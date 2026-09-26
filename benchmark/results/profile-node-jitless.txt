@@ -1,0 +1,201 @@
+total sampled 1664 ms
+
+== SELF time by area
+ 21.0% Phaser
+ 17.9% game field
+ 11.3% i18next
+  7.7% PROFILER
+  5.7% game data/abilities
+  4.5% game utils
+  4.0% game battle-scene
+  3.2% game ui
+  2.9% HARNESS upstream test harness + mocks
+  2.9% game phases
+  2.5% game data/moves
+  2.4% game data
+  2.3% game modifier
+  2.2% HARNESS bench shims/driver
+  2.0% (garbage collector)
+  1.3% node internals
+  0.9% game ai
+  0.9% game system
+  0.8% (idle)
+  0.6% (program)
+  0.5% game phase-manager
+  0.3% game game-mode
+  0.3% game phase-tree
+  0.3% game queues
+  0.3% game battle
+  0.2% game dynamic-queue-manager
+  0.2% game phase
+  0.2% game animations
+  0.1% game data/pokemon
+  0.1% game audio
+
+== INCLUSIVE time by area (a sample counts once per area on its stack)
+100.0% (root)
+ 92.6% HARNESS bench shims/driver
+ 81.9% HARNESS upstream test harness + mocks
+ 70.6% game phases
+ 46.2% game field
+ 22.9% Phaser
+ 21.8% game battle-scene
+ 17.3% game data/abilities
+ 17.3% game ui
+ 14.1% game utils
+ 11.4% game system
+ 11.3% i18next
+ 10.8% game queues
+  9.8% game data/moves
+  9.7% game modifier
+  7.7% PROFILER
+  6.9% game data
+  6.3% game animations
+  3.9% game phase-manager
+  3.6% game ai
+  3.0% game phase
+  2.7% game dynamic-queue-manager
+  2.0% (garbage collector)
+  1.5% node internals
+  1.0% game battle
+  0.9% game messages
+  0.8% (idle)
+  0.7% game game-mode
+  0.6% (program)
+  0.3% game phase-tree
+
+== library time by nearest caller
+ 18.0% Phaser  <-  HARNESS upstream test harness + mocks
+  7.7% PROFILER  <-  HARNESS bench shims/driver
+  4.0% i18next  <-  game: src/data/abilities/ability.ts
+  2.0% (garbage collector)  <-  (none)
+  1.8% i18next  <-  game: src/modifier/modifier-type.ts
+  1.3% Phaser  <-  game: src/battle-scene.ts
+  0.9% i18next  <-  game: src/messages.ts
+  0.9% node internals  <-  HARNESS bench shims/driver
+  0.8% (idle)  <-  (none)
+  0.6% (program)  <-  (none)
+  0.5% i18next  <-  game: src/ui/handlers/modifier-select-ui-handler.ts
+  0.5% i18next  <-  game: src/battle-scene.ts
+  0.5% i18next  <-  game: src/utils/common.ts
+  0.4% i18next  <-  game: src/phases/move-phase.ts
+  0.4% Phaser  <-  game: src/field/pokemon.ts
+  0.4% i18next  <-  game: src/ui/handlers/fight-ui-handler.ts
+  0.3% node internals  <-  (none)
+  0.3% i18next  <-  game: src/game-mode.ts
+  0.3% i18next  <-  game: src/data/pokeball.ts
+  0.3% i18next  <-  game: src/ui/handlers/command-ui-handler.ts
+  0.3% Phaser  <-  game: src/battle.ts
+  0.2% Phaser  <-  game: src/utils/common.ts
+  0.2% Phaser  <-  game: src/ui/containers/battle-flyout.ts
+  0.2% i18next  <-  game: src/phases/encounter-phase.ts
+  0.2% Phaser  <-  game: src/ui/handlers/modifier-select-ui-handler.ts
+  0.1% i18next  <-  game: src/phases/faint-phase.ts
+  0.1% i18next  <-  game: src/data/nature.ts
+  0.1% i18next  <-  game: src/phases/move-effect-phase.ts
+  0.1% i18next  <-  game: src/ui/handlers/confirm-ui-handler.ts
+  0.1% other: memoryUsage  <-  HARNESS bench shims/driver
+
+== top SELF functions
+ 12.9% removeListener @ nm/phaser/dist/phaser.js
+  7.7% post @ node:inspector
+  2.5% destroy @ nm/phaser/dist/phaser.js
+  2.1% applySingleAbAttrs @ src/data/abilities/apply-ab-attrs.ts
+  2.0% (garbage collector) @ (garbage collector)
+  1.9% canApplyAbility @ src/field/pokemon.ts
+  1.8% (anon) @ nm/i18next/dist/esm/i18next.js
+  1.5% translate @ nm/i18next/dist/esm/i18next.js
+  1.5% getAbility @ src/field/pokemon.ts
+  1.3% (anon) @ src/modifier/modifier-type.ts
+  1.3% hasPassive @ src/field/pokemon.ts
+  1.3% applyAbAttrsInternal @ src/data/abilities/apply-ab-attrs.ts
+  1.3% extractFromKey @ nm/i18next/dist/esm/i18next.js
+  1.1% getEffectiveStat @ src/field/pokemon.ts
+  0.8% (anon) @ src/field/learnsets.ts
+  0.8% extendTranslation @ nm/i18next/dist/esm/i18next.js
+  0.8% (idle) @ (idle)
+  0.8% state @ nm/phaser/dist/phaser.js
+  0.8% getTypes @ src/field/pokemon.ts
+  0.7% (anon) @ src/battle-scene.ts
+  0.7% (anon) @ src/data/abilities/ability.ts
+  0.7% applyChallenges @ src/utils/challenge-utils.ts
+  0.7% looksLikeObjectPath @ nm/i18next/dist/esm/i18next.js
+  0.7% update @ nm/phaser/dist/phaser.js
+  0.7% getResource @ nm/i18next/dist/esm/i18next.js
+  0.6% getField @ src/battle-scene.ts
+  0.6% getSpeciesForm @ src/field/pokemon.ts
+  0.6% interpolate @ nm/i18next/dist/esm/i18next.js
+  0.6% g$3.__runTimers @ shims/env.ts
+  0.6% (anon) @ src/field/pokemon.ts
+  0.6% (program) @ (program)
+  0.5% t @ nm/i18next/dist/esm/i18next.js
+  0.5% getEnemyField @ src/battle-scene.ts
+  0.5% getLastOfPath @ nm/i18next/dist/esm/i18next.js
+  0.5% BooleanHolder @ src/utils/value-holder.ts
+  0.5% getPlayerField @ src/battle-scene.ts
+  0.5% hasAttr @ src/data/abilities/ability.ts
+  0.5% hash @ nm/phaser/dist/phaser.js
+  0.4% getAttrs @ src/data/abilities/ability.ts
+  0.4% mutateTimeRelatedProperties @ src/system/game-speed.ts
+
+== top INCLUSIVE game functions
+ 13.4% applyAbAttrs @ src/data/abilities/apply-ab-attrs.ts
+ 13.1% applyAbAttrsInternal @ src/data/abilities/apply-ab-attrs.ts
+ 11.8% applySingleAbAttrs @ src/data/abilities/apply-ab-attrs.ts
+ 11.3% (anon) @ src/ui/ui.ts
+ 10.7% getEffectiveStat @ src/field/pokemon.ts
+ 10.6% scene.tweens.add @ src/system/game-speed.ts
+ 10.3% sortInSpeedOrder @ src/utils/speed-order.ts
+ 10.2% start @ src/phases/enemy-command-phase.ts
+ 10.2% start @ src/phases/select-modifier-phase.ts
+ 10.1% doSetMode @ src/ui/ui.ts
+ 10.0% (anon) @ src/field/pokemon.ts
+ 10.0% setModeInternal @ src/ui/ui.ts
+  9.7% getNextMove @ src/field/pokemon.ts
+  9.2% pop @ src/queues/priority-queue.ts
+  8.8% inSpeedOrder @ src/utils/speed-order-generator.ts
+  8.6% setMode @ src/ui/ui.ts
+  8.6% (anon) @ src/phases/encounter-phase.ts
+  8.2% canApplyAbility @ src/field/pokemon.ts
+  8.2% start @ src/phases/battle-end-phase.ts
+  8.2% start @ src/phases/encounter-phase.ts
+  8.1% (anon) @ src/utils/speed-order.ts
+  8.1% reorder @ src/queues/pokemon-priority-queue.ts
+  8.1% sortBySpeed @ src/utils/speed-order.ts
+  7.8% (anon) @ src/battle-scene.ts
+  7.7% destroy @ src/field/pokemon.ts
+  7.4% (anon) @ src/modifier/modifier-type.ts
+  6.3% getAttackDamage @ src/field/pokemon.ts
+  6.3% callback @ src/animations.ts
+  6.2% addParticle @ src/animations.ts
+  6.1% regenerateModifierPoolThresholds @ src/modifier/modifier-type.ts
+  5.9% updateGameInfo @ src/battle-scene.ts
+  5.7% onComplete @ src/animations.ts
+  4.9% start @ src/phases/move-effect-phase.ts
+  4.4% addEnemyPokemon @ src/battle-scene.ts
+  4.2% executeWithSeedOffset @ src/battle-scene.ts
+  4.2% getBaseDamage @ src/field/pokemon.ts
+  4.1% get name @ src/data/abilities/ability.ts
+  3.6% play @ src/data/battle-anims.ts
+  3.5% generateType @ src/modifier/modifier-type.ts
+  3.5% cleanUpAndComplete @ src/data/battle-anims.ts
+  3.4% postAnimCallback @ src/phases/move-effect-phase.ts
+  3.3% (anon) @ src/phases/move-effect-phase.ts
+  3.3% processInput @ src/ui/handlers/base-option-select-ui-handler.ts
+  3.3% yesHandler @ src/phases/select-modifier-phase.ts
+  3.3% handler @ src/ui/handlers/confirm-ui-handler.ts
+  3.2% applyToTargets @ src/phases/move-effect-phase.ts
+  3.2% start @ src/phases/command-phase.ts
+  3.1% start @ src/phases/turn-start-phase.ts
+  3.0% applyMoveEffects @ src/phases/move-effect-phase.ts
+  3.0% end @ src/phase.ts
+  2.9% getTargetBenefitScore @ src/data/moves/move.ts
+  2.9% start @ src/phases/move-phase.ts
+  2.9% shiftPhase @ src/phase-manager.ts
+  2.9% resetModifierSelect @ src/phases/select-modifier-phase.ts
+  2.8% calculateBattlePower @ src/data/moves/move.ts
+  2.8% (anon) @ src/ui/handlers/modifier-select-ui-handler.ts
+  2.7% show @ src/ui/handlers/modifier-select-ui-handler.ts
+  2.7% generateAndPopulateMoveset @ src/field/pokemon.ts
+  2.6% generateMoveset @ src/ai/ai-moveset-gen.ts
+  2.6% getMoveEffectiveness @ src/field/pokemon.ts

@@ -1,0 +1,44 @@
+# Nothing from Pokémon or PokeRogue may be committed: art, music, fonts,
+# generated packs, or anything fetched from upstream. Keep those on your SD card.
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.bmp
+*.ogg
+*.mp3
+*.wav
+*.m4a
+*.flac
+*.mp4
+*.webm
+*.ttf
+*.otf
+*.woff
+*.woff2
+*.pak
+*.rrt
+*.bcfnt
+*.bcwav
+
+# Fetched upstream data and generated SD card trees
+sd-card/
+data/
+**/upstream/
+**/pokerogue-assets/
+**/pokerogue-locales/
+node_modules/
+
+# Built binaries and prebuilt emulator cores
+*.3dsx
+*.elf
+*.smdh
+*.cia
+*.so
+*.o
+*.d
+*.a
+build/
+tools/azahar-libretro/*
+!tools/azahar-libretro/README.md

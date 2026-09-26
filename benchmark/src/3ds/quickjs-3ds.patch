@@ -1,0 +1,25 @@
+--- /home/claude/quickjs/quickjs.c	2026-09-26 09:45:07.073494181 +0000
++++ quickjs.c	2026-09-26 10:06:41.186295522 +0000
+@@ -2140,7 +2140,7 @@
+     return malloc_size(ptr);
+ #elif defined(_WIN32)
+     return _msize((void *)ptr);
+-#elif defined(__EMSCRIPTEN__)
++#elif defined(__EMSCRIPTEN__) || defined(__3DS__)
+     return 0;
+ #elif defined(__linux__) || defined(__GLIBC__)
+     return malloc_usable_size((void *)ptr);
+@@ -47497,9 +47497,13 @@
+     }
+ #else
+     {
++#ifdef __3DS__
++        res = 0; /* 3DS clock is local time; no zone info */
++#else
+         struct tm tm;
+         localtime_r(&ti, &tm);
+         res = -tm.tm_gmtoff / 60;
++#endif
+     }
+ #endif
+     return res;

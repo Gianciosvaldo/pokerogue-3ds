@@ -1,0 +1,75 @@
+host: read file 4 ms, load bytecode 32 ms, JS heap 13.4 MB after load
+PokeRogue headless battle benchmark (PC x86-64)
+  module load+eval (incl. i18n, species/move tables): 183ms
+  mem after module eval: 25.6 MB in use, peak 25.6 MB
+  initializeGame (all game data): 385ms
+  mem after initializeGame: 34.3 MB in use, peak 34.3 MB
+
+[single battles, wave 21+]
+  start run + first encounter: 683ms
+  mem after first encounter: 45.5 MB in use, peak 45.5 MB
+  turn 1 wave 21->22: 32ms (30 phases, 45.8 MB)
+  turn 2 wave 22->23: 29ms (30 phases, 46.1 MB)
+  turn 3 wave 23->24: 32ms (30 phases, 46.4 MB)
+  turn 4 wave 24: 10ms (20 phases, 46.4 MB)
+  turn 5 wave 24: 10ms (20 phases, 46.4 MB)
+  turn 6 wave 24->25: 46ms (35 phases, 47.2 MB)
+  turn 7 wave 25: 16ms (23 phases, 47.3 MB)
+  turn 8 wave 25: 15ms (23 phases, 47.3 MB)
+  turn 9 wave 25->26: 41ms (33 phases, 47.7 MB)
+  turn 10 wave 26->27: 33ms (30 phases, 47.9 MB)
+  turn 11 wave 27->28: 31ms (31 phases, 48.2 MB)
+  turn 12 wave 28->29: 32ms (30 phases, 48.6 MB)
+  turn 13 wave 29->30: 31ms (31 phases, 48.9 MB)
+  turn 14 wave 30->31: 28ms (43 phases, 49.2 MB)
+  turn 15 wave 31->32: 37ms (30 phases, 49.5 MB)
+  turn 16 wave 32->33: 32ms (30 phases, 49.8 MB)
+  turn 17 wave 33: 11ms (21 phases, 49.8 MB)
+  turn 18 wave 33->34: 33ms (30 phases, 50.1 MB)
+  turn 19 wave 34->35: 49ms (35 phases, 50.7 MB)
+  turn 20 wave 35: 17ms (24 phases, 50.8 MB)
+  turn 21 wave 35->36: 39ms (32 phases, 51.1 MB)
+  turn 22 wave 36->37: 36ms (33 phases, 51.4 MB)
+  turn 23 wave 37->38: 33ms (30 phases, 51.8 MB)
+  turn 24 wave 38->39: 31ms (30 phases, 52.1 MB)
+  turn 25 wave 39->40: 37ms (31 phases, 52.4 MB)
+  TURNS (no wave change): n=6 median 15ms p90 17ms max 17ms
+  TURN+NEXT WAVE: n=19 median 33ms p90 41ms max 49ms
+  mem end of scenario: 52.4 MB in use, peak 52.4 MB
+  mem after full GC (took 24ms): 52.1 MB in use, peak 52.4 MB
+
+[double battles, wave 51+]
+  start run + first encounter: 76ms
+  mem after first encounter: 53.9 MB in use, peak 54.0 MB
+  turn 1 wave 51->52: 71ms (52 phases, 54.4 MB)
+  turn 2 wave 52: 30ms (37 phases, 54.4 MB)
+  turn 3 wave 52->53: 51ms (44 phases, 54.8 MB)
+  turn 4 wave 53->54: 77ms (54 phases, 55.5 MB)
+  turn 5 wave 54: 36ms (35 phases, 55.5 MB)
+  turn 6 wave 54->55: 97ms (53 phases, 56.5 MB)
+  turn 7 wave 55: 57ms (39 phases, 56.6 MB)
+  turn 8 wave 55: 77ms (52 phases, 57.0 MB)
+  turn 9 wave 55->56: 93ms (52 phases, 57.4 MB)
+  turn 10 wave 56: 42ms (42 phases, 57.7 MB)
+  turn 11 wave 56->57: 58ms (43 phases, 58.2 MB)
+  turn 12 wave 57->58: 75ms (60 phases, 58.7 MB)
+  turn 13 wave 58->59: 80ms (53 phases, 59.2 MB)
+  turn 14 wave 59->60: 85ms (52 phases, 59.7 MB)
+  turn 15 wave 60: 51ms (42 phases, 59.8 MB)
+  turn 16 wave 60->61: 70ms (62 phases, 60.3 MB)
+  turn 17 wave 61->62: 139ms (69 phases, 61.2 MB)
+  TURNS (no wave change): n=6 median 51ms p90 77ms max 77ms
+  TURN+NEXT WAVE: n=11 median 77ms p90 97ms max 139ms
+  mem end of scenario: 61.2 MB in use, peak 61.3 MB
+  mem after full GC (took 34ms): 61.1 MB in use, peak 61.3 MB
+
+SUMMARY
+  harness polling: median 44 ticks/turn x 0.008 ms idle tick = ~0ms of each turn is test-harness overhead
+  turn median 30ms, p90 57ms, max 77ms (n=12)
+  turn that ends a wave + next encounter: median 39ms, max 139ms (n=30)
+  JS heap peak 61.3 MB, now 61.1 MB
+  console.error calls: 0
+  total wall time: 3.32s
+  all turns: median 37ms, p90 80ms (gate target: about 1s per turn)
+
+Saved to bench-result.txt
