@@ -10,6 +10,9 @@
 
 #define MON_FIELDS 49
 
+/* The counterfactual replays: state left out to see whether the answer depends on it */
+enum { CF_TAGS, CF_PASSIVES, CF_HISTORY, CF_COUNT_ };
+
 static const char *const battler_tag_names[] = {BATTLER_TAG_TYPE_VALUES};
 static const char *const arena_tag_names[] = {ARENA_TAG_TYPE_VALUES};
 
@@ -71,8 +74,8 @@ static int read_mon(char **save, pr_pokemon *p)
     p->is_boss = v[23];
     p->stellar_types_boosted = (uint32_t)v[24];
     p->summon_hit_count = (uint8_t)v[25];
-    p->n_move_history = (uint8_t)v[26];
-    p->n_attacks_received = (uint8_t)v[27];
+    p->n_move_history = (uint16_t)v[26];      /* the Hm/Ha lines fill the entries */
+    p->n_attacks_received = (uint16_t)v[27];
     p->acted = v[28];
     p->stat_stages_decreased = v[29];
     p->joined_round = v[30];
@@ -105,7 +108,7 @@ int main(int argc, char **argv)
     memset(&bt, 0, sizeof bt);
     int total = 0, covered = 0, pass = 0, fail = 0, stat_fail = 0, state_fail = 0;
     static int uncovered_by[PR_FEAT_COUNT_], deferred_by[PR_FEAT_COUNT_];
-    int with_deferred = 0;
+    int with_deferred = 0, matters[CF_COUNT_] = {0};
     pr_pokemon A, D;
     int mods_expected[2] = {0, 0}, arena_tags_expected = 0;
     /* battler tags read from T lines before the case line: [0] player (A), [1] enemy (D) */
@@ -113,6 +116,8 @@ int main(int argc, char **argv)
     int n_tags[2] = {0, 0};
     bool have_half_hp = false;
     double half_hp = 0;
+    /* move histories and attacks received read from Hm/Ha lines: [0] A, [1] D */
+    static pr_pokemon hist[2];
 
     while (fgets(line, sizeof line, f)) {
         char *save;
@@ -149,6 +154,7 @@ int main(int argc, char **argv)
             bt.n_party[0] = bt.n_party[1] = 0;
             bt.n_queued_movers = 0;
             have_half_hp = false;
+            memset(hist, 0, sizeof hist);
             continue;
         }
         if (!strcmp(tag, "G")) {
@@ -178,6 +184,46 @@ int main(int argc, char **argv)
             if (n < 0 || n > PR_MAX_QUEUED_MOVERS) { fprintf(stderr, "bad Q line\n"); return 2; }
             bt.n_queued_movers = (uint8_t)n;
             for (int i = 0; i < n; i++) bt.queued_movers[i] = (uint32_t)strtoul(next_tok(&save), NULL, 10);
+            continue;
+        }
+        if (!strcmp(tag, "O")) {
+            /* O n id...: dynamicQueueManager.getLastTurnOrder() */
+            int n = atoi(next_tok(&save));
+            if (n < 0 || n > PR_MAX_TURN_ORDER || n != bt.n_last_turn_order) { fprintf(stderr, "bad O line\n"); return 2; }
+            for (int i = 0; i < n; i++) bt.last_turn_order[i] = (uint32_t)strtoul(next_tok(&save), NULL, 10);
+            continue;
+        }
+        if (!strcmp(tag, "Hm")) {
+            /* Hm who n (move useMode result)*n: summonData.moveHistory, oldest first (result -1 = undefined) */
+            int who = atoi(next_tok(&save)), n = atoi(next_tok(&save));
+            if (who < 0 || who > 1 || n < 0) { fprintf(stderr, "bad Hm line\n"); return 2; }
+            hist[who].n_move_history = 0;
+            for (int i = 0; i < n; i++) {
+                pr_turn_move tm;
+                tm.move = (uint16_t)atoi(next_tok(&save));
+                tm.use_mode = (uint8_t)atoi(next_tok(&save));
+                int r = atoi(next_tok(&save));
+                tm.result = r < 0 ? PR_MOVE_RESULT_UNDEFINED : (uint8_t)r;
+                pr_push_move_history(&hist[who], tm);
+            }
+            continue;
+        }
+        if (!strcmp(tag, "Ha")) {
+            /* Ha who n (move result critical damage sourceId sourceBattlerIndex)*n:
+             * turnData.attacksReceived, newest first */
+            int who = atoi(next_tok(&save)), n = atoi(next_tok(&save));
+            if (who < 0 || who > 1 || n < 0 || n > 32) { fprintf(stderr, "bad Ha line\n"); return 2; }
+            pr_attack_record rec[32];
+            for (int i = 0; i < n; i++) {
+                rec[i].move = (uint16_t)atoi(next_tok(&save));
+                rec[i].result = (uint8_t)atoi(next_tok(&save));
+                rec[i].critical = atoi(next_tok(&save));
+                rec[i].damage = strtod(next_tok(&save), NULL);
+                rec[i].source_id = strtoll(next_tok(&save), NULL, 10);
+                rec[i].source_battler_index = (int8_t)atoi(next_tok(&save));
+            }
+            hist[who].n_attacks_received = 0;
+            for (int i = n - 1; i >= 0; i--) pr_unshift_attack_received(&hist[who], &rec[i]);
             continue;
         }
         if (!strcmp(tag, "H")) {
@@ -290,6 +336,15 @@ int main(int argc, char **argv)
         }
         memcpy(A.tags, tags[0], sizeof A.tags);
         memcpy(D.tags, tags[1], sizeof D.tags);
+        for (int w = 0; w < 2; w++) {
+            pr_pokemon *p = w ? &D : &A;
+            if (p->n_move_history != hist[w].n_move_history || p->n_attacks_received != hist[w].n_attacks_received) {
+                fprintf(stderr, "history length mismatch\n");
+                return 2;
+            }
+            memcpy(p->move_history, hist[w].move_history, sizeof p->move_history);
+            memcpy(p->attacks_received, hist[w].attacks_received, sizeof p->attacks_received);
+        }
         A.is_player = true;
         pr_update_passive(&bt, &A);
         pr_update_passive(&bt, &D);
@@ -316,6 +371,10 @@ int main(int argc, char **argv)
         bt.n_unported = 0;
         bt.n_deferred = 0;
         total++;
+        /* The state before the calls, for the counterfactual run without turn history below */
+        static pr_battle bt0;
+        static pr_pokemon A0, D0;
+        bt0 = bt; A0 = A; D0 = D;
         int32_t hp_a = A.hp, hp_d = D.hp;
         pr_calculate_stats(&bt, &A);
         pr_calculate_stats(&bt, &D);
@@ -349,7 +408,36 @@ int main(int argc, char **argv)
         bool ok = stats_ok && same(sim.damage, e[12]) && sim.result == e[13] && c_crit == (e[14] != 0)
                   && same(real.damage, e[15]) && real.result == e[16] && src->hit_count == e[17]
                   && src->hits_left == e[18];
-        if (ok) pass++;
+        if (ok) {
+            /* Would the answer change with some state ignored? Replays the case from the state
+             * before the calls without it: the tags (battler and arena), the passives, or the turn
+             * history (move histories, attacks received, the last turn order). */
+            for (int k = 0; k < CF_COUNT_; k++) {
+                static pr_battle cb;
+                static pr_pokemon ca, cd;
+                cb = bt0; ca = A0; cd = D0;
+                if (k == CF_TAGS) { ca.n_tags = cd.n_tags = 0; cb.n_arena_tags = 0; }
+                if (k == CF_PASSIVES) { ca.passive = cd.passive = 0; }
+                if (k == CF_HISTORY) {
+                    ca.n_move_history = cd.n_move_history = 0;
+                    ca.n_attacks_received = cd.n_attacks_received = 0;
+                    cb.n_last_turn_order = 0;
+                }
+                cb.field[0] = &ca; cb.field[2] = &cd;
+                pr_calculate_stats(&cb, &ca);
+                pr_calculate_stats(&cb, &cd);
+                ca.hp = hp_a;
+                cd.hp = hp_d;
+                pr_pokemon *s0 = swap ? &cd : &ca, *d0 = swap ? &ca : &cd;
+                pr_damage_result sim0 = pr_get_attack_damage(&cb, d0, s0, move, crit, true);
+                bool crit0 = pr_get_critical_hit_result(&cb, d0, s0, move);
+                pr_damage_result real0 = pr_get_attack_damage(&cb, d0, s0, move, crit, false);
+                if (!same(sim0.damage, sim.damage) || !same(real0.damage, real.damage) || sim0.result != sim.result
+                    || real0.result != real.result || crit0 != c_crit)
+                    matters[k]++;
+            }
+            pass++;
+        }
         else if (++fail <= 10)
             printf("MISMATCH move %d (%s) A %d/%d D %d/%d crit %d swap %d weather %d terrain %d: C sim %.17g/%d crit %d real %.17g/%d hits %d/%d | JS %.17g/%.0f %.0f %.17g/%.0f hits %.0f/%.0f\n",
                    move, pr_moves[move].name, A.species, A.form, D.species, D.form, crit, swap, bt.weather, bt.terrain,
@@ -359,6 +447,8 @@ int main(int argc, char **argv)
     printf("cases %d, stats mismatches %d, carried-state mismatches %d (all cases)\n", total, stat_fail, state_fail);
     printf("covered %d: pass %d, fail %d; not covered %d\n", covered, pass, fail, total - covered);
     printf("covered cases whose side effects were deferred to the (unported) phase engine: %d\n", with_deferred);
+    printf("passing cases whose answer changes if ignoring: tags %d, passives %d, turn history %d\n",
+           matters[CF_TAGS], matters[CF_PASSIVES], matters[CF_HISTORY]);
     for (int c = 0; c < PR_FEAT_COUNT_; c++)
         if (deferred_by[c]) printf("  deferred %s: %d\n", pr_unported_name((uint16_t)c), deferred_by[c]);
     printf("not covered because of (class or missing state: cases):\n");

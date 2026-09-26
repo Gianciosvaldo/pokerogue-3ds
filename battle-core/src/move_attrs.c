@@ -107,21 +107,45 @@ void pr_apply_variable_power(pr_battle *bt, const pr_pokemon *user, const pr_pok
             if (user->terastallized && pr_get_tera_type(user) == POKEMON_TYPE_STELLAR) *power = 100;
             break;
         case PR_AC_ConsecutiveUseDoublePowerAttr:
+            /* Rollout, Ice Ball, Fury Cutter: the constructor closure (closures_moves.c) gives
+             * this.getMultiplier(count) = Math.pow(2, count) */
+            *power *= pr_closure_call(bt, P(ConsecutiveUseDoublePowerAttr, a)->powerMultiplierFunc, a->cls, 1,
+                                      user, target, move);
+            break;
         case PR_AC_ConsecutiveUseMultiBasePowerAttr:
-            /* Rollout, Ice Ball, Fury Cutter (2^count), Echoed Voice (count + 1): count walks
-             * getLastXMoves(limit + 1).slice(1), so a history of 0 or 1 moves gives count 0 and a
-             * multiplier of 1. Longer histories (and the per-move limits held in the constructor
-             * closure) aren't modelled. */
-            if (user->n_move_history > 1) pr_note_unported(bt, PR_FEAT_MOVE_HISTORY);
+            /* Echoed Voice: count + 1 */
+            *power *= pr_closure_call(bt, P(ConsecutiveUseMultiBasePowerAttr, a)->powerMultiplierFunc, a->cls, 1,
+                                      user, target, move);
             break;
-        case PR_AC_TurnDamagedDoublePowerAttr:
-            /* Revenge, Avalanche: x2 if an attack from target damaged the user this turn */
-            if (user->n_attacks_received > 0) pr_note_unported(bt, PR_FEAT_MOVE_HISTORY);
+        case PR_AC_TurnDamagedDoublePowerAttr: {
+            /* Revenge, Avalanche: user.turnData.attacksReceived.find(r => r.damage && r.sourceId === target.id) */
+            int kept = pr_attacks_received_kept(user), k = 0;
+            for (; k < kept; k++) {
+                const pr_attack_record *r = &user->attacks_received[k];
+                if (r->damage != 0 && r->damage == r->damage && r->source_id == target->id) break;
+            }
+            if (k < kept) *power *= 2;
+            else pr_attacks_received_exhausted(bt, user);
             break;
-        case PR_AC_LastMoveDoublePowerAttr:
-            /* Fusion Flare / Bolt: looks at the Pokemon that moved earlier this turn */
-            if (bt->n_last_turn_order > 1) pr_note_unported(bt, PR_FEAT_TURN_ORDER);
+        }
+        case PR_AC_LastMoveDoublePowerAttr: {
+            /* Fusion Flare / Bolt: for (p of getLastTurnOrder().slice(0, -1).reverse()) {
+             *   const [lastMove] = p.getLastXMoves(1);
+             *   if (lastMove.result !== FAIL) { if (SUCCESS && lastMove.move === this.move) x2; break; } } */
+            for (int k = bt->n_last_turn_order - 2; k >= 0; k--) {
+                const pr_pokemon *p = k < PR_MAX_TURN_ORDER ? pr_field_pokemon_by_id(bt, bt->last_turn_order[k]) : NULL;
+                if (!p) { pr_note_unported(bt, PR_FEAT_TURN_ORDER); break; }
+                const pr_turn_move *last = pr_last_move(bt, p, 0);
+                /* An empty history makes upstream read .result of undefined and throw */
+                if (!last) { pr_note_unported(bt, PR_FEAT_TURN_ORDER); break; }
+                if (last->result != MOVE_RESULT_FAIL) {
+                    if (last->result == MOVE_RESULT_SUCCESS && last->move == P(LastMoveDoublePowerAttr, a)->move)
+                        *power *= 2;
+                    break;
+                }
+            }
             break;
+        }
         case PR_AC_MultiHitPowerIncrementAttr: {
             /* Triple Kick, Triple Axel */
             int hits_total = user->hit_count - (user->hits_left > 0 ? user->hits_left : 0);
@@ -499,11 +523,27 @@ double pr_apply_fixed_damage(pr_battle *bt, const pr_pokemon *user, const pr_pok
             dmg = to_dmg_value(*initial / 2);
             break;
         }
-        case PR_AC_CounterDamageAttr:                                                /* Counter, Mirror Coat... */
-            /* damage of the first matching attack received this turn, else 0 */
-            if (user->n_attacks_received > 0) { pr_note_unported(bt, PR_FEAT_MOVE_HISTORY); break; }
-            dmg = to_dmg_value(0 * P(CounterDamageAttr, a)->multiplier);
+        case PR_AC_CounterDamageAttr: {                                              /* Counter, Mirror Coat... */
+            /* user.turnData.attacksReceived.find(ar => category !== STATUS
+             *   && !areAllies(user.getBattlerIndex(), ar.sourceBattlerIndex)
+             *   && (moveFilter === undefined || category === moveFilter))?.damage ?? 0,
+             * where category is allMoves[ar.move].category; then toDmgValue(damage * multiplier) */
+            const pr_attr_CounterDamageAttr *c = P(CounterDamageAttr, a);
+            bool any_category = c->nulls & (1u << 2);
+            int kept = pr_attacks_received_kept(user), k = 0, self = pr_battler_index(bt, user);
+            for (; k < kept; k++) {
+                const pr_attack_record *r = &user->attacks_received[k];
+                int cat = pr_moves[r->move].category;
+                if (cat != MOVE_CATEGORY_STATUS && !pr_are_allies(self, r->source_battler_index)
+                    && (any_category || cat == c->moveFilter))
+                    break;
+            }
+            double damage = 0;
+            if (k < kept) damage = user->attacks_received[k].damage;
+            else pr_attacks_received_exhausted(bt, user);
+            dmg = to_dmg_value(damage * c->multiplier);
             break;
+        }
         default:
             pr_note_unported(bt, a->cls);
         }

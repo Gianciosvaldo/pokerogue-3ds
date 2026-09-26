@@ -149,13 +149,62 @@ static double retaliate(ARGS)
 }
 
 /* Stomping Tantrum: lastNonDancerMove = user.getLastXMoves(2)[1];
- * lastNonDancerMove && (result === FAIL(3) || result === MISS(2)) ? 2 : 1
- * Temper Flare: user.getLastXMoves(2)[1]?.result === 3 || ...result === 2 ? 2 : 1
- * Both look at the second newest history entry, which needs 2 or more entries. */
+ * lastNonDancerMove && (result === MISS || result === FAIL) ? 2 : 1
+ * Temper Flare: user.getLastXMoves(2)[1]?.result === 3 (MISS) || ...result === 2 (FAIL) ? 2 : 1 */
 static double failed_last_move(ARGS)
 {
-    if (u->n_move_history > 1) UNPORTED(PR_FEAT_MOVE_HISTORY);
-    return 1;
+    const pr_turn_move *e = pr_last_move(bt, u, 1);
+    return e && (e->result == MOVE_RESULT_MISS || e->result == MOVE_RESULT_FAIL) ? 2 : 1;
+}
+
+/* ConsecutiveUsePowerMultiplierAttr's constructor closure (Rollout, Ice Ball, Fury Cutter,
+ * Echoed Voice). It captures limit, resetOnFail, resetOnLimit and comboMoves, which the dump
+ * probes into self->vals = [limit, resetOnFail, resetOnLimit, ...comboMoves]:
+ *   const moveHistory = user.getLastXMoves(limit + 1).slice(1);
+ *   let count = 0; let turnMove;
+ *   while (((turnMove = moveHistory.shift())?.move === move.id
+ *           || (comboMoves.length > 0 && comboMoves.includes(turnMove?.move ?? MoveId.NONE)))
+ *          && (!resetOnFail || turnMove?.result === MoveResult.SUCCESS)) {
+ *     if (count < limit - 1) count++; else if (resetOnLimit) count = 0; else break;
+ *   }
+ *   return this.getMultiplier(count);
+ * where getMultiplier is Math.pow(2, count) (ConsecutiveUseDoublePowerAttr) or count + 1
+ * (ConsecutiveUseMultiBasePowerAttr), `this` being the attribute that owns the closure. */
+static double consecutive_use(ARGS)
+{
+    if (!self->vals || self->n_vals < 3) UNPORTED(PR_AC_ConsecutiveUsePowerMultiplierAttr);
+    int limit = self->vals[0];
+    bool reset_on_fail = self->vals[1], reset_on_limit = self->vals[2];
+    const int16_t *combo = self->vals + 3;
+    int n_combo = self->n_vals - 3;
+    int count = 0;
+    for (int k = 1;; k++) {
+        /* moveHistory.shift(): entry k of getLastXMoves(limit + 1), undefined past the end */
+        const pr_turn_move *tm = k <= limit ? pr_last_move(bt, u, k) : NULL;
+        if (!tm && k <= limit && k < u->n_move_history) return 1; /* older than the kept entries (reported) */
+        int looked_up = tm ? tm->move : MOVE_ID_NONE;
+        bool in_combo = false;
+        for (int c = 0; c < n_combo; c++) in_combo |= combo[c] == looked_up;
+        bool match = ((tm && tm->move == m) || in_combo)
+                     && (!reset_on_fail || (tm && tm->result == MOVE_RESULT_SUCCESS));
+        if (!match) break;
+        /* With NONE among the combo moves upstream would loop on the missing entries */
+        if (!tm) UNPORTED(PR_FEAT_MOVE_HISTORY);
+        if (count < limit - 1) count++;
+        else if (reset_on_limit) count = 0;
+        else break;
+    }
+    int id = (int)(self - pr_closures_meta);
+    for (unsigned i = 0; i < pr_moves[m].nattr; i++) {
+        const pr_attr *a = &pr_attrs[pr_moves[m].attr0 + i];
+        if (a->cls == PR_AC_ConsecutiveUseDoublePowerAttr
+            && ((const pr_attr_ConsecutiveUseDoublePowerAttr *)a->p)->powerMultiplierFunc == id)
+            return js_pow(2, count);
+        if (a->cls == PR_AC_ConsecutiveUseMultiBasePowerAttr
+            && ((const pr_attr_ConsecutiveUseMultiBasePowerAttr *)a->p)->powerMultiplierFunc == id)
+            return count + 1;
+    }
+    UNPORTED(PR_AC_ConsecutiveUsePowerMultiplierAttr);
 }
 
 /* Dynamax Cannon: if (target.level > globalScene.getMaxExpLevel()) {
@@ -224,6 +273,10 @@ const pr_closure_reg pr_move_closures[] = {
     {"move:372", "24376a7b4b8e", assurance},
     {"move:512", "8459b95e80a8", acrobatics},
     {"move:514", "cc1c3783a6d6", retaliate},
+    {"move:205", "8cbec46369f4", consecutive_use}, /* Rollout */
+    {"move:301", "8cbec46369f4", consecutive_use}, /* Ice Ball */
+    {"move:210", "60455f51213a", consecutive_use}, /* Fury Cutter */
+    {"move:497", "5141b1d3bea9", consecutive_use}, /* Echoed Voice */
     {"move:707", "4a9da7faa50b", failed_last_move},
     {"move:915", "eb786cc32675", failed_last_move},
     {"move:744", "39036af00597", dynamax_cannon},

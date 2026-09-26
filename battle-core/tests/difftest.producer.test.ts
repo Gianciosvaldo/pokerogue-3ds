@@ -29,7 +29,9 @@ import { ArenaTagType } from "#enums/arena-tag-type";
 import { BattlerTagType } from "#enums/battler-tag-type";
 import { Command } from "#enums/command";
 import { MoveCategory } from "#enums/move-category";
+import { HitResult } from "#enums/hit-result";
 import { MoveId } from "#enums/move-id";
+import { MoveResult } from "#enums/move-result";
 import { MoveUseMode } from "#enums/move-use-mode";
 import { SpeciesId } from "#enums/species-id";
 import { Stat } from "#enums/stat";
@@ -116,6 +118,11 @@ it("difftest producer", async () => {
     MoveId.DRAIN_PUNCH,
     // moves that ask hasAbility (Comatose), so a passive Comatose shows
     MoveId.HEX, MoveId.WAKE_UP_SLAP,
+    // moves that read the turn history: the user's move history, the attacks it received this
+    // turn, the last turn order
+    MoveId.ROLLOUT, MoveId.ICE_BALL, MoveId.FURY_CUTTER, MoveId.ECHOED_VOICE, MoveId.STOMPING_TANTRUM,
+    MoveId.TEMPER_FLARE, MoveId.REVENGE, MoveId.AVALANCHE, MoveId.COUNTER, MoveId.MIRROR_COAT, MoveId.METAL_BURST,
+    MoveId.COMEUPPANCE, MoveId.FUSION_FLARE, MoveId.FUSION_BOLT,
   ]
     .map(id => allMoves[id])
     .filter(m => attacks.includes(m));
@@ -130,6 +137,8 @@ it("difftest producer", async () => {
     // the move queue (Analytic), later hits (Parental Bond), priority vs Queenly Majesty and co.
     AbilityId.ANALYTIC, AbilityId.PARENTAL_BOND, AbilityId.PRANKSTER, AbilityId.GALE_WINGS, AbilityId.TRIAGE,
     AbilityId.QUEENLY_MAJESTY, AbilityId.DAZZLING, AbilityId.ARMOR_TAIL, AbilityId.WONDER_GUARD,
+    // the attacks received this turn (Sheer Force hits turn off Color Change and co.)
+    AbilityId.SHEER_FORCE, AbilityId.COLOR_CHANGE, AbilityId.BERSERK, AbilityId.ANGER_SHELL, AbilityId.WIMP_OUT,
   ];
   const focusOdds = (n: number) => rnd(FOCUS ? 2 : n) === 0;
   // Moves whose priority an ability can raise, met with the abilities that block priority moves
@@ -323,6 +332,65 @@ it("difftest producer", async () => {
   const partyLine = (side: number, party: any[]) =>
     ["P", side, party.length, ...party.flatMap((m: any) => [m.id, m.species.speciesId, m.status?.effect ?? 0])].join(" ");
 
+  // Turn history: summonData.moveHistory (oldest first) and turnData.attacksReceived (newest
+  // first), set as the move and damage phases leave them. Histories run from empty to longer than
+  // the port keeps (8 entries), and favour the moves the readers compare with: the case move,
+  // Rollout's combo move Defense Curl, Fusion Flare and Bolt.
+  const moveResults = [
+    MoveResult.SUCCESS, MoveResult.SUCCESS, MoveResult.SUCCESS, MoveResult.FAIL, MoveResult.MISS, MoveResult.OTHER,
+    MoveResult.PENDING, undefined,
+  ];
+  const useModes = Object.values(MoveUseMode).filter(v => typeof v === "number") as number[];
+  const damageResults = [
+    HitResult.EFFECTIVE, HitResult.EFFECTIVE, HitResult.SUPER_EFFECTIVE, HitResult.NOT_VERY_EFFECTIVE,
+    HitResult.EXTREMELY_EFFECTIVE, HitResult.MOSTLY_INEFFECTIVE, HitResult.ONE_HIT_KO, HitResult.CONFUSION,
+    HitResult.INDIRECT, HitResult.INDIRECT_KO,
+  ];
+  const historyMove = () => {
+    const hot = [caseMove.id, MoveId.DEFENSE_CURL, MoveId.FUSION_FLARE, MoveId.FUSION_BOLT];
+    return rnd(FOCUS ? 4 : 2) !== 0
+      ? hot[rnd(hot.length)]
+      : rnd(2) === 0
+        ? attacks[rnd(attacks.length)].id
+        : rnd(allMoves.length);
+  };
+  const giveHistory = (p: any) => {
+    const r = rnd(8);
+    const n = r < 3 ? 0 : r < 7 ? 1 + rnd(4) : 5 + rnd(6);
+    // One history in 3 is a streak: the case move (or Defense Curl) used again and again, as
+    // Rollout, Fury Cutter and Echoed Voice count, with the odd failure
+    const streak = rnd(3) === 0;
+    for (let k = 0; k < n; k++) {
+      p.summonData.moveHistory.push({
+        move: streak ? (rnd(6) === 0 ? MoveId.DEFENSE_CURL : caseMove.id) : historyMove(),
+        targets: [],
+        useMode: useModes[rnd(useModes.length)],
+        result: streak && rnd(6) !== 0 ? MoveResult.SUCCESS : moveResults[rnd(moveResults.length)],
+      });
+    }
+    const other = p === A ? D : A;
+    const m = rnd(2) === 0 ? 0 : rnd(16) === 0 ? 9 + rnd(3) : 1 + rnd(3);
+    for (let k = 0; k < m; k++) {
+      const pick = rnd(8);
+      const source = pick < 5 ? other : pick < 7 ? p : null; // null: a Pokemon not on the field
+      p.turnData.attacksReceived.push({
+        move: rnd(3) === 0 ? rnd(allMoves.length) : attacks[rnd(attacks.length)].id,
+        result: damageResults[rnd(damageResults.length)],
+        damage: rnd(4) === 0 ? 0 : 1 + rnd(300),
+        critical: rnd(8) === 0,
+        sourceId: source ? source.id : 424242,
+        sourceBattlerIndex: source && rnd(4) !== 0 ? source.getBattlerIndex() : rnd(5) - 1,
+      });
+    }
+  };
+  const historyLines = (who: number, p: any) => [
+    ["Hm", who, p.summonData.moveHistory.length,
+      ...p.summonData.moveHistory.flatMap((t: any) => [t.move, t.useMode, t.result ?? -1])].join(" "),
+    ["Ha", who, p.turnData.attacksReceived.length,
+      ...p.turnData.attacksReceived.flatMap((r: any) =>
+        [r.move, r.result, r.critical ? 1 : 0, r.damage, r.sourceId, r.sourceBattlerIndex])].join(" "),
+  ];
+
   const setup = (p: any) => {
     // Non-simulated calls can leave per-turn state behind (e.g. Tera Shell stores
     // turnData.moveEffectiveness), so every case starts from fresh transient data.
@@ -405,6 +473,7 @@ it("difftest producer", async () => {
     p.turnData.hitCount = rnd(4);
     p.turnData.hitsLeft = rnd(4) - 1;
     giveTags(p);
+    giveHistory(p);
     return [sid, form, p.level, ...p.ivs, p.nature, ...stages, s, p.isTerastallized ? 1 : 0, p.teraType, p.hp, ability, p.gender];
   };
   // Fields read after the move is known (the moveset may hold it)
@@ -474,6 +543,30 @@ it("difftest producer", async () => {
     const def = swap ? A : D;
     src.moveset = rnd(3) === 0 ? [new PokemonMove(move.id, rnd(move.pp + 1))] : [];
     def.moveset = [];
+    // The last turn order: the Pokemon whose MovePhase started this turn, usually ending with
+    // the attacker (the Pokemon moving now)
+    const turnOrder = scene.phaseManager.dynamicQueueManager.getLastTurnOrder();
+    turnOrder.length = 0;
+    // Fusion Flare and Bolt look back through it for each other, passing over failed moves, so
+    // for them it is more often long enough to hold a failure between the two
+    const fusion = move.id === MoveId.FUSION_FLARE || move.id === MoveId.FUSION_BOLT;
+    const partner = move.id === MoveId.FUSION_FLARE ? MoveId.FUSION_BOLT : MoveId.FUSION_FLARE;
+    const nOrder = fusion && rnd(2) === 0 ? 2 + rnd(3) : rnd(3) === 0 ? 0 : 1 + rnd(4);
+    for (let k = 0; k < nOrder; k++) {
+      turnOrder.push(k === nOrder - 1 && rnd(4) !== 0 ? src : [A, D][rnd(2)]);
+    }
+    // A Pokemon that moved earlier this turn usually has that move as its newest history entry
+    for (const p of turnOrder.slice(0, -1)) {
+      if (rnd(4) !== 0) {
+        p.summonData.moveHistory.push({
+          move: rnd(2) === 0 ? (fusion ? partner : [MoveId.FUSION_FLARE, MoveId.FUSION_BOLT][rnd(2)]) : historyMove(),
+          targets: [],
+          useMode: useModes[rnd(useModes.length)],
+          result: [MoveResult.SUCCESS, MoveResult.SUCCESS, MoveResult.FAIL, MoveResult.FAIL, MoveResult.MISS,
+            MoveResult.OTHER, undefined][rnd(7)],
+        });
+      }
+    }
     const faintTurn = (h: any[]) => (h.length ? h.at(-1).turn : -1);
     const rl = rngLine();
     const globalRng = `G ${Phaser.Math.RND.state().split(",").slice(1).join(" ")}`;
@@ -494,6 +587,12 @@ it("difftest producer", async () => {
         + ` ${[0, 1, 2, 3].map(k => battle.turnCommands[k]?.command ?? -1).join(" ")}`;
     const caseLine =
       `C ${a.join(" ")} ${late(A).join(" ")} ${d.join(" ")} ${late(D).join(" ")} ${weather} ${move.id} ${crit ? 1 : 0} ${swap ? 1 : 0}`;
+    // Turn order and histories as they stand before the calls
+    const turnLines = [
+      `O ${turnOrder.length} ${turnOrder.map((p: any) => p.id).join(" ")}`.trim(),
+      ...historyLines(0, A),
+      ...historyLines(1, D),
+    ];
     // Tags as they stand before the calls (a non-simulated call may add some, e.g. Sturdy's)
     const tagLines = [
       ...A.summonData.tags.map((t: any) => tagLine(0, t)),
@@ -518,6 +617,7 @@ it("difftest producer", async () => {
       }
     }
     lines.push(rl, worldLine, globalRng, ...partyLines, `Q ${queuedIds.length} ${queuedIds.join(" ")}`.trim());
+    lines.push(...turnLines);
     if (halfHpLine) {
       lines.push(halfHpLine);
     }

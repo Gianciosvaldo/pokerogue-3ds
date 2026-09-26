@@ -290,14 +290,22 @@ static double not_terastallized(ARGS) { UNUSED; return !a->terastallized; }
 /* Ball Fetch: (pokemon) => !pokemon.waveData.abilitiesApplied.has(ability) */
 static double ball_fetch_unused(ARGS) { UNUSED; return !pr_wave_ability_applied(a, ABILITY_ID_BALL_FETCH); }
 
-/* Color Change, Pickpocket, Wimp Out, Emergency Exit, Berserk, Anger Shell:
- * true without a received attack; otherwise false if the last attacker's Sheer Force
- * applied. Received-attack records are not modelled beyond their count. */
+/* Color Change, Pickpocket, Wimp Out, Emergency Exit, Berserk, Anger Shell (sheerForceHitDisableAbCondition):
+ *   const lastReceivedAttack = pokemon.turnData.attacksReceived[0];
+ *   if (!lastReceivedAttack) return true;
+ *   const lastAttacker = pokemon.getOpponents().find(p => p.id === lastReceivedAttack.sourceId);
+ *   if (!lastAttacker) return true;
+ *   return !(allMoves[lastReceivedAttack.move].chance >= 0 && lastAttacker.hasAbility(SHEER_FORCE));
+ * getOpponents() is the other side's field filtered by isActive(true): on the field and not
+ * fainted (isAllowedInChallenge is true without challenges, which the port doesn't model). */
 static double not_sheer_force_hit(ARGS)
 {
     UNUSED;
     if (a->n_attacks_received == 0) return 1;
-    UNPORTED(PR_AC_AbAttr);
+    const pr_attack_record *r = &a->attacks_received[0];
+    const pr_pokemon *attacker = pr_field_pokemon_by_id(bt, r->source_id);
+    if (!attacker || attacker->is_player == a->is_player || attacker->hp <= 0) return 1;
+    return !(pr_moves[r->move].chance >= 0 && pr_has_ability_active(bt, attacker, ABILITY_ID_SHEER_FORCE));
 }
 
 const pr_closure_reg pr_ability_closures[] = {
