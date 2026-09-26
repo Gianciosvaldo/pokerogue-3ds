@@ -1,9 +1,7 @@
 /* Ports of the damage path: Pokemon.getAttackDamage / getBaseDamage /
  * getMoveEffectiveness / getAttackTypeEffectiveness / calculateStabMultiplier /
  * getCriticalHitResult / getMoveType and Move.calculateBattlePower.
- * Every applyAbAttrs / applyMoveAttrs / modifier / tag call site is kept in upstream order.
- * Battler tags, arena tags and modifiers are asked through the entry points in hooks.c,
- * which report the case as unported whenever that state exists. */
+ * Every applyAbAttrs / applyMoveAttrs / modifier / tag call site is kept in upstream order. */
 #include "pr/battle.h"
 #include <math.h>
 
@@ -66,7 +64,10 @@ double pr_get_attack_type_effectiveness(pr_battle *bt, const pr_pokemon *def, in
              * then IgnoreTypeImmunityAbAttr (Scrappy, Mind's Eye). */
             if (move_type == POKEMON_TYPE_GROUND && types[i] == POKEMON_TYPE_FLYING && pr_is_forcibly_grounded(bt, def))
                 continue;
-            if (pr_has_battler_tag_class(bt, def, PR_TAGCLASS_EXPOSED)) pr_note_unported(bt, PR_FEAT_BATTLER_TAGS);
+            bool exposed = false; /* findTag(IGNORE_DARK / IGNORE_GHOST tag whose ignoreImmunity() holds) */
+            for (int k = 0; k < def->n_tags && !exposed; k++)
+                exposed = pr_exposed_tag_ignores_immunity(def->tags[k].type, types[i], move_type);
+            if (exposed) continue;
             bool ignore = false;
             pr_ab_params pp = {.pokemon = source, .move = -1, .simulated = true, .flag = &ignore,
                                .move_type = move_type, .defender_type = types[i]};
@@ -118,9 +119,7 @@ double pr_get_move_effectiveness_ex(pr_battle *bt, const pr_pokemon *def, const 
         pr_apply_ab_attrs(bt, PR_AC_FieldPriorityMoveImmunityAbAttr, &fp);
     }
     if (m->category != MOVE_CATEGORY_STATUS) pr_apply_ab_attrs(bt, PR_AC_FullHpResistTypeAbAttr, &pp);
-    /* status moves: hitsSubstitute needs a SUBSTITUTE tag */
-    if (m->category == MOVE_CATEGORY_STATUS && pr_has_battler_tag(bt, def, BATTLER_TAG_TYPE_SUBSTITUTE))
-        pr_note_unported(bt, PR_FEAT_BATTLER_TAGS);
+    if (m->category == MOVE_CATEGORY_STATUS && pr_move_hits_substitute(bt, move, src, def)) tm = 0;
     if (cancelled_out) *cancelled_out = cancelled;
     return cancelled ? 0 : tm;
 }
@@ -201,18 +200,29 @@ double pr_calculate_battle_power(pr_battle *bt, const pr_pokemon *src, const pr_
                        .value = &power};
     pr_apply_ab_attrs(bt, PR_AC_UserFieldMoveTypePowerBoostAbAttr, &up);
 
-    /* TypeBoostTag (Flash Fire, Charge): its boosted type and value aren't modelled */
-    if (pr_has_battler_tag_class(bt, src, PR_TAGCLASS_TYPE_BOOST)) pr_note_unported(bt, PR_FEAT_BATTLER_TAGS);
+    /* The first TypeBoostTag (Flash Fire, Charge) for the ability-changed type */
+    for (int i = 0; i < src->n_tags; i++) {
+        int boosted;
+        double boost;
+        if (pr_battler_tag_is(src->tags[i].type, PR_TAGCLASS_TYPE_BOOST)
+            && pr_type_boost_tag_params(src->tags[i].type, &boosted, &boost) && boosted == type_change) {
+            power *= boost;
+            break;
+        }
+    }
     if (!pr_move_has_attr((uint16_t)move, PR_AC_TypelessAttr)) {
-        /* WeakenMoveTypeTag (Mud Sport, Water Sport), AttackTypeBoosterModifier */
-        if ((pr_arena_has_tag(bt, ARENA_TAG_TYPE_MUD_SPORT, ARENA_TAG_SIDE_BOTH) && type_change == POKEMON_TYPE_ELECTRIC)
-            || (pr_arena_has_tag(bt, ARENA_TAG_TYPE_WATER_SPORT, ARENA_TAG_SIDE_BOTH) && type_change == POKEMON_TYPE_FIRE))
-            pr_note_unported(bt, PR_FEAT_ARENA_TAGS);
+        /* arena.applyTags(WeakenMoveTypeTag, type, power): every Mud Sport / Water Sport tag, either side */
+        for (int i = 0; i < bt->n_arena_tags; i++) {
+            const pr_arena_tag *t = &bt->arena_tags[i];
+            if (pr_arena_tag_is(t->type, PR_ARENACLASS_WEAKEN_MOVE_TYPE) && pr_weaken_move_type_tag_type(t->type) == type_change)
+                power *= 0.33;
+        }
         pr_apply_attack_type_booster_modifiers(bt, src, type_change, &power);
     }
     if (pr_has_battler_tag_class(bt, src, PR_TAGCLASS_HELPING_HAND)) power *= 1.5;
-    /* SupremeOverlordTag.getBoost() depends on the tag's faint count */
-    if (pr_has_battler_tag(bt, src, BATTLER_TAG_TYPE_SUPREME_OVERLORD)) pr_note_unported(bt, PR_FEAT_BATTLER_TAGS);
+    /* SupremeOverlordTag.getBoost(): 1 + 0.1 * faintCount */
+    const pr_battler_tag *overlord = pr_get_battler_tag(src, BATTLER_TAG_TYPE_SUPREME_OVERLORD);
+    if (overlord) power *= 1 + 0.1 * overlord->faint_count;
 
     if (pr_is_grounded(bt, src, false)) power *= terrain_power_multiplier(bt, pr_get_move_type(bt, src, move));
     if (pr_is_grounded(bt, def, false) && bt->terrain == TERRAIN_MISTY && type_change == POKEMON_TYPE_DRAGON)
@@ -360,13 +370,21 @@ pr_damage_result pr_get_attack_damage(pr_battle *bt, pr_pokemon *def, pr_pokemon
         pr_apply_ab_attrs(bt, PR_AC_BypassBurnDamageReductionAbAttr, &bp2);
         if (!bypass) burn = 0.5;
     }
-    /* WeakenMoveScreenTag (Reflect, Light Screen, Aurora Veil); crits go through screens */
+    /* arena.applyTagsForSide(WeakenMoveScreenTag, defendingSide, source, moveCategory, screenMultiplier):
+     * Reflect, Light Screen, Aurora Veil. Crits go through screens, and so does an Infiltrator. */
     double screen = 1;
     if (!is_critical) {
         int side = side_of(def);
-        if (pr_arena_has_tag(bt, ARENA_TAG_TYPE_REFLECT, side) || pr_arena_has_tag(bt, ARENA_TAG_TYPE_LIGHT_SCREEN, side)
-            || pr_arena_has_tag(bt, ARENA_TAG_TYPE_AURORA_VEIL, side))
-            pr_note_unported(bt, PR_FEAT_ARENA_TAGS);
+        for (int i = 0; i < bt->n_arena_tags; i++) {
+            const pr_arena_tag *t = &bt->arena_tags[i];
+            if (!pr_arena_tag_is(t->type, PR_ARENACLASS_WEAKEN_MOVE_SCREEN) || !pr_arena_tag_on_side(t, side)) continue;
+            if (!pr_screen_tag_weakens(t->type, category)) continue;
+            bool bypassed = false;
+            pr_ab_params ip = {.pokemon = src, .move = -1, .flag = &bypassed};
+            pr_apply_ab_attrs(bt, PR_AC_InfiltratorAbAttr, &ip);
+            if (bypassed) continue;
+            screen = bt->double_battle ? 2.0 / 3 : 1.0 / 2;
+        }
     }
     double hits_tag = pr_hits_tag_multiplier(bt, def, move);
 
@@ -409,7 +427,8 @@ bool pr_get_critical_hit_result(pr_battle *bt, const pr_pokemon *def, const pr_p
     pr_apply_temp_crit_booster_modifiers(bt, src->is_player, &stage); /* Dire Hit */
     pr_ab_params sp = {.pokemon = src, .move = -1, .holder = &stage};
     pr_apply_ab_attrs(bt, PR_AC_BonusCritAbAttr, &sp);
-    if (pr_has_battler_tag_class(bt, src, PR_TAGCLASS_CRIT_BOOST)) pr_note_unported(bt, PR_FEAT_BATTLER_TAGS);
+    const pr_battler_tag *crit_boost = pr_find_battler_tag_class(src, PR_TAGCLASS_CRIT_BOOST); /* Focus Energy, Dragon Cheer */
+    if (crit_boost) stage += crit_boost->crit_stages;
 
     static const int chance_tab[4] = {24, 8, 2, 1};
     int chance = chance_tab[stage < 0 ? 0 : stage > 3 ? 3 : stage];
@@ -418,6 +437,7 @@ bool pr_get_critical_hit_result(pr_battle *bt, const pr_pokemon *def, const pr_p
     bool block = false;
     pr_ab_params bp = {.pokemon = def, .move = -1, .flag = &block};
     pr_apply_ab_attrs(bt, PR_AC_BlockCritAbAttr, &bp);
-    if (pr_arena_has_tag(bt, ARENA_TAG_TYPE_NO_CRIT, side_of(def))) block = true; /* Lucky Chant */
+    /* arena.applyTagsForSide(NoCritTag, defender's side, blockCrit): Lucky Chant */
+    if (pr_arena_has_tag_class(bt, PR_ARENACLASS_NO_CRIT, side_of(def))) block = true;
     return crit && !block;
 }

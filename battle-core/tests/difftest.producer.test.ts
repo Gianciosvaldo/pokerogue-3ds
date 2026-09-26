@@ -2,21 +2,36 @@
  * Upstream half of the differential test. Copy into an upstream checkout as
  * test/tests/zz-dump/difftest.producer.test.ts and run with
  *   DIFF_OUT=/abs/cases.txt DIFF_N=5000 npx vitest run test/tests/zz-dump/difftest.producer.test.ts
+ * (DIFF_SEED picks the case stream, DIFF_ABILITIES=0 keeps every ability at Ball Fetch,
+ * DIFF_FOCUS=1 favours rare item and tag interactions).
  * It builds random attacker/defender pairs inside a real upstream battle, asks
  * upstream for stats, crit rolls and damage, and writes cases + expected answers.
  * build/difftest replays each case through the C port and compares.
  */
 import { BattleScene } from "#app/battle-scene";
 import { speciesDataRegistry } from "#app/globals/global-species-data-registry";
+import { getArenaTag, SuppressAbilitiesTag } from "#data/arena-tag";
+import {
+  AutotomizedTag,
+  CritBoostTag,
+  getBattlerTag,
+  HighestStatBoostTag,
+  StockpilingTag,
+  SupremeOverlordTag,
+} from "#data/battler-tags";
 import { allAbilities, allMoves, modifierTypes } from "#data/data-lists";
 import { Status } from "#data/status-effect";
 import { Terrain } from "#data/terrain";
 import { Weather } from "#data/weather";
 import { AbilityId } from "#enums/ability-id";
+import { ArenaTagSide } from "#enums/arena-tag-side";
+import { ArenaTagType } from "#enums/arena-tag-type";
+import { BattlerTagType } from "#enums/battler-tag-type";
 import { Command } from "#enums/command";
 import { MoveCategory } from "#enums/move-category";
 import { MoveId } from "#enums/move-id";
 import { SpeciesId } from "#enums/species-id";
+import { Stat } from "#enums/stat";
 import { StatusEffect } from "#enums/status-effect";
 import { PokemonMove } from "#moves/pokemon-move";
 import { generateModifierType } from "#mystery-encounters/encounter-phase-utils";
@@ -28,6 +43,9 @@ import { it } from "vitest";
 it("difftest producer", async () => {
   const N = Number(process.env.DIFF_N ?? 2000);
   const ABILITIES = process.env.DIFF_ABILITIES !== "0";
+  // DIFF_FOCUS=1 draws the focus moves, focus abilities and damage-path tags far more often,
+  // for interactions that need several rare picks at once (Unburden's tag + ability + a speed move)
+  const FOCUS = process.env.DIFF_FOCUS === "1";
   const OUT = process.env.DIFF_OUT ?? "/tmp/pr-cases.txt";
   const game = new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
   game.override
@@ -87,9 +105,25 @@ it("difftest producer", async () => {
     MoveId.SEISMIC_TOSS, MoveId.DRAGON_RAGE, MoveId.ENDEAVOR, MoveId.FLY, MoveId.DIVE, MoveId.SOLAR_BEAM,
     MoveId.ROLLOUT, MoveId.ICE_BALL, MoveId.UPROAR, MoveId.DOUBLE_KICK, MoveId.BULLET_SEED, MoveId.EXPLOSION,
     MoveId.TACKLE, MoveId.QUICK_ATTACK, MoveId.EMBER, MoveId.WATER_GUN, MoveId.VINE_WHIP, MoveId.THUNDER_SHOCK,
+    // moves whose damage reads a tag-dependent value: speed, weight, stockpiles, Minimize and
+    // semi-invulnerable targets, variable category, sound (Substitute), Ground vs Flying
+    MoveId.GYRO_BALL, MoveId.ELECTRO_BALL, MoveId.LOW_KICK, MoveId.GRASS_KNOT, MoveId.HEAVY_SLAM, MoveId.HEAT_CRASH,
+    MoveId.SPIT_UP, MoveId.STOMP, MoveId.BODY_SLAM, MoveId.GUST, MoveId.TWISTER, MoveId.EARTHQUAKE, MoveId.SURF,
+    MoveId.WHIRLPOOL, MoveId.PHOTON_GEYSER, MoveId.SHELL_SIDE_ARM, MoveId.BOOMBURST, MoveId.HYPER_VOICE,
+    MoveId.THOUSAND_ARROWS, MoveId.MUD_SHOT,
   ]
     .map(id => allMoves[id])
     .filter(m => attacks.includes(m));
+  // Abilities that meet tags: screens and Substitute (Infiltrator), Neutralizing Gas and the
+  // abilities it can't suppress, contact through a Substitute, Protect, Autotomize-like weight
+  const focusAbilities = [
+    AbilityId.INFILTRATOR, AbilityId.NEUTRALIZING_GAS, AbilityId.FLUFFY, AbilityId.DISGUISE, AbilityId.ICE_FACE,
+    AbilityId.UNSEEN_FIST, AbilityId.PIERCING_DRILL, AbilityId.UNBURDEN, AbilityId.COMATOSE, AbilityId.TERA_SHELL,
+    AbilityId.LEVITATE, AbilityId.SCRAPPY, AbilityId.LONG_REACH, AbilityId.TOUGH_CLAWS, AbilityId.HEAVY_METAL,
+    AbilityId.LIGHT_METAL, AbilityId.FLASH_FIRE, AbilityId.SOUNDPROOF, AbilityId.GALVANIZE, AbilityId.NORMALIZE,
+    AbilityId.AERILATE, AbilityId.LIQUID_VOICE, AbilityId.STURDY,
+  ];
+  const focusOdds = (n: number) => rnd(FOCUS ? 2 : n) === 0;
   let caseMove: any;
   const giveItems = (p: any) => {
     const list = p.isPlayer() ? scene.modifiers : scene.enemyModifiers;
@@ -161,6 +195,92 @@ it("difftest producer", async () => {
     ].join(" ");
   };
 
+  // Real upstream tags, built by the game's own factories (getBattlerTag / getArenaTag) and put
+  // straight into the tag lists, as loading a save does, so no onAdd side effect runs; the
+  // fields onAdd would set are set here. Half the picks are tags the damage path reads, the
+  // other half any tag type, so a read the port doesn't know about shows up as a mismatch.
+  const allBattlerTags = Object.values(BattlerTagType) as BattlerTagType[];
+  const hotBattlerTags = [
+    BattlerTagType.FIRE_BOOST, BattlerTagType.CHARGED, BattlerTagType.HELPING_HAND, BattlerTagType.SUPREME_OVERLORD,
+    BattlerTagType.CRIT_BOOST, BattlerTagType.DRAGON_CHEER, BattlerTagType.ALWAYS_CRIT, BattlerTagType.TAR_SHOT,
+    BattlerTagType.PROTOSYNTHESIS, BattlerTagType.QUARK_DRIVE, BattlerTagType.IGNORE_GHOST, BattlerTagType.IGNORE_DARK,
+    BattlerTagType.STOCKPILING, BattlerTagType.AUTOTOMIZED, BattlerTagType.SUBSTITUTE, BattlerTagType.ELECTRIFIED,
+    BattlerTagType.SLOW_START, BattlerTagType.UNBURDEN, BattlerTagType.IGNORE_FLYING, BattlerTagType.FLOATING,
+    BattlerTagType.TELEKINESIS, BattlerTagType.FLYING, BattlerTagType.UNDERGROUND, BattlerTagType.UNDERWATER,
+    BattlerTagType.HIDDEN, BattlerTagType.RECEIVE_DOUBLE_DAMAGE, BattlerTagType.MINIMIZED, BattlerTagType.STURDY,
+    BattlerTagType.CONFUSED, BattlerTagType.PROTECTED, BattlerTagType.KINGS_SHIELD, BattlerTagType.BANEFUL_BUNKER,
+  ];
+  const giveTags = (p: any) => {
+    // Unburden's tag only ever sits on an Unburden Pokemon (it's added when its item goes)
+    if (p.summonData.ability === AbilityId.UNBURDEN && rnd(2) === 0) {
+      p.summonData.tags.push(getBattlerTag(BattlerTagType.UNBURDEN, 1, caseMove.id, p.id));
+    }
+    const n = rnd(2) === 0 ? 0 : 1 + rnd(3);
+    for (let k = 0; k < n; k++) {
+      const type = rnd(FOCUS ? 4 : 2) !== 0 ? hotBattlerTags[rnd(hotBattlerTags.length)] : allBattlerTags[rnd(allBattlerTags.length)];
+      if (p.getTag(type)) {
+        continue; // addTag never holds two tags of one type
+      }
+      const tag: any = getBattlerTag(type, 1 + rnd(5), caseMove.id, rnd(2) === 0 ? A.id : D.id);
+      if (!tag) {
+        continue;
+      }
+      if (tag instanceof CritBoostTag) {
+        (tag as any).critStages = 1 + rnd(2);
+      } else if (tag instanceof SupremeOverlordTag) {
+        (tag as any).faintCount = rnd(6);
+      } else if (tag instanceof HighestStatBoostTag) {
+        tag.stat = 1 + rnd(5);
+        tag.multiplier = tag.stat === Stat.SPD ? 1.5 : 1.3;
+      } else if (tag instanceof StockpilingTag) {
+        tag.stockpiledCount = rnd(4);
+      } else if (tag instanceof AutotomizedTag) {
+        tag.autotomizeCount = rnd(4);
+      }
+      p.summonData.tags.push(tag);
+    }
+  };
+  const allArenaTags = (Object.values(ArenaTagType) as ArenaTagType[]).filter(t => t !== ArenaTagType.NONE);
+  const hotArenaTags = [
+    ArenaTagType.REFLECT, ArenaTagType.LIGHT_SCREEN, ArenaTagType.AURORA_VEIL, ArenaTagType.MUD_SPORT,
+    ArenaTagType.WATER_SPORT, ArenaTagType.NO_CRIT, ArenaTagType.NEUTRALIZING_GAS, ArenaTagType.ION_DELUGE,
+    ArenaTagType.GRAVITY, ArenaTagType.TAILWIND, ArenaTagType.GRASS_WATER_PLEDGE,
+  ];
+  const giveArenaTags = () => {
+    scene.arena.tags.length = 0;
+    const n = rnd(2) === 0 ? 0 : 1 + rnd(3);
+    for (let k = 0; k < n; k++) {
+      const type = rnd(FOCUS ? 4 : 2) !== 0 ? hotArenaTags[rnd(hotArenaTags.length)] : allArenaTags[rnd(allArenaTags.length)];
+      const side = [ArenaTagSide.BOTH, ArenaTagSide.PLAYER, ArenaTagSide.ENEMY][rnd(3)];
+      if (scene.arena.getTagOnSide(type, side)) {
+        continue; // addTag would only overlap the existing tag
+      }
+      const tag: any = getArenaTag(type, 1 + rnd(5), caseMove.id, rnd(2) === 0 ? A.id : D.id, side);
+      if (!tag) {
+        continue;
+      }
+      if (tag instanceof SuppressAbilitiesTag) {
+        (tag as any).sourceCount = 1 + rnd(2);
+      }
+      scene.arena.tags.push(tag);
+    }
+  };
+  const tagLine = (who: number, t: any) =>
+    [
+      "T", who, t.tagType, chainOf(t), t.turnCount, t.sourceMove ?? 0, t.sourceId ?? -1,
+      t instanceof CritBoostTag ? t.critStages : 0,
+      t instanceof StockpilingTag ? t.stockpiledCount : 0,
+      t instanceof AutotomizedTag ? t.autotomizeCount : 0,
+      t instanceof SupremeOverlordTag ? t.faintCount : 0,
+      t instanceof HighestStatBoostTag ? t.stat : -1,
+      t instanceof HighestStatBoostTag ? t.multiplier : 0,
+    ].join(" ");
+  const arenaLine = (t: any) =>
+    [
+      "A", t.tagType, chainOf(t), t.side, t.turnCount, t.maxDuration, t.sourceMove ?? 0, t.sourceId ?? -1,
+      t instanceof SuppressAbilitiesTag ? t.sourceCount : 0, t.beingRemoved ? 1 : 0,
+    ].join(" ");
+
   const setup = (p: any) => {
     // Non-simulated calls can leave per-turn state behind (e.g. Tera Shell stores
     // turnData.moveEffectiveness), so every case starts from fresh transient data.
@@ -182,7 +302,12 @@ it("difftest producer", async () => {
     p.hp = rnd(3) === 0 ? p.getMaxHp() : 1 + rnd(p.getMaxHp());
     // Active ability via summonData (wins over the Ball Fetch overrides, which still
     // govern the permanent ability that calculateStats looks at). DIFF_ABILITIES=0 keeps Ball Fetch.
-    const ability = ABILITIES && rnd(2) === 0 ? 1 + rnd(allAbilities.length - 1) : AbilityId.BALL_FETCH;
+    const ability =
+      ABILITIES && rnd(2) === 0
+        ? focusOdds(8)
+          ? focusAbilities[rnd(focusAbilities.length)]
+          : 1 + rnd(allAbilities.length - 1)
+        : AbilityId.BALL_FETCH;
     p.summonData.ability = ability;
     const stages = [0, 0, 0, 0, 0, 0, 0].map(() => (rnd(3) === 0 ? rnd(13) - 6 : 0));
     stages.forEach((v, i) => p.setStatStage(i + 1, v));
@@ -215,6 +340,7 @@ it("difftest producer", async () => {
       rnd(4) === 0 ? [MoveId.FIRE_PLEDGE, MoveId.WATER_PLEDGE, MoveId.GRASS_PLEDGE][rnd(3)] : undefined;
     p.turnData.hitCount = rnd(4);
     p.turnData.hitsLeft = rnd(4) - 1;
+    giveTags(p);
     return [sid, form, p.level, ...p.ivs, p.nature, ...stages, s, p.isTerastallized ? 1 : 0, p.teraType, p.hp, ability, p.gender];
   };
   // Fields read after the move is known (the moveset may hold it)
@@ -246,8 +372,8 @@ it("difftest producer", async () => {
 
   for (let i = 0; i < N; i++) {
     battle.turn = 1 + rnd(30);
-    // One case in 8 uses a move whose item interactions would otherwise come up rarely
-    const move = rnd(8) === 0 ? focus[rnd(focus.length)] : attacks[rnd(attacks.length)];
+    // One case in 8 (1 in 2 with DIFF_FOCUS=1) uses a move with rare item or tag interactions
+    const move = focusOdds(8) ? focus[rnd(focus.length)] : attacks[rnd(attacks.length)];
     caseMove = move;
     scene.modifiers.length = 0;
     scene.enemyModifiers.length = 0;
@@ -257,6 +383,7 @@ it("difftest producer", async () => {
     scene.arena.weather = weather ? new Weather(weather, 5) : null;
     const terrain = [0, 0, 0, 1, 2, 3, 4][rnd(7)];
     scene.arena.terrain = terrain ? new Terrain(terrain, 5) : null;
+    giveArenaTags();
     scene.arena.playerFaints = rnd(3) === 0 ? rnd(5) : 0;
     battle.enemyFaints = rnd(3) === 0 ? rnd(5) : 0;
     battle.playerFaintsHistory = rnd(3) === 0 ? [{ pokemon: A, turn: battle.turn - 1 - rnd(2) }] : [];
@@ -281,6 +408,12 @@ it("difftest producer", async () => {
         + ` ${[0, 1, 2, 3].map(k => battle.turnCommands[k]?.command ?? -1).join(" ")}`;
     const caseLine =
       `C ${a.join(" ")} ${late(A).join(" ")} ${d.join(" ")} ${late(D).join(" ")} ${weather} ${move.id} ${crit ? 1 : 0} ${swap ? 1 : 0}`;
+    // Tags as they stand before the calls (a non-simulated call may add some, e.g. Sturdy's)
+    const tagLines = [
+      ...A.summonData.tags.map((t: any) => tagLine(0, t)),
+      ...D.summonData.tags.map((t: any) => tagLine(1, t)),
+      ...scene.arena.tags.map((t: any) => arenaLine(t)),
+    ];
     let sim: any;
     let critRoll: boolean;
     let real: any;
@@ -297,6 +430,7 @@ it("difftest producer", async () => {
     lines.push(rl, worldLine);
     scene.modifiers.forEach((m: any) => lines.push(modLine(0, m)));
     scene.enemyModifiers.forEach((m: any) => lines.push(modLine(1, m)));
+    lines.push(...tagLines);
     lines.push(caseLine);
     lines.push(
       `E ${A.stats.join(" ")} ${D.stats.join(" ")} ${sim.damage} ${sim.result} ${critRoll ? 1 : 0} ${real.damage} ${real.result}`,

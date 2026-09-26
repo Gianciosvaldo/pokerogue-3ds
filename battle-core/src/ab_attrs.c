@@ -74,14 +74,26 @@ bool pr_has_ability_with_attr(pr_battle *bt, const pr_pokemon *p, uint16_t cls)
     return p->passive && pr_can_apply_ability(bt, p, p->passive) && pr_ability_first_attr(p->passive, cls);
 }
 
+bool pr_move_hits_substitute(pr_battle *bt, int move, const pr_pokemon *user, const pr_pokemon *target)
+{
+    int tgt = pr_moves[move].target;
+    if (tgt == MOVE_TARGET_USER || tgt == MOVE_TARGET_USER_SIDE || tgt == MOVE_TARGET_ENEMY_SIDE
+        || tgt == MOVE_TARGET_BOTH_SIDES || !target || !pr_has_battler_tag(bt, target, BATTLER_TAG_TYPE_SUBSTITUTE))
+        return false;
+    bool bypassed = false;
+    pr_ab_params pp = {.pokemon = user, .move = -1, .flag = &bypassed};
+    pr_apply_ab_attrs(bt, PR_AC_InfiltratorAbAttr, &pp);
+    unsigned fl = pr_moves[move].flags;
+    return !bypassed && !(fl & MOVE_FLAGS_SOUND_BASED) && !(fl & MOVE_FLAGS_IGNORE_SUBSTITUTE);
+}
+
 bool pr_move_does_flag_effect_apply(pr_battle *bt, int move, unsigned flag, const pr_pokemon *user,
                                     const pr_pokemon *target)
 {
     switch (flag) {
     case MOVE_FLAGS_MAKES_CONTACT:
-        /* hitsSubstitute(user, target) needs a SUBSTITUTE tag: none are modelled */
-        (void)target;
-        if (pr_has_ability_with_attr(bt, user, PR_AC_IgnoreContactAbAttr)) return false;
+        if (pr_has_ability_with_attr(bt, user, PR_AC_IgnoreContactAbAttr) || pr_move_hits_substitute(bt, move, user, target))
+            return false;
         break;
     case MOVE_FLAGS_IGNORE_ABILITIES:
     case MOVE_FLAGS_IGNORE_PROTECT:
@@ -108,11 +120,25 @@ bool pr_weather_effect_suppressed(pr_battle *bt)
     return false;
 }
 
-/* Pokemon.canApplyAbility(passive). Fusion, Transform, Mold Breaker (arena.ignoreAbilities),
- * suppression and Neutralizing Gas are not modelled; none can occur in the current state. */
+/* Pokemon.canApplyAbility(passive). Fusion, Transform, Mold Breaker (arena.ignoreAbilities) and
+ * summonData.abilitySuppressed are not modelled; none can occur in the current state. */
 bool pr_can_apply_ability(pr_battle *bt, const pr_pokemon *p, uint16_t ability)
 {
     const pr_ability *ab = &pr_abilities[ability];
+    /* Neutralizing Gas: arena.getTag(NEUTRALIZING_GAS) suppresses the abilities of Pokemon on the field
+     * (and PreSummonAbAttr abilities off it), except unsuppressable ones and the gas user's own: its
+     * other ability too while it is the only source (sourceCount 1). */
+    const pr_arena_tag *gas = pr_arena_get_tag_on_side(bt, ARENA_TAG_TYPE_NEUTRALIZING_GAS, ARENA_TAG_SIDE_BOTH);
+    if (gas && !gas->being_removed
+        && (pr_battler_index(bt, p) >= 0 || pr_ability_first_attr(ability, PR_AC_PreSummonAbAttr))) {
+        uint16_t src_attr = PR_AC_PreLeaveFieldRemoveSuppressAbilitiesSourceAbAttr;
+        bool this_suppressing = pr_ability_first_attr(ability, src_attr) != NULL;
+        /* hasAbilityWithAttr(..., canApply = false) */
+        bool has_suppressing = pr_ability_first_attr(p->ability, src_attr) || (p->passive && pr_ability_first_attr(p->passive, src_attr));
+        bool unsuppressable = (ab->flags & AB_FLAG_UNSUPPRESSABLE) || this_suppressing
+                              || (has_suppressing && !(gas->source_count > 1));
+        if (!unsuppressable) return false;
+    }
     if (!(p->hp > 0 || (ab->flags & AB_FLAG_BYPASS_FAINT))) return false;
     for (unsigned i = 0; i < ab->conditions.n; i++)
         if (!pr_closure_call(bt, ab->conditions.v[i], PR_AC_AbAttr, 1, p, NULL, -1)) return false;
@@ -343,10 +369,12 @@ static bool apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp)
         return true;
     }
     case PR_AC_FormBlockDamageAbAttr: {
-        /* Disguise, Ice Face. canApply: damage > 0, in the blocking form, condition, and not
-         * hitting a substitute (no tags are modelled). apply does nothing when simulated. */
+        /* Disguise, Ice Face. canApply: damage > 0, in the blocking form, condition, and the move
+         * doesn't hit a substitute. apply does nothing when simulated. */
         const pr_attr_FormBlockDamageAbAttr *x = P(FormBlockDamageAbAttr, a);
-        if (!(*pp->value > 0 && p->form == x->formIndex && call_bool(bt, x->condition, a->cls, p, o, move))) return true;
+        if (!(*pp->value > 0 && p->form == x->formIndex && call_bool(bt, x->condition, a->cls, p, o, move)
+              && !pr_move_hits_substitute(bt, move, o, p)))
+            return true;
         if (pp->simulated) return true;
         *pp->value = 0;
         defer(bt, a->cls); /* recoil damage and the form change */
@@ -356,9 +384,9 @@ static bool apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp)
         *pp->value = to_dmg_value(*pp->value * P(AlliedFieldDamageReductionAbAttr, a)->damageMultiplier);
         return true;
     case PR_AC_PreDefendFullHpEndureAbAttr:
-        /* canApply: full HP, max HP > 1, damage >= hp, no STURDY tag (tags not modelled) */
+        /* canApply: full HP, max HP > 1, damage >= hp, no STURDY tag */
         if (p->hp >= pr_get_stat(p, STAT_HP, true) && pr_get_stat(p, STAT_HP, true) > 1 && *pp->value >= p->hp
-            && !pp->simulated)
+            && !pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_STURDY) && !pp->simulated)
             defer(bt, a->cls); /* adds the STURDY tag; the damage itself is capped later */
         return true;
 
@@ -371,6 +399,11 @@ static bool apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp)
         return true;
     case PR_AC_BlockCritAbAttr:
         *pp->flag = true;
+        return true;
+
+    /* ---- screens and Substitute ---- */
+    case PR_AC_InfiltratorAbAttr:
+        if (!*pp->flag) *pp->flag = true; /* canApply: bypassed not yet set */
         return true;
     }
     return false;

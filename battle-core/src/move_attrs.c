@@ -163,10 +163,12 @@ void pr_apply_variable_power(pr_battle *bt, const pr_pokemon *user, const pr_pok
             *power = remains < 4 ? pw[remains] : 40;
             break;
         }
-        case PR_AC_SpitUpPowerAttr:
+        case PR_AC_SpitUpPowerAttr: {
             /* multiplier x stockpiled count, only while a StockpilingTag with stacks exists */
-            if (pr_has_battler_tag_class(bt, user, PR_TAGCLASS_STOCKPILING)) pr_note_unported(bt, PR_FEAT_BATTLER_TAGS);
+            const pr_battler_tag *st = pr_find_battler_tag_class(user, PR_TAGCLASS_STOCKPILING);
+            if (st && st->stockpiled_count > 0) *power = (double)P(SpitUpPowerAttr, a)->multiplier * st->stockpiled_count;
             break;
+        }
         case PR_AC_BeatUpAttr:
             /* power from the party member whose turn it is to hit */
             pr_note_unported(bt, PR_FEAT_PARTY);

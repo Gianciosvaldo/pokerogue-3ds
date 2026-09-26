@@ -1,6 +1,7 @@
 #!/bin/sh
 # Generate N upstream cases and replay them through the C port.
 # Usage: tools/difftest.sh <upstream dir> [N] [seed]
+# DIFF_ABILITIES=0 and DIFF_FOCUS=1 in the environment reach the producer.
 set -e
 UP=${1:?upstream dir}; N=${2:-5000}; SEED=${3:-12345}
 HERE=$(cd "$(dirname "$0")/.." && pwd)

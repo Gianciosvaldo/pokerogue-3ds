@@ -73,7 +73,9 @@ for name in sorted(str_enums):
     for i, (k, v) in enumerate(str_enums[name].items()):
         out.append(f"    {pre}_{snake(k) if not k.isupper() else k} = {i}, /* \"{v}\" */")
     out.append(f"    {pre}_COUNT_ = {len(str_enums[name])}")
-    out.append("};\n")
+    out.append("};")
+    # The upstream strings in the same order, for tools that read upstream's values
+    out.append(f"#define {pre}_VALUES " + ", ".join(c_str(v) for v in str_enums[name].values()) + "\n")
 out.append("#endif")
 os.makedirs(OUT, exist_ok=True)
 with open(os.path.join(OUT, "pr_enums.h"), "w") as f:
@@ -87,7 +89,10 @@ for owner in all_attr_owners:
         inst_by_class.setdefault(a["$class"], []).append(a)
 
 # Every attr class plus every ancestor, so dispatch can ask "is this a StatMultiplierAbAttr?"
-attr_classes = set(inst_by_class)
+# The port also asks for a few classes that no move or ability carries at this commit
+# (ability.hasAttr("PreSummonAbAttr") in canApplyAbility), so they get an id regardless.
+REFERENCED_CLASSES = ["PreSummonAbAttr"]
+attr_classes = set(inst_by_class) | set(REFERENCED_CLASSES)
 for c in list(attr_classes):
     attr_classes.update(classes.get(c, []))
 attr_classes = sorted(attr_classes)

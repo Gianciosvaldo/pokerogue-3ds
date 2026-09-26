@@ -190,8 +190,12 @@ int32_t pr_get_effective_stat_p(pr_battle *bt, const pr_pokemon *p, int stat, co
         break;
     }
     }
-    /* HighestStatBoostTag (Protosynthesis, Quark Drive) for this stat: its multiplier isn't modelled */
-    if (pr_has_battler_tag_class(bt, p, PR_TAGCLASS_HIGHEST_STAT_BOOST)) pr_note_unported(bt, PR_FEAT_BATTLER_TAGS);
+    /* findTag(t => t instanceof HighestStatBoostTag && t.stat === stat): Protosynthesis, Quark Drive */
+    for (int i = 0; i < p->n_tags; i++)
+        if (pr_battler_tag_is(p->tags[i].type, PR_TAGCLASS_HIGHEST_STAT_BOOST) && p->tags[i].stat == stat) {
+            ret *= p->tags[i].multiplier;
+            break;
+        }
     ret = floor(ret);
     return ret > 1 ? (int32_t)ret : 1;
 }
@@ -254,12 +258,13 @@ double pr_get_hp_ratio(const pr_pokemon *p, bool precise)
     return precise ? r : js_round(r * 100) / 100;
 }
 
-/* getWeight(): Autotomize tag not modelled (no tags yet). */
+/* getWeight(): form weight minus 100 kg per Autotomize, then weight abilities, at least 0.1 */
 double pr_get_weight(pr_battle *bt, const pr_pokemon *p)
 {
-    if (pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_AUTOTOMIZED)) pr_note_unported(bt, PR_FEAT_BATTLER_TAGS);
+    const pr_battler_tag *at = pr_find_battler_tag_class(p, PR_TAGCLASS_AUTOTOMIZED);
+    double removed = at ? 100.0 * at->autotomize_count : 0;
     const pr_form *f = pr_pokemon_form(p);
-    double w = f->weight_x10 / 10.0; /* same double as upstream's decimal literal */
+    double w = f->weight_x10 / 10.0 - removed; /* weight_x10 / 10.0 is the same double as upstream's decimal literal */
     pr_ab_params pp = {.pokemon = p, .move = -1, .simulated = true, .value = &w};
     pr_apply_ab_attrs(bt, PR_AC_WeightMultiplierAbAttr, &pp);
     return w > 0.1 ? w : 0.1;

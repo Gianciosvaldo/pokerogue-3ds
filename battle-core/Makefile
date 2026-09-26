@@ -4,7 +4,7 @@ CC ?= gcc
 CFLAGS ?= -O2 -g -std=c99 -Wall -Wextra -Wno-unused-parameter -ffp-contract=off
 CPPFLAGS += -Iinclude -Igen/out
 BUILD ?= build
-SRCS := src/rng.c src/hooks.c src/pokemon.c src/damage.c src/move_attrs.c src/closures.c src/closures_moves.c src/ab_attrs.c src/closures_abilities.c src/modifiers.c src/js_math.c gen/out/pr_data.c
+SRCS := src/rng.c src/hooks.c src/pokemon.c src/damage.c src/move_attrs.c src/closures.c src/closures_moves.c src/ab_attrs.c src/closures_abilities.c src/modifiers.c src/tags.c src/js_math.c gen/out/pr_data.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
 all: $(BUILD)/libprcore.a $(BUILD)/rng_cli $(BUILD)/difftest

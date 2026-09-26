@@ -3854,6 +3854,7 @@ enum pr_arena_event_type {
     ARENA_EVENT_TYPE_ARENA_TAG_REMOVED = 3, /* "onArenaTagRemoved" */
     ARENA_EVENT_TYPE_COUNT_ = 4
 };
+#define ARENA_EVENT_TYPE_VALUES "onWeatherChanged", "onTerrainChanged", "onArenaTagAdded", "onArenaTagRemoved"
 
 /* string enum in upstream */
 enum pr_arena_tag_type {
@@ -3888,6 +3889,7 @@ enum pr_arena_tag_type {
     ARENA_TAG_TYPE_PENDING_HEAL = 28, /* "PENDING_HEAL" */
     ARENA_TAG_TYPE_COUNT_ = 29
 };
+#define ARENA_TAG_TYPE_VALUES "NONE", "MUD_SPORT", "WATER_SPORT", "SPIKES", "TOXIC_SPIKES", "MIST", "STEALTH_ROCK", "STICKY_WEB", "TRICK_ROOM", "GRAVITY", "REFLECT", "LIGHT_SCREEN", "AURORA_VEIL", "QUICK_GUARD", "WIDE_GUARD", "MAT_BLOCK", "CRAFTY_SHIELD", "TAILWIND", "HAPPY_HOUR", "SAFEGUARD", "NO_CRIT", "IMPRISON", "ION_DELUGE", "FIRE_GRASS_PLEDGE", "WATER_FIRE_PLEDGE", "GRASS_WATER_PLEDGE", "FAIRY_LOCK", "NEUTRALIZING_GAS", "PENDING_HEAL"
 
 /* string enum in upstream */
 enum pr_battler_tag_type {
@@ -3988,6 +3990,7 @@ enum pr_battler_tag_type {
     BATTLER_TAG_TYPE_RAGE = 94, /* "RAGE" */
     BATTLER_TAG_TYPE_COUNT_ = 95
 };
+#define BATTLER_TAG_TYPE_VALUES "RECHARGING", "FLINCHED", "INTERRUPTED", "CONFUSED", "INFATUATED", "SEEDED", "NIGHTMARE", "FRENZY", "CHARGING", "ENCORE", "HELPING_HAND", "INGRAIN", "OCTOLOCK", "AQUA_RING", "DROWSY", "TRAPPED", "BIND", "WRAP", "FIRE_SPIN", "WHIRLPOOL", "CLAMP", "SAND_TOMB", "MAGMA_STORM", "SNAP_TRAP", "THUNDER_CAGE", "INFESTATION", "PROTECTED", "SPIKY_SHIELD", "KINGS_SHIELD", "OBSTRUCT", "SILK_TRAP", "BANEFUL_BUNKER", "BURNING_BULWARK", "ENDURING", "STURDY", "PERISH_SONG", "TRUANT", "SLOW_START", "PROTOSYNTHESIS", "QUARK_DRIVE", "FLYING", "UNDERGROUND", "UNDERWATER", "HIDDEN", "FIRE_BOOST", "CRIT_BOOST", "ALWAYS_CRIT", "IGNORE_ACCURACY", "IGNORE_FLYING", "SALT_CURED", "CURSED", "CHARGED", "ROOSTED", "FLOATING", "MINIMIZED", "DESTINY_BOND", "CENTER_OF_ATTENTION", "STOCKPILING", "RECEIVE_DOUBLE_DAMAGE", "ALWAYS_GET_HIT", "DISABLED", "SUBSTITUTE", "IGNORE_GHOST", "IGNORE_DARK", "GULP_MISSILE_ARROKUDA", "GULP_MISSILE_PIKACHU", "BEAK_BLAST_CHARGING", "SHELL_TRAP", "DRAGON_CHEER", "NO_RETREAT", "GORILLA_TACTICS", "UNBURDEN", "THROAT_CHOPPED", "TAR_SHOT", "BURNED_UP", "DOUBLE_SHOCKED", "AUTOTOMIZED", "MYSTERY_ENCOUNTER_POST_SUMMON", "POWER_TRICK", "HEAL_BLOCK", "TORMENT", "TAUNT", "IMPRISON", "SYRUP_BOMB", "ELECTRIFIED", "TELEKINESIS", "COMMANDED", "GRUDGE", "PSYCHO_SHIFT", "ENDURE_TOKEN", "POWDER", "MAGIC_COAT", "SUPREME_OVERLORD", "BYPASS_SPEED", "RAGE"
 
 /* string enum in upstream */
 enum pr_color {
@@ -4014,6 +4017,7 @@ enum pr_color {
     COLOR_LUXURY = 20, /* "#e64a18" */
     COLOR_COUNT_ = 21
 };
+#define COLOR_VALUES "#ffffff", "#f8f8f8", "#a0a0a0", "#484848", "#404040", "#f89890", "#e13d3d", "#e70808", "#d64b00", "#f8b050", "#e8e8a8", "#ccbe00", "#a68e17", "#78c850", "#40c8f8", "#ffffff", "#3890f8", "#f8d038", "#d52929", "#e020c0", "#e64a18"
 
 /* string enum in upstream */
 enum pr_positional_tag_type {
@@ -4021,6 +4025,7 @@ enum pr_positional_tag_type {
     POSITIONAL_TAG_TYPE_WISH = 1, /* "WISH" */
     POSITIONAL_TAG_TYPE_COUNT_ = 2
 };
+#define POSITIONAL_TAG_TYPE_VALUES "DELAYED_ATTACK", "WISH"
 
 /* string enum in upstream */
 enum pr_shadow_color {
@@ -4041,6 +4046,7 @@ enum pr_shadow_color {
     SHADOW_COLOR_LIGHT_ORANGE = 14, /* "#ffbd73" */
     SHADOW_COLOR_COUNT_ = 15
 };
+#define SHADOW_COLOR_VALUES "#636363", "#6b5a73", "#d0d0c8", "#69402a", "#fca2a2", "#f83018", "#984038", "#632929", "#306850", "#006090", "#ded6b5", "#ebd773", "#a0a060", "#c07800", "#ffbd73"
 
 /* string enum in upstream */
 enum pr_species_form_key {
@@ -4062,6 +4068,7 @@ enum pr_species_form_key {
     SPECIES_FORM_KEY_ETERNAMAX = 15, /* "eternamax" */
     SPECIES_FORM_KEY_COUNT_ = 16
 };
+#define SPECIES_FORM_KEY_VALUES "mega", "mega-x", "mega-y", "mega-z", "mega-original", "mega-curly", "mega-droopy", "mega-stretchy", "primal", "origin", "incarnate", "therian", "gigantamax", "gigantamax-single", "gigantamax-rapid", "eternamax"
 
 /* string enum in upstream */
 enum pr_type_color {
@@ -4085,6 +4092,7 @@ enum pr_type_color {
     TYPE_COLOR_FAIRY = 17, /* "#EF70EF" */
     TYPE_COLOR_COUNT_ = 18
 };
+#define TYPE_COLOR_VALUES "#ADA594", "#A55239", "#9CADF7", "#9141CB", "#AE7A3B", "#BDA55A", "#ADBD21", "#6363B5", "#81A6BE", "#F75231", "#399CFF", "#7BCE52", "#FFC631", "#EF4179", "#5ACEE7", "#7B63E7", "#735A4A", "#EF70EF"
 
 /* string enum in upstream */
 enum pr_type_shadow {
@@ -4108,5 +4116,6 @@ enum pr_type_shadow {
     TYPE_SHADOW_FAIRY = 17, /* "#663878" */
     TYPE_SHADOW_COUNT_ = 18
 };
+#define TYPE_SHADOW_VALUES "#574F4A", "#4E637C", "#4E637C", "#352166", "#572D1E", "#5F442D", "#5F5010", "#323D5B", "#415C5F", "#7C1818", "#1C4E80", "#4F6729", "#804618", "#782155", "#2D5C74", "#313874", "#392725", "#663878"
 
 #endif

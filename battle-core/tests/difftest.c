@@ -10,6 +10,37 @@
 
 #define MON_FIELDS 47
 
+static const char *const battler_tag_names[] = {BATTLER_TAG_TYPE_VALUES};
+static const char *const arena_tag_names[] = {ARENA_TAG_TYPE_VALUES};
+
+static int name_index(const char *const *names, int n, const char *s)
+{
+    for (int i = 0; i < n; i++)
+        if (!strcmp(names[i], s)) return i;
+    return -1;
+}
+
+/* Is `name` one of the '<'-separated class names in the upstream prototype chain? */
+static bool chain_has(const char *chain, const char *name)
+{
+    size_t n = strlen(name);
+    for (const char *c = chain; *c;) {
+        const char *e = strchr(c, '<');
+        size_t len = e ? (size_t)(e - c) : strlen(c);
+        if (len == n && !strncmp(c, name, n)) return true;
+        if (!e) break;
+        c = e + 1;
+    }
+    return false;
+}
+
+static char *next_tok(char **save)
+{
+    char *t = strtok_r(NULL, " \n", save);
+    if (!t) { fprintf(stderr, "short line\n"); exit(2); }
+    return t;
+}
+
 static int read_mon(char **save, pr_pokemon *p)
 {
     long long v[MON_FIELDS];
@@ -43,7 +74,7 @@ static int read_mon(char **save, pr_pokemon *p)
     p->combining_pledge = (uint16_t)v[32];
     p->hit_count = (int8_t)v[33];
     p->hits_left = (int8_t)v[34];
-    p->n_tags = (uint8_t)v[35];
+    p->n_tags = (uint8_t)v[35]; /* the T lines fill tags[] */
     p->friendship = (uint8_t)v[36];
     p->has_trainer = v[37];
     for (int i = 0; i < 4; i++) {
@@ -68,7 +99,10 @@ int main(int argc, char **argv)
     static int uncovered_by[PR_FEAT_COUNT_], deferred_by[PR_AC_COUNT_];
     int with_deferred = 0;
     pr_pokemon A, D;
-    int mods_expected[2] = {0, 0};
+    int mods_expected[2] = {0, 0}, arena_tags_expected = 0;
+    /* battler tags read from T lines before the case line: [0] player (A), [1] enemy (D) */
+    static pr_battler_tag tags[2][PR_MAX_BATTLER_TAGS];
+    int n_tags[2] = {0, 0};
 
     while (fgets(line, sizeof line, f)) {
         char *save;
@@ -93,7 +127,9 @@ int main(int argc, char **argv)
             bt.last_player_faint_turn = w[3];
             bt.last_enemy_faint_turn = w[4];
             bt.n_last_turn_order = (uint8_t)w[5];
-            bt.n_arena_tags = w[6];
+            arena_tags_expected = w[6];
+            bt.n_arena_tags = 0;
+            n_tags[0] = n_tags[1] = 0;
             mods_expected[0] = w[7];
             mods_expected[1] = w[8];
             bt.n_mods[0] = bt.n_mods[1] = 0;
@@ -137,12 +173,74 @@ int main(int argc, char **argv)
             for (int i = 0; i < ns; i++) m->species[m->n_species++] = (uint16_t)atoi(strtok_r(NULL, " \n", &save));
             continue;
         }
+        if (!strcmp(tag, "T")) {
+            /* T who type class-chain turnCount sourceMove sourceId critStages stockpiledCount
+             *   autotomizeCount faintCount stat multiplier */
+            int who = atoi(next_tok(&save));
+            if (who < 0 || who > 1 || n_tags[who] >= PR_MAX_BATTLER_TAGS) { fprintf(stderr, "bad T line\n"); return 2; }
+            pr_battler_tag *t = &tags[who][n_tags[who]++];
+            memset(t, 0, sizeof *t);
+            const char *name = next_tok(&save);
+            int type = name_index(battler_tag_names, BATTLER_TAG_TYPE_COUNT_, name);
+            if (type < 0) { fprintf(stderr, "unknown battler tag type %s\n", name); return 2; }
+            t->type = (uint8_t)type;
+            const char *chain = next_tok(&save);
+            for (int k = 0; k < PR_TAGCLASS_COUNT_; k++)
+                if (chain_has(chain, pr_tagclass_name[k]) != pr_battler_tag_is(type, k)) {
+                    fprintf(stderr, "battler tag %s (%s): pr_battler_tag_is disagrees on %s\n", name, chain, pr_tagclass_name[k]);
+                    return 2;
+                }
+            t->turn_count = (int16_t)atoi(next_tok(&save));
+            t->source_move = (uint16_t)atoi(next_tok(&save));
+            t->source_id = strtoll(next_tok(&save), NULL, 10);
+            t->crit_stages = (int8_t)atoi(next_tok(&save));
+            t->stockpiled_count = (int8_t)atoi(next_tok(&save));
+            t->autotomize_count = (int16_t)atoi(next_tok(&save));
+            t->faint_count = (int8_t)atoi(next_tok(&save));
+            t->stat = (int8_t)atoi(next_tok(&save));
+            t->multiplier = strtod(next_tok(&save), NULL);
+            continue;
+        }
+        if (!strcmp(tag, "A")) {
+            /* A type class-chain side turnCount maxDuration sourceMove sourceId sourceCount beingRemoved */
+            if (bt.n_arena_tags >= PR_MAX_ARENA_TAGS) { fprintf(stderr, "too many arena tags\n"); return 2; }
+            pr_arena_tag *t = &bt.arena_tags[bt.n_arena_tags++];
+            memset(t, 0, sizeof *t);
+            const char *name = next_tok(&save);
+            int type = name_index(arena_tag_names, ARENA_TAG_TYPE_COUNT_, name);
+            if (type < 0) { fprintf(stderr, "unknown arena tag type %s\n", name); return 2; }
+            t->type = (uint8_t)type;
+            const char *chain = next_tok(&save);
+            for (int k = 0; k < PR_ARENACLASS_COUNT_; k++)
+                if (chain_has(chain, pr_arenaclass_name[k]) != pr_arena_tag_is(type, k)) {
+                    fprintf(stderr, "arena tag %s (%s): pr_arena_tag_is disagrees on %s\n", name, chain, pr_arenaclass_name[k]);
+                    return 2;
+                }
+            t->side = (uint8_t)atoi(next_tok(&save));
+            t->turn_count = (int16_t)atoi(next_tok(&save));
+            t->max_duration = (int16_t)atoi(next_tok(&save));
+            t->source_move = (uint16_t)atoi(next_tok(&save));
+            t->source_id = strtoll(next_tok(&save), NULL, 10);
+            t->source_count = (int8_t)atoi(next_tok(&save));
+            t->being_removed = atoi(next_tok(&save));
+            continue;
+        }
         if (strcmp(tag, "C")) continue;
         if (bt.n_mods[0] != mods_expected[0] || bt.n_mods[1] != mods_expected[1]) {
             fprintf(stderr, "modifier count mismatch\n");
             return 2;
         }
+        if (bt.n_arena_tags != arena_tags_expected) {
+            fprintf(stderr, "arena tag count mismatch\n");
+            return 2;
+        }
         if (!read_mon(&save, &A) || !read_mon(&save, &D)) break;
+        if (A.n_tags != n_tags[0] || D.n_tags != n_tags[1]) {
+            fprintf(stderr, "battler tag count mismatch\n");
+            return 2;
+        }
+        memcpy(A.tags, tags[0], sizeof A.tags);
+        memcpy(D.tags, tags[1], sizeof D.tags);
         A.is_player = true;
         bt.weather = (uint8_t)atoi(strtok_r(NULL, " \n", &save));
         int move = atoi(strtok_r(NULL, " \n", &save));

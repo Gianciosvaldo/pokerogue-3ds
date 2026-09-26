@@ -18,8 +18,6 @@ enum { TERRAIN_NONE, TERRAIN_MISTY, TERRAIN_ELECTRIC, TERRAIN_GRASSY, TERRAIN_PS
 enum {
     PR_FEAT_DOUBLES = PR_AC_COUNT_,  /* more than one Pokemon per side */
     PR_FEAT_MODIFIERS,               /* a modifier whose own class has no port (see pr_modifier) */
-    PR_FEAT_BATTLER_TAGS,
-    PR_FEAT_ARENA_TAGS,
     PR_FEAT_MOVE_HISTORY,            /* summonData.moveHistory / turnData.attacksReceived entries */
     PR_FEAT_TURN_ORDER,              /* the turn queue (last turn order, move queue) */
     PR_FEAT_FAINT_HISTORY,
@@ -81,6 +79,35 @@ typedef struct pr_modifier {
 } pr_modifier;
 #define PR_MAX_MODIFIERS 96        /* per side */
 
+/* Battler tags (src/tags.c): summonData.tags, in upstream order. A tag's class and the
+ * parameters getBattlerTag() gives it (Flash Fire's type and boost...) follow from its
+ * type; only what can change after creation is stored. */
+typedef struct pr_battler_tag {
+    uint8_t type;                  /* BattlerTagType */
+    int16_t turn_count;
+    uint16_t source_move;          /* 0 = none */
+    int64_t source_id;             /* -1 = none */
+    int8_t crit_stages;            /* CritBoostTag.critStages */
+    int8_t stockpiled_count;       /* StockpilingTag.stockpiledCount */
+    int16_t autotomize_count;      /* AutotomizedTag.autotomizeCount */
+    int8_t faint_count;            /* SupremeOverlordTag.faintCount */
+    int8_t stat;                   /* HighestStatBoostTag.stat */
+    double multiplier;             /* HighestStatBoostTag.multiplier */
+} pr_battler_tag;
+#define PR_MAX_BATTLER_TAGS 24
+
+/* Arena tags: arena.tags, in upstream order */
+typedef struct pr_arena_tag {
+    uint8_t type;                  /* ArenaTagType */
+    uint8_t side;                  /* ArenaTagSide */
+    int16_t turn_count, max_duration;
+    uint16_t source_move;          /* 0 = none */
+    int64_t source_id;             /* -1 = none */
+    int8_t source_count;           /* SuppressAbilitiesTag.sourceCount */
+    bool being_removed;            /* SuppressAbilitiesTag.beingRemoved */
+} pr_arena_tag;
+#define PR_MAX_ARENA_TAGS 24
+
 typedef struct pr_pokemon {
     uint32_t id;               /* Pokemon.id: what held items point at */
     uint16_t species;
@@ -106,7 +133,8 @@ typedef struct pr_pokemon {
     uint8_t friendship;
     bool has_trainer;                  /* hasTrainer(): enemy owned by a trainer */
     bool is_boss;                      /* isBoss(): enemy with boss segments */
-    uint8_t n_tags;                    /* summonData.tags.length: tags aren't modelled, see pr_has_battler_tag */
+    pr_battler_tag tags[PR_MAX_BATTLER_TAGS]; /* summonData.tags */
+    uint8_t n_tags;
     uint32_t stellar_types_boosted;    /* stellarTypesBoosted, bit per PokemonType */
     /* summonData fields read on the damage path */
     uint8_t summon_hit_count;          /* summonData.hitCount (Rage Fist) */
@@ -130,7 +158,8 @@ typedef struct pr_battle {
     bool double_battle;
     uint8_t weather;           /* WeatherType */
     uint8_t terrain;           /* TerrainType */
-    int n_arena_tags;          /* arena.tags.length: tags aren't modelled, see pr_arena_has_tag */
+    pr_arena_tag arena_tags[PR_MAX_ARENA_TAGS]; /* arena.tags */
+    uint8_t n_arena_tags;
     /* globalScene.modifiers (player, [0]) and enemyModifiers ([1]), in upstream list order */
     pr_modifier mods[2][PR_MAX_MODIFIERS];
     uint8_t n_mods[2];
@@ -204,23 +233,43 @@ bool pr_can_apply_ability(pr_battle *bt, const pr_pokemon *p, uint16_t ability);
 /* hasAbility(ability) / hasAbilityWithAttr(cls) with canApply = true */
 bool pr_has_ability_active(pr_battle *bt, const pr_pokemon *p, int ability);
 bool pr_has_ability_with_attr(pr_battle *bt, const pr_pokemon *p, uint16_t cls);
-/* getTag(type): battler tags are not modelled yet. Every tag query goes through here, so
- * porting tags fixes all callers at once. A Pokemon that does carry tags (n_tags > 0)
- * makes the query unanswerable, which is reported as unported. */
-bool pr_has_battler_tag(pr_battle *bt, const pr_pokemon *p, int tag_type);
-/* findTag(t => t instanceof <class>) for tag classes that span several tag types */
+/* ---- tags (src/tags.c) ---- */
+/* Tag classes the battle logic asks for with getTag(<Class>) / instanceof. Which class a tag
+ * is follows from its type (getBattlerTag / getArenaTag); pr_*_tag_is is that mapping. */
 enum { PR_TAGCLASS_PROTECTED, PR_TAGCLASS_SEMI_INVULNERABLE, PR_TAGCLASS_TYPE_BOOST, PR_TAGCLASS_HELPING_HAND,
        PR_TAGCLASS_SUPREME_OVERLORD, PR_TAGCLASS_CRIT_BOOST, PR_TAGCLASS_TAR_SHOT, PR_TAGCLASS_HIGHEST_STAT_BOOST,
-       PR_TAGCLASS_EXPOSED, PR_TAGCLASS_STOCKPILING };
+       PR_TAGCLASS_EXPOSED, PR_TAGCLASS_STOCKPILING, PR_TAGCLASS_AUTOTOMIZED, PR_TAGCLASS_SUBSTITUTE,
+       PR_TAGCLASS_COUNT_ };
+extern const char *const pr_tagclass_name[PR_TAGCLASS_COUNT_];    /* upstream class names */
+bool pr_battler_tag_is(int tag_type, int tag_class);
+enum { PR_ARENACLASS_WEAKEN_MOVE_SCREEN, PR_ARENACLASS_WEAKEN_MOVE_TYPE, PR_ARENACLASS_NO_CRIT,
+       PR_ARENACLASS_SUPPRESS_ABILITIES, PR_ARENACLASS_COUNT_ };
+extern const char *const pr_arenaclass_name[PR_ARENACLASS_COUNT_];
+bool pr_arena_tag_is(int tag_type, int arena_class);
+/* pokemon.getTag(type) / getTag(Class): the first matching tag, or NULL */
+const pr_battler_tag *pr_get_battler_tag(const pr_pokemon *p, int tag_type);
+const pr_battler_tag *pr_find_battler_tag_class(const pr_pokemon *p, int tag_class);
+bool pr_has_battler_tag(pr_battle *bt, const pr_pokemon *p, int tag_type);
 bool pr_has_battler_tag_class(pr_battle *bt, const pr_pokemon *p, int tag_class);
-/* arena.getTagOnSide(type, side); ARENA_TAG_SIDE_BOTH matches either side, as arena.getTag(type).
- * Arena tags are not modelled yet either. */
+/* arena.getTagOnSide(type, side): a BOTH-sided tag matches any side, and side BOTH matches any
+ * tag (arena.getTag(type)) */
+const pr_arena_tag *pr_arena_get_tag_on_side(const pr_battle *bt, int tag_type, int side);
 bool pr_arena_has_tag(pr_battle *bt, int tag_type, int side);
+bool pr_arena_has_tag_class(pr_battle *bt, int arena_class, int side); /* getTagOnSide(Class, side) */
+/* arena.applyTagsForSide(<Class>, side, ...): does this tag take part for `side`? */
+bool pr_arena_tag_on_side(const pr_arena_tag *t, int side);
+/* The parameters getBattlerTag() / getArenaTag() build these classes with */
+bool pr_type_boost_tag_params(int tag_type, int *boosted_type, double *boost_value);
+bool pr_exposed_tag_ignores_immunity(int tag_type, int defender_type, int move_type);
+bool pr_screen_tag_weakens(int tag_type, int category);
+int pr_weaken_move_type_tag_type(int tag_type);
 /* waveData.abilitiesApplied.has(ability): wave data is not modelled yet (empty, as at wave start) */
 bool pr_wave_ability_applied(const pr_pokemon *p, int ability);
 /* Move.doesFlagEffectApply({flag, user, target}) */
 bool pr_move_does_flag_effect_apply(pr_battle *bt, int move, unsigned flag, const pr_pokemon *user,
                                     const pr_pokemon *target);
+/* Move.hitsSubstitute(user, target): target may be NULL */
+bool pr_move_hits_substitute(pr_battle *bt, int move, const pr_pokemon *user, const pr_pokemon *target);
 bool pr_is_opponent(const pr_battle *bt, const pr_pokemon *a, const pr_pokemon *b);
 const pr_pokemon *pr_get_ally(const pr_battle *bt, const pr_pokemon *p);
 bool pr_weather_effect_suppressed(pr_battle *bt);
