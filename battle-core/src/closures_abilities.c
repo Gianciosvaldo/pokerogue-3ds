@@ -119,7 +119,7 @@ static double status_or_comatose(ARGS)
 static double paralyzed(ARGS) { UNUSED; return a->status == STATUS_EFFECT_PARALYSIS; }
 
 /* Tangled Feet: !!pokemon.getTag("CONFUSED") */
-static double confused(ARGS) { UNUSED; return pr_has_battler_tag(a, BATTLER_TAG_TYPE_CONFUSED); }
+static double confused(ARGS) { UNUSED; return pr_has_battler_tag(bt, a, BATTLER_TAG_TYPE_CONFUSED); }
 
 static bool set_has(const uint16_t *v, unsigned n, int x)
 {
@@ -225,12 +225,11 @@ static double parental_bond(ARGS)
     UNPORTED(PR_AC_MoveDamageBoostAbAttr); /* canBeMultiStrikeEnhanced not ported */
 }
 
-/* Unseen Fist, Piercing Drill: !!target && target has a ProtectedTag && contact applies.
- * PROTECTED stands for "any ProtectedTag subclass" until battler tags are ported. */
+/* Unseen Fist, Piercing Drill: !!target && target has a ProtectedTag && contact applies. */
 static double protected_contact(ARGS)
 {
     UNUSED;
-    return b && pr_has_battler_tag(b, BATTLER_TAG_TYPE_PROTECTED)
+    return b && pr_has_battler_tag_class(bt, b, PR_TAGCLASS_PROTECTED)
            && pr_move_does_flag_effect_apply(bt, m, MOVE_FLAGS_MAKES_CONTACT, a, NULL);
 }
 

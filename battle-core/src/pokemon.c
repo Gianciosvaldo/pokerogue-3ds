@@ -2,19 +2,23 @@
 #include "pr/battle.h"
 #include <math.h>
 
-const pr_form *pr_pokemon_form(const pr_pokemon *p)
+const pr_species *pr_pokemon_species(const pr_pokemon *p)
 {
     /* Species ids are sparse; the table is sorted by id. */
     int lo = 0, hi = PR_SPECIES_COUNT - 1;
     while (lo <= hi) {
         int mid = (lo + hi) / 2;
-        if (pr_species_table[mid].id == p->species) {
-            const pr_species *s = &pr_species_table[mid];
-            return &pr_forms[s->form0 + (p->form < s->nforms ? p->form : 0)];
-        }
+        if (pr_species_table[mid].id == p->species) return &pr_species_table[mid];
         if (pr_species_table[mid].id < p->species) lo = mid + 1; else hi = mid - 1;
     }
-    return &pr_forms[0];
+    return NULL;
+}
+
+const pr_form *pr_pokemon_form(const pr_pokemon *p)
+{
+    const pr_species *s = pr_pokemon_species(p);
+    if (!s) return &pr_forms[0];
+    return &pr_forms[s->form0 + (p->form < s->nforms ? p->form : 0)];
 }
 
 /* calculateStats(). Modifiers (vitamins, nature mints...), fusion and challenges
@@ -22,7 +26,7 @@ const pr_form *pr_pokemon_form(const pr_pokemon *p)
 void pr_calculate_stats(pr_battle *bt, pr_pokemon *p)
 {
     const pr_form *f = pr_pokemon_form(p);
-    (void)bt;
+    pr_check_modifiers(bt, p->is_player); /* stat modifiers (vitamins, mints...) */
     for (int s = 0; s < 6; s++) {
         double v = floor((2 * f->base_stats[s] + p->ivs[s]) * p->level * 0.01);
         if (s == STAT_HP) {
@@ -102,8 +106,9 @@ bool pr_is_of_type(const pr_pokemon *p, int type)
     return false;
 }
 
-double pr_get_stat_stage_multiplier(pr_battle *bt, const pr_pokemon *p, int stat,
-                                    const pr_pokemon *opponent, int move, bool is_critical)
+double pr_get_stat_stage_multiplier(pr_battle *bt, const pr_pokemon *p, int stat, const pr_pokemon *opponent,
+                                    int move, bool ignore_opp_ability, bool is_critical, bool simulated,
+                                    bool ignore_held_items)
 {
     int stage = p->stat_stages[stat - 1];
     bool ignored = false;
@@ -112,62 +117,117 @@ double pr_get_stat_stage_multiplier(pr_battle *bt, const pr_pokemon *p, int stat
             if ((stat == STAT_ATK || stat == STAT_SPATK) && stage < 0) stage = 0;
             if ((stat == STAT_DEF || stat == STAT_SPDEF) && stage > 0) stage = 0;
         }
-        pr_ab_params pp = {.pokemon = opponent, .move = -1, .simulated = true, .stat = stat, .flag = &ignored};
-        pr_apply_ab_attrs(bt, PR_AC_IgnoreOpponentStatStagesAbAttr, &pp);
-        if (move >= 0) pr_hook_move(bt, (uint16_t)move, PR_AC_IgnoreOpponentStatStagesAttr);
+        if (!ignore_opp_ability) {
+            pr_ab_params pp = {.pokemon = opponent, .move = -1, .simulated = simulated, .stat = stat, .flag = &ignored};
+            pr_apply_ab_attrs(bt, PR_AC_IgnoreOpponentStatStagesAbAttr, &pp);
+        }
+        /* IgnoreOpponentStatStagesAttr (Chip Away, Sacred Sword...) sets the flag */
+        if (move >= 0 && pr_move_has_attr((uint16_t)move, PR_AC_IgnoreOpponentStatStagesAttr)) ignored = true;
     }
     if (ignored) return 1;
-    /* TempStatStageBoosterModifier (X items): held items not modelled */
     double m = (double)(2 + stage > 2 ? 2 + stage : 2) / (double)(2 - stage > 2 ? 2 - stage : 2);
+    if (!ignore_held_items) pr_check_modifiers(bt, p->is_player); /* TempStatStageBoosterModifier (X items) */
     return m < 4 ? m : 4;
 }
 
-int32_t pr_get_effective_stat(pr_battle *bt, const pr_pokemon *p, int stat,
-                              const pr_pokemon *opponent, int move, bool is_critical, bool for_defend)
+int32_t pr_get_effective_stat_p(pr_battle *bt, const pr_pokemon *p, int stat, const pr_stat_params *sp)
 {
     double v = pr_get_stat(p, stat, false);
-    /* StatBoosterModifier: held items not modelled */
+    if (!sp->ignore_held_items) pr_check_modifiers(bt, p->is_player); /* StatBoosterModifier */
 
-    /* Ruin abilities: getField(true) in field order, stop once one applied */
+    /* Ruin abilities: getField(true) in field order, stop once one applied. Never ignored. */
     bool field_applied = false;
     for (int i = 0; i < 4 && !field_applied; i++) {
         const pr_pokemon *f = bt->field[i];
         if (!f || f->hp <= 0) continue;
-        pr_ab_params fp = {.pokemon = f, .opponent = p, .move = -1, .simulated = true, .stat = stat,
+        pr_ab_params fp = {.pokemon = f, .opponent = p, .move = -1, .simulated = sp->simulated, .stat = stat,
                            .value = &v, .flag = &field_applied};
         pr_apply_ab_attrs(bt, PR_AC_FieldMultiplyStatAbAttr, &fp);
     }
 
     /* move ?? allMoves[MoveId.NONE] */
-    int m = move >= 0 ? move : MOVE_ID_NONE;
-    pr_ab_params sp = {.pokemon = p, .move = m, .simulated = true, .stat = stat, .value = &v};
-    pr_apply_ab_attrs(bt, PR_AC_StatMultiplierAbAttr, &sp);
+    int m = sp->move >= 0 ? sp->move : MOVE_ID_NONE;
+    pr_ab_params ap = {.pokemon = p, .move = m, .simulated = sp->simulated, .stat = stat, .value = &v};
+    if (!sp->ignore_ability) pr_apply_ab_attrs(bt, PR_AC_StatMultiplierAbAttr, &ap);
 
     const pr_pokemon *ally = pr_get_ally(bt, p);
     if (ally) {
-        pr_ab_params ap = sp;
-        ap.pokemon = ally;
-        ap.ignore_ability = move >= 0 && (pr_moves[move].flags & MOVE_FLAGS_IGNORE_ABILITIES);
-        pr_apply_ab_attrs(bt, PR_AC_AllyStatMultiplierAbAttr, &ap);
+        pr_ab_params lp = ap;
+        lp.pokemon = ally;
+        lp.ignore_ability = (sp->move >= 0 && (pr_moves[sp->move].flags & MOVE_FLAGS_IGNORE_ABILITIES))
+                            || sp->ignore_ally_ability;
+        pr_apply_ab_attrs(bt, PR_AC_AllyStatMultiplierAbAttr, &lp);
     }
 
-    int weather = !for_defend || !opponent ? bt->weather : pr_get_effective_weather_for_move(bt, opponent);
+    int weather = !sp->for_defend || sp->ignore_opp_ability || !sp->opponent
+                      ? bt->weather
+                      : pr_get_effective_weather_for_move(bt, sp->opponent);
 
-    double ret = v * pr_get_stat_stage_multiplier(bt, p, stat, opponent, move, is_critical);
+    double ret = v * pr_get_stat_stage_multiplier(bt, p, stat, sp->opponent, sp->move, sp->ignore_opp_ability,
+                                                  sp->is_critical, sp->simulated, sp->ignore_held_items);
     switch (stat) {
+    case STAT_ATK:
+        if (pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_SLOW_START)) ret = (double)((int32_t)ret >> 1);
+        break;
     case STAT_DEF:
         if (pr_is_of_type(p, POKEMON_TYPE_ICE) && weather == WEATHER_TYPE_SNOW) ret *= 1.5;
         break;
     case STAT_SPDEF:
         if (pr_is_of_type(p, POKEMON_TYPE_ROCK) && weather == WEATHER_TYPE_SANDSTORM) ret *= 1.5;
         break;
-    case STAT_SPD:
-        /* Tailwind / pledge / Slow Start / Unburden: tags not modelled */
+    case STAT_SPD: {
+        int side = p->is_player ? ARENA_TAG_SIDE_PLAYER : ARENA_TAG_SIDE_ENEMY;
+        if (pr_arena_has_tag(bt, ARENA_TAG_TYPE_TAILWIND, side)) ret *= 2;
+        if (pr_arena_has_tag(bt, ARENA_TAG_TYPE_GRASS_WATER_PLEDGE, side)) ret = (double)((int32_t)ret >> 2);
+        if (pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_SLOW_START)) ret = (double)((int32_t)ret >> 1);
         if (p->status == STATUS_EFFECT_PARALYSIS) ret = (double)((int32_t)ret >> 1);
+        if (pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_UNBURDEN) && pr_has_ability_active(bt, p, ABILITY_ID_UNBURDEN)) ret *= 2;
         break;
     }
+    }
+    /* HighestStatBoostTag (Protosynthesis, Quark Drive) for this stat: its multiplier isn't modelled */
+    if (pr_has_battler_tag_class(bt, p, PR_TAGCLASS_HIGHEST_STAT_BOOST)) pr_note_unported(bt, PR_FEAT_BATTLER_TAGS);
     ret = floor(ret);
     return ret > 1 ? (int32_t)ret : 1;
+}
+
+int32_t pr_get_effective_stat(pr_battle *bt, const pr_pokemon *p, int stat,
+                              const pr_pokemon *opponent, int move, bool is_critical, bool for_defend)
+{
+    pr_stat_params sp = {.opponent = opponent, .move = move, .is_critical = is_critical, .for_defend = for_defend,
+                         .simulated = true};
+    return pr_get_effective_stat_p(bt, p, stat, &sp);
+}
+
+/* isForciblyGrounded(): IGNORE_FLYING tag or Gravity */
+bool pr_is_forcibly_grounded(pr_battle *bt, const pr_pokemon *p)
+{
+    return pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_IGNORE_FLYING) || pr_arena_has_tag(bt, ARENA_TAG_TYPE_GRAVITY, ARENA_TAG_SIDE_BOTH);
+}
+
+/* isForciblyUngrounded(): FLOATING / TELEKINESIS tags, then UngroundedAbAttr (Levitate) */
+bool pr_is_forcibly_ungrounded(pr_battle *bt, const pr_pokemon *p)
+{
+    if (pr_is_forcibly_grounded(bt, p)) return false;
+    if (pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_FLOATING) || pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_TELEKINESIS))
+        return true;
+    bool ungrounded = false;
+    pr_ab_params pp = {.pokemon = p, .move = -1, .simulated = true, .flag = &ungrounded};
+    pr_apply_ab_attrs(bt, PR_AC_UngroundedAbAttr, &pp);
+    return ungrounded;
+}
+
+/* isGrounded(ignoreSemiInvulnerable) */
+bool pr_is_grounded(pr_battle *bt, const pr_pokemon *p, bool ignore_semi_invulnerable)
+{
+    if (pr_is_forcibly_grounded(bt, p)) return true;
+    if (pr_is_forcibly_ungrounded(bt, p)) return false;
+    bool semi = !ignore_semi_invulnerable && pr_has_battler_tag_class(bt, p, PR_TAGCLASS_SEMI_INVULNERABLE);
+    int8_t t[3];
+    int n = pr_get_types(p, t, PR_TYPES_ORIGINAL_IF_STELLAR);
+    bool flying = false;
+    for (int i = 0; i < n; i++) if (t[i] == POKEMON_TYPE_FLYING) flying = true;
+    return !semi && !flying;
 }
 
 /* JS Math.round: halves go toward +infinity, and it is exact (no x + 0.5 rounding). */
@@ -192,6 +252,7 @@ double pr_get_hp_ratio(const pr_pokemon *p, bool precise)
 /* getWeight(): Autotomize tag not modelled (no tags yet). */
 double pr_get_weight(pr_battle *bt, const pr_pokemon *p)
 {
+    if (pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_AUTOTOMIZED)) pr_note_unported(bt, PR_FEAT_BATTLER_TAGS);
     const pr_form *f = pr_pokemon_form(p);
     double w = f->weight_x10 / 10.0; /* same double as upstream's decimal literal */
     pr_ab_params pp = {.pokemon = p, .move = -1, .simulated = true, .value = &w};

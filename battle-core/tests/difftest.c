@@ -8,10 +8,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define MON_FIELDS 46
+
 static int read_mon(char **save, pr_pokemon *p)
 {
-    int v[23];
-    for (int i = 0; i < 23; i++) {
+    int v[MON_FIELDS];
+    for (int i = 0; i < MON_FIELDS; i++) {
         char *t = strtok_r(NULL, " \n", save);
         if (!t) return 0;
         v[i] = atoi(t);
@@ -29,10 +31,28 @@ static int read_mon(char **save, pr_pokemon *p)
     p->hp = v[20];
     p->ability = (uint16_t)v[21];
     p->gender = (int8_t)v[22];
+    p->is_boss = v[23];
+    p->stellar_types_boosted = (uint32_t)v[24];
+    p->summon_hit_count = (uint8_t)v[25];
+    p->n_move_history = (uint8_t)v[26];
+    p->n_attacks_received = (uint8_t)v[27];
+    p->acted = v[28];
+    p->stat_stages_decreased = v[29];
+    p->joined_round = v[30];
+    p->damage_taken = v[31];
+    p->combining_pledge = (uint16_t)v[32];
+    p->hit_count = (int8_t)v[33];
+    p->hits_left = (int8_t)v[34];
+    p->n_tags = (uint8_t)v[35];
+    p->friendship = (uint8_t)v[36];
+    p->has_trainer = v[37];
+    for (int i = 0; i < 4; i++) {
+        p->moves[i] = (uint16_t)v[38 + i];
+        p->pp_used[i] = (uint8_t)v[42 + i];
+    }
     p->base_ability = ABILITY_ID_BALL_FETCH;
     p->type_override[0] = p->type_override[1] = -2;
-    p->turn_move_effectiveness = -1;
-    p->hits_left = -1; /* turnData.moveEffectiveness unset */
+    p->turn_move_effectiveness = -1; /* turnData.moveEffectiveness unset */
     return 1;
 }
 
@@ -44,7 +64,7 @@ int main(int argc, char **argv)
     pr_battle bt;
     memset(&bt, 0, sizeof bt);
     int total = 0, covered = 0, pass = 0, fail = 0, stat_fail = 0;
-    static int uncovered_by[PR_AC_COUNT_], deferred_by[PR_AC_COUNT_];
+    static int uncovered_by[PR_FEAT_COUNT_], deferred_by[PR_AC_COUNT_];
     int with_deferred = 0;
     pr_pokemon A, D;
 
@@ -57,6 +77,25 @@ int main(int argc, char **argv)
             pr_seed_from_ascii(&bt.battle_seed, seed);
             bt.turn = atoi(strtok_r(NULL, " \n", &save));
             bt.battle_rng_live = false;
+            continue;
+        }
+        if (!strcmp(tag, "W")) {
+            int w[16];
+            char *t;
+            bt.turn = atoi(strtok_r(NULL, " \n", &save));
+            pr_seed_from_ascii(&bt.wave_seed, strtok_r(NULL, " \n", &save));
+            for (int i = 0; i < 15 && (t = strtok_r(NULL, " \n", &save)); i++) w[i] = atoi(t);
+            bt.terrain = (uint8_t)w[0];
+            bt.player_faints = w[1];
+            bt.enemy_faints = w[2];
+            bt.last_player_faint_turn = w[3];
+            bt.last_enemy_faint_turn = w[4];
+            bt.n_last_turn_order = (uint8_t)w[5];
+            bt.n_arena_tags = w[6];
+            bt.n_player_modifiers = (uint8_t)w[7];
+            bt.n_enemy_modifiers = (uint8_t)w[8];
+            bt.max_exp_level = w[9];
+            for (int i = 0; i < 4; i++) bt.turn_command[i] = (int8_t)w[10 + i];
             continue;
         }
         if (!strcmp(tag, "S")) {
@@ -73,6 +112,7 @@ int main(int argc, char **argv)
         bt.weather = (uint8_t)atoi(strtok_r(NULL, " \n", &save));
         int move = atoi(strtok_r(NULL, " \n", &save));
         bool crit = atoi(strtok_r(NULL, " \n", &save));
+        bool swap = atoi(strtok_r(NULL, " \n", &save));
         if (!fgets(eline, sizeof eline, f)) break;
         long e[17];
         char *es;
@@ -101,9 +141,10 @@ int main(int argc, char **argv)
                 printf("\n");
             }
         }
-        pr_damage_result sim = pr_get_attack_damage(&bt, &D, &A, move, crit, true);
-        bool c_crit = pr_get_critical_hit_result(&bt, &D, &A, move);
-        pr_damage_result real = pr_get_attack_damage(&bt, &D, &A, move, crit, false);
+        pr_pokemon *src = swap ? &D : &A, *def = swap ? &A : &D;
+        pr_damage_result sim = pr_get_attack_damage(&bt, def, src, move, crit, true);
+        bool c_crit = pr_get_critical_hit_result(&bt, def, src, move);
+        pr_damage_result real = pr_get_attack_damage(&bt, def, src, move, crit, false);
 
         if (bt.n_unported) {
             for (int i = 0; i < bt.n_unported; i++) uncovered_by[bt.unported[i]]++;
@@ -116,8 +157,8 @@ int main(int argc, char **argv)
                   && real.damage == e[15] && real.result == e[16];
         if (ok) pass++;
         else if (++fail <= 10)
-            printf("MISMATCH move %d (%s) A %d/%d D %d/%d crit %d weather %d: C sim %d/%d crit %d real %d/%d | JS %ld/%ld %ld %ld/%ld\n",
-                   move, pr_moves[move].name, A.species, A.form, D.species, D.form, crit, bt.weather,
+            printf("MISMATCH move %d (%s) A %d/%d D %d/%d crit %d swap %d weather %d terrain %d: C sim %d/%d crit %d real %d/%d | JS %ld/%ld %ld %ld/%ld\n",
+                   move, pr_moves[move].name, A.species, A.form, D.species, D.form, crit, swap, bt.weather, bt.terrain,
                    sim.damage, sim.result, c_crit, real.damage, real.result, e[12], e[13], e[14], e[15], e[16]);
     }
     printf("cases %d, stats mismatches %d (all cases)\n", total, stat_fail);
@@ -125,13 +166,13 @@ int main(int argc, char **argv)
     printf("covered cases whose side effects were deferred to the (unported) phase engine: %d\n", with_deferred);
     for (int c = 0; c < PR_AC_COUNT_; c++)
         if (deferred_by[c]) printf("  deferred %s: %d\n", pr_attr_class_name[c], deferred_by[c]);
-    printf("not covered because of (class: cases):\n");
+    printf("not covered because of (class or missing state: cases):\n");
     for (int pass_no = 0; pass_no < 30; pass_no++) {
         int best = -1;
-        for (int c = 0; c < PR_AC_COUNT_; c++)
+        for (int c = 0; c < PR_FEAT_COUNT_; c++)
             if (uncovered_by[c] && (best < 0 || uncovered_by[c] > uncovered_by[best])) best = c;
         if (best < 0) break;
-        printf("  %s: %d\n", pr_attr_class_name[best], uncovered_by[best]);
+        printf("  %s: %d\n", pr_unported_name((uint16_t)best), uncovered_by[best]);
         uncovered_by[best] = 0;
     }
     return fail || stat_fail ? 1 : 0;

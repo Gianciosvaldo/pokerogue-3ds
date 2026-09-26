@@ -74,18 +74,6 @@ bool pr_has_ability_with_attr(pr_battle *bt, const pr_pokemon *p, uint16_t cls)
     return p->passive && pr_can_apply_ability(bt, p, p->passive) && pr_ability_first_attr(p->passive, cls);
 }
 
-bool pr_has_battler_tag(const pr_pokemon *p, int tag_type)
-{
-    (void)p; (void)tag_type;
-    return false;
-}
-
-bool pr_wave_ability_applied(const pr_pokemon *p, int ability)
-{
-    (void)p; (void)ability;
-    return false;
-}
-
 bool pr_move_does_flag_effect_apply(pr_battle *bt, int move, unsigned flag, const pr_pokemon *user,
                                     const pr_pokemon *target)
 {

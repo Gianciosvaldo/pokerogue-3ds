@@ -10,6 +10,25 @@
 
 #define PR_MAX_UNPORTED 16
 
+/* arena.terrainType (src/data/terrain.ts TerrainType; not part of the dumped enums) */
+enum { TERRAIN_NONE, TERRAIN_MISTY, TERRAIN_ELECTRIC, TERRAIN_GRASSY, TERRAIN_PSYCHIC };
+
+/* State the port doesn't model yet, reported in the unported list next to attribute
+ * classes (ids continue after the last class id). */
+enum {
+    PR_FEAT_DOUBLES = PR_AC_COUNT_,  /* more than one Pokemon per side */
+    PR_FEAT_MODIFIERS,               /* held items and other modifiers */
+    PR_FEAT_BATTLER_TAGS,
+    PR_FEAT_ARENA_TAGS,
+    PR_FEAT_MOVE_HISTORY,            /* summonData.moveHistory / turnData.attacksReceived entries */
+    PR_FEAT_TURN_ORDER,              /* the turn queue (last turn order, move queue) */
+    PR_FEAT_FAINT_HISTORY,
+    PR_FEAT_WAVE,                    /* wave data the caller didn't provide (wave seed, level cap) */
+    PR_FEAT_PARTY,
+    PR_FEAT_COUNT_
+};
+const char *pr_unported_name(uint16_t id);
+
 typedef struct pr_pokemon {
     uint16_t species;
     uint8_t form;
@@ -28,11 +47,23 @@ typedef struct pr_pokemon {
     bool terastallized;
     int8_t tera_type;
     int8_t type_override[2];   /* -2 = none (summonData.types not set) */
-    uint16_t moves[4];
+    uint16_t moves[4];                 /* moveset, 0 = empty slot */
+    uint8_t pp_used[4];
     int8_t gender;                     /* Gender: -1 genderless, 0 male, 1 female */
+    uint8_t friendship;
+    bool has_trainer;                  /* hasTrainer(): enemy owned by a trainer */
+    bool is_boss;                      /* isBoss(): enemy with boss segments */
+    uint8_t n_tags;                    /* summonData.tags.length: tags aren't modelled, see pr_has_battler_tag */
+    uint32_t stellar_types_boosted;    /* stellarTypesBoosted, bit per PokemonType */
+    /* summonData fields read on the damage path */
+    uint8_t summon_hit_count;          /* summonData.hitCount (Rage Fist) */
+    uint8_t n_move_history;            /* summonData.moveHistory.length (entries not modelled) */
     /* turnData (PokemonTurnData) fields read on the damage path */
     uint8_t n_attacks_received;        /* turnData.attacksReceived.length (entries not modelled) */
     bool switched_in_this_turn;
+    bool acted, stat_stages_decreased, joined_round;
+    int32_t damage_taken;
+    uint16_t combining_pledge;         /* MoveId, 0 = none */
     int8_t hit_count, hits_left;       /* defaults 0 and -1 */
     double turn_move_effectiveness; /* turnData.moveEffectiveness; < 0 = unset */
 } pr_pokemon;
@@ -45,8 +76,17 @@ typedef struct pr_battle {
     int turn;
     bool double_battle;
     uint8_t weather;           /* WeatherType */
-    uint8_t terrain;           /* TerrainType; terrain effects beyond "none" are not ported */
-    int n_arena_tags;          /* arena tags are not modelled yet: must stay 0 for faithful results */
+    uint8_t terrain;           /* TerrainType */
+    int n_arena_tags;          /* arena.tags.length: tags aren't modelled, see pr_arena_has_tag */
+    uint8_t n_player_modifiers, n_enemy_modifiers; /* modifier counts: see pr_check_modifiers */
+    pr_seedstr wave_seed;      /* globalScene.waveSeed; len 0 = unknown */
+    int max_exp_level;         /* globalScene.getMaxExpLevel(); 0 = unknown */
+    int8_t turn_command[4];    /* currentBattle.turnCommands[i]?.command per BattlerIndex; -1 = none */
+    /* Faint bookkeeping: arena.playerFaints, currentBattle.enemyFaints, and the turn of the
+     * newest entry of currentBattle.playerFaintsHistory / enemyFaintsHistory (-1 = empty) */
+    int player_faints, enemy_faints;
+    int last_player_faint_turn, last_enemy_faint_turn;
+    uint8_t n_last_turn_order; /* dynamicQueueManager.getLastTurnOrder().length */
     pr_pokemon *field[4];      /* player 0/1, enemy 2/3 as in upstream BattlerIndex */
     /* Coverage: attribute classes that would have run upstream but have no C handler
      * yet. A result is only claimed faithful when this stays empty. */
@@ -109,9 +149,23 @@ bool pr_can_apply_ability(pr_battle *bt, const pr_pokemon *p, uint16_t ability);
 /* hasAbility(ability) / hasAbilityWithAttr(cls) with canApply = true */
 bool pr_has_ability_active(pr_battle *bt, const pr_pokemon *p, int ability);
 bool pr_has_ability_with_attr(pr_battle *bt, const pr_pokemon *p, uint16_t cls);
-/* getTag(type): battler tags are not modelled yet, so no Pokemon carries one. Every
- * tag query goes through here, so porting tags fixes all callers at once. */
-bool pr_has_battler_tag(const pr_pokemon *p, int tag_type);
+/* getTag(type): battler tags are not modelled yet. Every tag query goes through here, so
+ * porting tags fixes all callers at once. A Pokemon that does carry tags (n_tags > 0)
+ * makes the query unanswerable, which is reported as unported. */
+bool pr_has_battler_tag(pr_battle *bt, const pr_pokemon *p, int tag_type);
+/* findTag(t => t instanceof <class>) for tag classes that span several tag types */
+enum { PR_TAGCLASS_PROTECTED, PR_TAGCLASS_SEMI_INVULNERABLE, PR_TAGCLASS_TYPE_BOOST, PR_TAGCLASS_HELPING_HAND,
+       PR_TAGCLASS_SUPREME_OVERLORD, PR_TAGCLASS_CRIT_BOOST, PR_TAGCLASS_TAR_SHOT, PR_TAGCLASS_HIGHEST_STAT_BOOST,
+       PR_TAGCLASS_EXPOSED, PR_TAGCLASS_STOCKPILING };
+bool pr_has_battler_tag_class(pr_battle *bt, const pr_pokemon *p, int tag_class);
+/* arena.getTagOnSide(type, side); ARENA_TAG_SIDE_BOTH matches either side, as arena.getTag(type).
+ * Arena tags are not modelled yet either. */
+bool pr_arena_has_tag(pr_battle *bt, int tag_type, int side);
+/* globalScene.applyModifiers(<type>, player, ...) / findModifier: modifiers (held items
+ * included) are not modelled yet. A side that holds any is reported as unported. */
+void pr_check_modifiers(pr_battle *bt, bool player);
+/* Total stacks of the Pokemon's held items (transferable ones only if asked). */
+int pr_held_item_stacks(pr_battle *bt, const pr_pokemon *p, bool transferable_only);
 /* waveData.abilitiesApplied.has(ability): wave data is not modelled yet (empty, as at wave start) */
 bool pr_wave_ability_applied(const pr_pokemon *p, int ability);
 /* Move.doesFlagEffectApply({flag, user, target}) */
@@ -128,11 +182,27 @@ bool pr_move_is_attack(int move);
 void pr_apply_variable_power(pr_battle *bt, const pr_pokemon *user, const pr_pokemon *target, int move,
                              double *power);
 
+void pr_apply_variable_move_type(pr_battle *bt, const pr_pokemon *user, int move, int *type);
+void pr_apply_type_chart_override(pr_battle *bt, const pr_pokemon *user, const pr_pokemon *target, int move,
+                                  double *mult, const int8_t *types, int ntypes, int move_type);
+int pr_apply_variable_move_category(pr_battle *bt, const pr_pokemon *user, const pr_pokemon *target, int move,
+                                    int category);
+void pr_apply_variable_atk(pr_battle *bt, const pr_pokemon *user, const pr_pokemon *target, int move, double *atk);
+void pr_apply_variable_def(pr_battle *bt, const pr_pokemon *user, const pr_pokemon *target, int move, double *def);
+double pr_apply_fixed_damage(pr_battle *bt, const pr_pokemon *user, const pr_pokemon *target, int move);
+bool pr_apply_one_hit_ko(pr_battle *bt, const pr_pokemon *user, const pr_pokemon *target, int move);
+double pr_hits_tag_multiplier(pr_battle *bt, const pr_pokemon *target, int move);
+void pr_apply_modified_damage(pr_battle *bt, const pr_pokemon *user, const pr_pokemon *target, int move, double *dmg);
+void pr_apply_pledge_stab(const pr_pokemon *user, int move, double *stab);
+
 /* ---- rng (battle.ts randSeedInt) ---- */
 int32_t pr_battle_rand_seed_int(pr_battle *bt, int32_t range, int32_t min);
 
 /* ---- pokemon.ts ---- */
+const pr_species *pr_pokemon_species(const pr_pokemon *p);
 const pr_form *pr_pokemon_form(const pr_pokemon *p);
+/* getBattlerIndex(): the Pokemon's slot in bt->field, -1 when off the field */
+int pr_battler_index(const pr_battle *bt, const pr_pokemon *p);
 void pr_calculate_stats(pr_battle *bt, pr_pokemon *p);
 int pr_get_tera_type(const pr_pokemon *p);
 bool pr_has_ability(const pr_pokemon *p, int ability);
@@ -145,10 +215,24 @@ enum { PR_TYPES_NO_TERA = 1, PR_TYPES_ORIGINAL_IF_STELLAR = 2 };
 int pr_get_types(const pr_pokemon *p, int8_t out[3], unsigned flags);
 bool pr_is_of_type(const pr_pokemon *p, int type);
 int32_t pr_get_stat(const pr_pokemon *p, int stat, bool bypass_summon);
-double pr_get_stat_stage_multiplier(pr_battle *bt, const pr_pokemon *p, int stat,
-                                    const pr_pokemon *opponent, int move, bool is_critical);
+double pr_get_stat_stage_multiplier(pr_battle *bt, const pr_pokemon *p, int stat, const pr_pokemon *opponent,
+                                    int move, bool ignore_opp_ability, bool is_critical, bool simulated,
+                                    bool ignore_held_items);
+/* GetEffectiveStatParams. Upstream defaults: everything false, simulated true, move none (-1). */
+typedef struct {
+    const pr_pokemon *opponent;
+    int move;
+    bool ignore_ability, ignore_opp_ability, ignore_ally_ability, is_critical, ignore_held_items, for_defend;
+    bool simulated;
+} pr_stat_params;
+int32_t pr_get_effective_stat_p(pr_battle *bt, const pr_pokemon *p, int stat, const pr_stat_params *sp);
+/* Shorthand for the common case (no ignore flags, simulated). */
 int32_t pr_get_effective_stat(pr_battle *bt, const pr_pokemon *p, int stat,
                               const pr_pokemon *opponent, int move, bool is_critical, bool for_defend);
+/* isGrounded(ignoreSemiInvulnerable) and its two halves */
+bool pr_is_forcibly_grounded(pr_battle *bt, const pr_pokemon *p);
+bool pr_is_forcibly_ungrounded(pr_battle *bt, const pr_pokemon *p);
+bool pr_is_grounded(pr_battle *bt, const pr_pokemon *p, bool ignore_semi_invulnerable);
 int pr_get_move_type(pr_battle *bt, const pr_pokemon *p, int move);
 double pr_get_attack_type_effectiveness(pr_battle *bt, const pr_pokemon *def, int move_type,
                                         const pr_pokemon *source, int move);
@@ -156,10 +240,17 @@ double pr_get_move_effectiveness(pr_battle *bt, const pr_pokemon *def, const pr_
 /* getMoveEffectiveness with simulated and the cancelled holder */
 double pr_get_move_effectiveness_ex(pr_battle *bt, const pr_pokemon *def, const pr_pokemon *src, int move,
                                     bool simulated, bool *cancelled_out);
-double pr_calculate_battle_power(pr_battle *bt, const pr_pokemon *src, const pr_pokemon *def, int move);
-double pr_get_base_damage(pr_battle *bt, const pr_pokemon *def, const pr_pokemon *src, int move,
-                          int category, bool is_critical);
-double pr_calculate_stab_multiplier(pr_battle *bt, const pr_pokemon *src, int move);
+double pr_calculate_battle_power(pr_battle *bt, const pr_pokemon *src, const pr_pokemon *def, int move,
+                                 bool simulated);
+/* GetBaseDamageParams (defaults: ignore flags false, not critical, simulated) */
+typedef struct {
+    int move, category;
+    bool ignore_ability, ignore_source_ability, ignore_ally_ability, ignore_source_ally_ability, is_critical;
+    bool simulated;
+} pr_base_damage_params;
+double pr_get_base_damage(pr_battle *bt, const pr_pokemon *def, const pr_pokemon *src, const pr_base_damage_params *bp);
+double pr_calculate_stab_multiplier(pr_battle *bt, const pr_pokemon *src, int move, bool ignore_source_ability,
+                                    bool simulated);
 
 typedef struct { bool cancelled; int result /* HitResult */; int32_t damage; } pr_damage_result;
 /* simulated=true: random factor is 1 and no RNG is consumed, as upstream. */

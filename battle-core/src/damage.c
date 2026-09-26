@@ -2,8 +2,8 @@
  * getMoveEffectiveness / getAttackTypeEffectiveness / calculateStabMultiplier /
  * getCriticalHitResult / getMoveType and Move.calculateBattlePower.
  * Every applyAbAttrs / applyMoveAttrs / modifier / tag call site is kept in upstream order.
- * Battler tags, arena tags and held items are not modelled yet: the code states where
- * they would apply, and the difftest only generates states without them. */
+ * Battler tags, arena tags and modifiers are asked through the entry points in hooks.c,
+ * which report the case as unported whenever that state exists. */
 #include "pr/battle.h"
 #include <math.h>
 
@@ -18,21 +18,29 @@ static double type_mult(int atk, int def)
  * modelled (the side is p alone); speed ordering for doubles is not ported. */
 static const pr_pokemon *allies_singles(pr_battle *bt, const pr_pokemon *p)
 {
-    if (bt->double_battle) pr_note_unported(bt, PR_AC_MoveAttr);
+    if (bt->double_battle) pr_note_unported(bt, PR_FEAT_DOUBLES);
     return p;
+}
+
+static int side_of(const pr_pokemon *p)
+{
+    return p->is_player ? ARENA_TAG_SIDE_PLAYER : ARENA_TAG_SIDE_ENEMY;
 }
 
 int pr_get_move_type(pr_battle *bt, const pr_pokemon *p, int move)
 {
     int t = pr_moves[move].type;
-    pr_hook_move(bt, (uint16_t)move, PR_AC_VariableMoveTypeAttr);
+    pr_apply_variable_move_type(bt, p, move, &t);
     if (!pr_move_has_attr((uint16_t)move, PR_AC_CallMoveAttr)) {
         pr_ab_params pp = {.pokemon = p, .opponent = p, .move = move, .simulated = true, .holder = &t};
         pr_apply_ab_attrs(bt, PR_AC_MoveTypeChangeAbAttr, &pp);
     }
     if (p->terastallized && (move == MOVE_ID_TERA_BLAST || (move == MOVE_ID_TERA_STARSTORM && t == POKEMON_TYPE_STELLAR)))
         return t;
-    /* ION_DELUGE arena tag and ELECTRIFIED battler tag: not modelled (absent) */
+    /* IonDelugeTag: Normal becomes Electric */
+    if (pr_arena_has_tag(bt, ARENA_TAG_TYPE_ION_DELUGE, ARENA_TAG_SIDE_BOTH) && t == POKEMON_TYPE_NORMAL)
+        t = POKEMON_TYPE_ELECTRIC;
+    if (pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_ELECTRIFIED)) t = POKEMON_TYPE_ELECTRIC;
     return t;
 }
 
@@ -43,23 +51,22 @@ double pr_get_attack_type_effectiveness(pr_battle *bt, const pr_pokemon *def, in
     int8_t types[3];
     int n = pr_get_types(def, types, PR_TYPES_ORIGINAL_IF_STELLAR);
 
-    /* isForciblyUngrounded(): not forcibly grounded (IGNORE_FLYING tag / Gravity absent),
-     * no FLOATING/TELEKINESIS tags, then UngroundedAbAttr (Levitate). */
-    if (move_type == POKEMON_TYPE_GROUND) {
-        bool ungrounded = false;
-        pr_ab_params pp = {.pokemon = def, .move = -1, .flag = &ungrounded};
-        pr_apply_ab_attrs(bt, PR_AC_UngroundedAbAttr, &pp);
-        if (ungrounded && !(move >= 0 && pr_move_has_attr((uint16_t)move, PR_AC_NeutralDamageAgainstFlyingTypeAttr)))
-            return 0;
-    }
+    /* Ground moves (bar Thousand Arrows) miss anything made airborne by something other
+     * than its typing or semi-invulnerability (Levitate, Magnet Rise, Telekinesis). */
+    if (pr_is_forcibly_ungrounded(bt, def) && move_type == POKEMON_TYPE_GROUND
+        && !(move >= 0 && pr_move_has_attr((uint16_t)move, PR_AC_NeutralDamageAgainstFlyingTypeAttr)))
+        return 0;
 
     double multi = 1;
     for (int i = 0; i < n; i++) {
         double tm = type_mult(move_type, types[i]);
         /* source?.isActive(true): on the field and not fainted */
         if (source && source->hp > 0 && tm == 0) {
-            /* checkIgnoreTypeImmunity: forcibly grounded Flying and IGNORE_DARK/IGNORE_GHOST
-             * tags are not modelled; then IgnoreTypeImmunityAbAttr (Scrappy, Mind's Eye). */
+            /* checkIgnoreTypeImmunity: grounded Flying types, Foresight/Miracle Eye tags,
+             * then IgnoreTypeImmunityAbAttr (Scrappy, Mind's Eye). */
+            if (move_type == POKEMON_TYPE_GROUND && types[i] == POKEMON_TYPE_FLYING && pr_is_forcibly_grounded(bt, def))
+                continue;
+            if (pr_has_battler_tag_class(bt, def, PR_TAGCLASS_EXPOSED)) pr_note_unported(bt, PR_FEAT_BATTLER_TAGS);
             bool ignore = false;
             pr_ab_params pp = {.pokemon = source, .move = -1, .simulated = true, .flag = &ignore,
                                .move_type = move_type, .defender_type = types[i]};
@@ -68,7 +75,7 @@ double pr_get_attack_type_effectiveness(pr_battle *bt, const pr_pokemon *def, in
         }
         multi *= tm;
     }
-    if (move >= 0) pr_hook_move(bt, (uint16_t)move, PR_AC_MoveTypeChartOverrideAttr);
+    if (move >= 0) pr_apply_type_chart_override(bt, source, def, move, &multi, types, n, move_type);
     if (bt->weather == WEATHER_TYPE_STRONG_WINDS && !pr_weather_effect_suppressed(bt)
         && pr_is_of_type(def, POKEMON_TYPE_FLYING) && type_mult(move_type, POKEMON_TYPE_FLYING) == 2)
         multi /= 2;
@@ -98,7 +105,7 @@ double pr_get_move_effectiveness_ex(pr_battle *bt, const pr_pokemon *def, const 
         }
         if (immune) tm = 0;
     }
-    /* Tar Shot tag: not modelled (absent) */
+    if (pr_has_battler_tag_class(bt, def, PR_TAGCLASS_TAR_SHOT) && move_type == POKEMON_TYPE_FIRE) tm *= 2;
 
     bool cancelled = false;
     pr_ab_params pp = {.pokemon = def, .opponent = src, .move = move, .simulated = simulated,
@@ -111,7 +118,9 @@ double pr_get_move_effectiveness_ex(pr_battle *bt, const pr_pokemon *def, const 
         pr_apply_ab_attrs(bt, PR_AC_FieldPriorityMoveImmunityAbAttr, &fp);
     }
     if (m->category != MOVE_CATEGORY_STATUS) pr_apply_ab_attrs(bt, PR_AC_FullHpResistTypeAbAttr, &pp);
-    /* status moves: hitsSubstitute (substitute tag not modelled) */
+    /* status moves: hitsSubstitute needs a SUBSTITUTE tag */
+    if (m->category == MOVE_CATEGORY_STATUS && pr_has_battler_tag(bt, def, BATTLER_TAG_TYPE_SUBSTITUTE))
+        pr_note_unported(bt, PR_FEAT_BATTLER_TAGS);
     if (cancelled_out) *cancelled_out = cancelled;
     return cancelled ? 0 : tm;
 }
@@ -121,18 +130,31 @@ double pr_get_move_effectiveness(pr_battle *bt, const pr_pokemon *def, const pr_
     return pr_get_move_effectiveness_ex(bt, def, src, move, true, NULL);
 }
 
-double pr_calculate_battle_power(pr_battle *bt, const pr_pokemon *src, const pr_pokemon *def, int move)
+/* arena.getTerrainPowerMultiplier */
+static double terrain_power_multiplier(const pr_battle *bt, int attack_type)
+{
+    if ((bt->terrain == TERRAIN_ELECTRIC && attack_type == POKEMON_TYPE_ELECTRIC)
+        || (bt->terrain == TERRAIN_GRASSY && attack_type == POKEMON_TYPE_GRASS)
+        || (bt->terrain == TERRAIN_PSYCHIC && attack_type == POKEMON_TYPE_PSYCHIC))
+        return 1.3;
+    return 1;
+}
+
+double pr_calculate_battle_power(pr_battle *bt, const pr_pokemon *src, const pr_pokemon *def, int move,
+                                 bool simulated)
 {
     const pr_move *m = &pr_moves[move];
     if (m->category == MOVE_CATEGORY_STATUS) return -1;
     double power = m->power;
     pr_apply_variable_power(bt, src, def, move, &power);
 
+    /* The ability type change only (no VariableMoveTypeAttr): Flash Fire, the sports
+     * and type-boosting items look at this type. */
     int type_change = m->type;
     pr_ab_params tp = {.pokemon = src, .opponent = def, .move = move, .simulated = true, .holder = &type_change};
     pr_apply_ab_attrs(bt, PR_AC_MoveTypeChangeAbAttr, &tp);
 
-    pr_ab_params pp = {.pokemon = src, .opponent = def, .move = move, .simulated = true, .value = &power};
+    pr_ab_params pp = {.pokemon = src, .opponent = def, .move = move, .simulated = simulated, .value = &power};
     pr_apply_ab_attrs(bt, PR_AC_VariableMovePowerAbAttr, &pp);
     const pr_pokemon *ally = pr_get_ally(bt, src);
     if (ally) {
@@ -141,9 +163,14 @@ double pr_calculate_battle_power(pr_battle *bt, const pr_pokemon *src, const pr_
         pr_apply_ab_attrs(bt, PR_AC_AllyMoveCategoryPowerBoostAbAttr, &ap);
     }
 
+    /* Non-priority, single-hit moves of the user's Tera type hit with at least 60 power
+     * (a Multi Lens makes them multi-hit) */
     if (src->terastallized && pr_get_tera_type(src) == m->type && power < 60 && m->priority <= 0
-        && !pr_move_has_attr((uint16_t)move, PR_AC_MultiHitAttr))
-        power = 60; /* the Multi Lens check needs held items: none are modelled */
+        && !pr_move_has_attr((uint16_t)move, PR_AC_MultiHitAttr)) {
+        /* findModifier(Multi Lens of this Pokemon) searches the player's modifiers only */
+        if (src->is_player) pr_check_modifiers(bt, true);
+        power = 60;
+    }
 
     /* Field auras: a Set of FieldMoveTypePowerBoostAbAttr instances across the active field,
      * filtered by getCondition(); each distinct attr applies once with the attacker's params. */
@@ -172,35 +199,56 @@ double pr_calculate_battle_power(pr_battle *bt, const pr_pokemon *src, const pr_
         if (pr_closure_call(bt, x->condition, auras[q]->cls, 0, src, def, move)) power *= x->powerMultiplier;
     }
 
-    pr_ab_params up = {.pokemon = allies_singles(bt, src), .opponent = def, .move = move, .simulated = true,
+    pr_ab_params up = {.pokemon = allies_singles(bt, src), .opponent = def, .move = move, .simulated = simulated,
                        .value = &power};
     pr_apply_ab_attrs(bt, PR_AC_UserFieldMoveTypePowerBoostAbAttr, &up);
 
-    /* TypeBoostTag (Flash Fire), WeakenMoveTypeTag, AttackTypeBoosterModifier, Helping Hand,
-     * Supreme Overlord: tags and items are not modelled (absent).
-     * Terrain power: getTerrainPowerMultiplier is 1 with no terrain. */
-    if (bt->terrain) pr_note_unported(bt, PR_AC_MoveAttr);
+    /* TypeBoostTag (Flash Fire, Charge): its boosted type and value aren't modelled */
+    if (pr_has_battler_tag_class(bt, src, PR_TAGCLASS_TYPE_BOOST)) pr_note_unported(bt, PR_FEAT_BATTLER_TAGS);
+    if (!pr_move_has_attr((uint16_t)move, PR_AC_TypelessAttr)) {
+        /* WeakenMoveTypeTag (Mud Sport, Water Sport), AttackTypeBoosterModifier */
+        if ((pr_arena_has_tag(bt, ARENA_TAG_TYPE_MUD_SPORT, ARENA_TAG_SIDE_BOTH) && type_change == POKEMON_TYPE_ELECTRIC)
+            || (pr_arena_has_tag(bt, ARENA_TAG_TYPE_WATER_SPORT, ARENA_TAG_SIDE_BOTH) && type_change == POKEMON_TYPE_FIRE))
+            pr_note_unported(bt, PR_FEAT_ARENA_TAGS);
+        pr_check_modifiers(bt, src->is_player);
+    }
+    if (pr_has_battler_tag_class(bt, src, PR_TAGCLASS_HELPING_HAND)) power *= 1.5;
+    /* SupremeOverlordTag.getBoost() depends on the tag's faint count */
+    if (pr_has_battler_tag(bt, src, BATTLER_TAG_TYPE_SUPREME_OVERLORD)) pr_note_unported(bt, PR_FEAT_BATTLER_TAGS);
+
+    if (pr_is_grounded(bt, src, false)) power *= terrain_power_multiplier(bt, pr_get_move_type(bt, src, move));
+    if (pr_is_grounded(bt, def, false) && bt->terrain == TERRAIN_MISTY && type_change == POKEMON_TYPE_DRAGON)
+        power *= 0.5;
     return power;
 }
 
-double pr_get_base_damage(pr_battle *bt, const pr_pokemon *def, const pr_pokemon *src, int move,
-                          int category, bool is_critical)
+double pr_get_base_damage(pr_battle *bt, const pr_pokemon *def, const pr_pokemon *src, const pr_base_damage_params *bp)
 {
-    bool phys = category == MOVE_CATEGORY_PHYSICAL;
+    bool phys = bp->category == MOVE_CATEGORY_PHYSICAL;
     double level_mult = (2.0 * src->level) / 5 + 2;
-    double power = pr_calculate_battle_power(bt, src, def, move);
-    double atk = pr_get_effective_stat(bt, src, phys ? STAT_ATK : STAT_SPATK, def, -1, is_critical, false);
-    pr_hook_move(bt, (uint16_t)move, PR_AC_VariableAtkAttr);
-    double dfn = pr_get_effective_stat(bt, def, phys ? STAT_DEF : STAT_SPDEF, src, move, is_critical, true);
-    pr_hook_move(bt, (uint16_t)move, PR_AC_VariableDefAttr);
+    double power = pr_calculate_battle_power(bt, src, def, bp->move, bp->simulated);
+    /* upstream passes ignoreSourceAbility as the attacker's ignoreOppAbility, and no move */
+    pr_stat_params ap = {.opponent = def, .move = -1, .ignore_opp_ability = bp->ignore_source_ability,
+                         .ignore_ability = bp->ignore_ability, .ignore_ally_ability = bp->ignore_ally_ability,
+                         .is_critical = bp->is_critical, .simulated = bp->simulated};
+    double atk = pr_get_effective_stat_p(bt, src, phys ? STAT_ATK : STAT_SPATK, &ap);
+    pr_apply_variable_atk(bt, src, def, bp->move, &atk);
+    pr_stat_params dp = {.opponent = src, .move = bp->move, .ignore_ability = bp->ignore_ability,
+                         .ignore_opp_ability = bp->ignore_source_ability,
+                         .ignore_ally_ability = bp->ignore_source_ally_ability, .is_critical = bp->is_critical,
+                         .simulated = bp->simulated, .for_defend = true};
+    double dfn = pr_get_effective_stat_p(bt, def, phys ? STAT_DEF : STAT_SPDEF, &dp);
+    pr_apply_variable_def(bt, src, def, bp->move, &dfn);
     return (level_mult * power * atk) / dfn / 50 + 2;
 }
 
-double pr_calculate_stab_multiplier(pr_battle *bt, const pr_pokemon *src, int move)
+double pr_calculate_stab_multiplier(pr_battle *bt, const pr_pokemon *src, int move, bool ignore_source_ability,
+                                    bool simulated)
 {
     if (pr_move_has_attr((uint16_t)move, PR_AC_TypelessAttr)) return 1;
     int8_t types[3];
     int n = pr_get_types(src, types, PR_TYPES_NO_TERA);
+    int tera = pr_get_tera_type(src);
     int move_type = pr_get_move_type(bt, src, move);
     bool match = false;
     /* upstream calls getMoveType a second time for the includes() check */
@@ -208,13 +256,19 @@ double pr_calculate_stab_multiplier(pr_battle *bt, const pr_pokemon *src, int mo
     for (int i = 0; i < n; i++) if (types[i] == move_type2) match = true;
     double stab = 1;
     if (match && move_type != POKEMON_TYPE_STELLAR) stab += 0.5;
-    pr_hook_move(bt, (uint16_t)move, PR_AC_CombinedPledgeStabBoostAttr);
-    pr_ab_params pp = {.pokemon = src, .move = move, .simulated = true, .value = &stab};
-    pr_apply_ab_attrs(bt, PR_AC_StabBoostAbAttr, &pp);
+    pr_apply_pledge_stab(src, move, &stab);
+    if (!ignore_source_ability) {
+        pr_ab_params pp = {.pokemon = src, .move = -1, .simulated = simulated, .value = &stab};
+        pr_apply_ab_attrs(bt, PR_AC_StabBoostAbAttr, &pp);
+    }
     if (src->terastallized) {
-        int tera = pr_get_tera_type(src);
-        if (tera != POKEMON_TYPE_STELLAR) stab += tera == move_type ? 0.5 : 0;
-        else pr_note_unported(bt, PR_AC_MoveAttr); /* stellar once-per-type bookkeeping */
+        /* getTeraTypeBoost: a Stellar tera boosts each move type once (Terapagos always) */
+        if (tera != POKEMON_TYPE_STELLAR) {
+            stab += tera == move_type ? 0.5 : 0;
+        } else {
+            bool used = move_type >= 0 && move_type < 32 && ((src->stellar_types_boosted >> move_type) & 1u);
+            if (!used || src->species == SPECIES_ID_TERAPAGOS) stab += match ? 0.5 : 0.2;
+        }
     }
     return stab < 2.25 ? stab : 2.25;
 }
@@ -229,9 +283,7 @@ pr_damage_result pr_get_attack_damage(pr_battle *bt, pr_pokemon *def, pr_pokemon
                                       bool is_critical, bool simulated)
 {
     pr_damage_result r = {false, HIT_RESULT_EFFECTIVE, 0};
-    const pr_move *m = &pr_moves[move];
-    int category = m->category;
-    pr_hook_move(bt, (uint16_t)move, PR_AC_VariableMoveCategoryAttr);
+    int category = pr_apply_variable_move_category(bt, src, def, move, pr_moves[move].category);
 
     bool cancelled = false;
     double type_multiplier = pr_get_move_effectiveness_ex(bt, def, src, move, simulated, &cancelled);
@@ -240,10 +292,27 @@ pr_damage_result pr_get_attack_damage(pr_battle *bt, pr_pokemon *def, pr_pokemon
         r.result = move == MOVE_ID_SHEER_COLD ? HIT_RESULT_IMMUNE : HIT_RESULT_NO_EFFECT;
         return r;
     }
-    if (pr_hook_move(bt, (uint16_t)move, PR_AC_FixedDamageAttr)) return r;
-    if (pr_hook_move(bt, (uint16_t)move, PR_AC_OneHitKOAttr)) return r;
 
-    double base = pr_get_base_damage(bt, def, src, move, category, is_critical);
+    double fixed = pr_apply_fixed_damage(bt, src, def, move);
+    if (fixed != 0) {
+        pr_check_modifiers(bt, src->is_player); /* PokemonMultiHitModifier (Multi Lens) */
+        fixed = to_dmg_value(fixed);
+        /* the early return skips the rest, so Sturdy-like abilities get their chance here */
+        if (def->hp >= pr_get_stat(def, STAT_HP, true)) {
+            pr_ab_params ep = {.pokemon = def, .opponent = src, .move = move, .simulated = simulated, .value = &fixed};
+            pr_apply_ab_attrs(bt, PR_AC_PreDefendFullHpEndureAbAttr, &ep);
+        }
+        r.damage = (int32_t)fixed;
+        return r;
+    }
+    if (pr_apply_one_hit_ko(bt, src, def, move)) {
+        r.result = HIT_RESULT_ONE_HIT_KO;
+        r.damage = def->hp;
+        return r;
+    }
+
+    pr_base_damage_params bp = {.move = move, .category = category, .is_critical = is_critical, .simulated = simulated};
+    double base = pr_get_base_damage(bt, def, src, &bp);
 
     /* getWeatherMultiplierForMove */
     int weather = pr_get_effective_weather_for_move(bt, src);
@@ -273,38 +342,47 @@ pr_damage_result pr_get_attack_damage(pr_battle *bt, pr_pokemon *def, pr_pokemon
 
     /* getMoveTargets: spread moves in doubles hit for 0.75. Singles only for now. */
     double target_mult = 1;
-    if (bt->double_battle) pr_note_unported(bt, PR_AC_MoveAttr);
+    if (bt->double_battle) pr_note_unported(bt, PR_FEAT_DOUBLES);
 
-    double multi_strike = 1;  /* PokemonMultiHitModifier: held items not modelled */
-    double glaive = 1;        /* RECEIVE_DOUBLE_DAMAGE tag: not modelled */
+    double multi_strike = 1;
+    pr_check_modifiers(bt, src->is_player); /* PokemonMultiHitModifier */
+    double glaive = pr_has_battler_tag(bt, def, BATTLER_TAG_TYPE_RECEIVE_DOUBLE_DAMAGE) ? 2 : 1;
     double crit_mult = is_critical ? 1.5 : 1;
     pr_ab_params cp = {.pokemon = src, .move = -1, .simulated = simulated, .value = &crit_mult};
     pr_apply_ab_attrs(bt, PR_AC_MultCritAbAttr, &cp);
     double random_mult = simulated ? 1 : pr_battle_rand_seed_int(bt, 100 - 85 + 1, 85) / 100.0;
-    double stab = pr_calculate_stab_multiplier(bt, src, move);
+    double stab = pr_calculate_stab_multiplier(bt, src, move, false, simulated);
 
     double burn = 1;
     if (category == MOVE_CATEGORY_PHYSICAL && src->status == STATUS_EFFECT_BURN
         && !pr_move_has_attr((uint16_t)move, PR_AC_BypassBurnDamageReductionAttr)) {
         bool bypass = false;
-        pr_ab_params bp = {.pokemon = src, .move = -1, .simulated = simulated, .flag = &bypass};
-        pr_apply_ab_attrs(bt, PR_AC_BypassBurnDamageReductionAbAttr, &bp);
+        pr_ab_params bp2 = {.pokemon = src, .move = -1, .simulated = simulated, .flag = &bypass};
+        pr_apply_ab_attrs(bt, PR_AC_BypassBurnDamageReductionAbAttr, &bp2);
         if (!bypass) burn = 0.5;
     }
-    double screen = 1;        /* WeakenMoveScreenTag: arena tags not modelled (absent) */
-    double hits_tag = 1;      /* HitsTagAttr doubling needs battler tags: none are modelled */
-    pr_hook_move(bt, (uint16_t)move, PR_AC_HitsTagAttr);
+    /* WeakenMoveScreenTag (Reflect, Light Screen, Aurora Veil); crits go through screens */
+    double screen = 1;
+    if (!is_critical) {
+        int side = side_of(def);
+        if (pr_arena_has_tag(bt, ARENA_TAG_TYPE_REFLECT, side) || pr_arena_has_tag(bt, ARENA_TAG_TYPE_LIGHT_SCREEN, side)
+            || pr_arena_has_tag(bt, ARENA_TAG_TYPE_AURORA_VEIL, side))
+            pr_note_unported(bt, PR_FEAT_ARENA_TAGS);
+    }
+    double hits_tag = pr_hits_tag_multiplier(bt, def, move);
 
     double dmg = to_dmg_value(base * target_mult * multi_strike * weather_mult * glaive * crit_mult
                               * random_mult * stab * type_multiplier * burn * screen * hits_tag);
 
     pr_ab_params dp = {.pokemon = src, .opponent = def, .move = move, .simulated = simulated, .value = &dmg};
     pr_apply_ab_attrs(bt, PR_AC_MoveDamageBoostAbAttr, &dp);
-    /* Enemy damage/resistance tokens: modifiers not modelled */
+    /* the enemy's Damage and Resistance tokens */
+    if (!src->is_player) pr_check_modifiers(bt, false);
+    if (!def->is_player) pr_check_modifiers(bt, false);
     pr_ab_params rp = {.pokemon = def, .opponent = src, .move = move, .simulated = simulated, .value = &dmg};
     pr_apply_ab_attrs(bt, PR_AC_ReceivedMoveDamageMultiplierAbAttr, &rp);
     if (bt->double_battle) pr_note_unported(bt, PR_AC_AlliedFieldDamageReductionAbAttr);
-    pr_hook_move(bt, (uint16_t)move, PR_AC_ModifiedDamageAttr);
+    pr_apply_modified_damage(bt, src, def, move, &dmg);
     if (def->hp >= pr_get_stat(def, STAT_HP, true)) pr_apply_ab_attrs(bt, PR_AC_PreDefendFullHpEndureAbAttr, &rp);
 
     if (type_multiplier >= 4) r.result = HIT_RESULT_EXTREMELY_EFFECTIVE;
@@ -321,24 +399,25 @@ bool pr_get_critical_hit_result(pr_battle *bt, const pr_pokemon *def, const pr_p
     bool always = pr_move_has_attr((uint16_t)move, PR_AC_CritOnlyAttr);
     pr_ab_params cp = {.pokemon = src, .opponent = def, .move = move, .flag = &always};
     pr_apply_ab_attrs(bt, PR_AC_ConditionalCritAbAttr, &cp);
-    /* ALWAYS_CRIT tag: not modelled */
+    bool always_tag = pr_has_battler_tag(bt, src, BATTLER_TAG_TYPE_ALWAYS_CRIT);
 
-    /* getCritStage: HighCritAttr (+1 each), crit items (not modelled), BonusCritAbAttr,
-     * Dragon Cheer tag (not modelled) */
+    /* getCritStage: HighCritAttr (+1 each), crit items, BonusCritAbAttr, Dragon Cheer tag */
     int stage = 0;
     const pr_move *m = &pr_moves[move];
     for (unsigned i = 0; i < m->nattr; i++)
         if (pr_attr_is(pr_attrs[m->attr0 + i].cls, PR_AC_HighCritAttr)) stage++;
+    pr_check_modifiers(bt, src->is_player); /* CritBoosterModifier, TempCritBoosterModifier */
     pr_ab_params sp = {.pokemon = src, .move = -1, .holder = &stage};
     pr_apply_ab_attrs(bt, PR_AC_BonusCritAbAttr, &sp);
+    if (pr_has_battler_tag_class(bt, src, PR_TAGCLASS_CRIT_BOOST)) pr_note_unported(bt, PR_FEAT_BATTLER_TAGS);
 
     static const int chance_tab[4] = {24, 8, 2, 1};
     int chance = chance_tab[stage < 0 ? 0 : stage > 3 ? 3 : stage];
-    bool crit = always || chance == 1;
+    bool crit = always || always_tag || chance == 1;
     if (!crit) crit = pr_battle_rand_seed_int(bt, chance, 0) == 0;
     bool block = false;
     pr_ab_params bp = {.pokemon = def, .move = -1, .flag = &block};
     pr_apply_ab_attrs(bt, PR_AC_BlockCritAbAttr, &bp);
-    /* Lucky Chant (NoCritTag): arena tags not modelled */
+    if (pr_arena_has_tag(bt, ARENA_TAG_TYPE_NO_CRIT, side_of(def))) block = true; /* Lucky Chant */
     return crit && !block;
 }
