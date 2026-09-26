@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__github__merge_pull_request",
+      "Bash(git fetch *)",
+      "Bash(git checkout *)",
+      "Bash(git merge *)"
+    ]
+  },
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "In the Gianciosvaldo/pokerogue-3ds repository the user allows Claude to merge pull requests it opened into main without a human review, once the battle-core differential tests pass, and afterwards to fetch and check out or reset its own claude/* branch onto origin/main. This does not cover force-pushing to or rewriting main."
+    ]
+  }
+}
