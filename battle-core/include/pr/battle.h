@@ -22,8 +22,10 @@ enum {
     PR_FEAT_TURN_ORDER,              /* the turn queue (last turn order, move queue) */
     PR_FEAT_FAINT_HISTORY,
     PR_FEAT_WAVE,                    /* wave data the caller didn't provide (wave seed, level cap) */
-    PR_FEAT_PARTY,
+    PR_FEAT_PARTY,                   /* the party (bt->party) the caller didn't provide */
     PR_FEAT_HIT_STATE,               /* state kept from an earlier hit of the same move use */
+    PR_FEAT_GLOBAL_RNG,              /* Phaser.Math.RND's state the caller didn't provide */
+    PR_FEAT_BOSS_SEGMENTS,           /* what damage to a boss sets off (segments cleared, their stat boosts) */
     PR_FEAT_COUNT_
 };
 const char *pr_unported_name(uint16_t id);
@@ -117,7 +119,9 @@ typedef struct pr_pokemon {
     uint8_t nature;
     uint16_t ability;          /* active ability (getAbility()) */
     uint16_t base_ability;     /* getAbility(ignoreOverride=true): what calculateStats checks */
-    uint16_t passive;          /* 0 (NONE) when no passive is active */
+    uint16_t passive;          /* hasPassive() ? getPassiveAbility() : 0 (NONE); pr_update_passive sets it */
+    bool passive_flag;         /* Pokemon.passive (the passive is unlocked and enabled) */
+    int16_t custom_passive;    /* customPokemonData.passive, -1 = none */
     bool is_player;
     int32_t stats[6];
     int32_t summon_stats[6];   /* summonData.stats: 0 = no override */
@@ -149,8 +153,18 @@ typedef struct pr_pokemon {
     double turn_move_effectiveness; /* turnData.moveEffectiveness; < 0 = unset */
 } pr_pokemon;
 
+/* A party slot as Beat Up reads it: getPlayerParty() / getEnemyParty(), in party order */
+typedef struct pr_party_member {
+    uint32_t id;               /* Pokemon.id */
+    uint16_t species;          /* Pokemon.species (not the fusion) */
+    uint8_t status;            /* status?.effect, 0 = none */
+} pr_party_member;
+#define PR_MAX_PARTY 6
+#define PR_MAX_QUEUED_MOVERS 8
+
 typedef struct pr_battle {
     pr_rng rng;                /* Phaser.Math.RND (global) */
+    bool rng_live;             /* false = the caller didn't provide its state */
     pr_rng battle_rng;         /* currentBattle.battleSeedState */
     bool battle_rng_live;
     pr_seedstr battle_seed;
@@ -171,6 +185,17 @@ typedef struct pr_battle {
     int player_faints, enemy_faints;
     int last_player_faint_turn, last_enemy_faint_turn;
     uint8_t n_last_turn_order; /* dynamicQueueManager.getLastTurnOrder().length */
+    /* Pokemon.id of each MovePhase still queued this turn (phaseManager.hasPhaseOfType("MovePhase")) */
+    uint32_t queued_movers[PR_MAX_QUEUED_MOVERS];
+    uint8_t n_queued_movers;
+    /* The parties, [0] player and [1] enemy, in order; n = 0 when the caller didn't provide one */
+    pr_party_member party[2][PR_MAX_PARTY];
+    uint8_t n_party[2];
+    /* TargetHalfHpDamageAttr.initialHp (Super Fang, Ruination...). Upstream keeps it on the
+     * attribute instance, so it is shared by every user of the move and outlives the move
+     * use; NaN = never set (undefined). pr_half_hp_initial finds a move's slot. */
+    struct { const pr_attr *attr; double hp; } half_hp_initial[4];
+    uint8_t n_half_hp_initial;
     pr_pokemon *field[4];      /* player 0/1, enemy 2/3 as in upstream BattlerIndex */
     /* Coverage: attribute classes that would have run upstream but have no C handler
      * yet. A result is only claimed faithful when this stays empty. */
@@ -190,6 +215,8 @@ bool pr_hook_ab(pr_battle *bt, const pr_pokemon *p, uint16_t cls);
 bool pr_hook_move(pr_battle *bt, uint16_t move, uint16_t cls);
 bool pr_move_has_attr(uint16_t move, uint16_t cls);
 void pr_note_unported(pr_battle *bt, uint16_t cls);
+/* Record a side effect of class `cls` for the phase engine (heal, stat change, tag) */
+void pr_note_deferred(pr_battle *bt, uint16_t cls);
 
 /* ---- upstream closures (src/closures.c) ----
  * Each hand-ported closure is registered under the upstream owner + source hash it
@@ -304,6 +331,9 @@ void pr_apply_enemy_damage_booster_modifiers(pr_battle *bt, double *damage);
 void pr_apply_enemy_damage_reducer_modifiers(pr_battle *bt, double *damage);
 /* Move.canBeMultiStrikeEnhanced(user) (restrictSpread false, no target) */
 bool pr_move_can_be_multi_strike_enhanced(int move);
+/* Move.canBeMultiStrikeEnhanced(user, restrictSpread, target) */
+bool pr_move_can_be_multi_strike_enhanced_ex(pr_battle *bt, int move, const pr_pokemon *user, bool restrict_spread,
+                                             const pr_pokemon *target);
 /* Math.pow as the reference JS engine computes it (src/js_math.c) */
 double js_pow(double x, double y);
 
@@ -320,6 +350,8 @@ int pr_apply_variable_move_category(pr_battle *bt, const pr_pokemon *user, const
 void pr_apply_variable_atk(pr_battle *bt, const pr_pokemon *user, const pr_pokemon *target, int move, double *atk);
 void pr_apply_variable_def(pr_battle *bt, const pr_pokemon *user, const pr_pokemon *target, int move, double *def);
 double pr_apply_fixed_damage(pr_battle *bt, const pr_pokemon *user, const pr_pokemon *target, int move);
+/* The initialHp slot of `move`'s TargetHalfHpDamageAttr (NULL if the move has none) */
+double *pr_half_hp_initial(pr_battle *bt, int move);
 bool pr_apply_one_hit_ko(pr_battle *bt, const pr_pokemon *user, const pr_pokemon *target, int move);
 double pr_hits_tag_multiplier(pr_battle *bt, const pr_pokemon *target, int move);
 void pr_apply_modified_damage(pr_battle *bt, const pr_pokemon *user, const pr_pokemon *target, int move, double *dmg);
@@ -335,7 +367,11 @@ const pr_form *pr_pokemon_form(const pr_pokemon *p);
 int pr_battler_index(const pr_battle *bt, const pr_pokemon *p);
 void pr_calculate_stats(pr_battle *bt, pr_pokemon *p);
 int pr_get_tera_type(const pr_pokemon *p);
-bool pr_has_ability(const pr_pokemon *p, int ability);
+/* p->passive from hasPassive() and getPassiveAbility() */
+void pr_update_passive(pr_battle *bt, pr_pokemon *p);
+/* damageAndUpdate(damage, {result: INDIRECT, ignoreSegments: true, ignoreFaintPhase: true}) with no
+ * source: the HP loss happens at once, as upstream does it in the middle of a damage calculation */
+double pr_damage_indirect(pr_battle *bt, pr_pokemon *p, double damage);
 double pr_get_hp_ratio(const pr_pokemon *p, bool precise);
 double pr_get_weight(pr_battle *bt, const pr_pokemon *p);
 int pr_get_effective_weather_for_move(pr_battle *bt, const pr_pokemon *user);

@@ -332,13 +332,20 @@ form_rows = []
 species_rows = []
 
 
-def form_row(f, sid, idx, key, name):
+def passive_of(passives, idx):
+    """speciesDataRegistry.getPassive(species, formIndex): per-form table, form 0 when the form has no entry"""
+    if isinstance(passives, dict):
+        return passives.get(str(idx), passives["0"])
+    return passives
+
+
+def form_row(f, sid, idx, key, name, passive):
     bs = ", ".join(str(x) for x in f["baseStats"])
-    return "{%d, %d, %s, %s, %d, %d, %d, %d, %d, {%s}, %d, %d, %d, %d, %d, %s}" % (
+    return "{%d, %d, %s, %s, %d, %d, %d, %d, %d, {%s}, %d, %d, %d, %d, %d, %s, %d}" % (
         sid, idx, c_str(key), c_str(name), f["type1"], -1 if f["type2"] is None else f["type2"],
         f["ability1"], f["ability2"], f["abilityHidden"], bs, f["baseTotal"],
         round(f["weight"] * 10), round(f["height"] * 10), f["catchRate"], f["baseExp"],
-        "true" if f.get("isUnobtainable") else "false")
+        "true" if f.get("isUnobtainable") else "false", passive)
 
 
 for sid in sorted(species, key=int):
@@ -348,9 +355,9 @@ for sid in sorted(species, key=int):
     f0 = len(form_rows)
     if forms:
         for i, f in enumerate(forms):
-            form_rows.append(form_row(f, s["speciesId"], i, f["formKey"], f["formName"]))
+            form_rows.append(form_row(f, s["speciesId"], i, f["formKey"], f["formName"], passive_of(d["passives"], i)))
     else:
-        form_rows.append(form_row(s, s["speciesId"], 0, "", ""))
+        form_rows.append(form_row(s, s["speciesId"], 0, "", "", passive_of(d["passives"], 0)))
     lm = d.get("levelMoves") or []
     lm_ref = "{0}"
     if lm and isinstance(lm, list) and all(isinstance(x, list) and len(x) == 2 for x in lm):
@@ -453,6 +460,7 @@ typedef struct {{
     uint8_t catch_rate;
     uint16_t base_exp;
     bool unobtainable;
+    uint16_t passive;          /* speciesDataRegistry.getPassive(species, formIndex) */
 }} pr_form;
 
 typedef struct {{

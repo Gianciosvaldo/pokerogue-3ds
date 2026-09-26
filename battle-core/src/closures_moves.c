@@ -192,6 +192,12 @@ static double last_respects(ARGS)
     return 1 + (f < 100 ? f : 100);
 }
 
+/* Grassy Glide priority: arena.terrainType === GRASSY && user.isGrounded() */
+static double grassy_glide(ARGS)
+{
+    return bt->terrain == TERRAIN_GRASSY && pr_is_grounded(bt, u, false);
+}
+
 const pr_closure_reg pr_move_closures[] = {
     {"move:89", "d551c83b79fb", grassy_grounded_half},
     {"move:222", "d551c83b79fb", grassy_grounded_half},
@@ -224,6 +230,7 @@ const pr_closure_reg pr_move_closures[] = {
     {"move:754", "b92457609c24", target_not_acted},
     {"move:755", "b92457609c24", target_not_acted},
     {"move:808", "e64793309a8e", lash_out},
+    {"move:803", "1a3ab5759086", grassy_glide}, /* closure 387 */
     {"move:854", "3cbd6fbd3493", last_respects},
 };
 const int pr_move_closures_n = sizeof pr_move_closures / sizeof pr_move_closures[0];

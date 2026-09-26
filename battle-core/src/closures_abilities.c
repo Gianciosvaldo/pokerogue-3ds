@@ -221,9 +221,31 @@ static double stakeout(ARGS) { UNUSED; return b && b->switched_in_this_turn; }
 static double parental_bond(ARGS)
 {
     UNUSED;
-    if (!(a->hit_count > 1 && a->hits_left == 1)) return 0;
-    UNPORTED(PR_AC_MoveDamageBoostAbAttr); /* canBeMultiStrikeEnhanced not ported */
+    return a->hit_count > 1 && a->hits_left == 1 && pr_move_can_be_multi_strike_enhanced_ex(bt, m, a, true, b);
 }
+
+/* Analytic: !globalScene.phaseManager.hasPhaseOfType("MovePhase", phase => phase.pokemon.id !== user.id),
+ * i.e. no other Pokemon still has a move queued this turn */
+static double analytic(ARGS)
+{
+    UNUSED;
+    for (int i = 0; i < bt->n_queued_movers; i++)
+        if (bt->queued_movers[i] != a->id) return 0;
+    return 1;
+}
+
+/* Prankster: (_pokemon, move) => move.category === STATUS */
+static double prankster(ARGS) { UNUSED; return pr_moves[m].category == MOVE_CATEGORY_STATUS; }
+
+/* Gale Wings: pokemon.isFullHp() && pokemon.getMoveType(move) === FLYING */
+static double gale_wings(ARGS)
+{
+    UNUSED;
+    return a->hp >= pr_get_stat(a, STAT_HP, true) && pr_get_move_type(bt, a, m) == POKEMON_TYPE_FLYING;
+}
+
+/* Triage: move.hasFlag(HEALING_MOVE) */
+static double triage(ARGS) { UNUSED; return (pr_moves[m].flags & MOVE_FLAGS_HEALING_MOVE) != 0; }
 
 /* Unseen Fist, Piercing Drill: !!target && target has a ProtectedTag && contact applies. */
 static double protected_contact(ARGS)
@@ -379,5 +401,9 @@ const pr_closure_reg pr_ability_closures[] = {
     {"ability:237", "8e6e1b7d5953", ball_fetch_unused}, /* closure 629 */
     {"ability:248", "696705e9c797", physical}, /* closure 638 */
     {"ability:258", "95f58e84b99d", not_terastallized}, /* closure 645 */
+    {"ability:148", "1ac928f78f0f", analytic}, /* closure 532 */
+    {"ability:158", "74fa5cb6b41e", prankster}, /* closure 536 */
+    {"ability:177", "1b589a349668", gale_wings}, /* closure 558 */
+    {"ability:205", "e8d66e7b435a", triage}, /* closure 592 */
 };
 const int pr_ability_closures_n = (int)(sizeof pr_ability_closures / sizeof pr_ability_closures[0]);

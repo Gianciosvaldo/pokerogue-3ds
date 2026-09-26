@@ -302,7 +302,7 @@ pr_damage_result pr_get_attack_damage(pr_battle *bt, pr_pokemon *def, pr_pokemon
     }
 
     double fixed = pr_apply_fixed_damage(bt, src, def, move);
-    if (fixed != 0) {
+    if (fixed != 0 && fixed == fixed) { /* JS truthiness: NaN falls through to the normal calculation */
         double lens = 1;
         pr_apply_multi_hit_damage_modifiers(bt, src, move, &lens);
         fixed = to_dmg_value(fixed * lens);

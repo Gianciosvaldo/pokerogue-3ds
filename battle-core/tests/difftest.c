@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define MON_FIELDS 47
+#define MON_FIELDS 49
 
 static const char *const battler_tag_names[] = {BATTLER_TAG_TYPE_VALUES};
 static const char *const arena_tag_names[] = {ARENA_TAG_TYPE_VALUES};
@@ -32,6 +32,12 @@ static bool chain_has(const char *chain, const char *name)
         c = e + 1;
     }
     return false;
+}
+
+/* JS number equality for the expected answers, with NaN matching NaN */
+static bool same(double c, double js)
+{
+    return c == js || (c != c && js != js);
 }
 
 static char *next_tok(char **save)
@@ -82,6 +88,8 @@ static int read_mon(char **save, pr_pokemon *p)
         p->pp_used[i] = (uint8_t)v[42 + i];
     }
     p->id = (uint32_t)v[46];
+    p->passive_flag = v[47];
+    p->custom_passive = (int16_t)v[48];
     p->base_ability = ABILITY_ID_BALL_FETCH;
     p->type_override[0] = p->type_override[1] = -2;
     p->turn_move_effectiveness = -1; /* turnData.moveEffectiveness unset */
@@ -95,14 +103,16 @@ int main(int argc, char **argv)
     static char line[4096], eline[4096];
     pr_battle bt;
     memset(&bt, 0, sizeof bt);
-    int total = 0, covered = 0, pass = 0, fail = 0, stat_fail = 0;
-    static int uncovered_by[PR_FEAT_COUNT_], deferred_by[PR_AC_COUNT_];
+    int total = 0, covered = 0, pass = 0, fail = 0, stat_fail = 0, state_fail = 0;
+    static int uncovered_by[PR_FEAT_COUNT_], deferred_by[PR_FEAT_COUNT_];
     int with_deferred = 0;
     pr_pokemon A, D;
     int mods_expected[2] = {0, 0}, arena_tags_expected = 0;
     /* battler tags read from T lines before the case line: [0] player (A), [1] enemy (D) */
     static pr_battler_tag tags[2][PR_MAX_BATTLER_TAGS];
     int n_tags[2] = {0, 0};
+    bool have_half_hp = false;
+    double half_hp = 0;
 
     while (fgets(line, sizeof line, f)) {
         char *save;
@@ -135,6 +145,45 @@ int main(int argc, char **argv)
             bt.n_mods[0] = bt.n_mods[1] = 0;
             bt.max_exp_level = w[9];
             for (int i = 0; i < 4; i++) bt.turn_command[i] = (int8_t)w[10 + i];
+            bt.rng_live = false;
+            bt.n_party[0] = bt.n_party[1] = 0;
+            bt.n_queued_movers = 0;
+            have_half_hp = false;
+            continue;
+        }
+        if (!strcmp(tag, "G")) {
+            /* G c s0 s1 s2: Phaser.Math.RND.state() */
+            bt.rng.c = strtod(next_tok(&save), NULL);
+            bt.rng.s0 = strtod(next_tok(&save), NULL);
+            bt.rng.s1 = strtod(next_tok(&save), NULL);
+            bt.rng.s2 = strtod(next_tok(&save), NULL);
+            bt.rng_live = true;
+            continue;
+        }
+        if (!strcmp(tag, "P")) {
+            /* P side n (id species status)*n: the party in order, the Pokemon on the field first */
+            int side = atoi(next_tok(&save)), n = atoi(next_tok(&save));
+            if (side < 0 || side > 1 || n < 0 || n > PR_MAX_PARTY) { fprintf(stderr, "bad P line\n"); return 2; }
+            bt.n_party[side] = (uint8_t)n;
+            for (int i = 0; i < n; i++) {
+                bt.party[side][i].id = (uint32_t)strtoul(next_tok(&save), NULL, 10);
+                bt.party[side][i].species = (uint16_t)atoi(next_tok(&save));
+                bt.party[side][i].status = (uint8_t)atoi(next_tok(&save));
+            }
+            continue;
+        }
+        if (!strcmp(tag, "Q")) {
+            /* Q n id...: the Pokemon of each queued MovePhase */
+            int n = atoi(next_tok(&save));
+            if (n < 0 || n > PR_MAX_QUEUED_MOVERS) { fprintf(stderr, "bad Q line\n"); return 2; }
+            bt.n_queued_movers = (uint8_t)n;
+            for (int i = 0; i < n; i++) bt.queued_movers[i] = (uint32_t)strtoul(next_tok(&save), NULL, 10);
+            continue;
+        }
+        if (!strcmp(tag, "H")) {
+            /* H initialHp: the case move's TargetHalfHpDamageAttr state (NaN = undefined) */
+            half_hp = strtod(next_tok(&save), NULL);
+            have_half_hp = true;
             continue;
         }
         if (!strcmp(tag, "S")) {
@@ -242,15 +291,26 @@ int main(int argc, char **argv)
         memcpy(A.tags, tags[0], sizeof A.tags);
         memcpy(D.tags, tags[1], sizeof D.tags);
         A.is_player = true;
+        pr_update_passive(&bt, &A);
+        pr_update_passive(&bt, &D);
         bt.weather = (uint8_t)atoi(strtok_r(NULL, " \n", &save));
         int move = atoi(strtok_r(NULL, " \n", &save));
+        if (have_half_hp) {
+            /* The C slot carries over from earlier cases as upstream's attribute does, so it must
+             * already hold upstream's value (what earlier first hits stored); then it is synced. */
+            double *slot = pr_half_hp_initial(&bt, move);
+            if (!slot) { fprintf(stderr, "H line for a move without TargetHalfHpDamageAttr\n"); return 2; }
+            if (!same(*slot, half_hp) && ++state_fail <= 5)
+                printf("STATE MISMATCH initialHp of move %d: C %.17g | JS %.17g\n", move, *slot, half_hp);
+            *slot = half_hp;
+        }
         bool crit = atoi(strtok_r(NULL, " \n", &save));
         bool swap = atoi(strtok_r(NULL, " \n", &save));
         if (!fgets(eline, sizeof eline, f)) break;
-        double e[17]; /* JS numbers, printed in shortest round-trip form */
+        double e[19]; /* JS numbers, printed in shortest round-trip form */
         char *es;
         strtok_r(eline, " \n", &es);
-        for (int i = 0; i < 17; i++) e[i] = strtod(strtok_r(NULL, " \n", &es), NULL);
+        for (int i = 0; i < 19; i++) e[i] = strtod(next_tok(&es), NULL);
 
         bt.field[0] = &A; bt.field[2] = &D;
         bt.n_unported = 0;
@@ -286,19 +346,21 @@ int main(int argc, char **argv)
         covered++;
         if (bt.n_deferred) with_deferred++;
         for (int i = 0; i < bt.n_deferred; i++) deferred_by[bt.deferred[i]]++;
-        bool ok = stats_ok && sim.damage == e[12] && sim.result == e[13] && c_crit == (e[14] != 0)
-                  && real.damage == e[15] && real.result == e[16];
+        bool ok = stats_ok && same(sim.damage, e[12]) && sim.result == e[13] && c_crit == (e[14] != 0)
+                  && same(real.damage, e[15]) && real.result == e[16] && src->hit_count == e[17]
+                  && src->hits_left == e[18];
         if (ok) pass++;
         else if (++fail <= 10)
-            printf("MISMATCH move %d (%s) A %d/%d D %d/%d crit %d swap %d weather %d terrain %d: C sim %.17g/%d crit %d real %.17g/%d | JS %.17g/%.0f %.0f %.17g/%.0f\n",
+            printf("MISMATCH move %d (%s) A %d/%d D %d/%d crit %d swap %d weather %d terrain %d: C sim %.17g/%d crit %d real %.17g/%d hits %d/%d | JS %.17g/%.0f %.0f %.17g/%.0f hits %.0f/%.0f\n",
                    move, pr_moves[move].name, A.species, A.form, D.species, D.form, crit, swap, bt.weather, bt.terrain,
-                   sim.damage, sim.result, c_crit, real.damage, real.result, e[12], e[13], e[14], e[15], e[16]);
+                   sim.damage, sim.result, c_crit, real.damage, real.result, src->hit_count, src->hits_left, e[12], e[13],
+                   e[14], e[15], e[16], e[17], e[18]);
     }
-    printf("cases %d, stats mismatches %d (all cases)\n", total, stat_fail);
+    printf("cases %d, stats mismatches %d, carried-state mismatches %d (all cases)\n", total, stat_fail, state_fail);
     printf("covered %d: pass %d, fail %d; not covered %d\n", covered, pass, fail, total - covered);
     printf("covered cases whose side effects were deferred to the (unported) phase engine: %d\n", with_deferred);
-    for (int c = 0; c < PR_AC_COUNT_; c++)
-        if (deferred_by[c]) printf("  deferred %s: %d\n", pr_attr_class_name[c], deferred_by[c]);
+    for (int c = 0; c < PR_FEAT_COUNT_; c++)
+        if (deferred_by[c]) printf("  deferred %s: %d\n", pr_unported_name((uint16_t)c), deferred_by[c]);
     printf("not covered because of (class or missing state: cases):\n");
     for (int pass_no = 0; pass_no < 30; pass_no++) {
         int best = -1;
@@ -308,5 +370,5 @@ int main(int argc, char **argv)
         printf("  %s: %d\n", pr_unported_name((uint16_t)best), uncovered_by[best]);
         uncovered_by[best] = 0;
     }
-    return fail || stat_fail ? 1 : 0;
+    return fail || stat_fail || state_fail ? 1 : 0;
 }

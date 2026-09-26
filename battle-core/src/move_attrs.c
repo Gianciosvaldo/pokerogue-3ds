@@ -13,10 +13,11 @@ static int count_positive_stat_stages(const pr_pokemon *p)
     return n;
 }
 
+/* toDmgValue: Math.max(Math.floor(v), 1), where NaN stays NaN */
 static double to_dmg_value(double v)
 {
     v = floor(v);
-    return v > 1 ? v : 1;
+    return v > 1 || v != v ? v : 1;
 }
 
 /* randSeedInt(range) inside executeWithSeedOffset(fn, turn << 6, waveSeed): a fresh RNG
@@ -169,10 +170,45 @@ void pr_apply_variable_power(pr_battle *bt, const pr_pokemon *user, const pr_pok
             if (st && st->stockpiled_count > 0) *power = (double)P(SpitUpPowerAttr, a)->multiplier * st->stockpiled_count;
             break;
         }
-        case PR_AC_BeatUpAttr:
-            /* power from the party member whose turn it is to hit */
-            pr_note_unported(bt, PR_FEAT_PARTY);
+        case PR_AC_BeatUpAttr: {
+            /* The hit number, modulo the party members that count (the user, and allies without a
+             * status), picks where beatUpFunc starts walking the whole party; the first member that
+             * counts gives its species' base Attack / 10 + 5. */
+            int side = user->is_player ? 0 : 1, n = bt->n_party[side];
+            if (!n) { pr_note_unported(bt, PR_FEAT_PARTY); break; }
+            const pr_party_member *party = bt->party[side];
+            int allies = 0;
+            for (int k = 0; k < n; k++)
+                if (party[k].id == user->id || !party[k].status) allies++;
+            if (!allies) { *power = 0; break; } /* x % 0 is NaN: the loop doesn't run */
+            int idx = (user->hit_count - user->hits_left) % allies;
+            if (idx < 0) { pr_note_unported(bt, PR_FEAT_HIT_STATE); break; } /* party[-k] is undefined: upstream throws */
+            *power = 0;
+            for (int k = idx; k < n; k++) {
+                if (party[k].id != user->id && party[k].status) continue;
+                pr_pokemon sp = {.species = party[k].species};
+                *power = pr_pokemon_form(&sp)->base_stats[STAT_ATK] / 10.0 + 5; /* species.getBaseStat: form 0 */
+                break;
+            }
             break;
+        }
+        case PR_AC_PresentPowerAttr: {
+            /* A global-RNG roll; the heal outcome keeps the power, ends the move's other hits and
+             * queues a heal for the target. Upstream does this even when simulated. */
+            if (!bt->rng_live) { pr_note_unported(bt, PR_FEAT_GLOBAL_RNG); break; }
+            pr_pokemon *u = (pr_pokemon *)user; /* user.turnData is written */
+            bool first_hit = u->hit_count == u->hits_left;
+            int roll = pr_rng_seed_int(&bt->rng, first_hit ? 100 : 80, 0);
+            if (roll <= 40) *power = 40;
+            else if (roll <= 70) *power = 80;
+            else if (roll <= 80) *power = 120;
+            else if (roll <= 100) {
+                u->hit_count = 1;
+                u->hits_left = 1;
+                pr_note_deferred(bt, a->cls); /* PokemonHealPhase: target heals a quarter of its max HP */
+            }
+            break;
+        }
         case PR_AC_RoundPowerAttr:
             if (user->joined_round) *power *= 2;
             break;
@@ -422,6 +458,21 @@ void pr_apply_variable_def(pr_battle *bt, const pr_pokemon *user, const pr_pokem
 }
 
 /* ---- FixedDamageAttr family (getAttackDamage). Returns the fixed damage, 0 = none. ---- */
+double *pr_half_hp_initial(pr_battle *bt, int move)
+{
+    const pr_attr *a = NULL;
+    for (unsigned i = 0; i < pr_moves[move].nattr && !a; i++)
+        if (ATTR(move, i)->cls == PR_AC_TargetHalfHpDamageAttr) a = ATTR(move, i);
+    if (!a) return NULL;
+    for (int i = 0; i < bt->n_half_hp_initial; i++)
+        if (bt->half_hp_initial[i].attr == a) return &bt->half_hp_initial[i].hp;
+    int n = sizeof bt->half_hp_initial / sizeof bt->half_hp_initial[0];
+    int k = bt->n_half_hp_initial < n ? bt->n_half_hp_initial++ : n - 1;
+    bt->half_hp_initial[k].attr = a;
+    bt->half_hp_initial[k].hp = NAN; /* undefined */
+    return &bt->half_hp_initial[k].hp;
+}
+
 double pr_apply_fixed_damage(pr_battle *bt, const pr_pokemon *user, const pr_pokemon *target, int move)
 {
     double dmg = 0;
@@ -438,12 +489,14 @@ double pr_apply_fixed_damage(pr_battle *bt, const pr_pokemon *user, const pr_pok
             dmg = to_dmg_value(user->level * (pr_battle_rand_seed_int(bt, 101, 50) * 0.01));
             break;
         case PR_AC_TargetHalfHpDamageAttr: {                                         /* Super Fang, Ruination */
-            /* With a Multi Lens, the lens hits use the HP the target had at the first hit,
-             * which the attribute remembers between hits (this.initialHp). */
+            /* With a Multi Lens, the first hit stores the target's HP on the attribute
+             * (this.initialHp) and the lens hits use it; Parental Bond's extra hit doesn't. */
             int32_t lens = pr_held_multi_lens_stacks(bt, user);
             int hit = user->hit_count - user->hits_left;
-            if (lens <= 0 || hit == lens + 1 || hit == 0) dmg = to_dmg_value(target->hp / 2.0);
-            else pr_note_unported(bt, PR_FEAT_HIT_STATE);
+            if (lens <= 0 || hit == lens + 1) { dmg = to_dmg_value(target->hp / 2.0); break; }
+            double *initial = pr_half_hp_initial(bt, move);
+            if (hit == 0) *initial = target->hp;
+            dmg = to_dmg_value(*initial / 2);
             break;
         }
         case PR_AC_CounterDamageAttr:                                                /* Counter, Mirror Coat... */

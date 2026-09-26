@@ -44,6 +44,15 @@ bool pr_hook_move(pr_battle *bt, uint16_t move, uint16_t cls)
     return hit;
 }
 
+/* A side effect that belongs to the (not yet ported) phase engine: heal, stat change,
+ * battler tag. The damage result is unaffected; the effect is recorded as deferred. */
+void pr_note_deferred(pr_battle *bt, uint16_t cls)
+{
+    for (int i = 0; i < bt->n_deferred; i++)
+        if (bt->deferred[i] == cls) return;
+    if (bt->n_deferred < PR_MAX_UNPORTED) bt->deferred[bt->n_deferred++] = cls;
+}
+
 int32_t pr_battle_rand_seed_int(pr_battle *bt, int32_t range, int32_t min)
 {
     /* battle.ts randSeedInt: runs on its own saved RNG state, seeded lazily from
@@ -78,7 +87,8 @@ const char *pr_unported_name(uint16_t id)
 {
     static const char *const feat[PR_FEAT_COUNT_ - PR_AC_COUNT_] = {
         "(doubles)", "(modifier subclass not ported)", "(move history)",
-        "(turn order)", "(faint history)", "(wave data)", "(party)", "(earlier hit of the same move)"};
+        "(turn order)", "(faint history)", "(wave data)", "(party)", "(earlier hit of the same move)", "(global RNG)",
+        "(boss segments)"};
     if (id < PR_AC_COUNT_) return pr_attr_class_name[id];
     if (id < PR_FEAT_COUNT_) return feat[id - PR_AC_COUNT_];
     return "?";

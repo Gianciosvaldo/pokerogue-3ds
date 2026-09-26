@@ -22,7 +22,7 @@ const pr_form *pr_pokemon_form(const pr_pokemon *p)
 }
 
 /* calculateStats() with calculateBaseStats(). Fusion and challenges (FLIP_STAT) are
- * not ported yet; the Wonder Guard check reads the permanent ability. */
+ * not ported yet; the Wonder Guard check reads the permanent ability and the passive. */
 void pr_calculate_stats(pr_battle *bt, pr_pokemon *p)
 {
     const pr_form *f = pr_pokemon_form(p);
@@ -34,7 +34,8 @@ void pr_calculate_stats(pr_battle *bt, pr_pokemon *p)
         if (s == STAT_HP) {
             v = v + p->level + 10;
             pr_apply_incrementing_stat_modifier(bt, p, s, &v);
-            if (p->base_ability == ABILITY_ID_WONDER_GUARD) v = 1; /* hasAbility(WONDER_GUARD, false, true) */
+            /* hasAbility(WONDER_GUARD, canApply false, ignoreOverride true): the permanent ability or the passive */
+            if (p->base_ability == ABILITY_ID_WONDER_GUARD || p->passive == ABILITY_ID_WONDER_GUARD) v = 1;
             p->hp = (int32_t)v; /* fresh Pokemon: hp starts at max */
         } else {
             v += 5;
@@ -246,10 +247,31 @@ double js_round(double x)
     return (x - r >= 0.5) ? r + 1 : r;
 }
 
-/* hasAbility(ability): ability or passive. Suppression is not ported. */
-bool pr_has_ability(const pr_pokemon *p, int ability)
+/* hasPassive() and getPassiveAbility(), stored in p->passive (0 = no passive). hasPassive is
+ * Pokemon.passive or being a boss; the game-mode rules around it (no passive for the classic
+ * final boss or endless bosses, the passives challenge, daily-run passives) and the test
+ * overrides belong to the mode layer, which isn't ported. */
+void pr_update_passive(pr_battle *bt, pr_pokemon *p)
 {
-    return p->ability == ability || (p->passive && p->passive == ability);
+    (void)bt;
+    if (!(p->passive_flag || p->is_boss)) { p->passive = 0; return; }
+    if (p->custom_passive >= 0) p->passive = (uint16_t)p->custom_passive;
+    else p->passive = pr_pokemon_form(p)->passive;
+}
+
+double pr_damage_indirect(pr_battle *bt, pr_pokemon *p, double damage)
+{
+    if (p->hp <= 0) return 0; /* isFainted() */
+    /* Indirect damage sets preventEndure, so Endure, the Sturdy tag and Focus Band don't apply.
+     * With ignoreSegments the HP loss is the same for a boss; what the cleared segments bring
+     * (the segment index, random stat boosts drawn from the global RNG, their stat change) doesn't
+     * change this damage calculation and is recorded for the turn engine. The classic final
+     * boss's first-segment rule belongs to the mode layer. */
+    if (p->is_boss) pr_note_deferred(bt, PR_FEAT_BOSS_SEGMENTS);
+    double d = damage < p->hp ? damage : p->hp;
+    p->hp -= (int32_t)d;
+    pr_hook_ab(bt, p, PR_AC_PostDamageAbAttr); /* applyAbAttrs("PostDamageAbAttr"): no source */
+    return d;
 }
 
 double pr_get_hp_ratio(const pr_pokemon *p, bool precise)

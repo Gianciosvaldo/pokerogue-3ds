@@ -58,6 +58,7 @@ typedef struct {
     uint8_t catch_rate;
     uint16_t base_exp;
     bool unobtainable;
+    uint16_t passive;          /* speciesDataRegistry.getPassive(species, formIndex) */
 } pr_form;
 
 typedef struct {

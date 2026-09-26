@@ -3,7 +3,7 @@
  * test/tests/zz-dump/difftest.producer.test.ts and run with
  *   DIFF_OUT=/abs/cases.txt DIFF_N=5000 npx vitest run test/tests/zz-dump/difftest.producer.test.ts
  * (DIFF_SEED picks the case stream, DIFF_ABILITIES=0 keeps every ability at Ball Fetch,
- * DIFF_FOCUS=1 favours rare item and tag interactions).
+ * DIFF_FOCUS=1 favours rare item, tag and ability interactions).
  * It builds random attacker/defender pairs inside a real upstream battle, asks
  * upstream for stats, crit rolls and damage, and writes cases + expected answers.
  * build/difftest replays each case through the C port and compares.
@@ -30,9 +30,11 @@ import { BattlerTagType } from "#enums/battler-tag-type";
 import { Command } from "#enums/command";
 import { MoveCategory } from "#enums/move-category";
 import { MoveId } from "#enums/move-id";
+import { MoveUseMode } from "#enums/move-use-mode";
 import { SpeciesId } from "#enums/species-id";
 import { Stat } from "#enums/stat";
 import { StatusEffect } from "#enums/status-effect";
+import { TrainerSlot } from "#enums/trainer-slot";
 import { PokemonMove } from "#moves/pokemon-move";
 import { generateModifierType } from "#mystery-encounters/encounter-phase-utils";
 import { GameManager } from "#test/framework/game-manager";
@@ -52,8 +54,6 @@ it("difftest producer", async () => {
     .battleStyle("single")
     .ability(AbilityId.BALL_FETCH)
     .enemyAbility(AbilityId.BALL_FETCH)
-    .hasPassiveAbility(false)
-    .enemyHasPassiveAbility(false)
     .startingWave(5)
     .enemySpecies(SpeciesId.MAGIKARP)
     .enemyMoveset(MoveId.SPLASH);
@@ -111,6 +111,11 @@ it("difftest producer", async () => {
     MoveId.SPIT_UP, MoveId.STOMP, MoveId.BODY_SLAM, MoveId.GUST, MoveId.TWISTER, MoveId.EARTHQUAKE, MoveId.SURF,
     MoveId.WHIRLPOOL, MoveId.PHOTON_GEYSER, MoveId.SHELL_SIDE_ARM, MoveId.BOOMBURST, MoveId.HYPER_VOICE,
     MoveId.THOUSAND_ARROWS, MoveId.MUD_SHOT,
+    // the party (Beat Up), the global RNG (Present), priority (Grassy Glide vs Queenly Majesty)
+    MoveId.BEAT_UP, MoveId.PRESENT, MoveId.GRASSY_GLIDE, MoveId.QUICK_ATTACK, MoveId.AQUA_JET, MoveId.BRAVE_BIRD,
+    MoveId.DRAIN_PUNCH,
+    // moves that ask hasAbility (Comatose), so a passive Comatose shows
+    MoveId.HEX, MoveId.WAKE_UP_SLAP,
   ]
     .map(id => allMoves[id])
     .filter(m => attacks.includes(m));
@@ -122,8 +127,17 @@ it("difftest producer", async () => {
     AbilityId.LEVITATE, AbilityId.SCRAPPY, AbilityId.LONG_REACH, AbilityId.TOUGH_CLAWS, AbilityId.HEAVY_METAL,
     AbilityId.LIGHT_METAL, AbilityId.FLASH_FIRE, AbilityId.SOUNDPROOF, AbilityId.GALVANIZE, AbilityId.NORMALIZE,
     AbilityId.AERILATE, AbilityId.LIQUID_VOICE, AbilityId.STURDY,
+    // the move queue (Analytic), later hits (Parental Bond), priority vs Queenly Majesty and co.
+    AbilityId.ANALYTIC, AbilityId.PARENTAL_BOND, AbilityId.PRANKSTER, AbilityId.GALE_WINGS, AbilityId.TRIAGE,
+    AbilityId.QUEENLY_MAJESTY, AbilityId.DAZZLING, AbilityId.ARMOR_TAIL, AbilityId.WONDER_GUARD,
   ];
   const focusOdds = (n: number) => rnd(FOCUS ? 2 : n) === 0;
+  // Moves whose priority an ability can raise, met with the abilities that block priority moves
+  const priorityMoves = [
+    MoveId.GRASSY_GLIDE, MoveId.BRAVE_BIRD, MoveId.DRAIN_PUNCH, MoveId.QUICK_ATTACK, MoveId.AQUA_JET, MoveId.BODY_SLAM,
+  ].map(id => allMoves[id]);
+  const priorityRaisers = [AbilityId.GALE_WINGS, AbilityId.TRIAGE, AbilityId.PRANKSTER];
+  const priorityBlockers = [AbilityId.QUEENLY_MAJESTY, AbilityId.DAZZLING, AbilityId.ARMOR_TAIL];
   let caseMove: any;
   const giveItems = (p: any) => {
     const list = p.isPlayer() ? scene.modifiers : scene.enemyModifiers;
@@ -212,7 +226,7 @@ it("difftest producer", async () => {
   ];
   const giveTags = (p: any) => {
     // Unburden's tag only ever sits on an Unburden Pokemon (it's added when its item goes)
-    if (p.summonData.ability === AbilityId.UNBURDEN && rnd(2) === 0) {
+    if ((p.summonData.ability === AbilityId.UNBURDEN || p.customPokemonData.passive === AbilityId.UNBURDEN) && rnd(2) === 0) {
       p.summonData.tags.push(getBattlerTag(BattlerTagType.UNBURDEN, 1, caseMove.id, p.id));
     }
     const n = rnd(2) === 0 ? 0 : 1 + rnd(3);
@@ -281,6 +295,34 @@ it("difftest producer", async () => {
       t instanceof SuppressAbilitiesTag ? t.sourceCount : 0, t.beingRemoved ? 1 : 0,
     ].join(" ");
 
+  // Bench Pokemon for the parties (Beat Up walks the whole party): made once, given a random
+  // species and status per case. The Pokemon on the field stays first in its party.
+  const benchPool = (player: boolean) =>
+    Array.from({ length: 5 }, () =>
+      player
+        ? scene.addPlayerPokemon(speciesDataRegistry.getSpecies(SpeciesId.PIDGEY), 5)
+        : scene.addEnemyPokemon(speciesDataRegistry.getSpecies(SpeciesId.RATTATA), 5, TrainerSlot.NONE),
+    );
+  const playerBench = benchPool(true);
+  const enemyBench = benchPool(false);
+  const benchStatuses = [
+    StatusEffect.NONE, StatusEffect.NONE, StatusEffect.NONE, StatusEffect.BURN, StatusEffect.POISON,
+    StatusEffect.SLEEP, StatusEffect.FAINT,
+  ];
+  const giveParty = (p: any, pool: any[], party: any[]) => {
+    const n = rnd(3) === 0 ? 0 : 1 + rnd(pool.length);
+    party.length = 0;
+    party.push(p);
+    for (const b of pool.slice(0, n)) {
+      b.species = speciesDataRegistry.getSpecies(ids[rnd(ids.length)]);
+      const st = benchStatuses[rnd(benchStatuses.length)];
+      b.status = st ? new Status(st) : null;
+      party.push(b);
+    }
+  };
+  const partyLine = (side: number, party: any[]) =>
+    ["P", side, party.length, ...party.flatMap((m: any) => [m.id, m.species.speciesId, m.status?.effect ?? 0])].join(" ");
+
   const setup = (p: any) => {
     // Non-simulated calls can leave per-turn state behind (e.g. Tera Shell stores
     // turnData.moveEffectiveness), so every case starts from fresh transient data.
@@ -297,18 +339,43 @@ it("difftest producer", async () => {
     p.ivs = [0, 0, 0, 0, 0, 0].map(() => rnd(32));
     p.nature = rnd(25);
     p.summonData.types = [];
-    giveItems(p);
-    p.calculateStats();
-    p.hp = rnd(3) === 0 ? p.getMaxHp() : 1 + rnd(p.getMaxHp());
+    if (p === D) {
+      p.bossSegments = rnd(5) === 0 ? 2 : 0;
+    }
+    // Passives: Pokemon.passive (bosses always have one), with the species' own passive or a
+    // random one in customPokemonData. Set before calculateStats (a Wonder Guard passive sets HP to 1).
+    p.passive = ABILITIES && rnd(2) === 0;
+    p.customPokemonData.passive = !ABILITIES
+      ? AbilityId.BALL_FETCH
+      : rnd(3) === 0
+        ? -1
+        : focusOdds(8)
+          ? focusAbilities[rnd(focusAbilities.length)]
+          : 1 + rnd(allAbilities.length - 1);
     // Active ability via summonData (wins over the Ball Fetch overrides, which still
     // govern the permanent ability that calculateStats looks at). DIFF_ABILITIES=0 keeps Ball Fetch.
-    const ability =
+    let ability =
       ABILITIES && rnd(2) === 0
         ? focusOdds(8)
           ? focusAbilities[rnd(focusAbilities.length)]
           : 1 + rnd(allAbilities.length - 1)
         : AbilityId.BALL_FETCH;
+    if (ABILITIES && FOCUS && priorityMoves.includes(caseMove) && rnd(2) === 0) {
+      ability = (p === A ? priorityRaisers : priorityBlockers)[rnd(3)];
+      // an Aerilate passive turns a Normal move Flying, which Gale Wings reads through getMoveType
+      if (ability === AbilityId.GALE_WINGS && rnd(2) === 0) {
+        p.passive = true;
+        p.customPokemonData.passive = AbilityId.AERILATE;
+      }
+    }
     p.summonData.ability = ability;
+    // now and then the passive is the ability itself (applyAbAttrs then skips the passive)
+    if (ABILITIES && rnd(8) === 0) {
+      p.customPokemonData.passive = ability;
+    }
+    giveItems(p);
+    p.calculateStats();
+    p.hp = rnd(3) === 0 ? p.getMaxHp() : 1 + rnd(p.getMaxHp());
     const stages = [0, 0, 0, 0, 0, 0, 0].map(() => (rnd(3) === 0 ? rnd(13) - 6 : 0));
     stages.forEach((v, i) => p.setStatStage(i + 1, v));
     const s = [
@@ -327,9 +394,6 @@ it("difftest producer", async () => {
     p.gender = rnd(3) - 1; // GENDERLESS -1, MALE 0, FEMALE 1
     p.stellarTypesBoosted = rnd(2) === 0 ? [] : [rnd(19), rnd(19)];
     p.friendship = rnd(256);
-    if (p === D) {
-      p.bossSegments = rnd(5) === 0 ? 2 : 0;
-    }
     // Per-turn and per-summon state read on the damage path
     p.summonData.hitCount = rnd(4) === 0 ? rnd(8) : 0;
     p.turnData.acted = rnd(2) === 0;
@@ -367,6 +431,8 @@ it("difftest producer", async () => {
       ...moves,
       ...pp,
       p.id,
+      p.passive ? 1 : 0,
+      p.customPokemonData.passive,
     ];
   };
 
@@ -384,6 +450,16 @@ it("difftest producer", async () => {
     const terrain = [0, 0, 0, 1, 2, 3, 4][rnd(7)];
     scene.arena.terrain = terrain ? new Terrain(terrain, 5) : null;
     giveArenaTags();
+    giveParty(A, playerBench, scene.getPlayerParty());
+    giveParty(D, enemyBench, scene.getEnemyParty());
+    // Sometimes a MovePhase is still queued this turn (for either Pokemon), as Analytic checks
+    let queued: any = null;
+    if (rnd(4) === 0) {
+      const who = rnd(2) === 0 ? A : D;
+      const at = who === A ? D : A;
+      queued = scene.phaseManager.create("MovePhase", who, [at.getBattlerIndex()], new PokemonMove(MoveId.TACKLE), MoveUseMode.NORMAL);
+      scene.phaseManager.dynamicQueueManager.queueDynamicPhase(queued);
+    }
     scene.arena.playerFaints = rnd(3) === 0 ? rnd(5) : 0;
     battle.enemyFaints = rnd(3) === 0 ? rnd(5) : 0;
     battle.playerFaintsHistory = rnd(3) === 0 ? [{ pokemon: A, turn: battle.turn - 1 - rnd(2) }] : [];
@@ -400,6 +476,16 @@ it("difftest producer", async () => {
     def.moveset = [];
     const faintTurn = (h: any[]) => (h.length ? h.at(-1).turn : -1);
     const rl = rngLine();
+    const globalRng = `G ${Phaser.Math.RND.state().split(",").slice(1).join(" ")}`;
+    const queuedIds: number[] = [];
+    scene.phaseManager.hasPhaseOfType("MovePhase", (ph: any) => {
+      queuedIds.push(ph.pokemon.id);
+      return false;
+    });
+    // Super Fang's lens hits read the HP its attribute kept from an earlier first hit
+    const halfHpAttr: any = move.attrs.find((at: any) => at.constructor.name === "TargetHalfHpDamageAttr");
+    const halfHpLine = halfHpAttr ? `H ${halfHpAttr.initialHp === undefined ? "NaN" : halfHpAttr.initialHp}` : null;
+    const partyLines = [partyLine(0, scene.getPlayerParty()), partyLine(1, scene.getEnemyParty())];
     const worldLine =
       `W ${battle.turn} ${scene.waveSeed} ${terrain} ${scene.arena.playerFaints} ${battle.enemyFaints}`
         + ` ${faintTurn(battle.playerFaintsHistory)} ${faintTurn(battle.enemyFaintsHistory)}`
@@ -426,14 +512,23 @@ it("difftest producer", async () => {
       // with inconsistent hit counters). Such cases are left out and counted.
       thrown[move.name] = (thrown[move.name] ?? 0) + 1;
       continue;
+    } finally {
+      if (queued) {
+        scene.phaseManager.dynamicQueueManager.removePhase("MovePhase", (ph: any) => ph === queued);
+      }
     }
-    lines.push(rl, worldLine);
+    lines.push(rl, worldLine, globalRng, ...partyLines, `Q ${queuedIds.length} ${queuedIds.join(" ")}`.trim());
+    if (halfHpLine) {
+      lines.push(halfHpLine);
+    }
     scene.modifiers.forEach((m: any) => lines.push(modLine(0, m)));
     scene.enemyModifiers.forEach((m: any) => lines.push(modLine(1, m)));
     lines.push(...tagLines);
     lines.push(caseLine);
     lines.push(
-      `E ${A.stats.join(" ")} ${D.stats.join(" ")} ${sim.damage} ${sim.result} ${critRoll ? 1 : 0} ${real.damage} ${real.result}`,
+      `E ${A.stats.join(" ")} ${D.stats.join(" ")} ${sim.damage} ${sim.result} ${critRoll ? 1 : 0} ${real.damage} ${real.result}`
+        // what the calls left in the attacker's turn data (Present's heal ends the move's other hits)
+        + ` ${src.turnData.hitCount} ${src.turnData.hitsLeft}`,
     );
   }
   lines.push(`# upstream threw (case left out): ${JSON.stringify(thrown)}`);

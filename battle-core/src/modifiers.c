@@ -284,17 +284,54 @@ void pr_apply_attack_type_booster_modifiers(pr_battle *bt, const pr_pokemon *src
     }
 }
 
-bool pr_move_can_be_multi_strike_enhanced(int move)
+/* getMoveTargets(user, move) as far as canBeMultiStrikeEnhanced reads it: whether the move is
+ * a spread move ("multiple") with more than one active target. */
+static bool spread_with_several_targets(pr_battle *bt, int move, const pr_pokemon *user)
+{
+    /* applyMoveAttrs("VariableTargetAttr") can change the target first (Expanding Force...) */
+    if (pr_hook_move(bt, (uint16_t)move, PR_AC_VariableTargetAttr)) return false;
+    bool user_in = false, ally_in = false, opponents_in = false;
+    switch (pr_moves[move].target) {
+    case MOVE_TARGET_ALL_NEAR_OTHERS: case MOVE_TARGET_ALL_OTHERS:
+        ally_in = opponents_in = true; break;
+    case MOVE_TARGET_ALL_NEAR_ENEMIES: case MOVE_TARGET_ALL_ENEMIES: case MOVE_TARGET_ENEMY_SIDE:
+        opponents_in = true; break;
+    case MOVE_TARGET_USER_AND_ALLIES: case MOVE_TARGET_USER_SIDE:
+        user_in = ally_in = true; break;
+    case MOVE_TARGET_ALL: case MOVE_TARGET_BOTH_SIDES:
+        user_in = ally_in = opponents_in = true; break;
+    default:
+        return false; /* not "multiple" (RANDOM_NEAR_ENEMY's roll only happens with 2+ opponents: doubles) */
+    }
+    /* the set, filtered by isActive(true): on the field and not fainted */
+    int n = 0;
+    const pr_pokemon *ally = pr_get_ally(bt, user);
+    for (int i = 0; i < 4; i++) {
+        const pr_pokemon *p = bt->field[i];
+        if (!p || p->hp <= 0) continue;
+        if ((p == user && user_in) || (p == ally && ally && ally_in) || (pr_is_opponent(bt, user, p) && opponents_in)) n++;
+    }
+    return n > 1;
+}
+
+bool pr_move_can_be_multi_strike_enhanced_ex(pr_battle *bt, int move, const pr_pokemon *user, bool restrict_spread,
+                                             const pr_pokemon *target)
 {
     const pr_move *mv = &pr_moves[move];
     if (!strcmp(mv->kind, "ChargingAttackMove") || !strcmp(mv->kind, "ChargingSelfStatusMove")) return false;
+    if (restrict_spread && spread_with_several_targets(bt, move, user)) return false;
     if (mv->category == MOVE_CATEGORY_STATUS) return false;
     if (pr_move_has_attr((uint16_t)move, PR_AC_MultiHitAttr) || pr_move_has_attr((uint16_t)move, PR_AC_SacrificialAttr)
         || pr_move_has_attr((uint16_t)move, PR_AC_SacrificialAttrOnHit))
         return false;
-    /* HealOnAllyAttr: only refused when the target is the user's ally; no target is passed here */
+    if (target && pr_move_has_attr((uint16_t)move, PR_AC_HealOnAllyAttr) && pr_get_ally(bt, target) == user) return false;
     return move != MOVE_ID_FLING && move != MOVE_ID_UPROAR && move != MOVE_ID_ROLLOUT && move != MOVE_ID_ICE_BALL
            && move != MOVE_ID_ENDEAVOR;
+}
+
+bool pr_move_can_be_multi_strike_enhanced(int move)
+{
+    return pr_move_can_be_multi_strike_enhanced_ex(NULL, move, NULL, false, NULL);
 }
 
 /* PokemonMultiHitModifier.apply(pokemon, moveId, null, damageMultiplier) */

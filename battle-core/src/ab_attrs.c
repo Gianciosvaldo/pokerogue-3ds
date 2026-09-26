@@ -55,11 +55,18 @@ bool pr_move_is_attack(int move)
 /* Move.getPriority(user) */
 int pr_move_get_priority(pr_battle *bt, int move, const pr_pokemon *user)
 {
-    int prio = pr_moves[move].priority;
-    pr_hook_move(bt, (uint16_t)move, PR_AC_IncrementMovePriorityAttr);
-    pr_ab_params pp = {.pokemon = user, .move = move, .simulated = true};
+    double prio = pr_moves[move].priority;
+    /* applyMoveAttrs("IncrementMovePriorityAttr", user, null, move, priority): Grassy Glide */
+    const pr_move *mv = &pr_moves[move];
+    for (unsigned i = 0; i < mv->nattr; i++) {
+        const pr_attr *a = &pr_attrs[mv->attr0 + i];
+        if (!pr_attr_is(a->cls, PR_AC_IncrementMovePriorityAttr)) continue;
+        const pr_attr_IncrementMovePriorityAttr *x = P(IncrementMovePriorityAttr, a);
+        if (pr_closure_call(bt, x->moveIncrementFunc, a->cls, 0, user, NULL, move)) prio += x->increaseAmount;
+    }
+    pr_ab_params pp = {.pokemon = user, .move = move, .simulated = true, .value = &prio};
     pr_apply_ab_attrs(bt, PR_AC_ChangeMovePriorityAbAttr, &pp);
-    return prio;
+    return (int)prio;
 }
 
 bool pr_has_ability_active(pr_battle *bt, const pr_pokemon *p, int ability)
@@ -166,15 +173,6 @@ static bool condition_ok(pr_battle *bt, const pr_attr *a, const pr_pokemon *p)
     }
     if (a->cond == PR_NO_FN) return true;
     return call_bool(bt, a->cond, a->cls, p, NULL, -1);
-}
-
-/* A side effect that belongs to the (not yet ported) phase engine: heal, stat change,
- * battler tag. The damage result is unaffected; the effect is recorded as deferred. */
-static void defer(pr_battle *bt, uint16_t cls)
-{
-    for (int i = 0; i < bt->n_deferred; i++)
-        if (bt->deferred[i] == cls) return;
-    if (bt->n_deferred < PR_MAX_UNPORTED) bt->deferred[bt->n_deferred++] = cls;
 }
 
 static bool type_in(const pr_intlist *l, int t)
@@ -297,12 +295,12 @@ static bool apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp)
         *pp->value = 0;
         if (a->cls == PR_AC_TypeImmunityHealAbAttr) {
             if (p->hp < pr_get_stat(p, STAT_HP, true) && !pp->simulated) {
-                defer(bt, a->cls); /* PokemonHealPhase */
+                pr_note_deferred(bt, a->cls); /* PokemonHealPhase */
                 *pp->flag = true;
             }
         } else {
             *pp->flag = true;
-            if (!pp->simulated) defer(bt, a->cls); /* StatStageChangePhase / addTag */
+            if (!pp->simulated) pr_note_deferred(bt, a->cls); /* StatStageChangePhase / addTag */
         }
         return true;
     }
@@ -319,7 +317,13 @@ static bool apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp)
         if (a->cls == PR_AC_MoveImmunityStatStageChangeAbAttr && pp->simulated) return true;
         if (*pp->flag || !call_bool(bt, cond, a->cls, p, o, move)) return true;
         *pp->flag = true;
-        if (a->cls == PR_AC_MoveImmunityStatStageChangeAbAttr) defer(bt, a->cls);
+        if (a->cls == PR_AC_MoveImmunityStatStageChangeAbAttr) pr_note_deferred(bt, a->cls);
+        return true;
+    }
+    case PR_AC_ChangeMovePriorityAbAttr: {
+        /* Prankster, Gale Wings, Triage: moveFunc(pokemon, move) */
+        const pr_attr_ChangeMovePriorityAbAttr *x = P(ChangeMovePriorityAbAttr, a);
+        if (call_bool(bt, x->moveFunc, a->cls, p, NULL, move)) *pp->value += x->changeAmount;
         return true;
     }
     case PR_AC_FieldPriorityMoveImmunityAbAttr: {
@@ -377,7 +381,9 @@ static bool apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp)
             return true;
         if (pp->simulated) return true;
         *pp->value = 0;
-        defer(bt, a->cls); /* recoil damage and the form change */
+        /* Disguise's recoil hits at once (a later passive then sees the lower HP); the form change is queued */
+        if (x->recoil > 0) pr_damage_indirect(bt, (pr_pokemon *)p, to_dmg_value(pr_get_stat(p, STAT_HP, true) * x->recoil));
+        pr_note_deferred(bt, a->cls);
         return true;
     }
     case PR_AC_AlliedFieldDamageReductionAbAttr:
@@ -387,7 +393,7 @@ static bool apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp)
         /* canApply: full HP, max HP > 1, damage >= hp, no STURDY tag */
         if (p->hp >= pr_get_stat(p, STAT_HP, true) && pr_get_stat(p, STAT_HP, true) > 1 && *pp->value >= p->hp
             && !pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_STURDY) && !pp->simulated)
-            defer(bt, a->cls); /* adds the STURDY tag; the damage itself is capped later */
+            pr_note_deferred(bt, a->cls); /* adds the STURDY tag; the damage itself is capped later */
         return true;
 
     /* ---- crits ---- */
