@@ -19,6 +19,8 @@ typedef struct { const pr_fn_id *v; uint8_t n; } pr_fnlist;
 typedef struct {
     const char *owner, *hash;
     uint32_t cap;              /* probed captured values: bit (v + 1) set for each value v */
+    const int16_t *vals;       /* probed captured values as a list (see dump-upstream.test.ts), or NULL */
+    uint8_t n_vals;
 } pr_closure_info;
 extern const pr_closure_info pr_closures_meta[];
 typedef struct { int8_t level; uint16_t move; } pr_level_move;

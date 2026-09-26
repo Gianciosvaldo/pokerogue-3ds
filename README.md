@@ -12,7 +12,7 @@ Upstream pins: game `8555c08`, assets `056a1f4`, locales `270ed0a`.
 | [`benchmark/`](benchmark/) | Upstream game logic run headless in QuickJS, on PC and 3DS | Done. Old 3DS median turn 2.98 s, so the JS route was dropped for a native port ([RESULTS](benchmark/RESULTS.md)) |
 | [`skeleton/`](skeleton/) | First app: `rr` renderer over citro2d, SD saves, battle demo scene | Done, tested in Azahar |
 | [`assets-pipeline/`](assets-pipeline/) | Builds the 5 SD packs (gfx, snd, bgm, font, data) from upstream, and `app-src/`: the skeleton extended with pack, sound and font loaders | Done, tested in Azahar |
-| [`battle-core/`](battle-core/) | Native C battle logic, diff-tested against upstream | In progress: RNG, stats, damage, and the abilities (passives included), move effects, held items and battler/arena tags that affect damage match upstream in every covered test case, and in single battles only one random case in about 110,000 still hits unported code ([README](battle-core/README.md)) |
+| [`battle-core/`](battle-core/) | Native C battle logic, diff-tested against upstream | In progress: RNG, stats, damage, and the abilities (passives included), move effects, held items, battler/arena tags and turn history (move histories, attacks received, turn order) that affect damage match upstream in every covered test case, and in single battles only 6 random cases in about 110,000 still hit unported code ([README](battle-core/README.md)) |
 | [`tools/azahar-libretro/`](tools/azahar-libretro/) | Headless emulator test rig (binaries not in git) | See its README |
 
 `assets-pipeline/app-src/` is the current app; `skeleton/src/` is kept as the earlier baseline.

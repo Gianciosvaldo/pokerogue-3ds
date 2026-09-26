@@ -18,8 +18,8 @@ enum { TERRAIN_NONE, TERRAIN_MISTY, TERRAIN_ELECTRIC, TERRAIN_GRASSY, TERRAIN_PS
 enum {
     PR_FEAT_DOUBLES = PR_AC_COUNT_,  /* more than one Pokemon per side */
     PR_FEAT_MODIFIERS,               /* a modifier whose own class has no port (see pr_modifier) */
-    PR_FEAT_MOVE_HISTORY,            /* summonData.moveHistory / turnData.attacksReceived entries */
-    PR_FEAT_TURN_ORDER,              /* the turn queue (last turn order, move queue) */
+    PR_FEAT_MOVE_HISTORY,            /* moveHistory / attacksReceived entries older than the ones kept */
+    PR_FEAT_TURN_ORDER,              /* last turn order entries beyond the ones kept, or off the field */
     PR_FEAT_FAINT_HISTORY,
     PR_FEAT_WAVE,                    /* wave data the caller didn't provide (wave seed, level cap) */
     PR_FEAT_PARTY,                   /* the party (bt->party) the caller didn't provide */
@@ -110,6 +110,28 @@ typedef struct pr_arena_tag {
 } pr_arena_tag;
 #define PR_MAX_ARENA_TAGS 24
 
+/* A summonData.moveHistory entry (TurnMove) as the ported readers see it; targets aren't kept */
+enum { PR_MOVE_RESULT_UNDEFINED = 0xff };   /* TurnMove.result left undefined */
+typedef struct pr_turn_move {
+    uint16_t move;                 /* MoveId */
+    uint8_t use_mode;              /* MoveUseMode */
+    uint8_t result;                /* MoveResult, or PR_MOVE_RESULT_UNDEFINED */
+} pr_turn_move;
+/* The newest entries kept per Pokemon. The deepest ported read is Rollout's (limit + 1 = 6);
+ * a read past the kept entries reports PR_FEAT_MOVE_HISTORY instead of guessing. */
+#define PR_MAX_MOVE_HISTORY 8
+
+/* A turnData.attacksReceived entry (AttackMoveResult) */
+typedef struct pr_attack_record {
+    uint16_t move;                 /* MoveId */
+    uint8_t result;                /* HitResult */
+    bool critical;
+    int8_t source_battler_index;   /* BattlerIndex (-1 = ATTACKER) */
+    int64_t source_id;             /* Pokemon.id of the attacker */
+    double damage;
+} pr_attack_record;
+#define PR_MAX_ATTACKS_RECEIVED 8  /* newest entries kept; older ones read as PR_FEAT_MOVE_HISTORY */
+
 typedef struct pr_pokemon {
     uint32_t id;               /* Pokemon.id: what held items point at */
     uint16_t species;
@@ -142,9 +164,15 @@ typedef struct pr_pokemon {
     uint32_t stellar_types_boosted;    /* stellarTypesBoosted, bit per PokemonType */
     /* summonData fields read on the damage path */
     uint8_t summon_hit_count;          /* summonData.hitCount (Rage Fist) */
-    uint8_t n_move_history;            /* summonData.moveHistory.length (entries not modelled) */
+    /* summonData.moveHistory: its length, and its newest min(length, PR_MAX_MOVE_HISTORY)
+     * entries, oldest first (pr_push_move_history keeps both; pr_last_move reads them) */
+    uint16_t n_move_history;
+    pr_turn_move move_history[PR_MAX_MOVE_HISTORY];
     /* turnData (PokemonTurnData) fields read on the damage path */
-    uint8_t n_attacks_received;        /* turnData.attacksReceived.length (entries not modelled) */
+    /* turnData.attacksReceived: its length, and its newest entries, newest first as upstream
+     * unshifts them (pr_unshift_attack_received keeps both) */
+    uint16_t n_attacks_received;
+    pr_attack_record attacks_received[PR_MAX_ATTACKS_RECEIVED];
     bool switched_in_this_turn;
     bool acted, stat_stages_decreased, joined_round;
     int32_t damage_taken;
@@ -161,6 +189,7 @@ typedef struct pr_party_member {
 } pr_party_member;
 #define PR_MAX_PARTY 6
 #define PR_MAX_QUEUED_MOVERS 8
+#define PR_MAX_TURN_ORDER 8
 
 typedef struct pr_battle {
     pr_rng rng;                /* Phaser.Math.RND (global) */
@@ -184,7 +213,10 @@ typedef struct pr_battle {
      * newest entry of currentBattle.playerFaintsHistory / enemyFaintsHistory (-1 = empty) */
     int player_faints, enemy_faints;
     int last_player_faint_turn, last_enemy_faint_turn;
-    uint8_t n_last_turn_order; /* dynamicQueueManager.getLastTurnOrder().length */
+    /* dynamicQueueManager.getLastTurnOrder(): the Pokemon.id of each Pokemon whose MovePhase
+     * started this turn, in order (its length, and its first PR_MAX_TURN_ORDER entries) */
+    uint8_t n_last_turn_order;
+    uint32_t last_turn_order[PR_MAX_TURN_ORDER];
     /* Pokemon.id of each MovePhase still queued this turn (phaseManager.hasPhaseOfType("MovePhase")) */
     uint32_t queued_movers[PR_MAX_QUEUED_MOVERS];
     uint8_t n_queued_movers;
@@ -359,6 +391,23 @@ void pr_apply_pledge_stab(const pr_pokemon *user, int move, double *stab);
 
 /* ---- rng (battle.ts randSeedInt) ---- */
 int32_t pr_battle_rand_seed_int(pr_battle *bt, int32_t range, int32_t min);
+
+/* ---- turn history (src/history.c) ---- */
+/* pushMoveHistory(turnMove) (the caller checks isOnField, as upstream does) */
+void pr_push_move_history(pr_pokemon *p, pr_turn_move tm);
+/* getLastXMoves(k + 1)[k]: the k-th newest history entry (0 = newest), NULL when the history is
+ * shorter. An entry older than the kept ones reports PR_FEAT_MOVE_HISTORY and gives NULL. */
+const pr_turn_move *pr_last_move(pr_battle *bt, const pr_pokemon *p, int k);
+/* turnData.attacksReceived.unshift(record) */
+void pr_unshift_attack_received(pr_pokemon *p, const pr_attack_record *r);
+/* The kept attacksReceived entries, newest first: their count. A reader that scans them all
+ * without an answer calls pr_attacks_received_exhausted, which reports the older entries. */
+int pr_attacks_received_kept(const pr_pokemon *p);
+void pr_attacks_received_exhausted(pr_battle *bt, const pr_pokemon *p);
+/* The Pokemon on the field with this Pokemon.id, or NULL */
+pr_pokemon *pr_field_pokemon_by_id(const pr_battle *bt, int64_t id);
+/* areAllies(a, b) over BattlerIndex values (ATTACKER = -1 is nobody's ally) */
+bool pr_are_allies(int a, int b);
 
 /* ---- pokemon.ts ---- */
 const pr_species *pr_pokemon_species(const pr_pokemon *p);

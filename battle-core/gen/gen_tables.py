@@ -34,6 +34,7 @@ def snake(name):
 def closure_hash(cl):
     """Source text plus any probed captured values (see dump-upstream.test.ts)."""
     key = cl["src"] + ("\n#cap " + json.dumps(cl["cap"]) if "cap" in cl else "")
+    key += "\n#vals " + json.dumps(cl["vals"]) if "vals" in cl else ""
     return hashlib.sha1(key.encode()).hexdigest()[:12]
 
 
@@ -377,10 +378,14 @@ for name, ids in sorted(move_sets.items()):
     c.append(f"const uint16_t pr_set_{snake(name).lower()}_n = {len(ids)};")
 c += blob
 c += inst_lines
+for cl in closures:
+    if "vals" in cl:
+        c.append(f"static const int16_t pr_closure_vals_{cl['id']}[] = {{{', '.join(str(v) for v in cl['vals'])}}};")
 c.append(f"\nconst pr_closure_info pr_closures_meta[{max(len(closures), 1)}] = {{")
 for cl in closures:
     mask = sum(1 << (v + 1) for v in cl.get("cap", []))
-    c.append(f'    {{"{cl["owner"]}", "{closure_hash(cl)}", 0x{mask:x}u}},')
+    vals = f", pr_closure_vals_{cl['id']}, {len(cl['vals'])}" if "vals" in cl else ", NULL, 0"
+    c.append(f'    {{"{cl["owner"]}", "{closure_hash(cl)}", 0x{mask:x}u{vals}}},')
 c.append("};")
 c.append(f"\nconst pr_attr pr_attrs[{max(len(attr_rows), 1)}] = {{")
 c += [f"    {r}," for r in attr_rows]
@@ -421,6 +426,8 @@ typedef struct {{ const pr_fn_id *v; uint8_t n; }} pr_fnlist;
 typedef struct {{
     const char *owner, *hash;
     uint32_t cap;              /* probed captured values: bit (v + 1) set for each value v */
+    const int16_t *vals;       /* probed captured values as a list (see dump-upstream.test.ts), or NULL */
+    uint8_t n_vals;
 }} pr_closure_info;
 extern const pr_closure_info pr_closures_meta[];
 typedef struct {{ int8_t level; uint16_t move; }} pr_level_move;

@@ -20,6 +20,8 @@ import * as invalidMoves from "#data/moves/invalid-moves";
 import { Terrain } from "#data/terrain";
 import { Weather } from "#data/weather";
 import { globalScene } from "#app/global-scene";
+import { MoveId } from "#enums/move-id";
+import { MoveResult } from "#enums/move-result";
 import { it } from "vitest";
 
 const OUT = process.env.DUMP_OUT ?? "/tmp/pr-dump";
@@ -34,7 +36,7 @@ function noteClass(v: any) {
   classChains[name] = chain;
 }
 
-const closures: { id: number; owner: string; src: string; cap?: number[] }[] = [];
+const closures: { id: number; owner: string; src: string; cap?: number[]; vals?: number[] }[] = [];
 const closureIds = new Map<Function, number>();
 
 function closureRef(fn: Function, owner: string) {
@@ -104,6 +106,31 @@ function probeCaptures() {
         if (truthy(() => fn({}))) cap.push(t);
       }
       globalScene.arena.terrain = saved;
+    } else if (/getLastXMoves\(limit \+ 1\)/.test(src)) {
+      // ConsecutiveUsePowerMultiplierAttr (Rollout, Fury Cutter, Echoed Voice...) captures
+      // limit, resetOnFail, resetOnLimit and comboMoves: vals = [limit, resetOnFail,
+      // resetOnLimit, ...comboMoves]. The history is newest first, as getLastXMoves returns it;
+      // its first entry stands for the move being used and is skipped.
+      let asked = 0;
+      const user = (hist: any[]) => ({
+        getLastXMoves: (n: number) => {
+          asked = n;
+          return [{ move: 0, result: MoveResult.SUCCESS }, ...hist].slice(0, n);
+        },
+      });
+      const raised = (hist: any[], id: number) => {
+        try { return fn(user(hist), {}, { id }) > 1; } catch { return false; }
+      };
+      raised([], 1);
+      const limit = asked - 1;
+      const X = MoveId.TACKLE;
+      const same = (result: MoveResult, n: number) => Array.from({ length: n }, () => ({ move: X, result }));
+      const vals = [limit, raised(same(MoveResult.FAIL, 1), X) ? 0 : 1, raised(same(MoveResult.SUCCESS, limit), X) ? 0 : 1];
+      for (let m = 0; m < allMoves.length; m++) {
+        if (raised([{ move: m, result: MoveResult.SUCCESS }], -1)) vals.push(m);
+      }
+      cl.vals = vals;
+      continue;
     } else {
       continue;
     }
