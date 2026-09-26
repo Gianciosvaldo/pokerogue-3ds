@@ -8,7 +8,7 @@
  */
 import { BattleScene } from "#app/battle-scene";
 import { speciesDataRegistry } from "#app/globals/global-species-data-registry";
-import { allAbilities, allMoves } from "#data/data-lists";
+import { allAbilities, allMoves, modifierTypes } from "#data/data-lists";
 import { Status } from "#data/status-effect";
 import { Terrain } from "#data/terrain";
 import { Weather } from "#data/weather";
@@ -19,6 +19,7 @@ import { MoveId } from "#enums/move-id";
 import { SpeciesId } from "#enums/species-id";
 import { StatusEffect } from "#enums/status-effect";
 import { PokemonMove } from "#moves/pokemon-move";
+import { generateModifierType } from "#mystery-encounters/encounter-phase-utils";
 import { GameManager } from "#test/framework/game-manager";
 import * as fs from "node:fs";
 import Phaser from "phaser";
@@ -68,13 +69,105 @@ it("difftest producer", async () => {
     return st ? "S " + st.split(",").slice(1).join(" ") : `Z ${battle.battleSeed} ${battle.turn}`;
   };
 
+  // Real upstream items, built through the game's own modifier types. Each case gives
+  // both Pokemon a few random held items (sometimes pointing at another Pokemon, or at
+  // any Pokemon with id -1) and each side a few side-wide ones, in random list order.
+  const item = (key: string, pregen?: any[]) => generateModifierType((modifierTypes as any)[key], pregen) as any;
+  const coverSpecies = [
+    SpeciesId.FARFETCHD, SpeciesId.GALAR_FARFETCHD, SpeciesId.SIRFETCHD, SpeciesId.PIKACHU, SpeciesId.CUBONE,
+    SpeciesId.MAROWAK, SpeciesId.ALOLA_MAROWAK, SpeciesId.DITTO, SpeciesId.CLAMPERL, SpeciesId.EEVEE, SpeciesId.MEOWTH,
+  ];
+  const speciesItems = ["LIGHT_BALL", "THICK_CLUB", "METAL_POWDER", "QUICK_POWDER", "DEEP_SEA_SCALE", "DEEP_SEA_TOOTH"];
+  const plainHeld = [
+    "LEFTOVERS", "SOOTHE_BELL", "FOCUS_BAND", "QUICK_CLAW", "KINGS_ROCK", "SHELL_BELL", "LUCKY_EGG", "WIDE_LENS",
+    "GRIP_CLAW", "TOXIC_ORB", "FLAME_ORB",
+  ];
+  const focus = [
+    MoveId.KNOCK_OFF, MoveId.ACROBATICS, MoveId.SUPER_FANG, MoveId.RUINATION, MoveId.NATURES_MADNESS,
+    MoveId.SEISMIC_TOSS, MoveId.DRAGON_RAGE, MoveId.ENDEAVOR, MoveId.FLY, MoveId.DIVE, MoveId.SOLAR_BEAM,
+    MoveId.ROLLOUT, MoveId.ICE_BALL, MoveId.UPROAR, MoveId.DOUBLE_KICK, MoveId.BULLET_SEED, MoveId.EXPLOSION,
+    MoveId.TACKLE, MoveId.QUICK_ATTACK, MoveId.EMBER, MoveId.WATER_GUN, MoveId.VINE_WHIP, MoveId.THUNDER_SHOCK,
+  ]
+    .map(id => allMoves[id])
+    .filter(m => attacks.includes(m));
+  let caseMove: any;
+  const giveItems = (p: any) => {
+    const list = p.isPlayer() ? scene.modifiers : scene.enemyModifiers;
+    const n = rnd(3) === 0 ? 0 : 1 + rnd(4);
+    for (let k = 0; k < n; k++) {
+      let key: string;
+      let pregen: any[] | undefined;
+      let stacks = 1;
+      switch (rnd(15)) {
+        case 0: key = "SCOPE_LENS"; break;
+        case 1: key = "LEEK"; break;
+        case 2: key = "EVIOLITE"; break;
+        case 3: key = "SPECIES_STAT_BOOSTER"; pregen = [speciesItems[rnd(speciesItems.length)]]; break;
+        case 4:
+        case 5:
+          key = "ATTACK_TYPE_BOOSTER";
+          pregen = [rnd(2) === 0 ? caseMove.type : rnd(18)];
+          stacks = 1 + rnd(99);
+          break;
+        case 6: key = "BASE_STAT_BOOSTER"; pregen = [rnd(6)]; stacks = 1 + rnd(31); break;
+        case 7: key = "MULTI_LENS"; stacks = 1 + rnd(3); break;
+        case 8: key = "SOUL_DEW"; stacks = 1 + rnd(10); break;
+        case 9: key = "MYSTERY_ENCOUNTER_SHUCKLE_JUICE"; pregen = [rnd(2) === 0 ? 10 : -15]; stacks = 1 + rnd(2); break;
+        case 10: key = "MYSTERY_ENCOUNTER_OLD_GATEAU"; break;
+        case 11: key = "MYSTERY_ENCOUNTER_MACHO_BRACE"; stacks = rnd(3) === 0 ? 50 : 1 + rnd(50); break;
+        case 12: key = "BERRY"; pregen = [rnd(4)]; stacks = 1 + rnd(3); break;
+        default: key = plainHeld[rnd(plainHeld.length)]; stacks = 1 + rnd(3);
+      }
+      const m = item(key, pregen).newModifier(p);
+      m.stackCount = stacks;
+      if (rnd(8) === 0) m.virtualStackCount = 1 + rnd(2);
+      const who = rnd(12);
+      if (who === 0) m.pokemonId = -1;
+      else if (who === 1) m.pokemonId = 424242;
+      list.splice(rnd(list.length + 1), 0, m);
+    }
+    // Side-wide items: X items, Dire Hit, a non-battle item, and the enemy's tokens
+    const side: any[] = [];
+    if (rnd(4) === 0) side.push(item("TEMP_STAT_STAGE_BOOSTER", [1 + rnd(6)]).newModifier());
+    if (rnd(6) === 0) side.push(item("DIRE_HIT").newModifier());
+    if (rnd(6) === 0) side.push(item("EXP_CHARM").newModifier());
+    if (!p.isPlayer()) {
+      for (const key of ["ENEMY_DAMAGE_BOOSTER", "ENEMY_DAMAGE_REDUCTION"]) {
+        if (rnd(3) === 0) {
+          const m = item(key).newModifier();
+          m.stackCount = rnd(6) === 0 ? 1 + rnd(999) : 1 + rnd(40);
+          side.push(m);
+        }
+      }
+    }
+    for (const m of side) list.splice(rnd(list.length + 1), 0, m);
+  };
+  const chainOf = (m: any) => {
+    const c: string[] = [];
+    for (let o = Object.getPrototypeOf(m); o && o !== Object.prototype; o = Object.getPrototypeOf(o)) {
+      c.push(o.constructor.name);
+    }
+    return c.join("<");
+  };
+  const modLine = (sideNo: number, m: any) => {
+    const stats: number[] = Array.isArray(m.stats) ? m.stats : [];
+    const species: number[] = Array.isArray(m.species) ? m.species : [];
+    const mult = m.multiplier ?? m.boostMultiplier ?? m.boost ?? m.damageMultiplier ?? 0;
+    return [
+      "M", sideNo, chainOf(m), m.pokemonId ?? 0, m.stackCount, m.virtualStackCount, m.isTransferable ? 1 : 0,
+      typeof m.stat === "number" ? m.stat : -1, stats.reduce((b, st) => b | (1 << st), 0), mult,
+      typeof m.moveType === "number" ? m.moveType : -1, m.stageIncrement ?? m.statModifier ?? 0,
+      species.length, ...species,
+    ].join(" ");
+  };
+
   const setup = (p: any) => {
     // Non-simulated calls can leave per-turn state behind (e.g. Tera Shell stores
     // turnData.moveEffectiveness), so every case starts from fresh transient data.
     p.resetSummonData();
     p.resetTurnData();
     p.resetBattleAndWaveData();
-    const sid = ids[rnd(ids.length)];
+    const sid = rnd(12) === 0 ? coverSpecies[rnd(coverSpecies.length)] : ids[rnd(ids.length)];
     const sp = speciesDataRegistry.getSpecies(sid);
     const form = sp.forms.length ? rnd(sp.forms.length) : 0;
     p.species = sp;
@@ -84,6 +177,7 @@ it("difftest producer", async () => {
     p.ivs = [0, 0, 0, 0, 0, 0].map(() => rnd(32));
     p.nature = rnd(25);
     p.summonData.types = [];
+    giveItems(p);
     p.calculateStats();
     p.hp = rnd(3) === 0 ? p.getMaxHp() : 1 + rnd(p.getMaxHp());
     // Active ability via summonData (wins over the Ball Fetch overrides, which still
@@ -104,7 +198,7 @@ it("difftest producer", async () => {
     ][rnd(8)];
     p.status = s ? new Status(s) : null;
     p.isTerastallized = rnd(6) === 0;
-    p.teraType = rnd(19);
+    p.teraType = rnd(3) === 0 ? caseMove.type : rnd(19);
     p.gender = rnd(3) - 1; // GENDERLESS -1, MALE 0, FEMALE 1
     p.stellarTypesBoosted = rnd(2) === 0 ? [] : [rnd(19), rnd(19)];
     p.friendship = rnd(256);
@@ -146,11 +240,17 @@ it("difftest producer", async () => {
       p.hasTrainer() ? 1 : 0,
       ...moves,
       ...pp,
+      p.id,
     ];
   };
 
   for (let i = 0; i < N; i++) {
     battle.turn = 1 + rnd(30);
+    // One case in 8 uses a move whose item interactions would otherwise come up rarely
+    const move = rnd(8) === 0 ? focus[rnd(focus.length)] : attacks[rnd(attacks.length)];
+    caseMove = move;
+    scene.modifiers.length = 0;
+    scene.enemyModifiers.length = 0;
     const a = setup(A);
     const d = setup(D);
     const weather = [0, 0, 0, 1, 2, 3, 5, 9][rnd(8)];
@@ -165,7 +265,6 @@ it("difftest producer", async () => {
     for (const p of [A, D]) {
       battle.turnCommands[p.getBattlerIndex()] = { command: rnd(3) === 0 ? Command.BALL : Command.FIGHT };
     }
-    const move = attacks[rnd(attacks.length)];
     const crit = rnd(4) === 0;
     const swap = rnd(4) === 0; // the enemy attacks the player
     const src = swap ? D : A;
@@ -195,7 +294,10 @@ it("difftest producer", async () => {
       thrown[move.name] = (thrown[move.name] ?? 0) + 1;
       continue;
     }
-    lines.push(rl, worldLine, caseLine);
+    lines.push(rl, worldLine);
+    scene.modifiers.forEach((m: any) => lines.push(modLine(0, m)));
+    scene.enemyModifiers.forEach((m: any) => lines.push(modLine(1, m)));
+    lines.push(caseLine);
     lines.push(
       `E ${A.stats.join(" ")} ${D.stats.join(" ")} ${sim.damage} ${sim.result} ${critRoll ? 1 : 0} ${real.damage} ${real.result}`,
     );

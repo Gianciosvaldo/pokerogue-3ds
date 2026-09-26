@@ -21,25 +21,30 @@ const pr_form *pr_pokemon_form(const pr_pokemon *p)
     return &pr_forms[s->form0 + (p->form < s->nforms ? p->form : 0)];
 }
 
-/* calculateStats(). Modifiers (vitamins, nature mints...), fusion and challenges
- * are not ported yet; the hooks below flag Wonder Guard. */
+/* calculateStats() with calculateBaseStats(). Fusion and challenges (FLIP_STAT) are
+ * not ported yet; the Wonder Guard check reads the permanent ability. */
 void pr_calculate_stats(pr_battle *bt, pr_pokemon *p)
 {
     const pr_form *f = pr_pokemon_form(p);
-    pr_check_modifiers(bt, p->is_player); /* stat modifiers (vitamins, mints...) */
+    double base[6];
+    for (int s = 0; s < 6; s++) base[s] = f->base_stats[s];
+    pr_apply_base_stat_modifiers(bt, p, base);
     for (int s = 0; s < 6; s++) {
-        double v = floor((2 * f->base_stats[s] + p->ivs[s]) * p->level * 0.01);
+        double v = floor((2 * base[s] + p->ivs[s]) * p->level * 0.01);
         if (s == STAT_HP) {
             v = v + p->level + 10;
+            pr_apply_incrementing_stat_modifier(bt, p, s, &v);
             if (p->base_ability == ABILITY_ID_WONDER_GUARD) v = 1; /* hasAbility(WONDER_GUARD, false, true) */
             p->hp = (int32_t)v; /* fresh Pokemon: hp starts at max */
         } else {
             v += 5;
             double m = pr_nature_mult[p->nature][s];
+            pr_apply_nature_weight_modifier(bt, p, &m);
             if (m != 1) {
                 v = (m > 1) ? ceil(v * m) : floor(v * m);
                 if (v < 1) v = 1;
             }
+            pr_apply_incrementing_stat_modifier(bt, p, s, &v);
         }
         if (v < 1) v = 1;
         p->stats[s] = (int32_t)v;
@@ -126,14 +131,14 @@ double pr_get_stat_stage_multiplier(pr_battle *bt, const pr_pokemon *p, int stat
     }
     if (ignored) return 1;
     double m = (double)(2 + stage > 2 ? 2 + stage : 2) / (double)(2 - stage > 2 ? 2 - stage : 2);
-    if (!ignore_held_items) pr_check_modifiers(bt, p->is_player); /* TempStatStageBoosterModifier (X items) */
+    if (!ignore_held_items) pr_apply_temp_stat_stage_booster_modifiers(bt, p->is_player, stat, &m); /* X items */
     return m < 4 ? m : 4;
 }
 
 int32_t pr_get_effective_stat_p(pr_battle *bt, const pr_pokemon *p, int stat, const pr_stat_params *sp)
 {
     double v = pr_get_stat(p, stat, false);
-    if (!sp->ignore_held_items) pr_check_modifiers(bt, p->is_player); /* StatBoosterModifier */
+    if (!sp->ignore_held_items) pr_apply_stat_booster_modifiers(bt, p, stat, &v);
 
     /* Ruin abilities: getField(true) in field order, stop once one applied. Never ignored. */
     bool field_applied = false;

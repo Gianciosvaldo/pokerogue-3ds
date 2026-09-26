@@ -8,15 +8,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define MON_FIELDS 46
+#define MON_FIELDS 47
 
 static int read_mon(char **save, pr_pokemon *p)
 {
-    int v[MON_FIELDS];
+    long long v[MON_FIELDS];
     for (int i = 0; i < MON_FIELDS; i++) {
         char *t = strtok_r(NULL, " \n", save);
         if (!t) return 0;
-        v[i] = atoi(t);
+        v[i] = strtoll(t, NULL, 10);
     }
     memset(p, 0, sizeof *p);
     p->species = (uint16_t)v[0];
@@ -50,6 +50,7 @@ static int read_mon(char **save, pr_pokemon *p)
         p->moves[i] = (uint16_t)v[38 + i];
         p->pp_used[i] = (uint8_t)v[42 + i];
     }
+    p->id = (uint32_t)v[46];
     p->base_ability = ABILITY_ID_BALL_FETCH;
     p->type_override[0] = p->type_override[1] = -2;
     p->turn_move_effectiveness = -1; /* turnData.moveEffectiveness unset */
@@ -67,6 +68,7 @@ int main(int argc, char **argv)
     static int uncovered_by[PR_FEAT_COUNT_], deferred_by[PR_AC_COUNT_];
     int with_deferred = 0;
     pr_pokemon A, D;
+    int mods_expected[2] = {0, 0};
 
     while (fgets(line, sizeof line, f)) {
         char *save;
@@ -92,8 +94,9 @@ int main(int argc, char **argv)
             bt.last_enemy_faint_turn = w[4];
             bt.n_last_turn_order = (uint8_t)w[5];
             bt.n_arena_tags = w[6];
-            bt.n_player_modifiers = (uint8_t)w[7];
-            bt.n_enemy_modifiers = (uint8_t)w[8];
+            mods_expected[0] = w[7];
+            mods_expected[1] = w[8];
+            bt.n_mods[0] = bt.n_mods[1] = 0;
             bt.max_exp_level = w[9];
             for (int i = 0; i < 4; i++) bt.turn_command[i] = (int8_t)w[10 + i];
             continue;
@@ -106,7 +109,39 @@ int main(int argc, char **argv)
             bt.battle_rng_live = true;
             continue;
         }
+        if (!strcmp(tag, "M")) {
+            /* M side class-chain pokemonId stackCount virtualStackCount transferable stat statsMask mult
+             *   moveType num nSpecies species... */
+            int side = atoi(strtok_r(NULL, " \n", &save));
+            if (bt.n_mods[side] >= PR_MAX_MODIFIERS) { fprintf(stderr, "too many modifiers\n"); return 2; }
+            pr_modifier *m = &bt.mods[side][bt.n_mods[side]++];
+            memset(m, 0, sizeof *m);
+            char *chain = strtok_r(NULL, " \n", &save), *cs;
+            int depth = 0;
+            for (char *c = strtok_r(chain, "<", &cs); c; c = strtok_r(NULL, "<", &cs), depth++) {
+                int k = pr_mod_class_by_name(c);
+                if (k >= 0) { m->cls = (uint8_t)k; m->unknown_subclass = depth > 0; break; }
+            }
+            if (!m->cls) { fprintf(stderr, "modifier with no known class: %s\n", chain); return 2; }
+            m->pokemon_id = strtoll(strtok_r(NULL, " \n", &save), NULL, 10);
+            m->stack_count = atoi(strtok_r(NULL, " \n", &save));
+            m->virtual_stack_count = atoi(strtok_r(NULL, " \n", &save));
+            m->is_transferable = atoi(strtok_r(NULL, " \n", &save));
+            m->stat = (int8_t)atoi(strtok_r(NULL, " \n", &save));
+            m->stats_mask = (uint8_t)atoi(strtok_r(NULL, " \n", &save));
+            m->mult = strtod(strtok_r(NULL, " \n", &save), NULL);
+            m->move_type = (int8_t)atoi(strtok_r(NULL, " \n", &save));
+            m->num = (int16_t)atoi(strtok_r(NULL, " \n", &save));
+            int ns = atoi(strtok_r(NULL, " \n", &save));
+            if (ns > 4) { fprintf(stderr, "species list too long\n"); return 2; }
+            for (int i = 0; i < ns; i++) m->species[m->n_species++] = (uint16_t)atoi(strtok_r(NULL, " \n", &save));
+            continue;
+        }
         if (strcmp(tag, "C")) continue;
+        if (bt.n_mods[0] != mods_expected[0] || bt.n_mods[1] != mods_expected[1]) {
+            fprintf(stderr, "modifier count mismatch\n");
+            return 2;
+        }
         if (!read_mon(&save, &A) || !read_mon(&save, &D)) break;
         A.is_player = true;
         bt.weather = (uint8_t)atoi(strtok_r(NULL, " \n", &save));
@@ -114,10 +149,10 @@ int main(int argc, char **argv)
         bool crit = atoi(strtok_r(NULL, " \n", &save));
         bool swap = atoi(strtok_r(NULL, " \n", &save));
         if (!fgets(eline, sizeof eline, f)) break;
-        long e[17];
+        double e[17]; /* JS numbers, printed in shortest round-trip form */
         char *es;
         strtok_r(eline, " \n", &es);
-        for (int i = 0; i < 17; i++) e[i] = atol(strtok_r(NULL, " \n", &es));
+        for (int i = 0; i < 17; i++) e[i] = strtod(strtok_r(NULL, " \n", &es), NULL);
 
         bt.field[0] = &A; bt.field[2] = &D;
         bt.n_unported = 0;
@@ -137,7 +172,7 @@ int main(int argc, char **argv)
                 printf("STATS MISMATCH species %d/%d lv %d nature %d: C", A.species, A.form, A.level, A.nature);
                 for (int i = 0; i < 6; i++) printf(" %d", A.stats[i]);
                 printf(" | JS");
-                for (int i = 0; i < 6; i++) printf(" %ld", e[i]);
+                for (int i = 0; i < 6; i++) printf(" %.0f", e[i]);
                 printf("\n");
             }
         }
@@ -157,7 +192,7 @@ int main(int argc, char **argv)
                   && real.damage == e[15] && real.result == e[16];
         if (ok) pass++;
         else if (++fail <= 10)
-            printf("MISMATCH move %d (%s) A %d/%d D %d/%d crit %d swap %d weather %d terrain %d: C sim %d/%d crit %d real %d/%d | JS %ld/%ld %ld %ld/%ld\n",
+            printf("MISMATCH move %d (%s) A %d/%d D %d/%d crit %d swap %d weather %d terrain %d: C sim %.17g/%d crit %d real %.17g/%d | JS %.17g/%.0f %.0f %.17g/%.0f\n",
                    move, pr_moves[move].name, A.species, A.form, D.species, D.form, crit, swap, bt.weather, bt.terrain,
                    sim.damage, sim.result, c_crit, real.damage, real.result, e[12], e[13], e[14], e[15], e[16]);
     }

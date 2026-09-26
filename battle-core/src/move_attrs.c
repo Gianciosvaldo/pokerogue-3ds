@@ -435,11 +435,15 @@ double pr_apply_fixed_damage(pr_battle *bt, const pr_pokemon *user, const pr_pok
         case PR_AC_RandomLevelDamageAttr:                                            /* Psywave */
             dmg = to_dmg_value(user->level * (pr_battle_rand_seed_int(bt, 101, 50) * 0.01));
             break;
-        case PR_AC_TargetHalfHpDamageAttr:                                           /* Super Fang, Ruination */
-            /* with Multi Lens the hit number decides; held items aren't modelled */
-            if (pr_held_item_stacks(bt, user, false) > 0) { pr_note_unported(bt, PR_FEAT_MODIFIERS); break; }
-            dmg = to_dmg_value(target->hp / 2.0);
+        case PR_AC_TargetHalfHpDamageAttr: {                                         /* Super Fang, Ruination */
+            /* With a Multi Lens, the lens hits use the HP the target had at the first hit,
+             * which the attribute remembers between hits (this.initialHp). */
+            int32_t lens = pr_held_multi_lens_stacks(bt, user);
+            int hit = user->hit_count - user->hits_left;
+            if (lens <= 0 || hit == lens + 1 || hit == 0) dmg = to_dmg_value(target->hp / 2.0);
+            else pr_note_unported(bt, PR_FEAT_HIT_STATE);
             break;
+        }
         case PR_AC_CounterDamageAttr:                                                /* Counter, Mirror Coat... */
             /* damage of the first matching attack received this turn, else 0 */
             if (user->n_attacks_received > 0) { pr_note_unported(bt, PR_FEAT_MOVE_HISTORY); break; }

@@ -166,11 +166,9 @@ double pr_calculate_battle_power(pr_battle *bt, const pr_pokemon *src, const pr_
     /* Non-priority, single-hit moves of the user's Tera type hit with at least 60 power
      * (a Multi Lens makes them multi-hit) */
     if (src->terastallized && pr_get_tera_type(src) == m->type && power < 60 && m->priority <= 0
-        && !pr_move_has_attr((uint16_t)move, PR_AC_MultiHitAttr)) {
-        /* findModifier(Multi Lens of this Pokemon) searches the player's modifiers only */
-        if (src->is_player) pr_check_modifiers(bt, true);
+        && !pr_move_has_attr((uint16_t)move, PR_AC_MultiHitAttr)
+        && !pr_find_player_multi_lens(bt, src)) /* findModifier searches the player's list only */
         power = 60;
-    }
 
     /* Field auras: a Set of FieldMoveTypePowerBoostAbAttr instances across the active field,
      * filtered by getCondition(); each distinct attr applies once with the attacker's params. */
@@ -210,7 +208,7 @@ double pr_calculate_battle_power(pr_battle *bt, const pr_pokemon *src, const pr_
         if ((pr_arena_has_tag(bt, ARENA_TAG_TYPE_MUD_SPORT, ARENA_TAG_SIDE_BOTH) && type_change == POKEMON_TYPE_ELECTRIC)
             || (pr_arena_has_tag(bt, ARENA_TAG_TYPE_WATER_SPORT, ARENA_TAG_SIDE_BOTH) && type_change == POKEMON_TYPE_FIRE))
             pr_note_unported(bt, PR_FEAT_ARENA_TAGS);
-        pr_check_modifiers(bt, src->is_player);
+        pr_apply_attack_type_booster_modifiers(bt, src, type_change, &power);
     }
     if (pr_has_battler_tag_class(bt, src, PR_TAGCLASS_HELPING_HAND)) power *= 1.5;
     /* SupremeOverlordTag.getBoost() depends on the tag's faint count */
@@ -295,14 +293,15 @@ pr_damage_result pr_get_attack_damage(pr_battle *bt, pr_pokemon *def, pr_pokemon
 
     double fixed = pr_apply_fixed_damage(bt, src, def, move);
     if (fixed != 0) {
-        pr_check_modifiers(bt, src->is_player); /* PokemonMultiHitModifier (Multi Lens) */
-        fixed = to_dmg_value(fixed);
+        double lens = 1;
+        pr_apply_multi_hit_damage_modifiers(bt, src, move, &lens);
+        fixed = to_dmg_value(fixed * lens);
         /* the early return skips the rest, so Sturdy-like abilities get their chance here */
         if (def->hp >= pr_get_stat(def, STAT_HP, true)) {
             pr_ab_params ep = {.pokemon = def, .opponent = src, .move = move, .simulated = simulated, .value = &fixed};
             pr_apply_ab_attrs(bt, PR_AC_PreDefendFullHpEndureAbAttr, &ep);
         }
-        r.damage = (int32_t)fixed;
+        r.damage = fixed;
         return r;
     }
     if (pr_apply_one_hit_ko(bt, src, def, move)) {
@@ -344,8 +343,8 @@ pr_damage_result pr_get_attack_damage(pr_battle *bt, pr_pokemon *def, pr_pokemon
     double target_mult = 1;
     if (bt->double_battle) pr_note_unported(bt, PR_FEAT_DOUBLES);
 
-    double multi_strike = 1;
-    pr_check_modifiers(bt, src->is_player); /* PokemonMultiHitModifier */
+    double multi_strike = 1; /* Multi Lens (Parental Bond's own hits aren't ported) */
+    pr_apply_multi_hit_damage_modifiers(bt, src, move, &multi_strike);
     double glaive = pr_has_battler_tag(bt, def, BATTLER_TAG_TYPE_RECEIVE_DOUBLE_DAMAGE) ? 2 : 1;
     double crit_mult = is_critical ? 1.5 : 1;
     pr_ab_params cp = {.pokemon = src, .move = -1, .simulated = simulated, .value = &crit_mult};
@@ -377,8 +376,8 @@ pr_damage_result pr_get_attack_damage(pr_battle *bt, pr_pokemon *def, pr_pokemon
     pr_ab_params dp = {.pokemon = src, .opponent = def, .move = move, .simulated = simulated, .value = &dmg};
     pr_apply_ab_attrs(bt, PR_AC_MoveDamageBoostAbAttr, &dp);
     /* the enemy's Damage and Resistance tokens */
-    if (!src->is_player) pr_check_modifiers(bt, false);
-    if (!def->is_player) pr_check_modifiers(bt, false);
+    if (!src->is_player) pr_apply_enemy_damage_booster_modifiers(bt, &dmg);
+    if (!def->is_player) pr_apply_enemy_damage_reducer_modifiers(bt, &dmg);
     pr_ab_params rp = {.pokemon = def, .opponent = src, .move = move, .simulated = simulated, .value = &dmg};
     pr_apply_ab_attrs(bt, PR_AC_ReceivedMoveDamageMultiplierAbAttr, &rp);
     if (bt->double_battle) pr_note_unported(bt, PR_AC_AlliedFieldDamageReductionAbAttr);
@@ -389,7 +388,7 @@ pr_damage_result pr_get_attack_damage(pr_battle *bt, pr_pokemon *def, pr_pokemon
     else if (type_multiplier >= 2) r.result = HIT_RESULT_SUPER_EFFECTIVE;
     else if (type_multiplier <= 0.25) r.result = HIT_RESULT_MOSTLY_INEFFECTIVE;
     else if (type_multiplier <= 0.5) r.result = HIT_RESULT_NOT_VERY_EFFECTIVE;
-    r.damage = (int32_t)dmg;
+    r.damage = dmg;
     return r;
 }
 
@@ -406,7 +405,8 @@ bool pr_get_critical_hit_result(pr_battle *bt, const pr_pokemon *def, const pr_p
     const pr_move *m = &pr_moves[move];
     for (unsigned i = 0; i < m->nattr; i++)
         if (pr_attr_is(pr_attrs[m->attr0 + i].cls, PR_AC_HighCritAttr)) stage++;
-    pr_check_modifiers(bt, src->is_player); /* CritBoosterModifier, TempCritBoosterModifier */
+    pr_apply_crit_booster_modifiers(bt, src, &stage);           /* Scope Lens, Leek */
+    pr_apply_temp_crit_booster_modifiers(bt, src->is_player, &stage); /* Dire Hit */
     pr_ab_params sp = {.pokemon = src, .move = -1, .holder = &stage};
     pr_apply_ab_attrs(bt, PR_AC_BonusCritAbAttr, &sp);
     if (pr_has_battler_tag_class(bt, src, PR_TAGCLASS_CRIT_BOOST)) pr_note_unported(bt, PR_FEAT_BATTLER_TAGS);

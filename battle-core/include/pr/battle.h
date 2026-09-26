@@ -17,7 +17,7 @@ enum { TERRAIN_NONE, TERRAIN_MISTY, TERRAIN_ELECTRIC, TERRAIN_GRASSY, TERRAIN_PS
  * classes (ids continue after the last class id). */
 enum {
     PR_FEAT_DOUBLES = PR_AC_COUNT_,  /* more than one Pokemon per side */
-    PR_FEAT_MODIFIERS,               /* held items and other modifiers */
+    PR_FEAT_MODIFIERS,               /* a modifier whose own class has no port (see pr_modifier) */
     PR_FEAT_BATTLER_TAGS,
     PR_FEAT_ARENA_TAGS,
     PR_FEAT_MOVE_HISTORY,            /* summonData.moveHistory / turnData.attacksReceived entries */
@@ -25,11 +25,64 @@ enum {
     PR_FEAT_FAINT_HISTORY,
     PR_FEAT_WAVE,                    /* wave data the caller didn't provide (wave seed, level cap) */
     PR_FEAT_PARTY,
+    PR_FEAT_HIT_STATE,               /* state kept from an earlier hit of the same move use */
     PR_FEAT_COUNT_
 };
 const char *pr_unported_name(uint16_t id);
 
+/* Modifiers (src/modifiers.c): upstream's PersistentModifier instances, held items
+ * included. Classes are the upstream ones the battle logic queries; the parent table
+ * gives instanceof. */
+enum {
+    PR_MOD_NONE,
+    PR_MOD_PERSISTENT,               /* PersistentModifier (any class without a port, e.g. Exp. Charm) */
+    PR_MOD_HELD_ITEM,                /* PokemonHeldItemModifier (Leftovers, berries... whose effects aren't on the ported paths) */
+    PR_MOD_TEMP_STAT_STAGE_BOOSTER,  /* X Attack, X Defense... (side-wide) */
+    PR_MOD_TEMP_CRIT_BOOSTER,        /* Dire Hit (side-wide) */
+    PR_MOD_BASE_STAT,                /* vitamins */
+    PR_MOD_BASE_STAT_TOTAL,          /* Shuckle Juice */
+    PR_MOD_BASE_STAT_FLAT,           /* Old Gateau */
+    PR_MOD_INCREMENTING_STAT,        /* Macho Brace */
+    PR_MOD_STAT_BOOSTER,
+    PR_MOD_EVOLUTION_STAT_BOOSTER,   /* Eviolite */
+    PR_MOD_SPECIES_STAT_BOOSTER,     /* Light Ball, Thick Club, Metal Powder... */
+    PR_MOD_CRIT_BOOSTER,             /* Scope Lens */
+    PR_MOD_SPECIES_CRIT_BOOSTER,     /* Leek */
+    PR_MOD_ATTACK_TYPE_BOOSTER,      /* Charcoal, Mystic Water... */
+    PR_MOD_NATURE_WEIGHT,            /* Soul Dew */
+    PR_MOD_MULTI_HIT,                /* Multi Lens */
+    PR_MOD_ENEMY_PERSISTENT,
+    PR_MOD_ENEMY_DAMAGE_MULTIPLIER,
+    PR_MOD_ENEMY_DAMAGE_BOOSTER,     /* the enemy's Damage token */
+    PR_MOD_ENEMY_DAMAGE_REDUCER,     /* the enemy's Protection token */
+    PR_MOD_COUNT_
+};
+extern const uint8_t pr_mod_parent[PR_MOD_COUNT_];
+extern const char *const pr_mod_class_name[PR_MOD_COUNT_];   /* upstream class names */
+int pr_mod_class_by_name(const char *name);                  /* -1 when unknown */
+
+typedef struct pr_modifier {
+    uint8_t cls;
+    /* The upstream object is a subclass the port doesn't know (its nearest known ancestor
+     * is cls). Queries that would call its own shouldApply/apply report it unported. */
+    bool unknown_subclass;
+    bool is_transferable;          /* PokemonHeldItemModifier.isTransferable */
+    int64_t pokemon_id;            /* PokemonHeldItemModifier.pokemonId (ids are 32-bit unsigned); -1 = any Pokemon */
+    int32_t stack_count, virtual_stack_count;
+    int8_t stat;                   /* BaseStatModifier / TempStatStageBoosterModifier stat */
+    uint8_t stats_mask;            /* StatBoosterModifier.stats, bit per Stat */
+    int8_t move_type;              /* AttackTypeBoosterModifier.moveType */
+    int16_t num;                   /* CritBoosterModifier.stageIncrement, PokemonBaseStatTotalModifier.statModifier */
+    /* StatBoosterModifier.multiplier, AttackTypeBoosterModifier.boostMultiplier,
+     * TempStatStageBoosterModifier.boost, EnemyDamageMultiplierModifier.damageMultiplier */
+    double mult;
+    uint16_t species[4];           /* Species*Modifier.species */
+    uint8_t n_species;
+} pr_modifier;
+#define PR_MAX_MODIFIERS 96        /* per side */
+
 typedef struct pr_pokemon {
+    uint32_t id;               /* Pokemon.id: what held items point at */
     uint16_t species;
     uint8_t form;
     uint8_t level;
@@ -78,7 +131,9 @@ typedef struct pr_battle {
     uint8_t weather;           /* WeatherType */
     uint8_t terrain;           /* TerrainType */
     int n_arena_tags;          /* arena.tags.length: tags aren't modelled, see pr_arena_has_tag */
-    uint8_t n_player_modifiers, n_enemy_modifiers; /* modifier counts: see pr_check_modifiers */
+    /* globalScene.modifiers (player, [0]) and enemyModifiers ([1]), in upstream list order */
+    pr_modifier mods[2][PR_MAX_MODIFIERS];
+    uint8_t n_mods[2];
     pr_seedstr wave_seed;      /* globalScene.waveSeed; len 0 = unknown */
     int max_exp_level;         /* globalScene.getMaxExpLevel(); 0 = unknown */
     int8_t turn_command[4];    /* currentBattle.turnCommands[i]?.command per BattlerIndex; -1 = none */
@@ -161,11 +216,6 @@ bool pr_has_battler_tag_class(pr_battle *bt, const pr_pokemon *p, int tag_class)
 /* arena.getTagOnSide(type, side); ARENA_TAG_SIDE_BOTH matches either side, as arena.getTag(type).
  * Arena tags are not modelled yet either. */
 bool pr_arena_has_tag(pr_battle *bt, int tag_type, int side);
-/* globalScene.applyModifiers(<type>, player, ...) / findModifier: modifiers (held items
- * included) are not modelled yet. A side that holds any is reported as unported. */
-void pr_check_modifiers(pr_battle *bt, bool player);
-/* Total stacks of the Pokemon's held items (transferable ones only if asked). */
-int pr_held_item_stacks(pr_battle *bt, const pr_pokemon *p, bool transferable_only);
 /* waveData.abilitiesApplied.has(ability): wave data is not modelled yet (empty, as at wave start) */
 bool pr_wave_ability_applied(const pr_pokemon *p, int ability);
 /* Move.doesFlagEffectApply({flag, user, target}) */
@@ -176,6 +226,37 @@ const pr_pokemon *pr_get_ally(const pr_battle *bt, const pr_pokemon *p);
 bool pr_weather_effect_suppressed(pr_battle *bt);
 int pr_move_get_priority(pr_battle *bt, int move, const pr_pokemon *user);
 bool pr_move_is_attack(int move);
+
+/* ---- modifiers (src/modifiers.c) ----
+ * Each function is one upstream globalScene.applyModifiers / applyModifier /
+ * findModifier / getHeldItems call, named after the modifier class it applies. */
+bool pr_mod_is(const pr_modifier *m, int cls);
+int32_t pr_mod_get_stack_count(const pr_modifier *m);        /* stackCount + virtualStackCount */
+/* pokemon.getHeldItems() (pokemonId === id exactly), filtered to isTransferable when asked:
+ * the number of items, and the sum of their stackCount fields (not getStackCount()) */
+int pr_held_item_count(pr_battle *bt, const pr_pokemon *p, bool transferable_only);
+int32_t pr_held_item_stack_sum(pr_battle *bt, const pr_pokemon *p, bool transferable_only);
+/* getHeldItems().find(i => i instanceof PokemonMultiHitModifier)?.getStackCount() ?? 0 */
+int32_t pr_held_multi_lens_stacks(pr_battle *bt, const pr_pokemon *p);
+/* calculateBaseStats(): Shuckle Juice, Old Gateau, (fusion), vitamins */
+void pr_apply_base_stat_modifiers(pr_battle *bt, const pr_pokemon *p, double base[6]);
+void pr_apply_incrementing_stat_modifier(pr_battle *bt, const pr_pokemon *p, int stat, double *value);
+void pr_apply_nature_weight_modifier(pr_battle *bt, const pr_pokemon *p, double *mult);
+void pr_apply_stat_booster_modifiers(pr_battle *bt, const pr_pokemon *p, int stat, double *value);
+void pr_apply_temp_stat_stage_booster_modifiers(pr_battle *bt, bool player, int stat, double *mult);
+void pr_apply_crit_booster_modifiers(pr_battle *bt, const pr_pokemon *src, int *stage);
+void pr_apply_temp_crit_booster_modifiers(pr_battle *bt, bool player, int *stage);
+void pr_apply_attack_type_booster_modifiers(pr_battle *bt, const pr_pokemon *src, int move_type, double *power);
+/* PokemonMultiHitModifier.apply(pokemon, moveId, null, damageMultiplier) for each Multi Lens */
+void pr_apply_multi_hit_damage_modifiers(pr_battle *bt, const pr_pokemon *src, int move, double *mult);
+/* globalScene.findModifier(m => m instanceof PokemonMultiHitModifier && m.pokemonId === p.id) (player list) */
+bool pr_find_player_multi_lens(pr_battle *bt, const pr_pokemon *p);
+void pr_apply_enemy_damage_booster_modifiers(pr_battle *bt, double *damage);
+void pr_apply_enemy_damage_reducer_modifiers(pr_battle *bt, double *damage);
+/* Move.canBeMultiStrikeEnhanced(user) (restrictSpread false, no target) */
+bool pr_move_can_be_multi_strike_enhanced(int move);
+/* Math.pow as the reference JS engine computes it (src/js_math.c) */
+double js_pow(double x, double y);
 
 /* ---- move attributes (src/move_attrs.c) ---- */
 /* applyMoveAttrs("VariablePowerAttr", user, target, move, power) */
@@ -252,7 +333,9 @@ double pr_get_base_damage(pr_battle *bt, const pr_pokemon *def, const pr_pokemon
 double pr_calculate_stab_multiplier(pr_battle *bt, const pr_pokemon *src, int move, bool ignore_source_ability,
                                     bool simulated);
 
-typedef struct { bool cancelled; int result /* HitResult */; int32_t damage; } pr_damage_result;
+/* damage is a double like upstream's: it isn't capped by the target's HP here, and with
+ * the enemy's damage tokens (up to 999 stacks of x1.05 in endless) it can pass 2^63. */
+typedef struct { bool cancelled; int result /* HitResult */; double damage; } pr_damage_result;
 /* simulated=true: random factor is 1 and no RNG is consumed, as upstream. */
 pr_damage_result pr_get_attack_damage(pr_battle *bt, pr_pokemon *def, pr_pokemon *src, int move,
                                       bool is_critical, bool simulated);

@@ -60,7 +60,7 @@ int32_t pr_battle_rand_seed_int(pr_battle *bt, int32_t range, int32_t min)
 
 /* ---- state the port does not model yet ----
  * Each query below answers for state that doesn't exist yet in the C port (battler and
- * arena tags, wave data, modifiers). The caller passes counts of what upstream holds;
+ * arena tags, wave data). The caller passes counts of what upstream holds;
  * when there is nothing, "absent" is the exact answer. When there is something, the
  * query can't be answered, and the unported note keeps the result from being trusted.
  * These are the only places to change when that state is ported. */
@@ -91,18 +91,6 @@ bool pr_wave_ability_applied(const pr_pokemon *p, int ability)
     return false;
 }
 
-void pr_check_modifiers(pr_battle *bt, bool player)
-{
-    if (player ? bt->n_player_modifiers : bt->n_enemy_modifiers) pr_note_unported(bt, PR_FEAT_MODIFIERS);
-}
-
-int pr_held_item_stacks(pr_battle *bt, const pr_pokemon *p, bool transferable_only)
-{
-    (void)transferable_only;
-    pr_check_modifiers(bt, p->is_player);
-    return 0;
-}
-
 int pr_battler_index(const pr_battle *bt, const pr_pokemon *p)
 {
     for (int i = 0; i < 4; i++)
@@ -113,8 +101,8 @@ int pr_battler_index(const pr_battle *bt, const pr_pokemon *p)
 const char *pr_unported_name(uint16_t id)
 {
     static const char *const feat[PR_FEAT_COUNT_ - PR_AC_COUNT_] = {
-        "(doubles)", "(held items / modifiers)", "(battler tags)", "(arena tags)", "(move history)",
-        "(turn order)", "(faint history)", "(wave data)", "(party)"};
+        "(doubles)", "(modifier subclass not ported)", "(battler tags)", "(arena tags)", "(move history)",
+        "(turn order)", "(faint history)", "(wave data)", "(party)", "(earlier hit of the same move)"};
     if (id < PR_AC_COUNT_) return pr_attr_class_name[id];
     if (id < PR_FEAT_COUNT_) return feat[id - PR_AC_COUNT_];
     return "?";

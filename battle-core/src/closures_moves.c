@@ -105,7 +105,7 @@ static double super_effective_boost(ARGS)
 /* Knock Off: target.getHeldItems().filter((i) => i.isTransferable).length > 0 ? 1.5 : 1 */
 static double knock_off(ARGS)
 {
-    return pr_held_item_stacks(bt, t, true) > 0 ? 1.5 : 1;
+    return pr_held_item_count(bt, t, true) > 0 ? 1.5 : 1;
 }
 
 /* Wake-Up Slap: targetSleptOrComatoseCondition.apply(user, target, move) ? 2 : 1, where the
@@ -130,11 +130,11 @@ static double assurance(ARGS)
     return t->damage_taken > 0 ? 2 : 1;
 }
 
-/* Acrobatics: itemCount = sum of stackCount over the user's transferable held items;
- * Math.max(1, 2 - .2 * itemCount) */
+/* Acrobatics: itemCount = user.getHeldItems().filter(i => i.isTransferable)
+ *   .reduce((v, m) => v + m.stackCount, 0);  Math.max(1, 2 - .2 * itemCount) */
 static double acrobatics(ARGS)
 {
-    double v = 2 - .2 * pr_held_item_stacks(bt, u, true);
+    double v = 2 - .2 * pr_held_item_stack_sum(bt, u, true);
     return v > 1 ? v : 1;
 }
 

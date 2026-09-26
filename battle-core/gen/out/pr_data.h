@@ -72,6 +72,7 @@ typedef struct {
     int32_t prevolution;       /* species id or -1 */
     int32_t starter;           /* starter cost or -1 */
     pr_level_moves level_moves;
+    bool has_evolutions;       /* speciesDataRegistry.hasEvolutions() */
 } pr_species;
 
 extern const uint8_t pr_type_chart_x2[PR_TYPE_COUNT][PR_TYPE_COUNT];

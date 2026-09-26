@@ -351,13 +351,14 @@ for sid in sorted(species, key=int):
     if lm and isinstance(lm, list) and all(isinstance(x, list) and len(x) == 2 for x in lm):
         lm_ref = "{%s, %d}" % (emit_list("pr_level_move", ["{%d, %d}" % (lv, mid) for lv, mid in lm]), len(lm))
     species_rows.append(
-        "{%d, %s, %d, %d, %d, %d, %d, %s, %d, %d, %d, %d, %s}" % (
+        "{%d, %s, %d, %d, %d, %d, %d, %s, %d, %d, %d, %d, %s, %s}" % (
             s["speciesId"], c_str(s["name"]), s["_generation"], s["growthRate"],
             -1 if s["malePercent"] is None else round(s["malePercent"] * 10),
             (1 if s["subLegendary"] else 0) | (2 if s["legendary"] else 0) | (4 if s["mythical"] else 0),
             s["baseFriendship"], "true" if s["canChangeForm"] else "false", f0, len(form_rows) - f0,
             d.get("prevolution") if d.get("prevolution") is not None else -1,
-            d.get("starter") if isinstance(d.get("starter"), int) else -1, lm_ref))
+            d.get("starter") if isinstance(d.get("starter"), int) else -1, lm_ref,
+            "true" if d.get("evolutions") else "false"))
 
 for name, ids in sorted(move_sets.items()):
     c.append(f"const uint16_t pr_set_{snake(name).lower()}[] = {{{', '.join(str(i) for i in sorted(ids)) or '0'}}};")
@@ -461,6 +462,7 @@ typedef struct {{
     int32_t prevolution;       /* species id or -1 */
     int32_t starter;           /* starter cost or -1 */
     pr_level_moves level_moves;
+    bool has_evolutions;       /* speciesDataRegistry.hasEvolutions() */
 }} pr_species;
 
 extern const uint8_t pr_type_chart_x2[PR_TYPE_COUNT][PR_TYPE_COUNT];
