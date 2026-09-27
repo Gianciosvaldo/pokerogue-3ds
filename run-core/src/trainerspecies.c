@@ -123,3 +123,16 @@ int pr_run_gen_new_party_member_species(pr_run *run, const pr_party_species_ctx 
         return ret;
     }
 }
+
+bool pr_run_species_root_and_types(int species, int form, uint16_t *root, int8_t *types, int *n_types)
+{
+    const int si = species_index(species);
+    if (si < 0) return false;
+    const pr_species_gen *sp = &pr_species_gens[si];
+    /* getSpeciesForm(): forms[formIndex] when the species has forms, else the species */
+    if (sp->n_forms && (form < 0 || form >= sp->n_forms)) return false;
+    const pr_form_gen *f = &pr_form_gens[sp->form_start + (sp->n_forms ? form : 0)];
+    *root = pr_species_trainer[si].root;
+    for (int i = 0; i < f->n_types && *n_types < PR_MAX_PARTY_TYPES; i++) types[(*n_types)++] = f->types[i];
+    return true;
+}

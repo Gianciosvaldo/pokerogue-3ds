@@ -226,7 +226,12 @@ double pr_run_add_money(double money, double amount);
 double pr_run_apply_money_interest(double money, const int *stacks, int n);
 
 /* ---- trainers (data in gen/out/run_trainers.c) ---- */
-typedef struct { int8_t size, strength; int8_t strengths[8]; } pr_party_template;   /* size, .strength, getStrength(i) */
+typedef struct {
+    int8_t size, strength; int8_t strengths[8];   /* size, .strength, getStrength(i) */
+    int8_t evo_kind;              /* .evoLevelThresholdKind (NORMAL when undefined) */
+    uint8_t member[8];            /* per index: isSameSpecies bit 0, isBalanced bit 1, getEvoThresholdKind bits 2-3 */
+    int8_t offsets[8];            /* per index: genPartyMember's compound-template offset (0 for a plain one) */
+} pr_party_template;
 /* partyTemplateFunc captured as segments: in game mode `mode`, from currentBattle.waveIndex `from_wave`
  * on (0 = no current battle), the template is pr_party_templates[template] */
 typedef struct { uint8_t mode; uint16_t from_wave; uint16_t template; } pr_template_segment;
@@ -285,6 +290,10 @@ extern const pr_species_gen pr_species_gens[];   /* by SpeciesId */
 extern const int pr_species_gen_count;
 extern const pr_form_gen pr_form_gens[];
 extern const int8_t pr_trainer_specialty[];      /* by TrainerType: specialtyType, -1 = none */
+/* the Golden Bug Net's pool: a roll below `upto` (and at or past the entry before) picks `species` */
+typedef struct { uint16_t species, upto; } pr_weighted_species;
+extern const pr_weighted_species pr_golden_bug_net[];
+extern const int pr_golden_bug_net_count, pr_golden_bug_net_total;
 extern const int pr_trainer_specialty_count;
 
 typedef struct {
@@ -336,7 +345,16 @@ typedef struct {
     struct { uint16_t start; int16_t n; } tiers[5];   /* by TrainerPoolTier, in pr_trainer_pool_entries; n -1 = no such tier */
     int16_t filter;               /* config.speciesFilter as a row of pr_trainer_species_filters, -1 = none */
     uint16_t sig_start, n_sig;    /* roots of signatureSpecies[TrainerType[type]], in pr_trainer_signature_roots */
+    bool static_party, same_seed; /* hasStaticParty, useSameSeedForAllMembers */
+    uint16_t derived_type;        /* getDerivedType() */
+    uint16_t type_double;         /* trainerTypeDouble, 0 = none */
+    bool double_only;
+    uint16_t member_funcs;        /* bit i + 8: partyMemberFuncs has key i (-8 to 7; -1 is the last member) */
+    uint16_t group_start, n_groups;   /* signatureSpecies as groups, in pr_trainer_signature_groups */
 } pr_trainer_species;
+typedef struct { uint16_t start, n; } pr_signature_group;   /* in pr_trainer_signature_species */
+extern const pr_signature_group pr_trainer_signature_groups[];
+extern const uint16_t pr_trainer_signature_species[];
 extern const pr_trainer_species pr_trainer_species_data[];   /* by TrainerType */
 extern const int pr_trainer_species_count;
 extern const int16_t pr_trainer_pool_entries[];   /* a species, or -1 for an entry that is a list of species */
@@ -359,6 +377,46 @@ typedef struct {
  * its own offset: the caller sows run->rng). Returns the species, or -1 with PR_RUN_UNDEFINED_UPSTREAM
  * where upstream loops forever or picks from an empty list, PR_RUN_UNPORTED_TRAINER for an unknown type. */
 int pr_run_gen_new_party_member_species(pr_run *run, const pr_party_species_ctx *ctx);
+
+/* The root of `species`, and the types of its form `form` as a new Pokemon's getTypes() gives them, appended
+ * at types[*n_types];
+ * false where upstream reads an undefined form */
+bool pr_run_species_root_and_types(int species, int form, uint16_t *root, int8_t *types, int *n_types);
+
+/* A trainer's party, member by member (src/trainerparty.c) */
+typedef struct {
+    pr_enemy_gen_ctx enemy;       /* the scene addEnemyPokemon sees (wave, biome, trainer_type, battle_type...);
+                                   * species, level, slot, boss and shinyLock are set per member */
+    bool is_double;               /* trainer.isDouble() */
+    bool classic_wave20_trainer;
+    const pr_party_template *template_;   /* trainer.getPartyTemplate() */
+    int n_levels, levels[PR_MAX_PARTY_TEMPLATE];   /* currentBattle.enemyLevels */
+} pr_trainer_party_ctx;
+typedef struct {
+    int n;
+    uint16_t species[PR_MAX_PARTY_TEMPLATE];
+    pr_enemy_gen mons[PR_MAX_PARTY_TEMPLATE];   /* each member's rolls up to its moveset */
+} pr_trainer_party;
+/* genPartyMember(e) for every level in turn, each on its own RNG (the run seed at the trainer's offset);
+ * run->rng is left as it was. Returns 0, or -1 with a flag (partyMemberFuncs: PR_RUN_UNPORTED_TRAINER)
+ * and the members made so far in out->n. */
+int pr_run_gen_trainer_party(pr_run *run, const pr_trainer_party_ctx *ctx, pr_trainer_party *out);
+
+/* A wild battle's first enemy (src/wildenemy.c) */
+typedef struct {
+    pr_enemy_gen_ctx enemy;       /* the scene (wave, biome, wave_cycle_offset, charms, ids, events...) */
+    int level;                    /* currentBattle.enemyLevels[0] */
+    int luck;                     /* getPartyLuckValue(party) */
+    bool golden_bug_net;          /* the player holds a BoostBugSpawnModifier */
+    bool fresh_start;             /* gameMode.hasChallenge(FRESH_START) */
+} pr_wild_enemy_ctx;
+typedef struct {
+    int species;
+    bool boss, shiny_lock;        /* what addEnemyPokemon was given */
+    pr_enemy_gen mon;             /* its rolls up to the moveset */
+} pr_wild_enemy;
+/* The EncounterPhase's first wild enemy on run->rng, up to its moveset */
+int pr_run_gen_wild_enemy(pr_run *run, const pr_wild_enemy_ctx *ctx, pr_wild_enemy *out);
 
 /* ---- helpers ---- */
 /* executeWithSeedOffset(fn, offset, seedOverride): fn rolls on a fresh RNG sown from
