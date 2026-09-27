@@ -111,6 +111,11 @@
  * or its contact check reads (Long Reach, Water Veil, Water Bubble, Thermal Exchange, Comatose,
  * Purifying Salt...) or ones that hit back on contact; a quarter of the Pokemon have a status, a
  * sixth are behind a Substitute, and an eighth of the header moves have no PP left.
+ * TURN_DELAYED=1 aims at Future Sight, Doom Desire and Wish: most moves are one of them, the rest
+ * attacks or protections; two cases in three start with one or two of their tags already pending
+ * (on either Pokemon's slot or an empty one, 1 to 3 turns left, half the delayed attacks landing
+ * this turn; a delayed attack from either Pokemon, a bench Pokemon, the target itself or no
+ * Pokemon at all; a wish of 1 HP to the target's max HP), and a third of the Pokemon are at low HP.
  *
  * Each case builds a random singles state inside a real upstream battle, gives both sides a
  * FIGHT command the way the command phases do, then runs upstream's own phases from
@@ -141,6 +146,7 @@ import { MoveId } from "#enums/move-id";
 import { MoveResult } from "#enums/move-result";
 import { MoveUseMode } from "#enums/move-use-mode";
 import { PokemonType } from "#enums/pokemon-type";
+import { PositionalTagType } from "#enums/positional-tag-type";
 import { SpeciesId } from "#enums/species-id";
 import { Stat } from "#enums/stat";
 import { StatusEffect } from "#enums/status-effect";
@@ -172,6 +178,7 @@ it("turntest producer", async () => {
   const EFFECTS = process.env.TURN_EFFECTS === "1";
   const CALLED = process.env.TURN_CALLED === "1";
   const HEADER = process.env.TURN_HEADER === "1";
+  const DELAYED = process.env.TURN_DELAYED === "1";
   const OUT = process.env.TURN_OUT ?? "/tmp/pr-turns.txt";
   const game = new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
   game.override
@@ -446,6 +453,9 @@ it("turntest producer", async () => {
     || m.attrs.some((a: any) => ["MultiHitAttr", "ProtectAttr", "AddSubstituteAttr"].includes(a.constructor.name))
     || (m.category === MoveCategory.STATUS && [MoveTarget.NEAR_OTHER, MoveTarget.NEAR_ENEMY].includes(m.moveTarget)),
   );
+  // TURN_DELAYED pools
+  const delayedMoves = [MoveId.FUTURE_SIGHT, MoveId.DOOM_DESIRE, MoveId.WISH].map(id => allMoves[id]);
+  const protectOnly = usable.filter((m: any) => m.attrs.some((a: any) => a.constructor.name === "ProtectAttr"));
   const headerAbilityIds = [
     AbilityId.LONG_REACH, AbilityId.WATER_VEIL, AbilityId.WATER_BUBBLE, AbilityId.THERMAL_EXCHANGE, AbilityId.COMATOSE,
     AbilityId.PURIFYING_SALT, AbilityId.MAGIC_GUARD, AbilityId.FLAME_BODY, AbilityId.ROUGH_SKIN, AbilityId.UNSEEN_FIST,
@@ -550,6 +560,10 @@ it("turntest producer", async () => {
     for (const at of scene.arena.tags) {
       lines.push(`ATAG type=${at.tagType} side=${at.side} turns=${at.turnCount} max=${at.maxDuration} smove=${at.sourceMove ?? 0} sid=${at.sourceId ?? -1}`
         + (at instanceof EntryHazardTag ? ` layers=${at.layers}` : ""));
+    }
+    for (const pt of scene.arena.positionalTagManager.tags as any[]) {
+      lines.push(`POS type=${pt.tagType} turns=${pt.turnCount} target=${pt.targetIndex} sid=${pt.sourceId ?? -1}`
+        + ` smove=${pt.sourceMove ?? 0} heal=${pt.healHp ?? 0}`);
     }
     for (const p of [A, D]) {
       lines.push(...monLines(p));
@@ -715,6 +729,10 @@ it("turntest producer", async () => {
         ? calledMoves[rnd(calledMoves.length)]
         : HEADER && rnd(10) < 6
         ? headerMoves[rnd(headerMoves.length)]
+        : DELAYED && rnd(10) < 6
+        ? delayedMoves[rnd(delayedMoves.length)]
+        : DELAYED
+        ? (rnd(4) === 0 ? protectOnly[rnd(protectOnly.length)] : attacks[rnd(attacks.length)])
         : HEADER
         ? (rnd(2) === 0 ? contactAttacks[rnd(contactAttacks.length)] : headerHitters[rnd(headerHitters.length)])
         : TAGS && rnd(10) < 8
@@ -953,6 +971,40 @@ it("turntest producer", async () => {
           if (!scene.arena.getTagOnSide(type, side)) {
             scene.arena.tags.push(getArenaTag(type, 1 + rnd(5), MoveId.NONE, A.id, side));
           }
+        }
+      }
+    }
+    if (DELAYED) {
+      // pending Future Sight, Doom Desire and Wish tags, built by upstream's own loader
+      const mgr = scene.arena.positionalTagManager;
+      for (let k = rnd(3) === 0 ? 0 : 1 + rnd(2); k > 0; k--) {
+        const targetIndex = [A.getBattlerIndex(), D.getBattlerIndex(), A.getBattlerIndex() + 1][rnd(5) === 0 ? 2 : rnd(2)];
+        const target = targetIndex === A.getBattlerIndex() ? A : targetIndex === D.getBattlerIndex() ? D : null;
+        if (rnd(3) === 0) {
+          mgr.addTag({
+            tagType: PositionalTagType.WISH,
+            turnCount: 1 + rnd(2),
+            targetIndex,
+            healHp: 1 + rnd(target ? target.getMaxHp() : 100),
+            pokemonName: "x",
+          });
+        } else {
+          const bench = party.slice(1);
+          const r = rnd(8);
+          const sourceId = r < 3 ? A.id : r < 6 ? D.id : r === 6 && bench.length ? bench[rnd(bench.length)].id
+            : r === 6 ? A.id : 1 + rnd(1000);
+          mgr.addTag({
+            tagType: PositionalTagType.DELAYED_ATTACK,
+            sourceId,
+            targetIndex,
+            sourceMove: rnd(2) === 0 ? MoveId.FUTURE_SIGHT : MoveId.DOOM_DESIRE,
+            turnCount: rnd(2) === 0 ? 1 : 2 + rnd(2),
+          });
+        }
+      }
+      for (const p of [A, D]) {
+        if (rnd(3) === 0) {
+          p.hp = 1 + rnd(Math.max(1, Math.floor(p.getMaxHp() / 4)));
         }
       }
     }

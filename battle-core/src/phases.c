@@ -21,6 +21,21 @@ static int32_t max_hp(const pr_pokemon *p) { return pr_get_stat(p, STAT_HP, fals
 /* getPokemon() of a PokemonPhase: the Pokemon in that field slot */
 static pr_pokemon *slot(pr_battle *bt, int b) { return b >= 0 && b < 4 ? bt->field[b] : NULL; }
 
+/* MoveEffectPhase.getUserPokemon(): a delayed attack's phase was given the source's Pokemon.id as
+ * its battlerIndex (getPokemonById: both parties; only the field is modelled), the others their
+ * user's field slot */
+static pr_pokemon *me_user(pr_battle *bt, const pr_phase *fx)
+{
+    if (fx->user_id < 0) return slot(bt, fx->battler);
+    pr_pokemon *p = pr_field_pokemon_by_id(bt, fx->user_id);
+    if (!p) pr_note_unported(bt, PR_FEAT_PARTY);
+    return p;
+}
+/* PokemonPhase.player and fieldIndex: battlerIndex < 2 and battlerIndex % 2, the Pokemon.id's for a
+ * delayed attack */
+static bool me_player(const pr_phase *fx) { return fx->user_id < 0 && fx->battler < 2; }
+static int me_field_index(const pr_phase *fx) { return fx->user_id < 0 ? fx->battler % 2 : (int)(fx->user_id % 2); }
+
 /* globalScene.getField(true).filter(p => list.includes(p.getBattlerIndex())), in field order */
 static int active_in_list(pr_battle *bt, const pr_target_list *t, pr_pokemon **out)
 {
@@ -1113,7 +1128,7 @@ static bool check_bypass_acc_and_invuln(pr_battle *bt, pr_pokemon *user, pr_poke
 static int hit_check(pr_battle *bt, pr_engine *e, int ph, pr_pokemon *target, double *eff_out)
 {
     pr_phase *fx = PH(ph);
-    pr_pokemon *user = slot(bt, fx->battler);
+    pr_pokemon *user = me_user(bt, fx);
     int move = fx->move_id;
     const pr_move *mv = &pr_moves[move];
     *eff_out = 0;
@@ -1369,7 +1384,7 @@ static void apply_on_target_effects(pr_battle *bt, pr_engine *e, int ph, pr_poke
 static void apply_move_effects(pr_battle *bt, pr_engine *e, int ph, pr_pokemon *target, double eff, bool first_target)
 {
     pr_phase *fx = PH(ph);
-    pr_pokemon *user = slot(bt, fx->battler);
+    pr_pokemon *user = me_user(bt, fx);
     int move = fx->move_id;
     trigger_move_effects(bt, e, ph, MOVE_EFFECT_TRIGGER_PRE_APPLY, user, target, -1, -1);
     /* applyMove */
@@ -1393,7 +1408,7 @@ pr_pokemon *pr_move_effect_user(pr_battle *bt, pr_engine *e, int *move)
     if (!e || e->current < 0 || e->pool[e->current].type != PH_MOVE_EFFECT) return NULL;
     const pr_phase *fx = &e->pool[e->current];
     if (move) *move = fx->move_id;
-    return slot(bt, fx->battler);
+    return me_user(bt, fx);
 }
 
 void pr_stop_multi_hit(pr_battle *bt, pr_engine *e, pr_pokemon *target)
@@ -1413,7 +1428,7 @@ void pr_stop_multi_hit(pr_battle *bt, pr_engine *e, pr_pokemon *target)
             break;
         }
     if (t->n == 0) {
-        pr_pokemon *user = slot(bt, fx->battler);
+        pr_pokemon *user = me_user(bt, fx);
         if (user) {
             user->hit_count = 1;
             user->hits_left = 1;
@@ -1424,11 +1439,12 @@ void pr_stop_multi_hit(pr_battle *bt, pr_engine *e, pr_pokemon *target)
 static void move_effect_end(pr_battle *bt, pr_engine *e, int ph)
 {
     pr_phase *fx = PH(ph);
-    pr_pokemon *user = slot(bt, fx->battler);
+    pr_pokemon *user = me_user(bt, fx);
     if (--user->hits_left >= 1 && me_first_target(bt, e, ph, NULL)) {
         /* addNextHitPhase */
         int nx = new_pokemon_phase(e, PH_MOVE_EFFECT, fx->battler);
         if (nx < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }
+        PH(nx)->user_id = fx->user_id;
         PH(nx)->targets = fx->targets;
         PH(nx)->move_id = fx->move_id;
         PH(nx)->use_mode = fx->use_mode;
@@ -1439,7 +1455,7 @@ static void move_effect_end(pr_battle *bt, pr_engine *e, int ph)
     }
     int total = user->hit_count - (user->hits_left > 0 ? user->hits_left : 0);
     if (total > 1 || user->hits_left > 0) pr_queue_message(bt, e);
-    turn_modifiers(bt, fx->battler < 2, user);                  /* HitHealModifier (Shell Bell) */
+    turn_modifiers(bt, me_player(fx), user);                    /* HitHealModifier (Shell Bell) */
     pr_pokemon *t[4];
     int n = active_in_list(bt, tlist(e, fx->targets), t);
     for (int i = 0; i < n; i++) t[i]->turn_move_effectiveness = -1;
@@ -1524,30 +1540,63 @@ static void move_header_phase(pr_battle *bt, pr_engine *e, int ph)
 static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
 {
     pr_phase *fx = PH(ph);
-    pr_pokemon *user = slot(bt, fx->battler);
+    pr_pokemon *user = me_user(bt, fx);
     if (!user) return;
     int move = fx->move_id;
-    if (user->is_player) bt->last_player_involved = (int8_t)(fx->battler % 2);
-    else bt->last_enemy_involved = (int8_t)(fx->battler % 2);
+    if (user->is_player) bt->last_player_involved = (int8_t)me_field_index(fx);
+    else bt->last_enemy_involved = (int8_t)me_field_index(fx);
 
     /* applyMoveAttrs("OverrideMoveEffectAttr", user, getFirstTarget() ?? null, move, overridden, useMode):
      * the move-calling attributes queue their move and return without overriding anything */
     const pr_move *omv = &pr_moves[move];
+    bool overridden = false;
     for (unsigned i = 0; i < omv->nattr; i++) {
         const pr_attr *a = &pr_attrs[omv->attr0 + i];
         if (!pr_attr_is(a->cls, PR_AC_OverrideMoveEffectAttr)) continue;
         switch (a->cls) {
+        case PR_AC_DelayedAttackAttr: {
+            /* Future Sight, Doom Desire: not when this is the attack landing (DELAYED_ATTACK). The
+             * charge animation, the message, a history entry (OTHER, [target]), and a tag on the
+             * target's slot that lands in 3 turns */
+            if (fx->use_mode == MOVE_USE_MODE_DELAYED_ATTACK) break;
+            overridden = true;
+            pr_pokemon *tgt;
+            me_first_target(bt, e, ph, &tgt);
+            if (!tgt) { pr_note_unported(bt, a->cls); break; }        /* upstream reads a missing target */
+            int tb = pr_battler_index(bt, tgt);
+            unshift_new(bt, e, PH_MOVE_ANIM, -1);
+            pr_queue_message(bt, e);
+            if (is_on_field(user)) {                                    /* pushMoveHistory */
+                pr_turn_move tm;
+                memset(&tm, 0, sizeof tm);
+                tm.move = (uint16_t)move;
+                tm.use_mode = fx->use_mode;
+                tm.result = MOVE_RESULT_OTHER;
+                tm.targets[0] = (int8_t)tb;
+                tm.n_targets = 1;
+                pr_push_move_history(user, tm);
+            }
+            pr_positional_tag pt = {.type = POSITIONAL_TAG_TYPE_DELAYED_ATTACK, .turn_count = 3,
+                                    .target_index = (int8_t)tb, .source_id = user->id, .source_move = (uint16_t)move};
+            pr_pos_add(bt, e, &pt);
+            fx = PH(ph);
+            break;
+        }
         case PR_AC_NaturePowerAttr: case PR_AC_CopyMoveAttr: case PR_AC_RandomMoveAttr: case PR_AC_RandomMovesetMoveAttr: {
             pr_pokemon *first0;
             me_first_target(bt, e, ph, &first0);
             call_move(bt, e, move, a, user, first0);
             break;
         }
-        default:            /* DelayedAttackAttr (Future Sight), AwaitCombinedPledgeAttr, MovesetCopyMoveAttr (Mimic) */
+        default:            /* AwaitCombinedPledgeAttr, MovesetCopyMoveAttr (Mimic) */
             pr_note_unported(bt, a->cls);
         }
     }
     fx = PH(ph);
+    if (overridden) {                   /* stop before the other effects: this.end() */
+        move_effect_end(bt, e, ph);
+        return;
+    }
     pr_lapse_tags(bt, e, user, BATTLER_TAG_LAPSE_TYPE_MOVE_EFFECT);
 
     pr_pokemon *first;
@@ -1933,11 +1982,51 @@ static void weather_effect_phase(pr_battle *bt, pr_engine *e)
     }
 }
 
+/* PositionalTagPhase: positionalTagManager.activateAllTags(). Each tag counts down; one that runs
+ * out goes, triggering first if it should. A delayed attack needs its source (by Pokemon.id, in
+ * either party) and a target in its slot that isn't the source and hasn't fainted: the message,
+ * then a MoveEffectPhase given the source's id, [the slot], the move, DELAYED_ATTACK. Wish needs a
+ * target that hasn't fainted: a PokemonHealPhase with its message and no "HP is full" text. */
 static void positional_tag_phase(pr_battle *bt, pr_engine *e)
 {
-    (void)bt; (void)e;
-    /* arena.positionalTagManager: Wish and Future Sight aren't modelled; the producer starts
-     * every case without them, and nothing ported adds one */
+    pr_positional_tag left[PR_MAX_POSITIONAL_TAGS], tags[PR_MAX_POSITIONAL_TAGS];
+    int n = bt->n_pos_tags, nl = 0;
+    memcpy(tags, bt->pos_tags, (size_t)n * sizeof tags[0]);
+    for (int i = 0; i < n; i++) {
+        pr_positional_tag *t = &tags[i];
+        if (--t->turn_count > 0) {
+            left[nl++] = *t;
+            continue;
+        }
+        pr_pokemon *target = t->target_index >= 0 && t->target_index < 4 ? bt->field[t->target_index] : NULL;
+        if (t->type == POSITIONAL_TAG_TYPE_DELAYED_ATTACK) {
+            pr_pokemon *source = pr_field_pokemon_by_id(bt, t->source_id);
+            if (!source) {
+                for (int s = 0; s < 2; s++)
+                    for (int k = 0; k < bt->n_party[s]; k++)
+                        if (bt->party[s][k].id == t->source_id) pr_note_unported(bt, PR_FEAT_PARTY);   /* off the field */
+                continue;
+            }
+            if (!target || source == target || target->hp <= 0) continue;
+            pr_queue_message(bt, e);                                   /* moveTriggers:tookMoveAttack */
+            int fx = new_pokemon_phase(e, PH_MOVE_EFFECT, -1);
+            if (fx < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); continue; }
+            PH(fx)->user_id = t->source_id;
+            int8_t tv[1] = {t->target_index};
+            PH(fx)->targets = (int8_t)pr_targets_new(e, tv, 1);
+            PH(fx)->move_id = t->source_move;
+            PH(fx)->use_mode = MOVE_USE_MODE_DELAYED_ATTACK;
+            PH(fx)->n_hit_checks = 1;
+            PH(fx)->hit_check[0] = HIT_CHECK_RESULT_PENDING;
+            PH(fx)->hit_eff[0] = 0;
+            pr_phase_unshift(bt, e, fx);
+        } else {
+            if (!target || target->hp <= 0) continue;
+            pr_unshift_heal(bt, e, t->target_index, t->heal_hp, PR_HEAL_MESSAGE | PR_HEAL_NO_FULL_HP_MESSAGE);
+        }
+    }
+    memcpy(bt->pos_tags, left, (size_t)nl * sizeof left[0]);
+    bt->n_pos_tags = (uint8_t)nl;
 }
 
 static void berry_phase(pr_battle *bt, pr_engine *e)
@@ -2431,7 +2520,7 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_CHECK_STATUS_EFFECT: check_status_effect_phase(bt, e); break;
     case PH_POST_TURN_STATUS_EFFECT: post_turn_status_effect_phase(bt, e, ph); break;
     case PH_TURN_END: turn_end_phase(bt, e); break;
-    case PH_MESSAGE: case PH_DAMAGE_ANIM: case PH_COMMON_ANIM: case PH_POKEMON_ANIM: case PH_LOAD_MOVE_ANIM: break;
+    case PH_MESSAGE: case PH_DAMAGE_ANIM: case PH_COMMON_ANIM: case PH_POKEMON_ANIM: case PH_LOAD_MOVE_ANIM: case PH_MOVE_ANIM: break;
     case PH_SHOW_ABILITY: show_ability_phase(bt, e, ph); break;
     case PH_HIDE_ABILITY: bt->ability_bar_visible = false; break;
     case PH_RESET_STATUS: reset_status_phase(bt, e, ph); break;

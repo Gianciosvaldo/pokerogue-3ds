@@ -329,6 +329,20 @@ static double one_hit_ko(ARGS)
     return !cancelled && u->level >= t->level;
 }
 
+/* DelayedAttackAttr, WishAttr: positionalTagManager.canAddTag(type, target.getBattlerIndex()) */
+static double delayed_attack_free(ARGS)
+{
+    UNUSED;
+    NEED_TARGET;
+    return pr_pos_can_add(bt, POSITIONAL_TAG_TYPE_DELAYED_ATTACK, pr_battler_index(bt, t));
+}
+static double wish_free(ARGS)
+{
+    UNUSED;
+    NEED_TARGET;
+    return pr_pos_can_add(bt, POSITIONAL_TAG_TYPE_WISH, pr_battler_index(bt, t));
+}
+
 /* Shell Trap (sequence 3): user.getTag(ShellTrapTag)?.activated === true */
 static double shell_trap_activated(ARGS)
 {
@@ -867,6 +881,8 @@ const pr_closure_reg pr_condition_closures[] = {
     {NULL, "d747fd904def", one_hit_ko},
     /* singletons shared by several moves: the owner is the first move that uses them */
     {"move:704", "f1c1f1aae9ec", shell_trap_activated},
+    {NULL, "bf18660b4b9a", delayed_attack_free},    /* DelayedAttackAttr: Future Sight, Doom Desire */
+    {NULL, "2446932a5de5", wish_free},              /* WishAttr */
     {"move:68", "988ffaba8576", counter_physical},
     {"move:243", "988ffaba8576", counter_special},
     {"move:368", "988ffaba8576", counter_both},

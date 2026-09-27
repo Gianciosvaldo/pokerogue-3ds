@@ -130,6 +130,17 @@ typedef struct pr_arena_tag {
 } pr_arena_tag;
 #define PR_MAX_ARENA_TAGS 24
 
+/* arena.positionalTagManager.tags: Future Sight and Doom Desire (DelayedAttackTag), Wish (WishTag) */
+typedef struct pr_positional_tag {
+    uint8_t type;                  /* PositionalTagType */
+    int16_t turn_count;
+    int8_t target_index;           /* BattlerIndex of the slot it lands on */
+    int64_t source_id;             /* DelayedAttackTag.sourceId */
+    uint16_t source_move;          /* DelayedAttackTag.sourceMove */
+    double heal_hp;                /* WishTag.healHp */
+} pr_positional_tag;
+#define PR_MAX_POSITIONAL_TAGS 8
+
 /* A summonData.moveHistory / moveQueue entry (TurnMove) */
 enum { PR_MOVE_RESULT_UNDEFINED = 0xff };   /* TurnMove.result left undefined */
 typedef struct pr_turn_move {
@@ -250,6 +261,8 @@ typedef struct pr_battle {
     uint8_t terrain;           /* TerrainType */
     pr_arena_tag arena_tags[PR_MAX_ARENA_TAGS]; /* arena.tags */
     uint8_t n_arena_tags;
+    pr_positional_tag pos_tags[PR_MAX_POSITIONAL_TAGS];   /* arena.positionalTagManager.tags */
+    uint8_t n_pos_tags;
     /* globalScene.modifiers (player, [0]) and enemyModifiers ([1]), in upstream list order */
     pr_modifier mods[2][PR_MAX_MODIFIERS];
     uint8_t n_mods[2];

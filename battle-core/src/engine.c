@@ -15,7 +15,7 @@ const char *const pr_phase_name[PH_COUNT_] = {
     [PH_POST_TURN_STATUS_EFFECT] = "PostTurnStatusEffectPhase", [PH_TURN_END] = "TurnEndPhase", [PH_RESET_STATUS] = "ResetStatusPhase",
     [PH_MESSAGE] = "MessagePhase", [PH_DAMAGE_ANIM] = "DamageAnimPhase", [PH_COMMON_ANIM] = "CommonAnimPhase",
     [PH_SHOW_ABILITY] = "ShowAbilityPhase", [PH_HIDE_ABILITY] = "HideAbilityPhase", [PH_POKEMON_ANIM] = "PokemonAnimPhase",
-    [PH_LOAD_MOVE_ANIM] = "LoadMoveAnimPhase",
+    [PH_LOAD_MOVE_ANIM] = "LoadMoveAnimPhase", [PH_MOVE_ANIM] = "MoveAnimPhase",
     [PH_TURN_INIT] = "TurnInitPhase", [PH_VICTORY] = "VictoryPhase", [PH_SWITCH] = "SwitchPhase",
     [PH_SWITCH_SUMMON] = "SwitchSummonPhase", [PH_GAME_OVER] = "GameOverPhase", [PH_BATTLE_END] = "BattleEndPhase",
     [PH_SELECT_MODIFIER] = "SelectModifierPhase",
@@ -62,6 +62,7 @@ int pr_phase_new(pr_engine *e, pr_phase_type type, int8_t battler)
             memset(p, 0, sizeof *p);
             p->type = (uint8_t)type;
             p->battler = battler;
+            p->user_id = -1;
             p->targets = -1;
             p->source = -1;
             p->move.slot = -1;
@@ -539,7 +540,8 @@ static void trace(pr_engine *e, int ph)
                          || p->type == PH_POKEMON_HEAL || p->type == PH_POST_TURN_STATUS_EFFECT
                          || p->type == PH_MOVE_CHARGE;
     pokemon_phase = pokemon_phase || p->type == PH_MOVE_REFLECT;
-    if (pokemon_phase && p->battler >= 0) snprintf(out, 40, "%s:%d", pr_phase_name[p->type], p->battler);
+    if (pokemon_phase && p->user_id >= 0) snprintf(out, 40, "%s:%lld", pr_phase_name[p->type], (long long)p->user_id);
+    else if (pokemon_phase && p->battler >= 0) snprintf(out, 40, "%s:%d", pr_phase_name[p->type], p->battler);
     else snprintf(out, 40, "%s", pr_phase_name[p->type]);
 }
 

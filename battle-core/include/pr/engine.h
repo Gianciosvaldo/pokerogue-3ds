@@ -20,7 +20,7 @@ typedef enum {
     PH_TURN_END, PH_RESET_STATUS, PH_STAT_STAGE_CHANGE, PH_OBTAIN_STATUS_EFFECT, PH_MOVE_CHARGE, PH_POKEMON_HEAL,
     PH_MOVE_HEADER,
     /* presentation: no battle state of their own */
-    PH_MESSAGE, PH_DAMAGE_ANIM, PH_COMMON_ANIM, PH_SHOW_ABILITY, PH_HIDE_ABILITY, PH_POKEMON_ANIM, PH_LOAD_MOVE_ANIM,
+    PH_MESSAGE, PH_DAMAGE_ANIM, PH_COMMON_ANIM, PH_SHOW_ABILITY, PH_HIDE_ABILITY, PH_POKEMON_ANIM, PH_LOAD_MOVE_ANIM, PH_MOVE_ANIM,
     /* where a turn hands control back to the caller */
     PH_TURN_INIT, PH_VICTORY, PH_SWITCH, PH_SWITCH_SUMMON, PH_GAME_OVER, PH_BATTLE_END, PH_SELECT_MODIFIER,
     /* not ported yet: created where upstream creates them (so the order stays right), and
@@ -43,6 +43,8 @@ typedef struct pr_phase {
     uint8_t type;              /* pr_phase_type */
     uint8_t marker_of;         /* PH_MARKER: the dynamic phase type it stands for */
     int8_t battler;            /* PokemonPhase.battlerIndex (0-3), -1 = none */
+    int64_t user_id;           /* MoveEffectPhase of a delayed attack: the battlerIndex it was given is
+                                * the source's Pokemon.id (getPokemonById); -1 = none */
     pr_pokemon *pokemon;       /* MovePhase.pokemon (fixed at creation) */
     /* MovePhase / MoveEffectPhase: the targets array, shared upstream between the turn
      * command, these phases and the move history entry (see pr_targets) */
@@ -185,6 +187,9 @@ void pr_find_and_remove_tags(pr_battle *bt, pr_engine *e, pr_pokemon *p, const i
 /* ---- arena tags being added, lapsed and removed (src/arena_tags.c) ---- */
 /* arena.addTag(tagType, turnCount, sourceMove, sourceId, side, quiet): whether a new tag was added
  * (an existing one on that side overlaps instead) */
+/* positionalTagManager.canAddTag(type, targetIndex) and addTag */
+bool pr_pos_can_add(const pr_battle *bt, int type, int target_index);
+void pr_pos_add(pr_battle *bt, pr_engine *e, const pr_positional_tag *t);
 bool pr_arena_add_tag(pr_battle *bt, pr_engine *e, int type, int turn_count, int source_move, int64_t source_id,
                       int side, bool quiet);
 /* EntryHazardTag.maxLayers (canAdd: layers < maxLayers) */

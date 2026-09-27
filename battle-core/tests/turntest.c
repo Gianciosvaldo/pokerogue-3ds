@@ -15,6 +15,7 @@
 
 static const char *const battler_tag_names[] = {BATTLER_TAG_TYPE_VALUES};
 static const char *const arena_tag_names[] = {ARENA_TAG_TYPE_VALUES};
+static const char *const pos_tag_names[] = {POSITIONAL_TAG_TYPE_VALUES};
 
 #define MAX_LINES 128
 #define LINE_LEN 2048
@@ -205,6 +206,18 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             t->source_move = (uint16_t)inum(l, "smove");
             t->source_id = inum(l, "sid");
             t->layers = field(l, "layers") ? (int8_t)inum(l, "layers") : 1;   /* EntryHazardTag */
+        } else if (!strncmp(l, "POS ", 4)) {             /* positionalTagManager.tags */
+            if (bt->n_pos_tags >= PR_MAX_POSITIONAL_TAGS) { fprintf(stderr, "too many positional tags\n"); exit(2); }
+            pr_positional_tag *t = &bt->pos_tags[bt->n_pos_tags++];
+            memset(t, 0, sizeof *t);
+            int type = name_index(pos_tag_names, POSITIONAL_TAG_TYPE_COUNT_, need(l, "type"));
+            if (type < 0) { fprintf(stderr, "unknown positional tag %s\n", need(l, "type")); exit(2); }
+            t->type = (uint8_t)type;
+            t->turn_count = (int16_t)inum(l, "turns");
+            t->target_index = (int8_t)inum(l, "target");
+            t->source_id = inum(l, "sid");
+            t->source_move = (uint16_t)inum(l, "smove");
+            t->heal_hp = dnum(l, "heal");
         } else if (!strncmp(l, "MON ", 4)) {
             pr_pokemon *p = mon_for(cs, (int)inum(l, "b"));
             memset(p, 0, sizeof *p);
@@ -596,6 +609,11 @@ static void dump_state(lines_t *L, const pr_battle *bt, const case_state *cs, bo
         if (pr_arena_tag_is(t->type, PR_ARENACLASS_ENTRY_HAZARD)) snprintf(layers, sizeof layers, " layers=%d", t->layers);
         add_line(L, "ATAG type=%s side=%d turns=%d max=%d smove=%d sid=%lld%s", arena_tag_names[t->type], t->side,
                  t->turn_count, t->max_duration, t->source_move, (long long)t->source_id, layers);
+    }
+    for (int i = 0; i < bt->n_pos_tags; i++) {
+        const pr_positional_tag *t = &bt->pos_tags[i];
+        add_line(L, "POS type=%s turns=%d target=%d sid=%lld smove=%d heal=%.17g", pos_tag_names[t->type], t->turn_count,
+                 t->target_index, (long long)t->source_id, t->source_move, t->heal_hp);
     }
     dump_mon(L, bt, &cs->mon[0], 0, incomplete);
     dump_mon(L, bt, &cs->mon[1], 2, incomplete);

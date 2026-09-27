@@ -309,3 +309,22 @@ void pr_arena_conditional_protect(pr_battle *bt, pr_engine *e, int side, const p
         *bypass = *bypass || t->type == ARENA_TAG_TYPE_CRAFTY_SHIELD;   /* ignoresBypass */
     }
 }
+
+/* ---------------------------------------------------------------- positional tags */
+
+bool pr_pos_can_add(const pr_battle *bt, int type, int target_index)
+{
+    for (int i = 0; i < bt->n_pos_tags; i++)
+        if (bt->pos_tags[i].type == type && bt->pos_tags[i].target_index == target_index) return false;
+    return true;
+}
+
+void pr_pos_add(pr_battle *bt, pr_engine *e, const pr_positional_tag *t)
+{
+    if (bt->n_pos_tags >= PR_MAX_POSITIONAL_TAGS) {
+        pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT);
+        if (e) e->overflow = true;
+        return;
+    }
+    bt->pos_tags[bt->n_pos_tags++] = *t;
+}
