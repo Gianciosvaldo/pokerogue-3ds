@@ -233,6 +233,28 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         }
         pr_queue_message(bt, e);                         /* moveTriggers:fallDown */
         return;
+    case PR_AC_RepeatMoveAttr: {                         /* Instruct: no canApply check */
+        /* the target uses the moveset move the condition found, again, at the targets of its last
+         * use (recomputed for a move that hits several), as a normal move going first */
+        int slot = pr_instruct_slot(target);
+        bool unknown;
+        const pr_turn_move *last = pr_last_non_virtual_move(bt, target, false, true, &unknown);
+        if (slot < 0 || !last) { pr_note_unported(bt, a->cls); return; }
+        int mm = target->moves[slot];
+        int8_t tg[4];
+        int n;
+        if (pr_move_is_multi_target(mm)) {
+            bool multiple;
+            n = pr_get_move_targets(bt, target, mm, -1, tg, &multiple);
+        } else {
+            n = last->n_targets;
+            memcpy(tg, last->targets, (size_t)n);
+        }
+        if (bt->double_battle && n == 1) pr_note_unported(bt, PR_FEAT_DOUBLES);   /* a fainted target's ally */
+        pr_queue_message(bt, e);                         /* moveTriggers:instructingMove */
+        pr_unshift_move_phase(bt, e, target, mm, slot, tg, n, MOVE_USE_MODE_NORMAL, MOVE_PHASE_TIMING_MODIFIER_FIRST);
+        return;
+    }
     case PR_AC_ExposedMoveAttr:                          /* Foresight, Odor Sleuth, Miracle Eye */
         if (add_battler_tag(bt, e, a, ef, user, target, move)) pr_queue_message(bt, e);   /* moveTriggers:exposedMove */
         return;

@@ -13,6 +13,7 @@
  * and returns true; a turn with an unported condition is not claimed faithful. */
 #include "pr/engine.h"
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define UNPORTED(id) do { pr_note_unported(bt, (id)); return 1; } while (0)
@@ -526,13 +527,7 @@ static double yawn(ARGS)
  * getLastNonVirtualMove(): moveHistory.findLast(m => m.move !== NONE && !isVirtual(m.useMode)) */
 static const pr_turn_move *last_non_virtual_move(pr_battle *bt, const pr_pokemon *p, bool *unknown)
 {
-    *unknown = false;
-    for (int k = 0; k < p->n_move_history; k++) {
-        const pr_turn_move *tm = pr_last_move(bt, p, k);
-        if (!tm) { *unknown = true; return NULL; }             /* older than the kept entries (reported) */
-        if (tm->move != MOVE_ID_NONE && tm->use_mode < MOVE_USE_MODE_INDIRECT) return tm;
-    }
-    return NULL;
+    return pr_last_non_virtual_move(bt, p, false, true, unknown);
 }
 static double disable(ARGS)
 {
@@ -790,6 +785,59 @@ static double no_damp(ARGS)
     return !cancelled;
 }
 
+/* CallMoveAttrWithBanlist.getCondition (Metronome, Mirror Move, Sleep Talk, Assist, Copycat):
+ * this.getMove(user, target) !== NONE, with `this` the move's own attribute. Metronome draws a
+ * move here and again when it applies; Sleep Talk and Assist keep this pick for their apply. */
+static double call_move_possible(ARGS)
+{
+    UNUSED;
+    int mv = atoi(self->owner + 5);                            /* "move:<id>" */
+    const pr_move *pm = &pr_moves[mv];
+    for (unsigned i = 0; i < pm->nattr; i++) {
+        const pr_attr *a = &pr_attrs[pm->attr0 + i];
+        if (a->cls == PR_AC_CopyMoveAttr || a->cls == PR_AC_RandomMoveAttr || a->cls == PR_AC_RandomMovesetMoveAttr)
+            return pr_call_move_get(bt, bt->engine, mv, a, u, t) != MOVE_ID_NONE;
+    }
+    pr_note_unported(bt, PR_FEAT_MOVE_CONDITION);
+    return 1;
+}
+
+/* Mimic (targetMoveCopiableCondition): the target's last non-virtual move, unless it is a
+ * charging move whose entry is the charging turn (OTHER) */
+static double target_move_copiable(ARGS)
+{
+    UNUSED;
+    NEED_TARGET;
+    bool unknown;
+    const pr_turn_move *tm = last_non_virtual_move(bt, t, &unknown);
+    if (unknown) return 1;
+    if (!tm || !tm->move) return 0;
+    const char *k = pr_moves[tm->move].kind;
+    if ((!strcmp(k, "ChargingAttackMove") || !strcmp(k, "ChargingSelfStatusMove")) && tm->result == MOVE_RESULT_OTHER)
+        return 0;
+    return 1;
+}
+
+/* Instruct (RepeatMoveAttr.getCondition): the target's last non-virtual move, still in its
+ * moveset with PP left and not one Instruct can't repeat; that moveset move is kept for apply */
+static double instruct(ARGS)
+{
+    UNUSED;
+    NEED_TARGET;
+    bool unknown;
+    const pr_turn_move *tm = last_non_virtual_move(bt, t, &unknown);
+    if (unknown) return 1;
+    int slot = -1;
+    for (int s = 0; tm && s < t->n_moves; s++)
+        if (t->moves[s] == tm->move) { slot = s; break; }
+    if (!tm || !tm->move || slot < 0) return 0;
+    int max = move_pp(t->moves[slot], t->pp_up[slot], t->max_pp_override[slot]);   /* isOutOfPp */
+    if (max > 0 && t->pp_used[slot] >= max) return 0;
+    if (pr_instruct_invalid(tm->move)) return 0;
+    pr_instruct_keep(t, slot);
+    return 1;
+}
+
 const pr_closure_reg pr_condition_closures[] = {
     /* attribute conditions, any owner */
     {NULL, "7680b4c661ce", tag_overlap},
@@ -866,5 +914,8 @@ const pr_closure_reg pr_condition_closures[] = {
     {NULL, "f4be08971a26", side_bench_left},
     {NULL, "393096486706", teleport},
     {NULL, "286341e0a59e", no_damp},
+    {NULL, "9ff91522e088", call_move_possible},
+    {NULL, "be284c144c45", target_move_copiable},
+    {NULL, "f4ea51926183", instruct},
 };
 const int pr_condition_closures_n = sizeof pr_condition_closures / sizeof pr_condition_closures[0];

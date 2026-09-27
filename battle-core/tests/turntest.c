@@ -40,6 +40,7 @@ static int name_index(const char *const *names, int n, const char *s)
 
 /* whether the data file carries moneyScattered and addedType (files written before they were dumped don't) */
 static bool has_money;
+static bool has_biome;         /* the ARENA line gives the biome */
 
 /* The value of key=... in a record line (NULL if absent). Returns a pointer into a static
  * buffer, valid until the next call. */
@@ -188,6 +189,9 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             bt->terrain_max_duration = (int16_t)inum(l, "tmax");
             bt->ignore_abilities = inum(l, "ignab") != 0;
             bt->ignoring_effect_source = (int8_t)unum(l, "ignsrc", -1);
+            has_biome = field(l, "biome") != NULL;
+            bt->has_biome = has_biome;
+            bt->biome = has_biome ? (int16_t)inum(l, "biome") : 0;
         } else if (!strncmp(l, "ATAG ", 5)) {
             if (bt->n_arena_tags >= PR_MAX_ARENA_TAGS) { fprintf(stderr, "too many arena tags\n"); exit(2); }
             pr_arena_tag *t = &bt->arena_tags[bt->n_arena_tags++];
@@ -346,12 +350,19 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             if (side < 0 || side > 1 || n > PR_MAX_PARTY) { cs->skip = 1; continue; }
             bt->n_party[side] = (uint8_t)n;
             for (int j = 0; j < n; j++) {
-                char f[4][64];
-                split(ms[j], ':', f, 4);
+                char f[5][64] = {{0}};
+                int nf = split(ms[j], ':', f, 5);
                 bt->party[side][j].id = (uint32_t)strtoul(f[0], NULL, 10);
                 bt->party[side][j].species = (uint16_t)atoi(f[1]);
                 bt->party[side][j].status = (uint8_t)atoi(f[2]);
                 bt->party[side][j].hp = atoi(f[3]);
+                if (nf == 5) {                                  /* the moveset, '/'-separated */
+                    char mv[4][64];
+                    int nm = split(f[4], '/', mv, 4);
+                    for (int k = 0; k < nm; k++) bt->party[side][j].moves[k] = (uint16_t)atoi(mv[k]);
+                    bt->party[side][j].n_moves = (uint8_t)nm;
+                    bt->party_moves_known = true;
+                }
             }
         } else if (!strncmp(l, "CMD ", 4)) {
             int b = (int)inum(l, "b");
@@ -369,6 +380,14 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             for (int j = 0; j < n; j++) {
                 char *c = strchr(hs[j], ':');
                 pr_status_healed_set((uint16_t)atoi(hs[j]), c ? atoi(c + 1) : 0);
+            }
+        } else if (!strncmp(l, "CALLSEL ", 8)) {
+            /* RandomMovesetMoveAttr.selectedMove of Sleep Talk and Assist: move:selected */
+            char cs2[8][64];
+            int n = split(need(l, "list"), ',', cs2, 8);
+            for (int j = 0; j < n; j++) {
+                char *c = strchr(cs2[j], ':');
+                pr_called_selected_set(atoi(cs2[j]), c ? atoi(c + 1) : 0);
             }
         } else if (!strncmp(l, "PRE ", 4)) {
             int b = (int)inum(l, "b");
@@ -567,6 +586,7 @@ static void dump_state(lines_t *L, const pr_battle *bt, const case_state *cs, bo
        bt->weather ? bt->weather_turns_left : 0, bt->weather ? bt->weather_max_duration : 0, bt->terrain,
        bt->terrain ? bt->terrain_turns_left : 0, bt->terrain ? bt->terrain_max_duration : 0, bt->ignore_abilities);
     num_or_u(&s, bt->ignoring_effect_source, -1);
+    if (has_biome) sb(&s, " biome=%d", bt->biome);
     add_line(L, "%s", s.s);
     for (int i = 0; i < bt->n_arena_tags; i++) {
         const pr_arena_tag *t = &bt->arena_tags[i];
@@ -589,6 +609,11 @@ static void dump_state(lines_t *L, const pr_battle *bt, const case_state *cs, bo
                 if (cs->mon[k].id == m->id) { st = cs->mon[k].status; hp = cs->mon[k].hp; }
             if (i) sb(&s, ",");
             sb(&s, "%u:%d:%d:%d", m->id, m->species, st, hp);
+            if (bt->party_moves_known) {
+                sb(&s, ":");
+                if (!m->n_moves) sb(&s, "-");
+                for (int k = 0; k < m->n_moves; k++) sb(&s, k ? "/%d" : "%d", m->moves[k]);
+            }
         }
         add_line(L, "%s", s.s);
     }
@@ -612,6 +637,14 @@ static void dump_state(lines_t *L, const pr_battle *bt, const case_state *cs, bo
         s.n = 0;
         sb(&s, "SESSION healed=");
         LIST(&s, nh, ',', "%d:%d", hab[i], hef[i]);
+        add_line(L, "%s", s.s);
+    }
+    uint16_t cm[8], csel[8];
+    int nc = pr_called_selected_list(cm, csel, 8);
+    if (nc) {
+        s.n = 0;
+        sb(&s, "CALLSEL list=");
+        LIST(&s, nc, ',', "%d:%d", cm[i], csel[i]);
         add_line(L, "%s", s.s);
     }
 }
@@ -874,6 +907,7 @@ int main(int argc, char **argv)
         memset(&cs, 0, sizeof cs);
         for (int k = 0; k < 4; k++) cs.bt.commands[k].command = cs.bt.pre_commands[k].command = -1;
         pr_status_healed_clear();
+        pr_called_selected_reset();
         read_state(&js, 0, run_at, &cs);
         bool probe = run_at < js.n && is_probe_line(js.s[run_at]);
         if (cs.skip || (cs.btag && !probe)) { skipped++; continue; }

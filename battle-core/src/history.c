@@ -25,6 +25,23 @@ const pr_turn_move *pr_last_move(pr_battle *bt, const pr_pokemon *p, int k)
     return &p->move_history[kept - 1 - k];
 }
 
+/* getLastNonVirtualMove(ignoreStruggle, ignoreFollowUp): moveHistory.findLast(m => m.move !== NONE
+ * && (!ignoreStruggle || m.move !== STRUGGLE) && (!isVirtual(m.useMode) || (!ignoreFollowUp &&
+ * m.useMode === FOLLOW_UP))). *unknown: the search ran past the kept entries (reported). */
+const pr_turn_move *pr_last_non_virtual_move(pr_battle *bt, const pr_pokemon *p, bool ignore_struggle,
+                                             bool ignore_follow_up, bool *unknown)
+{
+    *unknown = false;
+    for (int k = 0; k < p->n_move_history; k++) {
+        const pr_turn_move *tm = pr_last_move(bt, p, k);
+        if (!tm) { *unknown = true; return NULL; }
+        if (tm->move == MOVE_ID_NONE || (ignore_struggle && tm->move == MOVE_ID_STRUGGLE)) continue;
+        if (tm->use_mode < MOVE_USE_MODE_INDIRECT || (!ignore_follow_up && tm->use_mode == MOVE_USE_MODE_FOLLOW_UP))
+            return tm;
+    }
+    return NULL;
+}
+
 void pr_unshift_attack_received(pr_pokemon *p, const pr_attack_record *r)
 {
     int kept = pr_attacks_received_kept(p);

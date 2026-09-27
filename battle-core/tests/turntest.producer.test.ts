@@ -98,6 +98,13 @@
  * evasion and a third are Ghost; a quarter of the Pokemon start with a type added, some exposed,
  * grounded or charged, a quarter of the cases with Toxic Spikes down, and half the Water Shuriken
  * users are Greninja with Battle Bond.
+ * TURN_CALLED=1 aims at the moves that call moves: most moves are Metronome, Mirror Move,
+ * Copycat, Sleep Talk, Assist, Nature Power or Instruct, the rest attacks or any move; half the
+ * Sleep Talk users are asleep; each Pokemon has up to three earlier moves in its history (mostly
+ * its own, some called or used indirectly, some failed), the battle's last move is random, the
+ * bench has random movesets (Assist), the biome is random and a third of the cases have a
+ * terrain (Nature Power), a sixth have Gravity, and an eighth of the time Sleep Talk or Assist
+ * still holds a pick an earlier condition made.
  *
  * Each case builds a random singles state inside a real upstream battle, gives both sides a
  * FIGHT command the way the command phases do, then runs upstream's own phases from
@@ -116,6 +123,7 @@ import { Terrain } from "#data/terrain";
 import { Weather } from "#data/weather";
 import { AbilityId } from "#enums/ability-id";
 import { BattleType } from "#enums/battle-type";
+import { BiomeId } from "#enums/biome-id";
 import { Command } from "#enums/command";
 import { MoveCategory } from "#enums/move-category";
 import { MoveFlags } from "#enums/move-flags";
@@ -156,6 +164,7 @@ it("turntest producer", async () => {
   const PROTECT = process.env.TURN_PROTECT === "1";
   const ARENA = process.env.TURN_ARENA === "1";
   const EFFECTS = process.env.TURN_EFFECTS === "1";
+  const CALLED = process.env.TURN_CALLED === "1";
   const OUT = process.env.TURN_OUT ?? "/tmp/pr-turns.txt";
   const game = new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
   game.override
@@ -407,7 +416,7 @@ it("turntest producer", async () => {
     "RemoveHeldItemAttr", "StealHeldItemChanceAttr", "StealEatBerryAttr", "StatusIfBoostedAttr",
     "AddBattlerTagIfBoostedAttr", "JawLockAttr", "MissEffectAttr", "WaterShurikenMultiHitTypeAttr", "HealAttr",
     "SacrificialAttr", "SacrificialAttrOnHit", "HalfSacrificialAttr", "ResetStatsAttr", "SwapStatStagesAttr",
-    "ChangeTypeAttr", "MessageAttr", "FlameBurstAttr", "HealOnAllyAttr",
+    "ChangeTypeAttr", "MessageAttr", "FlameBurstAttr", "HealOnAllyAttr", "CopyTypeAttr",
   ];
   const effectMoves = usable.filter((m: any) => m.attrs.some((a: any) => effectAttrNames.includes(a.constructor.name)));
   const windMoves = attacks.filter((m: any) => (m.flags & MoveFlags.WIND_MOVE) !== 0);
@@ -416,6 +425,12 @@ it("turntest producer", async () => {
     AbilityId.STICKY_HOLD, AbilityId.MAGIC_GUARD, AbilityId.LEVITATE, AbilityId.MEGA_LAUNCHER, AbilityId.DAMP,
     AbilityId.SERENE_GRACE, AbilityId.SHEER_FORCE, AbilityId.OWN_TEMPO, AbilityId.SIMPLE,
   ];
+  // TURN_CALLED pools
+  const calledMoves = [
+    MoveId.METRONOME, MoveId.MIRROR_MOVE, MoveId.COPYCAT, MoveId.SLEEP_TALK, MoveId.ASSIST, MoveId.NATURE_POWER,
+    MoveId.INSTRUCT,
+  ].map(id => allMoves[id]);
+  const biomeIds = Object.values(BiomeId).filter(v => typeof v === "number") as number[];
   const arenaTagPool = [
     ArenaTagType.REFLECT, ArenaTagType.LIGHT_SCREEN, ArenaTagType.AURORA_VEIL, ArenaTagType.MIST, ArenaTagType.SAFEGUARD,
     ArenaTagType.SPIKES, ArenaTagType.TOXIC_SPIKES, ArenaTagType.STEALTH_ROCK, ArenaTagType.STICKY_WEB,
@@ -508,7 +523,8 @@ it("turntest producer", async () => {
     lines.push(
       `ARENA weather=${w ? w.weatherType : 0} wturns=${w ? w.turnsLeft : 0} wmax=${w ? w.maxDuration : 0}`
         + ` terrain=${t ? t.terrainType : 0} tturns=${t ? t.turnsLeft : 0} tmax=${t ? t.maxDuration : 0}`
-        + ` ignab=${scene.arena.ignoreAbilities ? 1 : 0} ignsrc=${num(scene.arena.ignoringEffectSource)}`,
+        + ` ignab=${scene.arena.ignoreAbilities ? 1 : 0} ignsrc=${num(scene.arena.ignoringEffectSource)}`
+        + ` biome=${scene.arena.biomeId}`,
     );
     for (const at of scene.arena.tags) {
       lines.push(`ATAG type=${at.tagType} side=${at.side} turns=${at.turnCount} max=${at.maxDuration} smove=${at.sourceMove ?? 0} sid=${at.sourceId ?? -1}`
@@ -523,7 +539,7 @@ it("turntest producer", async () => {
       }
     }
     for (const [side, party] of [[0, scene.getPlayerParty()], [1, scene.getEnemyParty()]] as [number, any[]][]) {
-      lines.push(`PARTY side=${side} list=${L(party.map((m: any) => `${m.id}:${m.species.speciesId}:${m.status?.effect ?? 0}:${m.hp}`))}`);
+      lines.push(`PARTY side=${side} list=${L(party.map((m: any) => `${m.id}:${m.species.speciesId}:${m.status?.effect ?? 0}:${m.hp}:${m.moveset.map((x: any) => x.moveId).join("/") || "-"}`))}`);
     }
     for (let k = 0; k < 4; k++) {
       const c = battle.turnCommands[k];
@@ -539,6 +555,13 @@ it("turntest producer", async () => {
     const healed = healStatusAttrs.filter(([, x]) => x.statusHealed).map(([id, x]) => `${id}:${x.statusHealed}`);
     if (healed.length) {
       lines.push(`SESSION healed=${L(healed)}`);
+    }
+    // the move Sleep Talk's or Assist's condition picked and apply hasn't used yet (kept on the attr object)
+    const sel = [MoveId.SLEEP_TALK, MoveId.ASSIST]
+      .map(id => [id, (allMoves[id].getAttrs("RandomMovesetMoveAttr")[0] as any).selectedMove])
+      .filter(([, v]) => v);
+    if (sel.length) {
+      lines.push(`CALLSEL list=${L(sel.map(([id, v]) => `${id}:${v}`))}`);
     }
     return lines;
   };
@@ -666,6 +689,8 @@ it("turntest producer", async () => {
         : EFFECTS && rnd(10) < 7
         ? (rnd(2) === 0 ? effectMoves[rnd(effectMoves.length)]
           : rnd(4) === 0 ? windMoves[rnd(windMoves.length)] : attacks[rnd(attacks.length)])
+        : CALLED && rnd(10) < 6
+        ? calledMoves[rnd(calledMoves.length)]
         : TAGS && rnd(10) < 8
         ? (rnd(4) !== 0 ? tagMoves[rnd(tagMoves.length)] : tagReaders[rnd(tagReaders.length)])
         : CHARGE && rnd(10) < 7
@@ -674,6 +699,9 @@ it("turntest producer", async () => {
         ? withConditions[rnd(withConditions.length)]
         : rnd(10) < 7 ? attacks[rnd(attacks.length)] : usable[rnd(usable.length)];
       p.moveset.push(new PokemonMove(m.id, rnd(8) === 0 ? rnd(m.pp + 1) : 0));
+    }
+    if (CALLED && p.moveset.some((m: any) => m.moveId === MoveId.SLEEP_TALK) && rnd(2) === 0) {
+      p.status = new Status(StatusEffect.SLEEP, rnd(4), 1 + rnd(3));
     }
     if (COND) {
       p.tempSummonData.waveTurnCount = 1 + rnd(3);
@@ -737,8 +765,43 @@ it("turntest producer", async () => {
       party.push(b);
     }
     battle.playerParticipantIds.add(A.id);
+    if (CALLED) {
+      for (const b of party.slice(1)) {
+        b.moveset = [];
+        for (let k = 1 + rnd(4); k > 0; k--) {
+          const m = rnd(3) === 0 ? calledMoves[rnd(calledMoves.length)] : usable[rnd(usable.length)];
+          b.moveset.push(new PokemonMove(m.id));
+        }
+      }
+    }
     command(A);
     command(D);
+    if (CALLED) {
+      (scene.arena as any).biomeId = biomeIds[rnd(biomeIds.length)];
+      if (rnd(3) === 0) {
+        scene.arena.terrain = new Terrain(1 + rnd(4), 1 + rnd(5), 5);
+      }
+      if (rnd(6) === 0) {
+        scene.arena.tags.push(getArenaTag(ArenaTagType.GRAVITY, 1 + rnd(5), MoveId.GRAVITY, A.id, ArenaTagSide.BOTH));
+      }
+      battle.lastMove = rnd(4) === 0 ? MoveId.NONE : usable[rnd(usable.length)].id;
+      for (const p of [A, D]) {
+        for (let k = rnd(4); k > 0; k--) {
+          const move = rnd(3) === 0 ? usable[rnd(usable.length)].id : p.moveset[rnd(p.moveset.length)].moveId;
+          p.pushMoveHistory({
+            move,
+            targets: getMoveTargets(p, move).targets,
+            useMode: [MoveUseMode.NORMAL, MoveUseMode.NORMAL, MoveUseMode.NORMAL, MoveUseMode.IGNORE_PP,
+              MoveUseMode.FOLLOW_UP, MoveUseMode.INDIRECT][rnd(6)],
+            result: rnd(4) === 0 ? MoveResult.FAIL : MoveResult.SUCCESS,
+          });
+        }
+      }
+      for (const id of [MoveId.SLEEP_TALK, MoveId.ASSIST]) {
+        (allMoves[id].getAttrs("RandomMovesetMoveAttr")[0] as any).selectedMove =
+          rnd(8) === 0 ? usable[rnd(usable.length)].id : MoveId.NONE;
+      }
+    }
     if (STAT) {
       if (rnd(8) === 0) {
         D.summonData.ability = A.summonData.ability; // Mirror Armor against Mirror Armor, Opportunist against Opportunist
@@ -1008,6 +1071,22 @@ it("turntest producer", async () => {
             other.summonData.statStages[6] = 6; // evasion
           } else if (r === 1) {
             other.summonData.types = [PokemonType.GHOST];
+          }
+        }
+        // Foresight and co. facing the tag they add (the add fails, and so does the message)
+        if (has(p, "ExposedMoveAttr") && rnd(2) === 0) {
+          const ex = p.moveset.map((m: any) => m.getMove().attrs.find((a: any) => a.constructor.name === "ExposedMoveAttr")).find(Boolean);
+          other.summonData.tags.push(getBattlerTag(ex.tagType, 1, MoveId.NONE, p.id));
+        }
+        // Pay Day's amount grows with the wave set
+        if (has(p, "MoneyAttr") && rnd(2) === 0) {
+          battle.waveIndex = 1 + rnd(190);
+        }
+        // Reflect Type at a typeless target, with or without an added type
+        if (has(p, "CopyTypeAttr") && rnd(2) === 0) {
+          other.summonData.types = [PokemonType.UNKNOWN];
+          if (rnd(2) === 0) {
+            other.summonData.addedType = PokemonType.GHOST;
           }
         }
         if (has(p, "WaterShurikenMultiHitTypeAttr") && rnd(2) === 0) {

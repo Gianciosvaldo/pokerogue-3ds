@@ -15,6 +15,7 @@ const char *const pr_phase_name[PH_COUNT_] = {
     [PH_POST_TURN_STATUS_EFFECT] = "PostTurnStatusEffectPhase", [PH_TURN_END] = "TurnEndPhase", [PH_RESET_STATUS] = "ResetStatusPhase",
     [PH_MESSAGE] = "MessagePhase", [PH_DAMAGE_ANIM] = "DamageAnimPhase", [PH_COMMON_ANIM] = "CommonAnimPhase",
     [PH_SHOW_ABILITY] = "ShowAbilityPhase", [PH_HIDE_ABILITY] = "HideAbilityPhase", [PH_POKEMON_ANIM] = "PokemonAnimPhase",
+    [PH_LOAD_MOVE_ANIM] = "LoadMoveAnimPhase",
     [PH_TURN_INIT] = "TurnInitPhase", [PH_VICTORY] = "VictoryPhase", [PH_SWITCH] = "SwitchPhase",
     [PH_SWITCH_SUMMON] = "SwitchSummonPhase", [PH_GAME_OVER] = "GameOverPhase", [PH_BATTLE_END] = "BattleEndPhase",
     [PH_SELECT_MODIFIER] = "SelectModifierPhase",

@@ -70,6 +70,22 @@ static double expanding_force(ARGS)
     return bt->terrain == TERRAIN_PSYCHIC && pr_is_grounded(bt, u, false) ? 1.5 : 1;
 }
 
+/* Expanding Force's VariableTargetAttr: PSYCHIC terrain && user.isGrounded() ? ALL_NEAR_ENEMIES : NEAR_OTHER */
+static double expanding_force_target(ARGS)
+{
+    return bt->terrain == TERRAIN_PSYCHIC && pr_is_grounded(bt, u, false) ? MOVE_TARGET_ALL_NEAR_ENEMIES
+                                                                           : MOVE_TARGET_NEAR_OTHER;
+}
+
+/* Tera Starstorm's VariableTargetAttr: Terapagos, Terastallized or with a TERA pre-turn command at
+ * preTurnCommands[user.getFieldIndex()] (the field index, even for an enemy) ? ALL_NEAR_ENEMIES : NEAR_OTHER */
+static double tera_starstorm_target(ARGS)
+{
+    int fi = pr_battler_index(bt, u) & 1;
+    return u->species == SPECIES_ID_TERAPAGOS && (u->terastallized || bt->pre_commands[fi].command == COMMAND_TERA)
+               ? MOVE_TARGET_ALL_NEAR_ENEMIES : MOVE_TARGET_NEAR_OTHER;
+}
+
 /* Misty Explosion: arena.terrainType === MISTY && user.isGrounded() ? 1.5 : 1 */
 static double misty_explosion(ARGS)
 {
@@ -331,6 +347,8 @@ const pr_closure_reg pr_move_closures[] = {
     {"move:844", "816abc2701d9", infernal_parade},
     {"move:788", "580cb60ef7a2", grav_apple},
     {"move:797", "96f28b35e308", expanding_force},
+    {"move:797", "cc7adf2cbec5", expanding_force_target},
+    {"move:906", "b299f2a493b7", tera_starstorm_target},
     {"move:802", "2444769ee78b", misty_explosion},
     {"move:804", "a34673858968", rising_voltage},
     {"move:805", "fabf9892eb01", terrain_pulse},

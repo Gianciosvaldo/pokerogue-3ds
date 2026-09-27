@@ -146,6 +146,28 @@ static void push_new(pr_battle *bt, pr_engine *e, pr_phase_type t, int battler)
     pr_phase_push(bt, e, new_pokemon_phase(e, t, battler));
 }
 
+/* unshiftNew("MovePhase", pokemon, targets, pokemonMove, useMode, timingModifier): slot is the
+ * moveset slot, -1 for a detached `new PokemonMove(id)` */
+int pr_unshift_move_phase(pr_battle *bt, pr_engine *e, pr_pokemon *p, int move, int slot, const int8_t *targets,
+                          int n_targets, int use_mode, int timing)
+{
+    int mp = new_pokemon_phase(e, PH_MOVE, pr_battler_index(bt, p));
+    if (mp < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return -1; }
+    pr_phase *m = PH(mp);
+    m->pokemon = p;
+    m->move.id = (uint16_t)move;
+    m->move.slot = (int8_t)slot;
+    m->move.pp_used = 0;
+    m->use_mode = (uint8_t)use_mode;
+    m->timing = (uint8_t)timing;
+    m->targets = (int8_t)pr_targets_new(e, targets, n_targets);
+    m->entry.move = MOVE_ID_NONE;
+    m->entry.use_mode = (uint8_t)use_mode;
+    m->entry.result = PR_MOVE_RESULT_UNDEFINED;
+    pr_phase_unshift(bt, e, mp);
+    return mp;
+}
+
 /* PokemonPhase with no battler given: the first active Pokemon of getField(), else PLAYER */
 static int default_battler(pr_battle *bt)
 {
@@ -818,7 +840,14 @@ static void move_phase(pr_battle *bt, pr_engine *e, int ph)
         first_failure_check(bt, e, ph);
         pr_lapse_tags(bt, e, user, BATTLER_TAG_LAPSE_TYPE_PRE_MOVE);
     } else if (follow_up) {
-        pr_note_unported(bt, PR_FEAT_PHASE_0 + PH_MOVE);         /* called moves */
+        /* followUpMoveFirstFailureCheck: Heal Block, Throat Chop, then Gravity (its message
+         * doesn't cancel the move, as in the first failure check) */
+        if (!(pr_lapse_tag(bt, e, user, BATTLER_TAG_TYPE_HEAL_BLOCK, BATTLER_TAG_LAPSE_TYPE_PRE_MOVE) && PH(ph)->cancelled)
+            && !(pr_lapse_tag(bt, e, user, BATTLER_TAG_TYPE_THROAT_CHOPPED, BATTLER_TAG_LAPSE_TYPE_PRE_MOVE) && PH(ph)->cancelled)
+            && pr_arena_get_tag_on_side(bt, ARENA_TAG_TYPE_GRAVITY, ARENA_TAG_SIDE_BOTH)
+            && (pr_moves[PH(ph)->move.id].flags & MOVE_FLAGS_GRAVITY))
+            pr_queue_message(bt, e);
+        m = PH(ph);
     }
     if (m->cancelled) {
         handle_pre_move_failures(bt, e, ph);
@@ -1411,6 +1440,40 @@ static void move_effect_end(pr_battle *bt, pr_engine *e, int ph)
         }
 }
 
+/* CallMoveAttr.apply: the called move aims at its normal targets when it hits several or has only
+ * one; otherwise at the move's own target (Mirror Move, Nature Power) or a random one of its
+ * targets. LoadMoveAnimPhase, then a FOLLOW_UP MovePhase that goes first. */
+static void call_move(pr_battle *bt, pr_engine *e, int move, const pr_attr *a, pr_pokemon *user, pr_pokemon *target)
+{
+    bool preserve = false;
+    switch (a->cls) {
+    case PR_AC_NaturePowerAttr: preserve = ((const pr_attr_NaturePowerAttr *)a->p)->preserveTargeting; break;
+    case PR_AC_CopyMoveAttr: preserve = ((const pr_attr_CopyMoveAttr *)a->p)->preserveTargeting; break;
+    case PR_AC_RandomMoveAttr: preserve = ((const pr_attr_RandomMoveAttr *)a->p)->preserveTargeting; break;
+    case PR_AC_RandomMovesetMoveAttr: preserve = ((const pr_attr_RandomMovesetMoveAttr *)a->p)->preserveTargeting; break;
+    }
+    int called = pr_call_move_get(bt, e, move, a, user, target);
+    int replace = pr_moves[called].target == MOVE_TARGET_NEAR_OTHER ? MOVE_TARGET_NEAR_ENEMY : -1;
+    int8_t mt[4], targets[4];
+    bool multiple;
+    int n = pr_get_move_targets(bt, user, called, replace, mt, &multiple);
+    int nt = 1;
+    if (multiple || n == 1) {
+        memcpy(targets, mt, (size_t)n);
+        nt = n;
+    } else if (preserve) {
+        if (!target) { pr_note_unported(bt, a->cls); return; }   /* upstream reads a missing target */
+        targets[0] = (int8_t)pr_battler_index(bt, target);
+    } else {
+        int k = pr_battle_rand_seed_int(bt, n, 0);
+        if (k >= n) { pr_note_unported(bt, a->cls); return; }   /* no target: [undefined] */
+        targets[0] = mt[k];
+    }
+    unshift_new(bt, e, PH_LOAD_MOVE_ANIM, -1);
+    pr_unshift_move_phase(bt, e, user, called, -1, targets, nt, MOVE_USE_MODE_FOLLOW_UP,
+                          MOVE_PHASE_TIMING_MODIFIER_FIRST);
+}
+
 static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
 {
     pr_phase *fx = PH(ph);
@@ -1420,7 +1483,24 @@ static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
     if (user->is_player) bt->last_player_involved = (int8_t)(fx->battler % 2);
     else bt->last_enemy_involved = (int8_t)(fx->battler % 2);
 
-    move_attrs_unported(bt, move, PR_AC_OverrideMoveEffectAttr);
+    /* applyMoveAttrs("OverrideMoveEffectAttr", user, getFirstTarget() ?? null, move, overridden, useMode):
+     * the move-calling attributes queue their move and return without overriding anything */
+    const pr_move *omv = &pr_moves[move];
+    for (unsigned i = 0; i < omv->nattr; i++) {
+        const pr_attr *a = &pr_attrs[omv->attr0 + i];
+        if (!pr_attr_is(a->cls, PR_AC_OverrideMoveEffectAttr)) continue;
+        switch (a->cls) {
+        case PR_AC_NaturePowerAttr: case PR_AC_CopyMoveAttr: case PR_AC_RandomMoveAttr: case PR_AC_RandomMovesetMoveAttr: {
+            pr_pokemon *first0;
+            me_first_target(bt, e, ph, &first0);
+            call_move(bt, e, move, a, user, first0);
+            break;
+        }
+        default:            /* DelayedAttackAttr (Future Sight), AwaitCombinedPledgeAttr, MovesetCopyMoveAttr (Mimic) */
+            pr_note_unported(bt, a->cls);
+        }
+    }
+    fx = PH(ph);
     pr_lapse_tags(bt, e, user, BATTLER_TAG_LAPSE_TYPE_MOVE_EFFECT);
 
     pr_pokemon *first;
@@ -2304,7 +2384,7 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_CHECK_STATUS_EFFECT: check_status_effect_phase(bt, e); break;
     case PH_POST_TURN_STATUS_EFFECT: post_turn_status_effect_phase(bt, e, ph); break;
     case PH_TURN_END: turn_end_phase(bt, e); break;
-    case PH_MESSAGE: case PH_DAMAGE_ANIM: case PH_COMMON_ANIM: case PH_POKEMON_ANIM: break;
+    case PH_MESSAGE: case PH_DAMAGE_ANIM: case PH_COMMON_ANIM: case PH_POKEMON_ANIM: case PH_LOAD_MOVE_ANIM: break;
     case PH_SHOW_ABILITY: show_ability_phase(bt, e, ph); break;
     case PH_HIDE_ABILITY: bt->ability_bar_visible = false; break;
     case PH_RESET_STATUS: reset_status_phase(bt, e, ph); break;

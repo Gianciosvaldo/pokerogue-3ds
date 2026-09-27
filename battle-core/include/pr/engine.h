@@ -19,7 +19,7 @@ typedef enum {
     PH_WEATHER_EFFECT, PH_POSITIONAL_TAG, PH_BERRY, PH_CHECK_STATUS_EFFECT, PH_POST_TURN_STATUS_EFFECT,
     PH_TURN_END, PH_RESET_STATUS, PH_STAT_STAGE_CHANGE, PH_OBTAIN_STATUS_EFFECT, PH_MOVE_CHARGE, PH_POKEMON_HEAL,
     /* presentation: no battle state of their own */
-    PH_MESSAGE, PH_DAMAGE_ANIM, PH_COMMON_ANIM, PH_SHOW_ABILITY, PH_HIDE_ABILITY, PH_POKEMON_ANIM,
+    PH_MESSAGE, PH_DAMAGE_ANIM, PH_COMMON_ANIM, PH_SHOW_ABILITY, PH_HIDE_ABILITY, PH_POKEMON_ANIM, PH_LOAD_MOVE_ANIM,
     /* where a turn hands control back to the caller */
     PH_TURN_INIT, PH_VICTORY, PH_SWITCH, PH_SWITCH_SUMMON, PH_GAME_OVER, PH_BATTLE_END, PH_SELECT_MODIFIER,
     /* not ported yet: created where upstream creates them (so the order stays right), and
@@ -158,6 +158,26 @@ void pr_remove_field_boost_tag(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool 
  * The start or clear message, then per Pokemon in speed order the boost tag it ends and the
  * abilities told about the change */
 bool pr_try_set_weather(pr_battle *bt, pr_engine *e, int weather, const pr_pokemon *user);   /* user may be NULL */
+
+/* ---- moves that call moves (src/called_moves.c) ---- */
+/* CallMoveAttr.getMove for attribute `a` of `move` (MOVE_ID_NONE when nothing can be called);
+ * e may be NULL outside a turn (Nature Power's message is then not queued) */
+int pr_call_move_get(pr_battle *bt, pr_engine *e, int move, const pr_attr *a, const pr_pokemon *user,
+                     const pr_pokemon *target);
+/* getMoveTargets(user, move, replaceTarget): the battler indexes (at most 4) and whether the move
+ * hits them all; replace_target -1 = the move's own target */
+int pr_get_move_targets(pr_battle *bt, const pr_pokemon *user, int move, int replace_target, int8_t out[4],
+                        bool *multiple);
+bool pr_move_is_multi_target(int move);              /* Move.isMultiTarget() */
+bool pr_instruct_invalid(int move);                  /* invalidInstructMoves.has(move) */
+void pr_instruct_keep(const pr_pokemon *p, int slot);   /* RepeatMoveAttr.movesetMove = p's moveset[slot] */
+int pr_instruct_slot(const pr_pokemon *p);              /* that slot when it is p's, else -1 */
+int pr_unshift_move_phase(pr_battle *bt, pr_engine *e, pr_pokemon *p, int move, int slot, const int8_t *targets,
+                          int n_targets, int use_mode, int timing);
+/* RandomMovesetMoveAttr.selectedMove, one per move (session state upstream keeps on the attribute) */
+void pr_called_selected_reset(void);
+void pr_called_selected_set(int move, int sel);
+int pr_called_selected_list(uint16_t *move, uint16_t *sel, int max);
 bool pr_try_set_terrain(pr_battle *bt, pr_engine *e, int terrain, bool ignore_anim, const pr_pokemon *user);
 void pr_remove_tags_by_source_id(pr_battle *bt, pr_engine *e, pr_pokemon *p, int64_t source_id);
 /* findAndRemoveTags(t => types.includes(t.tagType)) */

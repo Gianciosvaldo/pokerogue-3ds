@@ -230,6 +230,8 @@ typedef struct pr_party_member {
     uint16_t species;          /* Pokemon.species (not the fusion) */
     uint8_t status;            /* status?.effect, 0 = none */
     int32_t hp;
+    uint16_t moves[4];         /* moveset move ids (Assist reads them) */
+    uint8_t n_moves;
 } pr_party_member;
 #define PR_MAX_PARTY 6
 #define PR_MAX_QUEUED_MOVERS 8
@@ -277,6 +279,7 @@ typedef struct pr_battle {
     /* The parties, [0] player and [1] enemy, in order; n = 0 when the caller didn't provide one */
     pr_party_member party[2][PR_MAX_PARTY];
     uint8_t n_party[2];
+    bool party_moves_known;    /* the party's movesets were given (party[].moves) */
     /* TargetHalfHpDamageAttr.initialHp (Super Fang, Ruination...). Upstream keeps it on the
      * attribute instance, so it is shared by every user of the move and outlives the move
      * use; NaN = never set (undefined). pr_half_hp_initial finds a move's slot. */
@@ -293,6 +296,8 @@ typedef struct pr_battle {
     int post_battle_loot;      /* currentBattle.postBattleLoot.length */
     double battle_score;       /* currentBattle.battleScore */
     int32_t money_scattered;   /* currentBattle.moneyScattered (Pay Day) */
+    int16_t biome;             /* arena.biomeId (BiomeId), read when has_biome */
+    bool has_biome;
     int16_t weather_turns_left, weather_max_duration;
     int16_t terrain_turns_left, terrain_max_duration;
     bool ignore_abilities;     /* arena.ignoreAbilities */
@@ -506,6 +511,9 @@ void pr_push_move_history(pr_pokemon *p, pr_turn_move tm);
 /* getLastXMoves(k + 1)[k]: the k-th newest history entry (0 = newest), NULL when the history is
  * shorter. An entry older than the kept ones reports PR_FEAT_MOVE_HISTORY and gives NULL. */
 const pr_turn_move *pr_last_move(pr_battle *bt, const pr_pokemon *p, int k);
+/* getLastNonVirtualMove(ignoreStruggle, ignoreFollowUp); *unknown when older entries were needed */
+const pr_turn_move *pr_last_non_virtual_move(pr_battle *bt, const pr_pokemon *p, bool ignore_struggle,
+                                             bool ignore_follow_up, bool *unknown);
 /* turnData.attacksReceived.unshift(record) */
 void pr_unshift_attack_received(pr_pokemon *p, const pr_attack_record *r);
 /* The kept attacksReceived entries, newest first: their count. A reader that scans them all
