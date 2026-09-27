@@ -53,7 +53,13 @@
  * Nine, Overcoat, Sand Veil, Rain Dish, Dry Skin, Solar Power, Forecast, Protosynthesis, Mimicry,
  * Magic Guard, Levitate, Swift Swim, Hydration, Normalize, Liquid Voice...),
  * a quarter of the Pokemon have a status, a sixth are terastallized and a quarter start with
- * Protosynthesis's or Quark Drive's stat boost.
+ * Protosynthesis's or Quark Drive's stat boost;
+ * TURN_TRAPS=1 aims at the damaging traps (Bind, Wrap, Fire Spin, Whirlpool, Clamp, Sand Tomb,
+ * Magma Storm, Snap Trap, Thunder Cage, Infestation): most moves add one, free the user (Rapid
+ * Spin, Mortal Spin) or clear arena tags (Brick Break, Defog, Tidy Up...), a quarter of the
+ * abilities are Magic Guard, half the Pokemon start trapped by the other one (1 to 5 turns left)
+ * and some of the rest by Mean Look, a third of the cases have entry hazards, screens, Mist or
+ * Safeguard on one side, a quarter a terrain and an eighth fog.
  *
  * Each case builds a random singles state inside a real upstream battle, gives both sides a
  * FIGHT command the way the command phases do, then runs upstream's own phases from
@@ -106,6 +112,7 @@ it("turntest producer", async () => {
   const TAGS = process.env.TURN_TAGS === "1";
   const HEAL = process.env.TURN_HEAL === "1";
   const WEATHER = process.env.TURN_WEATHER === "1";
+  const TRAPS = process.env.TURN_TRAPS === "1";
   const OUT = process.env.TURN_OUT ?? "/tmp/pr-turns.txt";
   const game = new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
   game.override
@@ -295,6 +302,23 @@ it("turntest producer", async () => {
       AbilityId.SLUSH_RUSH, AbilityId.SAND_FORCE, AbilityId.HYDRATION, AbilityId.LEAF_GUARD, AbilityId.SURGE_SURFER,
       AbilityId.NORMALIZE, AbilityId.LIQUID_VOICE,
     ]);
+  // TURN_TRAPS pools
+  const trapTags = [
+    BattlerTagType.BIND, BattlerTagType.WRAP, BattlerTagType.FIRE_SPIN, BattlerTagType.WHIRLPOOL, BattlerTagType.CLAMP,
+    BattlerTagType.SAND_TOMB, BattlerTagType.MAGMA_STORM, BattlerTagType.SNAP_TRAP, BattlerTagType.THUNDER_CAGE,
+    BattlerTagType.INFESTATION,
+  ];
+  const trapMoves = usable.filter((m: any) =>
+    m.attrs.some((a: any) =>
+      ["TrapAttr", "RemoveBattlerTagAttr", "RemoveArenaTrapAttr", "RemoveScreensAttr", "RemoveArenaTagsAttr"].includes(
+        a.constructor.name,
+      ),
+    ),
+  );
+  const trapArenaTags = [
+    ArenaTagType.SPIKES, ArenaTagType.TOXIC_SPIKES, ArenaTagType.STEALTH_ROCK, ArenaTagType.STICKY_WEB,
+    ArenaTagType.REFLECT, ArenaTagType.LIGHT_SCREEN, ArenaTagType.AURORA_VEIL, ArenaTagType.MIST, ArenaTagType.SAFEGUARD,
+  ];
   const healStatusAttrs: [number, any][] = allAbilities
     .filter((a: any) => a)
     .sort((a: any, b: any) => a.id - b.id)
@@ -491,6 +515,7 @@ it("turntest producer", async () => {
       : TAGS && rnd(4) === 0 ? tagAbilityIds[rnd(tagAbilityIds.length)]
       : HEAL && rnd(2) === 0 ? healAbilityIds[rnd(healAbilityIds.length)]
       : WEATHER && rnd(2) === 0 ? weatherAbilityIds[rnd(weatherAbilityIds.length)]
+      : TRAPS && rnd(4) === 0 ? AbilityId.MAGIC_GUARD
       : RICH && rnd(2) === 0 ? abilityIds[rnd(abilityIds.length)] : AbilityId.BALL_FETCH;
     p.gender = rnd(3) - 1;
     p.friendship = rnd(256);
@@ -502,7 +527,7 @@ it("turntest producer", async () => {
     p.status = null;
     if (HEAL && rnd(3) === 0) {
       p.status = new Status([StatusEffect.POISON, StatusEffect.TOXIC][rnd(2)], rnd(4));
-    } else if (RICH ? rnd(3) === 0 : STATUS || WEATHER ? rnd(4) === 0 : ONHIT || CHARGE || TAGS ? rnd(6) === 0 : STAT && rnd(8) === 0) {
+    } else if (RICH ? rnd(3) === 0 : STATUS || WEATHER ? rnd(4) === 0 : ONHIT || CHARGE || TAGS || TRAPS ? rnd(6) === 0 : STAT && rnd(8) === 0) {
       const s = statuses[rnd(statuses.length)];
       p.status = new Status(s, rnd(4), s === StatusEffect.SLEEP ? 1 + rnd(3) : 0, s === StatusEffect.FREEZE ? 1 + rnd(3) : undefined);
     }
@@ -519,6 +544,8 @@ it("turntest producer", async () => {
         ? healMoves[rnd(healMoves.length)]
         : WEATHER && rnd(10) < 7
         ? weatherMoves[rnd(weatherMoves.length)]
+        : TRAPS && rnd(10) < 7
+        ? trapMoves[rnd(trapMoves.length)]
         : TAGS && rnd(10) < 8
         ? (rnd(4) !== 0 ? tagMoves[rnd(tagMoves.length)] : tagReaders[rnd(tagReaders.length)])
         : CHARGE && rnd(10) < 7
@@ -687,6 +714,30 @@ it("turntest producer", async () => {
         battle.turnCommands[b] = p.isPlayer()
           ? { command: Command.FIGHT, cursor: p.moveset.findIndex((m: any) => m.moveId === move.id), move: turnMove, args: [MoveUseMode.IGNORE_PP, turnMove] }
           : { command: Command.FIGHT, move: turnMove, skip: false };
+      }
+    }
+    if (TRAPS) {
+      // a trap already there, as an earlier turn's TrapAttr and TURN_END lapses leave it (1 to 5
+      // turns left, its source the other Pokemon), or Mean Look's (built directly: addTag would run onAdd)
+      for (const p of [A, D]) {
+        const other = p === A ? D : A;
+        if (rnd(2) === 0) {
+          p.summonData.tags.push(getBattlerTag(trapTags[rnd(trapTags.length)], 1 + rnd(5), MoveId.NONE, other.id));
+        } else if (rnd(6) === 0) {
+          p.summonData.tags.push(getBattlerTag(BattlerTagType.TRAPPED, 1 + rnd(4), MoveId.MEAN_LOOK, other.id));
+        }
+      }
+      // a terrain on a quarter of the cases and fog on an eighth, for Defog, Ice Spinner and Steel Roller
+      scene.arena.terrain = rnd(4) === 0 ? new Terrain(1 + rnd(4), 1 + rnd(5), 5) : null;
+      scene.arena.weather = rnd(8) === 0 ? new Weather(6, 1 + rnd(5), 5) : null; // WeatherType.FOG
+      if (rnd(3) === 0) {
+        for (let k = 1 + rnd(2); k > 0; k--) {
+          const type = trapArenaTags[rnd(trapArenaTags.length)];
+          const side = rnd(2) === 0 ? ArenaTagSide.PLAYER : ArenaTagSide.ENEMY;
+          if (!scene.arena.getTagOnSide(type, side)) {
+            scene.arena.tags.push(getArenaTag(type, 1 + rnd(5), MoveId.NONE, A.id, side));
+          }
+        }
       }
     }
     if (HEAL) {

@@ -180,7 +180,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
     case PR_AC_AddBattlerTagAttr:
     case PR_AC_FlinchAttr:
     case PR_AC_RechargeAttr:                             /* Hyper Beam and co.: RECHARGING */
-    case PR_AC_TrapAttr:                                 /* Bind, Wrap, Fire Spin...: those tags aren't ported */
+    case PR_AC_TrapAttr:                                 /* Bind, Wrap, Fire Spin... */
         add_battler_tag(bt, e, a, ef, user, target, move);
         return;
     case PR_AC_ConfuseAttr: {
@@ -193,6 +193,57 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
             }
         }
         add_battler_tag(bt, e, a, ef, user, target, move);
+        return;
+    }
+    case PR_AC_ClearWeatherAttr:                         /* Defog in fog; no canApply check */
+        if (bt->weather == P(ClearWeatherAttr, a)->weatherType) pr_clear_weather(bt, e);
+        return;
+    case PR_AC_ClearTerrainAttr:                         /* Defog, Ice Spinner, Steel Roller: trySetTerrain(NONE, true, user) */
+        if (bt->terrain != TERRAIN_NONE) pr_clear_terrain(bt, e);
+        return;
+    case PR_AC_RemoveAllSubstitutesAttr: {               /* Tidy Up */
+        if (!effect_can_apply(ef, user, target)) return;
+        static const int32_t sub[] = {BATTLER_TAG_TYPE_SUBSTITUTE};
+        pr_speed_iter it;
+        pr_pokemon *p;
+        pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
+        while ((p = pr_speed_iter_next(bt, &it))) pr_find_and_remove_tags(bt, e, p, sub, 1);
+        return;
+    }
+    case PR_AC_RemoveBattlerTagAttr:                     /* Rapid Spin, Mortal Spin, Feint, Spit Up, Swallow */
+        if (!effect_can_apply(ef, user, target)) return;
+        pr_find_and_remove_tags(bt, e, ef->self_target ? user : target, P(RemoveBattlerTagAttr, a)->tagTypes.v,
+                                P(RemoveBattlerTagAttr, a)->tagTypes.n);
+        return;
+    case PR_AC_RemoveArenaTagsAttr:                      /* Feint, Defog */
+    case PR_AC_RemoveArenaTrapAttr:                      /* Rapid Spin, Mortal Spin, Defog, Tidy Up */
+    case PR_AC_RemoveScreensAttr: {                      /* Brick Break, Psychic Fangs, Raging Bull, Defog */
+        /* arena.removeTagsOnSide(tagTypes, getTagSideFunc(user, target)): an arena tag's removal
+         * isn't ported, so only a call that finds one reports itself */
+        if (!effect_can_apply(ef, user, target)) return;
+        const pr_intlist *types;
+        pr_fn_id side_fn;
+        if (a->cls == PR_AC_RemoveArenaTagsAttr) {
+            types = &P(RemoveArenaTagsAttr, a)->tagTypes;
+            side_fn = P(RemoveArenaTagsAttr, a)->getTagSideFunc;
+        } else if (a->cls == PR_AC_RemoveArenaTrapAttr) {
+            types = &P(RemoveArenaTrapAttr, a)->tagTypes;
+            side_fn = P(RemoveArenaTrapAttr, a)->getTagSideFunc;
+        } else {
+            types = &P(RemoveScreensAttr, a)->tagTypes;
+            side_fn = P(RemoveScreensAttr, a)->getTagSideFunc;
+        }
+        if (!target) {                                   /* the side closures may read the target */
+            pr_note_unported(bt, a->cls);
+            return;
+        }
+        int side = (int)pr_closure_call(bt, side_fn, a->cls, -1, user, target, move);
+        if (side < 0) return;
+        for (int k = 0; k < types->n; k++)
+            if (pr_arena_get_tag_on_side(bt, types->v[k], side)) {
+                pr_note_unported(bt, a->cls);
+                return;
+            }
         return;
     }
     }

@@ -299,6 +299,24 @@ static double tera_stellar_user(ARGS)
     return u->terastallized && type_in(u, POKEMON_TYPE_STELLAR, 0);
 }
 
+/* RemoveArenaTagsAttr's getTagSideFunc. Rapid Spin, Mortal Spin: (user) => user.isPlayer() ? PLAYER : ENEMY */
+static double user_side(ARGS)
+{
+    return u->is_player ? ARENA_TAG_SIDE_PLAYER : ARENA_TAG_SIDE_ENEMY;
+}
+
+/* Brick Break, Feint, Defog, Psychic Fangs, Raging Bull: (_user, target) => target.isPlayer() ? PLAYER : ENEMY */
+static double target_side(ARGS)
+{
+    return t->is_player ? ARENA_TAG_SIDE_PLAYER : ARENA_TAG_SIDE_ENEMY;
+}
+
+/* Defog, Tidy Up: () => BOTH */
+static double both_sides(ARGS)
+{
+    return ARENA_TAG_SIDE_BOTH;
+}
+
 const pr_closure_reg pr_move_closures[] = {
     {"move:89", "d551c83b79fb", grassy_grounded_half},
     {"move:222", "d551c83b79fb", grassy_grounded_half},
@@ -343,5 +361,14 @@ const pr_closure_reg pr_move_closures[] = {
     {"move:602", "907354da9d85", plus_minus_target}, /* Magnetic Flux */
     {"move:674", "907354da9d85", plus_minus_target}, /* Gear Up */
     {"move:851", "0b049cd4dbcc", tera_stellar_user},
+    {"move:229", "ab092b202a78", user_side},     /* Rapid Spin */
+    {"move:866", "ab092b202a78", user_side},     /* Mortal Spin */
+    {"move:280", "7a76ba527a21", target_side},   /* Brick Break */
+    {"move:364", "7a76ba527a21", target_side},   /* Feint */
+    {"move:432", "7a76ba527a21", target_side},   /* Defog (screens, Mist and Safeguard) */
+    {"move:706", "7a76ba527a21", target_side},   /* Psychic Fangs */
+    {"move:873", "7a76ba527a21", target_side},   /* Raging Bull */
+    {"move:432", "5e264af5663d", both_sides},    /* Defog (entry hazards) */
+    {"move:882", "5e264af5663d", both_sides},    /* Tidy Up */
 };
 const int pr_move_closures_n = sizeof pr_move_closures / sizeof pr_move_closures[0];

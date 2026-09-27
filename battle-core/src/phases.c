@@ -1840,9 +1840,10 @@ static bool terrain_lapse(pr_battle *bt)
     return true;
 }
 
-/* arena.trySetWeather(NONE) with no user, once a weather runs out: its clear message, then for each
- * Pokemon in speed order the tags tied to the weather go and PostWeatherChangeAbAttr runs */
-static void clear_weather(pr_battle *bt, pr_engine *e)
+/* arena.trySetWeather(NONE) with a weather up (a weather running out, Defog in fog): its clear
+ * message, then for each Pokemon in speed order the tags tied to the weather go and
+ * PostWeatherChangeAbAttr runs. A user only feeds FieldEffectModifier a duration a clear doesn't use. */
+void pr_clear_weather(pr_battle *bt, pr_engine *e)
 {
     bt->weather = WEATHER_TYPE_NONE;
     bt->weather_turns_left = bt->weather_max_duration = 0;
@@ -1858,7 +1859,7 @@ static void clear_weather(pr_battle *bt, pr_engine *e)
 }
 
 /* arena.trySetTerrain(NONE): the same for a terrain, plus Mimicry (TerrainEventTypeChangeAbAttr) */
-static void clear_terrain(pr_battle *bt, pr_engine *e)
+void pr_clear_terrain(pr_battle *bt, pr_engine *e)
 {
     bt->terrain = TERRAIN_NONE;
     bt->terrain_turns_left = bt->terrain_max_duration = 0;
@@ -1910,13 +1911,13 @@ static void turn_end_phase(pr_battle *bt, pr_engine *e)
     }
     lapse_arena_tags(bt, e);
     if (bt->weather != WEATHER_TYPE_NONE && !weather_lapse(bt)) {
-        clear_weather(bt, e);
+        pr_clear_weather(bt, e);
         /* triggerWeatherBasedFormChangesToNormal: Castform and Cherrim (form changes aren't ported) */
         pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
         while ((p = pr_speed_iter_next(bt, &it)))
             form_change(bt, p, PR_FCT_SpeciesFormChangeRevertWeatherFormTrigger);
     }
-    if (bt->terrain != TERRAIN_NONE && !terrain_lapse(bt)) clear_terrain(bt, e);
+    if (bt->terrain != TERRAIN_NONE && !terrain_lapse(bt)) pr_clear_terrain(bt, e);
 }
 
 /* ---------------------------------------------------------------- presentation */

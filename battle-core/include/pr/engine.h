@@ -142,6 +142,8 @@ void pr_queue_ability_display(pr_battle *bt, pr_engine *e, const pr_pokemon *p, 
 void pr_queue_faint(pr_battle *bt, pr_engine *e, int battler, bool prevent_instant_revive, int source);
 /* ---- battler tags being added, lapsed and removed (src/battler_tags.c) ---- */
 bool pr_tag_type_ported(int type);
+/* the move a DamagingTrapTag subclass (Bind, Wrap, Fire Spin...) names as its source; 0 otherwise */
+int pr_damaging_trap_move(int type);
 /* pokemon.addTag(type, turnCount, sourceMove, sourceId): whether it was added (0 / -1 = none) */
 bool pr_add_tag(pr_battle *bt, pr_engine *e, pr_pokemon *p, int type, int turn_count, int source_move,
                 int64_t source_id);
@@ -152,7 +154,13 @@ void pr_remove_tag(pr_battle *bt, pr_engine *e, pr_pokemon *p, int type);       
 /* After a weather or terrain change to `now`: Protosynthesis's tag (weather) or Quark Drive's
  * (terrain) goes with its message unless it lists the new one */
 void pr_remove_field_boost_tag(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool terrain, int now);
+/* arena.trySetWeather(NONE) / trySetTerrain(NONE) with a weather or terrain up: its message, then per
+ * Pokemon in speed order the boost tag it ends and the abilities told about the change */
+void pr_clear_weather(pr_battle *bt, pr_engine *e);
+void pr_clear_terrain(pr_battle *bt, pr_engine *e);
 void pr_remove_tags_by_source_id(pr_battle *bt, pr_engine *e, pr_pokemon *p, int64_t source_id);
+/* findAndRemoveTags(t => types.includes(t.tagType)) */
+void pr_find_and_remove_tags(pr_battle *bt, pr_engine *e, pr_pokemon *p, const int32_t *types, int n_types);
 /* phaseManager.unshiftNew(<PokemonPhase type>, battlerIndex) */
 void pr_unshift_new(pr_battle *bt, pr_engine *e, pr_phase_type t, int battler);
 /* the running phase, when it is a MovePhase (of Pokemon p, unless p is NULL): phase.cancel() */

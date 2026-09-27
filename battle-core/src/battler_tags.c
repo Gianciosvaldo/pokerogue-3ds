@@ -33,7 +33,26 @@ bool pr_tag_type_ported(int type)
     case BATTLER_TAG_TYPE_RECHARGING:   /* RechargingTag: Hyper Beam and co. */
         return true;
     }
-    return false;
+    return pr_damaging_trap_move(type) != 0;
+}
+
+/* DamagingTrapTag's subclasses (Bind, Wrap, Fire Spin...): the move each one names as its
+ * sourceMove, whatever move added it; 0 for any other tag type */
+int pr_damaging_trap_move(int type)
+{
+    switch (type) {
+    case BATTLER_TAG_TYPE_BIND: return MOVE_ID_BIND;
+    case BATTLER_TAG_TYPE_WRAP: return MOVE_ID_WRAP;
+    case BATTLER_TAG_TYPE_FIRE_SPIN: return MOVE_ID_FIRE_SPIN;
+    case BATTLER_TAG_TYPE_WHIRLPOOL: return MOVE_ID_WHIRLPOOL;
+    case BATTLER_TAG_TYPE_CLAMP: return MOVE_ID_CLAMP;
+    case BATTLER_TAG_TYPE_SAND_TOMB: return MOVE_ID_SAND_TOMB;
+    case BATTLER_TAG_TYPE_MAGMA_STORM: return MOVE_ID_MAGMA_STORM;
+    case BATTLER_TAG_TYPE_SNAP_TRAP: return MOVE_ID_SNAP_TRAP;
+    case BATTLER_TAG_TYPE_THUNDER_CAGE: return MOVE_ID_THUNDER_CAGE;
+    case BATTLER_TAG_TYPE_INFESTATION: return MOVE_ID_INFESTATION;
+    }
+    return 0;
 }
 
 static bool lapses_on(int type, int lapse_type)
@@ -46,7 +65,11 @@ static void note_tag(pr_battle *bt, int type)
     pr_note_unported(bt, (uint16_t)(PR_FEAT_TAG_0 + type));
 }
 
-static bool is_trap(int type) { return type == BATTLER_TAG_TYPE_TRAPPED || type == BATTLER_TAG_TYPE_NO_RETREAT; }
+/* the ported TrappedTag subclasses; each is source-linked (isSourceLinked) */
+static bool is_trap(int type)
+{
+    return type == BATTLER_TAG_TYPE_TRAPPED || type == BATTLER_TAG_TYPE_NO_RETREAT || pr_damaging_trap_move(type);
+}
 
 static int find_tag(const pr_pokemon *p, int type)
 {
@@ -108,6 +131,10 @@ static pr_battler_tag construct(int type, int turn_count, int source_move, int64
         t.source_move = MOVE_ID_AUTOTOMIZE;
         break;
     default:                                      /* CONFUSED, FRENZY, the semi-invulnerable tags */
+        if (pr_damaging_trap_move(type)) {        /* BindTag(turnCount, sourceId) and co. */
+            t.source_move = (uint16_t)pr_damaging_trap_move(type);
+            t.source_id = source_id;
+        }
         break;
     }
     return t;
@@ -143,6 +170,9 @@ static bool can_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_battler
     case BATTLER_TAG_TYPE_TAR_SHOT:
         return !p->terastallized;
     }
+    /* DamagingTrapTag: !getTag(TrappedTag) && !getTag(SUBSTITUTE); no Ghost check, no source */
+    if (pr_damaging_trap_move(t->type))
+        return !pr_find_battler_tag_class(p, PR_TAGCLASS_TRAPPED) && !pr_get_battler_tag(p, BATTLER_TAG_TYPE_SUBSTITUTE);
     return true;
 }
 
@@ -179,6 +209,7 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
         }
         return;
     }
+    if (pr_damaging_trap_move(t->type)) pr_queue_message(bt, e);   /* TrappedTag.onAdd: getTrapMessage() */
 }
 
 /* existingTag.onOverlap(pokemon) */
@@ -289,6 +320,21 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
         return ret;
     }
     }
+    if (pr_damaging_trap_move(t->type)) {
+        /* DamagingTrapTag.lapse (TURN_END): BattlerTag.lapse, then while the tag lasts its message,
+         * its animation and an eighth of max HP, unless BlockNonDirectDamageAbAttr (Magic Guard) */
+        if (--t->turn_count <= 0) return false;
+        pr_queue_message(bt, e);
+        pr_unshift_new(bt, e, PH_COMMON_ANIM, pr_battler_index(bt, p));
+        bool cancelled = false;
+        pr_ab_params ap = {.pokemon = p, .move = -1, .flag = &cancelled};
+        pr_apply_ab_attrs(bt, PR_AC_BlockNonDirectDamageAbAttr, &ap);
+        if (!cancelled) {
+            double damage = floor(pr_get_stat(p, STAT_HP, false) / 8.0);
+            pr_damage_and_update(bt, e, p, damage < 1 ? 1 : damage, HIT_RESULT_INDIRECT, false, NULL);
+        }
+        return true;
+    }
     return --t->turn_count > 0;                   /* BattlerTag.lapse */
 }
 
@@ -309,6 +355,7 @@ static void on_remove(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_battl
         }
         return;
     }
+    if (pr_damaging_trap_move(t->type)) pr_queue_message(bt, e);   /* TrappedTag.onRemove */
 }
 
 /* ---------------------------------------------------------------- Pokemon's tag methods */
@@ -408,6 +455,33 @@ void pr_remove_tag(pr_battle *bt, pr_engine *e, pr_pokemon *p, int type)
     pr_battler_tag t = p->tags[i];
     on_remove(bt, e, p, &t);
     splice_tag(p, i);
+}
+
+void pr_find_and_remove_tags(pr_battle *bt, pr_engine *e, pr_pokemon *p, const int32_t *types, int n_types)
+{
+    /* findAndRemoveTags(t => types.includes(t.tagType)): the matches in list order, then each
+     * one's turnCount = 0, onRemove, splice */
+    pr_battler_tag match[PR_MAX_BATTLER_TAGS];
+    int n = 0;
+    for (int i = 0; i < p->n_tags; i++) {
+        int type = p->tags[i].type;
+        bool listed = false;
+        for (int k = 0; k < n_types && !listed; k++) listed = types[k] == type;
+        if (!listed) continue;
+        if (!pr_tag_type_ported(type)) {
+            note_tag(bt, type);
+            continue;
+        }
+        match[n++] = p->tags[i];
+    }
+    for (int k = 0; k < n; k++) {
+        int i = find_tag(p, match[k].type);
+        if (i < 0) continue;
+        p->tags[i].turn_count = 0;
+        pr_battler_tag t = p->tags[i];
+        on_remove(bt, e, p, &t);
+        splice_tag(p, i);
+    }
 }
 
 void pr_remove_field_boost_tag(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool terrain, int now)
