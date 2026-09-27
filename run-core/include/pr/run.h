@@ -60,6 +60,19 @@ int pr_run_get_encounter_boss_segments(pr_run *run, int wave, int level, int spe
  * through battle-core's modifier lists and ability dispatch) */
 double pr_run_get_double_battle_chance(int wave, int n_lure_modifiers, int n_double_chance_abilities);
 
+/* ---- mystery encounters and trainer parties (src/wave.c) ---- */
+/* mysteryEncounterSaveData: encounterSpawnChance, encounteredEvents.length and the last one's waveIndex */
+typedef struct { double spawn_chance; int n_encountered; int last_encounter_wave; } pr_me_save;
+bool pr_run_is_mystery_encounter_valid_for_wave(const pr_run *run, bool wild, int wave);
+/* isWaveMysteryEncounter(battleType, wave): rolls on the run seed at offset wave * 3000 */
+bool pr_run_is_wave_mystery_encounter(pr_run *run, bool wild, int wave, const pr_me_save *save);
+#define PR_MAX_PARTY_TEMPLATE 8
+/* Trainer.getPartyLevels(wave) for a party template: strengths[i] = template.getStrength(i),
+ * base_strength = template.strength (used when a double battle widens a 1-member template).
+ * Returns the party size. */
+int pr_run_get_party_levels(const pr_run *run, int wave, int size, const uint8_t *strengths, int base_strength,
+                            bool is_double, int out[PR_MAX_PARTY_TEMPLATE]);
+
 /* ---- Battle (src/battle.ts) ---- */
 /* getLevelForWave() for a battle of `wave`, rolling on `rng` (newBattle builds the Battle inside
  * executeWithSeedOffset(waveIndex << 3, waveSeed), so pass pr_run_battle_rng's result) */

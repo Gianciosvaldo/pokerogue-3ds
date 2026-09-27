@@ -19,6 +19,15 @@ Runs (`tools/difftest.sh <upstream> 20000 <seed>`; each case picks a random game
 | 9001 | 20,000 | 404,125 | 0 | 15,875 |
 | 4242 | 20,000 | 404,059 | 0 | 15,941 |
 
+Mystery encounters and trainer parties (`src/wave.c`):
+
+| Piece | Upstream | State |
+|---|---|---|
+| `isMysteryEncounterValidForWave`, `isWaveMysteryEncounter`: legal waves, spacing after the last encounter, the anti-variance rate (capped at +128), the roll on the run seed at offset `wave * 3000` | `src/battle-scene.ts` | Matches |
+| `Trainer.getPartyLevels`: per-strength multipliers, the weaker members' wave bonus capped at 1.225 and level offset, a double battle widening a 1-member template | `src/field/trainer.ts` | Matches |
+
+New-battle runs (`tools/difftest.sh <upstream> 20000 <seed> newbattle`; random mode, run seed, wave, battle type and mystery-encounter save data (spawn chance, earlier encounters' waves), and a real Trainer of any type and variant with its party template pinned): seeds 777, 9001 and 4242, 20,000 cases each, 0 mismatches (2,210 encounters spawned). upstream's test framework forces the encounter rate to 0 (a dev override); the test switches that off, as a real run has it. The encounter constants (`AVERAGE_ENCOUNTERS_PER_RUN_TARGET`...) are quoted from `src/constants.ts`. 10 of 11 deliberate bugs are caught; the 11th, excluding the lowest legal wave, can't change anything (wave 10 is a boss wave, already excluded).
+
 Biomes (`src/biome.c`, with `gen/out/run_biomes.c` dumped from upstream's `allBiomes` by `gen/dump-biomes.test.ts`: each biome's links with their weights and its trainer chance):
 
 | Piece | Upstream | State |
@@ -58,7 +67,7 @@ Shop runs (`tools/difftest.sh <upstream> 20000 <seed> shop`; each case picks a r
 Mutation check: 22 deliberate bugs, 20 of which can change an answer; all 20 are caught, from a level curve dividing by 24 instead of 25 (76,806 mismatches) and the battle RNG seeded from the run seed instead of the wave seed (42,150) to the endless random-boss chance using floor instead of ceil (29), level 100 off by one (81), and the x25 rounding at every 250th wave dropped (83). The 2 not caught can't change anything: no random level offset on the final wave (every final wave in the ported modes already takes the x25 path) and a missing `abs()` on a sum of random fractions (never negative).
 
 ## Not done (in rough order)
-1. The rest of `newBattle`: mystery encounters (`isWaveMysteryEncounter`), random trainer type and variant (`arena.randomTrainerType`, the biome trainer pools), the trainer's party levels, fixed battles' trainers.
+1. The rest of `newBattle`: which mystery encounter spawns, the trainer's variant and party template choice (`new Trainer`), the trainer's party members (`partyMemberFuncs`, species pools), fixed battles' trainers, and the order these rolls happen in on the wave's RNG.
 2. `globalScene.randomSpecies` for an empty biome pool (no biome has one today), and the rest of a wild Pokemon's generation (form, gender, shininess, moves, abilities).
 3. The reward options: modifier pools and their weights (closures over the party's state), tier rolls and luck upgrades (`getNewModifierTypeOption`, `getPartyLuckValue`), the enemy's items.
 4. The daily run and challenges (the `PR_RUN_UNPORTED_*` flags).
@@ -67,7 +76,7 @@ Dev overrides (`LEVEL_CAP_OVERRIDE`, `ENEMY_HEALTH_SEGMENTS_OVERRIDE`...) aren't
 
 ## Layout
 - `include/pr/run.h` API, `src/wave.c` the wave functions, `src/biome.c` biomes and encounters, `src/evolution.c` the evolution step, `src/shop.c` the shop's economy (each function quotes the JS it replaces); `gen/dump-biomes.test.ts` and `gen/dump-evolutions.test.ts` write `gen/out/run_biomes.c` and `gen/out/run_evolutions.c` (generated, don't edit)
-- `tests/*.producer.test.ts` upstream halves of the tests, `tests/wavetest.c`, `tests/shoptest.c` and `tests/biometest.c` C halves
+- `tests/*.producer.test.ts` upstream halves of the tests, `tests/*test.c` C halves
 - `tools/difftest.sh <upstream dir> [N] [seed] [wave|shop|all]` (the upstream checkout comes from `battle-core/tools/setup-upstream.sh`)
 
 Build: `make` (outputs to `build/`).
