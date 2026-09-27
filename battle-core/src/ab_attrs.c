@@ -347,7 +347,10 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         *pp->value = 0;
         if (a->cls == PR_AC_TypeImmunityHealAbAttr) {
             if (p->hp < pr_get_stat(p, STAT_HP, true) && !pp->simulated) {
-                pr_note_deferred(bt, a->cls); /* PokemonHealPhase */
+                /* unshiftNew("PokemonHealPhase", toDmgValue(maxHp / 4), {message}); the damage-only
+                 * test has no engine and records it as deferred */
+                if (c->e) pr_unshift_heal(bt, c->e, pr_battler_index(bt, p), to_dmg_value(pr_get_stat(p, STAT_HP, true) / 4.0), PR_HEAL_MESSAGE);
+                else pr_note_deferred(bt, a->cls);
                 *pp->flag = true;
             }
         } else {
@@ -457,10 +460,13 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
             if (pr_get_battler_tag(p, x->immuneTags.v[i])) return -1;       /* removeTag: onRemove */
         return 0;
     }
-    case PR_AC_PostTurnStatusHealAbAttr: {                              /* Poison Heal's heal */
+    case PR_AC_PostTurnStatusHealAbAttr: {                              /* Poison Heal */
         const pr_attr_PostTurnStatusHealAbAttr *x = P(PostTurnStatusHealAbAttr, a);
         if (!(p->status && type_in(&x->effects, p->status) && p->hp < pr_get_stat(p, STAT_HP, true))) return 0;
-        return -1;                                     /* unshifts a PokemonHealPhase: not ported */
+        if (!c->e) return -1;
+        GATE(true);
+        pr_unshift_heal(bt, c->e, pr_battler_index(bt, p), to_dmg_value(pr_get_stat(p, STAT_HP, true) / 8.0), PR_HEAL_MESSAGE);
+        return 1;
     }
     /* ---- on-hit abilities: PostDefend (the Pokemon hit), PostReceiveCrit, PostAttack (the attacker).
      * The ones whose effect adds a tag, weather, terrain, an ability or an item run their canApply
@@ -675,6 +681,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         *pp->value = to_dmg_value(*pp->value * P(ReduceBurnDamageAbAttr, a)->multiplier);
         return 1;
     case PR_AC_BlockNonDirectDamageAbAttr:     /* Magic Guard */
+    case PR_AC_BlockRecoilDamageAttr:          /* Rock Head */
     case PR_AC_BypassBurnDamageReductionAbAttr:
     case PR_AC_BlockOneHitKOAbAttr:            /* Sturdy against OHKO moves */
     case PR_AC_FieldPreventExplosiveMovesAbAttr: /* Damp */

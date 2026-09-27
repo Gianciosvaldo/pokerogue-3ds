@@ -249,7 +249,8 @@ typedef struct pr_battle {
     /* currentBattle.turnCommands / preTurnCommands per BattlerIndex */
     struct pr_turn_command {
         int8_t command;        /* Command; -1 = none (null) */
-        uint16_t move;         /* move.move, 0 = no move */
+        uint16_t move;         /* move.move (MoveId.NONE for a recharge turn's placeholder) */
+        bool no_move;          /* turnCommand.move is undefined (FIGHT commands always have one) */
         int8_t targets[4];     /* move.targets */
         uint8_t n_targets;
         uint8_t use_mode;

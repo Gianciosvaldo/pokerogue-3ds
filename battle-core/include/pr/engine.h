@@ -17,18 +17,18 @@ typedef enum {
     /* phases of a turn, ported */
     PH_TURN_START, PH_MOVE, PH_MOVE_EFFECT, PH_MOVE_END, PH_FAINT, PH_CHECK_INTERLUDE,
     PH_WEATHER_EFFECT, PH_POSITIONAL_TAG, PH_BERRY, PH_CHECK_STATUS_EFFECT, PH_POST_TURN_STATUS_EFFECT,
-    PH_TURN_END, PH_RESET_STATUS, PH_STAT_STAGE_CHANGE, PH_OBTAIN_STATUS_EFFECT, PH_MOVE_CHARGE,
+    PH_TURN_END, PH_RESET_STATUS, PH_STAT_STAGE_CHANGE, PH_OBTAIN_STATUS_EFFECT, PH_MOVE_CHARGE, PH_POKEMON_HEAL,
     /* presentation: no battle state of their own */
     PH_MESSAGE, PH_DAMAGE_ANIM, PH_COMMON_ANIM, PH_SHOW_ABILITY, PH_HIDE_ABILITY,
     /* where a turn hands control back to the caller */
     PH_TURN_INIT, PH_VICTORY, PH_SWITCH, PH_SWITCH_SUMMON, PH_GAME_OVER, PH_BATTLE_END, PH_SELECT_MODIFIER,
     /* not ported yet: created where upstream creates them (so the order stays right), and
      * the turn is reported unported */
-    PH_POKEMON_HEAL, PH_MOVE_HEADER,
+    PH_MOVE_HEADER,
     PH_MOVE_REFLECT, PH_DANCER, PH_TERA, PH_ATTEMPT_CAPTURE, PH_ATTEMPT_RUN, PH_TOGGLE_DOUBLE_POSITION,
     PH_COUNT_
 } pr_phase_type;
-#define PH_FIRST_UNPORTED PH_POKEMON_HEAL
+#define PH_FIRST_UNPORTED PH_MOVE_HEADER
 extern const char *const pr_phase_name[PH_COUNT_];
 
 /* An upstream PokemonMove the phase holds: a moveset slot, or a detached one
@@ -77,6 +77,9 @@ typedef struct pr_phase {
     int8_t ose_sleep_turns;
     /* MoveChargePhase: targetIndex (the MovePhase's first target) */
     int8_t charge_target;
+    /* PokemonHealPhase: hpHealed and its options (PR_HEAL_*) */
+    double heal_hp;
+    uint8_t heal_flags;
     uint32_t seq;              /* creation order, for debugging */
 } pr_phase;
 
@@ -180,6 +183,18 @@ int pr_unshift_stat_stage_change(pr_battle *bt, pr_engine *e, int battler, const
  * damage, PostDamage abilities; returns the damage dealt */
 double pr_damage_and_update(pr_battle *bt, pr_engine *e, pr_pokemon *p, double damage, int result,
                             bool ignore_faint_phase, pr_pokemon *source);
+/* unshiftNew("PokemonHealPhase", battler, hpHealed, options): options as PR_HEAL_* flags, upstream's
+ * defaults being showFullHpMessage and nothing else */
+enum {
+    PR_HEAL_MESSAGE = 1,            /* a message was given */
+    PR_HEAL_NO_FULL_HP_MESSAGE = 2, /* showFullHpMessage: false */
+    PR_HEAL_SKIP_ANIM = 4,
+    PR_HEAL_REVIVE = 8,
+    PR_HEAL_STATUS = 16,
+    PR_HEAL_PREVENT_FULL = 32,
+    PR_HEAL_RESTORE_PP = 64,
+};
+void pr_unshift_heal(pr_battle *bt, pr_engine *e, int battler, double hp, unsigned flags);
 /* Pokemon.resetStatus(revive, false, false, asPhase=true): a ResetStatusPhase, unshifted */
 void pr_reset_status_phase(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool revive);
 /* Pokemon.trySetStatus(effect, sourcePokemon, sleepTurnsRemaining (-1 = undefined), sourceText,

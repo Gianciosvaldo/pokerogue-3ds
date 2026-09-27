@@ -6,6 +6,7 @@
  * nothing, and the effects that only queue phases or clear a status. An effect that would go
  * on to do something not ported yet reports its class (pr_note_unported) at that point. */
 #include "pr/engine.h"
+#include <math.h>
 
 #define P(T, a) ((const pr_attr_##T *)(a)->p)
 
@@ -52,7 +53,7 @@ static void unshift_pokemon_phase(pr_battle *bt, pr_engine *e, pr_phase_type typ
     pr_phase_unshift(bt, e, ph);
 }
 
-/* AddBattlerTagAttr.apply (FlinchAttr, ConfuseAttr and TrapAttr share its fields): the chance roll, then
+/* AddBattlerTagAttr.apply (FlinchAttr, ConfuseAttr, RechargeAttr and TrapAttr share its fields): the chance roll, then
  * (selfTarget ? user : target).addTag(tagType, randBattleSeedIntRange(min, max), move.id, user.id) */
 static void add_battler_tag(pr_battle *bt, pr_engine *e, const pr_attr *a, const pr_effect_info *ef,
                             pr_pokemon *user, pr_pokemon *target, int move)
@@ -128,6 +129,44 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
             }
         return;
     }
+    case PR_AC_HitHealAttr: {                            /* drain moves, Strength Sap */
+        /* no canApply: it heals even a fainted user (the heal phase then does nothing) */
+        const pr_attr_HitHealAttr *x = P(HitHealAttr, a);
+        if (pr_has_ability_with_attr(bt, target, PR_AC_ReverseDrainAbAttr)) return;   /* Liquid Ooze */
+        bool heal_stat = !(x->nulls & (1u << 3));
+        double amount = heal_stat ? pr_get_effective_stat(bt, target, x->healStat, NULL, -1, false, false)
+                                  : floor(user->single_hit_damage_dealt * x->healRatio);
+        if (!heal_stat && amount < 1) amount = 1;                                  /* toDmgValue */
+        pr_unshift_heal(bt, e, pr_battler_index(bt, user), amount,
+                        PR_HEAL_MESSAGE | PR_HEAL_NO_FULL_HP_MESSAGE | PR_HEAL_SKIP_ANIM);
+        return;
+    }
+    case PR_AC_RecoilAttr: {                             /* Double-Edge, Brave Bird, Struggle, Chloroblast... */
+        const pr_attr_RecoilAttr *x = P(RecoilAttr, a);
+        if (!effect_can_apply(ef, user, target)) return;
+        if (!x->useHp && user->total_damage_dealt == 0) return;
+        bool cancelled = false;
+        if (!x->unblockable) {
+            pr_ab_params rp = {.pokemon = user, .move = -1, .flag = &cancelled};
+            pr_apply_ab_attrs(bt, PR_AC_BlockRecoilDamageAttr, &rp);
+            pr_apply_ab_attrs(bt, PR_AC_BlockNonDirectDamageAbAttr, &rp);
+        }
+        if (cancelled) return;
+        if (x->useHp) {
+            /* no recoil when the move failed or missed (a missing entry counts as failed) */
+            const pr_turn_move *last = pr_last_move(bt, user, 0);
+            int r = last ? last->result : MOVE_RESULT_FAIL;
+            if (r == MOVE_RESULT_FAIL || r == MOVE_RESULT_MISS) return;
+        }
+        double base = x->useHp ? pr_get_stat(user, STAT_HP, false) : user->total_damage_dealt;
+        double recoil = floor(base * x->damageRatio);
+        if (recoil < 1) recoil = 1;                                                 /* toDmgValue */
+        /* damageAndUpdate(recoil, {result: INDIRECT, ignoreSegments: true}) */
+        pr_damage_and_update(bt, e, user, recoil, HIT_RESULT_INDIRECT, false, NULL);
+        pr_queue_message(bt, e);
+        user->damage_taken += (int32_t)recoil;
+        return;
+    }
     case PR_AC_SemiInvulnerableAttr:                     /* a charge attr: Fly, Dig, Dive, Phantom Force... */
         if (!effect_can_apply(ef, user, target)) return;
         pr_add_tag(bt, e, user, P(SemiInvulnerableAttr, a)->tagType, 1, move, (int64_t)user->id);
@@ -140,6 +179,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         return;
     case PR_AC_AddBattlerTagAttr:
     case PR_AC_FlinchAttr:
+    case PR_AC_RechargeAttr:                             /* Hyper Beam and co.: RECHARGING */
     case PR_AC_TrapAttr:                                 /* Bind, Wrap, Fire Spin...: those tags aren't ported */
         add_battler_tag(bt, e, a, ef, user, target, move);
         return;

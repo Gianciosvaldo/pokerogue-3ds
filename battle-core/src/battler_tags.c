@@ -30,6 +30,7 @@ bool pr_tag_type_ported(int type)
     case BATTLER_TAG_TYPE_CHARGED:      /* TypeBoostTag(CHARGED, sourceMove, ELECTRIC, 2, oneUse) */
     case BATTLER_TAG_TYPE_TAR_SHOT:     /* TarShotTag */
     case BATTLER_TAG_TYPE_AUTOTOMIZED:  /* AutotomizedTag */
+    case BATTLER_TAG_TYPE_RECHARGING:   /* RechargingTag: Hyper Beam and co. */
         return true;
     }
     return false;
@@ -99,6 +100,9 @@ static pr_battler_tag construct(int type, int turn_count, int source_move, int64
         t.turn_count = 0;
         t.source_move = 0;
         break;
+    case BATTLER_TAG_TYPE_RECHARGING:             /* RechargingTag(sourceMove) */
+        t.turn_count = 2;
+        break;
     case BATTLER_TAG_TYPE_AUTOTOMIZED:            /* AutotomizedTag(): sourceMove = AUTOTOMIZE */
         t.turn_count = 1;
         t.source_move = MOVE_ID_AUTOTOMIZE;
@@ -156,6 +160,20 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
     case BATTLER_TAG_TYPE_AUTOTOMIZED:
         if (pr_get_weight(bt, p) > 0.1) pr_queue_message(bt, e);
         t->autotomize_count++;
+        return;
+    case BATTLER_TAG_TYPE_RECHARGING:
+        /* pushMoveQueue({move: NONE, targets: [], useMode: NORMAL}): next turn's placeholder */
+        if (p->n_move_queue < PR_MAX_MOVE_QUEUE) {
+            pr_turn_move q;
+            memset(&q, 0, sizeof q);
+            q.move = MOVE_ID_NONE;
+            q.use_mode = MOVE_USE_MODE_NORMAL;
+            q.result = PR_MOVE_RESULT_UNDEFINED;
+            p->move_queue[p->n_move_queue++] = q;
+        } else {
+            pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT);
+            if (e) e->overflow = true;
+        }
         return;
     }
 }
@@ -234,6 +252,17 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
         pr_unshift_new(bt, e, PH_COMMON_ANIM, pr_battler_index(bt, p));
         if (pr_battle_rand_seed_int(bt, 3, 0) == 0) confusion_self_hit(bt, e, p);
         return true;
+    case BATTLER_TAG_TYPE_RECHARGING:
+        if (lapse_type == BATTLER_TAG_LAPSE_TYPE_PRE_MOVE) {
+            /* "must recharge": the move is cancelled and the placeholder leaves the queue */
+            pr_queue_message(bt, e);
+            pr_cancel_current_move(e, NULL);
+            if (p->n_move_queue) {
+                memmove(&p->move_queue[0], &p->move_queue[1], (size_t)(p->n_move_queue - 1) * sizeof p->move_queue[0]);
+                p->n_move_queue--;
+            }
+        }
+        return --t->turn_count > 0;
     case BATTLER_TAG_TYPE_MINIMIZED:
     case BATTLER_TAG_TYPE_CHARGED:
         return lapse_type != BATTLER_TAG_LAPSE_TYPE_CUSTOM || --t->turn_count > 0;

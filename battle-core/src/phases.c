@@ -156,7 +156,9 @@ static int default_battler(pr_battle *bt)
 static void handle_fight_command(pr_battle *bt, pr_engine *e, pr_pokemon *p, int b)
 {
     struct pr_turn_command *c = &bt->commands[b];
-    if (!c->move) return;                           /* no queuedMove */
+    if (c->no_move) return;                         /* no queuedMove */
+    /* (turnCommand.targets, set to [fieldIndex] for a player's MoveId.NONE command, equals the move's
+     * own targets there: NONE targets the user) */
     /* moveset.find(m => m.moveId === queuedMove.move && m.ppUsed < m.getMovePp()) ?? new PokemonMove */
     int slot = -1;
     for (int k = 0; k < p->n_moves; k++)
@@ -1993,6 +1995,61 @@ static void reset_status_phase(pr_battle *bt, pr_engine *e, int ph)
         pr_note_unported(bt, PR_FEAT_TAG_LAPSE); /* lapseTag(NIGHTMARE) */
 }
 
+/* ---------------------------------------------------------------- PokemonHealPhase */
+
+void pr_unshift_heal(pr_battle *bt, pr_engine *e, int battler, double hp, unsigned flags)
+{
+    int ph = new_pokemon_phase(e, PH_POKEMON_HEAL, battler);
+    if (ph < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); e->overflow = true; return; }
+    PH(ph)->heal_hp = hp;
+    PH(ph)->heal_flags = (uint8_t)flags;
+    pr_phase_unshift(bt, e, ph);
+}
+
+/* start() plays the HEALTH_UP animation (CommonAnimPhase) unless skipAnim or at full HP; either
+ * way end() heals, then the phase ends */
+static void pokemon_heal_phase(pr_battle *bt, pr_engine *e, int ph)
+{
+    pr_phase *h = PH(ph);
+    pr_pokemon *p = slot(bt, h->battler);
+    unsigned f = h->heal_flags;
+    bool message = f & PR_HEAL_MESSAGE;
+    if (!p || (!(f & PR_HEAL_REVIVE) && !is_active_on_field(p))) return;
+    if (pr_get_battler_tag(p, BATTLER_TAG_TYPE_HEAL_BLOCK) && h->heal_hp > 0) {
+        pr_queue_message(bt, e);                                  /* healBlock.onActivation */
+        return;
+    }
+    /* doHealPokemon */
+    if (h->heal_hp > 0 && p->hp >= max_hp(p)) {
+        if (!(f & PR_HEAL_NO_FULL_HP_MESSAGE)) message = true;    /* "HP is full" */
+    } else {
+        double amount;
+        if (f & PR_HEAL_REVIVE) {
+            amount = to_dmg_value(h->heal_hp);
+        } else {
+            /* Healing Charm (HealingBoosterModifier) on the phase's side */
+            turn_modifiers(bt, h->battler < 2, NULL);
+            amount = floor(h->heal_hp);
+            double cap = max_hp(p) - ((f & PR_HEAL_PREVENT_FULL) ? 1 : 0);
+            if (amount > cap) amount = cap;
+        }
+        if (amount < 0) {
+            damage_and_update(bt, e, p, -amount, HIT_RESULT_INDIRECT, false, NULL);
+        } else {
+            /* heal(amount) */
+            double room = max_hp(p) - p->hp;
+            p->hp += (int32_t)(amount < room ? amount : room);
+        }
+    }
+    if ((f & PR_HEAL_STATUS) && p->status) {
+        message = true;
+        reset_status_as_phase(bt, e, p, true);
+    }
+    if (f & PR_HEAL_RESTORE_PP)
+        for (int i = 0; i < p->n_moves; i++) p->pp_used[i] = 0;
+    if (message) pr_queue_message(bt, e);
+}
+
 void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
 {
     switch (PH(ph)->type) {
@@ -2015,6 +2072,7 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_STAT_STAGE_CHANGE: stat_stage_change_phase(bt, e, ph); break;
     case PH_OBTAIN_STATUS_EFFECT: obtain_status_effect_phase(bt, e, ph); break;
     case PH_MOVE_CHARGE: move_charge_phase(bt, e, ph); break;
+    case PH_POKEMON_HEAL: pokemon_heal_phase(bt, e, ph); break;
     default:
         /* a phase with no port: it was reported when it was queued */
         pr_note_unported(bt, (uint16_t)(PR_FEAT_PHASE_0 + PH(ph)->type));

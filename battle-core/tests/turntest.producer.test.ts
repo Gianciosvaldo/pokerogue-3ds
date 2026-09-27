@@ -38,7 +38,12 @@
  * or read one (Stomp, Electric and Fire attacks, weight-based moves), a quarter of the Pokemon have
  * an ability that reacts to them (Steadfast, Inner Focus, Own Tempo, Shield Dust, Serene Grace,
  * No Guard), a third start with some of those tags, and half the Pokemon holding a rampage move
- * start in the middle of one (FRENZY, the queued move, a successful history entry).
+ * start in the middle of one (FRENZY, the queued move, a successful history entry);
+ * TURN_HEAL=1 aims at recoil, drain, recharge and the heal phase: most moves have recoil, drain or
+ * recharge (Struggle and Chloroblast included) or are attacks, half the abilities block recoil,
+ * turn drain into damage, heal from a status or from a move's type (Rock Head, Magic Guard, Liquid
+ * Ooze, Poison Heal, Volt Absorb, Water Absorb...), a third of the Pokemon are poisoned, and half
+ * the Pokemon that know a recharge move start the turn recharging, as the command phases leave it.
  *
  * Each case builds a random singles state inside a real upstream battle, gives both sides a
  * FIGHT command the way the command phases do, then runs upstream's own phases from
@@ -88,6 +93,7 @@ it("turntest producer", async () => {
   const ONHIT = process.env.TURN_ONHIT === "1";
   const CHARGE = process.env.TURN_CHARGE === "1";
   const TAGS = process.env.TURN_TAGS === "1";
+  const HEAL = process.env.TURN_HEAL === "1";
   const OUT = process.env.TURN_OUT ?? "/tmp/pr-turns.txt";
   const game = new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
   game.override
@@ -226,6 +232,17 @@ it("turntest producer", async () => {
     AbilityId.STEADFAST, AbilityId.INNER_FOCUS, AbilityId.OWN_TEMPO, AbilityId.SHIELD_DUST, AbilityId.SERENE_GRACE,
     AbilityId.NO_GUARD,
   ];
+  // TURN_HEAL pools
+  const healMoves = usable.filter((m: any) =>
+    m.attrs.some((a: any) => ["RecoilAttr", "HitHealAttr", "RechargeAttr"].includes(a.constructor.name)),
+  );
+  const healAbilityIds = allAbilities
+    .filter((a: any) =>
+      a?.attrs.some((x: any) =>
+        isA(x, ["BlockRecoilDamageAttr", "BlockNonDirectDamageAbAttr", "ReverseDrainAbAttr", "PostTurnStatusHealAbAttr", "TypeImmunityHealAbAttr"]),
+      ),
+    )
+    .map((a: any) => a.id);
   const healStatusAttrs: [number, any][] = allAbilities
     .filter((a: any) => a)
     .sort((a: any, b: any) => a.id - b.id)
@@ -419,6 +436,7 @@ it("turntest producer", async () => {
       : ONHIT && rnd(3) !== 0 ? onHitAbilityIds[rnd(onHitAbilityIds.length)]
       : CHARGE && rnd(6) === 0 ? AbilityId.NO_GUARD
       : TAGS && rnd(4) === 0 ? tagAbilityIds[rnd(tagAbilityIds.length)]
+      : HEAL && rnd(2) === 0 ? healAbilityIds[rnd(healAbilityIds.length)]
       : RICH && rnd(2) === 0 ? abilityIds[rnd(abilityIds.length)] : AbilityId.BALL_FETCH;
     p.gender = rnd(3) - 1;
     p.friendship = rnd(256);
@@ -428,7 +446,9 @@ it("turntest producer", async () => {
     p.calculateStats();
     p.hp = rnd(3) === 0 ? p.getMaxHp() : 1 + rnd(p.getMaxHp());
     p.status = null;
-    if (RICH ? rnd(3) === 0 : STATUS ? rnd(4) === 0 : ONHIT || CHARGE || TAGS ? rnd(6) === 0 : STAT && rnd(8) === 0) {
+    if (HEAL && rnd(3) === 0) {
+      p.status = new Status([StatusEffect.POISON, StatusEffect.TOXIC][rnd(2)], rnd(4));
+    } else if (RICH ? rnd(3) === 0 : STATUS ? rnd(4) === 0 : ONHIT || CHARGE || TAGS ? rnd(6) === 0 : STAT && rnd(8) === 0) {
       const s = statuses[rnd(statuses.length)];
       p.status = new Status(s, rnd(4), s === StatusEffect.SLEEP ? 1 + rnd(3) : 0, s === StatusEffect.FREEZE ? 1 + rnd(3) : undefined);
     }
@@ -441,6 +461,8 @@ it("turntest producer", async () => {
         ? (rnd(6) === 0 ? thawMoves[rnd(thawMoves.length)] : statusSetMoves[rnd(statusSetMoves.length)])
         : ONHIT && rnd(10) < 8
         ? (rnd(4) !== 0 ? contactAttacks[rnd(contactAttacks.length)] : attacks[rnd(attacks.length)])
+        : HEAL && rnd(10) < 6
+        ? healMoves[rnd(healMoves.length)]
         : TAGS && rnd(10) < 8
         ? (rnd(4) !== 0 ? tagMoves[rnd(tagMoves.length)] : tagReaders[rnd(tagReaders.length)])
         : CHARGE && rnd(10) < 7
@@ -609,6 +631,29 @@ it("turntest producer", async () => {
         battle.turnCommands[b] = p.isPlayer()
           ? { command: Command.FIGHT, cursor: p.moveset.findIndex((m: any) => m.moveId === move.id), move: turnMove, args: [MoveUseMode.IGNORE_PP, turnMove] }
           : { command: Command.FIGHT, move: turnMove, skip: false };
+      }
+    }
+    if (HEAL) {
+      for (const p of [A, D]) {
+        // recharging: what the last turn's RECHARGING tag (2 turns, one lapsed at turn end) and the
+        // command phases leave: the player keeps the placeholder in its queue and commands it, the
+        // enemy's getNextMove() clears the queue and picks a move as usual
+        const recharge = p.moveset.filter((m: any) => m.getMove().attrs.some((a: any) => a.constructor.name === "RechargeAttr"));
+        if (!recharge.length || rnd(2) !== 0) {
+          continue;
+        }
+        p.summonData.tags.push(getBattlerTag(BattlerTagType.RECHARGING, 1, recharge[0].moveId, p.id));
+        (p.summonData.tags.at(-1) as any).turnCount = 1;
+        p.summonData.moveHistory.push({ move: recharge[0].moveId, targets: [(p === A ? D : A).getBattlerIndex()], result: MoveResult.SUCCESS, useMode: MoveUseMode.NORMAL });
+        if (p.isPlayer()) {
+          p.summonData.moveQueue = [{ move: MoveId.NONE, targets: [], useMode: MoveUseMode.NORMAL }];
+          const b = p.getBattlerIndex();
+          battle.turnCommands[b] = {
+            command: Command.FIGHT, cursor: -1,
+            move: { move: MoveId.NONE, targets: getMoveTargets(p, MoveId.NONE).targets, useMode: MoveUseMode.NORMAL },
+            args: [MoveUseMode.NORMAL, undefined], targets: [b],
+          };
+        }
       }
     }
     if (STATUS) {
