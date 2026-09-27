@@ -5,7 +5,7 @@ set -e
 UP=${1:?upstream dir}
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 mkdir -p "$UP/test/tests/zz-dump"
-for d in biomes evolutions exp; do
+for d in biomes evolutions exp trainers; do
   cp "$HERE/gen/dump-$d.test.ts" "$UP/test/tests/zz-dump/"
   (cd "$UP" && DUMP_OUT="$HERE/gen/out/run_$d.c" npx vitest run "test/tests/zz-dump/dump-$d.test.ts" >/dev/null)
   echo "gen/out/run_$d.c"
