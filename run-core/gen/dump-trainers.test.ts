@@ -1,7 +1,8 @@
 /*
  * Dumps what a new trainer battle reads, for run-core, as C: for every TrainerType, its config's
  * flags (doubleOnly, hasDouble, hasGenders, trainerTypeDouble), its party templates (size,
- * getStrength(i), base strength, deduplicated), its partyTemplateFunc as wave segments per mode, and how many names its class has in the
+ * getStrength(i), base strength, evoLevelThresholdKind, and per member index isSameSpecies, isBalanced,
+ * getEvoThresholdKind and the compound offset; deduplicated), its partyTemplateFunc as wave segments per mode, and how many names its class has in the
  * English locale (upstream picks a name with randSeedItem, so the count moves the RNG). Run with
  * tools/redump.sh <upstream dir>; writes gen/out/run_trainers.c. Generated: don't edit.
  */
@@ -38,7 +39,27 @@ it("dump trainers", async () => {
   const segs: string[] = [];
   const tpl = (t: any) => {
     const strengths = Array.from({ length: Math.min(t.size, 8) }, (_, i) => t.getStrength(i));
-    const key = `{${t.size}, ${t.strength ?? -1}, {${strengths.join(", ") || "0"}}}`;
+    // Per member index (0-7, past the size too: genPartyMember asks by index): isSameSpecies,
+    // isBalanced and getEvoThresholdKind packed as bit 0, bit 1 and bits 2-3; and the offset
+    // genPartyMember computes for a compound template (the start of the inner template holding the
+    // index), 0 for a plain one
+    const member = Array.from(
+      { length: 8 },
+      (_, i) => (t.isSameSpecies(i) ? 1 : 0) | (t.isBalanced(i) ? 2 : 0) | ((t.getEvoThresholdKind(i) ?? 1) << 2),
+    );
+    const offsets = Array.from({ length: 8 }, (_, i) => {
+      let offset = 0;
+      for (const inner of t.templates ?? []) {
+        if (offset + inner.size > i) {
+          break;
+        }
+        offset += inner.size;
+      }
+      return offset;
+    });
+    const key =
+      `{${t.size}, ${t.strength ?? -1}, {${strengths.join(", ") || "0"}}, ${t.evoLevelThresholdKind ?? 1}, `
+      + `{${member.join(", ")}}, {${offsets.join(", ")}}}`;
     if (!templateKey.has(key)) {
       templateKey.set(key, templates.length);
       templates.push(key);
