@@ -299,17 +299,274 @@ static void handle_pre_move_failures(pr_battle *bt, pr_engine *e, int ph)
     move_queue_shift(m->pokemon, NULL);
 }
 
-/* firstFailureCheck, for a user with no status and no tags (those checks report themselves) */
+static double pokemon_damage(pr_battle *bt, pr_engine *e, pr_pokemon *p, double damage, bool prevent_endure,
+                             bool ignore_faint_phase);
+
+/* ---- status effects (Status, Pokemon.cureStatus / resetStatus) ---- */
+
+/* Pokemon.clearStatus(confusion, reloadAssets): status = null */
+static void clear_status(pr_battle *bt, pr_pokemon *p, bool confusion)
+{
+    uint8_t last = p->status;
+    p->status = 0;
+    p->status_toxic_turns = p->status_sleep_turns = p->status_freeze_turns = -1;
+    if (last == STATUS_EFFECT_SLEEP && pr_get_battler_tag(p, BATTLER_TAG_TYPE_NIGHTMARE))
+        pr_note_unported(bt, PR_FEAT_TAG_LAPSE); /* lapseTag(NIGHTMARE) */
+    if (confusion && pr_get_battler_tag(p, BATTLER_TAG_TYPE_CONFUSED))
+        pr_note_unported(bt, PR_FEAT_TAG_LAPSE); /* lapseTag(CONFUSED) */
+}
+
+/* Pokemon.resetStatus(revive, confusion = false, reloadAssets = false, asPhase = true) */
+static void reset_status_as_phase(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool revive)
+{
+    if (!revive && p->status == STATUS_EFFECT_FAINT) return;
+    int ph = new_pokemon_phase(e, PH_RESET_STATUS, pr_battler_index(bt, p));
+    if (ph < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); e->overflow = true; return; }
+    PH(ph)->pokemon = p;
+    pr_phase_unshift(bt, e, ph);
+}
+
+void pr_reset_status_phase(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool revive)
+{
+    reset_status_as_phase(bt, e, p, revive);
+}
+
+/* Pokemon.cureStatus(effect): the cure message, then the status is cleared at once */
+static void cure_status(pr_battle *bt, pr_engine *e, pr_pokemon *p, int effect)
+{
+    if (effect != p->status) return;
+    pr_queue_message(bt, e);
+    clear_status(bt, p, false);
+}
+
+/* Status.incrementTurn(): the counters count down while truthy (undefined is -1 here) */
+static void status_increment_turn(pr_pokemon *p)
+{
+    p->status_toxic_turns++;
+    if (p->status_sleep_turns > 0) p->status_sleep_turns--;
+    if (p->status_freeze_turns > 0) p->status_freeze_turns--;
+}
+
+/* MovePhase.triggerStatus(effect, cancel): the activation message and its animation */
+static void trigger_status(pr_battle *bt, pr_engine *e, int ph, bool cancel)
+{
+    pr_phase *m = PH(ph);
+    pr_queue_message(bt, e);
+    unshift_new(bt, e, PH_COMMON_ANIM, pr_battler_index(bt, m->pokemon));
+    if (cancel) move_cancel(PH(ph));
+}
+
+/* move.findAttr(attr => attr.selfTarget && attr.is("HealStatusEffectAttr") && attr.isOfEffect(FREEZE)) */
+static bool move_thaws_user(int move)
+{
+    const pr_move *mv = &pr_moves[move];
+    for (unsigned i = 0; i < mv->nattr; i++) {
+        unsigned k = mv->attr0 + i;
+        if (!pr_attr_is(pr_attrs[k].cls, PR_AC_HealStatusEffectAttr) || !pr_attr_effects[k].self_target) continue;
+        const pr_attr_HealStatusEffectAttr *x = (const pr_attr_HealStatusEffectAttr *)pr_attrs[k].p;
+        for (unsigned j = 0; j < x->effects.n; j++)
+            if (x->effects.v[j] == STATUS_EFFECT_FREEZE) return true;
+    }
+    return false;
+}
+
+/* MovePhase.checkSleep */
+static bool check_sleep(pr_battle *bt, pr_engine *e, int ph)
+{
+    pr_phase *m = PH(ph);
+    pr_pokemon *user = m->pokemon;
+    if (user->status != STATUS_EFFECT_SLEEP) return false;
+    if (m->use_mode == MOVE_USE_MODE_INDIRECT) {       /* Dancer wakes its user up */
+        reset_status_as_phase(bt, e, user, false);
+        return false;
+    }
+    status_increment_turn(user);
+    double turns = user->status_sleep_turns < 0 ? 0 : user->status_sleep_turns;
+    pr_ab_params pp = {.pokemon = user, .move = -1, .value = &turns, .effect = STATUS_EFFECT_SLEEP};
+    pr_apply_ab_attrs(bt, PR_AC_ReduceStatusEffectDurationAbAttr, &pp);   /* Early Bird */
+    user->status_sleep_turns = (int16_t)turns;
+    if (user->status_sleep_turns <= 0) {
+        cure_status(bt, e, user, STATUS_EFFECT_SLEEP);
+        return false;
+    }
+    /* applyMoveAttrs("BypassSleepAttr"): Sleep Talk, Snore */
+    bool cancel = !pr_move_has_attr(m->move.id, PR_AC_BypassSleepAttr);
+    trigger_status(bt, e, ph, cancel);
+    return cancel;
+}
+
+/* MovePhase.checkFreeze */
+static bool check_freeze(pr_battle *bt, pr_engine *e, int ph)
+{
+    pr_phase *m = PH(ph);
+    pr_pokemon *user = m->pokemon;
+    if (user->status != STATUS_EFFECT_FREEZE) return false;
+    if (m->use_mode == MOVE_USE_MODE_INDIRECT) {
+        reset_status_as_phase(bt, e, user, false);
+        return false;
+    }
+    int move = m->move.id;
+    bool thaws = move_thaws_user(move);
+    int8_t ty[3];
+    int n = pr_get_types(user, ty, PR_TYPES_ORIGINAL_IF_STELLAR);
+    bool fire = false;
+    for (int i = 0; i < n; i++) fire |= ty[i] == POKEMON_TYPE_FIRE;
+    if (thaws && (move != MOVE_ID_BURN_UP || fire)) {   /* thawed after the other checks (doThawCheck) */
+        m->thaw = true;
+        return false;
+    }
+    status_increment_turn(user);
+    if (thaws || !pr_battle_rand_seed_int(bt, 4, 0) || (user->status_freeze_turns < 0 ? 0 : user->status_freeze_turns) <= 0) {
+        cure_status(bt, e, user, STATUS_EFFECT_FREEZE);
+        return false;
+    }
+    trigger_status(bt, e, ph, true);
+    return true;
+}
+
+/* Pokemon.isSafeguarded(attacker): Safeguard on this side, unless the attacker's Infiltrator
+ * (applied, not simulated) gets through */
+static bool is_safeguarded(pr_battle *bt, const pr_pokemon *p, const pr_pokemon *attacker)
+{
+    int side = p->is_player ? ARENA_TAG_SIDE_PLAYER : ARENA_TAG_SIDE_ENEMY;
+    if (!pr_arena_get_tag_on_side(bt, ARENA_TAG_TYPE_SAFEGUARD, side)) return false;
+    bool bypassed = false;
+    if (attacker) {
+        pr_ab_params ip = {.pokemon = attacker, .move = -1, .flag = &bypassed};
+        pr_apply_ab_attrs(bt, PR_AC_InfiltratorAbAttr, &ip);
+    }
+    return !bypassed;
+}
+
+bool pr_can_set_status(pr_battle *bt, pr_engine *e, pr_pokemon *p, int effect, bool quiet, bool override_status,
+                       const pr_pokemon *source, bool ignore_field)
+{
+    if (effect != STATUS_EFFECT_FAINT) {
+        /* Rest fails on its own status; anything else on any status, or one already on its way */
+        if (override_status ? p->status == effect : (p->status || p->pending_status)) {
+            if (!quiet) pr_queue_message(bt, e);                  /* queueStatusImmuneMessage */
+            return false;
+        }
+        if (pr_is_grounded(bt, p, false) && !ignore_field && bt->terrain == TERRAIN_MISTY) {
+            if (!quiet) pr_queue_message(bt, e);
+            return false;
+        }
+    }
+    int8_t ty[3];
+    int n = pr_get_types(p, ty, PR_TYPES_ORIGINAL_IF_STELLAR);
+    bool immune = false;
+    switch (effect) {
+    case STATUS_EFFECT_POISON:
+    case STATUS_EFFECT_TOXIC:
+        /* Poison and Steel types, unless the source's Corrosion gets through (not simulated) */
+        for (int i = 0; i < n && !immune; i++) {
+            if (ty[i] != POKEMON_TYPE_POISON && ty[i] != POKEMON_TYPE_STEEL) continue;
+            if (!source) { immune = true; break; }
+            bool cancel = false;
+            pr_ab_params cp = {.pokemon = source, .move = -1, .flag = &cancel, .effect = effect, .defender_type = ty[i]};
+            pr_apply_ab_attrs(bt, PR_AC_IgnoreTypeStatusEffectImmunityAbAttr, &cp);
+            immune = !cancel;
+        }
+        break;
+    case STATUS_EFFECT_PARALYSIS: immune = pr_is_of_type(p, POKEMON_TYPE_ELECTRIC); break;
+    case STATUS_EFFECT_SLEEP: immune = pr_is_grounded(bt, p, false) && bt->terrain == TERRAIN_ELECTRIC; break;
+    case STATUS_EFFECT_FREEZE:
+        immune = pr_is_of_type(p, POKEMON_TYPE_ICE)
+                 || (!ignore_field && (bt->weather == WEATHER_TYPE_SUNNY || bt->weather == WEATHER_TYPE_HARSH_SUN));
+        break;
+    case STATUS_EFFECT_BURN: immune = pr_is_of_type(p, POKEMON_TYPE_FIRE); break;
+    }
+    if (immune) {
+        if (!quiet) pr_queue_message(bt, e);
+        return false;
+    }
+    /* the Pokemon's own abilities (Limber, Insomnia...), then its side's (itself included) */
+    bool cancelled = false;
+    pr_ab_params pp = {.pokemon = p, .move = -1, .flag = &cancelled, .effect = effect, .simulated = quiet};
+    pr_apply_ab_attrs(bt, PR_AC_StatusEffectImmunityAbAttr, &pp);
+    if (cancelled) return false;
+    pr_speed_iter it;
+    pr_pokemon *ally;
+    pr_speed_iter_init(bt, &it, p->is_player ? ARENA_TAG_SIDE_PLAYER : ARENA_TAG_SIDE_ENEMY);
+    while ((ally = pr_speed_iter_next(bt, &it))) {
+        pr_ab_params ap = {.pokemon = ally, .opponent = source, .target = p, .move = -1, .flag = &cancelled,
+                           .effect = effect, .simulated = quiet};
+        pr_apply_ab_attrs(bt, PR_AC_UserFieldStatusEffectImmunityAbAttr, &ap);   /* Sweet Veil, Flower Veil */
+        if (cancelled) return false;
+    }
+    if (source && source != p && is_safeguarded(bt, p, source)) {
+        if (!quiet) pr_queue_message(bt, e);
+        return false;
+    }
+    return true;
+}
+
+bool pr_try_set_status(pr_battle *bt, pr_engine *e, pr_pokemon *p, int effect, pr_pokemon *source, int sleep_turns,
+                       bool override_status, bool quiet)
+{
+    if (!effect) return false;
+    if (!pr_can_set_status(bt, e, p, effect, quiet, override_status, source, false)) return false;
+    if (p->hp <= 0 && effect != STATUS_EFFECT_FAINT) return false;
+    /* falling asleep or freezing during its own multi-hit attack ends the attack */
+    if ((effect == STATUS_EFFECT_SLEEP || effect == STATUS_EFFECT_FREEZE) && e->current >= 0
+        && PH(e->current)->type == PH_MOVE_EFFECT && slot(bt, PH(e->current)->battler) == p) {
+        p->hit_count = 1;
+        p->hits_left = 1;
+    }
+    if (override_status) reset_status_as_phase(bt, e, p, false);
+    else p->pending_status = (uint8_t)effect;
+    int ph = new_pokemon_phase(e, PH_OBTAIN_STATUS_EFFECT, pr_battler_index(bt, p));
+    if (ph < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); e->overflow = true; return true; }
+    pr_phase *q = PH(ph);
+    q->pokemon = p;
+    q->ose_effect = (uint8_t)effect;
+    q->ose_sleep_turns = (int8_t)sleep_turns;
+    q->source_p = source;
+    pr_phase_unshift(bt, e, ph);
+    return true;
+}
+
+/* ObtainStatusEffectPhase.start */
+static void obtain_status_effect_phase(pr_battle *bt, pr_engine *e, int ph)
+{
+    pr_phase *q = PH(ph);
+    pr_pokemon *p = slot(bt, q->battler);
+    if (!p) { pr_note_unported(bt, PR_FEAT_PHASE_0 + PH_OBTAIN_STATUS_EFFECT); return; }
+    int effect = q->ose_effect;
+    /* doSetStatus(effect, sleepTurnsRemaining): 2 or 3 turns of sleep when not given */
+    int sleep = q->ose_sleep_turns >= 0 ? q->ose_sleep_turns
+                : effect == STATUS_EFFECT_SLEEP ? (pr_battle_rand_seed_int(bt, 3, 0) == 0 ? 2 : 3) : 0;
+    p->pending_status = 0;
+    if (effect == STATUS_EFFECT_SLEEP) {
+        /* falling asleep while semi-invulnerable ends it and drops the queued move */
+        static const int invuln[] = {BATTLER_TAG_TYPE_FLYING, BATTLER_TAG_TYPE_UNDERGROUND, BATTLER_TAG_TYPE_UNDERWATER,
+                                     BATTLER_TAG_TYPE_HIDDEN};
+        for (unsigned i = 0; i < sizeof invuln / sizeof *invuln; i++)
+            if (pr_get_battler_tag(p, invuln[i])) pr_note_unported(bt, PR_FEAT_TAG_LAPSE);
+    }
+    p->status = (uint8_t)effect;
+    p->status_toxic_turns = 0;
+    p->status_sleep_turns = (int16_t)sleep;
+    p->status_freeze_turns = effect == STATUS_EFFECT_FREEZE ? 3 : -1;
+    /* the animation's callback: the message, then (no species changes form on a status) */
+    pr_queue_message(bt, e);
+    if (effect && effect != STATUS_EFFECT_FAINT) {
+        bt->ignore_abilities = false;                       /* arena.setIgnoreAbilities(false) */
+        bt->ignoring_effect_source = -1;
+        pr_ab_params pp = {.pokemon = p, .opponent = q->source_p, .move = -1, .effect = effect};
+        pr_apply_ab_attrs(bt, PR_AC_PostSetStatusAbAttr, &pp);                   /* Synchronize */
+        q = PH(ph);
+        if (q->source_p) pr_hook_ab(bt, q->source_p, PR_AC_ConfusionOnStatusEffectAbAttr); /* Poison Puppeteer */
+    }
+}
+
+/* firstFailureCheck, for a user with no tags (those checks report themselves) */
 static bool first_failure_check(pr_battle *bt, pr_engine *e, int ph)
 {
     pr_phase *m = PH(ph);
     pr_pokemon *user = m->pokemon;
     const pr_move *mv = &pr_moves[m->move.id];
-    /* checkSleep, checkFreeze */
-    if (user->status == STATUS_EFFECT_SLEEP || user->status == STATUS_EFFECT_FREEZE) {
-        pr_note_unported(bt, PR_FEAT_STATUS_TURN);
-        return false;
-    }
+    if (check_sleep(bt, e, ph) || check_freeze(bt, e, ph)) return true;
     /* checkPP */
     if (mv->pp != -1 && m->use_mode < MOVE_USE_MODE_IGNORE_PP && ref_pp_used(m) >= ref_move_pp(m)) {
         move_cancel(m);
@@ -346,10 +603,10 @@ static bool first_failure_check(pr_battle *bt, pr_engine *e, int ph)
     static const int tag_checks2[] = {BATTLER_TAG_TYPE_TAUNT, BATTLER_TAG_TYPE_IMPRISON, BATTLER_TAG_TYPE_CONFUSED};
     for (unsigned i = 0; i < sizeof tag_checks2 / sizeof *tag_checks2; i++)
         if (lapse_tag(bt, user, tag_checks2[i]) && m->cancelled) return true;
-    /* checkPara */
-    if (user->status == STATUS_EFFECT_PARALYSIS) {
-        pr_note_unported(bt, PR_FEAT_STATUS_TURN);
-        return false;
+    /* checkPara: fully paralysed one time in eight */
+    if (user->status == STATUS_EFFECT_PARALYSIS && pr_battle_rand_seed_int(bt, 8, 0) == 0) {
+        trigger_status(bt, e, ph, true);
+        return true;
     }
     if (lapse_tag(bt, user, BATTLER_TAG_TYPE_INFATUATED) && m->cancelled) return true;
     return false;
@@ -533,7 +790,8 @@ static void move_phase(pr_battle *bt, pr_engine *e, int ph)
         queue_move_end(bt, e, ph);
         return;
     }
-    /* doThawCheck: `thaw` is only set by the freeze check */
+    /* doThawCheck: the move thaws its user out once the checks have passed */
+    if (!follow_up && !ignore_status && m->thaw) cure_status(bt, e, user, STATUS_EFFECT_FREEZE);
 
     int move = m->move.id;
     /* arena.ignoreAbilities (Sunsteel Strike and co. don't work when called indirectly) */
@@ -1090,7 +1348,9 @@ static void move_end_phase(pr_battle *bt, pr_engine *e, int ph)
     bt->ignoring_effect_source = -1;
     for (int i = 0; i < me->n_end_targets; i++) {
         pr_pokemon *t = slot(bt, me->end_targets[i]);
-        if (t) pr_hook_ab(bt, t, PR_AC_PostSummonRemoveEffectAbAttr);
+        if (!t) continue;
+        pr_ab_params pp = {.pokemon = t, .move = -1};
+        pr_apply_ab_attrs(bt, PR_AC_PostSummonRemoveEffectAbAttr, &pp);  /* Limber, Oblivious... */
     }
 }
 
@@ -1326,12 +1586,37 @@ static void check_status_effect_phase(pr_battle *bt, pr_engine *e)
 
 static void post_turn_status_effect_phase(pr_battle *bt, pr_engine *e, int ph)
 {
-    (void)e;
     pr_pokemon *p = slot(bt, PH(ph)->battler);
     if (!is_active_on_field(p) || !(p->status == STATUS_EFFECT_POISON || p->status == STATUS_EFFECT_TOXIC
-                                     || p->status == STATUS_EFFECT_BURN) || p->switch_out_status)
+                                     || p->status == STATUS_EFFECT_BURN) || p->switch_out_status) {
+        if (bt->wave_index == 200) pr_note_unported(bt, PR_FEAT_FINAL_BOSS);  /* end(): isClassicFinalBoss */
         return;
-    pr_note_unported(bt, PR_FEAT_STATUS_TURN);
+    }
+    status_increment_turn(p);
+    bool cancelled = false;
+    pr_ab_params pp = {.pokemon = p, .move = -1, .flag = &cancelled};
+    pr_apply_ab_attrs(bt, PR_AC_BlockNonDirectDamageAbAttr, &pp);   /* Magic Guard */
+    pr_apply_ab_attrs(bt, PR_AC_BlockStatusDamageAbAttr, &pp);      /* Poison Heal */
+    if (!cancelled) {
+        pr_queue_message(bt, e);
+        double damage = 0;
+        int32_t mhp = max_hp(p);
+        switch (p->status) {
+        case STATUS_EFFECT_POISON: damage = to_dmg_value(mhp / 8.0); break;
+        case STATUS_EFFECT_TOXIC: damage = to_dmg_value((double)mhp * p->status_toxic_turns / 16); break;
+        case STATUS_EFFECT_BURN: {
+            damage = to_dmg_value(mhp / 16.0);
+            pr_ab_params bp = {.pokemon = p, .move = -1, .value = &damage};
+            pr_apply_ab_attrs(bt, PR_AC_ReduceBurnDamageAbAttr, &bp);  /* Heatproof */
+            break;
+        }
+        }
+        if (damage) {
+            pokemon_damage(bt, e, p, damage, true, false);       /* damage(damage, false, preventEndure) */
+            pr_hook_ab(bt, p, PR_AC_PostDamageAbAttr);
+        }
+    }
+    if (bt->wave_index == 200) pr_note_unported(bt, PR_FEAT_FINAL_BOSS);
 }
 
 /* arena.lapseTags(): every tag's lapse() runs first (ArenaTag.lapse: a positive turn count counts
@@ -1654,6 +1939,7 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_HIDE_ABILITY: bt->ability_bar_visible = false; break;
     case PH_RESET_STATUS: reset_status_phase(bt, e, ph); break;
     case PH_STAT_STAGE_CHANGE: stat_stage_change_phase(bt, e, ph); break;
+    case PH_OBTAIN_STATUS_EFFECT: obtain_status_effect_phase(bt, e, ph); break;
     default:
         /* a phase with no port: it was reported when it was queued */
         pr_note_unported(bt, (uint16_t)(PR_FEAT_PHASE_0 + PH(ph)->type));

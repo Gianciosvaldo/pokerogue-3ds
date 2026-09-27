@@ -206,7 +206,7 @@ static bool type_in(const pr_intlist *l, int t)
 
 /* What applySingleAbAttrs does between canApply and apply outside a simulation: show the
  * ability, queue its trigger message. The turn engine keeps these phases (NULL: no engine). */
-typedef struct { pr_engine *e; bool shown; } ab_ctx;
+typedef struct { pr_engine *e; bool shown; uint16_t ability; } ab_ctx;
 static bool has_trigger_message(uint16_t cls);
 static bool shows_ability(const pr_attr *a);
 static void before_apply(pr_battle *bt, const pr_attr *a, const pr_ab_params *pp, ab_ctx *c)
@@ -395,6 +395,80 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         GATE(*pp->value > 1);
         *pp->value *= P(MultCritAbAttr, a)->multAmount;
         return 1;
+    /* ---- status effects ---- */
+    case PR_AC_StatusEffectImmunityAbAttr: {                            /* Limber, Insomnia, Water Veil... */
+        const pr_attr_StatusEffectImmunityAbAttr *x = P(StatusEffectImmunityAbAttr, a);
+        GATE(!*pp->flag && ((x->immuneEffects.n == 0 && pp->effect != STATUS_EFFECT_FAINT)
+                            || type_in(&x->immuneEffects, pp->effect)));
+        *pp->flag = true;
+        return 1;
+    }
+    case PR_AC_UserFieldStatusEffectImmunityAbAttr: {                   /* Sweet Veil, Pastel Veil */
+        const pr_attr_UserFieldStatusEffectImmunityAbAttr *x = P(UserFieldStatusEffectImmunityAbAttr, a);
+        GATE((!*pp->flag && x->immuneEffects.n == 0 && pp->effect != STATUS_EFFECT_FAINT)
+             || type_in(&x->immuneEffects, pp->effect));
+        *pp->flag = true;
+        return 1;
+    }
+    case PR_AC_ConditionalUserFieldStatusEffectImmunityAbAttr: {        /* Flower Veil */
+        const pr_attr_ConditionalUserFieldStatusEffectImmunityAbAttr *x = P(ConditionalUserFieldStatusEffectImmunityAbAttr, a);
+        GATE(!*pp->flag && call_bool(bt, x->condition, a->cls, pp->target, o, -1)
+             && ((!*pp->flag && x->immuneEffects.n == 0 && pp->effect != STATUS_EFFECT_FAINT)
+                 || type_in(&x->immuneEffects, pp->effect)));
+        *pp->flag = true;
+        return 1;
+    }
+    case PR_AC_IgnoreTypeStatusEffectImmunityAbAttr: {                  /* Corrosion */
+        const pr_attr_IgnoreTypeStatusEffectImmunityAbAttr *x = P(IgnoreTypeStatusEffectImmunityAbAttr, a);
+        GATE(!*pp->flag && type_in(&x->statusEffect, pp->effect) && type_in(&x->defenderType, pp->defender_type));
+        *pp->flag = true;
+        return 1;
+    }
+    case PR_AC_SynchronizeStatusAbAttr: {
+        if (!pp->simulated && !c->e) return -1;
+        int ef = pp->effect;
+        GATE(o && (ef == STATUS_EFFECT_BURN || ef == STATUS_EFFECT_PARALYSIS || ef == STATUS_EFFECT_POISON
+                   || ef == STATUS_EFFECT_TOXIC));
+        if (!pp->simulated) pr_try_set_status(bt, c->e, (pr_pokemon *)o, ef, (pr_pokemon *)p, -1, false, true);
+        return 1;
+    }
+    case PR_AC_PostSummonHealStatusAbAttr: {                            /* Limber, Insomnia, Water Veil... */
+        const pr_attr_PostSummonHealStatusAbAttr *x = P(PostSummonHealStatusAbAttr, a);
+        if (!(p->status && (x->immuneEffects.n == 0 || type_in(&x->immuneEffects, p->status)))) return 0;
+        if (!c->e) return -1;                         /* apply ignores simulated: it needs the queue */
+        GATE(true);
+        /* getTriggerMessage runs before apply: it names the status this attr cured last time */
+        if (pr_status_healed_get(c->ability)) pr_queue_message(bt, c->e);
+        pr_status_healed_set(c->ability, p->status);
+        pr_reset_status_phase(bt, c->e, (pr_pokemon *)p, false);
+        return 1;
+    }
+    case PR_AC_PostSummonRemoveBattlerTagAbAttr: {                      /* Oblivious, Own Tempo */
+        const pr_attr_PostSummonRemoveBattlerTagAbAttr *x = P(PostSummonRemoveBattlerTagAbAttr, a);
+        for (unsigned i = 0; i < x->immuneTags.n; i++)
+            if (pr_get_battler_tag(p, x->immuneTags.v[i])) return -1;       /* removeTag: onRemove */
+        return 0;
+    }
+    case PR_AC_PostTurnStatusHealAbAttr: {                              /* Poison Heal's heal */
+        const pr_attr_PostTurnStatusHealAbAttr *x = P(PostTurnStatusHealAbAttr, a);
+        if (!(p->status && type_in(&x->effects, p->status) && p->hp < pr_get_stat(p, STAT_HP, true))) return 0;
+        return -1;                                     /* unshifts a PokemonHealPhase: not ported */
+    }
+    case PR_AC_ReduceStatusEffectDurationAbAttr:                        /* Early Bird */
+        GATE(pp->effect == P(ReduceStatusEffectDurationAbAttr, a)->statusEffect);
+        *pp->value -= 1;
+        return 1;
+    case PR_AC_BlockStatusDamageAbAttr: {                               /* Poison Heal */
+        const pr_attr_BlockStatusDamageAbAttr *x = P(BlockStatusDamageAbAttr, a);
+        GATE(!*pp->flag && p->status && type_in(&x->effects, p->status));
+        *pp->flag = true;
+        return 1;
+    }
+    case PR_AC_ReduceBurnDamageAbAttr:                                  /* Heatproof */
+        GATE(true);
+        *pp->value = to_dmg_value(*pp->value * P(ReduceBurnDamageAbAttr, a)->multiplier);
+        return 1;
+    case PR_AC_BlockNonDirectDamageAbAttr:     /* Magic Guard */
     case PR_AC_BypassBurnDamageReductionAbAttr:
     case PR_AC_BlockOneHitKOAbAttr:            /* Sturdy against OHKO moves */
     case PR_AC_FieldPreventExplosiveMovesAbAttr: /* Damp */
@@ -590,6 +664,43 @@ static void set_add(pr_battle *bt, uint16_t *v, uint8_t *n, uint16_t x)
     else pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT);
 }
 
+static struct { uint16_t ability; uint8_t effect; } status_healed[16];
+static int n_status_healed;
+
+int pr_status_healed_get(uint16_t ability)
+{
+    for (int i = 0; i < n_status_healed; i++)
+        if (status_healed[i].ability == ability) return status_healed[i].effect;
+    return 0;
+}
+
+void pr_status_healed_set(uint16_t ability, int effect)
+{
+    int i = 0;
+    while (i < n_status_healed && status_healed[i].ability < ability) i++;
+    if (i < n_status_healed && status_healed[i].ability == ability) {
+        status_healed[i].effect = (uint8_t)effect;
+        return;
+    }
+    if (n_status_healed == (int)(sizeof status_healed / sizeof status_healed[0])) return;
+    memmove(&status_healed[i + 1], &status_healed[i], (size_t)(n_status_healed - i) * sizeof status_healed[0]);
+    status_healed[i].ability = ability;
+    status_healed[i].effect = (uint8_t)effect;
+    n_status_healed++;
+}
+
+void pr_status_healed_clear(void) { n_status_healed = 0; }
+
+int pr_status_healed_list(uint16_t *ability, uint8_t *effect, int max)
+{
+    int n = n_status_healed < max ? n_status_healed : max;
+    for (int i = 0; i < n; i++) {
+        ability[i] = status_healed[i].ability;
+        effect[i] = status_healed[i].effect;
+    }
+    return n;
+}
+
 void pr_apply_ab_attrs(pr_battle *bt, uint16_t cls, pr_ab_params *pp)
 {
     const pr_pokemon *p = pp->pokemon;
@@ -608,7 +719,7 @@ void pr_apply_ab_attrs(pr_battle *bt, uint16_t cls, pr_ab_params *pp)
             if (!checked) { can = pr_can_apply_ability(bt, p, ability); checked = true; }
             if (!can) break;
             if (!condition_ok(bt, a, p)) continue;
-            ab_ctx c = {e, false};
+            ab_ctx c = {e, false, ability};
             int r = apply_one(bt, a, pp, &c);
             if (r < 0) { pr_note_unported(bt, a->cls); continue; }
             if (r == 0 || !e) continue;

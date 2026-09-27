@@ -16,7 +16,7 @@
 static const char *const battler_tag_names[] = {BATTLER_TAG_TYPE_VALUES};
 static const char *const arena_tag_names[] = {ARENA_TAG_TYPE_VALUES};
 
-#define MAX_LINES 64
+#define MAX_LINES 128
 #define LINE_LEN 2048
 typedef struct { char s[MAX_LINES][LINE_LEN]; int n; } lines_t;
 
@@ -341,6 +341,13 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             for (int j = 0; j < c->n_targets; j++) c->targets[j] = (int8_t)atoi(tg[j]);
             c->use_mode = (uint8_t)inum(l, "mode");
             c->skip = inum(l, "skip") != 0;
+        } else if (!strncmp(l, "SESSION ", 8)) {
+            char hs[16][64];
+            int n = split(need(l, "healed"), ',', hs, 16);
+            for (int j = 0; j < n; j++) {
+                char *c = strchr(hs[j], ':');
+                pr_status_healed_set((uint16_t)atoi(hs[j]), c ? atoi(c + 1) : 0);
+            }
         } else if (!strncmp(l, "PRE ", 4)) {
             int b = (int)inum(l, "b");
             bt->pre_commands[b].command = (int8_t)inum(l, "cmd");
@@ -552,6 +559,16 @@ static void dump_state(lines_t *L, const pr_battle *bt, const case_state *cs, bo
         const struct pr_turn_command *pc = &bt->pre_commands[k];
         if (pc->command >= 0) add_line(L, "PRE b=%d cmd=%d skip=%d", k, pc->command, pc->skip);
     }
+    /* session state kept on ability attr objects upstream */
+    uint16_t hab[16];
+    uint8_t hef[16];
+    int nh = pr_status_healed_list(hab, hef, 16);
+    if (nh) {
+        s.n = 0;
+        sb(&s, "SESSION healed=");
+        LIST(&s, nh, ',', "%d:%d", hab[i], hef[i]);
+        add_line(L, "%s", s.s);
+    }
 }
 
 static void dump_trace_queue(lines_t *L, const pr_engine *e)
@@ -628,6 +645,26 @@ static int line_diff(const char *c, const char *js)
 /* ported calls made during covered turns, per closure id */
 static uint32_t covered_hits[PR_CLOSURE_COUNT];
 
+/* How many covered turns ran each phase (by upstream name, battler dropped) */
+static struct { char name[40]; int n; } ran_phase[64];
+static int n_ran_phase;
+static void count_phases(const pr_engine *e)
+{
+    int seen[64] = {0};
+    for (int t = 0; t < e->n_trace; t++) {
+        char nm[40];
+        snprintf(nm, sizeof nm, "%s", e->trace[t]);
+        nm[strcspn(nm, ":")] = 0;
+        int k = 0;
+        while (k < n_ran_phase && strcmp(ran_phase[k].name, nm)) k++;
+        if (k == n_ran_phase) {
+            if (n_ran_phase == 64) continue;
+            snprintf(ran_phase[n_ran_phase++].name, sizeof ran_phase[0].name, "%s", nm);
+        }
+        if (!seen[k]) { seen[k] = 1; ran_phase[k].n++; }
+    }
+}
+
 /* The move conditions (pr_moves[].conditions*) with a C port, and how many of them the covered
  * turns ran: a port no covered turn reaches is untested by this test */
 static void report_conditions(void)
@@ -657,7 +694,18 @@ static void report_conditions(void)
 
 /* TURN_PROBE cases: each PROBE line is move.applyConditions(user, target, seq) run upstream on
  * the state before, in order, with its result and the RNG state after it; seq=0 lines call a
- * StatStageChangeAttr's own condition (attr = its index on the move) */
+ * StatStageChangeAttr's own condition (attr = its index on the move). TURN_SPROBE cases: each
+ * SPROBE line is pokemon.canSetStatus(eff, quiet, ovr, src, ign), with the abilities applied so
+ * far on both sides */
+static bool is_probe_line(const char *l) { return !strncmp(l, "PROBE ", 6) || !strncmp(l, "SPROBE ", 7); }
+
+static void ab_applied(sbuf *s, const pr_pokemon *p)
+{
+    LIST(s, p->n_ab_applied_summon, ',', "%d", p->ab_applied_summon[i]);
+    sb(s, "/");
+    LIST(s, p->n_ab_applied_wave, ',', "%d", p->ab_applied_wave[i]);
+}
+
 static struct { int total, covered, pass, fail, unported, after_unported, threw, shown; } probes;
 static void probe_case(pr_battle *bt, const lines_t *js, int from, const char *case_name)
 {
@@ -667,7 +715,7 @@ static void probe_case(pr_battle *bt, const lines_t *js, int from, const char *c
     eng.current = -1;
     bt->engine = &eng;
     bool stop = false;
-    for (int i = from; i < js->n && !strncmp(js->s[i], "PROBE ", 6); i++) {
+    for (int i = from; i < js->n && is_probe_line(js->s[i]); i++) {
         const char *l = js->s[i];
         probes.total++;
         if (!strcmp(need(l, "res"), "throw") || stop) {
@@ -676,13 +724,22 @@ static void probe_case(pr_battle *bt, const lines_t *js, int from, const char *c
             stop = true;
             continue;
         }
-        pr_pokemon *u = bt->field[inum(l, "u")], *t = bt->field[inum(l, "t")];
-        int move = (int)inum(l, "move"), seq = (int)inum(l, "seq");
+        bool sprobe = l[0] == 'S';
+        pr_pokemon *u = sprobe ? NULL : bt->field[inum(l, "u")], *t = sprobe ? NULL : bt->field[inum(l, "t")];
+        int move = sprobe ? -1 : (int)inum(l, "move"), seq = sprobe ? -1 : (int)inum(l, "seq");
         bt->n_unported = bt->n_deferred = 0;
         static uint32_t hits_before[PR_CLOSURE_COUNT];
         memcpy(hits_before, pr_closure_hits, sizeof hits_before);
         bool res;
-        if (seq == 0) {
+        if (sprobe) {
+            /* what the call queues (ability bars) never runs: start each one from an empty queue */
+            memset(&eng, 0, sizeof eng);
+            eng.n_levels = 1;
+            eng.current = -1;
+            int src = (int)inum(l, "src");
+            res = pr_can_set_status(bt, &eng, bt->field[inum(l, "p")], (int)inum(l, "eff"), true, inum(l, "ovr") != 0,
+                                    src < 0 ? NULL : bt->field[src], inum(l, "ign") != 0);
+        } else if (seq == 0) {
             /* a StatStageChangeAttr's options.condition(user, target, move) */
             const pr_move *mv = &pr_moves[move];
             unsigned k = (unsigned)inum(l, "attr");
@@ -712,6 +769,14 @@ static void probe_case(pr_battle *bt, const lines_t *js, int from, const char *c
         snprintf(g, sizeof g, "%s", need(l, "g"));             /* need() reuses one buffer */
         snprintf(want, sizeof want, "RNG g=%s b=%s", g, need(l, "b"));
         bool ok = res == (inum(l, "res") != 0) && line_diff(got.s, want) < 0;
+        if (sprobe) {
+            sbuf aa = {{0}, 0};
+            ab_applied(&aa, bt->field[0]);
+            sb(&aa, "|");
+            ab_applied(&aa, bt->field[2]);
+            if (strcmp(aa.s, need(l, "aa"))) ok = false;
+            if (!ok) sb(&got, " aa=%s", aa.s);
+        }
         if (ok) probes.pass++;
         else {
             probes.fail++;
@@ -756,14 +821,16 @@ int main(int argc, char **argv)
         }
         if (!got) break;
         /* END: the case is complete */
+        if (js.n >= MAX_LINES) { fprintf(stderr, "case too long\n"); return 2; }
         snprintf(js.s[js.n++], LINE_LEN, "%s", line);
         if (run_at < 0) { fprintf(stderr, "%s: no RUN\n", case_name); return 2; }
         total++;
 
         memset(&cs, 0, sizeof cs);
         for (int k = 0; k < 4; k++) cs.bt.commands[k].command = cs.bt.pre_commands[k].command = -1;
+        pr_status_healed_clear();
         read_state(&js, 0, run_at, &cs);
-        bool probe = run_at < js.n && !strncmp(js.s[run_at], "PROBE ", 6);
+        bool probe = run_at < js.n && is_probe_line(js.s[run_at]);
         if (cs.skip || (cs.btag && !probe)) { skipped++; continue; }
         pr_battle *bt = &cs.bt;
         bt->field[0] = &cs.mon[0];
@@ -824,6 +891,7 @@ int main(int argc, char **argv)
             continue;
         }
         covered++;
+        count_phases(&eng);
         for (int i = 0; i < PR_CLOSURE_COUNT; i++) covered_hits[i] += pr_closure_hits[i] - hits_before[i];
         int njs = js.n - run_at;
         bool ok = ordered.n == njs;
@@ -877,6 +945,11 @@ int main(int argc, char **argv)
         printf("condition probes %d: covered %d, pass %d, fail %d; not covered %d (unported %d, after one %d, upstream threw %d)\n",
                probes.total, probes.covered, probes.pass, probes.fail, probes.total - probes.covered,
                probes.unported, probes.after_unported, probes.threw);
+    if (n_ran_phase) {
+        printf("covered turns that ran:");
+        for (int k = 0; k < n_ran_phase; k++) printf(" %s=%d", ran_phase[k].name, ran_phase[k].n);
+        printf("\n");
+    }
     report_conditions();
     fail += probes.fail;
     (void)cs0;

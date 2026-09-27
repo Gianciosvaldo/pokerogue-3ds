@@ -298,6 +298,17 @@ static double grass_target(ARGS)
     return 0;
 }
 
+/* Flower Veil status: (target, source) => !!source && target.id !== source.id
+ *   && target.isOfType(GRASS, {returnOriginalTypesIfStellar: true}) */
+static double flower_veil_status(ARGS)
+{
+    UNUSED;
+    return b && a->id != b->id && grass_target(bt, self, a, NULL, -1) != 0;
+}
+
+/* Shields Down: (p) => p.formIndex < 7 (Meteor Form) */
+static double meteor_form(ARGS) { UNUSED; return a->form < 7; }
+
 /* Ball Fetch: (pokemon) => !pokemon.waveData.abilitiesApplied.has(ability) */
 static double ball_fetch_unused(ARGS) { UNUSED; return !pr_wave_ability_applied(a, ABILITY_ID_BALL_FETCH); }
 
@@ -425,5 +436,7 @@ const pr_closure_reg pr_ability_closures[] = {
     {"ability:177", "1b589a349668", gale_wings}, /* closure 558 */
     {"ability:205", "e8d66e7b435a", triage}, /* closure 592 */
     {"ability:166", "3adbae502f95", grass_target}, /* closure 551 */
+    {"ability:166", "87c14ce5fba5", flower_veil_status}, /* closure 549 */
+    {"ability:197", "193c76db9e37", meteor_form}, /* closures 584, 585 */
 };
 const int pr_ability_closures_n = (int)(sizeof pr_ability_closures / sizeof pr_ability_closures[0]);

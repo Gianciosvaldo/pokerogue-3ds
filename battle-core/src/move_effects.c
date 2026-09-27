@@ -86,10 +86,23 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         }
         return;
     }
-    case PR_AC_StatusEffectAttr: {
+    case PR_AC_StatusEffectAttr:
+    case PR_AC_MultiStatusEffectAttr: {                 /* Tri Attack, Dire Claw */
+        int effect;
+        if (a->cls == PR_AC_MultiStatusEffectAttr) {
+            /* this.effect = randSeedItem(this.effects): Phaser.Math.RND.pick, before the chance roll */
+            const pr_intlist *l = &P(MultiStatusEffectAttr, a)->effects;
+            if (l->n == 1) effect = l->v[0];
+            else if (!bt->rng_live) { pr_note_unported(bt, PR_FEAT_GLOBAL_RNG); return; }
+            else effect = l->v[pr_rng_integer_in_range(&bt->rng, 0, (int32_t)l->n - 1)];
+        } else {
+            effect = P(StatusEffectAttr, a)->effect;
+        }
         /* no canApply check: the chance is rolled even against a fainted target */
         double chance = get_move_chance(bt, ef, user, target, move, ef->self_target, true);
-        if (chance_roll(bt, chance)) pr_note_unported(bt, a->cls); /* target.trySetStatus(...) */
+        if (!chance_roll(bt, chance)) return;
+        /* target.trySetStatus(effect, user, undefined, null, false, quiet): quiet unless a status move */
+        pr_try_set_status(bt, e, target, effect, user, -1, false, pr_moves[move].category != MOVE_CATEGORY_STATUS);
         return;
     }
     case PR_AC_HealStatusEffectAttr: {

@@ -17,14 +17,14 @@ typedef enum {
     /* phases of a turn, ported */
     PH_TURN_START, PH_MOVE, PH_MOVE_EFFECT, PH_MOVE_END, PH_FAINT, PH_CHECK_INTERLUDE,
     PH_WEATHER_EFFECT, PH_POSITIONAL_TAG, PH_BERRY, PH_CHECK_STATUS_EFFECT, PH_POST_TURN_STATUS_EFFECT,
-    PH_TURN_END, PH_RESET_STATUS, PH_STAT_STAGE_CHANGE,
+    PH_TURN_END, PH_RESET_STATUS, PH_STAT_STAGE_CHANGE, PH_OBTAIN_STATUS_EFFECT,
     /* presentation: no battle state of their own */
     PH_MESSAGE, PH_DAMAGE_ANIM, PH_COMMON_ANIM, PH_SHOW_ABILITY, PH_HIDE_ABILITY,
     /* where a turn hands control back to the caller */
     PH_TURN_INIT, PH_VICTORY, PH_SWITCH, PH_SWITCH_SUMMON, PH_GAME_OVER, PH_BATTLE_END, PH_SELECT_MODIFIER,
     /* not ported yet: created where upstream creates them (so the order stays right), and
      * the turn is reported unported */
-    PH_POKEMON_HEAL, PH_OBTAIN_STATUS_EFFECT, PH_MOVE_CHARGE, PH_MOVE_HEADER,
+    PH_POKEMON_HEAL, PH_MOVE_CHARGE, PH_MOVE_HEADER,
     PH_MOVE_REFLECT, PH_DANCER, PH_TERA, PH_ATTEMPT_CAPTURE, PH_ATTEMPT_RUN, PH_TOGGLE_DOUBLE_POSITION,
     PH_COUNT_
 } pr_phase_type;
@@ -72,6 +72,9 @@ typedef struct pr_phase {
     uint8_t n_ssc;
     bool ssc_message, ssc_ignore_abilities, ssc_processed, ssc_self_target;
     uint8_t ssc_source_type;
+    /* ObtainStatusEffectPhase: the effect, sourcePokemon (source_p), sleepTurnsRemaining (-1 = undefined) */
+    uint8_t ose_effect;
+    int8_t ose_sleep_turns;
     uint32_t seq;              /* creation order, for debugging */
 } pr_phase;
 
@@ -156,6 +159,15 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
  * sourcePokemon}) with no message and no other option; returns the phase (-1 when out of room) */
 int pr_unshift_stat_stage_change(pr_battle *bt, pr_engine *e, int battler, const int32_t *stats, int n_stats,
                                  int stages, pr_pokemon *source);
+/* Pokemon.resetStatus(revive, false, false, asPhase=true): a ResetStatusPhase, unshifted */
+void pr_reset_status_phase(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool revive);
+/* Pokemon.trySetStatus(effect, sourcePokemon, sleepTurnsRemaining (-1 = undefined), sourceText,
+ * overrideStatus, quiet): canSetStatus, then an ObtainStatusEffectPhase is unshifted */
+bool pr_try_set_status(pr_battle *bt, pr_engine *e, pr_pokemon *p, int effect, pr_pokemon *source, int sleep_turns,
+                       bool override_status, bool quiet);
+/* Pokemon.canSetStatus(effect, quiet, overrideStatus, sourcePokemon, ignoreField) */
+bool pr_can_set_status(pr_battle *bt, pr_engine *e, pr_pokemon *p, int effect, bool quiet, bool override_status,
+                       const pr_pokemon *source, bool ignore_field);
 /* unshiftNew("StatStageChangePhase", {battlerIndex, changes, sourcePokemon, sourceEffectType}) as the
  * stat-change abilities queue it (Mirror Armor, Opportunist, Defiant); -1 when out of room */
 int pr_unshift_stat_stage_change_ex(pr_battle *bt, pr_engine *e, int battler, const int8_t *stat,

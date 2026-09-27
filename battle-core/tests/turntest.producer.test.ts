@@ -14,7 +14,15 @@
  * (Simple, Contrary, Clear Body, Mirror Armor, Defiant, Opportunist...), stat stages start near
  * the caps two cases in three, a quarter of the Pokemon are terastallized (Stellar included),
  * one in eight has a status, one case in eight gives both sides the same ability, and a quarter of
- * the cases have Mist on one side).
+ * the cases have Mist on one side); TURN_STATUS=1 aims at statuses: most moves set one (Thunder
+ * Wave, Scald, Tri Attack...) or thaw the user, half the abilities deal with statuses (Limber,
+ * Sweet Veil, Flower Veil, Corrosion, Synchronize, Early Bird, Poison Heal, Infiltrator...), a
+ * quarter of the Pokemon start with a status, a fifth are terastallized and a quarter of the cases
+ * have Safeguard on one side; TURN_SPROBE=1 sets up states as TURN_PROBE does (weather, terrain,
+ * arena and battler tags) with those abilities and some pending statuses, and instead of running a
+ * turn calls pokemon.canSetStatus(effect, quiet=true, overrideStatus, source, ignoreField) for
+ * both Pokemon, every effect and three sources (the other one, itself, none), writing an SPROBE
+ * line with the result, the abilities applied so far and the RNG state after each call.
  *
  * Each case builds a random singles state inside a real upstream battle, gives both sides a
  * FIGHT command the way the command phases do, then runs upstream's own phases from
@@ -53,10 +61,13 @@ import { it } from "vitest";
 
 it("turntest producer", async () => {
   const N = Number(process.env.TURN_N ?? 2000);
-  const RICH = process.env.TURN_RICH === "1" || process.env.TURN_PROBE === "1";
-  const PROBE = process.env.TURN_PROBE === "1";
+  const RICH = process.env.TURN_RICH === "1" || process.env.TURN_PROBE === "1" || process.env.TURN_SPROBE === "1";
+  const PROBE = process.env.TURN_PROBE === "1" || process.env.TURN_SPROBE === "1";
   const COND = PROBE || process.env.TURN_COND === "1";
   const STAT = process.env.TURN_STAT === "1";
+  const SPROBE = process.env.TURN_SPROBE === "1";
+  const STATUS = process.env.TURN_STATUS === "1";
+  const STATUS_POOL = STATUS || SPROBE;
   const OUT = process.env.TURN_OUT ?? "/tmp/pr-turns.txt";
   const game = new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
   game.override
@@ -132,6 +143,39 @@ it("turntest producer", async () => {
     )
     .map((a: any) => a.id)
     .concat([AbilityId.INFILTRATOR, AbilityId.PLUS, AbilityId.MINUS, AbilityId.LEVITATE]);
+  // TURN_STATUS / TURN_SPROBE pools
+  const statusSetMoves = usable.filter((m: any) =>
+    m.attrs.some((a: any) => ["StatusEffectAttr", "MultiStatusEffectAttr"].includes(a.constructor.name)),
+  );
+  const thawMoves = usable.filter((m: any) =>
+    m.attrs.some((a: any) => a.selfTarget && a.constructor.name === "HealStatusEffectAttr" && a.isOfEffect(StatusEffect.FREEZE)),
+  );
+  const statusAbilityIds = allAbilities
+    .filter((a: any) =>
+      a?.attrs.some((x: any) =>
+        isA(x, [
+          "StatusEffectImmunityAbAttr",
+          "UserFieldStatusEffectImmunityAbAttr",
+          "IgnoreTypeStatusEffectImmunityAbAttr",
+          "SynchronizeStatusAbAttr",
+          "ReduceStatusEffectDurationAbAttr",
+          "BlockStatusDamageAbAttr",
+          "ReduceBurnDamageAbAttr",
+          "BlockNonDirectDamageAbAttr",
+          "InfiltratorAbAttr",
+          "MoveEffectChanceMultiplierAbAttr",
+          "IgnoreMoveEffectsAbAttr",
+        ]),
+      ),
+    )
+    .map((a: any) => a.id)
+    .concat([AbilityId.LEVITATE]);
+  const healStatusAttrs: [number, any][] = allAbilities
+    .filter((a: any) => a)
+    .sort((a: any, b: any) => a.id - b.id)
+    .flatMap((a: any) =>
+      a.attrs.filter((x: any) => x.constructor.name === "PostSummonHealStatusAbAttr").map((x: any) => [a.id, x]),
+    );
 
   // Bench Pokemon so a fainted player Pokemon has someone to switch to (SwitchPhase) and the
   // party lines are real. Made once; species and status are drawn per case.
@@ -233,6 +277,11 @@ it("turntest producer", async () => {
         lines.push(`PRE b=${k} cmd=${pc.command} skip=${pc.skip ? 1 : 0}`);
       }
     }
+    // session state kept on ability attr objects (the last status each cure-on-entry attr healed)
+    const healed = healStatusAttrs.filter(([, x]) => x.statusHealed).map(([id, x]) => `${id}:${x.statusHealed}`);
+    if (healed.length) {
+      lines.push(`SESSION healed=${L(healed)}`);
+    }
     return lines;
   };
   // What is still queued: the phase tree's levels (bottom first) and the dynamic queues
@@ -310,6 +359,7 @@ it("turntest producer", async () => {
     p.customPokemonData.passive = AbilityId.BALL_FETCH;
     p.summonData.ability = STAT && rnd(2) === 0
       ? statAbilityIds[rnd(statAbilityIds.length)]
+      : STATUS_POOL && rnd(3) !== 0 ? statusAbilityIds[rnd(statusAbilityIds.length)]
       : RICH && rnd(2) === 0 ? abilityIds[rnd(abilityIds.length)] : AbilityId.BALL_FETCH;
     p.gender = rnd(3) - 1;
     p.friendship = rnd(256);
@@ -319,7 +369,7 @@ it("turntest producer", async () => {
     p.calculateStats();
     p.hp = rnd(3) === 0 ? p.getMaxHp() : 1 + rnd(p.getMaxHp());
     p.status = null;
-    if (RICH ? rnd(3) === 0 : STAT && rnd(8) === 0) {
+    if (RICH ? rnd(3) === 0 : STATUS ? rnd(4) === 0 : STAT && rnd(8) === 0) {
       const s = statuses[rnd(statuses.length)];
       p.status = new Status(s, rnd(4), s === StatusEffect.SLEEP ? 1 + rnd(3) : 0, s === StatusEffect.FREEZE ? 1 + rnd(3) : undefined);
     }
@@ -328,6 +378,8 @@ it("turntest producer", async () => {
     for (let k = 0; k < n; k++) {
       const m = STAT && rnd(10) < 7
         ? (rnd(5) === 0 ? statCondMoves[rnd(statCondMoves.length)] : statMoves[rnd(statMoves.length)])
+        : STATUS && rnd(10) < 7
+        ? (rnd(6) === 0 ? thawMoves[rnd(thawMoves.length)] : statusSetMoves[rnd(statusSetMoves.length)])
         : COND && rnd(10) < 6
         ? withConditions[rnd(withConditions.length)]
         : rnd(10) < 7 ? attacks[rnd(attacks.length)] : usable[rnd(usable.length)];
@@ -412,6 +464,22 @@ it("turntest producer", async () => {
         scene.arena.tags.push(getArenaTag(ArenaTagType.MIST, 1 + rnd(5), MoveId.MIST, A.id, side));
       }
     }
+    if (STATUS) {
+      // which cure-on-entry abilities have cured before (their message names the last cure)
+      for (const [, x] of healStatusAttrs) {
+        x.statusHealed = rnd(3) === 0 ? statuses[rnd(statuses.length)] : undefined;
+      }
+      if (rnd(8) === 0) {
+        D.summonData.ability = A.summonData.ability; // Synchronize against Synchronize
+      }
+      for (const p of [A, D]) {
+        p.isTerastallized = rnd(5) === 0;
+      }
+      if (rnd(4) === 0) {
+        const side = [ArenaTagSide.PLAYER, ArenaTagSide.ENEMY][rnd(2)];
+        scene.arena.tags.push(getArenaTag(ArenaTagType.SAFEGUARD, 1 + rnd(5), MoveId.SAFEGUARD, A.id, side));
+      }
+    }
     if (PROBE) {
       // same levels half the time (OHKO moves), stat stages near the caps (Belly Drum and co.)
       if (rnd(2) === 0) {
@@ -450,9 +518,40 @@ it("turntest producer", async () => {
           scene.arena.tags.push(getArenaTag(type, 1 + rnd(5), MoveId.NONE, A.id, side));
         }
       }
+      if (SPROBE) {
+        for (const p of [A, D]) {
+          p.turnData.pendingStatus = rnd(8) === 0 ? statuses[rnd(statuses.length)] : StatusEffect.NONE;
+        }
+      }
       const before = dumpState();
       const probes: string[] = [];
       let threw = false;
+      if (SPROBE) {
+        const aa = (p: any) => `${L([...p.summonData.abilitiesApplied])}/${L([...p.waveData.abilitiesApplied])}`;
+        for (const p of [A, D]) {
+          for (const src of [p === A ? D : A, p, null]) {
+            for (let eff = StatusEffect.POISON; eff <= StatusEffect.FAINT && !threw; eff++) {
+              const ovr = rnd(4) === 0;
+              const ign = rnd(4) === 0;
+              let res: string;
+              try {
+                res = p.canSetStatus(eff, true, ovr, src, ign) ? "1" : "0";
+              } catch (e: any) {
+                res = "throw";
+                threw = true;
+              }
+              const bs = battle.battleSeedState;
+              probes.push(
+                `SPROBE p=${p.getBattlerIndex()} src=${src ? src.getBattlerIndex() : -1} eff=${eff} ovr=${ovr ? 1 : 0}`
+                  + ` ign=${ign ? 1 : 0} res=${res} aa=${aa(A)}|${aa(D)}`
+                  + ` g=${rngState(Phaser.Math.RND.state())} b=${bs ? rngState(bs) : "none"}`,
+              );
+            }
+          }
+        }
+        out.push(`CASE ${i}`, ...before, "RUN", ...probes, "END stop=probe");
+        continue;
+      }
       // first the StatStageChangeAttr conditions of the moves that have one, called directly
       // (seq=0, attr = the attr's index on the move; they draw no random number)
       for (const [u, t] of [[A, D], [D, A]]) {

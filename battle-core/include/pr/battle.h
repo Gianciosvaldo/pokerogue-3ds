@@ -354,9 +354,18 @@ typedef struct pr_ab_params {
     uint16_t *cancelled_stats;
     bool self_target;
     const pr_pokemon *target;
+    int effect;                    /* a StatusEffect (status immunities, Early Bird, Synchronize...) */
 } pr_ab_params;
 /* applyAbAttrs("<cls>", params): ability then passive, conditions, canApply, apply. */
 void pr_apply_ab_attrs(pr_battle *bt, uint16_t cls, pr_ab_params *pp);
+/* PostSummonHealStatusAbAttr.statusHealed: the last status the attr cured, which its next trigger
+ * message reads (before it cures again). Upstream keeps it on the attr object, so it outlives
+ * battles and is shared by every Pokemon with the ability: a session-wide table here too, by
+ * ability (each has at most one such attr). 0 = never cured. */
+int pr_status_healed_get(uint16_t ability);
+void pr_status_healed_set(uint16_t ability, int effect);
+void pr_status_healed_clear(void);
+int pr_status_healed_list(uint16_t *ability, uint8_t *effect, int max);   /* by ability id */
 /* ability.hasAttr / pokemon.getAbility().getAttrs(): presence only, no applicability checks */
 const pr_attr *pr_ability_first_attr(uint16_t ability, uint16_t cls);
 /* Pokemon.canApplyAbility for `ability` (the ability or the passive) */
