@@ -121,9 +121,14 @@ int pr_run_gen_trainer_party(pr_run *run, const pr_trainer_party_ctx *ctx, pr_tr
         out->species[e] = (uint16_t)species;
         out->n = e + 1;
 
-        /* what the next members see: the root (checkDuplicateSpecies) and getTypes() of the new member */
-        if (!pr_run_species_root_and_types(species, out->mons[e].form, &sc.party_roots[e],
-                                           sc.party_types, &sc.n_party_types)) {
+        /* what the next members see: the root (checkDuplicateSpecies) and getTypes() of the new member
+         * (its fusion's types too, in spliced endless) */
+        int8_t types[2];
+        const int root = pr_run_species_root(species), n_types = pr_run_enemy_types(&out->mons[e], species, types);
+        for (int i = 0; i < n_types && sc.n_party_types < PR_MAX_PARTY_TYPES; i++)
+            sc.party_types[sc.n_party_types++] = types[i];
+        sc.party_roots[e] = (uint16_t)root;
+        if (root < 0 || n_types < 0) {
             run->unported |= PR_RUN_UNDEFINED_UPSTREAM;
             run->rng = saved;
             return -1;

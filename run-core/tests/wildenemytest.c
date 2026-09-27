@@ -25,6 +25,7 @@ int main(int argc, char **argv)
     FILE *f = fopen(argc > 1 ? argv[1] : "wildenemy-cases.txt", "r");
     if (!f) { perror("cases"); return 2; }
     static char line[4096];
+    int fusions = 0;
     int line_no = 0, cases = 0, pass = 0, fail = 0, uncovered = 0, threw = 0, bosses = 0, bugs = 0, locked = 0;
     while (fgets(line, sizeof line, f)) {
         line_no++;
@@ -52,6 +53,8 @@ int main(int argc, char **argv)
         ctx.golden_bug_net = num(&save) != 0;
         ctx.enemy.hidden_ability_charm_stacks = (int)num(&save);
         ctx.enemy.shiny_charm_stacks = (int)num(&save);
+        ctx.enemy.enemy_fusion_stacks = (int)num(&save);
+        ctx.enemy.enemy_fusion_chance = num(&save);
         ctx.enemy.trainer_id = (uint16_t)num(&save);
         ctx.enemy.secret_id = (uint16_t)num(&save);
         read_state(&save, &run.rng);
@@ -70,6 +73,12 @@ int main(int argc, char **argv)
             ok = ok && me.mon.form == (int)num(&save);
             ok = ok && me.mon.nature == (int)num(&save);
             ok = ok && me.mon.tera_type == (int)num(&save);
+            if (ok) {
+                const int fs = (int)num(&save), fa = (int)num(&save), fg = (int)num(&save), ff = (int)num(&save);
+                ok = me.mon.fusion_species == fs
+                     && (fs < 0 || (me.mon.fusion_ability_index == fa && me.mon.fusion_gender == fg && me.mon.fusion_form == ff));
+                fusions += ok && fs >= 0;
+            }
             ok = ok && me.mon.boss_segments == (int)num(&save);
             pr_rng after;
             read_state(&save, &after);
@@ -84,8 +93,8 @@ int main(int argc, char **argv)
             printf("MISMATCH line %d: species %d (upstream %d)\n", line_no, me.species, up_species);
         }
     }
-    printf("cases %d (upstream threw: %d); checked: %d bosses, %d shiny-locked, %d with the Golden Bug Net\n", cases,
-           threw, bosses, locked, bugs);
+    printf("cases %d (upstream threw: %d); checked: %d bosses, %d shiny-locked, %d with the Golden Bug Net, %d fusions\n",
+           cases, threw, bosses, locked, bugs, fusions);
     printf("  %-36s pass %6d  fail %d  not covered %d\n", "first wild enemy (+ RNG)", pass, fail, uncovered);
     return fail ? 1 : 0;
 }

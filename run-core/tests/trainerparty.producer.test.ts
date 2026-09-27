@@ -49,8 +49,8 @@ it("trainerparty producer", async () => {
   };
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   const seedStr = () => Array.from({ length: 24 }, () => chars[rnd(chars.length)]).join("");
-  // The modes without a daily config or spliced fusions, which the port reports as unported
-  const modes = [GameModes.CLASSIC, GameModes.ENDLESS, GameModes.CHALLENGE];
+  // Every mode (spliced endless fuses every member; the daily run is a plain daily seed, without a custom config)
+  const modes = [GameModes.CLASSIC, GameModes.ENDLESS, GameModes.SPLICED_ENDLESS, GameModes.DAILY, GameModes.CHALLENGE];
   const biomes = Object.values(BiomeId) as number[];
   const types = Object.values(TrainerType).filter(v => typeof v === "number" && (trainerConfigs as any)[v]) as number[];
   const plain = types.filter(t => Object.keys((trainerConfigs as any)[t].partyMemberFuncs).length === 0);
@@ -75,7 +75,7 @@ it("trainerparty producer", async () => {
 
   let snap = "";
   (EnemyPokemon.prototype as any).generateAndPopulateMoveset = function (this: any) {
-    snap = [this.abilityIndex, this.id, this.gender, this.formIndex, this.nature, this.teraType].join(" ");
+    snap = [this.abilityIndex, this.id, this.gender, this.formIndex, this.nature, this.teraType, this.fusionSpecies?.speciesId ?? -1, this.fusionAbilityIndex ?? 0, this.fusionGender ?? 0, this.fusionFormIndex ?? 0].join(" ");
   };
 
   const lines: string[] = [];

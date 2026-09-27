@@ -13,12 +13,11 @@
  * run->unported and returns a placeholder, so a caller (or the test) never takes a guess
  * for upstream's answer. */
 enum {
-    PR_RUN_UNPORTED_DAILY = 1u << 0,      /* the daily run's seed config (trainer waves, money, final boss) */
+    PR_RUN_UNPORTED_DAILY = 1u << 0,      /* a custom daily seed's config (event dailies: run->daily_custom) */
     PR_RUN_UNPORTED_CHALLENGES = 1u << 1, /* challenge hooks (FIXED_BATTLES...) */
     PR_RUN_UNPORTED_SPECIES = 1u << 3,       /* globalScene.randomSpecies (any species), for an empty biome pool */
     PR_RUN_UNPORTED_FIXED_BATTLE = 1u << 4,  /* a fixed battle's trainer (config closures) */
     PR_RUN_UNPORTED_TRAINER = 1u << 5,       /* a trainer config the data doesn't cover */
-    PR_RUN_UNPORTED_FUSION = 1u << 6,        /* an enemy that becomes a fusion (generateFusionSpecies) */
     PR_RUN_UNDEFINED_UPSTREAM = 1u << 2,  /* upstream's own answer is undefined here (e.g. randSeedItem([])) */
 };
 
@@ -29,6 +28,8 @@ typedef struct pr_run {
     pr_seedstr wave_seed;      /* globalScene.waveSeed */
     pr_rng rng;                /* Phaser.Math.RND */
     bool offset_gym;           /* globalScene.offsetGym */
+    bool daily_custom;         /* the daily seed carries a custom config (gameMode.dailyConfig, parsed from an
+                                * event seed): its overrides aren't ported. A plain daily seed has none */
     unsigned unported;
 } pr_run;
 
@@ -158,6 +159,11 @@ int pr_run_get_time_of_day(int biome, int wave, int wave_cycle_offset);
  * is_boss < 0 = undefined. -1 with a PR_RUN_UNPORTED_* flag when it can't answer. */
 int pr_run_random_species(pr_run *run, int biome, int wave, int level, int luck, int is_boss, int wave_cycle_offset,
                           bool *evo_is_boss);
+/* gameMode.getOverrideSpecies(waveIndex), which arena.randomSpecies checks first and returns as it is
+ * (no evolution step): the daily run's final boss, randSeedItem over the legend-like species with a base
+ * total of 600 or more (not Eternatus or Arceus); -1 for none. pr_run_random_species returns it too, but a
+ * caller composing the evolution step has to check this first. */
+int pr_run_get_override_species(pr_run *run, int wave);
 /* arena.randomTrainerType(wave, isBoss) on run->rng */
 int pr_run_random_trainer_type(pr_run *run, int biome, int wave, bool is_boss);
 
@@ -224,6 +230,18 @@ int pr_run_try_spread_pokerus(const pr_run *run, int wave, bool *pokerus, int n_
 double pr_run_add_money(double money, double amount);
 /* The Coin Cases' interest (MoneyInterestModifier), each one's stack count in list order */
 double pr_run_apply_money_interest(double money, const int *stacks, int n);
+/* getPartyLuckValue(party): a party member as it sees it */
+typedef struct {
+    int species;
+    int luck, fusion_luck;        /* .luck, .fusionLuck */
+    bool fusion;                  /* isFusion() */
+    bool allowed;                 /* isAllowedInBattle(): not fainted and allowed by the challenges */
+} pr_luck_member;
+/* The party's luck (0-14): the members' luck, +1 for each of a timed event's luck-boosted species, the
+ * event's luck boost; in the daily run a roll on the run seed instead (a custom daily seed's luck isn't
+ * ported) */
+int pr_run_get_party_luck_value(pr_run *run, const pr_luck_member *party, int n, const int *event_species,
+                                int n_event_species, int event_luck_boost);
 
 /* ---- trainers (data in gen/out/run_trainers.c) ---- */
 typedef struct {
@@ -281,10 +299,13 @@ typedef struct {
     bool has_hidden;              /* abilityHidden is set */
     uint16_t n_forms;             /* forms.length (0 for a species without forms) */
     uint16_t form_start;          /* in pr_form_gens: n_forms entries, or 1 for the species itself */
+    /* getCompatibleFusionSpeciesFilter's inputs, and isCatchable */
+    bool has_evolutions, has_prevolution, sub_legendary, legendary, mythical, trainer_forbidden, catchable;
 } pr_species_gen;
 typedef struct {
-    uint8_t n_types; int8_t types[2];   /* what the tera type is picked from, in order */
+    uint8_t n_types; int8_t types[2];   /* what the tera type is picked from, in order (no fusion) */
     bool has_variants;                  /* variantData has "<id>-<formKey>" or "<id>" */
+    int8_t type1, type2;                /* the raw types (type2 -2 = null), for a fusion's getBaseTypes */
 } pr_form_gen;
 extern const pr_species_gen pr_species_gens[];   /* by SpeciesId */
 extern const int pr_species_gen_count;
@@ -314,6 +335,9 @@ typedef struct {
 } pr_enemy_gen_ctx;
 typedef struct {
     int ability_index;
+    int fusion_species;           /* -1 = not a fusion; else generateFusionSpecies' species, ability index,
+                                   * gender and form */
+    int fusion_ability_index, fusion_gender, fusion_form;
     uint32_t id;
     int ivs[6];
     int gender, form, nature, tera_type;
@@ -329,6 +353,9 @@ int pr_run_enemy_pokemon_base(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_enemy
  * wave seed at offset id), luck, a trainer's Pokemon's IVs and friendship; then addEnemyPokemon's
  * second IV roll for a boss (its postProcess callback and dev overrides aren't modelled) */
 int pr_run_enemy_pokemon_finish(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_enemy_gen *out);
+/* getTypes() of a new enemy (no tera, no summon data): its form's types, combined with its fusion's.
+ * Returns how many (1 or 2), or -1 where upstream reads an undefined form */
+int pr_run_enemy_types(const pr_enemy_gen *mon, int species, int8_t types[2]);
 /* battleScene.getSpeciesFormIndex(species, gender, undefined, false) for an enemy, on run->rng */
 int pr_run_get_species_form_index(pr_run *run, const pr_enemy_gen_ctx *ctx, int gender);
 
@@ -378,10 +405,8 @@ typedef struct {
  * where upstream loops forever or picks from an empty list, PR_RUN_UNPORTED_TRAINER for an unknown type. */
 int pr_run_gen_new_party_member_species(pr_run *run, const pr_party_species_ctx *ctx);
 
-/* The root of `species`, and the types of its form `form` as a new Pokemon's getTypes() gives them, appended
- * at types[*n_types];
- * false where upstream reads an undefined form */
-bool pr_run_species_root_and_types(int species, int form, uint16_t *root, int8_t *types, int *n_types);
+/* getRootSpeciesId() of `species`, -1 if unknown */
+int pr_run_species_root(int species);
 
 /* A trainer's party, member by member (src/trainerparty.c) */
 typedef struct {

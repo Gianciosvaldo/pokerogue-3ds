@@ -19,6 +19,7 @@ int main(int argc, char **argv)
     FILE *f = fopen(argc > 1 ? argv[1] : "trainerparty-cases.txt", "r");
     if (!f) { perror("cases"); return 2; }
     static char line[4096];
+    int fusions = 0;
     int line_no = 0, cases = 0, pass = 0, fail = 0, uncovered = 0, threw = 0, parties = 0, doubles = 0;
     pr_run run;
     pr_trainer_party_ctx ctx;
@@ -78,6 +79,12 @@ int main(int argc, char **argv)
                 ok = ok && m->form == (int)num(&save);
                 ok = ok && m->nature == (int)num(&save);
                 ok = ok && m->tera_type == (int)num(&save);
+                if (ok) {
+                    const int fs = (int)num(&save), fa = (int)num(&save), fg = (int)num(&save), ff = (int)num(&save);
+                    ok = m->fusion_species == fs
+                         && (fs < 0 || (m->fusion_ability_index == fa && m->fusion_gender == fg && m->fusion_form == ff));
+                    fusions += ok && fs >= 0;
+                }
             }
             if (ok) pass++;
             else {
@@ -87,8 +94,8 @@ int main(int argc, char **argv)
         }
     }
     if (cases && party_ok && rc == 0) parties++;
-    printf("cases %d (%d double; whole parties matched: %d; members upstream threw on: %d)\n", cases, doubles, parties,
-           threw);
+    printf("cases %d (%d double; whole parties matched: %d; members upstream threw on: %d; fused members: %d)\n", cases,
+           doubles, parties, threw, fusions);
     printf("  %-36s pass %6d  fail %d  not covered %d\n", "genPartyMember (species, rolls)", pass, fail, uncovered);
     return fail ? 1 : 0;
 }

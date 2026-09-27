@@ -42,7 +42,7 @@ int main(int argc, char **argv)
     FILE *f = fopen(argc > 1 ? argv[1] : "encounter-cases.txt", "r");
     if (!f) { perror("cases"); return 2; }
     static char line[8192];
-    int line_no = 0, cases = 0;
+    int line_no = 0, cases = 0, overrides = 0;
     while (fgets(line, sizeof line, f)) {
         line_no++;
         char *save;
@@ -72,8 +72,12 @@ int main(int argc, char **argv)
         bool my_evo_boss = false;
         int species = pr_run_random_species(&run, biome, wave, level, luck, is_boss, cycle, &my_evo_boss);
         unsigned species_unported = run.unported;
+        /* the daily run's final boss is the override species: upstream never reaches the evolution step */
+        const bool override = run.mode == GAME_MODES_DAILY && pr_run_is_wave_final(run.mode, wave);
+        overrides += override;
         record(C_SPECIES, &run.unported,
-               strcmp(sv, "NaN") && species == atoi(sv) && species == evo_species && my_evo_boss == (evo_boss != 0)
+               strcmp(sv, "NaN") && species == atoi(sv)
+                   && (override ? evo_species == -1 : species == evo_species && my_evo_boss == (evo_boss != 0))
                    && same_state(&run.rng, &after),
                line_no);
 
@@ -83,7 +87,8 @@ int main(int argc, char **argv)
         run.rng = start;
         run.unported = 0;
         species = pr_run_random_species(&run, biome, wave, level, luck, is_boss, cycle, &my_evo_boss);
-        int full = species < 0 ? -1 : pr_run_get_wild_species_for_level(&run.rng, species, level, true, my_evo_boss, false);
+        int full = species < 0 || override ? species
+                                           : pr_run_get_wild_species_for_level(&run.rng, species, level, true, my_evo_boss, false);
         run.unported |= species_unported;
         record(C_FULL, &run.unported, strcmp(fv, "NaN") && full == atoi(fv) && same_state(&run.rng, &after), line_no);
 
@@ -107,7 +112,7 @@ int main(int argc, char **argv)
         record(C_TRAINER, &run.unported,
                pr_run_random_trainer_type(&run, biome, wave, trainer_boss) == trainer && same_state(&run.rng, &after), line_no);
     }
-    printf("cases %d\n", cases);
+    printf("cases %d (daily final-boss overrides: %d)\n", cases, overrides);
     int bad = 0;
     for (int c = 0; c < C_COUNT_; c++) {
         printf("  %-36s pass %6d  fail %d  not covered %d\n", check_names[c], pass[c], fail[c], uncovered[c]);

@@ -199,6 +199,31 @@ static const pr_species *species_by_id(int id)
     return NULL;
 }
 
+/* gameMode.getOverrideSpecies(waveIndex):
+ *   if (isDaily && isWaveFinal(waveIndex)) {
+ *     const eventBoss = getDailyEventSeedBoss(); if (eventBoss?.speciesId != null) return it;  // custom seeds
+ *     return randSeedItem(getAllSpecies().filter(s => (s.subLegendary || s.legendary || s.mythical)
+ *       && s.baseTotal >= 600 && s.speciesId !== ETERNATUS && s.speciesId !== ARCEUS));
+ *   }
+ *   return getDailyForcedWaveSpecies(waveIndex);   // custom daily seeds only, else null */
+int pr_run_get_override_species(pr_run *run, int wave)
+{
+    if (run->mode != GAME_MODES_DAILY) return -1;
+    if (run->daily_custom) { run->unported |= PR_RUN_UNPORTED_DAILY; return -1; }
+    if (!pr_run_is_wave_final(run->mode, wave)) return -1;
+    static uint16_t list[256];
+    int n = 0;
+    for (int i = 0; i < pr_species_gen_count && n < 256; i++) {   /* getAllSpecies(): ascending id */
+        const pr_species_gen *g = &pr_species_gens[i];
+        const pr_species *sp = species_by_id(g->id);
+        if (!sp || !(g->sub_legendary || g->legendary || g->mythical)) continue;
+        if (pr_forms[sp->form0].base_total < 600 || g->id == SPECIES_ID_ETERNATUS || g->id == SPECIES_ID_ARCEUS) continue;
+        list[n++] = g->id;
+    }
+    if (!n) { run->unported |= PR_RUN_UNDEFINED_UPSTREAM; return -1; }
+    return list[n == 1 ? 0 : pr_rng_integer_in_range(&run->rng, 0, n - 1)];
+}
+
 /* arena.randomSpecies(waveIndex, level, attempt, luckValue, isBoss), up to the call of
  * species.getWildSpeciesForLevel(level, true, isBoss ?? isBossSpecies, gameMode):
  *   const overrideSpecies = gameMode.getOverrideSpecies(waveIndex); if (overrideSpecies) return it;
@@ -211,14 +236,16 @@ static const pr_species *species_by_id(int id)
  *   species = tierPool.length ? getSpecies(randSeedItem(tierPool)) : globalScene.randomSpecies(...);
  *   if (checkLegendBST(species, getWaveForDifficulty(waveIndex, true)) && attempt < 10) return randomSpecies(..., ++attempt, ...);
  * checkLegendBST: legend-like && (baseTotal >= 660 ? adjustedWave < 80 : adjustedWave < 55).
- * Returns the species handed to getWildSpeciesForLevel (whose evolution step isn't ported) and the
- * isBoss it gets; is_boss < 0 = undefined. */
+ * Returns the species handed to getWildSpeciesForLevel and the isBoss it gets; is_boss < 0 = undefined.
+ * On the daily run's final wave it returns the override species (see pr_run_get_override_species). */
 int pr_run_random_species(pr_run *run, int biome, int wave, int level, int luck, int is_boss, int wave_cycle_offset,
                           bool *evo_is_boss)
 {
-    if (run->mode == GAME_MODES_DAILY) { /* getOverrideSpecies and forced tiers read the daily config */
-        run->unported |= PR_RUN_UNPORTED_DAILY;
-        return -1;
+    /* getOverrideSpecies (checked again on each reroll: only the daily final wave has one) and the forced
+     * tiers of custom daily seeds */
+    if (run->mode == GAME_MODES_DAILY && (run->daily_custom || pr_run_is_wave_final(run->mode, wave))) {
+        *evo_is_boss = false;
+        return pr_run_get_override_species(run, wave);
     }
     int tod = pr_run_get_time_of_day(biome, wave, wave_cycle_offset);
     bool classic = run->mode == GAME_MODES_CLASSIC || run->mode == GAME_MODES_CHALLENGE;

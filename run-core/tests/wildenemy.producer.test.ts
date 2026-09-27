@@ -1,7 +1,7 @@
 /*
  * Upstream half of run-core's wild enemy test (tools/difftest.sh copies it into the upstream checkout).
  * Each case sets a random game mode, run and wave seeds, biome (End one time in 8), wave, cycle and gym
- * offsets, party luck, Golden Bug Net, charms and trainer ids, then makes the first enemy of a wild
+ * offsets, party luck, Golden Bug Net, charms, the enemy's fusion chance and trainer ids, then makes the first enemy of a wild
  * battle the way EncounterPhase.doEncounter does. The phase itself is tied to the UI and asset loading,
  * so its few lines for a wild enemy are transcribed here, calling upstream's own functions:
  *   species = scene.randomSpecies(waveIndex, level, true)   (= arena.randomSpecies(waveIndex, level, 0, luck))
@@ -68,7 +68,8 @@ it("wildenemy producer", async () => {
   let mid = "";
   (EnemyPokemon.prototype as any).generateAndPopulateMoveset = function (this: any) {
     mid = [
-      this.abilityIndex, this.id, this.gender, this.formIndex, this.nature, this.teraType, this.bossSegments ?? 0,
+      this.abilityIndex, this.id, this.gender, this.formIndex, this.nature, this.teraType,
+      this.fusionSpecies?.speciesId ?? -1, this.fusionAbilityIndex ?? 0, this.fusionGender ?? 0, this.fusionFormIndex ?? 0, this.bossSegments ?? 0,
       state(),
     ].join(" ");
   };
@@ -106,6 +107,13 @@ it("wildenemy producer", async () => {
       scene.modifiers.push(charm("SHINY_CHARM", sh));
     }
     scene.enemyModifiers.length = 0;
+    const fusionStacks = rnd(4) === 0 ? 1 + rnd(10) : 0;
+    let fusionChance = 0;
+    if (fusionStacks) {
+      const m = charm("ENEMY_FUSED_CHANCE", fusionStacks);
+      fusionChance = m.chance;
+      scene.enemyModifiers.push(m);
+    }
     scene.gameData.trainerId = rnd(65536);
     scene.gameData.secretId = rnd(65536);
 
@@ -132,7 +140,7 @@ it("wildenemy producer", async () => {
     lines.push(
       [
         "W", gm.modeId, scene.seed, scene.waveSeed, wave, biome, scene.waveCycleOffset, scene.offsetGym ? 1 : 0,
-        level, luck, bugNet ? 1 : 0, ha, sh, scene.gameData.trainerId, scene.gameData.secretId, before,
+        level, luck, bugNet ? 1 : 0, ha, sh, fusionStacks, fusionChance, scene.gameData.trainerId, scene.gameData.secretId, before,
         species.speciesId, boss ? 1 : 0, shinyLock ? 1 : 0, mid || "none",
       ].join(" "),
     );

@@ -10,7 +10,10 @@
  * The variant data is the assets repo's images/pokemon/variant/_masterlist.json at the commit upstream
  * pins; tools/redump.sh fetches it and passes it as VARIANT_MASTERLIST. (The experimental masterlist
  * adds no keys at that commit, so the expSpritesEnabled setting can't change the answer.)
- * Also the Golden Bug Net's species pool with its weights, probed (it isn't exported).
+ * Also the Golden Bug Net's species pool with its weights, probed (it isn't exported), and what
+ * generateFusionSpecies reads: each species' getCompatibleFusionSpeciesFilter inputs (hasEvolutions,
+ * hasPrevolution, subLegendary, legendary, mythical, isTrainerForbidden), isCatchable, and each form's
+ * raw type1/type2 (getBaseTypes combines them with the fusion's).
  * Run with tools/redump.sh <upstream dir>; writes gen/out/run_pokemongen.c. The output is generated:
  * don't edit it.
  */
@@ -53,11 +56,16 @@ it("dump pokemon generation data", () => {
       const key = sp.forms.length > 0 && f.formKey ? `${id}-${f.formKey}` : `${id}`;
       const variant = Object.hasOwn(variantData, key) || Object.hasOwn(variantData, `${id}`);
       variants += variant ? 1 : 0;
-      forms.push(`{${types.length}, {${types[0]}, ${types[1] ?? types[0]}}, ${variant ? 1 : 0}}`);
+      forms.push(
+        `{${types.length}, {${types[0]}, ${types[1] ?? types[0]}}, ${variant ? 1 : 0}, ${f.type1}, ${f.type2 ?? -2}}`,
+      );
     }
     const male = sp.malePercent == null ? -1 : sp.malePercent;
     rows.push(
-      `    {${id}, ${male}, ${sp.ability2 === sp.ability1 ? 1 : 0}, ${sp.abilityHidden ? 1 : 0}, ${sp.forms.length}, ${start}},`,
+      `    {${id}, ${male}, ${sp.ability2 === sp.ability1 ? 1 : 0}, ${sp.abilityHidden ? 1 : 0}, ${sp.forms.length}, ${start}, `
+        + `${speciesDataRegistry.hasEvolutions(id) ? 1 : 0}, ${speciesDataRegistry.hasPrevolution(id) ? 1 : 0}, `
+        + `${sp.subLegendary ? 1 : 0}, ${sp.legendary ? 1 : 0}, ${sp.mythical ? 1 : 0}, ${sp.isTrainerForbidden() ? 1 : 0}, `
+        + `${sp.isCatchable() ? 1 : 0}},`,
     );
   }
   const types = Object.values(TrainerType).filter(v => typeof v === "number") as number[];
