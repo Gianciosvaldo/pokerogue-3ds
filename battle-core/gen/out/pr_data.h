@@ -35,6 +35,7 @@ typedef struct {
     int8_t priority, generation;
     uint32_t flags;            /* MoveFlags bits */
     uint16_t attr0, nattr;     /* slice of pr_attrs */
+    uint16_t cattr0, ncattr;   /* chargeAttrs (ChargingAttackMove / ChargingSelfStatusMove): slice of pr_attrs */
     bool unimplemented;
     pr_fnlist conditions, conditions_seq2, conditions_seq3;
 } pr_move;
@@ -61,6 +62,7 @@ typedef struct {
     uint16_t base_exp;
     bool unobtainable;
     uint16_t passive;          /* speciesDataRegistry.getPassive(species, formIndex) */
+    bool exp_boost;            /* getBaseExp() is 1.5x baseExp (mega, primal, gigantamax, eternamax forms) */
 } pr_form;
 
 typedef struct {
@@ -76,11 +78,46 @@ typedef struct {
     int32_t starter;           /* starter cost or -1 */
     pr_level_moves level_moves;
     bool has_evolutions;       /* speciesDataRegistry.hasEvolutions() */
+    /* Bit PR_FCT_<Class> set: some form change of this species answers to that trigger class
+     * (SpeciesFormChangeTrigger.hasTriggerType), so triggerPokemonFormChange may act */
+    uint32_t form_change_triggers;
 } pr_species;
+enum {
+    PR_FCT_MeloettaFormChangePostMoveTrigger = 0,
+    PR_FCT_SpeciesDefaultFormMatchTrigger = 1,
+    PR_FCT_SpeciesFormChangeAbilityTrigger = 2,
+    PR_FCT_SpeciesFormChangeActiveTrigger = 3,
+    PR_FCT_SpeciesFormChangeCompoundTrigger = 4,
+    PR_FCT_SpeciesFormChangeItemTrigger = 5,
+    PR_FCT_SpeciesFormChangeLapseTeraTrigger = 6,
+    PR_FCT_SpeciesFormChangeManualTrigger = 7,
+    PR_FCT_SpeciesFormChangeMoveLearnedTrigger = 8,
+    PR_FCT_SpeciesFormChangeMoveTrigger = 9,
+    PR_FCT_SpeciesFormChangePostMoveTrigger = 10,
+    PR_FCT_SpeciesFormChangePreMoveTrigger = 11,
+    PR_FCT_SpeciesFormChangeRevertWeatherFormTrigger = 12,
+    PR_FCT_SpeciesFormChangeTeraTrigger = 13,
+    PR_FCT_SpeciesFormChangeTrigger = 14,
+    PR_FCT_SpeciesFormChangeWeatherTrigger = 15,
+};
 
 extern const uint8_t pr_type_chart_x2[PR_TYPE_COUNT][PR_TYPE_COUNT];
 extern const double pr_nature_mult[PR_NATURE_COUNT][6];
 extern const pr_attr pr_attrs[];
+/* MoveEffectAttr options per pr_attrs entry (zeros for other classes): trigger (MoveEffectTrigger),
+ * selfTarget, firstHitOnly, lastHitOnly, firstTargetOnly, effectChanceOverride (-1 = none) and the
+ * options.condition closure (StatStageChangeAttr and co., PR_NO_FN = none) */
+typedef struct {
+    int8_t trigger;
+    bool self_target, first_hit_only, last_hit_only, first_target_only;
+    int16_t chance_override;
+    pr_fn_id condition;
+} pr_effect_info;
+extern const pr_effect_info pr_attr_effects[];
+/* getBattlerTag(type): the lapse types it is built with (bit per BattlerTagLapseType), its class
+ * and the BattlerTagType's own name */
+typedef struct { uint16_t lapse_mask; const char *cls, *name; } pr_battler_tag_info;
+extern const pr_battler_tag_info pr_battler_tags_info[];
 extern const pr_move pr_moves[PR_MOVE_COUNT];
 extern const pr_ability pr_abilities[PR_ABILITY_COUNT];
 extern const pr_form pr_forms[PR_FORM_COUNT];

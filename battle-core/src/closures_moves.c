@@ -121,7 +121,7 @@ static double wake_up_slap(ARGS)
 static double payback(ARGS)
 {
     int i = pr_battler_index(bt, t);
-    return t->acted || (i >= 0 && bt->turn_command[i] == COMMAND_BALL) ? 2 : 1;
+    return t->acted || (i >= 0 && bt->commands[i].command == COMMAND_BALL) ? 2 : 1;
 }
 
 /* Assurance: target.turnData.damageTaken > 0 ? 2 : 1 */
@@ -143,8 +143,9 @@ static double acrobatics(ARGS)
  *   || lastEnemyFaint !== undefined && turn - lastEnemyFaint.turn === 1 && user.isEnemy() ? 2 : 1 */
 static double retaliate(ARGS)
 {
-    bool p = bt->last_player_faint_turn >= 0 && bt->turn - bt->last_player_faint_turn == 1 && u->is_player;
-    bool e = bt->last_enemy_faint_turn >= 0 && bt->turn - bt->last_enemy_faint_turn == 1 && !u->is_player;
+    int np = bt->n_faint_history[0], ne = bt->n_faint_history[1];
+    bool p = np && bt->turn - bt->faint_history[0][np - 1].turn == 1 && u->is_player;
+    bool e = ne && bt->turn - bt->faint_history[1][ne - 1].turn == 1 && !u->is_player;
     return p || e ? 2 : 1;
 }
 
@@ -247,6 +248,57 @@ static double grassy_glide(ARGS)
     return bt->terrain == TERRAIN_GRASSY && pr_is_grounded(bt, u, false);
 }
 
+/* ---- StatStageChangeAttr options.condition ---- */
+
+static bool type_in(const pr_pokemon *p, int type, int flags)
+{
+    int8_t ty[3];
+    int n = pr_get_types(p, ty, flags);
+    for (int i = 0; i < n; i++)
+        if (ty[i] == type) return true;
+    return false;
+}
+
+/* Rototiller: target.isOfType(GRASS) && target.isGrounded() */
+static double rototiller_target(ARGS)
+{
+    (void)self; (void)u; (void)m;
+    return type_in(t, POKEMON_TYPE_GRASS, 0) && pr_is_grounded(bt, t, false);
+}
+
+/* Flower Shield: target.isOfType(GRASS, {returnOriginalTypesIfStellar: true})
+ * && !target.getTag(SemiInvulnerableTag) */
+static double flower_shield_target(ARGS)
+{
+    (void)self; (void)u; (void)m;
+    return type_in(t, POKEMON_TYPE_GRASS, PR_TYPES_ORIGINAL_IF_STELLAR)
+           && !pr_has_battler_tag_class(bt, t, PR_TAGCLASS_SEMI_INVULNERABLE);
+}
+
+/* Venom Drench: target.status?.effect === POISON || target.status?.effect === TOXIC */
+static double venom_drench_target(ARGS)
+{
+    (void)bt; (void)self; (void)u; (void)m;
+    return t->status == STATUS_EFFECT_POISON || t->status == STATUS_EFFECT_TOXIC;
+}
+
+/* Magnetic Flux, Gear Up: [PLUS, MINUS].find(a => target.hasAbility(a, false)); canApply
+ * false, so a suppressed ability still counts */
+static double plus_minus_target(ARGS)
+{
+    (void)bt; (void)self; (void)u; (void)m;
+    for (int ab = ABILITY_ID_PLUS; ab <= ABILITY_ID_MINUS; ab++)
+        if (t->ability == ab || (t->passive && t->passive == ab)) return 1;
+    return 0;
+}
+
+/* Tera Blast's self drop: user.isTerastallized && user.isOfType(STELLAR) */
+static double tera_stellar_user(ARGS)
+{
+    (void)self; (void)t; (void)m; (void)bt;
+    return u->terastallized && type_in(u, POKEMON_TYPE_STELLAR, 0);
+}
+
 const pr_closure_reg pr_move_closures[] = {
     {"move:89", "d551c83b79fb", grassy_grounded_half},
     {"move:222", "d551c83b79fb", grassy_grounded_half},
@@ -285,5 +337,11 @@ const pr_closure_reg pr_move_closures[] = {
     {"move:808", "e64793309a8e", lash_out},
     {"move:803", "1a3ab5759086", grassy_glide}, /* closure 387 */
     {"move:854", "3cbd6fbd3493", last_respects},
+    {"move:563", "e4f928f5e88b", rototiller_target},
+    {"move:579", "9675e4d088a6", flower_shield_target},
+    {"move:599", "ae690988fb49", venom_drench_target},
+    {"move:602", "907354da9d85", plus_minus_target}, /* Magnetic Flux */
+    {"move:674", "907354da9d85", plus_minus_target}, /* Gear Up */
+    {"move:851", "0b049cd4dbcc", tera_stellar_user},
 };
 const int pr_move_closures_n = sizeof pr_move_closures / sizeof pr_move_closures[0];

@@ -17,6 +17,7 @@ const char *const pr_tagclass_name[PR_TAGCLASS_COUNT_] = {
     [PR_TAGCLASS_STOCKPILING] = "StockpilingTag",
     [PR_TAGCLASS_AUTOTOMIZED] = "AutotomizedTag",
     [PR_TAGCLASS_SUBSTITUTE] = "SubstituteTag",
+    [PR_TAGCLASS_TRAPPED] = "TrappedTag",
 };
 
 /* getBattlerTag(): which tag types are built as (a subclass of) each class */
@@ -41,6 +42,16 @@ bool pr_battler_tag_is(int t, int cls)
     case PR_TAGCLASS_STOCKPILING: return t == BATTLER_TAG_TYPE_STOCKPILING;
     case PR_TAGCLASS_AUTOTOMIZED: return t == BATTLER_TAG_TYPE_AUTOTOMIZED;
     case PR_TAGCLASS_SUBSTITUTE: return t == BATTLER_TAG_TYPE_SUBSTITUTE;
+    case PR_TAGCLASS_TRAPPED: /* TrappedTag and its subclasses: NoRetreat, Ingrain, Octolock, DamagingTrapTag */
+        switch (t) {
+        case BATTLER_TAG_TYPE_TRAPPED: case BATTLER_TAG_TYPE_NO_RETREAT: case BATTLER_TAG_TYPE_INGRAIN:
+        case BATTLER_TAG_TYPE_OCTOLOCK: case BATTLER_TAG_TYPE_BIND: case BATTLER_TAG_TYPE_WRAP:
+        case BATTLER_TAG_TYPE_FIRE_SPIN: case BATTLER_TAG_TYPE_WHIRLPOOL: case BATTLER_TAG_TYPE_CLAMP:
+        case BATTLER_TAG_TYPE_SAND_TOMB: case BATTLER_TAG_TYPE_MAGMA_STORM: case BATTLER_TAG_TYPE_SNAP_TRAP:
+        case BATTLER_TAG_TYPE_THUNDER_CAGE: case BATTLER_TAG_TYPE_INFESTATION:
+            return true;
+        }
+        return false;
     }
     return false;
 }

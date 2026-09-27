@@ -3,6 +3,7 @@
  * Classes with a C handler are applied by the caller; anything else is logged as
  * unported so a differential test never silently passes on missing logic. */
 #include "pr/battle.h"
+#include <stdio.h>
 
 void pr_note_unported(pr_battle *bt, uint16_t cls)
 {
@@ -85,11 +86,24 @@ int pr_battler_index(const pr_battle *bt, const pr_pokemon *p)
 
 const char *pr_unported_name(uint16_t id)
 {
-    static const char *const feat[PR_FEAT_COUNT_ - PR_AC_COUNT_] = {
+    static const char *const feat[PR_FEAT_PHASE_0 - PR_AC_COUNT_] = {
         "(doubles)", "(modifier subclass not ported)", "(move history)",
         "(turn order)", "(faint history)", "(wave data)", "(party)", "(earlier hit of the same move)", "(global RNG)",
-        "(boss segments)"};
+        "(boss segments)", "(battler tag lapse)", "(arena tags on the turn)", "(weather/terrain on the turn)",
+        "(held items/modifiers on the turn)", "(form change)", "(move effect attributes)", "(engine table full)",
+        "(final boss)", "(status effect on the turn)", "(move condition)"};
+    static char phase_names[64][48], tag_names[BATTLER_TAG_TYPE_COUNT_][48];
     if (id < PR_AC_COUNT_) return pr_attr_class_name[id];
-    if (id < PR_FEAT_COUNT_) return feat[id - PR_AC_COUNT_];
+    if (id < PR_FEAT_PHASE_0) return feat[id - PR_AC_COUNT_];
+    if (id < PR_FEAT_TAG_0) {
+        int k = id - PR_FEAT_PHASE_0;
+        if (!phase_names[k][0]) snprintf(phase_names[k], sizeof phase_names[k], "(phase %s)", pr_phase_name_of(k));
+        return phase_names[k];
+    }
+    if (id < PR_FEAT_COUNT_) {
+        int k = id - PR_FEAT_TAG_0;
+        if (!tag_names[k][0]) snprintf(tag_names[k], sizeof tag_names[k], "(tag %s)", pr_battler_tags_info[k].name);
+        return tag_names[k];
+    }
     return "?";
 }

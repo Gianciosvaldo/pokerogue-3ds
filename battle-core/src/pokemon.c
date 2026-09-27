@@ -222,7 +222,7 @@ bool pr_is_forcibly_ungrounded(pr_battle *bt, const pr_pokemon *p)
     if (pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_FLOATING) || pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_TELEKINESIS))
         return true;
     bool ungrounded = false;
-    pr_ab_params pp = {.pokemon = p, .move = -1, .simulated = true, .flag = &ungrounded};
+    pr_ab_params pp = {.pokemon = p, .move = -1, .simulated = false, .flag = &ungrounded}; /* not simulated upstream */
     pr_apply_ab_attrs(bt, PR_AC_UngroundedAbAttr, &pp);
     return ungrounded;
 }
@@ -287,7 +287,7 @@ double pr_get_weight(pr_battle *bt, const pr_pokemon *p)
     double removed = at ? 100.0 * at->autotomize_count : 0;
     const pr_form *f = pr_pokemon_form(p);
     double w = f->weight_x10 / 10.0 - removed; /* weight_x10 / 10.0 is the same double as upstream's decimal literal */
-    pr_ab_params pp = {.pokemon = p, .move = -1, .simulated = true, .value = &w};
+    pr_ab_params pp = {.pokemon = p, .move = -1, .simulated = false, .value = &w}; /* not simulated upstream */
     pr_apply_ab_attrs(bt, PR_AC_WeightMultiplierAbAttr, &pp);
     return w > 0.1 ? w : 0.1;
 }
@@ -297,7 +297,7 @@ double pr_get_weight(pr_battle *bt, const pr_pokemon *p)
 int pr_get_effective_weather_for_move(pr_battle *bt, const pr_pokemon *user)
 {
     int w = WEATHER_TYPE_NONE;
-    pr_ab_params pp = {.pokemon = user, .move = -1, .simulated = true, .holder = &w};
+    pr_ab_params pp = {.pokemon = user, .move = -1, .simulated = false, .holder = &w}; /* not simulated upstream */
     pr_apply_ab_attrs(bt, PR_AC_PreAttackWeatherOverrideAbAttr, &pp);
     if (w != WEATHER_TYPE_NONE) return w;
     if (bt->weather == WEATHER_TYPE_NONE || pr_weather_effect_suppressed(bt)) return WEATHER_TYPE_NONE;

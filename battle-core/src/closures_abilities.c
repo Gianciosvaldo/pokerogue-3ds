@@ -68,6 +68,7 @@ HAS_FLAG(flag_pulse, MOVE_FLAGS_PULSE_MOVE)
 HAS_FLAG(flag_contact, MOVE_FLAGS_MAKES_CONTACT)
 HAS_FLAG(flag_sound, MOVE_FLAGS_SOUND_BASED)
 HAS_FLAG(flag_slicing, MOVE_FLAGS_SLICING_MOVE)
+HAS_FLAG(flag_wind, MOVE_FLAGS_WIND_MOVE)
 
 /* (pokemon, attacker, move) => pokemon !== attacker && move.hasFlag(F) */
 #define IMMUNE_FLAG(name, F) static double name(ARGS) { UNUSED; return a != b && (pr_moves[m].flags & (F)) != 0; }
@@ -287,6 +288,76 @@ static double always(ARGS) { UNUSED; return 1; }
 /* Hunger Switch: (pokemon) => !pokemon.isTerastallized */
 static double not_terastallized(ARGS) { UNUSED; return !a->terastallized; }
 
+/* Flower Veil: (target) => target.isOfType(GRASS, {returnOriginalTypesIfStellar: true}) */
+static double grass_target(ARGS)
+{
+    UNUSED;
+    int8_t ty[3];
+    int n = pr_get_types(a, ty, PR_TYPES_ORIGINAL_IF_STELLAR);
+    for (int i = 0; i < n; i++)
+        if (ty[i] == POKEMON_TYPE_GRASS) return 1;
+    return 0;
+}
+
+/* Flower Veil status: (target, source) => !!source && target.id !== source.id
+ *   && target.isOfType(GRASS, {returnOriginalTypesIfStellar: true}) */
+static double flower_veil_status(ARGS)
+{
+    UNUSED;
+    return b && a->id != b->id && grass_target(bt, self, a, NULL, -1) != 0;
+}
+
+/* Shields Down: (p) => p.formIndex < 7 (Meteor Form) */
+static double meteor_form(ARGS) { UNUSED; return a->form < 7; }
+
+/* (_user, _target, move) => move.category !== STATUS: PostAttackAbAttr's default attackCondition and
+ * several on-hit conditions */
+static double not_status(ARGS) { UNUSED; return pr_moves[m].category != MOVE_CATEGORY_STATUS; }
+
+/* Stench's chance, called as chance(the one hit, the attacker, move):
+ * (user, target, move) => !move.hasAttr("FlinchAttr") && !move.hitsSubstitute(user, target) ? 10 : 0 */
+static double stench_chance(ARGS)
+{
+    UNUSED;
+    return !pr_move_has_attr((uint16_t)m, PR_AC_FlinchAttr) && !pr_move_hits_substitute(bt, m, a, b) ? 10 : 0;
+}
+
+/* On-hit stat abilities: (_target, user, move) => the move's type for the attacker is one of the
+ * listed ones && move.category !== STATUS (Justified, Rattled, Water Compaction, Steam Engine,
+ * Thermal Exchange) */
+static bool attacker_type_in(pr_battle *bt, const pr_pokemon *user, int m, int t1, int t2, int t3)
+{
+    int t = pr_get_move_type(bt, user, m);
+    return t == t1 || t == t2 || t == t3;
+}
+static double justified(ARGS)
+{
+    UNUSED;
+    return pr_get_move_type(bt, b, m) == POKEMON_TYPE_DARK && pr_moves[m].category != MOVE_CATEGORY_STATUS;
+}
+static double rattled(ARGS)
+{
+    UNUSED;
+    return pr_moves[m].category != MOVE_CATEGORY_STATUS
+           && attacker_type_in(bt, b, m, POKEMON_TYPE_DARK, POKEMON_TYPE_BUG, POKEMON_TYPE_GHOST);
+}
+static double water_compaction(ARGS)
+{
+    UNUSED;
+    return pr_get_move_type(bt, b, m) == POKEMON_TYPE_WATER && pr_moves[m].category != MOVE_CATEGORY_STATUS;
+}
+static double steam_engine(ARGS)
+{
+    UNUSED;
+    return pr_moves[m].category != MOVE_CATEGORY_STATUS
+           && attacker_type_in(bt, b, m, POKEMON_TYPE_FIRE, POKEMON_TYPE_WATER, POKEMON_TYPE_WATER);
+}
+static double thermal_exchange(ARGS)
+{
+    UNUSED;
+    return pr_get_move_type(bt, b, m) == POKEMON_TYPE_FIRE && pr_moves[m].category != MOVE_CATEGORY_STATUS;
+}
+
 /* Ball Fetch: (pokemon) => !pokemon.waveData.abilitiesApplied.has(ability) */
 static double ball_fetch_unused(ARGS) { UNUSED; return !pr_wave_ability_applied(a, ABILITY_ID_BALL_FETCH); }
 
@@ -413,5 +484,21 @@ const pr_closure_reg pr_ability_closures[] = {
     {"ability:158", "74fa5cb6b41e", prankster}, /* closure 536 */
     {"ability:177", "1b589a349668", gale_wings}, /* closure 558 */
     {"ability:205", "e8d66e7b435a", triage}, /* closure 592 */
+    {"ability:166", "3adbae502f95", grass_target}, /* closure 551 */
+    {"ability:166", "87c14ce5fba5", flower_veil_status}, /* closure 549 */
+    {"ability:197", "193c76db9e37", meteor_form}, /* closures 584, 585 */
+    /* on-hit abilities (PostDefend, PostAttack). Sources with no captures: any owner. */
+    {NULL, "0a3803cd6ba8", not_status},    /* Stench, Poison Touch, Magician, Toxic Chain */
+    {NULL, "ae78ec2f0596", not_status},    /* Stamina, Cotton Down, Sand Spit, Electromorphosis */
+    {NULL, "5ce535a80302", contact_on_me}, /* Pickpocket, Tangling Hair */
+    {NULL, "696705e9c797", physical},      /* Weak Armor, Toxic Debris */
+    {"ability:1", "0440d28dc66e", stench_chance}, /* closure 457 */
+    {"ability:154", "4663665ae292", justified}, /* closure 534 */
+    {"ability:155", "3a028c14a4c8", rattled}, /* closure 535 */
+    {"ability:183", "a74dff334353", flag_contact}, /* closure 563: Gooey, move.hasFlag(MAKES_CONTACT) */
+    {"ability:195", "e5afa457a71b", water_compaction}, /* closure 579 */
+    {"ability:243", "5ae0daa1e7f9", steam_engine}, /* closure 631 */
+    {"ability:270", "18cb24a88a08", thermal_exchange}, /* closure 651 */
+    {"ability:277", "4043a61eeca7", flag_wind}, /* closure 655: Wind Power */
 };
 const int pr_ability_closures_n = (int)(sizeof pr_ability_closures / sizeof pr_ability_closures[0]);

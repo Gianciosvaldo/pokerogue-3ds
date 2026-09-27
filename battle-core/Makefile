@@ -4,10 +4,10 @@ CC ?= gcc
 CFLAGS ?= -O2 -g -std=c99 -Wall -Wextra -Wno-unused-parameter -ffp-contract=off
 CPPFLAGS += -Iinclude -Igen/out
 BUILD ?= build
-SRCS := src/rng.c src/hooks.c src/pokemon.c src/damage.c src/move_attrs.c src/closures.c src/closures_moves.c src/ab_attrs.c src/closures_abilities.c src/modifiers.c src/tags.c src/history.c src/js_math.c gen/out/pr_data.c
+SRCS := src/rng.c src/hooks.c src/pokemon.c src/damage.c src/move_attrs.c src/closures.c src/closures_moves.c src/closures_conditions.c src/ab_attrs.c src/closures_abilities.c src/modifiers.c src/tags.c src/battler_tags.c src/history.c src/engine.c src/phases.c src/move_effects.c src/js_math.c gen/out/pr_data.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
-all: $(BUILD)/libprcore.a $(BUILD)/rng_cli $(BUILD)/difftest
+all: $(BUILD)/libprcore.a $(BUILD)/rng_cli $(BUILD)/difftest $(BUILD)/turntest
 
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -20,6 +20,9 @@ $(BUILD)/rng_cli: tests/rng_cli.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
 $(BUILD)/difftest: tests/difftest.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+$(BUILD)/turntest: tests/turntest.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
 gen: gen/out/pr_data.c

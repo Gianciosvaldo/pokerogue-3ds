@@ -139,8 +139,12 @@ int main(int argc, char **argv)
             bt.terrain = (uint8_t)w[0];
             bt.player_faints = w[1];
             bt.enemy_faints = w[2];
-            bt.last_player_faint_turn = w[3];
-            bt.last_enemy_faint_turn = w[4];
+            /* only the newest entry of each faint history is given */
+            for (int k = 0; k < 2; k++) {
+                bt.n_faint_history[k] = w[3 + k] >= 0;
+                bt.faint_history[k][0].id = 0;
+                bt.faint_history[k][0].turn = w[3 + k];
+            }
             bt.n_last_turn_order = (uint8_t)w[5];
             arena_tags_expected = w[6];
             bt.n_arena_tags = 0;
@@ -149,7 +153,7 @@ int main(int argc, char **argv)
             mods_expected[1] = w[8];
             bt.n_mods[0] = bt.n_mods[1] = 0;
             bt.max_exp_level = w[9];
-            for (int i = 0; i < 4; i++) bt.turn_command[i] = (int8_t)w[10 + i];
+            for (int i = 0; i < 4; i++) bt.commands[i].command = (int8_t)w[10 + i];
             bt.rng_live = false;
             bt.n_party[0] = bt.n_party[1] = 0;
             bt.n_queued_movers = 0;
@@ -199,7 +203,7 @@ int main(int argc, char **argv)
             if (who < 0 || who > 1 || n < 0) { fprintf(stderr, "bad Hm line\n"); return 2; }
             hist[who].n_move_history = 0;
             for (int i = 0; i < n; i++) {
-                pr_turn_move tm;
+                pr_turn_move tm = {0};
                 tm.move = (uint16_t)atoi(next_tok(&save));
                 tm.use_mode = (uint8_t)atoi(next_tok(&save));
                 int r = atoi(next_tok(&save));
