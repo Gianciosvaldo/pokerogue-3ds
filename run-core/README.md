@@ -23,6 +23,8 @@ Experience (`src/exp.c`): `getLevelTotalExp` and `getLevelRelExp` for all six gr
 
 Victory experience (`src/exp.c`): `getExpValue` and `applyPartyExp`: who gets experience (not fainted, under the level cap), the wave multiplier, trainer battles' x1.5 and mystery encounters' multiplier, the participants' split and Oval Charm, Exp. Share for the others, Pokerus, Lucky and Golden Eggs in list order (each floors), Exp. Balance's pull towards the split for members at or below the median level. Friendship and Macho Brace, which a defeat also brings, aren't part of it. The test (`tools/difftest.sh <upstream> 20000 <seed> partyexp`) builds a real party of 1 to 6 with random levels, fainted members, Pokerus, participants (sometimes one that left the party) and items, and compares the experience phases upstream's `applyPartyExp` queues: seeds 777, 9001 and 4242, 20,000 cases each, 0 mismatches (94,192 awards). 10 of 11 deliberate bugs are caught; the 11th, the median level not floored, can't change anything for whole-number levels. A mystery encounter's own multiplier is ported but not in the test.
 
+Between-wave upkeep (`src/upkeep.c`): `trySpreadPokerus` (each carrier rolls 1 in 10 for each neighbour on the run seed at offset `wave + (index << 8)`; a Pokemon that just caught it doesn't spread it the same wave) and the Coin Case's interest (`MoneyInterestModifier`, 10% per stack, floored, one Coin Case after another, money capped at `Number.MAX_SAFE_INTEGER`). The test (`tools/difftest.sh <upstream> 20000 <seed> upkeep`) runs upstream's own `trySpreadPokerus` and interest on a real party and real Coin Cases: seeds 777, 9001 and 4242, 20,000 cases each, 0 mismatches (6,598 infections). All 6 deliberate bugs are caught.
+
 Mystery encounters and trainer parties (`src/wave.c`):
 
 | Piece | Upstream | State |
@@ -79,7 +81,7 @@ Mutation check: 22 deliberate bugs, 20 of which can change an answer; all 20 are
 Dev overrides (`LEVEL_CAP_OVERRIDE`, `ENEMY_HEALTH_SEGMENTS_OVERRIDE`...) aren't modelled; they are upstream's testing switches, off in a real run.
 
 ## Layout
-- `include/pr/run.h` API, `src/wave.c` the wave functions, `src/biome.c` biomes and encounters, `src/evolution.c` the evolution step, `src/exp.c` experience, `src/shop.c` the shop's economy (each function quotes the JS it replaces); `gen/dump-*.test.ts` write `gen/out/run_*.c` (generated, don't edit; `tools/redump.sh <upstream dir>` refreshes them all)
+- `include/pr/run.h` API, `src/wave.c` the wave functions, `src/biome.c` biomes and encounters, `src/evolution.c` the evolution step, `src/exp.c` experience, `src/upkeep.c` Pokerus and interest, `src/shop.c` the shop's economy (each function quotes the JS it replaces); `gen/dump-*.test.ts` write `gen/out/run_*.c` (generated, don't edit; `tools/redump.sh <upstream dir>` refreshes them all)
 - `tests/*.producer.test.ts` upstream halves of the tests, `tests/*test.c` C halves
 - `tools/difftest.sh <upstream dir> [N] [seed] [wave|shop|all]` (the upstream checkout comes from `battle-core/tools/setup-upstream.sh`)
 
