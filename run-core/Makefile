@@ -6,10 +6,10 @@ BATTLE_CORE ?= ../battle-core
 CPPFLAGS += -Iinclude -I$(BATTLE_CORE)/include -I$(BATTLE_CORE)/gen/out
 BUILD ?= build
 CORE_LIB := $(BUILD)/battle-core/libprcore.a
-SRCS := src/wave.c
+SRCS := src/wave.c src/shop.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
-all: $(BUILD)/librun.a $(BUILD)/wavetest
+all: $(BUILD)/librun.a $(BUILD)/wavetest $(BUILD)/shoptest
 
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -30,3 +30,6 @@ clean:
 FORCE:
 .PHONY: all clean FORCE
 -include $(OBJS:.o=.d)
+
+$(BUILD)/shoptest: tests/shoptest.c $(BUILD)/librun.a $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

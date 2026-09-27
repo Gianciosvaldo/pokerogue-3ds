@@ -1,6 +1,6 @@
 # run-core: the run around the battles
 
-Native C port of PokeRogue's run-level logic: the waves now; the shop and rewards next. Like battle-core, it is diff-tested against upstream `pagefaultgames/pokerogue` @ `8555c08`. It reuses battle-core's RNG, V8 `Math.pow`, `js_round` and generated tables (enums, species) **read-only**: nothing in `battle-core/` is changed, and `make` builds battle-core's library into run-core's own build folder.
+Native C port of PokeRogue's run-level logic: the waves and the shop's economy so far; the reward pools next. Like battle-core, it is diff-tested against upstream `pagefaultgames/pokerogue` @ `8555c08`. It reuses battle-core's RNG, V8 `Math.pow`, `js_round` and generated tables (enums, species) **read-only**: nothing in `battle-core/` is changed, and `make` builds battle-core's library into run-core's own build folder.
 
 ## What works, and how it was checked
 | Piece | Upstream | State |
@@ -19,6 +19,18 @@ Runs (`tools/difftest.sh <upstream> 20000 <seed>`; each case picks a random game
 | 9001 | 20,000 | 404,125 | 0 | 15,875 |
 | 4242 | 20,000 | 404,059 | 0 | 15,941 |
 
+The shop's economy (`src/shop.c`):
+
+| Piece | Upstream | State |
+|---|---|---|
+| `getWaveMoneyAmount` | `src/battle-scene.ts` | Matches |
+| The money reward: the battle's multiplier, each Amulet Coin in modifier-list order (each floors its bonus, so the order changes the total), Happy Hour | `src/phases/money-reward-phase.ts` | Matches |
+| The always-available shop items (`getPlayerShopModifierTypeOptionsForWave`): which rows a wave opens, none on boss waves, prices, `getShopStatus` (no shop in the daily run) | `src/modifier/modifier-type.ts` | Matches |
+| Black Sludge (`HealShopCostModifier`, first one held, any shop multiplier), both as the shop screen shows prices (applied to the base cost) and as a purchase charges them (applied to the item's cost). Upstream computes the two differently, and they differ in 14,357 of the 60,000 cases below, so both are kept | `src/ui/handlers/modifier-select-ui-handler.ts`, `src/phases/select-modifier-phase.ts` | Matches |
+| `getRerollCost`: locked tiers' values, undefined tiers, the LUXURY tier (NaN, as upstream), doubling per reroll, custom multipliers (-1 when negative), Black Sludge | `src/phases/select-modifier-phase.ts` | Matches |
+
+Shop runs (`tools/difftest.sh <upstream> 20000 <seed> shop`; each case picks a random game mode, wave (up to 5,000), 0 to 2 Black Sludges, 0 to 3 Amulet Coins with random stacks at random list positions, Happy Hour, money multiplier, reroll count, custom multiplier and option tiers): seeds 777, 9001 and 4242, 20,000 cases each, all six checks identical in every case (360,000 checks, 0 mismatches). All 16 deliberate shop bugs are caught, from the money curve's exponent (207,513 mismatches) to Black Sludge rounding instead of flooring (21,533) and the LUXURY tier counting 0 instead of NaN (1,062, the thinnest).
+
 "Not covered" is the daily-run mode (a fifth of the cases): its seed config (trainer waves, starting money, final boss level and segments) isn't ported, so those functions report `PR_RUN_UNPORTED_DAILY` instead of guessing. Challenges' hooks report `PR_RUN_UNPORTED_CHALLENGES` the same way.
 
 Mutation check: 22 deliberate bugs, 20 of which can change an answer; all 20 are caught, from a level curve dividing by 24 instead of 25 (76,806 mismatches) and the battle RNG seeded from the run seed instead of the wave seed (42,150) to the endless random-boss chance using floor instead of ceil (29), level 100 off by one (81), and the x25 rounding at every 250th wave dropped (83). The 2 not caught can't change anything: no random level offset on the final wave (every final wave in the ported modes already takes the x25 path) and a missing `abs()` on a sum of random fractions (never negative).
@@ -26,14 +38,14 @@ Mutation check: 22 deliberate bugs, 20 of which can change an answer; all 20 are
 ## Not done (in rough order)
 1. The rest of `newBattle`: mystery encounters (`isWaveMysteryEncounter`), random trainer type and variant (`arena.randomTrainerType`, the biome trainer pools), the trainer's party levels, fixed battles' trainers.
 2. Biomes: species pools per biome and time of day, biome transitions and their rolls.
-3. The shop and rewards: modifier pools and weights, tiers and luck, reroll cost, the always-available shop items.
+3. The reward options: modifier pools and their weights (closures over the party's state), tier rolls and luck upgrades (`getNewModifierTypeOption`, `getPartyLuckValue`), the enemy's items.
 4. The daily run and challenges (the `PR_RUN_UNPORTED_*` flags).
 
 Dev overrides (`LEVEL_CAP_OVERRIDE`, `ENEMY_HEALTH_SEGMENTS_OVERRIDE`...) aren't modelled; they are upstream's testing switches, off in a real run.
 
 ## Layout
-- `include/pr/run.h` API, `src/wave.c` the wave functions (each quotes the JS it replaces)
-- `tests/wave.producer.test.ts` upstream half of the test, `tests/wavetest.c` C half
-- `tools/difftest.sh <upstream dir> [N] [seed]` (the upstream checkout comes from `battle-core/tools/setup-upstream.sh`)
+- `include/pr/run.h` API, `src/wave.c` the wave functions, `src/shop.c` the shop's economy (each function quotes the JS it replaces)
+- `tests/*.producer.test.ts` upstream halves of the tests, `tests/wavetest.c` and `tests/shoptest.c` C halves
+- `tools/difftest.sh <upstream dir> [N] [seed] [wave|shop|all]` (the upstream checkout comes from `battle-core/tools/setup-upstream.sh`)
 
 Build: `make` (outputs to `build/`).

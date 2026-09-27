@@ -1,4 +1,4 @@
-/* run-core: the run around the battles (waves now; the shop and rewards next).
+/* run-core: the run around the battles (waves, the shop's economy; the reward pools next).
  * Ported from upstream src/game-mode.ts, src/battle.ts and src/battle-scene.ts; function
  * names follow upstream so each one diffs against its TS original. It reads battle-core's
  * RNG, V8 Math.pow and generated tables and never changes battle-core. */
@@ -64,6 +64,34 @@ double pr_run_get_double_battle_chance(int wave, int n_lure_modifiers, int n_dou
 int pr_run_get_level_for_wave(pr_run *run, pr_rng *rng, int wave);
 /* The Phaser.Math.RND a new Battle is built with: sown from shiftCharCodes(waveSeed, wave << 3) */
 pr_rng pr_run_battle_rng(const pr_run *run, int wave);
+
+/* ---- the shop's economy (src/shop.c) ---- */
+/* The items of getPlayerShopModifierTypeOptionsForWave, in its order (modifierTypeInitObj keys) */
+enum {
+    PR_SHOP_POTION, PR_SHOP_ETHER, PR_SHOP_REVIVE, PR_SHOP_SUPER_POTION, PR_SHOP_FULL_HEAL, PR_SHOP_ELIXIR,
+    PR_SHOP_MAX_ETHER, PR_SHOP_HYPER_POTION, PR_SHOP_MAX_REVIVE, PR_SHOP_MEMORY_MUSHROOM, PR_SHOP_MAX_POTION,
+    PR_SHOP_MAX_ELIXIR, PR_SHOP_FULL_RESTORE, PR_SHOP_SACRED_ASH, PR_SHOP_ITEM_COUNT_
+};
+extern const char *const pr_shop_item_name[PR_SHOP_ITEM_COUNT_];
+typedef struct { int item; double cost; } pr_shop_option;   /* ModifierTypeOption: type and cost */
+/* getWaveMoneyAmount(moneyMultiplier) with currentBattle.waveIndex = wave */
+double pr_run_get_wave_money_amount(int wave, double money_multiplier);
+/* getPlayerShopModifierTypeOptionsForWave(wave, baseCost): the options in order; returns their count.
+ * The shop screen shows them with baseCost = Black Sludge applied to getWaveMoneyAmount(1); buying
+ * one charges Black Sludge applied to the option built from the plain getWaveMoneyAmount(1). */
+int pr_run_get_player_shop_options(pr_run *run, int wave, double base_cost, pr_shop_option out[PR_SHOP_ITEM_COUNT_]);
+bool pr_run_get_shop_status(pr_run *run);
+/* HealShopCostModifier (Black Sludge) through applyModifier; multiplier 0 = none held */
+double pr_run_apply_heal_shop_cost(double cost, double black_sludge_multiplier);
+/* MoneyRewardPhase: wave money x the battle's multiplier, each Amulet Coin (MoneyMultiplierModifier,
+ * in the modifier list's order: each floors its bonus, so the order changes the total;
+ * given by its getStackCount()), then Happy Hour's x2 */
+double pr_run_get_money_reward(int wave, double money_multiplier, const int *amulet_coin_stacks, int n_amulet_coins,
+                               bool happy_hour);
+/* SelectModifierPhase.getRerollCost(lockRarities); option_tiers[i] < 0 = undefined tier,
+ * custom_multiplier NaN = no customModifierSettings.rerollMultiplier */
+double pr_run_get_reroll_cost(int wave, bool lock_rarities, const int *option_tiers, int n_options, int reroll_count,
+                              double custom_multiplier, double black_sludge_multiplier);
 
 /* ---- helpers ---- */
 /* executeWithSeedOffset(fn, offset, seedOverride): fn rolls on a fresh RNG sown from
