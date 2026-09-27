@@ -6,10 +6,10 @@ BATTLE_CORE ?= ../battle-core
 CPPFLAGS += -Iinclude -I$(BATTLE_CORE)/include -I$(BATTLE_CORE)/gen/out
 BUILD ?= build
 CORE_LIB := $(BUILD)/battle-core/libprcore.a
-SRCS := src/wave.c src/shop.c
+SRCS := src/wave.c src/shop.c src/biome.c gen/out/run_biomes.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
-all: $(BUILD)/librun.a $(BUILD)/wavetest $(BUILD)/shoptest
+all: $(BUILD)/librun.a $(BUILD)/wavetest $(BUILD)/shoptest $(BUILD)/biometest
 
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -32,4 +32,7 @@ FORCE:
 -include $(OBJS:.o=.d)
 
 $(BUILD)/shoptest: tests/shoptest.c $(BUILD)/librun.a $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+$(BUILD)/biometest: tests/biometest.c $(BUILD)/librun.a $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

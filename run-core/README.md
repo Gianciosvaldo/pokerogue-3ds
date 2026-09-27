@@ -1,6 +1,6 @@
 # run-core: the run around the battles
 
-Native C port of PokeRogue's run-level logic: the waves and the shop's economy so far; the reward pools next. Like battle-core, it is diff-tested against upstream `pagefaultgames/pokerogue` @ `8555c08`. It reuses battle-core's RNG, V8 `Math.pow`, `js_round` and generated tables (enums, species) **read-only**: nothing in `battle-core/` is changed, and `make` builds battle-core's library into run-core's own build folder.
+Native C port of PokeRogue's run-level logic: the waves, biomes and the shop's economy so far; the reward pools next. Like battle-core, it is diff-tested against upstream `pagefaultgames/pokerogue` @ `8555c08`. It reuses battle-core's RNG, V8 `Math.pow`, `js_round` and generated tables (enums, species) **read-only**: nothing in `battle-core/` is changed, and `make` builds battle-core's library into run-core's own build folder.
 
 ## What works, and how it was checked
 | Piece | Upstream | State |
@@ -18,6 +18,16 @@ Runs (`tools/difftest.sh <upstream> 20000 <seed>`; each case picks a random game
 | 777 | 20,000 | 404,052 | 0 | 15,948 |
 | 9001 | 20,000 | 404,125 | 0 | 15,875 |
 | 4242 | 20,000 | 404,059 | 0 | 15,941 |
+
+Biomes (`src/biome.c`, with `gen/out/run_biomes.c` dumped from upstream's `allBiomes` by `gen/dump-biomes.test.ts`: each biome's links with their weights and its trainer chance):
+
+| Piece | Upstream | State |
+|---|---|---|
+| `initBiomeDepths`: the depth table walked from Town at startup (a jump to a random biome on reaching End is ported too, though no biome links to End today) | `src/init/init-biome-depths.ts` | Matches |
+| `generateRandomBiome(wave)`: depth weights over the 250-wave cycle | `src/battle-scene.ts` | Matches, including the RNG state |
+| `SelectBiomePhase`: the seed reset, End before the classic final boss and every 50 waves in endless, weighted links' rolls, the Map's menu (its choices in order), the random pick | `src/phases/select-biome-phase.ts` | Matches, including the RNG state |
+
+Biome runs (`tools/difftest.sh <upstream> 20000 <seed> biome`; each case rebuilds the depth table on a random RNG state, asks `generateRandomBiome` for a random wave, and runs a real `SelectBiomePhase` for a random mode, run seed, wave, current biome and Map): seeds 777, 9001 and 4242, 20,000 cases each, all identical (49,337 direct picks, 10,017 Map menus, 646 transitions to End). 11 of 12 deliberate bugs are caught, from End's depth off by one (121,606 mismatches) to rounding weights down instead of up (982) and End coming one wave late before the classic final boss (178). The one not caught, depths ignoring a lower link weight, gives the same table with today's biome data. An undefined upstream answer (all of a biome's weighted links failing, `randSeedItem([])`) is flagged `PR_RUN_UNDEFINED_UPSTREAM`; no biome today has only weighted links.
 
 The shop's economy (`src/shop.c`):
 
@@ -37,15 +47,15 @@ Mutation check: 22 deliberate bugs, 20 of which can change an answer; all 20 are
 
 ## Not done (in rough order)
 1. The rest of `newBattle`: mystery encounters (`isWaveMysteryEncounter`), random trainer type and variant (`arena.randomTrainerType`, the biome trainer pools), the trainer's party levels, fixed battles' trainers.
-2. Biomes: species pools per biome and time of day, biome transitions and their rolls.
+2. Biomes' species pools (per biome, rarity tier and time of day) and the wild species roll.
 3. The reward options: modifier pools and their weights (closures over the party's state), tier rolls and luck upgrades (`getNewModifierTypeOption`, `getPartyLuckValue`), the enemy's items.
 4. The daily run and challenges (the `PR_RUN_UNPORTED_*` flags).
 
 Dev overrides (`LEVEL_CAP_OVERRIDE`, `ENEMY_HEALTH_SEGMENTS_OVERRIDE`...) aren't modelled; they are upstream's testing switches, off in a real run.
 
 ## Layout
-- `include/pr/run.h` API, `src/wave.c` the wave functions, `src/shop.c` the shop's economy (each function quotes the JS it replaces)
-- `tests/*.producer.test.ts` upstream halves of the tests, `tests/wavetest.c` and `tests/shoptest.c` C halves
+- `include/pr/run.h` API, `src/wave.c` the wave functions, `src/biome.c` biomes, `src/shop.c` the shop's economy (each function quotes the JS it replaces); `gen/dump-biomes.test.ts` writes `gen/out/run_biomes.c` (generated, don't edit)
+- `tests/*.producer.test.ts` upstream halves of the tests, `tests/wavetest.c`, `tests/shoptest.c` and `tests/biometest.c` C halves
 - `tools/difftest.sh <upstream dir> [N] [seed] [wave|shop|all]` (the upstream checkout comes from `battle-core/tools/setup-upstream.sh`)
 
 Build: `make` (outputs to `build/`).

@@ -1,4 +1,4 @@
-/* run-core: the run around the battles (waves, the shop's economy; the reward pools next).
+/* run-core: the run around the battles (waves, biomes, the shop's economy; the reward pools next).
  * Ported from upstream src/game-mode.ts, src/battle.ts and src/battle-scene.ts; function
  * names follow upstream so each one diffs against its TS original. It reads battle-core's
  * RNG, V8 Math.pow and generated tables and never changes battle-core. */
@@ -15,6 +15,7 @@
 enum {
     PR_RUN_UNPORTED_DAILY = 1u << 0,      /* the daily run's seed config (trainer waves, money, final boss) */
     PR_RUN_UNPORTED_CHALLENGES = 1u << 1, /* challenge hooks (FIXED_BATTLES...) */
+    PR_RUN_UNDEFINED_UPSTREAM = 1u << 2,  /* upstream's own answer is undefined here (e.g. randSeedItem([])) */
 };
 
 typedef struct pr_run {
@@ -92,6 +93,35 @@ double pr_run_get_money_reward(int wave, double money_multiplier, const int *amu
  * custom_multiplier NaN = no customModifierSettings.rerollMultiplier */
 double pr_run_get_reroll_cost(int wave, bool lock_rarities, const int *option_tiers, int n_options, int reroll_count,
                               double custom_multiplier, double black_sludge_multiplier);
+
+/* ---- biomes (src/biome.c; data in gen/out/run_biomes.c, dumped from upstream's allBiomes) ---- */
+#define PR_BIOME_ID_LIMIT 64       /* BiomeId values are below this (the dump checks) */
+#define PR_MAX_BIOME_LINKS 8
+typedef struct { uint8_t biome, weight; } pr_biome_link;   /* weight 0 = a plain link, else [biome, weight] */
+typedef struct {
+    bool present;
+    uint8_t trainer_chance;       /* arena.trainerChance in this biome (0 = no trainers) */
+    uint8_t n_links;
+    pr_biome_link links[PR_MAX_BIOME_LINKS];   /* biomeLinks, in order */
+} pr_biome_info;
+extern const pr_biome_info pr_biomes[PR_BIOME_ID_LIMIT];
+extern const uint8_t pr_biome_order[];   /* Object.values(BiomeId) */
+extern const int pr_biome_count;
+/* biomeDepths: [depth, chance] per biome, built once at startup by initBiomeDepths */
+typedef struct {
+    bool set[PR_BIOME_ID_LIMIT];
+    int depth[PR_BIOME_ID_LIMIT], chance[PR_BIOME_ID_LIMIT];
+} pr_biome_depths;
+/* initBiomeDepths(): walks the links from TOWN; reaching END jumps to a random biome, rolled on
+ * `rng` (Phaser.Math.RND at startup), so the table isn't fixed data */
+void pr_run_init_biome_depths(pr_biome_depths *d, pr_rng *rng);
+/* generateRandomBiome(waveIndex) */
+int pr_run_generate_random_biome(const pr_biome_depths *d, pr_rng *rng, int wave);
+/* SelectBiomePhase.start() after the battle of `current_wave` in `current_biome`: resets the seed
+ * (resetSeed() of the current wave), then returns the next biome, or -1 when the player holds a
+ * Map and picks among `choices` (n_choices of them, in the order the menu lists them). */
+int pr_run_select_next_biome(pr_run *run, const pr_biome_depths *d, int current_biome, int current_wave, bool has_map,
+                             uint8_t choices[PR_MAX_BIOME_LINKS], int *n_choices);
 
 /* ---- helpers ---- */
 /* executeWithSeedOffset(fn, offset, seedOverride): fn rolls on a fresh RNG sown from
