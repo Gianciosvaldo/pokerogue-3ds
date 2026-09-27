@@ -38,7 +38,8 @@ enum {
     PR_FEAT_STATUS_TURN,             /* a status effect's turn counter or end-of-turn damage */
     PR_FEAT_MOVE_CONDITION,          /* a move's own condition (move.applyConditions) with no C port */
     PR_FEAT_PHASE_0,                 /* + pr_phase_type: a phase that isn't ported was created */
-    PR_FEAT_COUNT_ = PR_FEAT_PHASE_0 + 64
+    PR_FEAT_TAG_0 = PR_FEAT_PHASE_0 + 64,  /* + BattlerTagType: that tag added, lapsed or removed, not ported */
+    PR_FEAT_COUNT_ = PR_FEAT_TAG_0 + BATTLER_TAG_TYPE_COUNT_
 };
 const char *pr_unported_name(uint16_t id);
 const char *pr_phase_name_of(int phase_type);  /* src/engine.c */
@@ -357,6 +358,7 @@ typedef struct pr_ab_params {
     int effect;                    /* a StatusEffect (status immunities, Early Bird, Synchronize...) */
     int hit_result;                /* PostMoveInteractionAbAttrParams (on-hit abilities): hitResult, damage */
     double damage;
+    int tag_type;                  /* PreApplyBattlerTagAbAttrParams: the tag's BattlerTagType */
 } pr_ab_params;
 /* applyAbAttrs("<cls>", params): ability then passive, conditions, canApply, apply. */
 void pr_apply_ab_attrs(pr_battle *bt, uint16_t cls, pr_ab_params *pp);

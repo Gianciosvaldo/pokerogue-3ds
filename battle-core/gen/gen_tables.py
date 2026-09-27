@@ -54,6 +54,7 @@ species = load("species.json")
 typechart = load("typechart.json")
 natures = load("natures.json")
 move_sets = load("move-sets.json")
+battler_tags = load("battler-tags.json")
 form_changes = load("form-changes.json")
 # Form change trigger classes, numbered for the per-species bitmask (pr_species.form_change_triggers)
 fct_names = sorted({n for v in form_changes.values() for n in v})
@@ -90,7 +91,7 @@ with open(os.path.join(OUT, "pr_enums.h"), "w") as f:
 all_attr_owners = [m for m in moves if m] + [a for a in abilities if a]
 inst_by_class = {}
 for owner in all_attr_owners:
-    for a in owner["attrs"]:
+    for a in owner["attrs"] + (owner.get("chargeAttrs") or []):
         inst_by_class.setdefault(a["$class"], []).append(a)
 
 # Every attr class plus every ancestor, so dispatch can ask "is this a StatMultiplierAbAttr?"
@@ -344,11 +345,12 @@ for m in moves:
     if m is None:
         continue
     a0, an = emit_attrs(m["attrs"])
+    c0, cn = emit_attrs(m.get("chargeAttrs") or [])
     move_rows.append(
-        "{%d, %s, %s, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %s, %s, %s, %s}" % (
+        "{%d, %s, %s, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %s, %s, %s, %s}" % (
             m["id"], c_str(m["name"]), c_str(m["$class"]), m["_type"], m["_category"], m["moveTarget"],
             m["power"], m["accuracy"], m["pp"], m["chance"], m["priority"], m["generation"], m["flags"],
-            a0, an, "true" if m["isUnimplemented"] else "false",
+            a0, an, c0, cn, "true" if m["isUnimplemented"] else "false",
             fn_list(m["conditions"]), fn_list(m["conditionsSeq2"]) , fn_list(m["conditionsSeq3"])))
 ability_rows = []
 for ab in abilities:
@@ -433,6 +435,14 @@ c.append("};")
 c.append(f"\nconst pr_effect_info pr_attr_effects[{max(len(effect_rows), 1)}] = {{")
 c += [f"    {r}," for r in effect_rows]
 c.append("};")
+bt_num = str_enum_num["BattlerTagType"]
+bt_rows = ["{0, NULL, NULL}"] * len(bt_num)
+for t, info in battler_tags.items():
+    mask = sum(1 << l for l in info["lapseTypes"])
+    bt_rows[bt_num[t]] = "{0x%x, %s, %s}" % (mask, c_str(info["chain"][0]), c_str(t))
+c.append("const pr_battler_tag_info pr_battler_tags_info[BATTLER_TAG_TYPE_COUNT_] = {")
+c += [f"    {r}," for r in bt_rows]
+c.append("};")
 c.append(f"const pr_move pr_moves[PR_MOVE_COUNT] = {{")
 c += [f"    {r}," for r in move_rows]
 c.append("};")
@@ -485,6 +495,7 @@ typedef struct {{
     int8_t priority, generation;
     uint32_t flags;            /* MoveFlags bits */
     uint16_t attr0, nattr;     /* slice of pr_attrs */
+    uint16_t cattr0, ncattr;   /* chargeAttrs (ChargingAttackMove / ChargingSelfStatusMove): slice of pr_attrs */
     bool unimplemented;
     pr_fnlist conditions, conditions_seq2, conditions_seq3;
 }} pr_move;
@@ -546,6 +557,10 @@ typedef struct {{
     pr_fn_id condition;
 }} pr_effect_info;
 extern const pr_effect_info pr_attr_effects[];
+/* getBattlerTag(type): the lapse types it is built with (bit per BattlerTagLapseType), its class
+ * and the BattlerTagType's own name */
+typedef struct {{ uint16_t lapse_mask; const char *cls, *name; }} pr_battler_tag_info;
+extern const pr_battler_tag_info pr_battler_tags_info[];
 extern const pr_move pr_moves[PR_MOVE_COUNT];
 extern const pr_ability pr_abilities[PR_ABILITY_COUNT];
 extern const pr_form pr_forms[PR_FORM_COUNT];

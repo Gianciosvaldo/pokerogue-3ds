@@ -314,7 +314,8 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             t->source_id = inum(l, "sid");
             t->stockpiled_count = (int8_t)inum(l, "stock");
             t->crit_stages = (int8_t)inum(l, "crit");
-            cs->btag = 1;
+            /* the line holds all of a ported tag type's state; the others can hold more */
+            if (!pr_tag_type_ported(type)) cs->btag = 1;
         } else if (!strncmp(l, "MOD ", 4)) {
             cs->skip = 1;
         } else if (!strncmp(l, "PARTY ", 6)) {

@@ -631,6 +631,25 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
             || pp->hit_result >= HIT_RESULT_NO_EFFECT)
             return 0;
         return has_held_items(bt, o) ? -1 : 0;
+    /* ---- battler tag immunities (addTag): BaseBattlerTagImmunityAbAttr's canApply */
+    case PR_AC_BattlerTagImmunityAbAttr: {                              /* Oblivious, Own Tempo, Inner Focus... */
+        const pr_attr_BattlerTagImmunityAbAttr *x = P(BattlerTagImmunityAbAttr, a);
+        GATE(!*pp->flag && type_in(&x->immuneTagTypes, pp->tag_type));
+        *pp->flag = true;
+        return 1;
+    }
+    case PR_AC_UserFieldBattlerTagImmunityAbAttr: {                     /* Sweet Veil, Aroma Veil */
+        const pr_attr_UserFieldBattlerTagImmunityAbAttr *x = P(UserFieldBattlerTagImmunityAbAttr, a);
+        GATE(!*pp->flag && type_in(&x->immuneTagTypes, pp->tag_type));
+        *pp->flag = true;
+        return 1;
+    }
+    case PR_AC_ConditionalUserFieldBattlerTagImmunityAbAttr: {          /* Flower Veil */
+        const pr_attr_ConditionalUserFieldBattlerTagImmunityAbAttr *x = P(ConditionalUserFieldBattlerTagImmunityAbAttr, a);
+        GATE(!*pp->flag && type_in(&x->immuneTagTypes, pp->tag_type) && call_bool(bt, x->condition, a->cls, pp->target, o, -1));
+        *pp->flag = true;
+        return 1;
+    }
     case PR_AC_ReduceStatusEffectDurationAbAttr:                        /* Early Bird */
         GATE(pp->effect == P(ReduceStatusEffectDurationAbAttr, a)->statusEffect);
         *pp->value -= 1;

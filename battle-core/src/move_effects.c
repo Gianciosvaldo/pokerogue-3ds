@@ -124,6 +124,16 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
             }
         return;
     }
+    case PR_AC_SemiInvulnerableAttr:                     /* a charge attr: Fly, Dig, Dive, Phantom Force... */
+        if (!effect_can_apply(ef, user, target)) return;
+        pr_add_tag(bt, e, user, P(SemiInvulnerableAttr, a)->tagType, 1, move, (int64_t)user->id);
+        return;
+    case PR_AC_GulpMissileTagAttr:                       /* a charge attr: Dive */
+        if (!effect_can_apply(ef, user, target)) return;
+        /* Cramorant with Gulp Missile catches something (a tag, then a form change) */
+        if (pr_has_ability_active(bt, user, ABILITY_ID_GULP_MISSILE) && user->species == SPECIES_ID_CRAMORANT)
+            pr_note_unported(bt, a->cls);
+        return;
     case PR_AC_AddBattlerTagAttr:
     case PR_AC_FlinchAttr:
         add_battler_tag(bt, a, ef, user, target, move);

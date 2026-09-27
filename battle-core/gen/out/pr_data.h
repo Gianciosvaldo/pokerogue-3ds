@@ -35,6 +35,7 @@ typedef struct {
     int8_t priority, generation;
     uint32_t flags;            /* MoveFlags bits */
     uint16_t attr0, nattr;     /* slice of pr_attrs */
+    uint16_t cattr0, ncattr;   /* chargeAttrs (ChargingAttackMove / ChargingSelfStatusMove): slice of pr_attrs */
     bool unimplemented;
     pr_fnlist conditions, conditions_seq2, conditions_seq3;
 } pr_move;
@@ -113,6 +114,10 @@ typedef struct {
     pr_fn_id condition;
 } pr_effect_info;
 extern const pr_effect_info pr_attr_effects[];
+/* getBattlerTag(type): the lapse types it is built with (bit per BattlerTagLapseType), its class
+ * and the BattlerTagType's own name */
+typedef struct { uint16_t lapse_mask; const char *cls, *name; } pr_battler_tag_info;
+extern const pr_battler_tag_info pr_battler_tags_info[];
 extern const pr_move pr_moves[PR_MOVE_COUNT];
 extern const pr_ability pr_abilities[PR_ABILITY_COUNT];
 extern const pr_form pr_forms[PR_FORM_COUNT];

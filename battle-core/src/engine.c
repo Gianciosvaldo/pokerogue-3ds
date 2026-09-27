@@ -387,6 +387,23 @@ bool pr_phase_exists(pr_engine *e, pr_phase_type t, int battler)
     return false;
 }
 
+/* phaseManager.tryRemovePhase(type, phase => phase.getPokemon() === <battler>): the tree part
+ * (PhaseTree.remove: the first match, searching from the top level). Dynamic types would go
+ * through their priority queue first; none is removed this way yet. */
+bool pr_phase_try_remove(pr_battle *bt, pr_engine *e, pr_phase_type t, int battler)
+{
+    if (pr_phase_is_dynamic(t)) { pr_note_unported(bt, (uint16_t)(PR_FEAT_PHASE_0 + t)); return false; }
+    for (int l = e->n_levels - 1; l >= 0; l--)
+        for (int k = 0; k < e->level_len[l]; k++) {
+            int ph = e->levels[l][k];
+            if (!phase_is(e, ph, t) || (battler >= 0 && e->pool[ph].battler != battler)) continue;
+            memmove(&e->levels[l][k], &e->levels[l][k + 1], (size_t)(e->level_len[l] - k - 1));
+            e->level_len[l]--;
+            return true;
+        }
+    return false;
+}
+
 void pr_queue_message(pr_battle *bt, pr_engine *e)
 {
     pr_phase_unshift(bt, e, pr_phase_new(e, PH_MESSAGE, -1));

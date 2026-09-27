@@ -35,28 +35,6 @@ static int active_in_list(pr_battle *bt, const pr_target_list *t, pr_pokemon **o
 
 static pr_target_list *tlist(pr_engine *e, int list) { return list >= 0 ? &e->target_lists[list] : NULL; }
 
-/* ---- battler tags on the turn path: reading them is ported, lapsing and removing are not ---- */
-
-/* pokemon.lapseTags(type): nothing to do without tags */
-static void lapse_tags(pr_battle *bt, pr_pokemon *p, int lapse_type)
-{
-    (void)lapse_type;
-    if (p->n_tags) pr_note_unported(bt, PR_FEAT_TAG_LAPSE);
-}
-
-/* pokemon.lapseTag(type): false when the Pokemon has no such tag */
-static bool lapse_tag(pr_battle *bt, pr_pokemon *p, int tag_type)
-{
-    if (!pr_get_battler_tag(p, tag_type)) return false;
-    pr_note_unported(bt, PR_FEAT_TAG_LAPSE);
-    return true;
-}
-
-static void remove_tag(pr_battle *bt, pr_pokemon *p, int tag_type)
-{
-    if (pr_get_battler_tag(p, tag_type)) pr_note_unported(bt, PR_FEAT_TAG_LAPSE);
-}
-
 /* globalScene.triggerPokemonFormChange(pokemon, <trigger class>): only species with a form
  * change answering to that trigger can change; those are not ported yet */
 static void form_change(pr_battle *bt, const pr_pokemon *p, int trigger_class)
@@ -295,7 +273,7 @@ static void handle_pre_move_failures(pr_battle *bt, pr_engine *e, int ph)
     if (!m->cancelled && !m->failed) return;
     m->entry.result = MOVE_RESULT_FAIL;
     pr_push_history_shared(bt, e, m->pokemon, m->entry, m->targets);
-    lapse_tags(bt, m->pokemon, BATTLER_TAG_LAPSE_TYPE_MOVE_EFFECT);
+    pr_lapse_tags(bt, e, m->pokemon, BATTLER_TAG_LAPSE_TYPE_MOVE_EFFECT);
     move_queue_shift(m->pokemon, NULL);
 }
 
@@ -585,7 +563,7 @@ static bool first_failure_check(pr_battle *bt, pr_engine *e, int ph)
         return true;
     }
     /* (challenges restricting moves are not modelled: classic mode has none) */
-    if (lapse_tag(bt, user, BATTLER_TAG_TYPE_TRUANT) && m->cancelled) return true;
+    if (pr_lapse_tag(bt, e, user, BATTLER_TAG_TYPE_TRUANT) && m->cancelled) return true;
     /* checkPreUseInterrupt (Focus Punch) */
     if (pr_move_has_attr(m->move.id, PR_AC_PreUseInterruptAttr)) {
         pr_note_unported(bt, PR_AC_PreUseInterruptAttr);
@@ -594,7 +572,7 @@ static bool first_failure_check(pr_battle *bt, pr_engine *e, int ph)
     static const int tag_checks[] = {BATTLER_TAG_TYPE_FLINCHED, BATTLER_TAG_TYPE_DISABLED, BATTLER_TAG_TYPE_HEAL_BLOCK,
                                      BATTLER_TAG_TYPE_THROAT_CHOPPED};
     for (unsigned i = 0; i < sizeof tag_checks / sizeof *tag_checks; i++)
-        if (lapse_tag(bt, user, tag_checks[i]) && m->cancelled) return true;
+        if (pr_lapse_tag(bt, e, user, tag_checks[i]) && m->cancelled) return true;
     /* checkGravity */
     if (pr_arena_get_tag_on_side(bt, ARENA_TAG_TYPE_GRAVITY, ARENA_TAG_SIDE_BOTH) && (mv->flags & MOVE_FLAGS_GRAVITY)) {
         pr_queue_message(bt, e);
@@ -602,13 +580,13 @@ static bool first_failure_check(pr_battle *bt, pr_engine *e, int ph)
     }
     static const int tag_checks2[] = {BATTLER_TAG_TYPE_TAUNT, BATTLER_TAG_TYPE_IMPRISON, BATTLER_TAG_TYPE_CONFUSED};
     for (unsigned i = 0; i < sizeof tag_checks2 / sizeof *tag_checks2; i++)
-        if (lapse_tag(bt, user, tag_checks2[i]) && m->cancelled) return true;
+        if (pr_lapse_tag(bt, e, user, tag_checks2[i]) && m->cancelled) return true;
     /* checkPara: fully paralysed one time in eight */
     if (user->status == STATUS_EFFECT_PARALYSIS && pr_battle_rand_seed_int(bt, 8, 0) == 0) {
         trigger_status(bt, e, ph, true);
         return true;
     }
-    if (lapse_tag(bt, user, BATTLER_TAG_TYPE_INFATUATED) && m->cancelled) return true;
+    if (pr_lapse_tag(bt, e, user, BATTLER_TAG_TYPE_INFATUATED) && m->cancelled) return true;
     return false;
 }
 
@@ -681,7 +659,7 @@ static void fail_move(pr_battle *bt, pr_engine *e, int ph, bool due_to_terrain)
     pr_turn_move tm = {.move = (uint16_t)id, .use_mode = m->use_mode, .result = MOVE_RESULT_FAIL};
     pr_push_history_shared(bt, e, user, tm, m->targets);
     pr_queue_message(bt, e);
-    lapse_tags(bt, user, BATTLER_TAG_LAPSE_TYPE_MOVE_EFFECT);
+    pr_lapse_tags(bt, e, user, BATTLER_TAG_LAPSE_TYPE_MOVE_EFFECT);
 }
 
 static bool third_failure_check(pr_battle *bt, pr_engine *e, int ph)
@@ -730,7 +708,7 @@ static void use_move(pr_battle *bt, pr_engine *e, int ph, bool charging)
         m->use_mode = q.use_mode;
     }
     const pr_battler_tag *ch = pr_get_battler_tag(user, BATTLER_TAG_TYPE_CHARGING);
-    if (!charging && ch && ch->source_move == m->move.id) lapse_tag(bt, user, BATTLER_TAG_TYPE_CHARGING);
+    if (!charging && ch && ch->source_move == m->move.id) pr_lapse_tag(bt, e, user, BATTLER_TAG_TYPE_CHARGING);
     if (third_failure_check(bt, e, ph)) return;
     pr_pokemon *targets[4];
     int nt = active_in_list(bt, tlist(e, m->targets), targets);
@@ -740,7 +718,15 @@ static void use_move(pr_battle *bt, pr_engine *e, int ph, bool charging)
         return;
     }
     if (charging) {
+        /* chargeMove: MoveChargePhase(battlerIndex, targets[0], move, NORMAL ? IGNORE_PP : useMode) */
         int c = new_pokemon_phase(e, PH_MOVE_CHARGE, m->battler);
+        if (c < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }
+        pr_target_list *tl = tlist(e, m->targets);
+        PH(c)->pokemon = user;
+        PH(c)->move = m->move;
+        PH(c)->move_id = m->move.id;
+        PH(c)->charge_target = tl && tl->n ? tl->v[0] : -1;
+        PH(c)->use_mode = m->use_mode == MOVE_USE_MODE_NORMAL ? MOVE_USE_MODE_IGNORE_PP : m->use_mode;
         pr_phase_unshift(bt, e, c);
         return;
     }
@@ -774,14 +760,14 @@ static void move_phase(pr_battle *bt, pr_engine *e, int ph)
     int mode = m->use_mode;
     bool ignore_status = mode >= MOVE_USE_MODE_FOLLOW_UP, follow_up = mode == MOVE_USE_MODE_FOLLOW_UP;
 
-    remove_tag(bt, user, BATTLER_TAG_TYPE_ALWAYS_GET_HIT);
-    remove_tag(bt, user, BATTLER_TAG_TYPE_RECEIVE_DOUBLE_DAMAGE);
+    pr_remove_tag(bt, e, user, BATTLER_TAG_TYPE_ALWAYS_GET_HIT);
+    pr_remove_tag(bt, e, user, BATTLER_TAG_TYPE_RECEIVE_DOUBLE_DAMAGE);
     if (pr_get_battler_tag(user, BATTLER_TAG_TYPE_ENCORE)) pr_note_unported(bt, PR_FEAT_TAG_LAPSE);
     user->acted = true;
 
     if (!ignore_status) {
         first_failure_check(bt, e, ph);
-        lapse_tags(bt, user, BATTLER_TAG_LAPSE_TYPE_PRE_MOVE);
+        pr_lapse_tags(bt, e, user, BATTLER_TAG_LAPSE_TYPE_PRE_MOVE);
     } else if (follow_up) {
         pr_note_unported(bt, PR_FEAT_PHASE_0 + PH_MOVE);         /* called moves */
     }
@@ -834,7 +820,7 @@ static void move_phase(pr_battle *bt, pr_engine *e, int ph)
         /* arena.isMoveWeatherCancelled: primal weather blocking a move type */
         pr_note_unported(bt, PR_FEAT_WEATHER_TURN);
     } else {
-        lapse_tag(bt, user, BATTLER_TAG_TYPE_POWDER);
+        pr_lapse_tag(bt, e, user, BATTLER_TAG_TYPE_POWDER);
         second_failed = m->failed;
         if (second_failed) {
             handle_pre_move_failures(bt, e, ph);
@@ -861,10 +847,75 @@ static void move_phase(pr_battle *bt, pr_engine *e, int ph)
         move_queue_shift(user, NULL);
         pr_push_history_shared(bt, e, user, m->entry, m->targets);
     } else {
-        lapse_tags(bt, user, BATTLER_TAG_LAPSE_TYPE_MOVE);
+        pr_lapse_tags(bt, e, user, BATTLER_TAG_LAPSE_TYPE_MOVE);
         use_move(bt, e, ph, charging);
     }
     queue_move_end(bt, e, ph);
+}
+
+/* ---------------------------------------------------------------- MoveChargePhase */
+
+/* The charging turn of a two-turn move (Fly, Solar Beam...): the charge text, the move's charge
+ * effects (semi-invulnerability, a stat raise), the CHARGING tag; then either the move runs at
+ * once (Solar Beam in sun) or waits in the move queue for next turn. */
+static void move_charge_phase(pr_battle *bt, pr_engine *e, int ph)
+{
+    pr_phase *c = PH(ph);
+    pr_pokemon *user = slot(bt, c->battler);
+    int move = c->move.id;
+    /* getTargetPokemon: getField(true).find(p => targetIndex === p.getBattlerIndex()) */
+    pr_pokemon *target = slot(bt, c->charge_target);
+    if (target && !is_active_on_field(target)) target = NULL;
+    if (!user || !target || !is_charging_move(move)) return;     /* super.end() only */
+    const pr_move *mv = &pr_moves[move];
+
+    /* the charge animation's callback: showChargeText, applyMoveChargeAttrs("MoveEffectAttr"),
+     * addTag(CHARGING, 1, move.id, user.id) */
+    pr_queue_message(bt, e);
+    for (unsigned i = 0; i < mv->ncattr; i++)
+        if (pr_attr_is(pr_attrs[mv->cattr0 + i].cls, PR_AC_MoveEffectAttr))
+            pr_apply_move_effect(bt, e, ph, mv->cattr0 + i, user, target);
+    pr_add_tag(bt, e, user, BATTLER_TAG_TYPE_CHARGING, 1, move, user->id);
+
+    /* end(): applyMoveChargeAttrs("InstantChargeAttr", user, null, move, instantCharge) */
+    c = PH(ph);
+    bool instant = false;
+    for (unsigned i = 0; i < mv->ncattr; i++) {
+        const pr_attr *a = &pr_attrs[mv->cattr0 + i];
+        if (!pr_attr_is(a->cls, PR_AC_InstantChargeAttr)) continue;
+        if (a->cls != PR_AC_WeatherInstantChargeAttr) { pr_note_unported(bt, a->cls); continue; }
+        /* the condition: getEffectiveWeatherForMove(user) is one of weatherTypes */
+        const pr_attr_WeatherInstantChargeAttr *x = (const pr_attr_WeatherInstantChargeAttr *)a->p;
+        int w = pr_get_effective_weather_for_move(bt, user);
+        for (unsigned k = 0; k < x->weatherTypes.n; k++)
+            if (x->weatherTypes.v[k] == w) instant = true;
+    }
+    pr_turn_move tm = {.move = (uint16_t)move, .use_mode = c->use_mode, .result = PR_MOVE_RESULT_UNDEFINED,
+                       .targets = {c->charge_target}, .n_targets = 1};
+    if (instant) {
+        /* the pending MoveEndPhase goes; MovePhase(user, [targetIndex], move, useMode, FIRST) */
+        pr_phase_try_remove(bt, e, PH_MOVE_END, c->battler);
+        int mp = new_pokemon_phase(e, PH_MOVE, c->battler);
+        if (mp < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }
+        c = PH(ph);
+        pr_phase *m = PH(mp);
+        m->pokemon = user;
+        m->move = c->move;
+        m->use_mode = c->use_mode;
+        m->timing = MOVE_PHASE_TIMING_MODIFIER_FIRST;
+        m->targets = (int8_t)pr_targets_new(e, &c->charge_target, 1);
+        m->entry.move = MOVE_ID_NONE;
+        m->entry.use_mode = c->use_mode;
+        m->entry.result = PR_MOVE_RESULT_UNDEFINED;
+        pr_phase_unshift(bt, e, mp);
+    } else if (user->n_move_queue < PR_MAX_MOVE_QUEUE) {
+        user->move_queue[user->n_move_queue++] = tm;              /* pushMoveQueue */
+    } else {
+        pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT);
+    }
+    /* pushMoveHistory({move, targets: [targetIndex], result: OTHER, useMode}) */
+    tm.result = MOVE_RESULT_OTHER;
+    pr_push_history_shared(bt, e, user, tm, -1);
 }
 
 /* ---------------------------------------------------------------- MoveEffectPhase */
@@ -1077,7 +1128,7 @@ static double pokemon_damage(pr_battle *bt, pr_engine *e, pr_pokemon *p, double 
     p->hp -= (int32_t)damage;
     if (p->hp <= 0 && !ignore_faint_phase) {
         pr_queue_faint(bt, e, pr_battler_index(bt, p), prevent_endure, -1);
-        lapse_tag(bt, p, BATTLER_TAG_TYPE_COMMANDED);
+        pr_lapse_tag(bt, e, p, BATTLER_TAG_TYPE_COMMANDED);
     }
     return damage;
 }
@@ -1119,7 +1170,7 @@ static move_damage apply_move_damage(pr_battle *bt, pr_engine *e, int ph, pr_pok
     if (d.damage <= 0) return r;
     bool ohko = d.result == HIT_RESULT_ONE_HIT_KO;
     (void)ohko;
-    lapse_tags(bt, target, BATTLER_TAG_LAPSE_TYPE_HIT);
+    pr_lapse_tags(bt, e, target, BATTLER_TAG_LAPSE_TYPE_HIT);
     const pr_battler_tag *sub = pr_find_battler_tag_class(target, PR_TAGCLASS_SUBSTITUTE);
     bool blocked = sub && pr_move_hits_substitute(bt, move, user, target);
     if (blocked) pr_note_unported(bt, PR_FEAT_TAG_LAPSE);
@@ -1144,7 +1195,7 @@ static move_damage apply_move_damage(pr_battle *bt, pr_engine *e, int ph, pr_pok
 static void on_faint_target(pr_battle *bt, pr_engine *e, int ph, pr_pokemon *user, pr_pokemon *target)
 {
     pr_queue_faint(bt, e, pr_battler_index(bt, target), false, pr_battler_index(bt, user));
-    lapse_tag(bt, target, BATTLER_TAG_TYPE_COMMANDED);
+    pr_lapse_tag(bt, e, target, BATTLER_TAG_TYPE_COMMANDED);
     if (!PH(ph)->last_hit && user->hits_left > 1) PH(ph)->last_hit = true;
 }
 
@@ -1164,7 +1215,7 @@ static void apply_on_target_effects(pr_battle *bt, pr_engine *e, int ph, pr_poke
     pr_ab_params dp = {.pokemon = target, .opponent = user, .move = move, .hit_result = d.result, .damage = d.damage};
     pr_apply_ab_attrs(bt, PR_AC_PostDefendAbAttr, &dp);                  /* Static, Rough Skin, Justified... */
     if (d.critical) pr_apply_ab_attrs(bt, PR_AC_PostReceiveCritStatStageChangeAbAttr, &dp);   /* Anger Point */
-    lapse_tags(bt, target, BATTLER_TAG_LAPSE_TYPE_AFTER_HIT);
+    pr_lapse_tags(bt, e, target, BATTLER_TAG_LAPSE_TYPE_AFTER_HIT);
     pr_ab_params ap = {.pokemon = user, .opponent = target, .move = move, .hit_result = d.result, .damage = d.damage};
     pr_apply_ab_attrs(bt, PR_AC_PostAttackAbAttr, &ap);                  /* Poison Touch, Stench... */
     if (!user->is_player && pr_move_is_attack(move)) turn_modifiers(bt, false, target);   /* EnemyAttackStatusEffectChanceModifier */
@@ -1238,7 +1289,7 @@ static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
     else bt->last_enemy_involved = (int8_t)(fx->battler % 2);
 
     move_attrs_unported(bt, move, PR_AC_OverrideMoveEffectAttr);
-    lapse_tags(bt, user, BATTLER_TAG_LAPSE_TYPE_MOVE_EFFECT);
+    pr_lapse_tags(bt, e, user, BATTLER_TAG_LAPSE_TYPE_MOVE_EFFECT);
 
     pr_pokemon *first;
     me_first_target(bt, e, ph, &first);
@@ -1351,7 +1402,7 @@ static void move_end_phase(pr_battle *bt, pr_engine *e, int ph)
     pr_phase *me = PH(ph);
     pr_pokemon *p = slot(bt, me->battler);
     if (p) p->hits_left = -1;
-    if (!me->was_follow_up && is_active_on_field(p)) lapse_tags(bt, p, BATTLER_TAG_LAPSE_TYPE_AFTER_MOVE);
+    if (!me->was_follow_up && is_active_on_field(p)) pr_lapse_tags(bt, e, p, BATTLER_TAG_LAPSE_TYPE_AFTER_MOVE);
     bt->ignore_abilities = false;
     bt->ignoring_effect_source = -1;
     for (int i = 0; i < me->n_end_targets; i++) {
@@ -1499,7 +1550,7 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
 
     /* the faint cry's callback, then the tween's */
     if (player) p->friendship = (uint8_t)(p->friendship > 5 ? p->friendship - 5 : 0);
-    lapse_tags(bt, p, BATTLER_TAG_LAPSE_TYPE_FAINT);
+    pr_lapse_tags(bt, e, p, BATTLER_TAG_LAPSE_TYPE_FAINT);
     /* doSetStatus(FAINT) */
     p->pending_status = STATUS_EFFECT_NONE;
     p->status = STATUS_EFFECT_FAINT;
@@ -1681,7 +1732,7 @@ static void turn_end_phase(pr_battle *bt, pr_engine *e)
     pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
     while ((p = pr_speed_iter_next(bt, &it))) {
         if (!p->switch_out_status) {
-            lapse_tags(bt, p, BATTLER_TAG_LAPSE_TYPE_TURN_END);
+            pr_lapse_tags(bt, e, p, BATTLER_TAG_LAPSE_TYPE_TURN_END);
             turn_modifiers(bt, p->is_player, p);          /* TurnHealModifier (Leftovers) */
             if (bt->terrain == TERRAIN_GRASSY) pr_note_unported(bt, PR_FEAT_WEATHER_TURN);
             if (!p->is_player) turn_modifiers(bt, false, p);
@@ -1948,6 +1999,7 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_RESET_STATUS: reset_status_phase(bt, e, ph); break;
     case PH_STAT_STAGE_CHANGE: stat_stage_change_phase(bt, e, ph); break;
     case PH_OBTAIN_STATUS_EFFECT: obtain_status_effect_phase(bt, e, ph); break;
+    case PH_MOVE_CHARGE: move_charge_phase(bt, e, ph); break;
     default:
         /* a phase with no port: it was reported when it was queued */
         pr_note_unported(bt, (uint16_t)(PR_FEAT_PHASE_0 + PH(ph)->type));

@@ -28,7 +28,11 @@
  * Stench...): two abilities in three come from them or from the ones they check (Magic Guard,
  * Overcoat, Shield Dust, Long Reach), a quarter of the cases give one side one of those checked
  * abilities or Mirror Armor, most moves are attacks that make contact, one Pokemon in six starts
- * with a status and one in six is terastallized, and a quarter have random stat stages.
+ * with a status and one in six is terastallized, and a quarter have random stat stages;
+ * TURN_CHARGE=1 aims at two-turn moves (Fly, Dig, Solar Beam, Skull Bash...): most moves are
+ * two-turn moves or moves that reach a semi-invulnerable Pokemon (Thunder, Earthquake, Surf...),
+ * some Pokemon have No Guard, and half the Pokemon holding a two-turn move start on its second
+ * turn, as MoveChargePhase and the command phases leave it.
  *
  * Each case builds a random singles state inside a real upstream battle, gives both sides a
  * FIGHT command the way the command phases do, then runs upstream's own phases from
@@ -75,6 +79,7 @@ it("turntest producer", async () => {
   const STATUS = process.env.TURN_STATUS === "1";
   const STATUS_POOL = STATUS || SPROBE;
   const ONHIT = process.env.TURN_ONHIT === "1";
+  const CHARGE = process.env.TURN_CHARGE === "1";
   const OUT = process.env.TURN_OUT ?? "/tmp/pr-turns.txt";
   const game = new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
   game.override
@@ -187,6 +192,11 @@ it("turntest producer", async () => {
     )
     .map((a: any) => a.id)
     .concat([AbilityId.OVERCOAT, AbilityId.SHIELD_DUST, AbilityId.LONG_REACH]);
+  // TURN_CHARGE pools: two-turn moves, and the moves that hit a semi-invulnerable Pokemon
+  const chargeMoves = usable.filter((m: any) => m.isChargingMove());
+  const hitsTagMoves = usable.filter((m: any) =>
+    m.attrs.some((a: any) => ["HitsTagAttr", "HitsTagForDoubleDamageAttr"].includes(a.constructor.name)),
+  );
   const healStatusAttrs: [number, any][] = allAbilities
     .filter((a: any) => a)
     .sort((a: any, b: any) => a.id - b.id)
@@ -378,6 +388,7 @@ it("turntest producer", async () => {
       ? statAbilityIds[rnd(statAbilityIds.length)]
       : STATUS_POOL && rnd(3) !== 0 ? statusAbilityIds[rnd(statusAbilityIds.length)]
       : ONHIT && rnd(3) !== 0 ? onHitAbilityIds[rnd(onHitAbilityIds.length)]
+      : CHARGE && rnd(6) === 0 ? AbilityId.NO_GUARD
       : RICH && rnd(2) === 0 ? abilityIds[rnd(abilityIds.length)] : AbilityId.BALL_FETCH;
     p.gender = rnd(3) - 1;
     p.friendship = rnd(256);
@@ -387,7 +398,7 @@ it("turntest producer", async () => {
     p.calculateStats();
     p.hp = rnd(3) === 0 ? p.getMaxHp() : 1 + rnd(p.getMaxHp());
     p.status = null;
-    if (RICH ? rnd(3) === 0 : STATUS ? rnd(4) === 0 : ONHIT ? rnd(6) === 0 : STAT && rnd(8) === 0) {
+    if (RICH ? rnd(3) === 0 : STATUS ? rnd(4) === 0 : ONHIT || CHARGE ? rnd(6) === 0 : STAT && rnd(8) === 0) {
       const s = statuses[rnd(statuses.length)];
       p.status = new Status(s, rnd(4), s === StatusEffect.SLEEP ? 1 + rnd(3) : 0, s === StatusEffect.FREEZE ? 1 + rnd(3) : undefined);
     }
@@ -400,6 +411,8 @@ it("turntest producer", async () => {
         ? (rnd(6) === 0 ? thawMoves[rnd(thawMoves.length)] : statusSetMoves[rnd(statusSetMoves.length)])
         : ONHIT && rnd(10) < 8
         ? (rnd(4) !== 0 ? contactAttacks[rnd(contactAttacks.length)] : attacks[rnd(attacks.length)])
+        : CHARGE && rnd(10) < 7
+        ? (rnd(3) !== 0 ? chargeMoves[rnd(chargeMoves.length)] : hitsTagMoves[rnd(hitsTagMoves.length)])
         : COND && rnd(10) < 6
         ? withConditions[rnd(withConditions.length)]
         : rnd(10) < 7 ? attacks[rnd(attacks.length)] : usable[rnd(usable.length)];
@@ -498,6 +511,35 @@ it("turntest producer", async () => {
         if (rnd(4) === 0) {
           p.summonData.statStages = p.summonData.statStages.map(() => [0, 0, 1, -1, 2, -2, 5, -5, 6, -6][rnd(10)]); // Anger Point from below 0
         }
+      }
+    }
+    if (CHARGE) {
+      // half the Pokemon holding a two-turn move are on its second turn: what MoveChargePhase
+      // left (CHARGING, the semi-invulnerable tag, the queued move, the OTHER history entry) and
+      // the command the command phases build from the queue
+      for (const p of [A, D]) {
+        const charged = p.moveset.filter((m: any) => m.getMove().isChargingMove());
+        if (!charged.length || rnd(2) !== 0) {
+          continue;
+        }
+        const move = charged[rnd(charged.length)].getMove();
+        const other = p === A ? D : A;
+        const targets = [other.getBattlerIndex()];
+        p.summonData.tags.push(getBattlerTag(BattlerTagType.CHARGING, 1, move.id, p.id));
+        const semi = move.chargeAttrs.find((a: any) => a.constructor.name === "SemiInvulnerableAttr");
+        if (semi) {
+          p.summonData.tags.push(getBattlerTag(semi.tagType, 1, move.id, p.id));
+        }
+        p.summonData.moveQueue = [{ move: move.id, targets: [...targets], useMode: MoveUseMode.IGNORE_PP }];
+        p.summonData.moveHistory.push({ move: move.id, targets: [...targets], result: MoveResult.OTHER, useMode: MoveUseMode.IGNORE_PP });
+        const turnMove = { move: move.id, targets: [...targets], useMode: MoveUseMode.IGNORE_PP };
+        const b = p.getBattlerIndex();
+        battle.turnCommands[b] = p.isPlayer()
+          ? { command: Command.FIGHT, cursor: p.moveset.findIndex((m: any) => m.moveId === move.id), move: turnMove, args: [MoveUseMode.IGNORE_PP, turnMove] }
+          : { command: Command.FIGHT, move: turnMove, skip: false };
+      }
+      for (const p of [A, D]) {
+        p.isTerastallized = rnd(8) === 0;
       }
     }
     if (STATUS) {

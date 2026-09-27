@@ -19,6 +19,7 @@ import Phaser from "phaser";
 import * as invalidMoves from "#data/moves/invalid-moves";
 import { Terrain } from "#data/terrain";
 import { Weather } from "#data/weather";
+import { getBattlerTag } from "#data/battler-tags";
 import { globalScene } from "#app/global-scene";
 import { MoveId } from "#enums/move-id";
 import { MoveResult } from "#enums/move-result";
@@ -170,6 +171,19 @@ it("dump upstream data", () => {
     }
   }
   write("string-enums.json", strEnums);
+  // Battler tags as getBattlerTag() builds them: the class chain and the lapse types, per type
+  // (the turn engine needs to know which tags a lapse reaches, ported or not)
+  const battlerTags: Record<string, { chain: string[]; lapseTypes: number[] }> = {};
+  for (const t of Object.values(strEnums.BattlerTagType)) {
+    const tag: any = getBattlerTag(t as any, 1, MoveId.NONE, 0);
+    if (!tag) continue;
+    const chain: string[] = [];
+    for (let o = Object.getPrototypeOf(tag); o && o !== Object.prototype; o = Object.getPrototypeOf(o)) {
+      chain.push(o.constructor.name);
+    }
+    battlerTags[t] = { chain, lapseTypes: [...tag.lapseTypes] };
+  }
+  write("battler-tags.json", battlerTags);
 
   const T = enums.PokemonType;
   const types = Object.values(T).filter(x => x >= 0 && x <= 17);
