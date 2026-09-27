@@ -180,6 +180,17 @@ int pr_run_determine_enemy_species(pr_rng *rng, int species, int level, bool all
 int pr_run_get_wild_species_for_level(pr_rng *rng, int species, int level, bool allow_evolving, bool is_boss,
                                       bool classic_wave20_trainer);
 
+/* ---- experience (src/exp.c; levels 1-99 in gen/out/run_exp.c) ---- */
+/* GrowthRate (src/data/exp.ts, outside src/enums so battle-core's generator doesn't emit it;
+ * gen/dump-exp.test.ts fails if upstream's names or values differ from these) */
+enum { GROWTH_RATE_ERRATIC, GROWTH_RATE_FAST, GROWTH_RATE_MEDIUM_FAST, GROWTH_RATE_MEDIUM_SLOW, GROWTH_RATE_SLOW,
+       GROWTH_RATE_FLUCTUATING };
+#define PR_GROWTH_RATE_COUNT 6
+extern const int32_t pr_exp_table[PR_GROWTH_RATE_COUNT][99];
+/* getLevelTotalExp(level, growthRate) and getLevelRelExp(level, growthRate) (GrowthRate) */
+double pr_run_get_level_total_exp(int level, int rate);
+double pr_run_get_level_rel_exp(int level, int rate);
+
 /* ---- helpers ---- */
 /* executeWithSeedOffset(fn, offset, seedOverride): fn rolls on a fresh RNG sown from
  * shiftCharCodes(seedOverride || seed, offset), and RND's state comes back afterwards, so a

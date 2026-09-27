@@ -19,6 +19,8 @@ Runs (`tools/difftest.sh <upstream> 20000 <seed>`; each case picks a random game
 | 9001 | 20,000 | 404,125 | 0 | 15,875 |
 | 4242 | 20,000 | 404,059 | 0 | 15,941 |
 
+Experience (`src/exp.c`): `getLevelTotalExp` and `getLevelRelExp` for all six growth rates. Below level 100 upstream reads a table of its own that isn't exported, so `gen/dump-exp.test.ts` dumps its answers for levels 1 to 99 into `gen/out/run_exp.c`; from level 100 the formulas are ported. The test (`tools/difftest.sh <upstream> 20000 <seed> exp`) checks every rate at every level from 0 to 3,000 and 20,000 random levels up to 100,000: 138,006 checks, 0 mismatches. 5 of 6 deliberate bugs are caught; the 6th (rounding instead of flooring level³) can't change anything.
+
 Mystery encounters and trainer parties (`src/wave.c`):
 
 | Piece | Upstream | State |
@@ -75,7 +77,7 @@ Mutation check: 22 deliberate bugs, 20 of which can change an answer; all 20 are
 Dev overrides (`LEVEL_CAP_OVERRIDE`, `ENEMY_HEALTH_SEGMENTS_OVERRIDE`...) aren't modelled; they are upstream's testing switches, off in a real run.
 
 ## Layout
-- `include/pr/run.h` API, `src/wave.c` the wave functions, `src/biome.c` biomes and encounters, `src/evolution.c` the evolution step, `src/shop.c` the shop's economy (each function quotes the JS it replaces); `gen/dump-biomes.test.ts` and `gen/dump-evolutions.test.ts` write `gen/out/run_biomes.c` and `gen/out/run_evolutions.c` (generated, don't edit)
+- `include/pr/run.h` API, `src/wave.c` the wave functions, `src/biome.c` biomes and encounters, `src/evolution.c` the evolution step, `src/exp.c` experience, `src/shop.c` the shop's economy (each function quotes the JS it replaces); `gen/dump-*.test.ts` write `gen/out/run_*.c` (generated, don't edit; `tools/redump.sh <upstream dir>` refreshes them all)
 - `tests/*.producer.test.ts` upstream halves of the tests, `tests/*test.c` C halves
 - `tools/difftest.sh <upstream dir> [N] [seed] [wave|shop|all]` (the upstream checkout comes from `battle-core/tools/setup-upstream.sh`)
 
