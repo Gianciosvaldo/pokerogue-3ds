@@ -1,0 +1,6 @@
+romfs/
+build-host/
+*.map
+*.lst
+bench-result.txt
+bench-log.txt

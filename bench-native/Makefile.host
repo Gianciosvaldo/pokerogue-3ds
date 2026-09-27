@@ -1,0 +1,15 @@
+# PC build of the same bench, to compare against the console: make -f Makefile.host && build-host/bench romfs/cases
+CC ?= gcc
+BC := ../battle-core
+CFLAGS ?= -O2 -g -std=gnu99 -Wall -Wno-unused-parameter -Wno-unused-function -Wno-deprecated-declarations -ffp-contract=off
+BENCH_REV ?= $(shell git rev-parse --short HEAD 2>/dev/null)$(shell git diff --quiet HEAD -- . $(BC) 2>/dev/null || echo -dirty)
+CPPFLAGS += -Isource -I$(BC)/include -I$(BC)/gen/out -I$(BC)/tests -DBENCH_REV=\"$(BENCH_REV)\"
+SRCS := $(wildcard source/*.c) $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c
+
+build-host/bench: $(SRCS) $(wildcard source/*.h) $(BC)/tests/turntest.c
+	@mkdir -p build-host
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(SRCS) -lm -o $@
+
+clean:
+	rm -rf build-host
+.PHONY: clean
