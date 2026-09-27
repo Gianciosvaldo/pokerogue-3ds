@@ -360,6 +360,7 @@ typedef struct pr_ab_params {
     int hit_result;                /* PostMoveInteractionAbAttrParams (on-hit abilities): hitResult, damage */
     double damage;
     int tag_type;                  /* PreApplyBattlerTagAbAttrParams: the tag's BattlerTagType */
+    int field_type;                /* PostWeatherChange: the new WeatherType; PostTerrainChange: the new TerrainType */
 } pr_ab_params;
 /* applyAbAttrs("<cls>", params): ability then passive, conditions, canApply, apply. */
 void pr_apply_ab_attrs(pr_battle *bt, uint16_t cls, pr_ab_params *pp);
@@ -421,6 +422,8 @@ bool pr_move_hits_substitute(pr_battle *bt, int move, const pr_pokemon *user, co
 bool pr_is_opponent(const pr_battle *bt, const pr_pokemon *a, const pr_pokemon *b);
 const pr_pokemon *pr_get_ally(const pr_battle *bt, const pr_pokemon *p);
 bool pr_weather_effect_suppressed(pr_battle *bt);
+/* Weather.isImmutable(): the primal weathers (Heavy Rain, Harsh Sun, Strong Winds) */
+bool pr_weather_immutable(int weather);
 int pr_move_get_priority(pr_battle *bt, int move, const pr_pokemon *user);
 bool pr_move_is_attack(int move);
 

@@ -315,8 +315,15 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             t->stockpiled_count = (int8_t)inum(l, "stock");
             t->crit_stages = (int8_t)inum(l, "crit");
             t->autotomize_count = (int16_t)inum(l, "auto");
-            /* the line holds all of a ported tag type's state; the others can hold more */
-            if (!pr_tag_type_ported(type)) cs->btag = 1;
+            if (field(l, "stat")) {                    /* HighestStatBoostTag: Protosynthesis, Quark Drive */
+                t->stat = (int8_t)inum(l, "stat");
+                t->multiplier = dnum(l, "mult");
+            }
+            /* the line holds all of a ported tag type's state, and of Protosynthesis's and Quark
+             * Drive's (which only the damage path reads and a weather or terrain ending removes);
+             * the others can hold more */
+            if (!pr_tag_type_ported(type) && !(pr_battler_tag_is(type, PR_TAGCLASS_HIGHEST_STAT_BOOST) && field(l, "stat")))
+                cs->btag = 1;
         } else if (!strncmp(l, "MOD ", 4)) {
             cs->skip = 1;
         } else if (!strncmp(l, "PARTY ", 6)) {
@@ -403,6 +410,15 @@ static void turn_move_str(sbuf *b, const pr_turn_move *t)
     num_or_u(b, t->result, PR_MOVE_RESULT_UNDEFINED);
 }
 
+/* " stat=S mult=M" for a HighestStatBoostTag, "" for the others */
+static const char *boost_fields(const pr_battler_tag *t)
+{
+    static char buf[64];
+    if (!pr_battler_tag_is(t->type, PR_TAGCLASS_HIGHEST_STAT_BOOST)) return "";
+    snprintf(buf, sizeof buf, " stat=%d mult=%.17g", t->stat, t->multiplier);
+    return buf;
+}
+
 static void dump_mon(lines_t *L, const pr_battle *bt, const pr_pokemon *p, int b, bool *incomplete)
 {
     sbuf s = {{0}, 0};
@@ -482,10 +498,10 @@ static void dump_mon(lines_t *L, const pr_battle *bt, const pr_pokemon *p, int b
     add_line(L, "%s", s.s);
 
     for (int i = 0; i < p->n_tags; i++)
-        add_line(L, "BTAG b=%d type=%s turns=%d smove=%d sid=%lld stock=%d crit=%d auto=%d", b,
+        add_line(L, "BTAG b=%d type=%s turns=%d smove=%d sid=%lld stock=%d crit=%d auto=%d%s", b,
                  battler_tag_names[p->tags[i].type], p->tags[i].turn_count, p->tags[i].source_move,
                  (long long)p->tags[i].source_id, p->tags[i].stockpiled_count, p->tags[i].crit_stages,
-                 p->tags[i].autotomize_count);
+                 p->tags[i].autotomize_count, boost_fields(&p->tags[i]));
     (void)bt;
 }
 
@@ -894,6 +910,7 @@ int main(int argc, char **argv)
             continue;
         }
         covered++;
+        if (getenv("TURNTEST_COVERED")) printf("COVERED %s\n", case_name);   /* which cases were covered */
         count_phases(&eng);
         for (int i = 0; i < PR_CLOSURE_COUNT; i++) covered_hits[i] += pr_closure_hits[i] - hits_before[i];
         int njs = js.n - run_at;
@@ -934,8 +951,10 @@ int main(int argc, char **argv)
     int top[12], nt = 0;
     for (int i = 0; i < PR_CLOSURE_COUNT; i++) {
         if (!pr_closure_misses[i]) continue;
-        int j = nt < 12 ? nt++ : 11;
-        if (nt == 12 && j == 11 && pr_closure_misses[top[11]] >= pr_closure_misses[i]) continue;
+        int j;
+        if (nt < 12) j = nt++;
+        else if (pr_closure_misses[top[11]] >= pr_closure_misses[i]) continue;   /* full: keep the 12 most called */
+        else j = 11;
         top[j] = i;
         for (; j > 0 && pr_closure_misses[top[j - 1]] < pr_closure_misses[top[j]]; j--) {
             int t = top[j]; top[j] = top[j - 1]; top[j - 1] = t;

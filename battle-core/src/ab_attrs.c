@@ -128,11 +128,15 @@ bool pr_move_does_flag_effect_apply(pr_battle *bt, int move, unsigned flag, cons
 
 /* Weather.isEffectSuppressed(): reads the first SuppressWeatherEffectAbAttr straight off
  * each active Pokemon's ability (or passive), with no canApplyAbility check. */
+bool pr_weather_immutable(int weather)
+{
+    return weather == WEATHER_TYPE_HEAVY_RAIN || weather == WEATHER_TYPE_HARSH_SUN || weather == WEATHER_TYPE_STRONG_WINDS;
+}
+
 bool pr_weather_effect_suppressed(pr_battle *bt)
 {
     if (bt->weather == WEATHER_TYPE_NONE) return false;
-    bool immutable = bt->weather == WEATHER_TYPE_HEAVY_RAIN || bt->weather == WEATHER_TYPE_HARSH_SUN
-                     || bt->weather == WEATHER_TYPE_STRONG_WINDS;
+    bool immutable = pr_weather_immutable(bt->weather);
     for (int i = 0; i < 4; i++) {
         const pr_pokemon *p = bt->field[i];
         if (!p || p->hp <= 0) continue;
@@ -192,6 +196,17 @@ static bool condition_ok(pr_battle *bt, const pr_attr *a, const pr_pokemon *p)
     case PR_AC_NonSuperEffectiveImmunityAbAttr:
         /* getCondition() returns this.condition, which no instance sets */
         return true;
+    case PR_AC_PostWeatherLapseHealAbAttr:
+    case PR_AC_PostWeatherLapseDamageAbAttr: {
+        /* getCondition(): getWeatherCondition(...weatherTypes) */
+        const pr_intlist *l = a->cls == PR_AC_PostWeatherLapseHealAbAttr
+                                  ? &P(PostWeatherLapseHealAbAttr, a)->weatherTypes
+                                  : &P(PostWeatherLapseDamageAbAttr, a)->weatherTypes;
+        if (pr_weather_effect_suppressed(bt)) return false;
+        for (unsigned i = 0; i < l->n; i++)
+            if (l->v[i] == bt->weather) return true;
+        return false;
+    }
     }
     if (a->cond == PR_NO_FN) return true;
     return call_bool(bt, a->cond, a->cls, p, NULL, -1);
@@ -468,6 +483,56 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         pr_unshift_heal(bt, c->e, pr_battler_index(bt, p), to_dmg_value(pr_get_stat(p, STAT_HP, true) / 8.0), PR_HEAL_MESSAGE);
         return 1;
     }
+    /* ---- weather and terrain: WeatherEffectPhase, and arena.trySetWeather / trySetTerrain ---- */
+    case PR_AC_SuppressWeatherEffectAbAttr:                             /* Cloud Nine, Air Lock */
+        GATE(bt->weather != WEATHER_TYPE_NONE && !*pp->flag
+             && (P(SuppressWeatherEffectAbAttr, a)->affectsImmutable || pr_weather_immutable(bt->weather)));
+        *pp->flag = true;
+        return 1;
+    case PR_AC_BlockWeatherDamageAttr: {                                /* Overcoat, Sand Veil, Snow Cloak... */
+        const pr_attr_BlockWeatherDamageAttr *x = P(BlockWeatherDamageAttr, a);
+        GATE(bt->weather != WEATHER_TYPE_NONE && !*pp->flag
+             && (x->weatherTypes.n == 0 || type_in(&x->weatherTypes, bt->weather)));
+        *pp->flag = true;
+        return 1;
+    }
+    case PR_AC_PostWeatherLapseHealAbAttr: {                            /* Rain Dish, Ice Body, Dry Skin */
+        const pr_attr_PostWeatherLapseHealAbAttr *x = P(PostWeatherLapseHealAbAttr, a);
+        if (!c->e) return -1;
+        GATE(p->hp < pr_get_stat(p, STAT_HP, true));                     /* !isFullHp() */
+        pr_unshift_heal(bt, c->e, pr_battler_index(bt, p),
+                        to_dmg_value(pr_get_stat(p, STAT_HP, true) / (16.0 / x->healFactor)), PR_HEAL_MESSAGE);
+        return 1;
+    }
+    case PR_AC_PostWeatherLapseDamageAbAttr: {                          /* Solar Power, Dry Skin */
+        const pr_attr_PostWeatherLapseDamageAbAttr *x = P(PostWeatherLapseDamageAbAttr, a);
+        if (!c->e) return -1;
+        GATE(!pr_has_ability_with_attr(bt, p, PR_AC_BlockNonDirectDamageAbAttr));
+        pr_queue_message(bt, c->e);
+        pr_damage_and_update(bt, c->e, (pr_pokemon *)p,
+                             to_dmg_value(pr_get_stat(p, STAT_HP, true) / (16.0 / x->damageFactor)),
+                             HIT_RESULT_INDIRECT, false, NULL);
+        return 1;
+    }
+    case PR_AC_PostWeatherChangeFormChangeAbAttr: {                     /* Forecast, Flower Gift */
+        const pr_attr_PostWeatherChangeFormChangeAbAttr *x = P(PostWeatherChangeFormChangeAbAttr, a);
+        GATE((p->species == SPECIES_ID_CASTFORM && x->ability == ABILITY_ID_FORECAST)
+             || (p->species == SPECIES_ID_CHERRIM && x->ability == ABILITY_ID_FLOWER_GIFT));
+        /* triggerWeatherBasedFormChanges(ToNormal): form changes aren't ported */
+        if (!pp->simulated) pr_note_unported(bt, PR_FEAT_FORM_CHANGE);
+        return 1;
+    }
+    case PR_AC_IceFaceFormChangeAbAttr:                                 /* Ice Face in Hail or Snow */
+        GATE(p->form == P(IceFaceFormChangeAbAttr, a)->formIndex
+             && (pp->field_type == WEATHER_TYPE_HAIL || pp->field_type == WEATHER_TYPE_SNOW));
+        if (!pp->simulated) pr_note_unported(bt, PR_FEAT_FORM_CHANGE);
+        return 1;
+    case PR_AC_PostWeatherChangeAddBattlerTagAbAttr:                    /* Protosynthesis: its tag isn't ported */
+        return type_in(&P(PostWeatherChangeAddBattlerTagAbAttr, a)->weatherTypes, pp->field_type) ? -1 : 0;
+    case PR_AC_PostTerrainChangeAddBattlerTagAttr:                      /* Quark Drive: its tag isn't ported */
+        return type_in(&P(PostTerrainChangeAddBattlerTagAttr, a)->terrainTypes, pp->field_type) ? -1 : 0;
+    case PR_AC_TerrainEventTypeChangeAbAttr:                            /* Mimicry: its type change isn't ported */
+        return p->terastallized ? 0 : -1;
     /* ---- on-hit abilities: PostDefend (the Pokemon hit), PostReceiveCrit, PostAttack (the attacker).
      * The ones whose effect adds a tag, weather, terrain, an ability or an item run their canApply
      * (random rolls included, so the RNG stays in step) and report themselves when it holds. */

@@ -43,7 +43,17 @@
  * recharge (Struggle and Chloroblast included) or are attacks, half the abilities block recoil,
  * turn drain into damage, heal from a status or from a move's type (Rock Head, Magic Guard, Liquid
  * Ooze, Poison Heal, Volt Absorb, Water Absorb...), a third of the Pokemon are poisoned, and half
- * the Pokemon that know a recharge move start the turn recharging, as the command phases leave it.
+ * the Pokemon that know a recharge move start the turn recharging, as the command phases leave it;
+ * TURN_WEATHER=1 aims at weather and terrain over a turn: seven cases in eight have a weather (the
+ * primal ones included; a third last forever, the others have 1 to 5 turns left) and half have a
+ * terrain, most moves are Water or Fire moves, two-turn moves (Dig, Dive...), moves that read the
+ * weather or terrain (Thunder, Blizzard, Weather Ball, Solar Beam, Grassy Glide...), moves that
+ * confuse (Misty Terrain blocks it) or moves whose type can change to or from Fire or Water (Hidden
+ * Power, Revelation Dance, Tera Blast...), half the abilities deal with weather or terrain (Cloud
+ * Nine, Overcoat, Sand Veil, Rain Dish, Dry Skin, Solar Power, Forecast, Protosynthesis, Mimicry,
+ * Magic Guard, Levitate, Swift Swim, Hydration, Normalize, Liquid Voice...),
+ * a quarter of the Pokemon have a status, a sixth are terastallized and a quarter start with
+ * Protosynthesis's or Quark Drive's stat boost.
  *
  * Each case builds a random singles state inside a real upstream battle, gives both sides a
  * FIGHT command the way the command phases do, then runs upstream's own phases from
@@ -72,6 +82,7 @@ import { MoveResult } from "#enums/move-result";
 import { MoveUseMode } from "#enums/move-use-mode";
 import { PokemonType } from "#enums/pokemon-type";
 import { SpeciesId } from "#enums/species-id";
+import { Stat } from "#enums/stat";
 import { StatusEffect } from "#enums/status-effect";
 import { TrainerSlot } from "#enums/trainer-slot";
 import { getMoveTargets } from "#moves/move-utils";
@@ -94,6 +105,7 @@ it("turntest producer", async () => {
   const CHARGE = process.env.TURN_CHARGE === "1";
   const TAGS = process.env.TURN_TAGS === "1";
   const HEAL = process.env.TURN_HEAL === "1";
+  const WEATHER = process.env.TURN_WEATHER === "1";
   const OUT = process.env.TURN_OUT ?? "/tmp/pr-turns.txt";
   const game = new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
   game.override
@@ -140,6 +152,7 @@ it("turntest producer", async () => {
     (m: any) => m.conditions.length || m.conditionsSeq2.length || m.conditionsSeq3.length,
   );
   const abilityIds = allAbilities.filter((a: any) => a && a.id !== AbilityId.NONE).map((a: any) => a.id);
+  const boostTags = [BattlerTagType.PROTOSYNTHESIS, BattlerTagType.QUARK_DRIVE];
   // TURN_STAT pools, by class name up the prototype chain
   const isA = (o: any, names: string[]) => {
     for (let c = o?.constructor; c && c !== Object; c = Object.getPrototypeOf(c)) {
@@ -243,6 +256,45 @@ it("turntest producer", async () => {
       ),
     )
     .map((a: any) => a.id);
+  // TURN_WEATHER pools (the moves that set a weather or terrain are left out)
+  const fieldSetters = ["WeatherChangeAttr", "ClearWeatherAttr", "TerrainChangeAttr", "ClearTerrainAttr"];
+  const fieldReaders = [
+    MoveId.EXPANDING_FORCE, MoveId.RISING_VOLTAGE, MoveId.MISTY_EXPLOSION, MoveId.GRASSY_GLIDE, MoveId.PSYBLADE,
+    MoveId.HYDRO_STEAM,
+  ];
+  // primal weather reads the move's type after these change it
+  const typeShifters = [
+    MoveId.HIDDEN_POWER, MoveId.REVELATION_DANCE, MoveId.TERA_BLAST, MoveId.RAGING_BULL, MoveId.IVY_CUDGEL,
+  ];
+  const weatherMoves = usable.filter((m: any) => {
+    const names = [...m.attrs, ...(m.chargeAttrs ?? [])].map((a: any) => a.constructor.name);
+    if (names.some((n: string) => fieldSetters.includes(n))) {
+      return false;
+    }
+    return (
+      m.type === PokemonType.WATER
+      || m.type === PokemonType.FIRE
+      || names.some((n: string) => /Weather|Terrain|Storm|Thunder|Blizzard|SemiInvulnerable/.test(n))
+      || names.includes("ConfuseAttr")
+      || fieldReaders.includes(m.id)
+      || typeShifters.includes(m.id)
+    );
+  });
+  const weatherAbilityIds = allAbilities
+    .filter((a: any) =>
+      a?.attrs.some((x: any) =>
+        isA(x, [
+          "SuppressWeatherEffectAbAttr", "PreWeatherDamageAbAttr", "PostWeatherLapseAbAttr", "PostWeatherChangeAbAttr",
+          "PostTerrainChangeAbAttr", "TerrainEventTypeChangeAbAttr",
+        ]),
+      ),
+    )
+    .map((a: any) => a.id)
+    .concat([
+      AbilityId.MAGIC_GUARD, AbilityId.LEVITATE, AbilityId.SWIFT_SWIM, AbilityId.CHLOROPHYLL, AbilityId.SAND_RUSH,
+      AbilityId.SLUSH_RUSH, AbilityId.SAND_FORCE, AbilityId.HYDRATION, AbilityId.LEAF_GUARD, AbilityId.SURGE_SURFER,
+      AbilityId.NORMALIZE, AbilityId.LIQUID_VOICE,
+    ]);
   const healStatusAttrs: [number, any][] = allAbilities
     .filter((a: any) => a)
     .sort((a: any, b: any) => a.id - b.id)
@@ -299,7 +351,8 @@ it("turntest producer", async () => {
       ...sd.tags.map(
         (t: any) =>
           `BTAG b=${b} type=${t.tagType} turns=${t.turnCount} smove=${t.sourceMove ?? 0} sid=${t.sourceId ?? -1}`
-          + ` stock=${t.stockpiledCount ?? 0} crit=${t.critStages ?? 0} auto=${t.autotomizeCount ?? 0}`,
+          + ` stock=${t.stockpiledCount ?? 0} crit=${t.critStages ?? 0} auto=${t.autotomizeCount ?? 0}`
+          + (boostTags.includes(t.tagType) ? ` stat=${t.stat} mult=${t.multiplier}` : ""),
       ),
     ];
   };
@@ -437,6 +490,7 @@ it("turntest producer", async () => {
       : CHARGE && rnd(6) === 0 ? AbilityId.NO_GUARD
       : TAGS && rnd(4) === 0 ? tagAbilityIds[rnd(tagAbilityIds.length)]
       : HEAL && rnd(2) === 0 ? healAbilityIds[rnd(healAbilityIds.length)]
+      : WEATHER && rnd(2) === 0 ? weatherAbilityIds[rnd(weatherAbilityIds.length)]
       : RICH && rnd(2) === 0 ? abilityIds[rnd(abilityIds.length)] : AbilityId.BALL_FETCH;
     p.gender = rnd(3) - 1;
     p.friendship = rnd(256);
@@ -448,7 +502,7 @@ it("turntest producer", async () => {
     p.status = null;
     if (HEAL && rnd(3) === 0) {
       p.status = new Status([StatusEffect.POISON, StatusEffect.TOXIC][rnd(2)], rnd(4));
-    } else if (RICH ? rnd(3) === 0 : STATUS ? rnd(4) === 0 : ONHIT || CHARGE || TAGS ? rnd(6) === 0 : STAT && rnd(8) === 0) {
+    } else if (RICH ? rnd(3) === 0 : STATUS || WEATHER ? rnd(4) === 0 : ONHIT || CHARGE || TAGS ? rnd(6) === 0 : STAT && rnd(8) === 0) {
       const s = statuses[rnd(statuses.length)];
       p.status = new Status(s, rnd(4), s === StatusEffect.SLEEP ? 1 + rnd(3) : 0, s === StatusEffect.FREEZE ? 1 + rnd(3) : undefined);
     }
@@ -463,6 +517,8 @@ it("turntest producer", async () => {
         ? (rnd(4) !== 0 ? contactAttacks[rnd(contactAttacks.length)] : attacks[rnd(attacks.length)])
         : HEAL && rnd(10) < 6
         ? healMoves[rnd(healMoves.length)]
+        : WEATHER && rnd(10) < 7
+        ? weatherMoves[rnd(weatherMoves.length)]
         : TAGS && rnd(10) < 8
         ? (rnd(4) !== 0 ? tagMoves[rnd(tagMoves.length)] : tagReaders[rnd(tagReaders.length)])
         : CHARGE && rnd(10) < 7
@@ -653,6 +709,23 @@ it("turntest producer", async () => {
             move: { move: MoveId.NONE, targets: getMoveTargets(p, MoveId.NONE).targets, useMode: MoveUseMode.NORMAL },
             args: [MoveUseMode.NORMAL, undefined], targets: [b],
           };
+        }
+      }
+    }
+    if (WEATHER) {
+      const wt = rnd(8) !== 0 ? 1 + rnd(9) : 0; // WeatherType: Sunny ... Strong Winds
+      const wturns = rnd(3) === 0 ? 0 : 1 + rnd(5);
+      scene.arena.weather = wt ? new Weather(wt, wturns, wturns ? 5 : 0) : null;
+      const tturns = rnd(3) === 0 ? 0 : 1 + rnd(5);
+      scene.arena.terrain = rnd(2) === 0 ? new Terrain(1 + rnd(4), tturns, tturns ? 5 : 0) : null;
+      for (const p of [A, D]) {
+        p.isTerastallized = rnd(6) === 0;
+        if (rnd(4) === 0) {
+          // built directly (addTag would run onAdd): Protosynthesis's or Quark Drive's stat boost
+          const tag = getBattlerTag(boostTags[rnd(2)], 1, MoveId.NONE, p.id) as any;
+          tag.stat = [Stat.ATK, Stat.DEF, Stat.SPATK, Stat.SPDEF, Stat.SPD][rnd(5)];
+          tag.multiplier = tag.stat === Stat.SPD ? 1.5 : 1.3;
+          p.summonData.tags.push(tag);
         }
       }
     }

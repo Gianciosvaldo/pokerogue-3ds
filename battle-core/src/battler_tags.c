@@ -114,14 +114,17 @@ static pr_battler_tag construct(int type, int turn_count, int source_move, int64
 }
 
 /* newTag.canAdd(pokemon) */
-static bool can_add(pr_battle *bt, pr_pokemon *p, const pr_battler_tag *t)
+static bool can_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_battler_tag *t)
 {
     switch (t->type) {
     case BATTLER_TAG_TYPE_CONFUSED:
-        /* blocked by Misty Terrain on the ground (and a message for status moves); isGrounded() runs
-         * first, and applies Levitate (not simulated) */
+        /* blocked by Misty Terrain on the ground; isGrounded() runs first, and applies Levitate (not
+         * simulated). The terrain's message only when the running phase is a MoveEffectPhase of a
+         * status move (queueStatusImmuneMessage(false, MISTY)) */
         if (pr_is_grounded(bt, p, false) && bt->terrain == TERRAIN_MISTY) {
-            pr_note_unported(bt, PR_FEAT_WEATHER_TURN);
+            if (e && e->current >= 0 && e->pool[e->current].type == PH_MOVE_EFFECT
+                && pr_moves[e->pool[e->current].move_id].category == MOVE_CATEGORY_STATUS)
+                pr_queue_message(bt, e);
             return false;
         }
         return true;
@@ -340,7 +343,7 @@ bool pr_add_tag(pr_battle *bt, pr_engine *e, pr_pokemon *p, int type, int turn_c
         if (cancelled) return false;
     }
 
-    if (!can_add(bt, p, &t)) return false;
+    if (!can_add(bt, e, p, &t)) return false;
     if (p->n_tags >= PR_MAX_BATTLER_TAGS) {
         pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT);
         if (e) e->overflow = true;
@@ -404,6 +407,21 @@ void pr_remove_tag(pr_battle *bt, pr_engine *e, pr_pokemon *p, int type)
     }
     pr_battler_tag t = p->tags[i];
     on_remove(bt, e, p, &t);
+    splice_tag(p, i);
+}
+
+void pr_remove_field_boost_tag(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool terrain, int now)
+{
+    /* findAndRemoveTags(tag => "weatherTypes" in tag && !tag.weatherTypes.find(w => w === weather)),
+     * and the terrain version: only Protosynthesis's tag lists weathers (Sunny, Harsh Sun), only
+     * Quark Drive's lists terrains (Electric). turnCount = 0, onRemove (HighestStatBoostTag's
+     * message), splice. */
+    int type = terrain ? BATTLER_TAG_TYPE_QUARK_DRIVE : BATTLER_TAG_TYPE_PROTOSYNTHESIS;
+    bool listed = terrain ? now == TERRAIN_ELECTRIC : (now == WEATHER_TYPE_SUNNY || now == WEATHER_TYPE_HARSH_SUN);
+    int i = find_tag(p, type);
+    if (i < 0 || listed) return;
+    p->tags[i].turn_count = 0;
+    pr_queue_message(bt, e);
     splice_tag(p, i);
 }
 

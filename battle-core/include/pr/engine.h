@@ -149,6 +149,9 @@ void pr_lapse_tags(pr_battle *bt, pr_engine *e, pr_pokemon *p, int lapse_type); 
 /* lapseTag(type, lapseType): whether the Pokemon had the tag (upstream's default lapse type is CUSTOM) */
 bool pr_lapse_tag(pr_battle *bt, pr_engine *e, pr_pokemon *p, int type, int lapse_type);
 void pr_remove_tag(pr_battle *bt, pr_engine *e, pr_pokemon *p, int type);         /* removeTag(type) */
+/* After a weather or terrain change to `now`: Protosynthesis's tag (weather) or Quark Drive's
+ * (terrain) goes with its message unless it lists the new one */
+void pr_remove_field_boost_tag(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool terrain, int now);
 void pr_remove_tags_by_source_id(pr_battle *bt, pr_engine *e, pr_pokemon *p, int64_t source_id);
 /* phaseManager.unshiftNew(<PokemonPhase type>, battlerIndex) */
 void pr_unshift_new(pr_battle *bt, pr_engine *e, pr_phase_type t, int battler);

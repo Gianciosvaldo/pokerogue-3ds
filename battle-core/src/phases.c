@@ -299,6 +299,20 @@ static bool pre_move_message(pr_battle *bt, int move, const pr_pokemon *target, 
     return false;
 }
 
+/* arena.isMoveWeatherCancelled(user, move): weather && !isEffectSuppressed() && Weather's own
+ * check, which reads the move's type first whatever the weather: Harsh Sun stops Water attacks,
+ * Heavy Rain Fire attacks */
+static bool move_weather_cancelled(pr_battle *bt, const pr_pokemon *user, int move)
+{
+    if (bt->weather == WEATHER_TYPE_NONE || pr_weather_effect_suppressed(bt)) return false;
+    int type = pr_get_move_type(bt, user, move);
+    switch (bt->weather) {
+    case WEATHER_TYPE_HARSH_SUN: return pr_move_is_attack(move) && type == POKEMON_TYPE_WATER;
+    case WEATHER_TYPE_HEAVY_RAIN: return pr_move_is_attack(move) && type == POKEMON_TYPE_FIRE;
+    }
+    return false;
+}
+
 static void handle_pre_move_failures(pr_battle *bt, pr_engine *e, int ph)
 {
     pr_phase *m = PH(ph);
@@ -853,9 +867,10 @@ static void move_phase(pr_battle *bt, pr_engine *e, int ph)
     if (!pr_move_apply_conditions(bt, move, user, nt ? targets[0] : NULL, 2)) {
         m->failed = true;
         second_failed = true;
-    } else if (bt->weather != WEATHER_TYPE_NONE) {
-        /* arena.isMoveWeatherCancelled: primal weather blocking a move type */
-        pr_note_unported(bt, PR_FEAT_WEATHER_TURN);
+    } else if (move_weather_cancelled(bt, user, move)) {
+        /* the failed text is getWeatherBlockMessage(weatherType) */
+        m->failed = true;
+        second_failed = true;
     } else {
         pr_lapse_tag(bt, e, user, BATTLER_TAG_TYPE_POWDER, BATTLER_TAG_LAPSE_TYPE_PRE_MOVE);
         second_failed = m->failed;
@@ -1646,11 +1661,65 @@ static void check_interlude_phase(pr_battle *bt, pr_engine *e)
     pr_note_unported(bt, PR_FEAT_PHASE_0 + PH_CHECK_INTERLUDE);     /* onInterlude */
 }
 
+/* Weather.isTypeDamageImmune(type) */
+static bool weather_type_damage_immune(int weather, int type)
+{
+    switch (weather) {
+    case WEATHER_TYPE_SANDSTORM:
+        return type == POKEMON_TYPE_GROUND || type == POKEMON_TYPE_ROCK || type == POKEMON_TYPE_STEEL;
+    case WEATHER_TYPE_HAIL:
+        return type == POKEMON_TYPE_ICE;
+    }
+    return false;
+}
+
+/* WeatherEffectPhase (a CommonAnimPhase). Sandstorm and Hail: unless an ability on the field
+ * suppresses them (Cloud Nine, Air Lock), each Pokemon in speed order that isn't immune by type
+ * or leaving the field, isn't shielded by its ability (Overcoat, Sand Veil..., Magic Guard) and
+ * isn't underground or underwater takes 1/16 of its max HP after the damage message. Then the
+ * lapse text (ui.showText: no phase) and, in its callback, the abilities acting on the weather
+ * for each Pokemon still on the field (Rain Dish, Ice Body, Dry Skin, Solar Power). */
 static void weather_effect_phase(pr_battle *bt, pr_engine *e)
 {
-    (void)e;
-    if (bt->weather == WEATHER_TYPE_NONE) return;
-    pr_note_unported(bt, PR_FEAT_WEATHER_TURN);
+    int w = bt->weather;
+    if (w == WEATHER_TYPE_NONE) return;
+    pr_speed_iter it;
+    pr_pokemon *p;
+    if (w == WEATHER_TYPE_SANDSTORM || w == WEATHER_TYPE_HAIL) {         /* isDamaging() */
+        bool suppressed = false;
+        pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
+        while ((p = pr_speed_iter_next(bt, &it))) {
+            pr_ab_params sp = {.pokemon = p, .move = -1, .flag = &suppressed};
+            pr_apply_ab_attrs(bt, PR_AC_SuppressWeatherEffectAbAttr, &sp);
+        }
+        if (!suppressed) {
+            pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
+            while ((p = pr_speed_iter_next(bt, &it))) {
+                int8_t ty[3];
+                int n = pr_get_types(p, ty, PR_TYPES_ORIGINAL_IF_STELLAR);
+                bool immune = p->switch_out_status;
+                for (int i = 0; i < n; i++)
+                    if (weather_type_damage_immune(w, ty[i])) immune = true;
+                if (immune) continue;
+                bool cancelled = false;
+                pr_ab_params cp = {.pokemon = p, .move = -1, .flag = &cancelled};
+                pr_apply_ab_attrs(bt, PR_AC_PreWeatherDamageAbAttr, &cp);
+                pr_apply_ab_attrs(bt, PR_AC_BlockNonDirectDamageAbAttr, &cp);
+                if (cancelled || pr_get_battler_tag(p, BATTLER_TAG_TYPE_UNDERGROUND)
+                    || pr_get_battler_tag(p, BATTLER_TAG_TYPE_UNDERWATER))
+                    continue;
+                pr_queue_message(bt, e);                                   /* getWeatherDamageMessage */
+                /* damageAndUpdate(damage, {result: INDIRECT, ignoreSegments: true}) */
+                damage_and_update(bt, e, p, to_dmg_value(max_hp(p) / 16.0), HIT_RESULT_INDIRECT, false, NULL);
+            }
+        }
+    }
+    pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
+    while ((p = pr_speed_iter_next(bt, &it))) {
+        if (p->switch_out_status) continue;
+        pr_ab_params lp = {.pokemon = p, .move = -1};
+        pr_apply_ab_attrs(bt, PR_AC_PostWeatherLapseAbAttr, &lp);
+    }
 }
 
 static void positional_tag_phase(pr_battle *bt, pr_engine *e)
@@ -1755,6 +1824,57 @@ static void lapse_arena_tags(pr_battle *bt, pr_engine *e)
     bt->n_arena_tags = k;
 }
 
+/* Weather.lapse(): the primal weathers last; otherwise a count left counts down and the weather
+ * ends at 0 (none left: it lasts) */
+static bool weather_lapse(pr_battle *bt)
+{
+    if (pr_weather_immutable(bt->weather)) return true;
+    if (bt->weather_turns_left) return --bt->weather_turns_left != 0;
+    return true;
+}
+
+/* Terrain.lapse() */
+static bool terrain_lapse(pr_battle *bt)
+{
+    if (bt->terrain_turns_left) return --bt->terrain_turns_left != 0;
+    return true;
+}
+
+/* arena.trySetWeather(NONE) with no user, once a weather runs out: its clear message, then for each
+ * Pokemon in speed order the tags tied to the weather go and PostWeatherChangeAbAttr runs */
+static void clear_weather(pr_battle *bt, pr_engine *e)
+{
+    bt->weather = WEATHER_TYPE_NONE;
+    bt->weather_turns_left = bt->weather_max_duration = 0;
+    pr_queue_message(bt, e);                                  /* getWeatherClearMessage(oldWeatherType) */
+    pr_speed_iter it;
+    pr_pokemon *p;
+    pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
+    while ((p = pr_speed_iter_next(bt, &it))) {
+        pr_remove_field_boost_tag(bt, e, p, false, WEATHER_TYPE_NONE);
+        pr_ab_params wp = {.pokemon = p, .move = -1, .field_type = WEATHER_TYPE_NONE};
+        pr_apply_ab_attrs(bt, PR_AC_PostWeatherChangeAbAttr, &wp);
+    }
+}
+
+/* arena.trySetTerrain(NONE): the same for a terrain, plus Mimicry (TerrainEventTypeChangeAbAttr) */
+static void clear_terrain(pr_battle *bt, pr_engine *e)
+{
+    bt->terrain = TERRAIN_NONE;
+    bt->terrain_turns_left = bt->terrain_max_duration = 0;
+    pr_queue_message(bt, e);                                  /* getTerrainClearMessage(oldTerrainType) */
+    pr_speed_iter it;
+    pr_pokemon *p;
+    pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
+    while ((p = pr_speed_iter_next(bt, &it))) {
+        pr_remove_field_boost_tag(bt, e, p, true, TERRAIN_NONE);
+        pr_ab_params tp = {.pokemon = p, .move = -1, .field_type = TERRAIN_NONE};
+        pr_apply_ab_attrs(bt, PR_AC_PostTerrainChangeAbAttr, &tp);
+        pr_ab_params mp = {.pokemon = p, .move = -1};
+        pr_apply_ab_attrs(bt, PR_AC_TerrainEventTypeChangeAbAttr, &mp);
+    }
+}
+
 static void turn_end_phase(pr_battle *bt, pr_engine *e)
 {
     /* currentBattle.incrementTurn() */
@@ -1777,7 +1897,9 @@ static void turn_end_phase(pr_battle *bt, pr_engine *e)
         if (!p->switch_out_status) {
             pr_lapse_tags(bt, e, p, BATTLER_TAG_LAPSE_TYPE_TURN_END);
             turn_modifiers(bt, p->is_player, p);          /* TurnHealModifier (Leftovers) */
-            if (bt->terrain == TERRAIN_GRASSY) pr_note_unported(bt, PR_FEAT_WEATHER_TURN);
+            /* Grassy Terrain heals a grounded Pokemon by 1/16 of its max HP, with a message */
+            if (bt->terrain == TERRAIN_GRASSY && pr_is_grounded(bt, p, false))
+                pr_unshift_heal(bt, e, pr_battler_index(bt, p), to_dmg_value(max_hp(p) / 16.0), PR_HEAL_MESSAGE);
             if (!p->is_player) turn_modifiers(bt, false, p);
             pr_ab_params pt = {.pokemon = p, .move = -1};
             pr_apply_ab_attrs(bt, PR_AC_PostTurnAbAttr, &pt);
@@ -1787,7 +1909,14 @@ static void turn_end_phase(pr_battle *bt, pr_engine *e)
         p->temp_wave_turn_count++;
     }
     lapse_arena_tags(bt, e);
-    if (bt->weather != WEATHER_TYPE_NONE || bt->terrain != TERRAIN_NONE) pr_note_unported(bt, PR_FEAT_WEATHER_TURN);
+    if (bt->weather != WEATHER_TYPE_NONE && !weather_lapse(bt)) {
+        clear_weather(bt, e);
+        /* triggerWeatherBasedFormChangesToNormal: Castform and Cherrim (form changes aren't ported) */
+        pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
+        while ((p = pr_speed_iter_next(bt, &it)))
+            form_change(bt, p, PR_FCT_SpeciesFormChangeRevertWeatherFormTrigger);
+    }
+    if (bt->terrain != TERRAIN_NONE && !terrain_lapse(bt)) clear_terrain(bt, e);
 }
 
 /* ---------------------------------------------------------------- presentation */
