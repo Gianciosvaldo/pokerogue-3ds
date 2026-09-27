@@ -15,7 +15,9 @@
 enum {
     PR_RUN_UNPORTED_DAILY = 1u << 0,      /* the daily run's seed config (trainer waves, money, final boss) */
     PR_RUN_UNPORTED_CHALLENGES = 1u << 1, /* challenge hooks (FIXED_BATTLES...) */
-    PR_RUN_UNPORTED_SPECIES = 1u << 3,    /* globalScene.randomSpecies (any species), for an empty biome pool */
+    PR_RUN_UNPORTED_SPECIES = 1u << 3,
+    PR_RUN_UNPORTED_FIXED_BATTLE = 1u << 4,  /* a fixed battle's trainer (config closures) */
+    PR_RUN_UNPORTED_TRAINER = 1u << 5,       /* a trainer config the data doesn't cover */    /* globalScene.randomSpecies (any species), for an empty biome pool */
     PR_RUN_UNDEFINED_UPSTREAM = 1u << 2,  /* upstream's own answer is undefined here (e.g. randSeedItem([])) */
 };
 
@@ -74,8 +76,9 @@ int pr_run_get_party_levels(const pr_run *run, int wave, int size, const uint8_t
                             bool is_double, int out[PR_MAX_PARTY_TEMPLATE]);
 
 /* ---- Battle (src/battle.ts) ---- */
-/* getLevelForWave() for a battle of `wave`, rolling on `rng` (newBattle builds the Battle inside
- * executeWithSeedOffset(waveIndex << 3, waveSeed), so pass pr_run_battle_rng's result) */
+/* getLevelForWave() for a battle of `wave`, rolling on `rng`. newBattle builds the Battle inside
+ * executeWithSeedOffset(waveIndex << 3, waveSeed) (pr_run_battle_rng), where the battleSeed field
+ * initializer rolls 16 times before the levels: pr_run_new_battle does both in order. */
 int pr_run_get_level_for_wave(pr_run *run, pr_rng *rng, int wave);
 /* The Phaser.Math.RND a new Battle is built with: sown from shiftCharCodes(waveSeed, wave << 3) */
 pr_rng pr_run_battle_rng(const pr_run *run, int wave);
@@ -220,6 +223,47 @@ int pr_run_try_spread_pokerus(const pr_run *run, int wave, bool *pokerus, int n_
 double pr_run_add_money(double money, double amount);
 /* The Coin Cases' interest (MoneyInterestModifier), each one's stack count in list order */
 double pr_run_apply_money_interest(double money, const int *stacks, int n);
+
+/* ---- trainers (data in gen/out/run_trainers.c) ---- */
+typedef struct { int8_t size, strength; int8_t strengths[8]; } pr_party_template;   /* size, .strength, getStrength(i) */
+/* partyTemplateFunc captured as segments: in game mode `mode`, from currentBattle.waveIndex `from_wave`
+ * on (0 = no current battle), the template is pr_party_templates[template] */
+typedef struct { uint8_t mode; uint16_t from_wave; uint16_t template; } pr_template_segment;
+typedef struct {
+    uint16_t type;                       /* TrainerType */
+    bool double_only, has_double, has_genders, has_type_double, has_template_func;
+    uint8_t n_templates;
+    uint16_t templates[16];              /* config.partyTemplates, as pr_party_templates indexes */
+    uint16_t segment_start, n_segments;  /* partyTemplateFunc, in pr_template_segments */
+    /* names in the English locale for trainersCommon:<class>, .male and .female (-1 = no such key) */
+    int16_t names, names_male, names_female;
+} pr_trainer_info;
+extern const pr_trainer_info pr_trainers[];   /* by TrainerType */
+extern const int pr_trainer_count;
+extern const pr_party_template pr_party_templates[];
+extern const pr_template_segment pr_template_segments[];
+
+/* ---- a new battle (src/newbattle.c) ---- */
+typedef struct {
+    int biome, trainer_chance;           /* the arena: biomeId and its trainerChance */
+    int prev_wave;                       /* currentBattle.waveIndex before newBattle (0 = none yet) */
+    int n_lures, n_double_chance_abilities;   /* what getDoubleBattleChance counts */
+    pr_me_save me;                       /* mysteryEncounterSaveData */
+} pr_new_battle_ctx;
+typedef struct {
+    int battle_type;                     /* BattleType */
+    bool double_battle;
+    int trainer_type, variant, template_index;   /* -1 for no trainer */
+    int name, partner_name;              /* index among the class's locale names, -1 = none rolled */
+    int n_levels, levels[PR_MAX_PARTY_TEMPLATE];   /* currentBattle.enemyLevels */
+    bool me_spawn_chance_reset;          /* a mystery encounter sets encounterSpawnChance back to its base */
+    char battle_seed[17];                /* currentBattle.battleSeed: where the battle's own RNG starts */
+} pr_new_battle;
+/* randomString(length, true) on `rng`; out holds length + 1 chars */
+void pr_run_random_seed_string(pr_rng *rng, char *out, int length);
+/* newBattle() for wave `wave` (not a loaded save), rolling on run->rng from resetSeed(wave).
+ * Returns 0, or -1 with PR_RUN_UNPORTED_FIXED_BATTLE / _TRAINER / _DAILY in run->unported. */
+int pr_run_new_battle(pr_run *run, int wave, const pr_new_battle_ctx *ctx, pr_new_battle *out);
 
 /* ---- helpers ---- */
 /* executeWithSeedOffset(fn, offset, seedOverride): fn rolls on a fresh RNG sown from
