@@ -321,6 +321,19 @@ static int dyn_pop(pr_battle *bt, pr_engine *e, int type)
     return ph;
 }
 
+/* phaseManager.forceMoveNext(phase => phase.pokemon === p): the first queued MovePhase of p (in
+ * the queue's current order) moves first */
+void pr_force_move_next(pr_engine *e, const pr_pokemon *p)
+{
+    for (int i = 0; i < e->n_dyn[PH_MOVE]; i++) {
+        pr_phase *m = &e->pool[e->dyn[PH_MOVE][i]];
+        if (m->pokemon == p) {
+            m->timing = MOVE_PHASE_TIMING_MODIFIER_FIRST;
+            return;
+        }
+    }
+}
+
 /* phaseManager.hasPhaseOfType("MovePhase") as the damage path reads it (Analytic) */
 void pr_sync_queued_movers(pr_battle *bt, pr_engine *e)
 {

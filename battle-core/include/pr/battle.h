@@ -113,6 +113,7 @@ typedef struct pr_battler_tag {
     int32_t hp;                    /* SubstituteTag.hp */
     bool in_focus;                 /* SubstituteTag.sourceInFocus */
     int8_t source_index;           /* SeedTag.sourceIndex (-1 = unset) */
+    bool activated;                /* ShellTrapTag.activated */
 } pr_battler_tag;
 #define PR_MAX_BATTLER_TAGS 24
 

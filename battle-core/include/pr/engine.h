@@ -18,17 +18,17 @@ typedef enum {
     PH_TURN_START, PH_MOVE, PH_MOVE_EFFECT, PH_MOVE_END, PH_FAINT, PH_CHECK_INTERLUDE,
     PH_WEATHER_EFFECT, PH_POSITIONAL_TAG, PH_BERRY, PH_CHECK_STATUS_EFFECT, PH_POST_TURN_STATUS_EFFECT,
     PH_TURN_END, PH_RESET_STATUS, PH_STAT_STAGE_CHANGE, PH_OBTAIN_STATUS_EFFECT, PH_MOVE_CHARGE, PH_POKEMON_HEAL,
+    PH_MOVE_HEADER,
     /* presentation: no battle state of their own */
     PH_MESSAGE, PH_DAMAGE_ANIM, PH_COMMON_ANIM, PH_SHOW_ABILITY, PH_HIDE_ABILITY, PH_POKEMON_ANIM, PH_LOAD_MOVE_ANIM,
     /* where a turn hands control back to the caller */
     PH_TURN_INIT, PH_VICTORY, PH_SWITCH, PH_SWITCH_SUMMON, PH_GAME_OVER, PH_BATTLE_END, PH_SELECT_MODIFIER,
     /* not ported yet: created where upstream creates them (so the order stays right), and
      * the turn is reported unported */
-    PH_MOVE_HEADER,
     PH_MOVE_REFLECT, PH_DANCER, PH_TERA, PH_ATTEMPT_CAPTURE, PH_ATTEMPT_RUN, PH_TOGGLE_DOUBLE_POSITION,
     PH_COUNT_
 } pr_phase_type;
-#define PH_FIRST_UNPORTED PH_MOVE_HEADER
+#define PH_FIRST_UNPORTED PH_MOVE_REFLECT
 extern const char *const pr_phase_name[PH_COUNT_];
 
 /* An upstream PokemonMove the phase holds: a moveset slot, or a detached one
@@ -200,6 +200,8 @@ void pr_arena_conditional_protect(pr_battle *bt, pr_engine *e, int side, const p
 void pr_unshift_new(pr_battle *bt, pr_engine *e, pr_phase_type t, int battler);
 /* the running phase, when it is a MovePhase (of Pokemon p, unless p is NULL): phase.cancel() */
 void pr_cancel_current_move(pr_engine *e, const pr_pokemon *p);
+/* phaseManager.forceMoveNext(phase => phase.pokemon === p) (Shell Trap) */
+void pr_force_move_next(pr_engine *e, const pr_pokemon *p);
 /* inSpeedOrder(side): the active Pokemon of a side (ArenaTagSide) in speed order, as upstream's
  * generator yields them (the queue is re-sorted, with its seeded shuffle, before each one) */
 typedef struct { pr_pokemon *queue[4]; int n; } pr_speed_iter;

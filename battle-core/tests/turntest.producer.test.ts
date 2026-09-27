@@ -105,6 +105,12 @@
  * bench has random movesets (Assist), the biome is random and a third of the cases have a
  * terrain (Nature Power), a sixth have Gravity, and an eighth of the time Sleep Talk or Assist
  * still holds a pick an earlier condition made.
+ * TURN_HEADER=1 aims at the moves with a header phase: most moves are Focus Punch, Shell Trap or
+ * Beak Blast, the rest contact attacks, priority or multi-hit moves, status moves aimed at the
+ * other Pokemon, protections and Substitute; a third of the abilities are ones Beak Blast's burn
+ * or its contact check reads (Long Reach, Water Veil, Water Bubble, Thermal Exchange, Comatose,
+ * Purifying Salt...) or ones that hit back on contact; a quarter of the Pokemon have a status, a
+ * sixth are behind a Substitute, and an eighth of the header moves have no PP left.
  *
  * Each case builds a random singles state inside a real upstream battle, gives both sides a
  * FIGHT command the way the command phases do, then runs upstream's own phases from
@@ -165,6 +171,7 @@ it("turntest producer", async () => {
   const ARENA = process.env.TURN_ARENA === "1";
   const EFFECTS = process.env.TURN_EFFECTS === "1";
   const CALLED = process.env.TURN_CALLED === "1";
+  const HEADER = process.env.TURN_HEADER === "1";
   const OUT = process.env.TURN_OUT ?? "/tmp/pr-turns.txt";
   const game = new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
   game.override
@@ -431,6 +438,19 @@ it("turntest producer", async () => {
     MoveId.INSTRUCT,
   ].map(id => allMoves[id]);
   const biomeIds = Object.values(BiomeId).filter(v => typeof v === "number") as number[];
+  // TURN_HEADER pools
+  const headerIds = [MoveId.FOCUS_PUNCH, MoveId.SHELL_TRAP, MoveId.BEAK_BLAST];
+  const headerMoves = headerIds.map(id => allMoves[id]);
+  const headerHitters = usable.filter((m: any) =>
+    m.priority > 0
+    || m.attrs.some((a: any) => ["MultiHitAttr", "ProtectAttr", "AddSubstituteAttr"].includes(a.constructor.name))
+    || (m.category === MoveCategory.STATUS && [MoveTarget.NEAR_OTHER, MoveTarget.NEAR_ENEMY].includes(m.moveTarget)),
+  );
+  const headerAbilityIds = [
+    AbilityId.LONG_REACH, AbilityId.WATER_VEIL, AbilityId.WATER_BUBBLE, AbilityId.THERMAL_EXCHANGE, AbilityId.COMATOSE,
+    AbilityId.PURIFYING_SALT, AbilityId.MAGIC_GUARD, AbilityId.FLAME_BODY, AbilityId.ROUGH_SKIN, AbilityId.UNSEEN_FIST,
+    AbilityId.INFILTRATOR,
+  ];
   const arenaTagPool = [
     ArenaTagType.REFLECT, ArenaTagType.LIGHT_SCREEN, ArenaTagType.AURORA_VEIL, ArenaTagType.MIST, ArenaTagType.SAFEGUARD,
     ArenaTagType.SPIKES, ArenaTagType.TOXIC_SPIKES, ArenaTagType.STEALTH_ROCK, ArenaTagType.STICKY_WEB,
@@ -498,7 +518,8 @@ it("turntest producer", async () => {
           + ` stock=${t.stockpiledCount ?? 0} crit=${t.critStages ?? 0} auto=${t.autotomizeCount ?? 0}`
           + (boostTags.includes(t.tagType) ? ` stat=${t.stat} mult=${t.multiplier}` : "")
           + (t.tagType === BattlerTagType.SUBSTITUTE ? ` hp=${t.hp} focus=${t.sourceInFocus ? 1 : 0}` : "")
-          + (t.tagType === BattlerTagType.SEEDED ? ` sidx=${t.sourceIndex ?? -1}` : ""),
+          + (t.tagType === BattlerTagType.SEEDED ? ` sidx=${t.sourceIndex ?? -1}` : "")
+          + (t.tagType === BattlerTagType.SHELL_TRAP && t.activated ? " act=1" : ""),
       ),
     ];
   };
@@ -650,6 +671,7 @@ it("turntest producer", async () => {
       : PROTECT && rnd(3) === 0 ? protectAbilityIds[rnd(protectAbilityIds.length)]
       : ARENA && rnd(3) === 0 ? arenaAbilityIds[rnd(arenaAbilityIds.length)]
       : EFFECTS && rnd(3) === 0 ? effectAbilityIds[rnd(effectAbilityIds.length)]
+      : HEADER && rnd(3) === 0 ? headerAbilityIds[rnd(headerAbilityIds.length)]
       : RICH && rnd(2) === 0 ? abilityIds[rnd(abilityIds.length)] : AbilityId.BALL_FETCH;
     p.gender = rnd(3) - 1;
     p.friendship = rnd(256);
@@ -661,7 +683,7 @@ it("turntest producer", async () => {
     p.status = null;
     if (HEAL && rnd(3) === 0) {
       p.status = new Status([StatusEffect.POISON, StatusEffect.TOXIC][rnd(2)], rnd(4));
-    } else if (RICH ? rnd(3) === 0 : STATUS || WEATHER ? rnd(4) === 0 : ONHIT || CHARGE || TAGS || TRAPS || PROTECT || ARENA || EFFECTS ? rnd(6) === 0 : STAT && rnd(8) === 0) {
+    } else if (RICH ? rnd(3) === 0 : STATUS || WEATHER ? rnd(4) === 0 : ONHIT || CHARGE || TAGS || TRAPS || PROTECT || ARENA || EFFECTS ? rnd(6) === 0 : HEADER ? rnd(4) === 0 : STAT && rnd(8) === 0) {
       const s = statuses[rnd(statuses.length)];
       p.status = new Status(s, rnd(4), s === StatusEffect.SLEEP ? 1 + rnd(3) : 0, s === StatusEffect.FREEZE ? 1 + rnd(3) : undefined);
     }
@@ -691,6 +713,10 @@ it("turntest producer", async () => {
           : rnd(4) === 0 ? windMoves[rnd(windMoves.length)] : attacks[rnd(attacks.length)])
         : CALLED && rnd(10) < 6
         ? calledMoves[rnd(calledMoves.length)]
+        : HEADER && rnd(10) < 6
+        ? headerMoves[rnd(headerMoves.length)]
+        : HEADER
+        ? (rnd(2) === 0 ? contactAttacks[rnd(contactAttacks.length)] : headerHitters[rnd(headerHitters.length)])
         : TAGS && rnd(10) < 8
         ? (rnd(4) !== 0 ? tagMoves[rnd(tagMoves.length)] : tagReaders[rnd(tagReaders.length)])
         : CHARGE && rnd(10) < 7
@@ -699,6 +725,13 @@ it("turntest producer", async () => {
         ? withConditions[rnd(withConditions.length)]
         : rnd(10) < 7 ? attacks[rnd(attacks.length)] : usable[rnd(usable.length)];
       p.moveset.push(new PokemonMove(m.id, rnd(8) === 0 ? rnd(m.pp + 1) : 0));
+    }
+    if (HEADER) {
+      for (const pm of p.moveset) {
+        if (headerIds.includes(pm.moveId) && rnd(8) === 0) {
+          pm.ppUsed = pm.getMovePp();
+        }
+      }
     }
     if (CALLED && p.moveset.some((m: any) => m.moveId === MoveId.SLEEP_TALK) && rnd(2) === 0) {
       p.status = new Status(StatusEffect.SLEEP, rnd(4), 1 + rnd(3));
@@ -920,6 +953,17 @@ it("turntest producer", async () => {
           if (!scene.arena.getTagOnSide(type, side)) {
             scene.arena.tags.push(getArenaTag(type, 1 + rnd(5), MoveId.NONE, A.id, side));
           }
+        }
+      }
+    }
+    if (HEADER) {
+      for (const p of [A, D]) {
+        if (rnd(6) === 0) {
+          const tag = getBattlerTag(BattlerTagType.SUBSTITUTE, 0, MoveId.SUBSTITUTE, p.id) as any;
+          tag.hp = 1 + rnd(Math.max(1, Math.floor(p.getMaxHp() / 4)));
+          tag.sourceInFocus = false;
+          tag.sprite = scene.addFieldSprite(p.x, p.y, `pkmn${p.isPlayer() ? "__back" : ""}__sub`);
+          p.summonData.tags.push(tag);
         }
       }
     }

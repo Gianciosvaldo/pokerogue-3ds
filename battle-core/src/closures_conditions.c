@@ -329,6 +329,14 @@ static double one_hit_ko(ARGS)
     return !cancelled && u->level >= t->level;
 }
 
+/* Shell Trap (sequence 3): user.getTag(ShellTrapTag)?.activated === true */
+static double shell_trap_activated(ARGS)
+{
+    UNUSED;
+    const pr_battler_tag *tag = pr_get_battler_tag(u, BATTLER_TAG_TYPE_SHELL_TRAP);
+    return tag && tag->activated;
+}
+
 /* Counter (physical), Mirror Coat (special), Metal Burst and Comeuppance (both): the singleton
  * CounterAttackConditon(damageCategory): getCounterAttackTarget(user, damageCategory) !== null */
 static double counter_physical(ARGS) { UNUSED; return pr_counter_attack_target(bt, u, MOVE_CATEGORY_PHYSICAL) != -2; }
@@ -858,6 +866,7 @@ const pr_closure_reg pr_condition_closures[] = {
     {NULL, "8cf51e321985", protect_streak},
     {NULL, "d747fd904def", one_hit_ko},
     /* singletons shared by several moves: the owner is the first move that uses them */
+    {"move:704", "f1c1f1aae9ec", shell_trap_activated},
     {"move:68", "988ffaba8576", counter_physical},
     {"move:243", "988ffaba8576", counter_special},
     {"move:368", "988ffaba8576", counter_both},

@@ -193,7 +193,14 @@ static void handle_fight_command(pr_battle *bt, pr_engine *e, pr_pokemon *p, int
             break;
         }
     if (pr_move_has_attr(c->move, PR_AC_MoveHeaderAttr)) {
+        /* MoveHeaderPhase(pokemon, move): the same PokemonMove the MovePhase gets */
         int h = new_pokemon_phase(e, PH_MOVE_HEADER, b);
+        if (h >= 0) {
+            PH(h)->pokemon = p;
+            PH(h)->move.id = c->move;
+            PH(h)->move.slot = (int8_t)slot;
+            PH(h)->move.pp_used = 0;
+        }
         pr_phase_unshift(bt, e, h);
     }
     int ph = new_pokemon_phase(e, PH_MOVE, b);
@@ -635,10 +642,19 @@ static bool first_failure_check(pr_battle *bt, pr_engine *e, int ph)
     }
     /* (challenges restricting moves are not modelled: classic mode has none) */
     if (pr_lapse_tag(bt, e, user, BATTLER_TAG_TYPE_TRUANT, BATTLER_TAG_LAPSE_TYPE_PRE_MOVE) && m->cancelled) return true;
-    /* checkPreUseInterrupt (Focus Punch) */
-    if (pr_move_has_attr(m->move.id, PR_AC_PreUseInterruptAttr)) {
-        pr_note_unported(bt, PR_AC_PreUseInterruptAttr);
-        return false;
+    /* checkPreUseInterrupt (Focus Punch): each PreUseInterruptAttr whose condition holds cancels the
+     * move with its message (the running phase is this MovePhase) */
+    for (unsigned i = 0; i < mv->nattr; i++) {
+        const pr_attr *a = &pr_attrs[mv->attr0 + i];
+        if (a->cls != PR_AC_PreUseInterruptAttr) continue;
+        pr_pokemon *tg[4];                                   /* getActiveTargetPokemon()[0] */
+        int n = active_in_list(bt, tl, tg);
+        if (!pr_closure_call(bt, ((const pr_attr_PreUseInterruptAttr *)a->p)->conditionFunc, PR_AC_PreUseInterruptAttr,
+                             0, user, n ? tg[0] : NULL, m->move.id))
+            continue;
+        move_cancel(m);
+        pr_queue_message(bt, e);
+        return true;
     }
     static const int tag_checks[] = {BATTLER_TAG_TYPE_FLINCHED, BATTLER_TAG_TYPE_DISABLED, BATTLER_TAG_TYPE_HEAL_BLOCK,
                                      BATTLER_TAG_TYPE_THROAT_CHOPPED};
@@ -1472,6 +1488,37 @@ static void call_move(pr_battle *bt, pr_engine *e, int move, const pr_attr *a, p
     unshift_new(bt, e, PH_LOAD_MOVE_ANIM, -1);
     pr_unshift_move_phase(bt, e, user, called, -1, targets, nt, MOVE_USE_MODE_FOLLOW_UP,
                           MOVE_PHASE_TIMING_MODIFIER_FIRST);
+}
+
+/* MoveHeaderPhase: when the Pokemon is active on the field and the move usable (not NONE or
+ * unimplemented, PP left; challenges are not modelled), applyMoveAttrs("MoveHeaderAttr", pokemon,
+ * null, move): Focus Punch's message, Shell Trap's and Beak Blast's tags */
+static void move_header_phase(pr_battle *bt, pr_engine *e, int ph)
+{
+    pr_phase *h = PH(ph);
+    pr_pokemon *p = h->pokemon;
+    int move = h->move.id;
+    if (!is_active_on_field(p) || move == MOVE_ID_NONE || pr_moves[move].unimplemented) return;
+    int max_pp = ref_move_pp(h);
+    if (max_pp != -1 && ref_pp_used(h) >= max_pp) return;           /* isOutOfPp */
+    const pr_move *mv = &pr_moves[move];
+    for (unsigned i = 0; i < mv->nattr; i++) {
+        const pr_attr *a = &pr_attrs[mv->attr0 + i];
+        if (!pr_attr_is(a->cls, PR_AC_MoveHeaderAttr)) continue;
+        switch (a->cls) {
+        case PR_AC_MessageHeaderAttr:                                /* its message is never empty */
+            pr_queue_message(bt, e);
+            break;
+        case PR_AC_AddBattlerTagHeaderAttr:
+            pr_add_tag(bt, e, p, ((const pr_attr_AddBattlerTagHeaderAttr *)a->p)->tagType, 0, 0, -1);
+            break;
+        case PR_AC_BeakBlastHeaderAttr:
+            pr_add_tag(bt, e, p, ((const pr_attr_BeakBlastHeaderAttr *)a->p)->tagType, 0, 0, -1);
+            break;
+        default:
+            pr_note_unported(bt, a->cls);
+        }
+    }
 }
 
 static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
@@ -2391,6 +2438,7 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_STAT_STAGE_CHANGE: stat_stage_change_phase(bt, e, ph); break;
     case PH_OBTAIN_STATUS_EFFECT: obtain_status_effect_phase(bt, e, ph); break;
     case PH_MOVE_CHARGE: move_charge_phase(bt, e, ph); break;
+    case PH_MOVE_HEADER: move_header_phase(bt, e, ph); break;
     case PH_POKEMON_HEAL: pokemon_heal_phase(bt, e, ph); break;
     default:
         /* a phase with no port: it was reported when it was queued */

@@ -37,6 +37,8 @@ bool pr_tag_type_ported(int type)
     case BATTLER_TAG_TYPE_IGNORE_FLYING:  /* GroundedTag: Smack Down, Thousand Arrows (CUSTOM, 1 turn) */
     case BATTLER_TAG_TYPE_IGNORE_GHOST:   /* ExposedTag: Foresight, Odor Sleuth (CUSTOM, 1 turn) */
     case BATTLER_TAG_TYPE_IGNORE_DARK:    /* ExposedTag: Miracle Eye */
+    case BATTLER_TAG_TYPE_SHELL_TRAP:     /* ShellTrapTag: TURN_END and AFTER_HIT, 1 turn */
+    case BATTLER_TAG_TYPE_BEAK_BLAST_CHARGING:  /* BeakBlastChargingTag: PRE_MOVE, TURN_END, AFTER_HIT, 1 turn */
         return true;
     }
     return pr_damaging_trap_move(type) != 0 || pr_battler_tag_is(type, PR_TAGCLASS_PROTECTED);
@@ -152,6 +154,14 @@ static pr_battler_tag construct(int type, int turn_count, int source_move, int64
     case BATTLER_TAG_TYPE_ENDURING:               /* EnduringTag(tagType, TURN_END, sourceMove) */
         t.turn_count = 0;
         break;
+    case BATTLER_TAG_TYPE_SHELL_TRAP:             /* ShellTrapTag(): no source move */
+        t.turn_count = 1;
+        t.source_move = 0;
+        break;
+    case BATTLER_TAG_TYPE_BEAK_BLAST_CHARGING:    /* BeakBlastChargingTag() */
+        t.turn_count = 1;
+        t.source_move = MOVE_ID_BEAK_BLAST;
+        break;
     default:                                      /* CONFUSED, FRENZY, the semi-invulnerable tags */
         if (pr_damaging_trap_move(type)) {        /* BindTag(turnCount, sourceId) and co. */
             t.source_move = (uint16_t)pr_damaging_trap_move(type);
@@ -214,6 +224,8 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
     case BATTLER_TAG_TYPE_CHARGED:
     case BATTLER_TAG_TYPE_TAR_SHOT:
     case BATTLER_TAG_TYPE_ENDURING:
+    case BATTLER_TAG_TYPE_SHELL_TRAP:            /* "set a shell trap" */
+    case BATTLER_TAG_TYPE_BEAK_BLAST_CHARGING:   /* the charge animation plays outside the phases, then the message */
         pr_queue_message(bt, e);
         return;
     case BATTLER_TAG_TYPE_SEEDED: {
@@ -448,6 +460,29 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
     case BATTLER_TAG_TYPE_ENDURING:
         if (lapse_type == BATTLER_TAG_LAPSE_TYPE_CUSTOM) {
             pr_queue_message(bt, e);
+            return true;
+        }
+        return --t->turn_count > 0;
+    case BATTLER_TAG_TYPE_BEAK_BLAST_CHARGING:
+        /* AFTER_HIT: a contact move burns its user (trySetStatus(BURN, pokemon)); the tag stays */
+        if (lapse_type == BATTLER_TAG_LAPSE_TYPE_AFTER_HIT) {
+            int move;
+            pr_pokemon *attacker = pr_move_effect_user(bt, e, &move);
+            if (attacker && pr_move_does_flag_effect_apply_ex(bt, move, MOVE_FLAGS_MAKES_CONTACT, attacker, p, false))
+                pr_try_set_status(bt, e, attacker, STATUS_EFFECT_BURN, p, -1, false, true);
+            return true;
+        }
+        return --t->turn_count > 0;
+    case BATTLER_TAG_TYPE_SHELL_TRAP:
+        /* AFTER_HIT: an opponent's physical move (by the move's own category) makes the owner move
+         * next and activates the trap; the tag stays */
+        if (lapse_type == BATTLER_TAG_LAPSE_TYPE_AFTER_HIT) {
+            int move;
+            pr_pokemon *attacker = pr_move_effect_user(bt, e, &move);
+            if (attacker && pr_moves[move].category == MOVE_CATEGORY_PHYSICAL && pr_is_opponent(bt, p, attacker)) {
+                pr_force_move_next(e, p);
+                t->activated = true;
+            }
             return true;
         }
         return --t->turn_count > 0;

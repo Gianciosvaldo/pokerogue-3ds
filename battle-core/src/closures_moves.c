@@ -86,6 +86,17 @@ static double tera_starstorm_target(ARGS)
                ? MOVE_TARGET_ALL_NEAR_ENEMIES : MOVE_TARGET_NEAR_OTHER;
 }
 
+/* Focus Punch's PreUseInterruptAttr condition: user.turnData.attacksReceived.some(r => r.damage > 0) */
+static double focus_punch_hit(ARGS)
+{
+    (void)t; (void)self; (void)m;
+    int kept = pr_attacks_received_kept(u);
+    for (int k = 0; k < kept; k++)
+        if (u->attacks_received[k].damage > 0) return 1;
+    pr_attacks_received_exhausted(bt, u);
+    return 0;
+}
+
 /* Misty Explosion: arena.terrainType === MISTY && user.isGrounded() ? 1.5 : 1 */
 static double misty_explosion(ARGS)
 {
@@ -349,6 +360,7 @@ const pr_closure_reg pr_move_closures[] = {
     {"move:797", "96f28b35e308", expanding_force},
     {"move:797", "cc7adf2cbec5", expanding_force_target},
     {"move:906", "b299f2a493b7", tera_starstorm_target},
+    {"move:264", "d253ea744281", focus_punch_hit},
     {"move:802", "2444769ee78b", misty_explosion},
     {"move:804", "a34673858968", rising_voltage},
     {"move:805", "fabf9892eb01", terrain_pulse},

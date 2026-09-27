@@ -336,6 +336,7 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
                 t->in_focus = inum(l, "focus") != 0;
             }
             if (field(l, "sidx")) t->source_index = (int8_t)inum(l, "sidx");   /* SeedTag */
+            if (field(l, "act")) t->activated = inum(l, "act") != 0;           /* ShellTrapTag */
             /* the line holds all of a ported tag type's state, and of Protosynthesis's and Quark
              * Drive's (which only the damage path reads and a weather or terrain ending removes);
              * the others can hold more */
@@ -450,6 +451,7 @@ static const char *boost_fields(const pr_battler_tag *t)
         snprintf(buf, sizeof buf, " hp=%d focus=%d", t->hp, t->in_focus ? 1 : 0);
         return buf;
     }
+    if (t->type == BATTLER_TAG_TYPE_SHELL_TRAP && t->activated) return " act=1";   /* ShellTrapTag.activated */
     if (t->type == BATTLER_TAG_TYPE_SEEDED) {                 /* SeedTag.sourceIndex */
         snprintf(buf, sizeof buf, " sidx=%d", t->source_index);
         return buf;
