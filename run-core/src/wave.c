@@ -272,3 +272,86 @@ int pr_run_get_level_for_wave(pr_run *run, pr_rng *rng, int wave)
     double level = js_round(base + fabs(rand / deviation));
     return (int)(level > 1 ? level : 1);
 }
+
+/* Mystery encounters' constants (src/constants.ts) */
+#define MYSTERY_ENCOUNTER_SPAWN_MAX_WEIGHT 256
+#define AVERAGE_ENCOUNTERS_PER_RUN_TARGET 12
+#define ANTI_VARIANCE_WEIGHT_MODIFIER 15
+
+/* gameMode.getMysteryEncounterLegalWaves(): CLASSIC and CHALLENGE [10, 180]
+ * (CLASSIC_/CHALLENGE_MODE_MYSTERY_ENCOUNTER_WAVES), otherwise [0, 0] */
+static void legal_me_waves(int mode, int *lo, int *hi)
+{
+    *lo = *hi = 0;
+    if (is_classic(mode)) { *lo = 10; *hi = 180; }
+}
+
+/* isMysteryEncounterValidForWave(battleType, waveIndex):
+ *   gameMode.hasMysteryEncounters && battleType === WILD && !gameMode.isBoss(waveIndex) && waveIndex % 10 !== 1
+ *   && isBetween(waveIndex, lowest, highest)       // hasMysteryEncounters: CLASSIC and CHALLENGE */
+bool pr_run_is_mystery_encounter_valid_for_wave(const pr_run *run, bool wild, int wave)
+{
+    int lo, hi;
+    legal_me_waves(run->mode, &lo, &hi);
+    return is_classic(run->mode) && wild && !pr_run_is_boss(wave) && wave % 10 != 1 && lo <= wave && wave <= hi;
+}
+
+/* isWaveMysteryEncounter(battleType, waveIndex) (MYSTERY_ENCOUNTER_RATE_OVERRIDE, a dev override, isn't modelled):
+ *   if (getDailyMysteryEncounter(waveIndex) != null) return true;    // daily event seeds only
+ *   if (!isMysteryEncounterValidForWave(battleType, waveIndex)) return false;
+ *   const canSpawn = encounteredEvents.length === 0 || waveIndex > 3 + encounteredEvents.at(-1).waveIndex;
+ *   if (!canSpawn) return false;
+ *   const expectedEncountersByFloor = (AVERAGE_ENCOUNTERS_PER_RUN_TARGET / (highest - lowest)) * (waveIndex - lowest);
+ *   const currentRunDiffFromAvg = expectedEncountersByFloor - encounteredEvents.length;
+ *   const favoredEncounterRate = encounterSpawnChance
+ *     + Math.min(currentRunDiffFromAvg * ANTI_VARIANCE_WEIGHT_MODIFIER, MYSTERY_ENCOUNTER_SPAWN_MAX_WEIGHT / 2);
+ *   executeWithSeedOffset(() => roll = randSeedInt(MYSTERY_ENCOUNTER_SPAWN_MAX_WEIGHT), waveIndex * 3000);
+ *   return roll < favoredEncounterRate; */
+bool pr_run_is_wave_mystery_encounter(pr_run *run, bool wild, int wave, const pr_me_save *save)
+{
+    if (run->mode == GAME_MODES_DAILY) { /* getDailyMysteryEncounter reads the daily config */
+        run->unported |= PR_RUN_UNPORTED_DAILY;
+        return false;
+    }
+    if (!pr_run_is_mystery_encounter_valid_for_wave(run, wild, wave)) return false;
+    if (save->n_encountered && !(wave > 3 + save->last_encounter_wave)) return false;
+    int lo, hi;
+    legal_me_waves(run->mode, &lo, &hi);
+    double expected = ((double)AVERAGE_ENCOUNTERS_PER_RUN_TARGET / (hi - lo)) * (wave - lo);
+    double diff = (expected - save->n_encountered) * ANTI_VARIANCE_WEIGHT_MODIFIER;
+    double rate = save->spawn_chance + (diff < MYSTERY_ENCOUNTER_SPAWN_MAX_WEIGHT / 2 ? diff : MYSTERY_ENCOUNTER_SPAWN_MAX_WEIGHT / 2);
+    pr_rng r = pr_run_seed_offset_rng(run, wave * 3000, NULL);
+    return pr_rng_seed_int(&r, MYSTERY_ENCOUNTER_SPAWN_MAX_WEIGHT, 0) < rate;
+}
+
+/* Trainer.getPartyLevels(waveIndex) for a party template (its size and each member's strength):
+ *   const difficultyWaveIndex = getWaveForDifficulty(waveIndex);
+ *   const baseLevel = 1 + difficultyWaveIndex / 2 + Math.pow(difficultyWaveIndex / 25, 2);
+ *   if (this.isDouble() && partyTemplate.size < 2) partyTemplate = new TrainerPartyTemplate(2, partyTemplate.strength);
+ *   for each member: multiplier WEAKEST 0.95, WEAKER 1, WEAK 1.05, AVERAGE 1.12, STRONG 1.22, STRONGER 1.24, STRONGEST 1.25;
+ *     if (strength < STRONG) { multiplier = Math.min(multiplier + 0.025 * Math.floor(difficultyWaveIndex / 25), 1.225);
+ *       levelOffset = -Math.floor((difficultyWaveIndex / 50) * (STRONG - strength)); }
+ *     level = Math.ceil(baseLevel * multiplier) + levelOffset;
+ * strengths[i] is template.getStrength(i); for a double battle with a 1-member template, pass
+ * template.strength as base_strength (the widened template gives it to both). */
+int pr_run_get_party_levels(const pr_run *run, int wave, int size, const uint8_t *strengths, int base_strength,
+                            bool is_double, int out[PR_MAX_PARTY_TEMPLATE])
+{
+    static const double mult[7] = {0.95, 1, 1.05, 1.12, 1.22, 1.24, 1.25};
+    double d = pr_run_get_wave_for_difficulty(run, wave, false);
+    double base = 1 + d / 2 + js_pow(d / 25, 2);
+    bool widened = is_double && size < 2;
+    if (widened) size = 2;
+    for (int i = 0; i < size && i < PR_MAX_PARTY_TEMPLATE; i++) {
+        int strength = widened ? base_strength : strengths[i];
+        double m = strength >= 0 && strength < 7 ? mult[strength] : 1;
+        double offset = 0;
+        if (strength < PARTY_MEMBER_STRENGTH_STRONG) {
+            double raised = m + 0.025 * floor(d / 25);
+            m = raised < 1.225 ? raised : 1.225;
+            offset = -floor((d / 50) * (PARTY_MEMBER_STRENGTH_STRONG - strength));
+        }
+        out[i] = (int)(ceil(base * m) + offset);
+    }
+    return size;
+}
