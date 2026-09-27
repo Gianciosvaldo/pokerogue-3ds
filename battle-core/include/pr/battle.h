@@ -355,6 +355,8 @@ typedef struct pr_ab_params {
     bool self_target;
     const pr_pokemon *target;
     int effect;                    /* a StatusEffect (status immunities, Early Bird, Synchronize...) */
+    int hit_result;                /* PostMoveInteractionAbAttrParams (on-hit abilities): hitResult, damage */
+    double damage;
 } pr_ab_params;
 /* applyAbAttrs("<cls>", params): ability then passive, conditions, canApply, apply. */
 void pr_apply_ab_attrs(pr_battle *bt, uint16_t cls, pr_ab_params *pp);

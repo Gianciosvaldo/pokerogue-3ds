@@ -207,6 +207,14 @@ static bool type_in(const pr_intlist *l, int t)
 /* What applySingleAbAttrs does between canApply and apply outside a simulation: show the
  * ability, queue its trigger message. The turn engine keeps these phases (NULL: no engine). */
 typedef struct { pr_engine *e; bool shown; uint16_t ability; } ab_ctx;
+/* findModifiers(PokemonHeldItemModifier held by p): the item stealers stop at a non-empty list */
+static bool has_held_items(const pr_battle *bt, const pr_pokemon *p)
+{
+    int side = p->is_player ? 0 : 1;
+    for (int i = 0; i < bt->n_mods[side]; i++)
+        if (pr_mod_is(&bt->mods[side][i], PR_MOD_HELD_ITEM) && bt->mods[side][i].pokemon_id == (int64_t)p->id) return true;
+    return false;
+}
 static bool has_trigger_message(uint16_t cls);
 static bool shows_ability(const pr_attr *a);
 static void before_apply(pr_battle *bt, const pr_attr *a, const pr_ab_params *pp, ab_ctx *c)
@@ -454,6 +462,175 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         if (!(p->status && type_in(&x->effects, p->status) && p->hp < pr_get_stat(p, STAT_HP, true))) return 0;
         return -1;                                     /* unshifts a PokemonHealPhase: not ported */
     }
+    /* ---- on-hit abilities: PostDefend (the Pokemon hit), PostReceiveCrit, PostAttack (the attacker).
+     * The ones whose effect adds a tag, weather, terrain, an ability or an item run their canApply
+     * (random rolls included, so the RNG stays in step) and report themselves when it holds. */
+    case PR_AC_PostDefendStatStageChangeAbAttr: {                       /* Justified, Weak Armor, Gooey... */
+        const pr_attr_PostDefendStatStageChangeAbAttr *x = P(PostDefendStatStageChangeAbAttr, a);
+        if (!c->e) return -1;
+        GATE(call_bool(bt, x->condition, a->cls, p, o, move));
+        int8_t st = (int8_t)x->stat, sg = (int8_t)x->stages;
+        if (x->allOthers) {
+            /* getOpponents() (active on the field, field order), then getAlly() */
+            for (int k = 0; k < 4; k++) {
+                pr_pokemon *other = bt->field[k];
+                if (other && other->is_player != p->is_player && other->hp > 0 && other->on_field && !other->switch_out_status)
+                    pr_unshift_stat_stage_change_ex(bt, c->e, k, &st, &sg, 1, (pr_pokemon *)p, 0);
+            }
+            const pr_pokemon *ally = pr_get_ally(bt, p);
+            if (ally) pr_unshift_stat_stage_change_ex(bt, c->e, pr_battler_index(bt, ally), &st, &sg, 1, (pr_pokemon *)p, 0);
+        } else {
+            pr_unshift_stat_stage_change_ex(bt, c->e, pr_battler_index(bt, x->selfTarget ? p : o), &st, &sg, 1,
+                                            (pr_pokemon *)p, 0);
+        }
+        return 1;
+    }
+    case PR_AC_PostDefendHpGatedStatStageChangeAbAttr: {                /* Berserk, Anger Shell */
+        const pr_attr_PostDefendHpGatedStatStageChangeAbAttr *x = P(PostDefendHpGatedStatStageChangeAbAttr, a);
+        if (!c->e) return -1;
+        double threshold = to_dmg_value(pr_get_stat(p, STAT_HP, true) * x->hpGate);
+        GATE(pr_moves[move].category != MOVE_CATEGORY_STATUS && p->hp <= threshold && p->hp + pp->damage > threshold);
+        int8_t st[7], sg[7];
+        int n = 0;
+        for (unsigned i = 0; i < x->changes.n && n < 7; i++, n++) { st[n] = x->changes.v[i].stat; sg[n] = x->changes.v[i].stages; }
+        pr_unshift_stat_stage_change_ex(bt, c->e, pr_battler_index(bt, x->selfTarget ? p : o), st, sg, n, (pr_pokemon *)p, 0);
+        return 1;
+    }
+    case PR_AC_PostReceiveCritStatStageChangeAbAttr: {                  /* Anger Point */
+        const pr_attr_PostReceiveCritStatStageChangeAbAttr *x = P(PostReceiveCritStatStageChangeAbAttr, a);
+        if (!c->e) return -1;
+        GATE(true);
+        int8_t st = (int8_t)x->stat, sg = (int8_t)x->stages;
+        pr_unshift_stat_stage_change_ex(bt, c->e, pr_battler_index(bt, p), &st, &sg, 1, (pr_pokemon *)p, 0);
+        return 1;
+    }
+    case PR_AC_EffectSporeAbAttr:
+    case PR_AC_PostDefendApplyStatusEffectAbAttr: {                     /* Static, Flame Body, Poison Point */
+        const pr_attr_PostDefendApplyStatusEffectAbAttr *x = P(PostDefendApplyStatusEffectAbAttr, a);
+        if (!c->e) return -1;
+        /* Effect Spore: not against Grass types or Overcoat, before anything is rolled */
+        if (a->cls == PR_AC_EffectSporeAbAttr
+            && (pr_is_of_type(o, POKEMON_TYPE_GRASS) || pr_has_ability_active(bt, o, ABILITY_ID_OVERCOAT)))
+            return 0;
+        /* canApply picks the effect first (a roll when there are several), then contact, the
+         * attacker's status, the chance roll and canSetStatus */
+        int ef = x->effects.n == 1 ? x->effects.v[0] : x->effects.v[pr_battle_rand_seed_int(bt, x->effects.n, 0)];
+        bool can = (x->contactRequired ? pr_move_does_flag_effect_apply(bt, move, MOVE_FLAGS_MAKES_CONTACT, o, p)
+                                       : pr_moves[move].category != MOVE_CATEGORY_STATUS)
+                   && !o->status && (x->chance == -1 || pr_battle_rand_seed_int(bt, 100, 0) < x->chance)
+                   && pr_can_set_status(bt, c->e, (pr_pokemon *)o, ef, true, false, p, false);
+        GATE(can);
+        /* apply picks again, independently of the effect canApply checked */
+        ef = x->effects.n == 1 ? x->effects.v[0] : x->effects.v[pr_battle_rand_seed_int(bt, x->effects.n, 0)];
+        pr_try_set_status(bt, c->e, (pr_pokemon *)o, ef, (pr_pokemon *)p, -1, false, true);
+        return 1;
+    }
+    case PR_AC_PostDefendContactDamageAbAttr: {                         /* Rough Skin, Iron Barbs */
+        const pr_attr_PostDefendContactDamageAbAttr *x = P(PostDefendContactDamageAbAttr, a);
+        if (!c->e) return -1;
+        GATE(!pp->simulated && pr_move_does_flag_effect_apply(bt, move, MOVE_FLAGS_MAKES_CONTACT, o, p)
+             && !pr_has_ability_with_attr(bt, o, PR_AC_BlockNonDirectDamageAbAttr));
+        pr_pokemon *w = (pr_pokemon *)o;
+        pr_damage_and_update(bt, c->e, w, to_dmg_value(pr_get_stat(w, STAT_HP, true) * (1.0 / x->damageRatio)),
+                             HIT_RESULT_INDIRECT, false, NULL);
+        w->damage_taken += (int32_t)to_dmg_value(pr_get_stat(w, STAT_HP, true) * (1.0 / x->damageRatio));
+        return 1;
+    }
+    case PR_AC_PostDefendTypeChangeAbAttr: {                            /* Color Change */
+        if (pp->hit_result >= HIT_RESULT_NO_EFFECT || p->terastallized
+            || pr_move_has_attr((uint16_t)move, PR_AC_TypelessAttr) || o->hits_left > 1)
+            return 0;
+        int type = pr_get_move_type(bt, o, move);
+        int8_t ty[3];
+        int n = pr_get_types(p, ty, PR_TYPES_ORIGINAL_IF_STELLAR);
+        for (int i = 0; i < n; i++)
+            if (ty[i] == type) return 0;
+        GATE(true);
+        if (!pp->simulated) {
+            pr_pokemon *w = (pr_pokemon *)p;
+            w->type_override[0] = (int8_t)type;                  /* summonData.types = [type] */
+            w->type_override[1] = -1;
+        }
+        return 1;
+    }
+    case PR_AC_PostDefendMoveDisableAbAttr: {                           /* Cursed Body */
+        const pr_attr_PostDefendMoveDisableAbAttr *x = P(PostDefendMoveDisableAbAttr, a);
+        if (!c->e) return -1;
+        if (pr_get_battler_tag(o, BATTLER_TAG_TYPE_DISABLED)
+            || !pr_move_does_flag_effect_apply(bt, move, MOVE_FLAGS_MAKES_CONTACT, o, p)
+            || !(x->chance == -1 || pr_battle_rand_seed_int(bt, 100, 0) < x->chance))
+            return 0;
+        return -1;                                              /* addTag(DISABLED) */
+    }
+    case PR_AC_PostDefendContactApplyTagChanceAbAttr: {                 /* Cute Charm */
+        const pr_attr_PostDefendContactApplyTagChanceAbAttr *x = P(PostDefendContactApplyTagChanceAbAttr, a);
+        if (!c->e) return -1;
+        if (!pr_move_does_flag_effect_apply(bt, move, MOVE_FLAGS_MAKES_CONTACT, o, p)
+            || !(pr_battle_rand_seed_int(bt, 100, 0) < x->chance))
+            return 0;
+        return -1;                                              /* canAddTag, addTag */
+    }
+    case PR_AC_PostDefendPerishSongAbAttr:                              /* Perish Body */
+        if (!pr_move_does_flag_effect_apply(bt, move, MOVE_FLAGS_MAKES_CONTACT, o, p)
+            || pr_get_battler_tag(o, BATTLER_TAG_TYPE_PERISH_SONG))
+            return 0;
+        return -1;                                              /* addTag(PERISH_SONG) on both */
+    case PR_AC_PostDefendAbilitySwapAbAttr:                             /* Wandering Spirit */
+    case PR_AC_PostDefendAbilityGiveAbAttr:                             /* Mummy, Lingering Aroma */
+        /* contact, then the attacker's ability flags: setTempAbility isn't ported */
+        return pr_move_does_flag_effect_apply(bt, move, MOVE_FLAGS_MAKES_CONTACT, o, p) ? -1 : 0;
+    case PR_AC_PostDefendWeatherChangeAbAttr:                           /* Sand Spit */
+        return call_bool(bt, P(PostDefendWeatherChangeAbAttr, a)->condition, a->cls, p, o, move) ? -1 : 0;
+    case PR_AC_PostDefendApplyArenaTrapTagAbAttr:                       /* Toxic Debris */
+        return call_bool(bt, P(PostDefendApplyArenaTrapTagAbAttr, a)->condition, a->cls, p, o, move) ? -1 : 0;
+    case PR_AC_PostDefendApplyBattlerTagAbAttr:                         /* Wind Power, Electromorphosis */
+        return call_bool(bt, P(PostDefendApplyBattlerTagAbAttr, a)->condition, a->cls, p, o, move) ? -1 : 0;
+    case PR_AC_PostDefendTerrainChangeAbAttr:                           /* Seed Sower */
+        return pp->hit_result < HIT_RESULT_NO_EFFECT ? -1 : 0;
+    case PR_AC_ReverseDrainAbAttr: {                                    /* Liquid Ooze */
+        /* canApply applies the attacker's BlockNonDirectDamageAbAttr (Magic Guard) as it is simulated */
+        bool cancelled = false;
+        pr_ab_params bp = {.pokemon = o, .move = -1, .flag = &cancelled, .simulated = pp->simulated};
+        pr_apply_ab_attrs(bt, PR_AC_BlockNonDirectDamageAbAttr, &bp);
+        return !cancelled && pr_move_has_attr((uint16_t)move, PR_AC_HitHealAttr) ? -1 : 0;
+    }
+    case PR_AC_PostDefendStealHeldItemAbAttr:                           /* Pickpocket */
+        if (pp->simulated || pp->hit_result >= HIT_RESULT_NO_EFFECT
+            || !call_bool(bt, P(PostDefendStealHeldItemAbAttr, a)->condition, a->cls, p, o, move))
+            return 0;
+        return has_held_items(bt, o) ? -1 : 0;                  /* the roll for the item, the transfer */
+    case PR_AC_PostAttackApplyStatusEffectAbAttr:
+    case PR_AC_PostAttackContactApplyStatusEffectAbAttr: {              /* Poison Touch, Toxic Chain */
+        const pr_attr_PostAttackApplyStatusEffectAbAttr *x = P(PostAttackApplyStatusEffectAbAttr, a);
+        if (!c->e) return -1;
+        if (!call_bool(bt, x->attackCondition, a->cls, p, o, move)) return 0;
+        if (!pp->simulated
+            && !(!pr_has_ability_with_attr(bt, o, PR_AC_IgnoreMoveEffectsAbAttr) && p != o
+                 && (!x->contactRequired || pr_move_does_flag_effect_apply(bt, move, MOVE_FLAGS_MAKES_CONTACT, p, o))
+                 && pr_battle_rand_seed_int(bt, 100, 0) < x->chance && !p->status))   /* the attacker's own status */
+            return 0;
+        int ef = x->effects.n == 1 ? x->effects.v[0] : x->effects.v[pr_battle_rand_seed_int(bt, x->effects.n, 0)];
+        GATE(pp->simulated || pr_can_set_status(bt, c->e, (pr_pokemon *)o, ef, true, false, p, false));
+        ef = x->effects.n == 1 ? x->effects.v[0] : x->effects.v[pr_battle_rand_seed_int(bt, x->effects.n, 0)];
+        pr_try_set_status(bt, c->e, (pr_pokemon *)o, ef, (pr_pokemon *)p, -1, false, true);
+        return 1;
+    }
+    case PR_AC_PostAttackApplyBattlerTagAbAttr: {                       /* Stench */
+        const pr_attr_PostAttackApplyBattlerTagAbAttr *x = P(PostAttackApplyBattlerTagAbAttr, a);
+        if (!c->e) return -1;
+        /* the contact check and the chance take (user = the one hit, target = the attacker) */
+        if (!call_bool(bt, x->attackCondition, a->cls, p, o, move) || pr_has_ability_with_attr(bt, o, PR_AC_IgnoreMoveEffectsAbAttr)
+            || p == o || (x->contactRequired && !pr_move_does_flag_effect_apply(bt, move, MOVE_FLAGS_MAKES_CONTACT, o, p)))
+            return 0;
+        int roll = pr_battle_rand_seed_int(bt, 100, 0);
+        if (!(roll < pr_closure_call(bt, x->chance, a->cls, 0, o, p, move)) || p->status) return 0;
+        return -1;                                              /* addTag(FLINCHED) */
+    }
+    case PR_AC_PostAttackStealHeldItemAbAttr:                           /* Magician */
+        if (!call_bool(bt, P(PostAttackStealHeldItemAbAttr, a)->attackCondition, a->cls, p, o, move) || pp->simulated
+            || pp->hit_result >= HIT_RESULT_NO_EFFECT)
+            return 0;
+        return has_held_items(bt, o) ? -1 : 0;
     case PR_AC_ReduceStatusEffectDurationAbAttr:                        /* Early Bird */
         GATE(pp->effect == P(ReduceStatusEffectDurationAbAttr, a)->statusEffect);
         *pp->value -= 1;

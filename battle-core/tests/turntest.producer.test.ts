@@ -22,7 +22,13 @@
  * arena and battler tags) with those abilities and some pending statuses, and instead of running a
  * turn calls pokemon.canSetStatus(effect, quiet=true, overrideStatus, source, ignoreField) for
  * both Pokemon, every effect and three sources (the other one, itself, none), writing an SPROBE
- * line with the result, the abilities applied so far and the RNG state after each call.
+ * line with the result, the abilities applied so far and the RNG state after each call;
+ * TURN_ONHIT=1 aims at the abilities that react to a hit (Static, Flame Body, Effect Spore, Rough
+ * Skin, Justified, Weak Armor, Berserk, Anger Point, Color Change, Cotton Down, Poison Touch,
+ * Stench...): two abilities in three come from them or from the ones they check (Magic Guard,
+ * Overcoat, Shield Dust, Long Reach), a quarter of the cases give one side one of those checked
+ * abilities or Mirror Armor, most moves are attacks that make contact, one Pokemon in six starts
+ * with a status and one in six is terastallized, and a quarter have random stat stages.
  *
  * Each case builds a random singles state inside a real upstream battle, gives both sides a
  * FIGHT command the way the command phases do, then runs upstream's own phases from
@@ -68,6 +74,7 @@ it("turntest producer", async () => {
   const SPROBE = process.env.TURN_SPROBE === "1";
   const STATUS = process.env.TURN_STATUS === "1";
   const STATUS_POOL = STATUS || SPROBE;
+  const ONHIT = process.env.TURN_ONHIT === "1";
   const OUT = process.env.TURN_OUT ?? "/tmp/pr-turns.txt";
   const game = new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
   game.override
@@ -170,6 +177,16 @@ it("turntest producer", async () => {
     )
     .map((a: any) => a.id)
     .concat([AbilityId.LEVITATE]);
+  // TURN_ONHIT pools
+  const contactAttacks = attacks.filter((m: any) => m.flags & 1); // MoveFlags.MAKES_CONTACT
+  const onHitAbilityIds = allAbilities
+    .filter((a: any) =>
+      a?.attrs.some((x: any) =>
+        isA(x, ["PostDefendAbAttr", "PostAttackAbAttr", "PostReceiveCritStatStageChangeAbAttr", "BlockNonDirectDamageAbAttr"]),
+      ),
+    )
+    .map((a: any) => a.id)
+    .concat([AbilityId.OVERCOAT, AbilityId.SHIELD_DUST, AbilityId.LONG_REACH]);
   const healStatusAttrs: [number, any][] = allAbilities
     .filter((a: any) => a)
     .sort((a: any, b: any) => a.id - b.id)
@@ -360,6 +377,7 @@ it("turntest producer", async () => {
     p.summonData.ability = STAT && rnd(2) === 0
       ? statAbilityIds[rnd(statAbilityIds.length)]
       : STATUS_POOL && rnd(3) !== 0 ? statusAbilityIds[rnd(statusAbilityIds.length)]
+      : ONHIT && rnd(3) !== 0 ? onHitAbilityIds[rnd(onHitAbilityIds.length)]
       : RICH && rnd(2) === 0 ? abilityIds[rnd(abilityIds.length)] : AbilityId.BALL_FETCH;
     p.gender = rnd(3) - 1;
     p.friendship = rnd(256);
@@ -369,7 +387,7 @@ it("turntest producer", async () => {
     p.calculateStats();
     p.hp = rnd(3) === 0 ? p.getMaxHp() : 1 + rnd(p.getMaxHp());
     p.status = null;
-    if (RICH ? rnd(3) === 0 : STATUS ? rnd(4) === 0 : STAT && rnd(8) === 0) {
+    if (RICH ? rnd(3) === 0 : STATUS ? rnd(4) === 0 : ONHIT ? rnd(6) === 0 : STAT && rnd(8) === 0) {
       const s = statuses[rnd(statuses.length)];
       p.status = new Status(s, rnd(4), s === StatusEffect.SLEEP ? 1 + rnd(3) : 0, s === StatusEffect.FREEZE ? 1 + rnd(3) : undefined);
     }
@@ -380,6 +398,8 @@ it("turntest producer", async () => {
         ? (rnd(5) === 0 ? statCondMoves[rnd(statCondMoves.length)] : statMoves[rnd(statMoves.length)])
         : STATUS && rnd(10) < 7
         ? (rnd(6) === 0 ? thawMoves[rnd(thawMoves.length)] : statusSetMoves[rnd(statusSetMoves.length)])
+        : ONHIT && rnd(10) < 8
+        ? (rnd(4) !== 0 ? contactAttacks[rnd(contactAttacks.length)] : attacks[rnd(attacks.length)])
         : COND && rnd(10) < 6
         ? withConditions[rnd(withConditions.length)]
         : rnd(10) < 7 ? attacks[rnd(attacks.length)] : usable[rnd(usable.length)];
@@ -462,6 +482,22 @@ it("turntest producer", async () => {
       if (rnd(4) === 0) {
         const side = [ArenaTagSide.PLAYER, ArenaTagSide.ENEMY][rnd(2)];
         scene.arena.tags.push(getArenaTag(ArenaTagType.MIST, 1 + rnd(5), MoveId.MIST, A.id, side));
+      }
+    }
+    if (ONHIT) {
+      if (rnd(8) === 0) {
+        D.summonData.ability = A.summonData.ability; // Rough Skin against Rough Skin, Mummy against Mummy
+      }
+      if (rnd(4) === 0) {
+        // an ability the on-hit ones check: Magic Guard against Rough Skin, Mirror Armor against Gooey...
+        const counters = [AbilityId.MAGIC_GUARD, AbilityId.MIRROR_ARMOR, AbilityId.LONG_REACH, AbilityId.SHIELD_DUST, AbilityId.OVERCOAT];
+        [A, D][rnd(2)].summonData.ability = counters[rnd(counters.length)];
+      }
+      for (const p of [A, D]) {
+        p.isTerastallized = rnd(6) === 0; // Color Change
+        if (rnd(4) === 0) {
+          p.summonData.statStages = p.summonData.statStages.map(() => [0, 0, 1, -1, 2, -2, 5, -5, 6, -6][rnd(10)]); // Anger Point from below 0
+        }
       }
     }
     if (STATUS) {

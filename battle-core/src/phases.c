@@ -1094,6 +1094,12 @@ static double damage_and_update(pr_battle *bt, pr_engine *e, pr_pokemon *p, doub
     return damage;
 }
 
+double pr_damage_and_update(pr_battle *bt, pr_engine *e, pr_pokemon *p, double damage, int result,
+                            bool ignore_faint_phase, pr_pokemon *source)
+{
+    return damage_and_update(bt, e, p, damage, result, ignore_faint_phase, source);
+}
+
 static move_damage apply_move_damage(pr_battle *bt, pr_engine *e, int ph, pr_pokemon *user, pr_pokemon *target, double eff)
 {
     pr_phase *fx = PH(ph);
@@ -1155,10 +1161,12 @@ static void apply_on_target_effects(pr_battle *bt, pr_engine *e, int ph, pr_poke
         && !pr_has_ability_with_attr(bt, target, PR_AC_IgnoreMoveEffectsAbAttr) && !pr_move_hits_substitute(bt, move, user, target))
         turn_modifiers(bt, user->is_player, user);
     /* applyOnGetHitAbEffects */
-    pr_hook_ab(bt, target, PR_AC_PostDefendAbAttr);
-    if (d.critical) pr_hook_ab(bt, target, PR_AC_PostReceiveCritStatStageChangeAbAttr);
+    pr_ab_params dp = {.pokemon = target, .opponent = user, .move = move, .hit_result = d.result, .damage = d.damage};
+    pr_apply_ab_attrs(bt, PR_AC_PostDefendAbAttr, &dp);                  /* Static, Rough Skin, Justified... */
+    if (d.critical) pr_apply_ab_attrs(bt, PR_AC_PostReceiveCritStatStageChangeAbAttr, &dp);   /* Anger Point */
     lapse_tags(bt, target, BATTLER_TAG_LAPSE_TYPE_AFTER_HIT);
-    pr_hook_ab(bt, user, PR_AC_PostAttackAbAttr);
+    pr_ab_params ap = {.pokemon = user, .opponent = target, .move = move, .hit_result = d.result, .damage = d.damage};
+    pr_apply_ab_attrs(bt, PR_AC_PostAttackAbAttr, &ap);                  /* Poison Touch, Stench... */
     if (!user->is_player && pr_move_is_attack(move)) turn_modifiers(bt, false, target);   /* EnemyAttackStatusEffectChanceModifier */
     if (pr_move_is_attack(move)) turn_modifiers(bt, user->is_player, user);                /* ContactHeldItemTransferChanceModifier */
 }
