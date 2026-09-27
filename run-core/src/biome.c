@@ -130,3 +130,133 @@ int pr_run_select_next_biome(pr_run *run, const pr_biome_depths *d, int current_
     if (b->n_links == 1) return b->links[0].biome;
     return next % 50 == 0 ? BIOME_ID_END : pr_run_generate_random_biome(d, &run->rng, next);
 }
+
+/* randSeedInt(range) for a range that may be fractional (luck lowers the species roll's ceiling
+ * by 0.5 per point for bosses): integerInRange(0, range - 1) = Math.floor(realInRange(0, range)) */
+static int seed_int_frac(pr_rng *rng, double range)
+{
+    if (range <= 1) return 0;
+    return (int)floor(pr_rng_real_in_range(rng, 0, range));
+}
+
+/* getGeneratedWaveCycleOffset(): executeWithSeedOffset(() => ret = randSeedInt(8) * 5, 0, seed) */
+int pr_run_get_generated_wave_cycle_offset(const pr_run *run)
+{
+    pr_rng r = pr_run_seed_offset_rng(run, 0, NULL);
+    return pr_rng_seed_int(&r, 8, 0) * 5;
+}
+
+/* getGeneratedOffsetGym(): executeWithSeedOffset(() => ret = !randSeedInt(2), 0, seed);
+ * the scene keeps it only in classic modes (offsetGym = isClassic && getGeneratedOffsetGym()) */
+bool pr_run_get_generated_offset_gym(const pr_run *run)
+{
+    pr_rng r = pr_run_seed_offset_rng(run, 0, NULL);
+    return !pr_rng_seed_int(&r, 2, 0);
+}
+
+/* arena.getTimeOfDay() (TIME_OF_DAY_OVERRIDE, a dev override, isn't modelled):
+ *   ABYSS → NIGHT; const waveCycle = ((currentBattle?.waveIndex ?? 0) + waveCycleOffset) % 40;
+ *   < 15 DAY, < 20 DUSK, < 35 NIGHT, else DAWN */
+int pr_run_get_time_of_day(int biome, int wave, int wave_cycle_offset)
+{
+    if (biome == BIOME_ID_ABYSS) return TIME_OF_DAY_NIGHT;
+    int cycle = (wave + wave_cycle_offset) % 40;
+    return cycle < 15 ? TIME_OF_DAY_DAY : cycle < 20 ? TIME_OF_DAY_DUSK : cycle < 35 ? TIME_OF_DAY_NIGHT : TIME_OF_DAY_DAWN;
+}
+
+/* arena.pokemonPool[tier] after updatePoolsForTimeOfDay(): [...pool[ALL], ...pool[timeOfDay]] */
+static int pool_size(int biome, int tier, int tod)
+{
+    const pr_biome_info *b = &pr_biomes[biome];
+    return b->species[tier][0].n + b->species[tier][tod + 1].n;
+}
+static int pool_item(int biome, int tier, int tod, int i)
+{
+    const pr_pool_slice *all = &pr_biomes[biome].species[tier][0], *now = &pr_biomes[biome].species[tier][tod + 1];
+    return i < all->n ? pr_biome_pool_data[all->start + i] : pr_biome_pool_data[now->start + i - all->n];
+}
+
+/* generateBossBiomeTier / generateNonBossBiomeTier */
+static int boss_tier(int v)
+{
+    return v >= 20 ? BIOME_POOL_TIER_BOSS : v >= 6 ? BIOME_POOL_TIER_BOSS_RARE : v >= 1 ? BIOME_POOL_TIER_BOSS_SUPER_RARE
+                                                                                        : BIOME_POOL_TIER_BOSS_ULTRA_RARE;
+}
+static int non_boss_tier(int v)
+{
+    return v >= 156 ? BIOME_POOL_TIER_COMMON : v >= 32 ? BIOME_POOL_TIER_UNCOMMON : v >= 6 ? BIOME_POOL_TIER_RARE
+           : v >= 1 ? BIOME_POOL_TIER_SUPER_RARE : BIOME_POOL_TIER_ULTRA_RARE;
+}
+
+static const pr_species *species_by_id(int id)
+{
+    int lo = 0, hi = PR_SPECIES_COUNT - 1;
+    while (lo <= hi) {
+        int mid = (lo + hi) / 2;
+        if (pr_species_table[mid].id == id) return &pr_species_table[mid];
+        if (pr_species_table[mid].id < id) lo = mid + 1; else hi = mid - 1;
+    }
+    return NULL;
+}
+
+/* arena.randomSpecies(waveIndex, level, attempt, luckValue, isBoss), up to the call of
+ * species.getWildSpeciesForLevel(level, true, isBoss ?? isBossSpecies, gameMode):
+ *   const overrideSpecies = gameMode.getOverrideSpecies(waveIndex); if (overrideSpecies) return it;
+ *   const isBossSpecies = getEncounterBossSegments(waveIndex, level) > 0 && pokemonPool[BOSS].length > 0
+ *     && (biomeId !== END || gameMode.isClassic || gameMode.isWaveFinal(waveIndex));
+ *   const forcedTier = getDailyForcedWaveBiomePoolTier(waveIndex);   // null outside daily event seeds
+ *   const rngRoll = randSeedInt((isBossSpecies ? 64 : 512) - luckValue * (isBossSpecies ? 0.5 : 2));
+ *   tier = (isBossSpecies ? generateBossBiomeTier : generateNonBossBiomeTier)(rngRoll);
+ *   while (pokemonPool[tier].length === 0 && tier > COMMON) tier--;
+ *   species = tierPool.length ? getSpecies(randSeedItem(tierPool)) : globalScene.randomSpecies(...);
+ *   if (checkLegendBST(species, getWaveForDifficulty(waveIndex, true)) && attempt < 10) return randomSpecies(..., ++attempt, ...);
+ * checkLegendBST: legend-like && (baseTotal >= 660 ? adjustedWave < 80 : adjustedWave < 55).
+ * Returns the species handed to getWildSpeciesForLevel (whose evolution step isn't ported) and the
+ * isBoss it gets; is_boss < 0 = undefined. */
+int pr_run_random_species(pr_run *run, int biome, int wave, int level, int luck, int is_boss, int wave_cycle_offset,
+                          bool *evo_is_boss)
+{
+    if (run->mode == GAME_MODES_DAILY) { /* getOverrideSpecies and forced tiers read the daily config */
+        run->unported |= PR_RUN_UNPORTED_DAILY;
+        return -1;
+    }
+    int tod = pr_run_get_time_of_day(biome, wave, wave_cycle_offset);
+    bool classic = run->mode == GAME_MODES_CLASSIC || run->mode == GAME_MODES_CHALLENGE;
+    for (int attempt = 0;; attempt++) {
+        bool boss = pr_run_get_encounter_boss_segments(run, wave, level, -1, false) > 0
+                    && pool_size(biome, BIOME_POOL_TIER_BOSS, tod) > 0
+                    && (biome != BIOME_ID_END || classic || pr_run_is_wave_final(run->mode, wave));
+        int roll = seed_int_frac(&run->rng, (boss ? 64 : 512) - luck * (boss ? 0.5 : 2));
+        int tier = boss ? boss_tier(roll) : non_boss_tier(roll);
+        while (pool_size(biome, tier, tod) == 0 && tier > BIOME_POOL_TIER_COMMON) tier--;
+        int n = pool_size(biome, tier, tod);
+        if (!n) { /* globalScene.randomSpecies isn't ported */
+            run->unported |= PR_RUN_UNPORTED_SPECIES;
+            return -1;
+        }
+        int species = pool_item(biome, tier, tod, n == 1 ? 0 : pr_rng_integer_in_range(&run->rng, 0, n - 1));
+        const pr_species *sp = species_by_id(species);
+        int adjusted = pr_run_get_wave_for_difficulty(run, wave, true);
+        bool regen = sp && sp->rarity && (pr_forms[sp->form0].base_total >= 660 ? adjusted < 80 : adjusted < 55);
+        if (regen && attempt < 10) continue;
+        *evo_is_boss = is_boss >= 0 ? is_boss : boss;
+        return species;
+    }
+}
+
+/* arena.randomTrainerType(waveIndex, isBoss):
+ *   const isTrainerBoss = trainerPool[BOSS].length > 0 && (gameMode.isTrainerBoss(waveIndex, biomeId, offsetGym) || isBoss);
+ *   let tier = (isTrainerBoss ? generateBossBiomeTier : generateNonBossBiomeTier)(randSeedInt(isTrainerBoss ? 64 : 512));
+ *   while (trainerPool[tier].length === 0 && tier > COMMON) tier--;
+ *   return tierPool.length > 0 ? randSeedItem(tierPool) : TrainerType.BREEDER; */
+int pr_run_random_trainer_type(pr_run *run, int biome, int wave, bool is_boss)
+{
+    const pr_biome_info *b = &pr_biomes[biome];
+    bool boss = b->trainers[BIOME_POOL_TIER_BOSS].n > 0 && (pr_run_is_trainer_boss(run, wave, biome, run->offset_gym) || is_boss);
+    int v = pr_rng_seed_int(&run->rng, boss ? 64 : 512, 0);
+    int tier = boss ? boss_tier(v) : non_boss_tier(v);
+    while (b->trainers[tier].n == 0 && tier > BIOME_POOL_TIER_COMMON) tier--;
+    const pr_pool_slice *p = &b->trainers[tier];
+    if (!p->n) return TRAINER_TYPE_BREEDER;
+    return pr_biome_pool_data[p->start + (p->n == 1 ? 0 : pr_rng_integer_in_range(&run->rng, 0, p->n - 1))];
+}

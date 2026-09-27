@@ -15,6 +15,7 @@
 enum {
     PR_RUN_UNPORTED_DAILY = 1u << 0,      /* the daily run's seed config (trainer waves, money, final boss) */
     PR_RUN_UNPORTED_CHALLENGES = 1u << 1, /* challenge hooks (FIXED_BATTLES...) */
+    PR_RUN_UNPORTED_SPECIES = 1u << 3,    /* globalScene.randomSpecies (any species), for an empty biome pool */
     PR_RUN_UNDEFINED_UPSTREAM = 1u << 2,  /* upstream's own answer is undefined here (e.g. randSeedItem([])) */
 };
 
@@ -97,13 +98,20 @@ double pr_run_get_reroll_cost(int wave, bool lock_rarities, const int *option_ti
 /* ---- biomes (src/biome.c; data in gen/out/run_biomes.c, dumped from upstream's allBiomes) ---- */
 #define PR_BIOME_ID_LIMIT 64       /* BiomeId values are below this (the dump checks) */
 #define PR_MAX_BIOME_LINKS 8
-typedef struct { uint8_t biome, weight; } pr_biome_link;   /* weight 0 = a plain link, else [biome, weight] */
+typedef struct { uint8_t biome, weight; } pr_biome_link;
+typedef struct { uint16_t start, n; } pr_pool_slice;
+#define PR_BIOME_POOL_TIERS 9      /* BiomePoolTier COMMON..BOSS_ULTRA_RARE */   /* weight 0 = a plain link, else [biome, weight] */
 typedef struct {
     bool present;
     uint8_t trainer_chance;       /* arena.trainerChance in this biome (0 = no trainers) */
     uint8_t n_links;
     pr_biome_link links[PR_MAX_BIOME_LINKS];   /* biomeLinks, in order */
+    /* pokemonPool[tier][timeOfDay] (tod stored at TimeOfDay + 1, ALL = -1 first) and trainerPool[tier],
+     * as slices of pr_biome_pool_data */
+    pr_pool_slice species[PR_BIOME_POOL_TIERS][5];
+    pr_pool_slice trainers[PR_BIOME_POOL_TIERS];
 } pr_biome_info;
+extern const uint16_t pr_biome_pool_data[];
 extern const pr_biome_info pr_biomes[PR_BIOME_ID_LIMIT];
 extern const uint8_t pr_biome_order[];   /* Object.values(BiomeId) */
 extern const int pr_biome_count;
@@ -122,6 +130,19 @@ int pr_run_generate_random_biome(const pr_biome_depths *d, pr_rng *rng, int wave
  * Map and picks among `choices` (n_choices of them, in the order the menu lists them). */
 int pr_run_select_next_biome(pr_run *run, const pr_biome_depths *d, int current_biome, int current_wave, bool has_map,
                              uint8_t choices[PR_MAX_BIOME_LINKS], int *n_choices);
+
+/* getGeneratedWaveCycleOffset() and getGeneratedOffsetGym(), both from the run seed */
+int pr_run_get_generated_wave_cycle_offset(const pr_run *run);
+bool pr_run_get_generated_offset_gym(const pr_run *run);
+/* arena.getTimeOfDay() in `biome` during `wave` (TimeOfDay) */
+int pr_run_get_time_of_day(int biome, int wave, int wave_cycle_offset);
+/* arena.randomSpecies(wave, level, 0, luck, isBoss) on run->rng, up to the evolution step: returns the
+ * species handed to getWildSpeciesForLevel (not ported yet) and the isBoss it gets (*evo_is_boss).
+ * is_boss < 0 = undefined. -1 with a PR_RUN_UNPORTED_* flag when it can't answer. */
+int pr_run_random_species(pr_run *run, int biome, int wave, int level, int luck, int is_boss, int wave_cycle_offset,
+                          bool *evo_is_boss);
+/* arena.randomTrainerType(wave, isBoss) on run->rng */
+int pr_run_random_trainer_type(pr_run *run, int biome, int wave, bool is_boss);
 
 /* ---- helpers ---- */
 /* executeWithSeedOffset(fn, offset, seedOverride): fn rolls on a fresh RNG sown from

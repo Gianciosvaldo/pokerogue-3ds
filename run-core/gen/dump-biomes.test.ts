@@ -1,6 +1,6 @@
 /*
- * Dumps upstream's biome table for run-core as C: each biome's links (with their weights) and
- * trainer chance, in Object.values(BiomeId) order. Run with tools/redump.sh <upstream dir>;
+ * Dumps upstream's biome table for run-core as C: each biome's links (with their weights),
+ * trainer chance, species pools and trainer pools, in Object.values(BiomeId) order. Run with tools/redump.sh <upstream dir>;
  * writes gen/out/run_biomes.c. The output is generated: don't edit it.
  */
 import { allBiomes } from "#data/data-lists";
@@ -22,12 +22,28 @@ it("dump biomes", () => {
     `const uint8_t pr_biome_order[] = {${ids.join(", ")}};`,
     `const pr_biome_info pr_biomes[PR_BIOME_ID_LIMIT] = {`,
   ];
+  // Pools: species per BiomePoolTier (0-8) and TimeOfDay (ALL=-1..NIGHT=3, stored at tod + 1), and
+  // trainer types per tier, as slices of one flat array
+  const data: number[] = [];
+  const slice = (list: number[] | undefined) => {
+    const l = list ?? [];
+    const start = data.length;
+    data.push(...l);
+    return `{${start}, ${l.length}}`;
+  };
   for (const id of ids) {
     const b = allBiomes.get(id) as any;
     const links = (b.biomeLinks as any[]).map(l => (Array.isArray(l) ? `{${l[0]}, ${l[1]}}` : `{${l}, 0}`));
-    c.push(`    [${id}] = {true, ${b.trainerChance}, ${links.length}, {${links.join(", ")}}},`);
+    const species = Array.from({ length: 9 }, (_, t) =>
+      `{${Array.from({ length: 5 }, (_, k) => slice(b.pokemonPool?.[t]?.[k - 1])).join(", ")}}`);
+    const trainers = Array.from({ length: 9 }, (_, t) => slice(b.trainerPool?.[t]));
+    c.push(
+      `    [${id}] = {true, ${b.trainerChance}, ${links.length}, {${links.join(", ")}},`,
+      `        {${species.join(", ")}},`,
+      `        {${trainers.join(", ")}}},`,
+    );
   }
-  c.push("};", "");
+  c.push("};", `const uint16_t pr_biome_pool_data[${Math.max(data.length, 1)}] = {${data.join(", ") || "0"}};`, "");
   // run.h sizes: PR_BIOME_ID_LIMIT (ids below it) and PR_MAX_BIOME_LINKS
   if (Math.max(...ids) >= 64) throw new Error("a BiomeId is 64 or more: raise PR_BIOME_ID_LIMIT");
   if (ids.some(id => (allBiomes.get(id) as any).biomeLinks.length > 8)) throw new Error("raise PR_MAX_BIOME_LINKS");
