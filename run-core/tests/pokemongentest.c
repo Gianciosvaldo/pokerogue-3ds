@@ -40,6 +40,7 @@ int main(int argc, char **argv)
     FILE *f = fopen(argc > 1 ? argv[1] : "pokemongen-cases.txt", "r");
     if (!f) { perror("cases"); return 2; }
     static char line[4096];
+    int fusions = 0;
     int line_no = 0, cases = 0, threw = 0, shiny = 0, variants = 0, bosses = 0, trainer_mons = 0;
     pr_run run;
     pr_enemy_gen_ctx ctx;
@@ -92,6 +93,12 @@ int main(int argc, char **argv)
             ok &= me.form == (int)num(&save);
             ok &= me.nature == (int)num(&save);
             ok &= me.tera_type == (int)num(&save);
+            {
+                const int fs = (int)num(&save), fa = (int)num(&save), fg = (int)num(&save), ff = (int)num(&save);
+                ok &= me.fusion_species == fs
+                      && (fs < 0 || (me.fusion_ability_index == fa && me.fusion_gender == fg && me.fusion_form == ff));
+                fusions += fs >= 0;
+            }
             ok &= me.boss_segments == (int)num(&save);
             pr_rng after;
             read_state(&save, &after);
@@ -119,7 +126,7 @@ int main(int argc, char **argv)
         }
     }
     printf("cases %d (addEnemyPokemon threw upstream: %d); checked: %d shiny, %d rare/epic variants, %d bosses, "
-           "%d trainer Pokemon\n", cases, threw, shiny, variants, bosses, trainer_mons);
+           "%d trainer Pokemon, %d fusions\n", cases, threw, shiny, variants, bosses, trainer_mons, fusions);
     int bad = 0;
     for (int c = 0; c < C_COUNT_; c++) {
         printf("  %-48s pass %6d  fail %d  not covered %d\n", check_names[c], pass[c], fail[c], uncovered[c]);

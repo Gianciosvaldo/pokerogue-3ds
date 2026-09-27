@@ -49,3 +49,28 @@ double pr_run_apply_money_interest(double money, const int *stacks, int n)
     for (int i = 0; i < n; i++) money = pr_run_add_money(money, floor(money * 0.1 * stacks[i]));
     return money;
 }
+
+/* getPartyLuckValue(party) (src/modifier/modifier-type.ts):
+ *   if (isDaily) { executeWithSeedOffset(() => luck = getDailyEventSeedLuck() ?? randSeedInt(15), 0, seed); return luck; }
+ *   const luck = Phaser.Math.Clamp(party.map(p => p.isAllowedInBattle()
+ *       ? p.getLuck() + (eventLuckBoostedSpecies.includes(p.species.speciesId) ? 1 : 0) : 0).reduce(sum), 0, 14);
+ *   return Math.min(timedEventManager.getEventLuckBoost() + luck, 14);
+ * getLuck(): luck + (isFusion() ? fusionLuck : 0) */
+int pr_run_get_party_luck_value(pr_run *run, const pr_luck_member *party, int n, const int *event_species,
+                                int n_event_species, int event_luck_boost)
+{
+    if (run->mode == GAME_MODES_DAILY) {
+        if (run->daily_custom) { run->unported |= PR_RUN_UNPORTED_DAILY; return 0; }   /* the event seed's luck */
+        pr_rng r = pr_run_seed_offset_rng(run, 0, NULL);
+        return pr_rng_seed_int(&r, 15, 0);
+    }
+    int luck = 0;
+    for (int i = 0; i < n; i++) {
+        if (!party[i].allowed) continue;
+        luck += party[i].luck + (party[i].fusion ? party[i].fusion_luck : 0);
+        for (int k = 0; k < n_event_species; k++)
+            if (event_species[k] == party[i].species) { luck++; break; }
+    }
+    luck = luck < 0 ? 0 : luck > 14 ? 14 : luck;
+    return event_luck_boost + luck < 14 ? event_luck_boost + luck : 14;
+}

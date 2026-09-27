@@ -9,11 +9,17 @@ int pr_run_gen_wild_enemy(pr_run *run, const pr_wild_enemy_ctx *ctx, pr_wild_ene
 {
     pr_enemy_gen_ctx ec = ctx->enemy;
     const int wave = ec.wave, level = ctx->level;
-    /* arena.randomSpecies(waveIndex, level, 0, getPartyLuckValue(party)): isBoss undefined */
-    bool evo_boss = false;
-    int species = pr_run_random_species(run, ec.biome, wave, level, ctx->luck, -1, ec.wave_cycle_offset, &evo_boss);
-    if (species < 0) return -1;
-    species = pr_run_get_wild_species_for_level(&run->rng, species, level, true, evo_boss, false);
+    /* arena.randomSpecies(waveIndex, level, 0, getPartyLuckValue(party)): isBoss undefined; the override
+     * species (the daily run's final boss) comes back as it is */
+    const unsigned flags = run->unported;
+    int species = pr_run_get_override_species(run, wave);
+    if (species < 0) {
+        if (run->unported != flags) return -1;
+        bool evo_boss = false;
+        species = pr_run_random_species(run, ec.biome, wave, level, ctx->luck, -1, ec.wave_cycle_offset, &evo_boss);
+        if (species < 0) return -1;
+        species = pr_run_get_wild_species_for_level(&run->rng, species, level, true, evo_boss, false);
+    }
     /* the Golden Bug Net (BoostBugSpawnModifier): !gameMode.isBoss(waveIndex) && biome !== END &&
      * randSeedInt(10) === 0 → getGoldenBugNetSpecies(level): a weighted roll, then
      * getWildSpeciesForLevel(level, true, false) */

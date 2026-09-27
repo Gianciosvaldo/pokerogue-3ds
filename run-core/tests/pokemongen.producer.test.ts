@@ -90,6 +90,7 @@ it("pokemongen producer", async () => {
   (EnemyPokemon.prototype as any).generateAndPopulateMoveset = function (this: any) {
     mid = [
       this.abilityIndex, this.id, ...this.ivs, this.gender, this.formIndex, this.nature, this.teraType,
+      this.fusionSpecies?.speciesId ?? -1, this.fusionAbilityIndex ?? 0, this.fusionGender ?? 0, this.fusionFormIndex ?? 0,
       this.bossSegments ?? 0, state(),
     ].join(" ");
   };

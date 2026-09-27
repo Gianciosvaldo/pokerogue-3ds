@@ -25,7 +25,7 @@ int pr_run_get_starting_level(pr_run *run)
 /* getStartingMoney(): DAILY ? getDailyStartingMoney() ?? 1000 : 1000 */
 int pr_run_get_starting_money(pr_run *run)
 {
-    if (run->mode == GAME_MODES_DAILY) run->unported |= PR_RUN_UNPORTED_DAILY;
+    if (run->mode == GAME_MODES_DAILY && run->daily_custom) run->unported |= PR_RUN_UNPORTED_DAILY;
     return 1000;
 }
 
@@ -104,7 +104,8 @@ int pr_run_get_enemy_modifier_chance(const pr_run *run, bool is_boss)
 }
 
 /* isWaveTrainer(waveIndex):
- *   if (isDaily) { getDailyTrainerManipulation(waveIndex) ?? (waveIndex % 10 === 5 || ...) }
+ *   if (isDaily) return getDailyTrainerManipulation(waveIndex)   // a custom daily seed's, else null
+ *     ?? (waveIndex % 10 === 5 || (!(waveIndex % 10) && waveIndex > 10 && !isWaveFinal(waveIndex)));
  *   if (waveIndex % 30 === (offsetGym ? 0 : 20) && !isWaveFinal(waveIndex)) return true;
  *   if (waveIndex % 10 !== 1 && waveIndex % 10) {
  *     const trainerChance = arena.trainerChance; let allowTrainerBattle = true;
@@ -125,8 +126,8 @@ int pr_run_get_enemy_modifier_chance(const pr_run *run, bool is_boss)
 bool pr_run_is_wave_trainer(pr_run *run, int wave, int trainer_chance)
 {
     if (run->mode == GAME_MODES_DAILY) {
-        run->unported |= PR_RUN_UNPORTED_DAILY;
-        return false;
+        if (run->daily_custom) run->unported |= PR_RUN_UNPORTED_DAILY;
+        return wave % 10 == 5 || (!(wave % 10) && wave > 10 && !pr_run_is_wave_final(run->mode, wave));
     }
     int gym = run->offset_gym ? 0 : 20;
     if (wave % 30 == gym && !pr_run_is_wave_final(run->mode, wave)) return true;
@@ -192,7 +193,7 @@ static const pr_species *species_by_id(int id)
 int pr_run_get_encounter_boss_segments(pr_run *run, int wave, int level, int species, bool force_boss)
 {
     if (run->mode == GAME_MODES_DAILY && pr_run_is_wave_final(run->mode, wave)) {
-        run->unported |= PR_RUN_UNPORTED_DAILY;
+        if (run->daily_custom) run->unported |= PR_RUN_UNPORTED_DAILY;
         return 5;
     }
     const pr_species *sp = species >= 0 ? species_by_id(species) : NULL;
@@ -252,10 +253,8 @@ pr_rng pr_run_battle_rng(const pr_run *run, int wave)
  * isClassicFinalBoss is gameMode.isClassic && gameMode.isWaveFinal(waveIndex). */
 int pr_run_get_level_for_wave(pr_run *run, pr_rng *rng, int wave)
 {
-    if (run->mode == GAME_MODES_DAILY) {
-        run->unported |= PR_RUN_UNPORTED_DAILY; /* isDailyFinalBoss reads the daily config */
-        return 0;
-    }
+    /* isDailyFinalBoss(waveIndex): isDaily && isWaveFinal(waveIndex) → DAILY_BOSS_LEVEL (src/constants.ts) */
+    if (run->mode == GAME_MODES_DAILY && pr_run_is_wave_final(run->mode, wave)) return 75;
     double lw = pr_run_get_wave_for_difficulty(run, wave, false);
     double base = 1 + lw / 2 + js_pow(lw / 25, 2);
     if (pr_run_is_boss(wave)) {
@@ -309,7 +308,8 @@ bool pr_run_is_mystery_encounter_valid_for_wave(const pr_run *run, bool wild, in
  *   return roll < favoredEncounterRate; */
 bool pr_run_is_wave_mystery_encounter(pr_run *run, bool wild, int wave, const pr_me_save *save)
 {
-    if (run->mode == GAME_MODES_DAILY) { /* getDailyMysteryEncounter reads the daily config */
+    /* getDailyMysteryEncounter(waveIndex): a custom daily seed's forced encounter, else null */
+    if (run->mode == GAME_MODES_DAILY && run->daily_custom) {
         run->unported |= PR_RUN_UNPORTED_DAILY;
         return false;
     }
