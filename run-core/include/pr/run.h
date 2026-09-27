@@ -15,9 +15,10 @@
 enum {
     PR_RUN_UNPORTED_DAILY = 1u << 0,      /* the daily run's seed config (trainer waves, money, final boss) */
     PR_RUN_UNPORTED_CHALLENGES = 1u << 1, /* challenge hooks (FIXED_BATTLES...) */
-    PR_RUN_UNPORTED_SPECIES = 1u << 3,
+    PR_RUN_UNPORTED_SPECIES = 1u << 3,       /* globalScene.randomSpecies (any species), for an empty biome pool */
     PR_RUN_UNPORTED_FIXED_BATTLE = 1u << 4,  /* a fixed battle's trainer (config closures) */
-    PR_RUN_UNPORTED_TRAINER = 1u << 5,       /* a trainer config the data doesn't cover */    /* globalScene.randomSpecies (any species), for an empty biome pool */
+    PR_RUN_UNPORTED_TRAINER = 1u << 5,       /* a trainer config the data doesn't cover */
+    PR_RUN_UNPORTED_FUSION = 1u << 6,        /* an enemy that becomes a fusion (generateFusionSpecies) */
     PR_RUN_UNDEFINED_UPSTREAM = 1u << 2,  /* upstream's own answer is undefined here (e.g. randSeedItem([])) */
 };
 
@@ -264,6 +265,100 @@ void pr_run_random_seed_string(pr_rng *rng, char *out, int length);
 /* newBattle() for wave `wave` (not a loaded save), rolling on run->rng from resetSeed(wave).
  * Returns 0, or -1 with PR_RUN_UNPORTED_FIXED_BATTLE / _TRAINER / _DAILY in run->unported. */
 int pr_run_new_battle(pr_run *run, int wave, const pr_new_battle_ctx *ctx, pr_new_battle *out);
+
+/* ---- a new enemy Pokemon (src/pokemongen.c; data in gen/out/run_pokemongen.c) ---- */
+/* Gender (src/data/gender.ts, outside src/enums; gen/dump-pokemongen.test.ts checks the values) */
+enum { GENDER_GENDERLESS = -1, GENDER_MALE = 0, GENDER_FEMALE = 1 };
+typedef struct {
+    uint16_t id;
+    double male_percent;          /* malePercent, -1 = null (genderless) */
+    bool same_abilities;          /* ability2 === ability1 */
+    bool has_hidden;              /* abilityHidden is set */
+    uint16_t n_forms;             /* forms.length (0 for a species without forms) */
+    uint16_t form_start;          /* in pr_form_gens: n_forms entries, or 1 for the species itself */
+} pr_species_gen;
+typedef struct {
+    uint8_t n_types; int8_t types[2];   /* what the tera type is picked from, in order */
+    bool has_variants;                  /* variantData has "<id>-<formKey>" or "<id>" */
+} pr_form_gen;
+extern const pr_species_gen pr_species_gens[];   /* by SpeciesId */
+extern const int pr_species_gen_count;
+extern const pr_form_gen pr_form_gens[];
+extern const int8_t pr_trainer_specialty[];      /* by TrainerType: specialtyType, -1 = none */
+extern const int pr_trainer_specialty_count;
+
+typedef struct {
+    int species, level;
+    int trainer_slot;             /* TrainerSlot: 0 NONE (wild), 1 TRAINER, 2 TRAINER_PARTNER */
+    bool boss, shiny_lock;        /* the EnemyPokemon constructor's boss and shinyLock */
+    /* the scene */
+    int wave, biome, wave_cycle_offset;
+    int battle_type;              /* currentBattle.battleType */
+    int trainer_type;             /* currentBattle.trainer's TrainerType, -1 = none */
+    int hidden_ability_charm_stacks, shiny_charm_stacks;   /* the player's charms, 0 = none */
+    int enemy_fusion_stacks;      /* the enemy's EnemyFusionChanceModifier, 0 = none */
+    double enemy_fusion_chance;   /* its .chance */
+    uint16_t trainer_id, secret_id;   /* gameData */
+    bool event_active;            /* timedEventManager.isEventActive() */
+    double event_shiny_multiplier;    /* getShinyEncounterMultiplier() */
+    double event_trainer_shiny_chance;   /* getClassicTrainerShinyChance() */
+} pr_enemy_gen_ctx;
+typedef struct {
+    int ability_index;
+    uint32_t id;
+    int ivs[6];
+    int gender, form, nature, tera_type;
+    int boss_segments;            /* 0 = not a boss */
+    bool shiny;
+    int variant, luck;
+    int friendship;               /* set for a trainer's Pokemon; -1 = species.baseFriendship (not dumped) */
+} pr_enemy_gen;
+/* new EnemyPokemon(species, level, trainerSlot, boss, shinyLock) without a data source, on run->rng:
+ * the Pokemon constructor's rolls and setBoss, which come before generateAndPopulateMoveset */
+int pr_run_enemy_pokemon_base(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_enemy_gen *out);
+/* the rest of the EnemyPokemon constructor after generateAndPopulateMoveset: shiny, variant (on the
+ * wave seed at offset id), luck, a trainer's Pokemon's IVs and friendship; then addEnemyPokemon's
+ * second IV roll for a boss (its postProcess callback and dev overrides aren't modelled) */
+int pr_run_enemy_pokemon_finish(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_enemy_gen *out);
+/* battleScene.getSpeciesFormIndex(species, gender, undefined, false) for an enemy, on run->rng */
+int pr_run_get_species_form_index(pr_run *run, const pr_enemy_gen_ctx *ctx, int gender);
+
+/* ---- a trainer's party member species (src/trainerspecies.c; data in gen/out/run_trainerspecies.c) ---- */
+typedef struct {
+    bool catchable;               /* isCatchable() */
+    uint16_t root;                /* getRootSpeciesId() */
+    int8_t types[2];              /* type1, type2 (-2 = null) */
+} pr_species_trainer_info;
+extern const pr_species_trainer_info pr_species_trainer[];   /* in pr_species_gens order (ascending id) */
+typedef struct {
+    uint16_t type;                /* TrainerType */
+    bool has_pools;               /* config.speciesPools is set */
+    struct { uint16_t start; int16_t n; } tiers[5];   /* by TrainerPoolTier, in pr_trainer_pool_entries; n -1 = no such tier */
+    int16_t filter;               /* config.speciesFilter as a row of pr_trainer_species_filters, -1 = none */
+    uint16_t sig_start, n_sig;    /* roots of signatureSpecies[TrainerType[type]], in pr_trainer_signature_roots */
+} pr_trainer_species;
+extern const pr_trainer_species pr_trainer_species_data[];   /* by TrainerType */
+extern const int pr_trainer_species_count;
+extern const int16_t pr_trainer_pool_entries[];   /* a species, or -1 for an entry that is a list of species */
+extern const uint16_t pr_trainer_signature_roots[];
+extern const uint8_t pr_trainer_species_filters[];   /* pr_trainer_filter_bytes per row, bit i = species i */
+extern const int pr_trainer_filter_bytes;
+
+#define PR_MAX_PARTY_TYPES 16
+typedef struct {
+    int trainer_type, level, wave;
+    int evo_kind;                 /* template.evoLevelThresholdKind (EvoLevelThresholdKind), NORMAL when undefined */
+    bool balanced;                /* template.isBalanced(currentBattle.enemyParty.length) */
+    bool classic_wave20_trainer;  /* as for pr_run_determine_enemy_species */
+    int n_party;                  /* the enemy party so far: */
+    uint16_t party_roots[6];      /* each one's species.getRootSpeciesId() */
+    int n_party_types;
+    int8_t party_types[PR_MAX_PARTY_TYPES];   /* enemyParty.flatMap(p => p.getTypes()) */
+} pr_party_species_ctx;
+/* trainer.genNewPartyMemberSpecies(level, strength) on run->rng (genPartyMember rolls it on the run seed at
+ * its own offset: the caller sows run->rng). Returns the species, or -1 with PR_RUN_UNDEFINED_UPSTREAM
+ * where upstream loops forever or picks from an empty list, PR_RUN_UNPORTED_TRAINER for an unknown type. */
+int pr_run_gen_new_party_member_species(pr_run *run, const pr_party_species_ctx *ctx);
 
 /* ---- helpers ---- */
 /* executeWithSeedOffset(fn, offset, seedOverride): fn rolls on a fresh RNG sown from
