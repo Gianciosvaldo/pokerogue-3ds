@@ -212,6 +212,15 @@ double pr_run_get_exp_value(int base_exp, int level);
 int pr_run_apply_party_exp(const pr_exp_party *pp, double exp_value, bool use_wave_index_multiplier, int wave,
                            int out_index[PR_MAX_EXP_PARTY], double out_exp[PR_MAX_EXP_PARTY]);
 
+/* ---- between-wave upkeep (src/upkeep.c) ---- */
+/* trySpreadPokerus() for the wave: pokerus[] is the party's flags in order, updated in place;
+ * returns how many caught it */
+int pr_run_try_spread_pokerus(const pr_run *run, int wave, bool *pokerus, int n_party);
+/* addMoney (capped at Number.MAX_SAFE_INTEGER) */
+double pr_run_add_money(double money, double amount);
+/* The Coin Cases' interest (MoneyInterestModifier), each one's stack count in list order */
+double pr_run_apply_money_interest(double money, const int *stacks, int n);
+
 /* ---- helpers ---- */
 /* executeWithSeedOffset(fn, offset, seedOverride): fn rolls on a fresh RNG sown from
  * shiftCharCodes(seedOverride || seed, offset), and RND's state comes back afterwards, so a
