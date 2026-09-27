@@ -19,7 +19,7 @@ typedef enum {
     PH_WEATHER_EFFECT, PH_POSITIONAL_TAG, PH_BERRY, PH_CHECK_STATUS_EFFECT, PH_POST_TURN_STATUS_EFFECT,
     PH_TURN_END, PH_RESET_STATUS, PH_STAT_STAGE_CHANGE, PH_OBTAIN_STATUS_EFFECT, PH_MOVE_CHARGE, PH_POKEMON_HEAL,
     /* presentation: no battle state of their own */
-    PH_MESSAGE, PH_DAMAGE_ANIM, PH_COMMON_ANIM, PH_SHOW_ABILITY, PH_HIDE_ABILITY,
+    PH_MESSAGE, PH_DAMAGE_ANIM, PH_COMMON_ANIM, PH_SHOW_ABILITY, PH_HIDE_ABILITY, PH_POKEMON_ANIM,
     /* where a turn hands control back to the caller */
     PH_TURN_INIT, PH_VICTORY, PH_SWITCH, PH_SWITCH_SUMMON, PH_GAME_OVER, PH_BATTLE_END, PH_SELECT_MODIFIER,
     /* not ported yet: created where upstream creates them (so the order stays right), and
@@ -182,6 +182,10 @@ void pr_sync_queued_movers(pr_battle *bt, pr_engine *e);
 
 /* the phases' start() (src/phases.c) */
 void pr_phase_run(pr_battle *bt, pr_engine *e, int ph);
+/* the running phase, when it is a MoveEffectPhase: its user (getUserPokemon) and move; else NULL */
+pr_pokemon *pr_move_effect_user(pr_battle *bt, pr_engine *e, int *move);
+/* MoveEffectPhase.stopMultiHit(target) on the running MoveEffectPhase */
+void pr_stop_multi_hit(pr_battle *bt, pr_engine *e, pr_pokemon *target);
 
 /* One MoveEffectAttr's apply(user, target, move) for MoveEffectPhase `ph` (src/move_effects.c):
  * pr_attrs[attr_index] is one of the move's attributes. target is NULL for POST_TARGET effects. */

@@ -31,9 +31,12 @@ bool pr_tag_type_ported(int type)
     case BATTLER_TAG_TYPE_TAR_SHOT:     /* TarShotTag */
     case BATTLER_TAG_TYPE_AUTOTOMIZED:  /* AutotomizedTag */
     case BATTLER_TAG_TYPE_RECHARGING:   /* RechargingTag: Hyper Beam and co. */
+    case BATTLER_TAG_TYPE_SEEDED:       /* SeedTag: Leech Seed */
+    case BATTLER_TAG_TYPE_SUBSTITUTE:   /* SubstituteTag: Substitute, Shed Tail */
+    case BATTLER_TAG_TYPE_ENDURING:     /* EnduringTag: Endure */
         return true;
     }
-    return pr_damaging_trap_move(type) != 0;
+    return pr_damaging_trap_move(type) != 0 || pr_battler_tag_is(type, PR_TAGCLASS_PROTECTED);
 }
 
 /* DamagingTrapTag's subclasses (Bind, Wrap, Fire Spin...): the move each one names as its
@@ -96,6 +99,7 @@ static pr_battler_tag construct(int type, int turn_count, int source_move, int64
     t.turn_count = (int16_t)turn_count;
     t.source_move = (uint16_t)source_move;
     t.source_id = -1;
+    t.source_index = -1;
     switch (type) {
     case BATTLER_TAG_TYPE_CHARGING:
         t.turn_count = 1;
@@ -130,11 +134,24 @@ static pr_battler_tag construct(int type, int turn_count, int source_move, int64
         t.turn_count = 1;
         t.source_move = MOVE_ID_AUTOTOMIZE;
         break;
+    case BATTLER_TAG_TYPE_SEEDED:                 /* SeedTag(sourceId): TURN_END, 1 turn, LEECH_SEED */
+        t.turn_count = 1;
+        t.source_move = MOVE_ID_LEECH_SEED;
+        t.source_id = source_id;
+        break;
+    case BATTLER_TAG_TYPE_SUBSTITUTE:             /* SubstituteTag(sourceMove, sourceId) */
+        t.turn_count = 0;
+        t.source_id = source_id;
+        break;
+    case BATTLER_TAG_TYPE_ENDURING:               /* EnduringTag(tagType, TURN_END, sourceMove) */
+        t.turn_count = 0;
+        break;
     default:                                      /* CONFUSED, FRENZY, the semi-invulnerable tags */
         if (pr_damaging_trap_move(type)) {        /* BindTag(turnCount, sourceId) and co. */
             t.source_move = (uint16_t)pr_damaging_trap_move(type);
             t.source_id = source_id;
         }
+        if (pr_battler_tag_is(type, PR_TAGCLASS_PROTECTED)) t.turn_count = 0;   /* ProtectedTag(sourceMove, tagType) */
         break;
     }
     return t;
@@ -169,6 +186,8 @@ static bool can_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_battler
         return !pr_find_battler_tag_class(p, PR_TAGCLASS_TRAPPED);
     case BATTLER_TAG_TYPE_TAR_SHOT:
         return !p->terastallized;
+    case BATTLER_TAG_TYPE_SEEDED:
+        return !pr_is_of_type(p, POKEMON_TYPE_GRASS);
     }
     /* DamagingTrapTag: !getTag(TrappedTag) && !getTag(SUBSTITUTE); no Ghost check, no source */
     if (pr_damaging_trap_move(t->type))
@@ -188,8 +207,42 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
     case BATTLER_TAG_TYPE_NO_RETREAT:
     case BATTLER_TAG_TYPE_CHARGED:
     case BATTLER_TAG_TYPE_TAR_SHOT:
+    case BATTLER_TAG_TYPE_ENDURING:
         pr_queue_message(bt, e);
         return;
+    case BATTLER_TAG_TYPE_SEEDED: {
+        /* SeedTag.onAdd: nothing without its source (getSourcePokemon searches both parties; only
+         * the field is modelled), else the message, then sourceIndex = the source's battler index */
+        pr_pokemon *source = t->source_id >= 0 ? pr_field_pokemon_by_id(bt, t->source_id) : NULL;
+        if (!source) {
+            if (t->source_id >= 0) pr_note_unported(bt, PR_FEAT_PARTY);
+            return;
+        }
+        pr_queue_message(bt, e);
+        t->source_index = (int8_t)pr_battler_index(bt, source);
+        return;
+    }
+    case BATTLER_TAG_TYPE_SUBSTITUTE: {
+        /* SubstituteTag.onAdd: the doll gets a quarter of its source's max HP, its animation
+         * (PokemonAnimPhase), the message, then the Pokemon's damaging traps go */
+        pr_pokemon *source = t->source_id >= 0 ? pr_field_pokemon_by_id(bt, t->source_id) : NULL;
+        if (!source) {
+            if (t->source_id >= 0) pr_note_unported(bt, PR_FEAT_PARTY);
+            return;
+        }
+        t->hp = (int32_t)floor(pr_get_stat(source, STAT_HP, false) / 4.0);
+        t->in_focus = false;
+        pr_unshift_new(bt, e, PH_POKEMON_ANIM, -1);                      /* SUBSTITUTE_ADD */
+        pr_queue_message(bt, e);
+        static const int32_t traps[] = {
+            BATTLER_TAG_TYPE_BIND, BATTLER_TAG_TYPE_WRAP, BATTLER_TAG_TYPE_FIRE_SPIN, BATTLER_TAG_TYPE_WHIRLPOOL,
+            BATTLER_TAG_TYPE_CLAMP, BATTLER_TAG_TYPE_SAND_TOMB, BATTLER_TAG_TYPE_MAGMA_STORM,
+            BATTLER_TAG_TYPE_SNAP_TRAP, BATTLER_TAG_TYPE_THUNDER_CAGE, BATTLER_TAG_TYPE_INFESTATION,
+        };
+        /* findAndRemoveTags(tag => tag instanceof DamagingTrapTag); t may move */
+        pr_find_and_remove_tags(bt, e, p, traps, (int)(sizeof traps / sizeof traps[0]));
+        return;
+    }
     case BATTLER_TAG_TYPE_AUTOTOMIZED:
         if (pr_get_weight(bt, p) > 0.1) pr_queue_message(bt, e);
         t->autotomize_count++;
@@ -210,6 +263,7 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
         return;
     }
     if (pr_damaging_trap_move(t->type)) pr_queue_message(bt, e);   /* TrappedTag.onAdd: getTrapMessage() */
+    if (pr_battler_tag_is(t->type, PR_TAGCLASS_PROTECTED)) pr_queue_message(bt, e);   /* ProtectedTag.onAdd */
 }
 
 /* existingTag.onOverlap(pokemon) */
@@ -266,6 +320,77 @@ static void next_targets(pr_battle *bt, const pr_pokemon *p, int move, const pr_
     }
 }
 
+/* SeedTag.lapse past its countdown: the opponent standing at sourceIndex gets what the seeded
+ * Pokemon loses (an eighth of its max HP), or loses it instead against Liquid Ooze */
+static bool seed_drain(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_battler_tag *t)
+{
+    /* pokemon.getOpponents().find(o => o.getBattlerIndex() === sourceIndex): isActive(true) */
+    pr_pokemon *source = NULL;
+    for (int i = 0; i < 4 && !source; i++) {
+        pr_pokemon *o = bt->field[i];
+        if (o && o->is_player != p->is_player && o->hp > 0 && o->on_field && !o->switch_out_status
+            && t->source_index >= 0 && pr_battler_index(bt, o) == t->source_index)
+            source = o;
+    }
+    if (!source) return true;
+    bool cancelled = false;
+    pr_ab_params ap = {.pokemon = p, .move = -1, .flag = &cancelled};
+    pr_apply_ab_attrs(bt, PR_AC_BlockNonDirectDamageAbAttr, &ap);
+    if (cancelled) return true;
+    pr_unshift_new(bt, e, PH_COMMON_ANIM, pr_battler_index(bt, source));   /* CommonAnim.LEECH_SEED */
+    double hp = floor(pr_get_stat(p, STAT_HP, false) / 8.0);
+    double damage = pr_damage_and_update(bt, e, p, hp < 1 ? 1 : hp, HIT_RESULT_INDIRECT, false, NULL);
+    /* hasAbilityWithAttr("ReverseDrainAbAttr", false): no canApplyAbility check */
+    bool reverse = pr_ability_first_attr(p->ability, PR_AC_ReverseDrainAbAttr)
+                   || (p->passive && pr_ability_first_attr(p->passive, PR_AC_ReverseDrainAbAttr));
+    pr_unshift_heal(bt, e, pr_battler_index(bt, source), reverse ? -damage : damage,
+                    PR_HEAL_MESSAGE | PR_HEAL_NO_FULL_HP_MESSAGE | PR_HEAL_SKIP_ANIM);
+    return true;
+}
+
+/* SubstituteTag.onHit: the running MoveEffectPhase's first strike, if it hits the doll, says so */
+static void substitute_on_hit(pr_battle *bt, pr_engine *e, pr_pokemon *p)
+{
+    int move;
+    pr_pokemon *attacker = pr_move_effect_user(bt, e, &move);
+    if (!attacker) return;
+    if (attacker->hit_count == attacker->hits_left && pr_move_hits_substitute(bt, move, attacker, p))
+        pr_queue_message(bt, e);
+}
+
+/* ContactProtectedTag.onContact(attacker, user = the protected Pokemon) */
+static void protect_on_contact(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_battler_tag *t, pr_pokemon *attacker)
+{
+    int32_t stat = STAT_ATK;
+    int stages = -1;
+    switch (t->type) {
+    case BATTLER_TAG_TYPE_SPIKY_SHIELD: {
+        /* the protected Pokemon's Magic Guard (sic) decides; an eighth of the attacker's max HP */
+        bool cancelled = false;
+        pr_ab_params ap = {.pokemon = p, .move = -1, .flag = &cancelled};
+        pr_apply_ab_attrs(bt, PR_AC_BlockNonDirectDamageAbAttr, &ap);
+        if (!cancelled) {
+            double d = floor(pr_get_stat(attacker, STAT_HP, false) * (1.0 / 8));
+            pr_damage_and_update(bt, e, attacker, d < 1 ? 1 : d, HIT_RESULT_INDIRECT, false, NULL);
+        }
+        return;
+    }
+    case BATTLER_TAG_TYPE_BANEFUL_BUNKER:
+        pr_try_set_status(bt, e, attacker, STATUS_EFFECT_POISON, p, -1, false, true);
+        return;
+    case BATTLER_TAG_TYPE_BURNING_BULWARK:
+        pr_try_set_status(bt, e, attacker, STATUS_EFFECT_BURN, p, -1, false, true);
+        return;
+    case BATTLER_TAG_TYPE_KINGS_SHIELD: stat = STAT_ATK; stages = -1; break;
+    case BATTLER_TAG_TYPE_OBSTRUCT: stat = STAT_DEF; stages = -2; break;
+    case BATTLER_TAG_TYPE_SILK_TRAP: stat = STAT_SPD; stages = -1; break;
+    default: return;
+    }
+    /* StatStageChangePhase({battlerIndex: attacker, changes, sourcePokemon: getSourcePokemon()}):
+     * a protection tag has no sourceId, so no source */
+    pr_unshift_stat_stage_change(bt, e, pr_battler_index(bt, attacker), &stat, 1, stages, NULL);
+}
+
 /* tag.lapse(pokemon, lapseType): whether the tag stays */
 static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t, int lapse_type)
 {
@@ -300,6 +425,26 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
     case BATTLER_TAG_TYPE_MINIMIZED:
     case BATTLER_TAG_TYPE_CHARGED:
         return lapse_type != BATTLER_TAG_LAPSE_TYPE_CUSTOM || --t->turn_count > 0;
+    case BATTLER_TAG_TYPE_SEEDED:
+        /* lapseType !== CUSTOM || BattlerTag.lapse, then the drain */
+        if (lapse_type == BATTLER_TAG_LAPSE_TYPE_CUSTOM && !(--t->turn_count > 0)) return false;
+        return seed_drain(bt, e, p, t);
+    case BATTLER_TAG_TYPE_SUBSTITUTE:
+        /* MOVE and AFTER_MOVE bring the Pokemon in and out of focus (PokemonAnimPhase); HIT: onHit.
+         * Only a CUSTOM lapse removes it */
+        if (lapse_type == BATTLER_TAG_LAPSE_TYPE_MOVE || lapse_type == BATTLER_TAG_LAPSE_TYPE_AFTER_MOVE) {
+            pr_unshift_new(bt, e, PH_POKEMON_ANIM, -1);                  /* SUBSTITUTE_PRE/POST_MOVE */
+            t->in_focus = lapse_type == BATTLER_TAG_LAPSE_TYPE_MOVE;
+        } else if (lapse_type == BATTLER_TAG_LAPSE_TYPE_HIT) {
+            substitute_on_hit(bt, e, p);
+        }
+        return lapse_type != BATTLER_TAG_LAPSE_TYPE_CUSTOM;
+    case BATTLER_TAG_TYPE_ENDURING:
+        if (lapse_type == BATTLER_TAG_LAPSE_TYPE_CUSTOM) {
+            pr_queue_message(bt, e);
+            return true;
+        }
+        return --t->turn_count > 0;
     case BATTLER_TAG_TYPE_FRENZY: {
         /* MoveLockTag: only a use of the locked move (or none) advances it */
         const pr_turn_move *last = pr_last_move(bt, p, 0);
@@ -335,6 +480,21 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
         }
         return true;
     }
+    if (pr_battler_tag_is(t->type, PR_TAGCLASS_PROTECTED)) {
+        /* ProtectedTag.lapse: on CUSTOM (the hit check lapsing it) the message and stopMultiHit on
+         * the running MoveEffectPhase; ContactProtectedTag.lapse then, for a contact move, onContact */
+        if (lapse_type != BATTLER_TAG_LAPSE_TYPE_CUSTOM) return --t->turn_count > 0;
+        pr_queue_message(bt, e);
+        int move;
+        pr_pokemon *attacker = pr_move_effect_user(bt, e, &move);
+        if (attacker) pr_stop_multi_hit(bt, e, p);
+        if (attacker && t->type != BATTLER_TAG_TYPE_PROTECTED
+            && pr_move_does_flag_effect_apply_ex(bt, move, MOVE_FLAGS_MAKES_CONTACT, attacker, p, false)) {
+            pr_battler_tag copy = *t;
+            protect_on_contact(bt, e, p, &copy, attacker);
+        }
+        return true;
+    }
     return --t->turn_count > 0;                   /* BattlerTag.lapse */
 }
 
@@ -345,6 +505,12 @@ static void on_remove(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_battl
     case BATTLER_TAG_TYPE_CONFUSED:
     case BATTLER_TAG_TYPE_TRAPPED:
     case BATTLER_TAG_TYPE_NO_RETREAT:
+        pr_queue_message(bt, e);
+        return;
+    case BATTLER_TAG_TYPE_SUBSTITUTE:
+        /* the removal animation (PokemonAnimPhase) unless the Pokemon is in focus (its own move
+         * removed the doll: the sprite is just destroyed), then the message */
+        if (!t->in_focus) pr_unshift_new(bt, e, PH_POKEMON_ANIM, -1);     /* SUBSTITUTE_REMOVE */
         pr_queue_message(bt, e);
         return;
     case BATTLER_TAG_TYPE_FRENZY:

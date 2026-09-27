@@ -109,6 +109,9 @@ typedef struct pr_battler_tag {
     int8_t faint_count;            /* SupremeOverlordTag.faintCount */
     int8_t stat;                   /* HighestStatBoostTag.stat */
     double multiplier;             /* HighestStatBoostTag.multiplier */
+    int32_t hp;                    /* SubstituteTag.hp */
+    bool in_focus;                 /* SubstituteTag.sourceInFocus */
+    int8_t source_index;           /* SeedTag.sourceIndex (-1 = unset) */
 } pr_battler_tag;
 #define PR_MAX_BATTLER_TAGS 24
 

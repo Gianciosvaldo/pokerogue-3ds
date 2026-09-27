@@ -1099,11 +1099,21 @@ static int hit_check(pr_battle *bt, pr_engine *e, int ph, pr_pokemon *target, do
         if (mv->target != MOVE_TARGET_ENEMY_SIDE && mv->target != MOVE_TARGET_BOTH_SIDES
             && !pr_move_does_flag_effect_apply_ex(bt, move, MOVE_FLAGS_IGNORE_PROTECT, user, target, false)) {
             if (conditional) return HIT_CHECK_RESULT_PROTECTED;
+            /* target.findTags(t => t instanceof ProtectedTag).some(t => (!isStatusMove || t.blockStatus)
+             * && target.lapseTag(t.tagType)): the list is taken first; lapseTag finds each by type */
+            bool status_move = mv->category == MOVE_CATEGORY_STATUS;
+            uint8_t found[PR_MAX_BATTLER_TAGS];
+            int nf = 0;
             for (int i = 0; i < target->n_tags; i++)
-                if (pr_battler_tag_is(target->tags[i].type, PR_TAGCLASS_PROTECTED)) {
-                    pr_note_unported(bt, PR_FEAT_TAG_LAPSE);
-                    break;
-                }
+                if (pr_battler_tag_is(target->tags[i].type, PR_TAGCLASS_PROTECTED)) found[nf++] = target->tags[i].type;
+            for (int k = 0; k < nf; k++) {
+                int t = found[k];
+                /* blockStatus: false for Burning Bulwark and the stat-lowering ones */
+                bool block_status = t != BATTLER_TAG_TYPE_BURNING_BULWARK && t != BATTLER_TAG_TYPE_KINGS_SHIELD
+                                    && t != BATTLER_TAG_TYPE_OBSTRUCT && t != BATTLER_TAG_TYPE_SILK_TRAP;
+                if ((!status_move || block_status) && pr_lapse_tag(bt, e, target, t, BATTLER_TAG_LAPSE_TYPE_CUSTOM))
+                    return HIT_CHECK_RESULT_PROTECTED;
+            }
         }
     }
     /* isMoveReflectableBy */
@@ -1170,11 +1180,14 @@ static double pokemon_damage(pr_battle *bt, pr_engine *e, pr_pokemon *p, double 
     if (p->hp <= 0) return 0;
     if (p->is_boss) pr_note_unported(bt, PR_FEAT_BOSS_SEGMENTS);
     if (!prevent_endure && p->hp - damage <= 0) {
-        if ((p->hp >= 1 && pr_get_battler_tag(p, BATTLER_TAG_TYPE_ENDURING))
-            || (p->hp == max_hp(p) && pr_get_battler_tag(p, BATTLER_TAG_TYPE_STURDY))
-            || (p->hp >= 1 && pr_get_battler_tag(p, BATTLER_TAG_TYPE_ENDURE_TOKEN)))
+        bool survive = false;
+        if (p->hp >= 1 && pr_get_battler_tag(p, BATTLER_TAG_TYPE_ENDURING))
+            survive = pr_lapse_tag(bt, e, p, BATTLER_TAG_TYPE_ENDURING, BATTLER_TAG_LAPSE_TYPE_CUSTOM);
+        else if ((p->hp == max_hp(p) && pr_get_battler_tag(p, BATTLER_TAG_TYPE_STURDY))
+                 || (p->hp >= 1 && pr_get_battler_tag(p, BATTLER_TAG_TYPE_ENDURE_TOKEN)))
             pr_note_unported(bt, PR_FEAT_TAG_LAPSE);
-        turn_modifiers(bt, p->is_player, p);                     /* Focus Band */
+        if (!survive) turn_modifiers(bt, p->is_player, p);       /* Focus Band */
+        if (survive) damage = p->hp - 1;
     }
     if (damage > p->hp) damage = p->hp;
     p->hp -= (int32_t)damage;
@@ -1230,10 +1243,15 @@ static move_damage apply_move_damage(pr_battle *bt, pr_engine *e, int ph, pr_pok
     bool ohko = d.result == HIT_RESULT_ONE_HIT_KO;
     (void)ohko;
     pr_lapse_tags(bt, e, target, BATTLER_TAG_LAPSE_TYPE_HIT);
-    const pr_battler_tag *sub = pr_find_battler_tag_class(target, PR_TAGCLASS_SUBSTITUTE);
+    pr_battler_tag *sub = (pr_battler_tag *)pr_find_battler_tag_class(target, PR_TAGCLASS_SUBSTITUTE);
     bool blocked = sub && pr_move_hits_substitute(bt, move, user, target);
-    if (blocked) pr_note_unported(bt, PR_FEAT_TAG_LAPSE);
-    else if (!target->is_player && d.damage >= target->hp) turn_modifiers(bt, false, target);   /* EnemyEndureChanceModifier */
+    if (blocked) {
+        /* the doll takes it: totalDamageDealt += min(damage, doll's HP) */
+        user->total_damage_dealt += (int32_t)(d.damage < sub->hp ? d.damage : sub->hp);
+        sub->hp -= (int32_t)d.damage;
+    } else if (!target->is_player && d.damage >= target->hp) {
+        turn_modifiers(bt, false, target);                       /* EnemyEndureChanceModifier */
+    }
     double final = blocked ? 0 : damage_and_update(bt, e, target, d.damage, d.result, true, user);
     if (crit) pr_queue_message(bt, e);
     r.critical = crit;
@@ -1300,6 +1318,39 @@ static void apply_move_effects(pr_battle *bt, pr_engine *e, int ph, pr_pokemon *
     if (PH(ph)->last_hit) {
         form_change(bt, user, PR_FCT_SpeciesFormChangePostMoveTrigger);
         if (user->hit_count > 1) pr_hook_ab(bt, target, PR_AC_PostDamageAbAttr);
+    }
+}
+
+pr_pokemon *pr_move_effect_user(pr_battle *bt, pr_engine *e, int *move)
+{
+    if (!e || e->current < 0 || e->pool[e->current].type != PH_MOVE_EFFECT) return NULL;
+    const pr_phase *fx = &e->pool[e->current];
+    if (move) *move = fx->move_id;
+    return slot(bt, fx->battler);
+}
+
+void pr_stop_multi_hit(pr_battle *bt, pr_engine *e, pr_pokemon *target)
+{
+    /* removeTarget(target): splice it out of the targets array (the one the command and the move
+     * history share); with none left, hitCount = hitsLeft = 1 */
+    if (!e || e->current < 0 || e->pool[e->current].type != PH_MOVE_EFFECT) return;
+    pr_phase *fx = &e->pool[e->current];
+    pr_target_list *t = tlist(e, fx->targets);
+    if (!t) return;
+    int b = pr_battler_index(bt, target);
+    for (int i = 0; i < t->n; i++)
+        if (t->v[i] == b) {
+            memmove(&t->v[i], &t->v[i + 1], (size_t)(t->n - i - 1));
+            t->n--;
+            pr_targets_changed(bt, e, fx->targets);
+            break;
+        }
+    if (t->n == 0) {
+        pr_pokemon *user = slot(bt, fx->battler);
+        if (user) {
+            user->hit_count = 1;
+            user->hits_left = 1;
+        }
     }
 }
 
@@ -1447,10 +1498,12 @@ static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
     int move_type = pr_get_move_type(bt, user, move);
     if (pr_moves[move].category != MOVE_CATEGORY_STATUS) user->stellar_types_boosted |= 1u << move_type;
     if (fx->last_hit) trigger_move_effects(bt, e, ph, MOVE_EFFECT_TRIGGER_POST_TARGET, user, NULL, -1, -1);
-    /* updateSubstitutes */
+    /* updateSubstitutes: a doll at 0 HP or less goes (removeTag) */
     nt = active_in_list(bt, tlist(e, fx->targets), targets);
-    for (int i = 0; i < nt; i++)
-        if (pr_find_battler_tag_class(targets[i], PR_TAGCLASS_SUBSTITUTE)) pr_note_unported(bt, PR_FEAT_TAG_LAPSE);
+    for (int i = 0; i < nt; i++) {
+        const pr_battler_tag *sub = pr_find_battler_tag_class(targets[i], PR_TAGCLASS_SUBSTITUTE);
+        if (sub && sub->hp <= 0) pr_remove_tag(bt, e, targets[i], BATTLER_TAG_TYPE_SUBSTITUTE);
+    }
     move_effect_end(bt, e, ph);
 }
 
@@ -2221,7 +2274,7 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_CHECK_STATUS_EFFECT: check_status_effect_phase(bt, e); break;
     case PH_POST_TURN_STATUS_EFFECT: post_turn_status_effect_phase(bt, e, ph); break;
     case PH_TURN_END: turn_end_phase(bt, e); break;
-    case PH_MESSAGE: case PH_DAMAGE_ANIM: case PH_COMMON_ANIM: break;
+    case PH_MESSAGE: case PH_DAMAGE_ANIM: case PH_COMMON_ANIM: case PH_POKEMON_ANIM: break;
     case PH_SHOW_ABILITY: show_ability_phase(bt, e, ph); break;
     case PH_HIDE_ABILITY: bt->ability_bar_visible = false; break;
     case PH_RESET_STATUS: reset_status_phase(bt, e, ph); break;

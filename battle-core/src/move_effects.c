@@ -181,6 +181,8 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
     case PR_AC_FlinchAttr:
     case PR_AC_RechargeAttr:                             /* Hyper Beam and co.: RECHARGING */
     case PR_AC_TrapAttr:                                 /* Bind, Wrap, Fire Spin... */
+    case PR_AC_ProtectAttr:                              /* Protect, Detect, Spiky Shield... Endure */
+    case PR_AC_LeechSeedAttr:
         add_battler_tag(bt, e, a, ef, user, target, move);
         return;
     case PR_AC_ConfuseAttr: {
@@ -201,6 +203,17 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
     case PR_AC_ClearTerrainAttr:                         /* Defog, Ice Spinner, Steel Roller: trySetTerrain(NONE, true, user) */
         if (bt->terrain != TERRAIN_NONE) pr_clear_terrain(bt, e);
         return;
+    case PR_AC_AddSubstituteAttr: {                      /* Substitute, Shed Tail */
+        /* the HP cost (Shed Tail rounds up), taken as indirect damage with no faint phase, then
+         * addTag(SUBSTITUTE, 0, move, user.id) */
+        if (!effect_can_apply(ef, user, target)) return;
+        const pr_attr_AddSubstituteAttr *x = P(AddSubstituteAttr, a);
+        double cost = pr_get_stat(user, STAT_HP, false) * x->hpCost;
+        cost = x->roundUp ? ceil(cost) : (floor(cost) < 1 ? 1 : floor(cost));
+        pr_damage_and_update(bt, e, user, cost, HIT_RESULT_INDIRECT, true, NULL);
+        pr_add_tag(bt, e, user, BATTLER_TAG_TYPE_SUBSTITUTE, 0, move, user->id);
+        return;
+    }
     case PR_AC_RemoveAllSubstitutesAttr: {               /* Tidy Up */
         if (!effect_can_apply(ef, user, target)) return;
         static const int32_t sub[] = {BATTLER_TAG_TYPE_SUBSTITUTE};

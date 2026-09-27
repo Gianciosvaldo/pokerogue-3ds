@@ -59,7 +59,15 @@
  * Spin, Mortal Spin) or clear arena tags (Brick Break, Defog, Tidy Up...), a quarter of the
  * abilities are Magic Guard, half the Pokemon start trapped by the other one (1 to 5 turns left)
  * and some of the rest by Mean Look, a third of the cases have entry hazards, screens, Mist or
- * Safeguard on one side, a quarter a terrain and an eighth fog.
+ * Safeguard on one side, a quarter a terrain and an eighth fog;
+ * TURN_PROTECT=1 aims at Leech Seed, Substitute and the protections: most moves are Protect-family
+ * moves (Endure included), Substitute, Shed Tail, Tidy Up, Leech Seed, Rapid Spin, Feint, or
+ * attacks that hit several times, are sound-based, go through a Substitute or a protection, or
+ * make contact, and status moves aimed at the other Pokemon; a third of the abilities are Infiltrator,
+ * Unseen Fist, Long Reach, Liquid Ooze, Magic Guard, Skill Link, Sap Sipper, Rough Skin or
+ * Soundproof; a third of the Pokemon start seeded by the other one, a third behind a Substitute
+ * with some of its HP left, and a third of those knowing a protection used it successfully on the
+ * turns before (so the next use rolls its chance).
  *
  * Each case builds a random singles state inside a real upstream battle, gives both sides a
  * FIGHT command the way the command phases do, then runs upstream's own phases from
@@ -80,6 +88,8 @@ import { AbilityId } from "#enums/ability-id";
 import { BattleType } from "#enums/battle-type";
 import { Command } from "#enums/command";
 import { MoveCategory } from "#enums/move-category";
+import { MoveFlags } from "#enums/move-flags";
+import { MoveTarget } from "#enums/move-target";
 import { ArenaTagSide } from "#enums/arena-tag-side";
 import { ArenaTagType } from "#enums/arena-tag-type";
 import { BattlerTagType } from "#enums/battler-tag-type";
@@ -113,6 +123,7 @@ it("turntest producer", async () => {
   const HEAL = process.env.TURN_HEAL === "1";
   const WEATHER = process.env.TURN_WEATHER === "1";
   const TRAPS = process.env.TURN_TRAPS === "1";
+  const PROTECT = process.env.TURN_PROTECT === "1";
   const OUT = process.env.TURN_OUT ?? "/tmp/pr-turns.txt";
   const game = new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
   game.override
@@ -319,6 +330,20 @@ it("turntest producer", async () => {
     ArenaTagType.SPIKES, ArenaTagType.TOXIC_SPIKES, ArenaTagType.STEALTH_ROCK, ArenaTagType.STICKY_WEB,
     ArenaTagType.REFLECT, ArenaTagType.LIGHT_SCREEN, ArenaTagType.AURORA_VEIL, ArenaTagType.MIST, ArenaTagType.SAFEGUARD,
   ];
+  // TURN_PROTECT pools
+  const protectMoves = usable.filter((m: any) =>
+    m.attrs.some((a: any) => ["ProtectAttr", "AddSubstituteAttr", "RemoveAllSubstitutesAttr"].includes(a.constructor.name))
+    || [MoveId.LEECH_SEED, MoveId.RAPID_SPIN, MoveId.MORTAL_SPIN, MoveId.FEINT].includes(m.id),
+  );
+  const protectHitters = usable.filter((m: any) =>
+    m.attrs.some((a: any) => a.constructor.name === "MultiHitAttr")
+    || (m.flags & (MoveFlags.SOUND_BASED | MoveFlags.IGNORE_SUBSTITUTE | MoveFlags.IGNORE_PROTECT)) !== 0
+    || (m.category === MoveCategory.STATUS && [MoveTarget.NEAR_OTHER, MoveTarget.NEAR_ENEMY, MoveTarget.ALL_NEAR_ENEMIES].includes(m.moveTarget)),
+  );
+  const protectAbilityIds = [
+    AbilityId.INFILTRATOR, AbilityId.UNSEEN_FIST, AbilityId.LONG_REACH, AbilityId.LIQUID_OOZE, AbilityId.MAGIC_GUARD,
+    AbilityId.SKILL_LINK, AbilityId.SAP_SIPPER, AbilityId.ROUGH_SKIN, AbilityId.SOUNDPROOF,
+  ];
   const healStatusAttrs: [number, any][] = allAbilities
     .filter((a: any) => a)
     .sort((a: any, b: any) => a.id - b.id)
@@ -376,7 +401,9 @@ it("turntest producer", async () => {
         (t: any) =>
           `BTAG b=${b} type=${t.tagType} turns=${t.turnCount} smove=${t.sourceMove ?? 0} sid=${t.sourceId ?? -1}`
           + ` stock=${t.stockpiledCount ?? 0} crit=${t.critStages ?? 0} auto=${t.autotomizeCount ?? 0}`
-          + (boostTags.includes(t.tagType) ? ` stat=${t.stat} mult=${t.multiplier}` : ""),
+          + (boostTags.includes(t.tagType) ? ` stat=${t.stat} mult=${t.multiplier}` : "")
+          + (t.tagType === BattlerTagType.SUBSTITUTE ? ` hp=${t.hp} focus=${t.sourceInFocus ? 1 : 0}` : "")
+          + (t.tagType === BattlerTagType.SEEDED ? ` sidx=${t.sourceIndex ?? -1}` : ""),
       ),
     ];
   };
@@ -516,6 +543,7 @@ it("turntest producer", async () => {
       : HEAL && rnd(2) === 0 ? healAbilityIds[rnd(healAbilityIds.length)]
       : WEATHER && rnd(2) === 0 ? weatherAbilityIds[rnd(weatherAbilityIds.length)]
       : TRAPS && rnd(4) === 0 ? AbilityId.MAGIC_GUARD
+      : PROTECT && rnd(3) === 0 ? protectAbilityIds[rnd(protectAbilityIds.length)]
       : RICH && rnd(2) === 0 ? abilityIds[rnd(abilityIds.length)] : AbilityId.BALL_FETCH;
     p.gender = rnd(3) - 1;
     p.friendship = rnd(256);
@@ -527,7 +555,7 @@ it("turntest producer", async () => {
     p.status = null;
     if (HEAL && rnd(3) === 0) {
       p.status = new Status([StatusEffect.POISON, StatusEffect.TOXIC][rnd(2)], rnd(4));
-    } else if (RICH ? rnd(3) === 0 : STATUS || WEATHER ? rnd(4) === 0 : ONHIT || CHARGE || TAGS || TRAPS ? rnd(6) === 0 : STAT && rnd(8) === 0) {
+    } else if (RICH ? rnd(3) === 0 : STATUS || WEATHER ? rnd(4) === 0 : ONHIT || CHARGE || TAGS || TRAPS || PROTECT ? rnd(6) === 0 : STAT && rnd(8) === 0) {
       const s = statuses[rnd(statuses.length)];
       p.status = new Status(s, rnd(4), s === StatusEffect.SLEEP ? 1 + rnd(3) : 0, s === StatusEffect.FREEZE ? 1 + rnd(3) : undefined);
     }
@@ -546,6 +574,9 @@ it("turntest producer", async () => {
         ? weatherMoves[rnd(weatherMoves.length)]
         : TRAPS && rnd(10) < 7
         ? trapMoves[rnd(trapMoves.length)]
+        : PROTECT && rnd(10) < 8
+        ? (rnd(2) === 0 ? protectMoves[rnd(protectMoves.length)]
+          : rnd(2) === 0 ? protectHitters[rnd(protectHitters.length)] : contactAttacks[rnd(contactAttacks.length)])
         : TAGS && rnd(10) < 8
         ? (rnd(4) !== 0 ? tagMoves[rnd(tagMoves.length)] : tagReaders[rnd(tagReaders.length)])
         : CHARGE && rnd(10) < 7
@@ -740,6 +771,38 @@ it("turntest producer", async () => {
         }
       }
     }
+    if (PROTECT) {
+      for (const p of [A, D]) {
+        const other = p === A ? D : A;
+        // Leech Seed and a Substitute already there, with what onAdd leaves (built directly: addTag
+        // would run onAdd): the seeder's slot; a doll with 1 to a quarter of max HP left, and a
+        // stand-in for the sprite its animation made
+        if (rnd(3) === 0 && !p.isOfType(PokemonType.GRASS)) {
+          const tag = getBattlerTag(BattlerTagType.SEEDED, 1, MoveId.LEECH_SEED, other.id) as any;
+          tag.sourceIndex = other.getBattlerIndex();
+          p.summonData.tags.push(tag);
+        }
+        if (rnd(3) === 0) {
+          const tag = getBattlerTag(BattlerTagType.SUBSTITUTE, 0, MoveId.SUBSTITUTE, p.id) as any;
+          tag.hp = 1 + rnd(Math.max(1, Math.floor(p.getMaxHp() / 4)));
+          tag.sourceInFocus = false;
+          tag.sprite = scene.addFieldSprite(p.x, p.y, `pkmn${p.isPlayer() ? "__back" : ""}__sub`);
+          p.summonData.tags.push(tag);
+        }
+        // a protection that worked on the turns before, so the next one rolls its chance
+        const prot = p.moveset.filter((m: any) => m.getMove().attrs.some((a: any) => a.constructor.name === "ProtectAttr"));
+        if (prot.length && rnd(3) === 0) {
+          for (let k = 1 + rnd(2); k > 0; k--) {
+            p.pushMoveHistory({
+              move: prot[rnd(prot.length)].moveId,
+              targets: [p.getBattlerIndex()],
+              useMode: MoveUseMode.NORMAL,
+              result: MoveResult.SUCCESS,
+            });
+          }
+        }
+      }
+    }
     if (HEAL) {
       for (const p of [A, D]) {
         // recharging: what the last turn's RECHARGING tag (2 turns, one lapsed at turn end) and the
@@ -821,6 +884,14 @@ it("turntest producer", async () => {
           const tag = getBattlerTag(type, 1 + rnd(4), MoveId.NONE, (p === A ? D : A).id) as any;
           if (type === BattlerTagType.STOCKPILING) {
             tag.stockpiledCount = 1 + rnd(3);
+          }
+          // what onAdd would have set (no extra draws): a doll at full HP, the seeder's slot
+          if (type === BattlerTagType.SUBSTITUTE) {
+            tag.hp = Math.floor(p.getMaxHp() / 4);
+            tag.sourceInFocus = false;
+          }
+          if (type === BattlerTagType.SEEDED) {
+            tag.sourceIndex = (p === A ? D : A).getBattlerIndex();
           }
           p.summonData.tags.push(tag);
         }

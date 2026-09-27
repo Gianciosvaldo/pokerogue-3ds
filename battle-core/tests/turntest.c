@@ -319,6 +319,12 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
                 t->stat = (int8_t)inum(l, "stat");
                 t->multiplier = dnum(l, "mult");
             }
+            t->source_index = -1;
+            if (field(l, "hp")) {                      /* SubstituteTag */
+                t->hp = (int32_t)inum(l, "hp");
+                t->in_focus = inum(l, "focus") != 0;
+            }
+            if (field(l, "sidx")) t->source_index = (int8_t)inum(l, "sidx");   /* SeedTag */
             /* the line holds all of a ported tag type's state, and of Protosynthesis's and Quark
              * Drive's (which only the damage path reads and a weather or terrain ending removes);
              * the others can hold more */
@@ -414,6 +420,14 @@ static void turn_move_str(sbuf *b, const pr_turn_move *t)
 static const char *boost_fields(const pr_battler_tag *t)
 {
     static char buf[64];
+    if (t->type == BATTLER_TAG_TYPE_SUBSTITUTE) {             /* SubstituteTag.hp, sourceInFocus */
+        snprintf(buf, sizeof buf, " hp=%d focus=%d", t->hp, t->in_focus ? 1 : 0);
+        return buf;
+    }
+    if (t->type == BATTLER_TAG_TYPE_SEEDED) {                 /* SeedTag.sourceIndex */
+        snprintf(buf, sizeof buf, " sidx=%d", t->source_index);
+        return buf;
+    }
     if (!pr_battler_tag_is(t->type, PR_TAGCLASS_HIGHEST_STAT_BOOST)) return "";
     snprintf(buf, sizeof buf, " stat=%d mult=%.17g", t->stat, t->multiplier);
     return buf;
