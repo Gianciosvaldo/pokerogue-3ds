@@ -172,14 +172,14 @@ static double arena_tag_overlap(ARGS)
 }
 
 /* AddArenaTrapTagAttr: side = this.selfSideTarget === user.isPlayer() ? PLAYER : ENEMY;
- * no tag there ? true : tag.canAdd() (the layer count isn't modelled) */
+ * no tag there ? true : tag.canAdd() (a layer below the maximum) */
 static bool makes_arena_trap(const pr_attr *a) { return a->cls == PR_AC_AddArenaTrapTagAttr; }
 static double arena_trap_tag(ARGS)
 {
     OWN(makes_arena_trap);
     int side = P(AddArenaTrapTagAttr, a)->selfSideTarget == u->is_player ? ARENA_TAG_SIDE_PLAYER : ARENA_TAG_SIDE_ENEMY;
-    if (!pr_arena_get_tag_on_side(bt, P(AddArenaTrapTagAttr, a)->tagType, side)) return 1;
-    UNPORTED(PR_FEAT_MOVE_CONDITION);
+    const pr_arena_tag *tag = pr_arena_get_tag_on_side(bt, P(AddArenaTrapTagAttr, a)->tagType, side);
+    return !tag || tag->layers < pr_arena_max_layers(tag->type);
 }
 
 /* WeatherChangeAttr: !arena.weather || (weather.weatherType !== this.weatherType && !weather.isImmutable())

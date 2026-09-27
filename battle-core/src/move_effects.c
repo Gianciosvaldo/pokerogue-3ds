@@ -30,7 +30,7 @@ static double get_move_chance(pr_battle *bt, const pr_effect_info *ef, const pr_
         int side = user->is_player ? ARENA_TAG_SIDE_PLAYER : ARENA_TAG_SIDE_ENEMY;
         for (int i = 0; i < bt->n_arena_tags; i++)
             if (bt->arena_tags[i].type == ARENA_TAG_TYPE_WATER_FIRE_PLEDGE && pr_arena_tag_on_side(&bt->arena_tags[i], side))
-                pr_note_unported(bt, PR_FEAT_ARENA_TAG_TURN);
+                chance *= 2;
     }
     if (!self_effect) {
         pr_ab_params tp = {.pokemon = target, .move = move, .simulated = !show_ability, .value = &chance};
@@ -186,12 +186,18 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         add_battler_tag(bt, e, a, ef, user, target, move);
         return;
     case PR_AC_ConfuseAttr: {
-        /* !selfTarget && target.isSafeguarded(user) */
+        /* !selfTarget && target.isSafeguarded(user): Safeguard on the target's side, unless the
+         * user's Infiltrator gets through; a status move says so */
         if (!ef->self_target) {
             int side = target->is_player ? ARENA_TAG_SIDE_PLAYER : ARENA_TAG_SIDE_ENEMY;
             if (pr_arena_get_tag_on_side(bt, ARENA_TAG_TYPE_SAFEGUARD, side)) {
-                pr_note_unported(bt, PR_FEAT_ARENA_TAG_TURN);
-                return;
+                bool bypassed = false;
+                pr_ab_params ip = {.pokemon = user, .move = -1, .flag = &bypassed};
+                pr_apply_ab_attrs(bt, PR_AC_InfiltratorAbAttr, &ip);
+                if (!bypassed) {
+                    if (pr_moves[move].category == MOVE_CATEGORY_STATUS) pr_queue_message(bt, e);   /* moveTriggers:safeguard */
+                    return;
+                }
             }
         }
         add_battler_tag(bt, e, a, ef, user, target, move);
@@ -231,8 +237,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
     case PR_AC_RemoveArenaTagsAttr:                      /* Feint, Defog */
     case PR_AC_RemoveArenaTrapAttr:                      /* Rapid Spin, Mortal Spin, Defog, Tidy Up */
     case PR_AC_RemoveScreensAttr: {                      /* Brick Break, Psychic Fangs, Raging Bull, Defog */
-        /* arena.removeTagsOnSide(tagTypes, getTagSideFunc(user, target)): an arena tag's removal
-         * isn't ported, so only a call that finds one reports itself */
+        /* arena.removeTagsOnSide(tagTypes, getTagSideFunc(user, target)) */
         if (!effect_can_apply(ef, user, target)) return;
         const pr_intlist *types;
         pr_fn_id side_fn;
@@ -252,11 +257,72 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         }
         int side = (int)pr_closure_call(bt, side_fn, a->cls, -1, user, target, move);
         if (side < 0) return;
-        for (int k = 0; k < types->n; k++)
-            if (pr_arena_get_tag_on_side(bt, types->v[k], side)) {
-                pr_note_unported(bt, a->cls);
-                return;
+        pr_arena_remove_tags_on_side(bt, e, types->v, types->n, side, false);
+        return;
+    }
+    case PR_AC_AddArenaTagAttr:                          /* Reflect, Tailwind, Quick Guard, Gravity... */
+    case PR_AC_AddArenaTrapTagAttr:                      /* Spikes, Toxic Spikes, Stealth Rock, Sticky Web */
+    case PR_AC_AddPledgeEffectAttr: {                    /* the combined pledges' sea of fire, rainbow, swamp */
+        const pr_attr_AddArenaTagAttr *x = (const pr_attr_AddArenaTagAttr *)a->p;
+        const pr_turn_move *last = pr_last_move(bt, user, 0);
+        if (a->cls == PR_AC_AddPledgeEffectAttr) {
+            /* only when the last move succeeded and this pledge combined with the required one */
+            if (!last || last->result != MOVE_RESULT_SUCCESS) return;
+            if (user->combining_pledge != P(AddPledgeEffectAttr, a)->requiredPledge) return;
+        }
+        if (!effect_can_apply(ef, user, target)) return;
+        /* the move's own chance (not getMoveChance), then the last move's result */
+        double chance = pr_moves[move].chance;
+        if (!chance_roll(bt, chance)) return;
+        last = pr_last_move(bt, user, 0);
+        if (!last || last->result != MOVE_RESULT_SUCCESS) return;
+        if (!target) {
+            pr_note_unported(bt, a->cls);
+            return;
+        }
+        const pr_pokemon *on = x->selfSideTarget ? user : target;
+        bool trap_on_user = pr_move_has_attr((uint16_t)move, PR_AC_AddArenaTrapTagAttr) && target == user;
+        int side = on->is_player == trap_on_user ? ARENA_TAG_SIDE_ENEMY : ARENA_TAG_SIDE_PLAYER;
+        pr_arena_add_tag(bt, e, x->tagType, x->turnCount, move, (int64_t)user->id, side, false);
+        return;
+    }
+    case PR_AC_AddArenaTrapTagHitAttr: {                 /* Stone Axe, Ceaseless Edge: no canApply check */
+        const pr_attr_AddArenaTrapTagHitAttr *x = P(AddArenaTrapTagHitAttr, a);
+        double chance = get_move_chance(bt, ef, user, target, move, ef->self_target, true);
+        const pr_pokemon *on = x->selfSideTarget ? user : target;
+        int side = on->is_player ? ARENA_TAG_SIDE_PLAYER : ARENA_TAG_SIDE_ENEMY;
+        if (!chance_roll(bt, chance)) return;
+        const pr_turn_move *last = pr_last_move(bt, user, 0);
+        if (!last || last->result != MOVE_RESULT_SUCCESS) return;
+        pr_arena_add_tag(bt, e, x->tagType, 0, move, (int64_t)user->id, side, false);
+        return;
+    }
+    case PR_AC_SwapArenaTagsAttr: {                      /* Court Change */
+        if (!effect_can_apply(ef, user, target)) return;
+        const pr_intlist *valid = &P(SwapArenaTagsAttr, a)->validTags;
+        /* findTagsOnSide for each side (a BOTH-sided tag is found on both), then every one
+         * removed quietly by type from its side, then re-added on the other side as many
+         * times as it had layers, quietly (each extra layer's onAdd isn't) */
+        pr_arena_tag found[2][PR_MAX_ARENA_TAGS];
+        int nfound[2] = {0, 0};
+        const int sides[2] = {ARENA_TAG_SIDE_PLAYER, ARENA_TAG_SIDE_ENEMY};
+        for (int s = 0; s < 2; s++)
+            for (int i = 0; i < bt->n_arena_tags; i++) {
+                const pr_arena_tag *t = &bt->arena_tags[i];
+                bool ok = false;
+                for (int k = 0; k < valid->n; k++)
+                    if (valid->v[k] == t->type) ok = true;
+                if (ok && pr_arena_tag_on_side(t, sides[s])) found[s][nfound[s]++] = *t;
             }
+        for (int s = 0; s < 2; s++)
+            for (int i = 0; i < nfound[s]; i++) pr_arena_remove_tag_on_side(bt, e, found[s][i].type, sides[s], true);
+        for (int s = 0; s < 2; s++)
+            for (int i = 0; i < nfound[s]; i++) {
+                const pr_arena_tag *t = &found[s][i];
+                for (int l = 0; l < t->layers; l++)
+                    pr_arena_add_tag(bt, e, t->type, t->turn_count, t->source_move, t->source_id, sides[1 - s], true);
+            }
+        pr_queue_message(bt, e);                         /* moveTriggers:swapArenaTags */
         return;
     }
     }

@@ -123,6 +123,7 @@ typedef struct pr_arena_tag {
     uint16_t source_move;          /* 0 = none */
     int64_t source_id;             /* -1 = none */
     int8_t source_count;           /* SuppressAbilitiesTag.sourceCount */
+    int8_t layers;                 /* EntryHazardTag.layers (1 for the other tags) */
     bool being_removed;            /* SuppressAbilitiesTag.beingRemoved */
 } pr_arena_tag;
 #define PR_MAX_ARENA_TAGS 24
@@ -393,7 +394,8 @@ enum { PR_TAGCLASS_PROTECTED, PR_TAGCLASS_SEMI_INVULNERABLE, PR_TAGCLASS_TYPE_BO
 extern const char *const pr_tagclass_name[PR_TAGCLASS_COUNT_];    /* upstream class names */
 bool pr_battler_tag_is(int tag_type, int tag_class);
 enum { PR_ARENACLASS_WEAKEN_MOVE_SCREEN, PR_ARENACLASS_WEAKEN_MOVE_TYPE, PR_ARENACLASS_NO_CRIT,
-       PR_ARENACLASS_SUPPRESS_ABILITIES, PR_ARENACLASS_COUNT_ };
+       PR_ARENACLASS_SUPPRESS_ABILITIES, PR_ARENACLASS_CONDITIONAL_PROTECT, PR_ARENACLASS_ENTRY_HAZARD,
+       PR_ARENACLASS_COUNT_ };
 extern const char *const pr_arenaclass_name[PR_ARENACLASS_COUNT_];
 bool pr_arena_tag_is(int tag_type, int arena_class);
 /* pokemon.getTag(type) / getTag(Class): the first matching tag, or NULL */

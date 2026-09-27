@@ -1087,17 +1087,10 @@ static int hit_check(pr_battle *bt, pr_engine *e, int ph, pr_pokemon *target, do
     if (!field_targeted) {
         /* protectedCheck */
         int tside = target->is_player ? ARENA_TAG_SIDE_PLAYER : ARENA_TAG_SIDE_ENEMY;
-        bool conditional = false;
-        if (!is_ally_target(move))
-            for (int i = 0; i < bt->n_arena_tags; i++)
-                if (pr_arena_tag_on_side(&bt->arena_tags[i], tside)) {
-                    int t = bt->arena_tags[i].type;
-                    if (t == ARENA_TAG_TYPE_QUICK_GUARD || t == ARENA_TAG_TYPE_WIDE_GUARD || t == ARENA_TAG_TYPE_MAT_BLOCK
-                        || t == ARENA_TAG_TYPE_CRAFTY_SHIELD)
-                        pr_note_unported(bt, PR_FEAT_ARENA_TAG_TURN);
-                }
+        bool conditional = false, bypass = false;
+        if (!is_ally_target(move)) pr_arena_conditional_protect(bt, e, tside, target, move, &conditional, &bypass);
         if (mv->target != MOVE_TARGET_ENEMY_SIDE && mv->target != MOVE_TARGET_BOTH_SIDES
-            && !pr_move_does_flag_effect_apply_ex(bt, move, MOVE_FLAGS_IGNORE_PROTECT, user, target, false)) {
+            && (bypass || !pr_move_does_flag_effect_apply_ex(bt, move, MOVE_FLAGS_IGNORE_PROTECT, user, target, false))) {
             if (conditional) return HIT_CHECK_RESULT_PROTECTED;
             /* target.findTags(t => t instanceof ProtectedTag).some(t => (!isStatusMove || t.blockStatus)
              * && target.lapseTag(t.tagType)): the list is taken first; lapseTag finds each by type */
@@ -1843,40 +1836,6 @@ static void post_turn_status_effect_phase(pr_battle *bt, pr_engine *e, int ph)
     if (bt->wave_index == 200) pr_note_unported(bt, PR_FEAT_FINAL_BOSS);
 }
 
-/* arena.lapseTags(): every tag's lapse() runs first (ArenaTag.lapse: a positive turn count counts
- * down and the tag ends at 0; 0 or less lasts), then each ended tag's onRemove() queues its
- * message, if it has one, and the tag goes. Imprison, the Fire/Grass Pledge sea of fire and
- * pending heals override lapse(), Neutralizing Gas and Imprison onRemove(): not ported. */
-static void lapse_arena_tags(pr_battle *bt, pr_engine *e)
-{
-    bool ended[PR_MAX_ARENA_TAGS];
-    for (int i = 0; i < bt->n_arena_tags; i++) {
-        pr_arena_tag *t = &bt->arena_tags[i];
-        if (t->type == ARENA_TAG_TYPE_IMPRISON || t->type == ARENA_TAG_TYPE_FIRE_GRASS_PLEDGE
-            || t->type == ARENA_TAG_TYPE_PENDING_HEAL)
-            pr_note_unported(bt, PR_FEAT_ARENA_TAG_TURN);
-        ended[i] = !(t->turn_count < 1 || --t->turn_count > 0);
-    }
-    int k = 0;
-    for (int i = 0; i < bt->n_arena_tags; i++) {
-        const pr_arena_tag *t = &bt->arena_tags[i];
-        if (!ended[i]) { bt->arena_tags[k++] = *t; continue; }
-        switch (t->type) {
-        case ARENA_TAG_TYPE_NEUTRALIZING_GAS:
-            pr_note_unported(bt, PR_FEAT_ARENA_TAG_TURN);
-            break;
-        /* onRemoveMessageKey "": ConditionalProtectTag, Ion Deluge, Fairy Lock, NONE */
-        case ARENA_TAG_TYPE_QUICK_GUARD: case ARENA_TAG_TYPE_WIDE_GUARD: case ARENA_TAG_TYPE_MAT_BLOCK:
-        case ARENA_TAG_TYPE_CRAFTY_SHIELD: case ARENA_TAG_TYPE_ION_DELUGE: case ARENA_TAG_TYPE_FAIRY_LOCK:
-        case ARENA_TAG_TYPE_NONE:
-            break;
-        default:
-            pr_queue_message(bt, e);
-        }
-    }
-    bt->n_arena_tags = k;
-}
-
 /* Weather.lapse(): the primal weathers last; otherwise a count left counts down and the weather
  * ends at 0 (none left: it lasts) */
 static bool weather_lapse(pr_battle *bt)
@@ -1962,7 +1921,7 @@ static void turn_end_phase(pr_battle *bt, pr_engine *e)
         p->temp_turn_count++;
         p->temp_wave_turn_count++;
     }
-    lapse_arena_tags(bt, e);
+    pr_arena_lapse_tags(bt, e);
     if (bt->weather != WEATHER_TYPE_NONE && !weather_lapse(bt)) {
         pr_clear_weather(bt, e);
         /* triggerWeatherBasedFormChangesToNormal: Castform and Cherrim (form changes aren't ported) */

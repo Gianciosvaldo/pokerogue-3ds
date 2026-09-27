@@ -195,6 +195,7 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             t->max_duration = (int16_t)inum(l, "max");
             t->source_move = (uint16_t)inum(l, "smove");
             t->source_id = inum(l, "sid");
+            t->layers = field(l, "layers") ? (int8_t)inum(l, "layers") : 1;   /* EntryHazardTag */
         } else if (!strncmp(l, "MON ", 4)) {
             pr_pokemon *p = mon_for(cs, (int)inum(l, "b"));
             memset(p, 0, sizeof *p);
@@ -560,8 +561,10 @@ static void dump_state(lines_t *L, const pr_battle *bt, const case_state *cs, bo
     add_line(L, "%s", s.s);
     for (int i = 0; i < bt->n_arena_tags; i++) {
         const pr_arena_tag *t = &bt->arena_tags[i];
-        add_line(L, "ATAG type=%s side=%d turns=%d max=%d smove=%d sid=%lld", arena_tag_names[t->type], t->side,
-                 t->turn_count, t->max_duration, t->source_move, (long long)t->source_id);
+        char layers[16] = "";
+        if (pr_arena_tag_is(t->type, PR_ARENACLASS_ENTRY_HAZARD)) snprintf(layers, sizeof layers, " layers=%d", t->layers);
+        add_line(L, "ATAG type=%s side=%d turns=%d max=%d smove=%d sid=%lld%s", arena_tag_names[t->type], t->side,
+                 t->turn_count, t->max_duration, t->source_move, (long long)t->source_id, layers);
     }
     dump_mon(L, bt, &cs->mon[0], 0, incomplete);
     dump_mon(L, bt, &cs->mon[1], 2, incomplete);

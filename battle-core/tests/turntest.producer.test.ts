@@ -67,7 +67,23 @@
  * Unseen Fist, Long Reach, Liquid Ooze, Magic Guard, Skill Link, Sap Sipper, Rough Skin or
  * Soundproof; a third of the Pokemon start seeded by the other one, a third behind a Substitute
  * with some of its HP left, and a third of those knowing a protection used it successfully on the
- * turns before (so the next use rolls its chance).
+ * turns before (so the next use rolls its chance);
+ * TURN_ARENA=1 aims at arena tags being added, stacked, swapped, cleared and counted down: most
+ * moves lay one (screens, hazards, Tailwind, Gravity, Trick Room, Quick Guard, Wide Guard, Mat
+ * Block, Crafty Shield, Lucky Chant, the sports, Ion Deluge, Happy Hour, Fairy Lock, Stone Axe,
+ * Ceaseless Edge), swap or clear them (Court Change, Defog, Brick Break, Rapid Spin...), or are what
+ * the side-wide protections and Safeguard look at (priority moves, spread moves, status moves aimed
+ * at the other Pokemon, confusing moves, moves Gravity stops); a third of the abilities are
+ * Infiltrator, Prankster, Gale Wings, Triage, Wind Rider, Wind Power, Levitate, Magic Guard, Serene
+ * Grace or Own Tempo (Wind Rider or Wind Power for half the Tailwind users, half the Wind Power
+ * ones already charged); up to three arena tags are already up, on a random side (hazards with a
+ * random number of layers, the pledge fields included, half of them with part of a fixed duration
+ * gone), and half the time the tag a Pokemon's move lays is already where it would go (two of
+ * the side-wide protections on one side a quarter of the time; Quick Guard facing half the
+ * Prankster, Gale Wings and Triage users, Safeguard half the confusing ones, half of those with
+ * Infiltrator; Serene Grace or Sheer Force for half the Stone Axe and Ceaseless Edge users). The status moves
+ * aimed at everyone or at the user's side, and the ones that ignore protections, are among the
+ * moves the side-wide protections look at.
  *
  * Each case builds a random singles state inside a real upstream battle, gives both sides a
  * FIGHT command the way the command phases do, then runs upstream's own phases from
@@ -79,7 +95,7 @@
 import { BattleScene } from "#app/battle-scene";
 import { speciesDataRegistry } from "#app/globals/global-species-data-registry";
 import { allAbilities, allMoves } from "#data/data-lists";
-import { getArenaTag } from "#data/arena-tag";
+import { EntryHazardTag, getArenaTag } from "#data/arena-tag";
 import { getBattlerTag } from "#data/battler-tags";
 import { Status } from "#data/status-effect";
 import { Terrain } from "#data/terrain";
@@ -124,6 +140,7 @@ it("turntest producer", async () => {
   const WEATHER = process.env.TURN_WEATHER === "1";
   const TRAPS = process.env.TURN_TRAPS === "1";
   const PROTECT = process.env.TURN_PROTECT === "1";
+  const ARENA = process.env.TURN_ARENA === "1";
   const OUT = process.env.TURN_OUT ?? "/tmp/pr-turns.txt";
   const game = new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
   game.override
@@ -344,6 +361,39 @@ it("turntest producer", async () => {
     AbilityId.INFILTRATOR, AbilityId.UNSEEN_FIST, AbilityId.LONG_REACH, AbilityId.LIQUID_OOZE, AbilityId.MAGIC_GUARD,
     AbilityId.SKILL_LINK, AbilityId.SAP_SIPPER, AbilityId.ROUGH_SKIN, AbilityId.SOUNDPROOF,
   ];
+  // TURN_ARENA pools
+  const arenaMoves = usable.filter((m: any) =>
+    m.attrs.some((a: any) =>
+      [
+        "AddArenaTagAttr", "AddArenaTrapTagAttr", "AddArenaTrapTagHitAttr", "SwapArenaTagsAttr", "RemoveArenaTrapAttr",
+        "RemoveScreensAttr", "RemoveArenaTagsAttr",
+      ].includes(a.constructor.name),
+    ),
+  );
+  const arenaHitters = usable.filter((m: any) =>
+    m.priority > 0
+    || [MoveTarget.ALL_NEAR_ENEMIES, MoveTarget.ALL_NEAR_OTHERS, MoveTarget.ALL_ENEMIES, MoveTarget.ALL_OTHERS].includes(m.moveTarget)
+    || (m.category === MoveCategory.STATUS && [MoveTarget.NEAR_OTHER, MoveTarget.NEAR_ENEMY].includes(m.moveTarget))
+    || m.attrs.some((a: any) => a.constructor.name === "ConfuseAttr")
+    || (m.flags & MoveFlags.GRAVITY) !== 0
+    // what the side-wide protections pass over: status moves aimed at everyone, and moves aimed at
+    // the user's own side (in a single battle, the user); status moves that ignore protections
+    || (m.category === MoveCategory.STATUS
+      && ([MoveTarget.ALL, MoveTarget.USER_AND_ALLIES, MoveTarget.USER_OR_NEAR_ALLY].includes(m.moveTarget)
+        || (m.flags & MoveFlags.IGNORE_PROTECT) !== 0)),
+  );
+  const arenaAbilityIds = [
+    AbilityId.INFILTRATOR, AbilityId.PRANKSTER, AbilityId.GALE_WINGS, AbilityId.TRIAGE, AbilityId.WIND_RIDER,
+    AbilityId.WIND_POWER, AbilityId.LEVITATE, AbilityId.MAGIC_GUARD, AbilityId.SERENE_GRACE, AbilityId.OWN_TEMPO,
+  ];
+  const arenaTagPool = [
+    ArenaTagType.REFLECT, ArenaTagType.LIGHT_SCREEN, ArenaTagType.AURORA_VEIL, ArenaTagType.MIST, ArenaTagType.SAFEGUARD,
+    ArenaTagType.SPIKES, ArenaTagType.TOXIC_SPIKES, ArenaTagType.STEALTH_ROCK, ArenaTagType.STICKY_WEB,
+    ArenaTagType.TAILWIND, ArenaTagType.TRICK_ROOM, ArenaTagType.GRAVITY, ArenaTagType.QUICK_GUARD,
+    ArenaTagType.WIDE_GUARD, ArenaTagType.MAT_BLOCK, ArenaTagType.CRAFTY_SHIELD, ArenaTagType.NO_CRIT,
+    ArenaTagType.MUD_SPORT, ArenaTagType.WATER_SPORT, ArenaTagType.FIRE_GRASS_PLEDGE, ArenaTagType.WATER_FIRE_PLEDGE,
+    ArenaTagType.GRASS_WATER_PLEDGE, ArenaTagType.HAPPY_HOUR, ArenaTagType.FAIRY_LOCK, ArenaTagType.ION_DELUGE,
+  ];
   const healStatusAttrs: [number, any][] = allAbilities
     .filter((a: any) => a)
     .sort((a: any, b: any) => a.id - b.id)
@@ -431,7 +481,8 @@ it("turntest producer", async () => {
         + ` ignab=${scene.arena.ignoreAbilities ? 1 : 0} ignsrc=${num(scene.arena.ignoringEffectSource)}`,
     );
     for (const at of scene.arena.tags) {
-      lines.push(`ATAG type=${at.tagType} side=${at.side} turns=${at.turnCount} max=${at.maxDuration} smove=${at.sourceMove ?? 0} sid=${at.sourceId ?? -1}`);
+      lines.push(`ATAG type=${at.tagType} side=${at.side} turns=${at.turnCount} max=${at.maxDuration} smove=${at.sourceMove ?? 0} sid=${at.sourceId ?? -1}`
+        + (at instanceof EntryHazardTag ? ` layers=${at.layers}` : ""));
     }
     for (const p of [A, D]) {
       lines.push(...monLines(p));
@@ -544,6 +595,7 @@ it("turntest producer", async () => {
       : WEATHER && rnd(2) === 0 ? weatherAbilityIds[rnd(weatherAbilityIds.length)]
       : TRAPS && rnd(4) === 0 ? AbilityId.MAGIC_GUARD
       : PROTECT && rnd(3) === 0 ? protectAbilityIds[rnd(protectAbilityIds.length)]
+      : ARENA && rnd(3) === 0 ? arenaAbilityIds[rnd(arenaAbilityIds.length)]
       : RICH && rnd(2) === 0 ? abilityIds[rnd(abilityIds.length)] : AbilityId.BALL_FETCH;
     p.gender = rnd(3) - 1;
     p.friendship = rnd(256);
@@ -555,7 +607,7 @@ it("turntest producer", async () => {
     p.status = null;
     if (HEAL && rnd(3) === 0) {
       p.status = new Status([StatusEffect.POISON, StatusEffect.TOXIC][rnd(2)], rnd(4));
-    } else if (RICH ? rnd(3) === 0 : STATUS || WEATHER ? rnd(4) === 0 : ONHIT || CHARGE || TAGS || TRAPS || PROTECT ? rnd(6) === 0 : STAT && rnd(8) === 0) {
+    } else if (RICH ? rnd(3) === 0 : STATUS || WEATHER ? rnd(4) === 0 : ONHIT || CHARGE || TAGS || TRAPS || PROTECT || ARENA ? rnd(6) === 0 : STAT && rnd(8) === 0) {
       const s = statuses[rnd(statuses.length)];
       p.status = new Status(s, rnd(4), s === StatusEffect.SLEEP ? 1 + rnd(3) : 0, s === StatusEffect.FREEZE ? 1 + rnd(3) : undefined);
     }
@@ -577,6 +629,9 @@ it("turntest producer", async () => {
         : PROTECT && rnd(10) < 8
         ? (rnd(2) === 0 ? protectMoves[rnd(protectMoves.length)]
           : rnd(2) === 0 ? protectHitters[rnd(protectHitters.length)] : contactAttacks[rnd(contactAttacks.length)])
+        : ARENA && rnd(10) < 8
+        ? (rnd(2) === 0 ? arenaMoves[rnd(arenaMoves.length)]
+          : rnd(2) === 0 ? arenaHitters[rnd(arenaHitters.length)] : attacks[rnd(attacks.length)])
         : TAGS && rnd(10) < 8
         ? (rnd(4) !== 0 ? tagMoves[rnd(tagMoves.length)] : tagReaders[rnd(tagReaders.length)])
         : CHARGE && rnd(10) < 7
@@ -799,6 +854,84 @@ it("turntest producer", async () => {
               useMode: MoveUseMode.NORMAL,
               result: MoveResult.SUCCESS,
             });
+          }
+        }
+      }
+    }
+    if (ARENA) {
+      // arena tags already up, built directly (addTag would run onAdd): screens, hazards with some
+      // layers, field effects, the side-wide protections and the pledge fields, each on a random
+      // side unless its constructor makes it field-wide, set by either Pokemon
+      for (let k = rnd(4); k > 0; k--) {
+        const type = arenaTagPool[rnd(arenaTagPool.length)];
+        const side = rnd(2) === 0 ? ArenaTagSide.PLAYER : ArenaTagSide.ENEMY;
+        const source = rnd(2) === 0 ? A : D;
+        const tag = getArenaTag(type, 1 + rnd(5), MoveId.NONE, source.id, side) as any;
+        if (!tag || scene.arena.getTagOnSide(type, tag.side)) {
+          continue;
+        }
+        // half the time part of a fixed duration (the pledge fields' 4 turns...) has passed
+        if (tag.turnCount > 1 && rnd(2) === 0) {
+          tag.turnCount = 1 + rnd(tag.turnCount);
+        }
+        if (tag instanceof EntryHazardTag) {
+          tag.layers = 1 + rnd(tag.maxLayers);
+        }
+        scene.arena.tags.push(tag);
+      }
+      // two of the side-wide protections on one side, so only the first one says so
+      if (rnd(4) === 0) {
+        const guards = [ArenaTagType.QUICK_GUARD, ArenaTagType.WIDE_GUARD, ArenaTagType.MAT_BLOCK, ArenaTagType.CRAFTY_SHIELD];
+        const side = rnd(2) === 0 ? ArenaTagSide.PLAYER : ArenaTagSide.ENEMY;
+        for (let k = 0; k < 2; k++) {
+          const type = guards[rnd(guards.length)];
+          if (!scene.arena.getTagOnSide(type, side)) {
+            scene.arena.tags.push(getArenaTag(type, 1, MoveId.NONE, (rnd(2) === 0 ? A : D).id, side) as any);
+          }
+        }
+      }
+      for (const p of [A, D]) {
+        const other = p === A ? D : A;
+        const sideOf = (q: any) => (q.isPlayer() ? ArenaTagSide.PLAYER : ArenaTagSide.ENEMY);
+        const layUp = (type: ArenaTagType, side: ArenaTagSide) => {
+          const tag = getArenaTag(type, 1 + rnd(5), MoveId.NONE, p.id, side) as any;
+          if (tag && !scene.arena.getTagOnSide(type, tag.side)) {
+            if (tag instanceof EntryHazardTag) {
+              (tag as any).layers = 1 + rnd(tag.maxLayers);
+            }
+            scene.arena.tags.push(tag);
+          }
+        };
+        // half the time the tag this Pokemon's move lays is already where it would go, so the move
+        // stacks a layer, runs the tag's overlap or fails (Stone Axe's Stealth Rock always full)
+        for (const m of p.moveset) {
+          const lay = m.getMove().attrs.find((a: any) =>
+            ["AddArenaTagAttr", "AddArenaTrapTagAttr", "AddArenaTrapTagHitAttr"].includes(a.constructor.name),
+          ) as any;
+          if (lay && rnd(2) === 0) {
+            layUp(lay.tagType, sideOf(lay.selfSideTarget ? p : other));
+          }
+        }
+        // what the side-wide protections and Safeguard look at the ability for: Quick Guard against
+        // a raised priority, Safeguard against an Infiltrator's confusion; Stone Axe and Ceaseless
+        // Edge with a changed chance
+        if ([AbilityId.PRANKSTER, AbilityId.GALE_WINGS, AbilityId.TRIAGE].includes(p.getAbility().id) && rnd(2) === 0) {
+          layUp(ArenaTagType.QUICK_GUARD, sideOf(other));
+        }
+        if (p.moveset.some((m: any) => m.getMove().attrs.some((a: any) => a.constructor.name === "ConfuseAttr")) && rnd(2) === 0) {
+          layUp(ArenaTagType.SAFEGUARD, sideOf(other));
+          if (rnd(2) === 0) {
+            p.summonData.ability = AbilityId.INFILTRATOR;
+          }
+        }
+        if (p.moveset.some((m: any) => [MoveId.STONE_AXE, MoveId.CEASELESS_EDGE].includes(m.moveId)) && rnd(2) === 0) {
+          p.summonData.ability = rnd(2) === 0 ? AbilityId.SERENE_GRACE : AbilityId.SHEER_FORCE;
+        }
+        if (p.moveset.some((m: any) => m.moveId === MoveId.TAILWIND) && rnd(2) === 0) {
+          p.summonData.ability = rnd(2) === 0 ? AbilityId.WIND_RIDER : AbilityId.WIND_POWER;
+          // half the Wind Power ones already charged
+          if (p.summonData.ability === AbilityId.WIND_POWER && rnd(2) === 0) {
+            p.summonData.tags.push(getBattlerTag(BattlerTagType.CHARGED, 1, MoveId.NONE, p.id));
           }
         }
       }

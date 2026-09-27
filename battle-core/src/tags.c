@@ -61,6 +61,8 @@ const char *const pr_arenaclass_name[PR_ARENACLASS_COUNT_] = {
     [PR_ARENACLASS_WEAKEN_MOVE_TYPE] = "WeakenMoveTypeTag",
     [PR_ARENACLASS_NO_CRIT] = "NoCritTag",
     [PR_ARENACLASS_SUPPRESS_ABILITIES] = "SuppressAbilitiesTag",
+    [PR_ARENACLASS_CONDITIONAL_PROTECT] = "ConditionalProtectTag",
+    [PR_ARENACLASS_ENTRY_HAZARD] = "EntryHazardTag",
 };
 
 bool pr_arena_tag_is(int t, int cls)
@@ -71,6 +73,12 @@ bool pr_arena_tag_is(int t, int cls)
     case PR_ARENACLASS_WEAKEN_MOVE_TYPE: return t == ARENA_TAG_TYPE_MUD_SPORT || t == ARENA_TAG_TYPE_WATER_SPORT;
     case PR_ARENACLASS_NO_CRIT: return t == ARENA_TAG_TYPE_NO_CRIT;
     case PR_ARENACLASS_SUPPRESS_ABILITIES: return t == ARENA_TAG_TYPE_NEUTRALIZING_GAS;
+    case PR_ARENACLASS_CONDITIONAL_PROTECT:
+        return t == ARENA_TAG_TYPE_QUICK_GUARD || t == ARENA_TAG_TYPE_WIDE_GUARD || t == ARENA_TAG_TYPE_MAT_BLOCK
+               || t == ARENA_TAG_TYPE_CRAFTY_SHIELD;
+    case PR_ARENACLASS_ENTRY_HAZARD:                     /* Imprison is built as one too */
+        return t == ARENA_TAG_TYPE_SPIKES || t == ARENA_TAG_TYPE_TOXIC_SPIKES || t == ARENA_TAG_TYPE_STEALTH_ROCK
+               || t == ARENA_TAG_TYPE_STICKY_WEB || t == ARENA_TAG_TYPE_IMPRISON;
     }
     return false;
 }

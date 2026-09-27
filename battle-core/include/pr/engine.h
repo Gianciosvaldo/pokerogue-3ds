@@ -161,6 +161,20 @@ void pr_clear_terrain(pr_battle *bt, pr_engine *e);
 void pr_remove_tags_by_source_id(pr_battle *bt, pr_engine *e, pr_pokemon *p, int64_t source_id);
 /* findAndRemoveTags(t => types.includes(t.tagType)) */
 void pr_find_and_remove_tags(pr_battle *bt, pr_engine *e, pr_pokemon *p, const int32_t *types, int n_types);
+/* ---- arena tags being added, lapsed and removed (src/arena_tags.c) ---- */
+/* arena.addTag(tagType, turnCount, sourceMove, sourceId, side, quiet): whether a new tag was added
+ * (an existing one on that side overlaps instead) */
+bool pr_arena_add_tag(pr_battle *bt, pr_engine *e, int type, int turn_count, int source_move, int64_t source_id,
+                      int side, bool quiet);
+/* EntryHazardTag.maxLayers (canAdd: layers < maxLayers) */
+int pr_arena_max_layers(int type);
+bool pr_arena_remove_tag_on_side(pr_battle *bt, pr_engine *e, int type, int side, bool quiet);
+void pr_arena_remove_tags_on_side(pr_battle *bt, pr_engine *e, const int32_t *types, int n_types, int side, bool quiet);
+void pr_arena_lapse_tags(pr_battle *bt, pr_engine *e);
+/* arena.applyTagsForSide(ConditionalProtectTag, side, false, isProtected, attacker, defender, move,
+ * ignoresProtectBypass) */
+void pr_arena_conditional_protect(pr_battle *bt, pr_engine *e, int side, const pr_pokemon *defender, int move,
+                                  bool *is_protected, bool *bypass);
 /* phaseManager.unshiftNew(<PokemonPhase type>, battlerIndex) */
 void pr_unshift_new(pr_battle *bt, pr_engine *e, pr_phase_type t, int battler);
 /* the running phase, when it is a MovePhase (of Pokemon p, unless p is NULL): phase.cancel() */
