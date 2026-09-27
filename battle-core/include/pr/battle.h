@@ -26,9 +26,22 @@ enum {
     PR_FEAT_HIT_STATE,               /* state kept from an earlier hit of the same move use */
     PR_FEAT_GLOBAL_RNG,              /* Phaser.Math.RND's state the caller didn't provide */
     PR_FEAT_BOSS_SEGMENTS,           /* what damage to a boss sets off (segments cleared, their stat boosts) */
-    PR_FEAT_COUNT_
+    /* the turn engine */
+    PR_FEAT_TAG_LAPSE,               /* a battler tag lapses or is removed (its lapse/onRemove) */
+    PR_FEAT_ARENA_TAG_TURN,          /* arena tags on the turn path (lapse, protection, Trick Room...) */
+    PR_FEAT_WEATHER_TURN,            /* weather or terrain on the turn path (damage, lapse, blocked moves) */
+    PR_FEAT_TURN_MODIFIERS,          /* held items and other modifiers on the turn path */
+    PR_FEAT_FORM_CHANGE,             /* triggerPokemonFormChange for a species with a matching trigger */
+    PR_FEAT_MOVE_EFFECTS,            /* a move's MoveEffectAttrs (secondary effects, recoil, drain...) */
+    PR_FEAT_ENGINE_LIMIT,            /* a fixed-size table of the engine ran out */
+    PR_FEAT_FINAL_BOSS,
+    PR_FEAT_STATUS_TURN,             /* a status effect's turn counter or end-of-turn damage */
+    PR_FEAT_MOVE_CONDITION,          /* a move's own condition (move.applyConditions) with no C port */
+    PR_FEAT_PHASE_0,                 /* + pr_phase_type: a phase that isn't ported was created */
+    PR_FEAT_COUNT_ = PR_FEAT_PHASE_0 + 64
 };
 const char *pr_unported_name(uint16_t id);
+const char *pr_phase_name_of(int phase_type);  /* src/engine.c */
 
 /* Modifiers (src/modifiers.c): upstream's PersistentModifier instances, held items
  * included. Classes are the upstream ones the battle logic queries; the parent table
@@ -110,16 +123,19 @@ typedef struct pr_arena_tag {
 } pr_arena_tag;
 #define PR_MAX_ARENA_TAGS 24
 
-/* A summonData.moveHistory entry (TurnMove) as the ported readers see it; targets aren't kept */
+/* A summonData.moveHistory / moveQueue entry (TurnMove) */
 enum { PR_MOVE_RESULT_UNDEFINED = 0xff };   /* TurnMove.result left undefined */
 typedef struct pr_turn_move {
     uint16_t move;                 /* MoveId */
     uint8_t use_mode;              /* MoveUseMode */
     uint8_t result;                /* MoveResult, or PR_MOVE_RESULT_UNDEFINED */
+    int8_t targets[4];             /* BattlerIndex; the damage-path difftest leaves them empty */
+    uint8_t n_targets;
 } pr_turn_move;
 /* The newest entries kept per Pokemon. The deepest ported read is Rollout's (limit + 1 = 6);
  * a read past the kept entries reports PR_FEAT_MOVE_HISTORY instead of guessing. */
 #define PR_MAX_MOVE_HISTORY 8
+#define PR_MAX_MOVE_QUEUE 4
 
 /* A turnData.attacksReceived entry (AttackMoveResult) */
 typedef struct pr_attack_record {
@@ -141,6 +157,7 @@ typedef struct pr_pokemon {
     uint8_t nature;
     uint16_t ability;          /* active ability (getAbility()) */
     uint16_t base_ability;     /* getAbility(ignoreOverride=true): what calculateStats checks */
+    int32_t ability_override;  /* summonData.ability (-1 = undefined); ability follows it while set */
     uint16_t passive;          /* hasPassive() ? getPassiveAbility() : 0 (NONE); pr_update_passive sets it */
     bool passive_flag;         /* Pokemon.passive (the passive is unlocked and enabled) */
     int16_t custom_passive;    /* customPokemonData.passive, -1 = none */
@@ -149,12 +166,17 @@ typedef struct pr_pokemon {
     int32_t summon_stats[6];   /* summonData.stats: 0 = no override */
     int32_t hp;
     int8_t stat_stages[7];     /* ATK..EVA, i.e. index stat-1 */
-    uint8_t status;            /* StatusEffect */
+    uint8_t status;            /* StatusEffect (0 = no Status object) */
+    /* Status.toxicTurnCount, sleepTurnsRemaining, freezeTurnsRemaining (-1 = undefined) */
+    int16_t status_toxic_turns, status_sleep_turns, status_freeze_turns;
     bool terastallized;
     int8_t tera_type;
     int8_t type_override[2];   /* -2 = none (summonData.types not set) */
     uint16_t moves[4];                 /* moveset, 0 = empty slot */
     uint8_t pp_used[4];
+    uint8_t pp_up[4];
+    int16_t max_pp_override[4];        /* -1 = undefined */
+    uint8_t n_moves;
     int8_t gender;                     /* Gender: -1 genderless, 0 male, 1 female */
     uint8_t friendship;
     bool has_trainer;                  /* hasTrainer(): enemy owned by a trainer */
@@ -162,30 +184,45 @@ typedef struct pr_pokemon {
     pr_battler_tag tags[PR_MAX_BATTLER_TAGS]; /* summonData.tags */
     uint8_t n_tags;
     uint32_t stellar_types_boosted;    /* stellarTypesBoosted, bit per PokemonType */
-    /* summonData fields read on the damage path */
+    bool on_field;                     /* in globalScene.field (isOnField() also needs !switch_out_status) */
+    bool switch_out_status;
+    bool ability_suppressed;           /* summonData.abilitySuppressed */
+    /* summonData */
     uint8_t summon_hit_count;          /* summonData.hitCount (Rage Fist) */
     /* summonData.moveHistory: its length, and its newest min(length, PR_MAX_MOVE_HISTORY)
      * entries, oldest first (pr_push_move_history keeps both; pr_last_move reads them) */
     uint16_t n_move_history;
     pr_turn_move move_history[PR_MAX_MOVE_HISTORY];
-    /* turnData (PokemonTurnData) fields read on the damage path */
+    pr_turn_move move_queue[PR_MAX_MOVE_QUEUE];  /* summonData.moveQueue */
+    uint8_t n_move_queue;
+    /* turnData (PokemonTurnData) */
     /* turnData.attacksReceived: its length, and its newest entries, newest first as upstream
      * unshifts them (pr_unshift_attack_received keeps both) */
     uint16_t n_attacks_received;
     pr_attack_record attacks_received[PR_MAX_ATTACKS_RECEIVED];
-    bool switched_in_this_turn;
-    bool acted, stat_stages_decreased, joined_round;
-    int32_t damage_taken;
+    bool switched_in_this_turn, summoned_this_turn, failed_run_away;
+    bool acted, stat_stages_increased, stat_stages_decreased, joined_round;
+    int32_t damage_taken, total_damage_dealt, single_hit_damage_dealt;
     uint16_t combining_pledge;         /* MoveId, 0 = none */
     int8_t hit_count, hits_left;       /* defaults 0 and -1 */
+    int8_t order;                      /* turnData.order, -1 = undefined */
+    uint8_t pending_status;
     double turn_move_effectiveness; /* turnData.moveEffectiveness; < 0 = unset */
+    /* tempSummonData */
+    int32_t temp_turn_count, temp_wave_turn_count;
+    /* summonData.abilitiesApplied / waveData.abilitiesApplied: the abilities that applied an
+     * attribute outside a simulation (sets, in insertion order) */
+    uint16_t ab_applied_summon[4], ab_applied_wave[4];
+    uint8_t n_ab_applied_summon, n_ab_applied_wave;
 } pr_pokemon;
 
-/* A party slot as Beat Up reads it: getPlayerParty() / getEnemyParty(), in party order */
+/* A party slot: getPlayerParty() / getEnemyParty(), in party order. The Pokemon on the field
+ * are full pr_pokemon (bt->field); the bench is only what the battle reads of it so far. */
 typedef struct pr_party_member {
     uint32_t id;               /* Pokemon.id */
     uint16_t species;          /* Pokemon.species (not the fusion) */
     uint8_t status;            /* status?.effect, 0 = none */
+    int32_t hp;
 } pr_party_member;
 #define PR_MAX_PARTY 6
 #define PR_MAX_QUEUED_MOVERS 8
@@ -208,11 +245,20 @@ typedef struct pr_battle {
     uint8_t n_mods[2];
     pr_seedstr wave_seed;      /* globalScene.waveSeed; len 0 = unknown */
     int max_exp_level;         /* globalScene.getMaxExpLevel(); 0 = unknown */
-    int8_t turn_command[4];    /* currentBattle.turnCommands[i]?.command per BattlerIndex; -1 = none */
-    /* Faint bookkeeping: arena.playerFaints, currentBattle.enemyFaints, and the turn of the
-     * newest entry of currentBattle.playerFaintsHistory / enemyFaintsHistory (-1 = empty) */
+    /* currentBattle.turnCommands / preTurnCommands per BattlerIndex */
+    struct pr_turn_command {
+        int8_t command;        /* Command; -1 = none (null) */
+        uint16_t move;         /* move.move, 0 = no move */
+        int8_t targets[4];     /* move.targets */
+        uint8_t n_targets;
+        uint8_t use_mode;
+        bool skip;
+    } commands[4], pre_commands[4];
+    /* Faint bookkeeping: arena.playerFaints, currentBattle.enemyFaints and the faint histories
+     * (playerFaintsHistory / enemyFaintsHistory: which Pokemon, on which turn) */
     int player_faints, enemy_faints;
-    int last_player_faint_turn, last_enemy_faint_turn;
+    struct { uint32_t id; int turn; } faint_history[2][12];
+    uint8_t n_faint_history[2];        /* [0] player, [1] enemy */
     /* dynamicQueueManager.getLastTurnOrder(): the Pokemon.id of each Pokemon whose MovePhase
      * started this turn, in order (its length, and its first PR_MAX_TURN_ORDER entries) */
     uint8_t n_last_turn_order;
@@ -229,6 +275,22 @@ typedef struct pr_battle {
     struct { const pr_attr *attr; double hp; } half_hp_initial[4];
     uint8_t n_half_hp_initial;
     pr_pokemon *field[4];      /* player 0/1, enemy 2/3 as in upstream BattlerIndex */
+    /* ---- state the turn engine keeps (the damage path doesn't read it) ---- */
+    int wave_index;
+    uint8_t battle_type;       /* BattleType */
+    uint16_t last_move;        /* currentBattle.lastMove, 0 = none */
+    int8_t last_player_involved, last_enemy_involved;  /* -1 = undefined */
+    uint32_t participants[PR_MAX_PARTY];               /* playerParticipantIds, sorted */
+    uint8_t n_participants;
+    int post_battle_loot;      /* currentBattle.postBattleLoot.length */
+    double battle_score;       /* currentBattle.battleScore */
+    int16_t weather_turns_left, weather_max_duration;
+    int16_t terrain_turns_left, terrain_max_duration;
+    bool ignore_abilities;     /* arena.ignoreAbilities */
+    int8_t ignoring_effect_source; /* arena.ignoringEffectSource (BattlerIndex), -1 = undefined */
+    bool ability_bar_visible;  /* globalScene.abilityBar.isVisible() */
+    int8_t last_used_pokeball; /* currentBattle.lastUsedPokeball (PokeballType), -1 = null */
+    struct pr_engine *engine;  /* the phase engine (src/engine.c); NULL outside a turn */
     /* Coverage: attribute classes that would have run upstream but have no C handler
      * yet. A result is only claimed faithful when this stays empty. */
     uint16_t unported[PR_MAX_UNPORTED];
@@ -259,12 +321,15 @@ void pr_note_deferred(pr_battle *bt, uint16_t cls);
  * conditions. `self` carries the probed captured values (self->cap). */
 typedef double (*pr_closure_fn)(pr_battle *bt, const pr_closure_info *self, const pr_pokemon *a,
                                 const pr_pokemon *b, int move);
+/* owner NULL: any owner (a closure every instance of an attribute class makes) */
 typedef struct { const char *owner, *hash; pr_closure_fn fn; } pr_closure_reg;
 void pr_closures_init(void);
 /* Calls closure `id`; when it has no (current) C port, records `cls` as unported
  * and returns `fallback`. */
 double pr_closure_call(pr_battle *bt, uint16_t id, uint16_t cls, double fallback,
                        const pr_pokemon *a, const pr_pokemon *b, int move);
+/* Calls that found no C port / that ran one, per closure id (for the tests' reports) */
+extern uint32_t pr_closure_misses[], pr_closure_hits[];
 static inline bool pr_cap_has(const pr_closure_info *self, int v) { return (self->cap >> (v + 1)) & 1u; }
 int pr_closures_ported(void);
 
@@ -298,6 +363,7 @@ bool pr_has_ability_with_attr(pr_battle *bt, const pr_pokemon *p, uint16_t cls);
 enum { PR_TAGCLASS_PROTECTED, PR_TAGCLASS_SEMI_INVULNERABLE, PR_TAGCLASS_TYPE_BOOST, PR_TAGCLASS_HELPING_HAND,
        PR_TAGCLASS_SUPREME_OVERLORD, PR_TAGCLASS_CRIT_BOOST, PR_TAGCLASS_TAR_SHOT, PR_TAGCLASS_HIGHEST_STAT_BOOST,
        PR_TAGCLASS_EXPOSED, PR_TAGCLASS_STOCKPILING, PR_TAGCLASS_AUTOTOMIZED, PR_TAGCLASS_SUBSTITUTE,
+       PR_TAGCLASS_TRAPPED,
        PR_TAGCLASS_COUNT_ };
 extern const char *const pr_tagclass_name[PR_TAGCLASS_COUNT_];    /* upstream class names */
 bool pr_battler_tag_is(int tag_type, int tag_class);
@@ -327,6 +393,8 @@ bool pr_wave_ability_applied(const pr_pokemon *p, int ability);
 /* Move.doesFlagEffectApply({flag, user, target}) */
 bool pr_move_does_flag_effect_apply(pr_battle *bt, int move, unsigned flag, const pr_pokemon *user,
                                     const pr_pokemon *target);
+bool pr_move_does_flag_effect_apply_ex(pr_battle *bt, int move, unsigned flag, const pr_pokemon *user,
+                                       const pr_pokemon *target, bool is_follow_up);
 /* Move.hitsSubstitute(user, target): target may be NULL */
 bool pr_move_hits_substitute(pr_battle *bt, int move, const pr_pokemon *user, const pr_pokemon *target);
 bool pr_is_opponent(const pr_battle *bt, const pr_pokemon *a, const pr_pokemon *b);
@@ -473,6 +541,9 @@ typedef struct { bool cancelled; int result /* HitResult */; double damage; } pr
 /* simulated=true: random factor is 1 and no RNG is consumed, as upstream. */
 pr_damage_result pr_get_attack_damage(pr_battle *bt, pr_pokemon *def, pr_pokemon *src, int move,
                                       bool is_critical, bool simulated);
+/* the same with getAttackDamage's `effectiveness` option (NAN = undefined: computed as above) */
+pr_damage_result pr_get_attack_damage_ex(pr_battle *bt, pr_pokemon *def, pr_pokemon *src, int move,
+                                         bool is_critical, bool simulated, double effectiveness);
 bool pr_get_critical_hit_result(pr_battle *bt, const pr_pokemon *def, const pr_pokemon *src, int move);
 
 #endif

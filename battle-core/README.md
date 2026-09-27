@@ -1,6 +1,6 @@
 # battle-core: native C port of PokeRogue's battle logic
 
-Status 2026-09-26: **damage path with abilities and passives, move effects, held items, battler and arena tags, and the turn history verified against upstream** (singles). Every damaging move in the random test is now covered except 6 cases in about 110,000. Upstream is `pagefaultgames/pokerogue` @ `8555c08`.
+Status 2026-09-27: **damage path with abilities and passives, move effects, held items, battler and arena tags, and the turn history verified against upstream** (singles); the turn engine has started and replays about half of the random test turns exactly (see "Turn engine"). Every damaging move in the random test is now covered except 6 cases in about 110,000. Upstream is `pagefaultgames/pokerogue` @ `8555c08`.
 
 ## What works, and how it was checked
 | Piece | State | Evidence |
@@ -33,6 +33,18 @@ What the test doesn't cover yet: doubles and fusions. Code that is ported but ca
 
 Two things upstream does that a reader might not expect, both kept: `getAttackDamage` doesn't cap damage at the target's HP, and with the enemy's damage tokens (up to 999 stacks of x1.05 in endless mode) it can exceed 2^63, so damage is a double in the C port too. And the JS `Math.pow` result depends on the engine: the reference here is Node 22 (V8 12.4), whose pow is fdlibm's; newer V8 versions switched to a correctly rounded pow, so upstream itself can deal 1 point more or less on a different browser.
 
+## Turn engine (in progress, 2026-09-27)
+`src/engine.c` ports upstream's phase queue: the `PhaseTree` levels, deferral, and the dynamic speed-ordered queues with their markers (MovePhase's own queue included), so a phase lands where upstream would put it even when it only shows something. `src/phases.c` ports the phases of a turn: TurnStart, Move, MoveEffect, MoveEnd, Faint, CheckInterlude, PositionalTag, Berry, CheckStatusEffect, PostTurnStatusEffect, TurnEnd and ResetStatus, plus the message, animation and ability-display phases. A phase with no port yet is still created where upstream creates it, and the turn is reported unported. `src/move_effects.c` has the gates in front of a move's secondary effects (the effect chance and its roll). `src/closures_conditions.c` has the moves' own failure conditions (`move.applyConditions`): 70 of the 83 distinct sources, including Protect's consecutive-use odds, Fake Out, the weather and terrain moves, OHKO moves with Sturdy, screens, heal moves, Counter, Disable, Last Resort, Destiny Bond, Damp and Teleport. Not ported: the random-move callers (Metronome, Assist...), Encore, Wish and Future Sight, Transform, Sketch, Instruct, Mirror Move, Psycho Shift, Rest, Belch and Stuff Cheeks, Shell Trap and Revival Blessing. Some ported ones still report themselves unported in a state they don't model: the switch-out check of Roar, Whirlwind, Teleport, Baton Pass and Shed Tail, Chilly Reception in snow, an entry hazard already down, Reflect Type on a typeless target, Destiny Bond on wave 200 or a multiple of 250 (the game mode decides), and Rototiller with a bench.
+
+Checked by `build/turntest` against `tests/turntest.producer.test.ts`, which builds a random singles state inside a real upstream battle, gives both sides a command, runs upstream's own phases from TurnStartPhase to the end of the turn, and writes the state before, every phase that ran, what is left queued and the state after. The C engine replays the turn and every line must match:
+
+| Run | Cases | Covered | Identical |
+|---|---|---|---|
+| plain, seed 777 | 400 | 199 | 199 |
+| `TURN_COND=1` (most moves have their own conditions, short move histories), seed 777 | 399 | 99 | 99 |
+
+A covered turn hit nothing unported. The top reasons a turn isn't covered: the stat-change phase (54 of 400), status effects being set (17), battler tags being added (16), trapping moves (16), two-turn moves (14), recoil (12). `TURN_PROBE=1` checks the conditions directly: on each random state (random abilities, statuses, tags, weather, terrain, Tera, levels and stat stages near the edges) it calls every move's conditions for sequences 2, 3 and 4 both ways and records the result and the RNG state. Seed 777, 3000 states: 45,435 calls, 35,795 covered, all identical; 161 of the 190 condition closures ran. Of 28 deliberate bugs in the conditions, 23 are caught. The 5 not caught need a rare combination: Substitute at exactly the HP cost, Worry Seed on an Insomnia target, Destiny Bond after a failed Destiny Bond, Last Resort after a called move, and Flower Shield on a Stellar Tera Pokemon.
+
 ## Design (the decisions that make 180k lines tractable)
 1. **Data is generated, never hand-typed.** Upstream builds moves and abilities from ~430 attribute classes (`StatStageChangeAttr`, `StatMultiplierAbAttr`...). The dumper serialises every instance with its parameters. `gen/gen_tables.py` emits one C struct per class, a const table of instances, and an is-a bitmap for the class hierarchy. Upstream's `applyAbAttrs("X")` becomes "iterate attrs where `pr_attr_is(cls, PR_AC_X)`". Each class's C handler is written once; its 1,497 uses come free.
 2. **Closures are tracked, not guessed.** Hand ports live in `src/closures_moves.c` and `src/closures_abilities.c`, each registered under the owner and source hash it was written against. A changed upstream closure therefore reads as unported instead of running stale logic. 735 upstream closures (move conditions, ability predicates) can't be dumped as data. They're listed in `gen/out/closures.txt` with a hash of their source. After an upstream bump, `tools/redump.sh` says exactly which ones changed. Values a closure captures from its constructor (the type a Blaze-like ability boosts, Rollout's limit, reset rules and combo moves) aren't in its source, so the dumper recovers them by calling the closure on probe inputs, and they become part of its hash and of the generated data (`pr_closure_info.cap` and `.vals`). That's the answer to "upstream updates must be ported by hand": the tool tells you what to re-port.
@@ -43,9 +55,9 @@ Two things upstream does that a reader might not expect, both kept: `getAttackDa
 
 ## Layout
 - `include/pr/` public headers (`rng.h`, `battle.h`)
-- `src/` ported logic (`rng.c`, `hooks.c`, `pokemon.c`, `damage.c`, `move_attrs.c`, `ab_attrs.c` ability dispatch and handlers, `modifiers.c` held items and other modifiers, `tags.c` battler and arena tags, `history.c` move histories, attacks received and the last turn order, `js_math.c` V8's `Math.pow`, `closures.c` registry, `closures_moves.c` and `closures_abilities.c` hand-ported closures)
+- `src/` ported logic (`rng.c`, `hooks.c`, `pokemon.c`, `damage.c`, `move_attrs.c`, `ab_attrs.c` ability dispatch and handlers, `modifiers.c` held items and other modifiers, `tags.c` battler and arena tags, `history.c` move histories, attacks received and the last turn order, `js_math.c` V8's `Math.pow`, `closures.c` registry, `closures_moves.c`, `closures_abilities.c` and `closures_conditions.c` hand-ported closures, `engine.c` the phase queue, `phases.c` the phases of a turn, `move_effects.c` move secondary effects)
 - `gen/dump-upstream.test.ts` dumper (runs in an upstream checkout), `gen/upstream/*.json` dump (not in git; `tools/redump.sh` recreates it), `gen/gen_tables.py` generator, `gen/out/` generated C (committed so the code builds without upstream; do not edit), `gen/check_closures.py` drift report
-- `tests/difftest.producer.test.ts` upstream half of the differential test; `tests/difftest.c` C half; `tests/rng_*` RNG check
+- `tests/difftest.producer.test.ts` upstream half of the differential test; `tests/difftest.c` C half; `tests/turntest.producer.test.ts` and `tests/turntest.c` the whole-turn test (copy the producer to `test/tests/zz-dump/` in an upstream checkout; `TURN_OUT`, `TURN_N`, `TURN_SEED`, `TURN_RICH`, `TURN_COND`, `TURN_PROBE`); `tests/rng_*` RNG check
 - `tools/setup-upstream.sh <dir>` clones and prepares upstream (no images or audio are fetched). `tools/difftest.sh <dir> [N] [seed]` runs a differential test. `tools/redump.sh <dir>` refreshes the data and reports closure drift.
 
 Build: `make` (outputs to `build/`). `tools/closures.py` shows an owner's closures and fills registry hashes.
@@ -59,8 +71,8 @@ Upstream ids are compiled into const tables. Custom species, moves, abilities an
 
 ## Not done (in rough order)
 1. Weather and terrain lifecycles, tags being added, lapsing and removed over turns (only reading them is ported), status effects over turns, the other ~140 ability classes (switch-in, end-of-turn, contact effects...), and the held items whose effects happen outside the damage calculation (Leftovers, Focus Band, berries, Quick Claw, King's Rock, Shell Bell...).
-2. The turn history's other readers, which run outside the damage calculation (Protect's consecutive-use odds, Last Resort, Destiny Bond, Encore, Disable, Instruct, Mirror Move, Copycat, Focus Punch, Gigaton Hammer's restriction...), and filling the history as moves happen, which is the turn engine's job (`pr_push_move_history` and `pr_unshift_attack_received` are ready for it; upstream only records moves of a Pokemon on the field).
-3. The turn engine: upstream's phase queue (`src/phases`, ~13.7k lines), turn order, switching, fainting, multi-target doubles. Deferred side effects get applied here.
+2. The rest of the turn history's readers (Encore, Instruct, Mirror Move, Copycat, Focus Punch, Gigaton Hammer's restriction...).
+3. The rest of the turn engine: the stat-change phase, status effects, battler tags being added, two-turn moves, recoil and drain, switching, the phases before a turn (command, switch-in, abilities on entry), multi-target doubles. Deferred side effects get applied here.
 4. Enemy AI, wave generation, trainers, rewards, biomes, mystery encounters, eggs, save format.
 5. Hooking it to the renderer in `assets-pipeline/app-src`.
 

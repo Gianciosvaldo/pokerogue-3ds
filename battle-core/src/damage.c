@@ -290,11 +290,20 @@ static int32_t to_dmg_value(double v)
 pr_damage_result pr_get_attack_damage(pr_battle *bt, pr_pokemon *def, pr_pokemon *src, int move,
                                       bool is_critical, bool simulated)
 {
+    return pr_get_attack_damage_ex(bt, def, src, move, is_critical, simulated, NAN);
+}
+
+pr_damage_result pr_get_attack_damage_ex(pr_battle *bt, pr_pokemon *def, pr_pokemon *src, int move,
+                                         bool is_critical, bool simulated, double effectiveness)
+{
     pr_damage_result r = {false, HIT_RESULT_EFFECTIVE, 0};
     int category = pr_apply_variable_move_category(bt, src, def, move, pr_moves[move].category);
 
     bool cancelled = false;
-    double type_multiplier = pr_get_move_effectiveness_ex(bt, def, src, move, simulated, &cancelled);
+    /* `effectiveness ?? getMoveEffectiveness(...)`: the caller's value skips the calculation */
+    double type_multiplier = effectiveness == effectiveness
+                                 ? effectiveness
+                                 : pr_get_move_effectiveness_ex(bt, def, src, move, simulated, &cancelled);
     if (cancelled || type_multiplier == 0) {
         r.cancelled = cancelled;
         r.result = move == MOVE_ID_SHEER_COLD ? HIT_RESULT_IMMUNE : HIT_RESULT_NO_EFFECT;

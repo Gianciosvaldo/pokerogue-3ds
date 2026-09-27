@@ -121,7 +121,7 @@ static double wake_up_slap(ARGS)
 static double payback(ARGS)
 {
     int i = pr_battler_index(bt, t);
-    return t->acted || (i >= 0 && bt->turn_command[i] == COMMAND_BALL) ? 2 : 1;
+    return t->acted || (i >= 0 && bt->commands[i].command == COMMAND_BALL) ? 2 : 1;
 }
 
 /* Assurance: target.turnData.damageTaken > 0 ? 2 : 1 */
@@ -143,8 +143,9 @@ static double acrobatics(ARGS)
  *   || lastEnemyFaint !== undefined && turn - lastEnemyFaint.turn === 1 && user.isEnemy() ? 2 : 1 */
 static double retaliate(ARGS)
 {
-    bool p = bt->last_player_faint_turn >= 0 && bt->turn - bt->last_player_faint_turn == 1 && u->is_player;
-    bool e = bt->last_enemy_faint_turn >= 0 && bt->turn - bt->last_enemy_faint_turn == 1 && !u->is_player;
+    int np = bt->n_faint_history[0], ne = bt->n_faint_history[1];
+    bool p = np && bt->turn - bt->faint_history[0][np - 1].turn == 1 && u->is_player;
+    bool e = ne && bt->turn - bt->faint_history[1][ne - 1].turn == 1 && !u->is_player;
     return p || e ? 2 : 1;
 }
 

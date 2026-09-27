@@ -54,6 +54,10 @@ species = load("species.json")
 typechart = load("typechart.json")
 natures = load("natures.json")
 move_sets = load("move-sets.json")
+form_changes = load("form-changes.json")
+# Form change trigger classes, numbered for the per-species bitmask (pr_species.form_change_triggers)
+fct_names = sorted({n for v in form_changes.values() for n in v})
+assert len(fct_names) <= 32, "form change trigger classes no longer fit a uint32 mask"
 
 # ---------------------------------------------------------------- enums
 # String enums get 0-based numbers in declaration order.
@@ -155,7 +159,8 @@ for cls, insts in inst_by_class.items():
             spec[k] = ("int", None)  # reference by id
         else:
             spec[k] = ("json", None)
-        spec[k] = spec[k] + (len(nn) != len(vals),)  # nullable?
+        # nullable: null/undefined in some instance, or missing from it (a `declare`d field left unset)
+        spec[k] = spec[k] + (len(nn) != len(insts),)
     class_fields[cls] = spec
 
 
@@ -276,6 +281,7 @@ def value(cls, k, s, v):
 
 inst_lines = []
 attr_rows = []  # flat pr_attr table
+effect_rows = []  # pr_attr_effects, parallel to attr_rows
 
 
 def emit_attrs(attrs):
@@ -297,11 +303,36 @@ def emit_attrs(attrs):
         ec = a.get("extraCondition")
         cond = ec["$fn"] if isinstance(ec, dict) and "$fn" in ec else "PR_NO_FN"
         attr_rows.append(f"{{PR_AC_{cls}, {cond}, &{name}}}")
+        effect_rows.append(effect_info(a))
     return start, len(attrs)
 
 
+def effect_info(a):
+    """MoveEffectAttr's option getters (trigger, firstHitOnly...) for one attr; zeros otherwise."""
+    if "MoveEffectAttr" not in classes.get(a["$class"], []):
+        return "{0}"
+    o = a.get("options") if isinstance(a.get("options"), dict) else {}
+    cond = o.get("condition")
+    eco = o.get("effectChanceOverride")
+    return "{%d, %s, %s, %s, %s, %d, %s}" % (
+        o.get("trigger", 1), "true" if a.get("selfTarget") else "false",
+        "true" if o.get("firstHitOnly") else "false", "true" if o.get("lastHitOnly") else "false",
+        "true" if o.get("firstTargetOnly") else "false", -1 if eco is None else int(eco),
+        cond["$fn"] if isinstance(cond, dict) and "$fn" in cond else "PR_NO_FN")
+
+
 def fn_list(fns):
-    ids = [str(x["$fn"]) for x in fns if isinstance(x, dict) and "$fn" in x]
+    """A list of closures: bare {"$fn"} (abilities), or MoveCondition objects whose apply() is
+    this.func(...) (moves). Anything else stops the build rather than being dropped."""
+    ids = []
+    for x in fns:
+        if isinstance(x, dict) and "$fn" in x:
+            ids.append(str(x["$fn"]))
+        elif isinstance(x, dict) and isinstance(x.get("func"), dict) and "$fn" in x["func"] \
+                and set(x) == {"$class", "func"}:
+            ids.append(str(x["func"]["$fn"]))
+        else:
+            raise SystemExit(f"condition of unknown shape: {x!r}")
     if not ids:
         return "{0}"
     return "{%s, %d}" % (emit_list("pr_fn_id", ids), len(ids))
@@ -340,13 +371,19 @@ def passive_of(passives, idx):
     return passives
 
 
-def form_row(f, sid, idx, key, name, passive):
+# SpeciesFormKeys for which PokemonSpeciesForm.getBaseExp() gives 1.5x baseExp
+EXP_BOOST_KEYS = {"mega", "mega-x", "mega-y", "mega-z", "mega-original", "mega-curly", "mega-droopy",
+                  "mega-stretchy", "primal", "gigantamax", "eternamax"}
+
+
+def form_row(f, sid, idx, key, name, passive, sprite_key):
     bs = ", ".join(str(x) for x in f["baseStats"])
-    return "{%d, %d, %s, %s, %d, %d, %d, %d, %d, {%s}, %d, %d, %d, %d, %d, %s, %d}" % (
+    return "{%d, %d, %s, %s, %d, %d, %d, %d, %d, {%s}, %d, %d, %d, %d, %d, %s, %d, %s}" % (
         sid, idx, c_str(key), c_str(name), f["type1"], -1 if f["type2"] is None else f["type2"],
         f["ability1"], f["ability2"], f["abilityHidden"], bs, f["baseTotal"],
         round(f["weight"] * 10), round(f["height"] * 10), f["catchRate"], f["baseExp"],
-        "true" if f.get("isUnobtainable") else "false", passive)
+        "true" if f.get("isUnobtainable") else "false", passive,
+        "true" if sprite_key in EXP_BOOST_KEYS else "false")
 
 
 for sid in sorted(species, key=int):
@@ -356,22 +393,25 @@ for sid in sorted(species, key=int):
     f0 = len(form_rows)
     if forms:
         for i, f in enumerate(forms):
-            form_rows.append(form_row(f, s["speciesId"], i, f["formKey"], f["formName"], passive_of(d["passives"], i)))
+            # getFormSpriteKey(): formSpriteKey ?? formKey
+            sk = f["formSpriteKey"] if f.get("formSpriteKey") is not None else f["formKey"]
+            form_rows.append(form_row(f, s["speciesId"], i, f["formKey"], f["formName"], passive_of(d["passives"], i), sk))
     else:
-        form_rows.append(form_row(s, s["speciesId"], 0, "", "", passive_of(d["passives"], 0)))
+        form_rows.append(form_row(s, s["speciesId"], 0, "", "", passive_of(d["passives"], 0), ""))
     lm = d.get("levelMoves") or []
     lm_ref = "{0}"
     if lm and isinstance(lm, list) and all(isinstance(x, list) and len(x) == 2 for x in lm):
         lm_ref = "{%s, %d}" % (emit_list("pr_level_move", ["{%d, %d}" % (lv, mid) for lv, mid in lm]), len(lm))
+    fct_mask = sum(1 << fct_names.index(n) for n in form_changes.get(sid, []))
     species_rows.append(
-        "{%d, %s, %d, %d, %d, %d, %d, %s, %d, %d, %d, %d, %s, %s}" % (
+        "{%d, %s, %d, %d, %d, %d, %d, %s, %d, %d, %d, %d, %s, %s, 0x%xu}" % (
             s["speciesId"], c_str(s["name"]), s["_generation"], s["growthRate"],
             -1 if s["malePercent"] is None else round(s["malePercent"] * 10),
             (1 if s["subLegendary"] else 0) | (2 if s["legendary"] else 0) | (4 if s["mythical"] else 0),
             s["baseFriendship"], "true" if s["canChangeForm"] else "false", f0, len(form_rows) - f0,
             d.get("prevolution") if d.get("prevolution") is not None else -1,
             d.get("starter") if isinstance(d.get("starter"), int) else -1, lm_ref,
-            "true" if d.get("evolutions") else "false"))
+            "true" if d.get("evolutions") else "false", fct_mask))
 
 for name, ids in sorted(move_sets.items()):
     c.append(f"const uint16_t pr_set_{snake(name).lower()}[] = {{{', '.join(str(i) for i in sorted(ids)) or '0'}}};")
@@ -389,6 +429,9 @@ for cl in closures:
 c.append("};")
 c.append(f"\nconst pr_attr pr_attrs[{max(len(attr_rows), 1)}] = {{")
 c += [f"    {r}," for r in attr_rows]
+c.append("};")
+c.append(f"\nconst pr_effect_info pr_attr_effects[{max(len(effect_rows), 1)}] = {{")
+c += [f"    {r}," for r in effect_rows]
 c.append("};")
 c.append(f"const pr_move pr_moves[PR_MOVE_COUNT] = {{")
 c += [f"    {r}," for r in move_rows]
@@ -468,6 +511,7 @@ typedef struct {{
     uint16_t base_exp;
     bool unobtainable;
     uint16_t passive;          /* speciesDataRegistry.getPassive(species, formIndex) */
+    bool exp_boost;            /* getBaseExp() is 1.5x baseExp (mega, primal, gigantamax, eternamax forms) */
 }} pr_form;
 
 typedef struct {{
@@ -483,11 +527,25 @@ typedef struct {{
     int32_t starter;           /* starter cost or -1 */
     pr_level_moves level_moves;
     bool has_evolutions;       /* speciesDataRegistry.hasEvolutions() */
+    /* Bit PR_FCT_<Class> set: some form change of this species answers to that trigger class
+     * (SpeciesFormChangeTrigger.hasTriggerType), so triggerPokemonFormChange may act */
+    uint32_t form_change_triggers;
 }} pr_species;
+{{fct_enum}}
 
 extern const uint8_t pr_type_chart_x2[PR_TYPE_COUNT][PR_TYPE_COUNT];
 extern const double pr_nature_mult[PR_NATURE_COUNT][6];
 extern const pr_attr pr_attrs[];
+/* MoveEffectAttr options per pr_attrs entry (zeros for other classes): trigger (MoveEffectTrigger),
+ * selfTarget, firstHitOnly, lastHitOnly, firstTargetOnly, effectChanceOverride (-1 = none) and the
+ * options.condition closure (StatStageChangeAttr and co., PR_NO_FN = none) */
+typedef struct {{
+    int8_t trigger;
+    bool self_target, first_hit_only, last_hit_only, first_target_only;
+    int16_t chance_override;
+    pr_fn_id condition;
+}} pr_effect_info;
+extern const pr_effect_info pr_attr_effects[];
 extern const pr_move pr_moves[PR_MOVE_COUNT];
 extern const pr_ability pr_abilities[PR_ABILITY_COUNT];
 extern const pr_form pr_forms[PR_FORM_COUNT];
@@ -499,7 +557,8 @@ extern const pr_species pr_species_table[PR_SPECIES_COUNT];
 set_decls = "\n".join(f"extern const uint16_t pr_set_{snake(n).lower()}[]; extern const uint16_t pr_set_{snake(n).lower()}_n;"
                       for n in sorted(move_sets))
 with open(os.path.join(OUT, "pr_data.h"), "w") as f:
-    f.write(dh.replace("{set_decls}", set_decls))
+    fct_enum = "enum {\n" + "".join(f"    PR_FCT_{n} = {i},\n" for i, n in enumerate(fct_names)) + "};"
+    f.write(dh.replace("{set_decls}", set_decls).replace("{fct_enum}", fct_enum))
 
 # closure manifest
 with open(os.path.join(OUT, "closures.txt"), "w") as f:

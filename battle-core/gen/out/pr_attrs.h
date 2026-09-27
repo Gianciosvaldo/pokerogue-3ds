@@ -980,6 +980,7 @@ typedef struct pr_attr_CounterDamageAttr {
 
 /* CounterRedirectAttr (4 uses) : CounterRedirectAttr > MoveAttr */
 typedef struct pr_attr_CounterRedirectAttr {
+    uint32_t nulls; /* bit i set = field i below was null/undefined upstream */
     bool selfTarget;
     int32_t moveFilter;
 } pr_attr_CounterRedirectAttr;
