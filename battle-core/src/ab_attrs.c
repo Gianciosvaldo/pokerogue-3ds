@@ -496,6 +496,16 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         pr_unshift_stat_stage_change_ex(bt, c->e, pr_battler_index(bt, x->selfTarget ? p : o), st, sg, n, (pr_pokemon *)p, 0);
         return 1;
     }
+    case PR_AC_FlinchStatStageChangeAbAttr: {                           /* Steadfast */
+        const pr_attr_FlinchStatStageChangeAbAttr *x = P(FlinchStatStageChangeAbAttr, a);
+        if (!c->e) return -1;
+        GATE(true);
+        int8_t st[7], sg[7];
+        int n = 0;
+        for (unsigned i = 0; i < x->changes.n && n < 7; i++, n++) { st[n] = x->changes.v[i].stat; sg[n] = x->changes.v[i].stages; }
+        pr_unshift_stat_stage_change_ex(bt, c->e, pr_battler_index(bt, p), st, sg, n, (pr_pokemon *)p, 0);
+        return 1;
+    }
     case PR_AC_PostReceiveCritStatStageChangeAbAttr: {                  /* Anger Point */
         const pr_attr_PostReceiveCritStatStageChangeAbAttr *x = P(PostReceiveCritStatStageChangeAbAttr, a);
         if (!c->e) return -1;

@@ -314,6 +314,7 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             t->source_id = inum(l, "sid");
             t->stockpiled_count = (int8_t)inum(l, "stock");
             t->crit_stages = (int8_t)inum(l, "crit");
+            t->autotomize_count = (int16_t)inum(l, "auto");
             /* the line holds all of a ported tag type's state; the others can hold more */
             if (!pr_tag_type_ported(type)) cs->btag = 1;
         } else if (!strncmp(l, "MOD ", 4)) {
@@ -481,9 +482,10 @@ static void dump_mon(lines_t *L, const pr_battle *bt, const pr_pokemon *p, int b
     add_line(L, "%s", s.s);
 
     for (int i = 0; i < p->n_tags; i++)
-        add_line(L, "BTAG b=%d type=%s turns=%d smove=%d sid=%lld stock=%d crit=%d", b,
+        add_line(L, "BTAG b=%d type=%s turns=%d smove=%d sid=%lld stock=%d crit=%d auto=%d", b,
                  battler_tag_names[p->tags[i].type], p->tags[i].turn_count, p->tags[i].source_move,
-                 (long long)p->tags[i].source_id, p->tags[i].stockpiled_count, p->tags[i].crit_stages);
+                 (long long)p->tags[i].source_id, p->tags[i].stockpiled_count, p->tags[i].crit_stages,
+                 p->tags[i].autotomize_count);
     (void)bt;
 }
 

@@ -52,13 +52,17 @@ static void unshift_pokemon_phase(pr_battle *bt, pr_engine *e, pr_phase_type typ
     pr_phase_unshift(bt, e, ph);
 }
 
-/* AddBattlerTagAttr.apply, from the chance roll on: addTag isn't ported */
-static void add_battler_tag(pr_battle *bt, const pr_attr *a, const pr_effect_info *ef, pr_pokemon *user,
-                            pr_pokemon *target, int move)
+/* AddBattlerTagAttr.apply (FlinchAttr, ConfuseAttr and TrapAttr share its fields): the chance roll, then
+ * (selfTarget ? user : target).addTag(tagType, randBattleSeedIntRange(min, max), move.id, user.id) */
+static void add_battler_tag(pr_battle *bt, pr_engine *e, const pr_attr *a, const pr_effect_info *ef,
+                            pr_pokemon *user, pr_pokemon *target, int move)
 {
+    const pr_attr_AddBattlerTagAttr *x = (const pr_attr_AddBattlerTagAttr *)a->p;
     if (!effect_can_apply(ef, user, target)) return;
     double chance = get_move_chance(bt, ef, user, target, move, ef->self_target, true);
-    if (chance_roll(bt, chance)) pr_note_unported(bt, a->cls);
+    if (!chance_roll(bt, chance)) return;
+    int turns = pr_battle_rand_seed_int(bt, x->turnCountMax - x->turnCountMin + 1, x->turnCountMin);
+    pr_add_tag(bt, e, ef->self_target ? user : target, x->tagType, turns, move, (int64_t)user->id);
 }
 
 void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, pr_pokemon *user, pr_pokemon *target)
@@ -136,7 +140,8 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         return;
     case PR_AC_AddBattlerTagAttr:
     case PR_AC_FlinchAttr:
-        add_battler_tag(bt, a, ef, user, target, move);
+    case PR_AC_TrapAttr:                                 /* Bind, Wrap, Fire Spin...: those tags aren't ported */
+        add_battler_tag(bt, e, a, ef, user, target, move);
         return;
     case PR_AC_ConfuseAttr: {
         /* !selfTarget && target.isSafeguarded(user) */
@@ -147,7 +152,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
                 return;
             }
         }
-        add_battler_tag(bt, a, ef, user, target, move);
+        add_battler_tag(bt, e, a, ef, user, target, move);
         return;
     }
     }

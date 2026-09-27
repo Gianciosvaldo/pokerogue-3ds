@@ -32,7 +32,13 @@
  * TURN_CHARGE=1 aims at two-turn moves (Fly, Dig, Solar Beam, Skull Bash...): most moves are
  * two-turn moves or moves that reach a semi-invulnerable Pokemon (Thunder, Earthquake, Surf...),
  * some Pokemon have No Guard, and half the Pokemon holding a two-turn move start on its second
- * turn, as MoveChargePhase and the command phases leave it.
+ * turn, as MoveChargePhase and the command phases leave it;
+ * TURN_TAGS=1 aims at the battler tags moves add (flinch, confusion, Outrage's lock-in, Mean Look's
+ * trap, No Retreat, Minimize, Charge, Tar Shot, Autotomize, Glaive Rush): most moves add one of them
+ * or read one (Stomp, Electric and Fire attacks, weight-based moves), a quarter of the Pokemon have
+ * an ability that reacts to them (Steadfast, Inner Focus, Own Tempo, Shield Dust, Serene Grace,
+ * No Guard), a third start with some of those tags, and half the Pokemon holding a rampage move
+ * start in the middle of one (FRENZY, the queued move, a successful history entry).
  *
  * Each case builds a random singles state inside a real upstream battle, gives both sides a
  * FIGHT command the way the command phases do, then runs upstream's own phases from
@@ -59,6 +65,7 @@ import { BattlerTagType } from "#enums/battler-tag-type";
 import { MoveId } from "#enums/move-id";
 import { MoveResult } from "#enums/move-result";
 import { MoveUseMode } from "#enums/move-use-mode";
+import { PokemonType } from "#enums/pokemon-type";
 import { SpeciesId } from "#enums/species-id";
 import { StatusEffect } from "#enums/status-effect";
 import { TrainerSlot } from "#enums/trainer-slot";
@@ -80,6 +87,7 @@ it("turntest producer", async () => {
   const STATUS_POOL = STATUS || SPROBE;
   const ONHIT = process.env.TURN_ONHIT === "1";
   const CHARGE = process.env.TURN_CHARGE === "1";
+  const TAGS = process.env.TURN_TAGS === "1";
   const OUT = process.env.TURN_OUT ?? "/tmp/pr-turns.txt";
   const game = new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
   game.override
@@ -197,6 +205,27 @@ it("turntest producer", async () => {
   const hitsTagMoves = usable.filter((m: any) =>
     m.attrs.some((a: any) => ["HitsTagAttr", "HitsTagForDoubleDamageAttr"].includes(a.constructor.name)),
   );
+  // TURN_TAGS pools: moves adding a tag the C port has, moves reading one, abilities reacting to one
+  const portedTags = [
+    BattlerTagType.FLINCHED, BattlerTagType.CONFUSED, BattlerTagType.FRENZY, BattlerTagType.TRAPPED,
+    BattlerTagType.NO_RETREAT, BattlerTagType.ALWAYS_GET_HIT, BattlerTagType.RECEIVE_DOUBLE_DAMAGE,
+    BattlerTagType.MINIMIZED, BattlerTagType.CHARGED, BattlerTagType.TAR_SHOT, BattlerTagType.AUTOTOMIZED,
+  ];
+  const tagMoves = usable.filter((m: any) =>
+    m.attrs.some((a: any) => isA(a, ["AddBattlerTagAttr"]) && portedTags.includes(a.tagType)),
+  );
+  const tagReaders = attacks.filter(
+    (m: any) =>
+      m.type === PokemonType.ELECTRIC
+      || m.type === PokemonType.FIRE
+      || m.attrs.some((a: any) =>
+        ["HitsTagForDoubleDamageAttr", "WeightPowerAttr", "CompareWeightPowerAttr"].includes(a.constructor.name),
+      ),
+  );
+  const tagAbilityIds = [
+    AbilityId.STEADFAST, AbilityId.INNER_FOCUS, AbilityId.OWN_TEMPO, AbilityId.SHIELD_DUST, AbilityId.SERENE_GRACE,
+    AbilityId.NO_GUARD,
+  ];
   const healStatusAttrs: [number, any][] = allAbilities
     .filter((a: any) => a)
     .sort((a: any, b: any) => a.id - b.id)
@@ -253,7 +282,7 @@ it("turntest producer", async () => {
       ...sd.tags.map(
         (t: any) =>
           `BTAG b=${b} type=${t.tagType} turns=${t.turnCount} smove=${t.sourceMove ?? 0} sid=${t.sourceId ?? -1}`
-          + ` stock=${t.stockpiledCount ?? 0} crit=${t.critStages ?? 0}`,
+          + ` stock=${t.stockpiledCount ?? 0} crit=${t.critStages ?? 0} auto=${t.autotomizeCount ?? 0}`,
       ),
     ];
   };
@@ -389,6 +418,7 @@ it("turntest producer", async () => {
       : STATUS_POOL && rnd(3) !== 0 ? statusAbilityIds[rnd(statusAbilityIds.length)]
       : ONHIT && rnd(3) !== 0 ? onHitAbilityIds[rnd(onHitAbilityIds.length)]
       : CHARGE && rnd(6) === 0 ? AbilityId.NO_GUARD
+      : TAGS && rnd(4) === 0 ? tagAbilityIds[rnd(tagAbilityIds.length)]
       : RICH && rnd(2) === 0 ? abilityIds[rnd(abilityIds.length)] : AbilityId.BALL_FETCH;
     p.gender = rnd(3) - 1;
     p.friendship = rnd(256);
@@ -398,7 +428,7 @@ it("turntest producer", async () => {
     p.calculateStats();
     p.hp = rnd(3) === 0 ? p.getMaxHp() : 1 + rnd(p.getMaxHp());
     p.status = null;
-    if (RICH ? rnd(3) === 0 : STATUS ? rnd(4) === 0 : ONHIT || CHARGE ? rnd(6) === 0 : STAT && rnd(8) === 0) {
+    if (RICH ? rnd(3) === 0 : STATUS ? rnd(4) === 0 : ONHIT || CHARGE || TAGS ? rnd(6) === 0 : STAT && rnd(8) === 0) {
       const s = statuses[rnd(statuses.length)];
       p.status = new Status(s, rnd(4), s === StatusEffect.SLEEP ? 1 + rnd(3) : 0, s === StatusEffect.FREEZE ? 1 + rnd(3) : undefined);
     }
@@ -411,6 +441,8 @@ it("turntest producer", async () => {
         ? (rnd(6) === 0 ? thawMoves[rnd(thawMoves.length)] : statusSetMoves[rnd(statusSetMoves.length)])
         : ONHIT && rnd(10) < 8
         ? (rnd(4) !== 0 ? contactAttacks[rnd(contactAttacks.length)] : attacks[rnd(attacks.length)])
+        : TAGS && rnd(10) < 8
+        ? (rnd(4) !== 0 ? tagMoves[rnd(tagMoves.length)] : tagReaders[rnd(tagReaders.length)])
         : CHARGE && rnd(10) < 7
         ? (rnd(3) !== 0 ? chargeMoves[rnd(chargeMoves.length)] : hitsTagMoves[rnd(hitsTagMoves.length)])
         : COND && rnd(10) < 6
@@ -540,6 +572,43 @@ it("turntest producer", async () => {
       }
       for (const p of [A, D]) {
         p.isTerastallized = rnd(8) === 0;
+      }
+    }
+    if (TAGS) {
+      for (const p of [A, D]) {
+        const other = p === A ? D : A;
+        p.isTerastallized = rnd(6) === 0; // Tar Shot
+        // some tags already there (built directly: addTag would run onAdd)
+        if (rnd(3) === 0) {
+          for (let k = 1 + rnd(2); k > 0; k--) {
+            const type = portedTags[rnd(portedTags.length)];
+            if (p.getTag(type) || type === BattlerTagType.FRENZY) {
+              continue;
+            }
+            const tag = getBattlerTag(type, 1 + rnd(4), rnd(2) === 0 ? MoveId.NONE : MoveId.MEAN_LOOK, type === BattlerTagType.NO_RETREAT ? p.id : other.id) as any;
+            if (type === BattlerTagType.AUTOTOMIZED) {
+              tag.autotomizeCount = 1 + rnd(3);
+            }
+            p.summonData.tags.push(tag);
+          }
+        }
+        // the middle of a rampage: what the last turn's MoveLockTag lapse left
+        const rampage = p.moveset.filter((m: any) =>
+          m.getMove().attrs.some((a: any) => isA(a, ["AddBattlerTagAttr"]) && a.tagType === BattlerTagType.FRENZY),
+        );
+        if (!rampage.length || rnd(2) !== 0 || p.getTag(BattlerTagType.FRENZY)) {
+          continue;
+        }
+        const move = rampage[rnd(rampage.length)].getMove();
+        const targets = [other.getBattlerIndex()];
+        p.summonData.tags.push(getBattlerTag(BattlerTagType.FRENZY, 1 + rnd(2), move.id, p.id));
+        p.summonData.moveHistory.push({ move: move.id, targets: [...targets], result: MoveResult.SUCCESS, useMode: rnd(2) ? MoveUseMode.IGNORE_PP : MoveUseMode.NORMAL });
+        p.summonData.moveQueue = [{ move: move.id, targets: [...targets], useMode: MoveUseMode.IGNORE_PP }];
+        const turnMove = { move: move.id, targets: [...targets], useMode: MoveUseMode.IGNORE_PP };
+        const b = p.getBattlerIndex();
+        battle.turnCommands[b] = p.isPlayer()
+          ? { command: Command.FIGHT, cursor: p.moveset.findIndex((m: any) => m.moveId === move.id), move: turnMove, args: [MoveUseMode.IGNORE_PP, turnMove] }
+          : { command: Command.FIGHT, move: turnMove, skip: false };
       }
     }
     if (STATUS) {

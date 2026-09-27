@@ -143,8 +143,14 @@ bool pr_tag_type_ported(int type);
 bool pr_add_tag(pr_battle *bt, pr_engine *e, pr_pokemon *p, int type, int turn_count, int source_move,
                 int64_t source_id);
 void pr_lapse_tags(pr_battle *bt, pr_engine *e, pr_pokemon *p, int lapse_type);   /* lapseTags(type) */
-bool pr_lapse_tag(pr_battle *bt, pr_engine *e, pr_pokemon *p, int type);          /* lapseTag(type), CUSTOM */
+/* lapseTag(type, lapseType): whether the Pokemon had the tag (upstream's default lapse type is CUSTOM) */
+bool pr_lapse_tag(pr_battle *bt, pr_engine *e, pr_pokemon *p, int type, int lapse_type);
 void pr_remove_tag(pr_battle *bt, pr_engine *e, pr_pokemon *p, int type);         /* removeTag(type) */
+void pr_remove_tags_by_source_id(pr_battle *bt, pr_engine *e, pr_pokemon *p, int64_t source_id);
+/* phaseManager.unshiftNew(<PokemonPhase type>, battlerIndex) */
+void pr_unshift_new(pr_battle *bt, pr_engine *e, pr_phase_type t, int battler);
+/* the running phase, when it is a MovePhase (of Pokemon p, unless p is NULL): phase.cancel() */
+void pr_cancel_current_move(pr_engine *e, const pr_pokemon *p);
 /* inSpeedOrder(side): the active Pokemon of a side (ArenaTagSide) in speed order, as upstream's
  * generator yields them (the queue is re-sorted, with its seeded shuffle, before each one) */
 typedef struct { pr_pokemon *queue[4]; int n; } pr_speed_iter;
