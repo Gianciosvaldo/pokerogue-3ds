@@ -278,6 +278,27 @@ static void move_queue_shift(pr_pokemon *p, pr_turn_move *out)
     p->n_move_queue--;
 }
 
+/* PreMoveMessageAttr.apply: a message when the move's message function returns one. The
+ * functions live in the move list, so each user is ported by move id. */
+static bool pre_move_message(pr_battle *bt, int move, const pr_pokemon *target, int mode)
+{
+    switch (move) {
+    case MOVE_ID_STRUGGLE:
+    case MOVE_ID_MAGNITUDE:          /* "Magnitude N!": always a text, whatever the roll */
+        return true;
+    case MOVE_ID_FICKLE_BEAM: {      /* doublePowerChanceMessageFunc(30): the same roll as its power */
+        int roll = pr_wave_seed_roll(bt, 100);
+        return roll >= 0 && roll < 30;
+    }
+    case MOVE_ID_POLTERGEIST:        /* attackedByItemMessageFunc: the target's first transferable item */
+        return target && pr_held_item_count(bt, target, true) > 0;
+    case MOVE_ID_CHILLY_RECEPTION:   /* no text when called indirectly */
+        return mode < MOVE_USE_MODE_INDIRECT;
+    }
+    pr_note_unported(bt, PR_AC_PreMoveMessageAttr);
+    return false;
+}
+
 static void handle_pre_move_failures(pr_battle *bt, pr_engine *e, int ph)
 {
     pr_phase *m = PH(ph);
@@ -817,7 +838,12 @@ static void move_phase(pr_battle *bt, pr_engine *e, int ph)
         && !pr_get_battler_tag(user, BATTLER_TAG_TYPE_INTERRUPTED)) {
         m->entry.move = (uint16_t)move;
         pr_queue_message(bt, e);
-        if (pr_move_has_attr((uint16_t)move, PR_AC_PreMoveMessageAttr)) pr_note_unported(bt, PR_AC_PreMoveMessageAttr);
+        if (pr_move_has_attr((uint16_t)move, PR_AC_PreMoveMessageAttr)) {
+            /* applyMoveAttrs("PreMoveMessageAttr", pokemon, getActiveTargetPokemon()[0], move) */
+            pr_pokemon *tg[4];
+            int n = active_in_list(bt, tlist(e, m->targets), tg);
+            if (pre_move_message(bt, move, n ? tg[0] : NULL, mode)) pr_queue_message(bt, e);
+        }
     }
 
     /* secondFailureCheck */

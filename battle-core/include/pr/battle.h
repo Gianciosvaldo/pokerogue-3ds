@@ -459,6 +459,9 @@ bool pr_move_can_be_multi_strike_enhanced_ex(pr_battle *bt, int move, const pr_p
 double js_pow(double x, double y);
 
 /* ---- move attributes (src/move_attrs.c) ---- */
+/* randSeedInt(range) inside executeWithSeedOffset(fn, turn << 6, waveSeed) (Magnitude, Fickle Beam);
+ * -1 (reported unported) when the wave seed isn't known */
+int pr_wave_seed_roll(pr_battle *bt, int range);
 /* applyMoveAttrs("VariablePowerAttr", user, target, move, power) */
 void pr_apply_variable_power(pr_battle *bt, const pr_pokemon *user, const pr_pokemon *target, int move,
                              double *power);

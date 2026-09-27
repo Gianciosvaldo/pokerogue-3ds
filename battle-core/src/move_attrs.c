@@ -23,7 +23,7 @@ static double to_dmg_value(double v)
 /* randSeedInt(range) inside executeWithSeedOffset(fn, turn << 6, waveSeed): a fresh RNG
  * sown from the shifted wave seed; the global RNG state is restored afterwards, so a
  * copy stands in for it. Returns -1 when the caller didn't provide the wave seed. */
-static int wave_seed_roll(pr_battle *bt, int range)
+int pr_wave_seed_roll(pr_battle *bt, int range)
 {
     if (!bt->wave_seed.len) { pr_note_unported(bt, PR_FEAT_WAVE); return -1; }
     pr_rng r;
@@ -156,14 +156,14 @@ void pr_apply_variable_power(pr_battle *bt, const pr_pokemon *user, const pr_pok
             if (user->species == SPECIES_ID_BATTLE_BOND_GRENINJA && user->form == 1) *power = 20;
             break;
         case PR_AC_DoublePowerChanceAttr: { /* Fickle Beam */
-            int roll = wave_seed_roll(bt, 100);
+            int roll = pr_wave_seed_roll(bt, 100);
             if (roll >= 0 && roll < P(DoublePowerChanceAttr, a)->chance) *power *= 2;
             break;
         }
         case PR_AC_MagnitudePowerAttr: {
             static const int thresholds[6] = {5, 15, 35, 65, 85, 95};
             static const int powers[7] = {10, 30, 50, 70, 90, 110, 150};
-            int roll = wave_seed_roll(bt, 100);
+            int roll = pr_wave_seed_roll(bt, 100);
             if (roll < 0) break;
             int k = 0;
             while (k < 6 && !(roll < thresholds[k])) k++;
