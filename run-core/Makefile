@@ -9,7 +9,7 @@ CORE_LIB := $(BUILD)/battle-core/libprcore.a
 SRCS := src/wave.c src/shop.c src/biome.c src/evolution.c gen/out/run_biomes.c gen/out/run_evolutions.c src/exp.c gen/out/run_exp.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
-all: $(BUILD)/librun.a $(BUILD)/wavetest $(BUILD)/shoptest $(BUILD)/biometest $(BUILD)/encountertest $(BUILD)/newbattletest $(BUILD)/exptest
+all: $(BUILD)/librun.a $(BUILD)/wavetest $(BUILD)/shoptest $(BUILD)/biometest $(BUILD)/encountertest $(BUILD)/newbattletest $(BUILD)/exptest $(BUILD)/partyexptest
 
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -44,4 +44,7 @@ $(BUILD)/newbattletest: tests/newbattletest.c $(BUILD)/librun.a $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
 $(BUILD)/exptest: tests/exptest.c $(BUILD)/librun.a $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+$(BUILD)/partyexptest: tests/partyexptest.c $(BUILD)/librun.a $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

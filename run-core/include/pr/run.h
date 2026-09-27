@@ -191,6 +191,27 @@ extern const int32_t pr_exp_table[PR_GROWTH_RATE_COUNT][99];
 double pr_run_get_level_total_exp(int level, int rate);
 double pr_run_get_level_rel_exp(int level, int rate);
 
+/* Victory experience. A party member as applyPartyExp sees it, and the modifiers it reads */
+#define PR_MAX_EXP_PARTY 6
+typedef struct { uint32_t id; int level; int hp; bool pokerus, participated; } pr_exp_member;
+typedef struct { uint32_t pokemon_id; int stacks; double boost_percent; } pr_exp_egg;   /* Lucky/Golden Egg */
+typedef struct {
+    pr_exp_member party[PR_MAX_EXP_PARTY];   /* getPlayerParty(), in order */
+    int n_party;
+    int n_participants;                      /* currentBattle.playerParticipantIds.size */
+    double max_exp_level;                    /* getMaxExpLevel() */
+    bool trainer_battle;                     /* a trainer battle, or a mystery encounter's trainer battle */
+    double me_exp_multiplier;                /* another mystery encounter's expMultiplier; NaN = not one */
+    int exp_share_stacks, exp_balance_stacks, oval_charm_stacks;   /* the first one held (findModifier); 0 = none */
+    pr_exp_egg eggs[16];                     /* PokemonExpBoosterModifiers, in modifier-list order */
+    int n_eggs;
+} pr_exp_party;
+/* Pokemon.getExpValue() */
+double pr_run_get_exp_value(int base_exp, int level);
+/* applyPartyExp: returns how many members get experience (party indexes and amounts, in order) */
+int pr_run_apply_party_exp(const pr_exp_party *pp, double exp_value, bool use_wave_index_multiplier, int wave,
+                           int out_index[PR_MAX_EXP_PARTY], double out_exp[PR_MAX_EXP_PARTY]);
+
 /* ---- helpers ---- */
 /* executeWithSeedOffset(fn, offset, seedOverride): fn rolls on a fresh RNG sown from
  * shiftCharCodes(seedOverride || seed, offset), and RND's state comes back afterwards, so a

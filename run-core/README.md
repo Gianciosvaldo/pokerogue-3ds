@@ -21,6 +21,8 @@ Runs (`tools/difftest.sh <upstream> 20000 <seed>`; each case picks a random game
 
 Experience (`src/exp.c`): `getLevelTotalExp` and `getLevelRelExp` for all six growth rates. Below level 100 upstream reads a table of its own that isn't exported, so `gen/dump-exp.test.ts` dumps its answers for levels 1 to 99 into `gen/out/run_exp.c`; from level 100 the formulas are ported. The test (`tools/difftest.sh <upstream> 20000 <seed> exp`) checks every rate at every level from 0 to 3,000 and 20,000 random levels up to 100,000: 138,006 checks, 0 mismatches. 5 of 6 deliberate bugs are caught; the 6th (rounding instead of flooring level³) can't change anything.
 
+Victory experience (`src/exp.c`): `getExpValue` and `applyPartyExp`: who gets experience (not fainted, under the level cap), the wave multiplier, trainer battles' x1.5 and mystery encounters' multiplier, the participants' split and Oval Charm, Exp. Share for the others, Pokerus, Lucky and Golden Eggs in list order (each floors), Exp. Balance's pull towards the split for members at or below the median level. Friendship and Macho Brace, which a defeat also brings, aren't part of it. The test (`tools/difftest.sh <upstream> 20000 <seed> partyexp`) builds a real party of 1 to 6 with random levels, fainted members, Pokerus, participants (sometimes one that left the party) and items, and compares the experience phases upstream's `applyPartyExp` queues: seeds 777, 9001 and 4242, 20,000 cases each, 0 mismatches (94,192 awards). 10 of 11 deliberate bugs are caught; the 11th, the median level not floored, can't change anything for whole-number levels. A mystery encounter's own multiplier is ported but not in the test.
+
 Mystery encounters and trainer parties (`src/wave.c`):
 
 | Piece | Upstream | State |
