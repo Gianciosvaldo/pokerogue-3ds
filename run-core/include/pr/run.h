@@ -144,6 +144,29 @@ int pr_run_random_species(pr_run *run, int biome, int wave, int level, int luck,
 /* arena.randomTrainerType(wave, isBoss) on run->rng */
 int pr_run_random_trainer_type(pr_run *run, int biome, int wave, bool is_boss);
 
+/* ---- enemy species for a level (src/evolution.c; data in gen/out/run_evolutions.c) ---- */
+/* An evolution (target, level, evoLevelThreshold [STRONG, NORMAL, WILD], -1 = none), or a
+ * getPrevolutionLevels(true) entry (prevolution, level, threshold) */
+typedef struct { uint16_t species; uint8_t level; int8_t threshold[3]; } pr_evo;
+typedef struct {
+    uint16_t id;
+    bool has_prevolution;               /* speciesDataRegistry.hasPrevolution */
+    uint16_t evo_start, n_evo;          /* getEvolutions, in pr_evo_data */
+    uint16_t prevo_start, n_prevo;      /* getPrevolutionLevels(true), in pr_prevo_data */
+} pr_species_evo;
+extern const pr_species_evo pr_species_evos[];   /* by SpeciesId */
+extern const int pr_species_evo_count;
+extern const pr_evo pr_evo_data[], pr_prevo_data[];
+enum { PR_EVO_KIND_STRONG, PR_EVO_KIND_NORMAL, PR_EVO_KIND_WILD };   /* EvoLevelThresholdKind */
+/* determineEnemySpecies(species, level, allowEvolving, ..., encounterKind, tryForcePrevo) on `rng`.
+ * classic_wave20_trainer: currentBattle.waveIndex === 20 && gameMode.isClassic && currentBattle.trainer
+ * (which blocks evolving). */
+int pr_run_determine_enemy_species(pr_rng *rng, int species, int level, bool allow_evolving, int encounter_kind,
+                                   bool try_force_prevo, bool classic_wave20_trainer);
+/* species.getWildSpeciesForLevel(level, allowEvolving, isBoss, gameMode): kind NORMAL for a boss, else WILD */
+int pr_run_get_wild_species_for_level(pr_rng *rng, int species, int level, bool allow_evolving, bool is_boss,
+                                      bool classic_wave20_trainer);
+
 /* ---- helpers ---- */
 /* executeWithSeedOffset(fn, offset, seedOverride): fn rolls on a fresh RNG sown from
  * shiftCharCodes(seedOverride || seed, offset), and RND's state comes back afterwards, so a

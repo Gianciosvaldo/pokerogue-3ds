@@ -7,9 +7,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { C_OFFSETS, C_TOD, C_SPECIES, C_TRAINER, C_COUNT_ };
+enum { C_OFFSETS, C_TOD, C_SPECIES, C_FULL, C_DETERMINE, C_TRAINER, C_COUNT_ };
 static const char *const check_names[C_COUNT_] = {
-    "wave-cycle and gym offsets", "getTimeOfDay", "randomSpecies (+ RNG state)", "randomTrainerType (+ RNG state)",
+    "wave-cycle and gym offsets", "getTimeOfDay", "randomSpecies to the evolution step (+ RNG)",
+    "randomSpecies with evolution (+ RNG)", "determineEnemySpecies (+ RNG)", "randomTrainerType (+ RNG state)",
 };
 static int pass[C_COUNT_], fail[C_COUNT_], uncovered[C_COUNT_];
 
@@ -67,12 +68,37 @@ int main(int argc, char **argv)
         char *sv = tok(&save);
         int evo_species = (int)num(&save), evo_boss = (int)num(&save);
         read_state(&save, &after);
+        pr_rng start = run.rng;
         bool my_evo_boss = false;
         int species = pr_run_random_species(&run, biome, wave, level, luck, is_boss, cycle, &my_evo_boss);
+        unsigned species_unported = run.unported;
         record(C_SPECIES, &run.unported,
                strcmp(sv, "NaN") && species == atoi(sv) && species == evo_species && my_evo_boss == (evo_boss != 0)
                    && same_state(&run.rng, &after),
                line_no);
+
+        /* the whole randomSpecies: the same roll, then getWildSpeciesForLevel(level, true, isBoss) */
+        char *fv = tok(&save);
+        read_state(&save, &after);
+        run.rng = start;
+        run.unported = 0;
+        species = pr_run_random_species(&run, biome, wave, level, luck, is_boss, cycle, &my_evo_boss);
+        int full = species < 0 ? -1 : pr_run_get_wild_species_for_level(&run.rng, species, level, true, my_evo_boss, false);
+        run.unported |= species_unported;
+        record(C_FULL, &run.unported, strcmp(fv, "NaN") && full == atoi(fv) && same_state(&run.rng, &after), line_no);
+
+        /* determineEnemySpecies on its own */
+        int any = (int)num(&save), det_level = (int)num(&save);
+        bool det_allow = num(&save) != 0;
+        int det_kind = (int)num(&save);
+        bool det_force = num(&save) != 0, blocked = num(&save) != 0;
+        pr_rng dr;
+        read_state(&save, &dr);
+        int det = (int)num(&save);
+        read_state(&save, &after);
+        int my_det = pr_run_determine_enemy_species(&dr, any, det_level, det_allow, det_kind, det_force, blocked);
+        unsigned none = 0;
+        record(C_DETERMINE, &none, my_det == det && same_state(&dr, &after), line_no);
 
         bool trainer_boss = num(&save) != 0;
         read_state(&save, &run.rng);

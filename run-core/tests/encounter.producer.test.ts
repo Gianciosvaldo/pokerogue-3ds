@@ -5,9 +5,13 @@
  * time of day, a wild species (arena.randomSpecies, on a freshly sown RND) and a trainer type
  * (arena.randomTrainerType, likewise). The evolution step at the end of randomSpecies
  * (species.getWildSpeciesForLevel) isn't ported yet, so it is intercepted here: the case records the
- * species and the isBoss it receives. build/encountertest replays the cases.
+ * species and the isBoss it receives, and then the whole randomSpecies runs again on the same RND
+ * with the real evolution step. Each case also asks determineEnemySpecies on its own for a random
+ * species, level and kind. build/encountertest replays the cases.
  */
+import { determineEnemySpecies } from "#app/ai/ai-species-gen";
 import { getGameMode } from "#app/game-mode";
+import { speciesDataRegistry } from "#app/globals/global-species-data-registry";
 import { allBiomes } from "#data/data-lists";
 import { PokemonSpecies } from "#data/pokemon-species";
 import { BiomeId } from "#enums/biome-id";
@@ -43,10 +47,12 @@ it("encounter producer", async () => {
   // The unported evolution step: record what it receives and hand the species back unchanged
   const realWild = PokemonSpecies.prototype.getWildSpeciesForLevel;
   let evo: [number, number] = [-1, -1];
-  (PokemonSpecies.prototype as any).getWildSpeciesForLevel = function (this: any, _level: number, _allow: boolean, isBoss: boolean) {
+  const interceptWild = function (this: any, _level: number, _allow: boolean, isBoss: boolean) {
     evo = [this.speciesId, isBoss ? 1 : 0];
     return this.speciesId;
   };
+  (PokemonSpecies.prototype as any).getWildSpeciesForLevel = interceptWild;
+  const speciesIds = Object.keys(speciesDataRegistry.data).map(Number);
 
   const lines: string[] = [];
   try {
@@ -72,7 +78,8 @@ it("encounter producer", async () => {
       const level = 1 + rnd(120);
       const luck = rnd(3) === 0 ? rnd(15) : 0;
       const isBoss = [undefined, undefined, true, false][rnd(4)];
-      Phaser.Math.RND.sow([seedStr()]);
+      const spSeed = seedStr();
+      Phaser.Math.RND.sow([spSeed]);
       const spBefore = state();
       evo = [-1, -1];
       let species: any;
@@ -82,6 +89,36 @@ it("encounter producer", async () => {
         species = "NaN";
       }
       const spAfter = state();
+      // The whole of randomSpecies, evolution step included, on the same RND
+      Phaser.Math.RND.sow([spSeed]);
+      (PokemonSpecies.prototype as any).getWildSpeciesForLevel = realWild;
+      let full: any;
+      try {
+        full = arena.randomSpecies(wave, level, 0, luck, isBoss).speciesId;
+      } catch {
+        full = "NaN";
+      }
+      (PokemonSpecies.prototype as any).getWildSpeciesForLevel = interceptWild;
+      const fullAfter = state();
+
+      // determineEnemySpecies on its own: any species, level, kind, evolving or not, forced
+      // prevolutions or not, and now and then the wave-20 classic trainer battle that blocks evolving
+      const anySpecies = speciesIds[rnd(speciesIds.length)];
+      const detLevel = 1 + rnd(100);
+      const detAllow = rnd(4) !== 0;
+      const detKind = rnd(3);
+      const detForce = rnd(4) !== 0;
+      const block = rnd(8) === 0;
+      battle.waveIndex = block ? 20 : wave;
+      battle.trainer = block ? {} : null;
+      Phaser.Math.RND.sow([seedStr()]);
+      const detBefore = state();
+      const det = determineEnemySpecies(
+        speciesDataRegistry.getSpecies(anySpecies), detLevel, detAllow, false, undefined, detKind as any, detForce,
+      );
+      const detAfter = state();
+      battle.trainer = null;
+      const blocked = block && gm.isClassic ? 1 : 0;
 
       const trainerBoss = rnd(4) === 0;
       Phaser.Math.RND.sow([seedStr()]);
@@ -92,7 +129,8 @@ it("encounter producer", async () => {
       lines.push(
         [
           "E", gm.modeId, scene.seed, genCycle, genGym, biome, wave, scene.waveCycleOffset, scene.offsetGym ? 1 : 0, tod,
-          level, luck, isBoss === undefined ? -1 : isBoss ? 1 : 0, spBefore, species, evo[0], evo[1], spAfter,
+          level, luck, isBoss === undefined ? -1 : isBoss ? 1 : 0, spBefore, species, evo[0], evo[1], spAfter, full,
+          fullAfter, anySpecies, detLevel, detAllow ? 1 : 0, detKind, detForce ? 1 : 0, blocked, detBefore, det, detAfter,
           trainerBoss ? 1 : 0, trBefore, trainer, trAfter,
         ].join(" "),
       );

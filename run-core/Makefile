@@ -6,7 +6,7 @@ BATTLE_CORE ?= ../battle-core
 CPPFLAGS += -Iinclude -I$(BATTLE_CORE)/include -I$(BATTLE_CORE)/gen/out
 BUILD ?= build
 CORE_LIB := $(BUILD)/battle-core/libprcore.a
-SRCS := src/wave.c src/shop.c src/biome.c gen/out/run_biomes.c
+SRCS := src/wave.c src/shop.c src/biome.c src/evolution.c gen/out/run_biomes.c gen/out/run_evolutions.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
 all: $(BUILD)/librun.a $(BUILD)/wavetest $(BUILD)/shoptest $(BUILD)/biometest $(BUILD)/encountertest
