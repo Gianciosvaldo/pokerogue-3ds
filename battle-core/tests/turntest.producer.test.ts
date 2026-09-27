@@ -8,7 +8,13 @@
  * a wave turn count, so those conditions get exercised; TURN_PROBE=1 does what TURN_COND does
  * with random abilities and statuses, and instead of running a turn calls every move's own
  * conditions, move.applyConditions(user, target, seq) for seq 2, 3 and 4, both ways, writing
- * a PROBE line with the result and the RNG state after each call).
+ * a PROBE line with the result and the RNG state after each call, after calling the
+ * StatStageChangeAttr conditions of the moves that have one, as seq=0 PROBE lines; TURN_STAT=1 aims at the
+ * stat-change phase: most moves change stat stages, half the abilities react to stat changes
+ * (Simple, Contrary, Clear Body, Mirror Armor, Defiant, Opportunist...), stat stages start near
+ * the caps two cases in three, a quarter of the Pokemon are terastallized (Stellar included),
+ * one in eight has a status, one case in eight gives both sides the same ability, and a quarter of
+ * the cases have Mist on one side).
  *
  * Each case builds a random singles state inside a real upstream battle, gives both sides a
  * FIGHT command the way the command phases do, then runs upstream's own phases from
@@ -50,6 +56,7 @@ it("turntest producer", async () => {
   const RICH = process.env.TURN_RICH === "1" || process.env.TURN_PROBE === "1";
   const PROBE = process.env.TURN_PROBE === "1";
   const COND = PROBE || process.env.TURN_COND === "1";
+  const STAT = process.env.TURN_STAT === "1";
   const OUT = process.env.TURN_OUT ?? "/tmp/pr-turns.txt";
   const game = new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
   game.override
@@ -96,6 +103,35 @@ it("turntest producer", async () => {
     (m: any) => m.conditions.length || m.conditionsSeq2.length || m.conditionsSeq3.length,
   );
   const abilityIds = allAbilities.filter((a: any) => a && a.id !== AbilityId.NONE).map((a: any) => a.id);
+  // TURN_STAT pools, by class name up the prototype chain
+  const isA = (o: any, names: string[]) => {
+    for (let c = o?.constructor; c && c !== Object; c = Object.getPrototypeOf(c)) {
+      if (names.includes(c.name)) {
+        return true;
+      }
+    }
+    return false;
+  };
+  const statMoves = usable.filter((m: any) => m.attrs.some((a: any) => a.constructor.name === "StatStageChangeAttr"));
+  // the ones whose change has its own condition (Rototiller, Flower Shield, Venom Drench, Magnetic Flux, Gear Up, Tera Blast)
+  const hasStatCond = (a: any) =>
+    a.constructor.name === "StatStageChangeAttr" && a.options.condition.toString() !== "() => true";
+  const statCondMoves = usable.filter((m: any) => m.attrs.some(hasStatCond));
+  const statAbilityIds = allAbilities
+    .filter((a: any) =>
+      a?.attrs.some((x: any) =>
+        isA(x, [
+          "StatStageChangeMultiplierAbAttr",
+          "ProtectStatAbAttr",
+          "ConditionalUserFieldProtectStatAbAttr",
+          "ReflectStatStageChangeAbAttr",
+          "StatStageChangeCopyAbAttr",
+          "PostStatStageChangeAbAttr",
+        ]),
+      ),
+    )
+    .map((a: any) => a.id)
+    .concat([AbilityId.INFILTRATOR, AbilityId.PLUS, AbilityId.MINUS, AbilityId.LEVITATE]);
 
   // Bench Pokemon so a fainted player Pokemon has someone to switch to (SwitchPhase) and the
   // party lines are real. Made once; species and status are drawn per case.
@@ -272,7 +308,9 @@ it("turntest producer", async () => {
     p.nature = rnd(25);
     p.passive = false;
     p.customPokemonData.passive = AbilityId.BALL_FETCH;
-    p.summonData.ability = RICH && rnd(2) === 0 ? abilityIds[rnd(abilityIds.length)] : AbilityId.BALL_FETCH;
+    p.summonData.ability = STAT && rnd(2) === 0
+      ? statAbilityIds[rnd(statAbilityIds.length)]
+      : RICH && rnd(2) === 0 ? abilityIds[rnd(abilityIds.length)] : AbilityId.BALL_FETCH;
     p.gender = rnd(3) - 1;
     p.friendship = rnd(256);
     p.isTerastallized = false;
@@ -281,14 +319,16 @@ it("turntest producer", async () => {
     p.calculateStats();
     p.hp = rnd(3) === 0 ? p.getMaxHp() : 1 + rnd(p.getMaxHp());
     p.status = null;
-    if (RICH && rnd(3) === 0) {
+    if (RICH ? rnd(3) === 0 : STAT && rnd(8) === 0) {
       const s = statuses[rnd(statuses.length)];
       p.status = new Status(s, rnd(4), s === StatusEffect.SLEEP ? 1 + rnd(3) : 0, s === StatusEffect.FREEZE ? 1 + rnd(3) : undefined);
     }
     const n = 1 + rnd(4);
     p.moveset = [];
     for (let k = 0; k < n; k++) {
-      const m = COND && rnd(10) < 6
+      const m = STAT && rnd(10) < 7
+        ? (rnd(5) === 0 ? statCondMoves[rnd(statCondMoves.length)] : statMoves[rnd(statMoves.length)])
+        : COND && rnd(10) < 6
         ? withConditions[rnd(withConditions.length)]
         : rnd(10) < 7 ? attacks[rnd(attacks.length)] : usable[rnd(usable.length)];
       p.moveset.push(new PokemonMove(m.id, rnd(8) === 0 ? rnd(m.pp + 1) : 0));
@@ -357,6 +397,21 @@ it("turntest producer", async () => {
     battle.playerParticipantIds.add(A.id);
     command(A);
     command(D);
+    if (STAT) {
+      if (rnd(8) === 0) {
+        D.summonData.ability = A.summonData.ability; // Mirror Armor against Mirror Armor, Opportunist against Opportunist
+      }
+      for (const p of [A, D]) {
+        p.isTerastallized = rnd(4) === 0;
+        if (rnd(3) !== 0) {
+          p.summonData.statStages = p.summonData.statStages.map(() => [0, 0, 1, -1, 2, -2, 5, -5, 6, -6][rnd(10)]);
+        }
+      }
+      if (rnd(4) === 0) {
+        const side = [ArenaTagSide.PLAYER, ArenaTagSide.ENEMY][rnd(2)];
+        scene.arena.tags.push(getArenaTag(ArenaTagType.MIST, 1 + rnd(5), MoveId.MIST, A.id, side));
+      }
+    }
     if (PROBE) {
       // same levels half the time (OHKO moves), stat stages near the caps (Belly Drum and co.)
       if (rnd(2) === 0) {
@@ -370,6 +425,9 @@ it("turntest producer", async () => {
         }
         p.isTerastallized = rnd(4) === 0;
         p.turnData.acted = rnd(3) === 0;
+        if (rnd(8) === 0) {
+          p.summonData.ability = [AbilityId.PLUS, AbilityId.MINUS, AbilityId.LEVITATE][rnd(3)];
+        }
         // battler tags as the conditions read them (built directly: addTag would run onAdd)
         for (let k = rnd(3); k > 0; k--) {
           const type = probeBattlerTags[rnd(probeBattlerTags.length)];
@@ -395,6 +453,29 @@ it("turntest producer", async () => {
       const before = dumpState();
       const probes: string[] = [];
       let threw = false;
+      // first the StatStageChangeAttr conditions of the moves that have one, called directly
+      // (seq=0, attr = the attr's index on the move; they draw no random number)
+      for (const [u, t] of [[A, D], [D, A]]) {
+        for (const m of statCondMoves) {
+          m.attrs.forEach((a: any, k: number) => {
+            if (threw || !hasStatCond(a)) {
+              return;
+            }
+            let res: string;
+            try {
+              res = a.options.condition(u, t, m) ? "1" : "0";
+            } catch (e: any) {
+              res = "throw";
+              threw = true;
+            }
+            const bs = battle.battleSeedState;
+            probes.push(
+              `PROBE u=${u.getBattlerIndex()} t=${t.getBattlerIndex()} move=${m.id} seq=0 attr=${k} res=${res}`
+                + ` g=${rngState(Phaser.Math.RND.state())} b=${bs ? rngState(bs) : "none"}`,
+            );
+          });
+        }
+      }
       for (const [u, t] of [[A, D], [D, A]]) {
         for (const pmv of u.moveset) {
           for (const seq of [2, 3, 4]) {
@@ -439,6 +520,9 @@ it("turntest producer", async () => {
       continue;
     }
     out.push(`CASE ${i}`, ...before, "RUN", `TRACE list=${L(run.trace)}`, ...dumpState(), ...queueLines(), `END stop=${run.stop}`);
+  }
+  if (STAT) {
+    out.push(`# stat condition moves: ${statCondMoves.map((m: any) => m.id).join(",")}`);
   }
   out.push(`# upstream threw (case left out): ${JSON.stringify(thrown)}`);
   fs.writeFileSync(OUT, out.join("\n") + "\n");

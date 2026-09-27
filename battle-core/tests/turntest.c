@@ -656,7 +656,8 @@ static void report_conditions(void)
 }
 
 /* TURN_PROBE cases: each PROBE line is move.applyConditions(user, target, seq) run upstream on
- * the state before, in order, with its result and the RNG state after it */
+ * the state before, in order, with its result and the RNG state after it; seq=0 lines call a
+ * StatStageChangeAttr's own condition (attr = its index on the move) */
 static struct { int total, covered, pass, fail, unported, after_unported, threw, shown; } probes;
 static void probe_case(pr_battle *bt, const lines_t *js, int from, const char *case_name)
 {
@@ -680,7 +681,23 @@ static void probe_case(pr_battle *bt, const lines_t *js, int from, const char *c
         bt->n_unported = bt->n_deferred = 0;
         static uint32_t hits_before[PR_CLOSURE_COUNT];
         memcpy(hits_before, pr_closure_hits, sizeof hits_before);
-        bool res = pr_move_apply_conditions(bt, move, u, t, seq);
+        bool res;
+        if (seq == 0) {
+            /* a StatStageChangeAttr's options.condition(user, target, move) */
+            const pr_move *mv = &pr_moves[move];
+            unsigned k = (unsigned)inum(l, "attr");
+            if (k >= mv->nattr || pr_attrs[mv->attr0 + k].cls != PR_AC_StatStageChangeAttr
+                || pr_attr_effects[mv->attr0 + k].condition == PR_NO_FN) {
+                printf("PROBE ATTR MISMATCH %s: %s\n", case_name, l);
+                probes.fail++;
+                stop = true;
+                continue;
+            }
+            res = pr_closure_call(bt, pr_attr_effects[mv->attr0 + k].condition, PR_AC_StatStageChangeAttr, 0, u, t,
+                                  move) != 0;
+        } else {
+            res = pr_move_apply_conditions(bt, move, u, t, seq);
+        }
         if (bt->n_unported || bt->n_deferred || eng.overflow) {
             /* upstream may have moved the RNG where C can't follow: the rest of the case is out */
             probes.unported++;
@@ -798,6 +815,10 @@ int main(int argc, char **argv)
         if (incomplete) pr_note_unported(bt, PR_FEAT_MOVE_HISTORY);
 
         if (bt->n_unported || bt->n_deferred) {
+            /* TURNTEST_WHY=<reason> lists the cases a reason left out */
+            const char *why = getenv("TURNTEST_WHY");
+            for (int i = 0; why && i < bt->n_unported; i++)
+                if (!strcmp(why, pr_unported_name(bt->unported[i]))) printf("WHY %s\n", case_name);
             for (int i = 0; i < bt->n_unported; i++) uncovered_by[bt->unported[i]]++;
             for (int i = 0; i < bt->n_deferred; i++) uncovered_by[bt->deferred[i]]++;
             continue;

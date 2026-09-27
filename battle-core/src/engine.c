@@ -345,7 +345,7 @@ static int check_dynamic(pr_battle *bt, pr_engine *e, int ph)
 static void note_unported_phase(pr_battle *bt, pr_engine *e, int ph)
 {
     int t = e->pool[ph].type;
-    if (t >= PH_STAT_STAGE_CHANGE) pr_note_unported(bt, (uint16_t)(PR_FEAT_PHASE_0 + t));
+    if (t >= PH_FIRST_UNPORTED) pr_note_unported(bt, (uint16_t)(PR_FEAT_PHASE_0 + t));
 }
 
 /* PhaseManager.pushPhase */

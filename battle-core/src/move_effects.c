@@ -76,9 +76,14 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         if (!effect_can_apply(ef, user, target)) return;
         if (ef->condition != PR_NO_FN && !pr_closure_call(bt, ef->condition, a->cls, 0, user, target, move)) return;
         double chance = get_move_chance(bt, ef, user, target, move, ef->self_target, true);
-        if (chance_roll(bt, chance))
-            /* StatStageChangePhase({battlerIndex, changes, sourcePokemon: user, message}) */
-            unshift_pokemon_phase(bt, e, PH_STAT_STAGE_CHANGE, ef->self_target ? user : target);
+        if (chance_roll(bt, chance)) {
+            /* StatStageChangePhase({battlerIndex, changes: groupStatChange(stats, getLevels(user)),
+             * sourcePokemon: user, message: options.message}); no StatStageChangeAttr has a message */
+            const pr_attr_StatStageChangeAttr *x = P(StatStageChangeAttr, a);
+            pr_pokemon *on = ef->self_target ? user : target;
+            if (pr_unshift_stat_stage_change(bt, e, pr_battler_index(bt, on), x->stats.v, x->stats.n, x->stages, user) < 0)
+                e->overflow = true;
+        }
         return;
     }
     case PR_AC_StatusEffectAttr: {

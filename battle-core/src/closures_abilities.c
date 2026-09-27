@@ -287,6 +287,17 @@ static double always(ARGS) { UNUSED; return 1; }
 /* Hunger Switch: (pokemon) => !pokemon.isTerastallized */
 static double not_terastallized(ARGS) { UNUSED; return !a->terastallized; }
 
+/* Flower Veil: (target) => target.isOfType(GRASS, {returnOriginalTypesIfStellar: true}) */
+static double grass_target(ARGS)
+{
+    UNUSED;
+    int8_t ty[3];
+    int n = pr_get_types(a, ty, PR_TYPES_ORIGINAL_IF_STELLAR);
+    for (int i = 0; i < n; i++)
+        if (ty[i] == POKEMON_TYPE_GRASS) return 1;
+    return 0;
+}
+
 /* Ball Fetch: (pokemon) => !pokemon.waveData.abilitiesApplied.has(ability) */
 static double ball_fetch_unused(ARGS) { UNUSED; return !pr_wave_ability_applied(a, ABILITY_ID_BALL_FETCH); }
 
@@ -413,5 +424,6 @@ const pr_closure_reg pr_ability_closures[] = {
     {"ability:158", "74fa5cb6b41e", prankster}, /* closure 536 */
     {"ability:177", "1b589a349668", gale_wings}, /* closure 558 */
     {"ability:205", "e8d66e7b435a", triage}, /* closure 592 */
+    {"ability:166", "3adbae502f95", grass_target}, /* closure 551 */
 };
 const int pr_ability_closures_n = (int)(sizeof pr_ability_closures / sizeof pr_ability_closures[0]);

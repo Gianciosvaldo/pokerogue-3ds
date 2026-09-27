@@ -17,17 +17,18 @@ typedef enum {
     /* phases of a turn, ported */
     PH_TURN_START, PH_MOVE, PH_MOVE_EFFECT, PH_MOVE_END, PH_FAINT, PH_CHECK_INTERLUDE,
     PH_WEATHER_EFFECT, PH_POSITIONAL_TAG, PH_BERRY, PH_CHECK_STATUS_EFFECT, PH_POST_TURN_STATUS_EFFECT,
-    PH_TURN_END, PH_RESET_STATUS,
+    PH_TURN_END, PH_RESET_STATUS, PH_STAT_STAGE_CHANGE,
     /* presentation: no battle state of their own */
     PH_MESSAGE, PH_DAMAGE_ANIM, PH_COMMON_ANIM, PH_SHOW_ABILITY, PH_HIDE_ABILITY,
     /* where a turn hands control back to the caller */
     PH_TURN_INIT, PH_VICTORY, PH_SWITCH, PH_SWITCH_SUMMON, PH_GAME_OVER, PH_BATTLE_END, PH_SELECT_MODIFIER,
     /* not ported yet: created where upstream creates them (so the order stays right), and
      * the turn is reported unported */
-    PH_STAT_STAGE_CHANGE, PH_POKEMON_HEAL, PH_OBTAIN_STATUS_EFFECT, PH_MOVE_CHARGE, PH_MOVE_HEADER,
+    PH_POKEMON_HEAL, PH_OBTAIN_STATUS_EFFECT, PH_MOVE_CHARGE, PH_MOVE_HEADER,
     PH_MOVE_REFLECT, PH_DANCER, PH_TERA, PH_ATTEMPT_CAPTURE, PH_ATTEMPT_RUN, PH_TOGGLE_DOUBLE_POSITION,
     PH_COUNT_
 } pr_phase_type;
+#define PH_FIRST_UNPORTED PH_POKEMON_HEAL
 extern const char *const pr_phase_name[PH_COUNT_];
 
 /* An upstream PokemonMove the phase holds: a moveset slot, or a detached one
@@ -64,6 +65,13 @@ typedef struct pr_phase {
     double hit_eff[4];
     uint8_t n_hit_checks;
     bool first_hit, last_hit;
+    /* StatStageChangePhase options: the changes, sourcePokemon (source_p), whether a message was
+     * given, ignoreAbilities, sourceEffectType (StatChangeSource, 0 = none), processed; and
+     * selfTarget, which the constructor fixes */
+    int8_t ssc_stat[7], ssc_stages[7];
+    uint8_t n_ssc;
+    bool ssc_message, ssc_ignore_abilities, ssc_processed, ssc_self_target;
+    uint8_t ssc_source_type;
     uint32_t seq;              /* creation order, for debugging */
 } pr_phase;
 
@@ -144,6 +152,14 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph);
 /* One MoveEffectAttr's apply(user, target, move) for MoveEffectPhase `ph` (src/move_effects.c):
  * pr_attrs[attr_index] is one of the move's attributes. target is NULL for POST_TARGET effects. */
 void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, pr_pokemon *user, pr_pokemon *target);
+/* unshiftNew("StatStageChangePhase", {battlerIndex, changes: groupStatChange(stats, stages),
+ * sourcePokemon}) with no message and no other option; returns the phase (-1 when out of room) */
+int pr_unshift_stat_stage_change(pr_battle *bt, pr_engine *e, int battler, const int32_t *stats, int n_stats,
+                                 int stages, pr_pokemon *source);
+/* unshiftNew("StatStageChangePhase", {battlerIndex, changes, sourcePokemon, sourceEffectType}) as the
+ * stat-change abilities queue it (Mirror Armor, Opportunist, Defiant); -1 when out of room */
+int pr_unshift_stat_stage_change_ex(pr_battle *bt, pr_engine *e, int battler, const int8_t *stat,
+                                    const int8_t *stages, int n, pr_pokemon *source, int source_type);
 /* move.applyConditions(user, target, sequence 2, 3 or 4): every condition of that list holds */
 bool pr_move_apply_conditions(pr_battle *bt, int move, const pr_pokemon *user, const pr_pokemon *target, int seq);
 /* getCounterAttackTarget(user, damageCategory): the battler index, or -2 for null (category -1 = any) */

@@ -478,6 +478,72 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         return 1;
 
     /* ---- secondary effect chance (MoveEffectAttr.getMoveChance) ---- */
+    /* ---- StatStageChangePhase: protection from drops, reactions ---- */
+    case PR_AC_ProtectStatAbAttr: {                                     /* Clear Body, Hyper Cutter, Keen Eye... */
+        const pr_attr_ProtectStatAbAttr *x = P(ProtectStatAbAttr, a);
+        int ps = (x->nulls & (1u << 2)) ? -1 : x->protectedStat;          /* null: every stat */
+        bool any = false;
+        for (int i = 0; i < pp->n_ch; i++)
+            any |= (pp->ch_stat[i] == ps || ps < 0) && !(*pp->cancelled_stats & (1u << pp->ch_stat[i]));
+        GATE(any);
+        if (ps >= 0) *pp->cancelled_stats |= (uint16_t)(1u << ps);
+        else for (int i = 0; i < pp->n_ch; i++) *pp->cancelled_stats |= (uint16_t)(1u << pp->ch_stat[i]);
+        return 1;
+    }
+    case PR_AC_ConditionalUserFieldProtectStatAbAttr: {                 /* Flower Veil */
+        /* the constructor drops its protectedStat argument, so every stat is protected */
+        const pr_attr_ConditionalUserFieldProtectStatAbAttr *x = P(ConditionalUserFieldProtectStatAbAttr, a);
+        if (!pp->target) return 0;
+        bool any = false;
+        for (int i = 0; i < pp->n_ch; i++) any |= !(*pp->cancelled_stats & (1u << pp->ch_stat[i]));
+        GATE(any && call_bool(bt, x->condition, a->cls, pp->target, NULL, -1));
+        for (int i = 0; i < pp->n_ch; i++) *pp->cancelled_stats |= (uint16_t)(1u << pp->ch_stat[i]);
+        return 1;
+    }
+    case PR_AC_ReflectStatStageChangeAbAttr: {                          /* Mirror Armor */
+        if (!pp->simulated && !c->e) return -1;
+        int8_t rs[7], rg[7];
+        int nr = 0;
+        for (int i = 0; i < pp->n_ch && nr < 7; i++)
+            if (!(*pp->cancelled_stats & (1u << pp->ch_stat[i]))) { rs[nr] = pp->ch_stat[i]; rg[nr++] = pp->ch_stages[i]; }
+        GATE(o && nr > 0);
+        /* StatStageChangePhase({battlerIndex: source, changes: reflected, sourcePokemon: undefined,
+         * ignoreAbilities: false, sourceEffectType: MIRROR_ARMOR}) */
+        if (!pp->simulated
+            && pr_unshift_stat_stage_change_ex(bt, c->e, pr_battler_index(bt, o), rs, rg, nr, NULL,
+                                               STAT_CHANGE_SOURCE_MIRROR_ARMOR) < 0)
+            return -1;
+        for (int i = 0; i < nr; i++) *pp->cancelled_stats |= (uint16_t)(1u << rs[i]);
+        return 1;
+    }
+    case PR_AC_StatStageChangeCopyAbAttr:                               /* Opportunist */
+        if (!pp->simulated && !c->e) return -1;
+        GATE(true);
+        if (!pp->simulated
+            && pr_unshift_stat_stage_change_ex(bt, c->e, pr_battler_index(bt, p), pp->ch_stat, pp->ch_stages, pp->n_ch,
+                                               (pr_pokemon *)p, STAT_CHANGE_SOURCE_OPPORTUNIST) < 0)
+            return -1;
+        return 1;
+    case PR_AC_PostStatStageChangeStatStageChangeAbAttr: {              /* Defiant, Competitive */
+        /* changeFunc(pokemon, changes) returns a StatChange; the two upstream closures are
+         * {stat: ATK or SPATK, stages: changes[0].stages < 0 ? 2 * changes.length : 0} */
+        pr_fn_id fn = P(PostStatStageChangeStatStageChangeAbAttr, a)->changeFunc;
+        const char *h = fn < PR_CLOSURE_COUNT ? pr_closures_meta[fn].hash : "";
+        int8_t st = !strcmp(h, "f798b2762ab2") ? STAT_ATK : !strcmp(h, "8d8ced84c6c1") ? STAT_SPATK : -1;
+        if (st < 0) { if (fn < PR_CLOSURE_COUNT) pr_closure_misses[fn]++; return -1; }
+        if (!pp->simulated && !c->e) return -1;
+        pr_closure_hits[fn]++;
+        int8_t sg = (int8_t)(pp->n_ch && pp->ch_stages[0] < 0 ? 2 * pp->n_ch : 0);
+        GATE(!pp->self_target && sg != 0);
+        if (!pp->simulated
+            && pr_unshift_stat_stage_change_ex(bt, c->e, pr_battler_index(bt, p), &st, &sg, 1, (pr_pokemon *)p, 0) < 0)
+            return -1;
+        return 1;
+    }
+    case PR_AC_StatStageChangeMultiplierAbAttr:                 /* Simple x2, Contrary x-1 */
+        GATE(true);
+        *pp->value *= P(StatStageChangeMultiplierAbAttr, a)->multiplier;
+        return 1;
     case PR_AC_MoveEffectChanceMultiplierAbAttr:
         GATE(!(*pp->value <= 0 || move == MOVE_ID_ORDER_UP || move == MOVE_ID_ELECTRO_SHOT));
         *pp->value *= P(MoveEffectChanceMultiplierAbAttr, a)->chanceMultiplier;

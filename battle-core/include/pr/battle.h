@@ -347,6 +347,13 @@ typedef struct pr_ab_params {
     bool *flag;                    /* cancelled / ignored / hasApplied / blockCrit / isCritical / isUngrounded */
     int *holder;                   /* moveType / weather / critStage */
     int move_type, defender_type;  /* IgnoreTypeImmunityAbAttr */
+    /* StatStageChangePhase: the changes (Stat values and stages), the stats cancelled so far
+     * (bit per Stat), whether the change came from the Pokemon's own move, and its target */
+    const int8_t *ch_stat, *ch_stages;
+    int n_ch;
+    uint16_t *cancelled_stats;
+    bool self_target;
+    const pr_pokemon *target;
 } pr_ab_params;
 /* applyAbAttrs("<cls>", params): ability then passive, conditions, canApply, apply. */
 void pr_apply_ab_attrs(pr_battle *bt, uint16_t cls, pr_ab_params *pp);
@@ -519,6 +526,9 @@ bool pr_is_grounded(pr_battle *bt, const pr_pokemon *p, bool ignore_semi_invulne
 int pr_get_move_type(pr_battle *bt, const pr_pokemon *p, int move);
 double pr_get_attack_type_effectiveness(pr_battle *bt, const pr_pokemon *def, int move_type,
                                         const pr_pokemon *source, int move);
+/* the same with simulated = false passed through (IgnoreTypeImmunityAbAttr, the Strong Winds message) */
+double pr_get_attack_type_effectiveness_ex(pr_battle *bt, const pr_pokemon *def, int move_type,
+                                           const pr_pokemon *source, int move, bool simulated);
 double pr_get_move_effectiveness(pr_battle *bt, const pr_pokemon *def, const pr_pokemon *src, int move);
 /* getMoveEffectiveness with simulated and the cancelled holder */
 double pr_get_move_effectiveness_ex(pr_battle *bt, const pr_pokemon *def, const pr_pokemon *src, int move,

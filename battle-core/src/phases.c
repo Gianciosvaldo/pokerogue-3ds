@@ -1334,6 +1334,40 @@ static void post_turn_status_effect_phase(pr_battle *bt, pr_engine *e, int ph)
     pr_note_unported(bt, PR_FEAT_STATUS_TURN);
 }
 
+/* arena.lapseTags(): every tag's lapse() runs first (ArenaTag.lapse: a positive turn count counts
+ * down and the tag ends at 0; 0 or less lasts), then each ended tag's onRemove() queues its
+ * message, if it has one, and the tag goes. Imprison, the Fire/Grass Pledge sea of fire and
+ * pending heals override lapse(), Neutralizing Gas and Imprison onRemove(): not ported. */
+static void lapse_arena_tags(pr_battle *bt, pr_engine *e)
+{
+    bool ended[PR_MAX_ARENA_TAGS];
+    for (int i = 0; i < bt->n_arena_tags; i++) {
+        pr_arena_tag *t = &bt->arena_tags[i];
+        if (t->type == ARENA_TAG_TYPE_IMPRISON || t->type == ARENA_TAG_TYPE_FIRE_GRASS_PLEDGE
+            || t->type == ARENA_TAG_TYPE_PENDING_HEAL)
+            pr_note_unported(bt, PR_FEAT_ARENA_TAG_TURN);
+        ended[i] = !(t->turn_count < 1 || --t->turn_count > 0);
+    }
+    int k = 0;
+    for (int i = 0; i < bt->n_arena_tags; i++) {
+        const pr_arena_tag *t = &bt->arena_tags[i];
+        if (!ended[i]) { bt->arena_tags[k++] = *t; continue; }
+        switch (t->type) {
+        case ARENA_TAG_TYPE_NEUTRALIZING_GAS:
+            pr_note_unported(bt, PR_FEAT_ARENA_TAG_TURN);
+            break;
+        /* onRemoveMessageKey "": ConditionalProtectTag, Ion Deluge, Fairy Lock, NONE */
+        case ARENA_TAG_TYPE_QUICK_GUARD: case ARENA_TAG_TYPE_WIDE_GUARD: case ARENA_TAG_TYPE_MAT_BLOCK:
+        case ARENA_TAG_TYPE_CRAFTY_SHIELD: case ARENA_TAG_TYPE_ION_DELUGE: case ARENA_TAG_TYPE_FAIRY_LOCK:
+        case ARENA_TAG_TYPE_NONE:
+            break;
+        default:
+            pr_queue_message(bt, e);
+        }
+    }
+    bt->n_arena_tags = k;
+}
+
 static void turn_end_phase(pr_battle *bt, pr_engine *e)
 {
     /* currentBattle.incrementTurn() */
@@ -1365,7 +1399,7 @@ static void turn_end_phase(pr_battle *bt, pr_engine *e)
         p->temp_turn_count++;
         p->temp_wave_turn_count++;
     }
-    if (bt->n_arena_tags) pr_note_unported(bt, PR_FEAT_ARENA_TAG_TURN);     /* arena.lapseTags() */
+    lapse_arena_tags(bt, e);
     if (bt->weather != WEATHER_TYPE_NONE || bt->terrain != TERRAIN_NONE) pr_note_unported(bt, PR_FEAT_WEATHER_TURN);
 }
 
@@ -1384,6 +1418,207 @@ static void show_ability_phase(pr_battle *bt, pr_engine *e, int ph)
     if (p->is_player) bt->last_player_involved = (int8_t)(s->battler % 2);
     else bt->last_enemy_involved = (int8_t)(s->battler % 2);
     bt->ability_bar_visible = true;
+}
+
+/* ---------------------------------------------------------------- StatStageChangePhase */
+
+/* The constructor: selfTarget = sourcePokemon === getPokemon(); the changes keep only non-zero stages */
+static int new_stat_stage_change(pr_battle *bt, pr_engine *e, int battler, const pr_phase *opts,
+                                 const int8_t *stat, const int8_t *stages, int n)
+{
+    int ph = new_pokemon_phase(e, PH_STAT_STAGE_CHANGE, battler);
+    if (ph < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); e->overflow = true; return -1; }
+    pr_phase *q = PH(ph);
+    q->pokemon = slot(bt, battler);
+    q->source_p = opts->source_p;
+    q->ssc_message = opts->ssc_message;
+    q->ssc_ignore_abilities = opts->ssc_ignore_abilities;
+    q->ssc_processed = opts->ssc_processed;
+    q->ssc_source_type = opts->ssc_source_type;
+    q->ssc_self_target = opts->source_p && opts->source_p == slot(bt, battler);
+    q->n_ssc = 0;
+    for (int i = 0; i < n; i++)
+        if (stages[i] != 0) {
+            q->ssc_stat[q->n_ssc] = stat[i];
+            q->ssc_stages[q->n_ssc++] = stages[i];
+        }
+    return ph;
+}
+
+int pr_unshift_stat_stage_change(pr_battle *bt, pr_engine *e, int battler, const int32_t *stats, int n_stats,
+                                 int stages, pr_pokemon *source)
+{
+    int8_t st[7], sg[7];
+    if (n_stats > 7) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return -1; }
+    for (int i = 0; i < n_stats; i++) {
+        st[i] = (int8_t)stats[i];
+        sg[i] = (int8_t)stages;
+    }
+    pr_phase opts = {.source_p = source};
+    int ph = new_stat_stage_change(bt, e, battler, &opts, st, sg, n_stats);
+    if (ph >= 0) pr_phase_unshift(bt, e, ph);
+    return ph;
+}
+
+int pr_unshift_stat_stage_change_ex(pr_battle *bt, pr_engine *e, int battler, const int8_t *stat,
+                                    const int8_t *stages, int n, pr_pokemon *source, int source_type)
+{
+    if (battler < 0 || n > 7) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return -1; }
+    pr_phase opts = {.source_p = source, .ssc_source_type = (uint8_t)source_type};
+    int ph = new_stat_stage_change(bt, e, battler, &opts, stat, stages, n);
+    if (ph >= 0) pr_phase_unshift(bt, e, ph);
+    return ph;
+}
+
+/* StatStageChangePhase.start */
+static void stat_stage_change_phase(pr_battle *bt, pr_engine *e, int ph)
+{
+    pr_phase *q = PH(ph);
+    pr_pokemon *p = slot(bt, q->battler);
+    if (!is_active_on_field(p)) return;                                  /* isActive(true) */
+    if (!q->ssc_processed) {
+        /* applyStageMultipliers: StatStageChangeMultiplierAbAttr (Simple, Contrary), not simulated */
+        if (!q->ssc_ignore_abilities) {
+            double mult = 1;
+            pr_ab_params pp = {.pokemon = p, .move = -1, .value = &mult};
+            pr_apply_ab_attrs(bt, PR_AC_StatStageChangeMultiplierAbAttr, &pp);
+            for (int i = 0; i < q->n_ssc; i++) q->ssc_stages[i] = (int8_t)(q->ssc_stages[i] * mult);
+        }
+        /* removeCancelledChanges: drops caused by another Pokemon can be stopped */
+        int8_t ds[7], dg[7];
+        int nd = 0;
+        for (int i = 0; i < q->n_ssc; i++)
+            if (q->ssc_stages[i] < 0) { ds[nd] = q->ssc_stat[i]; dg[nd++] = q->ssc_stages[i]; }
+        if (!q->ssc_self_target && nd) {
+            uint16_t cancelled = 0;                                      /* cancelledStats, bit per Stat */
+            int n_cancelled = 0;
+            /* applyTagsForSide(MIST, side, ...): MistTag.apply(simulated false, pokemon, changes,
+             * cancelledStats, source): the source's Infiltrator gets through; otherwise every drop
+             * is cancelled, with a message */
+            int side = p->is_player ? ARENA_TAG_SIDE_PLAYER : ARENA_TAG_SIDE_ENEMY;
+            for (int i = 0; i < bt->n_arena_tags; i++) {
+                if (bt->arena_tags[i].type != ARENA_TAG_TYPE_MIST || !pr_arena_tag_on_side(&bt->arena_tags[i], side))
+                    continue;
+                if (q->source_p) {
+                    bool bypassed = false;
+                    pr_ab_params ip = {.pokemon = q->source_p, .move = -1, .flag = &bypassed};
+                    pr_apply_ab_attrs(bt, PR_AC_InfiltratorAbAttr, &ip);
+                    if (bypassed) continue;
+                }
+                q = PH(ph);
+                for (int k = 0; k < q->n_ssc; k++)
+                    if (q->ssc_stages[k] < 0 && !(cancelled & (1u << q->ssc_stat[k]))) {
+                        cancelled |= (uint16_t)(1u << q->ssc_stat[k]);
+                        n_cancelled++;
+                    }
+                if (n_cancelled) pr_queue_message(bt, e);                /* mistApply */
+            }
+            q = PH(ph);
+            /* checkAbilityProtection when cancelledStats.size < changes.length; the abilities
+             * see the drops only */
+            pr_ab_params pp = {.pokemon = p, .move = -1, .ch_stat = ds, .ch_stages = dg, .n_ch = nd,
+                               .cancelled_stats = &cancelled, .target = p};
+            if (n_cancelled < q->n_ssc) {
+                pr_apply_ab_attrs(bt, PR_AC_ProtectStatAbAttr, &pp);                       /* Clear Body... */
+                pr_apply_ab_attrs(bt, PR_AC_ConditionalUserFieldProtectStatAbAttr, &pp);   /* Flower Veil */
+                const pr_pokemon *ally = pr_get_ally(bt, p);
+                if (ally) {
+                    pr_ab_params ap = pp;
+                    ap.pokemon = ally;
+                    pr_apply_ab_attrs(bt, PR_AC_ConditionalUserFieldProtectStatAbAttr, &ap);
+                }
+                q = PH(ph);
+                if (q->source_p && q->ssc_source_type != STAT_CHANGE_SOURCE_MIRROR_ARMOR
+                    && !pr_get_battler_tag(p, BATTLER_TAG_TYPE_OCTOLOCK)) {
+                    pr_ab_params rp = pp;                                        /* Mirror Armor */
+                    rp.opponent = q->source_p;
+                    pr_apply_ab_attrs(bt, PR_AC_ReflectStatStageChangeAbAttr, &rp);
+                }
+            }
+            q = PH(ph);
+            int k = 0;
+            for (int i = 0; i < q->n_ssc; i++)
+                if (!(cancelled & (1u << q->ssc_stat[i]))) {
+                    q->ssc_stat[k] = q->ssc_stat[i];
+                    q->ssc_stages[k++] = q->ssc_stages[i];
+                }
+            q->n_ssc = (uint8_t)k;
+        }
+        /* splitBySign: the drops go to a phase of their own, unshifted */
+        int8_t pos_s[7], pos_g[7], neg_s[7], neg_g[7];
+        int np = 0, nn = 0;
+        for (int i = 0; i < q->n_ssc; i++) {
+            if (q->ssc_stages[i] >= 0) { pos_s[np] = q->ssc_stat[i]; pos_g[np++] = q->ssc_stages[i]; }
+            else { neg_s[nn] = q->ssc_stat[i]; neg_g[nn++] = q->ssc_stages[i]; }
+        }
+        if (np && nn) {
+            memcpy(q->ssc_stat, pos_s, (size_t)np);
+            memcpy(q->ssc_stages, pos_g, (size_t)np);
+            q->n_ssc = (uint8_t)np;
+            pr_phase opts = *q;
+            opts.ssc_processed = true;
+            int drop = new_stat_stage_change(bt, e, q->battler, &opts, neg_s, neg_g, nn);
+            if (drop >= 0) pr_phase_unshift(bt, e, drop);
+            q = PH(ph);
+        }
+    }
+    if (!q->n_ssc) return;
+    /* getAppliedChanges: clamped to [-6, 6] */
+    int8_t applied[7];
+    for (int i = 0; i < q->n_ssc; i++) {
+        int cur = p->stat_stages[q->ssc_stat[i] - 1], to = cur + q->ssc_stages[i];
+        to = to < -6 ? -6 : to > 6 ? 6 : to;
+        applied[i] = (int8_t)(to - cur);
+    }
+    /* options.onChange: no caller on the ported paths passes one */
+    /* queueStatChangeMessages: the given message, or one per distinct applied stage count */
+    if (q->ssc_message) pr_queue_message(bt, e);
+    else
+        for (int i = 0; i < q->n_ssc; i++) {
+            bool seen = false;
+            for (int j = 0; j < i; j++) seen |= applied[j] == applied[i];
+            if (!seen) pr_queue_message(bt, e);
+        }
+    /* updateStatStages */
+    for (int i = 0; i < q->n_ssc; i++) {
+        int cur = p->stat_stages[q->ssc_stat[i] - 1];
+        if (applied[i] > 0 && cur < 6) p->stat_stages_increased = true;
+        else if (applied[i] < 0 && cur > -6) p->stat_stages_decreased = true;
+        int to = cur + applied[i];
+        p->stat_stages[q->ssc_stat[i] - 1] = (int8_t)(to < -6 ? -6 : to > 6 ? 6 : to);
+    }
+    /* triggerReactionAbilities, on this.options.changes (before clamping) */
+    int8_t cs[7], cg[7];
+    int nc = q->n_ssc;
+    bool raise = false, self_target = q->ssc_self_target;
+    for (int i = 0; i < nc; i++) {
+        cs[i] = q->ssc_stat[i];
+        cg[i] = q->ssc_stages[i];
+        raise |= cg[i] > 0;
+    }
+    if (q->ssc_source_type != STAT_CHANGE_SOURCE_OPPORTUNIST && raise) {
+        pr_speed_iter it;
+        pr_pokemon *o;
+        pr_speed_iter_init(bt, &it, p->is_player ? ARENA_TAG_SIDE_ENEMY : ARENA_TAG_SIDE_PLAYER);
+        while ((o = pr_speed_iter_next(bt, &it))) {                      /* Opportunist */
+            pr_ab_params cp = {.pokemon = o, .move = -1, .ch_stat = cs, .ch_stages = cg, .n_ch = nc};
+            pr_apply_ab_attrs(bt, PR_AC_StatStageChangeCopyAbAttr, &cp);
+        }
+    }
+    pr_ab_params pp = {.pokemon = p, .move = -1, .ch_stat = cs, .ch_stages = cg, .n_ch = nc, .self_target = self_target};
+    pr_apply_ab_attrs(bt, PR_AC_PostStatStageChangeAbAttr, &pp);         /* Defiant, Competitive */
+    q = PH(ph);
+    /* checkWhiteHerb: once no other StatStageChangePhase for this battler is queued */
+    if (!pr_phase_exists(e, PH_STAT_STAGE_CHANGE, q->battler)) {
+        bool lowered = false;
+        for (int i = 0; i < 7; i++) lowered |= p->stat_stages[i] < 0;
+        int side = q->battler < 2 ? 0 : 1;
+        for (int i = 0; lowered && i < bt->n_mods[side]; i++)
+            if (pr_mod_is(&bt->mods[side][i], PR_MOD_HELD_ITEM) && bt->mods[side][i].pokemon_id == (int64_t)p->id) {
+                pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);            /* a White Herb may reset them */
+                break;
+            }
+    }
 }
 
 /* ---------------------------------------------------------------- dispatch */
@@ -1418,6 +1653,7 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_SHOW_ABILITY: show_ability_phase(bt, e, ph); break;
     case PH_HIDE_ABILITY: bt->ability_bar_visible = false; break;
     case PH_RESET_STATUS: reset_status_phase(bt, e, ph); break;
+    case PH_STAT_STAGE_CHANGE: stat_stage_change_phase(bt, e, ph); break;
     default:
         /* a phase with no port: it was reported when it was queued */
         pr_note_unported(bt, (uint16_t)(PR_FEAT_PHASE_0 + PH(ph)->type));

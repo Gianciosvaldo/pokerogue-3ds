@@ -3,6 +3,7 @@
  * getCriticalHitResult / getMoveType and Move.calculateBattlePower.
  * Every applyAbAttrs / applyMoveAttrs / modifier / tag call site is kept in upstream order. */
 #include "pr/battle.h"
+#include "pr/engine.h"
 #include <math.h>
 
 static double type_mult(int atk, int def)
@@ -42,8 +43,8 @@ int pr_get_move_type(pr_battle *bt, const pr_pokemon *p, int move)
     return t;
 }
 
-double pr_get_attack_type_effectiveness(pr_battle *bt, const pr_pokemon *def, int move_type,
-                                        const pr_pokemon *source, int move)
+double pr_get_attack_type_effectiveness_ex(pr_battle *bt, const pr_pokemon *def, int move_type,
+                                           const pr_pokemon *source, int move, bool simulated)
 {
     if (move_type == POKEMON_TYPE_STELLAR) return def->terastallized ? 2 : 1;
     int8_t types[3];
@@ -69,7 +70,7 @@ double pr_get_attack_type_effectiveness(pr_battle *bt, const pr_pokemon *def, in
                 exposed = pr_exposed_tag_ignores_immunity(def->tags[k].type, types[i], move_type);
             if (exposed) continue;
             bool ignore = false;
-            pr_ab_params pp = {.pokemon = source, .move = -1, .simulated = true, .flag = &ignore,
+            pr_ab_params pp = {.pokemon = source, .move = -1, .simulated = simulated, .flag = &ignore,
                                .move_type = move_type, .defender_type = types[i]};
             pr_apply_ab_attrs(bt, PR_AC_IgnoreTypeImmunityAbAttr, &pp);
             if (ignore) continue;
@@ -78,9 +79,18 @@ double pr_get_attack_type_effectiveness(pr_battle *bt, const pr_pokemon *def, in
     }
     if (move >= 0) pr_apply_type_chart_override(bt, source, def, move, &multi, types, n, move_type);
     if (bt->weather == WEATHER_TYPE_STRONG_WINDS && !pr_weather_effect_suppressed(bt)
-        && pr_is_of_type(def, POKEMON_TYPE_FLYING) && type_mult(move_type, POKEMON_TYPE_FLYING) == 2)
+        && pr_is_of_type(def, POKEMON_TYPE_FLYING) && type_mult(move_type, POKEMON_TYPE_FLYING) == 2) {
         multi /= 2;
+        if (!simulated && bt->engine) pr_queue_message(bt, bt->engine); /* strongWindsEffectMessage */
+    }
     return multi;
+}
+
+/* getAttackTypeEffectiveness(moveType, {source, move}): simulated by default */
+double pr_get_attack_type_effectiveness(pr_battle *bt, const pr_pokemon *def, int move_type,
+                                        const pr_pokemon *source, int move)
+{
+    return pr_get_attack_type_effectiveness_ex(bt, def, move_type, source, move, true);
 }
 
 double pr_get_move_effectiveness_ex(pr_battle *bt, const pr_pokemon *def, const pr_pokemon *src, int move,
@@ -91,7 +101,7 @@ double pr_get_move_effectiveness_ex(pr_battle *bt, const pr_pokemon *def, const 
     if (pr_move_has_attr((uint16_t)move, PR_AC_TypelessAttr)) return 1;
     int move_type = pr_get_move_type(bt, src, move);
     double tm = (m->category != MOVE_CATEGORY_STATUS || pr_move_has_attr((uint16_t)move, PR_AC_RespectAttackTypeImmunityAttr))
-                    ? pr_get_attack_type_effectiveness(bt, def, move_type, src, move)
+                    ? pr_get_attack_type_effectiveness_ex(bt, def, move_type, src, move, simulated)
                     : 1;
     /* move.isTypeImmune: powder moves vs Grass, Prankster status moves vs Dark */
     if (m->target != MOVE_TARGET_USER) {
