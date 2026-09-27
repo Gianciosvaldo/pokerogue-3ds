@@ -29,6 +29,7 @@ const uint8_t pr_mod_parent[PR_MOD_COUNT_] = {
     [PR_MOD_ATTACK_TYPE_BOOSTER] = PR_MOD_HELD_ITEM,
     [PR_MOD_NATURE_WEIGHT] = PR_MOD_HELD_ITEM,
     [PR_MOD_MULTI_HIT] = PR_MOD_HELD_ITEM,
+    [PR_MOD_FIELD_EFFECT] = PR_MOD_HELD_ITEM,
     [PR_MOD_ENEMY_PERSISTENT] = PR_MOD_PERSISTENT,
     [PR_MOD_ENEMY_DAMAGE_MULTIPLIER] = PR_MOD_ENEMY_PERSISTENT,
     [PR_MOD_ENEMY_DAMAGE_BOOSTER] = PR_MOD_ENEMY_DAMAGE_MULTIPLIER,
@@ -53,6 +54,7 @@ const char *const pr_mod_class_name[PR_MOD_COUNT_] = {
     [PR_MOD_ATTACK_TYPE_BOOSTER] = "AttackTypeBoosterModifier",
     [PR_MOD_NATURE_WEIGHT] = "PokemonNatureWeightModifier",
     [PR_MOD_MULTI_HIT] = "PokemonMultiHitModifier",
+    [PR_MOD_FIELD_EFFECT] = "FieldEffectModifier",
     [PR_MOD_ENEMY_PERSISTENT] = "EnemyPersistentModifier",
     [PR_MOD_ENEMY_DAMAGE_MULTIPLIER] = "EnemyDamageMultiplierModifier",
     [PR_MOD_ENEMY_DAMAGE_BOOSTER] = "EnemyDamageBoosterModifier",
@@ -142,6 +144,17 @@ int32_t pr_held_multi_lens_stacks(pr_battle *bt, const pr_pokemon *p)
 }
 
 /* ---- calculateBaseStats ---- */
+/* FieldEffectModifier.apply: fieldDuration += 2 * stackCount. applyModifier stops at the first. */
+void pr_apply_field_effect_modifier(pr_battle *bt, const pr_pokemon *user, int32_t *duration)
+{
+    pr_modifier *m;
+    EACH_MOD(m, bt, user->is_player, PR_MOD_FIELD_EFFECT) {
+        if (!held_applies(m, user)) continue;
+        *duration += 2 * m->stack_count;
+        return;
+    }
+}
+
 static double clamp_stat(double v)
 {
     return v < 1 ? 1 : v > 999999 ? 999999 : v; /* Math.min(Math.max(newVal, 1), 999999) */

@@ -51,6 +51,11 @@ int pr_closures_ported(void)
 
 uint32_t pr_closure_misses[PR_CLOSURE_COUNT], pr_closure_hits[PR_CLOSURE_COUNT];
 
+bool pr_closure_matches(uint16_t id, const char *owner, const char *hash)
+{
+    return id < PR_CLOSURE_COUNT && !strcmp(pr_closures_meta[id].owner, owner) && !strcmp(pr_closures_meta[id].hash, hash);
+}
+
 double pr_closure_call(pr_battle *bt, uint16_t id, uint16_t cls, double fallback,
                        const pr_pokemon *a, const pr_pokemon *b, int move)
 {

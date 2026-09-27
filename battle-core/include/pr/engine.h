@@ -154,10 +154,11 @@ void pr_remove_tag(pr_battle *bt, pr_engine *e, pr_pokemon *p, int type);       
 /* After a weather or terrain change to `now`: Protosynthesis's tag (weather) or Quark Drive's
  * (terrain) goes with its message unless it lists the new one */
 void pr_remove_field_boost_tag(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool terrain, int now);
-/* arena.trySetWeather(NONE) / trySetTerrain(NONE) with a weather or terrain up: its message, then per
- * Pokemon in speed order the boost tag it ends and the abilities told about the change */
-void pr_clear_weather(pr_battle *bt, pr_engine *e);
-void pr_clear_terrain(pr_battle *bt, pr_engine *e);
+/* arena.trySetWeather(weather, user) / trySetTerrain(terrain, ignoreAnim, user): whether it changed.
+ * The start or clear message, then per Pokemon in speed order the boost tag it ends and the
+ * abilities told about the change */
+bool pr_try_set_weather(pr_battle *bt, pr_engine *e, int weather, const pr_pokemon *user);   /* user may be NULL */
+bool pr_try_set_terrain(pr_battle *bt, pr_engine *e, int terrain, bool ignore_anim, const pr_pokemon *user);
 void pr_remove_tags_by_source_id(pr_battle *bt, pr_engine *e, pr_pokemon *p, int64_t source_id);
 /* findAndRemoveTags(t => types.includes(t.tagType)) */
 void pr_find_and_remove_tags(pr_battle *bt, pr_engine *e, pr_pokemon *p, const int32_t *types, int n_types);

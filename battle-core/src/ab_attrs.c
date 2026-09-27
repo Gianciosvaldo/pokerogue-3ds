@@ -660,14 +660,42 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
     case PR_AC_PostDefendAbilityGiveAbAttr:                             /* Mummy, Lingering Aroma */
         /* contact, then the attacker's ability flags: setTempAbility isn't ported */
         return pr_move_does_flag_effect_apply(bt, move, MOVE_FLAGS_MAKES_CONTACT, o, p) ? -1 : 0;
-    case PR_AC_PostDefendWeatherChangeAbAttr:                           /* Sand Spit */
-        return call_bool(bt, P(PostDefendWeatherChangeAbAttr, a)->condition, a->cls, p, o, move) ? -1 : 0;
-    case PR_AC_PostDefendApplyArenaTrapTagAbAttr:                       /* Toxic Debris */
-        return call_bool(bt, P(PostDefendApplyArenaTrapTagAbAttr, a)->condition, a->cls, p, o, move) ? -1 : 0;
-    case PR_AC_PostDefendApplyBattlerTagAbAttr:                         /* Wind Power, Electromorphosis */
-        return call_bool(bt, P(PostDefendApplyBattlerTagAbAttr, a)->condition, a->cls, p, o, move) ? -1 : 0;
-    case PR_AC_PostDefendTerrainChangeAbAttr:                           /* Seed Sower */
-        return pp->hit_result < HIT_RESULT_NO_EFFECT ? -1 : 0;
+    case PR_AC_PostDefendWeatherChangeAbAttr: {                         /* Sand Spit */
+        const pr_attr_PostDefendWeatherChangeAbAttr *x = P(PostDefendWeatherChangeAbAttr, a);
+        if (!c->e) return -1;
+        GATE(call_bool(bt, x->condition, a->cls, p, o, move) && !pr_weather_immutable(bt->weather)
+             && bt->weather != x->weatherType);
+        if (!pp->simulated) pr_try_set_weather(bt, c->e, x->weatherType, p);
+        return 1;
+    }
+    case PR_AC_PostDefendApplyArenaTrapTagAbAttr: {                     /* Toxic Debris */
+        /* the tag on either side (getTag looks at both) must have a layer left */
+        const pr_attr_PostDefendApplyArenaTrapTagAbAttr *x = P(PostDefendApplyArenaTrapTagAbAttr, a);
+        if (!c->e) return -1;
+        const pr_arena_tag *tag = pr_arena_get_tag_on_side(bt, x->arenaTagType, ARENA_TAG_SIDE_BOTH);
+        GATE(call_bool(bt, x->condition, a->cls, p, o, move) && (!tag || tag->layers < pr_arena_max_layers(tag->type)));
+        if (!pp->simulated)
+            pr_arena_add_tag(bt, c->e, x->arenaTagType, 0, -1, p->id,
+                             p->is_player ? ARENA_TAG_SIDE_ENEMY : ARENA_TAG_SIDE_PLAYER, false);
+        return 1;
+    }
+    case PR_AC_PostDefendApplyBattlerTagAbAttr: {                       /* Wind Power, Electromorphosis */
+        const pr_attr_PostDefendApplyBattlerTagAbAttr *x = P(PostDefendApplyBattlerTagAbAttr, a);
+        if (!c->e) return -1;
+        GATE(call_bool(bt, x->condition, a->cls, p, o, move));
+        if (!pr_get_battler_tag(p, x->tagType) && !pp->simulated) {
+            pr_add_tag(bt, c->e, (pr_pokemon *)p, x->tagType, 0, 0, p->id);   /* addTag(tagType, undefined, undefined, id) */
+            pr_queue_message(bt, c->e);                                   /* abilityTriggers:windPowerCharged */
+        }
+        return 1;
+    }
+    case PR_AC_PostDefendTerrainChangeAbAttr: {                         /* Seed Sower: with its animation */
+        const pr_attr_PostDefendTerrainChangeAbAttr *x = P(PostDefendTerrainChangeAbAttr, a);
+        if (!c->e) return -1;
+        GATE(pp->hit_result < HIT_RESULT_NO_EFFECT && bt->terrain != x->terrainType);
+        if (!pp->simulated) pr_try_set_terrain(bt, c->e, x->terrainType, false, p);
+        return 1;
+    }
     case PR_AC_ReverseDrainAbAttr: {                                    /* Liquid Ooze */
         /* canApply applies the attacker's BlockNonDirectDamageAbAttr (Magic Guard) as it is simulated */
         bool cancelled = false;
@@ -750,6 +778,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
     case PR_AC_BypassBurnDamageReductionAbAttr:
     case PR_AC_BlockOneHitKOAbAttr:            /* Sturdy against OHKO moves */
     case PR_AC_FieldPreventExplosiveMovesAbAttr: /* Damp */
+    case PR_AC_BlockItemTheftAbAttr:           /* Sticky Hold */
         GATE(!*pp->flag); /* CancelInteractionAbAttr */
         *pp->flag = true;
         return 1;

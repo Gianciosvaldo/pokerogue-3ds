@@ -84,6 +84,20 @@
  * Infiltrator; Serene Grace or Sheer Force for half the Stone Axe and Ceaseless Edge users). The status moves
  * aimed at everyone or at the user's side, and the ones that ignore protections, are among the
  * moves the side-wide protections look at.
+ * TURN_EFFECTS=1 aims at the smaller move effects and what they read: most moves set a weather or
+ * terrain, ground (Smack Down), expose (Foresight, Miracle Eye), add a type (Forest's Curse),
+ * scatter coins, take or eat items, burn or confuse a Pokemon whose stats rose (Burning Jealousy,
+ * Alluring Voice), lock jaws, crash on a miss (High Jump Kick), heal, faint the user (Explosion,
+ * Memento, Mind Blown), reset or swap stat stages, change a type (Soak), or only print a message
+ * (Splash), else they are attacks, wind moves half the time; a third of the abilities are Sand
+ * Spit, Seed Sower, Toxic Debris, Wind Power, Electromorphosis, Sticky Hold, Magic Guard,
+ * Levitate, Mega Launcher, Damp, Serene Grace, Sheer Force, Own Tempo or Simple; a third of the
+ * cases start with a weather (primal ones included) and a third with a terrain; half the targets
+ * of Burning Jealousy and Alluring Voice already raised a stat this turn, half those of Smack
+ * Down are airborne (Levitate or Flying), a third of those of the crash moves have maximum
+ * evasion and a third are Ghost; a quarter of the Pokemon start with a type added, some exposed,
+ * grounded or charged, a quarter of the cases with Toxic Spikes down, and half the Water Shuriken
+ * users are Greninja with Battle Bond.
  *
  * Each case builds a random singles state inside a real upstream battle, gives both sides a
  * FIGHT command the way the command phases do, then runs upstream's own phases from
@@ -141,6 +155,7 @@ it("turntest producer", async () => {
   const TRAPS = process.env.TURN_TRAPS === "1";
   const PROTECT = process.env.TURN_PROTECT === "1";
   const ARENA = process.env.TURN_ARENA === "1";
+  const EFFECTS = process.env.TURN_EFFECTS === "1";
   const OUT = process.env.TURN_OUT ?? "/tmp/pr-turns.txt";
   const game = new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
   game.override
@@ -386,6 +401,21 @@ it("turntest producer", async () => {
     AbilityId.INFILTRATOR, AbilityId.PRANKSTER, AbilityId.GALE_WINGS, AbilityId.TRIAGE, AbilityId.WIND_RIDER,
     AbilityId.WIND_POWER, AbilityId.LEVITATE, AbilityId.MAGIC_GUARD, AbilityId.SERENE_GRACE, AbilityId.OWN_TEMPO,
   ];
+  // TURN_EFFECTS pools
+  const effectAttrNames = [
+    "WeatherChangeAttr", "TerrainChangeAttr", "FallDownAttr", "ExposedMoveAttr", "AddTypeAttr", "MoneyAttr",
+    "RemoveHeldItemAttr", "StealHeldItemChanceAttr", "StealEatBerryAttr", "StatusIfBoostedAttr",
+    "AddBattlerTagIfBoostedAttr", "JawLockAttr", "MissEffectAttr", "WaterShurikenMultiHitTypeAttr", "HealAttr",
+    "SacrificialAttr", "SacrificialAttrOnHit", "HalfSacrificialAttr", "ResetStatsAttr", "SwapStatStagesAttr",
+    "ChangeTypeAttr", "MessageAttr", "FlameBurstAttr", "HealOnAllyAttr",
+  ];
+  const effectMoves = usable.filter((m: any) => m.attrs.some((a: any) => effectAttrNames.includes(a.constructor.name)));
+  const windMoves = attacks.filter((m: any) => (m.flags & MoveFlags.WIND_MOVE) !== 0);
+  const effectAbilityIds = [
+    AbilityId.SAND_SPIT, AbilityId.SEED_SOWER, AbilityId.TOXIC_DEBRIS, AbilityId.WIND_POWER, AbilityId.ELECTROMORPHOSIS,
+    AbilityId.STICKY_HOLD, AbilityId.MAGIC_GUARD, AbilityId.LEVITATE, AbilityId.MEGA_LAUNCHER, AbilityId.DAMP,
+    AbilityId.SERENE_GRACE, AbilityId.SHEER_FORCE, AbilityId.OWN_TEMPO, AbilityId.SIMPLE,
+  ];
   const arenaTagPool = [
     ArenaTagType.REFLECT, ArenaTagType.LIGHT_SCREEN, ArenaTagType.AURORA_VEIL, ArenaTagType.MIST, ArenaTagType.SAFEGUARD,
     ArenaTagType.SPIKES, ArenaTagType.TOXIC_SPIKES, ArenaTagType.STEALTH_ROCK, ArenaTagType.STICKY_WEB,
@@ -432,7 +462,7 @@ it("turntest producer", async () => {
         `sleep=${num(st?.sleepTurnsRemaining)} freeze=${num(st?.freezeTurnsRemaining)} stages=${L(sd.statStages)}`,
         `tera=${p.isTerastallized ? 1 : 0} teratype=${p.teraType} stellar=${L([...p.stellarTypesBoosted].sort((x, y) => x - y))}`,
         `boss=${p.isBoss() ? 1 : 0} onfield=${p.isOnField() ? 1 : 0} out=${p.switchOutStatus ? 1 : 0}`,
-        `shc=${sd.hitCount} types=${L(sd.types)} abilsup=${sd.abilitySuppressed ? 1 : 0}`,
+        `shc=${sd.hitCount} types=${L(sd.types)} added=${sd.addedType ?? 0} abilsup=${sd.abilitySuppressed ? 1 : 0}`,
         `tsd=${p.tempSummonData.turnCount} tswd=${p.tempSummonData.waveTurnCount}`,
         `aas=${L([...sd.abilitiesApplied])} aaw=${L([...p.waveData.abilitiesApplied])}`,
       ].join(" "),
@@ -469,7 +499,7 @@ it("turntest producer", async () => {
         `pfh=${fh(battle.playerFaintsHistory)} efh=${fh(battle.enemyFaintsHistory)}`,
         `lpi=${num(battle.lastPlayerInvolved)} lei=${num(battle.lastEnemyInvolved)}`,
         `participants=${L([...battle.playerParticipantIds].sort((x: number, y: number) => x - y))}`,
-        `loot=${battle.postBattleLoot.length} score=${battle.battleScore} type=${battle.battleType} double=${battle.double ? 1 : 0}`,
+        `loot=${battle.postBattleLoot.length} score=${battle.battleScore} money=${battle.moneyScattered} type=${battle.battleType} double=${battle.double ? 1 : 0}`,
         `mel=${scene.getMaxExpLevel()} bar=${scene.abilityBar.isVisible() ? 1 : 0} ball=${num(battle.lastUsedPokeball)}`,
       ].join(" "),
     );
@@ -596,6 +626,7 @@ it("turntest producer", async () => {
       : TRAPS && rnd(4) === 0 ? AbilityId.MAGIC_GUARD
       : PROTECT && rnd(3) === 0 ? protectAbilityIds[rnd(protectAbilityIds.length)]
       : ARENA && rnd(3) === 0 ? arenaAbilityIds[rnd(arenaAbilityIds.length)]
+      : EFFECTS && rnd(3) === 0 ? effectAbilityIds[rnd(effectAbilityIds.length)]
       : RICH && rnd(2) === 0 ? abilityIds[rnd(abilityIds.length)] : AbilityId.BALL_FETCH;
     p.gender = rnd(3) - 1;
     p.friendship = rnd(256);
@@ -607,7 +638,7 @@ it("turntest producer", async () => {
     p.status = null;
     if (HEAL && rnd(3) === 0) {
       p.status = new Status([StatusEffect.POISON, StatusEffect.TOXIC][rnd(2)], rnd(4));
-    } else if (RICH ? rnd(3) === 0 : STATUS || WEATHER ? rnd(4) === 0 : ONHIT || CHARGE || TAGS || TRAPS || PROTECT || ARENA ? rnd(6) === 0 : STAT && rnd(8) === 0) {
+    } else if (RICH ? rnd(3) === 0 : STATUS || WEATHER ? rnd(4) === 0 : ONHIT || CHARGE || TAGS || TRAPS || PROTECT || ARENA || EFFECTS ? rnd(6) === 0 : STAT && rnd(8) === 0) {
       const s = statuses[rnd(statuses.length)];
       p.status = new Status(s, rnd(4), s === StatusEffect.SLEEP ? 1 + rnd(3) : 0, s === StatusEffect.FREEZE ? 1 + rnd(3) : undefined);
     }
@@ -632,6 +663,9 @@ it("turntest producer", async () => {
         : ARENA && rnd(10) < 8
         ? (rnd(2) === 0 ? arenaMoves[rnd(arenaMoves.length)]
           : rnd(2) === 0 ? arenaHitters[rnd(arenaHitters.length)] : attacks[rnd(attacks.length)])
+        : EFFECTS && rnd(10) < 7
+        ? (rnd(2) === 0 ? effectMoves[rnd(effectMoves.length)]
+          : rnd(4) === 0 ? windMoves[rnd(windMoves.length)] : attacks[rnd(attacks.length)])
         : TAGS && rnd(10) < 8
         ? (rnd(4) !== 0 ? tagMoves[rnd(tagMoves.length)] : tagReaders[rnd(tagReaders.length)])
         : CHARGE && rnd(10) < 7
@@ -933,6 +967,54 @@ it("turntest producer", async () => {
           if (p.summonData.ability === AbilityId.WIND_POWER && rnd(2) === 0) {
             p.summonData.tags.push(getBattlerTag(BattlerTagType.CHARGED, 1, MoveId.NONE, p.id));
           }
+        }
+      }
+    }
+    if (EFFECTS) {
+      scene.arena.weather = rnd(3) === 0 ? new Weather(1 + rnd(9), rnd(4) === 0 ? 0 : 1 + rnd(5), 5) : null;
+      scene.arena.terrain = rnd(3) === 0 ? new Terrain(1 + rnd(4), 1 + rnd(5), 5) : null;
+      if (rnd(4) === 0) {
+        const tag = getArenaTag(ArenaTagType.TOXIC_SPIKES, 0, MoveId.NONE, (rnd(2) === 0 ? A : D).id,
+          rnd(2) === 0 ? ArenaTagSide.PLAYER : ArenaTagSide.ENEMY) as any;
+        tag.layers = 1 + rnd(2);
+        scene.arena.tags.push(tag);
+      }
+      const has = (p: any, name: string) =>
+        p.moveset.some((m: any) => m.getMove().attrs.some((a: any) => a.constructor.name === name));
+      for (const p of [A, D]) {
+        const other = p === A ? D : A;
+        p.isTerastallized = rnd(6) === 0;
+        if (rnd(4) === 0) {
+          p.summonData.addedType = [PokemonType.GHOST, PokemonType.GRASS][rnd(2)];
+        }
+        // built directly (addTag would run onAdd): exposed, grounded, or charged by Wind Power
+        const pre = [BattlerTagType.IGNORE_GHOST, BattlerTagType.IGNORE_DARK, BattlerTagType.IGNORE_FLYING, BattlerTagType.CHARGED];
+        if (rnd(6) === 0) {
+          p.summonData.tags.push(getBattlerTag(pre[rnd(pre.length)], 1, MoveId.NONE, other.id));
+        }
+        if ((has(p, "StatusIfBoostedAttr") || has(p, "AddBattlerTagIfBoostedAttr")) && rnd(2) === 0) {
+          other.turnData.statStagesIncreased = true;
+        }
+        if (has(p, "FallDownAttr") && rnd(2) === 0) {
+          if (rnd(2) === 0) {
+            other.summonData.ability = AbilityId.LEVITATE;
+          } else {
+            other.summonData.types = [PokemonType.FLYING];
+          }
+        }
+        if (has(p, "MissEffectAttr")) {
+          const r = rnd(3);
+          if (r === 0) {
+            other.summonData.statStages[6] = 6; // evasion
+          } else if (r === 1) {
+            other.summonData.types = [PokemonType.GHOST];
+          }
+        }
+        if (has(p, "WaterShurikenMultiHitTypeAttr") && rnd(2) === 0) {
+          p.species = speciesDataRegistry.getSpecies(SpeciesId.BATTLE_BOND_GRENINJA);
+          p.formIndex = rnd(2);
+          p.calculateStats();
+          p.hp = Math.min(p.hp, p.getMaxHp());
         }
       }
     }

@@ -65,6 +65,7 @@ enum {
     PR_MOD_ATTACK_TYPE_BOOSTER,      /* Charcoal, Mystic Water... */
     PR_MOD_NATURE_WEIGHT,            /* Soul Dew */
     PR_MOD_MULTI_HIT,                /* Multi Lens */
+    PR_MOD_FIELD_EFFECT,             /* Mystical Rock */
     PR_MOD_ENEMY_PERSISTENT,
     PR_MOD_ENEMY_DAMAGE_MULTIPLIER,
     PR_MOD_ENEMY_DAMAGE_BOOSTER,     /* the enemy's Damage token */
@@ -166,6 +167,7 @@ typedef struct pr_pokemon {
     uint16_t passive;          /* hasPassive() ? getPassiveAbility() : 0 (NONE); pr_update_passive sets it */
     bool passive_flag;         /* Pokemon.passive (the passive is unlocked and enabled) */
     int16_t custom_passive;    /* customPokemonData.passive, -1 = none */
+    int8_t added_type;         /* summonData.addedType (Forest's Curse, Trick-or-Treat); 0 = none (null) */
     bool is_player;
     int32_t stats[6];
     int32_t summon_stats[6];   /* summonData.stats: 0 = no override */
@@ -290,6 +292,7 @@ typedef struct pr_battle {
     uint8_t n_participants;
     int post_battle_loot;      /* currentBattle.postBattleLoot.length */
     double battle_score;       /* currentBattle.battleScore */
+    int32_t money_scattered;   /* currentBattle.moneyScattered (Pay Day) */
     int16_t weather_turns_left, weather_max_duration;
     int16_t terrain_turns_left, terrain_max_duration;
     bool ignore_abilities;     /* arena.ignoreAbilities */
@@ -332,6 +335,9 @@ typedef struct { const char *owner, *hash; pr_closure_fn fn; } pr_closure_reg;
 void pr_closures_init(void);
 /* Calls closure `id`; when it has no (current) C port, records `cls` as unported
  * and returns `fallback`. */
+/* Whether closure id is the upstream function with that owner and source hash: for the few
+ * closures with side effects, which their call sites port in place */
+bool pr_closure_matches(uint16_t id, const char *owner, const char *hash);
 double pr_closure_call(pr_battle *bt, uint16_t id, uint16_t cls, double fallback,
                        const pr_pokemon *a, const pr_pokemon *b, int move);
 /* Calls that found no C port / that ran one, per closure id (for the tests' reports) */
@@ -443,6 +449,8 @@ int pr_held_item_count(pr_battle *bt, const pr_pokemon *p, bool transferable_onl
 int32_t pr_held_item_stack_sum(pr_battle *bt, const pr_pokemon *p, bool transferable_only);
 /* getHeldItems().find(i => i instanceof PokemonMultiHitModifier)?.getStackCount() ?? 0 */
 int32_t pr_held_multi_lens_stacks(pr_battle *bt, const pr_pokemon *p);
+/* applyModifier(FieldEffectModifier, user.isPlayer(), user, duration): +2 turns per stack */
+void pr_apply_field_effect_modifier(pr_battle *bt, const pr_pokemon *user, int32_t *duration);
 /* calculateBaseStats(): Shuckle Juice, Old Gateau, (fusion), vitamins */
 void pr_apply_base_stat_modifiers(pr_battle *bt, const pr_pokemon *p, double base[6]);
 void pr_apply_incrementing_stat_modifier(pr_battle *bt, const pr_pokemon *p, int stat, double *value);

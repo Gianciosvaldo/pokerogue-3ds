@@ -647,14 +647,13 @@ static double gastro_acid(ARGS)
 }
 
 /* Reflect Type: !user.isTerastallized && (!target.isOfType(UNKNOWN, {returnOriginalTypesIfStellar})
- * || target.summonData.addedType !== null) (addedType isn't modelled) */
+ * || target.summonData.addedType !== null) */
 static double reflect_type(ARGS)
 {
     UNUSED;
     NEED_TARGET;
     if (u->terastallized) return 0;
-    if (!is_of_type_orig(t, POKEMON_TYPE_UNKNOWN)) return 1;
-    UNPORTED(PR_FEAT_MOVE_CONDITION);
+    return !is_of_type_orig(t, POKEMON_TYPE_UNKNOWN) || t->added_type != 0;
 }
 
 /* No Retreat: user.getTag(TrappedTag)?.tagType !== "NO_RETREAT" */
@@ -774,17 +773,20 @@ static double teleport(ARGS)
     return 1;
 }
 
-/* Self-Destruct, Explosion, Mind Blown, Misty Explosion: FieldPreventExplosiveMovesAbAttr (Damp) on
- * every active Pokemon on the field, not simulated outside EnemyCommandPhase: !cancelled.value */
+/* Self-Destruct, Explosion, Mind Blown, Misty Explosion (failIfDampCondition):
+ * FieldPreventExplosiveMovesAbAttr (Damp) on every Pokemon inSpeedOrder(BOTH), not simulated
+ * outside EnemyCommandPhase; a cancel queues the "cannot use" message. !cancelled.value */
 static double no_damp(ARGS)
 {
     UNUSED;
     bool cancelled = false;
-    for (int i = 0; i < 4; i++) {
-        if (!is_active(bt->field[i])) continue;
-        pr_ab_params pp = {.pokemon = bt->field[i], .move = -1, .flag = &cancelled};
+    pr_speed_iter it;
+    pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
+    for (pr_pokemon *p; (p = pr_speed_iter_next(bt, &it));) {
+        pr_ab_params pp = {.pokemon = p, .move = -1, .flag = &cancelled};
         pr_apply_ab_attrs(bt, PR_AC_FieldPreventExplosiveMovesAbAttr, &pp);
     }
+    if (cancelled && bt->engine) pr_queue_message(bt, bt->engine); /* moveTriggers:cannotUseMove */
     return !cancelled;
 }
 

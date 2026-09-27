@@ -7,6 +7,7 @@
  * on to do something not ported yet reports its class (pr_note_unported) at that point. */
 #include "pr/engine.h"
 #include <math.h>
+#include <string.h>
 
 #define P(T, a) ((const pr_attr_##T *)(a)->p)
 
@@ -53,17 +54,18 @@ static void unshift_pokemon_phase(pr_battle *bt, pr_engine *e, pr_phase_type typ
     pr_phase_unshift(bt, e, ph);
 }
 
-/* AddBattlerTagAttr.apply (FlinchAttr, ConfuseAttr, RechargeAttr and TrapAttr share its fields): the chance roll, then
- * (selfTarget ? user : target).addTag(tagType, randBattleSeedIntRange(min, max), move.id, user.id) */
-static void add_battler_tag(pr_battle *bt, pr_engine *e, const pr_attr *a, const pr_effect_info *ef,
+/* AddBattlerTagAttr.apply (FlinchAttr, ConfuseAttr, RechargeAttr, TrapAttr, FallDownAttr and
+ * ExposedMoveAttr share its fields): the chance roll, then (selfTarget ? user : target).addTag(tagType,
+ * randBattleSeedIntRange(min, max), move.id, user.id); whether the tag was added */
+static bool add_battler_tag(pr_battle *bt, pr_engine *e, const pr_attr *a, const pr_effect_info *ef,
                             pr_pokemon *user, pr_pokemon *target, int move)
 {
     const pr_attr_AddBattlerTagAttr *x = (const pr_attr_AddBattlerTagAttr *)a->p;
-    if (!effect_can_apply(ef, user, target)) return;
+    if (!effect_can_apply(ef, user, target)) return false;
     double chance = get_move_chance(bt, ef, user, target, move, ef->self_target, true);
-    if (!chance_roll(bt, chance)) return;
+    if (!chance_roll(bt, chance)) return false;
     int turns = pr_battle_rand_seed_int(bt, x->turnCountMax - x->turnCountMin + 1, x->turnCountMin);
-    pr_add_tag(bt, e, ef->self_target ? user : target, x->tagType, turns, move, (int64_t)user->id);
+    return pr_add_tag(bt, e, ef->self_target ? user : target, x->tagType, turns, move, (int64_t)user->id);
 }
 
 void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, pr_pokemon *user, pr_pokemon *target)
@@ -204,10 +206,88 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         return;
     }
     case PR_AC_ClearWeatherAttr:                         /* Defog in fog; no canApply check */
-        if (bt->weather == P(ClearWeatherAttr, a)->weatherType) pr_clear_weather(bt, e);
+        if (bt->weather == P(ClearWeatherAttr, a)->weatherType) pr_try_set_weather(bt, e, WEATHER_TYPE_NONE, user);
         return;
-    case PR_AC_ClearTerrainAttr:                         /* Defog, Ice Spinner, Steel Roller: trySetTerrain(NONE, true, user) */
-        if (bt->terrain != TERRAIN_NONE) pr_clear_terrain(bt, e);
+    case PR_AC_ClearTerrainAttr:                         /* Defog, Ice Spinner, Steel Roller */
+        pr_try_set_terrain(bt, e, TERRAIN_NONE, true, user);
+        return;
+    case PR_AC_JawLockAttr:                              /* Jaw Lock: both trapped, each by the other */
+        if (!effect_can_apply(ef, user, target)) return;
+        if (pr_find_battler_tag_class(user, PR_TAGCLASS_TRAPPED) || pr_find_battler_tag_class(target, PR_TAGCLASS_TRAPPED))
+            return;
+        if (!chance_roll(bt, get_move_chance(bt, ef, user, target, move, ef->self_target, false))) return;
+        if (pr_add_tag(bt, e, target, BATTLER_TAG_TYPE_TRAPPED, 1, move, (int64_t)user->id))
+            pr_add_tag(bt, e, user, BATTLER_TAG_TYPE_TRAPPED, 1, move, (int64_t)target->id);
+        return;
+    case PR_AC_AddBattlerTagIfBoostedAttr:               /* Alluring Voice: confuses a target whose stats rose this turn */
+        if (target->stat_stages_increased) add_battler_tag(bt, e, a, ef, user, target, move);
+        return;
+    case PR_AC_FallDownAttr:                             /* Smack Down, Thousand Arrows */
+        if (pr_is_grounded(bt, target, true)) return;
+        if (!add_battler_tag(bt, e, a, ef, user, target, move)) return;
+        pr_remove_tag(bt, e, target, BATTLER_TAG_TYPE_FLOATING);
+        pr_remove_tag(bt, e, target, BATTLER_TAG_TYPE_TELEKINESIS);
+        if (pr_get_battler_tag(target, BATTLER_TAG_TYPE_FLYING)) {
+            pr_remove_tag(bt, e, target, BATTLER_TAG_TYPE_FLYING);
+            pr_add_tag(bt, e, target, BATTLER_TAG_TYPE_INTERRUPTED, 0, 0, -1);
+        }
+        pr_queue_message(bt, e);                         /* moveTriggers:fallDown */
+        return;
+    case PR_AC_ExposedMoveAttr:                          /* Foresight, Odor Sleuth, Miracle Eye */
+        if (add_battler_tag(bt, e, a, ef, user, target, move)) pr_queue_message(bt, e);   /* moveTriggers:exposedMove */
+        return;
+    case PR_AC_AddTypeAttr:                              /* Forest's Curse, Trick-or-Treat: no canApply check */
+        target->added_type = (int8_t)P(AddTypeAttr, a)->type;
+        pr_queue_message(bt, e);                         /* moveTriggers:addType */
+        return;
+    case PR_AC_OrderUpStatBoostAttr:                     /* Order Up: only with a Tatsugiri commanding (doubles) */
+        if (pr_get_battler_tag(user, BATTLER_TAG_TYPE_COMMANDED)) pr_note_unported(bt, a->cls);
+        return;
+    case PR_AC_HealOnAllyAttr:                           /* Pollen Puff: heals only the user's ally (doubles) */
+        if (bt->double_battle) pr_note_unported(bt, a->cls);
+        return;
+    case PR_AC_StatusIfBoostedAttr:                      /* Burning Jealousy (self-targeted, reads the real target) */
+        if (target->stat_stages_increased)
+            pr_try_set_status(bt, e, target, P(StatusIfBoostedAttr, a)->effect, user, -1, false, true);
+        return;
+    case PR_AC_FlameBurstAttr:                           /* hits the target's ally: a single battle has none */
+        if (bt->double_battle) pr_note_unported(bt, a->cls);
+        return;
+    case PR_AC_MoneyAttr: {                              /* Pay Day: moneyScattered += getWaveMoneyAmount(0.2) */
+        int w = bt->wave_index, set = (int)ceil(w / 10.0) - 1;
+        double v = js_pow((set + 1 + (0.75 + (((w - 1) % 10) + 1) / 10.0)) * 100, 1 + 0.005 * set) * 0.2;
+        bt->money_scattered += (int32_t)(floor(v / 10) * 10);
+        pr_queue_message(bt, e);                         /* moveTriggers:coinsScatteredEverywhere */
+        return;
+    }
+    case PR_AC_RemoveHeldItemAttr: {                     /* Knock Off (not the player's items), Incinerate (berries) */
+        if (!P(RemoveHeldItemAttr, a)->berriesOnly && target->is_player) return;
+        bool cancelled = false;
+        pr_ab_params cp = {.pokemon = target, .move = -1, .flag = &cancelled};
+        pr_apply_ab_attrs(bt, PR_AC_BlockItemTheftAbAttr, &cp);
+        /* with a transferable item left to pick (a berry for Incinerate), losing it isn't ported */
+        if (!cancelled && pr_held_item_count(bt, target, true)) pr_note_unported(bt, a->cls);
+        return;
+    }
+    case PR_AC_StealHeldItemChanceAttr: {                /* Thief, Covet: randSeedFloat() > chance fails */
+        if (!bt->rng_live) { pr_note_unported(bt, PR_FEAT_GLOBAL_RNG); return; }
+        if (pr_rng_seed_float(&bt->rng) > P(StealHeldItemChanceAttr, a)->chance) return;
+        if (pr_held_item_count(bt, target, true)) pr_note_unported(bt, a->cls);   /* the transfer isn't ported */
+        return;
+    }
+    case PR_AC_StealEatBerryAttr: {                      /* Bug Bite, Pluck */
+        bool cancelled = false;
+        pr_ab_params cp = {.pokemon = target, .move = -1, .flag = &cancelled};
+        pr_apply_ab_attrs(bt, PR_AC_BlockItemTheftAbAttr, &cp);
+        /* any held item might be a berry (BerryModifier isn't a ported class): eating it isn't ported */
+        if (!cancelled && pr_held_item_count(bt, target, false)) pr_note_unported(bt, a->cls);
+        return;
+    }
+    case PR_AC_WeatherChangeAttr:                        /* Rain Dance, Sunny Day, Sandstorm, Hail, Snowscape, */
+        pr_try_set_weather(bt, e, P(WeatherChangeAttr, a)->weatherType, user);   /* Chilly Reception */
+        return;
+    case PR_AC_TerrainChangeAttr:                        /* the four terrain moves: no animation of their own */
+        pr_try_set_terrain(bt, e, P(TerrainChangeAttr, a)->terrainType, true, user);
         return;
     case PR_AC_AddSubstituteAttr: {                      /* Substitute, Shed Tail */
         /* the HP cost (Shed Tail rounds up), taken as indirect damage with no faint phase, then
@@ -323,6 +403,68 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
                     pr_arena_add_tag(bt, e, t->type, t->turn_count, t->source_move, t->source_id, sides[1 - s], true);
             }
         pr_queue_message(bt, e);                         /* moveTriggers:swapArenaTags */
+        return;
+    }
+    case PR_AC_SacrificialAttr:                          /* Explosion, Self-Destruct, Misty Explosion */
+    case PR_AC_SacrificialAttrOnHit: {                   /* Memento, Final Gambit: only if the move hit */
+        if (a->cls == PR_AC_SacrificialAttrOnHit && !effect_can_apply(ef, user, target)) return;
+        /* damageAndUpdate(user.hp, {result: INDIRECT, ignoreSegments: true}), then damageTaken +=
+         * user.hp: the HP left afterwards, 0 unless the user got through */
+        pr_damage_and_update(bt, e, user, user->hp, HIT_RESULT_INDIRECT, false, NULL);
+        user->damage_taken += user->hp;
+        return;
+    }
+    case PR_AC_HalfSacrificialAttr: {                    /* Mind Blown, Steel Beam */
+        if (!effect_can_apply(ef, user, target)) return;
+        bool cancelled = false;
+        pr_ab_params ap = {.pokemon = user, .move = -1, .flag = &cancelled};
+        pr_apply_ab_attrs(bt, PR_AC_BlockNonDirectDamageAbAttr, &ap);
+        if (cancelled) return;
+        double d = floor(pr_get_stat(user, STAT_HP, false) / 2.0);
+        pr_damage_and_update(bt, e, user, d < 1 ? 1 : d, HIT_RESULT_INDIRECT, false, NULL);
+        pr_queue_message(bt, e);                         /* moveTriggers:cutHpPowerUpMove */
+        return;
+    }
+    case PR_AC_ResetStatsAttr:                           /* Haze, Freezy Frost (everyone active); Clear Smog */
+        /* no canApply check: a target that fainted to the hit is reset too */
+        if (P(ResetStatsAttr, a)->targetAllPokemon) {
+            for (int i = 0; i < 4; i++)
+                if (bt->field[i] && bt->field[i]->hp > 0) memset(bt->field[i]->stat_stages, 0, sizeof bt->field[i]->stat_stages);
+        } else {
+            memset(target->stat_stages, 0, sizeof target->stat_stages);
+        }
+        pr_queue_message(bt, e);                         /* statEliminated / resetStats */
+        return;
+    case PR_AC_SwapStatStagesAttr: {                     /* Heart Swap, Power Swap, Guard Swap */
+        if (!effect_can_apply(ef, user, target)) return;
+        const pr_intlist *st = &P(SwapStatStagesAttr, a)->stats;
+        for (int k = 0; k < st->n; k++) {
+            int8_t tmp = user->stat_stages[st->v[k] - 1];
+            user->stat_stages[st->v[k] - 1] = target->stat_stages[st->v[k] - 1];
+            target->stat_stages[st->v[k] - 1] = tmp;
+        }
+        if (st->n == 7 || st->n == 2) pr_queue_message(bt, e);   /* switchedStatChanges / switchedTwoStatChanges */
+        return;
+    }
+    case PR_AC_ChangeTypeAttr:                           /* Soak, Magic Powder: no canApply check */
+        target->type_override[0] = (int8_t)P(ChangeTypeAttr, a)->type;
+        target->type_override[1] = -1;
+        pr_queue_message(bt, e);                         /* moveTriggers:transformedIntoType */
+        return;
+    case PR_AC_MessageAttr:                              /* Splash, Celebrate, Lock-On, Perish Song...: */
+        pr_queue_message(bt, e);                         /* every message upstream builds is non-empty */
+        return;
+    case PR_AC_HealAttr: {                               /* Recover, Soft-Boiled, Roost, Heal Pulse... */
+        const pr_attr_HealAttr *x = P(HealAttr, a);
+        if (!effect_can_apply(ef, user, target)) return;
+        double ratio = x->healRatio;
+        pr_ab_params hp = {.pokemon = user, .opponent = target, .move = move, .value = &ratio};
+        pr_apply_ab_attrs(bt, PR_AC_MoveHealBoostAbAttr, &hp);   /* Mega Launcher's Heal Pulse */
+        pr_pokemon *on = x->selfTarget ? user : target;
+        /* PokemonHealPhase(Math.round(maxHp * ratio), {message, showFullHpMessage, skipAnim: !showAnim}):
+         * a move's heal rounds half up */
+        pr_unshift_heal(bt, e, pr_battler_index(bt, on), js_round(pr_get_stat(on, STAT_HP, false) * ratio),
+                        PR_HEAL_MESSAGE | (x->showAnim ? 0 : PR_HEAL_SKIP_ANIM));
         return;
     }
     }

@@ -100,6 +100,12 @@ int pr_get_types(const pr_pokemon *p, int8_t out[3], unsigned flags)
             if (out[i] != POKEMON_TYPE_UNKNOWN) out[k++] = out[i];
         n = k;
     }
+    /* then the type Forest's Curse or Trick-or-Treat added, if the set lacks it */
+    if (p->added_type) {
+        bool have = false;
+        for (int i = 0; i < n; i++) have = have || out[i] == p->added_type;
+        if (!have) out[n++] = p->added_type;
+    }
     return n;
 }
 

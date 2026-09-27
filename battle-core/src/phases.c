@@ -126,6 +126,9 @@ static void move_attrs_unported(pr_battle *bt, int move, uint16_t cls)
 
 /* ---------------------------------------------------------------- queueing helpers */
 
+static double damage_and_update(pr_battle *bt, pr_engine *e, pr_pokemon *p, double damage, int result,
+                                bool ignore_faint_phase, pr_pokemon *source);
+
 static int new_pokemon_phase(pr_engine *e, pr_phase_type t, int battler)
 {
     return pr_phase_new(e, t, (int8_t)battler);
@@ -1209,6 +1212,32 @@ double pr_damage_and_update(pr_battle *bt, pr_engine *e, pr_pokemon *p, double d
     return damage_and_update(bt, e, p, damage, result, ignore_faint_phase, source);
 }
 
+/* applyMoveAttrs("NoEffectAttr" / "MissEffectAttr"): every one upstream runs crashDamageFunc (High
+ * Jump Kick, Jump Kick, Axe Kick, Supercell Slam): unless Magic Guard blocks it, half the user's
+ * max HP as indirect damage, the message, and turnData.damageTaken grows by the same amount */
+static void miss_effects(pr_battle *bt, pr_engine *e, pr_pokemon *user, int move, uint16_t cls)
+{
+    const pr_move *mv = &pr_moves[move];
+    for (unsigned i = 0; i < mv->nattr; i++) {
+        const pr_attr *a = &pr_attrs[mv->attr0 + i];
+        if (a->cls != cls) continue;
+        pr_fn_id fn = cls == PR_AC_MissEffectAttr ? ((const pr_attr_MissEffectAttr *)a->p)->missEffectFunc
+                                                  : ((const pr_attr_NoEffectAttr *)a->p)->noEffectFunc;
+        if (!pr_closure_matches(fn, "move:26", "651822f1cdcc")) {
+            pr_note_unported(bt, cls);
+            continue;
+        }
+        bool cancelled = false;
+        pr_ab_params cp = {.pokemon = user, .move = -1, .flag = &cancelled};
+        pr_apply_ab_attrs(bt, PR_AC_BlockNonDirectDamageAbAttr, &cp);
+        if (cancelled) continue;
+        double d = to_dmg_value(max_hp(user) / 2.0);
+        damage_and_update(bt, e, user, d, HIT_RESULT_INDIRECT, false, NULL);
+        pr_queue_message(bt, e);                               /* moveTriggers:keptGoingAndCrashed */
+        user->damage_taken += (int32_t)d;
+    }
+}
+
 static move_damage apply_move_damage(pr_battle *bt, pr_engine *e, int ph, pr_pokemon *user, pr_pokemon *target, double eff)
 {
     pr_phase *fx = PH(ph);
@@ -1402,12 +1431,20 @@ static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
         for (unsigned i = 0; i < mv->nattr; i++) {
             const pr_attr *a = &pr_attrs[mv->attr0 + i];
             if (!pr_attr_is(a->cls, PR_AC_MultiHitAttr)) continue;
-            if (a->cls != PR_AC_MultiHitAttr || pr_move_has_attr((uint16_t)move, PR_AC_ChangeMultiHitTypeAttr)) {
-                pr_note_unported(bt, a->cls == PR_AC_MultiHitAttr ? PR_AC_ChangeMultiHitTypeAttr : a->cls);
+            if (a->cls != PR_AC_MultiHitAttr) {
+                pr_note_unported(bt, a->cls);
                 continue;
             }
             const pr_attr_MultiHitAttr *mh = a->p;
-            switch (mh->intrinsicMultiHitType) {
+            int hit_type = mh->intrinsicMultiHitType;
+            /* applyMoveAttrs("ChangeMultiHitTypeAttr"): Water Shuriken hits 3 times for Ash-Greninja */
+            for (unsigned j = 0; j < mv->nattr; j++) {
+                int c = pr_attrs[mv->attr0 + j].cls;
+                if (!pr_attr_is(c, PR_AC_ChangeMultiHitTypeAttr)) continue;
+                if (c != PR_AC_WaterShurikenMultiHitTypeAttr) pr_note_unported(bt, c);
+                else if (user->species == SPECIES_ID_BATTLE_BOND_GRENINJA && user->form == 1) hit_type = MULTI_HIT_TYPE_THREE;
+            }
+            switch (hit_type) {
             case MULTI_HIT_TYPE_TWO_TO_FIVE: {
                 int v = pr_battle_rand_seed_int(bt, 20, 0);
                 pr_hook_ab(bt, user, PR_AC_MaxMultiHitAbAttr);
@@ -1476,11 +1513,11 @@ static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
             /* fall through */
         case HIT_CHECK_RESULT_NO_EFFECT_NO_MESSAGE: case HIT_CHECK_RESULT_PROTECTED:
         case HIT_CHECK_RESULT_TARGET_NOT_ON_FIELD:
-            move_attrs_unported(bt, move, PR_AC_NoEffectAttr);
+            miss_effects(bt, e, user, move, PR_AC_NoEffectAttr);
             break;
         case HIT_CHECK_RESULT_MISS:
             pr_queue_message(bt, e);
-            move_attrs_unported(bt, move, PR_AC_MissEffectAttr);
+            miss_effects(bt, e, user, move, PR_AC_MissEffectAttr);
             break;
         case HIT_CHECK_RESULT_REFLECTED:
             unshift_new(bt, e, PH_MOVE_REFLECT, pr_battler_index(bt, targets[i]));
@@ -1547,6 +1584,7 @@ static void reset_summon_data(pr_pokemon *p)
     p->ability = p->base_ability;
     memset(p->summon_stats, 0, sizeof p->summon_stats);
     p->type_override[0] = p->type_override[1] = -2;
+    p->added_type = 0;
     p->n_move_history = 0;
     p->temp_turn_count = p->temp_wave_turn_count = 1;
     p->n_ab_applied_summon = 0;
@@ -1852,40 +1890,73 @@ static bool terrain_lapse(pr_battle *bt)
     return true;
 }
 
-/* arena.trySetWeather(NONE) with a weather up (a weather running out, Defog in fog): its clear
- * message, then for each Pokemon in speed order the tags tied to the weather go and
- * PostWeatherChangeAbAttr runs. A user only feeds FieldEffectModifier a duration a clear doesn't use. */
-void pr_clear_weather(pr_battle *bt, pr_engine *e)
+/* arena.trySetWeather(weather, user). It fails on the weather already up; a primal weather (Harsh
+ * Sun, Heavy Rain, Strong Winds) only gives way to another primal one or to none, and otherwise
+ * plays its animation and its "continues" message. A user makes it last 5 turns plus 2 per
+ * FieldEffectModifier (Mystical Rock) stack; a primal weather has no count. The start (animation
+ * and message) or clear message, then for each Pokemon in speed order the tags tied to the old
+ * weather go and PostWeatherChangeAbAttr runs. */
+bool pr_try_set_weather(pr_battle *bt, pr_engine *e, int weather, const pr_pokemon *user)
 {
-    bt->weather = WEATHER_TYPE_NONE;
-    bt->weather_turns_left = bt->weather_max_duration = 0;
-    pr_queue_message(bt, e);                                  /* getWeatherClearMessage(oldWeatherType) */
+    if (bt->weather == weather) return false;                 /* canSetWeather */
+    if (pr_weather_immutable(bt->weather) && !pr_weather_immutable(weather) && weather != WEATHER_TYPE_NONE) {
+        unshift_new(bt, e, PH_COMMON_ANIM, default_battler(bt));  /* getWeatherAnim(oldWeatherType) */
+        pr_queue_message(bt, e);                              /* getLegendaryWeatherContinuesMessage */
+        return false;
+    }
+    int32_t duration = 0;
+    if (user) {
+        duration = 5;
+        pr_apply_field_effect_modifier(bt, user, &duration);
+    }
+    bt->weather = weather;
+    if (weather == WEATHER_TYPE_NONE) {
+        bt->weather_turns_left = bt->weather_max_duration = 0;
+        pr_queue_message(bt, e);                              /* getWeatherClearMessage(oldWeatherType) */
+    } else {
+        /* new Weather(weather, duration, duration): a primal weather keeps no count */
+        bt->weather_turns_left = bt->weather_max_duration = pr_weather_immutable(weather) ? 0 : duration;
+        unshift_new(bt, e, PH_COMMON_ANIM, default_battler(bt));  /* getWeatherAnim(weather) */
+        pr_queue_message(bt, e);                              /* getWeatherStartMessage */
+    }
     pr_speed_iter it;
     pr_pokemon *p;
     pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
     while ((p = pr_speed_iter_next(bt, &it))) {
-        pr_remove_field_boost_tag(bt, e, p, false, WEATHER_TYPE_NONE);
-        pr_ab_params wp = {.pokemon = p, .move = -1, .field_type = WEATHER_TYPE_NONE};
+        pr_remove_field_boost_tag(bt, e, p, false, weather);
+        pr_ab_params wp = {.pokemon = p, .move = -1, .field_type = weather};
         pr_apply_ab_attrs(bt, PR_AC_PostWeatherChangeAbAttr, &wp);
     }
+    return true;
 }
 
-/* arena.trySetTerrain(NONE): the same for a terrain, plus Mimicry (TerrainEventTypeChangeAbAttr) */
-void pr_clear_terrain(pr_battle *bt, pr_engine *e)
+/* arena.trySetTerrain(terrain, ignoreAnim, user): the same for a terrain, with no primal case,
+ * an animation only when ignoreAnim is off (moves turn it off), and Mimicry
+ * (TerrainEventTypeChangeAbAttr) after PostTerrainChangeAbAttr */
+bool pr_try_set_terrain(pr_battle *bt, pr_engine *e, int terrain, bool ignore_anim, const pr_pokemon *user)
 {
-    bt->terrain = TERRAIN_NONE;
-    bt->terrain_turns_left = bt->terrain_max_duration = 0;
-    pr_queue_message(bt, e);                                  /* getTerrainClearMessage(oldTerrainType) */
+    if (bt->terrain == terrain) return false;                 /* canSetTerrain */
+    int32_t duration = 0;
+    if (user) {
+        duration = 5;
+        pr_apply_field_effect_modifier(bt, user, &duration);
+    }
+    bt->terrain = terrain;
+    bt->terrain_turns_left = bt->terrain_max_duration = terrain == TERRAIN_NONE ? 0 : duration;
+    if (terrain != TERRAIN_NONE && !ignore_anim)
+        unshift_new(bt, e, PH_COMMON_ANIM, default_battler(bt));  /* getTerrainAnim(terrain) */
+    pr_queue_message(bt, e);                                  /* getTerrainStartMessage / getTerrainClearMessage */
     pr_speed_iter it;
     pr_pokemon *p;
     pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
     while ((p = pr_speed_iter_next(bt, &it))) {
-        pr_remove_field_boost_tag(bt, e, p, true, TERRAIN_NONE);
-        pr_ab_params tp = {.pokemon = p, .move = -1, .field_type = TERRAIN_NONE};
+        pr_remove_field_boost_tag(bt, e, p, true, terrain);
+        pr_ab_params tp = {.pokemon = p, .move = -1, .field_type = terrain};
         pr_apply_ab_attrs(bt, PR_AC_PostTerrainChangeAbAttr, &tp);
         pr_ab_params mp = {.pokemon = p, .move = -1};
         pr_apply_ab_attrs(bt, PR_AC_TerrainEventTypeChangeAbAttr, &mp);
     }
+    return true;
 }
 
 static void turn_end_phase(pr_battle *bt, pr_engine *e)
@@ -1923,13 +1994,13 @@ static void turn_end_phase(pr_battle *bt, pr_engine *e)
     }
     pr_arena_lapse_tags(bt, e);
     if (bt->weather != WEATHER_TYPE_NONE && !weather_lapse(bt)) {
-        pr_clear_weather(bt, e);
+        pr_try_set_weather(bt, e, WEATHER_TYPE_NONE, NULL);
         /* triggerWeatherBasedFormChangesToNormal: Castform and Cherrim (form changes aren't ported) */
         pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
         while ((p = pr_speed_iter_next(bt, &it)))
             form_change(bt, p, PR_FCT_SpeciesFormChangeRevertWeatherFormTrigger);
     }
-    if (bt->terrain != TERRAIN_NONE && !terrain_lapse(bt)) pr_clear_terrain(bt, e);
+    if (bt->terrain != TERRAIN_NONE && !terrain_lapse(bt)) pr_try_set_terrain(bt, e, TERRAIN_NONE, true, NULL);
 }
 
 /* ---------------------------------------------------------------- presentation */

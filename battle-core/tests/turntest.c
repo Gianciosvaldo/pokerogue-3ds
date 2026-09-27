@@ -38,6 +38,9 @@ static int name_index(const char *const *names, int n, const char *s)
     return -1;
 }
 
+/* whether the data file carries moneyScattered and addedType (files written before they were dumped don't) */
+static bool has_money;
+
 /* The value of key=... in a record line (NULL if absent). Returns a pointer into a static
  * buffer, valid until the next call. */
 static const char *field(const char *line, const char *key)
@@ -169,6 +172,8 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             for (int j = 0; j < bt->n_participants; j++) bt->participants[j] = (uint32_t)strtoul(pids[j], NULL, 10);
             bt->post_battle_loot = (int)inum(l, "loot");
             bt->battle_score = dnum(l, "score");
+            has_money = field(l, "money") != NULL;
+            bt->money_scattered = has_money ? (int32_t)inum(l, "money") : 0;
             bt->battle_type = (uint8_t)inum(l, "type");
             bt->double_battle = inum(l, "double") != 0;
             bt->max_exp_level = (int)inum(l, "mel");
@@ -236,6 +241,7 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             p->type_override[0] = p->type_override[1] = -2;
             for (int j = 0; j < nt; j++) p->type_override[j] = (int8_t)atoi(it[j]);
             if (nt == 1) p->type_override[1] = -1;
+            p->added_type = field(l, "added") ? (int8_t)inum(l, "added") : 0;
             p->ability_suppressed = inum(l, "abilsup") != 0;
             p->temp_turn_count = (int32_t)inum(l, "tsd");
             p->temp_wave_turn_count = (int32_t)inum(l, "tswd");
@@ -459,6 +465,7 @@ static void dump_mon(lines_t *L, const pr_battle *bt, const pr_pokemon *p, int b
        p->switch_out_status, p->summon_hit_count);
     int nt = p->type_override[0] == -2 ? 0 : p->type_override[1] == -1 ? 1 : 2;
     LIST(&s, nt, ',', "%d", p->type_override[i]);
+    if (has_money) sb(&s, " added=%d", p->added_type);
     sb(&s, " abilsup=%d tsd=%d tswd=%d aas=", p->ability_suppressed, p->temp_turn_count, p->temp_wave_turn_count);
     LIST(&s, p->n_ab_applied_summon, ',', "%d", p->ab_applied_summon[i]);
     sb(&s, " aaw=");
@@ -548,8 +555,10 @@ static void dump_state(lines_t *L, const pr_battle *bt, const case_state *cs, bo
     num_or_u(&s, bt->last_enemy_involved, -1);
     sb(&s, " participants=");
     LIST(&s, bt->n_participants, ',', "%u", bt->participants[i]);
-    sb(&s, " loot=%d score=%.17g type=%d double=%d mel=%d bar=%d ball=", bt->post_battle_loot, bt->battle_score,
-       bt->battle_type, bt->double_battle, bt->max_exp_level, bt->ability_bar_visible);
+    sb(&s, " loot=%d score=%.17g", bt->post_battle_loot, bt->battle_score);
+    if (has_money) sb(&s, " money=%d", bt->money_scattered);
+    sb(&s, " type=%d double=%d mel=%d bar=%d ball=", bt->battle_type, bt->double_battle, bt->max_exp_level,
+       bt->ability_bar_visible);
     num_or_u(&s, bt->last_used_pokeball, -1);
     add_line(L, "%s", s.s);
 

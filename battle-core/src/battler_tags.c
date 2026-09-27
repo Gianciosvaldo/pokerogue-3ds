@@ -34,6 +34,9 @@ bool pr_tag_type_ported(int type)
     case BATTLER_TAG_TYPE_SEEDED:       /* SeedTag: Leech Seed */
     case BATTLER_TAG_TYPE_SUBSTITUTE:   /* SubstituteTag: Substitute, Shed Tail */
     case BATTLER_TAG_TYPE_ENDURING:     /* EnduringTag: Endure */
+    case BATTLER_TAG_TYPE_IGNORE_FLYING:  /* GroundedTag: Smack Down, Thousand Arrows (CUSTOM, 1 turn) */
+    case BATTLER_TAG_TYPE_IGNORE_GHOST:   /* ExposedTag: Foresight, Odor Sleuth (CUSTOM, 1 turn) */
+    case BATTLER_TAG_TYPE_IGNORE_DARK:    /* ExposedTag: Miracle Eye */
         return true;
     }
     return pr_damaging_trap_move(type) != 0 || pr_battler_tag_is(type, PR_TAGCLASS_PROTECTED);
@@ -114,6 +117,9 @@ static pr_battler_tag construct(int type, int turn_count, int source_move, int64
         t.source_id = source_id;
         break;
     case BATTLER_TAG_TYPE_FLINCHED:               /* FlinchedTag(sourceMove) */
+    case BATTLER_TAG_TYPE_IGNORE_FLYING:          /* GroundedTag(tagType, CUSTOM, sourceMove) */
+    case BATTLER_TAG_TYPE_IGNORE_GHOST:           /* ExposedTag(tagType, sourceMove, ...) */
+    case BATTLER_TAG_TYPE_IGNORE_DARK:
     case BATTLER_TAG_TYPE_ALWAYS_GET_HIT:
     case BATTLER_TAG_TYPE_RECEIVE_DOUBLE_DAMAGE:
     case BATTLER_TAG_TYPE_CHARGED:
