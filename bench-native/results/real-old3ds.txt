@@ -1,0 +1,32 @@
+PokeRogue native battle-core speed test
+build: 808f653, machine: Old 3DS, ARM11 268 MHz
+cases: battle-core b4e13d0, upstream 8555c08c, 400 turns per kind, 1000 damage cases, seed 777
+timed: pr_run_turn only (TurnStartPhase to the end of the turn, both commands given).
+not timed: enemy AI, command menus, switching, drawing, reading/checking the test records.
+covered = the turn touched nothing unported; same = every record matched upstream here.
+
+kind     turns cover  same | covered turns, ms       | all turns, ms           | phases
+                           |  median     p95     max |  median     p95     max |    avg
+plain      400   360   360 |   1.514   1.994   2.889 |   1.539   1.992   2.889 |   15.5
+RICH       400   328   328 |   1.430   1.959   3.529 |   1.467   1.959   3.529 |   16.0
+STATUS     400   376   376 |   1.448   1.963   2.393 |   1.450   1.973   2.810 |   15.6
+ONHIT      400   353   353 |   1.396   1.993   3.912 |   1.406   1.993   3.912 |   15.7
+WEATHER    400   360   360 |   1.581   2.266   2.885 |   1.601   2.301   2.885 |   16.6
+CALLED     400   366   366 |   1.574   2.712   4.025 |   1.592   2.772   4.025 |   18.3
+PROTECT    400   351   351 |   1.612   2.084   3.060 |   1.623   2.082   3.060 |   20.7
+ARENA      400   355   355 |   1.480   1.926   2.620 |   1.491   1.926   2.620 |   16.8
+ALL       3200  2849  2849 |   1.507   2.174   4.025 |   1.523   2.170   4.025 |   16.9
+mean ms per turn: covered 1.543, all 1.553; turns timed 3200 (bench counted 2850 covered)
+result: every covered turn and damage case matched upstream on this machine
+
+damage calculations (pr_get_attack_damage, one call each): 8000 calls from 1000 cases, 1000 covered, 1000 same
+  ms per call: median 0.1169, p95 0.1631, max 0.2672, mean 0.1148
+
+startup: closure registry 21.5 ms (the only load step; the data tables are compiled in)
+first turn after launch: 2.087 ms; launch to first turn: 133 ms
+reading + checking records (not timed above), per case: plain 52.5 ms RICH 51.1 ms STATUS 53.6 ms ONHIT 52.7 ms WEATHER 54.8 ms CALLED 54.2 ms PROTECT 55.0 ms ARENA 56.7 ms damage 12.4 ms
+memory: pr_battle 12600 B, pr_engine 45568 B, pr_pokemon 1504 B
+memory: deepest stack in one turn 3704 B (probe paints 128 KB)
+memory: malloc in use 39976 B, arena 40912 B
+memory: app heap 29.6 MB, linear heap 32.0 MB (all the app memory this launch got)
+total run: 338.7 s

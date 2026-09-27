@@ -19,11 +19,13 @@ Also reported: the one-time startup step (linking the hand-ported closures; the 
 |---|---|---|---|---|---|
 | PC (Xeon, gcc -O2, host build) | 0.025 ms | 0.042 ms | 0.39 ms | 0.0016 ms | 0.5 ms |
 | Azahar emulator, Old 3DS mode | 0.64 ms | 0.88 ms | 1.66 ms | 0.046 ms | 16.7 ms |
-| Real Old 3DS | not measured yet | | | | |
+| **Real Old 3DS (lorenzo's console)** | **1.51 ms** | **2.17 ms** | **4.03 ms** | **0.117 ms** | **21.5 ms** |
 
 Covered turns (2,849 of 3,200) and all 1,000 damage cases matched upstream in both runs, so the ARM build computes the same results as the PC. Averages 16.9 phases per turn. Memory: `pr_battle` 12.6 KB, `pr_engine` 45.6 KB, deepest stack in one turn 3.7 KB, and the engine allocates nothing. On ARM, battle-core is 571 KB of code and tables (424 KB of it the generated data) plus 21 KB of static data.
 
-For comparison, the QuickJS route ran singles turns at 375 ms median in the same emulator and 1.21 s on the real console (upstream's "turn" there also includes the AI, the command phase and the test harness). Azahar doesn't model cache misses, and the real console ran the QuickJS bench about 3.1x slower than the emulator; whether native code shows the same gap is unknown until the console run.
+The real console (2026-09-27, bench `808f653`) ran every kind of turn about 2.35x slower than the emulator (the QuickJS bench was 3.1x slower there), and again every covered turn and damage case matched upstream. Its worst turn was 4.03 ms (a called-move turn); the first turn after launch took 2.09 ms. Raw output: [`results/real-old3ds.txt`](results/real-old3ds.txt).
+
+For comparison, the QuickJS route ran singles turns at 1.21 s median on the same console, about 800x the native turn time. That comparison flatters native somewhat: upstream's "turn" there also included the enemy AI, the command phase and the test harness. Adding the AI's roughly four damage calculations per singles turn (4 x 0.117 ms, inferred from the damage timing, AI not ported) still leaves a turn around 2 ms, a small fraction of one 33 ms frame at 30 fps. Doubles aren't measured (the engine can't run them yet).
 
 ## Building
 ```sh
