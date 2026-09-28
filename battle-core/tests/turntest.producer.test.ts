@@ -46,7 +46,8 @@
  * third start with some of those tags (Disable and Taunt with 1 to 4 turns left; half the time
  * a Pokemon already infatuated faces Attract, one already cursed a Ghost-type Curse, a powdered
  * one uses a Fire move and a stockpiling one Spit Up or Swallow), a tenth have Truant with its
- * tag, half the Pokemon holding a rampage move start in the middle of one (FRENZY, the queued
+ * tag, a sixteenth have Gorilla Tactics and no PP left, a sixteenth of the cases put Encore
+ * against Shell Trap, half the Pokemon holding a rampage move start in the middle of one (FRENZY, the queued
  * move, a successful history entry), a sixth of the cases have a terrain (Electric Terrain for
  * half the Yawn users) and an eighth rain or heavy rain;
  * TURN_HEAL=1 aims at recoil, drain, recharge and the heal phase: most moves have recoil, drain or
@@ -1211,8 +1212,9 @@ it("turntest producer", async () => {
               commandMove(other, MoveId.CURSE);
             }
             if (type === BattlerTagType.POWDER && rnd(2) === 0) {
-              // a Fire move under the powder, now and then in heavy rain (no explosion there)
-              commandMove(p, [MoveId.EMBER, MoveId.FLAMETHROWER, MoveId.FLAME_WHEEL][rnd(3)]);
+              // a Fire move under the powder, now and then in heavy rain, which stops Fire attacks
+              // first but not Will-O-Wisp, and keeps the powder from going off
+              commandMove(p, [MoveId.EMBER, MoveId.FLAMETHROWER, MoveId.WILL_O_WISP][rnd(3)]);
               if (rnd(2) === 0) {
                 scene.arena.weather = new Weather(WeatherType.HEAVY_RAIN, 0, 0);
               }
@@ -1269,9 +1271,27 @@ it("turntest producer", async () => {
             p.summonData.tags.push(getBattlerTag(BattlerTagType.TRUANT, 1, MoveId.NONE, p.id));
           }
           if (rnd(3) !== 0) {
-            p.pushMoveHistory({ move: p.moveset[0].moveId, targets: [p.getBattlerIndex()], useMode: MoveUseMode.NORMAL, result: MoveResult.SUCCESS });
+            // a NONE entry (an interrupted or recharging turn) keeps Truant from loafing
+            const move = rnd(4) === 0 ? MoveId.NONE : p.moveset[0].moveId;
+            p.pushMoveHistory({ move, targets: [p.getBattlerIndex()], useMode: MoveUseMode.NORMAL, result: move ? MoveResult.SUCCESS : MoveResult.OTHER });
           }
         }
+        if (rnd(16) === 0) {
+          // Gorilla Tactics out of PP: its tag won't lock the Pokemon into Struggle
+          p.summonData.ability = AbilityId.GORILLA_TACTICS;
+          for (const m of p.moveset) {
+            m.ppUsed = m.getMovePp();
+          }
+          command(p);
+        }
+      }
+      if (rnd(16) === 0) {
+        // Encore against a Shell Trap user (Encore goes first; it fails while the trap is set)
+        const [trapper, encorer] = rnd(2) === 0 ? [A, D] : [D, A];
+        commandMove(trapper, MoveId.SHELL_TRAP);
+        const last = trapper.moveset.find((m: any) => m.moveId !== MoveId.SHELL_TRAP) ?? trapper.moveset[0];
+        trapper.pushMoveHistory({ move: last.moveId, targets: [encorer.getBattlerIndex()], useMode: MoveUseMode.NORMAL, result: MoveResult.SUCCESS });
+        commandMove(encorer, MoveId.ENCORE);
       }
     }
     if (TRAPS) {
