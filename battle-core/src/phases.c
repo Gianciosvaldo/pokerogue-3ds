@@ -750,6 +750,40 @@ static void resolve_redirect_target(pr_battle *bt, pr_engine *e, int ph)
     }
 }
 
+/* move.getFailedText(user, targets[0]): the attributes in order until one has a text. Only
+ * ForceSwitchOutAttr's (and ChillyReceptionAttr's) does more than read state: it applies the
+ * Suction Cups-style abilities of the target for real, so they show. The text itself isn't
+ * modelled (a MessagePhase is a MessagePhase). */
+static void failed_text(pr_battle *bt, pr_engine *e, int ph)
+{
+    pr_phase *m = PH(ph);
+    const pr_move *mv = &pr_moves[m->move.id];
+    pr_pokemon *targets[4];
+    int nt = -1;
+    if (!pr_move_has_attr(m->move.id, PR_AC_ForceSwitchOutAttr) && !pr_move_has_attr(m->move.id, PR_AC_ChillyReceptionAttr))
+        return;
+    for (unsigned i = 0; i < mv->nattr; i++) {
+        const pr_attr *a = &pr_attrs[mv->attr0 + i];
+        pr_pokemon *u = m->pokemon;
+        if (a->cls == PR_AC_AddSubstituteAttr) {       /* Shed Tail, Substitute: a doll already, or too little HP */
+            const pr_attr_AddSubstituteAttr *x = (const pr_attr_AddSubstituteAttr *)a->p;
+            double c = pr_get_stat(u, STAT_HP, true) * x->hpCost;
+            c = x->roundUp ? ceil(c) : (floor(c) < 1 ? 1 : floor(c));
+            if (pr_get_battler_tag(u, BATTLER_TAG_TYPE_SUBSTITUTE) || u->hp <= c) return;
+        } else if (a->cls == PR_AC_HealAttr) {
+            pr_note_unported(bt, PR_AC_HealAttr);      /* no switching move has one */
+            return;
+        } else if (a->cls == PR_AC_ForceSwitchOutAttr || a->cls == PR_AC_ChillyReceptionAttr) {
+            if (nt < 0) nt = active_in_list(bt, tlist(e, m->targets), targets);
+            if (!nt) { pr_note_unported(bt, PR_FEAT_MOVE_CONDITION); return; }   /* upstream would throw */
+            bool cancelled = false;
+            pr_ab_params ap = {.pokemon = targets[0], .move = -1, .flag = &cancelled};
+            pr_apply_ab_attrs(bt, PR_AC_ForceSwitchOutImmunityAbAttr, &ap);
+            if (cancelled) return;                       /* moveTriggers:cannotBeSwitchedOut */
+        }
+    }
+}
+
 static void fail_move(pr_battle *bt, pr_engine *e, int ph, bool due_to_terrain)
 {
     pr_phase *m = PH(ph);
@@ -760,6 +794,7 @@ static void fail_move(pr_battle *bt, pr_engine *e, int ph, bool due_to_terrain)
         pr_hook_ab(bt, user, PR_AC_PokemonTypeChangeAbAttr);
     pr_turn_move tm = {.move = (uint16_t)id, .use_mode = m->use_mode, .result = MOVE_RESULT_FAIL};
     pr_push_history_shared(bt, e, user, tm, m->targets);
+    failed_text(bt, e, ph);
     pr_queue_message(bt, e);
     pr_lapse_tags(bt, e, user, BATTLER_TAG_LAPSE_TYPE_MOVE_EFFECT);
 }
@@ -980,7 +1015,7 @@ static void move_charge_phase(pr_battle *bt, pr_engine *e, int ph)
     int move = c->move.id;
     /* getTargetPokemon: getField(true).find(p => targetIndex === p.getBattlerIndex()) */
     pr_pokemon *target = slot(bt, c->charge_target);
-    if (target && !is_active_on_field(target)) target = NULL;
+    if (target && !is_active(target)) target = NULL;              /* isActive(): on the field or not */
     if (!user || !target || !is_charging_move(move)) return;     /* super.end() only */
     const pr_move *mv = &pr_moves[move];
 
@@ -1859,7 +1894,19 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
         if (bt->n_party[0] == 0) pr_note_unported(bt, PR_FEAT_PARTY);
         if (legal == 0) unshift_new(bt, e, PH_GAME_OVER, -1);
         else if (bt->double_battle && legal == 1 && bench == 0) unshift_new(bt, e, PH_TOGGLE_DOUBLE_POSITION, -1);
-        else if (bench > 0) push_new(bt, e, PH_SWITCH, -1);
+        else if (bench > 0) {
+            /* pushNew("SwitchPhase", SwitchType.SWITCH, fieldIndex, isModal true, doReturn false) */
+            int sw = new_pokemon_phase(e, PH_SWITCH, -1);
+            if (sw >= 0) {
+                pr_phase *s = PH(sw);
+                s->sw_type = SWITCH_TYPE_SWITCH;
+                s->sw_field_index = (int8_t)(f->battler % 2);
+                s->sw_modal = true;
+                s->sw_do_return = false;
+                s->sw_player = true;
+            }
+            pr_phase_push(bt, e, sw);
+        }
     } else {
         unshift_new(bt, e, PH_VICTORY, f->battler);
         if (bt->battle_type == BATTLE_TYPE_TRAINER || bt->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER)
@@ -1894,13 +1941,22 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
             if (pr_mod_is(&bt->mods[1][i], PR_MOD_HELD_ITEM) && bt->mods[1][i].pokemon_id == (int64_t)p->id)
                 pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
     }
-    /* leaveField */
+    pr_leave_field(bt, e, p, true);
+}
+
+/* Pokemon.leaveField(clearEffects): its turn data reset, the tags it gave the others removed,
+ * its summon data too unless it passes them on (Baton Pass, Shed Tail, a wild Pokemon fleeing);
+ * then off the field. The sprite, the Substitute doll and the info box are only drawn. */
+void pr_leave_field(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool clear_effects)
+{
+    pr_speed_iter it;
+    pr_pokemon *q;
     reset_turn_data(p);
     pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
     while ((q = pr_speed_iter_next(bt, &it)))
         if (q != p)
             pr_remove_tags_by_source_id(bt, e, q, (int64_t)p->id);
-    reset_summon_data(p);
+    if (clear_effects) reset_summon_data(p);
     pr_hook_ab(bt, p, PR_AC_PreLeaveFieldAbAttr);
     p->switch_out_status = true;
     form_change(bt, p, PR_FCT_SpeciesFormChangeActiveTrigger);

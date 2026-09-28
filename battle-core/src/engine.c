@@ -23,7 +23,8 @@ const char *const pr_phase_name[PH_COUNT_] = {
     [PH_OBTAIN_STATUS_EFFECT] = "ObtainStatusEffectPhase", [PH_MOVE_CHARGE] = "MoveChargePhase",
     [PH_MOVE_HEADER] = "MoveHeaderPhase", [PH_MOVE_REFLECT] = "MoveReflectPhase", [PH_DANCER] = "DancerPhase",
     [PH_TERA] = "TeraPhase", [PH_ATTEMPT_CAPTURE] = "AttemptCapturePhase", [PH_ATTEMPT_RUN] = "AttemptRunPhase",
-    [PH_TOGGLE_DOUBLE_POSITION] = "ToggleDoublePositionPhase",
+    [PH_TOGGLE_DOUBLE_POSITION] = "ToggleDoublePositionPhase", [PH_SELECT_BIOME] = "SelectBiomePhase",
+    [PH_NEW_BATTLE] = "NewBattlePhase",
 };
 
 const char *pr_phase_name_of(int t)
@@ -498,7 +499,7 @@ static bool is_stop(int type)
 {
     switch (type) {
     case PH_TURN_INIT: case PH_VICTORY: case PH_SWITCH: case PH_SWITCH_SUMMON: case PH_GAME_OVER:
-    case PH_BATTLE_END: case PH_SELECT_MODIFIER:
+    case PH_BATTLE_END: case PH_SELECT_MODIFIER: case PH_SELECT_BIOME: case PH_NEW_BATTLE:
         return true;
     }
     return false;
@@ -559,6 +560,7 @@ void pr_run_turn(pr_battle *bt, pr_engine *e)
         if (ph < 0 || e->overflow) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); break; }
         if (is_stop(e->pool[ph].type)) {
             e->stop = e->pool[ph].type;
+            e->stop_phase = e->pool[ph];
             phase_free(e, ph);
             break;
         }

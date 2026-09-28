@@ -779,6 +779,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
     case PR_AC_BlockOneHitKOAbAttr:            /* Sturdy against OHKO moves */
     case PR_AC_FieldPreventExplosiveMovesAbAttr: /* Damp */
     case PR_AC_BlockItemTheftAbAttr:           /* Sticky Hold */
+    case PR_AC_ForceSwitchOutImmunityAbAttr:   /* Suction Cups, Guard Dog */
         GATE(!*pp->flag); /* CancelInteractionAbAttr */
         *pp->flag = true;
         return 1;

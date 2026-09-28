@@ -116,15 +116,25 @@
  * (on either Pokemon's slot or an empty one, 1 to 3 turns left, half the delayed attacks landing
  * this turn; a delayed attack from either Pokemon, a bench Pokemon, the target itself or no
  * Pokemon at all; a wish of 1 HP to the target's max HP), and a third of the Pokemon are at low HP.
+ * TURN_SWITCH=1 aims at the moves that switch a Pokemon out (Roar, Whirlwind, Dragon Tail, Circle
+ * Throw, U-turn, Volt Switch, Flip Turn, Teleport, Baton Pass, Shed Tail, Parting Shot, Chilly
+ * Reception): most moves are one of them, the rest protections, Substitute, Mist or attacks; a
+ * third of the abilities are ones those moves check (Suction Cups, Guard Dog, Wimp Out, Emergency
+ * Exit, Soundproof, Infiltrator, Contrary, the stat-protecting ones) or Rough Skin; the player's
+ * bench has 0 to 5 Pokemon, a third of them fainted; the wave is often a multiple of 10 or of 5,
+ * the game mode classic, endless or daily; a sixth of the Pokemon are behind a Substitute, a sixth
+ * of the sides have Mist, a quarter of the cases have snow, a quarter of the Pokemon have Attack
+ * and Sp. Atk near the limits and a third are just above half HP.
  *
  * Each case builds a random singles state inside a real upstream battle, gives both sides a
  * FIGHT command the way the command phases do, then runs upstream's own phases from
  * TurnStartPhase until the turn is over (the next TurnInitPhase) or a phase the turn engine
- * stops at (VictoryPhase, SwitchPhase, GameOverPhase). It writes the state before, every phase
+ * stops at (VictoryPhase, SwitchPhase, SwitchSummonPhase, GameOverPhase, BattleEndPhase). It writes the state before, every phase
  * that ran, what is left queued, and the state after. build/turntest replays each case
  * through the C engine and compares all of it.
  */
 import { BattleScene } from "#app/battle-scene";
+import { getGameMode } from "#app/game-mode";
 import { speciesDataRegistry } from "#app/globals/global-species-data-registry";
 import { allAbilities, allMoves } from "#data/data-lists";
 import { EntryHazardTag, getArenaTag } from "#data/arena-tag";
@@ -135,6 +145,7 @@ import { Weather } from "#data/weather";
 import { AbilityId } from "#enums/ability-id";
 import { BattleType } from "#enums/battle-type";
 import { BiomeId } from "#enums/biome-id";
+import { GameModes } from "#enums/game-modes";
 import { Command } from "#enums/command";
 import { MoveCategory } from "#enums/move-category";
 import { MoveFlags } from "#enums/move-flags";
@@ -151,6 +162,7 @@ import { SpeciesId } from "#enums/species-id";
 import { Stat } from "#enums/stat";
 import { StatusEffect } from "#enums/status-effect";
 import { TrainerSlot } from "#enums/trainer-slot";
+import { WeatherType } from "#enums/weather-type";
 import { getMoveTargets } from "#moves/move-utils";
 import { PokemonMove } from "#moves/pokemon-move";
 import { GameManager } from "#test/framework/game-manager";
@@ -179,6 +191,7 @@ it("turntest producer", async () => {
   const CALLED = process.env.TURN_CALLED === "1";
   const HEADER = process.env.TURN_HEADER === "1";
   const DELAYED = process.env.TURN_DELAYED === "1";
+  const SWITCH = process.env.TURN_SWITCH === "1";
   const OUT = process.env.TURN_OUT ?? "/tmp/pr-turns.txt";
   const game = new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
   game.override
@@ -456,6 +469,15 @@ it("turntest producer", async () => {
   // TURN_DELAYED pools
   const delayedMoves = [MoveId.FUTURE_SIGHT, MoveId.DOOM_DESIRE, MoveId.WISH].map(id => allMoves[id]);
   const protectOnly = usable.filter((m: any) => m.attrs.some((a: any) => a.constructor.name === "ProtectAttr"));
+  // TURN_SWITCH pools
+  const switchAttrNames = ["ForceSwitchOutAttr", "ChillyReceptionAttr", "PartingShotAttr"];
+  const switchMoves = usable.filter((m: any) => m.attrs.some((a: any) => switchAttrNames.includes(a.constructor.name)));
+  const switchOthers = [MoveId.PROTECT, MoveId.DETECT, MoveId.SUBSTITUTE, MoveId.MIST].map(id => allMoves[id]);
+  const switchAbilityIds = [
+    AbilityId.SUCTION_CUPS, AbilityId.GUARD_DOG, AbilityId.WIMP_OUT, AbilityId.EMERGENCY_EXIT, AbilityId.SOUNDPROOF,
+    AbilityId.INFILTRATOR, AbilityId.CONTRARY, AbilityId.CLEAR_BODY, AbilityId.WHITE_SMOKE, AbilityId.FULL_METAL_BODY,
+    AbilityId.HYPER_CUTTER, AbilityId.ROUGH_SKIN,
+  ];
   const headerAbilityIds = [
     AbilityId.LONG_REACH, AbilityId.WATER_VEIL, AbilityId.WATER_BUBBLE, AbilityId.THERMAL_EXCHANGE, AbilityId.COMATOSE,
     AbilityId.PURIFYING_SALT, AbilityId.MAGIC_GUARD, AbilityId.FLAME_BODY, AbilityId.ROUGH_SKIN, AbilityId.UNSEEN_FIST,
@@ -547,6 +569,7 @@ it("turntest producer", async () => {
         `participants=${L([...battle.playerParticipantIds].sort((x: number, y: number) => x - y))}`,
         `loot=${battle.postBattleLoot.length} score=${battle.battleScore} money=${battle.moneyScattered} type=${battle.battleType} double=${battle.double ? 1 : 0}`,
         `mel=${scene.getMaxExpLevel()} bar=${scene.abilityBar.isVisible() ? 1 : 0} ball=${num(battle.lastUsedPokeball)}`,
+        `gm=${scene.gameMode.modeId}`,
       ].join(" "),
     );
     const w = scene.arena.weather;
@@ -630,6 +653,17 @@ it("turntest producer", async () => {
     const b = ph.battlerIndex;
     return typeof ph.getPokemon === "function" && typeof b === "number" ? `${ph.phaseName}:${b}` : ph.phaseName;
   };
+  // The arguments of the switch prompt a turn hands over to
+  const b01 = (v: unknown) => (v ? 1 : 0);
+  const stopArgs = (ph: any) => {
+    if (ph.phaseName === "SwitchPhase") {
+      return ` type=${ph.switchType} field=${ph.fieldIndex} modal=${b01(ph.isModal)} return=${b01(ph.doReturn)}`;
+    }
+    if (ph.phaseName === "SwitchSummonPhase") {
+      return ` type=${ph.switchType} field=${ph.fieldIndex} slot=${ph.slotIndex} return=${b01(ph.doReturn)} player=${b01(ph.player)}`;
+    }
+    return "";
+  };
   const runTurn = async () => {
     const trace: string[] = [];
     pm.pushNew("TurnStartPhase");
@@ -637,7 +671,7 @@ it("turntest producer", async () => {
     for (let guard = 0; ; guard++) {
       const ph = pm.getCurrentPhase();
       if (boundary.has(ph.phaseName)) {
-        return { trace, stop: ph.phaseName };
+        return { trace, stop: ph.phaseName + stopArgs(ph) };
       }
       if (guard > 400) {
         throw new Error("turn did not end");
@@ -686,6 +720,7 @@ it("turntest producer", async () => {
       : ARENA && rnd(3) === 0 ? arenaAbilityIds[rnd(arenaAbilityIds.length)]
       : EFFECTS && rnd(3) === 0 ? effectAbilityIds[rnd(effectAbilityIds.length)]
       : HEADER && rnd(3) === 0 ? headerAbilityIds[rnd(headerAbilityIds.length)]
+      : SWITCH && rnd(3) === 0 ? switchAbilityIds[rnd(switchAbilityIds.length)]
       : RICH && rnd(2) === 0 ? abilityIds[rnd(abilityIds.length)] : AbilityId.BALL_FETCH;
     p.gender = rnd(3) - 1;
     p.friendship = rnd(256);
@@ -697,7 +732,7 @@ it("turntest producer", async () => {
     p.status = null;
     if (HEAL && rnd(3) === 0) {
       p.status = new Status([StatusEffect.POISON, StatusEffect.TOXIC][rnd(2)], rnd(4));
-    } else if (RICH ? rnd(3) === 0 : STATUS || WEATHER ? rnd(4) === 0 : ONHIT || CHARGE || TAGS || TRAPS || PROTECT || ARENA || EFFECTS ? rnd(6) === 0 : HEADER ? rnd(4) === 0 : STAT && rnd(8) === 0) {
+    } else if (RICH ? rnd(3) === 0 : STATUS || WEATHER ? rnd(4) === 0 : ONHIT || CHARGE || TAGS || TRAPS || PROTECT || ARENA || EFFECTS ? rnd(6) === 0 : HEADER ? rnd(4) === 0 : SWITCH ? rnd(6) === 0 : STAT && rnd(8) === 0) {
       const s = statuses[rnd(statuses.length)];
       p.status = new Status(s, rnd(4), s === StatusEffect.SLEEP ? 1 + rnd(3) : 0, s === StatusEffect.FREEZE ? 1 + rnd(3) : undefined);
     }
@@ -731,6 +766,11 @@ it("turntest producer", async () => {
         ? headerMoves[rnd(headerMoves.length)]
         : DELAYED && rnd(10) < 6
         ? delayedMoves[rnd(delayedMoves.length)]
+        : SWITCH && rnd(10) < 6
+        ? switchMoves[rnd(switchMoves.length)]
+        : SWITCH
+        ? (rnd(3) === 0 ? switchOthers[rnd(switchOthers.length)]
+          : rnd(2) === 0 ? contactAttacks[rnd(contactAttacks.length)] : attacks[rnd(attacks.length)])
         : DELAYED
         ? (rnd(4) === 0 ? protectOnly[rnd(protectOnly.length)] : attacks[rnd(attacks.length)])
         : HEADER
@@ -809,9 +849,10 @@ it("turntest producer", async () => {
     const party = scene.getPlayerParty();
     party.length = 0;
     party.push(A);
-    for (const b of playerBench.slice(0, 1 + rnd(playerBench.length))) {
+    const benchSize = SWITCH && rnd(5) === 0 ? 0 : 1 + rnd(playerBench.length);
+    for (const b of playerBench.slice(0, benchSize)) {
       b.species = speciesDataRegistry.getSpecies(ids[rnd(ids.length)]);
-      b.hp = rnd(4) === 0 ? 0 : b.getMaxHp();
+      b.hp = rnd(SWITCH ? 3 : 4) === 0 ? 0 : b.getMaxHp();
       b.status = b.hp ? null : new Status(StatusEffect.FAINT);
       party.push(b);
     }
@@ -1005,6 +1046,38 @@ it("turntest producer", async () => {
       for (const p of [A, D]) {
         if (rnd(3) === 0) {
           p.hp = 1 + rnd(Math.max(1, Math.floor(p.getMaxHp() / 4)));
+        }
+      }
+    }
+    if (SWITCH) {
+      const r = rnd(3);
+      battle.waveIndex = r === 0 ? 10 * (1 + rnd(19)) : r === 1 ? [5, 15, 25, 45, 49, 55, 95, 99, 105, 149, 155, 195][rnd(12)]
+        : 1 + rnd(199);
+      scene.gameMode = getGameMode([GameModes.CLASSIC, GameModes.CLASSIC, GameModes.ENDLESS, GameModes.DAILY][rnd(4)]);
+      if (rnd(4) === 0) {
+        scene.arena.weather = new Weather(WeatherType.SNOW, 1 + rnd(5), 5);
+      }
+      for (const side of [ArenaTagSide.PLAYER, ArenaTagSide.ENEMY]) {
+        if (rnd(6) === 0) {
+          scene.arena.tags.push(getArenaTag(ArenaTagType.MIST, 1 + rnd(5), MoveId.MIST, A.id, side));
+        }
+      }
+      for (const p of [A, D]) {
+        if (rnd(6) === 0) {
+          const tag = getBattlerTag(BattlerTagType.SUBSTITUTE, 0, MoveId.SUBSTITUTE, p.id) as any;
+          tag.hp = 1 + rnd(Math.max(1, Math.floor(p.getMaxHp() / 4)));
+          tag.sourceInFocus = false;
+          tag.sprite = scene.addFieldSprite(p.x, p.y, `pkmn${p.isPlayer() ? "__back" : ""}__sub`);
+          p.summonData.tags.push(tag);
+        }
+        if (rnd(4) === 0) {
+          const edge = rnd(2) === 0 ? -6 : 6;
+          p.setStatStage(Stat.ATK, edge - Math.sign(edge) * rnd(2));
+          p.setStatStage(Stat.SPATK, edge - Math.sign(edge) * rnd(2));
+        }
+        if (rnd(3) === 0) {
+          const max = p.getMaxHp();
+          p.hp = Math.min(max, Math.ceil(max / 2) + rnd(Math.max(1, Math.floor(max / 8))));
         }
       }
     }

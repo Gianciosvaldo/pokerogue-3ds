@@ -23,6 +23,7 @@ typedef enum {
     PH_MESSAGE, PH_DAMAGE_ANIM, PH_COMMON_ANIM, PH_SHOW_ABILITY, PH_HIDE_ABILITY, PH_POKEMON_ANIM, PH_LOAD_MOVE_ANIM, PH_MOVE_ANIM,
     /* where a turn hands control back to the caller */
     PH_TURN_INIT, PH_VICTORY, PH_SWITCH, PH_SWITCH_SUMMON, PH_GAME_OVER, PH_BATTLE_END, PH_SELECT_MODIFIER,
+    PH_SELECT_BIOME, PH_NEW_BATTLE,
     /* not ported yet: created where upstream creates them (so the order stays right), and
      * the turn is reported unported */
     PH_MOVE_REFLECT, PH_DANCER, PH_TERA, PH_ATTEMPT_CAPTURE, PH_ATTEMPT_RUN, PH_TOGGLE_DOUBLE_POSITION,
@@ -79,6 +80,10 @@ typedef struct pr_phase {
     int8_t ose_sleep_turns;
     /* MoveChargePhase: targetIndex (the MovePhase's first target) */
     int8_t charge_target;
+    /* SwitchPhase(switchType, fieldIndex, isModal, doReturn) and SwitchSummonPhase(switchType,
+     * fieldIndex, slotIndex, doReturn, player): where a turn hands control back to the caller */
+    int8_t sw_type, sw_field_index, sw_slot;
+    bool sw_modal, sw_do_return, sw_player;
     /* PokemonHealPhase: hpHealed and its options (PR_HEAL_*) */
     double heal_hp;
     uint8_t heal_flags;
@@ -119,6 +124,7 @@ typedef struct pr_engine {
     char trace[PR_MAX_TRACE][40];
     int n_trace;
     uint8_t stop;              /* the phase type the turn stopped at */
+    pr_phase stop_phase;       /* that phase, with its arguments (the switch prompt's) */
     bool overflow;             /* a fixed-size table ran out: the run is not faithful */
 } pr_engine;
 
@@ -252,6 +258,14 @@ enum {
     PR_HEAL_RESTORE_PP = 64,
 };
 void pr_unshift_heal(pr_battle *bt, pr_engine *e, int battler, double hp, unsigned flags);
+/* Pokemon.leaveField(clearEffects) (src/phases.c) */
+void pr_leave_field(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool clear_effects);
+/* ForceSwitchOutAttr (src/switching.c): getSwitchOutCondition() for an attribute with these fields,
+ * and apply(). The condition applies Suction Cups-style abilities outside a simulation. */
+bool pr_switch_out_condition(pr_battle *bt, bool self_switch, int switch_type, const pr_pokemon *user,
+                             const pr_pokemon *target, int move);
+void pr_force_switch_out(pr_battle *bt, pr_engine *e, bool self_switch, int switch_type, pr_pokemon *user,
+                         pr_pokemon *target, int move);
 /* Pokemon.resetStatus(revive, false, false, asPhase=true): a ResetStatusPhase, unshifted */
 void pr_reset_status_phase(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool revive);
 /* Pokemon.trySetStatus(effect, sourcePokemon, sleepTurnsRemaining (-1 = undefined), sourceText,

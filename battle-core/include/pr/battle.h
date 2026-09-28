@@ -37,6 +37,7 @@ enum {
     PR_FEAT_FINAL_BOSS,
     PR_FEAT_STATUS_TURN,             /* a status effect's turn counter or end-of-turn damage */
     PR_FEAT_MOVE_CONDITION,          /* a move's own condition (move.applyConditions) with no C port */
+    PR_FEAT_TRAINER,                 /* a trainer or mystery encounter battle's own rules */
     PR_FEAT_PHASE_0,                 /* + pr_phase_type: a phase that isn't ported was created */
     PR_FEAT_TAG_0 = PR_FEAT_PHASE_0 + 64,  /* + BattlerTagType: that tag added, lapsed or removed, not ported */
     PR_FEAT_COUNT_ = PR_FEAT_TAG_0 + BATTLER_TAG_TYPE_COUNT_
@@ -302,6 +303,7 @@ typedef struct pr_battle {
     pr_pokemon *field[4];      /* player 0/1, enemy 2/3 as in upstream BattlerIndex */
     /* ---- state the turn engine keeps (the damage path doesn't read it) ---- */
     int wave_index;
+    int8_t game_mode;          /* gameMode.modeId (GameModes), -1 = unknown */
     uint8_t battle_type;       /* BattleType */
     uint16_t last_move;        /* currentBattle.lastMove, 0 = none */
     int8_t last_player_involved, last_enemy_involved;  /* -1 = undefined */

@@ -68,6 +68,48 @@ static bool add_battler_tag(pr_battle *bt, pr_engine *e, const pr_attr *a, const
     return pr_add_tag(bt, e, ef->self_target ? user : target, x->tagType, turns, move, (int64_t)user->id);
 }
 
+/* StatStageChangeAttr.apply: canApply, the condition, the chance roll, then
+ * StatStageChangePhase({battlerIndex, changes: groupStatChange(stats, getLevels(user)),
+ * sourcePokemon: user, message: options.message}); no StatStageChangeAttr has a message.
+ * Whether the phase was queued. */
+static bool stat_stage_change(pr_battle *bt, pr_engine *e, const pr_effect_info *ef, uint16_t cls, pr_pokemon *user,
+                              pr_pokemon *target, int move, const int32_t *stats, int n, int stages)
+{
+    if (!effect_can_apply(ef, user, target)) return false;
+    if (ef->condition != PR_NO_FN && !pr_closure_call(bt, ef->condition, cls, 0, user, target, move)) return false;
+    double chance = get_move_chance(bt, ef, user, target, move, ef->self_target, true);
+    if (!chance_roll(bt, chance)) return false;
+    pr_pokemon *on = ef->self_target ? user : target;
+    if (pr_unshift_stat_stage_change(bt, e, pr_battler_index(bt, on), stats, n, stages, user) < 0) e->overflow = true;
+    return true;
+}
+
+/* PartingShotAttr: after the stat drop is queued, the user switches out only if the drop will
+ * happen: no Mist on the target's side, and Attack or Sp. Atk can move (the stat-protecting
+ * abilities simulated, the stages inside ±6, Contrary turning the drop into a raise) */
+static void parting_shot(pr_battle *bt, pr_engine *e, const pr_attr *a, const pr_effect_info *ef, pr_pokemon *user,
+                         pr_pokemon *target, int move)
+{
+    const pr_attr_PartingShotAttr *x = (const pr_attr_PartingShotAttr *)a->p;
+    if (!stat_stage_change(bt, e, ef, a->cls, user, target, move, x->stats.v, x->stats.n, x->stages)) return;
+    int side = target->is_player ? ARENA_TAG_SIDE_PLAYER : ARENA_TAG_SIDE_ENEMY;
+    if (pr_arena_get_tag_on_side(bt, ARENA_TAG_TYPE_MIST, side)) return;
+    int mod = pr_has_ability_active(bt, target, ABILITY_ID_CONTRARY) ? 1 : -1;
+    uint16_t cancelled = 0;
+    bool can[2];
+    static const int8_t which[2] = {STAT_ATK, STAT_SPATK}, minus_one[1] = {-1};
+    for (int k = 0; k < 2; k++) {
+        pr_ab_params pp = {.pokemon = target, .move = -1, .simulated = true, .ch_stat = &which[k],
+                           .ch_stages = minus_one, .n_ch = 1, .cancelled_stats = &cancelled};
+        pr_apply_ab_attrs(bt, PR_AC_ProtectStatAbAttr, &pp);
+        int st = target->stat_stages[which[k] - 1] + mod;
+        can[k] = !(cancelled & (1u << which[k])) && st >= -6 && st <= 6;
+    }
+    if (!can[0] && !can[1]) return;
+    if (pr_switch_out_condition(bt, true, SWITCH_TYPE_SWITCH, user, target, move))
+        pr_force_switch_out(bt, e, true, SWITCH_TYPE_SWITCH, user, target, move);
+}
+
 void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, pr_pokemon *user, pr_pokemon *target)
 {
     const pr_attr *a = &pr_attrs[attr_index];
@@ -80,17 +122,22 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
     }
     switch (a->cls) {
     case PR_AC_StatStageChangeAttr: {
-        if (!effect_can_apply(ef, user, target)) return;
-        if (ef->condition != PR_NO_FN && !pr_closure_call(bt, ef->condition, a->cls, 0, user, target, move)) return;
-        double chance = get_move_chance(bt, ef, user, target, move, ef->self_target, true);
-        if (chance_roll(bt, chance)) {
-            /* StatStageChangePhase({battlerIndex, changes: groupStatChange(stats, getLevels(user)),
-             * sourcePokemon: user, message: options.message}); no StatStageChangeAttr has a message */
-            const pr_attr_StatStageChangeAttr *x = P(StatStageChangeAttr, a);
-            pr_pokemon *on = ef->self_target ? user : target;
-            if (pr_unshift_stat_stage_change(bt, e, pr_battler_index(bt, on), x->stats.v, x->stats.n, x->stages, user) < 0)
-                e->overflow = true;
-        }
+        const pr_attr_StatStageChangeAttr *x = P(StatStageChangeAttr, a);
+        stat_stage_change(bt, e, ef, a->cls, user, target, move, x->stats.v, x->stats.n, x->stages);
+        return;
+    }
+    case PR_AC_PartingShotAttr:
+        parting_shot(bt, e, a, ef, user, target, move);
+        return;
+    case PR_AC_ForceSwitchOutAttr: {                     /* Roar, Whirlwind, Dragon Tail, U-turn, Baton Pass... */
+        const pr_attr_ForceSwitchOutAttr *x = P(ForceSwitchOutAttr, a);
+        pr_force_switch_out(bt, e, x->selfSwitch, x->switchType, user, target, move);
+        return;
+    }
+    case PR_AC_ChillyReceptionAttr: {                    /* snow first, whether or not the user can leave */
+        const pr_attr_ChillyReceptionAttr *x = P(ChillyReceptionAttr, a);
+        pr_try_set_weather(bt, e, WEATHER_TYPE_SNOW, user);
+        pr_force_switch_out(bt, e, x->selfSwitch, x->switchType, user, target, move);
         return;
     }
     case PR_AC_StatusEffectAttr:

@@ -181,6 +181,7 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             bt->max_exp_level = (int)inum(l, "mel");
             bt->ability_bar_visible = inum(l, "bar") != 0;
             bt->last_used_pokeball = (int8_t)unum(l, "ball", -1);
+            bt->game_mode = field(l, "gm") ? (int8_t)inum(l, "gm") : -1;   /* older files have none */
         } else if (!strncmp(l, "ARENA ", 6)) {
             bt->weather = (uint8_t)inum(l, "weather");
             bt->weather_turns_left = (int16_t)inum(l, "wturns");
@@ -594,6 +595,7 @@ static void dump_state(lines_t *L, const pr_battle *bt, const case_state *cs, bo
     sb(&s, " type=%d double=%d mel=%d bar=%d ball=", bt->battle_type, bt->double_battle, bt->max_exp_level,
        bt->ability_bar_visible);
     num_or_u(&s, bt->last_used_pokeball, -1);
+    if (bt->game_mode >= 0) sb(&s, " gm=%d", bt->game_mode);
     add_line(L, "%s", s.s);
 
     s.n = 0;
@@ -708,7 +710,16 @@ static void dump_trace_queue(lines_t *L, const pr_engine *e)
         }
     LIST(&s, n, ',', "%s", items[i]);
     add_line(L, "%s", s.s);
-    add_line(L, "END stop=%s", pr_phase_name[e->stop]);
+    /* the arguments of the switch prompt the turn hands over to */
+    const pr_phase *sp = &e->stop_phase;
+    if (e->stop == PH_SWITCH)
+        add_line(L, "END stop=%s type=%d field=%d modal=%d return=%d", pr_phase_name[e->stop], sp->sw_type,
+                 sp->sw_field_index, sp->sw_modal, sp->sw_do_return);
+    else if (e->stop == PH_SWITCH_SUMMON)
+        add_line(L, "END stop=%s type=%d field=%d slot=%d return=%d player=%d", pr_phase_name[e->stop], sp->sw_type,
+                 sp->sw_field_index, sp->sw_slot, sp->sw_do_return, sp->sw_player);
+    else
+        add_line(L, "END stop=%s", pr_phase_name[e->stop]);
 }
 
 /* ------------------------------------------------------------------ comparing */

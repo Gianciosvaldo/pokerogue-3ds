@@ -279,20 +279,24 @@ static double ability_copy(ARGS)
 }
 
 /* ForceSwitchOutAttr: move.category !== STATUS || this.getSwitchOutCondition()(user, target, move)
- * (the switch-out condition isn't ported) */
+ * (src/switching.c) */
+static bool makes_force_switch(const pr_attr *a) { return a->cls == PR_AC_ForceSwitchOutAttr; }
 static double force_switch_out(ARGS)
 {
-    UNUSED;
     if (pr_moves[m].category != MOVE_CATEGORY_STATUS) return 1;
-    UNPORTED(PR_FEAT_MOVE_CONDITION);
+    OWN(makes_force_switch);
+    const pr_attr_ForceSwitchOutAttr *x = P(ForceSwitchOutAttr, a);
+    return pr_switch_out_condition(bt, x->selfSwitch, x->switchType, u, t, m);
 }
 
 /* ChillyReceptionAttr: arena.weather?.weatherType !== SNOW || super.getSwitchOutCondition()(...) */
+static bool makes_chilly_reception(const pr_attr *a) { return a->cls == PR_AC_ChillyReceptionAttr; }
 static double chilly_reception(ARGS)
 {
-    UNUSED;
     if (bt->weather != WEATHER_TYPE_SNOW) return 1;
-    UNPORTED(PR_FEAT_MOVE_CONDITION);
+    OWN(makes_chilly_reception);
+    const pr_attr_ChillyReceptionAttr *x = P(ChillyReceptionAttr, a);
+    return pr_switch_out_condition(bt, x->selfSwitch, x->switchType, u, t, m);
 }
 
 /* ProtectAttr: the chance to keep protecting falls to 1/3^n after n successful protections
@@ -518,16 +522,20 @@ static double not_repeated_success(ARGS)
     return !(tm->move == m && tm->result == MOVE_RESULT_SUCCESS);
 }
 
-/* Destiny Bond: !(target.isEnemy() && (gameMode.isBattleClassicFinalBoss(wave) || isEndlessMinorBoss(wave)))
- * Those need wave 200 (classic, challenge) or a multiple of 250 (endless); the game mode isn't modelled,
- * so only other waves are answered. */
+/* Destiny Bond: !(target.isEnemy() && (gameMode.isBattleClassicFinalBoss(wave) || isEndlessMinorBoss(wave))):
+ * wave 200 in classic and challenge, a multiple of 250 in endless */
 static double not_final_boss(ARGS)
 {
     UNUSED;
     NEED_TARGET;
     if (t->is_player) return 1;
     if (bt->wave_index != 200 && bt->wave_index % 250 != 0) return 1;
-    UNPORTED(PR_FEAT_FINAL_BOSS);
+    switch (bt->game_mode) {
+    case GAME_MODES_CLASSIC: case GAME_MODES_CHALLENGE: return bt->wave_index != 200;
+    case GAME_MODES_ENDLESS: case GAME_MODES_SPLICED_ENDLESS: return bt->wave_index % 250 != 0;
+    case GAME_MODES_DAILY: return 1;
+    default: UNPORTED(PR_FEAT_FINAL_BOSS);                    /* the game mode wasn't given */
+    }
 }
 
 /* Yawn: !target.status && !target.isSafeguarded(user). isSafeguarded(attacker): Safeguard on the
