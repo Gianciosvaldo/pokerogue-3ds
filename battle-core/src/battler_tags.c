@@ -1463,7 +1463,8 @@ void pr_remove_field_boost_tag(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool 
     int i = find_tag(p, type);
     if (i < 0 || listed) return;
     p->tags[i].turn_count = 0;
-    pr_queue_message(bt, e);
+    pr_battler_tag t = p->tags[i];
+    on_remove(bt, e, p, &t);
     splice_tag(p, i);
 }
 
