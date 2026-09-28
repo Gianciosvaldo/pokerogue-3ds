@@ -66,7 +66,7 @@ tools/run-azahar.sh path/to/lr-run path/to/azahar_libretro.so path/to/sd-card ou
 The emulator run marks the emulated SD card as headless: the final question is skipped, and the sprite and text ramps stop at 400 because Azahar's software renderer takes minutes per step beyond that.
 
 ## Running on the console
-Copy `pokerogue-gfx-bench.3dsx` to `sd:/3ds/`, start it from the Homebrew Launcher and leave it running for about 3 minutes. At the end the top screen shows a thin line on each edge and the bottom screen asks what you see: press A if you can see all four, or the d-pad direction of a missing one. Then press START to exit. The results are in `sd:/3ds/pokerogue-gfx-bench-result.txt` (and the full log in `pokerogue-gfx-bench-log.txt`). On a New 3DS the bench keeps the Old 3DS clock.
+Copy `pokerogue-gfx-bench.3dsx` to `sd:/3ds/`, start it from the Homebrew Launcher and leave it running (a few minutes; not yet timed on a console). At the end the top screen shows a thin line on each edge and the bottom screen asks what you see: press A if you can see all four, or the d-pad direction of a missing one. Then press START to exit. The results are in `sd:/3ds/pokerogue-gfx-bench-result.txt` (and the full log in `pokerogue-gfx-bench-log.txt`). On a New 3DS the bench keeps the Old 3DS clock.
 
 ## Files
 - `source/gfxbench.c`: order of the sections, the pack and sound check
