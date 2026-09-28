@@ -28,6 +28,7 @@ bool pr_tag_type_ported(int type)
     case BATTLER_TAG_TYPE_RECEIVE_DOUBLE_DAMAGE:
     case BATTLER_TAG_TYPE_MINIMIZED:    /* MinimizeTag */
     case BATTLER_TAG_TYPE_CHARGED:      /* TypeBoostTag(CHARGED, sourceMove, ELECTRIC, 2, oneUse) */
+    case BATTLER_TAG_TYPE_FIRE_BOOST:   /* TypeBoostTag(FIRE_BOOST, sourceMove, FIRE, 1.5): Flash Fire */
     case BATTLER_TAG_TYPE_TAR_SHOT:     /* TarShotTag */
     case BATTLER_TAG_TYPE_AUTOTOMIZED:  /* AutotomizedTag */
     case BATTLER_TAG_TYPE_RECHARGING:   /* RechargingTag: Hyper Beam and co. */
@@ -74,6 +75,13 @@ bool pr_tag_type_ported(int type)
     case BATTLER_TAG_TYPE_DOUBLE_SHOCKED:   /* RemovedTypeTag: Double Shock */
     case BATTLER_TAG_TYPE_POWER_TRICK:      /* PowerTrickTag */
     case BATTLER_TAG_TYPE_INTERRUPTED:      /* InterruptedTag: Smack Down or Gravity on a flying Pokemon */
+    case BATTLER_TAG_TYPE_TRUANT:           /* TruantTag */
+    case BATTLER_TAG_TYPE_SLOW_START:       /* SlowStartTag */
+    case BATTLER_TAG_TYPE_STURDY:           /* SturdyTag: Sturdy's endure, set by the damage calculation */
+    case BATTLER_TAG_TYPE_ENDURE_TOKEN:     /* EnduringTag(ENDURE_TOKEN, AFTER_HIT) */
+    case BATTLER_TAG_TYPE_UNBURDEN:         /* UnburdenTag (the Speed doubling reads it) */
+    case BATTLER_TAG_TYPE_GORILLA_TACTICS:  /* GorillaTacticsTag (MoveRestrictionBattlerTag) */
+    case BATTLER_TAG_TYPE_SUPREME_OVERLORD: /* SupremeOverlordTag (the damage calculation reads it) */
         return true;
     }
     return pr_damaging_trap_move(type) != 0 || pr_battler_tag_is(type, PR_TAGCLASS_PROTECTED);
@@ -193,6 +201,7 @@ static pr_battler_tag construct(int type, int turn_count, int source_move, int64
     case BATTLER_TAG_TYPE_ALWAYS_GET_HIT:
     case BATTLER_TAG_TYPE_RECEIVE_DOUBLE_DAMAGE:
     case BATTLER_TAG_TYPE_CHARGED:
+    case BATTLER_TAG_TYPE_FIRE_BOOST:
         t.turn_count = 1;
         break;
     case BATTLER_TAG_TYPE_MINIMIZED:              /* MinimizeTag() */
@@ -313,7 +322,24 @@ static pr_battler_tag construct(int type, int turn_count, int source_move, int64
         t.source_id = source_id;
         break;
     case BATTLER_TAG_TYPE_INTERRUPTED:            /* InterruptedTag(sourceMove): PRE_MOVE, 0 turns */
+    case BATTLER_TAG_TYPE_STURDY:                 /* SturdyTag(sourceMove): TURN_END, 0 turns */
+    case BATTLER_TAG_TYPE_ENDURE_TOKEN:           /* EnduringTag(ENDURE_TOKEN, AFTER_HIT, sourceMove): 0 turns */
         t.turn_count = 0;
+        break;
+    /* AbilityBattlerTag(tagType, ability, lapseType, turnCount): no source move */
+    case BATTLER_TAG_TYPE_TRUANT:                 /* CUSTOM, 1 turn */
+    case BATTLER_TAG_TYPE_UNBURDEN:               /* CUSTOM, 1 turn */
+        t.turn_count = 1;
+        t.source_move = 0;
+        break;
+    case BATTLER_TAG_TYPE_SLOW_START:             /* TURN_END, 5 turns */
+        t.turn_count = 5;
+        t.source_move = 0;
+        break;
+    case BATTLER_TAG_TYPE_GORILLA_TACTICS:        /* MoveRestrictionBattlerTag(GORILLA_TACTICS, CUSTOM, 0) */
+    case BATTLER_TAG_TYPE_SUPREME_OVERLORD:       /* FAINT, 0 turns */
+        t.turn_count = 0;
+        t.source_move = 0;
         break;
     case BATTLER_TAG_TYPE_ELECTRIFIED:            /* ElectrifiedTag(): TURN_END, 1 turn */
         t.turn_count = 1;
@@ -453,6 +479,11 @@ static bool can_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *
     }
     case BATTLER_TAG_TYPE_NO_RETREAT:
         return !pr_find_battler_tag_class(p, PR_TAGCLASS_TRAPPED);
+    case BATTLER_TAG_TYPE_GORILLA_TACTICS: {              /* a last non-virtual move to lock into, not Struggle */
+        bool unknown;
+        const pr_turn_move *last = pr_last_non_virtual_move(bt, p, false, true, &unknown);
+        return last && last->move != MOVE_ID_STRUGGLE;
+    }
     case BATTLER_TAG_TYPE_INTERRUPTED:                    /* only a Pokemon up in the air (Fly, Bounce) */
         return pr_get_battler_tag(p, BATTLER_TAG_TYPE_FLYING) != NULL;
     case BATTLER_TAG_TYPE_TAR_SHOT:
@@ -522,7 +553,7 @@ static void roost_on_remove(pr_battle *bt, pr_pokemon *p, const pr_battler_tag *
  * of 0 or less) */
 void pr_power_trick_swap(pr_pokemon *p)
 {
-    int32_t atk = (int32_t)pr_get_stat(p, STAT_ATK, false), def = (int32_t)pr_get_stat(p, STAT_DEF, false);
+    double atk = pr_get_stat(p, STAT_ATK, false), def = pr_get_stat(p, STAT_DEF, false);
     if (def > 0) p->summon_stats[STAT_ATK] = def;
     if (atk > 0) p->summon_stats[STAT_DEF] = atk;
 }
@@ -549,6 +580,7 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
     case BATTLER_TAG_TYPE_TRAPPED:
     case BATTLER_TAG_TYPE_NO_RETREAT:
     case BATTLER_TAG_TYPE_CHARGED:
+    case BATTLER_TAG_TYPE_FIRE_BOOST:
     case BATTLER_TAG_TYPE_TAR_SHOT:
     case BATTLER_TAG_TYPE_ENDURING:
     case BATTLER_TAG_TYPE_SHELL_TRAP:            /* "set a shell trap" */
@@ -569,6 +601,8 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
     case BATTLER_TAG_TYPE_MAGIC_COAT:
     case BATTLER_TAG_TYPE_ELECTRIFIED:
     case BATTLER_TAG_TYPE_GRUDGE:
+    case BATTLER_TAG_TYPE_SLOW_START:
+    case BATTLER_TAG_TYPE_ENDURE_TOKEN:
         pr_queue_message(bt, e);
         return;
     case BATTLER_TAG_TYPE_SALT_CURED:                /* the message only with its source */
@@ -604,6 +638,23 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
         pr_power_trick_swap(p);
         pr_queue_message(bt, e);
         return;
+    case BATTLER_TAG_TYPE_GORILLA_TACTICS: {
+        /* locked into the last non-virtual move (canAdd found one); Attack x1.5 in summonData.stats */
+        bool unknown;
+        const pr_turn_move *last = pr_last_non_virtual_move(bt, p, false, true, &unknown);
+        t->move_id = last ? last->move : MOVE_ID_NONE;
+        double atk = pr_get_stat(p, STAT_ATK, false) * 1.5;
+        if (atk > 0) p->summon_stats[STAT_ATK] = atk;
+        return;
+    }
+    case BATTLER_TAG_TYPE_SUPREME_OVERLORD: {
+        /* faintCount: the side's faints so far (the arena's for the player, the battle's for the
+         * enemy), at most 5, then the message */
+        int faints = p->is_player ? bt->player_faints : bt->enemy_faints;
+        t->faint_count = (int8_t)(faints < 5 ? faints : 5);
+        pr_queue_message(bt, e);
+        return;
+    }
     case BATTLER_TAG_TYPE_INTERRUPTED: {
         /* the queued second turn of Fly or Bounce goes, and the history gets a NONE entry (OTHER) */
         if (p->n_move_queue) {
@@ -680,6 +731,7 @@ static void on_overlap(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_ta
     switch (t->type) {
     case BATTLER_TAG_TYPE_CONFUSED:
     case BATTLER_TAG_TYPE_CHARGED:
+    case BATTLER_TAG_TYPE_FIRE_BOOST:
     case BATTLER_TAG_TYPE_INFATUATED:
     case BATTLER_TAG_TYPE_NIGHTMARE:
         pr_queue_message(bt, e);
@@ -825,6 +877,7 @@ static bool move_restricted(const pr_battler_tag *t, int move)
     case BATTLER_TAG_TYPE_DISABLED: return move == t->move_id;
     case BATTLER_TAG_TYPE_TAUNT: return pr_moves[move].category == MOVE_CATEGORY_STATUS;
     case BATTLER_TAG_TYPE_ENCORE: return move != t->move_id;
+    case BATTLER_TAG_TYPE_GORILLA_TACTICS: return move != t->move_id;
     }
     for (unsigned i = 0; i < pr_set_heal_blocked_moves_n; i++)           /* HEAL_BLOCK: healBlockedMoves */
         if (pr_set_heal_blocked_moves[i] == move) return true;
@@ -882,6 +935,7 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
         return --t->turn_count > 0;
     case BATTLER_TAG_TYPE_MINIMIZED:
     case BATTLER_TAG_TYPE_CHARGED:
+    case BATTLER_TAG_TYPE_FIRE_BOOST:
         return lapse_type != BATTLER_TAG_LAPSE_TYPE_CUSTOM || --t->turn_count > 0;
     case BATTLER_TAG_TYPE_SEEDED:
         /* lapseType !== CUSTOM || BattlerTag.lapse, then the drain */
@@ -898,11 +952,36 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
         }
         return lapse_type != BATTLER_TAG_LAPSE_TYPE_CUSTOM;
     case BATTLER_TAG_TYPE_ENDURING:
+    case BATTLER_TAG_TYPE_ENDURE_TOKEN:
         if (lapse_type == BATTLER_TAG_LAPSE_TYPE_CUSTOM) {
             pr_queue_message(bt, e);
             return true;
         }
         return --t->turn_count > 0;
+    case BATTLER_TAG_TYPE_STURDY:
+        /* CUSTOM (Pokemon.damage leaving it at 1 HP): the message, and it goes */
+        if (lapse_type == BATTLER_TAG_LAPSE_TYPE_CUSTOM) {
+            pr_queue_message(bt, e);
+            return false;
+        }
+        return --t->turn_count > 0;
+    case BATTLER_TAG_TYPE_SLOW_START:
+        /* without the ability any more it ends at this lapse */
+        if (!pr_has_ability_active(bt, p, ABILITY_ID_SLOW_START)) t->turn_count = 1;
+        return --t->turn_count > 0;
+    case BATTLER_TAG_TYPE_TRUANT: {
+        /* without the ability: BattlerTag.lapse. Otherwise nothing after no move or a NONE entry
+         * (getLastXMoves(1)), else the running MovePhase is cancelled with the ability shown
+         * around the message; the tag stays */
+        if (!pr_has_ability_active(bt, p, ABILITY_ID_TRUANT)) return --t->turn_count > 0;
+        const pr_turn_move *last = pr_last_move(bt, p, 0);
+        if (!last || last->move == MOVE_ID_NONE) return true;
+        pr_cancel_current_move(e, NULL);
+        pr_queue_ability_display(bt, e, p, true);
+        pr_queue_message(bt, e);
+        pr_queue_ability_display(bt, e, p, false);
+        return true;
+    }
     case BATTLER_TAG_TYPE_BEAK_BLAST_CHARGING:
         /* AFTER_HIT: a contact move burns its user (trySetStatus(BURN, pokemon)); the tag stays */
         if (lapse_type == BATTLER_TAG_LAPSE_TYPE_AFTER_HIT) {
@@ -1138,6 +1217,9 @@ static void on_remove(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_battl
         return;
     case BATTLER_TAG_TYPE_POWER_TRICK:
         pr_power_trick_swap(p);
+        pr_queue_message(bt, e);
+        return;
+    case BATTLER_TAG_TYPE_SLOW_START:
         pr_queue_message(bt, e);
         return;
     case BATTLER_TAG_TYPE_STOCKPILING:

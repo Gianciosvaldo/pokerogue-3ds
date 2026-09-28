@@ -340,6 +340,8 @@ it("turntest producer", async () => {
     BattlerTagType.CRIT_BOOST, BattlerTagType.DRAGON_CHEER, BattlerTagType.SYRUP_BOMB, BattlerTagType.MAGIC_COAT,
     BattlerTagType.ELECTRIFIED, BattlerTagType.DESTINY_BOND, BattlerTagType.GRUDGE, BattlerTagType.STOCKPILING,
     BattlerTagType.BURNED_UP, BattlerTagType.DOUBLE_SHOCKED, BattlerTagType.POWER_TRICK, BattlerTagType.INTERRUPTED,
+    BattlerTagType.TRUANT, BattlerTagType.SLOW_START, BattlerTagType.STURDY, BattlerTagType.ENDURE_TOKEN,
+    BattlerTagType.UNBURDEN, BattlerTagType.GORILLA_TACTICS, BattlerTagType.SUPREME_OVERLORD, BattlerTagType.FIRE_BOOST,
   ];
   const tagMoves = usable.filter(
     (m: any) =>
@@ -370,6 +372,8 @@ it("turntest producer", async () => {
     AbilityId.STEADFAST, AbilityId.INNER_FOCUS, AbilityId.OWN_TEMPO, AbilityId.SHIELD_DUST, AbilityId.SERENE_GRACE,
     AbilityId.NO_GUARD, AbilityId.PERISH_BODY, AbilityId.CURSED_BODY, AbilityId.CUTE_CHARM, AbilityId.OBLIVIOUS,
     AbilityId.AROMA_VEIL, AbilityId.MAGIC_BOUNCE, AbilityId.MAGIC_GUARD, AbilityId.SIMPLE, AbilityId.CONTRARY,
+    AbilityId.TRUANT, AbilityId.SLOW_START, AbilityId.STURDY, AbilityId.FLASH_FIRE, AbilityId.GORILLA_TACTICS,
+    AbilityId.SUPREME_OVERLORD, AbilityId.MOTOR_DRIVE, AbilityId.SAP_SIPPER, AbilityId.LIGHTNING_ROD, AbilityId.STORM_DRAIN,
   ];
   // TURN_HEAL pools
   const healMoves = usable.filter((m: any) =>
@@ -625,7 +629,10 @@ it("turntest producer", async () => {
           + (t.tagType === BattlerTagType.SEEDED ? ` sidx=${t.sourceIndex ?? -1}` : "")
           + (t.tagType === BattlerTagType.SHELL_TRAP && t.activated ? " act=1" : "")
           + (t.tagType === BattlerTagType.ROOSTED && t.isBasePureFlying ? " bpf=1" : "")
-          + (t.tagType === BattlerTagType.DISABLED || t.tagType === BattlerTagType.ENCORE ? ` mid=${t.moveId ?? 0}` : "")
+          + ([BattlerTagType.DISABLED, BattlerTagType.ENCORE, BattlerTagType.GORILLA_TACTICS].includes(t.tagType)
+            ? ` mid=${t.moveId ?? 0}`
+            : "")
+          + (t.tagType === BattlerTagType.SUPREME_OVERLORD ? ` fc=${t.faintCount ?? 0}` : "")
           + (t.tagType === BattlerTagType.STOCKPILING
             ? ` scd=${t.statChangeCounts[Stat.DEF]} scs=${t.statChangeCounts[Stat.SPDEF]}`
             : ""),
@@ -1117,6 +1124,18 @@ it("turntest producer", async () => {
             }
             if (type === BattlerTagType.POWER_TRICK) {
               tag.swapStat(p); // what its onAdd did
+            }
+            if (type === BattlerTagType.GORILLA_TACTICS) {
+              tag.moveId = p.moveset[rnd(p.moveset.length)].moveId;
+              if (rnd(2) === 0) {
+                p.setStat(Stat.ATK, p.getStat(Stat.ATK, false) * 1.5, false); // what its onAdd did
+              }
+            }
+            if (type === BattlerTagType.SUPREME_OVERLORD) {
+              tag.faintCount = rnd(6);
+            }
+            if (type === BattlerTagType.SLOW_START) {
+              tag.turnCount = 1 + rnd(5);
             }
             if (type === BattlerTagType.STOCKPILING) {
               // stacks from earlier turns, each raise counted or not (capped stages, Contrary)

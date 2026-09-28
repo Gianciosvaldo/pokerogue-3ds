@@ -412,7 +412,16 @@ static double not_sheer_force_hit(ARGS)
     return !(pr_moves[r->move].chance >= 0 && pr_has_ability_active(bt, attacker, ABILITY_ID_SHEER_FORCE));
 }
 
+/* Supreme Overlord's conditionalAttr: (p) => (p.isPlayer() ? arena.playerFaints
+ * : currentBattle.enemyFaints) > 0 */
+static double side_has_fainted(ARGS)
+{
+    UNUSED;
+    return (a->is_player ? bt->player_faints : bt->enemy_faints) > 0;
+}
+
 const pr_closure_reg pr_ability_closures[] = {
+    {"ability:293", "4d378ef18dde", side_has_fainted}, /* closure 675 */
     {"ability:8", "5d9de4139911", weather_in}, /* closure 460 */
     {"ability:33", "ea09345d0147", weather_in}, /* closure 464 */
     {"ability:34", "d82d9f5f2c0a", weather_in}, /* closure 465 */

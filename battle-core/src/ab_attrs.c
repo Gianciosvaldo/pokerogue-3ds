@@ -408,7 +408,19 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
             }
         } else {
             *pp->flag = true;
-            if (!pp->simulated) pr_note_deferred(bt, a->cls); /* StatStageChangePhase / addTag */
+            if (pp->simulated) return 1;
+            if (!c->e) {
+                pr_note_deferred(bt, a->cls);                /* StatStageChangePhase / addTag */
+            } else if (a->cls == PR_AC_TypeImmunityStatStageChangeAbAttr) {
+                /* Motor Drive, Sap Sipper, Lightning Rod...: the stat change, from the Pokemon itself */
+                const pr_attr_TypeImmunityStatStageChangeAbAttr *x = P(TypeImmunityStatStageChangeAbAttr, a);
+                const int32_t st = x->stat;
+                pr_unshift_stat_stage_change(bt, c->e, pr_battler_index(bt, p), &st, 1, x->stages, (pr_pokemon *)p);
+            } else {
+                /* Flash Fire: addTag(tagType, turnCount, undefined, pokemon.id) */
+                const pr_attr_TypeImmunityAddBattlerTagAbAttr *x = P(TypeImmunityAddBattlerTagAbAttr, a);
+                pr_add_tag(bt, c->e, (pr_pokemon *)p, x->tagType, x->turnCount, 0, (int64_t)p->id);
+            }
         }
         return 1;
     }
@@ -1139,10 +1151,28 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         GATE(true);
         *pp->value = to_dmg_value(*pp->value * P(AlliedFieldDamageReductionAbAttr, a)->damageMultiplier);
         return 1;
+    case PR_AC_RedirectTypeMoveAbAttr: {                                /* Lightning Rod, Storm Drain */
+        /* canRedirect: a NEAR_OTHER or OTHER move of the ability's type (the user's getMoveType);
+         * and the target isn't this Pokemon already. The target becomes this Pokemon */
+        int tgt = pr_moves[move].target, self = pr_battler_index(bt, p);
+        GATE((tgt == MOVE_TARGET_NEAR_OTHER || tgt == MOVE_TARGET_OTHER)
+             && pr_get_move_type(bt, o, move) == P(RedirectTypeMoveAbAttr, a)->type && *pp->holder != self);
+        *pp->holder = self;
+        return 1;
+    }
+    case PR_AC_GorillaTacticsAbAttr:                                    /* ExecutedMoveAbAttr */
+        if (!c->e) return -1;
+        GATE(!pr_get_battler_tag(p, BATTLER_TAG_TYPE_GORILLA_TACTICS));
+        if (!pp->simulated) pr_add_tag(bt, c->e, (pr_pokemon *)p, BATTLER_TAG_TYPE_GORILLA_TACTICS, 0, 0, -1);
+        return 1;
     case PR_AC_PreDefendFullHpEndureAbAttr:
         GATE(p->hp >= pr_get_stat(p, STAT_HP, true) && pr_get_stat(p, STAT_HP, true) > 1 && *pp->value >= p->hp
              && !pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_STURDY));
-        if (!pp->simulated) pr_note_deferred(bt, a->cls); /* adds the STURDY tag; the damage itself is capped later */
+        /* addTag(STURDY, 1); the damage itself is capped later, in Pokemon.damage */
+        if (!pp->simulated) {
+            if (c->e) pr_add_tag(bt, c->e, (pr_pokemon *)p, BATTLER_TAG_TYPE_STURDY, 1, 0, -1);
+            else pr_note_deferred(bt, a->cls);
+        }
         return 1;
 
     /* ---- crits ---- */

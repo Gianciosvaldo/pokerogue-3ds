@@ -291,7 +291,7 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             p->has_eaten_berry = field(l, "eb") && inum(l, "eb") != 0;
             if (field(l, "ss")) {                      /* summonData.stats */
                 if (split(need(l, "ss"), ',', it, 6) != 6) { fprintf(stderr, "bad ss\n"); exit(2); }
-                for (int j = 0; j < 6; j++) p->summon_stats[j] = atoi(it[j]);
+                for (int j = 0; j < 6; j++) p->summon_stats[j] = strtod(it[j], NULL);
             }
             p->has_trainer = false;
             p->turn_move_effectiveness = -1;
@@ -378,7 +378,8 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             if (field(l, "sidx")) t->source_index = (int8_t)inum(l, "sidx");   /* SeedTag */
             if (field(l, "act")) t->activated = inum(l, "act") != 0;           /* ShellTrapTag */
             if (field(l, "bpf")) t->base_pure_flying = inum(l, "bpf") != 0;    /* RoostedTag */
-            if (field(l, "mid")) t->move_id = (uint16_t)inum(l, "mid");         /* DisabledTag, EncoreTag */
+            if (field(l, "mid")) t->move_id = (uint16_t)inum(l, "mid");         /* Disabled, Encore, Gorilla Tactics */
+            if (field(l, "fc")) t->faint_count = (int8_t)inum(l, "fc");         /* SupremeOverlordTag */
             if (field(l, "scd")) {                                              /* StockpilingTag */
                 t->stock_def = (int8_t)inum(l, "scd");
                 t->stock_spdef = (int8_t)inum(l, "scs");
@@ -499,7 +500,12 @@ static const char *boost_fields(const pr_battler_tag *t)
     }
     if (t->type == BATTLER_TAG_TYPE_SHELL_TRAP && t->activated) return " act=1";   /* ShellTrapTag.activated */
     if (t->type == BATTLER_TAG_TYPE_ROOSTED && t->base_pure_flying) return " bpf=1";   /* RoostedTag.isBasePureFlying */
-    if (t->type == BATTLER_TAG_TYPE_DISABLED || t->type == BATTLER_TAG_TYPE_ENCORE) {   /* moveId */
+    if (t->type == BATTLER_TAG_TYPE_SUPREME_OVERLORD) {       /* SupremeOverlordTag.faintCount */
+        snprintf(buf, sizeof buf, " fc=%d", t->faint_count);
+        return buf;
+    }
+    if (t->type == BATTLER_TAG_TYPE_DISABLED || t->type == BATTLER_TAG_TYPE_ENCORE
+        || t->type == BATTLER_TAG_TYPE_GORILLA_TACTICS) {     /* moveId */
         snprintf(buf, sizeof buf, " mid=%d", t->move_id);
         return buf;
     }
@@ -550,7 +556,7 @@ static void dump_mon(lines_t *L, const pr_battle *bt, const pr_pokemon *p, const
     for (int i = 0; i < 6; i++) ss |= p->summon_stats[i] != 0;
     if (ss) {                                  /* summonData.stats (Power Trick), when any is set */
         sb(&s, " ss=");
-        LIST(&s, 6, ',', "%d", p->summon_stats[i]);
+        LIST(&s, 6, ',', "%.17g", p->summon_stats[i]);
     }
     add_line(L, "%s", s.s);
 

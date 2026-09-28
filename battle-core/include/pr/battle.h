@@ -189,7 +189,7 @@ typedef struct pr_pokemon {
     int8_t added_type;         /* summonData.addedType (Forest's Curse, Trick-or-Treat); 0 = none (null) */
     bool is_player;
     int32_t stats[6];
-    int32_t summon_stats[6];   /* summonData.stats: 0 = no override */
+    double summon_stats[6];    /* summonData.stats: 0 = no override (Gorilla Tactics' 1.5x can leave a fraction) */
     int32_t hp;
     int8_t stat_stages[7];     /* ATK..EVA, i.e. index stat-1 */
     uint8_t status;            /* StatusEffect (0 = no Status object) */
@@ -576,7 +576,7 @@ int pr_get_types(const pr_pokemon *p, int8_t out[PR_MAX_TYPES], unsigned flags);
 /* summonData.types = types (n of them); false, reported, past PR_MAX_SUMMON_TYPES */
 bool pr_set_summon_types(pr_battle *bt, pr_pokemon *p, const int8_t *types, int n);
 bool pr_is_of_type(const pr_pokemon *p, int type);
-int32_t pr_get_stat(const pr_pokemon *p, int stat, bool bypass_summon);
+double pr_get_stat(const pr_pokemon *p, int stat, bool bypass_summon);
 double pr_get_stat_stage_multiplier(pr_battle *bt, const pr_pokemon *p, int stat, const pr_pokemon *opponent,
                                     int move, bool ignore_opp_ability, bool is_critical, bool simulated,
                                     bool ignore_held_items);

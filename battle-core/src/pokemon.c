@@ -62,7 +62,7 @@ void pr_calculate_stats(pr_battle *bt, pr_pokemon *p)
     }
 }
 
-int32_t pr_get_stat(const pr_pokemon *p, int stat, bool bypass_summon)
+double pr_get_stat(const pr_pokemon *p, int stat, bool bypass_summon)
 {
     if (!bypass_summon && p->summon_stats[stat]) return p->summon_stats[stat];
     return p->stats[stat];

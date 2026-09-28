@@ -787,17 +787,40 @@ static void resolve_redirect_target(pr_battle *bt, pr_engine *e, int ph)
     pr_phase *m = PH(ph);
     pr_target_list *tl = tlist(e, m->targets);
     if (!tl || tl->n != 1) return;
+    /* the redirecting abilities (Lightning Rod, Storm Drain) of everyone but the user, in speed order */
+    int current = tl->v[0], redirect = current;
     pr_speed_iter it;
     pr_pokemon *p;
     pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
     while ((p = pr_speed_iter_next(bt, &it)))
-        if (p != m->pokemon) pr_hook_ab(bt, p, PR_AC_RedirectMoveAbAttr);
+        if (p != m->pokemon) {
+            pr_ab_params rp = {.pokemon = p, .opponent = m->pokemon, .move = m->move.id, .holder = &redirect};
+            pr_apply_ab_attrs(bt, PR_AC_RedirectMoveAbAttr, &rp);
+        }
+    bool by_ability = current != redirect;
     /* center-of-attention tags on the opponents (Follow Me, Rage Powder, Spotlight) */
     for (int i = 0; i < 4; i++) {
         pr_pokemon *o = bt->field[i];
         if (is_active(o) && pr_is_opponent(bt, m->pokemon, o) && pr_get_battler_tag(o, BATTLER_TAG_TYPE_CENTER_OF_ATTENTION))
             pr_note_unported(bt, PR_FEAT_TAG_LAPSE);
     }
+    if (current == redirect) return;
+    /* BypassRedirectAttr (Snipe Shot...: abilitiesOnly, only against an ability's redirect), then
+     * BlockRedirectAbAttr on the user (Stalwart, Propeller Tail), shown and hidden */
+    const pr_move *mv = &pr_moves[m->move.id];
+    for (unsigned i = 0; i < mv->nattr; i++) {
+        const pr_attr *a = &pr_attrs[mv->attr0 + i];
+        if (pr_attr_is(a->cls, PR_AC_BypassRedirectAttr)
+            && (!((const pr_attr_BypassRedirectAttr *)a->p)->abilitiesOnly || by_ability))
+            redirect = current;
+    }
+    if (pr_has_ability_with_attr(bt, m->pokemon, PR_AC_BlockRedirectAbAttr)) {
+        redirect = current;
+        pr_queue_ability_display(bt, e, m->pokemon, true);
+        pr_queue_ability_display(bt, e, m->pokemon, false);
+    }
+    tl->v[0] = (int8_t)redirect;
+    pr_targets_changed(bt, e, m->targets);
 }
 
 /* move.getFailedText(user, targets[0]): the attributes in order until one has a text. Only
@@ -1368,9 +1391,11 @@ static double pokemon_damage(pr_battle *bt, pr_engine *e, pr_pokemon *p, double 
         bool survive = false;
         if (p->hp >= 1 && pr_get_battler_tag(p, BATTLER_TAG_TYPE_ENDURING))
             survive = pr_lapse_tag(bt, e, p, BATTLER_TAG_TYPE_ENDURING, BATTLER_TAG_LAPSE_TYPE_CUSTOM);
-        else if ((p->hp == max_hp(p) && pr_get_battler_tag(p, BATTLER_TAG_TYPE_STURDY))
-                 || (p->hp >= 1 && pr_get_battler_tag(p, BATTLER_TAG_TYPE_ENDURE_TOKEN)))
-            pr_note_unported(bt, PR_FEAT_TAG_LAPSE);
+        else if (p->hp == max_hp(p) && pr_get_battler_tag(p, BATTLER_TAG_TYPE_STURDY)) {
+            survive = true;
+            pr_lapse_tag(bt, e, p, BATTLER_TAG_TYPE_STURDY, BATTLER_TAG_LAPSE_TYPE_CUSTOM);
+        } else if (p->hp >= 1 && pr_get_battler_tag(p, BATTLER_TAG_TYPE_ENDURE_TOKEN))
+            survive = pr_lapse_tag(bt, e, p, BATTLER_TAG_TYPE_ENDURE_TOKEN, BATTLER_TAG_LAPSE_TYPE_CUSTOM);
         if (!survive) turn_modifiers(bt, p->is_player, p);       /* Focus Band */
         if (survive) damage = p->hp - 1;
     }
@@ -1820,7 +1845,8 @@ static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
     /* postAnimCallback (the animation runs first; it queues nothing) */
     if (fx->first_hit && fx->use_mode != MOVE_USE_MODE_DELAYED_ATTACK) {
         pr_push_history_shared(bt, e, user, fx->entry, fx->targets);
-        pr_hook_ab(bt, user, PR_AC_ExecutedMoveAbAttr);
+        pr_ab_params xp = {.pokemon = user, .move = -1};
+        pr_apply_ab_attrs(bt, PR_AC_ExecutedMoveAbAttr, &xp);   /* Gorilla Tactics */
     }
     /* applyToTargets */
     bool first_target = true;
