@@ -1,0 +1,98 @@
+PokeRogue graphics + memory bench
+build: fcea806, machine: Old 3DS, ARM11 at 268 MHz (the Old 3DS clock)
+memory at start: app heap 31.7 MB (0.2 MB in use), linear heap 32.0 MB (29.7 MB free),
+  VRAM 5.01 MB free of 6 (the two screen render targets use the rest)
+  textures, sound buffers and the GPU command and vertex buffers all come out of the linear heap
+
+== screen edges (the 1 px offset seen in Azahar) ==
+top screen (400x240): red line drawn on row 0 is on rows 0; green on row 239 is on rows 239;
+  blue on column 0 is on columns 0; yellow on column 399 is on columns 399 => exact, no offset in the framebuffer
+bottom screen (320x240): red line drawn on row 0 is on rows 0; green on row 239 is on rows 239;
+  blue on column 0 is on columns 0; yellow on column 319 is on columns 319 => exact, no offset in the framebuffer
+
+packs in sd:/3ds/pokerogue/: gfx.pak MISSING, snd.pak MISSING, bgm.pak MISSING, font.pak MISSING (data.pak is not used)
+sound: on
+after opening the packs and sound: app heap 0.3 MB in use (pack indexes), linear heap 29.7 MB free
+
+== SD card ==
+write 24 MB in 256 KB writes: 4.3 MB/s
+reads from pokerogue-gfx-bench.tmp (24 MB), just written: the packs are not on the SD card
+sequential read, 4 MB each: 16 KB chunks 2.4 MB/s, 64 KB chunks 5.8 MB/s, 256 KB chunks 8.9 MB/s, 1024 KB chunks 10.2 MB/s
+the same 4 MB again (64 KB chunks): 5.7 MB/s (first time 5.8 MB/s; much faster = something caches)
+random   4 KB reads (seek + read), 100 of them: median 10.75 ms, p95 11.60, max 12.80
+random  32 KB reads (seek + read), 100 of them: median 13.12 ms, p95 13.79, max 14.69
+random 256 KB reads (seek + read),  40 of them: median 33.79 ms, p95 34.51, max 34.81
+64 KB save (save_write: temp file + CRC + .bak + rename), 5 times: median 130.6 ms, max 172.8 ms
+
+== loading from the packs ==
+skipped: gfx.pak is not on the SD card (sdmc:/3ds/pokerogue/gfx.pak)
+
+== rendering ==
+NOTE: 27 of 27 images are stand-ins (same sizes, made-up pixels): gfx.pak not on the SD card
+text: stand-in glyphs (font.pak missing)
+always stand-ins: the Pokemon shadows (upstream draws them in its shader) and the anim background
+texture memory: singles scene 2.56 MB, + doubles Pokemon 1.50 MB, + the 4 largest sheets 8.00 MB
+linear heap free with all of it loaded: 17.6 MB
+
+frame times in ms. vsync: the app's normal 60 fps loop (16.7 ms per frame); missed = frames that
+took 2+ refreshes. build = CPU time queueing draws; end = rr_frame_end (citro3d submits and flushes
+the data cache); GPU = drawing + copying to the screens. max fps = the same scene with no vsync wait.
+scene                           quad | vsync period med p95 max miss | build med p95 max | end med max | GPU med p95 |   max
+                                   s |                         |                   |             |             |   fps
+empty (clear both screens)         0 |  16.7  16.7  16.7    0 |  0.02  0.02  0.11 |  0.17  0.48 |  1.13  1.30 |   740
+singles                          327 |  16.7  16.7  16.8    0 |  2.29  2.43  2.56 |  0.23  0.56 |  2.81  2.99 |   186
+singles + move anim              360 |  16.7  16.7  16.7    0 |  2.74  2.98  3.12 |  0.23  0.40 |  5.07  5.21 |   124
+doubles                          384 |  16.7  16.7  16.7    0 |  2.71  2.90  3.24 |  0.23  0.58 |  3.06  3.22 |   167
+doubles + move anim              417 |  16.7  16.7  16.7    0 |  3.14  3.39  3.55 |  0.23  0.48 |  5.30  5.48 |   115
+doubles + anim + sound           417 |  16.7  16.7  16.7    0 |  3.16  3.43  3.60 |  0.23  0.56 |  5.31  5.48 |   115
+doubles + anim, largest sprites  417 |  16.7  16.7  16.8    0 |  3.15  3.44  3.68 |  0.23  0.55 |  5.42  5.61 |   114
+citro3d flushes the whole 32 MB linear heap from the CPU cache in every rr_frame_end;
+  that flush alone: median 0.08 ms, max 0.22 ms
+
+sprite ramp: N animated 82x80 sprites (Garchomp's sheet) over the arena, no vsync
+       N |  frame  build    end    GPU
+       0 |   2.38   0.12   0.18   2.10
+      25 |   3.85   0.25   0.18   3.44
+      50 |   5.21   0.39   0.18   4.66
+     100 |   7.80   0.59   0.19   7.00
+     200 |  13.20   1.15   0.20  11.84
+     300 |  18.46   1.60   0.20  16.66
+     400 |  23.67   2.03   0.20  21.49
+     600 |  34.27   2.90   0.20  31.12
+     800 |  45.23   4.30   0.20  40.75
+  => sprites per frame: about 266 at 60 fps, about 582 at 30 fps (whole frame cost, nothing else running)
+
+text ramp: N glyphs with drop shadow (2 quads each) on the bottom screen, no vsync
+       N |  frame  build    end    GPU
+       0 |   1.36   0.02   0.17   1.16
+     100 |   2.59   0.95   0.24   1.40
+     200 |   3.76   1.98   0.24   1.54
+     400 |   5.48   3.41   0.25   1.85
+     800 |   9.44   6.80   0.25   2.43
+    1200 |  13.43  10.13   0.25   3.00
+    1600 |  18.00  14.18   0.25   3.60
+  => glyphs per frame: about 1483 at 60 fps, over 1600 at 30 fps (whole frame cost, nothing else running)
+
+fill: N full-screen 400x240 layers on the top screen (RGBA5551, alpha-blended), no vsync, GPU ms
+       N | texture FCRAM |  texture VRAM
+       1 |          1.83 |          1.70
+       2 |          2.41 |          2.24
+       4 |          3.54 |          3.14
+       8 |          5.80 |          5.02
+      16 |         10.35 |          8.85
+      32 |         19.41 |         16.45
+  => one full-screen layer costs the GPU 0.567 ms from FCRAM (169 Mpixel/s), 0.476 ms from VRAM (202 Mpixel/s)
+
+== audio CPU cost ==
+skipped (bgm.pak or snd.pak missing)
+
+== memory ==
+before: linear heap 29.7 MB free, 0 textures (0.00 MB) still loaded
+filling the linear heap with 64 KB stand-in sheets from empty: 474 sheets, 29.6 MB of textures in 8.1 s (a load failed)
+  linear heap left then: 0.04 MB (started at 29.7 MB)
+  with the heap that full: a new sound effect FAILS, music start FAILS
+after freeing everything: linear heap 29.67 MB free, 0 KB more than before these tests (the sound cache
+  keeps up to 1 MB of recent sound effects; more than that missing would be a leak)
+
+finished after 76 s
+what the top screen shows (your answer): all four edge lines visible
