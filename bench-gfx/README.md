@@ -29,17 +29,28 @@ Also reported: app heap, linear heap and VRAM at start and after opening the pac
 - **For the loading, sound and real-image numbers** it needs `gfx.pak`, `snd.pak`, `bgm.pak` and `font.pak` in `sd:/3ds/pokerogue/` (843 MB, built with `../assets-pipeline/build_sd.py`; `data.pak` isn't used), and `sd:/3ds/dspfirm.cdc` for sound. Without `dspfirm.cdc` the sound tests are skipped and the cries are only read.
 
 ## Results so far
-Only the emulator so far. **Azahar doesn't model GPU time or real SD card timing**, so its GPU column is a constant and its SD and load numbers aren't the console's. Its CPU times are an approximation (the native battle bench ran 2.35x slower on the real console than in Azahar).
+Only the emulator so far; the console run is still to come. **Azahar doesn't model GPU time, the CPU cache or real SD card timing**, so its GPU column is a constant (0.50 ms whatever is drawn), the cache flush looks free, and its SD and load times aren't the console's. Its CPU times are an approximation: the native battle bench ran 2.35x slower on the real console than in Azahar, and the "console guess" column below is build plus `rr_frame_end` times that factor (a guess, not a measurement).
 
-Azahar, Old 3DS mode, all packs (bench `EMU_REV`), frame times in ms:
+Azahar, Old 3DS mode, all packs, 60 frames per scene (full files: `results/azahar-old3ds-packs.txt`, `results/azahar-old3ds-no-packs.txt`), ms:
 
-EMU_TABLE
+| scene | quads | build (CPU) | `rr_frame_end` | console guess, CPU per frame | missed refreshes |
+|---|---:|---:|---:|---:|---:|
+| empty | 0 | 0.01 | 0.29 | 0.7 | 0 |
+| singles | 327 | 1.52 | 0.31 | 4.3 | 0 |
+| singles + move anim | 360 | 1.77 | 0.31 | 4.9 | 0 |
+| doubles | 384 | 1.81 | 0.31 | 5.0 | 0 |
+| doubles + move anim | 417 | 2.06 | 0.31 | 5.6 | 0 |
+| doubles + anim + sound | 417 | 2.07 | 0.31 | 5.6 | 0 |
+| doubles + anim, largest sprites | 417 | 2.06 | 0.31 | 5.6 | 0 |
 
-Things the emulator run does show:
-EMU_FINDINGS
+What the emulator run shows:
+- **The 1 px offset is Azahar's, not the app's.** Read back from memory, the lines on all four edges of both screens are exactly where they were drawn. In the picture Azahar's libretro core outputs, both screens are shifted down one row and the bottom row wraps round to the top (checked pixel by pixel in the last frame of the run). Whether the real LCD shows all four lines is the question the bench asks on the console.
+- **CPU per frame is small.** The busiest scene queues 417 quads in 2.06 ms plus 0.31 ms in `rr_frame_end` (about 5.6 ms on the console by the 2.35x factor, out of 16.7 ms per frame). The sprite ramp costs 2.7 µs per extra sprite and text 7.6 µs per glyph with its shadow, so a glyph costs about three times a Pokemon sprite. The GPU side is unknown until the console runs it.
+- **Memory numbers should carry over to the console** (inferred: same 32 MB linear heap and the same libctru allocator; only the app heap differs, 63.7 MB here against 29.6 MB measured on the console by `bench-native`). A singles battle holds 2.78 MB of textures, doubles 1.50 MB more, and even the four largest sheets in the game on top leave 16.0 MB free. 145 Pokemon front sheets (27.9 MB) fit before a load fails with 1.6 MB still free. Sound effects and music still start at that point. Freeing everything gives the memory back (4 KB short, within the sound cache).
+- **Loading a Pokemon is CPU-heavy as well as SD-heavy.** A median sheet takes 16.4 ms here, of which LZ4 and the texture build are about half; the largest (back Thundurus-T, 3 MB of texture) takes 95 ms, 56 ms of it CPU, so over 100 ms on the console before counting the SD card. Music playing doesn't slow loading down here.
 
 ## Found while building this
-- **Upstream's boot-time preload does not fit.** The images upstream's loading scene loads at boot come to 28.2 MB of textures in this port's format, against a 32 MB linear heap that also holds the GPU buffers and sound. Loading must be on demand (computed from `gfx-entries.json`; the memory section measures it on the console).
+- **Upstream's boot-time preload leaves no room for a battle.** Every image upstream's loading scene loads at boot comes to 28.2 MB of textures in this port's format. It does load (183 of 183, in the emulator), but leaves 1.3 MB of the 32 MB linear heap, which also has to hold the Pokemon, the GPU buffers and sound. Loading must be on demand.
 - **Battle-animation backgrounds are cut up in `gfx.pak`.** `gfx.py` slices every `battle_anims/*.png` into 96x96 cells, but upstream loads the 121 animation backgrounds (named in the animations' `AnimTimedAddBgEvent`/`AnimTimedUpdateBgEvent` events) as whole images (`loadImage` in `battle-anims.ts`), so their edges are lost. Two names are used both ways (`PRAS- Psychic BG`, `PRAS- Sketch + Lick`). The bench draws a stand-in background for this reason. Not fixed here.
 - **Every frame flushes the whole 32 MB linear heap from the CPU cache.** `rr_frame_end` calls `C3D_FrameEnd(0)`, and citro3d then runs `GSPGPU_FlushDataCache` over the entire linear heap, because citro2d's vertex buffer needs flushing and citro2d doesn't flush it itself. What that costs on the console is one of the numbers this bench reports; if it's large, the fix is to flush only the buffers that changed.
 
@@ -65,4 +76,4 @@ Copy `pokerogue-gfx-bench.3dsx` to `sd:/3ds/`, start it from the Homebrew Launch
 - `source/report.c`: result file, progress screen, statistics
 - `source/preload_keys.h`: generated by `tools/gen-preload-keys.py`
 - `tools/run-azahar.sh`: headless emulator run
-- `results/`: result files from real runs
+- `results/`: result files (so far the two emulator runs; console runs go here too)
