@@ -3,6 +3,7 @@
  * quoted above each function. A closure whose inputs aren't modelled yet
  * reports itself unported instead of guessing. */
 #include "pr/battle.h"
+#include "pr/engine.h"
 
 #define UNPORTED(id) do { pr_note_unported(bt, (id)); return 1; } while (0)
 #define ARGS pr_battle *bt, const pr_closure_info *self, const pr_pokemon *u, const pr_pokemon *t, int m
@@ -378,7 +379,18 @@ static double both_sides(ARGS)
     return ARENA_TAG_SIDE_BOTH;
 }
 
+/* Burn Up, Double Shock: RemoveTypeAttr's messageCallback, (user) => queueMessage(burnedItselfOut /
+ * usedUpAllElectricity) */
+static double type_removed_message(ARGS)
+{
+    if (!bt->engine) UNPORTED(PR_FEAT_ENGINE_LIMIT);
+    pr_queue_message(bt, bt->engine);
+    return 0;
+}
+
 const pr_closure_reg pr_move_closures[] = {
+    {"move:682", "01fe976cce6b", type_removed_message},
+    {"move:892", "33cadb1bb03d", type_removed_message},
     {"move:89", "d551c83b79fb", grassy_grounded_half},
     {"move:222", "d551c83b79fb", grassy_grounded_half},
     {"move:234", "aa4ef38398a5", sunny_heal_ratio},     /* shared by Synthesis and Moonlight */

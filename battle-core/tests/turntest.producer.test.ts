@@ -339,6 +339,7 @@ it("turntest producer", async () => {
     BattlerTagType.DROWSY, BattlerTagType.POWDER, BattlerTagType.FLOATING, BattlerTagType.TELEKINESIS,
     BattlerTagType.CRIT_BOOST, BattlerTagType.DRAGON_CHEER, BattlerTagType.SYRUP_BOMB, BattlerTagType.MAGIC_COAT,
     BattlerTagType.ELECTRIFIED, BattlerTagType.DESTINY_BOND, BattlerTagType.GRUDGE, BattlerTagType.STOCKPILING,
+    BattlerTagType.BURNED_UP, BattlerTagType.DOUBLE_SHOCKED, BattlerTagType.POWER_TRICK, BattlerTagType.INTERRUPTED,
   ];
   const tagMoves = usable.filter(
     (m: any) =>
@@ -601,7 +602,8 @@ it("turntest producer", async () => {
         `shc=${sd.hitCount} types=${L(sd.types)} added=${sd.addedType ?? 0} abilsup=${sd.abilitySuppressed ? 1 : 0}`,
         `tsd=${p.tempSummonData.turnCount} tswd=${p.tempSummonData.waveTurnCount}`,
         `aas=${L([...sd.abilitiesApplied])} aaw=${L([...p.waveData.abilitiesApplied])}`
-          + (p.battleData.hasEatenBerry ? " eb=1" : ""),
+          + (p.battleData.hasEatenBerry ? " eb=1" : "")
+          + (sd.stats.some((v: number) => v) ? ` ss=${L(sd.stats)}` : ""),
       ].join(" "),
       [
         `TURN b=${b} acted=${td.acted ? 1 : 0} order=${num(td.order)} hc=${td.hitCount} hl=${td.hitsLeft}`,
@@ -1112,6 +1114,9 @@ it("turntest producer", async () => {
             }
             if (type === BattlerTagType.CRIT_BOOST || type === BattlerTagType.DRAGON_CHEER) {
               tag.critStages = 1 + rnd(2);
+            }
+            if (type === BattlerTagType.POWER_TRICK) {
+              tag.swapStat(p); // what its onAdd did
             }
             if (type === BattlerTagType.STOCKPILING) {
               // stacks from earlier turns, each raise counted or not (capped stages, Contrary)

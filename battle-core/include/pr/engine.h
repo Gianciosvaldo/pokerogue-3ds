@@ -222,6 +222,7 @@ int pr_moveset_slot_with_pp(const pr_pokemon *p, int move);
 int pr_encore_move(pr_battle *bt, const pr_pokemon *p);
 /* EncoreTag.tryOverrideMove without the targets: the slot of the move to use instead, -1 = none */
 int pr_encore_try_override(pr_pokemon *p);
+void pr_power_trick_swap(pr_pokemon *p);
 void pr_transfer_summon(pr_battle *bt, pr_pokemon *to, const pr_pokemon *from);   /* Baton Pass */
 void pr_pass_substitute(pr_battle *bt, pr_pokemon *to, const pr_pokemon *from);   /* Shed Tail */
 /* findAndRemoveTags(t => types.includes(t.tagType)) */

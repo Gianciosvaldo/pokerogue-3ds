@@ -70,6 +70,10 @@ bool pr_tag_type_ported(int type)
     case BATTLER_TAG_TYPE_DESTINY_BOND:     /* DestinyBondTag: the FaintPhase lapses it */
     case BATTLER_TAG_TYPE_GRUDGE:           /* GrudgeTag: the same */
     case BATTLER_TAG_TYPE_STOCKPILING:      /* StockpilingTag */
+    case BATTLER_TAG_TYPE_BURNED_UP:        /* RemovedTypeTag: Burn Up (Roost reads it) */
+    case BATTLER_TAG_TYPE_DOUBLE_SHOCKED:   /* RemovedTypeTag: Double Shock */
+    case BATTLER_TAG_TYPE_POWER_TRICK:      /* PowerTrickTag */
+    case BATTLER_TAG_TYPE_INTERRUPTED:      /* InterruptedTag: Smack Down or Gravity on a flying Pokemon */
         return true;
     }
     return pr_damaging_trap_move(type) != 0 || pr_battler_tag_is(type, PR_TAGCLASS_PROTECTED);
@@ -300,7 +304,16 @@ static pr_battler_tag construct(int type, int turn_count, int source_move, int64
         t.source_move = MOVE_ID_MAGIC_COAT;
         break;
     case BATTLER_TAG_TYPE_STOCKPILING:            /* StockpilingTag(sourceMove): CUSTOM, 1 turn */
+    case BATTLER_TAG_TYPE_BURNED_UP:              /* RemovedTypeTag(tagType, CUSTOM, sourceMove): 1 turn */
+    case BATTLER_TAG_TYPE_DOUBLE_SHOCKED:
         t.turn_count = 1;
+        break;
+    case BATTLER_TAG_TYPE_POWER_TRICK:            /* PowerTrickTag(sourceMove, sourceId): CUSTOM, 0 turns */
+        t.turn_count = 0;
+        t.source_id = source_id;
+        break;
+    case BATTLER_TAG_TYPE_INTERRUPTED:            /* InterruptedTag(sourceMove): PRE_MOVE, 0 turns */
+        t.turn_count = 0;
         break;
     case BATTLER_TAG_TYPE_ELECTRIFIED:            /* ElectrifiedTag(): TURN_END, 1 turn */
         t.turn_count = 1;
@@ -440,6 +453,8 @@ static bool can_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *
     }
     case BATTLER_TAG_TYPE_NO_RETREAT:
         return !pr_find_battler_tag_class(p, PR_TAGCLASS_TRAPPED);
+    case BATTLER_TAG_TYPE_INTERRUPTED:                    /* only a Pokemon up in the air (Fly, Bounce) */
+        return pr_get_battler_tag(p, BATTLER_TAG_TYPE_FLYING) != NULL;
     case BATTLER_TAG_TYPE_TAR_SHOT:
         return !p->terastallized;
     case BATTLER_TAG_TYPE_SEEDED:
@@ -502,6 +517,16 @@ static void roost_on_remove(pr_battle *bt, pr_pokemon *p, const pr_battler_tag *
 }
 
 /* tag.onAdd(pokemon); t is the tag in p->tags */
+/* PowerTrickTag.swapStat: Attack and Defense trade places in summonData.stats (getStat(stat,
+ * false) reads through to the real stats where no override is set; setStat ignores a value
+ * of 0 or less) */
+void pr_power_trick_swap(pr_pokemon *p)
+{
+    int32_t atk = (int32_t)pr_get_stat(p, STAT_ATK, false), def = (int32_t)pr_get_stat(p, STAT_DEF, false);
+    if (def > 0) p->summon_stats[STAT_ATK] = def;
+    if (atk > 0) p->summon_stats[STAT_DEF] = atk;
+}
+
 /* StockpilingTag.onAdd (onOverlap too): below 3 stacks, one more with its message, then Defense
  * and Sp. Def +1 from the Pokemon itself, the tag counting each raise that applies */
 static void stockpile_on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t)
@@ -575,6 +600,24 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
     case BATTLER_TAG_TYPE_STOCKPILING:
         stockpile_on_add(bt, e, p, t);
         return;
+    case BATTLER_TAG_TYPE_POWER_TRICK:
+        pr_power_trick_swap(p);
+        pr_queue_message(bt, e);
+        return;
+    case BATTLER_TAG_TYPE_INTERRUPTED: {
+        /* the queued second turn of Fly or Bounce goes, and the history gets a NONE entry (OTHER) */
+        if (p->n_move_queue) {
+            memmove(&p->move_queue[0], &p->move_queue[1], (size_t)(p->n_move_queue - 1) * sizeof p->move_queue[0]);
+            p->n_move_queue--;
+        }
+        pr_turn_move tm;
+        memset(&tm, 0, sizeof tm);
+        tm.move = MOVE_ID_NONE;
+        tm.result = MOVE_RESULT_OTHER;
+        tm.use_mode = MOVE_USE_MODE_NORMAL;
+        pr_push_history_shared(bt, e, p, tm, -1);
+        return;
+    }
     case BATTLER_TAG_TYPE_SEEDED: {
         /* SeedTag.onAdd: nothing without its source (getSourcePokemon searches both parties; only
          * the field is modelled), else the message, then sourceIndex = the source's battler index */
@@ -646,6 +689,9 @@ static void on_overlap(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_ta
         return;
     case BATTLER_TAG_TYPE_STOCKPILING:
         stockpile_on_add(bt, e, p, t);
+        return;
+    case BATTLER_TAG_TYPE_POWER_TRICK:                    /* a second Power Trick undoes the first */
+        pr_remove_tag(bt, e, p, BATTLER_TAG_TYPE_POWER_TRICK);
         return;
     }
 }
@@ -819,6 +865,10 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
         pr_unshift_new(bt, e, PH_COMMON_ANIM, pr_battler_index(bt, p));
         if (pr_battle_rand_seed_int(bt, 3, 0) == 0) confusion_self_hit(bt, e, p);
         return true;
+    case BATTLER_TAG_TYPE_INTERRUPTED:
+        /* whatever MovePhase is running is cancelled, then BattlerTag.lapse (0 turns: it goes) */
+        pr_cancel_current_move(e, NULL);
+        return --t->turn_count > 0;
     case BATTLER_TAG_TYPE_RECHARGING:
         if (lapse_type == BATTLER_TAG_LAPSE_TYPE_PRE_MOVE) {
             /* "must recharge": the move is cancelled and the placeholder leaves the queue */
@@ -1086,6 +1136,10 @@ static void on_remove(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_battl
     case BATTLER_TAG_TYPE_ROOSTED:
         roost_on_remove(bt, p, t);
         return;
+    case BATTLER_TAG_TYPE_POWER_TRICK:
+        pr_power_trick_swap(p);
+        pr_queue_message(bt, e);
+        return;
     case BATTLER_TAG_TYPE_STOCKPILING:
         /* each stat drops by the raises the tag counted, from the Pokemon itself */
         if (t->stock_def > 0 || t->stock_spdef > 0) {
@@ -1337,10 +1391,7 @@ void pr_transfer_summon(pr_battle *bt, pr_pokemon *to, const pr_pokemon *from)
             pass = !(fk && (!strcmp(fk, "mega") || !strcmp(fk, "gigantamax")));
         }
         if (!pass) continue;
-        if (t->type == BATTLER_TAG_TYPE_POWER_TRICK) {           /* swapStat(this) */
-            note_tag(bt, t->type);
-            continue;
-        }
+        if (t->type == BATTLER_TAG_TYPE_POWER_TRICK) pr_power_trick_swap(to);   /* swapStat(this) */
         push_tag(bt, to, t);
     }
 }

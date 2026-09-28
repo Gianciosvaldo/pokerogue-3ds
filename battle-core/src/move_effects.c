@@ -563,6 +563,21 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         pr_queue_message(bt, e);                         /* moveTriggers:transformedIntoType */
         return;
     }
+    case PR_AC_RemoveTypeAttr: {                         /* Burn Up, Double Shock (POST_TARGET, the user) */
+        /* not the user's active Tera type; else summonData.types = getTypes() without the type
+         * ([UNKNOWN] when none is left), then the callback's message */
+        const pr_attr_RemoveTypeAttr *x = P(RemoveTypeAttr, a);
+        if (!effect_can_apply(ef, user, target)) return;
+        if (user->terastallized && pr_get_tera_type(user) == x->removedType) return;
+        int8_t ty[PR_MAX_TYPES], keep[PR_MAX_TYPES];
+        int n = pr_get_types(user, ty, 0), k = 0;
+        for (int i = 0; i < n; i++)
+            if (ty[i] != x->removedType) keep[k++] = ty[i];
+        if (!k) keep[k++] = POKEMON_TYPE_UNKNOWN;
+        pr_set_summon_types(bt, user, keep, k);
+        if (x->messageCallback != PR_NO_FN) pr_closure_call(bt, x->messageCallback, a->cls, 0, user, target, move);
+        return;
+    }
     case PR_AC_CueNextRoundAttr: {                       /* Round (last hit only); no canApply check */
         /* the next Round in the queue moves next, and its user has joined the round */
         pr_phase *next = pr_find_move_phase(e, MOVE_ID_ROUND, -1);

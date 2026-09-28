@@ -289,6 +289,10 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             p->n_ab_applied_wave = (uint8_t)split(need(l, "aaw"), ',', it, 4);
             for (int j = 0; j < p->n_ab_applied_wave; j++) p->ab_applied_wave[j] = (uint16_t)atoi(it[j]);
             p->has_eaten_berry = field(l, "eb") && inum(l, "eb") != 0;
+            if (field(l, "ss")) {                      /* summonData.stats */
+                if (split(need(l, "ss"), ',', it, 6) != 6) { fprintf(stderr, "bad ss\n"); exit(2); }
+                for (int j = 0; j < 6; j++) p->summon_stats[j] = atoi(it[j]);
+            }
             p->has_trainer = false;
             p->turn_move_effectiveness = -1;
         } else if (!strncmp(l, "TURN ", 5)) {
@@ -542,6 +546,12 @@ static void dump_mon(lines_t *L, const pr_battle *bt, const pr_pokemon *p, const
     sb(&s, " aaw=");
     LIST(&s, p->n_ab_applied_wave, ',', "%d", p->ab_applied_wave[i]);
     if (p->has_eaten_berry) sb(&s, " eb=1");
+    bool ss = false;
+    for (int i = 0; i < 6; i++) ss |= p->summon_stats[i] != 0;
+    if (ss) {                                  /* summonData.stats (Power Trick), when any is set */
+        sb(&s, " ss=");
+        LIST(&s, 6, ',', "%d", p->summon_stats[i]);
+    }
     add_line(L, "%s", s.s);
 
     s.n = 0;
