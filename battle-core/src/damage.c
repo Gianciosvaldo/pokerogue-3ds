@@ -48,7 +48,7 @@ double pr_get_attack_type_effectiveness_opts(pr_battle *bt, const pr_pokemon *de
                                              bool ignore_strong_winds)
 {
     if (move_type == POKEMON_TYPE_STELLAR) return def->terastallized ? 2 : 1;
-    int8_t types[3];
+    int8_t types[PR_MAX_TYPES];
     int n = pr_get_types(def, types, PR_TYPES_ORIGINAL_IF_STELLAR);
 
     /* Ground moves (bar Thousand Arrows) miss anything made airborne by something other
@@ -113,7 +113,7 @@ double pr_get_move_effectiveness_ex(pr_battle *bt, const pr_pokemon *def, const 
     /* move.isTypeImmune: powder moves vs Grass, Prankster status moves vs Dark */
     if (m->target != MOVE_TARGET_USER) {
         bool immune = false;
-        int8_t dt[3];
+        int8_t dt[PR_MAX_TYPES];
         int dn = pr_get_types(def, dt, PR_TYPES_ORIGINAL_IF_STELLAR);
         for (int i = 0; i < dn; i++) {
             if (dt[i] == POKEMON_TYPE_GRASS && (m->flags & MOVE_FLAGS_POWDER_MOVE)) immune = true;
@@ -271,7 +271,7 @@ double pr_calculate_stab_multiplier(pr_battle *bt, const pr_pokemon *src, int mo
                                     bool simulated)
 {
     if (pr_move_has_attr((uint16_t)move, PR_AC_TypelessAttr)) return 1;
-    int8_t types[3];
+    int8_t types[PR_MAX_TYPES];
     int n = pr_get_types(src, types, PR_TYPES_NO_TERA);
     int tera = pr_get_tera_type(src);
     int move_type = pr_get_move_type(bt, src, move);

@@ -904,15 +904,15 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
             || pr_move_has_attr((uint16_t)move, PR_AC_TypelessAttr) || o->hits_left > 1)
             return 0;
         int type = pr_get_move_type(bt, o, move);
-        int8_t ty[3];
+        int8_t ty[PR_MAX_TYPES];
         int n = pr_get_types(p, ty, PR_TYPES_ORIGINAL_IF_STELLAR);
         for (int i = 0; i < n; i++)
             if (ty[i] == type) return 0;
         GATE(true);
         if (!pp->simulated) {
             pr_pokemon *w = (pr_pokemon *)p;
-            w->type_override[0] = (int8_t)type;                  /* summonData.types = [type] */
-            w->type_override[1] = -1;
+            int8_t one = (int8_t)type;                            /* summonData.types = [type] */
+            pr_set_summon_types(bt, w, &one, 1);
         }
         return 1;
     }
@@ -933,11 +933,17 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
             return 0;
         return -1;                                              /* canAddTag, addTag */
     }
-    case PR_AC_PostDefendPerishSongAbAttr:                              /* Perish Body */
-        if (!pr_move_does_flag_effect_apply(bt, move, MOVE_FLAGS_MAKES_CONTACT, o, p)
-            || pr_get_battler_tag(o, BATTLER_TAG_TYPE_PERISH_SONG))
-            return 0;
-        return -1;                                              /* addTag(PERISH_SONG) on both */
+    case PR_AC_PostDefendPerishSongAbAttr: {                            /* Perish Body */
+        if (!c->e) return -1;
+        GATE(pr_move_does_flag_effect_apply(bt, move, MOVE_FLAGS_MAKES_CONTACT, o, p)
+             && !pr_get_battler_tag(o, BATTLER_TAG_TYPE_PERISH_SONG));
+        if (!pp->simulated) {                                   /* the attacker, then the Pokemon */
+            int turns = P(PostDefendPerishSongAbAttr, a)->turns;
+            pr_add_tag(bt, c->e, (pr_pokemon *)o, BATTLER_TAG_TYPE_PERISH_SONG, turns, 0, -1);
+            pr_add_tag(bt, c->e, (pr_pokemon *)p, BATTLER_TAG_TYPE_PERISH_SONG, turns, 0, -1);
+        }
+        return 1;
+    }
     case PR_AC_PostDefendAbilitySwapAbAttr:                             /* Wandering Spirit */
     case PR_AC_PostDefendAbilityGiveAbAttr:                             /* Mummy, Lingering Aroma */
         /* contact, then the attacker's ability flags: setTempAbility isn't ported */

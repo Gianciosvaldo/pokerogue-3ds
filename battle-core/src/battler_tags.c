@@ -39,6 +39,15 @@ bool pr_tag_type_ported(int type)
     case BATTLER_TAG_TYPE_IGNORE_DARK:    /* ExposedTag: Miracle Eye */
     case BATTLER_TAG_TYPE_SHELL_TRAP:     /* ShellTrapTag: TURN_END and AFTER_HIT, 1 turn */
     case BATTLER_TAG_TYPE_BEAK_BLAST_CHARGING:  /* BeakBlastChargingTag: PRE_MOVE, TURN_END, AFTER_HIT, 1 turn */
+    case BATTLER_TAG_TYPE_IGNORE_ACCURACY:  /* Lock-On, Mind Reader: SerializableBattlerTag(TURN_END, 2) */
+    case BATTLER_TAG_TYPE_ALWAYS_CRIT:      /* Laser Focus: the same */
+    case BATTLER_TAG_TYPE_PERISH_SONG:      /* PerishSongTag */
+    case BATTLER_TAG_TYPE_ROOSTED:          /* RoostedTag */
+    case BATTLER_TAG_TYPE_THROAT_CHOPPED:   /* ThroatChoppedTag (MoveRestrictionBattlerTag) */
+    case BATTLER_TAG_TYPE_HEAL_BLOCK:       /* HealBlockTag (MoveRestrictionBattlerTag) */
+    case BATTLER_TAG_TYPE_AQUA_RING:        /* AquaRingTag */
+    case BATTLER_TAG_TYPE_INGRAIN:          /* IngrainTag (TrappedTag) */
+    case BATTLER_TAG_TYPE_OCTOLOCK:         /* OctolockTag (TrappedTag) */
         return true;
     }
     return pr_damaging_trap_move(type) != 0 || pr_battler_tag_is(type, PR_TAGCLASS_PROTECTED);
@@ -76,7 +85,15 @@ static void note_tag(pr_battle *bt, int type)
 /* the ported TrappedTag subclasses; each is source-linked (isSourceLinked) */
 static bool is_trap(int type)
 {
-    return type == BATTLER_TAG_TYPE_TRAPPED || type == BATTLER_TAG_TYPE_NO_RETREAT || pr_damaging_trap_move(type);
+    return type == BATTLER_TAG_TYPE_TRAPPED || type == BATTLER_TAG_TYPE_NO_RETREAT || type == BATTLER_TAG_TYPE_INGRAIN
+           || type == BATTLER_TAG_TYPE_OCTOLOCK || pr_damaging_trap_move(type);
+}
+
+/* toDmgValue(pokemon.getMaxHp() / div) */
+static double max_hp_part(const pr_pokemon *p, double div)
+{
+    double v = floor(pr_get_stat(p, STAT_HP, false) / div);
+    return v < 1 ? 1 : v;
 }
 
 static int find_tag(const pr_pokemon *p, int type)
@@ -162,6 +179,38 @@ static pr_battler_tag construct(int type, int turn_count, int source_move, int64
         t.turn_count = 1;
         t.source_move = MOVE_ID_BEAK_BLAST;
         break;
+    case BATTLER_TAG_TYPE_IGNORE_ACCURACY:        /* SerializableBattlerTag(tagType, TURN_END, 2, sourceMove) */
+    case BATTLER_TAG_TYPE_ALWAYS_CRIT:
+        t.turn_count = 2;
+        break;
+    case BATTLER_TAG_TYPE_PERISH_SONG:            /* PerishSongTag(turnCount) */
+        t.source_move = MOVE_ID_PERISH_SONG;
+        break;
+    case BATTLER_TAG_TYPE_ROOSTED:                /* RoostedTag() */
+        t.turn_count = 1;
+        t.source_move = MOVE_ID_ROOST;
+        break;
+    case BATTLER_TAG_TYPE_THROAT_CHOPPED:         /* ThroatChoppedTag() */
+        t.turn_count = 2;
+        t.source_move = MOVE_ID_THROAT_CHOP;
+        break;
+    case BATTLER_TAG_TYPE_HEAL_BLOCK:             /* HealBlockTag(turnCount): no source move */
+        t.source_move = 0;
+        break;
+    case BATTLER_TAG_TYPE_AQUA_RING:              /* AquaRingTag() */
+        t.turn_count = 1;
+        t.source_move = MOVE_ID_AQUA_RING;
+        break;
+    case BATTLER_TAG_TYPE_INGRAIN:                /* IngrainTag(sourceId) */
+        t.turn_count = 1;
+        t.source_move = MOVE_ID_INGRAIN;
+        t.source_id = source_id;
+        break;
+    case BATTLER_TAG_TYPE_OCTOLOCK:               /* OctolockTag(sourceId) */
+        t.turn_count = 1;
+        t.source_move = MOVE_ID_OCTOLOCK;
+        t.source_id = source_id;
+        break;
     default:                                      /* CONFUSED, FRENZY, the semi-invulnerable tags */
         if (pr_damaging_trap_move(type)) {        /* BindTag(turnCount, sourceId) and co. */
             t.source_move = (uint16_t)pr_damaging_trap_move(type);
@@ -177,6 +226,12 @@ static pr_battler_tag construct(int type, int turn_count, int source_move, int64
 static bool can_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_battler_tag *t)
 {
     switch (t->type) {
+    case BATTLER_TAG_TYPE_PERISH_SONG:
+        return !p->is_boss;                                   /* !isBossImmune() */
+    case BATTLER_TAG_TYPE_ROOSTED:
+        return pr_is_of_type(p, POKEMON_TYPE_FLYING) && !p->terastallized;
+    case BATTLER_TAG_TYPE_INGRAIN:
+        return !pr_get_battler_tag(p, BATTLER_TAG_TYPE_TRAPPED);
     case BATTLER_TAG_TYPE_CONFUSED:
         /* blocked by Misty Terrain on the ground; isGrounded() runs first, and applies Levitate (not
          * simulated). The terrain's message only when the running phase is a MoveEffectPhase of a
@@ -188,7 +243,8 @@ static bool can_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_battler
             return false;
         }
         return true;
-    case BATTLER_TAG_TYPE_TRAPPED: {
+    case BATTLER_TAG_TYPE_TRAPPED:
+    case BATTLER_TAG_TYPE_OCTOLOCK: {                     /* TrappedTag.canAdd */
         /* getSourcePokemon() searches both parties; only the field is modelled */
         pr_pokemon *source = pr_field_pokemon_by_id(bt, t->source_id);
         if (!source) {
@@ -211,6 +267,56 @@ static bool can_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_battler
     return true;
 }
 
+static bool has_type(const int8_t *types, int n, int type)
+{
+    for (int i = 0; i < n; i++)
+        if (types[i] == type) return true;
+    return false;
+}
+
+/* RoostedTag.onAdd: Flying comes off the current types; a Pokemon purely Flying by its species
+ * becomes Normal instead (isBasePureFlying), and one a RemovedTypeTag (Burn Up, Double Shock)
+ * left with one type of its two becomes typeless. summonData.types = the result. */
+static void roost_on_add(pr_battle *bt, pr_pokemon *p, pr_battler_tag *t)
+{
+    int8_t cur[PR_MAX_TYPES], base[PR_MAX_TYPES], out[PR_MAX_TYPES];
+    int nc = pr_get_types(p, cur, 0);
+    int nb = pr_get_types(p, base, PR_TYPES_NO_TERA | PR_TYPES_BYPASS_SUMMON | PR_TYPES_IGNORE_THIRD);
+    t->base_pure_flying = base[0] == POKEMON_TYPE_FLYING && nb == 1;
+    int n = 0;
+    if (t->base_pure_flying && nc != 2) {
+        out[n++] = POKEMON_TYPE_NORMAL;
+    } else if ((pr_get_battler_tag(p, BATTLER_TAG_TYPE_BURNED_UP) || pr_get_battler_tag(p, BATTLER_TAG_TYPE_DOUBLE_SHOCKED))
+               && nb == 2 && nc != 2) {
+        out[n++] = POKEMON_TYPE_UNKNOWN;
+    } else {
+        for (int i = 0; i < nc; i++)
+            if (cur[i] != POKEMON_TYPE_FLYING) out[n++] = cur[i];
+    }
+    pr_set_summon_types(bt, p, out, n);
+}
+
+/* RoostedTag.onRemove: Flying goes back on top of the current types; for a pure Flying one, the
+ * Normal it got comes off only when Forest's Curse or Trick-or-Treat added a type (guessed from
+ * the types, as upstream does), else it is just Flying again */
+static void roost_on_remove(pr_battle *bt, pr_pokemon *p, const pr_battler_tag *t)
+{
+    int8_t cur[PR_MAX_TYPES], base[PR_MAX_TYPES], out[PR_MAX_TYPES + 1];
+    int nc = pr_get_types(p, cur, 0);
+    int nb = pr_get_types(p, base, PR_TYPES_NO_TERA | PR_TYPES_BYPASS_SUMMON | PR_TYPES_IGNORE_THIRD);
+    bool forests_curse = has_type(cur, nc, POKEMON_TYPE_GRASS) && !has_type(base, nb, POKEMON_TYPE_GRASS);
+    bool trick_or_treat = has_type(cur, nc, POKEMON_TYPE_GHOST) && !has_type(base, nb, POKEMON_TYPE_GHOST);
+    int n = 0;
+    if (t->base_pure_flying && !forests_curse && !trick_or_treat) {
+        out[n++] = POKEMON_TYPE_FLYING;
+    } else {
+        for (int i = 0; i < nc; i++)
+            if (!t->base_pure_flying || cur[i] != POKEMON_TYPE_NORMAL) out[n++] = cur[i];
+        out[n++] = POKEMON_TYPE_FLYING;
+    }
+    pr_set_summon_types(bt, p, out, n);
+}
+
 /* tag.onAdd(pokemon); t is the tag in p->tags */
 static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t)
 {
@@ -226,7 +332,14 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
     case BATTLER_TAG_TYPE_ENDURING:
     case BATTLER_TAG_TYPE_SHELL_TRAP:            /* "set a shell trap" */
     case BATTLER_TAG_TYPE_BEAK_BLAST_CHARGING:   /* the charge animation plays outside the phases, then the message */
+    case BATTLER_TAG_TYPE_AQUA_RING:
+    case BATTLER_TAG_TYPE_HEAL_BLOCK:
+    case BATTLER_TAG_TYPE_INGRAIN:               /* TrappedTag.onAdd: getTrapMessage() */
+    case BATTLER_TAG_TYPE_OCTOLOCK:
         pr_queue_message(bt, e);
+        return;
+    case BATTLER_TAG_TYPE_ROOSTED:
+        roost_on_add(bt, p, t);
         return;
     case BATTLER_TAG_TYPE_SEEDED: {
         /* SeedTag.onAdd: nothing without its source (getSourcePokemon searches both parties; only
@@ -409,6 +522,38 @@ static void protect_on_contact(pr_battle *bt, pr_engine *e, pr_pokemon *p, const
     pr_unshift_stat_stage_change(bt, e, pr_battler_index(bt, attacker), &stat, 1, stages, NULL);
 }
 
+/* getSourcePokemon(): getPokemonById(sourceId), reported when it isn't found and a side's party
+ * isn't modelled (it could be there) */
+static pr_pokemon *tag_source(pr_battle *bt, const pr_battler_tag *t)
+{
+    pr_pokemon *source = pr_pokemon_by_id(bt, t->source_id);
+    if (!source && t->source_id >= 0 && (!bt->n_party[0] || !bt->n_party[1])) pr_note_unported(bt, PR_FEAT_PARTY);
+    return source;
+}
+
+/* MoveRestrictionBattlerTag.isMoveRestricted */
+static bool move_restricted(int type, int move)
+{
+    if (type == BATTLER_TAG_TYPE_THROAT_CHOPPED) return (pr_moves[move].flags & MOVE_FLAGS_SOUND_BASED) != 0;
+    for (unsigned i = 0; i < pr_set_heal_blocked_moves_n; i++)           /* HEAL_BLOCK: healBlockedMoves */
+        if (pr_set_heal_blocked_moves[i] == move) return true;
+    return false;
+}
+
+/* MoveRestrictionBattlerTag.lapse: on PRE_MOVE (the MovePhase's check), a restricted move is
+ * interrupted (interruptedText, never empty for these two, then cancel()) and the tag stays;
+ * any other lapse is BattlerTag.lapse */
+static bool restriction_lapse(pr_battle *bt, pr_engine *e, pr_battler_tag *t, int lapse_type)
+{
+    if (lapse_type != BATTLER_TAG_LAPSE_TYPE_PRE_MOVE) return --t->turn_count > 0;
+    if (e && e->current >= 0 && e->pool[e->current].type == PH_MOVE
+        && move_restricted(t->type, e->pool[e->current].move.id)) {
+        pr_queue_message(bt, e);
+        pr_cancel_current_move(e, NULL);
+    }
+    return true;
+}
+
 /* tag.lapse(pokemon, lapseType): whether the tag stays */
 static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t, int lapse_type)
 {
@@ -486,6 +631,35 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
             return true;
         }
         return --t->turn_count > 0;
+    case BATTLER_TAG_TYPE_THROAT_CHOPPED:
+    case BATTLER_TAG_TYPE_HEAL_BLOCK:
+        return restriction_lapse(bt, e, t, lapse_type);
+    case BATTLER_TAG_TYPE_PERISH_SONG: {
+        /* the count, or at its end the Pokemon's remaining HP (INDIRECT_KO, ignoreSegments) */
+        bool ret = --t->turn_count > 0;
+        if (ret) pr_queue_message(bt, e);
+        else pr_damage_and_update(bt, e, p, p->hp, HIT_RESULT_INDIRECT_KO, false, NULL);
+        return ret;
+    }
+    case BATTLER_TAG_TYPE_AQUA_RING:
+    case BATTLER_TAG_TYPE_INGRAIN: {
+        /* lapseType !== CUSTOM || BattlerTag.lapse; while it stays, a sixteenth of max HP back
+         * (PokemonHealPhase with a message) */
+        bool ret = lapse_type != BATTLER_TAG_LAPSE_TYPE_CUSTOM || --t->turn_count > 0;
+        if (ret) pr_unshift_heal(bt, e, pr_battler_index(bt, p), max_hp_part(p, 16), PR_HEAL_MESSAGE);
+        return ret;
+    }
+    case BATTLER_TAG_TYPE_OCTOLOCK: {
+        /* the same test; while it stays, Defense and Sp. Def drop a stage (its source as the
+         * StatStageChangePhase's sourcePokemon) */
+        bool ret = lapse_type != BATTLER_TAG_LAPSE_TYPE_CUSTOM || --t->turn_count > 0;
+        if (ret) {
+            static const int32_t stats[2] = {STAT_DEF, STAT_SPDEF};
+            if (pr_unshift_stat_stage_change(bt, e, pr_battler_index(bt, p), stats, 2, -1, tag_source(bt, t)) < 0 && e)
+                e->overflow = true;
+        }
+        return ret;
+    }
     case BATTLER_TAG_TYPE_FRENZY: {
         /* MoveLockTag: only a use of the locked move (or none) advances it */
         const pr_turn_move *last = pr_last_move(bt, p, 0);
@@ -546,7 +720,13 @@ static void on_remove(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_battl
     case BATTLER_TAG_TYPE_CONFUSED:
     case BATTLER_TAG_TYPE_TRAPPED:
     case BATTLER_TAG_TYPE_NO_RETREAT:
+    case BATTLER_TAG_TYPE_INGRAIN:               /* TrappedTag.onRemove */
+    case BATTLER_TAG_TYPE_OCTOLOCK:
+    case BATTLER_TAG_TYPE_HEAL_BLOCK:
         pr_queue_message(bt, e);
+        return;
+    case BATTLER_TAG_TYPE_ROOSTED:
+        roost_on_remove(bt, p, t);
         return;
     case BATTLER_TAG_TYPE_SUBSTITUTE:
         /* the removal animation (PokemonAnimPhase) unless the Pokemon is in focus (its own move

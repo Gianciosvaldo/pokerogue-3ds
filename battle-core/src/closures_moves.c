@@ -279,7 +279,7 @@ static double grassy_glide(ARGS)
 
 static bool type_in(const pr_pokemon *p, int type, int flags)
 {
-    int8_t ty[3];
+    int8_t ty[PR_MAX_TYPES];
     int n = pr_get_types(p, ty, flags);
     for (int i = 0; i < n; i++)
         if (ty[i] == type) return true;

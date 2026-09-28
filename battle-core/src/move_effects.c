@@ -557,11 +557,12 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         if (st->n == 7 || st->n == 2) pr_queue_message(bt, e);   /* switchedStatChanges / switchedTwoStatChanges */
         return;
     }
-    case PR_AC_ChangeTypeAttr:                           /* Soak, Magic Powder: no canApply check */
-        target->type_override[0] = (int8_t)P(ChangeTypeAttr, a)->type;
-        target->type_override[1] = -1;
+    case PR_AC_ChangeTypeAttr: {                         /* Soak, Magic Powder: no canApply check */
+        int8_t one = (int8_t)P(ChangeTypeAttr, a)->type;   /* summonData.types = [type] */
+        pr_set_summon_types(bt, target, &one, 1);
         pr_queue_message(bt, e);                         /* moveTriggers:transformedIntoType */
         return;
+    }
     case PR_AC_MessageAttr:                              /* Splash, Celebrate, Lock-On, Perish Song...: */
         pr_queue_message(bt, e);                         /* every message upstream builds is non-empty */
         return;

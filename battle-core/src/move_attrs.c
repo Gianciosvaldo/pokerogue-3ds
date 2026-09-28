@@ -330,7 +330,7 @@ void pr_apply_variable_move_type(pr_battle *bt, const pr_pokemon *user, int move
             if (user->terastallized && sp == SPECIES_ID_TERAPAGOS) *type = POKEMON_TYPE_STELLAR;
             break;
         case PR_AC_MatchUserTypeAttr: { /* Revelation Dance */
-            int8_t t[3];
+            int8_t t[PR_MAX_TYPES];
             if (pr_get_types(user, t, PR_TYPES_ORIGINAL_IF_STELLAR) > 0) *type = t[0];
             break;
         }
@@ -384,7 +384,7 @@ void pr_apply_type_chart_override(pr_battle *bt, const pr_pokemon *user, const p
             break;
         case PR_AC_HitsSameTypeAttr: { /* Synchronoise: user.getTypes() with default options */
             if (!user) { pr_note_unported(bt, a->cls); break; }
-            int8_t ut[3];
+            int8_t ut[PR_MAX_TYPES];
             int un = pr_get_types(user, ut, 0);
             if (types_include(ut, un, POKEMON_TYPE_UNKNOWN)) { *mult = 0; break; }
             bool shares = false;

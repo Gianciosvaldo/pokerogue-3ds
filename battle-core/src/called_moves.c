@@ -225,7 +225,7 @@ int pr_get_move_targets(pr_battle *bt, const pr_pokemon *user, int move, int rep
     switch (target) {
     case MOVE_TARGET_CURSE: {
         /* a non-Ghost user targets itself (original types when Stellar) */
-        int8_t ty[3];
+        int8_t ty[PR_MAX_TYPES];
         int nt = pr_get_types(user, ty, PR_TYPES_ORIGINAL_IF_STELLAR);
         bool ghost = false;
         for (int i = 0; i < nt; i++) ghost |= ty[i] == POKEMON_TYPE_GHOST;

@@ -46,7 +46,7 @@ static bool has_ability_any(const pr_pokemon *p, int ab) { return p->ability == 
 /* isOfType(type, {returnOriginalTypesIfStellar: true}) */
 static bool is_of_type_orig(const pr_pokemon *p, int type)
 {
-    int8_t ty[3];
+    int8_t ty[PR_MAX_TYPES];
     int n = pr_get_types(p, ty, PR_TYPES_ORIGINAL_IF_STELLAR);
     for (int i = 0; i < n; i++)
         if (ty[i] == type) return true;
@@ -245,7 +245,7 @@ static double change_type(ARGS)
     NEED_TARGET;
     if (t->terastallized) return 0;
     if (pr_has_ability_active(bt, t, ABILITY_ID_MULTITYPE) || pr_has_ability_active(bt, t, ABILITY_ID_RKS_SYSTEM)) return 0;
-    int8_t ty[3];
+    int8_t ty[PR_MAX_TYPES];
     int n = pr_get_types(t, ty, 0);
     return !(n == 1 && ty[0] == P(ChangeTypeAttr, a)->type);
 }

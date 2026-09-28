@@ -115,8 +115,11 @@ typedef struct pr_battler_tag {
     bool in_focus;                 /* SubstituteTag.sourceInFocus */
     int8_t source_index;           /* SeedTag.sourceIndex (-1 = unset) */
     bool activated;                /* ShellTrapTag.activated */
+    bool base_pure_flying;         /* RoostedTag.isBasePureFlying */
 } pr_battler_tag;
 #define PR_MAX_BATTLER_TAGS 24
+/* summonData.types: Roost gives Flying back on top of up to three others */
+#define PR_MAX_SUMMON_TYPES 4
 
 /* Arena tags: arena.tags, in upstream order */
 typedef struct pr_arena_tag {
@@ -192,7 +195,8 @@ typedef struct pr_pokemon {
     bool terastallized;
     bool shiny;                        /* isShiny(true): shiny, or a shiny fusion */
     int8_t tera_type;
-    int8_t type_override[2];   /* -2 = none (summonData.types not set) */
+    int8_t summon_types[PR_MAX_SUMMON_TYPES];  /* summonData.types, in order */
+    uint8_t n_summon_types;            /* its length; 0 = not set (getTypes uses the species') */
     uint16_t moves[4];                 /* moveset, 0 = empty slot */
     uint8_t pp_used[4];
     uint8_t pp_up[4];
@@ -558,8 +562,12 @@ double pr_get_weight(pr_battle *bt, const pr_pokemon *p);
 int pr_get_effective_weather_for_move(pr_battle *bt, const pr_pokemon *user);
 double js_round(double x);
 /* getTypes(): flags mirror upstream's options object. */
-enum { PR_TYPES_NO_TERA = 1, PR_TYPES_ORIGINAL_IF_STELLAR = 2 };
-int pr_get_types(const pr_pokemon *p, int8_t out[3], unsigned flags);
+enum { PR_TYPES_NO_TERA = 1, PR_TYPES_ORIGINAL_IF_STELLAR = 2, PR_TYPES_BYPASS_SUMMON = 4, PR_TYPES_IGNORE_THIRD = 8 };
+/* at most PR_MAX_TYPES entries: the summon types, then the added type */
+#define PR_MAX_TYPES (PR_MAX_SUMMON_TYPES + 1)
+int pr_get_types(const pr_pokemon *p, int8_t out[PR_MAX_TYPES], unsigned flags);
+/* summonData.types = types (n of them); false, reported, past PR_MAX_SUMMON_TYPES */
+bool pr_set_summon_types(pr_battle *bt, pr_pokemon *p, const int8_t *types, int n);
 bool pr_is_of_type(const pr_pokemon *p, int type);
 int32_t pr_get_stat(const pr_pokemon *p, int stat, bool bypass_summon);
 double pr_get_stat_stage_multiplier(pr_battle *bt, const pr_pokemon *p, int stat, const pr_pokemon *opponent,

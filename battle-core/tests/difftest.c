@@ -94,7 +94,7 @@ static int read_mon(char **save, pr_pokemon *p)
     p->passive_flag = v[47];
     p->custom_passive = (int16_t)v[48];
     p->base_ability = ABILITY_ID_BALL_FETCH;
-    p->type_override[0] = p->type_override[1] = -2;
+    p->n_summon_types = 0;
     p->turn_move_effectiveness = -1; /* turnData.moveEffectiveness unset */
     return 1;
 }

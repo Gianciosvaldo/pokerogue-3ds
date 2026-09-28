@@ -276,11 +276,10 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
              * still in the scene's field then, a bench Pokemon isn't */
             p->on_field = inum(l, "onfield") != 0 || (p->switch_out_status && p == &cs->mon[side][0]);
             p->summon_hit_count = (uint8_t)inum(l, "shc");
-            int nt = split(need(l, "types"), ',', it, 3);
-            if (nt > 2) { cs->skip = 1; nt = 2; }
-            p->type_override[0] = p->type_override[1] = -2;
-            for (int j = 0; j < nt; j++) p->type_override[j] = (int8_t)atoi(it[j]);
-            if (nt == 1) p->type_override[1] = -1;
+            int nt = split(need(l, "types"), ',', it, PR_MAX_SUMMON_TYPES + 1);
+            if (nt > PR_MAX_SUMMON_TYPES) { cs->skip = 1; nt = PR_MAX_SUMMON_TYPES; }
+            p->n_summon_types = (uint8_t)nt;
+            for (int j = 0; j < nt; j++) p->summon_types[j] = (int8_t)atoi(it[j]);
             p->added_type = field(l, "added") ? (int8_t)inum(l, "added") : 0;
             p->ability_suppressed = inum(l, "abilsup") != 0;
             p->temp_turn_count = (int32_t)inum(l, "tsd");
@@ -373,6 +372,7 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             }
             if (field(l, "sidx")) t->source_index = (int8_t)inum(l, "sidx");   /* SeedTag */
             if (field(l, "act")) t->activated = inum(l, "act") != 0;           /* ShellTrapTag */
+            if (field(l, "bpf")) t->base_pure_flying = inum(l, "bpf") != 0;    /* RoostedTag */
             /* the line holds all of a ported tag type's state, and of Protosynthesis's and Quark
              * Drive's (which only the damage path reads and a weather or terrain ending removes);
              * the others can hold more */
@@ -488,6 +488,7 @@ static const char *boost_fields(const pr_battler_tag *t)
         return buf;
     }
     if (t->type == BATTLER_TAG_TYPE_SHELL_TRAP && t->activated) return " act=1";   /* ShellTrapTag.activated */
+    if (t->type == BATTLER_TAG_TYPE_ROOSTED && t->base_pure_flying) return " bpf=1";   /* RoostedTag.isBasePureFlying */
     if (t->type == BATTLER_TAG_TYPE_SEEDED) {                 /* SeedTag.sourceIndex */
         snprintf(buf, sizeof buf, " sidx=%d", t->source_index);
         return buf;
@@ -520,8 +521,7 @@ static void dump_mon(lines_t *L, const pr_battle *bt, const pr_pokemon *p, const
     LIST(&s, nst, ',', "%d", st[i]);
     sb(&s, " boss=%d shiny=%d onfield=%d out=%d shc=%d types=", p->is_boss, p->shiny, p->on_field && !p->switch_out_status,
        p->switch_out_status, p->summon_hit_count);
-    int nt = p->type_override[0] == -2 ? 0 : p->type_override[1] == -1 ? 1 : 2;
-    LIST(&s, nt, ',', "%d", p->type_override[i]);
+    LIST(&s, p->n_summon_types, ',', "%d", p->summon_types[i]);
     if (has_money) sb(&s, " added=%d", p->added_type);
     sb(&s, " abilsup=%d tsd=%d tswd=%d aas=", p->ability_suppressed, p->temp_turn_count, p->temp_wave_turn_count);
     LIST(&s, p->n_ab_applied_summon, ',', "%d", p->ab_applied_summon[i]);

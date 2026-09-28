@@ -311,7 +311,7 @@ static double not_terastallized(ARGS) { UNUSED; return !a->terastallized; }
 static double grass_target(ARGS)
 {
     UNUSED;
-    int8_t ty[3];
+    int8_t ty[PR_MAX_TYPES];
     int n = pr_get_types(a, ty, PR_TYPES_ORIGINAL_IF_STELLAR);
     for (int i = 0; i < n; i++)
         if (ty[i] == POKEMON_TYPE_GRASS) return 1;

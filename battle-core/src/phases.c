@@ -491,7 +491,7 @@ static bool check_freeze(pr_battle *bt, pr_engine *e, int ph)
     }
     int move = m->move.id;
     bool thaws = move_thaws_user(move);
-    int8_t ty[3];
+    int8_t ty[PR_MAX_TYPES];
     int n = pr_get_types(user, ty, PR_TYPES_ORIGINAL_IF_STELLAR);
     bool fire = false;
     for (int i = 0; i < n; i++) fire |= ty[i] == POKEMON_TYPE_FIRE;
@@ -536,7 +536,7 @@ bool pr_can_set_status(pr_battle *bt, pr_engine *e, pr_pokemon *p, int effect, b
             return false;
         }
     }
-    int8_t ty[3];
+    int8_t ty[PR_MAX_TYPES];
     int n = pr_get_types(p, ty, PR_TYPES_ORIGINAL_IF_STELLAR);
     bool immune = false;
     switch (effect) {
@@ -1172,7 +1172,18 @@ static bool check_bypass_acc_and_invuln(pr_battle *bt, pr_pokemon *user, pr_poke
     if (pr_has_ability_with_attr(bt, user, PR_AC_AlwaysHitAbAttr) || pr_has_ability_with_attr(bt, target, PR_AC_AlwaysHitAbAttr))
         return true;
     if (pr_move_has_attr((uint16_t)move, PR_AC_ToxicAccuracyAttr) && pr_is_of_type(user, POKEMON_TYPE_POISON)) return true;
-    if (pr_get_battler_tag(user, BATTLER_TAG_TYPE_IGNORE_ACCURACY)) pr_note_unported(bt, PR_FEAT_TAG_LAPSE);
+    if (pr_get_battler_tag(user, BATTLER_TAG_TYPE_IGNORE_ACCURACY)) {
+        /* getLastXMoves(-1).find(m => m.move === LOCK_ON || m.move === MIND_READER)?.targets
+         * includes the target */
+        for (int k = 0; k < user->n_move_history; k++) {
+            const pr_turn_move *tm = pr_last_move(bt, user, k);
+            if (!tm) break;                                        /* older than the kept ones: reported */
+            if (tm->move != MOVE_ID_LOCK_ON && tm->move != MOVE_ID_MIND_READER) continue;
+            for (int i = 0; i < tm->n_targets; i++)
+                if (tm->targets[i] == pr_battler_index(bt, target)) return true;
+            break;
+        }
+    }
     return is_field_targeted(move);
 }
 
@@ -1810,7 +1821,7 @@ static void reset_summon_data(pr_pokemon *p)
     p->ability_override = -1;
     p->ability = p->base_ability;
     memset(p->summon_stats, 0, sizeof p->summon_stats);
-    p->type_override[0] = p->type_override[1] = -2;
+    p->n_summon_types = 0;
     p->added_type = 0;
     p->n_move_history = 0;
     p->temp_turn_count = p->temp_wave_turn_count = 1;
@@ -2026,7 +2037,7 @@ static void weather_effect_phase(pr_battle *bt, pr_engine *e)
         if (!suppressed) {
             pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
             while ((p = pr_speed_iter_next(bt, &it))) {
-                int8_t ty[3];
+                int8_t ty[PR_MAX_TYPES];
                 int n = pr_get_types(p, ty, PR_TYPES_ORIGINAL_IF_STELLAR);
                 bool immune = p->switch_out_status;
                 for (int i = 0; i < n; i++)

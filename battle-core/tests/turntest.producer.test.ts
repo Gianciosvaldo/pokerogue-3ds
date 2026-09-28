@@ -34,10 +34,12 @@
  * some Pokemon have No Guard, and half the Pokemon holding a two-turn move start on its second
  * turn, as MoveChargePhase and the command phases leave it;
  * TURN_TAGS=1 aims at the battler tags moves add (flinch, confusion, Outrage's lock-in, Mean Look's
- * trap, No Retreat, Minimize, Charge, Tar Shot, Autotomize, Glaive Rush): most moves add one of them
- * or read one (Stomp, Electric and Fire attacks, weight-based moves), a quarter of the Pokemon have
- * an ability that reacts to them (Steadfast, Inner Focus, Own Tempo, Shield Dust, Serene Grace,
- * No Guard), a third start with some of those tags, and half the Pokemon holding a rampage move
+ * trap, No Retreat, Minimize, Charge, Tar Shot, Autotomize, Glaive Rush, Lock-On, Laser Focus,
+ * Perish Song, Roost, Throat Chop, Heal Block, Aqua Ring, Ingrain, Octolock): most moves add one of
+ * them or read one (Stomp, Electric and Fire attacks, weight-based moves, sound moves, the moves
+ * Heal Block stops, inaccurate attacks), a quarter of the Pokemon have an ability that reacts to
+ * them (Steadfast, Inner Focus, Own Tempo, Shield Dust, Serene Grace, No Guard, Perish Body), a
+ * third start with some of those tags, and half the Pokemon holding a rampage move
  * start in the middle of one (FRENZY, the queued move, a successful history entry);
  * TURN_HEAL=1 aims at recoil, drain, recharge and the heal phase: most moves have recoil, drain or
  * recharge (Struggle and Chloroblast included) or are attacks, half the abilities block recoil,
@@ -174,6 +176,7 @@ import { TrainerSlot } from "#enums/trainer-slot";
 import { UiMode } from "#enums/ui-mode";
 import { WeatherType } from "#enums/weather-type";
 import { getMoveTargets } from "#moves/move-utils";
+import { healBlockedMoves } from "#moves/invalid-moves";
 import { PokemonMove } from "#moves/pokemon-move";
 import { GameManager } from "#test/framework/game-manager";
 import { PartyOption } from "#ui/party-ui-handler";
@@ -328,6 +331,9 @@ it("turntest producer", async () => {
     BattlerTagType.FLINCHED, BattlerTagType.CONFUSED, BattlerTagType.FRENZY, BattlerTagType.TRAPPED,
     BattlerTagType.NO_RETREAT, BattlerTagType.ALWAYS_GET_HIT, BattlerTagType.RECEIVE_DOUBLE_DAMAGE,
     BattlerTagType.MINIMIZED, BattlerTagType.CHARGED, BattlerTagType.TAR_SHOT, BattlerTagType.AUTOTOMIZED,
+    BattlerTagType.IGNORE_ACCURACY, BattlerTagType.ALWAYS_CRIT, BattlerTagType.PERISH_SONG, BattlerTagType.ROOSTED,
+    BattlerTagType.THROAT_CHOPPED, BattlerTagType.HEAL_BLOCK, BattlerTagType.AQUA_RING, BattlerTagType.INGRAIN,
+    BattlerTagType.OCTOLOCK,
   ];
   const tagMoves = usable.filter((m: any) =>
     m.attrs.some((a: any) => isA(a, ["AddBattlerTagAttr"]) && portedTags.includes(a.tagType)),
@@ -339,10 +345,18 @@ it("turntest producer", async () => {
       || m.attrs.some((a: any) =>
         ["HitsTagForDoubleDamageAttr", "WeightPowerAttr", "CompareWeightPowerAttr"].includes(a.constructor.name),
       ),
+  ).concat(
+    // what Throat Chop and Heal Block stop, and what Lock-On makes sure of
+    usable.filter(
+      (m: any) =>
+        m.hasFlag(MoveFlags.SOUND_BASED)
+        || healBlockedMoves.has(m.id)
+        || (m.category !== MoveCategory.STATUS && m.accuracy > 0 && m.accuracy < 80),
+    ),
   );
   const tagAbilityIds = [
     AbilityId.STEADFAST, AbilityId.INNER_FOCUS, AbilityId.OWN_TEMPO, AbilityId.SHIELD_DUST, AbilityId.SERENE_GRACE,
-    AbilityId.NO_GUARD,
+    AbilityId.NO_GUARD, AbilityId.PERISH_BODY,
   ];
   // TURN_HEAL pools
   const healMoves = usable.filter((m: any) =>
@@ -594,7 +608,8 @@ it("turntest producer", async () => {
           + (boostTags.includes(t.tagType) ? ` stat=${t.stat} mult=${t.multiplier}` : "")
           + (t.tagType === BattlerTagType.SUBSTITUTE ? ` hp=${t.hp} focus=${t.sourceInFocus ? 1 : 0}` : "")
           + (t.tagType === BattlerTagType.SEEDED ? ` sidx=${t.sourceIndex ?? -1}` : "")
-          + (t.tagType === BattlerTagType.SHELL_TRAP && t.activated ? " act=1" : ""),
+          + (t.tagType === BattlerTagType.SHELL_TRAP && t.activated ? " act=1" : "")
+          + (t.tagType === BattlerTagType.ROOSTED && t.isBasePureFlying ? " bpf=1" : ""),
       ),
     ];
   };
@@ -1057,7 +1072,8 @@ it("turntest producer", async () => {
             if (p.getTag(type) || type === BattlerTagType.FRENZY) {
               continue;
             }
-            const tag = getBattlerTag(type, 1 + rnd(4), rnd(2) === 0 ? MoveId.NONE : MoveId.MEAN_LOOK, type === BattlerTagType.NO_RETREAT ? p.id : other.id) as any;
+            const self = type === BattlerTagType.NO_RETREAT || type === BattlerTagType.INGRAIN;
+            const tag = getBattlerTag(type, 1 + rnd(4), rnd(2) === 0 ? MoveId.NONE : MoveId.MEAN_LOOK, self ? p.id : other.id) as any;
             if (type === BattlerTagType.AUTOTOMIZED) {
               tag.autotomizeCount = 1 + rnd(3);
             }

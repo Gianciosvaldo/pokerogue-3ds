@@ -1,6 +1,7 @@
 /* Ports of src/field/pokemon.ts: stats, types, stat stages, effective stats. */
 #include "pr/battle.h"
 #include <math.h>
+#include <string.h>
 
 const pr_species *pr_pokemon_species(const pr_pokemon *p)
 {
@@ -81,7 +82,7 @@ int pr_get_tera_type(const pr_pokemon *p)
 }
 
 /* getTypes({}) : returns count, out gets up to 3 types. */
-int pr_get_types(const pr_pokemon *p, int8_t out[3], unsigned flags)
+int pr_get_types(const pr_pokemon *p, int8_t out[PR_MAX_TYPES], unsigned flags)
 {
     /* A Stellar tera reports [STELLAR] unless the caller asks for the original types. */
     int tera = pr_get_tera_type(p);
@@ -90,19 +91,25 @@ int pr_get_types(const pr_pokemon *p, int8_t out[3], unsigned flags)
         out[0] = (int8_t)tera;
         return 1;
     }
-    int8_t t1, t2;
-    if (p->type_override[0] != -2) {
-        t1 = p->type_override[0];
-        t2 = p->type_override[1];
+    /* getBaseTypes: summonData.types when set (and not bypassed), else the form's two */
+    int8_t base[PR_MAX_SUMMON_TYPES];
+    int nb;
+    if (!(flags & PR_TYPES_BYPASS_SUMMON) && p->n_summon_types) {
+        nb = p->n_summon_types;
+        memcpy(base, p->summon_types, (size_t)nb);
     } else {
         const pr_form *f = pr_pokemon_form(p);
-        t1 = f->type1;
-        t2 = f->type2 < 0 ? POKEMON_TYPE_UNKNOWN : f->type2;
+        base[0] = f->type1;
+        base[1] = f->type2 < 0 ? POKEMON_TYPE_UNKNOWN : f->type2;
+        nb = 2;
     }
-    /* new Set([t1, t2]) then drop UNKNOWN when something else is present */
+    /* new Set(base), then drop UNKNOWN when something else is present */
     int n = 0;
-    out[n++] = t1;
-    if (t2 != t1) out[n++] = t2;
+    for (int i = 0; i < nb; i++) {
+        bool have = false;
+        for (int k = 0; k < n; k++) have = have || out[k] == base[i];
+        if (!have) out[n++] = base[i];
+    }
     if (n > 1) {
         int k = 0;
         for (int i = 0; i < n; i++)
@@ -110,7 +117,7 @@ int pr_get_types(const pr_pokemon *p, int8_t out[3], unsigned flags)
         n = k;
     }
     /* then the type Forest's Curse or Trick-or-Treat added, if the set lacks it */
-    if (p->added_type) {
+    if (!(flags & PR_TYPES_IGNORE_THIRD) && p->added_type) {
         bool have = false;
         for (int i = 0; i < n; i++) have = have || out[i] == p->added_type;
         if (!have) out[n++] = p->added_type;
@@ -118,9 +125,20 @@ int pr_get_types(const pr_pokemon *p, int8_t out[3], unsigned flags)
     return n;
 }
 
+bool pr_set_summon_types(pr_battle *bt, pr_pokemon *p, const int8_t *types, int n)
+{
+    if (n > PR_MAX_SUMMON_TYPES) {
+        pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT);
+        return false;
+    }
+    memcpy(p->summon_types, types, (size_t)n);
+    p->n_summon_types = (uint8_t)n;
+    return true;
+}
+
 bool pr_is_of_type(const pr_pokemon *p, int type)
 {
-    int8_t t[3];
+    int8_t t[PR_MAX_TYPES];
     int n = pr_get_types(p, t, 0);
     for (int i = 0; i < n; i++)
         if (t[i] == type) return true;
@@ -248,7 +266,7 @@ bool pr_is_grounded(pr_battle *bt, const pr_pokemon *p, bool ignore_semi_invulne
     if (pr_is_forcibly_grounded(bt, p)) return true;
     if (pr_is_forcibly_ungrounded(bt, p)) return false;
     bool semi = !ignore_semi_invulnerable && pr_has_battler_tag_class(bt, p, PR_TAGCLASS_SEMI_INVULNERABLE);
-    int8_t t[3];
+    int8_t t[PR_MAX_TYPES];
     int n = pr_get_types(p, t, PR_TYPES_ORIGINAL_IF_STELLAR);
     bool flying = false;
     for (int i = 0; i < n; i++) if (t[i] == POKEMON_TYPE_FLYING) flying = true;
