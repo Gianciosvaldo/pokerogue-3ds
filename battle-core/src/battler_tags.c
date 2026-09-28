@@ -48,6 +48,8 @@ bool pr_tag_type_ported(int type)
     case BATTLER_TAG_TYPE_AQUA_RING:        /* AquaRingTag */
     case BATTLER_TAG_TYPE_INGRAIN:          /* IngrainTag (TrappedTag) */
     case BATTLER_TAG_TYPE_OCTOLOCK:         /* OctolockTag (TrappedTag) */
+    case BATTLER_TAG_TYPE_RAGE:             /* RageTag: PRE_MOVE and AFTER_HIT, 1 turn */
+    case BATTLER_TAG_TYPE_PSYCHO_SHIFT:     /* PsychoShiftTag: AFTER_MOVE, 1 turn */
         return true;
     }
     return pr_damaging_trap_move(type) != 0 || pr_battler_tag_is(type, PR_TAGCLASS_PROTECTED);
@@ -210,6 +212,14 @@ static pr_battler_tag construct(int type, int turn_count, int source_move, int64
         t.turn_count = 1;
         t.source_move = MOVE_ID_OCTOLOCK;
         t.source_id = source_id;
+        break;
+    case BATTLER_TAG_TYPE_RAGE:                   /* RageTag(): no source id */
+        t.turn_count = 1;
+        t.source_move = MOVE_ID_RAGE;
+        break;
+    case BATTLER_TAG_TYPE_PSYCHO_SHIFT:           /* PsychoShiftTag() */
+        t.turn_count = 1;
+        t.source_move = MOVE_ID_PSYCHO_SHIFT;
         break;
     default:                                      /* CONFUSED, FRENZY, the semi-invulnerable tags */
         if (pr_damaging_trap_move(type)) {        /* BindTag(turnCount, sourceId) and co. */
@@ -659,6 +669,30 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
                 e->overflow = true;
         }
         return ret;
+    }
+    case BATTLER_TAG_TYPE_PSYCHO_SHIFT:
+        /* heals the user of the status it passed on once its move is over (isActive(true)):
+         * the message, then resetStatus() as a phase (revive = true) */
+        if (p->status && p->hp > 0 && p->on_field && !p->switch_out_status) {
+            pr_queue_message(bt, e);
+            pr_reset_status_phase(bt, e, p, true);
+        }
+        return false;
+    case BATTLER_TAG_TYPE_RAGE: {
+        /* AFTER_HIT: when attacksReceived.at(-1) (the turn's first record, as they are unshifted)
+         * dealt damage, Attack rises a stage (the Pokemon as its own source); the tag stays.
+         * PRE_MOVE: BattlerTag.lapse */
+        if (lapse_type != BATTLER_TAG_LAPSE_TYPE_AFTER_HIT) return --t->turn_count > 0;
+        if (!p->n_attacks_received) return true;
+        if (p->n_attacks_received > pr_attacks_received_kept(p)) {
+            pr_attacks_received_exhausted(bt, p);
+            return true;
+        }
+        if (p->attacks_received[p->n_attacks_received - 1].damage > 0) {
+            int32_t atk = STAT_ATK;
+            if (pr_unshift_stat_stage_change(bt, e, pr_battler_index(bt, p), &atk, 1, 1, p) < 0 && e) e->overflow = true;
+        }
+        return true;
     }
     case BATTLER_TAG_TYPE_FRENZY: {
         /* MoveLockTag: only a use of the locked move (or none) advances it */

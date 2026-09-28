@@ -33,6 +33,40 @@ static double weather_ball(ARGS)
     return pr_get_effective_weather_for_move(bt, u) == WEATHER_TYPE_NONE ? 1 : 2;
 }
 
+/* Morning Sun, Synthesis, Moonlight (sunnyHealRatioFunc): by getEffectiveWeatherForMove(user),
+ * 2/3 in sun or harsh sun, 1/4 in rain, sandstorm, hail, snow, heavy rain or fog, 1/2 under
+ * strong winds or no weather */
+static double sunny_heal_ratio(ARGS)
+{
+    switch (pr_get_effective_weather_for_move(bt, u)) {
+    case WEATHER_TYPE_SUNNY: case WEATHER_TYPE_HARSH_SUN: return 2.0 / 3;
+    case WEATHER_TYPE_RAIN: case WEATHER_TYPE_SANDSTORM: case WEATHER_TYPE_HAIL: case WEATHER_TYPE_SNOW:
+    case WEATHER_TYPE_HEAVY_RAIN: case WEATHER_TYPE_FOG: return 1.0 / 4;
+    case WEATHER_TYPE_STRONG_WINDS: case WEATHER_TYPE_NONE: return 1.0 / 2;
+    }
+    UNPORTED(PR_FEAT_ENGINE_LIMIT);                /* undefined upstream: no such weather */
+}
+
+/* Swallow: 0 without a Stockpiling tag (or none stockpiled), else 1/4, 1/2, then 1 */
+static double swallow_heal_ratio(ARGS)
+{
+    const pr_battler_tag *tag = pr_get_battler_tag(u, BATTLER_TAG_TYPE_STOCKPILING);
+    if (!tag || tag->stockpiled_count <= 0) return 0;
+    return tag->stockpiled_count == 1 ? .25 : tag->stockpiled_count == 2 ? .5 : 1;
+}
+
+/* Shore Up: getEffectiveWeatherForMove(user) === SANDSTORM ? 2/3 : 1/2 */
+static double shore_up_heal_ratio(ARGS)
+{
+    return pr_get_effective_weather_for_move(bt, u) == WEATHER_TYPE_SANDSTORM ? 2.0 / 3 : 1.0 / 2;
+}
+
+/* Floral Healing: arena.terrainType === GRASSY ? 2/3 : 1/2 */
+static double floral_heal_ratio(ARGS)
+{
+    return bt->terrain == TERRAIN_GRASSY ? 2.0 / 3 : 1.0 / 2;
+}
+
 /* Brine: target.getHpRatio() < .5 ? 2 : 1 */
 static double brine(ARGS)
 {
@@ -347,6 +381,10 @@ static double both_sides(ARGS)
 const pr_closure_reg pr_move_closures[] = {
     {"move:89", "d551c83b79fb", grassy_grounded_half},
     {"move:222", "d551c83b79fb", grassy_grounded_half},
+    {"move:234", "aa4ef38398a5", sunny_heal_ratio},     /* shared by Synthesis and Moonlight */
+    {"move:256", "23f0fcce7ad4", swallow_heal_ratio},
+    {"move:659", "1dcbd7907ce6", shore_up_heal_ratio},
+    {"move:666", "a5cbc44909cd", floral_heal_ratio},
     {"move:523", "d551c83b79fb", grassy_grounded_half},
     {"move:263", "ea1540a66027", facade},
     {"move:265", "2ccd7cdfa0e2", smelling_salts},

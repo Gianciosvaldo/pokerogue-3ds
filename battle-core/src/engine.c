@@ -355,6 +355,17 @@ void pr_force_move_next(pr_engine *e, const pr_pokemon *p)
     }
 }
 
+pr_phase *pr_find_move_phase(pr_engine *e, int move, int player)
+{
+    for (int i = 0; i < e->n_dyn[PH_MOVE]; i++) {
+        pr_phase *m = &e->pool[e->dyn[PH_MOVE][i]];
+        if (move >= 0 && m->move.id != move) continue;
+        if (player >= 0 && m->pokemon->is_player != (player != 0)) continue;
+        return m;
+    }
+    return NULL;
+}
+
 /* phaseManager.hasPhaseOfType("MovePhase") as the damage path reads it (Analytic) */
 void pr_sync_queued_movers(pr_battle *bt, pr_engine *e)
 {

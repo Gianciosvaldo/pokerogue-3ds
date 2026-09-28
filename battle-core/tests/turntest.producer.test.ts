@@ -588,7 +588,8 @@ it("turntest producer", async () => {
         `boss=${p.isBoss() ? 1 : 0} shiny=${p.isShiny(true) ? 1 : 0} onfield=${p.isOnField() ? 1 : 0} out=${p.switchOutStatus ? 1 : 0}`,
         `shc=${sd.hitCount} types=${L(sd.types)} added=${sd.addedType ?? 0} abilsup=${sd.abilitySuppressed ? 1 : 0}`,
         `tsd=${p.tempSummonData.turnCount} tswd=${p.tempSummonData.waveTurnCount}`,
-        `aas=${L([...sd.abilitiesApplied])} aaw=${L([...p.waveData.abilitiesApplied])}`,
+        `aas=${L([...sd.abilitiesApplied])} aaw=${L([...p.waveData.abilitiesApplied])}`
+          + (p.battleData.hasEatenBerry ? " eb=1" : ""),
       ].join(" "),
       [
         `TURN b=${b} acted=${td.acted ? 1 : 0} order=${num(td.order)} hc=${td.hitCount} hl=${td.hitsLeft}`,
@@ -861,6 +862,9 @@ it("turntest producer", async () => {
     }
     if (COND) {
       p.tempSummonData.waveTurnCount = 1 + rnd(3);
+      if (p.moveset.some((m: any) => m.moveId === MoveId.BELCH) && rnd(2) === 0) {
+        p.battleData.hasEatenBerry = true; // Belch's condition
+      }
       const pool = [...p.moveset.map((m: any) => m.moveId), MoveId.PROTECT, MoveId.DETECT, MoveId.QUICK_GUARD, MoveId.STRUGGLE];
       for (let k = rnd(4); k > 0; k--) {
         p.pushMoveHistory({
@@ -1078,6 +1082,16 @@ it("turntest producer", async () => {
               tag.autotomizeCount = 1 + rnd(3);
             }
             p.summonData.tags.push(tag);
+            // what the hit check reads with the Lock-On tag: the newest Lock-On or Mind Reader in the
+            // history and its targets (the other Pokemon, now and then the user itself), sometimes
+            // with a later move on top
+            if (type === BattlerTagType.IGNORE_ACCURACY && rnd(3) !== 0) {
+              const tb = rnd(4) === 0 ? p.getBattlerIndex() : other.getBattlerIndex();
+              p.pushMoveHistory({ move: rnd(2) ? MoveId.LOCK_ON : MoveId.MIND_READER, targets: [tb], useMode: MoveUseMode.NORMAL, result: MoveResult.SUCCESS });
+              if (rnd(3) === 0) {
+                p.pushMoveHistory({ move: p.moveset[0].moveId, targets: [other.getBattlerIndex()], useMode: MoveUseMode.NORMAL, result: MoveResult.SUCCESS });
+              }
+            }
           }
         }
         // the middle of a rampage: what the last turn's MoveLockTag lapse left

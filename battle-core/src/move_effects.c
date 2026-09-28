@@ -563,20 +563,56 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         pr_queue_message(bt, e);                         /* moveTriggers:transformedIntoType */
         return;
     }
+    case PR_AC_CueNextRoundAttr: {                       /* Round (last hit only); no canApply check */
+        /* the next Round in the queue moves next, and its user has joined the round */
+        pr_phase *next = pr_find_move_phase(e, MOVE_ID_ROUND, -1);
+        if (!next) return;
+        next->timing = MOVE_PHASE_TIMING_MODIFIER_FIRST;  /* forceMoveNext(phase.move.moveId === ROUND) */
+        next->pokemon->joined_round = true;
+        return;
+    }
+    case PR_AC_RageAttr:                                 /* PRE_APPLY; no canApply check */
+        pr_queue_message(bt, e);                         /* moveTriggers:rageIsBuilding */
+        pr_add_tag(bt, e, user, BATTLER_TAG_TYPE_RAGE, 0, move, (int64_t)user->id);
+        return;
     case PR_AC_MessageAttr:                              /* Splash, Celebrate, Lock-On, Perish Song...: */
         pr_queue_message(bt, e);                         /* every message upstream builds is non-empty */
         return;
-    case PR_AC_HealAttr: {                               /* Recover, Soft-Boiled, Roost, Heal Pulse... */
-        const pr_attr_HealAttr *x = P(HealAttr, a);
+    case PR_AC_RestAttr: {                               /* Rest */
+        /* user.trySetStatus(SLEEP, user, duration, null, overrideStatus, quiet) first; then
+         * HealAttr.apply, whose addHealPhase Rest overrides: PokemonHealPhase(maxHp), no options */
+        if (!pr_try_set_status(bt, e, user, STATUS_EFFECT_SLEEP, user, P(RestAttr, a)->duration, true, true)) return;
         if (!effect_can_apply(ef, user, target)) return;
-        double ratio = x->healRatio;
+        double ratio = P(RestAttr, a)->healRatio;
+        pr_ab_params hp = {.pokemon = user, .opponent = target, .move = move, .value = &ratio};
+        pr_apply_ab_attrs(bt, PR_AC_MoveHealBoostAbAttr, &hp);
+        pr_unshift_heal(bt, e, pr_battler_index(bt, user), pr_get_stat(user, STAT_HP, false), 0);
+        return;
+    }
+    case PR_AC_PsychoShiftEffectAttr: {                  /* Psycho Shift: no canApply gate */
+        /* the user's status (Comatose: sleep) goes to the target, and a user with a status of its
+         * own is healed of it after its move (PsychoShiftTag) */
+        int st = user->status ? user->status
+                 : pr_has_ability_active(bt, user, ABILITY_ID_COMATOSE) ? STATUS_EFFECT_SLEEP : STATUS_EFFECT_NONE;
+        if (!pr_try_set_status(bt, e, target, st, user, -1, false, true)) return;
+        if (user->status) pr_add_tag(bt, e, user, BATTLER_TAG_TYPE_PSYCHO_SHIFT, 0, move, -1);
+        return;
+    }
+    case PR_AC_HealAttr:                                 /* Recover, Soft-Boiled, Roost, Heal Pulse... */
+    case PR_AC_VariableHealAttr: {                       /* Moonlight, Swallow, Shore Up...: healRatio = healFunc(user) first */
+        bool variable = a->cls == PR_AC_VariableHealAttr;
+        const pr_attr_HealAttr *x = P(HealAttr, a);
+        const pr_attr_VariableHealAttr *v = P(VariableHealAttr, a);
+        double ratio = variable ? pr_closure_call(bt, v->healFunc, a->cls, 0, user, target, move) : x->healRatio;
+        bool self_target = variable ? v->selfTarget : x->selfTarget, show_anim = variable ? v->showAnim : x->showAnim;
+        if (!effect_can_apply(ef, user, target)) return;
         pr_ab_params hp = {.pokemon = user, .opponent = target, .move = move, .value = &ratio};
         pr_apply_ab_attrs(bt, PR_AC_MoveHealBoostAbAttr, &hp);   /* Mega Launcher's Heal Pulse */
-        pr_pokemon *on = x->selfTarget ? user : target;
+        pr_pokemon *on = self_target ? user : target;
         /* PokemonHealPhase(Math.round(maxHp * ratio), {message, showFullHpMessage, skipAnim: !showAnim}):
          * a move's heal rounds half up */
         pr_unshift_heal(bt, e, pr_battler_index(bt, on), js_round(pr_get_stat(on, STAT_HP, false) * ratio),
-                        PR_HEAL_MESSAGE | (x->showAnim ? 0 : PR_HEAL_SKIP_ANIM));
+                        PR_HEAL_MESSAGE | (show_anim ? 0 : PR_HEAL_SKIP_ANIM));
         return;
     }
     }

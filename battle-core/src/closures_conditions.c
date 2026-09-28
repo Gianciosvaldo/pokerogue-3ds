@@ -144,6 +144,21 @@ static double heal_full_hp(ARGS)
     return ok;
 }
 
+/* RestAttr (Rest): HealAttr's condition on the same attribute, then
+ * user.canSetStatus(SLEEP, quiet = true, overrideStatus = true, user) */
+static bool makes_rest(const pr_attr *a) { return a->cls == PR_AC_RestAttr; }
+static double rest(ARGS)
+{
+    OWN(makes_rest);
+    const pr_attr_RestAttr *x = P(RestAttr, a);
+    if (x->failOnFullHp) {
+        const pr_pokemon *p = x->selfTarget ? u : t;
+        if (!p) UNPORTED(PR_FEAT_MOVE_CONDITION);
+        if (is_full_hp(p)) return 0;
+    }
+    return pr_can_set_status(bt, bt->engine, (pr_pokemon *)u, STATUS_EFFECT_SLEEP, true, true, u, false);
+}
+
 /* HealOnAllyAttr (Pollen Puff): (user, target, move) => user.isOpponent(target) || super.getCondition()(...) */
 static bool makes_heal_on_ally(const pr_attr *a) { return a->cls == PR_AC_HealOnAllyAttr; }
 static double heal_on_ally(ARGS)
@@ -552,6 +567,26 @@ static double yawn(ARGS)
     return bypassed;
 }
 
+/* Psycho Shift: !target.status?.effect, and the status it would pass on (the user's, or sleep
+ * for a Comatose user) exists and target.canSetStatus(it, quiet = false, false, user): an
+ * immunity queues its message here */
+static double psycho_shift(ARGS)
+{
+    UNUSED;
+    NEED_TARGET;
+    if (t->status) return 0;
+    int st = u->status ? u->status
+             : pr_has_ability_active(bt, u, ABILITY_ID_COMATOSE) ? STATUS_EFFECT_SLEEP : STATUS_EFFECT_NONE;
+    if (!st) return 0;
+    if (!bt->engine) UNPORTED(PR_FEAT_MOVE_CONDITION);   /* its messages need a phase queue */
+    return pr_can_set_status(bt, bt->engine, (pr_pokemon *)t, st, false, false, u, false);
+}
+
+/* Belch: restriction(user => !user.battleData.hasEatenBerry, ..., alsoCondition = true) adds the
+ * condition (user, _, move) => !restriction(user, move). Stuff Cheeks shares the closure with a
+ * restriction on the side's BerryModifiers, which aren't a ported class */
+static double belch(ARGS) { UNUSED; return u->has_eaten_berry; }
+
 /* Disable: lastNonVirtualMove = target.getLastNonVirtualMove(); != null && .move !== STRUGGLE
  * getLastNonVirtualMove(): moveHistory.findLast(m => m.move !== NONE && !isVirtual(m.useMode)) */
 static const pr_turn_move *last_non_virtual_move(pr_battle *bt, const pr_pokemon *p, bool *unknown)
@@ -872,6 +907,7 @@ const pr_closure_reg pr_condition_closures[] = {
     {NULL, "7680b4c661ce", tag_overlap},
     {NULL, "e088dd3b9894", heal_full_hp},
     {NULL, "0f3b7651e995", heal_on_ally},
+    {NULL, "3a65d0b2090a", rest},
     {NULL, "17c62d0d309e", arena_tag_overlap},
     {NULL, "398a03ca7007", arena_trap_tag},
     {NULL, "c980f6dbe046", weather_change},
@@ -925,6 +961,8 @@ const pr_closure_reg pr_condition_closures[] = {
     {NULL, "3b82dbf46b74", not_repeated_success},
     {NULL, "f73e15f05b6b", not_final_boss},
     {NULL, "8ff758b28223", yawn},
+    {"move:375", "edb63cc0c6c1", psycho_shift},
+    {"move:562", "3ba58287d0b2", belch},
     {NULL, "0a338d0d1122", disable},
     {NULL, "e781731f96ae", spite},
     {NULL, "0bef0addc6de", conversion},

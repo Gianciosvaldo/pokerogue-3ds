@@ -239,6 +239,8 @@ typedef struct pr_pokemon {
      * attribute outside a simulation (sets, in insertion order) */
     uint16_t ab_applied_summon[4], ab_applied_wave[4];
     uint8_t n_ab_applied_summon, n_ab_applied_wave;
+    /* battleData */
+    bool has_eaten_berry;              /* battleData.hasEatenBerry (Belch) */
 } pr_pokemon;
 
 #define PR_MAX_PARTY 6
@@ -264,6 +266,8 @@ typedef struct pr_battle {
     uint8_t n_mods[2];
     pr_seedstr wave_seed;      /* globalScene.waveSeed; len 0 = unknown */
     int max_exp_level;         /* globalScene.getMaxExpLevel(); 0 = unknown */
+    /* turnCommand.cursor left undefined (a recharge turn's FIGHT command has -1) */
+#define PR_CURSOR_UNDEFINED INT8_MIN
     /* currentBattle.turnCommands / preTurnCommands per BattlerIndex */
     struct pr_turn_command {
         int8_t command;        /* Command; -1 = none (null) */
@@ -273,7 +277,7 @@ typedef struct pr_battle {
         uint8_t n_targets;
         uint8_t use_mode;
         bool skip;
-        int8_t cursor;         /* POKEMON: the party slot to send in */
+        int8_t cursor;         /* POKEMON: the party slot to send in; PR_CURSOR_UNDEFINED = undefined */
         bool baton;            /* POKEMON: args[0], the switch passes the baton */
     } commands[4], pre_commands[4];
     /* Faint bookkeeping: arena.playerFaints, currentBattle.enemyFaints and the faint histories

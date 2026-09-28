@@ -254,6 +254,20 @@ static double analytic(ARGS)
     return 1;
 }
 
+/* Shed Skin: (_pokemon) => randSeedInt(10) < 3 (the global generator) */
+static double shed_skin_chance(ARGS)
+{
+    UNUSED;
+    return pr_rng_seed_int(&bt->rng, 10, 0) < 3;
+}
+
+/* Healer: (pokemon) => pokemon.getAlly() != null && randSeedInt(2) === 1 */
+static double healer_chance(ARGS)
+{
+    UNUSED;
+    return pr_get_ally(bt, a) != NULL && pr_rng_seed_int(&bt->rng, 2, 0) == 1;
+}
+
 /* Prankster: (_pokemon, move) => move.category === STATUS */
 static double prankster(ARGS) { UNUSED; return pr_moves[m].category == MOVE_CATEGORY_STATUS; }
 
@@ -504,6 +518,8 @@ const pr_closure_reg pr_ability_closures[] = {
     {"ability:258", "95f58e84b99d", not_terastallized}, /* closure 645 */
     {"ability:148", "1ac928f78f0f", analytic}, /* closure 532 */
     {"ability:158", "74fa5cb6b41e", prankster}, /* closure 536 */
+    {"ability:61", "c7430ea8ec1c", shed_skin_chance}, /* closure 476 */
+    {"ability:131", "521e79b891c5", healer_chance}, /* closure 521 */
     {"ability:177", "1b589a349668", gale_wings}, /* closure 558 */
     {"ability:205", "e8d66e7b435a", triage}, /* closure 592 */
     {"ability:166", "3adbae502f95", grass_target}, /* closure 551 */

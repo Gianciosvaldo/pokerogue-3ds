@@ -1651,7 +1651,20 @@ static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
             call_move(bt, e, move, a, user, first0);
             break;
         }
-        default:            /* AwaitCombinedPledgeAttr, MovesetCopyMoveAttr (Mimic) */
+        case PR_AC_AwaitCombinedPledgeAttr: {
+            /* the combined move's message when this is the second pledge; else the first queued
+             * MovePhase of a Pokemon on the user's side (getMovePhase), when it holds a different
+             * pledge, makes this one wait for it: only with an ally, which a single battle lacks */
+            if (user->combining_pledge) {
+                pr_queue_message(bt, e);                         /* moveTriggers:combiningPledge */
+                break;
+            }
+            const pr_phase *mine = pr_find_move_phase(e, -1, user->is_player ? 1 : 0);
+            if (mine && mine->move.id != move && pr_move_has_attr(mine->move.id, PR_AC_AwaitCombinedPledgeAttr))
+                pr_note_unported(bt, a->cls);
+            break;
+        }
+        default:            /* MovesetCopyMoveAttr (Mimic) */
             pr_note_unported(bt, a->cls);
         }
     }

@@ -11,6 +11,7 @@
 #define AB_FLAG_IGNORABLE (1u << 1)
 #define AB_FLAG_UNSUPPRESSABLE (1u << 2)
 #define AB_FLAG_UNCOPIABLE (1u << 3)
+#define AB_FLAG_UNREPLACEABLE (1u << 4)
 
 #define P(T, a) ((const pr_attr_##T *)(a)->p)
 /* Nullable closure field: PR_NO_FN when absent. Structs with a `nulls` mask always
@@ -944,10 +945,36 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         }
         return 1;
     }
-    case PR_AC_PostDefendAbilitySwapAbAttr:                             /* Wandering Spirit */
-    case PR_AC_PostDefendAbilityGiveAbAttr:                             /* Mummy, Lingering Aroma */
-        /* contact, then the attacker's ability flags: setTempAbility isn't ported */
-        return pr_move_does_flag_effect_apply(bt, move, MOVE_FLAGS_MAKES_CONTACT, o, p) ? -1 : 0;
+    case PR_AC_PostTurnResetStatusAbAttr: {                             /* Shed Skin, Hydration, Healer */
+        /* the Pokemon, or its ally; any status but FAINT: the heal text, then resetStatus(false) */
+        if (!c->e) return -1;
+        const pr_pokemon *tg = P(PostTurnResetStatusAbAttr, a)->allyTarget ? pr_get_ally(bt, p) : p;
+        GATE(tg && tg->status && tg->status != STATUS_EFFECT_FAINT);
+        if (!pp->simulated) {
+            pr_queue_message(bt, c->e);                          /* getStatusEffectHealText */
+            pr_reset_status_phase(bt, c->e, (pr_pokemon *)tg, false);
+        }
+        return 1;
+    }
+    case PR_AC_PostDefendAbilitySwapAbAttr: {                           /* Wandering Spirit */
+        /* contact, and the attacker's ability swappable (neither uncopiable nor unreplaceable) */
+        GATE(pr_move_does_flag_effect_apply(bt, move, MOVE_FLAGS_MAKES_CONTACT, o, p)
+             && !(pr_abilities[o->ability].flags & (AB_FLAG_UNCOPIABLE | AB_FLAG_UNREPLACEABLE)));
+        if (!pp->simulated) {
+            uint16_t theirs = o->ability;
+            pr_set_temp_ability(bt, (pr_pokemon *)o, p->ability);
+            pr_set_temp_ability(bt, (pr_pokemon *)p, theirs);
+        }
+        return 1;
+    }
+    case PR_AC_PostDefendAbilityGiveAbAttr: {                           /* Mummy, Lingering Aroma */
+        /* contact, the attacker's ability suppressable and not one of these itself */
+        GATE(pr_move_does_flag_effect_apply(bt, move, MOVE_FLAGS_MAKES_CONTACT, o, p)
+             && !(pr_abilities[o->ability].flags & AB_FLAG_UNSUPPRESSABLE)
+             && !pr_ability_first_attr(o->ability, PR_AC_PostDefendAbilityGiveAbAttr));
+        if (!pp->simulated) pr_set_temp_ability(bt, (pr_pokemon *)o, (uint16_t)P(PostDefendAbilityGiveAbAttr, a)->ability);
+        return 1;
+    }
     case PR_AC_PostDefendWeatherChangeAbAttr: {                         /* Sand Spit */
         const pr_attr_PostDefendWeatherChangeAbAttr *x = P(PostDefendWeatherChangeAbAttr, a);
         if (!c->e) return -1;

@@ -288,6 +288,7 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             for (int j = 0; j < p->n_ab_applied_summon; j++) p->ab_applied_summon[j] = (uint16_t)atoi(it[j]);
             p->n_ab_applied_wave = (uint8_t)split(need(l, "aaw"), ',', it, 4);
             for (int j = 0; j < p->n_ab_applied_wave; j++) p->ab_applied_wave[j] = (uint16_t)atoi(it[j]);
+            p->has_eaten_berry = field(l, "eb") && inum(l, "eb") != 0;
             p->has_trainer = false;
             p->turn_move_effectiveness = -1;
         } else if (!strncmp(l, "TURN ", 5)) {
@@ -405,7 +406,7 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             for (int j = 0; j < c->n_targets; j++) c->targets[j] = (int8_t)atoi(tg[j]);
             c->use_mode = (uint8_t)inum(l, "mode");
             c->skip = inum(l, "skip") != 0;
-            c->cursor = (int8_t)unum(l, "cursor", -1);
+            c->cursor = (int8_t)unum(l, "cursor", PR_CURSOR_UNDEFINED);
             c->baton = inum(l, "baton") != 0;
         } else if (!strncmp(l, "PICK ", 5)) {
             char ps[8][64];
@@ -527,6 +528,7 @@ static void dump_mon(lines_t *L, const pr_battle *bt, const pr_pokemon *p, const
     LIST(&s, p->n_ab_applied_summon, ',', "%d", p->ab_applied_summon[i]);
     sb(&s, " aaw=");
     LIST(&s, p->n_ab_applied_wave, ',', "%d", p->ab_applied_wave[i]);
+    if (p->has_eaten_berry) sb(&s, " eb=1");
     add_line(L, "%s", s.s);
 
     s.n = 0;
@@ -680,7 +682,7 @@ static void dump_state(lines_t *L, const pr_battle *bt, const case_state *cs, bo
             sb(&s, "CMD b=%d cmd=%d move=%d targets=", k, c->command, c->move);
             LIST(&s, c->n_targets, ',', "%d", c->targets[i]);
             sb(&s, " mode=%d skip=%d cursor=", c->use_mode, c->skip);
-            num_or_u(&s, c->cursor, -1);
+            num_or_u(&s, c->cursor, PR_CURSOR_UNDEFINED);
             sb(&s, " baton=%d", c->baton);
             add_line(L, "%s", s.s);
         }

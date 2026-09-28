@@ -236,6 +236,9 @@ void pr_unshift_new(pr_battle *bt, pr_engine *e, pr_phase_type t, int battler);
 void pr_cancel_current_move(pr_engine *e, const pr_pokemon *p);
 /* phaseManager.forceMoveNext(phase => phase.pokemon === p) (Shell Trap) */
 void pr_force_move_next(pr_engine *e, const pr_pokemon *p);
+/* getMovePhase(condition): the first queued MovePhase using `move` (-1: any) of a player's (1),
+ * an enemy's (0) or anyone's (-1) Pokemon, in queue order */
+pr_phase *pr_find_move_phase(pr_engine *e, int move, int player);
 /* inSpeedOrder(side): the active Pokemon of a side (ArenaTagSide) in speed order, as upstream's
  * generator yields them (the queue is re-sorted, with its seeded shuffle, before each one) */
 typedef struct { pr_pokemon *queue[4]; int n; } pr_speed_iter;
