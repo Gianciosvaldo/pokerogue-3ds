@@ -1250,6 +1250,11 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         *pp->value *= P(MoveEffectChanceMultiplierAbAttr, a)->chanceMultiplier;
         if (*pp->value > 100) *pp->value = 100;
         return 1;
+    case PR_AC_ReflectStatusMoveAbAttr:                                 /* Magic Bounce: no canApply of its own */
+        if (!c->e) return -1;
+        GATE(true);
+        if (!pp->simulated) pr_reflect_move(bt, c->e, (pr_pokemon *)p, o, move);
+        return 1;
     case PR_AC_IgnoreMoveEffectsAbAttr:
         GATE(*pp->value > 0);
         *pp->value = 0;

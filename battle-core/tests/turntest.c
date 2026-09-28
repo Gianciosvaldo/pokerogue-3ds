@@ -375,6 +375,10 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             if (field(l, "act")) t->activated = inum(l, "act") != 0;           /* ShellTrapTag */
             if (field(l, "bpf")) t->base_pure_flying = inum(l, "bpf") != 0;    /* RoostedTag */
             if (field(l, "mid")) t->move_id = (uint16_t)inum(l, "mid");         /* DisabledTag, EncoreTag */
+            if (field(l, "scd")) {                                              /* StockpilingTag */
+                t->stock_def = (int8_t)inum(l, "scd");
+                t->stock_spdef = (int8_t)inum(l, "scs");
+            }
             /* the line holds all of a ported tag type's state, and of Protosynthesis's and Quark
              * Drive's (which only the damage path reads and a weather or terrain ending removes);
              * the others can hold more */
@@ -493,6 +497,10 @@ static const char *boost_fields(const pr_battler_tag *t)
     if (t->type == BATTLER_TAG_TYPE_ROOSTED && t->base_pure_flying) return " bpf=1";   /* RoostedTag.isBasePureFlying */
     if (t->type == BATTLER_TAG_TYPE_DISABLED || t->type == BATTLER_TAG_TYPE_ENCORE) {   /* moveId */
         snprintf(buf, sizeof buf, " mid=%d", t->move_id);
+        return buf;
+    }
+    if (t->type == BATTLER_TAG_TYPE_STOCKPILING) {            /* StockpilingTag.statChangeCounts */
+        snprintf(buf, sizeof buf, " scd=%d scs=%d", t->stock_def, t->stock_spdef);
         return buf;
     }
     if (t->type == BATTLER_TAG_TYPE_SEEDED) {                 /* SeedTag.sourceIndex */

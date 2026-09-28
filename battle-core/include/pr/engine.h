@@ -18,7 +18,7 @@ typedef enum {
     PH_TURN_START, PH_MOVE, PH_MOVE_EFFECT, PH_MOVE_END, PH_FAINT, PH_CHECK_INTERLUDE,
     PH_WEATHER_EFFECT, PH_POSITIONAL_TAG, PH_BERRY, PH_CHECK_STATUS_EFFECT, PH_POST_TURN_STATUS_EFFECT,
     PH_TURN_END, PH_RESET_STATUS, PH_STAT_STAGE_CHANGE, PH_OBTAIN_STATUS_EFFECT, PH_MOVE_CHARGE, PH_POKEMON_HEAL,
-    PH_MOVE_HEADER, PH_SWITCH_SUMMON, PH_POST_SUMMON,
+    PH_MOVE_HEADER, PH_SWITCH_SUMMON, PH_POST_SUMMON, PH_MOVE_REFLECT,
     PH_SWITCH,                 /* hands control back mid-phase for the player's pick (pr_resume_switch) */
     /* presentation: no battle state of their own */
     PH_MESSAGE, PH_DAMAGE_ANIM, PH_COMMON_ANIM, PH_SHOW_ABILITY, PH_HIDE_ABILITY, PH_POKEMON_ANIM, PH_LOAD_MOVE_ANIM, PH_MOVE_ANIM,
@@ -28,10 +28,10 @@ typedef enum {
     PH_SELECT_BIOME, PH_NEW_BATTLE,
     /* not ported yet: created where upstream creates them (so the order stays right), and
      * the turn is reported unported */
-    PH_MOVE_REFLECT, PH_DANCER, PH_TERA, PH_ATTEMPT_CAPTURE, PH_ATTEMPT_RUN, PH_TOGGLE_DOUBLE_POSITION,
+    PH_DANCER, PH_TERA, PH_ATTEMPT_CAPTURE, PH_ATTEMPT_RUN, PH_TOGGLE_DOUBLE_POSITION,
     PH_COUNT_
 } pr_phase_type;
-#define PH_FIRST_UNPORTED PH_MOVE_REFLECT
+#define PH_FIRST_UNPORTED PH_DANCER
 extern const char *const pr_phase_name[PH_COUNT_];
 
 /* An upstream PokemonMove the phase holds: a moveset slot, or a detached one
@@ -78,6 +78,7 @@ typedef struct pr_phase {
     int8_t ssc_stat[7], ssc_stages[7];
     uint8_t n_ssc;
     bool ssc_message, ssc_ignore_abilities, ssc_processed, ssc_self_target;
+    bool ssc_stockpile;            /* onChange: StockpilingTag.onStatStagesChanged (the only caller) */
     uint8_t ssc_source_type;
     /* ObtainStatusEffectPhase: the effect, sourcePokemon (source_p), sleepTurnsRemaining (-1 = undefined) */
     uint8_t ose_effect;
@@ -211,6 +212,9 @@ int pr_called_selected_list(uint16_t *move, uint16_t *sel, int max);
 bool pr_try_set_terrain(pr_battle *bt, pr_engine *e, int terrain, bool ignore_anim, const pr_pokemon *user);
 void pr_remove_tags_by_source_id(pr_battle *bt, pr_engine *e, pr_pokemon *p, int64_t source_id);
 void pr_transfer_tags_by_source_id(pr_pokemon *p, int64_t from, int64_t to);
+/* the FaintPhase's lapses of the fainted Pokemon's Destiny Bond and Grudge */
+void pr_destiny_bond_lapse(pr_battle *bt, pr_engine *e, const pr_battler_tag *t, pr_pokemon *attacker);
+void pr_grudge_lapse(pr_battle *bt, pr_engine *e, pr_pokemon *fainted, pr_pokemon *source);
 /* the moveset slot holding `move` with PP left (!isOutOfPp()), -1 when none */
 int pr_moveset_slot_with_pp(const pr_pokemon *p, int move);
 /* the move new EncoreTag(..).canAdd(p) would lock p into; 0 when it can't be added, -1 when the
@@ -243,6 +247,12 @@ void pr_arena_conditional_protect(pr_battle *bt, pr_engine *e, int side, const p
 void pr_unshift_new(pr_battle *bt, pr_engine *e, pr_phase_type t, int battler);
 /* the running phase, when it is a MovePhase (of Pokemon p, unless p is NULL): phase.cancel() */
 void pr_cancel_current_move(pr_engine *e, const pr_pokemon *p);
+/* MagicCoatTag.apply / ReflectStatusMoveAbAttr.apply: `pokemon` sends `move` back with a
+ * MovePhase(pokemon, targets, new PokemonMove(move), REFLECTED, FIRST): at `opponent`, or at the
+ * move's own targets for a multi-target move */
+void pr_reflect_move(pr_battle *bt, pr_engine *e, pr_pokemon *pokemon, const pr_pokemon *opponent, int move);
+/* the running phase's fail() when it is a MovePhase */
+void pr_fail_current_move(pr_engine *e);
 /* phaseManager.forceMoveNext(phase => phase.pokemon === p) (Shell Trap) */
 void pr_force_move_next(pr_engine *e, const pr_pokemon *p);
 /* getMovePhase(condition): the first queued MovePhase using `move` (-1: any) of a player's (1),

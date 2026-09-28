@@ -55,6 +55,21 @@ bool pr_tag_type_ported(int type)
     case BATTLER_TAG_TYPE_TORMENT:          /* TormentTag (MoveRestrictionBattlerTag) */
     case BATTLER_TAG_TYPE_ENCORE:           /* EncoreTag (MoveRestrictionBattlerTag) */
     case BATTLER_TAG_TYPE_INFATUATED:       /* InfatuatedTag: Attract, Cute Charm */
+    case BATTLER_TAG_TYPE_SALT_CURED:       /* SaltCuredTag */
+    case BATTLER_TAG_TYPE_CURSED:           /* CursedTag: a Ghost's Curse */
+    case BATTLER_TAG_TYPE_NIGHTMARE:        /* NightmareTag */
+    case BATTLER_TAG_TYPE_DROWSY:           /* DrowsyTag: Yawn */
+    case BATTLER_TAG_TYPE_POWDER:           /* PowderTag */
+    case BATTLER_TAG_TYPE_FLOATING:         /* FloatingTag: Magnet Rise */
+    case BATTLER_TAG_TYPE_TELEKINESIS:      /* TelekinesisTag */
+    case BATTLER_TAG_TYPE_CRIT_BOOST:       /* CritBoostTag: Focus Energy */
+    case BATTLER_TAG_TYPE_DRAGON_CHEER:     /* CritBoostTag: Dragon Cheer */
+    case BATTLER_TAG_TYPE_SYRUP_BOMB:       /* SyrupBombTag */
+    case BATTLER_TAG_TYPE_MAGIC_COAT:       /* MagicCoatTag: the MoveReflectPhase reads it */
+    case BATTLER_TAG_TYPE_ELECTRIFIED:      /* ElectrifiedTag: the move type reads it */
+    case BATTLER_TAG_TYPE_DESTINY_BOND:     /* DestinyBondTag: the FaintPhase lapses it */
+    case BATTLER_TAG_TYPE_GRUDGE:           /* GrudgeTag: the same */
+    case BATTLER_TAG_TYPE_STOCKPILING:      /* StockpilingTag */
         return true;
     }
     return pr_damaging_trap_move(type) != 0 || pr_battler_tag_is(type, PR_TAGCLASS_PROTECTED);
@@ -275,6 +290,61 @@ static pr_battler_tag construct(int type, int turn_count, int source_move, int64
         t.turn_count = 1;
         t.source_id = source_id;
         break;
+    case BATTLER_TAG_TYPE_SALT_CURED:             /* SaltCuredTag(sourceId): TURN_END, 1 turn */
+        t.turn_count = 1;
+        t.source_move = MOVE_ID_SALT_CURE;
+        t.source_id = source_id;
+        break;
+    case BATTLER_TAG_TYPE_MAGIC_COAT:             /* MagicCoatTag(): TURN_END, 1 turn */
+        t.turn_count = 1;
+        t.source_move = MOVE_ID_MAGIC_COAT;
+        break;
+    case BATTLER_TAG_TYPE_STOCKPILING:            /* StockpilingTag(sourceMove): CUSTOM, 1 turn */
+        t.turn_count = 1;
+        break;
+    case BATTLER_TAG_TYPE_ELECTRIFIED:            /* ElectrifiedTag(): TURN_END, 1 turn */
+        t.turn_count = 1;
+        t.source_move = MOVE_ID_ELECTRIFY;
+        break;
+    case BATTLER_TAG_TYPE_DESTINY_BOND:           /* DestinyBondTag(sourceMove, sourceId): PRE_MOVE, 1 turn */
+        t.turn_count = 1;
+        t.source_id = source_id;
+        break;
+    case BATTLER_TAG_TYPE_GRUDGE:                 /* GrudgeTag(): PRE_MOVE, 1 turn, no source move */
+        t.turn_count = 1;
+        t.source_move = 0;
+        break;
+    case BATTLER_TAG_TYPE_SYRUP_BOMB:             /* SyrupBombTag(sourceId): TURN_END, 3 turns */
+        t.turn_count = 3;
+        t.source_move = MOVE_ID_SYRUP_BOMB;
+        t.source_id = source_id;
+        break;
+    case BATTLER_TAG_TYPE_CURSED:                 /* CursedTag(sourceId): TURN_END, 1 turn */
+        t.turn_count = 1;
+        t.source_move = MOVE_ID_CURSE;
+        t.source_id = source_id;
+        break;
+    case BATTLER_TAG_TYPE_NIGHTMARE:              /* NightmareTag(): TURN_END, 1 turn */
+        t.turn_count = 1;
+        t.source_move = MOVE_ID_NIGHTMARE;
+        break;
+    case BATTLER_TAG_TYPE_DROWSY:                 /* DrowsyTag(): TURN_END, 2 turns */
+        t.turn_count = 2;
+        t.source_move = MOVE_ID_YAWN;
+        break;
+    case BATTLER_TAG_TYPE_POWDER:                 /* PowderTag(): TURN_END, 1 turn, no source move */
+    case BATTLER_TAG_TYPE_TELEKINESIS:            /* TelekinesisTag(): TURN_END, 3 turns, no source move */
+        t.turn_count = type == BATTLER_TAG_TYPE_POWDER ? 1 : 3;
+        t.source_move = 0;
+        break;
+    case BATTLER_TAG_TYPE_FLOATING:               /* FloatingTag(turnCount): no source move */
+        t.source_move = 0;
+        break;
+    case BATTLER_TAG_TYPE_CRIT_BOOST:             /* CritBoostTag(tagType, sourceMove): TURN_END, 1 turn */
+    case BATTLER_TAG_TYPE_DRAGON_CHEER:
+        t.turn_count = 1;
+        t.crit_stages = 1;
+        break;
     default:                                      /* CONFUSED, FRENZY, the semi-invulnerable tags */
         if (pr_damaging_trap_move(type)) {        /* BindTag(turnCount, sourceId) and co. */
             t.source_move = (uint16_t)pr_damaging_trap_move(type);
@@ -338,6 +408,8 @@ static bool can_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *
         pr_pokemon *source = tag_source(bt, t);
         return source && opposite_gender(p, source);
     }
+    case BATTLER_TAG_TYPE_DROWSY:                         /* no Yawn on the ground in Electric Terrain */
+        return bt->terrain != TERRAIN_ELECTRIC || !pr_is_grounded(bt, p, false);
     case BATTLER_TAG_TYPE_PERISH_SONG:
         return !p->is_boss;                                   /* !isBossImmune() */
     case BATTLER_TAG_TYPE_ROOSTED:
@@ -430,6 +502,18 @@ static void roost_on_remove(pr_battle *bt, pr_pokemon *p, const pr_battler_tag *
 }
 
 /* tag.onAdd(pokemon); t is the tag in p->tags */
+/* StockpilingTag.onAdd (onOverlap too): below 3 stacks, one more with its message, then Defense
+ * and Sp. Def +1 from the Pokemon itself, the tag counting each raise that applies */
+static void stockpile_on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t)
+{
+    if (t->stockpiled_count >= 3) return;
+    t->stockpiled_count++;
+    pr_queue_message(bt, e);
+    static const int32_t stats[] = {STAT_SPDEF, STAT_DEF};
+    int ph = pr_unshift_stat_stage_change(bt, e, pr_battler_index(bt, p), stats, 2, 1, p);
+    if (ph >= 0) e->pool[ph].ssc_stockpile = true;
+}
+
 static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t)
 {
     switch (t->type) {
@@ -452,8 +536,29 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
     case BATTLER_TAG_TYPE_TORMENT:
     case BATTLER_TAG_TYPE_ENCORE:
     case BATTLER_TAG_TYPE_INFATUATED:
+    case BATTLER_TAG_TYPE_NIGHTMARE:
+    case BATTLER_TAG_TYPE_DROWSY:
+    case BATTLER_TAG_TYPE_POWDER:
+    case BATTLER_TAG_TYPE_TELEKINESIS:
+    case BATTLER_TAG_TYPE_SYRUP_BOMB:
+    case BATTLER_TAG_TYPE_MAGIC_COAT:
+    case BATTLER_TAG_TYPE_ELECTRIFIED:
+    case BATTLER_TAG_TYPE_GRUDGE:
         pr_queue_message(bt, e);
         return;
+    case BATTLER_TAG_TYPE_SALT_CURED:                /* the message only with its source */
+        if (tag_source(bt, t)) pr_queue_message(bt, e);
+        return;
+    case BATTLER_TAG_TYPE_CRIT_BOOST:
+    case BATTLER_TAG_TYPE_DRAGON_CHEER: {
+        /* 2 stages; Dragon Cheer only 1 for a Pokemon that isn't Dragon type (its original types
+         * when Stellar), then the message */
+        int8_t ty[PR_MAX_TYPES];
+        int n = pr_get_types(p, ty, PR_TYPES_ORIGINAL_IF_STELLAR);
+        t->crit_stages = (int8_t)(t->type == BATTLER_TAG_TYPE_DRAGON_CHEER && !has_type(ty, n, POKEMON_TYPE_DRAGON) ? 1 : 2);
+        pr_queue_message(bt, e);
+        return;
+    }
     case BATTLER_TAG_TYPE_DISABLED: {
         /* the Pokemon's last non-virtual move becomes moveId, with the message; nothing against
          * no move or Struggle */
@@ -466,6 +571,9 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
     }
     case BATTLER_TAG_TYPE_ROOSTED:
         roost_on_add(bt, p, t);
+        return;
+    case BATTLER_TAG_TYPE_STOCKPILING:
+        stockpile_on_add(bt, e, p, t);
         return;
     case BATTLER_TAG_TYPE_SEEDED: {
         /* SeedTag.onAdd: nothing without its source (getSourcePokemon searches both parties; only
@@ -530,10 +638,14 @@ static void on_overlap(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_ta
     case BATTLER_TAG_TYPE_CONFUSED:
     case BATTLER_TAG_TYPE_CHARGED:
     case BATTLER_TAG_TYPE_INFATUATED:
+    case BATTLER_TAG_TYPE_NIGHTMARE:
         pr_queue_message(bt, e);
         return;
     case BATTLER_TAG_TYPE_AUTOTOMIZED:
         on_add(bt, e, p, t);
+        return;
+    case BATTLER_TAG_TYPE_STOCKPILING:
+        stockpile_on_add(bt, e, p, t);
         return;
     }
 }
@@ -775,6 +887,66 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
         /* no longer added this turn; it ends early once the move has no PP left */
         t->added_this_turn = false;
         return pr_moveset_slot_with_pp(p, t->move_id) >= 0 && restriction_lapse(bt, e, t, lapse_type);
+    case BATTLER_TAG_TYPE_SALT_CURED:
+    case BATTLER_TAG_TYPE_CURSED:
+    case BATTLER_TAG_TYPE_NIGHTMARE: {
+        /* lapseType !== CUSTOM || BattlerTag.lapse; while it stays: (Nightmare's message first) an
+         * animation, then unless Magic Guard blocks it the damage (a quarter of max HP; Salt Cure an
+         * eighth on Steel or Water types, else a sixteenth) and (Salt Cure's, Curse's) message */
+        bool ret = lapse_type != BATTLER_TAG_LAPSE_TYPE_CUSTOM || --t->turn_count > 0;
+        if (!ret) return false;
+        if (t->type == BATTLER_TAG_TYPE_NIGHTMARE) pr_queue_message(bt, e);
+        pr_unshift_new(bt, e, PH_COMMON_ANIM, pr_battler_index(bt, p));
+        bool cancelled = false;
+        pr_ab_params ap = {.pokemon = p, .move = -1, .flag = &cancelled};
+        pr_apply_ab_attrs(bt, PR_AC_BlockNonDirectDamageAbAttr, &ap);
+        if (cancelled) return true;
+        double div = 4;
+        if (t->type == BATTLER_TAG_TYPE_SALT_CURED)
+            div = pr_is_of_type(p, POKEMON_TYPE_STEEL) || pr_is_of_type(p, POKEMON_TYPE_WATER) ? 8 : 16;
+        pr_damage_and_update(bt, e, p, max_hp_part(p, div), HIT_RESULT_INDIRECT, false, NULL);
+        if (t->type != BATTLER_TAG_TYPE_NIGHTMARE) pr_queue_message(bt, e);
+        return true;
+    }
+    case BATTLER_TAG_TYPE_CRIT_BOOST:
+    case BATTLER_TAG_TYPE_DRAGON_CHEER:
+        return lapse_type != BATTLER_TAG_LAPSE_TYPE_CUSTOM || --t->turn_count > 0;
+    case BATTLER_TAG_TYPE_GRUDGE:                 /* its CUSTOM lapse is the FaintPhase's (pr_grudge_lapse) */
+        return false;
+    case BATTLER_TAG_TYPE_SYRUP_BOMB: {
+        /* ends at once when its source is gone or off the field; else the message and Speed -1
+         * (the Pokemon as its own source), then BattlerTag.lapse */
+        pr_pokemon *source = tag_source(bt, t);
+        if (!source || !active_on_field(source)) return false;
+        pr_queue_message(bt, e);
+        int32_t spd = STAT_SPD;
+        if (pr_unshift_stat_stage_change(bt, e, pr_battler_index(bt, p), &spd, 1, -1, p) < 0 && e) e->overflow = true;
+        return --t->turn_count > 0;
+    }
+    case BATTLER_TAG_TYPE_DROWSY:
+        /* at the end of its count the Pokemon falls asleep: trySetStatus(SLEEP) */
+        if (--t->turn_count > 0) return true;
+        pr_try_set_status(bt, e, p, STATUS_EFFECT_SLEEP, NULL, -1, false, true);
+        return false;
+    case BATTLER_TAG_TYPE_POWDER: {
+        /* TURN_END ends it. Else, in a MovePhase of a Fire-type move (unless unsuppressed Heavy Rain
+         * blocks it first): the move fails, the animation, a quarter of max HP (rounded down)
+         * unless Magic Guard blocks it, then the message */
+        if (lapse_type == BATTLER_TAG_LAPSE_TYPE_TURN_END) return false;
+        if (!e || e->current < 0 || e->pool[e->current].type != PH_MOVE) return true;
+        int move = e->pool[e->current].move.id;
+        if (pr_get_move_type(bt, p, move) != POKEMON_TYPE_FIRE
+            || (bt->weather == WEATHER_TYPE_HEAVY_RAIN && !pr_weather_effect_suppressed(bt)))
+            return true;
+        pr_fail_current_move(e);
+        pr_unshift_new(bt, e, PH_COMMON_ANIM, pr_battler_index(bt, p));   /* CommonAnim.POWDER */
+        bool cancelled = false;
+        pr_ab_params ap = {.pokemon = p, .move = -1, .flag = &cancelled};
+        pr_apply_ab_attrs(bt, PR_AC_BlockNonDirectDamageAbAttr, &ap);
+        if (!cancelled) pr_damage_and_update(bt, e, p, floor(pr_get_stat(p, STAT_HP, false) / 4.0), HIT_RESULT_INDIRECT, false, NULL);
+        pr_queue_message(bt, e);
+        return true;
+    }
     case BATTLER_TAG_TYPE_INFATUATED: {
         /* lapseType !== CUSTOM || BattlerTag.lapse; no source ends it. Else the message, the
          * ATTRACT animation, and half the time the immobilized message and the running
@@ -906,10 +1078,21 @@ static void on_remove(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_battl
     case BATTLER_TAG_TYPE_TAUNT:
     case BATTLER_TAG_TYPE_ENCORE:
     case BATTLER_TAG_TYPE_INFATUATED:
+    case BATTLER_TAG_TYPE_TELEKINESIS:
+    case BATTLER_TAG_TYPE_CRIT_BOOST:
+    case BATTLER_TAG_TYPE_DRAGON_CHEER:
         pr_queue_message(bt, e);
         return;
     case BATTLER_TAG_TYPE_ROOSTED:
         roost_on_remove(bt, p, t);
+        return;
+    case BATTLER_TAG_TYPE_STOCKPILING:
+        /* each stat drops by the raises the tag counted, from the Pokemon itself */
+        if (t->stock_def > 0 || t->stock_spdef > 0) {
+            const int8_t stat[] = {STAT_DEF, STAT_SPDEF};
+            const int8_t stages[] = {(int8_t)-t->stock_def, (int8_t)-t->stock_spdef};
+            pr_unshift_stat_stage_change_ex(bt, e, pr_battler_index(bt, p), stat, stages, 2, p, 0);
+        }
         return;
     case BATTLER_TAG_TYPE_SUBSTITUTE:
         /* the removal animation (PokemonAnimPhase) unless the Pokemon is in focus (its own move
@@ -926,6 +1109,40 @@ static void on_remove(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_battl
         return;
     }
     if (pr_damaging_trap_move(t->type)) pr_queue_message(bt, e);   /* TrappedTag.onRemove */
+}
+
+/* FaintPhase: the fainted Pokemon's DestinyBondTag.lapse(source, CUSTOM), called on the tag
+ * directly (it stays until resetSummonData). Once the Destiny Bond user has fainted, its
+ * attacker loses its remaining HP (INDIRECT_KO), unless it is the user's ally or a boss. */
+void pr_destiny_bond_lapse(pr_battle *bt, pr_engine *e, const pr_battler_tag *t, pr_pokemon *attacker)
+{
+    pr_pokemon *source = tag_source(bt, t);
+    if (!source || source->hp > 0) return;
+    if (pr_get_ally(bt, source) == attacker) return;
+    pr_queue_message(bt, e);                       /* destinyBondLapseIsBoss, or destinyBondLapse */
+    if (attacker->is_boss) return;
+    pr_damage_and_update(bt, e, attacker, attacker->hp, HIT_RESULT_INDIRECT_KO, false, NULL);
+}
+
+/* FaintPhase: GrudgeTag.lapse(fainted, CUSTOM, source): an active opponent that knocked the
+ * Pokemon out loses all the PP of its last non-virtual move (not Struggle), with the message */
+void pr_grudge_lapse(pr_battle *bt, pr_engine *e, pr_pokemon *fainted, pr_pokemon *source)
+{
+    if (!source || source->hp <= 0 || !pr_is_opponent(bt, fainted, source)) return;
+    bool unknown;
+    const pr_turn_move *last = pr_last_non_virtual_move(bt, source, false, true, &unknown);
+    if (!last || last->move == MOVE_ID_STRUGGLE) return;
+    for (int s = 0; s < source->n_moves; s++) {
+        if (source->moves[s] != last->move) continue;
+        int move = source->moves[s];
+        double step = floor(pr_moves[move].pp / 5.0);
+        int max = source->max_pp_override[s] > 0 ? source->max_pp_override[s]
+                  : pr_moves[move].pp + source->pp_up[s] * (int)(step < 1 ? 1 : step);
+        int used = source->pp_used[s] + (max - source->pp_used[s]);   /* usePp(remaining) */
+        source->pp_used[s] = (uint8_t)(used > max ? max : used);
+        pr_queue_message(bt, e);
+        return;
+    }
 }
 
 /* ---------------------------------------------------------------- Pokemon's tag methods */

@@ -589,6 +589,33 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         pr_unshift_heal(bt, e, pr_battler_index(bt, user), pr_get_stat(user, STAT_HP, false), 0);
         return;
     }
+    case PR_AC_DestinyBondAttr:                          /* PRE_APPLY; no canApply check */
+        pr_queue_message(bt, e);                         /* moveTriggers:tryingToTakeFoeDown */
+        pr_add_tag(bt, e, user, BATTLER_TAG_TYPE_DESTINY_BOND, 0, move, (int64_t)user->id);
+        return;
+    case PR_AC_CurseAttr: {                              /* Curse: no canApply check */
+        /* a Ghost user (user.getTypes()) curses the target for half its own max HP (the attack
+         * fails on one already cursed); any other user: Attack and Defense +1, then Speed -1 */
+        int8_t ty[PR_MAX_TYPES];
+        int n = pr_get_types(user, ty, 0);
+        bool ghost = false;
+        for (int i = 0; i < n; i++) ghost |= ty[i] == POKEMON_TYPE_GHOST;
+        if (ghost) {
+            if (pr_get_battler_tag(target, BATTLER_TAG_TYPE_CURSED)) {
+                pr_queue_message(bt, e);                 /* battle:attackFailed */
+                return;
+            }
+            double d = floor(pr_get_stat(user, STAT_HP, false) / 2.0);
+            pr_damage_and_update(bt, e, user, d < 1 ? 1 : d, HIT_RESULT_INDIRECT, false, NULL);
+            pr_queue_message(bt, e);                     /* battlerTags:cursedOnAdd */
+            pr_add_tag(bt, e, target, BATTLER_TAG_TYPE_CURSED, 0, move, (int64_t)user->id);
+            return;
+        }
+        static const int32_t up[2] = {STAT_ATK, STAT_DEF}, down[1] = {STAT_SPD};
+        if (pr_unshift_stat_stage_change(bt, e, pr_battler_index(bt, user), up, 2, 1, user) < 0) e->overflow = true;
+        if (pr_unshift_stat_stage_change(bt, e, pr_battler_index(bt, user), down, 1, -1, user) < 0) e->overflow = true;
+        return;
+    }
     case PR_AC_PsychoShiftEffectAttr: {                  /* Psycho Shift: no canApply gate */
         /* the user's status (Comatose: sleep) goes to the target, and a user with a status of its
          * own is healed of it after its move (PsychoShiftTag) */

@@ -107,6 +107,7 @@ typedef struct pr_battler_tag {
     int64_t source_id;             /* -1 = none */
     int8_t crit_stages;            /* CritBoostTag.critStages */
     int8_t stockpiled_count;       /* StockpilingTag.stockpiledCount */
+    int8_t stock_def, stock_spdef; /* StockpilingTag.statChangeCounts[DEF], [SPDEF] */
     int16_t autotomize_count;      /* AutotomizedTag.autotomizeCount */
     int8_t faint_count;            /* SupremeOverlordTag.faintCount */
     int8_t stat;                   /* HighestStatBoostTag.stat */

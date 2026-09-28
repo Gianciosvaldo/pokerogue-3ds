@@ -332,6 +332,41 @@ void pr_cancel_current_move(pr_engine *e, const pr_pokemon *p)
     if (m->type == PH_MOVE && (!p || m->pokemon == p)) move_cancel(m);
 }
 
+void pr_reflect_move(pr_battle *bt, pr_engine *e, pr_pokemon *pokemon, const pr_pokemon *opponent, int move)
+{
+    int8_t tg[4];
+    int n = 1;
+    if (pr_move_is_multi_target(move)) {
+        bool multiple;
+        n = pr_get_move_targets(bt, pokemon, move, -1, tg, &multiple);
+    } else {
+        tg[0] = (int8_t)pr_battler_index(bt, opponent);
+    }
+    if (pr_unshift_move_phase(bt, e, pokemon, move, -1, tg, n, MOVE_USE_MODE_REFLECTED, MOVE_PHASE_TIMING_MODIFIER_FIRST) < 0)
+        e->overflow = true;
+}
+
+/* MoveReflectPhase: Magic Coat before Magic Bounce */
+static void move_reflect_phase(pr_battle *bt, pr_engine *e, int ph)
+{
+    pr_phase *r = PH(ph);
+    pr_pokemon *p = r->pokemon, *opponent = r->source_p;
+    int move = r->move_id;
+    if (pr_get_battler_tag(p, BATTLER_TAG_TYPE_MAGIC_COAT)) {
+        pr_reflect_move(bt, e, p, opponent, move);
+        return;
+    }
+    pr_ab_params ap = {.pokemon = p, .opponent = opponent, .move = move};
+    pr_apply_ab_attrs(bt, PR_AC_ReflectStatusMoveAbAttr, &ap);
+}
+
+void pr_fail_current_move(pr_engine *e)
+{
+    if (!e || e->current < 0) return;
+    pr_phase *m = PH(e->current);
+    if (m->type == PH_MOVE) move_fail(m);
+}
+
 /* the Pokemon's moveQueue.shift() */
 static void move_queue_shift(pr_pokemon *p, pr_turn_move *out)
 {
@@ -392,15 +427,14 @@ static double pokemon_damage(pr_battle *bt, pr_engine *e, pr_pokemon *p, double 
 /* ---- status effects (Status, Pokemon.cureStatus / resetStatus) ---- */
 
 /* Pokemon.clearStatus(confusion, reloadAssets): status = null */
-static void clear_status(pr_battle *bt, pr_pokemon *p, bool confusion)
+static void clear_status(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool confusion)
 {
     uint8_t last = p->status;
     p->status = 0;
     p->status_toxic_turns = p->status_sleep_turns = p->status_freeze_turns = -1;
-    if (last == STATUS_EFFECT_SLEEP && pr_get_battler_tag(p, BATTLER_TAG_TYPE_NIGHTMARE))
-        pr_note_unported(bt, PR_FEAT_TAG_LAPSE); /* lapseTag(NIGHTMARE) */
-    if (confusion && pr_get_battler_tag(p, BATTLER_TAG_TYPE_CONFUSED))
-        pr_note_unported(bt, PR_FEAT_TAG_LAPSE); /* lapseTag(CONFUSED) */
+    /* waking up ends a nightmare: lapseTag(NIGHTMARE), a CUSTOM lapse */
+    if (last == STATUS_EFFECT_SLEEP) pr_lapse_tag(bt, e, p, BATTLER_TAG_TYPE_NIGHTMARE, BATTLER_TAG_LAPSE_TYPE_CUSTOM);
+    if (confusion) pr_lapse_tag(bt, e, p, BATTLER_TAG_TYPE_CONFUSED, BATTLER_TAG_LAPSE_TYPE_CUSTOM);
 }
 
 /* Pokemon.resetStatus(revive, confusion = false, reloadAssets = false, asPhase = true) */
@@ -423,7 +457,7 @@ static void cure_status(pr_battle *bt, pr_engine *e, pr_pokemon *p, int effect)
 {
     if (effect != p->status) return;
     pr_queue_message(bt, e);
-    clear_status(bt, p, false);
+    clear_status(bt, e, p, false);
 }
 
 /* Status.incrementTurn(): the counters count down while truthy (undefined is -1 here) */
@@ -1271,7 +1305,6 @@ static int hit_check(pr_battle *bt, pr_engine *e, int ph, pr_pokemon *target, do
     /* isMoveReflectableBy */
     if (fx->use_mode != MOVE_USE_MODE_REFLECTED && !semi && (mv->flags & MOVE_FLAGS_REFLECTABLE)
         && (pr_get_battler_tag(target, BATTLER_TAG_TYPE_MAGIC_COAT) || pr_has_ability_with_attr(bt, target, PR_AC_ReflectStatusMoveAbAttr))) {
-        pr_note_unported(bt, PR_FEAT_PHASE_0 + PH_MOVE_REFLECT);
         return HIT_CHECK_RESULT_REFLECTED;
     }
     if (field_targeted) { *eff_out = 1; return HIT_CHECK_RESULT_HIT; }
@@ -1761,7 +1794,12 @@ static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
         double eff;
         int hc = hit_check(bt, e, ph, targets[i], &eff);
         if (field_move && hc == HIT_CHECK_RESULT_REFLECTED) {
-            pr_note_unported(bt, PR_FEAT_PHASE_0 + PH_MOVE_REFLECT);
+            /* a field move stops at the first target that bounces it: targets = [target] */
+            targets[0] = targets[i];
+            fx->hit_check[0] = (uint8_t)hc;
+            fx->hit_eff[0] = eff;
+            fx->n_hit_checks = 1;
+            nt = 1;
             break;
         }
         if (hc == HIT_CHECK_RESULT_HIT) any_success = true;
@@ -1804,9 +1842,16 @@ static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
             pr_queue_message(bt, e);
             miss_effects(bt, e, user, move, PR_AC_MissEffectAttr);
             break;
-        case HIT_CHECK_RESULT_REFLECTED:
-            unshift_new(bt, e, PH_MOVE_REFLECT, pr_battler_index(bt, targets[i]));
+        case HIT_CHECK_RESULT_REFLECTED: {
+            /* MoveReflectPhase(target, user, move) */
+            int rp = new_pokemon_phase(e, PH_MOVE_REFLECT, pr_battler_index(bt, targets[i]));
+            if (rp < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); e->overflow = true; break; }
+            PH(rp)->pokemon = targets[i];
+            PH(rp)->source_p = user;
+            PH(rp)->move_id = (uint16_t)move;
+            pr_phase_unshift(bt, e, rp);
             break;
+        }
         }
     }
     /* stellarTypesBoosted gets the move's type for any damaging move */
@@ -1914,8 +1959,12 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
     bool player = f->battler < 2;
     pr_pokemon *source = f->source >= 0 ? slot(bt, f->source) : NULL;
     if (source) {
-        if (pr_get_battler_tag(p, BATTLER_TAG_TYPE_DESTINY_BOND) || pr_get_battler_tag(p, BATTLER_TAG_TYPE_GRUDGE))
-            pr_note_unported(bt, PR_FEAT_TAG_LAPSE);
+        const pr_battler_tag *db = pr_get_battler_tag(p, BATTLER_TAG_TYPE_DESTINY_BOND);
+        if (db) {
+            pr_battler_tag copy = *db;
+            pr_destiny_bond_lapse(bt, e, &copy, source);
+        }
+        if (pr_get_battler_tag(p, BATTLER_TAG_TYPE_GRUDGE)) pr_grudge_lapse(bt, e, p, source);
     }
     reset_summon_data(p);
     if (!f->prevent_instant_revive) turn_modifiers(bt, player, p);   /* Reviver Seed */
@@ -2379,6 +2428,7 @@ static int new_stat_stage_change(pr_battle *bt, pr_engine *e, int battler, const
     q->ssc_ignore_abilities = opts->ssc_ignore_abilities;
     q->ssc_processed = opts->ssc_processed;
     q->ssc_source_type = opts->ssc_source_type;
+    q->ssc_stockpile = opts->ssc_stockpile;
     q->ssc_self_target = opts->source_p && opts->source_p == slot(bt, battler);
     q->n_ssc = 0;
     for (int i = 0; i < n; i++)
@@ -2514,7 +2564,21 @@ static void stat_stage_change_phase(pr_battle *bt, pr_engine *e, int ph)
         to = to < -6 ? -6 : to > 6 ? 6 : to;
         applied[i] = (int8_t)(to - cur);
     }
-    /* options.onChange: no caller on the ported paths passes one */
+    /* options.onChange: only Stockpile passes one, bound to its StockpilingTag. Each stat raised
+     * by a positive applied stage counts once (the Pokemon's current tag stands in for the bound
+     * instance: the phase runs right after the tag's onAdd) */
+    if (q->ssc_stockpile) {
+        pr_battler_tag *st = NULL;
+        for (int i = 0; i < p->n_tags; i++)
+            if (p->tags[i].type == BATTLER_TAG_TYPE_STOCKPILING) st = &p->tags[i];
+        bool def = false, spdef = false;
+        for (int i = 0; i < q->n_ssc; i++) {
+            def |= q->ssc_stat[i] == STAT_DEF && applied[i] > 0;
+            spdef |= q->ssc_stat[i] == STAT_SPDEF && applied[i] > 0;
+        }
+        if (st && def) st->stock_def++;
+        if (st && spdef) st->stock_spdef++;
+    }
     /* queueStatChangeMessages: the given message, or one per distinct applied stage count */
     if (q->ssc_message) pr_queue_message(bt, e);
     else
@@ -2571,11 +2635,7 @@ static void stat_stage_change_phase(pr_battle *bt, pr_engine *e, int ph)
 static void reset_status_phase(pr_battle *bt, pr_engine *e, int ph)
 {
     pr_pokemon *p = PH(ph)->pokemon;
-    uint8_t last = p->status;
-    p->status = 0;
-    p->status_toxic_turns = p->status_sleep_turns = p->status_freeze_turns = -1;
-    if (last == STATUS_EFFECT_SLEEP && pr_get_battler_tag(p, BATTLER_TAG_TYPE_NIGHTMARE))
-        pr_note_unported(bt, PR_FEAT_TAG_LAPSE); /* lapseTag(NIGHTMARE) */
+    clear_status(bt, e, p, false);
 }
 
 /* ---------------------------------------------------------------- PokemonHealPhase */
@@ -2660,6 +2720,7 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_SWITCH_SUMMON: pr_switch_summon_phase(bt, e, ph); break;
     case PH_POST_SUMMON: pr_post_summon_phase(bt, e, ph); break;
     case PH_SWITCH: pr_switch_phase(bt, e, ph); break;
+    case PH_MOVE_REFLECT: move_reflect_phase(bt, e, ph); break;
     case PH_SHINY_SPARKLE: break;
     default:
         /* a phase with no port: it was reported when it was queued */

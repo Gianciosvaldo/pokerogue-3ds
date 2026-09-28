@@ -335,15 +335,24 @@ it("turntest producer", async () => {
     BattlerTagType.IGNORE_ACCURACY, BattlerTagType.ALWAYS_CRIT, BattlerTagType.PERISH_SONG, BattlerTagType.ROOSTED,
     BattlerTagType.THROAT_CHOPPED, BattlerTagType.HEAL_BLOCK, BattlerTagType.AQUA_RING, BattlerTagType.INGRAIN,
     BattlerTagType.OCTOLOCK, BattlerTagType.DISABLED, BattlerTagType.TAUNT, BattlerTagType.TORMENT, BattlerTagType.ENCORE,
-    BattlerTagType.INFATUATED,
+    BattlerTagType.INFATUATED, BattlerTagType.SALT_CURED, BattlerTagType.CURSED, BattlerTagType.NIGHTMARE,
+    BattlerTagType.DROWSY, BattlerTagType.POWDER, BattlerTagType.FLOATING, BattlerTagType.TELEKINESIS,
+    BattlerTagType.CRIT_BOOST, BattlerTagType.DRAGON_CHEER, BattlerTagType.SYRUP_BOMB, BattlerTagType.MAGIC_COAT,
+    BattlerTagType.ELECTRIFIED, BattlerTagType.DESTINY_BOND, BattlerTagType.GRUDGE, BattlerTagType.STOCKPILING,
   ];
-  const tagMoves = usable.filter((m: any) =>
-    m.attrs.some((a: any) => isA(a, ["AddBattlerTagAttr"]) && portedTags.includes(a.tagType)),
+  const tagMoves = usable.filter(
+    (m: any) =>
+      m.attrs.some((a: any) => isA(a, ["AddBattlerTagAttr"]) && portedTags.includes(a.tagType))
+      || m.id === MoveId.CURSE
+      || m.id === MoveId.DESTINY_BOND
+      || m.id === MoveId.SPIT_UP
+      || m.id === MoveId.SWALLOW,
   );
   const tagReaders = attacks.filter(
     (m: any) =>
       m.type === PokemonType.ELECTRIC
       || m.type === PokemonType.FIRE
+      || m.type === PokemonType.GROUND
       || m.attrs.some((a: any) =>
         ["HitsTagForDoubleDamageAttr", "WeightPowerAttr", "CompareWeightPowerAttr"].includes(a.constructor.name),
       ),
@@ -359,7 +368,7 @@ it("turntest producer", async () => {
   const tagAbilityIds = [
     AbilityId.STEADFAST, AbilityId.INNER_FOCUS, AbilityId.OWN_TEMPO, AbilityId.SHIELD_DUST, AbilityId.SERENE_GRACE,
     AbilityId.NO_GUARD, AbilityId.PERISH_BODY, AbilityId.CURSED_BODY, AbilityId.CUTE_CHARM, AbilityId.OBLIVIOUS,
-    AbilityId.AROMA_VEIL,
+    AbilityId.AROMA_VEIL, AbilityId.MAGIC_BOUNCE, AbilityId.MAGIC_GUARD, AbilityId.SIMPLE, AbilityId.CONTRARY,
   ];
   // TURN_HEAL pools
   const healMoves = usable.filter((m: any) =>
@@ -614,7 +623,10 @@ it("turntest producer", async () => {
           + (t.tagType === BattlerTagType.SEEDED ? ` sidx=${t.sourceIndex ?? -1}` : "")
           + (t.tagType === BattlerTagType.SHELL_TRAP && t.activated ? " act=1" : "")
           + (t.tagType === BattlerTagType.ROOSTED && t.isBasePureFlying ? " bpf=1" : "")
-          + (t.tagType === BattlerTagType.DISABLED || t.tagType === BattlerTagType.ENCORE ? ` mid=${t.moveId ?? 0}` : ""),
+          + (t.tagType === BattlerTagType.DISABLED || t.tagType === BattlerTagType.ENCORE ? ` mid=${t.moveId ?? 0}` : "")
+          + (t.tagType === BattlerTagType.STOCKPILING
+            ? ` scd=${t.statChangeCounts[Stat.DEF]} scs=${t.statChangeCounts[Stat.SPDEF]}`
+            : ""),
       ),
     ];
   };
@@ -1093,10 +1105,22 @@ it("turntest producer", async () => {
             if (p.getTag(type) || type === BattlerTagType.FRENZY) {
               continue;
             }
-            const self = type === BattlerTagType.NO_RETREAT || type === BattlerTagType.INGRAIN;
+            const self = [BattlerTagType.NO_RETREAT, BattlerTagType.INGRAIN, BattlerTagType.DESTINY_BOND].includes(type);
             const tag = getBattlerTag(type, 1 + rnd(4), rnd(2) === 0 ? MoveId.NONE : MoveId.MEAN_LOOK, self ? p.id : other.id) as any;
             if (type === BattlerTagType.AUTOTOMIZED) {
               tag.autotomizeCount = 1 + rnd(3);
+            }
+            if (type === BattlerTagType.CRIT_BOOST || type === BattlerTagType.DRAGON_CHEER) {
+              tag.critStages = 1 + rnd(2);
+            }
+            if (type === BattlerTagType.STOCKPILING) {
+              // stacks from earlier turns, each raise counted or not (capped stages, Contrary)
+              tag.stockpiledCount = 1 + rnd(3);
+              tag.statChangeCounts[Stat.DEF] = rnd(tag.stockpiledCount + 1);
+              tag.statChangeCounts[Stat.SPDEF] = rnd(tag.stockpiledCount + 1);
+            }
+            if (type === BattlerTagType.NIGHTMARE && !p.status && rnd(3) !== 0) {
+              p.status = new Status(StatusEffect.SLEEP, 0, 1 + rnd(3)); // a nightmare needs sleep
             }
             if (type === BattlerTagType.DISABLED) {
               tag.moveId = rnd(4) === 0 ? MoveId.NONE : p.moveset[rnd(p.moveset.length)].moveId;
