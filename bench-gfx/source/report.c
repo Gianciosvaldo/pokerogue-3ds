@@ -90,14 +90,18 @@ bool status(const char* fmt, ...) {
   va_start(ap, fmt);
   vsnprintf(step, sizeof step, fmt, ap);
   va_end(ap);
-  logf_("-- %s\n", step);
+  static char last[160];
+  if (strcmp(step, last)) { /* the done screen redraws the same step every frame */
+    logf_("-- %s\n", step);
+    snprintf(last, sizeof last, "%s", step);
+  }
   rr_set_origin(RR_TOP, 0, 0);
   rr_set_origin(RR_BOTTOM, 0, 0);
   rr_frame_begin();
   rr_target(RR_TOP, RR_RGBA(16, 16, 28, 255));
   rr_text_sys(10, 10, 0.6f, "PokeRogue graphics + memory bench", RR_RGBA(240, 240, 240, 255));
   rr_text_sys(10, 40, 0.5f, step, RR_RGBA(255, 220, 120, 255));
-  rr_text_sys(10, 200, 0.45f, "Takes about 3 minutes. START stops early\n(the results so far are kept).",
+  rr_text_sys(10, 200, 0.45f, "About 1.5 minutes without the packs, longer with them.\nSTART stops early (the results so far are kept).",
               RR_RGBA(160, 160, 180, 255));
   rr_target(RR_BOTTOM, RR_RGBA(8, 8, 16, 255));
   for (int i = 0; i < g_nlines; i++) rr_text_sys(4, 4 + i * 18, 0.42f, g_lines[i], RR_RGBA(210, 210, 210, 255));
