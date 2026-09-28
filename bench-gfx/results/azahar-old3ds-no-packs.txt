@@ -1,5 +1,5 @@
 PokeRogue graphics + memory bench
-build: 89ca115, machine: Old 3DS, ARM11 at 268 MHz (the Old 3DS clock)
+build: fcea806, machine: Old 3DS, ARM11 at 268 MHz (the Old 3DS clock)
 memory at start: app heap 63.7 MB (0.2 MB in use), linear heap 32.0 MB (29.7 MB free),
   VRAM 5.01 MB free of 6 (the two screen render targets use the rest)
   textures, sound buffers and the GPU command and vertex buffers all come out of the linear heap
@@ -15,14 +15,14 @@ sound: on
 after opening the packs and sound: app heap 0.2 MB in use (pack indexes), linear heap 29.7 MB free
 
 == SD card ==
-write 24 MB in 256 KB writes: 463.4 MB/s
+write 24 MB in 256 KB writes: 478.5 MB/s
 reads from pokerogue-gfx-bench.tmp (24 MB), just written: the packs are not on the SD card
 sequential read, 4 MB each: 16 KB chunks 3.8 MB/s, 64 KB chunks 4.8 MB/s, 256 KB chunks 5.1 MB/s, 1024 KB chunks 5.2 MB/s
 the same 4 MB again (64 KB chunks): 4.8 MB/s (first time 4.8 MB/s; much faster = something caches)
-random   4 KB reads (seek + read), 100 of them: median 2.48 ms, p95 2.58, max 2.58
-random  32 KB reads (seek + read), 100 of them: median 7.75 ms, p95 7.82, max 7.83
-random 256 KB reads (seek + read),  40 of them: median 49.72 ms, p95 49.80, max 49.81
-64 KB save (save_write: temp file + CRC + .bak + rename), 5 times: median 166.2 ms, max 234.0 ms
+random   4 KB reads (seek + read), 100 of them: median 2.48 ms, p95 2.58, max 2.61
+random  32 KB reads (seek + read), 100 of them: median 7.75 ms, p95 7.82, max 7.87
+random 256 KB reads (seek + read),  40 of them: median 49.71 ms, p95 49.80, max 49.81
+64 KB save (save_write: temp file + CRC + .bak + rename), 5 times: median 183.8 ms, max 200.6 ms
 
 == loading from the packs ==
 skipped: gfx.pak is not on the SD card (sdmc:/3ds/pokerogue/gfx.pak)
@@ -40,14 +40,14 @@ the data cache); GPU = drawing + copying to the screens. max fps = the same scen
 scene                           quad | vsync period med p95 max miss | build med p95 max | end med max | GPU med p95 |   max
                                    s |                         |                   |             |             |   fps
 empty (clear both screens)         0 |  16.7  16.7  16.8    0 |  0.01  0.01  0.01 |  0.29  0.50 |  0.33  0.36 |  2157
-singles                          327 |  16.7  16.7  16.8    0 |  1.21  1.30  1.30 |  0.31  0.36 |  0.50  0.55 |   542
-singles + move anim              360 |  16.7  16.7  16.8    0 |  1.46  1.54  1.54 |  0.31  0.39 |  0.50  0.55 |   478
+singles                          327 |  16.7  16.7  16.8    0 |  1.21  1.30  1.30 |  0.31  0.39 |  0.50  0.55 |   542
+singles + move anim              360 |  16.7  16.7  16.8    0 |  1.46  1.54  1.54 |  0.31  0.39 |  0.50  0.55 |   468
 doubles                          384 |  16.7  16.7  16.8    0 |  1.46  1.55  1.55 |  0.31  0.44 |  0.50  0.56 |   471
-doubles + move anim              417 |  16.7  16.7  16.8    0 |  1.71  1.80  1.80 |  0.31  0.39 |  0.50  0.55 |   423
-doubles + anim + sound           417 |  16.7  16.7  16.8    0 |  1.71  1.80  1.80 |  0.31  0.38 |  0.50  0.56 |   418
-doubles + anim, largest sprites  417 |  16.7  16.7  16.8    0 |  1.71  1.80  1.80 |  0.31  0.39 |  0.50  0.56 |   415
+doubles + move anim              417 |  16.7  16.7  16.8    0 |  1.71  1.80  1.80 |  0.31  0.39 |  0.50  0.55 |   413
+doubles + anim + sound           417 |  16.7  16.7  16.8    0 |  1.71  1.80  1.80 |  0.31  0.38 |  0.50  0.56 |   420
+doubles + anim, largest sprites  417 |  16.7  16.7  16.8    0 |  1.71  1.80  1.80 |  0.31  0.39 |  0.50  0.56 |   423
 citro3d flushes the whole 32 MB linear heap from the CPU cache in every rr_frame_end;
-  that flush alone: median 0.06 ms, max 0.12 ms
+  that flush alone: median 0.06 ms, max 0.06 ms
 
 sprite ramp: N animated 82x80 sprites (Garchomp's sheet) over the arena, no vsync
        N |  frame  build    end    GPU
@@ -65,7 +65,7 @@ text ramp: N glyphs with drop shadow (2 quads each) on the bottom screen, no vsy
        0 |   0.46   0.01   0.29   0.33
      100 |   1.07   0.51   0.31   0.41
      200 |   1.57   1.02   0.31   0.41
-     400 |   2.66   2.06   0.31   0.41
+     400 |   2.66   2.03   0.31   0.41
   => glyphs per frame: over 400 at 60 fps, over 400 at 30 fps (whole frame cost, nothing else running)
 
 fill: N full-screen 400x240 layers on the top screen (RGBA5551, alpha-blended), no vsync, GPU ms

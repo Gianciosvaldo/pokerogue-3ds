@@ -1,5 +1,5 @@
 PokeRogue graphics + memory bench
-build: 89ca115, machine: Old 3DS, ARM11 at 268 MHz (the Old 3DS clock)
+build: fcea806, machine: Old 3DS, ARM11 at 268 MHz (the Old 3DS clock)
 memory at start: app heap 63.7 MB (0.2 MB in use), linear heap 32.0 MB (29.7 MB free),
   VRAM 5.01 MB free of 6 (the two screen render targets use the rest)
   textures, sound buffers and the GPU command and vertex buffers all come out of the linear heap
@@ -20,44 +20,44 @@ reads from bgm.pak (619 MB)
 sequential read, 4 MB each: 16 KB chunks 3.8 MB/s, 64 KB chunks 4.8 MB/s, 256 KB chunks 5.1 MB/s, 1024 KB chunks 5.2 MB/s
 the same 4 MB again (64 KB chunks): 4.8 MB/s (first time 4.8 MB/s; much faster = something caches)
 random   4 KB reads (seek + read), 100 of them: median 2.49 ms, p95 2.58, max 2.58
-random  32 KB reads (seek + read), 100 of them: median 7.73 ms, p95 7.82, max 7.86
-random 256 KB reads (seek + read),  40 of them: median 49.72 ms, p95 49.79, max 49.80
-64 KB save (save_write: temp file + CRC + .bak + rename), 5 times: median 183.8 ms, max 200.6 ms
+random  32 KB reads (seek + read), 100 of them: median 7.73 ms, p95 7.81, max 7.83
+random 256 KB reads (seek + read),  40 of them: median 49.72 ms, p95 49.80, max 49.82
+64 KB save (save_write: temp file + CRC + .bak + rename), 5 times: median 183.8 ms, max 217.3 ms
 
 == loading from the packs ==
 ms per image: SD read, LZ4 unpack, texture build (palette to RGBA5551, into linear memory);
 1st = first read after launch, 2nd = same again, API = rr_atlas_load_key (the app's call)
 image                                read   LZ4  build     1st |    2nd    API |  texture  on SD
-front Bulbasaur                       2.9   0.6    1.8     5.2 |    5.9    5.9 |   128 KB   9 KB
+front Bulbasaur                       2.9   0.6    1.9     5.3 |    6.0    5.9 |   128 KB   9 KB
 front Pikachu                         5.0   1.2    3.5     9.7 |    9.7    9.8 |   256 KB  17 KB
 front Gengar                          5.9   1.4    3.5    10.8 |   10.8   10.9 |   256 KB  22 KB
 front Dragonite                       9.0   2.7    6.9    18.6 |   18.6   18.6 |   512 KB  39 KB
-front Torchic (median sheet)          3.1   0.4    0.9     4.4 |    4.4    4.4 |    64 KB   7 KB
-front Garchomp                        8.0   2.3    7.1    17.4 |   17.4   17.4 |   512 KB  33 KB
-front Reshiram                       18.3   5.7   13.8    37.8 |   37.8   37.9 |  1024 KB  89 KB
+front Torchic (median sheet)          3.1   0.4    0.9     4.4 |    4.5    4.5 |    64 KB   7 KB
+front Garchomp                        8.0   2.4    7.0    17.4 |   17.4   17.4 |   512 KB  33 KB
+front Reshiram                       18.3   5.6   13.9    37.8 |   37.8   37.9 |  1024 KB  89 KB
 front Eternatus                      13.7   4.7   13.9    32.3 |   32.3   32.3 |  1024 KB  64 KB
-front White Kyurem                   31.5  10.5   27.6    69.6 |   69.5   69.6 |  2048 KB 159 KB
-front Thundurus-T                    33.2  11.6   31.1    75.9 |   75.8   75.9 |  2304 KB 167 KB
-back Bulbasaur                        2.9   0.4    0.9     4.2 |    4.2    4.3 |    64 KB   6 KB
+front White Kyurem                   31.5  10.5   27.7    69.6 |   69.6   69.6 |  2048 KB 159 KB
+front Thundurus-T                    33.2  11.5   31.2    75.9 |   75.9   75.9 |  2304 KB 167 KB
+back Bulbasaur                        2.9   0.4    0.9     4.2 |    4.3    4.4 |    64 KB   6 KB
 back Pikachu                          4.9   1.2    3.5     9.6 |    9.6    9.7 |   256 KB  17 KB
-back Blaziken                         6.0   1.9    7.0    14.9 |   14.9   14.9 |   512 KB  23 KB
-back Garchomp                         6.4   2.0    7.1    15.5 |   15.5   15.5 |   512 KB  25 KB
-back Charizard                       12.0   4.3   13.8    30.0 |   30.1   30.1 |  1024 KB  55 KB
-back Thundurus-T (largest)           39.2  14.5   41.3    95.0 |   95.1   95.0 |  3072 KB 200 KB
-arena grass bg                        1.5   0.5    3.4     5.4 |    5.5    5.5 |   256 KB   1 KB
-arena volcano prop                    1.5   0.6    3.9     5.9 |    6.0    6.0 |   512 KB   1 KB
-anim sheet PRAS- Fire                 6.7   1.6    3.6    11.9 |   11.9   11.9 |   256 KB  26 KB
+back Blaziken                         6.0   2.0    7.0    15.0 |   15.0   15.0 |   512 KB  23 KB
+back Garchomp                         6.4   2.0    7.0    15.4 |   15.5   15.5 |   512 KB  25 KB
+back Charizard                       11.9   4.3   13.9    30.1 |   30.0   30.0 |  1024 KB  55 KB
+back Thundurus-T (largest)           39.2  14.5   41.4    95.1 |   95.0   95.1 |  3072 KB 200 KB
+arena grass bg                        1.5   0.5    3.5     5.5 |    5.5    5.4 |   256 KB   1 KB
+arena volcano prop                    1.5   0.5    3.9     5.9 |    6.0    5.9 |   512 KB   1 KB
+anim sheet PRAS- Fire                 6.7   1.5    3.6    11.9 |   12.0   11.9 |   256 KB  26 KB
 anim sheet GEN8- Fiery (largest)    100.6  21.3   10.1   132.0 |  132.0  131.9 |  2048 KB 528 KB
-Pokemon icon sheet 1                 22.2   4.2    8.5    34.8 |   34.8   34.7 |   512 KB 109 KB
-item icons (all)                     22.9   5.2   15.7    43.8 |   43.8   43.9 |  2048 KB 113 KB
-Pokemon sheets above (first load): median 16.4 ms, max 95.0 ms
-shiny Garchomp (sheet + variant colour map, rr_atlas_load_key_variant):  18.1 ms
-biome change: grass (bg + 2 bases) 16.5 ms, 0.75 MB; volcano (bg + 2 bases + 3 props) 32.1 ms, 1.75 MB
-font emerald 16 px: open 0.8 ms; first English line 8.1 ms (1 page, 128 KB); a Japanese line 59.2 ms (7 more pages, 832 KB)
+Pokemon icon sheet 1                 22.2   4.2    8.5    34.8 |   34.8   34.8 |   512 KB 109 KB
+item icons (all)                     23.0   5.2   15.6    43.8 |   43.7   43.8 |  2048 KB 113 KB
+Pokemon sheets above (first load): median 16.4 ms, max 95.1 ms
+shiny Garchomp (sheet + variant colour map, rr_atlas_load_key_variant):  18.0 ms
+biome change: grass (bg + 2 bases) 16.5 ms, 0.75 MB; volcano (bg + 2 bases + 3 props) 32.0 ms, 1.75 MB
+font emerald 16 px: open 0.8 ms; first English line 8.0 ms (1 page, 128 KB); a Japanese line 59.2 ms (7 more pages, 832 KB)
 cries (6): first play (load) median 5.7 ms, max 8.9; cached play median 0.01 ms
 => a new wild Garchomp appears (front sheet + cry): about 23 ms; Blaziken switches in (back + cry): about 21 ms (sums of the first loads above)
-music: start  36.4 ms to queue, first sample playing after 48 ms; switching track  54.2 ms
-largest sheet while music streams: 95.1 ms, silent: 95.2 ms
+music: start  36.5 ms to queue, first sample playing after 49 ms; switching track  52.6 ms
+largest sheet while music streams: 95.1 ms, silent: 95.1 ms
 
 == rendering ==
 text: font.pak (emerald 16 and 12 px)
@@ -71,14 +71,14 @@ the data cache); GPU = drawing + copying to the screens. max fps = the same scen
 scene                           quad | vsync period med p95 max miss | build med p95 max | end med max | GPU med p95 |   max
                                    s |                         |                   |             |             |   fps
 empty (clear both screens)         0 |  16.7  16.7  16.8    0 |  0.01  0.01  0.01 |  0.29  0.50 |  0.33  0.36 |  2157
-singles                          327 |  16.7  16.7  16.8    0 |  1.52  1.61  1.61 |  0.31  0.38 |  0.50  0.56 |   461
-singles + move anim              360 |  16.7  16.7  16.8    0 |  1.77  1.85  1.85 |  0.31  0.44 |  0.50  0.56 |   404
-doubles                          384 |  16.7  16.7  16.8    0 |  1.81  1.90  1.90 |  0.31  0.44 |  0.50  0.56 |   400
+singles                          327 |  16.7  16.7  16.8    0 |  1.52  1.61  1.61 |  0.31  0.38 |  0.50  0.55 |   454
+singles + move anim              360 |  16.7  16.7  16.8    0 |  1.77  1.85  1.85 |  0.31  0.44 |  0.50  0.56 |   408
+doubles                          384 |  16.7  16.7  16.8    0 |  1.81  1.90  1.90 |  0.31  0.44 |  0.50  0.56 |   394
 doubles + move anim              417 |  16.7  16.7  16.7    0 |  2.06  2.15  2.15 |  0.31  0.39 |  0.50  0.56 |   362
-doubles + anim + sound           417 |  16.7  16.7  16.8    0 |  2.07  2.15  2.16 |  0.31  0.39 |  0.50  0.55 |   360
+doubles + anim + sound           417 |  16.7  16.7  16.8    0 |  2.07  2.15  2.16 |  0.31  0.36 |  0.50  0.55 |   362
 doubles + anim, largest sprites  417 |  16.7  16.7  16.8    0 |  2.06  2.15  2.15 |  0.31  0.39 |  0.50  0.56 |   361
 citro3d flushes the whole 32 MB linear heap from the CPU cache in every rr_frame_end;
-  that flush alone: median 0.06 ms, max 0.13 ms
+  that flush alone: median 0.06 ms, max 0.06 ms
 
 sprite ramp: N animated 82x80 sprites (Garchomp's sheet) over the arena, no vsync
        N |  frame  build    end    GPU
@@ -95,7 +95,7 @@ text ramp: N glyphs with drop shadow (2 quads each) on the bottom screen, no vsy
        N |  frame  build    end    GPU
        0 |   0.46   0.01   0.29   0.33
      100 |   1.29   0.74   0.31   0.41
-     200 |   2.06   1.48   0.31   0.41
+     200 |   2.09   1.48   0.31   0.41
      400 |   3.59   3.04   0.31   0.41
   => glyphs per frame: over 400 at 60 fps, over 400 at 30 fps (whole frame cost, nothing else running)
 
