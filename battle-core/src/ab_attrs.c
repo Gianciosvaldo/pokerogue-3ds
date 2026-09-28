@@ -822,10 +822,22 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
              && (pp->field_type == WEATHER_TYPE_HAIL || pp->field_type == WEATHER_TYPE_SNOW));
         if (!pp->simulated) pr_note_unported(bt, PR_FEAT_FORM_CHANGE);
         return 1;
-    case PR_AC_PostWeatherChangeAddBattlerTagAbAttr:                    /* Protosynthesis: its tag isn't ported */
-        return type_in(&P(PostWeatherChangeAddBattlerTagAbAttr, a)->weatherTypes, pp->field_type) ? -1 : 0;
-    case PR_AC_PostTerrainChangeAddBattlerTagAttr:                      /* Quark Drive: its tag isn't ported */
-        return type_in(&P(PostTerrainChangeAddBattlerTagAttr, a)->terrainTypes, pp->field_type) ? -1 : 0;
+    case PR_AC_PostWeatherChangeAddBattlerTagAbAttr: {                  /* Protosynthesis */
+        const pr_attr_PostWeatherChangeAddBattlerTagAbAttr *x = P(PostWeatherChangeAddBattlerTagAbAttr, a);
+        if (!type_in(&x->weatherTypes, pp->field_type)) return 0;
+        if (!c->e) return -1;
+        GATE(pr_can_add_tag(bt, (pr_pokemon *)p, x->tagType));
+        if (!pp->simulated) pr_add_tag(bt, c->e, (pr_pokemon *)p, x->tagType, x->turnCount, 0, -1);
+        return 1;
+    }
+    case PR_AC_PostTerrainChangeAddBattlerTagAttr: {                    /* Quark Drive */
+        const pr_attr_PostTerrainChangeAddBattlerTagAttr *x = P(PostTerrainChangeAddBattlerTagAttr, a);
+        if (!type_in(&x->terrainTypes, pp->field_type)) return 0;
+        if (!c->e) return -1;
+        GATE(pr_can_add_tag(bt, (pr_pokemon *)p, x->tagType));
+        if (!pp->simulated) pr_add_tag(bt, c->e, (pr_pokemon *)p, x->tagType, x->turnCount, 0, -1);
+        return 1;
+    }
     case PR_AC_TerrainEventTypeChangeAbAttr:                            /* Mimicry: its type change isn't ported */
         return p->terastallized ? 0 : -1;
     /* ---- on-hit abilities: PostDefend (the Pokemon hit), PostReceiveCrit, PostAttack (the attacker).

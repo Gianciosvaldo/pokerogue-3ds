@@ -56,6 +56,9 @@
  * Magic Guard, Levitate, Swift Swim, Hydration, Normalize, Liquid Voice...),
  * a quarter of the Pokemon have a status, a sixth are terastallized and a quarter start with
  * Protosynthesis's or Quark Drive's stat boost;
+ * TURN_BOOST=1 is TURN_WEATHER aimed at Protosynthesis and Quark Drive picking their stat: three
+ * Pokemon in four have one of them, half have random stat stages to compare, and a third of the
+ * moves set a weather or terrain (Sunny Day, Electric Terrain, Rain Dance...);
  * TURN_TRAPS=1 aims at the damaging traps (Bind, Wrap, Fire Spin, Whirlpool, Clamp, Sand Tomb,
  * Magma Storm, Snap Trap, Thunder Cage, Infestation): most moves add one, free the user (Rapid
  * Spin, Mortal Spin) or clear arena tags (Brick Break, Defog, Tidy Up...), a quarter of the
@@ -198,7 +201,8 @@ it("turntest producer", async () => {
   const CHARGE = process.env.TURN_CHARGE === "1";
   const TAGS = process.env.TURN_TAGS === "1";
   const HEAL = process.env.TURN_HEAL === "1";
-  const WEATHER = process.env.TURN_WEATHER === "1";
+  const BOOST = process.env.TURN_BOOST === "1";
+  const WEATHER = process.env.TURN_WEATHER === "1" || BOOST;
   const TRAPS = process.env.TURN_TRAPS === "1";
   const PROTECT = process.env.TURN_PROTECT === "1";
   const ARENA = process.env.TURN_ARENA === "1";
@@ -256,6 +260,11 @@ it("turntest producer", async () => {
   );
   const abilityIds = allAbilities.filter((a: any) => a && a.id !== AbilityId.NONE).map((a: any) => a.id);
   const boostTags = [BattlerTagType.PROTOSYNTHESIS, BattlerTagType.QUARK_DRIVE];
+  // TURN_BOOST: the moves that start the weathers and terrains that add or remove those boosts
+  const fieldSetMoves = [
+    MoveId.SUNNY_DAY, MoveId.SUNNY_DAY, MoveId.ELECTRIC_TERRAIN, MoveId.ELECTRIC_TERRAIN, MoveId.RAIN_DANCE,
+    MoveId.SANDSTORM, MoveId.SNOWSCAPE, MoveId.GRASSY_TERRAIN, MoveId.MISTY_TERRAIN, MoveId.PSYCHIC_TERRAIN,
+  ];
   // TURN_STAT pools, by class name up the prototype chain
   const isA = (o: any, names: string[]) => {
     for (let c = o?.constructor; c && c !== Object; c = Object.getPrototypeOf(c)) {
@@ -838,6 +847,8 @@ it("turntest producer", async () => {
         ? (rnd(4) !== 0 ? contactAttacks[rnd(contactAttacks.length)] : attacks[rnd(attacks.length)])
         : HEAL && rnd(10) < 6
         ? healMoves[rnd(healMoves.length)]
+        : BOOST && rnd(3) === 0
+        ? allMoves[fieldSetMoves[rnd(fieldSetMoves.length)]]
         : WEATHER && rnd(10) < 7
         ? weatherMoves[rnd(weatherMoves.length)]
         : TRAPS && rnd(10) < 7
@@ -1512,6 +1523,17 @@ it("turntest producer", async () => {
           tag.stat = [Stat.ATK, Stat.DEF, Stat.SPATK, Stat.SPDEF, Stat.SPD][rnd(5)];
           tag.multiplier = tag.stat === Stat.SPD ? 1.5 : 1.3;
           p.summonData.tags.push(tag);
+        }
+        if (BOOST) {
+          if (rnd(4) !== 0) {
+            p.summonData.ability = [AbilityId.PROTOSYNTHESIS, AbilityId.QUARK_DRIVE][rnd(2)];
+          }
+          if (rnd(2) === 0) {
+            // Attack to Speed only: the stats the highest-stat pick compares
+            p.summonData.statStages = p.summonData.statStages.map((v: number, i: number) =>
+              i < 5 && rnd(3) === 0 ? [1, -1, 2, -2, 6, -6][rnd(6)] : v,
+            );
+          }
         }
       }
     }

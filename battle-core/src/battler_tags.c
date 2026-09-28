@@ -82,6 +82,8 @@ bool pr_tag_type_ported(int type)
     case BATTLER_TAG_TYPE_UNBURDEN:         /* UnburdenTag (the Speed doubling reads it) */
     case BATTLER_TAG_TYPE_GORILLA_TACTICS:  /* GorillaTacticsTag (MoveRestrictionBattlerTag) */
     case BATTLER_TAG_TYPE_SUPREME_OVERLORD: /* SupremeOverlordTag (the damage calculation reads it) */
+    case BATTLER_TAG_TYPE_PROTOSYNTHESIS:   /* WeatherHighestStatBoostTag (getEffectiveStat reads it) */
+    case BATTLER_TAG_TYPE_QUARK_DRIVE:      /* TerrainHighestStatBoostTag */
         return true;
     }
     return pr_damaging_trap_move(type) != 0 || pr_battler_tag_is(type, PR_TAGCLASS_PROTECTED);
@@ -335,6 +337,13 @@ static pr_battler_tag construct(int type, int turn_count, int source_move, int64
     case BATTLER_TAG_TYPE_SLOW_START:             /* TURN_END, 5 turns */
         t.turn_count = 5;
         t.source_move = 0;
+        break;
+    case BATTLER_TAG_TYPE_PROTOSYNTHESIS:         /* HighestStatBoostTag: CUSTOM, 1 turn, Attack x1.3 */
+    case BATTLER_TAG_TYPE_QUARK_DRIVE:
+        t.turn_count = 1;
+        t.source_move = 0;
+        t.stat = STAT_ATK;
+        t.multiplier = 1.3;
         break;
     case BATTLER_TAG_TYPE_GORILLA_TACTICS:        /* MoveRestrictionBattlerTag(GORILLA_TACTICS, CUSTOM, 0) */
     case BATTLER_TAG_TYPE_SUPREME_OVERLORD:       /* FAINT, 0 turns */
@@ -645,6 +654,23 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
         t->move_id = last ? last->move : MOVE_ID_NONE;
         double atk = pr_get_stat(p, STAT_ATK, false) * 1.5;
         if (atk > 0) p->summon_stats[STAT_ATK] = atk;
+        return;
+    }
+    case BATTLER_TAG_TYPE_PROTOSYNTHESIS:
+    case BATTLER_TAG_TYPE_QUARK_DRIVE: {
+        /* the highest effective stat without abilities or held items, Attack first on a tie; the
+         * tag is already on the Pokemon, so its default Attack x1.3 counts in that comparison */
+        const pr_stat_params sp = {.move = -1, .ignore_ability = true, .ignore_opp_ability = true,
+                                   .ignore_ally_ability = true, .ignore_held_items = true, .simulated = true};
+        int best = STAT_ATK;
+        int32_t best_value = 0;
+        for (int stat = STAT_ATK; stat <= STAT_SPD; stat++) {
+            int32_t v = pr_get_effective_stat_p(bt, p, stat, &sp);
+            if (v > best_value) best = stat, best_value = v;
+        }
+        t->stat = (int8_t)best;
+        t->multiplier = best == STAT_SPD ? 1.5 : 1.3;
+        pr_queue_message(bt, e);
         return;
     }
     case BATTLER_TAG_TYPE_SUPREME_OVERLORD: {
@@ -1210,6 +1236,8 @@ static void on_remove(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_battl
     case BATTLER_TAG_TYPE_TELEKINESIS:
     case BATTLER_TAG_TYPE_CRIT_BOOST:
     case BATTLER_TAG_TYPE_DRAGON_CHEER:
+    case BATTLER_TAG_TYPE_PROTOSYNTHESIS:
+    case BATTLER_TAG_TYPE_QUARK_DRIVE:
         pr_queue_message(bt, e);
         return;
     case BATTLER_TAG_TYPE_ROOSTED:
