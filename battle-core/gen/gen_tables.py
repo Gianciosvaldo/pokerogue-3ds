@@ -436,10 +436,11 @@ c.append(f"\nconst pr_effect_info pr_attr_effects[{max(len(effect_rows), 1)}] = 
 c += [f"    {r}," for r in effect_rows]
 c.append("};")
 bt_num = str_enum_num["BattlerTagType"]
-bt_rows = ["{0, NULL, NULL}"] * len(bt_num)
+bt_rows = ["{0, false, NULL, NULL}"] * len(bt_num)
 for t, info in battler_tags.items():
     mask = sum(1 << l for l in info["lapseTypes"])
-    bt_rows[bt_num[t]] = "{0x%x, %s, %s}" % (mask, c_str(info["chain"][0]), c_str(t))
+    baton = "true" if info["baton"] else "false"
+    bt_rows[bt_num[t]] = "{0x%x, %s, %s, %s}" % (mask, baton, c_str(info["chain"][0]), c_str(t))
 c.append("const pr_battler_tag_info pr_battler_tags_info[BATTLER_TAG_TYPE_COUNT_] = {")
 c += [f"    {r}," for r in bt_rows]
 c.append("};")
@@ -559,7 +560,7 @@ typedef struct {{
 extern const pr_effect_info pr_attr_effects[];
 /* getBattlerTag(type): the lapse types it is built with (bit per BattlerTagLapseType), its class
  * and the BattlerTagType's own name */
-typedef struct {{ uint16_t lapse_mask; const char *cls, *name; }} pr_battler_tag_info;
+typedef struct {{ uint16_t lapse_mask; bool baton; const char *cls, *name; }} pr_battler_tag_info;   /* baton: isBatonPassable (see the dump) */
 extern const pr_battler_tag_info pr_battler_tags_info[];
 extern const pr_move pr_moves[PR_MOVE_COUNT];
 extern const pr_ability pr_abilities[PR_ABILITY_COUNT];

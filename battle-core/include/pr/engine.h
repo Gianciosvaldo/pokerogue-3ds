@@ -18,11 +18,13 @@ typedef enum {
     PH_TURN_START, PH_MOVE, PH_MOVE_EFFECT, PH_MOVE_END, PH_FAINT, PH_CHECK_INTERLUDE,
     PH_WEATHER_EFFECT, PH_POSITIONAL_TAG, PH_BERRY, PH_CHECK_STATUS_EFFECT, PH_POST_TURN_STATUS_EFFECT,
     PH_TURN_END, PH_RESET_STATUS, PH_STAT_STAGE_CHANGE, PH_OBTAIN_STATUS_EFFECT, PH_MOVE_CHARGE, PH_POKEMON_HEAL,
-    PH_MOVE_HEADER,
+    PH_MOVE_HEADER, PH_SWITCH_SUMMON, PH_POST_SUMMON,
+    PH_SWITCH,                 /* hands control back mid-phase for the player's pick (pr_resume_switch) */
     /* presentation: no battle state of their own */
     PH_MESSAGE, PH_DAMAGE_ANIM, PH_COMMON_ANIM, PH_SHOW_ABILITY, PH_HIDE_ABILITY, PH_POKEMON_ANIM, PH_LOAD_MOVE_ANIM, PH_MOVE_ANIM,
+    PH_SHINY_SPARKLE,
     /* where a turn hands control back to the caller */
-    PH_TURN_INIT, PH_VICTORY, PH_SWITCH, PH_SWITCH_SUMMON, PH_GAME_OVER, PH_BATTLE_END, PH_SELECT_MODIFIER,
+    PH_TURN_INIT, PH_VICTORY, PH_GAME_OVER, PH_BATTLE_END, PH_SELECT_MODIFIER,
     PH_SELECT_BIOME, PH_NEW_BATTLE,
     /* not ported yet: created where upstream creates them (so the order stays right), and
      * the turn is reported unported */
@@ -56,7 +58,7 @@ typedef struct pr_phase {
     uint8_t timing;            /* MovePhase.timingModifier */
     bool prevent_instant_revive;       /* FaintPhase */
     int8_t source;             /* FaintPhase.source battler, -1 = none */
-    int8_t end_targets[4];     /* MoveEndPhase.targets (battler indexes) */
+    pr_pokemon *end_targets[4]; /* MoveEndPhase.targets */
     uint8_t n_end_targets;
     bool was_follow_up;        /* MoveEndPhase */
     pr_pokemon *source_p;      /* FaintPhase.source (undefined = NULL) */
@@ -80,10 +82,15 @@ typedef struct pr_phase {
     int8_t ose_sleep_turns;
     /* MoveChargePhase: targetIndex (the MovePhase's first target) */
     int8_t charge_target;
-    /* SwitchPhase(switchType, fieldIndex, isModal, doReturn) and SwitchSummonPhase(switchType,
-     * fieldIndex, slotIndex, doReturn, player): where a turn hands control back to the caller */
+    /* SwitchPhase(switchType, fieldIndex, isModal, doReturn), where a turn hands control back to
+     * the caller for the player's pick, and SwitchSummonPhase(switchType, fieldIndex, slotIndex,
+     * doReturn, player) */
     int8_t sw_type, sw_field_index, sw_slot;
     bool sw_modal, sw_do_return, sw_player;
+    /* PostSummonPhase; PostSummonActivateAbilityPhase (the same phaseName) is one with
+     * ps_activate set: getPriority() and which ability it applies */
+    int8_t ps_priority;
+    bool ps_activate, ps_passive;
     /* PokemonHealPhase: hpHealed and its options (PR_HEAL_*) */
     double heal_hp;
     uint8_t heal_flags;
@@ -125,6 +132,10 @@ typedef struct pr_engine {
     int n_trace;
     uint8_t stop;              /* the phase type the turn stopped at */
     pr_phase stop_phase;       /* that phase, with its arguments (the switch prompt's) */
+    /* PH_SWITCH stop: the SwitchPhase opened the party screen and waits in the pool for the
+     * player's pick; pr_resume_switch finishes it and runs on */
+    bool awaiting_pick;
+    int pick_phase;            /* its pool index */
     bool overflow;             /* a fixed-size table ran out: the run is not faithful */
 } pr_engine;
 
@@ -132,6 +143,13 @@ typedef struct pr_engine {
  * (the next TurnInitPhase) or a phase outside the turn (victory, a switch prompt...). The turn
  * commands in bt->commands / bt->pre_commands must be set. */
 void pr_run_turn(pr_battle *bt, pr_engine *e);
+
+/* After a turn stopped at PH_SWITCH (the party screen of a SwitchPhase), the player's pick: the
+ * party slot to send in, or -1 for none. Runs on to the next stop, as pr_run_turn. */
+void pr_resume_switch(pr_battle *bt, pr_engine *e, int slot);
+
+/* SwitchPhase.start: the early exits, or the party screen (sets e->awaiting_pick) */
+void pr_switch_phase(pr_battle *bt, pr_engine *e, int ph);
 
 /* ---- used by the phases (src/phases.c) ---- */
 int pr_phase_new(pr_engine *e, pr_phase_type type, int8_t battler);
@@ -152,6 +170,8 @@ void pr_queue_faint(pr_battle *bt, pr_engine *e, int battler, bool prevent_insta
 bool pr_tag_type_ported(int type);
 /* the move a DamagingTrapTag subclass (Bind, Wrap, Fire Spin...) names as its source; 0 otherwise */
 int pr_damaging_trap_move(int type);
+/* pokemon.canAddTag(type) */
+bool pr_can_add_tag(pr_battle *bt, pr_pokemon *p, int type);
 /* pokemon.addTag(type, turnCount, sourceMove, sourceId): whether it was added (0 / -1 = none) */
 bool pr_add_tag(pr_battle *bt, pr_engine *e, pr_pokemon *p, int type, int turn_count, int source_move,
                 int64_t source_id);
@@ -188,6 +208,9 @@ void pr_called_selected_set(int move, int sel);
 int pr_called_selected_list(uint16_t *move, uint16_t *sel, int max);
 bool pr_try_set_terrain(pr_battle *bt, pr_engine *e, int terrain, bool ignore_anim, const pr_pokemon *user);
 void pr_remove_tags_by_source_id(pr_battle *bt, pr_engine *e, pr_pokemon *p, int64_t source_id);
+void pr_transfer_tags_by_source_id(pr_pokemon *p, int64_t from, int64_t to);
+void pr_transfer_summon(pr_battle *bt, pr_pokemon *to, const pr_pokemon *from);   /* Baton Pass */
+void pr_pass_substitute(pr_battle *bt, pr_pokemon *to, const pr_pokemon *from);   /* Shed Tail */
 /* findAndRemoveTags(t => types.includes(t.tagType)) */
 void pr_find_and_remove_tags(pr_battle *bt, pr_engine *e, pr_pokemon *p, const int32_t *types, int n_types);
 /* ---- arena tags being added, lapsed and removed (src/arena_tags.c) ---- */
@@ -260,12 +283,27 @@ enum {
 void pr_unshift_heal(pr_battle *bt, pr_engine *e, int battler, double hp, unsigned flags);
 /* Pokemon.leaveField(clearEffects) (src/phases.c) */
 void pr_leave_field(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool clear_effects);
+/* Pokemon.resetTurnData(), resetSummonData(); triggerPokemonFormChange(p, <trigger class>) */
+void pr_reset_turn_data(pr_pokemon *p);
+void pr_reset_summon_data(pr_pokemon *p);
+void pr_form_change(pr_battle *bt, const pr_pokemon *p, int trigger_class);
+/* SwitchSummonPhase and PostSummonPhase / PostSummonActivateAbilityPhase (src/switching.c) */
+void pr_switch_summon_phase(pr_battle *bt, pr_engine *e, int ph);
+void pr_post_summon_phase(pr_battle *bt, pr_engine *e, int ph);
 /* ForceSwitchOutAttr (src/switching.c): getSwitchOutCondition() for an attribute with these fields,
  * and apply(). The condition applies Suction Cups-style abilities outside a simulation. */
 bool pr_switch_out_condition(pr_battle *bt, bool self_switch, int switch_type, const pr_pokemon *user,
                              const pr_pokemon *target, int move);
 void pr_force_switch_out(pr_battle *bt, pr_engine *e, bool self_switch, int switch_type, pr_pokemon *user,
                          pr_pokemon *target, int move);
+/* Wimp Out, Emergency Exit (PostDamageForceSwitchAbAttr): canApply (-1 = not modelled), apply */
+int pr_wimp_out_can_apply(pr_battle *bt, const pr_pokemon *p, const pr_pokemon *source, double damage,
+                          double hp_ratio);
+void pr_wimp_out_apply(pr_battle *bt, pr_engine *e, pr_pokemon *p);
+/* applyAbAttrs("PostDamageAbAttr", {pokemon, damage, source}) */
+void pr_post_damage_ab(pr_battle *bt, pr_pokemon *p, double damage, pr_pokemon *source);
+/* Pokemon.setTempAbility(ability): Trace and co. */
+void pr_set_temp_ability(pr_battle *bt, pr_pokemon *p, uint16_t ability);
 /* Pokemon.resetStatus(revive, false, false, asPhase=true): a ResetStatusPhase, unshifted */
 void pr_reset_status_phase(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool revive);
 /* Pokemon.trySetStatus(effect, sourcePokemon, sleepTurnsRemaining (-1 = undefined), sourceText,

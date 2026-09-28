@@ -200,17 +200,17 @@ void pr_apply_variable_power(pr_battle *bt, const pr_pokemon *user, const pr_pok
              * counts gives its species' base Attack / 10 + 5. */
             int side = user->is_player ? 0 : 1, n = bt->n_party[side];
             if (!n) { pr_note_unported(bt, PR_FEAT_PARTY); break; }
-            const pr_party_member *party = bt->party[side];
+            pr_pokemon *const *party = bt->party[side];
             int allies = 0;
             for (int k = 0; k < n; k++)
-                if (party[k].id == user->id || !party[k].status) allies++;
+                if (party[k]->id == user->id || !party[k]->status) allies++;
             if (!allies) { *power = 0; break; } /* x % 0 is NaN: the loop doesn't run */
             int idx = (user->hit_count - user->hits_left) % allies;
             if (idx < 0) { pr_note_unported(bt, PR_FEAT_HIT_STATE); break; } /* party[-k] is undefined: upstream throws */
             *power = 0;
             for (int k = idx; k < n; k++) {
-                if (party[k].id != user->id && party[k].status) continue;
-                pr_pokemon sp = {.species = party[k].species};
+                if (party[k]->id != user->id && party[k]->status) continue;
+                pr_pokemon sp = {.species = party[k]->species};
                 *power = pr_pokemon_form(&sp)->base_stats[STAT_ATK] / 10.0 + 5; /* species.getBaseStat: form 0 */
                 break;
             }
@@ -249,7 +249,7 @@ void pr_apply_variable_power(pr_battle *bt, const pr_pokemon *user, const pr_pok
 }
 
 /* ---- applyMoveAttrs("VariableMoveTypeAttr", user, null, move, moveType) ---- */
-static int hidden_power_type(const pr_pokemon *u)
+int pr_hidden_power_type(const pr_pokemon *u)
 {
     static const int8_t types[16] = {
         POKEMON_TYPE_FIGHTING, POKEMON_TYPE_FLYING, POKEMON_TYPE_POISON, POKEMON_TYPE_GROUND,
@@ -271,7 +271,7 @@ void pr_apply_variable_move_type(pr_battle *bt, const pr_pokemon *user, int move
         int sp = user->species, form = user->form;
         switch (a->cls) {
         case PR_AC_HiddenPowerTypeAttr:
-            *type = hidden_power_type(user);
+            *type = pr_hidden_power_type(user);
             break;
         case PR_AC_WeatherBallTypeAttr:
             switch (pr_get_effective_weather_for_move(bt, user)) {

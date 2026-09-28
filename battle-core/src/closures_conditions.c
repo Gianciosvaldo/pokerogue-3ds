@@ -83,21 +83,20 @@ static const pr_attr *own_attr(const pr_closure_info *self, int m, bool (*makes)
 }
 #define OWN(makes) const pr_attr *a = own_attr(self, m, makes); if (!a) UNPORTED(PR_FEAT_MOVE_CONDITION)
 
-/* The party slots of one side ([0] player, [1] enemy), read through the field Pokemon when on it */
-static const pr_pokemon *party_field_mon(const pr_battle *bt, int side, int k)
+/* The party slots of one side ([0] player, [1] enemy) */
+static bool in_field_slot(const pr_battle *bt, const pr_pokemon *p)
 {
     for (int i = 0; i < 4; i++)
-        if (bt->field[i] && bt->field[i]->id == bt->party[side][k].id) return bt->field[i];
-    return NULL;
+        if (bt->field[i] == p) return true;
+    return false;
 }
 static int32_t party_hp(const pr_battle *bt, int side, int k)
 {
-    const pr_pokemon *f = party_field_mon(bt, side, k);
-    return f ? f->hp : bt->party[side][k].hp;
+    return bt->party[side][k]->hp;
 }
 static bool party_on_field(const pr_battle *bt, int side, int k)
 {
-    return is_on_field(party_field_mon(bt, side, k));
+    return is_on_field(bt->party[side][k]);
 }
 
 /* ------------------------------------------------------------ attribute conditions */
@@ -752,7 +751,7 @@ static double rototiller(ARGS)
     for (int side = 0; side < 2; side++) {
         if (!bt->n_party[side]) UNPORTED(PR_FEAT_PARTY);
         for (int k = 0; k < bt->n_party[side]; k++)
-            if (!party_field_mon(bt, side, k)) UNPORTED(PR_FEAT_MOVE_CONDITION);
+            if (!in_field_slot(bt, bt->party[side][k])) UNPORTED(PR_FEAT_MOVE_CONDITION);
     }
     return 0;
 }

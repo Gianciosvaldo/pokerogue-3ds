@@ -68,6 +68,23 @@ pr_pokemon *pr_field_pokemon_by_id(const pr_battle *bt, int64_t id)
     return NULL;
 }
 
+/* globalScene.getPokemonById: the player's party, then the enemy's (a side with no party given:
+ * its Pokemon on the field) */
+pr_pokemon *pr_pokemon_by_id(const pr_battle *bt, int64_t id)
+{
+    if (id < 0) return NULL;
+    for (int side = 0; side < 2; side++) {
+        if (!bt->n_party[side]) {
+            for (int i = side * 2; i < side * 2 + 2; i++)
+                if (bt->field[i] && bt->field[i]->id == id) return bt->field[i];
+            continue;
+        }
+        for (int k = 0; k < bt->n_party[side]; k++)
+            if (bt->party[side][k]->id == id) return bt->party[side][k];
+    }
+    return NULL;
+}
+
 /* areAllies: a === ATTACKER || b === ATTACKER ? false : (a is a player slot) === (b is a player slot) */
 bool pr_are_allies(int a, int b)
 {

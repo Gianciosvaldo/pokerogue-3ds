@@ -116,7 +116,7 @@ typedef struct {
 extern const pr_effect_info pr_attr_effects[];
 /* getBattlerTag(type): the lapse types it is built with (bit per BattlerTagLapseType), its class
  * and the BattlerTagType's own name */
-typedef struct { uint16_t lapse_mask; const char *cls, *name; } pr_battler_tag_info;
+typedef struct { uint16_t lapse_mask; bool baton; const char *cls, *name; } pr_battler_tag_info;   /* baton: isBatonPassable (see the dump) */
 extern const pr_battler_tag_info pr_battler_tags_info[];
 extern const pr_move pr_moves[PR_MOVE_COUNT];
 extern const pr_ability pr_abilities[PR_ABILITY_COUNT];

@@ -173,7 +173,9 @@ it("dump upstream data", () => {
   write("string-enums.json", strEnums);
   // Battler tags as getBattlerTag() builds them: the class chain and the lapse types, per type
   // (the turn engine needs to know which tags a lapse reaches, ported or not)
-  const battlerTags: Record<string, { chain: string[]; lapseTypes: number[] }> = {};
+  // and isBatonPassable for a recipient that isn't Mega or G-Max Gengar (Telekinesis's only exception)
+  const battlerTags: Record<string, { chain: string[]; lapseTypes: number[]; baton: boolean }> = {};
+  const recipient: any = { species: { speciesId: 0 }, getFormKey: () => "" };
   for (const t of Object.values(strEnums.BattlerTagType)) {
     const tag: any = getBattlerTag(t as any, 1, MoveId.NONE, 0);
     if (!tag) continue;
@@ -181,7 +183,7 @@ it("dump upstream data", () => {
     for (let o = Object.getPrototypeOf(tag); o && o !== Object.prototype; o = Object.getPrototypeOf(o)) {
       chain.push(o.constructor.name);
     }
-    battlerTags[t] = { chain, lapseTypes: [...tag.lapseTypes] };
+    battlerTags[t] = { chain, lapseTypes: [...tag.lapseTypes], baton: !!tag.isBatonPassable(recipient) };
   }
   write("battler-tags.json", battlerTags);
 

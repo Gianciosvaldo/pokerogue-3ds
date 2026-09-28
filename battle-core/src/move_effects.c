@@ -11,6 +11,16 @@
 
 #define P(T, a) ((const pr_attr_##T *)(a)->p)
 
+static double to_dmg_value(double v) { double f = floor(v); return f < 1 ? 1 : f; }
+
+/* pokemonMove.getMovePp() for moveset slot s: maxPpOverride || pp + ppUp * toDmgValue(pp / 5) */
+static int reduce_pp_move_pp(const pr_pokemon *p, int s)
+{
+    if (p->max_pp_override[s] > 0) return p->max_pp_override[s];
+    int pp = pr_moves[p->moves[s]].pp;
+    return pp + p->pp_up[s] * (int)to_dmg_value(pp / 5.0);
+}
+
 /* MoveEffectAttr.canApply(user, target): the Pokemon the effect lands on isn't fainted */
 static bool effect_can_apply(const pr_effect_info *ef, const pr_pokemon *user, const pr_pokemon *target)
 {
@@ -129,6 +139,29 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
     case PR_AC_PartingShotAttr:
         parting_shot(bt, e, a, ef, user, target, move);
         return;
+    case PR_AC_ReducePpMoveAttr:                         /* Spite */
+    case PR_AC_AttackReducePpMoveAttr: {                 /* Eerie Spell: only when the move has PP left */
+        int reduction = a->cls == PR_AC_ReducePpMoveAttr ? P(ReducePpMoveAttr, a)->reduction
+                                                         : P(AttackReducePpMoveAttr, a)->reduction;
+        bool unknown;
+        const pr_turn_move *tm = pr_last_non_virtual_move(bt, target, false, true, &unknown);
+        if (unknown) return;                             /* reported */
+        int s = -1;
+        for (int k = 0; tm && k < target->n_moves; k++)
+            if (target->moves[k] == tm->move) { s = k; break; }
+        int max = s < 0 ? 0 : reduce_pp_move_pp(target, s);
+        if (a->cls == PR_AC_AttackReducePpMoveAttr) {
+            double ratio = s < 0 ? 0 : 1.0 - (double)target->pp_used[s] / max;   /* getPpRatio() */
+            if (!(ratio == ratio && ratio != 0)) return;
+        } else if (s < 0) {
+            pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT);  /* the condition rules it out; upstream would throw */
+            return;
+        }
+        int last = target->pp_used[s], v = last + reduction;
+        target->pp_used[s] = (uint8_t)(v < max ? v : max);
+        pr_queue_message(bt, e);                         /* battle:ppReduced */
+        return;
+    }
     case PR_AC_ForceSwitchOutAttr: {                     /* Roar, Whirlwind, Dragon Tail, U-turn, Baton Pass... */
         const pr_attr_ForceSwitchOutAttr *x = P(ForceSwitchOutAttr, a);
         pr_force_switch_out(bt, e, x->selfSwitch, x->switchType, user, target, move);

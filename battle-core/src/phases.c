@@ -276,7 +276,19 @@ static void turn_start(pr_battle *bt, pr_engine *e)
         switch (c->command) {
         case COMMAND_FIGHT: handle_fight_command(bt, e, mon, b); break;
         case COMMAND_BALL: unshift_new(bt, e, PH_ATTEMPT_CAPTURE, -1); break;
-        case COMMAND_POKEMON: unshift_new(bt, e, PH_SWITCH_SUMMON, b); pr_note_unported(bt, PR_FEAT_PHASE_0 + PH_SWITCH_SUMMON); break;
+        case COMMAND_POKEMON: {
+            /* SwitchSummonPhase(args[0] ? BATON_PASS : SWITCH, getFieldIndex(), cursor, true, isPlayer()) */
+            int q = new_pokemon_phase(e, PH_SWITCH_SUMMON, -1);
+            if (q < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); e->overflow = true; break; }
+            pr_phase *s = PH(q);
+            s->sw_type = c->baton ? SWITCH_TYPE_BATON_PASS : SWITCH_TYPE_SWITCH;
+            s->sw_field_index = (int8_t)(b % 2);
+            s->sw_slot = c->cursor;
+            s->sw_do_return = true;
+            s->sw_player = mon->is_player;
+            pr_phase_unshift(bt, e, q);
+            break;
+        }
         case COMMAND_RUN: unshift_new(bt, e, PH_ATTEMPT_RUN, -1); break;
         }
     }
@@ -295,12 +307,13 @@ static void turn_start(pr_battle *bt, pr_engine *e)
 static void queue_move_end(pr_battle *bt, pr_engine *e, int ph)
 {
     pr_phase *m = PH(ph);
-    int end = new_pokemon_phase(e, PH_MOVE_END, m->battler);
+    /* this.pokemon.getBattlerIndex(): -1 once the Pokemon has been switched out */
+    int end = new_pokemon_phase(e, PH_MOVE_END, (int8_t)pr_battler_index(bt, m->pokemon));
     if (end < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }
     pr_pokemon *t[4];
     int n = active_in_list(bt, tlist(e, m->targets), t);
     pr_phase *me = PH(end);
-    for (int i = 0; i < n; i++) me->end_targets[i] = (int8_t)pr_battler_index(bt, t[i]);
+    for (int i = 0; i < n; i++) me->end_targets[i] = t[i];
     me->n_end_targets = (uint8_t)n;
     me->was_follow_up = m->use_mode >= MOVE_USE_MODE_INDIRECT;   /* isVirtual */
     pr_phase_unshift(bt, e, end);
@@ -940,8 +953,12 @@ static void move_phase(pr_battle *bt, pr_engine *e, int ph)
         /* usePP: Pressure on each active target adds to the PP used */
         pr_pokemon *targets[4];
         int nt = active_in_list(bt, tlist(e, m->targets), targets);
-        for (int i = 0; i < nt; i++) pr_hook_ab(bt, targets[i], PR_AC_IncreasePpUsedAbAttr);
-        ref_use_pp(m, 1);
+        double pp = 1;
+        for (int i = 0; i < nt; i++) {
+            pr_ab_params ap = {.pokemon = targets[i], .opponent = user, .move = -1, .value = &pp};
+            pr_apply_ab_attrs(bt, PR_AC_IncreasePpUsedAbAttr, &ap);
+        }
+        ref_use_pp(m, (int)pp);
     }
     if (!follow_up) form_change(bt, user, PR_FCT_SpeciesFormChangePreMoveTrigger);
 
@@ -1297,7 +1314,7 @@ static double damage_and_update(pr_battle *bt, pr_engine *e, pr_pokemon *p, doub
     unshift_new(bt, e, PH_DAMAGE_ANIM, pr_battler_index(bt, p));
     if (p->switch_out_status && source) damage = 0;
     damage = pokemon_damage(bt, e, p, damage, indirect, ignore_faint_phase);
-    if (!source || source->hit_count <= 1) pr_hook_ab(bt, p, PR_AC_PostDamageAbAttr);
+    if (!source || source->hit_count <= 1) pr_post_damage_ab(bt, p, damage, source);
     return damage;
 }
 
@@ -1434,7 +1451,7 @@ static void apply_move_effects(pr_battle *bt, pr_engine *e, int ph, pr_pokemon *
     if (!pr_move_hits_substitute(bt, move, user, target)) apply_on_target_effects(bt, e, ph, user, target, first_target, d);
     if (PH(ph)->last_hit) {
         form_change(bt, user, PR_FCT_SpeciesFormChangePostMoveTrigger);
-        if (user->hit_count > 1) pr_hook_ab(bt, target, PR_AC_PostDamageAbAttr);
+        if (user->hit_count > 1) pr_post_damage_ab(bt, target, 0, user);   /* Wimp Out after a multi-hit */
     }
 }
 
@@ -1759,8 +1776,7 @@ static void move_end_phase(pr_battle *bt, pr_engine *e, int ph)
     bt->ignore_abilities = false;
     bt->ignoring_effect_source = -1;
     for (int i = 0; i < me->n_end_targets; i++) {
-        pr_pokemon *t = slot(bt, me->end_targets[i]);
-        if (!t) continue;
+        pr_pokemon *t = me->end_targets[i];                  /* the Pokemon, wherever it is now */
         pr_ab_params pp = {.pokemon = t, .move = -1};
         pr_apply_ab_attrs(bt, PR_AC_PostSummonRemoveEffectAbAttr, &pp);  /* Limber, Oblivious... */
     }
@@ -1801,19 +1817,18 @@ static void reset_summon_data(pr_pokemon *p)
     p->n_ab_applied_summon = 0;
 }
 
-/* the player's party entry's HP, reading the Pokemon itself when it is on the field */
+void pr_reset_turn_data(pr_pokemon *p) { reset_turn_data(p); }
+void pr_reset_summon_data(pr_pokemon *p) { reset_summon_data(p); }
+void pr_form_change(pr_battle *bt, const pr_pokemon *p, int trigger_class) { form_change(bt, p, trigger_class); }
+
 static int32_t party_hp(pr_battle *bt, int side, int k)
 {
-    for (int i = 0; i < 4; i++)
-        if (bt->field[i] && bt->field[i]->id == bt->party[side][k].id) return bt->field[i]->hp;
-    return bt->party[side][k].hp;
+    return bt->party[side][k]->hp;
 }
 
 static bool party_on_field(pr_battle *bt, int side, int k)
 {
-    for (int i = 0; i < 4; i++)
-        if (bt->field[i] && bt->field[i]->id == bt->party[side][k].id) return is_on_field(bt->field[i]);
-    return false;
+    return is_on_field(bt->party[side][k]);
 }
 
 static void add_participant(pr_battle *bt, uint32_t id)
@@ -2060,7 +2075,7 @@ static void positional_tag_phase(pr_battle *bt, pr_engine *e)
             if (!source) {
                 for (int s = 0; s < 2; s++)
                     for (int k = 0; k < bt->n_party[s]; k++)
-                        if (bt->party[s][k].id == t->source_id) pr_note_unported(bt, PR_FEAT_PARTY);   /* off the field */
+                        if (bt->party[s][k]->id == t->source_id) pr_note_unported(bt, PR_FEAT_PARTY);   /* off the field */
                 continue;
             }
             if (!target || source == target || target->hp <= 0) continue;
@@ -2140,7 +2155,7 @@ static void post_turn_status_effect_phase(pr_battle *bt, pr_engine *e, int ph)
         }
         if (damage) {
             pokemon_damage(bt, e, p, damage, true, false);       /* damage(damage, false, preventEndure) */
-            pr_hook_ab(bt, p, PR_AC_PostDamageAbAttr);
+            pr_post_damage_ab(bt, p, damage, NULL);              /* the damage asked for, not the HP lost */
         }
     }
     if (bt->wave_index == 200) pr_note_unported(bt, PR_FEAT_FINAL_BOSS);
@@ -2585,6 +2600,10 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_MOVE_CHARGE: move_charge_phase(bt, e, ph); break;
     case PH_MOVE_HEADER: move_header_phase(bt, e, ph); break;
     case PH_POKEMON_HEAL: pokemon_heal_phase(bt, e, ph); break;
+    case PH_SWITCH_SUMMON: pr_switch_summon_phase(bt, e, ph); break;
+    case PH_POST_SUMMON: pr_post_summon_phase(bt, e, ph); break;
+    case PH_SWITCH: pr_switch_phase(bt, e, ph); break;
+    case PH_SHINY_SPARKLE: break;
     default:
         /* a phase with no port: it was reported when it was queued */
         pr_note_unported(bt, (uint16_t)(PR_FEAT_PHASE_0 + PH(ph)->type));

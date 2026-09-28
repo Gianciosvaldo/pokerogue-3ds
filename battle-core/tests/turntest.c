@@ -122,18 +122,36 @@ static pr_turn_move read_turn_move(const char *s)
 
 typedef struct {
     pr_battle bt;
-    pr_pokemon mon[2];         /* [0] the player's (A, battler 0), [1] the enemy (D, battler 2) */
+    /* the parties' Pokemon by party slot, [0] the player's and [1] the enemy's; slot 0 is the one on
+     * the field (battler 0 and 2), the others the bench */
+    pr_pokemon mon[2][PR_MAX_PARTY];
+    int picks[8], n_picks;     /* PICK: the player's picks on the party screens of the turn */
     int skip;                  /* the case has records this test doesn't read (modifiers) */
     int btag;                  /* battler tags: only their type, turns, source, stockpile and crit stages are in
                                 * the record, which is all the condition probes read */
 } case_state;
 
-static pr_pokemon *mon_for(case_state *cs, int b)
+/* A Pokemon record's key: its battler index on the field (0, 2), or p<slot> / e<slot> for the
+ * player's or the enemy's bench */
+static pr_pokemon *mon_for(case_state *cs, const char *b, int *side)
 {
-    if (b == 0) return &cs->mon[0];
-    if (b == 2) return &cs->mon[1];
-    fprintf(stderr, "battler %d in a singles case\n", b);
-    exit(2);
+    int s = -1, k = -1;
+    if (!strcmp(b, "0")) s = 0, k = 0;
+    else if (!strcmp(b, "2")) s = 1, k = 0;
+    else if ((b[0] == 'p' || b[0] == 'e') && b[1] >= '1' && b[1] < '0' + PR_MAX_PARTY && !b[2]) s = b[0] == 'e', k = b[1] - '0';
+    if (s < 0) {
+        fprintf(stderr, "Pokemon %s in a singles case\n", b);
+        exit(2);
+    }
+    if (side) *side = s;
+    return &cs->mon[s][k];
+}
+
+static void mon_key(char out[8], const pr_battle *bt, int side, int k)
+{
+    if (k == 0) snprintf(out, 8, "%d", side * 2);
+    else snprintf(out, 8, "%c%d", side ? 'e' : 'p', k);
+    (void)bt;
 }
 
 static void read_state(const lines_t *L, int from, int to, case_state *cs)
@@ -220,9 +238,10 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             t->source_move = (uint16_t)inum(l, "smove");
             t->heal_hp = dnum(l, "heal");
         } else if (!strncmp(l, "MON ", 4)) {
-            pr_pokemon *p = mon_for(cs, (int)inum(l, "b"));
+            int side;
+            pr_pokemon *p = mon_for(cs, need(l, "b"), &side);
             memset(p, 0, sizeof *p);
-            p->is_player = inum(l, "b") < 2;
+            p->is_player = side == 0;
             p->id = (uint32_t)inum(l, "id");
             p->species = (uint16_t)inum(l, "sp");
             p->form = (uint8_t)inum(l, "form");
@@ -251,8 +270,11 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             int ns = split(need(l, "stellar"), ',', it, 16);
             for (int j = 0; j < ns; j++) p->stellar_types_boosted |= 1u << atoi(it[j]);
             p->is_boss = inum(l, "boss") != 0;
+            p->shiny = inum(l, "shiny") != 0;
             p->switch_out_status = inum(l, "out") != 0;
-            p->on_field = inum(l, "onfield") != 0 || p->switch_out_status;
+            /* isOnField() is false while switchOutStatus is set: a Pokemon in a field slot is
+             * still in the scene's field then, a bench Pokemon isn't */
+            p->on_field = inum(l, "onfield") != 0 || (p->switch_out_status && p == &cs->mon[side][0]);
             p->summon_hit_count = (uint8_t)inum(l, "shc");
             int nt = split(need(l, "types"), ',', it, 3);
             if (nt > 2) { cs->skip = 1; nt = 2; }
@@ -270,7 +292,7 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             p->has_trainer = false;
             p->turn_move_effectiveness = -1;
         } else if (!strncmp(l, "TURN ", 5)) {
-            pr_pokemon *p = mon_for(cs, (int)inum(l, "b"));
+            pr_pokemon *p = mon_for(cs, need(l, "b"), NULL);
             p->acted = inum(l, "acted") != 0;
             p->order = (int8_t)unum(l, "order", -1);
             p->hit_count = (int8_t)inum(l, "hc");
@@ -303,7 +325,7 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
                 pr_unshift_attack_received(p, &r);
             }
         } else if (!strncmp(l, "MOVES ", 6)) {
-            pr_pokemon *p = mon_for(cs, (int)inum(l, "b"));
+            pr_pokemon *p = mon_for(cs, need(l, "b"), NULL);
             char mv[4][64];
             p->n_moves = (uint8_t)split(need(l, "list"), ',', mv, 4);
             for (int j = 0; j < p->n_moves; j++) {
@@ -315,7 +337,7 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
                 p->max_pp_override[j] = !strcmp(f[3], "u") ? -1 : (int16_t)atoi(f[3]);
             }
         } else if (!strncmp(l, "HIST ", 5) || !strncmp(l, "MQ ", 3)) {
-            pr_pokemon *p = mon_for(cs, (int)inum(l, "b"));
+            pr_pokemon *p = mon_for(cs, need(l, "b"), NULL);
             static char tm[64][64];
             int n = split(need(l, "list"), ',', tm, 64);
             if (l[0] == 'H') {
@@ -327,7 +349,7 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
                 for (int j = 0; j < n; j++) p->move_queue[j] = read_turn_move(tm[j]);
             }
         } else if (!strncmp(l, "BTAG ", 5)) {
-            pr_pokemon *p = mon_for(cs, (int)inum(l, "b"));
+            pr_pokemon *p = mon_for(cs, need(l, "b"), NULL);
             if (p->n_tags >= PR_MAX_BATTLER_TAGS) { fprintf(stderr, "too many battler tags\n"); exit(2); }
             pr_battler_tag *t = &p->tags[p->n_tags++];
             memset(t, 0, sizeof *t);
@@ -363,21 +385,15 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             static char ms[PR_MAX_PARTY + 1][64];
             int n = split(need(l, "list"), ',', ms, PR_MAX_PARTY + 1);
             if (side < 0 || side > 1 || n > PR_MAX_PARTY) { cs->skip = 1; continue; }
+            /* the party's ids in order: each member's state is its MON record, keyed by slot */
             bt->n_party[side] = (uint8_t)n;
             for (int j = 0; j < n; j++) {
-                char f[5][64] = {{0}};
-                int nf = split(ms[j], ':', f, 5);
-                bt->party[side][j].id = (uint32_t)strtoul(f[0], NULL, 10);
-                bt->party[side][j].species = (uint16_t)atoi(f[1]);
-                bt->party[side][j].status = (uint8_t)atoi(f[2]);
-                bt->party[side][j].hp = atoi(f[3]);
-                if (nf == 5) {                                  /* the moveset, '/'-separated */
-                    char mv[4][64];
-                    int nm = split(f[4], '/', mv, 4);
-                    for (int k = 0; k < nm; k++) bt->party[side][j].moves[k] = (uint16_t)atoi(mv[k]);
-                    bt->party[side][j].n_moves = (uint8_t)nm;
-                    bt->party_moves_known = true;
+                pr_pokemon *p = &cs->mon[side][j];
+                if (p->id != (uint32_t)strtoul(ms[j], NULL, 10)) {
+                    fprintf(stderr, "party slot %d.%d is %s, its record says %u\n", side, j, ms[j], p->id);
+                    exit(2);
                 }
+                bt->party[side][j] = p;
             }
         } else if (!strncmp(l, "CMD ", 4)) {
             int b = (int)inum(l, "b");
@@ -389,6 +405,12 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             for (int j = 0; j < c->n_targets; j++) c->targets[j] = (int8_t)atoi(tg[j]);
             c->use_mode = (uint8_t)inum(l, "mode");
             c->skip = inum(l, "skip") != 0;
+            c->cursor = (int8_t)unum(l, "cursor", -1);
+            c->baton = inum(l, "baton") != 0;
+        } else if (!strncmp(l, "PICK ", 5)) {
+            char ps[8][64];
+            cs->n_picks = split(need(l, "list"), ',', ps, 8);
+            for (int j = 0; j < cs->n_picks; j++) cs->picks[j] = atoi(ps[j]);
         } else if (!strncmp(l, "SESSION ", 8)) {
             char hs[16][64];
             int n = split(need(l, "healed"), ',', hs, 16);
@@ -475,10 +497,10 @@ static const char *boost_fields(const pr_battler_tag *t)
     return buf;
 }
 
-static void dump_mon(lines_t *L, const pr_battle *bt, const pr_pokemon *p, int b, bool *incomplete)
+static void dump_mon(lines_t *L, const pr_battle *bt, const pr_pokemon *p, const char *b, bool *incomplete)
 {
     sbuf s = {{0}, 0};
-    sb(&s, "MON b=%d id=%u sp=%d form=%d lv=%d ivs=", b, p->id, p->species, p->form, p->level);
+    sb(&s, "MON b=%s id=%u sp=%d form=%d lv=%d ivs=", b, p->id, p->species, p->form, p->level);
     LIST(&s, 6, ',', "%d", p->ivs[i]);
     sb(&s, " nat=%d ab=", p->nature);
     num_or_u(&s, p->ability_override, -1);
@@ -496,7 +518,7 @@ static void dump_mon(lines_t *L, const pr_battle *bt, const pr_pokemon *p, int b
     for (int t = 0; t < 32; t++)
         if (p->stellar_types_boosted & (1u << t)) st[nst++] = t;
     LIST(&s, nst, ',', "%d", st[i]);
-    sb(&s, " boss=%d onfield=%d out=%d shc=%d types=", p->is_boss, p->on_field && !p->switch_out_status,
+    sb(&s, " boss=%d shiny=%d onfield=%d out=%d shc=%d types=", p->is_boss, p->shiny, p->on_field && !p->switch_out_status,
        p->switch_out_status, p->summon_hit_count);
     int nt = p->type_override[0] == -2 ? 0 : p->type_override[1] == -1 ? 1 : 2;
     LIST(&s, nt, ',', "%d", p->type_override[i]);
@@ -508,7 +530,7 @@ static void dump_mon(lines_t *L, const pr_battle *bt, const pr_pokemon *p, int b
     add_line(L, "%s", s.s);
 
     s.n = 0;
-    sb(&s, "TURN b=%d acted=%d order=", b, p->acted);
+    sb(&s, "TURN b=%s acted=%d order=", b, p->acted);
     num_or_u(&s, p->order, -1);
     sb(&s, " hc=%d hl=%d dealt=%d single=%d taken=%d inc=%d dec=%d eff=", p->hit_count, p->hits_left,
        p->total_damage_dealt, p->single_hit_damage_dealt, p->damage_taken, p->stat_stages_increased,
@@ -525,7 +547,7 @@ static void dump_mon(lines_t *L, const pr_battle *bt, const pr_pokemon *p, int b
     add_line(L, "%s", s.s);
 
     s.n = 0;
-    sb(&s, "MOVES b=%d list=", b);
+    sb(&s, "MOVES b=%s list=", b);
     for (int i = 0; i < p->n_moves; i++) {
         if (i) sb(&s, ",");
         sb(&s, "%d:%d:%d:", p->moves[i], p->pp_used[i], p->pp_up[i]);
@@ -535,7 +557,7 @@ static void dump_mon(lines_t *L, const pr_battle *bt, const pr_pokemon *p, int b
     add_line(L, "%s", s.s);
 
     s.n = 0;
-    sb(&s, "HIST b=%d list=", b);
+    sb(&s, "HIST b=%s list=", b);
     if (p->n_move_history > PR_MAX_MOVE_HISTORY) *incomplete = true;
     int kept = p->n_move_history < PR_MAX_MOVE_HISTORY ? p->n_move_history : PR_MAX_MOVE_HISTORY;
     for (int i = 0; i < kept; i++) {
@@ -546,7 +568,7 @@ static void dump_mon(lines_t *L, const pr_battle *bt, const pr_pokemon *p, int b
     add_line(L, "%s", s.s);
 
     s.n = 0;
-    sb(&s, "MQ b=%d list=", b);
+    sb(&s, "MQ b=%s list=", b);
     for (int i = 0; i < p->n_move_queue; i++) {
         if (i) sb(&s, ",");
         turn_move_str(&s, &p->move_queue[i]);
@@ -555,7 +577,7 @@ static void dump_mon(lines_t *L, const pr_battle *bt, const pr_pokemon *p, int b
     add_line(L, "%s", s.s);
 
     for (int i = 0; i < p->n_tags; i++)
-        add_line(L, "BTAG b=%d type=%s turns=%d smove=%d sid=%lld stock=%d crit=%d auto=%d%s", b,
+        add_line(L, "BTAG b=%s type=%s turns=%d smove=%d sid=%lld stock=%d crit=%d auto=%d%s", b,
                  battler_tag_names[p->tags[i].type], p->tags[i].turn_count, p->tags[i].source_move,
                  (long long)p->tags[i].source_id, p->tags[i].stockpiled_count, p->tags[i].crit_stages,
                  p->tags[i].autotomize_count, boost_fields(&p->tags[i]));
@@ -589,7 +611,14 @@ static void dump_state(lines_t *L, const pr_battle *bt, const case_state *cs, bo
     sb(&s, " lei=");
     num_or_u(&s, bt->last_enemy_involved, -1);
     sb(&s, " participants=");
-    LIST(&s, bt->n_participants, ',', "%u", bt->participants[i]);
+    uint32_t part[PR_MAX_PARTY];                  /* printed in id order, as the producer sorts them */
+    int np = bt->n_participants;
+    for (int i = 0; i < np; i++) {
+        int j = i;
+        for (; j > 0 && part[j - 1] > bt->participants[i]; j--) part[j] = part[j - 1];
+        part[j] = bt->participants[i];
+    }
+    LIST(&s, np, ',', "%u", part[i]);
     sb(&s, " loot=%d score=%.17g", bt->post_battle_loot, bt->battle_score);
     if (has_money) sb(&s, " money=%d", bt->money_scattered);
     sb(&s, " type=%d double=%d mel=%d bar=%d ball=", bt->battle_type, bt->double_battle, bt->max_exp_level,
@@ -617,35 +646,42 @@ static void dump_state(lines_t *L, const pr_battle *bt, const case_state *cs, bo
         add_line(L, "POS type=%s turns=%d target=%d sid=%lld smove=%d heal=%.17g", pos_tag_names[t->type], t->turn_count,
                  t->target_index, (long long)t->source_id, t->source_move, t->heal_hp);
     }
-    dump_mon(L, bt, &cs->mon[0], 0, incomplete);
-    dump_mon(L, bt, &cs->mon[1], 2, incomplete);
+    /* every party member in party order, the player's first; a side with no party given: its
+     * Pokemon on the field */
+    for (int side = 0; side < 2; side++) {
+        char key[8];
+        if (!bt->n_party[side]) {
+            dump_mon(L, bt, bt->field[side * 2], side ? "2" : "0", incomplete);
+            continue;
+        }
+        for (int k = 0; k < bt->n_party[side]; k++) {
+            mon_key(key, bt, side, k);
+            dump_mon(L, bt, bt->party[side][k], key, incomplete);
+        }
+    }
     for (int side = 0; side < 2; side++) {
         if (!bt->n_party[side]) continue;
         s.n = 0;
         sb(&s, "PARTY side=%d list=", side);
-        for (int i = 0; i < bt->n_party[side]; i++) {
-            const pr_party_member *m = &bt->party[side][i];
-            int st = m->status, hp = m->hp;
-            /* the Pokemon on the field: its live state */
-            for (int k = 0; k < 2; k++)
-                if (cs->mon[k].id == m->id) { st = cs->mon[k].status; hp = cs->mon[k].hp; }
-            if (i) sb(&s, ",");
-            sb(&s, "%u:%d:%d:%d", m->id, m->species, st, hp);
-            if (bt->party_moves_known) {
-                sb(&s, ":");
-                if (!m->n_moves) sb(&s, "-");
-                for (int k = 0; k < m->n_moves; k++) sb(&s, k ? "/%d" : "%d", m->moves[k]);
-            }
-        }
+        LIST(&s, bt->n_party[side], ',', "%u", bt->party[side][i]->id);
         add_line(L, "%s", s.s);
     }
+    if (cs->n_picks) {
+        s.n = 0;
+        sb(&s, "PICK list=");
+        LIST(&s, cs->n_picks, ',', "%d", cs->picks[i]);
+        add_line(L, "%s", s.s);
+    }
+    (void)cs;
     for (int k = 0; k < 4; k++) {
         const struct pr_turn_command *c = &bt->commands[k];
         if (c->command >= 0) {
             s.n = 0;
             sb(&s, "CMD b=%d cmd=%d move=%d targets=", k, c->command, c->move);
             LIST(&s, c->n_targets, ',', "%d", c->targets[i]);
-            sb(&s, " mode=%d skip=%d", c->use_mode, c->skip);
+            sb(&s, " mode=%d skip=%d cursor=", c->use_mode, c->skip);
+            num_or_u(&s, c->cursor, -1);
+            sb(&s, " baton=%d", c->baton);
             add_line(L, "%s", s.s);
         }
         const struct pr_turn_command *pc = &bt->pre_commands[k];
@@ -943,10 +979,12 @@ int main(int argc, char **argv)
         bool probe = run_at < js.n && is_probe_line(js.s[run_at]);
         if (cs.skip || (cs.btag && !probe)) { skipped++; continue; }
         pr_battle *bt = &cs.bt;
-        bt->field[0] = &cs.mon[0];
-        bt->field[2] = &cs.mon[1];
-        for (int k = 0; k < 2; k++) {
-            pr_pokemon *p = &cs.mon[k];
+        bt->field[0] = &cs.mon[0][0];
+        bt->field[2] = &cs.mon[1][0];
+        for (int k = 0; k < 2 * PR_MAX_PARTY; k++) {
+            int side = k / PR_MAX_PARTY, slot = k % PR_MAX_PARTY;
+            if (slot && slot >= bt->n_party[side]) continue;
+            pr_pokemon *p = &cs.mon[side][slot];
             pr_update_passive(bt, p);
             int32_t hp = p->hp, stats[6];
             memcpy(stats, p->stats, sizeof stats);
@@ -980,6 +1018,15 @@ int main(int argc, char **argv)
         static uint32_t hits_before[PR_CLOSURE_COUNT];
         memcpy(hits_before, pr_closure_hits, sizeof hits_before);
         pr_run_turn(bt, &eng);
+        /* the party screens: the n-th one of the turn takes the n-th pick, modulo the Pokemon it
+         * can send in (the bench, not fainted), as the producer's stand-in for the screen does */
+        for (int n = 0; eng.stop == PH_SWITCH && eng.awaiting_pick && n < 16; n++) {
+            int eligible[PR_MAX_PARTY], ne = 0;
+            for (int k = bt->double_battle ? 2 : 1; k < bt->n_party[0]; k++)
+                if (bt->party[0][k]->hp > 0) eligible[ne++] = k;
+            int r = cs.n_picks ? cs.picks[n % cs.n_picks] : 0;
+            pr_resume_switch(bt, &eng, ne ? eligible[r % ne] : -1);
+        }
         c_after.n = 0;
         dump_trace_queue(&c_after, &eng);
         /* TRACE first, then the state, then QUEUE and END, as the producer writes them */

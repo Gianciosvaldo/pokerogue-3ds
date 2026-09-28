@@ -125,6 +125,15 @@
  * the game mode classic, endless or daily; a sixth of the Pokemon are behind a Substitute, a sixth
  * of the sides have Mist, a quarter of the cases have snow, a quarter of the Pokemon have Attack
  * and Sp. Atk near the limits and a third are just above half HP.
+ * TURN_SUMMON=1 aims at the switch itself: the player switches as its command in a third of the
+ * cases (and uses the switching moves in another third), the wild Pokemon often drags the player's
+ * out (Roar, Whirlwind, Dragon Tail, Circle Throw) or knocks it out; the player's side has entry
+ * hazards (Spikes, Toxic Spikes, Stealth Rock, Sticky Web) half the time; the bench has 1 to 5
+ * Pokemon, a quarter fainted, half of them with an ability that acts on entry, some with a status,
+ * an eighth shiny; the Pokemon on the field has Natural Cure or Regenerator a sixth of the time.
+ *
+ * Every mode: a SwitchPhase's party screen picks the n-th number of the case's PICK list modulo
+ * the Pokemon it can send in (the bench, not fainted), the same rule the C test applies.
  *
  * Each case builds a random singles state inside a real upstream battle, gives both sides a
  * FIGHT command the way the command phases do, then runs upstream's own phases from
@@ -162,10 +171,12 @@ import { SpeciesId } from "#enums/species-id";
 import { Stat } from "#enums/stat";
 import { StatusEffect } from "#enums/status-effect";
 import { TrainerSlot } from "#enums/trainer-slot";
+import { UiMode } from "#enums/ui-mode";
 import { WeatherType } from "#enums/weather-type";
 import { getMoveTargets } from "#moves/move-utils";
 import { PokemonMove } from "#moves/pokemon-move";
 import { GameManager } from "#test/framework/game-manager";
+import { PartyOption } from "#ui/party-ui-handler";
 import * as fs from "node:fs";
 import Phaser from "phaser";
 import { it } from "vitest";
@@ -192,11 +203,13 @@ it("turntest producer", async () => {
   const HEADER = process.env.TURN_HEADER === "1";
   const DELAYED = process.env.TURN_DELAYED === "1";
   const SWITCH = process.env.TURN_SWITCH === "1";
+  const SUMMON = process.env.TURN_SUMMON === "1";
   const OUT = process.env.TURN_OUT ?? "/tmp/pr-turns.txt";
   const game = new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
   game.override
     .battleStyle("single")
-    .ability(AbilityId.BALL_FETCH)
+    // TURN_SUMMON: no override, so the Pokemon sent in keep their own abilities
+    .ability(SUMMON ? AbilityId.NONE : AbilityId.BALL_FETCH)
     .enemyAbility(AbilityId.BALL_FETCH)
     .battleType(BattleType.WILD)
     .startingWave(3)
@@ -478,6 +491,17 @@ it("turntest producer", async () => {
     AbilityId.INFILTRATOR, AbilityId.CONTRARY, AbilityId.CLEAR_BODY, AbilityId.WHITE_SMOKE, AbilityId.FULL_METAL_BODY,
     AbilityId.HYPER_CUTTER, AbilityId.ROUGH_SKIN,
   ];
+  // TURN_SUMMON: abilities that act when their Pokemon comes in, or as it leaves
+  const entryAbilityIds = [
+    AbilityId.INTIMIDATE, AbilityId.DRIZZLE, AbilityId.DROUGHT, AbilityId.SAND_STREAM, AbilityId.SNOW_WARNING,
+    AbilityId.ELECTRIC_SURGE, AbilityId.GRASSY_SURGE, AbilityId.MISTY_SURGE, AbilityId.PSYCHIC_SURGE,
+    AbilityId.PRESSURE, AbilityId.MOLD_BREAKER, AbilityId.UNNERVE, AbilityId.DOWNLOAD, AbilityId.TRACE,
+    AbilityId.FRISK, AbilityId.ANTICIPATION, AbilityId.FOREWARN, AbilityId.SCREEN_CLEANER, AbilityId.IMPOSTER,
+    AbilityId.AIR_LOCK, AbilityId.CLOUD_NINE, AbilityId.NEUTRALIZING_GAS, AbilityId.INTREPID_SWORD,
+    AbilityId.DAUNTLESS_SHIELD, AbilityId.LEVITATE, AbilityId.MAGIC_GUARD, AbilityId.IMMUNITY, AbilityId.OWN_TEMPO,
+    AbilityId.OBLIVIOUS, AbilityId.LIMBER, AbilityId.INSOMNIA, AbilityId.CONTRARY, AbilityId.CLEAR_BODY,
+    AbilityId.DEFIANT, AbilityId.COMPETITIVE, AbilityId.WIMP_OUT, AbilityId.EMERGENCY_EXIT,
+  ];
   const headerAbilityIds = [
     AbilityId.LONG_REACH, AbilityId.WATER_VEIL, AbilityId.WATER_BUBBLE, AbilityId.THERMAL_EXCHANGE, AbilityId.COMATOSE,
     AbilityId.PURIFYING_SALT, AbilityId.MAGIC_GUARD, AbilityId.FLAME_BODY, AbilityId.ROUGH_SKIN, AbilityId.UNSEEN_FIST,
@@ -508,19 +532,38 @@ it("turntest producer", async () => {
     );
   const playerBench = benchPool(true);
 
+  // The party screen a SwitchPhase opens: the n-th screen of the turn sends in the Pokemon the n-th
+  // number of the case's PICK list picks among those it can send in (the bench, not fainted). The
+  // numbers come from the case index, not the case stream, so the streams stay as they were.
+  let picks: number[] = [];
+  let pickAt = 0;
+  const uiSetMode = scene.ui.setMode.bind(scene.ui);
+  scene.ui.setMode = (mode: UiMode, ...args: any[]) => {
+    if (mode !== UiMode.PARTY) {
+      return uiSetMode(mode, ...args);
+    }
+    const party = scene.getPlayerParty();
+    const first = battle.getBattlerCount();
+    const eligible = party.map((_: any, k: number) => k).filter((k: number) => k >= first && !party[k].isFainted());
+    const r = picks[pickAt++ % picks.length];
+    args[2](eligible.length ? eligible[r % eligible.length] : -1, PartyOption.SEND_OUT);
+    return Promise.resolve();
+  };
+
   // ---- the state dump (the C engine prints the same records; see tests/turntest.c) ----
   const L = (xs: any[]) => (xs.length ? xs.join(",") : "-");
   const num = (v: any) => (v === undefined || v === null ? "u" : String(v));
   const rngState = (st: string) => st.split(",").slice(1).join(",");
   const turnMove = (t: any) => `${t.move}:${L(t.targets).replace(/,/g, "/")}:${t.useMode}:${num(t.result)}`;
-  const monLines = (p: any) => {
+  // A Pokemon's records are keyed by its battler index on the field (0, 2), or p<slot> / e<slot>
+  // for a bench Pokemon of the player or the enemy
+  const monLines = (p: any, b: string) => {
     const td = p.turnData;
     const sd = p.summonData;
     const st = p.status;
     if (st && st.effect === StatusEffect.NONE) {
       throw new Error("Status object with effect NONE");
     }
-    const b = p.getBattlerIndex();
     return [
       [
         `MON b=${b} id=${p.id} sp=${p.species.speciesId} form=${p.formIndex} lv=${p.level} ivs=${L(p.ivs)} nat=${p.nature}`,
@@ -528,7 +571,7 @@ it("turntest producer", async () => {
         `friend=${p.friendship} hp=${p.hp} stats=${L(p.stats)} st=${st ? st.effect : 0} toxic=${st ? st.toxicTurnCount : 0}`,
         `sleep=${num(st?.sleepTurnsRemaining)} freeze=${num(st?.freezeTurnsRemaining)} stages=${L(sd.statStages)}`,
         `tera=${p.isTerastallized ? 1 : 0} teratype=${p.teraType} stellar=${L([...p.stellarTypesBoosted].sort((x, y) => x - y))}`,
-        `boss=${p.isBoss() ? 1 : 0} onfield=${p.isOnField() ? 1 : 0} out=${p.switchOutStatus ? 1 : 0}`,
+        `boss=${p.isBoss() ? 1 : 0} shiny=${p.isShiny(true) ? 1 : 0} onfield=${p.isOnField() ? 1 : 0} out=${p.switchOutStatus ? 1 : 0}`,
         `shc=${sd.hitCount} types=${L(sd.types)} added=${sd.addedType ?? 0} abilsup=${sd.abilitySuppressed ? 1 : 0}`,
         `tsd=${p.tempSummonData.turnCount} tswd=${p.tempSummonData.waveTurnCount}`,
         `aas=${L([...sd.abilitiesApplied])} aaw=${L([...p.waveData.abilitiesApplied])}`,
@@ -588,8 +631,10 @@ it("turntest producer", async () => {
       lines.push(`POS type=${pt.tagType} turns=${pt.turnCount} target=${pt.targetIndex} sid=${pt.sourceId ?? -1}`
         + ` smove=${pt.sourceMove ?? 0} heal=${pt.healHp ?? 0}`);
     }
-    for (const p of [A, D]) {
-      lines.push(...monLines(p));
+    for (const [side, party] of [[0, scene.getPlayerParty()], [1, scene.getEnemyParty()]] as [number, any[]][]) {
+      party.forEach((p: any, k: number) => {
+        lines.push(...monLines(p, k === 0 ? String(side * 2) : `${side ? "e" : "p"}${k}`));
+      });
     }
     for (const [side, list] of [[0, scene.modifiers], [1, scene.enemyModifiers]] as [number, any[]][]) {
       for (const m of list) {
@@ -597,12 +642,16 @@ it("turntest producer", async () => {
       }
     }
     for (const [side, party] of [[0, scene.getPlayerParty()], [1, scene.getEnemyParty()]] as [number, any[]][]) {
-      lines.push(`PARTY side=${side} list=${L(party.map((m: any) => `${m.id}:${m.species.speciesId}:${m.status?.effect ?? 0}:${m.hp}:${m.moveset.map((x: any) => x.moveId).join("/") || "-"}`))}`);
+      lines.push(`PARTY side=${side} list=${L(party.map((m: any) => m.id))}`);
     }
+    lines.push(`PICK list=${L(picks)}`);
     for (let k = 0; k < 4; k++) {
       const c = battle.turnCommands[k];
       if (c) {
-        lines.push(`CMD b=${k} cmd=${c.command} move=${c.move?.move ?? 0} targets=${L(c.move?.targets ?? [])} mode=${c.move?.useMode ?? 0} skip=${c.skip ? 1 : 0}`);
+        lines.push(
+          `CMD b=${k} cmd=${c.command} move=${c.move?.move ?? 0} targets=${L(c.move?.targets ?? [])} mode=${c.move?.useMode ?? 0} skip=${c.skip ? 1 : 0}`
+            + ` cursor=${num(c.cursor)} baton=${c.args?.[0] === true ? 1 : 0}`,
+        );
       }
       const pc = battle.preTurnCommands[k];
       if (pc) {
@@ -646,8 +695,7 @@ it("turntest producer", async () => {
   // Where the turn engine hands control back: the turn is over (TurnInitPhase), or the battle
   // moves on to something outside a turn (a switch-in prompt, victory, a wild Pokemon leaving).
   const boundary = new Set([
-    "TurnInitPhase", "VictoryPhase", "SwitchPhase", "SwitchSummonPhase", "GameOverPhase", "BattleEndPhase",
-    "SelectModifierPhase",
+    "TurnInitPhase", "VictoryPhase", "GameOverPhase", "BattleEndPhase", "SelectModifierPhase",
   ]);
   const phaseTag = (ph: any) => {
     const b = ph.battlerIndex;
@@ -721,6 +769,8 @@ it("turntest producer", async () => {
       : EFFECTS && rnd(3) === 0 ? effectAbilityIds[rnd(effectAbilityIds.length)]
       : HEADER && rnd(3) === 0 ? headerAbilityIds[rnd(headerAbilityIds.length)]
       : SWITCH && rnd(3) === 0 ? switchAbilityIds[rnd(switchAbilityIds.length)]
+      : SUMMON && rnd(6) === 0 ? [AbilityId.NATURAL_CURE, AbilityId.REGENERATOR][rnd(2)]
+      : SUMMON && rnd(5) === 0 ? entryAbilityIds[rnd(entryAbilityIds.length)]
       : RICH && rnd(2) === 0 ? abilityIds[rnd(abilityIds.length)] : AbilityId.BALL_FETCH;
     p.gender = rnd(3) - 1;
     p.friendship = rnd(256);
@@ -732,7 +782,7 @@ it("turntest producer", async () => {
     p.status = null;
     if (HEAL && rnd(3) === 0) {
       p.status = new Status([StatusEffect.POISON, StatusEffect.TOXIC][rnd(2)], rnd(4));
-    } else if (RICH ? rnd(3) === 0 : STATUS || WEATHER ? rnd(4) === 0 : ONHIT || CHARGE || TAGS || TRAPS || PROTECT || ARENA || EFFECTS ? rnd(6) === 0 : HEADER ? rnd(4) === 0 : SWITCH ? rnd(6) === 0 : STAT && rnd(8) === 0) {
+    } else if (RICH ? rnd(3) === 0 : STATUS || WEATHER ? rnd(4) === 0 : ONHIT || CHARGE || TAGS || TRAPS || PROTECT || ARENA || EFFECTS ? rnd(6) === 0 : HEADER ? rnd(4) === 0 : SWITCH || SUMMON ? rnd(6) === 0 : STAT && rnd(8) === 0) {
       const s = statuses[rnd(statuses.length)];
       p.status = new Status(s, rnd(4), s === StatusEffect.SLEEP ? 1 + rnd(3) : 0, s === StatusEffect.FREEZE ? 1 + rnd(3) : undefined);
     }
@@ -766,9 +816,9 @@ it("turntest producer", async () => {
         ? headerMoves[rnd(headerMoves.length)]
         : DELAYED && rnd(10) < 6
         ? delayedMoves[rnd(delayedMoves.length)]
-        : SWITCH && rnd(10) < 6
+        : (SWITCH || SUMMON) && rnd(10) < 6
         ? switchMoves[rnd(switchMoves.length)]
-        : SWITCH
+        : SWITCH || SUMMON
         ? (rnd(3) === 0 ? switchOthers[rnd(switchOthers.length)]
           : rnd(2) === 0 ? contactAttacks[rnd(contactAttacks.length)] : attacks[rnd(attacks.length)])
         : DELAYED
@@ -824,6 +874,8 @@ it("turntest producer", async () => {
   const out: string[] = [];
   const thrown: Record<string, number> = {};
   for (let i = 0; i < N; i++) {
+    picks = [0, 1, 2].map(j => (Math.imul(3 * i + j + 1, 2654435761) >>> 0) % 60);
+    pickAt = 0;
     pm.clearAllPhases();
     pm.phaseQueue.deferredActive = false; // clear() leaves it set
     pm.dynamicQueueManager.clearLastTurnOrder();
@@ -850,10 +902,43 @@ it("turntest producer", async () => {
     party.length = 0;
     party.push(A);
     const benchSize = SWITCH && rnd(5) === 0 ? 0 : 1 + rnd(playerBench.length);
+    for (const b of playerBench) {
+      // a bench Pokemon sent in during an earlier case: off the field, with fresh summon, turn and wave data
+      if (b.isOnField()) {
+        scene.field.remove(b);
+      }
+      b.switchOutStatus = false;
+      b.resetSummonData();
+      b.resetTurnData();
+      b.resetBattleAndWaveData();
+      b.customPokemonData.ability = -1;
+    }
     for (const b of playerBench.slice(0, benchSize)) {
       b.species = speciesDataRegistry.getSpecies(ids[rnd(ids.length)]);
-      b.hp = rnd(SWITCH ? 3 : 4) === 0 ? 0 : b.getMaxHp();
+      // a form an earlier case's switch-in changed to may not exist for the new species
+      b.formIndex = 0;
+      if (SWITCH || SUMMON) {
+        // a Pokemon that can be dragged in: its own level, ability, moves, HP, status and shininess
+        b.level = 1 + rnd(100);
+        b.ivs = [0, 0, 0, 0, 0, 0].map(() => rnd(32));
+        b.nature = rnd(25);
+        b.abilityIndex = rnd(3);
+        b.shiny = rnd(8) === 0;
+        b.moveset = [];
+        for (let k = 1 + rnd(4); k > 0; k--) {
+          b.moveset.push(new PokemonMove(usable[rnd(usable.length)].id));
+        }
+      }
+      if (SUMMON && rnd(2) === 0) {
+        b.customPokemonData.ability = entryAbilityIds[rnd(entryAbilityIds.length)];
+      }
+      b.calculateStats();
+      b.hp = rnd(SWITCH ? 3 : 4) === 0 ? 0 : (SWITCH || SUMMON) && rnd(2) === 0 ? 1 + rnd(b.getMaxHp()) : b.getMaxHp();
       b.status = b.hp ? null : new Status(StatusEffect.FAINT);
+      if ((SWITCH || SUMMON) && b.hp && rnd(4) === 0) {
+        const st = statuses[rnd(statuses.length)];
+        b.status = new Status(st, rnd(4), st === StatusEffect.SLEEP ? 1 + rnd(3) : 0, st === StatusEffect.FREEZE ? 1 + rnd(3) : undefined);
+      }
       party.push(b);
     }
     battle.playerParticipantIds.add(A.id);
@@ -868,6 +953,13 @@ it("turntest producer", async () => {
     }
     command(A);
     command(D);
+    if (SUMMON && rnd(3) === 0) {
+      // the player switches (CommandPhase.tryLeaveField): a bench Pokemon that hasn't fainted
+      const bench = party.map((_: any, k: number) => k).filter((k: number) => k >= 1 && !party[k].isFainted());
+      if (bench.length) {
+        battle.turnCommands[0] = { command: Command.POKEMON, cursor: bench[rnd(bench.length)], args: [false] };
+      }
+    }
     if (CALLED) {
       (scene.arena as any).biomeId = biomeIds[rnd(biomeIds.length)];
       if (rnd(3) === 0) {
@@ -1049,7 +1141,20 @@ it("turntest producer", async () => {
         }
       }
     }
-    if (SWITCH) {
+    if (SUMMON && rnd(2) === 0) {
+      // entry hazards on the player's side, laid by the wild Pokemon
+      const hazards = [ArenaTagType.SPIKES, ArenaTagType.TOXIC_SPIKES, ArenaTagType.STEALTH_ROCK, ArenaTagType.STICKY_WEB];
+      for (let k = 1 + rnd(3); k > 0; k--) {
+        const type = hazards[rnd(hazards.length)];
+        if (scene.arena.getTagOnSide(type, ArenaTagSide.PLAYER)) {
+          continue;
+        }
+        const tag = getArenaTag(type, 0, MoveId.NONE, D.id, ArenaTagSide.PLAYER) as any;
+        tag.layers = 1 + rnd(tag.maxLayers);
+        scene.arena.tags.push(tag);
+      }
+    }
+    if (SWITCH || SUMMON) {
       const r = rnd(3);
       battle.waveIndex = r === 0 ? 10 * (1 + rnd(19)) : r === 1 ? [5, 15, 25, 45, 49, 55, 95, 99, 105, 149, 155, 195][rnd(12)]
         : 1 + rnd(199);

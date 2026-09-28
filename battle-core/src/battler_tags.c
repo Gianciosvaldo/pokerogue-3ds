@@ -608,6 +608,23 @@ bool pr_add_tag(pr_battle *bt, pr_engine *e, pr_pokemon *p, int type, int turn_c
     return true;
 }
 
+/* pokemon.canAddTag(type): not there yet, and no tag immunity (simulated, with a stub tag) */
+bool pr_can_add_tag(pr_battle *bt, pr_pokemon *p, int type)
+{
+    if (find_tag(p, type) >= 0) return false;
+    bool cancelled = false;
+    pr_ab_params ip = {.pokemon = p, .move = -1, .flag = &cancelled, .tag_type = type, .simulated = true};
+    pr_apply_ab_attrs(bt, PR_AC_BattlerTagImmunityAbAttr, &ip);
+    pr_speed_iter it;
+    pr_pokemon *ally;
+    pr_speed_iter_init(bt, &it, p->is_player ? ARENA_TAG_SIDE_PLAYER : ARENA_TAG_SIDE_ENEMY);
+    while ((ally = pr_speed_iter_next(bt, &it))) {
+        pr_ab_params ap = {.pokemon = ally, .target = p, .move = -1, .flag = &cancelled, .tag_type = type, .simulated = true};
+        pr_apply_ab_attrs(bt, PR_AC_UserFieldBattlerTagImmunityAbAttr, &ap);
+    }
+    return !cancelled;
+}
+
 void pr_lapse_tags(pr_battle *bt, pr_engine *e, pr_pokemon *p, int lapse_type)
 {
     /* tags.filter(t => lapseType === FAINT || (t.lapseTypes has lapseType && !t.lapse(this, lapseType)))
@@ -704,6 +721,55 @@ void pr_remove_field_boost_tag(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool 
     p->tags[i].turn_count = 0;
     pr_queue_message(bt, e);
     splice_tag(p, i);
+}
+
+/* transferTagsBySourceId: tags this Pokemon got from `from` now come from `to` (every tag type:
+ * only sourceId changes) */
+void pr_transfer_tags_by_source_id(pr_pokemon *p, int64_t from, int64_t to)
+{
+    for (int i = 0; i < p->n_tags; i++)
+        if (p->tags[i].source_id == from) p->tags[i].source_id = to;
+}
+
+/* push onto summonData.tags as it is: no canAdd, no onAdd (Baton Pass, Shed Tail) */
+static bool push_tag(pr_battle *bt, pr_pokemon *p, const pr_battler_tag *t)
+{
+    if (p->n_tags >= PR_MAX_BATTLER_TAGS) {
+        pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT);
+        return false;
+    }
+    p->tags[p->n_tags++] = *t;
+    return true;
+}
+
+/* Pokemon.transferSummon(source): Baton Pass hands over the stat stages and the tags that are
+ * isBatonPassable for the recipient (dumped per type; Telekinesis refuses Mega and G-Max Gengar).
+ * Upstream pushes the same tag objects, and the source's summon data is reset right after, so a
+ * copy acts the same. */
+void pr_transfer_summon(pr_battle *bt, pr_pokemon *to, const pr_pokemon *from)
+{
+    for (int s = 0; s < 7; s++) to->stat_stages[s] = from->stat_stages[s];   /* setStatStage: already in -6..6 */
+    for (int i = 0; i < from->n_tags; i++) {
+        const pr_battler_tag *t = &from->tags[i];
+        bool pass = pr_battler_tags_info[t->type].baton;
+        if (t->type == BATTLER_TAG_TYPE_TELEKINESIS && to->species == SPECIES_ID_GENGAR) {
+            const char *fk = pr_pokemon_form(to)->form_key;
+            pass = !(fk && (!strcmp(fk, "mega") || !strcmp(fk, "gigantamax")));
+        }
+        if (!pass) continue;
+        if (t->type == BATTLER_TAG_TYPE_POWER_TRICK) {           /* swapStat(this) */
+            note_tag(bt, t->type);
+            continue;
+        }
+        push_tag(bt, to, t);
+    }
+}
+
+/* Shed Tail: the leaving Pokemon's SubstituteTag goes onto the new one's tags */
+void pr_pass_substitute(pr_battle *bt, pr_pokemon *to, const pr_pokemon *from)
+{
+    int i = find_tag((pr_pokemon *)from, BATTLER_TAG_TYPE_SUBSTITUTE);
+    if (i >= 0) push_tag(bt, to, &from->tags[i]);
 }
 
 void pr_remove_tags_by_source_id(pr_battle *bt, pr_engine *e, pr_pokemon *p, int64_t source_id)

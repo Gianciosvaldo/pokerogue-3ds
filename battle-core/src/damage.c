@@ -43,8 +43,9 @@ int pr_get_move_type(pr_battle *bt, const pr_pokemon *p, int move)
     return t;
 }
 
-double pr_get_attack_type_effectiveness_ex(pr_battle *bt, const pr_pokemon *def, int move_type,
-                                           const pr_pokemon *source, int move, bool simulated)
+double pr_get_attack_type_effectiveness_opts(pr_battle *bt, const pr_pokemon *def, int move_type,
+                                             const pr_pokemon *source, int move, bool simulated,
+                                             bool ignore_strong_winds)
 {
     if (move_type == POKEMON_TYPE_STELLAR) return def->terastallized ? 2 : 1;
     int8_t types[3];
@@ -60,7 +61,7 @@ double pr_get_attack_type_effectiveness_ex(pr_battle *bt, const pr_pokemon *def,
     for (int i = 0; i < n; i++) {
         double tm = type_mult(move_type, types[i]);
         /* source?.isActive(true): on the field and not fainted */
-        if (source && source->hp > 0 && tm == 0) {
+        if (source && source->hp > 0 && source->on_field && !source->switch_out_status && tm == 0) {
             /* checkIgnoreTypeImmunity: grounded Flying types, Foresight/Miracle Eye tags,
              * then IgnoreTypeImmunityAbAttr (Scrappy, Mind's Eye). */
             if (move_type == POKEMON_TYPE_GROUND && types[i] == POKEMON_TYPE_FLYING && pr_is_forcibly_grounded(bt, def))
@@ -78,12 +79,18 @@ double pr_get_attack_type_effectiveness_ex(pr_battle *bt, const pr_pokemon *def,
         multi *= tm;
     }
     if (move >= 0) pr_apply_type_chart_override(bt, source, def, move, &multi, types, n, move_type);
-    if (bt->weather == WEATHER_TYPE_STRONG_WINDS && !pr_weather_effect_suppressed(bt)
+    if (!ignore_strong_winds && bt->weather == WEATHER_TYPE_STRONG_WINDS && !pr_weather_effect_suppressed(bt)
         && pr_is_of_type(def, POKEMON_TYPE_FLYING) && type_mult(move_type, POKEMON_TYPE_FLYING) == 2) {
         multi /= 2;
         if (!simulated && bt->engine) pr_queue_message(bt, bt->engine); /* strongWindsEffectMessage */
     }
     return multi;
+}
+
+double pr_get_attack_type_effectiveness_ex(pr_battle *bt, const pr_pokemon *def, int move_type,
+                                           const pr_pokemon *source, int move, bool simulated)
+{
+    return pr_get_attack_type_effectiveness_opts(bt, def, move_type, source, move, simulated, false);
 }
 
 /* getAttackTypeEffectiveness(moveType, {source, move}): simulated by default */

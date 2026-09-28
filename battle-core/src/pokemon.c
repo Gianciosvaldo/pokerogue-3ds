@@ -23,6 +23,15 @@ const pr_form *pr_pokemon_form(const pr_pokemon *p)
 
 /* calculateStats() with calculateBaseStats(). Fusion and challenges (FLIP_STAT) are
  * not ported yet; the Wonder Guard check reads the permanent ability and the passive. */
+void pr_recalculate_stats(pr_battle *bt, pr_pokemon *p)
+{
+    int32_t hp = p->hp, last_max = p->stats[STAT_HP];
+    pr_calculate_stats(bt, p);
+    int32_t max = p->stats[STAT_HP];
+    if (hp > max) p->hp = max;
+    else p->hp = hp && last_max && max > last_max ? hp + (max - last_max) : hp;
+}
+
 void pr_calculate_stats(pr_battle *bt, pr_pokemon *p)
 {
     const pr_form *f = pr_pokemon_form(p);
@@ -257,10 +266,23 @@ double js_round(double x)
  * Pokemon.passive or being a boss; the game-mode rules around it (no passive for the classic
  * final boss or endless bosses, the passives challenge, daily-run passives) and the test
  * overrides belong to the mode layer, which isn't ported. */
+/* Pokemon.hasPassive(), with the game mode's rules when the mode is known: no passive for the
+ * enemy in the classic final battle or on an endless boss wave, and a daily run's Pokemon has the
+ * passive its custom data names. (The passives challenge isn't modelled.) */
+static bool has_passive(pr_battle *bt, const pr_pokemon *p)
+{
+    int gm = bt->game_mode, w = bt->wave_index;
+    if (gm == GAME_MODES_CHALLENGE) pr_note_unported(bt, PR_FEAT_WAVE);
+    bool endless = gm == GAME_MODES_ENDLESS || gm == GAME_MODES_SPLICED_ENDLESS;
+    if (!p->is_player && ((gm == GAME_MODES_CLASSIC && w == 200) || (endless && (w % 250 == 0 || w % 1000 == 0))))
+        return false;
+    if (gm == GAME_MODES_DAILY && p->custom_passive != -1) return true;
+    return p->passive_flag || p->is_boss;
+}
+
 void pr_update_passive(pr_battle *bt, pr_pokemon *p)
 {
-    (void)bt;
-    if (!(p->passive_flag || p->is_boss)) { p->passive = 0; return; }
+    if (!has_passive(bt, p)) { p->passive = 0; return; }
     if (p->custom_passive >= 0) p->passive = (uint16_t)p->custom_passive;
     else p->passive = pr_pokemon_form(p)->passive;
 }

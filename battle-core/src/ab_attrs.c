@@ -10,6 +10,7 @@
 #define AB_FLAG_BYPASS_FAINT (1u << 0)
 #define AB_FLAG_IGNORABLE (1u << 1)
 #define AB_FLAG_UNSUPPRESSABLE (1u << 2)
+#define AB_FLAG_UNCOPIABLE (1u << 3)
 
 #define P(T, a) ((const pr_attr_##T *)(a)->p)
 /* Nullable closure field: PR_NO_FN when absent. Structs with a `nulls` mask always
@@ -73,6 +74,41 @@ bool pr_has_ability_active(pr_battle *bt, const pr_pokemon *p, int ability)
 {
     if (p->ability == ability && pr_can_apply_ability(bt, p, p->ability)) return true;
     return p->passive && p->passive == ability && pr_can_apply_ability(bt, p, p->passive);
+}
+
+/* PostSummonAbAttr.shouldActivateOnGain(): activateOnGain, after the fields every attr starts with
+ * (nulls, showAbility, extraCondition); extraCondition is a closure id where an instance has one */
+static bool activate_on_gain(const pr_attr *a)
+{
+    switch (a->cls) {
+    case PR_AC_PostSummonAddBattlerTagAbAttr: return P(PostSummonAddBattlerTagAbAttr, a)->activateOnGain;
+    case PR_AC_PostSummonFormChangeAbAttr: return P(PostSummonFormChangeAbAttr, a)->activateOnGain;
+    case PR_AC_PostSummonMessageAbAttr: return P(PostSummonMessageAbAttr, a)->activateOnGain;
+    }
+    return ((const struct { uint32_t nulls; bool showAbility; uint8_t extraCondition; bool activateOnGain; } *)a->p)
+        ->activateOnGain;
+}
+_Static_assert(offsetof(pr_attr_PostSummonTransformAbAttr, activateOnGain) == offsetof(pr_attr_DownloadAbAttr, activateOnGain),
+               "PostSummon attr layout");
+
+/* Pokemon.setTempAbility(ability) (passive = false): the ability's lose effects, summonData.ability,
+ * then the new ability's PostSummon attrs that activate on gain */
+void pr_set_temp_ability(pr_battle *bt, pr_pokemon *p, uint16_t ability)
+{
+    pr_ab_params lose = {.pokemon = p, .move = -1, .only = 1};
+    pr_apply_ab_attrs(bt, PR_AC_PreLeaveFieldAbAttr, &lose);            /* applyOnLoseAbAttrs (no ability has an
+                                                                         * IllusionBreakAbAttr in the dump) */
+    p->ability_override = ability;
+    p->ability = ability;
+    pr_ab_params gain = {.pokemon = p, .move = -1, .only = 1, .on_gain = true};
+    pr_apply_ab_attrs(bt, PR_AC_PostSummonAbAttr, &gain);               /* applyOnGainAbAttrs */
+}
+
+/* applyAbAttrs("PostDamageAbAttr", {pokemon, damage, source}) */
+void pr_post_damage_ab(pr_battle *bt, pr_pokemon *p, double damage, pr_pokemon *source)
+{
+    pr_ab_params pp = {.pokemon = p, .opponent = source, .move = -1, .damage = damage};
+    pr_apply_ab_attrs(bt, PR_AC_PostDamageAbAttr, &pp);
 }
 
 bool pr_has_ability_with_attr(pr_battle *bt, const pr_pokemon *p, uint16_t cls)
@@ -160,10 +196,11 @@ bool pr_can_apply_ability(pr_battle *bt, const pr_pokemon *p, uint16_t ability)
     if (p->ability_suppressed && !(ab->flags & AB_FLAG_UNSUPPRESSABLE)) return false;
     /* Neutralizing Gas: arena.getTag(NEUTRALIZING_GAS) suppresses the abilities of Pokemon on the field
      * (and PreSummonAbAttr abilities off it), except unsuppressable ones and the gas user's own: its
-     * other ability too while it is the only source (sourceCount 1). */
+     * other ability too while it is the only source (sourceCount 1). isOnField() goes by on_field, not
+     * the field slot: a Pokemon that has left the field keeps its slot until the switch swaps it. */
     const pr_arena_tag *gas = pr_arena_get_tag_on_side(bt, ARENA_TAG_TYPE_NEUTRALIZING_GAS, ARENA_TAG_SIDE_BOTH);
     if (gas && !gas->being_removed
-        && (pr_battler_index(bt, p) >= 0 || pr_ability_first_attr(ability, PR_AC_PreSummonAbAttr))) {
+        && ((p->on_field && !p->switch_out_status) || pr_ability_first_attr(ability, PR_AC_PreSummonAbAttr))) {
         uint16_t src_attr = PR_AC_PreLeaveFieldRemoveSuppressAbilitiesSourceAbAttr;
         bool this_suppressing = pr_ability_first_attr(ability, src_attr) != NULL;
         /* hasAbilityWithAttr(..., canApply = false) */
@@ -467,6 +504,251 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         if (pr_status_healed_get(c->ability)) pr_queue_message(bt, c->e);
         pr_status_healed_set(c->ability, p->status);
         pr_reset_status_phase(bt, c->e, (pr_pokemon *)p, false);
+        return 1;
+    }
+    /* ---- coming in: PostSummonActivateAbilityPhase ---- */
+    case PR_AC_PostSummonMessageAbAttr:                                 /* Pressure, Mold Breaker, Anticipation... */
+    case PR_AC_PostSummonUnnamedMessageAbAttr:                          /* Air Lock, Cloud Nine */
+        if (!c->e) return -1;
+        GATE(true);
+        if (!pp->simulated) pr_queue_message(bt, c->e);
+        return 1;
+    case PR_AC_PostSummonAddBattlerTagAbAttr: {                         /* Protosynthesis, Quark Drive... */
+        const pr_attr_PostSummonAddBattlerTagAbAttr *x = P(PostSummonAddBattlerTagAbAttr, a);
+        if (!c->e) return -1;
+        GATE(pr_can_add_tag(bt, (pr_pokemon *)p, x->tagType));
+        if (!pp->simulated) pr_add_tag(bt, c->e, (pr_pokemon *)p, x->tagType, x->turnCount, 0, -1);
+        return 1;
+    }
+    case PR_AC_PostSummonStatStageChangeAbAttr:                         /* Intimidate, Intrepid Sword... */
+    case PR_AC_PostSummonStatStageChangeOnArenaAbAttr: {                /* Wind Rider with a Tailwind */
+        const pr_statchanges *ch;
+        bool self_target, intimidate;
+        if (a->cls == PR_AC_PostSummonStatStageChangeAbAttr) {
+            const pr_attr_PostSummonStatStageChangeAbAttr *x = P(PostSummonStatStageChangeAbAttr, a);
+            ch = &x->changes, self_target = x->selfTarget, intimidate = x->intimidate;
+            if (!c->e) return -1;
+            GATE(true);
+        } else {
+            const pr_attr_PostSummonStatStageChangeOnArenaAbAttr *x = P(PostSummonStatStageChangeOnArenaAbAttr, a);
+            ch = &x->changes, self_target = x->selfTarget, intimidate = x->intimidate;
+            if (!c->e) return -1;
+            GATE(pr_arena_get_tag_on_side(bt, x->arenaTagType, p->is_player ? ARENA_TAG_SIDE_PLAYER : ARENA_TAG_SIDE_ENEMY));
+        }
+        if (pp->simulated) return 1;
+        int8_t st[7], sg[7];
+        int n = 0;
+        for (unsigned i = 0; i < ch->n && n < 7; i++, n++) { st[n] = ch->v[i].stat; sg[n] = ch->v[i].stages; }
+        if (self_target) {
+            pr_unshift_stat_stage_change_ex(bt, c->e, pr_battler_index(bt, p), st, sg, n, (pr_pokemon *)p, 0);
+            return 1;
+        }
+        /* each opponent in speed order: Intimidate checks its immunities and reactions (Rattled,
+         * Guard Dog) and a Substitute */
+        pr_speed_iter it;
+        pr_pokemon *opp;
+        pr_speed_iter_init(bt, &it, p->is_player ? ARENA_TAG_SIDE_ENEMY : ARENA_TAG_SIDE_PLAYER);
+        while ((opp = pr_speed_iter_next(bt, &it))) {
+            bool cancelled = false;
+            if (intimidate) {
+                pr_ab_params ip = {.pokemon = opp, .move = -1, .flag = &cancelled};
+                pr_apply_ab_attrs(bt, PR_AC_IntimidateImmunityAbAttr, &ip);
+                pr_apply_ab_attrs(bt, PR_AC_PostIntimidateStatStageChangeAbAttr, &ip);
+                if (pr_get_battler_tag(opp, BATTLER_TAG_TYPE_SUBSTITUTE)) cancelled = true;
+            }
+            if (!cancelled)
+                pr_unshift_stat_stage_change_ex(bt, c->e, pr_battler_index(bt, opp), st, sg, n, (pr_pokemon *)p, 0);
+        }
+        return 1;
+    }
+    case PR_AC_PostIntimidateStatStageChangeAbAttr: {                   /* Rattled, Guard Dog */
+        const pr_attr_PostIntimidateStatStageChangeAbAttr *x = P(PostIntimidateStatStageChangeAbAttr, a);
+        if (!c->e) return -1;
+        GATE(true);
+        if (!pp->simulated) {
+            int8_t st[7], sg[7];
+            int n = 0;
+            for (unsigned i = 0; i < x->changes.n && n < 7; i++, n++) { st[n] = x->changes.v[i].stat; sg[n] = x->changes.v[i].stages; }
+            pr_unshift_stat_stage_change_ex(bt, c->e, pr_battler_index(bt, p), st, sg, n, (pr_pokemon *)p, 0);
+        }
+        *pp->flag = x->overwrites;
+        return 1;
+    }
+    case PR_AC_PostSummonWeatherChangeAbAttr: {                         /* Drizzle, Drought, the primal weathers */
+        int w = P(PostSummonWeatherChangeAbAttr, a)->weatherType;
+        if (!c->e) return -1;
+        bool replaceable = w == WEATHER_TYPE_HEAVY_RAIN || w == WEATHER_TYPE_HARSH_SUN || w == WEATHER_TYPE_STRONG_WINDS
+                           || w == WEATHER_TYPE_NONE || !pr_weather_immutable(bt->weather);
+        GATE(replaceable && bt->weather != w);                          /* canSetWeather */
+        if (!pp->simulated) pr_try_set_weather(bt, c->e, w, p);
+        return 1;
+    }
+    case PR_AC_PostSummonTerrainChangeAbAttr: {                         /* the Surges */
+        int t = P(PostSummonTerrainChangeAbAttr, a)->terrainType;
+        if (!c->e) return -1;
+        GATE(bt->terrain != t);                                         /* canSetTerrain */
+        if (!pp->simulated) pr_try_set_terrain(bt, c->e, t, false, p);
+        return 1;
+    }
+    case PR_AC_PostSummonAddArenaTagAbAttr: {                           /* Neutralizing Gas */
+        const pr_attr_PostSummonAddArenaTagAbAttr *x = P(PostSummonAddArenaTagAbAttr, a);
+        if (!c->e) return -1;
+        GATE(true);
+        if (!pp->simulated) pr_arena_add_tag(bt, c->e, x->tagType, x->turnCount, -1, p->id, ARENA_TAG_SIDE_BOTH, false);
+        return 1;
+    }
+    case PR_AC_PostSummonRemoveArenaTagAbAttr: {                        /* Screen Cleaner */
+        const pr_attr_PostSummonRemoveArenaTagAbAttr *x = P(PostSummonRemoveArenaTagAbAttr, a);
+        if (!c->e) return -1;
+        bool any = false;                                               /* arena.hasTag(tagTypes): any side */
+        for (int i = 0; i < bt->n_arena_tags; i++) any |= type_in(&x->arenaTags, bt->arena_tags[i].type);
+        GATE(any);
+        if (!pp->simulated) pr_arena_remove_tags_on_side(bt, c->e, x->arenaTags.v, x->arenaTags.n, ARENA_TAG_SIDE_BOTH, false);
+        return 1;
+    }
+    case PR_AC_PostSummonWeatherSuppressedFormChangeAbAttr: {           /* Air Lock, Cloud Nine */
+        /* getPokemonWithWeatherBasedForms(): Castform with Forecast, Cherrim with Flower Gift */
+        const pr_pokemon *forms[4];
+        int nf = 0;
+        for (int k = 0; k < 4; k++) {
+            const pr_pokemon *q = bt->field[k];
+            if (!q || !(q->hp > 0 && q->on_field && !q->switch_out_status)) continue;   /* getField(true) */
+            if ((q->species == SPECIES_ID_CASTFORM && pr_has_ability_active(bt, q, ABILITY_ID_FORECAST))
+                || (q->species == SPECIES_ID_CHERRIM && pr_has_ability_active(bt, q, ABILITY_ID_FLOWER_GIFT)))
+                forms[nf++] = q;
+        }
+        if (!c->e) return -1;
+        GATE(nf > 0);
+        if (!pp->simulated)                                             /* triggerWeatherBasedFormChangesToNormal */
+            for (int k = 0; k < nf; k++) pr_form_change(bt, forms[k], PR_FCT_SpeciesFormChangeRevertWeatherFormTrigger);
+        return 1;
+    }
+    case PR_AC_DownloadAbAttr: {                                        /* Download */
+        /* the opponents' average effective Defense and Sp. Def, each rounded (Math.round) */
+        double def = 0, spdef = 0;
+        int count = 0;
+        for (int k = 0; k < 4; k++) {
+            const pr_pokemon *q = bt->field[k];
+            if (!q || q->is_player == p->is_player || !(q->hp > 0 && q->on_field && !q->switch_out_status)) continue;
+            count++;
+            def += pr_get_effective_stat(bt, q, STAT_DEF, NULL, -1, false, false);
+            spdef += pr_get_effective_stat(bt, q, STAT_SPDEF, NULL, -1, false, false);
+        }
+        if (!c->e) return -1;
+        def = count ? floor(def / count + 0.5) : NAN;
+        spdef = count ? floor(spdef / count + 0.5) : NAN;
+        GATE(def > 0 && spdef > 0);
+        if (!pp->simulated) {
+            int8_t st = def < spdef ? STAT_ATK : STAT_SPATK, sg = 1;
+            pr_unshift_stat_stage_change_ex(bt, c->e, pr_battler_index(bt, p), &st, &sg, 1, (pr_pokemon *)p, 0);
+        }
+        return 1;
+    }
+    case PR_AC_ForewarnAbAttr: {                                        /* Forewarn */
+        const pr_pokemon *opps[4];
+        int no = 0;
+        bool any_moves = false;
+        for (int k = 0; k < 4; k++) {
+            const pr_pokemon *q = bt->field[k];
+            if (!q || q->is_player == p->is_player || !(q->hp > 0 && q->on_field && !q->switch_out_status)) continue;
+            opps[no++] = q;
+            any_moves |= q->n_moves > 0;
+        }
+        if (!c->e) return -1;
+        GATE(any_moves);
+        if (pp->simulated) return 1;
+        /* the strongest moves by getForewarnPower; one of the ties on the battle RNG */
+        int max_power = 0, n_at_max = 0;
+        for (int k = 0; k < no; k++)
+            for (int j = 0; j < opps[k]->n_moves; j++) {
+                int mv = opps[k]->moves[j];
+                if (!mv) continue;
+                int power = pr_moves[mv].category == MOVE_CATEGORY_STATUS ? 1
+                            : pr_move_has_attr((uint16_t)mv, PR_AC_OneHitKOAttr) ? 150
+                            : pr_move_has_attr((uint16_t)mv, PR_AC_CounterDamageAttr) ? 120
+                            : pr_moves[mv].power == -1 ? 80 : pr_moves[mv].power;
+                if (power < max_power) continue;
+                if (power == max_power) { n_at_max++; continue; }
+                max_power = power;
+                n_at_max = 1;
+            }
+        if (n_at_max == 0) return 1;
+        pr_battle_rand_seed_int(bt, n_at_max, 0);
+        pr_queue_message(bt, c->e);                                     /* abilityTriggers:forewarn */
+        return 1;
+    }
+    case PR_AC_FriskAbAttr: {                                           /* Frisk: a message per opponent */
+        if (!c->e) return -1;
+        GATE(true);
+        if (pp->simulated) return 1;
+        pr_speed_iter it;
+        pr_speed_iter_init(bt, &it, p->is_player ? ARENA_TAG_SIDE_ENEMY : ARENA_TAG_SIDE_PLAYER);
+        while (pr_speed_iter_next(bt, &it)) pr_queue_message(bt, c->e);
+        return 1;
+    }
+    /* ---- leaving the field: SwitchSummonPhase.switchAndSummon ---- */
+    case PR_AC_PreSwitchOutResetStatusAbAttr:                           /* Natural Cure */
+        GATE(p->status != 0);
+        if (pp->simulated) return 1;
+        if (!c->e) return -1;
+        pr_reset_status_phase(bt, c->e, (pr_pokemon *)p, true);
+        return 1;
+    case PR_AC_PreSwitchOutHealAbAttr: {                                /* Regenerator */
+        double max = pr_get_stat(p, STAT_HP, true);
+        GATE(p->hp < max);                                              /* !isFullHp() */
+        if (!pp->simulated) ((pr_pokemon *)p)->hp += (int32_t)fmin(to_dmg_value(max * 0.33), max - p->hp);
+        return 1;
+    }
+    case PR_AC_IncreasePpUsedAbAttr:                                    /* Pressure (shows nothing) */
+        GATE(p->is_player != o->is_player);                             /* isOpponent */
+        *pp->value += P(IncreasePpUsedAbAttr, a)->ppIncrease;
+        return 1;
+    case PR_AC_PostSummonUserFieldRemoveStatusEffectAbAttr: {           /* Pastel Veil */
+        const pr_attr_PostSummonUserFieldRemoveStatusEffectAbAttr *x = P(PostSummonUserFieldRemoveStatusEffectAbAttr, a);
+        /* getPlayerField() / getEnemyField(): the first one (two in doubles) of the party, allowed in battle */
+        int side = p->is_player ? 0 : 1, n = bt->double_battle ? 2 : 1;
+        bool any = false;
+        for (int k = 0; k < n; k++) {
+            const pr_pokemon *q = bt->n_party[side] ? (k < bt->n_party[side] ? bt->party[side][k] : NULL)
+                                                    : bt->field[side * 2 + k];
+            if (q && q->hp > 0) any = true;
+        }
+        if (!c->e && !pp->simulated) return -1;
+        GATE(any);
+        if (pp->simulated) return 1;
+        /* getAlliesGenerator(): its side in speed order; the heal text, then resetStatus(false) as a phase */
+        pr_speed_iter it;
+        pr_pokemon *q;
+        pr_speed_iter_init(bt, &it, p->is_player ? ARENA_TAG_SIDE_PLAYER : ARENA_TAG_SIDE_ENEMY);
+        while ((q = pr_speed_iter_next(bt, &it)))
+            if (q->status && type_in(&x->statusEffect, q->status)) {
+                pr_queue_message(bt, c->e);
+                pr_reset_status_phase(bt, c->e, q, false);
+            }
+        return 1;
+    }
+    case PR_AC_PostSummonCopyAbilityAbAttr: {                           /* Trace */
+        /* getOpponents().filter(t => t.getAbility().copiable || t.getAbility().id === WONDER_GUARD) */
+        const pr_pokemon *tg[2];
+        int n = 0;
+        for (int k = 0; k < 2; k++) {
+            const pr_pokemon *t = bt->field[(p->is_player ? 2 : 0) + k];
+            if (!t || t->hp <= 0 || !t->on_field || t->switch_out_status) continue;
+            if (!(pr_abilities[t->ability].flags & AB_FLAG_UNCOPIABLE) || t->ability == ABILITY_ID_WONDER_GUARD) tg[n++] = t;
+        }
+        if (n == 0) return 0;
+        if (n > 1 && !pp->simulated) pr_note_unported(bt, PR_FEAT_DOUBLES);   /* randSeedInt over the targets */
+        if (!c->e && !pp->simulated) return -1;
+        GATE(true);
+        if (!pp->simulated) pr_set_temp_ability(bt, (pr_pokemon *)p, tg[0]->ability);   /* revealAbility: UI */
+        return 1;
+    }
+    case PR_AC_PostDamageForceSwitchAbAttr: {                           /* Wimp Out, Emergency Exit */
+        if (!c->e) return -1;
+        int r = pr_wimp_out_can_apply(bt, p, o, pp->damage, P(PostDamageForceSwitchAbAttr, a)->hpRatio);
+        if (r < 0) return -1;
+        GATE(r);
+        pr_wimp_out_apply(bt, c->e, (pr_pokemon *)p);                   /* the simulated flag isn't read */
         return 1;
     }
     case PR_AC_PostSummonRemoveBattlerTagAbAttr: {                      /* Oblivious, Own Tempo */
@@ -780,6 +1062,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
     case PR_AC_FieldPreventExplosiveMovesAbAttr: /* Damp */
     case PR_AC_BlockItemTheftAbAttr:           /* Sticky Hold */
     case PR_AC_ForceSwitchOutImmunityAbAttr:   /* Suction Cups, Guard Dog */
+    case PR_AC_IntimidateImmunityAbAttr:       /* Inner Focus, Oblivious, Own Tempo, Scrappy */
         GATE(!*pp->flag); /* CancelInteractionAbAttr */
         *pp->flag = true;
         return 1;
@@ -1019,6 +1302,7 @@ void pr_apply_ab_attrs(pr_battle *bt, uint16_t cls, pr_ab_params *pp)
     for (int passive = 0; passive < 2; passive++) {
         uint16_t ability = passive ? p->passive : p->ability;
         if (passive && (!p->passive || p->passive == p->ability)) continue;
+        if (pp->only == (passive ? 1 : 2)) continue;
         const pr_ability *ab = &pr_abilities[ability];
         bool checked = false, can = false;
         for (unsigned i = 0; i < ab->nattr; i++) {
@@ -1026,6 +1310,7 @@ void pr_apply_ab_attrs(pr_battle *bt, uint16_t cls, pr_ab_params *pp)
             if (!pr_attr_is(a->cls, cls)) continue;
             if (!checked) { can = pr_can_apply_ability(bt, p, ability); checked = true; }
             if (!can) break;
+            if (pp->on_gain && !activate_on_gain(a)) continue;                 /* attrFilter */
             if (!condition_ok(bt, a, p)) continue;
             ab_ctx c = {e, false, ability};
             int r = apply_one(bt, a, pp, &c);

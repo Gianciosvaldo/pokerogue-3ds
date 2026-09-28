@@ -48,6 +48,25 @@ static double attacker_move_type_is(ARGS)
     return pr_get_move_type(bt, b, m) == cap_value(self);
 }
 
+/* (pokemon) => pokemon.getOpponents().some(opponent => opponent.moveset.some(...)): Anticipation.
+ * An attack (Hidden Power by its computed type) that would be super effective, or a one-hit KO move */
+static double anticipation(ARGS)
+{
+    UNUSED;
+    for (int k = 0; k < 4; k++) {
+        const pr_pokemon *o = bt->field[k];
+        if (!o || o->is_player == a->is_player || !(o->hp > 0 && o->on_field && !o->switch_out_status)) continue;
+        for (int j = 0; j < 4; j++) {
+            int mv = o->moves[j];
+            if (!mv || pr_moves[mv].category == MOVE_CATEGORY_STATUS) continue;     /* move.is("AttackMove") */
+            if (pr_move_has_attr((uint16_t)mv, PR_AC_OneHitKOAttr)) return 1;
+            int type = pr_move_has_attr((uint16_t)mv, PR_AC_HiddenPowerTypeAttr) ? pr_hidden_power_type(o) : pr_moves[mv].type;
+            if (pr_get_attack_type_effectiveness_opts(bt, a, type, o, mv, true, true) >= 2) return 1;
+        }
+    }
+    return 0;
+}
+
 /* (_pokemon, _defender, move) => boostedCategories.includes(move.category) */
 static double category_in(ARGS)
 {
@@ -405,6 +424,7 @@ const pr_closure_reg pr_ability_closures[] = {
     {"ability:95", "acdfaaf775e5", status_or_comatose}, /* closure 497 */
     {"ability:96", "497d1fe60e56", normalize}, /* closure 498 */
     {"ability:101", "6eb4bea1f968", technician}, /* closure 502 */
+    {"ability:107", "5d2a90933803", anticipation}, /* closure 506 */
     {"ability:110", "89270e5952c9", tinted_lens}, /* closure 508 */
     {"ability:111", "d098fc8f0f4a", super_effective_on_me}, /* closure 509 */
     {"ability:116", "d098fc8f0f4a", super_effective_on_me}, /* closure 510 */
@@ -464,6 +484,8 @@ const pr_closure_reg pr_ability_closures[] = {
     {"ability:272", "da9c6f3897fd", attacker_move_type_is}, /* closure 652 */
     {"ability:274", "35c5a2c7c42c", immune_wind}, /* closure 653 */
     {"ability:276", "80f23dd0757f", user_move_type_is}, /* closure 654 */
+    {"ability:281", "d82d9f5f2c0a", weather_in}, /* closure 661 */
+    {"ability:282", "98bd0df457a0", terrain_in}, /* closure 662 */
     {"ability:283", "bea598419963", good_as_gold}, /* closure 663 */
     {"ability:288", "d82d9f5f2c0a", weather_in}, /* closure 670 */
     {"ability:289", "98bd0df457a0", terrain_in}, /* closure 673 */

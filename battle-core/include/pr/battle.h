@@ -190,6 +190,7 @@ typedef struct pr_pokemon {
     /* Status.toxicTurnCount, sleepTurnsRemaining, freezeTurnsRemaining (-1 = undefined) */
     int16_t status_toxic_turns, status_sleep_turns, status_freeze_turns;
     bool terastallized;
+    bool shiny;                        /* isShiny(true): shiny, or a shiny fusion */
     int8_t tera_type;
     int8_t type_override[2];   /* -2 = none (summonData.types not set) */
     uint16_t moves[4];                 /* moveset, 0 = empty slot */
@@ -236,16 +237,6 @@ typedef struct pr_pokemon {
     uint8_t n_ab_applied_summon, n_ab_applied_wave;
 } pr_pokemon;
 
-/* A party slot: getPlayerParty() / getEnemyParty(), in party order. The Pokemon on the field
- * are full pr_pokemon (bt->field); the bench is only what the battle reads of it so far. */
-typedef struct pr_party_member {
-    uint32_t id;               /* Pokemon.id */
-    uint16_t species;          /* Pokemon.species (not the fusion) */
-    uint8_t status;            /* status?.effect, 0 = none */
-    int32_t hp;
-    uint16_t moves[4];         /* moveset move ids (Assist reads them) */
-    uint8_t n_moves;
-} pr_party_member;
 #define PR_MAX_PARTY 6
 #define PR_MAX_QUEUED_MOVERS 8
 #define PR_MAX_TURN_ORDER 8
@@ -278,6 +269,8 @@ typedef struct pr_battle {
         uint8_t n_targets;
         uint8_t use_mode;
         bool skip;
+        int8_t cursor;         /* POKEMON: the party slot to send in */
+        bool baton;            /* POKEMON: args[0], the switch passes the baton */
     } commands[4], pre_commands[4];
     /* Faint bookkeeping: arena.playerFaints, currentBattle.enemyFaints and the faint histories
      * (playerFaintsHistory / enemyFaintsHistory: which Pokemon, on which turn) */
@@ -291,10 +284,11 @@ typedef struct pr_battle {
     /* Pokemon.id of each MovePhase still queued this turn (phaseManager.hasPhaseOfType("MovePhase")) */
     uint32_t queued_movers[PR_MAX_QUEUED_MOVERS];
     uint8_t n_queued_movers;
-    /* The parties, [0] player and [1] enemy, in order; n = 0 when the caller didn't provide one */
-    pr_party_member party[2][PR_MAX_PARTY];
+    /* The parties, [0] player and [1] enemy, in party order (getPlayerParty() / getEnemyParty()).
+     * Every member is a full Pokemon; the ones on the field are the same objects as bt->field.
+     * n = 0 when the caller didn't provide one. */
+    pr_pokemon *party[2][PR_MAX_PARTY];
     uint8_t n_party[2];
-    bool party_moves_known;    /* the party's movesets were given (party[].moves) */
     /* TargetHalfHpDamageAttr.initialHp (Super Fang, Ruination...). Upstream keeps it on the
      * attribute instance, so it is shared by every user of the move and outlives the move
      * use; NaN = never set (undefined). pr_half_hp_initial finds a move's slot. */
@@ -392,6 +386,8 @@ typedef struct pr_ab_params {
     double damage;
     int tag_type;                  /* PreApplyBattlerTagAbAttrParams: the tag's BattlerTagType */
     int field_type;                /* PostWeatherChange: the new WeatherType; PostTerrainChange: the new TerrainType */
+    int8_t only;                   /* params.passive given: 1 = the ability only, 2 = the passive only; 0 = both */
+    bool on_gain;                  /* applyOnGainAbAttrs: only attrs that shouldActivateOnGain() */
 } pr_ab_params;
 /* applyAbAttrs("<cls>", params): ability then passive, conditions, canApply, apply. */
 void pr_apply_ab_attrs(pr_battle *bt, uint16_t cls, pr_ab_params *pp);
@@ -538,6 +534,7 @@ int pr_attacks_received_kept(const pr_pokemon *p);
 void pr_attacks_received_exhausted(pr_battle *bt, const pr_pokemon *p);
 /* The Pokemon on the field with this Pokemon.id, or NULL */
 pr_pokemon *pr_field_pokemon_by_id(const pr_battle *bt, int64_t id);
+pr_pokemon *pr_pokemon_by_id(const pr_battle *bt, int64_t id);   /* getPokemonById: the parties */
 /* areAllies(a, b) over BattlerIndex values (ATTACKER = -1 is nobody's ally) */
 bool pr_are_allies(int a, int b);
 
@@ -547,6 +544,9 @@ const pr_form *pr_pokemon_form(const pr_pokemon *p);
 /* getBattlerIndex(): the Pokemon's slot in bt->field, -1 when off the field */
 int pr_battler_index(const pr_battle *bt, const pr_pokemon *p);
 void pr_calculate_stats(pr_battle *bt, pr_pokemon *p);
+/* calculateStats() on a Pokemon that has HP: kept, capped at the new maximum, or raised by as much
+ * as the maximum grew (pr_calculate_stats sets it to the maximum, as for a new Pokemon) */
+void pr_recalculate_stats(pr_battle *bt, pr_pokemon *p);
 int pr_get_tera_type(const pr_pokemon *p);
 /* p->passive from hasPassive() and getPassiveAbility() */
 void pr_update_passive(pr_battle *bt, pr_pokemon *p);
@@ -581,11 +581,17 @@ bool pr_is_forcibly_grounded(pr_battle *bt, const pr_pokemon *p);
 bool pr_is_forcibly_ungrounded(pr_battle *bt, const pr_pokemon *p);
 bool pr_is_grounded(pr_battle *bt, const pr_pokemon *p, bool ignore_semi_invulnerable);
 int pr_get_move_type(pr_battle *bt, const pr_pokemon *p, int move);
+/* HiddenPowerTypeAttr: Hidden Power's type from the user's IVs */
+int pr_hidden_power_type(const pr_pokemon *u);
 double pr_get_attack_type_effectiveness(pr_battle *bt, const pr_pokemon *def, int move_type,
                                         const pr_pokemon *source, int move);
 /* the same with simulated = false passed through (IgnoreTypeImmunityAbAttr, the Strong Winds message) */
 double pr_get_attack_type_effectiveness_ex(pr_battle *bt, const pr_pokemon *def, int move_type,
                                            const pr_pokemon *source, int move, bool simulated);
+/* ... and ignoreStrongWinds (Stealth Rock) */
+double pr_get_attack_type_effectiveness_opts(pr_battle *bt, const pr_pokemon *def, int move_type,
+                                             const pr_pokemon *source, int move, bool simulated,
+                                             bool ignore_strong_winds);
 double pr_get_move_effectiveness(pr_battle *bt, const pr_pokemon *def, const pr_pokemon *src, int move);
 /* getMoveEffectiveness with simulated and the cancelled holder */
 double pr_get_move_effectiveness_ex(pr_battle *bt, const pr_pokemon *def, const pr_pokemon *src, int move,

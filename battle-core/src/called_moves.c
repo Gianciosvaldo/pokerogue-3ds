@@ -129,12 +129,12 @@ static int eligible_moves(pr_battle *bt, const char *invalid, bool include_party
         return n;
     }
     int side = user->is_player ? 0 : 1;
-    if (!bt->n_party[side] || !bt->party_moves_known) {
+    if (!bt->n_party[side]) {
         pr_note_unported(bt, PR_FEAT_PARTY);
         return 0;
     }
     for (int i = 0; i < bt->n_party[side]; i++) {
-        const pr_party_member *m = &bt->party[side][i];
+        const pr_pokemon *m = bt->party[side][i];
         if (m->id == user->id) continue;
         for (int k = 0; k < m->n_moves; k++)
             if (move_allowed(invalid, m->moves[k])) out[n++] = m->moves[k];

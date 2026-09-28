@@ -17,7 +17,8 @@ const char *const pr_phase_name[PH_COUNT_] = {
     [PH_SHOW_ABILITY] = "ShowAbilityPhase", [PH_HIDE_ABILITY] = "HideAbilityPhase", [PH_POKEMON_ANIM] = "PokemonAnimPhase",
     [PH_LOAD_MOVE_ANIM] = "LoadMoveAnimPhase", [PH_MOVE_ANIM] = "MoveAnimPhase",
     [PH_TURN_INIT] = "TurnInitPhase", [PH_VICTORY] = "VictoryPhase", [PH_SWITCH] = "SwitchPhase",
-    [PH_SWITCH_SUMMON] = "SwitchSummonPhase", [PH_GAME_OVER] = "GameOverPhase", [PH_BATTLE_END] = "BattleEndPhase",
+    [PH_SWITCH_SUMMON] = "SwitchSummonPhase", [PH_POST_SUMMON] = "PostSummonPhase",
+    [PH_SHINY_SPARKLE] = "ShinySparklePhase", [PH_GAME_OVER] = "GameOverPhase", [PH_BATTLE_END] = "BattleEndPhase",
     [PH_SELECT_MODIFIER] = "SelectModifierPhase",
     [PH_STAT_STAGE_CHANGE] = "StatStageChangePhase", [PH_POKEMON_HEAL] = "PokemonHealPhase",
     [PH_OBTAIN_STATUS_EFFECT] = "ObtainStatusEffectPhase", [PH_MOVE_CHARGE] = "MoveChargePhase",
@@ -39,6 +40,7 @@ bool pr_phase_is_dynamic(pr_phase_type t)
     switch (t) {
     case PH_MOVE: case PH_COMMON_ANIM: case PH_STAT_STAGE_CHANGE: case PH_OBTAIN_STATUS_EFFECT:
     case PH_POST_TURN_STATUS_EFFECT: case PH_MOVE_CHARGE: case PH_MOVE_HEADER: case PH_SWITCH_SUMMON:
+    case PH_POST_SUMMON: case PH_SHINY_SPARKLE:
     case PH_MOVE_REFLECT: case PH_DANCER: case PH_TERA:
         return true;
     default:
@@ -254,8 +256,14 @@ pr_pokemon *pr_speed_iter_next(pr_battle *bt, pr_speed_iter *it)
 
 static pr_pokemon *phase_pokemon(pr_battle *bt, pr_engine *e, int ph)
 {
-    /* PokemonPhase.getPokemon(): the Pokemon in the phase's field slot */
-    int b = e->pool[ph].battler;
+    const pr_phase *p = &e->pool[ph];
+    if (p->type == PH_SWITCH_SUMMON) {
+        /* PartyMemberPokemonPhase.getPokemon(): the party member in slot fieldIndex */
+        int side = p->sw_player ? 0 : 1;
+        return p->sw_field_index >= 0 && p->sw_field_index < bt->n_party[side] ? bt->party[side][p->sw_field_index] : NULL;
+    }
+    /* PokemonPhase.getPokemon(): the Pokemon in the phase's field slot now (MovePhase too) */
+    int b = p->battler;
     return b >= 0 && b < 4 ? bt->field[b] : NULL;
 }
 
@@ -277,8 +285,19 @@ static void dyn_reorder(pr_battle *bt, pr_engine *e, int type)
     for (int i = 0; i < n; i++) {
         pay[i] = e->dyn[type][i];
         mons[i] = phase_pokemon(bt, e, pay[i]);
+        if (!mons[i]) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }   /* upstream would throw */
     }
     pr_sort_in_speed_order(bt, mons, pay, n);
+    if (type == PH_POST_SUMMON) {
+        /* PostSummonPhasePriorityQueue.reorder: then by getPriority() descending (a stable sort):
+         * 0 for a PostSummonPhase, the ability's postSummonPriority for an activate phase */
+        for (int i = 1; i < n; i++) {
+            int kp = pay[i], kk = e->pool[kp].ps_priority;
+            int j = i - 1;
+            for (; j >= 0 && e->pool[pay[j]].ps_priority < kk; j--) pay[j + 1] = pay[j];
+            pay[j + 1] = kp;
+        }
+    }
     if (type == PH_MOVE) {
         /* MovePhasePriorityQueue.sortPostSpeed: timing modifier, move priority, in-bracket
          * priority (stable sort, each key descending) */
@@ -344,6 +363,28 @@ void pr_sync_queued_movers(pr_battle *bt, pr_engine *e)
         bt->queued_movers[bt->n_queued_movers++] = e->pool[e->dyn[PH_MOVE][i]].pokemon->id;
 }
 
+static int check_dynamic(pr_battle *bt, pr_engine *e, int ph);
+
+/* PostSummonPhasePriorityQueue.queueAbilityPhase: a PostSummonPhase pushed onto its queue
+ * unshifts a PostSummonActivateAbilityPhase for each of getAbilityPriorities() (the ability's
+ * postSummonPriority, then the passive's when it has one) */
+static void queue_ability_phases(pr_battle *bt, pr_engine *e, int ph)
+{
+    int b = e->pool[ph].battler;
+    const pr_pokemon *p = b >= 0 && b < 4 ? bt->field[b] : NULL;
+    if (!p) { limit(bt, e); return; }
+    uint16_t abs[2] = {p->ability, p->passive};
+    for (int k = 0; k < 2; k++) {
+        if (k == 1 && !p->passive) break;
+        int a = pr_phase_new(e, PH_POST_SUMMON, (int8_t)b);
+        if (a < 0) { limit(bt, e); return; }
+        e->pool[a].ps_activate = true;
+        e->pool[a].ps_passive = k == 1;
+        e->pool[a].ps_priority = pr_abilities[abs[k]].post_summon_priority;
+        pr_phase_unshift(bt, e, a);
+    }
+}
+
 /* PhaseManager.checkDynamic: a dynamic phase goes to its queue and a marker takes its place */
 static int check_dynamic(pr_battle *bt, pr_engine *e, int ph)
 {
@@ -352,6 +393,7 @@ static int check_dynamic(pr_battle *bt, pr_engine *e, int ph)
     if (e->n_dyn[t] >= PR_DYN_CAP) { limit(bt, e); return ph; }
     e->dyn[t][e->n_dyn[t]++] = (uint8_t)ph;
     if (t == PH_MOVE) pr_sync_queued_movers(bt, e);
+    if (t == PH_POST_SUMMON && !e->pool[ph].ps_activate) queue_ability_phases(bt, e, ph);
     int m = pr_phase_new(e, PH_MARKER, -1);
     if (m < 0) { limit(bt, e); return ph; }
     e->pool[m].marker_of = (uint8_t)t;
@@ -498,7 +540,7 @@ int pr_targets_new(pr_engine *e, const int8_t *v, int n)
 static bool is_stop(int type)
 {
     switch (type) {
-    case PH_TURN_INIT: case PH_VICTORY: case PH_SWITCH: case PH_SWITCH_SUMMON: case PH_GAME_OVER:
+    case PH_TURN_INIT: case PH_VICTORY: case PH_GAME_OVER:
     case PH_BATTLE_END: case PH_SELECT_MODIFIER: case PH_SELECT_BIOME: case PH_NEW_BATTLE:
         return true;
     }
@@ -540,22 +582,17 @@ static void trace(pr_engine *e, int ph)
                          || p->type == PH_STAT_STAGE_CHANGE || p->type == PH_OBTAIN_STATUS_EFFECT
                          || p->type == PH_POKEMON_HEAL || p->type == PH_POST_TURN_STATUS_EFFECT
                          || p->type == PH_MOVE_CHARGE;
-    pokemon_phase = pokemon_phase || p->type == PH_MOVE_REFLECT;
-    if (pokemon_phase && p->user_id >= 0) snprintf(out, 40, "%s:%lld", pr_phase_name[p->type], (long long)p->user_id);
+    pokemon_phase = pokemon_phase || p->type == PH_MOVE_REFLECT || p->type == PH_POST_SUMMON || p->type == PH_SHINY_SPARKLE;
+    /* MoveEndPhase is given its user's getBattlerIndex(), which is -1 once it has been switched out */
+    if (p->type == PH_MOVE_END) snprintf(out, 40, "%s:%d", pr_phase_name[p->type], p->battler);
+    else if (pokemon_phase && p->user_id >= 0) snprintf(out, 40, "%s:%lld", pr_phase_name[p->type], (long long)p->user_id);
     else if (pokemon_phase && p->battler >= 0) snprintf(out, 40, "%s:%d", pr_phase_name[p->type], p->battler);
     else snprintf(out, 40, "%s", pr_phase_name[p->type]);
 }
 
-void pr_run_turn(pr_battle *bt, pr_engine *e)
+static void run_phases(pr_battle *bt, pr_engine *e, int ph)
 {
-    memset(e, 0, sizeof *e);
-    e->n_levels = 1;
-    e->current = -1;
-    for (int i = 0; i < 4; i++) e->command_targets[i] = -1;
     bt->engine = e;
-    /* the caller's pushNew("TurnStartPhase") + shiftPhase() */
-    pr_phase_push(bt, e, pr_phase_new(e, PH_TURN_START, -1));
-    int ph = shift_phase(bt, e);
     for (;;) {
         if (ph < 0 || e->overflow) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); break; }
         if (is_stop(e->pool[ph].type)) {
@@ -568,9 +605,59 @@ void pr_run_turn(pr_battle *bt, pr_engine *e)
         e->current = ph;
         pr_phase_run(bt, e, ph);
         e->current = -1;
+        if (e->awaiting_pick) {
+            /* the party screen is open: the phase stays in the pool until the pick */
+            e->stop = PH_SWITCH;
+            e->stop_phase = e->pool[ph];
+            e->pick_phase = ph;
+            break;
+        }
         phase_free(e, ph);
         if (e->n_trace >= PR_MAX_TRACE) { e->overflow = true; continue; }
         ph = shift_phase(bt, e);
     }
     bt->engine = NULL;
+}
+
+void pr_run_turn(pr_battle *bt, pr_engine *e)
+{
+    memset(e, 0, sizeof *e);
+    e->n_levels = 1;
+    e->current = -1;
+    for (int i = 0; i < 4; i++) e->command_targets[i] = -1;
+    bt->engine = e;
+    /* the caller's pushNew("TurnStartPhase") + shiftPhase() */
+    pr_phase_push(bt, e, pr_phase_new(e, PH_TURN_START, -1));
+    run_phases(bt, e, shift_phase(bt, e));
+}
+
+/* The party screen's callback: a slot past the Pokemon on the field queues the SwitchSummonPhase
+ * (Baton Pass's screen hands over PASS_BATON, which keeps the Baton Pass type), then the
+ * SwitchPhase ends once the screen has gone back to the message mode. */
+void pr_resume_switch(pr_battle *bt, pr_engine *e, int slot)
+{
+    if (!e->awaiting_pick) return;
+    bt->engine = e;
+    int ph = e->pick_phase;
+    e->awaiting_pick = false;
+    e->stop = 0;
+    e->current = ph;
+    const pr_phase *s = &e->pool[ph];
+    if (slot >= (bt->double_battle ? 2 : 1) && slot < 6) {
+        int q = pr_phase_new(e, PH_SWITCH_SUMMON, -1);
+        if (q < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); e->overflow = true; }
+        else {
+            pr_phase *n = &e->pool[q];
+            s = &e->pool[ph];
+            n->sw_type = s->sw_type;
+            n->sw_field_index = s->sw_field_index;
+            n->sw_slot = (int8_t)slot;
+            n->sw_do_return = s->sw_do_return;
+            n->sw_player = true;
+            pr_phase_unshift(bt, e, q);
+        }
+    }
+    e->current = -1;
+    phase_free(e, ph);
+    run_phases(bt, e, e->overflow ? -1 : shift_phase(bt, e));
 }

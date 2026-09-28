@@ -174,11 +174,15 @@ int main(int argc, char **argv)
             /* P side n (id species status)*n: the party in order, the Pokemon on the field first */
             int side = atoi(next_tok(&save)), n = atoi(next_tok(&save));
             if (side < 0 || side > 1 || n < 0 || n > PR_MAX_PARTY) { fprintf(stderr, "bad P line\n"); return 2; }
+            static pr_pokemon party_store[2][PR_MAX_PARTY];
             bt.n_party[side] = (uint8_t)n;
             for (int i = 0; i < n; i++) {
-                bt.party[side][i].id = (uint32_t)strtoul(next_tok(&save), NULL, 10);
-                bt.party[side][i].species = (uint16_t)atoi(next_tok(&save));
-                bt.party[side][i].status = (uint8_t)atoi(next_tok(&save));
+                pr_pokemon *m = &party_store[side][i];
+                memset(m, 0, sizeof *m);
+                m->id = (uint32_t)strtoul(next_tok(&save), NULL, 10);
+                m->species = (uint16_t)atoi(next_tok(&save));
+                m->status = (uint8_t)atoi(next_tok(&save));
+                bt.party[side][i] = m;
             }
             continue;
         }
@@ -372,6 +376,13 @@ int main(int argc, char **argv)
         for (int i = 0; i < 19; i++) e[i] = strtod(next_tok(&es), NULL);
 
         bt.field[0] = &A; bt.field[2] = &D;
+        A.on_field = D.on_field = true;
+        /* the party members on the field are the field Pokemon themselves */
+        for (int side = 0; side < 2; side++)
+            for (int i = 0; i < bt.n_party[side]; i++) {
+                if (bt.party[side][i]->id == A.id) bt.party[side][i] = &A;
+                else if (bt.party[side][i]->id == D.id) bt.party[side][i] = &D;
+            }
         bt.n_unported = 0;
         bt.n_deferred = 0;
         total++;
@@ -428,6 +439,12 @@ int main(int argc, char **argv)
                     cb.n_last_turn_order = 0;
                 }
                 cb.field[0] = &ca; cb.field[2] = &cd;
+                ca.on_field = cd.on_field = true;
+                for (int side = 0; side < 2; side++)
+                    for (int i = 0; i < cb.n_party[side]; i++) {
+                        if (cb.party[side][i] == &A) cb.party[side][i] = &ca;
+                        else if (cb.party[side][i] == &D) cb.party[side][i] = &cd;
+                    }
                 pr_calculate_stats(&cb, &ca);
                 pr_calculate_stats(&cb, &cd);
                 ca.hp = hp_a;
