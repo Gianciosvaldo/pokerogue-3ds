@@ -31,16 +31,24 @@
  * with a status and one in six is terastallized, and a quarter have random stat stages;
  * TURN_CHARGE=1 aims at two-turn moves (Fly, Dig, Solar Beam, Skull Bash...): most moves are
  * two-turn moves or moves that reach a semi-invulnerable Pokemon (Thunder, Earthquake, Surf...),
- * some Pokemon have No Guard, and half the Pokemon holding a two-turn move start on its second
- * turn, as MoveChargePhase and the command phases leave it;
- * TURN_TAGS=1 aims at the battler tags moves add (flinch, confusion, Outrage's lock-in, Mean Look's
- * trap, No Retreat, Minimize, Charge, Tar Shot, Autotomize, Glaive Rush, Lock-On, Laser Focus,
- * Perish Song, Roost, Throat Chop, Heal Block, Aqua Ring, Ingrain, Octolock): most moves add one of
- * them or read one (Stomp, Electric and Fire attacks, weight-based moves, sound moves, the moves
- * Heal Block stops, inaccurate attacks), a quarter of the Pokemon have an ability that reacts to
- * them (Steadfast, Inner Focus, Own Tempo, Shield Dust, Serene Grace, No Guard, Perish Body), a
- * third start with some of those tags, and half the Pokemon holding a rampage move
- * start in the middle of one (FRENZY, the queued move, a successful history entry);
+ * some Pokemon have No Guard, half the Pokemon holding a two-turn move start on its second
+ * turn, as MoveChargePhase and the command phases leave it, and half the Pokemon facing one that
+ * knows Fly or Bounce use Smack Down, Thousand Arrows or Gravity;
+ * TURN_TAGS=1 aims at the battler tags (flinch, confusion, Outrage's lock-in, Mean Look's trap, No
+ * Retreat, Minimize, Charge, Tar Shot, Autotomize, Glaive Rush, Lock-On, Laser Focus, Perish Song,
+ * Roost, Throat Chop, Heal Block, Aqua Ring, Ingrain, Octolock, Disable, Taunt, Torment, Encore,
+ * Attract, Salt Cure, Curse, Nightmare, Yawn, Powder, Magic Coat, Destiny Bond, Grudge, Stockpile,
+ * Power Trick, Burn Up...): most moves add one of them (Curse, Destiny Bond, Spit Up and Swallow
+ * included) or read one (Stomp, Electric and Fire attacks, weight-based moves, sound moves, the
+ * moves Heal Block stops, inaccurate attacks), a quarter of the Pokemon have an ability that reacts
+ * to them or adds one (Steadfast, Inner Focus, Own Tempo, Cursed Body, Cute Charm, Magic Bounce,
+ * Truant, Slow Start, Sturdy, Flash Fire, Gorilla Tactics, Supreme Overlord, Lightning Rod...), a
+ * third start with some of those tags (Disable and Taunt with 1 to 4 turns left; half the time
+ * a Pokemon already infatuated faces Attract, one already cursed a Ghost-type Curse, a powdered
+ * one uses a Fire move and a stockpiling one Spit Up or Swallow), a tenth have Truant with its
+ * tag, half the Pokemon holding a rampage move start in the middle of one (FRENZY, the queued
+ * move, a successful history entry), a sixth of the cases have a terrain (Electric Terrain for
+ * half the Yawn users) and an eighth rain or heavy rain;
  * TURN_HEAL=1 aims at recoil, drain, recharge and the heal phase: most moves have recoil, drain or
  * recharge (Struggle and Chloroblast included) or are attacks, half the abilities block recoil,
  * turn drain into damage, heal from a status or from a move's type (Rock Head, Magic Guard, Liquid
@@ -129,7 +137,8 @@
  * bench has 0 to 5 Pokemon, a third of them fainted; the wave is often a multiple of 10 or of 5,
  * the game mode classic, endless or daily; a sixth of the Pokemon are behind a Substitute, a sixth
  * of the sides have Mist, a quarter of the cases have snow, a quarter of the Pokemon have Attack
- * and Sp. Atk near the limits and a third are just above half HP.
+ * and Sp. Atk near the limits, a third are just above half HP, and a third of the Baton Pass users
+ * hold Power Trick.
  * TURN_SUMMON=1 aims at the switch itself: the player switches as its command in a third of the
  * cases (and uses the switching moves in another third), the wild Pokemon often drags the player's
  * out (Roar, Whirlwind, Dragon Tail, Circle Throw) or knocks it out; the player's side has entry
@@ -154,7 +163,7 @@ import { allAbilities, allMoves } from "#data/data-lists";
 import { EntryHazardTag, getArenaTag } from "#data/arena-tag";
 import { getBattlerTag } from "#data/battler-tags";
 import { Status } from "#data/status-effect";
-import { Terrain } from "#data/terrain";
+import { Terrain, TerrainType } from "#data/terrain";
 import { Weather } from "#data/weather";
 import { AbilityId } from "#enums/ability-id";
 import { BattleType } from "#enums/battle-type";
@@ -925,6 +934,15 @@ it("turntest producer", async () => {
       }
     }
   };
+  // replace one moveset slot with this move and make it the Pokemon's command
+  const commandMove = (p: any, move: MoveId) => {
+    const slot = rnd(p.moveset.length);
+    p.moveset[slot] = new PokemonMove(move);
+    const turnMove = { move, targets: getMoveTargets(p, move).targets, useMode: MoveUseMode.NORMAL };
+    battle.turnCommands[p.getBattlerIndex()] = p.isPlayer()
+      ? { command: Command.FIGHT, cursor: slot, move: turnMove, args: [MoveUseMode.NORMAL, undefined] }
+      : { command: Command.FIGHT, move: turnMove, skip: false };
+  };
   const command = (p: any) => {
     // CommandPhase / EnemyCommandPhase: a move with PP left (Struggle when none is usable)
     const slots = p.moveset.map((_: any, k: number) => k).filter((k: number) => p.moveset[k].ppUsed < p.moveset[k].getMovePp());
@@ -1113,6 +1131,16 @@ it("turntest producer", async () => {
       for (const p of [A, D]) {
         p.isTerastallized = rnd(8) === 0;
       }
+      // Smack Down, Thousand Arrows or Gravity against a Pokemon that knows Fly or Bounce, now and
+      // then: caught mid-air, it falls. (Its move isn't interrupted: both take the FLYING tag off
+      // before adding INTERRUPTED, whose canAdd asks for FLYING.)
+      for (const p of [A, D]) {
+        const other = p === A ? D : A;
+        const flier = p.moveset.some((m: any) => m.moveId === MoveId.FLY || m.moveId === MoveId.BOUNCE);
+        if (flier && !other.getTag(BattlerTagType.CHARGING) && rnd(2) === 0) {
+          commandMove(other, [MoveId.SMACK_DOWN, MoveId.THOUSAND_ARROWS, MoveId.GRAVITY][rnd(3)]);
+        }
+      }
     }
     if (TAGS) {
       for (const p of [A, D]) {
@@ -1160,6 +1188,9 @@ it("turntest producer", async () => {
             if (type === BattlerTagType.DISABLED) {
               tag.moveId = rnd(4) === 0 ? MoveId.NONE : p.moveset[rnd(p.moveset.length)].moveId;
             }
+            if (type === BattlerTagType.DISABLED || type === BattlerTagType.TAUNT) {
+              tag.turnCount = 1 + rnd(4); // their constructors fix 4; some run out this turn
+            }
             if (type === BattlerTagType.ENCORE) {
               // an Encore from an earlier turn: that turn's end cleared its private addedThisTurn
               tag.moveId = p.moveset[rnd(p.moveset.length)].moveId;
@@ -1167,6 +1198,28 @@ it("turntest producer", async () => {
               tag.turnCount = 1 + rnd(4);
             }
             p.summonData.tags.push(tag);
+            if (type === BattlerTagType.INFATUATED && rnd(2) === 0) {
+              // Attract again on a Pokemon that already holds it (the tag's onOverlap)
+              p.gender = rnd(2);
+              other.gender = 1 - p.gender;
+              commandMove(other, MoveId.ATTRACT);
+            }
+            if (type === BattlerTagType.CURSED && rnd(2) === 0) {
+              // a Ghost-type Curse on a Pokemon already cursed (it fails with its message)
+              other.isTerastallized = true;
+              other.teraType = PokemonType.GHOST;
+              commandMove(other, MoveId.CURSE);
+            }
+            if (type === BattlerTagType.POWDER && rnd(2) === 0) {
+              // a Fire move under the powder, now and then in heavy rain (no explosion there)
+              commandMove(p, [MoveId.EMBER, MoveId.FLAMETHROWER, MoveId.FLAME_WHEEL][rnd(3)]);
+              if (rnd(2) === 0) {
+                scene.arena.weather = new Weather(WeatherType.HEAVY_RAIN, 0, 0);
+              }
+            }
+            if (type === BattlerTagType.STOCKPILING && rnd(2) === 0) {
+              commandMove(p, rnd(2) === 0 ? MoveId.SPIT_UP : MoveId.SWALLOW); // the stacks go, and the stat stages with them
+            }
             // what the hit check reads with the Lock-On tag: the newest Lock-On or Mind Reader in the
             // history and its targets (the other Pokemon, now and then the user itself), sometimes
             // with a later move on top
@@ -1196,6 +1249,29 @@ it("turntest producer", async () => {
         battle.turnCommands[b] = p.isPlayer()
           ? { command: Command.FIGHT, cursor: p.moveset.findIndex((m: any) => m.moveId === move.id), move: turnMove, args: [MoveUseMode.IGNORE_PP, turnMove] }
           : { command: Command.FIGHT, move: turnMove, skip: false };
+      }
+      // what some tags read: a terrain (Yawn fails in Electric Terrain) or rain (Powder is off in
+      // Heavy Rain) now and then
+      if (rnd(6) === 0) {
+        scene.arena.terrain = new Terrain(1 + rnd(4), 1 + rnd(5), 5);
+      }
+      if (rnd(8) === 0 && !scene.arena.weather) {
+        scene.arena.weather = new Weather(rnd(2) === 0 ? WeatherType.HEAVY_RAIN : WeatherType.RAIN, 1 + rnd(5), 5);
+      }
+      for (const p of [A, D]) {
+        if (p.moveset.some((m: any) => m.moveId === MoveId.YAWN) && rnd(2) === 0) {
+          scene.arena.terrain = new Terrain(TerrainType.ELECTRIC, 1 + rnd(5), 5); // Yawn fails on a grounded target
+        }
+        if (rnd(10) === 0) {
+          // Truant with the tag its entry left, and now and then a move last turn to loaf after
+          p.summonData.ability = AbilityId.TRUANT;
+          if (!p.getTag(BattlerTagType.TRUANT)) {
+            p.summonData.tags.push(getBattlerTag(BattlerTagType.TRUANT, 1, MoveId.NONE, p.id));
+          }
+          if (rnd(3) !== 0) {
+            p.pushMoveHistory({ move: p.moveset[0].moveId, targets: [p.getBattlerIndex()], useMode: MoveUseMode.NORMAL, result: MoveResult.SUCCESS });
+          }
+        }
       }
     }
     if (TRAPS) {
@@ -1298,6 +1374,12 @@ it("turntest producer", async () => {
         if (rnd(3) === 0) {
           const max = p.getMaxHp();
           p.hp = Math.min(max, Math.ceil(max / 2) + rnd(Math.max(1, Math.floor(max / 8))));
+        }
+        if (SWITCH && p.moveset.some((m: any) => m.moveId === MoveId.BATON_PASS) && rnd(3) === 0) {
+          // Power Trick, which Baton Pass hands over with its Attack and Defense swap
+          const tag = getBattlerTag(BattlerTagType.POWER_TRICK, 0, MoveId.POWER_TRICK, p.id) as any;
+          tag.swapStat(p); // what its onAdd did
+          p.summonData.tags.push(tag);
         }
       }
     }
