@@ -142,3 +142,66 @@ int pr_run_generate_enemy_items(pr_run *run, const pr_enemy_items_ctx *ctx, pr_e
     }
     return 0;
 }
+
+static pr_enemy_buffs *find_buff(pr_enemy_buffs *b, int item, int *index)
+{
+    for (int i = 0; i < b->n; i++)
+        if (b->buff[i].item == item) { *index = i; return b; }
+    *index = -1;
+    return b;
+}
+
+/* AddEnemyBuffModifierPhase:
+ *   tier = waveIndex % 1000 ? (waveIndex % 250 ? COMMON : GREAT) : ULTRA;
+ *   regenerateModifierPoolThresholds(enemyParty, ENEMY_BUFF);   // a buff whose held stacks are all at
+ *                                                              // getMaxStackCount(true) weighs 0
+ *   for (count = ceil(waveIndex / 250)) addEnemyModifier(getEnemyBuffModifierForWave(tier, enemy buffs))
+ * getEnemyBuffModifierForWave: tierStackCount ULTRA 5, GREAT 3, else 1;
+ *   candidate = getNewModifierTypeOption([], ENEMY_BUFF, tier)   // the weighted pick, no tier roll
+ *   while (++r < 50 && (held = the held buff of candidate's type)
+ *          && held.getMaxStackCount() < held.stackCount + (r < 10 ? tierStackCount : 1)) candidate = the pick again;
+ *   the buff, with stackCount = tierStackCount: add() raises a held one's stack when it fits, else nothing */
+int pr_run_add_enemy_buffs(pr_run *run, int wave, pr_enemy_buffs *buffs)
+{
+    const int tier = wave % 1000 ? (wave % 250 ? 0 : 1) : 2;
+    const int hi = wave < 2000 ? 0 : 2;   /* the limits read currentBattle.waveIndex (the damage reducer's rises) */
+    const pr_pool_tier *pt = &pr_enemy_pools[2][tier];
+    /* the thresholds, built once before the buffs are added */
+    int total[16], index[16], n = 0, sum = 0;
+    for (int i = 0; i < pt->n && n < 16; i++) {
+        const pr_pool_entry *e = &pr_pool_entries[pt->start + i];
+        int h;
+        find_buff(buffs, e->item, &h);
+        const bool maxed = h >= 0 && buffs->buff[h].stack >= pr_item_max_stacks[e->item][hi + 1];
+        if (!e->weight || maxed) continue;
+        sum += e->weight;
+        total[n] = sum;
+        index[n++] = i;
+    }
+    const int tier_stack = tier == 2 ? 5 : tier == 1 ? 3 : 1;
+    const int count = (wave + 249) / 250;
+    for (int k = 0; k < count; k++) {
+        int item = -1;
+        for (int r = 0;;) {
+            if (!n) { run->unported |= PR_RUN_UNDEFINED_UPSTREAM; return -1; }
+            const int value = pr_rng_seed_int(&run->rng, total[n - 1], 0);
+            for (int i = 0; i < n; i++)
+                if (value < total[i]) { item = pr_pool_entries[pt->start + index[i]].item; break; }
+            int h;
+            find_buff(buffs, item, &h);
+            if (!(++r < 50 && h >= 0 && pr_item_max_stacks[item][hi] < buffs->buff[h].stack + (r < 10 ? tier_stack : 1)))
+                break;
+        }
+        int h;
+        find_buff(buffs, item, &h);
+        if (h < 0) {
+            if (buffs->n < 32) {
+                buffs->buff[buffs->n].item = (uint8_t)item;
+                buffs->buff[buffs->n++].stack = tier_stack;
+            }
+        } else if (buffs->buff[h].stack + tier_stack <= pr_item_max_stacks[item][hi]) {
+            buffs->buff[h].stack += tier_stack;
+        }
+    }
+    return 0;
+}
