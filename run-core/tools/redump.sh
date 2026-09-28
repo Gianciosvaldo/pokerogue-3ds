@@ -10,7 +10,7 @@ ASSETS=$(git -C "$UP" ls-tree HEAD assets | awk '{print $3}')
 ML="$UP/test/tests/zz-dump/variant-masterlist-$ASSETS.json"
 mkdir -p "$UP/test/tests/zz-dump"
 [ -s "$ML" ] || curl -sSf -o "$ML" "https://raw.githubusercontent.com/pagefaultgames/pokerogue-assets/$ASSETS/images/pokemon/variant/_masterlist.json"
-for d in biomes evolutions exp trainers pokemongen trainerspecies; do
+for d in biomes evolutions exp trainers pokemongen trainerspecies enemyitems; do
   cp "$HERE/gen/dump-$d.test.ts" "$UP/test/tests/zz-dump/"
   (cd "$UP" && VARIANT_MASTERLIST="$ML" DUMP_OUT="$HERE/gen/out/run_$d.c" npx vitest run "test/tests/zz-dump/dump-$d.test.ts" >/dev/null)
   echo "gen/out/run_$d.c"

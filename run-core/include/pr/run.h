@@ -443,6 +443,41 @@ typedef struct {
 /* The EncounterPhase's first wild enemy on run->rng, up to its moveset */
 int pr_run_gen_wild_enemy(pr_run *run, const pr_wild_enemy_ctx *ctx, pr_wild_enemy *out);
 
+/* ---- an enemy's held items (src/enemyitems.c; data in gen/out/run_enemyitems.c) ---- */
+enum { PR_POOL_PLAIN, PR_POOL_BERRY, PR_POOL_BASE_STAT, PR_POOL_ATTACK_TYPE };   /* generator kinds */
+typedef struct { uint8_t kind, item; uint16_t weight; } pr_pool_entry;
+typedef struct { uint16_t start; int16_t n; } pr_pool_tier;   /* n -1: the pool has no such tier */
+extern const pr_pool_entry pr_pool_entries[];
+extern const pr_pool_tier pr_enemy_pools[2][6];   /* [WILD, TRAINER][ModifierTier] */
+extern const char *const pr_item_names[];         /* modifierTypes keys */
+extern const int pr_item_count, pr_item_mini_black_hole;
+extern const uint8_t pr_trainer_item_flags[];     /* by TrainerType: bit 0 config.isBoss, bit 1 genModifiersFunc */
+extern const int pr_trainer_item_flag_count;
+
+#define PR_MAX_ENEMY_ITEMS 64
+typedef struct {
+    bool boss;                    /* isBoss() */
+    int n_attack_types;           /* the attack type booster's input: for each attack move in the moveset, in */
+    int8_t attack_types[16];      /* order, getTypesForItemSpawn / getMoveTypeForItemSpawn */
+} pr_item_enemy;
+typedef struct {
+    int wave;
+    bool trainer_battle, double_battle;
+    int trainer_type;             /* -1 = none */
+    int n_party;
+    pr_item_enemy party[6];       /* getEnemyParty(); the field is the first one, or two in a double */
+} pr_enemy_items_ctx;
+typedef struct { uint8_t item; int8_t arg; } pr_enemy_item;   /* arg: BerryType, Stat or PokemonType, -1 */
+typedef struct {
+    int n[6];
+    pr_enemy_item items[6][PR_MAX_ENEMY_ITEMS];   /* each enemy's items in the order they're added */
+} pr_enemy_items;
+/* The EncounterPhase's item step on run->rng: regenerateModifierPoolThresholds(enemy field, WILD or
+ * TRAINER), whose generators roll once each, then generateEnemyModifiers() without held-item configs
+ * (those are mystery encounters'). Assumes no enemy modifiers are left from before. Returns 0, or -1 with
+ * PR_RUN_UNPORTED_TRAINER for a trainer with a genModifiersFunc. */
+int pr_run_generate_enemy_items(pr_run *run, const pr_enemy_items_ctx *ctx, pr_enemy_items *out);
+
 /* ---- helpers ---- */
 /* executeWithSeedOffset(fn, offset, seedOverride): fn rolls on a fresh RNG sown from
  * shiftCharCodes(seedOverride || seed, offset), and RND's state comes back afterwards, so a
