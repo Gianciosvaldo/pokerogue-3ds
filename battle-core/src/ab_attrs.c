@@ -920,19 +920,22 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
     case PR_AC_PostDefendMoveDisableAbAttr: {                           /* Cursed Body */
         const pr_attr_PostDefendMoveDisableAbAttr *x = P(PostDefendMoveDisableAbAttr, a);
         if (!c->e) return -1;
-        if (pr_get_battler_tag(o, BATTLER_TAG_TYPE_DISABLED)
-            || !pr_move_does_flag_effect_apply(bt, move, MOVE_FLAGS_MAKES_CONTACT, o, p)
-            || !(x->chance == -1 || pr_battle_rand_seed_int(bt, 100, 0) < x->chance))
-            return 0;
-        return -1;                                              /* addTag(DISABLED) */
+        GATE(!pr_get_battler_tag(o, BATTLER_TAG_TYPE_DISABLED)
+             && pr_move_does_flag_effect_apply(bt, move, MOVE_FLAGS_MAKES_CONTACT, o, p)
+             && (x->chance == -1 || pr_battle_rand_seed_int(bt, 100, 0) < x->chance));
+        if (!pp->simulated)                                     /* the attacker's last move, 4 turns */
+            pr_add_tag(bt, c->e, (pr_pokemon *)o, BATTLER_TAG_TYPE_DISABLED, 4, 0, (int64_t)p->id);
+        return 1;
     }
     case PR_AC_PostDefendContactApplyTagChanceAbAttr: {                 /* Cute Charm */
         const pr_attr_PostDefendContactApplyTagChanceAbAttr *x = P(PostDefendContactApplyTagChanceAbAttr, a);
         if (!c->e) return -1;
-        if (!pr_move_does_flag_effect_apply(bt, move, MOVE_FLAGS_MAKES_CONTACT, o, p)
-            || !(pr_battle_rand_seed_int(bt, 100, 0) < x->chance))
-            return 0;
-        return -1;                                              /* canAddTag, addTag */
+        GATE(pr_move_does_flag_effect_apply(bt, move, MOVE_FLAGS_MAKES_CONTACT, o, p)
+             && pr_battle_rand_seed_int(bt, 100, 0) < x->chance
+             && pr_can_add_tag(bt, (pr_pokemon *)o, x->tagType));
+        if (!pp->simulated)                                     /* addTag(tagType, turnCount, move.id, pokemon.id) */
+            pr_add_tag(bt, c->e, (pr_pokemon *)o, x->tagType, 0, move, (int64_t)p->id);
+        return 1;
     }
     case PR_AC_PostDefendPerishSongAbAttr: {                            /* Perish Body */
         if (!c->e) return -1;

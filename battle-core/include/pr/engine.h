@@ -62,8 +62,10 @@ typedef struct pr_phase {
     uint8_t n_end_targets;
     bool was_follow_up;        /* MoveEndPhase */
     pr_pokemon *source_p;      /* FaintPhase.source (undefined = NULL) */
-    /* MovePhase / MoveEffectPhase.moveHistoryEntry: its targets are the shared list (targets) */
+    /* MovePhase / MoveEffectPhase.moveHistoryEntry: its targets are the shared list (targets),
+     * or entry_targets once Encore gave the MovePhase new targets (the entry keeps the old array) */
     pr_turn_move entry;
+    int8_t entry_targets;      /* -2 = the same list as targets */
     bool failed, cancelled, thaw;          /* MovePhase */
     /* MoveEffectPhase.hitChecks (result, effectiveness), firstHit / lastHit */
     uint8_t hit_check[4];
@@ -209,6 +211,13 @@ int pr_called_selected_list(uint16_t *move, uint16_t *sel, int max);
 bool pr_try_set_terrain(pr_battle *bt, pr_engine *e, int terrain, bool ignore_anim, const pr_pokemon *user);
 void pr_remove_tags_by_source_id(pr_battle *bt, pr_engine *e, pr_pokemon *p, int64_t source_id);
 void pr_transfer_tags_by_source_id(pr_pokemon *p, int64_t from, int64_t to);
+/* the moveset slot holding `move` with PP left (!isOutOfPp()), -1 when none */
+int pr_moveset_slot_with_pp(const pr_pokemon *p, int move);
+/* the move new EncoreTag(..).canAdd(p) would lock p into; 0 when it can't be added, -1 when the
+ * history it reads isn't kept (reported) */
+int pr_encore_move(pr_battle *bt, const pr_pokemon *p);
+/* EncoreTag.tryOverrideMove without the targets: the slot of the move to use instead, -1 = none */
+int pr_encore_try_override(pr_pokemon *p);
 void pr_transfer_summon(pr_battle *bt, pr_pokemon *to, const pr_pokemon *from);   /* Baton Pass */
 void pr_pass_substitute(pr_battle *bt, pr_pokemon *to, const pr_pokemon *from);   /* Shed Tail */
 /* findAndRemoveTags(t => types.includes(t.tagType)) */

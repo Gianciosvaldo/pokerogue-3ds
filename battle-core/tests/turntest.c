@@ -374,6 +374,7 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             if (field(l, "sidx")) t->source_index = (int8_t)inum(l, "sidx");   /* SeedTag */
             if (field(l, "act")) t->activated = inum(l, "act") != 0;           /* ShellTrapTag */
             if (field(l, "bpf")) t->base_pure_flying = inum(l, "bpf") != 0;    /* RoostedTag */
+            if (field(l, "mid")) t->move_id = (uint16_t)inum(l, "mid");         /* DisabledTag, EncoreTag */
             /* the line holds all of a ported tag type's state, and of Protosynthesis's and Quark
              * Drive's (which only the damage path reads and a weather or terrain ending removes);
              * the others can hold more */
@@ -490,6 +491,10 @@ static const char *boost_fields(const pr_battler_tag *t)
     }
     if (t->type == BATTLER_TAG_TYPE_SHELL_TRAP && t->activated) return " act=1";   /* ShellTrapTag.activated */
     if (t->type == BATTLER_TAG_TYPE_ROOSTED && t->base_pure_flying) return " bpf=1";   /* RoostedTag.isBasePureFlying */
+    if (t->type == BATTLER_TAG_TYPE_DISABLED || t->type == BATTLER_TAG_TYPE_ENCORE) {   /* moveId */
+        snprintf(buf, sizeof buf, " mid=%d", t->move_id);
+        return buf;
+    }
     if (t->type == BATTLER_TAG_TYPE_SEEDED) {                 /* SeedTag.sourceIndex */
         snprintf(buf, sizeof buf, " sidx=%d", t->source_index);
         return buf;

@@ -50,6 +50,11 @@ bool pr_tag_type_ported(int type)
     case BATTLER_TAG_TYPE_OCTOLOCK:         /* OctolockTag (TrappedTag) */
     case BATTLER_TAG_TYPE_RAGE:             /* RageTag: PRE_MOVE and AFTER_HIT, 1 turn */
     case BATTLER_TAG_TYPE_PSYCHO_SHIFT:     /* PsychoShiftTag: AFTER_MOVE, 1 turn */
+    case BATTLER_TAG_TYPE_DISABLED:         /* DisabledTag (MoveRestrictionBattlerTag) */
+    case BATTLER_TAG_TYPE_TAUNT:            /* TauntTag (MoveRestrictionBattlerTag) */
+    case BATTLER_TAG_TYPE_TORMENT:          /* TormentTag (MoveRestrictionBattlerTag) */
+    case BATTLER_TAG_TYPE_ENCORE:           /* EncoreTag (MoveRestrictionBattlerTag) */
+    case BATTLER_TAG_TYPE_INFATUATED:       /* InfatuatedTag: Attract, Cute Charm */
         return true;
     }
     return pr_damaging_trap_move(type) != 0 || pr_battler_tag_is(type, PR_TAGCLASS_PROTECTED);
@@ -89,6 +94,31 @@ static bool is_trap(int type)
 {
     return type == BATTLER_TAG_TYPE_TRAPPED || type == BATTLER_TAG_TYPE_NO_RETREAT || type == BATTLER_TAG_TYPE_INGRAIN
            || type == BATTLER_TAG_TYPE_OCTOLOCK || pr_damaging_trap_move(type);
+}
+
+/* isSourceLinked(): TrappedTag and InfatuatedTag */
+static bool source_linked(int type)
+{
+    return is_trap(type) || type == BATTLER_TAG_TYPE_INFATUATED;
+}
+
+/* isActive(true): not fainted, and on the field */
+static bool active_on_field(const pr_pokemon *p)
+{
+    return p->hp > 0 && p->on_field && !p->switch_out_status;
+}
+
+/* the moveset slot holding `move` with PP left (moveset.find(m => m.moveId === move &&
+ * !m.isOutOfPp())), -1 when none; isOutOfPp: getMovePp() !== -1 && ppUsed >= getMovePp() */
+int pr_moveset_slot_with_pp(const pr_pokemon *p, int move)
+{
+    for (int s = 0; s < p->n_moves; s++) {
+        if (p->moves[s] != move) continue;
+        double step = floor(pr_moves[move].pp / 5.0);                     /* toDmgValue(pp / 5) */
+        int max = p->max_pp_override[s] > 0 ? p->max_pp_override[s] : pr_moves[move].pp + p->pp_up[s] * (int)(step < 1 ? 1 : step);
+        if (max == -1 || p->pp_used[s] < max) return s;
+    }
+    return -1;
 }
 
 /* toDmgValue(pokemon.getMaxHp() / div) */
@@ -221,6 +251,30 @@ static pr_battler_tag construct(int type, int turn_count, int source_move, int64
         t.turn_count = 1;
         t.source_move = MOVE_ID_PSYCHO_SHIFT;
         break;
+    case BATTLER_TAG_TYPE_DISABLED:               /* DisabledTag(sourceId): TURN_END, 4 turns; moveId NONE */
+        t.turn_count = 4;
+        t.source_move = MOVE_ID_DISABLE;
+        t.source_id = source_id;
+        break;
+    case BATTLER_TAG_TYPE_TAUNT:                  /* TauntTag(): AFTER_MOVE, 4 turns, no source id */
+        t.turn_count = 4;
+        t.source_move = MOVE_ID_TAUNT;
+        break;
+    case BATTLER_TAG_TYPE_TORMENT:                /* TormentTag(sourceId): AFTER_MOVE, 1 turn */
+        t.turn_count = 1;
+        t.source_move = MOVE_ID_TORMENT;
+        t.source_id = source_id;
+        break;
+    case BATTLER_TAG_TYPE_ENCORE:                 /* EncoreTag(sourceId): TURN_END, 4 turns; moveId set by canAdd */
+        t.turn_count = 4;
+        t.source_move = MOVE_ID_ENCORE;
+        t.source_id = source_id;
+        t.added_this_turn = true;
+        break;
+    case BATTLER_TAG_TYPE_INFATUATED:             /* InfatuatedTag(sourceMove, sourceId): CUSTOM, 1 turn */
+        t.turn_count = 1;
+        t.source_id = source_id;
+        break;
     default:                                      /* CONFUSED, FRENZY, the semi-invulnerable tags */
         if (pr_damaging_trap_move(type)) {        /* BindTag(turnCount, sourceId) and co. */
             t.source_move = (uint16_t)pr_damaging_trap_move(type);
@@ -233,9 +287,57 @@ static pr_battler_tag construct(int type, int turn_count, int source_move, int64
 }
 
 /* newTag.canAdd(pokemon) */
-static bool can_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_battler_tag *t)
+static pr_pokemon *tag_source(pr_battle *bt, const pr_battler_tag *t);
+
+/* isOppositeGender: this.gender !== GENDERLESS && other.gender === (this.gender === MALE ? FEMALE : MALE)
+ * (Gender: GENDERLESS -1, MALE 0, FEMALE 1) */
+static bool opposite_gender(const pr_pokemon *a, const pr_pokemon *b)
+{
+    return a->gender != -1 && b->gender == (a->gender == 0 ? 1 : 0);
+}
+
+/* EncoreTag.canAdd without the tag: the move it would lock the Pokemon into (its last non-virtual
+ * move, not one of invalidEncoreMoves, still in its moveset with PP left, and no Shell Trap
+ * set), 0 when it can't be added; -1 when the history it needs isn't kept (reported) */
+int pr_encore_move(pr_battle *bt, const pr_pokemon *p)
+{
+    bool unknown;
+    const pr_turn_move *last = pr_last_non_virtual_move(bt, p, false, true, &unknown);
+    if (unknown) return -1;
+    if (!last) return 0;
+    for (unsigned i = 0; i < pr_set_invalid_encore_moves_n; i++)
+        if (pr_set_invalid_encore_moves[i] == last->move) return 0;
+    if (pr_moveset_slot_with_pp(p, last->move) < 0 || pr_get_battler_tag(p, BATTLER_TAG_TYPE_SHELL_TRAP)) return 0;
+    return last->move;
+}
+
+/* EncoreTag.tryOverrideMove's first half: an Encore added this turn whose move still has PP
+ * takes a turn off its count and is no longer new; the moveset slot, -1 for no override */
+int pr_encore_try_override(pr_pokemon *p)
+{
+    int i = find_tag(p, BATTLER_TAG_TYPE_ENCORE);
+    if (i < 0 || !p->tags[i].added_this_turn) return -1;
+    int slot = pr_moveset_slot_with_pp(p, p->tags[i].move_id);
+    if (slot < 0) return -1;
+    p->tags[i].turn_count--;
+    p->tags[i].added_this_turn = false;
+    return slot;
+}
+
+/* newTag.canAdd(pokemon); Encore's sets its moveId */
+static bool can_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t)
 {
     switch (t->type) {
+    case BATTLER_TAG_TYPE_ENCORE: {
+        int move = pr_encore_move(bt, p);
+        if (move <= 0) return false;
+        t->move_id = (uint16_t)move;
+        return true;
+    }
+    case BATTLER_TAG_TYPE_INFATUATED: {
+        pr_pokemon *source = tag_source(bt, t);
+        return source && opposite_gender(p, source);
+    }
     case BATTLER_TAG_TYPE_PERISH_SONG:
         return !p->is_boss;                                   /* !isBossImmune() */
     case BATTLER_TAG_TYPE_ROOSTED:
@@ -346,8 +448,22 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
     case BATTLER_TAG_TYPE_HEAL_BLOCK:
     case BATTLER_TAG_TYPE_INGRAIN:               /* TrappedTag.onAdd: getTrapMessage() */
     case BATTLER_TAG_TYPE_OCTOLOCK:
+    case BATTLER_TAG_TYPE_TAUNT:
+    case BATTLER_TAG_TYPE_TORMENT:
+    case BATTLER_TAG_TYPE_ENCORE:
+    case BATTLER_TAG_TYPE_INFATUATED:
         pr_queue_message(bt, e);
         return;
+    case BATTLER_TAG_TYPE_DISABLED: {
+        /* the Pokemon's last non-virtual move becomes moveId, with the message; nothing against
+         * no move or Struggle */
+        bool unknown;
+        const pr_turn_move *move = pr_last_non_virtual_move(bt, p, false, true, &unknown);
+        if (!move || move->move == MOVE_ID_STRUGGLE) return;
+        t->move_id = move->move;
+        pr_queue_message(bt, e);
+        return;
+    }
     case BATTLER_TAG_TYPE_ROOSTED:
         roost_on_add(bt, p, t);
         return;
@@ -413,6 +529,7 @@ static void on_overlap(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_ta
     switch (t->type) {
     case BATTLER_TAG_TYPE_CONFUSED:
     case BATTLER_TAG_TYPE_CHARGED:
+    case BATTLER_TAG_TYPE_INFATUATED:
         pr_queue_message(bt, e);
         return;
     case BATTLER_TAG_TYPE_AUTOTOMIZED:
@@ -541,23 +658,29 @@ static pr_pokemon *tag_source(pr_battle *bt, const pr_battler_tag *t)
     return source;
 }
 
-/* MoveRestrictionBattlerTag.isMoveRestricted */
-static bool move_restricted(int type, int move)
+/* MoveRestrictionBattlerTag.isMoveRestricted (Torment's, which reads the user's history, is
+ * only asked at move selection) */
+static bool move_restricted(const pr_battler_tag *t, int move)
 {
-    if (type == BATTLER_TAG_TYPE_THROAT_CHOPPED) return (pr_moves[move].flags & MOVE_FLAGS_SOUND_BASED) != 0;
+    switch (t->type) {
+    case BATTLER_TAG_TYPE_THROAT_CHOPPED: return (pr_moves[move].flags & MOVE_FLAGS_SOUND_BASED) != 0;
+    case BATTLER_TAG_TYPE_DISABLED: return move == t->move_id;
+    case BATTLER_TAG_TYPE_TAUNT: return pr_moves[move].category == MOVE_CATEGORY_STATUS;
+    case BATTLER_TAG_TYPE_ENCORE: return move != t->move_id;
+    }
     for (unsigned i = 0; i < pr_set_heal_blocked_moves_n; i++)           /* HEAL_BLOCK: healBlockedMoves */
         if (pr_set_heal_blocked_moves[i] == move) return true;
     return false;
 }
 
 /* MoveRestrictionBattlerTag.lapse: on PRE_MOVE (the MovePhase's check), a restricted move is
- * interrupted (interruptedText, never empty for these two, then cancel()) and the tag stays;
- * any other lapse is BattlerTag.lapse */
+ * interrupted (interruptedText, never empty for the tags checked there, then cancel()) and the
+ * tag stays; any other lapse is BattlerTag.lapse */
 static bool restriction_lapse(pr_battle *bt, pr_engine *e, pr_battler_tag *t, int lapse_type)
 {
     if (lapse_type != BATTLER_TAG_LAPSE_TYPE_PRE_MOVE) return --t->turn_count > 0;
     if (e && e->current >= 0 && e->pool[e->current].type == PH_MOVE
-        && move_restricted(t->type, e->pool[e->current].move.id)) {
+        && move_restricted(t, e->pool[e->current].move.id)) {
         pr_queue_message(bt, e);
         pr_cancel_current_move(e, NULL);
     }
@@ -643,7 +766,29 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
         return --t->turn_count > 0;
     case BATTLER_TAG_TYPE_THROAT_CHOPPED:
     case BATTLER_TAG_TYPE_HEAL_BLOCK:
+    case BATTLER_TAG_TYPE_DISABLED:
+    case BATTLER_TAG_TYPE_TAUNT:
         return restriction_lapse(bt, e, t, lapse_type);
+    case BATTLER_TAG_TYPE_TORMENT:                /* only leaving the field ends it */
+        return active_on_field(p);
+    case BATTLER_TAG_TYPE_ENCORE:
+        /* no longer added this turn; it ends early once the move has no PP left */
+        t->added_this_turn = false;
+        return pr_moveset_slot_with_pp(p, t->move_id) >= 0 && restriction_lapse(bt, e, t, lapse_type);
+    case BATTLER_TAG_TYPE_INFATUATED: {
+        /* lapseType !== CUSTOM || BattlerTag.lapse; no source ends it. Else the message, the
+         * ATTRACT animation, and half the time the immobilized message and the running
+         * MovePhase cancelled */
+        if (!(lapse_type != BATTLER_TAG_LAPSE_TYPE_CUSTOM || --t->turn_count > 0)) return false;
+        if (!tag_source(bt, t)) return false;
+        pr_queue_message(bt, e);
+        pr_unshift_new(bt, e, PH_COMMON_ANIM, pr_battler_index(bt, p));   /* CommonAnim.ATTRACT */
+        if (pr_battle_rand_seed_int(bt, 2, 0)) {
+            pr_queue_message(bt, e);
+            pr_cancel_current_move(e, NULL);
+        }
+        return true;
+    }
     case BATTLER_TAG_TYPE_PERISH_SONG: {
         /* the count, or at its end the Pokemon's remaining HP (INDIRECT_KO, ignoreSegments) */
         bool ret = --t->turn_count > 0;
@@ -757,6 +902,10 @@ static void on_remove(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_battl
     case BATTLER_TAG_TYPE_INGRAIN:               /* TrappedTag.onRemove */
     case BATTLER_TAG_TYPE_OCTOLOCK:
     case BATTLER_TAG_TYPE_HEAL_BLOCK:
+    case BATTLER_TAG_TYPE_DISABLED:
+    case BATTLER_TAG_TYPE_TAUNT:
+    case BATTLER_TAG_TYPE_ENCORE:
+    case BATTLER_TAG_TYPE_INFATUATED:
         pr_queue_message(bt, e);
         return;
     case BATTLER_TAG_TYPE_ROOSTED:
@@ -999,7 +1148,7 @@ void pr_remove_tags_by_source_id(pr_battle *bt, pr_engine *e, pr_pokemon *p, int
             note_tag(bt, type);                   /* isSourceLinked() and what follows aren't known */
             continue;
         }
-        if (is_trap(type)) match[n++] = p->tags[i];
+        if (source_linked(type)) match[n++] = p->tags[i];
     }
     for (int k = 0; k < n; k++) {
         int i = find_tag(p, match[k].type);

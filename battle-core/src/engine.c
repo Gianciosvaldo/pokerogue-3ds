@@ -67,6 +67,7 @@ int pr_phase_new(pr_engine *e, pr_phase_type type, int8_t battler)
             p->battler = battler;
             p->user_id = -1;
             p->targets = -1;
+            p->entry_targets = -2;
             p->source = -1;
             p->move.slot = -1;
             p->timing = MOVE_PHASE_TIMING_MODIFIER_NORMAL;

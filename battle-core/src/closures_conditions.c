@@ -587,6 +587,17 @@ static double psycho_shift(ARGS)
  * restriction on the side's BerryModifiers, which aren't a ported class */
 static double belch(ARGS) { UNUSED; return u->has_eaten_berry; }
 
+/* Encore: new EncoreTag(user.id).canAdd(target): the target's last non-virtual move, not one
+ * Encore can't repeat, still in its moveset with PP left, and no Shell Trap set */
+static double encore(ARGS)
+{
+    UNUSED;
+    NEED_TARGET;
+    int move = pr_encore_move(bt, t);
+    if (move < 0) return 1;                                    /* history not kept (reported) */
+    return move > 0;
+}
+
 /* Disable: lastNonVirtualMove = target.getLastNonVirtualMove(); != null && .move !== STRUGGLE
  * getLastNonVirtualMove(): moveHistory.findLast(m => m.move !== NONE && !isVirtual(m.useMode)) */
 static const pr_turn_move *last_non_virtual_move(pr_battle *bt, const pr_pokemon *p, bool *unknown)
@@ -963,6 +974,7 @@ const pr_closure_reg pr_condition_closures[] = {
     {NULL, "8ff758b28223", yawn},
     {"move:375", "edb63cc0c6c1", psycho_shift},
     {"move:562", "3ba58287d0b2", belch},
+    {"move:227", "e0aa92d77dd2", encore},
     {NULL, "0a338d0d1122", disable},
     {NULL, "e781731f96ae", spite},
     {NULL, "0bef0addc6de", conversion},

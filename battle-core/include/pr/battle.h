@@ -116,6 +116,8 @@ typedef struct pr_battler_tag {
     int8_t source_index;           /* SeedTag.sourceIndex (-1 = unset) */
     bool activated;                /* ShellTrapTag.activated */
     bool base_pure_flying;         /* RoostedTag.isBasePureFlying */
+    uint16_t move_id;              /* DisabledTag.moveId, EncoreTag.moveId (0: NONE, or undefined) */
+    bool added_this_turn;          /* EncoreTag.#addedThisTurn (private upstream, so not dumped) */
 } pr_battler_tag;
 #define PR_MAX_BATTLER_TAGS 24
 /* summonData.types: Roost gives Flying back on top of up to three others */

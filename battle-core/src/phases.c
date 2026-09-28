@@ -319,6 +319,9 @@ static void queue_move_end(pr_battle *bt, pr_engine *e, int ph)
     pr_phase_unshift(bt, e, end);
 }
 
+/* the list moveHistoryEntry.targets is */
+static int entry_list(const pr_phase *m) { return m->entry_targets == -2 ? m->targets : m->entry_targets; }
+
 static void move_fail(pr_phase *m) { m->failed = true; m->entry.result = MOVE_RESULT_FAIL; }
 static void move_cancel(pr_phase *m) { m->cancelled = true; m->entry.result = MOVE_RESULT_FAIL; }
 
@@ -378,7 +381,7 @@ static void handle_pre_move_failures(pr_battle *bt, pr_engine *e, int ph)
     pr_phase *m = PH(ph);
     if (!m->cancelled && !m->failed) return;
     m->entry.result = MOVE_RESULT_FAIL;
-    pr_push_history_shared(bt, e, m->pokemon, m->entry, m->targets);
+    pr_push_history_shared(bt, e, m->pokemon, m->entry, entry_list(m));
     pr_lapse_tags(bt, e, m->pokemon, BATTLER_TAG_LAPSE_TYPE_MOVE_EFFECT);
     move_queue_shift(m->pokemon, NULL);
 }
@@ -912,7 +915,37 @@ static void move_phase(pr_battle *bt, pr_engine *e, int ph)
 
     pr_remove_tag(bt, e, user, BATTLER_TAG_TYPE_ALWAYS_GET_HIT);
     pr_remove_tag(bt, e, user, BATTLER_TAG_TYPE_RECEIVE_DOUBLE_DAMAGE);
-    if (pr_get_battler_tag(user, BATTLER_TAG_TYPE_ENCORE)) pr_note_unported(bt, PR_FEAT_TAG_LAPSE);
+    /* an Encore added this turn overrides the move and its targets (the history entry keeps
+     * the old targets array) */
+    int encore_slot = pr_encore_try_override(user);
+    if (encore_slot >= 0) {
+        int move = user->moves[encore_slot];
+        int8_t tg[4], mt[4];
+        int n = 1;
+        if (pr_moves[move].target == MOVE_TARGET_USER_OR_NEAR_ALLY) {
+            tg[0] = (int8_t)pr_battler_index(bt, user);          /* Acupressure: itself */
+        } else {
+            bool multiple;
+            int nm = pr_get_move_targets(bt, user, move, -1, mt, &multiple);
+            if (multiple || nm == 1) {
+                memcpy(tg, mt, (size_t)nm);
+                n = nm;
+            } else {
+                int k = pr_battle_rand_seed_int(bt, nm, 0);
+                if (k >= nm) {                                    /* [undefined] */
+                    pr_note_unported(bt, (uint16_t)(PR_FEAT_TAG_0 + BATTLER_TAG_TYPE_ENCORE));
+                    n = 0;
+                } else {
+                    tg[0] = mt[k];
+                }
+            }
+        }
+        if (m->entry_targets == -2) m->entry_targets = m->targets;
+        m->move.id = (uint16_t)move;
+        m->move.slot = (int8_t)encore_slot;
+        m->move.pp_used = 0;
+        m->targets = (int8_t)pr_targets_new(e, tg, n);
+    }
     user->acted = true;
 
     if (!ignore_status) {
@@ -1012,7 +1045,7 @@ static void move_phase(pr_battle *bt, pr_engine *e, int ph)
         pr_queue_message(bt, e);
         move_fail(m);
         move_queue_shift(user, NULL);
-        pr_push_history_shared(bt, e, user, m->entry, m->targets);
+        pr_push_history_shared(bt, e, user, m->entry, entry_list(m));
     } else {
         pr_lapse_tags(bt, e, user, BATTLER_TAG_LAPSE_TYPE_MOVE);
         use_move(bt, e, ph, charging);

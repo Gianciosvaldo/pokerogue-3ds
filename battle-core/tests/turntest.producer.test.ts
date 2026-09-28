@@ -163,6 +163,7 @@ import { MoveFlags } from "#enums/move-flags";
 import { MoveTarget } from "#enums/move-target";
 import { ArenaTagSide } from "#enums/arena-tag-side";
 import { ArenaTagType } from "#enums/arena-tag-type";
+import { BattlerTagLapseType } from "#enums/battler-tag-lapse-type";
 import { BattlerTagType } from "#enums/battler-tag-type";
 import { MoveId } from "#enums/move-id";
 import { MoveResult } from "#enums/move-result";
@@ -333,7 +334,8 @@ it("turntest producer", async () => {
     BattlerTagType.MINIMIZED, BattlerTagType.CHARGED, BattlerTagType.TAR_SHOT, BattlerTagType.AUTOTOMIZED,
     BattlerTagType.IGNORE_ACCURACY, BattlerTagType.ALWAYS_CRIT, BattlerTagType.PERISH_SONG, BattlerTagType.ROOSTED,
     BattlerTagType.THROAT_CHOPPED, BattlerTagType.HEAL_BLOCK, BattlerTagType.AQUA_RING, BattlerTagType.INGRAIN,
-    BattlerTagType.OCTOLOCK,
+    BattlerTagType.OCTOLOCK, BattlerTagType.DISABLED, BattlerTagType.TAUNT, BattlerTagType.TORMENT, BattlerTagType.ENCORE,
+    BattlerTagType.INFATUATED,
   ];
   const tagMoves = usable.filter((m: any) =>
     m.attrs.some((a: any) => isA(a, ["AddBattlerTagAttr"]) && portedTags.includes(a.tagType)),
@@ -356,7 +358,8 @@ it("turntest producer", async () => {
   );
   const tagAbilityIds = [
     AbilityId.STEADFAST, AbilityId.INNER_FOCUS, AbilityId.OWN_TEMPO, AbilityId.SHIELD_DUST, AbilityId.SERENE_GRACE,
-    AbilityId.NO_GUARD, AbilityId.PERISH_BODY,
+    AbilityId.NO_GUARD, AbilityId.PERISH_BODY, AbilityId.CURSED_BODY, AbilityId.CUTE_CHARM, AbilityId.OBLIVIOUS,
+    AbilityId.AROMA_VEIL,
   ];
   // TURN_HEAL pools
   const healMoves = usable.filter((m: any) =>
@@ -610,7 +613,8 @@ it("turntest producer", async () => {
           + (t.tagType === BattlerTagType.SUBSTITUTE ? ` hp=${t.hp} focus=${t.sourceInFocus ? 1 : 0}` : "")
           + (t.tagType === BattlerTagType.SEEDED ? ` sidx=${t.sourceIndex ?? -1}` : "")
           + (t.tagType === BattlerTagType.SHELL_TRAP && t.activated ? " act=1" : "")
-          + (t.tagType === BattlerTagType.ROOSTED && t.isBasePureFlying ? " bpf=1" : ""),
+          + (t.tagType === BattlerTagType.ROOSTED && t.isBasePureFlying ? " bpf=1" : "")
+          + (t.tagType === BattlerTagType.DISABLED || t.tagType === BattlerTagType.ENCORE ? ` mid=${t.moveId ?? 0}` : ""),
       ),
     ];
   };
@@ -860,6 +864,19 @@ it("turntest producer", async () => {
     if (CALLED && p.moveset.some((m: any) => m.moveId === MoveId.SLEEP_TALK) && rnd(2) === 0) {
       p.status = new Status(StatusEffect.SLEEP, rnd(4), 1 + rnd(3));
     }
+    if (TAGS && rnd(2) === 0) {
+      // a history for Disable and Encore to read: its own moves, now and then Struggle or Encore
+      // (which Encore can't repeat), a called move (virtual) or a failed one
+      const pool = [...p.moveset.map((m: any) => m.moveId), MoveId.STRUGGLE, MoveId.ENCORE];
+      for (let k = 1 + rnd(2); k > 0; k--) {
+        p.pushMoveHistory({
+          move: pool[rnd(pool.length)],
+          targets: [p.getBattlerIndex()],
+          useMode: rnd(5) === 0 ? MoveUseMode.FOLLOW_UP : MoveUseMode.NORMAL,
+          result: rnd(4) === 0 ? MoveResult.FAIL : MoveResult.SUCCESS,
+        });
+      }
+    }
     if (COND) {
       p.tempSummonData.waveTurnCount = 1 + rnd(3);
       if (p.moveset.some((m: any) => m.moveId === MoveId.BELCH) && rnd(2) === 0) {
@@ -1080,6 +1097,15 @@ it("turntest producer", async () => {
             const tag = getBattlerTag(type, 1 + rnd(4), rnd(2) === 0 ? MoveId.NONE : MoveId.MEAN_LOOK, self ? p.id : other.id) as any;
             if (type === BattlerTagType.AUTOTOMIZED) {
               tag.autotomizeCount = 1 + rnd(3);
+            }
+            if (type === BattlerTagType.DISABLED) {
+              tag.moveId = rnd(4) === 0 ? MoveId.NONE : p.moveset[rnd(p.moveset.length)].moveId;
+            }
+            if (type === BattlerTagType.ENCORE) {
+              // an Encore from an earlier turn: that turn's end cleared its private addedThisTurn
+              tag.moveId = p.moveset[rnd(p.moveset.length)].moveId;
+              tag.lapse(p, BattlerTagLapseType.TURN_END);
+              tag.turnCount = 1 + rnd(4);
             }
             p.summonData.tags.push(tag);
             // what the hit check reads with the Lock-On tag: the newest Lock-On or Mind Reader in the
