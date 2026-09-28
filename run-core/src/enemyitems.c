@@ -132,10 +132,13 @@ int pr_run_generate_enemy_items(pr_run *run, const pr_enemy_items_ctx *ctx, pr_e
                 if (arg != -2) { item = e->item; break; }
             }
             if (out->n[p] < PR_MAX_ENEMY_ITEMS) out->items[p][out->n[p]++] = (pr_enemy_item){(uint8_t)item, (int8_t)arg};
+            else out->overflow = true;
         }
         /* every 1000th wave also gives a Mini Black Hole */
-        if (!(difficulty_wave % 1000) && out->n[p] < PR_MAX_ENEMY_ITEMS)
-            out->items[p][out->n[p]++] = (pr_enemy_item){(uint8_t)pr_item_mini_black_hole, -1};
+        if (!(difficulty_wave % 1000)) {
+            if (out->n[p] < PR_MAX_ENEMY_ITEMS) out->items[p][out->n[p]++] = (pr_enemy_item){(uint8_t)pr_item_mini_black_hole, -1};
+            else out->overflow = true;
+        }
     }
     return 0;
 }

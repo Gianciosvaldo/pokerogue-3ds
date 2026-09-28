@@ -1,7 +1,7 @@
 /*
  * Upstream half of run-core's enemy item test (tools/difftest.sh copies it into the upstream checkout).
  * Each case sets a random game mode, run seed and wave, a wild or trainer battle (a real Trainer of a
- * random type), single or double, and makes an enemy party of real Pokemon (with their real movesets)
+ * random type without a genModifiersFunc), single or double, and makes an enemy party of real Pokemon (with their real movesets)
  * through upstream's own addEnemyPokemon. It records what the item step reads from them: whether each
  * is a boss, and the attack type booster's input, each attack move's types in moveset order, asked with
  * the booster generator's own calls (its six lines are transcribed below). Then, on a freshly sown
@@ -95,7 +95,8 @@ it("enemyitems producer", async () => {
     battle.trainer = null;
     try {
       if (trainerBattle) {
-        trainerType = rnd(4) === 0 ? types[rnd(types.length)] : plain[rnd(plain.length)];
+        // trainers with a genModifiersFunc (a closure the port reports as unported) are left out
+        trainerType = plain[rnd(plain.length)];
         battle.trainer = new Trainer(trainerType, TrainerVariant.DEFAULT);
       }
       const party: any[] = [];
@@ -113,7 +114,7 @@ it("enemyitems producer", async () => {
         scene.getEnemyField(),
         trainerBattle ? ModifierPoolType.TRAINER : ModifierPoolType.WILD,
       );
-      scene.generateEnemyModifiers();
+      await scene.generateEnemyModifiers();
       const after = state();
       const head = [
         "I", gm.modeId, scene.seed, wave, trainerBattle ? 1 : 0, battle.double ? 1 : 0, trainerType, party.length,

@@ -454,7 +454,7 @@ extern const int pr_item_count, pr_item_mini_black_hole;
 extern const uint8_t pr_trainer_item_flags[];     /* by TrainerType: bit 0 config.isBoss, bit 1 genModifiersFunc */
 extern const int pr_trainer_item_flag_count;
 
-#define PR_MAX_ENEMY_ITEMS 64
+#define PR_MAX_ENEMY_ITEMS 1024   /* ceil(wave / 10) chances, x2.5 at a final wave, plus the Mini Black Hole */
 typedef struct {
     bool boss;                    /* isBoss() */
     int n_attack_types;           /* the attack type booster's input: for each attack move in the moveset, in */
@@ -471,6 +471,7 @@ typedef struct { uint8_t item; int8_t arg; } pr_enemy_item;   /* arg: BerryType,
 typedef struct {
     int n[6];
     pr_enemy_item items[6][PR_MAX_ENEMY_ITEMS];   /* each enemy's items in the order they're added */
+    bool overflow;                /* an enemy got more than PR_MAX_ENEMY_ITEMS (past endless wave ~4,000) */
 } pr_enemy_items;
 /* The EncounterPhase's item step on run->rng: regenerateModifierPoolThresholds(enemy field, WILD or
  * TRAINER), whose generators roll once each, then generateEnemyModifiers() without held-item configs
