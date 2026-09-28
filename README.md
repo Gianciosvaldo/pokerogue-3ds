@@ -9,6 +9,7 @@ Upstream pins: game `8555c08`, assets `056a1f4`, locales `270ed0a`.
 | Folder | What it is | Status |
 |---|---|---|
 | [`docs/feasibility.md`](docs/feasibility.md) | Feasibility audit of the port | Done |
+| [`docs/beta-plan.md`](docs/beta-plan.md) | Plan to the 10 October 2026 beta: milestones, one workstream per folder, what battle-core does next, the one-click SD card builder | Written 2026-09-28 |
 | [`benchmark/`](benchmark/) | Upstream game logic run headless in QuickJS, on PC and 3DS | Done. Old 3DS median turn 2.98 s, so the JS route was dropped for a native port ([RESULTS](benchmark/RESULTS.md)) |
 | [`skeleton/`](skeleton/) | First app: `rr` renderer over citro2d, SD saves, battle demo scene | Done, tested in Azahar |
 | [`assets-pipeline/`](assets-pipeline/) | Builds the 5 SD packs (gfx, snd, bgm, font, data) from upstream, and `app-src/`: the skeleton extended with pack, sound and font loaders | Done, tested in Azahar |
