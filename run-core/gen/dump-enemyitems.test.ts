@@ -1,13 +1,15 @@
 /*
- * Dumps what an enemy's held items are rolled from, for run-core, as C: the WILD and TRAINER modifier
- * pools (getModifierPoolForType) by tier, each entry's item, its weight (a number in both pools: checked)
+ * Dumps what an enemy's held items and endless buffs are rolled from, for run-core, as C: the WILD,
+ * TRAINER and ENEMY_BUFF modifier pools (getModifierPoolForType) by tier, each entry's item, its weight (a number in both pools: checked)
  * and whether it is a generator (Berry, base stat booster, attack type booster: they roll when asked for
- * a type); the item names; and for every trainer type config.isBoss and whether it has a genModifiersFunc
+ * a type); the item names; the buffs' stack limits; and for every trainer type config.isBoss and whether it has a genModifiersFunc
  * (a closure: not ported). Run with tools/redump.sh <upstream dir>; writes gen/out/run_enemyitems.c.
  * The output is generated: don't edit it.
  */
 import { ModifierPoolType } from "#enums/modifier-pool-type";
 import { ModifierTier } from "#enums/modifier-tier";
+import { MoveId } from "#enums/move-id";
+import { SpeciesId } from "#enums/species-id";
 import { TrainerType } from "#enums/trainer-type";
 import { ModifierTypeGenerator } from "#modifiers/modifier-type";
 import { GameManager } from "#test/framework/game-manager";
@@ -17,8 +19,11 @@ import * as fs from "node:fs";
 import Phaser from "phaser";
 import { expect, it } from "vitest";
 
-it("dump enemy items", () => {
-  new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
+it("dump enemy items", async () => {
+  // a battle, since making some buffs to read their stack limits reads currentBattle.waveIndex
+  const game = new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
+  game.override.battleStyle("single").startingWave(5).enemySpecies(SpeciesId.MAGIKARP).enemyMoveset(MoveId.SPLASH);
+  await game.classicMode.startBattle(SpeciesId.BULBASAUR);
   const out = process.env.DUMP_OUT ?? "/tmp/run_enemyitems.c";
   expect([ModifierTier.COMMON, ModifierTier.LUXURY]).toEqual([0, 5]);
   const kinds: Record<string, number> = { BERRY: 1, BASE_STAT_BOOSTER: 2, ATTACK_TYPE_BOOSTER: 3 };
@@ -31,7 +36,7 @@ it("dump enemy items", () => {
   };
   const entries: string[] = [];
   const pools: string[] = [];
-  for (const poolType of [ModifierPoolType.WILD, ModifierPoolType.TRAINER]) {
+  for (const poolType of [ModifierPoolType.WILD, ModifierPoolType.TRAINER, ModifierPoolType.ENEMY_BUFF]) {
     const pool: any = getModifierPoolForType(poolType);
     const tiers: string[] = [];
     for (let t = 0; t <= ModifierTier.LUXURY; t++) {
@@ -56,6 +61,35 @@ it("dump enemy items", () => {
     pools.push(`    {${tiers.join(", ")}},`);
   }
   itemIndex("MINI_BLACK_HOLE");
+  // The enemy buffs' stack limits: getMaxStackCount() (adding) and getMaxStackCount(true) (the pool's check)
+  const maxStacks: string[] = [];
+  const buffPool: any = getModifierPoolForType(ModifierPoolType.ENEMY_BUFF);
+  for (const id of names) {
+    let entry: any;
+    for (const t of Object.keys(buffPool)) {
+      entry = entry ?? buffPool[t].find((w: any) => w.modifierType.id === id);
+    }
+    if (!entry) {
+      maxStacks.push("{-1, -1, -1, -1}");
+      continue;
+    }
+    // some limits depend on currentBattle.waveIndex (the damage reducer's rises at wave 2000): read below and
+    // from wave 2000, and check nothing else moves
+    const at = (wave: number) => {
+      game.scene.currentBattle.waveIndex = wave;
+      const m = entry.modifierType.newModifier();
+      return [m.getMaxStackCount(), m.getMaxStackCount(true)];
+    };
+    const lo = at(1999);
+    const hi = at(2000);
+    for (const w of [1, 50, 1000, 1950]) {
+      expect(at(w)).toEqual(lo);
+    }
+    for (const w of [2050, 5000, 10000]) {
+      expect(at(w)).toEqual(hi);
+    }
+    maxStacks.push(`{${lo[0]}, ${lo[1]}, ${hi[0]}, ${hi[1]}}`);
+  }
   const types = Object.values(TrainerType).filter(v => typeof v === "number") as number[];
   const max = Math.max(...types);
   const flags = new Array(max + 1).fill(0);
@@ -71,11 +105,12 @@ it("dump enemy items", () => {
     '#include "pr/run.h"',
     "",
     `const pr_pool_entry pr_pool_entries[${entries.length}] = {${entries.join(", ")}};`,
-    "const pr_pool_tier pr_enemy_pools[2][6] = {",
+    "const pr_pool_tier pr_enemy_pools[3][6] = {",
     ...pools,
     "};",
     `const int pr_item_count = ${names.length};`,
     `const char *const pr_item_names[${names.length}] = {${names.map(n => `"${n}"`).join(", ")}};`,
+    `const int16_t pr_item_max_stacks[${names.length}][4] ={${maxStacks.join(", ")}};`,
     `const int pr_item_mini_black_hole = ${names.indexOf("MINI_BLACK_HOLE")};`,
     `const int pr_trainer_item_flag_count = ${max + 1};`,
     `const uint8_t pr_trainer_item_flags[${max + 1}] = {${flags.join(", ")}};`,

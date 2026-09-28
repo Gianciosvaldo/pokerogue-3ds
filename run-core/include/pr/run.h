@@ -448,7 +448,9 @@ enum { PR_POOL_PLAIN, PR_POOL_BERRY, PR_POOL_BASE_STAT, PR_POOL_ATTACK_TYPE };  
 typedef struct { uint8_t kind, item; uint16_t weight; } pr_pool_entry;
 typedef struct { uint16_t start; int16_t n; } pr_pool_tier;   /* n -1: the pool has no such tier */
 extern const pr_pool_entry pr_pool_entries[];
-extern const pr_pool_tier pr_enemy_pools[2][6];   /* [WILD, TRAINER][ModifierTier] */
+extern const pr_pool_tier pr_enemy_pools[3][6];   /* [WILD, TRAINER, ENEMY_BUFF][ModifierTier] */
+extern const int16_t pr_item_max_stacks[][4];     /* a buff's getMaxStackCount() and getMaxStackCount(true) below wave
+                                                   * 2000, then both from wave 2000; -1 for other items */
 extern const char *const pr_item_names[];         /* modifierTypes keys */
 extern const int pr_item_count, pr_item_mini_black_hole;
 extern const uint8_t pr_trainer_item_flags[];     /* by TrainerType: bit 0 config.isBoss, bit 1 genModifiersFunc */
@@ -478,6 +480,15 @@ typedef struct {
  * (those are mystery encounters'). Assumes no enemy modifiers are left from before. Returns 0, or -1 with
  * PR_RUN_UNPORTED_TRAINER for a trainer with a genModifiersFunc. */
 int pr_run_generate_enemy_items(pr_run *run, const pr_enemy_items_ctx *ctx, pr_enemy_items *out);
+
+/* The endless enemy buffs (AddEnemyBuffModifierPhase, every 50th endless wave): the buffs the enemy side
+ * holds, which carry over from wave to wave */
+typedef struct { int n; struct { uint8_t item; int stack; } buff[32]; } pr_enemy_buffs;
+/* AddEnemyBuffModifierPhase for `wave` on run->rng: regenerateModifierPoolThresholds(ENEMY_BUFF), then
+ * ceil(wave / 250) buffs of the wave's tier (ULTRA every 1000th wave, GREAT every 250th, else COMMON),
+ * each getEnemyBuffModifierForWave (retries while it would overflow a held buff), added to `buffs`.
+ * Returns 0, or -1 with PR_RUN_UNDEFINED_UPSTREAM where upstream draws from an empty tier (and throws). */
+int pr_run_add_enemy_buffs(pr_run *run, int wave, pr_enemy_buffs *buffs);
 
 /* ---- helpers ---- */
 /* executeWithSeedOffset(fn, offset, seedOverride): fn rolls on a fresh RNG sown from
