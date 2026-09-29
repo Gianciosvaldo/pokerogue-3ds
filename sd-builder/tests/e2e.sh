@@ -7,8 +7,8 @@
 #
 # MIRROR_DIR holds each download under the name the builder saves it as: the files named in pins.json,
 # plus assets-87426a7.zip and locales-270ed0a.zip (git archive --prefix=REPO-COMMIT/ of the pinned commits,
-# which is what codeload serves). REFERENCE_PACK_DIR: packs from build_sd.py to compare byte for byte
-# (all five must match; under Wine, data, font and gfx must, and the audio packs are only compared).
+# which is what codeload serves). REFERENCE_PACK_DIR: packs from build_sd.py on Linux; all five must be
+# byte-identical, natively and under Wine.
 # --wine runs the Windows Python, ffmpeg and encoder under Wine (needs wine64; the Python comes from
 # the mirror, as setup.ps1 would fetch it on Windows).
 set -e
@@ -45,10 +45,7 @@ for s in data font gfx snd bgm; do
   [ -s "$SD/3ds/pokerogue/$s.pak" ] || fail "$s.pak missing on the card"
   if [ -n "$REF" ]; then
     if cmp -s "$SD/3ds/pokerogue/$s.pak" "$REF/$s.pak"; then echo "$s.pak identical to the reference"
-    else echo "$s.pak DIFFERS from the reference ($(stat -c %s "$SD/3ds/pokerogue/$s.pak") vs $(stat -c %s "$REF/$s.pak") bytes)"
-      # same machine, same ffmpeg: every pack must match; under Wine only the audio may (other ffmpeg build)
-      [ -z "$WINE" ] || [ "$s" = snd ] || [ "$s" = bgm ] || fail "$s.pak differs"
-      [ -n "$WINE" ] || fail "$s.pak differs"; fi
+    else fail "$s.pak differs from the reference ($(stat -c %s "$SD/3ds/pokerogue/$s.pak") vs $(stat -c %s "$REF/$s.pak") bytes)"; fi
   fi
 done
 [ -s "$SD/3ds/DSP1.3dsx" ] || fail "DSP1.3dsx not put on a card without dspfirm.cdc"

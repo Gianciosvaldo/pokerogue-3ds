@@ -21,7 +21,7 @@ import struct
 
 import numpy as np
 from fontTools.ttLib import TTFont
-from PIL import ImageFont
+from PIL import ImageFont, features
 
 import gfx
 
@@ -37,10 +37,21 @@ FONTS = {  # upstream fontFamily -> file in assets/fonts
 }
 
 
+def require_raqm():
+    """Glyphs are placed with Raqm (HarfBuzz) layout, as browsers do. Pillow's basic layout uses hinted
+    advances: about 5% of glyphs come out 1 px wider or narrower than the font's own widths, and some
+    bitmaps shift. Pillow's Linux and macOS wheels include Raqm; on Windows it also needs fribidi-0.dll
+    next to python.exe (sd-builder installs it)."""
+    if not features.check("raqm"):
+        raise RuntimeError("font.pak needs Pillow with Raqm text layout (on Windows, fribidi-0.dll next to "
+                           "python.exe); without it glyph widths differ from upstream")
+
+
 def bake(path, size):
     """Returns (rfnt_bytes, [(rrt page bytes, glyph table bytes)], stats)."""
+    require_raqm()
     cps = sorted(c for c in TTFont(path).getBestCmap() if c >= 0x20)
-    font = ImageFont.truetype(path, size)
+    font = ImageFont.truetype(path, size, layout_engine=ImageFont.Layout.RAQM)
     ascent, descent = font.getmetrics()
     glyphs = []  # (cp, bitmap uint8 HxW, ox, oy, adv)
     for cp in cps:

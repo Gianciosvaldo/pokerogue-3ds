@@ -28,6 +28,13 @@ import rpak  # noqa: E402
 SKIP_IMAGE_EXT = {".mp4"}
 
 
+def walk(root):
+    """os.walk in sorted order, so a pack's bytes don't depend on the file system's directory order."""
+    for d, dirs, files in os.walk(root):
+        dirs.sort()
+        yield d, dirs, sorted(files)
+
+
 def _gfx_job(args):
     png, rel, bg_mode = args
     try:
@@ -41,8 +48,8 @@ def build_gfx(assets, out_dir, jobs, report):
     root = os.path.join(assets, "images")
     anim_bgs = gfx.anim_backgrounds(assets)
     todo, variant_maps, skipped = [], [], []
-    for d, _, files in os.walk(root):
-        for f in sorted(files):
+    for d, _, files in walk(root):
+        for f in files:
             p = os.path.join(d, f)
             rel = os.path.relpath(p, root).replace(os.sep, "/")
             if f.endswith(".png"):
@@ -163,8 +170,8 @@ def build_snd(assets, out_dir, jobs, encoder, report):
     todo = []
     for sub in ("se", "ui", "cry", "battle_anims"):
         root = os.path.join(assets, "audio", sub)
-        for d, _, files in os.walk(root):
-            for f in sorted(files):
+        for d, _, files in walk(root):
+            for f in files:
                 if f.lower().endswith(AUDIO_EXT):
                     todo.append((encoder, os.path.join(d, f)))
     w = rpak.Writer(os.path.join(out_dir, "snd.pak"))
@@ -196,6 +203,7 @@ def _font_job(args):
 
 
 def build_font(assets, out_dir, jobs, report):
+    font.require_raqm()
     todo = [(os.path.join(assets, "fonts", f), name, size) for name, f in font.FONTS.items()
             if os.path.exists(os.path.join(assets, "fonts", f)) for size in font.SIZES]
     w = rpak.Writer(os.path.join(out_dir, "font.pak"))
@@ -235,8 +243,8 @@ def build_data(assets, game, locales, out_dir, report):
         st["raw"] += len(data)
         st["entries"] += 1
 
-    for d, _, files in os.walk(os.path.join(assets, "battle-anims")):
-        for f in sorted(files):
+    for d, _, files in walk(os.path.join(assets, "battle-anims")):
+        for f in files:
             if f.endswith(".json"):
                 p = os.path.join(d, f)
                 try:
@@ -257,7 +265,7 @@ def build_data(assets, game, locales, out_dir, report):
     loops = audio.bgm_loop_points(game, assets)
     add("audio/bgm-loop-points.json", json.dumps(loops, separators=(",", ":")).encode())
     if locales and os.path.isdir(locales):
-        for d, _, files in os.walk(locales):
+        for d, _, files in walk(locales):
             if ".git" in d or os.path.samefile(d, locales):
                 continue  # root holds tooling configs (tsconfig, biome), not game text
             for f in sorted(files):

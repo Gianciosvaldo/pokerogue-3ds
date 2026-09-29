@@ -14,7 +14,8 @@ Turns the upstream PokeRogue assets into 5 pack files the 3DS app reads from the
 ## Building the SD card
 On Windows, use the one-click [`sd-builder`](../sd-builder/): it downloads everything at these pins and writes the packs to the card. By hand:
 ```
-python3 -m pip install pillow numpy lz4 fonttools     # plus ffmpeg on PATH and a C compiler (cc/gcc/clang)
+python3 -m pip install numpy==1.26.4 pillow==12.3.0 lz4==4.4.5 fonttools==4.66.0   # the versions sd-builder pins
+# plus ffmpeg on PATH and a C compiler (cc/gcc/clang)
 python3 build_sd.py --assets PATH/pokerogue-assets --game PATH/pokerogue --locales PATH/pokerogue-locales --out sd-card
 ```
 Copy `sd-card/` to the SD card root; the packs go to `sd:/3ds/pokerogue/`. `--only gfx,snd,bgm,font,data` rebuilds a subset. `build-report.json` records counts, sizes, the worst audio SNR and any errors. Sound needs `sd:/3ds/dspfirm.cdc` on a real console, dumped once with the DSP1 homebrew.
@@ -35,7 +36,7 @@ Copy `sd-card/` to the SD card root; the packs go to `sd:/3ds/pokerogue/`. `--on
   - Each track carries its upstream loop point, and `snd_bgm_play_from` can loop from any other point (upstream passes a loop point per biome).
   - Sound effects keep their own rate, are mono when both channels are identical, and are cached, about 1 MB.
   - Encode quality: worst track 27 dB SNR, worst sound effect 20 dB.
-- **Fonts (`font.py`)**: 1-bit glyphs at every size upstream's UI uses (canvas px / 6, rounded: 5-16 and 21 px). They are packed into 256x256 pages, and the app loads only the pages a string touches. `rr_font_load_key("fonts/emerald@16")`.
+- **Fonts (`font.py`)**: 1-bit glyphs at every size upstream's UI uses (canvas px / 6, rounded: 5-16 and 21 px). They are packed into 256x256 pages, and the app loads only the pages a string touches. `rr_font_load_key("fonts/emerald@16")`. Glyphs are placed with Pillow's Raqm (HarfBuzz) layout, as browsers do, and the build stops if Raqm is missing: Pillow's basic layout makes 5% of glyphs 1 px wider or narrower. Pillow's Linux and macOS wheels include it; on Windows it also needs `fribidi-0.dll` next to `python.exe` (sd-builder installs it).
 - **Data**: JSON, minified. The battle-logic port decides how to parse it.
 
 ## Tested in Azahar (Old 3DS mode)
