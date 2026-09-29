@@ -40,7 +40,8 @@ typedef struct {
 
 #define PR_MSG_MAX_ARGS 5
 
-/* One message. key == NULL: no message. */
+/* One message. key == NULL: its text isn't ported yet (args[0].s may name the engine source
+ * line that made it); key "": upstream's empty text box. */
 typedef struct {
     const char *key;       /* "battle:useMove"; a string literal */
     uint8_t n_args;

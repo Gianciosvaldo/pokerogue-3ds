@@ -180,8 +180,13 @@ bool pr_phase_exists(pr_engine *e, pr_phase_type t, int battler);
 bool pr_phase_try_remove(pr_battle *bt, pr_engine *e, pr_phase_type t, int battler);
 /* queueMessage(...), queueAbilityDisplay(...): presentation phases. pr_queue_message is a
  * message whose text isn't ported yet; pr_queue_msg carries it. */
-void pr_queue_message(pr_battle *bt, pr_engine *e);
-void pr_queue_message_deferred(pr_battle *bt, pr_engine *e);
+void pr_queue_message_at(pr_battle *bt, pr_engine *e, const char *site);
+void pr_queue_message_deferred_at(pr_battle *bt, pr_engine *e, const char *site);
+#define PR_STR2_(x) #x
+#define PR_STR_(x) PR_STR2_(x)
+/* the site ("src/phases.c:904") rides in msg.args[0].s, so the turn test can list what is left */
+#define pr_queue_message(bt, e) pr_queue_message_at((bt), (e), __FILE__ ":" PR_STR_(__LINE__))
+#define pr_queue_message_deferred(bt, e) pr_queue_message_deferred_at((bt), (e), __FILE__ ":" PR_STR_(__LINE__))
 void pr_queue_msg(pr_battle *bt, pr_engine *e, pr_msg m);
 void pr_queue_msg_deferred(pr_battle *bt, pr_engine *e, pr_msg m);
 /* ---- messages and events (src/events.c) ---- */

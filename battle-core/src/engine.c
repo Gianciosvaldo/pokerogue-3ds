@@ -474,21 +474,30 @@ bool pr_phase_try_remove(pr_battle *bt, pr_engine *e, pr_phase_type t, int battl
     return false;
 }
 
-void pr_queue_message(pr_battle *bt, pr_engine *e)
-{
-    pr_phase_unshift(bt, e, pr_phase_new(e, PH_MESSAGE, -1));
-}
-
-void pr_queue_message_deferred(pr_battle *bt, pr_engine *e)
-{
-    pr_phase_push(bt, e, pr_phase_new(e, PH_MESSAGE, -1));
-}
-
 static int message_phase(pr_engine *e, const pr_msg *m)
 {
     int ph = pr_phase_new(e, PH_MESSAGE, -1);
     if (ph >= 0) e->pool[ph].msg = *m;
     return ph;
+}
+
+static pr_msg todo_msg(const char *site)
+{
+    pr_msg m = pr_msg0(NULL);
+    m.args[0].s = site;
+    return m;
+}
+
+void pr_queue_message_at(pr_battle *bt, pr_engine *e, const char *site)
+{
+    pr_msg m = todo_msg(site);
+    pr_phase_unshift(bt, e, message_phase(e, &m));
+}
+
+void pr_queue_message_deferred_at(pr_battle *bt, pr_engine *e, const char *site)
+{
+    pr_msg m = todo_msg(site);
+    pr_phase_push(bt, e, message_phase(e, &m));
 }
 
 void pr_queue_msg(pr_battle *bt, pr_engine *e, pr_msg m)
