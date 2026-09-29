@@ -471,7 +471,11 @@ static void entry_hazard_apply(pr_battle *bt, pr_engine *e, int i, pr_pokemon *p
             pr_arena_remove_tag_on_side(bt, e, t.type, t.side, false);
             return;
         }
-        pr_try_set_status(bt, e, p, t.layers == 1 ? STATUS_EFFECT_POISON : STATUS_EFFECT_TOXIC, NULL, 0, false, true);
+        int st = t.layers == 1 ? STATUS_EFFECT_POISON : STATUS_EFFECT_TOXIC;
+        /* sourceText: the tag's move name */
+        pr_msg m = pr_msg2(pr_status_key(st, PR_ST_OBTAIN_SOURCE), pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+                           pr_arg_move("sourceText", MOVE_ID_TOXIC_SPIKES));
+        pr_try_set_status_msg(bt, e, p, st, NULL, 0, false, true, &m);
         return;
     case ARENA_TAG_TYPE_STICKY_WEB: {
         static const int8_t spd[1] = {STAT_SPD}, minus_one[1] = {-1};

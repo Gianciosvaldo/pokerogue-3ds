@@ -259,7 +259,7 @@ static bool type_in(const pr_intlist *l, int t)
 
 /* What applySingleAbAttrs does between canApply and apply outside a simulation: show the
  * ability, queue its trigger message. The turn engine keeps these phases (NULL: no engine). */
-typedef struct { pr_engine *e; bool shown; uint16_t ability; } ab_ctx;
+typedef struct { pr_engine *e; bool shown; uint16_t ability; bool passive; } ab_ctx;
 /* findModifiers(PokemonHeldItemModifier held by p): the item stealers stop at a non-empty list */
 static bool has_held_items(const pr_battle *bt, const pr_pokemon *p)
 {
@@ -274,7 +274,7 @@ static void before_apply(pr_battle *bt, const pr_attr *a, const pr_ab_params *pp
 {
     if (!c->e) return;
     c->shown = shows_ability(a);
-    if (c->shown) pr_queue_ability_display(bt, c->e, pp->pokemon, true);
+    if (c->shown) pr_queue_ability_display(bt, c->e, pp->pokemon, c->passive, true);
     if (has_trigger_message(a->cls)) pr_queue_message(bt, c->e);
 }
 /* canApply(params) false: skip this attr; true: the ability applies, apply follows */
@@ -1395,11 +1395,11 @@ void pr_apply_ab_attrs(pr_battle *bt, uint16_t cls, pr_ab_params *pp)
             if (!can) break;
             if (pp->on_gain && !activate_on_gain(a)) continue;                 /* attrFilter */
             if (!condition_ok(bt, a, p)) continue;
-            ab_ctx c = {e, false, ability};
+            ab_ctx c = {e, false, ability, passive != 0};
             int r = apply_one(bt, a, pp, &c);
             if (r < 0) { pr_note_unported(bt, a->cls); continue; }
             if (r == 0 || !e) continue;
-            if (c.shown) pr_queue_ability_display(bt, e, p, false);
+            if (c.shown) pr_queue_ability_display(bt, e, p, passive != 0, false);
             pr_pokemon *w = (pr_pokemon *)p;
             set_add(bt, w->ab_applied_wave, &w->n_ab_applied_wave, ability);
             set_add(bt, w->ab_applied_summon, &w->n_ab_applied_summon, ability);

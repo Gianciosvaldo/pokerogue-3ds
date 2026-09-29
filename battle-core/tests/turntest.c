@@ -18,7 +18,7 @@ static const char *const arena_tag_names[] = {ARENA_TAG_TYPE_VALUES};
 static const char *const pos_tag_names[] = {POSITIONAL_TAG_TYPE_VALUES};
 
 #define MAX_LINES 128
-#define LINE_LEN 2048
+#define LINE_LEN 4096
 typedef struct { char s[MAX_LINES][LINE_LEN]; int n; } lines_t;
 
 static void add_line(lines_t *L, const char *fmt, ...)
@@ -964,6 +964,93 @@ static void probe_case(pr_battle *bt, const lines_t *js, int from, const char *c
     bt->engine = NULL;
 }
 
+/* ---- the texts a turn shows (TEXTS line): C's messages rendered with upstream's English
+ * locale files (TURNTEST_LOCALES, default ../../pokerogue/locales/en next to this checkout) ---- */
+static const char *locales_dir(void)
+{
+    const char *d = getenv("TURNTEST_LOCALES");
+    return d ? d : "/home/claude/pokerogue/locales/en";
+}
+
+static const char *locale_get(void *ctx, const char *file, int fallback, size_t *len)
+{
+    (void)ctx;
+    static struct { char name[64]; char *text; size_t len; } cache[96];
+    static int n_cache;
+    if (fallback) return NULL;
+    for (int i = 0; i < n_cache; i++)
+        if (!strcmp(cache[i].name, file)) { *len = cache[i].len; return cache[i].text; }
+    if (n_cache >= 96) return NULL;
+    char path[512];
+    snprintf(path, sizeof path, "%s/%s.json", locales_dir(), file);
+    FILE *f = fopen(path, "rb");
+    char *text = NULL;
+    size_t n = 0;
+    if (f) {
+        fseek(f, 0, SEEK_END);
+        long sz = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        text = malloc((size_t)sz + 1);
+        n = fread(text, 1, (size_t)sz, f);
+        text[n] = 0;
+        fclose(f);
+    }
+    snprintf(cache[n_cache].name, sizeof cache[n_cache].name, "%s", file);
+    cache[n_cache].text = text;
+    cache[n_cache].len = n;
+    n_cache++;
+    *len = n;
+    return text;
+}
+
+/* JSON.stringify of one string */
+static void json_str(sbuf *b, const char *s)
+{
+    sb(b, "\"");
+    for (const unsigned char *p = (const unsigned char *)s; *p; p++) {
+        switch (*p) {
+        case '"': sb(b, "\\\""); break;
+        case '\\': sb(b, "\\\\"); break;
+        case '\n': sb(b, "\\n"); break;
+        case '\r': sb(b, "\\r"); break;
+        case '\t': sb(b, "\\t"); break;
+        case '\b': sb(b, "\\b"); break;
+        case '\f': sb(b, "\\f"); break;
+        default:
+            if (*p < 0x20) sb(b, "\\u%04x", *p);
+            else sb(b, "%c", *p);
+        }
+    }
+    sb(b, "\"");
+}
+
+/* The TEXTS line C's events give: false when a message has no text port yet */
+static bool c_texts(sbuf *b, const pr_event *ev, int n)
+{
+    static const pr_text_source src = {locale_get, NULL, "en"};
+    bool known = true;
+    sb(b, "TEXTS [");
+    int k = 0;
+    for (int i = 0; i < n; i++) {
+        if (ev[i].type != PR_EV_TEXT) continue;
+        if (k++) sb(b, ",");
+        if (!ev[i].msg.key) { known = false; sb(b, "\"<?>\""); continue; }
+        char text[1024];
+        pr_msg_format(&ev[i].msg, &src, text, sizeof text);
+        json_str(b, text);
+    }
+    sb(b, "]");
+    return known;
+}
+
+static struct { int cases, same, differ, unported, shown; } texts;
+static pr_event all_events[PR_MAX_EVENTS * 4];
+static int n_all_events;
+static void keep_events(const pr_engine *e)
+{
+    for (int i = 0; i < e->n_events && n_all_events < PR_MAX_EVENTS * 4; i++) all_events[n_all_events++] = e->events[i];
+}
+
 int main(int argc, char **argv)
 {
     FILE *f = fopen(argc > 1 ? argv[1] : "turns.txt", "r");
@@ -976,6 +1063,7 @@ int main(int argc, char **argv)
     int total = 0, covered = 0, pass = 0, fail = 0, parse_fail = 0, skipped = 0, stat_fail = 0;
     int shown = 0;
     static char line[LINE_LEN * 2];
+    static char js_texts[LINE_LEN * 2];
     char case_name[64] = "";
     int run_at = -1;
 
@@ -987,10 +1075,12 @@ int main(int argc, char **argv)
             if (!strncmp(line, "CASE ", 5)) {
                 snprintf(case_name, sizeof case_name, "%s", line);
                 js.n = 0;
+                js_texts[0] = 0;
                 run_at = -1;
                 continue;
             }
             if (!strcmp(line, "RUN")) { run_at = js.n; continue; }
+            if (!strncmp(line, "TEXTS ", 6)) { snprintf(js_texts, sizeof js_texts, "%s", line); continue; }
             if (js.n >= MAX_LINES) { fprintf(stderr, "case too long\n"); return 2; }
             snprintf(js.s[js.n++], LINE_LEN, "%s", line);
             continue;
@@ -1049,6 +1139,8 @@ int main(int argc, char **argv)
         static uint32_t hits_before[PR_CLOSURE_COUNT];
         memcpy(hits_before, pr_closure_hits, sizeof hits_before);
         pr_run_turn(bt, &eng);
+        n_all_events = 0;
+        keep_events(&eng);
         /* the party screens: the n-th one of the turn takes the n-th pick, modulo the Pokemon it
          * can send in (the bench, not fainted), as the producer's stand-in for the screen does */
         for (int n = 0; eng.stop == PH_SWITCH && eng.awaiting_pick && n < 16; n++) {
@@ -1057,6 +1149,7 @@ int main(int argc, char **argv)
                 if (bt->party[0][k]->hp > 0) eligible[ne++] = k;
             int r = cs.n_picks ? cs.picks[n % cs.n_picks] : 0;
             pr_resume_switch(bt, &eng, ne ? eligible[r % ne] : -1);
+            keep_events(&eng);
         }
         c_after.n = 0;
         dump_trace_queue(&c_after, &eng);
@@ -1082,6 +1175,20 @@ int main(int argc, char **argv)
         if (getenv("TURNTEST_COVERED")) printf("COVERED %s\n", case_name);   /* which cases were covered */
         count_phases(&eng);
         for (int i = 0; i < PR_CLOSURE_COUNT; i++) covered_hits[i] += pr_closure_hits[i] - hits_before[i];
+        if (js_texts[0]) {
+            static sbuf tb;
+            tb.n = 0;
+            tb.s[0] = 0;
+            bool known = c_texts(&tb, all_events, n_all_events);
+            texts.cases++;
+            if (!known) texts.unported++;
+            else if (!strcmp(tb.s, js_texts)) texts.same++;
+            else {
+                texts.differ++;
+                if (texts.shown++ < (getenv("TURNTEST_TEXTS") ? atoi(getenv("TURNTEST_TEXTS")) : 5))
+                    printf("TEXT DIFF %s\n  C : %s\n  JS: %s\n", case_name, tb.s, js_texts);
+            }
+        }
         int njs = js.n - run_at;
         bool ok = ordered.n == njs;
         int bad = -1;
@@ -1132,6 +1239,9 @@ int main(int argc, char **argv)
     if (nt) printf("closures with no C port, by calls:\n");
     for (int i = 0; i < nt; i++)
         printf("  %6u  %s %s\n", pr_closure_misses[top[i]], pr_closures_meta[top[i]].owner, pr_closures_meta[top[i]].hash);
+    if (texts.cases)
+        printf("texts of covered turns %d: identical %d, differ %d, a message with no text yet %d\n", texts.cases,
+               texts.same, texts.differ, texts.unported);
     if (probes.total)
         printf("condition probes %d: covered %d, pass %d, fail %d; not covered %d (unported %d, after one %d, upstream threw %d)\n",
                probes.total, probes.covered, probes.pass, probes.fail, probes.total - probes.covered,
