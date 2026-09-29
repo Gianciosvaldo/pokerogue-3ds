@@ -29,9 +29,9 @@ SKIP_IMAGE_EXT = {".mp4"}
 
 
 def _gfx_job(args):
-    png, rel = args
+    png, rel, bg_mode = args
     try:
-        data, st = gfx.convert_png(png, rel)
+        data, st = gfx.convert_png(png, rel, bg_mode)
         return rel, data, st, None
     except Exception as e:  # report and keep going
         return rel, None, None, f"{type(e).__name__}: {e}"
@@ -39,13 +39,14 @@ def _gfx_job(args):
 
 def build_gfx(assets, out_dir, jobs, report):
     root = os.path.join(assets, "images")
+    anim_bgs = gfx.anim_backgrounds(assets)
     todo, variant_maps, skipped = [], [], []
     for d, _, files in os.walk(root):
         for f in sorted(files):
             p = os.path.join(d, f)
             rel = os.path.relpath(p, root).replace(os.sep, "/")
             if f.endswith(".png"):
-                todo.append((p, rel))
+                todo.append((p, rel, gfx.anim_bg_mode(rel, anim_bgs)))
             elif f.endswith(".json"):
                 if rel.startswith("pokemon/variant/") and not os.path.exists(p[:-5] + ".png"):
                     variant_maps.append((p, rel))

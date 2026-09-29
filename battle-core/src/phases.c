@@ -142,7 +142,7 @@ static void move_attrs_unported(pr_battle *bt, int move, uint16_t cls)
 /* ---------------------------------------------------------------- queueing helpers */
 
 static double damage_and_update(pr_battle *bt, pr_engine *e, pr_pokemon *p, double damage, int result,
-                                bool ignore_faint_phase, pr_pokemon *source);
+                                bool ignore_faint_phase, pr_pokemon *source, bool critical);
 
 static int new_pokemon_phase(pr_engine *e, pr_phase_type t, int battler)
 {
@@ -155,6 +155,25 @@ static void unshift_new(pr_battle *bt, pr_engine *e, pr_phase_type t, int battle
 }
 
 void pr_unshift_new(pr_battle *bt, pr_engine *e, pr_phase_type t, int battler) { unshift_new(bt, e, t, battler); }
+
+/* unshiftNew("CommonAnimPhase", battlerIndex, targetIndex, anim) */
+void pr_unshift_common_anim(pr_battle *bt, pr_engine *e, int battler, int target, int anim)
+{
+    int ph = new_pokemon_phase(e, PH_COMMON_ANIM, battler);
+    if (ph >= 0) {
+        PH(ph)->anim = (uint16_t)anim;
+        PH(ph)->anim_target = (int8_t)target;
+    }
+    pr_phase_unshift(bt, e, ph);
+}
+
+/* unshiftNew("PokemonAnimPhase", key, pokemon): battler = the Pokemon's BattlerIndex */
+void pr_unshift_pokemon_anim(pr_battle *bt, pr_engine *e, int battler, int type)
+{
+    int ph = new_pokemon_phase(e, PH_POKEMON_ANIM, battler);
+    if (ph >= 0) PH(ph)->anim = (uint16_t)type;
+    pr_phase_unshift(bt, e, ph);
+}
 
 static void push_new(pr_battle *bt, pr_engine *e, pr_phase_type t, int battler)
 {
@@ -378,20 +397,36 @@ static void move_queue_shift(pr_pokemon *p, pr_turn_move *out)
 
 /* PreMoveMessageAttr.apply: a message when the move's message function returns one. The
  * functions live in the move list, so each user is ported by move id. */
-static bool pre_move_message(pr_battle *bt, int move, const pr_pokemon *target, int mode)
+/* PreMoveMessageAttr's text (Struggle, Magnitude, Fickle Beam, Poltergeist, Chilly Reception);
+ * false when it is "" and nothing shows */
+static bool pre_move_message(pr_battle *bt, int move, const pr_pokemon *user, const pr_pokemon *target, int mode,
+                             pr_msg *out)
 {
     switch (move) {
     case MOVE_ID_STRUGGLE:
-    case MOVE_ID_MAGNITUDE:          /* "Magnitude N!": always a text, whatever the roll */
+        *out = pr_msg1("moveTriggers:struggle", pr_arg_pokemon(bt, "pokemonName", user));
         return true;
+    case MOVE_ID_MAGNITUDE: {        /* "Magnitude N!": always a text, whatever the roll */
+        static const int thresholds[] = {5, 15, 35, 65, 85, 95};
+        int roll = pr_wave_seed_roll(bt, 100), m = 0;
+        while (m < 6 && roll >= thresholds[m]) m++;
+        *out = pr_msg1("moveTriggers:magnitudeMessage", pr_arg_int("magnitude", m + 4));
+        return true;
+    }
     case MOVE_ID_FICKLE_BEAM: {      /* doublePowerChanceMessageFunc(30): the same roll as its power */
         int roll = pr_wave_seed_roll(bt, 100);
-        return roll >= 0 && roll < 30;
+        if (!(roll >= 0 && roll < 30)) return false;
+        *out = pr_msg1("moveTriggers:goingAllOutForAttack", pr_arg_pokemon(bt, "pokemonName", user));
+        return true;
     }
     case MOVE_ID_POLTERGEIST:        /* attackedByItemMessageFunc: the target's first transferable item */
-        return target && pr_held_item_count(bt, target, true) > 0;
+        if (!(target && pr_held_item_count(bt, target, true) > 0)) return false;
+        *out = pr_msg0(NULL);        /* the item's name isn't ported yet */
+        return true;
     case MOVE_ID_CHILLY_RECEPTION:   /* no text when called indirectly */
-        return mode < MOVE_USE_MODE_INDIRECT;
+        if (mode >= MOVE_USE_MODE_INDIRECT) return false;
+        *out = pr_msg1("moveTriggers:chillyReception", pr_arg_pokemon(bt, "pokemonName", user));
+        return true;
     }
     pr_note_unported(bt, PR_AC_PreMoveMessageAttr);
     return false;
@@ -452,11 +487,12 @@ void pr_reset_status_phase(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool revi
     reset_status_as_phase(bt, e, p, revive);
 }
 
-/* Pokemon.cureStatus(effect): the cure message, then the status is cleared at once */
-static void cure_status(pr_battle *bt, pr_engine *e, pr_pokemon *p, int effect)
+/* Pokemon.cureStatus(effect, msg = getStatusEffectHealText(effect, name)): the cure message, then
+ * the status is cleared at once */
+static void cure_status(pr_battle *bt, pr_engine *e, pr_pokemon *p, int effect, const pr_msg *msg)
 {
     if (effect != p->status) return;
-    pr_queue_message(bt, e);
+    pr_queue_msg(bt, e, msg ? *msg : pr_status_msg(bt, effect, PR_ST_HEAL, p));
     clear_status(bt, e, p, false);
 }
 
@@ -469,11 +505,11 @@ static void status_increment_turn(pr_pokemon *p)
 }
 
 /* MovePhase.triggerStatus(effect, cancel): the activation message and its animation */
-static void trigger_status(pr_battle *bt, pr_engine *e, int ph, bool cancel)
+static void trigger_status(pr_battle *bt, pr_engine *e, int ph, int effect, bool cancel)
 {
     pr_phase *m = PH(ph);
-    pr_queue_message(bt, e);
-    unshift_new(bt, e, PH_COMMON_ANIM, pr_battler_index(bt, m->pokemon));
+    pr_queue_msg(bt, e, pr_status_msg(bt, effect, PR_ST_ACTIVATION, m->pokemon));
+    pr_unshift_common_anim(bt, e, pr_battler_index(bt, m->pokemon), -1, COMMON_ANIM_POISON + (effect - 1));
     if (cancel) move_cancel(PH(ph));
 }
 
@@ -507,12 +543,12 @@ static bool check_sleep(pr_battle *bt, pr_engine *e, int ph)
     pr_apply_ab_attrs(bt, PR_AC_ReduceStatusEffectDurationAbAttr, &pp);   /* Early Bird */
     user->status_sleep_turns = (int16_t)turns;
     if (user->status_sleep_turns <= 0) {
-        cure_status(bt, e, user, STATUS_EFFECT_SLEEP);
+        cure_status(bt, e, user, STATUS_EFFECT_SLEEP, NULL);
         return false;
     }
     /* applyMoveAttrs("BypassSleepAttr"): Sleep Talk, Snore */
     bool cancel = !pr_move_has_attr(m->move.id, PR_AC_BypassSleepAttr);
-    trigger_status(bt, e, ph, cancel);
+    trigger_status(bt, e, ph, STATUS_EFFECT_SLEEP, cancel);
     return cancel;
 }
 
@@ -538,10 +574,10 @@ static bool check_freeze(pr_battle *bt, pr_engine *e, int ph)
     }
     status_increment_turn(user);
     if (thaws || !pr_battle_rand_seed_int(bt, 4, 0) || (user->status_freeze_turns < 0 ? 0 : user->status_freeze_turns) <= 0) {
-        cure_status(bt, e, user, STATUS_EFFECT_FREEZE);
+        cure_status(bt, e, user, STATUS_EFFECT_FREEZE, NULL);
         return false;
     }
-    trigger_status(bt, e, ph, true);
+    trigger_status(bt, e, ph, STATUS_EFFECT_FREEZE, true);
     return true;
 }
 
@@ -565,11 +601,13 @@ bool pr_can_set_status(pr_battle *bt, pr_engine *e, pr_pokemon *p, int effect, b
     if (effect != STATUS_EFFECT_FAINT) {
         /* Rest fails on its own status; anything else on any status, or one already on its way */
         if (override_status ? p->status == effect : (p->status || p->pending_status)) {
-            if (!quiet) pr_queue_message(bt, e);                  /* queueStatusImmuneMessage */
+            /* queueStatusImmuneMessage(quiet, overrideStatus ? "overlap" : "other") */
+            if (!quiet) pr_queue_msg(bt, e, override_status ? pr_status_msg(bt, p->status, PR_ST_OVERLAP, p)
+                                                            : pr_msg_p(bt, "abilityTriggers:moveImmunity", p));
             return false;
         }
         if (pr_is_grounded(bt, p, false) && !ignore_field && bt->terrain == TERRAIN_MISTY) {
-            if (!quiet) pr_queue_message(bt, e);
+            if (!quiet) pr_queue_msg(bt, e, pr_terrain_block_msg(bt, TERRAIN_MISTY, p));
             return false;
         }
     }
@@ -598,7 +636,9 @@ bool pr_can_set_status(pr_battle *bt, pr_engine *e, pr_pokemon *p, int effect, b
     case STATUS_EFFECT_BURN: immune = pr_is_of_type(p, POKEMON_TYPE_FIRE); break;
     }
     if (immune) {
-        if (!quiet) pr_queue_message(bt, e);
+        /* the reason: Electric Terrain for sleep (whether or not it was the terrain), else "other" */
+        if (!quiet) pr_queue_msg(bt, e, effect == STATUS_EFFECT_SLEEP ? pr_terrain_block_msg(bt, TERRAIN_ELECTRIC, p)
+                                                                      : pr_msg_p(bt, "abilityTriggers:moveImmunity", p));
         return false;
     }
     /* the Pokemon's own abilities (Limber, Insomnia...), then its side's (itself included) */
@@ -616,7 +656,7 @@ bool pr_can_set_status(pr_battle *bt, pr_engine *e, pr_pokemon *p, int effect, b
         if (cancelled) return false;
     }
     if (source && source != p && is_safeguarded(bt, p, source)) {
-        if (!quiet) pr_queue_message(bt, e);
+        if (!quiet) pr_queue_msg(bt, e, pr_msg1("moveTriggers:safeguard", pr_arg_pokemon(bt, "targetName", p)));
         return false;
     }
     return true;
@@ -624,6 +664,14 @@ bool pr_can_set_status(pr_battle *bt, pr_engine *e, pr_pokemon *p, int effect, b
 
 bool pr_try_set_status(pr_battle *bt, pr_engine *e, pr_pokemon *p, int effect, pr_pokemon *source, int sleep_turns,
                        bool override_status, bool quiet)
+{
+    return pr_try_set_status_msg(bt, e, p, effect, source, sleep_turns, override_status, quiet, NULL);
+}
+
+/* trySetStatus with the message the ObtainStatusEffectPhase shows instead of the plain obtain
+ * text (a sourceText's obtainSource text, or overrideMessage) */
+bool pr_try_set_status_msg(pr_battle *bt, pr_engine *e, pr_pokemon *p, int effect, pr_pokemon *source, int sleep_turns,
+                           bool override_status, bool quiet, const pr_msg *msg)
 {
     if (!effect) return false;
     if (!pr_can_set_status(bt, e, p, effect, quiet, override_status, source, false)) return false;
@@ -643,6 +691,7 @@ bool pr_try_set_status(pr_battle *bt, pr_engine *e, pr_pokemon *p, int effect, p
     q->ose_effect = (uint8_t)effect;
     q->ose_sleep_turns = (int8_t)sleep_turns;
     q->source_p = source;
+    q->msg = msg ? *msg : pr_status_msg(bt, effect, PR_ST_OBTAIN, p);   /* fixed by the constructor */
     pr_phase_unshift(bt, e, ph);
     return true;
 }
@@ -669,8 +718,10 @@ static void obtain_status_effect_phase(pr_battle *bt, pr_engine *e, int ph)
     p->status_toxic_turns = 0;
     p->status_sleep_turns = (int16_t)sleep;
     p->status_freeze_turns = effect == STATUS_EFFECT_FREEZE ? 3 : -1;
-    /* the animation's callback: the message, then (no species changes form on a status) */
-    pr_queue_message(bt, e);
+    /* the status animation plays, and its callback queues the message, then (no species changes
+     * form on a status) */
+    pr_event_add(bt, e, PR_EV_COMMON_ANIM, q->battler, -1, COMMON_ANIM_POISON + (effect - 1), 0, NULL);
+    pr_queue_msg(bt, e, q->msg);
     if (effect && effect != STATUS_EFFECT_FAINT) {
         bt->ignore_abilities = false;                       /* arena.setIgnoreAbilities(false) */
         bt->ignoring_effect_source = -1;
@@ -691,14 +742,14 @@ static bool first_failure_check(pr_battle *bt, pr_engine *e, int ph)
     /* checkPP */
     if (mv->pp != -1 && m->use_mode < MOVE_USE_MODE_IGNORE_PP && ref_pp_used(m) >= ref_move_pp(m)) {
         move_cancel(m);
-        pr_queue_message(bt, e);
+        pr_queue_msg(bt, e, pr_msg0("battle:attackFailed"));
         return true;
     }
     /* checkValidity */
     pr_target_list *tl = tlist(e, m->targets);
     if (mv->unimplemented) {
         move_cancel(m);
-        pr_queue_message(bt, e);
+        pr_queue_msg(bt, e, pr_msg1("battle:moveNotImplemented", pr_arg_move("moveName", (int)(m->move.id | PR_MSG_MOVE_BARE))));
         return true;
     }
     if (m->move.id == MOVE_ID_NONE || !tl || tl->n == 0) {
@@ -718,7 +769,8 @@ static bool first_failure_check(pr_battle *bt, pr_engine *e, int ph)
                              0, user, n ? tg[0] : NULL, m->move.id))
             continue;
         move_cancel(m);
-        pr_queue_message(bt, e);
+        /* the attr's message: Focus Punch's is the only one */
+        pr_queue_msg(bt, e, pr_msg1("moveTriggers:lostFocus", pr_arg_pokemon(bt, "pokemonName", user)));
         return true;
     }
     static const int tag_checks[] = {BATTLER_TAG_TYPE_FLINCHED, BATTLER_TAG_TYPE_DISABLED, BATTLER_TAG_TYPE_HEAL_BLOCK,
@@ -727,7 +779,8 @@ static bool first_failure_check(pr_battle *bt, pr_engine *e, int ph)
         if (pr_lapse_tag(bt, e, user, tag_checks[i], BATTLER_TAG_LAPSE_TYPE_PRE_MOVE) && m->cancelled) return true;
     /* checkGravity */
     if (pr_arena_get_tag_on_side(bt, ARENA_TAG_TYPE_GRAVITY, ARENA_TAG_SIDE_BOTH) && (mv->flags & MOVE_FLAGS_GRAVITY)) {
-        pr_queue_message(bt, e);
+        pr_queue_msg(bt, e, pr_msg2("battle:moveDisabledGravity", pr_arg_pokemon(bt, "pokemonNameWithAffix", user),
+                                    pr_arg_move("moveName", m->move.id)));
         return true;
     }
     static const int tag_checks2[] = {BATTLER_TAG_TYPE_TAUNT, BATTLER_TAG_TYPE_IMPRISON, BATTLER_TAG_TYPE_CONFUSED};
@@ -735,7 +788,7 @@ static bool first_failure_check(pr_battle *bt, pr_engine *e, int ph)
         if (pr_lapse_tag(bt, e, user, tag_checks2[i], BATTLER_TAG_LAPSE_TYPE_PRE_MOVE) && m->cancelled) return true;
     /* checkPara: fully paralysed one time in eight */
     if (user->status == STATUS_EFFECT_PARALYSIS && pr_battle_rand_seed_int(bt, 8, 0) == 0) {
-        trigger_status(bt, e, ph, true);
+        trigger_status(bt, e, ph, STATUS_EFFECT_PARALYSIS, true);
         return true;
     }
     if (pr_lapse_tag(bt, e, user, BATTLER_TAG_TYPE_INFATUATED, BATTLER_TAG_LAPSE_TYPE_PRE_MOVE) && m->cancelled) return true;
@@ -816,8 +869,12 @@ static void resolve_redirect_target(pr_battle *bt, pr_engine *e, int ph)
     }
     if (pr_has_ability_with_attr(bt, m->pokemon, PR_AC_BlockRedirectAbAttr)) {
         redirect = current;
-        pr_queue_ability_display(bt, e, m->pokemon, true);
-        pr_queue_ability_display(bt, e, m->pokemon, false);
+        /* passive: getPassiveAbility().hasAttr(...), the species' passive whether unlocked or not */
+        const pr_pokemon *u = m->pokemon;
+        int pa = u->custom_passive >= 0 ? u->custom_passive : pr_pokemon_form(u)->passive;
+        bool passive = pr_ability_first_attr((uint16_t)pa, PR_AC_BlockRedirectAbAttr) != NULL;
+        pr_queue_ability_display(bt, e, u, passive, true);
+        pr_queue_ability_display(bt, e, u, passive, false);
     }
     tl->v[0] = (int8_t)redirect;
     pr_targets_changed(bt, e, m->targets);
@@ -827,34 +884,53 @@ static void resolve_redirect_target(pr_battle *bt, pr_engine *e, int ph)
  * ForceSwitchOutAttr's (and ChillyReceptionAttr's) does more than read state: it applies the
  * Suction Cups-style abilities of the target for real, so they show. The text itself isn't
  * modelled (a MessagePhase is a MessagePhase). */
-static void failed_text(pr_battle *bt, pr_engine *e, int ph)
+/* HealAttr and its subclasses: selfTarget */
+static bool heal_self_target(const pr_attr *a)
+{
+    switch (a->cls) {
+    case PR_AC_HealAttr: return ((const pr_attr_HealAttr *)a->p)->selfTarget;
+    case PR_AC_RestAttr: return ((const pr_attr_RestAttr *)a->p)->selfTarget;
+    case PR_AC_VariableHealAttr: return ((const pr_attr_VariableHealAttr *)a->p)->selfTarget;
+    case PR_AC_HealOnAllyAttr: return ((const pr_attr_HealOnAllyAttr *)a->p)->selfTarget;
+    }
+    return true;
+}
+
+/* failMove's text: move.getFailedText(user, targets[0], move) (the first attribute with one),
+ * else getTerrainBlockMessage(targets[0], terrain) when the terrain stopped it, else
+ * battle:attackFailed. ForceSwitchOutAttr's check applies the target's
+ * ForceSwitchOutImmunityAbAttr for real (Suction Cups shows its bar). */
+static pr_msg failed_text(pr_battle *bt, pr_engine *e, int ph, bool due_to_terrain)
 {
     pr_phase *m = PH(ph);
     const pr_move *mv = &pr_moves[m->move.id];
     pr_pokemon *targets[4];
-    int nt = -1;
-    if (!pr_move_has_attr(m->move.id, PR_AC_ForceSwitchOutAttr) && !pr_move_has_attr(m->move.id, PR_AC_ChillyReceptionAttr))
-        return;
+    int nt = active_in_list(bt, tlist(e, m->targets), targets);
+    pr_pokemon *u = m->pokemon, *t = nt ? targets[0] : NULL;
     for (unsigned i = 0; i < mv->nattr; i++) {
         const pr_attr *a = &pr_attrs[mv->attr0 + i];
-        pr_pokemon *u = m->pokemon;
         if (a->cls == PR_AC_AddSubstituteAttr) {       /* Shed Tail, Substitute: a doll already, or too little HP */
             const pr_attr_AddSubstituteAttr *x = (const pr_attr_AddSubstituteAttr *)a->p;
+            if (pr_get_battler_tag(u, BATTLER_TAG_TYPE_SUBSTITUTE))
+                return pr_msg1("moveTriggers:substituteOnOverlap", pr_arg_pokemon(bt, "pokemonName", u));
             double c = pr_get_stat(u, STAT_HP, true) * x->hpCost;
             c = x->roundUp ? ceil(c) : (floor(c) < 1 ? 1 : floor(c));
-            if (pr_get_battler_tag(u, BATTLER_TAG_TYPE_SUBSTITUTE) || u->hp <= c) return;
-        } else if (a->cls == PR_AC_HealAttr) {
-            pr_note_unported(bt, PR_AC_HealAttr);      /* no switching move has one */
-            return;
-        } else if (a->cls == PR_AC_ForceSwitchOutAttr || a->cls == PR_AC_ChillyReceptionAttr) {
-            if (nt < 0) nt = active_in_list(bt, tlist(e, m->targets), targets);
-            if (!nt) { pr_note_unported(bt, PR_FEAT_MOVE_CONDITION); return; }   /* upstream would throw */
+            if (u->hp <= c) return pr_msg0("moveTriggers:substituteNotEnoughHp");
+        } else if (pr_attr_is(a->cls, PR_AC_HealAttr)) {
+            const pr_pokemon *h = heal_self_target(a) ? u : t;
+            if (!h) { pr_note_unported(bt, PR_FEAT_MOVE_CONDITION); continue; }   /* upstream would throw */
+            if (h->hp >= pr_get_stat(h, STAT_HP, true))
+                return pr_msg1("battle:hpIsFull", pr_arg_pokemon(bt, "pokemonName", h));
+        } else if (pr_attr_is(a->cls, PR_AC_ForceSwitchOutAttr)) {
+            if (!t) { pr_note_unported(bt, PR_FEAT_MOVE_CONDITION); continue; }   /* upstream would throw */
             bool cancelled = false;
-            pr_ab_params ap = {.pokemon = targets[0], .move = -1, .flag = &cancelled};
+            pr_ab_params ap = {.pokemon = t, .move = -1, .flag = &cancelled};
             pr_apply_ab_attrs(bt, PR_AC_ForceSwitchOutImmunityAbAttr, &ap);
-            if (cancelled) return;                       /* moveTriggers:cannotBeSwitchedOut */
+            if (cancelled) return pr_msg1("moveTriggers:cannotBeSwitchedOut", pr_arg_pokemon(bt, "pokemonName", t));
         }
     }
+    if (due_to_terrain) return pr_terrain_block_msg(bt, bt->terrain, t);
+    return pr_msg0("battle:attackFailed");
 }
 
 static void fail_move(pr_battle *bt, pr_engine *e, int ph, bool due_to_terrain)
@@ -867,8 +943,7 @@ static void fail_move(pr_battle *bt, pr_engine *e, int ph, bool due_to_terrain)
         pr_hook_ab(bt, user, PR_AC_PokemonTypeChangeAbAttr);
     pr_turn_move tm = {.move = (uint16_t)id, .use_mode = m->use_mode, .result = MOVE_RESULT_FAIL};
     pr_push_history_shared(bt, e, user, tm, m->targets);
-    failed_text(bt, e, ph);
-    pr_queue_message(bt, e);
+    pr_queue_msg(bt, e, failed_text(bt, e, ph, due_to_terrain));
     pr_lapse_tags(bt, e, user, BATTLER_TAG_LAPSE_TYPE_MOVE_EFFECT);
 }
 
@@ -1015,7 +1090,8 @@ static void move_phase(pr_battle *bt, pr_engine *e, int ph)
             && !(pr_lapse_tag(bt, e, user, BATTLER_TAG_TYPE_THROAT_CHOPPED, BATTLER_TAG_LAPSE_TYPE_PRE_MOVE) && PH(ph)->cancelled)
             && pr_arena_get_tag_on_side(bt, ARENA_TAG_TYPE_GRAVITY, ARENA_TAG_SIDE_BOTH)
             && (pr_moves[PH(ph)->move.id].flags & MOVE_FLAGS_GRAVITY))
-            pr_queue_message(bt, e);
+            pr_queue_msg(bt, e, pr_msg2("battle:moveDisabledGravity", pr_arg_pokemon(bt, "pokemonNameWithAffix", user),
+                                        pr_arg_move("moveName", PH(ph)->move.id)));
         m = PH(ph);
     }
     if (m->cancelled) {
@@ -1024,7 +1100,11 @@ static void move_phase(pr_battle *bt, pr_engine *e, int ph)
         return;
     }
     /* doThawCheck: the move thaws its user out once the checks have passed */
-    if (!follow_up && !ignore_status && m->thaw) cure_status(bt, e, user, STATUS_EFFECT_FREEZE);
+    if (!follow_up && !ignore_status && m->thaw) {
+        pr_msg healed = pr_msg2("statusEffect:freeze.healByMove", pr_arg_pokemon(bt, "pokemonNameWithAffix", user),
+                                pr_arg_move("moveName", m->move.id));
+        cure_status(bt, e, user, STATUS_EFFECT_FREEZE, &healed);
+    }
 
     int move = m->move.id;
     /* arena.ignoreAbilities (Sunsteel Strike and co. don't work when called indirectly) */
@@ -1056,12 +1136,14 @@ static void move_phase(pr_battle *bt, pr_engine *e, int ph)
     if (move != MOVE_ID_NONE && !pr_get_battler_tag(user, BATTLER_TAG_TYPE_RECHARGING)
         && !pr_get_battler_tag(user, BATTLER_TAG_TYPE_INTERRUPTED)) {
         m->entry.move = (uint16_t)move;
-        pr_queue_message(bt, e);
+        pr_queue_msg(bt, e, pr_msg2(mode == MOVE_USE_MODE_REFLECTED ? "battle:magicCoatActivated" : "battle:useMove",
+                                    pr_arg_pokemon(bt, "pokemonNameWithAffix", user), pr_arg_move("moveName", move)));
         if (pr_move_has_attr((uint16_t)move, PR_AC_PreMoveMessageAttr)) {
             /* applyMoveAttrs("PreMoveMessageAttr", pokemon, getActiveTargetPokemon()[0], move) */
             pr_pokemon *tg[4];
+            pr_msg pm;
             int n = active_in_list(bt, tlist(e, m->targets), tg);
-            if (pre_move_message(bt, move, n ? tg[0] : NULL, mode)) pr_queue_message(bt, e);
+            if (pre_move_message(bt, move, user, n ? tg[0] : NULL, mode, &pm)) pr_queue_msg(bt, e, pm);
         }
     }
 
@@ -1069,11 +1151,15 @@ static void move_phase(pr_battle *bt, pr_engine *e, int ph)
     pr_pokemon *targets[4];
     int nt = active_in_list(bt, tlist(e, m->targets), targets);
     bool second_failed = false;
+    pr_msg second_text = pr_msg0("battle:attackFailed");
     if (!pr_move_apply_conditions(bt, move, user, nt ? targets[0] : NULL, 2)) {
+        if (pr_move_has_attr((uint16_t)move, PR_AC_HealOnAllyAttr))
+            second_text = pr_msg2("battle:moveDisabledHealBlock", pr_arg_pokemon(bt, "pokemonNameWithAffix", user),
+                                  pr_arg_move("moveName", move));
         m->failed = true;
         second_failed = true;
     } else if (move_weather_cancelled(bt, user, move)) {
-        /* the failed text is getWeatherBlockMessage(weatherType) */
+        second_text = pr_msg0(pr_weather_key(bt->weather, PR_WEATHER_BLOCK));
         m->failed = true;
         second_failed = true;
     } else {
@@ -1086,7 +1172,7 @@ static void move_phase(pr_battle *bt, pr_engine *e, int ph)
         }
     }
     if (second_failed && m->failed) {
-        pr_queue_message(bt, e);
+        pr_queue_msg(bt, e, second_text);
         handle_pre_move_failures(bt, e, ph);
         queue_move_end(bt, e, ph);
         return;
@@ -1099,7 +1185,7 @@ static void move_phase(pr_battle *bt, pr_engine *e, int ph)
     nt = active_in_list(bt, tlist(e, m->targets), targets);
     if ((nt == 0 && !pr_move_has_attr((uint16_t)move, PR_AC_AddArenaTrapTagAttr))
         || (user->n_move_queue > 0 && user->move_queue[0].move == MOVE_ID_NONE)) {
-        pr_queue_message(bt, e);
+        pr_queue_msg(bt, e, pr_msg0("battle:attackFailed"));
         move_fail(m);
         move_queue_shift(user, NULL);
         pr_push_history_shared(bt, e, user, m->entry, entry_list(m));
@@ -1372,11 +1458,15 @@ static void trigger_move_effects(pr_battle *bt, pr_engine *e, int ph, int trigge
 
 static void queue_hit_result_message(pr_battle *bt, pr_engine *e, int result)
 {
+    const char *k = NULL;
     switch (result) {
-    case HIT_RESULT_EXTREMELY_EFFECTIVE: case HIT_RESULT_SUPER_EFFECTIVE: case HIT_RESULT_NOT_VERY_EFFECTIVE:
-    case HIT_RESULT_MOSTLY_INEFFECTIVE: case HIT_RESULT_ONE_HIT_KO:
-        pr_queue_message(bt, e);
+    case HIT_RESULT_EXTREMELY_EFFECTIVE: k = "battle:hitResultExtremelyEffective"; break;
+    case HIT_RESULT_SUPER_EFFECTIVE: k = "battle:hitResultSuperEffective"; break;
+    case HIT_RESULT_NOT_VERY_EFFECTIVE: k = "battle:hitResultNotVeryEffective"; break;
+    case HIT_RESULT_MOSTLY_INEFFECTIVE: k = "battle:hitResultMostlyIneffective"; break;
+    case HIT_RESULT_ONE_HIT_KO: k = "battle:hitResultOneHitKo"; break;
     }
+    if (k) pr_queue_msg(bt, e, pr_msg0(k));
 }
 
 typedef struct { int result; double damage; bool critical; } move_damage;
@@ -1410,12 +1500,18 @@ static double pokemon_damage(pr_battle *bt, pr_engine *e, pr_pokemon *p, double 
 
 /* Pokemon.damageAndUpdate(damage, {result, isCritical, ignoreSegments, ignoreFaintPhase, source}) */
 static double damage_and_update(pr_battle *bt, pr_engine *e, pr_pokemon *p, double damage, int result,
-                                bool ignore_faint_phase, pr_pokemon *source)
+                                bool ignore_faint_phase, pr_pokemon *source, bool critical)
 {
     bool indirect = result == HIT_RESULT_INDIRECT || result == HIT_RESULT_INDIRECT_KO;
-    unshift_new(bt, e, PH_DAMAGE_ANIM, pr_battler_index(bt, p));
+    int anim = new_pokemon_phase(e, PH_DAMAGE_ANIM, pr_battler_index(bt, p));
+    if (anim >= 0) {
+        PH(anim)->anim_result = (uint8_t)result;
+        PH(anim)->anim_critical = critical;
+    }
+    pr_phase_unshift(bt, e, anim);
     if (p->switch_out_status && source) damage = 0;
     damage = pokemon_damage(bt, e, p, damage, indirect, ignore_faint_phase);
+    if (anim >= 0) PH(anim)->anim_amount = (int32_t)damage;   /* damagePhase.updateAmount(damage) */
     if (!source || source->hit_count <= 1) pr_post_damage_ab(bt, p, damage, source);
     return damage;
 }
@@ -1423,7 +1519,7 @@ static double damage_and_update(pr_battle *bt, pr_engine *e, pr_pokemon *p, doub
 double pr_damage_and_update(pr_battle *bt, pr_engine *e, pr_pokemon *p, double damage, int result,
                             bool ignore_faint_phase, pr_pokemon *source)
 {
-    return damage_and_update(bt, e, p, damage, result, ignore_faint_phase, source);
+    return damage_and_update(bt, e, p, damage, result, ignore_faint_phase, source, false);
 }
 
 /* applyMoveAttrs("NoEffectAttr" / "MissEffectAttr"): every one upstream runs crashDamageFunc (High
@@ -1446,7 +1542,7 @@ static void miss_effects(pr_battle *bt, pr_engine *e, pr_pokemon *user, int move
         pr_apply_ab_attrs(bt, PR_AC_BlockNonDirectDamageAbAttr, &cp);
         if (cancelled) continue;
         double d = to_dmg_value(max_hp(user) / 2.0);
-        damage_and_update(bt, e, user, d, HIT_RESULT_INDIRECT, false, NULL);
+        damage_and_update(bt, e, user, d, HIT_RESULT_INDIRECT, false, NULL, false);
         pr_queue_message(bt, e);                               /* moveTriggers:keptGoingAndCrashed */
         user->damage_taken += (int32_t)d;
     }
@@ -1488,8 +1584,8 @@ static move_damage apply_move_damage(pr_battle *bt, pr_engine *e, int ph, pr_pok
     } else if (!target->is_player && d.damage >= target->hp) {
         turn_modifiers(bt, false, target);                       /* EnemyEndureChanceModifier */
     }
-    double final = blocked ? 0 : damage_and_update(bt, e, target, d.damage, d.result, true, user);
-    if (crit) pr_queue_message(bt, e);
+    double final = blocked ? 0 : damage_and_update(bt, e, target, d.damage, d.result, true, user, crit);
+    if (crit) pr_queue_msg(bt, e, pr_msg0("battle:hitResultCriticalHit"));
     r.critical = crit;
     if (final <= 0) return r;
     user->total_damage_dealt += (int32_t)final;
@@ -1858,14 +1954,15 @@ static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
             if (field_move) i = nt;
             break;
         case HIT_CHECK_RESULT_NO_EFFECT:
-            pr_queue_message(bt, e);
+            pr_queue_msg(bt, e, pr_msg1(move == MOVE_ID_SHEER_COLD ? "battle:hitResultImmune" : "battle:hitResultNoEffect",
+                                        pr_arg_pokemon(bt, "pokemonName", targets[i])));
             /* fall through */
         case HIT_CHECK_RESULT_NO_EFFECT_NO_MESSAGE: case HIT_CHECK_RESULT_PROTECTED:
         case HIT_CHECK_RESULT_TARGET_NOT_ON_FIELD:
             miss_effects(bt, e, user, move, PR_AC_NoEffectAttr);
             break;
         case HIT_CHECK_RESULT_MISS:
-            pr_queue_message(bt, e);
+            pr_queue_msg(bt, e, pr_msg_p(bt, "battle:attackMissed", targets[i]));
             miss_effects(bt, e, user, move, PR_AC_MissEffectAttr);
             break;
         case HIT_CHECK_RESULT_REFLECTED: {
@@ -2012,7 +2109,7 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
         bt->faint_history[1][k].id = p->id;
         bt->faint_history[1][k].turn = bt->turn;
     }
-    pr_queue_message(bt, e);
+    pr_queue_msg(bt, e, pr_msg_p(bt, "battle:fainted", p));
     form_change(bt, p, PR_FCT_SpeciesFormChangeActiveTrigger);
     /* resetTera */
     bool was_tera = p->terastallized;
@@ -2062,6 +2159,7 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
     if (bt->double_battle) pr_note_unported(bt, PR_FEAT_DOUBLES);
 
     /* the faint cry's callback, then the tween's */
+    pr_event_add(bt, e, PR_EV_FAINT, f->battler, -1, 0, 0, NULL);
     if (player) p->friendship = (uint8_t)(p->friendship > 5 ? p->friendship - 5 : 0);
     pr_lapse_tags(bt, e, p, BATTLER_TAG_LAPSE_TYPE_FAINT);
     /* doSetStatus(FAINT) */
@@ -2171,18 +2269,22 @@ static void weather_effect_phase(pr_battle *bt, pr_engine *e)
                 if (cancelled || pr_get_battler_tag(p, BATTLER_TAG_TYPE_UNDERGROUND)
                     || pr_get_battler_tag(p, BATTLER_TAG_TYPE_UNDERWATER))
                     continue;
-                pr_queue_message(bt, e);                                   /* getWeatherDamageMessage */
+                pr_queue_msg(bt, e, pr_msg_p(bt, pr_weather_key(w, PR_WEATHER_DAMAGE), p));
                 /* damageAndUpdate(damage, {result: INDIRECT, ignoreSegments: true}) */
-                damage_and_update(bt, e, p, to_dmg_value(max_hp(p) / 16.0), HIT_RESULT_INDIRECT, false, NULL);
+                damage_and_update(bt, e, p, to_dmg_value(max_hp(p) / 16.0), HIT_RESULT_INDIRECT, false, NULL, false);
             }
         }
     }
+    /* ui.showText(getWeatherLapseMessage), then PostWeatherLapseAbAttr, then CommonAnimPhase.start
+     * plays getWeatherAnim */
+    pr_show_text(bt, e, pr_msg0(pr_weather_key(w, PR_WEATHER_LAPSE)));
     pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
     while ((p = pr_speed_iter_next(bt, &it))) {
         if (p->switch_out_status) continue;
         pr_ab_params lp = {.pokemon = p, .move = -1};
         pr_apply_ab_attrs(bt, PR_AC_PostWeatherLapseAbAttr, &lp);
     }
+    pr_event_add(bt, e, PR_EV_COMMON_ANIM, default_battler(bt), -1, COMMON_ANIM_SUNNY + (w - 1), 0, NULL);
 }
 
 /* PositionalTagPhase: positionalTagManager.activateAllTags(). Each tag counts down; one that runs
@@ -2430,13 +2532,15 @@ static void show_ability_phase(pr_battle *bt, pr_engine *e, int ph)
     pr_pokemon *p = slot(bt, s->battler);
     if (!p) return;
     if (bt->ability_bar_visible) {
+        bool passive = s->anim_result;
         pr_phase_unshift(bt, e, pr_phase_new(e, PH_HIDE_ABILITY, -1));
-        pr_phase_unshift(bt, e, pr_phase_new(e, PH_SHOW_ABILITY, s->battler));
+        pr_queue_ability_display(bt, e, p, passive, true);
         return;
     }
     if (p->is_player) bt->last_player_involved = (int8_t)(s->battler % 2);
     else bt->last_enemy_involved = (int8_t)(s->battler % 2);
     bt->ability_bar_visible = true;
+    pr_event_add(bt, e, PR_EV_ABILITY_SHOW, s->battler, -1, s->anim, s->anim_result, NULL);
 }
 
 /* ---------------------------------------------------------------- StatStageChangePhase */
@@ -2605,13 +2709,34 @@ static void stat_stage_change_phase(pr_battle *bt, pr_engine *e, int ph)
         if (st && def) st->stock_def++;
         if (st && spdef) st->stock_spdef++;
     }
-    /* queueStatChangeMessages: the given message, or one per distinct applied stage count */
+    /* isIncrease; playStatChangeAnimation when a stage moves */
+    bool increase = false;
+    int32_t moved = 0;
+    for (int i = 0; i < q->n_ssc; i++) {
+        increase |= q->ssc_stages[i] > 0;
+        if (applied[i]) moved |= 1 << q->ssc_stat[i];
+    }
+    if (moved) pr_event_add(bt, e, PR_EV_STAT_STAGES, q->battler, -1, increase, moved, NULL);
+    /* queueStatChangeMessages: the given message (no caller passes one), or one per group of
+     * equal applied stages (Map.groupBy: in first-seen order), getStatStageChangeDescriptionKey
+     * with the stats joined as formatStatsFragment does */
     if (q->ssc_message) pr_queue_message(bt, e);
     else
         for (int i = 0; i < q->n_ssc; i++) {
             bool seen = false;
             for (int j = 0; j < i; j++) seen |= applied[j] == applied[i];
-            if (!seen) pr_queue_message(bt, e);
+            if (seen) continue;
+            int8_t group[7];
+            int ng = 0;
+            for (int j = i; j < q->n_ssc; j++)
+                if (applied[j] == applied[i]) group[ng++] = (int8_t)q->ssc_stat[j];
+            int st = applied[i] < 0 ? -applied[i] : applied[i];
+            const char *key = st == 1 ? (increase ? "battle:statRose" : "battle:statFell")
+                            : st == 2 ? (increase ? "battle:statSharplyRose" : "battle:statHarshlyFell")
+                            : st > 2 && st <= 6 ? (increase ? "battle:statRoseDrastically" : "battle:statSeverelyFell")
+                            : (increase ? "battle:statWontGoAnyHigher" : "battle:statWontGoAnyLower");
+            pr_queue_msg(bt, e, pr_msg3(key, pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+                                        pr_arg_stats("stats", group, ng), pr_arg_int("count", ng)));
         }
     /* updateStatStages */
     for (int i = 0; i < q->n_ssc; i++) {
@@ -2703,7 +2828,7 @@ static void pokemon_heal_phase(pr_battle *bt, pr_engine *e, int ph)
             if (amount > cap) amount = cap;
         }
         if (amount < 0) {
-            damage_and_update(bt, e, p, -amount, HIT_RESULT_INDIRECT, false, NULL);
+            damage_and_update(bt, e, p, -amount, HIT_RESULT_INDIRECT, false, NULL, false);
         } else {
             /* heal(amount) */
             double room = max_hp(p) - p->hp;
@@ -2734,9 +2859,21 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_CHECK_STATUS_EFFECT: check_status_effect_phase(bt, e); break;
     case PH_POST_TURN_STATUS_EFFECT: post_turn_status_effect_phase(bt, e, ph); break;
     case PH_TURN_END: turn_end_phase(bt, e); break;
-    case PH_MESSAGE: case PH_DAMAGE_ANIM: case PH_COMMON_ANIM: case PH_POKEMON_ANIM: case PH_LOAD_MOVE_ANIM: case PH_MOVE_ANIM: break;
+    case PH_MESSAGE: pr_event_add(bt, e, PR_EV_TEXT, -1, -1, 0, 0, &PH(ph)->msg); break;
+    case PH_DAMAGE_ANIM:
+        pr_event_add(bt, e, PR_EV_DAMAGE, PH(ph)->battler, -1, PH(ph)->anim_result, PH(ph)->anim_amount, NULL);
+        break;
+    case PH_COMMON_ANIM:
+        pr_event_add(bt, e, PR_EV_COMMON_ANIM, PH(ph)->battler, PH(ph)->anim_target, PH(ph)->anim, 0, NULL);
+        break;
+    case PH_POKEMON_ANIM: pr_event_add(bt, e, PR_EV_POKEMON_ANIM, PH(ph)->battler, -1, PH(ph)->anim, 0, NULL); break;
+    case PH_MOVE_ANIM: pr_event_add(bt, e, PR_EV_MOVE_ANIM, PH(ph)->battler, PH(ph)->anim_target, PH(ph)->anim, 0, NULL); break;
+    case PH_LOAD_MOVE_ANIM: break;
     case PH_SHOW_ABILITY: show_ability_phase(bt, e, ph); break;
-    case PH_HIDE_ABILITY: bt->ability_bar_visible = false; break;
+    case PH_HIDE_ABILITY:
+        bt->ability_bar_visible = false;
+        pr_event_add(bt, e, PR_EV_ABILITY_HIDE, -1, -1, 0, 0, NULL);
+        break;
     case PH_RESET_STATUS: reset_status_phase(bt, e, ph); break;
     case PH_STAT_STAGE_CHANGE: stat_stage_change_phase(bt, e, ph); break;
     case PH_OBTAIN_STATUS_EFFECT: obtain_status_effect_phase(bt, e, ph); break;
@@ -2747,7 +2884,7 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_POST_SUMMON: pr_post_summon_phase(bt, e, ph); break;
     case PH_SWITCH: pr_switch_phase(bt, e, ph); break;
     case PH_MOVE_REFLECT: move_reflect_phase(bt, e, ph); break;
-    case PH_SHINY_SPARKLE: break;
+    case PH_SHINY_SPARKLE: pr_event_add(bt, e, PR_EV_SHINY_SPARKLE, PH(ph)->battler, -1, 0, 0, NULL); break;
     default:
         /* a phase with no port: it was reported when it was queued */
         pr_note_unported(bt, (uint16_t)(PR_FEAT_PHASE_0 + PH(ph)->type));

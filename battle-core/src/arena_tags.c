@@ -117,10 +117,10 @@ static void tailwind_on_add(pr_battle *bt, pr_engine *e, const pr_arena_tag *t)
             pr_queue_message(bt, e);                      /* windPowerCharged */
         }
         if (pr_has_ability_active(bt, p, ABILITY_ID_WIND_RIDER)) {
-            pr_queue_ability_display(bt, e, p, true);
+            pr_queue_ability_display(bt, e, p, false, true);
             static const int32_t atk = STAT_ATK;
             if (pr_unshift_stat_stage_change(bt, e, pr_battler_index(bt, p), &atk, 1, 1, p) < 0) e->overflow = true;
-            pr_queue_ability_display(bt, e, p, false);
+            pr_queue_ability_display(bt, e, p, false, false);
         }
     }
 }

@@ -31,6 +31,20 @@ def snake(name):
     return re.sub(r"[^A-Za-z0-9]+", "_", s).upper().strip("_")
 
 
+def split_words(v):
+    """upstream utils/strings.ts splitWords (enum keys are ASCII)"""
+    r = v.strip()
+    r = re.sub(r"([a-z\d])([A-Z])", "\\1\0\\2", r)
+    r = re.sub(r"([A-Z])([A-Z][a-z])", "\\1\0\\2", r)
+    r = re.sub(r"[-_ ]+", "\0", r)
+    return r.strip("\0").split("\0")
+
+
+def camel(v):
+    """upstream toCamelCase, which turns enum keys into locale keys (MoveId.DOUBLE_EDGE -> doubleEdge)"""
+    return "".join(w.lower() if i == 0 else w[:1].upper() + w[1:].lower() for i, w in enumerate(split_words(v)))
+
+
 def closure_hash(cl):
     """Source text plus any probed captured values (see dump-upstream.test.ts)."""
     key = cl["src"] + ("\n#cap " + json.dumps(cl["cap"]) if "cap" in cl else "")
@@ -456,6 +470,27 @@ c.append("};")
 c.append(f"const pr_species pr_species_table[PR_SPECIES_COUNT] = {{")
 c += [f"    {r}," for r in species_rows]
 c.append("};")
+# ---------------------------------------------------------------- locale keys
+# The keys upstream builds names from: toCamelCase(<Enum>[value]) (move:<key>.name, pokemon:<key>,
+# pokemonInfo:type.<key>...). The texts themselves stay in upstream's locale files.
+move_keys = {v: camel(k) for k, v in enums["MoveId"].items()}
+c.append("const pr_move_text_info pr_move_text[PR_MOVE_COUNT] = {")
+for m in moves:
+    c.append("    {%s, %s}," % (c_str(move_keys[m["id"]]), c_str(m.get("nameAppend") or "")))
+c.append("};")
+species_keys = {v: camel(k) for k, v in enums["SpeciesId"].items()}
+c.append("const char *const pr_species_i18n[PR_SPECIES_COUNT] = {")
+for sid in sorted(species, key=int):
+    c.append("    %s," % c_str(species_keys[int(sid)]))
+c.append("};")
+TEXT_ENUMS = ["PokemonType", "Stat", "StatusEffect", "WeatherType", "BerryType"]
+for en in TEXT_ENUMS:
+    vals = enums[en]
+    lo, hi = min(vals.values()), max(vals.values())
+    rows = ["NULL"] * (hi - lo + 1)
+    for k, v in vals.items():
+        rows[v - lo] = c_str(camel(k))
+    c.append(f"const char *const pr_i18n_{snake(en).lower()}[{hi - lo + 1}] = {{{', '.join(rows)}}};   /* value {lo}.. */")
 with open(os.path.join(OUT, "pr_data.c"), "w") as f:
     f.write("\n".join(c) + "\n")
 
@@ -566,6 +601,13 @@ extern const pr_move pr_moves[PR_MOVE_COUNT];
 extern const pr_ability pr_abilities[PR_ABILITY_COUNT];
 extern const pr_form pr_forms[PR_FORM_COUNT];
 extern const pr_species pr_species_table[PR_SPECIES_COUNT];
+/* Locale keys (upstream toCamelCase of the enum key): move:<key>.name, plus the " (N)" / " (P)"
+ * upstream appends to unimplemented and partial moves; pokemon:<key> per pr_species_table row;
+ * and for a few enums the key by value (index = value - the enum's lowest value) */
+typedef struct {{ const char *key, *name_append; }} pr_move_text_info;
+extern const pr_move_text_info pr_move_text[PR_MOVE_COUNT];
+extern const char *const pr_species_i18n[PR_SPECIES_COUNT];
+{{text_enum_decls}}
 {{set_decls}}
 
 #endif
@@ -574,7 +616,10 @@ set_decls = "\n".join(f"extern const uint16_t pr_set_{snake(n).lower()}[]; exter
                       for n in sorted(move_sets))
 with open(os.path.join(OUT, "pr_data.h"), "w") as f:
     fct_enum = "enum {\n" + "".join(f"    PR_FCT_{n} = {i},\n" for i, n in enumerate(fct_names)) + "};"
-    f.write(dh.replace("{set_decls}", set_decls).replace("{fct_enum}", fct_enum))
+    text_enum_decls = "\n".join(
+        f"extern const char *const pr_i18n_{snake(en).lower()}[{max(enums[en].values()) - min(enums[en].values()) + 1}];"
+        f"   /* {en}, from {min(enums[en].values())} */" for en in TEXT_ENUMS)
+    f.write(dh.replace("{set_decls}", set_decls).replace("{fct_enum}", fct_enum).replace("{text_enum_decls}", text_enum_decls))
 
 # closure manifest
 with open(os.path.join(OUT, "closures.txt"), "w") as f:
