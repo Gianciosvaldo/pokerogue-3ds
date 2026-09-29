@@ -122,6 +122,17 @@ extern const pr_move pr_moves[PR_MOVE_COUNT];
 extern const pr_ability pr_abilities[PR_ABILITY_COUNT];
 extern const pr_form pr_forms[PR_FORM_COUNT];
 extern const pr_species pr_species_table[PR_SPECIES_COUNT];
+/* Locale keys (upstream toCamelCase of the enum key): move:<key>.name, plus the " (N)" / " (P)"
+ * upstream appends to unimplemented and partial moves; pokemon:<key> per pr_species_table row;
+ * and for a few enums the key by value (index = value - the enum's lowest value) */
+typedef struct { const char *key, *name_append; } pr_move_text_info;
+extern const pr_move_text_info pr_move_text[PR_MOVE_COUNT];
+extern const char *const pr_species_i18n[PR_SPECIES_COUNT];
+extern const char *const pr_i18n_pokemon_type[20];   /* PokemonType, from -1 */
+extern const char *const pr_i18n_stat[8];   /* Stat, from 0 */
+extern const char *const pr_i18n_status_effect[8];   /* StatusEffect, from 0 */
+extern const char *const pr_i18n_weather_type[10];   /* WeatherType, from 0 */
+extern const char *const pr_i18n_berry_type[11];   /* BerryType, from 0 */
 extern const uint16_t pr_set_heal_blocked_moves[]; extern const uint16_t pr_set_heal_blocked_moves_n;
 extern const uint16_t pr_set_invalid_assist_moves[]; extern const uint16_t pr_set_invalid_assist_moves_n;
 extern const uint16_t pr_set_invalid_copycat_moves[]; extern const uint16_t pr_set_invalid_copycat_moves_n;

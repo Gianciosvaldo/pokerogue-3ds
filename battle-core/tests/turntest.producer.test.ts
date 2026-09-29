@@ -772,8 +772,27 @@ it("turntest producer", async () => {
     }
     return "";
   };
+  // Every text the turn shows, in order: what reaches the message box. ui.showText hands a
+  // prompted text with "$" pages to itself page by page, so only the calls that go on to the
+  // message handler are recorded (MessagePhase splits its own "$" pages the same way).
+  let shown: string[] = [];
+  const ui = scene.ui as any;
+  const uiShowText = ui.showText.bind(ui);
+  ui.showText = (text: string, ...rest: any[]) => {
+    const prompt = rest[3];
+    if (!(prompt && String(text).indexOf("$") > -1)) {
+      shown.push(String(text));
+    }
+    return uiShowText(text, ...rest);
+  };
+  const uiShowDialogue = ui.showDialogue.bind(ui);
+  ui.showDialogue = (text: string, name: string, ...rest: any[]) => {
+    shown.push(`${name}: ${text}`);
+    return uiShowDialogue(text, name, ...rest);
+  };
   const runTurn = async () => {
     const trace: string[] = [];
+    shown = [];
     pm.pushNew("TurnStartPhase");
     pm.shiftPhase();
     for (let guard = 0; ; guard++) {
@@ -838,6 +857,8 @@ it("turntest producer", async () => {
     p.teraType = rnd(19);
     p.stellarTypesBoosted = [];
     p.calculateStats();
+    // the name messages use is fixed when the Pokemon is made; the species changed since
+    p.generateName();
     p.hp = rnd(3) === 0 ? p.getMaxHp() : 1 + rnd(p.getMaxHp());
     p.status = null;
     if (HEAL && rnd(3) === 0) {
@@ -1020,6 +1041,7 @@ it("turntest producer", async () => {
         b.customPokemonData.ability = entryAbilityIds[rnd(entryAbilityIds.length)];
       }
       b.calculateStats();
+      b.generateName();
       b.hp = rnd(SWITCH ? 3 : 4) === 0 ? 0 : (SWITCH || SUMMON) && rnd(2) === 0 ? 1 + rnd(b.getMaxHp()) : b.getMaxHp();
       b.status = b.hp ? null : new Status(StatusEffect.FAINT);
       if ((SWITCH || SUMMON) && b.hp && rnd(4) === 0) {
@@ -1584,6 +1606,7 @@ it("turntest producer", async () => {
           p.species = speciesDataRegistry.getSpecies(SpeciesId.BATTLE_BOND_GRENINJA);
           p.formIndex = rnd(2);
           p.calculateStats();
+          p.generateName();
           p.hp = Math.min(p.hp, p.getMaxHp());
         }
       }
@@ -1790,9 +1813,11 @@ it("turntest producer", async () => {
     }
     let before: string[];
     let run: { trace: string[]; stop: string };
+    let texts: string[];
     try {
       before = dumpState();
       run = await runTurn();
+      texts = shown;
     } catch (e: any) {
       const key = String(e?.message ?? e).slice(0, 80);
       if (!thrown[key] && process.env.TURN_STACKS) {
@@ -1801,7 +1826,7 @@ it("turntest producer", async () => {
       thrown[key] = (thrown[key] ?? 0) + 1;
       continue;
     }
-    out.push(`CASE ${i}`, ...before, "RUN", `TRACE list=${L(run.trace)}`, ...dumpState(), ...queueLines(), `END stop=${run.stop}`);
+    out.push(`CASE ${i}`, ...before, "RUN", `TRACE list=${L(run.trace)}`, `TEXTS ${JSON.stringify(texts)}`, ...dumpState(), ...queueLines(), `END stop=${run.stop}`);
   }
   if (STAT) {
     out.push(`# stat condition moves: ${statCondMoves.map((m: any) => m.id).join(",")}`);

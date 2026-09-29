@@ -596,7 +596,9 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
     case PR_AC_RestAttr: {                               /* Rest */
         /* user.trySetStatus(SLEEP, user, duration, null, overrideStatus, quiet) first; then
          * HealAttr.apply, whose addHealPhase Rest overrides: PokemonHealPhase(maxHp), no options */
-        if (!pr_try_set_status(bt, e, user, STATUS_EFFECT_SLEEP, user, P(RestAttr, a)->duration, true, true)) return;
+        pr_msg rest = pr_msg1("moveTriggers:restBecameHealthy", pr_arg_pokemon(bt, "pokemonName", user));
+        if (!pr_try_set_status_msg(bt, e, user, STATUS_EFFECT_SLEEP, user, P(RestAttr, a)->duration, true, true, &rest))
+            return;
         if (!effect_can_apply(ef, user, target)) return;
         double ratio = P(RestAttr, a)->healRatio;
         pr_ab_params hp = {.pokemon = user, .opponent = target, .move = move, .value = &ratio};

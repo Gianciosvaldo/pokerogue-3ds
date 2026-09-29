@@ -9,6 +9,7 @@
 #ifndef PR_ENGINE_H
 #define PR_ENGINE_H
 #include "pr/battle.h"
+#include "pr/events.h"
 
 /* Upstream phase classes the engine knows. Names (pr_phase_name) are upstream's phaseName. */
 typedef enum {
@@ -97,6 +98,15 @@ typedef struct pr_phase {
     /* PokemonHealPhase: hpHealed and its options (PR_HEAL_*) */
     double heal_hp;
     uint8_t heal_flags;
+    /* MessagePhase: its text (key == NULL: a message whose text isn't ported yet) */
+    pr_msg msg;
+    /* presentation phases: CommonAnimPhase's CommonAnim and target, PokemonAnimPhase's
+     * PokemonAnimType, DamageAnimPhase's amount, result and critical flag, MoveAnimPhase's move */
+    uint16_t anim;
+    int8_t anim_target;
+    int32_t anim_amount;
+    uint8_t anim_result;
+    bool anim_critical;
     uint32_t seq;              /* creation order, for debugging */
 } pr_phase;
 
@@ -140,6 +150,11 @@ typedef struct pr_engine {
     bool awaiting_pick;
     int pick_phase;            /* its pool index */
     bool overflow;             /* a fixed-size table ran out: the run is not faithful */
+    /* what the turn shows (include/pr/events.h): started afresh by pr_run_turn and
+     * pr_resume_switch */
+    pr_event events[PR_MAX_EVENTS];
+    int n_events;
+    bool events_overflow;      /* more than PR_MAX_EVENTS: the later ones were dropped */
 } pr_engine;
 
 /* Run one turn from TurnStartPhase, as upstream's PhaseManager would, until the turn is over
@@ -163,10 +178,50 @@ bool pr_phase_is_dynamic(pr_phase_type t);
 /* phaseManager.hasPhaseOfType / tryRemovePhase for a type (optionally one battler) */
 bool pr_phase_exists(pr_engine *e, pr_phase_type t, int battler);
 bool pr_phase_try_remove(pr_battle *bt, pr_engine *e, pr_phase_type t, int battler);
-/* queueMessage(...), queueAbilityDisplay(...): presentation phases */
-void pr_queue_message(pr_battle *bt, pr_engine *e);
-void pr_queue_message_deferred(pr_battle *bt, pr_engine *e);
-void pr_queue_ability_display(pr_battle *bt, pr_engine *e, const pr_pokemon *p, bool show);
+/* queueMessage(...), queueAbilityDisplay(...): presentation phases. pr_queue_message is a
+ * message whose text isn't ported yet; pr_queue_msg carries it. */
+void pr_queue_message_at(pr_battle *bt, pr_engine *e, const char *site);
+void pr_queue_message_deferred_at(pr_battle *bt, pr_engine *e, const char *site);
+#define PR_STR2_(x) #x
+#define PR_STR_(x) PR_STR2_(x)
+/* the site ("src/phases.c:904") rides in msg.args[0].s, so the turn test can list what is left */
+#define pr_queue_message(bt, e) pr_queue_message_at((bt), (e), __FILE__ ":" PR_STR_(__LINE__))
+#define pr_queue_message_deferred(bt, e) pr_queue_message_deferred_at((bt), (e), __FILE__ ":" PR_STR_(__LINE__))
+void pr_queue_msg(pr_battle *bt, pr_engine *e, pr_msg m);
+void pr_queue_msg_deferred(pr_battle *bt, pr_engine *e, pr_msg m);
+/* ---- messages and events (src/events.c) ---- */
+/* i18next.t(key, {args}) as a message; up to PR_MSG_MAX_ARGS arguments */
+pr_msg pr_msg0(const char *key);
+pr_msg pr_msg1(const char *key, pr_msg_arg a);
+pr_msg pr_msg2(const char *key, pr_msg_arg a, pr_msg_arg b);
+pr_msg pr_msg3(const char *key, pr_msg_arg a, pr_msg_arg b, pr_msg_arg c);
+pr_msg pr_msg4(const char *key, pr_msg_arg a, pr_msg_arg b, pr_msg_arg c, pr_msg_arg d);
+pr_msg_arg pr_arg_pokemon(const pr_battle *bt, const char *name, const pr_pokemon *p);   /* with affix */
+pr_msg_arg pr_arg_pokemon_name(const pr_battle *bt, const char *name, const pr_pokemon *p);
+pr_msg_arg pr_arg_int(const char *name, int32_t v);
+pr_msg_arg pr_arg_move(const char *name, int move);
+pr_msg_arg pr_arg_ability(const char *name, int ability);
+pr_msg_arg pr_arg_type(const char *name, int type);
+pr_msg_arg pr_arg_stat(const char *name, int stat);
+pr_msg_arg pr_arg_stats(const char *name, const int8_t *stats, int n);
+pr_msg_arg pr_arg_key(const char *name, const char *key);
+/* shorthand for the most common shape: {pokemonNameWithAffix} */
+pr_msg pr_msg_p(const pr_battle *bt, const char *key, const pr_pokemon *p);
+/* keys picked by an enum value (upstream's get...Message helpers); "" where they give "" */
+enum { PR_ST_OBTAIN, PR_ST_OBTAIN_SOURCE, PR_ST_ACTIVATION, PR_ST_OVERLAP, PR_ST_HEAL, PR_ST_DESCRIPTION };
+const char *pr_status_key(int effect, int kind);
+pr_msg pr_status_msg(const pr_battle *bt, int effect, int kind, const pr_pokemon *p);   /* {pokemonNameWithAffix} */
+enum { PR_WEATHER_START, PR_WEATHER_LAPSE, PR_WEATHER_CLEAR, PR_WEATHER_CONTINUE, PR_WEATHER_BLOCK, PR_WEATHER_DAMAGE };
+const char *pr_weather_key(int weather, int kind);
+enum { PR_TERRAIN_START, PR_TERRAIN_CLEAR, PR_TERRAIN_NAME };
+const char *pr_terrain_key(int terrain, int kind);
+pr_msg pr_terrain_block_msg(const pr_battle *bt, int terrain, const pr_pokemon *p);
+/* the text a phase shows itself (ui.showText), as a PR_EV_TEXT event now */
+void pr_show_text(pr_battle *bt, pr_engine *e, pr_msg m);
+/* append an event with the field as it stands */
+void pr_event_add(pr_battle *bt, pr_engine *e, int type, int battler, int target, int id, int32_t value,
+                  const pr_msg *m);
+void pr_queue_ability_display(pr_battle *bt, pr_engine *e, const pr_pokemon *p, bool passive, bool show);
 /* queueFaintPhase(battlerIndex, preventInstantRevive, source) */
 void pr_queue_faint(pr_battle *bt, pr_engine *e, int battler, bool prevent_instant_revive, int source);
 /* ---- battler tags being added, lapsed and removed (src/battler_tags.c) ---- */
@@ -246,6 +301,8 @@ void pr_arena_conditional_protect(pr_battle *bt, pr_engine *e, int side, const p
                                   bool *is_protected, bool *bypass);
 /* phaseManager.unshiftNew(<PokemonPhase type>, battlerIndex) */
 void pr_unshift_new(pr_battle *bt, pr_engine *e, pr_phase_type t, int battler);
+void pr_unshift_common_anim(pr_battle *bt, pr_engine *e, int battler, int target, int anim);   /* CommonAnimPhase */
+void pr_unshift_pokemon_anim(pr_battle *bt, pr_engine *e, int battler, int type);   /* PokemonAnimPhase */
 /* the running phase, when it is a MovePhase (of Pokemon p, unless p is NULL): phase.cancel() */
 void pr_cancel_current_move(pr_engine *e, const pr_pokemon *p);
 /* MagicCoatTag.apply / ReflectStatusMoveAbAttr.apply: `pokemon` sends `move` back with a
@@ -333,6 +390,8 @@ void pr_reset_status_phase(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool revi
  * overrideStatus, quiet): canSetStatus, then an ObtainStatusEffectPhase is unshifted */
 bool pr_try_set_status(pr_battle *bt, pr_engine *e, pr_pokemon *p, int effect, pr_pokemon *source, int sleep_turns,
                        bool override_status, bool quiet);
+bool pr_try_set_status_msg(pr_battle *bt, pr_engine *e, pr_pokemon *p, int effect, pr_pokemon *source, int sleep_turns,
+                           bool override_status, bool quiet, const pr_msg *msg);
 /* Pokemon.canSetStatus(effect, quiet, overrideStatus, sourcePokemon, ignoreField) */
 bool pr_can_set_status(pr_battle *bt, pr_engine *e, pr_pokemon *p, int effect, bool quiet, bool override_status,
                        const pr_pokemon *source, bool ignore_field);

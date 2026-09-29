@@ -1,6 +1,6 @@
 # PokeRogue 3DS asset pipeline (step 3, done 2026-09-26)
 
-Turns the upstream PokeRogue assets into 5 pack files the 3DS app reads from the SD card. Upstream pins are assets `056a1f4`, game `8555c08` and locales `270ed0a`. Everything was tested in Azahar's Old 3DS mode, not on a real console.
+Turns the upstream PokeRogue assets into 5 pack files the 3DS app reads from the SD card. Upstream pins are game `8555c08` with its own submodule pins, assets `87426a7` and locales `270ed0a`. The first packs were built from assets `056a1f4`, one commit later, which differs only in `fonts/pokemon-emerald-pro.ttf` ([`sd-builder/README.md`](../sd-builder/README.md#pins-pinsjson)). Everything was tested in Azahar's Old 3DS mode, not on a real console.
 
 | Pack | Contents | Size | Build time (4 cores) |
 |---|---|---|---|
@@ -12,6 +12,7 @@ Turns the upstream PokeRogue assets into 5 pack files the 3DS app reads from the
 | **total** | | **848 MB** | |
 
 ## Building the SD card
+On Windows, use the one-click [`sd-builder`](../sd-builder/): it downloads everything at these pins and writes the packs to the card. By hand:
 ```
 python3 -m pip install pillow numpy lz4 fonttools     # plus ffmpeg on PATH and a C compiler (cc/gcc/clang)
 python3 build_sd.py --assets PATH/pokerogue-assets --game PATH/pokerogue --locales PATH/pokerogue-locales --out sd-card
@@ -24,6 +25,7 @@ Copy `sd-card/` to the SD card root; the packs go to `sd:/3ds/pokerogue/`. `--on
 - **Pack (`rpak.py`, `pak.c`)**: one file per category with a hash index sorted for binary search, 24 bytes per entry in RAM. Entries are keyed by upstream path (for example `images/pokemon/back/642-therian` or `audio/bgm/title`) and LZ4-compressed, except music, which is stored raw for streaming.
 - **Textures (`gfx.py`)**:
   - Images are stored as 8-bit palette indices with the exact 8-bit palette. Every Pokémon sheet has 178 colors or fewer. Upstream shiny variants and fusions recolor by exact color match, and the palette keeps that possible. `rr_atlas_load_key_variant` applies upstream's variant maps with upstream's shader rules: the first 32 pairs apply and the first match wins.
+  - Battle-animation images follow upstream's `loadAnimAssets`: an animation's graphic is cut into 96x96 cells named `0`, `1`, ... The 116 backgrounds (the `AnimTimedAddBgEvent` names) stay whole, as one frame, because upstream draws them as tile sprites. The 2 names used both ways (`PRAS- Psychic BG`, `PRAS- Sketch + Lick`) get the cells plus a whole-image frame named `__BASE`. `tests/anim_bg_test.py` checks this against the PNGs. Upstream names 2 backgrounds that have no image (`PRAS- Extrasensory BG`, `PRAS-Dragon Dance BG`); its own load fails for those too.
   - Frames are de-duplicated and repacked into power-of-two pages of at most 1024 px. That uses 30% less texture memory for Pokémon and a third as much for battle animations. Thundurus-Therian now fits.
   - Texels are pre-swizzled to PICA200 tile order.
   - Images with more than 255 colors (battle effects, event banners) are stored as ready-made texels.
