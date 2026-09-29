@@ -15,6 +15,7 @@ STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
 D="$STAGE/PokeRogue-SD-Builder"
 mkdir -p "$D/files/pipeline/tools" "$D/files/apps" "$OUT"
+OUT=$(cd "$OUT" && pwd)  # zip runs from the staging folder
 
 cp "$HERE/windows/BUILD-SD-CARD.bat" "$HERE/READ-ME-FIRST.txt" "$D/"
 cp "$HERE/builder.py" "$HERE/pins.json" "$HERE/windows/setup.ps1" "$D/files/"
