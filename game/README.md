@@ -5,10 +5,11 @@ saves from [`assets-pipeline/app-src/`](../assets-pipeline/app-src/), and linkin
 ([`battle-core/`](../battle-core/), [`run-core/`](../run-core/), and `ai-core/`, `reward-core/`,
 `game-core/` once they exist). The cores are read-only here.
 
-Status: the framework is in, and the battle screen plays a **scripted** demo battle (intro,
-send-out, command and fight menus, move, damage, faint, EXP, next wild Pokemon). The damage
-numbers in the demo are made up; wiring battle-core's event stream (`battle-core/include/pr/events.h`)
-is the next slice.
+Status: the framework is in, and the battle screen plays a demo battle whose turns are **run by
+battle-core** and shown from its events (`battle-core/include/pr/events.h`): the texts upstream
+shows, hits and HP bars, stat changes, faints. The battle itself is built by a stand-in
+(`battle_setup.c`) and the enemy picks random moves; both go when the app drives game-core's run
+(`game-core/include/gc/run.h`) and ai-core.
 
 ## Build and run
 From the repo root (the whole repo is mounted because the game links the cores):
@@ -48,10 +49,19 @@ Every position in the code is upstream's own number in one of these spaces (see 
 | [`ui_widgets.h`](include/ui_widgets.h) | Images from gfx.pak by upstream key (`img_draw("images/ui/cursor", NULL, x, y, 0.5, 0.5)`, animation frames), `ui_window` (addWindow's 9-slice), `ui_cursor`, `msgbox` (typing, `$` pages, prompt arrow, `@d`/`@s`), `optlist` (OptionSelectUiHandler), `ui_push_options` and `ui_push_confirm` overlays. |
 | [`tween.h`](include/tween.h) | Phaser's easing functions and a small tween. |
 | [`battle_view.h`](include/battle_view.h) | The battle screen: `bv_begin`, `bv_play(events)`, `bv_ask_command`. |
+| [`battle_events.h`](include/battle_events.h) | battle-core's turn events as battle screen events, with their text rendered from data.pak (`pr_msg_format`). Catches up at the end of a turn on anything battle-core doesn't emit yet (HP, faints). |
+| [`battle_setup.h`](include/battle_setup.h) | Stand-in: builds a wild singles battle for the demo until game-core's run drives the app. |
 | [`gen/gm_enum_names.h`](gen/gm_enum_names.h) | Names of battle-core's enums (`gm_enum_camel(GM_E_SPECIES_ID, id, ...)` gives upstream's i18n key). Regenerate with `python3 game/tools/gen_enum_names.py` when battle-core's enums change. |
 
 New screens go in their own source files; `menus/` (party, summary, starter select, reward
 select, learn move, biome map) is picked up by the Makefile when it exists.
+
+## PC check
+`game/tests/` builds the stand-in battle and battle-core on the PC and prints each turn's events
+with their English text (needs upstream's `locales/en`):
+```
+make -C game/tests && game/tests/build/evtest path/to/pokerogue/locales/en 2
+```
 
 ## Checked against upstream
 - Text metrics: Phaser 3.90's `MeasureText` in Chromium for both fonts at every size used (ascent,
@@ -65,7 +75,9 @@ select, learn move, biome map) is picked up by the Makefile when it exists.
 - Checked by eye in Azahar screenshots, not pixel-diffed against upstream yet.
 
 ## Not done yet
-- battle-core's events instead of the scripted demo (next).
+- Driving the app from game-core's run (starters, waves, EXP, rewards) instead of the stand-in.
+- Message timing per text (upstream's 500 ms for "X used Y!", prompts after faints): asked of
+  battle-core; every text waits 1.5 s for now.
 - Move animations (a lunge stands in), trainer battles, doubles, the ball and party screens,
   stat stage and shiny effects, boss HP segments, weather and field effects on the field.
 - Sound without snd.pak is silent (the packs in the test rig have no sound yet).

@@ -106,7 +106,7 @@ void ui_timer_cancel(int id);
 /* ---- sounds (no-ops without snd.pak / the DSP firmware) ---- */
 void ui_play_select(void); /* upstream ui.playSelect: "ui/select" */
 void ui_play_error(void);  /* "ui/error" */
-void ui_play_sound(const char* key); /* upstream playSound keys, e.g. "se/hit", "ui/menu_open" */
+void ui_play_sound(const char* key); /* upstream playSound keys, e.g. "se/hit", "ui/menu_open"; NULL = none */
 
 /* ---- drawing spaces ----
  * Upstream draws on one 320x180 canvas. The 3DS has a 400x240 top and a 320x240 bottom screen.

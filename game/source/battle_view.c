@@ -15,7 +15,7 @@
 #include "ui_text.h"
 #include "ui_widgets.h"
 
-#define EV_MAX 64
+#define EV_MAX 160
 #define EV_TEXT 256
 
 /* ------------------------------------------------------------------ state */
@@ -60,6 +60,8 @@ static struct {
   void* command_arg;
   char ability_text[96];
   float ability_t;
+  float ko_wait;
+  bool blink;
   float fps;
   int fps_frames;
   float fps_t;
@@ -525,23 +527,35 @@ static void run_event(float dt) {
 
     case BEV_DAMAGE:
       if (B.step == 0) {
-        /* DamageAnimPhase: the hit sound by result, then the sprite blinks 6 times */
-        int r = e->b;
-        ui_play_sound(r == 2 || r == 5 ? "se/hit_strong" : r == 3 ? "se/hit_weak" : "se/hit");
+        /* DamageAnimPhase. HitResult: 1 EFFECTIVE, 2 EXTREMELY_, 3 SUPER_, 4 NOT_VERY_, 5 MOSTLY_INEFFECTIVE,
+         * 6 ONE_HIT_KO, 12 INDIRECT, 14 CONFUSION, 15 INDIRECT_KO. A KO waits 1 s first (upstream inverts
+         * the colours meanwhile; not done here). */
+        B.ko_wait = e->b == 6 || e->b == 15 ? 1000 : 0;
         B.step = 1;
         B.t = 0;
       }
-      if (B.step == 1) {
+      if (B.step == 1 && B.t >= B.ko_wait) {
+        int r = e->b;
+        ui_play_sound(r == 1 || r == 14                        ? "se/hit"
+                      : r == 2 || r == 3 || r == 6 || r == 15  ? "se/hit_strong"
+                      : r == 4 || r == 5                       ? "se/hit_weak"
+                                                               : NULL);
+        /* the sprite blinks (hidden, shown... six times 100 ms apart) unless indirect or no damage */
+        B.blink = r != 12 && e->a < sd->mon.hp;
+        B.step = 2;
+        B.t = 0;
+      }
+      if (B.step == 2) {
         int k = (int)(B.t / 100);
-        sd->sprite_on = k % 2 == 1 || k >= 6;
-        if (B.t >= 600) {
+        if (B.blink) sd->sprite_on = k % 2 == 1 || k >= 5;
+        if (!B.blink || B.t >= 500) {
           sd->sprite_on = true;
           tween_start(&B.tw, sd->hp_shown, (float)e->a, hp_tween_ms(sd->hp_shown, (float)e->a), EASE_SINE_OUT);
           sd->mon.hp = e->a;
-          B.step = 2;
+          B.step = 3;
         }
       }
-      if (B.step == 2) {
+      if (B.step == 3) {
         tween_update(&B.tw, dt);
         sd->hp_shown = B.tw.value;
         if (tween_done(&B.tw)) finish_event();

@@ -252,7 +252,7 @@ static void read_input(void) {
 
 /* ---- sounds ---- */
 void ui_play_sound(const char* key) {
-  if (!snd_ready()) return;
+  if (!key || !snd_ready()) return;
   char k[96];
   snprintf(k, sizeof k, "audio/%s", key);
   snd_sfx_play(k);
