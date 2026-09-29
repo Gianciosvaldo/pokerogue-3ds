@@ -4,8 +4,13 @@ Every upstream PNG becomes one RRT entry. What it holds:
   - TexturePacker atlases (PNG + JSON with frames): frames are de-duplicated and
     repacked into power-of-two pages no larger than 1024x1024 (the PICA200 limit),
     with a 1 px transparent gutter so scaled/rotated draws never bleed.
-  - battle_anims/*.png: upstream loads these as 96x96 spritesheets, so each cell
-    becomes a trimmed frame named "0", "1", ... (empty cells keep a 0x0 frame).
+  - battle_anims/*.png: upstream (loadAnimAssets in battle-anims.ts) loads an
+    animation's graphic as a 96x96 spritesheet, so each cell becomes a trimmed
+    frame named "0", "1", ... (empty cells keep a 0x0 frame). The images named by
+    AnimTimedAddBgEvent are backgrounds, loaded whole (loadImage) and drawn as a
+    tile sprite, so they get one whole-image frame like any other PNG. The two
+    names used both ways get the cells plus a whole-image frame named "__BASE"
+    (Phaser's name for the whole texture), appended after the cells.
   - Any other PNG: one frame covering the whole image. Images wider or taller
     than 1024 px are cut into a grid of pages, one frame per tile, and every tile
     frame carries the full image size as its source size, so drawing all frames
@@ -43,6 +48,7 @@ MAX_PAGE = 1024
 KIND_INDEXED, KIND_DIRECT = 0, 1
 GPU_5551, GPU_RGBA8 = 0, 1
 SPRITESHEETS = {"battle_anims": 96}  # folder -> cell size (scene-base.ts loadSpritesheet callers)
+ANIM_BG_EVENT = "AnimTimedAddBgEvent"  # the only event whose resourceName upstream loads as an image
 
 # ---------------------------------------------------------------- tiling
 
@@ -360,8 +366,49 @@ def image_frames(rgba):
     return out, names
 
 
-def convert_png(png_path, rel):
-    """rel: path relative to images/ (with .png). Returns (rrt_bytes, stats)."""
+def anim_backgrounds(assets):
+    """Names under images/battle_anims that upstream loads whole, from assets/battle-anims/*.json:
+    every AnimTimedAddBgEvent resourceName (AnimConfig.getBackgroundResourceNames).
+    Returns (backgrounds, graphics): graphics are the names loaded as spritesheets."""
+    bgs, graphics = set(), set()
+
+    def walk(o):
+        if isinstance(o, dict):
+            if o.get("eventType") == ANIM_BG_EVENT and o.get("resourceName"):
+                bgs.add(o["resourceName"])
+            for v in o.values():
+                walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v)
+
+    root = os.path.join(assets, "battle-anims")
+    for f in sorted(os.listdir(root)) if os.path.isdir(root) else []:
+        if f.endswith(".json"):
+            js = json.load(open(os.path.join(root, f), encoding="utf-8"))
+            for a in js if isinstance(js, list) else [js]:
+                if isinstance(a, dict) and a.get("graphic"):
+                    graphics.add(a["graphic"])
+            walk(js)
+    return bgs, graphics
+
+
+def anim_bg_mode(rel, anim_bgs):
+    """How to cut images/<rel>: None (the default for its folder), "whole" (a background only)
+    or "both" (a background that is also an animation's graphic). anim_bgs: anim_backgrounds()."""
+    folder = rel.split("/")[0]
+    if folder not in SPRITESHEETS or "/" not in rel:
+        return None
+    name = rel[len(folder) + 1:-4]
+    bgs, graphics = anim_bgs
+    if name not in bgs:
+        return None
+    return "both" if name in graphics else "whole"
+
+
+def convert_png(png_path, rel, bg_mode=None):
+    """rel: path relative to images/ (with .png). bg_mode: anim_bg_mode(); without it every
+    battle_anims image is cut into cells. Returns (rrt_bytes, stats)."""
     rgba = load_rgba(png_path)
     js_path = png_path[:-4] + ".json"
     folder = rel.split("/")[0]
@@ -373,8 +420,12 @@ def convert_png(png_path, rel):
         if is_atlas_json(js):
             frames, names, _ = atlas_frames(js)
             return encode(rgba, frames, names)
-    if folder in SPRITESHEETS and "/" in rel:
+    if folder in SPRITESHEETS and "/" in rel and bg_mode != "whole":
         frames, names = sheet_frames(rgba, SPRITESHEETS[folder])
+        if bg_mode == "both":
+            whole, _ = image_frames(rgba)
+            frames += whole
+            names += ["__BASE"] * len(whole)
         return encode(rgba, frames, names)
     frames, names = image_frames(rgba)
     return encode(rgba, frames, names)
