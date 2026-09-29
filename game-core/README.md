@@ -13,13 +13,13 @@ the soak runs show how much of a run is still standing in.
 ## The API (`include/gc/run.h`)
 
 ```c
-static gc_run run;                            /* about 180 KB: keep it static or on the heap */
+static gc_run run;                            /* about 300 KB: keep it static or on the heap */
 gc_run_new(&run, GAME_MODES_CLASSIC, seed, entropy);   /* waits on GC_SCREEN_STARTERS */
 gc_run_set_starters(&run, starters, n, &why);          /* runs to the first screen of wave 1 */
 for (;;) {
     gc_event ev;
-    while (gc_run_next_event(&run, &ev)) show(&ev);    /* messages (upstream i18n keys + args), HP,
-                                                          faints, exp, level ups, money, waves... */
+    while (gc_run_next_event(&run, &ev)) show(&ev);    /* messages, a turn's battle events, exp,
+                                                          level ups, money, waves... */
     const gc_screen *s = gc_run_screen(&run);          /* what the player must answer, and what's legal */
     if (s->kind == GC_SCREEN_GAME_OVER || s->kind == GC_SCREEN_CLEAR) break;
     gc_run_choose(&run, &choice, &why);                /* false + why when it isn't legal */
@@ -32,8 +32,11 @@ party, money, wave, biome and the battle's field straight from `gc_run`, but mus
 `party[]` never moves: an index in an event or a choice always means the same Pokémon, and
 `party_order[]` is upstream's order for the party screen.
 
-Messages carry upstream's i18n key (`battle:expGain`) and named arguments (`pokemonName`, `exp`), so
-the app looks up the English text in `data.pak` the way upstream does.
+Messages are battle-core's `pr_msg` (`battle-core/include/pr/text.h`): upstream's i18n key
+(`battle:expGain`) with its named arguments (`pokemonName`, `exp`), fixed when the message is made, so
+`pr_msg_format` gives the text upstream shows. A turn's own moves, damage, faints, switches and texts are
+battle-core's `pr_event` list (`pr/events.h`), handed over as one `GC_EV_BATTLE` event that points into
+`run->battle_events` (valid until the next `gc_run_choose`). The app plays both the same way.
 
 ## Building and playing on a PC
 
@@ -42,12 +45,17 @@ make                                        # builds run-core and battle-core's 
 ./build/gcplay --starters BULBASAUR,CHARMANDER,SQUIRTLE     # play by typing the choices
 ./build/gcplay --auto 1000 --jobs 8                          # seeded soak runs
 ./build/gcplay --auto 1 --first 42 --verbose                 # replay soak run 42 with every event
+./build/gcplay --auto 1 --first 42 --verbose --locales <upstream>/public/locales/en   # as English text
 ```
 
-The soak runs make random legal choices (their own RNG, seeded by run number) with a random team of
-starters within the cost budget. Each run is its own process, so a crash or a hang is reported with the
-seed that caused it. The report lists where runs ended, the stand-ins they used, and battle-core's
-unported effects by how many runs hit them.
+The soak runs play a random team of starters within the cost budget with a plain player of their own
+(their own RNG, seeded by run number): the strongest move by power, STAB and type, switch out when
+low, heal the hurt and revive the fainted from the rewards, Rare Candy on the lowest level, potions
+from the shop, learn a move when it is stronger, always evolve. 15% of its answers are random legal
+ones, so the runs stay varied. Each run is its own process, so a crash or a hang is reported with the
+seed that caused it. The report lists where runs ended, game-core's and run-core's stand-ins, the
+battle texts battle-core hasn't ported yet (by source line) and battle-core's unported effects, each
+by how many runs hit it.
 
 ## What upstream does that game-core doesn't do yet
 

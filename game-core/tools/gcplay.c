@@ -2,6 +2,7 @@
  *
  *   gcplay [--seed S] [--starters BULBASAUR,CHARMANDER,...]     play a run by typing the choices
  *   gcplay --auto N [--first K] [--jobs J] [--verbose]           N seeded soak runs with random choices
+ *   --locales DIR   upstream's locales/en folder: messages as English text instead of keys
  *
  * The soak runs pick random legal answers on every screen (their own RNG, seeded per run), each in its
  * own process so a crash or a hang is caught and reported with its seed, and sum up where the runs
@@ -26,31 +27,86 @@ static const char *species_name(int id)
 static const char *move_name(int id) { return id > 0 && id < PR_MOVE_COUNT ? pr_moves[id].name : "-"; }
 
 /* ---------------------------------------------------------------- printing */
-static void print_arg(const gc_run *run, const gc_arg *a)
+/* upstream's English locale files (locales/en/<file>.json) when --locales names the folder */
+static const char *locales;
+static const char *locale_get(void *ctx, const char *file, int fallback, size_t *len)
 {
-    printf(" %s=", a->name);
-    switch (a->type) {
-    case GC_ARG_POKEMON: {
-        int side = a->v / 8, idx = a->v % 8;
-        const gc_mon *m = side ? &run->enemy[idx] : &run->party[idx];
-        printf("%s%s", side ? (run->battle_type == 1 ? "Foe " : "Wild ") : "", species_name(m->b.species));
+    (void)ctx;
+    static struct { char name[64]; char *text; size_t len; } cache[96];
+    static int n_cache;
+    if (fallback || !locales) return NULL;
+    for (int i = 0; i < n_cache; i++)
+        if (!strcmp(cache[i].name, file)) { *len = cache[i].len; return cache[i].text; }
+    if (n_cache >= 96) return NULL;
+    char path[512];
+    snprintf(path, sizeof path, "%s/%s.json", locales, file);
+    FILE *f = fopen(path, "rb");
+    char *text = NULL;
+    size_t n = 0;
+    if (f) {
+        fseek(f, 0, SEEK_END);
+        long sz = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        text = malloc((size_t)sz + 1);
+        n = fread(text, 1, (size_t)sz, f);
+        text[n] = 0;
+        fclose(f);
+    }
+    snprintf(cache[n_cache].name, sizeof cache[n_cache].name, "%s", file);
+    cache[n_cache].text = text;
+    cache[n_cache].len = n;
+    n_cache++;
+    *len = n;
+    return text;
+}
+
+static void print_msg(const pr_msg *m)
+{
+    if (!m->key) { printf("  [text not ported: %s]\n", m->args[0].s ? m->args[0].s : "?"); return; }
+    if (locales) {
+        static const pr_text_source src = {locale_get, NULL, "en"};
+        char text[1024];
+        pr_msg_format(m, &src, text, sizeof text);
+        for (char *c = text; *c; c++) if (*c == '\n') *c = ' ';
+        printf("  %s\n", text);
+        return;
+    }
+    printf("  [%s]", m->key);
+    for (int i = 0; i < m->n_args; i++) {
+        const pr_msg_arg *a = &m->args[i];
+        printf(" %s=", a->name);
+        switch (a->kind) {
+        case PR_ARG_POKEMON: case PR_ARG_POKEMON_NAME:
+            printf("%s%s", a->kind == PR_ARG_POKEMON && (a->v & PR_MSG_POKEMON_ENEMY) ? (a->v & PR_MSG_POKEMON_FOE ? "Foe " : "Wild ") : "",
+                   species_name((int)(a->v >> 16)));
+            break;
+        case PR_ARG_MOVE: printf("%s", move_name((int)(a->v & 0xffff))); break;
+        case PR_ARG_KEY: case PR_ARG_STR: printf("%s", a->s ? a->s : ""); break;
+        default: printf("%d", (int)a->v); break;
+        }
+    }
+    printf("\n");
+}
+
+static void print_battle_event(const pr_event *e)
+{
+    switch (e->type) {
+    case PR_EV_TEXT: print_msg(&e->msg); break;
+    case PR_EV_DAMAGE: case PR_EV_HP: {
+        const pr_event_field *f = &e->field[e->battler];
+        printf("    %s %s HP %d/%d\n", e->battler < 2 ? "you" : "foe", species_name(f->species), f->hp, f->max_hp);
         break;
     }
-    case GC_ARG_SPECIES: printf("%s", species_name(a->v)); break;
-    case GC_ARG_MOVE: printf("%s", move_name(a->v)); break;
-    case GC_ARG_TRAINER: printf("trainer#%d", run->trainer_type); break;
-    case GC_ARG_STRING: printf("%s", a->s ? a->s : ""); break;
-    default: printf("%d", a->v); break;
+    default: break;
     }
 }
 
 static void print_event(const gc_run *run, const gc_event *e)
 {
     switch (e->kind) {
-    case GC_EV_MESSAGE:
-        printf("  [%s]", e->key);
-        for (int i = 0; i < e->n_args; i++) print_arg(run, &e->args[i]);
-        printf("\n");
+    case GC_EV_MESSAGE: print_msg(&e->msg); break;
+    case GC_EV_BATTLE:
+        for (int i = 0; i < e->b; i++) print_battle_event(&run->battle_events[e->a + i]);
         break;
     case GC_EV_WAVE: printf("== wave %d  biome %d  %s\n", e->a, e->b, e->c == 1 ? "trainer" : "wild"); break;
     case GC_EV_BIOME: printf("== new biome %d\n", e->a); break;
@@ -140,12 +196,121 @@ static int alive_member(const gc_run *run)
     return n ? c[rnd((uint32_t)n)] : 0;
 }
 
-/* one random legal answer; false when nothing was accepted */
+/* ---- a plain player: the strongest move, heal the hurt, revive the fainted. 15% of its answers are
+ * random so the runs stay varied ---- */
+static const pr_form *form_of(const pr_pokemon *p)
+{
+    for (int i = 0; i < PR_SPECIES_COUNT; i++)
+        if (pr_species_table[i].id == p->species) {
+            const pr_species *sp = &pr_species_table[i];
+            return &pr_forms[sp->form0 + (p->form < sp->nforms ? p->form : 0)];
+        }
+    return &pr_forms[0];
+}
+
+static double move_score(const pr_pokemon *user, const pr_pokemon *foe, int move)
+{
+    const pr_move *m = &pr_moves[move];
+    if (m->power <= 0) return 15;
+    const pr_form *uf = form_of(user), *ff = form_of(foe);
+    double s = m->power * (m->type == uf->type1 || m->type == uf->type2 ? 1.5 : 1);
+    if (m->type >= 0 && m->type < PR_TYPE_COUNT) {
+        if (ff->type1 >= 0) s *= pr_type_chart_x2[m->type][ff->type1] / 2.0;
+        if (ff->type2 >= 0) s *= pr_type_chart_x2[m->type][ff->type2] / 2.0;
+    }
+    return s;
+}
+
+static int most_hurt(const gc_run *run, bool fainted)
+{
+    int best = -1;
+    double worst = 2;
+    for (int i = 0; i < run->n_party; i++) {
+        const pr_pokemon *b = &run->party[i].b;
+        if ((b->hp <= 0) != fainted) continue;
+        double f = b->stats[0] ? (double)b->hp / b->stats[0] : 1;
+        if (f < worst) { worst = f; best = i; }
+    }
+    return fainted || worst < 0.6 ? best : -1;
+}
+
+static bool plain_choice(const gc_run *run, gc_choice *c)
+{
+    const gc_screen *s = gc_run_screen(run);
+    memset(c, 0, sizeof *c);
+    switch (s->kind) {
+    case GC_SCREEN_COMMAND: {
+        const gc_mon *me = gc_field_mon(run, 0), *foe = gc_field_mon(run, 1);
+        if (!me || !foe) return false;
+        if (s->can_switch && me->b.hp * 4 < me->b.stats[0] && rnd(3) == 0) {
+            for (int i = 0; i < run->n_party; i++)
+                if (!run->party[i].b.on_field && run->party[i].b.hp * 2 > run->party[i].b.stats[0]) {
+                    c->kind = GC_CH_POKEMON; c->a = (int16_t)i; return true;
+                }
+        }
+        double best = -1;
+        c->kind = GC_CH_FIGHT; c->a = 0; c->b = -1;
+        for (int i = 0; i < 4; i++)
+            if (s->move_ok[i]) {
+                double sc = move_score(&me->b, &foe->b, me->b.moves[i]);
+                if (sc > best) { best = sc; c->a = (int16_t)i; }
+            }
+        return true;
+    }
+    case GC_SCREEN_SWITCH: {
+        int best = -1, hp = -1;
+        for (int i = 0; i < run->n_party; i++) if (s->pick_ok[i] && run->party[i].b.hp > hp) { hp = run->party[i].b.hp; best = i; }
+        c->kind = GC_CH_PICK; c->a = (int16_t)best;
+        return best >= 0;
+    }
+    case GC_SCREEN_LEARN_MOVE: {
+        const gc_mon *m = &run->party[s->party];
+        int worst = -1, wp = pr_moves[s->move].power;
+        for (int i = 0; i < m->b.n_moves; i++) if (pr_moves[m->b.moves[i]].power < wp) { wp = pr_moves[m->b.moves[i]].power; worst = i; }
+        c->kind = GC_CH_FORGET; c->a = (int16_t)worst;
+        return true;
+    }
+    case GC_SCREEN_EVOLVE: c->kind = GC_CH_EVOLVE; return true;
+    case GC_SCREEN_REWARD: {
+        const int fainted = most_hurt(run, true), hurt = most_hurt(run, false);
+        /* buy a potion for a badly hurt member once */
+        if (hurt >= 0 && run->party[hurt].b.hp * 3 < run->party[hurt].b.stats[0])
+            for (int i = 0; i < s->n_shop; i++)
+                if (strstr(s->shop[i].key, "POTION") && s->shop[i].cost <= run->money && rnd(2)) {
+                    c->kind = GC_CH_SHOP; c->a = (int16_t)i; c->b = (int16_t)hurt; return true;
+                }
+        int pick = -1, target = -1;
+        for (int i = 0; i < s->n_options && pick < 0; i++) {
+            const char *k = s->options[i].key;
+            if (fainted >= 0 && strstr(k, "REVIVE")) { pick = i; target = fainted; }
+        }
+        for (int i = 0; i < s->n_options && pick < 0; i++) {
+            const char *k = s->options[i].key;
+            if (hurt >= 0 && (strstr(k, "POTION") || strstr(k, "RESTORE"))) { pick = i; target = hurt; }
+        }
+        for (int i = 0; i < s->n_options && pick < 0; i++)
+            if (!strcmp(s->options[i].key, "RARE_CANDY")) {
+                pick = i;
+                int lv = 999;
+                for (int k = 0; k < run->n_party; k++) if (run->party[k].b.hp > 0 && run->party[k].b.level < lv) { lv = run->party[k].b.level; target = k; }
+            }
+        if (pick < 0) { pick = 0; target = alive_member(run); }
+        if (!s->n_options) { c->kind = GC_CH_SKIP; return true; }
+        c->kind = GC_CH_REWARD; c->a = (int16_t)pick; c->b = (int16_t)target; c->c = 0;
+        return true;
+    }
+    default:
+        return false;
+    }
+}
+
+/* one legal answer (the plain player's, or a random one); false when nothing was accepted */
 static bool auto_choose(gc_run *run)
 {
     const gc_screen *s = gc_run_screen(run);
     gc_choice c = {0};
     const char *why;
+    if (rnd(100) >= 15 && plain_choice(run, &c) && gc_run_choose(run, &c, &why)) return true;
     for (int tries = 0; tries < 64; tries++) {
         memset(&c, 0, sizeof c);
         switch (s->kind) {
@@ -236,6 +401,9 @@ typedef struct {
     int waves_to_trainer;
     uint32_t stubs[16];
     uint32_t unported[PR_FEAT_COUNT_];
+    uint32_t run_core[8];
+    struct { char site[40]; uint32_t n; } texts[32];   /* battle texts not ported yet, by engine site */
+    int n_texts;
     char stuck_screen;
     char team[64];
 } soak_result;
@@ -261,6 +429,16 @@ static void soak_one(int index, int verbose, soak_result *r)
         gc_event e;
         while (gc_run_next_event(&run, &e)) {
             if (e.kind == GC_EV_TURN) r->turns++;
+            if (e.kind == GC_EV_BATTLE)
+                for (int i = 0; i < e.b; i++) {
+                    const pr_event *be = &run.battle_events[e.a + i];
+                    if (be->type != PR_EV_TEXT || be->msg.key) continue;
+                    const char *site = be->msg.args[0].s ? be->msg.args[0].s : "?";
+                    int k = 0;
+                    while (k < r->n_texts && strcmp(r->texts[k].site, site)) k++;
+                    if (k == r->n_texts && r->n_texts < 32) snprintf(r->texts[r->n_texts++].site, 40, "%s", site);
+                    if (k < r->n_texts) r->texts[k].n++;
+                }
             if (verbose) print_event(&run, &e);
         }
         const gc_screen *s = gc_run_screen(&run);
@@ -272,6 +450,7 @@ static void soak_one(int index, int verbose, soak_result *r)
     r->score = run.score;
     memcpy(r->stubs, run.stubs, sizeof r->stubs);
     memcpy(r->unported, run.unported, sizeof r->unported);
+    memcpy(r->run_core, run.run_core_unported, sizeof r->run_core);
 }
 
 static int cmp_desc(const void *a, const void *b)
@@ -284,7 +463,9 @@ static int soak(int n, int first, int jobs, int verbose, int timeout)
 {
     static soak_result agg_r;
     static uint32_t hit_runs[PR_FEAT_COUNT_], hit_total[PR_FEAT_COUNT_];
-    uint32_t stub_runs[16] = {0}, stub_total[16] = {0};
+    uint32_t stub_runs[16] = {0}, stub_total[16] = {0}, rc_runs[8] = {0}, rc_total[8] = {0};
+    static struct { char site[40]; uint32_t runs, n; } texts[256];
+    int n_texts = 0;
     int ended = 0, stuck = 0, crashed = 0, timed = 0, clears = 0;
     long turns = 0;
     int wave_hist[21] = {0};
@@ -341,6 +522,14 @@ static int soak(int n, int first, int jobs, int verbose, int timeout)
         turns += r->turns;
         wave_hist[r->wave / 10 > 20 ? 20 : r->wave / 10]++;
         for (int i = 0; i < 16; i++) { stub_total[i] += r->stubs[i]; stub_runs[i] += r->stubs[i] > 0; }
+        for (int i = 0; i < 8; i++) { rc_total[i] += r->run_core[i]; rc_runs[i] += r->run_core[i] > 0; }
+        for (int t = 0; t < r->n_texts; t++) {
+            int k = 0;
+            while (k < n_texts && strcmp(texts[k].site, r->texts[t].site)) k++;
+            if (k == n_texts) { if (n_texts >= 256) continue; snprintf(texts[n_texts++].site, 40, "%s", r->texts[t].site); }
+            texts[k].runs++;
+            texts[k].n += r->texts[t].n;
+        }
         for (int i = 0; i < PR_FEAT_COUNT_; i++) { hit_total[i] += r->unported[i]; hit_runs[i] += r->unported[i] > 0; }
     }
     printf("\n%d runs: %d ended (%d cleared), %d stuck, %d crashed, %d timed out; %ld turns (%.1f per run)\n",
@@ -350,6 +539,12 @@ static int soak(int n, int first, int jobs, int verbose, int timeout)
     printf("\n\nstand-ins (runs that used it, times):\n");
     for (int i = 0; i < GC_STUB_COUNT_; i++)
         if (stub_total[i]) printf("  %-50s %6u runs %9u\n", gc_stub_name[i], stub_runs[i], stub_total[i]);
+    static const char *const rc_name[8] = {"daily custom seed", "challenges", "upstream undefined", "species pool",
+                                           "fixed classic battle", "trainer config", "bit 6", "bit 7"};
+    printf("\nrun-core stand-ins (runs, times):\n");
+    for (int i = 0; i < 8; i++) if (rc_total[i]) printf("  %-50s %6u runs %9u\n", rc_name[i], rc_runs[i], rc_total[i]);
+    printf("\nbattle texts not ported yet (engine site: runs, times):\n");
+    for (int k = 0; k < n_texts; k++) printf("  %-44s %6u runs %9u\n", texts[k].site, texts[k].runs, texts[k].n);
     static uint32_t order[PR_FEAT_COUNT_][2];
     int m = 0;
     for (int i = 0; i < PR_FEAT_COUNT_; i++) if (hit_runs[i]) { order[m][0] = (uint32_t)i; order[m][1] = hit_runs[i]; m++; }
@@ -434,7 +629,8 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--jobs") && i + 1 < argc) jobs = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--timeout") && i + 1 < argc) timeout = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--verbose")) verbose = 1;
-        else { fprintf(stderr, "usage: %s [--seed S] [--starters A,B,C] | --auto N [--first K] [--jobs J] [--verbose]\n", argv[0]); return 2; }
+        else if (!strcmp(argv[i], "--locales") && i + 1 < argc) locales = argv[++i];
+        else { fprintf(stderr, "usage: %s [--seed S] [--starters A,B,C] | --auto N [--first K] [--jobs J] [--verbose]  [--locales DIR]\n", argv[0]); return 2; }
     }
     if (autos > 0) return soak(autos, first, jobs < 1 ? 1 : jobs, verbose, timeout);
     return play(seed, starters);

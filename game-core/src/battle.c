@@ -298,52 +298,14 @@ bool gc_battle_queued_command(gc_run *run)
 static void note_unported(gc_run *run)
 {
     pr_battle *bt = &run->bt;
-    for (int i = 0; i < bt->n_unported; i++) run->unported[bt->unported[i]]++;
-    for (int i = 0; i < bt->n_deferred; i++) run->unported[bt->deferred[i]]++;
+    for (int i = 0; i < bt->n_unported; i++) if (bt->unported[i] < PR_FEAT_COUNT_) run->unported[bt->unported[i]]++;
+    for (int i = 0; i < bt->n_deferred; i++) if (bt->deferred[i] < PR_FEAT_COUNT_) run->unported[bt->deferred[i]]++;
     bt->n_unported = bt->n_deferred = 0;
-}
-
-/* HP, faint and field changes seen from the state before and after a turn (battle-core's own event
- * stream will replace this) */
-typedef struct { int32_t hp[2][6]; bool on[2][6]; } snapshot;
-static void snap(const gc_run *run, snapshot *s)
-{
-    for (int i = 0; i < run->n_party; i++) { s->hp[0][i] = run->party[i].b.hp; s->on[0][i] = run->bt.field[0] == &run->party[i].b; }
-    for (int i = 0; i < run->n_enemy; i++) { s->hp[1][i] = run->enemy[i].b.hp; s->on[1][i] = run->bt.field[2] == &run->enemy[i].b; }
-}
-static void diff(gc_run *run, const snapshot *a)
-{
-    snapshot b;
-    snap(run, &b);
-    for (int side = 0; side < 2; side++) {
-        int n = side ? run->n_enemy : run->n_party;
-        for (int i = 0; i < n; i++) {
-            if (a->on[side][i] && !b.on[side][i]) {
-                gc_event *ev = gc_ev_new(run, GC_EV_RECALL);
-                if (ev) { ev->a = side; ev->b = i; }
-            }
-            if (!a->on[side][i] && b.on[side][i]) {
-                gc_event *ev = gc_ev_new(run, GC_EV_SUMMON);
-                if (ev) { ev->a = side; ev->b = i; ev->c = 0; }
-            }
-            if (a->hp[side][i] != b.hp[side][i]) {
-                gc_event *ev = gc_ev_new(run, GC_EV_HP);
-                if (ev) { ev->a = side; ev->b = i; ev->c = b.hp[side][i]; }
-                if (b.hp[side][i] <= 0 && a->hp[side][i] > 0) {
-                    ev = gc_ev_new(run, GC_EV_FAINT);
-                    if (ev) { ev->a = side; ev->b = i; }
-                    gc_ev_msg(run, "battle:fainted", 1, gc_a_mon("pokemonNameWithAffix", side, i));
-                }
-            }
-        }
-    }
 }
 
 int gc_battle_run(gc_run *run, int pick)
 {
     pr_battle *bt = &run->bt;
-    snapshot before;
-    snap(run, &before);
     if (pick < -1) {
         gc_event *ev = gc_ev_new(run, GC_EV_TURN);
         if (ev) ev->a = bt->turn;
@@ -352,8 +314,8 @@ int gc_battle_run(gc_run *run, int pick)
         pr_resume_switch(bt, &run->eng, pick >= 0 ? gc_battle_slot_of(run, pick) : -1);
     }
     note_unported(run);
+    gc_ev_battle(run);
     gc_sync_party_order(run);
-    diff(run, &before);
     run->run.rng = bt->rng;
     return run->eng.stop;
 }
@@ -381,7 +343,7 @@ bool gc_battle_trainer_next(gc_run *run)
             if (old) old->on_field = false;
             summon(run, 1, i);
             gc_stub(run, GC_STUB_TRAINER_NEXT);
-            gc_ev_msg(run, "battle:trainerSendOut", 2, gc_a_trainer("trainerName"), gc_a_mon("pokemonName", 1, i));
+            gc_ev_msg(run, "battle:trainerSendOut", 2, gc_m_trainer(run, "trainerName"), gc_m_mon_name(run, "pokemonName", 1, i));
             return true;
         }
     }

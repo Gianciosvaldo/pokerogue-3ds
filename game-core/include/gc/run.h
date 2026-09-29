@@ -32,45 +32,28 @@
 #define GC_API_VERSION 1
 
 /* ---------------------------------------------------------------- events */
-/* A message's arguments, named as upstream's i18n interpolation names them ({{pokemonName}}...) */
-enum {
-    GC_ARG_INT,        /* v: a number */
-    GC_ARG_POKEMON,    /* v: GC_MON_REF(side, party index); the app adds "Wild"/"Foe" as upstream's
-                        * getPokemonNameWithAffix does */
-    GC_ARG_SPECIES,    /* v: SpeciesId */
-    GC_ARG_MOVE,       /* v: MoveId */
-    GC_ARG_ABILITY,    /* v: AbilityId */
-    GC_ARG_TRAINER,    /* v: 0, the current battle's trainer (its name and title) */
-    GC_ARG_BIOME,      /* v: BiomeId */
-    GC_ARG_STRING,     /* s: a string that needs no translation */
-};
-#define GC_MON_REF(side, index) ((side) * 8 + (index))
-typedef struct {
-    const char *name;
-    uint8_t type;
-    int32_t v;
-    const char *s;
-} gc_arg;
-#define GC_MAX_ARGS 4
-
+/* Messages are battle-core's pr_msg (include/pr/text.h): upstream's i18n key ("battle:expGain") and its
+ * named arguments, fixed when the message is made, so pr_msg_format gives the same text upstream shows.
+ * The turns' own events (moves, damage, faints, switches, their texts) are battle-core's pr_event list
+ * (include/pr/events.h), handed over as GC_EV_BATTLE. */
 typedef enum {
-    GC_EV_MESSAGE,       /* text: key is upstream's i18n key ("battle:expGain"), with args */
+    GC_EV_MESSAGE,       /* a text box: msg */
+    GC_EV_BATTLE,        /* play battle-core's events run->battle_events[a] .. [a + b - 1] (a turn, or the
+                          * rest of one after a switch prompt). They stay valid until the next
+                          * gc_run_choose */
     GC_EV_WAVE,          /* a new wave: a = wave, b = biome, c = BattleType (the app sets the scene up) */
     GC_EV_BIOME,         /* the run moves to biome a (SwitchBiomePhase) */
     GC_EV_TRAINER,       /* a trainer appears: a = TrainerType, b = TrainerVariant */
-    GC_EV_SUMMON,        /* a Pokemon comes onto the field: a = side (0 player, 1 enemy), b = party index,
-                          * c = field slot */
-    GC_EV_RECALL,        /* a Pokemon leaves the field: a = side, b = party index */
-    GC_EV_HP,            /* a = side, b = party index, c = HP now */
-    GC_EV_FAINT,         /* a = side, b = party index */
+    GC_EV_SUMMON,        /* outside a turn, a Pokemon comes onto the field: a = side (0 player, 1 enemy),
+                          * b = party index (party[] or enemy[]), c = field slot */
+    GC_EV_RECALL,        /* outside a turn, a Pokemon goes back into its ball: a = side, b = party index */
+    GC_EV_HP,            /* outside a turn (items, the party heal): a = side, b = party index, c = HP now */
     GC_EV_EXP,           /* a = party index, b = exp gained, c = level before */
     GC_EV_LEVEL_UP,      /* a = party index, b = the new level (stats are already updated) */
     GC_EV_MOVE_LEARNED,  /* a = party index, b = move slot, c = MoveId */
     GC_EV_EVOLVED,       /* a = party index, b = species before, c = species after */
     GC_EV_MONEY,         /* a = the change, b = money now */
-    GC_EV_TURN,          /* a turn is about to run: a = turn number. Until battle-core publishes its event
-                          * stream, the turn's own messages and animations are not reported, only the
-                          * HP, faint and summon events game-core can see from the state before and after */
+    GC_EV_TURN,          /* a turn is about to run: a = turn number (its events follow as GC_EV_BATTLE) */
     GC_EV_SAVE_POINT,    /* the run has reached upstream's save point (the start of an encounter): a good
                           * moment for the app to call gc_run_save and write the buffer */
 } gc_event_kind;
@@ -78,9 +61,7 @@ typedef enum {
 typedef struct {
     uint8_t kind;               /* gc_event_kind */
     int32_t a, b, c;
-    const char *key;            /* GC_EV_MESSAGE */
-    gc_arg args[GC_MAX_ARGS];
-    uint8_t n_args;
+    pr_msg msg;                 /* GC_EV_MESSAGE */
 } gc_event;
 
 /* ---------------------------------------------------------------- screens and choices */
@@ -199,7 +180,8 @@ typedef struct {
     uint16_t moves[4];          /* 0 = empty; all 0 = the default moveset (gc_starter_default_moves) */
 } gc_starter;
 
-#define GC_MAX_EVENTS 512
+#define GC_MAX_EVENTS 256
+#define GC_MAX_BATTLE_EVENTS 384
 typedef struct gc_run {
     int api_version;
     pr_run run;                 /* run-core: mode, seed, wave seed, Phaser.Math.RND */
@@ -236,10 +218,15 @@ typedef struct gc_run {
     gc_event events[GC_MAX_EVENTS];
     int ev_head, ev_count;
     bool ev_overflow;
+    /* battle-core's events since the last gc_run_choose (GC_EV_BATTLE points into them) */
+    pr_event battle_events[GC_MAX_BATTLE_EVENTS];
+    int n_battle_events;
+    bool battle_events_overflow;
     /* what the run hit that isn't ported yet: counts by battle-core's unported ids, and game-core's own
      * stand-ins (GC_STUB_*), for the soak runs' report */
     uint32_t unported[PR_FEAT_COUNT_];
     uint32_t stubs[16];
+    uint32_t run_core_unported[8];      /* run-core's stand-ins, by PR_RUN_UNPORTED_* bit */
     bool finished;
 } gc_run;
 

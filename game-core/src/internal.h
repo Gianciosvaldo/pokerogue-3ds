@@ -72,12 +72,12 @@ static inline gc_rphase gc_rp(int type, int a, int b, int c) { gc_rphase p = {(u
 
 /* ---- events (src/run.c) ---- */
 gc_event *gc_ev_new(gc_run *run, int kind);
-void gc_ev_msg(gc_run *run, const char *key, int n, ...);   /* n gc_arg values follow */
-static inline gc_arg gc_a_mon(const char *name, int side, int idx) { gc_arg a = {name, GC_ARG_POKEMON, GC_MON_REF(side, idx), NULL}; return a; }
-static inline gc_arg gc_a_int(const char *name, int v) { gc_arg a = {name, GC_ARG_INT, v, NULL}; return a; }
-static inline gc_arg gc_a_move(const char *name, int v) { gc_arg a = {name, GC_ARG_MOVE, v, NULL}; return a; }
-static inline gc_arg gc_a_species(const char *name, int v) { gc_arg a = {name, GC_ARG_SPECIES, v, NULL}; return a; }
-static inline gc_arg gc_a_trainer(const char *name) { gc_arg a = {name, GC_ARG_TRAINER, 0, NULL}; return a; }
+void gc_ev_msg(gc_run *run, const char *key, int n, ...);   /* n pr_msg_arg values follow */
+pr_msg_arg gc_m_mon(gc_run *run, const char *name, int side, int idx);   /* getPokemonNameWithAffix */
+pr_msg_arg gc_m_mon_name(gc_run *run, const char *name, int side, int idx);   /* getNameToRender */
+pr_msg_arg gc_m_trainer(gc_run *run, const char *name);                  /* the trainer's name */
+pr_msg_arg gc_m_item(const char *name, const char *item_key);            /* a modifier type's name */
+void gc_ev_battle(gc_run *run);                   /* battle-core's events of the last call, as GC_EV_BATTLE */
 void gc_stub(gc_run *run, int which);
 
 /* ---- Pokemon (src/mon.c) ---- */

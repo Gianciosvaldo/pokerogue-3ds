@@ -123,7 +123,7 @@ bool gc_port_apply_reward(gc_run *run, const gc_offer *o, int party, int move_sl
     if (ball >= 0) {
         const int add = ball == POKEBALL_TYPE_MASTER_BALL ? 1 : 5;
         run->pokeballs[ball] = (uint8_t)(run->pokeballs[ball] + add > 99 ? 99 : run->pokeballs[ball] + add);
-        gc_ev_msg(run, "battle:rewardGain", 1, (gc_arg){"modifierName", GC_ARG_STRING, 0, k});
+        gc_ev_msg(run, "battle:rewardGain", 1, gc_m_item("modifierName", k));
         return true;
     }
     if (o->target == GC_TARGET_NONE) {

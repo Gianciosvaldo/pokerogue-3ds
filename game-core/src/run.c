@@ -53,14 +53,66 @@ void gc_ev_msg(gc_run *run, const char *key, int n, ...)
 {
     gc_event *ev = gc_ev_new(run, GC_EV_MESSAGE);
     if (!ev) return;
-    ev->key = key;
+    ev->msg.key = key;
     va_list ap;
     va_start(ap, n);
     for (int i = 0; i < n; i++) {
-        gc_arg a = va_arg(ap, gc_arg);
-        if (i < GC_MAX_ARGS) ev->args[ev->n_args++] = a;
+        pr_msg_arg a = va_arg(ap, pr_msg_arg);
+        if (i < PR_MSG_MAX_ARGS) ev->msg.args[ev->msg.n_args++] = a;
     }
     va_end(ap);
+}
+
+pr_msg_arg gc_m_mon(gc_run *run, const char *name, int side, int idx)
+{
+    const gc_mon *m = side ? &run->enemy[idx] : &run->party[idx];
+    return pr_arg_pokemon(&run->bt, name, &m->b);
+}
+
+pr_msg_arg gc_m_mon_name(gc_run *run, const char *name, int side, int idx)
+{
+    const gc_mon *m = side ? &run->enemy[idx] : &run->party[idx];
+    return pr_arg_pokemon_name(&run->bt, name, &m->b);
+}
+
+/* trainer.getName(): the trainer classes' and names' locale keys aren't dumped yet */
+pr_msg_arg gc_m_trainer(gc_run *run, const char *name)
+{
+    (void)run;
+    pr_msg_arg a = {name, PR_ARG_STR, 0, "Trainer"};
+    return a;
+}
+
+/* modifierType.name: "modifierType:ModifierType.<KEY>.name" for the plain modifier types */
+pr_msg_arg gc_m_item(const char *name, const char *item_key)
+{
+    static struct { const char *item; char key[72]; } pool[48];
+    static int n_pool;
+    pr_msg_arg a = {name, PR_ARG_STR, 0, item_key};
+    for (int i = 0; i < n_pool; i++)
+        if (pool[i].item == item_key || !strcmp(pool[i].item, item_key)) { a.kind = PR_ARG_KEY; a.s = pool[i].key; return a; }
+    if (n_pool >= 48) return a;
+    pool[n_pool].item = item_key;
+    snprintf(pool[n_pool].key, sizeof pool[n_pool].key, "modifierType:ModifierType.%s.name", item_key);
+    a.kind = PR_ARG_KEY;
+    a.s = pool[n_pool++].key;
+    return a;
+}
+
+/* battle-core's events from its last call, kept for the app until the next choice */
+void gc_ev_battle(gc_run *run)
+{
+    const pr_engine *e = &run->eng;
+    if (!e->n_events) return;
+    const int first = run->n_battle_events;
+    int n = e->n_events;
+    if (first + n > GC_MAX_BATTLE_EVENTS) { n = GC_MAX_BATTLE_EVENTS - first; run->battle_events_overflow = true; }
+    if (e->events_overflow) run->battle_events_overflow = true;
+    if (n <= 0) return;
+    memcpy(&run->battle_events[first], e->events, sizeof(pr_event) * (size_t)n);
+    run->n_battle_events += n;
+    gc_event *ev = gc_ev_new(run, GC_EV_BATTLE);
+    if (ev) { ev->a = first; ev->b = n; }
 }
 
 bool gc_run_next_event(gc_run *run, gc_event *out)
@@ -236,6 +288,8 @@ bool gc_run_choose(gc_run *run, const gc_choice *c, const char **why)
     if (!why) why = &dummy;
     *why = "";
     gc_rqueue *q = &gc_int(run)->rq;
+    run->n_battle_events = 0;
+    run->battle_events_overflow = false;
     if (run->screen.kind == GC_SCREEN_GAME_OVER || run->screen.kind == GC_SCREEN_CLEAR) {
         if (c->kind == GC_CH_CONTINUE) return true;
         *why = "the run is over";

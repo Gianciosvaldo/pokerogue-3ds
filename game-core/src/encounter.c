@@ -158,6 +158,13 @@ static bool gen_trainer(gc_run *run, const pr_new_battle *nb, int prev_wave)
     return run->n_enemy > 0;
 }
 
+/* the run-core stand-ins a call just reported (bits set since `before`), for the soak runs */
+static void note_run_core(gc_run *run, unsigned before)
+{
+    const unsigned now = run->run.unported & ~before;
+    for (int b = 0; b < 8; b++) if (now & (1u << b)) run->run_core_unported[b]++;
+}
+
 /* isNewBiome(battle of `wave`) */
 bool gc_is_new_biome(const gc_run *run, int wave)
 {
@@ -191,6 +198,7 @@ void gc_new_battle(gc_run *run)
     pr_new_battle nb;
     unsigned before = run->run.unported;
     int rc = pr_run_new_battle(&run->run, wave, &ctx, &nb);
+    note_run_core(run, before);
     if (rc < 0 || nb.battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) {
         /* a fixed classic battle (rival, evil team, Elite Four...) or a mystery encounter: a wild battle
          * of the wave's level stands in (the fixed battle's config and the encounters aren't ported) */
@@ -222,6 +230,7 @@ void gc_new_battle(gc_run *run)
 
     /* EncounterPhase: the enemy party */
     bool ok = nb.battle_type == BATTLE_TYPE_TRAINER ? gen_trainer(run, &nb, prev_wave) : gen_wild(run, nb.levels[0]);
+    note_run_core(run, before);
     if (!ok) {
         /* run-core couldn't make it (a trainer's config closure, an unported species pool...): a wild
          * battle of the same level stands in, rolled again on the wave's seed */
@@ -263,9 +272,9 @@ void gc_new_battle(gc_run *run)
     pr_run_reset_seed(&run->run, wave);
 
     if (run->battle_type == BATTLE_TYPE_TRAINER) {
-        gc_ev_msg(run, "battle:trainerAppeared", 1, gc_a_trainer("trainerName"));
+        gc_ev_msg(run, "battle:trainerAppeared", 1, gc_m_trainer(run, "trainerName"));
     } else {
-        gc_ev_msg(run, "battle:singleWildAppeared", 1, gc_a_mon("pokemonName", 1, 0));
+        gc_ev_msg(run, "battle:singleWildAppeared", 1, gc_m_mon_name(run, "pokemonName", 1, 0));
     }
     /* doPostBattleCleanup's resetArenaState */
     const bool new_biome = prev_wave && gc_is_new_biome(run, prev_wave);
@@ -273,9 +282,9 @@ void gc_new_battle(gc_run *run)
                        || in->last_battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER || in->last_final_boss;
     const bool sent_out = gc_battle_setup_field(run, reset);
     if (run->battle_type == BATTLE_TYPE_TRAINER)
-        gc_ev_msg(run, "battle:trainerSendOut", 2, gc_a_trainer("trainerName"), gc_a_mon("pokemonName", 1, 0));
-    if (sent_out) gc_ev_msg(run, "battle:playerGo", 1, gc_a_mon("pokemonName", 0, gc_player_active_index(run)));
+        gc_ev_msg(run, "battle:trainerSendOut", 2, gc_m_trainer(run, "trainerName"), gc_m_mon_name(run, "pokemonName", 1, 0));
+    if (sent_out) gc_ev_msg(run, "battle:playerGo", 1, gc_m_mon(run, "pokemonName", 0, gc_player_active_index(run)));
     /* LevelCapPhase, after a new biome's encounter */
     if (new_biome && run->bt.max_exp_level > in->last_max_exp_level)
-        gc_ev_msg(run, "battle:levelCapUp", 1, gc_a_int("levelCap", run->bt.max_exp_level));
+        gc_ev_msg(run, "battle:levelCapUp", 1, pr_arg_int("levelCap", run->bt.max_exp_level));
 }

@@ -156,7 +156,7 @@ static void exp_phase(gc_run *run, gc_rphase *p)
 {
     gc_mon *m = pm(run, p->a);
     const double exp = floor(gc_apply_exp_boosters(run, p->d));
-    if (p->b) gc_ev_msg(run, "battle:expGain", 2, gc_a_mon("pokemonName", 0, p->a), gc_a_int("exp", (int)exp));
+    if (p->b) gc_ev_msg(run, "battle:expGain", 2, gc_m_mon(run, "pokemonName", 0, p->a), pr_arg_int("exp", (int)exp));
     const int last = m->b.level;
     gc_mon_add_exp(run, m, exp);
     gc_event *ev = gc_ev_new(run, GC_EV_EXP);
@@ -171,7 +171,7 @@ static void level_up(gc_run *run, gc_rphase *p)
     gc_mon_recalc(run, m);
     gc_event *ev = gc_ev_new(run, GC_EV_LEVEL_UP);
     if (ev) { ev->a = p->a; ev->b = p->c; }
-    gc_ev_msg(run, "battle:levelUp", 2, gc_a_mon("pokemonName", 0, p->a), gc_a_int("level", p->c));
+    gc_ev_msg(run, "battle:levelUp", 2, gc_m_mon(run, "pokemonName", 0, p->a), pr_arg_int("level", p->c));
     /* end(): the new level moves, then the evolution check */
     if (p->b < 100) {
         uint16_t mv[32];
@@ -193,7 +193,7 @@ static void learn(gc_run *run, int idx, int move, int slot)
     gc_mon_set_move(m, slot, move);
     gc_event *ev = gc_ev_new(run, GC_EV_MOVE_LEARNED);
     if (ev) { ev->a = idx; ev->b = slot; ev->c = move; }
-    gc_ev_msg(run, "battle:learnMove", 2, gc_a_mon("pokemonName", 0, idx), gc_a_move("moveName", move));
+    gc_ev_msg(run, "battle:learnMove", 2, gc_m_mon(run, "pokemonName", 0, idx), pr_arg_move("moveName", move));
 }
 
 static bool learn_move_start(gc_run *run, gc_rphase *p)
@@ -203,8 +203,8 @@ static bool learn_move_start(gc_run *run, gc_rphase *p)
     if (pr_moves[move].unimplemented) return true;
     for (int i = 0; i < m->b.n_moves; i++) if (m->b.moves[i] == move && move != MOVE_ID_SKETCH) return true;
     if (m->b.n_moves < 4) { learn(run, p->a, move, m->b.n_moves); return true; }
-    gc_ev_msg(run, "battle:learnMovePrompt", 2, gc_a_mon("pokemonName", 0, p->a), gc_a_move("moveName", move));
-    gc_ev_msg(run, "battle:learnMoveLimitReached", 1, gc_a_mon("pokemonName", 0, p->a));
+    gc_ev_msg(run, "battle:learnMovePrompt", 2, gc_m_mon(run, "pokemonName", 0, p->a), pr_arg_move("moveName", move));
+    gc_ev_msg(run, "battle:learnMoveLimitReached", 1, gc_m_mon(run, "pokemonName", 0, p->a));
     gc_screen *s = &run->screen;
     memset(s, 0, sizeof *s);
     s->kind = GC_SCREEN_LEARN_MOVE;
@@ -217,7 +217,7 @@ static bool learn_move_start(gc_run *run, gc_rphase *p)
 static bool evolution_start(gc_run *run, gc_rphase *p)
 {
     gc_mon *m = pm(run, p->a);
-    gc_ev_msg(run, "menu:evolving", 1, gc_a_mon("pokemonName", 0, p->a));
+    gc_ev_msg(run, "menu:evolving", 1, gc_m_mon(run, "pokemonName", 0, p->a));
     gc_screen *s = &run->screen;
     memset(s, 0, sizeof *s);
     s->kind = GC_SCREEN_EVOLVE;
@@ -231,10 +231,11 @@ static void evolve(gc_run *run, gc_rphase *p)
 {
     gc_mon *m = pm(run, p->a);
     const int before = m->b.species;
+    const pr_msg_arg pre_name = gc_m_mon(run, "pokemonName", 0, p->a);
     gc_mon_evolve(run, m, p->b);
     gc_event *ev = gc_ev_new(run, GC_EV_EVOLVED);
     if (ev) { ev->a = p->a; ev->b = before; ev->c = m->b.species; }
-    gc_ev_msg(run, "menu:evolutionDone", 2, gc_a_species("pokemonName", before), gc_a_species("evolvedPokemonName", m->b.species));
+    gc_ev_msg(run, "menu:evolutionDone", 2, pre_name, pr_arg_pokemon_name(&run->bt, "evolvedPokemonName", &m->b));
     /* postEvolve: the new species' evolution moves (level 0) */
     uint16_t mv[16];
     const int n = gc_evolution_moves(m, mv, 16);
@@ -289,7 +290,7 @@ static void trainer_victory(gc_run *run)
     p.d = 1;
     gc_rq_unshift(run, p);
     gc_stub(run, GC_STUB_TRAINER_REWARDS);   /* modifierRewardFuncs, vouchers */
-    gc_ev_msg(run, "battle:trainerDefeated", 1, gc_a_trainer("trainerName"));
+    gc_ev_msg(run, "battle:trainerDefeated", 1, gc_m_trainer(run, "trainerName"));
 }
 
 static void money_reward(gc_run *run, double mult)
@@ -301,7 +302,7 @@ static void money_reward(gc_run *run, double mult)
     run->money = pr_run_add_money(run->money, amount);
     gc_event *ev = gc_ev_new(run, GC_EV_MONEY);
     if (ev) { ev->a = (int32_t)amount; ev->b = (int32_t)run->money; }
-    gc_ev_msg(run, "battle:moneyWon", 1, gc_a_int("moneyAmount", (int)amount));
+    gc_ev_msg(run, "battle:moneyWon", 1, pr_arg_int("moneyAmount", (int)amount));
 }
 
 /* ---- SelectModifierPhase ---- */
@@ -510,7 +511,7 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         return true;
     case RP_MODIFIER_REWARD:
         gc_port_give_reward(run, p->key);
-        gc_ev_msg(run, "battle:rewardGain", 1, (gc_arg){"modifierName", GC_ARG_STRING, 0, p->key});
+        gc_ev_msg(run, "battle:rewardGain", 1, gc_m_item("modifierName", p->key));
         return true;
     case RP_SELECT_MODIFIER:
         return select_modifier_start(run, p);
@@ -575,7 +576,7 @@ bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char *
             for (int k = 0; k < run->n_party; k++) run->bt.party[0][k] = &run->party[run->party_order[k]].b;
             gc_event *ev = gc_ev_new(run, GC_EV_SUMMON);
             if (ev) { ev->a = 0; ev->b = c->a; }
-            gc_ev_msg(run, "battle:playerGo", 1, gc_a_mon("pokemonName", 0, c->a));
+            gc_ev_msg(run, "battle:playerGo", 1, gc_m_mon(run, "pokemonName", 0, c->a));
             return true;
         }
         after_stop(run, gc_battle_run(run, c->a));
@@ -587,11 +588,11 @@ bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char *
         if (c->a < -1 || c->a >= m->b.n_moves) { *why = "no such move slot"; return false; }
         *ok = true;
         if (c->a == -1) {
-            gc_ev_msg(run, "battle:learnMoveNotLearned", 2, gc_a_mon("pokemonName", 0, p->a), gc_a_move("moveName", p->b));
+            gc_ev_msg(run, "battle:learnMoveNotLearned", 2, gc_m_mon(run, "pokemonName", 0, p->a), pr_arg_move("moveName", p->b));
             return true;
         }
         gc_ev_msg(run, "battle:countdownPoof", 0);
-        gc_ev_msg(run, "battle:learnMoveForgetSuccess", 2, gc_a_mon("pokemonName", 0, p->a), gc_a_move("moveName", m->b.moves[c->a]));
+        gc_ev_msg(run, "battle:learnMoveForgetSuccess", 2, gc_m_mon(run, "pokemonName", 0, p->a), pr_arg_move("moveName", m->b.moves[c->a]));
         gc_ev_msg(run, "battle:learnMoveAnd", 0);
         learn(run, p->a, p->b, c->a);
         return true;
@@ -600,10 +601,10 @@ bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char *
         if (c->kind == GC_CH_EVOLVE) { *ok = true; evolve(run, p); return true; }
         if (c->kind == GC_CH_CANCEL) {
             *ok = true;
-            gc_ev_msg(run, "menu:stoppedEvolving", 1, gc_a_mon("pokemonName", 0, p->a));
+            gc_ev_msg(run, "menu:stoppedEvolving", 1, gc_m_mon(run, "pokemonName", 0, p->a));
             if (c->a == 1) {
                 pm(run, p->a)->pause_evolutions = true;
-                gc_ev_msg(run, "menu:evolutionsPaused", 1, gc_a_mon("pokemonName", 0, p->a));
+                gc_ev_msg(run, "menu:evolutionsPaused", 1, gc_m_mon(run, "pokemonName", 0, p->a));
             }
             return true;
         }
