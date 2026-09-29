@@ -54,6 +54,34 @@ static menu_mon make(uint16_t species, const char* name, int level, int hp, int 
   return m;
 }
 
+/* summary data for a member (made up, plausible) */
+static void summary_fill(menu_mon* m, int t1, int t2, int ability, int passive, int nature) {
+  m->types[0] = t1;
+  m->types[1] = t2;
+  m->ability = ability;
+  m->passive = passive;
+  m->has_passive = passive != 0;
+  m->nature = nature;
+  for (int i = 0; i < 6; i++) {
+    m->stats[i] = 40 + m->level * (i + 1) / 3;
+    m->ivs[i] = (uint8_t)((m->species * 7 + i * 11) % 32);
+  }
+  m->ivs[1] = 31;
+  m->exp = m->level * m->level * m->level;
+  m->next_lv_exp = (m->level + 1) * (m->level + 1) * (m->level + 1) - m->exp;
+  m->exp_ratio = 0.4f;
+  m->pokeball = m->species % 6;
+  m->friendship = (uint8_t)(m->species * 3 % 256);
+  m->met_biome = (int16_t)(m->species % 30);
+  m->met_level = 5;
+  m->met_wave = (uint16_t)(m->species % 50);
+  m->candy_count = m->species % 120;
+  m->starter_friendship = 30;
+  m->friendship_cap = 75;
+  m->candy_colors[0] = 0xf8a038;
+  m->candy_colors[1] = 0xf8f8a0;
+}
+
 static void add_item(menu_mon* m, const char* name, const char* icon, int count, int max) {
   menu_held_item* it = &m->items[m->nitems++];
   snprintf(it->name, sizeof it->name, "%s", name);
@@ -95,6 +123,19 @@ static void party_reset(void) {
   g_party[5].relearn[2] = 175; /* Flail */
   g_party[5].relearn_level[2] = 30;
   g_party[5].nrelearn = 3;
+  /* types: normal 0 fighting 1 flying 2 poison 3 ground 4 ghost 7 fire 9 water 10 electric 12 dragon 15 */
+  summary_fill(&g_party[0], 9, 1, 66, 3, 3);    /* Blaze, Speed Boost; Adamant */
+  g_party[0].luck = 2;
+  g_party[0].champion = true;
+  g_party[0].pokerus = true;
+  summary_fill(&g_party[1], 15, 4, 8, 24, 13);  /* Sand Veil, Rough Skin; Jolly */
+  summary_fill(&g_party[2], 12, -1, 9, 0, 10);  /* Static; Timid */
+  g_party[2].met_biome = -1;
+  summary_fill(&g_party[3], 7, 3, 26, 0, 15);   /* Levitate; Modest */
+  summary_fill(&g_party[4], 15, 2, 39, 0, 0);   /* Inner Focus; Hardy */
+  summary_fill(&g_party[5], 10, -1, 33, 0, 24); /* Swift Swim; Quirky */
+  g_party[5].moves[0] = (menu_move){150, 0, 40}; /* Splash */
+  g_party[5].nmoves = 1;
 }
 
 /* ------------------------------------------------------------ events */
@@ -103,6 +144,7 @@ static const char* g_mode_names[] = {"SWITCH", "FAINT_SWITCH", "POST_BATTLE_SWIT
                                      "MOVE_MODIFIER", "TM_MODIFIER", "REMEMBER_MOVE_MODIFIER", "MODIFIER_TRANSFER",
                                      "SPLICE", "RELEASE", "CHECK", "SELECT", "DISCARD"};
 static party_mode g_mode;
+static int g_start_summary;
 static bool g_double;
 
 static const char* filter_non_fainted(void* ctx, int slot) {
@@ -137,10 +179,127 @@ static void on_pause(void* ctx, int slot, bool paused) {
   (void)ctx;
   logf_("pause slot=%d paused=%d", slot, paused);
 }
+static void sum_close(void* ctx) {
+  (void)ctx;
+  logf_("summary closed");
+  if (party_active()) party_resume();
+}
+static void sum_swap(void* ctx, int slot, int a, int b) {
+  (void)ctx;
+  logf_("swap slot=%d moves %d<->%d", slot, a, b);
+  menu_move t = g_party[slot].moves[a];
+  g_party[slot].moves[a] = g_party[slot].moves[b];
+  g_party[slot].moves[b] = t;
+}
+static void sum_learn(void* ctx, int cursor) {
+  (void)ctx;
+  logf_("learn move cursor=%d", cursor);
+  summary_close();
+}
+
+static void open_summary(int slot, summary_mode mode) {
+  summary_args a;
+  memset(&a, 0, sizeof a);
+  a.mode = mode;
+  a.page = SUMMARY_PROFILE;
+  a.party = g_party;
+  a.n = g_n;
+  a.index = slot;
+  a.from_party = mode == SUMMARY_DEFAULT;
+  a.new_move = 436; /* Lava Plume */
+  a.new_move_type = -1;
+  a.trainer_name = "Lorenzo";
+  a.trainer_id = "54321";
+  summary_events ev = {sum_close, sum_swap, sum_learn, NULL};
+  summary_open(&a, &ev);
+}
+
 static void on_summary(void* ctx, int slot) {
   (void)ctx;
   logf_("summary slot=%d", slot);
-  party_resume(); /* no summary screen yet */
+  open_summary(slot, SUMMARY_DEFAULT);
+}
+
+/* ---- a stand-in message box and yes/no box for the learn-move dialog (the
+ * game's are the battle screen's) ---- */
+static mui_msg g_msg;
+static bool g_msg_on;
+static mui_confirm g_confirm;
+static char g_pages[640];
+static char* g_page;
+static bool g_final_prompt;
+static menu_cb g_done;
+static void* g_done_ctx;
+
+static void next_page(void* ctx);
+static void show_page(void) {
+  char* end = strchr(g_page, '$');
+  if (end) *end = 0;
+  char* next = end ? end + 1 : NULL;
+  const char* cur = g_page;
+  g_page = next;
+  g_msg_on = true;
+  mui_msg_show(&g_msg, cur, 20, next_page, NULL, next ? true : g_final_prompt);
+}
+static void next_page(void* ctx) {
+  (void)ctx;
+  if (g_page) {
+    show_page();
+    return;
+  }
+  if (g_done) g_done(g_done_ctx);
+}
+static void host_text(void* host, const char* text, bool prompt, menu_cb done, void* done_ctx) {
+  (void)host;
+  /* drop upstream's @d{} @s{} @c{} @f{} tags (this stand-in has no timing or sound for them) */
+  size_t o = 0;
+  for (const char* p = text; *p && o + 1 < sizeof g_pages; p++) {
+    if (p[0] == '@' && p[1] && strchr("cdsf", p[1]) && p[2] == '{') {
+      const char* e = strchr(p, '}');
+      if (e) {
+        p = e;
+        continue;
+      }
+    }
+    g_pages[o++] = *p;
+  }
+  g_pages[o] = 0;
+  g_page = g_pages;
+  g_final_prompt = prompt;
+  g_done = done;
+  g_done_ctx = done_ctx;
+  logf_("text: %.60s", text);
+  show_page();
+}
+static void host_confirm(void* host, menu_cb yes, menu_cb no, void* ctx) {
+  (void)host;
+  logf_("confirm");
+  mui_confirm_show(&g_confirm, yes, no, ctx);
+}
+static void host_result(void* host, int slot) {
+  (void)host;
+  logf_("learn result slot=%d", slot);
+  if (slot >= 0) {
+    menu_mon* m = &g_party[4];
+    m->moves[slot] = (menu_move){436, 0, 15};
+    if (slot >= m->nmoves) m->nmoves = slot + 1;
+  }
+}
+static void host_end(void* host) {
+  (void)host;
+  logf_("learn move end");
+  g_msg_on = false;
+}
+static void start_learn_move(void) {
+  menu_mon* m = &g_party[4];
+  m->moves[0] = (menu_move){337, 0, 15}; /* Dragon Claw */
+  m->moves[1] = (menu_move){245, 1, 5};  /* Extreme Speed */
+  m->moves[2] = (menu_move){7, 0, 15};   /* Fire Punch */
+  m->moves[3] = (menu_move){9, 2, 15};   /* Thunder Punch */
+  m->nmoves = 4;
+  learn_move_args a = {g_party, g_n, 4, 436, m->name, true, "Lorenzo", "54321", false};
+  learn_move_host h = {host_text, host_confirm, host_result, host_end, NULL};
+  learn_move_start(&a, &h);
 }
 
 static void open_party(void) {
@@ -173,14 +332,19 @@ int main(void) {
   if (cfg) {
     int m = 0, d = 0;
     if (fscanf(cfg, "%d %d", &m, &d) >= 1 && m >= 0 && m <= PARTY_DISCARD) g_mode = (party_mode)m;
+    if (m >= 14 && m <= 16) g_start_summary = m;
     g_double = d != 0;
     fclose(cfg);
   }
   party_reset();
   open_party();
+  /* 14: the summary of the first member, 15: learning a move */
+  if (g_start_summary == 16)
+    start_learn_move();
+  else if (g_start_summary) open_summary(g_start_summary == 15 ? 5 : 0, g_start_summary == 15 ? SUMMARY_LEARN_MOVE : SUMMARY_DEFAULT);
 
-  rr_set_origin(RR_TOP, 40, 30);
-  rr_set_origin(RR_BOTTOM, 0, 0);
+  mui_set_origin(RR_TOP, 40, 30);
+  mui_set_origin(RR_BOTTOM, 0, 0);
   u64 last = osGetTime();
   while (aptMainLoop()) {
     hidScanInput();
@@ -201,7 +365,16 @@ int main(void) {
         {KEY_A, MB_ACTION}, {KEY_B, MB_CANCEL}, {KEY_X, MB_MENU}, {KEY_Y, MB_STATS},
     };
     for (size_t i = 0; i < sizeof map / sizeof map[0]; i++)
-      if (k & map[i].key) party_input(map[i].b);
+      if (k & map[i].key) {
+        if (g_confirm.active)
+          mui_confirm_input(&g_confirm, map[i].b);
+        else if (summary_active())
+          summary_input(map[i].b);
+        else if (g_msg_on)
+          mui_msg_input(&g_msg, map[i].b);
+        else
+          party_input(map[i].b);
+      }
 
     u64 now = osGetTime();
     float dt = (float)(now - last);
@@ -211,11 +384,23 @@ int main(void) {
     dt = 1000.0f / 60.0f;
     mui_tick(dt);
     party_update(dt);
+    summary_update(dt);
+    if (g_msg_on) mui_msg_update(&g_msg, dt);
 
     rr_frame_begin();
     rr_target(RR_TOP, RR_RGBA(0, 0, 0, 255));
-    party_draw();
+    mui_set_origin(RR_TOP, 40, 30);
+    if (summary_active())
+      summary_draw();
+    else
+      party_draw();
+    if (g_msg_on && !summary_active()) {
+      mui_window(0, 132, 320, 48);
+      mui_msg_draw(&g_msg, TS_MESSAGE, 12, 138);
+    }
+    if (g_confirm.active && !summary_active()) mui_confirm_draw(&g_confirm);
     rr_target(RR_BOTTOM, RR_RGBA(0x18, 0x18, 0x20, 255));
+    mui_set_origin(RR_BOTTOM, 0, 0);
     char info[512];
     snprintf(info, sizeof info,
              "menutest: party, mode %s%s\n\nlast events:\n%s\n%s\n%s\n%s\n\nL/R: mode  SELECT: doubles  START: quit",

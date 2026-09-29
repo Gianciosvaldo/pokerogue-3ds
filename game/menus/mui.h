@@ -47,8 +47,14 @@ typedef enum {
   TS_EGG_SUMMARY_DEX, TS_STARTER_VALUE_LIMIT, TS_TOOLTIP_TITLE, TS_TOOLTIP_CONTENT, TS_FILTER_BAR_MAIN,
   TS_MOVE_INFO_CONTENT, TS_MOVE_PP_FULL, TS_MOVE_PP_HALF_FULL, TS_MOVE_PP_NEAR_EMPTY, TS_MOVE_PP_EMPTY,
   TS_SMALLER_WINDOW_ALT, TS_BGM_BAR, TS_PERFECT_IV, TS_ME_OPTION_DEFAULT, TS_ME_OPTION_SPECIAL, TS_SHADOW_TEXT,
-  TS_COUNT_
+  TS_COUNT_,
+  /* not upstream styles: a style with a font size override */
+  TSX_WINDOW_ALT_76, /* WINDOW_ALT at fontSize 76px (summary candy and friendship counts) */
 } mui_style;
+
+/* lineSpacing in canvas px: addTextObject (scale * 30), addBBCodeTextObject (scale * 60) */
+#define MUI_LS_TEXT 5.0f
+#define MUI_LS_BBCODE 10.0f
 
 #define MUI_RGB(hex) ((rr_color)(((uint32_t)(hex) << 8) | 0xFF))
 
@@ -67,6 +73,13 @@ bool mui_image(const char* key, const char* frame, float x, float y, float ox, f
 bool mui_image_ex(const char* key, const char* frame, float x, float y, const rr_draw_opts* o);
 void mui_unload_all(void);
 
+/* rr_set_origin that mui remembers (for mui_clip): call it instead. */
+void mui_set_origin(rr_screen s, int px, int py);
+/* Clips drawing to a canvas rectangle (upstream geometry masks) until
+ * mui_clip_off. Rectangles only; no nesting. */
+void mui_clip(float x, float y, float w, float h);
+void mui_clip_off(void);
+
 /* upstream addWindow: 9-slice window_1 (the default red/orange style) */
 void mui_window(float x, float y, float w, float h);
 
@@ -78,10 +91,21 @@ int mui_text(mui_style s, float x, float y, const char* utf8);
 int mui_text_o(mui_style s, float x, float y, float ox, float oy, const char* utf8);
 /* Same with explicit colours (upstream setColor/setShadowColor). */
 int mui_text_c(mui_style s, float x, float y, const char* utf8, rr_color c, rr_color shadow);
+/* Same with a lineSpacing other than addTextObject's (canvas px, setLineSpacing). */
+int mui_text_ls(mui_style s, float x, float y, float ls, const char* utf8, rr_color c, rr_color shadow);
+float mui_text_height_ls(mui_style s, float ls, const char* utf8);
 int mui_text_width(mui_style s, const char* utf8);
 int mui_line_height(mui_style s);  /* line pitch, rounded */
 float mui_text_height(mui_style s, const char* utf8); /* Phaser text box height */
 rr_color mui_style_color(mui_style s, bool shadow); /* upstream getTextColor */
+/* Phaser's wordWrap ({ width }), width in logical px (upstream's / 6). Writes
+ * the text with "\n" breaks into out; returns the line count. */
+int mui_wrap(mui_style s, const char* in, float width, char* out, size_t n);
+/* addBBCodeTextObject: text with upstream's [color=#rrggbb][shadow=#rrggbb]
+ * tags (getBBCodeFrag), drawn at x,y (origin 0,0). Returns the widest line. */
+int mui_bbtext(mui_style s, float x, float y, const char* bb);
+/* getBBCodeFrag(content, style, close) */
+char* mui_bbfrag(char* out, size_t n, const char* content, mui_style s, bool close);
 
 /* ---- strings (English locale files in data.pak) ----
  * key: i18next "namespace:key.sub" (e.g. "partyUiHandler:choosePokemon").

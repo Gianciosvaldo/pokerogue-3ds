@@ -8,6 +8,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <citro2d.h>
+
 #include "pak.h"
 #include "snd.h"
 
@@ -80,6 +82,43 @@ bool mui_image(const char* key, const char* frame, float x, float y, float ox, f
   return mui_image_ex(key, frame, x, y, &o);
 }
 
+/* ------------------------------------------------------------------ view */
+
+static rr_screen g_screen = RR_TOP;
+static int g_org[2][2] = {{40, 30}, {0, 60}};
+static bool g_clipped;
+
+void mui_set_origin(rr_screen s, int px, int py) {
+  rr_set_origin(s, px, py);
+  g_screen = s;
+  g_org[s][0] = px;
+  g_org[s][1] = py;
+}
+
+/* The GPU scissor works on the framebuffer, which is the screen turned a
+ * quarter: 240 wide, 400 (top) or 320 (bottom) tall, x from the bottom edge. */
+void mui_clip(float x, float y, float w, float h) {
+  int sw = g_screen == RR_TOP ? 400 : 320;
+  int x0 = (int)floorf(x) + g_org[g_screen][0], y0 = (int)floorf(y) + g_org[g_screen][1];
+  int x1 = (int)ceilf(x + w) + g_org[g_screen][0], y1 = (int)ceilf(y + h) + g_org[g_screen][1];
+  if (x0 < 0) x0 = 0;
+  if (y0 < 0) y0 = 0;
+  if (x1 > sw) x1 = sw;
+  if (y1 > 240) y1 = 240;
+  if (x1 < x0) x1 = x0;
+  if (y1 < y0) y1 = y0;
+  C2D_Flush();
+  C3D_SetScissor(GPU_SCISSOR_NORMAL, 240 - y1, sw - x1, 240 - y0, sw - x0);
+  g_clipped = true;
+}
+
+void mui_clip_off(void) {
+  if (!g_clipped) return;
+  C2D_Flush();
+  C3D_SetScissor(GPU_SCISSOR_DISABLE, 0, 0, 0, 0);
+  g_clipped = false;
+}
+
 /* ui-theme.ts addWindow: window_<uiWindowStyle>, border 8 (6 in the legacy theme) */
 void mui_window(float x, float y, float w, float h) {
   const rr_frame* f = mui_frame("ui/windows/window_1", NULL);
@@ -136,6 +175,8 @@ static style_metrics style_metrics_of(mui_style s) {
       return (style_metrics){"emerald", 11, 64, 48, 56, 0, 6, 9};
     case TS_MOVE_INFO_CONTENT:
       return (style_metrics){"emerald", 9, 56, 42, 49, 0, 6, 7};
+    case TSX_WINDOW_ALT_76:
+      return (style_metrics){"emerald", 13, 76, 58, 68, 0, 6, 10};
     default:
       return (style_metrics){"emerald", 16, 96, 72, 84, 0, 6, 12};
   }
@@ -188,6 +229,7 @@ rr_color mui_style_color(mui_style s, bool sh) {
     case TS_MOVE_PP_NEAR_EMPTY: C(0xd64b00, 0x69402a);
     case TS_MOVE_PP_EMPTY: C(0xe13d3d, 0x632929);
     case TS_WINDOW_ALT:
+    case TSX_WINDOW_ALT_76:
     case TS_SUMMARY_ALT:
     case TS_GROWTH_RATE_TYPE:
     case TS_SMALLER_WINDOW_ALT:
@@ -240,17 +282,21 @@ rr_color mui_style_color(mui_style s, bool sh) {
 #undef C
 }
 
-/* Line pitch of an addTextObject text: line height + lineSpacing (scale * 30
- * = 5 canvas px), in logical px. */
-static float line_pitch(const style_metrics* m) { return (m->line + 5) / 6.0f; }
+/* Line pitch of a text with `ls` canvas px of lineSpacing (addTextObject sets
+ * scale * 30 = 5, addBBCodeTextObject scale * 60 = 10), in logical px. */
+static float line_pitch_ls(const style_metrics* m, float ls) { return (m->line + ls) / 6.0f; }
+static float line_pitch(const style_metrics* m) { return line_pitch_ls(m, MUI_LS_TEXT); }
+
+/* Where a line's baked glyphs go so its baseline lands where Phaser's would. */
+static float line_y(const style_metrics* m, float y, int line, float ls) {
+  return floorf(y + (m->pad_top + m->asc) / 6.0f - m->pil_asc + line * line_pitch_ls(m, ls) + 0.5f);
+}
 
 /* Draws each line so its baseline lands where Phaser's would, rounded to the
  * nearest pixel (upstream positions are fractional at 1/6 px). */
-int mui_text_c(mui_style s, float x, float y, const char* utf8, rr_color c, rr_color shadow) {
+int mui_text_ls(mui_style s, float x, float y, float ls, const char* utf8, rr_color c, rr_color shadow) {
   rr_font* f = font_get(s);
   style_metrics m = style_metrics_of(s);
-  float base = (m.pad_top + m.asc) / 6.0f - m.pil_asc;
-  float pitch = line_pitch(&m);
   int widest = 0, line = 0;
   char buf[256];
   const char* p = utf8;
@@ -260,13 +306,17 @@ int mui_text_c(mui_style s, float x, float y, const char* utf8, rr_color c, rr_c
     if (n >= sizeof buf) n = sizeof buf - 1;
     memcpy(buf, p, n);
     buf[n] = 0;
-    int w = rr_text(f, floorf(x + 0.5f), floorf(y + base + line * pitch + 0.5f), buf, c, shadow);
+    int w = rr_text(f, floorf(x + 0.5f), line_y(&m, y, line, ls), buf, c, shadow);
     if (w > widest) widest = w;
     if (!nl) break;
     p = nl + 1;
     line++;
   }
   return widest;
+}
+
+int mui_text_c(mui_style s, float x, float y, const char* utf8, rr_color c, rr_color shadow) {
+  return mui_text_ls(s, x, y, MUI_LS_TEXT, utf8, c, shadow);
 }
 
 int mui_text(mui_style s, float x, float y, const char* utf8) {
@@ -300,11 +350,134 @@ int mui_line_height(mui_style s) {
 }
 
 /* Phaser's text box height: lines * line + (lines - 1) * lineSpacing + padding */
-float mui_text_height(mui_style s, const char* utf8) {
+float mui_text_height_ls(mui_style s, float ls, const char* utf8) {
   style_metrics m = style_metrics_of(s);
   int lines = 1;
   for (const char* p = utf8; *p; p++) lines += *p == '\n';
-  return (lines * m.line + (lines - 1) * 5 + m.pad_top + m.pad_bottom) / 6.0f;
+  return (lines * m.line + (lines - 1) * ls + m.pad_top + m.pad_bottom) / 6.0f;
+}
+
+float mui_text_height(mui_style s, const char* utf8) { return mui_text_height_ls(s, MUI_LS_TEXT, utf8); }
+
+/* Phaser Text basicWordWrap: greedy by words, measured with the trailing
+ * space; a word that doesn't fit starts a new line (never the first word). */
+int mui_wrap(mui_style s, const char* in, float width, char* out, size_t n) {
+  rr_font* f = font_get(s);
+  size_t o = 0;
+  int lines = 1;
+  float space = f ? (float)rr_text_width(f, " ") : 4;
+  char word[128];
+#define PUT(ch) do { if (o + 1 < n) out[o++] = (ch); } while (0)
+  const char* p = in;
+  while (*p) {
+    float left = width;
+    const char* end = strchr(p, '\n');
+    if (!end) end = p + strlen(p);
+    bool first = true;
+    while (p <= end) {
+      const char* sp = p;
+      while (sp < end && *sp != ' ') sp++;
+      size_t wl = (size_t)(sp - p);
+      if (wl >= sizeof word) wl = sizeof word - 1;
+      memcpy(word, p, wl);
+      word[wl] = 0;
+      bool last = sp >= end;
+      float ww = f ? (float)rr_text_width(f, word) : wl * 6.0f;
+      float wws = ww + (last ? 0 : space);
+      if (wws > left && !first) {
+        PUT('\n');
+        lines++;
+        left = width;
+      }
+      for (size_t i = 0; i < wl; i++) PUT(word[i]);
+      if (!last) {
+        PUT(' ');
+        left -= wws;
+      } else {
+        left -= ww;
+      }
+      first = false;
+      p = sp + 1;
+      if (last) break;
+    }
+    if (*end == '\n') {
+      PUT('\n');
+      lines++;
+      p = end + 1;
+    } else {
+      p = end;
+    }
+  }
+#undef PUT
+  if (n) out[o < n ? o : n - 1] = 0;
+  return lines;
+}
+
+/* rexBBCodeText with the [color=#rrggbb] / [shadow=#rrggbb] tags upstream's
+ * getBBCodeFrag writes; [/color] and [/shadow] go back to the base style. */
+static bool bb_hex(const char* p, uint32_t* out) {
+  if (*p != '#') return false;
+  char* e;
+  unsigned long v = strtoul(p + 1, &e, 16);
+  if (e - p != 7 || *e != ']') return false;
+  *out = (uint32_t)v;
+  return true;
+}
+
+int mui_bbtext(mui_style s, float x, float y, const char* bb) {
+  rr_font* f = font_get(s);
+  style_metrics m = style_metrics_of(s);
+  rr_color base_c = mui_style_color(s, false), base_sh = mui_style_color(s, true);
+  rr_color c = base_c, sh = base_sh;
+  int line = 0, widest = 0;
+  float cx = x;
+  char seg[256];
+  size_t sl = 0;
+  const char* p = bb;
+  for (;;) {
+    bool flush = !*p || *p == '\n' || *p == '[';
+    uint32_t hex = 0;
+    const char* tag_end = NULL;
+    if (*p == '[') {
+      if (!strncmp(p, "[color=", 7) && bb_hex(p + 7, &hex)) tag_end = p + 15;
+      else if (!strncmp(p, "[shadow=", 8) && bb_hex(p + 8, &hex)) tag_end = p + 16;
+      else if (!strncmp(p, "[/color]", 8)) tag_end = p + 8;
+      else if (!strncmp(p, "[/shadow]", 9)) tag_end = p + 9;
+      else flush = false;
+    }
+    if (flush && sl) {
+      seg[sl] = 0;
+      cx += f ? rr_text(f, floorf(cx + 0.5f), line_y(&m, y, line, MUI_LS_BBCODE), seg, c, sh) : 0;
+      sl = 0;
+    }
+    if (!*p) break;
+    if (tag_end) {
+      if (p[1] == 'c') c = MUI_RGB(hex);
+      else if (p[1] == 's') sh = MUI_RGB(hex);
+      else if (p[2] == 'c') c = base_c;
+      else sh = base_sh;
+      p = tag_end;
+      continue;
+    }
+    if (*p == '\n') {
+      if ((int)(cx - x) > widest) widest = (int)(cx - x);
+      cx = x;
+      line++;
+      p++;
+      continue;
+    }
+    if (sl + 1 < sizeof seg) seg[sl++] = *p;
+    p++;
+  }
+  if ((int)(cx - x) > widest) widest = (int)(cx - x);
+  return widest;
+}
+
+char* mui_bbfrag(char* out, size_t n, const char* content, mui_style s, bool close) {
+  uint32_t c = mui_style_color(s, false) >> 8, sh = mui_style_color(s, true) >> 8;
+  snprintf(out, n, "[color=#%06lx][shadow=#%06lx]%s%s", (unsigned long)c, (unsigned long)sh, content,
+           close ? "[/color][/shadow]" : "");
+  return out;
 }
 
 int mui_text_o(mui_style s, float x, float y, float ox, float oy, const char* utf8) {
@@ -338,7 +511,20 @@ static struct {
 } g_ns[NS_SLOTS];
 
 /* "partyUiHandler" -> "party-ui-handler" (the locale file names) */
+/* i18n-namespace-map.ts: namespaces whose file name isn't the kebab-case name */
+static const char* const g_ns_map[][2] = {
+    {"titles", "trainer-titles"}, {"moveTriggers", "move-trigger"}, {"abilityTriggers", "ability-trigger"},
+    {"battlePokemonForm", "pokemon-form-battle"}, {"miscDialogue", "dialogue-misc"},
+    {"battleSpecDialogue", "dialogue-final-boss"}, {"doubleBattleDialogue", "dialogue-double-battle"},
+    {"splashMessages", "splash-texts"}, {"mysteryEncounterMessages", "mystery-encounter-texts"}, {"biome", "biomes"},
+};
+
 static void ns_file(const char* ns, char* out, size_t n) {
+  for (size_t i = 0; i < sizeof g_ns_map / sizeof g_ns_map[0]; i++)
+    if (!strcmp(ns, g_ns_map[i][0])) {
+      snprintf(out, n, "%s", g_ns_map[i][1]);
+      return;
+    }
   size_t o = 0;
   for (const char* p = ns; *p && o + 2 < n; p++) {
     if (isupper((unsigned char)*p)) {
