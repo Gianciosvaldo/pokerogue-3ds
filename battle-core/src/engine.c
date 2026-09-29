@@ -484,10 +484,34 @@ void pr_queue_message_deferred(pr_battle *bt, pr_engine *e)
     pr_phase_push(bt, e, pr_phase_new(e, PH_MESSAGE, -1));
 }
 
-void pr_queue_ability_display(pr_battle *bt, pr_engine *e, const pr_pokemon *p, bool show)
+static int message_phase(pr_engine *e, const pr_msg *m)
+{
+    int ph = pr_phase_new(e, PH_MESSAGE, -1);
+    if (ph >= 0) e->pool[ph].msg = *m;
+    return ph;
+}
+
+void pr_queue_msg(pr_battle *bt, pr_engine *e, pr_msg m)
+{
+    pr_phase_unshift(bt, e, message_phase(e, &m));
+}
+
+void pr_queue_msg_deferred(pr_battle *bt, pr_engine *e, pr_msg m)
+{
+    pr_phase_push(bt, e, message_phase(e, &m));
+}
+
+void pr_queue_ability_display(pr_battle *bt, pr_engine *e, const pr_pokemon *p, bool passive, bool show)
 {
     int b = pr_battler_index(bt, p);
-    pr_phase_unshift(bt, e, pr_phase_new(e, show ? PH_SHOW_ABILITY : PH_HIDE_ABILITY, (int8_t)(show ? b : -1)));
+    int ph = pr_phase_new(e, show ? PH_SHOW_ABILITY : PH_HIDE_ABILITY, (int8_t)(show ? b : -1));
+    if (ph >= 0 && show) {
+        /* the constructor fixes the name shown: getPassiveAbility() or getAbility() */
+        e->pool[ph].anim_result = passive;
+        e->pool[ph].anim = passive ? (uint16_t)(p->custom_passive >= 0 ? p->custom_passive : pr_pokemon_form(p)->passive)
+                                   : p->ability;
+    }
+    pr_phase_unshift(bt, e, ph);
 }
 
 void pr_queue_faint(pr_battle *bt, pr_engine *e, int battler, bool prevent_instant_revive, int source)
@@ -650,6 +674,8 @@ void pr_resume_switch(pr_battle *bt, pr_engine *e, int slot)
 {
     if (!e->awaiting_pick) return;
     bt->engine = e;
+    e->n_events = 0;
+    e->events_overflow = false;
     int ph = e->pick_phase;
     e->awaiting_pick = false;
     e->stop = 0;

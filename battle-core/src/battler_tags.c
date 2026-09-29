@@ -1003,9 +1003,9 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
         const pr_turn_move *last = pr_last_move(bt, p, 0);
         if (!last || last->move == MOVE_ID_NONE) return true;
         pr_cancel_current_move(e, NULL);
-        pr_queue_ability_display(bt, e, p, true);
+        pr_queue_ability_display(bt, e, p, p->ability != ABILITY_ID_TRUANT, true);
         pr_queue_message(bt, e);
-        pr_queue_ability_display(bt, e, p, false);
+        pr_queue_ability_display(bt, e, p, p->ability != ABILITY_ID_TRUANT, false);
         return true;
     }
     case BATTLER_TAG_TYPE_BEAK_BLAST_CHARGING:
