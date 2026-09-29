@@ -35,6 +35,9 @@ node_modules/
 *.elf
 *.smdh
 *.cia
+*.exe
+assets-pipeline/tools/dspadpcm
+sd-builder/dist/
 *.so
 *.o
 *.d
@@ -42,3 +45,4 @@ node_modules/
 build/
 tools/azahar-libretro/*
 !tools/azahar-libretro/README.md
+__pycache__/

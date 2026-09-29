@@ -1,0 +1,39 @@
+PokeRogue SD card builder (Windows 10 or 11)
+=============================================
+
+What this does
+  The 3DS game needs PokeRogue's pictures, sounds, music and text, converted for the 3DS
+  (about 850 MB of files). Nobody is allowed to share those, so this tool makes them on
+  your own PC from PokeRogue's public files and puts them on your SD card.
+
+What you need
+  - This PC, connected to the internet.
+  - Your 3DS's SD card, in the PC (card slot or card reader). You can also do without it
+    and copy the files later.
+  - About 3 GB free on the PC, and about 1 GB free on the SD card.
+  - 20 to 60 minutes, mostly waiting. You can use the PC meanwhile.
+
+Steps
+  1. Double-click BUILD-SD-CARD (in this folder).
+     If a blue "Windows protected your PC" box appears, click "More info", then "Run anyway".
+     If a box asks "Do you want to run this file?", click "Run".
+     These boxes appear because this tool isn't signed by a company.
+  2. A black window opens. It looks for your SD card and shows its letter (for example E:).
+     Press Enter to use it. If it can't find the card, type the card's letter and press Enter.
+  3. Wait. It downloads about 700 MB, converts everything, and copies it to the SD card.
+     It says "Done" at the end. If it stops or you close it, double-click BUILD-SD-CARD
+     again: it carries on where it stopped.
+  4. If it says one more step is needed for sound, do the three short steps it shows
+     (they run a small tool called DSP1 once on the 3DS).
+  5. Eject the SD card before taking it out: in File Explorer, right-click the card's drive
+     and choose Eject. Put the card back in your 3DS.
+
+If something goes wrong
+  The window says what happened and what to do. If it keeps failing, send the file
+  build-log.txt (it appears in this folder) in the project thread.
+
+When you're done
+  You can delete this whole folder to get the space back. Keep it if you'd rather not
+  download everything again next time the game needs new files.
+
+Please keep the files it makes to yourself: they're only for your own console.

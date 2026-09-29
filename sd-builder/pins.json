@@ -1,0 +1,68 @@
+{
+  "_comment": "Everything the builder downloads, pinned. Tools are checked by SHA-256; the upstream archives are pinned by commit and checked by file count and total size after unpacking (GitHub does not promise stable archive bytes). sd-builder/README.md says how to change a pin.",
+  "python": {
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250918/cpython-3.12.11+20250918-x86_64-pc-windows-msvc-install_only.tar.gz",
+    "sha256": "919257921a6c75bb8cec70ed2b3fe946f5be1395641ae8301154abf567a55cf5",
+    "size": 45272321
+  },
+  "wheels": [
+    {
+      "url": "https://files.pythonhosted.org/packages/16/2e/86f24451c2d530c88daf997cb8d6ac622c1d40d19f5a031ed68a4b73a374/numpy-1.26.4-cp312-cp312-win_amd64.whl",
+      "sha256": "08beddf13648eb95f8d867350f6a018a4be2e5ad54c8d8caed89ebca558b2818",
+      "size": 15517754
+    },
+    {
+      "url": "https://files.pythonhosted.org/packages/45/89/da2f7971a317f83d807fdd4065c0af40208e59e692cc43d315a71a0e96d1/pillow-12.3.0-cp312-cp312-win_amd64.whl",
+      "sha256": "a2b55dd6b2a4c4b7d87ffa56bdb33fdc5fdb9a462173861a7bc097f17d91cb09",
+      "size": 7227137
+    },
+    {
+      "url": "https://files.pythonhosted.org/packages/a5/0b/a54cd7406995ab097fceb907c7eb13a6ddd49e0b231e448f1a81a50af65c/lz4-4.4.5-cp312-cp312-win_amd64.whl",
+      "sha256": "713a777de88a73425cf08eb11f742cd2c98628e79a8673d6a52e3c5f0c116f33",
+      "size": 99497
+    },
+    {
+      "url": "https://files.pythonhosted.org/packages/83/65/826290863c9df6041f2e36a5ae5d604cd8247fffc8ec7b45581fd2473e4d/fonttools-4.66.0-py3-none-any.whl",
+      "sha256": "bc7b7ddc1a1f46c363354304e9a8dd93722e4a6a24f785015650898dacf40df9",
+      "size": 1201583
+    }
+  ],
+  "ffmpeg": {
+    "url": "https://github.com/GyanD/codexffmpeg/releases/download/8.1.2/ffmpeg-8.1.2-essentials_build.zip",
+    "sha256": "db580001caa24ac104c8cb856cd113a87b0a443f7bdf47d8c12b1d740584a2ec",
+    "size": 109728040,
+    "files": ["bin/ffmpeg.exe", "bin/ffprobe.exe"]
+  },
+  "assets": {
+    "repo": "pagefaultgames/pokerogue-assets",
+    "commit": "87426a79611f9d212c4dc8af58e2834a05b93725",
+    "url": "https://codeload.github.com/pagefaultgames/pokerogue-assets/zip/87426a79611f9d212c4dc8af58e2834a05b93725",
+    "files": 32045,
+    "bytes": 764773635
+  },
+  "locales": {
+    "repo": "pagefaultgames/pokerogue-locales",
+    "commit": "270ed0a2938b2c3e2e34e7de940e84aecadf548b",
+    "url": "https://codeload.github.com/pagefaultgames/pokerogue-locales/zip/270ed0a2938b2c3e2e34e7de940e84aecadf548b",
+    "files": 1851,
+    "bytes": 11810502
+  },
+  "game": {
+    "repo": "pagefaultgames/pokerogue",
+    "commit": "8555c08c823b856cbec4eb99ca84ea52a955836d",
+    "files": {
+      "src/audio/audio-manager.ts": {
+        "url": "https://raw.githubusercontent.com/pagefaultgames/pokerogue/8555c08c823b856cbec4eb99ca84ea52a955836d/src/audio/audio-manager.ts",
+        "sha256": "4d13f013c5940c77f1a6ca11e164052b9c549f3387db930a038ce405ca228d02",
+        "size": 17381
+      }
+    }
+  },
+  "dsp1": {
+    "url": "https://github.com/zoogie/DSP1/releases/download/v1.0/DSP1.3dsx",
+    "sha256": "ce95f0db8fe4a6025be4de7e4ccdf5ea5974b87b316abf9363becec4f3bd01a7",
+    "size": 446968
+  },
+  "packs": ["data", "font", "gfx", "snd", "bgm"],
+  "expect": {"data": 2765, "font": 65, "gfx": 19483, "snd": 2557, "bgm": 178}
+}

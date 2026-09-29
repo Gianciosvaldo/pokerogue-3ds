@@ -1,0 +1,76 @@
+# Runs the SD card builder zip on a real Windows machine, the way lorenzo runs it: the .bat, the
+# Python download, the real upstream downloads, a full build and the copy to a folder standing in
+# for the SD card. Only the log and the build report are kept; the packs never leave the runner.
+# A Windows run takes roughly an hour of Actions time, counted double on a private repo.
+name: SD card builder on Windows
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "sd-builder/**"
+      - "assets-pipeline/*.py"
+      - "assets-pipeline/tools/dspadpcm.c"
+      - ".github/workflows/sd-builder-windows.yml"
+
+concurrency:
+  group: sd-builder-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  zip:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq mingw-w64 zip
+      - run: sd-builder/make-zip.sh dist && sha256sum dist/PokeRogue-SD-Builder.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PokeRogue-SD-Builder
+          path: dist/PokeRogue-SD-Builder.zip
+
+  windows:
+    needs: zip
+    runs-on: windows-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: PokeRogue-SD-Builder
+      - name: Unzip into a folder with a space and an accent in its name
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP "Download folder à"
+          Expand-Archive PokeRogue-SD-Builder.zip -DestinationPath $dir
+          New-Item -ItemType Directory -Force -Path (Join-Path $env:RUNNER_TEMP "fake sd\3ds") | Out-Null
+          "BUILDER=$dir\PokeRogue-SD-Builder" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          "SD=$env:RUNNER_TEMP\fake sd" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+      - name: First run (downloads and builds everything)
+        shell: cmd
+        run: call "%BUILDER%\BUILD-SD-CARD.bat" --sd "%SD%" --yes < nul
+      - name: Second run (should skip everything)
+        shell: cmd
+        run: call "%BUILDER%\BUILD-SD-CARD.bat" --sd "%SD%" --yes < nul
+      - name: Check the card
+        shell: pwsh
+        run: |
+          Get-ChildItem -Recurse $env:SD | Format-Table Length, FullName -AutoSize
+          foreach ($s in 'data','font','gfx','snd','bgm') {
+            $p = Join-Path $env:SD "3ds\pokerogue\$s.pak"
+            if (-not (Test-Path $p)) { throw "$s.pak missing" }
+            "{0}  {1}  {2}" -f $s, (Get-Item $p).Length, (Get-FileHash $p -Algorithm SHA256).Hash
+          }
+          if (-not (Test-Path (Join-Path $env:SD "3ds\DSP1.3dsx"))) { throw "DSP1.3dsx missing" }
+          $log = Get-Content (Join-Path $env:BUILDER "build-log.txt") -Raw
+          if (($log | Select-String -Pattern "=== done" -AllMatches).Matches.Count -ne 2) { throw "expected two finished runs" }
+      - name: Keep the log and build report (no packs)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sd-builder-windows-log
+          path: |
+            ${{ env.BUILDER }}/build-log.txt
+            ${{ env.BUILDER }}/files/build/3ds/pokerogue/build-report.json
