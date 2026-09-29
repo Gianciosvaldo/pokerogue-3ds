@@ -363,6 +363,8 @@ void pr_switch_summon_phase(pr_battle *bt, pr_engine *e, int ph)
         pr_pokemon *q;
         pr_speed_iter_init(bt, &it, side == 0 ? ARENA_TAG_SIDE_ENEMY : ARENA_TAG_SIDE_PLAYER);
         while ((q = pr_speed_iter_next(bt, &it))) pr_remove_tags_by_source_id(bt, e, q, (int64_t)last->id);
+        pr_show_text(bt, e, pr_msg1("battle:playerComeBack", pr_arg_pokemon(bt, "pokemonName", last)));
+        pr_event_add(bt, e, PR_EV_SWITCH_OUT, side * 2 + field, -1, 0, 0, NULL);
         pr_leave_field(bt, e, last, type == SWITCH_TYPE_SWITCH);
     }
 
@@ -390,8 +392,11 @@ void pr_switch_summon_phase(pr_battle *bt, pr_engine *e, int ph)
     bt->party[side][slot] = last;
     bt->party[side][field] = in;
     bt->field[side * 2 + field] = in;
-    /* showTextAndSummon: the send-out text (not a phase); Baton Pass and Shed Tail only move the
-     * sprite of a passed Substitute, the others set the Pokemon up and reset its summon data */
+    /* showTextAndSummon: the send-out text (getSendOutText; not a phase); Baton Pass and Shed Tail
+     * only move the sprite of a passed Substitute, the others set the Pokemon up and reset its
+     * summon data */
+    pr_show_text(bt, e, pr_msg1(type == SWITCH_TYPE_FORCE_SWITCH ? "battle:pokemonDraggedOut" : "battle:playerGo",
+                                pr_arg_pokemon(bt, "pokemonName", in)));
     if (type != SWITCH_TYPE_BATON_PASS && type != SWITCH_TYPE_SHED_TAIL) field_setup(bt, e, in, true);
 
     /* summon(): the Pokemon joins the field, updateModifiers(player) recalculates the party's stats,
@@ -400,6 +405,7 @@ void pr_switch_summon_phase(pr_battle *bt, pr_engine *e, int ph)
     if (bt->n_mods[side]) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
     for (int k = 0; k < bt->n_party[side]; k++) pr_recalculate_stats(bt, bt->party[side][k]);
     field_setup(bt, e, in, false);
+    pr_event_add(bt, e, PR_EV_SWITCH_IN, side * 2 + field, -1, 0, field, NULL);
 
     /* SummonPhase.onEnd */
     int b = side * 2 + field;

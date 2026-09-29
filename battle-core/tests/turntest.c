@@ -1024,6 +1024,18 @@ static void json_str(sbuf *b, const char *s)
     sb(b, "\"");
 }
 
+/* engine source lines whose message has no text yet, by covered turns showing them */
+typedef struct { const char *site; int n; } todo_site;
+static todo_site todo_sites[256];
+static int n_todo_sites;
+static void count_todo_site(const char *site)
+{
+    if (!site) site = "?";
+    for (int i = 0; i < n_todo_sites; i++)
+        if (!strcmp(todo_sites[i].site, site)) { todo_sites[i].n++; return; }
+    if (n_todo_sites < 256) todo_sites[n_todo_sites++] = (todo_site){site, 1};
+}
+
 /* The TEXTS line C's events give: false when a message has no text port yet */
 static bool c_texts(sbuf *b, const pr_event *ev, int n)
 {
@@ -1034,7 +1046,12 @@ static bool c_texts(sbuf *b, const pr_event *ev, int n)
     for (int i = 0; i < n; i++) {
         if (ev[i].type != PR_EV_TEXT) continue;
         if (k++) sb(b, ",");
-        if (!ev[i].msg.key) { known = false; sb(b, "\"<?>\""); continue; }
+        if (!ev[i].msg.key) {
+            if (known) count_todo_site(ev[i].msg.args[0].s);   /* the first one in the turn */
+            known = false;
+            sb(b, "\"<?>\"");
+            continue;
+        }
         char text[1024];
         pr_msg_format(&ev[i].msg, &src, text, sizeof text);
         json_str(b, text);
@@ -1242,6 +1259,13 @@ int main(int argc, char **argv)
     if (texts.cases)
         printf("texts of covered turns %d: identical %d, differ %d, a message with no text yet %d\n", texts.cases,
                texts.same, texts.differ, texts.unported);
+    if (getenv("TURNTEST_SITES")) {
+        for (int i = 0; i < n_todo_sites; i++)
+            for (int j = i; j > 0 && todo_sites[j].n > todo_sites[j - 1].n; j--) {
+                todo_site t = todo_sites[j]; todo_sites[j] = todo_sites[j - 1]; todo_sites[j - 1] = t;
+            }
+        for (int i = 0; i < n_todo_sites; i++) printf("TODO SITE %6d %s\n", todo_sites[i].n, todo_sites[i].site);
+    }
     if (probes.total)
         printf("condition probes %d: covered %d, pass %d, fail %d; not covered %d (unported %d, after one %d, upstream threw %d)\n",
                probes.total, probes.covered, probes.pass, probes.fail, probes.total - probes.covered,
