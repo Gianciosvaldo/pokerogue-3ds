@@ -167,6 +167,14 @@ void pr_unshift_common_anim(pr_battle *bt, pr_engine *e, int battler, int target
     pr_phase_unshift(bt, e, ph);
 }
 
+/* unshiftNew("PokemonAnimPhase", key, pokemon): battler = the Pokemon's BattlerIndex */
+void pr_unshift_pokemon_anim(pr_battle *bt, pr_engine *e, int battler, int type)
+{
+    int ph = new_pokemon_phase(e, PH_POKEMON_ANIM, battler);
+    if (ph >= 0) PH(ph)->anim = (uint16_t)type;
+    pr_phase_unshift(bt, e, ph);
+}
+
 static void push_new(pr_battle *bt, pr_engine *e, pr_phase_type t, int battler)
 {
     pr_phase_push(bt, e, new_pokemon_phase(e, t, battler));

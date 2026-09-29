@@ -302,6 +302,7 @@ void pr_arena_conditional_protect(pr_battle *bt, pr_engine *e, int side, const p
 /* phaseManager.unshiftNew(<PokemonPhase type>, battlerIndex) */
 void pr_unshift_new(pr_battle *bt, pr_engine *e, pr_phase_type t, int battler);
 void pr_unshift_common_anim(pr_battle *bt, pr_engine *e, int battler, int target, int anim);   /* CommonAnimPhase */
+void pr_unshift_pokemon_anim(pr_battle *bt, pr_engine *e, int battler, int type);   /* PokemonAnimPhase */
 /* the running phase, when it is a MovePhase (of Pokemon p, unless p is NULL): phase.cancel() */
 void pr_cancel_current_move(pr_engine *e, const pr_pokemon *p);
 /* MagicCoatTag.apply / ReflectStatusMoveAbAttr.apply: `pokemon` sends `move` back with a
