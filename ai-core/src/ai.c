@@ -435,8 +435,8 @@ static int player_field(pr_battle *bt, pr_pokemon *out[2])
     return n;
 }
 
-/* Trainer.getPartyMemberMatchupScores(trainerSlot, forSwitch = true): [party index, score] */
-static int party_member_scores(pr_battle *bt, pr_ai *ai, int trainer_slot, ai_scored out[PR_MAX_PARTY])
+/* Trainer.getPartyMemberMatchupScores(trainerSlot, forSwitch): [party index, score] */
+static int party_member_scores(pr_battle *bt, pr_ai *ai, int trainer_slot, bool for_switch, ai_scored out[PR_MAX_PARTY])
 {
     if (trainer_slot && !ai->trainer->is_double) trainer_slot = TRAINER_SLOT_NONE;
     if (!bt->n_party[1]) { pr_note_unported(bt, PR_FEAT_PARTY); return 0; }
@@ -454,7 +454,7 @@ static int party_member_scores(pr_battle *bt, pr_ai *ai, int trainer_slot, ai_sc
                 if (pr_pokemon_species(pf[i])->rarity & 2) score /= 2;   /* species.legendary */
             }
             score /= npf;
-            if (!ai_is_on_field(q))
+            if (for_switch && !ai_is_on_field(q))
                 for (int i = 0; i < bt->n_arena_tags; i++) {
                     const pr_arena_tag *t = &bt->arena_tags[i];
                     if (pr_arena_tag_is(t->type, PR_ARENACLASS_ENTRY_HAZARD) && pr_arena_tag_on_side(t, ARENA_TAG_SIDE_ENEMY))
@@ -483,7 +483,25 @@ static int next_summon_index(pr_battle *bt, pr_ai *ai, const ai_scored *scores, 
         pr_rng_sow(&r, &s);
         return best[pr_rng_seed_int(&r, nb, 0)];
     }
-    return nb ? best[0] : PR_CURSOR_UNDEFINED;
+    return nb ? best[0] : -1;
+}
+
+int pr_ai_next_summon_index(pr_battle *bt, pr_ai *ai, int trainer_slot)
+{
+    if (!ai->trainer) return -1;
+    ai_scored scores[PR_MAX_PARTY];
+    int n = party_member_scores(bt, ai, trainer_slot, false, scores);
+    return n ? next_summon_index(bt, ai, scores, n) : -1;
+}
+
+int pr_ai_party_matchup_scores(pr_battle *bt, pr_ai *ai, int trainer_slot, bool for_switch,
+                               int slots[PR_MAX_PARTY], double scores[PR_MAX_PARTY])
+{
+    if (!ai->trainer) return 0;
+    ai_scored sc[PR_MAX_PARTY];
+    int n = party_member_scores(bt, ai, trainer_slot, for_switch, sc);
+    for (int i = 0; i < n; i++) slots[i] = sc[i].idx, scores[i] = sc[i].key;
+    return n;
 }
 
 /* ---- targets and moves ---- */
@@ -576,6 +594,7 @@ static bool move_can_ko(pr_battle *bt, pr_ai *ai, pr_pokemon *p, int move)
 pr_turn_move pr_ai_get_next_move(pr_battle *bt, pr_ai *ai, pr_pokemon *p)
 {
     int8_t tg[4];
+    ai->n_move_scores = 0;
     /* a queued move: the first one that was called indirectly or is still in the moveset (upstream
      * tests isUsable()'s [usable, text] tuple, which is always truthy) */
     for (int i = 0; i < p->n_move_queue; i++) {
@@ -662,6 +681,8 @@ pr_turn_move pr_ai_get_next_move(pr_battle *bt, pr_ai *ai, pr_pokemon *p)
                 }
                 scores[k] = (ai_scored){0 + best, k};
             }
+            for (int k = 0; k < n; k++) ai->move_scores[k] = scores[k].key;
+            ai->n_move_scores = (uint8_t)n;
             ai_scored sorted[4];
             memcpy(sorted, scores, sizeof(ai_scored) * (size_t)n);
             v8_sort(sorted, n);
@@ -724,7 +745,7 @@ void pr_ai_enemy_command(pr_battle *bt, pr_ai *ai, int field_index)
      * trainer), less eagerly right after a switch */
     if (ai->trainer && p->n_move_queue == 0 && !pr_ai_is_trapped(bt, ai, p)) {
         ai_scored scores[PR_MAX_PARTY];
-        int n = party_member_scores(bt, ai, trainer_slot_of(ai, p), scores);
+        int n = party_member_scores(bt, ai, trainer_slot_of(ai, p), true, scores);
         if (n > 0) {
             double sum = 0;
             int n_opp = 0;
