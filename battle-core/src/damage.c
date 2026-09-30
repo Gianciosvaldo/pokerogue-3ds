@@ -82,7 +82,7 @@ double pr_get_attack_type_effectiveness_opts(pr_battle *bt, const pr_pokemon *de
     if (!ignore_strong_winds && bt->weather == WEATHER_TYPE_STRONG_WINDS && !pr_weather_effect_suppressed(bt)
         && pr_is_of_type(def, POKEMON_TYPE_FLYING) && type_mult(move_type, POKEMON_TYPE_FLYING) == 2) {
         multi /= 2;
-        if (!simulated && bt->engine) pr_queue_message(bt, bt->engine); /* strongWindsEffectMessage */
+        if (!simulated && bt->engine) pr_queue_msg(bt, bt->engine, pr_msg0("weather:strongWindsEffectMessage"));
     }
     return multi;
 }

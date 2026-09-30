@@ -318,7 +318,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         double hp = floor(pr_get_stat(user, STAT_HP, false) / 2.0);
         pr_positional_tag pt = {.type = POSITIONAL_TAG_TYPE_WISH, .turn_count = 2,
                                 .target_index = (int8_t)pr_battler_index(bt, target), .source_id = -1,
-                                .heal_hp = hp < 1 ? 1 : hp};
+                                .heal_hp = hp < 1 ? 1 : hp, .pokemon_name = pr_arg_pokemon(bt, "", user).v};
         pr_pos_add(bt, e, &pt);
         return;
     }

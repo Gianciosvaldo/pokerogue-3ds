@@ -145,6 +145,7 @@ typedef struct pr_positional_tag {
     int64_t source_id;             /* DelayedAttackTag.sourceId */
     uint16_t source_move;          /* DelayedAttackTag.sourceMove */
     double heal_hp;                /* WishTag.healHp */
+    uint32_t pokemon_name;         /* WishTag.pokemonName: its user as a message names it (pr_msg_pokemon) */
 } pr_positional_tag;
 #define PR_MAX_POSITIONAL_TAGS 8
 

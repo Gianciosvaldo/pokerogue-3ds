@@ -66,20 +66,80 @@ static bool construct(int type, int turn_count, int source_move, int64_t source_
     return true;
 }
 
-/* onAddMessageKey / onRemoveMessageKey: the ones that are "" */
-static bool has_add_message(int type)
+/* key + i18nSideKey: "Player", "Enemy", or nothing for BOTH */
+#define SIDED(side, key) \
+    ((side) == ARENA_TAG_SIDE_PLAYER ? key "Player" : (side) == ARENA_TAG_SIDE_ENEMY ? key "Enemy" : key)
+
+/* onAddMessageKey ("" = no message) */
+static const char *add_message_key(const pr_arena_tag *t)
 {
-    return type != ARENA_TAG_TYPE_NEUTRALIZING_GAS && type != ARENA_TAG_TYPE_PENDING_HEAL && type != ARENA_TAG_TYPE_NONE;
-}
-static bool has_remove_message(int type)
-{
-    switch (type) {
-    case ARENA_TAG_TYPE_QUICK_GUARD: case ARENA_TAG_TYPE_WIDE_GUARD: case ARENA_TAG_TYPE_MAT_BLOCK:
-    case ARENA_TAG_TYPE_CRAFTY_SHIELD: case ARENA_TAG_TYPE_ION_DELUGE: case ARENA_TAG_TYPE_FAIRY_LOCK:
-    case ARENA_TAG_TYPE_IMPRISON: case ARENA_TAG_TYPE_PENDING_HEAL: case ARENA_TAG_TYPE_NONE:
-        return false;
+    int s = t->side;
+    switch (t->type) {
+    case ARENA_TAG_TYPE_MIST: return SIDED(s, "arenaTag:mistOnAdd");
+    case ARENA_TAG_TYPE_QUICK_GUARD: case ARENA_TAG_TYPE_WIDE_GUARD: case ARENA_TAG_TYPE_CRAFTY_SHIELD:
+        return SIDED(s, "arenaTag:conditionalProtectOnAdd");
+    case ARENA_TAG_TYPE_MAT_BLOCK: return "arenaTag:matBlockOnAdd";
+    case ARENA_TAG_TYPE_NO_CRIT: return SIDED(s, "arenaTag:noCritOnAdd");
+    case ARENA_TAG_TYPE_MUD_SPORT: return "arenaTag:mudSportOnAdd";
+    case ARENA_TAG_TYPE_WATER_SPORT: return "arenaTag:waterSportOnAdd";
+    case ARENA_TAG_TYPE_ION_DELUGE: return "arenaTag:plasmaFistsOnAdd";
+    case ARENA_TAG_TYPE_SPIKES: return SIDED(s, "arenaTag:spikesOnAdd");
+    case ARENA_TAG_TYPE_TOXIC_SPIKES: return SIDED(s, "arenaTag:toxicSpikesOnAdd");
+    case ARENA_TAG_TYPE_STEALTH_ROCK: return SIDED(s, "arenaTag:stealthRockOnAdd");
+    case ARENA_TAG_TYPE_STICKY_WEB: return SIDED(s, "arenaTag:stickyWebOnAdd");
+    case ARENA_TAG_TYPE_IMPRISON: return "battlerTags:imprisonOnAdd";
+    case ARENA_TAG_TYPE_TRICK_ROOM: return "arenaTag:trickRoomOnAdd";
+    case ARENA_TAG_TYPE_GRAVITY: return "arenaTag:gravityOnAdd";
+    case ARENA_TAG_TYPE_REFLECT: return SIDED(s, "arenaTag:reflectOnAdd");
+    case ARENA_TAG_TYPE_LIGHT_SCREEN: return SIDED(s, "arenaTag:lightScreenOnAdd");
+    case ARENA_TAG_TYPE_AURORA_VEIL: return SIDED(s, "arenaTag:auroraVeilOnAdd");
+    case ARENA_TAG_TYPE_TAILWIND: return SIDED(s, "arenaTag:tailwindOnAdd");
+    case ARENA_TAG_TYPE_HAPPY_HOUR: return "arenaTag:happyHourOnAdd";
+    case ARENA_TAG_TYPE_SAFEGUARD: return SIDED(s, "arenaTag:safeguardOnAdd");
+    case ARENA_TAG_TYPE_FIRE_GRASS_PLEDGE: return SIDED(s, "arenaTag:fireGrassPledgeOnAdd");
+    case ARENA_TAG_TYPE_WATER_FIRE_PLEDGE: return SIDED(s, "arenaTag:waterFirePledgeOnAdd");
+    case ARENA_TAG_TYPE_GRASS_WATER_PLEDGE: return SIDED(s, "arenaTag:grassWaterPledgeOnAdd");
+    case ARENA_TAG_TYPE_FAIRY_LOCK: return SIDED(s, "arenaTag:fairyLockOnAdd");
     }
-    return true;
+    return "";                                           /* Neutralizing Gas, pending heals, NONE */
+}
+
+/* onRemoveMessageKey ("" = no message) */
+static const char *remove_message_key(const pr_arena_tag *t)
+{
+    int s = t->side;
+    switch (t->type) {
+    case ARENA_TAG_TYPE_MIST: return SIDED(s, "arenaTag:mistOnRemove");
+    case ARENA_TAG_TYPE_NO_CRIT: return SIDED(s, "arenaTag:noCritOnRemove");
+    case ARENA_TAG_TYPE_MUD_SPORT: return "arenaTag:mudSportOnRemove";
+    case ARENA_TAG_TYPE_WATER_SPORT: return "arenaTag:waterSportOnRemove";
+    case ARENA_TAG_TYPE_SPIKES: return SIDED(s, "arenaTag:spikesOnRemove");
+    case ARENA_TAG_TYPE_TOXIC_SPIKES: return SIDED(s, "arenaTag:toxicSpikesOnRemove");
+    case ARENA_TAG_TYPE_STEALTH_ROCK: return SIDED(s, "arenaTag:stealthRockOnRemove");
+    case ARENA_TAG_TYPE_STICKY_WEB: return SIDED(s, "arenaTag:stickyWebOnRemove");
+    case ARENA_TAG_TYPE_TRICK_ROOM: return "arenaTag:trickRoomOnRemove";
+    case ARENA_TAG_TYPE_GRAVITY: return "arenaTag:gravityOnRemove";
+    case ARENA_TAG_TYPE_REFLECT: return SIDED(s, "arenaTag:reflectOnRemove");
+    case ARENA_TAG_TYPE_LIGHT_SCREEN: return SIDED(s, "arenaTag:lightScreenOnRemove");
+    case ARENA_TAG_TYPE_AURORA_VEIL: return SIDED(s, "arenaTag:auroraVeilOnRemove");
+    case ARENA_TAG_TYPE_TAILWIND: return SIDED(s, "arenaTag:tailwindOnRemove");
+    case ARENA_TAG_TYPE_HAPPY_HOUR: return "arenaTag:happyHourOnRemove";
+    case ARENA_TAG_TYPE_SAFEGUARD: return SIDED(s, "arenaTag:safeguardOnRemove");
+    case ARENA_TAG_TYPE_FIRE_GRASS_PLEDGE: return SIDED(s, "arenaTag:fireGrassPledgeOnRemove");
+    case ARENA_TAG_TYPE_WATER_FIRE_PLEDGE: return SIDED(s, "arenaTag:waterFirePledgeOnRemove");
+    case ARENA_TAG_TYPE_GRASS_WATER_PLEDGE: return SIDED(s, "arenaTag:grassWaterPledgeOnRemove");
+    case ARENA_TAG_TYPE_NEUTRALIZING_GAS: return "arenaTag:neutralizingGasOnRemove";
+    }
+    return "";   /* Quick Guard, Wide Guard, Mat Block, Crafty Shield, Ion Deluge, Fairy Lock, Imprison, pending heals */
+}
+#undef SIDED
+
+/* ArenaTag.onAdd / onRemove's message: i18next.t(key, {pokemonNameWithAffix: the source Pokemon
+ * (getPokemonById, "MissingNo." when none), moveName: getMoveName() (null when no sourceMove)}) */
+static void queue_tag_message(pr_battle *bt, pr_engine *e, const pr_arena_tag *t, const char *key)
+{
+    pr_queue_msg(bt, e, pr_msg2(key, pr_arg_pokemon(bt, "pokemonNameWithAffix", pr_pokemon_by_id(bt, t->source_id)),
+                                pr_arg_move("moveName", t->source_move)));
 }
 
 /* GravityTag.onAdd after the message: for each active Pokemon in speed order, the ones in the air
@@ -96,7 +156,7 @@ static void gravity_on_add(pr_battle *bt, pr_engine *e)
             pr_remove_tag(bt, e, p, BATTLER_TAG_TYPE_FLYING);
             pr_add_tag(bt, e, p, BATTLER_TAG_TYPE_INTERRUPTED, 0, 0, -1);
         }
-        if (was_airborne) pr_queue_message(bt, e);       /* gravityGroundsPokemon */
+        if (was_airborne) pr_queue_msg(bt, e, pr_msg_p(bt, "arenaTag:gravityGroundsPokemon", p));
     }
 }
 
@@ -114,7 +174,8 @@ static void tailwind_on_add(pr_battle *bt, pr_engine *e, const pr_arena_tag *t)
     for (pr_pokemon *p; (p = pr_speed_iter_next(bt, &it));) {
         if (pr_has_ability_active(bt, p, ABILITY_ID_WIND_POWER) && !pr_get_battler_tag(p, BATTLER_TAG_TYPE_CHARGED)) {
             pr_add_tag(bt, e, p, BATTLER_TAG_TYPE_CHARGED, 0, 0, -1);
-            pr_queue_message(bt, e);                      /* windPowerCharged */
+            pr_queue_msg(bt, e, pr_msg2("abilityTriggers:windPowerCharged", pr_arg_pokemon(bt, "pokemonName", p),
+                                        pr_arg_move("moveName", t->source_move)));
         }
         if (pr_has_ability_active(bt, p, ABILITY_ID_WIND_RIDER)) {
             pr_queue_ability_display(bt, e, p, false, true);
@@ -134,7 +195,8 @@ static void on_add(pr_battle *bt, pr_engine *e, const pr_arena_tag *t, bool quie
         note(bt);
         return;
     }
-    if (!quiet && has_add_message(t->type)) pr_queue_message(bt, e);
+    const char *key = add_message_key(t);
+    if (!quiet && *key) queue_tag_message(bt, e, t, key);
     if (t->type == ARENA_TAG_TYPE_GRAVITY) gravity_on_add(bt, e);
     else if (t->type == ARENA_TAG_TYPE_TAILWIND) tailwind_on_add(bt, e, t);
 }
@@ -146,7 +208,8 @@ static void on_remove(pr_battle *bt, pr_engine *e, const pr_arena_tag *t, bool q
         note(bt);                                        /* abilities regained, IMPRISON tags removed */
         return;
     }
-    if (!quiet && has_remove_message(t->type)) pr_queue_message(bt, e);
+    const char *key = remove_message_key(t);
+    if (!quiet && *key) queue_tag_message(bt, e, t, key);
 }
 
 static void splice(pr_battle *bt, int i)
@@ -237,8 +300,9 @@ static void sea_of_fire(pr_battle *bt, pr_engine *e, int side)
     pr_speed_iter_init(bt, &it, side);
     for (pr_pokemon *p; (p = pr_speed_iter_next(bt, &it));) {
         if (pr_is_of_type(p, POKEMON_TYPE_FIRE) || p->switch_out_status) continue;
-        pr_queue_message(bt, e);                          /* fireGrassPledgeLapse */
-        pr_unshift_new(bt, e, PH_COMMON_ANIM, pr_battler_index(bt, p));   /* CommonAnim.MAGMA_STORM */
+        pr_queue_msg(bt, e, pr_msg_p(bt, "arenaTag:fireGrassPledgeLapse", p));
+        int b = pr_battler_index(bt, p);
+        pr_unshift_common_anim(bt, e, b, b, COMMON_ANIM_MAGMA_STORM);
         double damage = floor(pr_get_stat(p, STAT_HP, false) / 8.0);
         pr_damage_and_update(bt, e, p, damage < 1 ? 1 : damage, HIT_RESULT_INDIRECT, false, NULL);
     }
@@ -305,7 +369,11 @@ void pr_arena_conditional_protect(pr_battle *bt, pr_engine *e, int side, const p
         if (!pr_arena_tag_is(t->type, PR_ARENACLASS_CONDITIONAL_PROTECT) || !pr_arena_tag_on_side(t, side)) continue;
         if (!can_affect(bt, t, defender) || !conditional_protects(bt, e, t->type, move) || *is_protected) continue;
         *is_protected = true;
-        pr_queue_message(bt, e);                          /* conditionalProtectApply / matBlockApply */
+        /* (the CommonAnim.PROTECT it plays first is not a phase) */
+        pr_queue_msg(bt, e, pr_msg3(t->type == ARENA_TAG_TYPE_MAT_BLOCK ? "arenaTag:matBlockApply"
+                                                                        : "arenaTag:conditionalProtectApply",
+                                    pr_arg_pokemon(bt, "pokemonNameWithAffix", defender),
+                                    pr_arg_move("moveName", t->source_move), pr_arg_move("attackName", move)));
         *bypass = *bypass || t->type == ARENA_TAG_TYPE_CRAFTY_SHIELD;   /* ignoresBypass */
     }
 }

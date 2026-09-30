@@ -149,7 +149,9 @@ int pr_call_move_get(pr_battle *bt, pr_engine *e, int move, const pr_attr *a, co
     case PR_AC_NaturePowerAttr: {
         if (!bt->has_biome) pr_note_unported(bt, PR_FEAT_WAVE);
         int id = nature_power_move(bt->terrain, bt->biome);
-        if (e) pr_queue_message(bt, e);                    /* moveTriggers:naturePowerUse */
+        if (e)
+            pr_queue_msg(bt, e, pr_msg2("moveTriggers:naturePowerUse", pr_arg_pokemon(bt, "pokemonName", user),
+                                        pr_arg_move("moveName", id)));
         return id;
     }
     case PR_AC_CopyMoveAttr: {

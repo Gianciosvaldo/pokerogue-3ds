@@ -4,6 +4,7 @@
  * reports itself unported instead of guessing. */
 #include "pr/battle.h"
 #include "pr/engine.h"
+#include <string.h>
 
 #define UNPORTED(id) do { pr_note_unported(bt, (id)); return 1; } while (0)
 #define ARGS pr_battle *bt, const pr_closure_info *self, const pr_pokemon *u, const pr_pokemon *t, int m
@@ -384,7 +385,9 @@ static double both_sides(ARGS)
 static double type_removed_message(ARGS)
 {
     if (!bt->engine) UNPORTED(PR_FEAT_ENGINE_LIMIT);
-    pr_queue_message(bt, bt->engine);
+    (void)t; (void)m;
+    const char *key = !strcmp(self->owner, "move:682") ? "moveTriggers:burnedItselfOut" : "moveTriggers:usedUpAllElectricity";
+    pr_queue_msg(bt, bt->engine, pr_msg1(key, pr_arg_pokemon(bt, "pokemonName", u)));
     return 0;
 }
 

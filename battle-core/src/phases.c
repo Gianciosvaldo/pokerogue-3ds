@@ -1198,6 +1198,29 @@ static void move_phase(pr_battle *bt, pr_engine *e, int ph)
 
 /* ---------------------------------------------------------------- MoveChargePhase */
 
+/* ChargingMove: chargeAnim (ChargeAnim[`${MoveId}_CHARGING`]) and the chargeText key; showChargeText
+ * fills {USER} and {TARGET} with getPokemonNameWithAffix */
+static const struct { uint16_t move; uint16_t anim; const char *key; } charge_texts[] = {
+    {MOVE_ID_RAZOR_WIND, CHARGE_ANIM_RAZOR_WIND_CHARGING, "moveTriggers:whippedUpAWhirlwind"},
+    {MOVE_ID_FLY, CHARGE_ANIM_FLY_CHARGING, "moveTriggers:flewUpHigh"},
+    {MOVE_ID_SOLAR_BEAM, CHARGE_ANIM_SOLAR_BEAM_CHARGING, "moveTriggers:tookInSunlight"},
+    {MOVE_ID_DIG, CHARGE_ANIM_DIG_CHARGING, "moveTriggers:dugAHole"},
+    {MOVE_ID_SKULL_BASH, CHARGE_ANIM_SKULL_BASH_CHARGING, "moveTriggers:loweredItsHead"},
+    {MOVE_ID_SKY_ATTACK, CHARGE_ANIM_SKY_ATTACK_CHARGING, "moveTriggers:isGlowing"},
+    {MOVE_ID_DIVE, CHARGE_ANIM_DIVE_CHARGING, "moveTriggers:hidUnderwater"},
+    {MOVE_ID_BOUNCE, CHARGE_ANIM_BOUNCE_CHARGING, "moveTriggers:sprangUp"},
+    {MOVE_ID_SHADOW_FORCE, CHARGE_ANIM_SHADOW_FORCE_CHARGING, "moveTriggers:vanishedInstantly"},
+    {MOVE_ID_SKY_DROP, CHARGE_ANIM_SKY_DROP_CHARGING, "moveTriggers:tookTargetIntoSky"},
+    {MOVE_ID_FREEZE_SHOCK, CHARGE_ANIM_FREEZE_SHOCK_CHARGING, "moveTriggers:becameCloakedInFreezingLight"},
+    {MOVE_ID_ICE_BURN, CHARGE_ANIM_ICE_BURN_CHARGING, "moveTriggers:becameCloakedInFreezingAir"},
+    {MOVE_ID_PHANTOM_FORCE, CHARGE_ANIM_PHANTOM_FORCE_CHARGING, "moveTriggers:vanishedInstantly"},
+    {MOVE_ID_GEOMANCY, CHARGE_ANIM_GEOMANCY_CHARGING, "moveTriggers:isChargingPower"},
+    {MOVE_ID_SOLAR_BLADE, CHARGE_ANIM_SOLAR_BLADE_CHARGING, "moveTriggers:isGlowing"},
+    {MOVE_ID_METEOR_BEAM, CHARGE_ANIM_METEOR_BEAM_CHARGING, "moveTriggers:isOverflowingWithSpacePower"},
+    {MOVE_ID_ELECTRO_SHOT, CHARGE_ANIM_ELECTRO_SHOT_CHARGING, "moveTriggers:absorbedElectricity"},
+};
+
+
 /* The charging turn of a two-turn move (Fly, Solar Beam...): the charge text, the move's charge
  * effects (semi-invulnerability, a stat raise), the CHARGING tag; then either the move runs at
  * once (Solar Beam in sun) or waits in the move queue for next turn. */
@@ -1214,7 +1237,14 @@ static void move_charge_phase(pr_battle *bt, pr_engine *e, int ph)
 
     /* the charge animation's callback: showChargeText, applyMoveChargeAttrs("MoveEffectAttr"),
      * addTag(CHARGING, 1, move.id, user.id) */
-    pr_queue_message(bt, e);
+    pr_msg text = pr_msg0(NULL);
+    for (size_t i = 0; i < sizeof charge_texts / sizeof charge_texts[0]; i++) {
+        if (charge_texts[i].move != move) continue;
+        pr_event_add(bt, e, PR_EV_CHARGE_ANIM, c->battler, c->charge_target, charge_texts[i].anim, 0, NULL);
+        text = pr_msg2(charge_texts[i].key, pr_arg_pokemon(bt, "pokemonName", user),
+                       pr_arg_pokemon(bt, "targetName", target));
+    }
+    pr_queue_msg(bt, e, text);
     for (unsigned i = 0; i < mv->ncattr; i++)
         if (pr_attr_is(pr_attrs[mv->cattr0 + i].cls, PR_AC_MoveEffectAttr))
             pr_apply_move_effect(bt, e, ph, mv->cattr0 + i, user, target);
@@ -1543,7 +1573,7 @@ static void miss_effects(pr_battle *bt, pr_engine *e, pr_pokemon *user, int move
         if (cancelled) continue;
         double d = to_dmg_value(max_hp(user) / 2.0);
         damage_and_update(bt, e, user, d, HIT_RESULT_INDIRECT, false, NULL, false);
-        pr_queue_message(bt, e);                               /* moveTriggers:keptGoingAndCrashed */
+        pr_queue_msg(bt, e, pr_msg1("moveTriggers:keptGoingAndCrashed", pr_arg_pokemon(bt, "pokemonName", user)));
         user->damage_taken += (int32_t)d;
     }
 }
@@ -1704,7 +1734,7 @@ static void move_effect_end(pr_battle *bt, pr_engine *e, int ph)
         return;
     }
     int total = user->hit_count - (user->hits_left > 0 ? user->hits_left : 0);
-    if (total > 1 || user->hits_left > 0) pr_queue_message(bt, e);
+    if (total > 1 || user->hits_left > 0) pr_queue_msg(bt, e, pr_msg1("battle:attackHitsCount", pr_arg_int("count", total)));
     turn_modifiers(bt, me_player(fx), user);                    /* HitHealModifier (Shell Bell) */
     pr_pokemon *t[4];
     int n = active_in_list(bt, tlist(e, fx->targets), t);
@@ -1772,8 +1802,8 @@ static void move_header_phase(pr_battle *bt, pr_engine *e, int ph)
         const pr_attr *a = &pr_attrs[mv->attr0 + i];
         if (!pr_attr_is(a->cls, PR_AC_MoveHeaderAttr)) continue;
         switch (a->cls) {
-        case PR_AC_MessageHeaderAttr:                                /* its message is never empty */
-            pr_queue_message(bt, e);
+        case PR_AC_MessageHeaderAttr:                                /* Focus Punch's, the only one */
+            pr_queue_msg(bt, e, pr_msg1("moveTriggers:isTighteningFocus", pr_arg_pokemon(bt, "pokemonName", p)));
             break;
         case PR_AC_AddBattlerTagHeaderAttr:
             pr_add_tag(bt, e, p, ((const pr_attr_AddBattlerTagHeaderAttr *)a->p)->tagType, 0, 0, -1);
@@ -1814,8 +1844,14 @@ static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
             me_first_target(bt, e, ph, &tgt);
             if (!tgt) { pr_note_unported(bt, a->cls); break; }        /* upstream reads a missing target */
             int tb = pr_battler_index(bt, tgt);
-            unshift_new(bt, e, PH_MOVE_ANIM, -1);
-            pr_queue_message(bt, e);
+            {
+                /* MoveAnimPhase(new MoveChargeAnim(chargeAnim, move.id, user)), then chargeKey */
+                const pr_attr_DelayedAttackAttr *x = (const pr_attr_DelayedAttackAttr *)a->p;
+                int an = new_pokemon_phase(e, PH_MOVE_ANIM, pr_battler_index(bt, user));
+                if (an >= 0) { PH(an)->anim = (uint16_t)x->chargeAnim; PH(an)->anim_target = -1; }
+                pr_phase_unshift(bt, e, an);
+                pr_queue_msg(bt, e, pr_msg1(x->chargeKey, pr_arg_pokemon(bt, "pokemonName", user)));
+            }
             if (is_on_field(user)) {                                    /* pushMoveHistory */
                 pr_turn_move tm;
                 memset(&tm, 0, sizeof tm);
@@ -1843,7 +1879,7 @@ static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
              * MovePhase of a Pokemon on the user's side (getMovePhase), when it holds a different
              * pledge, makes this one wait for it: only with an ally, which a single battle lacks */
             if (user->combining_pledge) {
-                pr_queue_message(bt, e);                         /* moveTriggers:combiningPledge */
+                pr_queue_msg(bt, e, pr_msg0("moveTriggers:combiningPledge"));
                 break;
             }
             const pr_phase *mine = pr_find_move_phase(e, -1, user->is_player ? 1 : 0);
@@ -2313,7 +2349,8 @@ static void positional_tag_phase(pr_battle *bt, pr_engine *e)
                 continue;
             }
             if (!target || source == target || target->hp <= 0) continue;
-            pr_queue_message(bt, e);                                   /* moveTriggers:tookMoveAttack */
+            pr_queue_msg(bt, e, pr_msg2("moveTriggers:tookMoveAttack", pr_arg_pokemon(bt, "pokemonName", target),
+                                        pr_arg_move("moveName", t->source_move)));
             int fx = new_pokemon_phase(e, PH_MOVE_EFFECT, -1);
             if (fx < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); continue; }
             PH(fx)->user_id = t->source_id;
@@ -2327,7 +2364,9 @@ static void positional_tag_phase(pr_battle *bt, pr_engine *e)
             pr_phase_unshift(bt, e, fx);
         } else {
             if (!target || target->hp <= 0) continue;
-            pr_unshift_heal(bt, e, t->target_index, t->heal_hp, PR_HEAL_MESSAGE | PR_HEAL_NO_FULL_HP_MESSAGE);
+            pr_msg_arg name = {"pokemonNameWithAffix", PR_ARG_POKEMON, t->pokemon_name, NULL};
+            pr_unshift_heal_msg(bt, e, t->target_index, t->heal_hp, PR_HEAL_MESSAGE | PR_HEAL_NO_FULL_HP_MESSAGE,
+                                pr_msg1("arenaTag:wishTagOnAdd", name));
         }
     }
     memcpy(bt->pos_tags, left, (size_t)nl * sizeof left[0]);
@@ -2374,7 +2413,7 @@ static void post_turn_status_effect_phase(pr_battle *bt, pr_engine *e, int ph)
     pr_apply_ab_attrs(bt, PR_AC_BlockNonDirectDamageAbAttr, &pp);   /* Magic Guard */
     pr_apply_ab_attrs(bt, PR_AC_BlockStatusDamageAbAttr, &pp);      /* Poison Heal */
     if (!cancelled) {
-        pr_queue_message(bt, e);
+        pr_queue_msg(bt, e, pr_status_msg(bt, p->status, PR_ST_ACTIVATION, p));
         double damage = 0;
         int32_t mhp = max_hp(p);
         switch (p->status) {
@@ -2388,9 +2427,13 @@ static void post_turn_status_effect_phase(pr_battle *bt, pr_engine *e, int ph)
         }
         }
         if (damage) {
+            int32_t before = p->hp;
             pokemon_damage(bt, e, p, damage, true, false);       /* damage(damage, false, preventEndure) */
+            pr_event_add(bt, e, PR_EV_HP, PH(ph)->battler, -1, 0, p->hp - before, NULL);   /* the damage number */
             pr_post_damage_ab(bt, p, damage, NULL);              /* the damage asked for, not the HP lost */
         }
+        /* CommonAnim.POISON + (effect - 1), then end() */
+        pr_event_add(bt, e, PR_EV_COMMON_ANIM, PH(ph)->battler, -1, COMMON_ANIM_POISON + (p->status - 1), 0, NULL);
     }
     if (bt->wave_index == 200) pr_note_unported(bt, PR_FEAT_FINAL_BOSS);
 }
@@ -2421,8 +2464,8 @@ bool pr_try_set_weather(pr_battle *bt, pr_engine *e, int weather, const pr_pokem
 {
     if (bt->weather == weather) return false;                 /* canSetWeather */
     if (pr_weather_immutable(bt->weather) && !pr_weather_immutable(weather) && weather != WEATHER_TYPE_NONE) {
-        unshift_new(bt, e, PH_COMMON_ANIM, default_battler(bt));  /* getWeatherAnim(oldWeatherType) */
-        pr_queue_message(bt, e);                              /* getLegendaryWeatherContinuesMessage */
+        pr_unshift_common_anim(bt, e, default_battler(bt), -1, COMMON_ANIM_SUNNY + (bt->weather - 1));
+        pr_queue_msg(bt, e, pr_msg0(pr_weather_key(bt->weather, PR_WEATHER_CONTINUE)));
         return false;
     }
     int32_t duration = 0;
@@ -2430,15 +2473,16 @@ bool pr_try_set_weather(pr_battle *bt, pr_engine *e, int weather, const pr_pokem
         duration = 5;
         pr_apply_field_effect_modifier(bt, user, &duration);
     }
+    int old = bt->weather;
     bt->weather = weather;
     if (weather == WEATHER_TYPE_NONE) {
         bt->weather_turns_left = bt->weather_max_duration = 0;
-        pr_queue_message(bt, e);                              /* getWeatherClearMessage(oldWeatherType) */
+        pr_queue_msg(bt, e, pr_msg0(pr_weather_key(old, PR_WEATHER_CLEAR)));
     } else {
         /* new Weather(weather, duration, duration): a primal weather keeps no count */
         bt->weather_turns_left = bt->weather_max_duration = pr_weather_immutable(weather) ? 0 : duration;
-        unshift_new(bt, e, PH_COMMON_ANIM, default_battler(bt));  /* getWeatherAnim(weather) */
-        pr_queue_message(bt, e);                              /* getWeatherStartMessage */
+        pr_unshift_common_anim(bt, e, default_battler(bt), -1, COMMON_ANIM_SUNNY + (weather - 1));
+        pr_queue_msg(bt, e, pr_msg0(pr_weather_key(weather, PR_WEATHER_START)));
     }
     pr_speed_iter it;
     pr_pokemon *p;
@@ -2462,11 +2506,13 @@ bool pr_try_set_terrain(pr_battle *bt, pr_engine *e, int terrain, bool ignore_an
         duration = 5;
         pr_apply_field_effect_modifier(bt, user, &duration);
     }
+    int old = bt->terrain;
     bt->terrain = terrain;
     bt->terrain_turns_left = bt->terrain_max_duration = terrain == TERRAIN_NONE ? 0 : duration;
     if (terrain != TERRAIN_NONE && !ignore_anim)
-        unshift_new(bt, e, PH_COMMON_ANIM, default_battler(bt));  /* getTerrainAnim(terrain) */
-    pr_queue_message(bt, e);                                  /* getTerrainStartMessage / getTerrainClearMessage */
+        pr_unshift_common_anim(bt, e, default_battler(bt), -1, COMMON_ANIM_MISTY_TERRAIN + (terrain - 1));
+    pr_queue_msg(bt, e, pr_msg0(terrain == TERRAIN_NONE ? pr_terrain_key(old, PR_TERRAIN_CLEAR)
+                                                        : pr_terrain_key(terrain, PR_TERRAIN_START)));
     pr_speed_iter it;
     pr_pokemon *p;
     pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
@@ -2504,7 +2550,8 @@ static void turn_end_phase(pr_battle *bt, pr_engine *e)
             turn_modifiers(bt, p->is_player, p);          /* TurnHealModifier (Leftovers) */
             /* Grassy Terrain heals a grounded Pokemon by 1/16 of its max HP, with a message */
             if (bt->terrain == TERRAIN_GRASSY && pr_is_grounded(bt, p, false))
-                pr_unshift_heal(bt, e, pr_battler_index(bt, p), to_dmg_value(max_hp(p) / 16.0), PR_HEAL_MESSAGE);
+                pr_unshift_heal_msg(bt, e, pr_battler_index(bt, p), to_dmg_value(max_hp(p) / 16.0), PR_HEAL_MESSAGE,
+                                    pr_msg1("battle:turnEndHpRestore", pr_arg_pokemon(bt, "pokemonName", p)));
             if (!p->is_player) turn_modifiers(bt, false, p);
             pr_ab_params pt = {.pokemon = p, .move = -1};
             pr_apply_ab_attrs(bt, PR_AC_PostTurnAbAttr, &pt);
@@ -2791,13 +2838,21 @@ static void reset_status_phase(pr_battle *bt, pr_engine *e, int ph)
 
 /* ---------------------------------------------------------------- PokemonHealPhase */
 
-void pr_unshift_heal(pr_battle *bt, pr_engine *e, int battler, double hp, unsigned flags)
+void pr_unshift_heal_msg(pr_battle *bt, pr_engine *e, int battler, double hp, unsigned flags, pr_msg msg)
 {
     int ph = new_pokemon_phase(e, PH_POKEMON_HEAL, battler);
     if (ph < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); e->overflow = true; return; }
     PH(ph)->heal_hp = hp;
     PH(ph)->heal_flags = (uint8_t)flags;
+    PH(ph)->msg = msg;
     pr_phase_unshift(bt, e, ph);
+}
+
+void pr_unshift_heal_at(pr_battle *bt, pr_engine *e, int battler, double hp, unsigned flags, const char *site)
+{
+    pr_msg m = pr_msg0(NULL);
+    m.args[0].s = site;
+    pr_unshift_heal_msg(bt, e, battler, hp, flags, m);
 }
 
 /* start() plays the HEALTH_UP animation (CommonAnimPhase) unless skipAnim or at full HP; either
@@ -2808,14 +2863,21 @@ static void pokemon_heal_phase(pr_battle *bt, pr_engine *e, int ph)
     pr_pokemon *p = slot(bt, h->battler);
     unsigned f = h->heal_flags;
     bool message = f & PR_HEAL_MESSAGE;
+    pr_msg text = h->msg;
+    /* start(): CommonAnimPhase plays HEALTH_UP unless skipAnim or at full HP */
+    if (p && !(f & PR_HEAL_SKIP_ANIM) && p->hp < max_hp(p))
+        pr_event_add(bt, e, PR_EV_COMMON_ANIM, h->battler, -1, COMMON_ANIM_HEALTH_UP, 0, NULL);
     if (!p || (!(f & PR_HEAL_REVIVE) && !is_active_on_field(p))) return;
     if (pr_get_battler_tag(p, BATTLER_TAG_TYPE_HEAL_BLOCK) && h->heal_hp > 0) {
-        pr_queue_message(bt, e);                                  /* healBlock.onActivation */
+        pr_queue_msg(bt, e, pr_msg_p(bt, "battlerTags:healBlockCannotHeal", p));
         return;
     }
     /* doHealPokemon */
     if (h->heal_hp > 0 && p->hp >= max_hp(p)) {
-        if (!(f & PR_HEAL_NO_FULL_HP_MESSAGE)) message = true;    /* "HP is full" */
+        if (!(f & PR_HEAL_NO_FULL_HP_MESSAGE)) {
+            message = true;
+            text = pr_msg1("battle:hpIsFull", pr_arg_pokemon(bt, "pokemonName", p));
+        }
     } else {
         double amount;
         if (f & PR_HEAL_REVIVE) {
@@ -2830,18 +2892,20 @@ static void pokemon_heal_phase(pr_battle *bt, pr_engine *e, int ph)
         if (amount < 0) {
             damage_and_update(bt, e, p, -amount, HIT_RESULT_INDIRECT, false, NULL, false);
         } else {
-            /* heal(amount) */
+            /* heal(amount); the damage number shows amount */
             double room = max_hp(p) - p->hp;
             p->hp += (int32_t)(amount < room ? amount : room);
+            pr_event_add(bt, e, PR_EV_HP, h->battler, -1, 0, (int32_t)amount, NULL);
         }
     }
     if ((f & PR_HEAL_STATUS) && p->status) {
         message = true;
+        text = pr_status_msg(bt, p->status, PR_ST_HEAL, p);
         reset_status_as_phase(bt, e, p, true);
     }
     if (f & PR_HEAL_RESTORE_PP)
         for (int i = 0; i < p->n_moves; i++) p->pp_used[i] = 0;
-    if (message) pr_queue_message(bt, e);
+    if (message) pr_queue_msg(bt, e, text);
 }
 
 void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
@@ -2867,7 +2931,10 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
         pr_event_add(bt, e, PR_EV_COMMON_ANIM, PH(ph)->battler, PH(ph)->anim_target, PH(ph)->anim, 0, NULL);
         break;
     case PH_POKEMON_ANIM: pr_event_add(bt, e, PR_EV_POKEMON_ANIM, PH(ph)->battler, -1, PH(ph)->anim, 0, NULL); break;
-    case PH_MOVE_ANIM: pr_event_add(bt, e, PR_EV_MOVE_ANIM, PH(ph)->battler, PH(ph)->anim_target, PH(ph)->anim, 0, NULL); break;
+    case PH_MOVE_ANIM:       /* a MoveAnim, or a MoveChargeAnim (ChargeAnim ids are 1000 and up) */
+        pr_event_add(bt, e, PH(ph)->anim >= 1000 ? PR_EV_CHARGE_ANIM : PR_EV_MOVE_ANIM, PH(ph)->battler,
+                     PH(ph)->anim_target, PH(ph)->anim, 0, NULL);
+        break;
     case PH_LOAD_MOVE_ANIM: break;
     case PH_SHOW_ABILITY: show_ability_phase(bt, e, ph); break;
     case PH_HIDE_ABILITY:

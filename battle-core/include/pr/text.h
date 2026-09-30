@@ -78,7 +78,7 @@ typedef struct {
 } pr_text_source;
 
 /* The message as text, NUL-terminated in out (cut to cap - 1 bytes). Returns the length it
- * needed. A key the locale lacks comes out as the key itself, as i18next does. */
+ * needed. A key the locale lacks comes out as the key without its namespace, as i18next does. */
 size_t pr_msg_format(const pr_msg *m, const pr_text_source *src, char *out, size_t cap);
 
 /* The raw string at key ("battle:useMove", "move:tackle.name") with no interpolation, unescaped

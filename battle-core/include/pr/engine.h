@@ -360,7 +360,11 @@ enum {
     PR_HEAL_PREVENT_FULL = 32,
     PR_HEAL_RESTORE_PP = 64,
 };
-void pr_unshift_heal(pr_battle *bt, pr_engine *e, int battler, double hp, unsigned flags);
+/* msg: the message option (PR_HEAL_MESSAGE); pr_unshift_heal is one whose text isn't ported yet */
+void pr_unshift_heal_msg(pr_battle *bt, pr_engine *e, int battler, double hp, unsigned flags, pr_msg msg);
+void pr_unshift_heal_at(pr_battle *bt, pr_engine *e, int battler, double hp, unsigned flags, const char *site);
+#define pr_unshift_heal(bt, e, battler, hp, flags) \
+    pr_unshift_heal_at((bt), (e), (battler), (hp), (flags), __FILE__ ":" PR_STR_(__LINE__))
 /* Pokemon.leaveField(clearEffects) (src/phases.c) */
 void pr_leave_field(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool clear_effects);
 /* Pokemon.resetTurnData(), resetSummonData(); triggerPokemonFormChange(p, <trigger class>) */

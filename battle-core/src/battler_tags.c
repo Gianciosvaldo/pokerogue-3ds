@@ -170,6 +170,84 @@ static void splice_tag(pr_pokemon *p, int i)
     p->n_tags--;
 }
 
+/* ---------------------------------------------------------------- messages */
+
+/* queueMessage(i18next.t(key, {pokemonNameWithAffix: getPokemonNameWithAffix(p)})): most tag texts */
+static void say(pr_battle *bt, pr_engine *e, const char *key, const pr_pokemon *p)
+{
+    pr_queue_msg(bt, e, pr_msg_p(bt, key, p));
+}
+
+/* getSourcePokemon() where upstream only names it in a text (no report: the tag's own logic
+ * already looked it up) */
+static const pr_pokemon *msg_source(const pr_battle *bt, const pr_battler_tag *t)
+{
+    return pr_pokemon_by_id(bt, t->source_id);
+}
+
+/* getMoveName(): the source move's name, null (an empty interpolation) without one */
+static pr_msg_arg move_name_arg(const pr_battler_tag *t)
+{
+    return pr_arg_move("moveName", t->source_move);
+}
+
+/* tag.getTrapMessage(pokemon), which TrappedTag.onAdd queues: TrappedTag's own (Mean Look, No
+ * Retreat, Octolock), Ingrain's, and each DamagingTrapTag subclass's */
+static pr_msg trap_message(const pr_battle *bt, const pr_pokemon *p, const pr_battler_tag *t)
+{
+    pr_msg_arg name = pr_arg_pokemon(bt, "pokemonNameWithAffix", p);
+    const pr_pokemon *source = msg_source(bt, t);
+    switch (t->type) {
+    case BATTLER_TAG_TYPE_INGRAIN: return pr_msg1("battlerTags:ingrainOnTrap", name);
+    case BATTLER_TAG_TYPE_FIRE_SPIN:                  /* VortexTrapTag */
+    case BATTLER_TAG_TYPE_WHIRLPOOL: return pr_msg1("battlerTags:vortexOnTrap", name);
+    case BATTLER_TAG_TYPE_SAND_TOMB: return pr_msg2("battlerTags:sandTombOnTrap", name, move_name_arg(t));
+    case BATTLER_TAG_TYPE_MAGMA_STORM: return pr_msg1("battlerTags:magmaStormOnTrap", name);
+    case BATTLER_TAG_TYPE_SNAP_TRAP: return pr_msg1("battlerTags:snapTrapOnTrap", name);
+    case BATTLER_TAG_TYPE_BIND:
+    case BATTLER_TAG_TYPE_WRAP:
+    case BATTLER_TAG_TYPE_CLAMP:
+    case BATTLER_TAG_TYPE_THUNDER_CAGE:
+    case BATTLER_TAG_TYPE_INFESTATION:
+        /* without its source upstream returns an untranslated "ERROR - ... REPORT" string, which
+         * no locale key holds: not ported */
+        if (!source) return pr_msg0(NULL);
+        break;
+    default:
+        return pr_msg1("battlerTags:trappedOnAdd", name);
+    }
+    switch (t->type) {
+    case BATTLER_TAG_TYPE_BIND:
+        return pr_msg3("battlerTags:bindOnTrap", name, pr_arg_pokemon(bt, "sourcePokemonName", source), move_name_arg(t));
+    case BATTLER_TAG_TYPE_WRAP:
+        return pr_msg3("battlerTags:wrapOnTrap", name, pr_arg_pokemon(bt, "sourcePokemonName", source), move_name_arg(t));
+    case BATTLER_TAG_TYPE_CLAMP:
+        return pr_msg2("battlerTags:clampOnTrap", pr_arg_pokemon(bt, "sourcePokemonNameWithAffix", source),
+                       pr_arg_pokemon(bt, "pokemonName", p));
+    case BATTLER_TAG_TYPE_THUNDER_CAGE:
+        return pr_msg2("battlerTags:thunderCageOnTrap", name, pr_arg_pokemon(bt, "sourcePokemonNameWithAffix", source));
+    default:                                          /* INFESTATION */
+        return pr_msg2("battlerTags:infestationOnTrap", name, pr_arg_pokemon(bt, "sourcePokemonNameWithAffix", source));
+    }
+}
+
+/* the CommonAnim a DamagingTrapTag subclass hands its constructor, played at each lapse */
+static int trap_anim(int type)
+{
+    switch (type) {
+    case BATTLER_TAG_TYPE_WRAP: return COMMON_ANIM_WRAP;
+    case BATTLER_TAG_TYPE_FIRE_SPIN: return COMMON_ANIM_FIRE_SPIN;
+    case BATTLER_TAG_TYPE_WHIRLPOOL: return COMMON_ANIM_WHIRLPOOL;
+    case BATTLER_TAG_TYPE_CLAMP: return COMMON_ANIM_CLAMP;
+    case BATTLER_TAG_TYPE_SAND_TOMB: return COMMON_ANIM_SAND_TOMB;
+    case BATTLER_TAG_TYPE_MAGMA_STORM: return COMMON_ANIM_MAGMA_STORM;
+    case BATTLER_TAG_TYPE_SNAP_TRAP: return COMMON_ANIM_SNAP_TRAP;
+    case BATTLER_TAG_TYPE_THUNDER_CAGE: return COMMON_ANIM_THUNDER_CAGE;
+    case BATTLER_TAG_TYPE_INFESTATION: return COMMON_ANIM_INFESTATION;
+    }
+    return COMMON_ANIM_BIND;
+}
+
 /* ---------------------------------------------------------------- per tag type */
 
 /* getBattlerTag(tagType, turnCount, sourceMove, sourceId): the fields its constructor sets
@@ -471,7 +549,7 @@ static bool can_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *
         if (pr_is_grounded(bt, p, false) && bt->terrain == TERRAIN_MISTY) {
             if (e && e->current >= 0 && e->pool[e->current].type == PH_MOVE_EFFECT
                 && pr_moves[e->pool[e->current].move_id].category == MOVE_CATEGORY_STATUS)
-                pr_queue_message(bt, e);
+                pr_queue_msg(bt, e, pr_terrain_block_msg(bt, TERRAIN_MISTY, p));   /* getTerrainBlockMessage */
             return false;
         }
         return true;
@@ -573,7 +651,8 @@ static void stockpile_on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_batt
 {
     if (t->stockpiled_count >= 3) return;
     t->stockpiled_count++;
-    pr_queue_message(bt, e);
+    pr_queue_msg(bt, e, pr_msg2("battlerTags:stockpilingOnAdd", pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+                                pr_arg_int("stockpiledCount", t->stockpiled_count)));
     static const int32_t stats[] = {STAT_SPDEF, STAT_DEF};
     int ph = pr_unshift_stat_stage_change(bt, e, pr_battler_index(bt, p), stats, 2, 1, p);
     if (ph >= 0) e->pool[ph].ssc_stockpile = true;
@@ -583,39 +662,50 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
 {
     switch (t->type) {
     case BATTLER_TAG_TYPE_CONFUSED:
-        pr_unshift_new(bt, e, PH_COMMON_ANIM, pr_battler_index(bt, p));   /* CommonAnim.CONFUSION */
-        pr_queue_message(bt, e);
+        pr_unshift_common_anim(bt, e, pr_battler_index(bt, p), -1, COMMON_ANIM_CONFUSION);
+        say(bt, e, "battlerTags:confusedOnAdd", p);
         return;
     case BATTLER_TAG_TYPE_TRAPPED:
     case BATTLER_TAG_TYPE_NO_RETREAT:
-    case BATTLER_TAG_TYPE_CHARGED:
-    case BATTLER_TAG_TYPE_FIRE_BOOST:
-    case BATTLER_TAG_TYPE_TAR_SHOT:
-    case BATTLER_TAG_TYPE_ENDURING:
-    case BATTLER_TAG_TYPE_SHELL_TRAP:            /* "set a shell trap" */
-    case BATTLER_TAG_TYPE_BEAK_BLAST_CHARGING:   /* the charge animation plays outside the phases, then the message */
-    case BATTLER_TAG_TYPE_AQUA_RING:
-    case BATTLER_TAG_TYPE_HEAL_BLOCK:
     case BATTLER_TAG_TYPE_INGRAIN:               /* TrappedTag.onAdd: getTrapMessage() */
     case BATTLER_TAG_TYPE_OCTOLOCK:
-    case BATTLER_TAG_TYPE_TAUNT:
-    case BATTLER_TAG_TYPE_TORMENT:
-    case BATTLER_TAG_TYPE_ENCORE:
-    case BATTLER_TAG_TYPE_INFATUATED:
-    case BATTLER_TAG_TYPE_NIGHTMARE:
-    case BATTLER_TAG_TYPE_DROWSY:
-    case BATTLER_TAG_TYPE_POWDER:
-    case BATTLER_TAG_TYPE_TELEKINESIS:
-    case BATTLER_TAG_TYPE_SYRUP_BOMB:
-    case BATTLER_TAG_TYPE_MAGIC_COAT:
-    case BATTLER_TAG_TYPE_ELECTRIFIED:
-    case BATTLER_TAG_TYPE_GRUDGE:
-    case BATTLER_TAG_TYPE_SLOW_START:
-    case BATTLER_TAG_TYPE_ENDURE_TOKEN:
-        pr_queue_message(bt, e);
+        pr_queue_msg(bt, e, trap_message(bt, p, t));
         return;
+    case BATTLER_TAG_TYPE_CHARGED:               /* TypeBoostTag.onAdd: its boostedType */
+    case BATTLER_TAG_TYPE_FIRE_BOOST:
+        pr_queue_msg(bt, e, pr_msg2("abilityTriggers:typeImmunityPowerBoost", pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+                                    pr_arg_type("typeName", t->type == BATTLER_TAG_TYPE_CHARGED ? POKEMON_TYPE_ELECTRIC
+                                                                                                : POKEMON_TYPE_FIRE)));
+        return;
+    case BATTLER_TAG_TYPE_SHELL_TRAP:            /* "set a shell trap" */
+        pr_queue_msg(bt, e, pr_msg1("moveTriggers:setUpShellTrap", pr_arg_pokemon(bt, "pokemonName", p)));
+        return;
+    case BATTLER_TAG_TYPE_BEAK_BLAST_CHARGING:   /* the charge animation plays outside the phases, then the message */
+        pr_queue_msg(bt, e, pr_msg1("moveTriggers:startedHeatingUpBeak", pr_arg_pokemon(bt, "pokemonName", p)));
+        return;
+    case BATTLER_TAG_TYPE_INFATUATED:            /* canAdd found the source */
+        pr_queue_msg(bt, e, pr_msg2("battlerTags:infatuatedOnAdd", pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+                                    pr_arg_pokemon(bt, "sourcePokemonName", msg_source(bt, t))));
+        return;
+    case BATTLER_TAG_TYPE_TAR_SHOT: say(bt, e, "battlerTags:tarShotOnAdd", p); return;
+    case BATTLER_TAG_TYPE_ENDURING:              /* EnduringTag */
+    case BATTLER_TAG_TYPE_ENDURE_TOKEN: say(bt, e, "battlerTags:enduringOnAdd", p); return;
+    case BATTLER_TAG_TYPE_AQUA_RING: say(bt, e, "battlerTags:aquaRingOnAdd", p); return;
+    case BATTLER_TAG_TYPE_HEAL_BLOCK: say(bt, e, "battlerTags:healBlockOnAdd", p); return;
+    case BATTLER_TAG_TYPE_TAUNT: say(bt, e, "battlerTags:tauntOnAdd", p); return;
+    case BATTLER_TAG_TYPE_TORMENT: say(bt, e, "battlerTags:tormentOnAdd", p); return;
+    case BATTLER_TAG_TYPE_ENCORE: say(bt, e, "battlerTags:encoreOnAdd", p); return;
+    case BATTLER_TAG_TYPE_NIGHTMARE: say(bt, e, "battlerTags:nightmareOnAdd", p); return;
+    case BATTLER_TAG_TYPE_DROWSY: say(bt, e, "battlerTags:drowsyOnAdd", p); return;
+    case BATTLER_TAG_TYPE_POWDER: say(bt, e, "battlerTags:powderOnAdd", p); return;
+    case BATTLER_TAG_TYPE_TELEKINESIS: say(bt, e, "battlerTags:telekinesisOnAdd", p); return;
+    case BATTLER_TAG_TYPE_SYRUP_BOMB: say(bt, e, "battlerTags:syrupBombOnAdd", p); return;
+    case BATTLER_TAG_TYPE_MAGIC_COAT: say(bt, e, "battlerTags:magicCoatOnAdd", p); return;
+    case BATTLER_TAG_TYPE_ELECTRIFIED: say(bt, e, "battlerTags:electrifiedOnAdd", p); return;
+    case BATTLER_TAG_TYPE_GRUDGE: say(bt, e, "battlerTags:grudgeOnAdd", p); return;
+    case BATTLER_TAG_TYPE_SLOW_START: say(bt, e, "battlerTags:slowStartOnAdd", p); return;
     case BATTLER_TAG_TYPE_SALT_CURED:                /* the message only with its source */
-        if (tag_source(bt, t)) pr_queue_message(bt, e);
+        if (tag_source(bt, t)) say(bt, e, "battlerTags:saltCuredOnAdd", p);
         return;
     case BATTLER_TAG_TYPE_CRIT_BOOST:
     case BATTLER_TAG_TYPE_DRAGON_CHEER: {
@@ -624,7 +714,7 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
         int8_t ty[PR_MAX_TYPES];
         int n = pr_get_types(p, ty, PR_TYPES_ORIGINAL_IF_STELLAR);
         t->crit_stages = (int8_t)(t->type == BATTLER_TAG_TYPE_DRAGON_CHEER && !has_type(ty, n, POKEMON_TYPE_DRAGON) ? 1 : 2);
-        pr_queue_message(bt, e);
+        say(bt, e, "battlerTags:critBoostOnAdd", p);
         return;
     }
     case BATTLER_TAG_TYPE_DISABLED: {
@@ -634,7 +724,8 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
         const pr_turn_move *move = pr_last_non_virtual_move(bt, p, false, true, &unknown);
         if (!move || move->move == MOVE_ID_STRUGGLE) return;
         t->move_id = move->move;
-        pr_queue_message(bt, e);
+        pr_queue_msg(bt, e, pr_msg2("battlerTags:disabledOnAdd", pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+                                    pr_arg_move("moveName", t->move_id)));
         return;
     }
     case BATTLER_TAG_TYPE_ROOSTED:
@@ -645,7 +736,7 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
         return;
     case BATTLER_TAG_TYPE_POWER_TRICK:
         pr_power_trick_swap(p);
-        pr_queue_message(bt, e);
+        say(bt, e, "battlerTags:powerTrickActive", p);
         return;
     case BATTLER_TAG_TYPE_GORILLA_TACTICS: {
         /* locked into the last non-virtual move (canAdd found one); Attack x1.5 in summonData.stats */
@@ -670,7 +761,8 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
         }
         t->stat = (int8_t)best;
         t->multiplier = best == STAT_SPD ? 1.5 : 1.3;
-        pr_queue_message(bt, e);
+        pr_queue_msg(bt, e, pr_msg2("battlerTags:highestStatBoostOnAdd", pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+                                    pr_arg_stat("statName", best)));
         return;
     }
     case BATTLER_TAG_TYPE_SUPREME_OVERLORD: {
@@ -678,7 +770,7 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
          * enemy), at most 5, then the message */
         int faints = p->is_player ? bt->player_faints : bt->enemy_faints;
         t->faint_count = (int8_t)(faints < 5 ? faints : 5);
-        pr_queue_message(bt, e);
+        say(bt, e, "battlerTags:supremeOverlordOnAdd", p);
         return;
     }
     case BATTLER_TAG_TYPE_INTERRUPTED: {
@@ -703,7 +795,7 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
             if (t->source_id >= 0) pr_note_unported(bt, PR_FEAT_PARTY);
             return;
         }
-        pr_queue_message(bt, e);
+        say(bt, e, "battlerTags:seededOnAdd", p);
         t->source_index = (int8_t)pr_battler_index(bt, source);
         return;
     }
@@ -717,8 +809,8 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
         }
         t->hp = (int32_t)floor(pr_get_stat(source, STAT_HP, false) / 4.0);
         t->in_focus = false;
-        pr_unshift_new(bt, e, PH_POKEMON_ANIM, -1);                      /* SUBSTITUTE_ADD */
-        pr_queue_message(bt, e);
+        pr_unshift_pokemon_anim(bt, e, pr_battler_index(bt, p), POKEMON_ANIM_TYPE_SUBSTITUTE_ADD);
+        say(bt, e, t->source_move == MOVE_ID_SHED_TAIL ? "battlerTags:shedTailOnAdd" : "battlerTags:substituteOnAdd", p);
         static const int32_t traps[] = {
             BATTLER_TAG_TYPE_BIND, BATTLER_TAG_TYPE_WRAP, BATTLER_TAG_TYPE_FIRE_SPIN, BATTLER_TAG_TYPE_WHIRLPOOL,
             BATTLER_TAG_TYPE_CLAMP, BATTLER_TAG_TYPE_SAND_TOMB, BATTLER_TAG_TYPE_MAGMA_STORM,
@@ -729,7 +821,7 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
         return;
     }
     case BATTLER_TAG_TYPE_AUTOTOMIZED:
-        if (pr_get_weight(bt, p) > 0.1) pr_queue_message(bt, e);
+        if (pr_get_weight(bt, p) > 0.1) say(bt, e, "battlerTags:autotomizeOnAdd", p);
         t->autotomize_count++;
         return;
     case BATTLER_TAG_TYPE_RECHARGING:
@@ -747,21 +839,19 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
         }
         return;
     }
-    if (pr_damaging_trap_move(t->type)) pr_queue_message(bt, e);   /* TrappedTag.onAdd: getTrapMessage() */
-    if (pr_battler_tag_is(t->type, PR_TAGCLASS_PROTECTED)) pr_queue_message(bt, e);   /* ProtectedTag.onAdd */
+    if (pr_damaging_trap_move(t->type)) pr_queue_msg(bt, e, trap_message(bt, p, t));   /* TrappedTag.onAdd */
+    if (pr_battler_tag_is(t->type, PR_TAGCLASS_PROTECTED)) say(bt, e, "battlerTags:protectedOnAdd", p);   /* ProtectedTag.onAdd */
 }
 
 /* existingTag.onOverlap(pokemon) */
 static void on_overlap(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t)
 {
     switch (t->type) {
-    case BATTLER_TAG_TYPE_CONFUSED:
-    case BATTLER_TAG_TYPE_CHARGED:
-    case BATTLER_TAG_TYPE_FIRE_BOOST:
-    case BATTLER_TAG_TYPE_INFATUATED:
-    case BATTLER_TAG_TYPE_NIGHTMARE:
-        pr_queue_message(bt, e);
-        return;
+    case BATTLER_TAG_TYPE_CONFUSED: say(bt, e, "battlerTags:confusedOnOverlap", p); return;
+    case BATTLER_TAG_TYPE_CHARGED:                        /* TypeBoostTag.onOverlap */
+    case BATTLER_TAG_TYPE_FIRE_BOOST: say(bt, e, "abilityTriggers:moveImmunity", p); return;
+    case BATTLER_TAG_TYPE_INFATUATED: say(bt, e, "battlerTags:infatuatedOnOverlap", p); return;
+    case BATTLER_TAG_TYPE_NIGHTMARE: say(bt, e, "battlerTags:nightmareOnOverlap", p); return;
     case BATTLER_TAG_TYPE_AUTOTOMIZED:
         on_add(bt, e, p, t);
         return;
@@ -782,7 +872,7 @@ static void confusion_self_hit(pr_battle *bt, pr_engine *e, pr_pokemon *p)
     double roll = pr_battle_rand_seed_int(bt, 16, 85) / 100.0;       /* randBattleSeedIntRange(85, 100) */
     double damage = floor((((2.0 * p->level) / 5 + 2) * 40 * atk / def / 50 + 2) * roll);
     if (damage < 1) damage = 1;                                        /* toDmgValue */
-    pr_queue_message(bt, e);
+    pr_queue_msg(bt, e, pr_msg0("battlerTags:confusedLapseHurtItself"));
     pr_damage_and_update(bt, e, p, damage, HIT_RESULT_CONFUSION, false, NULL);
     pr_cancel_current_move(e, p);
 }
@@ -831,7 +921,7 @@ static bool seed_drain(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_batt
     pr_ab_params ap = {.pokemon = p, .move = -1, .flag = &cancelled};
     pr_apply_ab_attrs(bt, PR_AC_BlockNonDirectDamageAbAttr, &ap);
     if (cancelled) return true;
-    pr_unshift_new(bt, e, PH_COMMON_ANIM, pr_battler_index(bt, source));   /* CommonAnim.LEECH_SEED */
+    pr_unshift_common_anim(bt, e, pr_battler_index(bt, source), pr_battler_index(bt, p), COMMON_ANIM_LEECH_SEED);
     double hp = floor(pr_get_stat(p, STAT_HP, false) / 8.0);
     double damage = pr_damage_and_update(bt, e, p, hp < 1 ? 1 : hp, HIT_RESULT_INDIRECT, false, NULL);
     /* hasAbilityWithAttr("ReverseDrainAbAttr", false): no canApplyAbility check */
@@ -849,7 +939,7 @@ static void substitute_on_hit(pr_battle *bt, pr_engine *e, pr_pokemon *p)
     pr_pokemon *attacker = pr_move_effect_user(bt, e, &move);
     if (!attacker) return;
     if (attacker->hit_count == attacker->hits_left && pr_move_hits_substitute(bt, move, attacker, p))
-        pr_queue_message(bt, e);
+        say(bt, e, "battlerTags:substituteOnHit", p);
 }
 
 /* ContactProtectedTag.onContact(attacker, user = the protected Pokemon) */
@@ -910,15 +1000,38 @@ static bool move_restricted(const pr_battler_tag *t, int move)
     return false;
 }
 
+/* interruptedText(pokemon, move) of a MoveRestrictionBattlerTag; false where it is "" (the base
+ * class's, which Encore keeps), and then nothing is queued */
+static bool interrupted_text(const pr_battle *bt, const pr_pokemon *p, const pr_battler_tag *t, int move, pr_msg *out)
+{
+    pr_msg_arg name = pr_arg_pokemon(bt, "pokemonNameWithAffix", p);
+    switch (t->type) {
+    case BATTLER_TAG_TYPE_THROAT_CHOPPED:
+        *out = pr_msg1("battle:throatChopInterruptedMove", pr_arg_pokemon(bt, "pokemonName", p));
+        return true;
+    case BATTLER_TAG_TYPE_DISABLED:
+        *out = pr_msg2("battle:disableInterruptedMove", name, pr_arg_move("moveName", move));
+        return true;
+    case BATTLER_TAG_TYPE_HEAL_BLOCK:                 /* its selectionDeniedText */
+        *out = pr_msg2("battle:moveDisabledHealBlock", name, pr_arg_move("moveName", move));
+        return true;
+    case BATTLER_TAG_TYPE_TAUNT:
+        *out = pr_msg2("battle:moveDisabledTaunt", name, pr_arg_move("moveName", move));
+        return true;
+    }
+    return false;
+}
+
 /* MoveRestrictionBattlerTag.lapse: on PRE_MOVE (the MovePhase's check), a restricted move is
- * interrupted (interruptedText, never empty for the tags checked there, then cancel()) and the
- * tag stays; any other lapse is BattlerTag.lapse */
-static bool restriction_lapse(pr_battle *bt, pr_engine *e, pr_battler_tag *t, int lapse_type)
+ * interrupted (interruptedText when it has one, then cancel()) and the tag stays; any other
+ * lapse is BattlerTag.lapse */
+static bool restriction_lapse(pr_battle *bt, pr_engine *e, const pr_pokemon *p, pr_battler_tag *t, int lapse_type)
 {
     if (lapse_type != BATTLER_TAG_LAPSE_TYPE_PRE_MOVE) return --t->turn_count > 0;
     if (e && e->current >= 0 && e->pool[e->current].type == PH_MOVE
         && move_restricted(t, e->pool[e->current].move.id)) {
-        pr_queue_message(bt, e);
+        pr_msg m;
+        if (interrupted_text(bt, p, t, e->pool[e->current].move.id, &m)) pr_queue_msg(bt, e, m);
         pr_cancel_current_move(e, NULL);
     }
     return true;
@@ -931,7 +1044,7 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
     case BATTLER_TAG_TYPE_FLINCHED:
         if (lapse_type == BATTLER_TAG_LAPSE_TYPE_PRE_MOVE) {
             pr_cancel_current_move(e, NULL);
-            pr_queue_message(bt, e);
+            say(bt, e, "battlerTags:flinchedLapse", p);
             pr_ab_params ap = {.pokemon = p, .move = -1};
             pr_apply_ab_attrs(bt, PR_AC_FlinchEffectAbAttr, &ap);
             return true;
@@ -940,8 +1053,8 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
     case BATTLER_TAG_TYPE_CONFUSED:
         /* the duration only ticks down on PRE_MOVE */
         if (!(lapse_type == BATTLER_TAG_LAPSE_TYPE_PRE_MOVE && --t->turn_count > 0)) return false;
-        pr_queue_message(bt, e);
-        pr_unshift_new(bt, e, PH_COMMON_ANIM, pr_battler_index(bt, p));
+        say(bt, e, "battlerTags:confusedLapse", p);
+        pr_unshift_common_anim(bt, e, pr_battler_index(bt, p), -1, COMMON_ANIM_CONFUSION);
         if (pr_battle_rand_seed_int(bt, 3, 0) == 0) confusion_self_hit(bt, e, p);
         return true;
     case BATTLER_TAG_TYPE_INTERRUPTED:
@@ -951,7 +1064,7 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
     case BATTLER_TAG_TYPE_RECHARGING:
         if (lapse_type == BATTLER_TAG_LAPSE_TYPE_PRE_MOVE) {
             /* "must recharge": the move is cancelled and the placeholder leaves the queue */
-            pr_queue_message(bt, e);
+            say(bt, e, "battlerTags:rechargingLapse", p);
             pr_cancel_current_move(e, NULL);
             if (p->n_move_queue) {
                 memmove(&p->move_queue[0], &p->move_queue[1], (size_t)(p->n_move_queue - 1) * sizeof p->move_queue[0]);
@@ -971,7 +1084,9 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
         /* MOVE and AFTER_MOVE bring the Pokemon in and out of focus (PokemonAnimPhase); HIT: onHit.
          * Only a CUSTOM lapse removes it */
         if (lapse_type == BATTLER_TAG_LAPSE_TYPE_MOVE || lapse_type == BATTLER_TAG_LAPSE_TYPE_AFTER_MOVE) {
-            pr_unshift_new(bt, e, PH_POKEMON_ANIM, -1);                  /* SUBSTITUTE_PRE/POST_MOVE */
+            pr_unshift_pokemon_anim(bt, e, pr_battler_index(bt, p),
+                                    lapse_type == BATTLER_TAG_LAPSE_TYPE_MOVE ? POKEMON_ANIM_TYPE_SUBSTITUTE_PRE_MOVE
+                                                                              : POKEMON_ANIM_TYPE_SUBSTITUTE_POST_MOVE);
             t->in_focus = lapse_type == BATTLER_TAG_LAPSE_TYPE_MOVE;
         } else if (lapse_type == BATTLER_TAG_LAPSE_TYPE_HIT) {
             substitute_on_hit(bt, e, p);
@@ -980,14 +1095,14 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
     case BATTLER_TAG_TYPE_ENDURING:
     case BATTLER_TAG_TYPE_ENDURE_TOKEN:
         if (lapse_type == BATTLER_TAG_LAPSE_TYPE_CUSTOM) {
-            pr_queue_message(bt, e);
+            say(bt, e, "battlerTags:enduringLapse", p);
             return true;
         }
         return --t->turn_count > 0;
     case BATTLER_TAG_TYPE_STURDY:
         /* CUSTOM (Pokemon.damage leaving it at 1 HP): the message, and it goes */
         if (lapse_type == BATTLER_TAG_LAPSE_TYPE_CUSTOM) {
-            pr_queue_message(bt, e);
+            say(bt, e, "battlerTags:sturdyLapse", p);
             return false;
         }
         return --t->turn_count > 0;
@@ -1004,7 +1119,7 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
         if (!last || last->move == MOVE_ID_NONE) return true;
         pr_cancel_current_move(e, NULL);
         pr_queue_ability_display(bt, e, p, p->ability != ABILITY_ID_TRUANT, true);
-        pr_queue_message(bt, e);
+        say(bt, e, "battlerTags:truantLapse", p);
         pr_queue_ability_display(bt, e, p, p->ability != ABILITY_ID_TRUANT, false);
         return true;
     }
@@ -1035,23 +1150,30 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
     case BATTLER_TAG_TYPE_HEAL_BLOCK:
     case BATTLER_TAG_TYPE_DISABLED:
     case BATTLER_TAG_TYPE_TAUNT:
-        return restriction_lapse(bt, e, t, lapse_type);
+        return restriction_lapse(bt, e, p, t, lapse_type);
     case BATTLER_TAG_TYPE_TORMENT:                /* only leaving the field ends it */
         return active_on_field(p);
     case BATTLER_TAG_TYPE_ENCORE:
         /* no longer added this turn; it ends early once the move has no PP left */
         t->added_this_turn = false;
-        return pr_moveset_slot_with_pp(p, t->move_id) >= 0 && restriction_lapse(bt, e, t, lapse_type);
+        return pr_moveset_slot_with_pp(p, t->move_id) >= 0 && restriction_lapse(bt, e, p, t, lapse_type);
     case BATTLER_TAG_TYPE_SALT_CURED:
     case BATTLER_TAG_TYPE_CURSED:
     case BATTLER_TAG_TYPE_NIGHTMARE: {
         /* lapseType !== CUSTOM || BattlerTag.lapse; while it stays: (Nightmare's message first) an
-         * animation, then unless Magic Guard blocks it the damage (a quarter of max HP; Salt Cure an
-         * eighth on Steel or Water types, else a sixteenth) and (Salt Cure's, Curse's) message */
+         * animation (Nightmare's is CURSE on the Pokemon; Salt Cure's and Curse's are both SALT_CURE,
+         * from the Pokemon to itself), then unless Magic Guard blocks it the damage (a quarter of
+         * max HP; Salt Cure an eighth on Steel or Water types, else a sixteenth) and (Salt Cure's,
+         * Curse's) message */
         bool ret = lapse_type != BATTLER_TAG_LAPSE_TYPE_CUSTOM || --t->turn_count > 0;
         if (!ret) return false;
-        if (t->type == BATTLER_TAG_TYPE_NIGHTMARE) pr_queue_message(bt, e);
-        pr_unshift_new(bt, e, PH_COMMON_ANIM, pr_battler_index(bt, p));
+        int idx = pr_battler_index(bt, p);
+        if (t->type == BATTLER_TAG_TYPE_NIGHTMARE) {
+            say(bt, e, "battlerTags:nightmareLapse", p);
+            pr_unshift_common_anim(bt, e, idx, -1, COMMON_ANIM_CURSE);
+        } else {
+            pr_unshift_common_anim(bt, e, idx, idx, COMMON_ANIM_SALT_CURE);
+        }
         bool cancelled = false;
         pr_ab_params ap = {.pokemon = p, .move = -1, .flag = &cancelled};
         pr_apply_ab_attrs(bt, PR_AC_BlockNonDirectDamageAbAttr, &ap);
@@ -1060,7 +1182,11 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
         if (t->type == BATTLER_TAG_TYPE_SALT_CURED)
             div = pr_is_of_type(p, POKEMON_TYPE_STEEL) || pr_is_of_type(p, POKEMON_TYPE_WATER) ? 8 : 16;
         pr_damage_and_update(bt, e, p, max_hp_part(p, div), HIT_RESULT_INDIRECT, false, NULL);
-        if (t->type != BATTLER_TAG_TYPE_NIGHTMARE) pr_queue_message(bt, e);
+        if (t->type == BATTLER_TAG_TYPE_SALT_CURED)
+            pr_queue_msg(bt, e, pr_msg2("battlerTags:saltCuredLapse", pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+                                        move_name_arg(t)));
+        else if (t->type == BATTLER_TAG_TYPE_CURSED)
+            say(bt, e, "battlerTags:cursedLapse", p);
         return true;
     }
     case BATTLER_TAG_TYPE_CRIT_BOOST:
@@ -1073,7 +1199,7 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
          * (the Pokemon as its own source), then BattlerTag.lapse */
         pr_pokemon *source = tag_source(bt, t);
         if (!source || !active_on_field(source)) return false;
-        pr_queue_message(bt, e);
+        say(bt, e, "battlerTags:syrupBombLapse", p);
         int32_t spd = STAT_SPD;
         if (pr_unshift_stat_stage_change(bt, e, pr_battler_index(bt, p), &spd, 1, -1, p) < 0 && e) e->overflow = true;
         return --t->turn_count > 0;
@@ -1094,12 +1220,12 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
             || (bt->weather == WEATHER_TYPE_HEAVY_RAIN && !pr_weather_effect_suppressed(bt)))
             return true;
         pr_fail_current_move(e);
-        pr_unshift_new(bt, e, PH_COMMON_ANIM, pr_battler_index(bt, p));   /* CommonAnim.POWDER */
+        pr_unshift_common_anim(bt, e, pr_battler_index(bt, p), pr_battler_index(bt, p), COMMON_ANIM_POWDER);
         bool cancelled = false;
         pr_ab_params ap = {.pokemon = p, .move = -1, .flag = &cancelled};
         pr_apply_ab_attrs(bt, PR_AC_BlockNonDirectDamageAbAttr, &ap);
         if (!cancelled) pr_damage_and_update(bt, e, p, floor(pr_get_stat(p, STAT_HP, false) / 4.0), HIT_RESULT_INDIRECT, false, NULL);
-        pr_queue_message(bt, e);
+        pr_queue_msg(bt, e, pr_msg1("battlerTags:powderLapse", pr_arg_move("moveName", move)));   /* move.name */
         return true;
     }
     case BATTLER_TAG_TYPE_INFATUATED: {
@@ -1107,11 +1233,13 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
          * ATTRACT animation, and half the time the immobilized message and the running
          * MovePhase cancelled */
         if (!(lapse_type != BATTLER_TAG_LAPSE_TYPE_CUSTOM || --t->turn_count > 0)) return false;
-        if (!tag_source(bt, t)) return false;
-        pr_queue_message(bt, e);
-        pr_unshift_new(bt, e, PH_COMMON_ANIM, pr_battler_index(bt, p));   /* CommonAnim.ATTRACT */
+        const pr_pokemon *source = tag_source(bt, t);
+        if (!source) return false;
+        pr_queue_msg(bt, e, pr_msg2("battlerTags:infatuatedLapse", pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+                                    pr_arg_pokemon(bt, "sourcePokemonName", source)));
+        pr_unshift_common_anim(bt, e, pr_battler_index(bt, p), -1, COMMON_ANIM_ATTRACT);
         if (pr_battle_rand_seed_int(bt, 2, 0)) {
-            pr_queue_message(bt, e);
+            say(bt, e, "battlerTags:infatuatedLapseImmobilize", p);
             pr_cancel_current_move(e, NULL);
         }
         return true;
@@ -1119,7 +1247,9 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
     case BATTLER_TAG_TYPE_PERISH_SONG: {
         /* the count, or at its end the Pokemon's remaining HP (INDIRECT_KO, ignoreSegments) */
         bool ret = --t->turn_count > 0;
-        if (ret) pr_queue_message(bt, e);
+        if (ret)
+            pr_queue_msg(bt, e, pr_msg2("battlerTags:perishSongLapse", pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+                                        pr_arg_int("turnCount", t->turn_count)));
         else pr_damage_and_update(bt, e, p, p->hp, HIT_RESULT_INDIRECT_KO, false, NULL);
         return ret;
     }
@@ -1146,7 +1276,7 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
         /* heals the user of the status it passed on once its move is over (isActive(true)):
          * the message, then resetStatus() as a phase (revive = true) */
         if (p->status && p->hp > 0 && p->on_field && !p->switch_out_status) {
-            pr_queue_message(bt, e);
+            pr_queue_msg(bt, e, pr_status_msg(bt, p->status, PR_ST_HEAL, p));   /* getStatusEffectHealText */
             pr_reset_status_phase(bt, e, p, true);
         }
         return false;
@@ -1190,8 +1320,9 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
         /* DamagingTrapTag.lapse (TURN_END): BattlerTag.lapse, then while the tag lasts its message,
          * its animation and an eighth of max HP, unless BlockNonDirectDamageAbAttr (Magic Guard) */
         if (--t->turn_count <= 0) return false;
-        pr_queue_message(bt, e);
-        pr_unshift_new(bt, e, PH_COMMON_ANIM, pr_battler_index(bt, p));
+        pr_queue_msg(bt, e, pr_msg2("battlerTags:damagingTrapLapse", pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+                                    move_name_arg(t)));
+        pr_unshift_common_anim(bt, e, pr_battler_index(bt, p), -1, trap_anim(t->type));
         bool cancelled = false;
         pr_ab_params ap = {.pokemon = p, .move = -1, .flag = &cancelled};
         pr_apply_ab_attrs(bt, PR_AC_BlockNonDirectDamageAbAttr, &ap);
@@ -1205,7 +1336,8 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
         /* ProtectedTag.lapse: on CUSTOM (the hit check lapsing it) the message and stopMultiHit on
          * the running MoveEffectPhase; ContactProtectedTag.lapse then, for a contact move, onContact */
         if (lapse_type != BATTLER_TAG_LAPSE_TYPE_CUSTOM) return --t->turn_count > 0;
-        pr_queue_message(bt, e);
+        /* (CommonBattleAnim(PROTECT).play() first: an animation outside the phases, no event yet) */
+        say(bt, e, "battlerTags:protectedLapse", p);
         int move;
         pr_pokemon *attacker = pr_move_effect_user(bt, e, &move);
         if (attacker) pr_stop_multi_hit(bt, e, p);
@@ -1223,32 +1355,40 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
 static void on_remove(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_battler_tag *t)
 {
     switch (t->type) {
-    case BATTLER_TAG_TYPE_CONFUSED:
+    case BATTLER_TAG_TYPE_CONFUSED: say(bt, e, "battlerTags:confusedOnRemove", p); return;
     case BATTLER_TAG_TYPE_TRAPPED:
     case BATTLER_TAG_TYPE_NO_RETREAT:
     case BATTLER_TAG_TYPE_INGRAIN:               /* TrappedTag.onRemove */
     case BATTLER_TAG_TYPE_OCTOLOCK:
-    case BATTLER_TAG_TYPE_HEAL_BLOCK:
-    case BATTLER_TAG_TYPE_DISABLED:
-    case BATTLER_TAG_TYPE_TAUNT:
-    case BATTLER_TAG_TYPE_ENCORE:
-    case BATTLER_TAG_TYPE_INFATUATED:
-    case BATTLER_TAG_TYPE_TELEKINESIS:
+        pr_queue_msg(bt, e, pr_msg2("battlerTags:trappedOnRemove", pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+                                    move_name_arg(t)));
+        return;
+    case BATTLER_TAG_TYPE_HEAL_BLOCK: say(bt, e, "battlerTags:healBlockOnRemove", p); return;
+    case BATTLER_TAG_TYPE_DISABLED:              /* moveId: NONE when onAdd found no move to disable */
+        pr_queue_msg(bt, e, pr_msg2("battlerTags:disabledOnRemove", pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+                                    pr_arg_move("moveName", t->move_id)));
+        return;
+    case BATTLER_TAG_TYPE_TAUNT: say(bt, e, "battlerTags:tauntOnRemove", p); return;
+    case BATTLER_TAG_TYPE_ENCORE: say(bt, e, "battlerTags:encoreOnRemove", p); return;
+    case BATTLER_TAG_TYPE_INFATUATED: say(bt, e, "battlerTags:infatuatedOnRemove", p); return;
+    case BATTLER_TAG_TYPE_TELEKINESIS: say(bt, e, "battlerTags:telekinesisOnRemove", p); return;
     case BATTLER_TAG_TYPE_CRIT_BOOST:
-    case BATTLER_TAG_TYPE_DRAGON_CHEER:
-    case BATTLER_TAG_TYPE_PROTOSYNTHESIS:
+    case BATTLER_TAG_TYPE_DRAGON_CHEER: say(bt, e, "battlerTags:critBoostOnRemove", p); return;
+    case BATTLER_TAG_TYPE_PROTOSYNTHESIS:         /* HighestStatBoostTag.onRemove: the tag's ability */
     case BATTLER_TAG_TYPE_QUARK_DRIVE:
-        pr_queue_message(bt, e);
+        pr_queue_msg(bt, e, pr_msg2("battlerTags:highestStatBoostOnRemove", pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+                                    pr_arg_ability("abilityName", t->type == BATTLER_TAG_TYPE_PROTOSYNTHESIS
+                                                                      ? ABILITY_ID_PROTOSYNTHESIS : ABILITY_ID_QUARK_DRIVE)));
         return;
     case BATTLER_TAG_TYPE_ROOSTED:
         roost_on_remove(bt, p, t);
         return;
     case BATTLER_TAG_TYPE_POWER_TRICK:
         pr_power_trick_swap(p);
-        pr_queue_message(bt, e);
+        say(bt, e, "battlerTags:powerTrickActive", p);
         return;
     case BATTLER_TAG_TYPE_SLOW_START:
-        pr_queue_message(bt, e);
+        say(bt, e, "battlerTags:slowStartOnRemove", p);
         return;
     case BATTLER_TAG_TYPE_STOCKPILING:
         /* each stat drops by the raises the tag counted, from the Pokemon itself */
@@ -1261,8 +1401,8 @@ static void on_remove(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_battl
     case BATTLER_TAG_TYPE_SUBSTITUTE:
         /* the removal animation (PokemonAnimPhase) unless the Pokemon is in focus (its own move
          * removed the doll: the sprite is just destroyed), then the message */
-        if (!t->in_focus) pr_unshift_new(bt, e, PH_POKEMON_ANIM, -1);     /* SUBSTITUTE_REMOVE */
-        pr_queue_message(bt, e);
+        if (!t->in_focus) pr_unshift_pokemon_anim(bt, e, pr_battler_index(bt, p), POKEMON_ANIM_TYPE_SUBSTITUTE_REMOVE);
+        say(bt, e, "battlerTags:substituteOnRemove", p);
         return;
     case BATTLER_TAG_TYPE_FRENZY:
         /* a frenzy that ran its course confuses: addTag(CONFUSED, randBattleSeedIntRange(2, 5)) */
@@ -1272,7 +1412,9 @@ static void on_remove(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_battl
         }
         return;
     }
-    if (pr_damaging_trap_move(t->type)) pr_queue_message(bt, e);   /* TrappedTag.onRemove */
+    if (pr_damaging_trap_move(t->type))                                 /* TrappedTag.onRemove */
+        pr_queue_msg(bt, e, pr_msg2("battlerTags:trappedOnRemove", pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+                                    move_name_arg(t)));
 }
 
 /* FaintPhase: the fainted Pokemon's DestinyBondTag.lapse(source, CUSTOM), called on the tag
@@ -1283,8 +1425,12 @@ void pr_destiny_bond_lapse(pr_battle *bt, pr_engine *e, const pr_battler_tag *t,
     pr_pokemon *source = tag_source(bt, t);
     if (!source || source->hp > 0) return;
     if (pr_get_ally(bt, source) == attacker) return;
-    pr_queue_message(bt, e);                       /* destinyBondLapseIsBoss, or destinyBondLapse */
-    if (attacker->is_boss) return;
+    if (attacker->is_boss) {                       /* isBossImmune() */
+        say(bt, e, "battlerTags:destinyBondLapseIsBoss", attacker);
+        return;
+    }
+    pr_queue_msg(bt, e, pr_msg2("battlerTags:destinyBondLapse", pr_arg_pokemon(bt, "pokemonNameWithAffix", source),
+                                pr_arg_pokemon(bt, "pokemonNameWithAffix2", attacker)));
     pr_damage_and_update(bt, e, attacker, attacker->hp, HIT_RESULT_INDIRECT_KO, false, NULL);
 }
 
@@ -1304,7 +1450,8 @@ void pr_grudge_lapse(pr_battle *bt, pr_engine *e, pr_pokemon *fainted, pr_pokemo
                   : pr_moves[move].pp + source->pp_up[s] * (int)(step < 1 ? 1 : step);
         int used = source->pp_used[s] + (max - source->pp_used[s]);   /* usePp(remaining) */
         source->pp_used[s] = (uint8_t)(used > max ? max : used);
-        pr_queue_message(bt, e);
+        pr_queue_msg(bt, e, pr_msg2("battlerTags:grudgeLapse", pr_arg_pokemon(bt, "pokemonNameWithAffix", source),
+                                    pr_arg_move("moveName", move)));   /* movesetMove.getName() */
         return;
     }
 }

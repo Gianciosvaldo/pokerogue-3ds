@@ -179,7 +179,7 @@ void pr_force_switch_out(pr_battle *bt, pr_engine *e, bool self_switch, int swit
     const pr_pokemon *ally = pr_get_ally(bt, out);
     if (out->hp > 0) {
         pr_leave_field(bt, e, out, false);
-        pr_queue_message(bt, e);                                     /* moveTriggers:fled */
+        pr_queue_msg(bt, e, pr_msg1("moveTriggers:fled", pr_arg_pokemon(bt, "pokemonName", out)));
         if (bt->double_battle && ally) pr_note_unported(bt, PR_FEAT_DOUBLES);   /* redirectPokemonMoves */
     }
     /* clearEnemyHeldItemModifiers(out), then updateModifiers(false): with none of its held items
@@ -272,7 +272,7 @@ void pr_wimp_out_apply(pr_battle *bt, pr_engine *e, pr_pokemon *p)
     if (!bt->wave_index || bt->wave_index % 10 == 0) return;
     if (p->hp > 0) {
         pr_leave_field(bt, e, p, false);
-        pr_queue_message(bt, e);                                     /* moveTriggers:fled */
+        pr_queue_msg(bt, e, pr_msg1("moveTriggers:fled", pr_arg_pokemon(bt, "pokemonName", p)));
         if (bt->double_battle && ally) pr_note_unported(bt, PR_FEAT_DOUBLES);   /* redirectPokemonMoves */
     }
     if (!is_active_on_field(ally)) {
@@ -326,7 +326,7 @@ static void field_setup(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool reset)
     pr_form_change(bt, p, PR_FCT_SpeciesFormChangePostMoveTrigger);
     for (int i = 0; i < p->n_tags; i++)
         if (p->tags[i].type == BATTLER_TAG_TYPE_SUBSTITUTE) {
-            pr_unshift_new(bt, e, PH_POKEMON_ANIM, -1);                  /* SUBSTITUTE_ADD */
+            pr_unshift_pokemon_anim(bt, e, pr_battler_index(bt, p), POKEMON_ANIM_TYPE_SUBSTITUTE_ADD);
             p->tags[i].in_focus = false;
             break;
         }
@@ -467,7 +467,8 @@ static void entry_hazard_apply(pr_battle *bt, pr_engine *e, int i, pr_pokemon *p
                            ? 1.0 / (10 - 2 * t.layers)
                            : 0.125 * pr_get_attack_type_effectiveness_opts(bt, p, POKEMON_TYPE_ROCK, NULL, -1, true, true);
         double damage = to_dmg_value(pr_get_stat(p, STAT_HP, true) * ratio);
-        pr_queue_message(bt, e);                                           /* spikes / stealthRockActivateTrap */
+        pr_queue_msg(bt, e, pr_msg_p(bt, t.type == ARENA_TAG_TYPE_SPIKES ? "arenaTag:spikesActivateTrap"
+                                                                         : "arenaTag:stealthRockActivateTrap", p));
         pr_damage_and_update(bt, e, p, damage, HIT_RESULT_INDIRECT, false, NULL);
         p->damage_taken += (int32_t)damage;
         return;
@@ -490,7 +491,7 @@ static void entry_hazard_apply(pr_battle *bt, pr_engine *e, int i, pr_pokemon *p
                            .cancelled_stats = &cancelled};
         pr_apply_ab_attrs(bt, PR_AC_ProtectStatAbAttr, &pp);
         if (cancelled) return;
-        pr_queue_message(bt, e);                                           /* stickyWebActivateTrap */
+        pr_queue_msg(bt, e, pr_msg_p(bt, "arenaTag:stickyWebActivateTrap", p));
         if (pr_unshift_stat_stage_change_ex(bt, e, pr_battler_index(bt, p), spd, minus_one, 1,
                                             pr_pokemon_by_id(bt, t.source_id), STAT_CHANGE_SOURCE_STICKY_WEB) < 0)
             e->overflow = true;
