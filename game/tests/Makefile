@@ -2,8 +2,10 @@
 CC ?= gcc
 CFLAGS ?= -O1 -g -std=gnu11 -Wall -Wno-unused-parameter -ffp-contract=off
 BC := ../../battle-core
-CPPFLAGS := -I../include -I$(BC)/include -I$(BC)/gen/out
-SRCS := evtest.c ../source/battle_setup.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c
+CPPFLAGS += -I../include -I$(BC)/include -I$(BC)/gen/out
+AI := ../../ai-core
+CPPFLAGS += -I$(AI)/include -I$(AI)/gen/out
+SRCS := evtest.c ../source/battle_setup.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/evtest: $(SRCS)
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SRCS) -lm -o $@

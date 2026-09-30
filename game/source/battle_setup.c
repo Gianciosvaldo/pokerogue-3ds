@@ -31,6 +31,7 @@ void bs_begin(bs_battle* b, int biome, int wave, const char* seed) {
   bt->last_used_pokeball = -1;
   for (int k = 0; k < 4; k++) bt->commands[k].command = bt->pre_commands[k].command = -1;
   b->next_id = 1000;
+  b->ai.seed = s;
 }
 
 pr_pokemon* bs_add(bs_battle* b, int side, int species, int level, const int* moves, int n_moves) {
@@ -85,22 +86,13 @@ static void fight(struct pr_turn_command* c, int slot, int move, int target) {
   c->cursor = (int8_t)slot;
 }
 
-static int pp_left(const pr_pokemon* p, int i) {
-  int max = p->max_pp_override[i] >= 0 ? p->max_pp_override[i] : pr_moves[p->moves[i]].pp;
-  return max - p->pp_used[i];
-}
 
 void bs_turn_fight(bs_battle* b, int slot) {
   pr_battle* bt = &b->bt;
   for (int k = 0; k < 4; k++) bt->commands[k].command = bt->pre_commands[k].command = -1;
   pr_pokemon* me = bt->field[0];
-  pr_pokemon* en = bt->field[2];
   fight(&bt->commands[0], slot, me->moves[slot], 2);
-  int ok[4], n = 0;
-  for (int i = 0; i < en->n_moves; i++)
-    if (pp_left(en, i) > 0) ok[n++] = i;
-  int es = n ? ok[rnd(b, n)] : 0;
-  fight(&bt->commands[2], es, en->moves[es], 0);
+  pr_ai_enemy_command(bt, &b->ai, 0);
   bt->n_unported = bt->n_deferred = 0;
   pr_run_turn(bt, &b->eng);
 }
