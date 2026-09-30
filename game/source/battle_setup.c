@@ -97,6 +97,26 @@ void bs_turn_fight(bs_battle* b, int slot) {
   pr_run_turn(bt, &b->eng);
 }
 
+void bs_turn_switch(bs_battle* b, int slot) {
+  pr_battle* bt = &b->bt;
+  for (int k = 0; k < 4; k++) bt->commands[k].command = bt->pre_commands[k].command = -1;
+  struct pr_turn_command* c = &bt->commands[0];
+  memset(c, 0, sizeof *c);
+  c->command = COMMAND_POKEMON;
+  c->cursor = (int8_t)slot;
+  c->no_move = true;
+  pr_ai_enemy_command(bt, &b->ai, 0);
+  bt->n_unported = bt->n_deferred = 0;
+  pr_run_turn(bt, &b->eng);
+}
+
+bool bs_awaiting_player_pick(const bs_battle* b) { return b->eng.awaiting_pick && b->eng.stop_phase.sw_player; }
+
+void bs_pick(bs_battle* b, int slot) {
+  b->bt.n_unported = b->bt.n_deferred = 0;
+  pr_resume_switch(&b->bt, &b->eng, slot);
+}
+
 int bs_outcome(const bs_battle* b) {
   const pr_battle* bt = &b->bt;
   bool enemy_left = false, player_left = false;

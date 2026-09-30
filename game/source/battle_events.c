@@ -103,6 +103,7 @@ typedef struct {
 int be_convert(const pr_battle* bt, const pr_engine* e, const bv_mon* shown_player, const bv_mon* shown_enemy,
                bv_event* out, int max) {
   int n = 0, nt = 0;
+  const char* go_text = NULL;
   seen_t seen[4] = {{0}};
   seen[0] = (seen_t){shown_player->hp, shown_player->status, shown_player->hp <= 0, true};
   seen[2] = (seen_t){shown_enemy->hp, shown_enemy->status, shown_enemy->hp <= 0, true};
@@ -120,7 +121,13 @@ int be_convert(const pr_battle* bt, const pr_engine* e, const bv_mon* shown_play
       case PR_EV_TEXT:
         if (!ev->msg.key || nt >= TXT_MAX) break;
         pr_msg_format(&ev->msg, be_text_source(), g_txt[nt], sizeof g_txt[nt]);
-        /* value = callbackDelay, id = prompt, once battle-core fills them (0 = upstream's defaults) */
+        if (i + 1 < e->n_events && e->events[i + 1].type == PR_EV_SWITCH_IN && e->events[i + 1].battler >= 0 &&
+            e->events[i + 1].battler < 2) {
+          /* "Go! X!": SwitchSummonPhase shows it while the ball is thrown, so the summon shows it */
+          go_text = g_txt[nt++];
+          break;
+        }
+        /* value = callbackDelay, id = prompt (0 = upstream's defaults) */
         PUT(.type = BEV_MESSAGE, .battler = -1, .text = g_txt[nt], .a = ev->value, .prompt = ev->id == 1);
         nt++;
         break;
@@ -167,7 +174,8 @@ int be_convert(const pr_battle* bt, const pr_engine* e, const bv_mon* shown_play
         be_mon(bt, bt->party[side][slot], &sent[b]);
         sent[b].hp = ev->field[b].hp;
         sent[b].status = ev->field[b].status;
-        PUT(.type = BEV_SUMMON, .battler = b, .mon = &sent[b]);
+        PUT(.type = BEV_SUMMON, .battler = b, .mon = &sent[b], .text = go_text);
+        go_text = NULL;
         seen[b] = (seen_t){ev->field[b].hp, ev->field[b].status, false, true};
         break;
       }

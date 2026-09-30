@@ -7,8 +7,9 @@ saves from [`assets-pipeline/app-src/`](../assets-pipeline/app-src/), and linkin
 
 Status: the framework is in, and the battle screen plays a demo battle whose turns are **run by
 battle-core** and shown from its events (`battle-core/include/pr/events.h`): the texts upstream
-shows, move animations, hits and HP bars, stat changes, faints. The enemy's moves come from
-ai-core. The battle itself is built by a stand-in (`battle_setup.c`), which goes when the app
+shows, move animations, hits and HP bars, stat changes, faints, switching. The enemy's moves come
+from ai-core. POKEMON and a faint open the menus thread's party screen (`menus/`) on the bottom
+screen to switch; BALL opens the Poke Ball list (throwing one says catching isn't in yet). The battle itself is built by a stand-in (`battle_setup.c`), which goes when the app
 drives game-core's run (`game-core/include/gc/run.h`).
 
 ## Build and run
@@ -51,6 +52,8 @@ Every position in the code is upstream's own number in one of these spaces (see 
 | [`battle_view.h`](include/battle_view.h) | The battle screen: `bv_begin`, `bv_play(events)`, `bv_ask_command`. |
 | [`battle_events.h`](include/battle_events.h) | battle-core's turn events as battle screen events, with their text rendered from data.pak (`pr_msg_format`). Catches up at the end of a turn on anything battle-core doesn't emit yet (HP, faints). |
 | [`battle_anim.h`](include/battle_anim.h) | Upstream's battle animation player (`BattleAnim` in `battle-anims.ts`): move, common and charge animations from data.pak, their graphic cells, Pokemon copies, backgrounds, sounds, layers. `ba_preload_move` at battle start. |
+| [`party_screen.h`](include/party_screen.h) | `menus/`' party and summary screens as an overlay on the bottom screen, filled from battle-core's party: `ps_open(bt, PS_SWITCH or PS_FAINT_SWITCH, on_pick)`. |
+| [`ball_menu.h`](include/ball_menu.h) | Upstream's `BallUiHandler`: the Poke Ball list with counts, `ball_menu_open(counts, on_pick)`. |
 | [`battle_setup.h`](include/battle_setup.h) | Stand-in: builds a wild singles battle for the demo until game-core's run drives the app. |
 | [`gen/gm_enum_names.h`](gen/gm_enum_names.h) | Names of battle-core's enums (`gm_enum_camel(GM_E_SPECIES_ID, id, ...)` gives upstream's i18n key). Regenerate with `python3 game/tools/gen_enum_names.py` when battle-core's enums change. |
 
@@ -62,6 +65,12 @@ select, learn move, biome map) is picked up by the Makefile when it exists.
 with their English text (needs upstream's `locales/en`):
 ```
 make -C game/tests && game/tests/build/evtest path/to/pokerogue/locales/en 2
+```
+
+Switching through the stand-in battle (a switch turn, then faint switches until the party is
+out; exits 0 when the level 80 enemy wins, as it should):
+```
+make -C game/tests build/switchtest && game/tests/build/switchtest path/to/pokerogue/locales/en
 ```
 
 The animation player runs on the PC over every upstream animation file (all moves from both
@@ -88,7 +97,8 @@ make -C game/tests animtest && game/tests/build/animtest path/to/pokerogue-asset
   battle-core; every text waits 1.5 s for now.
 - In move animations: the grey part of a sprite's tone (upstream's shader pushes it far past
   grey; not reproduced), Substitute, and the KO colour inversion.
-- Trainer battles, doubles, the ball and party screens, stat stage and shiny effects, boss HP
+- Catching and fleeing (battle-core), so a thrown ball and RUN are placeholders.
+- Trainer battles, doubles, stat stage and shiny effects, boss HP
   segments, weather and field effects on the field.
 - Sound without snd.pak is silent (the packs in the test rig have no sound yet).
 - Forms, variants and gender sprite differences in sprite keys.

@@ -47,7 +47,7 @@ typedef enum {
   BEV_MESSAGE,     /* text, like a MessagePhase: a = callbackDelay ms (0 = upstream's default:
                     * 1500, or none with a prompt), prompt = wait for a button */
   BEV_INTRO_WILD,  /* the wild encounter: arenas slide in, the enemy untints, cries, info box, message */
-  BEV_SUMMON,      /* battler sent out (mon = its data); player: "Go! X!" */
+  BEV_SUMMON,      /* battler sent out (mon = its data); player: text, or "Go! X!" when NULL */
   BEV_WITHDRAW,    /* battler returns to its ball */
   BEV_MOVE_ANIM,   /* an animation (battle_anim.h): b = ba_kind (move, common, charge), a = its id
                     * (MoveId, CommonAnim, ChargeAnim), battler = user, target (-1 = none) */
@@ -65,7 +65,7 @@ typedef struct {
   bev_type type;
   int8_t battler, target;
   int a, b;
-  const char* text;          /* BEV_MESSAGE: the text (already translated) */
+  const char* text;          /* BEV_MESSAGE, BEV_SUMMON: the text (already translated) */
   bool prompt;               /* BEV_MESSAGE: wait for a button */
   const bv_mon* mon;         /* BEV_SUMMON */
 } bv_event;
