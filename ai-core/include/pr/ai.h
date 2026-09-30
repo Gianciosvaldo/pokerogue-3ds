@@ -72,6 +72,10 @@ typedef struct pr_ai {
     bool skip_enemy_turns;         /* currentBattle.mysteryEncounter?.skipEnemyBattleTurns */
     pr_ai_mon mons[2 * PR_MAX_PARTY];
     uint8_t n_mons;
+    /* out: the move scores of the last SMART or SMART_RANDOM choice, one per move in the pool (what
+     * upstream logs as "Move Scores:"); 0 entries when the last choice didn't score moves */
+    double move_scores[4];
+    uint8_t n_move_scores;
 } pr_ai;
 
 /* The entry for p (adding a default one if there is room); NULL when the table is full */
@@ -83,8 +87,19 @@ int pr_ai_default_type(bool boss, bool has_trainer);
 /* EnemyCommandPhase(fieldIndex).start() for the enemy at bt->field[BATTLER_INDEX_ENEMY + field_index]:
  * a trainer's Pokemon may switch (bt->commands[...] = POKEMON with the party slot in cursor), otherwise
  * it picks a move (FIGHT with the move, its targets and use mode), and a trainer may terastallize it
- * (bt->pre_commands[...] = TERA). Uses the battle RNG (bt->battle_rng) exactly where upstream does. */
+ * (bt->pre_commands[...] = TERA). Uses the battle RNG (bt->battle_rng) exactly where upstream does.
+ * A few move conditions the scores call read the phase queue (Protect and co. fail unless a
+ * MovePhase is queued, which it never is at command time) or add to it as upstream does then (Damp
+ * showing itself against Explosion, an immunity message): set bt->engine to the game's engine
+ * between turns; with bt->engine NULL those conditions report PR_FEAT_MOVE_CONDITION. */
 void pr_ai_enemy_command(pr_battle *bt, pr_ai *ai, int field_index);
+
+/* Trainer.getNextSummonIndex(trainerSlot): the enemy party slot the trainer sends in when a Pokemon
+ * of trainer_slot (TRAINER_SLOT_*) faints or is forced out (SwitchSummonPhase with slot -1): the best
+ * matchup against the player's field, a tie settled by a roll on ai->seed. -1 when no Pokemon on the
+ * bench can come in (upstream would throw). battle-core stops at PH_SWITCH for the enemy side; the
+ * caller passes this to pr_resume_switch. */
+int pr_ai_next_summon_index(pr_battle *bt, pr_ai *ai, int trainer_slot);
 
 /* EnemyPokemon.getNextMove(): the move, its targets and use mode. Like upstream it drops unusable
  * moves from the front of p's move queue, or clears the queue. */
