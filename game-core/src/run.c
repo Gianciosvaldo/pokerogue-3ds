@@ -5,11 +5,12 @@
 #include <stdio.h>
 
 _Static_assert(sizeof(gc_internal) <= sizeof(((gc_run *)0)->internal_), "gc_run.internal_ is too small");
+_Static_assert(PR_AI_FEAT_COUNT_ <= GC_MAX_UNPORTED, "gc_run.unported is too small for ai-core's ids");
+_Static_assert(GC_STUB_COUNT_ <= 16, "gc_run.stubs is too small");
 gc_internal *gc_int(gc_run *run) { return (gc_internal *)(void *)run->internal_; }
 
 const char *const gc_stub_name[GC_STUB_COUNT_] = {
     [GC_STUB_ENEMY_MOVESET] = "enemy moveset (last 4 level moves)",
-    [GC_STUB_ENEMY_AI] = "enemy AI (random usable move)",
     [GC_STUB_REWARDS] = "rewards (placeholder list)",
     [GC_STUB_DOUBLE_AS_SINGLE] = "double battle played as single",
     [GC_STUB_MYSTERY_ENCOUNTER] = "mystery encounter played as wild",
@@ -22,6 +23,7 @@ const char *const gc_stub_name[GC_STUB_COUNT_] = {
     [GC_STUB_BATTLE_START] = "summon phases at battle start",
     [GC_STUB_TRAINER_REWARDS] = "trainer's own rewards",
     [GC_STUB_POST_BATTLE] = "post-battle abilities, Pay Day, lapsing items",
+    [GC_STUB_ENEMY_SWITCH] = "trainer's switch-out (enemy loses the turn)",
 };
 
 void gc_stub(gc_run *run, int which)

@@ -185,7 +185,7 @@ void gc_new_battle(gc_run *run)
     run->n_enemy = 0;
     run->n_enemy_items = 0;
     run->trainer_type = run->trainer_variant = -1;
-    in->enemy_switch_counter = 0;
+    gc_ai_reset(run);
     in->reroll_count = 0;
 
     pr_new_battle_ctx ctx;
@@ -257,6 +257,7 @@ void gc_new_battle(gc_run *run)
         pr_calculate_stats(&run->bt, &run->enemy[i].b);
     }
     enemy_items(run);
+    gc_ai_enemy_party(run);
     /* arena.setBiomeWeather / setBiomeTerrain on a new biome: not ported (they roll on the RNG) */
     run->run.unported = before;
 

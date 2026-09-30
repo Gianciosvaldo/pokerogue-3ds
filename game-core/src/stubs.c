@@ -3,45 +3,6 @@
  * run's own rolls stay where upstream has them, minus what the stand-in itself would have rolled. */
 #include "internal.h"
 
-/* ---- ai-core: a random usable move, on the stand-ins' own RNG ---- */
-void gc_port_enemy_command(gc_run *run, int enemy_slot)
-{
-    pr_battle *bt = &run->bt;
-    pr_pokemon *p = bt->field[enemy_slot];
-    if (!p || !p->on_field || p->hp <= 0) return;
-    struct pr_turn_command *tc = &bt->commands[enemy_slot];
-    memset(tc, 0, sizeof *tc);
-    tc->command = COMMAND_FIGHT;
-    tc->use_mode = MOVE_USE_MODE_NORMAL;
-    if (p->n_move_queue) {
-        /* a move locked in by the last turn */
-        const pr_turn_move *q = &p->move_queue[0];
-        tc->move = q->move;
-        tc->use_mode = q->use_mode;
-        tc->n_targets = q->n_targets;
-        memcpy(tc->targets, q->targets, sizeof tc->targets);
-        tc->cursor = PR_CURSOR_UNDEFINED;
-        return;
-    }
-    gc_stub(run, GC_STUB_ENEMY_AI);
-    int usable[4], n = 0;
-    for (int i = 0; i < p->n_moves; i++) if (gc_move_usable(p, i, NULL)) usable[n++] = i;
-    const int move = n ? p->moves[usable[gc_stub_rand(run, (uint32_t)n)]] : MOVE_ID_STRUGGLE;
-    tc->move = (uint16_t)move;
-    tc->cursor = PR_CURSOR_UNDEFINED;
-    int8_t tg[4];
-    bool multiple = false;
-    int nt = pr_get_move_targets(bt, p, move, -1, tg, &multiple);
-    if (nt > 4) nt = 4;
-    if (nt > 1 && !multiple) {
-        /* one target picked among several (upstream: getNextTargets) */
-        tg[0] = tg[gc_stub_rand(run, (uint32_t)nt)];
-        nt = 1;
-    }
-    tc->n_targets = (uint8_t)nt;
-    memcpy(tc->targets, tg, (size_t)nt);
-}
-
 /* ---- run-core: the last four level moves the enemy could know at its level ---- */
 void gc_port_enemy_moveset(gc_run *run, gc_mon *m)
 {
@@ -123,7 +84,11 @@ bool gc_port_apply_reward(gc_run *run, const gc_offer *o, int party, int move_sl
     if (ball >= 0) {
         const int add = ball == POKEBALL_TYPE_MASTER_BALL ? 1 : 5;
         run->pokeballs[ball] = (uint8_t)(run->pokeballs[ball] + add > 99 ? 99 : run->pokeballs[ball] + add);
-        gc_ev_msg(run, "battle:rewardGain", 1, gc_m_item("modifierName", k));
+        /* upstream's name is "5× Poké Ball" (AddPokeballModifierType.name with its count): the stand-in
+         * names the ball alone */
+        static const char *const ball_key[] = {"pokeball:pokeBall", "pokeball:greatBall", "pokeball:ultraBall",
+                                               "pokeball:rogueBall", "pokeball:masterBall"};
+        gc_ev_msg(run, "battle:rewardGain", 1, pr_arg_key("modifierName", ball_key[ball]));
         return true;
     }
     if (o->target == GC_TARGET_NONE) {

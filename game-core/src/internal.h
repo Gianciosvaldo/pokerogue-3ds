@@ -4,6 +4,7 @@
 #include "gc/run.h"
 #include "gc/ports.h"
 #include "gc/data.h"
+#include "pr/ai.h"
 #include <math.h>
 #include <string.h>
 
@@ -51,7 +52,11 @@ typedef struct {
     gc_rqueue rq;
     uint32_t stub_rng;          /* the stand-ins' own RNG, so they never move upstream's */
     int reroll_count;
-    int enemy_switch_counter;
+    /* ai-core's view of the battle: enemySwitchCounter, each Pokemon's AI entry (initialTeamIndex,
+     * waveData.abilityRevealed); reset at each new battle. ai.trainer is set at each call, as it
+     * points into this struct */
+    pr_ai ai;
+    pr_ai_trainer ai_trainer;
     bool lock_rarities;
     int last_battle_type;       /* the finished battle's BattleType, -1 = none yet */
     bool last_final_boss;       /* it was the classic final boss */
@@ -112,6 +117,8 @@ double gc_apply_exp_boosters(const gc_run *run, double exp);          /* ExpBoos
 void gc_new_battle(gc_run *run);                  /* NewBattlePhase + EncounterPhase */
 bool gc_is_new_biome(const gc_run *run, int wave);   /* isNewBiome for the battle of `wave` */
 bool gc_battle_setup_field(gc_run *run, bool reset_arena);   /* bt from the parties, before the first turn */
+void gc_ai_reset(gc_run *run);                    /* ai-core's state for a new battle */
+void gc_ai_enemy_party(gc_run *run);              /* ...and the enemy party's entries once it is made */
 void gc_battle_turn_init(gc_run *run);            /* TurnInitPhase's part: participants, resetTurnData */
 /* The player's command for field slot 0: fills bt->commands[0]; false (and why) if not allowed */
 bool gc_battle_player_command(gc_run *run, const gc_choice *c, const char **why);

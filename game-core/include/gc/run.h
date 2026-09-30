@@ -121,7 +121,8 @@ typedef struct {
     uint16_t move;          /* LEARN_MOVE: the new move */
     uint16_t species;       /* EVOLVE: what it becomes */
     /* COMMAND: which commands are allowed now; a move slot that can't be picked has its reason (an
-     * upstream i18n key, e.g. "battle:moveNoPp") in move_why */
+     * upstream i18n key, e.g. "battle:moveNoPp"; {{moveName}} is the slot's move and
+     * {{pokemonNameWithAffix}} the Pokemon) in move_why */
     bool can_ball, can_switch, can_run;
     bool move_ok[4];
     const char *move_why[4];
@@ -181,6 +182,7 @@ typedef struct {
 } gc_starter;
 
 #define GC_MAX_EVENTS 256
+#define GC_MAX_UNPORTED (PR_FEAT_COUNT_ + 16)
 #define GC_MAX_BATTLE_EVENTS 384
 typedef struct gc_run {
     int api_version;
@@ -224,7 +226,7 @@ typedef struct gc_run {
     bool battle_events_overflow;
     /* what the run hit that isn't ported yet: counts by battle-core's unported ids, and game-core's own
      * stand-ins (GC_STUB_*), for the soak runs' report */
-    uint32_t unported[PR_FEAT_COUNT_];
+    uint32_t unported[GC_MAX_UNPORTED];   /* battle-core's ids, then ai-core's (PR_AI_FEAT_*) */
     uint32_t stubs[16];
     uint32_t run_core_unported[8];      /* run-core's stand-ins, by PR_RUN_UNPORTED_* bit */
     bool finished;
@@ -233,7 +235,6 @@ typedef struct gc_run {
 /* game-core's own stand-ins, counted in run->stubs */
 enum {
     GC_STUB_ENEMY_MOVESET,      /* run-core has no enemy moveset yet: the last 4 level moves */
-    GC_STUB_ENEMY_AI,           /* no ai-core yet: a random usable move */
     GC_STUB_REWARDS,            /* no reward-core yet: a fixed placeholder list */
     GC_STUB_DOUBLE_AS_SINGLE,   /* a double battle roll played as a single battle (M1 rule) */
     GC_STUB_MYSTERY_ENCOUNTER,  /* a mystery encounter roll played as a wild battle */
@@ -246,6 +247,8 @@ enum {
     GC_STUB_BATTLE_START,       /* the summon phases at a battle's start (entry abilities, hazards) not run */
     GC_STUB_TRAINER_REWARDS,    /* a trainer's own rewards (modifierRewardFuncs, vouchers) not given */
     GC_STUB_POST_BATTLE,        /* PostBattle abilities (Pickup, Honey Gather), Pay Day money, lapsing items */
+    GC_STUB_ENEMY_SWITCH,       /* the AI switched a trainer's Pokemon out: battle-core doesn't run the enemy
+                                 * side's SwitchSummonPhase yet, so the enemy does nothing that turn */
     GC_STUB_COUNT_
 };
 extern const char *const gc_stub_name[GC_STUB_COUNT_];

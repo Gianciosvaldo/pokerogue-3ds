@@ -9,6 +9,7 @@
  * ended, the stand-ins they used and battle-core's unported effects they hit. */
 #define _POSIX_C_SOURCE 200809L
 #include "gc/run.h"
+#include "pr/ai.h"
 #include <errno.h>
 #include <math.h>
 #include <signal.h>
@@ -400,7 +401,7 @@ typedef struct {
     int wave, turns, score, clear;
     int waves_to_trainer;
     uint32_t stubs[16];
-    uint32_t unported[PR_FEAT_COUNT_];
+    uint32_t unported[GC_MAX_UNPORTED];
     uint32_t run_core[8];
     struct { char site[40]; uint32_t n; } texts[32];   /* battle texts not ported yet, by engine site */
     int n_texts;
@@ -453,6 +454,13 @@ static void soak_one(int index, int verbose, soak_result *r)
     memcpy(r->run_core, run.run_core_unported, sizeof r->run_core);
 }
 
+typedef struct { char site[40]; uint32_t runs, n; } text_site;
+static int cmp_site(const void *a, const void *b)
+{
+    const text_site *x = a, *y = b;
+    return x->runs < y->runs ? 1 : x->runs > y->runs ? -1 : strcmp(x->site, y->site);
+}
+
 static int cmp_desc(const void *a, const void *b)
 {
     const uint32_t *x = a, *y = b;
@@ -462,9 +470,9 @@ static int cmp_desc(const void *a, const void *b)
 static int soak(int n, int first, int jobs, int verbose, int timeout)
 {
     static soak_result agg_r;
-    static uint32_t hit_runs[PR_FEAT_COUNT_], hit_total[PR_FEAT_COUNT_];
+    static uint32_t hit_runs[GC_MAX_UNPORTED], hit_total[GC_MAX_UNPORTED];
     uint32_t stub_runs[16] = {0}, stub_total[16] = {0}, rc_runs[8] = {0}, rc_total[8] = {0};
-    static struct { char site[40]; uint32_t runs, n; } texts[256];
+    static text_site texts[256];
     int n_texts = 0;
     int ended = 0, stuck = 0, crashed = 0, timed = 0, clears = 0;
     long turns = 0;
@@ -530,7 +538,7 @@ static int soak(int n, int first, int jobs, int verbose, int timeout)
             texts[k].runs++;
             texts[k].n += r->texts[t].n;
         }
-        for (int i = 0; i < PR_FEAT_COUNT_; i++) { hit_total[i] += r->unported[i]; hit_runs[i] += r->unported[i] > 0; }
+        for (int i = 0; i < GC_MAX_UNPORTED; i++) { hit_total[i] += r->unported[i]; hit_runs[i] += r->unported[i] > 0; }
     }
     printf("\n%d runs: %d ended (%d cleared), %d stuck, %d crashed, %d timed out; %ld turns (%.1f per run)\n",
            n, ended, clears, stuck, crashed, timed, turns, n ? (double)turns / n : 0.0);
@@ -543,15 +551,16 @@ static int soak(int n, int first, int jobs, int verbose, int timeout)
                                            "fixed classic battle", "trainer config", "bit 6", "bit 7"};
     printf("\nrun-core stand-ins (runs, times):\n");
     for (int i = 0; i < 8; i++) if (rc_total[i]) printf("  %-50s %6u runs %9u\n", rc_name[i], rc_runs[i], rc_total[i]);
-    printf("\nbattle texts not ported yet (engine site: runs, times):\n");
-    for (int k = 0; k < n_texts; k++) printf("  %-44s %6u runs %9u\n", texts[k].site, texts[k].runs, texts[k].n);
-    static uint32_t order[PR_FEAT_COUNT_][2];
+    qsort(texts, (size_t)n_texts, sizeof texts[0], cmp_site);
+    printf("\nbattle texts not ported yet, by runs that showed one (%d engine sites; the top 15):\n", n_texts);
+    for (int k = 0; k < n_texts && k < 15; k++) printf("  %-44s %6u runs %9u\n", texts[k].site, texts[k].runs, texts[k].n);
+    static uint32_t order[GC_MAX_UNPORTED][2];
     int m = 0;
-    for (int i = 0; i < PR_FEAT_COUNT_; i++) if (hit_runs[i]) { order[m][0] = (uint32_t)i; order[m][1] = hit_runs[i]; m++; }
+    for (int i = 0; i < GC_MAX_UNPORTED; i++) if (hit_runs[i]) { order[m][0] = (uint32_t)i; order[m][1] = hit_runs[i]; m++; }
     qsort(order, (size_t)m, sizeof order[0], cmp_desc);
-    printf("\nbattle-core unported, by runs that hit it (%d kinds):\n", m);
+    printf("\nbattle-core and ai-core unported, by runs that hit it (%d kinds):\n", m);
     for (int i = 0; i < m; i++)
-        printf("  %-44s %6u runs %9u\n", pr_unported_name((uint16_t)order[i][0]), order[i][1], hit_total[order[i][0]]);
+        printf("  %-44s %6u runs %9u\n", pr_ai_unported_name((uint16_t)order[i][0]), order[i][1], hit_total[order[i][0]]);
     return crashed || timed ? 1 : 0;
 }
 

@@ -5,10 +5,11 @@ wave's encounter, the battle's commands, victory, experience, level ups, new mov
 rewards, biome changes and game over. It has no graphics, sound or file access. The 3DS app shows its
 events and screens and hands back the player's choices.
 
-It calls battle-core for the turns, run-core for the waves and the enemies, and goes through
-`include/gc/ports.h` for the enemy AI, the enemy movesets and the rewards. Until ai-core, reward-core and
-run-core's movesets land, stand-ins in `src/stubs.c` keep a run playable. Each stand-in is counted, so
-the soak runs show how much of a run is still standing in.
+It calls battle-core for the turns, run-core for the waves and the enemies, ai-core for the enemy's
+commands (and the player's command restrictions and trapping), and goes through `include/gc/ports.h`
+for the enemy movesets and the rewards. Until reward-core and run-core's movesets land, stand-ins in
+`src/stubs.c` keep a run playable. Each stand-in is counted, so the soak runs show how much of a run is
+still standing in.
 
 ## The API (`include/gc/run.h`)
 
@@ -36,7 +37,9 @@ Messages are battle-core's `pr_msg` (`battle-core/include/pr/text.h`): upstream'
 (`battle:expGain`) with its named arguments (`pokemonName`, `exp`), fixed when the message is made, so
 `pr_msg_format` gives the text upstream shows. A turn's own moves, damage, faints, switches and texts are
 battle-core's `pr_event` list (`pr/events.h`), handed over as one `GC_EV_BATTLE` event that points into
-`run->battle_events` (valid until the next `gc_run_choose`). The app plays both the same way.
+`run->battle_events` (valid until the next `gc_run_choose`). The app plays both the same way. Some of
+upstream's texts carry its control codes (`@d{15}` waits, `@s{se/pb_bounce_1}` plays a sound, as in
+the "1, 2, and… Poof!" of a forgotten move): the app acts on them rather than printing them.
 
 ## Building and playing on a PC
 
@@ -64,11 +67,11 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 | Stand-in | Waits on |
 |---|---|
 | Enemy moveset: the last four level moves | run-core |
-| Enemy AI: a random usable move | ai-core |
+| A trainer's switch-out picked by the AI does nothing (the enemy loses its turn) | battle-core: the enemy side's SwitchSummonPhase |
 | Rewards: a fixed placeholder pool (potions, revives, ethers, Rare Candy, balls) | reward-core |
 | Double battles are played as singles (M1 rule) | doubles in battle-core |
 | Mystery encounters and fixed classic battles (rival, evil team, gyms run-core can't make) become wild battles of the wave's level | run-core, later the encounters |
-| A trainer's next Pokémon goes straight onto the field, without its summon phases | battle-core battle API, ai-core (which one it sends) |
+| A trainer's next Pokémon is its first one still able to fight, straight onto the field without its summon phases | battle-core battle API, ai-core's getNextSummonIndex |
 | The rest of a turn after a victory (end-of-turn effects) is lost | battle-core: carry on past a stop |
 | The summon phases at a battle's start (entry abilities, hazards) aren't run | battle-core battle API |
 | No weather roll for a new biome | port of `getRandomWeatherType` |
@@ -78,8 +81,10 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 | Pickup, Honey Gather, Pay Day, lapsing items | reward-core |
 
 Not started: saving and loading (`gc_run_save` returns 0 for now; it's the next slice), the dex and
-starter unlocks, eggs, the "Will you switch?" prompt at a trainer's new Pokémon, move restrictions on
-the command screen (Disable, Taunt, Encore, Imprison), form learnsets, and the prevolution-move messages.
+starter unlocks, eggs, the "Will you switch?" prompt at a trainer's new Pokémon, Imprison and the
+restriction texts of their own (a restricted move answers `battle:moveCannotBeSelected` until
+battle-core's `pr_move_usable` lands), the trainer config's boss flag and Terastallization for the fixed
+battles' trainers, form learnsets, and the prevolution-move messages.
 
 ## Data
 
