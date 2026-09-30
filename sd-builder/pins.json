@@ -58,6 +58,12 @@
       }
     }
   },
+  "fribidi": {
+    "url": "https://conda.anaconda.org/conda-forge/win-64/fribidi-1.0.10-h8d14728_0.tar.bz2",
+    "sha256": "e0323e6d7b6047042970812ee810c6b1e1a11a3af4025db26d0965ae5d206104",
+    "size": 64567,
+    "file": "Library/bin/fribidi-0.dll"
+  },
   "dsp1": {
     "url": "https://github.com/zoogie/DSP1/releases/download/v1.0/DSP1.3dsx",
     "sha256": "ce95f0db8fe4a6025be4de7e4ccdf5ea5974b87b316abf9363becec4f3bd01a7",
