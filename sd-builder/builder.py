@@ -27,6 +27,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import threading
 import time
 import urllib.error
@@ -176,6 +177,23 @@ def unpack_wheels():
             z.extractall(lib)
     open(marker, "w").write(want)
     return lib
+
+
+def install_fribidi():
+    """fribidi-0.dll next to python.exe, so Pillow's Raqm text layout works and the fonts come out as on
+    Linux (font.require_raqm). Elsewhere than Windows (tests), Pillow's wheel already includes it."""
+    if not WINDOWS:
+        return
+    pin = PINS["fribidi"]
+    dll = os.path.join(os.path.dirname(sys.executable), os.path.basename(pin["file"]))
+    marker = os.path.join(RUNTIME, "fribidi.ok")
+    if os.path.exists(dll) and os.path.exists(marker) and open(marker).read() == pin["sha256"]:
+        return
+    path = fetch(pin["url"], os.path.join(DOWNLOADS, os.path.basename(pin["url"])), "the text layout library",
+                 pin["sha256"], pin["size"])
+    with tarfile.open(path, "r:bz2") as t, t.extractfile(pin["file"]) as src, open(dll, "wb") as dst:
+        shutil.copyfileobj(src, dst)
+    open(marker, "w").write(pin["sha256"])
 
 
 def unpack_ffmpeg():
@@ -443,6 +461,7 @@ def build(assets, locales, game, lib, ffmpeg):
             say(f"   {len(errors)} files couldn't be converted (details in build-log.txt). The game will run, "
                 "but those pictures or sounds will be missing.")
         open(marker, "w").write(want)
+        log(f"{stage}.pak sha256 {sha256_of(pak)}")  # to compare with the tested build (sd-builder/README.md)
         say(f"   done in {(time.time() - t0) / 60:.0f} min, {os.path.getsize(pak) / MB:,.0f} MB")
 
 
@@ -657,6 +676,7 @@ def main():
             say("The files will be made in this folder, in SD-CARD-FILES, for you to copy later.")
         say("")
         lib = unpack_wheels()
+        install_fribidi()
         ffmpeg = unpack_ffmpeg()
         assets = fetch_upstream("assets", "PokeRogue's pictures and sounds (about 530 MB)")
         locales = fetch_upstream("locales", "PokeRogue's text in every language (about 4 MB)")

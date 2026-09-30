@@ -8,8 +8,8 @@ One download and one double-click that put the game's packs on a 3DS SD card, wi
 1. `BUILD-SD-CARD.bat` runs `setup.ps1`, which downloads a portable Python (python-build-standalone, 45 MB) with `curl.exe`, checks its SHA-256 and unpacks it with `tar.exe`. Both ship with Windows 10 1803 and later.
 2. `builder.py` does the rest, using only the standard library:
    - Finds the SD card: drives with a `3ds` folder, or removable ones. It skips the system drive, avoids "insert a disk" pop-ups from empty slots, and asks before using a drive with no `3ds` folder or one that isn't FAT32. Before the long build it writes a test file, so a locked card is caught at the start.
-   - Downloads the pipeline's libraries (4 wheels), ffmpeg (GyanD essentials build) and upstream's files at the pins below. Every tool is checked by SHA-256. The upstream archives are checked by file count and total size after unpacking, because GitHub doesn't promise stable archive bytes. Interrupted downloads resume where the server allows it, and are retried 5 times.
-   - Runs `build_sd.py` once per pack (data, font, gfx, snd, bgm) at below-normal priority, using all cores but one. It shows the percentage for gfx and bgm and a "still working" line every minute. A finished pack is marked with a hash of the pins and the pipeline code, so a rerun skips it; a pack stopped halfway is rebuilt.
+   - Downloads the pipeline's libraries (4 wheels, plus FriBiDi next to `python.exe`: see **Same packs on every PC** below), ffmpeg (GyanD essentials build) and upstream's files at the pins below. Every tool is checked by SHA-256. The upstream archives are checked by file count and total size after unpacking, because GitHub doesn't promise stable archive bytes. Interrupted downloads resume where the server allows it, and are retried 5 times.
+   - Runs `build_sd.py` once per pack (data, font, gfx, snd, bgm) at below-normal priority, using all cores but one. It shows the percentage for gfx and bgm and a "still working" line every minute. A finished pack is marked with a hash of the pins and the pipeline code, so a rerun skips it; a pack stopped halfway is rebuilt. Each pack's SHA-256 goes in the log.
    - Copies the packs to `3ds\pokerogue\` on the card. Each one goes to a `.part` file first, is synced, and is renamed only when complete. Packs already on the card are skipped.
    - If `3ds\dspfirm.cdc` is missing, it puts DSP1 (zoogie, MIT) in `3ds\` and tells the user to run it once on the 3DS.
    - Copies any `.3dsx` shipped in `files\apps\` to `3ds\` (the current zip carries the graphics bench, for the next console check).
@@ -27,11 +27,19 @@ Everything is logged to `build-log.txt` next to the .bat. It stops with a plain 
 | PokeRogue assets | `pokerogue-assets` `87426a7` (codeload zip; 32,045 files, 765 MB unpacked) | about 530 MB |
 | PokeRogue locales | `pokerogue-locales` `270ed0a` (1,851 files) | 4 MB |
 | Game source | `pokerogue` `8555c08`: `src/audio/audio-manager.ts` only (BGM loop points) | 17 KB |
+| FriBiDi | conda-forge `fribidi-1.0.10-h8d14728_0` (`fribidi-0.dll` only, LGPL; downloaded, not shipped) | 65 KB |
 | DSP1 | zoogie/DSP1 `v1.0` `DSP1.3dsx`, only when `dspfirm.cdc` is missing | 0.4 MB |
 
 **Assets pin.** The packs were first built from assets `056a1f4`, while the game's `8555c08` pins its assets submodule at `87426a7`. The two differ in one file only, `fonts/pokemon-emerald-pro.ttf` (upstream #128, font adjustments), and `056a1f4` is one commit later. The builder uses `87426a7`, so every upstream input comes from the one game commit, like `run-core`'s tests. The locales pin `270ed0a` is already the game's submodule pin.
 
 To change a pin: update the URL and hash (or the commit, file count and bytes for an upstream archive) in `pins.json`, then run the tests below. `expect` holds each pack's entry count from the reference build; a mismatch is only noted in the log.
+
+## Same packs on every PC
+The packs a user builds are byte-identical to the ones built on Linux and tested in Azahar. Two things were needed for that:
+- **Font layout.** Pillow's Windows wheel includes Raqm (HarfBuzz layout) but loads FriBiDi at run time, and without it falls back to its basic layout. That layout uses hinted advances: 31,557 of 630,565 glyphs (5%) came out 1 px wider or narrower than the font's own widths, and 9,386 bitmaps shifted. The builder puts `fribidi-0.dll` next to `python.exe`, and `font.py` now refuses to build without Raqm instead of silently falling back.
+- **File order.** `build_sd.py` walks folders in sorted order, so the order of entries inside `data.pak` and `gfx.pak` no longer depends on the file system (their contents were already the same).
+
+The workflow checks this on every run (below).
 
 ## Making the zip
 ```sh
@@ -47,10 +55,10 @@ It cross-compiles `dspadpcm.exe` (statically, 45 KB) and uses Windows line endin
   - a pack marked unfinished: only that pack is rebuilt
 
   `--wine` runs the Windows Python, libraries, ffmpeg and encoder under Wine.
-- `.github/workflows/sd-builder-windows.yml` builds the zip on Ubuntu, then runs it on a GitHub Windows runner, the way a user would: the .bat, `setup.ps1`, the real downloads, a full build into a folder whose path has a space and an accent, and a second run. It keeps only the log and the build report as artifacts. The packs never leave the runner.
+- `.github/workflows/sd-builder-windows.yml` builds the zip on Ubuntu, then runs it on a GitHub Windows runner, the way a user would: the .bat, `setup.ps1`, the real downloads, a full build into a folder whose path has a space and an accent, and a second run. The same zip also builds on an Ubuntu runner, and a last job fails unless the two sets of packs have the same SHA-256. It keeps only the logs, build reports and hashes. The packs never leave the runners.
 - `assets-pipeline/tests/anim_bg_test.py` checks the battle-animation backgrounds (see the pipeline README).
 
-Results are in the PR that added this folder. What isn't covered: the drive picker on a real card reader, SmartScreen, and antivirus reactions to the unsigned `dspadpcm.exe`.
+Results are in the PRs that added this folder (#19) and made the packs identical across platforms. What isn't covered: the drive picker on a real card reader, SmartScreen, and antivirus reactions to the unsigned `dspadpcm.exe`.
 
 ## Known limits
 - Windows 10 1803 or later, or Windows 11, on x86-64. Windows on Arm runs it through emulation (untested). No Mac or Linux launcher: lorenzo builds on Windows.
