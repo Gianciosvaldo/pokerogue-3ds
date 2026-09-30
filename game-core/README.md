@@ -41,6 +41,25 @@ battle-core's `pr_event` list (`pr/events.h`), handed over as one `GC_EV_BATTLE`
 upstream's texts carry its control codes (`@d{15}` waits, `@s{se/pb_bounce_1}` plays a sound, as in
 the "1, 2, and… Poof!" of a forgotten move): the app acts on them rather than printing them.
 
+## Saving
+
+A run is saved where upstream saves it: at the start of each encounter (`GC_EV_SAVE_POINT`), which in
+game-core means from that event until the battle's first turn runs, while the first COMMAND screen waits
+(`gc_run_can_save`). `gc_run_save` fills a buffer of at most `GC_SAVE_MAX` (64 KB; about 7 to 9 KB in
+practice), and `gc_run_load` comes back to that COMMAND screen with the run exactly as it was: the
+party with its summon data (a lead that stays out between waves keeps its stat stages and effects), the
+enemy party, the items, the arena, the money, the seeds and the RNG states. What follows a load is what
+would have followed without it: the soak runs check that at every save point (`--save-test`).
+
+The format outlives changes to the structs it comes from. Each value is stored under its field's name and
+size; a build loads each field it knows from a saved field with the same name and size, keeps the
+default for the others and counts them in `run->load_dropped`. A damaged or cut save (CRC-32) or one
+in a newer format is refused with a reason. Upstream's own reload differs in one way: it plays the
+encounter's summon phases again; game-core has no battle-start summon phases yet (see the stand-ins).
+
+`make test` runs the save checks (`tools/savetest.c`: round trip, damaged, cut, newer and older saves)
+and then 200 soak runs with and without a save/load at every save point, whose digests must match.
+
 ## Building and playing on a PC
 
 ```sh
@@ -48,7 +67,9 @@ make                                        # builds run-core and battle-core's 
 ./build/gcplay --starters BULBASAUR,CHARMANDER,SQUIRTLE     # play by typing the choices
 ./build/gcplay --auto 1000 --jobs 8                          # seeded soak runs
 ./build/gcplay --auto 1 --first 42 --verbose                 # replay soak run 42 with every event
-./build/gcplay --auto 1 --first 42 --verbose --locales <upstream>/public/locales/en   # as English text
+./build/gcplay --auto 1 --first 42 --verbose --locales <upstream>/locales/en   # as English text
+./build/gcplay --auto 1000 --jobs 8 --save-test              # save and load back at every save point
+make test                                                    # the save checks and the digest comparison
 ```
 
 The soak runs play a random team of starters within the cost budget with a plain player of their own
@@ -80,8 +101,7 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 | A trainer's own rewards and money multiplier aren't given (x1 money) | a trainer config dump |
 | Pickup, Honey Gather, Pay Day, lapsing items | reward-core |
 
-Not started: saving and loading (`gc_run_save` returns 0 for now; it's the next slice), the dex and
-starter unlocks, eggs, the "Will you switch?" prompt at a trainer's new Pokémon, Imprison and the
+Not started: the dex and starter unlocks, eggs, the "Will you switch?" prompt at a trainer's new Pokémon, Imprison and the
 restriction texts of their own (a restricted move answers `battle:moveCannotBeSelected` until
 battle-core's `pr_move_usable` lands), the trainer config's boss flag and Terastallization for the fixed
 battles' trainers, form learnsets, and the prevolution-move messages.

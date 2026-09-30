@@ -62,6 +62,7 @@ typedef struct {
     bool last_final_boss;       /* it was the classic final boss */
     double last_max_exp_level;  /* getMaxExpLevel() when it ended, for LevelCapPhase */
     bool pending_trainer_victory;
+    bool at_save_point;         /* from GC_EV_SAVE_POINT until the battle's first turn runs (gc_run_can_save) */
 } gc_internal;
 gc_internal *gc_int(gc_run *run);
 
@@ -73,6 +74,7 @@ bool gc_rq_remove(gc_run *run, int type);          /* tryRemovePhase */
 void gc_rq_remove_all(gc_run *run, int type);
 void gc_rq_clear(gc_run *run);
 bool gc_rq_next(gc_rqueue *q, gc_rphase *out);
+void gc_run_until_screen(gc_run *run);            /* runs phases until one waits on a screen */
 static inline gc_rphase gc_rp(int type, int a, int b, int c) { gc_rphase p = {(uint8_t)type, a, b, c, 0, NULL}; return p; }
 
 /* ---- events (src/run.c) ---- */

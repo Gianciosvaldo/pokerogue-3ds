@@ -2,6 +2,7 @@
  *
  *   gcplay [--seed S] [--starters BULBASAUR,CHARMANDER,...]     play a run by typing the choices
  *   gcplay --auto N [--first K] [--jobs J] [--verbose]           N seeded soak runs with random choices
+ *   --save-test     soak runs: at each save point, save, wipe the run and load it back (the digest must not change)
  *   --locales DIR   upstream's locales/en folder: messages as English text instead of keys
  *
  * The soak runs pick random legal answers on every screen (their own RNG, seeded per run), each in its
@@ -407,7 +408,12 @@ typedef struct {
     int n_texts;
     char stuck_screen;
     char team[64];
+    int saves;                  /* --save-test: save/load round trips */
+    uint32_t save_max;          /* the largest save, bytes */
 } soak_result;
+
+/* --save-test: at each save point, save, wipe the run and load it back, then play on */
+static int save_test;
 
 static void soak_one(int index, int verbose, soak_result *r)
 {
@@ -426,6 +432,7 @@ static void soak_one(int index, int verbose, soak_result *r)
         snprintf(r->team + l, sizeof r->team - l, "%s%d", i ? "," : "", team[i].species);
     }
     if (!gc_run_set_starters(&run, team, n, &why)) { r->status = 1; r->stuck_screen = 'S'; return; }
+    int saved_wave = -1;
     for (int step = 0; step < 200000; step++) {
         gc_event e;
         while (gc_run_next_event(&run, &e)) {
@@ -441,6 +448,23 @@ static void soak_one(int index, int verbose, soak_result *r)
                     if (k < r->n_texts) r->texts[k].n++;
                 }
             if (verbose) print_event(&run, &e);
+        }
+        if (save_test && run.wave != saved_wave && gc_run_can_save(&run)) {
+            static uint8_t buf[GC_SAVE_MAX];
+            saved_wave = run.wave;
+            const size_t len = gc_run_save(&run, buf, sizeof buf);
+            if (!len) { r->status = 1; r->stuck_screen = 'W'; break; }
+            if (len > r->save_max) r->save_max = (uint32_t)len;
+            r->saves++;
+            memset(&run, 0xA5, sizeof run);
+            if (!gc_run_load(&run, buf, len, &why) || run.load_dropped) {
+                if (verbose) printf("load failed: %s (dropped %d)\n", why, run.load_dropped);
+                r->status = 1;
+                r->stuck_screen = 'L';
+                break;
+            }
+            if (verbose) printf("-- saved (%u bytes) and loaded back\n", (unsigned)len);
+            continue;
         }
         const gc_screen *s = gc_run_screen(&run);
         if (s->kind == GC_SCREEN_GAME_OVER || s->kind == GC_SCREEN_CLEAR) { r->clear = s->kind == GC_SCREEN_CLEAR; break; }
@@ -477,6 +501,8 @@ static int soak(int n, int first, int jobs, int verbose, int timeout)
     int ended = 0, stuck = 0, crashed = 0, timed = 0, clears = 0;
     long turns = 0;
     int wave_hist[21] = {0};
+    long saves = 0;
+    uint32_t save_max = 0, digest = 0;
     int running = 0, next = 0;
     struct { pid_t pid; int fd; int index; } slot[64];
     if (jobs > 64) jobs = 64;
@@ -495,6 +521,7 @@ static int soak(int n, int first, int jobs, int verbose, int timeout)
                 const char *b = (const char *)&r;
                 size_t left = sizeof r;
                 while (left) { ssize_t w = write(p[1], b, left); if (w <= 0) break; b += w; left -= (size_t)w; }
+                fflush(stdout);   /* _exit doesn't flush: a verbose run's last lines would be lost */
                 _exit(0);
             }
             close(p[1]);
@@ -528,6 +555,18 @@ static int soak(int n, int first, int jobs, int verbose, int timeout)
         else ended++;
         clears += r->clear;
         turns += r->turns;
+        saves += r->saves;
+        if (r->save_max > save_max) save_max = r->save_max;
+        {
+            /* each run's outcome, mixed in whatever order the runs finish: the same number when the same runs
+             * play out the same way (with or without --save-test) */
+            uint32_t h = 2166136261u;
+            const uint32_t v[5] = {(uint32_t)index, (uint32_t)r->wave, (uint32_t)r->turns, (uint32_t)r->score, (uint32_t)r->clear};
+            for (int i = 0; i < 5; i++) { h ^= v[i]; h *= 16777619u; }
+            for (int i = 0; i < 16; i++) { h ^= r->stubs[i]; h *= 16777619u; }
+            for (int i = 0; i < GC_MAX_UNPORTED; i++) if (r->unported[i]) { h ^= (uint32_t)i << 20 ^ r->unported[i]; h *= 16777619u; }
+            digest ^= h;
+        }
         wave_hist[r->wave / 10 > 20 ? 20 : r->wave / 10]++;
         for (int i = 0; i < 16; i++) { stub_total[i] += r->stubs[i]; stub_runs[i] += r->stubs[i] > 0; }
         for (int i = 0; i < 8; i++) { rc_total[i] += r->run_core[i]; rc_runs[i] += r->run_core[i] > 0; }
@@ -544,6 +583,8 @@ static int soak(int n, int first, int jobs, int verbose, int timeout)
            n, ended, clears, stuck, crashed, timed, turns, n ? (double)turns / n : 0.0);
     printf("final wave: ");
     for (int i = 0; i <= 20; i++) if (wave_hist[i]) printf(" %d-%d:%d", i * 10, i * 10 + 9, wave_hist[i]);
+    printf("\nruns' digest: %08x", digest);
+    if (save_test) printf("\nsave/load round trips: %ld (largest save %u bytes of %u)", saves, save_max, (unsigned)GC_SAVE_MAX);
     printf("\n\nstand-ins (runs that used it, times):\n");
     for (int i = 0; i < GC_STUB_COUNT_; i++)
         if (stub_total[i]) printf("  %-50s %6u runs %9u\n", gc_stub_name[i], stub_runs[i], stub_total[i]);
@@ -638,8 +679,9 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--jobs") && i + 1 < argc) jobs = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--timeout") && i + 1 < argc) timeout = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--verbose")) verbose = 1;
+        else if (!strcmp(argv[i], "--save-test")) save_test = 1;
         else if (!strcmp(argv[i], "--locales") && i + 1 < argc) locales = argv[++i];
-        else { fprintf(stderr, "usage: %s [--seed S] [--starters A,B,C] | --auto N [--first K] [--jobs J] [--verbose]  [--locales DIR]\n", argv[0]); return 2; }
+        else { fprintf(stderr, "usage: %s [--seed S] [--starters A,B,C] | --auto N [--first K] [--jobs J] [--verbose] [--save-test]  [--locales DIR]\n", argv[0]); return 2; }
     }
     if (autos > 0) return soak(autos, first, jobs < 1 ? 1 : jobs, verbose, timeout);
     return play(seed, starters);

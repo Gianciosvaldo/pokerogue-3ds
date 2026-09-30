@@ -356,7 +356,17 @@ void gc_port_enemy_command(gc_run *run, int enemy_slot)
     in->ai_trainer.tera_mode = PR_TERA_AI_NO_TERA;
     in->ai_trainer.n_instant_teras = 0;
     in->ai.trainer = run->battle_type == BATTLE_TYPE_TRAINER ? &in->ai_trainer : NULL;
+    /* Some move conditions the scores call read the phase queue (Protect fails unless a MovePhase is
+     * queued) or add to it, as upstream's queue stands at command time: empty, with the turn about to
+     * start. The engine is set up the way pr_run_turn starts it (the last turn's leftovers, such as the
+     * tail a victory stop cut off, must not show) */
+    memset(&run->eng, 0, sizeof run->eng);
+    run->eng.n_levels = 1;
+    run->eng.current = -1;
+    for (int i = 0; i < 4; i++) run->eng.command_targets[i] = -1;
+    bt->engine = &run->eng;
     pr_ai_enemy_command(bt, &in->ai, enemy_slot - BATTLER_INDEX_ENEMY);
+    bt->engine = NULL;
     in->ai.trainer = NULL;
     if (bt->commands[enemy_slot].command == COMMAND_POKEMON) gc_stub(run, GC_STUB_ENEMY_SWITCH);
 }
@@ -401,6 +411,7 @@ static void note_revealed(gc_run *run)
 int gc_battle_run(gc_run *run, int pick)
 {
     pr_battle *bt = &run->bt;
+    gc_int(run)->at_save_point = false;
     if (pick < -1) {
         gc_event *ev = gc_ev_new(run, GC_EV_TURN);
         if (ev) ev->a = bt->turn;
@@ -450,6 +461,7 @@ bool gc_battle_trainer_next(gc_run *run)
  * battle's setup recalls them or keeps the lead out (see gc_battle_setup_field). */
 void gc_battle_end_cleanup(gc_run *run)
 {
+    gc_int(run)->at_save_point = false;
     run->run.rng = run->bt.rng;
     gc_sync_party_order(run);
     for (int i = 0; i < run->n_party; i++) pr_reset_turn_data(&run->party[i].b);

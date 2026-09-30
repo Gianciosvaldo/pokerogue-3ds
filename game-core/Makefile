@@ -10,10 +10,10 @@ BUILD ?= build
 RUN_LIB := $(BUILD)/run-core/librun.a
 CORE_LIB := $(BUILD)/run-core/battle-core/libprcore.a
 AI_LIB := $(BUILD)/ai-core/libai.a
-SRCS := src/run.c src/phases.c src/mon.c src/items.c src/encounter.c src/battle.c src/stubs.c gen/out/gc_evolutions.c gen/out/gc_starters.c
+SRCS := src/run.c src/phases.c src/mon.c src/items.c src/encounter.c src/battle.c src/save.c src/stubs.c gen/out/gc_evolutions.c gen/out/gc_starters.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
-all: $(BUILD)/libgc.a $(BUILD)/gcplay
+all: $(BUILD)/libgc.a $(BUILD)/gcplay $(BUILD)/savetest
 
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -33,9 +33,19 @@ $(BUILD)/libgc.a: $(OBJS)
 $(BUILD)/gcplay: tools/gcplay.c $(BUILD)/libgc.a $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
+$(BUILD)/savetest: tools/savetest.c $(BUILD)/libgc.a $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+# the save checks, then 200 soak runs twice: with a save/load round trip at every save point, the runs'
+# digest must come out the same
+test: all
+	$(BUILD)/savetest
+	@a=$$($(BUILD)/gcplay --auto 200 --jobs 8 | grep digest); b=$$($(BUILD)/gcplay --auto 200 --jobs 8 --save-test | grep digest); \
+	echo "without saves: $$a"; echo "with saves:    $$b"; [ "$$a" = "$$b" ]
+
 clean:
 	rm -rf $(BUILD)
 
 FORCE:
-.PHONY: all clean FORCE
+.PHONY: all clean test FORCE
 -include $(OBJS:.o=.d)

@@ -269,6 +269,7 @@ void gc_new_battle(gc_run *run)
     }
     /* the save point: gameData.saveAll at the start of the encounter, before anything is shown */
     gc_ev_new(run, GC_EV_SAVE_POINT);
+    in->at_save_point = true;
     /* doEncounter: resetWaveData, then resetSeed() once the encounter is set up */
     pr_run_reset_seed(&run->run, wave);
 

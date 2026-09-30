@@ -229,6 +229,8 @@ typedef struct gc_run {
     uint32_t unported[GC_MAX_UNPORTED];   /* battle-core's ids, then ai-core's (PR_AI_FEAT_*) */
     uint32_t stubs[16];
     uint32_t run_core_unported[8];      /* run-core's stand-ins, by PR_RUN_UNPORTED_* bit */
+    int load_dropped;           /* after gc_run_load: saved values this build couldn't read back (0 normally;
+                                 * more when the save comes from a build whose battle structs differ) */
     bool finished;
 } gc_run;
 
@@ -273,9 +275,13 @@ const gc_screen *gc_run_screen(const gc_run *run);
  * *why) if the choice isn't legal on this screen; nothing changes then. */
 bool gc_run_choose(gc_run *run, const gc_choice *c, const char **why);
 
-/* Saving. Allowed only between battles' turns at a save point (gc_run_can_save); the buffer holds
- * everything needed to come back to the same screen. Returns the bytes written (0 = not allowed or the
- * buffer is too small; GC_SAVE_MAX always fits). */
+/* Saving, at upstream's save point: from GC_EV_SAVE_POINT (the start of an encounter) until the battle's
+ * first turn runs, while its first COMMAND screen waits (gc_run_can_save). The buffer holds everything
+ * needed to come back to that screen with the run as it was; gc_run_save returns the bytes written (0 =
+ * not allowed now, or the buffer is too small; GC_SAVE_MAX always fits). gc_run_load replaces the whole
+ * run and queues the scene's events (WAVE, TRAINER, SUMMON) before the COMMAND screen; false (and *why)
+ * for a damaged save or one from a newer format, and the run is left empty then. A save made by another
+ * build loads as far as its fields still match (see load_dropped). */
 #define GC_SAVE_MAX (64 * 1024)
 bool gc_run_can_save(const gc_run *run);
 size_t gc_run_save(const gc_run *run, void *buf, size_t cap);

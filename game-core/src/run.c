@@ -192,7 +192,7 @@ void gc_rq_clear(gc_run *run)
 }
 
 /* Runs phases until one waits on a screen, or the run is over */
-static void run_until_screen(gc_run *run)
+void gc_run_until_screen(gc_run *run)
 {
     gc_rqueue *q = &gc_int(run)->rq;
     for (int guard = 0; guard < 100000 && !q->waiting && !run->finished; guard++) {
@@ -278,7 +278,7 @@ bool gc_run_set_starters(gc_run *run, const gc_starter *starters, int n, const c
     run->n_party = n;
     memset(&run->screen, 0, sizeof run->screen);
     gc_rq_push(run, gc_rp(RP_NEW_BATTLE, 0, 0, 0));
-    run_until_screen(run);
+    gc_run_until_screen(run);
     return true;
 }
 
@@ -305,17 +305,7 @@ bool gc_run_choose(gc_run *run, const gc_choice *c, const char **why)
         q->waiting = false;
         q->current.type = RP_NONE;
         memset(&run->screen, 0, sizeof run->screen);
-        run_until_screen(run);
+        gc_run_until_screen(run);
     }
     return true;
-}
-
-/* ---------------------------------------------------------------- saving (the next slice) */
-bool gc_run_can_save(const gc_run *run) { (void)run; return false; }
-size_t gc_run_save(const gc_run *run, void *buf, size_t cap) { (void)run; (void)buf; (void)cap; return 0; }
-bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
-{
-    (void)run; (void)buf; (void)len;
-    if (why) *why = "saving isn't ported yet";
-    return false;
 }
