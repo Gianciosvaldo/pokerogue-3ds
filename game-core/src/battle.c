@@ -341,6 +341,20 @@ void gc_ai_enemy_party(gc_run *run)
     }
 }
 
+/* currentBattle.trainer for the AI's calls (NULL in a wild battle); ai.trainer goes back to NULL after
+ * each call. Only the random trainers' classes are met for now (the fixed battles, where gym leaders,
+ * the Elite Four, champions and evil team bosses are, fall back to wild ones): none is a boss and none
+ * terastallizes, which is what these defaults say. Doubles are played as singles. */
+static void ai_trainer_on(gc_run *run)
+{
+    gc_internal *in = gc_int(run);
+    in->ai_trainer.is_boss = false;
+    in->ai_trainer.is_double = false;
+    in->ai_trainer.tera_mode = PR_TERA_AI_NO_TERA;
+    in->ai_trainer.n_instant_teras = 0;
+    in->ai.trainer = run->battle_type == BATTLE_TYPE_TRAINER ? &in->ai_trainer : NULL;
+}
+
 /* EnemyCommandPhase for the enemy in field slot 2 */
 void gc_port_enemy_command(gc_run *run, int enemy_slot)
 {
@@ -348,14 +362,7 @@ void gc_port_enemy_command(gc_run *run, int enemy_slot)
     pr_battle *bt = &run->bt;
     pr_pokemon *p = bt->field[enemy_slot];
     if (!p || !p->on_field || p->hp <= 0) return;
-    /* Only the random trainers' classes are met for now (the fixed battles, where gym leaders, the
-     * Elite Four, champions and evil team bosses are, fall back to wild ones): none is a boss and
-     * none terastallizes, which is what these defaults say. Doubles are played as singles. */
-    in->ai_trainer.is_boss = false;
-    in->ai_trainer.is_double = false;
-    in->ai_trainer.tera_mode = PR_TERA_AI_NO_TERA;
-    in->ai_trainer.n_instant_teras = 0;
-    in->ai.trainer = run->battle_type == BATTLE_TYPE_TRAINER ? &in->ai_trainer : NULL;
+    ai_trainer_on(run);
     /* Some move conditions the scores call read the phase queue (Protect fails unless a MovePhase is
      * queued) or add to it, as upstream's queue stands at command time: empty, with the turn about to
      * start. The engine is set up the way pr_run_turn starts it (the last turn's leftovers, such as the
@@ -439,22 +446,33 @@ void gc_battle_switch_screen(gc_run *run)
     s->can_skip = !run->eng.stop_phase.sw_modal;
 }
 
-/* The trainer sends out its next Pokemon (FaintPhase's SwitchSummonPhase for the enemy, which battle-core
- * would run after the VictoryPhase): the next one that can fight, straight onto the field */
+/* The trainer sends out its next Pokemon: FaintPhase's SwitchSummonPhase(SWITCH, 0, -1) for the enemy,
+ * which battle-core would run after the VictoryPhase. The slot is Trainer.getNextSummonIndex (ai-core:
+ * the best matchup against the player's field, a tie settled by a roll on the session seed and
+ * bt->turn; the turn's lost tail may leave that count off until battle-core carries on past a stop). As
+ * switchAndSummon does, the new Pokemon takes the fainted one's place in the enemy party's order and
+ * the fainted one takes its slot. It goes straight onto the field, without its summon phases. */
 bool gc_battle_trainer_next(gc_run *run)
 {
-    for (int i = 0; i < run->n_enemy; i++) {
-        gc_mon *m = &run->enemy[i];
-        if (m->b.hp > 0 && !m->b.on_field) {
-            pr_pokemon *old = run->bt.field[2];
-            if (old) old->on_field = false;
-            summon(run, 1, i);
-            gc_stub(run, GC_STUB_TRAINER_NEXT);
-            gc_ev_msg(run, "battle:trainerSendOut", 2, gc_m_trainer(run, "trainerName", GC_TNAME_TRAINER), gc_m_mon_name(run, "pokemonName", 1, i));
-            return true;
-        }
-    }
-    return false;
+    pr_battle *bt = &run->bt;
+    gc_internal *in = gc_int(run);
+    ai_trainer_on(run);
+    int k = pr_ai_next_summon_index(bt, &in->ai, TRAINER_SLOT_TRAINER);
+    in->ai.trainer = NULL;
+    /* -1 only when no Pokemon on the bench can fight, which FaintPhase checked before pushing this */
+    int idx = -1;
+    if (k > 0 && k < bt->n_party[1])
+        for (int i = 0; i < run->n_enemy; i++) if (&run->enemy[i].b == bt->party[1][k]) idx = i;
+    if (idx < 0) return false;
+    pr_pokemon *old = bt->field[2];
+    if (old) old->on_field = false;
+    pr_pokemon *t = bt->party[1][0];
+    bt->party[1][0] = bt->party[1][k];
+    bt->party[1][k] = t;
+    summon(run, 1, idx);
+    gc_stub(run, GC_STUB_TRAINER_NEXT);
+    gc_ev_msg(run, "battle:trainerSendOut", 2, gc_m_trainer(run, "trainerName", GC_TNAME_TRAINER), gc_m_mon_name(run, "pokemonName", 1, idx));
+    return true;
 }
 
 /* BattleEndPhase's part: the battle is over. The player's Pokemon stay where they are: the next
