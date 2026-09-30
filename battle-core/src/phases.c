@@ -2212,8 +2212,30 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
         }
     } else {
         unshift_new(bt, e, PH_VICTORY, f->battler);
-        if (bt->battle_type == BATTLE_TYPE_TRAINER || bt->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER)
-            pr_note_unported(bt, PR_FEAT_PARTY);
+        if (bt->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) pr_note_unported(bt, PR_FEAT_TRAINER);
+        if (bt->battle_type == BATTLE_TYPE_TRAINER) {
+            /* a reserve of the same trainer (isActive(), not on the field): the trainer's next
+             * Pokemon, pushNew("SwitchSummonPhase", SWITCH, fieldIndex, -1, false, false) */
+            bool reserve = false;
+            if (!bt->n_party[1]) pr_note_unported(bt, PR_FEAT_PARTY);
+            for (int k = 0; k < bt->n_party[1]; k++) {
+                const pr_pokemon *q = bt->party[1][k];
+                if (q->hp > 0 && !(q->on_field && !q->switch_out_status) && q->trainer_slot == p->trainer_slot)
+                    reserve = true;
+            }
+            if (reserve) {
+                int sw = new_pokemon_phase(e, PH_SWITCH_SUMMON, -1);
+                if (sw >= 0) {
+                    pr_phase *s = PH(sw);
+                    s->sw_type = SWITCH_TYPE_SWITCH;
+                    s->sw_field_index = (int8_t)(f->battler % 2);
+                    s->sw_slot = -1;
+                    s->sw_do_return = false;
+                    s->sw_player = false;
+                }
+                pr_phase_push(bt, e, sw);
+            }
+        }
     }
     if (bt->double_battle) pr_note_unported(bt, PR_FEAT_DOUBLES);
 
