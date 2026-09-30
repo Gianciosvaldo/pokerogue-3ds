@@ -1,0 +1,189 @@
+#include "pr/reward.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdbool.h>
+
+static uint16_t parse_item_key(const char *key) {
+    if (strcmp(key, "POTION") == 0) return PR_ITEM_POTION;
+    if (strcmp(key, "SUPER_POTION") == 0) return PR_ITEM_SUPER_POTION;
+    if (strcmp(key, "HYPER_POTION") == 0) return PR_ITEM_HYPER_POTION;
+    if (strcmp(key, "MAX_POTION") == 0) return PR_ITEM_MAX_POTION;
+    if (strcmp(key, "FULL_RESTORE") == 0) return PR_ITEM_FULL_RESTORE;
+    if (strcmp(key, "REVIVE") == 0) return PR_ITEM_REVIVE;
+    if (strcmp(key, "MAX_REVIVE") == 0) return PR_ITEM_MAX_REVIVE;
+    if (strcmp(key, "SACRED_ASH") == 0) return PR_ITEM_SACRED_ASH;
+    if (strcmp(key, "ETHER") == 0) return PR_ITEM_ETHER;
+    if (strcmp(key, "MAX_ETHER") == 0) return PR_ITEM_MAX_ETHER;
+    if (strcmp(key, "ELIXIR") == 0) return PR_ITEM_ELIXIR;
+    if (strcmp(key, "MAX_ELIXIR") == 0) return PR_ITEM_MAX_ELIXIR;
+    if (strcmp(key, "PP_UP") == 0) return PR_ITEM_PP_UP;
+    if (strcmp(key, "PP_MAX") == 0) return PR_ITEM_PP_MAX;
+    if (strcmp(key, "HEALING_CHARM") == 0) return PR_ITEM_HEALING_CHARM;
+    return 0;
+}
+
+static long num(char **p) {
+    return strtol(*p, p, 10);
+}
+
+int main(int argc, char **argv) {
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s <cases file>\n", argv[0]);
+        return 1;
+    }
+    FILE *f = fopen(argv[1], "r");
+    if (!f) {
+        perror("fopen");
+        return 1;
+    }
+
+    char line[4096];
+    int cases = 0, pass = 0, fail = 0;
+    int item_counts[14] = {0};
+    const char *item_keys[14] = {
+        "POTION", "SUPER_POTION", "HYPER_POTION", "MAX_POTION", "FULL_RESTORE",
+        "REVIVE", "MAX_REVIVE", "SACRED_ASH",
+        "ETHER", "MAX_ETHER", "ELIXIR", "MAX_ELIXIR",
+        "PP_UP", "PP_MAX"
+    };
+
+    while (fgets(line, sizeof(line), f)) {
+        if (line[0] == 'A') {
+            cases++;
+            char *p = line + 1;
+            char key[64];
+            sscanf(p, "%63s", key);
+            while (*p && *p != ' ') p++;
+            while (*p == ' ') p++;
+            while (*p && *p != ' ') p++; /* skip key */
+
+            int target_party_idx = (int)num(&p);
+            int target_move_idx = (int)num(&p);
+            uint32_t challenges = (uint32_t)num(&p);
+            int n_party = (int)num(&p);
+
+            uint16_t item_id = parse_item_key(key);
+            for (int k = 0; k < 14; k++) {
+                if (strcmp(key, item_keys[k]) == 0) {
+                    item_counts[k]++;
+                    break;
+                }
+            }
+
+            pr_reward_ctx ctx;
+            memset(&ctx, 0, sizeof(ctx));
+            ctx.challenges = challenges;
+            ctx.n_party = n_party;
+
+            for (int i = 0; i < n_party; i++) {
+                if (!fgets(line, sizeof(line), f) || line[0] != 'P') break;
+                char *pp = line + 1;
+                ctx.party[i].id = (uint32_t)num(&pp);
+                ctx.party[i].hp = (int32_t)num(&pp);
+                ctx.party[i].max_hp = (int32_t)num(&pp);
+                ctx.party[i].status = (uint8_t)num(&pp);
+                ctx.party[i].n_moves = (uint8_t)num(&pp);
+                for (int m = 0; m < ctx.party[i].n_moves; m++) {
+                    ctx.party[i].moves[m].move = (uint16_t)num(&pp);
+                    ctx.party[i].moves[m].pp_used = (uint8_t)num(&pp);
+                    ctx.party[i].moves[m].pp_up = (uint8_t)num(&pp);
+                    ctx.party[i].moves[m].max_pp = (uint8_t)num(&pp);
+                }
+            }
+
+            /* Read items */
+            if (fgets(line, sizeof(line), f) && line[0] == 'I') {
+                char *ip = line + 1;
+                ctx.n_items = (int)num(&ip);
+                for (int j = 0; j < ctx.n_items; j++) {
+                    char ikey[64];
+                    if (sscanf(ip, "%63s", ikey) != 1) break;
+                    while (*ip && *ip == ' ') ip++;
+                    while (*ip && *ip != ' ') ip++;
+                    ctx.items[j].item = parse_item_key(ikey);
+                    ctx.items[j].stack = (int32_t)num(&ip);
+                    ctx.items[j].owner = (int8_t)num(&ip);
+                }
+            }
+
+            /* Call C apply */
+            const char *msg = NULL;
+            bool res = pr_reward_apply(&ctx, item_id, target_party_idx, target_move_idx, &msg);
+
+            /* Read upstream result */
+            if (!fgets(line, sizeof(line), f) || line[0] != 'R') {
+                fail++;
+                continue;
+            }
+            char *rp = line + 1;
+            int exp_applied = (int)num(&rp);
+            char exp_msg[128];
+            sscanf(rp, "%127s", exp_msg);
+            while (*rp && *rp != ' ') rp++;
+            while (*rp == ' ') rp++;
+            while (*rp && *rp != ' ') rp++;
+
+            bool ok = (res == (exp_applied != 0));
+            char diff_reason[256] = "";
+
+            if (!ok) {
+                snprintf(diff_reason, sizeof(diff_reason), "result mismatch: C res=%d, exp_applied=%d", res ? 1 : 0, exp_applied);
+            } else {
+                for (int i = 0; i < ctx.n_party && ok; i++) {
+                    int exp_hp = (int)num(&rp);
+                    int exp_status = (int)num(&rp);
+                    int exp_n_moves = (int)num(&rp);
+                    if (ctx.party[i].hp != exp_hp) {
+                        ok = false;
+                        snprintf(diff_reason, sizeof(diff_reason), "p[%d].hp: C=%d, exp=%d", i, ctx.party[i].hp, exp_hp);
+                        break;
+                    }
+                    if (ctx.party[i].status != exp_status) {
+                        ok = false;
+                        snprintf(diff_reason, sizeof(diff_reason), "p[%d].status: C=%d, exp=%d", i, ctx.party[i].status, exp_status);
+                        break;
+                    }
+                    if (ctx.party[i].n_moves != exp_n_moves) {
+                        ok = false;
+                        snprintf(diff_reason, sizeof(diff_reason), "p[%d].n_moves: C=%d, exp=%d", i, ctx.party[i].n_moves, exp_n_moves);
+                        break;
+                    }
+                    for (int m = 0; m < ctx.party[i].n_moves; m++) {
+                        int exp_pp_used = (int)num(&rp);
+                        int exp_pp_up = (int)num(&rp);
+                        int exp_max_pp = (int)num(&rp);
+                        if (ctx.party[i].moves[m].pp_used != exp_pp_used ||
+                            ctx.party[i].moves[m].pp_up != exp_pp_up ||
+                            ctx.party[i].moves[m].max_pp != exp_max_pp) {
+                            ok = false;
+                            snprintf(diff_reason, sizeof(diff_reason), "p[%d].m[%d]: C=(used:%d,up:%d,max:%d), exp=(used:%d,up:%d,max:%d)",
+                                     i, m, ctx.party[i].moves[m].pp_used, ctx.party[i].moves[m].pp_up, ctx.party[i].moves[m].max_pp,
+                                     exp_pp_used, exp_pp_up, exp_max_pp);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (ok) {
+                pass++;
+            } else {
+                fail++;
+                if (fail <= 10) {
+                    printf("FAIL case %d (%s, target_p=%d, target_m=%d): %s\n", cases, key, target_party_idx, target_move_idx, diff_reason);
+                }
+            }
+        }
+    }
+    fclose(f);
+
+    printf("== apply\n");
+    printf("cases %d: pass %d, fail %d\n", cases, pass, fail);
+    printf("cases per item:\n");
+    for (int k = 0; k < 14; k++) {
+        printf("  %-15s: %d\n", item_keys[k], item_counts[k]);
+    }
+
+    return fail == 0 ? 0 : 1;
+}
