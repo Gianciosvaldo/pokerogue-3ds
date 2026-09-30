@@ -879,6 +879,9 @@ int rr_text(rr_font* f, float x, float y, const char* s, rr_color c, rr_color sh
 
 int rr_text_width(rr_font* f, const char* s) { return f ? text_pass(f, 0, 0, s, 0, false) : 0; }
 
+int rr_font_size(const rr_font* f) { return f ? f->size : 0; }
+int rr_font_ascent(const rr_font* f) { return f ? f->ascender : 0; }
+
 void rr_text_sys(float x, float y, float size, const char* s, rr_color c) {
   if (g_tint_mode != C2D_TintSolid) {
     C2D_SetTintMode(C2D_TintSolid);

@@ -124,6 +124,9 @@ int rr_text_width(rr_font* f, const char* utf8);
 /* Pre-rendered font from font.pak (asset pipeline), e.g. "fonts/emerald@16".
  * Pages (256x256 each) load on first use of a glyph in them. */
 rr_font* rr_font_load_key(const char* key);
+/* The font's pixel size and its ascent (baseline distance from the top of a line), in logical px. */
+int rr_font_size(const rr_font* f);
+int rr_font_ascent(const rr_font* f);
 /* Fallback when no font file is on the SD card: the console's system font. */
 void rr_text_sys(float x, float y, float size, const char* s, rr_color c);
 

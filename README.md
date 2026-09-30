@@ -19,12 +19,14 @@ Upstream pins: game `8555c08`, with its submodule pins assets `87426a7` and loca
 | [`sd-builder/`](sd-builder/) | One-click Windows builder: downloads PokeRogue's public files at the pins and writes the packs to the SD card, with nothing to install | Built and tested (see its README) |
 | [`bench-native/`](bench-native/) | Console speed test of the C battle engine: replays upstream-recorded turns through battle-core on the 3DS, times each one and checks it still matches upstream | Real Old 3DS: 1.51 ms median per singles turn (4.03 ms worst), about 800x faster than the QuickJS route; all covered turns identical on the console ([README](bench-native/README.md)) |
 | [`bench-gfx/`](bench-gfx/) | Console test of drawing, texture memory, SD card loading and audio: battle scenes laid out like upstream's (singles, doubles, move animations, the largest sprites), load times from the packs, memory limits, and where the screen edges land | Run on a real Old 3DS without the packs: a battle takes 8.8 ms of the 16.7 ms frame; loading from the packs and audio still to measure on the console ([README](bench-gfx/README.md)) |
+| [`game/`](game/) | The game app: screen stack, input, text with upstream's fonts and metrics, strings from the locale files, windows, message box, menus, and the battle screen | In progress: the framework, and the battle screen showing real battle-core turns (texts, hits, HP bars, faints) in a demo battle in Azahar; driving it from game-core's run next ([README](game/README.md)) |
 | [`tools/azahar-libretro/`](tools/azahar-libretro/) | Headless emulator test rig (binaries not in git) | See its README |
 
-`assets-pipeline/app-src/` is the current app; `skeleton/src/` is kept as the earlier baseline.
+`game/` is the game app. It takes the renderer, packs, sound and saves from `assets-pipeline/app-src/` (whose own `main.c` is the older demo); `skeleton/src/` is kept as the earlier baseline.
 
 ## Building
-- App: `docker run --rm -v "$PWD/assets-pipeline/app-src":/src -w /src devkitpro/devkitarm make` (details in [`skeleton/README.md`](skeleton/README.md)).
+- Game: `docker run --rm -v "$PWD":/src -w /src/game devkitpro/devkitarm make` from the repo root (the whole repo is mounted because the game links battle-core and run-core).
+- Older demo app: `docker run --rm -v "$PWD/assets-pipeline/app-src":/src -w /src devkitpro/devkitarm make` (details in [`skeleton/README.md`](skeleton/README.md)).
 - SD card packs: on Windows, the one-click [`sd-builder`](sd-builder/); elsewhere `python3 assets-pipeline/build_sd.py ...` (details in [`assets-pipeline/README.md`](assets-pipeline/README.md)).
 
 The READMEs mention screenshots and pixel-test images. Those contain Pokémon art, so they are not in this repo.
