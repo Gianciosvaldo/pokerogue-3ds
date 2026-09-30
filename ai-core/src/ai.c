@@ -494,6 +494,16 @@ int pr_ai_next_summon_index(pr_battle *bt, pr_ai *ai, int trainer_slot)
     return n ? next_summon_index(bt, ai, scores, n) : -1;
 }
 
+int pr_ai_party_matchup_scores(pr_battle *bt, pr_ai *ai, int trainer_slot, bool for_switch,
+                               int slots[PR_MAX_PARTY], double scores[PR_MAX_PARTY])
+{
+    if (!ai->trainer) return 0;
+    ai_scored sc[PR_MAX_PARTY];
+    int n = party_member_scores(bt, ai, trainer_slot, for_switch, sc);
+    for (int i = 0; i < n; i++) slots[i] = sc[i].idx, scores[i] = sc[i].key;
+    return n;
+}
+
 /* ---- targets and moves ---- */
 
 int pr_ai_get_next_targets(pr_battle *bt, pr_ai *ai, pr_pokemon *p, int move, int8_t out[4])

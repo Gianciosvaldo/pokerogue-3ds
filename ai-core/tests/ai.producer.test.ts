@@ -13,8 +13,9 @@
  * and then another; each side's ability is revealed half the time; the enemy sometimes starts with
  * a queued move, a move-restricting tag (Encore, Disable, Taunt, Torment, Throat Chop, Heal Block,
  * Gorilla Tactics, Imprison), a trap, Laser Focus or a Substitute; the arena gets entry hazards,
- * Gravity, Fairy Lock, weathers (the primal ones included) and terrains; the session-wide state on
- * Tri Attack's and Moonlight's attrs is set at random; the trainer's switch counter is random.
+ * screens, Tailwind, Gravity, Fairy Lock, weathers (the primal ones included) and terrains; the
+ * session-wide state on Tri Attack's and Moonlight's attrs is set at random; the trainer's switch
+ * counter is random.
  *
  * It then runs upstream's own EnemyCommandPhase(0).start() and writes the state before, and after
  * RUN: the enemy's command (CMD, PRE), the switch counter, both RNG states, the enemy's move queue,
@@ -261,10 +262,17 @@ it("ai producer", async () => {
   };
 
   // ---- random states ----
+  // moves whose scores read something rare (sun, a semi-invulnerable target, sleep, the first turn),
+  // one pick in ten, so a random moveset meets those states often enough
+  const focus = [
+    "GROWTH", "GUST", "TWISTER", "THUNDER", "HURRICANE", "SKY_UPPERCUT", "EARTHQUAKE", "MAGNITUDE", "SURF",
+    "WHIRLPOOL", "SMACK_DOWN", "FAKE_OUT", "FIRST_IMPRESSION", "SNORE", "SLEEP_TALK", "SUPER_FANG", "BRINE",
+    "BATON_PASS", "REVIVAL_BLESSING", "SOLAR_BEAM", "WEATHER_BALL", "MOONLIGHT", "TRI_ATTACK", "SUCKER_PUNCH",
+  ].map(n => usable.find((m: any) => m.id === (MoveId as any)[n])).filter(m => m);
   const randomMoveset = (p: any) => {
     p.moveset = [];
     for (let k = 1 + rnd(4); k > 0; k--) {
-      const m = rnd(2) === 0 ? attacks[rnd(attacks.length)] : usable[rnd(usable.length)];
+      const m = rnd(10) === 0 ? focus[rnd(focus.length)] : rnd(2) === 0 ? attacks[rnd(attacks.length)] : usable[rnd(usable.length)];
       p.moveset.push(new PokemonMove(m.id, rnd(8) === 0 ? rnd(m.pp + 1) : 0, rnd(6) === 0 ? 1 + rnd(3) : 0));
     }
   };
@@ -479,6 +487,11 @@ it("ai producer", async () => {
         D.summonData.tags.push(tag);
       }
     }
+    // the player mid-Fly/Dig/Dive/Shadow Force: what Gust, Earthquake or Surf score against it
+    if (rnd(16) === 0) {
+      const semi = [BattlerTagType.FLYING, BattlerTagType.UNDERGROUND, BattlerTagType.UNDERWATER, BattlerTagType.HIDDEN];
+      A.summonData.tags.push(getBattlerTag(semi[rnd(semi.length)], 1, MoveId.NONE, A.id));
+    }
     for (const p of [A, D]) {
       if (rnd(8) === 0) {
         const tag = getBattlerTag(BattlerTagType.SUBSTITUTE, 0, MoveId.SUBSTITUTE, p.id) as any;
@@ -513,6 +526,16 @@ it("ai producer", async () => {
         tag.layers = 1 + rnd(tag.maxLayers);
         scene.arena.tags.push(tag);
       }
+    }
+    if (rnd(8) === 0) {
+      // a screen on the player's side (the KO check's damage goes through it), or on the enemy's
+      const type = [ArenaTagType.REFLECT, ArenaTagType.LIGHT_SCREEN, ArenaTagType.AURORA_VEIL][rnd(3)];
+      const side = rnd(4) === 0 ? ArenaTagSide.ENEMY : ArenaTagSide.PLAYER;
+      scene.arena.tags.push(getArenaTag(type, 1 + rnd(5), MoveId.NONE, side === ArenaTagSide.PLAYER ? A.id : D.id, side));
+    }
+    if (rnd(10) === 0) {
+      const side = rnd(2) === 0 ? ArenaTagSide.ENEMY : ArenaTagSide.PLAYER;
+      scene.arena.tags.push(getArenaTag(ArenaTagType.TAILWIND, 1 + rnd(4), MoveId.TAILWIND, side === ArenaTagSide.PLAYER ? A.id : D.id, side));
     }
     if (rnd(10) === 0) {
       scene.arena.tags.push(getArenaTag(ArenaTagType.GRAVITY, 1 + rnd(5), MoveId.GRAVITY, A.id, ArenaTagSide.BOTH));
@@ -570,6 +593,9 @@ it("ai producer", async () => {
     }
     if (battle.trainer) {
       // the Pokemon the trainer would send in after a faint (SwitchSummonPhase with slot -1)
+      // the switch-in scores EnemyCommandPhase weighs (entry hazards included), compared as numbers
+      const sw = battle.trainer.getPartyMemberMatchupScores(TrainerSlot.TRAINER, true);
+      out.push(`MATCHUP list=${L(sw.map(([k, s]: [number, number]) => `${k}:${s}`))}`);
       const scores = battle.trainer.getPartyMemberMatchupScores(TrainerSlot.TRAINER);
       out.push(`NEXT slot=${scores.length ? battle.trainer.getNextSummonIndex(TrainerSlot.TRAINER) : -1}`);
     }

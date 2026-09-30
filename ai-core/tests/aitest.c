@@ -519,7 +519,12 @@ static void mq_str(char *out, size_t n, const pr_pokemon *p)
 
 /* What the command left behind, taken before the trainer's faint pick is worked out (upstream
  * writes these records first; the pick's own matchup scores queue and apply things too) */
-typedef struct { char queue[LINE_LEN]; char applied[2][LINE_LEN]; } snapshot;
+typedef struct {
+    char queue[LINE_LEN];
+    char applied[2][LINE_LEN];
+    int n_match, match_slot[PR_MAX_PARTY];   /* the trainer's switch-in scores, worked out after the above */
+    double match_score[PR_MAX_PARTY];
+} snapshot;
 
 static void take_snapshot(snapshot *sn, pr_battle *bt, pr_ai *ai)
 {
@@ -614,6 +619,25 @@ static bool check_line(const char *l, pr_battle *bt, const pr_ai *ai, const snap
         snprintf(c_out, n, "%s", snap->applied[b == 2]);
         return !strcmp(c_out, l);
     }
+    if (!strncmp(l, "MATCHUP ", 8)) {
+        *seen_next = true;
+        int slots[PR_MAX_PARTY];
+        double sc[PR_MAX_PARTY];
+        int nm = snap->n_match;
+        memcpy(slots, snap->match_slot, sizeof slots);
+        memcpy(sc, snap->match_score, sizeof sc);
+        int k = snprintf(c_out, n, "MATCHUP list=");
+        if (!nm) snprintf(c_out + k, n - (size_t)k, "-");
+        for (int i = 0; i < nm; i++) k += snprintf(c_out + k, n - (size_t)k, "%s%d:%.17g", i ? "," : "", slots[i], sc[i]);
+        char sv[PR_MAX_PARTY + 2][64];
+        int ns = split(need(l, "list"), ',', sv, PR_MAX_PARTY + 2);
+        if (ns != nm) return false;
+        for (int i = 0; i < ns; i++) {
+            char *colon = strchr(sv[i], ':');
+            if (!colon || atoi(sv[i]) != slots[i] || !same_num(strtod(colon + 1, NULL), sc[i])) return false;
+        }
+        return true;
+    }
     if (!strncmp(l, "NEXT ", 5)) {
         *seen_next = true;
         snprintf(c_out, n, "NEXT slot=%d", next);
@@ -696,6 +720,7 @@ int main(int argc, char **argv)
         pr_ai_enemy_command(bt, ai, 0);
         static snapshot snap;
         take_snapshot(&snap, bt, ai);
+        snap.n_match = pr_ai_party_matchup_scores(bt, ai, TRAINER_SLOT_TRAINER, true, snap.match_slot, snap.match_score);
         int next = ai->trainer ? pr_ai_next_summon_index(bt, ai, TRAINER_SLOT_TRAINER) : -1;
 
         if (bt->n_unported || bt->n_deferred) {

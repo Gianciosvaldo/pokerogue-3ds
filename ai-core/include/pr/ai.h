@@ -101,6 +101,13 @@ void pr_ai_enemy_command(pr_battle *bt, pr_ai *ai, int field_index);
  * caller passes this to pr_resume_switch. */
 int pr_ai_next_summon_index(pr_battle *bt, pr_ai *ai, int trainer_slot);
 
+/* Trainer.getPartyMemberMatchupScores(trainerSlot, forSwitch): the enemy bench slots that can come
+ * in, in party order, with their matchup scores against the player's field; for_switch multiplies in
+ * the entry hazards on the enemy side, as EnemyCommandPhase does. Returns how many (0 in a wild
+ * battle). For a debug overlay; the test compares it with upstream. */
+int pr_ai_party_matchup_scores(pr_battle *bt, pr_ai *ai, int trainer_slot, bool for_switch,
+                               int slots[PR_MAX_PARTY], double scores[PR_MAX_PARTY]);
+
 /* EnemyPokemon.getNextMove(): the move, its targets and use mode. Like upstream it drops unusable
  * moves from the front of p's move queue, or clears the queue. */
 pr_turn_move pr_ai_get_next_move(pr_battle *bt, pr_ai *ai, pr_pokemon *p);
