@@ -121,8 +121,8 @@ typedef struct {
     uint16_t passive;             /* getPassiveAbility().id if hasPassive(), else 0 */
     bool can_apply_ability, can_apply_passive;   /* caller: canApplyAbility(), canApplyAbility(true) (battle-core) */
     int8_t types[2]; uint8_t n_types;   /* getTypes(false, false, true, true): PARTY_TYPE evolutions */
-    /* getMoveset() (the summon moveset while one is set): each move, its ppUsed and getMovePp() */
-    struct { uint16_t move; uint8_t pp_used, max_pp; } moves[4];
+    /* getMoveset() (the summon moveset while one is set): each move, its ppUsed, ppUp and getMovePp() */
+    struct { uint16_t move; uint8_t pp_used, pp_up, max_pp; } moves[4];
     uint8_t n_moves;
     uint16_t base_moves[4];       /* this.moveset / getMoveset(true): the moves */
     uint8_t n_base_moves;
@@ -231,5 +231,15 @@ int pr_reward_select_start(pr_reward_ctx *ctx, const pr_reward_select *sel, pr_r
 /* ---- the fixed rewards of a victory (VictoryPhase): ModifierRewardPhase items, in the order they're given,
  * and whether a reward screen (SelectModifierPhase) follows. Returns how many items. ---- */
 int pr_reward_victory_rewards(const pr_run *run, int wave, uint16_t out[8], bool *select_screen);
+
+/* ---- applying rewards (Task 10: healing, revives, PP) ---- */
+/* Apply a reward item (potions, revives, Sacred Ash, PP items) to the player's party in ctx.
+ * item: enum pr_item (PR_ITEM_POTION..PR_ITEM_FULL_RESTORE, PR_ITEM_REVIVE, PR_ITEM_MAX_REVIVE, PR_ITEM_SACRED_ASH,
+ *                      PR_ITEM_ETHER, PR_ITEM_MAX_ETHER, PR_ITEM_ELIXIR, PR_ITEM_MAX_ELIXIR, PR_ITEM_PP_UP, PR_ITEM_PP_MAX)
+ * party_idx: 0..n_party-1, or -1 for Sacred Ash
+ * move_idx: 0..3 for Ether/Max Ether/PP Up/PP Max, or -1
+ * msg: if non-NULL, set to "It won’t have any effect." on failure, or NULL on success.
+ * Returns true if applied, false if no effect. */
+bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int party_idx, int move_idx, const char **msg);
 
 #endif
