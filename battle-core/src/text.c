@@ -235,11 +235,18 @@ static const pr_species *species_by_id(uint16_t id)
 
 static void format_key(obuf *o, const char *key, const pr_msg *args, const pr_text_source *src, int depth);
 
+/* what i18next shows for a key it lacks: the key without its namespace */
+static const char *missing_key(const char *key)
+{
+    const char *c = strchr(key, ':');
+    return c ? c + 1 : key;
+}
+
 static void lookup_into(obuf *o, const pr_text_source *src, const char *key)
 {
     const char *e, *s = find_key(src, key, &e);
     if (s) unescape(o, s, e);
-    else puts_(o, key);
+    else puts_(o, missing_key(key));
 }
 
 /* PokemonSpecies.getName(formIndex): the species name, wrapped for Mega, Primal, G-Max and
@@ -375,7 +382,7 @@ static void format_key(obuf *o, const char *key, const pr_msg *m, const pr_text_
     char tmpl[1024];
     obuf tb = {tmpl, sizeof tmpl, 0};
     const char *e, *s = find_key(src, use, &e);
-    if (!s) { puts_(o, key); return; }
+    if (!s) { puts_(o, missing_key(key)); return; }
     unescape(&tb, s, e);
     end(&tb);
     for (const char *p = tmpl; *p;) {

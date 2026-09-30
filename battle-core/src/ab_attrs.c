@@ -259,7 +259,13 @@ static bool type_in(const pr_intlist *l, int t)
 
 /* What applySingleAbAttrs does between canApply and apply outside a simulation: show the
  * ability, queue its trigger message. The turn engine keeps these phases (NULL: no engine). */
-typedef struct { pr_engine *e; bool shown; uint16_t ability; bool passive; } ab_ctx;
+typedef struct {
+    pr_engine *e; bool shown; uint16_t ability; bool passive;
+    /* what the attr's canApply keeps on it for getTriggerMessage, set by its case before GATE:
+     * Color Change's type, Trace's target */
+    int msg_type;
+    const pr_pokemon *msg_target;
+} ab_ctx;
 /* findModifiers(PokemonHeldItemModifier held by p): the item stealers stop at a non-empty list */
 static bool has_held_items(const pr_battle *bt, const pr_pokemon *p)
 {
@@ -268,17 +274,50 @@ static bool has_held_items(const pr_battle *bt, const pr_pokemon *p)
         if (pr_mod_is(&bt->mods[side][i], PR_MOD_HELD_ITEM) && bt->mods[side][i].pokemon_id == (int64_t)p->id) return true;
     return false;
 }
-static bool has_trigger_message(uint16_t cls);
+static bool trigger_message(pr_battle *bt, const pr_attr *a, const pr_ab_params *pp, const ab_ctx *c, pr_msg *out);
 static bool shows_ability(const pr_attr *a);
 static void before_apply(pr_battle *bt, const pr_attr *a, const pr_ab_params *pp, ab_ctx *c)
 {
     if (!c->e) return;
     c->shown = shows_ability(a);
     if (c->shown) pr_queue_ability_display(bt, c->e, pp->pokemon, c->passive, true);
-    if (has_trigger_message(a->cls)) pr_queue_message(bt, c->e);
+    pr_msg m;
+    if (trigger_message(bt, a, pp, c, &m)) pr_queue_msg(bt, c->e, m);
 }
 /* canApply(params) false: skip this attr; true: the ability applies, apply follows */
 #define GATE(can) do { if (!(can)) return 0; before_apply(bt, a, pp, c); } while (0)
+
+/* PostSummonMessageAbAttr's messageFunc(pokemon) and PostSummonUnnamedMessageAbAttr's message, by the
+ * ability they belong to (init-abilities.ts) */
+static pr_msg post_summon_message(const pr_battle *bt, const pr_attr *a, uint16_t ability, const pr_pokemon *p)
+{
+    if (a->cls == PR_AC_PostSummonUnnamedMessageAbAttr)                /* Cloud Nine, Air Lock */
+        return pr_msg0(ability == ABILITY_ID_CLOUD_NINE || ability == ABILITY_ID_AIR_LOCK
+                           ? "abilityTriggers:weatherEffectDisappeared" : NULL);
+    const char *key = NULL;
+    int stat = -1;
+    switch (ability) {
+    case ABILITY_ID_PRESSURE: key = "abilityTriggers:postSummonPressure"; break;
+    case ABILITY_ID_MOLD_BREAKER: key = "abilityTriggers:postSummonMoldBreaker"; break;
+    case ABILITY_ID_ANTICIPATION: key = "abilityTriggers:postSummonAnticipation"; break;
+    case ABILITY_ID_TURBOBLAZE: key = "abilityTriggers:postSummonTurboblaze"; break;
+    case ABILITY_ID_TERAVOLT: key = "abilityTriggers:postSummonTeravolt"; break;
+    case ABILITY_ID_DARK_AURA: key = "abilityTriggers:postSummonDarkAura"; break;
+    case ABILITY_ID_FAIRY_AURA: key = "abilityTriggers:postSummonFairyAura"; break;
+    case ABILITY_ID_AURA_BREAK: key = "abilityTriggers:postSummonAuraBreak"; break;
+    case ABILITY_ID_AS_ONE_GLASTRIER: key = "abilityTriggers:postSummonAsOneGlastrier"; break;
+    case ABILITY_ID_AS_ONE_SPECTRIER: key = "abilityTriggers:postSummonAsOneSpectrier"; break;
+    /* (its messageFunc also marks zeroToHeroFormChangeMessage, which its condition reads: not modelled) */
+    case ABILITY_ID_ZERO_TO_HERO: key = "abilityTriggers:postSummonZeroToHero"; break;
+    case ABILITY_ID_VESSEL_OF_RUIN: key = "abilityTriggers:postSummonVesselOfRuin"; stat = STAT_SPATK; break;
+    case ABILITY_ID_SWORD_OF_RUIN: key = "abilityTriggers:postSummonSwordOfRuin"; stat = STAT_DEF; break;
+    case ABILITY_ID_TABLETS_OF_RUIN: key = "abilityTriggers:postSummonTabletsOfRuin"; stat = STAT_ATK; break;
+    case ABILITY_ID_BEADS_OF_RUIN: key = "abilityTriggers:postSummonBeadsOfRuin"; stat = STAT_SPDEF; break;
+    default: return pr_msg0(NULL);                                       /* a messageFunc not listed here */
+    }
+    if (stat >= 0) return pr_msg2(key, pr_arg_pokemon(bt, "pokemonNameWithAffix", p), pr_arg_stat("statName", stat));
+    return pr_msg_p(bt, key, p);
+}
 
 /* canApply, then apply, for one attr: 1 applied, 0 canApply was false, -1 no C port. */
 static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *c)
@@ -402,7 +441,10 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
             if (p->hp < pr_get_stat(p, STAT_HP, true) && !pp->simulated) {
                 /* unshiftNew("PokemonHealPhase", toDmgValue(maxHp / 4), {message}); the damage-only
                  * test has no engine and records it as deferred */
-                if (c->e) pr_unshift_heal(bt, c->e, pr_battler_index(bt, p), to_dmg_value(pr_get_stat(p, STAT_HP, true) / 4.0), PR_HEAL_MESSAGE);
+                if (c->e)
+                    pr_unshift_heal_msg(bt, c->e, pr_battler_index(bt, p), to_dmg_value(pr_get_stat(p, STAT_HP, true) / 4.0),
+                                        PR_HEAL_MESSAGE, pr_msg2("abilityTriggers:typeImmunityHeal",
+                                        pr_arg_pokemon(bt, "pokemonNameWithAffix", p), pr_arg_ability("abilityName", c->ability)));
                 else pr_note_deferred(bt, a->cls);
                 *pp->flag = true;
             }
@@ -512,9 +554,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         const pr_attr_PostSummonHealStatusAbAttr *x = P(PostSummonHealStatusAbAttr, a);
         if (!(p->status && (x->immuneEffects.n == 0 || type_in(&x->immuneEffects, p->status)))) return 0;
         if (!c->e) return -1;                         /* apply ignores simulated: it needs the queue */
-        GATE(true);
-        /* getTriggerMessage runs before apply: it names the status this attr cured last time */
-        if (pr_status_healed_get(c->ability)) pr_queue_message(bt, c->e);
+        GATE(true);                                   /* its trigger message names the status cured last time */
         pr_status_healed_set(c->ability, p->status);
         pr_reset_status_phase(bt, c->e, (pr_pokemon *)p, false);
         return 1;
@@ -524,7 +564,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
     case PR_AC_PostSummonUnnamedMessageAbAttr:                          /* Air Lock, Cloud Nine */
         if (!c->e) return -1;
         GATE(true);
-        if (!pp->simulated) pr_queue_message(bt, c->e);
+        if (!pp->simulated) pr_queue_msg(bt, c->e, post_summon_message(bt, a, c->ability, p));
         return 1;
     case PR_AC_PostSummonAddBattlerTagAbAttr: {                         /* Protosynthesis, Quark Drive... */
         const pr_attr_PostSummonAddBattlerTagAbAttr *x = P(PostSummonAddBattlerTagAbAttr, a);
@@ -672,6 +712,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         if (pp->simulated) return 1;
         /* the strongest moves by getForewarnPower; one of the ties on the battle RNG */
         int max_power = 0, n_at_max = 0;
+        uint16_t at_max[4 * 4];                                         /* movesAtMaxPower's moves */
         for (int k = 0; k < no; k++)
             for (int j = 0; j < opps[k]->n_moves; j++) {
                 int mv = opps[k]->moves[j];
@@ -681,13 +722,15 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
                             : pr_move_has_attr((uint16_t)mv, PR_AC_CounterDamageAttr) ? 120
                             : pr_moves[mv].power == -1 ? 80 : pr_moves[mv].power;
                 if (power < max_power) continue;
-                if (power == max_power) { n_at_max++; continue; }
+                if (power == max_power) { at_max[n_at_max++] = (uint16_t)mv; continue; }
                 max_power = power;
                 n_at_max = 1;
+                at_max[0] = (uint16_t)mv;
             }
         if (n_at_max == 0) return 1;
-        pr_battle_rand_seed_int(bt, n_at_max, 0);
-        pr_queue_message(bt, c->e);                                     /* abilityTriggers:forewarn */
+        int chosen = at_max[pr_battle_rand_seed_int(bt, n_at_max, 0)];
+        pr_queue_msg(bt, c->e, pr_msg2("abilityTriggers:forewarn", pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+                                       pr_arg_move("moveName", chosen)));
         return 1;
     }
     case PR_AC_FriskAbAttr: {                                           /* Frisk: a message per opponent */
@@ -696,7 +739,10 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         if (pp->simulated) return 1;
         pr_speed_iter it;
         pr_speed_iter_init(bt, &it, p->is_player ? ARENA_TAG_SIDE_ENEMY : ARENA_TAG_SIDE_PLAYER);
-        while (pr_speed_iter_next(bt, &it)) pr_queue_message(bt, c->e);
+        for (pr_pokemon *q; (q = pr_speed_iter_next(bt, &it));)
+            pr_queue_msg(bt, c->e, pr_msg3("abilityTriggers:frisk", pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+                                           pr_arg_pokemon_name(bt, "opponentName", q),
+                                           pr_arg_ability("opponentAbilityName", q->ability)));
         return 1;
     }
     /* ---- leaving the field: SwitchSummonPhase.switchAndSummon ---- */
@@ -735,7 +781,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         pr_speed_iter_init(bt, &it, p->is_player ? ARENA_TAG_SIDE_PLAYER : ARENA_TAG_SIDE_ENEMY);
         while ((q = pr_speed_iter_next(bt, &it)))
             if (q->status && type_in(&x->statusEffect, q->status)) {
-                pr_queue_message(bt, c->e);
+                pr_queue_msg(bt, c->e, pr_status_msg(bt, q->status, PR_ST_HEAL, q));   /* getStatusEffectHealText */
                 pr_reset_status_phase(bt, c->e, q, false);
             }
         return 1;
@@ -752,6 +798,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         if (n == 0) return 0;
         if (n > 1 && !pp->simulated) pr_note_unported(bt, PR_FEAT_DOUBLES);   /* randSeedInt over the targets */
         if (!c->e && !pp->simulated) return -1;
+        c->msg_target = tg[0];                                          /* this.target */
         GATE(true);
         if (!pp->simulated) pr_set_temp_ability(bt, (pr_pokemon *)p, tg[0]->ability);   /* revealAbility: UI */
         return 1;
@@ -775,7 +822,9 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         if (!(p->status && type_in(&x->effects, p->status) && p->hp < pr_get_stat(p, STAT_HP, true))) return 0;
         if (!c->e) return -1;
         GATE(true);
-        pr_unshift_heal(bt, c->e, pr_battler_index(bt, p), to_dmg_value(pr_get_stat(p, STAT_HP, true) / 8.0), PR_HEAL_MESSAGE);
+        pr_unshift_heal_msg(bt, c->e, pr_battler_index(bt, p), to_dmg_value(pr_get_stat(p, STAT_HP, true) / 8.0), PR_HEAL_MESSAGE,
+                            pr_msg2("abilityTriggers:poisonHeal", pr_arg_pokemon(bt, "pokemonName", p),
+                                    pr_arg_ability("abilityName", c->ability)));
         return 1;
     }
     /* ---- weather and terrain: WeatherEffectPhase, and arena.trySetWeather / trySetTerrain ---- */
@@ -795,15 +844,19 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         const pr_attr_PostWeatherLapseHealAbAttr *x = P(PostWeatherLapseHealAbAttr, a);
         if (!c->e) return -1;
         GATE(p->hp < pr_get_stat(p, STAT_HP, true));                     /* !isFullHp() */
-        pr_unshift_heal(bt, c->e, pr_battler_index(bt, p),
-                        to_dmg_value(pr_get_stat(p, STAT_HP, true) / (16.0 / x->healFactor)), PR_HEAL_MESSAGE);
+        pr_unshift_heal_msg(bt, c->e, pr_battler_index(bt, p),
+                            to_dmg_value(pr_get_stat(p, STAT_HP, true) / (16.0 / x->healFactor)), PR_HEAL_MESSAGE,
+                            pr_msg2("abilityTriggers:postWeatherLapseHeal", pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+                                    pr_arg_ability("abilityName", c->ability)));
         return 1;
     }
     case PR_AC_PostWeatherLapseDamageAbAttr: {                          /* Solar Power, Dry Skin */
         const pr_attr_PostWeatherLapseDamageAbAttr *x = P(PostWeatherLapseDamageAbAttr, a);
         if (!c->e) return -1;
         GATE(!pr_has_ability_with_attr(bt, p, PR_AC_BlockNonDirectDamageAbAttr));
-        pr_queue_message(bt, c->e);
+        /* abilityName: (passive ? getPassiveAbility() : getAbility()).name */
+        pr_queue_msg(bt, c->e, pr_msg2("abilityTriggers:postWeatherLapseDamage",
+                                       pr_arg_pokemon(bt, "pokemonNameWithAffix", p), pr_arg_ability("abilityName", c->ability)));
         pr_damage_and_update(bt, c->e, (pr_pokemon *)p,
                              to_dmg_value(pr_get_stat(p, STAT_HP, true) / (16.0 / x->damageFactor)),
                              HIT_RESULT_INDIRECT, false, NULL);
@@ -933,6 +986,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         int n = pr_get_types(p, ty, PR_TYPES_ORIGINAL_IF_STELLAR);
         for (int i = 0; i < n; i++)
             if (ty[i] == type) return 0;
+        c->msg_type = type;                                       /* this.type */
         GATE(true);
         if (!pp->simulated) {
             pr_pokemon *w = (pr_pokemon *)p;
@@ -978,7 +1032,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         const pr_pokemon *tg = P(PostTurnResetStatusAbAttr, a)->allyTarget ? pr_get_ally(bt, p) : p;
         GATE(tg && tg->status && tg->status != STATUS_EFFECT_FAINT);
         if (!pp->simulated) {
-            pr_queue_message(bt, c->e);                          /* getStatusEffectHealText */
+            pr_queue_msg(bt, c->e, pr_status_msg(bt, tg->status, PR_ST_HEAL, tg));   /* getStatusEffectHealText */
             pr_reset_status_phase(bt, c->e, (pr_pokemon *)tg, false);
         }
         return 1;
@@ -1027,7 +1081,8 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         GATE(call_bool(bt, x->condition, a->cls, p, o, move));
         if (!pr_get_battler_tag(p, x->tagType) && !pp->simulated) {
             pr_add_tag(bt, c->e, (pr_pokemon *)p, x->tagType, 0, 0, p->id);   /* addTag(tagType, undefined, undefined, id) */
-            pr_queue_message(bt, c->e);                                   /* abilityTriggers:windPowerCharged */
+            pr_queue_msg(bt, c->e, pr_msg2("abilityTriggers:windPowerCharged", pr_arg_pokemon(bt, "pokemonName", p),
+                                           pr_arg_move("moveName", move)));
         }
         return 1;
     }
@@ -1306,20 +1361,133 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
 }
 #undef GATE
 
-/* attr.getTriggerMessage() gives a message (for any params) */
-static bool has_trigger_message(uint16_t cls)
+/* BattlerTag.getDescriptor() of the tag a BaseBattlerTagImmunityAbAttr blocks ("" for most tags) */
+static const char *tag_descriptor_key(int type)
 {
-    static const uint16_t always[] = {
-        PR_AC_BlockItemTheftAbAttr, PR_AC_NonSuperEffectiveImmunityAbAttr, PR_AC_FullHpResistTypeAbAttr,
-        PR_AC_MoveImmunityAbAttr, PR_AC_PostDefendTypeChangeAbAttr, PR_AC_PostDefendContactDamageAbAttr,
-        PR_AC_PostDefendPerishSongAbAttr, PR_AC_PostDefendAbilitySwapAbAttr, PR_AC_PostDefendAbilityGiveAbAttr,
-        PR_AC_PokemonTypeChangeAbAttr, PR_AC_IntimidateImmunityAbAttr, PR_AC_PostSummonCopyAbilityAbAttr,
-        PR_AC_PostSummonCopyAllyStatsAbAttr, PR_AC_ReflectStatStageChangeAbAttr, PR_AC_ProtectStatAbAttr,
-        PR_AC_PreSetStatusEffectImmunityAbAttr, PR_AC_PreApplyBattlerTagAbAttr, PR_AC_ArenaTrapAbAttr,
-        PR_AC_PostFaintContactDamageAbAttr, PR_AC_PostFaintHPDamageAbAttr, PR_AC_FormBlockDamageAbAttr,
-        PR_AC_BypassSpeedChanceAbAttr, PR_AC_TerrainEventTypeChangeAbAttr};
-    for (unsigned i = 0; i < sizeof always / sizeof always[0]; i++)
-        if (pr_attr_is(cls, always[i])) return true;
+    switch (type) {
+    case BATTLER_TAG_TYPE_FLINCHED: return "battlerTags:flinchedDesc";
+    case BATTLER_TAG_TYPE_CONFUSED: return "battlerTags:confusedDesc";
+    case BATTLER_TAG_TYPE_INFATUATED: return "battlerTags:infatuatedDesc";
+    case BATTLER_TAG_TYPE_SEEDED: return "battlerTags:seedDesc";
+    case BATTLER_TAG_TYPE_NIGHTMARE: return "battlerTags:nightmareDesc";
+    case BATTLER_TAG_TYPE_INGRAIN: return "battlerTags:ingrainDesc";      /* before TrappedTag's */
+    case BATTLER_TAG_TYPE_DROWSY: return "battlerTags:drowsyDesc";
+    }
+    return pr_battler_tag_is(type, PR_TAGCLASS_TRAPPED) ? "battlerTags:trappedDesc" : "";
+}
+
+/* attr.getTriggerMessage(params, ability.name), which applySingleAbAttrs queues (when it isn't null
+ * or "") between showing the ability and apply: the text as upstream builds it then. abilityName is
+ * the name of the ability the attr belongs to (the passive's when it is the passive). */
+static bool trigger_message(pr_battle *bt, const pr_attr *a, const pr_ab_params *pp, const ab_ctx *c, pr_msg *out)
+{
+    const pr_pokemon *p = pp->pokemon;
+    pr_msg_arg name = pr_arg_pokemon(bt, "pokemonNameWithAffix", p);
+    pr_msg_arg ability = pr_arg_ability("abilityName", c->ability);
+    switch (a->cls) {
+    case PR_AC_BlockItemTheftAbAttr: *out = pr_msg2("abilityTriggers:blockItemTheft", name, ability); return true;
+    case PR_AC_NonSuperEffectiveImmunityAbAttr:
+        *out = pr_msg2("abilityTriggers:nonSuperEffectiveImmunity", name, ability);
+        return true;
+    case PR_AC_FullHpResistTypeAbAttr: *out = pr_msg1("abilityTriggers:fullHpResistType", name); return true;
+    case PR_AC_MoveImmunityAbAttr:
+    case PR_AC_MoveImmunityStatStageChangeAbAttr:                       /* inherits MoveImmunityAbAttr's */
+        *out = pr_msg1("abilityTriggers:moveImmunity", name);
+        return true;
+    case PR_AC_ReverseDrainAbAttr:                                      /* names the attacker */
+        *out = pr_msg_p(bt, "abilityTriggers:reverseDrain", pp->opponent);
+        return true;
+    case PR_AC_PostDefendTypeChangeAbAttr:
+        *out = pr_msg3("abilityTriggers:postDefendTypeChange", name, ability, pr_arg_type("typeName", c->msg_type));
+        return true;
+    case PR_AC_PostDefendContactDamageAbAttr:
+        *out = pr_msg2("abilityTriggers:postDefendContactDamage", name, ability);
+        return true;
+    case PR_AC_PostDefendPerishSongAbAttr:
+        *out = pr_msg2("abilityTriggers:perishBody", pr_arg_pokemon(bt, "pokemonName", p), ability);
+        return true;
+    case PR_AC_PostDefendAbilitySwapAbAttr: *out = pr_msg1("abilityTriggers:postDefendAbilitySwap", name); return true;
+    case PR_AC_PostDefendAbilityGiveAbAttr:
+        *out = pr_msg2("abilityTriggers:postDefendAbilityGive", name, ability);
+        return true;
+    case PR_AC_PokemonTypeChangeAbAttr:
+        /* Protean, Libero: pokemonTypeChange {moveType: this.moveType}, which canApply sets; the class
+         * isn't ported (no case sets it here) */
+        *out = pr_msg0(NULL);
+        return true;
+    case PR_AC_IntimidateImmunityAbAttr:
+        *out = pr_msg2("abilityTriggers:intimidateImmunity", name, ability);
+        return true;
+    case PR_AC_PostSummonHealStatusAbAttr: {
+        /* getStatusEffectHealText(this.statusHealed): the status this attr cured last time, if any */
+        int healed = pr_status_healed_get(c->ability);
+        if (!healed) return false;
+        *out = pr_status_msg(bt, healed, PR_ST_HEAL, p);
+        return true;
+    }
+    case PR_AC_PostSummonCopyAbilityAbAttr:                             /* Trace: this.target */
+        *out = pr_msg3("abilityTriggers:trace", pr_arg_pokemon(bt, "pokemonName", p),
+                       pr_arg_pokemon(bt, "targetName", c->msg_target),
+                       pr_arg_ability("abilityName", c->msg_target ? c->msg_target->ability : 0));
+        return true;
+    case PR_AC_PostSummonCopyAllyStatsAbAttr:                           /* Costar: this.ally = getAlly() */
+        *out = pr_msg2("abilityTriggers:costar", pr_arg_pokemon(bt, "pokemonName", p),
+                       pr_arg_pokemon(bt, "allyName", pr_get_ally(bt, p)));
+        return true;
+    case PR_AC_ReflectStatStageChangeAbAttr: {                          /* Mirror Armor */
+        /* this.reflectedChanges: the changes not cancelled yet (apply hasn't cancelled them) */
+        int n = 0, stat = 0;
+        for (int i = 0; i < pp->n_ch; i++)
+            if (!(*pp->cancelled_stats & (1u << pp->ch_stat[i]))) { stat = pp->ch_stat[i]; n++; }
+        *out = pr_msg3("abilityTriggers:protectStat", name, ability,
+                       n == 1 ? pr_arg_stat("statName", stat) : pr_arg_key("statName", "battle:stats"));
+        return true;
+    }
+    case PR_AC_ProtectStatAbAttr: {
+        const pr_attr_ProtectStatAbAttr *x = P(ProtectStatAbAttr, a);
+        bool one = !(x->nulls & (1u << 2)) && x->protectedStat;        /* `this.protectedStat ?` */
+        *out = pr_msg3("abilityTriggers:protectStat", name, ability,
+                       one ? pr_arg_stat("statName", x->protectedStat) : pr_arg_key("statName", "battle:stats"));
+        return true;
+    }
+    case PR_AC_StatusEffectImmunityAbAttr: {                            /* PreSetStatusEffectImmunityAbAttr's */
+        const pr_attr_StatusEffectImmunityAbAttr *x = P(StatusEffectImmunityAbAttr, a);
+        if (x->immuneEffects.n > 0)
+            *out = pr_msg3("abilityTriggers:statusEffectImmunityWithName", name, ability,
+                           pr_arg_key("statusEffectName", pr_status_key(pp->effect, PR_ST_DESCRIPTION)));
+        else
+            *out = pr_msg2("abilityTriggers:statusEffectImmunity", name, ability);
+        return true;
+    }
+    case PR_AC_ArenaTrapAbAttr: *out = pr_msg2("abilityTriggers:arenaTrap", name, ability); return true;
+    case PR_AC_PostFaintContactDamageAbAttr:
+        *out = pr_msg2("abilityTriggers:postFaintContactDamage", name, ability);
+        return true;
+    case PR_AC_PostFaintHPDamageAbAttr: *out = pr_msg2("abilityTriggers:postFaintHpDamage", name, ability); return true;
+    case PR_AC_FormBlockDamageAbAttr:                                   /* Disguise, Ice Face: this.i18nKey */
+        *out = pr_msg2(P(FormBlockDamageAbAttr, a)->i18nKey, name, ability);
+        return true;
+    case PR_AC_BypassSpeedChanceAbAttr:
+        *out = pr_msg1("abilityTriggers:quickDraw", pr_arg_pokemon(bt, "pokemonName", p));
+        return true;
+    case PR_AC_TerrainEventTypeChangeAbAttr: {                          /* Mimicry */
+        /* determineTypeChange(pokemon, terrain)[0] for a terrain */
+        int t = bt->terrain == TERRAIN_ELECTRIC ? POKEMON_TYPE_ELECTRIC
+              : bt->terrain == TERRAIN_MISTY ? POKEMON_TYPE_FAIRY
+              : bt->terrain == TERRAIN_GRASSY ? POKEMON_TYPE_GRASS
+              : bt->terrain == TERRAIN_PSYCHIC ? POKEMON_TYPE_PSYCHIC : -2;
+        if (bt->terrain == TERRAIN_NONE) *out = pr_msg1("abilityTriggers:pokemonTypeChangeRevert", name);
+        else if (t != -2) *out = pr_msg2("abilityTriggers:pokemonTypeChange", name, pr_arg_type("moveType", t));
+        else *out = pr_msg0(NULL);
+        return true;
+    }
+    }
+    /* BaseBattlerTagImmunityAbAttr: BattlerTagImmunity, UserFieldBattlerTagImmunity and its Conditional */
+    if (pr_attr_is(a->cls, PR_AC_PreApplyBattlerTagAbAttr)) {
+        *out = pr_msg3("abilityTriggers:battlerTagImmunity", name, ability,
+                       pr_arg_key("battlerTagName", tag_descriptor_key(pp->tag_type)));
+        return true;
+    }
     return false;
 }
 
@@ -1395,7 +1563,7 @@ void pr_apply_ab_attrs(pr_battle *bt, uint16_t cls, pr_ab_params *pp)
             if (!can) break;
             if (pp->on_gain && !activate_on_gain(a)) continue;                 /* attrFilter */
             if (!condition_ok(bt, a, p)) continue;
-            ab_ctx c = {e, false, ability, passive != 0};
+            ab_ctx c = {.e = e, .ability = ability, .passive = passive != 0};
             int r = apply_one(bt, a, pp, &c);
             if (r < 0) { pr_note_unported(bt, a->cls); continue; }
             if (r == 0 || !e) continue;

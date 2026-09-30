@@ -1,14 +1,15 @@
 /* What a turn shows: the battle events the game screen plays back.
  *
  * pr_run_turn and pr_resume_switch each start a fresh list in e->events and append one
- * event for every presentation step upstream takes, in the order upstream takes them
- * (the turn test checks that order and the text). The screen plays them one by one, then
- * reads bt for anything else it shows. Each event carries the field as it stands once the
- * event has happened (pr_event_field), so the screen can move HP bars and status icons to
- * it without knowing the rules.
+ * event for every presentation step upstream takes, in the order upstream takes them.
+ * The screen plays them one by one, then reads bt for anything else it shows. Each event
+ * carries the field as it stands once the event has happened (pr_event_field), so the
+ * screen can move HP bars and status icons to it without knowing the rules.
  *
- * Status (2026-09-28): the header is the contract; the engine fills it in slice by slice.
- * Events not produced yet are marked below. */
+ * Status (2026-09-30): every message the engine shows has its text; the turn test checks
+ * the texts of each covered turn against upstream's (identical on all but a setup
+ * artifact). The other events follow upstream's code in the same order but are not
+ * compared with upstream by the test. */
 #ifndef PR_EVENTS_H
 #define PR_EVENTS_H
 #include <stdbool.h>
@@ -20,10 +21,13 @@ typedef enum {
     /* A text box (MessagePhase, or a phase's own ui.showText). msg; battler = -1.
      * upstream shows it for 1.5 s or until a button press when prompt is set */
     PR_EV_TEXT,
-    /* A move's animation (MoveAnim in MoveEffectPhase / MoveAnimPhase): id = MoveId,
-     * battler = user, target = the target it plays against */
+    /* A move's animation (MoveAnim in MoveEffectPhase, each hit, when the move succeeded
+     * against a target or has a POST_TARGET effect): id = MoveId, battler = user, target =
+     * the target it plays against (one event per target on the field; the user itself
+     * when none is left). Comes before the hit's DAMAGE and texts */
     PR_EV_MOVE_ANIM,
-    /* A two-turn move's charge animation (MoveChargeAnim): id = ChargeAnim, battler = user */
+    /* A charge animation (MoveChargeAnim: a two-turn move's first turn, Future Sight and
+     * Doom Desire): id = ChargeAnim, battler = user, target = its target or -1 */
     PR_EV_CHARGE_ANIM,
     /* CommonAnimPhase: id = CommonAnim (weather, status, Leech Seed, stat up/down...),
      * battler = where it plays, target = second position when it has one, else -1 */
@@ -31,7 +35,8 @@ typedef enum {
     /* DamageAnimPhase: battler hit; value = damage; id = HitResult (effective, super
      * effective, not very effective, critical... picks the sound and flashes) */
     PR_EV_DAMAGE,
-    /* HP changed with no damage animation (a heal): battler; value = HP gained */
+    /* HP changed with no damage animation: a heal (value = HP gained, as upstream's
+     * damage number shows it) or status damage (value < 0): battler */
     PR_EV_HP,
     /* Stat stage arrows (StatStageChangePhase): battler; value = a bit per Stat changed;
      * id = 1 rising, 0 falling */

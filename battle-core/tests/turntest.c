@@ -994,6 +994,14 @@ static const char *locale_get(void *ctx, const char *file, int fallback, size_t 
         n = fread(text, 1, (size_t)sz, f);
         text[n] = 0;
         fclose(f);
+        /* upstream's tests load each locale file as a module namespace (import.meta.glob, eager),
+         * whose named exports can't be reserved words: there move "return" and ability "static"
+         * are missing, and i18next shows "return.name". Hide them the same way (the game has them). */
+        static const char *const hidden[] = {"\n  \"return\": ", "\n  \"static\": "};
+        for (int i = 0; i < 2; i++) {
+            char *k = strstr(text, hidden[i]);
+            if (k) k[4] = '_';                               /* "return" -> "_eturn" */
+        }
     }
     snprintf(cache[n_cache].name, sizeof cache[n_cache].name, "%s", file);
     cache[n_cache].text = text;

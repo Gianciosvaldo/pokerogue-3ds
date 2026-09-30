@@ -145,6 +145,7 @@ typedef struct pr_positional_tag {
     int64_t source_id;             /* DelayedAttackTag.sourceId */
     uint16_t source_move;          /* DelayedAttackTag.sourceMove */
     double heal_hp;                /* WishTag.healHp */
+    uint32_t pokemon_name;         /* WishTag.pokemonName: its user as a message names it (pr_msg_pokemon) */
 } pr_positional_tag;
 #define PR_MAX_POSITIONAL_TAGS 8
 
@@ -317,6 +318,7 @@ typedef struct pr_battle {
     int post_battle_loot;      /* currentBattle.postBattleLoot.length */
     double battle_score;       /* currentBattle.battleScore */
     int32_t money_scattered;   /* currentBattle.moneyScattered (Pay Day) */
+    const char *player_name;   /* loggedInUser.username for Celebrate's text; NULL: none (upstream shows "") */
     int16_t biome;             /* arena.biomeId (BiomeId), read when has_biome */
     bool has_biome;
     int16_t weather_turns_left, weather_max_duration;

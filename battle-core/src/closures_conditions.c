@@ -856,7 +856,9 @@ static double no_damp(ARGS)
         pr_ab_params pp = {.pokemon = p, .move = -1, .flag = &cancelled};
         pr_apply_ab_attrs(bt, PR_AC_FieldPreventExplosiveMovesAbAttr, &pp);
     }
-    if (cancelled && bt->engine) pr_queue_message(bt, bt->engine); /* moveTriggers:cannotUseMove */
+    if (cancelled && bt->engine)
+        pr_queue_msg(bt, bt->engine, pr_msg2("moveTriggers:cannotUseMove", pr_arg_pokemon(bt, "pokemonName", u),
+                                             pr_arg_move("moveName", m)));
     return !cancelled;
 }
 
