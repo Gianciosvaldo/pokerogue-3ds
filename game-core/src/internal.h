@@ -82,7 +82,7 @@ bool gc_rq_next(gc_rqueue *q, gc_rphase *out);
 void gc_run_until_screen(gc_run *run);            /* runs phases until one waits on a screen */
 static inline gc_rphase gc_rp(int type, int a, int b, int c) { gc_rphase p = {(uint8_t)type, a, b, c, 0, NULL}; return p; }
 
-/* ---- events (src/run.c) ---- */
+/* ---- events (src/gc_run.c) ---- */
 gc_event *gc_ev_new(gc_run *run, int kind);
 void gc_ev_msg(gc_run *run, const char *key, int n, ...);   /* n pr_msg_arg values follow */
 pr_msg_arg gc_m_mon(gc_run *run, const char *name, int side, int idx);   /* getPokemonNameWithAffix */
@@ -92,7 +92,7 @@ pr_msg_arg gc_m_item(const char *name, const char *item_key);            /* a mo
 void gc_ev_battle(gc_run *run);                   /* battle-core's events of the last call, as GC_EV_BATTLE */
 void gc_stub(gc_run *run, int which);
 
-/* ---- Pokemon (src/mon.c) ---- */
+/* ---- Pokemon (src/gc_mon.c) ---- */
 const pr_species *gc_species(int id);
 const pr_form *gc_form(int species, int form);
 int gc_form_ability(const pr_form *f, int ability_index);
@@ -114,13 +114,13 @@ void gc_mon_recalc(gc_run *run, gc_mon *m);                            /* calcul
 bool gc_mon_fainted(const gc_mon *m);
 bool gc_mon_allowed(const gc_mon *m);                                  /* isAllowedInBattle */
 
-/* ---- items (src/items.c) ---- */
+/* ---- items (src/gc_items.c) ---- */
 int gc_item_stack(const gc_run *run, const char *key);                 /* stack count of a player item, 0 = none */
 void gc_item_add(gc_run *run, const char *key, int16_t arg, uint32_t pokemon_id, int stack);
 void gc_items_to_battle(gc_run *run);                                  /* the player's and the enemy's lists into bt->mods */
 double gc_apply_exp_boosters(const gc_run *run, double exp);          /* ExpBoosterModifier */
 
-/* ---- the encounter and the battle (src/encounter.c, src/battle.c) ---- */
+/* ---- the encounter and the battle (src/gc_encounter.c, src/gc_battle.c) ---- */
 void gc_new_battle(gc_run *run);                  /* NewBattlePhase + EncounterPhase */
 void gc_trainer_names(gc_run *run);               /* run->trainer_names for the current trainer */
 bool gc_is_new_biome(const gc_run *run, int wave);   /* isNewBiome for the battle of `wave` */
@@ -144,7 +144,7 @@ bool gc_battle_turn_tail_lost(const gc_run *run); /* battle-core stopped with tu
 int gc_battle_slot_of(const gc_run *run, int party_index);   /* upstream party slot of party[i] */
 void gc_sync_party_order(gc_run *run);            /* party_order from battle-core's party list */
 
-/* run-phase handlers (src/phases.c): return true when the phase is done, false when it waits on a screen */
+/* run-phase handlers (src/gc_phases.c): return true when the phase is done, false when it waits on a screen */
 bool gc_phase_start(gc_run *run, gc_rphase *p);
 bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char **why, bool *ok);
 

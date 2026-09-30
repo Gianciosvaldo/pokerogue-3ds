@@ -10,7 +10,7 @@ BUILD ?= build
 RUN_LIB := $(BUILD)/run-core/librun.a
 CORE_LIB := $(BUILD)/run-core/battle-core/libprcore.a
 AI_LIB := $(BUILD)/ai-core/libai.a
-SRCS := src/run.c src/phases.c src/mon.c src/items.c src/encounter.c src/battle.c src/save.c src/stubs.c gen/out/gc_evolutions.c gen/out/gc_starters.c gen/out/gc_trainers.c
+SRCS := src/gc_run.c src/gc_phases.c src/gc_mon.c src/gc_items.c src/gc_encounter.c src/gc_battle.c src/gc_save.c src/gc_stubs.c gen/out/gc_evolutions.c gen/out/gc_starters.c gen/out/gc_trainers.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
 all: $(BUILD)/libgc.a $(BUILD)/gcplay $(BUILD)/savetest

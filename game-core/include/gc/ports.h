@@ -1,5 +1,5 @@
 /* What game-core needs from the workstreams that haven't landed yet. Each call has a stand-in in
- * src/stubs.c that keeps a run playable and counts itself in run->stubs; when ai-core, reward-core and
+ * src/gc_stubs.c that keeps a run playable and counts itself in run->stubs; when ai-core, reward-core and
  * run-core's enemy moveset land, their headers replace these stand-ins one by one and nothing else in
  * game-core changes. */
 #ifndef GC_PORTS_H

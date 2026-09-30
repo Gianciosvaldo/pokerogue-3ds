@@ -8,7 +8,7 @@ events and screens and hands back the player's choices.
 It calls battle-core for the turns, run-core for the waves and the enemies, ai-core for the enemy's
 commands (and the player's command restrictions and trapping), and goes through `include/gc/ports.h`
 for the enemy movesets and the rewards. Until reward-core and run-core's movesets land, stand-ins in
-`src/stubs.c` keep a run playable. Each stand-in is counted, so the soak runs show how much of a run is
+`src/gc_stubs.c` keep a run playable. Each stand-in is counted, so the soak runs show how much of a run is
 still standing in.
 
 ## The API (`include/gc/run.h`)
@@ -80,6 +80,15 @@ ones, so the runs stay varied. Each run is its own process, so a crash or a hang
 seed that caused it. The report lists where runs ended, game-core's and run-core's stand-ins, the
 battle texts battle-core hasn't ported yet (by source line) and battle-core's unported effects, each
 by how many runs hit it.
+
+## On the 3DS
+
+The game app (`game/Makefile`) compiles `src/` and `gen/out/` with the other cores' sources into one
+build folder, where objects are named by file name only, so every source file here starts with `gc_`
+(a `phases.c` or `save.c` would clash with battle-core's and the app's own). Checked with
+arm-none-eabi-gcc 13 and the app's flags (`-march=armv6k -mfloat-abi=hard -std=gnu11 -Wall`, plus
+`-Wextra`): no warnings, about 106 KB of code and read-only tables. A host build of all the cores with `-funsigned-char`
+(ARM's `char`) gives the same soak digest as the normal one.
 
 ## What upstream does that game-core doesn't do yet
 
