@@ -12,3 +12,11 @@ build/evtest: $(SRCS)
 clean:
 	rm -rf build
 .PHONY: clean
+
+# the battle animation player over every upstream animation file (needs libjansson)
+ANIM_SRCS := animtest.c ../source/battle_anim.c ../source/tween.c ../gen/gm_enum_names.c $(BC)/gen/out/pr_data.c
+build/animtest: $(ANIM_SRCS)
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) -I../gen -I../../assets-pipeline/app-src/include $(CFLAGS) -fsanitize=address,undefined $(ANIM_SRCS) -ljansson -lm -o $@
+animtest: build/animtest
+.PHONY: animtest

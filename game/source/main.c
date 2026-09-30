@@ -3,8 +3,7 @@
  *
  * For now it boots straight into a demo battle: Blaziken against a wild Pokemon, each turn run by
  * battle-core and shown from its events (battle_events.c). The battle is built by a stand-in
- * (battle_setup.c) until the app drives game-core's run; the enemy picks random moves until
- * ai-core. RUN always gets away (fleeing isn't in battle-core yet) and a new wild Pokemon appears;
+ * (battle_setup.c) until the app drives game-core's run; the enemy's moves come from ai-core. RUN always gets away (fleeing isn't in battle-core yet) and a new wild Pokemon appears;
  * BALL and POKEMON say they aren't wired up yet.
  *
  * START + SELECT quits.
@@ -14,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "battle_anim.h"
 #include "battle_events.h"
 #include "battle_setup.h"
 #include "battle_view.h"
@@ -84,7 +84,7 @@ static void on_command(bv_command c, void* arg) {
     bv_play(ev, n, ask, NULL);
     return;
   }
-  /* a real battle-core turn: the enemy picks a random move until ai-core is wired in */
+  /* a real battle-core turn */
   bv_mon before_p = *bv_mon_of(BV_PLAYER), before_e = *bv_mon_of(BV_ENEMY);
   bs_turn_fight(&D.b, c.move_slot);
   n = be_convert(&D.b.bt, &D.b.eng, &before_p, &before_e, ev, 190);
@@ -121,6 +121,12 @@ static void start_battle(void* arg) {
   int nm = level_moves(wild, enl, em);
   bs_add(&D.b, 1, wild, enl, em, nm);
 
+  /* upstream loads the battle's move animations before it starts (loadMoveAnimAssets) */
+  for (int side = 0; side < 2; side++) {
+    const pr_pokemon* p = D.b.bt.field[side ? 2 : 0];
+    for (int i = 0; i < p->n_moves; i++) ba_preload_move(p->moves[i]);
+  }
+
   bv_setup s = {0};
   s.biome = biome;
   be_mon(&D.b.bt, D.b.bt.field[0], &s.player);
@@ -139,6 +145,7 @@ static void new_battle(void* arg) {
   (void)arg;
   img_drop_prefix("images/pokemon/");
   img_drop_prefix("images/arenas/");
+  ba_drop_moves();
   ui_fade(250, 100, 250, start_battle, NULL);
 }
 

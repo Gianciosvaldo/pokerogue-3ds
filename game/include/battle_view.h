@@ -9,8 +9,7 @@
  *      order, each one waiting for its animation or message, then calls on_done.
  *   3. bv_ask_command(): shows "What will X do?" with the command and fight menus and calls
  *      back with the player's choice.
- * Until battle-core's event header lands (the battle thread's first beta task), events use this
- * header's own bv_event; an adapter will map battle-core's events onto it.
+ * Events use this header's own bv_event; battle_events.h maps battle-core's events onto them.
  */
 #ifndef GM_BATTLE_VIEW_H
 #define GM_BATTLE_VIEW_H
@@ -50,7 +49,8 @@ typedef enum {
   BEV_INTRO_WILD,  /* the wild encounter: arenas slide in, the enemy untints, cries, info box, message */
   BEV_SUMMON,      /* battler sent out (mon = its data); player: "Go! X!" */
   BEV_WITHDRAW,    /* battler returns to its ball */
-  BEV_MOVE_ANIM,   /* move animation: a (move id), battler = user, target */
+  BEV_MOVE_ANIM,   /* an animation (battle_anim.h): b = ba_kind (move, common, charge), a = its id
+                    * (MoveId, CommonAnim, ChargeAnim), battler = user, target (-1 = none) */
   BEV_DAMAGE,      /* hit flash and HP bar: battler, a = new hp, b = HitResult (upstream) */
   BEV_HEAL,        /* HP bar up: battler, a = new hp */
   BEV_STATUS,      /* status icon: battler, a = StatusEffect */
