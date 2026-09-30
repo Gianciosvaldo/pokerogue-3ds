@@ -1,10 +1,12 @@
 /*
  * PokeRogue 3DS: the game app.
  *
- * For now it boots straight into a demo battle: Blaziken against a wild Pokemon, each turn run by
- * battle-core and shown from its events (battle_events.c). The battle is built by a stand-in
- * (battle_setup.c) until the app drives game-core's run; the enemy's moves come from ai-core. RUN always gets away (fleeing isn't in battle-core yet) and a new wild Pokemon appears;
- * BALL and POKEMON say they aren't wired up yet.
+ * For now it boots straight into a demo battle: Blaziken, Lapras and Gengar against a wild
+ * Pokemon, each turn run by battle-core and shown from its events (battle_events.c). The battle is
+ * built by a stand-in (battle_setup.c) until the app drives game-core's run; the enemy's moves come
+ * from ai-core. RUN always gets away (fleeing isn't in battle-core yet) and a new wild Pokemon
+ * appears. POKEMON opens the party screen (game/menus) to switch, as a faint does; BALL opens
+ * the Poke Ball list, and throwing one says catching isn't in yet.
  *
  * START + SELECT quits.
  */
@@ -16,7 +18,9 @@
 #include "battle_anim.h"
 #include "battle_events.h"
 #include "battle_setup.h"
+#include "ball_menu.h"
 #include "battle_view.h"
+#include "party_screen.h"
 #include "i18n.h"
 #include "pak.h"
 #include "pr_data.h"
@@ -37,7 +41,8 @@ static struct {
   bs_battle b;
   int n;       /* battles so far */
   int level;   /* the player's level, kept between battles */
-} D;
+  int balls[BALL_TYPES]; /* pokeballCounts: a new run's 5 Poke Balls */
+} D = {.balls = {5}};
 
 static void new_battle(void* arg);
 static void ask(void* arg);
@@ -65,9 +70,77 @@ static void add_msg(bv_event* ev, int* n, const char* text, bool prompt) {
   ev[(*n)++] = (bv_event){.type = BEV_MESSAGE, .text = text, .prompt = prompt};
 }
 
+static void after_turn(void* arg);
+static void on_faint_pick(int slot, int option, void* arg);
+
+/* A battle-core turn's events on screen, then what comes next (after_turn). */
+static void play_turn(void) {
+  static bv_event ev[192];
+  bv_mon before_p = *bv_mon_of(BV_PLAYER), before_e = *bv_mon_of(BV_ENEMY);
+  int n = be_convert(&D.b.bt, &D.b.eng, &before_p, &before_e, ev, 190);
+  bv_play(ev, n, after_turn, NULL);
+}
+
+static void after_turn(void* arg) {
+  (void)arg;
+  /* the fight menu reads PP from the screen's copy */
+  const pr_pokemon* p = D.b.bt.field[0];
+  bv_mon* shown = bv_mon_of(BV_PLAYER);
+  if (p && p->species == shown->species)
+    for (int i = 0; i < p->n_moves && i < 4; i++) {
+      int max = p->max_pp_override[i] >= 0 ? p->max_pp_override[i] : pr_moves[p->moves[i]].pp;
+      shown->pp_left[i] = max - p->pp_used[i];
+    }
+  if (bs_awaiting_player_pick(&D.b)) {
+    /* a faint: SwitchPhase(FAINT_SWITCH) opens the party screen */
+    ps_open(&D.b.bt, PS_FAINT_SWITCH, on_faint_pick, NULL);
+    return;
+  }
+  int out = bs_outcome(&D.b);
+  if (out == 2) D.level = 0; /* lost: start over */
+  if (out)
+    new_battle(NULL);
+  else
+    ask(NULL);
+}
+
+static void on_faint_pick(int slot, int option, void* arg) {
+  (void)arg;
+  if (option != PS_SEND_OUT) return;
+  ps_close();
+  bs_pick(&D.b, slot);
+  play_turn();
+}
+
+static void on_switch_pick(int slot, int option, void* arg) {
+  (void)arg;
+  if (option != PS_SEND_OUT && option != PS_CANCEL) return;
+  ps_close();
+  if (option == PS_CANCEL) {
+    ask(NULL);
+    return;
+  }
+  bs_turn_switch(&D.b, slot);
+  play_turn();
+}
+
+static void on_ball_pick(int ball, void* arg) {
+  (void)arg;
+  static bv_event ev[2];
+  int n = 0;
+  if (ball < 0) {
+    ask(NULL);
+    return;
+  }
+  /* CommandPhase.handleBallCommand passes here (a wild singles battle, no boss); the throw itself
+   * (AttemptCapturePhase) isn't in battle-core yet */
+  add_msg(ev, &n, "Catching isn't in the battle logic yet.", true);
+  bv_play(ev, n, ask, NULL);
+}
+
 static void on_command(bv_command c, void* arg) {
   (void)arg;
-  static bv_event ev[192];
+  static bv_event ev[4];
   static char text[160];
   int n = 0;
   if (c.command == 3) {
@@ -78,26 +151,16 @@ static void on_command(bv_command c, void* arg) {
     bv_play(ev, n, new_battle, NULL);
     return;
   }
-  if (c.command != 0) {
-    snprintf(text, sizeof text, "The %s screen isn't in yet.", c.command == 1 ? "ball" : "party");
-    add_msg(ev, &n, text, true);
-    bv_play(ev, n, ask, NULL);
+  if (c.command == 2) {
+    ps_open(&D.b.bt, PS_SWITCH, on_switch_pick, NULL);
     return;
   }
-  /* a real battle-core turn */
-  bv_mon before_p = *bv_mon_of(BV_PLAYER), before_e = *bv_mon_of(BV_ENEMY);
-  bs_turn_fight(&D.b, c.move_slot);
-  n = be_convert(&D.b.bt, &D.b.eng, &before_p, &before_e, ev, 190);
-  /* the fight menu reads PP from the screen's copy */
-  bv_mon* shown = bv_mon_of(BV_PLAYER);
-  for (int i = 0; i < 4; i++) {
-    const pr_pokemon* p = D.b.bt.field[0];
-    int max = p->max_pp_override[i] >= 0 ? p->max_pp_override[i] : pr_moves[p->moves[i]].pp;
-    shown->pp_left[i] = max - p->pp_used[i];
+  if (c.command == 1) {
+    ball_menu_open(D.balls, on_ball_pick, NULL);
+    return;
   }
-  int out = bs_outcome(&D.b);
-  if (out == 2) D.level = 0; /* lost: start over */
-  bv_play(ev, n, out ? new_battle : ask, NULL);
+  bs_turn_fight(&D.b, c.move_slot);
+  play_turn();
 }
 
 static void ask(void* arg) {
@@ -116,16 +179,22 @@ static void start_battle(void* arg) {
   bs_begin(&D.b, biome, D.n, seed);
   static const int PLAYER_MOVES[] = {MOVE_ID_BLAZE_KICK, MOVE_ID_CLOSE_COMBAT, MOVE_ID_BRAVE_BIRD, MOVE_ID_SWORDS_DANCE};
   bs_add(&D.b, 0, SPECIES_ID_BLAZIKEN, D.level, PLAYER_MOVES, 4);
+  static const int TEAM[] = {SPECIES_ID_LAPRAS, SPECIES_ID_GENGAR};
+  for (int i = 0; i < 2; i++) {
+    int tm[4];
+    bs_add(&D.b, 0, TEAM[i], D.level, tm, level_moves(TEAM[i], D.level, tm));
+  }
   int em[4];
   int enl = 45 + rand() % 10;
   int nm = level_moves(wild, enl, em);
   bs_add(&D.b, 1, wild, enl, em, nm);
 
   /* upstream loads the battle's move animations before it starts (loadMoveAnimAssets) */
-  for (int side = 0; side < 2; side++) {
-    const pr_pokemon* p = D.b.bt.field[side ? 2 : 0];
-    for (int i = 0; i < p->n_moves; i++) ba_preload_move(p->moves[i]);
-  }
+  for (int side = 0; side < 2; side++)
+    for (int k = 0; k < D.b.bt.n_party[side]; k++) {
+      const pr_pokemon* p = D.b.bt.party[side][k];
+      for (int i = 0; i < p->n_moves; i++) ba_preload_move(p->moves[i]);
+    }
 
   bv_setup s = {0};
   s.biome = biome;
@@ -176,6 +245,7 @@ int main(void) {
   save_init();
   srand((unsigned)osGetTime());
   ui_init();
+  ps_init();
   start_battle(NULL);
   while (ui_tick()) {
   }

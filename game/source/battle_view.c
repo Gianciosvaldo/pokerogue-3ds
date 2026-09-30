@@ -481,7 +481,10 @@ static void run_event(float dt) {
         sd->info_on = false;
         if (player) {
           char s[128];
-          i18n_t(s, sizeof s, "battle:playerGo", "pokemonName", sd->mon.name, NULL);
+          if (e->text)
+            snprintf(s, sizeof s, "%s", e->text);
+          else
+            i18n_t(s, sizeof s, "battle:playerGo", "pokemonName", sd->mon.name, NULL);
           msgbox_show(&B.msg, s, -1, false);
           B.msg.wait_ms = 0;
         }
