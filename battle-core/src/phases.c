@@ -1974,6 +1974,29 @@ static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
     for (int i = 0; i < nt; i++) any_active |= is_active_on_field(targets[i]);
     fx->last_hit = user->hits_left == 1 || !any_active;
 
+    /* the move's animation when it succeeded against a target or has a POST_TARGET effect: one per
+     * target on the field (getTargets(), field order), or against the user when none is left;
+     * then postAnimCallback */
+    bool post_target = false;
+    const pr_move *amv = &pr_moves[move];
+    for (unsigned i = 0; i < amv->nattr; i++) {
+        int ai = amv->attr0 + (int)i;
+        if (pr_attr_is(pr_attrs[ai].cls, PR_AC_MoveEffectAttr) && pr_attr_effects[ai].trigger == MOVE_EFFECT_TRIGGER_POST_TARGET)
+            post_target = true;
+    }
+    if (fx->entry.result == MOVE_RESULT_SUCCESS || post_target) {
+        pr_target_list *atl = tlist(e, fx->targets);
+        int ub = pr_battler_index(bt, user), shown = 0;
+        for (int b = 0; b < 4; b++) {
+            bool listed = false;
+            for (int k = 0; atl && k < atl->n; k++) listed |= atl->v[k] == b;
+            if (!listed || !is_active_on_field(bt->field[b])) continue;
+            pr_event_add(bt, e, PR_EV_MOVE_ANIM, ub, b, move, 0, NULL);
+            shown++;
+        }
+        if (!shown) pr_event_add(bt, e, PR_EV_MOVE_ANIM, ub, ub, move, 0, NULL);
+    }
+
     /* postAnimCallback (the animation runs first; it queues nothing) */
     if (fx->first_hit && fx->use_mode != MOVE_USE_MODE_DELAYED_ATTACK) {
         pr_push_history_shared(bt, e, user, fx->entry, fx->targets);
@@ -2682,7 +2705,7 @@ static void stat_stage_change_phase(pr_battle *bt, pr_engine *e, int ph)
                         cancelled |= (uint16_t)(1u << q->ssc_stat[k]);
                         n_cancelled++;
                     }
-                if (n_cancelled) pr_queue_message(bt, e);                /* mistApply */
+                if (n_cancelled) pr_queue_msg(bt, e, pr_msg_p(bt, "arenaTag:mistApply", p));
             }
             q = PH(ph);
             /* checkAbilityProtection when cancelledStats.size < changes.length; the abilities

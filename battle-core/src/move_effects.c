@@ -159,7 +159,9 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         }
         int last = target->pp_used[s], v = last + reduction;
         target->pp_used[s] = (uint8_t)(v < max ? v : max);
-        pr_queue_message(bt, e);                         /* battle:ppReduced */
+        pr_queue_msg(bt, e, pr_msg3("battle:ppReduced", pr_arg_pokemon(bt, "targetName", target),
+                                    pr_arg_move("moveName", target->moves[s]),
+                                    pr_arg_int("reduction", target->pp_used[s] - last)));
         return;
     }
     case PR_AC_ForceSwitchOutAttr: {                     /* Roar, Whirlwind, Dragon Tail, U-turn, Baton Pass... */
@@ -204,7 +206,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         if (!p->status) return;
         for (unsigned i = 0; i < x->effects.n; i++)
             if (x->effects.v[i] == p->status) {
-                pr_queue_message(bt, e);
+                pr_queue_msg(bt, e, pr_status_msg(bt, p->status, PR_ST_HEAL, p));
                 /* resetStatus(): revive = true, asPhase = true */
                 unshift_pokemon_phase(bt, e, PH_RESET_STATUS, p);
                 return;
@@ -219,8 +221,10 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         double amount = heal_stat ? pr_get_effective_stat(bt, target, x->healStat, NULL, -1, false, false)
                                   : floor(user->single_hit_damage_dealt * x->healRatio);
         if (!heal_stat && amount < 1) amount = 1;                                  /* toDmgValue */
-        pr_unshift_heal(bt, e, pr_battler_index(bt, user), amount,
-                        PR_HEAL_MESSAGE | PR_HEAL_NO_FULL_HP_MESSAGE | PR_HEAL_SKIP_ANIM);
+        pr_unshift_heal_msg(bt, e, pr_battler_index(bt, user), amount,
+                            PR_HEAL_MESSAGE | PR_HEAL_NO_FULL_HP_MESSAGE | PR_HEAL_SKIP_ANIM,
+                            heal_stat ? pr_msg1("battle:drainMessage", pr_arg_pokemon(bt, "pokemonName", target))
+                                      : pr_msg1("battle:regainHealth", pr_arg_pokemon(bt, "pokemonName", user)));
         return;
     }
     case PR_AC_RecoilAttr: {                             /* Double-Edge, Brave Bird, Struggle, Chloroblast... */
@@ -245,7 +249,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         if (recoil < 1) recoil = 1;                                                 /* toDmgValue */
         /* damageAndUpdate(recoil, {result: INDIRECT, ignoreSegments: true}) */
         pr_damage_and_update(bt, e, user, recoil, HIT_RESULT_INDIRECT, false, NULL);
-        pr_queue_message(bt, e);
+        pr_queue_msg(bt, e, pr_msg1("moveTriggers:hitWithRecoil", pr_arg_pokemon(bt, "pokemonName", user)));
         user->damage_taken += (int32_t)recoil;
         return;
     }
@@ -277,7 +281,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
                 pr_ab_params ip = {.pokemon = user, .move = -1, .flag = &bypassed};
                 pr_apply_ab_attrs(bt, PR_AC_InfiltratorAbAttr, &ip);
                 if (!bypassed) {
-                    if (pr_moves[move].category == MOVE_CATEGORY_STATUS) pr_queue_message(bt, e);   /* moveTriggers:safeguard */
+                    if (pr_moves[move].category == MOVE_CATEGORY_STATUS) pr_queue_msg(bt, e, pr_msg1("moveTriggers:safeguard", pr_arg_pokemon(bt, "targetName", target)));
                     return;
                 }
             }
@@ -311,7 +315,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
             pr_remove_tag(bt, e, target, BATTLER_TAG_TYPE_FLYING);
             pr_add_tag(bt, e, target, BATTLER_TAG_TYPE_INTERRUPTED, 0, 0, -1);
         }
-        pr_queue_message(bt, e);                         /* moveTriggers:fallDown */
+        pr_queue_msg(bt, e, pr_msg1("moveTriggers:fallDown", pr_arg_pokemon(bt, "targetPokemonName", target)));
         return;
     case PR_AC_WishAttr: {                               /* no canApply check */
         /* a WishTag on the target's slot (Wish targets its user): half the user's max HP, in 2 turns */
@@ -340,16 +344,20 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
             memcpy(tg, last->targets, (size_t)n);
         }
         if (bt->double_battle && n == 1) pr_note_unported(bt, PR_FEAT_DOUBLES);   /* a fainted target's ally */
-        pr_queue_message(bt, e);                         /* moveTriggers:instructingMove */
+        pr_queue_msg(bt, e, pr_msg2("moveTriggers:instructingMove", pr_arg_pokemon(bt, "userPokemonName", user),
+                                    pr_arg_pokemon(bt, "targetPokemonName", target)));
         pr_unshift_move_phase(bt, e, target, mm, slot, tg, n, MOVE_USE_MODE_NORMAL, MOVE_PHASE_TIMING_MODIFIER_FIRST);
         return;
     }
     case PR_AC_ExposedMoveAttr:                          /* Foresight, Odor Sleuth, Miracle Eye */
-        if (add_battler_tag(bt, e, a, ef, user, target, move)) pr_queue_message(bt, e);   /* moveTriggers:exposedMove */
+        if (add_battler_tag(bt, e, a, ef, user, target, move))
+            pr_queue_msg(bt, e, pr_msg2("moveTriggers:exposedMove", pr_arg_pokemon(bt, "pokemonName", user),
+                                        pr_arg_pokemon(bt, "targetPokemonName", target)));
         return;
     case PR_AC_AddTypeAttr:                              /* Forest's Curse, Trick-or-Treat: no canApply check */
         target->added_type = (int8_t)P(AddTypeAttr, a)->type;
-        pr_queue_message(bt, e);                         /* moveTriggers:addType */
+        pr_queue_msg(bt, e, pr_msg2("moveTriggers:addType", pr_arg_type("typeName", P(AddTypeAttr, a)->type),
+                                    pr_arg_pokemon(bt, "pokemonName", target)));
         return;
     case PR_AC_OrderUpStatBoostAttr:                     /* Order Up: only with a Tatsugiri commanding (doubles) */
         if (pr_get_battler_tag(user, BATTLER_TAG_TYPE_COMMANDED)) pr_note_unported(bt, a->cls);
@@ -368,7 +376,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         int w = bt->wave_index, set = (int)ceil(w / 10.0) - 1;
         double v = js_pow((set + 1 + (0.75 + (((w - 1) % 10) + 1) / 10.0)) * 100, 1 + 0.005 * set) * 0.2;
         bt->money_scattered += (int32_t)(floor(v / 10) * 10);
-        pr_queue_message(bt, e);                         /* moveTriggers:coinsScatteredEverywhere */
+        pr_queue_msg(bt, e, pr_msg0("moveTriggers:coinsScatteredEverywhere"));
         return;
     }
     case PR_AC_RemoveHeldItemAttr: {                     /* Knock Off (not the player's items), Incinerate (berries) */
@@ -513,7 +521,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
                 for (int l = 0; l < t->layers; l++)
                     pr_arena_add_tag(bt, e, t->type, t->turn_count, t->source_move, t->source_id, sides[1 - s], true);
             }
-        pr_queue_message(bt, e);                         /* moveTriggers:swapArenaTags */
+        pr_queue_msg(bt, e, pr_msg1("moveTriggers:swapArenaTags", pr_arg_pokemon(bt, "pokemonName", user)));
         return;
     }
     case PR_AC_SacrificialAttr:                          /* Explosion, Self-Destruct, Misty Explosion */
@@ -533,7 +541,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         if (cancelled) return;
         double d = floor(pr_get_stat(user, STAT_HP, false) / 2.0);
         pr_damage_and_update(bt, e, user, d < 1 ? 1 : d, HIT_RESULT_INDIRECT, false, NULL);
-        pr_queue_message(bt, e);                         /* moveTriggers:cutHpPowerUpMove */
+        pr_queue_msg(bt, e, pr_msg1("moveTriggers:cutHpPowerUpMove", pr_arg_pokemon(bt, "pokemonName", user)));
         return;
     }
     case PR_AC_ResetStatsAttr:                           /* Haze, Freezy Frost (everyone active); Clear Smog */
@@ -544,7 +552,8 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         } else {
             memset(target->stat_stages, 0, sizeof target->stat_stages);
         }
-        pr_queue_message(bt, e);                         /* statEliminated / resetStats */
+        pr_queue_msg(bt, e, P(ResetStatsAttr, a)->targetAllPokemon ? pr_msg0("moveTriggers:statEliminated")
+                            : pr_msg1("moveTriggers:resetStats", pr_arg_pokemon(bt, "pokemonName", target)));
         return;
     case PR_AC_SwapStatStagesAttr: {                     /* Heart Swap, Power Swap, Guard Swap */
         if (!effect_can_apply(ef, user, target)) return;
@@ -554,13 +563,18 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
             user->stat_stages[st->v[k] - 1] = target->stat_stages[st->v[k] - 1];
             target->stat_stages[st->v[k] - 1] = tmp;
         }
-        if (st->n == 7 || st->n == 2) pr_queue_message(bt, e);   /* switchedStatChanges / switchedTwoStatChanges */
+        if (st->n == 7)
+            pr_queue_msg(bt, e, pr_msg1("moveTriggers:switchedStatChanges", pr_arg_pokemon(bt, "pokemonName", user)));
+        else if (st->n == 2)
+            pr_queue_msg(bt, e, pr_msg3("moveTriggers:switchedTwoStatChanges", pr_arg_pokemon(bt, "pokemonName", user),
+                                        pr_arg_stat("firstStat", st->v[0]), pr_arg_stat("secondStat", st->v[1])));
         return;
     }
     case PR_AC_ChangeTypeAttr: {                         /* Soak, Magic Powder: no canApply check */
         int8_t one = (int8_t)P(ChangeTypeAttr, a)->type;   /* summonData.types = [type] */
         pr_set_summon_types(bt, target, &one, 1);
-        pr_queue_message(bt, e);                         /* moveTriggers:transformedIntoType */
+        pr_queue_msg(bt, e, pr_msg2("moveTriggers:transformedIntoType", pr_arg_pokemon(bt, "pokemonName", target),
+                                    pr_arg_type("typeName", one)));
         return;
     }
     case PR_AC_RemoveTypeAttr: {                         /* Burn Up, Double Shock (POST_TARGET, the user) */
@@ -587,11 +601,28 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         return;
     }
     case PR_AC_RageAttr:                                 /* PRE_APPLY; no canApply check */
-        pr_queue_message(bt, e);                         /* moveTriggers:rageIsBuilding */
+        pr_queue_msg(bt, e, pr_msg1("moveTriggers:rageIsBuilding", pr_arg_pokemon(bt, "pokemonName", user)));
         pr_add_tag(bt, e, user, BATTLER_TAG_TYPE_RAGE, 0, move, (int64_t)user->id);
         return;
     case PR_AC_MessageAttr:                              /* Splash, Celebrate, Lock-On, Perish Song...: */
-        pr_queue_message(bt, e);                         /* every message upstream builds is non-empty */
+        switch (move) {                                  /* every message upstream builds is non-empty */
+        case MOVE_ID_SPLASH: pr_queue_msg(bt, e, pr_msg0("moveTriggers:splash")); break;
+        case MOVE_ID_MIND_READER: case MOVE_ID_LOCK_ON:
+            pr_queue_msg(bt, e, pr_msg2("moveTriggers:tookAimAtTarget", pr_arg_pokemon(bt, "pokemonName", user),
+                                        pr_arg_pokemon(bt, "targetName", target)));
+            break;
+        case MOVE_ID_PERISH_SONG:
+            pr_queue_msg(bt, e, pr_msg2("moveTriggers:faintCountdown", pr_arg_pokemon(bt, "pokemonName", target),
+                                        pr_arg_int("turnCount", 3)));
+            break;
+        case MOVE_ID_CELEBRATE: {
+            pr_msg_arg name = {"playerName", PR_ARG_STR, 0, bt->player_name ? bt->player_name : ""};
+            pr_queue_msg(bt, e, pr_msg1("moveTriggers:celebrate", name));
+            break;
+        }
+        case MOVE_ID_LASER_FOCUS: pr_queue_msg(bt, e, pr_msg_p(bt, "battlerTags:laserFocusOnAdd", user)); break;
+        default: pr_queue_message(bt, e);
+        }
         return;
     case PR_AC_RestAttr: {                               /* Rest */
         /* user.trySetStatus(SLEEP, user, duration, null, overrideStatus, quiet) first; then
@@ -607,7 +638,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         return;
     }
     case PR_AC_DestinyBondAttr:                          /* PRE_APPLY; no canApply check */
-        pr_queue_message(bt, e);                         /* moveTriggers:tryingToTakeFoeDown */
+        pr_queue_msg(bt, e, pr_msg1("moveTriggers:tryingToTakeFoeDown", pr_arg_pokemon(bt, "pokemonName", user)));
         pr_add_tag(bt, e, user, BATTLER_TAG_TYPE_DESTINY_BOND, 0, move, (int64_t)user->id);
         return;
     case PR_AC_CurseAttr: {                              /* Curse: no canApply check */
@@ -619,12 +650,13 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         for (int i = 0; i < n; i++) ghost |= ty[i] == POKEMON_TYPE_GHOST;
         if (ghost) {
             if (pr_get_battler_tag(target, BATTLER_TAG_TYPE_CURSED)) {
-                pr_queue_message(bt, e);                 /* battle:attackFailed */
+                pr_queue_msg(bt, e, pr_msg0("battle:attackFailed"));
                 return;
             }
             double d = floor(pr_get_stat(user, STAT_HP, false) / 2.0);
             pr_damage_and_update(bt, e, user, d < 1 ? 1 : d, HIT_RESULT_INDIRECT, false, NULL);
-            pr_queue_message(bt, e);                     /* battlerTags:cursedOnAdd */
+            pr_queue_msg(bt, e, pr_msg2("battlerTags:cursedOnAdd", pr_arg_pokemon(bt, "pokemonNameWithAffix", user),
+                                        pr_arg_pokemon(bt, "pokemonName", target)));
             pr_add_tag(bt, e, target, BATTLER_TAG_TYPE_CURSED, 0, move, (int64_t)user->id);
             return;
         }
@@ -655,8 +687,9 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         pr_pokemon *on = self_target ? user : target;
         /* PokemonHealPhase(Math.round(maxHp * ratio), {message, showFullHpMessage, skipAnim: !showAnim}):
          * a move's heal rounds half up */
-        pr_unshift_heal(bt, e, pr_battler_index(bt, on), js_round(pr_get_stat(on, STAT_HP, false) * ratio),
-                        PR_HEAL_MESSAGE | (show_anim ? 0 : PR_HEAL_SKIP_ANIM));
+        pr_unshift_heal_msg(bt, e, pr_battler_index(bt, on), js_round(pr_get_stat(on, STAT_HP, false) * ratio),
+                            PR_HEAL_MESSAGE | (show_anim ? 0 : PR_HEAL_SKIP_ANIM),
+                            pr_msg1("moveTriggers:healHp", pr_arg_pokemon(bt, "pokemonName", on)));
         return;
     }
     }

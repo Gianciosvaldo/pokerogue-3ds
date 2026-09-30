@@ -927,8 +927,9 @@ static bool seed_drain(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_batt
     /* hasAbilityWithAttr("ReverseDrainAbAttr", false): no canApplyAbility check */
     bool reverse = pr_ability_first_attr(p->ability, PR_AC_ReverseDrainAbAttr)
                    || (p->passive && pr_ability_first_attr(p->passive, PR_AC_ReverseDrainAbAttr));
-    pr_unshift_heal(bt, e, pr_battler_index(bt, source), reverse ? -damage : damage,
-                    PR_HEAL_MESSAGE | PR_HEAL_NO_FULL_HP_MESSAGE | PR_HEAL_SKIP_ANIM);
+    pr_unshift_heal_msg(bt, e, pr_battler_index(bt, source), reverse ? -damage : damage,
+                        PR_HEAL_MESSAGE | PR_HEAL_NO_FULL_HP_MESSAGE | PR_HEAL_SKIP_ANIM,
+                        pr_msg_p(bt, reverse ? "battlerTags:seededLapseShed" : "battlerTags:seededLapse", p));
     return true;
 }
 
@@ -1258,7 +1259,11 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
         /* lapseType !== CUSTOM || BattlerTag.lapse; while it stays, a sixteenth of max HP back
          * (PokemonHealPhase with a message) */
         bool ret = lapse_type != BATTLER_TAG_LAPSE_TYPE_CUSTOM || --t->turn_count > 0;
-        if (ret) pr_unshift_heal(bt, e, pr_battler_index(bt, p), max_hp_part(p, 16), PR_HEAL_MESSAGE);
+        if (ret)
+            pr_unshift_heal_msg(bt, e, pr_battler_index(bt, p), max_hp_part(p, 16), PR_HEAL_MESSAGE,
+                                t->type == BATTLER_TAG_TYPE_INGRAIN ? pr_msg_p(bt, "battlerTags:ingrainLapse", p)
+                                : pr_msg2("battlerTags:aquaRingLapse", pr_arg_move("moveName", t->source_move),
+                                          pr_arg_pokemon(bt, "pokemonName", p)));
         return ret;
     }
     case BATTLER_TAG_TYPE_OCTOLOCK: {

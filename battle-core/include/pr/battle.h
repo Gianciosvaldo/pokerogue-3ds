@@ -318,6 +318,7 @@ typedef struct pr_battle {
     int post_battle_loot;      /* currentBattle.postBattleLoot.length */
     double battle_score;       /* currentBattle.battleScore */
     int32_t money_scattered;   /* currentBattle.moneyScattered (Pay Day) */
+    const char *player_name;   /* loggedInUser.username for Celebrate's text; NULL: none (upstream shows "") */
     int16_t biome;             /* arena.biomeId (BiomeId), read when has_biome */
     bool has_biome;
     int16_t weather_turns_left, weather_max_duration;

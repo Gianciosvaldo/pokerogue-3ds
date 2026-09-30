@@ -441,7 +441,10 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
             if (p->hp < pr_get_stat(p, STAT_HP, true) && !pp->simulated) {
                 /* unshiftNew("PokemonHealPhase", toDmgValue(maxHp / 4), {message}); the damage-only
                  * test has no engine and records it as deferred */
-                if (c->e) pr_unshift_heal(bt, c->e, pr_battler_index(bt, p), to_dmg_value(pr_get_stat(p, STAT_HP, true) / 4.0), PR_HEAL_MESSAGE);
+                if (c->e)
+                    pr_unshift_heal_msg(bt, c->e, pr_battler_index(bt, p), to_dmg_value(pr_get_stat(p, STAT_HP, true) / 4.0),
+                                        PR_HEAL_MESSAGE, pr_msg2("abilityTriggers:typeImmunityHeal",
+                                        pr_arg_pokemon(bt, "pokemonNameWithAffix", p), pr_arg_ability("abilityName", c->ability)));
                 else pr_note_deferred(bt, a->cls);
                 *pp->flag = true;
             }
@@ -819,7 +822,9 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         if (!(p->status && type_in(&x->effects, p->status) && p->hp < pr_get_stat(p, STAT_HP, true))) return 0;
         if (!c->e) return -1;
         GATE(true);
-        pr_unshift_heal(bt, c->e, pr_battler_index(bt, p), to_dmg_value(pr_get_stat(p, STAT_HP, true) / 8.0), PR_HEAL_MESSAGE);
+        pr_unshift_heal_msg(bt, c->e, pr_battler_index(bt, p), to_dmg_value(pr_get_stat(p, STAT_HP, true) / 8.0), PR_HEAL_MESSAGE,
+                            pr_msg2("abilityTriggers:poisonHeal", pr_arg_pokemon(bt, "pokemonName", p),
+                                    pr_arg_ability("abilityName", c->ability)));
         return 1;
     }
     /* ---- weather and terrain: WeatherEffectPhase, and arena.trySetWeather / trySetTerrain ---- */
@@ -839,8 +844,10 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         const pr_attr_PostWeatherLapseHealAbAttr *x = P(PostWeatherLapseHealAbAttr, a);
         if (!c->e) return -1;
         GATE(p->hp < pr_get_stat(p, STAT_HP, true));                     /* !isFullHp() */
-        pr_unshift_heal(bt, c->e, pr_battler_index(bt, p),
-                        to_dmg_value(pr_get_stat(p, STAT_HP, true) / (16.0 / x->healFactor)), PR_HEAL_MESSAGE);
+        pr_unshift_heal_msg(bt, c->e, pr_battler_index(bt, p),
+                            to_dmg_value(pr_get_stat(p, STAT_HP, true) / (16.0 / x->healFactor)), PR_HEAL_MESSAGE,
+                            pr_msg2("abilityTriggers:postWeatherLapseHeal", pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+                                    pr_arg_ability("abilityName", c->ability)));
         return 1;
     }
     case PR_AC_PostWeatherLapseDamageAbAttr: {                          /* Solar Power, Dry Skin */
