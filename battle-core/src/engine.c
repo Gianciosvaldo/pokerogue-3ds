@@ -676,6 +676,38 @@ void pr_run_turn(pr_battle *bt, pr_engine *e)
     run_phases(bt, e, shift_phase(bt, e));
 }
 
+/* VictoryPhase.start without what belongs to the game (the Pokemon defeated count,
+ * applyPartyExp) and with the reward phases it pushes after BattleEndPhase left to the game */
+void pr_continue(pr_battle *bt, pr_engine *e)
+{
+    if (e->stop != PH_VICTORY) return;
+    bt->engine = e;
+    e->n_events = 0;
+    e->events_overflow = false;
+    e->stop = 0;
+    if (e->n_trace < PR_MAX_TRACE)
+        snprintf(e->trace[e->n_trace++], 40, "%s:%d", pr_phase_name[PH_VICTORY], e->stop_phase.battler);
+    if (bt->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) pr_note_unported(bt, PR_FEAT_TRAINER);
+    /* getEnemyParty().find(p => WILD ? p.isOnField() : !p?.isFainted()) finds nobody, and no
+     * TrainerVictoryPhase is queued yet: that one goes in with the trainer battle's BattleEndPhase */
+    bool left = false;
+    bool wild = bt->battle_type == BATTLE_TYPE_WILD;
+    if (bt->n_party[1]) {
+        for (int k = 0; k < bt->n_party[1]; k++) {
+            const pr_pokemon *p = bt->party[1][k];
+            if (wild ? p->on_field : p->hp > 0) left = true;
+        }
+    } else {
+        for (int i = 2; i < 4; i++) {
+            const pr_pokemon *p = bt->field[i];
+            if (p && (wild ? p->on_field : p->hp > 0)) left = true;
+        }
+    }
+    bool trainer_victory = bt->battle_type == BATTLE_TYPE_TRAINER && pr_phase_exists(e, PH_BATTLE_END, -1);
+    if (!left && !trainer_victory) pr_phase_push(bt, e, pr_phase_new(e, PH_BATTLE_END, -1));
+    run_phases(bt, e, shift_phase(bt, e));
+}
+
 /* The party screen's callback: a slot past the Pokemon on the field queues the SwitchSummonPhase
  * (Baton Pass's screen hands over PASS_BATON, which keeps the Baton Pass type), then the
  * SwitchPhase ends once the screen has gone back to the message mode. */

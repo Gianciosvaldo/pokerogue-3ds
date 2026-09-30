@@ -166,6 +166,17 @@ void pr_run_turn(pr_battle *bt, pr_engine *e);
  * party slot to send in, or -1 for none. Runs on to the next stop, as pr_run_turn. */
 void pr_resume_switch(pr_battle *bt, pr_engine *e, int slot);
 
+/* After a turn stopped at PH_VICTORY (an enemy fainted): the game applies the experience
+ * first (upstream's applyPartyExp unshifts the ExpPhases, which run next), then calls this.
+ * It does the rest of VictoryPhase (when no enemy is left, a BattleEndPhase at the end of
+ * the queue) and runs the rest of the turn to the next stop: PH_BATTLE_END once the battle
+ * is won, PH_TURN_INIT, another PH_VICTORY, or a switch pick. The events start afresh.
+ * What upstream queues after that BattleEndPhase is the game's to do, in this order:
+ * TrainerVictoryPhase (trainer battles), then on the final wave GameOverPhase(victory), else
+ * EggLapsePhase, the wave's ModifierRewardPhases, SelectModifierPhase (waves not a multiple
+ * of 10), AddEnemyBuffModifierPhase (endless), SelectBiomePhase (new biome), NewBattlePhase. */
+void pr_continue(pr_battle *bt, pr_engine *e);
+
 /* SwitchPhase.start: the early exits, or the party screen (sets e->awaiting_pick) */
 void pr_switch_phase(pr_battle *bt, pr_engine *e, int ph);
 

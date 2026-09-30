@@ -153,11 +153,15 @@
  * Each case builds a random singles state inside a real upstream battle, gives both sides a
  * FIGHT command the way the command phases do, then runs upstream's own phases from
  * TurnStartPhase until the turn is over (the next TurnInitPhase) or a phase the turn engine
- * stops at (VictoryPhase, SwitchPhase, SwitchSummonPhase, GameOverPhase, BattleEndPhase). It writes the state before, every phase
+ * stops at (GameOverPhase, BattleEndPhase, SelectModifierPhase). A VictoryPhase runs without
+ * the experience (the game's side: applyPartyExp is stubbed) and the turn goes on, as the C
+ * engine's pr_continue does; the reward phases VictoryPhase queues after the BattleEndPhase are
+ * left out of the QUEUE line. It writes the state before, every phase
  * that ran, what is left queued, and the state after. build/turntest replays each case
  * through the C engine and compares all of it.
  */
 import { BattleScene } from "#app/battle-scene";
+import { getPokemonNameWithAffix } from "#app/messages";
 import { getGameMode } from "#app/game-mode";
 import { speciesDataRegistry } from "#app/globals/global-species-data-registry";
 import { allAbilities, allMoves } from "#data/data-lists";
@@ -187,6 +191,7 @@ import { SpeciesId } from "#enums/species-id";
 import { Stat } from "#enums/stat";
 import { StatusEffect } from "#enums/status-effect";
 import { TrainerSlot } from "#enums/trainer-slot";
+import { TrainerType } from "#enums/trainer-type";
 import { UiMode } from "#enums/ui-mode";
 import { WeatherType } from "#enums/weather-type";
 import { getMoveTargets } from "#moves/move-utils";
@@ -222,6 +227,7 @@ it("turntest producer", async () => {
   const DELAYED = process.env.TURN_DELAYED === "1";
   const SWITCH = process.env.TURN_SWITCH === "1";
   const SUMMON = process.env.TURN_SUMMON === "1";
+  const TRAINER = process.env.TURN_TRAINER === "1";
   const OUT = process.env.TURN_OUT ?? "/tmp/pr-turns.txt";
   const game = new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
   game.override
@@ -229,9 +235,12 @@ it("turntest producer", async () => {
     // TURN_SUMMON: no override, so the Pokemon sent in keep their own abilities
     .ability(SUMMON ? AbilityId.NONE : AbilityId.BALL_FETCH)
     .enemyAbility(AbilityId.BALL_FETCH)
-    .battleType(BattleType.WILD)
+    .battleType(TRAINER ? BattleType.TRAINER : BattleType.WILD)
     .startingWave(3)
     .enemySpecies(SpeciesId.MAGIKARP);
+  if (TRAINER) {
+    game.override.randomTrainer({ trainerType: TrainerType.YOUNGSTER });
+  }
   await game.classicMode.startBattle(SpeciesId.BULBASAUR);
 
   // GameManager pins battle rolls to their maximum; put upstream's real body back.
@@ -581,6 +590,24 @@ it("turntest producer", async () => {
         : scene.addEnemyPokemon(speciesDataRegistry.getSpecies(SpeciesId.RATTATA), 5, TrainerSlot.NONE),
     );
   const playerBench = benchPool(true);
+  // TURN_TRAINER: the trainer's own reserves (trainerSlot TRAINER), drawn per case like the player's
+  const enemyBench = TRAINER
+    ? Array.from({ length: 5 }, () =>
+        scene.addEnemyPokemon(speciesDataRegistry.getSpecies(SpeciesId.RATTATA), 5, TrainerSlot.TRAINER),
+      )
+    : [];
+  // The trainer's picks (getNextSummonIndex) during the turn, "trainerSlot:pick", which the C test
+  // hands back through bt->next_summon_index
+  let epicks: string[] = [];
+  if (TRAINER) {
+    const tr = battle.trainer;
+    const nextSummonIndex = tr.getNextSummonIndex.bind(tr);
+    tr.getNextSummonIndex = (slot: any, ...rest: any[]) => {
+      const r = nextSummonIndex(slot, ...rest);
+      epicks.push(`${slot ?? 0}:${r}`);
+      return r;
+    };
+  }
 
   // The party screen a SwitchPhase opens: the n-th screen of the turn sends in the Pokemon the n-th
   // number of the case's PICK list picks among those it can send in (the bench, not fainted). The
@@ -626,6 +653,7 @@ it("turntest producer", async () => {
         `tsd=${p.tempSummonData.turnCount} tswd=${p.tempSummonData.waveTurnCount}`,
         `aas=${L([...sd.abilitiesApplied])} aaw=${L([...p.waveData.abilitiesApplied])}`
           + (p.battleData.hasEatenBerry ? " eb=1" : "")
+          + (p.trainerSlot ? ` tslot=${p.trainerSlot}` : "")
           + (sd.stats.some((v: number) => v) ? ` ss=${L(sd.stats)}` : ""),
       ].join(" "),
       [
@@ -658,7 +686,8 @@ it("turntest producer", async () => {
       ),
     ];
   };
-  const dumpState = () => {
+  // before: the state a case starts from, which also names the Pokemon behind a Wish the setup made
+  const dumpState = (before = false) => {
     const lines: string[] = [];
     const bs = battle.battleSeedState;
     lines.push(`RNG g=${rngState(Phaser.Math.RND.state())} b=${bs ? rngState(bs) : "none"}`);
@@ -689,7 +718,8 @@ it("turntest producer", async () => {
     }
     for (const pt of scene.arena.positionalTagManager.tags as any[]) {
       lines.push(`POS type=${pt.tagType} turns=${pt.turnCount} target=${pt.targetIndex} sid=${pt.sourceId ?? -1}`
-        + ` smove=${pt.sourceMove ?? 0} heal=${pt.healHp ?? 0}`);
+        + ` smove=${pt.sourceMove ?? 0} heal=${pt.healHp ?? 0}`
+        + (before && pt.wisherId !== undefined ? ` wisher=${pt.wisherId}` : ""));
     }
     for (const [side, party] of [[0, scene.getPlayerParty()], [1, scene.getEnemyParty()]] as [number, any[]][]) {
       party.forEach((p: any, k: number) => {
@@ -705,6 +735,11 @@ it("turntest producer", async () => {
       lines.push(`PARTY side=${side} list=${L(party.map((m: any) => m.id))}`);
     }
     lines.push(`PICK list=${L(picks)}`);
+    if (battle.trainer) {
+      // the names go last: they can have spaces
+      const tr = battle.trainer;
+      lines.push(`TRAINER partner=${tr.isPartner() ? 1 : 0} names=${JSON.stringify([tr.getName(TrainerSlot.TRAINER), tr.getName(TrainerSlot.TRAINER_PARTNER)])}`);
+    }
     for (let k = 0; k < 4; k++) {
       const c = battle.turnCommands[k];
       if (c) {
@@ -733,10 +768,17 @@ it("turntest producer", async () => {
     return lines;
   };
   // What is still queued: the phase tree's levels (bottom first) and the dynamic queues
+  // What VictoryPhase or a fleeing wild Pokemon queues after the BattleEndPhase (rewards, the next
+  // biome and battle) is the game's to run, and left out; it is still queued at a GameOverPhase
+  // stop when the player's last Pokemon fainted later in the turn
+  const afterBattle = new Set([
+    "TrainerVictoryPhase", "GameOverPhase", "EggLapsePhase", "ModifierRewardPhase", "SelectModifierPhase",
+    "AddEnemyBuffModifierPhase", "SelectBiomePhase", "NewBattlePhase",
+  ]);
   const queueLines = () => {
     const tree = pm.phaseQueue;
     const nm = (ph: any) => (ph.phaseName === "DynamicPhaseMarker" ? `Marker:${ph.phaseType}` : ph.phaseName);
-    const levels = tree.levels.map((lv: any[]) => L(lv.map(nm)));
+    const levels = tree.levels.map((lv: any[]) => L(lv.filter((ph: any) => !afterBattle.has(ph.phaseName)).map(nm)));
     const dyn: string[] = [];
     for (const [name, q] of pm.dynamicQueueManager.dynamicPhaseMap) {
       if (q.queue.length) {
@@ -753,10 +795,12 @@ it("turntest producer", async () => {
     started++;
   };
   // Where the turn engine hands control back: the turn is over (TurnInitPhase), or the battle
-  // moves on to something outside a turn (a switch-in prompt, victory, a wild Pokemon leaving).
+  // is (won, lost, or a wild Pokemon left). A switch-in prompt runs on through the PICK list.
   const boundary = new Set([
-    "TurnInitPhase", "VictoryPhase", "GameOverPhase", "BattleEndPhase", "SelectModifierPhase",
+    "TurnInitPhase", "GameOverPhase", "BattleEndPhase", "SelectModifierPhase",
   ]);
+  // the experience a VictoryPhase hands out (ExpPhase, level ups, learning moves) is the game's
+  scene.applyPartyExp = () => {};
   const phaseTag = (ph: any) => {
     const b = ph.battlerIndex;
     return typeof ph.getPokemon === "function" && typeof b === "number" ? `${ph.phaseName}:${b}` : ph.phaseName;
@@ -1051,6 +1095,43 @@ it("turntest producer", async () => {
       party.push(b);
     }
     battle.playerParticipantIds.add(A.id);
+    if (TRAINER) {
+      // the trainer's party: its Pokemon on the field and 0 to 5 reserves, some fainted
+      const eparty = scene.getEnemyParty();
+      eparty.length = 0;
+      eparty.push(D);
+      for (const b of enemyBench) {
+        if (b.isOnField()) {
+          scene.field.remove(b);
+        }
+        b.switchOutStatus = false;
+        b.resetSummonData();
+        b.resetTurnData();
+        b.resetBattleAndWaveData();
+      }
+      for (const b of enemyBench.slice(0, rnd(6))) {
+        b.species = speciesDataRegistry.getSpecies(ids[rnd(ids.length)]);
+        b.formIndex = 0;
+        b.level = 1 + rnd(100);
+        b.ivs = [0, 0, 0, 0, 0, 0].map(() => rnd(32));
+        b.nature = rnd(25);
+        b.abilityIndex = rnd(3);
+        b.shiny = rnd(8) === 0;
+        b.moveset = [];
+        for (let k = 1 + rnd(4); k > 0; k--) {
+          b.moveset.push(new PokemonMove(usable[rnd(usable.length)].id));
+        }
+        b.calculateStats();
+        b.generateName();
+        b.hp = rnd(3) === 0 ? 0 : rnd(2) === 0 ? 1 + rnd(b.getMaxHp()) : b.getMaxHp();
+        b.status = b.hp ? null : new Status(StatusEffect.FAINT);
+        if (b.hp && rnd(4) === 0) {
+          const st = statuses[rnd(statuses.length)];
+          b.status = new Status(st, rnd(4), st === StatusEffect.SLEEP ? 1 + rnd(3) : 0, st === StatusEffect.FREEZE ? 1 + rnd(3) : undefined);
+        }
+        eparty.push(b);
+      }
+    }
     if (CALLED) {
       for (const b of party.slice(1)) {
         b.moveset = [];
@@ -1062,6 +1143,14 @@ it("turntest producer", async () => {
     }
     command(A);
     command(D);
+    if (TRAINER && rnd(4) === 0) {
+      // the trainer switches (EnemyCommandPhase): one of its reserves that hasn't fainted
+      const eparty = scene.getEnemyParty();
+      const reserves = eparty.map((_: any, k: number) => k).filter((k: number) => k >= 1 && !eparty[k].isFainted());
+      if (reserves.length) {
+        battle.turnCommands[2] = { command: Command.POKEMON, cursor: reserves[rnd(reserves.length)], args: [false], skip: false };
+      }
+    }
     if (SUMMON && rnd(3) === 0) {
       // the player switches (CommandPhase.tryLeaveField): a bench Pokemon that hasn't fainted
       const bench = party.map((_: any, k: number) => k).filter((k: number) => k >= 1 && !party[k].isFainted());
@@ -1347,13 +1436,15 @@ it("turntest producer", async () => {
         const targetIndex = [A.getBattlerIndex(), D.getBattlerIndex(), A.getBattlerIndex() + 1][rnd(5) === 0 ? 2 : rnd(2)];
         const target = targetIndex === A.getBattlerIndex() ? A : targetIndex === D.getBattlerIndex() ? D : null;
         if (rnd(3) === 0) {
+          const wisher = rnd(2) === 0 ? A : D;
           mgr.addTag({
             tagType: PositionalTagType.WISH,
             turnCount: 1 + rnd(2),
             targetIndex,
             healHp: 1 + rnd(target ? target.getMaxHp() : 100),
-            pokemonName: "x",
+            pokemonName: getPokemonNameWithAffix(wisher),
           });
+          mgr.tags[mgr.tags.length - 1].wisherId = wisher.id;
         } else {
           const bench = party.slice(1);
           const r = rnd(8);
@@ -1729,7 +1820,7 @@ it("turntest producer", async () => {
           p.turnData.pendingStatus = rnd(8) === 0 ? statuses[rnd(statuses.length)] : StatusEffect.NONE;
         }
       }
-      const before = dumpState();
+      const before = dumpState(true);
       const probes: string[] = [];
       let threw = false;
       if (SPROBE) {
@@ -1815,7 +1906,8 @@ it("turntest producer", async () => {
     let run: { trace: string[]; stop: string };
     let texts: string[];
     try {
-      before = dumpState();
+      before = dumpState(true);
+      epicks = [];
       run = await runTurn();
       texts = shown;
     } catch (e: any) {
@@ -1826,7 +1918,7 @@ it("turntest producer", async () => {
       thrown[key] = (thrown[key] ?? 0) + 1;
       continue;
     }
-    out.push(`CASE ${i}`, ...before, "RUN", `TRACE list=${L(run.trace)}`, `TEXTS ${JSON.stringify(texts)}`, ...dumpState(), ...queueLines(), `END stop=${run.stop}`);
+    out.push(`CASE ${i}`, ...before, ...(TRAINER ? [`EPICK list=${L(epicks)}`] : []), "RUN", `TRACE list=${L(run.trace)}`, `TEXTS ${JSON.stringify(texts)}`, ...dumpState(), ...queueLines(), `END stop=${run.stop}`);
   }
   if (STAT) {
     out.push(`# stat condition moves: ${statCondMoves.map((m: any) => m.id).join(",")}`);

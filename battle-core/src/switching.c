@@ -1,9 +1,9 @@
 /* A Pokemon switched out by a move during a turn (src/data/moves/move.ts: ForceSwitchOutAttr, which
  * ChillyReceptionAttr and PartingShotAttr use too): the checks, the Pokemon leaving the field and
- * the phase that brings in its replacement. That phase (SwitchPhase's party prompt, or
- * SwitchSummonPhase) is where a turn hands control back to the caller; a wild Pokemon that flees
- * ends the battle (BattleEndPhase). Only wild single battles are modelled: a trainer's or a
- * mystery encounter's own rules report themselves unported (PR_FEAT_TRAINER). */
+ * the phase that brings in its replacement. The player's party prompt (SwitchPhase) is where a
+ * turn hands control back to the caller; a trainer's pick comes from bt->next_summon_index; a
+ * wild Pokemon that flees ends the battle (BattleEndPhase). Single battles, wild or trainer, are
+ * modelled: a mystery encounter's own rules report themselves unported (PR_FEAT_TRAINER). */
 #include "pr/engine.h"
 #include <math.h>
 #include <string.h>
@@ -24,6 +24,26 @@ static int eligible_switch_ins(const pr_battle *bt, int side, int out[PR_MAX_PAR
         if (p->hp > 0 && !on_field) out[n++] = k;
     }
     return n;
+}
+
+/* The enemy party's Pokemon that could come in for `out`: allowed in battle, off the field and,
+ * when `same_slot`, owned by the same trainer (trainerSlot) */
+static int enemy_reserves(const pr_battle *bt, const pr_pokemon *out, bool same_slot, int res[PR_MAX_PARTY])
+{
+    int n = 0;
+    for (int k = 0; k < bt->n_party[1]; k++) {
+        const pr_pokemon *p = bt->party[1][k];
+        bool on_field = p->on_field && !p->switch_out_status;
+        if (p->hp > 0 && !on_field && (!same_slot || p->trainer_slot == out->trainer_slot)) res[n++] = k;
+    }
+    return n;
+}
+
+/* currentBattle.trainer.getNextSummonIndex(trainerSlot), or -2 when the game gave no pick */
+static int next_summon_index(pr_battle *bt, int trainer_slot)
+{
+    if (!bt->next_summon_index) { pr_note_unported(bt, PR_FEAT_TRAINER); return -2; }
+    return bt->next_summon_index(bt, trainer_slot, bt->next_summon_ctx);
 }
 
 /* move.getAttrs("ForceSwitchOutAttr").find(attr => attr.switchType === FORCE_SWITCH) */
@@ -54,8 +74,14 @@ bool pr_switch_out_condition(pr_battle *bt, bool self_switch, int switch_type, c
     if (!self_switch) {
         if (!target) { pr_note_unported(bt, PR_FEAT_MOVE_CONDITION); return true; }
         if (pr_move_hits_substitute(bt, move, user, target)) return false;
-        /* Roar and Whirlwind against a trainer with one Pokemon left */
-        if (has_force_switch_attr(move) && bt->battle_type == BATTLE_TYPE_TRAINER) pr_note_unported(bt, PR_FEAT_TRAINER);
+        /* Roar and Whirlwind in a trainer battle whose trainer has one Pokemon left, whoever
+         * they are used on */
+        if (has_force_switch_attr(move) && bt->battle_type == BATTLE_TYPE_TRAINER) {
+            if (!bt->n_party[1]) { pr_note_unported(bt, PR_FEAT_PARTY); return true; }
+            int remaining = 0;
+            for (int k = 0; k < bt->n_party[1]; k++) remaining += bt->party[1][k]->hp > 0;
+            if (remaining <= 1) return false;
+        }
         /* no forcing a wild Pokemon out of a mystery encounter that doesn't allow fleeing */
         if (!player && bt->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) pr_note_unported(bt, PR_FEAT_TRAINER);
         /* Suction Cups, Guard Dog: applied for real, so the ability shows */
@@ -71,9 +97,9 @@ bool pr_switch_out_condition(pr_battle *bt, bool self_switch, int switch_type, c
         return switch_type != SWITCH_TYPE_BATON_PASS && bt->wave_index % 10 != 0
                && !(self_switch && pr_moves[move].category != MOVE_CATEGORY_STATUS);
     }
-    if (!player) { pr_note_unported(bt, PR_FEAT_TRAINER); return true; }   /* the trainer's own slot */
     int side = player ? 0 : 1, eligible[PR_MAX_PARTY];
     if (!bt->n_party[side]) { pr_note_unported(bt, PR_FEAT_PARTY); return true; }
+    if (!player) return enemy_reserves(bt, out, true, eligible) > 0;       /* the trainer's own Pokemon */
     return eligible_switch_ins(bt, side, eligible) > 0;
 }
 
@@ -172,7 +198,20 @@ void pr_force_switch_out(pr_battle *bt, pr_engine *e, bool self_switch, int swit
         }
         return;
     }
-    if (bt->battle_type != BATTLE_TYPE_WILD) { pr_note_unported(bt, PR_FEAT_TRAINER); return; }
+    if (bt->battle_type != BATTLE_TYPE_WILD) {
+        /* an enemy trainer's Pokemon: another one of theirs comes in, a random one when dragged
+         * out, else the trainer's pick; it stays on the field until then */
+        if (bt->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) { pr_note_unported(bt, PR_FEAT_TRAINER); return; }
+        if (!bt->n_party[1]) { pr_note_unported(bt, PR_FEAT_PARTY); return; }
+        int eligible[PR_MAX_PARTY];
+        int n = enemy_reserves(bt, out, bt->trainer_partner, eligible);
+        if (n == 0 || out->hp <= 0) return;
+        int slot = switch_type == SWITCH_TYPE_FORCE_SWITCH ? eligible[pr_battle_rand_seed_int(bt, n, 0)]
+                                                           : next_summon_index(bt, out->trainer_slot);
+        if (slot == -2) return;
+        defer_switch_summon(bt, e, switch_type, field_index(bt, out), slot, false, false);
+        return;
+    }
 
     /* a wild Pokemon flees */
     if (emergency_exit) return;
@@ -210,8 +249,9 @@ static bool helper_switch_out_condition(pr_battle *bt, const pr_pokemon *p, cons
     if (bt->battle_type == BATTLE_TYPE_WILD && bt->wave_index == 0) return false;
     if (bt->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) { pr_note_unported(bt, PR_FEAT_TRAINER); return true; }
     if (bt->battle_type == BATTLE_TYPE_WILD) return true;
-    pr_note_unported(bt, PR_FEAT_TRAINER);                                  /* the trainer's slot */
-    return true;
+    int res[PR_MAX_PARTY];
+    if (!bt->n_party[1]) { pr_note_unported(bt, PR_FEAT_PARTY); return true; }
+    return enemy_reserves(bt, p, true, res) > 0;                            /* the trainer's own Pokemon */
 }
 
 /* PostDamageForceSwitchAbAttr.canApply({pokemon, source, damage}): 1, 0, or -1 when a held item
@@ -267,7 +307,19 @@ void pr_wimp_out_apply(pr_battle *bt, pr_engine *e, pr_pokemon *p)
         if (p->hp > 0) defer_switch_phase(bt, e, SWITCH_TYPE_SWITCH, field_index(bt, p), true, true);
         return;
     }
-    if (bt->battle_type != BATTLE_TYPE_WILD) { pr_note_unported(bt, PR_FEAT_TRAINER); return; }
+    if (bt->battle_type != BATTLE_TYPE_WILD) {
+        /* an enemy trainer's Pokemon: the trainer's pick comes in (any of its party's reserves
+         * will do for the check, whoever's they are) */
+        if (bt->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) { pr_note_unported(bt, PR_FEAT_TRAINER); return; }
+        int res[PR_MAX_PARTY];
+        if (!bt->n_party[1]) { pr_note_unported(bt, PR_FEAT_PARTY); return; }
+        if (enemy_reserves(bt, p, false, res) == 0) return;
+        if (p->hp > 0) {
+            int slot = next_summon_index(bt, p->trainer_slot);
+            if (slot != -2) defer_switch_summon(bt, e, SWITCH_TYPE_SWITCH, field_index(bt, p), slot, false, false);
+        }
+        return;
+    }
     const pr_pokemon *ally = pr_get_ally(bt, p);
     if (!bt->wave_index || bt->wave_index % 10 == 0) return;
     if (p->hp > 0) {
@@ -334,42 +386,65 @@ static void field_setup(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool reset)
     if (reset) pr_reset_summon_data(p);
 }
 
+/* currentBattle.trainer?.getName(slot): the name the game gave, or "" (i18next's undefined) */
+static pr_msg_arg trainer_name(const pr_battle *bt, int trainer_slot)
+{
+    const char *n = bt->trainer_names[trainer_slot == TRAINER_SLOT_TRAINER_PARTNER ? 1 : 0];
+    return (pr_msg_arg){"trainerName", PR_ARG_STR, 0, n ? n : ""};
+}
+
 /* SwitchSummonPhase: the party member in slotIndex comes in to the field slot (fieldIndex) and the
  * Pokemon there goes to slotIndex. Upstream runs it as SummonPhase.start, preSummon (withdrawing
  * the Pokemon first when doReturn), switchAndSummon, summon and, once the animations are over,
- * onEnd. Only the player's side is modelled: a trainer's switch reports itself. */
+ * onEnd. An enemy trainer's switch with slotIndex -1 (the one FaintPhase queues) asks the trainer
+ * for its pick (bt->next_summon_index). */
 void pr_switch_summon_phase(pr_battle *bt, pr_engine *e, int ph)
 {
     pr_phase *s = &e->pool[ph];
     int side = s->sw_player ? 0 : 1, field = s->sw_field_index, slot = s->sw_slot, type = s->sw_type;
-    bool do_return = s->sw_do_return;
-    if (!s->sw_player) { pr_note_unported(bt, PR_FEAT_TRAINER); return; }
+    bool do_return = s->sw_do_return, player = s->sw_player;
     if (!bt->n_party[side]) { pr_note_unported(bt, PR_FEAT_PARTY); return; }
     if (bt->double_battle) pr_note_unported(bt, PR_FEAT_DOUBLES);
-    if (field < 0 || field >= bt->n_party[side] || slot < 0 || slot >= PR_MAX_PARTY) {
+    if (field < 0 || field >= bt->n_party[side] || slot < -1 || slot >= PR_MAX_PARTY) {
         pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT);                       /* upstream would throw */
         return;
     }
     pr_pokemon *last = bt->party[side][field];                             /* getPokemon() */
+    int tslot = field % 2 ? TRAINER_SLOT_TRAINER_PARTNER : TRAINER_SLOT_TRAINER;
 
     /* SummonPhase.start: PreSummonAbAttr for getPokemon(), the Pokemon still in the field slot */
     pr_hook_ab(bt, last, PR_AC_PreSummonAbAttr);
 
-    /* preSummon: with doReturn (and a Pokemon in slotIndex), the Pokemon is withdrawn first: the
-     * tags it gave the other side go, then leaveField(switchType === SWITCH, false) in the tween's
-     * callback; switchAndSummon comes after, on a timer */
-    if (do_return && slot < bt->n_party[side]) {
+    /* preSummon: an enemy trainer picks the Pokemon to send in when none was given, then slides
+     * in with its ball tray */
+    if (!player) {
+        if (bt->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) { pr_note_unported(bt, PR_FEAT_TRAINER); return; }
+        if (slot == -1) {
+            if (bt->battle_type != BATTLE_TYPE_TRAINER) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }
+            slot = next_summon_index(bt, field ? TRAINER_SLOT_TRAINER_PARTNER : TRAINER_SLOT_TRAINER);
+            if (slot == -2) return;
+            if (slot < -1 || slot >= PR_MAX_PARTY) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }
+            s->sw_slot = (int8_t)slot;
+        }
+        if (slot > -1) pr_event_add(bt, e, PR_EV_TRAINER_SHOW, -1, -1, (uint16_t)tslot, 0, NULL);
+    }
+    /* with doReturn (and a Pokemon in slotIndex), the Pokemon is withdrawn first: the tags it gave
+     * the other side go, then leaveField(switchType === SWITCH, false) in the tween's callback;
+     * switchAndSummon comes after, on a timer */
+    if (do_return && slot >= 0 && slot < bt->n_party[side]) {
         pr_speed_iter it;
         pr_pokemon *q;
         pr_speed_iter_init(bt, &it, side == 0 ? ARENA_TAG_SIDE_ENEMY : ARENA_TAG_SIDE_PLAYER);
         while ((q = pr_speed_iter_next(bt, &it))) pr_remove_tags_by_source_id(bt, e, q, (int64_t)last->id);
-        pr_show_text(bt, e, pr_msg1("battle:playerComeBack", pr_arg_pokemon(bt, "pokemonName", last)));
+        if (player) pr_show_text(bt, e, pr_msg1("battle:playerComeBack", pr_arg_pokemon(bt, "pokemonName", last)));
+        else pr_show_text(bt, e, pr_msg2("battle:trainerComeBack", trainer_name(bt, tslot),
+                                         pr_arg_pokemon_name(bt, "pokemonName", last)));   /* getNameToRender() */
         pr_event_add(bt, e, PR_EV_SWITCH_OUT, side * 2 + field, -1, 0, 0, NULL);
         pr_leave_field(bt, e, last, type == SWITCH_TYPE_SWITCH);
     }
 
     /* switchAndSummon */
-    if (slot >= bt->n_party[side]) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }   /* party[slot] undefined: throws */
+    if (slot < 0 || slot >= bt->n_party[side]) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }   /* party[slot] undefined: throws */
     pr_pokemon *in = bt->party[side][slot];
     pr_reset_summon_data(in);
     if (last->on_field && !last->switch_out_status)                        /* isOnField() */
@@ -392,11 +467,15 @@ void pr_switch_summon_phase(pr_battle *bt, pr_engine *e, int ph)
     bt->party[side][slot] = last;
     bt->party[side][field] = in;
     bt->field[side * 2 + field] = in;
-    /* showTextAndSummon: the send-out text (getSendOutText; not a phase); Baton Pass and Shed Tail
-     * only move the sprite of a passed Substitute, the others set the Pokemon up and reset its
-     * summon data */
-    pr_show_text(bt, e, pr_msg1(type == SWITCH_TYPE_FORCE_SWITCH ? "battle:pokemonDraggedOut" : "battle:playerGo",
-                                pr_arg_pokemon(bt, "pokemonName", in)));
+    /* showTextAndSummon (for an enemy on a timer, once the trainer and its ball tray are hidden):
+     * the send-out text (getSendOutText; not a phase); Baton Pass and Shed Tail only move the
+     * sprite of a passed Substitute, the others set the Pokemon up and reset its summon data */
+    if (!player) pr_event_add(bt, e, PR_EV_TRAINER_HIDE, -1, -1, (uint16_t)tslot, 0, NULL);
+    if (type == SWITCH_TYPE_FORCE_SWITCH || player)
+        pr_show_text(bt, e, pr_msg1(type == SWITCH_TYPE_FORCE_SWITCH ? "battle:pokemonDraggedOut" : "battle:playerGo",
+                                    pr_arg_pokemon(bt, "pokemonName", in)));
+    else pr_show_text(bt, e, pr_msg2("battle:trainerGo", trainer_name(bt, tslot),
+                                     pr_arg_pokemon_name(bt, "pokemonName", in)));   /* getPokemon().getNameToRender() */
     if (type != SWITCH_TYPE_BATON_PASS && type != SWITCH_TYPE_SHED_TAIL) field_setup(bt, e, in, true);
 
     /* summon(): the Pokemon joins the field, updateModifiers(player) recalculates the party's stats,
@@ -412,7 +491,6 @@ void pr_switch_summon_phase(pr_battle *bt, pr_engine *e, int ph)
     if (in->shiny) pr_unshift_new(bt, e, PH_SHINY_SPARKLE, b);
     pr_reset_turn_data(in);
     pr_form_change(bt, in, PR_FCT_SpeciesFormChangeActiveTrigger);
-    in->summoned_this_turn = true;                                         /* SummonPhase.queuePostSummon */
     {
         int q = pr_phase_new(e, PH_POST_SUMMON, (int8_t)b);                /* SwitchSummonPhase.queuePostSummon */
         pr_phase_unshift(bt, e, q);

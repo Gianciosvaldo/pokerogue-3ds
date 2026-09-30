@@ -1,6 +1,6 @@
 /* What a turn shows: the battle events the game screen plays back.
  *
- * pr_run_turn and pr_resume_switch each start a fresh list in e->events and append one
+ * pr_run_turn, pr_resume_switch and pr_continue each start a fresh list in e->events and append one
  * event for every presentation step upstream takes, in the order upstream takes them.
  * The screen plays them one by one, then reads bt for anything else it shows. Each event
  * carries the field as it stands once the event has happened (pr_event_field), so the
@@ -55,6 +55,11 @@ typedef enum {
     PR_EV_SWITCH_IN,
     /* ShinySparklePhase: battler */
     PR_EV_SHINY_SPARKLE,
+    /* A trainer's switch (SwitchSummonPhase.showEnemyTrainer): the enemy trainer and its
+     * party's ball tray slide in; id = TrainerSlot. HIDE: they slide out again, right
+     * before the send-out text */
+    PR_EV_TRAINER_SHOW,
+    PR_EV_TRAINER_HIDE,
     PR_EV_COUNT_
 } pr_event_type;
 
@@ -67,6 +72,11 @@ typedef struct {
     uint8_t status;            /* StatusEffect */
     bool fainted;
     bool substitute;           /* a Substitute doll stands in front of it */
+    bool visible;              /* drawn: on the field and not in the air, underground or underwater (a
+                                * SemiInvulnerableTag: Fly, Bounce, Dig, Dive, Shadow Force, Phantom Force,
+                                * Sky Drop). Upstream shows it again two frames after the tag goes. A
+                                * fainting Pokemon is still visible in the FAINT event (its animation
+                                * starts there) and hidden in the events after it. */
 } pr_event_field;
 
 typedef struct {

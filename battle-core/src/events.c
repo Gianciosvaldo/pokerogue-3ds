@@ -106,6 +106,8 @@ void pr_event_add(pr_battle *bt, pr_engine *e, int type, int battler, int target
         f->status = p->status;
         f->fainted = p->hp <= 0;
         f->substitute = pr_get_battler_tag(p, BATTLER_TAG_TYPE_SUBSTITUTE) != NULL;
+        /* SemiInvulnerableTag.onAdd hides the sprite, onRemove shows it again; leaveField hides it */
+        f->visible = p->on_field && !pr_find_battler_tag_class(p, PR_TAGCLASS_SEMI_INVULNERABLE);
     }
 }
 

@@ -209,6 +209,7 @@ typedef struct pr_pokemon {
     int8_t gender;                     /* Gender: -1 genderless, 0 male, 1 female */
     uint8_t friendship;
     bool has_trainer;                  /* hasTrainer(): enemy owned by a trainer */
+    int8_t trainer_slot;               /* EnemyPokemon.trainerSlot (TrainerSlot): which trainer of a duo owns it */
     bool is_boss;                      /* isBoss(): enemy with boss segments */
     pr_battler_tag tags[PR_MAX_BATTLER_TAGS]; /* summonData.tags */
     uint8_t n_tags;
@@ -319,6 +320,19 @@ typedef struct pr_battle {
     double battle_score;       /* currentBattle.battleScore */
     int32_t money_scattered;   /* currentBattle.moneyScattered (Pay Day) */
     const char *player_name;   /* loggedInUser.username for Celebrate's text; NULL: none (upstream shows "") */
+    /* A trainer battle's trainer (currentBattle.trainer). trainer_names: getName(TRAINER) and
+     * getName(TRAINER_PARTNER), for "{{trainerName}} sent out..."; NULL shows "" (upstream's
+     * undefined). trainer_partner: isPartner(), a duo like Tate & Liza whose Pokemon each
+     * switch within their own trainer's (trainer_slot) */
+    const char *trainer_names[2];
+    bool trainer_partner;
+    /* trainer.getNextSummonIndex(trainerSlot): the party slot the trainer sends in next, when
+     * its Pokemon fainted or used U-turn and co. The game sets it (ai-core ports it). Called
+     * where upstream calls it, with the TrainerSlot upstream passes; upstream runs the tie
+     * break under executeWithSeedOffset, so it must leave the RNG as it found it. NULL in a
+     * trainer battle: that switch reports itself unported (PR_FEAT_TRAINER). */
+    int (*next_summon_index)(struct pr_battle *bt, int trainer_slot, void *ctx);
+    void *next_summon_ctx;
     int16_t biome;             /* arena.biomeId (BiomeId), read when has_biome */
     bool has_biome;
     int16_t weather_turns_left, weather_max_duration;
