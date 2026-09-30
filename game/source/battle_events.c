@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "battle_anim.h"
 #include "i18n.h"
 #include "pak.h"
 #include "pr/events.h"
@@ -124,7 +125,11 @@ int be_convert(const pr_battle* bt, const pr_engine* e, const bv_mon* shown_play
         nt++;
         break;
       case PR_EV_MOVE_ANIM:
-        if (single) PUT(.type = BEV_MOVE_ANIM, .battler = b, .target = ev->target, .a = ev->id);
+      case PR_EV_CHARGE_ANIM:
+      case PR_EV_COMMON_ANIM:
+        if (single)
+          PUT(.type = BEV_MOVE_ANIM, .battler = b, .target = ev->target, .a = ev->id,
+              .b = ev->type == PR_EV_MOVE_ANIM ? BA_MOVE : ev->type == PR_EV_CHARGE_ANIM ? BA_CHARGE : BA_COMMON);
         break;
       case PR_EV_DAMAGE:
         if (!single) break;
@@ -166,7 +171,7 @@ int be_convert(const pr_battle* bt, const pr_engine* e, const bv_mon* shown_play
         seen[b] = (seen_t){ev->field[b].hp, ev->field[b].status, false, true};
         break;
       }
-      default: /* CHARGE_ANIM, COMMON_ANIM, POKEMON_ANIM, ABILITY_HIDE, SHINY_SPARKLE: not drawn yet */
+      default: /* POKEMON_ANIM, ABILITY_HIDE, SHINY_SPARKLE: not drawn yet */
         break;
     }
     /* status icons follow the snapshot */

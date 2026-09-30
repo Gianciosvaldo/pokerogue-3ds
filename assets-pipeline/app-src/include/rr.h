@@ -24,7 +24,7 @@ typedef enum { RR_TOP = 0, RR_BOTTOM = 1 } rr_screen;
 
 /* 0xRRGGBBAA */
 typedef uint32_t rr_color;
-#define RR_RGBA(r, g, b, a) ((rr_color)(((r) << 24) | ((g) << 16) | ((b) << 8) | (a)))
+#define RR_RGBA(r, g, b, a) ((rr_color)(((uint32_t)(r) << 24) | ((uint32_t)(g) << 16) | ((uint32_t)(b) << 8) | (uint32_t)(a)))
 
 typedef struct rr_tex rr_tex;
 typedef struct rr_atlas rr_atlas;
@@ -109,6 +109,14 @@ void rr_draw(const rr_frame* f, float x, float y, const rr_draw_opts* o);
  * (used for HP/EXP bar fills, which upstream crops). */
 void rr_draw_cropped(const rr_frame* f, float x, float y, int w, int h, const rr_draw_opts* o);
 void rr_rect(float x, float y, float w, float h, rr_color c);
+/* Blending for what is drawn next, until changed (reset to NORMAL at each rr_target):
+ * NORMAL is alpha blending, ADD adds the source (times its alpha) to what is there
+ * (Phaser's BlendModes.ADD). */
+typedef enum { RR_BLEND_NORMAL, RR_BLEND_ADD } rr_blend;
+void rr_set_blend(rr_blend b);
+/* A signed colour (-255..255 per channel) added to every drawn pixel's RGB before blending,
+ * until changed (reset to 0 at each rr_target): upstream's sprite shader "tone" (rgb part). */
+void rr_set_tone(int r, int g, int b);
 /* 9-slice window from a 24x24 upstream window image (ui/windows/window_N.png). */
 void rr_nineslice(const rr_frame* f, float x, float y, float w, float h, int border);
 

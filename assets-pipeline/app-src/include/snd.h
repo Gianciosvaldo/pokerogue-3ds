@@ -38,6 +38,11 @@ void snd_bgm_volume(float v); /* 0..1 */
 bool snd_sfx_play(const char* key);
 bool snd_sfx_preload(const char* key);
 void snd_sfx_volume(float v); /* 0..1 */
+/* With a volume (0..1, times the sfx volume) and a playback rate (1 = as recorded; Phaser's
+ * rate, which also changes the pitch). */
+bool snd_sfx_play_ex(const char* key, float volume, float rate);
+/* The sound's length in seconds at rate 1 (loads it into the cache), 0 when missing. */
+float snd_sfx_seconds(const char* key);
 
 /* Optional per-frame housekeeping (frees finished voices). Music does not depend on it. */
 void snd_update(void);

@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "battle_anim.h"
 #include "gm_enum_names.h"
 #include "i18n.h"
 #include "pr_data.h"
@@ -31,7 +32,6 @@ typedef struct {
   bool info_on;
   float hp_shown;     /* the HP bar's displayed hp (tweened) */
   float exp_shown;
-  float lunge;        /* move placeholder: sprite offset */
   char sprite_key[64];
 } side;
 
@@ -88,7 +88,7 @@ static void set_mon(side* sd, const bv_mon* m, bool player) {
   sd->drop = 0;
   sd->scale = 1;
   sd->black = false;
-  sd->lunge = 0;
+  ba_show(player ? 0 : 2);
 }
 
 static void cry(const bv_mon* m) {
@@ -111,13 +111,32 @@ static const char* name_with_affix(int battler) {
 
 /* ------------------------------------------------------------------ drawing: field */
 
-static void draw_sprite(side* sd, bool player) {
-  if (!sd->present || !sd->sprite_on || sd->scale <= 0) return;
+static const rr_frame* sprite_frame(side* sd) {
   int frame = (int)(ui_now() * 10 / 1000); /* upstream anims run at 10 fps */
-  const rr_frame* f = img_anim_frame(sd->sprite_key, frame);
+  return img_anim_frame(sd->sprite_key, frame);
+}
+
+/* The field as battle animations see it: where each Pokemon stands and its current frame. */
+static void anim_field(ba_mon out[4]) {
+  memset(out, 0, 4 * sizeof *out);
+  for (int k = 0; k < 2; k++) {
+    side* sd = &B.s[k];
+    ba_mon* m = &out[k ? 2 : 0];
+    m->on_field = sd->present;
+    m->player = !k;
+    m->x = k ? 236 + B.enemy_slide : 106;
+    m->y = k ? 84 : 148;
+    m->frame = sprite_frame(sd);
+    m->half_h = (m->frame ? m->frame->src_h : 40) * sd->scale / 2;
+    m->species = sd->mon.species;
+  }
+}
+
+static void draw_sprite(side* sd, bool player) {
+  if (!sd->present || !sd->sprite_on || sd->scale <= 0 || ba_hidden(player ? 0 : 2)) return;
+  const rr_frame* f = sprite_frame(sd);
   float x = player ? 106 : 236 + B.enemy_slide;
   float y = player ? 148 : 84;
-  x += player ? sd->lunge : -sd->lunge;
   if (!f) {
     rr_rect(x - 20, y - 40 + sd->drop, 40, 40, player ? RR_RGBA(0xd0, 0x60, 0x40, 255) : RR_RGBA(0x50, 0x60, 0xa0, 255));
     return;
@@ -149,8 +168,13 @@ static void draw_field(void) {
   img_draw(k, NULL, B.arena_enemy_x, 0, 0, 0);
   snprintf(k, sizeof k, "images/arenas/%s_a", B.biome);
   img_draw(k, NULL, B.arena_player_x, 0, 0, 0);
+  ba_mon field[4];
+  anim_field(field);
+  ba_draw(BA_LAYER_BELOW_ENEMY, field);
   draw_sprite(&B.s[1], false);
+  ba_draw(BA_LAYER_MID, field);
   draw_sprite(&B.s[0], true);
+  ba_draw(BA_LAYER_TOP, field);
 }
 
 /* ------------------------------------------------------------------ drawing: info boxes */
@@ -504,26 +528,20 @@ static void run_event(float dt) {
       }
       break;
 
-    case BEV_MOVE_ANIM:
-      /* placeholder until the battle animation interpreter: the user lunges forward */
+    case BEV_MOVE_ANIM: {
+      ba_mon field[4];
+      anim_field(field);
       if (B.step == 0) {
-        tween_start(&B.tw, 0, 12, 150, EASE_SINE_OUT);
         B.step = 1;
-      }
-      if (B.step == 1) {
-        tween_update(&B.tw, dt);
-        sd->lunge = B.tw.value;
-        if (tween_done(&B.tw)) {
-          tween_start(&B.tw, 12, 0, 200, EASE_SINE_IN);
-          B.step = 2;
+        if (!ba_play((ba_kind)e->b, e->a, e->battler, e->target, field)) {
+          finish_event();
+          break;
         }
       }
-      if (B.step == 2) {
-        tween_update(&B.tw, dt);
-        sd->lunge = B.tw.value;
-        if (tween_done(&B.tw)) finish_event();
-      }
+      ba_update(dt, field);
+      if (!ba_active()) finish_event();
       break;
+    }
 
     case BEV_DAMAGE:
       if (B.step == 0) {

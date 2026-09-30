@@ -347,7 +347,14 @@ static sfx_entry* sfx_get(const char* key) {
 
 bool snd_sfx_preload(const char* key) { return g_ready && sfx_get(key) != NULL; }
 
-bool snd_sfx_play(const char* key) {
+bool snd_sfx_play(const char* key) { return snd_sfx_play_ex(key, 1.0f, 1.0f); }
+
+float snd_sfx_seconds(const char* key) {
+  sfx_entry* e = g_ready ? sfx_get(key) : NULL;
+  return e && e->rate ? (float)e->samples / e->rate : 0.0f;
+}
+
+bool snd_sfx_play_ex(const char* key, float volume, float rate) {
   if (!g_ready) return false;
   sfx_entry* e = sfx_get(key);
   if (!e) return false;
@@ -361,14 +368,14 @@ bool snd_sfx_play(const char* key) {
     voice* vo = &g_voices[vs[c]];
     ndspChnReset(ch);
     ndspChnSetInterp(ch, NDSP_INTERP_LINEAR);
-    ndspChnSetRate(ch, (float)e->rate);
+    ndspChnSetRate(ch, (float)e->rate * rate);
     ndspChnSetFormat(ch, NDSP_FORMAT_MONO_ADPCM);
     ndspChnSetAdpcmCoefs(ch, (u16*)e->ch[c].coefs);
     float mix[12] = {0};
     if (e->channels == 1)
-      mix[0] = mix[1] = g_sfx_vol;
+      mix[0] = mix[1] = g_sfx_vol * volume;
     else
-      mix[c] = g_sfx_vol;
+      mix[c] = g_sfx_vol * volume;
     ndspChnSetMix(ch, mix);
     memset(&vo->wb, 0, sizeof vo->wb);
     vo->ctx.index = e->mem[c * e->per_chan];
