@@ -41,7 +41,8 @@ Start with [`README.md`](../README.md) (folder table), then the README of the fo
 2. **Never weaken, skip, or edit a check to make it pass.** If a diff test fails, the fix goes in the C port. Do not
    change `*.producer.test.ts`, the comparison in `turntest.c` / `difftest.c` / `aitest.c`, tolerances, seeds, or case
    counts, and do not make a failing case report "unported" or "not covered" instead of matching. If you believe the
-   test itself is wrong, stop and write that up in the PR. Covered counts must not go down.
+   test itself is wrong, stop and write that up in the PR. Covered counts must not go down. *Adding* a new test or a new
+   test mode (as the tasks below ask) is expected. Loosening an existing one never is.
 3. **Do not hand-edit generated files** (`*/gen/out/*`). Regenerate them with the folder's `tools/redump.sh`.
 4. **Never commit**: Pokemon or PokeRogue art, music, fonts, logos, `.pak` files, upstream JSON dumps or upstream
    source, built binaries (`.3dsx`, `.elf`, test executables). Keep the upstream checkout outside the repo. `.gitignore`
@@ -49,8 +50,8 @@ Start with [`README.md`](../README.md) (folder table), then the README of the fo
 5. Stay inside the folder(s) the task names. Do not reformat or refactor unrelated code.
 6. The PR description must list the exact commands you ran and the numbers they printed. Anything you could not run,
    say so. Do not write "all tests pass" without the output.
-7. No 3DS builds needed (they need devkitPro) and nothing here requires the console or emulator. If a step seems to,
-   stop and say so.
+7. No 3DS builds needed on your machine (they need devkitPro; only Task 14 builds one, inside CI), and nothing here
+   requires the console or emulator. If a step seems to, stop and say so.
 
 ## Setting up the upstream checks
 Needs `git`, `gcc`, `make`, `python3`, Node 22 with `corepack`/`pnpm`, and network access (to clone upstream and
@@ -144,13 +145,132 @@ fails: no `|| true`, no `continue-on-error`.
 
 ---
 
+## Batch 2 (Tasks 5 to 15)
+Ordered by what moves the beta closest to a Classic singles run (beta plan M1). Same rules, same format. As with
+Tasks 1 to 4, none of this was run by the author: the "Problem" lines come from the READMEs and from reading the code.
+
+### Lanes: who may run at the same time
+Two tasks in the same folder at once will conflict, so each folder is a **lane** and a lane runs **one task at a time,
+in the order listed**, each merged before the next starts. Different lanes can run together.
+
+| Lane | Folder | Order | Waits for |
+|---|---|---|---|
+| A | `battle-core/` | Task 1, 2, then 5, 6, 7, 8, 9 | Tasks 5 to 9 start only after Tasks 1 and 2 are merged |
+| B | `reward-core/` | Task 10, then 11 | Nothing |
+| C | `game-core/` | Task 3, then 12 and 13 (either order, never together) | 12 needs Tasks 1 and 2 merged. 13 needs Task 3 merged |
+| D | `.github/` | Task 4, then 14 | 14 needs Task 4 merged |
+| E | `game/` | Task 15 | Nothing |
+
+With three agent slots: run lane A and lane B, and use the third slot for C, D and E in turn (Task 4 first, as a trial).
+Lane A changes code that game-core, ai-core and reward-core read, so get Task 4's CI merged before lane A's later tasks.
+
+### Task 5: Catch roll (battle-core, lane A)
+**Problem.** `PH_ATTEMPT_CAPTURE` exists in `battle-core/src/engine.c` but the phase isn't ported; the species table has
+`catch_rate`, and `pr_battle` has `last_used_pokeball`. Catching is an M1 requirement.
+**Do.** Port only the capture *roll* of upstream's `AttemptCapturePhase` (`src/phases/attempt-capture-phase.ts`): the modified
+catch rate, the shake checks and the RNG draws they make, every ball type, status and HP effects, bosses as upstream treats
+them, and the message keys upstream queues. Not the party-full flow, the dex, candy or animations. Add a producer mode that
+runs upstream's phase on random wild targets and compare shakes, caught or not, and the RNG state after. If upstream's
+harness can't run the phase headless, stop and say so in the PR. Do not fake the comparison.
+**Pass.** The new mode shows 0 mismatches over at least 2,000 cases on each of four seeds (777, 9001, 4242, 31337), and
+the existing modes from Task 1's regression list still show 0 mismatches with covered counts not lower.
+
+### Task 6: Flee roll (battle-core, lane A)
+**Problem.** `pr_can_run` says whether RUN is allowed; its comment in `battle-core/include/pr/engine.h` says whether the
+escape succeeds is the `AttemptRunPhase` roll, "not ported yet".
+**Do.** Port upstream's `AttemptRunPhase` roll (its escape chance, the attempt counter it reads and raises, the RNG draw, the
+success and failure texts) and wire the `COMMAND_RUN` path in `phases.c` (line ~311) to it. Add a producer mode (or extend
+Task 5's) that runs upstream's phase and compares the result and the RNG state after.
+**Pass.** 0 mismatches over at least 2,000 cases on each of the four seeds, existing modes unchanged as in Task 5.
+
+### Task 7: Held items, part 1: Leftovers and Shell Bell (battle-core, lane A)
+**Problem.** Held items are the biggest gap for real runs. Any turn with a held item on a Pokemon is reported
+unported (`PR_FEAT_TURN_MODIFIERS`, noted in `phases.c` and `switching.c`: `grep -n PR_FEAT_TURN_MODIFIERS battle-core/src/*.c`),
+so those turns are never checked. `battle-core/README.md` "Not done" lists Leftovers, Focus Band, berries, Quick Claw, King's
+Rock and Shell Bell.
+**Do.** Add a producer mode `TURN_ITEMS=1` that gives random Pokemon random held items from the list a task covers, and port
+the turn-path effect of **Leftovers** (end-of-turn heal) and **Shell Bell** (heal on dealing damage) as upstream's modifier
+classes do it (`src/modifier/`), including their texts and stack counts. Leave every other held item reporting unported as now.
+**Pass.** `TURN_ITEMS=1` (with only these two items enabled) shows 0 mismatches over at least 2,000 cases on each of the four
+seeds and a nonzero count of turns where each item fires. The other modes are unchanged.
+
+### Task 8: Held items, part 2: chance items (battle-core, lane A)
+**Problem.** Same gap as Task 7.
+**Do.** Extend `TURN_ITEMS` and port **Focus Band** (survives a fatal hit by chance), **Quick Claw** (moves first by chance),
+**King's Rock** (flinch chance) and **White Herb** (resets lowered stats; see `phases.c` near the `PR_FEAT_TURN_MODIFIERS`
+note about it). Check the class names and rolls in upstream's source at `8555c08`.
+**Pass.** As Task 7 with these four items enabled: 0 mismatches over 2,000+ cases per seed, each item fires at least once,
+other modes unchanged.
+
+### Task 9: Berries, first slice (battle-core, lane A)
+**Problem.** Berries are eaten on thresholds during the turn; `phases.c` (~line 2432, `eatBerries`) still reports them unported.
+Upstream has 11 berry types: `BERRY_TYPE_*` in `battle-core/gen/out/pr_enums.h`.
+**Do.** Extend `TURN_ITEMS` and port **Sitrus** (HP), **Lum** (status cure) and **Leppa** (PP) as upstream's `BerryModifier`
+does, including when they trigger, stack counts, texts, and what a berry eaten does for Belch, Stuff Cheeks and Cud Chew (the
+existing conditions in `TURN_COND`). The stat-pinch berries (Liechi, Ganlon, Petaya, Apicot, Salac, Lansat, Starf) and
+Enigma stay unported for a later task.
+**Pass.** As Task 7 with these three berries enabled, plus the `TURN_COND=1` runs still at 0 mismatches.
+
+### Task 10: What rewards do when picked, part 1: healing, revives, PP (reward-core, lane B)
+**Problem.** `reward-core/README.md` "Not done yet": what each reward does when picked. Only the options are ported.
+**Do.** Add an apply API to `reward-core/include/pr/reward.h` (or a new header) and port, for the player's party, the
+potions (`PokemonHpRestoreModifierType` family, Full Restore included), the revives (Revive, Max Revive, Sacred Ash) and
+the PP items (Ether, Max Ether, Elixir, Max Elixir, PP Up, PP Max). Names and numbers are upstream's at `8555c08`
+(`src/modifier/`). Add a producer test that applies each item in upstream to random parties (random HP, fainted members,
+PP and PP Ups) and compares the party after and the message. The game-core stand-ins are not touched here.
+**Pass.** The new test shows 0 mismatches over at least 4,000 cases on each of three seeds with every item above applied
+(say how many applications of each), and the existing `tools/difftest.sh` rewards and victory runs from the README
+(seed 99, 4,000 cases) still show 0 mismatches.
+
+### Task 11: What rewards do when picked, part 2: Rare Candy, vitamins, held items (reward-core, lane B)
+**Problem.** Continuation of Task 10.
+**Do.** Extend the apply API and test to **Rare Candy** (level up, calling battle-core's stat code read-only), the vitamins
+(base stat modifiers with their stack limit) and the items that are added to the modifier list (held items and persistent
+items, with stack caps and what "transfer" means). Mints are a later task.
+**Pass.** As Task 10, for these items. Depends on Task 10 being merged.
+
+### Task 12: Wire battle start and trainer switches into game-core (game-core, lane C)
+**Problem.** `game-core/README.md`'s stand-in table lists: "the summon phases at a battle's start aren't run", "a trainer's
+next Pokemon goes onto the field without its summon phases", "a trainer's switch-out picked by the AI does nothing", "the rest
+of a turn after a victory is lost". battle-core has since gained `pr_start_battle`, `pr_continue` and trainer switches (see
+`battle-core/WHERE-I-STOPPED.md`), so some rows may already be stale. Check each against the code first.
+**Do.** Replace the stand-ins that battle-core now covers with calls to it, and delete the matching rows and
+stub counters. Leave rows that still wait on something. Requires Tasks 1 and 2 merged.
+**Pass.** `make -C game-core test` passes, `build/gcplay --auto 1000 --jobs 8` reports no crashes or hangs, and the stub
+counts the soak report prints for the rows you wired drop to 0 (paste before and after). The digests may change. Say so and why.
+
+### Task 13: Dex updates during a run (game-core, lane C)
+**Problem.** Step 3 of `game-core/WIP-dex-and-unlocks.md` without the catching parts. Requires Task 3 merged.
+**Do.** Hook `setPokemonSeen` at each enemy encounter, the evolution and form-change updates, and `addFriendship` (candy
+progress with upstream's multiplier and caps, replacing the two direct `friendship +=` the note names) into game-core, plus
+the `SPECIES_CAUGHT` evolution condition reading the dex. Not catching or the party-full flow.
+**Pass.** A diff test comparing the dex and starter data after those functions on random Pokemon in upstream and in C shows
+0 mismatches (say how many), and `make -C game-core test` still passes.
+
+### Task 14: CI builds the 3DS app (`.github/`, lane D)
+**Problem.** Task 4's CI only builds on the host. Nothing checks the real 3DS build.
+**Do.** Add a job to Task 4's workflow that runs the README's build (`docker run --rm -v "$PWD":/src -w /src/game
+devkitpro/devkitarm make`) and fails if it fails. No artifacts uploaded, no packs, no upstream download. Requires Task 4 merged.
+**Pass.** The job is green on its own PR, and red on a scratch branch (not merged) with a deliberate compile error in `game/`.
+
+### Task 15: Two animation details (`game/`, lane E) (weak check)
+**Problem.** `game/README.md` "Not done yet": animations aimed at a Substitute doll (upstream's `onSubstitute`) and the grey
+part of a sprite's tone (`tone[3]` in `battle_anim.c`, not reproduced). PR #35 draws the doll but doesn't aim animations at it.
+**Do.** Read upstream's `src/data/battle-anims.ts` and its sprite shader at `8555c08`. Put the target choice for a doll and
+the tone's grey math in small pure C functions with host tests in `game/tests/` whose expected values you derive from
+upstream's source (say how). Wire them in. Do not change the rendering API or anything that needs the console.
+**Pass.** `make -C game/tests animtest && build/animtest <pokerogue-assets>` (needs upstream's assets checkout and libjansson)
+runs ASan-clean with the same "moves: N played" counts as before, and the new tests pass. **This check only covers the
+logic. Whether it looks right is unverified until someone runs the emulator.** Say that in the PR.
+
+---
+
 ## Not for an outside agent yet
-- **Move animations aimed at the Substitute doll** (`game/`, upstream's `onSubstitute`). PR #35 merged: the doll is drawn
-  and steps aside. Animations that should play on the doll are not done, and only a screenshot can tell if they look right.
-- **The grey part of the animation tone** (`game/source/battle_anim.c`, `tone[3]`). Needs citro2d rendering checked on
-  the emulator.
 - **Driving the battle screen from game-core's run** (`game/WIP-run-driver.md`). Large, and judged on screen.
-- **Hooking game-core to `pr_start_battle`, `pr_continue` and trainer switches** (the stand-in table in
-  `game-core/README.md`). Changes the soak digests, and should wait for Tasks 1 and 2.
-- **What each reward does when picked** (`reward-core/README.md`, "Not done yet"). Large; needs a new producer test.
+- **The second half of berries** (Liechi, Ganlon, Petaya, Apicot, Salac, Lansat, Starf, Enigma), other held items, mints,
+  TMs and evolution items as rewards: same shape as Tasks 7 to 11, worth doing after those land.
+- **ai-core's backlog** (`ai-core/README.md`): its held-item scores, trainer switching moves and Illusion depend on
+  battle-core work that Tasks 1 and 7 to 9 do first, so wait for them.
+- **Catching's screens, the party-full flow and dex/candy on a catch**, and **doubles, forms and Transform, Neutralizing Gas**
+  in battle-core. Large; Sunday's work.
 - Anything that needs a real 3DS, the SD packs, or the Azahar emulator.
