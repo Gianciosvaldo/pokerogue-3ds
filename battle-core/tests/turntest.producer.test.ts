@@ -166,7 +166,7 @@ import { getGameMode } from "#app/game-mode";
 import { speciesDataRegistry } from "#app/globals/global-species-data-registry";
 import { allAbilities, allMoves } from "#data/data-lists";
 import { EntryHazardTag, getArenaTag } from "#data/arena-tag";
-import { getBattlerTag } from "#data/battler-tags";
+import { getBattlerTag, TrappedTag } from "#data/battler-tags";
 import { Status } from "#data/status-effect";
 import { Terrain, TerrainType } from "#data/terrain";
 import { Weather } from "#data/weather";
@@ -199,14 +199,16 @@ import { healBlockedMoves } from "#moves/invalid-moves";
 import { PokemonMove } from "#moves/pokemon-move";
 import { GameManager } from "#test/framework/game-manager";
 import { PartyOption } from "#ui/party-ui-handler";
+import i18next from "i18next";
 import * as fs from "node:fs";
 import Phaser from "phaser";
 import { it } from "vitest";
 
 it("turntest producer", async () => {
   const N = Number(process.env.TURN_N ?? 2000);
-  const RICH = process.env.TURN_RICH === "1" || process.env.TURN_PROBE === "1" || process.env.TURN_SPROBE === "1";
-  const PROBE = process.env.TURN_PROBE === "1" || process.env.TURN_SPROBE === "1";
+  const CPROBE = process.env.TURN_CPROBE === "1";
+  const RICH = process.env.TURN_RICH === "1" || process.env.TURN_PROBE === "1" || process.env.TURN_SPROBE === "1" || CPROBE;
+  const PROBE = process.env.TURN_PROBE === "1" || process.env.TURN_SPROBE === "1" || CPROBE;
   const COND = PROBE || process.env.TURN_COND === "1";
   const STAT = process.env.TURN_STAT === "1";
   const SPROBE = process.env.TURN_SPROBE === "1";
@@ -1815,6 +1817,68 @@ it("turntest producer", async () => {
           scene.arena.tags.push(getArenaTag(type, 1 + rnd(5), MoveId.NONE, A.id, side));
         }
       }
+      if (CPROBE) {
+        // the command screen's checks: moves its rules refuse (the moves' own restrictions,
+        // unimplemented ones, no PP left), the tags that restrict moves or trap, the abilities
+        // that trap, Gravity and Fairy Lock
+        const own = [MoveId.BELCH, MoveId.STUFF_CHEEKS, MoveId.GIGATON_HAMMER, MoveId.BLOOD_MOON];
+        const gravityMoves = usable.filter((m: any) => m.hasFlag(MoveFlags.GRAVITY)).map((m: any) => m.id);
+        const soundMoves = usable.filter((m: any) => m.hasFlag(MoveFlags.SOUND_BASED)).map((m: any) => m.id);
+        const unimpl = allMoves.filter((m: any) => m && m.id !== MoveId.NONE && m.isUnimplemented).map((m: any) => m.id);
+        const trapAbilities = [AbilityId.SHADOW_TAG, AbilityId.ARENA_TRAP, AbilityId.MAGNET_PULL, AbilityId.RUN_AWAY];
+        const restrictTags = [
+          BattlerTagType.DISABLED, BattlerTagType.ENCORE, BattlerTagType.GORILLA_TACTICS, BattlerTagType.TAUNT,
+          BattlerTagType.TORMENT, BattlerTagType.IMPRISON, BattlerTagType.HEAL_BLOCK, BattlerTagType.THROAT_CHOPPED,
+          BattlerTagType.TRAPPED, BattlerTagType.BIND,
+        ];
+        for (const p of [A, D]) {
+          const o = p === A ? D : A;
+          for (let k = 1 + rnd(2); k > 0; k--) {
+            const pool = [own, gravityMoves, soundMoves, healBlockedMoves, unimpl, o.moveset.map((m: any) => m.moveId)][rnd(6)];
+            if (pool.length) {
+              p.moveset[rnd(p.moveset.length)] = new PokemonMove(pool[rnd(pool.length)]);
+            }
+          }
+          for (const pm of p.moveset) {
+            pm.ppUp = rnd(4) === 0 ? rnd(4) : 0;
+            if (rnd(6) === 0) {
+              pm.ppUsed = pm.getMovePp() - rnd(2);
+            }
+          }
+          if (rnd(3) === 0) {
+            p.summonData.ability = trapAbilities[rnd(trapAbilities.length)];
+          }
+          p.battleData.hasEatenBerry = rnd(2) === 0;
+          for (let k = rnd(3); k > 0; k--) {
+            const type = restrictTags[rnd(restrictTags.length)];
+            if (p.getTag(type)) {
+              continue;
+            }
+            const src = type === BattlerTagType.TRAPPED ? MoveId.MEAN_LOOK : type === BattlerTagType.BIND ? MoveId.BIND : MoveId.NONE;
+            const tag = getBattlerTag(type, 1 + rnd(4), src, o.id) as any;
+            if ("moveId" in tag || type === BattlerTagType.DISABLED || type === BattlerTagType.ENCORE) {
+              tag.moveId = p.moveset[rnd(p.moveset.length)].moveId;
+            }
+            p.summonData.tags.push(tag);
+          }
+          if (rnd(3) === 0) {
+            const pool = [...p.moveset.map((m: any) => m.moveId), MoveId.STRUGGLE, MoveId.OUTRAGE];
+            p.pushMoveHistory({
+              move: pool[rnd(pool.length)],
+              targets: [o.getBattlerIndex()],
+              useMode: MoveUseMode.NORMAL,
+              result: [MoveResult.SUCCESS, MoveResult.MISS, MoveResult.FAIL][rnd(3)],
+            });
+          }
+        }
+        if (rnd(3) === 0) {
+          const type = [ArenaTagType.GRAVITY, ArenaTagType.FAIRY_LOCK][rnd(2)];
+          const side = [ArenaTagSide.BOTH, ArenaTagSide.PLAYER, ArenaTagSide.ENEMY][rnd(3)];
+          if (!scene.arena.getTagOnSide(type, side)) {
+            scene.arena.tags.push(getArenaTag(type, 1 + rnd(5), type === ArenaTagType.GRAVITY ? MoveId.GRAVITY : MoveId.FAIRY_LOCK, D.id, side));
+          }
+        }
+      }
       if (SPROBE) {
         for (const p of [A, D]) {
           p.turnData.pendingStatus = rnd(8) === 0 ? statuses[rnd(statuses.length)] : StatusEffect.NONE;
@@ -1823,6 +1887,37 @@ it("turntest producer", async () => {
       const before = dumpState(true);
       const probes: string[] = [];
       let threw = false;
+      if (CPROBE) {
+        const rng = () => {
+          const bs = battle.battleSeedState;
+          return `g=${rngState(Phaser.Math.RND.state())} b=${bs ? rngState(bs) : "none"}`;
+        };
+        for (const p of [A, D]) {
+          p.moveset.forEach((pm: any, k: number) => {
+            const [ok, text] = pm.isUsable(p, false, true);
+            probes.push(`CPROBE p=${p.getBattlerIndex()} kind=move slot=${k} res=${ok ? 1 : 0} ${rng()} text=${JSON.stringify(text)}`);
+          });
+          // isTrapped, and for the player the text CommandPhase.handleTrap shows on the switch
+          // command: the ability's message, else showNoEscapeText(tag, false)
+          const msgs: string[] = [];
+          const trapped = p.isTrapped(msgs);
+          let text = msgs[0] ?? "";
+          if (trapped && msgs.length === 0 && p === A) {
+            const tag: any = p.getTag(TrappedTag) ?? scene.arena.getTagOnSide(ArenaTagType.FAIRY_LOCK, ArenaTagSide.PLAYER);
+            if (tag) {
+              text = i18next.t("battle:noEscapePokemon", {
+                pokemonName:
+                  tag.sourceId && scene.getPokemonById(tag.sourceId) ? getPokemonNameWithAffix(scene.getPokemonById(tag.sourceId)!) : "",
+                moveName: tag.getMoveName(),
+                escapeVerb: i18next.t("battle:escapeVerbFlee"),
+              });
+            }
+          }
+          probes.push(`CPROBE p=${p.getBattlerIndex()} kind=trap res=${trapped ? 1 : 0} ${rng()} text=${JSON.stringify(text)}`);
+        }
+        out.push(`CASE ${i}`, ...before, "RUN", ...probes, "END stop=probe");
+        continue;
+      }
       if (SPROBE) {
         const aa = (p: any) => `${L([...p.summonData.abilitiesApplied])}/${L([...p.waveData.abilitiesApplied])}`;
         for (const p of [A, D]) {

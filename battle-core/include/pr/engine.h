@@ -177,6 +177,34 @@ void pr_resume_switch(pr_battle *bt, pr_engine *e, int slot);
  * of 10), AddEnemyBuffModifierPhase (endless), SelectBiomePhase (new biome), NewBattlePhase. */
 void pr_continue(pr_battle *bt, pr_engine *e);
 
+/* ---- the command screen's checks (CommandPhase, src/commands.c) ----
+ * They read the battle between turns and change nothing. Each says whether the command is
+ * accepted and, when it isn't, puts in *why (may be NULL) the text upstream shows then: key
+ * NULL when upstream shows nothing, "" for its empty text box. */
+/* pokemon.isMoveSelectable(move): a restricting battler tag (Disable, Encore, Taunt, Torment,
+ * Imprison, Heal Block, Throat Chop, Gorilla Tactics), then the move's own restrictions (Belch,
+ * Stuff Cheeks, Gigaton Hammer and Blood Moon twice in a row, Gravity) */
+bool pr_move_selectable(pr_battle *bt, const pr_pokemon *p, int move, pr_msg *why);
+/* PokemonMove.isUsable(p, ignorePp, forSelection) for moveset slot `slot`: not implemented, out
+ * of PP, then (forSelection) pr_move_selectable. The player's challenge rules aren't modelled. */
+bool pr_move_usable(pr_battle *bt, const pr_pokemon *p, int slot, bool ignore_pp, bool for_selection, pr_msg *why);
+/* CommandPhase.handleFightCommand's check for the FIGHT command on slot `slot` (-1: the queued
+ * MoveId.NONE of a recharge turn): the move the turn command gets (the slot's move, or Struggle
+ * when no move at all is usable), or -1 when the pick is refused (*why says why) */
+int pr_fight_move(pr_battle *bt, const pr_pokemon *p, int slot, bool ignore_pp, pr_msg *why);
+/* pokemon.isTrapped(trappedAbMessages, simulated): Commander, Shadow Tag / Arena Trap / Magnet
+ * Pull (the first trigger message in *ab_msg), a trapping tag, Fairy Lock; Ghost types and Run
+ * Away are never trapped */
+bool pr_is_trapped(pr_battle *bt, const pr_pokemon *p, pr_msg *ab_msg);
+/* The POKEMON command (tryLeaveField with isSwitch): p may switch out. baton: the party screen's
+ * Baton Pass switch, which skips the trap check. Which party member may come in is the party
+ * screen's business, not checked here. */
+bool pr_can_switch(pr_battle *bt, const pr_pokemon *p, bool baton, pr_msg *why);
+/* The RUN command (handleRunCommand): not in the End biome, not from a trainer, and p not
+ * trapped (an ability's trap shows no text there, upstream's quirk). Whether the escape
+ * succeeds is the AttemptRunPhase's roll, not ported yet. */
+bool pr_can_run(pr_battle *bt, const pr_pokemon *p, pr_msg *why);
+
 /* SwitchPhase.start: the early exits, or the party screen (sets e->awaiting_pick) */
 void pr_switch_phase(pr_battle *bt, pr_engine *e, int ph);
 

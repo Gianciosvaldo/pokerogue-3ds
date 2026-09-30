@@ -390,7 +390,7 @@ static void field_setup(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool reset)
 static pr_msg_arg trainer_name(const pr_battle *bt, int trainer_slot)
 {
     const char *n = bt->trainer_names[trainer_slot == TRAINER_SLOT_TRAINER_PARTNER ? 1 : 0];
-    return (pr_msg_arg){"trainerName", PR_ARG_STR, 0, n ? n : ""};
+    return (pr_msg_arg){"trainerName", PR_ARG_TEMPLATE, 0, n ? n : ""};   /* getName() may nest keys */
 }
 
 /* SwitchSummonPhase: the party member in slotIndex comes in to the field slot (fieldIndex) and the

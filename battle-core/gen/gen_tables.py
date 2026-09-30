@@ -571,7 +571,7 @@ typedef struct {{
     bool can_change_form;
     uint16_t form0, nforms;    /* slice of pr_forms; form 0 is the species itself */
     int32_t prevolution;       /* species id or -1 */
-    int32_t starter;           /* starter cost or -1 */
+    int32_t starter;           /* the root species of its evolution line (Ivysaur: Bulbasaur), or -1 as the dump has it (Bulbasaur -1, yet Mewtwo 150); not the starter cost */
     pr_level_moves level_moves;
     bool has_evolutions;       /* speciesDataRegistry.hasEvolutions() */
     /* Bit PR_FCT_<Class> set: some form change of this species answers to that trigger class

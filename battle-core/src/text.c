@@ -305,7 +305,26 @@ static void stat_name(obuf *o, const pr_text_source *src, int stat)
     lookup_into(o, src, key);
 }
 
-static void put_arg(obuf *o, const pr_msg_arg *a, const pr_text_source *src)
+static void format_key(obuf *o, const char *key, const pr_msg *m, const pr_text_source *src, int depth);
+
+/* $t(key) at p: formats key into o and returns the text after it; NULL when p isn't one */
+static const char *nest_at(obuf *o, const char *p, const pr_msg *m, const pr_text_source *src, int depth)
+{
+    if (depth >= 4 || p[0] != '$' || p[1] != 't' || p[2] != '(') return NULL;
+    const char *close = strchr(p + 3, ')');
+    if (!close) return NULL;
+    char nk[128];
+    size_t n = (size_t)(close - (p + 3));
+    const char *comma = memchr(p + 3, ',', n);
+    if (comma) n = (size_t)(comma - (p + 3));
+    if (n >= sizeof nk) return NULL;
+    memcpy(nk, p + 3, n);
+    nk[n] = 0;
+    format_key(o, nk, m, src, depth + 1);
+    return close + 1;
+}
+
+static void put_arg(obuf *o, const pr_msg_arg *a, const pr_msg *m, const pr_text_source *src, int depth)
 {
     char key[96];
     switch (a->kind) {
@@ -358,6 +377,15 @@ static void put_arg(obuf *o, const pr_msg_arg *a, const pr_text_source *src)
     }
     case PR_ARG_KEY: if (a->s) lookup_into(o, src, a->s); break;
     case PR_ARG_STR: if (a->s) puts_(o, a->s); break;
+    case PR_ARG_TEMPLATE:
+        /* i18next nests after interpolating, so $t() in an argument's value is translated too */
+        for (const char *p = a->s; p && *p;) {
+            const char *after = nest_at(o, p, m, src, depth);
+            if (after) { p = after; continue; }
+            put(o, p, 1);
+            p++;
+        }
+        break;
     default: break;
     }
 }
@@ -386,22 +414,8 @@ static void format_key(obuf *o, const char *key, const pr_msg *m, const pr_text_
     unescape(&tb, s, e);
     end(&tb);
     for (const char *p = tmpl; *p;) {
-        if (depth < 4 && p[0] == '$' && p[1] == 't' && p[2] == '(') {
-            const char *close = strchr(p + 3, ')');
-            if (close) {
-                char nk[128];
-                size_t n = (size_t)(close - (p + 3));
-                const char *comma = memchr(p + 3, ',', n);
-                if (comma) n = (size_t)(comma - (p + 3));
-                if (n < sizeof nk) {
-                    memcpy(nk, p + 3, n);
-                    nk[n] = 0;
-                    format_key(o, nk, m, src, depth + 1);
-                    p = close + 1;
-                    continue;
-                }
-            }
-        }
+        const char *after = nest_at(o, p, m, src, depth);
+        if (after) { p = after; continue; }
         if (p[0] == '{' && p[1] == '{') {
             const char *close = strstr(p + 2, "}}");
             if (close) {
@@ -411,7 +425,7 @@ static void format_key(obuf *o, const char *key, const pr_msg *m, const pr_text_
                 while (a < ne && *a == ' ') a++;
                 while (ne > a && ne[-1] == ' ') ne--;
                 const pr_msg_arg *arg = find_arg(m, a, (size_t)(ne - a));
-                if (arg) put_arg(o, arg, src);
+                if (arg) put_arg(o, arg, m, src, depth);
                 else put(o, p, (size_t)(close + 2 - p));   /* skipOnVariables: a missing value stays as it is */
                 p = close + 2;
                 continue;
