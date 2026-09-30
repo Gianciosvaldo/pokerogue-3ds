@@ -41,6 +41,9 @@ typedef struct {
   int boss_segments;
   int8_t stat_stages[7];     /* ATK DEF SPATK SPDEF SPD ACC EVA */
   bool caught_before;        /* the "owned" ball icon on the enemy's box */
+  bool hidden;               /* out of sight in the air, underground or underwater (upstream's
+                              * pokemon.setVisible(false) from a SemiInvulnerableTag); the info
+                              * box stays */
 } bv_mon;
 
 typedef enum {
@@ -59,6 +62,8 @@ typedef enum {
   BEV_FAINT,       /* battler faints: cry, sprite drops, info box leaves */
   BEV_EXP,         /* battler (player), a = new exp ratio x 1000, b = new level (0 = same) */
   BEV_WAIT,        /* a = ms */
+  BEV_VISIBLE,     /* battler, a = 0: hide it (SemiInvulnerableTag.onAdd), 1: show it again two
+                    * frames later (onRemove); the queue doesn't wait */
 } bev_type;
 
 typedef struct {

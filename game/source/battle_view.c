@@ -32,6 +32,7 @@ typedef struct {
   bool info_on;
   float hp_shown;     /* the HP bar's displayed hp (tweened) */
   float exp_shown;
+  float show_ms;      /* BEV_VISIBLE: ms until the hidden Pokemon shows again */
   char sprite_key[64];
 } side;
 
@@ -88,6 +89,7 @@ static void set_mon(side* sd, const bv_mon* m, bool player) {
   sd->drop = 0;
   sd->scale = 1;
   sd->black = false;
+  sd->show_ms = 0;
   ba_show(player ? 0 : 2);
 }
 
@@ -129,11 +131,12 @@ static void anim_field(ba_mon out[4]) {
     m->frame = sprite_frame(sd);
     m->half_h = (m->frame ? m->frame->src_h : 40) * sd->scale / 2;
     m->species = sd->mon.species;
+    m->visible = !sd->mon.hidden;
   }
 }
 
 static void draw_sprite(side* sd, bool player) {
-  if (!sd->present || !sd->sprite_on || sd->scale <= 0 || ba_hidden(player ? 0 : 2)) return;
+  if (!sd->present || !sd->sprite_on || sd->scale <= 0 || sd->mon.hidden || ba_hidden(player ? 0 : 2)) return;
   const rr_frame* f = sprite_frame(sd);
   float x = player ? 106 : 236 + B.enemy_slide;
   float y = player ? 148 : 84;
@@ -687,6 +690,17 @@ static void run_event(float dt) {
     case BEV_WAIT:
       if (B.t >= e->a) finish_event();
       break;
+
+    case BEV_VISIBLE:
+      if (e->a) {
+        /* onRemove: visible after getFrameMs(2), without holding up what follows */
+        if (sd->mon.hidden) sd->show_ms = 2000 / 60.f;
+      } else {
+        sd->mon.hidden = true;
+        sd->show_ms = 0;
+      }
+      finish_event();
+      break;
   }
 }
 
@@ -775,6 +789,11 @@ static void bv_update(ui_screen* s, float dt) {
   float frame_dt = dt;
   msgbox_update(&B.msg, dt);
   if (B.ability_t > 0) B.ability_t -= dt;
+  for (int k = 0; k < 2; k++)
+    if (B.s[k].show_ms > 0 && (B.s[k].show_ms -= dt) <= 0) {
+      B.s[k].show_ms = 0;
+      B.s[k].mon.hidden = false;
+    }
   if (B.mode == M_EVENTS) {
     while (B.cur < B.n_ev) {
       int before = B.cur;
