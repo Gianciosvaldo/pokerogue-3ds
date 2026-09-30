@@ -10,10 +10,10 @@ BUILD ?= build
 RUN_LIB := $(BUILD)/run-core/librun.a
 CORE_LIB := $(BUILD)/run-core/battle-core/libprcore.a
 AI_LIB := $(BUILD)/ai-core/libai.a
-SRCS := src/gc_run.c src/gc_phases.c src/gc_mon.c src/gc_items.c src/gc_encounter.c src/gc_battle.c src/gc_save.c src/gc_stubs.c gen/out/gc_evolutions.c gen/out/gc_starters.c gen/out/gc_trainers.c
+SRCS := src/gc_run.c src/gc_phases.c src/gc_mon.c src/gc_items.c src/gc_encounter.c src/gc_battle.c src/gc_save.c src/gc_stubs.c src/gc_system.c gen/out/gc_evolutions.c gen/out/gc_starters.c gen/out/gc_trainers.c gen/out/gc_dex.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
-all: $(BUILD)/libgc.a $(BUILD)/gcplay $(BUILD)/savetest
+all: $(BUILD)/libgc.a $(BUILD)/gcplay $(BUILD)/savetest $(BUILD)/dextest
 
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -34,6 +34,9 @@ $(BUILD)/gcplay: tools/gcplay.c $(BUILD)/libgc.a $(AI_LIB) $(RUN_LIB) $(CORE_LIB
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
 $(BUILD)/savetest: tools/savetest.c $(BUILD)/libgc.a $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+$(BUILD)/dextest: tests/dextest.c $(BUILD)/libgc.a $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
 # the save checks, then 200 soak runs twice: with a save/load round trip at every save point, the runs'

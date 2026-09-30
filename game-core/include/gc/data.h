@@ -32,6 +32,28 @@ extern const gc_evo_cond gc_evo_conds[];
 typedef struct { uint16_t id; uint8_t cost; } gc_starter_cost_entry;
 extern const gc_starter_cost_entry gc_starter_costs[];
 extern const int gc_starter_cost_count;
+extern const uint16_t gc_default_starters[];
+extern const int gc_default_starter_count;
+
+/* Dex info dumped from upstream (gen/out/gc_dex.c) */
+extern const uint8_t gc_default_starter_natures[];
+
+typedef struct {
+    uint16_t species;
+    int16_t prevolution;        /* 0 if none */
+    int16_t male_percent;       /* -1 if genderless / null, otherwise 0..100 */
+    bool has_variants;
+    bool has_ability2;
+} gc_species_dex_info;
+extern const gc_species_dex_info gc_species_dex_info_data[];
+extern const int gc_species_dex_info_count;
+
+typedef struct {
+    uint16_t species;
+    uint16_t egg_moves[4];      /* MoveId, 0 if < 4 */
+} gc_starter_egg_moves;
+extern const gc_starter_egg_moves gc_starter_egg_moves_data[];
+extern const int gc_starter_egg_moves_count;
 
 /* A trainer config, as Trainer.getName and the money reward read it (gen/out/gc_trainers.c) */
 typedef struct {
