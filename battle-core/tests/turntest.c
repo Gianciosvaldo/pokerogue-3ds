@@ -1193,6 +1193,7 @@ int main(int argc, char **argv)
     static char js_texts[LINE_LEN * 2];
     char case_name[64] = "";
     int run_at = -1;
+    int js_start = 0, js_start_set = 0, js_start_yes = 0;
 
     for (;;) {
         char *got = fgets(line, sizeof line, f);
@@ -1204,7 +1205,14 @@ int main(int argc, char **argv)
                 js.n = 0;
                 js_texts[0] = 0;
                 n_js_epicks = 0;
+                js_start = js_start_set = js_start_yes = 0;
                 run_at = -1;
+                continue;
+            }
+            if (!strncmp(line, "START ", 6)) {           /* TURN_START: a battle's start, not a turn */
+                js_start = 1;
+                js_start_set = (int)inum(line, "set");
+                js_start_yes = (int)inum(line, "yes");
                 continue;
             }
             if (!strncmp(line, "EPICK ", 6)) {
@@ -1282,7 +1290,9 @@ int main(int argc, char **argv)
         epick_bad = false;
         static uint32_t hits_before[PR_CLOSURE_COUNT];
         memcpy(hits_before, pr_closure_hits, sizeof hits_before);
-        pr_run_turn(bt, &eng);
+        bt->battle_style_set = js_start_set != 0;
+        if (js_start) pr_start_battle(bt, &eng);
+        else pr_run_turn(bt, &eng);
         n_all_events = 0;
         keep_events(&eng);
         /* the party screens: the n-th one of the turn takes the n-th pick, modulo the Pokemon it
@@ -1297,6 +1307,8 @@ int main(int argc, char **argv)
                 pr_resume_switch(bt, &eng, ne ? eligible[r % ne] : -1);
             } else if (eng.stop == PH_VICTORY) {
                 pr_continue(bt, &eng);
+            } else if (eng.stop == PH_CHECK_SWITCH && eng.awaiting_confirm) {
+                pr_answer_check_switch(bt, &eng, js_start_yes != 0);
             } else break;
             keep_events(&eng);
         }

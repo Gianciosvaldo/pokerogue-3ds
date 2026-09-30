@@ -163,6 +163,7 @@
 import { BattleScene } from "#app/battle-scene";
 import { getPokemonNameWithAffix } from "#app/messages";
 import { getGameMode } from "#app/game-mode";
+import { settings } from "#app/global-settings-manager";
 import { speciesDataRegistry } from "#app/globals/global-species-data-registry";
 import { allAbilities, allMoves } from "#data/data-lists";
 import { EntryHazardTag, getArenaTag } from "#data/arena-tag";
@@ -171,6 +172,7 @@ import { Status } from "#data/status-effect";
 import { Terrain, TerrainType } from "#data/terrain";
 import { Weather } from "#data/weather";
 import { AbilityId } from "#enums/ability-id";
+import { BattleStyle } from "#enums/battle-style";
 import { BattleType } from "#enums/battle-type";
 import { BiomeId } from "#enums/biome-id";
 import { GameModes } from "#enums/game-modes";
@@ -228,7 +230,8 @@ it("turntest producer", async () => {
   const HEADER = process.env.TURN_HEADER === "1";
   const DELAYED = process.env.TURN_DELAYED === "1";
   const SWITCH = process.env.TURN_SWITCH === "1";
-  const SUMMON = process.env.TURN_SUMMON === "1";
+  const START = process.env.TURN_START === "1";
+  const SUMMON = process.env.TURN_SUMMON === "1" || START;
   const TRAINER = process.env.TURN_TRAINER === "1";
   const OUT = process.env.TURN_OUT ?? "/tmp/pr-turns.txt";
   const game = new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
@@ -617,7 +620,13 @@ it("turntest producer", async () => {
   let picks: number[] = [];
   let pickAt = 0;
   const uiSetMode = scene.ui.setMode.bind(scene.ui);
+  // TURN_START: the answer to CheckSwitchPhase's "Will you switch?"
+  let checkYes = false;
   scene.ui.setMode = (mode: UiMode, ...args: any[]) => {
+    if (mode === UiMode.CONFIRM && START) {
+      (checkYes ? args[0].yesHandler : args[0].noHandler)();
+      return Promise.resolve();
+    }
     if (mode !== UiMode.PARTY) {
       return uiSetMode(mode, ...args);
     }
@@ -836,10 +845,37 @@ it("turntest producer", async () => {
     shown.push(`${name}: ${text}`);
     return uiShowDialogue(text, name, ...rest);
   };
+  // TURN_START: what EncounterPhase queues for a single battle (doTrainerSummon, then end())
+  const queueStart = () => {
+    if (battle.battleType === BattleType.TRAINER) {
+      pm.unshiftNew("SummonPhase", 0, false);
+    }
+    scene.getEnemyField().forEach((p: any, e: number) => {
+      if (p.isShiny(true)) {
+        pm.unshiftNew("ShinySparklePhase", 2 + e);
+      }
+    });
+    const allowed = scene.getPokemonAllowedInBattle();
+    if (!allowed[0].isOnField()) {
+      pm.pushNew("SummonPhase", 0);
+    }
+    if (allowed.length > 1 && allowed[1].isOnField()) {
+      pm.pushNew("ReturnPhase", 1);
+    }
+    pm.pushNew("ToggleDoublePositionPhase", false);
+    if (battle.battleType !== BattleType.TRAINER && (battle.waveIndex > 1 || !scene.gameMode.isDaily) && allowed.length > 1) {
+      pm.pushNew("CheckSwitchPhase", 0, battle.double);
+    }
+    pm.pushNew("InitEncounterPhase");
+  };
   const runTurn = async () => {
     const trace: string[] = [];
     shown = [];
-    pm.pushNew("TurnStartPhase");
+    if (START) {
+      queueStart();
+    } else {
+      pm.pushNew("TurnStartPhase");
+    }
     pm.shiftPhase();
     for (let guard = 0; ; guard++) {
       const ph = pm.getCurrentPhase();
@@ -2001,7 +2037,24 @@ it("turntest producer", async () => {
     let run: { trace: string[]; stop: string };
     let texts: string[];
     try {
+      if (START) {
+        // the battle's start: the player's Pokemon (and a trainer's) not sent out yet; now and
+        // then the first one has fainted (SummonPhase sends the next one)
+        for (const p of battle.battleType === BattleType.TRAINER ? [A, D] : [A]) {
+          scene.field.remove(p);
+        }
+        if (rnd(8) === 0) {
+          A.hp = 0;
+          A.status = new Status(StatusEffect.FAINT);
+        }
+        D.shiny = rnd(5) === 0; // EncounterPhase's sparkle for the enemy field
+        settings.general.battleStyle = rnd(3) === 0 ? BattleStyle.SET : BattleStyle.SWITCH;
+        checkYes = rnd(2) === 0;
+      }
       before = dumpState(true);
+      if (START) {
+        before.push(`START set=${settings.general.battleStyle === BattleStyle.SET ? 1 : 0} yes=${checkYes ? 1 : 0}`);
+      }
       epicks = [];
       run = await runTurn();
       texts = shown;
