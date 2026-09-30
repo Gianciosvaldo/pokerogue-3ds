@@ -516,6 +516,52 @@ void rr_target(rr_screen s, rr_color clear) {
   g_cur = s;
   C2D_TargetClear(g_targets[s], __builtin_bswap32(clear)); /* citro2d wants 0xAABBGGRR */
   C2D_SceneBegin(g_targets[s]);
+  rr_set_blend(RR_BLEND_NORMAL);
+  rr_set_tone(0, 0, 0);
+}
+
+static rr_blend g_blend = RR_BLEND_NORMAL;
+static int g_tone[3];
+
+void rr_set_blend(rr_blend b) {
+  if (b == g_blend) return;
+  C2D_Flush();
+  g_blend = b;
+  if (b == RR_BLEND_ADD)
+    C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_SRC_ALPHA, GPU_ONE, GPU_ZERO, GPU_ONE);
+  else /* citro3d's default */
+    C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_SRC_ALPHA,
+                   GPU_ONE_MINUS_SRC_ALPHA);
+}
+
+static int clamp255(int v) { return v < 0 ? 0 : v > 255 ? 255 : v; }
+
+void rr_set_tone(int r, int g, int b) {
+  if (r == g_tone[0] && g == g_tone[1] && b == g_tone[2]) return;
+  C2D_Flush();
+  g_tone[0] = r, g_tone[1] = g, g_tone[2] = b;
+  /* citro2d uses texenv 0..3 for its image modes, keeps 4 as a no-op and 5 for its fade (unused
+   * here). The tone takes 4 (add the positive part) and 5 (subtract the negative part). */
+  C3D_TexEnv* env = C3D_GetTexEnv(4);
+  C3D_TexEnvInit(env);
+  C3D_TexEnv* env5 = C3D_GetTexEnv(5);
+  C3D_TexEnvInit(env5);
+  if (!r && !g && !b) {
+    /* back to citro2d's stage 5: mix(previous, fade colour, fade alpha) with no fade */
+    C3D_TexEnvSrc(env5, C3D_RGB, GPU_PREVIOUS, GPU_CONSTANT, GPU_CONSTANT);
+    C3D_TexEnvOpRgb(env5, GPU_TEVOP_RGB_SRC_COLOR, GPU_TEVOP_RGB_SRC_COLOR, GPU_TEVOP_RGB_ONE_MINUS_SRC_ALPHA);
+    C3D_TexEnvFunc(env5, C3D_RGB, GPU_INTERPOLATE);
+    C3D_TexEnvColor(env5, 0);
+    return;
+  }
+  u32 pos = (u32)clamp255(r) | (u32)clamp255(g) << 8 | (u32)clamp255(b) << 16;
+  u32 neg = (u32)clamp255(-r) | (u32)clamp255(-g) << 8 | (u32)clamp255(-b) << 16;
+  C3D_TexEnvSrc(env, C3D_RGB, GPU_PREVIOUS, GPU_CONSTANT, 0);
+  C3D_TexEnvFunc(env, C3D_RGB, GPU_ADD);
+  C3D_TexEnvColor(env, pos);
+  C3D_TexEnvSrc(env5, C3D_RGB, GPU_PREVIOUS, GPU_CONSTANT, 0);
+  C3D_TexEnvFunc(env5, C3D_RGB, GPU_SUBTRACT);
+  C3D_TexEnvColor(env5, neg);
 }
 
 void rr_frame_end(void) {

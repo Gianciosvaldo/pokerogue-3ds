@@ -7,9 +7,9 @@ saves from [`assets-pipeline/app-src/`](../assets-pipeline/app-src/), and linkin
 
 Status: the framework is in, and the battle screen plays a demo battle whose turns are **run by
 battle-core** and shown from its events (`battle-core/include/pr/events.h`): the texts upstream
-shows, hits and HP bars, stat changes, faints. The battle itself is built by a stand-in
-(`battle_setup.c`) and the enemy picks random moves; both go when the app drives game-core's run
-(`game-core/include/gc/run.h`) and ai-core.
+shows, move animations, hits and HP bars, stat changes, faints. The enemy's moves come from
+ai-core. The battle itself is built by a stand-in (`battle_setup.c`), which goes when the app
+drives game-core's run (`game-core/include/gc/run.h`).
 
 ## Build and run
 From the repo root (the whole repo is mounted because the game links the cores):
@@ -50,6 +50,7 @@ Every position in the code is upstream's own number in one of these spaces (see 
 | [`tween.h`](include/tween.h) | Phaser's easing functions and a small tween. |
 | [`battle_view.h`](include/battle_view.h) | The battle screen: `bv_begin`, `bv_play(events)`, `bv_ask_command`. |
 | [`battle_events.h`](include/battle_events.h) | battle-core's turn events as battle screen events, with their text rendered from data.pak (`pr_msg_format`). Catches up at the end of a turn on anything battle-core doesn't emit yet (HP, faints). |
+| [`battle_anim.h`](include/battle_anim.h) | Upstream's battle animation player (`BattleAnim` in `battle-anims.ts`): move, common and charge animations from data.pak, their graphic cells, Pokemon copies, backgrounds, sounds, layers. `ba_preload_move` at battle start. |
 | [`battle_setup.h`](include/battle_setup.h) | Stand-in: builds a wild singles battle for the demo until game-core's run drives the app. |
 | [`gen/gm_enum_names.h`](gen/gm_enum_names.h) | Names of battle-core's enums (`gm_enum_camel(GM_E_SPECIES_ID, id, ...)` gives upstream's i18n key). Regenerate with `python3 game/tools/gen_enum_names.py` when battle-core's enums change. |
 
@@ -61,6 +62,13 @@ select, learn move, biome map) is picked up by the Makefile when it exists.
 with their English text (needs upstream's `locales/en`):
 ```
 make -C game/tests && game/tests/build/evtest path/to/pokerogue/locales/en 2
+```
+
+The animation player runs on the PC over every upstream animation file (all moves from both
+sides, the common and charge animations), with ASan, and prints how long each one takes (needs
+upstream's assets checkout and libjansson):
+```
+make -C game/tests animtest && game/tests/build/animtest path/to/pokerogue-assets
 ```
 
 ## Checked against upstream
@@ -78,8 +86,10 @@ make -C game/tests && game/tests/build/evtest path/to/pokerogue/locales/en 2
 - Driving the app from game-core's run (starters, waves, EXP, rewards) instead of the stand-in.
 - Message timing per text (upstream's 500 ms for "X used Y!", prompts after faints): asked of
   battle-core; every text waits 1.5 s for now.
-- Move animations (a lunge stands in), trainer battles, doubles, the ball and party screens,
-  stat stage and shiny effects, boss HP segments, weather and field effects on the field.
+- In move animations: the grey part of a sprite's tone (upstream's shader pushes it far past
+  grey; not reproduced), Substitute, and the KO colour inversion.
+- Trainer battles, doubles, the ball and party screens, stat stage and shiny effects, boss HP
+  segments, weather and field effects on the field.
 - Sound without snd.pak is silent (the packs in the test rig have no sound yet).
 - Forms, variants and gender sprite differences in sprite keys.
 - Title, save slots, starter select and every other screen in the beta plan.
