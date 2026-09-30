@@ -8,7 +8,8 @@ saves from [`assets-pipeline/app-src/`](../assets-pipeline/app-src/), and linkin
 Status: the framework is in, and the battle screen plays a demo battle whose turns are **run by
 battle-core** and shown from its events (`battle-core/include/pr/events.h`): the texts upstream
 shows, move animations, hits and HP bars, stat changes, faints, switching. The enemy's moves come
-from ai-core. POKEMON and a faint open the menus thread's party screen (`menus/`) on the bottom
+from ai-core. A Pokemon in the air or underground (Fly, Dig...) disappears and comes back as
+upstream's SemiInvulnerableTag makes it do. POKEMON and a faint open the menus thread's party screen (`menus/`) on the bottom
 screen to switch; BALL opens the Poke Ball list (throwing one says catching isn't in yet). The battle itself is built by a stand-in (`battle_setup.c`), which goes when the app
 drives game-core's run (`game-core/include/gc/run.h`).
 

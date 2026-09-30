@@ -27,6 +27,8 @@ typedef struct {
   float half_h;           /* half the sprite's displayed height */
   const rr_frame* frame;  /* the sprite's current frame (copies follow its animation) */
   int species;            /* for the cry */
+  bool visible;           /* the Pokemon itself (not just its sprite) is shown: false while it's in
+                           * the air or underground, and then its copies aren't drawn either */
 } ba_mon;
 
 typedef enum { BA_MOVE, BA_COMMON, BA_CHARGE } ba_kind;

@@ -97,7 +97,7 @@ static char g_txt[TXT_MAX][256];
 
 typedef struct {
   int hp, status;
-  bool fainted, present;
+  bool fainted, present, visible;
 } seen_t;
 
 int be_convert(const pr_battle* bt, const pr_engine* e, const bv_mon* shown_player, const bv_mon* shown_enemy,
@@ -105,8 +105,8 @@ int be_convert(const pr_battle* bt, const pr_engine* e, const bv_mon* shown_play
   int n = 0, nt = 0;
   const char* go_text = NULL;
   seen_t seen[4] = {{0}};
-  seen[0] = (seen_t){shown_player->hp, shown_player->status, shown_player->hp <= 0, true};
-  seen[2] = (seen_t){shown_enemy->hp, shown_enemy->status, shown_enemy->hp <= 0, true};
+  seen[0] = (seen_t){shown_player->hp, shown_player->status, shown_player->hp <= 0, true, !shown_player->hidden};
+  seen[2] = (seen_t){shown_enemy->hp, shown_enemy->status, shown_enemy->hp <= 0, true, !shown_enemy->hidden};
   static bv_mon sent[4];
 #define PUT(...)                                    \
   do {                                              \
@@ -117,6 +117,16 @@ int be_convert(const pr_battle* bt, const pr_engine* e, const bv_mon* shown_play
     const pr_event* ev = &e->events[i];
     int b = ev->battler;
     bool single = b == 0 || b == 2; /* singles: the screen shows battlers 0 and 2 */
+    /* In the air or underground: the snapshot after this event says whether the Pokemon is still in
+     * sight, and the change came before the event (the tag goes at MOVE_EFFECT, before the hit's
+     * animation; "X flew up high!" follows the hiding). A switch or a faint changes it their own way. */
+    if (ev->type != PR_EV_SWITCH_OUT && ev->type != PR_EV_SWITCH_IN && ev->type != PR_EV_FAINT)
+      for (int k = 0; k < 4; k += 2)
+        if (seen[k].present && !seen[k].fainted && ev->field[k].species && !ev->field[k].fainted &&
+            ev->field[k].visible != seen[k].visible) {
+          PUT(.type = BEV_VISIBLE, .battler = k, .a = ev->field[k].visible);
+          seen[k].visible = ev->field[k].visible;
+        }
     switch (ev->type) {
       case PR_EV_TEXT:
         if (!ev->msg.key || nt >= TXT_MAX) break;
@@ -176,7 +186,7 @@ int be_convert(const pr_battle* bt, const pr_engine* e, const bv_mon* shown_play
         sent[b].status = ev->field[b].status;
         PUT(.type = BEV_SUMMON, .battler = b, .mon = &sent[b], .text = go_text);
         go_text = NULL;
-        seen[b] = (seen_t){ev->field[b].hp, ev->field[b].status, false, true};
+        seen[b] = (seen_t){ev->field[b].hp, ev->field[b].status, false, true, true};
         break;
       }
       default: /* POKEMON_ANIM, ABILITY_HIDE, SHINY_SPARKLE: not drawn yet */

@@ -700,10 +700,11 @@ void ba_draw(ba_layer layer, const ba_mon field[4]) {
         break;
       }
       case 2:
-        if (field[A.user].on_field) draw_spr(s, field[A.user].frame);
+        /* pokemonSprite.setVisible(frame.visible && user.visible) */
+        if (field[A.user].on_field && field[A.user].visible) draw_spr(s, field[A.user].frame);
         break;
       case 3:
-        if (field[A.target].on_field) draw_spr(s, field[A.target].frame);
+        if (field[A.target].on_field && field[A.target].visible) draw_spr(s, field[A.target].frame);
         break;
     }
   }
