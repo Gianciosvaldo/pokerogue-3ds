@@ -15,14 +15,8 @@ Branch `claude/project-thread-rpdgp5`. Not merged yet; no PR opened because the 
 ## Upstream re-check at the stop
 - CPROBE, seed 777: 2,125 of 2,125 checks match, texts included.
 - START, seed 777, N=300: wild 276/276, trainer 291/291, texts identical. Removing the enemy sparkle is caught.
-- Full regenerated set (84 files, 4 seeds): 80 files 0 mismatches. The 4 `trainer_*` files are NOT clean:
-  777 1 fail, 4242 1, 31337 1, 9001 32 fails (28 text diffs).
-  Pattern seen: the enemy uses Roar/Whirlwind in a trainer battle and upstream prints "But it failed!"
-  (e.g. seed 9001 cases 946, 959, 964); native differs there. Not yet diagnosed. This may already be on main
-  (trainer switches landed with PR #30), so check main against trainer_9001 first.
 - Not run yet: CPROBE and START on seeds 9001/4242/31337.
 
 ## Next steps
-1. Diagnose the trainer Roar/Whirlwind failure (FAIL CASE lines in `build/turntest trainer_9001.txt`).
-2. Run CPROBE (N=2000) and START (with and without TURN_TRAINER) on all 4 seeds; all must be 0 mismatches.
-3. README update for the new API and test modes, then open the PR.
+1. Run CPROBE (N=2000) and START (with and without TURN_TRAINER) on all 4 seeds; all must be 0 mismatches.
+2. README update for the new API and test modes, then open the PR.
