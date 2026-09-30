@@ -41,6 +41,9 @@ typedef struct {
   int boss_segments;
   int8_t stat_stages[7];     /* ATK DEF SPATK SPDEF SPD ACC EVA */
   bool caught_before;        /* the "owned" ball icon on the enemy's box */
+  bool substitute;           /* a Substitute doll stands in front of it (set by the screen as the
+                              * doll's animations play; battle_events.c compares it with
+                              * battle-core's) */
   bool hidden;               /* out of sight in the air, underground or underwater (upstream's
                               * pokemon.setVisible(false) from a SemiInvulnerableTag); the info
                               * box stays */
@@ -62,6 +65,9 @@ typedef enum {
   BEV_FAINT,       /* battler faints: cry, sprite drops, info box leaves */
   BEV_EXP,         /* battler (player), a = new exp ratio x 1000, b = new level (0 = same) */
   BEV_WAIT,        /* a = ms */
+  BEV_POKEMON_ANIM,/* PokemonAnimPhase: battler, a = PokemonAnimType (the Substitute doll's
+                    * ADD, PRE_MOVE, POST_MOVE, REMOVE), or -1: the doll goes without an animation
+                    * (SubstituteTag.onRemove while the Pokemon is in focus) */
   BEV_VISIBLE,     /* battler, a = 0: hide it (SemiInvulnerableTag.onAdd), 1: show it again two
                     * frames later (onRemove); the queue doesn't wait */
 } bev_type;

@@ -11,6 +11,7 @@
 #include "gm_enum_names.h"
 #include "i18n.h"
 #include "pr_data.h"
+#include "pr_enums.h"
 #include "tween.h"
 #include "ui.h"
 #include "ui_text.h"
@@ -33,6 +34,13 @@ typedef struct {
   float hp_shown;     /* the HP bar's displayed hp (tweened) */
   float exp_shown;
   float show_ms;      /* BEV_VISIBLE: ms until the hidden Pokemon shows again */
+  /* the Substitute doll (SubstituteTag.sprite) and the Pokemon stepping aside for it */
+  bool sub_on;        /* the doll is on the field */
+  float sub_alpha;
+  float sub_off;      /* 0..1 of getSubstituteOffset() the Pokemon has moved */
+  float mon_alpha;    /* the Pokemon's alpha (0.5 behind its doll) */
+  bool tint_on, tint_above; /* the doll's white copy (setTintFill) and whether it's over the Pokemon */
+  float tint_scale, tint_alpha;
   char sprite_key[64];
 } side;
 
@@ -90,6 +98,10 @@ static void set_mon(side* sd, const bv_mon* m, bool player) {
   sd->scale = 1;
   sd->black = false;
   sd->show_ms = 0;
+  /* resetSprite: no doll, no offset */
+  sd->sub_on = sd->tint_on = sd->mon.substitute = false;
+  sd->sub_off = 0;
+  sd->mon_alpha = 1;
   ba_show(player ? 0 : 2);
 }
 
@@ -119,6 +131,8 @@ static const rr_frame* sprite_frame(side* sd) {
 }
 
 /* The field as battle animations see it: where each Pokemon stands and its current frame. */
+static void mon_pos(const side* sd, bool player, float* x, float* y);
+
 static void anim_field(ba_mon out[4]) {
   memset(out, 0, 4 * sizeof *out);
   for (int k = 0; k < 2; k++) {
@@ -126,8 +140,7 @@ static void anim_field(ba_mon out[4]) {
     ba_mon* m = &out[k ? 2 : 0];
     m->on_field = sd->present;
     m->player = !k;
-    m->x = k ? 236 + B.enemy_slide : 106;
-    m->y = k ? 84 : 148;
+    mon_pos(sd, !k, &m->x, &m->y);
     m->frame = sprite_frame(sd);
     m->half_h = (m->frame ? m->frame->src_h : 40) * sd->scale / 2;
     m->species = sd->mon.species;
@@ -135,11 +148,37 @@ static void anim_field(ba_mon out[4]) {
   }
 }
 
+/* Where a side's Pokemon stands: its field position plus the Substitute offset (getSubstituteOffset:
+ * the player's steps back left and down, the enemy's right and up). */
+static void mon_pos(const side* sd, bool player, float* x, float* y) {
+  *x = (player ? 106 : 236 + B.enemy_slide) + sd->sub_off * (player ? -30 : 30);
+  *y = (player ? 148 : 84) + sd->sub_off * (player ? 10 : -10);
+}
+
+/* The doll ("pkmn__sub" / "pkmn__back__sub", origin (0.5, 1), half size on the player's side) at
+ * the Pokemon's own field position, and its white copy. */
+static void draw_sub(const side* sd, bool player, bool tint) {
+  const rr_frame* f = img_frame(player ? "images/pokemon/back/sub" : "images/pokemon/sub", NULL);
+  if (!f) return;
+  float scale = player ? 0.5f : 1, alpha = tint ? sd->tint_alpha : sd->sub_alpha;
+  if (tint) scale = sd->tint_scale;
+  if (alpha <= 0 || scale <= 0) return;
+  rr_draw_opts o = RR_DEFAULT_OPTS;
+  o.origin_x = 0.5f;
+  o.origin_y = 1.0f;
+  o.scale_x = o.scale_y = scale;
+  int a = (int)(alpha * 255 + 0.5f);
+  o.tint = RR_RGBA(255, 255, 255, a > 255 ? 255 : a);
+  if (tint) rr_set_tone(255, 255, 255);
+  rr_draw(f, player ? 106 : 236 + B.enemy_slide, player ? 148 : 84, &o);
+  if (tint) rr_set_tone(0, 0, 0);
+}
+
 static void draw_sprite(side* sd, bool player) {
   if (!sd->present || !sd->sprite_on || sd->scale <= 0 || sd->mon.hidden || ba_hidden(player ? 0 : 2)) return;
   const rr_frame* f = sprite_frame(sd);
-  float x = player ? 106 : 236 + B.enemy_slide;
-  float y = player ? 148 : 84;
+  float x, y;
+  mon_pos(sd, player, &x, &y);
   if (!f) {
     rr_rect(x - 20, y - 40 + sd->drop, 40, 40, player ? RR_RGBA(0xd0, 0x60, 0x40, 255) : RR_RGBA(0x50, 0x60, 0xa0, 255));
     return;
@@ -149,6 +188,7 @@ static void draw_sprite(side* sd, bool player) {
   o.origin_y = 1.0f;
   o.scale_x = o.scale_y = sd->scale;
   if (sd->black) o.tint = RR_RGBA(0, 0, 0, 255);
+  else if (sd->mon_alpha < 1) o.tint = RR_RGBA(255, 255, 255, (int)(sd->mon_alpha * 255 + 0.5f));
   if (sd->drop > 0) {
     /* fainting: the sprite sinks below its base line */
     int vis = (int)(f->src_h - sd->drop);
@@ -174,9 +214,16 @@ static void draw_field(void) {
   ba_mon field[4];
   anim_field(field);
   ba_draw(BA_LAYER_BELOW_ENEMY, field);
-  draw_sprite(&B.s[1], false);
+  /* the enemy's doll is added over it; the player's Pokemon is brought over its doll */
+  side *en = &B.s[1], *pl = &B.s[0];
+  draw_sprite(en, false);
+  if (en->present && en->sub_on) draw_sub(en, false, false);
+  if (en->present && en->tint_on) draw_sub(en, false, true);
   ba_draw(BA_LAYER_MID, field);
-  draw_sprite(&B.s[0], true);
+  if (pl->present && pl->sub_on) draw_sub(pl, true, false);
+  if (pl->present && pl->tint_on && !pl->tint_above) draw_sub(pl, true, true);
+  draw_sprite(pl, true);
+  if (pl->present && pl->tint_on && pl->tint_above) draw_sub(pl, true, true);
   ba_draw(BA_LAYER_TOP, field);
 }
 
@@ -424,6 +471,101 @@ static void finish_event(void) {
 static float hp_tween_ms(float from, float to) {
   float d = fabsf(from - to) * 5; /* Phaser.Math.Clamp(|lastHp - hp| * 5, 250, 5000) */
   return d < 250 ? 250 : d > 5000 ? 5000 : d;
+}
+
+/* 0..1 through a tween that starts at `delay` ms and runs `ms` ms, eased */
+static float seg(float t, float delay, float ms, ease_fn f) {
+  float u = (t - delay) / ms;
+  return ease(f, u < 0 ? 0 : u > 1 ? 1 : u);
+}
+
+/* PokemonAnimPhase's Substitute animations at time t (ms). Returns true while running. */
+static bool substitute_anim(side* sd, int type, float t) {
+  bool player = sd == &B.s[0];
+  float full = player ? 0.5f : 1; /* getSpriteScale() * (isPlayer ? 0.5 : 1) */
+  float u;
+  switch (type) {
+    case POKEMON_ANIM_TYPE_SUBSTITUTE_ADD:
+      /* the Pokemon steps aside and fades to half; a white doll grows, then the doll shows and
+       * the white fades off it */
+      if (B.step == 0) ui_play_sound("battle_anims/PRSFX- Transform"), B.step = 1;
+      u = seg(t, 0, 500, EASE_SINE_IN);
+      sd->sub_off = u;
+      sd->mon_alpha = 1 - 0.5f * u;
+      sd->tint_on = true;
+      sd->tint_above = false;
+      if (t < 750) {
+        sd->tint_scale = 0.01f + (full - 0.01f) * seg(t, 250, 500, EASE_CUBIC_IN_OUT);
+        sd->tint_alpha = 1;
+      } else {
+        sd->sub_on = true;
+        sd->sub_alpha = 1;
+        sd->tint_scale = full;
+        sd->tint_alpha = 1 - seg(t, 1000, 1000, EASE_CUBIC_OUT);
+      }
+      if (t < 2000) return true;
+      sd->tint_on = false;
+      sd->mon.substitute = true;
+      return false;
+    case POKEMON_ANIM_TYPE_SUBSTITUTE_PRE_MOVE:
+      /* the doll fades out and the Pokemon comes forward, whole again, to use its move */
+      if (!sd->sub_on) return false;
+      sd->sub_alpha = 1 - seg(t, 0, 500, EASE_SINE_IN_OUT);
+      u = seg(t, 250, 500, EASE_SINE_IN_OUT);
+      sd->sub_off = 1 - u;
+      sd->mon_alpha = 0.5f + 0.5f * u;
+      return t < 750;
+    case POKEMON_ANIM_TYPE_SUBSTITUTE_POST_MOVE:
+      if (!sd->sub_on) return false;
+      u = seg(t, 0, 500, EASE_SINE_IN_OUT);
+      sd->sub_off = u;
+      sd->mon_alpha = 1 - 0.5f * u;
+      sd->sub_alpha = seg(t, 250, 500, EASE_SINE_IN_OUT);
+      return t < 750;
+    case POKEMON_ANIM_TYPE_SUBSTITUTE_REMOVE: {
+      /* a white doll fades in over it, the doll goes, the white one flashes 8 times (100 ms
+       * apart, from the first frame: startAt 200 > delay 100) and shrinks away while the Pokemon
+       * steps back */
+      if (!sd->sub_on && !sd->tint_on) return false;
+      sd->tint_on = true;
+      sd->tint_above = true;
+      sd->tint_scale = full;
+      if (t < 500) {
+        sd->tint_alpha = seg(t, 0, 500, EASE_SINE_IN_OUT);
+        return true;
+      }
+      sd->sub_on = false;
+      sd->tint_alpha = 1;
+      /* Phaser's timer (delay 100, startAt 200) runs its first two callbacks on the first two
+       * frames, then one every 100 ms: callback k (0..7) is at 0, 17, 117, 217... after the fade.
+       * The copy shows on even repeatCount (7 - k), and each callback plays a sound. */
+      float ft = t - 500;
+      int k = ft < 0 ? -1 : ft < 17 ? 0 : ft < 117 ? 1 : 1 + (int)((ft - 17) / 100);
+      if (k > 7) k = 7;
+      if (k > B.step - 1) {
+        ui_play_sound("battle_anims/PRSFX- Substitute2");
+        B.step = k + 1;
+      }
+      if ((7 - k) % 2) sd->tint_alpha = 0;
+      if (k < 7) return true;
+      float t0 = 500 + 617;
+      /* ("Sine.cubicEaseIn" isn't a Phaser ease name, so Phaser falls back to linear) */
+      sd->tint_scale = 0.01f + (full - 0.01f) * (1 - seg(t, t0, 500, EASE_LINEAR));
+      u = seg(t, t0 + 250, 500, EASE_SINE_IN_OUT);
+      sd->sub_off = 1 - u;
+      sd->mon_alpha = 0.5f + 0.5f * u;
+      if (t < t0 + 750) return true;
+      sd->tint_on = sd->mon.substitute = false;
+      sd->sub_off = 0;
+      sd->mon_alpha = 1;
+      return false;
+    }
+    default: /* -1: the tag went while the Pokemon was in focus (sprite.destroy()) */
+      sd->sub_on = sd->tint_on = sd->mon.substitute = false;
+      sd->sub_off = 0;
+      sd->mon_alpha = 1;
+      return false;
+  }
 }
 
 static void run_event(float dt) {
@@ -689,6 +831,10 @@ static void run_event(float dt) {
 
     case BEV_WAIT:
       if (B.t >= e->a) finish_event();
+      break;
+
+    case BEV_POKEMON_ANIM:
+      if (!substitute_anim(sd, e->a, B.t)) finish_event();
       break;
 
     case BEV_VISIBLE:

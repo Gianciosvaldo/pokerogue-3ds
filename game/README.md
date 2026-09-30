@@ -9,7 +9,8 @@ Status: the framework is in, and the battle screen plays a demo battle whose tur
 battle-core** and shown from its events (`battle-core/include/pr/events.h`): the texts upstream
 shows, move animations, hits and HP bars, stat changes, faints, switching. The enemy's moves come
 from ai-core. A Pokemon in the air or underground (Fly, Dig...) disappears and comes back as
-upstream's SemiInvulnerableTag makes it do. POKEMON and a faint open the menus thread's party screen (`menus/`) on the bottom
+upstream's SemiInvulnerableTag makes it do. A Substitute doll stands in front of its Pokemon, which
+steps aside and fades (PokemonAnimPhase's add, pre-move, post-move and remove animations). POKEMON and a faint open the menus thread's party screen (`menus/`) on the bottom
 screen to switch; BALL opens the Poke Ball list (throwing one says catching isn't in yet). The battle itself is built by a stand-in (`battle_setup.c`), which goes when the app
 drives game-core's run (`game-core/include/gc/run.h`).
 
@@ -97,7 +98,8 @@ make -C game/tests animtest && game/tests/build/animtest path/to/pokerogue-asset
 - Message timing per text (upstream's 500 ms for "X used Y!", prompts after faints): asked of
   battle-core; every text waits 1.5 s for now.
 - In move animations: the grey part of a sprite's tone (upstream's shader pushes it far past
-  grey; not reproduced), Substitute, and the KO colour inversion.
+  grey; not reproduced), hitting a Substitute doll (animations aimed at the doll, `onSubstitute`),
+  and the KO colour inversion.
 - Catching and fleeing (battle-core), so a thrown ball and RUN are placeholders.
 - Trainer battles, doubles, stat stage and shiny effects, boss HP
   segments, weather and field effects on the field.

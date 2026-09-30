@@ -97,7 +97,7 @@ static char g_txt[TXT_MAX][256];
 
 typedef struct {
   int hp, status;
-  bool fainted, present, visible;
+  bool fainted, present, visible, substitute;
 } seen_t;
 
 int be_convert(const pr_battle* bt, const pr_engine* e, const bv_mon* shown_player, const bv_mon* shown_enemy,
@@ -105,8 +105,8 @@ int be_convert(const pr_battle* bt, const pr_engine* e, const bv_mon* shown_play
   int n = 0, nt = 0;
   const char* go_text = NULL;
   seen_t seen[4] = {{0}};
-  seen[0] = (seen_t){shown_player->hp, shown_player->status, shown_player->hp <= 0, true, !shown_player->hidden};
-  seen[2] = (seen_t){shown_enemy->hp, shown_enemy->status, shown_enemy->hp <= 0, true, !shown_enemy->hidden};
+  seen[0] = (seen_t){shown_player->hp, shown_player->status, shown_player->hp <= 0, true, !shown_player->hidden, shown_player->substitute};
+  seen[2] = (seen_t){shown_enemy->hp, shown_enemy->status, shown_enemy->hp <= 0, true, !shown_enemy->hidden, shown_enemy->substitute};
   static bv_mon sent[4];
 #define PUT(...)                                    \
   do {                                              \
@@ -186,10 +186,17 @@ int be_convert(const pr_battle* bt, const pr_engine* e, const bv_mon* shown_play
         sent[b].status = ev->field[b].status;
         PUT(.type = BEV_SUMMON, .battler = b, .mon = &sent[b], .text = go_text);
         go_text = NULL;
-        seen[b] = (seen_t){ev->field[b].hp, ev->field[b].status, false, true, true};
+        seen[b] = (seen_t){ev->field[b].hp, ev->field[b].status, false, true, true, ev->field[b].substitute};
         break;
       }
-      default: /* POKEMON_ANIM, ABILITY_HIDE, SHINY_SPARKLE: not drawn yet */
+      case PR_EV_POKEMON_ANIM:
+        /* the Substitute doll's animations (Commander's aren't drawn yet) */
+        if (single && ev->id <= POKEMON_ANIM_TYPE_SUBSTITUTE_REMOVE) {
+          PUT(.type = BEV_POKEMON_ANIM, .battler = b, .a = ev->id);
+          seen[b].substitute = ev->id != POKEMON_ANIM_TYPE_SUBSTITUTE_REMOVE;
+        }
+        break;
+      default: /* ABILITY_HIDE, SHINY_SPARKLE: not drawn yet */
         break;
     }
     /* status icons follow the snapshot */
@@ -208,6 +215,9 @@ int be_convert(const pr_battle* bt, const pr_engine* e, const bv_mon* shown_play
     else if (p->hp > seen[k].hp) PUT(.type = BEV_HEAL, .battler = k, .a = p->hp);
     if (p->status != seen[k].status) PUT(.type = BEV_STATUS, .battler = k, .a = p->status);
     if (p->hp <= 0 && !seen[k].fainted) PUT(.type = BEV_FAINT, .battler = k);
+    /* a doll gone without its animation (SubstituteTag.onRemove while the Pokemon was in focus) */
+    if (seen[k].substitute && !pr_get_battler_tag(p, BATTLER_TAG_TYPE_SUBSTITUTE))
+      PUT(.type = BEV_POKEMON_ANIM, .battler = k, .a = -1);
   }
 #undef PUT
   return n;
