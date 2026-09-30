@@ -4,12 +4,109 @@
  * fixed classic battles and mystery encounters become wild battles, a double battle is played as a
  * single one (the M1 rule), and a wild double's second enemy isn't made. */
 #include "internal.h"
+#include <stdio.h>
+
+/* run-core's trainer entry for a TrainerType (the table skips the unused numbers), NULL = none */
+static const pr_trainer_info *trainer_info(int type)
+{
+    int lo = 0, hi = pr_trainer_count - 1;
+    while (lo <= hi) {
+        const int mid = (lo + hi) / 2;
+        if (pr_trainers[mid].type == type) return &pr_trainers[mid];
+        if (pr_trainers[mid].type < type) lo = mid + 1; else hi = mid - 1;
+    }
+    return NULL;
+}
+
+const gc_trainer_config *gc_trainer_config_of(int type)
+{
+    int lo = 0, hi = gc_trainer_config_count - 1;
+    while (lo <= hi) {
+        const int mid = (lo + hi) / 2;
+        if (gc_trainer_configs[mid].type == type) return &gc_trainer_configs[mid];
+        if (gc_trainer_configs[mid].type < type) lo = mid + 1; else hi = mid - 1;
+    }
+    return NULL;
+}
+
+/* trainersCommon's key for a name run-core rolled (index `n` among the class's names), into out */
+static void name_key(char *out, size_t cap, const char *class_key, const char *gender, int n)
+{
+    snprintf(out, cap, "$t(trainersCommon:%s%s.%d)", class_key, gender, n + 1);
+}
+
+/* Copies tpl into out with each @N / @P replaced by n / p */
+static void fill_names(char *out, size_t cap, const char *tpl, const char *n, const char *p)
+{
+    size_t o = 0;
+    for (; *tpl && o + 1 < cap; tpl++) {
+        const char *put = tpl[0] == '@' && tpl[1] == 'N' ? n : tpl[0] == '@' && tpl[1] == 'P' ? p : NULL;
+        if (!put) { out[o++] = *tpl; continue; }
+        while (*put && o + 1 < cap) out[o++] = *put++;
+        tpl++;
+    }
+    out[o] = 0;
+}
+
+/* Trainer.getName for the current trainer (run->trainer_names), from the templates the dump took from
+ * upstream's getName and the names run-core rolled. The texts sit in a ring of three, so a message of
+ * the battle before that is still queued keeps its name. A double-only pair (Twins) has one name,
+ * "Amy & May", which upstream splits in two: its send-out here names both */
+void gc_trainer_names(gc_run *run)
+{
+    gc_internal *in = gc_int(run);
+    for (int i = 0; i < GC_TNAME_COUNT_; i++) run->trainer_names[i] = NULL;
+    const gc_trainer_config *c = run->battle_type == BATTLE_TYPE_TRAINER ? gc_trainer_config_of(run->trainer_type) : NULL;
+    const int v = run->trainer_variant;
+    if (!c || v < 0 || v > 2) return;
+    in->name_ring = (uint8_t)((in->name_ring + 1) % 3);
+    /* the Trainer constructor: the name from trainersCommon:<class>, .male/.female by variant when the
+     * class has them; a partner's from .female when it has it */
+    const pr_trainer_info *t = trainer_info(run->trainer_type);
+    char n[80] = "", p[80] = "";
+    if (c->class_key && run->trainer_name >= 0)
+        name_key(n, sizeof n, c->class_key,
+                 t && t->names_male >= 0 ? (v == TRAINER_VARIANT_FEMALE ? ".female" : ".male") : "", run->trainer_name);
+    if (c->class_key && run->trainer_partner_name >= 0)
+        name_key(p, sizeof p, c->class_key, t && t->names_female >= 0 ? ".female" : "", run->trainer_partner_name);
+    for (int i = 0; i < GC_TNAME_COUNT_; i++) {
+        char *out = in->name_text[in->name_ring][i];
+        const char *tpl = gc_trainer_name_templates[c->names[v][i]];
+        if (c->double_only && !p[0]) {
+            /* the pair's one name stands for "@N & @P", and for each half */
+            char whole[128];
+            const char *pair = strstr(tpl, "@N & @P");
+            if (pair) {
+                snprintf(whole, sizeof whole, "%.*s@N%s", (int)(pair - tpl), tpl, pair + 7);
+                tpl = whole;
+            }
+            fill_names(out, sizeof in->name_text[0][0], tpl, n, n);
+        } else {
+            fill_names(out, sizeof in->name_text[0][0], tpl, n, p);
+        }
+        run->trainer_names[i] = out;
+        /* the message argument gc_m_trainer gives until messages can take a text with several keys: the
+         * one key when the name is just that, else the name after the title (the second key) */
+        char *arg = in->name_arg[in->name_ring][i];
+        arg[0] = 0;
+        int segs = 0;
+        for (const char *q = strstr(out, "$t("); q; q = strstr(q, "$t(")) {
+            const char *e = strchr(q, ')');
+            if (!e) break;
+            if (segs++ < 2) snprintf(arg, sizeof in->name_arg[0][0], "%.*s", (int)(e - q - 3), q + 3);
+            q = e;
+        }
+        const size_t len = strlen(out);
+        if (segs == 1 && !strncmp(out, "$t(", 3) && out[len - 1] == ')') in->name_exact[in->name_ring] |= (uint8_t)(1u << i);
+        else in->name_exact[in->name_ring] &= (uint8_t)~(1u << i);
+    }
+}
 
 /* trainer.getPartyTemplate(), as run-core's newbattle.c resolves it for the Battle constructor */
 static const pr_party_template *party_template(const pr_run *run, int trainer_type, int index, int prev_wave)
 {
-    if (trainer_type < 0 || trainer_type >= pr_trainer_count) return NULL;
-    const pr_trainer_info *t = &pr_trainers[trainer_type];
+    const pr_trainer_info *t = trainer_info(trainer_type);
+    if (!t) return NULL;
     if (!t->has_template_func) return index >= 0 && index < t->n_templates ? &pr_party_templates[t->templates[index]] : NULL;
     const pr_template_segment *best = NULL;
     for (int i = 0; i < t->n_segments; i++) {
@@ -134,8 +231,8 @@ static bool gen_trainer(gc_run *run, const pr_new_battle *nb, int prev_wave)
     pr_trainer_party_ctx tc;
     memset(&tc, 0, sizeof tc);
     enemy_ctx(run, &tc.enemy);
-    const pr_trainer_info *t = &pr_trainers[nb->trainer_type];
-    tc.is_double = t->double_only || nb->variant == TRAINER_VARIANT_DOUBLE;
+    const pr_trainer_info *t = trainer_info(nb->trainer_type);
+    tc.is_double = (t && t->double_only) || nb->variant == TRAINER_VARIANT_DOUBLE;
     tc.classic_wave20_trainer = run->wave == 20 && run->run.mode == GAME_MODES_CLASSIC;
     tc.template_ = tpl;
     tc.n_levels = nb->n_levels;
@@ -185,6 +282,7 @@ void gc_new_battle(gc_run *run)
     run->n_enemy = 0;
     run->n_enemy_items = 0;
     run->trainer_type = run->trainer_variant = -1;
+    run->trainer_name = run->trainer_partner_name = -1;
     gc_ai_reset(run);
     in->reroll_count = 0;
 
@@ -218,6 +316,8 @@ void gc_new_battle(gc_run *run)
     run->battle_type = nb.battle_type;
     run->trainer_type = nb.trainer_type;
     run->trainer_variant = nb.variant;
+    run->trainer_name = (int16_t)nb.name;
+    run->trainer_partner_name = (int16_t)nb.partner_name;
     memcpy(run->battle_seed, nb.battle_seed, sizeof run->battle_seed);
 
     /* doPostBattleCleanup (not for the first battle): Pokerus spreads */
@@ -238,6 +338,7 @@ void gc_new_battle(gc_run *run)
         run->run.unported = before;
         run->battle_type = BATTLE_TYPE_WILD;
         run->trainer_type = run->trainer_variant = -1;
+        run->trainer_name = run->trainer_partner_name = -1;
         pr_run_reset_seed(&run->run, wave);
         if (!gen_wild(run, nb.levels[0])) {
             /* last resort: the lead of the player's species list at the wave's level */
@@ -258,6 +359,7 @@ void gc_new_battle(gc_run *run)
     }
     enemy_items(run);
     gc_ai_enemy_party(run);
+    gc_trainer_names(run);
     /* arena.setBiomeWeather / setBiomeTerrain on a new biome: not ported (they roll on the RNG) */
     run->run.unported = before;
 
@@ -274,7 +376,7 @@ void gc_new_battle(gc_run *run)
     pr_run_reset_seed(&run->run, wave);
 
     if (run->battle_type == BATTLE_TYPE_TRAINER) {
-        gc_ev_msg(run, "battle:trainerAppeared", 1, gc_m_trainer(run, "trainerName"));
+        gc_ev_msg(run, "battle:trainerAppeared", 1, gc_m_trainer(run, "trainerName", GC_TNAME_TITLED));
     } else {
         gc_ev_msg(run, "battle:singleWildAppeared", 1, gc_m_mon_name(run, "pokemonName", 1, 0));
     }
@@ -284,7 +386,7 @@ void gc_new_battle(gc_run *run)
                        || in->last_battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER || in->last_final_boss;
     const bool sent_out = gc_battle_setup_field(run, reset);
     if (run->battle_type == BATTLE_TYPE_TRAINER)
-        gc_ev_msg(run, "battle:trainerSendOut", 2, gc_m_trainer(run, "trainerName"), gc_m_mon_name(run, "pokemonName", 1, 0));
+        gc_ev_msg(run, "battle:trainerSendOut", 2, gc_m_trainer(run, "trainerName", GC_TNAME_TRAINER), gc_m_mon_name(run, "pokemonName", 1, 0));
     if (sent_out) gc_ev_msg(run, "battle:playerGo", 1, gc_m_mon(run, "pokemonName", 0, gc_player_active_index(run)));
     /* LevelCapPhase, after a new biome's encounter */
     if (new_biome && run->bt.max_exp_level > in->last_max_exp_level)

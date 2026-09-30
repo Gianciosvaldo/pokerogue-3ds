@@ -63,6 +63,11 @@ typedef struct {
     double last_max_exp_level;  /* getMaxExpLevel() when it ended, for LevelCapPhase */
     bool pending_trainer_victory;
     bool at_save_point;         /* from GC_EV_SAVE_POINT until the battle's first turn runs (gc_run_can_save) */
+    /* gc_trainer_names' ring: run->trainer_names' texts, gc_m_trainer's key for each and whether that
+     * key is the whole name (bit per GC_TNAME_*) */
+    uint8_t name_ring, name_exact[3];
+    char name_text[3][GC_TNAME_COUNT_][128];
+    char name_arg[3][GC_TNAME_COUNT_][72];
 } gc_internal;
 gc_internal *gc_int(gc_run *run);
 
@@ -82,7 +87,7 @@ gc_event *gc_ev_new(gc_run *run, int kind);
 void gc_ev_msg(gc_run *run, const char *key, int n, ...);   /* n pr_msg_arg values follow */
 pr_msg_arg gc_m_mon(gc_run *run, const char *name, int side, int idx);   /* getPokemonNameWithAffix */
 pr_msg_arg gc_m_mon_name(gc_run *run, const char *name, int side, int idx);   /* getNameToRender */
-pr_msg_arg gc_m_trainer(gc_run *run, const char *name);                  /* the trainer's name */
+pr_msg_arg gc_m_trainer(gc_run *run, const char *name, int which);       /* trainer.getName (GC_TNAME_*) */
 pr_msg_arg gc_m_item(const char *name, const char *item_key);            /* a modifier type's name */
 void gc_ev_battle(gc_run *run);                   /* battle-core's events of the last call, as GC_EV_BATTLE */
 void gc_stub(gc_run *run, int which);
@@ -117,6 +122,7 @@ double gc_apply_exp_boosters(const gc_run *run, double exp);          /* ExpBoos
 
 /* ---- the encounter and the battle (src/encounter.c, src/battle.c) ---- */
 void gc_new_battle(gc_run *run);                  /* NewBattlePhase + EncounterPhase */
+void gc_trainer_names(gc_run *run);               /* run->trainer_names for the current trainer */
 bool gc_is_new_biome(const gc_run *run, int wave);   /* isNewBiome for the battle of `wave` */
 bool gc_battle_setup_field(gc_run *run, bool reset_arena);   /* bt from the parties, before the first turn */
 void gc_ai_reset(gc_run *run);                    /* ai-core's state for a new battle */

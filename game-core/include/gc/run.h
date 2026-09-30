@@ -184,6 +184,15 @@ typedef struct {
 #define GC_MAX_EVENTS 256
 #define GC_MAX_UNPORTED (PR_FEAT_COUNT_ + 16)
 #define GC_MAX_BATTLE_EVENTS 384
+/* The Trainer.getName calls the game makes (gc_run.trainer_names) */
+enum {
+    GC_TNAME_TITLED,            /* getName(NONE, true): appeared, defeated */
+    GC_TNAME_TRAINER,           /* getName(TRAINER): sends out, comes back */
+    GC_TNAME_PARTNER,           /* getName(TRAINER_PARTNER): a double's second Pokemon */
+    GC_TNAME_SPEAKER,           /* getName(TRAINER, true): the victory dialogue's speaker */
+    GC_TNAME_COUNT_
+};
+
 typedef struct gc_run {
     int api_version;
     pr_run run;                 /* run-core: mode, seed, wave seed, Phaser.Math.RND */
@@ -207,6 +216,11 @@ typedef struct gc_run {
     bool in_battle;
     int battle_type;            /* BattleType */
     int trainer_type, trainer_variant;   /* -1 = none */
+    int16_t trainer_name, trainer_partner_name;   /* run-core's rolled locale name indexes, -1 = none */
+    /* Trainer.getName as upstream builds it, by GC_TNAME_*: text with $t(key) where upstream translates
+     * (i18next's nesting syntax), e.g. "$t(trainerClasses:aceTrainer) $t(trainersCommon:aceTrainer.male.3)"
+     * or "$t(titles:gymLeader) $t(trainerNames:brock)". NULL = no trainer */
+    const char *trainer_names[GC_TNAME_COUNT_];
     char battle_seed[17];
     gc_mon enemy[6];
     int n_enemy;
@@ -251,6 +265,8 @@ enum {
     GC_STUB_POST_BATTLE,        /* PostBattle abilities (Pickup, Honey Gather), Pay Day money, lapsing items */
     GC_STUB_ENEMY_SWITCH,       /* the AI switched a trainer's Pokemon out: battle-core doesn't run the enemy
                                  * side's SwitchSummonPhase yet, so the enemy does nothing that turn */
+    GC_STUB_TRAINER_TITLE,      /* a trainer's name in a message without its title ("Aaron" for "Ace Trainer
+                                 * Aaron"): battle-core's messages take one locale key per argument */
     GC_STUB_COUNT_
 };
 extern const char *const gc_stub_name[GC_STUB_COUNT_];

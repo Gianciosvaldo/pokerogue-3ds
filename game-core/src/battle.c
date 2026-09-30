@@ -450,7 +450,7 @@ bool gc_battle_trainer_next(gc_run *run)
             if (old) old->on_field = false;
             summon(run, 1, i);
             gc_stub(run, GC_STUB_TRAINER_NEXT);
-            gc_ev_msg(run, "battle:trainerSendOut", 2, gc_m_trainer(run, "trainerName"), gc_m_mon_name(run, "pokemonName", 1, i));
+            gc_ev_msg(run, "battle:trainerSendOut", 2, gc_m_trainer(run, "trainerName", GC_TNAME_TRAINER), gc_m_mon_name(run, "pokemonName", 1, i));
             return true;
         }
     }

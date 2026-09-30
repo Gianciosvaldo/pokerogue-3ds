@@ -1,6 +1,7 @@
 /* game-core's generated tables (gen/out/gc_<name>.c, dumped from upstream by gen/dump-<name>.test.ts). */
 #ifndef GC_DATA_H
 #define GC_DATA_H
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -31,5 +32,22 @@ extern const gc_evo_cond gc_evo_conds[];
 typedef struct { uint16_t id; uint8_t cost; } gc_starter_cost_entry;
 extern const gc_starter_cost_entry gc_starter_costs[];
 extern const int gc_starter_cost_count;
+
+/* A trainer config, as Trainer.getName and the money reward read it (gen/out/gc_trainers.c) */
+typedef struct {
+    uint16_t type;              /* TrainerType */
+    const char *class_key;      /* trainersCommon:<class_key>: its personal names; NULL = it has none */
+    double money_multiplier;    /* config.moneyMultiplier */
+    bool is_boss, double_only;
+    uint8_t n_reward_funcs;     /* config.modifierRewardFuncs.length: the rewards TrainerVictoryPhase gives */
+    /* by TrainerVariant, then GC_TNAME_* (gc/run.h): the name as a gc_trainer_name_templates index. A
+     * template is text with $t(key) where upstream translates; @N and @P stand for the trainer's and the
+     * partner's personal names */
+    uint16_t names[3][4];
+} gc_trainer_config;
+extern const gc_trainer_config gc_trainer_configs[];   /* ascending TrainerType */
+extern const int gc_trainer_config_count;
+extern const char *const gc_trainer_name_templates[];
+const gc_trainer_config *gc_trainer_config_of(int type);   /* NULL = no such config */
 
 #endif

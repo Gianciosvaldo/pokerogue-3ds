@@ -7,6 +7,7 @@
 _Static_assert(sizeof(gc_internal) <= sizeof(((gc_run *)0)->internal_), "gc_run.internal_ is too small");
 _Static_assert(PR_AI_FEAT_COUNT_ <= GC_MAX_UNPORTED, "gc_run.unported is too small for ai-core's ids");
 _Static_assert(GC_STUB_COUNT_ <= 16, "gc_run.stubs is too small");
+_Static_assert(sizeof(gc_trainer_configs[0].names[0]) / sizeof(uint16_t) == GC_TNAME_COUNT_, "gc_trainer_config.names");
 gc_internal *gc_int(gc_run *run) { return (gc_internal *)(void *)run->internal_; }
 
 const char *const gc_stub_name[GC_STUB_COUNT_] = {
@@ -24,6 +25,7 @@ const char *const gc_stub_name[GC_STUB_COUNT_] = {
     [GC_STUB_TRAINER_REWARDS] = "trainer's own rewards",
     [GC_STUB_POST_BATTLE] = "post-battle abilities, Pay Day, lapsing items",
     [GC_STUB_ENEMY_SWITCH] = "trainer's switch-out (enemy loses the turn)",
+    [GC_STUB_TRAINER_TITLE] = "trainer's name without its title in a message",
 };
 
 void gc_stub(gc_run *run, int which)
@@ -77,11 +79,21 @@ pr_msg_arg gc_m_mon_name(gc_run *run, const char *name, int side, int idx)
     return pr_arg_pokemon_name(&run->bt, name, &m->b);
 }
 
-/* trainer.getName(): the trainer classes' and names' locale keys aren't dumped yet */
-pr_msg_arg gc_m_trainer(gc_run *run, const char *name)
+/* trainer.getName() (GC_TNAME_*) as a message argument. A name that is one locale key goes as that key;
+ * a title and a name ("$t(trainerClasses:aceTrainer) $t(trainersCommon:aceTrainer.male.3)") need more
+ * than one argument can hold, so the name goes without its title for now (GC_STUB_TRAINER_TITLE;
+ * gc_trainer_names picks the key) */
+pr_msg_arg gc_m_trainer(gc_run *run, const char *name, int which)
 {
-    (void)run;
-    pr_msg_arg a = {name, PR_ARG_STR, 0, "Trainer"};
+    gc_internal *in = gc_int(run);
+    pr_msg_arg a = {name, PR_ARG_STR, 0, ""};
+    const char *t = run->trainer_names[which];
+    if (!t) return a;
+    const char *k = in->name_arg[in->name_ring][which];
+    if (!k[0]) { a.s = t; return a; }   /* plain text: a class with no names, as upstream prints it */
+    if (!(in->name_exact[in->name_ring] >> which & 1)) gc_stub(run, GC_STUB_TRAINER_TITLE);
+    a.kind = PR_ARG_KEY;
+    a.s = k;
     return a;
 }
 
@@ -248,6 +260,7 @@ void gc_run_new(gc_run *run, int mode, const char *seed, uint32_t entropy)
     run->money = pr_run_get_starting_money(&run->run);
     run->pokeballs[POKEBALL_TYPE_POKEBALL] = 5;
     run->trainer_type = run->trainer_variant = -1;
+    run->trainer_name = run->trainer_partner_name = -1;
     run->screen.kind = GC_SCREEN_STARTERS;
 }
 

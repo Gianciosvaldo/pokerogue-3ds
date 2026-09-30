@@ -285,12 +285,13 @@ static void battle_end(gc_run *run, gc_rphase *p)
 /* ---- TrainerVictoryPhase / MoneyRewardPhase ---- */
 static void trainer_victory(gc_run *run)
 {
-    /* the trainer config's moneyMultiplier isn't dumped yet: 1 */
+    const gc_trainer_config *c = gc_trainer_config_of(run->trainer_type);
     gc_rphase p = gc_rp(RP_MONEY_REWARD, 0, 0, 0);
-    p.d = 1;
+    p.d = c ? c->money_multiplier : 1;   /* config.moneyMultiplier */
     gc_rq_unshift(run, p);
-    gc_stub(run, GC_STUB_TRAINER_REWARDS);   /* modifierRewardFuncs, vouchers */
-    gc_ev_msg(run, "battle:trainerDefeated", 1, gc_m_trainer(run, "trainerName"));
+    /* the config's modifierRewardFuncs, and a boss's voucher */
+    if (c && (c->n_reward_funcs || c->is_boss)) gc_stub(run, GC_STUB_TRAINER_REWARDS);
+    gc_ev_msg(run, "battle:trainerDefeated", 1, gc_m_trainer(run, "trainerName", GC_TNAME_TITLED));
 }
 
 static void money_reward(gc_run *run, double mult)

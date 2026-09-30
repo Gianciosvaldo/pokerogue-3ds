@@ -98,7 +98,8 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 | No weather roll for a new biome | port of `getRandomWeatherType` |
 | Evolution conditions on items, held items or the dex aren't met | reward-core, the dex |
 | No catching or fleeing | battle-core (AttemptCapturePhase, AttemptRunPhase) |
-| A trainer's own rewards and money multiplier aren't given (x1 money) | a trainer config dump |
+| A trainer's own rewards (the config's reward items, a boss's voucher) aren't given | reward-core |
+| A trainer's name in a message goes without its title ("Aaron would like to battle!" for "Ace Trainer Aaron would like to battle!") | battle-core: a message argument made of several locale keys |
 | Pickup, Honey Gather, Pay Day, lapsing items | reward-core |
 
 Not started: the dex and starter unlocks, eggs, the "Will you switch?" prompt at a trainer's new Pokémon, Imprison and the
@@ -108,6 +109,15 @@ battles' trainers, form learnsets, and the prevolution-move messages.
 
 ## Data
 
-`gen/out/gc_evolutions.c` (each species' evolutions and their conditions) and `gen/out/gc_starters.c`
-(starter costs and the default unlocked starters) are dumped from upstream. To dump them again from an
+`gen/out/gc_evolutions.c` (each species' evolutions and their conditions), `gen/out/gc_starters.c`
+(starter costs and the default unlocked starters) and `gen/out/gc_trainers.c` (each trainer config's
+money multiplier, boss flag, reward count and names) are dumped from upstream. To dump them again from an
 upstream checkout prepared by `battle-core/tools/setup-upstream.sh`: `tools/redump.sh <upstream dir>`.
+
+Trainer names are upstream's own `Trainer.getName`, run by the dump on every config and variant for the
+calls the game makes (`GC_TNAME_*`: the titled name of the appeared and defeated messages, the send-out
+names, the victory speaker) with `i18next.t` swapped for one that returns `$t(key)`. So a name is text
+with `$t(key)` segments, i18next's nesting syntax: `$t(titles:gymLeader) $t(trainerNames:brock)`, or
+`$t(trainerClasses:aceTrainer) @N` where game-core puts the personal name run-core rolled
+(`$t(trainersCommon:aceTrainer.male.3)`). `run->trainer_names` has them. A double-only pair (Twins) has
+one name, "Amy & May", which upstream splits for each twin's send-out; here both send-outs name the pair.

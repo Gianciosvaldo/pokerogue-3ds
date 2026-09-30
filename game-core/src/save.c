@@ -49,7 +49,7 @@ typedef struct {
     int32_t n_items, n_enemy_items;
     pr_me_save me;
     bool in_battle;
-    int32_t battle_type, trainer_type, trainer_variant;
+    int32_t battle_type, trainer_type, trainer_variant, trainer_name, trainer_partner_name;
     char battle_seed[17];
     int32_t n_enemy;
     /* game-core's own */
@@ -69,6 +69,7 @@ static const sfield run_fields[] = {
     SF(sv_run, trainer_id), SF(sv_run, secret_id), SF(sv_run, pokeballs), SF(sv_run, n_party),
     SF(sv_run, party_order), SF(sv_run, n_items), SF(sv_run, n_enemy_items), SF(sv_run, me),
     SF(sv_run, in_battle), SF(sv_run, battle_type), SF(sv_run, trainer_type), SF(sv_run, trainer_variant),
+    SF(sv_run, trainer_name), SF(sv_run, trainer_partner_name),
     SF(sv_run, battle_seed), SF(sv_run, n_enemy), SF(sv_run, last_battle_type), SF(sv_run, last_final_boss),
     SF(sv_run, lock_rarities), SF(sv_run, last_max_exp_level), SF(sv_run, stub_rng), SF(sv_run, weather),
     SF(sv_run, terrain), SF(sv_run, weather_turns_left), SF(sv_run, weather_max_duration),
@@ -338,6 +339,8 @@ size_t gc_run_save(const gc_run *run, void *buf, size_t cap)
     v.battle_type = run->battle_type;
     v.trainer_type = run->trainer_type;
     v.trainer_variant = run->trainer_variant;
+    v.trainer_name = run->trainer_name;
+    v.trainer_partner_name = run->trainer_partner_name;
     memcpy(v.battle_seed, run->battle_seed, sizeof v.battle_seed);
     v.n_enemy = run->n_enemy;
     v.last_battle_type = in->last_battle_type;
@@ -471,6 +474,7 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
 
     sv_run v;
     memset(&v, 0, sizeof v);
+    v.trainer_name = v.trainer_partner_name = -1;   /* a save without them: no names rolled */
     v.last_battle_type = -1;
     int dropped = 0;
     reader r = section(&body, "run");
@@ -518,6 +522,8 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     run->battle_type = v.battle_type;
     run->trainer_type = v.trainer_type;
     run->trainer_variant = v.trainer_variant;
+    run->trainer_name = (int16_t)v.trainer_name;
+    run->trainer_partner_name = (int16_t)v.trainer_partner_name;
     memcpy(run->battle_seed, v.battle_seed, sizeof run->battle_seed);
     run->battle_seed[sizeof run->battle_seed - 1] = 0;
     run->n_enemy = v.n_enemy;
@@ -563,6 +569,7 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     } else if (v.n_arena_tags || v.n_pos_tags) {
         dropped++;
     }
+    gc_trainer_names(run);
     gc_event *ev = gc_ev_new(run, GC_EV_WAVE);
     if (ev) { ev->a = run->wave; ev->b = run->biome; ev->c = run->battle_type; }
     if (run->battle_type == BATTLE_TYPE_TRAINER) {
