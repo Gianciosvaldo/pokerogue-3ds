@@ -390,7 +390,7 @@ static void field_setup(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool reset)
 static pr_msg_arg trainer_name(const pr_battle *bt, int trainer_slot)
 {
     const char *n = bt->trainer_names[trainer_slot == TRAINER_SLOT_TRAINER_PARTNER ? 1 : 0];
-    return (pr_msg_arg){"trainerName", PR_ARG_STR, 0, n ? n : ""};
+    return (pr_msg_arg){"trainerName", PR_ARG_TEMPLATE, 0, n ? n : ""};   /* getName() may nest keys */
 }
 
 /* SwitchSummonPhase: the party member in slotIndex comes in to the field slot (fieldIndex) and the
@@ -603,4 +603,92 @@ void pr_post_summon_phase(pr_battle *bt, pr_engine *e, int ph)
         if (pr_arena_tag_is(bt->arena_tags[i].type, PR_ARENACLASS_ENTRY_HAZARD)) entry_hazard_apply(bt, e, i, p);
     /* a mystery encounter's post-summon tag, and the allies' Commander: not in a wild single battle */
     if (bt->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) pr_note_unported(bt, PR_FEAT_TRAINER);
+}
+
+/* SummonPhase(fieldIndex, player) as EncounterPhase queues it (loaded false): the party member in
+ * slot fieldIndex comes out. start: PreSummonAbAttr; preSummon: a fainted one swaps with the next
+ * Pokemon allowed in battle, then the send-out text; summon: it joins the field; onEnd. */
+void pr_summon_phase(pr_battle *bt, pr_engine *e, int ph)
+{
+    pr_phase *s = &e->pool[ph];
+    int side = s->sw_player ? 0 : 1, field = s->sw_field_index;
+    bool player = s->sw_player;
+    if (bt->double_battle) pr_note_unported(bt, PR_FEAT_DOUBLES);
+    if (!bt->n_party[side]) { pr_note_unported(bt, PR_FEAT_PARTY); return; }
+    if (field < 0 || field >= bt->n_party[side]) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }
+    pr_pokemon *p = bt->party[side][field];
+    pr_hook_ab(bt, p, PR_AC_PreSummonAbAttr);
+
+    /* preSummon: a Pokemon not allowed in battle is swapped with the first allowed one after it */
+    if (p->hp <= 0) {
+        if (p->on_field && !p->switch_out_status) pr_leave_field(bt, e, p, true);
+        int legal = -1;
+        for (int k = field + 1; k < bt->n_party[side] && legal < 0; k++)
+            if (bt->party[side][k]->hp > 0) legal = k;
+        if (legal < 0) { pr_note_unported(bt, PR_FEAT_PARTY); return; }   /* clearPhaseQueue + GameOverPhase */
+        bt->party[side][field] = bt->party[side][legal];
+        bt->party[side][legal] = p;
+        p = bt->party[side][field];
+    }
+    int tslot = field % 2 ? TRAINER_SLOT_TRAINER_PARTNER : TRAINER_SLOT_TRAINER;
+    if (player) {
+        pr_show_text(bt, e, pr_msg1("battle:playerGo", pr_arg_pokemon(bt, "pokemonName", p)));
+    } else if (bt->battle_type == BATTLE_TYPE_TRAINER) {
+        pr_event_add(bt, e, PR_EV_TRAINER_HIDE, -1, -1, (uint16_t)tslot, 0, NULL);
+        pr_show_text(bt, e, pr_msg2("battle:trainerSendOut", trainer_name(bt, tslot),
+                                    pr_arg_pokemon_name(bt, "pokemonName", p)));   /* getNameToRender() */
+    } else {
+        pr_note_unported(bt, PR_FEAT_TRAINER);   /* a mystery encounter's summonWild; a wild one never gets here */
+        return;
+    }
+
+    /* summon(): the Pokemon joins the field, updateModifiers(player) recalculates the party's stats,
+     * then fieldSetup() */
+    int b = side * 2 + field;
+    bt->field[b] = p;
+    p->on_field = true;
+    p->switch_out_status = false;
+    if (bt->n_mods[side]) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
+    for (int k = 0; k < bt->n_party[side]; k++) pr_recalculate_stats(bt, bt->party[side][k]);
+    field_setup(bt, e, p, false);
+    pr_event_add(bt, e, PR_EV_SWITCH_IN, b, -1, 0, field, NULL);
+
+    /* onEnd */
+    if (p->shiny) pr_unshift_new(bt, e, PH_SHINY_SPARKLE, b);
+    pr_reset_turn_data(p);
+    pr_form_change(bt, p, PR_FCT_SpeciesFormChangeActiveTrigger);
+    p->summoned_this_turn = true;                                           /* queuePostSummon */
+}
+
+/* InitEncounterPhase: a PostSummonPhase for every Pokemon on the field that is an enemy or was
+ * summoned this turn, in field order */
+void pr_init_encounter_phase(pr_battle *bt, pr_engine *e, int ph)
+{
+    (void)ph;
+    for (int b = 0; b < 4; b++) {
+        pr_pokemon *p = bt->field[b];
+        if (!p || p->hp <= 0 || !p->on_field || p->switch_out_status) continue;   /* getField(true) */
+        if (b >= 2 || p->summoned_this_turn) pr_phase_unshift(bt, e, pr_phase_new(e, PH_POST_SUMMON, (int8_t)b));
+    }
+}
+
+/* CheckSwitchPhase: "Will you switch?" at a wild battle's start, unless the battle style is Set, no
+ * other Pokemon could come in, or the Pokemon is locked in (Outrage), trapped or commanded */
+void pr_check_switch_phase(pr_battle *bt, pr_engine *e, int ph)
+{
+    int field = e->pool[ph].sw_field_index;
+    if (bt->battle_style_set) return;
+    pr_pokemon *p = bt->field[field];
+    if (!p || !p->on_field) { pr_note_unported(bt, PR_FEAT_PARTY); return; }   /* SummonMissingPhase */
+    bool others = false;
+    for (int k = 1; k < bt->n_party[0]; k++) others |= bt->party[0][k]->hp > 0;
+    if (!others) return;
+    if (pr_get_battler_tag(p, BATTLER_TAG_TYPE_FRENZY) || pr_is_trapped(bt, p, NULL)
+        || pr_get_battler_tag(p, BATTLER_TAG_TYPE_COMMANDED))
+        return;
+    /* useName: currentBattle.double */
+    pr_show_text(bt, e, pr_msg1("battle:switchQuestion",
+                                bt->double_battle ? pr_arg_pokemon(bt, "pokemonName", p)
+                                                  : pr_arg_key("pokemonName", "battle:pokemon")));
+    e->awaiting_confirm = true;
 }

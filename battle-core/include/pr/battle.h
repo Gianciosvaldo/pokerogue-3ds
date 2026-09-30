@@ -326,6 +326,7 @@ typedef struct pr_battle {
      * switch within their own trainer's (trainer_slot) */
     const char *trainer_names[2];
     bool trainer_partner;
+    bool battle_style_set;     /* settings.general.battleStyle === SET: no "Will you switch?" at a battle's start */
     /* trainer.getNextSummonIndex(trainerSlot): the party slot the trainer sends in next, when
      * its Pokemon fainted or used U-turn and co. The game sets it (ai-core ports it). Called
      * where upstream calls it, with the TrainerSlot upstream passes; upstream runs the tie

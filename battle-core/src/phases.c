@@ -2995,6 +2995,13 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_SWITCH_SUMMON: pr_switch_summon_phase(bt, e, ph); break;
     case PH_POST_SUMMON: pr_post_summon_phase(bt, e, ph); break;
     case PH_SWITCH: pr_switch_phase(bt, e, ph); break;
+    case PH_SUMMON: pr_summon_phase(bt, e, ph); break;
+    case PH_INIT_ENCOUNTER: pr_init_encounter_phase(bt, e, ph); break;
+    case PH_CHECK_SWITCH: pr_check_switch_phase(bt, e, ph); break;
+    case PH_TOGGLE_DOUBLE_POSITION:
+        /* singles: the Pokemon on the field moves to the centre (only the sprite moves) */
+        if (bt->double_battle) pr_note_unported(bt, PR_FEAT_DOUBLES);
+        break;
     case PH_MOVE_REFLECT: move_reflect_phase(bt, e, ph); break;
     case PH_SHINY_SPARKLE: pr_event_add(bt, e, PR_EV_SHINY_SPARKLE, PH(ph)->battler, -1, 0, 0, NULL); break;
     default:

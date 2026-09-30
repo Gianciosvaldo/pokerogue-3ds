@@ -21,6 +21,9 @@ typedef enum {
     PH_TURN_END, PH_RESET_STATUS, PH_STAT_STAGE_CHANGE, PH_OBTAIN_STATUS_EFFECT, PH_MOVE_CHARGE, PH_POKEMON_HEAL,
     PH_MOVE_HEADER, PH_SWITCH_SUMMON, PH_POST_SUMMON, PH_MOVE_REFLECT,
     PH_SWITCH,                 /* hands control back mid-phase for the player's pick (pr_resume_switch) */
+    /* the start of a battle (pr_start_battle) */
+    PH_SUMMON, PH_TOGGLE_DOUBLE_POSITION, PH_INIT_ENCOUNTER,
+    PH_CHECK_SWITCH,           /* hands control back mid-phase for the player's answer (pr_answer_check_switch) */
     /* presentation: no battle state of their own */
     PH_MESSAGE, PH_DAMAGE_ANIM, PH_COMMON_ANIM, PH_SHOW_ABILITY, PH_HIDE_ABILITY, PH_POKEMON_ANIM, PH_LOAD_MOVE_ANIM, PH_MOVE_ANIM,
     PH_SHINY_SPARKLE,
@@ -29,7 +32,7 @@ typedef enum {
     PH_SELECT_BIOME, PH_NEW_BATTLE,
     /* not ported yet: created where upstream creates them (so the order stays right), and
      * the turn is reported unported */
-    PH_DANCER, PH_TERA, PH_ATTEMPT_CAPTURE, PH_ATTEMPT_RUN, PH_TOGGLE_DOUBLE_POSITION,
+    PH_DANCER, PH_TERA, PH_ATTEMPT_CAPTURE, PH_ATTEMPT_RUN,
     PH_COUNT_
 } pr_phase_type;
 #define PH_FIRST_UNPORTED PH_DANCER
@@ -149,6 +152,9 @@ typedef struct pr_engine {
      * player's pick; pr_resume_switch finishes it and runs on */
     bool awaiting_pick;
     int pick_phase;            /* its pool index */
+    /* PH_CHECK_SWITCH stop: the CheckSwitchPhase asked "Will you switch?" and waits in the pool
+     * (pick_phase) for pr_answer_check_switch */
+    bool awaiting_confirm;
     bool overflow;             /* a fixed-size table ran out: the run is not faithful */
     /* what the turn shows (include/pr/events.h): started afresh by pr_run_turn and
      * pr_resume_switch */
@@ -161,6 +167,20 @@ typedef struct pr_engine {
  * (the next TurnInitPhase) or a phase outside the turn (victory, a switch prompt...). The turn
  * commands in bt->commands / bt->pre_commands must be set. */
 void pr_run_turn(pr_battle *bt, pr_engine *e);
+
+/* The start of a battle, from where upstream's EncounterPhase ends to the first turn: the
+ * trainer sends out its Pokemon (SummonPhase), the player sends out theirs, and the PostSummon
+ * phases run (entry abilities such as Intimidate and Drizzle, hazards). The game sets up bt first:
+ * the parties, with the Pokemon to send out first in slot 0; a wild Pokemon already on the field
+ * (EncounterPhase put it there), a trainer's and the player's not yet. Stops at PH_TURN_INIT, at
+ * PH_CHECK_SWITCH (a wild battle asks whether the player will switch; bt->battle_style_set skips
+ * it, the "Set" battle style), or at a switch pick after a "yes". The game shows the encounter
+ * text and the trainer's intro before calling this. Singles only. */
+void pr_start_battle(pr_battle *bt, pr_engine *e);
+
+/* After a stop at PH_CHECK_SWITCH: the player's answer. Yes opens the party screen (a PH_SWITCH
+ * stop, answered with pr_resume_switch); no goes on. Runs on to the next stop. */
+void pr_answer_check_switch(pr_battle *bt, pr_engine *e, bool yes);
 
 /* After a turn stopped at PH_SWITCH (the party screen of a SwitchPhase), the player's pick: the
  * party slot to send in, or -1 for none. Runs on to the next stop, as pr_run_turn. */
@@ -176,6 +196,34 @@ void pr_resume_switch(pr_battle *bt, pr_engine *e, int slot);
  * EggLapsePhase, the wave's ModifierRewardPhases, SelectModifierPhase (waves not a multiple
  * of 10), AddEnemyBuffModifierPhase (endless), SelectBiomePhase (new biome), NewBattlePhase. */
 void pr_continue(pr_battle *bt, pr_engine *e);
+
+/* ---- the command screen's checks (CommandPhase, src/commands.c) ----
+ * They read the battle between turns and change nothing. Each says whether the command is
+ * accepted and, when it isn't, puts in *why (may be NULL) the text upstream shows then: key
+ * NULL when upstream shows nothing, "" for its empty text box. */
+/* pokemon.isMoveSelectable(move): a restricting battler tag (Disable, Encore, Taunt, Torment,
+ * Imprison, Heal Block, Throat Chop, Gorilla Tactics), then the move's own restrictions (Belch,
+ * Stuff Cheeks, Gigaton Hammer and Blood Moon twice in a row, Gravity) */
+bool pr_move_selectable(pr_battle *bt, const pr_pokemon *p, int move, pr_msg *why);
+/* PokemonMove.isUsable(p, ignorePp, forSelection) for moveset slot `slot`: not implemented, out
+ * of PP, then (forSelection) pr_move_selectable. The player's challenge rules aren't modelled. */
+bool pr_move_usable(pr_battle *bt, const pr_pokemon *p, int slot, bool ignore_pp, bool for_selection, pr_msg *why);
+/* CommandPhase.handleFightCommand's check for the FIGHT command on slot `slot` (-1: the queued
+ * MoveId.NONE of a recharge turn): the move the turn command gets (the slot's move, or Struggle
+ * when no move at all is usable), or -1 when the pick is refused (*why says why) */
+int pr_fight_move(pr_battle *bt, const pr_pokemon *p, int slot, bool ignore_pp, pr_msg *why);
+/* pokemon.isTrapped(trappedAbMessages, simulated): Commander, Shadow Tag / Arena Trap / Magnet
+ * Pull (the first trigger message in *ab_msg), a trapping tag, Fairy Lock; Ghost types and Run
+ * Away are never trapped */
+bool pr_is_trapped(pr_battle *bt, const pr_pokemon *p, pr_msg *ab_msg);
+/* The POKEMON command (tryLeaveField with isSwitch): p may switch out. baton: the party screen's
+ * Baton Pass switch, which skips the trap check. Which party member may come in is the party
+ * screen's business, not checked here. */
+bool pr_can_switch(pr_battle *bt, const pr_pokemon *p, bool baton, pr_msg *why);
+/* The RUN command (handleRunCommand): not in the End biome, not from a trainer, and p not
+ * trapped (an ability's trap shows no text there, upstream's quirk). Whether the escape
+ * succeeds is the AttemptRunPhase's roll, not ported yet. */
+bool pr_can_run(pr_battle *bt, const pr_pokemon *p, pr_msg *why);
 
 /* SwitchPhase.start: the early exits, or the party screen (sets e->awaiting_pick) */
 void pr_switch_phase(pr_battle *bt, pr_engine *e, int ph);
@@ -385,6 +433,10 @@ void pr_form_change(pr_battle *bt, const pr_pokemon *p, int trigger_class);
 /* SwitchSummonPhase and PostSummonPhase / PostSummonActivateAbilityPhase (src/switching.c) */
 void pr_switch_summon_phase(pr_battle *bt, pr_engine *e, int ph);
 void pr_post_summon_phase(pr_battle *bt, pr_engine *e, int ph);
+/* SummonPhase (a battle's first send-out), InitEncounterPhase and CheckSwitchPhase (src/switching.c) */
+void pr_summon_phase(pr_battle *bt, pr_engine *e, int ph);
+void pr_init_encounter_phase(pr_battle *bt, pr_engine *e, int ph);
+void pr_check_switch_phase(pr_battle *bt, pr_engine *e, int ph);
 /* ForceSwitchOutAttr (src/switching.c): getSwitchOutCondition() for an attribute with these fields,
  * and apply(). The condition applies Suction Cups-style abilities outside a simulation. */
 bool pr_switch_out_condition(pr_battle *bt, bool self_switch, int switch_type, const pr_pokemon *user,

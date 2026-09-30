@@ -927,7 +927,15 @@ static void report_conditions(void)
  * StatStageChangeAttr's own condition (attr = its index on the move). TURN_SPROBE cases: each
  * SPROBE line is pokemon.canSetStatus(eff, quiet, ovr, src, ign), with the abilities applied so
  * far on both sides */
-static bool is_probe_line(const char *l) { return !strncmp(l, "PROBE ", 6) || !strncmp(l, "SPROBE ", 7); }
+static bool is_probe_line(const char *l)
+{
+    return !strncmp(l, "PROBE ", 6) || !strncmp(l, "SPROBE ", 7) || !strncmp(l, "CPROBE ", 7);
+}
+/* TURN_CPROBE cases: each CPROBE line is a command screen check on the state before. kind=move:
+ * moveset[slot].isUsable(p, false, true); kind=trap: p.isTrapped(messages), with the text the
+ * switch command shows (the player's only; the enemy's: the ability's message). text= is the
+ * rest of the line, JSON. */
+static void msg_json(sbuf *b, const pr_msg *m);
 
 static void ab_applied(sbuf *s, const pr_pokemon *p)
 {
@@ -954,14 +962,25 @@ static void probe_case(pr_battle *bt, const lines_t *js, int from, const char *c
             stop = true;
             continue;
         }
-        bool sprobe = l[0] == 'S';
-        pr_pokemon *u = sprobe ? NULL : bt->field[inum(l, "u")], *t = sprobe ? NULL : bt->field[inum(l, "t")];
-        int move = sprobe ? -1 : (int)inum(l, "move"), seq = sprobe ? -1 : (int)inum(l, "seq");
+        bool sprobe = l[0] == 'S', cprobe = l[0] == 'C';
+        pr_msg why = {0};
+        pr_pokemon *u = sprobe || cprobe ? NULL : bt->field[inum(l, "u")], *t = sprobe || cprobe ? NULL : bt->field[inum(l, "t")];
+        int move = sprobe || cprobe ? -1 : (int)inum(l, "move"), seq = sprobe || cprobe ? -1 : (int)inum(l, "seq");
         bt->n_unported = bt->n_deferred = 0;
         static uint32_t hits_before[PR_CLOSURE_COUNT];
         memcpy(hits_before, pr_closure_hits, sizeof hits_before);
         bool res;
-        if (sprobe) {
+        if (cprobe) {
+            pr_pokemon *p = bt->field[inum(l, "p")];
+            if (!strcmp(need(l, "kind"), "move")) {
+                res = pr_move_usable(bt, p, (int)inum(l, "slot"), false, true, &why);
+            } else {
+                pr_msg ab;
+                res = pr_is_trapped(bt, p, &ab);
+                why = ab;
+                if (res && p->is_player) pr_can_switch(bt, p, false, &why);
+            }
+        } else if (sprobe) {
             /* what the call queues (ability bars) never runs: start each one from an empty queue */
             memset(&eng, 0, sizeof eng);
             eng.n_levels = 1;
@@ -999,6 +1018,13 @@ static void probe_case(pr_battle *bt, const lines_t *js, int from, const char *c
         snprintf(g, sizeof g, "%s", need(l, "g"));             /* need() reuses one buffer */
         snprintf(want, sizeof want, "RNG g=%s b=%s", g, need(l, "b"));
         bool ok = res == (inum(l, "res") != 0) && line_diff(got.s, want) < 0;
+        if (cprobe) {
+            sbuf txt = {{0}, 0};
+            msg_json(&txt, &why);
+            const char *want_text = strstr(l, " text=");
+            if (!want_text || strcmp(txt.s, want_text + 6)) ok = false;
+            if (!ok) sb(&got, " text=%s", txt.s);
+        }
         if (sprobe) {
             sbuf aa = {{0}, 0};
             ab_applied(&aa, bt->field[0]);
@@ -1122,6 +1148,15 @@ static bool c_texts(sbuf *b, const pr_event *ev, int n)
     return known;
 }
 
+/* a message as JSON text; no message (key NULL) is upstream's "" */
+static void msg_json(sbuf *b, const pr_msg *m)
+{
+    static const pr_text_source src = {locale_get, NULL, "en"};
+    char text[1024] = "";
+    if (m->key) pr_msg_format(m, &src, text, sizeof text);
+    json_str(b, text);
+}
+
 static struct { int cases, same, differ, unported, shown; } texts;
 static pr_event all_events[PR_MAX_EVENTS * 4];
 static int n_all_events;
@@ -1158,6 +1193,7 @@ int main(int argc, char **argv)
     static char js_texts[LINE_LEN * 2];
     char case_name[64] = "";
     int run_at = -1;
+    int js_start = 0, js_start_set = 0, js_start_yes = 0;
 
     for (;;) {
         char *got = fgets(line, sizeof line, f);
@@ -1169,7 +1205,14 @@ int main(int argc, char **argv)
                 js.n = 0;
                 js_texts[0] = 0;
                 n_js_epicks = 0;
+                js_start = js_start_set = js_start_yes = 0;
                 run_at = -1;
+                continue;
+            }
+            if (!strncmp(line, "START ", 6)) {           /* TURN_START: a battle's start, not a turn */
+                js_start = 1;
+                js_start_set = (int)inum(line, "set");
+                js_start_yes = (int)inum(line, "yes");
                 continue;
             }
             if (!strncmp(line, "EPICK ", 6)) {
@@ -1247,7 +1290,9 @@ int main(int argc, char **argv)
         epick_bad = false;
         static uint32_t hits_before[PR_CLOSURE_COUNT];
         memcpy(hits_before, pr_closure_hits, sizeof hits_before);
-        pr_run_turn(bt, &eng);
+        bt->battle_style_set = js_start_set != 0;
+        if (js_start) pr_start_battle(bt, &eng);
+        else pr_run_turn(bt, &eng);
         n_all_events = 0;
         keep_events(&eng);
         /* the party screens: the n-th one of the turn takes the n-th pick, modulo the Pokemon it
@@ -1262,6 +1307,8 @@ int main(int argc, char **argv)
                 pr_resume_switch(bt, &eng, ne ? eligible[r % ne] : -1);
             } else if (eng.stop == PH_VICTORY) {
                 pr_continue(bt, &eng);
+            } else if (eng.stop == PH_CHECK_SWITCH && eng.awaiting_confirm) {
+                pr_answer_check_switch(bt, &eng, js_start_yes != 0);
             } else break;
             keep_events(&eng);
         }
