@@ -42,6 +42,8 @@ typedef struct {
 typedef struct {
   uint16_t id;            /* MoveId */
   uint8_t pp_used, pp_max;
+  bool has_type;          /* pokemon.getMoveType() differs from the move's own type (Hidden Power, -ate abilities...) */
+  int8_t type;            /* PokemonType when has_type */
 } menu_move;
 
 /* One party member, as the menus show it. */
@@ -76,6 +78,29 @@ typedef struct {
   uint16_t relearn[32];
   uint8_t relearn_level[32]; /* level learned, 0 = TM/egg source */
   uint8_t nrelearn;
+
+  /* ---- summary screen ---- */
+  int8_t types[2];        /* getTypes (no tera, no third type); types[1] = -1 when single-typed */
+  uint16_t ability, passive; /* AbilityId (getAbility(true), getPassiveAbility) */
+  bool has_passive;
+  uint8_t nature;         /* Nature */
+  uint32_t stats[6];      /* getStat, in PERMANENT_STATS order (stats[0] unused: hp/max_hp) */
+  uint8_t ivs[6];
+  uint32_t exp, next_lv_exp; /* exp and getLevelTotalExp(level + 1) - exp (0 at the level cap) */
+  float exp_ratio;        /* levelExp / getLevelRelExp(level + 1), 0 at the level cap */
+  uint8_t pokeball;       /* PokeballType */
+  uint8_t friendship;
+  uint8_t luck;           /* getLuck() */
+  bool pokerus;
+  bool champion;          /* classic wins for both root species (champion ribbon) */
+  int8_t tera_type;       /* shown when show_tera (the Terastallize achievement is unlocked) */
+  bool show_tera;
+  int16_t met_biome;      /* BiomeId, -1 = unknown ("apparently met") */
+  uint16_t met_level, met_wave; /* met_wave 0 = unknown */
+  /* starter data of the root species */
+  uint16_t candy_count;
+  uint16_t starter_friendship, friendship_cap; /* getStarterValueFriendshipCap */
+  uint32_t candy_colors[2]; /* getStarterColors: candy and overlay tints, 0xRRGGBB */
 } menu_mon;
 
 /* ------------------------------------------------------------ party screen */
@@ -154,6 +179,101 @@ bool party_active(void);
 bool party_input(mui_button b);
 void party_update(float dt_ms);
 void party_draw(void);
+
+/* ------------------------------------------------------------ summary screen */
+
+/* upstream SummaryUiMode and Page */
+typedef enum { SUMMARY_DEFAULT, SUMMARY_LEARN_MOVE } summary_mode;
+typedef enum { SUMMARY_PROFILE, SUMMARY_STATS, SUMMARY_MOVES } summary_page;
+
+typedef struct {
+  /* DEFAULT: the player backed out (selectCallback(-1)). The screen is
+   * closed; go back to the party screen (party_resume) or the message box. */
+  void (*on_close)(void* ctx);
+  /* DEFAULT: the player swapped two moves of party member `slot`. The screen
+   * already shows them swapped; the caller swaps its own moveset. */
+  void (*on_move_swap)(void* ctx, int slot, int a, int b);
+  /* LEARN_MOVE (moveSelectFunction): 0..3 = forget that move, 4 = give up on
+   * the new move. The screen stays open; the caller closes it (summary_close)
+   * when the learn-move phase moves on, like upstream. */
+  void (*on_move_select)(void* ctx, int cursor);
+  void* ctx;
+} summary_events;
+
+typedef struct {
+  summary_mode mode;
+  summary_page page;           /* DEFAULT: the page to open on */
+  const menu_mon* party;       /* the member shown is party[index] */
+  int n, index;
+  bool from_party;             /* opened from the party screen: UP/DOWN go through the party */
+  uint16_t new_move;           /* LEARN_MOVE: the move to learn */
+  int8_t new_move_type;        /* its getMoveType, -1 = the move's own type */
+  const char* trainer_name;    /* OT (loggedInUser.username; NULL = "Unknown") */
+  const char* trainer_id;      /* gameData.trainerId as text */
+  bool player_female;          /* OT colour */
+} summary_args;
+
+void summary_open(const summary_args* args, const summary_events* ev);
+void summary_close(void);
+bool summary_active(void);
+bool summary_input(mui_button b);
+void summary_update(float dt_ms);
+void summary_draw(void);
+
+/* ------------------------------------------------------------ learn move */
+
+/* The learn-move dialog (upstream LearnMovePhase's messages, confirm boxes and
+ * the summary in LEARN_MOVE mode). The host shows the text in its message box
+ * (battle or evolution scene) and the yes/no box; this runs the sequence. */
+typedef void (*menu_cb)(void* ctx);
+typedef struct {
+  /* ui.showText: text may hold "$" page breaks and upstream's @d{ms} / @s{sound}
+   * tags. With prompt, wait for A before calling done. */
+  void (*show_text)(void* host, const char* text, bool prompt, menu_cb done, void* done_ctx);
+  /* UiMode.CONFIRM (mui_confirm does it) */
+  void (*confirm)(void* host, menu_cb yes, menu_cb no, void* cb_ctx);
+  /* The answer (game-core's GC_CH_FORGET): the slot the move goes into
+   * (0..3; a free slot when the moveset has room), or -1 = not learned. The
+   * host changes the moveset, then the dialog shows "learned" and calls on_end. */
+  void (*on_result)(void* host, int slot);
+  void (*on_end)(void* host);  /* the phase ends (after the last message) */
+  void* host;
+} learn_move_host;
+
+typedef struct {
+  const menu_mon* party;  /* the summary pages through nothing else: only party[index] is shown */
+  int n, index;
+  uint16_t move;
+  const char* pokemon_name; /* getPokemonNameWithAffix (party members: the name) */
+  bool level_move_confirmation; /* settings.general.levelMoveConfirmation (default true) */
+  const char* trainer_name;
+  const char* trainer_id;
+  bool player_female;
+} learn_move_args;
+
+void learn_move_start(const learn_move_args* args, const learn_move_host* host);
+
+/* ------------------------------------------------------------ sprites */
+
+/* A Pokemon's battle sprite (front or back; upstream getSpriteKey: forms,
+ * female sprites, shiny and variant colours) and its animation. Fusions use
+ * the base species' sprite: the fusion palette swap isn't ported yet. */
+#define MENU_SPRITE_MAX_FRAMES 400
+typedef struct {
+  rr_atlas* atlas;
+  const rr_frame* frames[MENU_SPRITE_MAX_FRAMES]; /* 0001.png, 0002.png... in order */
+  int n;
+} menu_sprite;
+bool menu_sprite_load(menu_sprite* s, const menu_mon* m, bool back);
+void menu_sprite_free(menu_sprite* s);
+/* The frame `ms` into the animation (upstream: 10 frames a second, looping). */
+const rr_frame* menu_sprite_frame(const menu_sprite* s, uint32_t ms);
+
+/* ------------------------------------------------------------ names */
+
+const char* menu_move_name(uint16_t id);
+/* The Pokemon's cry sound key (without "audio/"), e.g. "cry/257". */
+void menu_cry_key(const menu_mon* m, char* out, size_t n);
 
 /* ------------------------------------------------------------ icons */
 
