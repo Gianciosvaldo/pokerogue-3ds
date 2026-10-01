@@ -1227,6 +1227,10 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         *pp->holder = self;
         return 1;
     }
+    case PR_AC_RunSuccessAbAttr:
+        GATE(true);
+        if (pp->value) *pp->value = 256;
+        return 1;
     case PR_AC_GorillaTacticsAbAttr:                                    /* ExecutedMoveAbAttr */
         if (!c->e) return -1;
         GATE(!pr_get_battler_tag(p, BATTLER_TAG_TYPE_GORILLA_TACTICS));

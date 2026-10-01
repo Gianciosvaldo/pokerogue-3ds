@@ -19,7 +19,7 @@ typedef enum {
     PH_TURN_START, PH_MOVE, PH_MOVE_EFFECT, PH_MOVE_END, PH_FAINT, PH_CHECK_INTERLUDE,
     PH_WEATHER_EFFECT, PH_POSITIONAL_TAG, PH_BERRY, PH_CHECK_STATUS_EFFECT, PH_POST_TURN_STATUS_EFFECT,
     PH_TURN_END, PH_RESET_STATUS, PH_STAT_STAGE_CHANGE, PH_OBTAIN_STATUS_EFFECT, PH_MOVE_CHARGE, PH_POKEMON_HEAL,
-    PH_MOVE_HEADER, PH_SWITCH_SUMMON, PH_POST_SUMMON, PH_MOVE_REFLECT,
+    PH_MOVE_HEADER, PH_SWITCH_SUMMON, PH_POST_SUMMON, PH_MOVE_REFLECT, PH_ATTEMPT_RUN,
     PH_SWITCH,                 /* hands control back mid-phase for the player's pick (pr_resume_switch) */
     /* the start of a battle (pr_start_battle) */
     PH_SUMMON, PH_TOGGLE_DOUBLE_POSITION, PH_INIT_ENCOUNTER,
@@ -32,7 +32,7 @@ typedef enum {
     PH_SELECT_BIOME, PH_NEW_BATTLE,
     /* not ported yet: created where upstream creates them (so the order stays right), and
      * the turn is reported unported */
-    PH_DANCER, PH_TERA, PH_ATTEMPT_CAPTURE, PH_ATTEMPT_RUN,
+    PH_DANCER, PH_TERA, PH_ATTEMPT_CAPTURE,
     PH_COUNT_
 } pr_phase_type;
 #define PH_FIRST_UNPORTED PH_DANCER

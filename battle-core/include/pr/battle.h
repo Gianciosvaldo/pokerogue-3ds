@@ -342,6 +342,8 @@ typedef struct pr_battle {
     int8_t ignoring_effect_source; /* arena.ignoringEffectSource (BattlerIndex), -1 = undefined */
     bool ability_bar_visible;  /* globalScene.abilityBar.isVisible() */
     int8_t last_used_pokeball; /* currentBattle.lastUsedPokeball (PokeballType), -1 = null */
+    int escape_attempts;       /* currentBattle.escapeAttempts */
+    bool successful_run;       /* currentBattle.successfulRun */
     struct pr_engine *engine;  /* the phase engine (src/engine.c); NULL outside a turn */
     /* Coverage: attribute classes that would have run upstream but have no C handler
      * yet. A result is only claimed faithful when this stays empty. */
@@ -516,6 +518,7 @@ bool pr_move_can_be_multi_strike_enhanced(int move);
 /* Move.canBeMultiStrikeEnhanced(user, restrictSpread, target) */
 bool pr_move_can_be_multi_strike_enhanced_ex(pr_battle *bt, int move, const pr_pokemon *user, bool restrict_spread,
                                              const pr_pokemon *target);
+bool pr_is_new_biome(pr_battle *bt);
 /* Math.pow as the reference JS engine computes it (src/js_math.c) */
 double js_pow(double x, double y);
 

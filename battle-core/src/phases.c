@@ -2953,6 +2953,109 @@ static void pokemon_heal_phase(pr_battle *bt, pr_engine *e, int ph)
     if (message) pr_queue_msg(bt, e, text);
 }
 
+/* AttemptRunPhase.calculateEscapeChance(escapeAttempts) */
+static double calculate_escape_chance(pr_battle *bt, int current_attempts)
+{
+    double enemy_speed = 0.0;
+    double player_speed = 0.0;
+    bool is_boss = false;
+
+    for (int i = 0; i < 2; i++) {
+        pr_pokemon *p = bt->field[i];
+        if (is_active_on_field(p)) {
+            player_speed += pr_get_stat(p, STAT_SPD, true);
+        }
+    }
+    for (int i = 2; i < 4; i++) {
+        pr_pokemon *p = bt->field[i];
+        if (is_active_on_field(p)) {
+            enemy_speed += pr_get_stat(p, STAT_SPD, true);
+            if (p->is_boss) is_boss = true;
+        }
+    }
+
+    if (enemy_speed <= 0.0) enemy_speed = 1.0;
+
+    double speed_ratio = player_speed / enemy_speed;
+    double speed_cap = is_boss ? 6.0 : 4.0;
+    double min_chance = 5.0;
+    double max_chance = is_boss ? 25.0 : 95.0;
+    double escape_bonus = is_boss ? 2.0 : 10.0;
+    double escape_slope = (max_chance - min_chance) / speed_cap;
+
+    double chance = js_round(escape_slope * speed_ratio + min_chance + escape_bonus * current_attempts);
+    if (chance < min_chance) chance = min_chance;
+    if (chance > max_chance) chance = max_chance;
+    return chance;
+}
+
+static void attempt_run_phase(pr_battle *bt, pr_engine *e, int ph)
+{
+    (void)ph;
+    int current_attempts = bt->escape_attempts++;
+    int escape_roll = pr_battle_rand_seed_int(bt, 100, 0);
+    double escape_chance = calculate_escape_chance(bt, current_attempts);
+
+    pr_speed_iter it;
+    pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_PLAYER);
+    pr_pokemon *p;
+    while ((p = pr_speed_iter_next(bt, &it))) {
+        if (pr_is_of_type(p, POKEMON_TYPE_GHOST)) {
+            escape_chance = 256;
+        }
+        pr_ab_params pp = {.pokemon = p, .value = &escape_chance};
+        pr_apply_ab_attrs(bt, PR_AC_RunSuccessAbAttr, &pp);
+    }
+
+    if ((double)escape_roll < escape_chance) {
+        for (int b = 2; b < 4; b++) {
+            pr_pokemon *ep = bt->field[b];
+            if (is_active_on_field(ep)) {
+                pr_ab_params pp = {.pokemon = ep};
+                pr_apply_ab_attrs(bt, PR_AC_PreLeaveFieldAbAttr, &pp);
+            }
+        }
+
+        pr_queue_msg(bt, e, pr_msg0("battle:runAwaySuccess"));
+
+        bt->successful_run = true;
+
+        /* clearEnemyHeldItemModifiers() */
+        int w = 0;
+        for (int i = 0; i < bt->n_mods[1]; i++) {
+            if (!pr_mod_is(&bt->mods[1][i], PR_MOD_HELD_ITEM)) {
+                bt->mods[1][w++] = bt->mods[1][i];
+            } else {
+                pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
+            }
+        }
+        bt->n_mods[1] = w;
+
+        for (int b = 2; b < 4; b++) {
+            pr_pokemon *ep = bt->field[b];
+            if (ep && is_active_on_field(ep)) {
+                ep->hp = 0;
+                ep->status = STATUS_EFFECT_FAINT;
+                ep->status_sleep_turns = 0;
+            }
+        }
+
+        push_new(bt, e, PH_BATTLE_END, -1);
+        if (pr_is_new_biome(bt) || bt->game_mode == GAME_MODES_ENDLESS || bt->game_mode == GAME_MODES_SPLICED_ENDLESS) {
+            push_new(bt, e, PH_SELECT_BIOME, -1);
+        }
+        push_new(bt, e, PH_NEW_BATTLE, -1);
+    } else {
+        for (int b = 0; b < 2; b++) {
+            pr_pokemon *pp = bt->field[b];
+            if (is_active_on_field(pp)) {
+                pp->failed_run_away = true;
+            }
+        }
+        pr_queue_msg(bt, e, pr_msg0("battle:runAwayCannotEscape"));
+    }
+}
+
 void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
 {
     switch (PH(ph)->type) {
@@ -2990,6 +3093,7 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_STAT_STAGE_CHANGE: stat_stage_change_phase(bt, e, ph); break;
     case PH_OBTAIN_STATUS_EFFECT: obtain_status_effect_phase(bt, e, ph); break;
     case PH_MOVE_CHARGE: move_charge_phase(bt, e, ph); break;
+    case PH_ATTEMPT_RUN: attempt_run_phase(bt, e, ph); break;
     case PH_MOVE_HEADER: move_header_phase(bt, e, ph); break;
     case PH_POKEMON_HEAL: pokemon_heal_phase(bt, e, ph); break;
     case PH_SWITCH_SUMMON: pr_switch_summon_phase(bt, e, ph); break;

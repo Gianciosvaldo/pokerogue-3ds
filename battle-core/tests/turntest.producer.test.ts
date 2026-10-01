@@ -198,6 +198,7 @@ import { UiMode } from "#enums/ui-mode";
 import { WeatherType } from "#enums/weather-type";
 import { getMoveTargets } from "#moves/move-utils";
 import { healBlockedMoves } from "#moves/invalid-moves";
+import { Pokemon } from "#field/pokemon";
 import { PokemonMove } from "#moves/pokemon-move";
 import { GameManager } from "#test/framework/game-manager";
 import { PartyOption } from "#ui/party-ui-handler";
@@ -232,8 +233,11 @@ it("turntest producer", async () => {
   const SWITCH = process.env.TURN_SWITCH === "1";
   const START = process.env.TURN_START === "1";
   const SUMMON = process.env.TURN_SUMMON === "1" || START;
-  const TRAINER = process.env.TURN_TRAINER === "1";
+  const RUN = process.env.TURN_RUN === "1";
+  const TRAINER = process.env.TURN_TRAINER === "1" && !RUN;
   const OUT = process.env.TURN_OUT ?? "/tmp/pr-turns.txt";
+  (Pokemon.prototype as any).hideInfo = async function() {};
+  (Phaser.GameObjects.Sprite.prototype as any).setPosition = function() { return this; };
   const game = new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
   game.override
     .battleStyle("single")
@@ -1070,6 +1074,8 @@ it("turntest producer", async () => {
     pm.phaseQueue.deferredActive = false; // clear() leaves it set
     pm.dynamicQueueManager.clearLastTurnOrder();
     scene.abilityBar.setVisible(false);
+    scene.tweens.add = (config: any) => { config.onComplete?.(); return {} as any; };
+    if ((scene as any).ui?.messageHandler) (scene as any).ui.messageHandler.prompt = null;
     battle.battleScore = 0;
     // faint bookkeeping accumulates over the cases otherwise
     battle.playerFaintsHistory.length = 0;
@@ -1181,6 +1187,29 @@ it("turntest producer", async () => {
     }
     command(A);
     command(D);
+    if (RUN) {
+      battle.turnCommands[0] = { command: Command.RUN };
+      battle.escapeAttempts = rnd(6);
+      if (rnd(4) === 0) {
+        (D as any).bossSegments = [1, 2];
+      }
+      if (rnd(2) === 0) {
+        A.summonData.ability = AbilityId.RUN_AWAY;
+      } else if (rnd(4) === 0) {
+        A.species = speciesDataRegistry.getSpecies(SpeciesId.GASTLY);
+      }
+      if (rnd(4) === 0) {
+        D.summonData.ability = [AbilityId.SHADOW_TAG, AbilityId.ARENA_TRAP][rnd(2)];
+      }
+      if (rnd(2) === 0) {
+        A.level = 10 + rnd(90);
+        D.level = 10 + rnd(90);
+        A.calculateStats();
+        D.calculateStats();
+        A.summonData.statStages[Stat.SPD - 1] = [-3, -1, 0, 1, 3, 6][rnd(6)];
+        D.summonData.statStages[Stat.SPD - 1] = [-3, -1, 0, 1, 3, 6][rnd(6)];
+      }
+    }
     if (TRAINER && rnd(4) === 0) {
       // the trainer switches (EnemyCommandPhase): one of its reserves that hasn't fainted
       const eparty = scene.getEnemyParty();
