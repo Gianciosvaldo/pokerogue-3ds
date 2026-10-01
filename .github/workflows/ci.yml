@@ -1,0 +1,23 @@
+# Runs C logic tests on host (Linux runner) on every pull request and manual dispatch.
+# Note: Differential tests against upstream PokeRogue require an upstream checkout
+# (using setup-upstream.sh) and are run by hand.
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run game-core tests
+        run: make -C game-core test
