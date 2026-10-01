@@ -915,7 +915,7 @@ it("turntest producer", async () => {
     p.ivs = [0, 0, 0, 0, 0, 0].map(() => rnd(32));
     p.nature = rnd(25);
     p.passive = false;
-    p.customPokemonData.passive = AbilityId.BALL_FETCH;
+    p.customPokemonData.passive = SUMMON || CATCH ? AbilityId.NONE : AbilityId.BALL_FETCH;
     p.summonData.ability = STAT && rnd(2) === 0
       ? statAbilityIds[rnd(statAbilityIds.length)]
       : STATUS_POOL && rnd(3) !== 0 ? statusAbilityIds[rnd(statusAbilityIds.length)]
@@ -932,7 +932,7 @@ it("turntest producer", async () => {
       : SWITCH && rnd(3) === 0 ? switchAbilityIds[rnd(switchAbilityIds.length)]
       : SUMMON && rnd(6) === 0 ? [AbilityId.NATURAL_CURE, AbilityId.REGENERATOR][rnd(2)]
       : SUMMON && rnd(5) === 0 ? entryAbilityIds[rnd(entryAbilityIds.length)]
-      : RICH && rnd(2) === 0 ? abilityIds[rnd(abilityIds.length)] : AbilityId.BALL_FETCH;
+      : RICH && rnd(2) === 0 ? abilityIds[rnd(abilityIds.length)] : (CATCH ? AbilityId.NONE : AbilityId.BALL_FETCH);
     p.gender = rnd(3) - 1;
     p.friendship = rnd(256);
     p.isTerastallized = false;
@@ -1091,7 +1091,7 @@ it("turntest producer", async () => {
     const party = scene.getPlayerParty();
     party.length = 0;
     party.push(A);
-    const benchSize = SWITCH && rnd(5) === 0 ? 0 : 1 + rnd(playerBench.length);
+    const benchSize = CATCH ? rnd(5) : SWITCH && rnd(5) === 0 ? 0 : 1 + rnd(playerBench.length);
     for (const b of playerBench) {
       // a bench Pokemon sent in during an earlier case: off the field, with fresh summon, turn and wave data
       if (b.isOnField()) {
