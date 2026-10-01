@@ -8,6 +8,13 @@
 #include <math.h>
 #include <string.h>
 
+static bool side_has_unported_modifier(const pr_battle *bt, int side)
+{
+    for (int i = 0; i < bt->n_mods[side]; i++)
+        if (!pr_mod_is_ported_item(bt->mods[side][i].cls)) return true;
+    return false;
+}
+
 /* isActive(true): allowed in battle (not fainted; challenges are not modelled) and on the field */
 static bool is_active_on_field(const pr_pokemon *p)
 {
@@ -224,8 +231,9 @@ void pr_force_switch_out(pr_battle *bt, pr_engine *e, bool self_switch, int swit
     /* clearEnemyHeldItemModifiers(out), then updateModifiers(false): with none of its held items
      * left to remove, recalculating the enemy party's stats gives the stats they already have */
     for (int i = 0; i < bt->n_mods[1]; i++)
-        if (pr_mod_is(&bt->mods[1][i], PR_MOD_HELD_ITEM) && bt->mods[1][i].pokemon_id == (int64_t)out->id)
+        if (!pr_mod_is_ported_item(bt->mods[1][i].cls) && pr_mod_is(&bt->mods[1][i], PR_MOD_HELD_ITEM) && bt->mods[1][i].pokemon_id == (int64_t)out->id)
             pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
+    pr_clear_enemy_held_item_modifiers(bt, out);
     if (!is_active_on_field(ally) && out->hp > 0) {
         push_boundary(bt, e, PH_BATTLE_END);
         if (pr_is_new_biome(bt)) push_boundary(bt, e, PH_SELECT_BIOME);
@@ -332,7 +340,7 @@ void pr_wimp_out_apply(pr_battle *bt, pr_engine *e, pr_pokemon *p)
     if (!is_active_on_field(ally)) {
         /* clearEnemyHeldItemModifiers(): every enemy held item, then updateModifiers(false) */
         for (int i = 0; i < bt->n_mods[1]; i++)
-            if (pr_mod_is(&bt->mods[1][i], PR_MOD_HELD_ITEM)) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
+            if (!pr_mod_is_ported_item(bt->mods[1][i].cls) && pr_mod_is(&bt->mods[1][i], PR_MOD_HELD_ITEM)) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
         if (p->hp) {
             push_boundary(bt, e, PH_BATTLE_END);
             if (pr_is_new_biome(bt)) push_boundary(bt, e, PH_SELECT_BIOME);
@@ -483,7 +491,7 @@ void pr_switch_summon_phase(pr_battle *bt, pr_engine *e, int ph)
     /* summon(): the Pokemon joins the field, updateModifiers(player) recalculates the party's stats,
      * and fieldSetup() again */
     in->on_field = true;
-    if (bt->n_mods[side]) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
+    if (side_has_unported_modifier(bt, side)) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
     for (int k = 0; k < bt->n_party[side]; k++) pr_recalculate_stats(bt, bt->party[side][k]);
     field_setup(bt, e, in, false);
     pr_event_add(bt, e, PR_EV_SWITCH_IN, side * 2 + field, -1, 0, field, NULL);
@@ -650,7 +658,7 @@ void pr_summon_phase(pr_battle *bt, pr_engine *e, int ph)
     bt->field[b] = p;
     p->on_field = true;
     p->switch_out_status = false;
-    if (bt->n_mods[side]) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
+    if (side_has_unported_modifier(bt, side)) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
     for (int k = 0; k < bt->n_party[side]; k++) pr_recalculate_stats(bt, bt->party[side][k]);
     field_setup(bt, e, p, false);
     pr_event_add(bt, e, PR_EV_SWITCH_IN, b, -1, 0, field, NULL);

@@ -436,6 +436,7 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             m->unknown_subclass = c <= 0;
             m->pokemon_id = inum(l, "pid");
             m->stack_count = (int32_t)inum(l, "stack");
+            m->is_transferable = true;
         } else if (!strncmp(l, "PARTY ", 6)) {
             int side = (int)inum(l, "side");
             static char ms[PR_MAX_PARTY + 1][64];
@@ -1142,6 +1143,10 @@ static void count_todo_site(const char *site)
 
 static int leftovers_fired = 0;
 static int shell_bell_fired = 0;
+static int focus_band_fired = 0;
+static int quick_claw_fired = 0;
+static int kings_rock_fired = 0;
+static int white_herb_fired = 0;
 
 /* The TEXTS line C's events give: false when a message has no text port yet */
 static bool c_texts(sbuf *b, const pr_event *ev, int n)
@@ -1155,6 +1160,9 @@ static bool c_texts(sbuf *b, const pr_event *ev, int n)
         if (ev[i].msg.key) {
             if (!strcmp(ev[i].msg.key, "modifier:turnHealApply")) leftovers_fired++;
             if (!strcmp(ev[i].msg.key, "modifier:hitHealApply")) shell_bell_fired++;
+            if (!strcmp(ev[i].msg.key, "modifier:surviveDamageApply")) focus_band_fired++;
+            if (!strcmp(ev[i].msg.key, "modifier:bypassSpeedChanceApply")) quick_claw_fired++;
+            if (!strcmp(ev[i].msg.key, "modifier:resetNegativeStatStageApply")) white_herb_fired++;
         }
         if (k++) sb(b, ",");
         if (!ev[i].msg.key) {
@@ -1314,6 +1322,7 @@ int main(int argc, char **argv)
         static uint32_t hits_before[PR_CLOSURE_COUNT];
         memcpy(hits_before, pr_closure_hits, sizeof hits_before);
         bt->battle_style_set = js_start_set != 0;
+        pr_kings_rock_fired = 0;
         if (js_start) pr_start_battle(bt, &eng);
         else pr_run_turn(bt, &eng);
         n_all_events = 0;
@@ -1364,6 +1373,7 @@ int main(int argc, char **argv)
             continue;
         }
         covered++;
+        kings_rock_fired += pr_kings_rock_fired;
         if (getenv("TURNTEST_COVERED")) printf("COVERED %s\n", case_name);   /* which cases were covered */
         count_phases(&eng);
         for (int i = 0; i < PR_CLOSURE_COUNT; i++) covered_hits[i] += pr_closure_hits[i] - hits_before[i];
@@ -1451,7 +1461,8 @@ int main(int argc, char **argv)
         printf("\n");
     }
     report_conditions();
-    printf("item firings: Leftovers=%d, Shell Bell=%d\n", leftovers_fired, shell_bell_fired);
+    printf("item firings: Leftovers=%d, Shell Bell=%d, Focus Band=%d, Quick Claw=%d, King's Rock=%d, White Herb=%d\n",
+           leftovers_fired, shell_bell_fired, focus_band_fired, quick_claw_fired, kings_rock_fired, white_herb_fired);
     fail += probes.fail;
     (void)cs0;
     return fail || parse_fail ? 1 : 0;

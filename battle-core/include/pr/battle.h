@@ -73,6 +73,10 @@ enum {
     PR_MOD_ENEMY_DAMAGE_MULTIPLIER,
     PR_MOD_ENEMY_DAMAGE_BOOSTER,     /* the enemy's Damage token */
     PR_MOD_ENEMY_DAMAGE_REDUCER,     /* the enemy's Protection token */
+    PR_MOD_SURVIVE_DAMAGE,           /* Focus Band */
+    PR_MOD_BYPASS_SPEED_CHANCE,      /* Quick Claw */
+    PR_MOD_FLINCH_CHANCE,            /* King's Rock */
+    PR_MOD_RESET_NEGATIVE_STAT_STAGE,/* White Herb */
     PR_MOD_COUNT_
 };
 extern const uint8_t pr_mod_parent[PR_MOD_COUNT_];
@@ -491,6 +495,7 @@ bool pr_move_is_attack(int move);
  * Each function is one upstream globalScene.applyModifiers / applyModifier /
  * findModifier / getHeldItems call, named after the modifier class it applies. */
 bool pr_mod_is(const pr_modifier *m, int cls);
+bool pr_mod_is_ported_item(int cls);
 int32_t pr_mod_get_stack_count(const pr_modifier *m);        /* stackCount + virtualStackCount */
 /* pokemon.getHeldItems() (pokemonId === id exactly), filtered to isTransferable when asked:
  * the number of items, and the sum of their stackCount fields (not getStackCount()) */
@@ -512,6 +517,13 @@ void pr_apply_attack_type_booster_modifiers(pr_battle *bt, const pr_pokemon *src
 void pr_apply_turn_heal_modifiers(pr_battle *bt, struct pr_engine *e, pr_pokemon *p);
 void pr_apply_hit_heal_modifiers(pr_battle *bt, struct pr_engine *e, pr_pokemon *p);
 double pr_calculate_shell_bell_recovery(pr_battle *bt, const pr_pokemon *p);
+void pr_apply_survive_damage_modifiers(pr_battle *bt, struct pr_engine *e, pr_pokemon *p, bool *survive);
+void pr_apply_bypass_speed_chance_modifiers(pr_battle *bt, struct pr_engine *e, pr_pokemon *p);
+void pr_apply_flinch_chance_modifiers(pr_battle *bt, struct pr_engine *e, pr_pokemon *user, pr_pokemon *target, bool deals_damage, bool *flinched);
+bool pr_apply_reset_negative_stat_stage_modifier(pr_battle *bt, struct pr_engine *e, pr_pokemon *p);
+void pr_lose_held_item(pr_battle *bt, struct pr_engine *e, pr_pokemon *p, pr_modifier *m);
+void pr_clear_enemy_held_item_modifiers(pr_battle *bt, const pr_pokemon *p);
+extern int pr_kings_rock_fired;
 /* PokemonMultiHitModifier.apply(pokemon, moveId, null, damageMultiplier) for each Multi Lens */
 void pr_apply_multi_hit_damage_modifiers(pr_battle *bt, const pr_pokemon *src, int move, double *mult);
 /* globalScene.findModifier(m => m instanceof PokemonMultiHitModifier && m.pokemonId === p.id) (player list) */
