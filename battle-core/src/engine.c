@@ -42,7 +42,7 @@ bool pr_phase_is_dynamic(pr_phase_type t)
     case PH_MOVE: case PH_COMMON_ANIM: case PH_STAT_STAGE_CHANGE: case PH_OBTAIN_STATUS_EFFECT:
     case PH_POST_TURN_STATUS_EFFECT: case PH_MOVE_CHARGE: case PH_MOVE_HEADER: case PH_SWITCH_SUMMON:
     case PH_POST_SUMMON: case PH_SHINY_SPARKLE:
-    case PH_MOVE_REFLECT: case PH_DANCER: case PH_TERA:
+    case PH_MOVE_REFLECT: case PH_DANCER: case PH_TERA: case PH_ATTEMPT_CAPTURE:
         return true;
     default:
         /* not dynamic: MoveEffect, MoveEnd, Faint, DamageAnim, PokemonHeal, WeatherEffect,
@@ -628,7 +628,7 @@ static void trace(pr_engine *e, int ph)
                          || p->type == PH_STAT_STAGE_CHANGE || p->type == PH_OBTAIN_STATUS_EFFECT
                          || p->type == PH_POKEMON_HEAL || p->type == PH_POST_TURN_STATUS_EFFECT
                          || p->type == PH_MOVE_CHARGE;
-    pokemon_phase = pokemon_phase || p->type == PH_MOVE_REFLECT || p->type == PH_POST_SUMMON || p->type == PH_SHINY_SPARKLE;
+    pokemon_phase = pokemon_phase || p->type == PH_MOVE_REFLECT || p->type == PH_POST_SUMMON || p->type == PH_SHINY_SPARKLE || p->type == PH_ATTEMPT_CAPTURE;
     /* SummonPhase (a PartyMemberPokemonPhase) has no battlerIndex upstream: its name alone */
     /* MoveEndPhase is given its user's getBattlerIndex(), which is -1 once it has been switched out */
     if (p->type == PH_MOVE_END) snprintf(out, 40, "%s:%d", pr_phase_name[p->type], p->battler);

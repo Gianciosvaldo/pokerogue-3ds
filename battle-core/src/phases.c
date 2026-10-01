@@ -210,6 +210,117 @@ static int default_battler(pr_battle *bt)
     return 0;
 }
 
+/* ---------------------------------------------------------------- AttemptCapturePhase */
+
+static double get_pokeball_catch_multiplier(int pokeball_type)
+{
+    switch (pokeball_type) {
+    case POKEBALL_TYPE_POKEBALL: return 1.0;
+    case POKEBALL_TYPE_GREAT_BALL: return 1.5;
+    case POKEBALL_TYPE_ULTRA_BALL: return 2.0;
+    case POKEBALL_TYPE_ROGUE_BALL: return 3.0;
+    case POKEBALL_TYPE_MASTER_BALL: return -1.0;
+    case POKEBALL_TYPE_LUXURY_BALL: return 1.0;
+    default: return 1.0;
+    }
+}
+
+static double get_status_effect_catch_rate_multiplier(int status)
+{
+    switch (status) {
+    case STATUS_EFFECT_POISON:
+    case STATUS_EFFECT_TOXIC:
+    case STATUS_EFFECT_PARALYSIS:
+    case STATUS_EFFECT_BURN:
+        return 1.5;
+    case STATUS_EFFECT_SLEEP:
+    case STATUS_EFFECT_FREEZE:
+        return 2.5;
+    default:
+        return 1.0;
+    }
+}
+
+static int get_critical_capture_chance(const pr_battle *bt, int modified_catch_rate)
+{
+    if (bt->game_mode == GAME_MODES_CHALLENGE) return 0;
+    double dex_multiplier = (bt->game_mode == GAME_MODES_DAILY) ? 2.5 : 0.0;
+    double charm_multiplier = 1.0;
+    int cap_rate = modified_catch_rate < 255 ? modified_catch_rate : 255;
+    return (int)floor((charm_multiplier * dex_multiplier * cap_rate) / 6.0);
+}
+
+static void attempt_capture_phase(pr_battle *bt, pr_engine *e, int ph)
+{
+    int b = PH(ph)->battler;
+    if (b < 0 || b >= 4) b = 2;
+    pr_pokemon *pokemon = slot(bt, b);
+    if (!pokemon || pokemon->hp <= 0) return;
+
+    pr_battler_tag *sub = (pr_battler_tag *)pr_find_battler_tag_class(pokemon, PR_TAGCLASS_SUBSTITUTE);
+    if (sub) sub->in_focus = false;
+
+    int pokeball_type = PH(ph)->sw_slot >= 0 ? PH(ph)->sw_slot : POKEBALL_TYPE_POKEBALL;
+
+    double _3m = 3.0 * max_hp(pokemon);
+    double _2h = 2.0 * pokemon->hp;
+    const pr_form *fm = pr_pokemon_form(pokemon);
+    double catch_rate = fm ? fm->catch_rate : 255;
+    double pokeball_mult = get_pokeball_catch_multiplier(pokeball_type);
+    double status_mult = get_status_effect_catch_rate_multiplier(pokemon->status);
+    double shiny_mult = 1.0;
+
+    double modified_catch_rate_float = (((_3m - _2h) * catch_rate * pokeball_mult) / _3m) * status_mult * shiny_mult;
+    int modified_catch_rate = (int)round(modified_catch_rate_float);
+
+    int shake_probability = (int)round(65536.0 / js_pow(255.0 / modified_catch_rate, 0.1875));
+    int critical_capture_chance = get_critical_capture_chance(bt, modified_catch_rate);
+
+    int crit_roll = pr_battle_rand_seed_int(bt, 256, 0);
+    bool is_critical = crit_roll < critical_capture_chance;
+
+    bool caught = true;
+
+    if (is_critical) {
+        int r = pr_battle_rand_seed_int(bt, 65536, 0);
+        if (pokeball_mult == -1.0 || modified_catch_rate >= 255 || r < shake_probability) {
+            caught = true;
+        } else {
+            caught = false;
+        }
+    } else {
+        for (int i = 0; i < 3; i++) {
+            int r = pokeball_mult == -1.0 || modified_catch_rate >= 255 ? -1 : pr_battle_rand_seed_int(bt, 65536, 0);
+            if (pokeball_mult == -1.0 || modified_catch_rate >= 255 || r < shake_probability) {
+                /* shake passes */
+            } else {
+                caught = false;
+                break;
+            }
+        }
+    }
+
+    if (caught) {
+        int iv = 0;
+        for (int i = 0; i < 6; i++) iv += pokemon->ivs[i];
+        const pr_form *fm = pr_pokemon_form(pokemon);
+        double score = fm->base_exp * (fm->exp_boost ? 1.5 : 1) * ((double)pokemon->level / bt->max_exp_level) * ((iv / 93.0) * 0.2 + 0.8);
+        if (bt->max_exp_level <= 0) pr_note_unported(bt, PR_FEAT_WAVE);
+        for (int i = 0; i < bt->n_mods[1]; i++)
+            if (pr_mod_is(&bt->mods[1][i], PR_MOD_HELD_ITEM) && bt->mods[1][i].pokemon_id == (int64_t)pokemon->id)
+                pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
+        if (pokemon->is_boss) pr_note_unported(bt, PR_FEAT_BOSS_SEGMENTS);
+        bt->battle_score += ceil(score);
+
+        pr_show_text(bt, e, pr_msg1("battle:pokemonCaught", pr_arg_pokemon(bt, "pokemonName", pokemon)));
+        unshift_new(bt, e, PH_VICTORY, b);
+        pr_leave_field(bt, e, pokemon, true);
+    } else {
+        bt->last_used_pokeball = (int8_t)pokeball_type;
+        if (sub) sub->in_focus = true;
+    }
+}
+
 /* ---------------------------------------------------------------- TurnStartPhase */
 
 static void handle_fight_command(pr_battle *bt, pr_engine *e, pr_pokemon *p, int b)
@@ -294,7 +405,13 @@ static void turn_start(pr_battle *bt, pr_engine *e)
         if (c->command == COMMAND_FIGHT) mon->order = (int8_t)k;
         switch (c->command) {
         case COMMAND_FIGHT: handle_fight_command(bt, e, mon, b); break;
-        case COMMAND_BALL: unshift_new(bt, e, PH_ATTEMPT_CAPTURE, -1); break;
+        case COMMAND_BALL: {
+            int target_battler = (c->n_targets > 0 && c->targets[0] >= 0) ? 2 + (c->targets[0] % 2) : 2;
+            int q = new_pokemon_phase(e, PH_ATTEMPT_CAPTURE, target_battler);
+            if (q >= 0) PH(q)->sw_slot = c->cursor;
+            pr_phase_unshift(bt, e, q);
+            break;
+        }
         case COMMAND_POKEMON: {
             /* SwitchSummonPhase(args[0] ? BATON_PASS : SWITCH, getFieldIndex(), cursor, true, isPlayer()) */
             int q = new_pokemon_phase(e, PH_SWITCH_SUMMON, -1);
@@ -3108,6 +3225,7 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
         break;
     case PH_MOVE_REFLECT: move_reflect_phase(bt, e, ph); break;
     case PH_SHINY_SPARKLE: pr_event_add(bt, e, PR_EV_SHINY_SPARKLE, PH(ph)->battler, -1, 0, 0, NULL); break;
+    case PH_ATTEMPT_CAPTURE: attempt_capture_phase(bt, e, ph); break;
     default:
         /* a phase with no port: it was reported when it was queued */
         pr_note_unported(bt, (uint16_t)(PR_FEAT_PHASE_0 + PH(ph)->type));
