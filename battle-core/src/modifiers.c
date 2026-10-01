@@ -8,6 +8,7 @@
  * returns true. The shouldApply checks here never depend on values an apply changes,
  * so filtering and applying in one pass is the same thing. */
 #include "pr/battle.h"
+#include "pr/engine.h"
 #include <math.h>
 #include <string.h>
 
@@ -15,6 +16,8 @@ const uint8_t pr_mod_parent[PR_MOD_COUNT_] = {
     [PR_MOD_NONE] = PR_MOD_NONE,
     [PR_MOD_PERSISTENT] = PR_MOD_NONE,
     [PR_MOD_HELD_ITEM] = PR_MOD_PERSISTENT,
+    [PR_MOD_TURN_HEAL] = PR_MOD_HELD_ITEM,
+    [PR_MOD_HIT_HEAL] = PR_MOD_HELD_ITEM,
     [PR_MOD_TEMP_STAT_STAGE_BOOSTER] = PR_MOD_PERSISTENT, /* via LapsingPersistentModifier */
     [PR_MOD_TEMP_CRIT_BOOSTER] = PR_MOD_PERSISTENT,
     [PR_MOD_BASE_STAT] = PR_MOD_HELD_ITEM,
@@ -40,6 +43,8 @@ const char *const pr_mod_class_name[PR_MOD_COUNT_] = {
     [PR_MOD_NONE] = "",
     [PR_MOD_PERSISTENT] = "PersistentModifier",
     [PR_MOD_HELD_ITEM] = "PokemonHeldItemModifier",
+    [PR_MOD_TURN_HEAL] = "TurnHealModifier",
+    [PR_MOD_HIT_HEAL] = "HitHealModifier",
     [PR_MOD_TEMP_STAT_STAGE_BOOSTER] = "TempStatStageBoosterModifier",
     [PR_MOD_TEMP_CRIT_BOOSTER] = "TempCritBoosterModifier",
     [PR_MOD_BASE_STAT] = "BaseStatModifier",
@@ -295,6 +300,49 @@ void pr_apply_attack_type_booster_modifiers(pr_battle *bt, const pr_pokemon *src
         if (!held_applies(m, src) || m->move_type != move_type) continue;
         if (*power >= 1) *power = floor(*power * (1 + pr_mod_get_stack_count(m) * m->mult));
     }
+}
+
+static int max_hp(const pr_pokemon *p) { return p->stats[STAT_HP]; }
+static double to_dmg_value(double v) { double f = floor(v); return f < 1 ? 1 : f; }
+
+void pr_apply_turn_heal_modifiers(pr_battle *bt, pr_engine *e, pr_pokemon *p)
+{
+    pr_modifier *m;
+    EACH_MOD(m, bt, p->is_player, PR_MOD_TURN_HEAL) {
+        if (!held_applies(m, p)) continue;
+        if (p->hp > 0 && p->hp < max_hp(p)) {
+            double amount = to_dmg_value(max_hp(p) / 16.0) * m->stack_count;
+            pr_msg msg = pr_msg2("modifier:turnHealApply",
+                                 pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+                                 pr_arg_key("typeName", "modifierType:ModifierType.LEFTOVERS.name"));
+            pr_unshift_heal_msg(bt, e, pr_battler_index(bt, p), amount, PR_HEAL_MESSAGE, msg);
+        }
+    }
+}
+
+void pr_apply_hit_heal_modifiers(pr_battle *bt, pr_engine *e, pr_pokemon *p)
+{
+    pr_modifier *m;
+    EACH_MOD(m, bt, p->is_player, PR_MOD_HIT_HEAL) {
+        if (!held_applies(m, p)) continue;
+        if (p->hp > 0 && p->total_damage_dealt > 0 && p->hp < max_hp(p)) {
+            double amount = to_dmg_value((p->total_damage_dealt * m->stack_count) / 8.0);
+            pr_msg msg = pr_msg2("modifier:hitHealApply",
+                                 pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+                                 pr_arg_key("typeName", "modifierType:ModifierType.SHELL_BELL.name"));
+            pr_unshift_heal_msg(bt, e, pr_battler_index(bt, p), amount, PR_HEAL_MESSAGE, msg);
+        }
+    }
+}
+
+double pr_calculate_shell_bell_recovery(pr_battle *bt, const pr_pokemon *p)
+{
+    pr_modifier *m;
+    EACH_MOD(m, bt, p->is_player, PR_MOD_HIT_HEAL) {
+        if (!held_applies(m, p)) continue;
+        return to_dmg_value((p->total_damage_dealt * m->stack_count) / 8.0);
+    }
+    return 0;
 }
 
 /* getMoveTargets(user, move) as far as canBeMultiStrikeEnhanced reads it: whether the move is

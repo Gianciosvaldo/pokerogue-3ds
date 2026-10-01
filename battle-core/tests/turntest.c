@@ -426,7 +426,16 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             if (!pr_tag_type_ported(type) && !(pr_battler_tag_is(type, PR_TAGCLASS_HIGHEST_STAT_BOOST) && field(l, "stat")))
                 cs->btag = 1;
         } else if (!strncmp(l, "MOD ", 4)) {
-            cs->skip = 1;
+            int side = (int)inum(l, "side");
+            if (side < 0 || side > 1 || bt->n_mods[side] >= PR_MAX_MODIFIERS) { cs->skip = 1; continue; }
+            pr_modifier *m = &bt->mods[side][bt->n_mods[side]++];
+            memset(m, 0, sizeof *m);
+            const char *cls_name = need(l, "cls");
+            int c = pr_mod_class_by_name(cls_name);
+            m->cls = c > 0 ? (uint8_t)c : PR_MOD_PERSISTENT;
+            m->unknown_subclass = c <= 0;
+            m->pokemon_id = inum(l, "pid");
+            m->stack_count = (int32_t)inum(l, "stack");
         } else if (!strncmp(l, "PARTY ", 6)) {
             int side = (int)inum(l, "side");
             static char ms[PR_MAX_PARTY + 1][64];
@@ -736,6 +745,13 @@ static void dump_state(lines_t *L, const pr_battle *bt, const case_state *cs, bo
         for (int k = 0; k < bt->n_party[side]; k++) {
             mon_key(key, bt, side, k);
             dump_mon(L, bt, bt->party[side][k], key, incomplete);
+        }
+    }
+    for (int side = 0; side < 2; side++) {
+        for (int i = 0; i < bt->n_mods[side]; i++) {
+            const pr_modifier *m = &bt->mods[side][i];
+            add_line(L, "MOD side=%d cls=%s pid=%lld stack=%d", side,
+                     pr_mod_class_name[m->cls], (long long)m->pokemon_id, m->stack_count);
         }
     }
     for (int side = 0; side < 2; side++) {
@@ -1124,6 +1140,9 @@ static void count_todo_site(const char *site)
     if (n_todo_sites < 256) todo_sites[n_todo_sites++] = (todo_site){site, 1};
 }
 
+static int leftovers_fired = 0;
+static int shell_bell_fired = 0;
+
 /* The TEXTS line C's events give: false when a message has no text port yet */
 static bool c_texts(sbuf *b, const pr_event *ev, int n)
 {
@@ -1133,6 +1152,10 @@ static bool c_texts(sbuf *b, const pr_event *ev, int n)
     int k = 0;
     for (int i = 0; i < n; i++) {
         if (ev[i].type != PR_EV_TEXT) continue;
+        if (ev[i].msg.key) {
+            if (!strcmp(ev[i].msg.key, "modifier:turnHealApply")) leftovers_fired++;
+            if (!strcmp(ev[i].msg.key, "modifier:hitHealApply")) shell_bell_fired++;
+        }
         if (k++) sb(b, ",");
         if (!ev[i].msg.key) {
             if (known) count_todo_site(ev[i].msg.args[0].s);   /* the first one in the turn */
@@ -1428,6 +1451,7 @@ int main(int argc, char **argv)
         printf("\n");
     }
     report_conditions();
+    printf("item firings: Leftovers=%d, Shell Bell=%d\n", leftovers_fired, shell_bell_fired);
     fail += probes.fail;
     (void)cs0;
     return fail || parse_fail ? 1 : 0;

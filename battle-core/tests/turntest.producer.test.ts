@@ -165,7 +165,7 @@ import { getPokemonNameWithAffix } from "#app/messages";
 import { getGameMode } from "#app/game-mode";
 import { settings } from "#app/global-settings-manager";
 import { speciesDataRegistry } from "#app/globals/global-species-data-registry";
-import { allAbilities, allMoves } from "#data/data-lists";
+import { allAbilities, allMoves, modifierTypes } from "#data/data-lists";
 import { EntryHazardTag, getArenaTag } from "#data/arena-tag";
 import { getBattlerTag, TrappedTag } from "#data/battler-tags";
 import { Status } from "#data/status-effect";
@@ -233,6 +233,8 @@ it("turntest producer", async () => {
   const SWITCH = process.env.TURN_SWITCH === "1";
   const START = process.env.TURN_START === "1";
   const SUMMON = process.env.TURN_SUMMON === "1" || START;
+  const CATCH = process.env.TURN_CATCH === "1";
+  const ITEMS = process.env.TURN_ITEMS === "1";
   const RUN = process.env.TURN_RUN === "1";
   const TRAINER = process.env.TURN_TRAINER === "1" && !RUN;
   const OUT = process.env.TURN_OUT ?? "/tmp/pr-turns.txt";
@@ -1094,6 +1096,16 @@ it("turntest producer", async () => {
     battle.preTurnCommands = {};
     setup(A);
     setup(D);
+    if (ITEMS) {
+      for (const p of [A, D]) {
+        if (rnd(2) === 0) {
+          const itemFunc = [modifierTypes.LEFTOVERS, modifierTypes.SHELL_BELL][rnd(2)];
+          const mod = itemFunc().withIdFromFunc(itemFunc).newModifier(p);
+          mod.stackCount = 1 + rnd(4);
+          scene.addModifier(mod, true, false, false, true);
+        }
+      }
+    }
     const party = scene.getPlayerParty();
     party.length = 0;
     party.push(A);
