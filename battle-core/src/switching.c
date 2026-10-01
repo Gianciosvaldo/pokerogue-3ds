@@ -113,7 +113,7 @@ static bool hp_dropped_below_half(const pr_pokemon *p)
 /* globalScene.isNewBiome(): a wave that is a multiple of 10, or of 5 with short biomes (endless),
  * or 49 mod 50 in endless or daily. (gameMode.hasRandomBiomes, checked next to it, is never set
  * by any game mode.) */
-static bool is_new_biome(pr_battle *bt)
+bool pr_is_new_biome(pr_battle *bt)
 {
     int w = bt->wave_index;
     if (w % 10 == 0) return true;
@@ -228,7 +228,7 @@ void pr_force_switch_out(pr_battle *bt, pr_engine *e, bool self_switch, int swit
             pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
     if (!is_active_on_field(ally) && out->hp > 0) {
         push_boundary(bt, e, PH_BATTLE_END);
-        if (is_new_biome(bt)) push_boundary(bt, e, PH_SELECT_BIOME);
+        if (pr_is_new_biome(bt)) push_boundary(bt, e, PH_SELECT_BIOME);
         push_boundary(bt, e, PH_NEW_BATTLE);
     }
 }
@@ -333,7 +333,7 @@ void pr_wimp_out_apply(pr_battle *bt, pr_engine *e, pr_pokemon *p)
             if (pr_mod_is(&bt->mods[1][i], PR_MOD_HELD_ITEM)) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
         if (p->hp) {
             push_boundary(bt, e, PH_BATTLE_END);
-            if (is_new_biome(bt)) push_boundary(bt, e, PH_SELECT_BIOME);
+            if (pr_is_new_biome(bt)) push_boundary(bt, e, PH_SELECT_BIOME);
             push_boundary(bt, e, PH_NEW_BATTLE);
         }
     }
