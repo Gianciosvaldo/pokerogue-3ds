@@ -1099,10 +1099,21 @@ it("turntest producer", async () => {
     if (ITEMS) {
       for (const p of [A, D]) {
         if (rnd(2) === 0) {
-          const itemFunc = [modifierTypes.LEFTOVERS, modifierTypes.SHELL_BELL][rnd(2)];
+          const itemFunc = [
+            modifierTypes.LEFTOVERS,
+            modifierTypes.SHELL_BELL,
+            modifierTypes.FOCUS_BAND,
+            modifierTypes.QUICK_CLAW,
+            modifierTypes.KINGS_ROCK,
+            modifierTypes.WHITE_HERB,
+          ][rnd(6)];
           const mod = itemFunc().withIdFromFunc(itemFunc).newModifier(p);
           mod.stackCount = 1 + rnd(4);
-          scene.addModifier(mod, true, false, false, true);
+          if (p.isPlayer()) {
+            scene.addModifier(mod, true, false, false, true);
+          } else {
+            mod.add(scene.enemyModifiers, false);
+          }
         }
       }
     }

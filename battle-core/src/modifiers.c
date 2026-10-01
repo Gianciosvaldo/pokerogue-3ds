@@ -37,6 +37,10 @@ const uint8_t pr_mod_parent[PR_MOD_COUNT_] = {
     [PR_MOD_ENEMY_DAMAGE_MULTIPLIER] = PR_MOD_ENEMY_PERSISTENT,
     [PR_MOD_ENEMY_DAMAGE_BOOSTER] = PR_MOD_ENEMY_DAMAGE_MULTIPLIER,
     [PR_MOD_ENEMY_DAMAGE_REDUCER] = PR_MOD_ENEMY_DAMAGE_MULTIPLIER,
+    [PR_MOD_SURVIVE_DAMAGE] = PR_MOD_HELD_ITEM,
+    [PR_MOD_BYPASS_SPEED_CHANCE] = PR_MOD_HELD_ITEM,
+    [PR_MOD_FLINCH_CHANCE] = PR_MOD_HELD_ITEM,
+    [PR_MOD_RESET_NEGATIVE_STAT_STAGE] = PR_MOD_HELD_ITEM,
 };
 
 const char *const pr_mod_class_name[PR_MOD_COUNT_] = {
@@ -64,6 +68,10 @@ const char *const pr_mod_class_name[PR_MOD_COUNT_] = {
     [PR_MOD_ENEMY_DAMAGE_MULTIPLIER] = "EnemyDamageMultiplierModifier",
     [PR_MOD_ENEMY_DAMAGE_BOOSTER] = "EnemyDamageBoosterModifier",
     [PR_MOD_ENEMY_DAMAGE_REDUCER] = "EnemyDamageReducerModifier",
+    [PR_MOD_SURVIVE_DAMAGE] = "SurviveDamageModifier",
+    [PR_MOD_BYPASS_SPEED_CHANCE] = "BypassSpeedChanceModifier",
+    [PR_MOD_FLINCH_CHANCE] = "FlinchChanceModifier",
+    [PR_MOD_RESET_NEGATIVE_STAT_STAGE] = "ResetNegativeStatStageModifier",
 };
 
 int pr_mod_class_by_name(const char *name)
@@ -78,6 +86,13 @@ bool pr_mod_is(const pr_modifier *m, int cls)
     for (int c = m->cls; c != PR_MOD_NONE; c = pr_mod_parent[c])
         if (c == cls) return true;
     return false;
+}
+
+bool pr_mod_is_ported_item(int cls)
+{
+    return cls == PR_MOD_TURN_HEAL || cls == PR_MOD_HIT_HEAL
+        || cls == PR_MOD_SURVIVE_DAMAGE || cls == PR_MOD_BYPASS_SPEED_CHANCE
+        || cls == PR_MOD_FLINCH_CHANCE || cls == PR_MOD_RESET_NEGATIVE_STAT_STAGE;
 }
 
 int32_t pr_mod_get_stack_count(const pr_modifier *m)
@@ -325,7 +340,7 @@ void pr_apply_hit_heal_modifiers(pr_battle *bt, pr_engine *e, pr_pokemon *p)
     pr_modifier *m;
     EACH_MOD(m, bt, p->is_player, PR_MOD_HIT_HEAL) {
         if (!held_applies(m, p)) continue;
-        if (p->hp > 0 && p->total_damage_dealt > 0 && p->hp < max_hp(p)) {
+        if (p->total_damage_dealt > 0 && p->hp < max_hp(p)) {
             double amount = to_dmg_value((p->total_damage_dealt * m->stack_count) / 8.0);
             pr_msg msg = pr_msg2("modifier:hitHealApply",
                                  pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
@@ -436,4 +451,112 @@ void pr_apply_enemy_damage_booster_modifiers(pr_battle *bt, double *damage)
 void pr_apply_enemy_damage_reducer_modifiers(pr_battle *bt, double *damage)
 {
     enemy_damage_multiplier(bt, PR_MOD_ENEMY_DAMAGE_REDUCER, damage);
+}
+
+int pr_kings_rock_fired = 0;
+
+void pr_clear_enemy_held_item_modifiers(pr_battle *bt, const pr_pokemon *p)
+{
+    int w = 0;
+    for (int i = 0; i < bt->n_mods[1]; i++) {
+        if (!pr_mod_is(&bt->mods[1][i], PR_MOD_HELD_ITEM) || (p && bt->mods[1][i].pokemon_id != (int64_t)p->id)) {
+            bt->mods[1][w++] = bt->mods[1][i];
+        }
+    }
+    bt->n_mods[1] = w;
+}
+
+void pr_lose_held_item(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_modifier *m)
+{
+    if (!m) return;
+    int side = p->is_player ? 0 : 1;
+    m->stack_count--;
+    if (m->stack_count <= 0) {
+        int idx = -1;
+        for (int i = 0; i < bt->n_mods[side]; i++) {
+            if (&bt->mods[side][i] == m) {
+                idx = i;
+                break;
+            }
+        }
+        if (idx >= 0) {
+            memmove(&bt->mods[side][idx], &bt->mods[side][idx + 1],
+                    (size_t)(bt->n_mods[side] - idx - 1) * sizeof(pr_modifier));
+            bt->n_mods[side]--;
+        }
+    }
+    pr_hook_ab(bt, p, PR_AC_PostItemLostAbAttr);
+}
+
+void pr_apply_survive_damage_modifiers(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool *survive)
+{
+    pr_modifier *m;
+    EACH_MOD(m, bt, p->is_player, PR_MOD_SURVIVE_DAMAGE) {
+        if (!held_applies(m, p)) continue;
+        if (!*survive && pr_battle_rand_seed_int(bt, 10, 0) < pr_mod_get_stack_count(m)) {
+            *survive = true;
+            pr_queue_msg(bt, e, pr_msg2("modifier:surviveDamageApply",
+                                 pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+                                 pr_arg_key("typeName", "modifierType:ModifierType.FOCUS_BAND.name")));
+            return;
+        }
+    }
+}
+
+void pr_apply_bypass_speed_chance_modifiers(pr_battle *bt, pr_engine *e, pr_pokemon *p)
+{
+    pr_modifier *m;
+    EACH_MOD(m, bt, p->is_player, PR_MOD_BYPASS_SPEED_CHANCE) {
+        if (!held_applies(m, p)) continue;
+        if (pr_battle_rand_seed_int(bt, 10, 0) < pr_mod_get_stack_count(m)) {
+            if (pr_add_tag(bt, e, p, BATTLER_TAG_TYPE_BYPASS_SPEED, 0, 0, -1)) {
+                pr_queue_msg(bt, e, pr_msg2("modifier:bypassSpeedChanceApply",
+                                     pr_arg_pokemon(bt, "pokemonName", p),
+                                     pr_arg_key("itemName", "modifierType:ModifierType.QUICK_CLAW.name")));
+                return;
+            }
+        }
+    }
+}
+
+void pr_apply_flinch_chance_modifiers(pr_battle *bt, pr_engine *e, pr_pokemon *user, pr_pokemon *target, bool deals_damage, bool *flinched)
+{
+    if (!deals_damage) return;
+    pr_modifier *m;
+    EACH_MOD(m, bt, user->is_player, PR_MOD_FLINCH_CHANCE) {
+        if (!held_applies(m, user)) continue;
+        if (!*flinched && pr_battle_rand_seed_int(bt, 100, 0) < pr_mod_get_stack_count(m) * 10) {
+            *flinched = true;
+            pr_kings_rock_fired++;
+            return;
+        }
+    }
+}
+
+bool pr_apply_reset_negative_stat_stage_modifier(pr_battle *bt, pr_engine *e, pr_pokemon *p)
+{
+    bool stat_restored = false;
+    for (int s = 0; s < 7; s++) {
+        if (p->stat_stages[s] < 0) {
+            stat_restored = true;
+            break;
+        }
+    }
+    if (!stat_restored) return false;
+
+    pr_modifier *m;
+    EACH_MOD(m, bt, p->is_player, PR_MOD_RESET_NEGATIVE_STAT_STAGE) {
+        if (!held_applies(m, p)) continue;
+        for (int s = 0; s < 7; s++) {
+            if (p->stat_stages[s] < 0) {
+                p->stat_stages[s] = 0;
+            }
+        }
+        pr_queue_msg(bt, e, pr_msg2("modifier:resetNegativeStatStageApply",
+                             pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+                             pr_arg_key("typeName", "modifierType:ModifierType.WHITE_HERB.name")));
+        pr_lose_held_item(bt, e, p, m);
+        return true;
+    }
+    return false;
 }

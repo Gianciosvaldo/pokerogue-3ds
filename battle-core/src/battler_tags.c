@@ -84,6 +84,7 @@ bool pr_tag_type_ported(int type)
     case BATTLER_TAG_TYPE_SUPREME_OVERLORD: /* SupremeOverlordTag (the damage calculation reads it) */
     case BATTLER_TAG_TYPE_PROTOSYNTHESIS:   /* WeatherHighestStatBoostTag (getEffectiveStat reads it) */
     case BATTLER_TAG_TYPE_QUARK_DRIVE:      /* TerrainHighestStatBoostTag */
+    case BATTLER_TAG_TYPE_BYPASS_SPEED:     /* BypassSpeedTag */
         return true;
     }
     return pr_damaging_trap_move(type) != 0 || pr_battler_tag_is(type, PR_TAGCLASS_PROTECTED);
@@ -422,6 +423,10 @@ static pr_battler_tag construct(int type, int turn_count, int source_move, int64
         t.source_move = 0;
         t.stat = STAT_ATK;
         t.multiplier = 1.3;
+        break;
+    case BATTLER_TAG_TYPE_BYPASS_SPEED:           /* BypassSpeedTag: TURN_END, 1 turn */
+        t.turn_count = 1;
+        t.source_move = 0;
         break;
     case BATTLER_TAG_TYPE_GORILLA_TACTICS:        /* MoveRestrictionBattlerTag(GORILLA_TACTICS, CUSTOM, 0) */
     case BATTLER_TAG_TYPE_SUPREME_OVERLORD:       /* FAINT, 0 turns */

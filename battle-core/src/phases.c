@@ -65,7 +65,7 @@ static void turn_modifiers(pr_battle *bt, bool player, const pr_pokemon *p)
     int side = player ? 0 : 1;
     for (int i = 0; i < bt->n_mods[side]; i++) {
         const pr_modifier *m = &bt->mods[side][i];
-        if (m->cls == PR_MOD_TURN_HEAL || m->cls == PR_MOD_HIT_HEAL) continue;
+        if (pr_mod_is_ported_item(m->cls)) continue;
         if (!pr_mod_is(m, PR_MOD_HELD_ITEM) || !p || m->pokemon_id == (int64_t)p->id) {
             pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
             return;
@@ -308,7 +308,7 @@ static void attempt_capture_phase(pr_battle *bt, pr_engine *e, int ph)
         double score = fm->base_exp * (fm->exp_boost ? 1.5 : 1) * ((double)pokemon->level / bt->max_exp_level) * ((iv / 93.0) * 0.2 + 0.8);
         if (bt->max_exp_level <= 0) pr_note_unported(bt, PR_FEAT_WAVE);
         for (int i = 0; i < bt->n_mods[1]; i++)
-            if (pr_mod_is(&bt->mods[1][i], PR_MOD_HELD_ITEM) && bt->mods[1][i].pokemon_id == (int64_t)pokemon->id)
+            if (!pr_mod_is_ported_item(bt->mods[1][i].cls) && pr_mod_is(&bt->mods[1][i], PR_MOD_HELD_ITEM) && bt->mods[1][i].pokemon_id == (int64_t)pokemon->id)
                 pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
         if (pokemon->is_boss) pr_note_unported(bt, PR_FEAT_BOSS_SEGMENTS);
         bt->battle_score += ceil(score);
@@ -395,7 +395,7 @@ static void turn_start(pr_battle *bt, pr_engine *e)
         int b = pr_battler_index(bt, p);
         if (bt->commands[b].command != COMMAND_FIGHT) continue;
         pr_hook_ab(bt, p, PR_AC_BypassSpeedChanceAbAttr);     /* Quick Draw */
-        turn_modifiers(bt, p->is_player, p);                  /* Quick Claw */
+        pr_apply_bypass_speed_chance_modifiers(bt, e, p);     /* Quick Claw */
     }
 
     for (int k = 0; k < n; k++) {
@@ -1634,7 +1634,7 @@ static double pokemon_damage(pr_battle *bt, pr_engine *e, pr_pokemon *p, double 
             pr_lapse_tag(bt, e, p, BATTLER_TAG_TYPE_STURDY, BATTLER_TAG_LAPSE_TYPE_CUSTOM);
         } else if (p->hp >= 1 && pr_get_battler_tag(p, BATTLER_TAG_TYPE_ENDURE_TOKEN))
             survive = pr_lapse_tag(bt, e, p, BATTLER_TAG_TYPE_ENDURE_TOKEN, BATTLER_TAG_LAPSE_TYPE_CUSTOM);
-        if (!survive) turn_modifiers(bt, p->is_player, p);       /* Focus Band */
+        if (!survive) pr_apply_survive_damage_modifiers(bt, e, p, &survive);   /* Focus Band */
         if (survive) damage = p->hp - 1;
     }
     if (damage > p->hp) damage = p->hp;
@@ -1766,8 +1766,13 @@ static void apply_on_target_effects(pr_battle *bt, pr_engine *e, int ph, pr_poke
     trigger_move_effects(bt, e, ph, MOVE_EFFECT_TRIGGER_POST_APPLY, user, target, first_target, 0);
     /* applyHeldItemFlinchCheck (King's Rock) */
     if (!pr_move_has_attr((uint16_t)move, PR_AC_FlinchAttr) && deals
-        && !pr_has_ability_with_attr(bt, target, PR_AC_IgnoreMoveEffectsAbAttr) && !pr_move_hits_substitute(bt, move, user, target))
-        turn_modifiers(bt, user->is_player, user);
+        && !pr_has_ability_with_attr(bt, target, PR_AC_IgnoreMoveEffectsAbAttr) && !pr_move_hits_substitute(bt, move, user, target)) {
+        bool flinched = false;
+        pr_apply_flinch_chance_modifiers(bt, e, user, target, deals, &flinched);
+        if (flinched) {
+            pr_add_tag(bt, e, target, BATTLER_TAG_TYPE_FLINCHED, 0, move, user->id);
+        }
+    }
     /* applyOnGetHitAbEffects */
     pr_ab_params dp = {.pokemon = target, .opponent = user, .move = move, .hit_result = d.result, .damage = d.damage};
     pr_apply_ab_attrs(bt, PR_AC_PostDefendAbAttr, &dp);                  /* Static, Rough Skin, Justified... */
@@ -2377,14 +2382,21 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
         double score = fm->base_exp * (fm->exp_boost ? 1.5 : 1) * ((double)p->level / bt->max_exp_level) * ((iv / 93.0) * 0.2 + 0.8);
         if (bt->max_exp_level <= 0) pr_note_unported(bt, PR_FEAT_WAVE);
         for (int i = 0; i < bt->n_mods[1]; i++)
-            if (pr_mod_is(&bt->mods[1][i], PR_MOD_HELD_ITEM) && bt->mods[1][i].pokemon_id == (int64_t)p->id)
+            if (!pr_mod_is_ported_item(bt->mods[1][i].cls) && pr_mod_is(&bt->mods[1][i], PR_MOD_HELD_ITEM) && bt->mods[1][i].pokemon_id == (int64_t)p->id)
                 pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);                /* getScoreMultiplier */
         if (p->is_boss) pr_note_unported(bt, PR_FEAT_BOSS_SEGMENTS);
         bt->battle_score += ceil(score);
         /* addPostBattleLoot: the enemy's transferable held items */
-        for (int i = 0; i < bt->n_mods[1]; i++)
-            if (pr_mod_is(&bt->mods[1][i], PR_MOD_HELD_ITEM) && bt->mods[1][i].pokemon_id == (int64_t)p->id)
-                pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
+        for (int i = 0; i < bt->n_mods[1]; i++) {
+            pr_modifier *m = &bt->mods[1][i];
+            if (pr_mod_is(m, PR_MOD_HELD_ITEM) && m->pokemon_id == (int64_t)p->id) {
+                if (m->is_transferable) {
+                    bt->post_battle_loot++;
+                    m->pokemon_id = 0;
+                }
+                if (!pr_mod_is_ported_item(m->cls)) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
+            }
+        }
     }
     pr_leave_field(bt, e, p, true);
 }
@@ -2547,7 +2559,7 @@ static void berry_phase(pr_battle *bt, pr_engine *e)
         /* eatBerries: findModifier(BerryModifier that shouldApply) */
         int side = p->is_player ? 0 : 1;
         for (int i = 0; i < bt->n_mods[side]; i++)
-            if (pr_mod_is(&bt->mods[side][i], PR_MOD_HELD_ITEM) && bt->mods[side][i].pokemon_id == (int64_t)p->id)
+            if (!pr_mod_is_ported_item(bt->mods[side][i].cls) && pr_mod_is(&bt->mods[side][i], PR_MOD_HELD_ITEM) && bt->mods[side][i].pokemon_id == (int64_t)p->id)
                 pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
         pr_hook_ab(bt, p, PR_AC_CudChewConsumeBerryAbAttr);
     }
@@ -2981,14 +2993,7 @@ static void stat_stage_change_phase(pr_battle *bt, pr_engine *e, int ph)
     q = PH(ph);
     /* checkWhiteHerb: once no other StatStageChangePhase for this battler is queued */
     if (!pr_phase_exists(e, PH_STAT_STAGE_CHANGE, q->battler)) {
-        bool lowered = false;
-        for (int i = 0; i < 7; i++) lowered |= p->stat_stages[i] < 0;
-        int side = q->battler < 2 ? 0 : 1;
-        for (int i = 0; lowered && i < bt->n_mods[side]; i++)
-            if (pr_mod_is(&bt->mods[side][i], PR_MOD_HELD_ITEM) && bt->mods[side][i].pokemon_id == (int64_t)p->id) {
-                pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);            /* a White Herb may reset them */
-                break;
-            }
+        pr_apply_reset_negative_stat_stage_modifier(bt, e, p);
     }
 }
 
@@ -3146,7 +3151,7 @@ static void attempt_run_phase(pr_battle *bt, pr_engine *e, int ph)
             if (!pr_mod_is(&bt->mods[1][i], PR_MOD_HELD_ITEM)) {
                 bt->mods[1][w++] = bt->mods[1][i];
             } else {
-                pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
+                if (!pr_mod_is_ported_item(bt->mods[1][i].cls)) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
             }
         }
         bt->n_mods[1] = w;
