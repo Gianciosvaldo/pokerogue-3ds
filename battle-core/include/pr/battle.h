@@ -52,6 +52,8 @@ enum {
     PR_MOD_NONE,
     PR_MOD_PERSISTENT,               /* PersistentModifier (any class without a port, e.g. Exp. Charm) */
     PR_MOD_HELD_ITEM,                /* PokemonHeldItemModifier (Leftovers, berries... whose effects aren't on the ported paths) */
+    PR_MOD_TURN_HEAL,                /* Leftovers */
+    PR_MOD_HIT_HEAL,                 /* Shell Bell */
     PR_MOD_TEMP_STAT_STAGE_BOOSTER,  /* X Attack, X Defense... (side-wide) */
     PR_MOD_TEMP_CRIT_BOOSTER,        /* Dire Hit (side-wide) */
     PR_MOD_BASE_STAT,                /* vitamins */
@@ -507,6 +509,9 @@ void pr_apply_temp_stat_stage_booster_modifiers(pr_battle *bt, bool player, int 
 void pr_apply_crit_booster_modifiers(pr_battle *bt, const pr_pokemon *src, int *stage);
 void pr_apply_temp_crit_booster_modifiers(pr_battle *bt, bool player, int *stage);
 void pr_apply_attack_type_booster_modifiers(pr_battle *bt, const pr_pokemon *src, int move_type, double *power);
+void pr_apply_turn_heal_modifiers(pr_battle *bt, struct pr_engine *e, pr_pokemon *p);
+void pr_apply_hit_heal_modifiers(pr_battle *bt, struct pr_engine *e, pr_pokemon *p);
+double pr_calculate_shell_bell_recovery(pr_battle *bt, const pr_pokemon *p);
 /* PokemonMultiHitModifier.apply(pokemon, moveId, null, damageMultiplier) for each Multi Lens */
 void pr_apply_multi_hit_damage_modifiers(pr_battle *bt, const pr_pokemon *src, int move, double *mult);
 /* globalScene.findModifier(m => m instanceof PokemonMultiHitModifier && m.pokemonId === p.id) (player list) */

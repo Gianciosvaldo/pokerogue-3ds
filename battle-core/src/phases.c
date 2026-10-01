@@ -65,6 +65,7 @@ static void turn_modifiers(pr_battle *bt, bool player, const pr_pokemon *p)
     int side = player ? 0 : 1;
     for (int i = 0; i < bt->n_mods[side]; i++) {
         const pr_modifier *m = &bt->mods[side][i];
+        if (m->cls == PR_MOD_TURN_HEAL || m->cls == PR_MOD_HIT_HEAL) continue;
         if (!pr_mod_is(m, PR_MOD_HELD_ITEM) || !p || m->pokemon_id == (int64_t)p->id) {
             pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
             return;
@@ -1852,6 +1853,7 @@ static void move_effect_end(pr_battle *bt, pr_engine *e, int ph)
     }
     int total = user->hit_count - (user->hits_left > 0 ? user->hits_left : 0);
     if (total > 1 || user->hits_left > 0) pr_queue_msg(bt, e, pr_msg1("battle:attackHitsCount", pr_arg_int("count", total)));
+    pr_apply_hit_heal_modifiers(bt, e, user);                   /* HitHealModifier (Shell Bell) */
     turn_modifiers(bt, me_player(fx), user);                    /* HitHealModifier (Shell Bell) */
     pr_pokemon *t[4];
     int n = active_in_list(bt, tlist(e, fx->targets), t);
@@ -2709,6 +2711,7 @@ static void turn_end_phase(pr_battle *bt, pr_engine *e)
     while ((p = pr_speed_iter_next(bt, &it))) {
         if (!p->switch_out_status) {
             pr_lapse_tags(bt, e, p, BATTLER_TAG_LAPSE_TYPE_TURN_END);
+            pr_apply_turn_heal_modifiers(bt, e, p);       /* TurnHealModifier (Leftovers) */
             turn_modifiers(bt, p->is_player, p);          /* TurnHealModifier (Leftovers) */
             /* Grassy Terrain heals a grounded Pokemon by 1/16 of its max HP, with a message */
             if (bt->terrain == TERRAIN_GRASSY && pr_is_grounded(bt, p, false))

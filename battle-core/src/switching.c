@@ -280,13 +280,15 @@ int pr_wimp_out_can_apply(pr_battle *bt, const pr_pokemon *p, const pr_pokemon *
     if (!(p->hp + damage >= limit)) return 0;
     /* calculateShellBellRecovery: getHeldItems().find(m => m instanceof HitHealModifier) */
     int side = p->is_player ? 0 : 1;
+    double shell_bell_heal = pr_calculate_shell_bell_recovery(bt, p);
     for (int i = 0; i < bt->n_mods[side]; i++) {
         const pr_modifier *m = &bt->mods[side][i];
+        if (m->cls == PR_MOD_TURN_HEAL || m->cls == PR_MOD_HIT_HEAL) continue;
         if (pr_mod_is(m, PR_MOD_HELD_ITEM) && m->pokemon_id == (int64_t)p->id
             && (m->cls == PR_MOD_HELD_ITEM || m->unknown_subclass))
             return -1;
     }
-    if (!(p->hp < limit)) return 0;
+    if (!(p->hp - shell_bell_heal < limit)) return 0;
     /* getOpponents(): the other side's field, isActive(true), in field order */
     for (int k = 0; k < 2; k++) {
         const pr_pokemon *o = bt->field[(p->is_player ? 2 : 0) + k];
