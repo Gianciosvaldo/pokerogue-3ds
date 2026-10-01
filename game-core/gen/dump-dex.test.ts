@@ -8,6 +8,7 @@ import { speciesEggMoves } from "#balance/egg-moves";
 import { Nature } from "#enums/nature";
 import { globalScene } from "#app/global-scene";
 import { speciesDataRegistry } from "#app/globals/global-species-data-registry";
+import { variantData } from "#sprites/variant";
 import { randSeedItem } from "#utils/common";
 import { GameManager } from "#test/framework/game-manager";
 import * as fs from "node:fs";
@@ -18,6 +19,13 @@ it("dump dex", () => {
   new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
   const outC = process.env.DUMP_OUT ?? "/tmp/gc_dex.c";
   const outDefaults = process.env.DEX_DEFAULTS_OUT ?? "/tmp/gc_dex_defaults.txt";
+
+  try {
+    const vMaster = JSON.parse(fs.readFileSync("assets/images/pokemon/variant/_masterlist.json", "utf-8"));
+    Object.assign(variantData, vMaster);
+  } catch (e) {
+    /* ignore */
+  }
 
   const defaultStarterNatures: number[] = [];
   globalScene.executeWithSeedOffset(
@@ -41,8 +49,9 @@ it("dump dex", () => {
     const prevo = speciesDataRegistry.getPrevolution(s.speciesId) ?? 0;
     const malePct = s.malePercent === null ? -1 : Math.round(s.malePercent);
     const hasVar = s.hasVariants() ? "true" : "false";
-    const hasAb2 = s.ability2 !== undefined && s.ability2 !== null ? "true" : "false";
-    dexInfoRows.push(`    {${s.speciesId}, ${prevo}, ${malePct}, ${hasVar}, ${hasAb2}},`);
+    const hasAb2 = s.ability2 !== undefined && s.ability2 !== null && s.ability2 !== s.ability1 ? "true" : "false";
+    const hasFC = speciesDataRegistry.getFormChanges(s.speciesId).length > 0 ? "true" : "false";
+    dexInfoRows.push(`    {${s.speciesId}, ${prevo}, ${malePct}, ${hasVar}, ${hasAb2}, ${hasFC}},`);
   }
 
   const eggMoveRows: string[] = [];

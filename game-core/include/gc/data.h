@@ -44,6 +44,7 @@ typedef struct {
     int16_t male_percent;       /* -1 if genderless / null, otherwise 0..100 */
     bool has_variants;
     bool has_ability2;
+    bool has_form_changes;
 } gc_species_dex_info;
 extern const gc_species_dex_info gc_species_dex_info_data[];
 extern const int gc_species_dex_info_count;

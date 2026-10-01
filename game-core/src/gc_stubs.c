@@ -123,7 +123,7 @@ bool gc_port_apply_reward(gc_run *run, const gc_offer *o, int party, int move_sl
         b->level++;
         if (b->level <= pr_run_get_max_exp_level(&run->run, run->wave, true)) m->exp = gc_level_total_exp(b->level, sp ? sp->growth_rate : 0);
         /* FRIENDSHIP_GAIN_FROM_RARE_CANDY (6), capped at RARE_CANDY_FRIENDSHIP_CAP (200) */
-        if (b->friendship < 200) b->friendship = (uint8_t)(b->friendship + 6 > 200 ? 200 : b->friendship + 6);
+        gc_system_add_friendship(run->sys, run, m, 6, true);
         gc_rq_unshift(run, gc_rp(RP_LEVEL_UP, party, b->level - 1, b->level));
     } else {
         gc_item_add(run, k, o->arg, b->id, 1);

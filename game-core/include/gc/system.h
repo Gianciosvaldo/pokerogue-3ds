@@ -9,6 +9,10 @@
 
 #define GC_MAX_SPECIES_ID 9000
 
+/* Forward declarations */
+typedef struct gc_run gc_run;
+typedef struct gc_mon gc_mon;
+
 /* Per-species Dex data entry (upstream DexEntry) */
 typedef struct {
     uint64_t seen_attr;
@@ -49,5 +53,17 @@ typedef struct {
 
 /* Initialize system data with new-save defaults (upstream initDexData + initStarterData) */
 void gc_system_init_defaults(gc_system *sys);
+
+/* Dex and starter data helpers */
+uint64_t gc_mon_dex_attr(const gc_mon *m);
+int16_t gc_species_prevolution(uint16_t species_id);
+uint16_t gc_species_root_id(uint16_t species_id);
+int getStarterValueFriendshipCap(int starter_cost);
+
+void gc_system_set_pokemon_seen(gc_system *sys, const gc_mon *m, bool increment_count, bool trainer);
+bool gc_system_set_pokemon_caught(gc_system *sys, const gc_mon *m, bool increment_count, bool from_egg);
+void gc_system_update_species_dex_ivs(gc_system *sys, uint16_t species_id, const uint8_t ivs[6]);
+bool gc_system_add_starter_candy(gc_system *sys, uint16_t species_id, int32_t count);
+void gc_system_add_friendship(gc_system *sys, const gc_run *run, gc_mon *m, int friendship, bool capped);
 
 #endif
