@@ -30,9 +30,10 @@ typedef enum {
     /* where a turn hands control back to the caller */
     PH_TURN_INIT, PH_VICTORY, PH_GAME_OVER, PH_BATTLE_END, PH_SELECT_MODIFIER,
     PH_SELECT_BIOME, PH_NEW_BATTLE,
+    PH_ATTEMPT_CAPTURE,
     /* not ported yet: created where upstream creates them (so the order stays right), and
      * the turn is reported unported */
-    PH_DANCER, PH_TERA, PH_ATTEMPT_CAPTURE, PH_ATTEMPT_RUN,
+    PH_DANCER, PH_TERA, PH_ATTEMPT_RUN,
     PH_COUNT_
 } pr_phase_type;
 #define PH_FIRST_UNPORTED PH_DANCER
