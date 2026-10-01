@@ -94,7 +94,7 @@ static void victory(gc_run *run, int enemy_idx)
         if (bt->n_participants > 0)
             for (int k = 0; k < run->n_party; k++) {
                 gc_mon *m = pm(run, run->party_order[k]);
-                if (m->b.hp > 0 && pp.party[k].participated) m->b.friendship = (uint8_t)(m->b.friendship + 3 > 255 ? 255 : m->b.friendship + 3);
+                if (m->b.hp > 0 && pp.party[k].participated) gc_system_add_friendship(run->sys, run, m, 3, false);
             }
         int idx[PR_MAX_EXP_PARTY];
         double amount[PR_MAX_EXP_PARTY];

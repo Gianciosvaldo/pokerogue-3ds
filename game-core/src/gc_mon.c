@@ -269,9 +269,13 @@ static bool conditions_fulfilled(gc_run *run, const gc_mon *m, const gc_evo *e)
             break;
         }
         case GC_EVO_SPECIES_CAUGHT:
-            /* the dex isn't kept yet: counts as not caught */
-            gc_stub(run, GC_STUB_EVOLUTION);
-            ok = false;
+            if (run->sys) {
+                uint16_t req_species = (uint16_t)c->v[0];
+                ok = (req_species <= GC_MAX_SPECIES_ID && run->sys->dex[req_species].caught_attr != 0);
+            } else {
+                gc_stub(run, GC_STUB_EVOLUTION);
+                ok = false;
+            }
             break;
         case GC_EVO_TREASURE_TRACKER:
         case GC_EVO_HELD_ITEM:
@@ -320,6 +324,12 @@ void gc_mon_evolve(gc_run *run, gc_mon *m, int evo)
     p->base_ability = (uint16_t)gc_form_ability(f, m->ability_index);
     if (p->ability_override < 0) p->ability = p->base_ability;
     gc_mon_recalc(run, m);
+
+    if (run->sys) {
+        gc_system_update_species_dex_ivs(run->sys, m->b.species, m->b.ivs);
+        gc_system_set_pokemon_seen(run->sys, m, false, false);
+        gc_system_set_pokemon_caught(run->sys, m, false, false);
+    }
 }
 
 /* ---- starters ---- */

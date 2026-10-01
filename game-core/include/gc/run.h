@@ -28,6 +28,7 @@
 #include <stdint.h>
 #include "pr/engine.h"   /* battle-core: pr_battle, pr_pokemon, pr_engine */
 #include "pr/run.h"      /* run-core: pr_run, pr_biome_depths */
+#include "gc/system.h"   /* game-core: gc_system */
 
 #define GC_API_VERSION 1
 
@@ -145,7 +146,7 @@ typedef struct {
 /* A Pokemon of the run: battle-core's Pokemon (species, form, level, stats, HP, status, moves and PP,
  * ability, nature, gender, friendship, shiny...) plus what only the run keeps. Party members keep their
  * `b` across battles; its summon and turn data are reset as upstream resets them. */
-typedef struct {
+typedef struct gc_mon {
     pr_pokemon b;
     double exp;                 /* total experience (Pokemon.exp) */
     uint8_t ability_index;      /* 0, 1 or 2 (hidden) */
@@ -195,6 +196,7 @@ enum {
 
 typedef struct gc_run {
     int api_version;
+    gc_system *sys;             /* overall system data across runs (NULL = no system updates) */
     pr_run run;                 /* run-core: mode, seed, wave seed, Phaser.Math.RND */
     pr_biome_depths depths;
     int wave, biome;

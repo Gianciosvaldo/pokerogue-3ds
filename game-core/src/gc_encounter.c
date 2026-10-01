@@ -356,6 +356,10 @@ void gc_new_battle(gc_run *run)
     for (int i = 0; i < run->n_enemy; i++) {
         pr_update_passive(&run->bt, &run->enemy[i].b);
         pr_calculate_stats(&run->bt, &run->enemy[i].b);
+        if (run->sys) {
+            bool is_trainer = (run->battle_type == BATTLE_TYPE_TRAINER);
+            gc_system_set_pokemon_seen(run->sys, &run->enemy[i], true, is_trainer);
+        }
     }
     enemy_items(run);
     gc_ai_enemy_party(run);
