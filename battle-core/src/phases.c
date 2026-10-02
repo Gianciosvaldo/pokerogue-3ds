@@ -1633,7 +1633,7 @@ typedef struct { int result; double damage; bool critical; } move_damage;
 static void boss_segments_cleared(pr_battle *bt, pr_engine *e, pr_pokemon *p, int segment_index)
 {
     bool do_stat_boost = !p->has_trainer;
-    int8_t stats[8], stages[8];
+    int8_t stats[7], stages[7];
     int n = 0;
 
     while (p->boss_segment_index > 0 && segment_index - 1 < p->boss_segment_index) {
@@ -1667,7 +1667,7 @@ static void boss_segments_cleared(pr_battle *bt, pr_engine *e, pr_pokemon *p, in
         int boost = 1;
         if (p->boss_segments >= 3 && p->boss_segment_index == 0) boost++;
         if (p->boss_segments >= 5 && p->boss_segment_index == 1) boost++;
-        if (n < 8) {
+        if (n < 7) {
             stats[n] = (int8_t)picked;
             stages[n] = (int8_t)boost;
             n++;
