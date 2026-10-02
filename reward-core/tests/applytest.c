@@ -122,8 +122,95 @@ static void test_passive_multipliers(void) {
     printf("PASS: passive_multipliers unit tests\n");
 }
 
+static void test_transfer_and_stealing(void) {
+    pr_reward_ctx ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.n_party = 2;
+    ctx.party[0].id = 101;
+    ctx.party[1].id = 202;
+
+    /* Give party[0] a Leftovers (PR_ITEM_LEFTOVERS, max_held 1) with stack 1 */
+    ctx.items[0].item = PR_ITEM_LEFTOVERS;
+    ctx.items[0].stack = 1;
+    ctx.items[0].owner = 0;
+    ctx.items[0].active = true;
+    ctx.n_items = 1;
+
+    /* Transfer from 0 to 1 with bypass_cap = false: should succeed */
+    if (!pr_reward_try_transfer_held_item(&ctx, 0, 1, 1, false)) {
+        fprintf(stderr, "FAIL: try_transfer_held_item basic transfer\n");
+        exit(1);
+    }
+    if (ctx.items[0].owner != 1 || ctx.items[0].stack != 1) {
+        fprintf(stderr, "FAIL: try_transfer_held_item owner/stack after transfer\n");
+        exit(1);
+    }
+
+    /* Give party[0] another Leftovers, party[1] already has 4 Leftovers (max_held = 4) */
+    ctx.items[0].owner = 1; /* index 0 is party[1]'s Leftovers */
+    ctx.items[0].stack = 4;
+    ctx.items[1].item = PR_ITEM_LEFTOVERS;
+    ctx.items[1].stack = 1;
+    ctx.items[1].owner = 0;
+    ctx.items[1].active = true;
+    ctx.n_items = 2;
+
+    /* Transfer with bypass_cap = false should fail because target (1) has max_held (1) */
+    if (pr_reward_try_transfer_held_item(&ctx, 1, 1, 1, false)) {
+        fprintf(stderr, "FAIL: try_transfer_held_item cap enforcement\n");
+        exit(1);
+    }
+
+    /* Transfer with bypass_cap = true should succeed and bypass cap (stack becomes 2) */
+    if (!pr_reward_try_transfer_held_item(&ctx, 1, 1, 1, true)) {
+        fprintf(stderr, "FAIL: try_transfer_held_item bypass cap\n");
+        exit(1);
+    }
+    if (ctx.n_items != 1 || ctx.items[0].owner != 1 || ctx.items[0].stack != 5) {
+        fprintf(stderr, "FAIL: try_transfer_held_item merged stack bypass cap\n");
+        exit(1);
+    }
+
+    /* Test steal held item with item_idx = -1 */
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.n_party = 2;
+    ctx.items[0].item = PR_ITEM_GRIP_CLAW;
+    ctx.items[0].stack = 1;
+    ctx.items[0].owner = 0;
+    ctx.items[0].active = true;
+    ctx.n_items = 1;
+
+    if (!pr_reward_steal_held_item(&ctx, 0, 1, -1, 1, true)) {
+        fprintf(stderr, "FAIL: steal_held_item random pick\n");
+        exit(1);
+    }
+    if (ctx.items[0].owner != 1) {
+        fprintf(stderr, "FAIL: steal_held_item new owner\n");
+        exit(1);
+    }
+
+    /* Test Black Sludge shop cost multiplier */
+    memset(&ctx, 0, sizeof(ctx));
+    if (pr_reward_black_sludge_shop_cost_multiplier(&ctx) != 1.0) {
+        fprintf(stderr, "FAIL: black_sludge_shop_cost_multiplier without item\n");
+        exit(1);
+    }
+
+    ctx.items[0].item = PR_ITEM_MYSTERY_ENCOUNTER_BLACK_SLUDGE;
+    ctx.items[0].stack = 1;
+    ctx.items[0].active = true;
+    ctx.n_items = 1;
+    if (pr_reward_black_sludge_shop_cost_multiplier(&ctx) != 2.5) {
+        fprintf(stderr, "FAIL: black_sludge_shop_cost_multiplier with item\n");
+        exit(1);
+    }
+
+    printf("PASS: transfer_and_stealing unit tests\n");
+}
+
 int main(int argc, char **argv) {
     test_passive_multipliers();
+    test_transfer_and_stealing();
 
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <cases file>\n", argv[0]);

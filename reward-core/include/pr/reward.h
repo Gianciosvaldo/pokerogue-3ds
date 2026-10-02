@@ -254,4 +254,19 @@ double pr_reward_golden_punch_money_multiplier(const pr_reward_ctx *ctx, uint32_
 /* Amulet Coin global money multiplier factor: 1.0 + 0.2 * stackCount */
 double pr_reward_money_multiplier(const pr_reward_ctx *ctx);
 
+/* ---- inventory item transfer & stealing mechanics (Grip Claw, Mini Black Hole, Black Sludge) ---- */
+/* Attempt to transfer quantity of held item at item_idx in ctx->items to party member to_p.
+ * If bypass_cap is true, stolen items bypass normal max stack limits per holder.
+ * Returns true if transfer succeeded (at least 1 item moved), false otherwise. */
+bool pr_reward_try_transfer_held_item(pr_reward_ctx *ctx, int item_idx, int to_p, int quantity, bool bypass_cap);
+
+/* Grip Claw / Mini Black Hole / enemy steal attempt: steals quantity items from holder from_p to holder to_p.
+ * If item_idx is -1, selects an item randomly.
+ * Stolen items bypass max_held limits when bypass_cap is true.
+ * Returns true if any item was stolen/transferred. */
+bool pr_reward_steal_held_item(pr_reward_ctx *ctx, int from_p, int to_p, int item_idx, int quantity, bool bypass_cap);
+
+/* Applies Black Sludge shop cost multiplier factor (2.5 if Black Sludge is held/active, or 1.0 otherwise). */
+double pr_reward_black_sludge_shop_cost_multiplier(const pr_reward_ctx *ctx);
+
 #endif

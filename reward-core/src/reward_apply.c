@@ -532,3 +532,148 @@ double pr_reward_money_multiplier(const pr_reward_ctx *ctx) {
     int stack = get_item_stack(ctx, PR_ITEM_AMULET_COIN);
     return 1.0 + 0.2 * stack;
 }
+
+/* ---- inventory item transfer & stealing mechanics (Grip Claw, Mini Black Hole, Black Sludge) ---- */
+
+static int get_max_held_count(const pr_reward_ctx *ctx, int to_p, uint16_t item_id, int16_t arg) {
+    (void)to_p;
+    if (item_id >= PR_ITEM_COUNT_) return 1;
+    if (pr_items[item_id].gen) {
+        for (int i = 0; i < pr_gen_type_count; i++) {
+            if (pr_gen_types[i].item == item_id && pr_gen_types[i].arg == arg) {
+                if (pr_gen_types[i].max_held >= 0) return pr_gen_types[i].max_held;
+                break;
+            }
+        }
+    }
+    if (pr_items[item_id].max_held >= 0) {
+        return pr_items[item_id].max_held;
+    }
+    if (pr_items[item_id].max_held == -2) {
+        return 31;
+    }
+    if (pr_items[item_id].max_stack_threshold > 0) {
+        return pr_items[item_id].max_stack_threshold;
+    }
+    return 1;
+}
+
+bool pr_reward_try_transfer_held_item(pr_reward_ctx *ctx, int item_idx, int to_p, int quantity, bool bypass_cap) {
+    if (!ctx || item_idx < 0 || item_idx >= ctx->n_items || to_p < 0 || to_p >= ctx->n_party) {
+        return false;
+    }
+
+    pr_owned_item *item = &ctx->items[item_idx];
+    if (item->owner == (int8_t)to_p || item->stack <= 0) {
+        return false;
+    }
+
+    uint16_t item_id = item->item;
+    int16_t arg = item->arg;
+    int transfer_qty = (quantity <= 0) ? item->stack : (quantity < item->stack ? quantity : item->stack);
+    if (transfer_qty <= 0) return false;
+
+    int max_held = bypass_cap ? 999999 : get_max_held_count(ctx, to_p, item_id, arg);
+
+    /* Find matching item owned by to_p */
+    int matching_idx = -1;
+    for (int j = 0; j < ctx->n_items; j++) {
+        if (ctx->items[j].owner == (int8_t)to_p && ctx->items[j].item == item_id && ctx->items[j].arg == arg) {
+            matching_idx = j;
+            break;
+        }
+    }
+
+    if (matching_idx >= 0) {
+        pr_owned_item *matching = &ctx->items[matching_idx];
+        if (!bypass_cap && matching->stack >= max_held) {
+            return false;
+        }
+        int space = bypass_cap ? transfer_qty : (max_held - matching->stack);
+        int count_taken = (transfer_qty < space) ? transfer_qty : space;
+        if (count_taken <= 0) return false;
+
+        item->stack -= count_taken;
+        matching->stack += count_taken;
+    } else {
+        int space = bypass_cap ? transfer_qty : max_held;
+        int count_taken = (transfer_qty < space) ? transfer_qty : space;
+        if (count_taken <= 0) return false;
+
+        item->stack -= count_taken;
+        if (item->stack == 0) {
+            /* Reuse existing slot */
+            item->owner = (int8_t)to_p;
+            item->stack = count_taken;
+        } else {
+            /* Create new slot for target */
+            if (ctx->n_items >= PR_REWARD_MAX_OWNED) {
+                item->stack += count_taken;
+                return false;
+            }
+            ctx->items[ctx->n_items].item = item_id;
+            ctx->items[ctx->n_items].arg = arg;
+            ctx->items[ctx->n_items].stack = count_taken;
+            ctx->items[ctx->n_items].owner = (int8_t)to_p;
+            ctx->items[ctx->n_items].battle_count = 0;
+            ctx->items[ctx->n_items].active = true;
+            ctx->n_items++;
+        }
+    }
+
+    /* Clean up 0-stack items */
+    int write_idx = 0;
+    for (int i = 0; i < ctx->n_items; i++) {
+        if (ctx->items[i].stack > 0) {
+            if (write_idx != i) {
+                ctx->items[write_idx] = ctx->items[i];
+            }
+            write_idx++;
+        }
+    }
+    ctx->n_items = write_idx;
+
+    return true;
+}
+
+bool pr_reward_steal_held_item(pr_reward_ctx *ctx, int from_p, int to_p, int item_idx, int quantity, bool bypass_cap) {
+    if (!ctx || from_p < 0 || from_p >= ctx->n_party || to_p < 0 || to_p >= ctx->n_party || from_p == to_p) {
+        return false;
+    }
+
+    if (item_idx >= 0) {
+        if (item_idx >= ctx->n_items || ctx->items[item_idx].owner != (int8_t)from_p) {
+            return false;
+        }
+    } else {
+        int candidates[PR_REWARD_MAX_OWNED];
+        int n_cand = 0;
+        for (int i = 0; i < ctx->n_items; i++) {
+            if (ctx->items[i].owner == (int8_t)from_p && ctx->items[i].stack > 0) {
+                uint16_t it = ctx->items[i].item;
+                if (it < PR_ITEM_COUNT_ && (pr_items[it].flags & PR_ITEMF_HELD)) {
+                    candidates[n_cand++] = i;
+                }
+            }
+        }
+        if (n_cand == 0) return false;
+
+        int chosen = 0;
+        if (ctx->run) {
+            chosen = pr_rng_seed_int(&ctx->run->rng, n_cand, 0);
+        }
+        item_idx = candidates[chosen];
+    }
+
+    return pr_reward_try_transfer_held_item(ctx, item_idx, to_p, quantity, bypass_cap);
+}
+
+double pr_reward_black_sludge_shop_cost_multiplier(const pr_reward_ctx *ctx) {
+    if (!ctx) return 1.0;
+    for (int i = 0; i < ctx->n_items; i++) {
+        if (ctx->items[i].item == PR_ITEM_MYSTERY_ENCOUNTER_BLACK_SLUDGE && ctx->items[i].stack > 0 && ctx->items[i].active) {
+            return 2.5;
+        }
+    }
+    return 1.0;
+}
