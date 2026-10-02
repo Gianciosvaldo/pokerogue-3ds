@@ -21,9 +21,20 @@ enum {
     PR_RUN_UNDEFINED_UPSTREAM = 1u << 2,  /* upstream's own answer is undefined here (e.g. randSeedItem([])) */
 };
 
+enum {
+    PR_CHALLENGE_SINGLE_GENERATION = 1u << 0, /* Challenges.SINGLE_GENERATION */
+    PR_CHALLENGE_SINGLE_TYPE       = 1u << 1, /* Challenges.SINGLE_TYPE */
+    PR_CHALLENGE_FRESH_START       = 1u << 4, /* Challenges.FRESH_START */
+    PR_CHALLENGE_RULES_PORTED = PR_CHALLENGE_SINGLE_GENERATION | PR_CHALLENGE_SINGLE_TYPE | PR_CHALLENGE_FRESH_START,
+};
+
 typedef struct pr_run {
     int mode;                  /* gameMode.modeId (GameModes) */
     bool has_challenges;       /* gameMode.challenges has an active challenge */
+    uint32_t challenge_flags;  /* bit Challenges id; 0 with has_challenges=true means legacy/unknown challenge state */
+    uint8_t challenge_generation; /* SINGLE_GENERATION value: 0 off, 1..9 */
+    uint8_t challenge_type;       /* SINGLE_TYPE value: 0 off, 1..18 (PokemonType + 1) */
+    uint8_t challenge_fresh_start;/* FRESH_START value: 0 off, 1..2 */
     pr_seedstr seed;           /* globalScene.seed: the run seed */
     pr_seedstr wave_seed;      /* globalScene.waveSeed */
     pr_rng rng;                /* Phaser.Math.RND */
@@ -32,6 +43,26 @@ typedef struct pr_run {
                                 * event seed): its overrides aren't ported. A plain daily seed has none */
     unsigned unported;
 } pr_run;
+
+/* ---- Challenge mode validation (src/challenges.c) ---- */
+typedef struct {
+    uint16_t species;
+    uint8_t form;
+    uint16_t fusion_species; /* 0 = not fused */
+    uint8_t fusion_form;
+} pr_challenge_mon;
+
+/* ChallengeType.POKEMON_IN_BATTLE for Single Generation / Single Type. */
+bool pr_run_challenge_mon_allowed(const pr_run *run, const pr_challenge_mon *mon);
+/* Every non-fainted/usable party member must satisfy the active Mono-gen/Mono-type rules. */
+bool pr_run_challenge_party_allowed(const pr_run *run, const pr_challenge_mon *party, int n_party);
+/* Starter Choice validation for Single Generation, Single Type and Fresh Start. */
+bool pr_run_challenge_starter_allowed(const pr_run *run, int species, int form);
+/* Capture-to-party validation used by the offline run layer: a captured mon must be legal for the
+ * active Mono-gen/Mono-type formation. Fresh Start does not restrict later captures upstream. */
+bool pr_run_challenge_capture_allowed(const pr_run *run, const pr_challenge_mon *mon);
+/* True when run->has_challenges includes hooks outside the three rules ported here. */
+bool pr_run_has_unported_challenges(const pr_run *run);
 
 /* ---- GameMode (src/game-mode.ts) ---- */
 int pr_run_get_starting_level(pr_run *run);
