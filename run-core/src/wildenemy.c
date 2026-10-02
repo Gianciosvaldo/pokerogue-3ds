@@ -37,8 +37,12 @@ int pr_run_gen_wild_enemy(pr_run *run, const pr_wild_enemy_ctx *ctx, pr_wild_ene
     ec.trainer_slot = 0;
     ec.boss = pr_run_get_encounter_boss_segments(run, wave, level, species, false) != 0;
     /* isEncounterShinyLocked(): END in an endless mode or with the Fresh Start challenge */
+    const bool fresh_start = ctx->fresh_start
+        || (run->mode == GAME_MODES_CHALLENGE
+            && (run->challenge_flags & PR_CHALLENGE_FRESH_START)
+            && run->challenge_fresh_start > 0);
     ec.shiny_lock = ec.biome == BIOME_ID_END
-                    && (run->mode == GAME_MODES_ENDLESS || run->mode == GAME_MODES_SPLICED_ENDLESS || ctx->fresh_start);
+                    && (run->mode == GAME_MODES_ENDLESS || run->mode == GAME_MODES_SPLICED_ENDLESS || fresh_start);
     out->species = species;
     out->boss = ec.boss;
     out->shiny_lock = ec.shiny_lock;
