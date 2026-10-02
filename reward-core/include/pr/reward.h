@@ -242,4 +242,16 @@ int pr_reward_victory_rewards(const pr_run *run, int wave, uint16_t out[8], bool
  * Returns true if applied, false if no effect. */
 bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_idx, int move_idx, const char **msg);
 
+/* ---- passive inventory multipliers (EXP Items & Economy) ---- */
+/* EXP Share multiplier per non-participant party member: (stackCount * 0.2) / n_participants (or 0.0 if no EXP Share held or n_participants <= 0) */
+double pr_reward_exp_share_multiplier(const pr_reward_ctx *ctx, int n_participants);
+/* EXP All / Oval Charm multiplier bonus for participants when n_participants > 1: stackCount * 0.2 (or 0.0) */
+double pr_reward_multiple_participant_exp_bonus(const pr_reward_ctx *ctx);
+/* EXP Balance linear interpolation weight: 0.2 * stackCount (or 0.0) */
+double pr_reward_exp_balance_weight(const pr_reward_ctx *ctx);
+/* Golden Punch money reward multiplier for the given attacking Pokemon ID: 0.5 * stackCount (or 0.0 if not held) */
+double pr_reward_golden_punch_money_multiplier(const pr_reward_ctx *ctx, uint32_t pokemon_id);
+/* Amulet Coin global money multiplier factor: 1.0 + 0.2 * stackCount */
+double pr_reward_money_multiplier(const pr_reward_ctx *ctx);
+
 #endif

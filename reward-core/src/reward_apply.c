@@ -347,3 +347,60 @@ bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_i
             return false;
     }
 }
+
+/* ---- passive inventory multipliers (EXP Items & Economy) ---- */
+
+static int get_item_stack(const pr_reward_ctx *ctx, uint16_t item) {
+    if (!ctx) return 0;
+    for (int i = 0; i < ctx->n_items; i++) {
+        if (ctx->items[i].item == item && ctx->items[i].stack > 0) {
+            return ctx->items[i].stack;
+        }
+    }
+    return 0;
+}
+
+static int get_held_item_stack(const pr_reward_ctx *ctx, uint16_t item, uint32_t pokemon_id) {
+    if (!ctx) return 0;
+    for (int i = 0; i < ctx->n_party; i++) {
+        if (ctx->party[i].id == pokemon_id) {
+            for (int j = 0; j < ctx->n_items; j++) {
+                if (ctx->items[j].item == item && ctx->items[j].owner == i && ctx->items[j].stack > 0) {
+                    return ctx->items[j].stack;
+                }
+            }
+            break;
+        }
+    }
+    return 0;
+}
+
+double pr_reward_exp_share_multiplier(const pr_reward_ctx *ctx, int n_participants) {
+    if (n_participants <= 0) return 0.0;
+    int stack = get_item_stack(ctx, PR_ITEM_EXP_SHARE);
+    if (stack <= 0) return 0.0;
+    return (stack * 0.2) / (double)n_participants;
+}
+
+double pr_reward_multiple_participant_exp_bonus(const pr_reward_ctx *ctx) {
+    int stack = get_item_stack(ctx, PR_ITEM_OVAL_CHARM);
+    if (stack <= 0) return 0.0;
+    return stack * 0.2;
+}
+
+double pr_reward_exp_balance_weight(const pr_reward_ctx *ctx) {
+    int stack = get_item_stack(ctx, PR_ITEM_EXP_BALANCE);
+    if (stack <= 0) return 0.0;
+    return 0.2 * stack;
+}
+
+double pr_reward_golden_punch_money_multiplier(const pr_reward_ctx *ctx, uint32_t pokemon_id) {
+    int stack = get_held_item_stack(ctx, PR_ITEM_GOLDEN_PUNCH, pokemon_id);
+    if (stack <= 0) return 0.0;
+    return 0.5 * stack;
+}
+
+double pr_reward_money_multiplier(const pr_reward_ctx *ctx) {
+    int stack = get_item_stack(ctx, PR_ITEM_AMULET_COIN);
+    return 1.0 + 0.2 * stack;
+}
