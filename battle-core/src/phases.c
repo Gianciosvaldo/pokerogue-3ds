@@ -65,7 +65,7 @@ static void turn_modifiers(pr_battle *bt, bool player, const pr_pokemon *p)
     int side = player ? 0 : 1;
     for (int i = 0; i < bt->n_mods[side]; i++) {
         const pr_modifier *m = &bt->mods[side][i];
-        if (pr_mod_is_ported_item(m->cls)) continue;
+        if (pr_mod_is_ported_item(m)) continue;
         if (!pr_mod_is(m, PR_MOD_HELD_ITEM) || !p || m->pokemon_id == (int64_t)p->id) {
             pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
             return;
@@ -308,7 +308,7 @@ static void attempt_capture_phase(pr_battle *bt, pr_engine *e, int ph)
         double score = fm->base_exp * (fm->exp_boost ? 1.5 : 1) * ((double)pokemon->level / bt->max_exp_level) * ((iv / 93.0) * 0.2 + 0.8);
         if (bt->max_exp_level <= 0) pr_note_unported(bt, PR_FEAT_WAVE);
         for (int i = 0; i < bt->n_mods[1]; i++)
-            if (!pr_mod_is_ported_item(bt->mods[1][i].cls) && pr_mod_is(&bt->mods[1][i], PR_MOD_HELD_ITEM) && bt->mods[1][i].pokemon_id == (int64_t)pokemon->id)
+            if (!pr_mod_is_ported_item(&bt->mods[1][i]) && pr_mod_is(&bt->mods[1][i], PR_MOD_HELD_ITEM) && bt->mods[1][i].pokemon_id == (int64_t)pokemon->id)
                 pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
         if (pokemon->is_boss) pr_note_unported(bt, PR_FEAT_BOSS_SEGMENTS);
         bt->battle_score += ceil(score);
@@ -591,18 +591,24 @@ static void clear_status(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool confus
 }
 
 /* Pokemon.resetStatus(revive, confusion = false, reloadAssets = false, asPhase = true) */
-static void reset_status_as_phase(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool revive)
+static void reset_status_as_phase(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool revive, bool confusion)
 {
     if (!revive && p->status == STATUS_EFFECT_FAINT) return;
     int ph = new_pokemon_phase(e, PH_RESET_STATUS, pr_battler_index(bt, p));
     if (ph < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); e->overflow = true; return; }
     PH(ph)->pokemon = p;
+    PH(ph)->affect_confusion = confusion;
     pr_phase_unshift(bt, e, ph);
+}
+
+void pr_reset_status_phase_ex(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool revive, bool confusion)
+{
+    reset_status_as_phase(bt, e, p, revive, confusion);
 }
 
 void pr_reset_status_phase(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool revive)
 {
-    reset_status_as_phase(bt, e, p, revive);
+    reset_status_as_phase(bt, e, p, revive, false);
 }
 
 /* Pokemon.cureStatus(effect, msg = getStatusEffectHealText(effect, name)): the cure message, then
@@ -652,7 +658,7 @@ static bool check_sleep(pr_battle *bt, pr_engine *e, int ph)
     pr_pokemon *user = m->pokemon;
     if (user->status != STATUS_EFFECT_SLEEP) return false;
     if (m->use_mode == MOVE_USE_MODE_INDIRECT) {       /* Dancer wakes its user up */
-        reset_status_as_phase(bt, e, user, false);
+        reset_status_as_phase(bt, e, user, false, false);
         return false;
     }
     status_increment_turn(user);
@@ -677,7 +683,7 @@ static bool check_freeze(pr_battle *bt, pr_engine *e, int ph)
     pr_pokemon *user = m->pokemon;
     if (user->status != STATUS_EFFECT_FREEZE) return false;
     if (m->use_mode == MOVE_USE_MODE_INDIRECT) {
-        reset_status_as_phase(bt, e, user, false);
+        reset_status_as_phase(bt, e, user, false, false);
         return false;
     }
     int move = m->move.id;
@@ -800,7 +806,7 @@ bool pr_try_set_status_msg(pr_battle *bt, pr_engine *e, pr_pokemon *p, int effec
         p->hit_count = 1;
         p->hits_left = 1;
     }
-    if (override_status) reset_status_as_phase(bt, e, p, false);
+    if (override_status) reset_status_as_phase(bt, e, p, false, false);
     else p->pending_status = (uint8_t)effect;
     int ph = new_pokemon_phase(e, PH_OBTAIN_STATUS_EFFECT, pr_battler_index(bt, p));
     if (ph < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); e->overflow = true; return true; }
@@ -2382,7 +2388,7 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
         double score = fm->base_exp * (fm->exp_boost ? 1.5 : 1) * ((double)p->level / bt->max_exp_level) * ((iv / 93.0) * 0.2 + 0.8);
         if (bt->max_exp_level <= 0) pr_note_unported(bt, PR_FEAT_WAVE);
         for (int i = 0; i < bt->n_mods[1]; i++)
-            if (!pr_mod_is_ported_item(bt->mods[1][i].cls) && pr_mod_is(&bt->mods[1][i], PR_MOD_HELD_ITEM) && bt->mods[1][i].pokemon_id == (int64_t)p->id)
+            if (!pr_mod_is_ported_item(&bt->mods[1][i]) && pr_mod_is(&bt->mods[1][i], PR_MOD_HELD_ITEM) && bt->mods[1][i].pokemon_id == (int64_t)p->id)
                 pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);                /* getScoreMultiplier */
         if (p->is_boss) pr_note_unported(bt, PR_FEAT_BOSS_SEGMENTS);
         bt->battle_score += ceil(score);
@@ -2394,7 +2400,7 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
                     bt->post_battle_loot++;
                     m->pokemon_id = 0;
                 }
-                if (!pr_mod_is_ported_item(m->cls)) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
+                if (!pr_mod_is_ported_item(m)) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
             }
         }
     }
@@ -2551,16 +2557,48 @@ static void positional_tag_phase(pr_battle *bt, pr_engine *e)
 
 static void berry_phase(pr_battle *bt, pr_engine *e)
 {
-    (void)e;
     pr_speed_iter it;
     pr_pokemon *p;
     pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
     while ((p = pr_speed_iter_next(bt, &it))) {
-        /* eatBerries: findModifier(BerryModifier that shouldApply) */
         int side = p->is_player ? 0 : 1;
         for (int i = 0; i < bt->n_mods[side]; i++)
-            if (!pr_mod_is_ported_item(bt->mods[side][i].cls) && pr_mod_is(&bt->mods[side][i], PR_MOD_HELD_ITEM) && bt->mods[side][i].pokemon_id == (int64_t)p->id)
+            if (!pr_mod_is_ported_item(&bt->mods[side][i]) && pr_mod_is(&bt->mods[side][i], PR_MOD_HELD_ITEM) && bt->mods[side][i].pokemon_id == (int64_t)p->id)
                 pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
+
+        bool has_usable_berry = false;
+        for (int i = 0; i < bt->n_mods[side]; i++) {
+            if (pr_berry_should_apply(bt, p, &bt->mods[side][i])) {
+                has_usable_berry = true;
+                break;
+            }
+        }
+        if (!has_usable_berry) {
+            pr_hook_ab(bt, p, PR_AC_CudChewConsumeBerryAbAttr);
+            continue;
+        }
+
+        bool cancelled = false;
+        pr_ab_params pp = {.pokemon = p, .move = -1, .flag = &cancelled};
+        pr_apply_ab_attrs(bt, PR_AC_PreventBerryUseAbAttr, &pp);
+        if (cancelled) {
+            pr_msg msg = pr_msg1("abilityTriggers:preventBerryUse",
+                                 pr_arg_pokemon(bt, "pokemonNameWithAffix", p));
+            pr_queue_msg(bt, e, msg);
+            pr_hook_ab(bt, p, PR_AC_CudChewConsumeBerryAbAttr);
+            continue;
+        }
+
+        pr_unshift_common_anim(bt, e, pr_battler_index(bt, p), pr_battler_index(bt, p), COMMON_ANIM_USE_ITEM);
+
+        for (int i = 0; i < bt->n_mods[side]; i++) {
+            if (pr_berry_should_apply(bt, p, &bt->mods[side][i])) {
+                pr_apply_berry(bt, e, p, &bt->mods[side][i]);
+                break;
+            }
+        }
+
+        pr_hook_ab(bt, p, PR_AC_HealFromBerryUseAbAttr);
         pr_hook_ab(bt, p, PR_AC_CudChewConsumeBerryAbAttr);
     }
 }
@@ -3003,7 +3041,7 @@ static void stat_stage_change_phase(pr_battle *bt, pr_engine *e, int ph)
 static void reset_status_phase(pr_battle *bt, pr_engine *e, int ph)
 {
     pr_pokemon *p = PH(ph)->pokemon;
-    clear_status(bt, e, p, false);
+    clear_status(bt, e, p, PH(ph)->affect_confusion);
 }
 
 /* ---------------------------------------------------------------- PokemonHealPhase */
@@ -3071,7 +3109,7 @@ static void pokemon_heal_phase(pr_battle *bt, pr_engine *e, int ph)
     if ((f & PR_HEAL_STATUS) && p->status) {
         message = true;
         text = pr_status_msg(bt, p->status, PR_ST_HEAL, p);
-        reset_status_as_phase(bt, e, p, true);
+        reset_status_as_phase(bt, e, p, true, false);
     }
     if (f & PR_HEAL_RESTORE_PP)
         for (int i = 0; i < p->n_moves; i++) p->pp_used[i] = 0;
@@ -3151,7 +3189,7 @@ static void attempt_run_phase(pr_battle *bt, pr_engine *e, int ph)
             if (!pr_mod_is(&bt->mods[1][i], PR_MOD_HELD_ITEM)) {
                 bt->mods[1][w++] = bt->mods[1][i];
             } else {
-                if (!pr_mod_is_ported_item(bt->mods[1][i].cls)) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
+                if (!pr_mod_is_ported_item(&bt->mods[1][i])) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
             }
         }
         bt->n_mods[1] = w;

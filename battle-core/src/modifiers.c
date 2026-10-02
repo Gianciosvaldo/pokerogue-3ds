@@ -41,6 +41,7 @@ const uint8_t pr_mod_parent[PR_MOD_COUNT_] = {
     [PR_MOD_BYPASS_SPEED_CHANCE] = PR_MOD_HELD_ITEM,
     [PR_MOD_FLINCH_CHANCE] = PR_MOD_HELD_ITEM,
     [PR_MOD_RESET_NEGATIVE_STAT_STAGE] = PR_MOD_HELD_ITEM,
+    [PR_MOD_BERRY] = PR_MOD_HELD_ITEM,
 };
 
 const char *const pr_mod_class_name[PR_MOD_COUNT_] = {
@@ -72,6 +73,7 @@ const char *const pr_mod_class_name[PR_MOD_COUNT_] = {
     [PR_MOD_BYPASS_SPEED_CHANCE] = "BypassSpeedChanceModifier",
     [PR_MOD_FLINCH_CHANCE] = "FlinchChanceModifier",
     [PR_MOD_RESET_NEGATIVE_STAT_STAGE] = "ResetNegativeStatStageModifier",
+    [PR_MOD_BERRY] = "BerryModifier",
 };
 
 int pr_mod_class_by_name(const char *name)
@@ -88,8 +90,15 @@ bool pr_mod_is(const pr_modifier *m, int cls)
     return false;
 }
 
-bool pr_mod_is_ported_item(int cls)
+bool pr_mod_is_ported_item(const pr_modifier *m)
 {
+    if (!m) return false;
+    if (m->cls == PR_MOD_BERRY) {
+        return m->berry_type == BERRY_TYPE_SITRUS
+            || m->berry_type == BERRY_TYPE_LUM
+            || m->berry_type == BERRY_TYPE_LEPPA;
+    }
+    int cls = m->cls;
     return cls == PR_MOD_TURN_HEAL || cls == PR_MOD_HIT_HEAL
         || cls == PR_MOD_SURVIVE_DAMAGE || cls == PR_MOD_BYPASS_SPEED_CHANCE
         || cls == PR_MOD_FLINCH_CHANCE || cls == PR_MOD_RESET_NEGATIVE_STAT_STAGE;
@@ -255,6 +264,112 @@ static bool species_listed(const pr_modifier *m, int species)
     return false;
 }
 
+static int max_hp(const pr_pokemon *p) { return p->stats[STAT_HP]; }
+static double to_dmg_value(double v) { double f = floor(v); return f < 1 ? 1 : f; }
+
+int pr_sitrus_berry_fired = 0, pr_lum_berry_fired = 0, pr_leppa_berry_fired = 0;
+
+static int pr_pokemon_move_max_pp(const pr_pokemon *p, int s)
+{
+    if (s < 0 || s >= p->n_moves) return 0;
+    int move = p->moves[s];
+    if (move <= 0 || move >= PR_MOVE_COUNT) return 0;
+    int ovr = p->max_pp_override[s];
+    if (ovr >= 0) return ovr;
+    int base = pr_moves[move].pp;
+    if (base <= 0) return 0;
+    return base + (base * p->pp_up[s]) / 5;
+}
+
+static double get_hp_ratio(const pr_pokemon *p)
+{
+    return js_round(((double)p->hp / max_hp(p)) * 100.0) / 100.0;
+}
+
+bool pr_berry_should_apply(pr_battle *bt, const pr_pokemon *p, const pr_modifier *m)
+{
+    if (!m || m->cls != PR_MOD_BERRY) return false;
+    if (!held_applies(m, p)) return false;
+
+    switch (m->berry_type) {
+    case BERRY_TYPE_SITRUS:
+        return get_hp_ratio(p) < 0.5;
+    case BERRY_TYPE_LUM:
+        return p->status != STATUS_EFFECT_NONE || pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_CONFUSED);
+    case BERRY_TYPE_LEPPA: {
+        for (int i = 0; i < p->n_moves; i++) {
+            int max_pp = pr_pokemon_move_max_pp(p, i);
+            if (max_pp > 0 && p->pp_used[i] >= max_pp) return true;
+        }
+        return false;
+    }
+    default:
+        return false;
+    }
+}
+
+void pr_apply_berry(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_modifier *m)
+{
+    if (!m || m->cls != PR_MOD_BERRY) return;
+    p->has_eaten_berry = true;
+    int btype = m->berry_type;
+
+    pr_lose_held_item(bt, e, p, m);
+
+    switch (btype) {
+    case BERRY_TYPE_SITRUS: {
+        pr_sitrus_berry_fired++;
+        double amount = to_dmg_value(max_hp(p) / 4.0);
+        pr_ab_params rp = {.pokemon = p, .move = -1, .value = &amount};
+        pr_apply_ab_attrs(bt, PR_AC_DoubleBerryEffectAbAttr, &rp);
+        pr_msg msg = pr_msg2("battle:hpHealBerry",
+                             pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+                             pr_arg_key("berryName", "berry:sitrus.name"));
+        pr_unshift_heal_msg(bt, e, pr_battler_index(bt, p), amount, PR_HEAL_MESSAGE, msg);
+        break;
+    }
+    case BERRY_TYPE_LUM: {
+        pr_lum_berry_fired++;
+        if (p->status != STATUS_EFFECT_NONE) {
+            pr_queue_msg(bt, e, pr_status_msg(bt, p->status, PR_ST_HEAL, p));
+        }
+        pr_reset_status_phase_ex(bt, e, p, true, true);
+        break;
+    }
+    case BERRY_TYPE_LEPPA: {
+        pr_leppa_berry_fired++;
+        int slot = -1;
+        for (int i = 0; i < p->n_moves; i++) {
+            int max_pp = pr_pokemon_move_max_pp(p, i);
+            if (max_pp > 0 && p->pp_used[i] >= max_pp) {
+                slot = i;
+                break;
+            }
+        }
+        if (slot < 0) {
+            for (int i = 0; i < p->n_moves; i++) {
+                int max_pp = pr_pokemon_move_max_pp(p, i);
+                if (max_pp > 0 && p->pp_used[i] > 0) {
+                    slot = i;
+                    break;
+                }
+            }
+        }
+        if (slot >= 0) {
+            p->pp_used[slot] = p->pp_used[slot] > 10 ? p->pp_used[slot] - 10 : 0;
+            pr_msg msg = pr_msg3("battle:ppHealBerry",
+                                 pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+                                 pr_arg_move("moveName", p->moves[slot]),
+                                 pr_arg_key("berryName", "berry:leppa.name"));
+            pr_queue_msg(bt, e, msg);
+        }
+        break;
+    }
+    default:
+        break;
+    }
+}
+
 /* applyModifiers(StatBoosterModifier, isPlayer, this, stat, statVal) in getEffectiveStat */
 void pr_apply_stat_booster_modifiers(pr_battle *bt, const pr_pokemon *p, int stat, double *value)
 {
@@ -316,9 +431,6 @@ void pr_apply_attack_type_booster_modifiers(pr_battle *bt, const pr_pokemon *src
         if (*power >= 1) *power = floor(*power * (1 + pr_mod_get_stack_count(m) * m->mult));
     }
 }
-
-static int max_hp(const pr_pokemon *p) { return p->stats[STAT_HP]; }
-static double to_dmg_value(double v) { double f = floor(v); return f < 1 ? 1 : f; }
 
 void pr_apply_turn_heal_modifiers(pr_battle *bt, pr_engine *e, pr_pokemon *p)
 {

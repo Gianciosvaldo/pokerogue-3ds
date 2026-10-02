@@ -437,6 +437,7 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             m->pokemon_id = inum(l, "pid");
             m->stack_count = (int32_t)inum(l, "stack");
             m->is_transferable = true;
+            if (field(l, "btype")) m->berry_type = (int8_t)inum(l, "btype");
         } else if (!strncmp(l, "PARTY ", 6)) {
             int side = (int)inum(l, "side");
             static char ms[PR_MAX_PARTY + 1][64];
@@ -751,8 +752,12 @@ static void dump_state(lines_t *L, const pr_battle *bt, const case_state *cs, bo
     for (int side = 0; side < 2; side++) {
         for (int i = 0; i < bt->n_mods[side]; i++) {
             const pr_modifier *m = &bt->mods[side][i];
-            add_line(L, "MOD side=%d cls=%s pid=%lld stack=%d", side,
-                     pr_mod_class_name[m->cls], (long long)m->pokemon_id, m->stack_count);
+            if (m->cls == PR_MOD_BERRY)
+                add_line(L, "MOD side=%d cls=%s pid=%lld stack=%d btype=%d", side,
+                         pr_mod_class_name[m->cls], (long long)m->pokemon_id, m->stack_count, m->berry_type);
+            else
+                add_line(L, "MOD side=%d cls=%s pid=%lld stack=%d", side,
+                         pr_mod_class_name[m->cls], (long long)m->pokemon_id, m->stack_count);
         }
     }
     for (int side = 0; side < 2; side++) {
@@ -1461,8 +1466,9 @@ int main(int argc, char **argv)
         printf("\n");
     }
     report_conditions();
-    printf("item firings: Leftovers=%d, Shell Bell=%d, Focus Band=%d, Quick Claw=%d, King's Rock=%d, White Herb=%d\n",
-           leftovers_fired, shell_bell_fired, focus_band_fired, quick_claw_fired, kings_rock_fired, white_herb_fired);
+    printf("item firings: Leftovers=%d, Shell Bell=%d, Focus Band=%d, Quick Claw=%d, King's Rock=%d, White Herb=%d, Sitrus=%d, Lum=%d, Leppa=%d\n",
+           leftovers_fired, shell_bell_fired, focus_band_fired, quick_claw_fired, kings_rock_fired, white_herb_fired,
+           pr_sitrus_berry_fired, pr_lum_berry_fired, pr_leppa_berry_fired);
     fail += probes.fail;
     (void)cs0;
     return fail || parse_fail ? 1 : 0;

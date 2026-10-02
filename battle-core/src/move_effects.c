@@ -394,11 +394,29 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         if (pr_held_item_count(bt, target, true)) pr_note_unported(bt, a->cls);   /* the transfer isn't ported */
         return;
     }
+    case PR_AC_EatBerryAttr: {                           /* Stuff Cheeks, Teatime */
+        pr_pokemon *target_p = P(EatBerryAttr, a)->selfTarget ? user : target;
+        if (!target_p) return;
+        int side = target_p->is_player ? 0 : 1;
+        int n_berries = 0;
+        pr_modifier *berries[PR_MAX_MODIFIERS];
+        for (int i = 0; i < bt->n_mods[side]; i++) {
+            pr_modifier *m = &bt->mods[side][i];
+            if (pr_mod_is(m, PR_MOD_BERRY) && m->pokemon_id == (int64_t)target_p->id) {
+                berries[n_berries++] = m;
+            }
+        }
+        if (n_berries > 0) {
+            int idx = pr_battle_rand_seed_int(bt, n_berries, 0);
+            pr_apply_berry(bt, e, target_p, berries[idx]);
+        }
+        return;
+    }
     case PR_AC_StealEatBerryAttr: {                      /* Bug Bite, Pluck */
         bool cancelled = false;
         pr_ab_params cp = {.pokemon = target, .move = -1, .flag = &cancelled};
         pr_apply_ab_attrs(bt, PR_AC_BlockItemTheftAbAttr, &cp);
-        /* any held item might be a berry (BerryModifier isn't a ported class): eating it isn't ported */
+        /* any held item might be a berry: eating it isn't ported */
         if (!cancelled && pr_held_item_count(bt, target, false)) pr_note_unported(bt, a->cls);
         return;
     }

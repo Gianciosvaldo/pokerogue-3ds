@@ -77,6 +77,7 @@ enum {
     PR_MOD_BYPASS_SPEED_CHANCE,      /* Quick Claw */
     PR_MOD_FLINCH_CHANCE,            /* King's Rock */
     PR_MOD_RESET_NEGATIVE_STAT_STAGE,/* White Herb */
+    PR_MOD_BERRY,                    /* Berries */
     PR_MOD_COUNT_
 };
 extern const uint8_t pr_mod_parent[PR_MOD_COUNT_];
@@ -100,6 +101,7 @@ typedef struct pr_modifier {
     double mult;
     uint16_t species[4];           /* Species*Modifier.species */
     uint8_t n_species;
+    int8_t berry_type;             /* BerryModifier.berryType */
 } pr_modifier;
 #define PR_MAX_MODIFIERS 96        /* per side */
 
@@ -495,7 +497,7 @@ bool pr_move_is_attack(int move);
  * Each function is one upstream globalScene.applyModifiers / applyModifier /
  * findModifier / getHeldItems call, named after the modifier class it applies. */
 bool pr_mod_is(const pr_modifier *m, int cls);
-bool pr_mod_is_ported_item(int cls);
+bool pr_mod_is_ported_item(const pr_modifier *m);
 int32_t pr_mod_get_stack_count(const pr_modifier *m);        /* stackCount + virtualStackCount */
 /* pokemon.getHeldItems() (pokemonId === id exactly), filtered to isTransferable when asked:
  * the number of items, and the sum of their stackCount fields (not getStackCount()) */
@@ -524,6 +526,9 @@ bool pr_apply_reset_negative_stat_stage_modifier(pr_battle *bt, struct pr_engine
 void pr_lose_held_item(pr_battle *bt, struct pr_engine *e, pr_pokemon *p, pr_modifier *m);
 void pr_clear_enemy_held_item_modifiers(pr_battle *bt, const pr_pokemon *p);
 extern int pr_kings_rock_fired;
+extern int pr_sitrus_berry_fired, pr_lum_berry_fired, pr_leppa_berry_fired;
+bool pr_berry_should_apply(pr_battle *bt, const pr_pokemon *p, const pr_modifier *m);
+void pr_apply_berry(pr_battle *bt, struct pr_engine *e, pr_pokemon *p, pr_modifier *m);
 /* PokemonMultiHitModifier.apply(pokemon, moveId, null, damageMultiplier) for each Multi Lens */
 void pr_apply_multi_hit_damage_modifiers(pr_battle *bt, const pr_pokemon *src, int move, double *mult);
 /* globalScene.findModifier(m => m instanceof PokemonMultiHitModifier && m.pokemonId === p.id) (player list) */
