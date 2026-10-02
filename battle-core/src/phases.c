@@ -1671,6 +1671,8 @@ static void boss_segments_cleared(pr_battle *bt, pr_engine *e, pr_pokemon *p, in
             stats[n] = (int8_t)picked;
             stages[n] = (int8_t)boost;
             n++;
+        } else {
+            pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT);
         }
     }
 
