@@ -33,7 +33,97 @@ static long num(char **p) {
     return strtol(*p, p, 10);
 }
 
+static void test_passive_multipliers(void) {
+    pr_reward_ctx ctx;
+    memset(&ctx, 0, sizeof(ctx));
+
+    /* EXP Share: zero stack or 0 participants */
+    if (pr_reward_exp_share_multiplier(&ctx, 1) != 0.0) {
+        fprintf(stderr, "FAIL: exp_share zero stack\n");
+        exit(1);
+    }
+    ctx.items[0].item = PR_ITEM_EXP_SHARE;
+    ctx.items[0].stack = 5;
+    ctx.n_items = 1;
+    if (pr_reward_exp_share_multiplier(&ctx, 0) != 0.0) {
+        fprintf(stderr, "FAIL: exp_share 0 participants\n");
+        exit(1);
+    }
+    if (pr_reward_exp_share_multiplier(&ctx, 2) != 0.5) { /* (5 * 0.2) / 2 = 0.5 */
+        fprintf(stderr, "FAIL: exp_share 5 stack / 2 participants\n");
+        exit(1);
+    }
+
+    /* EXP All / Oval Charm: multiple participant bonus */
+    memset(&ctx, 0, sizeof(ctx));
+    if (pr_reward_multiple_participant_exp_bonus(&ctx) != 0.0) {
+        fprintf(stderr, "FAIL: multiple_participant_exp_bonus zero stack\n");
+        exit(1);
+    }
+    ctx.items[0].item = PR_ITEM_OVAL_CHARM;
+    ctx.items[0].stack = 5;
+    ctx.n_items = 1;
+    if (pr_reward_multiple_participant_exp_bonus(&ctx) != 1.0) { /* 5 * 0.2 = 1.0 */
+        fprintf(stderr, "FAIL: multiple_participant_exp_bonus 5 stack\n");
+        exit(1);
+    }
+
+    /* EXP Balance: lerp weight */
+    memset(&ctx, 0, sizeof(ctx));
+    if (pr_reward_exp_balance_weight(&ctx) != 0.0) {
+        fprintf(stderr, "FAIL: exp_balance_weight zero stack\n");
+        exit(1);
+    }
+    ctx.items[0].item = PR_ITEM_EXP_BALANCE;
+    ctx.items[0].stack = 4;
+    ctx.n_items = 1;
+    if (pr_reward_exp_balance_weight(&ctx) != 0.8) { /* 0.2 * 4 = 0.8 */
+        fprintf(stderr, "FAIL: exp_balance_weight 4 stack\n");
+        exit(1);
+    }
+
+    /* Golden Punch: holder money multiplier */
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.n_party = 2;
+    ctx.party[0].id = 101;
+    ctx.party[1].id = 202;
+    if (pr_reward_golden_punch_money_multiplier(&ctx, 101) != 0.0) {
+        fprintf(stderr, "FAIL: golden_punch zero stack\n");
+        exit(1);
+    }
+    ctx.items[0].item = PR_ITEM_GOLDEN_PUNCH;
+    ctx.items[0].stack = 5;
+    ctx.items[0].owner = 1; /* owned by party index 1 (id 202) */
+    ctx.n_items = 1;
+    if (pr_reward_golden_punch_money_multiplier(&ctx, 101) != 0.0) {
+        fprintf(stderr, "FAIL: golden_punch non-holder\n");
+        exit(1);
+    }
+    if (pr_reward_golden_punch_money_multiplier(&ctx, 202) != 2.5) { /* 0.5 * 5 = 2.5 */
+        fprintf(stderr, "FAIL: golden_punch holder\n");
+        exit(1);
+    }
+
+    /* Amulet Coin: global money multiplier */
+    memset(&ctx, 0, sizeof(ctx));
+    if (pr_reward_money_multiplier(&ctx) != 1.0) {
+        fprintf(stderr, "FAIL: money_multiplier zero stack\n");
+        exit(1);
+    }
+    ctx.items[0].item = PR_ITEM_AMULET_COIN;
+    ctx.items[0].stack = 5;
+    ctx.n_items = 1;
+    if (pr_reward_money_multiplier(&ctx) != 2.0) { /* 1.0 + 0.2 * 5 = 2.0 */
+        fprintf(stderr, "FAIL: money_multiplier 5 stack\n");
+        exit(1);
+    }
+
+    printf("PASS: passive_multipliers unit tests\n");
+}
+
 int main(int argc, char **argv) {
+    test_passive_multipliers();
+
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <cases file>\n", argv[0]);
         return 1;
