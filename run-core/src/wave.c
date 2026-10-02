@@ -86,7 +86,11 @@ bool pr_run_is_fixed_battle(pr_run *run, int wave)
     if (is_classic(run->mode))
         for (unsigned i = 0; i < sizeof classic_fixed / sizeof classic_fixed[0]; i++)
             if (classic_fixed[i] == wave) return true;
-    if (run->has_challenges) run->unported |= PR_RUN_UNPORTED_CHALLENGES;
+    /* SINGLE_GENERATION also rewrites fixed trainers upstream; Task 34 ports only
+     * starter/party/capture validation, so keep that hook explicitly unported here. */
+    if (pr_run_has_unported_challenges(run)
+        || (run->challenge_flags & PR_CHALLENGE_SINGLE_GENERATION))
+        run->unported |= PR_RUN_UNPORTED_CHALLENGES;
     return false;
 }
 
