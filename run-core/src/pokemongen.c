@@ -264,6 +264,15 @@ int pr_run_enemy_pokemon_base_rng(pr_rng *rng, pr_run *run, const pr_enemy_gen_c
             }
         }
         out->nature = pr_rng_seed_int(rng, PR_NATURE_COUNT, 0);
+        out->luck = out->shiny ? out->variant + 1 : 0;
+
+        /* PlayerPokemon rolls teraType after nature. Daily starter generation shares one
+         * offset-0 RNG across all three starters, so omitting this roll for a dual-type
+         * starter shifts the RNG sequence of every starter that follows. */
+        int8_t types[2];
+        int n_types = pr_run_enemy_types(out, ctx->species, types);
+        if (n_types < 0) { run->unported |= PR_RUN_UNDEFINED_UPSTREAM; return -1; }
+        out->tera_type = n_types == 1 ? types[0] : types[pr_rng_integer_in_range(rng, 0, n_types - 1)];
         return 0;
     }
 
