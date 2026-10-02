@@ -212,6 +212,12 @@ static int allowed_bench(const gc_run *run)
     return n;
 }
 
+static bool has_any_pokeball(const gc_run *run)
+{
+    for (int i = 0; i < 8; i++) if (run->pokeballs[i] > 0) return true;
+    return false;
+}
+
 void gc_battle_command_screen(gc_run *run)
 {
     gc_screen *s = &run->screen;
@@ -226,8 +232,8 @@ void gc_battle_command_screen(gc_run *run)
     }
     s->struggle = p && !any;
     s->can_switch = p && allowed_bench(run) > 0 && !trapped(run, p);
-    s->can_ball = false;   /* catching isn't ported yet (AttemptCapturePhase) */
-    s->can_run = false;    /* nor fleeing (AttemptRunPhase) */
+    s->can_ball = run->battle_type == BATTLE_TYPE_WILD && has_any_pokeball(run);
+    s->can_run = false;    /* fleeing isn't ported yet (AttemptRunPhase) */
 }
 
 /* CommandPhase.handleFightCommand / handleSwitchCommand for field slot 0 */
@@ -283,7 +289,25 @@ bool gc_battle_player_command(gc_run *run, const gc_choice *c, const char **why)
         tc->no_move = true;
         return true;
     }
-    if (c->kind == GC_CH_BALL) { gc_stub(run, GC_STUB_CATCH); *why = "catching isn't ported yet"; return false; }
+    if (c->kind == GC_CH_BALL) {
+        if (run->battle_type != BATTLE_TYPE_WILD) { *why = "battle:pokeballTrainerBattle"; return false; }
+        int ball = c->a;
+        if (ball < 0 || ball >= 8 || run->pokeballs[ball] == 0) { *why = "modifierSelectUiHandler:notEnoughMoney"; return false; }
+        run->pokeballs[ball]--;
+        bt->last_used_pokeball = (int8_t)ball;
+        memset(tc, 0, sizeof *tc);
+        tc->command = COMMAND_BALL;
+        tc->cursor = (int8_t)ball;
+        tc->n_targets = 1;
+        tc->targets[0] = 2;
+        memset(pc, 0, sizeof *pc);
+        pc->command = COMMAND_BALL;
+        pc->targets[0] = 0;
+        pc->n_targets = 1;
+        pc->skip = true;
+        pc->cursor = PR_CURSOR_UNDEFINED;
+        return true;
+    }
     if (c->kind == GC_CH_RUN) { *why = "fleeing isn't ported yet"; return false; }
     *why = "not a command";
     return false;

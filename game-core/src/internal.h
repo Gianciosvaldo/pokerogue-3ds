@@ -33,6 +33,7 @@ enum {
     RP_SWITCH_BIOME,     /* SwitchBiomePhase: a = biome */
     RP_PARTY_HEAL,       /* PartyHealPhase */
     RP_GAME_OVER,        /* GameOverPhase: a = victory; waits on GAME_OVER / CLEAR */
+    RP_PARTY_SWAP,       /* PartySwapPhase: a = enemy party index of caught mon */
     RP_COUNT_
 };
 typedef struct { uint8_t type; int32_t a, b, c; double d; const char *key; } gc_rphase;

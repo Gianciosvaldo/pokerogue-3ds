@@ -244,6 +244,13 @@ static bool plain_choice(const gc_run *run, gc_choice *c)
     case GC_SCREEN_COMMAND: {
         const gc_mon *me = gc_field_mon(run, 0), *foe = gc_field_mon(run, 1);
         if (!me || !foe) return false;
+        if (s->can_ball) {
+            for (int i = 7; i >= 0; i--) {
+                if (run->pokeballs[i] > 0 && (foe->b.hp * 2 < foe->b.stats[0] || rnd(3) == 0)) {
+                    c->kind = GC_CH_BALL; c->a = (int16_t)i; return true;
+                }
+            }
+        }
         if (s->can_switch && me->b.hp * 4 < me->b.stats[0] && rnd(3) == 0) {
             for (int i = 0; i < run->n_party; i++)
                 if (!run->party[i].b.on_field && run->party[i].b.hp * 2 > run->party[i].b.stats[0]) {
@@ -317,6 +324,15 @@ static bool auto_choose(gc_run *run)
         memset(&c, 0, sizeof c);
         switch (s->kind) {
         case GC_SCREEN_COMMAND: {
+            if (s->can_ball && rnd(100) < 15) {
+                int avail[8], n_avail = 0;
+                for (int i = 0; i < 8; i++) if (run->pokeballs[i] > 0) avail[n_avail++] = i;
+                if (n_avail > 0) {
+                    c.kind = GC_CH_BALL;
+                    c.a = (int16_t)avail[rnd((uint32_t)n_avail)];
+                    break;
+                }
+            }
             if (s->can_switch && rnd(100) < 10) {
                 c.kind = GC_CH_POKEMON;
                 c.a = (int16_t)rnd((uint32_t)run->n_party);
@@ -333,7 +349,11 @@ static bool auto_choose(gc_run *run)
             int ok[6], n = 0;
             for (int i = 0; i < run->n_party; i++) if (s->pick_ok[i]) ok[n++] = i;
             c.kind = GC_CH_PICK;
-            c.a = (int16_t)(n ? ok[rnd((uint32_t)n)] : -1);
+            if (s->can_skip && rnd(4) == 0) {
+                c.a = -1;
+            } else {
+                c.a = (int16_t)(n ? ok[rnd((uint32_t)n)] : -1);
+            }
             break;
         }
         case GC_SCREEN_LEARN_MOVE:
