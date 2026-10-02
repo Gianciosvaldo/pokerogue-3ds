@@ -21,6 +21,14 @@ build/animtest: $(ANIM_SRCS)
 animtest: build/animtest
 .PHONY: animtest
 
+# unit test for animation details (tone gray and substitute target selection)
+DETAILS_SRCS := anim_details_test.c ../source/battle_anim.c ../source/tween.c ../gen/gm_enum_names.c $(BC)/gen/out/pr_data.c
+build/anim_details_test: $(DETAILS_SRCS)
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) -I../gen -I../../assets-pipeline/app-src/include $(CFLAGS) -fsanitize=address,undefined $(DETAILS_SRCS) -ljansson -lm -o $@
+anim_details_test: build/anim_details_test
+.PHONY: anim_details_test
+
 # switching through the stand-in battle (a switch turn, a faint switch)
 SW_SRCS := switchtest.c ../source/battle_setup.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/switchtest: $(SW_SRCS)
