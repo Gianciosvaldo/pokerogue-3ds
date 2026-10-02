@@ -227,6 +227,10 @@ bool pr_can_switch(pr_battle *bt, const pr_pokemon *p, bool baton, pr_msg *why);
  * succeeds is the AttemptRunPhase's roll, not ported yet. */
 bool pr_can_run(pr_battle *bt, const pr_pokemon *p, pr_msg *why);
 
+/* Check whether p can Mega Evolve or Gigantamax */
+bool pr_can_mega(pr_battle *bt, const pr_pokemon *p);
+bool pr_can_gigantamax(pr_battle *bt, const pr_pokemon *p);
+
 /* SwitchPhase.start: the early exits, or the party screen (sets e->awaiting_pick) */
 void pr_switch_phase(pr_battle *bt, pr_engine *e, int ph);
 

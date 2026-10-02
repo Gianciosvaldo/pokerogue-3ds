@@ -3,6 +3,7 @@
  * it can't. They only read the battle: nothing is queued and no ability shows (upstream asks
  * with simulated calls). */
 #include "pr/engine.h"
+#include "pr/battle.h"
 #include <math.h>
 
 /* PokemonMove.getMovePp(): maxPpOverride, else pp + ppUp * toDmgValue(pp / 5) */
@@ -122,6 +123,41 @@ bool pr_move_selectable(pr_battle *bt, const pr_pokemon *p, int move, pr_msg *wh
     if (ok && move_restriction(bt, p, move, &m)) ok = false;
     if (why) *why = m;
     return ok;
+}
+
+bool pr_can_mega(pr_battle *bt, const pr_pokemon *p)
+{
+    if (!p || p->hp <= 0) return false;
+    if (pr_is_mega(p) || pr_is_max(p)) return false;
+    const pr_species *sp = pr_pokemon_species(p);
+    if (!sp || !sp->can_change_form) return false;
+    int side = p->is_player ? 0 : 1;
+    for (int i = 0; i < bt->n_mods[side]; i++) {
+        const pr_modifier *m = &bt->mods[side][i];
+        if (m->cls == PR_MOD_HELD_ITEM && m->pokemon_id == (int64_t)p->id && m->num > 0) {
+            /* Check if held item is mega stone / form change item matching species */
+            if (m->num >= FORM_CHANGE_ITEM_ABOMASITE && m->num <= FORM_CHANGE_ITEM_TATSUGIRINITE) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool pr_can_gigantamax(pr_battle *bt, const pr_pokemon *p)
+{
+    if (!p || p->hp <= 0) return false;
+    if (pr_is_mega(p) || pr_is_max(p)) return false;
+    const pr_species *sp = pr_pokemon_species(p);
+    if (!sp || !sp->can_change_form) return false;
+    int side = p->is_player ? 0 : 1;
+    for (int i = 0; i < bt->n_mods[side]; i++) {
+        const pr_modifier *m = &bt->mods[side][i];
+        if (m->cls == PR_MOD_HELD_ITEM && m->pokemon_id == (int64_t)p->id && m->num == FORM_CHANGE_ITEM_MAX_MUSHROOMS) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool pr_move_usable(pr_battle *bt, const pr_pokemon *p, int slot, bool ignore_pp, bool for_selection, pr_msg *why)

@@ -41,6 +41,22 @@ const pr_form *pr_pokemon_fusion_form(const pr_pokemon *p)
     return &pr_forms[fs->form0 + (p->fusion_form < fs->nforms ? p->fusion_form : 0)];
 }
 
+bool pr_is_mega(const pr_pokemon *p)
+{
+    const char *k = pr_pokemon_form(p)->form_key;
+    if (!k) return false;
+    return !strcmp(k, "mega") || !strcmp(k, "mega-x") || !strcmp(k, "mega-y") || !strcmp(k, "mega-z")
+           || !strcmp(k, "mega-original") || !strcmp(k, "primal");
+}
+
+bool pr_is_max(const pr_pokemon *p)
+{
+    const char *k = pr_pokemon_form(p)->form_key;
+    if (!k) return false;
+    return !strcmp(k, "gigantamax") || !strcmp(k, "gigantamax-rapid") || !strcmp(k, "gigantamax-single")
+           || !strcmp(k, "eternamax");
+}
+
 /* calculateStats() with calculateBaseStats(). Fusion and challenges (FLIP_STAT) are
  * not ported yet; the Wonder Guard check reads the permanent ability and the passive. */
 void pr_recalculate_stats(pr_battle *bt, pr_pokemon *p)
@@ -72,7 +88,6 @@ void pr_calculate_stats(pr_battle *bt, pr_pokemon *p)
             pr_apply_incrementing_stat_modifier(bt, p, s, &v);
             /* hasAbility(WONDER_GUARD, canApply false, ignoreOverride true): the permanent ability or the passive */
             if (p->base_ability == ABILITY_ID_WONDER_GUARD || p->passive == ABILITY_ID_WONDER_GUARD) v = 1;
-            p->hp = (int32_t)v; /* fresh Pokemon: hp starts at max */
         } else {
             v += 5;
             double m = pr_nature_mult[p->nature][s];
@@ -86,6 +101,34 @@ void pr_calculate_stats(pr_battle *bt, pr_pokemon *p)
         if (v < 1) v = 1;
         p->stats[s] = (int32_t)v;
     }
+}
+
+void pr_change_form(pr_battle *bt, pr_pokemon *p, uint8_t new_form)
+{
+    const pr_species *sp = pr_pokemon_species(p);
+    if (!sp || new_form >= sp->nforms) return;
+
+    p->form = new_form;
+
+    /* Update ability to match new form while keeping ability index */
+    const pr_form *f = pr_pokemon_form(p);
+    if (p->fusion_ability_index == 1 && f->ability2 != ABILITY_ID_NONE) {
+        p->ability = p->base_ability = f->ability2;
+    } else if (p->fusion_ability_index == 2 && f->ability_hidden != ABILITY_ID_NONE) {
+        p->ability = p->base_ability = f->ability_hidden;
+    } else {
+        p->ability = p->base_ability = f->ability1;
+    }
+    p->passive = f->passive;
+
+    /* Reset Terastallization if active and entering Mega/Max form */
+    if (p->terastallized && (pr_is_mega(p) || pr_is_max(p))) {
+        p->terastallized = false;
+        p->stellar_types_boosted = 0;
+    }
+
+    /* Recalculate stats */
+    pr_recalculate_stats(bt, p);
 }
 
 double pr_get_stat(const pr_pokemon *p, int stat, bool bypass_summon)

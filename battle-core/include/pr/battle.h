@@ -694,4 +694,8 @@ pr_damage_result pr_get_attack_damage_ex(pr_battle *bt, pr_pokemon *def, pr_poke
                                          bool is_critical, bool simulated, double effectiveness);
 bool pr_get_critical_hit_result(pr_battle *bt, const pr_pokemon *def, const pr_pokemon *src, int move);
 
+bool pr_is_mega(const pr_pokemon *p);
+bool pr_is_max(const pr_pokemon *p);
+void pr_change_form(pr_battle *bt, pr_pokemon *p, uint8_t new_form);
+
 #endif
