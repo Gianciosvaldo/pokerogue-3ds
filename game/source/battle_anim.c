@@ -288,12 +288,54 @@ typedef struct {
   float x, y, angle, sx, sy;
   int graphic_frame;
   uint8_t alpha, blend;
-  int16_t tone[3];
+  int16_t tone[4];
   bool visible, locked;
   int prio;      /* graphics: the priority last applied */
   ba_layer layer;
   float z;       /* order within the layer */
 } spr_t;
+
+/* ---- Pure C animation detail helpers ---- */
+
+void anim_apply_tone_gray(uint8_t r, uint8_t g, uint8_t b, uint8_t a, const int16_t tone[4], uint8_t out_rgb[3]) {
+  /* Derived from upstream sprite-frag-shader.frag lines 218-222:
+   * const vec3 lumaF = vec3(.299, .587, .114);
+   * float luma = dot(color.rgb, lumaF);
+   * color.rgb = mix(color.rgb, vec3(luma), tone.w);
+   * color.rgb += tone.rgb * (color.a / 255.0);
+   */
+  float fr = (float)r;
+  float fg = (float)g;
+  float fb = (float)b;
+  float fa = (float)a;
+
+  float luma = 0.299f * fr + 0.587f * fg + 0.114f * fb;
+  float tone_w = (float)tone[3] / 255.0f;
+  if (tone_w < 0.0f) tone_w = 0.0f;
+  if (tone_w > 1.0f) tone_w = 1.0f;
+
+  float mr = fr + (luma - fr) * tone_w + (float)tone[0] * (fa / 255.0f);
+  float mg = fg + (luma - fg) * tone_w + (float)tone[1] * (fa / 255.0f);
+  float mb = fb + (luma - fb) * tone_w + (float)tone[2] * (fa / 255.0f);
+
+  if (mr < 0.0f) mr = 0.0f;
+  if (mr > 255.0f) mr = 255.0f;
+  if (mg < 0.0f) mg = 0.0f;
+  if (mg > 255.0f) mg = 255.0f;
+  if (mb < 0.0f) mb = 0.0f;
+  if (mb > 255.0f) mb = 255.0f;
+
+  out_rgb[0] = (uint8_t)(mr + 0.5f);
+  out_rgb[1] = (uint8_t)(mg + 0.5f);
+  out_rgb[2] = (uint8_t)(mb + 0.5f);
+}
+
+bool anim_get_target_is_substitute(int user_battler, int target_battler, bool on_substitute, bool target_has_substitute) {
+  /* Derived from upstream battle-anims.ts lines 778 & 852:
+   * const targetSubstitute = onSubstitute && user !== target ? target.getTag(BattlerTagType.SUBSTITUTE) : null;
+   */
+  return on_substitute && (user_battler != target_battler) && target_has_substitute;
+}
 
 typedef struct {
   spr_t s[SPR_MAX];
@@ -506,7 +548,7 @@ static void apply_frame(const ba_mon* field) {
         set_priority(s, fr->priority, fr->focus, field);
       }
       s->graphic_frame = fr->graphic_frame;
-      s->tone[0] = s->tone[1] = s->tone[2] = 0;
+      s->tone[0] = s->tone[1] = s->tone[2] = s->tone[3] = 0;
     } else {
       bool is_user = fr->target == TGT_USER;
       if (is_user && A.target == A.user) continue;
@@ -520,7 +562,7 @@ static void apply_frame(const ba_mon* field) {
       }
       s = &l->s[(*n)++];
       s->locked = fr->locked;
-      for (int k = 0; k < 3; k++) s->tone[k] = fr->tone[k];
+      for (int k = 0; k < 4; k++) s->tone[k] = fr->tone[k];
     }
     s->x = x;
     s->y = y;

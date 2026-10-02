@@ -57,4 +57,16 @@ void ba_draw(ba_layer layer, const ba_mon field[4]);
 bool ba_hidden(int battler);
 void ba_show(int battler);
 
+/* Animation details (pure logic helpers for tone gray math and Substitute target selection). */
+
+/* Applies tone gray (luma desaturation) and RGB tone offset based on upstream's sprite fragment shader
+ * (sprite-frag-shader.frag lines 218-222). tone is [r, g, b, gray] where gray is 0..255 (or 0..1 scaled). */
+void anim_apply_tone_gray(uint8_t r, uint8_t g, uint8_t b, uint8_t a, const int16_t tone[4], uint8_t out_rgb[3]);
+
+/* Determines whether an animation target should be directed at the Substitute doll sprite instead of
+ * the target Pokemon sprite based on upstream's BattleAnim.play / getGraphicFrameData
+ * (battle-anims.ts lines 778 & 852: `onSubstitute && user !== target ? target.getTag(BattlerTagType.SUBSTITUTE) : null`).
+ * Returns true if the Substitute doll sprite is targeted. */
+bool anim_get_target_is_substitute(int user_battler, int target_battler, bool on_substitute, bool target_has_substitute);
+
 #endif
