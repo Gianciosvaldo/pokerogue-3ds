@@ -47,6 +47,7 @@ it("reward apply producer", async () => {
     "PP_UP", "PP_MAX",
     "EVOLUTION_ITEM", "RARE_EVOLUTION_ITEM",
     "FORM_CHANGE_ITEM", "RARE_FORM_CHANGE_ITEM",
+    "MEGA_BRACELET", "DYNAMAX_BAND", "DNA_SPLICERS",
   ];
 
   const evoItemIds = Object.values(EvolutionItem).filter((v): v is number => typeof v === "number" && v > 0);
@@ -145,6 +146,7 @@ it("reward apply producer", async () => {
 
       let modifierType: any;
       let arg = 0;
+      let filterMsg: string | null = null;
 
       if (itemKey === "EVOLUTION_ITEM" || itemKey === "RARE_EVOLUTION_ITEM") {
         const rare = itemKey === "RARE_EVOLUTION_ITEM";
@@ -172,6 +174,24 @@ it("reward apply producer", async () => {
           arg = pick(formChangeItemIds);
         }
         modifierType = new FormChangeItemModifierType(arg);
+      } else if (itemKey === "DNA_SPLICERS") {
+        const typeFunc = (modifierTypes as any)["DNA_SPLICERS"];
+        modifierType = typeFunc();
+        if (party.length < 2) {
+          filterMsg = "It won’t have any effect.";
+        } else {
+          arg = (targetPartyIdx + 1 + rnd(party.length - 1)) % party.length;
+          const secPartyMon = party[arg];
+          if (secPartyMon.isFusion()) {
+            filterMsg = "It won’t have any effect.";
+          }
+        }
+      } else if (itemKey === "MEGA_BRACELET" || itemKey === "DYNAMAX_BAND") {
+        const typeFunc = (modifierTypes as any)[itemKey];
+        modifierType = typeFunc();
+        if (scene.modifiers.some((m: any) => keyOf(m.type) === itemKey)) {
+          filterMsg = "It won’t have any effect.";
+        }
       } else {
         const typeFunc = (modifierTypes as any)[itemKey];
         modifierType = typeFunc();
@@ -209,9 +229,7 @@ it("reward apply producer", async () => {
       );
 
       // Execute item apply in upstream
-      let filterMsg: string | null = null;
-
-      if (modifierType.selectFilter) {
+      if (filterMsg === null && modifierType.selectFilter) {
         filterMsg = modifierType.selectFilter(targetMon);
       }
       if (filterMsg === null && modifierType instanceof PokemonMoveModifierType) {
@@ -225,11 +243,16 @@ it("reward apply producer", async () => {
         let mod: any;
         if (modifierType instanceof PokemonMoveModifierType) {
           mod = modifierType.newModifier(targetMon, targetMoveIdx);
+        } else if (itemKey === "DNA_SPLICERS") {
+          const secPartyMon = party[arg];
+          mod = modifierType.newModifier(targetMon, secPartyMon);
         } else if (typeof modifierType.newModifier === "function") {
           mod = modifierType.newModifier(targetMon);
         }
         if (mod) {
-          applied = scene.addModifier(mod);
+          const preModCount = scene.modifiers.length;
+          const ret = scene.addModifier(mod);
+          applied = ret || scene.modifiers.length > preModCount;
         }
       }
 

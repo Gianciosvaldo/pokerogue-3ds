@@ -26,6 +26,7 @@ static uint16_t parse_item_key(const char *key) {
     if (strcmp(key, "RARE_EVOLUTION_ITEM") == 0) return PR_ITEM_RARE_EVOLUTION_ITEM;
     if (strcmp(key, "FORM_CHANGE_ITEM") == 0) return PR_ITEM_FORM_CHANGE_ITEM;
     if (strcmp(key, "RARE_FORM_CHANGE_ITEM") == 0) return PR_ITEM_RARE_FORM_CHANGE_ITEM;
+    if (strcmp(key, "DNA_SPLICERS") == 0) return PR_ITEM_DNA_SPLICERS;
     return 0;
 }
 
@@ -136,14 +137,15 @@ int main(int argc, char **argv) {
 
     char line[4096];
     int cases = 0, pass = 0, fail = 0;
-    int item_counts[18] = {0};
-    const char *item_keys[18] = {
+    int item_counts[21] = {0};
+    const char *item_keys[21] = {
         "POTION", "SUPER_POTION", "HYPER_POTION", "MAX_POTION", "FULL_RESTORE",
         "REVIVE", "MAX_REVIVE", "SACRED_ASH",
         "ETHER", "MAX_ETHER", "ELIXIR", "MAX_ELIXIR",
         "PP_UP", "PP_MAX",
         "EVOLUTION_ITEM", "RARE_EVOLUTION_ITEM",
-        "FORM_CHANGE_ITEM", "RARE_FORM_CHANGE_ITEM"
+        "FORM_CHANGE_ITEM", "RARE_FORM_CHANGE_ITEM",
+        "MEGA_BRACELET", "DYNAMAX_BAND", "DNA_SPLICERS"
     };
 
     while (fgets(line, sizeof(line), f)) {
@@ -163,7 +165,7 @@ int main(int argc, char **argv) {
             int n_party = (int)num(&p);
 
             uint16_t item_id = parse_item_key(key);
-            for (int k = 0; k < 18; k++) {
+            for (int k = 0; k < 21; k++) {
                 if (strcmp(key, item_keys[k]) == 0) {
                     item_counts[k]++;
                     break;
@@ -310,7 +312,7 @@ int main(int argc, char **argv) {
     printf("== apply\n");
     printf("cases %d: pass %d, fail %d\n", cases, pass, fail);
     printf("cases per item:\n");
-    for (int k = 0; k < 18; k++) {
+    for (int k = 0; k < 21; k++) {
         printf("  %-22s: %d\n", item_keys[k], item_counts[k]);
     }
 

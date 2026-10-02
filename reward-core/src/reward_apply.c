@@ -319,6 +319,15 @@ bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_i
                     continue;
                 }
 
+                bool conds_met = true;
+                for (int c = 0; c < fc->n_cond; c++) {
+                    if (!pr_reward_fc_condition(ctx, party_idx, &pr_fc_conds[fc->cond_start + c])) {
+                        conds_met = false;
+                        break;
+                    }
+                }
+                if (!conds_met) continue;
+
                 can_change = true;
                 break;
             }
@@ -336,6 +345,125 @@ bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_i
                 ctx->items[ctx->n_items].owner = (int8_t)party_idx;
                 ctx->items[ctx->n_items].active = true;
                 ctx->n_items++;
+            }
+
+            if (msg) *msg = NULL;
+            return true;
+        }
+
+        case PR_ITEM_MEGA_BRACELET:
+        case PR_ITEM_DYNAMAX_BAND: {
+            if (pr_reward_has_item(ctx, item)) {
+                if (msg) *msg = NO_EFFECT_MSG;
+                return false;
+            }
+            if (ctx->n_items >= PR_REWARD_MAX_OWNED) {
+                if (msg) *msg = NO_EFFECT_MSG;
+                return false;
+            }
+            ctx->items[ctx->n_items].item = item;
+            ctx->items[ctx->n_items].arg = 0;
+            ctx->items[ctx->n_items].stack = 1;
+            ctx->items[ctx->n_items].owner = -1;
+            ctx->items[ctx->n_items].active = true;
+            ctx->items[ctx->n_items].battle_count = 0;
+            ctx->n_items++;
+
+            if (msg) *msg = NULL;
+            return true;
+        }
+
+        case PR_ITEM_DNA_SPLICERS: {
+            if (party_idx < 0 || party_idx >= ctx->n_party) {
+                if (msg) *msg = NO_EFFECT_MSG;
+                return false;
+            }
+            int sec_idx = (arg >= 0 && arg < ctx->n_party && arg != party_idx) ? arg : move_idx;
+            if (sec_idx < 0 || sec_idx >= ctx->n_party || sec_idx == party_idx) {
+                if (msg) *msg = NO_EFFECT_MSG;
+                return false;
+            }
+
+            pr_reward_mon *p1 = &ctx->party[party_idx];
+            pr_reward_mon *p2 = &ctx->party[sec_idx];
+
+            if (p1->fusion_species >= 0 || p2->fusion_species >= 0) {
+                if (msg) *msg = NO_EFFECT_MSG;
+                return false;
+            }
+
+            if (!p1->allowed_in_challenge || !p2->allowed_in_challenge) {
+                if (msg) *msg = NO_EFFECT_MSG;
+                return false;
+            }
+
+            /* Perform fusion */
+            p1->fusion_species = p2->species;
+            p1->fusion_form = p2->form;
+            p1->fusion_gender = p2->gender;
+            if (p2->pause_evolutions) p1->pause_evolutions = true;
+
+            int sp1_id = p1->species > 1025 ? (p1->species % 1000) : p1->species;
+            int sp2_id = p2->species > 1025 ? (p2->species % 1000) : p2->species;
+            int hp1_base = 0, hp2_base = 0;
+            if (sp1_id >= 1 && sp1_id <= PR_SPECIES_COUNT) {
+                const pr_species *s = &pr_species_table[sp1_id - 1];
+                uint16_t fidx = s->form0 + (p1->form < s->nforms ? p1->form : 0);
+                if (fidx < PR_FORM_COUNT) hp1_base = pr_forms[fidx].base_stats[0];
+            }
+            if (sp2_id >= 1 && sp2_id <= PR_SPECIES_COUNT) {
+                const pr_species *s = &pr_species_table[sp2_id - 1];
+                uint16_t fidx = s->form0 + (p2->form < s->nforms ? p2->form : 0);
+                if (fidx < PR_FORM_COUNT) hp2_base = pr_forms[fidx].base_stats[0];
+            }
+
+            double p1_hp_pct = (p1->max_hp > 0) ? ((double)p1->hp / (double)p1->max_hp) : 0.0;
+            double p2_hp_pct = (p2->max_hp > 0) ? ((double)p2->hp / (double)p2->max_hp) : 0.0;
+            double new_hp_pct = (p1_hp_pct + p2_hp_pct) / 2.0;
+
+            if (hp1_base > 0 && hp2_base > 0) {
+                int fused_base = (hp1_base + hp2_base) / 2;
+                int delta_hp = ((2 * fused_base - 2 * hp1_base) * (int)p1->level) / 100;
+                p1->max_hp += delta_hp;
+                if (p1->max_hp < 1) p1->max_hp = 1;
+            }
+
+            bool p1_was_fainted = (p1->hp <= 0);
+            bool p2_was_fainted = (p2->hp <= 0);
+
+            int new_hp = (int)round((double)p1->max_hp * new_hp_pct);
+
+            if (!p1_was_fainted) {
+                p1->hp = new_hp;
+                if (p1->hp > p1->max_hp) p1->hp = p1->max_hp;
+                if (p1->status == 0 && p2->status != 0) {
+                    p1->status = p2->status;
+                }
+            } else if (!p2_was_fainted) {
+                p1->hp = (new_hp < 1) ? 1 : (new_hp > p1->max_hp ? p1->max_hp : new_hp);
+                p1->status = p2->status;
+            } else {
+                p1->hp = 0;
+            }
+
+            /* Transfer held items from p2 to p1 */
+            for (int i = 0; i < ctx->n_items; i++) {
+                if (ctx->items[i].owner == (int8_t)sec_idx) {
+                    ctx->items[i].owner = (int8_t)party_idx;
+                }
+            }
+
+            /* Sacrifice secondary unit: remove p2 from ctx->party and update party & item indices */
+            for (int i = sec_idx; i < ctx->n_party - 1; i++) {
+                ctx->party[i] = ctx->party[i + 1];
+            }
+            ctx->n_party--;
+
+            /* Update owner indices in ctx->items after removing sec_idx */
+            for (int i = 0; i < ctx->n_items; i++) {
+                if (ctx->items[i].owner > (int8_t)sec_idx) {
+                    ctx->items[i].owner--;
+                }
             }
 
             if (msg) *msg = NULL;
