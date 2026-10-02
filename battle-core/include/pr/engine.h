@@ -62,6 +62,7 @@ typedef struct pr_phase {
     uint8_t use_mode;
     uint8_t timing;            /* MovePhase.timingModifier */
     bool prevent_instant_revive;       /* FaintPhase */
+    bool affect_confusion;             /* ResetStatusPhase */
     int8_t source;             /* FaintPhase.source battler, -1 = none */
     pr_pokemon *end_targets[4]; /* MoveEndPhase.targets */
     uint8_t n_end_targets;
@@ -454,6 +455,7 @@ void pr_post_damage_ab(pr_battle *bt, pr_pokemon *p, double damage, pr_pokemon *
 void pr_set_temp_ability(pr_battle *bt, pr_pokemon *p, uint16_t ability);
 /* Pokemon.resetStatus(revive, false, false, asPhase=true): a ResetStatusPhase, unshifted */
 void pr_reset_status_phase(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool revive);
+void pr_reset_status_phase_ex(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool revive, bool confusion);
 /* Pokemon.trySetStatus(effect, sourcePokemon, sleepTurnsRemaining (-1 = undefined), sourceText,
  * overrideStatus, quiet): canSetStatus, then an ObtainStatusEffectPhase is unshifted */
 bool pr_try_set_status(pr_battle *bt, pr_engine *e, pr_pokemon *p, int effect, pr_pokemon *source, int sleep_turns,

@@ -1272,6 +1272,26 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         *pp->flag = true;
         return 1;
 
+    /* ---- berries ---- */
+    case PR_AC_DoubleBerryEffectAbAttr:
+        GATE(pr_has_ability_with_attr(bt, p, PR_AC_DoubleBerryEffectAbAttr));
+        if (pp->value) *pp->value *= 2.0;
+        return 1;
+    case PR_AC_HealFromBerryUseAbAttr:
+        GATE(p->has_eaten_berry && pr_has_ability_with_attr(bt, p, PR_AC_HealFromBerryUseAbAttr));
+        if (c->e) {
+            double hp_healed = to_dmg_value(pr_get_stat(p, STAT_HP, true) / 3.0);
+            pr_msg msg = pr_msg2("abilityTriggers:healFromBerryUse",
+                                 pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+                                 pr_arg_ability("abilityName", c->ability));
+            pr_unshift_heal_msg(bt, c->e, pr_battler_index(bt, p), hp_healed, PR_HEAL_MESSAGE, msg);
+        }
+        return 1;
+    case PR_AC_PreventBerryUseAbAttr:
+        GATE(pr_has_ability_with_attr(bt, p, PR_AC_PreventBerryUseAbAttr));
+        if (pp->flag) *pp->flag = true;
+        return 1;
+
     /* ---- end of turn ---- */
     case PR_AC_FetchBallAbAttr:
         GATE(!pp->simulated && bt->last_used_pokeball >= 0 && p->is_player);

@@ -196,6 +196,8 @@ import { TrainerSlot } from "#enums/trainer-slot";
 import { TrainerType } from "#enums/trainer-type";
 import { UiMode } from "#enums/ui-mode";
 import { WeatherType } from "#enums/weather-type";
+import { BerryType } from "#enums/berry-type";
+import { BerryModifierType } from "#modifiers/modifier-type";
 import { getMoveTargets } from "#moves/move-utils";
 import { healBlockedMoves } from "#moves/invalid-moves";
 import { Pokemon } from "#field/pokemon";
@@ -745,7 +747,10 @@ it("turntest producer", async () => {
     }
     for (const [side, list] of [[0, scene.modifiers], [1, scene.enemyModifiers]] as [number, any[]][]) {
       for (const m of list) {
-        lines.push(`MOD side=${side} cls=${m.constructor.name} pid=${m.pokemonId ?? 0} stack=${m.stackCount}`);
+        lines.push(
+          `MOD side=${side} cls=${m.constructor.name} pid=${m.pokemonId ?? 0} stack=${m.stackCount}`
+            + (m.berryType !== undefined ? ` btype=${m.berryType}` : ""),
+        );
       }
     }
     for (const [side, party] of [[0, scene.getPlayerParty()], [1, scene.getEnemyParty()]] as [number, any[]][]) {
@@ -1106,8 +1111,12 @@ it("turntest producer", async () => {
             modifierTypes.QUICK_CLAW,
             modifierTypes.KINGS_ROCK,
             modifierTypes.WHITE_HERB,
-          ][rnd(6)];
-          const mod = itemFunc().withIdFromFunc(itemFunc).newModifier(p);
+            () => new BerryModifierType(BerryType.SITRUS),
+            () => new BerryModifierType(BerryType.LUM),
+            () => new BerryModifierType(BerryType.LEPPA),
+          ][rnd(9)];
+          const type = itemFunc();
+          const mod = (type.withIdFromFunc ? type.withIdFromFunc(itemFunc) : type).newModifier(p);
           mod.stackCount = 1 + rnd(4);
           if (p.isPlayer()) {
             scene.addModifier(mod, true, false, false, true);
