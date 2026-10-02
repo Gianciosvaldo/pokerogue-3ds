@@ -274,3 +274,45 @@ void gc_system_add_friendship(gc_system *sys, const gc_run *run, gc_mon *m, int 
         }
     }
 }
+
+int gc_system_increment_egg_steps(gc_system *sys) {
+    if (!sys) return 0;
+    int updated = 0;
+    for (int i = 0; i < sys->n_eggs; i++) {
+        if (sys->eggs[i].hatch_waves > 0) {
+            sys->eggs[i].hatch_waves--;
+            updated++;
+        }
+    }
+    return updated;
+}
+
+bool gc_system_add_egg(gc_system *sys, uint32_t id, int32_t hatch_waves, uint8_t tier, uint16_t species) {
+    if (!sys || sys->n_eggs >= GC_MAX_EGGS) return false;
+    gc_egg *e = &sys->eggs[sys->n_eggs++];
+    e->id = id;
+    e->hatch_waves = hatch_waves;
+    e->tier = tier;
+    e->species = species;
+    return true;
+}
+
+bool gc_system_has_voucher_unlock(const gc_system *sys, int trainer_type) {
+    if (!sys || trainer_type < 0 || trainer_type >= 512) return false;
+    return sys->voucher_unlocks[trainer_type] != 0;
+}
+
+bool gc_system_unlock_voucher(gc_system *sys, int trainer_type, int voucher_type) {
+    if (!sys || trainer_type < 0 || trainer_type >= 512) return false;
+    if (sys->voucher_unlocks[trainer_type]) return false;
+    sys->voucher_unlocks[trainer_type] = 1;
+    if (voucher_type >= 0 && voucher_type < 4) {
+        sys->voucher_counts[voucher_type]++;
+    }
+    return true;
+}
+
+void gc_system_add_voucher_count(gc_system *sys, int voucher_type, int count) {
+    if (!sys || voucher_type < 0 || voucher_type >= 4) return;
+    sys->voucher_counts[voucher_type] += count;
+}

@@ -13,7 +13,7 @@ AI_LIB := $(BUILD)/ai-core/libai.a
 SRCS := src/gc_run.c src/gc_phases.c src/gc_mon.c src/gc_items.c src/gc_encounter.c src/gc_battle.c src/gc_save.c src/gc_stubs.c src/gc_system.c gen/out/gc_evolutions.c gen/out/gc_starters.c gen/out/gc_trainers.c gen/out/gc_dex.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
-all: $(BUILD)/libgc.a $(BUILD)/gcplay $(BUILD)/savetest $(BUILD)/dextest $(BUILD)/dexupdatetest $(BUILD)/level_evo_test $(BUILD)/biome_test
+all: $(BUILD)/libgc.a $(BUILD)/gcplay $(BUILD)/savetest $(BUILD)/dextest $(BUILD)/dexupdatetest $(BUILD)/level_evo_test $(BUILD)/biome_test $(BUILD)/voucher_egg_test
 
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -48,12 +48,16 @@ $(BUILD)/level_evo_test: tests/level_evo_test.c $(BUILD)/libgc.a $(AI_LIB) $(RUN
 $(BUILD)/biome_test: tests/biome_test.c $(BUILD)/libgc.a $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
-# the save checks, level/evo tests, biome tests, then 200 soak runs twice: with a save/load round trip at every save point, the runs'
+$(BUILD)/voucher_egg_test: tests/voucher_egg_test.c $(BUILD)/libgc.a $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+# the save checks, level/evo tests, biome tests, voucher/egg tests, then 200 soak runs twice: with a save/load round trip at every save point, the runs'
 # digest must come out the same
 test: all
 	$(BUILD)/savetest
 	$(BUILD)/level_evo_test
 	$(BUILD)/biome_test
+	$(BUILD)/voucher_egg_test
 	@a=$$($(BUILD)/gcplay --auto 200 --jobs 8 | grep digest); b=$$($(BUILD)/gcplay --auto 200 --jobs 8 --save-test | grep digest); \
 	echo "without saves: $$a"; echo "with saves:    $$b"; [ "$$a" = "$$b" ]
 
