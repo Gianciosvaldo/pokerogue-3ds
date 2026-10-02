@@ -101,9 +101,7 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 | Rewards: a fixed placeholder pool (potions, revives, ethers, Rare Candy, balls) | reward-core |
 | Double battles are played as singles (M1 rule) | doubles in battle-core |
 | Mystery encounters and fixed classic battles (rival, evil team, gyms run-core can't make) become wild battles of the wave's level | run-core, later the encounters |
-| A trainer's next Pokémon (ai-core's `getNextSummonIndex` picks it, as upstream) goes straight onto the field without its summon phases | battle-core battle API |
 | The rest of a turn after a victory (end-of-turn effects) is lost | battle-core: carry on past a stop |
-| The summon phases at a battle's start (entry abilities, hazards) aren't run | battle-core battle API |
 | No weather roll for a new biome | port of `getRandomWeatherType` |
 | Evolution conditions on items, held items or the dex aren't met | reward-core, the dex |
 | No catching or fleeing | battle-core (AttemptCapturePhase, AttemptRunPhase) |
