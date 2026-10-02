@@ -298,7 +298,7 @@ bool gc_run_choose(gc_run *run, const gc_choice *c, const char **why);
  * run and queues the scene's events (WAVE, TRAINER, SUMMON) before the COMMAND screen; false (and *why)
  * for a damaged save or one from a newer format, and the run is left empty then. A save made by another
  * build loads as far as its fields still match (see load_dropped). */
-#define GC_SAVE_MAX (64 * 1024)
+#define GC_SAVE_MAX (128 * 1024)
 bool gc_run_can_save(const gc_run *run);
 size_t gc_run_save(const gc_run *run, void *buf, size_t cap);
 bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why);
