@@ -74,6 +74,10 @@ enum {
     PR_MOD_ENEMY_DAMAGE_BOOSTER,     /* the enemy's Damage token */
     PR_MOD_ENEMY_DAMAGE_REDUCER,     /* the enemy's Protection token */
     PR_MOD_ENEMY_TURN_HEAL,          /* Recovery token */
+    PR_MOD_ENEMY_ATTACK_STATUS_EFFECT_CHANCE,
+    PR_MOD_ENEMY_STATUS_EFFECT_HEAL_CHANCE,
+    PR_MOD_ENEMY_ENDURE_CHANCE,
+    PR_MOD_ENEMY_FUSED_CHANCE,
     PR_MOD_SURVIVE_DAMAGE,           /* Focus Band */
     PR_MOD_BYPASS_SPEED_CHANCE,      /* Quick Claw */
     PR_MOD_FLINCH_CHANCE,            /* King's Rock */
@@ -256,6 +260,8 @@ typedef struct pr_pokemon {
      * attribute outside a simulation (sets, in insertion order) */
     uint16_t ab_applied_summon[4], ab_applied_wave[4];
     uint8_t n_ab_applied_summon, n_ab_applied_wave;
+    /* waveData */
+    bool wave_endured;                 /* waveData.endured (EnemyEndureChanceModifier) */
     /* battleData */
     bool has_eaten_berry;              /* battleData.hasEatenBerry (Belch) */
 } pr_pokemon;
@@ -542,6 +548,9 @@ bool pr_find_player_multi_lens(pr_battle *bt, const pr_pokemon *p);
 void pr_apply_enemy_damage_booster_modifiers(pr_battle *bt, double *damage);
 void pr_apply_enemy_damage_reducer_modifiers(pr_battle *bt, double *damage);
 void pr_apply_enemy_turn_heal_modifiers(pr_battle *bt, struct pr_engine *e, pr_pokemon *p);
+void pr_apply_enemy_status_heal_modifiers(pr_battle *bt, struct pr_engine *e, pr_pokemon *p);
+void pr_apply_enemy_attack_status_modifiers(pr_battle *bt, struct pr_engine *e, pr_pokemon *user, pr_pokemon *target);
+void pr_apply_enemy_endure_modifiers(pr_battle *bt, struct pr_engine *e, pr_pokemon *target);
 /* Move.canBeMultiStrikeEnhanced(user) (restrictSpread false, no target) */
 bool pr_move_can_be_multi_strike_enhanced(int move);
 /* Move.canBeMultiStrikeEnhanced(user, restrictSpread, target) */

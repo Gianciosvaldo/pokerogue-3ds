@@ -189,10 +189,23 @@ it("difftest producer", async () => {
     if (rnd(6) === 0) side.push(item("DIRE_HIT").newModifier());
     if (rnd(6) === 0) side.push(item("EXP_CHARM").newModifier());
     if (!p.isPlayer()) {
-      for (const key of ["ENEMY_DAMAGE_BOOSTER", "ENEMY_DAMAGE_REDUCTION", "ENEMY_HEAL"]) {
+      for (const key of [
+        "ENEMY_DAMAGE_BOOSTER",
+        "ENEMY_DAMAGE_REDUCTION",
+        "ENEMY_HEAL",
+        "ENEMY_ATTACK_POISON_CHANCE",
+        "ENEMY_ATTACK_PARALYZE_CHANCE",
+        "ENEMY_ATTACK_BURN_CHANCE",
+        "ENEMY_STATUS_EFFECT_HEAL_CHANCE",
+        "ENEMY_ENDURE_CHANCE",
+        "ENEMY_FUSED_CHANCE",
+      ]) {
         if (rnd(3) === 0) {
           const m = item(key).newModifier();
-          m.stackCount = key === "ENEMY_HEAL" ? (rnd(3) === 0 ? 1 + rnd(10) : 1 + rnd(5)) : (rnd(6) === 0 ? 1 + rnd(999) : 1 + rnd(40));
+          const maxStack = m.getMaxStackCount ? m.getMaxStackCount() : 10;
+          m.stackCount = key === "ENEMY_HEAL"
+            ? (rnd(3) === 0 ? 1 + rnd(10) : 1 + rnd(5))
+            : (maxStack === 10 ? 1 + rnd(10) : (rnd(6) === 0 ? 1 + rnd(999) : 1 + rnd(40)));
           side.push(m);
         }
       }

@@ -1133,6 +1133,12 @@ it("turntest producer", async () => {
               modifierTypes.ENEMY_DAMAGE_BOOSTER,
               modifierTypes.ENEMY_DAMAGE_REDUCTION,
               modifierTypes.ENEMY_HEAL,
+              modifierTypes.ENEMY_ATTACK_POISON_CHANCE,
+              modifierTypes.ENEMY_ATTACK_PARALYZE_CHANCE,
+              modifierTypes.ENEMY_ATTACK_BURN_CHANCE,
+              modifierTypes.ENEMY_STATUS_EFFECT_HEAL_CHANCE,
+              modifierTypes.ENEMY_ENDURE_CHANCE,
+              modifierTypes.ENEMY_FUSED_CHANCE,
             );
           }
           const itemFunc = itemFuncList[rnd(itemFuncList.length)];
