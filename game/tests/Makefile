@@ -34,3 +34,11 @@ SW_SRCS := switchtest.c ../source/battle_setup.c $(wildcard $(BC)/src/*.c) $(BC)
 build/switchtest: $(SW_SRCS)
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SW_SRCS) -lm -o $@
+
+# unit test for stat stage modifier indicators, status visual banners, and text banner queuing
+BANNER_SRCS := stat_banner_test.c ../source/battle_setup.c ../source/battle_events.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+build/stat_banner_test: $(BANNER_SRCS)
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) -I../gen -I../../assets-pipeline/app-src/include $(CFLAGS) $(BANNER_SRCS) -lm -o $@
+stat_banner_test: build/stat_banner_test
+.PHONY: stat_banner_test

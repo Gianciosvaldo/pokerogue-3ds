@@ -23,6 +23,24 @@
 /* ------------------------------------------------------------------ state */
 
 typedef struct {
+  bool active;
+  int battler;
+  int stat;         /* 1..7 (STAT_ATK..STAT_EVA) */
+  int stage_delta;  /* +1 or -1 */
+  int new_stage;    /* updated stage value -6..+6 */
+  float timer;      /* ms remaining (600ms) */
+  char text[40];    /* formatted indicator string e.g. "+1 ATK" */
+} stat_banner_state;
+
+typedef struct {
+  bool active;
+  int battler;
+  int status;       /* StatusEffect */
+  float timer;      /* ms remaining (1000ms) */
+  char text[32];    /* status banner string e.g. "PSN", "PAR", "BRN", "SLP", "FRZ" */
+} status_banner_state;
+
+typedef struct {
   bv_mon mon;
   bool present;       /* on the field */
   bool sprite_on;     /* sprite visible (damage blink) */
@@ -34,6 +52,8 @@ typedef struct {
   float hp_shown;     /* the HP bar's displayed hp (tweened) */
   float exp_shown;
   float show_ms;      /* BEV_VISIBLE: ms until the hidden Pokemon shows again */
+  stat_banner_state stat_banner;     /* active stat modifier indicator banner */
+  status_banner_state status_banner; /* active status visual banner */
   /* the Substitute doll (SubstituteTag.sprite) and the Pokemon stepping aside for it */
   bool sub_on;        /* the doll is on the field */
   float sub_alpha;
@@ -102,6 +122,8 @@ static void set_mon(side* sd, const bv_mon* m, bool player) {
   sd->sub_on = sd->tint_on = sd->mon.substitute = false;
   sd->sub_off = 0;
   sd->mon_alpha = 1;
+  memset(&sd->stat_banner, 0, sizeof sd->stat_banner);
+  memset(&sd->status_banner, 0, sizeof sd->status_banner);
   ba_show(player ? 0 : 2);
 }
 
@@ -293,6 +315,25 @@ static void draw_name(const bv_mon* m, bool player, float x, float y) {
   }
 }
 
+static void draw_stat_indicators(side* sd, bool player, float bx, float by) {
+  if (sd->stat_banner.active && sd->stat_banner.timer > 0) {
+    float x = bx + (player ? -120 : -110);
+    float y = by + (player ? -35 : -30);
+    rr_rect(x, y, 70, 16, RR_RGBA(0, 0, 0, 192));
+    text_opts o = text_defaults();
+    o.color = sd->stat_banner.stage_delta > 0 ? RR_RGBA(0x50, 0xf0, 0x50, 255) : RR_RGBA(0xf0, 0x50, 0x50, 255);
+    text_draw(TS_BATTLE_INFO, x + 4, y + 2, sd->stat_banner.text, &o);
+  }
+  if (sd->status_banner.active && sd->status_banner.timer > 0) {
+    float x = bx + (player ? -45 : -35);
+    float y = by + (player ? -35 : -30);
+    rr_rect(x, y, 40, 16, RR_RGBA(0x80, 0x20, 0x20, 220));
+    text_opts o = text_defaults();
+    o.color = RR_RGBA(255, 255, 255, 255);
+    text_draw(TS_BATTLE_INFO, x + 4, y + 2, sd->status_banner.text, &o);
+  }
+}
+
 static void draw_player_info(side* sd) {
   if (!sd->present || !sd->info_on) return;
   const bv_mon* m = &sd->mon;
@@ -316,6 +357,7 @@ static void draw_player_info(side* sd) {
   const rr_frame* ef = img_frame("images/ui/overlay_exp", NULL);
   int ew = (int)floorf(85 * sd->exp_shown + 0.5f);
   if (ef && ew > 0) rr_draw_cropped(ef, bx - 98, by + 18, ew, ef->src_h, NULL);
+  draw_stat_indicators(sd, true, bx, by);
 }
 
 static void draw_enemy_info(side* sd) {
@@ -333,6 +375,7 @@ static void draw_enemy_info(side* sd) {
   if (w < 1 && sd->hp_shown > 0) w = 1;
   if (hf && w > 0) rr_draw_cropped(hf, bx - 71, by + 4.5f, w, hf->src_h, NULL);
   img_draw("images/ui/text_images/en/battle_ui/overlay_hp_label", NULL, bx - 72, by + 1.5f, 1, 0);
+  draw_stat_indicators(sd, false, bx, by);
 }
 
 /* ------------------------------------------------------------------ drawing: bottom strip */
@@ -741,6 +784,18 @@ static void run_event(float dt) {
 
     case BEV_STATUS:
       sd->mon.status = e->a;
+      if (e->a > 0) {
+        sd->status_banner.active = true;
+        sd->status_banner.battler = e->battler;
+        sd->status_banner.status = e->a;
+        sd->status_banner.timer = 1000.0f;
+        char fr[24];
+        gm_enum_lower(GM_E_STATUS_EFFECT, e->a, fr, sizeof fr);
+        for (char* p = fr; *p; p++) if (*p >= 'a' && *p <= 'z') *p -= 32;
+        snprintf(sd->status_banner.text, sizeof sd->status_banner.text, "%s", fr);
+      } else {
+        sd->status_banner.active = false;
+      }
       finish_event();
       break;
 
@@ -750,10 +805,22 @@ static void run_event(float dt) {
         if (e->a >= 1 && e->a <= 7) {
           int v = sd->mon.stat_stages[e->a - 1] + e->b;
           sd->mon.stat_stages[e->a - 1] = (int8_t)(v > 6 ? 6 : v < -6 ? -6 : v);
+          sd->stat_banner.active = true;
+          sd->stat_banner.battler = e->battler;
+          sd->stat_banner.stat = e->a;
+          sd->stat_banner.stage_delta = e->b;
+          sd->stat_banner.new_stage = sd->mon.stat_stages[e->a - 1];
+          sd->stat_banner.timer = 600.0f;
+          static const char* const STAT_NAMES[] = {"", "ATK", "DEF", "SPATK", "SPDEF", "SPD", "ACC", "EVA"};
+          snprintf(sd->stat_banner.text, sizeof sd->stat_banner.text, "%s %s%d",
+                   STAT_NAMES[e->a], e->b > 0 ? "+" : "", e->b);
         }
         B.step = 1;
       }
-      if (B.t >= 600) finish_event();
+      if (B.t >= 600) {
+        sd->stat_banner.active = false;
+        finish_event();
+      }
       break;
 
     case BEV_ABILITY:
@@ -935,11 +1002,26 @@ static void bv_update(ui_screen* s, float dt) {
   float frame_dt = dt;
   msgbox_update(&B.msg, dt);
   if (B.ability_t > 0) B.ability_t -= dt;
-  for (int k = 0; k < 2; k++)
+  for (int k = 0; k < 2; k++) {
     if (B.s[k].show_ms > 0 && (B.s[k].show_ms -= dt) <= 0) {
       B.s[k].show_ms = 0;
       B.s[k].mon.hidden = false;
     }
+    if (B.s[k].stat_banner.active) {
+      B.s[k].stat_banner.timer -= dt;
+      if (B.s[k].stat_banner.timer <= 0) {
+        B.s[k].stat_banner.active = false;
+        B.s[k].stat_banner.timer = 0;
+      }
+    }
+    if (B.s[k].status_banner.active) {
+      B.s[k].status_banner.timer -= dt;
+      if (B.s[k].status_banner.timer <= 0) {
+        B.s[k].status_banner.active = false;
+        B.s[k].status_banner.timer = 0;
+      }
+    }
+  }
   if (B.mode == M_EVENTS) {
     while (B.cur < B.n_ev) {
       int before = B.cur;
