@@ -5,6 +5,7 @@
 import { defaultStarterSpecies } from "#app/constants";
 import { speciesDataRegistry } from "#app/globals/global-species-data-registry";
 import { PokemonType } from "#enums/pokemon-type";
+import { SpeciesId } from "#enums/species-id";
 import { GameManager } from "#test/framework/game-manager";
 import * as fs from "node:fs";
 import Phaser from "phaser";
@@ -66,7 +67,7 @@ it("challenge validation producer", () => {
       if ((flags & (1 << 0))
           && (m.species.generation !== gen || (m.fusion && m.fusion.generation !== gen))) return false;
       if (flags & (1 << 1)) {
-        const override = wantedType === PokemonType.NORMAL && m.species.speciesId === 351; // CASTFORM
+        const override = wantedType === PokemonType.NORMAL && m.species.speciesId === SpeciesId.CASTFORM;
         if (!override && !battleTypes(m).includes(wantedType)) return false;
       }
       return true;
