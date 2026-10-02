@@ -22,6 +22,25 @@ const pr_form *pr_pokemon_form(const pr_pokemon *p)
     return &pr_forms[s->form0 + (p->form < s->nforms ? p->form : 0)];
 }
 
+const pr_species *pr_pokemon_fusion_species(const pr_pokemon *p)
+{
+    if (!p->fusion_species) return NULL;
+    int lo = 0, hi = PR_SPECIES_COUNT - 1;
+    while (lo <= hi) {
+        int mid = (lo + hi) / 2;
+        if (pr_species_table[mid].id == p->fusion_species) return &pr_species_table[mid];
+        if (pr_species_table[mid].id < p->fusion_species) lo = mid + 1; else hi = mid - 1;
+    }
+    return NULL;
+}
+
+const pr_form *pr_pokemon_fusion_form(const pr_pokemon *p)
+{
+    const pr_species *fs = pr_pokemon_fusion_species(p);
+    if (!fs) return NULL;
+    return &pr_forms[fs->form0 + (p->fusion_form < fs->nforms ? p->fusion_form : 0)];
+}
+
 /* calculateStats() with calculateBaseStats(). Fusion and challenges (FLIP_STAT) are
  * not ported yet; the Wonder Guard check reads the permanent ability and the passive. */
 void pr_recalculate_stats(pr_battle *bt, pr_pokemon *p)
@@ -36,8 +55,15 @@ void pr_recalculate_stats(pr_battle *bt, pr_pokemon *p)
 void pr_calculate_stats(pr_battle *bt, pr_pokemon *p)
 {
     const pr_form *f = pr_pokemon_form(p);
+    const pr_form *ff = pr_pokemon_fusion_form(p);
     double base[6];
-    for (int s = 0; s < 6; s++) base[s] = f->base_stats[s];
+    for (int s = 0; s < 6; s++) {
+        if (ff) {
+            base[s] = ceil((f->base_stats[s] + ff->base_stats[s]) / 2.0);
+        } else {
+            base[s] = f->base_stats[s];
+        }
+    }
     pr_apply_base_stat_modifiers(bt, p, base);
     for (int s = 0; s < 6; s++) {
         double v = floor((2 * base[s] + p->ivs[s]) * p->level * 0.01);
@@ -99,8 +125,20 @@ int pr_get_types(const pr_pokemon *p, int8_t out[PR_MAX_TYPES], unsigned flags)
         memcpy(base, p->summon_types, (size_t)nb);
     } else {
         const pr_form *f = pr_pokemon_form(p);
-        base[0] = f->type1;
-        base[1] = f->type2 < 0 ? POKEMON_TYPE_UNKNOWN : f->type2;
+        const pr_form *ff = pr_pokemon_fusion_form(p);
+        int8_t type1 = f->type1;
+        int8_t second_type = f->type2 < 0 ? POKEMON_TYPE_UNKNOWN : f->type2;
+        if (ff) {
+            int8_t fusion_type1 = ff->type1;
+            int8_t fusion_type2 = ff->type2 < 0 ? POKEMON_TYPE_UNKNOWN : ff->type2;
+            if (fusion_type2 != POKEMON_TYPE_UNKNOWN && fusion_type2 != type1) {
+                second_type = fusion_type2;
+            } else if (fusion_type1 != type1) {
+                second_type = fusion_type1;
+            }
+        }
+        base[0] = type1;
+        base[1] = second_type;
         nb = 2;
     }
     /* new Set(base), then drop UNKNOWN when something else is present */

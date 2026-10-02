@@ -238,6 +238,7 @@ it("turntest producer", async () => {
   const CATCH = process.env.TURN_CATCH === "1";
   const ITEMS = process.env.TURN_ITEMS === "1";
   const RUN = process.env.TURN_RUN === "1";
+  const FUSION = process.env.TURN_FUSION === "1";
   const TRAINER = process.env.TURN_TRAINER === "1" && !RUN;
   const OUT = process.env.TURN_OUT ?? "/tmp/pr-turns.txt";
   (Pokemon.prototype as any).hideInfo = async function() {};
@@ -662,7 +663,7 @@ it("turntest producer", async () => {
     }
     return [
       [
-        `MON b=${b} id=${p.id} sp=${p.species.speciesId} form=${p.formIndex} lv=${p.level} ivs=${L(p.ivs)} nat=${p.nature}`,
+        `MON b=${b} id=${p.id} sp=${p.species.speciesId} form=${p.formIndex}${p.fusionSpecies ? ` fsp=${p.fusionSpecies.speciesId} fform=${p.fusionFormIndex} fabil=${p.fusionAbilityIndex}` : ""} lv=${p.level} ivs=${L(p.ivs)} nat=${p.nature}`,
         `ab=${num(sd.ability)} abil=${p.getAbility().id} babil=${p.getAbility(true).id} passive=${p.passive ? 1 : 0} cpass=${p.customPokemonData.passive} gender=${p.gender}`,
         `friend=${p.friendship} hp=${p.hp} stats=${L(p.stats)} st=${st ? st.effect : 0} toxic=${st ? st.toxicTurnCount : 0}`,
         `sleep=${num(st?.sleepTurnsRemaining)} freeze=${num(st?.freezeTurnsRemaining)} stages=${L(sd.statStages)}`,
@@ -921,7 +922,14 @@ it("turntest producer", async () => {
     const sp = speciesDataRegistry.getSpecies(ids[rnd(ids.length)]);
     p.species = sp;
     p.formIndex = sp.forms.length ? rnd(sp.forms.length) : 0;
-    p.fusionSpecies = null;
+    if (FUSION && rnd(2) === 0) {
+      const fsp = speciesDataRegistry.getSpecies(ids[rnd(ids.length)]);
+      p.fusionSpecies = fsp;
+      p.fusionFormIndex = fsp.forms.length ? rnd(fsp.forms.length) : 0;
+      p.fusionAbilityIndex = rnd(3);
+    } else {
+      p.fusionSpecies = null;
+    }
     p.level = 1 + rnd(100);
     p.ivs = [0, 0, 0, 0, 0, 0].map(() => rnd(32));
     p.nature = rnd(25);
