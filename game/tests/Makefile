@@ -54,3 +54,12 @@ build/map_ui_test: $(MAP_SRCS)
 	$(CC) $(MAP_CPPFLAGS) $(CFLAGS) $(MAP_SRCS) -lm -o $@
 map_ui_test: build/map_ui_test
 .PHONY: map_ui_test
+
+# unit test for DNA Splicers target selection UI
+SPLICER_CPPFLAGS := $(CPPFLAGS) -I../menus -I$(APP)/include
+SPLICER_SRCS := splicer_ui_test.c ../menus/party.c ../menus/menus_names.c ../menus/menus_data.c $(BC)/gen/out/pr_data.c
+build/splicer_ui_test: $(SPLICER_SRCS)
+	@mkdir -p build
+	$(CC) $(SPLICER_CPPFLAGS) $(CFLAGS) $(SPLICER_SRCS) -lm -o $@
+splicer_ui_test: build/splicer_ui_test
+.PHONY: splicer_ui_test
