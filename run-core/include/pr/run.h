@@ -301,6 +301,7 @@ typedef struct {
     uint16_t form_start;          /* in pr_form_gens: n_forms entries, or 1 for the species itself */
     /* getCompatibleFusionSpeciesFilter's inputs, and isCatchable */
     bool has_evolutions, has_prevolution, sub_legendary, legendary, mythical, trainer_forbidden, catchable;
+    uint8_t starter_cost;
 } pr_species_gen;
 typedef struct {
     uint8_t n_types; int8_t types[2];   /* what the tera type is picked from, in order (no fusion) */
@@ -349,6 +350,11 @@ typedef struct {
 /* new EnemyPokemon(species, level, trainerSlot, boss, shinyLock) without a data source, on run->rng:
  * the Pokemon constructor's rolls and setBoss, which come before generateAndPopulateMoveset */
 int pr_run_enemy_pokemon_base(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_enemy_gen *out);
+int pr_run_enemy_pokemon_base_rng(pr_rng *rng, pr_run *run, const pr_enemy_gen_ctx *ctx, pr_enemy_gen *out);
+
+/* ---- daily runs (src/daily.c) ---- */
+int pr_run_get_daily_starters(const pr_run *run, pr_enemy_gen out_starters[3], int out_species[3]);
+int pr_run_get_daily_starting_biome(const pr_run *run);
 /* the rest of the EnemyPokemon constructor after generateAndPopulateMoveset: shiny, variant (on the
  * wave seed at offset id), luck, a trainer's Pokemon's IVs and friendship; then addEnemyPokemon's
  * second IV roll for a boss (its postProcess callback and dev overrides aren't modelled) */
