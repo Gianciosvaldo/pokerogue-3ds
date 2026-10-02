@@ -42,3 +42,15 @@ build/stat_banner_test: $(BANNER_SRCS)
 	$(CC) $(CPPFLAGS) -I../gen -I../../assets-pipeline/app-src/include $(CFLAGS) $(BANNER_SRCS) -lm -o $@
 stat_banner_test: build/stat_banner_test
 .PHONY: stat_banner_test
+
+# unit test for map selection UI driven by game-core
+GC := ../../game-core
+RC := ../../run-core
+APP := ../../assets-pipeline/app-src
+MAP_CPPFLAGS := $(CPPFLAGS) -I../menus -I$(GC)/include -I$(GC)/src -I$(GC)/gen/out -I$(RC)/include -I$(RC)/gen/out -I$(APP)/include
+MAP_SRCS := map_ui_test.c ../menus/biome_map.c ../menus/menus_names.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+build/map_ui_test: $(MAP_SRCS)
+	@mkdir -p build
+	$(CC) $(MAP_CPPFLAGS) $(CFLAGS) $(MAP_SRCS) -lm -o $@
+map_ui_test: build/map_ui_test
+.PHONY: map_ui_test

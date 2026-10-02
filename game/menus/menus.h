@@ -282,6 +282,28 @@ void menu_cry_key(const menu_mon* m, char* out, size_t n);
  * x is the icon's centre when ox = 0.5; oy 0.5 centres it vertically. */
 void menu_draw_icon(const menu_mon* m, float x, float y, float ox, float oy);
 
+/* ------------------------------------------------------------ biome map choice */
+
+#define BIOME_MAP_MAX_OPTIONS 8
+
+typedef struct {
+  /* Option selected (0..n_biomes-1). Selection is mandatory (no cancel). */
+  void (*on_select)(void* ctx, int option);
+  void* ctx;
+} biome_map_events;
+
+typedef struct {
+  const uint8_t* biomes; /* BiomeId list (from gc_screen.biomes) */
+  int n_biomes;
+} biome_map_args;
+
+void biome_map_open(const biome_map_args* args, const biome_map_events* ev);
+void biome_map_close(void);
+bool biome_map_active(void);
+bool biome_map_input(mui_button b);
+void biome_map_update(float dt_ms);
+void biome_map_draw(void);
+
 #ifdef __cplusplus
 }
 #endif

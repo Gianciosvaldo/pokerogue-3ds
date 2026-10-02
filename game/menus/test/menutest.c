@@ -327,21 +327,34 @@ int main(void) {
   g_log = fopen("sdmc:/3ds/pokerogue/menutest.log", "w");
   logf_("menutest start, %d paks", paks);
 
+  static void on_biome_select(void* ctx, int option) {
+    (void)ctx;
+    logf_("biome select option=%d", option);
+    biome_map_close();
+  }
+
   /* optional start mode: sdmc:/3ds/pokerogue/menutest.txt holds "<mode> <double>" */
   FILE* cfg = fopen("sdmc:/3ds/pokerogue/menutest.txt", "r");
   if (cfg) {
     int m = 0, d = 0;
     if (fscanf(cfg, "%d %d", &m, &d) >= 1 && m >= 0 && m <= PARTY_DISCARD) g_mode = (party_mode)m;
-    if (m >= 14 && m <= 16) g_start_summary = m;
+    if (m >= 14 && m <= 17) g_start_summary = m;
     g_double = d != 0;
     fclose(cfg);
   }
   party_reset();
   open_party();
-  /* 14: the summary of the first member, 15: learning a move */
-  if (g_start_summary == 16)
+  /* 14: summary, 15: summary learn move, 16: learn move dialog, 17: biome map UI */
+  if (g_start_summary == 17) {
+    static const uint8_t test_biomes[3] = {2, 5, 13}; /* GRASS, FOREST, CAVE */
+    biome_map_args ba = {test_biomes, 3};
+    biome_map_events be = {on_biome_select, NULL};
+    biome_map_open(&ba, &be);
+  } else if (g_start_summary == 16) {
     start_learn_move();
-  else if (g_start_summary) open_summary(g_start_summary == 15 ? 5 : 0, g_start_summary == 15 ? SUMMARY_LEARN_MOVE : SUMMARY_DEFAULT);
+  } else if (g_start_summary) {
+    open_summary(g_start_summary == 15 ? 5 : 0, g_start_summary == 15 ? SUMMARY_LEARN_MOVE : SUMMARY_DEFAULT);
+  }
 
   mui_set_origin(RR_TOP, 40, 30);
   mui_set_origin(RR_BOTTOM, 0, 0);
@@ -372,6 +385,8 @@ int main(void) {
           summary_input(map[i].b);
         else if (g_msg_on)
           mui_msg_input(&g_msg, map[i].b);
+        else if (biome_map_active())
+          biome_map_input(map[i].b);
         else
           party_input(map[i].b);
       }
@@ -386,6 +401,7 @@ int main(void) {
     party_update(dt);
     summary_update(dt);
     if (g_msg_on) mui_msg_update(&g_msg, dt);
+    biome_map_update(dt);
 
     rr_frame_begin();
     rr_target(RR_TOP, RR_RGBA(0, 0, 0, 255));
@@ -398,6 +414,7 @@ int main(void) {
       mui_window(0, 132, 320, 48);
       mui_msg_draw(&g_msg, TS_MESSAGE, 12, 138);
     }
+    if (biome_map_active()) biome_map_draw();
     if (g_confirm.active && !summary_active()) mui_confirm_draw(&g_confirm);
     rr_target(RR_BOTTOM, RR_RGBA(0x18, 0x18, 0x20, 255));
     mui_set_origin(RR_BOTTOM, 0, 0);
