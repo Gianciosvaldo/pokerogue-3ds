@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #define GC_MAX_SPECIES_ID 9000
+#define GC_MAX_EGGS 100
 
 /* Forward declarations */
 typedef struct gc_run gc_run;
@@ -44,11 +45,31 @@ typedef struct {
     bool eviolite;
 } gc_unlocks;
 
+/* An Egg held by system data (upstream EggData / Egg) */
+typedef struct {
+    uint32_t id;
+    int32_t hatch_waves;  /* waves remaining to hatch */
+    uint8_t tier;         /* EggTier */
+    uint16_t species;     /* species ID (0 = random) */
+} gc_egg;
+
+/* VoucherType enum values */
+enum {
+    GC_VOUCHER_REGULAR = 0,
+    GC_VOUCHER_PLUS = 1,
+    GC_VOUCHER_PREMIUM = 2,
+    GC_VOUCHER_GOLDEN = 3,
+};
+
 /* Overall system data (upstream GameData) */
 typedef struct {
     gc_dex_entry dex[GC_MAX_SPECIES_ID + 1];           /* 1-indexed by SpeciesId */
     gc_starter_entry starters[GC_MAX_SPECIES_ID + 1];  /* 1-indexed by SpeciesId (starters only) */
     gc_unlocks unlocks;
+    gc_egg eggs[GC_MAX_EGGS];
+    int n_eggs;
+    uint32_t voucher_counts[4];                         /* by VoucherType */
+    uint8_t voucher_unlocks[512];                       /* 1 if voucher for trainer_type is unlocked */
 } gc_system;
 
 /* Initialize system data with new-save defaults (upstream initDexData + initStarterData) */
@@ -65,5 +86,12 @@ bool gc_system_set_pokemon_caught(gc_system *sys, const gc_mon *m, bool incremen
 void gc_system_update_species_dex_ivs(gc_system *sys, uint16_t species_id, const uint8_t ivs[6]);
 bool gc_system_add_starter_candy(gc_system *sys, uint16_t species_id, int32_t count);
 void gc_system_add_friendship(gc_system *sys, const gc_run *run, gc_mon *m, int friendship, bool capped);
+
+/* Egg and Voucher helpers */
+int gc_system_increment_egg_steps(gc_system *sys);
+bool gc_system_add_egg(gc_system *sys, uint32_t id, int32_t hatch_waves, uint8_t tier, uint16_t species);
+bool gc_system_has_voucher_unlock(const gc_system *sys, int trainer_type);
+bool gc_system_unlock_voucher(gc_system *sys, int trainer_type, int voucher_type);
+void gc_system_add_voucher_count(gc_system *sys, int voucher_type, int count);
 
 #endif

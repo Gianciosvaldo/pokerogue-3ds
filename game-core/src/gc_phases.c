@@ -145,7 +145,10 @@ static void victory(gc_run *run, int enemy_idx)
     const bool endless = mode == GAME_MODES_ENDLESS || mode == GAME_MODES_SPLICED_ENDLESS;
     const bool classic = mode == GAME_MODES_CLASSIC;
     if (endless || !pr_run_is_wave_final(mode, wave)) {
-        /* EggLapsePhase: eggs aren't kept yet */
+        /* EggLapsePhase: increment egg hatch step counters */
+        if (run->sys) {
+            gc_system_increment_egg_steps(run->sys);
+        }
         if (classic && wave == 165) {
             gc_rphase p = gc_rp(RP_MODIFIER_REWARD, 0, 0, 0); p.key = "LOCK_CAPSULE"; gc_rq_push(run, p);
         }
@@ -164,7 +167,14 @@ static void victory(gc_run *run, int enemy_idx)
                 gc_rq_push(run, p);
             }
             if (wave <= 150 && !(wave % 50)) { p.key = "GOLDEN_POKEBALL"; gc_rq_push(run, p); }
-            if (endless && !(wave % 50)) { p.key = wave % 250 ? "VOUCHER_PLUS" : "VOUCHER_PREMIUM"; gc_rq_push(run, p); }
+            if (endless && !(wave % 50)) {
+                int vtype = wave % 250 ? GC_VOUCHER_PLUS : GC_VOUCHER_PREMIUM;
+                p.key = wave % 250 ? "VOUCHER_PLUS" : "VOUCHER_PREMIUM";
+                gc_rq_push(run, p);
+                if (run->sys) {
+                    gc_system_add_voucher_count(run->sys, vtype, 1);
+                }
+            }
         }
         if (gc_is_new_biome(run, wave)) gc_rq_push(run, gc_rp(RP_SELECT_BIOME, 0, 0, 0));
         gc_rq_push(run, gc_rp(RP_NEW_BATTLE, 0, 0, 0));
@@ -314,8 +324,25 @@ static void trainer_victory(gc_run *run)
     gc_rphase p = gc_rp(RP_MONEY_REWARD, 0, 0, 0);
     p.d = c ? c->money_multiplier : 1;   /* config.moneyMultiplier */
     gc_rq_unshift(run, p);
-    /* the config's modifierRewardFuncs, and a boss's voucher */
-    if (c && (c->n_reward_funcs || c->is_boss)) gc_stub(run, GC_STUB_TRAINER_REWARDS);
+    /* Classic Gym Leaders (100..124) / Boss Trainers voucher unlock */
+    if (c && c->is_boss) {
+        int vtype = (c->money_multiplier >= 10) ? GC_VOUCHER_PREMIUM : GC_VOUCHER_PLUS;
+        const char *vkey = (c->money_multiplier >= 10) ? "VOUCHER_PREMIUM" : "VOUCHER_PLUS";
+        bool should_queue = true;
+        if (run->sys) {
+            if (gc_system_has_voucher_unlock(run->sys, run->trainer_type)) {
+                should_queue = false;
+            } else {
+                gc_system_unlock_voucher(run->sys, run->trainer_type, vtype);
+            }
+        }
+        if (should_queue) {
+            gc_rphase vp = gc_rp(RP_MODIFIER_REWARD, 0, 0, 0);
+            vp.key = vkey;
+            gc_rq_unshift(run, vp);
+        }
+    }
+    if (c && c->n_reward_funcs) gc_stub(run, GC_STUB_TRAINER_REWARDS);
     gc_ev_msg(run, "battle:trainerDefeated", 1, gc_m_trainer(run, "trainerName", GC_TNAME_TITLED));
 }
 
