@@ -20,6 +20,12 @@ static uint16_t parse_item_key(const char *key) {
     if (strcmp(key, "PP_UP") == 0) return PR_ITEM_PP_UP;
     if (strcmp(key, "PP_MAX") == 0) return PR_ITEM_PP_MAX;
     if (strcmp(key, "HEALING_CHARM") == 0) return PR_ITEM_HEALING_CHARM;
+    if (strcmp(key, "MEGA_BRACELET") == 0) return PR_ITEM_MEGA_BRACELET;
+    if (strcmp(key, "DYNAMAX_BAND") == 0) return PR_ITEM_DYNAMAX_BAND;
+    if (strcmp(key, "EVOLUTION_ITEM") == 0) return PR_ITEM_EVOLUTION_ITEM;
+    if (strcmp(key, "RARE_EVOLUTION_ITEM") == 0) return PR_ITEM_RARE_EVOLUTION_ITEM;
+    if (strcmp(key, "FORM_CHANGE_ITEM") == 0) return PR_ITEM_FORM_CHANGE_ITEM;
+    if (strcmp(key, "RARE_FORM_CHANGE_ITEM") == 0) return PR_ITEM_RARE_FORM_CHANGE_ITEM;
     return 0;
 }
 
@@ -40,12 +46,14 @@ int main(int argc, char **argv) {
 
     char line[4096];
     int cases = 0, pass = 0, fail = 0;
-    int item_counts[14] = {0};
-    const char *item_keys[14] = {
+    int item_counts[18] = {0};
+    const char *item_keys[18] = {
         "POTION", "SUPER_POTION", "HYPER_POTION", "MAX_POTION", "FULL_RESTORE",
         "REVIVE", "MAX_REVIVE", "SACRED_ASH",
         "ETHER", "MAX_ETHER", "ELIXIR", "MAX_ELIXIR",
-        "PP_UP", "PP_MAX"
+        "PP_UP", "PP_MAX",
+        "EVOLUTION_ITEM", "RARE_EVOLUTION_ITEM",
+        "FORM_CHANGE_ITEM", "RARE_FORM_CHANGE_ITEM"
     };
 
     while (fgets(line, sizeof(line), f)) {
@@ -58,13 +66,14 @@ int main(int argc, char **argv) {
             while (*p == ' ') p++;
             while (*p && *p != ' ') p++; /* skip key */
 
+            int16_t arg = (int16_t)num(&p);
             int target_party_idx = (int)num(&p);
             int target_move_idx = (int)num(&p);
             uint32_t challenges = (uint32_t)num(&p);
             int n_party = (int)num(&p);
 
             uint16_t item_id = parse_item_key(key);
-            for (int k = 0; k < 14; k++) {
+            for (int k = 0; k < 18; k++) {
                 if (strcmp(key, item_keys[k]) == 0) {
                     item_counts[k]++;
                     break;
@@ -79,16 +88,45 @@ int main(int argc, char **argv) {
             for (int i = 0; i < n_party; i++) {
                 if (!fgets(line, sizeof(line), f) || line[0] != 'P') break;
                 char *pp = line + 1;
-                ctx.party[i].id = (uint32_t)num(&pp);
-                ctx.party[i].hp = (int32_t)num(&pp);
-                ctx.party[i].max_hp = (int32_t)num(&pp);
-                ctx.party[i].status = (uint8_t)num(&pp);
-                ctx.party[i].n_moves = (uint8_t)num(&pp);
-                for (int m = 0; m < ctx.party[i].n_moves; m++) {
-                    ctx.party[i].moves[m].move = (uint16_t)num(&pp);
-                    ctx.party[i].moves[m].pp_used = (uint8_t)num(&pp);
-                    ctx.party[i].moves[m].pp_up = (uint8_t)num(&pp);
-                    ctx.party[i].moves[m].max_pp = (uint8_t)num(&pp);
+                pr_reward_mon *m = &ctx.party[i];
+                memset(m, 0, sizeof(*m));
+                m->id = (uint32_t)num(&pp);
+                m->species = (int16_t)num(&pp);
+                m->form = (int16_t)num(&pp);
+                m->fusion_species = (int16_t)num(&pp);
+                m->fusion_form = (int16_t)num(&pp);
+                m->gender = (int8_t)num(&pp);
+                m->fusion_gender = (int8_t)num(&pp);
+                m->level = (uint8_t)num(&pp);
+                m->hp = (int32_t)num(&pp);
+                m->max_hp = (int32_t)num(&pp);
+                m->status = (uint8_t)num(&pp);
+                m->nature = (uint8_t)num(&pp);
+                m->tera_type = (int8_t)num(&pp);
+                m->friendship = (uint8_t)num(&pp);
+                m->ability = (uint16_t)num(&pp);
+                m->cur_ability = (uint16_t)num(&pp);
+                m->passive = (uint16_t)num(&pp);
+                m->can_apply_ability = num(&pp) != 0;
+                m->can_apply_passive = num(&pp) != 0;
+                m->pause_evolutions = num(&pp) != 0;
+                m->allowed_in_challenge = num(&pp) != 0;
+                m->can_toxic = num(&pp) != 0;
+                m->can_burn = num(&pp) != 0;
+                m->has_learnable_level_moves = num(&pp) != 0;
+                m->persistent_treasure = (int)num(&pp);
+
+                m->n_moves = (uint8_t)num(&pp);
+                for (int mv = 0; mv < m->n_moves; mv++) {
+                    m->moves[mv].move = (uint16_t)num(&pp);
+                    m->moves[mv].pp_used = (uint8_t)num(&pp);
+                    m->moves[mv].pp_up = (uint8_t)num(&pp);
+                    m->moves[mv].max_pp = (uint8_t)num(&pp);
+                }
+
+                m->n_base_moves = (uint8_t)num(&pp);
+                for (int mv = 0; mv < m->n_base_moves; mv++) {
+                    m->base_moves[mv] = (uint16_t)num(&pp);
                 }
             }
 
@@ -104,12 +142,13 @@ int main(int argc, char **argv) {
                     ctx.items[j].item = parse_item_key(ikey);
                     ctx.items[j].stack = (int32_t)num(&ip);
                     ctx.items[j].owner = (int8_t)num(&ip);
+                    ctx.items[j].arg = (int16_t)num(&ip);
                 }
             }
 
             /* Call C apply */
             const char *msg = NULL;
-            bool res = pr_reward_apply(&ctx, item_id, target_party_idx, target_move_idx, &msg);
+            bool res = pr_reward_apply(&ctx, item_id, arg, target_party_idx, target_move_idx, &msg);
 
             /* Read upstream result */
             if (!fgets(line, sizeof(line), f) || line[0] != 'R') {
@@ -171,7 +210,7 @@ int main(int argc, char **argv) {
             } else {
                 fail++;
                 if (fail <= 10) {
-                    printf("FAIL case %d (%s, target_p=%d, target_m=%d): %s\n", cases, key, target_party_idx, target_move_idx, diff_reason);
+                    printf("FAIL case %d (%s, arg=%d, target_p=%d, target_m=%d): %s\n", cases, key, arg, target_party_idx, target_move_idx, diff_reason);
                 }
             }
         }
@@ -181,8 +220,8 @@ int main(int argc, char **argv) {
     printf("== apply\n");
     printf("cases %d: pass %d, fail %d\n", cases, pass, fail);
     printf("cases per item:\n");
-    for (int k = 0; k < 14; k++) {
-        printf("  %-15s: %d\n", item_keys[k], item_counts[k]);
+    for (int k = 0; k < 18; k++) {
+        printf("  %-22s: %d\n", item_keys[k], item_counts[k]);
     }
 
     return fail == 0 ? 0 : 1;

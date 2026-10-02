@@ -1,4 +1,5 @@
 #include "pr/reward.h"
+#include "reward_internal.h"
 #include "pr_data.h"
 #include <math.h>
 #include <stddef.h>
@@ -16,7 +17,7 @@ static double get_healing_booster_multiplier(const pr_reward_ctx *ctx) {
     return mult;
 }
 
-bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int party_idx, int move_idx, const char **msg) {
+bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_idx, int move_idx, const char **msg) {
     if (!ctx) {
         if (msg) *msg = NO_EFFECT_MSG;
         return false;
@@ -213,6 +214,129 @@ bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int party_idx, int move_
 
             p->moves[move_idx].pp_up = (uint8_t)new_pp_up;
             p->moves[move_idx].max_pp = (uint8_t)floor((double)base_pp * (1.0 + 0.2 * (double)new_pp_up));
+
+            if (msg) *msg = NULL;
+            return true;
+        }
+
+        case PR_ITEM_EVOLUTION_ITEM:
+        case PR_ITEM_RARE_EVOLUTION_ITEM: {
+            if (party_idx < 0 || party_idx >= ctx->n_party) {
+                if (msg) *msg = NO_EFFECT_MSG;
+                return false;
+            }
+            pr_reward_mon *m = &ctx->party[party_idx];
+            bool can_evolve = false;
+
+            /* Check species evolutions */
+            if (m->species >= 0) {
+                const pr_reward_species *s = pr_reward_species_find(m->species);
+                if (s && (s->flags & 1) && !pr_reward_form_is_max(m->species, m->form)) {
+                    if (!m->pause_evolutions || pr_reward_pause_exempt(m->species)) {
+                        const pr_species_slice *sl = pr_reward_slice_find(pr_item_evo_species, pr_item_evo_species_count, m->species);
+                        if (sl) {
+                            const int key = pr_reward_form_key(m->species, m->form);
+                            for (int i = 0; i < sl->n; i++) {
+                                const pr_item_evo *e = &pr_item_evos[sl->start + i];
+                                if (e->item == arg && m->level >= e->level) {
+                                    if (e->pre_form_key < 0 || e->pre_form_key == key) {
+                                        if (pr_reward_evo_conditions(ctx, party_idx, e)) {
+                                            can_evolve = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            /* Check fusion species evolutions if not already can_evolve */
+            if (!can_evolve && m->fusion_species >= 0) {
+                const pr_reward_species *s = pr_reward_species_find(m->fusion_species);
+                if (s && (s->flags & 1) && !pr_reward_form_is_max(m->fusion_species, m->fusion_form)) {
+                    if (!m->pause_evolutions || pr_reward_pause_exempt(m->fusion_species)) {
+                        const pr_species_slice *sl = pr_reward_slice_find(pr_item_evo_species, pr_item_evo_species_count, m->fusion_species);
+                        if (sl) {
+                            const int key = pr_reward_form_key(m->fusion_species, m->fusion_form);
+                            for (int i = 0; i < sl->n; i++) {
+                                const pr_item_evo *e = &pr_item_evos[sl->start + i];
+                                if (e->item == arg && m->level >= e->level) {
+                                    if (e->pre_form_key < 0 || e->pre_form_key == key) {
+                                        if (pr_reward_evo_conditions(ctx, party_idx, e)) {
+                                            can_evolve = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!can_evolve) {
+                if (msg) *msg = NO_EFFECT_MSG;
+                return false;
+            }
+
+            if (msg) *msg = NULL;
+            return true;
+        }
+
+        case PR_ITEM_FORM_CHANGE_ITEM:
+        case PR_ITEM_RARE_FORM_CHANGE_ITEM: {
+            if (party_idx < 0 || party_idx >= ctx->n_party) {
+                if (msg) *msg = NO_EFFECT_MSG;
+                return false;
+            }
+            pr_reward_mon *m = &ctx->party[party_idx];
+            const pr_reward_species *s = pr_reward_species_find(m->species);
+            if (!s || !(s->flags & 2)) {
+                if (msg) *msg = NO_EFFECT_MSG;
+                return false;
+            }
+
+            const pr_species_slice *sl = pr_reward_slice_find(pr_item_fc_species, pr_item_fc_species_count, m->species);
+            if (!sl) {
+                if (msg) *msg = NO_EFFECT_MSG;
+                return false;
+            }
+
+            const int key = pr_reward_form_key(m->species, m->form);
+
+            bool can_change = false;
+            for (int i = 0; i < sl->n; i++) {
+                const pr_item_fc *fc = &pr_item_fcs[sl->start + i];
+                if (fc->item != arg) continue;
+                if (fc->pre_form_key != key) continue;
+                if (!(fc->flags & 4)) continue; /* active */
+
+                /* Check if already held */
+                if (pr_reward_held(ctx, party_idx, PR_ITEM_FORM_CHANGE_ITEM, arg) ||
+                    pr_reward_held(ctx, party_idx, PR_ITEM_RARE_FORM_CHANGE_ITEM, arg)) {
+                    continue;
+                }
+
+                can_change = true;
+                break;
+            }
+
+            if (!can_change) {
+                if (msg) *msg = NO_EFFECT_MSG;
+                return false;
+            }
+
+            /* Add form change item to owned items */
+            if (ctx->n_items < PR_REWARD_MAX_OWNED) {
+                ctx->items[ctx->n_items].item = item;
+                ctx->items[ctx->n_items].arg = arg;
+                ctx->items[ctx->n_items].stack = 1;
+                ctx->items[ctx->n_items].owner = (int8_t)party_idx;
+                ctx->items[ctx->n_items].active = true;
+                ctx->n_items++;
+            }
 
             if (msg) *msg = NULL;
             return true;

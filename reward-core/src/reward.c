@@ -27,7 +27,12 @@ const pr_reward_species *pr_reward_species_find(int species)
 int pr_reward_form_key(int species, int form)
 {
     const pr_reward_species *s = pr_reward_species_find(species);
-    if (!s || !s->n_forms || form < 0 || form >= s->n_forms) return 1;
+    if (!s) return 1;
+    if (form == 0) {
+        if (!s->n_forms) return 1;
+        return pr_reward_forms[s->form_start].key;
+    }
+    if (form < 0 || form >= s->n_forms) return -1;
     return pr_reward_forms[s->form_start + form].key;
 }
 
@@ -219,7 +224,7 @@ static int gen_tm(pr_reward_ctx *ctx, int tier)
 }
 
 /* SpeciesEvolutionCondition.conditionsFulfilled(pokemon) (isValidItemEvolution passes no forFusion) */
-static bool evo_conditions(pr_reward_ctx *ctx, int p, const pr_item_evo *e)
+bool pr_reward_evo_conditions(pr_reward_ctx *ctx, int p, const pr_item_evo *e)
 {
     const pr_reward_mon *m = &ctx->party[p];
     for (int c = 0; c < e->n_cond; c++) {
@@ -281,7 +286,7 @@ static bool evo_conditions(pr_reward_ctx *ctx, int p, const pr_item_evo *e)
     return true;
 }
 
-static const pr_species_slice *slice_find(const pr_species_slice *v, int n, int species)
+const pr_species_slice *pr_reward_slice_find(const pr_species_slice *v, int n, int species)
 {
     int lo = 0, hi = n - 1;
     while (lo <= hi) {
@@ -293,7 +298,7 @@ static const pr_species_slice *slice_find(const pr_species_slice *v, int n, int 
     return NULL;
 }
 
-static bool pause_exempt(int species)
+bool pr_reward_pause_exempt(int species)
 {
     return species == SPECIES_ID_SLOWPOKE || species == SPECIES_ID_EEVEE || species == SPECIES_ID_KIRLIA ||
            species == SPECIES_ID_SNORUNT;
@@ -312,8 +317,8 @@ static int gen_evolution_item(pr_reward_ctx *ctx, bool rare)
             if (species < 0) continue;
             const pr_reward_species *s = pr_reward_species_find(species);
             if (!s || !(s->flags & 1)) continue;                      /* hasEvolutions */
-            if (m->pause_evolutions && !pause_exempt(species)) continue;
-            const pr_species_slice *sl = slice_find(pr_item_evo_species, pr_item_evo_species_count, species);
+            if (m->pause_evolutions && !pr_reward_pause_exempt(species)) continue;
+            const pr_species_slice *sl = pr_reward_slice_find(pr_item_evo_species, pr_item_evo_species_count, species);
             if (!sl) continue;
             /* isValidItemEvolution(p, forFusion): the level, the form (preFormKey null or the (fusion) form key),
              * the conditions */
@@ -322,7 +327,7 @@ static int gen_evolution_item(pr_reward_ctx *ctx, bool rare)
                 const pr_item_evo *e = &pr_item_evos[sl->start + i];
                 if (m->level < e->level) continue;
                 if (e->pre_form_key >= 0 && e->pre_form_key != key) continue;
-                if (!evo_conditions(ctx, p, e)) continue;
+                if (!pr_reward_evo_conditions(ctx, p, e)) continue;
                 if (!e->item || (e->item > 50) != rare) continue;
                 if (n < 64) pool[n++] = e->item;
                 else ctx->run->unported |= PR_REWARD_UNPORTED_OPTIONS;
@@ -333,7 +338,7 @@ static int gen_evolution_item(pr_reward_ctx *ctx, bool rare)
 }
 
 /* A form change condition (SpeciesFormChangeCondition.predicate(p)) */
-static bool fc_condition(pr_reward_ctx *ctx, int p, const pr_fc_cond *c)
+bool pr_reward_fc_condition(pr_reward_ctx *ctx, int p, const pr_fc_cond *c)
 {
     const pr_reward_mon *m = &ctx->party[p];
     switch (c->kind) {
@@ -362,7 +367,7 @@ static int gen_form_change_item(pr_reward_ctx *ctx, bool rare)
         const pr_reward_mon *m = &ctx->party[p];
         const pr_reward_species *s = pr_reward_species_find(m->species);
         if (!s || !(s->flags & 2)) continue;
-        const pr_species_slice *sl = slice_find(pr_item_fc_species, pr_item_fc_species_count, m->species);
+        const pr_species_slice *sl = pr_reward_slice_find(pr_item_fc_species, pr_item_fc_species_count, m->species);
         if (!sl) continue;
         const int key = pr_reward_form_key(m->species, m->form);
         uint16_t mine[64];
@@ -373,7 +378,7 @@ static int gen_form_change_item(pr_reward_ctx *ctx, bool rare)
             if ((fc->flags & 2) && !gmax) continue;
             if (fc->n_cond) {
                 bool any = false;
-                for (int c = 0; c < fc->n_cond && !any; c++) any = fc_condition(ctx, p, &pr_fc_conds[fc->cond_start + c]);
+                for (int c = 0; c < fc->n_cond && !any; c++) any = pr_reward_fc_condition(ctx, p, &pr_fc_conds[fc->cond_start + c]);
                 if (!any) continue;
             }
             if (fc->pre_form_key != key) continue;

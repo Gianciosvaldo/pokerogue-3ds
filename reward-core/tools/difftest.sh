@@ -11,7 +11,7 @@ make -s -C "$HERE" BUILD="$BUILD"
 for t in rewards victory apply; do
   [ "$WHAT" = all ] || [ "$WHAT" = $t ] || continue
   cp "$HERE/tests/$t.producer.test.ts" "$UP/test/tests/zz-dump/"
-  (cd "$UP" && DIFF_SEED=$SEED DIFF_N=$N DIFF_OUT=$BUILD/$t-cases.txt npx vitest run test/tests/zz-dump/$t.producer.test.ts >/dev/null)
+  (cd "$UP" && DIFF_SEED=$SEED DIFF_N=$N DIFF_OUT=$BUILD/$t-cases.txt npx vitest run --no-cache test/tests/zz-dump/$t.producer.test.ts >/dev/null)
   echo "== $t"
   "$BUILD/${t}test" "$BUILD/$t-cases.txt"
 done

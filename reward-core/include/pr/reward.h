@@ -232,14 +232,14 @@ int pr_reward_select_start(pr_reward_ctx *ctx, const pr_reward_select *sel, pr_r
  * and whether a reward screen (SelectModifierPhase) follows. Returns how many items. ---- */
 int pr_reward_victory_rewards(const pr_run *run, int wave, uint16_t out[8], bool *select_screen);
 
-/* ---- applying rewards (Task 10: healing, revives, PP) ---- */
-/* Apply a reward item (potions, revives, Sacred Ash, PP items) to the player's party in ctx.
- * item: enum pr_item (PR_ITEM_POTION..PR_ITEM_FULL_RESTORE, PR_ITEM_REVIVE, PR_ITEM_MAX_REVIVE, PR_ITEM_SACRED_ASH,
- *                      PR_ITEM_ETHER, PR_ITEM_MAX_ETHER, PR_ITEM_ELIXIR, PR_ITEM_MAX_ELIXIR, PR_ITEM_PP_UP, PR_ITEM_PP_MAX)
+/* ---- applying rewards (Task 10/18: healing, revives, PP, evolution items, form change items) ---- */
+/* Apply a reward item to the player's party in ctx.
+ * item: enum pr_item
+ * arg: generated argument for items like evolution items / form change items, or 0
  * party_idx: 0..n_party-1, or -1 for Sacred Ash
  * move_idx: 0..3 for Ether/Max Ether/PP Up/PP Max, or -1
  * msg: if non-NULL, set to "It won’t have any effect." on failure, or NULL on success.
  * Returns true if applied, false if no effect. */
-bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int party_idx, int move_idx, const char **msg);
+bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_idx, int move_idx, const char **msg);
 
 #endif
