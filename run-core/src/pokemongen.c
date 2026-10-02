@@ -220,7 +220,7 @@ int pr_run_enemy_types(const pr_enemy_gen *mon, int species, int8_t types[2])
     return fused_types(f, ff, types);
 }
 
-int pr_run_enemy_pokemon_base(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_enemy_gen *out)
+int pr_run_enemy_pokemon_base_rng(pr_rng *rng, pr_run *run, const pr_enemy_gen_ctx *ctx, pr_enemy_gen *out)
 {
     const pr_species_gen *sp = species_gen(ctx->species);
     if (!sp) { run->unported |= PR_RUN_UNPORTED_SPECIES; return -1; }
@@ -230,19 +230,13 @@ int pr_run_enemy_pokemon_base(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_enemy
     out->boss_segments = 0;
     out->friendship = -1;
 
-    /* generateAbilityIndex(). The Ability Charm is skipped for a Pokemon with a trainer
-     * (!this.hasTrainer()), but EnemyPokemon.hasTrainer() reads this.trainerSlot, which the
-     * EnemyPokemon constructor sets only after super(): here it is always false, so the charm counts
-     * for a trainer's Pokemon too. */
     double chance = BASE_HIDDEN_ABILITY_RATE;
     if (ctx->hidden_ability_charm_stacks > 0) chance *= js_pow(2, -1 - ctx->hidden_ability_charm_stacks);
-    int regular = sp->same_abilities ? 0 : seed_int(run, 2);
-    bool hidden = sp->has_hidden ? !seed_int(run, (int)chance) : false;
+    int regular = sp->same_abilities ? 0 : pr_rng_seed_int(rng, 2, 0);
+    bool hidden = sp->has_hidden ? !pr_rng_seed_int(rng, (int)chance, 0) : false;
     out->ability_index = hidden ? 2 : regular;
 
-    /* this.id = randSeedInt(4294967296): integerInRange(0, 2^32 - 1), past int32 */
-    out->id = (uint32_t)floor(pr_rng_real_in_range(&run->rng, 0, 4294967296.0));
-    /* getIvsFromId(id) */
+    out->id = (uint32_t)floor(pr_rng_real_in_range(rng, 0, 4294967296.0));
     const uint32_t id = out->id;
     out->ivs[0] = (id & 0x3e000000u) >> 25;
     out->ivs[1] = (id & 0x01f00000u) >> 20;
@@ -251,35 +245,50 @@ int pr_run_enemy_pokemon_base(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_enemy
     out->ivs[4] = (id & 0x000003e0u) >> 5;
     out->ivs[5] = id & 0x0000001fu;
 
-    /* species.generateGender(): randSeedFloat() * 100 <= malePercent */
     if (sp->male_percent < 0) out->gender = GENDER_GENDERLESS;
-    else out->gender = pr_rng_frac(&run->rng) * 100 <= sp->male_percent ? GENDER_MALE : GENDER_FEMALE;
+    else out->gender = pr_rng_frac(rng) * 100 <= sp->male_percent ? GENDER_MALE : GENDER_FEMALE;
 
-    out->form = pr_run_get_species_form_index(run, ctx, out->gender);
+    bool ignore_arena = ctx->trainer_slot == 0 && ctx->wave < 0;
+    out->form = form_index(run, ctx, ctx->species, out->gender, -1, ignore_arena);
 
-    /* generateNature(): getEnumValues(Nature)[randSeedInt(25)] */
-    out->nature = seed_int(run, PR_NATURE_COUNT);
+    if (ctx->trainer_slot == 0 && ctx->wave < 0) {
+        /* Player starter: trySetShiny() check, then nature */
+        const uint32_t f = (out->id >> 16) ^ (out->id & 0xffffu);
+        out->shiny = f < BASE_SHINY_CHANCE;
+        if (out->shiny) {
+            const pr_form_gen *fg = form_gen(sp, out->form);
+            if (fg && fg->has_variants) {
+                pr_rng r = pr_run_seed_offset_rng(run, (int)(out->id & 0xffffu), &run->wave_seed);
+                int rand = pr_rng_seed_int(&r, 10, 0);
+                out->variant = rand >= SHINY_VARIANT_CHANCE ? 0 : rand >= SHINY_EPIC_CHANCE ? 1 : 2;
+            }
+        }
+        out->nature = pr_rng_seed_int(rng, PR_NATURE_COUNT, 0);
+        return 0;
+    }
 
-    /* if (level > 1): fused = gameMode.isSplicedOnly, else for an enemy without a trainer (always,
-     * as above) the enemy's EnemyFusionChanceModifier: randSeedFloat() > chance * stackCount fails */
+    out->nature = pr_rng_seed_int(rng, PR_NATURE_COUNT, 0);
+
     if (ctx->level > 1) {
         bool fused = run->mode == GAME_MODES_SPLICED_ENDLESS;
         if (!fused && ctx->enemy_fusion_stacks > 0)
-            fused = !(pr_rng_frac(&run->rng) > ctx->enemy_fusion_chance * ctx->enemy_fusion_stacks);
-        /* if (fused.value) { this.calculateStats(); this.generateFusionSpecies(); } */
+            fused = !(pr_rng_frac(rng) > ctx->enemy_fusion_chance * ctx->enemy_fusion_stacks);
         if (fused && generate_fusion(run, ctx, sp, out) < 0) return -1;
     }
     out->luck = 0;
 
-    /* teraType = randSeedItem(getTypes({includeTeraType: false, bypassSummonData: true, ignoreThirdType: true})) */
     int8_t types[2];
     const int n_types = pr_run_enemy_types(out, ctx->species, types);
-    if (n_types < 0) { run->unported |= PR_RUN_UNDEFINED_UPSTREAM; return -1; }   /* forms[formIndex] undefined */
-    out->tera_type = n_types == 1 ? types[0] : types[pr_rng_integer_in_range(&run->rng, 0, n_types - 1)];
+    if (n_types < 0) { run->unported |= PR_RUN_UNDEFINED_UPSTREAM; return -1; }
+    out->tera_type = n_types == 1 ? types[0] : types[pr_rng_integer_in_range(rng, 0, n_types - 1)];
 
-    /* EnemyPokemon: if (boss) setBoss(boss): getEncounterBossSegments(waveIndex, level, species, true) */
     if (ctx->boss) out->boss_segments = pr_run_get_encounter_boss_segments(run, ctx->wave, ctx->level, ctx->species, true);
     return 0;
+}
+
+int pr_run_enemy_pokemon_base(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_enemy_gen *out)
+{
+    return pr_run_enemy_pokemon_base_rng(&run->rng, run, ctx, out);
 }
 
 int pr_run_enemy_pokemon_finish(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_enemy_gen *out)

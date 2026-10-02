@@ -61,11 +61,12 @@ it("dump pokemon generation data", () => {
       );
     }
     const male = sp.malePercent == null ? -1 : sp.malePercent;
+    const starterCost = speciesDataRegistry.isStarter(id) ? speciesDataRegistry.getStarterCost(id) ?? 0 : 0;
     rows.push(
       `    {${id}, ${male}, ${sp.ability2 === sp.ability1 ? 1 : 0}, ${sp.abilityHidden ? 1 : 0}, ${sp.forms.length}, ${start}, `
         + `${speciesDataRegistry.hasEvolutions(id) ? 1 : 0}, ${speciesDataRegistry.hasPrevolution(id) ? 1 : 0}, `
         + `${sp.subLegendary ? 1 : 0}, ${sp.legendary ? 1 : 0}, ${sp.mythical ? 1 : 0}, ${sp.isTrainerForbidden() ? 1 : 0}, `
-        + `${sp.isCatchable() ? 1 : 0}},`,
+        + `${sp.isCatchable() ? 1 : 0}, ${starterCost}},`,
     );
   }
   const types = Object.values(TrainerType).filter(v => typeof v === "number") as number[];
