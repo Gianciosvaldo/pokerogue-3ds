@@ -52,8 +52,12 @@ it("daily run producer", async () => {
 
   for (const seed of dailySeeds) {
     scene.gameMode = getGameMode(GameModes.DAILY);
+    /* The setup battle above only initializes the headless scene. A real Daily Run reaches
+     * this path from the title screen without a current battle; otherwise resetSeed() silently
+     * inherits the setup battle's wave and contaminates the deterministic seed. */
+    scene.currentBattle = null;
     scene.setSeed(seed);
-    scene.resetSeed();
+    scene.resetSeed(0);
 
     const starters = getDailyRunStarters();
     const rawStartingBiome = getDailyStartingBiome();
@@ -72,7 +76,6 @@ it("daily run producer", async () => {
 
     scene.arena.biomeId = startingBiome;
     scene.arena.trainerPool = allBiomes.get(startingBiome).trainerPool;
-    scene.currentBattle = null;
 
     for (let wave = 1; wave <= 50; wave++) {
       const battle = scene.newBattle();
