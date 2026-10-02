@@ -208,9 +208,163 @@ static void test_transfer_and_stealing(void) {
     printf("PASS: transfer_and_stealing unit tests\n");
 }
 
+static void test_shop_economy_and_lock_capsule(void) {
+    pr_reward_ctx ctx;
+    pr_run run;
+    pr_seedstr seed;
+    memset(&run, 0, sizeof(run));
+    pr_seed_from_ascii(&seed, "12345");
+    pr_rng_sow(&run.rng, &seed);
+
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.run = &run;
+    ctx.wave = 1;
+
+    /* 1. Basic reroll cost (unlocked, wave 1, reroll_count 0) */
+    double cost = pr_reward_reroll_cost(&ctx, 0, false, NULL, 0, NULL);
+    if (cost != 250.0) {
+        fprintf(stderr, "FAIL: reroll_cost basic (got %.0f, expected 250)\n", cost);
+        exit(1);
+    }
+
+    /* Scaling by reroll count */
+    cost = pr_reward_reroll_cost(&ctx, 1, false, NULL, 0, NULL);
+    if (cost != 500.0) {
+        fprintf(stderr, "FAIL: reroll_cost reroll_count=1 (got %.0f, expected 500)\n", cost);
+        exit(1);
+    }
+
+    cost = pr_reward_reroll_cost(&ctx, 2, false, NULL, 0, NULL);
+    if (cost != 1000.0) {
+        fprintf(stderr, "FAIL: reroll_cost reroll_count=2 (got %.0f, expected 1000)\n", cost);
+        exit(1);
+    }
+
+    /* Scaling by wave (wave 15 -> ceil(15/10) = 2) */
+    ctx.wave = 15;
+    cost = pr_reward_reroll_cost(&ctx, 0, false, NULL, 0, NULL);
+    if (cost != 500.0) {
+        fprintf(stderr, "FAIL: reroll_cost wave 15 (got %.0f, expected 500)\n", cost);
+        exit(1);
+    }
+    ctx.wave = 1;
+
+    /* 2. Lock Capsule tier freezing cost */
+    pr_reward_option options[3];
+    memset(options, 0, sizeof(options));
+    options[0].tier = MODIFIER_TIER_COMMON; /* 50 */
+    options[1].tier = MODIFIER_TIER_GREAT;  /* 125 */
+    options[2].tier = MODIFIER_TIER_ULTRA;  /* 300 */
+    /* Total base_value = 475 */
+
+    cost = pr_reward_reroll_cost(&ctx, 0, true, options, 3, NULL);
+    if (cost != 475.0) {
+        fprintf(stderr, "FAIL: reroll_cost locked (got %.0f, expected 475)\n", cost);
+        exit(1);
+    }
+
+    cost = pr_reward_reroll_cost(&ctx, 1, true, options, 3, NULL);
+    if (cost != 950.0) {
+        fprintf(stderr, "FAIL: reroll_cost locked reroll_count=1 (got %.0f, expected 950)\n", cost);
+        exit(1);
+    }
+
+    /* 3. Custom settings override */
+    pr_reward_custom custom;
+    memset(&custom, 0, sizeof(custom));
+    custom.reroll_multiplier = -1.0; /* disabled */
+    cost = pr_reward_reroll_cost(&ctx, 0, false, NULL, 0, &custom);
+    if (cost != -1.0) {
+        fprintf(stderr, "FAIL: reroll_cost disabled custom (got %.0f, expected -1)\n", cost);
+        exit(1);
+    }
+
+    custom.reroll_multiplier = 0.5;
+    cost = pr_reward_reroll_cost(&ctx, 0, false, NULL, 0, &custom);
+    if (cost != 125.0) {
+        fprintf(stderr, "FAIL: reroll_cost custom multiplier 0.5 (got %.0f, expected 125)\n", cost);
+        exit(1);
+    }
+
+    /* 4. Black Sludge effect on reroll cost */
+    ctx.items[0].item = PR_ITEM_MYSTERY_ENCOUNTER_BLACK_SLUDGE;
+    ctx.items[0].stack = 1;
+    ctx.items[0].active = true;
+    ctx.n_items = 1;
+
+    cost = pr_reward_reroll_cost(&ctx, 0, false, NULL, 0, NULL);
+    if (cost != 625.0) { /* 250 * 2.5 = 625 */
+        fprintf(stderr, "FAIL: reroll_cost with Black Sludge (got %.0f, expected 625)\n", cost);
+        exit(1);
+    }
+    ctx.n_items = 0; /* reset items */
+
+    /* 5. Lock Capsule tier extraction helper */
+    int8_t locked_tiers[PR_REWARD_MAX_OPTIONS];
+    int n_locked = pr_reward_get_locked_tiers(options, 3, locked_tiers);
+    if (n_locked != 3 || locked_tiers[0] != MODIFIER_TIER_COMMON ||
+        locked_tiers[1] != MODIFIER_TIER_GREAT || locked_tiers[2] != MODIFIER_TIER_ULTRA) {
+        fprintf(stderr, "FAIL: get_locked_tiers\n");
+        exit(1);
+    }
+
+    /* 6. Money deduction helper */
+    double money = 1000.0;
+    if (!pr_reward_try_deduct_money(&money, 250.0) || money != 750.0) {
+        fprintf(stderr, "FAIL: try_deduct_money success\n");
+        exit(1);
+    }
+
+    if (pr_reward_try_deduct_money(&money, 1000.0) || money != 750.0) {
+        fprintf(stderr, "FAIL: try_deduct_money insufficient\n");
+        exit(1);
+    }
+
+    if (pr_reward_try_deduct_money(&money, -1.0) || money != 750.0) {
+        fprintf(stderr, "FAIL: try_deduct_money negative cost\n");
+        exit(1);
+    }
+
+    /* 7. Shop reroll state machine transition */
+    ctx.n_party = 1;
+    ctx.party[0].species = SPECIES_ID_PIKACHU;
+    ctx.party[0].allowed_in_challenge = true;
+
+    pr_reward_select sel;
+    memset(&sel, 0, sizeof(sel));
+    pr_reward_thresholds th;
+    pr_reward_option out_options[PR_REWARD_MAX_OPTIONS];
+
+    money = 2000.0;
+    int n_res = pr_reward_reroll(&ctx, &money, false, NULL, 0, &sel, &th, out_options);
+    if (n_res <= 0 || money != 1750.0 || sel.reroll_count != 1) {
+        fprintf(stderr, "FAIL: pr_reward_reroll transition (n_res=%d, money=%.0f, reroll_count=%d)\n",
+                n_res, money, sel.reroll_count);
+        exit(1);
+    }
+
+    /* Perform a locked reroll with Lock Capsule (reroll_count = 1, cost = 475 * 2 = 950) */
+    n_res = pr_reward_reroll(&ctx, &money, true, options, 3, &sel, &th, out_options);
+    if (n_res != 3 || money != 800.0 || sel.reroll_count != 2) { /* 1750 - 950 = 800 */
+        fprintf(stderr, "FAIL: pr_reward_reroll locked transition (n_res=%d, money=%.0f, reroll_count=%d)\n",
+                n_res, money, sel.reroll_count);
+        exit(1);
+    }
+
+    /* Attempt reroll with insufficient money (800 < cost 475 * 4 = 1900) */
+    n_res = pr_reward_reroll(&ctx, &money, true, options, 3, &sel, &th, out_options);
+    if (n_res != -1 || money != 800.0 || sel.reroll_count != 2) {
+        fprintf(stderr, "FAIL: pr_reward_reroll insufficient money (n_res=%d, money=%.0f)\n", n_res, money);
+        exit(1);
+    }
+
+    printf("PASS: shop_economy_and_lock_capsule unit tests\n");
+}
+
 int main(int argc, char **argv) {
     test_passive_multipliers();
     test_transfer_and_stealing();
+    test_shop_economy_and_lock_capsule();
 
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <cases file>\n", argv[0]);

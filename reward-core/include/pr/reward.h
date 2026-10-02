@@ -269,4 +269,33 @@ bool pr_reward_steal_held_item(pr_reward_ctx *ctx, int from_p, int to_p, int ite
 /* Applies Black Sludge shop cost multiplier factor (2.5 if Black Sludge is held/active, or 1.0 otherwise). */
 double pr_reward_black_sludge_shop_cost_multiplier(const pr_reward_ctx *ctx);
 
+/* ---- shop economy & Lock Capsule mechanics ---- */
+/* Calculates the shop reroll cost for the given context, reroll_count, Lock Capsule state (lock_rarities),
+ * previous options when lock_rarities is true, and custom settings (or NULL).
+ * Returns -1.0 if rerolls are disabled (e.g. reroll_multiplier < 0), or non-negative cost. */
+double pr_reward_reroll_cost(const pr_reward_ctx *ctx, int reroll_count, bool lock_rarities,
+                            const pr_reward_option *options, int n_options,
+                            const pr_reward_custom *custom);
+
+/* Extract tier array from current options for Lock Capsule locked_tiers input.
+ * Fills out_tiers (must be at least n_options in size) with tier of each option.
+ * Returns number of tiers written. */
+int pr_reward_get_locked_tiers(const pr_reward_option *options, int n_options, int8_t *out_tiers);
+
+/* Attempt to deduct cost from money balance.
+ * Returns true and deducts cost if money >= cost and cost >= 0.
+ * Returns false if money < cost or cost < 0. */
+bool pr_reward_try_deduct_money(double *money, double cost);
+
+/* Performs a shop reroll state machine transition:
+ * 1. Calculates reroll cost.
+ * 2. Checks and deducts cost from *money.
+ * 3. Prepares sel (increments reroll_count, attaches locked_tiers if lock_rarities is true).
+ * 4. Calls pr_reward_select_start to generate new options.
+ * Returns number of generated options on success, or -1 on failure. */
+int pr_reward_reroll(pr_reward_ctx *ctx, double *money, bool lock_rarities,
+                     const pr_reward_option *prev_options, int n_prev_options,
+                     pr_reward_select *sel, pr_reward_thresholds *th,
+                     pr_reward_option *out_options);
+
 #endif

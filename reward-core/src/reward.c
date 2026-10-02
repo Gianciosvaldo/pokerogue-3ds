@@ -724,3 +724,95 @@ int pr_reward_select_start(pr_reward_ctx *ctx, const pr_reward_select *sel, pr_r
     const int count = pr_reward_get_modifier_count(ctx, sel->custom);
     return pr_reward_get_player_options(ctx, th, count, sel->locked_tiers, sel->n_locked_tiers, sel->custom, out);
 }
+
+/* ---- shop economy & Lock Capsule mechanics ---- */
+double pr_reward_reroll_cost(const pr_reward_ctx *ctx, int reroll_count, bool lock_rarities,
+                            const pr_reward_option *options, int n_options,
+                            const pr_reward_custom *custom)
+{
+    if (custom && custom->reroll_multiplier < 0) {
+        return -1.0;
+    }
+
+    double base_value = 250.0;
+    if (lock_rarities) {
+        static const double tier_values[5] = {50.0, 125.0, 300.0, 750.0, 2000.0};
+        base_value = 0.0;
+        if (options && n_options > 0) {
+            for (int i = 0; i < n_options; i++) {
+                int t = options[i].tier;
+                if (t < 0 || t > 4) t = 0;
+                base_value += tier_values[t];
+            }
+        }
+    }
+
+    double multiplier = 1.0;
+    if (custom && !isnan(custom->reroll_multiplier)) {
+        multiplier = custom->reroll_multiplier;
+    }
+
+    int wave = ctx ? ctx->wave : 1;
+    if (wave < 1) wave = 1;
+    double wave_factor = ceil(wave / 10.0);
+
+    double base_multiplier = wave_factor * base_value * pow(2.0, reroll_count) * multiplier;
+    if (base_multiplier > 9007199254740991.0) {
+        base_multiplier = 9007199254740991.0;
+    }
+
+    double bs_mult = ctx ? pr_reward_black_sludge_shop_cost_multiplier(ctx) : 1.0;
+    return floor(base_multiplier * bs_mult);
+}
+
+int pr_reward_get_locked_tiers(const pr_reward_option *options, int n_options, int8_t *out_tiers)
+{
+    if (!options || n_options <= 0 || !out_tiers) return 0;
+    for (int i = 0; i < n_options; i++) {
+        out_tiers[i] = options[i].tier;
+    }
+    return n_options;
+}
+
+bool pr_reward_try_deduct_money(double *money, double cost)
+{
+    if (!money || cost < 0.0 || *money < cost) return false;
+    *money -= cost;
+    return true;
+}
+
+int pr_reward_reroll(pr_reward_ctx *ctx, double *money, bool lock_rarities,
+                     const pr_reward_option *prev_options, int n_prev_options,
+                     pr_reward_select *sel, pr_reward_thresholds *th,
+                     pr_reward_option *out_options)
+{
+    if (!ctx || !money || !sel || !th || !out_options) return -1;
+
+    const pr_reward_custom *custom = sel->custom;
+    const double cost = pr_reward_reroll_cost(ctx, sel->reroll_count, lock_rarities,
+                                              prev_options, n_prev_options, custom);
+    if (cost < 0.0 || !pr_reward_try_deduct_money(money, cost)) {
+        return -1;
+    }
+
+    int8_t locked_tiers[PR_REWARD_MAX_OPTIONS];
+    int n_locked = 0;
+    if (lock_rarities && prev_options && n_prev_options > 0) {
+        n_locked = pr_reward_get_locked_tiers(prev_options, n_prev_options, locked_tiers);
+    }
+
+    sel->reroll_count++;
+    sel->is_copy = false;
+    if (lock_rarities && n_locked > 0) {
+        sel->locked_tiers = locked_tiers;
+        sel->n_locked_tiers = n_locked;
+    } else {
+        sel->locked_tiers = NULL;
+        sel->n_locked_tiers = 0;
+    }
+
+    int res = pr_reward_select_start(ctx, sel, th, out_options);
+    sel->locked_tiers = NULL;
+    sel->n_locked_tiers = 0;
+    return res;
+}
