@@ -45,7 +45,7 @@ the "1, 2, and… Poof!" of a forgotten move): the app acts on them rather than 
 
 A run is saved where upstream saves it: at the start of each encounter (`GC_EV_SAVE_POINT`), which in
 game-core means from that event until the battle's first turn runs, while the first COMMAND screen waits
-(`gc_run_can_save`). `gc_run_save` fills a buffer of at most `GC_SAVE_MAX` (64 KB; about 7 to 9 KB in
+(`gc_run_can_save`). `gc_run_save` fills a buffer of at most `GC_SAVE_MAX` (128 KB; about 7 to 9 KB in
 practice), and `gc_run_load` comes back to that COMMAND screen with the run exactly as it was: the
 party with its summon data (a lead that stays out between waves keeps its stat stages and effects), the
 enemy party, the items, the arena, the money, the seeds and the RNG states. What follows a load is what
