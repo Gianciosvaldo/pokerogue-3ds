@@ -156,7 +156,7 @@ static int mystical_rock_weight(const pr_reward_ctx *ctx)
 }
 
 /* isMax(): the form key (or the fusion's) is a G-Max or Eternamax one */
-static bool form_is_max(int species, int form)
+bool pr_reward_form_is_max(int species, int form)
 {
     const pr_reward_species *s = pr_reward_species_find(species);
     if (!s || !s->n_forms || form < 0 || form >= s->n_forms) return false;
@@ -177,7 +177,7 @@ static int eviolite_weight(const pr_reward_ctx *ctx)
     for (int p = 0; p < ctx->n_party; p++) {
         const pr_reward_mon *m = &ctx->party[p];
         const bool fusion = m->fusion_species >= 0;
-        if (form_is_max(m->species, m->form) || (fusion && form_is_max(m->fusion_species, m->fusion_form))) continue;
+        if (pr_reward_form_is_max(m->species, m->form) || (fusion && pr_reward_form_is_max(m->fusion_species, m->fusion_form))) continue;
         if (!has_evolutions(m->species) && !(fusion && has_evolutions(m->fusion_species))) continue;
         if (!pr_reward_held(ctx, p, PR_ITEM_EVIOLITE, -1)) return 10;
     }

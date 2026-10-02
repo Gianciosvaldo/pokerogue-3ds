@@ -1,20 +1,23 @@
 /*
  * Upstream half of reward-core's item application test (tools/difftest.sh copies it into upstream).
- * Tests applying 14 reward items (potions, revives, Sacred Ash, PP items) to random parties with random HP,
- * statuses, PP, PP Ups, held items, and challenge settings.
+ * Tests applying reward items (potions, revives, Sacred Ash, PP items, evolution items, form change items)
+ * to random parties with random HP, statuses, PP, PP Ups, held items, and challenge settings.
  */
+import { EvolutionItem } from "#balance/pokemon-evolutions";
 import { getGameMode } from "#app/game-mode";
 import { speciesDataRegistry } from "#app/globals/global-species-data-registry";
 import { allMoves, modifierTypes } from "#data/data-lists";
+import { SpeciesFormChangeItemTrigger } from "#data/form-change-triggers";
 import { Status } from "#data/status-effect";
 import { Challenges } from "#enums/challenges";
+import { FormChangeItem } from "#enums/form-change-item";
 import { GameModes } from "#enums/game-modes";
 import { MoveId } from "#enums/move-id";
 import { SpeciesId } from "#enums/species-id";
 import { StatusEffect } from "#enums/status-effect";
 import { PokemonHeldItemModifier } from "#modifiers/modifier";
 import { PokemonMove } from "#moves/pokemon-move";
-import { PokemonMoveModifierType } from "#modifiers/modifier-type";
+import { EvolutionItemModifierType, FormChangeItemModifierType, PokemonMoveModifierType } from "#modifiers/modifier-type";
 import { GameManager } from "#test/framework/game-manager";
 import * as fs from "node:fs";
 import Phaser from "phaser";
@@ -42,7 +45,12 @@ it("reward apply producer", async () => {
     "REVIVE", "MAX_REVIVE", "SACRED_ASH",
     "ETHER", "MAX_ETHER", "ELIXIR", "MAX_ELIXIR",
     "PP_UP", "PP_MAX",
+    "EVOLUTION_ITEM", "RARE_EVOLUTION_ITEM",
+    "FORM_CHANGE_ITEM", "RARE_FORM_CHANGE_ITEM",
   ];
+
+  const evoItemIds = Object.values(EvolutionItem).filter((v): v is number => typeof v === "number" && v > 0);
+  const formChangeItemIds = Object.values(FormChangeItem).filter((v): v is number => typeof v === "number" && v > 0);
 
   const speciesIds = Object.keys(speciesDataRegistry.data).map(Number);
   const moveIds = allMoves.map((m: any) => m.id).filter((id: number) => id > 0);
@@ -104,7 +112,7 @@ it("reward apply producer", async () => {
         party.push(p);
       }
 
-      // items (e.g. HEALING_CHARM)
+      // items (e.g. HEALING_CHARM, MEGA_BRACELET, DYNAMAX_BAND)
       scene.modifiers.length = 0;
       if (rnd(2) === 0) {
         const hcFunc = (modifierTypes as any)["HEALING_CHARM"];
@@ -115,20 +123,76 @@ it("reward apply producer", async () => {
           scene.modifiers.push(m);
         }
       }
+      if (rnd(2) === 0) {
+        const mbFunc = (modifierTypes as any)["MEGA_BRACELET"];
+        if (mbFunc) {
+          const t = mbFunc().withIdFromFunc(mbFunc);
+          scene.modifiers.push(t.newModifier());
+        }
+      }
+      if (rnd(2) === 0) {
+        const dbFunc = (modifierTypes as any)["DYNAMAX_BAND"];
+        if (dbFunc) {
+          const t = dbFunc().withIdFromFunc(dbFunc);
+          scene.modifiers.push(t.newModifier());
+        }
+      }
 
       const itemKey = itemKeys[i % itemKeys.length];
       const targetPartyIdx = rnd(party.length);
       const targetMon = party[targetPartyIdx];
       const targetMoveIdx = rnd(targetMon.moveset.length);
 
+      let modifierType: any;
+      let arg = 0;
+
+      if (itemKey === "EVOLUTION_ITEM" || itemKey === "RARE_EVOLUTION_ITEM") {
+        const rare = itemKey === "RARE_EVOLUTION_ITEM";
+        const evolutions = speciesDataRegistry.hasEvolutions(targetMon.species.speciesId)
+          ? speciesDataRegistry.getEvolutions(targetMon.species.speciesId)
+          : [];
+        const validItems = evolutions.filter((e: any) => e.item && (e.item > 50) === rare).map((e: any) => e.item);
+        if (validItems.length > 0 && rnd(2) === 0) {
+          arg = pick(validItems);
+        } else {
+          arg = pick(evoItemIds);
+        }
+        modifierType = new EvolutionItemModifierType(arg);
+      } else if (itemKey === "FORM_CHANGE_ITEM" || itemKey === "RARE_FORM_CHANGE_ITEM") {
+        const rare = itemKey === "RARE_FORM_CHANGE_ITEM";
+        const formChanges = speciesDataRegistry.hasFormChanges(targetMon.species.speciesId)
+          ? speciesDataRegistry.getFormChanges(targetMon.species.speciesId)
+          : [];
+        const validItems = formChanges
+          .map((fc: any) => fc.findTrigger(SpeciesFormChangeItemTrigger)?.item)
+          .filter((i: any) => !!i && (i >= 100 && i < 150) === rare);
+        if (validItems.length > 0 && rnd(2) === 0) {
+          arg = pick(validItems);
+        } else {
+          arg = pick(formChangeItemIds);
+        }
+        modifierType = new FormChangeItemModifierType(arg);
+      } else {
+        const typeFunc = (modifierTypes as any)[itemKey];
+        modifierType = typeFunc();
+      }
+
       // Record input state for C
-      lines.push(["A", itemKey, targetPartyIdx, targetMoveIdx, challenges, party.length].join(" "));
+      lines.push(["A", itemKey, arg, targetPartyIdx, targetMoveIdx, challenges, party.length].join(" "));
       for (const p of party) {
         const ms = p.getMoveset();
+        const baseMs = p.moveset;
         lines.push(
           [
-            "P", p.id, p.hp, p.getMaxHp(), p.status?.effect ?? 0, ms.length,
-            ...ms.flatMap((m: any) => [m.moveId, m.ppUsed, m.ppUp, m.getMovePp()]),
+            "P", p.id, p.species.speciesId, p.formIndex, p.fusionSpecies ? p.fusionSpecies.speciesId : -1, p.fusionFormIndex,
+            p.gender, p.fusionGender ?? 0, p.level, p.hp, p.getMaxHp(), p.status?.effect ?? 0, p.getNature(), p.teraType,
+            p.friendship, p.getAbility(true).id, p.getAbility().id, p.hasPassive() ? p.getPassiveAbility().id : 0,
+            p.canApplyAbility() ? 1 : 0, p.canApplyAbility(true) ? 1 : 0, p.pauseEvolutions ? 1 : 0,
+            p.isAllowedInChallenge() ? 1 : 0, p.canSetStatus(StatusEffect.TOXIC, true, true, null, true) ? 1 : 0,
+            p.canSetStatus(StatusEffect.BURN, true, true, null, true) ? 1 : 0, p.getLearnableLevelMoves().length > 0 ? 1 : 0,
+            p.getPersistentTreasureCount(),
+            ms.length, ...ms.flatMap((m: any) => [m.moveId, m.ppUsed, m.ppUp, m.getMovePp()]),
+            baseMs.length, ...baseMs.map((m: any) => m.moveId),
           ].join(" "),
         );
       }
@@ -139,13 +203,12 @@ it("reward apply producer", async () => {
           ...mods.flatMap((m: any) => [
             keyOf(m.type), m.stackCount,
             m instanceof PokemonHeldItemModifier ? party.findIndex((p: any) => p.id === m.pokemonId) : -1,
+            m.formChangeItem ?? 0,
           ]),
         ].join(" "),
       );
 
       // Execute item apply in upstream
-      const typeFunc = (modifierTypes as any)[itemKey];
-      const modifierType = typeFunc();
       let filterMsg: string | null = null;
 
       if (modifierType.selectFilter) {
