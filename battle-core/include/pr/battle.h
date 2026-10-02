@@ -527,8 +527,10 @@ void pr_lose_held_item(pr_battle *bt, struct pr_engine *e, pr_pokemon *p, pr_mod
 void pr_clear_enemy_held_item_modifiers(pr_battle *bt, const pr_pokemon *p);
 extern int pr_kings_rock_fired;
 extern int pr_sitrus_berry_fired, pr_lum_berry_fired, pr_leppa_berry_fired;
+extern int pr_liechi_berry_fired, pr_ganlon_berry_fired, pr_petaya_berry_fired, pr_apicot_berry_fired, pr_salac_berry_fired;
 bool pr_berry_should_apply(pr_battle *bt, const pr_pokemon *p, const pr_modifier *m);
 void pr_apply_berry(pr_battle *bt, struct pr_engine *e, pr_pokemon *p, pr_modifier *m);
+void pr_apply_berry_ex(pr_battle *bt, struct pr_engine *e, pr_pokemon *p, pr_modifier *m, int8_t *ssc_stats, int8_t *ssc_stages, int *n_ssc);
 /* PokemonMultiHitModifier.apply(pokemon, moveId, null, damageMultiplier) for each Multi Lens */
 void pr_apply_multi_hit_damage_modifiers(pr_battle *bt, const pr_pokemon *src, int move, double *mult);
 /* globalScene.findModifier(m => m instanceof PokemonMultiHitModifier && m.pokemonId === p.id) (player list) */

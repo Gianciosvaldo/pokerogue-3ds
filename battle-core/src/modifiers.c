@@ -96,7 +96,12 @@ bool pr_mod_is_ported_item(const pr_modifier *m)
     if (m->cls == PR_MOD_BERRY) {
         return m->berry_type == BERRY_TYPE_SITRUS
             || m->berry_type == BERRY_TYPE_LUM
-            || m->berry_type == BERRY_TYPE_LEPPA;
+            || m->berry_type == BERRY_TYPE_LEPPA
+            || m->berry_type == BERRY_TYPE_LIECHI
+            || m->berry_type == BERRY_TYPE_GANLON
+            || m->berry_type == BERRY_TYPE_PETAYA
+            || m->berry_type == BERRY_TYPE_APICOT
+            || m->berry_type == BERRY_TYPE_SALAC;
     }
     int cls = m->cls;
     return cls == PR_MOD_TURN_HEAL || cls == PR_MOD_HIT_HEAL
@@ -268,6 +273,7 @@ static int max_hp(const pr_pokemon *p) { return p->stats[STAT_HP]; }
 static double to_dmg_value(double v) { double f = floor(v); return f < 1 ? 1 : f; }
 
 int pr_sitrus_berry_fired = 0, pr_lum_berry_fired = 0, pr_leppa_berry_fired = 0;
+int pr_liechi_berry_fired = 0, pr_ganlon_berry_fired = 0, pr_petaya_berry_fired = 0, pr_apicot_berry_fired = 0, pr_salac_berry_fired = 0;
 
 static int pr_pokemon_move_max_pp(const pr_pokemon *p, int s)
 {
@@ -303,12 +309,28 @@ bool pr_berry_should_apply(pr_battle *bt, const pr_pokemon *p, const pr_modifier
         }
         return false;
     }
+    case BERRY_TYPE_LIECHI:
+    case BERRY_TYPE_GANLON:
+    case BERRY_TYPE_PETAYA:
+    case BERRY_TYPE_APICOT:
+    case BERRY_TYPE_SALAC: {
+        double hp_ratio_req = 0.25;
+        int stat = m->berry_type - BERRY_TYPE_ENIGMA;
+        pr_ab_params pp = {.pokemon = (pr_pokemon *)p, .move = -1, .value = &hp_ratio_req};
+        pr_apply_ab_attrs((pr_battle *)bt, PR_AC_ReduceBerryUseThresholdAbAttr, &pp);
+        return get_hp_ratio(p) < hp_ratio_req && p->stat_stages[stat - 1] < 6;
+    }
     default:
         return false;
     }
 }
 
 void pr_apply_berry(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_modifier *m)
+{
+    pr_apply_berry_ex(bt, e, p, m, NULL, NULL, NULL);
+}
+
+void pr_apply_berry_ex(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_modifier *m, int8_t *ssc_stats, int8_t *ssc_stages, int *n_ssc)
 {
     if (!m || m->cls != PR_MOD_BERRY) return;
     p->has_eaten_berry = true;
@@ -362,6 +384,44 @@ void pr_apply_berry(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_modifier *m)
                                  pr_arg_move("moveName", p->moves[slot]),
                                  pr_arg_key("berryName", "berry:leppa.name"));
             pr_queue_msg(bt, e, msg);
+        }
+        break;
+    }
+    case BERRY_TYPE_LIECHI:
+    case BERRY_TYPE_GANLON:
+    case BERRY_TYPE_PETAYA:
+    case BERRY_TYPE_APICOT:
+    case BERRY_TYPE_SALAC: {
+        if (btype == BERRY_TYPE_LIECHI) pr_liechi_berry_fired++;
+        else if (btype == BERRY_TYPE_GANLON) pr_ganlon_berry_fired++;
+        else if (btype == BERRY_TYPE_PETAYA) pr_petaya_berry_fired++;
+        else if (btype == BERRY_TYPE_APICOT) pr_apicot_berry_fired++;
+        else if (btype == BERRY_TYPE_SALAC) pr_salac_berry_fired++;
+
+        int stat = btype - BERRY_TYPE_ENIGMA;
+        double amount = 1.0;
+        pr_ab_params rp = {.pokemon = p, .move = -1, .value = &amount};
+        pr_apply_ab_attrs(bt, PR_AC_DoubleBerryEffectAbAttr, &rp);
+        int8_t stages = (int8_t)amount;
+
+        if (ssc_stats != NULL && ssc_stages != NULL && n_ssc != NULL) {
+            int idx = -1;
+            for (int k = 0; k < *n_ssc; k++) {
+                if (ssc_stats[k] == (int8_t)stat) {
+                    idx = k;
+                    break;
+                }
+            }
+            if (idx >= 0) {
+                ssc_stages[idx] += stages;
+            } else if (*n_ssc < 7) {
+                ssc_stats[*n_ssc] = (int8_t)stat;
+                ssc_stages[*n_ssc] = stages;
+                (*n_ssc)++;
+            }
+        } else {
+            int8_t st = (int8_t)stat;
+            pr_unshift_stat_stage_change_ex(bt, e, pr_battler_index(bt, p), &st, &stages, 1, p, 0);
         }
         break;
     }
@@ -437,7 +497,7 @@ void pr_apply_turn_heal_modifiers(pr_battle *bt, pr_engine *e, pr_pokemon *p)
     pr_modifier *m;
     EACH_MOD(m, bt, p->is_player, PR_MOD_TURN_HEAL) {
         if (!held_applies(m, p)) continue;
-        if (p->hp > 0 && p->hp < max_hp(p)) {
+        if (p->hp < max_hp(p)) {
             double amount = to_dmg_value(max_hp(p) / 16.0) * m->stack_count;
             pr_msg msg = pr_msg2("modifier:turnHealApply",
                                  pr_arg_pokemon(bt, "pokemonNameWithAffix", p),

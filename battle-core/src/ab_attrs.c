@@ -1273,6 +1273,15 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         return 1;
 
     /* ---- berries ---- */
+    case PR_AC_ReduceBerryUseThresholdAbAttr:
+        GATE(pr_has_ability_with_attr(bt, p, PR_AC_ReduceBerryUseThresholdAbAttr));
+        if (pp->value) {
+            double hp_ratio = js_round(((double)p->hp / p->stats[STAT_HP]) * 100.0) / 100.0;
+            if (*pp->value < hp_ratio) {
+                *pp->value *= 2.0;
+            }
+        }
+        return 1;
     case PR_AC_DoubleBerryEffectAbAttr:
         GATE(pr_has_ability_with_attr(bt, p, PR_AC_DoubleBerryEffectAbAttr));
         if (pp->value) *pp->value *= 2.0;

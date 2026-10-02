@@ -2591,11 +2591,18 @@ static void berry_phase(pr_battle *bt, pr_engine *e)
 
         pr_unshift_common_anim(bt, e, pr_battler_index(bt, p), pr_battler_index(bt, p), COMMON_ANIM_USE_ITEM);
 
+        int8_t ssc_stats[7], ssc_stages[7];
+        int n_ssc = 0;
+
         for (int i = 0; i < bt->n_mods[side]; i++) {
             if (pr_berry_should_apply(bt, p, &bt->mods[side][i])) {
-                pr_apply_berry(bt, e, p, &bt->mods[side][i]);
+                pr_apply_berry_ex(bt, e, p, &bt->mods[side][i], ssc_stats, ssc_stages, &n_ssc);
                 break;
             }
+        }
+
+        if (n_ssc > 0) {
+            pr_unshift_stat_stage_change_ex(bt, e, pr_battler_index(bt, p), ssc_stats, ssc_stages, n_ssc, p, 0);
         }
 
         pr_hook_ab(bt, p, PR_AC_HealFromBerryUseAbAttr);
