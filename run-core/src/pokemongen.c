@@ -349,7 +349,7 @@ int pr_run_enemy_pokemon_finish(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_ene
         out->friendship = (int)(fr < TRAINER_MIN_FRIENDSHIP ? TRAINER_MIN_FRIENDSHIP : fr > 255 ? 255 : fr);
     }
     /* applyChallenges(MOVESET_MODIFY) */
-    if (run->has_challenges) { run->unported |= PR_RUN_UNPORTED_CHALLENGES; return -1; }
+    if (pr_run_has_unported_challenges(run)) { run->unported |= PR_RUN_UNPORTED_CHALLENGES; return -1; }
 
     /* addEnemyPokemon, after the constructor: a boss rolls a second id and each IV moves 3/4 of the
      * way from the lower to the higher of the two, rounded:
