@@ -272,10 +272,15 @@ static void attempt_capture_phase(pr_battle *bt, pr_engine *e, int ph)
     double shiny_mult = 1.0;
 
     double modified_catch_rate_float = (((_3m - _2h) * catch_rate * pokeball_mult) / _3m) * status_mult * shiny_mult;
-    int modified_catch_rate = (int)round(modified_catch_rate_float);
+    /* Master Ball uses a -1 multiplier upstream. That deliberately makes the intermediate
+     * catch-rate math NaN, but the later guaranteed-catch branches never consume it. Avoid
+     * converting NaN to int in C while preserving the same RNG behavior (the crit roll still runs). */
+    bool guaranteed_ball = pokeball_mult == -1.0;
+    int modified_catch_rate = guaranteed_ball ? 0 : (int)round(modified_catch_rate_float);
 
-    int shake_probability = (int)round(65536.0 / js_pow(255.0 / modified_catch_rate, 0.1875));
-    int critical_capture_chance = get_critical_capture_chance(bt, modified_catch_rate);
+    int shake_probability = guaranteed_ball ? 0
+        : (int)round(65536.0 / js_pow(255.0 / modified_catch_rate, 0.1875));
+    int critical_capture_chance = guaranteed_ball ? 0 : get_critical_capture_chance(bt, modified_catch_rate);
 
     int crit_roll = pr_battle_rand_seed_int(bt, 256, 0);
     bool is_critical = crit_roll < critical_capture_chance;
@@ -3178,9 +3183,6 @@ static void attempt_run_phase(pr_battle *bt, pr_engine *e, int ph)
     pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_PLAYER);
     pr_pokemon *p;
     while ((p = pr_speed_iter_next(bt, &it))) {
-        if (pr_is_of_type(p, POKEMON_TYPE_GHOST)) {
-            escape_chance = 256;
-        }
         pr_ab_params pp = {.pokemon = p, .value = &escape_chance};
         pr_apply_ab_attrs(bt, PR_AC_RunSuccessAbAttr, &pp);
     }
