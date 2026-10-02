@@ -1676,8 +1676,10 @@ static void boss_segments_cleared(pr_battle *bt, pr_engine *e, pr_pokemon *p, in
         }
     }
 
-    if (n)
-        pr_unshift_stat_stage_change_ex(bt, e, pr_battler_index(bt, p), stats, stages, n, p, 0);
+    if (n) {
+        int ph = pr_unshift_stat_stage_change_ex(bt, e, pr_battler_index(bt, p), stats, stages, n, p, 0);
+        if (ph >= 0) PH(ph)->ssc_ignore_abilities = true;
+    }
 }
 
 /* Pokemon.damage(damage, ignoreSegments=false, preventEndure, ignoreFaintPhase) */
