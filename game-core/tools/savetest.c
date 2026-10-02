@@ -60,6 +60,12 @@ int main(void)
     CHECK(gc_run_set_starters(&run, team, 3, &why), "a new run with three starters");
     gc_event e;
     while (gc_run_next_event(&run, &e)) {}
+    /* Set Mega form on party[0] and Fusion on party[1] to test form/fusion saving */
+    run.party[0].b.species = SPECIES_ID_VENUSAUR;
+    run.party[0].b.form = 1;
+    run.party[1].b.fusion_species = SPECIES_ID_CHARMANDER;
+    run.party[1].b.fusion_form = 0;
+    run.party[1].b.fusion_ability_index = 1;
     CHECK(gc_run_can_save(&run), "saving is allowed at wave 1's first command");
     const size_t n = gc_run_save(&run, buf, sizeof buf);
     CHECK(n > 0 && n <= GC_SAVE_MAX, "the save fits in GC_SAVE_MAX");
@@ -77,7 +83,11 @@ int main(void)
     for (int i = 0; i < run.n_party; i++)
         same &= back.party[i].b.species == run.party[i].b.species && back.party[i].b.hp == run.party[i].b.hp
                 && back.party[i].exp == run.party[i].exp && !memcmp(back.party[i].b.moves, run.party[i].b.moves, 8);
-    CHECK(same, "each party member's species, HP, exp and moves");
+    same &= (back.party[0].b.form == run.party[0].b.form);
+    same &= (back.party[1].b.fusion_species == run.party[1].b.fusion_species
+             && back.party[1].b.fusion_form == run.party[1].b.fusion_form
+             && back.party[1].b.fusion_ability_index == run.party[1].b.fusion_ability_index);
+    CHECK(same, "each party member's species, form, fusion data, HP, exp and moves");
 
     /* one turn later the save point is over */
     gc_choice c = {GC_CH_FIGHT, 0, -1, 0};

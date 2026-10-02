@@ -93,7 +93,9 @@ static const sfield mon_fields[] = {
 /* battle-core's Pokemon: everything but its turnData (reset before every turn) and the lists, which
  * have blocks of their own */
 static const sfield pokemon_fields[] = {
-    SF(pr_pokemon, id), SF(pr_pokemon, species), SF(pr_pokemon, form), SF(pr_pokemon, level), SF(pr_pokemon, ivs),
+    SF(pr_pokemon, id), SF(pr_pokemon, species), SF(pr_pokemon, form),
+    SF(pr_pokemon, fusion_species), SF(pr_pokemon, fusion_form), SF(pr_pokemon, fusion_ability_index),
+    SF(pr_pokemon, level), SF(pr_pokemon, ivs),
     SF(pr_pokemon, nature), SF(pr_pokemon, ability), SF(pr_pokemon, base_ability), SF(pr_pokemon, ability_override),
     SF(pr_pokemon, passive), SF(pr_pokemon, passive_flag), SF(pr_pokemon, custom_passive), SF(pr_pokemon, added_type),
     SF(pr_pokemon, is_player), SF(pr_pokemon, stats), SF(pr_pokemon, summon_stats), SF(pr_pokemon, hp),
@@ -399,6 +401,7 @@ static void mon_defaults(gc_mon *m)
     b->status_toxic_turns = 0;
     b->status_sleep_turns = b->status_freeze_turns = -1;
     b->tera_type = -1;
+    b->fusion_ability_index = -1;
     for (int i = 0; i < 4; i++) b->max_pp_override[i] = -1;
     pr_reset_summon_data(b);
     pr_reset_turn_data(b);
@@ -409,7 +412,13 @@ static void mon_defaults(gc_mon *m)
 static bool mon_ok(const gc_mon *m)
 {
     const pr_pokemon *b = &m->b;
-    if (!gc_species(b->species) || !gc_form(b->species, b->form) || b->level < 1) return false;
+    const pr_species *sp = gc_species(b->species);
+    if (!sp || b->form >= sp->nforms || b->level < 1) return false;
+    if (b->fusion_species != 0) {
+        const pr_species *fsp = gc_species(b->fusion_species);
+        if (!fsp || b->fusion_form >= fsp->nforms) return false;
+        if (b->fusion_ability_index < -1 || b->fusion_ability_index > 2) return false;
+    }
     if (b->n_moves > 4 || b->n_tags > PR_MAX_BATTLER_TAGS || b->n_move_queue > PR_MAX_MOVE_QUEUE) return false;
     for (int i = 0; i < b->n_moves; i++) if (b->moves[i] >= PR_MOVE_COUNT) return false;
     if (b->n_summon_types > PR_MAX_SUMMON_TYPES || b->n_ab_applied_summon > 4 || b->n_ab_applied_wave > 4) return false;
