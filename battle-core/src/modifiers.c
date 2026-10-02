@@ -38,6 +38,10 @@ const uint8_t pr_mod_parent[PR_MOD_COUNT_] = {
     [PR_MOD_ENEMY_DAMAGE_BOOSTER] = PR_MOD_ENEMY_DAMAGE_MULTIPLIER,
     [PR_MOD_ENEMY_DAMAGE_REDUCER] = PR_MOD_ENEMY_DAMAGE_MULTIPLIER,
     [PR_MOD_ENEMY_TURN_HEAL] = PR_MOD_ENEMY_PERSISTENT,
+    [PR_MOD_ENEMY_ATTACK_STATUS_EFFECT_CHANCE] = PR_MOD_ENEMY_PERSISTENT,
+    [PR_MOD_ENEMY_STATUS_EFFECT_HEAL_CHANCE] = PR_MOD_ENEMY_PERSISTENT,
+    [PR_MOD_ENEMY_ENDURE_CHANCE] = PR_MOD_ENEMY_PERSISTENT,
+    [PR_MOD_ENEMY_FUSED_CHANCE] = PR_MOD_ENEMY_PERSISTENT,
     [PR_MOD_SURVIVE_DAMAGE] = PR_MOD_HELD_ITEM,
     [PR_MOD_BYPASS_SPEED_CHANCE] = PR_MOD_HELD_ITEM,
     [PR_MOD_FLINCH_CHANCE] = PR_MOD_HELD_ITEM,
@@ -71,6 +75,10 @@ const char *const pr_mod_class_name[PR_MOD_COUNT_] = {
     [PR_MOD_ENEMY_DAMAGE_BOOSTER] = "EnemyDamageBoosterModifier",
     [PR_MOD_ENEMY_DAMAGE_REDUCER] = "EnemyDamageReducerModifier",
     [PR_MOD_ENEMY_TURN_HEAL] = "EnemyTurnHealModifier",
+    [PR_MOD_ENEMY_ATTACK_STATUS_EFFECT_CHANCE] = "EnemyAttackStatusEffectChanceModifier",
+    [PR_MOD_ENEMY_STATUS_EFFECT_HEAL_CHANCE] = "EnemyStatusEffectHealChanceModifier",
+    [PR_MOD_ENEMY_ENDURE_CHANCE] = "EnemyEndureChanceModifier",
+    [PR_MOD_ENEMY_FUSED_CHANCE] = "EnemyFusionChanceModifier",
     [PR_MOD_SURVIVE_DAMAGE] = "SurviveDamageModifier",
     [PR_MOD_BYPASS_SPEED_CHANCE] = "BypassSpeedChanceModifier",
     [PR_MOD_FLINCH_CHANCE] = "FlinchChanceModifier",
@@ -110,7 +118,11 @@ bool pr_mod_is_ported_item(const pr_modifier *m)
         || cls == PR_MOD_SURVIVE_DAMAGE || cls == PR_MOD_BYPASS_SPEED_CHANCE
         || cls == PR_MOD_FLINCH_CHANCE || cls == PR_MOD_RESET_NEGATIVE_STAT_STAGE
         || cls == PR_MOD_ENEMY_DAMAGE_BOOSTER || cls == PR_MOD_ENEMY_DAMAGE_REDUCER
-        || cls == PR_MOD_ENEMY_TURN_HEAL;
+        || cls == PR_MOD_ENEMY_TURN_HEAL
+        || cls == PR_MOD_ENEMY_ATTACK_STATUS_EFFECT_CHANCE
+        || cls == PR_MOD_ENEMY_STATUS_EFFECT_HEAL_CHANCE
+        || cls == PR_MOD_ENEMY_ENDURE_CHANCE
+        || cls == PR_MOD_ENEMY_FUSED_CHANCE;
 }
 
 int32_t pr_mod_get_stack_count(const pr_modifier *m)
@@ -253,6 +265,64 @@ void pr_apply_nature_weight_modifier(pr_battle *bt, const pr_pokemon *p, double 
         if (!held_applies(m, p)) continue;
         if (*mult != 1) {
             *mult += 0.1 * pr_mod_get_stack_count(m) * (*mult > 1 ? 1 : -1);
+            return;
+        }
+    }
+}
+
+void pr_apply_enemy_status_heal_modifiers(pr_battle *bt, pr_engine *e, pr_pokemon *p)
+{
+    if (!p || p->is_player || !p->status) return;
+    pr_modifier *m;
+    EACH_MOD(m, bt, false, PR_MOD_ENEMY_STATUS_EFFECT_HEAL_CHANCE) {
+        double chance = 0.025 * pr_mod_get_stack_count(m);
+        if (pr_rng_seed_float(&bt->rng) <= chance) {
+            pr_queue_msg(bt, e, pr_status_msg(bt, p->status, PR_ST_HEAL, p));
+            pr_reset_status_phase(bt, e, p, false);
+            return;
+        }
+    }
+}
+
+void pr_apply_enemy_attack_status_modifiers(pr_battle *bt, pr_engine *e, pr_pokemon *user, pr_pokemon *target)
+{
+    if (!user || user->is_player || !target) return;
+    pr_modifier *eligible[16], *m;
+    int n = 0;
+    EACH_MOD(m, bt, false, PR_MOD_ENEMY_ATTACK_STATUS_EFFECT_CHANCE) {
+        if (n < 16) eligible[n++] = m;
+    }
+    if (n == 0) return;
+
+    /* applyShuffledModifiers: Fisher-Yates shuffle using randSeedInt(len) */
+    for (int i = n - 1; i > 0; i--) {
+        int r = pr_battle_rand_seed_int(bt, i + 1, 0);
+        pr_modifier *tmp = eligible[i];
+        eligible[i] = eligible[r];
+        eligible[r] = tmp;
+    }
+
+    for (int i = 0; i < n; i++) {
+        pr_modifier *m = eligible[i];
+        int status = m->berry_type; /* effect stored in berry_type */
+        double chance = 0.025 * (status == STATUS_EFFECT_BURN || status == STATUS_EFFECT_POISON ? 2.0 : 1.0);
+        if (pr_rng_seed_float(&bt->rng) <= chance * pr_mod_get_stack_count(m)) {
+            if (pr_try_set_status(bt, e, target, status, user, -1, false, true)) {
+                return;
+            }
+        }
+    }
+}
+
+void pr_apply_enemy_endure_modifiers(pr_battle *bt, pr_engine *e, pr_pokemon *target)
+{
+    if (!target || target->is_player || target->wave_endured) return;
+    pr_modifier *m;
+    EACH_MOD(m, bt, false, PR_MOD_ENEMY_ENDURE_CHANCE) {
+        int chance = 2 * pr_mod_get_stack_count(m);
+        if (pr_battle_rand_seed_int(bt, 100, 0) < chance) {
+            pr_add_tag(bt, e, target, BATTLER_TAG_TYPE_ENDURE_TOKEN, 1, 0, -1);
+            target->wave_endured = true;
             return;
         }
     }

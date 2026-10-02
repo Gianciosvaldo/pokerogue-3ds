@@ -1736,6 +1736,7 @@ static move_damage apply_move_damage(pr_battle *bt, pr_engine *e, int ph, pr_pok
         user->total_damage_dealt += (int32_t)(d.damage < sub->hp ? d.damage : sub->hp);
         sub->hp -= (int32_t)d.damage;
     } else if (!target->is_player && d.damage >= target->hp) {
+        pr_apply_enemy_endure_modifiers(bt, e, target);
         turn_modifiers(bt, false, target);                       /* EnemyEndureChanceModifier */
     }
     double final = blocked ? 0 : damage_and_update(bt, e, target, d.damage, d.result, true, user, crit);
@@ -1786,7 +1787,10 @@ static void apply_on_target_effects(pr_battle *bt, pr_engine *e, int ph, pr_poke
     pr_lapse_tags(bt, e, target, BATTLER_TAG_LAPSE_TYPE_AFTER_HIT);
     pr_ab_params ap = {.pokemon = user, .opponent = target, .move = move, .hit_result = d.result, .damage = d.damage};
     pr_apply_ab_attrs(bt, PR_AC_PostAttackAbAttr, &ap);                  /* Poison Touch, Stench... */
-    if (!user->is_player && pr_move_is_attack(move)) turn_modifiers(bt, false, target);   /* EnemyAttackStatusEffectChanceModifier */
+    if (!user->is_player && pr_move_is_attack(move)) {
+        pr_apply_enemy_attack_status_modifiers(bt, e, user, target);
+        turn_modifiers(bt, false, target);   /* EnemyAttackStatusEffectChanceModifier */
+    }
     if (pr_move_is_attack(move)) turn_modifiers(bt, user->is_player, user);                /* ContactHeldItemTransferChanceModifier */
 }
 
@@ -2776,6 +2780,7 @@ static void turn_end_phase(pr_battle *bt, pr_engine *e)
                                     pr_msg1("battle:turnEndHpRestore", pr_arg_pokemon(bt, "pokemonName", p)));
             if (!p->is_player) {
                 pr_apply_enemy_turn_heal_modifiers(bt, e, p);
+                pr_apply_enemy_status_heal_modifiers(bt, e, p);
                 turn_modifiers(bt, false, p);
             }
             pr_ab_params pt = {.pokemon = p, .move = -1};
