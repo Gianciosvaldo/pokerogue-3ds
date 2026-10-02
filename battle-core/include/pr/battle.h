@@ -186,6 +186,9 @@ typedef struct pr_pokemon {
     uint32_t id;               /* Pokemon.id: what held items point at */
     uint16_t species;
     uint8_t form;
+    uint16_t fusion_species;   /* 0 = null (not fused) */
+    uint8_t fusion_form;
+    int8_t fusion_ability_index; /* 0, 1, 2 for ability1, ability2, ability_hidden; -1 = none */
     uint8_t level;
     uint8_t ivs[6];
     uint8_t nature;
@@ -596,6 +599,8 @@ bool pr_are_allies(int a, int b);
 /* ---- pokemon.ts ---- */
 const pr_species *pr_pokemon_species(const pr_pokemon *p);
 const pr_form *pr_pokemon_form(const pr_pokemon *p);
+const pr_species *pr_pokemon_fusion_species(const pr_pokemon *p);
+const pr_form *pr_pokemon_fusion_form(const pr_pokemon *p);
 /* getBattlerIndex(): the Pokemon's slot in bt->field, -1 when off the field */
 int pr_battler_index(const pr_battle *bt, const pr_pokemon *p);
 void pr_calculate_stats(pr_battle *bt, pr_pokemon *p);

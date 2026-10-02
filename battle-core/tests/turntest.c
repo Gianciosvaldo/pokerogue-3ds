@@ -280,6 +280,9 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             p->id = (uint32_t)inum(l, "id");
             p->species = (uint16_t)inum(l, "sp");
             p->form = (uint8_t)inum(l, "form");
+            p->fusion_species = field(l, "fsp") ? (uint16_t)inum(l, "fsp") : 0;
+            p->fusion_form = field(l, "fform") ? (uint8_t)inum(l, "fform") : 0;
+            p->fusion_ability_index = field(l, "fabil") ? (int8_t)inum(l, "fabil") : -1;
             p->level = (uint8_t)inum(l, "lv");
             if (split(need(l, "ivs"), ',', it, 6) != 6) { fprintf(stderr, "bad ivs\n"); exit(2); }
             for (int j = 0; j < 6; j++) p->ivs[j] = (uint8_t)atoi(it[j]);
@@ -580,7 +583,10 @@ static const char *boost_fields(const pr_battler_tag *t)
 static void dump_mon(lines_t *L, const pr_battle *bt, const pr_pokemon *p, const char *b, bool *incomplete)
 {
     sbuf s = {{0}, 0};
-    sb(&s, "MON b=%s id=%u sp=%d form=%d lv=%d ivs=", b, p->id, p->species, p->form, p->level);
+    sb(&s, "MON b=%s id=%u sp=%d form=%d", b, p->id, p->species, p->form);
+    if (p->fusion_species)
+        sb(&s, " fsp=%d fform=%d fabil=%d", p->fusion_species, p->fusion_form, p->fusion_ability_index);
+    sb(&s, " lv=%d ivs=", p->level);
     LIST(&s, 6, ',', "%d", p->ivs[i]);
     sb(&s, " nat=%d ab=", p->nature);
     num_or_u(&s, p->ability_override, -1);
