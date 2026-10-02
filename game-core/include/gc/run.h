@@ -256,13 +256,11 @@ enum {
     GC_STUB_REWARDS,            /* no reward-core yet: a fixed placeholder list */
     GC_STUB_DOUBLE_AS_SINGLE,   /* a double battle roll played as a single battle (M1 rule) */
     GC_STUB_MYSTERY_ENCOUNTER,  /* a mystery encounter roll played as a wild battle */
-    GC_STUB_TRAINER_NEXT,       /* a trainer's next Pokemon sent in without its summon phases */
     GC_STUB_TURN_TAIL,          /* the rest of a turn after a victory was cut short */
     GC_STUB_EVOLUTION,          /* an evolution condition other than level (item, friendship...) not checked */
     GC_STUB_WEATHER,            /* the biome's weather roll isn't ported */
     GC_STUB_UNPORTED_ENEMY,     /* run-core couldn't generate an enemy (a PR_RUN_UNPORTED_* case): a stand-in */
     GC_STUB_CATCH,              /* no catching yet */
-    GC_STUB_BATTLE_START,       /* the summon phases at a battle's start (entry abilities, hazards) not run */
     GC_STUB_TRAINER_REWARDS,    /* a trainer's own rewards (modifierRewardFuncs, vouchers) not given */
     GC_STUB_POST_BATTLE,        /* PostBattle abilities (Pickup, Honey Gather), Pay Day money, lapsing items */
     GC_STUB_ENEMY_SWITCH,       /* the AI switched a trainer's Pokemon out: battle-core doesn't run the enemy

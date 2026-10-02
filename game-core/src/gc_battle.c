@@ -8,6 +8,8 @@
  * restrictions and trapping come from ai-core. */
 #include "internal.h"
 
+static void note_unported(gc_run *run);
+
 static int index_of(const gc_mon *arr, int n, const pr_pokemon *p)
 {
     for (int i = 0; i < n; i++) if (&arr[i].b == p) return i;
@@ -121,18 +123,22 @@ bool gc_battle_setup_field(gc_run *run, bool reset_arena)
         pr_update_passive(bt, &run->enemy[i].b);
     }
     bt->n_party[1] = (uint8_t)run->n_enemy;
-    summon(run, 1, 0);
-    gc_stub(run, GC_STUB_BATTLE_START);
+    if (run->battle_type != BATTLE_TYPE_TRAINER && run->n_enemy) {
+        summon(run, 1, 0);
+    }
     if (keep_lead) {
         bt->field[0] = &run->party[lead].b;
         pr_reset_turn_data(&run->party[lead].b);
-        return false;
     }
-    if (run->n_party && gc_mon_allowed(&run->party[run->party_order[0]])) {
-        summon(run, 0, run->party_order[0]);
-        return true;
-    }
-    return false;
+    bt->battle_style_set = false;
+    bt->trainer_names[0] = run->trainer_names[GC_TNAME_TRAINER];
+    bt->trainer_names[1] = run->trainer_names[GC_TNAME_PARTNER];
+    pr_start_battle(bt, &run->eng);
+    note_unported(run);
+    gc_ev_battle(run);
+    gc_sync_party_order(run);
+    run->run.rng = bt->rng;
+    return !keep_lead && run->n_party && gc_mon_allowed(&run->party[run->party_order[0]]);
 }
 
 /* battle-core's party list is upstream's party order: switching swaps its entries */
@@ -470,7 +476,6 @@ bool gc_battle_trainer_next(gc_run *run)
     bt->party[1][0] = bt->party[1][k];
     bt->party[1][k] = t;
     summon(run, 1, idx);
-    gc_stub(run, GC_STUB_TRAINER_NEXT);
     gc_ev_msg(run, "battle:trainerSendOut", 2, gc_m_trainer(run, "trainerName", GC_TNAME_TRAINER), gc_m_mon_name(run, "pokemonName", 1, idx));
     return true;
 }
