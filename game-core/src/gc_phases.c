@@ -55,7 +55,32 @@ static void victory(gc_run *run, int enemy_idx)
     gc_internal *in = gc_int(run);
     pr_battle *bt = &run->bt;
     if (enemy_idx >= 0) {
-        const pr_pokemon *e = &run->enemy[enemy_idx].b;
+        gc_mon *e_mon = &run->enemy[enemy_idx];
+        const pr_pokemon *e = &e_mon->b;
+        bool caught = run->battle_type == BATTLE_TYPE_WILD && e->hp > 0;
+        if (caught) {
+            e_mon->pokeball = (uint8_t)(run->bt.last_used_pokeball >= 0 ? run->bt.last_used_pokeball : POKEBALL_TYPE_POKEBALL);
+            e_mon->met_wave = (int16_t)run->wave;
+            pr_reset_summon_data(&e_mon->b);
+            pr_reset_turn_data(&e_mon->b);
+            e_mon->b.on_field = false;
+            e_mon->b.is_player = true;
+            pr_calculate_stats(&run->bt, &e_mon->b);
+            pr_update_passive(&run->bt, &e_mon->b);
+            if (run->sys) {
+                gc_system_set_pokemon_caught(run->sys, e_mon, true, false);
+                gc_system_update_species_dex_ivs(run->sys, e_mon->b.species, e_mon->b.ivs);
+            }
+            if (run->n_party < 6) {
+                run->party[run->n_party] = *e_mon;
+                run->party_order[run->n_party] = (int8_t)run->n_party;
+                run->n_party++;
+                run->bt.n_party[0] = (uint8_t)run->n_party;
+                run->bt.party[0][run->n_party - 1] = &run->party[run->n_party - 1].b;
+            } else {
+                gc_rq_push(run, gc_rp(RP_PARTY_SWAP, enemy_idx, 0, 0));
+            }
+        }
         const pr_form *f = gc_form(e->species, e->form);
         /* getExpValue(): getBaseExp() (x1.5 for mega, primal and gigantamax forms) * level / 5 + 1 */
         const double base = f->exp_boost ? f->base_exp * 1.5 : f->base_exp;
@@ -536,6 +561,17 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         run->finished = true;
         return false;
     }
+    case RP_PARTY_SWAP: {
+        gc_screen *s = &run->screen;
+        memset(s, 0, sizeof *s);
+        s->kind = GC_SCREEN_SWITCH;
+        s->slot = 0;
+        s->party = (int8_t)p->a;
+        for (int i = 0; i < run->n_party; i++) s->pick_ok[i] = true;
+        s->can_skip = true;
+        gc_ev_msg(run, "menu:swapOrRelease", 1, gc_m_mon_name(run, "pokemonName", 1, p->a));
+        return false;
+    }
     default:
         (void)in;
         return true;
@@ -618,6 +654,33 @@ bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char *
         *ok = true;
         set_next_biome(run, run->screen.biomes[c->a]);
         return true;
+    case RP_PARTY_SWAP: {
+        if (c->kind != GC_CH_PICK) { *why = "pick a Pokemon"; return false; }
+        const gc_screen *s = &run->screen;
+        if (c->a == -1) {
+            if (!s->can_skip) { *why = "partyUiHandler:noEnergy"; return false; }
+            *ok = true;
+            gc_ev_msg(run, "menu:pokemonReleased", 1, gc_m_mon_name(run, "pokemonName", 1, p->a));
+            return true;
+        }
+        if (c->a < 0 || c->a >= run->n_party || !s->pick_ok[c->a]) {
+            *why = "partyUiHandler:noEnergy";
+            return false;
+        }
+        *ok = true;
+        gc_ev_msg(run, "menu:pokemonSwapped", 2, gc_m_mon_name(run, "releasedName", 0, c->a), gc_m_mon_name(run, "pokemonName", 1, p->a));
+        gc_mon caught = run->enemy[p->a];
+        pr_reset_summon_data(&caught.b);
+        pr_reset_turn_data(&caught.b);
+        caught.b.on_field = false;
+        caught.b.is_player = true;
+        pr_calculate_stats(&run->bt, &caught.b);
+        pr_update_passive(&run->bt, &caught.b);
+        run->party[c->a] = caught;
+        int slot = gc_battle_slot_of(run, c->a);
+        if (slot >= 0) run->bt.party[0][slot] = &run->party[c->a].b;
+        return true;
+    }
     default:
         *why = "nothing to answer";
         return false;
