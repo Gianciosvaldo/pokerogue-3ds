@@ -37,6 +37,7 @@ const uint8_t pr_mod_parent[PR_MOD_COUNT_] = {
     [PR_MOD_ENEMY_DAMAGE_MULTIPLIER] = PR_MOD_ENEMY_PERSISTENT,
     [PR_MOD_ENEMY_DAMAGE_BOOSTER] = PR_MOD_ENEMY_DAMAGE_MULTIPLIER,
     [PR_MOD_ENEMY_DAMAGE_REDUCER] = PR_MOD_ENEMY_DAMAGE_MULTIPLIER,
+    [PR_MOD_ENEMY_TURN_HEAL] = PR_MOD_ENEMY_PERSISTENT,
     [PR_MOD_SURVIVE_DAMAGE] = PR_MOD_HELD_ITEM,
     [PR_MOD_BYPASS_SPEED_CHANCE] = PR_MOD_HELD_ITEM,
     [PR_MOD_FLINCH_CHANCE] = PR_MOD_HELD_ITEM,
@@ -69,6 +70,7 @@ const char *const pr_mod_class_name[PR_MOD_COUNT_] = {
     [PR_MOD_ENEMY_DAMAGE_MULTIPLIER] = "EnemyDamageMultiplierModifier",
     [PR_MOD_ENEMY_DAMAGE_BOOSTER] = "EnemyDamageBoosterModifier",
     [PR_MOD_ENEMY_DAMAGE_REDUCER] = "EnemyDamageReducerModifier",
+    [PR_MOD_ENEMY_TURN_HEAL] = "EnemyTurnHealModifier",
     [PR_MOD_SURVIVE_DAMAGE] = "SurviveDamageModifier",
     [PR_MOD_BYPASS_SPEED_CHANCE] = "BypassSpeedChanceModifier",
     [PR_MOD_FLINCH_CHANCE] = "FlinchChanceModifier",
@@ -106,7 +108,9 @@ bool pr_mod_is_ported_item(const pr_modifier *m)
     int cls = m->cls;
     return cls == PR_MOD_TURN_HEAL || cls == PR_MOD_HIT_HEAL
         || cls == PR_MOD_SURVIVE_DAMAGE || cls == PR_MOD_BYPASS_SPEED_CHANCE
-        || cls == PR_MOD_FLINCH_CHANCE || cls == PR_MOD_RESET_NEGATIVE_STAT_STAGE;
+        || cls == PR_MOD_FLINCH_CHANCE || cls == PR_MOD_RESET_NEGATIVE_STAT_STAGE
+        || cls == PR_MOD_ENEMY_DAMAGE_BOOSTER || cls == PR_MOD_ENEMY_DAMAGE_REDUCER
+        || cls == PR_MOD_ENEMY_TURN_HEAL;
 }
 
 int32_t pr_mod_get_stack_count(const pr_modifier *m)
@@ -610,7 +614,8 @@ static void enemy_damage_multiplier(pr_battle *bt, int cls, double *damage)
 {
     pr_modifier *m;
     EACH_MOD(m, bt, false, cls) {
-        double v = floor(*damage * js_pow(m->mult, pr_mod_get_stack_count(m)));
+        double mult = m->mult != 0 ? m->mult : (cls == PR_MOD_ENEMY_DAMAGE_BOOSTER ? 1.05 : 0.975);
+        double v = floor(*damage * js_pow(mult, pr_mod_get_stack_count(m)));
         *damage = v > 1 ? v : 1;
     }
 }
@@ -623,6 +628,21 @@ void pr_apply_enemy_damage_booster_modifiers(pr_battle *bt, double *damage)
 void pr_apply_enemy_damage_reducer_modifiers(pr_battle *bt, double *damage)
 {
     enemy_damage_multiplier(bt, PR_MOD_ENEMY_DAMAGE_REDUCER, damage);
+}
+
+void pr_apply_enemy_turn_heal_modifiers(pr_battle *bt, pr_engine *e, pr_pokemon *p)
+{
+    if (!p || p->is_player) return;
+    pr_modifier *m;
+    EACH_MOD(m, bt, false, PR_MOD_ENEMY_TURN_HEAL) {
+        if (p->hp < max_hp(p)) {
+            double amount = (max_hp(p) * m->stack_count * 2.0) / 100.0;
+            pr_msg msg = pr_msg1("modifier:enemyTurnHealApply",
+                                 pr_arg_pokemon(bt, "pokemonNameWithAffix", p));
+            pr_unshift_heal_msg(bt, e, pr_battler_index(bt, p), amount,
+                                PR_HEAL_MESSAGE | PR_HEAL_PREVENT_FULL, msg);
+        }
+    }
 }
 
 int pr_kings_rock_fired = 0;
