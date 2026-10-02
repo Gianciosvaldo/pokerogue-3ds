@@ -2774,7 +2774,10 @@ static void turn_end_phase(pr_battle *bt, pr_engine *e)
             if (bt->terrain == TERRAIN_GRASSY && pr_is_grounded(bt, p, false))
                 pr_unshift_heal_msg(bt, e, pr_battler_index(bt, p), to_dmg_value(max_hp(p) / 16.0), PR_HEAL_MESSAGE,
                                     pr_msg1("battle:turnEndHpRestore", pr_arg_pokemon(bt, "pokemonName", p)));
-            if (!p->is_player) turn_modifiers(bt, false, p);
+            if (!p->is_player) {
+                pr_apply_enemy_turn_heal_modifiers(bt, e, p);
+                turn_modifiers(bt, false, p);
+            }
             pr_ab_params pt = {.pokemon = p, .move = -1};
             pr_apply_ab_attrs(bt, PR_AC_PostTurnAbAttr, &pt);
         }

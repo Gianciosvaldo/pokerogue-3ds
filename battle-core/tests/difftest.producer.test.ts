@@ -189,10 +189,10 @@ it("difftest producer", async () => {
     if (rnd(6) === 0) side.push(item("DIRE_HIT").newModifier());
     if (rnd(6) === 0) side.push(item("EXP_CHARM").newModifier());
     if (!p.isPlayer()) {
-      for (const key of ["ENEMY_DAMAGE_BOOSTER", "ENEMY_DAMAGE_REDUCTION"]) {
+      for (const key of ["ENEMY_DAMAGE_BOOSTER", "ENEMY_DAMAGE_REDUCTION", "ENEMY_HEAL"]) {
         if (rnd(3) === 0) {
           const m = item(key).newModifier();
-          m.stackCount = rnd(6) === 0 ? 1 + rnd(999) : 1 + rnd(40);
+          m.stackCount = key === "ENEMY_HEAL" ? (rnd(3) === 0 ? 1 + rnd(10) : 1 + rnd(5)) : (rnd(6) === 0 ? 1 + rnd(999) : 1 + rnd(40));
           side.push(m);
         }
       }

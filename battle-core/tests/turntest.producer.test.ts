@@ -1112,7 +1112,7 @@ it("turntest producer", async () => {
     if (ITEMS) {
       for (const p of [A, D]) {
         if (rnd(2) === 0) {
-          const itemFunc = [
+          const itemFuncList = [
             modifierTypes.LEFTOVERS,
             modifierTypes.SHELL_BELL,
             modifierTypes.FOCUS_BAND,
@@ -1127,10 +1127,18 @@ it("turntest producer", async () => {
             () => new BerryModifierType(BerryType.PETAYA),
             () => new BerryModifierType(BerryType.APICOT),
             () => new BerryModifierType(BerryType.SALAC),
-          ][rnd(14)];
+          ];
+          if (!p.isPlayer()) {
+            itemFuncList.push(
+              modifierTypes.ENEMY_DAMAGE_BOOSTER,
+              modifierTypes.ENEMY_DAMAGE_REDUCTION,
+              modifierTypes.ENEMY_HEAL,
+            );
+          }
+          const itemFunc = itemFuncList[rnd(itemFuncList.length)];
           const type = itemFunc();
           const mod = (type.withIdFromFunc ? type.withIdFromFunc(itemFunc) : type).newModifier(p);
-          mod.stackCount = 1 + rnd(4);
+          mod.stackCount = 1 + rnd(mod.getMaxStackCount());
           if (p.isPlayer()) {
             scene.addModifier(mod, true, false, false, true);
           } else {

@@ -73,6 +73,7 @@ enum {
     PR_MOD_ENEMY_DAMAGE_MULTIPLIER,
     PR_MOD_ENEMY_DAMAGE_BOOSTER,     /* the enemy's Damage token */
     PR_MOD_ENEMY_DAMAGE_REDUCER,     /* the enemy's Protection token */
+    PR_MOD_ENEMY_TURN_HEAL,          /* Recovery token */
     PR_MOD_SURVIVE_DAMAGE,           /* Focus Band */
     PR_MOD_BYPASS_SPEED_CHANCE,      /* Quick Claw */
     PR_MOD_FLINCH_CHANCE,            /* King's Rock */
@@ -540,6 +541,7 @@ void pr_apply_multi_hit_damage_modifiers(pr_battle *bt, const pr_pokemon *src, i
 bool pr_find_player_multi_lens(pr_battle *bt, const pr_pokemon *p);
 void pr_apply_enemy_damage_booster_modifiers(pr_battle *bt, double *damage);
 void pr_apply_enemy_damage_reducer_modifiers(pr_battle *bt, double *damage);
+void pr_apply_enemy_turn_heal_modifiers(pr_battle *bt, struct pr_engine *e, pr_pokemon *p);
 /* Move.canBeMultiStrikeEnhanced(user) (restrictSpread false, no target) */
 bool pr_move_can_be_multi_strike_enhanced(int move);
 /* Move.canBeMultiStrikeEnhanced(user, restrictSpread, target) */
