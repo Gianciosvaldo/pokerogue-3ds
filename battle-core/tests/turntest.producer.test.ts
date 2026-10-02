@@ -1114,7 +1114,12 @@ it("turntest producer", async () => {
             () => new BerryModifierType(BerryType.SITRUS),
             () => new BerryModifierType(BerryType.LUM),
             () => new BerryModifierType(BerryType.LEPPA),
-          ][rnd(9)];
+            () => new BerryModifierType(BerryType.LIECHI),
+            () => new BerryModifierType(BerryType.GANLON),
+            () => new BerryModifierType(BerryType.PETAYA),
+            () => new BerryModifierType(BerryType.APICOT),
+            () => new BerryModifierType(BerryType.SALAC),
+          ][rnd(14)];
           const type = itemFunc();
           const mod = (type.withIdFromFunc ? type.withIdFromFunc(itemFunc) : type).newModifier(p);
           mod.stackCount = 1 + rnd(4);

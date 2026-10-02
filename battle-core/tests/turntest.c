@@ -1466,9 +1466,10 @@ int main(int argc, char **argv)
         printf("\n");
     }
     report_conditions();
-    printf("item firings: Leftovers=%d, Shell Bell=%d, Focus Band=%d, Quick Claw=%d, King's Rock=%d, White Herb=%d, Sitrus=%d, Lum=%d, Leppa=%d\n",
+    printf("item firings: Leftovers=%d, Shell Bell=%d, Focus Band=%d, Quick Claw=%d, King's Rock=%d, White Herb=%d, Sitrus=%d, Lum=%d, Leppa=%d, Liechi=%d, Ganlon=%d, Petaya=%d, Apicot=%d, Salac=%d\n",
            leftovers_fired, shell_bell_fired, focus_band_fired, quick_claw_fired, kings_rock_fired, white_herb_fired,
-           pr_sitrus_berry_fired, pr_lum_berry_fired, pr_leppa_berry_fired);
+           pr_sitrus_berry_fired, pr_lum_berry_fired, pr_leppa_berry_fired,
+           pr_liechi_berry_fired, pr_ganlon_berry_fired, pr_petaya_berry_fired, pr_apicot_berry_fired, pr_salac_berry_fired);
     fail += probes.fail;
     (void)cs0;
     return fail || parse_fail ? 1 : 0;
