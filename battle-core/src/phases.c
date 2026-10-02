@@ -1630,12 +1630,76 @@ static void queue_hit_result_message(pr_battle *bt, pr_engine *e, int result)
 
 typedef struct { int result; double damage; bool critical; } move_damage;
 
-/* Pokemon.damage(damage, ignoreSegments, preventEndure, ignoreFaintPhase) */
+static void boss_segments_cleared(pr_battle *bt, pr_engine *e, pr_pokemon *p, int segment_index)
+{
+    bool do_stat_boost = !p->has_trainer;
+    int8_t stats[7], stages[7];
+    int n = 0;
+
+    while (p->boss_segment_index > 0 && segment_index - 1 < p->boss_segment_index) {
+        p->boss_segment_index--;
+        if (!do_stat_boost) continue;
+
+        int eligible[5], weights[5], n_eligible = 0, total = 0;
+        for (int stat = STAT_ATK; stat <= STAT_SPD; stat++) {
+            int queued = 0;
+            for (int i = 0; i < n; i++) if (stats[i] == stat) queued += stages[i];
+            if (p->stat_stages[stat - 1] + queued >= 6) continue;
+            int weight = (int)pr_get_stat(p, stat, false);
+            if (weight < 0) weight = 0;
+            eligible[n_eligible] = stat;
+            weights[n_eligible] = weight;
+            total += weight;
+            n_eligible++;
+        }
+        if (!n_eligible || total <= 0) {
+            do_stat_boost = false;
+            continue;
+        }
+
+        int roll = pr_battle_rand_seed_int(bt, total, 0);
+        int picked = eligible[0], upto = 0;
+        for (int i = 0; i < n_eligible; i++) {
+            upto += weights[i];
+            if (roll < upto) { picked = eligible[i]; break; }
+        }
+
+        int boost = 1;
+        if (p->boss_segments >= 3 && p->boss_segment_index == 0) boost++;
+        if (p->boss_segments >= 5 && p->boss_segment_index == 1) boost++;
+        if (n < 7) {
+            stats[n] = (int8_t)picked;
+            stages[n] = (int8_t)boost;
+            n++;
+        } else {
+            pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT);
+        }
+    }
+
+    if (n)
+        pr_unshift_stat_stage_change_ex(bt, e, pr_battler_index(bt, p), stats, stages, n, p, 0);
+}
+
+/* Pokemon.damage(damage, ignoreSegments=false, preventEndure, ignoreFaintPhase) */
 static double pokemon_damage(pr_battle *bt, pr_engine *e, pr_pokemon *p, double damage, bool prevent_endure,
                              bool ignore_faint_phase)
 {
     if (p->hp <= 0) return 0;
-    if (p->is_boss) pr_note_unported(bt, PR_FEAT_BOSS_SEGMENTS);
+
+    int cleared_boss_segment_index = p->boss_segment_index + 1;
+    bool ported_boss = p->is_boss && p->boss_segments > 0;
+    if (p->is_boss && !ported_boss) {
+        /* Old callers only supplied is_boss. Do not silently guess a segment count. */
+        pr_note_unported(bt, PR_FEAT_BOSS_SEGMENTS);
+    } else if (ported_boss) {
+        double segment_hp = (double)max_hp(p) / p->boss_segments;
+        int min_segment = (bt->game_mode == GAME_MODES_CLASSIC && bt->wave_index == 200 && p->form == 0) ? 1 : 0;
+        damage = pr_calculate_boss_segment_damage(damage, p->hp, segment_hp, min_segment,
+                                                  p->boss_segment_index, &cleared_boss_segment_index);
+        if (min_segment == 1 && p->boss_segment_index < 1 && damage > p->hp - 1)
+            damage = p->hp - 1;
+    }
+
     if (!prevent_endure && p->hp - damage <= 0) {
         bool survive = false;
         if (p->hp >= 1 && pr_get_battler_tag(p, BATTLER_TAG_TYPE_ENDURING))
@@ -1650,6 +1714,10 @@ static double pokemon_damage(pr_battle *bt, pr_engine *e, pr_pokemon *p, double 
     }
     if (damage > p->hp) damage = p->hp;
     p->hp -= (int32_t)damage;
+
+    if (ported_boss && cleared_boss_segment_index <= p->boss_segment_index)
+        boss_segments_cleared(bt, e, p, cleared_boss_segment_index);
+
     if (p->hp <= 0 && !ignore_faint_phase) {
         pr_queue_faint(bt, e, pr_battler_index(bt, p), prevent_endure, -1);
         pr_lapse_tag(bt, e, p, BATTLER_TAG_TYPE_COMMANDED, BATTLER_TAG_LAPSE_TYPE_CUSTOM);

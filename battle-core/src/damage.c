@@ -304,6 +304,43 @@ static int32_t to_dmg_value(double v)
     return v > 1 ? (int32_t)v : 1;
 }
 
+double pr_calculate_boss_segment_damage(double damage, double current_hp, double segment_hp,
+                                        int min_segment_index, int current_segment_index,
+                                        int *cleared_index)
+{
+    int segment_index = current_segment_index >= 0
+        ? current_segment_index
+        : (int)ceil(current_hp / segment_hp) - 1;
+    if (segment_index <= 0) {
+        if (cleared_index) *cleared_index = 1;
+        return damage;
+    }
+
+    double segment_threshold = segment_hp * segment_index;
+    double rounded_threshold = js_round(segment_threshold);
+    double remaining_segment_hp = current_hp - rounded_threshold;
+    double leftover_damage = damage - remaining_segment_hp;
+
+    if (leftover_damage < 0) {
+        if (cleared_index) *cleared_index = segment_index + 1;
+        return damage;
+    }
+    if (leftover_damage == 0) {
+        if (cleared_index) *cleared_index = segment_index;
+        return damage;
+    }
+
+    int bypassed = (int)floor(log2(leftover_damage / segment_hp));
+    if (bypassed < 0) bypassed = 0;
+    int max_bypass = segment_index - min_segment_index;
+    if (bypassed > max_bypass) bypassed = max_bypass;
+
+    double adjusted = floor(current_hp - segment_threshold + segment_hp * bypassed);
+    if (adjusted < 1) adjusted = 1;
+    if (cleared_index) *cleared_index = segment_index - bypassed;
+    return adjusted;
+}
+
 pr_damage_result pr_get_attack_damage(pr_battle *bt, pr_pokemon *def, pr_pokemon *src, int move,
                                       bool is_critical, bool simulated)
 {

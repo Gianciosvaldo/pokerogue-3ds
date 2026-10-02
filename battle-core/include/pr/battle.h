@@ -227,6 +227,8 @@ typedef struct pr_pokemon {
     bool has_trainer;                  /* hasTrainer(): enemy owned by a trainer */
     int8_t trainer_slot;               /* EnemyPokemon.trainerSlot (TrainerSlot): which trainer of a duo owns it */
     bool is_boss;                      /* isBoss(): enemy with boss segments */
+    uint8_t boss_segments;              /* EnemyPokemon.bossSegments; 0 = not a boss */
+    uint8_t boss_segment_index;         /* shields remaining: bossSegments - 1 initially */
     pr_battler_tag tags[PR_MAX_BATTLER_TAGS]; /* summonData.tags */
     uint8_t n_tags;
     uint32_t stellar_types_boosted;    /* stellarTypesBoosted, bit per PokemonType */
@@ -692,6 +694,10 @@ pr_damage_result pr_get_attack_damage(pr_battle *bt, pr_pokemon *def, pr_pokemon
 /* the same with getAttackDamage's `effectiveness` option (NAN = undefined: computed as above) */
 pr_damage_result pr_get_attack_damage_ex(pr_battle *bt, pr_pokemon *def, pr_pokemon *src, int move,
                                          bool is_critical, bool simulated, double effectiveness);
+/* src/utils/damage.ts calculateBossSegmentDamage. */
+double pr_calculate_boss_segment_damage(double damage, double current_hp, double segment_hp,
+                                        int min_segment_index, int current_segment_index,
+                                        int *cleared_index);
 bool pr_get_critical_hit_result(pr_battle *bt, const pr_pokemon *def, const pr_pokemon *src, int move);
 
 #endif
