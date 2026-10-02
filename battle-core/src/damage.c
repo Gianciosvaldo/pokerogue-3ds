@@ -330,7 +330,7 @@ double pr_calculate_boss_segment_damage(double damage, double current_hp, double
         return damage;
     }
 
-    int bypassed = (int)floor(log(leftover_damage / segment_hp) / log(2.0));
+    int bypassed = (int)floor(log2(leftover_damage / segment_hp));
     if (bypassed < 0) bypassed = 0;
     int max_bypass = segment_index - min_segment_index;
     if (bypassed > max_bypass) bypassed = max_bypass;
