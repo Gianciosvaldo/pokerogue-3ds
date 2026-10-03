@@ -170,3 +170,61 @@ remains a draft until the expanded gate is resolved. The focused comparison
 covers modifier identity and item loss, not complete move/turn/reward parity.
 The legacy mystery test's reported 76 choices compare no upstream result fields
 and are smoke coverage only; its producer/comparison was not changed here.
+
+## Task 87: resume state fixes; expanded gate still blocked
+
+At main `58030d63ef3090b7d69865b66431bb4e8e015656`, reload omitted mystery
+history and the active mystery node, replayed trainer summon effects (Intimidate
+lowered Attack twice), and reset battle RNG already consumed by Forewarn.
+The resume path now restores field pointers without executing battle-start effects,
+serializes mystery history/node fields, and preserves the battle RNG and live flag.
+The normal new-encounter path is unchanged. Historical saves missing these fields
+load with empty history, no active mystery node and an uninitialized battle RNG;
+missing historical state cannot be recovered or claimed faithful.
+
+New additive `tests/resume_test.c` uses the existing, unchanged gcplay chooser.
+It checks empty/full history, encounter selection and RNG, trainer stat stages,
+field ownership, invalid history and three real failing seeds. Original main
+fails its active-node check; changed code reports **2,110 checks passed**:
+
+| Seed | Final wave | Turns | Score | Saved/ordinary |
+|---|---|---|---|---|
+| soak00000235 | 42 | 118 | 1553 | identical |
+| soak00000431 | 45 | 121 | 1451 | identical |
+| soak00000558 | 14 | 44 | 281 | identical |
+
+Exact commands from the owning folder's parent, after a clean build:
+
+```sh
+make -C game-core clean
+make -C game-core test
+game-core/build/gcplay --auto 1000 --jobs 8
+game-core/build/gcplay --auto 1000 --jobs 8 --save-test
+game-core/build/gcplay --auto 1 --first 849 --verbose
+game-core/build/gcplay --auto 1 --first 849 --verbose --save-test
+```
+
+`make test` exits 0: new 2,110 resume checks, existing 39 item lifecycle checks,
+and unchanged 200-run gate with `030a9394` / `030a9394` (same as current-main baseline).
+Existing producers/comparators/counts/seeds/digest/soak chooser are unchanged.
+The old mystery test's printed "76 differential cases" still represents smoke
+coverage, not upstream result comparison.
+
+| 1,000 runs | Ordinary digest / turns | Saved digest / turns | Equality |
+|---|---|---|---|
+| main 58030d63 | e94dc9ac / 257987 | 42ce52f4 / 257964 | FAIL |
+| Task 87 | e94dc9ac / 257987 | 6917434c / 257973 | FAIL |
+
+All reports print 1,000 ended, zero cleared/stuck/crashed/timed out; **that is not
+reliable completion evidence**. Seed 849 exhausts gcplay's 200,000-step loop and
+is wrongly counted as ended. Every save/load `continue` consumes a step; 14
+roundtrips leave saved play with 199,959 turns against 199,973 ordinary turns.
+Its digests are `9c69699e` / `1c33e37e`. The saved 200,124 filtered gameplay
+messages/turn events form an identical prefix of the ordinary 200,138 events.
+This sole budget discrepancy accounts for the remaining aggregate digest XOR.
+
+Under HANDOFF2, "If you believe the test itself is wrong, stop and write that up
+in the PR." Task 87 stops as a **draft**: do not waive the 1,000-run gate, reduce
+counts, exclude seed 849 or modify its established chooser/digest. The budget
+accounting/completion check needs separate review. No new upstream differential
+or hardware/emulator result is claimed by this resume work.

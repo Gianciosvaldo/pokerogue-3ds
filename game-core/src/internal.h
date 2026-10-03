@@ -139,6 +139,7 @@ bool gc_gen_wild(gc_run *run, int level);
 void gc_trainer_names(gc_run *run);               /* run->trainer_names for the current trainer */
 bool gc_is_new_biome(const gc_run *run, int wave);   /* isNewBiome for the battle of `wave` */
 bool gc_battle_setup_field(gc_run *run, bool reset_arena);   /* bt from the parties, before the first turn */
+void gc_battle_restore_field(gc_run *run); /* pointers only; summon effects already saved */
 void gc_ai_reset(gc_run *run);                    /* ai-core's state for a new battle */
 void gc_ai_enemy_party(gc_run *run);              /* ...and the enemy party's entries once it is made */
 void gc_battle_turn_init(gc_run *run);            /* TurnInitPhase's part: participants, resetTurnData */

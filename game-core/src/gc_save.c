@@ -43,6 +43,8 @@ typedef struct {
     bool has_challenges, offset_gym, daily_custom;
     uint16_t seed[64], seed_len, wave_seed[64], wave_seed_len;
     pr_rng rng;
+    pr_rng battle_rng;
+    bool battle_rng_live;
     int32_t wave, biome, wave_cycle_offset;
     double money;
     int32_t score, trainer_id, secret_id;
@@ -51,6 +53,8 @@ typedef struct {
     int8_t party_order[6];
     int32_t n_items, n_enemy_items;
     pr_me_save me;
+    uint8_t n_mystery_history;
+    int8_t mystery_type, mystery_tier;
     bool in_battle;
     int32_t battle_type, trainer_type, trainer_variant, trainer_name, trainer_partner_name;
     char battle_seed[17];
@@ -68,9 +72,11 @@ typedef struct {
 static const sfield run_fields[] = {
     SF(sv_run, mode), SF(sv_run, has_challenges), SF(sv_run, offset_gym), SF(sv_run, daily_custom),
     SF(sv_run, seed), SF(sv_run, seed_len), SF(sv_run, wave_seed), SF(sv_run, wave_seed_len), SF(sv_run, rng),
+    SF(sv_run, battle_rng), SF(sv_run, battle_rng_live),
     SF(sv_run, wave), SF(sv_run, biome), SF(sv_run, wave_cycle_offset), SF(sv_run, money), SF(sv_run, score),
     SF(sv_run, trainer_id), SF(sv_run, secret_id), SF(sv_run, pokeballs), SF(sv_run, n_party),
     SF(sv_run, party_order), SF(sv_run, n_items), SF(sv_run, n_enemy_items), SF(sv_run, me),
+    SF(sv_run, n_mystery_history), SF(sv_run, mystery_type), SF(sv_run, mystery_tier),
     SF(sv_run, in_battle), SF(sv_run, battle_type), SF(sv_run, trainer_type), SF(sv_run, trainer_variant),
     SF(sv_run, trainer_name), SF(sv_run, trainer_partner_name),
     SF(sv_run, battle_seed), SF(sv_run, n_enemy), SF(sv_run, last_battle_type), SF(sv_run, last_final_boss),
@@ -81,6 +87,9 @@ static const sfield run_fields[] = {
 };
 
 static const sfield depth_fields[] = {SF(pr_biome_depths, set), SF(pr_biome_depths, depth), SF(pr_biome_depths, chance)};
+static const sfield mystery_history_fields[] = {
+    SF(gc_mystery_seen, type), SF(gc_mystery_seen, tier), SF(gc_mystery_seen, wave),
+};
 
 /* An item, its key as text (gc_item.key is a pointer) */
 typedef struct { char key[40]; int16_t arg; int32_t stack; uint32_t pokemon_id; } sv_item;
@@ -313,7 +322,8 @@ static void put_items(writer *w, const char *name, const gc_item *items, int n)
 
 size_t gc_run_save(const gc_run *run, void *buf, size_t cap)
 {
-    if (!gc_run_can_save(run) || !little_endian() || cap < 24) return 0;
+    if (!gc_run_can_save(run) || !little_endian() || cap < 24
+        || run->n_mystery_history > GC_MAX_MYSTERY_HISTORY) return 0;
     gc_internal *in = gc_int((gc_run *)run);
     const pr_battle *bt = &run->bt;
     sv_run v;
@@ -327,6 +337,8 @@ size_t gc_run_save(const gc_run *run, void *buf, size_t cap)
     memcpy(v.wave_seed, run->run.wave_seed.u, sizeof v.wave_seed);
     v.wave_seed_len = (uint16_t)run->run.wave_seed.len;
     v.rng = run->run.rng;
+    v.battle_rng = bt->battle_rng;
+    v.battle_rng_live = bt->battle_rng_live;
     v.wave = run->wave;
     v.biome = run->biome;
     v.wave_cycle_offset = run->wave_cycle_offset;
@@ -340,6 +352,9 @@ size_t gc_run_save(const gc_run *run, void *buf, size_t cap)
     v.n_items = run->n_items;
     v.n_enemy_items = run->n_enemy_items;
     v.me = run->me;
+    v.n_mystery_history = run->n_mystery_history;
+    v.mystery_type = run->mystery_type;
+    v.mystery_tier = run->mystery_tier;
     v.in_battle = run->in_battle;
     v.battle_type = run->battle_type;
     v.trainer_type = run->trainer_type;
@@ -377,6 +392,10 @@ size_t gc_run_save(const gc_run *run, void *buf, size_t cap)
     put_block(&w, depth_fields, NF(depth_fields), &run->depths, sizeof run->depths, 1);
     section_end(&w, s);
     put_mons(&w, "party", run->party, run->n_party);
+    s = section_start(&w, "mystery_history");
+    put_block(&w, mystery_history_fields, NF(mystery_history_fields), run->mystery_history,
+              sizeof run->mystery_history[0], run->n_mystery_history);
+    section_end(&w, s);
     put_mons(&w, "enemy", run->enemy, run->n_enemy);
     put_items(&w, "items", run->items, run->n_items);
     put_items(&w, "enemy_items", run->enemy_items, run->n_enemy_items);
@@ -488,11 +507,13 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     memset(&v, 0, sizeof v);
     v.trainer_name = v.trainer_partner_name = -1;   /* a save without them: no names rolled */
     v.last_battle_type = -1;
+    v.mystery_type = v.mystery_tier = -1;
     int dropped = 0;
     reader r = section(&body, "run");
     if (r.bad || get_block(&r, run_fields, NF(run_fields), &v, sizeof v, 1, &dropped) != 1) { *why = "the save is damaged"; return false; }
     if (!v.in_battle || v.wave < 1 || v.n_party < 1 || v.n_party > 6 || v.n_enemy < 1 || v.n_enemy > 6
         || v.n_items < 0 || v.n_items > GC_MAX_ITEMS || v.n_enemy_items < 0 || v.n_enemy_items > GC_MAX_ITEMS
+        || v.n_mystery_history > GC_MAX_MYSTERY_HISTORY
         || v.seed_len > 64 || v.wave_seed_len > 64 || v.n_arena_tags < 0 || v.n_arena_tags > PR_MAX_ARENA_TAGS
         || v.n_pos_tags < 0 || v.n_pos_tags > PR_MAX_POSITIONAL_TAGS || v.biome < 0 || v.biome >= PR_BIOME_ID_LIMIT) {
         *why = "the save is damaged";
@@ -530,6 +551,9 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     run->n_items = v.n_items;
     run->n_enemy_items = v.n_enemy_items;
     run->me = v.me;
+    run->n_mystery_history = v.n_mystery_history;
+    run->mystery_type = v.mystery_type;
+    run->mystery_tier = v.mystery_tier;
     run->in_battle = true;
     run->battle_type = v.battle_type;
     run->trainer_type = v.trainer_type;
@@ -544,6 +568,27 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     in->lock_rarities = v.lock_rarities;
     in->last_max_exp_level = v.last_max_exp_level;
     in->stub_rng = v.stub_rng;
+
+    r = section(&body, "mystery_history");
+    if (!r.bad) {
+        const int n = get_block(&r, mystery_history_fields, NF(mystery_history_fields),
+                                run->mystery_history, sizeof run->mystery_history[0],
+                                GC_MAX_MYSTERY_HISTORY, &dropped);
+        if (n != v.n_mystery_history || r.bad) {
+            *why = "the save is damaged";
+            return false;
+        }
+        for (int i = 0; i < n; i++) {
+            const gc_mystery_seen *h = &run->mystery_history[i];
+            if (h->type >= GC_ME_COUNT || h->tier > GC_ME_ROGUE || h->wave > run->wave) {
+                *why = "the save is damaged";
+                return false;
+            }
+        }
+    } else if (v.n_mystery_history) {
+        *why = "the save is damaged";
+        return false;
+    }
 
     r = section(&body, "depths");
     if (r.bad || get_block(&r, depth_fields, NF(depth_fields), &run->depths, sizeof run->depths, 1, &dropped) != 1) {
@@ -590,7 +635,9 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     }
     const int lead = run->party_order[0];
     const bool lead_out = run->party[lead].b.on_field && run->party[lead].b.hp > 0;
-    gc_battle_setup_field(run, !lead_out);
+    gc_battle_restore_field(run);
+    bt->battle_rng = v.battle_rng;
+    bt->battle_rng_live = v.battle_rng_live;
     if (lead_out) {
         ev = gc_ev_new(run, GC_EV_SUMMON);
         if (ev) { ev->a = 0; ev->b = lead; ev->c = 0; }
