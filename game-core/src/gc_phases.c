@@ -642,6 +642,7 @@ bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char *
             pr_reset_summon_data(&m->b);
             pr_reset_turn_data(&m->b);
             m->b.on_field = true;
+            m->b.switch_out_status = false;
             run->bt.field[0] = &m->b;
             /* the party order: the new lead takes the old one's slot */
             int k_new = gc_battle_slot_of(run, c->a), k_old = 0;

@@ -42,7 +42,7 @@ static void summon(gc_run *run, int side, int idx)
  * upstream keeps the arena (weather, terrain, the arena tags) and leaves the player's lead on the field
  * with its summon data (stat stages, tags): doPostBattleCleanup only recalls and resets on
  * resetArenaState. reset_arena says which case this is. true when the player's lead was sent out. */
-bool gc_battle_setup_field(gc_run *run, bool reset_arena)
+static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
 {
     pr_battle *bt = &run->bt;
     /* what the arena keeps */
@@ -90,7 +90,7 @@ bool gc_battle_setup_field(gc_run *run, bool reset_arena)
     for (int k = 0; k < 4; k++) bt->commands[k].command = bt->pre_commands[k].command = -1;
     gc_items_to_battle(run);
 
-    if (!keep_lead) {
+    if (!keep_lead && !restoring) {
         /* ReturnPhase and resetBattleAndWaveData: everyone off the field, their summon data cleared */
         for (int i = 0; i < run->n_party; i++) {
             if (run->party[i].b.on_field) {
@@ -117,13 +117,19 @@ bool gc_battle_setup_field(gc_run *run, bool reset_arena)
     }
     bt->n_party[0] = (uint8_t)run->n_party;
     for (int i = 0; i < run->n_enemy; i++) {
-        run->enemy[i].b.on_field = false;
+        if (!restoring) run->enemy[i].b.on_field = false;
         run->enemy[i].b.is_player = false;
         bt->party[1][i] = &run->enemy[i].b;
         pr_update_passive(bt, &run->enemy[i].b);
     }
     bt->n_party[1] = (uint8_t)run->n_enemy;
-    if (run->battle_type != BATTLE_TYPE_TRAINER && run->n_enemy) {
+    if (restoring) {
+        /* The legal save point is after summon effects. Rebuild pointers without
+         * summoning again: otherwise Intimidate/hazards/item effects run twice. */
+        bt->field[0] = &run->party[lead].b;
+        for (int i = 0; i < run->n_enemy; i++)
+            if (run->enemy[i].b.on_field) { bt->field[2] = &run->enemy[i].b; break; }
+    } else if (run->battle_type != BATTLE_TYPE_TRAINER && run->n_enemy) {
         summon(run, 1, 0);
     }
     if (keep_lead) {
@@ -133,13 +139,25 @@ bool gc_battle_setup_field(gc_run *run, bool reset_arena)
     bt->battle_style_set = false;
     bt->trainer_names[0] = run->trainer_names[GC_TNAME_TRAINER];
     bt->trainer_names[1] = run->trainer_names[GC_TNAME_PARTNER];
-    pr_start_battle(bt, &run->eng);
-    note_unported(run);
-    gc_items_from_battle(run);
-    gc_ev_battle(run);
+    if (!restoring) {
+        pr_start_battle(bt, &run->eng);
+        note_unported(run);
+        gc_items_from_battle(run);
+        gc_ev_battle(run);
+    }
     gc_sync_party_order(run);
     run->run.rng = bt->rng;
     return !keep_lead && run->n_party && gc_mon_allowed(&run->party[run->party_order[0]]);
+}
+
+bool gc_battle_setup_field(gc_run *run, bool reset_arena)
+{
+    return setup_field(run, reset_arena, false);
+}
+
+void gc_battle_restore_field(gc_run *run)
+{
+    setup_field(run, false, true);
 }
 
 /* battle-core's party list is upstream's party order: switching swaps its entries */
