@@ -149,25 +149,25 @@ There is no new wave of three independent lower-compute tasks. Task 68 still nee
 
 **Pass.** H; focused first-form/transition/final-form victory fixtures compare phase sequence, shield counters, stats and final clear state to pinned source; report unavailable differential validation.
 
-### Task 67: Illusion battle representation (battle-core/, lane A)
+### Task 67: Dormant Illusion identity/type representation (battle-core/, lane A)
 
-**Branch:** `outside/illusion-state`. **Assignment:** Hard. **Prerequisites:** Lane A free; prerequisite form APIs available.
+**Branch:** `outside/illusion-state`. **Assignment:** Hard. **Prerequisites:** Task 90 baseline repair merged; prerequisite form APIs available. PR #103 proposes this bounded scope for review.
 
-**Problem.** AI matchup paths report Illusion unported because the disguise is not represented.
+**Problem.** Pinned Illusion is disabled: natural selection/break/switch activation cannot provide a nonzero differential. Dormant helpers can still store and read loaded/manual apparent identities; C lacks that representation.
 
-**Do.** Model disguise selection, apparent identity/type reads, break conditions, switches and message arguments. Separate real identity from apparent identity. Add a newly approved differential mode.
+**Do.** Model the identity subset used by actual pinned set/break/reset helpers, separate real stats/ability from apparent species/form/fusion/gender and type reads, and snapshot ordinary species/form messages. Add a separate helper producer; do not register commented-out abilities or change existing checks. Keep nickname/fused display names, fusion gender, visual assets and natural dispatch explicitly deferred.
 
-**Pass.** New approved mode: 2,000 cases per four seeds, zero mismatches and nonzero disguise/break/switch cases; B unchanged with covered counts retained.
+**Pass.** New helper mode: 2,000 cases per seeds 777, 9001, 4242 and 31337, zero mismatches, nonzero manual Pokemon/species setters, breaks and reset cleanup; all 32 type-flag combinations; source snapshot independence, unchanged real state and RNG; planted mutation and malformed trace rejected. B unchanged with coverage retained after Task 90; host/3DS CI pass. The original natural disguise/break/switch gate remains deferred and unrun; this card does not claim it passed.
 
-### Task 68: Illusion AI integration (ai-core/, lane F)
+### Task 68: Loaded Illusion AI integration (ai-core/, lane F)
 
-**Branch:** `outside/ai-illusion`. **Assignment:** Lower compute. **Prerequisites:** 58 and 67 merged.
+**Branch:** `outside/ai-illusion`. **Assignment:** Lower compute. **Prerequisites:** 58, 90 and the reviewed bounded 67 scope merged.
 
-**Problem.** AI cannot score the disguised types without battle-core representation.
+**Problem.** AI cannot read a manually loaded apparent identity in the pinned helper contract. Natural Illusion remains disabled upstream.
 
-**Do.** Use exported disguise-aware reads for matchup and benefit scores. Remove only the Illusion coverage exclusion now supported.
+**Do.** Use the exported disguise-aware reads where the pinned AI reads apparent identity/types. Add a separate producer with explicit manual/loaded snapshots invoking actual upstream helpers and AI scores. Preserve all established producers, comparators and natural-ability coverage exclusions. Keep automatic disguise dispatch and presentation outside this task.
 
-**Pass.** A: zero mismatches, coverage does not decrease, and at least one disguise changes a matchup score. Record before/after covered and Illusion-excluded counts.
+**Pass.** A: zero mismatches and coverage retained. Additive loaded-state AI comparisons: 2,000 per each of the four seeds, zero mismatches, at least one disguise changes a matchup score, and a planted identity mutation fails. Report before/after covered and Illusion-excluded counts unchanged for the established suite; natural activation is unavailable, not passing evidence.
 
 ### Task 69: Weather-driven form changes (battle-core/, lane A)
 

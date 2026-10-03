@@ -2391,6 +2391,7 @@ static void revert_dynamax(pr_pokemon *p)
 
 static void reset_summon_data(pr_pokemon *p)
 {
+    pr_break_illusion(p);
     revert_dynamax(p);
     p->queued_mega = p->queued_dynamax = false;
     p->is_dynamaxed = false;
