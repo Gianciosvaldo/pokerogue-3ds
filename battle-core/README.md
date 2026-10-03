@@ -2,6 +2,40 @@
 
 Status 2026-09-28: **damage path with abilities and passives, move effects, held items, battler and arena tags, and the turn history verified against upstream** (singles); the turn engine has started and replays about 96% of the plain random test turns exactly, with stat changes, statuses, on-hit abilities, two-turn moves, 87 of the 95 battler tag types (all but Helping Hand, Follow Me's, Imprison, Quick Claw's, Commander's, Cramorant's two and the mystery encounters' one), recoil, drain, recharge, pre-move texts, the healing phase, weather and terrain over a turn, the damaging traps, Leech Seed, Substitute, the protections and Endure, arena tags being laid, stacked, cleared and swapped, the weather and terrain moves with about 25 smaller move effects, the moves that call other moves (Metronome, Mirror Move, Copycat, Sleep Talk, Assist, Nature Power, Instruct), Focus Punch-style header moves, Future Sight and Wish, and switching (the moves that switch a Pokemon out, the switch command, the party prompt as a pause the caller answers, and the switch itself with entry hazards, entry abilities, Baton Pass and Shed Tail passing their effects, Wimp Out and Emergency Exit) ported (see "Turn engine"). Every damaging move in the random test is now covered except 6 cases in about 110,000. Upstream is `pagefaultgames/pokerogue` @ `8555c08`.
 
+## Task 67: Illusion target blocker (2026-10-03)
+
+Task 67 is **blocked**, not complete. At the named upstream target
+`8555c08c823b856cbec4eb99ca84ea52a955836d`, `src/data/abilities/init-abilities.ts`
+explicitly marks Illusion `.unimplemented()`. All five effect registrations
+(pre-summon, ability-loss break, post-defend break, fusion restriction and
+post-battle reset) are commented out. The remaining helper classes in
+`src/data/abilities/ab-attrs.ts` are not registered to that ability. Its dormant
+pre-summon `canApply` also requires an already-present illusion. These helpers
+are not evidence of an enabled battle mechanic.
+
+The unchanged upstream `test/tests/abilities/illusion.test.ts` is a
+`describe.todo` suite. Actual command in the external upstream checkout:
+
+```sh
+PATH=/root/.npm/_npx/52027bd8fc0022aa/node_modules/node/bin:$PATH /root/.npm/_npx/52027bd8fc0022aa/node_modules/node/bin/node node_modules/vitest/vitest.mjs run test/tests/abilities/illusion.test.ts
+```
+
+Printed result: **1 test file skipped, 9 tests TODO, 0 executed** (exit 0).
+This is unavailable validation, not nine passing tests. Local
+`make -s -C battle-core` completed with exit 0; a build does not validate Illusion.
+No C code, generated data, existing producer, comparator or coverage exclusion
+was changed. No new 2,000-case/four-seed Illusion differential or battle baseline
+regression was run in this diagnostic task.
+
+The Task 67 gate requires nonzero disguise, break and switch cases against
+upstream's actual dispatch. The pinned ability cannot supply those cases.
+Re-enabling its attributes in the producer or calling dormant helpers directly
+would compare a different contract. A separately reviewed decision must either
+revise Task 67 to explicit dormant-helper/loaded-state support at this pin, or
+select an upstream target with an enabled Illusion implementation and review the
+pin migration. Task 68 stays blocked; no Illusion exclusion is removed and no
+complete Illusion parity is claimed.
+
 ## What works, and how it was checked
 | Piece | State | Evidence |
 |---|---|---|
