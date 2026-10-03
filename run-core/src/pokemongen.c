@@ -229,6 +229,8 @@ int pr_run_enemy_pokemon_base_rng(pr_rng *rng, pr_run *run, const pr_enemy_gen_c
     out->variant = 0;     /* ...and variant undefined: this.shiny ? generateShinyVariant() : 0 */
     out->boss_segments = 0;
     out->friendship = -1;
+    out->rival_pending = false;
+    out->rival_fight = out->rival_slot = 0;
 
     double chance = BASE_HIDDEN_ABILITY_RATE;
     if (ctx->hidden_ability_charm_stacks > 0) chance *= js_pow(2, -1 - ctx->hidden_ability_charm_stacks);
@@ -304,6 +306,9 @@ int pr_run_enemy_pokemon_finish(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_ene
 {
     const pr_species_gen *sp = species_gen(ctx->species);
     if (!sp) { run->unported |= PR_RUN_UNPORTED_SPECIES; return -1; }
+    /* Rival genPartyMember runs inside executeWithSeedOffset for the whole constructor + postProcess.
+     * Generic enemies use the ambient run RNG; rival members resume the saved per-slot offset RNG. */
+    pr_rng *finish_rng = out->rival_pending ? &out->rival_rng : &run->rng;
     const bool has_trainer = ctx->trainer_slot != 0;   /* now this.trainerSlot is set */
     if (ctx->shiny_lock) {
         out->shiny = false;
@@ -344,7 +349,7 @@ int pr_run_enemy_pokemon_finish(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_ene
      * range is empty and randSeedInt returns its minimum, above 31, without rolling), and friendship */
     if (has_trainer) {
         const int lo = ctx->wave / 10;
-        for (int i = 0; i < 6; i++) out->ivs[i] = pr_rng_seed_int(&run->rng, 31 - lo + 1, lo);
+        for (int i = 0; i < 6; i++) out->ivs[i] = pr_rng_seed_int(finish_rng, 31 - lo + 1, lo);
         double fr = js_round(255 * ((double)ctx->wave / TRAINER_MAX_FRIENDSHIP_WAVE));
         out->friendship = (int)(fr < TRAINER_MIN_FRIENDSHIP ? TRAINER_MIN_FRIENDSHIP : fr > 255 ? 255 : fr);
     }
@@ -355,7 +360,7 @@ int pr_run_enemy_pokemon_finish(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_ene
      * way from the lower to the higher of the two, rounded:
      * Math.round(Phaser.Math.Linear(min, max, 0.75)) with Linear(p0, p1, t) = (p1 - p0) * t + p0 */
     if (ctx->boss) {
-        const uint32_t id2 = (uint32_t)floor(pr_rng_real_in_range(&run->rng, 0, 4294967296.0));
+        const uint32_t id2 = (uint32_t)floor(pr_rng_real_in_range(finish_rng, 0, 4294967296.0));
         const int iv2[6] = {(id2 & 0x3e000000u) >> 25, (id2 & 0x01f00000u) >> 20, (id2 & 0x000f8000u) >> 15,
                             (id2 & 0x00007c00u) >> 10, (id2 & 0x000003e0u) >> 5, id2 & 0x0000001fu};
         for (int i = 0; i < 6; i++) {
@@ -364,5 +369,6 @@ int pr_run_enemy_pokemon_finish(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_ene
             out->ivs[i] = (int)js_round((hi - lo) * 0.75 + lo);
         }
     }
+    if (out->rival_pending) pr_run_rival_finish(run, ctx, out);
     return 0;
 }

@@ -378,6 +378,11 @@ typedef struct {
     bool shiny;
     int variant, luck;
     int friendship;               /* set for a trainer's Pokemon; -1 = species.baseFriendship (not dumped) */
+    /* Task 48: a rival member's executeWithSeedOffset RNG is restored only after the
+     * EnemyPokemon constructor and addEnemyPokemon postProcess have both finished. */
+    bool rival_pending;
+    int8_t rival_fight, rival_slot;
+    pr_rng rival_rng;
 } pr_enemy_gen;
 /* new EnemyPokemon(species, level, trainerSlot, boss, shinyLock) without a data source, on run->rng:
  * the Pokemon constructor's rolls and setBoss, which come before generateAndPopulateMoveset */
@@ -467,6 +472,8 @@ typedef struct {
 int pr_run_gen_trainer_party(pr_run *run, const pr_trainer_party_ctx *ctx, pr_trainer_party *out);
 /* Rival partyMemberFuncs for Classic waves 8/25/55/95/145/195. fight is 1..6. */
 int pr_run_gen_rival_party(pr_run *run, const pr_trainer_party_ctx *ctx, int fight, pr_trainer_party *out);
+/* Called by pr_run_enemy_pokemon_finish after the rival member's constructor state is complete. */
+void pr_run_rival_finish(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_enemy_gen *out);
 
 /* A wild battle's first enemy (src/wildenemy.c) */
 typedef struct {

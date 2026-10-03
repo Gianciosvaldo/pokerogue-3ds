@@ -269,13 +269,37 @@ int pr_run_gen_rival_party(pr_run *run,const pr_trainer_party_ctx *ctx,int fight
 
         pr_enemy_gen_ctx ec=ctx->enemy;
         ec.species=species;ec.level=initial_level;ec.trainer_slot=1;ec.boss=false;ec.shiny_lock=false;
-        if(pr_run_enemy_pokemon_base_rng(&rng,run,&ec,&out->mons[slot])<0){run->rng=saved;return -1;}
-        int level=forced_level(fight,slot,initial_level);
-        postprocess(run,fight,slot,species,&rng,&out->mons[slot],level);
+
+        /* executeWithSeedOffset replaces Phaser.Math.RND itself. Some constructor helpers
+         * (notably random form selection and fusion generation) intentionally read run->rng,
+         * so install the member RNG rather than passing a detached copy only to the top-level
+         * helper. This keeps every pre-moveset roll on the same static slot stream. */
+        run->rng=rng;
+        if(pr_run_enemy_pokemon_base(run,&ec,&out->mons[slot])<0){run->rng=saved;return -1;}
+        rng=run->rng;
+
+        /* genPartyMember's executeWithSeedOffset stays active through EnemyPokemon's constructor,
+         * generateAndPopulateMoveset and addEnemyPokemon's postProcess. This API intentionally stops
+         * at the moveset boundary, so retain the member RNG and defer postProcess to
+         * pr_run_enemy_pokemon_finish(). */
+        out->mons[slot].rival_pending=true;
+        out->mons[slot].rival_fight=(int8_t)fight;
+        out->mons[slot].rival_slot=(int8_t)slot;
+        out->mons[slot].rival_rng=rng;
+
         out->species[slot]=(uint16_t)species;
-        out->levels[slot]=level;
+        out->levels[slot]=forced_level(fight,slot,initial_level);
         out->n=slot+1;
     }
     run->rng=saved;
     return 0;
+}
+
+void pr_run_rival_finish(pr_run *run,const pr_enemy_gen_ctx *ctx,pr_enemy_gen *out)
+{
+    if(!out||!out->rival_pending)return;
+    const int fight=out->rival_fight,slot=out->rival_slot;
+    const int level=forced_level(fight,slot,ctx->level);
+    postprocess(run,fight,slot,ctx->species,&out->rival_rng,out,level);
+    out->rival_pending=false;
 }
