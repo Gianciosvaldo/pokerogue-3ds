@@ -65,13 +65,17 @@ test: all
 	$(BUILD)/biome_test
 	$(BUILD)/voucher_egg_test
 	$(BUILD)/mystery_test
+	@a=$($(BUILD)/gcplay --auto 200 --jobs 8 | grep digest); b=$($(BUILD)/gcplay --auto 200 --jobs 8 --save-test | grep digest); \
+	echo "without saves: $a"; echo "with saves:    $b"; [ "$a" = "$b" ]
+
+# Upstream-dependent Task 46 differential check. Generate /tmp/mystery_actions.txt
+# (or gen/out/mystery_actions.txt) from pinned upstream 8555c08 before running this target.
+mystery-diff: all
 	$(BUILD)/mystery_diff_test
-	@a=$$($(BUILD)/gcplay --auto 200 --jobs 8 | grep digest); b=$$($(BUILD)/gcplay --auto 200 --jobs 8 --save-test | grep digest); \
-	echo "without saves: $$a"; echo "with saves:    $$b"; [ "$$a" = "$$b" ]
 
 clean:
 	rm -rf $(BUILD)
 
 FORCE:
-.PHONY: all clean test FORCE
+.PHONY: all clean test mystery-diff FORCE
 -include $(OBJS:.o=.d)
