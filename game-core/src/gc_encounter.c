@@ -328,12 +328,12 @@ void gc_new_battle(gc_run *run)
     }
 
     if (nb.battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) {
-        int type = GC_ME_MYSTERIOUS_CHALLENGERS, tier = GC_ME_TIER_COMMON;
+        int type = GC_ME_MYSTERIOUS_CHALLENGERS, tier = GC_ME_COMMON;
         run->battle_type = BATTLE_TYPE_MYSTERY_ENCOUNTER;
         memcpy(run->battle_seed, nb.battle_seed, sizeof run->battle_seed);
         if (!gc_mystery_select(run, &type, &tier)) {
             type = GC_ME_MYSTERIOUS_CHALLENGERS;
-            tier = GC_ME_TIER_GREAT;
+            tier = GC_ME_GREAT;
         }
         gc_mystery_record(run, type, tier);
         in->pending_me_miss = false;
