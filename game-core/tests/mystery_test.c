@@ -39,8 +39,8 @@ static void test_selector_and_history(void)
 
     int type, tier;
     assert(gc_mystery_select(&run, &type, &tier));
-    assert(type >= 0 && type < GC_MYSTERY_TYPE_COUNT);
-    assert(tier >= GC_ME_TIER_COMMON && tier <= GC_ME_TIER_ROGUE);
+    assert(type >= 0 && type < GC_ME_COUNT);
+    assert(tier >= GC_ME_COMMON && tier <= GC_ME_ROGUE);
 
     gc_mystery_record(&run, type, tier);
     assert(run.n_mystery_history == 1);
