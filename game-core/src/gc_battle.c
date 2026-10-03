@@ -135,6 +135,7 @@ bool gc_battle_setup_field(gc_run *run, bool reset_arena)
     bt->trainer_names[1] = run->trainer_names[GC_TNAME_PARTNER];
     pr_start_battle(bt, &run->eng);
     note_unported(run);
+    gc_items_from_battle(run);
     gc_ev_battle(run);
     gc_sync_party_order(run);
     run->run.rng = bt->rng;
@@ -458,6 +459,7 @@ int gc_battle_run(gc_run *run, int pick)
     }
     note_unported(run);
     note_revealed(run);
+    gc_items_from_battle(run);
     gc_ev_battle(run);
     gc_sync_party_order(run);
     run->run.rng = bt->rng;

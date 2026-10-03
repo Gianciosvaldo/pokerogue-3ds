@@ -128,3 +128,45 @@ with `$t(key)` segments, i18next's nesting syntax: `$t(titles:gymLeader) $t(trai
 `$t(trainerClasses:aceTrainer) @N` where game-core puts the personal name run-core rolled
 (`$t(trainersCommon:aceTrainer.male.3)`). `run->trainer_names` has them. A double-only pair (Twins) has
 one name, "Amy & May", which upstream splits for each twin's send-out; here both send-outs name the pair.
+
+## Task 57: held item adapter and consumption persistence
+
+The run now maps LEFTOVERS, SHELL_BELL, FOCUS_BAND, QUICK_CLAW, KINGS_ROCK,
+WHITE_HERB and BERRY to their battle-core classes. Berry/White Herb losses are
+reconciled to both inventories after battle start and after each turn/switch
+continuation, before the inventory can be rebuilt or serialized. Matching retains
+owner and berry kind. Entries beyond battle-core's 96-entry capacity are retained;
+this PR does not remove that capacity limit or add transfers/new item effects.
+
+Actual upstream `8555c08` construction and `Pokemon.loseHeldItem` were compared
+using the new additive producer. Existing producers/comparators are unchanged.
+
+```sh
+# From a prepared upstream checkout outside this repo:
+ITEM_BRIDGE_OUT=/tmp/itembridge.txt pnpm exec vitest run test/tests/zz-dump/itembridge.producer.test.ts
+# From the port after copying game-core/tests/itembridge.producer.test.ts there:
+make -C game-core test
+game-core/build/itembridge_test /tmp/itembridge.txt
+```
+
+Measured 2026-10-03: 648 cases, 648 identical, 0 mismatches; 39 host lifecycle
+checks (both sides' Sitrus/Lum/Leppa effects, White Herb, distinct holders/kinds,
+repeated synchronization, overflow preservation and legal save/reload). The
+standard 200-run test passed: both digests `1d0a6108`; original main's pair was
+`46f970df`. Activating previously opaque enemy held items changes run outcomes.
+
+Expanded checks remain **failing the save equality gate**, despite zero hangs,
+crashes or timeouts across 1,000 finished runs in each run:
+
+| Source | No-save digest | Save digest | Equality |
+|---|---|---|---|
+| Main `2a740ab` | `5c084cbb` | `f12eb771` | FAIL |
+| Task 57 | `47b699cc` | `ec350294` | FAIL |
+
+Commands: `game-core/build/gcplay --auto 1000 --jobs 8` and the same command with
+`--save-test`, before and after. This demonstrates a baseline persistence gap;
+it does not prove every changed-branch divergence has the same cause. Task 57
+remains a draft until the expanded gate is resolved. The focused comparison
+covers modifier identity and item loss, not complete move/turn/reward parity.
+The legacy mystery test's reported 76 choices compare no upstream result fields
+and are smoke coverage only; its producer/comparison was not changed here.
