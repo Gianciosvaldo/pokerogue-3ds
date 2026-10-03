@@ -257,14 +257,18 @@ static bool move_restricted(pr_battle *bt, const pr_pokemon *p, int move)
     }
     if (r & AI_RESTR_BELCH) restricted |= !p->has_eaten_berry;
     if (r & AI_RESTR_NO_BERRY) {
-        /* findModifiers(m => m instanceof BerryModifier, user.isPlayer()).length === 0: berries are
-         * held items battle-core doesn't tell apart, so any held item of an unknown class may be one */
+        /* Upstream checks every BerryModifier on the user's side, without filtering its owner
+         * or stack count. An unknown held-item subclass may still be a berry. */
         int side = p->is_player ? 0 : 1;
-        bool maybe_berry = false;
-        for (int i = 0; i < bt->n_mods[side]; i++)
+        bool berry = false, maybe_berry = false;
+        for (int i = 0; i < bt->n_mods[side]; i++) {
+            berry |= pr_mod_is(&bt->mods[side][i], PR_MOD_BERRY);
             maybe_berry |= pr_mod_is(&bt->mods[side][i], PR_MOD_HELD_ITEM) && bt->mods[side][i].unknown_subclass;
-        if (maybe_berry) pr_note_unported(bt, PR_AI_FEAT_RESTRICTION);
-        else restricted = true;
+        }
+        if (!berry) {
+            if (maybe_berry) pr_note_unported(bt, PR_AI_FEAT_RESTRICTION);
+            else restricted = true;
+        }
     }
     if (r & AI_RESTR_UNKNOWN) pr_note_unported(bt, PR_AI_FEAT_RESTRICTION);
     return restricted;
