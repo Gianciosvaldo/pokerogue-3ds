@@ -607,6 +607,9 @@ enum pr_command {
     COMMAND_POKEMON = 2,
     COMMAND_RUN = 3,
     COMMAND_TERA = 4,
+    COMMAND_MEGA = 5,
+    COMMAND_DYNAMAX = 6,
+    COMMAND_GIGANTAMAX = 7,
 };
 
 enum pr_common_anim {

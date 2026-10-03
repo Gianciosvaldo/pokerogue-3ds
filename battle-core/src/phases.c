@@ -473,6 +473,10 @@ static void turn_start(pr_battle *bt, pr_engine *e)
         if (pre->command == COMMAND_TERA) {
             int t = new_pokemon_phase(e, PH_TERA, b);
             pr_phase_push(bt, e, t);
+        } else if (p->queued_mega || pre->command == COMMAND_MEGA) {
+            pr_mega_evolve(bt, p);
+        } else if (p->queued_dynamax || pre->command == COMMAND_DYNAMAX || pre->command == COMMAND_GIGANTAMAX) {
+            pr_dynamax(bt, p);
         }
     }
     pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
@@ -2373,8 +2377,25 @@ static void reset_turn_data(pr_pokemon *p)
     p->pending_status = STATUS_EFFECT_NONE;
 }
 
+static void revert_dynamax(pr_pokemon *p)
+{
+    if (!p || !p->is_dynamaxed) return;
+    double mult = 1.5 + ((double)p->dynamax_level * 0.05);
+    p->stats[STAT_HP] = (int32_t)ceil((double)p->stats[STAT_HP] / mult);
+    p->hp = (int32_t)ceil((double)p->hp / mult);
+    if (p->hp > p->stats[STAT_HP]) p->hp = p->stats[STAT_HP];
+    p->is_dynamaxed = false;
+    p->dynamax_turns_left = 0;
+    p->form = p->pre_dynamax_form;
+}
+
 static void reset_summon_data(pr_pokemon *p)
 {
+    revert_dynamax(p);
+    p->queued_mega = p->queued_dynamax = false;
+    p->is_dynamaxed = false;
+    p->dynamax_turns_left = 0;
+    p->dynamax_level = 0;
     memset(p->stat_stages, 0, sizeof p->stat_stages);
     p->n_move_queue = 0;
     p->n_tags = 0;
@@ -2940,6 +2961,12 @@ static void turn_end_phase(pr_battle *bt, pr_engine *e)
             }
             pr_ab_params pt = {.pokemon = p, .move = -1};
             pr_apply_ab_attrs(bt, PR_AC_PostTurnAbAttr, &pt);
+        }
+        if (p->is_dynamaxed) {
+            if (p->dynamax_turns_left > 0) p->dynamax_turns_left--;
+            if (p->dynamax_turns_left == 0) {
+                revert_dynamax(p);
+            }
         }
         turn_modifiers(bt, p->is_player, p);              /* TurnStatusEffectModifier, TurnHeldItemTransferModifier */
         p->temp_turn_count++;

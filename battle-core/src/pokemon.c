@@ -1,5 +1,7 @@
 /* Ports of src/field/pokemon.ts: stats, types, stat stages, effective stats. */
 #include "pr/battle.h"
+#include "pr/engine.h"
+#include "pr/text.h"
 #include <math.h>
 #include <string.h>
 
@@ -386,4 +388,105 @@ int pr_get_effective_weather_for_move(pr_battle *bt, const pr_pokemon *user)
     if (w != WEATHER_TYPE_NONE) return w;
     if (bt->weather == WEATHER_TYPE_NONE || pr_weather_effect_suppressed(bt)) return WEATHER_TYPE_NONE;
     return bt->weather;
+}
+
+/* Task 53: Mega Evolution & Dynamax */
+bool pr_is_mega(const pr_pokemon *p)
+{
+    if (!p) return false;
+    const pr_form *f = pr_pokemon_form(p);
+    if (f && f->form_key) {
+        if (!strncmp(f->form_key, "mega", 4) || !strcmp(f->form_key, "primal"))
+            return true;
+    }
+    const pr_form *ff = pr_pokemon_fusion_form(p);
+    if (ff && ff->form_key) {
+        if (!strncmp(ff->form_key, "mega", 4) || !strcmp(ff->form_key, "primal"))
+            return true;
+    }
+    return false;
+}
+
+bool pr_is_max(const pr_pokemon *p)
+{
+    if (!p) return false;
+    if (p->is_dynamaxed) return true;
+    const pr_form *f = pr_pokemon_form(p);
+    if (f && f->form_key) {
+        if (!strncmp(f->form_key, "gigantamax", 10) || !strcmp(f->form_key, "eternamax"))
+            return true;
+    }
+    const pr_form *ff = pr_pokemon_fusion_form(p);
+    if (ff && ff->form_key) {
+        if (!strncmp(ff->form_key, "gigantamax", 10) || !strcmp(ff->form_key, "eternamax"))
+            return true;
+    }
+    return false;
+}
+
+void pr_mega_evolve(pr_battle *bt, pr_pokemon *p)
+{
+    if (!p) return;
+    p->queued_mega = false;
+    const pr_species *sp = pr_pokemon_species(p);
+    if (!sp) return;
+
+    int mega_form_idx = -1;
+    for (uint16_t i = 0; i < sp->nforms; i++) {
+        const pr_form *f = &pr_forms[sp->form0 + i];
+        if (f->form_key && !strncmp(f->form_key, "mega", 4)) {
+            mega_form_idx = (int)i;
+            break;
+        }
+    }
+    if (mega_form_idx < 0) return;
+
+    pr_msg_arg pre_name_arg = pr_arg_pokemon(bt, "preName", p);
+    p->form = (uint8_t)mega_form_idx;
+
+    pr_recalculate_stats(bt, p);
+
+    const pr_form *mf = pr_pokemon_form(p);
+    p->base_ability = mf->ability1;
+    if (p->ability_override < 0) p->ability = mf->ability1;
+
+    if (bt->engine) {
+        pr_queue_msg(bt, bt->engine, pr_msg1("battlePokemonForm:megaChange", pre_name_arg));
+    }
+
+    pr_ab_params gain = {.pokemon = p, .move = -1, .only = 1, .on_gain = true};
+    pr_apply_ab_attrs(bt, PR_AC_PostSummonAbAttr, &gain);
+}
+
+void pr_dynamax(pr_battle *bt, pr_pokemon *p)
+{
+    if (!p || p->is_dynamaxed) return;
+    p->queued_dynamax = false;
+    p->pre_dynamax_form = p->form;
+    const pr_species *sp = pr_pokemon_species(p);
+
+    if (sp) {
+        for (uint16_t i = 0; i < sp->nforms; i++) {
+            const pr_form *f = &pr_forms[sp->form0 + i];
+            if (f->form_key && !strncmp(f->form_key, "gigantamax", 10)) {
+                p->form = (uint8_t)i;
+                break;
+            }
+        }
+    }
+
+    p->is_dynamaxed = true;
+    p->dynamax_turns_left = 3;
+
+    double mult = 1.5 + ((double)p->dynamax_level * 0.05);
+    p->stats[STAT_HP] = (int32_t)js_round((double)p->stats[STAT_HP] * mult);
+    p->hp = (int32_t)js_round((double)p->hp * mult);
+
+    if (bt->engine) {
+        const pr_form *f = pr_pokemon_form(p);
+        if (f->form_key && strstr(f->form_key, "gigantamax")) {
+            pr_msg_arg pre_name_arg = pr_arg_pokemon(bt, "preName", p);
+            pr_queue_msg(bt, bt->engine, pr_msg1("battlePokemonForm:gigantamaxChange", pre_name_arg));
+        }
+    }
 }
