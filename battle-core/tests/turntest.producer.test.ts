@@ -239,6 +239,7 @@ it("turntest producer", async () => {
   const ITEMS = process.env.TURN_ITEMS === "1";
   const RUN = process.env.TURN_RUN === "1";
   const FUSION = process.env.TURN_FUSION === "1";
+  const FORMS = process.env.TURN_FORMS === "1";
   const TRAINER = process.env.TURN_TRAINER === "1" && !RUN;
   const OUT = process.env.TURN_OUT ?? "/tmp/pr-turns.txt";
   (Pokemon.prototype as any).hideInfo = async function() {};
@@ -919,7 +920,14 @@ it("turntest producer", async () => {
     if (!p.isOnField()) {
       scene.field.add(p);
     }
-    const sp = speciesDataRegistry.getSpecies(ids[rnd(ids.length)]);
+    const formSpeciesIds = [
+      SpeciesId.AEGISLASH,
+      SpeciesId.DARMANITAN,
+      SpeciesId.GALAR_DARMANITAN,
+      SpeciesId.MINIOR,
+      SpeciesId.MORPEKO,
+    ];
+    const sp = speciesDataRegistry.getSpecies(FORMS ? formSpeciesIds[rnd(formSpeciesIds.length)] : ids[rnd(ids.length)]);
     p.species = sp;
     p.formIndex = sp.forms.length ? rnd(sp.forms.length) : 0;
     if (FUSION && rnd(2) === 0) {
@@ -935,7 +943,9 @@ it("turntest producer", async () => {
     p.nature = rnd(25);
     p.passive = false;
     p.customPokemonData.passive = SUMMON || CATCH ? AbilityId.NONE : AbilityId.BALL_FETCH;
-    p.summonData.ability = STAT && rnd(2) === 0
+    p.summonData.ability = FORMS
+      ? p.getAbility(true).id
+      : STAT && rnd(2) === 0
       ? statAbilityIds[rnd(statAbilityIds.length)]
       : STATUS_POOL && rnd(3) !== 0 ? statusAbilityIds[rnd(statusAbilityIds.length)]
       : ONHIT && rnd(3) !== 0 ? onHitAbilityIds[rnd(onHitAbilityIds.length)]
@@ -960,7 +970,9 @@ it("turntest producer", async () => {
     p.calculateStats();
     // the name messages use is fixed when the Pokemon is made; the species changed since
     p.generateName();
-    p.hp = rnd(3) === 0 ? p.getMaxHp() : 1 + rnd(p.getMaxHp());
+    p.hp = FORMS
+      ? (rnd(2) === 0 ? p.getMaxHp() : 1 + rnd(Math.floor(p.getMaxHp() * 0.5)))
+      : (rnd(3) === 0 ? p.getMaxHp() : 1 + rnd(p.getMaxHp()));
     p.status = null;
     if (HEAL && rnd(3) === 0) {
       p.status = new Status([StatusEffect.POISON, StatusEffect.TOXIC][rnd(2)], rnd(4));

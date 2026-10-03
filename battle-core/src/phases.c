@@ -50,12 +50,92 @@ static int active_in_list(pr_battle *bt, const pr_target_list *t, pr_pokemon **o
 
 static pr_target_list *tlist(pr_engine *e, int list) { return list >= 0 ? &e->target_lists[list] : NULL; }
 
-/* globalScene.triggerPokemonFormChange(pokemon, <trigger class>): only species with a form
- * change answering to that trigger can change; those are not ported yet */
+/* globalScene.triggerPokemonFormChange(pokemon, <trigger class>): mid-battle form changes */
 static void form_change(pr_battle *bt, const pr_pokemon *p, int trigger_class)
 {
-    const pr_species *sp = pr_pokemon_species(p);   /* species ids are sparse: never index the table by id */
-    if (sp && (sp->form_change_triggers & (1u << trigger_class))) pr_note_unported(bt, PR_FEAT_FORM_CHANGE);
+    if (!p) return;
+    const pr_species *sp = pr_pokemon_species(p);
+    if (!sp || !(sp->form_change_triggers & (1u << trigger_class))) return;
+
+    pr_pokemon *mon = (pr_pokemon *)p;
+    int target_form = -1;
+
+    /* 1. Stance Change (Aegislash #681) */
+    if (mon->species == SPECIES_ID_AEGISLASH && pr_has_ability_active(bt, mon, ABILITY_ID_STANCE_CHANGE)) {
+        if (trigger_class == PR_FCT_SpeciesFormChangePreMoveTrigger) {
+            pr_engine *e = bt->engine;
+            if (e && e->current >= 0 && e->pool[e->current].type == PH_MOVE) {
+                uint16_t move_id = e->pool[e->current].move.id;
+                if (move_id == MOVE_ID_KINGS_SHIELD) {
+                    if (mon->form == 1) target_form = 0; /* Blade -> Shield */
+                } else if (pr_moves[move_id].category != MOVE_CATEGORY_STATUS) {
+                    if (mon->form == 0) target_form = 1; /* Shield -> Blade */
+                }
+            }
+        } else if (trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger) {
+            if (!is_active(mon) && mon->form == 1) {
+                target_form = 0; /* Revert to Shield when leaving field */
+            }
+        }
+    }
+    /* 2. Zen Mode (Darmanitan #555, Galar Darmanitan #4555) */
+    else if ((mon->species == SPECIES_ID_DARMANITAN || mon->species == SPECIES_ID_GALAR_DARMANITAN) &&
+             pr_has_ability_active(bt, mon, ABILITY_ID_ZEN_MODE)) {
+        if (trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger) {
+            double hp_ratio = pr_get_hp_ratio(mon, false);
+            int base_form = (mon->form / 2) * 2;
+            if (hp_ratio <= 0.5) {
+                target_form = base_form + 1; /* Zen form */
+            } else {
+                target_form = base_form;     /* Standard form */
+            }
+        }
+    }
+    /* 3. Shields Down (Minior #774) */
+    else if (mon->species == SPECIES_ID_MINIOR && pr_has_ability_active(bt, mon, ABILITY_ID_SHIELDS_DOWN)) {
+        if (trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger) {
+            double hp_ratio = pr_get_hp_ratio(mon, false);
+            int color_offset = mon->form % 7;
+            if (hp_ratio <= 0.5) {
+                target_form = color_offset + 7; /* Core Form (7..13) */
+            } else {
+                target_form = color_offset;     /* Meteor Form (0..6) */
+            }
+        }
+    }
+    /* 4. Hunger Switch (Morpeko #877) */
+    else if (mon->species == SPECIES_ID_MORPEKO && pr_has_ability_active(bt, mon, ABILITY_ID_HUNGER_SWITCH)) {
+        if (trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger) {
+            if (!mon->terastallized) {
+                target_form = (mon->form == 0) ? 1 : 0; /* Full Belly (0) <-> Hangry (1) */
+            }
+        }
+    }
+
+    if (target_form >= 0 && target_form != mon->form) {
+        bool is_revert = (target_form == 0 || (mon->species == SPECIES_ID_MINIOR && target_form < 7));
+        pr_msg_arg pre_name_arg = pr_arg_pokemon(bt, "preName", mon);
+
+        mon->form = (uint8_t)target_form;
+
+        /* Recalculate stats with the new form's base stats */
+        pr_recalculate_stats(bt, mon);
+
+        if (bt->engine) {
+            pr_remove_tag(bt, bt->engine, mon, BATTLER_TAG_TYPE_AUTOTOMIZED);
+            if (is_revert) {
+                pr_queue_msg(bt, bt->engine, pr_msg1("battlePokemonForm:revertChange", pr_arg_pokemon(bt, "pokemonName", mon)));
+            } else {
+                pr_queue_msg(bt, bt->engine, pr_msg1("battlePokemonForm:formChange", pre_name_arg));
+            }
+        }
+        return;
+    }
+
+    /* Report unported only for form change triggers on other species */
+    if (target_form < 0 && (sp->form_change_triggers & (1u << trigger_class))) {
+        pr_note_unported(bt, PR_FEAT_FORM_CHANGE);
+    }
 }
 
 /* globalScene.applyModifiers(<a turn-path modifier class>, player, pokemon): held items and

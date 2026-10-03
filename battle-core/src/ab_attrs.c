@@ -863,6 +863,13 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
                              HIT_RESULT_INDIRECT, false, NULL);
         return 1;
     }
+    case PR_AC_PostSummonFormChangeAbAttr:
+    case PR_AC_PostTurnFormChangeAbAttr:
+    case PR_AC_PostBattleInitFormChangeAbAttr: {
+        GATE(!pp->simulated);
+        pr_form_change(bt, p, PR_FCT_SpeciesFormChangeAbilityTrigger);
+        return 1;
+    }
     case PR_AC_PostWeatherChangeFormChangeAbAttr: {                     /* Forecast, Flower Gift */
         const pr_attr_PostWeatherChangeFormChangeAbAttr *x = P(PostWeatherChangeFormChangeAbAttr, a);
         GATE((p->species == SPECIES_ID_CASTFORM && x->ability == ABILITY_ID_FORECAST)
