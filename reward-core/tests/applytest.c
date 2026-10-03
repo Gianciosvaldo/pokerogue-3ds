@@ -350,6 +350,14 @@ static void test_shop_economy_and_lock_capsule(void) {
                 n_res, money, sel.reroll_count);
         exit(1);
     }
+    if (sel.locked_tiers != sel.owned_locked_tiers || sel.n_locked_tiers != 3
+        || sel.n_owned_locked_tiers != 3
+        || sel.locked_tiers[0] != MODIFIER_TIER_COMMON
+        || sel.locked_tiers[1] != MODIFIER_TIER_GREAT
+        || sel.locked_tiers[2] != MODIFIER_TIER_ULTRA) {
+        fprintf(stderr, "FAIL: locked reroll did not retain modifierTiers phase state\n");
+        exit(1);
+    }
 
     /* Attempt reroll with insufficient money (800 < cost 475 * 4 = 1900) */
     n_res = pr_reward_reroll(&ctx, &money, true, options, 3, &sel, &th, out_options);
