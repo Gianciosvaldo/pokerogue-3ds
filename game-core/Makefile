@@ -13,7 +13,7 @@ AI_LIB := $(BUILD)/ai-core/libai.a
 SRCS := src/gc_run.c src/gc_phases.c src/gc_mon.c src/gc_items.c src/gc_encounter.c src/gc_battle.c src/gc_save.c src/gc_stubs.c src/gc_system.c src/gc_mystery.c gen/out/gc_evolutions.c gen/out/gc_starters.c gen/out/gc_trainers.c gen/out/gc_dex.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
-all: $(BUILD)/libgc.a $(BUILD)/gcplay $(BUILD)/savetest $(BUILD)/dextest $(BUILD)/dexupdatetest $(BUILD)/level_evo_test $(BUILD)/biome_test $(BUILD)/voucher_egg_test $(BUILD)/mystery_test $(BUILD)/mystery_diff_test
+all: $(BUILD)/libgc.a $(BUILD)/gcplay $(BUILD)/savetest $(BUILD)/system_save_test $(BUILD)/dextest $(BUILD)/dexupdatetest $(BUILD)/level_evo_test $(BUILD)/biome_test $(BUILD)/voucher_egg_test $(BUILD)/mystery_test $(BUILD)/mystery_diff_test
 
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -34,6 +34,9 @@ $(BUILD)/gcplay: tools/gcplay.c $(BUILD)/libgc.a $(AI_LIB) $(RUN_LIB) $(CORE_LIB
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
 $(BUILD)/savetest: tools/savetest.c $(BUILD)/libgc.a $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+$(BUILD)/system_save_test: tests/system_save_test.c $(BUILD)/libgc.a $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
 $(BUILD)/dextest: tests/dextest.c $(BUILD)/libgc.a $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
@@ -61,6 +64,7 @@ $(BUILD)/mystery_diff_test: tests/mystery_diff_test.c $(BUILD)/libgc.a $(AI_LIB)
 # digest must come out the same
 test: all
 	$(BUILD)/savetest
+	$(BUILD)/system_save_test
 	$(BUILD)/level_evo_test
 	$(BUILD)/biome_test
 	$(BUILD)/voucher_egg_test

@@ -61,6 +61,19 @@ enum {
     GC_VOUCHER_GOLDEN = 3,
 };
 
+/* Stat milestones tracked across the system profile */
+typedef struct {
+    uint32_t classic_wins;
+    uint32_t endless_wins;
+    uint32_t total_battles;
+    uint32_t total_catches;
+    uint32_t total_hatches;
+    uint32_t total_shinies;
+    uint32_t highest_wave;
+    uint32_t highest_damage;
+    uint64_t total_money_earned;
+} gc_stat_milestones;
+
 /* Overall system data (upstream GameData) */
 typedef struct {
     gc_dex_entry dex[GC_MAX_SPECIES_ID + 1];           /* 1-indexed by SpeciesId */
@@ -70,6 +83,8 @@ typedef struct {
     int n_eggs;
     uint32_t voucher_counts[4];                         /* by VoucherType */
     uint8_t voucher_unlocks[512];                       /* 1 if voucher for trainer_type is unlocked */
+    uint8_t achievement_flags[256];                     /* 1 if achievement_id is unlocked */
+    gc_stat_milestones stats;                          /* profile stat milestones */
 } gc_system;
 
 /* Initialize system data with new-save defaults (upstream initDexData + initStarterData) */
@@ -93,5 +108,15 @@ bool gc_system_add_egg(gc_system *sys, uint32_t id, int32_t hatch_waves, uint8_t
 bool gc_system_has_voucher_unlock(const gc_system *sys, int trainer_type);
 bool gc_system_unlock_voucher(gc_system *sys, int trainer_type, int voucher_type);
 void gc_system_add_voucher_count(gc_system *sys, int voucher_type, int count);
+
+/* Achievements, Ribbons, and Stat Milestones helpers */
+bool gc_system_has_achievement(const gc_system *sys, int achievement_id);
+bool gc_system_unlock_achievement(gc_system *sys, int achievement_id);
+void gc_system_add_classic_win(gc_system *sys, uint16_t species_id);
+uint16_t gc_system_get_ribbons(const gc_system *sys, uint16_t species_id);
+
+/* SD Card System Data Serializer */
+size_t gc_system_save(const gc_system *sys, void *buf, size_t cap);
+bool gc_system_load(gc_system *sys, const void *buf, size_t len, const char **why);
 
 #endif
