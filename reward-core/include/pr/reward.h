@@ -133,6 +133,15 @@ typedef struct {
     /* caller: getLevelMoves({includeEvolutionMoves: true, includeRelearnerMoves: true}) moves, which
      * getCompatibleTms(true, true, true) leaves out; and usedTMs */
     uint16_t level_moves[PR_REWARD_MAX_LEVEL_MOVES]; uint16_t n_level_moves;
+    /* Task 43 Memory Mushroom metadata for the entries above. level -1 represents null;
+     * source uses upstream LearnableMoveSource values. Existing callers may leave these zeroed,
+     * which means ordinary LEVEL source at level 0. */
+    int16_t level_move_levels[PR_REWARD_MAX_LEVEL_MOVES];
+    int8_t level_move_sources[PR_REWARD_MAX_LEVEL_MOVES];
+    /* getUnlockedEggMoves() input. Only unlocked egg moves are supplied. */
+    uint16_t egg_moves[4]; uint8_t n_egg_moves;
+    bool met_as_starter;          /* metBiome === -1 */
+    bool egg_relearn_allowed;     /* ChallengeType.EGG_MOVE_RELEARN_AVAILABILITY ValueHolder */
     uint16_t used_tms[PR_REWARD_MAX_USED_TMS]; uint8_t n_used_tms;
     /* caller: the attack type booster's input: for each attack move in getMoveset(), in order, its types
      * for item spawns (VariableMoveTypeAttr.getTypesForItemSpawn or getMoveTypeForItemSpawn) */
@@ -236,6 +245,60 @@ int pr_reward_select_start(pr_reward_ctx *ctx, const pr_reward_select *sel, pr_r
 /* ---- the fixed rewards of a victory (VictoryPhase): ModifierRewardPhase items, in the order they're given,
  * and whether a reward screen (SelectModifierPhase) follows. Returns how many items. ---- */
 int pr_reward_victory_rewards(const pr_run *run, int wave, uint16_t out[8], bool *select_screen);
+
+/* ---- Memory Mushroom / move relearning (Task 43) ---- */
+enum {
+    PR_LEARN_SOURCE_LEVEL = 0,
+    PR_LEARN_SOURCE_FUSION_LEVEL = 1,
+    PR_LEARN_SOURCE_RELEARN = 2,
+    PR_LEARN_SOURCE_FUSION_RELEARN = 3,
+    PR_LEARN_SOURCE_EVOLUTION = 4,
+    PR_LEARN_SOURCE_FUSION_EVOLUTION = 5,
+    PR_LEARN_SOURCE_PREVO = 6,
+    PR_LEARN_SOURCE_FUSION_PREVO = 7,
+    PR_LEARN_SOURCE_TM = 8,
+    PR_LEARN_SOURCE_FUSION_TM = 9,
+    PR_LEARN_SOURCE_EGG = 10,
+    PR_LEARN_SOURCE_FUSION_EGG = 11,
+    PR_LEARN_SOURCE_OTHER = 12,
+    PR_LEARN_SOURCE_FUSION_OTHER = 13,
+};
+typedef struct {
+    int16_t level;                /* null upstream = -1 */
+    uint16_t move;
+    int8_t source;                /* PR_LEARN_SOURCE_* */
+} pr_reward_memory_move;
+
+enum {
+    PR_REWARD_TARGET_NONE = 0,
+    PR_REWARD_TARGET_REMEMBER_MOVE = 1, /* UiMode.PARTY + PartyUiMode.REMEMBER_MOVE_MODIFIER */
+    PR_REWARD_TARGET_LEARN_MOVE = 2,    /* LearnMovePhase(..., LearnMoveType.MEMORY, cost) */
+};
+typedef struct {
+    int mode;
+    int party_idx;
+    int option_idx;
+    uint16_t move;
+    double cost;
+    bool copy_reward_screen;      /* SelectModifierPhase.copy() is queued before RememberMoveModifier.apply */
+} pr_reward_target_state;
+
+/* PlayerPokemon.getLearnableLevelMoves(): level/pre-evo/relearner entries supplied by the caller,
+ * unlocked egg moves for run starters (except Daily / blocked challenges), then used TMs; moves already
+ * known are removed and the result is stable-sorted by base LearnableMoveSource descending. */
+int pr_reward_memory_moves(const pr_reward_ctx *ctx, int party_idx,
+                           pr_reward_memory_move *out, int out_cap);
+
+/* Selecting a Memory Mushroom opens PARTY in REMEMBER_MOVE_MODIFIER mode. Returns the number of
+ * selectable moves, or 0 and PR_REWARD_TARGET_NONE if the target cannot relearn anything. */
+int pr_reward_memory_begin(const pr_reward_ctx *ctx, int party_idx,
+                           pr_reward_memory_move *out, int out_cap,
+                           pr_reward_target_state *state);
+
+/* Selecting one of the Memory Mushroom move rows queues LearnMovePhase with LearnMoveType.MEMORY.
+ * Returns false for an invalid target/option. */
+bool pr_reward_memory_choose(const pr_reward_ctx *ctx, int party_idx, int option_idx, double cost,
+                             pr_reward_target_state *state);
 
 /* ---- applying rewards (Task 10/18: healing, revives, PP, evolution items, form change items) ---- */
 /* Apply a reward item to the player's party in ctx.
