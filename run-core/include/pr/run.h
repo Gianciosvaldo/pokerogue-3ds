@@ -457,12 +457,15 @@ typedef struct {
 typedef struct {
     int n;
     uint16_t species[PR_MAX_PARTY_TEMPLATE];
+    int levels[PR_MAX_PARTY_TEMPLATE];          /* postProcess-adjusted level; normally ctx->levels */
     pr_enemy_gen mons[PR_MAX_PARTY_TEMPLATE];   /* each member's rolls up to its moveset */
 } pr_trainer_party;
 /* genPartyMember(e) for every level in turn, each on its own RNG (the run seed at the trainer's offset);
  * run->rng is left as it was. Returns 0, or -1 with a flag (partyMemberFuncs: PR_RUN_UNPORTED_TRAINER)
  * and the members made so far in out->n. */
 int pr_run_gen_trainer_party(pr_run *run, const pr_trainer_party_ctx *ctx, pr_trainer_party *out);
+/* Rival partyMemberFuncs for Classic waves 8/25/55/95/145/195. fight is 1..6. */
+int pr_run_gen_rival_party(pr_run *run, const pr_trainer_party_ctx *ctx, int fight, pr_trainer_party *out);
 
 /* A wild battle's first enemy (src/wildenemy.c) */
 typedef struct {
