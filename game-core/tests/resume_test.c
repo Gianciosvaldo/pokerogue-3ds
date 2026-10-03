@@ -70,10 +70,47 @@ static int fixtures(void)
     return 0;
 }
 
+/* Unlike soak_one's legacy result, this check requires an observed terminal screen.
+ * Keep the same chooser, seeds and 200000-step budget; never credit budget exhaustion. */
+static int completion_check(int index, bool saves, int *steps)
+{
+    static gc_run run;
+    static uint8_t buf[GC_SAVE_MAX];
+    char seed[32]; const char *why = NULL; gc_starter team[6];
+    snprintf(seed, sizeof seed, "soak%08d", index);
+    rs = 0x9E3779B97F4A7C15ull ^ ((uint64_t)index * 0xD1B54A32D192ED03ull);
+    rnd(1);
+    gc_run_new(&run, GAME_MODES_CLASSIC, seed, (uint32_t)index);
+    int n = random_team(team);
+    VERIFY(gc_run_set_starters(&run, team, n, &why));
+    int saved_wave = -1;
+    for (int step = 0; step < 200000; step++) {
+        gc_event e; while (gc_run_next_event(&run, &e)) {}
+        if (saves && run.wave != saved_wave && gc_run_can_save(&run)) {
+            size_t len = gc_run_save(&run, buf, sizeof buf);
+            VERIFY(len > 0);
+            memset(&run, 0xA5, sizeof run);
+            VERIFY(gc_run_load(&run, buf, len, &why) && !run.load_dropped);
+            saved_wave = run.wave;
+            continue;
+        }
+        const gc_screen *screen = gc_run_screen(&run);
+        if (screen->kind == GC_SCREEN_GAME_OVER || screen->kind == GC_SCREEN_CLEAR) {
+            *steps = step; return 0;
+        }
+        if (!auto_choose(&run)) {
+            fprintf(stderr, "FAIL completion %s save=%d step=%d: chooser stuck\n", seed, saves, step);
+            return 1;
+        }
+    }
+    fprintf(stderr, "FAIL completion %s save=%d: step budget exhausted\n", seed, saves);
+    return 1;
+}
+
 int main(void)
 {
     if (fixtures()) return 1;
-    const int seeds[] = {235, 431, 558};
+    const int seeds[] = {235, 431, 558, 849};
     for (size_t i = 0; i < sizeof seeds / sizeof seeds[0]; i++) {
         soak_result a = {0}, b = {0};
         save_test = 0; soak_one(seeds[i], 0, &a);
@@ -85,6 +122,14 @@ int main(void)
         VERIFY(!memcmp(a.run_core, b.run_core, sizeof a.run_core));
         printf("resume seed soak%08d: wave %d, turns %d, score %d, identical\n", seeds[i], a.wave, a.turns, a.score);
     }
+    int max_steps[2] = {0};
+    for (int saves = 0; saves < 2; saves++)
+        for (int index = 0; index < 1000; index++) {
+            int steps = 0;
+            if (completion_check(index, saves != 0, &steps)) return 1;
+            if (steps > max_steps[saves]) max_steps[saves] = steps;
+        }
+    printf("completion: 1000/1000 without saves, 1000/1000 with saves; max steps %d/%d; budget 200000\n", max_steps[0], max_steps[1]);
     printf("resume regression: %d checks passed\n", checks);
     return 0;
 }

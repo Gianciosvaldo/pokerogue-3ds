@@ -184,47 +184,47 @@ missing historical state cannot be recovered or claimed faithful.
 
 New additive `tests/resume_test.c` uses the existing, unchanged gcplay chooser.
 It checks empty/full history, encounter selection and RNG, trainer stat stages,
-field ownership, invalid history and three real failing seeds. Original main
-fails its active-node check; changed code reports **2,110 checks passed**:
+field ownership and invalid history. Four regression seeds match after loading:
 
 | Seed | Final wave | Turns | Score | Saved/ordinary |
 |---|---|---|---|---|
 | soak00000235 | 42 | 118 | 1553 | identical |
 | soak00000431 | 45 | 121 | 1451 | identical |
 | soak00000558 | 14 | 44 | 281 | identical |
+| soak00000849 | 14 | 39 | 316 | identical |
 
-Exact commands from the owning folder's parent, after a clean build:
+Seed 849 exposed another adapter bug: a revived lead sent out through game-core's
+own replacement prompt retained `switch_out_status=true`. It was displayed as
+active but battle-core correctly treated it as leaving the field, producing
+empty turns indefinitely. That send-out now clears the flag, just as the regular
+summon path does. The established soak driver is unchanged, including its
+200,000-step limit, chooser, seeds and digest. Its limit-exhaustion reporting is
+still unreliable in general; an additive completion check therefore independently
+requires an observed GAME_OVER/CLEAR screen for every seed 0..999, with and without
+saving. It fails on exhausted budgets or rejected chooser actions.
+
+Exact commands from the repository root:
 
 ```sh
 make -C game-core clean
 make -C game-core test
 game-core/build/gcplay --auto 1000 --jobs 8
 game-core/build/gcplay --auto 1000 --jobs 8 --save-test
-game-core/build/gcplay --auto 1 --first 849 --verbose
-game-core/build/gcplay --auto 1 --first 849 --verbose --save-test
 ```
 
-`make test` exits 0: new 2,110 resume checks, existing 39 item lifecycle checks,
-and unchanged 200-run gate with `030a9394` / `030a9394` (same as current-main baseline).
-Existing producers/comparators/counts/seeds/digest/soak chooser are unchanged.
-The old mystery test's printed "76 differential cases" still represents smoke
-coverage, not upstream result comparison.
+The completion check observes 1,000/1,000 terminal runs in each mode, maximum
+450/472 steps, and the resume regression reports **36,471 checks passed**.
+The 1,000-run legacy checks both report 1,000 ended, zero cleared/stuck/crashed/
+timed out, **57,502 turns**, digest **`0cba4e49`**.
 
-| 1,000 runs | Ordinary digest / turns | Saved digest / turns | Equality |
+| Historical 1,000-run build | Ordinary digest / turns | Saved digest / turns | Equality |
 |---|---|---|---|
 | main 58030d63 | e94dc9ac / 257987 | 42ce52f4 / 257964 | FAIL |
-| Task 87 | e94dc9ac / 257987 | 6917434c / 257973 | FAIL |
+| initial Task 87 slice | e94dc9ac / 257987 | 6917434c / 257973 | FAIL |
+| Task 87, replacement flag corrected | 0cba4e49 / 57502 | 0cba4e49 / 57502 | PASS |
 
-All reports print 1,000 ended, zero cleared/stuck/crashed/timed out; **that is not
-reliable completion evidence**. Seed 849 exhausts gcplay's 200,000-step loop and
-is wrongly counted as ended. Every save/load `continue` consumes a step; 14
-roundtrips leave saved play with 199,959 turns against 199,973 ordinary turns.
-Its digests are `9c69699e` / `1c33e37e`. The saved 200,124 filtered gameplay
-messages/turn events form an identical prefix of the ordinary 200,138 events.
-This sole budget discrepancy accounts for the remaining aggregate digest XOR.
-
-Under HANDOFF2, "If you believe the test itself is wrong, stop and write that up
-in the PR." Task 87 stops as a **draft**: do not waive the 1,000-run gate, reduce
-counts, exclude seed 849 or modify its established chooser/digest. The budget
-accounting/completion check needs separate review. No new upstream differential
-or hardware/emulator result is claimed by this resume work.
+The historical failures included the silently exhausted seed 849 and cannot be
+credited as completed runs. No existing producer/comparator was changed. The
+mystery test's printed “76 differential cases” still represents smoke coverage,
+not upstream result comparison. These checks validate deterministic host resume;
+no new upstream differential or hardware/emulator result is claimed.
