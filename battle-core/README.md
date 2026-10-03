@@ -2,6 +2,19 @@
 
 Status 2026-09-28: **damage path with abilities and passives, move effects, held items, battler and arena tags, and the turn history verified against upstream** (singles); the turn engine has started and replays about 96% of the plain random test turns exactly, with stat changes, statuses, on-hit abilities, two-turn moves, 87 of the 95 battler tag types (all but Helping Hand, Follow Me's, Imprison, Quick Claw's, Commander's, Cramorant's two and the mystery encounters' one), recoil, drain, recharge, pre-move texts, the healing phase, weather and terrain over a turn, the damaging traps, Leech Seed, Substitute, the protections and Endure, arena tags being laid, stacked, cleared and swapped, the weather and terrain moves with about 25 smaller move effects, the moves that call other moves (Metronome, Mirror Move, Copycat, Sleep Talk, Assist, Nature Power, Instruct), Focus Punch-style header moves, Future Sight and Wish, and switching (the moves that switch a Pokemon out, the switch command, the party prompt as a pause the caller answers, and the switch itself with entry hazards, entry abilities, Baton Pass and Shed Tail passing their effects, Wimp Out and Emergency Exit) ported (see "Turn engine"). Every damaging move in the random test is now covered except 6 cases in about 110,000. Upstream is `pagefaultgames/pokerogue` @ `8555c08`.
 
+## Battle regression repair (Task 90, 2026-10-03)
+
+The unchanged whole-turn producer at upstream `8555c08c823b856cbec4eb99ca84ea52a955836d` exposed failures already on main. The C repair removes form-based Max immunities absent from that pin, evaluates form callbacks before displaying an ability, and queues enabled Daily passives even when their ability is `NONE`. No established producer, comparator, exclusion or generated table changed.
+
+| `TURN_N=2000 TURN_SEED=777` mode | Before covered / pass / fail | After covered / pass / fail | After uncovered |
+| --- | --- | --- | --- |
+| Plain | 1940 / 1939 / 1 | 1940 / 1940 / 0 | 60 |
+| `TURN_RICH=1` | 1826 / 1819 / 7 | 1826 / 1826 / 0 | 174 |
+| `TURN_SWITCH=1` | 1885 / 1883 / 2 | 1885 / 1885 / 0 | 115 |
+| `TURN_SUMMON=1` | 1855 / 1825 / 30 | 1856 / 1856 / 0 | 144 |
+
+Run `turntest.producer.test.ts` using each flag above with `TURN_OUT=/abs/turn-MODE.txt`, then `TURNTEST_LOCALES=/abs/upstream/locales/en battle-core/build/turntest /abs/turn-MODE.txt`. Node 22.23.3 / Vitest 4.1.11 and GCC 13.3 were used. Covered message comparisons are all identical. Existing uncovered cases remain excluded by the unchanged comparator. These named singles regressions do not establish full battle parity; hardware/emulator play was not run.
+
 ## What works, and how it was checked
 | Piece | State | Evidence |
 |---|---|---|

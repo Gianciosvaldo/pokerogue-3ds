@@ -379,6 +379,16 @@ There is no new wave of three independent lower-compute tasks. Task 68 still nee
 
 **Pass.** A planted species or ability mutation fails the new suite; then at least2,000 cases per each of four seeds show zero mismatches with nonzero successful/rejected applications of each family. Existing reward option/victory/apply regressions retain coverage. State precisely which lifecycle remains in game-core.
 
+### Task 90: Repair current battle regression failures (battle-core/, lane A)
+
+**Branch:** `outside/battle-baseline-regressions`. **Assignment:** Hard/coordinator. **Prerequisites:** Lane A free; upstream pin unchanged. Task 67 stacks on this repair.
+
+**Problem.** The B regression suite fails on main before Task 67: plain 1, rich 7, switch 2 and summon 30 mismatches at 2,000 cases / seed 777.
+
+**Do.** Fix C behavior against the pinned upstream source: form-based Max immunities, form callback applicability and enabled Daily passives whose ability is `NONE`. Keep established producers, comparators and exclusions unchanged; document before/after counts.
+
+**Pass.** B: plain, rich, switch and summon have zero mismatches and covered counts at least 1940, 1826, 1885 and 1855 respectively. Host tests and 3DS CI pass. This does not enable natural Illusion or unlock Task 68 by itself.
+
 ## Beyond these bounded slices
 
 This backlog is deliberately not a promise that 33 PRs produce full parity. Later tasks must separately bound remaining move/ability dispatch, Transform/Sketch and boss cases, complete held-item families, reward lifecycle classes, mystery encounter families, custom Daily event configurations, Endless/Challenge mechanics, egg-event differences, achievements and statistics, translations/tutorials, full menus and presentation, audio/animation acceptance, and Old 3DS resource limits. Online account/server features require an explicit offline replacement policy. Custom content follows pinned upstream parity; it is not parity work. Each further task needs the same Problem/Do/Pass contract and an owning lane.
