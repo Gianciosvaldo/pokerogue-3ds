@@ -304,6 +304,7 @@ typedef struct {
     int prev_wave;                       /* currentBattle.waveIndex before newBattle (0 = none yet) */
     int n_lures, n_double_chance_abilities;   /* what getDoubleBattleChance counts */
     bool enable_fixed_rivals;            /* Task 48: caller opts into the six ported Classic rival closures */
+    bool enable_gym_e4;                   /* Task 49: caller opts into Gym/E4 fixed trainer closures */
     pr_me_save me;                       /* mysteryEncounterSaveData */
 } pr_new_battle_ctx;
 typedef struct {
@@ -457,6 +458,7 @@ typedef struct {
                                    * species, level, slot, boss and shinyLock are set per member */
     bool is_double;               /* trainer.isDouble() */
     bool classic_wave20_trainer;
+    bool enable_gym_e4;            /* Task 49: caller opts into Gym/E4 partyMemberFuncs */
     const pr_party_template *template_;   /* trainer.getPartyTemplate() */
     int n_levels, levels[PR_MAX_PARTY_TEMPLATE];   /* currentBattle.enemyLevels */
 } pr_trainer_party_ctx;
