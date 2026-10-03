@@ -257,6 +257,8 @@ void gc_run_new(gc_run *run, int mode, const char *seed, uint32_t entropy)
     run->biome = BIOME_ID_TOWN;
     run->money = pr_run_get_starting_money(&run->run);
     run->pokeballs[POKEBALL_TYPE_POKEBALL] = 5;
+    run->me.spawn_chance = 3; /* BASE_MYSTERY_ENCOUNTER_SPAWN_WEIGHT */
+    run->mystery_type = run->mystery_tier = -1;
     run->trainer_type = run->trainer_variant = -1;
     run->trainer_name = run->trainer_partner_name = -1;
     run->screen.kind = GC_SCREEN_STARTERS;
