@@ -110,7 +110,8 @@ typedef struct {
     int16_t fusion_species;       /* fusionSpecies.speciesId, -1 = not a fusion */
     int16_t fusion_form;          /* fusionFormIndex */
     int8_t gender, fusion_gender; /* Gender (-1 genderless) */
-    uint8_t level;
+    uint16_t level;
+    double exp;                    /* PlayerPokemon.exp; Task 44 Rare/Rarer Candy syncs this when <= absolute cap */
     int32_t hp, max_hp;           /* hp, getMaxHp() */
     uint8_t status;               /* status.effect (StatusEffect), 0 = none */
     uint8_t nature;               /* getNature() */
@@ -179,6 +180,9 @@ typedef struct {
     /* gameData.dexData[species].caughtAttr != 0; NULL = nothing caught */
     bool (*caught)(void *user, int species);
     void *caught_user;
+    /* Task 44: LevelUpPhase requests produced by Rare/Rarer Candy application. */
+    struct { int8_t party_idx; uint16_t old_level, new_level; } level_events[PR_REWARD_MAX_PARTY];
+    uint8_t n_level_events;
 } pr_reward_ctx;
 
 /* ---- the reward options ---- */
@@ -309,6 +313,12 @@ bool pr_reward_memory_choose(const pr_reward_ctx *ctx, int party_idx, int option
  * msg: if non-NULL, set to "It won’t have any effect." on failure, or NULL on success.
  * Returns true if applied, false if no effect. */
 bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_idx, int move_idx, const char **msg);
+/* Task 44: LevelIncrementBoosterModifier / PokemonLevelIncrementModifier.
+ * Upstream has RARE_CANDY (one party member) and RARER_CANDY (all party members); there is no
+ * BITE_SIZED_CANDY in pinned 8555c08. Each Candy Jar stack adds one extra level to either item. */
+int pr_reward_candy_level_count(const pr_reward_ctx *ctx);
+bool pr_reward_apply_candy(pr_reward_ctx *ctx, uint16_t item, int party_idx);
+double pr_reward_level_total_exp(int level, int growth_rate);
 
 /* ---- passive inventory multipliers (EXP Items & Economy) ---- */
 /* EXP Share multiplier per non-participant party member: (stackCount * 0.2) / n_participants (or 0.0 if no EXP Share held or n_participants <= 0) */
