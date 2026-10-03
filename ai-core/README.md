@@ -108,3 +108,66 @@ These are local copies or shims, kept in step with battle-core by hand until it 
 - `src/ai.c`: `EnemyCommandPhase`, `getNextMove`, `getNextTargets`, matchup and switch-in scores, trapping, move selection rules. `src/ai_score.c`: the benefit scores. `src/ai_damage.c`: the flagged damage path.
 - `tests/ai.producer.test.ts`, `tests/aitest.c`, `tools/difftest.sh`: the diff test.
 
+
+## Task 88: runtime-dependent matchup scores
+
+Checked main `ca1401075ccc80c4111fa12333d6f66e1164efd3` on 2026-10-03.
+The existing C AI is clean under HANDOFF's specified Node 22 reference runtime:
+
+| Seed | Generated | Covered / identical | Mismatches | Not covered |
+|---|---|---|---|---|
+| 777 | 5000 | 4938 / 4938 | 0 | 62 |
+| 9001 | 5000 | 4946 / 4946 | 0 | 54 |
+| 4242 | 5000 | 4942 / 4942 | 0 | 58 |
+| 31337 | 5000 | 4936 / 4936 | 0 | 64 |
+
+Total: 20,000 generated, 19,762 covered/identical, zero mismatches, 238 not
+covered. Stats mismatches and skipped records are zero. Coverage did not decline
+from the previous Node 24 runs. The uncovered Illusion/move-condition reasons
+remain; this does not establish complete AI parity or unlock Illusion integration
+before Task 67. Existing C, producers/comparators, tolerances, seeds, counts and
+coverage classifications are unchanged.
+
+Runtime: Node **22.23.3**, GCC **13.3.0**, upstream
+`8555c08c823b856cbec4eb99ca84ea52a955836d`. Node **24.19.0** remains a different
+reference: its previously recorded 2/9/9/12 failures are real, not waived.
+Stealth Rock uses `Math.pow(damageHpRatio, damageHpRatio)` in
+`src/data/arena-tag.ts`. Directly measured values:
+
+| Input x (`Math.pow(x,x)`) | Node 22 / port js_pow | Node 24 |
+|---|---|---|
+| 0.0625 | 0.84089641525371461 | 0.84089641525371450 |
+| 0.125 | 0.77110541270397048 | 0.77110541270397037 |
+| 0.25 | 0.70710678118654746 | 0.70710678118654757 |
+
+The port's existing `battle-core/src/js_math.c` deliberately reproduces Node
+22/V8's power implementation. Node 24's differing final bits propagate through
+hazard matchup multipliers. All 12 failing cached seed-31337 cases contain an
+enemy-side Stealth Rock tag; all four required suites pass with Node 22.
+Switching to host libc pow would silently change the existing target and is not
+portable evidence for the 3DS; no such substitution was made.
+
+**Reference-runtime conflict remains:** HANDOFF says Node 22, but the pinned
+upstream's own `package.json` declares Node `>=24.9.0`. Node 22 passing establishes
+the named HANDOFF runtime's comparisons, not validation under upstream's declared
+Node 24 environment or every JavaScript engine. Choosing/migrating a reference
+runtime needs an explicit reviewed contract. Task 88 diagnoses the recorded
+failures; it does not erase the Node 24 gap.
+
+Exact producer/replay commands used (upstream checkout outside the repo):
+
+```sh
+# Seed 777, from the port; script copies the unchanged producer and invokes it:
+PATH=/root/.npm/_npx/52027bd8fc0022aa/node_modules/node/bin:$PATH BUILD=/tmp/ai88-node22-777 sh ai-core/tools/difftest.sh /tmp/pokerogue-upstream 5000 777
+# Each of 9001, 4242, 31337, from /tmp/pokerogue-upstream (substitute seed):
+PATH=/root/.npm/_npx/52027bd8fc0022aa/node_modules/node/bin:$PATH AI_SEED=<seed> AI_N=5000 AI_OUT=/tmp/ai88-node22-<seed>.txt /root/.npm/_npx/52027bd8fc0022aa/node_modules/node/bin/node node_modules/vitest/vitest.mjs run test/tests/zz-dump/ai.producer.test.ts
+/tmp/ai88-node22-777/aitest /tmp/ai88-node22-<seed>.txt
+# Focused berry regressions, from the port:
+make -s -C ai-core BATTLE_CORE=../battle-core test-berry
+ai-core/build/berrytest /tmp/ai-berry-cases.txt
+```
+
+Each upstream producer reports one test passed. Fresh-built comparator replays
+all four files with the counts above. Berry host: 404/404, zero mismatches; replay
+of the prior recorded upstream berry trace: 268/268, zero mismatches (not a newly
+generated berry differential here). No new hardware/emulator or 3DS result.
