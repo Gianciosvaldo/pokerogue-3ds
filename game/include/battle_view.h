@@ -70,6 +70,7 @@ typedef enum {
                     * (SubstituteTag.onRemove while the Pokemon is in focus) */
   BEV_VISIBLE,     /* battler, a = 0: hide it (SemiInvulnerableTag.onAdd), 1: show it again two
                     * frames later (onRemove); the queue doesn't wait */
+  BEV_FORM_CHANGE, /* battler, a = species, b = form (Mega Evolution, Gigantamax, form change) */
 } bev_type;
 
 typedef struct {
