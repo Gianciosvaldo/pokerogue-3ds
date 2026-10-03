@@ -55,6 +55,11 @@ bool pr_run_is_battle_classic_final_boss(const pr_run *run, int wave)
     return is_classic(run->mode) && pr_run_is_wave_final(run->mode, wave);
 }
 
+bool pr_run_is_paradox_wave(int mode, int wave)
+{
+    return is_classic(mode) && ((wave >= 191 && wave <= 194) || (wave >= 196 && wave <= 199));
+}
+
 bool pr_run_is_endless_boss(const pr_run *run, int wave) { return wave % 50 == 0 && is_endless(run->mode); }
 bool pr_run_is_endless_minor_boss(const pr_run *run, int wave) { return wave % 250 == 0 && is_endless(run->mode); }
 bool pr_run_is_endless_major_boss(const pr_run *run, int wave) { return wave % 1000 == 0 && is_endless(run->mode); }

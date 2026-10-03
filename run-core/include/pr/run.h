@@ -71,6 +71,7 @@ int pr_run_get_wave_for_difficulty(const pr_run *run, int wave, bool ignore_curv
 bool pr_run_is_wave_final(int mode, int wave);
 bool pr_run_is_boss(int wave);
 bool pr_run_is_battle_classic_final_boss(const pr_run *run, int wave);
+bool pr_run_is_paradox_wave(int mode, int wave);
 bool pr_run_is_endless_boss(const pr_run *run, int wave);
 bool pr_run_is_endless_minor_boss(const pr_run *run, int wave);
 bool pr_run_is_endless_major_boss(const pr_run *run, int wave);
@@ -384,7 +385,11 @@ typedef struct {
     bool rival_pending;
     int8_t rival_fight, rival_slot;
     pr_rng rival_rng;
+    int moveset[4];               /* moveset (0 = none) */
 } pr_enemy_gen;
+
+/* Returns fixed moveset for Eternatus */
+void pr_run_get_eternatus_moveset(int form, bool inverse_battle, int moveset[4]);
 /* new EnemyPokemon(species, level, trainerSlot, boss, shinyLock) without a data source, on run->rng:
  * the Pokemon constructor's rolls and setBoss, which come before generateAndPopulateMoveset */
 int pr_run_enemy_pokemon_base(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_enemy_gen *out);

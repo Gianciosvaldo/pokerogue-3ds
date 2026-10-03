@@ -126,6 +126,10 @@ static int form_index(pr_run *run, const pr_enemy_gen_ctx *ctx, int species, int
         if (run->mode == GAME_MODES_CLASSIC || run->mode == GAME_MODES_CHALLENGE)
             return 1;
         return seed_int(run, sp->n_forms);
+    case SPECIES_ID_ETERNATUS:
+        if (!pr_run_is_battle_classic_final_boss(run, ctx->wave) && ctx->wave > 0 && !(ctx->wave % 1000))
+            return 1;
+        return 0;
     case SPECIES_ID_BURMY: case SPECIES_ID_WORMADAM:   /* the constructor: ignoreArena = isPlayer() = false */
         if (ignore_arena) return seed_int(run, sp->n_forms);
         switch (ctx->biome) {
@@ -148,6 +152,21 @@ static int form_index(pr_run *run, const pr_enemy_gen_ctx *ctx, int species, int
 int pr_run_get_species_form_index(pr_run *run, const pr_enemy_gen_ctx *ctx, int gender)
 {
     return form_index(run, ctx, ctx->species, gender, -1, false);
+}
+
+void pr_run_get_eternatus_moveset(int form, bool inverse_battle, int moveset[4])
+{
+    if (form) {
+        moveset[0] = MOVE_ID_DYNAMAX_CANNON;
+        moveset[1] = MOVE_ID_CROSS_POISON;
+        moveset[2] = inverse_battle ? MOVE_ID_EARTH_POWER : MOVE_ID_FLAMETHROWER;
+        moveset[3] = MOVE_ID_RECOVER;
+    } else {
+        moveset[0] = MOVE_ID_ETERNABEAM;
+        moveset[1] = MOVE_ID_SLUDGE_BOMB;
+        moveset[2] = inverse_battle ? MOVE_ID_EARTH_POWER : MOVE_ID_FLAMETHROWER;
+        moveset[3] = MOVE_ID_COSMIC_POWER;
+    }
 }
 
 /* generateFusionSpecies() for an enemy made by the constructor (level > 1, fused) */
@@ -280,6 +299,12 @@ int pr_run_enemy_pokemon_base_rng(pr_rng *rng, pr_run *run, const pr_enemy_gen_c
 
     out->nature = pr_rng_seed_int(rng, PR_NATURE_COUNT, 0);
 
+    for (int i = 0; i < 4; i++) out->moveset[i] = 0;
+    if (ctx->species == SPECIES_ID_ETERNATUS) {
+        bool inverse = run->has_challenges && (run->challenge_flags & (1u << CHALLENGES_INVERSE_BATTLE));
+        pr_run_get_eternatus_moveset(out->form, inverse, out->moveset);
+    }
+
     if (ctx->level > 1) {
         bool fused = run->mode == GAME_MODES_SPLICED_ENDLESS;
         if (!fused && ctx->enemy_fusion_stacks > 0)
@@ -293,7 +318,12 @@ int pr_run_enemy_pokemon_base_rng(pr_rng *rng, pr_run *run, const pr_enemy_gen_c
     if (n_types < 0) { run->unported |= PR_RUN_UNDEFINED_UPSTREAM; return -1; }
     out->tera_type = n_types == 1 ? types[0] : types[pr_rng_integer_in_range(rng, 0, n_types - 1)];
 
-    if (ctx->boss) out->boss_segments = pr_run_get_encounter_boss_segments(run, ctx->wave, ctx->level, ctx->species, true);
+    if (ctx->boss) {
+        if (ctx->species == SPECIES_ID_ETERNATUS && pr_run_is_battle_classic_final_boss(run, ctx->wave))
+            out->boss_segments = (out->form == 1) ? 5 : 4;
+        else
+            out->boss_segments = pr_run_get_encounter_boss_segments(run, ctx->wave, ctx->level, ctx->species, true);
+    }
     return 0;
 }
 
@@ -368,6 +398,9 @@ int pr_run_enemy_pokemon_finish(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_ene
             const double hi = out->ivs[i] < iv2[i] ? iv2[i] : out->ivs[i];
             out->ivs[i] = (int)js_round((hi - lo) * 0.75 + lo);
         }
+    }
+    if (ctx->species == SPECIES_ID_ETERNATUS && pr_run_is_battle_classic_final_boss(run, ctx->wave)) {
+        for (int i = 0; i < 6; i++) out->ivs[i] = 31;
     }
     if (out->rival_pending) pr_run_rival_finish(run, ctx, out);
     return 0;
