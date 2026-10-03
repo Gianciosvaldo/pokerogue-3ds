@@ -85,6 +85,21 @@ static void to_modifier(const gc_item *it, pr_modifier *m)
     m->is_transferable = true;
     m->unknown_subclass = true;
     m->cls = it->pokemon_id ? PR_MOD_HELD_ITEM : PR_MOD_PERSISTENT;
+    /* These classes now have turn-path implementations in battle-core.  Parameters and
+     * transferability come from upstream modifierTypes, not an inferred item name. */
+    static const struct { const char *key; uint8_t cls; } held[] = {
+        {"LEFTOVERS", PR_MOD_TURN_HEAL}, {"SHELL_BELL", PR_MOD_HIT_HEAL},
+        {"FOCUS_BAND", PR_MOD_SURVIVE_DAMAGE}, {"QUICK_CLAW", PR_MOD_BYPASS_SPEED_CHANCE},
+        {"KINGS_ROCK", PR_MOD_FLINCH_CHANCE}, {"WHITE_HERB", PR_MOD_RESET_NEGATIVE_STAT_STAGE},
+        {"BERRY", PR_MOD_BERRY}
+    };
+    for (size_t i = 0; i < sizeof held / sizeof held[0]; i++) {
+        if (strcmp(it->key, held[i].key)) continue;
+        m->cls = held[i].cls;
+        m->unknown_subclass = false;
+        if (m->cls == PR_MOD_BERRY) m->berry_type = (int8_t)it->arg;
+        return;
+    }
     if (!strcmp(it->key, "BASE_STAT_BOOSTER")) {          /* vitamins: BaseStatModifier(stat) */
         m->cls = PR_MOD_BASE_STAT; m->stat = (int8_t)it->arg; m->unknown_subclass = false;
     } else if (!strcmp(it->key, "ATTACK_TYPE_BOOSTER")) { /* AttackTypeBoosterModifier(type, 20) */
@@ -106,4 +121,43 @@ void gc_items_to_battle(gc_run *run)
         to_modifier(&run->items[i], &bt->mods[0][bt->n_mods[0]++]);
     for (int i = 0; i < run->n_enemy_items && bt->n_mods[1] < PR_MAX_MODIFIERS; i++)
         to_modifier(&run->enemy_items[i], &bt->mods[1][bt->n_mods[1]++]);
+    gc_int(run)->battle_item_count[0] = bt->n_mods[0];
+    gc_int(run)->battle_item_count[1] = bt->n_mods[1];
+}
+
+/* Persist the losses of mapped consumables before another encounter rebuilds bt->mods or
+ * a save serializes the run inventory. Match owner AND berry kind: two party members' berries
+ * are separate entries. Unsupported items and entries beyond battle-core's capacity stay intact.
+ * The tracked prefix shrinks with removed entries, so repeated synchronization never mistakes
+ * an unrepresented overflow item for a consumed one. Transfers/additions require a later adapter. */
+void gc_items_from_battle(gc_run *run)
+{
+    for (int side = 0; side < 2; side++) {
+        gc_item *items = side ? run->enemy_items : run->items;
+        int *n = side ? &run->n_enemy_items : &run->n_items;
+        const int tracked = gc_int(run)->battle_item_count[side];
+        int w = 0, removed = 0;
+        for (int i = 0; i < *n; i++) {
+            gc_item it = items[i];
+            pr_modifier expected;
+            to_modifier(&it, &expected);
+            if (i < tracked && (expected.cls == PR_MOD_BERRY ||
+                                expected.cls == PR_MOD_RESET_NEGATIVE_STAT_STAGE)) {
+                int remaining = 0;
+                for (int j = 0; j < run->bt.n_mods[side]; j++) {
+                    const pr_modifier *m = &run->bt.mods[side][j];
+                    if (m->unknown_subclass || m->cls != expected.cls ||
+                        m->pokemon_id != expected.pokemon_id) continue;
+                    if (m->cls == PR_MOD_BERRY && m->berry_type != expected.berry_type) continue;
+                    remaining += m->stack_count;
+                }
+                if (remaining <= 0) { removed++; continue; }
+                it.stack = remaining;
+            }
+            items[w++] = it;
+        }
+        memset(&items[w], 0, (size_t)(*n - w) * sizeof *items);
+        *n = w;
+        gc_int(run)->battle_item_count[side] = tracked - removed;
+    }
 }

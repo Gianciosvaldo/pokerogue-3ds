@@ -54,6 +54,7 @@ typedef struct {
     gc_rqueue rq;
     uint32_t stub_rng;          /* the stand-ins' own RNG, so they never move upstream's */
     int reroll_count;
+    int battle_item_count[2];   /* represented inventory prefix; rebuilt on load/setup */
     /* ai-core's view of the battle: enemySwitchCounter, each Pokemon's AI entry (initialTeamIndex,
      * waveData.abilityRevealed); reset at each new battle. ai.trainer is set at each call, as it
      * points into this struct */
@@ -122,6 +123,7 @@ int gc_item_stack(const gc_run *run, const char *key);                 /* stack 
 void gc_item_add(gc_run *run, const char *key, int16_t arg, uint32_t pokemon_id, int stack);
 void gc_item_remove_at(gc_run *run, int idx);
 int gc_item_remove_stacks(gc_run *run, const char *key, int count);
+void gc_items_from_battle(gc_run *run); /* persist consumed berries/White Herb */
 void gc_items_to_battle(gc_run *run);                                  /* the player's and the enemy's lists into bt->mods */
 double gc_apply_exp_boosters(const gc_run *run, double exp);          /* ExpBoosterModifier */
 
