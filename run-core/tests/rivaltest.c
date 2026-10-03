@@ -25,7 +25,7 @@ int main(int argc,char **argv)
         for(int i=0;i<n;i++){while(*p==' ')p++;exp_levels[i]=(int)strtol(p,&p,10);}
 
         pr_run run;memset(&run,0,sizeof run);run.mode=GAME_MODES_CLASSIC;pr_seed_from_ascii(&run.seed,seed);
-        pr_new_battle_ctx nbctx;memset(&nbctx,0,sizeof nbctx);nbctx.biome=BIOME_ID_PLAINS;nbctx.prev_wave=wave-1;nbctx.me.spawn_chance=3;
+        pr_new_battle_ctx nbctx;memset(&nbctx,0,sizeof nbctx);nbctx.biome=BIOME_ID_PLAINS;nbctx.prev_wave=wave-1;nbctx.me.spawn_chance=3;nbctx.enable_fixed_rivals=true;
         pr_new_battle nb;
         int rc=pr_run_new_battle(&run,wave,&nbctx,&nb);
         bool bad=rc!=0||nb.battle_type!=BATTLE_TYPE_TRAINER||nb.trainer_type!=type||nb.n_levels!=n;
