@@ -42,7 +42,7 @@ it("gym/e4 producer", async () => {
   const gymNormal = [20, 50, 80, 110, 140, 170];
   const gymOffset = [30, 60, 90, 120, 150, 180];
   const e4Waves = [182, 184, 186, 188, 190];
-  const biomeIds = Array.from({ length: 35 }, (_, i) => i).concat([40, 41, 50]);
+  const biomeIds = Array.from({ length: 32 }, (_, i) => i).concat([40, 41, 50]);
 
   (EnemyPokemon.prototype as any).generateAndPopulateMoveset = function (this: any) {
     if (this.__task49Snapshot === undefined) {
@@ -72,8 +72,6 @@ it("gym/e4 producer", async () => {
 
   const lines: string[] = [];
   for (let i = 0; i < N; i++) {
-    scene.gameMode = scene.gameMode.getModeId?.() === GameModes.CLASSIC ? scene.gameMode : game.classicMode.mode;
-    battle.gameMode = scene.gameMode;
     scene.seed = seedStr();
     scene.waveCycleOffset = rnd(8) * 5;
     scene.gameData.trainerId = rnd(65536);
@@ -118,7 +116,7 @@ it("gym/e4 producer", async () => {
     lines.push([
       "C", fixed ? 1 : 0, scene.seed, wave, biome, offsetGym ? 1 : 0, scene.waveCycleOffset,
       scene.gameData.trainerId, scene.gameData.secretId,
-      trainer.config.type, trainer.variant, trainer.isDouble() ? 1 : 0,
+      trainer.config.trainerType, trainer.variant, trainer.isDouble() ? 1 : 0,
       tplLine(template), levels.length, ...levels,
     ].join(" "));
     lines.push(...members);
