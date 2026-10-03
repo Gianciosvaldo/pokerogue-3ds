@@ -67,7 +67,7 @@ int pr_run_new_battle(pr_run *run, int wave, const pr_new_battle_ctx *ctx, pr_ne
     out->trainer_type = out->variant = out->template_index = out->name = out->partner_name = -1;
     /* this.resetSeed(waveIndex) */
     pr_run_reset_seed(run, wave);
-    const int fixed_rival = classic_rival_type(run->mode, wave);
+    const int fixed_rival = ctx->enable_fixed_rivals ? classic_rival_type(run->mode, wave) : -1;
     /* Task 48 closes the six Classic rival fixed battles. Other fixed battle closures remain explicit. */
     if (pr_run_is_fixed_battle(run, wave) && fixed_rival < 0) {
         run->unported |= PR_RUN_UNPORTED_FIXED_BATTLE;
