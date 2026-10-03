@@ -41,6 +41,13 @@ int main(int argc,char **argv)
         pc.n_levels=n;for(int i=0;i<n;i++)pc.levels[i]=exp_levels[i];
         pr_trainer_party got;
         if(!bad&&pr_run_gen_trainer_party(&run,&pc,&got)<0)bad=true;
+        /* The producer replaces generateAndPopulateMoveset with a no-op but still executes the
+         * remainder of EnemyPokemon's constructor before the rival postProcess callback. */
+        if(!bad)for(int i=0;i<n;i++){
+            pr_enemy_gen_ctx ec=pc.enemy;
+            ec.species=got.species[i];ec.level=exp_levels[i];ec.trainer_slot=1;ec.boss=false;ec.shiny_lock=false;
+            if(pr_run_enemy_pokemon_finish(&run,&ec,&got.mons[i])<0){bad=true;break;}
+        }
 
         for(int i=0;i<n;i++){
             if(!fgets(line,sizeof line,f)||line[0]!='M')return 2;
