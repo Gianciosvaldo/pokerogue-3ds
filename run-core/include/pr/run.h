@@ -303,6 +303,7 @@ typedef struct {
     int biome, trainer_chance;           /* the arena: biomeId and its trainerChance */
     int prev_wave;                       /* currentBattle.waveIndex before newBattle (0 = none yet) */
     int n_lures, n_double_chance_abilities;   /* what getDoubleBattleChance counts */
+    bool enable_fixed_rivals;            /* Task 48: caller opts into the six ported Classic rival closures */
     pr_me_save me;                       /* mysteryEncounterSaveData */
 } pr_new_battle_ctx;
 typedef struct {
