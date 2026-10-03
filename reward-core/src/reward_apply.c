@@ -235,61 +235,48 @@ bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_i
                 return false;
             }
             pr_reward_mon *m = &ctx->party[party_idx];
-            bool can_evolve = false;
-
-            /* Check species evolutions */
-            if (m->species >= 0) {
-                const pr_reward_species *s = pr_reward_species_find(m->species);
-                if (s && (s->flags & 1) && !pr_reward_form_is_max(m->species, m->form)) {
-                    if (!m->pause_evolutions || pr_reward_pause_exempt(m->species)) {
-                        const pr_species_slice *sl = pr_reward_slice_find(pr_item_evo_species, pr_item_evo_species_count, m->species);
-                        if (sl) {
-                            const int key = pr_reward_form_key(m->species, m->form);
-                            for (int i = 0; i < sl->n; i++) {
-                                const pr_item_evo *e = &pr_item_evos[sl->start + i];
-                                if (e->item == arg && m->level >= e->level) {
-                                    if (e->pre_form_key < 0 || e->pre_form_key == key) {
-                                        if (pr_reward_evo_conditions(ctx, party_idx, e)) {
-                                            can_evolve = true;
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                        }
+            const pr_item_evo *matching = NULL;
+            bool for_fusion = false;
+            /* Selection checks the primary before the fusion. pauseEvolutions limits
+             * offered item generation, not an explicit EvolutionItemModifierType
+             * selection or EvolutionItemModifier.apply. Preserve registry order. */
+            for (int fusion = 0; fusion < 2 && !matching; fusion++) {
+                int species = fusion ? m->fusion_species : m->species;
+                int form = fusion ? m->fusion_form : m->form;
+                const pr_reward_species *s = pr_reward_species_find(species);
+                if (!s || !(s->flags & 1) || pr_reward_form_is_max(species, form)) continue;
+                const pr_species_slice *sl = pr_reward_slice_find(pr_item_evo_species, pr_item_evo_species_count, species);
+                if (!sl) continue;
+                int key = pr_reward_form_key(species, form);
+                for (int i = 0; i < sl->n; i++) {
+                    const pr_item_evo *e = &pr_item_evos[sl->start + i];
+                    if (e->item == arg && m->level >= e->level
+                        && (e->pre_form_key < 0 || e->pre_form_key == key)
+                        && pr_reward_evo_conditions_ex(ctx, party_idx, e, fusion != 0)) {
+                        matching = e;
+                        for_fusion = fusion != 0;
+                        break;
                     }
                 }
             }
-
-            /* Check fusion species evolutions if not already can_evolve */
-            if (!can_evolve && m->fusion_species >= 0) {
-                const pr_reward_species *s = pr_reward_species_find(m->fusion_species);
-                if (s && (s->flags & 1) && !pr_reward_form_is_max(m->fusion_species, m->fusion_form)) {
-                    if (!m->pause_evolutions || pr_reward_pause_exempt(m->fusion_species)) {
-                        const pr_species_slice *sl = pr_reward_slice_find(pr_item_evo_species, pr_item_evo_species_count, m->fusion_species);
-                        if (sl) {
-                            const int key = pr_reward_form_key(m->fusion_species, m->fusion_form);
-                            for (int i = 0; i < sl->n; i++) {
-                                const pr_item_evo *e = &pr_item_evos[sl->start + i];
-                                if (e->item == arg && m->level >= e->level) {
-                                    if (e->pre_form_key < 0 || e->pre_form_key == key) {
-                                        if (pr_reward_evo_conditions(ctx, party_idx, e)) {
-                                            can_evolve = true;
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (!can_evolve) {
+            if (!matching) {
                 if (msg) *msg = NO_EFFECT_MSG;
                 return false;
             }
-
+            /* Applying the item queues EvolutionPhase; it does not evolve the mon.
+             * The caller owns phase execution, stat/move/dex updates and persistence. */
+            if (ctx->n_evolution_events >= PR_REWARD_MAX_EVOLUTION_EVENTS) {
+                ctx->evolution_events_overflow = true;
+                if (msg) *msg = NO_EFFECT_MSG;
+                return false;
+            }
+            pr_reward_evolution_event *event = &ctx->evolution_events[ctx->n_evolution_events++];
+            *event = (pr_reward_evolution_event){
+                .pokemon_id = m->id, .primary_species = m->species, .target_species = matching->species,
+                .item = matching->item, .pre_form_key = matching->pre_form_key,
+                .evo_form_key = matching->evo_form_key, .last_level = (int16_t)(m->level - 1),
+                .evolution_level = matching->level, .fusion = for_fusion,
+            };
             if (msg) *msg = NULL;
             return true;
         }

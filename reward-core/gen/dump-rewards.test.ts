@@ -391,7 +391,8 @@ it("dump rewards", async () => {
         listPool.push(...list);
       }
       const pre = e.preFormKey == null ? -1 : str(e.preFormKey);
-      evoRows.push(`{${e.speciesId}, ${e.item}, ${e.level}, ${pre}, ${cStart}, ${condRows.length - cStart}}`);
+      const evo = e.evoFormKey == null ? -1 : str(e.evoFormKey);
+      evoRows.push(`{${e.speciesId}, ${e.item}, ${e.level}, ${pre}, ${cStart}, ${condRows.length - cStart}, ${evo}}`);
     }
     if (evoRows.length > start) {
       evoSpecies.push(`{${id}, ${start}, ${evoRows.length - start}}`);

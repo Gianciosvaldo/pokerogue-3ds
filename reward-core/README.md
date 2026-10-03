@@ -4,6 +4,109 @@ Native C port of PokeRogue's player rewards: the reward options after a wave (po
 
 The API is [`include/pr/reward.h`](include/pr/reward.h). The run loop (game-core) fills a `pr_reward_ctx` from the run before each reward screen: the party as the rolls see it, the player's items, ball counts, unlocks, the arena. A few of its fields are other ports' answers, marked "caller" in the header: `canSetStatus` (battle-core), `canApplyAbility`, the learnable level moves and the level-move list the TM filter leaves out (learnsets, not ported yet), each attack move's types for item spawns. The diff test takes those from upstream, so reward-core is checked given correct inputs.
 
+## Task 89: evolution application state (draft; regression blocker)
+
+Checked against upstream `8555c08c823b856cbec4eb99ca84ea52a955836d` on
+2026-10-03, port base `cdac97d859cd39ef96200570287efb28b77bc287`, Node 22.23.3 /
+GCC 13.3.0. Task 89 is **not ready for merge**: the new bounded slice passes, but
+the existing application regression fails and has an unrecorded randomness gap.
+
+Evolution items now retain `pr_reward_ctx.evolution_events` rather than returning
+success without the upstream `EvolutionPhase` request. Events carry Pokemon ID,
+primary/target species, fusion status, item, pre/evolution form keys, evolution
+level and last level. Entries follow enqueue order (`unshiftNew` calls); the
+caller consumes them in reverse order, clears consumed entries, and resolves the
+Pokemon by ID. An eight-entry capacity reports overflow and refuses the ninth
+application without overwriting requests. Newly transported IVs, six stats,
+ability indices, shiny/variant/luck and fusion attributes remain unchanged at
+this application boundary. Regeneration adds the upstream evolution form key to
+the generated evolution rows; no generated file was hand-edited.
+
+Explicit item selection/application follows upstream validation even when
+`pauseEvolutions` is set; that flag filters offered item generation, which is
+unchanged. Fusion gender conditions read fusionGender during application.
+**Success means queued, not evolved.** game-core still needs to consume the
+request and perform EvolutionPhase/evolve, ability/form/stat/move updates,
+dex/starter bookkeeping and save/resume. Form-change item execution and DNA
+Splicers full-state lifecycle are not validated by this slice.
+
+The separate producer `tests/evolution-state.producer.test.ts` calls real
+EvolutionItemModifierType selection, modifier construction and `scene.addModifier`.
+Only the queue boundary is intercepted; any other queued phase or exception
+fails. Its C comparator is `build/evolutionstatetest`. Each record compares all
+63 named numeric party fields (including species/forms, fusion metadata, ability,
+IVs, stats, HP/status, EXP, nature, Tera type, friendship and move/PP data), the
+entire test inventory (Leftovers and Healing Charm, including ownership), global
+seeded RNG and every evolution request. Upstream battle RNG is asserted unchanged.
+Version/count/footer and record ordering are strict: missing data cannot pass.
+Custom Pokemon overrides, status-object counters, broader inventories and actual
+phase execution are outside this bounded application-stage contract.
+
+Four stones are exercised: Fire/Vulpix, Water/Shellder, Thunder/Pikachu and
+Dawn/Snorunt, both primary and fusion evolutions, including gender rejection.
+
+| Seed | Cases / identical | Mismatches | Accepted (Fire/Water/Thunder/Dawn) | Rejected | Fusion requests |
+|---|---|---|---|---|---|
+| 777 | 2000 / 2000 | 0 | 227/259/255/85 | 273/241/245/415 | 266 |
+| 9001 | 2000 / 2000 | 0 | 248/267/260/79 | 252/233/240/421 | 313 |
+| 4242 | 2000 / 2000 | 0 | 256/247/230/80 | 244/253/270/420 | 276 |
+| 31337 | 2000 / 2000 | 0 | 255/258/272/66 | 245/242/228/434 | 287 |
+
+Total 8000/8000 identical, zero skipped/thrown. Every stone succeeds and rejects
+on every seed. Unchanged production reward_apply.c replayed through the new
+transport/comparator fails 847/868/831/880 cases respectively; this baseline does
+not claim that the old comparator checked these fields. Species and ability
+mutations at the C application boundary each yield 2000/2000 mismatches (exit 1).
+Deleting the completion footer yields exit 2. Queue capacity/overflow checks pass.
+
+Existing checks, generated once and replayed on unchanged main and changed C:
+seed 99 rewards, 4000 cases: 3950 pass, 0 fail, 50 unported (8052 screens);
+seed 99 victory, 4000/4000 pass (2055 items, 2459 screens);
+seed 99 apply, **3865 pass / 135 fail** on both, byte-identical replay output.
+The stronger victory seed 5 / 20000 run passes (9984 items, 12402 screens).
+The combined `all` script stops at apply with exit 1, so its subsequent memory
+suite did not run. No existing producer/comparator/seed/count/coverage was edited.
+`make -s -C game-core test` also exits 0 with the standard 200-run digest pair
+`030a9394`/`030a9394`. Its existing mystery comparator's advertised differential
+is not credited here; the Task 82 ignored-money defect remains. The expanded
+1000-run save gate remains blocked by Task 87 and was not rerun in Task 89.
+
+The first printed apply failure is case 21, DNA Splicers: HP 122 versus upstream
+109. There are real C fusion HP/stat gaps, not an excuse to waive those failures.
+Separately, PlayerPokemon.fuse calls getRandomStatus; status-effect.ts uses
+randIntRange -> Math.random when both statuses are non-volatile. The existing
+apply trace does not record that draw. Its case 21 has primary HP/status 65/4
+and secondary 152/3. The additive `tests/fusion-randomness.probe.test.ts` calls the
+real helper with identical statuses and seeded state: Math.random=0 produces
+status 3, Math.random=0.999999 produces status 4, and seeded RNG is unchanged
+(one test passed). This is a diagnostic, not a fusion differential pass.
+HANDOFF rule 2 requires stopping and reporting the defective check. Implementation
+stopped here. A separate reviewed fusion harness must record unseeded draws and
+compare the complete state/queue before that family can be completed. The old
+check stays intact; these failures remain outstanding.
+
+Exact commands (from port unless stated otherwise):
+
+```sh
+PATH=/root/.npm/_npx/52027bd8fc0022aa/node_modules/node/bin:$PATH sh reward-core/tools/redump.sh /tmp/pokerogue-upstream
+make -s -C reward-core
+cp reward-core/tests/evolution-state.producer.test.ts /tmp/pokerogue-upstream/test/tests/zz-dump/
+# In /tmp/pokerogue-upstream, for each seed 777, 9001, 4242, 31337:
+EVO_N=2000 EVO_SEED=<seed> EVO_OUT=/tmp/task89-evo-<seed>.txt /root/.npm/_npx/52027bd8fc0022aa/node_modules/node/bin/node node_modules/vitest/vitest.mjs run test/tests/zz-dump/evolution-state.producer.test.ts
+# Back in port:
+reward-core/build/evolutionstatetest /tmp/task89-evo-<seed>.txt
+reward-core/build/evolutionstatetest /tmp/task89-evo-777.txt --mutate-species
+reward-core/build/evolutionstatetest /tmp/task89-evo-777.txt --mutate-ability
+PATH=/root/.npm/_npx/52027bd8fc0022aa/node_modules/node/bin:$PATH BUILD=/tmp/task89-regression sh reward-core/tools/difftest.sh /tmp/pokerogue-upstream 4000 99 all
+PATH=/root/.npm/_npx/52027bd8fc0022aa/node_modules/node/bin:$PATH BUILD=/tmp/task89-victory5 sh reward-core/tools/difftest.sh /tmp/pokerogue-upstream 20000 5 victory
+# In external upstream after copying fusion-randomness.probe.test.ts there:
+/root/.npm/_npx/52027bd8fc0022aa/node_modules/node/bin/node node_modules/vitest/vitest.mjs run test/tests/zz-dump/fusion-randomness.probe.test.ts
+```
+
+Each evolution producer reports one test passed. No 3DS/emulator result or full
+run evolution parity is claimed. Node 22 follows HANDOFF; upstream's declared
+Node >=24.9.0/runtime conflict remains as documented by Task 88.
+
 ## What works, and how it was checked
 | Piece | Upstream | State |
 |---|---|---|
