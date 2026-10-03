@@ -80,6 +80,7 @@ bool pr_switch_out_condition(pr_battle *bt, bool self_switch, int switch_type, c
 
     if (!self_switch) {
         if (!target) { pr_note_unported(bt, PR_FEAT_MOVE_CONDITION); return true; }
+        if (pr_is_max(target)) return false;
         if (pr_move_hits_substitute(bt, move, user, target)) return false;
         /* Roar and Whirlwind in a trainer battle whose targeted side has one Pokemon left */
         if (has_force_switch_attr(move) && bt->battle_type == BATTLE_TYPE_TRAINER) {

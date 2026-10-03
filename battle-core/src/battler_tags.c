@@ -1471,6 +1471,7 @@ void pr_grudge_lapse(pr_battle *bt, pr_engine *e, pr_pokemon *fainted, pr_pokemo
 bool pr_add_tag(pr_battle *bt, pr_engine *e, pr_pokemon *p, int type, int turn_count, int source_move,
                 int64_t source_id)
 {
+    if (type == BATTLER_TAG_TYPE_FLINCHED && pr_is_max(p)) return false;
     if (!pr_tag_type_ported(type)) {
         note_tag(bt, type);
         return false;

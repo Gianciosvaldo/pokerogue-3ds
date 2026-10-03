@@ -334,6 +334,11 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             p->trainer_slot = field(l, "tslot") ? (int8_t)inum(l, "tslot") : 0;
             p->has_trainer = p->trainer_slot != 0;             /* EnemyPokemon.hasTrainer() */
             p->turn_move_effectiveness = -1;
+            if (field(l, "qmega")) p->queued_mega = inum(l, "qmega") != 0;
+            if (field(l, "qdmax")) p->queued_dynamax = inum(l, "qdmax") != 0;
+            if (field(l, "dmax")) p->is_dynamaxed = inum(l, "dmax") != 0;
+            if (field(l, "dmleft")) p->dynamax_turns_left = (uint8_t)inum(l, "dmleft");
+            if (field(l, "dmlv")) p->dynamax_level = (uint8_t)inum(l, "dmlv");
         } else if (!strncmp(l, "TURN ", 5)) {
             pr_pokemon *p = mon_for(cs, need(l, "b"), NULL);
             p->acted = inum(l, "acted") != 0;

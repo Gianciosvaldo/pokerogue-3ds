@@ -266,6 +266,13 @@ typedef struct pr_pokemon {
     bool wave_endured;                 /* waveData.endured (EnemyEndureChanceModifier) */
     /* battleData */
     bool has_eaten_berry;              /* battleData.hasEatenBerry (Belch) */
+    /* Task 53: Mega Evolution & Dynamax */
+    bool queued_mega;
+    bool queued_dynamax;
+    bool is_dynamaxed;
+    uint8_t dynamax_turns_left;
+    uint8_t dynamax_level;
+    uint8_t pre_dynamax_form;
 } pr_pokemon;
 
 #define PR_MAX_PARTY 6
@@ -613,6 +620,10 @@ bool pr_are_allies(int a, int b);
 const pr_species *pr_pokemon_species(const pr_pokemon *p);
 const pr_form *pr_pokemon_form(const pr_pokemon *p);
 const pr_species *pr_pokemon_fusion_species(const pr_pokemon *p);
+bool pr_is_mega(const pr_pokemon *p);
+bool pr_is_max(const pr_pokemon *p);
+void pr_mega_evolve(pr_battle *bt, pr_pokemon *p);
+void pr_dynamax(pr_battle *bt, pr_pokemon *p);
 const pr_form *pr_pokemon_fusion_form(const pr_pokemon *p);
 /* getBattlerIndex(): the Pokemon's slot in bt->field, -1 when off the field */
 int pr_battler_index(const pr_battle *bt, const pr_pokemon *p);
