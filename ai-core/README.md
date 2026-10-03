@@ -46,6 +46,52 @@ To check the test itself, 78 one-line bugs were planted in ai-core one at a time
 - **Boss enemies** (boss segments are unported in battle-core) and **Transform** (`summonData.moveset`) aren't in the test.
 - **Messages at command time.** What a condition queues on `bt->engine` (above) is what upstream queues, but `pr_run_turn` starts the engine afresh, so the game doesn't show them yet.
 
+### Stuff Cheeks restriction
+
+The move selection restriction recognizes `PR_MOD_BERRY` anywhere on the user's side,
+including a teammate's berry. Upstream's restriction does not filter the modifier's
+owner, berry type or stack count. Unknown held-item subclasses still report
+`PR_AI_FEAT_RESTRICTION` when no known berry resolves the check.
+
+`make -C ai-core test-berry` runs focused host checks derived from upstream
+`8555c08`, `src/data/moves/move.ts` (Stuff Cheeks) and `BattleScene.findModifiers`.
+For a focused differential, copy the additive `tests/berry.producer.test.ts` into
+the prepared upstream checkout's `test/tests/zz-dump/`, then run:
+
+```sh
+cd <upstream>
+BERRY_OUT=/tmp/ai-berry.txt npx vitest run test/tests/zz-dump/berry.producer.test.ts
+cd <port>
+make -C ai-core build/berrytest
+ai-core/build/berrytest /tmp/ai-berry.txt
+```
+
+The producer invokes upstream's actual `checkRestrictions` on both sides for all
+11 berry types, three owners (user, teammate, unowned), zero/nonzero stack counts,
+opposite-side berries, no modifier and a known non-berry held item. This focused
+check covers selection availability only; it does not validate berry consumption,
+held-item scores, doubles or a full enemy command with modifiers.
+
+Checked on 2026-10-03: the focused host test printed **404 cases, 404 identical,
+0 mismatches** (including unknown-subclass handling); the upstream differential
+printed **268 cases, 268 identical, 0 mismatches**. Replaying those same 268
+upstream cases with the original AI code printed **132 mismatches**.
+
+The existing 5,000-case AI differential was also rerun without modifying its
+producer or comparator. It is **not clean in this environment**:
+
+| Seed | Covered | Identical | Mismatches | Not covered |
+|---|---|---|---|---|
+| 777 | 4,938 | 4,936 | 2 | 62 |
+| 9001 | 4,946 | 4,937 | 9 | 54 |
+| 4242 | 4,942 | 4,933 | 9 | 58 |
+| 31337 | 4,936 | 4,924 | 12 | 64 |
+
+The original AI code replayed the same records with identical failure output
+and counts on all four seeds. Printed first differences concern trainer matchup
+score floating-point values. This bounded restriction fix does not resolve those
+pre-existing failures; full AI differential validation remains blocked.
+
 ## What ai-core carries that belongs in battle-core
 
 These are local copies or shims, kept in step with battle-core by hand until it exports them:
@@ -61,3 +107,4 @@ These are local copies or shims, kept in step with battle-core by hand until it 
 - `include/pr/ai.h`: the API. `include/pr/ai_data.h` and `gen/out/ai_data.c`: what each move attribute's scores read (owner classes, levels, stats, tag scores, restrictions...), dumped from upstream's live objects by `gen/dump-ai.test.ts` (`tools/redump.sh <upstream>`). `pr_ai_tables_match()` checks the dump against battle-core's move tables; the scores report `PR_AI_FEAT_TABLES` if they drift apart.
 - `src/ai.c`: `EnemyCommandPhase`, `getNextMove`, `getNextTargets`, matchup and switch-in scores, trapping, move selection rules. `src/ai_score.c`: the benefit scores. `src/ai_damage.c`: the flagged damage path.
 - `tests/ai.producer.test.ts`, `tests/aitest.c`, `tools/difftest.sh`: the diff test.
+

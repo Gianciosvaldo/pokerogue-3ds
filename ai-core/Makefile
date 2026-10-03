@@ -25,9 +25,16 @@ $(BUILD)/libai.a: $(OBJS)
 $(BUILD)/aitest: tests/aitest.c $(BUILD)/libai.a $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
+$(BUILD)/berrytest: tests/berrytest.c $(BUILD)/libai.a $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+test-berry: $(BUILD)/berrytest
+	$(BUILD)/berrytest
+
 clean:
 	rm -rf $(BUILD)
 
 FORCE:
-.PHONY: all clean FORCE
+.PHONY: all clean FORCE test-berry
 -include $(OBJS:.o=.d)
+
