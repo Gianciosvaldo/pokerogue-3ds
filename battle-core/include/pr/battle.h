@@ -187,12 +187,22 @@ typedef struct pr_attack_record {
 } pr_attack_record;
 #define PR_MAX_ATTACKS_RECEIVED 8  /* newest entries kept; older ones read as PR_FEAT_MOVE_HISTORY */
 
+/* Battle identity subset of summonData.illusion. Presentation metadata (nickname,
+ * sprite/ball/shiny variants) stays with the application, not these type reads. */
+typedef struct pr_illusion {
+    uint16_t species, fusion_species;
+    uint8_t form, fusion_form;
+    int8_t gender;
+    bool active;
+} pr_illusion;
+
 typedef struct pr_pokemon {
     uint32_t id;               /* Pokemon.id: what held items point at */
     uint16_t species;
     uint8_t form;
     uint16_t fusion_species;   /* 0 = null (not fused) */
     uint8_t fusion_form;
+    pr_illusion illusion;
     int8_t fusion_ability_index; /* 0, 1, 2 for ability1, ability2, ability_hidden; -1 = none */
     uint8_t level;
     uint8_t ivs[6];
@@ -633,6 +643,8 @@ void pr_calculate_stats(pr_battle *bt, pr_pokemon *p);
 void pr_recalculate_stats(pr_battle *bt, pr_pokemon *p);
 int pr_get_tera_type(const pr_pokemon *p);
 /* p->passive from hasPassive() and getPassiveAbility() */
+/* Enabled passives include Daily custom ability NONE, whose activation phase still queues. */
+bool pr_has_passive(pr_battle *bt, const pr_pokemon *p);
 void pr_update_passive(pr_battle *bt, pr_pokemon *p);
 /* damageAndUpdate(damage, {result: INDIRECT, ignoreSegments: true, ignoreFaintPhase: true}) with no
  * source: the HP loss happens at once, as upstream does it in the middle of a damage calculation */
@@ -642,10 +654,18 @@ double pr_get_weight(pr_battle *bt, const pr_pokemon *p);
 int pr_get_effective_weather_for_move(pr_battle *bt, const pr_pokemon *user);
 double js_round(double x);
 /* getTypes(): flags mirror upstream's options object. */
-enum { PR_TYPES_NO_TERA = 1, PR_TYPES_ORIGINAL_IF_STELLAR = 2, PR_TYPES_BYPASS_SUMMON = 4, PR_TYPES_IGNORE_THIRD = 8 };
+enum { PR_TYPES_NO_TERA = 1, PR_TYPES_ORIGINAL_IF_STELLAR = 2, PR_TYPES_BYPASS_SUMMON = 4, PR_TYPES_IGNORE_THIRD = 8, PR_TYPES_USE_ILLUSION = 16 };
 /* at most PR_MAX_TYPES entries: the summon types, then the added type */
 #define PR_MAX_TYPES (PR_MAX_SUMMON_TYPES + 1)
 int pr_get_types(const pr_pokemon *p, int8_t out[PR_MAX_TYPES], unsigned flags);
+/* Dormant/manual helper support only: pinned upstream does not register Illusion's
+ * ability attrs. Never call these automatically on summon or damage. */
+void pr_set_illusion(pr_pokemon *p, const pr_pokemon *source);
+void pr_set_illusion_species(pr_pokemon *p, uint16_t species, uint8_t form);
+bool pr_break_illusion(pr_pokemon *p);
+const pr_form *pr_apparent_form(const pr_pokemon *p, bool use_illusion);
+const pr_form *pr_apparent_fusion_form(const pr_pokemon *p, bool use_illusion);
+int pr_apparent_gender(const pr_pokemon *p, bool use_illusion);
 /* summonData.types = types (n of them); false, reported, past PR_MAX_SUMMON_TYPES */
 bool pr_set_summon_types(pr_battle *bt, pr_pokemon *p, const int8_t *types, int n);
 bool pr_is_of_type(const pr_pokemon *p, int type);

@@ -2,39 +2,49 @@
 
 Status 2026-09-28: **damage path with abilities and passives, move effects, held items, battler and arena tags, and the turn history verified against upstream** (singles); the turn engine has started and replays about 96% of the plain random test turns exactly, with stat changes, statuses, on-hit abilities, two-turn moves, 87 of the 95 battler tag types (all but Helping Hand, Follow Me's, Imprison, Quick Claw's, Commander's, Cramorant's two and the mystery encounters' one), recoil, drain, recharge, pre-move texts, the healing phase, weather and terrain over a turn, the damaging traps, Leech Seed, Substitute, the protections and Endure, arena tags being laid, stacked, cleared and swapped, the weather and terrain moves with about 25 smaller move effects, the moves that call other moves (Metronome, Mirror Move, Copycat, Sleep Talk, Assist, Nature Power, Instruct), Focus Punch-style header moves, Future Sight and Wish, and switching (the moves that switch a Pokemon out, the switch command, the party prompt as a pause the caller answers, and the switch itself with entry hazards, entry abilities, Baton Pass and Shed Tail passing their effects, Wimp Out and Emergency Exit) ported (see "Turn engine"). Every damaging move in the random test is now covered except 6 cases in about 110,000. Upstream is `pagefaultgames/pokerogue` @ `8555c08`.
 
-## Task 67: Illusion target blocker (2026-10-03)
+## Task 67: Dormant Illusion identity/type helpers (2026-10-03)
 
-Task 67 is **blocked**, not complete. At the named upstream target
-`8555c08c823b856cbec4eb99ca84ea52a955836d`, `src/data/abilities/init-abilities.ts`
-explicitly marks Illusion `.unimplemented()`. All five effect registrations
-(pre-summon, ability-loss break, post-defend break, fusion restriction and
-post-battle reset) are commented out. The remaining helper classes in
-`src/data/abilities/ab-attrs.ts` are not registered to that ability. Its dormant
-pre-summon `canApply` also requires an already-present illusion. These helpers
-are not evidence of an enabled battle mechanic.
+This PR proposes a bounded, reviewable replacement for the impossible natural-ability gate at upstream `8555c08c823b856cbec4eb99ca84ea52a955836d`. Illusion remains `.unimplemented()` with its five effect registrations commented out; the unchanged upstream suite is 9 TODO tests, 0 executed. Natural pre-summon selection, ability-loss/post-defend breaks and full battle presentation remain unavailable validation. This slice does not enable those registrations or claim complete Task 67 parity.
 
-The unchanged upstream `test/tests/abilities/illusion.test.ts` is a
-`describe.todo` suite. Actual command in the external upstream checkout:
+The C port now stores a separate apparent identity snapshot, exposes identity/fusion-form/gender helpers, accepts `PR_TYPES_USE_ILLUSION` independently of the other four type flags, clears the snapshot with summon reset, and snapshots apparent species/form into message arguments. Real species, stats, ability and damage typing stay separate. The type fixtures also found and fixed fusion Terapagos/Ogerpon/Shedinja Tera-type selection. Nicknames, fused display names, fusion gender, shiny variants, balls, sprites and natural dispatch are outside this slice.
+
+The additive producer calls actual upstream `setIllusion(Pokemon)`, `setIllusion(PokemonSpecies)`, `breakIllusion`, `resetSummonData`, identity getters and all 32 type-flag combinations. It stubs only asset/UI methods and on-field presentation; it does not register disabled effects or rewrite established tests. Every case checks four snapshots, source mutation independence, break idempotence, unchanged real identity/stats/ability and unchanged global RNG. Messages are compared only for non-fused apparent identities without nicknames; identity/types include fusion cases.
+
+| Seed | Cases / identical / mismatch | Pokemon / species setters | Apparent fusion | Changed non-Tera typing | Break / reset cleanup |
+| --- | --- | --- | --- | --- | --- |
+| 777 | 2000 / 2000 / 0 | 1000 / 1000 | 511 | 1989 | 2000 / 2000 |
+| 9001 | 2000 / 2000 / 0 | 1000 / 1000 | 543 | 1985 | 2000 / 2000 |
+| 4242 | 2000 / 2000 / 0 | 1000 / 1000 | 532 | 1991 | 2000 / 2000 |
+| 31337 | 2000 / 2000 / 0 | 1000 / 1000 | 508 | 1988 | 2000 / 2000 |
+
+Total: 8000 comparisons, 1,024,000 type reads, 0 thrown/skipped cases, **0 natural ability dispatches**. A deliberate identity mutation fails 1998/2000 cases (exit 1); a truncated trace is rejected (exit 2). Reset cleanup calls the helper used by switches; it is not a natural switch-disguise differential.
+
+Reproduce with Node 22.23.3 / Vitest 4.1.11 and GCC 13.3:
 
 ```sh
-PATH=/root/.npm/_npx/52027bd8fc0022aa/node_modules/node/bin:$PATH /root/.npm/_npx/52027bd8fc0022aa/node_modules/node/bin/node node_modules/vitest/vitest.mjs run test/tests/abilities/illusion.test.ts
+# In the external pinned checkout, after copying ONLY the new producer into test/tests/zz-dump/:
+ILLUSION_N=2000 ILLUSION_SEED=777 ILLUSION_OUT=/abs/illusion-777.txt \
+  node node_modules/vitest/vitest.mjs run test/tests/zz-dump/illusion.producer.test.ts
+# Repeat for 9001, 4242 and 31337; then in this repo:
+make -C battle-core
+TURNTEST_LOCALES=/abs/upstream/locales/en battle-core/build/illusiontest /abs/illusion-777.txt
+TURNTEST_LOCALES=/abs/upstream/locales/en battle-core/build/illusiontest /abs/illusion-777.txt --mutate-identity
 ```
 
-Printed result: **1 test file skipped, 9 tests TODO, 0 executed** (exit 0).
-This is unavailable validation, not nine passing tests. Local
-`make -s -C battle-core` completed with exit 0; a build does not validate Illusion.
-No C code, generated data, existing producer, comparator or coverage exclusion
-was changed. No new 2,000-case/four-seed Illusion differential or battle baseline
-regression was run in this diagnostic task.
+This PR stacks on Task 90's separate baseline repair. With that prerequisite, unchanged B replays at 2000 / seed 777 pass: plain **1940/1940**, rich **1826/1826**, switch **1885/1885**, summon **1856/1856**, all with 0 mismatches and no coverage loss. The proposed Task 68 follow-up must use explicit loaded/manual identity fixtures and preserve existing natural-ability exclusions. It is delegable only after this scope is reviewed and both PRs merge. Hardware/emulator play and full natural Illusion parity remain unvalidated.
 
-The Task 67 gate requires nonzero disguise, break and switch cases against
-upstream's actual dispatch. The pinned ability cannot supply those cases.
-Re-enabling its attributes in the producer or calling dormant helpers directly
-would compare a different contract. A separately reviewed decision must either
-revise Task 67 to explicit dormant-helper/loaded-state support at this pin, or
-select an upstream target with an enabled Illusion implementation and review the
-pin migration. Task 68 stays blocked; no Illusion exclusion is removed and no
-complete Illusion parity is claimed.
+## Battle regression repair (Task 90, 2026-10-03)
+
+The unchanged whole-turn producer at upstream `8555c08c823b856cbec4eb99ca84ea52a955836d` exposed failures already on main. The C repair removes form-based Max immunities absent from that pin, evaluates form callbacks before displaying an ability, and queues enabled Daily passives even when their ability is `NONE`. No established producer, comparator, exclusion or generated table changed.
+
+| `TURN_N=2000 TURN_SEED=777` mode | Before covered / pass / fail | After covered / pass / fail | After uncovered |
+| --- | --- | --- | --- |
+| Plain | 1940 / 1939 / 1 | 1940 / 1940 / 0 | 60 |
+| `TURN_RICH=1` | 1826 / 1819 / 7 | 1826 / 1826 / 0 | 174 |
+| `TURN_SWITCH=1` | 1885 / 1883 / 2 | 1885 / 1885 / 0 | 115 |
+| `TURN_SUMMON=1` | 1855 / 1825 / 30 | 1856 / 1856 / 0 | 144 |
+
+Run `turntest.producer.test.ts` using each flag above with `TURN_OUT=/abs/turn-MODE.txt`, then `TURNTEST_LOCALES=/abs/upstream/locales/en battle-core/build/turntest /abs/turn-MODE.txt`. Node 22.23.3 / Vitest 4.1.11 and GCC 13.3 were used. Covered message comparisons are all identical. Existing uncovered cases remain excluded by the unchanged comparator. These named singles regressions do not establish full battle parity; hardware/emulator play was not run.
 
 ## What works, and how it was checked
 | Piece | State | Evidence |

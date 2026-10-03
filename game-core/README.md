@@ -170,3 +170,61 @@ remains a draft until the expanded gate is resolved. The focused comparison
 covers modifier identity and item loss, not complete move/turn/reward parity.
 The legacy mystery test's reported 76 choices compare no upstream result fields
 and are smoke coverage only; its producer/comparison was not changed here.
+
+## Task 87: resume state fixes; expanded gate still blocked
+
+At main `58030d63ef3090b7d69865b66431bb4e8e015656`, reload omitted mystery
+history and the active mystery node, replayed trainer summon effects (Intimidate
+lowered Attack twice), and reset battle RNG already consumed by Forewarn.
+The resume path now restores field pointers without executing battle-start effects,
+serializes mystery history/node fields, and preserves the battle RNG and live flag.
+The normal new-encounter path is unchanged. Historical saves missing these fields
+load with empty history, no active mystery node and an uninitialized battle RNG;
+missing historical state cannot be recovered or claimed faithful.
+
+New additive `tests/resume_test.c` uses the existing, unchanged gcplay chooser.
+It checks empty/full history, encounter selection and RNG, trainer stat stages,
+field ownership and invalid history. Four regression seeds match after loading:
+
+| Seed | Final wave | Turns | Score | Saved/ordinary |
+|---|---|---|---|---|
+| soak00000235 | 42 | 118 | 1553 | identical |
+| soak00000431 | 45 | 121 | 1451 | identical |
+| soak00000558 | 14 | 44 | 281 | identical |
+| soak00000849 | 14 | 39 | 316 | identical |
+
+Seed 849 exposed another adapter bug: a revived lead sent out through game-core's
+own replacement prompt retained `switch_out_status=true`. It was displayed as
+active but battle-core correctly treated it as leaving the field, producing
+empty turns indefinitely. That send-out now clears the flag, just as the regular
+summon path does. The established soak driver is unchanged, including its
+200,000-step limit, chooser, seeds and digest. Its limit-exhaustion reporting is
+still unreliable in general; an additive completion check therefore independently
+requires an observed GAME_OVER/CLEAR screen for every seed 0..999, with and without
+saving. It fails on exhausted budgets or rejected chooser actions.
+
+Exact commands from the repository root:
+
+```sh
+make -C game-core clean
+make -C game-core test
+game-core/build/gcplay --auto 1000 --jobs 8
+game-core/build/gcplay --auto 1000 --jobs 8 --save-test
+```
+
+The completion check observes 1,000/1,000 terminal runs in each mode, maximum
+450/472 steps, and the resume regression reports **36,471 checks passed**.
+The 1,000-run legacy checks both report 1,000 ended, zero cleared/stuck/crashed/
+timed out, **57,502 turns**, digest **`0cba4e49`**.
+
+| Historical 1,000-run build | Ordinary digest / turns | Saved digest / turns | Equality |
+|---|---|---|---|
+| main 58030d63 | e94dc9ac / 257987 | 42ce52f4 / 257964 | FAIL |
+| initial Task 87 slice | e94dc9ac / 257987 | 6917434c / 257973 | FAIL |
+| Task 87, replacement flag corrected | 0cba4e49 / 57502 | 0cba4e49 / 57502 | PASS |
+
+The historical failures included the silently exhausted seed 849 and cannot be
+credited as completed runs. No existing producer/comparator was changed. The
+mystery test's printed “76 differential cases” still represents smoke coverage,
+not upstream result comparison. These checks validate deterministic host resume;
+no new upstream differential or hardware/emulator result is claimed.
