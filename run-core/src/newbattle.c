@@ -22,6 +22,20 @@ static int seed_item(pr_rng *rng, int n)
     return n == 1 ? 0 : pr_rng_integer_in_range(rng, 0, n - 1);
 }
 
+static int classic_rival_type(int mode, int wave)
+{
+    if (mode != GAME_MODES_CLASSIC) return -1;
+    switch (wave) {
+    case CLASSIC_FIXED_BOSS_WAVES_RIVAL_1: return TRAINER_TYPE_RIVAL;
+    case CLASSIC_FIXED_BOSS_WAVES_RIVAL_2: return TRAINER_TYPE_RIVAL_2;
+    case CLASSIC_FIXED_BOSS_WAVES_RIVAL_3: return TRAINER_TYPE_RIVAL_3;
+    case CLASSIC_FIXED_BOSS_WAVES_RIVAL_4: return TRAINER_TYPE_RIVAL_4;
+    case CLASSIC_FIXED_BOSS_WAVES_RIVAL_5: return TRAINER_TYPE_RIVAL_5;
+    case CLASSIC_FIXED_BOSS_WAVES_RIVAL_6: return TRAINER_TYPE_RIVAL_6;
+    default: return -1;
+    }
+}
+
 /* getRandomLocaleEntry(key): randSeedItem(Object.keys(i18next.t(key, { returnObjects: true }))) */
 static int locale_entry(pr_run *run, int count)
 {
@@ -53,47 +67,52 @@ int pr_run_new_battle(pr_run *run, int wave, const pr_new_battle_ctx *ctx, pr_ne
     out->trainer_type = out->variant = out->template_index = out->name = out->partner_name = -1;
     /* this.resetSeed(waveIndex) */
     pr_run_reset_seed(run, wave);
-    /* fixed battles build their trainer from config closures, not ported */
-    if (pr_run_is_fixed_battle(run, wave)) {
+    const int fixed_rival = classic_rival_type(run->mode, wave);
+    /* Task 48 closes the six Classic rival fixed battles. Other fixed battle closures remain explicit. */
+    if (pr_run_is_fixed_battle(run, wave) && fixed_rival < 0) {
         run->unported |= PR_RUN_UNPORTED_FIXED_BATTLE;
         return -1;
     }
-    /* handleNonFixedBattle: battleType = !gameMode.hasTrainers ? WILD : isWaveTrainer(waveIndex) ? TRAINER : WILD */
     bool has_trainers = run->mode == GAME_MODES_CLASSIC || run->mode == GAME_MODES_CHALLENGE || run->mode == GAME_MODES_DAILY;
-    out->battle_type = has_trainers && pr_run_is_wave_trainer(run, wave, ctx->trainer_chance) ? BATTLE_TYPE_TRAINER
-                                                                                             : BATTLE_TYPE_WILD;
-    /* isWaveMysteryEncounter(battleType, waveIndex) → MYSTERY_ENCOUNTER, spawn chance back to its base */
-    if (pr_run_is_wave_mystery_encounter(run, out->battle_type == BATTLE_TYPE_WILD, wave, &ctx->me)) {
+    out->battle_type = fixed_rival >= 0 ? BATTLE_TYPE_TRAINER
+        : has_trainers && pr_run_is_wave_trainer(run, wave, ctx->trainer_chance) ? BATTLE_TYPE_TRAINER
+                                                                                : BATTLE_TYPE_WILD;
+    if (fixed_rival < 0 && pr_run_is_wave_mystery_encounter(run, out->battle_type == BATTLE_TYPE_WILD, wave, &ctx->me)) {
         out->battle_type = BATTLE_TYPE_MYSTERY_ENCOUNTER;
         out->me_spawn_chance_reset = true;
     }
     const pr_trainer_info *t = NULL;
     double chance = pr_run_get_double_battle_chance(wave, ctx->n_lures, ctx->n_double_chance_abilities);
     if (out->battle_type == BATTLE_TYPE_TRAINER) {
-        /* generateNewBattleTrainer: arena.randomTrainerType(waveIndex); doubleOnly → double;
-         * !hasDouble || (trainerTypeDouble && not TATE/LIZA) → not; else randSeedInt(getDoubleBattleChance) === 0;
-         * variant = double ? DOUBLE : (randSeedInt(2) ? FEMALE : DEFAULT) */
-        out->trainer_type = pr_run_random_trainer_type(run, ctx->biome, wave, false);
-        t = trainer_info(out->trainer_type);
-        if (!t || !t->n_templates) { run->unported |= PR_RUN_UNPORTED_TRAINER; return -1; }
-        bool dbl;
-        if (t->double_only) dbl = true;
-        else if (!t->has_double || (t->has_type_double && out->trainer_type != TRAINER_TYPE_TATE
-                                    && out->trainer_type != TRAINER_TYPE_LIZA))
-            dbl = false;
-        else dbl = pr_rng_seed_int(&run->rng, (int32_t)chance, 0) == 0;
-        out->variant = dbl ? TRAINER_VARIANT_DOUBLE : pr_rng_seed_int(&run->rng, 2, 0) ? TRAINER_VARIANT_FEMALE
-                                                                                     : TRAINER_VARIANT_DEFAULT;
-        /* new Trainer(type, variant): partyTemplateIndex = Math.min(randSeedItem(indexes), length - 1);
-         * a name from the class (".male"/".female" when the class has them), and for a double
-         * trainer that isn't doubleOnly a partner's name (".female" when the class has it) */
-        out->template_index = seed_item(&run->rng, t->n_templates);
-        if (t->names >= 0) {
-            int count = t->names_male >= 0 ? (out->variant == TRAINER_VARIANT_FEMALE ? t->names_female : t->names_male)
-                                           : t->names;
-            out->name = locale_entry(run, count);
-            if (out->variant == TRAINER_VARIANT_DOUBLE && !t->double_only)
-                out->partner_name = locale_entry(run, t->names_female >= 0 ? t->names_female : t->names);
+        if (fixed_rival >= 0) {
+            /* Fixed rival BattleConfig constructs the requested rival type directly. It consumes no
+             * trainer-type/template/name RNG; every rival has one static party template. */
+            out->trainer_type = fixed_rival;
+            t = trainer_info(out->trainer_type);
+            if (!t || !t->n_templates) { run->unported |= PR_RUN_UNPORTED_TRAINER; return -1; }
+            out->variant = TRAINER_VARIANT_DEFAULT; /* visual gender is caller/UI state, not party generation */
+            out->template_index = 0;
+        } else {
+            /* generateNewBattleTrainer */
+            out->trainer_type = pr_run_random_trainer_type(run, ctx->biome, wave, false);
+            t = trainer_info(out->trainer_type);
+            if (!t || !t->n_templates) { run->unported |= PR_RUN_UNPORTED_TRAINER; return -1; }
+            bool dbl;
+            if (t->double_only) dbl = true;
+            else if (!t->has_double || (t->has_type_double && out->trainer_type != TRAINER_TYPE_TATE
+                                        && out->trainer_type != TRAINER_TYPE_LIZA))
+                dbl = false;
+            else dbl = pr_rng_seed_int(&run->rng, (int32_t)chance, 0) == 0;
+            out->variant = dbl ? TRAINER_VARIANT_DOUBLE : pr_rng_seed_int(&run->rng, 2, 0) ? TRAINER_VARIANT_FEMALE
+                                                                                         : TRAINER_VARIANT_DEFAULT;
+            out->template_index = seed_item(&run->rng, t->n_templates);
+            if (t->names >= 0) {
+                int count = t->names_male >= 0 ? (out->variant == TRAINER_VARIANT_FEMALE ? t->names_female : t->names_male)
+                                               : t->names;
+                out->name = locale_entry(run, count);
+                if (out->variant == TRAINER_VARIANT_DOUBLE && !t->double_only)
+                    out->partner_name = locale_entry(run, t->names_female >= 0 ? t->names_female : t->names);
+            }
         }
     }
     /* checkIsDouble: never on a final wave, an endless boss wave or a mystery encounter;
