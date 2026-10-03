@@ -206,3 +206,566 @@ void gc_mystery_increment_miss(gc_run *run)
         if (run->me.spawn_chance > 256) run->me.spawn_chance = 256;
     }
 }
+
+static bool bug_in_party(const gc_run *r)
+{
+    for (int i = 0; i < r->n_party; i++) {
+        int8_t ty[PR_MAX_TYPES];
+        int nt = pr_get_types(&r->party[i].b, ty, PR_TYPES_NO_TERA);
+        for (int k = 0; k < nt; k++) if (ty[k] == POKEMON_TYPE_BUG) return true;
+    }
+    return false;
+}
+
+void gc_mystery_setup_screen(gc_run *run)
+{
+    gc_screen *s = &run->screen;
+    const int type = s->mystery_type;
+    int n = 2;
+    switch (type) {
+    case GC_ME_MYSTERIOUS_CHALLENGERS: case GC_ME_FIGHT_OR_FLIGHT: case GC_ME_SLUMBERING_SNORLAX:
+    case GC_ME_SHADY_VITAMIN_DEALER: case GC_ME_LOST_AT_SEA: case GC_ME_FIERY_FALLOUT:
+    case GC_ME_ABSOLUTE_AVARICE: case GC_ME_CLOWNING_AROUND: case GC_ME_PART_TIMER:
+    case GC_ME_DANCING_LESSONS: case GC_ME_WEIRD_DREAM: case GC_ME_TELEPORTING_HIJINKS:
+    case GC_ME_FUN_AND_GAMES: case GC_ME_UNCOMMON_BREED: case GC_ME_THE_EXPERT_POKEMON_BREEDER:
+        n = 3; break;
+    case GC_ME_TRAINING_SESSION: case GC_ME_DEPARTMENT_STORE_SALE: case GC_ME_FIELD_TRIP:
+    case GC_ME_SAFARI_ZONE: case GC_ME_DELIBIRDY: case GC_ME_GLOBAL_TRADE_SYSTEM:
+        n = 4; break;
+    default:
+        n = 2; break;
+    }
+
+    s->n_options = n;
+    for (int i = 0; i < 8; i++) s->option_ok[i] = i < n;
+
+    if (type == GC_ME_DARK_DEAL || type == GC_ME_AN_OFFER_YOU_CANT_REFUSE) {
+        s->option_ok[0] = legal_party(run) > 0;
+    } else if (type == GC_ME_SHADY_VITAMIN_DEALER) {
+        bool ok = any_over_half_hp(run);
+        s->option_ok[0] = ok; s->option_ok[1] = ok;
+    } else if (type == GC_ME_THE_POKEMON_SALESMAN) {
+        s->option_ok[0] = run->money >= pr_run_get_wave_money_amount(run->wave, 4.0) && run->n_party < 6;
+    } else if (type == GC_ME_DELIBIRDY) {
+        s->option_ok[0] = run->n_items > 0;
+        s->option_ok[1] = run->n_items > 0;
+        s->option_ok[2] = run->n_items > 0;
+    } else if (type == GC_ME_ABSOLUTE_AVARICE) {
+        s->option_ok[1] = berry_stacks(run) >= 6;
+    } else if (type == GC_ME_TRASH_TO_TREASURE) {
+        s->option_ok[0] = run->n_items >= 3;
+    } else if (type == GC_ME_BUG_TYPE_SUPERFAN) {
+        s->option_ok[0] = bug_in_party(run);
+    } else if (type == GC_ME_GLOBAL_TRADE_SYSTEM) {
+        s->option_ok[0] = run->n_party >= 2;
+        s->option_ok[1] = run->n_items > 0;
+        s->option_ok[2] = berry_stacks(run) > 0;
+    } else if (type == GC_ME_THE_EXPERT_POKEMON_BREEDER) {
+        s->option_ok[0] = run->n_party >= 1;
+        s->option_ok[1] = run->n_party >= 1;
+    }
+}
+
+static void end_mystery_encounter_leave(gc_run *run)
+{
+    run->in_battle = false;
+    run->mystery_type = run->mystery_tier = -1;
+    if (gc_is_new_biome(run, run->wave)) gc_rq_push(run, gc_rp(RP_SELECT_BIOME, 0, 0, 0));
+    gc_rq_push(run, gc_rp(RP_NEW_BATTLE, 0, 0, 0));
+}
+
+static void init_player_mon(gc_run *run, gc_mon *m, int species, int level)
+{
+    memset(m, 0, sizeof *m);
+    m->b.species = (uint16_t)(species > 0 ? species : SPECIES_ID_BULBASAUR);
+    m->b.level = level > 0 ? level : 10;
+    m->b.is_player = true;
+    m->met_wave = (int16_t)run->wave;
+    m->pokeball = POKEBALL_TYPE_POKEBALL;
+
+    for (int i = 0; i < 6; i++) m->b.ivs[i] = 15;
+    gc_starter_default_moves(m->b.species, m->b.moves);
+    m->b.n_moves = 0;
+    for (int i = 0; i < 4; i++) {
+        if (m->b.moves[i] > 0) {
+            m->b.n_moves++;
+            m->b.pp_used[i] = 0;
+        }
+    }
+
+    pr_reset_summon_data(&m->b);
+    pr_reset_turn_data(&m->b);
+    pr_calculate_stats(&run->bt, &m->b);
+    m->b.hp = m->b.stats[0];
+}
+
+static void start_mystery_wild_battle(gc_run *run, int species, int level, bool is_boss, int boss_segments, int omni_boost)
+{
+    run->mystery_type = run->mystery_tier = -1;
+    run->in_battle = true;
+    run->battle_type = BATTLE_TYPE_WILD;
+    int lvl = level > 0 ? level : (int)pr_run_get_max_exp_level(&run->run, run->wave, false);
+
+    if (species <= 0) {
+        gc_gen_wild(run, lvl);
+    } else {
+        pr_enemy_gen g;
+        memset(&g, 0, sizeof g);
+        g.id = (uint32_t)floor(pr_rng_real_in_range(&run->run.rng, 0, 4294967296.0));
+        g.fusion_species = -1;
+        g.friendship = -1;
+
+        gc_mon *m = &run->enemy[0];
+        gc_mon_new_enemy(run, m, species, lvl, &g, 0);
+        gc_port_enemy_moveset(run, m);
+        run->n_enemy = 1;
+    }
+
+    gc_mon *m = &run->enemy[0];
+    if (is_boss) {
+        m->boss_segments = (int16_t)(boss_segments > 0 ? boss_segments : 2);
+        m->boss_segment_index = (int16_t)(m->boss_segments - 1);
+        m->b.is_boss = true;
+        if (omni_boost > 0) {
+            for (int k = 1; k <= 6; k++) m->b.stat_stages[k] = (int8_t)omni_boost;
+        }
+    }
+    gc_battle_setup_field(run, true);
+    gc_rq_push(run, gc_rp(RP_TURN_INIT, 0, 0, 0));
+}
+
+bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why, bool *ok)
+{
+    if (option < 0 || option >= run->screen.n_options || !run->screen.option_ok[option]) {
+        *why = "option not allowed";
+        *ok = false;
+        return false;
+    }
+    *ok = true;
+    const int type = run->mystery_type >= 0 ? run->mystery_type : run->screen.mystery_type;
+    const int wave_level = (int)pr_run_get_max_exp_level(&run->run, run->wave, false);
+
+    switch (type) {
+    case GC_ME_MYSTERIOUS_CHALLENGERS:
+        if (option == 0) {
+            gc_port_give_reward(run, "MEMORY_MUSHROOM");
+            end_mystery_encounter_leave(run);
+            return true;
+        } else if (option == 1) {
+            gc_port_give_reward(run, "RARE_CANDY");
+            end_mystery_encounter_leave(run);
+            return true;
+        } else if (option == 2) {
+            gc_port_give_reward(run, "EXP_CHARM");
+            end_mystery_encounter_leave(run);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_MYSTERIOUS_CHEST:
+        if (option == 0) {
+            int roll = pr_rng_seed_int(&run->run.rng, 100, 0);
+            if (roll < 30) {
+                /* Trap! Highest level unfainted mon gets KOed */
+                int max_idx = -1, max_lvl = -1;
+                for (int i = 0; i < run->n_party; i++) {
+                    if (run->party[i].b.hp > 0 && run->party[i].b.level > max_lvl) {
+                        max_lvl = run->party[i].b.level;
+                        max_idx = i;
+                    }
+                }
+                if (max_idx >= 0) run->party[max_idx].b.hp = 0;
+                if (legal_party(run) == 0) {
+                    gc_rq_clear(run);
+                    gc_rq_unshift(run, gc_rp(RP_GAME_OVER, 0, 0, 0));
+                    return true;
+                }
+                /* Fight Gimmighoul boss */
+                start_mystery_wild_battle(run, SPECIES_ID_GIMMIGHOUL, wave_level, true, 3, 1);
+                return true;
+            }
+            /* Rewards depending on roll */
+            if (roll >= 75) gc_port_give_reward(run, "POTION");
+            else if (roll >= 45) gc_port_give_reward(run, "SUPER_POTION");
+            else if (roll >= 35) gc_port_give_reward(run, "HYPER_POTION");
+            else gc_port_give_reward(run, "MAX_POTION");
+            end_mystery_encounter_leave(run);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_DARK_DEAL:
+        if (option == 0) {
+            int target = (b >= 0 && b < run->n_party && run->party[b].b.hp > 0) ? b : -1;
+            if (target < 0) {
+                for (int i = 0; i < run->n_party; i++) if (run->party[i].b.hp > 0) { target = i; break; }
+            }
+            if (target >= 0) run->party[target].b.hp = 0;
+            run->money = pr_run_add_money(run->money, pr_run_get_wave_money_amount(run->wave, 5.0));
+            end_mystery_encounter_leave(run);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_FIGHT_OR_FLIGHT:
+        if (option == 0) {
+            start_mystery_wild_battle(run, 0, wave_level, true, 2, 1);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_SLUMBERING_SNORLAX:
+        if (option == 0 || option == 1) {
+            start_mystery_wild_battle(run, SPECIES_ID_SNORLAX, wave_level, true, 3, 1);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_TRAINING_SESSION:
+        if (option == 0 || option == 1 || option == 2) {
+            int target = (b >= 0 && b < run->n_party) ? b : 0;
+            /* Increase lowest IV to 31 */
+            int min_iv_idx = 0;
+            for (int i = 1; i < 6; i++) {
+                if (run->party[target].b.ivs[i] < run->party[target].b.ivs[min_iv_idx]) min_iv_idx = i;
+            }
+            run->party[target].b.ivs[min_iv_idx] = 31;
+            pr_calculate_stats(&run->bt, &run->party[target].b);
+            end_mystery_encounter_leave(run);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_DEPARTMENT_STORE_SALE:
+        if (option >= 0 && option <= 2) {
+            double mult = option == 0 ? 1.0 : option == 1 ? 2.0 : 3.0;
+            double cost = pr_run_get_wave_money_amount(run->wave, mult);
+            if (run->money >= cost) run->money -= cost;
+            gc_port_give_reward(run, option == 0 ? "POTION" : option == 1 ? "SUPER_POTION" : "MAX_POTION");
+            end_mystery_encounter_leave(run);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_SHADY_VITAMIN_DEALER:
+        if (option == 0 || option == 1) {
+            double cost = pr_run_get_wave_money_amount(run->wave, option == 0 ? 1.5 : 3.5);
+            if (run->money >= cost) run->money -= cost;
+            double mult = option == 0 ? 0.75 : 0.50;
+            for (int i = 0; i < run->n_party; i++) {
+                if (run->party[i].b.hp > 0) run->party[i].b.hp = (int32_t)(run->party[i].b.hp * mult);
+            }
+            gc_port_give_reward(run, "HP_UP");
+            end_mystery_encounter_leave(run);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_FIELD_TRIP:
+        if (option == 0) {
+            gc_port_give_reward(run, "RARE_CANDY");
+            end_mystery_encounter_leave(run);
+            return true;
+        } else if (option == 1) {
+            for (int i = 0; i < run->n_party; i++) run->party[i].b.hp = run->party[i].b.stats[0];
+            end_mystery_encounter_leave(run);
+            return true;
+        } else if (option == 2) {
+            start_mystery_wild_battle(run, 0, wave_level, true, 2, 1);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_SAFARI_ZONE:
+        if (option == 0) {
+            double cost = pr_run_get_wave_money_amount(run->wave, 2.0);
+            if (run->money >= cost) run->money -= cost;
+            gc_port_give_reward(run, "GREAT_BALL");
+            end_mystery_encounter_leave(run);
+            return true;
+        } else if (option == 1) {
+            start_mystery_wild_battle(run, 0, wave_level, false, 0, 0);
+            return true;
+        } else if (option == 2) {
+            double cost = pr_run_get_wave_money_amount(run->wave, 1.5);
+            if (run->money >= cost) run->money -= cost;
+            gc_port_give_reward(run, "SUPER_POTION");
+            end_mystery_encounter_leave(run);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_LOST_AT_SEA:
+        if (option == 0) {
+            for (int i = 0; i < run->n_party; i++) run->party[i].b.hp = run->party[i].b.stats[0];
+            gc_port_give_reward(run, "ETHER");
+            end_mystery_encounter_leave(run);
+            return true;
+        } else if (option == 1) {
+            start_mystery_wild_battle(run, SPECIES_ID_LAPRAS, wave_level, true, 3, 1);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_FIERY_FALLOUT:
+        if (option == 0) {
+            for (int i = 0; i < run->n_party; i++) {
+                run->party[i].b.hp = run->party[i].b.stats[0];
+                run->party[i].b.status = STATUS_EFFECT_NONE;
+            }
+            end_mystery_encounter_leave(run);
+            return true;
+        } else if (option == 1) {
+            start_mystery_wild_battle(run, SPECIES_ID_VOLCARONA, wave_level, true, 3, 1);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_THE_STRONG_STUFF:
+        if (option == 0) {
+            int target = (b >= 0 && b < run->n_party) ? b : 0;
+            if (run->party[target].b.stat_stages[STAT_ATK] < 6) run->party[target].b.stat_stages[STAT_ATK]++;
+            end_mystery_encounter_leave(run);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_THE_POKEMON_SALESMAN:
+        if (option == 0) {
+            double cost = pr_run_get_wave_money_amount(run->wave, 4.0);
+            if (run->money >= cost) run->money -= cost;
+            if (run->n_party < 6) {
+                init_player_mon(run, &run->party[run->n_party], SPECIES_ID_MAGIKARP, wave_level);
+                run->party_order[run->n_party] = (int8_t)run->n_party;
+                run->n_party++;
+            }
+            end_mystery_encounter_leave(run);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_AN_OFFER_YOU_CANT_REFUSE:
+        if (option == 0) {
+            int target = (b >= 0 && b < run->n_party) ? b : 0;
+            init_player_mon(run, &run->party[target], SPECIES_ID_DITTO, wave_level);
+            end_mystery_encounter_leave(run);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_DELIBIRDY:
+        if (option >= 0 && option <= 2) {
+            int item_idx = (b >= 0 && b < run->n_items) ? b : 0;
+            if (run->n_items > 0) gc_item_remove_at(run, item_idx);
+            gc_port_give_reward(run, option == 0 ? "SUPER_POTION" : option == 1 ? "HYPER_POTION" : "MAX_POTION");
+            end_mystery_encounter_leave(run);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_ABSOLUTE_AVARICE:
+        if (option == 0) {
+            start_mystery_wild_battle(run, SPECIES_ID_GREEDENT, wave_level, true, 4, 2);
+            return true;
+        } else if (option == 1) {
+            gc_item_remove_stacks(run, "BERRY", 6);
+            gc_port_give_reward(run, "REVIVER_SEED");
+            end_mystery_encounter_leave(run);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_A_TRAINERS_TEST:
+        if (option == 0) {
+            start_mystery_wild_battle(run, 0, wave_level + 5, true, 3, 1);
+            return true;
+        } else if (option == 1) {
+            for (int i = 0; i < run->n_party; i++) run->party[i].b.hp = run->party[i].b.stats[0];
+            end_mystery_encounter_leave(run);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_TRASH_TO_TREASURE:
+        if (option == 0) {
+            int to_remove = run->n_items >= 3 ? 3 : run->n_items;
+            for (int i = 0; i < to_remove; i++) gc_item_remove_at(run, 0);
+            gc_port_give_reward(run, "GOLDEN_POKEBALL");
+            end_mystery_encounter_leave(run);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_BERRIES_ABOUND:
+        if (option == 0) {
+            gc_port_give_reward(run, "SITRUS_BERRY");
+            end_mystery_encounter_leave(run);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_CLOWNING_AROUND:
+        if (option == 0) {
+            start_mystery_wild_battle(run, SPECIES_ID_BLACEPHALON, wave_level, true, 3, 1);
+            return true;
+        } else if (option == 1) {
+            gc_port_give_reward(run, "LUM_BERRY");
+            end_mystery_encounter_leave(run);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_PART_TIMER:
+        if (option == 0 || option == 1) {
+            double mult = option == 0 ? 0.8 : 0.5;
+            for (int i = 0; i < run->n_party; i++) {
+                if (run->party[i].b.hp > 0) run->party[i].b.hp = (int32_t)(run->party[i].b.hp * mult);
+            }
+            run->money = pr_run_add_money(run->money, pr_run_get_wave_money_amount(run->wave, option == 0 ? 2.0 : 5.0));
+            end_mystery_encounter_leave(run);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_DANCING_LESSONS:
+        if (option == 0) {
+            int target = (b >= 0 && b < run->n_party) ? b : 0;
+            if (run->party[target].b.stat_stages[STAT_SPD] < 6) run->party[target].b.stat_stages[STAT_SPD]++;
+            end_mystery_encounter_leave(run);
+            return true;
+        } else if (option == 1) {
+            start_mystery_wild_battle(run, SPECIES_ID_ORICORIO, wave_level, true, 2, 1);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_WEIRD_DREAM:
+        if (option == 0) {
+            start_mystery_wild_battle(run, SPECIES_ID_DARKRAI, wave_level, true, 4, 1);
+            return true;
+        } else if (option == 1) {
+            for (int i = 0; i < run->n_party; i++) run->party[i].b.hp = run->party[i].b.stats[0];
+            end_mystery_encounter_leave(run);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_THE_WINSTRATE_CHALLENGE:
+        if (option == 0) {
+            start_mystery_wild_battle(run, 0, wave_level, true, 3, 1);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_TELEPORTING_HIJINKS:
+        if (option == 0) {
+            run->money = pr_run_add_money(run->money, pr_run_get_wave_money_amount(run->wave, 2.0));
+            end_mystery_encounter_leave(run);
+            return true;
+        } else if (option == 1) {
+            start_mystery_wild_battle(run, SPECIES_ID_ALAKAZAM, wave_level, true, 3, 1);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_BUG_TYPE_SUPERFAN:
+        if (option == 0) {
+            gc_port_give_reward(run, "EXP_SHARE");
+            end_mystery_encounter_leave(run);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_FUN_AND_GAMES:
+        if (option == 0 || option == 1) {
+            run->money = pr_run_add_money(run->money, pr_run_get_wave_money_amount(run->wave, 1.5));
+            end_mystery_encounter_leave(run);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_UNCOMMON_BREED:
+        if (option == 0) {
+            start_mystery_wild_battle(run, 0, wave_level, true, 2, 1);
+            return true;
+        } else if (option == 1) {
+            if (run->n_party < 6) {
+                init_player_mon(run, &run->party[run->n_party], SPECIES_ID_EEVEE, wave_level);
+                run->party_order[run->n_party] = (int8_t)run->n_party;
+                run->n_party++;
+            }
+            end_mystery_encounter_leave(run);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_GLOBAL_TRADE_SYSTEM:
+        if (option == 0) {
+            int target = (b >= 0 && b < run->n_party) ? b : 0;
+            init_player_mon(run, &run->party[target], SPECIES_ID_PIKACHU, wave_level);
+            end_mystery_encounter_leave(run);
+            return true;
+        } else if (option == 1) {
+            int item_idx = (b >= 0 && b < run->n_items) ? b : 0;
+            if (run->n_items > 0) gc_item_remove_at(run, item_idx);
+            gc_port_give_reward(run, "EXP_CHARM");
+            end_mystery_encounter_leave(run);
+            return true;
+        } else if (option == 2) {
+            gc_item_remove_stacks(run, "BERRY", 1);
+            gc_port_give_reward(run, "SITRUS_BERRY");
+            end_mystery_encounter_leave(run);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    case GC_ME_THE_EXPERT_POKEMON_BREEDER:
+        if (option == 0 || option == 1) {
+            int target = (b >= 0 && b < run->n_party) ? b : 0;
+            int min_iv_idx = 0;
+            for (int i = 1; i < 6; i++) {
+                if (run->party[target].b.ivs[i] < run->party[target].b.ivs[min_iv_idx]) min_iv_idx = i;
+            }
+            run->party[target].b.ivs[min_iv_idx] = 31;
+            pr_calculate_stats(&run->bt, &run->party[target].b);
+            end_mystery_encounter_leave(run);
+            return true;
+        }
+        end_mystery_encounter_leave(run);
+        return true;
+
+    default:
+        end_mystery_encounter_leave(run);
+        return true;
+    }
+}
