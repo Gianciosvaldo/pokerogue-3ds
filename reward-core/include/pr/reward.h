@@ -223,6 +223,11 @@ typedef struct {
     int reroll_count;
     bool is_copy;                 /* the screen again after a TM or Memory Mushroom (custom = the old options) */
     const int8_t *locked_tiers; int n_locked_tiers;   /* lockModifierTiers ? modifierTiers : none */
+    /* A rerolled SelectModifierPhase owns its modifierTiers for the lifetime of the phase.
+     * Keep a C-owned copy here so locked tiers survive pr_reward_reroll() and can be reused
+     * if the phase is copied/reopened (TM / Memory Mushroom flows). */
+    int8_t owned_locked_tiers[PR_REWARD_MAX_OPTIONS];
+    int n_owned_locked_tiers;
     const pr_reward_custom *custom;
 } pr_reward_select;
 int pr_reward_select_start(pr_reward_ctx *ctx, const pr_reward_select *sel, pr_reward_thresholds *th,
