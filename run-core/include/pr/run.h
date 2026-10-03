@@ -475,6 +475,13 @@ int pr_run_gen_rival_party(pr_run *run, const pr_trainer_party_ctx *ctx, int fig
 /* Called by pr_run_enemy_pokemon_finish after the rival member's constructor state is complete. */
 void pr_run_rival_finish(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_enemy_gen *out);
 
+/* Task 49 Gym/E4 closures. The member helper is called with the exact partyMemberFuncs key selected
+ * by Trainer.genPartyMember and returns 1 when Task 49 owns it, 0 otherwise, -1 on error. */
+int pr_run_gen_gym_e4_closure_member(pr_run *run, const pr_trainer_party_ctx *ctx,
+                                     int index, int func_key, pr_enemy_gen *out, int *out_species);
+/* Classic/Challenge fixed E4/Champion trainer selection at 182/184/186/188/190; -1 otherwise. */
+int pr_run_fixed_e4_trainer(const pr_run *run, int wave);
+
 /* A wild battle's first enemy (src/wildenemy.c) */
 typedef struct {
     pr_enemy_gen_ctx enemy;       /* the scene (wave, biome, wave_cycle_offset, charms, ids, events...) */
