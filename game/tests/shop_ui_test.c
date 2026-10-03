@@ -73,6 +73,22 @@ static void on_test_skip(void* ctx) {
 int main(void) {
   printf("Running shop_ui_test...\n");
 
+  /* Test Party Luck Grade calculations */
+  assert(!strcmp(shop_ui_luck_grade(0), "D"));
+  assert(!strcmp(shop_ui_luck_grade(1), "C"));
+  assert(!strcmp(shop_ui_luck_grade(2), "C"));
+  assert(!strcmp(shop_ui_luck_grade(3), "B"));
+  assert(!strcmp(shop_ui_luck_grade(4), "B"));
+  assert(!strcmp(shop_ui_luck_grade(5), "A"));
+  assert(!strcmp(shop_ui_luck_grade(6), "A"));
+  assert(!strcmp(shop_ui_luck_grade(7), "S"));
+  assert(!strcmp(shop_ui_luck_grade(9), "S"));
+  assert(!strcmp(shop_ui_luck_grade(10), "SS"));
+  assert(!strcmp(shop_ui_luck_grade(13), "SS"));
+  assert(!strcmp(shop_ui_luck_grade(14), "SSS"));
+  assert(!strcmp(shop_ui_luck_grade(18), "SSS"));
+  printf("Party Luck Grade mapping (D through SSS) PASSED.\n");
+
   /* 1. Setup mock gc_screen for REWARD phase */
   gc_screen screen;
   memset(&screen, 0, sizeof screen);
@@ -114,6 +130,7 @@ int main(void) {
   args.locked_tiers[0] = 0;
   args.locked_tiers[1] = 2;
   args.locked_tiers[2] = 1;
+  args.party_luck = 14; /* SSS Grade */
 
   shop_ui_events ev;
   ev.on_select_reward = on_test_select_reward;

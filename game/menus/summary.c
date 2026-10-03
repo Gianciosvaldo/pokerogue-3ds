@@ -159,6 +159,32 @@ static void format_stat(char* out, size_t n, uint32_t v, bool hp) {
   snprintf(out, n, "%.*s%s%s%s", digits, s, *dec ? "." : "", dec, mui_t(abr[k - 1]));
 }
 
+/* Helper to parse active unit's Shiny Tier (0 = None, 1 = Yellow, 2 = Blue, 3 = Red) */
+int summary_mon_shiny_tier(const menu_mon* m, int* fusion_tier) {
+  if (fusion_tier) *fusion_tier = 0;
+  if (!m) return 0;
+  bool base_shiny = m->shiny;
+  bool fus_shiny = m->fusion && m->fusion_shiny;
+  if (!base_shiny && !fus_shiny) return 0;
+
+  int base_t = base_shiny ? (m->variant < 3 ? m->variant + 1 : 1) : 0;
+  int fus_t = fus_shiny ? (m->fusion_variant < 3 ? m->fusion_variant + 1 : 1) : 0;
+
+  if (fusion_tier) *fusion_tier = fus_t;
+
+  if (base_shiny) return base_t;
+  return fus_t;
+}
+
+const char* summary_shiny_tier_name(int tier) {
+  switch (tier) {
+    case 1: return "Yellow";
+    case 2: return "Blue";
+    case 3: return "Red";
+    default: return "None";
+  }
+}
+
 /* utils padInt */
 static void pad_int(char* out, size_t n, int v, int len, const char* with) {
   char s[16], t[48];
@@ -331,21 +357,34 @@ static void draw_profile(float px, float py, bool main) {
     mui_image("ui/button_tera", type_frame(m->tera_type), px + 128, py + 26, 0.5f, 0.5f);
 
   if (m->has_passive) mui_image("ui/summary_profile_prompt_a", NULL, px + 8, py + 43, 0, 0);
-  int shown = main && S.show_passive ? 1 : 0;
-  mui_image(shown ? "ui/text_images/en/summary/summary_profile_passive"
-                  : "ui/text_images/en/summary/summary_profile_ability",
-            NULL, px + 17, py + 47, 0, 0.5f);
-  uint16_t ab = shown ? m->passive : m->ability;
-  mui_text_o(TS_SUMMARY_ALT, px + 7, py + 68, 0, 1, ability_text(ab, "name"));
-  int lines = S.abil_lines[shown];
-  float dy = lines > 2 ? 69 : 71;
-  dy -= scroll_offset(S.now - S.abil_t0, lines, 2);
-  mui_clip(110, 90, 206, 31);
-  mui_text(TS_WINDOW_ALT, px + 7, py + dy, S.abil_desc[shown]);
-  mui_clip(0, 0, MUI_W, MUI_H);
 
-  mui_image("ui/text_images/en/summary/summary_profile_memo_title", NULL, px + 7, py + 107, 0, 0.5f);
-  mui_bbtext(TS_WINDOW_ALT, px + 7, py + 113, S.memo);
+  /* Primary Ability Slot */
+  mui_image("ui/text_images/en/summary/summary_profile_ability", NULL, px + 17, py + 47, 0, 0.5f);
+  mui_text_o(TS_SUMMARY_ALT, px + 7, py + 58, 0, 1, ability_text(m->ability, "name"));
+  int lines0 = S.abil_lines[0];
+  float dy0 = lines0 > 2 ? 59 : 61;
+  dy0 -= scroll_offset(S.now - S.abil_t0, lines0, 2);
+  mui_clip(110, (int)(px + 7), 206, m->has_passive ? 18 : 31);
+  mui_text(TS_WINDOW_ALT, px + 7, py + dy0, S.abil_desc[0]);
+  mui_clip_off();
+
+  if (m->has_passive) {
+    /* Passive Ability Slot rendered directly below Primary Ability */
+    mui_image("ui/text_images/en/summary/summary_profile_passive", NULL, px + 17, py + 78, 0, 0.5f);
+    mui_text_o(TS_SUMMARY_ALT, px + 7, py + 88, 0, 1, ability_text(m->passive, "name"));
+    int lines1 = S.abil_lines[1];
+    float dy1 = lines1 > 2 ? 89 : 91;
+    dy1 -= scroll_offset(S.now - S.abil_t0, lines1, 2);
+    mui_clip(110, (int)(px + 7), 206, 18);
+    mui_text(TS_WINDOW_ALT, px + 7, py + dy1, S.abil_desc[1]);
+    mui_clip_off();
+
+    mui_image("ui/text_images/en/summary/summary_profile_memo_title", NULL, px + 7, py + 115, 0, 0.5f);
+    mui_bbtext(TS_WINDOW_ALT, px + 7, py + 121, S.memo);
+  } else {
+    mui_image("ui/text_images/en/summary/summary_profile_memo_title", NULL, px + 7, py + 107, 0, 0.5f);
+    mui_bbtext(TS_WINDOW_ALT, px + 7, py + 113, S.memo);
+  }
 }
 
 static void draw_stats(float px, float py, bool main) {
@@ -711,7 +750,10 @@ bool summary_input(mui_button b) {
       case MB_DOWN: {
         if (learn || !S.a.from_party) break;
         bool down = b == MB_DOWN;
-        if ((down && S.index < S.a.n - 1) || (!down && S.index)) show(S.index + (down ? 1 : -1), S.cursor, false);
+        if ((down && S.index < S.a.n - 1) || (!down && S.index)) {
+          show(S.index + (down ? 1 : -1), S.cursor, false);
+          success = true;
+        }
         break;
       }
       case MB_LEFT:
@@ -795,17 +837,16 @@ void summary_draw(void) {
   }
   bool double_shiny = m->fusion && m->shiny && m->fusion_shiny;
   if (shiny) {
-    int big = double_shiny ? m->variant
-                           : (m->fusion ? (m->fusion_shiny && (!m->shiny || m->fusion_variant > m->variant)
-                                               ? m->fusion_variant
-                                               : m->variant)
-                                        : m->variant);
+    int fus_tier = 0;
+    int tier = summary_mon_shiny_tier(m, &fus_tier);
+    int big = double_shiny ? (m->variant < 3 ? m->variant : 0)
+                           : (tier > 0 ? tier - 1 : 0);
     rr_draw_opts o = RR_DEFAULT_OPTS;
     o.scale_x = o.scale_y = 0.75f;
     o.tint = MUI_RGB(variant_tint(big));
     mui_image_ex(double_shiny ? "ui/shiny_1" : "ui/shiny", NULL, icon_x, Y(-50), &o);
     if (double_shiny) {
-      o.tint = MUI_RGB(variant_tint(m->fusion_variant));
+      o.tint = MUI_RGB(variant_tint(fus_tier > 0 ? fus_tier - 1 : 0));
       mui_image_ex("ui/shiny_2", NULL, icon_x, Y(-50), &o);
     }
   }

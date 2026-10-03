@@ -220,6 +220,10 @@ bool summary_input(mui_button b);
 void summary_update(float dt_ms);
 void summary_draw(void);
 
+/* Helper to parse active unit's Shiny Tier (0 = None, 1 = Yellow, 2 = Blue, 3 = Red) */
+int summary_mon_shiny_tier(const menu_mon* m, int* fusion_tier);
+const char* summary_shiny_tier_name(int tier);
+
 /* ------------------------------------------------------------ learn move */
 
 /* The learn-move dialog (upstream LearnMovePhase's messages, confirm boxes and

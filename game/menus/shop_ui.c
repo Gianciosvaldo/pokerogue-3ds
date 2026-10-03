@@ -136,6 +136,16 @@ static void shop_ui_recalc_layout(void) {
   shop_ui_add_touch_slot(SHOP_TARGET_SKIP, action_btn_idx++, skip_x, btn_y, skip_w, btn_h);
 }
 
+const char* shop_ui_luck_grade(int luck) {
+  if (luck <= 0) return "D";
+  if (luck <= 2) return "C";
+  if (luck <= 4) return "B";
+  if (luck <= 6) return "A";
+  if (luck <= 9) return "S";
+  if (luck <= 13) return "SS";
+  return "SSS";
+}
+
 void shop_ui_open(const shop_ui_args* args, const shop_ui_events* ev) {
   memset(&S, 0, sizeof S);
   if (args && args->screen) {
@@ -144,6 +154,7 @@ void shop_ui_open(const shop_ui_args* args, const shop_ui_events* ev) {
     S.has_lock_capsule = args->has_lock_capsule;
     S.lock_capsule_active = args->lock_capsule_active;
     S.n_locked_tiers = args->n_locked_tiers;
+    S.party_luck = args->party_luck;
     if (args->n_locked_tiers > 0) {
       memcpy(S.locked_tiers, args->locked_tiers, sizeof(args->locked_tiers));
     }
@@ -357,8 +368,12 @@ void shop_ui_draw(void) {
   /* Background window */
   mui_window(0, 0, 320, 180);
 
-  /* Title bar & Money balance */
+  /* Title bar, Luck Grade & Money balance */
   mui_text(TS_HEADER_LABEL, 10, 4, "REWARDS & SHOP");
+
+  char luck_buf[32];
+  snprintf(luck_buf, sizeof luck_buf, "Luck: %s", shop_ui_luck_grade(S.party_luck));
+  mui_text(TS_LUCK_VALUE, 140, 4, luck_buf);
 
   char money_buf[32];
   snprintf(money_buf, sizeof money_buf, "Money: ₽%.0f", S.player_money);

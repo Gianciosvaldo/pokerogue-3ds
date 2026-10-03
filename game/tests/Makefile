@@ -80,3 +80,12 @@ build/shop_ui_test: $(SHOP_SRCS)
 	$(CC) $(SHOP_CPPFLAGS) $(CFLAGS) $(SHOP_SRCS) -lm -o $@
 shop_ui_test: build/shop_ui_test
 .PHONY: shop_ui_test
+
+# unit test for summary UI, shiny tier parsing and passive ability slot
+SUMMARY_CPPFLAGS := $(CPPFLAGS) -I../menus -I$(GC)/include -I$(GC)/src -I$(GC)/gen/out -I$(RC)/include -I$(RC)/gen/out -I$(APP)/include
+SUMMARY_SRCS := summary_ui_test.c ../menus/summary.c ../menus/menus_names.c ../menus/menus_data.c $(BC)/gen/out/pr_data.c
+build/summary_ui_test: $(SUMMARY_SRCS)
+	@mkdir -p build
+	$(CC) $(SUMMARY_CPPFLAGS) $(CFLAGS) $(SUMMARY_SRCS) -lm -o $@
+summary_ui_test: build/summary_ui_test
+.PHONY: summary_ui_test

@@ -32,6 +32,7 @@ typedef struct {
   bool lock_capsule_active; /* whether Lock Capsule tier lock is currently active */
   int8_t locked_tiers[GC_MAX_OPTIONS]; /* tiers locked by Lock Capsule */
   int n_locked_tiers;
+  int party_luck;           /* total party luck value */
 } shop_ui_args;
 
 typedef struct {
@@ -63,6 +64,7 @@ typedef struct {
   bool lock_capsule_active;
   int8_t locked_tiers[GC_MAX_OPTIONS];
   int n_locked_tiers;
+  int party_luck;
 
   /* Cursor navigation state */
   int row;    /* 0: rewards, 1..2: shop rows, 3: bottom buttons */
@@ -85,6 +87,9 @@ void shop_ui_draw(void);
 
 /* Helper for hit testing touch bounds */
 bool shop_ui_hit_test(const shop_ui_rect* rect, float x, float y);
+
+/* Converts party luck integer to letter grade (D through SSS) */
+const char* shop_ui_luck_grade(int luck);
 
 #ifdef __cplusplus
 }
