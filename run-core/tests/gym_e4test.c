@@ -66,6 +66,7 @@ int main(int argc, char **argv)
             nc.trainer_chance = 32;
             nc.prev_wave = wave - 1;
             nc.me.spawn_chance = 3;
+            nc.enable_gym_e4 = true;
             int rc = pr_run_new_battle(&run, wave, &nc, &nb);
             case_ok = rc == 0 && nb.battle_type == BATTLE_TYPE_TRAINER
                 && nb.trainer_type == exp_type && nb.variant == exp_variant
@@ -87,6 +88,7 @@ int main(int argc, char **argv)
             pc.enemy.secret_id = secret_id;
             pc.is_double = exp_double;
             pc.classic_wave20_trainer = wave == 20;
+            pc.enable_gym_e4 = true;
             pc.template_ = &tpl;
             pc.n_levels = nlevels;
             for (int i = 0; i < nlevels; i++) pc.levels[i] = exp_levels[i];
