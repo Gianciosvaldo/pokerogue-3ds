@@ -9,6 +9,7 @@ import { ChallengeType } from "#enums/challenge-type";
 import { Challenges } from "#enums/challenges";
 import { GameModes } from "#enums/game-modes";
 import { MoveId } from "#enums/move-id";
+import { SpeciesId } from "#enums/species-id";
 import { LearnMoveType } from "#enums/learn-move-type";
 import { LearnableMoveSource } from "#enums/learnable-move-source";
 import { allMoves, modifierTypes } from "#data/data-lists";
@@ -25,7 +26,7 @@ it("memory mushroom producer", async () => {
   const OUT = process.env.DIFF_OUT ?? "/tmp/pr-memory-cases.txt";
   const game = new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
   game.override.battleStyle("single").startingWave(5).enemyMoveset(MoveId.SPLASH);
-  await game.classicMode.startBattle();
+  await game.classicMode.startBattle(SpeciesId.BULBASAUR);
   const scene = game.scene as any;
 
   let seed = Number(process.env.DIFF_SEED ?? 12345) >>> 0;
