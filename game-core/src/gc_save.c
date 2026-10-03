@@ -18,9 +18,12 @@
 #include "internal.h"
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define SAVE_FORMAT 1
 static const char magic[8] = {'P', 'R', '3', 'D', 'S', 'R', 'U', 'N'};
+static const char sys_magic[8] = {'P', 'R', '3', 'D', 'S', 'S', 'Y', 'S'};
 
 /* ---------------------------------------------------------------- fields */
 typedef struct { const char *name; uint32_t off; uint16_t size; } sfield;
@@ -603,5 +606,226 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     gc_ev_new(run, GC_EV_SAVE_POINT);
     gc_rq_push(run, gc_rp(RP_TURN_INIT, 0, 0, 0));
     gc_run_until_screen(run);
+    return true;
+}
+
+/* ---------------------------------------------------------------- system save/load */
+
+typedef struct { uint16_t species; gc_dex_entry entry; } sv_dex_entry;
+static const sfield dex_fields[] = {
+    SF(sv_dex_entry, species), SF(sv_dex_entry, entry.seen_attr), SF(sv_dex_entry, entry.caught_attr),
+    SF(sv_dex_entry, entry.nature_attr), SF(sv_dex_entry, entry.seen_count), SF(sv_dex_entry, entry.caught_count),
+    SF(sv_dex_entry, entry.hatched_count), SF(sv_dex_entry, entry.ivs),
+};
+
+typedef struct { uint16_t species; gc_starter_entry entry; } sv_starter_entry;
+static const sfield starter_fields[] = {
+    SF(sv_starter_entry, species), SF(sv_starter_entry, entry.ability_attr), SF(sv_starter_entry, entry.passive_attr),
+    SF(sv_starter_entry, entry.value_reduction), SF(sv_starter_entry, entry.candy_count), SF(sv_starter_entry, entry.friendship),
+    SF(sv_starter_entry, entry.egg_moves), SF(sv_starter_entry, entry.moveset), SF(sv_starter_entry, entry.classic_win_count),
+};
+
+static const sfield unlock_fields[] = {
+    SF(gc_unlocks, endless_mode), SF(gc_unlocks, mini_black_hole),
+    SF(gc_unlocks, spliced_endless_mode), SF(gc_unlocks, eviolite),
+};
+
+typedef struct { uint32_t voucher_counts[4]; uint8_t voucher_unlocks[512]; } sv_vouchers;
+static const sfield voucher_fields[] = {
+    SF(sv_vouchers, voucher_counts), SF(sv_vouchers, voucher_unlocks),
+};
+
+typedef struct { uint8_t flags[256]; } sv_achievements;
+static const sfield achievement_fields[] = {
+    SF(sv_achievements, flags),
+};
+
+static const sfield stat_milestone_fields[] = {
+    SF(gc_stat_milestones, classic_wins), SF(gc_stat_milestones, endless_wins),
+    SF(gc_stat_milestones, total_battles), SF(gc_stat_milestones, total_catches),
+    SF(gc_stat_milestones, total_hatches), SF(gc_stat_milestones, total_shinies),
+    SF(gc_stat_milestones, highest_wave), SF(gc_stat_milestones, highest_damage),
+    SF(gc_stat_milestones, total_money_earned),
+};
+
+static const sfield egg_fields[] = {
+    SF(gc_egg, id), SF(gc_egg, hatch_waves), SF(gc_egg, tier), SF(gc_egg, species),
+};
+
+size_t gc_system_save(const gc_system *sys, void *buf, size_t cap)
+{
+    if (!sys || !little_endian() || cap < 24) return 0;
+    writer w = {(uint8_t *)buf, 0, cap, false};
+    put(&w, sys_magic, 8);
+    put16(&w, SAVE_FORMAT);
+    put16(&w, GC_API_VERSION);
+    put32(&w, 0);
+    put32(&w, 0);
+    const size_t body = w.n;
+
+    size_t s = section_start(&w, "unlocks");
+    put_block(&w, unlock_fields, NF(unlock_fields), &sys->unlocks, sizeof sys->unlocks, 1);
+    section_end(&w, s);
+
+    sv_vouchers sv_v;
+    memcpy(sv_v.voucher_counts, sys->voucher_counts, sizeof sys->voucher_counts);
+    memcpy(sv_v.voucher_unlocks, sys->voucher_unlocks, sizeof sys->voucher_unlocks);
+    s = section_start(&w, "vouchers");
+    put_block(&w, voucher_fields, NF(voucher_fields), &sv_v, sizeof sv_v, 1);
+    section_end(&w, s);
+
+    sv_achievements sv_a;
+    memcpy(sv_a.flags, sys->achievement_flags, sizeof sv_a.flags);
+    s = section_start(&w, "achievements");
+    put_block(&w, achievement_fields, NF(achievement_fields), &sv_a, sizeof sv_a, 1);
+    section_end(&w, s);
+
+    s = section_start(&w, "stats");
+    put_block(&w, stat_milestone_fields, NF(stat_milestone_fields), &sys->stats, sizeof sys->stats, 1);
+    section_end(&w, s);
+
+    if (sys->n_eggs > 0) {
+        s = section_start(&w, "eggs");
+        put_block(&w, egg_fields, NF(egg_fields), sys->eggs, sizeof sys->eggs[0], sys->n_eggs);
+        section_end(&w, s);
+    }
+
+    int n_dex = 0;
+    for (int i = 1; i <= GC_MAX_SPECIES_ID; i++) {
+        if (sys->dex[i].seen_attr || sys->dex[i].caught_attr) n_dex++;
+    }
+    if (n_dex > 0) {
+        sv_dex_entry *dex_buf = malloc(sizeof(sv_dex_entry) * n_dex);
+        if (dex_buf) {
+            int k = 0;
+            for (int i = 1; i <= GC_MAX_SPECIES_ID; i++) {
+                if (sys->dex[i].seen_attr || sys->dex[i].caught_attr) {
+                    dex_buf[k].species = (uint16_t)i;
+                    dex_buf[k].entry = sys->dex[i];
+                    k++;
+                }
+            }
+            s = section_start(&w, "dex");
+            put_block(&w, dex_fields, NF(dex_fields), dex_buf, sizeof(sv_dex_entry), n_dex);
+            section_end(&w, s);
+            free(dex_buf);
+        }
+    }
+
+    int n_starters = 0;
+    for (int i = 1; i <= GC_MAX_SPECIES_ID; i++) {
+        const gc_starter_entry *st = &sys->starters[i];
+        if (st->ability_attr || st->passive_attr || st->value_reduction || st->candy_count ||
+            st->friendship || st->egg_moves || st->classic_win_count ||
+            st->moveset[0] || st->moveset[1] || st->moveset[2] || st->moveset[3]) {
+            n_starters++;
+        }
+    }
+    if (n_starters > 0) {
+        sv_starter_entry *st_buf = malloc(sizeof(sv_starter_entry) * n_starters);
+        if (st_buf) {
+            int k = 0;
+            for (int i = 1; i <= GC_MAX_SPECIES_ID; i++) {
+                const gc_starter_entry *st = &sys->starters[i];
+                if (st->ability_attr || st->passive_attr || st->value_reduction || st->candy_count ||
+                    st->friendship || st->egg_moves || st->classic_win_count ||
+                    st->moveset[0] || st->moveset[1] || st->moveset[2] || st->moveset[3]) {
+                    st_buf[k].species = (uint16_t)i;
+                    st_buf[k].entry = *st;
+                    k++;
+                }
+            }
+            s = section_start(&w, "starters");
+            put_block(&w, starter_fields, NF(starter_fields), st_buf, sizeof(sv_starter_entry), n_starters);
+            section_end(&w, s);
+            free(st_buf);
+        }
+    }
+
+    if (w.full) { memset(buf, 0, 8); return 0; }
+    const uint32_t len = (uint32_t)(w.n - body), crc = crc32(w.p + body, len);
+    memcpy(w.p + 12, &len, 4);
+    memcpy(w.p + 16, &crc, 4);
+    return w.n;
+}
+
+bool gc_system_load(gc_system *sys, const void *buf, size_t len, const char **why)
+{
+    const char *dummy;
+    if (!why) why = &dummy;
+    const uint8_t *p = buf;
+    if (!little_endian()) { *why = "saves need a little-endian host"; return false; }
+    if (!buf || len < 20 || memcmp(p, sys_magic, 8)) { *why = "not a system save"; return false; }
+    uint16_t format, api;
+    uint32_t body_len, crc;
+    memcpy(&format, p + 8, 2);
+    memcpy(&api, p + 10, 2);
+    memcpy(&body_len, p + 12, 4);
+    memcpy(&crc, p + 16, 4);
+    if (format > SAVE_FORMAT) { *why = "the save was made by a newer version of the game"; return false; }
+    if (body_len < 8 || body_len > len - 20 || crc32(p + 20, body_len) != crc) { *why = "the save is damaged"; return false; }
+    reader body = {p + 20, body_len, 0, false};
+
+    gc_system_init_defaults(sys);
+    int dropped = 0;
+
+    reader r = section(&body, "unlocks");
+    if (!r.bad) get_block(&r, unlock_fields, NF(unlock_fields), &sys->unlocks, sizeof sys->unlocks, 1, &dropped);
+
+    r = section(&body, "vouchers");
+    if (!r.bad) {
+        sv_vouchers sv_v;
+        memset(&sv_v, 0, sizeof sv_v);
+        get_block(&r, voucher_fields, NF(voucher_fields), &sv_v, sizeof sv_v, 1, &dropped);
+        memcpy(sys->voucher_counts, sv_v.voucher_counts, sizeof sys->voucher_counts);
+        memcpy(sys->voucher_unlocks, sv_v.voucher_unlocks, sizeof sys->voucher_unlocks);
+    }
+
+    r = section(&body, "achievements");
+    if (!r.bad) {
+        sv_achievements sv_a;
+        memset(&sv_a, 0, sizeof sv_a);
+        get_block(&r, achievement_fields, NF(achievement_fields), &sv_a, sizeof sv_a, 1, &dropped);
+        memcpy(sys->achievement_flags, sv_a.flags, sizeof sys->achievement_flags);
+    }
+
+    r = section(&body, "stats");
+    if (!r.bad) {
+        get_block(&r, stat_milestone_fields, NF(stat_milestone_fields), &sys->stats, sizeof sys->stats, 1, &dropped);
+    }
+
+    r = section(&body, "eggs");
+    if (!r.bad) {
+        sys->n_eggs = get_block(&r, egg_fields, NF(egg_fields), sys->eggs, sizeof sys->eggs[0], GC_MAX_EGGS, &dropped);
+    }
+
+    r = section(&body, "dex");
+    if (!r.bad) {
+        sv_dex_entry dex_buf[256];
+        int count;
+        while ((count = get_block(&r, dex_fields, NF(dex_fields), dex_buf, sizeof(sv_dex_entry), 256, &dropped)) > 0) {
+            for (int i = 0; i < count; i++) {
+                uint16_t sp = dex_buf[i].species;
+                if (sp > 0 && sp <= GC_MAX_SPECIES_ID) {
+                    sys->dex[sp] = dex_buf[i].entry;
+                }
+            }
+        }
+    }
+
+    r = section(&body, "starters");
+    if (!r.bad) {
+        sv_starter_entry st_buf[256];
+        int count;
+        while ((count = get_block(&r, starter_fields, NF(starter_fields), st_buf, sizeof(sv_starter_entry), 256, &dropped)) > 0) {
+            for (int i = 0; i < count; i++) {
+                uint16_t sp = st_buf[i].species;
+                if (sp > 0 && sp <= GC_MAX_SPECIES_ID) {
+                    sys->starters[sp] = st_buf[i].entry;
+                }
+            }
+        }
+    }
+
     return true;
 }

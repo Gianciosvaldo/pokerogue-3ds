@@ -316,3 +316,36 @@ void gc_system_add_voucher_count(gc_system *sys, int voucher_type, int count) {
     if (!sys || voucher_type < 0 || voucher_type >= 4) return;
     sys->voucher_counts[voucher_type] += count;
 }
+
+bool gc_system_has_achievement(const gc_system *sys, int achievement_id) {
+    if (!sys || achievement_id < 0 || achievement_id >= 256) return false;
+    return sys->achievement_flags[achievement_id] != 0;
+}
+
+bool gc_system_unlock_achievement(gc_system *sys, int achievement_id) {
+    if (!sys || achievement_id < 0 || achievement_id >= 256) return false;
+    if (sys->achievement_flags[achievement_id]) return false;
+    sys->achievement_flags[achievement_id] = 1;
+    return true;
+}
+
+void gc_system_add_classic_win(gc_system *sys, uint16_t species_id) {
+    if (!sys) return;
+    sys->stats.classic_wins++;
+    if (species_id > 0 && species_id <= GC_MAX_SPECIES_ID) {
+        if (sys->starters[species_id].classic_win_count < 65535) {
+            sys->starters[species_id].classic_win_count++;
+        }
+        uint16_t root = gc_species_root_id(species_id);
+        if (root != species_id && root > 0 && root <= GC_MAX_SPECIES_ID) {
+            if (sys->starters[root].classic_win_count < 65535) {
+                sys->starters[root].classic_win_count++;
+            }
+        }
+    }
+}
+
+uint16_t gc_system_get_ribbons(const gc_system *sys, uint16_t species_id) {
+    if (!sys || species_id == 0 || species_id > GC_MAX_SPECIES_ID) return 0;
+    return sys->starters[species_id].classic_win_count;
+}
