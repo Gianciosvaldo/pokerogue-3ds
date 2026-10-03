@@ -34,6 +34,7 @@ enum {
     RP_PARTY_HEAL,       /* PartyHealPhase */
     RP_GAME_OVER,        /* GameOverPhase: a = victory; waits on GAME_OVER / CLEAR */
     RP_PARTY_SWAP,       /* PartySwapPhase: a = enemy party index of caught mon */
+    RP_MYSTERY,          /* MysteryEncounterPhase: a = selected type, b = selected tier */
     RP_COUNT_
 };
 typedef struct { uint8_t type; int32_t a, b, c; double d; const char *key; } gc_rphase;
@@ -63,6 +64,7 @@ typedef struct {
     bool last_final_boss;       /* it was the classic final boss */
     double last_max_exp_level;  /* getMaxExpLevel() when it ended, for LevelCapPhase */
     bool pending_trainer_victory;
+    bool pending_me_miss;       /* EncounterPhase increments spawn chance after the save point */
     bool at_save_point;         /* from GC_EV_SAVE_POINT until the battle's first turn runs (gc_run_can_save) */
     /* gc_trainer_names' ring: run->trainer_names' texts, gc_m_trainer's key for each and whether that
      * key is the whole name (bit per GC_TNAME_*) */
@@ -123,6 +125,10 @@ double gc_apply_exp_boosters(const gc_run *run, double exp);          /* ExpBoos
 
 /* ---- the encounter and the battle (src/gc_encounter.c, src/gc_battle.c) ---- */
 void gc_new_battle(gc_run *run);                  /* NewBattlePhase + EncounterPhase */
+/* Task 45: getMysteryEncounter() inside executeWithSeedOffset(wave * 16). */
+bool gc_mystery_select(gc_run *run, int *type, int *tier);
+void gc_mystery_record(gc_run *run, int type, int tier);
+void gc_mystery_increment_miss(gc_run *run);
 void gc_trainer_names(gc_run *run);               /* run->trainer_names for the current trainer */
 bool gc_is_new_biome(const gc_run *run, int wave);   /* isNewBiome for the battle of `wave` */
 bool gc_battle_setup_field(gc_run *run, bool reset_arena);   /* bt from the parties, before the first turn */
