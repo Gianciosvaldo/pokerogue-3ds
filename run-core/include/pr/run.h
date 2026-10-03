@@ -304,6 +304,7 @@ typedef struct {
     int prev_wave;                       /* currentBattle.waveIndex before newBattle (0 = none yet) */
     int n_lures, n_double_chance_abilities;   /* what getDoubleBattleChance counts */
     bool enable_fixed_rivals;            /* Task 48: caller opts into the six ported Classic rival closures */
+    bool enable_gym_e4;                   /* Task 49: caller opts into Gym/E4 fixed trainer closures */
     pr_me_save me;                       /* mysteryEncounterSaveData */
 } pr_new_battle_ctx;
 typedef struct {
@@ -457,6 +458,7 @@ typedef struct {
                                    * species, level, slot, boss and shinyLock are set per member */
     bool is_double;               /* trainer.isDouble() */
     bool classic_wave20_trainer;
+    bool enable_gym_e4;            /* Task 49: caller opts into Gym/E4 partyMemberFuncs */
     const pr_party_template *template_;   /* trainer.getPartyTemplate() */
     int n_levels, levels[PR_MAX_PARTY_TEMPLATE];   /* currentBattle.enemyLevels */
 } pr_trainer_party_ctx;
@@ -474,6 +476,13 @@ int pr_run_gen_trainer_party(pr_run *run, const pr_trainer_party_ctx *ctx, pr_tr
 int pr_run_gen_rival_party(pr_run *run, const pr_trainer_party_ctx *ctx, int fight, pr_trainer_party *out);
 /* Called by pr_run_enemy_pokemon_finish after the rival member's constructor state is complete. */
 void pr_run_rival_finish(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_enemy_gen *out);
+
+/* Task 49 Gym/E4 closures. The member helper is called with the exact partyMemberFuncs key selected
+ * by Trainer.genPartyMember and returns 1 when Task 49 owns it, 0 otherwise, -1 on error. */
+int pr_run_gen_gym_e4_closure_member(pr_run *run, const pr_trainer_party_ctx *ctx,
+                                     int index, int func_key, pr_enemy_gen *out, int *out_species);
+/* Classic/Challenge fixed E4/Champion trainer selection at 182/184/186/188/190; -1 otherwise. */
+int pr_run_fixed_e4_trainer(const pr_run *run, int wave);
 
 /* A wild battle's first enemy (src/wildenemy.c) */
 typedef struct {

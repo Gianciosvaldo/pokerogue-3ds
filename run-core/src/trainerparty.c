@@ -81,12 +81,28 @@ int pr_run_gen_trainer_party(pr_run *run, const pr_trainer_party_ctx *ctx, pr_tr
                                             : ctx->enemy.wave + (ts->derived_type << 10)
                                                   + (((ts->same_seed ? 0 : e) + 1) << 8);
         run->rng = pr_run_seed_offset_rng(run, offset, NULL);
-        if (!named_double
-            && (has_func(ts, e) || has_func(ts, e - tpl->size))) {
-            run->unported |= PR_RUN_UNPORTED_TRAINER;   /* config.partyMemberFuncs[index]: a closure */
-            run->rng = saved;
-            return -1;
+
+        int func_key = 99;
+        if (!named_double) {
+            if (has_func(ts, e)) func_key = e;
+            else if (has_func(ts, e - tpl->size)) func_key = e - tpl->size;
         }
+
+        int species = -1;
+        bool closure_generated = false;
+        if (func_key != 99) {
+            int handled = ctx->enable_gym_e4
+                ? pr_run_gen_gym_e4_closure_member(run, ctx, e, func_key, &out->mons[e], &species)
+                : 0;
+            if (handled < 0) { run->rng = saved; return -1; }
+            if (!handled) {
+                run->unported |= PR_RUN_UNPORTED_TRAINER;
+                run->rng = saved;
+                return -1;
+            }
+            closure_generated = true;
+        }
+
         const int inner_offset = tpl->offsets[e];
 
         uint16_t pool[64];
@@ -109,30 +125,32 @@ int pr_run_gen_trainer_party(pr_run *run, const pr_trainer_party_ctx *ctx, pr_tr
             }
         }
 
-        /* let species = this.genNewPartyMemberSpecies(level, strength): rolled even when a pool replaces it */
-        sc.level = level;
-        sc.balanced = tpl->member[e] >> 1 & 1;   /* template.isBalanced(battle.enemyParty.length) */
-        int species = pr_run_gen_new_party_member_species(run, &sc);
-        if (species < 0) { run->rng = saved; return -1; }
-        if (n_pool) {
-            species = pool[seed_item(&run->rng, n_pool)];
-        } else if ((tpl->member[e] & 1) && e > inner_offset) {
-            /* same species as the inner template's first member: its getTrainerSpeciesForLevel(level, false, ...) */
-            species = pr_run_determine_enemy_species(&run->rng, out->species[inner_offset], level, false, tpl->evo_kind,
-                                                     true, ctx->classic_wave20_trainer);
-        }
-        /* if (newSpeciesPool) — an array, always truthy: getSpeciesForLevel(level, true, true, strength, kind) */
-        species = pr_run_determine_enemy_species(&run->rng, species, level, true, tpl->evo_kind, true,
-                                                 ctx->classic_wave20_trainer);
+        if (!closure_generated) {
+            /* let species = this.genNewPartyMemberSpecies(level, strength): rolled even when a pool replaces it */
+            sc.level = level;
+            sc.balanced = tpl->member[e] >> 1 & 1;   /* template.isBalanced(battle.enemyParty.length) */
+            species = pr_run_gen_new_party_member_species(run, &sc);
+            if (species < 0) { run->rng = saved; return -1; }
+            if (n_pool) {
+                species = pool[seed_item(&run->rng, n_pool)];
+            } else if ((tpl->member[e] & 1) && e > inner_offset) {
+                /* same species as the inner template's first member: its getTrainerSpeciesForLevel(level, false, ...) */
+                species = pr_run_determine_enemy_species(&run->rng, out->species[inner_offset], level, false, tpl->evo_kind,
+                                                         true, ctx->classic_wave20_trainer);
+            }
+            /* if (newSpeciesPool) — an array, always truthy: getSpeciesForLevel(level, true, true, strength, kind) */
+            species = pr_run_determine_enemy_species(&run->rng, species, level, true, tpl->evo_kind, true,
+                                                     ctx->classic_wave20_trainer);
 
-        /* addEnemyPokemon(species, level, !isDouble() || !(index % 2) ? TRAINER : TRAINER_PARTNER) */
-        pr_enemy_gen_ctx ec = ctx->enemy;
-        ec.species = species;
-        ec.level = level;
-        ec.trainer_slot = !ctx->is_double || !(e % 2) ? 1 : 2;
-        ec.boss = false;
-        ec.shiny_lock = false;
-        if (pr_run_enemy_pokemon_base(run, &ec, &out->mons[e]) < 0) { run->rng = saved; return -1; }
+            /* addEnemyPokemon(species, level, !isDouble() || !(index % 2) ? TRAINER : TRAINER_PARTNER) */
+            pr_enemy_gen_ctx ec = ctx->enemy;
+            ec.species = species;
+            ec.level = level;
+            ec.trainer_slot = !ctx->is_double || !(e % 2) ? 1 : 2;
+            ec.boss = false;
+            ec.shiny_lock = false;
+            if (pr_run_enemy_pokemon_base(run, &ec, &out->mons[e]) < 0) { run->rng = saved; return -1; }
+        }
         out->species[e] = (uint16_t)species;
         out->levels[e] = level;
         out->n = e + 1;

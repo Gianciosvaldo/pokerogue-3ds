@@ -68,29 +68,31 @@ int pr_run_new_battle(pr_run *run, int wave, const pr_new_battle_ctx *ctx, pr_ne
     /* this.resetSeed(waveIndex) */
     pr_run_reset_seed(run, wave);
     const int fixed_rival = ctx->enable_fixed_rivals ? classic_rival_type(run->mode, wave) : -1;
-    /* Task 48 closes the six Classic rival fixed battles. Other fixed battle closures remain explicit. */
-    if (pr_run_is_fixed_battle(run, wave) && fixed_rival < 0) {
+    const int fixed_e4 = ctx->enable_gym_e4 ? pr_run_fixed_e4_trainer(run, wave) : -1;
+    /* Tasks 48/49 close rivals plus the Classic/Challenge E4 and Champion fixed battles. */
+    if (pr_run_is_fixed_battle(run, wave) && fixed_rival < 0 && fixed_e4 < 0) {
         run->unported |= PR_RUN_UNPORTED_FIXED_BATTLE;
         return -1;
     }
     bool has_trainers = run->mode == GAME_MODES_CLASSIC || run->mode == GAME_MODES_CHALLENGE || run->mode == GAME_MODES_DAILY;
-    out->battle_type = fixed_rival >= 0 ? BATTLE_TYPE_TRAINER
+    out->battle_type = (fixed_rival >= 0 || fixed_e4 >= 0) ? BATTLE_TYPE_TRAINER
         : has_trainers && pr_run_is_wave_trainer(run, wave, ctx->trainer_chance) ? BATTLE_TYPE_TRAINER
                                                                                 : BATTLE_TYPE_WILD;
-    if (fixed_rival < 0 && pr_run_is_wave_mystery_encounter(run, out->battle_type == BATTLE_TYPE_WILD, wave, &ctx->me)) {
+    if (fixed_rival < 0 && fixed_e4 < 0
+        && pr_run_is_wave_mystery_encounter(run, out->battle_type == BATTLE_TYPE_WILD, wave, &ctx->me)) {
         out->battle_type = BATTLE_TYPE_MYSTERY_ENCOUNTER;
         out->me_spawn_chance_reset = true;
     }
     const pr_trainer_info *t = NULL;
     double chance = pr_run_get_double_battle_chance(wave, ctx->n_lures, ctx->n_double_chance_abilities);
     if (out->battle_type == BATTLE_TYPE_TRAINER) {
-        if (fixed_rival >= 0) {
-            /* Fixed rival BattleConfig constructs the requested rival type directly. It consumes no
-             * trainer-type/template/name RNG; every rival has one static party template. */
-            out->trainer_type = fixed_rival;
+        if (fixed_rival >= 0 || fixed_e4 >= 0) {
+            /* Fixed BattleConfig constructs the chosen trainer under its own seed-offset RNG.  The
+             * resulting Trainer is DEFAULT variant and these static classes have one party template. */
+            out->trainer_type = fixed_rival >= 0 ? fixed_rival : fixed_e4;
             t = trainer_info(out->trainer_type);
             if (!t || !t->n_templates) { run->unported |= PR_RUN_UNPORTED_TRAINER; return -1; }
-            out->variant = TRAINER_VARIANT_DEFAULT; /* visual gender is caller/UI state, not party generation */
+            out->variant = TRAINER_VARIANT_DEFAULT;
             out->template_index = 0;
         } else {
             /* generateNewBattleTrainer */
