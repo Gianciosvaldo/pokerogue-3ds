@@ -55,6 +55,7 @@ typedef enum {
     GC_EV_EVOLVED,       /* a = party index, b = species before, c = species after */
     GC_EV_MONEY,         /* a = the change, b = money now */
     GC_EV_TURN,          /* a turn is about to run: a = turn number (its events follow as GC_EV_BATTLE) */
+    GC_EV_MYSTERY,       /* MysteryEncounterSelectPhase: a = MysteryEncounterType, b = tier, c = wave */
     GC_EV_SAVE_POINT,    /* the run has reached upstream's save point (the start of an encounter): a good
                           * moment for the app to call gc_run_save and write the buffer */
 } gc_event_kind;
@@ -76,6 +77,7 @@ typedef enum {
     GC_SCREEN_EVOLVE,       /* party member `party` is evolving into `species`: GC_CH_EVOLVE or GC_CH_CANCEL */
     GC_SCREEN_REWARD,       /* the reward options after a wave (SelectModifierPhase) */
     GC_SCREEN_BIOME,        /* choose the next biome (the player holds a Map) */
+    GC_SCREEN_MYSTERY,      /* Mystery Encounter node selected; Task 46 supplies its action choices */
     GC_SCREEN_GAME_OVER,    /* the party is out of Pokemon: the run is over */
     GC_SCREEN_CLEAR,        /* the run is won (classic wave 200) */
 } gc_screen_kind;
@@ -96,6 +98,7 @@ typedef enum {
     GC_CH_REROLL,           /* REWARD */
     GC_CH_SKIP,             /* REWARD: take nothing */
     GC_CH_BIOME,            /* BIOME: a = index into screen.biomes */
+    GC_CH_MYSTERY,          /* MYSTERY: Task 45 continuation placeholder; Task 46 replaces with actions */
     GC_CH_CONTINUE,         /* GAME_OVER / CLEAR */
 } gc_choice_kind;
 
@@ -140,6 +143,9 @@ typedef struct {
     /* BIOME */
     uint8_t biomes[PR_MAX_BIOME_LINKS];
     int n_biomes;
+    /* MYSTERY */
+    int8_t mystery_type;         /* MysteryEncounterType 0..30 */
+    int8_t mystery_tier;         /* 0 COMMON, 1 GREAT, 2 ULTRA, 3 ROGUE */
 } gc_screen;
 
 /* ---------------------------------------------------------------- the run's state */
@@ -169,6 +175,13 @@ typedef struct {
     uint32_t pokemon_id;        /* held items: the Pokemon's id; 0 = not a held item */
 } gc_item;
 #define GC_MAX_ITEMS 128
+
+#define GC_MAX_MYSTERY_HISTORY 48
+typedef struct {
+    uint8_t type;                /* MysteryEncounterType */
+    uint8_t tier;                /* gc_mystery_tier */
+    uint16_t wave;
+} gc_mystery_seen;
 
 /* A starter as the starter select screen hands it over (upstream's Starter) */
 typedef struct {
@@ -213,7 +226,10 @@ typedef struct gc_run {
     int8_t party_order[6];
     gc_item items[GC_MAX_ITEMS];
     int n_items;
-    pr_me_save me;              /* mysteryEncounterSaveData */
+    pr_me_save me;              /* mysteryEncounterSaveData spawn state */
+    gc_mystery_seen mystery_history[GC_MAX_MYSTERY_HISTORY];
+    uint8_t n_mystery_history;
+    int8_t mystery_type, mystery_tier; /* selected node; -1 when none is active */
     /* the current battle */
     bool in_battle;
     int battle_type;            /* BattleType */
