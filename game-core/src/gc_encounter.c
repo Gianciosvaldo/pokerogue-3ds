@@ -297,13 +297,12 @@ void gc_new_battle(gc_run *run)
     unsigned before = run->run.unported;
     int rc = pr_run_new_battle(&run->run, wave, &ctx, &nb);
     note_run_core(run, before);
-    if (rc < 0 || nb.battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) {
-        /* a fixed classic battle (rival, evil team, Elite Four...) or a mystery encounter: a wild battle
-         * of the wave's level stands in (the fixed battle's config and the encounters aren't ported) */
-        gc_stub(run, rc < 0 ? GC_STUB_UNPORTED_ENEMY : GC_STUB_MYSTERY_ENCOUNTER);
-        if (nb.me_spawn_chance_reset) run->me.spawn_chance = 3;   /* BASE_MYSTERY_ENCOUNTER_SPAWN_WEIGHT */
+    if (rc < 0) {
+        /* A fixed battle/config closure still outside the current game-core integration: use the
+         * established wild stand-in. Mystery Encounters are handled separately below. */
+        gc_stub(run, GC_STUB_UNPORTED_ENEMY);
         run->run.unported = before;
-        if (rc < 0) pr_run_reset_seed(&run->run, wave);
+        pr_run_reset_seed(&run->run, wave);
         pr_rng br = pr_run_battle_rng(&run->run, wave);
         memset(&nb, 0, sizeof nb);
         nb.battle_type = BATTLE_TYPE_WILD;
@@ -327,6 +326,33 @@ void gc_new_battle(gc_run *run)
         pr_run_try_spread_pokerus(&run->run, wave, pk, run->n_party);
         for (int i = 0; i < run->n_party; i++) run->party[i].pokerus = pk[i];
     }
+
+    if (nb.battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) {
+        int type = GC_ME_MYSTERIOUS_CHALLENGERS, tier = GC_ME_TIER_COMMON;
+        run->battle_type = BATTLE_TYPE_MYSTERY_ENCOUNTER;
+        memcpy(run->battle_seed, nb.battle_seed, sizeof run->battle_seed);
+        if (!gc_mystery_select(run, &type, &tier)) {
+            type = GC_ME_MYSTERIOUS_CHALLENGERS;
+            tier = GC_ME_TIER_GREAT;
+        }
+        gc_mystery_record(run, type, tier);
+        in->pending_me_miss = false;
+
+        gc_event *ev = gc_ev_new(run, GC_EV_WAVE);
+        if (ev) { ev->a = wave; ev->b = run->biome; ev->c = BATTLE_TYPE_MYSTERY_ENCOUNTER; }
+        ev = gc_ev_new(run, GC_EV_MYSTERY);
+        if (ev) { ev->a = type; ev->b = tier; ev->c = wave; }
+
+        /* Upstream saves at the encounter start before showing the mystery node. */
+        gc_ev_new(run, GC_EV_SAVE_POINT);
+        in->at_save_point = true;
+        pr_run_reset_seed(&run->run, wave);
+        gc_rq_unshift(run, gc_rp(RP_MYSTERY, type, tier, 0));
+        return;
+    }
+
+    in->pending_me_miss = pr_run_is_mystery_encounter_valid_for_wave(
+        &run->run, nb.battle_type == BATTLE_TYPE_WILD, wave);
 
     /* EncounterPhase: the enemy party */
     bool ok = nb.battle_type == BATTLE_TYPE_TRAINER ? gen_trainer(run, &nb, prev_wave) : gen_wild(run, nb.levels[0]);
@@ -376,6 +402,10 @@ void gc_new_battle(gc_run *run)
     /* the save point: gameData.saveAll at the start of the encounter, before anything is shown */
     gc_ev_new(run, GC_EV_SAVE_POINT);
     in->at_save_point = true;
+    if (in->pending_me_miss) {
+        gc_mystery_increment_miss(run);
+        in->pending_me_miss = false;
+    }
     /* doEncounter: resetWaveData, then resetSeed() once the encounter is set up */
     pr_run_reset_seed(&run->run, wave);
 
