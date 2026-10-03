@@ -30,6 +30,19 @@ The unported cases are all Moveset Randomizer runs (its TM shuffle isn't ported;
 
 Planted bugs (the seed-99 cases replayed through a changed port): 16 of 17 are caught, from the Poké Ball weight ignoring the game mode (958 cases) and two undefined groups not counting as duplicates (1,901) to the attack type booster's cap of 3 (5), the Mystical Rock's full stack (4) and a held item's stack limit (4). The one not caught is Necrozma's rule, which can't change anything with today's data: the Ultranecrozium Z and the two N-items it looks for are never offered from the same form (checked in `gen/out/reward_data.c`).
 
+## Memory Mushroom / move relearning
+
+Task 43 adds the two-stage Memory Mushroom path. `pr_reward_memory_moves` mirrors
+`PlayerPokemon.getLearnableLevelMoves()`: previous level/evolution/pre-evolution/relearner rows,
+eligible unlocked egg moves, and used TMs are combined, currently-known moves are removed, and the
+stable upstream source ordering is preserved. `pr_reward_memory_begin` represents
+`PartyUiMode.REMEMBER_MOVE_MODIFIER`; `pr_reward_memory_choose` represents the queued
+`LearnMovePhase(..., LearnMoveType.MEMORY, cost)` and records that the reward screen is copied
+before the consumable is applied.
+
+The caller supplies parsed learnset rows, unlocked egg moves and challenge egg-relearn availability
+in `pr_reward_mon`; reward-core owns the Memory Mushroom filtering/order and target state, not the UI rendering.
+
 ## Not done yet
 - Trainers' `genModifiersFunc` and fixed battles' `customModifierRewardSettings` (the rival's and bosses' reward screens); a caller can pass custom settings already.
 - What each reward does when it is picked or used (healing, revives, PP, TMs, evolution items, vitamins, Rare Candy, held items into the battle's modifier list, lures, charms, exp items). Next in this folder.
