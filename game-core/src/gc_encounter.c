@@ -224,6 +224,11 @@ static bool gen_wild(gc_run *run, int level)
     return true;
 }
 
+bool gc_gen_wild(gc_run *run, int level)
+{
+    return gen_wild(run, level);
+}
+
 static bool gen_trainer(gc_run *run, const pr_new_battle *nb, int prev_wave)
 {
     const pr_party_template *tpl = party_template(&run->run, nb->trainer_type, nb->template_index, prev_wave);

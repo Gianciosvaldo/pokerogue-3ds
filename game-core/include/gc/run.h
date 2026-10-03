@@ -146,6 +146,7 @@ typedef struct {
     /* MYSTERY */
     int8_t mystery_type;         /* MysteryEncounterType 0..30 */
     int8_t mystery_tier;         /* 0 COMMON, 1 GREAT, 2 ULTRA, 3 ROGUE */
+    bool option_ok[8];
 } gc_screen;
 
 /* ---------------------------------------------------------------- the run's state */

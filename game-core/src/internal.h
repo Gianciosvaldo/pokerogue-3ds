@@ -120,6 +120,8 @@ bool gc_mon_allowed(const gc_mon *m);                                  /* isAllo
 /* ---- items (src/gc_items.c) ---- */
 int gc_item_stack(const gc_run *run, const char *key);                 /* stack count of a player item, 0 = none */
 void gc_item_add(gc_run *run, const char *key, int16_t arg, uint32_t pokemon_id, int stack);
+void gc_item_remove_at(gc_run *run, int idx);
+int gc_item_remove_stacks(gc_run *run, const char *key, int count);
 void gc_items_to_battle(gc_run *run);                                  /* the player's and the enemy's lists into bt->mods */
 double gc_apply_exp_boosters(const gc_run *run, double exp);          /* ExpBoosterModifier */
 
@@ -129,6 +131,9 @@ void gc_new_battle(gc_run *run);                  /* NewBattlePhase + EncounterP
 bool gc_mystery_select(gc_run *run, int *type, int *tier);
 void gc_mystery_record(gc_run *run, int type, int tier);
 void gc_mystery_increment_miss(gc_run *run);
+void gc_mystery_setup_screen(gc_run *run);
+bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why, bool *ok);
+bool gc_gen_wild(gc_run *run, int level);
 void gc_trainer_names(gc_run *run);               /* run->trainer_names for the current trainer */
 bool gc_is_new_biome(const gc_run *run, int wave);   /* isNewBiome for the battle of `wave` */
 bool gc_battle_setup_field(gc_run *run, bool reset_arena);   /* bt from the parties, before the first turn */

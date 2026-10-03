@@ -27,6 +27,39 @@ void gc_item_add(gc_run *run, const char *key, int16_t arg, uint32_t pokemon_id,
     it->stack = stack;
 }
 
+void gc_item_remove_at(gc_run *run, int idx)
+{
+    if (idx < 0 || idx >= run->n_items) return;
+    for (int i = idx; i < run->n_items - 1; i++) {
+        run->items[i] = run->items[i + 1];
+    }
+    run->n_items--;
+    memset(&run->items[run->n_items], 0, sizeof(gc_item));
+}
+
+int gc_item_remove_stacks(gc_run *run, const char *key, int count)
+{
+    int removed = 0;
+    for (int i = 0; i < run->n_items && count > 0; ) {
+        if (!strcmp(run->items[i].key, key) || (strstr(key, "BERRY") && strstr(run->items[i].key, "BERRY"))) {
+            if (run->items[i].stack <= count) {
+                int take = run->items[i].stack;
+                count -= take;
+                removed += take;
+                gc_item_remove_at(run, i);
+                continue;
+            } else {
+                run->items[i].stack -= count;
+                removed += count;
+                count = 0;
+                break;
+            }
+        }
+        i++;
+    }
+    return removed;
+}
+
 /* ExpBoosterModifier.apply for each Exp. Charm kind, in list order: floor(exp * (1 + stacks * boost)) */
 double gc_apply_exp_boosters(const gc_run *run, double exp)
 {

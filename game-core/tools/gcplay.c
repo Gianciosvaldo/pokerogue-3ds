@@ -171,6 +171,10 @@ static void print_screen(const gc_run *run)
         for (int i = 0; i < s->n_biomes; i++) printf(" %d=%d", i, s->biomes[i]);
         printf("\n");
         break;
+    case GC_SCREEN_MYSTERY:
+        printf("MYSTERY (type %d tier %d): options %d\n", s->mystery_type, s->mystery_tier, s->n_options);
+        for (int i = 0; i < s->n_options; i++) printf("  option %d: %s\n", i, s->option_ok[i] ? "ok" : "disabled");
+        break;
     case GC_SCREEN_GAME_OVER: printf("GAME OVER at wave %d, score %d\n", run->wave, run->score); break;
     case GC_SCREEN_CLEAR: printf("CLEAR! score %d\n", run->score); break;
     default: printf("(screen %d)\n", s->kind); break;
@@ -280,6 +284,16 @@ static bool plain_choice(const gc_run *run, gc_choice *c)
         return true;
     }
     case GC_SCREEN_EVOLVE: c->kind = GC_CH_EVOLVE; return true;
+    case GC_SCREEN_MYSTERY: {
+        int best = -1;
+        for (int i = 0; i < s->n_options; i++) if (s->option_ok[i]) { best = i; break; }
+        if (best < 0) return false;
+        c->kind = GC_CH_MYSTERY;
+        c->a = (int16_t)best;
+        c->b = (int16_t)alive_member(run);
+        c->c = 0;
+        return true;
+    }
     case GC_SCREEN_REWARD: {
         const int fainted = most_hurt(run, true), hurt = most_hurt(run, false);
         /* buy a potion for a badly hurt member once */
@@ -384,6 +398,15 @@ static bool auto_choose(gc_run *run)
             c.kind = GC_CH_BIOME;
             c.a = (int16_t)rnd((uint32_t)s->n_biomes);
             break;
+        case GC_SCREEN_MYSTERY: {
+            int ok[8], n = 0;
+            for (int i = 0; i < s->n_options; i++) if (s->option_ok[i]) ok[n++] = i;
+            c.kind = GC_CH_MYSTERY;
+            c.a = (int16_t)(n ? ok[rnd((uint32_t)n)] : 0);
+            c.b = (int16_t)alive_member(run);
+            c.c = 0;
+            break;
+        }
         default:
             return false;
         }
@@ -681,6 +704,7 @@ static int play(const char *seed, const char *starters)
             c.a = (int16_t)a; c.b = (int16_t)b; c.c = (int16_t)d;
             break;
         case GC_SCREEN_BIOME: c.kind = GC_CH_BIOME; c.a = (int16_t)atoi(cmd); break;
+        case GC_SCREEN_MYSTERY: c.kind = GC_CH_MYSTERY; c.a = (int16_t)a; c.b = (int16_t)b; c.c = (int16_t)d; break;
         default: break;
         }
         if (!gc_run_choose(&run, &c, &why)) printf("  not allowed: %s\n", why);

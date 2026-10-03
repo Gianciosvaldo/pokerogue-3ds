@@ -586,6 +586,7 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         s->kind = GC_SCREEN_MYSTERY;
         s->mystery_type = (int8_t)p->a;
         s->mystery_tier = (int8_t)p->b;
+        gc_mystery_setup_screen(run);
         return false;
     }
     case RP_GAME_OVER: {
@@ -690,16 +691,8 @@ bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char *
         set_next_biome(run, run->screen.biomes[c->a]);
         return true;
     case RP_MYSTERY:
-        /* Task 45 owns dispatch only. Task 46 replaces this single continuation with the
-         * encounter-specific action tree; until then no fake battle is generated. */
         if (c->kind != GC_CH_MYSTERY) { *why = "choose a mystery encounter action"; return false; }
-        *ok = true;
-        gc_stub(run, GC_STUB_MYSTERY_ENCOUNTER);
-        run->in_battle = false;
-        run->mystery_type = run->mystery_tier = -1;
-        if (gc_is_new_biome(run, run->wave)) gc_rq_push(run, gc_rp(RP_SELECT_BIOME, 0, 0, 0));
-        gc_rq_push(run, gc_rp(RP_NEW_BATTLE, 0, 0, 0));
-        return true;
+        return gc_mystery_execute(run, c->a, c->b, c->c, why, ok);
     case RP_PARTY_SWAP: {
         if (c->kind != GC_CH_PICK) { *why = "pick a Pokemon"; return false; }
         const gc_screen *s = &run->screen;
