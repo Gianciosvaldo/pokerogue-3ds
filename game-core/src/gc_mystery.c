@@ -12,38 +12,38 @@ typedef struct {
     uint8_t wave_mod_mask; /* bit r means wave % 10 == r is legal; 0 = no modulus gate */
 } me_rule;
 
-static const me_rule me_rules[GC_MYSTERY_TYPE_COUNT] = {
-    [GC_ME_MYSTERIOUS_CHALLENGERS] = {GC_ME_TIER_GREAT, 10,180,0,0,0,0,0},
-    [GC_ME_MYSTERIOUS_CHEST]       = {GC_ME_TIER_COMMON,10,180,0,2,0,0,0},
-    [GC_ME_DARK_DEAL]               = {GC_ME_TIER_ROGUE, 30,180,0,2,(1u<<0)|(1u<<9),0,0},
-    [GC_ME_FIGHT_OR_FLIGHT]         = {GC_ME_TIER_COMMON,10,180,0,0,0,0,0},
-    [GC_ME_SLUMBERING_SNORLAX]      = {GC_ME_TIER_GREAT, 15,150,0,0,(1u<<11),0,0},
-    [GC_ME_TRAINING_SESSION]        = {GC_ME_TIER_ULTRA, 10,180,0,2,0,0,0},
-    [GC_ME_DEPARTMENT_STORE_SALE]   = {GC_ME_TIER_COMMON,10,100,0,0,0,0,0},
-    [GC_ME_SHADY_VITAMIN_DEALER]    = {GC_ME_TIER_COMMON,10,180,0,0,0,1.5,0},
-    [GC_ME_FIELD_TRIP]              = {GC_ME_TIER_COMMON,10,100,0,0,0,0,0},
-    [GC_ME_SAFARI_ZONE]             = {GC_ME_TIER_GREAT, 10,180,0,0,0,2.0,0},
-    [GC_ME_LOST_AT_SEA]             = {GC_ME_TIER_COMMON,10,180,0,0,0,0,0},
-    [GC_ME_FIERY_FALLOUT]           = {GC_ME_TIER_COMMON,40,180,0,0,0,0,0},
-    [GC_ME_THE_STRONG_STUFF]        = {GC_ME_TIER_COMMON,10,180,1,3,0,0,0},
-    [GC_ME_THE_POKEMON_SALESMAN]    = {GC_ME_TIER_ULTRA, 10,180,0,0,0,4.0,0},
-    [GC_ME_AN_OFFER_YOU_CANT_REFUSE]= {GC_ME_TIER_GREAT, 10,180,0,2,0,0,0},
-    [GC_ME_DELIBIRDY]               = {GC_ME_TIER_GREAT, 10,180,4,0,0,2.0,0},
-    [GC_ME_ABSOLUTE_AVARICE]        = {GC_ME_TIER_GREAT, 20,180,0,0,0,0,0},
-    [GC_ME_A_TRAINERS_TEST]         = {GC_ME_TIER_ROGUE,100,180,0,0,0,0,0},
-    [GC_ME_TRASH_TO_TREASURE]       = {GC_ME_TIER_ULTRA,100,180,1,3,0,0,0},
-    [GC_ME_BERRIES_ABOUND]          = {GC_ME_TIER_COMMON,10,180,0,0,0,0,0},
-    [GC_ME_CLOWNING_AROUND]         = {GC_ME_TIER_ULTRA, 80,180,0,0,(1u<<1),0,0},
-    [GC_ME_PART_TIMER]              = {GC_ME_TIER_COMMON,10,180,0,0,0,0,0},
-    [GC_ME_DANCING_LESSONS]         = {GC_ME_TIER_GREAT, 30,180,0,0,0,0,0},
-    [GC_ME_WEIRD_DREAM]             = {GC_ME_TIER_ROGUE, 30,140,1,3,(1u<<0)|(1u<<1),0,0},
-    [GC_ME_THE_WINSTRATE_CHALLENGE] = {GC_ME_TIER_ROGUE,100,180,1,3,0,0,0},
-    [GC_ME_TELEPORTING_HIJINKS]     = {GC_ME_TIER_COMMON,10,180,0,0,0,1.75,(1u<<2)|(1u<<3)|(1u<<4)},
-    [GC_ME_BUG_TYPE_SUPERFAN]       = {GC_ME_TIER_GREAT, 30,180,1,3,0,0,0},
-    [GC_ME_FUN_AND_GAMES]           = {GC_ME_TIER_GREAT, 10,180,0,0,0,1.5,0},
-    [GC_ME_UNCOMMON_BREED]          = {GC_ME_TIER_COMMON,10,180,0,0,0,0,0},
-    [GC_ME_GLOBAL_TRADE_SYSTEM]     = {GC_ME_TIER_COMMON,10,180,0,2,0,0,0},
-    [GC_ME_THE_EXPERT_POKEMON_BREEDER]={GC_ME_TIER_ULTRA,25,180,0,4,(1u<<9),0,0},
+static const me_rule me_rules[GC_ME_COUNT] = {
+    [GC_ME_MYSTERIOUS_CHALLENGERS] = {GC_ME_GREAT, 10,180,0,0,0,0,0},
+    [GC_ME_MYSTERIOUS_CHEST]       = {GC_ME_COMMON,10,180,0,2,0,0,0},
+    [GC_ME_DARK_DEAL]               = {GC_ME_ROGUE, 30,180,0,2,(1u<<0)|(1u<<9),0,0},
+    [GC_ME_FIGHT_OR_FLIGHT]         = {GC_ME_COMMON,10,180,0,0,0,0,0},
+    [GC_ME_SLUMBERING_SNORLAX]      = {GC_ME_GREAT, 15,150,0,0,(1u<<11),0,0},
+    [GC_ME_TRAINING_SESSION]        = {GC_ME_ULTRA, 10,180,0,2,0,0,0},
+    [GC_ME_DEPARTMENT_STORE_SALE]   = {GC_ME_COMMON,10,100,0,0,0,0,0},
+    [GC_ME_SHADY_VITAMIN_DEALER]    = {GC_ME_COMMON,10,180,0,0,0,1.5,0},
+    [GC_ME_FIELD_TRIP]              = {GC_ME_COMMON,10,100,0,0,0,0,0},
+    [GC_ME_SAFARI_ZONE]             = {GC_ME_GREAT, 10,180,0,0,0,2.0,0},
+    [GC_ME_LOST_AT_SEA]             = {GC_ME_COMMON,10,180,0,0,0,0,0},
+    [GC_ME_FIERY_FALLOUT]           = {GC_ME_COMMON,40,180,0,0,0,0,0},
+    [GC_ME_THE_STRONG_STUFF]        = {GC_ME_COMMON,10,180,1,3,0,0,0},
+    [GC_ME_THE_POKEMON_SALESMAN]    = {GC_ME_ULTRA, 10,180,0,0,0,4.0,0},
+    [GC_ME_AN_OFFER_YOU_CANT_REFUSE]= {GC_ME_GREAT, 10,180,0,2,0,0,0},
+    [GC_ME_DELIBIRDY]               = {GC_ME_GREAT, 10,180,4,0,0,2.0,0},
+    [GC_ME_ABSOLUTE_AVARICE]        = {GC_ME_GREAT, 20,180,0,0,0,0,0},
+    [GC_ME_A_TRAINERS_TEST]         = {GC_ME_ROGUE,100,180,0,0,0,0,0},
+    [GC_ME_TRASH_TO_TREASURE]       = {GC_ME_ULTRA,100,180,1,3,0,0,0},
+    [GC_ME_BERRIES_ABOUND]          = {GC_ME_COMMON,10,180,0,0,0,0,0},
+    [GC_ME_CLOWNING_AROUND]         = {GC_ME_ULTRA, 80,180,0,0,(1u<<1),0,0},
+    [GC_ME_PART_TIMER]              = {GC_ME_COMMON,10,180,0,0,0,0,0},
+    [GC_ME_DANCING_LESSONS]         = {GC_ME_GREAT, 30,180,0,0,0,0,0},
+    [GC_ME_WEIRD_DREAM]             = {GC_ME_ROGUE, 30,140,1,3,(1u<<0)|(1u<<1),0,0},
+    [GC_ME_THE_WINSTRATE_CHALLENGE] = {GC_ME_ROGUE,100,180,1,3,0,0,0},
+    [GC_ME_TELEPORTING_HIJINKS]     = {GC_ME_COMMON,10,180,0,0,0,1.75,(1u<<2)|(1u<<3)|(1u<<4)},
+    [GC_ME_BUG_TYPE_SUPERFAN]       = {GC_ME_GREAT, 30,180,1,3,0,0,0},
+    [GC_ME_FUN_AND_GAMES]           = {GC_ME_GREAT, 10,180,0,0,0,1.5,0},
+    [GC_ME_UNCOMMON_BREED]          = {GC_ME_COMMON,10,180,0,0,0,0,0},
+    [GC_ME_GLOBAL_TRADE_SYSTEM]     = {GC_ME_COMMON,10,180,0,2,0,0,0},
+    [GC_ME_THE_EXPERT_POKEMON_BREEDER]={GC_ME_ULTRA,25,180,0,4,(1u<<9),0,0},
 };
 
 static bool biome_has(const gc_run *r, int type)
@@ -124,7 +124,7 @@ static bool any_over_half_hp(const gc_run *r)
 
 static bool available(const gc_run *r, int type, int tier)
 {
-    if (type < 0 || type >= GC_MYSTERY_TYPE_COUNT || !biome_has(r, type)) return false;
+    if (type < 0 || type >= GC_ME_COUNT || !biome_has(r, type)) return false;
     const me_rule *q = &me_rules[type];
     if (q->tier != tier || r->wave < q->min_wave || r->wave > q->max_wave) return false;
     if (r->n_mystery_history && r->mystery_history[r->n_mystery_history - 1].type == type) return false;
@@ -158,24 +158,24 @@ bool gc_mystery_select(gc_run *run, int *out_type, int *out_tier)
 {
     int weights[4] = {66, 40, 19, 3};
     for (int i = 0; i < run->n_mystery_history; i++) {
-        if (run->mystery_history[i].tier == GC_ME_TIER_COMMON) weights[0] -= 6;
-        else if (run->mystery_history[i].tier == GC_ME_TIER_GREAT) weights[1] -= 4;
+        if (run->mystery_history[i].tier == GC_ME_COMMON) weights[0] -= 6;
+        else if (run->mystery_history[i].tier == GC_ME_GREAT) weights[1] -= 4;
     }
     for (int i = 0; i < 4; i++) if (weights[i] < 0) weights[i] = 0;
     int total = weights[0] + weights[1] + weights[2] + weights[3];
     if (total <= 0) return false;
 
     int roll = pr_rng_seed_int(&run->run.rng, total, 0);
-    int tier = GC_ME_TIER_COMMON;
-    if (roll > weights[0] + weights[1] + weights[2]) tier = GC_ME_TIER_ROGUE;
-    else if (roll > weights[0] + weights[1]) tier = GC_ME_TIER_ULTRA;
-    else if (roll > weights[0]) tier = GC_ME_TIER_GREAT;
+    int tier = GC_ME_COMMON;
+    if (roll > weights[0] + weights[1] + weights[2]) tier = GC_ME_ROGUE;
+    else if (roll > weights[0] + weights[1]) tier = GC_ME_ULTRA;
+    else if (roll > weights[0]) tier = GC_ME_GREAT;
 
-    int candidates[GC_MYSTERY_TYPE_COUNT], n = 0;
+    int candidates[GC_ME_COUNT], n = 0;
     for (;;) {
         n = 0;
-        for (int t = 0; t < GC_MYSTERY_TYPE_COUNT; t++) if (available(run, t, tier)) candidates[n++] = t;
-        if (n || tier == GC_ME_TIER_COMMON) break;
+        for (int t = 0; t < GC_ME_COUNT; t++) if (available(run, t, tier)) candidates[n++] = t;
+        if (n || tier == GC_ME_COMMON) break;
         tier--;
     }
 
