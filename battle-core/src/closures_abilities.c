@@ -420,7 +420,27 @@ static double side_has_fainted(ARGS)
     return (a->is_player ? bt->player_faints : bt->enemy_faints) > 0;
 }
 
+/* Form callbacks are evaluated before showing the ability, including for species
+ * whose current ability/passive differs from their natural one. */
+static double form_zero(ARGS) { UNUSED; return 0; }
+static double zen_form(ARGS) { UNUSED; return pr_get_hp_ratio(a, false) <= .5 ? 1 : 0; }
+static double meteor_base(ARGS) { UNUSED; return a->form % 7; }
+static double shields_form(ARGS) { UNUSED; return a->form % 7 + (pr_get_hp_ratio(a, false) <= .5 ? 7 : 0); }
+static double schooling_form(ARGS) { UNUSED; return a->level < 20 || pr_get_hp_ratio(a, false) <= .25 ? 0 : 1; }
+static double hunger_toggle(ARGS) { UNUSED; const pr_form *f = pr_pokemon_form(a); return f && f->form_key && f->form_key[0] ? 0 : 1; }
+static double hunger_stay(ARGS) { UNUSED; const pr_form *f = pr_pokemon_form(a); return f && f->form_key && f->form_key[0] ? 1 : 0; }
+
 const pr_closure_reg pr_ability_closures[] = {
+    {"ability:161", "5e264af5663d", form_zero},
+    {"ability:161", "38014e3c8e4b", zen_form},
+    {"ability:197", "6bab2eeebf7d", meteor_base},
+    {"ability:197", "6c19617bd754", shields_form},
+    {"ability:208", "5e264af5663d", form_zero},
+    {"ability:208", "759562ea36a7", schooling_form},
+    {"ability:209", "5e264af5663d", form_zero},
+    {"ability:248", "5e264af5663d", form_zero},
+    {"ability:258", "55c07decbbff", hunger_toggle},
+    {"ability:258", "0f9adfd526fb", hunger_stay},
     {"ability:293", "4d378ef18dde", side_has_fainted}, /* closure 675 */
     {"ability:8", "5d9de4139911", weather_in}, /* closure 460 */
     {"ability:33", "ea09345d0147", weather_in}, /* closure 464 */

@@ -327,7 +327,7 @@ double js_round(double x)
 /* Pokemon.hasPassive(), with the game mode's rules when the mode is known: no passive for the
  * enemy in the classic final battle or on an endless boss wave, and a daily run's Pokemon has the
  * passive its custom data names. (The passives challenge isn't modelled.) */
-static bool has_passive(pr_battle *bt, const pr_pokemon *p)
+bool pr_has_passive(pr_battle *bt, const pr_pokemon *p)
 {
     int gm = bt->game_mode, w = bt->wave_index;
     if (gm == GAME_MODES_CHALLENGE) pr_note_unported(bt, PR_FEAT_WAVE);
@@ -340,7 +340,7 @@ static bool has_passive(pr_battle *bt, const pr_pokemon *p)
 
 void pr_update_passive(pr_battle *bt, pr_pokemon *p)
 {
-    if (!has_passive(bt, p)) { p->passive = 0; return; }
+    if (!pr_has_passive(bt, p)) { p->passive = 0; return; }
     if (p->custom_passive >= 0) p->passive = (uint16_t)p->custom_passive;
     else p->passive = pr_pokemon_form(p)->passive;
 }

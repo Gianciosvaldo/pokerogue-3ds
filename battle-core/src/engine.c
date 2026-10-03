@@ -388,7 +388,8 @@ static void queue_ability_phases(pr_battle *bt, pr_engine *e, int ph)
     if (!p) { limit(bt, e); return; }
     uint16_t abs[2] = {p->ability, p->passive};
     for (int k = 0; k < 2; k++) {
-        if (k == 1 && !p->passive) break;
+        /* Legacy callers may supply an effective nonzero passive directly. */
+        if (k == 1 && !p->passive && !pr_has_passive(bt, p)) break;
         int a = pr_phase_new(e, PH_POST_SUMMON, (int8_t)b);
         if (a < 0) { limit(bt, e); return; }
         e->pool[a].ps_activate = true;
