@@ -787,6 +787,10 @@ int pr_reward_reroll(pr_reward_ctx *ctx, double *money, bool lock_rarities,
                      pr_reward_option *out_options)
 {
     if (!ctx || !money || !sel || !th || !out_options) return -1;
+    if (lock_rarities && n_prev_options > PR_REWARD_MAX_OPTIONS) {
+        if (ctx->run) ctx->run->unported |= PR_REWARD_UNPORTED_OPTIONS;
+        return -1;
+    }
 
     const pr_reward_custom *custom = sel->custom;
     const double cost = pr_reward_reroll_cost(ctx, sel->reroll_count, lock_rarities,
@@ -795,24 +799,23 @@ int pr_reward_reroll(pr_reward_ctx *ctx, double *money, bool lock_rarities,
         return -1;
     }
 
-    int8_t locked_tiers[PR_REWARD_MAX_OPTIONS];
-    int n_locked = 0;
+    sel->n_owned_locked_tiers = 0;
     if (lock_rarities && prev_options && n_prev_options > 0) {
-        n_locked = pr_reward_get_locked_tiers(prev_options, n_prev_options, locked_tiers);
+        sel->n_owned_locked_tiers = pr_reward_get_locked_tiers(
+            prev_options, n_prev_options, sel->owned_locked_tiers);
     }
 
     sel->reroll_count++;
     sel->is_copy = false;
-    if (lock_rarities && n_locked > 0) {
-        sel->locked_tiers = locked_tiers;
-        sel->n_locked_tiers = n_locked;
+    if (lock_rarities && sel->n_owned_locked_tiers > 0) {
+        sel->locked_tiers = sel->owned_locked_tiers;
+        sel->n_locked_tiers = sel->n_owned_locked_tiers;
     } else {
         sel->locked_tiers = NULL;
         sel->n_locked_tiers = 0;
     }
 
-    int res = pr_reward_select_start(ctx, sel, th, out_options);
-    sel->locked_tiers = NULL;
-    sel->n_locked_tiers = 0;
-    return res;
+    /* Upstream's new SelectModifierPhase keeps modifierTiers as phase state after start().
+     * Do not clear the retained tiers here: a later copy()/reopen must see the same state. */
+    return pr_reward_select_start(ctx, sel, th, out_options);
 }
