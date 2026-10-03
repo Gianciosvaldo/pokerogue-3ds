@@ -1,12 +1,12 @@
 # Remaining parity tasks (supplement to HANDOFF)
 
-Audit baseline: port main `2a740ab66bce22dd94aa34c6cbf2c8e665ad6a79`; upstream target `pagefaultgames/pokerogue` at `8555c08`. Public beta inspected separately at `4f0969875845fb412c5b0af8ed4bc006484a8f2a`; it is a moving target and is not the port target. This document is a source-backed planning inventory, **not an exhaustive per-move audit, a measured completion percentage, or evidence that the checks below ran**.
+Audit baseline: port main `2a740ab66bce22dd94aa34c6cbf2c8e665ad6a79`; upstream target `pagefaultgames/pokerogue` at `8555c08`. Public beta inspected separately at `4f0969875845fb412c5b0af8ed4bc006484a8f2a`; it is a moving target and is not the port target. This document is a source-backed planning inventory, **not an exhaustive per-move audit, a measured completion percentage, or evidence that the checks below ran**. See [PARITY-LEDGER.md](PARITY-LEDGER.md) for the active subsystem parity matrix, public beta drift analysis, landed PR index, and untested class inventory.
 
 Read [HANDOFF.md](HANDOFF.md), the root README and the owning folder README before each task. HANDOFF remains unchanged and controls every task: one task/branch/PR, never push main or merge; named-folder scope; generated data only via redump; no copyrighted assets, upstream source/dumps or binaries; preserve existing producers/comparators, tolerances, seeds, case counts and coverage. A test defect requires stopping the affected task and reporting it. New harnesses and modes below are additive, separately reviewed work, never permission to loosen or rewrite established checks. Exact commands and printed counts belong in each PR.
 
-Existing Tasks 50–56 retain their assigned numbers; Task 50 fixed Eternatus/Paradox generation is merged in PR #92. Do not duplicate their implementations. Supplementary cards start at 57 to avoid collisions; inspect current integration and recorded validation before starting. Tasks 57 and 58 are the initial coordinator and delegated slices respectively; descriptions below are acceptance targets until their PRs record results.
+Existing Tasks 50–56 retain their assigned numbers; Task 50 fixed Eternatus/Paradox generation is merged in PR #92. Do not duplicate their implementations. Supplementary cards start at 57 to avoid collisions; inspect current integration and recorded validation before starting. Tasks 57 and 58 are merged on `main` (PR #97 / commit `58030d6` and commit `836d10c`).
 
-Implementation PRs: [Task 57 #97](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/97) and [Task 58 #98](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/98) are drafts. Focused checks pass; expanded save equality and existing AI regression gates fail. Pause these drafts while scheduling Tasks 87/88 in their lanes, then rebase and rerun the full gates. No next integration task starts on an unmerged prerequisite.
+Implementation PRs: [Task 57 #97](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/97) and Task 58 (commit `836d10c`) are merged on `main`. No next integration task starts on an unmerged prerequisite.
 
 ## Scheduling
 
@@ -33,6 +33,19 @@ These aliases specify exact baseline commands; substitute the absolute upstream 
 - A **new approved suite** must name its producer path, environment flags, trace path, C executable and complete commands in its own PR before its numbers are evidence. The task's minimum seeds/counts never override a stricter existing baseline. No fictional command name is provided for a harness that does not exist yet.
 
 Missing upstream dependencies/network are a validation gap. Host fixtures, build success and code inspection do not substitute for unrun upstream differential checks. In particular, existing mystery traces are not validated money/party/modifier parity unless the comparator actually checks those outputs.
+
+## Coordinator status after Task 88 merge (2026-10-03)
+
+Main checked: `cdac97d859cd39ef96200570287efb28b77bc287`. The cards below retain their original scope and pass gates; status reports do not waive prerequisites.
+
+| Task | State | Gate |
+|---|---|---|
+| 67 | [#103](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/103), draft diagnostic | Pinned Illusion has no effect registrations; existing suite is 9 TODO / 0 executed. Nonzero disguise/break/switch differential unavailable; reviewed target/scope needed |
+| 87 | [#101](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/101), draft fixes | Expanded save equality still fails; seed 849 step-budget completion defect must be reviewed separately. Task 59 stays blocked |
+| 88 | [#102](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/102), merged diagnosis | Node 22: 19762 covered/identical, zero mismatches, 238 uncovered. Node 24's 2/9/9/12 failures and runtime-contract conflict remain |
+| 89 | [#104](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/104), draft | New bounded evolution application/queue slice passes 8000/8000. Existing apply: 3865 pass / 135 fail on both main/changed C; unrecorded Math.random fusion status draw blocks reliable replay |
+
+There is no new wave of three independent lower-compute tasks. Task 68 still needs completed 67, Task 60 still needs 87 then 59, and Task 71 still needs 67 then 69 and 70. Later hard tasks require these merged prerequisites; 63 remains run-core owner work, 85 console gated. Draft PRs stay draft until their validation blockers are resolved. See the [ledger](PARITY-LEDGER.md) for recorded scopes; unavailable or defective comparisons are not passing evidence.
 
 ## Task cards
 
