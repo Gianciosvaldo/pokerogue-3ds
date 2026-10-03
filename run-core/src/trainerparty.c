@@ -91,7 +91,9 @@ int pr_run_gen_trainer_party(pr_run *run, const pr_trainer_party_ctx *ctx, pr_tr
         int species = -1;
         bool closure_generated = false;
         if (func_key != 99) {
-            int handled = pr_run_gen_gym_e4_closure_member(run, ctx, e, func_key, &out->mons[e], &species);
+            int handled = ctx->enable_gym_e4
+                ? pr_run_gen_gym_e4_closure_member(run, ctx, e, func_key, &out->mons[e], &species)
+                : 0;
             if (handled < 0) { run->rng = saved; return -1; }
             if (!handled) {
                 run->unported |= PR_RUN_UNPORTED_TRAINER;
