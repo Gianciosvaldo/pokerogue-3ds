@@ -101,21 +101,80 @@ bv_mon* bv_mon_of(int battler) { return &side_of(battler)->mon; }
 
 /* ------------------------------------------------------------------ helpers */
 
+static const char* mon_form_key(uint16_t species, int form) {
+  int lo = 0, hi = PR_SPECIES_COUNT - 1;
+  while (lo <= hi) {
+    int mid = (lo + hi) / 2;
+    if (pr_species_table[mid].id == species) {
+      const pr_species* sp = &pr_species_table[mid];
+      if (!sp || sp->nforms <= 1) return "";
+      if (form >= sp->nforms) form = sp->nforms - 1;
+      const char* k = pr_forms[sp->form0 + form].form_key;
+      return k ? k : "";
+    }
+    if (pr_species_table[mid].id < species) lo = mid + 1;
+    else hi = mid - 1;
+  }
+  return "";
+}
+
+static float get_mon_scale(const bv_mon* m) {
+  const char* fk = mon_form_key((uint16_t)m->species, m->form);
+  if (fk && (strstr(fk, "gigantamax") || strstr(fk, "eternamax"))) {
+    return 1.5f;
+  }
+  return 1.0f;
+}
+
+static void update_mon_form(bv_mon* m, int species, int form) {
+  m->species = species;
+  m->form = form;
+  int lo = 0, hi = PR_SPECIES_COUNT - 1;
+  while (lo <= hi) {
+    int mid = (lo + hi) / 2;
+    if (pr_species_table[mid].id == species) {
+      const pr_species* sp = &pr_species_table[mid];
+      if (sp && sp->nforms > 0 && form < sp->nforms) {
+        const pr_form* f = &pr_forms[sp->form0 + form];
+        m->n_types = 0;
+        if (f->type1 >= 0) m->types[m->n_types++] = f->type1;
+        if (f->type2 >= 0) m->types[m->n_types++] = f->type2;
+      }
+      break;
+    }
+    if (pr_species_table[mid].id < species) lo = mid + 1;
+    else hi = mid - 1;
+  }
+}
+
 static void sprite_key(const bv_mon* m, bool back, char* out, int n) {
-  /* upstream getSpriteAtlasPath without forms, variants or gender differences yet */
-  snprintf(out, n, "images/pokemon/%s%s%d", back ? "back/" : "", m->shiny ? "shiny/" : "", m->species);
+  const char* b = back ? "back/" : "";
+  const char* s = m->shiny ? "shiny/" : "";
+  const char* fk = mon_form_key((uint16_t)m->species, m->form);
+
+  if (fk && *fk) {
+    snprintf(out, n, "images/pokemon/%s%s%d-%s", b, s, m->species, fk);
+    if (img_has(out)) return;
+    if (m->shiny) {
+      snprintf(out, n, "images/pokemon/%s%d-%s", b, m->species, fk);
+      if (img_has(out)) return;
+    }
+  }
+
+  snprintf(out, n, "images/pokemon/%s%s%d", b, s, m->species);
+  if (!img_has(out) && m->shiny) {
+    snprintf(out, n, "images/pokemon/%s%d", b, m->species);
+  }
 }
 
 static void set_mon(side* sd, const bv_mon* m, bool player) {
   sd->mon = *m;
   sprite_key(m, player, sd->sprite_key, sizeof sd->sprite_key);
-  if (!img_has(sd->sprite_key) && m->shiny) sprite_key(&(bv_mon){.species = m->species}, player, sd->sprite_key,
-                                                         sizeof sd->sprite_key);
   sd->hp_shown = m->hp;
   sd->exp_shown = m->exp_ratio;
   sd->sprite_on = true;
   sd->drop = 0;
-  sd->scale = 1;
+  sd->scale = get_mon_scale(m);
   sd->black = false;
   sd->show_ms = 0;
   /* resetSprite: no doll, no offset */
@@ -682,7 +741,7 @@ static void run_event(float dt) {
       if (B.step == 1 && B.t >= (player ? 750 : 250)) {
         /* the ball opens: the Pokemon grows in, cries, and its info box slides in */
         ui_play_sound("se/pb_rel");
-        tween_start(&B.tw, 0, 1, 250, EASE_SINE_IN);
+        tween_start(&B.tw, 0, get_mon_scale(&sd->mon), 250, EASE_SINE_IN);
         B.step = 2;
       }
       if (B.step == 2) {
@@ -913,6 +972,28 @@ static void run_event(float dt) {
         sd->show_ms = 0;
       }
       finish_event();
+      break;
+
+    case BEV_FORM_CHANGE:
+      if (B.step == 0) {
+        update_mon_form(&sd->mon, e->a, e->b);
+        sprite_key(&sd->mon, player, sd->sprite_key, sizeof sd->sprite_key);
+        float target_scale = get_mon_scale(&sd->mon);
+        ui_play_sound("battle_anims/PRSFX- Transform");
+        if (fabsf(sd->scale - target_scale) > 0.01f) {
+          tween_start(&B.tw, sd->scale, target_scale, 300, EASE_SINE_IN_OUT);
+          B.step = 1;
+        } else {
+          sd->scale = target_scale;
+          finish_event();
+          break;
+        }
+      }
+      if (B.step == 1) {
+        tween_update(&B.tw, dt);
+        sd->scale = B.tw.value;
+        if (tween_done(&B.tw)) finish_event();
+      }
       break;
   }
 }

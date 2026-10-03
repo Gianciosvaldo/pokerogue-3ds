@@ -43,6 +43,14 @@ build/stat_banner_test: $(BANNER_SRCS)
 stat_banner_test: build/stat_banner_test
 .PHONY: stat_banner_test
 
+# unit test for Mega/Dynamax/Gigantamax form animation states, event conversion, sprite keys, and scaling
+FORM_ANIM_SRCS := form_anim_test.c ../source/battle_setup.c ../source/battle_events.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+build/form_anim_test: $(FORM_ANIM_SRCS)
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) -I../gen -I../../assets-pipeline/app-src/include $(CFLAGS) $(FORM_ANIM_SRCS) -lm -o $@
+form_anim_test: build/form_anim_test
+.PHONY: form_anim_test
+
 # unit test for map selection UI driven by game-core
 GC := ../../game-core
 RC := ../../run-core
