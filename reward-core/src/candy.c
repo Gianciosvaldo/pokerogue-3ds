@@ -43,7 +43,7 @@ double pr_reward_level_total_exp(int level, int growth_rate)
     if (level < 1) return 0.0;
     double raw;
     if (level < 100) {
-        raw = canonical_exp(level, growth_rate);
+        raw = level == 1 ? 0.0 : canonical_exp(level, growth_rate);
     } else {
         const double n = level;
         switch (growth_rate) {
