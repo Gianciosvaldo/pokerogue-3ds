@@ -304,6 +304,10 @@ bool biome_map_input(mui_button b);
 void biome_map_update(float dt_ms);
 void biome_map_draw(void);
 
+/* ------------------------------------------------------------ shop & reward select UI */
+
+#include "shop_ui.h"
+
 #ifdef __cplusplus
 }
 #endif

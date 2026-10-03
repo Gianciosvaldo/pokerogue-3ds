@@ -63,3 +63,12 @@ build/splicer_ui_test: $(SPLICER_SRCS)
 	$(CC) $(SPLICER_CPPFLAGS) $(CFLAGS) $(SPLICER_SRCS) -lm -o $@
 splicer_ui_test: build/splicer_ui_test
 .PHONY: splicer_ui_test
+
+# unit test for shop UI and Lock Capsule visuals
+SHOP_CPPFLAGS := $(CPPFLAGS) -I../menus -I$(GC)/include -I$(GC)/src -I$(GC)/gen/out -I$(RC)/include -I$(RC)/gen/out -I$(APP)/include
+SHOP_SRCS := shop_ui_test.c ../menus/shop_ui.c ../menus/menus_names.c ../menus/menus_data.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+build/shop_ui_test: $(SHOP_SRCS)
+	@mkdir -p build
+	$(CC) $(SHOP_CPPFLAGS) $(CFLAGS) $(SHOP_SRCS) -lm -o $@
+shop_ui_test: build/shop_ui_test
+.PHONY: shop_ui_test
