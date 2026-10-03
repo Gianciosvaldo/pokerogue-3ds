@@ -68,7 +68,7 @@ int pr_run_new_battle(pr_run *run, int wave, const pr_new_battle_ctx *ctx, pr_ne
     /* this.resetSeed(waveIndex) */
     pr_run_reset_seed(run, wave);
     const int fixed_rival = ctx->enable_fixed_rivals ? classic_rival_type(run->mode, wave) : -1;
-    const int fixed_e4 = pr_run_fixed_e4_trainer(run, wave);
+    const int fixed_e4 = ctx->enable_gym_e4 ? pr_run_fixed_e4_trainer(run, wave) : -1;
     /* Tasks 48/49 close rivals plus the Classic/Challenge E4 and Champion fixed battles. */
     if (pr_run_is_fixed_battle(run, wave) && fixed_rival < 0 && fixed_e4 < 0) {
         run->unported |= PR_RUN_UNPORTED_FIXED_BATTLE;
