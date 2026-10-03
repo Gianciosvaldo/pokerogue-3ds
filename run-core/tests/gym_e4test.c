@@ -35,7 +35,6 @@ int main(int argc, char **argv)
         if (!t || t[0] == '#') continue;
 
         if (!strcmp(t, "C")) {
-            if (cases && case_ok) fights++;
             cases++;
             memset(&run, 0, sizeof run);
             memset(&nc, 0, sizeof nc);
