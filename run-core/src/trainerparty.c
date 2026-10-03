@@ -26,6 +26,19 @@ static bool has_func(const pr_trainer_species *ts, int key)
 
 static int seed_item(pr_rng *rng, int n) { return n == 1 ? 0 : pr_rng_integer_in_range(rng, 0, n - 1); }
 
+static int rival_fight(int type)
+{
+    switch (type) {
+    case TRAINER_TYPE_RIVAL: return 1;
+    case TRAINER_TYPE_RIVAL_2: return 2;
+    case TRAINER_TYPE_RIVAL_3: return 3;
+    case TRAINER_TYPE_RIVAL_4: return 4;
+    case TRAINER_TYPE_RIVAL_5: return 5;
+    case TRAINER_TYPE_RIVAL_6: return 6;
+    default: return 0;
+    }
+}
+
 /* signatureSpecies[TrainerType[type]] without the groups that hold a species already in the party,
  * flattened */
 static int filtered_signature(const pr_trainer_species *ts, const pr_trainer_party *party, uint16_t *out)
@@ -48,6 +61,8 @@ int pr_run_gen_trainer_party(pr_run *run, const pr_trainer_party_ctx *ctx, pr_tr
     memset(out, 0, sizeof *out);
     const pr_trainer_species *ts = trainer_species(ctx->enemy.trainer_type);
     if (!ts) { run->unported |= PR_RUN_UNPORTED_TRAINER; return -1; }
+    const int rf = rival_fight(ctx->enemy.trainer_type);
+    if (rf) return pr_run_gen_rival_party(run, ctx, rf, out);
     const pr_party_template *tpl = ctx->template_;
     pr_party_species_ctx sc;
     memset(&sc, 0, sizeof sc);
@@ -119,6 +134,7 @@ int pr_run_gen_trainer_party(pr_run *run, const pr_trainer_party_ctx *ctx, pr_tr
         ec.shiny_lock = false;
         if (pr_run_enemy_pokemon_base(run, &ec, &out->mons[e]) < 0) { run->rng = saved; return -1; }
         out->species[e] = (uint16_t)species;
+        out->levels[e] = level;
         out->n = e + 1;
 
         /* what the next members see: the root (checkDuplicateSpecies) and getTypes() of the new member
