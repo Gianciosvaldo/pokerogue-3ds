@@ -633,6 +633,8 @@ void pr_calculate_stats(pr_battle *bt, pr_pokemon *p);
 void pr_recalculate_stats(pr_battle *bt, pr_pokemon *p);
 int pr_get_tera_type(const pr_pokemon *p);
 /* p->passive from hasPassive() and getPassiveAbility() */
+/* Enabled passives include Daily custom ability NONE, whose activation phase still queues. */
+bool pr_has_passive(pr_battle *bt, const pr_pokemon *p);
 void pr_update_passive(pr_battle *bt, pr_pokemon *p);
 /* damageAndUpdate(damage, {result: INDIRECT, ignoreSegments: true, ignoreFaintPhase: true}) with no
  * source: the HP loss happens at once, as upstream does it in the middle of a damage calculation */
