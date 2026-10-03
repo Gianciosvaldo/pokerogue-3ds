@@ -11,7 +11,7 @@ RUN_LIB := $(BUILD)/run-core/librun.a
 SRCS := src/reward.c src/pools.c src/victory.c src/reward_apply.c src/memory.c src/candy.c gen/out/reward_data.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
-all: $(BUILD)/libreward.a $(BUILD)/rewardstest $(BUILD)/victorytest $(BUILD)/applytest $(BUILD)/memorytest $(BUILD)/candytest
+all: $(BUILD)/libreward.a $(BUILD)/rewardstest $(BUILD)/victorytest $(BUILD)/applytest $(BUILD)/memorytest $(BUILD)/candytest $(BUILD)/learnsetinputtest
 
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -39,6 +39,9 @@ $(BUILD)/memorytest: tests/memorytest.c $(BUILD)/libreward.a $(RUN_LIB) $(CORE_L
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
 $(BUILD)/candytest: tests/candytest.c $(BUILD)/libreward.a $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+$(BUILD)/learnsetinputtest: tests/learnsetinputtest.c $(BUILD)/libreward.a $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
 clean:

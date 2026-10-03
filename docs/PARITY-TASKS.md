@@ -379,6 +379,16 @@ There is no new wave of three independent lower-compute tasks. Task 68 still nee
 
 **Pass.** A planted species or ability mutation fails the new suite; then at least2,000 cases per each of four seeds show zero mismatches with nonzero successful/rejected applications of each family. Existing reward option/victory/apply regressions retain coverage. State precisely which lifecycle remains in game-core.
 
+### Task 91: Separate reward learnset caller contracts (reward-core/, lane B)
+
+**Branch:** `outside/reward-learnset-inputs`. **Assignment:** Hard/coordinator. **Prerequisites:** Lane B free; upstream pin unchanged. Task 59 integration awaits this API.
+
+**Problem.** One `pr_reward_mon.level_moves` list cannot represent both actual TM exclusions and Memory Mushroom pre-evolution/relearner rows. The established Memory producer also has a stale ValueHolder import and emits no cases at the pin.
+
+**Do.** Add an explicit separate relearner list, preserve legacy callers, use base moves for Memory exclusions under summon overrides, and preserve duplicate TM history as actual upstream does. Add a separate simultaneous getter/Memory/TM generator producer. Do not edit established checks; report the stale import and stop readiness pending its separately reviewed repair.
+
+**Pass.** New dual-input comparisons: 2,000 per seeds 777, 9001, 4242 and 31337, zero Memory/TM/RNG mismatches, nonzero distinct-list/fusion/summon-override cases; mutation detected. Explicit-empty/bounds host checks pass. Existing reward option/victory/application coverage and mismatch counts do not worsen. Established Memory producer must execute and replay cleanly after reviewed test-contract repair; no unexecuted cases credited. Host/3DS CI pass. No game lifecycle parity claim.
+
 ## Beyond these bounded slices
 
 This backlog is deliberately not a promise that 33 PRs produce full parity. Later tasks must separately bound remaining move/ability dispatch, Transform/Sketch and boss cases, complete held-item families, reward lifecycle classes, mystery encounter families, custom Daily event configurations, Endless/Challenge mechanics, egg-event differences, achievements and statistics, translations/tutorials, full menus and presentation, audio/animation acceptance, and Old 3DS resource limits. Online account/server features require an explicit offline replacement policy. Custom content follows pinned upstream parity; it is not parity work. Each further task needs the same Problem/Do/Pass contract and an owning lane.
