@@ -4,6 +4,7 @@ Native C port of PokeRogue's player rewards: the reward options after a wave (po
 
 The API is [`include/pr/reward.h`](include/pr/reward.h). The run loop (game-core) fills a `pr_reward_ctx` from the run before each reward screen: the party as the rolls see it, the player's items, ball counts, unlocks, the arena. A few of its fields are other ports' answers, marked "caller" in the header: `canSetStatus` (battle-core), `canApplyAbility`, the learnable level moves and the level-move list the TM filter leaves out (learnsets, not ported yet), each attack move's types for item spawns. The diff test takes those from upstream, so reward-core is checked given correct inputs.
 
+
 ## Task 89: evolution application state (2026-10-04)
 
 Checked against upstream `8555c08c823b856cbec4eb99ca84ea52a955836d` on
@@ -58,6 +59,7 @@ not claim that the old comparator checked these fields. Species and ability
 mutations at the C application boundary each yield 2000/2000 mismatches (exit 1).
 Deleting the completion footer yields exit 2. Queue capacity/overflow checks pass.
 
+
 ## Task 89 validation repair (2026-10-04)
 
 The user authorized repairing established inputs without removing assertions. Fusion now uses actual form/IV/nature data through battle-core's stat calculator, assigns HP from the upstream pre-fusion maximum and clamps after modifier refresh. The application producer records the real unseeded status-helper draw; it does not replace randomness with a fixed result. C requires that input when both valid statuses can be selected and refuses missing/invalid input before mutation. A sprite-only mock prevents destroyed display fixtures from throwing; upstream item/selection/stat/status logic still runs and any thrown case fails the producer. Form-item selection matches upstream item-trigger lookup without incorrectly requiring phase activation conditions. Hardcore rejects a fainted primary. Memory imports ValueHolder from its actual module and preserves duplicate used-TM history as upstream does.
@@ -87,6 +89,7 @@ PATH=/root/.npm/_npx/52027bd8fc0022aa/node_modules/node/bin:$PATH BUILD=/tmp/tas
 Each evolution producer reports one test passed. No 3DS/emulator result or full
 run evolution parity is claimed. Node 22 follows HANDOFF; upstream's declared
 Node >=24.9.0/runtime conflict remains as documented by Task 88.
+
 
 ## What works, and how it was checked
 | Piece | Upstream | State |

@@ -13,7 +13,7 @@ AI_LIB := $(BUILD)/ai-core/libai.a
 SRCS := src/gc_run.c src/gc_phases.c src/gc_mon.c src/gc_items.c src/gc_encounter.c src/gc_battle.c src/gc_save.c src/gc_stubs.c src/gc_system.c src/gc_mystery.c gen/out/gc_evolutions.c gen/out/gc_starters.c gen/out/gc_trainers.c gen/out/gc_dex.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
-all: $(BUILD)/itembridge_test $(BUILD)/libgc.a $(BUILD)/gcplay $(BUILD)/savetest $(BUILD)/system_save_test $(BUILD)/dextest $(BUILD)/dexupdatetest $(BUILD)/level_evo_test $(BUILD)/biome_test $(BUILD)/voucher_egg_test $(BUILD)/mystery_test $(BUILD)/mystery_diff_test
+all: $(BUILD)/resume_test $(BUILD)/itembridge_test $(BUILD)/libgc.a $(BUILD)/gcplay $(BUILD)/savetest $(BUILD)/system_save_test $(BUILD)/dextest $(BUILD)/dexupdatetest $(BUILD)/level_evo_test $(BUILD)/biome_test $(BUILD)/voucher_egg_test $(BUILD)/mystery_test $(BUILD)/mystery_diff_test
 
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -63,9 +63,13 @@ $(BUILD)/mystery_diff_test: tests/mystery_diff_test.c $(BUILD)/libgc.a $(AI_LIB)
 $(BUILD)/itembridge_test: tests/itembridge_test.c $(BUILD)/libgc.a $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
+$(BUILD)/resume_test: tests/resume_test.c tools/gcplay.c $(BUILD)/libgc.a $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/resume_test.c $(BUILD)/libgc.a $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+
 # the save checks, level/evo tests, biome tests, voucher/egg tests, then 200 soak runs twice: with a save/load round trip at every save point, the runs'
 # digest must come out the same
 test: all
+	$(BUILD)/resume_test
 	$(BUILD)/itembridge_test
 	$(BUILD)/savetest
 	$(BUILD)/system_save_test

@@ -49,7 +49,8 @@ static uint32_t pokemon_v(const pr_battle *bt, const pr_pokemon *p)
         flags |= PR_MSG_POKEMON_ENEMY;
         if (p->has_trainer || classic_final_boss(bt)) flags |= PR_MSG_POKEMON_FOE;
     }
-    return pr_msg_pokemon(p->species, p->form, flags);
+    return pr_msg_pokemon(p->illusion.active ? p->illusion.species : p->species,
+                          p->illusion.active ? p->illusion.form : p->form, flags);
 }
 
 pr_msg_arg pr_arg_pokemon(const pr_battle *bt, const char *name, const pr_pokemon *p)

@@ -80,7 +80,6 @@ bool pr_switch_out_condition(pr_battle *bt, bool self_switch, int switch_type, c
 
     if (!self_switch) {
         if (!target) { pr_note_unported(bt, PR_FEAT_MOVE_CONDITION); return true; }
-        if (pr_is_max(target)) return false;
         if (pr_move_hits_substitute(bt, move, user, target)) return false;
         /* Roar and Whirlwind in a trainer battle whose targeted side has one Pokemon left */
         if (has_force_switch_attr(move) && bt->battle_type == BATTLE_TYPE_TRAINER) {
@@ -524,8 +523,8 @@ void pr_switch_summon_phase(pr_battle *bt, pr_engine *e, int ph)
     }
     pr_reset_summon_data(last);
     pr_form_change(bt, in, PR_FCT_SpeciesFormChangeActiveTrigger);
-    /* arena.triggerWeatherBasedFormChanges(pokemon) */
-    pr_form_change(bt, in, PR_FCT_SpeciesFormChangeWeatherTrigger);
+    /* The newly summoned Pokemon is excluded upstream; restore the other holders. */
+    pr_weather_form_changes(bt, false, in);
 }
 
 /* getAffectedPokemon().includes(pokemon) for an arena tag on `side` */
@@ -703,3 +702,4 @@ void pr_check_switch_phase(pr_battle *bt, pr_engine *e, int ph)
                                                   : pr_arg_key("pokemonName", "battle:pokemon")));
     e->awaiting_confirm = true;
 }
+

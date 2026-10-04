@@ -7,6 +7,7 @@
 #include <string.h>
 
 const char *const pr_phase_name[PH_COUNT_] = {
+    [PH_QUIET_FORM_CHANGE] = "QuietFormChangePhase",
     [PH_NONE] = "?", [PH_MARKER] = "DynamicPhaseMarker",
     [PH_TURN_START] = "TurnStartPhase", [PH_MOVE] = "MovePhase", [PH_MOVE_EFFECT] = "MoveEffectPhase",
     [PH_MOVE_END] = "MoveEndPhase", [PH_FAINT] = "FaintPhase", [PH_CHECK_INTERLUDE] = "CheckInterludePhase",
@@ -388,7 +389,8 @@ static void queue_ability_phases(pr_battle *bt, pr_engine *e, int ph)
     if (!p) { limit(bt, e); return; }
     uint16_t abs[2] = {p->ability, p->passive};
     for (int k = 0; k < 2; k++) {
-        if (k == 1 && !p->passive) break;
+        /* Legacy callers may supply an effective nonzero passive directly. */
+        if (k == 1 && !p->passive && !pr_has_passive(bt, p)) break;
         int a = pr_phase_new(e, PH_POST_SUMMON, (int8_t)b);
         if (a < 0) { limit(bt, e); return; }
         e->pool[a].ps_activate = true;
@@ -823,3 +825,4 @@ void pr_resume_switch(pr_battle *bt, pr_engine *e, int slot)
     phase_free(e, ph);
     run_phases(bt, e, e->overflow ? -1 : shift_phase(bt, e));
 }
+
