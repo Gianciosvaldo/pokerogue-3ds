@@ -1,5 +1,5 @@
-/* The two damage-path functions the AI calls with ignore flags: Pokemon.getMoveEffectiveness and
- * Pokemon.getAttackDamage. They are battle-core's ports (src/damage.c) with upstream's
+/* The damage-path functions the AI calls with flags battle-core's ports don't take: Pokemon.getMoveEffectiveness,
+ * Pokemon.getAttackDamage and, with useIllusion, Pokemon.getAttackTypeEffectiveness. They are battle-core's ports (src/damage.c) with upstream's
  * ignoreAbility / ignoreAllyAbility branches put back; battle-core's own versions don't take the
  * flags because no battle path passes them. Keep in step with src/damage.c until battle-core
  * exports flagged versions, then call those instead. */
@@ -19,6 +19,58 @@ static const pr_pokemon *allies_singles(pr_battle *bt, const pr_pokemon *p)
     return p;
 }
 
+static double type_mult(int atk, int def)
+{
+    if (atk == POKEMON_TYPE_UNKNOWN || def == POKEMON_TYPE_UNKNOWN) return 1;
+    if (atk < 0 || atk >= PR_TYPE_COUNT || def < 0 || def >= PR_TYPE_COUNT) return 1;
+    return pr_type_chart_x2[atk][def] / 2.0;
+}
+
+/* getAttackTypeEffectiveness with useIllusion: the steps of battle-core's pr_get_attack_type_effectiveness_opts
+ * (src/damage.c) with getTypes({returnOriginalTypesIfStellar, useIllusion}). Everything but that one read is
+ * the real Pokemon's, as upstream has it: Ground moves and the strong winds check use isForciblyUngrounded and
+ * isOfType(FLYING) without the flag, and Flying Press's inner read (MoveTypeChartOverrideAttr) has no flag either
+ * (upstream's TODO). Keep in step with src/damage.c until battle-core exports the flag. */
+double ai_attack_type_effectiveness(pr_battle *bt, const pr_pokemon *def, int move_type, const pr_pokemon *source,
+                                    int move, bool simulated, bool use_illusion)
+{
+    if (!use_illusion || !def->illusion.active)
+        return pr_get_attack_type_effectiveness_ex(bt, def, move_type, source, move, simulated);
+    if (move_type == POKEMON_TYPE_STELLAR) return def->terastallized ? 2 : 1;
+    int8_t types[PR_MAX_TYPES];
+    int n = pr_get_types(def, types, PR_TYPES_ORIGINAL_IF_STELLAR | PR_TYPES_USE_ILLUSION);
+
+    if (pr_is_forcibly_ungrounded(bt, def) && move_type == POKEMON_TYPE_GROUND
+        && !(move >= 0 && pr_move_has_attr((uint16_t)move, PR_AC_NeutralDamageAgainstFlyingTypeAttr)))
+        return 0;
+
+    double multi = 1;
+    for (int i = 0; i < n; i++) {
+        double tm = type_mult(move_type, types[i]);
+        if (source && source->hp > 0 && source->on_field && !source->switch_out_status && tm == 0) {
+            if (move_type == POKEMON_TYPE_GROUND && types[i] == POKEMON_TYPE_FLYING && pr_is_forcibly_grounded(bt, def))
+                continue;
+            bool exposed = false;
+            for (int k = 0; k < def->n_tags && !exposed; k++)
+                exposed = pr_exposed_tag_ignores_immunity(def->tags[k].type, types[i], move_type);
+            if (exposed) continue;
+            bool ignore = false;
+            pr_ab_params pp = {.pokemon = source, .move = -1, .simulated = simulated, .flag = &ignore,
+                               .move_type = move_type, .defender_type = types[i]};
+            pr_apply_ab_attrs(bt, PR_AC_IgnoreTypeImmunityAbAttr, &pp);
+            if (ignore) continue;
+        }
+        multi *= tm;
+    }
+    if (move >= 0) pr_apply_type_chart_override(bt, source, def, move, &multi, types, n, move_type);
+    if (bt->weather == WEATHER_TYPE_STRONG_WINDS && !pr_weather_effect_suppressed(bt)
+        && pr_is_of_type(def, POKEMON_TYPE_FLYING) && type_mult(move_type, POKEMON_TYPE_FLYING) == 2) {
+        multi /= 2;
+        if (!simulated && bt->engine) pr_queue_msg(bt, bt->engine, pr_msg0("weather:strongWindsEffectMessage"));
+    }
+    return multi;
+}
+
 double ai_move_effectiveness(pr_battle *bt, const pr_pokemon *def, const pr_pokemon *src, int move,
                              bool ignore_ability, bool use_illusion, bool *cancelled_out)
 {
@@ -30,7 +82,7 @@ double ai_move_effectiveness(pr_battle *bt, const pr_pokemon *def, const pr_poke
     int move_type = pr_get_move_type(bt, src, move);
     if (use_illusion) ai_note_illusion(bt, def);
     double tm = (m->category != MOVE_CATEGORY_STATUS || pr_move_has_attr((uint16_t)move, PR_AC_RespectAttackTypeImmunityAttr))
-                    ? pr_get_attack_type_effectiveness_ex(bt, def, move_type, src, move, simulated)
+                    ? ai_attack_type_effectiveness(bt, def, move_type, src, move, simulated, use_illusion)
                     : 1;
     /* move.isTypeImmune: powder moves vs Grass, Prankster status moves vs Dark */
     if (m->target != MOVE_TARGET_USER) {

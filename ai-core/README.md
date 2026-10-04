@@ -40,7 +40,7 @@ To check the test itself, 78 one-line bugs were planted in ai-core one at a time
 ## What isn't covered yet
 
 - **Doubles.** The code follows upstream's doubles paths (two opponents, allies' scores, Commander) but the test is singles only, as battle-core's turn engine is; battle-core's damage path reports doubles as unported.
-- **Illusion.** `getMatchupScore` and the scores read the disguised Pokemon's types with `useIllusion`; Illusion isn't modelled, so a read of a Pokemon with Illusion reports `PR_AI_FEAT_ILLUSION`.
+- **Illusion, the ability.** Pinned upstream registers no Illusion ability attrs, so the ability sets no disguise in a real battle and ai-core doesn't model it turning on: a useIllusion read of a Pokemon that has the ability but no loaded disguise still reports `PR_AI_FEAT_ILLUSION` and the case is not covered (131 cases over the four seeds, unchanged). A disguise loaded by hand (`pr_set_illusion*` in battle-core, Task 67's helpers) is modelled, see Task 68 below.
 - **Held items.** The test has no modifiers (battle-core's records skip them), so what the scores read from items is untested: Thief, Knock Off and co. (`StealHeldItemChanceAttr`, `RemoveHeldItemAttr`), the KO check's item damage boosts, and Stuff Cheeks, which needs a berry: battle-core doesn't tell berries from other held items, so any held item of an unknown class reports `PR_AI_FEAT_RESTRICTION`.
 - **A trainer's switching moves.** battle-core's `pr_switch_out_condition` reports `PR_FEAT_TRAINER` for the trainer's side (it doesn't know trainer slots), so U-turn, Baton Pass, Parting Shot and Roar in a trainer battle are uncovered.
 - **Boss enemies** (boss segments are unported in battle-core) and **Transform** (`summonData.moveset`) aren't in the test.
@@ -96,7 +96,7 @@ pre-existing failures; full AI differential validation remains blocked.
 
 These are local copies or shims, kept in step with battle-core by hand until it exports them:
 
-- `src/ai_damage.c`: `getMoveEffectiveness` and `getAttackDamage` with upstream's `ignoreAbility` / `ignoreAllyAbility` branches (battle-core's versions take no flags because no battle path passes them).
+- `src/ai_damage.c`: `getMoveEffectiveness` and `getAttackDamage` with upstream's `ignoreAbility` / `ignoreAllyAbility` branches (battle-core's versions take no flags because no battle path passes them), and `getAttackTypeEffectiveness` with `useIllusion` (`ai_attack_type_effectiveness`: battle-core's `pr_get_attack_type_effectiveness_opts` has no such flag, so with a disguise loaded the same steps run here on the disguise's types; without one it calls battle-core's own).
 - `isMoveSelectable`: the restricting tags (Torment and Imprison included) and the moves' own restrictions (Gravity, Belch, Stuff Cheeks, consecutive use). The player's fight menu needs the same check.
 - `isTrapped`: `CheckTrappedAbAttr` with Arena Trap's, Shadow Tag's and Magnet Pull's conditions (matched to upstream's source by `pr_closure_matches`).
 - `waveData.abilityRevealed` lives in `pr_ai_mon`; battle-core should set it where an ability is shown.
@@ -107,6 +107,7 @@ These are local copies or shims, kept in step with battle-core by hand until it 
 - `include/pr/ai.h`: the API. `include/pr/ai_data.h` and `gen/out/ai_data.c`: what each move attribute's scores read (owner classes, levels, stats, tag scores, restrictions...), dumped from upstream's live objects by `gen/dump-ai.test.ts` (`tools/redump.sh <upstream>`). `pr_ai_tables_match()` checks the dump against battle-core's move tables; the scores report `PR_AI_FEAT_TABLES` if they drift apart.
 - `src/ai.c`: `EnemyCommandPhase`, `getNextMove`, `getNextTargets`, matchup and switch-in scores, trapping, move selection rules. `src/ai_score.c`: the benefit scores. `src/ai_damage.c`: the flagged damage path.
 - `tests/ai.producer.test.ts`, `tests/aitest.c`, `tools/difftest.sh`: the diff test.
+- `tests/illusion.producer.test.ts`, `tests/illusiontest.c`, `tools/illusiondiff.sh`: the same test with disguises loaded by hand (Task 68, below). Both are copies of the established pair plus marked lines; the established files are unchanged.
 
 
 ## Task 88: runtime-dependent matchup scores
@@ -171,3 +172,101 @@ Each upstream producer reports one test passed. Fresh-built comparator replays
 all four files with the counts above. Berry host: 404/404, zero mismatches; replay
 of the prior recorded upstream berry trace: 268/268, zero mismatches (not a newly
 generated berry differential here). No new hardware/emulator or 3DS result.
+
+## Task 68: loaded Illusion
+
+The AI reads a Pokemon's apparent typing in two places: `getMatchupScore` (`opponent.getTypes({useIllusion: true})`,
+the second-type defence read with `useIllusion`, and the attack-score read on the opponent with `useIllusion`) and
+the move scores (`target.getMoveEffectiveness(..., useIllusion = true)` in `getNextMove`). ai-core now reads the
+disguise there when `pr_pokemon.illusion.active` is set (battle-core's Task 67 helpers: `pr_get_types` with
+`PR_TYPES_USE_ILLUSION`; the effectiveness steps are the copy in `src/ai_damage.c`, see above). Everything else
+upstream reads without `useIllusion` still reads the real Pokemon: the first defence read, STAB (`isOfType`), Ground
+immunity, the strong-winds check and Flying Press's inner read (upstream's own TODO in `move.ts`).
+
+What this does not do: it never turns a disguise on. Natural Illusion (the ability, its summon and break dispatch)
+stays outside, as in upstream at the pin. A Pokemon with the ability and no loaded disguise reports
+`PR_AI_FEAT_ILLUSION` exactly as before.
+
+### How it is checked
+
+`tests/illusion.producer.test.ts` is `tests/ai.producer.test.ts` plus marked "LOADED ILLUSION" lines. After each
+case's state is built (the same random wild and trainer battles), a third of the two Pokemon on the field and a
+quarter of every bench Pokemon get a real `summonData.illusion` from upstream's own `Pokemon.setIllusion`: another
+Pokemon with a random species, form, fusion and gender, or only a species; a quarter of those also get a summon
+typing and some an added type, which a disguise hides from a `useIllusion` read, and one in six a Foresight, Miracle
+Eye or Smack Down tag. One in ten of the two Pokemon on the field gets Scrappy or Mind's Eye, and one case in twelve gives
+the enemy a Stellar Tera Blast. Only the presentation calls
+`setIllusion` makes (assets, the info box, the animation, the shiny sparkle) are stubbed. The case then runs upstream's
+`EnemyCommandPhase` as the established producer does, and each disguised Pokemon gets an `ILL` record.
+`tests/illusiontest.c` is `tests/aitest.c` plus the marked lines that read `ILL` (the established comparator stops at
+an unknown record, so the two cannot be mixed up). `--mutate-identity` replaces every disguise with its Pokemon's real
+identity before the replay, which a test that ignored disguises would not notice.
+
+```sh
+sh battle-core/tools/setup-upstream.sh <upstream>          # Node 22; once
+sh ai-core/tools/illusiondiff.sh <upstream> 5000 <seed>    # seeds 777 9001 4242 31337
+```
+
+The script refuses a Node that is not 22.x (the Node 24 conflict above is unresolved), replays the cases, then replays
+them with the identity planted and fails unless that run fails.
+
+Checked 2026-10-04 on main `ff35abf`, Node v22.22.0, GCC 13.3.0, vitest 4.1.11, upstream `8555c08`, 5,000 cases per seed:
+
+| Seed | Disguised Pokemon (player / enemy / bench) | Covered / identical | Mismatches | Not covered | Passing cases with a disguise | Of those, field matchup score moved by it | Identity planted: failing cases |
+|---|---|---|---|---|---|---|---|
+| 777 | 6,824 (1,732 / 1,654 / 3,438) | 4,945 / 4,945 | 0 | 55 | 3,823 | 2,259 | 1,138 of 4,949 |
+| 9001 | 6,679 (1,662 / 1,569 / 3,448) | 4,959 / 4,959 | 0 | 41 | 3,774 | 2,141 | 1,116 of 4,961 |
+| 4242 | 6,765 (1,709 / 1,628 / 3,428) | 4,947 / 4,947 | 0 | 53 | 3,809 | 2,163 | 1,127 of 4,947 |
+| 31337 | 6,860 (1,722 / 1,669 / 3,469) | 4,959 / 4,959 | 0 | 41 | 3,809 | 2,269 | 1,117 of 4,958 |
+
+Over the four seeds: 20,000 cases, 27,128 disguises (13,472 by species, 6,679 with a fusion, 6,724 with a summon
+typing), 19,810 covered cases, all identical. The 190 not-covered cases: 88 read a Pokemon that has the Illusion
+ability and no loaded disguise (the unchanged exclusion) and 103 hit a move condition battle-core hasn't ported (one
+case has both). Upstream's own scores moved with the disguise in 8,921 cases for `getMatchupScore` and 4,289 for the
+move effectiveness the AI scores with (counted in the producer, on a fresh state). With the identity planted,
+4,498 covered cases fail.
+
+Planted faults in the C (one at a time, 5,000 cases on each seed, failing cases per seed in the order above):
+
+| Planted fault | Failing cases |
+|---|---|
+| matchup: opponent's types read without the disguise | 491 / 510 / 476 / 502 |
+| matchup: own second-type read without the disguise | 314 / 313 / 293 / 325 |
+| matchup: attack-score read without the disguise | 501 / 515 / 484 / 511 |
+| matchup: first defence read with the disguise (upstream has none) | 603 / 616 / 591 / 632 |
+| matchup: second-type read simulated (upstream passes `simulated: false`) | 3 / 0 / 3 / 2 |
+| move scores: effectiveness without the disguise | 604 / 579 / 592 / 594 |
+| copy: types without the disguise | 1,105 / 1,092 / 1,092 / 1,105 |
+| copy: strong-winds halving dropped | 1 / 1 / 1 / 0 |
+| copy: type-chart overrides (Freeze-Dry...) dropped | 4 / 5 / 3 / 3 |
+| copy: forcibly-ungrounded Ground immunity dropped | 0 / 2 / 1 / 0 |
+| copy: grounded Flying type loses its Ground immunity, dropped | 6 / 3 / 0 / 3 |
+| copy: ignore-type-immunity abilities (Scrappy, Mind's Eye) dropped | 5 / 3 / 4 / 4 |
+| copy: exposed-tag (Foresight, Miracle Eye) immunity bypass dropped | 3 / 2 / 2 / 3 |
+| copy: Stellar-move early return dropped | 5 / 11 / 12 / 9 |
+| move scores: disguise also used for the powder / Prankster immunity block | 0 / 0 / 0 / 0 |
+
+Every fault is caught on at least one seed except the last, and that one cannot change a result: the AI's move scores
+pass `useIllusion` only for attack moves, and the powder and Prankster conditions concern status moves. Several of the
+copy's branches are caught by a handful of cases in 20,000 (strong winds, 3; Ground immunity, 3), because the random
+states reach them rarely; the producer adds Foresight, Odor Sleuth, Miracle Eye and Smack Down's tags to disguised Pokemon,
+Scrappy or Mind's Eye to the Pokemon on the field and a Stellar Tera Blast to the enemy (in 1 case in 12) so the rest are reached
+at all. They stay as thinly tested as that.
+
+Not covered by this suite: a disguise on a Pokemon in doubles, natural Illusion, nickname and fused display names,
+and anything about the disguise's gender beyond carrying it. The disguise is always loaded by hand.
+
+### Established checks, before and after
+
+The established AI differential (`tools/difftest.sh <upstream> 5000 <seed>`) was run on unchanged main and again with
+this change, same upstream checkout, Node v22.22.0. The printed summaries are byte-identical on all four seeds:
+
+| Seed | Covered | Identical | Mismatches | Not covered | Of those, AI: Illusion |
+|---|---|---|---|---|---|
+| 777 | 4,938 | 4,938 | 0 | 62 | 34 |
+| 9001 | 4,946 | 4,946 | 0 | 54 | 25 |
+| 4242 | 4,942 | 4,942 | 0 | 58 | 34 |
+| 31337 | 4,936 | 4,936 | 0 | 64 | 38 |
+
+`make -C ai-core test-berry` still prints 404 cases, 404 identical; the upstream berry differential 268 cases, 268
+identical. `make -C game-core test` exits 0 with the same paired 200-run digests before and after (`8ee22b13`).
