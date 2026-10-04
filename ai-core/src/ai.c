@@ -94,6 +94,7 @@ static bool out_of_pp(const pr_pokemon *p, int slot)
 
 void ai_note_illusion(pr_battle *bt, const pr_pokemon *p)
 {
+    if (p->illusion.active) return;
     if (p->ability == ABILITY_ID_ILLUSION || p->passive == ABILITY_ID_ILLUSION) pr_note_unported(bt, PR_AI_FEAT_ILLUSION);
 }
 
@@ -364,7 +365,7 @@ double pr_ai_matchup_score(pr_battle *bt, pr_ai *ai, pr_pokemon *p, pr_pokemon *
     (void)ai;
     ai_note_illusion(bt, opponent);                          /* opponent.getTypes({useIllusion: true}) */
     int8_t et[PR_MAX_TYPES];
-    int ne = pr_get_types(opponent, et, 0);
+    int ne = pr_get_types(opponent, et, PR_TYPES_USE_ILLUSION);
     pr_stat_params mine = {.opponent = opponent, .move = -1, .simulated = true};
     pr_stat_params theirs = {.opponent = p, .move = -1, .simulated = true};
     double my_spd = ai_is_active(p, true) ? pr_get_effective_stat_p(bt, p, STAT_SPD, &mine) : pr_get_stat(p, STAT_SPD, false);
@@ -373,7 +374,7 @@ double pr_ai_matchup_score(pr_battle *bt, pr_ai *ai, pr_pokemon *p, pr_pokemon *
     double def = 1 / js_max(pr_get_attack_type_effectiveness(bt, p, et[0], opponent, -1), 0.25);
     if (ne > 1) {
         ai_note_illusion(bt, p);
-        def /= js_max(pr_get_attack_type_effectiveness_ex(bt, p, et[1], opponent, -1, false), 0.25);
+        def /= js_max(ai_attack_type_effectiveness(bt, p, et[1], opponent, -1, false, true), 0.25);
     }
 
     double atk = 0;
@@ -381,7 +382,7 @@ double pr_ai_matchup_score(pr_battle *bt, pr_ai *ai, pr_pokemon *p, pr_pokemon *
     for (int s = 0; s < p->n_moves; s++) {
         const pr_move *m = &pr_moves[p->moves[s]];
         if (m->category == MOVE_CATEGORY_STATUS || ai_pp_ratio(p, s) <= 0) continue;
-        double score = pr_get_attack_type_effectiveness(bt, opponent, m->type, p, -1);
+        double score = ai_attack_type_effectiveness(bt, opponent, m->type, p, -1, true, true);
         if (pr_is_of_type(p, m->type) && !pr_move_has_attr(p->moves[s], PR_AC_VariableMoveTypeAttr)) score *= 1.5;
         atk += score;
         n_atk++;

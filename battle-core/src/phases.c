@@ -2077,7 +2077,18 @@ static void move_effect_end(pr_battle *bt, pr_engine *e, int ph)
         && tl && tl->n > 0 && any_hit)
         for (int i = 0; i < 4; i++) {
             pr_pokemon *p = bt->field[i];
-            if (is_active(p) && p != user) pr_hook_ab(bt, p, PR_AC_PostMoveUsedAbAttr);
+            if (!is_active(p) || p == user) continue;
+            if ((pr_moves[fx->move_id].flags & MOVE_FLAGS_DANCE_MOVE)
+                && !pr_find_battler_tag_class(p, PR_TAGCLASS_SEMI_INVULNERABLE)
+                && pr_has_ability_with_attr(bt, p, PR_AC_PostDancingMoveAbAttr)) {
+                int nx = new_pokemon_phase(e, PH_DANCER, i);
+                if (nx < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); continue; }
+                PH(nx)->pokemon = p;
+                PH(nx)->source_p = user;
+                PH(nx)->move_id = fx->move_id;
+                PH(nx)->targets = fx->targets;
+                pr_phase_unshift(bt, e, nx);
+            }
         }
 }
 
@@ -3507,6 +3518,14 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
 {
     switch (PH(ph)->type) {
     case PH_TURN_START: turn_start(bt, e); break;
+    case PH_DANCER: {
+        pr_target_list *tl = tlist(e, PH(ph)->targets);
+        pr_ab_params pp = {.pokemon = PH(ph)->pokemon, .opponent = PH(ph)->source_p,
+            .move = PH(ph)->move_id, .move_targets = tl ? tl->v : NULL,
+            .n_move_targets = tl ? tl->n : 0};
+        pr_apply_ab_attrs(bt, PR_AC_PostMoveUsedAbAttr, &pp);
+        break;
+    }
     case PH_MOVE: move_phase(bt, e, ph); break;
     case PH_MOVE_EFFECT: move_effect_phase(bt, e, ph); break;
     case PH_MOVE_END: move_end_phase(bt, e, ph); break;

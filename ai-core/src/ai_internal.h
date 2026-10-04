@@ -16,7 +16,9 @@ bool ai_is_active(const pr_pokemon *p, bool on_field);
 /* PokemonMove.getMovePp() / getPpRatio() for p's moveset slot */
 double ai_move_pp(const pr_pokemon *p, int slot);
 double ai_pp_ratio(const pr_pokemon *p, int slot);
-/* A read with useIllusion: Illusion isn't modelled, so it is reported when p could have one */
+/* A read with useIllusion. A loaded disguise (p->illusion.active, set by hand: pinned upstream registers
+ * no Illusion ability attrs) is modelled; a Pokemon that only has the ability is reported, as the natural
+ * ability's dispatch isn't ported */
 void ai_note_illusion(pr_battle *bt, const pr_pokemon *p);
 /* randBattleSeedInt(range) with a range that may not be a whole number (getNextTargets' total weight) */
 double ai_battle_rand_real(pr_battle *bt, double range);
@@ -33,6 +35,11 @@ double ai_move_chance(pr_battle *bt, int attr_index, const pr_pokemon *user, con
  * with the ignore flags battle-core's versions don't take (the source's abilities always count) */
 double ai_move_effectiveness(pr_battle *bt, const pr_pokemon *def, const pr_pokemon *src, int move,
                              bool ignore_ability, bool use_illusion, bool *cancelled_out);
+/* getAttackTypeEffectiveness(moveType, {source, simulated, move, useIllusion}); ignoreStrongWinds stays false.
+ * battle-core's has no useIllusion, so with a disguise active the read runs here on the disguise's types;
+ * without one it is battle-core's own */
+double ai_attack_type_effectiveness(pr_battle *bt, const pr_pokemon *def, int move_type, const pr_pokemon *source,
+                                    int move, bool simulated, bool use_illusion);
 pr_damage_result ai_attack_damage(pr_battle *bt, pr_pokemon *def, pr_pokemon *src, int move, bool ignore_ability,
                                   bool ignore_ally_ability, bool is_critical);
 

@@ -10,7 +10,7 @@ CORE_LIB := $(BUILD)/battle-core/libprcore.a
 SRCS := src/ai.c src/ai_score.c src/ai_damage.c gen/out/ai_data.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
-all: $(BUILD)/libai.a $(BUILD)/aitest
+all: $(BUILD)/libai.a $(BUILD)/aitest $(BUILD)/illusiontest
 
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -23,6 +23,9 @@ $(BUILD)/libai.a: $(OBJS)
 	ar rcs $@ $^
 
 $(BUILD)/aitest: tests/aitest.c $(BUILD)/libai.a $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+$(BUILD)/illusiontest: tests/illusiontest.c $(BUILD)/libai.a $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
 $(BUILD)/berrytest: tests/berrytest.c $(BUILD)/libai.a $(CORE_LIB)
