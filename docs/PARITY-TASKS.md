@@ -42,13 +42,13 @@ Main checked: `ee476524016b0dc0ce6edc93db5baf4f76521325`. Actual code on main co
 | --- | --- | --- |
 | 87 | #101 merged | 36,471 resume checks and 1000 normal + 1000 saved strict terminal completions; four production fixes including seed 849. Host consistency, not upstream run parity |
 | 90 | #106 merged | Plain 1940, rich 1826, switch 1885, summon 1856 covered/identical; zero failures, no coverage loss; CI #102 host/3DS pass |
-| 67 | #103 side-branch merged; #108 ready for main | 8000/8000 dormant/manual helper comparisons; original natural ability gate remains deferred. #108 CI #105 host/3DS pass; code not on this main |
+| 67 | #108 merged directly into main | 8000/8000 dormant/manual helper comparisons; original natural ability gate remains deferred. #108 CI #105 host/3DS pass; bounded helpers on main `cae69338` |
 | 88 | #102 merged diagnosis | Node 22: 19762 identical/covered, 0 mismatch, 238 uncovered. Node 24 contract remains unresolved |
 | 89 | #104 draft | Bounded evolution queue slice 8000/8000; application baseline 3865 pass / 135 fail, unrecorded fusion status randomness |
 | 91 | #107 draft | Dual input 8000/8000 plus 24,000 TM/RNG comparisons; CI #106 pass. Established Memory producer fails stale ValueHolder import, 0 cases recorded |
 | 59 | Audit blocked on 91 | Existing fixed reward pool remains; no integration or zero-placeholder claim |
 
-No new three-task Jules wave is available. Task 68's proposed loaded-state contract is in #108 and requires that reviewed scope on main; it preserves natural-ability exclusions. Task 60 needs 59 and Task 71 needs 67/69/70. Established checks are untouched; unavailable natural Illusion/Memory and failed fusion comparisons do not count as passing. The original Task 67/68 cards below remain acceptance history until #108 lands its explicitly revised helper scope. Exact commands and results are in the linked PRs and owning READMEs.
+Task 68 is delegated to Jules: #108 landed its bounded loaded-state contract directly on main. Lane F is reserved; natural-ability exclusions remain. Task 69's weather-form work is separately validated for review; Task 70 waits for its merge. No new three-task Jules wave is available. Task 60 needs 59 and Task 71 needs 67/69/70. Established checks are untouched; unavailable natural Illusion/Memory and failed fusion comparisons do not count as passing. #108 landed the explicitly revised helper scope in the Task 67/68 cards below. Exact commands and results are in the linked PRs and owning READMEs.
 
 ## Task cards
 
@@ -418,3 +418,4 @@ Run [#63](https://github.com/Gianciosvaldo/pokerogue-3ds/actions/runs/3711313825
 PR #86 is now merged. Its final head `e7f54b36c422f53e5f269f22047737ed9612a769` contains only four run-core files and no `R48W`; current main also contains no `R48W`. [Run #80](https://github.com/Gianciosvaldo/pokerogue-3ds/actions/runs/37118573215) passed both host and 3DS jobs. No extra removal patch is needed.
 
 The original four unavailable rival checks were subsequently run in [#75](https://github.com/Gianciosvaldo/pokerogue-3ds/actions/runs/37114586055), at head `3966f42930a8e0a399b808a47a786f328419e7f3`. Job logs explicitly show `run-core/tools/difftest.sh /tmp/pokerogue-upstream-8555c08 500 <seed> rival` for seeds 777, 9001, 4242 and 31337: each prints **3000 fights, 0 mismatches**; total 12,000. Save digests there are `b7c0a91b`/`b7c0a91b`. These are historical, actual recorded comparisons, not results run by this audit on final head or current main. Final rebased-head upstream comparison remains a distinct gap; fixed-team traces also stop at the deliberate moveset boundary and do not establish full game-core rival lifecycle parity.
+

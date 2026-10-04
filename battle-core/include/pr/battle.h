@@ -253,6 +253,8 @@ typedef struct pr_pokemon {
     pr_turn_move move_history[PR_MAX_MOVE_HISTORY];
     pr_turn_move move_queue[PR_MAX_MOVE_QUEUE];  /* summonData.moveQueue */
     uint8_t n_move_queue;
+    uint16_t form_change_abilities[16];
+    uint8_t n_form_change_abilities;
     /* turnData (PokemonTurnData) */
     /* turnData.attacksReceived: its length, and its newest entries, newest first as upstream
      * unshifts them (pr_unshift_attack_received keeps both) */
@@ -454,6 +456,7 @@ typedef struct pr_ab_params {
     int tag_type;                  /* PreApplyBattlerTagAbAttrParams: the tag's BattlerTagType */
     int field_type;                /* PostWeatherChange: the new WeatherType; PostTerrainChange: the new TerrainType */
     int8_t only;                   /* params.passive given: 1 = the ability only, 2 = the passive only; 0 = both */
+    bool after_form_change;         /* exclude recursive form callbacks */
     bool on_gain;                  /* applyOnGainAbAttrs: only attrs that shouldActivateOnGain() */
 } pr_ab_params;
 /* applyAbAttrs("<cls>", params): ability then passive, conditions, canApply, apply. */
@@ -732,3 +735,4 @@ double pr_calculate_boss_segment_damage(double damage, double current_hp, double
 bool pr_get_critical_hit_result(pr_battle *bt, const pr_pokemon *def, const pr_pokemon *src, int move);
 
 #endif
+

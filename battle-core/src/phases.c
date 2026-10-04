@@ -60,6 +60,42 @@ static void form_change(pr_battle *bt, const pr_pokemon *p, int trigger_class)
     pr_pokemon *mon = (pr_pokemon *)p;
     int target_form = -1;
 
+    /* Weather form triggers are quiet phases upstream, queued before mutation. */
+    if (mon->species == SPECIES_ID_CASTFORM || mon->species == SPECIES_ID_CHERRIM) {
+        int ability = mon->species == SPECIES_ID_CASTFORM ? ABILITY_ID_FORECAST : ABILITY_ID_FLOWER_GIFT;
+        bool raw = mon->base_ability == ability || mon->passive == ability;
+        bool suppressed = pr_weather_effect_suppressed(bt);
+        if (trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger && !is_active_on_field(mon)) target_form = 0;
+        else if (trigger_class == PR_FCT_SpeciesFormChangeWeatherTrigger
+            && !mon->ability_suppressed && !suppressed && pr_has_ability_active(bt, mon, ability)) {
+            if (bt->weather == WEATHER_TYPE_SUNNY || bt->weather == WEATHER_TYPE_HARSH_SUN) target_form = 1;
+            else if (mon->species == SPECIES_ID_CASTFORM) {
+                if (bt->weather == WEATHER_TYPE_RAIN || bt->weather == WEATHER_TYPE_HEAVY_RAIN) target_form = 2;
+                if (bt->weather == WEATHER_TYPE_HAIL || bt->weather == WEATHER_TYPE_SNOW) target_form = 3;
+            }
+        } else if (trigger_class == PR_FCT_SpeciesFormChangeRevertWeatherFormTrigger && raw) {
+            bool weather_reverts = mon->species == SPECIES_ID_CHERRIM
+                ? bt->weather != WEATHER_TYPE_SUNNY && bt->weather != WEATHER_TYPE_HARSH_SUN
+                : bt->weather == WEATHER_TYPE_NONE || bt->weather == WEATHER_TYPE_SANDSTORM
+                  || bt->weather == WEATHER_TYPE_STRONG_WINDS || bt->weather == WEATHER_TYPE_FOG;
+            if (weather_reverts || suppressed || mon->ability_suppressed
+                || (mon->ability_override >= 0 && mon->ability_override != ability)) target_form = 0;
+        }
+    } else if (mon->species == SPECIES_ID_EISCUE && trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger) {
+        target_form = mon->form == 0 ? 1 : 0;
+    } else goto other_forms;
+    if (target_form >= 0 && target_form != mon->form) {
+        pr_engine *e = bt->engine;
+        if (!e) { pr_note_unported(bt, PR_FEAT_FORM_CHANGE); return; }
+        int ph = pr_phase_new(e, PH_QUIET_FORM_CHANGE, (int8_t)pr_battler_index(bt, mon));
+        if (ph < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }
+        e->pool[ph].pokemon = mon;
+        e->pool[ph].move_id = (uint16_t)target_form;
+        if (trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger && !is_active_on_field(mon)) pr_phase_push(bt, e, ph);
+        else pr_phase_unshift(bt, e, ph);
+    }
+    return;
+other_forms:
     /* 1. Stance Change (Aegislash #681) */
     if (mon->species == SPECIES_ID_AEGISLASH && pr_has_ability_active(bt, mon, ABILITY_ID_STANCE_CHANGE)) {
         if (trigger_class == PR_FCT_SpeciesFormChangePreMoveTrigger) {
@@ -2363,6 +2399,7 @@ static void move_end_phase(pr_battle *bt, pr_engine *e, int ph)
 
 static void reset_turn_data(pr_pokemon *p)
 {
+    p->n_form_change_abilities = 0;
     p->hit_count = 0;
     p->hits_left = -1;
     p->total_damage_dealt = p->single_hit_damage_dealt = p->damage_taken = 0;
@@ -2415,6 +2452,57 @@ static void reset_summon_data(pr_pokemon *p)
 void pr_reset_turn_data(pr_pokemon *p) { reset_turn_data(p); }
 void pr_reset_summon_data(pr_pokemon *p) { reset_summon_data(p); }
 void pr_form_change(pr_battle *bt, const pr_pokemon *p, int trigger_class) { form_change(bt, p, trigger_class); }
+
+void pr_weather_form_changes(pr_battle *bt, bool revert, const pr_pokemon *source)
+{
+    pr_speed_iter it;
+    pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
+    pr_pokemon *p;
+    while ((p = pr_speed_iter_next(bt, &it))) {
+        if (!revert && p == source) continue;
+        int ability = p->species == SPECIES_ID_CASTFORM ? ABILITY_ID_FORECAST
+                    : p->species == SPECIES_ID_CHERRIM ? ABILITY_ID_FLOWER_GIFT : -1;
+        if (ability < 0) continue;
+        bool has = revert ? p->base_ability == ability || p->passive == ability
+                          : pr_has_ability_active(bt, p, ability);
+        if (has) form_change(bt, p, revert ? PR_FCT_SpeciesFormChangeRevertWeatherFormTrigger
+                                          : PR_FCT_SpeciesFormChangeWeatherTrigger);
+    }
+}
+
+static void quiet_form_change_phase(pr_battle *bt, pr_engine *e, int ph)
+{
+    pr_pokemon *p = PH(ph)->pokemon;
+    int target = PH(ph)->move_id;
+    if (!p || p->form == target || (!p->is_player && !is_active_on_field(p))) return;
+    pr_msg_arg pre = pr_arg_pokemon(bt, "preName", p);
+    pr_ab_params pp = {.pokemon = p, .move = -1};
+    pr_apply_ab_attrs(bt, PR_AC_PreLeaveFieldAbAttr, &pp);
+    p->form = (uint8_t)target;
+    pr_recalculate_stats(bt, p);
+    pr_update_passive(bt, p);
+    if (is_active_on_field(p)) {
+        bool active_seen = false, passive_seen = false;
+        for (int i = 0; i < p->n_form_change_abilities; i++) {
+            active_seen |= p->form_change_abilities[i] == p->ability;
+            passive_seen |= p->form_change_abilities[i] == p->passive;
+        }
+        if (!active_seen || !passive_seen) {
+            if (p->n_form_change_abilities + 2 > 16) pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT);
+            else {
+                if (!active_seen) p->form_change_abilities[p->n_form_change_abilities++] = p->ability;
+                if (!passive_seen) p->form_change_abilities[p->n_form_change_abilities++] = p->passive;
+                pp.only = active_seen ? 2 : passive_seen ? 1 : 0;
+                pp.after_form_change = true;
+                pr_apply_ab_attrs(bt, PR_AC_PostSummonAbAttr, &pp);
+            }
+        }
+    }
+    pr_show_text(bt, e, target == 0
+        ? pr_msg1("battlePokemonForm:revertChange", pr_arg_pokemon(bt, "pokemonName", p))
+        : pr_msg1("battlePokemonForm:formChange", pre));
+    pr_remove_tag(bt, e, p, BATTLER_TAG_TYPE_AUTOTOMIZED);
+}
 
 static int32_t party_hp(pr_battle *bt, int side, int k)
 {
@@ -2486,7 +2574,8 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
     p->terastallized = false;
     p->stellar_types_boosted = 0;
     if (was_tera) form_change(bt, p, PR_FCT_SpeciesFormChangeLapseTeraTrigger);
-    pr_hook_ab(bt, p, PR_AC_PostFaintAbAttr);
+    pr_ab_params faint_params = {.pokemon = p, .move = -1};
+    pr_apply_ab_attrs(bt, PR_AC_PostFaintAbAttr, &faint_params);
     pr_speed_iter it;
     pr_pokemon *q;
     pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
@@ -3466,6 +3555,7 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
         break;
     case PH_MOVE_REFLECT: move_reflect_phase(bt, e, ph); break;
     case PH_SHINY_SPARKLE: pr_event_add(bt, e, PR_EV_SHINY_SPARKLE, PH(ph)->battler, -1, 0, 0, NULL); break;
+    case PH_QUIET_FORM_CHANGE: quiet_form_change_phase(bt, e, ph); break;
     case PH_ATTEMPT_CAPTURE: attempt_capture_phase(bt, e, ph); break;
     default:
         /* a phase with no port: it was reported when it was queued */
@@ -3473,3 +3563,4 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
         break;
     }
 }
+
