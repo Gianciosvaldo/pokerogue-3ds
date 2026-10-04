@@ -34,18 +34,21 @@ These aliases specify exact baseline commands; substitute the absolute upstream 
 
 Missing upstream dependencies/network are a validation gap. Host fixtures, build success and code inspection do not substitute for unrun upstream differential checks. In particular, existing mystery traces are not validated money/party/modifier parity unless the comparator actually checks those outputs.
 
-## Coordinator status after Task 88 merge (2026-10-03)
+## Coordinator status after save and battle repairs (2026-10-03)
 
-Main checked: `cdac97d859cd39ef96200570287efb28b77bc287`. The cards below retain their original scope and pass gates; status reports do not waive prerequisites.
+Main checked: `ee476524016b0dc0ce6edc93db5baf4f76521325`. Actual code on main controls prerequisites; a side-branch merge does not unlock integration.
 
 | Task | State | Gate |
-|---|---|---|
-| 67 | [#103](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/103), draft diagnostic | Pinned Illusion has no effect registrations; existing suite is 9 TODO / 0 executed. Nonzero disguise/break/switch differential unavailable; reviewed target/scope needed |
-| 87 | [#101](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/101), draft fixes | Expanded save equality still fails; seed 849 step-budget completion defect must be reviewed separately. Task 59 stays blocked |
-| 88 | [#102](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/102), merged diagnosis | Node 22: 19762 covered/identical, zero mismatches, 238 uncovered. Node 24's 2/9/9/12 failures and runtime-contract conflict remain |
-| 89 | [#104](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/104), draft | New bounded evolution application/queue slice passes 8000/8000. Existing apply: 3865 pass / 135 fail on both main/changed C; unrecorded Math.random fusion status draw blocks reliable replay |
+| --- | --- | --- |
+| 87 | #101 merged | 36,471 resume checks and 1000 normal + 1000 saved strict terminal completions; four production fixes including seed 849. Host consistency, not upstream run parity |
+| 90 | #106 merged | Plain 1940, rich 1826, switch 1885, summon 1856 covered/identical; zero failures, no coverage loss; CI #102 host/3DS pass |
+| 67 | #103 side-branch merged; #108 ready for main | 8000/8000 dormant/manual helper comparisons; original natural ability gate remains deferred. #108 CI #105 host/3DS pass; code not on this main |
+| 88 | #102 merged diagnosis | Node 22: 19762 identical/covered, 0 mismatch, 238 uncovered. Node 24 contract remains unresolved |
+| 89 | #104 draft | Bounded evolution queue slice 8000/8000; application baseline 3865 pass / 135 fail, unrecorded fusion status randomness |
+| 91 | #107 draft | Dual input 8000/8000 plus 24,000 TM/RNG comparisons; CI #106 pass. Established Memory producer fails stale ValueHolder import, 0 cases recorded |
+| 59 | Audit blocked on 91 | Existing fixed reward pool remains; no integration or zero-placeholder claim |
 
-There is no new wave of three independent lower-compute tasks. Task 68 still needs completed 67, Task 60 still needs 87 then 59, and Task 71 still needs 67 then 69 and 70. Later hard tasks require these merged prerequisites; 63 remains run-core owner work, 85 console gated. Draft PRs stay draft until their validation blockers are resolved. See the [ledger](PARITY-LEDGER.md) for recorded scopes; unavailable or defective comparisons are not passing evidence.
+No new three-task Jules wave is available. Task 68's proposed loaded-state contract is in #108 and requires that reviewed scope on main; it preserves natural-ability exclusions. Task 60 needs 59 and Task 71 needs 67/69/70. Established checks are untouched; unavailable natural Illusion/Memory and failed fusion comparisons do not count as passing. The original Task 67/68 cards below remain acceptance history until #108 lands its explicitly revised helper scope. Exact commands and results are in the linked PRs and owning READMEs.
 
 ## Task cards
 
@@ -71,7 +74,7 @@ There is no new wave of three independent lower-compute tasks. Task 68 still nee
 
 ### Task 59: Replace the placeholder reward option pool (game-core/, lane C)
 
-**Branch:** `outside/reward-options-integration`. **Assignment:** Hard. **Prerequisites:** 57 merged; reward-core option API available.
+**Branch:** `outside/reward-options-integration`. **Assignment:** Hard. **Prerequisites:** 57 and 87 merged; 91 merged after its established Memory check reruns; reward-core option API available.
 
 **Problem.** gc_port_reward_options in src/gc_stubs.c still chooses a small fixed pool instead of reward-core options.
 
@@ -388,6 +391,16 @@ There is no new wave of three independent lower-compute tasks. Task 68 still nee
 **Do.** Fix C behavior against the pinned upstream source: form-based Max immunities, form callback applicability and enabled Daily passives whose ability is `NONE`. Keep established producers, comparators and exclusions unchanged; document before/after counts.
 
 **Pass.** B: plain, rich, switch and summon have zero mismatches and covered counts at least 1940, 1826, 1885 and 1855 respectively. Host tests and 3DS CI pass. This does not enable natural Illusion or unlock Task 68 by itself.
+
+### Task 91: Separate reward learnset caller contracts (reward-core/, lane B)
+
+**Branch:** `outside/reward-learnset-inputs`. **Assignment:** Hard/coordinator. **Prerequisites:** Lane B free; upstream pin unchanged. Task 59 integration awaits this API.
+
+**Problem.** One `pr_reward_mon.level_moves` list cannot represent both actual TM exclusions and Memory Mushroom pre-evolution/relearner rows. The established Memory producer also has a stale ValueHolder import and emits no cases at the pin.
+
+**Do.** Add an explicit separate relearner list, preserve legacy callers, use base moves for Memory exclusions under summon overrides, and preserve duplicate TM history as actual upstream does. Add a separate simultaneous getter/Memory/TM generator producer. Do not edit established checks; report the stale import and stop readiness pending its separately reviewed repair.
+
+**Pass.** New dual-input comparisons: 2,000 per seeds 777, 9001, 4242 and 31337, zero Memory/TM/RNG mismatches, nonzero distinct-list/fusion/summon-override cases; mutation detected. Explicit-empty/bounds host checks pass. Existing reward option/victory/application coverage and mismatch counts do not worsen. Established Memory producer must execute and replay cleanly after reviewed test-contract repair; no unexecuted cases credited. Host/3DS CI pass. No game lifecycle parity claim.
 
 ## Beyond these bounded slices
 
