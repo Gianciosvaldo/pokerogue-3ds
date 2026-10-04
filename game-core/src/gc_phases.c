@@ -547,6 +547,9 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         return learn_move_start(run, p);
     case RP_EVOLUTION:
         return evolution_start(run, p);
+    case RP_REWARD_FORM:
+        gc_reward_change_form(run, p->a, p->b);
+        return true;
     case RP_TRAINER_NEXT:
         gc_battle_trainer_next(run);
         return true;

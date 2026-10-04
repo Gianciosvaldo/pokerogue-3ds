@@ -421,6 +421,8 @@ static int core_move_index(const pr_pokemon *p, int slot)
 int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, const char **why)
 {
     const int item = gc_reward_item_index(o->key);
+    const int lifecycle = gc_reward_lifecycle_apply(run, o, party, why);
+    if (lifecycle != GC_APPLY_UNHANDLED) return lifecycle;
     if (item < 0 || !core_applies(item)) return GC_APPLY_UNHANDLED;
     /* a free reward is applied with cost -1, a purchase with its price (a shop item: cost > 0) */
     const bool purchase = o->cost > 0;
