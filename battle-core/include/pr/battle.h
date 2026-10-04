@@ -457,6 +457,8 @@ typedef struct pr_ab_params {
     int field_type;                /* PostWeatherChange: the new WeatherType; PostTerrainChange: the new TerrainType */
     int8_t only;                   /* params.passive given: 1 = the ability only, 2 = the passive only; 0 = both */
     bool after_form_change;         /* exclude recursive form callbacks */
+    const int8_t *move_targets; /* PostDancingMoveAbAttr: original targets */
+    int n_move_targets;
     bool on_gain;                  /* applyOnGainAbAttrs: only attrs that shouldActivateOnGain() */
 } pr_ab_params;
 /* applyAbAttrs("<cls>", params): ability then passive, conditions, canApply, apply. */

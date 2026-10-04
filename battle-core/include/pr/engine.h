@@ -37,7 +37,7 @@ typedef enum {
     PH_DANCER, PH_TERA,
     PH_COUNT_
 } pr_phase_type;
-#define PH_FIRST_UNPORTED PH_DANCER
+#define PH_FIRST_UNPORTED PH_TERA
 extern const char *const pr_phase_name[PH_COUNT_];
 
 /* An upstream PokemonMove the phase holds: a moveset slot, or a detached one
