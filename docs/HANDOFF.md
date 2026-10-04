@@ -53,6 +53,37 @@ Start with [`README.md`](../README.md) (folder table), then the README of the fo
 7. No 3DS builds needed on your machine (they need devkitPro; only Task 14 builds one, inside CI), and nothing here
    requires the console or emulator. If a step seems to, stop and say so.
 
+## Settled project decisions (lorenzo, 2026-10-04)
+Lorenzo answered these; a task PR does not reopen them. If one looks wrong for your task, say so in the PR and stop.
+
+1. **Reference runtime is Node 22.** Run every upstream differential on Node 22 (Node 24 is not a substitute).
+   Why: Node 22 / V8 12.4 computes `Math.pow` with fdlibm, and battle-core's `src/js_math.c` reproduces it bit for bit.
+   Node 24 returns a different last bit for some inputs. That reaches ai-core through the Stealth Rock matchup score and
+   is the origin of the Node 24 failures of 2, 9, 9 and 12 cases across the four seeds (Task 88, #102, ai-core README).
+   run-core's shop comparison also fails under Node 24 (#112); that one was not traced to `Math.pow`. Upstream's own
+   `package.json` asks for Node >= 24.9.0, so Node 22 is a choice of which engine's numbers the port reproduces, not
+   proof that it matches every JavaScript engine. Never waive those Node 24 failures, never loosen a comparison to hide
+   them, and if you see a failure only on Node 24, report it as that.
+2. **The game is fully offline.** No account login, no server daily rankings, no run upload, no other online feature.
+   There is no import of browser saves and no port of upstream's save-version migration code; the port's own save
+   format is the only one. Anything upstream gets from a server needs a local replacement chosen in its own card, and
+   none is chosen yet.
+3. **The upstream pin stays `8555c08c823b856cbec4eb99ca84ea52a955836d`** until a Classic singles run is playable start to
+   finish in the app (Milestone 1 of the post-parity plan). After that lorenzo decides whether to move the pin. The
+   public beta `4f09698` is not a target before then.
+4. **Cards 92 to 96 are approved**, in the lane C order given in [PARITY-TASKS.md](PARITY-TASKS.md) (92, 93, 94, 77, 95,
+   96, then 64, 65, 66 and the rest). Card 64 no longer waits for 62.
+5. **Run-core producer edits are allowed for card 100 only** (the `gym_e4` producer's `TypeError` and the `rival`
+   producer's memory use). Rule 2 still applies to every other check: change a producer minimally, state the case counts
+   before and after, never loosen a comparison.
+6. **The app driver (card 110) is authorized**: wire `game/` to game-core's run one screen flow at a time, accepted first
+   in the Azahar emulator. Console acceptance stays a human gate (Task 85). It runs as a project thread, not as an outside
+   agent task, and not in a PR together with other work.
+7. **Skipped for now**: the custom-content list (Milestone 4 cards stay unplanned). **Not decided yet**: timed events
+   (date-driven seasonal boosts and rewards; none is ported, and the pinned list's one event active today, the "Item
+   Update waiting room", gives a Mega Bracelet and a Dynamax Band at Classic wave 115), the second soak chooser (109)
+   and the differential CI job (148).
+
 ## Setting up the upstream checks
 Needs `git`, `gcc`, `make`, `python3`, Node 22 with `corepack`/`pnpm`, and network access (to clone upstream and
 download a few small JSON files).
@@ -266,7 +297,8 @@ logic. Whether it looks right is unverified until someone runs the emulator.** S
 ---
 
 ## Not for an outside agent yet
-- **Driving the battle screen from game-core's run** (`game/WIP-run-driver.md`). Large, and judged on screen.
+- **Driving the battle screen from game-core's run** (`game/WIP-run-driver.md`). Large, and judged on screen. Authorized
+  as card 110 for a project thread (see the settled decisions above); still not an outside-agent task.
 - **The second half of berries** (Liechi, Ganlon, Petaya, Apicot, Salac, Lansat, Starf, Enigma), other held items, mints,
   TMs and evolution items as rewards: same shape as Tasks 7 to 11, worth doing after those land.
 - **ai-core's backlog** (`ai-core/README.md`): its held-item scores, trainer switching moves and Illusion depend on
