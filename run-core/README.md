@@ -142,3 +142,12 @@ Dev overrides (`LEVEL_CAP_OVERRIDE`, `ENEMY_HEALTH_SEGMENTS_OVERRIDE`...) aren't
 - `tools/difftest.sh <upstream dir> [N] [seed] [wave|shop|biome|encounter|newbattle|exp|partyexp|upkeep|battlegen|pokemongen|trainerspecies|trainerparty|wildenemy|luck|enemyitems|enemybuffs|daily|all]` (the upstream checkout comes from `battle-core/tools/setup-upstream.sh`)
 
 Build: `make` (outputs to `build/`).
+
+## Task 63 baseline blocker (2026-10-04)
+
+Enemy moveset generation remains unimplemented. Before any Task 63 code change,
+main `6ac3e321288ef543517279354bf96d7e5c6e5420` fails the unchanged `daily`
+differential: five daily runs / 250 waves, 760 checks passed and 15 mismatches,
+exit 1 under Node 22.23.3. Work stopped as required by the task's baseline rule.
+See [the exact commands, summaries and remaining gates](TASK63-BLOCKER.md).
+This documentation-only draft establishes no new moveset parity result.
