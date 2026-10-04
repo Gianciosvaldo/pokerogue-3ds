@@ -15,7 +15,7 @@ import { LearnableMoveSource } from "#enums/learnable-move-source";
 import { allMoves, modifierTypes } from "#data/data-lists";
 import { PokemonMove } from "#moves/pokemon-move";
 import { applyChallenges } from "#utils/challenge-utils";
-import { ValueHolder } from "#utils/common";
+import { ValueHolder } from "#utils/value-holder";
 import { GameManager } from "#test/framework/game-manager";
 import * as fs from "node:fs";
 import Phaser from "phaser";

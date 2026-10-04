@@ -56,3 +56,40 @@ tools/redump.sh <upstream>             # regenerate gen/out/ from upstream
 tools/difftest.sh <upstream> 4000 99   # rewards and victory cases, replayed through the port
 ```
 The upstream checkout is the one `battle-core/tools/setup-upstream.sh` prepares. To look into a mismatch: rerun the producer with `DIFF_ONLY=<case>` (it prints every pool entry's weight and every generator result for that case to stderr), and replay with `DEBUG_CASE=<case>` against a build made with `CFLAGS="-O0 -g -std=c99 -DPR_REWARD_DEBUG"`, which prints the port's.
+
+## Task 91: Separate TM and relearner caller inputs (2026-10-04)
+
+Task 59 cannot supply one accurate `level_moves` array for two upstream contracts. TM generation excludes `getLevelMoves({includeEvolutionMoves:true, includeRelearnerMoves:true})`; Memory Mushroom reads `startingLevel:1` plus pre-evolution moves. `pr_reward_mon` now accepts a separate, explicitly selected relearn list with level/source metadata. Explicit mode excludes the base moveset, as upstream does even under summon moveset overrides, and permits an empty list. Legacy callers retain their original input path. Used-TM history duplicates survive filtering against the earlier level/egg rows, matching actual upstream behavior.
+
+An additive producer invokes both actual upstream getters, `getLearnableLevelMoves()` and all three TM generators in the same case. C compares the resulting Memory rows and each TM/RNG result. Node 22.23.3 / Vitest 4.1.11, GCC 13.3, upstream `8555c08c823b856cbec4eb99ca84ea52a955836d`:
+
+| Seed | Identical / total | Mismatches | Distinct lists | Fusion | Summon moveset overrides |
+| --- | --- | --- | --- | --- | --- |
+| 777 | 2000 / 2000 | 0 | 322 | 978 | 995 |
+| 9001 | 2000 / 2000 | 0 | 324 | 974 | 992 |
+| 4242 | 2000 / 2000 | 0 | 293 | 990 | 1021 |
+| 31337 | 2000 / 2000 | 0 | 284 | 961 | 998 |
+
+8000 cases, 24,000 TM/RNG comparisons, zero thrown/skipped cases. A planted return to the shared-list contract fails 945/2000 cases; truncation is rejected (exit 2). Three host-only boundary checks cover explicit empty, legacy fallback and oversized input; the upstream random cases produced zero empty raw relearn lists.
+
+```sh
+# Copy the new producer into the external pinned checkout's test/tests/zz-dump/:
+DIFF_N=2000 DIFF_SEED=777 DIFF_OUT=/abs/dual-777.txt \
+  node node_modules/vitest/vitest.mjs run test/tests/zz-dump/learnset-inputs.producer.test.ts
+# Repeat for 9001, 4242, 31337, then in the port:
+make -C reward-core
+reward-core/build/learnsetinputtest /abs/dual-777.txt
+reward-core/build/learnsetinputtest /abs/dual-777.txt --mutate-shared-list
+reward-core/build/learnsetinputtest --selftest
+```
+
+Established seed-99 / N=4000 producers and unchanged comparators were run before/after on the same traces: reward options **3950 pass / 0 fail / 50 unported**, victory **4000 pass / 0 fail**, application **3865 pass / 135 fail**. Each before/after output is byte-identical; application failures are the existing fusion gap, not passing validation.
+
+
+## Task 91 validation repair (2026-10-04)
+
+The user's authorization resolved the established Memory producer blocker: ValueHolder now imports from `#utils/value-holder`, its actual pinned upstream module. No assertion, case count, seed or comparison was removed. Fresh seed99/N4000 Memory replay: **4000 cases, 0 mismatches**. The separate dual-input suite was rerun on Node24.19.0/Vitest4.1.11 at upstream `8555c08`: four seeds ×2000 = **8000 identical, zero Memory/TM/RNG mismatches**, with 24,000 TM/RNG comparisons; explicit-empty/bounds checks pass, shared-list mutation fails, incomplete trace exits2.
+
+Established seed99/N4000 options remain3950pass/0fail/50unported, victory4000pass/0fail, application3865pass/135fail (unchanged existing fusion gap, addressed separately in Task89/#104). Task91's pass gate requires no worsening of that established application baseline; those135failures are never credited as passes. Host test exits0, paired200-run digests `d1eb301b`/`d1eb301b`. CI must pass on the updated head before ready-for-review transition. Integration Task59 requires this API to merge on main; Task60 still requires Task59 and its documented prerequisites. No full reward/run/hardware lifecycle claim.
+
+
