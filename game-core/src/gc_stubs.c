@@ -23,33 +23,9 @@ void gc_port_enemy_moveset(gc_run *run, gc_mon *m)
     for (int k = 0; k < n; k++) gc_mon_set_move(m, k, mv[n - 1 - k]);
 }
 
-/* ---- reward-core: a placeholder pool ---- */
-typedef struct { const char *key; uint8_t target; int8_t tier; } stub_reward;
-static const stub_reward pool[] = {
-    {"POTION", GC_TARGET_POKEMON, 0}, {"SUPER_POTION", GC_TARGET_POKEMON, 1}, {"REVIVE", GC_TARGET_POKEMON, 1},
-    {"FULL_HEAL", GC_TARGET_POKEMON, 1}, {"ETHER", GC_TARGET_MOVE, 0}, {"ELIXIR", GC_TARGET_POKEMON, 1},
-    {"RARE_CANDY", GC_TARGET_POKEMON, 1}, {"POKEBALL", GC_TARGET_NONE, 0}, {"GREAT_BALL", GC_TARGET_NONE, 1},
-    {"HYPER_POTION", GC_TARGET_POKEMON, 2}, {"MAX_REVIVE", GC_TARGET_POKEMON, 2},
-};
-#define POOL_N ((int)(sizeof pool / sizeof pool[0]))
-
-int gc_port_reward_options(gc_run *run, int reroll_count, gc_offer out[GC_MAX_OPTIONS])
-{
-    (void)reroll_count;
-    gc_stub(run, GC_STUB_REWARDS);
-    int n = 3 + gc_item_stack(run, "GOLDEN_POKEBALL");
-    if (n > GC_MAX_OPTIONS) n = GC_MAX_OPTIONS;
-    for (int i = 0; i < n; i++) {
-        const stub_reward *r = &pool[gc_stub_rand(run, POOL_N)];
-        out[i].key = r->key;
-        out[i].arg = -1;
-        out[i].tier = r->tier;
-        out[i].target = r->target;
-        out[i].cost = 0;
-    }
-    return n;
-}
-
+/* ---- reward-core: what a reward does when it is taken (Task 60). The options themselves are reward-core's
+ * (gc_reward.c); this applies the few the stand-in knows, and adds the rest to the player's items as they
+ * are, counting each one that needs a real effect ---- */
 static bool heal(gc_mon *m, int points, int percent, bool revive, bool status)
 {
     pr_pokemon *b = &m->b;
@@ -91,7 +67,9 @@ bool gc_port_apply_reward(gc_run *run, const gc_offer *o, int party, int move_sl
         gc_ev_msg(run, "battle:rewardGain", 1, pr_arg_key("modifierName", ball_key[ball]));
         return true;
     }
+    const int idx = gc_reward_item_index(k);
     if (o->target == GC_TARGET_NONE) {
+        if (idx < 0 || !(pr_items[idx].flags & PR_ITEMF_PERSISTENT)) gc_stub(run, GC_STUB_REWARD_APPLY);
         gc_item_add(run, k, o->arg, 0, 1);
         return true;
     }
@@ -126,6 +104,8 @@ bool gc_port_apply_reward(gc_run *run, const gc_offer *o, int party, int move_sl
         gc_system_add_friendship(run->sys, run, m, 6, true);
         gc_rq_unshift(run, gc_rp(RP_LEVEL_UP, party, b->level - 1, b->level));
     } else {
+        /* a held item is added as it is; anything else would act on the Pokemon, and doesn't yet */
+        if (idx < 0 || !(pr_items[idx].flags & PR_ITEMF_HELD)) gc_stub(run, GC_STUB_REWARD_APPLY);
         gc_item_add(run, k, o->arg, b->id, 1);
     }
     if (!ok) { *why = "partyUiHandler:anyEffect"; return false; }

@@ -69,6 +69,7 @@ void gc_mon_new_player(gc_run *run, gc_mon *m, const gc_starter *s, int level)
     p->gender = sp && sp->male_permille < 0 ? -1 : (s->female ? 1 : 0);
     p->shiny = s->shiny;
     m->variant = s->variant;
+    m->luck = (int8_t)(s->shiny ? s->variant + 1 : 0);   /* Pokemon's constructor: luck = shiny ? variant + 1 : 0 */
     p->friendship = sp ? sp->base_friendship : 0;
     p->is_player = true;
     p->passive_flag = s->passive;

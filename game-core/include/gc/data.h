@@ -56,6 +56,14 @@ typedef struct {
 extern const gc_starter_egg_moves gc_starter_egg_moves_data[];
 extern const int gc_starter_egg_moves_count;
 
+/* A species' form-specific level moves (formLevelMoves[form_key]), appended after the species' own level
+ * moves (battle-core's pr_species.level_moves) by getLevelMoves (gen/out/gc_learnsets.c). Level 0 is
+ * EVOLVE_MOVE and -1 RELEARN_MOVE; the rows are in upstream's order, ascending by (species, key) */
+typedef struct { int8_t level; uint16_t move; } gc_level_move;
+typedef struct { uint16_t species; const char *form_key; const gc_level_move *v; uint16_t n; } gc_form_level_moves;
+extern const gc_form_level_moves gc_form_level_moves_data[];
+extern const int gc_form_level_moves_count;
+
 /* A trainer config, as Trainer.getName and the money reward read it (gen/out/gc_trainers.c) */
 typedef struct {
     uint16_t type;              /* TrainerType */
