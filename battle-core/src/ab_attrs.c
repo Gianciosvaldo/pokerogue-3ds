@@ -1210,6 +1210,39 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         GATE(true);
         *pp->value = to_dmg_value(*pp->value * P(ReduceBurnDamageAbAttr, a)->multiplier);
         return 1;
+    case PR_AC_PostDancingMoveAbAttr: {
+        if (!c->e) return -1;
+        GATE(move >= 0 && (pr_moves[move].flags & MOVE_FLAGS_DANCE_MOVE)
+             && !pr_find_battler_tag_class(p, PR_TAGCLASS_SEMI_INVULNERABLE));
+        int8_t targets[4];
+        int n = 0;
+        if (pr_move_is_multi_target(move)) {
+            bool multiple;
+            n = pr_get_move_targets(bt, p, move, -1, targets, &multiple);
+        } else if (!strcmp(pr_moves[move].kind, "SelfStatusMove")
+                   || !strcmp(pr_moves[move].kind, "ChargingSelfStatusMove")) {
+            /* ChargeMove mixin retains SelfStatusMove.is upstream. */
+            targets[n++] = (int8_t)pr_battler_index(bt, p);
+        } else {
+            bool targeted = false;
+            int b = pr_battler_index(bt, p);
+            for (int i = 0; i < pp->n_move_targets; i++) targeted |= pp->move_targets[i] == b;
+            if (o && (p->is_player != o->is_player || targeted))
+                targets[n++] = (int8_t)pr_battler_index(bt, o);
+            else for (int i = 0; i < pp->n_move_targets && i < 4; i++) targets[n++] = pp->move_targets[i];
+            if (bt->double_battle && n > 0) {
+                pr_pokemon *first = bt->field[targets[0]];
+                pr_pokemon *ally = bt->field[targets[0] ^ 1];
+                if (first && first->hp <= 0 && first->is_player != p->is_player
+                    && ally && ally->hp > 0 && ally->on_field && !ally->switch_out_status) {
+                    targets[0] ^= 1; n = 1;
+                }
+            }
+        }
+        pr_unshift_move_phase(bt, c->e, (pr_pokemon *)p, move, -1, targets, n,
+                              MOVE_USE_MODE_INDIRECT, MOVE_PHASE_TIMING_MODIFIER_FIRST);
+        return 1;
+    }
     case PR_AC_PostItemLostApplyBattlerTagAbAttr: {
         int tag = P(PostItemLostApplyBattlerTagAbAttr, a)->tagType;
         GATE(!pp->simulated && !pr_get_battler_tag(p, tag));
