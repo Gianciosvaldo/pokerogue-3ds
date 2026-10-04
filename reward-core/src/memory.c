@@ -55,9 +55,12 @@ int pr_reward_memory_moves(const pr_reward_ctx *ctx, int party_idx,
     }
 
     /* usedTMs are appended only when that move is not already available from another source. */
+    const int n_before_tms = n;
     for (int i = 0; i < m->n_used_tms && n < MEMORY_MAX; i++) {
         const uint16_t move = m->used_tms[i];
-        if (!move_in(tmp, n, move))
+        /* Upstream filters the entire usedTMs array against the pre-existing rows,
+         * not against earlier TMs appended from that array. Duplicate history survives. */
+        if (!move_in(tmp, n_before_tms, move))
             tmp[n++] = (pr_reward_memory_move){-1, move, PR_LEARN_SOURCE_TM};
     }
 

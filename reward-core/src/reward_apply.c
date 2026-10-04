@@ -1,6 +1,8 @@
 #include "pr/reward.h"
 #include "reward_internal.h"
 #include "pr_data.h"
+#include "pr/battle.h"
+#include <string.h>
 #include <math.h>
 #include <stddef.h>
 #include <stdbool.h>
@@ -307,22 +309,13 @@ bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_i
                 const pr_item_fc *fc = &pr_item_fcs[sl->start + i];
                 if (fc->item != arg) continue;
                 if (fc->pre_form_key != key) continue;
-                if (!(fc->flags & 4)) continue; /* active */
+                /* Item selection only matches preform and item; activation conditions belong to the later phase. */
 
                 /* Check if already held */
                 if (pr_reward_held(ctx, party_idx, PR_ITEM_FORM_CHANGE_ITEM, arg) ||
                     pr_reward_held(ctx, party_idx, PR_ITEM_RARE_FORM_CHANGE_ITEM, arg)) {
                     continue;
                 }
-
-                bool conds_met = true;
-                for (int c = 0; c < fc->n_cond; c++) {
-                    if (!pr_reward_fc_condition(ctx, party_idx, &pr_fc_conds[fc->cond_start + c])) {
-                        conds_met = false;
-                        break;
-                    }
-                }
-                if (!conds_met) continue;
 
                 can_change = true;
                 break;
@@ -380,6 +373,7 @@ bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_i
                 return false;
             }
 
+            if (hardcore && ctx->party[party_idx].hp <= 0) { if (msg) *msg = NO_EFFECT_MSG; return false; }
             pr_reward_mon *p1 = &ctx->party[party_idx];
             pr_reward_mon *p2 = &ctx->party[sec_idx];
 
@@ -393,54 +387,53 @@ bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_i
                 return false;
             }
 
+            bool first_valid_status = p1->status != STATUS_EFFECT_NONE && p1->status != STATUS_EFFECT_FAINT;
+            bool second_valid_status = p2->status != STATUS_EFFECT_NONE && p2->status != STATUS_EFFECT_FAINT;
+            int original_max_hp = p1->max_hp;
+            double p1_hp_pct = p1->max_hp > 0 ? (double)p1->hp / p1->max_hp : 0.0;
+            double p2_hp_pct = p2->max_hp > 0 ? (double)p2->hp / p2->max_hp : 0.0;
+            double new_hp_pct = (p1_hp_pct + p2_hp_pct) / 2.0;
+            int new_hp = (int)floor((double)original_max_hp * new_hp_pct + 0.5);
+            if (new_hp > 0 && first_valid_status && second_valid_status
+                && (!ctx->fusion_status_choice_available || ctx->fusion_status_choice > 1)) {
+                if (msg) *msg = NO_EFFECT_MSG;
+                return false; /* refuse missing randomness input before mutation */
+            }
+
             /* Perform fusion */
             p1->fusion_species = p2->species;
             p1->fusion_form = p2->form;
             p1->fusion_gender = p2->gender;
             if (p2->pause_evolutions) p1->pause_evolutions = true;
 
-            int sp1_id = p1->species > 1025 ? (p1->species % 1000) : p1->species;
-            int sp2_id = p2->species > 1025 ? (p2->species % 1000) : p2->species;
-            int hp1_base = 0, hp2_base = 0;
-            if (sp1_id >= 1 && sp1_id <= PR_SPECIES_COUNT) {
-                const pr_species *s = &pr_species_table[sp1_id - 1];
-                uint16_t fidx = s->form0 + (p1->form < s->nforms ? p1->form : 0);
-                if (fidx < PR_FORM_COUNT) hp1_base = pr_forms[fidx].base_stats[0];
-            }
-            if (sp2_id >= 1 && sp2_id <= PR_SPECIES_COUNT) {
-                const pr_species *s = &pr_species_table[sp2_id - 1];
-                uint16_t fidx = s->form0 + (p2->form < s->nforms ? p2->form : 0);
-                if (fidx < PR_FORM_COUNT) hp2_base = pr_forms[fidx].base_stats[0];
-            }
+            /* Sparse form lookup, fusion ceil-average, IVs/nature and Wonder Guard
+             * use the already ported battle stat calculator read-only. */
+            pr_battle stat_bt = {0};
+            pr_pokemon stat_mon = {0};
+            stat_mon.species=p1->species;stat_mon.form=p1->form;
+            stat_mon.fusion_species=p2->species;stat_mon.fusion_form=p2->form;
+            stat_mon.level=p1->level;stat_mon.nature=p1->nature;
+            stat_mon.base_ability=p2->ability;stat_mon.passive=p1->passive;
+            stat_mon.is_player=true;stat_mon.id=p1->id;
+            memcpy(stat_mon.ivs,p1->ivs,sizeof stat_mon.ivs);
+            pr_calculate_stats(&stat_bt,&stat_mon);
+            p1->max_hp=stat_mon.stats[STAT_HP];
+            memcpy(p1->stats,stat_mon.stats,sizeof p1->stats);
+            p1->fusion_ability_index=p2->ability_index;
+            p1->fusion_shiny=p2->shiny;p1->fusion_variant=p2->variant;p1->fusion_luck=p2->luck;
 
-            double p1_hp_pct = (p1->max_hp > 0) ? ((double)p1->hp / (double)p1->max_hp) : 0.0;
-            double p2_hp_pct = (p2->max_hp > 0) ? ((double)p2->hp / (double)p2->max_hp) : 0.0;
-            double new_hp_pct = (p1_hp_pct + p2_hp_pct) / 2.0;
-
-            if (hp1_base > 0 && hp2_base > 0) {
-                int fused_base = (hp1_base + hp2_base) / 2;
-                int delta_hp = ((2 * fused_base - 2 * hp1_base) * (int)p1->level) / 100;
-                p1->max_hp += delta_hp;
-                if (p1->max_hp < 1) p1->max_hp = 1;
-            }
-
-            bool p1_was_fainted = (p1->hp <= 0);
-            bool p2_was_fainted = (p2->hp <= 0);
-
-            int new_hp = (int)round((double)p1->max_hp * new_hp_pct);
-
-            if (!p1_was_fainted) {
-                p1->hp = new_hp;
-                if (p1->hp > p1->max_hp) p1->hp = p1->max_hp;
-                if (p1->status == 0 && p2->status != 0) {
-                    p1->status = p2->status;
-                }
-            } else if (!p2_was_fainted) {
-                p1->hp = (new_hp < 1) ? 1 : (new_hp > p1->max_hp ? p1->max_hp : new_hp);
+            p1->hp = new_hp;
+            if (p1->hp > 0) {
+                if (p1->hp > original_max_hp) p1->hp = original_max_hp;
+                if (!first_valid_status) p1->status = p2->status;
+                else if (second_valid_status && !ctx->fusion_status_choice) p1->status = p2->status;
+            } else if (p2->hp > 0) {
+                if (p1->hp < 1) p1->hp = 1;
                 p1->status = p2->status;
-            } else {
-                p1->hp = 0;
             }
+
+            /* updateModifiers recalculates the new fusion maximum after assigning old-max HP. */
+            if (p1->hp > p1->max_hp) p1->hp=p1->max_hp;
 
             /* Transfer held items from p2 to p1 */
             for (int i = 0; i < ctx->n_items; i++) {

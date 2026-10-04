@@ -203,6 +203,12 @@ typedef struct {
     /* Task 44: LevelUpPhase requests produced by Rare/Rarer Candy application. */
     struct { int8_t party_idx; uint16_t old_level, new_level; } level_events[PR_REWARD_MAX_PARTY];
     uint8_t n_level_events;
+    /* Caller supplies the actual unseeded getRandomStatus coin flip for DNA Splicers.
+     * Required only when both input statuses are nonvolatile. Seeded RNG cannot reproduce it. */
+    /* Current application only: caller resets availability before each use.
+     * This is the actual external unseeded draw, never the seeded reward RNG. */
+    bool fusion_status_choice_available;
+    uint8_t fusion_status_choice; /* 0 secondary, 1 primary */
     pr_reward_evolution_event evolution_events[PR_REWARD_MAX_EVOLUTION_EVENTS];
     uint8_t n_evolution_events;
     bool evolution_events_overflow; /* no success reported when the request cannot be retained */

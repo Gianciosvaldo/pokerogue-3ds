@@ -4,12 +4,11 @@ Native C port of PokeRogue's player rewards: the reward options after a wave (po
 
 The API is [`include/pr/reward.h`](include/pr/reward.h). The run loop (game-core) fills a `pr_reward_ctx` from the run before each reward screen: the party as the rolls see it, the player's items, ball counts, unlocks, the arena. A few of its fields are other ports' answers, marked "caller" in the header: `canSetStatus` (battle-core), `canApplyAbility`, the learnable level moves and the level-move list the TM filter leaves out (learnsets, not ported yet), each attack move's types for item spawns. The diff test takes those from upstream, so reward-core is checked given correct inputs.
 
-## Task 89: evolution application state (draft; regression blocker)
+## Task 89: evolution application state (2026-10-04)
 
 Checked against upstream `8555c08c823b856cbec4eb99ca84ea52a955836d` on
 2026-10-03, port base `cdac97d859cd39ef96200570287efb28b77bc287`, Node 22.23.3 /
-GCC 13.3.0. Task 89 is **not ready for merge**: the new bounded slice passes, but
-the existing application regression fails and has an unrecorded randomness gap.
+GCC 13.3.0. The original regression blockers were repaired with the user's authorization; current results below use Node 24.19.0 and preserve the existing assertions.
 
 Evolution items now retain `pr_reward_ctx.evolution_events` rather than returning
 success without the upstream `EvolutionPhase` request. Events carry Pokemon ID,
@@ -59,31 +58,13 @@ not claim that the old comparator checked these fields. Species and ability
 mutations at the C application boundary each yield 2000/2000 mismatches (exit 1).
 Deleting the completion footer yields exit 2. Queue capacity/overflow checks pass.
 
-Existing checks, generated once and replayed on unchanged main and changed C:
-seed 99 rewards, 4000 cases: 3950 pass, 0 fail, 50 unported (8052 screens);
-seed 99 victory, 4000/4000 pass (2055 items, 2459 screens);
-seed 99 apply, **3865 pass / 135 fail** on both, byte-identical replay output.
-The stronger victory seed 5 / 20000 run passes (9984 items, 12402 screens).
-The combined `all` script stops at apply with exit 1, so its subsequent memory
-suite did not run. No existing producer/comparator/seed/count/coverage was edited.
-`make -s -C game-core test` also exits 0 with the standard 200-run digest pair
-`030a9394`/`030a9394`. Its existing mystery comparator's advertised differential
-is not credited here; the Task 82 ignored-money defect remains. The expanded
-1000-run save gate remains blocked by Task 87 and was not rerun in Task 89.
+## Task 89 validation repair (2026-10-04)
 
-The first printed apply failure is case 21, DNA Splicers: HP 122 versus upstream
-109. There are real C fusion HP/stat gaps, not an excuse to waive those failures.
-Separately, PlayerPokemon.fuse calls getRandomStatus; status-effect.ts uses
-randIntRange -> Math.random when both statuses are non-volatile. The existing
-apply trace does not record that draw. Its case 21 has primary HP/status 65/4
-and secondary 152/3. The additive `tests/fusion-randomness.probe.test.ts` calls the
-real helper with identical statuses and seeded state: Math.random=0 produces
-status 3, Math.random=0.999999 produces status 4, and seeded RNG is unchanged
-(one test passed). This is a diagnostic, not a fusion differential pass.
-HANDOFF rule 2 requires stopping and reporting the defective check. Implementation
-stopped here. A separate reviewed fusion harness must record unseeded draws and
-compare the complete state/queue before that family can be completed. The old
-check stays intact; these failures remain outstanding.
+The user authorized repairing established inputs without removing assertions. Fusion now uses actual form/IV/nature data through battle-core's stat calculator, assigns HP from the upstream pre-fusion maximum and clamps after modifier refresh. The application producer records the real unseeded status-helper draw; it does not replace randomness with a fixed result. C requires that input when both valid statuses can be selected and refuses missing/invalid input before mutation. A sprite-only mock prevents destroyed display fixtures from throwing; upstream item/selection/stat/status logic still runs and any thrown case fails the producer. Form-item selection matches upstream item-trigger lookup without incorrectly requiring phase activation conditions. Hardcore rejects a fainted primary. Memory imports ValueHolder from its actual module and preserves duplicate used-TM history as upstream does.
+
+Node24.19.0/Vitest4.1.11, GCC13.3, upstream `8555c08`: established application **4000/4000 seed99**, plus **2000/2000 each seeds777/9001/4242/31337**, zero failures/thrown. The existing comparisons remain HP/status/PP/results; they do not establish complete fusion state. The separate bounded evolution suite still compares63 named party fields, inventory/RNG/queues: **8000/8000 identical**, zero mismatches/skipped/thrown. Species/ability mutations each fail2000/2000; flipped recorded status draws fail6/4000; missing draw/stat inputs and incomplete evolution footer exit2. Missing/invalid caller status-choice checks preserve the original context and both real choices pass.
+
+The complete established `difftest.sh <upstream> 4000 99 all` now exits0: options3950pass/0fail/50unported, victory4000pass/0fail, apply4000pass/0fail, Memory4000cases/0mismatches. Host test exits0 with paired200-run digests `d1eb301b`/`d1eb301b`. CI must pass on the updated head before ready-for-review transition. Evolution success still means queued; game-core must execute evolution and persist lifecycle state. Custom/stat-modifying held inventories, complete DNA Splicers state/phase/transfer lifecycle, form-change phase execution, upstream whole-run and hardware parity remain unvalidated. No missing differential is credited as passing.
 
 Exact commands (from port unless stated otherwise):
 

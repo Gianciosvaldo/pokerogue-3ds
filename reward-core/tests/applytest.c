@@ -31,7 +31,13 @@ static uint16_t parse_item_key(const char *key) {
 }
 
 static long num(char **p) {
-    return strtol(*p, p, 10);
+    char *start = *p;
+    long value = strtol(start, p, 10);
+    if (*p == start) {
+        fputs("missing numeric trace input\n", stderr);
+        exit(2);
+    }
+    return value;
 }
 
 static void test_passive_multipliers(void) {
@@ -369,10 +375,51 @@ static void test_shop_economy_and_lock_capsule(void) {
     printf("PASS: shop_economy_and_lock_capsule unit tests\n");
 }
 
+static void test_fusion_status_input(void) {
+    pr_reward_ctx original = {0};
+    original.n_party = 2;
+    for (int i = 0; i < 2; i++) {
+        original.party[i].id = 100 + i;
+        original.party[i].species = i ? 25 : 1;
+        original.party[i].fusion_species = -1;
+        original.party[i].level = 50;
+        original.party[i].hp = original.party[i].max_hp = 100;
+        original.party[i].allowed_in_challenge = true;
+        for (int j = 0; j < 6; j++) original.party[i].ivs[j] = 31;
+    }
+    original.party[0].status = 1;
+    original.party[1].status = 2;
+    pr_reward_ctx ctx = original;
+    const char *message = NULL;
+    if (pr_reward_apply(&ctx, PR_ITEM_DNA_SPLICERS, 1, 0, 0, &message)
+        || memcmp(&ctx, &original, sizeof ctx)) {
+        fputs("FAIL: missing fusion status input mutated state\n", stderr); exit(1);
+    }
+    ctx = original;
+    ctx.fusion_status_choice_available = true;
+    ctx.fusion_status_choice = 2;
+    pr_reward_ctx invalid = ctx;
+    if (pr_reward_apply(&ctx, PR_ITEM_DNA_SPLICERS, 1, 0, 0, &message)
+        || memcmp(&ctx, &invalid, sizeof ctx)) {
+        fputs("FAIL: invalid fusion status input mutated state\n", stderr); exit(1);
+    }
+    for (int choice = 0; choice < 2; choice++) {
+        ctx = original;
+        ctx.fusion_status_choice_available = true;
+        ctx.fusion_status_choice = choice;
+        if (!pr_reward_apply(&ctx, PR_ITEM_DNA_SPLICERS, 1, 0, 0, &message)
+            || ctx.party[0].status != (choice ? 1 : 2)) {
+            fputs("FAIL: fusion status choice ignored\n", stderr); exit(1);
+        }
+    }
+    puts("PASS: fusion_status_input unit tests");
+}
+
 int main(int argc, char **argv) {
     test_passive_multipliers();
     test_transfer_and_stealing();
     test_shop_economy_and_lock_capsule();
+    test_fusion_status_input();
 
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <cases file>\n", argv[0]);
@@ -469,6 +516,10 @@ int main(int argc, char **argv) {
                 for (int mv = 0; mv < m->n_base_moves; mv++) {
                     m->base_moves[mv] = (uint16_t)num(&pp);
                 }
+                for(int s=0;s<6;s++)m->ivs[s]=(uint8_t)num(&pp);
+                for(int s=0;s<6;s++)m->stats[s]=(int32_t)num(&pp);
+                m->ability_index=(int8_t)num(&pp);m->shiny=num(&pp)!=0;
+                m->variant=(uint8_t)num(&pp);m->luck=(uint8_t)num(&pp);
             }
 
             /* Read items */
@@ -486,6 +537,13 @@ int main(int argc, char **argv) {
                     ctx.items[j].arg = (int16_t)num(&ip);
                 }
             }
+
+            /* Required input transport: preserve the real upstream unseeded status draw. */
+            if (!fgets(line, sizeof(line), f) || line[0] != 'D') { fputs("missing fusion draw record\n",stderr); return 2; }
+            char *dp=line+1;int draws=(int)num(&dp);
+            if(draws<0||draws>1)return 2;
+            if(draws) { char *start=dp;double draw=strtod(dp,&dp);if(dp==start||!(draw>=0&&draw<1))return 2;
+                ctx.fusion_status_choice_available=true;ctx.fusion_status_choice=(uint8_t)(draw*2); }
 
             /* Call C apply */
             const char *msg = NULL;
