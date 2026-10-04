@@ -1,4 +1,4 @@
-/* Stand-in battle builder for the demo (see battle_setup.h). */
+/* Test fixture: a hand-built battle (see battle_setup.h). */
 #include "battle_setup.h"
 
 #include <string.h>

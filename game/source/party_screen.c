@@ -158,3 +158,118 @@ void ps_close(void) {
   party_close();
   if (ui_top() == &g_screen) ui_pop();
 }
+
+/* ---- the learn-move dialog ---- */
+
+static struct {
+  menu_mon party[PR_MAX_PARTY];
+  int n;
+  char name[48], trainer_id[12];
+  ps_learn_host h;
+  void (*done)(void*);
+  void* done_ctx;
+  void (*yes)(void*);
+  void (*no)(void*);
+  void* cb_ctx;
+} L;
+
+/* The summary page over the battle while it is open (menus' summary_open is called by the dialog itself) */
+static bool sum_input(ui_screen* s, ui_button b) {
+  (void)s;
+  return summary_active() && summary_input((mui_button)b);
+}
+
+static void sum_update(ui_screen* s, float dt) {
+  (void)s;
+  mui_tick(dt);
+  summary_update(dt);
+}
+
+static void sum_draw(ui_screen* s, rr_screen which) {
+  (void)s;
+  if (which != RR_BOTTOM || !summary_active()) return;
+  if (ui_space(UI_PHYS_BOTTOM)) rr_rect(0, 0, 320, 240, RR_RGBA(0, 0, 0, 255));
+  mui_set_origin(RR_BOTTOM, 0, 30); /* UI_BOTTOM_CANVAS */
+  summary_draw();
+}
+
+static ui_screen g_sum_screen = {"learn-summary", UI_OVERLAY, NULL, NULL, NULL, sum_input, sum_update, sum_draw, NULL};
+
+/* the summary screen is on top exactly while it is open */
+static void lm_sync(void) {
+  if (summary_active()) {
+    if (ui_top() != &g_sum_screen) ui_push(&g_sum_screen);
+  } else if (ui_top() == &g_sum_screen) {
+    ui_pop();
+  }
+}
+
+static void lm_text_done(void* ctx) {
+  (void)ctx;
+  void (*cb)(void*) = L.done;
+  void* c = L.done_ctx;
+  L.done = NULL;
+  if (cb) cb(c);
+  lm_sync();
+}
+
+static void lm_show(void* host, const char* text, bool prompt, void (*done)(void*), void* done_ctx) {
+  (void)host;
+  lm_sync();
+  L.done = done;
+  L.done_ctx = done_ctx;
+  L.h.show_text(L.h.host, text, prompt, lm_text_done, NULL);
+}
+
+static void lm_yes(void* ctx) {
+  (void)ctx;
+  if (L.yes) L.yes(L.cb_ctx);
+  lm_sync();
+}
+
+static void lm_no(void* ctx) {
+  (void)ctx;
+  if (L.no) L.no(L.cb_ctx);
+  lm_sync();
+}
+
+static void lm_confirm(void* host, menu_cb yes, menu_cb no, void* ctx) {
+  (void)host;
+  lm_sync();
+  L.yes = yes;
+  L.no = no;
+  L.cb_ctx = ctx;
+  L.h.confirm(L.h.host, lm_yes, lm_no, NULL);
+}
+
+static void lm_result(void* host, int slot) {
+  (void)host;
+  lm_sync();
+  L.h.on_result(L.h.host, slot);
+}
+
+static void lm_end(void* host) {
+  (void)host;
+  lm_sync();
+  L.h.on_end(L.h.host);
+}
+
+void ps_learn_move(const pr_battle* bt, int party_slot, int move, int trainer_id, const ps_learn_host* host) {
+  memset(&L, 0, sizeof L);
+  L.h = *host;
+  for (int i = 0; i < bt->n_party[0] && i < PR_MAX_PARTY; i++) ps_menu_mon(bt, bt->party[0][i], &L.party[i]);
+  L.n = bt->n_party[0];
+  snprintf(L.name, sizeof L.name, "%s", L.party[party_slot].name);
+  snprintf(L.trainer_id, sizeof L.trainer_id, "%05d", trainer_id);
+  learn_move_args a;
+  memset(&a, 0, sizeof a);
+  a.party = L.party;
+  a.n = L.n;
+  a.index = party_slot;
+  a.move = (uint16_t)move;
+  a.pokemon_name = L.name;
+  a.level_move_confirmation = true;
+  a.trainer_id = L.trainer_id;
+  learn_move_host h = {lm_show, lm_confirm, lm_result, lm_end, NULL};
+  learn_move_start(&a, &h);
+}

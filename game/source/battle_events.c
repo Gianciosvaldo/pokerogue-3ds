@@ -101,21 +101,44 @@ typedef struct {
   bool fainted, present, visible, substitute;
 } seen_t;
 
-int be_convert(const pr_battle* bt, const pr_engine* e, const bv_mon* shown_player, const bv_mon* shown_enemy,
-               bv_event* out, int max) {
+/* The Pokemon a SWITCH_IN event sent out: the snapshot says its party slot when the event happened, its
+ * species, form and max HP; later switches may have moved it, so look for it among the side's party. */
+static const pr_pokemon* be_switched_in(const pr_battle* bt, int side, int battler, const pr_event_field* f) {
+  if (!f->species) return NULL;
+  const int n = bt->n_party[side];
+  if (f->party_slot >= 0 && f->party_slot < n) {
+    const pr_pokemon* p = bt->party[side][f->party_slot];
+    if (p && p->species == f->species && p->form == f->form && (f->max_hp <= 0 || p->stats[STAT_HP] == f->max_hp))
+      return p;
+  }
+  const pr_pokemon *same_hp = NULL, *same = NULL;
+  for (int k = 0; k < n; k++) {
+    const pr_pokemon* p = bt->party[side][k];
+    if (!p || p->species != f->species || p->form != f->form) continue;
+    if (!same || p == bt->field[battler]) same = p;
+    if (f->max_hp > 0 && p->stats[STAT_HP] == f->max_hp && (!same_hp || p == bt->field[battler])) same_hp = p;
+  }
+  return same_hp ? same_hp : same;
+}
+
+int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events, bool settled, be_view* view,
+                      bv_event* out, int max) {
   int n = 0, nt = 0;
   const char* go_text = NULL;
+  view->sent[0] = view->sent[1] = NULL;
   seen_t seen[4] = {{0}};
-  seen[0] = (seen_t){shown_player->species, shown_player->form, shown_player->hp, shown_player->status, shown_player->hp <= 0, true, !shown_player->hidden, shown_player->substitute};
-  seen[2] = (seen_t){shown_enemy->species, shown_enemy->form, shown_enemy->hp, shown_enemy->status, shown_enemy->hp <= 0, true, !shown_enemy->hidden, shown_enemy->substitute};
+  const bv_mon* shown_player = &view->mon[0];
+  const bv_mon* shown_enemy = &view->mon[1];
+  seen[0] = (seen_t){shown_player->species, shown_player->form, shown_player->hp, shown_player->status, shown_player->hp <= 0, view->present[0], !shown_player->hidden, shown_player->substitute};
+  seen[2] = (seen_t){shown_enemy->species, shown_enemy->form, shown_enemy->hp, shown_enemy->status, shown_enemy->hp <= 0, view->present[1], !shown_enemy->hidden, shown_enemy->substitute};
   static bv_mon sent[4];
 #define PUT(...)                                    \
   do {                                              \
     if (n < max) out[n++] = (bv_event){__VA_ARGS__}; \
   } while (0)
 
-  for (int i = 0; i < e->n_events; i++) {
-    const pr_event* ev = &e->events[i];
+  for (int i = 0; i < n_events; i++) {
+    const pr_event* ev = &events[i];
     int b = ev->battler;
     bool single = b == 0 || b == 2; /* singles: the screen shows battlers 0 and 2 */
     /* In the air or underground: the snapshot after this event says whether the Pokemon is still in
@@ -139,9 +162,12 @@ int be_convert(const pr_battle* bt, const pr_engine* e, const bv_mon* shown_play
     switch (ev->type) {
       case PR_EV_TEXT:
         if (!ev->msg.key || nt >= TXT_MAX) break;
+        /* "Will you switch Pokemon?" is asked as a prompt in upstream (SET battle style only); the run doesn't
+         * ask it, and the question alone would be a dead end on screen */
+        if (!strcmp(ev->msg.key, "battle:switchQuestion")) break;
         pr_msg_format(&ev->msg, be_text_source(), g_txt[nt], sizeof g_txt[nt]);
-        if (i + 1 < e->n_events && e->events[i + 1].type == PR_EV_SWITCH_IN && e->events[i + 1].battler >= 0 &&
-            e->events[i + 1].battler < 2) {
+        if (i + 1 < n_events && events[i + 1].type == PR_EV_SWITCH_IN && events[i + 1].battler >= 0 &&
+            events[i + 1].battler < 2) {
           /* "Go! X!": SwitchSummonPhase shows it while the ball is thrown, so the summon shows it */
           go_text = g_txt[nt++];
           break;
@@ -188,10 +214,25 @@ int be_convert(const pr_battle* bt, const pr_engine* e, const bv_mon* shown_play
         break;
       case PR_EV_SWITCH_IN: {
         if (!single) break;
-        int side = b >= 2, slot = ev->value;
-        if (slot < 0 || slot >= bt->n_party[side]) break;
-        be_mon(bt, bt->party[side][slot], &sent[b]);
+        const int side = b >= 2;
+        /* value is the field slot; the Pokemon is found from the snapshot (species, form, max HP), as the
+         * party may have been reordered by later switches in the same batch */
+        const pr_pokemon* p = be_switched_in(bt, side, b, &ev->field[b]);
+        view->sent[side] = p;
+        if (p) {
+          be_mon(bt, p, &sent[b]);
+          if (!side && view->exp_ratio) sent[b].exp_ratio = view->exp_ratio(p);
+        } else {
+          memset(&sent[b], 0, sizeof sent[b]);
+          sent[b].species = ev->field[b].species;
+          sent[b].form = ev->field[b].form;
+          snprintf(sent[b].name, sizeof sent[b].name, "%s", i18n_species_name(ev->field[b].species));
+          sent[b].level = 1;
+          sent[b].gender = -1;
+          view->not_found++;
+        }
         sent[b].hp = ev->field[b].hp;
+        if (ev->field[b].max_hp > 0) sent[b].max_hp = ev->field[b].max_hp;
         sent[b].status = ev->field[b].status;
         PUT(.type = BEV_SUMMON, .battler = b, .mon = &sent[b], .text = go_text);
         go_text = NULL;
@@ -216,8 +257,9 @@ int be_convert(const pr_battle* bt, const pr_engine* e, const bv_mon* shown_play
       }
   }
 
-  /* catch up on what the events didn't show */
-  for (int k = 0; k < 4; k += 2) {
+  /* catch up on what the events didn't show, from the battle as it stands once the events have
+   * happened (not when the run went on after them: a victory, the experience, the next wave) */
+  for (int k = 0; k < 4 && settled; k += 2) {
     const pr_pokemon* p = bt->field[k];
     if (!p || !seen[k].present) continue;
     if (p->hp < seen[k].hp) PUT(.type = BEV_DAMAGE, .battler = k, .a = p->hp, .b = HIT_RESULT_INDIRECT);
@@ -234,5 +276,13 @@ int be_convert(const pr_battle* bt, const pr_engine* e, const bv_mon* shown_play
     }
   }
 #undef PUT
+  view->present[0] = seen[0].present;
+  view->present[1] = seen[2].present;
   return n;
+}
+
+int be_convert(const pr_battle* bt, const pr_engine* e, const bv_mon* shown_player, const bv_mon* shown_enemy,
+               bv_event* out, int max) {
+  be_view view = {{*shown_player, *shown_enemy}, {true, true}, NULL, 0};
+  return be_convert_events(bt, e->events, e->n_events, true, &view, out, max);
 }

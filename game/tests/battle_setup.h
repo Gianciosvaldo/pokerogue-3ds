@@ -1,11 +1,11 @@
 /*
- * battle_setup: a STAND-IN that builds a battle-core battle for the demo, until game-core's
- * battle adapter lands (the run loop owns building Pokemon and battles; this file goes then).
+ * battle_setup: a TEST FIXTURE that builds a battle-core battle without the run (the app no longer uses it:
+ * run_screen.c drives game-core's run). The converter tests (evtest, switchtest, stat_banner_test,
+ * form_anim_test) use it to run single turns with hand-made Pokemon.
  *
- * It makes fresh Pokemon (species, level, moves; random IVs, nature, gender; the species'
- * first ability) and a wild singles battle, and runs turns with the player's FIGHT or POKEMON
- * command.
- * The enemy's command comes from ai-core (pr_ai_enemy_command), as upstream's EnemyCommandPhase.
+ * It makes fresh Pokemon (species, level, moves; random IVs, nature, gender; the species' first ability)
+ * and a wild singles battle, and runs turns with the player's FIGHT or POKEMON command. The enemy's command
+ * comes from ai-core (pr_ai_enemy_command), as upstream's EnemyCommandPhase.
  */
 #ifndef GM_BATTLE_SETUP_H
 #define GM_BATTLE_SETUP_H
