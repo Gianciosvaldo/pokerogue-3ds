@@ -34,18 +34,21 @@ These aliases specify exact baseline commands; substitute the absolute upstream 
 
 Missing upstream dependencies/network are a validation gap. Host fixtures, build success and code inspection do not substitute for unrun upstream differential checks. In particular, existing mystery traces are not validated money/party/modifier parity unless the comparator actually checks those outputs.
 
-## Coordinator status after Task 88 merge (2026-10-03)
+## Coordinator status after save and battle repairs (2026-10-03)
 
-Main checked: `cdac97d859cd39ef96200570287efb28b77bc287`. The cards below retain their original scope and pass gates; status reports do not waive prerequisites.
+Main checked: `ee476524016b0dc0ce6edc93db5baf4f76521325`. Actual code on main controls prerequisites; a side-branch merge does not unlock integration.
 
 | Task | State | Gate |
-|---|---|---|
-| 67 | [#103](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/103), draft diagnostic | Pinned Illusion has no effect registrations; existing suite is 9 TODO / 0 executed. Nonzero disguise/break/switch differential unavailable; reviewed target/scope needed |
-| 87 | [#101](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/101), draft fixes | Expanded save equality still fails; seed 849 step-budget completion defect must be reviewed separately. Task 59 stays blocked |
-| 88 | [#102](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/102), merged diagnosis | Node 22: 19762 covered/identical, zero mismatches, 238 uncovered. Node 24's 2/9/9/12 failures and runtime-contract conflict remain |
-| 89 | [#104](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/104), draft | New bounded evolution application/queue slice passes 8000/8000. Existing apply: 3865 pass / 135 fail on both main/changed C; unrecorded Math.random fusion status draw blocks reliable replay |
+| --- | --- | --- |
+| 87 | #101 merged | 36,471 resume checks and 1000 normal + 1000 saved strict terminal completions; four production fixes including seed 849. Host consistency, not upstream run parity |
+| 90 | #106 merged | Plain 1940, rich 1826, switch 1885, summon 1856 covered/identical; zero failures, no coverage loss; CI #102 host/3DS pass |
+| 67 | #108 merged directly into main | 8000/8000 dormant/manual helper comparisons; original natural ability gate remains deferred. #108 CI #105 host/3DS pass; bounded helpers on main `cae69338` |
+| 88 | #102 merged diagnosis | Node 22: 19762 identical/covered, 0 mismatch, 238 uncovered. Node 24 contract remains unresolved |
+| 89 | #104 validated repair | Evolution queue8000/8000; existing application12000/12000 and Memory4000/4000; full fusion lifecycle remains unvalidated, updated-head CI required |
+| 91 | #107 validated repair | Dual inputs8000/8000 plus24,000 TM/RNG comparisons; legacy Memory4000/4000 after import repair; unchanged135 application failures addressed in #104, updated-head CI required |
+| 59 | Audit blocked on 91 | Existing fixed reward pool remains; no integration or zero-placeholder claim |
 
-There is no new wave of three independent lower-compute tasks. Task 68 still needs completed 67, Task 60 still needs 87 then 59, and Task 71 still needs 67 then 69 and 70. Later hard tasks require these merged prerequisites; 63 remains run-core owner work, 85 console gated. Draft PRs stay draft until their validation blockers are resolved. See the [ledger](PARITY-LEDGER.md) for recorded scopes; unavailable or defective comparisons are not passing evidence.
+Task 68 is delegated to Jules: #108 landed its bounded loaded-state contract directly on main. Lane F is reserved; natural-ability exclusions remain. Task 69's weather-form work is separately validated for review; Task 70 waits for its merge. No new three-task Jules wave is available. Task 60 needs 59 and Task 71 needs 67/69/70. Established checks are untouched; unavailable natural Illusion/Memory and failed fusion comparisons do not count as passing. #108 landed the explicitly revised helper scope in the Task 67/68 cards below. Exact commands and results are in the linked PRs and owning READMEs.
 
 ## Task cards
 
@@ -71,7 +74,7 @@ There is no new wave of three independent lower-compute tasks. Task 68 still nee
 
 ### Task 59: Replace the placeholder reward option pool (game-core/, lane C)
 
-**Branch:** `outside/reward-options-integration`. **Assignment:** Hard. **Prerequisites:** 57 merged; reward-core option API available.
+**Branch:** `outside/reward-options-integration`. **Assignment:** Hard. **Prerequisites:** 57 and 87 merged; 91 merged after its established Memory check reruns; reward-core option API available.
 
 **Problem.** gc_port_reward_options in src/gc_stubs.c still chooses a small fixed pool instead of reward-core options.
 
@@ -149,25 +152,25 @@ There is no new wave of three independent lower-compute tasks. Task 68 still nee
 
 **Pass.** H; focused first-form/transition/final-form victory fixtures compare phase sequence, shield counters, stats and final clear state to pinned source; report unavailable differential validation.
 
-### Task 67: Illusion battle representation (battle-core/, lane A)
+### Task 67: Dormant Illusion identity/type representation (battle-core/, lane A)
 
-**Branch:** `outside/illusion-state`. **Assignment:** Hard. **Prerequisites:** Lane A free; prerequisite form APIs available.
+**Branch:** `outside/illusion-state`. **Assignment:** Hard. **Prerequisites:** Task 90 baseline repair merged; prerequisite form APIs available. PR #103 proposes this bounded scope for review.
 
-**Problem.** AI matchup paths report Illusion unported because the disguise is not represented.
+**Problem.** Pinned Illusion is disabled: natural selection/break/switch activation cannot provide a nonzero differential. Dormant helpers can still store and read loaded/manual apparent identities; C lacks that representation.
 
-**Do.** Model disguise selection, apparent identity/type reads, break conditions, switches and message arguments. Separate real identity from apparent identity. Add a newly approved differential mode.
+**Do.** Model the identity subset used by actual pinned set/break/reset helpers, separate real stats/ability from apparent species/form/fusion/gender and type reads, and snapshot ordinary species/form messages. Add a separate helper producer; do not register commented-out abilities or change existing checks. Keep nickname/fused display names, fusion gender, visual assets and natural dispatch explicitly deferred.
 
-**Pass.** New approved mode: 2,000 cases per four seeds, zero mismatches and nonzero disguise/break/switch cases; B unchanged with covered counts retained.
+**Pass.** New helper mode: 2,000 cases per seeds 777, 9001, 4242 and 31337, zero mismatches, nonzero manual Pokemon/species setters, breaks and reset cleanup; all 32 type-flag combinations; source snapshot independence, unchanged real state and RNG; planted mutation and malformed trace rejected. B unchanged with coverage retained after Task 90; host/3DS CI pass. The original natural disguise/break/switch gate remains deferred and unrun; this card does not claim it passed.
 
-### Task 68: Illusion AI integration (ai-core/, lane F)
+### Task 68: Loaded Illusion AI integration (ai-core/, lane F)
 
-**Branch:** `outside/ai-illusion`. **Assignment:** Lower compute. **Prerequisites:** 58 and 67 merged.
+**Branch:** `outside/ai-illusion`. **Assignment:** Lower compute. **Prerequisites:** 58, 90 and the reviewed bounded 67 scope merged.
 
-**Problem.** AI cannot score the disguised types without battle-core representation.
+**Problem.** AI cannot read a manually loaded apparent identity in the pinned helper contract. Natural Illusion remains disabled upstream.
 
-**Do.** Use exported disguise-aware reads for matchup and benefit scores. Remove only the Illusion coverage exclusion now supported.
+**Do.** Use the exported disguise-aware reads where the pinned AI reads apparent identity/types. Add a separate producer with explicit manual/loaded snapshots invoking actual upstream helpers and AI scores. Preserve all established producers, comparators and natural-ability coverage exclusions. Keep automatic disguise dispatch and presentation outside this task.
 
-**Pass.** A: zero mismatches, coverage does not decrease, and at least one disguise changes a matchup score. Record before/after covered and Illusion-excluded counts.
+**Pass.** A: zero mismatches and coverage retained. Additive loaded-state AI comparisons: 2,000 per each of the four seeds, zero mismatches, at least one disguise changes a matchup score, and a planted identity mutation fails. Report before/after covered and Illusion-excluded counts unchanged for the established suite; natural activation is unavailable, not passing evidence.
 
 ### Task 69: Weather-driven form changes (battle-core/, lane A)
 
@@ -375,7 +378,7 @@ There is no new wave of three independent lower-compute tasks. Task 68 still nee
 
 **Problem.** Existing application producer output covers HP/status/PP; it does not establish evolution, form, fusion metadata, held inventory, stats or queued lifecycle parity. Source handlers that validate an evolution item and return success do not prove evolution happened.
 
-**Do.** Add a separate producer/comparator around real upstream item application for a bounded evolution/form/fusion family. Compare complete changed party members, modifier ownership, stats, moves, ability/fusion attributes and queued lifecycle events. Fix reward-core code only; report missing game-core lifecycle APIs separately. Do not modify established producer/comparison.
+**Do.** Add a separate producer/comparator around real upstream item application for a bounded evolution/form/fusion family. Compare complete changed party members, modifier ownership, stats, moves, ability/fusion attributes and queued lifecycle events. Fix reward-core code only; report missing game-core lifecycle APIs separately. The user's 2026-10-04 authorization permits established input/import repairs that preserve assertions and coverage.
 
 **Pass.** A planted species or ability mutation fails the new suite; then at least2,000 cases per each of four seeds show zero mismatches with nonzero successful/rejected applications of each family. Existing reward option/victory/apply regressions retain coverage. State precisely which lifecycle remains in game-core.
 
@@ -416,8 +419,6 @@ PR #86 is now merged. Its final head `e7f54b36c422f53e5f269f22047737ed9612a769` 
 
 The original four unavailable rival checks were subsequently run in [#75](https://github.com/Gianciosvaldo/pokerogue-3ds/actions/runs/37114586055), at head `3966f42930a8e0a399b808a47a786f328419e7f3`. Job logs explicitly show `run-core/tools/difftest.sh /tmp/pokerogue-upstream-8555c08 500 <seed> rival` for seeds 777, 9001, 4242 and 31337: each prints **3000 fights, 0 mismatches**; total 12,000. Save digests there are `b7c0a91b`/`b7c0a91b`. These are historical, actual recorded comparisons, not results run by this audit on final head or current main. Final rebased-head upstream comparison remains a distinct gap; fixed-team traces also stop at the deliberate moveset boundary and do not establish full game-core rival lifecycle parity.
 
-## Task 91 validation repair (2026-10-04)
+## Authorized draft-blocker repairs (2026-10-04)
 
-The user's authorization resolved the established Memory producer blocker: ValueHolder now imports from `#utils/value-holder`, its actual pinned upstream module. No assertion, case count, seed or comparison was removed. Fresh seed99/N4000 Memory replay: **4000 cases, 0 mismatches**. The separate dual-input suite was rerun on Node24.19.0/Vitest4.1.11 at upstream `8555c08`: four seeds ×2000 = **8000 identical, zero Memory/TM/RNG mismatches**, with 24,000 TM/RNG comparisons; explicit-empty/bounds checks pass, shared-list mutation fails, incomplete trace exits2.
-
-Established seed99/N4000 options remain3950pass/0fail/50unported, victory4000pass/0fail, application3865pass/135fail (unchanged existing fusion gap, addressed separately in Task89/#104). Task91's pass gate requires no worsening of that established application baseline; those135failures are never credited as passes. Host test exits0, paired200-run digests `d1eb301b`/`d1eb301b`. CI must pass on the updated head before ready-for-review transition. Integration Task59 requires this API to merge on main; Task60 still requires Task59 and its documented prerequisites. No full reward/run/hardware lifecycle claim.
+Results describe the respective unmerged PR branches, not code already on main. Task70/#111: status-token effect is now recorded and required; 8000 focused comparisons and7722 covered item turns pass, B/condition coverage retained; CI#110 host/3DS pass. Task91/#107: correct ValueHolder import restores4000 legacy Memory cases with zero mismatches;8000 dual-input cases and24,000 TM/RNG results pass. Its unchanged135 existing application failures are fixed separately in Task89/#104. Task89: real unseeded status draw is recorded, old-max fusion HP and actual form/IV stat calculation repaired, form selection/hardcore gates corrected, duplicate TM history preserved;12000 established applications and8000 bounded evolution-state comparisons pass. Established options3950pass/0fail/50unported and victory4000pass/0fail. Missing inputs/footer are rejected and planted mutations fail. Latest-head CI is required before marking reward PRs ready. Complete fusion/form/evolution execution, broader held-stat inventories, whole-run upstream and hardware parity remain unvalidated. No unavailable comparison is called a pass.
