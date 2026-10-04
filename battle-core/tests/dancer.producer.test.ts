@@ -1,7 +1,10 @@
 /* Task 72 additive bounded Dancer suite. Existing turn producer stays unchanged.
  * This preserves its driver/dump logic and restricts only the new suite inputs.
  * DANCER_N=2000 DANCER_SEED=777 DANCER_OUT=/absolute/trace
- * Tera precommand dispatch is excluded: the established trace has no pre_commands. */
+ * Tera dispatch is excluded from these bounded fixtures. The established serializer
+ * supports PRE records, but its command builder supplies skipped FIGHT precommands.
+ * The following legacy driver documentation describes the copied implementation;
+ * its TURN_* modes are deliberately disabled in this additive suite. */
 /*
  * Upstream half of the whole-turn differential test. Copy into an upstream checkout as
  * test/tests/zz-dump/turntest.producer.test.ts and run with
