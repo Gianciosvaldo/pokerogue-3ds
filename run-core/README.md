@@ -158,3 +158,12 @@ overrides passes 775/775 daily checks with the unchanged comparator. The
 established daily producer is still unchanged and still fails; its input repair
 needs authorization under the earlier producer-edit prohibition. No moveset
 parity result or complete R-baseline pass is established.
+
+Update (2026-10-04, later): lorenzo authorized the producer input fix on the review card, and
+`tests/daily.producer.test.ts` now clears the IV, nature and shiny overrides after classic setup
+(three lines, nothing else changed). Under Node v22.22.0, `difftest.sh <upstream> 20000 <seed> daily`
+prints 775 checks passed, 0 mismatches on seeds 777, 9001, 4242 and 31337 (the producer reads no seed:
+it is five fixed daily runs). The original C library on the same trace still prints 773 passed, 2
+mismatches, so the patched producer still catches the form-roll defect. The other Node 22 failures
+(`trainerparty` Rival 5 and 6 members, one `wildenemy` Eternatus case, the `gym_e4` producer crash) and
+the unfinished `rival` run are listed in the PR #112 comment; none of them is touched here.
