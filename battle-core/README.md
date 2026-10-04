@@ -227,6 +227,51 @@ Upstream ids are compiled into const tables. Custom species, moves, abilities an
 This code has run on a real Old 3DS ([`bench-native/`](../bench-native/), 2026-09-27, an earlier revision): all 2,849 covered turns (of 3,200 from eight turn-test modes) and all 1,000 damage cases matched upstream there too, at a median of 1.51 ms per turn. Later slices haven't been rerun on the console.
 
 
+## Task 71: Enigma, Lansat and Starf berry effects (2026-10-04)
+
+Enigma, Lansat and Starf berries now use their pinned trigger conditions and consumption effects:
+- Enigma Berry triggers when the holder receives a super-effective or extremely-effective attack, healing 25% max HP (doubled by `DoubleBerryEffectAbAttr` if active) and unshifting the heal message (`battle:hpHealBerry`).
+- Lansat Berry triggers when the holder's HP ratio falls below 25% (or threshold modified by `ReduceBerryUseThresholdAbAttr`) provided the holder does not already have a `CRIT_BOOST` tag, adding `BATTLER_TAG_TYPE_CRIT_BOOST`.
+- Starf Berry triggers when the holder's HP ratio falls below 25% (or threshold modified by `ReduceBerryUseThresholdAbAttr`), choosing a random stat stage to boost by +2 (from ATK through SPD, doubled by `DoubleBerryEffectAbAttr` if active).
+
+The NEW producer (`battle-core/tests/berry.producer.test.ts`) tests all 11 berry types (Sitrus, Lum, Leppa, Liechi, Ganlon, Petaya, Apicot, Salac, Enigma, Lansat, Starf) across random HP, status, PP, attacks received, and abilities. The comparator (`battle-core/tests/berrytest.c`) checks trigger selection (`shouldApply`), consumption (`apply`), surviving state, HP, status, tags, stat stages, messages, and global RNG.
+
+Validated against upstream `8555c08c823b856cbec4eb99ca84ea52a955836d`, Node 22.22.1, Vitest 4.1.11, GCC 13.3.0.
+
+| Seed | Cases / identical / mismatches | Consumed Enigma / Lansat / Starf | Rejected Enigma / Lansat / Starf |
+| --- | --- | --- | --- |
+| 777 | 2000 / 2000 / 0 | 89 / 99 / 89 | 92 / 86 / 102 |
+| 9001 | 2000 / 2000 / 0 | 73 / 99 / 89 | 78 / 86 / 109 |
+| 4242 | 2000 / 2000 / 0 | 96 / 97 / 96 | 97 / 97 / 82 |
+| 31337 | 2000 / 2000 / 0 | 85 / 93 / 82 | 94 / 80 / 80 |
+
+8,000 identical cases; zero mismatches. Planted stat mutation fails 2,000/2000 cases (exit 1); planted stack mutation fails 952/2000 cases (exit 1). Missing completion footer is rejected with exit 2.
+
+Fresh B traces replay comparison, seed 777/N2000, before and after:
+- plain: 1942 / 1942 (0 mismatches)
+- rich: 1830 / 1830 (0 mismatches)
+- switch: 1890 / 1890 (0 mismatches)
+- summon: 1862 / 1862 (0 mismatches)
+
+Fresh TURN_COND/N2000: seeds 777/9001/4242/31337 covered/identical 1767/1756/1770/1766 both before and after (0 mismatches).
+Fresh TURN_ITEMS/N2000: seeds 777/9001/4242/31337 covered/identical 1922/1932/1929/1939 both before and after (0 mismatches).
+
+Host `make -C game-core test`: 36,473 resume checks and 39 item-bridge checks pass; 1000-run normal/saved digests both `4355853d`.
+
+Commands to reproduce:
+
+```sh
+make -s -C battle-core
+cp battle-core/tests/berry.producer.test.ts /tmp/pokerogue-upstream/test/tests/zz-dump/
+# In external upstream; repeat seed=777,9001,4242,31337:
+BERRY_N=2000 BERRY_SEED=<seed> BERRY_OUT=/tmp/traces_task71/berry-<seed>.txt node node_modules/vitest/vitest.mjs run test/tests/zz-dump/berry.producer.test.ts
+# In port, repeat each seed:
+TURNTEST_LOCALES=/tmp/pokerogue-upstream/locales/en battle-core/build/berrytest /tmp/traces_task71/berry-<seed>.txt
+TURNTEST_LOCALES=/tmp/pokerogue-upstream/locales/en battle-core/build/berrytest /tmp/traces_task71/berry-777.txt --mutate-stat
+TURNTEST_LOCALES=/tmp/pokerogue-upstream/locales/en battle-core/build/berrytest /tmp/traces_task71/berry-777.txt --mutate-stack
+TURNTEST_LOCALES=/tmp/pokerogue-upstream/locales/en battle-core/build/berrytest /tmp/traces_task71/berry-truncated.txt
+```
+
 ## Task 70: Bounded held-item removal (2026-10-04)
 
 Knock Off and Incinerate now use RemoveHeldItemAttr's actual bounded behavior: player Knock Off immunity; ability/passive Sticky Hold and suppression; list-order filtering by holder, transferability and berry restriction; battle-RNG selection; one-stack loss; post-loss Unburden; exact item messages. Six named item classes (Leftovers, Shell Bell, Focus Band, Quick Claw, King's Rock, White Herb) and all eleven berry identities are covered. A supplied `pr_modifier *removed` receives the original selected identity, owner and stack count; resulting `bt->mods` exports remaining ownership/stacks for the run adapter. Removal does not transfer an item to the user. Unknown item identities stay explicitly unported. Thief/Covet, theft tiers/caps, Bug Bite/Pluck and other transfer families remain outstanding. This does not integrate inventory persistence into game-core or claim full-turn/hardware parity.
