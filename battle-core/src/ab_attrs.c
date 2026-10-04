@@ -1219,7 +1219,9 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         if (pr_move_is_multi_target(move)) {
             bool multiple;
             n = pr_get_move_targets(bt, p, move, -1, targets, &multiple);
-        } else if (!strcmp(pr_moves[move].kind, "SelfStatusMove")) {
+        } else if (!strcmp(pr_moves[move].kind, "SelfStatusMove")
+                   || !strcmp(pr_moves[move].kind, "ChargingSelfStatusMove")) {
+            /* ChargeMove mixin retains SelfStatusMove.is upstream. */
             targets[n++] = (int8_t)pr_battler_index(bt, p);
         } else {
             bool targeted = false;
