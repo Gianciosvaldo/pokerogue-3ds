@@ -1,0 +1,610 @@
+/* Task 60: what taking a healing, revive, PP restore or PP Up reward does (gc_port_apply_reward ->
+ * gc_reward_apply -> reward-core's pr_reward_apply, the result written back into the run).
+ *
+ * Two parts, both through the port function the reward screen calls:
+ *  1. a table of hand-made cases with the numbers worked out from upstream's source at 8555c08
+ *     (PokemonHpRestoreModifier, PokemonPpRestoreModifier, PokemonAllMovePpRestoreModifier, PokemonPpUpModifier,
+ *     and each type's selectFilter / moveSelectFilter in modifier-type.ts): full HP, a fainted target,
+ *     statuses, empty PP, PP Ups, invalid targets, a reward that would do nothing, the Healing Charm, a shuffled
+ *     party order, a purchase against a free reward;
+ *  2. random states (party order, HP, status, PP, PP Ups, Healing Charm stacks, targets good and bad, free or
+ *     bought) checked against a second implementation of upstream's rules written out in this file, not
+ *     against reward-core. It prints how often each item was taken and refused.
+ * Neither part needs an upstream checkout. The application against upstream itself is
+ * tools/applydiff.sh. */
+#include "../src/internal.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+static gc_run run;
+static gc_system sys;
+static long checks;
+#define CHECK(x) do { if (!(x)) { fprintf(stderr, "reward apply FAIL line %d: %s\n", __LINE__, #x); exit(1); } checks++; } while (0)
+#define CHECKF(x, ...) do { if (!(x)) { fprintf(stderr, "reward apply FAIL line %d: %s\n  ", __LINE__, #x); fprintf(stderr, __VA_ARGS__); fputc('\n', stderr); exit(1); } checks++; } while (0)
+
+static const char *const NO_EFFECT = "partyUiHandler:anyEffect";
+
+/* ---- a run with `n` party members (cost-1 species so that six fit the budget), everything at a known state ---- */
+static void setup(const char *seed, int n)
+{
+    memset(&run, 0, sizeof run);
+    gc_system_init_defaults(&sys);
+    gc_run_new(&run, GAME_MODES_CLASSIC, seed, 7);
+    gc_starter team[6];
+    memset(team, 0, sizeof team);
+    int k = 0;
+    for (int i = 0; i < gc_starter_cost_count && k < n; i++) {
+        if (gc_starter_costs[i].cost != 1) continue;
+        team[k].species = gc_starter_costs[i].id;
+        team[k].tera_type = -1;
+        for (int j = 0; j < 6; j++) team[k].ivs[j] = 15;
+        k++;
+    }
+    const char *why;
+    CHECK(k == n);
+    CHECK(gc_run_set_starters(&run, team, n, &why));
+    CHECK(run.n_party == n);
+    run.sys = &sys;
+    for (int i = 0; i < n; i++) {
+        pr_pokemon *b = &run.party[i].b;
+        b->level = 50;
+        gc_mon_recalc(&run, &run.party[i]);
+        b->stats[0] = 300;
+        b->hp = 300;
+        b->status = STATUS_EFFECT_NONE;
+        for (int s = 0; s < 4; s++) { b->pp_used[s] = 0; b->pp_up[s] = 0; b->max_pp_override[s] = -1; }
+    }
+}
+
+static void drain(void) { gc_event e; while (gc_run_next_event(&run, &e)) {} }
+
+static gc_mon *mon(int storage) { return &run.party[storage]; }
+
+static void faint(int storage)
+{
+    mon(storage)->b.hp = 0;
+    mon(storage)->b.status = STATUS_EFFECT_FAINT;
+}
+
+/* give the Healing Charm `stacks` stacks (the run's own item list, as a reward would) */
+static void charm(int stacks)
+{
+    run.n_items = 0;
+    if (stacks > 0) gc_item_add(&run, "HEALING_CHARM", -1, 0, stacks);
+}
+
+static gc_offer offer(const char *key, double cost)
+{
+    gc_offer o;
+    memset(&o, 0, sizeof o);
+    o.key = key;
+    o.arg = -1;
+    o.target = gc_reward_target(key);
+    o.cost = cost;
+    return o;
+}
+
+typedef struct { bool ok; const char *why; } result;
+static result take(const char *key, double cost, int party, int slot)
+{
+    const gc_offer o = offer(key, cost);
+    result r = {false, ""};
+    r.ok = gc_port_apply_reward(&run, &o, party, slot, &r.why);
+    return r;
+}
+
+/* the party's whole state, to see that nothing but the target changed */
+typedef struct { int hp, status, pp_used[4], pp_up[4]; } snap;
+static void snapshot(snap out[6])
+{
+    for (int i = 0; i < run.n_party; i++) {
+        const pr_pokemon *b = &run.party[i].b;
+        out[i].hp = b->hp;
+        out[i].status = b->status;
+        for (int s = 0; s < 4; s++) { out[i].pp_used[s] = b->pp_used[s]; out[i].pp_up[s] = b->pp_up[s]; }
+    }
+}
+static bool same(const snap *a, const snap *b) { return !memcmp(a, b, sizeof *a); }
+
+/* ---- 1. the table ---- */
+typedef struct {
+    const char *name, *key;
+    double cost;                    /* 0 = a free reward, else a purchase */
+    int max_hp, hp, status;         /* before */
+    int charm;                      /* Healing Charm stacks */
+    int pp_used[4], pp_up[4];       /* before: move slots 0-3 (n_moves 4) */
+    int party, slot;                /* the choice: a party[] index (the target is party index 2 of 4), a move slot */
+    bool ok;                        /* expected: taken */
+    const char *why;                /* expected refusal */
+    int hp_after, status_after;     /* expected target state (when taken; else unchanged) */
+    int pp_used_after[4], pp_up_after[4];
+} acase;
+
+#define T 2   /* the target's party[] index in the table's runs */
+#define ANY {0, 0, 0, 0}
+static const acase table[] = {
+    /* ---- Potions: restorePoints x HealingBooster, restorePercent of max HP, whichever is more, at least 1 ---- */
+    {"Potion heals 30 (10% of 300 beats 20 points)", "POTION", 0, 300, 100, 0, 0, ANY, ANY, T, 0, true, NULL, 130, 0, ANY, ANY},
+    {"Potion on a full-HP Pokemon: no effect", "POTION", 0, 300, 300, 0, 0, ANY, ANY, T, 0, false, NO_EFFECT, 300, 0, ANY, ANY},
+    {"Potion on a fainted Pokemon: no effect", "POTION", 0, 300, 0, STATUS_EFFECT_FAINT, 0, ANY, ANY, T, 0, false, NO_EFFECT, 0, STATUS_EFFECT_FAINT, ANY, ANY},
+    {"Potion stops at max HP", "POTION", 0, 300, 295, 0, 0, ANY, ANY, T, 0, true, NULL, 300, 0, ANY, ANY},
+    {"Potion: 20 points beat 10% of 100", "POTION", 0, 100, 50, 0, 0, ANY, ANY, T, 0, true, NULL, 70, 0, ANY, ANY},
+    {"Potion keeps a status", "POTION", 0, 300, 100, STATUS_EFFECT_BURN, 0, ANY, ANY, T, 0, true, NULL, 130, STATUS_EFFECT_BURN, ANY, ANY},
+    {"Potion with one Healing Charm: floor(20 x 1.1) = 22", "POTION", 0, 100, 50, 0, 1, ANY, ANY, T, 0, true, NULL, 72, 0, ANY, ANY},
+    {"Potion with two Healing Charms: floor(20 x 1.2) = 24", "POTION", 0, 100, 50, 0, 2, ANY, ANY, T, 0, true, NULL, 74, 0, ANY, ANY},
+    {"Potion with five Healing Charms: floor(20 x 1.5) = 30", "POTION", 0, 100, 50, 0, 5, ANY, ANY, T, 0, true, NULL, 80, 0, ANY, ANY},
+    {"Super Potion: 25% of 300 beats 50 points", "SUPER_POTION", 0, 300, 10, 0, 0, ANY, ANY, T, 0, true, NULL, 85, 0, ANY, ANY},
+    {"Super Potion: 50 points beat 25% of 100", "SUPER_POTION", 0, 100, 10, 0, 0, ANY, ANY, T, 0, true, NULL, 60, 0, ANY, ANY},
+    {"Hyper Potion: 200 points beat 50% of 300", "HYPER_POTION", 0, 300, 1, 0, 0, ANY, ANY, T, 0, true, NULL, 201, 0, ANY, ANY},
+    {"Hyper Potion: 50% of 600 beats 200 points", "HYPER_POTION", 0, 600, 1, 0, 0, ANY, ANY, T, 0, true, NULL, 301, 0, ANY, ANY},
+    {"Hyper Potion with three Healing Charms: floor(200 x 1.3) = 260 beats 150", "HYPER_POTION", 0, 300, 1, 0, 3, ANY, ANY, T, 0, true, NULL, 261, 0, ANY, ANY},
+    {"Hyper Potion with five Healing Charms: 300 points, capped at max HP", "HYPER_POTION", 0, 300, 100, 0, 5, ANY, ANY, T, 0, true, NULL, 300, 0, ANY, ANY},
+    {"Max Potion fills", "MAX_POTION", 0, 300, 10, 0, 0, ANY, ANY, T, 0, true, NULL, 300, 0, ANY, ANY},
+    {"Max Potion on full HP: no effect", "MAX_POTION", 0, 300, 300, 0, 0, ANY, ANY, T, 0, false, NO_EFFECT, 300, 0, ANY, ANY},
+    {"Max Potion on a fainted Pokemon: no effect", "MAX_POTION", 0, 300, 0, STATUS_EFFECT_FAINT, 0, ANY, ANY, T, 0, false, NO_EFFECT, 0, STATUS_EFFECT_FAINT, ANY, ANY},
+    /* ---- Full Restore: HP and the status ---- */
+    {"Full Restore heals and cures", "FULL_RESTORE", 0, 300, 100, STATUS_EFFECT_TOXIC, 0, ANY, ANY, T, 0, true, NULL, 300, 0, ANY, ANY},
+    {"Full Restore at full HP still cures a status", "FULL_RESTORE", 0, 300, 300, STATUS_EFFECT_SLEEP, 0, ANY, ANY, T, 0, true, NULL, 300, 0, ANY, ANY},
+    {"Full Restore at full HP with no status: no effect", "FULL_RESTORE", 0, 300, 300, 0, 0, ANY, ANY, T, 0, false, NO_EFFECT, 300, 0, ANY, ANY},
+    {"Full Restore on a fainted Pokemon: no effect", "FULL_RESTORE", 0, 300, 0, STATUS_EFFECT_FAINT, 0, ANY, ANY, T, 0, false, NO_EFFECT, 0, STATUS_EFFECT_FAINT, ANY, ANY},
+    /* ---- Revives: the fainted only; the Healing Charm doesn't count; a status is cleared ---- */
+    {"Revive brings back half", "REVIVE", 0, 300, 0, STATUS_EFFECT_FAINT, 0, ANY, ANY, T, 0, true, NULL, 150, 0, ANY, ANY},
+    {"Revive on a Pokemon that can still fight: no effect", "REVIVE", 0, 300, 100, 0, 0, ANY, ANY, T, 0, false, NO_EFFECT, 100, 0, ANY, ANY},
+    {"Revive ignores the Healing Charm", "REVIVE", 0, 300, 0, STATUS_EFFECT_FAINT, 5, ANY, ANY, T, 0, true, NULL, 150, 0, ANY, ANY},
+    {"Revive rounds 50% of 1 HP down and gives 1", "REVIVE", 0, 1, 0, STATUS_EFFECT_FAINT, 0, ANY, ANY, T, 0, true, NULL, 1, 0, ANY, ANY},
+    {"Revive rounds 50% of 301 down: 150", "REVIVE", 0, 301, 0, STATUS_EFFECT_FAINT, 0, ANY, ANY, T, 0, true, NULL, 150, 0, ANY, ANY},
+    {"Max Revive brings back everything", "MAX_REVIVE", 0, 300, 0, STATUS_EFFECT_FAINT, 0, ANY, ANY, T, 0, true, NULL, 300, 0, ANY, ANY},
+    {"Max Revive on a Pokemon that can still fight: no effect", "MAX_REVIVE", 0, 300, 299, 0, 0, ANY, ANY, T, 0, false, NO_EFFECT, 299, 0, ANY, ANY},
+    /* ---- Ether and Max Ether: one move ---- */
+    {"Ether gives back 10 PP", "ETHER", 0, 300, 300, 0, 0, {0, 12, 3, 0}, ANY, T, 1, true, NULL, 300, 0, {0, 2, 3, 0}, ANY},
+    {"Ether doesn't go below 0 PP used", "ETHER", 0, 300, 300, 0, 0, {0, 12, 3, 0}, ANY, T, 2, true, NULL, 300, 0, {0, 12, 0, 0}, ANY},
+    {"Ether on a move with all its PP: no effect", "ETHER", 0, 300, 300, 0, 0, {0, 12, 3, 0}, ANY, T, 0, false, NO_EFFECT, 300, 0, {0, 12, 3, 0}, ANY},
+    {"Ether works on a fainted Pokemon (its selectFilter is () => null)", "ETHER", 0, 300, 0, STATUS_EFFECT_FAINT, 0, {5, 0, 0, 0}, ANY, T, 0, true, NULL, 0, STATUS_EFFECT_FAINT, {0, 0, 0, 0}, ANY},
+    {"Ether with no move chosen: pick a move", "ETHER", 0, 300, 300, 0, 0, {5, 5, 5, 5}, ANY, T, -1, false, "pick a move", 300, 0, ANY, ANY},
+    {"Ether on a slot past the moveset: pick a move", "ETHER", 0, 300, 300, 0, 0, {5, 5, 5, 5}, ANY, T, 4, false, "pick a move", 300, 0, ANY, ANY},
+    {"PP Up with no move chosen: pick a move", "PP_UP", 0, 300, 300, 0, 0, ANY, ANY, T, -1, false, "pick a move", 300, 0, ANY, ANY},
+    {"Max Ether refills the move", "MAX_ETHER", 0, 300, 300, 0, 0, {0, 12, 0, 0}, ANY, T, 1, true, NULL, 300, 0, {0, 0, 0, 0}, ANY},
+    {"Max Ether on a move with all its PP: no effect", "MAX_ETHER", 0, 300, 300, 0, 0, {0, 12, 0, 0}, ANY, T, 3, false, NO_EFFECT, 300, 0, {0, 12, 0, 0}, ANY},
+    /* ---- Elixir and Max Elixir: every move ---- */
+    {"Elixir gives back 10 PP to each move", "ELIXIR", 0, 300, 300, 0, 0, {3, 12, 0, 25}, ANY, T, 0, true, NULL, 300, 0, {0, 2, 0, 15}, ANY},
+    {"Elixir with every move at full PP: no effect", "ELIXIR", 0, 300, 300, 0, 0, ANY, ANY, T, 0, false, NO_EFFECT, 300, 0, ANY, ANY},
+    {"Max Elixir refills every move", "MAX_ELIXIR", 0, 300, 300, 0, 0, {3, 12, 0, 25}, ANY, T, 0, true, NULL, 300, 0, {0, 0, 0, 0}, ANY},
+    {"Max Elixir with every move at full PP: no effect", "MAX_ELIXIR", 0, 300, 300, 0, 0, ANY, ANY, T, 0, false, NO_EFFECT, 300, 0, ANY, ANY},
+    /* ---- PP Up and PP Max: ppUp + points, at most 3 ---- */
+    {"PP Up adds one", "PP_UP", 0, 300, 300, 0, 0, ANY, {0, 1, 0, 0}, T, 1, true, NULL, 300, 0, ANY, {0, 2, 0, 0}},
+    {"PP Up from none", "PP_UP", 0, 300, 300, 0, 0, ANY, ANY, T, 0, true, NULL, 300, 0, ANY, {1, 0, 0, 0}},
+    {"PP Up on a move with 3 PP Ups: no effect", "PP_UP", 0, 300, 300, 0, 0, ANY, {3, 0, 0, 0}, T, 0, false, NO_EFFECT, 300, 0, ANY, {3, 0, 0, 0}},
+    {"PP Max adds up to the limit", "PP_MAX", 0, 300, 300, 0, 0, ANY, {0, 2, 0, 0}, T, 1, true, NULL, 300, 0, ANY, {0, 3, 0, 0}},
+    {"PP Max from none", "PP_MAX", 0, 300, 300, 0, 0, ANY, ANY, T, 2, true, NULL, 300, 0, ANY, {0, 0, 3, 0}},
+    {"PP Max on a move with 3 PP Ups: no effect", "PP_MAX", 0, 300, 300, 0, 0, ANY, {0, 0, 0, 3}, T, 3, false, NO_EFFECT, 300, 0, ANY, {0, 0, 0, 3}},
+    {"PP Up works on a fainted Pokemon", "PP_UP", 0, 300, 0, STATUS_EFFECT_FAINT, 0, ANY, ANY, T, 0, true, NULL, 0, STATUS_EFFECT_FAINT, ANY, {1, 0, 0, 0}},
+    {"PP Up keeps the PP used", "PP_UP", 0, 300, 300, 0, 0, {4, 0, 0, 0}, ANY, T, 0, true, NULL, 300, 0, {4, 0, 0, 0}, {1, 0, 0, 0}},
+    /* ---- invalid targets ---- */
+    {"No party member: pick a Pokemon", "POTION", 0, 300, 100, 0, 0, ANY, ANY, -1, 0, false, "pick a Pokemon", 100, 0, ANY, ANY},
+    {"A party index past the party: pick a Pokemon", "REVIVE", 0, 300, 0, STATUS_EFFECT_FAINT, 0, ANY, ANY, 4, 0, false, "pick a Pokemon", 0, STATUS_EFFECT_FAINT, ANY, ANY},
+    {"No party member for a PP Up: pick a Pokemon", "PP_UP", 0, 300, 300, 0, 0, ANY, ANY, 7, 0, false, "pick a Pokemon", 300, 0, ANY, ANY},
+    /* ---- a purchase is refused the same way, and is taken the same way ---- */
+    {"Bought Potion on a full-HP Pokemon: refused", "POTION", 500, 300, 300, 0, 0, ANY, ANY, T, 0, false, NO_EFFECT, 300, 0, ANY, ANY},
+    {"Bought Potion heals", "POTION", 500, 300, 100, 0, 0, ANY, ANY, T, 0, true, NULL, 130, 0, ANY, ANY},
+    {"Bought Max Revive", "MAX_REVIVE", 4000, 300, 0, STATUS_EFFECT_FAINT, 0, ANY, ANY, T, 0, true, NULL, 300, 0, ANY, ANY},
+    {"Bought Ether", "ETHER", 300, 300, 300, 0, 0, {0, 0, 7, 0}, ANY, T, 2, true, NULL, 300, 0, {0, 0, 0, 0}, ANY},
+    {"Bought Full Restore with nothing to heal: refused", "FULL_RESTORE", 1000, 300, 300, 0, 0, ANY, ANY, T, 0, false, NO_EFFECT, 300, 0, ANY, ANY},
+};
+#define N_TABLE ((int)(sizeof table / sizeof table[0]))
+
+/* 4 party members; the target is party[2]. Its moves are 4 distinct ones, so every slot is in use */
+static void run_case(const acase *c)
+{
+    setup("reward-apply-table", 4);
+    gc_mon *m = mon(T);
+    pr_pokemon *b = &m->b;
+    static const int ids[4] = {MOVE_ID_TACKLE, MOVE_ID_GROWL, MOVE_ID_EMBER, MOVE_ID_SCRATCH};
+    for (int s = 0; s < 4; s++) gc_mon_set_move(m, s, ids[s]);
+    b->n_moves = 4;
+    b->stats[0] = c->max_hp;
+    b->hp = c->hp;
+    b->status = (uint8_t)c->status;
+    for (int s = 0; s < 4; s++) { b->pp_used[s] = (uint8_t)c->pp_used[s]; b->pp_up[s] = (uint8_t)c->pp_up[s]; }
+    charm(c->charm);
+    drain();
+    snap before[6], after[6];
+    snapshot(before);
+    const result r = take(c->key, c->cost, c->party, c->slot);
+    snapshot(after);
+    CHECKF(r.ok == c->ok, "%s: taken %d, expected %d", c->name, r.ok, c->ok);
+    if (!c->ok) {
+        CHECKF(!strcmp(r.why, c->why), "%s: why '%s', expected '%s'", c->name, r.why, c->why);
+        CHECKF(same(before, after), "%s: a refused reward changed the party", c->name);
+        gc_event e;
+        CHECKF(!gc_run_next_event(&run, &e), "%s: a refused reward queued an event", c->name);
+        return;
+    }
+    CHECKF(after[T].hp == c->hp_after, "%s: hp %d, expected %d", c->name, after[T].hp, c->hp_after);
+    CHECKF(after[T].status == c->status_after, "%s: status %d, expected %d", c->name, after[T].status, c->status_after);
+    for (int s = 0; s < 4; s++) {
+        CHECKF(after[T].pp_used[s] == c->pp_used_after[s], "%s: pp_used[%d] %d, expected %d", c->name, s, after[T].pp_used[s], c->pp_used_after[s]);
+        CHECKF(after[T].pp_up[s] == c->pp_up_after[s], "%s: pp_up[%d] %d, expected %d", c->name, s, after[T].pp_up[s], c->pp_up_after[s]);
+    }
+    /* nobody else changed */
+    for (int i = 0; i < run.n_party; i++) if (i != T) CHECKF(!memcmp(&before[i], &after[i], sizeof before[i]), "%s: party %d changed", c->name, i);
+    /* the one HP event the party screen listens to: the target's HP now */
+    gc_event e;
+    CHECKF(gc_run_next_event(&run, &e) && e.kind == GC_EV_HP && e.a == 0 && e.b == T && e.c == after[T].hp, "%s: HP event", c->name);
+    CHECKF(!gc_run_next_event(&run, &e), "%s: more than one event", c->name);
+    /* the reward leaves no item behind (a consumed reward isn't added to the player's items) */
+    CHECKF(run.n_items == (c->charm > 0), "%s: left an item in run->items", c->name);
+}
+
+/* ---- Sacred Ash: every fainted member, no target ---- */
+static void sacred_ash(void)
+{
+    setup("reward-apply-ash", 6);
+    snap before[6], after[6];
+    /* two fainted (one with a leftover status flag from its faint), one hurt, three well; nobody's PP touched */
+    faint(1);
+    faint(4);
+    mon(3)->b.hp = 77;
+    mon(2)->b.status = STATUS_EFFECT_BURN;
+    mon(0)->b.pp_used[0] = 5;
+    drain();
+    snapshot(before);
+    result r = take("SACRED_ASH", 0, -1, -1);
+    snapshot(after);
+    CHECK(r.ok);
+    for (int i = 0; i < 6; i++) {
+        if (i == 1 || i == 4) {
+            CHECK(after[i].hp == 300 && after[i].status == STATUS_EFFECT_NONE);
+        } else {
+            CHECK(!memcmp(&before[i], &after[i], sizeof before[i]));
+        }
+    }
+    int hp_events = 0;
+    gc_event e;
+    while (gc_run_next_event(&run, &e)) {
+        CHECK(e.kind == GC_EV_HP && e.a == 0 && (e.b == 1 || e.b == 4) && e.c == 300);
+        hp_events++;
+    }
+    CHECK(hp_events == 2);
+    CHECK(run.n_items == 0);
+
+    /* nobody fainted: a free reward is taken and changes nothing; bought, it is refused and keeps the screen */
+    snapshot(before);
+    r = take("SACRED_ASH", 0, -1, -1);
+    CHECK(r.ok);
+    snapshot(after);
+    CHECK(!memcmp(before, after, sizeof before));
+    CHECK(!gc_run_next_event(&run, &e));
+    CHECK(run.n_items == 0);
+    r = take("SACRED_ASH", 9000, -1, -1);
+    CHECK(!r.ok && !strcmp(r.why, NO_EFFECT));
+    snapshot(after);
+    CHECK(!memcmp(before, after, sizeof before));
+
+    /* bought, with one fainted: taken (a party member in the choice is ignored) */
+    faint(5);
+    r = take("SACRED_ASH", 9000, 0, 0);
+    CHECK(r.ok);
+    CHECK(mon(5)->b.hp == 300 && mon(5)->b.status == STATUS_EFFECT_NONE);
+}
+
+/* ---- the party order: a choice names party[], reward-core's party is in upstream's order ---- */
+static void shuffled_party_order(void)
+{
+    setup("reward-apply-order", 6);
+    const int8_t order[6] = {3, 5, 0, 4, 1, 2};   /* a permutation as switching in battle makes */
+    memcpy(run.party_order, order, sizeof order);
+    for (int i = 0; i < 6; i++) mon(i)->b.hp = 100;
+    drain();
+    for (int target = 0; target < 6; target++) {
+        for (int i = 0; i < 6; i++) mon(i)->b.hp = 100;
+        const result r = take("SUPER_POTION", 0, target, 0);
+        CHECK(r.ok);
+        for (int i = 0; i < 6; i++) CHECK(mon(i)->b.hp == (i == target ? 175 : 100));
+        gc_event e;
+        CHECK(gc_run_next_event(&run, &e) && e.kind == GC_EV_HP && e.b == target && e.c == 175);
+        CHECK(!gc_run_next_event(&run, &e));
+    }
+    /* Ether: the PP of the right Pokemon */
+    for (int target = 0; target < 6; target++) {
+        for (int i = 0; i < 6; i++) mon(i)->b.pp_used[0] = 6;
+        const result r = take("ETHER", 0, target, 0);
+        CHECK(r.ok);
+        for (int i = 0; i < 6; i++) CHECK(mon(i)->b.pp_used[0] == (i == target ? 0 : 6));
+        drain();
+    }
+    /* Revive: only the fainted target, even with another fainted one next to it in the party order */
+    for (int target = 0; target < 6; target++) {
+        for (int i = 0; i < 6; i++) faint(i);
+        const result r = take("REVIVE", 0, target, 0);
+        CHECK(r.ok);
+        for (int i = 0; i < 6; i++) CHECK(mon(i)->b.hp == (i == target ? 150 : 0));
+        drain();
+    }
+}
+
+/* ---- reward-core has no application for these: game-core's own code keeps them ---- */
+static void unhandled_items(void)
+{
+    setup("reward-apply-unhandled", 3);
+    const char *why = "";
+    static const char *const others[] = {"FULL_HEAL", "RARE_CANDY", "POKEBALL", "LEFTOVERS", "TM_COMMON", "MEMORY_MUSHROOM", "EXP_SHARE"};
+    for (size_t i = 0; i < sizeof others / sizeof others[0]; i++) {
+        const gc_offer o = offer(others[i], 0);
+        CHECK(gc_reward_apply(&run, &o, 0, 0, &why) == GC_APPLY_UNHANDLED);
+    }
+    /* Full Heal: the stand-in's own rules, as before (a living Pokemon with a status; nothing else) */
+    mon(0)->b.status = STATUS_EFFECT_POISON;
+    result r = take("FULL_HEAL", 0, 0, 0);
+    CHECK(r.ok && mon(0)->b.status == STATUS_EFFECT_NONE);
+    r = take("FULL_HEAL", 0, 0, 0);
+    CHECK(!r.ok && !strcmp(r.why, NO_EFFECT));
+    faint(1);
+    r = take("FULL_HEAL", 0, 1, 0);
+    CHECK(!r.ok && !strcmp(r.why, NO_EFFECT));
+    /* a Poke Ball is added to the bag, not applied */
+    const int balls = run.pokeballs[POKEBALL_TYPE_POKEBALL];
+    r = take("POKEBALL", 0, -1, -1);
+    CHECK(r.ok && run.pokeballs[POKEBALL_TYPE_POKEBALL] == balls + 5);
+}
+
+/* a slot in the moveset range with no move (reward-core's moveset leaves empty slots out) is no move */
+static void empty_slot_is_no_move(void)
+{
+    setup("reward-apply-empty-slot", 2);
+    pr_pokemon *b = &mon(0)->b;
+    b->moves[2] = 0;
+    b->n_moves = 3;
+    b->pp_used[0] = b->pp_used[1] = 5;
+    result r = take("ETHER", 0, 0, 2);
+    CHECK(!r.ok && !strcmp(r.why, "pick a move"));
+    r = take("PP_UP", 0, 0, 3);
+    CHECK(!r.ok && !strcmp(r.why, "pick a move"));
+    /* with a gap before the last move, reward-core's index and the slot differ: the right move is changed */
+    b->moves[1] = 0;
+    b->moves[2] = MOVE_ID_EMBER;
+    b->pp_used[0] = 6; b->pp_used[2] = 6;
+    r = take("ETHER", 0, 0, 2);
+    CHECK(r.ok && b->pp_used[2] == 0 && b->pp_used[0] == 6);
+    r = take("PP_UP", 0, 0, 1);
+    CHECK(!r.ok && !strcmp(r.why, "pick a move"));
+}
+
+/* ---- PP Up and a fixed (overridden) maximum PP: PokemonPpUpModifierType's moveSelectFilter ---- */
+static void max_pp_override_blocks_pp_up(void)
+{
+    setup("reward-apply-override", 2);
+    pr_pokemon *b = &mon(0)->b;
+    b->max_pp_override[0] = 10;
+    const result r = take("PP_UP", 0, 0, 0);
+    CHECK(!r.ok && !strcmp(r.why, NO_EFFECT) && b->pp_up[0] == 0);
+    const result r2 = take("PP_MAX", 0, 0, 0);
+    CHECK(!r2.ok && b->pp_up[0] == 0);
+    /* another slot of the same Pokemon is fine, and Ether isn't affected by an override */
+    CHECK(take("PP_UP", 0, 0, 1).ok && b->pp_up[1] == 1);
+    b->pp_used[0] = 4;
+    CHECK(take("ETHER", 0, 0, 0).ok && b->pp_used[0] == 0);
+}
+
+/* a move with fewer than 5 base PP can't take a PP Up */
+static void low_pp_move_refuses_pp_up(void)
+{
+    setup("reward-apply-lowpp", 2);
+    int low = -1;
+    for (int i = 1; i < PR_MOVE_COUNT && low < 0; i++)
+        if (!pr_moves[i].unimplemented && pr_moves[i].pp > 0 && pr_moves[i].pp < 5) low = i;
+    CHECK(low > 0);
+    gc_mon_set_move(mon(0), 1, low);
+    mon(0)->b.n_moves = 2;
+    const result r = take("PP_UP", 0, 0, 1);
+    CHECK(!r.ok && !strcmp(r.why, NO_EFFECT) && mon(0)->b.pp_up[1] == 0);
+    CHECK(take("PP_UP", 0, 0, 0).ok && mon(0)->b.pp_up[0] == 1);
+}
+
+/* ---- 2. random states against a second implementation of upstream's rules ---- */
+static uint64_t rs = 0x9E3779B97F4A7C15ull;
+static uint32_t rnd(uint32_t n)
+{
+    rs ^= rs << 13; rs ^= rs >> 7; rs ^= rs << 17;
+    return (uint32_t)((rs >> 11) % n);
+}
+
+typedef struct { int hp, max_hp, status; int pp_used[4], pp_up[4], n_moves, base_pp[4], override[4]; } mmon;
+
+/* PokemonHpRestoreModifier.apply's amount: restorePoints x multiplier (not for a revive), restorePercent of
+ * max HP rounded down, the larger of the two, at least 1 */
+static int hp_gain(int points, int percent, double mult, bool fainted_item, int max_hp)
+{
+    int pts = fainted_item ? points : (int)floor(points * mult);
+    int pct = (int)floor(percent * 0.01 * max_hp);
+    int g = pct > pts ? pct : pts;
+    return g < 1 ? 1 : g;
+}
+
+static double healing_booster(int stacks) { return 1 + (1.1 - 1) * stacks; }
+
+static const struct {
+    const char *key;
+    int kind;   /* 0 potion family, 1 revive, 2 ether, 3 elixir, 4 pp up, 5 sacred ash */
+    int points, percent;
+    bool heal_status;
+} items[] = {
+    {"POTION", 0, 20, 10, false}, {"SUPER_POTION", 0, 50, 25, false}, {"HYPER_POTION", 0, 200, 50, false},
+    {"MAX_POTION", 0, 0, 100, false}, {"FULL_RESTORE", 0, 0, 100, true}, {"REVIVE", 1, 0, 50, false},
+    {"MAX_REVIVE", 1, 0, 100, false}, {"ETHER", 2, 10, 0, false}, {"MAX_ETHER", 2, -1, 0, false},
+    {"ELIXIR", 3, 10, 0, false}, {"MAX_ELIXIR", 3, -1, 0, false}, {"PP_UP", 4, 1, 0, false}, {"PP_MAX", 4, 3, 0, false},
+    {"SACRED_ASH", 5, 0, 100, false},
+};
+#define N_ITEMS ((int)(sizeof items / sizeof items[0]))
+static long taken_n[N_ITEMS], refused_n[N_ITEMS], consumed_n[N_ITEMS];
+
+/* the model: returns true = taken. `tgt` is the party[] index, `slot` the moveset slot */
+static bool model(int item, mmon *party, int n, int tgt, int slot, int charm_stacks, bool purchase, bool *no_target_msg)
+{
+    const int kind = items[item].kind;
+    *no_target_msg = false;
+    if (kind == 5) {
+        bool any = false;
+        for (int i = 0; i < n; i++) any |= party[i].hp <= 0;
+        if (!any) return !purchase;   /* addModifier is false; a free reward ends the phase anyway */
+        for (int i = 0; i < n; i++)
+            if (party[i].hp <= 0) { party[i].hp = party[i].max_hp; party[i].status = STATUS_EFFECT_NONE; }
+        return true;
+    }
+    if (tgt < 0 || tgt >= n) { *no_target_msg = true; return false; }
+    mmon *m = &party[tgt];
+    switch (kind) {
+    case 0:   /* selectFilter, then apply */
+        if (m->hp <= 0 || (m->hp >= m->max_hp && (!items[item].heal_status || m->status == STATUS_EFFECT_NONE))) return false;
+        {
+            const int g = hp_gain(items[item].points, items[item].percent, healing_booster(charm_stacks), false, m->max_hp);
+            if (items[item].heal_status) m->status = STATUS_EFFECT_NONE;
+            m->hp = m->hp + g > m->max_hp ? m->max_hp : m->hp + g;
+        }
+        return true;
+    case 1:
+        if (m->hp > 0) return false;
+        {
+            const int g = hp_gain(0, items[item].percent, 1, true, m->max_hp);
+            m->status = STATUS_EFFECT_NONE;
+            m->hp = m->hp + g > m->max_hp ? m->max_hp : m->hp + g;
+        }
+        return true;
+    case 2: case 4:
+        if (slot < 0 || slot >= m->n_moves) { *no_target_msg = true; return false; }   /* "pick a move" */
+        if (kind == 2) {
+            if (!m->pp_used[slot]) return false;
+            const int pts = items[item].points;
+            m->pp_used[slot] = pts > -1 ? (m->pp_used[slot] - pts > 0 ? m->pp_used[slot] - pts : 0) : 0;
+        } else {
+            if (m->base_pp[slot] < 5 || m->pp_up[slot] >= 3 || m->override[slot] > 0) return false;
+            m->pp_up[slot] = m->pp_up[slot] + items[item].points > 3 ? 3 : m->pp_up[slot] + items[item].points;
+        }
+        return true;
+    default: {   /* elixir */
+        bool any = false;
+        for (int s = 0; s < m->n_moves; s++) any |= m->pp_used[s] != 0;
+        if (!any) return false;
+        const int pts = items[item].points;
+        for (int s = 0; s < m->n_moves; s++)
+            m->pp_used[s] = pts > -1 ? (m->pp_used[s] - pts > 0 ? m->pp_used[s] - pts : 0) : 0;
+        return true;
+    }
+    }
+}
+
+static void random_cases(int count)
+{
+    static const int pool_moves[] = {MOVE_ID_TACKLE, MOVE_ID_GROWL, MOVE_ID_EMBER, MOVE_ID_SCRATCH, MOVE_ID_SPLASH, MOVE_ID_SURF,
+                                     MOVE_ID_PROTECT, MOVE_ID_HYPER_BEAM, MOVE_ID_EXPLOSION, MOVE_ID_STRUGGLE, MOVE_ID_CALM_MIND,
+                                     MOVE_ID_EARTHQUAKE};
+    static const int statuses[] = {STATUS_EFFECT_NONE, STATUS_EFFECT_POISON, STATUS_EFFECT_TOXIC, STATUS_EFFECT_PARALYSIS,
+                                   STATUS_EFFECT_SLEEP, STATUS_EFFECT_FREEZE, STATUS_EFFECT_BURN};
+    long total_taken = 0, total_refused = 0;
+    for (int c = 0; c < count; c++) {
+        const int n = 1 + (int)rnd(6);
+        setup("reward-apply-random", n);
+        /* upstream's party order: a random permutation */
+        for (int i = n - 1; i > 0; i--) {
+            const int j = (int)rnd((uint32_t)i + 1);
+            const int8_t t = run.party_order[i]; run.party_order[i] = run.party_order[j]; run.party_order[j] = t;
+        }
+        mmon party[6];
+        memset(party, 0, sizeof party);
+        for (int i = 0; i < n; i++) {
+            gc_mon *g = mon(i);
+            pr_pokemon *b = &g->b;
+            mmon *m = &party[i];
+            m->n_moves = 1 + (int)rnd(4);
+            for (int s = 0; s < m->n_moves; s++) {
+                gc_mon_set_move(g, s, pool_moves[rnd(sizeof pool_moves / sizeof pool_moves[0])]);
+                m->base_pp[s] = pr_moves[b->moves[s]].pp;
+                m->pp_up[s] = (int)rnd(4);
+                b->pp_up[s] = (uint8_t)m->pp_up[s];
+                if (rnd(25) == 0) { b->max_pp_override[s] = (int16_t)(5 + rnd(30)); m->override[s] = b->max_pp_override[s]; }
+                else m->override[s] = -1;
+                const int cap = gc_move_max_pp(b, s);
+                m->pp_used[s] = rnd(3) ? (int)rnd((uint32_t)cap + 1) : 0;
+                b->pp_used[s] = (uint8_t)m->pp_used[s];
+            }
+            b->n_moves = (uint8_t)m->n_moves;
+            for (int s = m->n_moves; s < 4; s++) { b->moves[s] = 0; b->pp_used[s] = b->pp_up[s] = 0; }
+            m->max_hp = 1 + (int)rnd(rnd(3) ? 700 : 4);
+            switch (rnd(5)) {
+            case 0: m->hp = 0; break;
+            case 1: m->hp = m->max_hp; break;
+            default: m->hp = 1 + (int)rnd((uint32_t)m->max_hp); break;
+            }
+            m->status = m->hp ? statuses[rnd(sizeof statuses / sizeof statuses[0])] : STATUS_EFFECT_FAINT;
+            b->stats[0] = m->max_hp;
+            b->hp = m->hp;
+            b->status = (uint8_t)m->status;
+        }
+        const int stacks = rnd(3) ? (int)rnd(6) : 0;
+        charm(stacks);
+        drain();
+        const int item = (int)rnd(N_ITEMS);
+        const bool purchase = rnd(4) == 0;
+        /* mostly a valid target, now and then a bad one */
+        int tgt = rnd(10) ? (int)rnd((uint32_t)n) : (int)rnd(9) - 1;
+        int slot = rnd(10) ? (int)rnd(4) : (int)rnd(7) - 1;
+        if (items[item].kind == 5 && rnd(2)) tgt = -1;
+        mmon expect[6];
+        memcpy(expect, party, sizeof party);
+        bool bad_target;
+        const bool want = model(item, expect, n, tgt, slot, stacks, purchase, &bad_target);
+        result r = take(items[item].key, purchase ? 100 + rnd(900) : 0, tgt, slot);
+        CHECKF(r.ok == want, "case %d %s: taken %d, model says %d (target %d slot %d purchase %d, hp %d/%d status %d)", c,
+               items[item].key, r.ok, want, tgt, slot, purchase,
+               tgt >= 0 && tgt < n ? party[tgt].hp : -1, tgt >= 0 && tgt < n ? party[tgt].max_hp : -1, tgt >= 0 && tgt < n ? party[tgt].status : -1);
+        if (!want) {
+            const char *expect_why = bad_target ? (items[item].kind == 2 || items[item].kind == 4 ? (tgt < 0 || tgt >= n ? "pick a Pokemon" : "pick a move") : "pick a Pokemon") : NO_EFFECT;
+            CHECKF(!strcmp(r.why, expect_why), "case %d %s: why '%s', model says '%s'", c, items[item].key, r.why, expect_why);
+        }
+        for (int i = 0; i < n; i++) {
+            const pr_pokemon *b = &mon(i)->b;
+            const mmon *e = &expect[i];
+            CHECKF(b->hp == e->hp && b->status == e->status, "case %d %s: member %d hp %d status %d, model %d %d", c, items[item].key, i, b->hp, b->status, e->hp, e->status);
+            for (int s = 0; s < e->n_moves; s++)
+                CHECKF(b->pp_used[s] == e->pp_used[s] && b->pp_up[s] == e->pp_up[s], "case %d %s: member %d move %d pp_used %d pp_up %d, model %d %d",
+                       c, items[item].key, i, s, b->pp_used[s], b->pp_up[s], e->pp_used[s], e->pp_up[s]);
+            CHECK(b->n_moves == e->n_moves);
+        }
+        if (want) {
+            taken_n[item]++;
+            total_taken++;
+            if (items[item].kind == 5 && !purchase) {
+                bool any = false;
+                for (int i = 0; i < n; i++) any |= party[i].hp <= 0;
+                consumed_n[item] += !any;
+            }
+        } else {
+            refused_n[item]++;
+            total_refused++;
+        }
+        CHECK(run.n_items == (stacks > 0));
+    }
+    printf("random states: %d cases, %ld taken, %ld refused, all as the model says\n", count, total_taken, total_refused);
+    printf("%-14s %8s %8s\n", "item", "taken", "refused");
+    for (int i = 0; i < N_ITEMS; i++) {
+        printf("%-14s %8ld %8ld", items[i].key, taken_n[i], refused_n[i]);
+        if (consumed_n[i]) printf("   (%ld free, with nobody fainted: taken, no effect)", consumed_n[i]);
+        printf("\n");
+    }
+}
+
+int main(void)
+{
+    for (int i = 0; i < N_TABLE; i++) run_case(&table[i]);
+    printf("table: %d cases ok\n", N_TABLE);
+    sacred_ash();
+    shuffled_party_order();
+    unhandled_items();
+    empty_slot_is_no_move();
+    max_pp_override_blocks_pp_up();
+    low_pp_move_refuses_pp_up();
+    printf("sacred ash, party order, unhandled items, empty slot, max PP override, low-PP move: ok\n");
+    random_cases(30000);
+    printf("reward apply: %ld checks, 0 failures\n", checks);
+    return 0;
+}

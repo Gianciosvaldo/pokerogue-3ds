@@ -15,7 +15,7 @@ REWARD_LIB := $(BUILD)/reward-core/libreward.a
 SRCS := src/gc_run.c src/gc_phases.c src/gc_mon.c src/gc_items.c src/gc_encounter.c src/gc_battle.c src/gc_save.c src/gc_stubs.c src/gc_system.c src/gc_mystery.c src/gc_reward.c src/gc_learnset.c gen/out/gc_evolutions.c gen/out/gc_starters.c gen/out/gc_trainers.c gen/out/gc_dex.c gen/out/gc_learnsets.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
-all: $(BUILD)/resume_test $(BUILD)/itembridge_test $(BUILD)/libgc.a $(BUILD)/gcplay $(BUILD)/savetest $(BUILD)/system_save_test $(BUILD)/dextest $(BUILD)/dexupdatetest $(BUILD)/level_evo_test $(BUILD)/biome_test $(BUILD)/voucher_egg_test $(BUILD)/mystery_test $(BUILD)/mystery_diff_test $(BUILD)/reward_test $(BUILD)/reward_diff_test $(BUILD)/switch_prompt_test
+all: $(BUILD)/resume_test $(BUILD)/itembridge_test $(BUILD)/libgc.a $(BUILD)/gcplay $(BUILD)/savetest $(BUILD)/system_save_test $(BUILD)/dextest $(BUILD)/dexupdatetest $(BUILD)/level_evo_test $(BUILD)/biome_test $(BUILD)/voucher_egg_test $(BUILD)/mystery_test $(BUILD)/mystery_diff_test $(BUILD)/reward_test $(BUILD)/reward_diff_test $(BUILD)/switch_prompt_test $(BUILD)/reward_apply_test $(BUILD)/reward_apply_diff_test
 
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -75,6 +75,12 @@ $(BUILD)/reward_diff_test: tests/reward_diff_test.c $(BUILD)/libgc.a $(REWARD_LI
 $(BUILD)/switch_prompt_test: tests/switch_prompt_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
+$(BUILD)/reward_apply_test: tests/reward_apply_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+$(BUILD)/reward_apply_diff_test: tests/reward_apply_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
 $(BUILD)/itembridge_test: tests/itembridge_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
@@ -95,6 +101,7 @@ test: all
 	$(BUILD)/mystery_diff_test
 	$(BUILD)/reward_test
 	$(BUILD)/switch_prompt_test
+	$(BUILD)/reward_apply_test
 	@a=$$($(BUILD)/gcplay --auto 200 --jobs 8 | grep digest); b=$$($(BUILD)/gcplay --auto 200 --jobs 8 --save-test | grep digest); \
 	echo "without saves: $$a"; echo "with saves:    $$b"; [ "$$a" = "$$b" ]
 

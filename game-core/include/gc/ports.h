@@ -26,9 +26,11 @@ void gc_port_enemy_moveset(gc_run *run, gc_mon *m);
  * Fills out, and *reroll_cost (SelectModifierPhase.getRerollCost; < 0: no reroll). Returns how many options. */
 enum { GC_REWARD_FIRST, GC_REWARD_RESTRICTED, GC_REWARD_REROLL, GC_REWARD_COPY };
 int gc_port_reward_options(gc_run *run, int kind, gc_offer out[GC_MAX_OPTIONS], double *reroll_cost);
-/* Take reward `o` (what it does: the item's own apply, or adding it to run->items; a stand-in until Task 60),
- * used on party member `party` / move slot `move_slot` where it needs one. false (and *why) when it can't be
- * used there; nothing changes then. */
+/* Take reward `o` (what it does: reward-core's application for healing, revives, PP restores and PP Ups,
+ * src/gc_reward.c; for the other items a stand-in that adds them to run->items or applies the few it knows),
+ * used on party member `party` (an index into party[]) / move slot `move_slot` where it needs one. false (and
+ * *why) when it can't be used there; nothing changes then. o->cost > 0 means a purchase: a reward that does
+ * nothing is refused and keeps the screen; a free reward is taken either way where upstream takes it. */
 bool gc_port_apply_reward(gc_run *run, const gc_offer *o, int party, int move_slot, const char **why);
 /* ModifierRewardPhase: a fixed reward (EXP_CHARM at wave 10, GOLDEN_POKEBALL...) given as it is. */
 void gc_port_give_reward(gc_run *run, const char *key);
