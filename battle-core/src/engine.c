@@ -7,6 +7,7 @@
 #include <string.h>
 
 const char *const pr_phase_name[PH_COUNT_] = {
+    [PH_QUIET_FORM_CHANGE] = "QuietFormChangePhase",
     [PH_NONE] = "?", [PH_MARKER] = "DynamicPhaseMarker",
     [PH_TURN_START] = "TurnStartPhase", [PH_MOVE] = "MovePhase", [PH_MOVE_EFFECT] = "MoveEffectPhase",
     [PH_MOVE_END] = "MoveEndPhase", [PH_FAINT] = "FaintPhase", [PH_CHECK_INTERLUDE] = "CheckInterludePhase",
@@ -824,3 +825,4 @@ void pr_resume_switch(pr_battle *bt, pr_engine *e, int slot)
     phase_free(e, ph);
     run_phases(bt, e, e->overflow ? -1 : shift_phase(bt, e));
 }
+

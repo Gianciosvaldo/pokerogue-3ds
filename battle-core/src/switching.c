@@ -523,8 +523,8 @@ void pr_switch_summon_phase(pr_battle *bt, pr_engine *e, int ph)
     }
     pr_reset_summon_data(last);
     pr_form_change(bt, in, PR_FCT_SpeciesFormChangeActiveTrigger);
-    /* arena.triggerWeatherBasedFormChanges(pokemon) */
-    pr_form_change(bt, in, PR_FCT_SpeciesFormChangeWeatherTrigger);
+    /* The newly summoned Pokemon is excluded upstream; restore the other holders. */
+    pr_weather_form_changes(bt, false, in);
 }
 
 /* getAffectedPokemon().includes(pokemon) for an arena tag on `side` */
@@ -702,3 +702,4 @@ void pr_check_switch_phase(pr_battle *bt, pr_engine *e, int ph)
                                                   : pr_arg_key("pokemonName", "battle:pokemon")));
     e->awaiting_confirm = true;
 }
+

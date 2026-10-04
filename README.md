@@ -15,7 +15,7 @@ The source audit still finds a last-four-level-moves enemy fallback and a fixed 
 
 The existing `game-core/tests/mystery_diff_test.c` reads TYPE/OPTION while ignoring RESULT_MONEY, and its producer catches UI errors. Its mystery encounter traces do not establish action or money parity. A correction to an established check must be reported under HANDOFF; an additive, separately reviewed harness is proposed in Task 82. No unavailable upstream differential is counted as passing.
 
-## Coordinator validation status (2026-10-03)
+## Coordinator validation status (2026-10-04)
 
 Checked main `ee476524016b0dc0ce6edc93db5baf4f76521325` after PR #106. Task numbers differ from PR numbers. The original 33 cards and new coordinator prerequisites are in [docs/PARITY-TASKS.md](docs/PARITY-TASKS.md); assignment remains **Hard/coordinator** or **Lower compute**.
 
@@ -23,7 +23,7 @@ Checked main `ee476524016b0dc0ce6edc93db5baf4f76521325` after PR #106. Task numb
 | --- | --- | --- |
 | 87: save/resume | [#101](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/101) | Merged. Four production resume bugs fixed, including seed 849's retained switch-out flag. 36,471 checks; all 1000 normal + 1000 saved strict runs reach terminal screens within budget |
 | 90: battle regressions | [#106](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/106) | Merged. Seed 777 / N=2000: plain 1940, rich 1826, switch 1885, summon 1856 covered and identical; 0 mismatches, coverage retained. Host and 3DS CI #102 pass |
-| 67: Illusion helpers | [#103](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/103), [#108](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/108) | #103 merged into the prerequisite branch after #106 landed, so helpers are absent from this main. #108 lands the same tested head directly on main and is ready for review; CI #104/#105 pass. 8000/8000 manual identity/type helper comparisons; natural activation remains disabled, 9 TODO / 0 executed |
+| 67: Illusion helpers | [#103](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/103), [#108](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/108) | #108 merged directly into main at `cae69338`; bounded loaded/manual helpers are present. CI #104/#105 pass. 8000/8000 manual identity/type helper comparisons; natural activation remains disabled, 9 TODO / 0 executed |
 | 88: AI matchup | [#102](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/102) | Merged diagnosis. Node 22: 19,762 covered/identical, 0 mismatches, 238 uncovered. Node 24 reference migration remains unresolved |
 | 89: evolution application | [#104](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/104) | Draft. Bounded evolution application/queue slice 8000/8000; existing application regression 3865 pass / 135 fail. Fusion status uses an unrecorded Math.random draw; no full fusion parity claim |
 | 91: reward caller inputs | [#107](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/107) | Draft. Separate TM/relearner inputs: 8000/8000 comparisons and 24,000 TM/RNG results match. Host/3DS CI #106 pass. Established Memory producer throws on a stale ValueHolder import before any cases; readiness remains blocked |
@@ -33,7 +33,7 @@ Task 87's merged head recorded 1000-run paired digests `0cba4e49`/`0cba4e49`. Wi
 
 Task 67's proposed scope covers manually loaded/dormant identity/type helpers, not natural ability selection or a switch-disguise differential. Task 91's new suite does not replace the failed established Memory check. Fresh unchanged seed-99 / N=4000 reward regressions before/after Task 91 are byte-identical: options 3950 pass / 0 fail / 50 unported, victory 4000 pass / 0 fail, application 3865 pass / 135 fail. No missing or failed comparison is credited as passing.
 
-**Jules scheduling:** Task 68's loaded-state AI scope becomes available once #108 lands on main; Task 60 needs completed 59; Task 71 needs 69 then 70. No new batch of three independent lower-compute tasks is currently unlocked. Merge-triggered notifications are configured to report actual newly available tasks. Task 63 remains run-core owner work; Task 85 remains console gated. [HANDOFF rule 2](docs/HANDOFF.md#rules-read-these-before-touching-anything) requires reporting defective established checks before proceeding; #104 and #107 stay drafts.
+**Jules scheduling:** Task 68's loaded-state AI scope is delegated to Jules after #108 merged into main; Task 60 needs completed 59; Task 71 needs 69 then 70. No new batch of three independent lower-compute tasks is currently unlocked. Merge-triggered notifications are configured to report actual newly available tasks. Task 63 remains run-core owner work; Task 85 remains console gated. [HANDOFF rule 2](docs/HANDOFF.md#rules-read-these-before-touching-anything) requires reporting defective established checks before proceeding; #104 and #107 stay drafts.
 
 ## Layout
 | Folder | What it is | Status |
@@ -75,3 +75,6 @@ The READMEs mention screenshots and pixel-test images. Those contain Pokémon ar
 
 ## License
 PokeRogue's code is AGPL-3.0, and this port derives from it. Pokémon is © Nintendo, Game Freak and The Pokémon Company; nothing of theirs is included here.
+
+
+Task 69 implements weather-driven quiet form dispatch for Forecast, Flower Gift and Ice Face, including suppression, loaded/natural passives, summon, replacement and leaving-field resets. See [battle-core validation and reproduction](battle-core/README.md#task-69-weather-driven-quiet-form-changes-2026-10-04). Task 68 is delegated to Jules in lane F; Task 70 awaits Task 69 merging, and Task 71 remains behind 70.
