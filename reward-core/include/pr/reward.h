@@ -139,6 +139,13 @@ typedef struct {
      * which means ordinary LEVEL source at level 0. */
     int16_t level_move_levels[PR_REWARD_MAX_LEVEL_MOVES];
     int8_t level_move_sources[PR_REWARD_MAX_LEVEL_MOVES];
+    /* Task 91: Memory Mushroom's getLevelMoves(startingLevel=1, evolution/prevo/relearner=true)
+     * differs from the TM exclusion list above. Explicit mode permits an empty relearn list.
+     * Legacy callers keep supplying Memory rows through level_moves until migrated. */
+    bool has_explicit_relearn_moves;
+    uint16_t relearn_moves[PR_REWARD_MAX_LEVEL_MOVES]; uint16_t n_relearn_moves;
+    int16_t relearn_move_levels[PR_REWARD_MAX_LEVEL_MOVES];
+    int8_t relearn_move_sources[PR_REWARD_MAX_LEVEL_MOVES];
     /* getUnlockedEggMoves() input. Only unlocked egg moves are supplied. */
     uint16_t egg_moves[4]; uint8_t n_egg_moves;
     bool met_as_starter;          /* metBiome === -1 */

@@ -8,8 +8,14 @@
 
 static bool known_move(const pr_reward_mon *m, uint16_t move)
 {
-    for (int i = 0; i < m->n_moves; i++)
-        if (m->moves[i].move == move) return true;
+    if (m->has_explicit_relearn_moves) {
+        /* Upstream excludes this.moveset, even while summonData overrides getMoveset(). */
+        for (int i = 0; i < m->n_base_moves; i++)
+            if (m->base_moves[i] == move) return true;
+    } else {
+        for (int i = 0; i < m->n_moves; i++)
+            if (m->moves[i].move == move) return true;
+    }
     return false;
 }
 
@@ -38,11 +44,15 @@ int pr_reward_memory_moves(const pr_reward_ctx *ctx, int party_idx,
      *   includePrevolutionMoves: true, includeRelearnerMoves: true
      * })
      * The learnset parser lives with the caller; reward-core keeps the exact resulting rows. */
-    for (int i = 0; i < m->n_level_moves && n < MEMORY_MAX; i++) {
+    const bool explicit = m->has_explicit_relearn_moves;
+    const int n_rows = explicit ? m->n_relearn_moves : m->n_level_moves;
+    if (n_rows > PR_REWARD_MAX_LEVEL_MOVES || m->n_egg_moves > 4
+        || m->n_used_tms > PR_REWARD_MAX_USED_TMS || m->n_base_moves > 4 || m->n_moves > 4) return -1;
+    for (int i = 0; i < n_rows; i++) {
         tmp[n++] = (pr_reward_memory_move){
-            m->level_move_levels[i],
-            m->level_moves[i],
-            m->level_move_sources[i],
+            explicit ? m->relearn_move_levels[i] : m->level_move_levels[i],
+            explicit ? m->relearn_moves[i] : m->level_moves[i],
+            explicit ? m->relearn_move_sources[i] : m->level_move_sources[i],
         };
     }
 
