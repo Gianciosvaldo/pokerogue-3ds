@@ -33,6 +33,7 @@ static struct {
   int nq, qi;
   bool swap_prompt;             /* the drain has "swap or release" for a caught Pokemon */
   bool learn_drop;              /* the next drain starts with the learn dialog's own messages */
+  bool swap_replaced;           /* a caught Pokemon replaced the one on the field: the screen must show the new one */
   /* what the battle screen shows */
   bool present[2];              /* a Pokemon of each side is out */
   int shown;                    /* party index of the player's Pokemon on screen, -1 none */
@@ -68,9 +69,30 @@ static int slot_of(int party_index) {
   return -1;
 }
 
+/* A party member as it was before the experience this drain still has to show (the run is ahead of the screen) */
+static gc_mon before_exp(int idx) {
+  gc_mon m = G.run.party[idx];
+  bool first = true;
+  for (int j = G.qi; j < G.nq; j++) {
+    const gc_event* e = &G.q[j];
+    if (e->kind != GC_EV_EXP || e->a != idx) continue;
+    m.exp -= e->b;
+    if (first) m.b.level = (uint8_t)e->c; /* the level before the first gain */
+    first = false;
+  }
+  return m;
+}
+
 static float exp_ratio_cb(const pr_pokemon* p) {
   int i = pidx_of(p);
-  return i < 0 ? 0.0f : (float)gc_exp_level_fraction(&G.run.party[i]);
+  if (i < 0) return 0.0f;
+  const gc_mon m = before_exp(i);
+  return (float)gc_exp_level_fraction(&m);
+}
+
+static int level_of_cb(const pr_pokemon* p) {
+  int i = pidx_of(p);
+  return i < 0 ? p->level : before_exp(i).b.level;
 }
 
 static uint32_t rnd(uint32_t n) {
@@ -336,6 +358,11 @@ static bool handle_event(int i) {
       v.present[0] = G.present[0];
       v.present[1] = G.present[1];
       v.exp_ratio = exp_ratio_cb;
+      v.level_of = level_of_cb;
+      const pr_pokemon* enemy_ptr[6];
+      for (int k = 0; k < G.run.n_enemy && k < 6; k++) enemy_ptr[k] = &G.run.enemy[k].b;
+      v.enemy_party = enemy_ptr;
+      v.n_enemy_party = G.run.n_enemy < 6 ? G.run.n_enemy : 6;
       G.n_ev = be_convert_events(&G.run.bt, &G.run.battle_events[e->a], e->b, settled_after(i), &v, G.ev, EV_CAP);
       G.present[0] = v.present[0];
       G.present[1] = v.present[1];
@@ -429,12 +456,17 @@ static bool handle_event(int i) {
         snprintf(sh->name, sizeof sh->name, "%s", m.name);
         sh->max_hp = m.max_hp;
         sh->level = m.level;
+        /* the new species' stats move the HP with the maximum */
+        if (m.hp > sh->hp)
+          *ev_new() = (bv_event){.type = BEV_HEAL, .battler = BV_PLAYER, .a = m.hp};
+        else if (m.hp < sh->hp)
+          *ev_new() = (bv_event){.type = BEV_DAMAGE, .battler = BV_PLAYER, .a = m.hp, .b = HIT_RESULT_INDIRECT};
       }
       break;
 
     case GC_EV_MYSTERY: {
       char* t = txt_new();
-      snprintf(t, TXT_LEN, "A Mystery Encounter (%d) happens! It is not built yet; the first option is taken.", e->a);
+      snprintf(t, TXT_LEN, "A Mystery Encounter (%d) happens! It is not built yet; the first option is taken.", (int)e->a);
       put_msg(t, false);
       break;
     }
@@ -469,21 +501,24 @@ static void pump(void* arg) {
   }
 }
 
-/* Gives game-core the player's answer. A refusal is told to the player, who then answers again. */
-static bool answer(const gc_choice* c) {
+/* Gives game-core the player's answer and takes in the events it queued (the driver goes on with pump). A refusal is
+ * told to the player, who then answers again. */
+static bool submit(const gc_choice* c) {
   const char* why = NULL;
-  if (!gc_run_choose(&G.run, c, &why)) {
-    char buf[200];
-    G.st.refused++;
-    if (++G.refused_in_row > 30) {
-      G.st.stuck++;
-      return false;
-    }
-    say(why_text(why, buf, sizeof buf));
-    return false;
+  if (gc_run_choose(&G.run, c, &why)) {
+    G.refused_in_row = 0;
+    drain();
+    return true;
   }
-  G.refused_in_row = 0;
-  drain();
+  char buf[200];
+  G.st.refused++;
+  G.refused_in_row++;
+  say(why_text(why, buf, sizeof buf)); /* the player answers again; a person is never locked out */
+  return false;
+}
+
+static bool answer(const gc_choice* c) {
+  if (!submit(c)) return false;
   pump(NULL);
   return true;
 }
@@ -492,6 +527,47 @@ static bool answer(const gc_choice* c) {
 
 static char g_reason[4][160];
 static void on_command(bv_command c, void* arg);
+
+/* The screen shows the Pokemon the run has on the field. A caught Pokemon that replaces the one out leaves the screen
+ * behind game-core's field: bring them together before the command is asked. True when events are playing. */
+static bool resync_field(void) {
+  const gc_mon* me = gc_field_mon(&G.run, 0);
+  if (!me) return false;
+  const int idx = (int)(me - G.run.party);
+  if (G.present[0] && G.shown == idx && bv_mon_of(BV_PLAYER)->species == me->b.species) {
+    /* the same Pokemon: its HP and status are what the run says (battle-core doesn't make an event for every change, e.g.
+     * a Disguise that busts as the battle ends; the converter catches up only while the battle goes on) */
+    G.n_ev = G.ev_pos = G.n_txt = 0;
+    for (int side = 0; side < 2; side++) {
+      const gc_mon* m = gc_field_mon(&G.run, side);
+      const bv_mon* sh = bv_mon_of(side ? BV_ENEMY : BV_PLAYER);
+      if (!m || !G.present[side] || sh->species != m->b.species) continue;
+      const int battler = side ? BV_ENEMY : BV_PLAYER;
+      if (m->b.hp > sh->hp)
+        *ev_new() = (bv_event){.type = BEV_HEAL, .battler = battler, .a = m->b.hp};
+      else if (m->b.hp < sh->hp)
+        *ev_new() = (bv_event){.type = BEV_DAMAGE, .battler = battler, .a = m->b.hp, .b = HIT_RESULT_INDIRECT};
+      if (m->b.status != sh->status) *ev_new() = (bv_event){.type = BEV_STATUS, .battler = battler, .a = m->b.status};
+    }
+    if (!G.n_ev) return false;
+    G.st.hp_resynced++;
+    play_chunk();
+    return true;
+  }
+  if (G.swap_replaced)
+    G.swap_replaced = false;
+  else
+    G.st.shown_mismatch++;
+  G.n_ev = G.ev_pos = G.n_txt = 0;
+  if (G.present[0]) *ev_new() = (bv_event){.type = BEV_WITHDRAW, .battler = BV_PLAYER};
+  static bv_mon sent;
+  sent = make_mon(me, true);
+  *ev_new() = (bv_event){.type = BEV_SUMMON, .battler = BV_PLAYER, .mon = &sent};
+  G.present[0] = true;
+  G.shown = idx;
+  play_chunk();
+  return true;
+}
 
 static void ask(void) {
   const gc_screen* s = gc_run_screen(&G.run);
@@ -580,7 +656,15 @@ static void on_send_pick(int slot, int option, void* arg) {
   if (option == PS_SEND_OUT && slot >= 0 && slot < G.run.n_party) c.a = G.run.party_order[slot];
   else if (!s->can_skip) return; /* no cancelling a faint switch */
   ps_close();
-  answer(&c);
+  const bool swap = G.swap_prompt;
+  if (!submit(&c)) return;
+  if (swap && c.a >= 0 && c.a == G.shown) {
+    /* the caught Pokemon took the place of the one on the field: the screen's copy is gone */
+    G.present[0] = false;
+    G.shown = -1;
+    G.swap_replaced = true;
+  }
+  pump(NULL);
 }
 
 static void open_switch(const gc_screen* s) {
@@ -727,8 +811,8 @@ static void on_reward_pick(int idx, void* arg) {
   }
   for (int i = 0; i < G.run.n_party; i++) {
     const pr_pokemon* p = &G.run.party[i].b;
-    snprintf(pk_label[i], sizeof pk_label[i], "%s Lv%d  %d/%d", i18n_species_name(p->species), p->level, p->hp > 0 ? p->hp : 0,
-             p->stats[STAT_HP]);
+    snprintf(pk_label[i], sizeof pk_label[i], "%s Lv%d  %d/%d", i18n_species_name(p->species), (int)p->level, (int)(p->hp > 0 ? p->hp : 0),
+             (int)p->stats[STAT_HP]);
     pk_ptr[i] = pk_label[i];
   }
   ui_push_options(pk_ptr, G.run.n_party, true, on_pokemon_pick, NULL);
@@ -821,7 +905,7 @@ static void end_run(int kind) {
     i18n_t(text, sizeof text, "battle:congratulations", NULL);
   } else {
     G.st.game_overs++;
-    snprintf(text, sizeof text, "Game over at wave %d. A new run begins.", G.run.wave);
+    snprintf(text, sizeof text, "Game over at wave %d. A new run begins.", (int)G.run.wave);
   }
   G.n_ev = G.ev_pos = G.n_txt = 0;
   put_msg(text, true);
@@ -834,7 +918,7 @@ static void screen_step(void) {
   G.st.screens[s->kind & 15]++;
   switch (s->kind) {
     case GC_SCREEN_COMMAND:
-      ask();
+      if (!resync_field()) ask();
       break;
     case GC_SCREEN_SWITCH:
       open_switch(s);

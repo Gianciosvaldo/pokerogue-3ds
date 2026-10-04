@@ -38,6 +38,7 @@ typedef struct {
   int screens[16];            /* screens handled, by gc_screen_kind */
   int dup_dropped;            /* game-core messages dropped because the battle events already showed them */
   int not_found;              /* switch-ins whose Pokemon the converter could not find (a bug when not 0) */
+  int hp_resynced;            /* COMMAND screens where the HP or status shown was behind the run (an event battle-core did not make) */
   int shown_mismatch;         /* COMMAND screens where the Pokemon on screen was not the one on the field (a bug) */
   int stuck;                  /* screens the driver could not answer (a bug) */
   uint32_t bev;               /* screen events played */

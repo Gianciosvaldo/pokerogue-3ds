@@ -89,3 +89,14 @@ build/summary_ui_test: $(SUMMARY_SRCS)
 	$(CC) $(SUMMARY_CPPFLAGS) $(CFLAGS) $(SUMMARY_SRCS) -lm -o $@
 summary_ui_test: build/summary_ui_test
 .PHONY: summary_ui_test
+
+# the app's run driver (run_screen.c + battle_events.c) over the real game-core run, with a fake battle screen and menus
+# that check every screen event; make runtest && build/runtest [runs] [first]
+RW := ../../reward-core
+RUN_CPPFLAGS := $(CPPFLAGS) -I../gen -I$(GC)/include -I$(GC)/gen/out -I$(RC)/include -I$(RC)/gen/out -I$(RW)/include -I$(RW)/gen/out -I$(APP)/include
+RUN_SRCS := runtest.c ../source/run_screen.c ../source/battle_events.c ../gen/gm_enum_names.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+build/runtest: $(RUN_SRCS)
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) $(RUN_SRCS) -lm -o $@
+runtest: build/runtest
+.PHONY: runtest

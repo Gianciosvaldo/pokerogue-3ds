@@ -404,7 +404,7 @@ static void draw_player_info(side* sd) {
   draw_types(m, true, bx, by);
   draw_name(m, true, bx - 115, by - 15.2f);
   draw_level(bx - 41, by - 10, m->level, false);
-  float ratio = m->max_hp ? sd->hp_shown / m->max_hp : 0;
+  float ratio = m->max_hp ? fminf(sd->hp_shown / m->max_hp, 1.0f) : 0;
   const rr_frame* hf = img_frame("images/ui/overlay_hp", hp_frame(ratio));
   int w = (int)floorf(48 * ratio + 0.5f);
   if (w < 1 && sd->hp_shown > 0) w = 1;
@@ -431,7 +431,7 @@ static void draw_enemy_info(side* sd) {
   draw_name(m, false, bx - 124, by - 11.2f);
   if (m->caught_before) img_draw("images/ui/icon_owned", NULL, bx - 124, by - 11.2f + 11.75f, 0, 0);
   draw_level(bx - 50, by - 5, m->level, false);
-  float ratio = m->max_hp ? sd->hp_shown / m->max_hp : 0;
+  float ratio = m->max_hp ? fminf(sd->hp_shown / m->max_hp, 1.0f) : 0;
   const rr_frame* hf = img_frame("images/ui/overlay_hp", hp_frame(ratio));
   int w = (int)floorf(48 * ratio + 0.5f);
   if (w < 1 && sd->hp_shown > 0) w = 1;
@@ -993,6 +993,11 @@ static void run_event(float dt) {
         sd->mon.hidden = true;
         sd->show_ms = 0;
       }
+      finish_event();
+      break;
+
+    case BEV_MAX_HP:
+      sd->mon.max_hp = e->a;
       finish_event();
       break;
 

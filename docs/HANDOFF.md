@@ -26,8 +26,8 @@ Start with [`README.md`](../README.md) (folder table), then the README of the fo
 
 ## Where things stand on main
 - Every branch on the remote is fully merged into main (checked: 0 unmerged commits on all 15). The three stop notes
-  the threads left are on main: `battle-core/WHERE-I-STOPPED.md`, `game-core/WIP-dex-and-unlocks.md`,
-  `game/WIP-run-driver.md`.
+  the threads left are on main: `battle-core/WHERE-I-STOPPED.md`, `game-core/WIP-dex-and-unlocks.md`.
+  (`game/WIP-run-driver.md` was deleted when card 110 landed the run driver: `game/source/run_screen.c`.)
 - battle-core: singles battles replay upstream's turns; per its README all covered test cases match. The newest pieces
   (`pr_start_battle`, command-screen checks `pr_can_switch` etc.) are in but **not yet in the README**, and the trainer
   battle re-check still had 35 mismatches when work stopped (Task 1).
@@ -266,7 +266,7 @@ logic. Whether it looks right is unverified until someone runs the emulator.** S
 ---
 
 ## Not for an outside agent yet
-- **Driving the battle screen from game-core's run** (`game/WIP-run-driver.md`). Large, and judged on screen.
+- **Driving the battle screen from game-core's run** (done in card 110: `game/source/run_screen.c`; what is still a stand-in is listed in `game/include/run_screen.h`).
 - **The second half of berries** (Liechi, Ganlon, Petaya, Apicot, Salac, Lansat, Starf, Enigma), other held items, mints,
   TMs and evolution items as rewards: same shape as Tasks 7 to 11, worth doing after those land.
 - **ai-core's backlog** (`ai-core/README.md`): its held-item scores, trainer switching moves and Illusion depend on

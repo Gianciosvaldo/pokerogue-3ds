@@ -30,7 +30,7 @@
 
 /* sdmc:/3ds/pokerogue/rundriver.txt (see the header comment) */
 static void read_driver_file(rs_config* cfg) {
-  static char seed[64];
+  static char seed[160];
   FILE* f = fopen("sdmc:/3ds/pokerogue/rundriver.txt", "r");
   if (!f) return;
   char line[160];

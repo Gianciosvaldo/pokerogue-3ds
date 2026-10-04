@@ -75,6 +75,7 @@ typedef enum {
   BEV_VISIBLE,     /* battler, a = 0: hide it (SemiInvulnerableTag.onAdd), 1: show it again two
                     * frames later (onRemove); the queue doesn't wait */
   BEV_FORM_CHANGE, /* battler, a = species, b = form (Mega Evolution, Gigantamax, form change) */
+  BEV_MAX_HP,      /* battler, a = new max HP (a form with other base stats); the HP follows in a heal or damage event */
 } bev_type;
 
 typedef struct {
