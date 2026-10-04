@@ -17,6 +17,7 @@ double pr_reward_hp_ratio(const pr_reward_mon *m);
 bool pr_reward_is_classic(const pr_run *run);
 
 bool pr_reward_evo_conditions(pr_reward_ctx *ctx, int p, const pr_item_evo *e);
+bool pr_reward_evo_conditions_ex(pr_reward_ctx *ctx, int p, const pr_item_evo *e, bool for_fusion);
 bool pr_reward_fc_condition(pr_reward_ctx *ctx, int p, const pr_fc_cond *c);
 const pr_species_slice *pr_reward_slice_find(const pr_species_slice *v, int n, int species);
 bool pr_reward_pause_exempt(int species);

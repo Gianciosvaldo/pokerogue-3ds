@@ -21,7 +21,8 @@ import { EvolutionItemModifierType, FormChangeItemModifierType, PokemonMoveModif
 import { GameManager } from "#test/framework/game-manager";
 import * as fs from "node:fs";
 import Phaser from "phaser";
-import { it } from "vitest";
+import { it, vi } from "vitest";
+import * as statusHelpers from "#data/status-effect";
 
 it("reward apply producer", async () => {
   const N = Number(process.env.DIFF_N ?? 4000);
@@ -60,9 +61,21 @@ it("reward apply producer", async () => {
   ];
 
   const pool = Array.from({ length: 6 }, () => scene.addPlayerPokemon(speciesDataRegistry.getSpecies(SpeciesId.PIDGEY), 5));
+  // Fusion destroys secondary display objects; reused fixtures still run real item logic.
+  // Only sprite presentation is intercepted, never status/stats/selection/application.
+  for (const pokemon of pool) vi.spyOn(pokemon, "playSprite").mockImplementation(() => {});
   const party = scene.getPlayerParty();
 
   const lines: string[] = [];
+  let fusionDraws: number[] = [];
+  const realStatus = statusHelpers.getRandomStatus;
+  vi.spyOn(statusHelpers, "getRandomStatus").mockImplementation((a,b)=>{
+    const realRandom = Math.random;
+    try {
+      Math.random = () => { const draw=realRandom(); fusionDraws.push(draw); return draw; };
+      return realStatus(a,b);
+    } finally { Math.random=realRandom; }
+  });
   let thrown = 0;
 
   for (let i = 0; i < N; i++) {
@@ -213,6 +226,7 @@ it("reward apply producer", async () => {
             p.getPersistentTreasureCount(),
             ms.length, ...ms.flatMap((m: any) => [m.moveId, m.ppUsed, m.ppUp, m.getMovePp()]),
             baseMs.length, ...baseMs.map((m: any) => m.moveId),
+            ...p.ivs,...p.stats,p.abilityIndex,p.shiny?1:0,p.variant,p.luck,
           ].join(" "),
         );
       }
@@ -238,6 +252,7 @@ it("reward apply producer", async () => {
         }
       }
 
+      fusionDraws=[];
       let applied = false;
       if (filterMsg === null) {
         let mod: any;
@@ -256,6 +271,9 @@ it("reward apply producer", async () => {
         }
       }
 
+      if(fusionDraws.length>1) throw new Error("unexpected fusion draw count");
+      lines.push(["D",fusionDraws.length,...fusionDraws].join(" "));
+
       // Record result state after upstream apply
       const outMon = party.flatMap((p: any) => [
         p.hp, p.status?.effect ?? 0, p.moveset.length,
@@ -271,6 +289,7 @@ it("reward apply producer", async () => {
 
   party.length = 0;
   scene.modifiers.length = 0;
+  if (thrown) throw new Error(`${thrown} upstream application cases threw`);
   lines.push(`# threw: ${thrown}`);
   fs.writeFileSync(OUT, lines.join("\n") + "\n");
 }, 1_800_000);

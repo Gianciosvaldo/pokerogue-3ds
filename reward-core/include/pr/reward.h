@@ -74,7 +74,7 @@ extern const int pr_reward_species_count;
 typedef struct { uint16_t tms; int16_t key; uint8_t is_max; } pr_reward_form;   /* tm list, formKey string, isMax */
 extern const pr_reward_form pr_reward_forms[];
 /* Item evolutions (getEvolutions, the ones with an item, in order) by species */
-typedef struct { uint16_t species, item; uint8_t level; int16_t pre_form_key; uint16_t cond_start, n_cond; } pr_item_evo;
+typedef struct { uint16_t species, item; uint8_t level; int16_t pre_form_key; uint16_t cond_start, n_cond; int16_t evo_form_key; } pr_item_evo;
 typedef struct { uint8_t key; int32_t a; uint16_t list_start, n_list; } pr_evo_cond;   /* EvoCondKey data */
 typedef struct { uint16_t species, start, n; } pr_species_slice;
 extern const pr_item_evo pr_item_evos[];
@@ -155,6 +155,14 @@ typedef struct {
      * for item spawns (VariableMoveTypeAttr.getTypesForItemSpawn or getMoveTypeForItemSpawn) */
     int8_t attack_types[PR_REWARD_MAX_ATTACK_TYPES]; uint8_t n_attack_types;
     int persistent_treasure;      /* getPersistentTreasureCount() (Gimmighoul's evolution) */
+    /* Full application-state transport. Evolution item application queues a request;
+     * these permanent attributes and stats are preserved until the caller executes it. */
+    uint8_t ivs[6];
+    int32_t stats[6];
+    int8_t ability_index, fusion_ability_index;
+    bool shiny, fusion_shiny, passive_flag;
+    uint8_t variant, fusion_variant;
+    int8_t luck, fusion_luck;
 } pr_reward_mon;
 
 /* One of the player's modifiers (globalScene.modifiers, in order) */
@@ -169,6 +177,18 @@ typedef struct {
 
 #define PR_REWARD_MAX_PARTY 6
 #define PR_REWARD_MAX_OWNED 256
+#define PR_REWARD_MAX_EVOLUTION_EVENTS 8
+/* In enqueue (unshiftNew call) order; the phase runner consumes in reverse order.
+ * Target species/form belong to the evolving component. Fusion requests retain
+ * primary_species as FusionSpeciesFormEvolution does. form_key -1 means null. */
+typedef struct {
+    uint32_t pokemon_id;
+    uint16_t primary_species, target_species, item;
+    int16_t pre_form_key, evo_form_key;
+    int16_t last_level;
+    uint8_t evolution_level;
+    bool fusion;
+} pr_reward_evolution_event;
 typedef struct {
     pr_run *run;                  /* mode, run seed, run->rng = Phaser.Math.RND */
     int wave;                     /* currentBattle.waveIndex */
@@ -190,6 +210,15 @@ typedef struct {
     /* Task 44: LevelUpPhase requests produced by Rare/Rarer Candy application. */
     struct { int8_t party_idx; uint16_t old_level, new_level; } level_events[PR_REWARD_MAX_PARTY];
     uint8_t n_level_events;
+    /* Caller supplies the actual unseeded getRandomStatus coin flip for DNA Splicers.
+     * Required only when both input statuses are nonvolatile. Seeded RNG cannot reproduce it. */
+    /* Current application only: caller resets availability before each use.
+     * This is the actual external unseeded draw, never the seeded reward RNG. */
+    bool fusion_status_choice_available;
+    uint8_t fusion_status_choice; /* 0 secondary, 1 primary */
+    pr_reward_evolution_event evolution_events[PR_REWARD_MAX_EVOLUTION_EVENTS];
+    uint8_t n_evolution_events;
+    bool evolution_events_overflow; /* no success reported when the request cannot be retained */
 } pr_reward_ctx;
 
 /* ---- the reward options ---- */

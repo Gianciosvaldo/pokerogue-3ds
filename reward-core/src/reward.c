@@ -224,7 +224,7 @@ static int gen_tm(pr_reward_ctx *ctx, int tier)
 }
 
 /* SpeciesEvolutionCondition.conditionsFulfilled(pokemon) (isValidItemEvolution passes no forFusion) */
-bool pr_reward_evo_conditions(pr_reward_ctx *ctx, int p, const pr_item_evo *e)
+bool pr_reward_evo_conditions_ex(pr_reward_ctx *ctx, int p, const pr_item_evo *e, bool for_fusion)
 {
     const pr_reward_mon *m = &ctx->party[p];
     for (int c = 0; c < e->n_cond; c++) {
@@ -274,7 +274,7 @@ bool pr_reward_evo_conditions(pr_reward_ctx *ctx, int p, const pr_item_evo *e)
             break;
         }
         case 12: ok = ctx->caught && ctx->caught(ctx->caught_user, k->a); break;  /* SPECIES_CAUGHT */
-        case 13: ok = k->a == m->gender; break;                                   /* GENDER */
+        case 13: ok = k->a == (for_fusion ? m->fusion_gender : m->gender); break;    /* GENDER */
         case 14:                                                                 /* NATURE */
             for (int i = 0; i < k->n_list; i++) ok |= list[i] == m->nature;
             break;
@@ -284,6 +284,11 @@ bool pr_reward_evo_conditions(pr_reward_ctx *ctx, int p, const pr_item_evo *e)
         if (!ok) return false;
     }
     return true;
+}
+
+bool pr_reward_evo_conditions(pr_reward_ctx *ctx, int p, const pr_item_evo *e)
+{
+    return pr_reward_evo_conditions_ex(ctx, p, e, false);
 }
 
 const pr_species_slice *pr_reward_slice_find(const pr_species_slice *v, int n, int species)
