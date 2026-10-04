@@ -747,7 +747,8 @@ void pr_lose_held_item(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_modifier *
             bt->n_mods[side]--;
         }
     }
-    pr_hook_ab(bt, p, PR_AC_PostItemLostAbAttr);
+    pr_ab_params pp = {.pokemon = p, .move = -1};
+    pr_apply_ab_attrs(bt, PR_AC_PostItemLostAbAttr, &pp);
 }
 
 void pr_apply_survive_damage_modifiers(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool *survive)

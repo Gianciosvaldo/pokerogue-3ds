@@ -226,3 +226,57 @@ Upstream ids are compiled into const tables. Custom species, moves, abilities an
 
 This code has run on a real Old 3DS ([`bench-native/`](../bench-native/), 2026-09-27, an earlier revision): all 2,849 covered turns (of 3,200 from eight turn-test modes) and all 1,000 damage cases matched upstream there too, at a median of 1.51 ms per turn. Later slices haven't been rerun on the console.
 
+
+## Task 70: Bounded held-item removal (2026-10-04)
+
+Knock Off and Incinerate now use RemoveHeldItemAttr's actual bounded behavior: player Knock Off immunity; ability/passive Sticky Hold and suppression; list-order filtering by holder, transferability and berry restriction; battle-RNG selection; one-stack loss; post-loss Unburden; exact item messages. Six named item classes (Leftovers, Shell Bell, Focus Band, Quick Claw, King's Rock, White Herb) and all eleven berry identities are covered. A supplied `pr_modifier *removed` receives the original selected identity, owner and stack count; resulting `bt->mods` exports remaining ownership/stacks for the run adapter. Removal does not transfer an item to the user. Unknown item identities stay explicitly unported. Thief/Covet, theft tiers/caps, Bug Bite/Pluck and other transfer families remain outstanding. This does not integrate inventory persistence into game-core or claim full-turn/hardware parity.
+
+The NEW producer calls the real pinned RemoveHeldItemAttr, loseHeldItem, updateModifiers and ability callbacks. It captures the actual BattleScene RNG method before GameManager installs its maximum-roll stub, then restores it. Only message presentation is intercepted. Pools contain actual item instances, stack counts 1–3, transferable/nontransferable rows and unrelated existing holder IDs. Zero orphan IDs are introduced: general orphan cleanup is outside this bounded family. An opposite-holder item remains untouched. The comparator checks surviving row identity, ownership, transferability, stack counts, original removed descriptor, Unburden tag, every queued message and exact battle RNG; the oracle asserts unchanged global RNG. The subsequent user-authorized established transport repair records the actual enemy status-token effect and rejects missing effects; comparisons and assertions are retained.
+
+Validated against main `6ffee812dc89d1b0664521208b3157edd210aecf`, upstream `8555c08c823b856cbec4eb99ca84ea52a955836d`, Node 24.19.0, Vitest 4.1.11, GCC 13.3.0. The relevant local battle/game-core sources were synchronized with the exact main tree before final replay.
+
+| Seed | Cases / identical / mismatches | Knock Off / Incinerate successes | Rejections |
+| --- | --- | --- | --- |
+| 777 | 2000 / 2000 / 0 | 257 / 438 | 743 / 562 |
+| 9001 | 2000 / 2000 / 0 | 276 / 439 | 724 / 561 |
+| 4242 | 2000 / 2000 / 0 | 255 / 424 | 745 / 576 |
+| 31337 | 2000 / 2000 / 0 | 247 / 415 | 753 / 585 |
+
+8000 identical; thrown/skipped zero. Planted stack mutation: 662 mismatches / 2000, exit 1. Missing completion footer: exit 2.
+
+Fresh unchanged B traces, seed 777/N2000, before and after: plain 1942/1942; rich 1830/1830; switch 1890/1890; summon 1862/1862, all zero mismatches. Fresh TURN_COND/N2000: seeds 777/9001/4242/31337 covered/identical 1767/1756/1770/1766 both before and after; zero mismatches. Host test exits 0: 36,471 resume checks, 39 bridge checks, 1000/1000 strict terminal completions both normal/saved; standard 200-run digests 20597398/20597398. The existing mystery output is not credited as upstream action/money parity.
+
+**Resolved regression blocker.** The established TURN_ITEMS trace omitted `EnemyAttackStatusEffectChanceModifier.effect`; this caused 6/6/10/8 failures before and after the feature. With the user's authorization, the producer now records the actual effect, the parser requires it, and trace round-tripping preserves it. The C result is never used to infer upstream inputs. All original comparisons remain, with no coverage waiver. Fresh upstream records now give:
+
+| Seed | Covered / pass / fail | Uncovered |
+| --- | --- | --- |
+| 777 | 1922 / 1922 / 0 | 78 |
+| 9001 | 1932 / 1932 / 0 | 68 |
+| 4242 | 1929 / 1929 / 0 | 71 |
+| 31337 | 1939 / 1939 / 0 | 61 |
+
+Total 7722 covered and identical, zero mismatches; uncovered turns are not credited. Omitting an effect is rejected with exit 2. Focused removal, B, condition and host gates were rerun after this repair and pass with the counts above. Task 71 still requires this PR to land on main.
+
+Exact commands (port path `/workspace/scratch/809689da2702/item-removal-work`, external upstream `/workspace/scratch/809689da2702/upstream-reference`; traces under `/workspace/scratch/809689da2702/validation`):
+
+```sh
+make -s -C battle-core
+cp battle-core/tests/item-removal.producer.test.ts /workspace/scratch/809689da2702/upstream-reference/test/tests/zz-dump/
+# In external upstream; repeat seed=777,9001,4242,31337:
+REMOVE_N=2000 REMOVE_SEED=<seed> REMOVE_OUT=/workspace/scratch/809689da2702/validation/removal-<seed>.txt node node_modules/vitest/vitest.mjs run test/tests/zz-dump/item-removal.producer.test.ts
+# In port, repeat each seed:
+TURNTEST_LOCALES=/workspace/scratch/809689da2702/upstream-reference/locales/en battle-core/build/itemremovaltest /workspace/scratch/809689da2702/validation/removal-<seed>.txt
+TURNTEST_LOCALES=/workspace/scratch/809689da2702/upstream-reference/locales/en battle-core/build/itemremovaltest /workspace/scratch/809689da2702/validation/removal-777.txt --mutate-stack
+# Missing-footer copy is rejected:
+TURNTEST_LOCALES=/workspace/scratch/809689da2702/upstream-reference/locales/en battle-core/build/itemremovaltest /workspace/scratch/809689da2702/validation/removal-truncated.txt
+# In external upstream, fresh established traces:
+TURN_N=2000 TURN_SEED=777 TURN_OUT=<trace> node node_modules/vitest/vitest.mjs run test/tests/zz-dump/turntest.producer.test.ts
+# Repeat with TURN_RICH=1, TURN_SWITCH=1, TURN_SUMMON=1, separate traces.
+# Repeat TURN_ITEMS=1 and TURN_COND=1 at seeds777,9001,4242,31337, N2000, separate traces.
+# Both exact-main baseline and changed port replay EACH trace:
+TURNTEST_LOCALES=/workspace/scratch/809689da2702/upstream-reference/locales/en battle-core/build/turntest <trace>
+make -s -C game-core test
+git diff --check
+```
+
+The focused and repaired established regressions both pass for their recorded scopes. No 3DS result is claimed here; CI status belongs to the published PR's exact head.

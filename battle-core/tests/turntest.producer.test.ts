@@ -751,7 +751,8 @@ it("turntest producer", async () => {
       for (const m of list) {
         lines.push(
           `MOD side=${side} cls=${m.constructor.name} pid=${m.pokemonId ?? 0} stack=${m.stackCount}`
-            + (m.berryType !== undefined ? ` btype=${m.berryType}` : ""),
+            + (m.berryType !== undefined ? ` btype=${m.berryType}` : "")
+            + (m.constructor.name === "EnemyAttackStatusEffectChanceModifier" ? ` effect=${m.effect}` : ""),
         );
       }
     }

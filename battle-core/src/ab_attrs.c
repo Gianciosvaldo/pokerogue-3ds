@@ -1210,6 +1210,12 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         GATE(true);
         *pp->value = to_dmg_value(*pp->value * P(ReduceBurnDamageAbAttr, a)->multiplier);
         return 1;
+    case PR_AC_PostItemLostApplyBattlerTagAbAttr: {
+        int tag = P(PostItemLostApplyBattlerTagAbAttr, a)->tagType;
+        GATE(!pp->simulated && !pr_get_battler_tag(p, tag));
+        pr_add_tag(bt, c->e, (pr_pokemon *)p, tag, 0, 0, -1);
+        return 1;
+    }
     case PR_AC_BlockNonDirectDamageAbAttr:     /* Magic Guard */
     case PR_AC_BlockRecoilDamageAttr:          /* Rock Head */
     case PR_AC_BypassBurnDamageReductionAbAttr:
