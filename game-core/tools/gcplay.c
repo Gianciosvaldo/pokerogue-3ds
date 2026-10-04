@@ -327,13 +327,37 @@ static bool plain_choice(const gc_run *run, gc_choice *c)
     }
 }
 
+/* --auto: how often each healing, revive, PP and PP Up reward was taken or refused (a reward pick or a shop
+ * purchase on the reward screen, for any reason it came back false), by key. Full Heal is game-core's own
+ * code; the rest is reward-core's application (gc_reward_apply). Each run counts in its own process. */
+static const char *const apply_keys[] = {"POTION", "SUPER_POTION", "HYPER_POTION", "MAX_POTION", "FULL_RESTORE",
+                                         "FULL_HEAL", "REVIVE", "MAX_REVIVE", "SACRED_ASH", "ETHER", "MAX_ETHER",
+                                         "ELIXIR", "MAX_ELIXIR", "PP_UP", "PP_MAX"};
+#define N_APPLY_KEYS ((int)(sizeof apply_keys / sizeof apply_keys[0]))
+static uint32_t apply_taken[N_APPLY_KEYS], apply_refused[N_APPLY_KEYS];
+
+static bool tallied_choose(gc_run *run, const gc_choice *c, const char **why)
+{
+    const gc_screen *s = gc_run_screen(run);
+    int k = -1;
+    if (s->kind == GC_SCREEN_REWARD && (c->kind == GC_CH_REWARD || c->kind == GC_CH_SHOP)) {
+        const bool reward = c->kind == GC_CH_REWARD;
+        const gc_offer *o = c->a < 0 ? NULL : reward ? (c->a < s->n_options ? &s->options[c->a] : NULL)
+                                                      : (c->a < s->n_shop ? &s->shop[c->a] : NULL);
+        for (int i = 0; o && i < N_APPLY_KEYS && k < 0; i++) if (!strcmp(o->key, apply_keys[i])) k = i;
+    }
+    const bool ok = gc_run_choose(run, c, why);
+    if (k >= 0) (ok ? apply_taken : apply_refused)[k]++;
+    return ok;
+}
+
 /* one legal answer (the plain player's, or a random one); false when nothing was accepted */
 static bool auto_choose(gc_run *run)
 {
     const gc_screen *s = gc_run_screen(run);
     gc_choice c = {0};
     const char *why;
-    if (rnd(100) >= 15 && plain_choice(run, &c) && gc_run_choose(run, &c, &why)) return true;
+    if (rnd(100) >= 15 && plain_choice(run, &c) && tallied_choose(run, &c, &why)) return true;
     for (int tries = 0; tries < 64; tries++) {
         memset(&c, 0, sizeof c);
         switch (s->kind) {
@@ -410,7 +434,7 @@ static bool auto_choose(gc_run *run)
         default:
             return false;
         }
-        if (gc_run_choose(run, &c, &why)) return true;
+        if (tallied_choose(run, &c, &why)) return true;
     }
     return false;
 }
@@ -451,6 +475,7 @@ typedef struct {
     int n_texts;
     char stuck_screen;
     char team[64];
+    uint32_t apply_taken[N_APPLY_KEYS], apply_refused[N_APPLY_KEYS];   /* tallied_choose, per apply_keys */
     int saves;                  /* --save-test: save/load round trips */
     uint32_t save_max;          /* the largest save, bytes */
 } soak_result;
@@ -519,6 +544,8 @@ static void soak_one(int index, int verbose, soak_result *r)
     memcpy(r->stubs, run.stubs, sizeof r->stubs);
     memcpy(r->unported, run.unported, sizeof r->unported);
     memcpy(r->run_core, run.run_core_unported, sizeof r->run_core);
+    memcpy(r->apply_taken, apply_taken, sizeof apply_taken);
+    memcpy(r->apply_refused, apply_refused, sizeof apply_refused);
 }
 
 typedef struct { char site[40]; uint32_t runs, n; } text_site;
@@ -539,6 +566,7 @@ static int soak(int n, int first, int jobs, int verbose, int timeout)
     static soak_result agg_r;
     static uint32_t hit_runs[GC_MAX_UNPORTED], hit_total[GC_MAX_UNPORTED];
     uint32_t stub_runs[16] = {0}, stub_total[16] = {0}, rc_runs[8] = {0}, rc_total[8] = {0};
+    uint32_t taken_runs[N_APPLY_KEYS] = {0}, taken_total[N_APPLY_KEYS] = {0}, refused_total[N_APPLY_KEYS] = {0};
     static text_site texts[256];
     int n_texts = 0;
     int ended = 0, stuck = 0, crashed = 0, timed = 0, clears = 0;
@@ -613,6 +641,11 @@ static int soak(int n, int first, int jobs, int verbose, int timeout)
         wave_hist[r->wave / 10 > 20 ? 20 : r->wave / 10]++;
         for (int i = 0; i < 16; i++) { stub_total[i] += r->stubs[i]; stub_runs[i] += r->stubs[i] > 0; }
         for (int i = 0; i < 8; i++) { rc_total[i] += r->run_core[i]; rc_runs[i] += r->run_core[i] > 0; }
+        for (int i = 0; i < N_APPLY_KEYS; i++) {
+            taken_total[i] += r->apply_taken[i];
+            taken_runs[i] += r->apply_taken[i] > 0;
+            refused_total[i] += r->apply_refused[i];
+        }
         for (int t = 0; t < r->n_texts; t++) {
             int k = 0;
             while (k < n_texts && strcmp(texts[k].site, r->texts[t].site)) k++;
@@ -631,6 +664,10 @@ static int soak(int n, int first, int jobs, int verbose, int timeout)
     printf("\n\nstand-ins (runs that used it, times):\n");
     for (int i = 0; i < GC_STUB_COUNT_; i++)
         if (stub_total[i]) printf("  %-50s %6u runs %9u\n", gc_stub_name[i], stub_runs[i], stub_total[i]);
+    printf("\nhealing, revive and PP rewards (taken: runs, times; refused: times):\n");
+    for (int i = 0; i < N_APPLY_KEYS; i++)
+        if (taken_total[i] || refused_total[i])
+            printf("  %-50s %6u runs %9u taken %9u refused\n", apply_keys[i], taken_runs[i], taken_total[i], refused_total[i]);
     static const char *const rc_name[8] = {"daily custom seed", "challenges", "upstream undefined", "species pool",
                                            "fixed classic battle", "trainer config", "bit 6", "bit 7"};
     printf("\nrun-core stand-ins (runs, times):\n");

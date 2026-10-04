@@ -3,8 +3,8 @@
  * SelectModifierPhase's options through reward-core's pr_reward_select_start for each way the screen comes
  * up (src/phases/select-modifier-phase.ts at 8555c08): the first roll, a paid reroll (with the Lock Capsule's
  * tiers), the screen again after a TM or the Memory Mushroom (copy()), and the no-victory screen. reward-core
- * rolls on run->run.rng; this file rolls nothing itself. What the player does with an option (applying it) is
- * gc_stubs.c until Task 60. */
+ * rolls on run->run.rng; this file rolls nothing itself. What the player does with an option: the application
+ * of healing, revive, PP and PP Up rewards is at the end of this file (Task 60); the rest is gc_stubs.c. */
 #include "internal.h"
 
 /* ---- the items by key ---- */
@@ -144,7 +144,7 @@ static void fill_learnsets(gc_run *run, const gc_mon *m, pr_reward_mon *r)
     r->n_egg_moves = (uint8_t)gc_unlocked_egg_moves(run, m, r->egg_moves);
     r->met_as_starter = m->met_wave == -1;
     r->egg_relearn_allowed = true;   /* no challenge hook yet: ChallengeType.EGG_MOVE_RELEARN_AVAILABILITY keeps its default */
-    r->n_used_tms = 0;               /* game-core doesn't apply TMs yet (Task 60): usedTMs stays empty */
+    r->n_used_tms = 0;               /* game-core doesn't apply TMs yet: usedTMs stays empty */
 }
 
 static void fill_mon(gc_run *run, gc_mon *m, pr_reward_mon *r)
@@ -216,45 +216,56 @@ static bool caught(void *user, int species)
     return run->sys && species > 0 && species <= GC_MAX_SPECIES_ID && run->sys->dex[species].caught_attr != 0;
 }
 
-pr_reward_ctx *gc_reward_ctx(gc_run *run)
+/* the context without the learnsets: everything the application of a reward reads (hp, status, moves, the
+ * held items for the Healing Charm), and the first half of what the screens read. `count` = a stand-in
+ * input is counted in run->stubs (the screens count it; applying a reward doesn't count it twice) */
+static pr_reward_ctx ctx_store;
+
+static pr_reward_ctx *ctx_base(gc_run *run, bool count)
 {
-    static pr_reward_ctx c;
-    memset(&c, 0, sizeof c);
-    c.run = &run->run;
-    c.wave = run->wave;
-    c.luck = gc_party_luck(run);
-    c.n_party = run->n_party < PR_REWARD_MAX_PARTY ? run->n_party : PR_REWARD_MAX_PARTY;
-    for (int k = 0; k < c.n_party; k++) fill_mon(run, &run->party[run->party_order[k]], &c.party[k]);
-    for (int i = 0; i < run->n_items && c.n_items < PR_REWARD_MAX_OWNED; i++) {
+    pr_reward_ctx *c = &ctx_store;
+    memset(c, 0, sizeof *c);
+    c->run = &run->run;
+    c->wave = run->wave;
+    c->luck = gc_party_luck(run);
+    c->n_party = run->n_party < PR_REWARD_MAX_PARTY ? run->n_party : PR_REWARD_MAX_PARTY;
+    for (int k = 0; k < c->n_party; k++) fill_mon(run, &run->party[run->party_order[k]], &c->party[k]);
+    for (int i = 0; i < run->n_items && c->n_items < PR_REWARD_MAX_OWNED; i++) {
         const gc_item *it = &run->items[i];
         const int item = gc_reward_item_index(it->key);
-        if (item < 0) { gc_stub(run, GC_STUB_REWARD_INPUT); continue; }
-        pr_owned_item *o = &c.items[c.n_items++];
+        if (item < 0) { if (count) gc_stub(run, GC_STUB_REWARD_INPUT); continue; }
+        pr_owned_item *o = &c->items[c->n_items++];
         o->item = (uint16_t)item;
         o->arg = it->arg;
         o->stack = it->stack;
         o->owner = -1;
         if (it->pokemon_id)
-            for (int k = 0; k < c.n_party; k++)
-                if (c.party[k].id == it->pokemon_id) { o->owner = (int8_t)k; break; }
+            for (int k = 0; k < c->n_party; k++)
+                if (c->party[k].id == it->pokemon_id) { o->owner = (int8_t)k; break; }
         o->active = true;   /* the modifier's own default; lures' and the Silver Poke Ball's battle counts aren't kept yet */
     }
-    for (int i = 0; i < 5; i++) c.pokeball_counts[i] = run->pokeballs[i];
-    c.biome = run->biome;
-    c.time_of_day = pr_run_get_time_of_day(run->biome, run->wave, run->wave_cycle_offset);
-    c.weather = run->bt.weather;
-    c.unlocked_eviolite = run->sys && run->sys->unlocks.eviolite;
-    c.unlocked_mini_black_hole = run->sys && run->sys->unlocks.mini_black_hole;
-    c.caught = caught;
-    c.caught_user = run;
+    for (int i = 0; i < 5; i++) c->pokeball_counts[i] = run->pokeballs[i];
+    c->biome = run->biome;
+    c->time_of_day = pr_run_get_time_of_day(run->biome, run->wave, run->wave_cycle_offset);
+    c->weather = run->bt.weather;
+    c->unlocked_eviolite = run->sys && run->sys->unlocks.eviolite;
+    c->unlocked_mini_black_hole = run->sys && run->sys->unlocks.mini_black_hole;
+    c->caught = caught;
+    c->caught_user = run;
+    return c;
+}
+
+pr_reward_ctx *gc_reward_ctx(gc_run *run)
+{
+    pr_reward_ctx *c = ctx_base(run, true);
     /* getLearnableLevelMoves().length > 0 (the Memory Mushroom's weight): reward-core's own list, once the
      * rows are in */
-    for (int k = 0; k < c.n_party; k++) fill_learnsets(run, &run->party[run->party_order[k]], &c.party[k]);
+    for (int k = 0; k < c->n_party; k++) fill_learnsets(run, &run->party[run->party_order[k]], &c->party[k]);
     static pr_reward_memory_move moves[PR_REWARD_MAX_LEVEL_MOVES + 4 + PR_REWARD_MAX_USED_TMS];
-    for (int k = 0; k < c.n_party; k++)
-        c.party[k].has_learnable_level_moves =
-            pr_reward_memory_moves(&c, k, moves, (int)(sizeof moves / sizeof moves[0])) > 0;
-    return &c;
+    for (int k = 0; k < c->n_party; k++)
+        c->party[k].has_learnable_level_moves =
+            pr_reward_memory_moves(c, k, moves, (int)(sizeof moves / sizeof moves[0])) > 0;
+    return c;
 }
 
 /* ---- the offers ---- */
@@ -370,4 +381,102 @@ int gc_port_reward_options(gc_run *run, int kind, gc_offer out[GC_MAX_OPTIONS], 
     *reroll_cost = pr_reward_reroll_cost(ctx, in->reroll_count, in->lock_rarities, rs->options, n,
                                          rs->has_custom ? &rs->custom : NULL);
     return n;
+}
+
+/* ---- applying a reward: healing, revives, PP restores and PP Ups (Task 60) ----
+ * What `applyModifier` does once the player has picked the target: PokemonHpRestoreModifier (Potions, Full
+ * Restore, Revives, Sacred Ash), PokemonPpRestoreModifier / PokemonAllMovePpRestoreModifier (Ether, Elixir)
+ * and PokemonPpUpModifier, after the party menu's own filter (the selectFilter / moveSelectFilter of each
+ * item type). reward-core's pr_reward_apply does both on a context made from the run; this adds only
+ * what lives on game-core's side of the line: which party member and move slot the choice means, and
+ * writing the result back into the run. */
+uint8_t gc_reward_target(const char *key)
+{
+    const int item = gc_reward_item_index(key);
+    return item < 0 ? GC_TARGET_NONE : target_of(item);
+}
+
+static bool core_applies(int item)
+{
+    switch (item) {
+    case PR_ITEM_POTION: case PR_ITEM_SUPER_POTION: case PR_ITEM_HYPER_POTION: case PR_ITEM_MAX_POTION:
+    case PR_ITEM_FULL_RESTORE: case PR_ITEM_REVIVE: case PR_ITEM_MAX_REVIVE: case PR_ITEM_SACRED_ASH:
+    case PR_ITEM_ETHER: case PR_ITEM_MAX_ETHER: case PR_ITEM_ELIXIR: case PR_ITEM_MAX_ELIXIR:
+    case PR_ITEM_PP_UP: case PR_ITEM_PP_MAX:
+        return true;
+    default:
+        return false;
+    }
+}
+
+/* a move's index in reward-core's moveset (fill_mon leaves out an empty slot), -1 = no such move */
+static int core_move_index(const pr_pokemon *p, int slot)
+{
+    if (slot < 0 || slot >= p->n_moves || slot >= 4 || !p->moves[slot]) return -1;
+    int k = 0;
+    for (int i = 0; i < slot; i++) k += p->moves[i] != 0;
+    return k;
+}
+
+int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, const char **why)
+{
+    const int item = gc_reward_item_index(o->key);
+    if (item < 0 || !core_applies(item)) return GC_APPLY_UNHANDLED;
+    /* a free reward is applied with cost -1, a purchase with its price (a shop item: cost > 0) */
+    const bool purchase = o->cost > 0;
+    int k = -1, move = -1;
+    if (item != PR_ITEM_SACRED_ASH) {
+        if (party < 0 || party >= run->n_party || (k = gc_battle_slot_of(run, party)) < 0) {
+            *why = "pick a Pokemon";
+            return GC_APPLY_REFUSED;
+        }
+        if (target_of(item) == GC_TARGET_MOVE) {
+            const pr_pokemon *b = &run->party[party].b;
+            move = core_move_index(b, move_slot);
+            if (move < 0) { *why = "pick a move"; return GC_APPLY_REFUSED; }
+            /* PokemonPpUpModifierType's moveSelectFilter: `pokemonMove.maxPpOverride` (reward-core's moves
+             * don't carry it) */
+            if ((item == PR_ITEM_PP_UP || item == PR_ITEM_PP_MAX) && b->max_pp_override[move_slot] > 0) {
+                *why = "partyUiHandler:anyEffect";
+                return GC_APPLY_REFUSED;
+            }
+        }
+    }
+    pr_reward_ctx *ctx = ctx_base(run, false);
+    const char *msg = NULL;
+    if (!pr_reward_apply(ctx, (uint16_t)item, o->arg, k, move, &msg)) {
+        /* SelectModifierPhase.applyModifier ends the phase for a free reward whatever addModifier returned
+         * (only Sacred Ash, which needs no target, can come back false here); a purchase keeps the screen
+         * and its money */
+        if (item == PR_ITEM_SACRED_ASH && !purchase) return GC_APPLY_DONE;
+        *why = "partyUiHandler:anyEffect";
+        return GC_APPLY_REFUSED;
+    }
+    /* what reward-core changed, back into the run: hp, status (and the counters its Status object carried),
+     * PP used and PP Ups. Sacred Ash can touch the whole party, anything else the one member */
+    for (int i = 0; i < ctx->n_party; i++) {
+        const int storage = run->party_order[i];
+        pr_pokemon *b = &run->party[storage].b;
+        const pr_reward_mon *r = &ctx->party[i];
+        const bool hp_changed = b->hp != r->hp;
+        if (b->status != r->status) {
+            if (r->status == STATUS_EFFECT_NONE) {
+                b->status_toxic_turns = 0;
+                b->status_sleep_turns = b->status_freeze_turns = -1;
+            }
+            b->status = (uint8_t)r->status;
+        }
+        b->hp = r->hp;
+        for (int s = 0, c = 0; s < b->n_moves && s < 4; s++) {
+            if (!b->moves[s]) continue;
+            b->pp_used[s] = r->moves[c].pp_used;
+            b->pp_up[s] = r->moves[c].pp_up;
+            c++;
+        }
+        if (hp_changed || (i == k && item != PR_ITEM_SACRED_ASH)) {
+            gc_event *ev = gc_ev_new(run, GC_EV_HP);
+            if (ev) { ev->a = 0; ev->b = storage; ev->c = b->hp; }
+        }
+    }
+    return GC_APPLY_DONE;
 }

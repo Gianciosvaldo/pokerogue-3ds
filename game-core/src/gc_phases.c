@@ -376,7 +376,7 @@ static void reward_screen(gc_run *run, int kind)
             o->key = pr_shop_item_name[so[i].item];
             o->arg = -1;
             o->tier = 0;
-            o->target = GC_TARGET_POKEMON;
+            o->target = gc_reward_target(o->key);
             o->cost = so[i].cost;
         }
     }

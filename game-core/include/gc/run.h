@@ -301,7 +301,7 @@ enum {
     GC_STUB_TRAINER_TITLE,      /* a trainer's name in a message without its title ("Aaron" for "Ace Trainer
                                  * Aaron"): battle-core's messages take one locale key per argument */
     GC_STUB_REWARD_INPUT,       /* a reward-core input game-core can't give: an item it doesn't know, a learnset too long */
-    GC_STUB_REWARD_APPLY,       /* a reward taken without its own effect (the placeholder apply, Task 60) */
+    GC_STUB_REWARD_APPLY,       /* a reward taken without its own effect (not a healing, revive, PP or PP Up item: reward-core applies those) */
     GC_STUB_COUNT_
 };
 extern const char *const gc_stub_name[GC_STUB_COUNT_];

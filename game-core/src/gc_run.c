@@ -25,7 +25,7 @@ const char *const gc_stub_name[GC_STUB_COUNT_] = {
     [GC_STUB_ENEMY_SWITCH] = "trainer's switch-out (enemy loses the turn)",
     [GC_STUB_TRAINER_TITLE] = "trainer's name without its title in a message",
     [GC_STUB_REWARD_INPUT] = "reward-core input game-core can't give",
-    [GC_STUB_REWARD_APPLY] = "reward taken without its own effect (Task 60)",
+    [GC_STUB_REWARD_APPLY] = "reward taken without its own effect",
 };
 
 void gc_stub(gc_run *run, int which)

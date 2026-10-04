@@ -8,7 +8,8 @@ events and screens and hands back the player's choices.
 It calls battle-core for the turns, run-core for the waves and the enemies, ai-core for the enemy's
 commands (and the player's command restrictions and trapping), and goes through `include/gc/ports.h`
 for the enemy movesets and the rewards. The reward screens are reward-core's (`src/gc_reward.c`, Task 59).
-Until run-core's movesets land and rewards act on the run (Task 60), stand-ins in `src/gc_stubs.c` keep a run
+Healing, revive, PP restore and PP Up rewards act on the run through reward-core (Task 60). Until run-core's
+movesets land and the other rewards act on the run, stand-ins in `src/gc_stubs.c` keep a run
 playable. Each stand-in is counted, so the soak runs show how much of a run is still standing in.
 
 ## The API (`include/gc/run.h`)
@@ -98,7 +99,7 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 |---|---|
 | Enemy moveset: the last four level moves | run-core |
 | A trainer's switch-out picked by the AI does nothing (the enemy loses its turn) | battle-core: the enemy side's SwitchSummonPhase |
-| A reward taken does only what the placeholder knows (potions, revives, ethers, Rare Candy, balls, held and permanent items); any other is added to the items and counted (`reward taken without its own effect`) | Task 60 |
+| A reward taken that isn't a ball, Full Heal, Rare Candy, held item or one of the healing, revive and PP items Task 60 ported (TMs, Memory Mushroom, Mints, money, vouchers, evolution items, DNA Splicers, Rarer Candy) is added to the items and counted (`reward taken without its own effect`) | later reward tasks |
 | Double battles are played as singles (M1 rule) | doubles in battle-core |
 | Mystery encounters and fixed classic battles (rival, evil team, gyms run-core can't make) become wild battles of the wave's level | run-core, later the encounters |
 | The rest of a turn after a victory (end-of-turn effects) is lost | battle-core: carry on past a stop |
@@ -253,7 +254,7 @@ empty and is counted (`reward screen reward-core could not roll`), as is an inpu
 (`src/gc_learnset.c`, `getLevelMoves` with prevolution and fusion rows, `getUnlockedEggMoves`) use
 `gen/out/gc_learnsets.c`, the form-specific level moves dumped by `gen/dump-learnsets.test.ts` through
 `tools/redump.sh` (67 lists, 307 moves; running `tools/redump.sh` again on the 8555c08 checkout leaves every
-generated file unchanged). Applying a reward is still the placeholder (Task 60).
+generated file unchanged). Applying a reward was still the placeholder; Task 60 (below) replaced it for healing, revives and PP.
 
 Exact commands from the repository root, with an upstream checkout from `battle-core/tools/setup-upstream.sh`:
 
@@ -321,7 +322,7 @@ Not done or not checked (reported, not widened into this PR):
   Blast, Raging Bull and Ivy Cudgel; the adapter works around it (`with_partner_as_primary`, which also copies
   upstream's quirk of reading the partner species' own form 0).
 - Nothing applies a TM or the Memory Mushroom yet, so the copy screen is unreachable from a real run and
-  `usedTMs` stays empty (Task 60).
+  `usedTMs` stays empty.
 - Fusion gender and luck aren't tracked (reward-core's item-evolution gender condition uses fusion gender).
   Lure and Silver Poké Ball battle counts aren't tracked either (the differential leaves lures out).
   `metSpecies` is derived from the current species' root. Challenges aren't modelled: no level-up moveset hook,
@@ -331,3 +332,95 @@ Not done or not checked (reported, not widened into this PR):
   unchecked. The shop, fixed-battle and mystery encounter custom reward settings, and fleeing (a non-victory
   is always the restricted screen) are untouched.
 - No hardware or emulator result; the 3DS build is CI's (no ARM toolchain here).
+
+## Task 60: healing, revive and PP rewards through reward-core
+
+At main (after Task 59, #113), `gc_port_apply_reward` (`src/gc_stubs.c`) applied potions, revives, ethers and
+elixirs by hand, accepted a Potion at full HP, ignored the Healing Charm and did no PP Up at all. It now hands the 14 items reward-core ports (Potion, Super, Hyper and Max Potion, Full Restore,
+Revive, Max Revive, Sacred Ash, Ether, Max Ether, Elixir, Max Elixir, PP Up, PP Max) to `gc_reward_apply`
+(`src/gc_reward.c`), which calls reward-core's `pr_reward_apply` on the run as game-core holds it and writes
+back what changed:
+
+- The context is the same `gc_reward_ctx` builds for the screens (party in `party_order`, items and holders);
+  the choice's party index is a storage index, mapped to the context's index with `gc_battle_slot_of`.
+- Written back: HP, status (and the toxic, sleep and freeze counters when the status clears), and each move's
+  PP used and PP Ups. An empty move slot is skipped, as reward-core's moves are compacted. `GC_EV_HP` is emitted
+  for every member whose HP changed and for the target.
+- A free reward and a purchase differ the way upstream's `SelectModifierPhase.applyModifier` does: a reward at
+  cost -1 is consumed whatever `addModifier` returned (only Sacred Ash can reach that with a false result); a
+  purchase is taken only if it did something. The party menu's filter (`selectFilter`, `moveSelectFilter`) is
+  reward-core's, so a refusal is `partyUiHandler:anyEffect`, and no target is "pick a Pokemon" or "pick a move".
+- A move with a fixed maximum PP (`max_pp_override`) refuses PP Up and PP Max, as
+  `PokemonPpUpModifierType`'s filter does: reward-core's moves don't carry it, so game-core checks it.
+- Left explicit, still the stand-in: Poké Balls, Full Heal (reward-core has no application for it; game-core's
+  own rule is HP above 0 and a status), Rare Candy (no Candy Jar), held items, and everything that is added to the
+  items as it is. `gcplay` now tallies the 14 items plus Full Heal, taken and refused, so the soak shows what is applied.
+
+Exact commands from the repository root, with an upstream checkout from `battle-core/tools/setup-upstream.sh`:
+
+```sh
+make -C game-core clean
+make -C game-core test
+game-core/build/gcplay --auto 1000 --jobs 8
+game-core/build/gcplay --auto 1000 --jobs 8 --save-test
+for seed in 777 9001 4242 31337; do game-core/tools/applydiff.sh <upstream dir> 4000 $seed; done
+for seed in 777 9001 4242 31337; do game-core/tools/rewarddiff.sh <upstream dir> 1500 $seed; done   # Task 59 regression
+reward-core/tools/difftest.sh <upstream dir> 4000 99 all                                          # unchanged reward-core regression
+```
+
+Results:
+
+- `make -C game-core test` exits 0, no warnings. New: `build/reward_apply_test`, **638,355 checks, 0 failures**: 58
+  table cases (full HP, fainted targets, statuses, empty PP, PP Ups, PP at the 3-Up cap, a move with under 5 PP,
+  invalid targets, Healing Charm stacks, free against bought, rejection), Sacred Ash, a shuffled `party_order`,
+  the items left unhandled, an empty move slot, `max_pp_override`, and 30,000 random states checked against a
+  model written from upstream's `PokemonHpRestoreModifier`, `PokemonPpRestoreModifier`,
+  `PokemonPpUpModifier` and `ReviveModifier` rules (14,682 taken, 15,318 refused; each item from 395 to 1,887 taken
+  and from 280 to 1,729 refused, listed in the test's output). The 200-run digest is `da825571` without and with saves.
+  `build/switch_prompt_test` still 25 checks. `build/resume_test` is unchanged: **36,441 checks**, completion
+  1000/1000 both ways, max steps 274/331 (Task 59: 36,417 and 250/296; the runs it plays changed again).
+- Differential against upstream, `tools/applydiff.sh`: reward-core's apply producer (`reward-core/tests/apply.producer.test.ts`,
+  unchanged, run by upstream's own modifier classes at 8555c08) feeds `tests/reward_apply_diff_test.c`, which replays
+  each healing, revive and PP case through `gc_port_apply_reward` on a real run, once free and once bought, at a
+  rotated `party_order`. It compares taken or refused, the refusal text, every member's HP, status, move count,
+  PP used and PP Ups, and the maximum PP of every move (`getMovePp()`). Four seeds of 4,000 cases:
+
+  | seed | cases replayed (x2: free, bought) | skipped: Hardcore, other items | comparisons | mismatches |
+  |---|---|---|---|---|
+  | 777 | 2,000 | 670, 1,330 | 4,000 | **0** |
+  | 9001 | 1,964 | 706, 1,330 | 3,928 | **0** |
+  | 4242 | 2,000 | 670, 1,330 | 4,000 | **0** |
+  | 31337 | 2,008 | 662, 1,330 | 4,016 | **0** |
+
+  Seed 777, per item (cases, taken, refused, free and bought together): POTION 143/168/118, SUPER_POTION 141/172/110,
+  HYPER_POTION 148/212/84, MAX_POTION 131/142/120, FULL_RESTORE 147/218/76, REVIVE 146/46/246, MAX_REVIVE 143/38/248,
+  SACRED_ASH 148/203/93, ETHER 133/180/86, MAX_ETHER 144/178/110, ELIXIR 141/232/50, MAX_ELIXIR 144/252/36,
+  PP_UP 148/220/76, PP_MAX 143/190/96; 563 HP values, 109 statuses, 612 PP used and 205 PP Ups changed by free
+  rewards; 1,035 cases carry a Healing Charm. Hardcore cases are skipped (game-core models no challenge). The
+  trace doesn't carry `max_pp_override`, so that one is covered by the unit test only.
+- Mutation checks: the unit test caught 12 of 12 changes to the adapter. The differential caught 7 of 8: HP, status, PP used and PP Up
+  not written back, the storage index in place of the party-order index, Sacred Ash taken when bought with no effect,
+  a free reward refused; the one it can't see is the `max_pp_override` check, for the reason above. `switch_prompt_test`
+  fails when either of Task 87's and Task 59's switch-prompt fixes is removed (re-checked, since the runs changed again).
+- 1,000 soak runs, with and without saves: 1,000 ended, 0 cleared/stuck/crashed/timed out, **55,547 turns**, digest
+  **`b3bdf746`** both (16,163 save/load round trips, largest save 10,552 of 131,072 bytes). Task 59's `bdfe170b` (55,280 turns)
+  moved. The old `gcplay.c` (HEAD's, unchanged digest definition) built against the new library gives `b3bdf746` too, so the
+  move is game-core's behaviour, not the tally I added to `gcplay`. The behaviours that differ from the old stand-in: a
+  Potion, Ether or Elixir on a Pokémon that can't use it is now refused (the reward screen stays), the Healing Charm
+  raises potion healing, PP Up and PP Max do something, and the party menu's filter picks which targets are valid. I
+  did not split the digest change by cause. The stand-in counter is **811 runs, 1,330 times**, from 831 and 1,466.
+  What it still counts is outside this card: TMs, money rewards (Nugget, Big Nugget, Relic Gold), vouchers, Memory
+  Mushroom, Mints, Rarer Candy, evolution items and DNA Splicers; the counter never counted potions, so applying
+  them is not what it measures.
+- Applied in the soak (runs, taken, refused): POTION 890 runs, 2,439 taken, 285 refused; SUPER_POTION 61, 75, 8;
+  FULL_RESTORE 1, 1, 0; FULL_HEAL 9, 9, 52 (game-core's own); REVIVE 542, 861, 141; MAX_REVIVE 247, 280, 36;
+  SACRED_ASH 3, 3, 0; ETHER 14, 14, 58; MAX_ETHER 3, 3, 12; ELIXIR 3, 3, 4; MAX_ELIXIR 2, 2, 1; PP_UP 115, 125, 15;
+  PP_MAX 18, 18, 0. HYPER_POTION and MAX_POTION never came up in these 1,000 runs, so only the tests cover them.
+- Regressions, unchanged: `rewarddiff.sh` 1,500 cases each on seeds 777, 9001, 4242 and 31337, **0 mismatches**; reward-core
+  `difftest.sh` 4,000 cases, seed 99, all: apply 4,000 pass 0 fail, Memory 4,000 cases 0 mismatches, the rest pass.
+
+Not done or not checked (reported, not widened into this PR):
+
+- No Hardcore handling (game-core has no challenges); no Candy Jar for Rare Candy; Full Heal stays game-core's own.
+- Enemy movesets are Task 63's, so how often these rewards come up depends on the stand-in moveset.
+- The app (`game/`) isn't changed; no hardware or emulator result. The 3DS build is CI's.
