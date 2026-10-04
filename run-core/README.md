@@ -150,4 +150,11 @@ main `6ac3e321288ef543517279354bf96d7e5c6e5420` fails the unchanged `daily`
 differential: five daily runs / 250 waves, 760 checks passed and 15 mismatches,
 exit 1 under Node 22.23.3. Work stopped as required by the task's baseline rule.
 See [the exact commands, summaries and remaining gates](TASK63-BLOCKER.md).
-This documentation-only draft establishes no new moveset parity result.
+After the user authorized repairing the failure, form rolls were fixed to use
+the caller-supplied RNG, preserving the daily temporary stream. A separate
+27-check host regression passes; it fails five checks against the original
+library. An external diagnostic copy clearing the leaked player IV/nature/shiny
+overrides passes 775/775 daily checks with the unchanged comparator. The
+established daily producer is still unchanged and still fails; its input repair
+needs authorization under the earlier producer-edit prohibition. No moveset
+parity result or complete R-baseline pass is established.

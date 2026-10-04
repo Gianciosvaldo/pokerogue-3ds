@@ -11,6 +11,16 @@ OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
 all: $(BUILD)/librun.a $(BUILD)/wavetest $(BUILD)/shoptest $(BUILD)/biometest $(BUILD)/encountertest $(BUILD)/newbattletest $(BUILD)/exptest $(BUILD)/partyexptest $(BUILD)/upkeeptest $(BUILD)/battlegentest $(BUILD)/pokemongentest $(BUILD)/trainerspeciestest $(BUILD)/trainerpartytest $(BUILD)/wildenemytest $(BUILD)/lucktest $(BUILD)/enemyitemstest $(BUILD)/enemybuffstest $(BUILD)/dailytest $(BUILD)/challengetest $(BUILD)/rivaltest $(BUILD)/gym_e4test
 
+all: $(BUILD)/daily_rng_test
+
+$(BUILD)/daily_rng_test: tests/daily_rng_test.c $(BUILD)/librun.a $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+test-daily-rng: $(BUILD)/daily_rng_test
+	$(BUILD)/daily_rng_test
+
+.PHONY: test-daily-rng
+
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@

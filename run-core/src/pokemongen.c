@@ -36,7 +36,7 @@ static const pr_form_gen *form_gen(const pr_species_gen *sp, int form)
 }
 
 /* getSpeciesFormIndex(species, gender, nature, ignoreArena); nature -1 = undefined */
-static int form_index(pr_run *run, const pr_enemy_gen_ctx *ctx, int species, int gender, int nature, bool ignore_arena)
+static int form_index(pr_rng *rng, pr_run *run, const pr_enemy_gen_ctx *ctx, int species, int gender, int nature, bool ignore_arena)
 {
     const pr_species_gen *sp = species_gen(species);
     if (!sp) { run->unported |= PR_RUN_UNPORTED_SPECIES; return 0; }
@@ -88,28 +88,28 @@ static int form_index(pr_run *run, const pr_enemy_gen_ctx *ctx, int species, int
     case SPECIES_ID_SPEWPA: case SPECIES_ID_VIVILLON: case SPECIES_ID_FLABEBE: case SPECIES_ID_FLOETTE:
     case SPECIES_ID_FLORGES: case SPECIES_ID_FURFROU: case SPECIES_ID_PUMPKABOO: case SPECIES_ID_GOURGEIST:
     case SPECIES_ID_ORICORIO: case SPECIES_ID_ZARUDE: case SPECIES_ID_SQUAWKABILLY: case SPECIES_ID_PALDEA_TAUROS:
-        return seed_int(run, sp->n_forms);
+        return pr_rng_seed_int(rng, sp->n_forms, 0);
     case SPECIES_ID_SINISTEA: case SPECIES_ID_POLTEAGEIST: case SPECIES_ID_MAUSHOLD: case SPECIES_ID_DUDUNSPARCE:
     case SPECIES_ID_POLTCHAGEIST: case SPECIES_ID_SINISTCHA:
-        return seed_int(run, 16) ? 0 : 1;
+        return pr_rng_seed_int(rng, 16, 0) ? 0 : 1;
     case SPECIES_ID_PICHU:
-        return seed_int(run, 8) ? 0 : 1;
+        return pr_rng_seed_int(rng, 8, 0) ? 0 : 1;
     case SPECIES_ID_PIKACHU:   /* no Cosplay or Partner Pikachu for trainers before wave 30 */
         if (trainer_battle && ctx->wave < 30) return 0;
-        return seed_int(run, 8);
+        return pr_rng_seed_int(rng, 8, 0);
     case SPECIES_ID_EEVEE:
         if (trainer_battle && ctx->wave < 30) return 0;
-        return seed_int(run, 2);
+        return pr_rng_seed_int(rng, 2, 0);
     case SPECIES_ID_MAGEARNA: case SPECIES_ID_URSHIFU:
-        return seed_int(run, 2);
+        return pr_rng_seed_int(rng, 2, 0);
     case SPECIES_ID_TATSUGIRI:
-        return seed_int(run, 3);
+        return pr_rng_seed_int(rng, 3, 0);
     case SPECIES_ID_ZYGARDE:
-        return seed_int(run, 4);
+        return pr_rng_seed_int(rng, 4, 0);
     case SPECIES_ID_MINIOR:
-        return seed_int(run, 7);
+        return pr_rng_seed_int(rng, 7, 0);
     case SPECIES_ID_ALCREMIE:
-        return seed_int(run, 9);
+        return pr_rng_seed_int(rng, 9, 0);
     case SPECIES_ID_MEOWSTIC: case SPECIES_ID_INDEEDEE: case SPECIES_ID_BASCULEGION: case SPECIES_ID_OINKOLOGNE:
         return gender == GENDER_FEMALE ? 1 : 0;
     case SPECIES_ID_TOXTRICITY:
@@ -125,20 +125,20 @@ static int form_index(pr_run *run, const pr_enemy_gen_ctx *ctx, int species, int
     case SPECIES_ID_GIMMIGHOUL:   /* gameMode.hasMysteryEncounters: CLASSIC and CHALLENGE */
         if (run->mode == GAME_MODES_CLASSIC || run->mode == GAME_MODES_CHALLENGE)
             return 1;
-        return seed_int(run, sp->n_forms);
+        return pr_rng_seed_int(rng, sp->n_forms, 0);
     case SPECIES_ID_ETERNATUS:
         if (!pr_run_is_battle_classic_final_boss(run, ctx->wave) && ctx->wave > 0 && !(ctx->wave % 1000))
             return 1;
         return 0;
     case SPECIES_ID_BURMY: case SPECIES_ID_WORMADAM:   /* the constructor: ignoreArena = isPlayer() = false */
-        if (ignore_arena) return seed_int(run, sp->n_forms);
+        if (ignore_arena) return pr_rng_seed_int(rng, sp->n_forms, 0);
         switch (ctx->biome) {
         case BIOME_ID_BEACH: return 1;
         case BIOME_ID_SLUM: return 2;
         }
         return 0;
     case SPECIES_ID_LYCANROC:
-        if (ignore_arena) return seed_int(run, sp->n_forms);
+        if (ignore_arena) return pr_rng_seed_int(rng, sp->n_forms, 0);
         switch (pr_run_get_time_of_day(ctx->biome, ctx->wave, ctx->wave_cycle_offset)) {
         case TIME_OF_DAY_DAWN: case TIME_OF_DAY_DAY: return 0;
         case TIME_OF_DAY_DUSK: return 2;
@@ -151,7 +151,7 @@ static int form_index(pr_run *run, const pr_enemy_gen_ctx *ctx, int species, int
 
 int pr_run_get_species_form_index(pr_run *run, const pr_enemy_gen_ctx *ctx, int gender)
 {
-    return form_index(run, ctx, ctx->species, gender, -1, false);
+    return form_index(&run->rng, run, ctx, ctx->species, gender, -1, false);
 }
 
 void pr_run_get_eternatus_moveset(int form, bool inverse_battle, int moveset[4])
@@ -202,7 +202,7 @@ static int generate_fusion(pr_run *run, const pr_enemy_gen_ctx *ctx, const pr_sp
     if (fs->male_percent < 0) out->fusion_gender = GENDER_GENDERLESS;
     else out->fusion_gender = (out->id % 256) * 0.390625 < fs->male_percent ? GENDER_MALE : GENDER_FEMALE;
     /* getSpeciesFormIndex(fusionSpecies, fusionGender, getNature(), true) */
-    out->fusion_form = form_index(run, ctx, fusion, out->fusion_gender, out->nature, true);
+    out->fusion_form = form_index(&run->rng, run, ctx, fusion, out->fusion_gender, out->nature, true);
     return 0;
 }
 
@@ -270,7 +270,9 @@ int pr_run_enemy_pokemon_base_rng(pr_rng *rng, pr_run *run, const pr_enemy_gen_c
     else out->gender = pr_rng_frac(rng) * 100 <= sp->male_percent ? GENDER_MALE : GENDER_FEMALE;
 
     bool ignore_arena = ctx->trainer_slot == 0 && ctx->wave < 0;
-    out->form = form_index(run, ctx, ctx->species, out->gender, -1, ignore_arena);
+    /* Daily starters use a temporary offset RNG. Form rolls must advance that same
+     * stream, rather than consuming the run's saved outer RNG. */
+    out->form = form_index(rng, run, ctx, ctx->species, out->gender, -1, ignore_arena);
 
     if (ctx->trainer_slot == 0 && ctx->wave < 0) {
         /* Player starter: trySetShiny() check, then nature */
