@@ -100,6 +100,7 @@ typedef enum {
     GC_CH_BIOME,            /* BIOME: a = index into screen.biomes */
     GC_CH_MYSTERY,          /* MYSTERY: Task 45 continuation placeholder; Task 46 replaces with actions */
     GC_CH_CONTINUE,         /* GAME_OVER / CLEAR */
+    GC_CH_LOCK_RARITIES,    /* REWARD: switch the Lock Capsule's lock on or off (toggleRerollLock; needs the capsule) */
 } gc_choice_kind;
 
 typedef struct {
@@ -115,6 +116,7 @@ typedef struct {
     int8_t tier;            /* ModifierTier, for the ball colour */
     uint8_t target;         /* GC_TARGET_*: what it must be used on */
     double cost;            /* shop items: the price; 0 for a free reward */
+    int8_t upgrade_count;   /* ModifierTypeOption.upgradeCount: how many tiers the luck upgrade raised it */
 } gc_offer;
 enum { GC_TARGET_NONE, GC_TARGET_POKEMON, GC_TARGET_MOVE };
 
@@ -284,7 +286,7 @@ typedef struct gc_run {
 /* game-core's own stand-ins, counted in run->stubs */
 enum {
     GC_STUB_ENEMY_MOVESET,      /* run-core has no enemy moveset yet: the last 4 level moves */
-    GC_STUB_REWARDS,            /* no reward-core yet: a fixed placeholder list */
+    GC_STUB_REWARDS,            /* reward-core couldn't roll a reward screen (it flagged it): the screen is empty */
     GC_STUB_DOUBLE_AS_SINGLE,   /* a double battle roll played as a single battle (M1 rule) */
     GC_STUB_MYSTERY_ENCOUNTER,  /* a mystery encounter roll played as a wild battle */
     GC_STUB_TURN_TAIL,          /* the rest of a turn after a victory was cut short */
@@ -298,6 +300,8 @@ enum {
                                  * side's SwitchSummonPhase yet, so the enemy does nothing that turn */
     GC_STUB_TRAINER_TITLE,      /* a trainer's name in a message without its title ("Aaron" for "Ace Trainer
                                  * Aaron"): battle-core's messages take one locale key per argument */
+    GC_STUB_REWARD_INPUT,       /* a reward-core input game-core can't give: an item it doesn't know, a learnset too long */
+    GC_STUB_REWARD_APPLY,       /* a reward taken without its own effect (the placeholder apply, Task 60) */
     GC_STUB_COUNT_
 };
 extern const char *const gc_stub_name[GC_STUB_COUNT_];

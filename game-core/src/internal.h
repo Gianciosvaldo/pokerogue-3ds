@@ -5,6 +5,7 @@
 #include "gc/ports.h"
 #include "gc/data.h"
 #include "pr/ai.h"
+#include "pr/reward.h"
 #include <math.h>
 #include <string.h>
 
@@ -49,6 +50,21 @@ typedef struct {
     bool overflow;
 } gc_rqueue;
 
+/* ---- the reward screen (src/gc_reward.c): what a SelectModifierPhase keeps between its calls ---- */
+typedef struct {
+    pr_reward_option options[PR_REWARD_MAX_OPTIONS];   /* typeOptions of the open phase */
+    int n_options;
+    bool has_custom, is_copy;
+    pr_reward_custom custom;    /* its customModifierSettings: the no-victory screen's, or a copy's old options */
+    pr_reward_thresholds th;    /* modifierPoolThresholds: global upstream, kept so a copy rolls with the old ones */
+    /* copy(): the options, rerollCount and rerollMultiplier a copy of the screen is made from, until it starts */
+    bool copy_pending;
+    int copy_reroll_count;
+    double copy_reroll_multiplier;
+    pr_reward_option copy_options[PR_REWARD_MAX_OPTIONS];
+    int n_copy_options;
+} gc_reward_state;
+
 /* run-level state that isn't part of the public struct */
 typedef struct {
     gc_rqueue rq;
@@ -60,7 +76,8 @@ typedef struct {
      * points into this struct */
     pr_ai ai;
     pr_ai_trainer ai_trainer;
-    bool lock_rarities;
+    bool lock_rarities;         /* globalScene.lockModifierTiers (the Lock Capsule's switch) */
+    gc_reward_state reward;
     int last_battle_type;       /* the finished battle's BattleType, -1 = none yet */
     bool last_final_boss;       /* it was the classic final boss */
     double last_max_exp_level;  /* getMaxExpLevel() when it ended, for LevelCapPhase */
@@ -117,6 +134,33 @@ void gc_mon_evolve(gc_run *run, gc_mon *m, int evo);
 void gc_mon_recalc(gc_run *run, gc_mon *m);                            /* calculateStats on a living Pokemon */
 bool gc_mon_fainted(const gc_mon *m);
 bool gc_mon_allowed(const gc_mon *m);                                  /* isAllowedInBattle */
+
+/* ---- learnsets (src/gc_learnset.c): field/learnsets.ts getLevelMoves, as the reward screen reads it ---- */
+/* One row of PlayerPokemon.getLevelMoves: its level (-1 RELEARN_MOVE, 0 EVOLVE_MOVE), the move and its
+ * LearnableMoveSource (PR_LEARN_SOURCE_*) */
+typedef struct { int16_t level; uint16_t move; int8_t source; } gc_learn_row;
+/* Pokemon.getLevelMoves({startingLevel, includeEvolutionMoves, includePrevolutionMoves, includeRelearnerMoves}):
+ * the rows, or -1 when they don't fit in `cap` */
+int gc_level_moves(const gc_mon *m, int starting_level, bool evo, bool prevo, bool relearn, gc_learn_row *out, int cap);
+/* PlayerPokemon.getUnlockedEggMoves(): how many (out holds 4) */
+int gc_unlocked_egg_moves(const gc_run *run, const gc_mon *m, uint16_t out[4]);
+
+/* ---- rewards (src/gc_reward.c): the adapter between game-core's run and reward-core ---- */
+/* getPartyLuckValue(party) */
+int gc_party_luck(gc_run *run);
+/* A pr_reward_ctx made from the run as it is now (a static: valid until the next call). Its party is in
+ * upstream's party order (run->party_order), so ctx party index k is run->party[run->party_order[k]]. */
+pr_reward_ctx *gc_reward_ctx(gc_run *run);
+/* The types an attack move counts as for the type-boosting items: VariableMoveTypeAttr.getTypesForItemSpawn
+ * or Pokemon.getMoveTypeForItemSpawn. Returns how many (out holds 2). */
+int gc_types_for_item_spawn(gc_run *run, const gc_mon *m, int move, int8_t out[2]);
+/* SelectModifierPhase.copy(): queue the screen again, with the options it showed (what a TM or the Memory
+ * Mushroom does when it is taken) */
+void gc_reward_queue_copy(gc_run *run);
+/* SelectModifierPhase.getRerollCost(lockModifierTiers) for the screen that is open */
+double gc_reward_reroll_cost(gc_run *run);
+/* the reward-core item (enum pr_item) of a modifierTypes key, -1 = none */
+int gc_reward_item_index(const char *key);
 
 /* ---- items (src/gc_items.c) ---- */
 int gc_item_stack(const gc_run *run, const char *key);                 /* stack count of a player item, 0 = none */

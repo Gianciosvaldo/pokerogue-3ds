@@ -359,13 +359,13 @@ static void money_reward(gc_run *run, double mult)
 }
 
 /* ---- SelectModifierPhase ---- */
-static void reward_screen(gc_run *run, bool restricted)
+/* kind: GC_REWARD_* (gc/ports.h). The options and the reroll price are reward-core's, through gc_reward.c */
+static void reward_screen(gc_run *run, int kind)
 {
-    gc_internal *in = gc_int(run);
     gc_screen *s = &run->screen;
     memset(s, 0, sizeof *s);
     s->kind = GC_SCREEN_REWARD;
-    s->n_options = restricted ? 0 : gc_port_reward_options(run, in->reroll_count, s->options);
+    s->n_options = gc_port_reward_options(run, kind, s->options, &s->reroll_cost);
     s->n_shop = 0;
     if (pr_run_get_shop_status(&run->run)) {
         pr_shop_option so[PR_SHOP_ITEM_COUNT_];
@@ -380,22 +380,13 @@ static void reward_screen(gc_run *run, bool restricted)
             o->cost = so[i].cost;
         }
     }
-    if (restricted) {
-        s->reroll_cost = -1;
-    } else {
-        int tiers[GC_MAX_OPTIONS];
-        for (int i = 0; i < s->n_options; i++) tiers[i] = s->options[i].tier;
-        s->reroll_cost = pr_run_get_reroll_cost(run->wave, in->lock_rarities, tiers, s->n_options, in->reroll_count, NAN, 0);
-    }
     s->can_skip = true;
 }
 
+/* SelectModifierPhase.start(): p->a = the no-victory screen, p->b = a copy of the screen (copy()) */
 static bool select_modifier_start(gc_run *run, gc_rphase *p)
 {
-    gc_internal *in = gc_int(run);
-    in->reroll_count = 0;
-    pr_run_reset_seed(&run->run, run->wave);   /* updateSeed(): resetSeed() */
-    reward_screen(run, p->a);
+    reward_screen(run, p->b ? GC_REWARD_COPY : p->a ? GC_REWARD_RESTRICTED : GC_REWARD_FIRST);
     return false;
 }
 
@@ -426,14 +417,20 @@ static bool select_modifier_choose(gc_run *run, gc_rphase *p, const gc_choice *c
     }
     case GC_CH_REROLL:
         if (s->reroll_cost < 0) { *why = "no reroll here"; return false; }
-        if (run->money < s->reroll_cost) { *why = "modifierSelectUiHandler:notEnoughMoney"; return false; }
-        run->money -= s->reroll_cost;
+        if (!pr_reward_try_deduct_money(&run->money, s->reroll_cost)) { *why = "modifierSelectUiHandler:notEnoughMoney"; return false; }
         {
             gc_event *ev = gc_ev_new(run, GC_EV_MONEY);
             if (ev) { ev->a = -(int32_t)s->reroll_cost; ev->b = (int32_t)run->money; }
         }
-        in->reroll_count++;
-        reward_screen(run, p->a);
+        reward_screen(run, GC_REWARD_REROLL);
+        *ok = true;
+        return false;
+    case GC_CH_LOCK_RARITIES:
+        /* toggleRerollLock(): only where a reroll is allowed, and the button only exists with the Lock Capsule */
+        if (s->reroll_cost < 0) { *why = "no reroll here"; return false; }
+        if (gc_item_stack(run, "LOCK_CAPSULE") <= 0) { *why = "no Lock Capsule"; return false; }
+        in->lock_rarities = !in->lock_rarities;
+        s->reroll_cost = gc_reward_reroll_cost(run);
         *ok = true;
         return false;
     default:

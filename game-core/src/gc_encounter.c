@@ -132,7 +132,8 @@ static void enemy_ctx(gc_run *run, pr_enemy_gen_ctx *ec)
     ec->event_shiny_multiplier = 1;
 }
 
-static int party_luck(gc_run *run)
+/* getPartyLuckValue(party) */
+int gc_party_luck(gc_run *run)
 {
     pr_luck_member m[6];
     for (int i = 0; i < run->n_party; i++) {
@@ -204,7 +205,7 @@ static bool gen_wild(gc_run *run, int level)
     memset(&wc, 0, sizeof wc);
     enemy_ctx(run, &wc.enemy);
     wc.level = level;
-    wc.luck = party_luck(run);
+    wc.luck = gc_party_luck(run);
     wc.golden_bug_net = gc_item_stack(run, "GOLDEN_BUG_NET") > 0;
     pr_wild_enemy w;
     if (pr_run_gen_wild_enemy(&run->run, &wc, &w) < 0) return false;

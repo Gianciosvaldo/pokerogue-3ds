@@ -490,10 +490,18 @@ void gc_battle_switch_screen(gc_run *run)
     memset(s, 0, sizeof *s);
     s->kind = GC_SCREEN_SWITCH;
     s->slot = run->eng.stop_phase.sw_field_index;
-    for (int i = 0; i < run->n_party; i++)
-        s->pick_ok[i] = gc_mon_allowed(&run->party[i]) && !run->party[i].b.on_field;
+    /* the Pokemon being switched out (a move's switch-out: Teleport, U-turn) is still in its party slot, and
+     * upstream's party screen doesn't let a Pokemon be sent into the slot it already holds. It's off the
+     * field by now, so on_field doesn't exclude it: picking it left switch_out_status set and the battle
+     * never went on. */
+    const pr_pokemon *leaving = s->slot >= 0 && s->slot < 2 ? run->bt.field[s->slot] : NULL;
+    bool any = false;
+    for (int i = 0; i < run->n_party; i++) {
+        s->pick_ok[i] = gc_mon_allowed(&run->party[i]) && !run->party[i].b.on_field && &run->party[i].b != leaving;
+        any |= s->pick_ok[i];
+    }
     /* a modal SwitchPhase (after a faint) must be answered; a move's switch-out can be left empty */
-    s->can_skip = !run->eng.stop_phase.sw_modal;
+    s->can_skip = !run->eng.stop_phase.sw_modal || !any;
 }
 
 /* The trainer sends out its next Pokemon: FaintPhase's SwitchSummonPhase(SWITCH, 0, -1) for the enemy,
