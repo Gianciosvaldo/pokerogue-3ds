@@ -96,17 +96,66 @@ double pr_get_stat(const pr_pokemon *p, int stat, bool bypass_summon)
     return p->stats[stat];
 }
 
-/* getTeraType(). hasSpecies() also matches the fusion species: fusion not ported yet. */
+/* getTeraType(): special real species include the fusion, never the disguise. */
 int pr_get_tera_type(const pr_pokemon *p)
 {
-    if (p->species == SPECIES_ID_TERAPAGOS) return POKEMON_TYPE_STELLAR;
-    if (p->species == SPECIES_ID_OGERPON) {
+    if (p->species == SPECIES_ID_TERAPAGOS || p->fusion_species == SPECIES_ID_TERAPAGOS) return POKEMON_TYPE_STELLAR;
+    if (p->species == SPECIES_ID_OGERPON || p->fusion_species == SPECIES_ID_OGERPON) {
         static const int8_t t[8] = {POKEMON_TYPE_GRASS, POKEMON_TYPE_WATER, POKEMON_TYPE_FIRE, POKEMON_TYPE_ROCK,
                                     POKEMON_TYPE_GRASS, POKEMON_TYPE_WATER, POKEMON_TYPE_FIRE, POKEMON_TYPE_ROCK};
-        if (p->form < 8) return t[p->form];
+        int form = p->species == SPECIES_ID_OGERPON ? p->form : p->fusion_form;
+        if (form < 8) return t[form];
     }
-    if (p->species == SPECIES_ID_SHEDINJA) return POKEMON_TYPE_BUG;
+    if (p->species == SPECIES_ID_SHEDINJA || p->fusion_species == SPECIES_ID_SHEDINJA) return POKEMON_TYPE_BUG;
     return p->tera_type;
+}
+
+/* Identity subset of Pokemon.setIllusion: snapshot, never replace real stats or
+ * ability. Save a local copy so setIllusion(self) is also well-defined. */
+void pr_set_illusion(pr_pokemon *p, const pr_pokemon *source)
+{
+    pr_illusion value = {source->species, source->fusion_species, source->form,
+                         source->fusion_form, source->gender, true};
+    p->illusion = value;
+}
+
+void pr_set_illusion_species(pr_pokemon *p, uint16_t species, uint8_t form)
+{
+    pr_pokemon identity = {0}; identity.species = species; identity.form = form;
+    const pr_species *sp = pr_pokemon_species(&identity);
+    int gender = -1;
+    if (sp && sp->male_permille >= 0)
+        gender = (p->id % 256) * 3.90625 < sp->male_permille ? 0 : 1;
+    p->illusion = (pr_illusion){species, 0, form, 0, (int8_t)gender, true};
+}
+
+bool pr_break_illusion(pr_pokemon *p)
+{
+    bool active = p->illusion.active;
+    memset(&p->illusion, 0, sizeof p->illusion);
+    return active;
+}
+
+const pr_form *pr_apparent_form(const pr_pokemon *p, bool use_illusion)
+{
+    if (!use_illusion || !p->illusion.active) return pr_pokemon_form(p);
+    pr_pokemon identity = {0};
+    identity.species = p->illusion.species; identity.form = p->illusion.form;
+    return pr_pokemon_form(&identity);
+}
+
+const pr_form *pr_apparent_fusion_form(const pr_pokemon *p, bool use_illusion)
+{
+    if (!use_illusion || !p->illusion.active) return pr_pokemon_fusion_form(p);
+    pr_pokemon identity = {0};
+    identity.fusion_species = p->illusion.fusion_species;
+    identity.fusion_form = p->illusion.fusion_form;
+    return pr_pokemon_fusion_form(&identity);
+}
+
+int pr_apparent_gender(const pr_pokemon *p, bool use_illusion)
+{
+    return use_illusion && p->illusion.active ? p->illusion.gender : p->gender;
 }
 
 /* getTypes({}) : returns count, out gets up to 3 types. */
@@ -122,12 +171,13 @@ int pr_get_types(const pr_pokemon *p, int8_t out[PR_MAX_TYPES], unsigned flags)
     /* getBaseTypes: summonData.types when set (and not bypassed), else the form's two */
     int8_t base[PR_MAX_SUMMON_TYPES];
     int nb;
-    if (!(flags & PR_TYPES_BYPASS_SUMMON) && p->n_summon_types) {
+    bool illusion = (flags & PR_TYPES_USE_ILLUSION) && p->illusion.active;
+    if (!(flags & PR_TYPES_BYPASS_SUMMON) && p->n_summon_types && !illusion) {
         nb = p->n_summon_types;
         memcpy(base, p->summon_types, (size_t)nb);
     } else {
-        const pr_form *f = pr_pokemon_form(p);
-        const pr_form *ff = pr_pokemon_fusion_form(p);
+        const pr_form *f = pr_apparent_form(p, illusion);
+        const pr_form *ff = pr_apparent_fusion_form(p, illusion);
         int8_t type1 = f->type1;
         int8_t second_type = f->type2 < 0 ? POKEMON_TYPE_UNKNOWN : f->type2;
         if (ff) {
