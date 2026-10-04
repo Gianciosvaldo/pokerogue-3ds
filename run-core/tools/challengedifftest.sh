@@ -2,6 +2,7 @@
 # Differential test for Challenge Mode validation against pinned upstream behavior.
 # Usage: tools/challengedifftest.sh <upstream dir> [N] [seed]
 set -e
+. "$(dirname "$0")/require-node22.sh"
 UP=${1:?upstream dir}; N=${2:-10000}; SEED=${3:-12345}
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 BUILD=${BUILD:-/tmp/prrun-challenge-build}

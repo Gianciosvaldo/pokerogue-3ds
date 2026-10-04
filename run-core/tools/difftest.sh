@@ -4,6 +4,7 @@
 # The upstream checkout is the one battle-core/tools/setup-upstream.sh prepares. pokemongen reads the
 # variant masterlist tools/redump.sh fetches (it runs redump's fetch if the file isn't there yet).
 set -e
+. "$(dirname "$0")/require-node22.sh"
 UP=${1:?upstream dir}; N=${2:-20000}; SEED=${3:-12345}; WHAT=${4:-all}
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 BUILD=${BUILD:-/tmp/run-core-build}
