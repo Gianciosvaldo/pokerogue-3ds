@@ -379,15 +379,9 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         pr_queue_msg(bt, e, pr_msg0("moveTriggers:coinsScatteredEverywhere"));
         return;
     }
-    case PR_AC_RemoveHeldItemAttr: {                     /* Knock Off (not the player's items), Incinerate (berries) */
-        if (!P(RemoveHeldItemAttr, a)->berriesOnly && target->is_player) return;
-        bool cancelled = false;
-        pr_ab_params cp = {.pokemon = target, .move = -1, .flag = &cancelled};
-        pr_apply_ab_attrs(bt, PR_AC_BlockItemTheftAbAttr, &cp);
-        /* with a transferable item left to pick (a berry for Incinerate), losing it isn't ported */
-        if (!cancelled && pr_held_item_count(bt, target, true)) pr_note_unported(bt, a->cls);
+    case PR_AC_RemoveHeldItemAttr:
+        pr_remove_move_held_item(bt, e, user, target, P(RemoveHeldItemAttr, a)->berriesOnly, NULL);
         return;
-    }
     case PR_AC_StealHeldItemChanceAttr: {                /* Thief, Covet: randSeedFloat() > chance fails */
         if (!bt->rng_live) { pr_note_unported(bt, PR_FEAT_GLOBAL_RNG); return; }
         if (pr_rng_seed_float(&bt->rng) > P(StealHeldItemChanceAttr, a)->chance) return;
@@ -712,4 +706,55 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
     }
     }
     pr_note_unported(bt, a->cls);
+}
+
+/* Bounded removal family: supported named battle items and all berry identities.
+ * Unsupported item names remain explicit rather than producing a false message. */
+static const char *removed_item_key(const pr_modifier *m)
+{
+    static const char *const berries[] = {
+        "berry:sitrus.name", "berry:lum.name", "berry:enigma.name", "berry:liechi.name",
+        "berry:ganlon.name", "berry:petaya.name", "berry:apicot.name", "berry:salac.name",
+        "berry:lansat.name", "berry:starf.name", "berry:leppa.name"
+    };
+    if (m->unknown_subclass) return NULL;
+    if (m->cls == PR_MOD_BERRY)
+        return m->berry_type >= 0 && m->berry_type < 11 ? berries[m->berry_type] : NULL;
+    switch (m->cls) {
+    case PR_MOD_TURN_HEAL: return "modifierType:ModifierType.LEFTOVERS.name";
+    case PR_MOD_HIT_HEAL: return "modifierType:ModifierType.SHELL_BELL.name";
+    case PR_MOD_SURVIVE_DAMAGE: return "modifierType:ModifierType.FOCUS_BAND.name";
+    case PR_MOD_BYPASS_SPEED_CHANCE: return "modifierType:ModifierType.QUICK_CLAW.name";
+    case PR_MOD_FLINCH_CHANCE: return "modifierType:ModifierType.KINGS_ROCK.name";
+    case PR_MOD_RESET_NEGATIVE_STAT_STAGE: return "modifierType:ModifierType.WHITE_HERB.name";
+    default: return NULL;
+    }
+}
+
+bool pr_remove_move_held_item(pr_battle *bt, pr_engine *e, pr_pokemon *user,
+                             pr_pokemon *target, bool berries_only, pr_modifier *removed)
+{
+    if (!berries_only && target->is_player) return false;
+    bool cancelled = false;
+    pr_ab_params cp = {.pokemon = target, .move = -1, .flag = &cancelled};
+    pr_apply_ab_attrs(bt, PR_AC_BlockItemTheftAbAttr, &cp);
+    if (cancelled) return false;
+    int side = target->is_player ? 0 : 1, indices[PR_MAX_MODIFIERS], n = 0;
+    for (int k = 0; k < bt->n_mods[side]; k++) {
+        const pr_modifier *m = &bt->mods[side][k];
+        if (m->pokemon_id == (int64_t)target->id && m->is_transferable
+            && pr_mod_is(m, PR_MOD_HELD_ITEM) && (!berries_only || pr_mod_is(m, PR_MOD_BERRY)))
+            indices[n++] = k;
+    }
+    if (!n) return false;
+    int selected = pr_battle_rand_seed_int(bt, n, 0);
+    pr_modifier *m = &bt->mods[side][indices[selected]];
+    const char *key = removed_item_key(m);
+    if (!key) { pr_note_unported(bt, PR_AC_RemoveHeldItemAttr); return false; }
+    if (removed) *removed = *m;
+    pr_lose_held_item(bt, e, target, m);
+    pr_queue_msg(bt, e, pr_msg3(berries_only ? "moveTriggers:incineratedItem" : "moveTriggers:knockedOffItem",
+        pr_arg_pokemon(bt, "pokemonName", user), pr_arg_pokemon(bt, "targetName", target),
+        pr_arg_key("itemName", key)));
+    return true;
 }

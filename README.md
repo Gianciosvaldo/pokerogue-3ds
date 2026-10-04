@@ -78,3 +78,5 @@ PokeRogue's code is AGPL-3.0, and this port derives from it. Pokémon is © Nint
 
 
 Task 69 implements weather-driven quiet form dispatch for Forecast, Flower Gift and Ice Face, including suppression, loaded/natural passives, summon, replacement and leaving-field resets. See [battle-core validation and reproduction](battle-core/README.md#task-69-weather-driven-quiet-form-changes-2026-10-04). Task 68 is delegated to Jules in lane F; Task 70 awaits Task 69 merging, and Task 71 remains behind 70.
+
+Task 70's bounded Knock Off/Incinerate removal and Unburden callbacks are implemented with 8000/8000 focused comparisons. B and condition regressions pass with retained coverage; the established item suite still fails on unchanged main and this branch because its trace omits enemy status-token effects. Readiness and Task 71 remain blocked under HANDOFF rule 2. See [exact results and reproduction](battle-core/README.md#task-70-bounded-held-item-removal-2026-10-04-validation-blocked). Tasks 89/#104 and 91/#107 retain their separately documented fusion/Memory blockers.
