@@ -36,6 +36,7 @@ enum {
     RP_GAME_OVER,        /* GameOverPhase: a = victory; waits on GAME_OVER / CLEAR */
     RP_PARTY_SWAP,       /* PartySwapPhase: a = enemy party index of caught mon */
     RP_MYSTERY,          /* MysteryEncounterPhase: a = selected type, b = selected tier */
+    RP_REWARD_FORM,      /* bounded FormChangePhase: a = storage party index, b = target form */
     RP_COUNT_
 };
 typedef struct { uint8_t type; int32_t a, b, c; double d; const char *key; } gc_rphase;
@@ -171,6 +172,8 @@ uint8_t gc_reward_target(const char *key);
  * (Sacred Ash with nobody fainted), as SelectModifierPhase.applyModifier does with cost -1. */
 enum { GC_APPLY_UNHANDLED, GC_APPLY_DONE, GC_APPLY_REFUSED };
 int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, const char **why);
+int gc_reward_lifecycle_apply(gc_run *run, const gc_offer *o, int party, const char **why);
+void gc_reward_change_form(gc_run *run, int party, int form);
 
 /* ---- items (src/gc_items.c) ---- */
 int gc_item_stack(const gc_run *run, const char *key);                 /* stack count of a player item, 0 = none */

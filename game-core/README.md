@@ -424,3 +424,64 @@ Not done or not checked (reported, not widened into this PR):
 - No Hardcore handling (game-core has no challenges); no Candy Jar for Rare Candy; Full Heal stays game-core's own.
 - Enemy movesets are Task 63's, so how often these rewards come up depends on the stand-in moveset.
 - The app (`game/`) isn't changed; no hardware or emulator result. The 3DS build is CI's.
+
+### Task 61: bounded reward evolution/form lifecycle
+
+The reward-screen adapter now executes two families from pinned upstream `8555c08`:
+Growlithe's Fire Stone evolution into Arcanine, and Giratina's Griseous Core
+transition from altered to origin. `gc_reward_lifecycle.c` calls `pr_reward_apply`
+for selection/application and owns the subsequent run phases. The stone is
+consumed before the cancellable evolution screen; cancellation changes neither
+species, stats, moves nor dex and may pause later evolutions. Acceptance uses the
+existing evolution/learn-move screens, ability/stat recalculation and dex updates.
+The Core is retained with its holder's stable Pokemon ID before the form phase;
+form changes update seen/caught records before recalculating stats and preserve
+moves/PP. An active Core on Origin Giratina is installed without activating the
+reverse rule. A full held Core stack substitutes the PLAYER pool's default ball
+reward for the offer tier, retaining the original Core stack and owner.
+
+This is one evolution family and one form-item family, not general evolution/form
+parity. Other Fire Stone recipients, fusion evolutions, other form items, manual
+activation/deactivation and reversal remain outside this slice; their existing
+counted stand-ins remain. The graphical FormChangePhase animation is represented
+by an immediate run phase, not a new cancellable form-animation screen. Console
+presentation and broad held-item battle behavior are not validated here.
+
+The separately added `tests/reward-lifecycle.producer.test.ts` runs real pinned
+selection, `addModifier`, `PlayerPokemon.evolve` / `changeForm`, stat, dex and
+`setMove` methods on real Pokemon. Asset/info loading and animation completion
+are headless boundaries. Free reward selection completes regardless of
+`addModifier`'s Boolean; the test distinguishes ownership from activation. It
+compares species/form, level/nature/ability, pause state, HP/stats, moves/order,
+PP used/PP Ups, seen/caught/nature/IV dex records, transition queue counts, held
+stacks/ownership, substituted balls and global RNG; upstream battle RNG is also
+asserted unchanged. Rendered message text is not a differential claim.
+
+```
+make -C game-core
+NODE=/path/to/node22 game-core/tools/lifecyclediff.sh /external/pokerogue-upstream 280 777
+NODE=/path/to/node22 game-core/tools/lifecyclediff.sh /external/pokerogue-upstream 280 9001
+NODE=/path/to/node22 game-core/tools/lifecyclediff.sh /external/pokerogue-upstream 280 4242
+NODE=/path/to/node22 game-core/tools/lifecyclediff.sh /external/pokerogue-upstream 280 31337
+```
+
+`LC_OUT` selects the trace path; producer flags are `LC_N`, `LC_SEED`, `LC_OUT`.
+The C comparator is `build/reward_lifecycle_test`. Validation used Node 22.23.3.
+Each seed: **280 cases, 280 identical, 0 mismatches**; seven paths each have 40
+cases: accepted evolution, cancelled evolution, invalid target, activated form,
+Core retained without activation, reward skipped, and full-stack replacement.
+`reward_lifecycle_host_test`, included in `make test`, adds **46 checks** for the
+public reward/evolve/learn choices, full-moveset replacement, duplicate stacks,
+invalid targets and ownership/stats/moves persisted at a legal save boundary.
+A temporary mutant retaining altered form produced **40 mismatches**, exit 1;
+a trace with the `Z` completion footer removed was rejected with exit 2.
+
+Before/after main `ff35abf`: `make -C game-core test` retained 36,417 resume
+checks, 39 item-bridge checks, 3,512 reward-adapter checks, 25 switch checks and
+638,355 reward-application checks with zero failures. Its paired 200-run digest
+remained `8ee22b13`. Both `gcplay --auto 1000 --jobs 8` and the same command with
+`--save-test`: 1,000/1,000 ended, 0 stuck/crashed/timed out, 55,491 turns, digest
+`5fd93475`; saved runs made 16,151 round trips (largest save 10,552 bytes).
+All printed stub counts were unchanged; these rare families are established by
+the focused fixtures, not by a fallback reduction in the random soak. No 3DS
+build or console test is claimed.
