@@ -111,7 +111,10 @@ bool pr_mod_is_ported_item(const pr_modifier *m)
             || m->berry_type == BERRY_TYPE_GANLON
             || m->berry_type == BERRY_TYPE_PETAYA
             || m->berry_type == BERRY_TYPE_APICOT
-            || m->berry_type == BERRY_TYPE_SALAC;
+            || m->berry_type == BERRY_TYPE_SALAC
+            || m->berry_type == BERRY_TYPE_ENIGMA
+            || m->berry_type == BERRY_TYPE_LANSAT
+            || m->berry_type == BERRY_TYPE_STARF;
     }
     int cls = m->cls;
     return cls == PR_MOD_TURN_HEAL || cls == PR_MOD_HIT_HEAL
@@ -348,6 +351,7 @@ static double to_dmg_value(double v) { double f = floor(v); return f < 1 ? 1 : f
 
 int pr_sitrus_berry_fired = 0, pr_lum_berry_fired = 0, pr_leppa_berry_fired = 0;
 int pr_liechi_berry_fired = 0, pr_ganlon_berry_fired = 0, pr_petaya_berry_fired = 0, pr_apicot_berry_fired = 0, pr_salac_berry_fired = 0;
+int pr_enigma_berry_fired = 0, pr_lansat_berry_fired = 0, pr_starf_berry_fired = 0;
 
 static int pr_pokemon_move_max_pp(const pr_pokemon *p, int s)
 {
@@ -376,7 +380,19 @@ bool pr_berry_should_apply(pr_battle *bt, const pr_pokemon *p, const pr_modifier
         return get_hp_ratio(p) < 0.5;
     case BERRY_TYPE_LUM:
         return p->status != STATUS_EFFECT_NONE || pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_CONFUSED);
+    case BERRY_TYPE_ENIGMA: {
+        int kept = pr_attacks_received_kept(p);
+        for (int i = 0; i < kept; i++) {
+            int res = p->attacks_received[i].result;
+            if (res == HIT_RESULT_SUPER_EFFECTIVE || res == HIT_RESULT_EXTREMELY_EFFECTIVE)
+                return true;
+        }
+        return false;
+    }
     case BERRY_TYPE_LEPPA: {
+        double hp_ratio_req = 0.25;
+        pr_ab_params pp = {.pokemon = (pr_pokemon *)p, .move = -1, .value = &hp_ratio_req};
+        pr_apply_ab_attrs((pr_battle *)bt, PR_AC_ReduceBerryUseThresholdAbAttr, &pp);
         for (int i = 0; i < p->n_moves; i++) {
             int max_pp = pr_pokemon_move_max_pp(p, i);
             if (max_pp > 0 && p->pp_used[i] >= max_pp) return true;
@@ -391,8 +407,26 @@ bool pr_berry_should_apply(pr_battle *bt, const pr_pokemon *p, const pr_modifier
         double hp_ratio_req = 0.25;
         int stat = m->berry_type - BERRY_TYPE_ENIGMA;
         pr_ab_params pp = {.pokemon = (pr_pokemon *)p, .move = -1, .value = &hp_ratio_req};
+        pr_engine *saved = bt->engine; bt->engine = NULL;
         pr_apply_ab_attrs((pr_battle *)bt, PR_AC_ReduceBerryUseThresholdAbAttr, &pp);
+        bt->engine = saved;
         return get_hp_ratio(p) < hp_ratio_req && p->stat_stages[stat - 1] < 6;
+    }
+    case BERRY_TYPE_LANSAT: {
+        double hp_ratio_req = 0.25;
+        pr_ab_params pp = {.pokemon = (pr_pokemon *)p, .move = -1, .value = &hp_ratio_req};
+        pr_engine *saved = bt->engine; bt->engine = NULL;
+        pr_apply_ab_attrs((pr_battle *)bt, PR_AC_ReduceBerryUseThresholdAbAttr, &pp);
+        bt->engine = saved;
+        return get_hp_ratio(p) < 0.25 && !pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_CRIT_BOOST);
+    }
+    case BERRY_TYPE_STARF: {
+        double hp_ratio_req = 0.25;
+        pr_ab_params pp = {.pokemon = (pr_pokemon *)p, .move = -1, .value = &hp_ratio_req};
+        pr_engine *saved = bt->engine; bt->engine = NULL;
+        pr_apply_ab_attrs((pr_battle *)bt, PR_AC_ReduceBerryUseThresholdAbAttr, &pp);
+        bt->engine = saved;
+        return get_hp_ratio(p) < 0.25;
     }
     default:
         return false;
@@ -413,14 +447,18 @@ void pr_apply_berry_ex(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_modifier *
     pr_lose_held_item(bt, e, p, m);
 
     switch (btype) {
-    case BERRY_TYPE_SITRUS: {
-        pr_sitrus_berry_fired++;
+    case BERRY_TYPE_SITRUS:
+    case BERRY_TYPE_ENIGMA: {
+        if (btype == BERRY_TYPE_SITRUS) pr_sitrus_berry_fired++;
+        else pr_enigma_berry_fired++;
+
         double amount = to_dmg_value(max_hp(p) / 4.0);
         pr_ab_params rp = {.pokemon = p, .move = -1, .value = &amount};
         pr_apply_ab_attrs(bt, PR_AC_DoubleBerryEffectAbAttr, &rp);
+        const char *key = btype == BERRY_TYPE_SITRUS ? "berry:sitrus.name" : "berry:enigma.name";
         pr_msg msg = pr_msg2("battle:hpHealBerry",
                              pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
-                             pr_arg_key("berryName", "berry:sitrus.name"));
+                             pr_arg_key("berryName", key));
         pr_unshift_heal_msg(bt, e, pr_battler_index(bt, p), amount, PR_HEAL_MESSAGE, msg);
         break;
     }
@@ -495,6 +533,40 @@ void pr_apply_berry_ex(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_modifier *
             }
         } else {
             int8_t st = (int8_t)stat;
+            pr_unshift_stat_stage_change_ex(bt, e, pr_battler_index(bt, p), &st, &stages, 1, p, 0);
+        }
+        break;
+    }
+    case BERRY_TYPE_LANSAT: {
+        pr_lansat_berry_fired++;
+        pr_add_tag(bt, e, p, BATTLER_TAG_TYPE_CRIT_BOOST, 0, 0, -1);
+        break;
+    }
+    case BERRY_TYPE_STARF: {
+        pr_starf_berry_fired++;
+        int rand_stat = pr_rng_seed_int(&bt->rng, 5, STAT_ATK);
+        double amount = 2.0;
+        pr_ab_params rp = {.pokemon = p, .move = -1, .value = &amount};
+        pr_apply_ab_attrs(bt, PR_AC_DoubleBerryEffectAbAttr, &rp);
+        int8_t stages = (int8_t)amount;
+
+        if (ssc_stats != NULL && ssc_stages != NULL && n_ssc != NULL) {
+            int idx = -1;
+            for (int k = 0; k < *n_ssc; k++) {
+                if (ssc_stats[k] == (int8_t)rand_stat) {
+                    idx = k;
+                    break;
+                }
+            }
+            if (idx >= 0) {
+                ssc_stages[idx] += stages;
+            } else if (*n_ssc < 7) {
+                ssc_stats[*n_ssc] = (int8_t)rand_stat;
+                ssc_stages[*n_ssc] = stages;
+                (*n_ssc)++;
+            }
+        } else {
+            int8_t st = (int8_t)rand_stat;
             pr_unshift_stat_stage_change_ex(bt, e, pr_battler_index(bt, p), &st, &stages, 1, p, 0);
         }
         break;
