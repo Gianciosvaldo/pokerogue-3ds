@@ -56,6 +56,7 @@ typedef struct {
     uint8_t n_mystery_history;
     int8_t mystery_type, mystery_tier;
     bool in_battle;
+    bool me_battle, me_catch_allowed;
     int32_t battle_type, trainer_type, trainer_variant, trainer_name, trainer_partner_name;
     char battle_seed[17];
     int32_t n_enemy;
@@ -77,7 +78,7 @@ static const sfield run_fields[] = {
     SF(sv_run, trainer_id), SF(sv_run, secret_id), SF(sv_run, pokeballs), SF(sv_run, n_party),
     SF(sv_run, party_order), SF(sv_run, n_items), SF(sv_run, n_enemy_items), SF(sv_run, me),
     SF(sv_run, n_mystery_history), SF(sv_run, mystery_type), SF(sv_run, mystery_tier),
-    SF(sv_run, in_battle), SF(sv_run, battle_type), SF(sv_run, trainer_type), SF(sv_run, trainer_variant),
+    SF(sv_run, in_battle), SF(sv_run, me_battle), SF(sv_run, me_catch_allowed), SF(sv_run, battle_type), SF(sv_run, trainer_type), SF(sv_run, trainer_variant),
     SF(sv_run, trainer_name), SF(sv_run, trainer_partner_name),
     SF(sv_run, battle_seed), SF(sv_run, n_enemy), SF(sv_run, last_battle_type), SF(sv_run, last_final_boss),
     SF(sv_run, lock_rarities), SF(sv_run, last_max_exp_level), SF(sv_run, stub_rng), SF(sv_run, weather),
@@ -99,7 +100,7 @@ static const sfield item_fields[] = {SF(sv_item, key), SF(sv_item, arg), SF(sv_i
 static const sfield mon_fields[] = {
     SF(gc_mon, exp), SF(gc_mon, ability_index), SF(gc_mon, variant), SF(gc_mon, pokerus),
     SF(gc_mon, pause_evolutions), SF(gc_mon, luck), SF(gc_mon, pokeball), SF(gc_mon, met_wave),
-    SF(gc_mon, trainer_slot),
+    SF(gc_mon, trainer_slot), SF(gc_mon, met_level), SF(gc_mon, met_biome), SF(gc_mon, met_species),
 };
 
 /* battle-core's Pokemon: everything but its turnData (reset before every turn) and the lists, which
@@ -356,6 +357,8 @@ size_t gc_run_save(const gc_run *run, void *buf, size_t cap)
     v.mystery_type = run->mystery_type;
     v.mystery_tier = run->mystery_tier;
     v.in_battle = run->in_battle;
+    v.me_battle = run->me_battle;
+    v.me_catch_allowed = run->me_catch_allowed;
     v.battle_type = run->battle_type;
     v.trainer_type = run->trainer_type;
     v.trainer_variant = run->trainer_variant;
@@ -428,6 +431,7 @@ static void mon_defaults(gc_mon *m)
     pr_reset_summon_data(b);
     pr_reset_turn_data(b);
     m->met_wave = -1;
+    m->met_biome = -1;
 }
 
 /* A Pokemon that can't be played with (a species or move this build lacks, counts out of range) */
@@ -555,6 +559,8 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     run->mystery_type = v.mystery_type;
     run->mystery_tier = v.mystery_tier;
     run->in_battle = true;
+    run->me_battle = v.me_battle;
+    run->me_catch_allowed = v.me_catch_allowed;
     run->battle_type = v.battle_type;
     run->trainer_type = v.trainer_type;
     run->trainer_variant = v.trainer_variant;

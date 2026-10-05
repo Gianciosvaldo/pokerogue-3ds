@@ -292,6 +292,7 @@ void gc_new_battle(gc_run *run)
     gc_ai_reset(run);
     in->reroll_count = 0;
     in->battle_won = false;
+    run->me_battle = run->me_catch_allowed = false;
 
     pr_new_battle_ctx ctx;
     memset(&ctx, 0, sizeof ctx);

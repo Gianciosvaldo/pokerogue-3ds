@@ -73,7 +73,9 @@ typedef enum {
     GC_SCREEN_STARTERS,     /* pick the starters: gc_run_set_starters */
     GC_SCREEN_COMMAND,      /* Fight, Ball, Pokemon or Run for field slot `slot` (CommandPhase) */
     GC_SCREEN_SWITCH,       /* pick the party member to send into field slot `slot` (after a faint, or a
-                             * move that switches out): GC_CH_PICK */
+                             * move that switches out): GC_CH_PICK. After a catch with six in the party it is
+                             * the release prompt instead (events battle:partyFull, menu:swapOrRelease):
+                             * pick the member to release, or -1 = No (can_skip) */
     GC_SCREEN_LEARN_MOVE,   /* party member `party` wants to learn `move` but knows 4 moves: GC_CH_FORGET */
     GC_SCREEN_EVOLVE,       /* party member `party` is evolving into `species`: GC_CH_EVOLVE or GC_CH_CANCEL */
     GC_SCREEN_REWARD,       /* the reward options after a wave (SelectModifierPhase) */
@@ -170,6 +172,9 @@ typedef struct gc_mon {
     uint8_t pokeball;           /* PokeballType it was caught in */
     int16_t met_wave;           /* -1 for a starter */
     uint8_t trainer_slot;       /* enemies: TrainerSlot */
+    uint8_t met_level;          /* Pokemon.metLevel: its level when it joined (a catch sets it again) */
+    int8_t met_biome;           /* Pokemon.metBiome (BiomeId), -1 for a starter */
+    uint16_t met_species;       /* Pokemon.metSpecies */
 } gc_mon;
 
 /* The player's items and the enemy's: upstream's modifier list entries, by modifierTypes key */
@@ -252,6 +257,9 @@ typedef struct gc_run {
     /* the current battle */
     bool in_battle;
     int battle_type;            /* BattleType */
+    /* the wild battle a mystery encounter starts (battle_type stays WILD here): MysteryEncounter.catchAllowed
+     * decides whether a ball may be thrown at it */
+    bool me_battle, me_catch_allowed;
     int trainer_type, trainer_variant;   /* -1 = none */
     int16_t trainer_name, trainer_partner_name;   /* run-core's rolled locale name indexes, -1 = none */
     /* Trainer.getName as upstream builds it, by GC_TNAME_*: text with $t(key) where upstream translates
@@ -299,7 +307,6 @@ enum {
     GC_STUB_EVOLUTION,          /* an evolution condition other than level (item, friendship...) not checked */
     GC_STUB_WEATHER,            /* the biome's weather roll isn't ported */
     GC_STUB_UNPORTED_ENEMY,     /* run-core couldn't generate an enemy (a PR_RUN_UNPORTED_* case): a stand-in */
-    GC_STUB_CATCH,              /* no catching yet */
     GC_STUB_TRAINER_REWARDS,    /* a trainer's own rewards (modifierRewardFuncs, vouchers) not given */
     GC_STUB_POST_BATTLE,        /* PostBattle abilities (Pickup, Honey Gather), Pay Day money, lapsing items */
     GC_STUB_TRAINER_TITLE,      /* a trainer's name in a message without its title ("Aaron" for "Ace Trainer

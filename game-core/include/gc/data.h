@@ -44,10 +44,15 @@ typedef struct {
     int16_t male_percent;       /* -1 if genderless / null, otherwise 0..100 */
     bool has_variants;
     bool has_ability2;
-    bool has_form_changes;
+    uint64_t full_unlocks;      /* PokemonSpecies.getFullUnlocksData(): every dex attribute a catch of it can set */
 } gc_species_dex_info;
 extern const gc_species_dex_info gc_species_dex_info_data[];
 extern const int gc_species_dex_info_count;
+
+/* The form keys a species' form changes lead to (speciesFormChanges[species][].formKey) */
+typedef struct { uint16_t species; const char *form_key; } gc_form_change_target;
+extern const gc_form_change_target gc_form_change_targets_data[];
+extern const int gc_form_change_targets_count;
 
 typedef struct {
     uint16_t species;

@@ -281,6 +281,9 @@ static void init_player_mon(gc_run *run, gc_mon *m, int species, int level)
     m->b.level = level > 0 ? level : 10;
     m->b.is_player = true;
     m->met_wave = (int16_t)run->wave;
+    m->met_level = m->b.level;
+    m->met_biome = (int8_t)run->biome;
+    m->met_species = m->b.species;
     m->pokeball = POKEBALL_TYPE_POKEBALL;
 
     for (int i = 0; i < 6; i++) m->b.ivs[i] = 15;
@@ -299,8 +302,25 @@ static void init_player_mon(gc_run *run, gc_mon *m, int species, int level)
     m->b.hp = m->b.stats[0];
 }
 
+/* MysteryEncounter.catchAllowed: the encounters built withCatchAllowed(true) */
+static bool me_catch_allowed(int type)
+{
+    switch (type) {
+    case GC_ME_FIGHT_OR_FLIGHT: case GC_ME_TELEPORTING_HIJINKS: case GC_ME_DARK_DEAL: case GC_ME_MYSTERIOUS_CHEST:
+    case GC_ME_BERRIES_ABOUND: case GC_ME_SLUMBERING_SNORLAX: case GC_ME_FIERY_FALLOUT: case GC_ME_UNCOMMON_BREED:
+    case GC_ME_DANCING_LESSONS:
+        return true;
+    default:
+        return false;
+    }
+}
+
 static void start_mystery_wild_battle(gc_run *run, int species, int level, bool is_boss, int boss_segments, int omni_boost)
 {
+    /* the encounter's battle is a BattleType.MYSTERY_ENCOUNTER upstream; here it runs as a wild one, and what a
+     * ball may do in it is the encounter's own rule */
+    run->me_battle = true;
+    run->me_catch_allowed = me_catch_allowed(run->mystery_type >= 0 ? run->mystery_type : run->screen.mystery_type);
     run->mystery_type = run->mystery_tier = -1;
     run->in_battle = true;
     run->battle_type = BATTLE_TYPE_WILD;

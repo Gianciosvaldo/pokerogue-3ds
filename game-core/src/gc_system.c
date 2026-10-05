@@ -80,37 +80,27 @@ uint16_t gc_species_root_id(uint16_t species_id) {
     return root;
 }
 
+/* getRootSpeciesId(forStarter = true): down the prevolutions, stopping at the first species that is a starter
+ * (Pikachu stops at Pikachu, a species whose chain has no starter ends at its root) */
+uint16_t gc_species_root_for_starter(uint16_t species_id) {
+    uint16_t root = species_id;
+    for (int depth = 0; depth < 10; depth++) {
+        if (gc_starter_cost(root) >= 0) break;
+        int16_t pre = gc_species_prevolution(root);
+        if (pre <= 0) break;
+        root = (uint16_t)pre;
+    }
+    return root;
+}
+
+/* PokemonSpecies.getFullUnlocksData(), as upstream computes it (the dump has it per species: its sexes, variants
+ * and obtainable forms, which are not all of the species' forms) */
 uint64_t gc_species_full_unlocks_data(uint16_t species_id) {
     if (species_id == 0 || species_id > GC_MAX_SPECIES_ID) return 0;
-    uint64_t attr = 1ULL | 2ULL; /* NON_SHINY | SHINY */
-
-    int male_pct = -1;
-    bool has_var = false;
     for (int i = 0; i < gc_species_dex_info_count; i++) {
-        if (gc_species_dex_info_data[i].species == species_id) {
-            male_pct = gc_species_dex_info_data[i].male_percent;
-            has_var = gc_species_dex_info_data[i].has_variants;
-            break;
-        }
+        if (gc_species_dex_info_data[i].species == species_id) return gc_species_dex_info_data[i].full_unlocks;
     }
-
-    if (male_pct != -1) {
-        if (male_pct > 0) attr |= 4ULL;   /* MALE */
-        if (male_pct < 100) attr |= 8ULL; /* FEMALE */
-    }
-
-    attr |= 16ULL; /* DEFAULT_VARIANT */
-    if (has_var) {
-        attr |= 32ULL; /* VARIANT_2 */
-        attr |= 64ULL; /* VARIANT_3 */
-    }
-
-    const pr_species *sp = gc_species(species_id);
-    int nforms = sp && sp->nforms > 0 ? sp->nforms : 1;
-    for (int f = 0; f < nforms && f < 10; f++) {
-        attr |= (1ULL << (7 + f));
-    }
-    return attr;
+    return 0;
 }
 
 int getStarterValueFriendshipCap(int starter_cost) {
@@ -162,33 +152,41 @@ bool gc_system_add_starter_candy(gc_system *sys, uint16_t species_id, int32_t co
     return true;
 }
 
-static void set_pokemon_species_caught(gc_system *sys, const gc_mon *m, uint16_t species_id, bool increment_count, bool from_egg) {
+/* What gameData.setPokemonSpeciesCaught(pokemon, species, incrementCount, fromEgg, showMessage) is asked, and the
+ * species whose "added as a starter" message it shows, in order */
+typedef struct {
+    bool increment_count, from_egg, show_message, daily;
+    uint16_t started[GC_CAUGHT_STARTED_MAX];
+    int n_started;
+} caught_ctx;
+
+static void set_pokemon_species_caught(gc_system *sys, const gc_mon *m, uint16_t species_id, caught_ctx *cx) {
     if (!sys || species_id == 0 || species_id > GC_MAX_SPECIES_ID) return;
     gc_dex_entry *dex_entry = &sys->dex[species_id];
     uint64_t caught_attr_before = dex_entry->caught_attr;
     uint64_t dex_attr = gc_mon_dex_attr(m) & gc_species_full_unlocks_data(species_id);
     dex_entry->caught_attr |= dex_attr;
 
+    /* a caught battle form also marks the base form (getFormAttr(0) = bit 7); Pikachu's marks Pichu's too, Urshifu's
+     * and Zygarde's forms go by their own bits, and any other species' by a form change that leads to the form's key */
     int form_index = m->b.form;
     if (form_index > 0) {
         if (m->b.species == 25 && species_id == 172) { /* Pikachu / Pichu */
             dex_entry->caught_attr |= (1ULL << 7);
-        } else if (m->b.species == species_id) {
-            bool has_fc = false;
-            for (int i = 0; i < gc_species_dex_info_count; i++) {
-                if (gc_species_dex_info_data[i].species == species_id) {
-                    has_fc = gc_species_dex_info_data[i].has_form_changes;
+        }
+        if (m->b.species == 892) { /* Urshifu */
+            if (form_index == 2) dex_entry->caught_attr |= (1ULL << 7);
+            else if (form_index == 3) dex_entry->caught_attr |= (1ULL << 8);
+        } else if (m->b.species == 718) { /* Zygarde */
+            if (form_index == 4) dex_entry->caught_attr |= (1ULL << 9);
+            else if (form_index == 5) dex_entry->caught_attr |= (1ULL << 10);
+        } else {
+            const char *key = gc_form(m->b.species, form_index)->form_key;
+            for (int i = 0; i < gc_form_change_targets_count; i++) {
+                if (gc_form_change_targets_data[i].species == species_id && !strcmp(gc_form_change_targets_data[i].form_key, key)) {
+                    dex_entry->caught_attr |= (1ULL << 7);
                     break;
                 }
-            }
-            if (m->b.species == 892) { /* Urshifu */
-                if (form_index == 2) dex_entry->caught_attr |= (1ULL << 7);
-                else if (form_index == 3) dex_entry->caught_attr |= (1ULL << 8);
-            } else if (m->b.species == 718) { /* Zygarde */
-                if (form_index == 4) dex_entry->caught_attr |= (1ULL << 9);
-                else if (form_index == 5) dex_entry->caught_attr |= (1ULL << 10);
-            } else if (has_fc) {
-                dex_entry->caught_attr |= (1ULL << 7);
             }
         }
     }
@@ -204,40 +202,60 @@ static void set_pokemon_species_caught(gc_system *sys, const gc_mon *m, uint16_t
     int16_t pre = gc_species_prevolution(species_id);
     bool has_pre = pre > 0;
     bool new_catch = (caught_attr_before == 0);
+    bool has_new_attr = (caught_attr_before & dex_attr) != dex_attr;
 
-    if (increment_count) {
-        if (from_egg) {
+    if (cx->increment_count) {
+        if (cx->from_egg) {
             dex_entry->hatched_count++;
         } else {
             dex_entry->caught_count++;
         }
-        if (!has_pre) {
+        /* a Daily Run gives candy for a catch only when it unlocks something new */
+        if (!has_pre && (!cx->daily || has_new_attr || cx->from_egg)) {
             int shiny_bonus = m->b.shiny ? 5 * (1 << m->variant) : 1;
-            int egg_or_boss_bonus = (from_egg || m->b.is_boss) ? 2 : 1;
+            int egg_or_boss_bonus = (cx->from_egg || m->b.is_boss) ? 2 : 1;
             gc_system_add_starter_candy(sys, species_id, shiny_bonus * egg_or_boss_bonus);
         }
     }
 
-    /* Upstream line 1738: if a species is a starter and newCatch is true,
-     * setPokemonCaught with showMessage = false (increment_count = false) returns early
-     * before checkPrevolution */
-    if (new_catch && gc_starter_cost(species_id) >= 0 && !increment_count) {
+    const bool started = new_catch && gc_starter_cost(species_id) >= 0;
+    /* a new starter with showMessage = false returns before checkPrevolution; the message comes before it */
+    if (started && !cx->show_message) {
         return;
     }
+    if (started && cx->n_started < GC_CAUGHT_STARTED_MAX) cx->started[cx->n_started++] = species_id;
 
     if (has_pre) {
-        set_pokemon_species_caught(sys, m, (uint16_t)pre, increment_count, from_egg);
+        set_pokemon_species_caught(sys, m, (uint16_t)pre, cx);
     }
 }
 
-bool gc_system_set_pokemon_caught(gc_system *sys, const gc_mon *m, bool increment_count, bool from_egg) {
+bool gc_system_set_pokemon_caught_ex(gc_system *sys, const gc_mon *m, bool increment_count, bool from_egg,
+                                     bool show_message, bool daily, gc_caught_report *report) {
+    if (report) report->n_started = 0;
     if (!sys || !m || m->b.species == 0 || m->b.species > GC_MAX_SPECIES_ID) return false;
     uint16_t root = gc_species_root_id(m->b.species);
     if (!increment_count && sys->dex[root].caught_attr == 0) {
         return false;
     }
-    set_pokemon_species_caught(sys, m, m->b.species, increment_count, from_egg);
+    caught_ctx cx;
+    memset(&cx, 0, sizeof cx);
+    cx.increment_count = increment_count;
+    cx.from_egg = from_egg;
+    cx.show_message = show_message;
+    cx.daily = daily;
+    set_pokemon_species_caught(sys, m, m->b.species, &cx);
+    if (report) {
+        report->n_started = cx.n_started;
+        memcpy(report->started, cx.started, sizeof cx.started);
+    }
     return true;
+}
+
+/* The callers that aren't a catch (an egg, a form change, a lifecycle step) ask for showMessage the way
+ * incrementCount goes: a count of one is a catch, which shows it, and 0 is an update, which doesn't */
+bool gc_system_set_pokemon_caught(gc_system *sys, const gc_mon *m, bool increment_count, bool from_egg) {
+    return gc_system_set_pokemon_caught_ex(sys, m, increment_count, from_egg, increment_count, false, NULL);
 }
 
 void gc_system_add_friendship(gc_system *sys, const gc_run *run, gc_mon *m, int friendship, bool capped) {
