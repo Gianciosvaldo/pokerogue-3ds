@@ -92,6 +92,32 @@ extern const pr_item_fc pr_item_fcs[];
 extern const pr_fc_cond pr_fc_conds[];
 extern const pr_species_slice pr_item_fc_species[];
 extern const int pr_item_fc_species_count;
+/* By TrainerType (card 97): whether trainerConfigs has it, config.isBoss, the voucher TrainerVictoryPhase validates
+ * (vouchers[TrainerType[t]].voucherType, a VoucherType; -1 = none), config.moneyMultiplier, the
+ * modifierRewardFuncs' items (-1 pads) and whether it has a genModifiersFunc */
+typedef struct {
+    bool has_config, is_boss;
+    int8_t voucher_type;
+    double money_multiplier;
+    uint8_t n_reward_items;
+    int16_t reward_items[2];
+    bool gen_modifiers;
+} pr_reward_trainer;
+extern const pr_reward_trainer pr_reward_trainers[];
+extern const int pr_reward_trainer_count;
+/* The fixed battles' reward settings. A battleConfig row: mode (GameModes), single_gen 0, a wave of
+ * gameMode.battleConfig. A Single Generation row: mode -1, single_gen 1..9, a wave its FIXED_BATTLES hook takes
+ * over. has_custom: the config has customModifierRewardSettings (guaranteedModifierTiers, allowLuckUpgrades,
+ * fillRemaining: the dump fails on any other setting) */
+typedef struct {
+    int8_t mode, single_gen;
+    uint16_t wave;
+    bool has_custom;
+    int8_t n_tiers, tiers[8];
+    bool allow_luck_upgrades, fill_remaining;
+} pr_fixed_reward;
+extern const pr_fixed_reward pr_fixed_rewards[];
+extern const int pr_fixed_reward_count;
 
 /* An item and its generated argument (-1 = none): a ModifierType as the rolls see it */
 typedef struct { uint16_t item; int16_t arg; } pr_item_type;
@@ -285,6 +311,45 @@ int pr_reward_select_start(pr_reward_ctx *ctx, const pr_reward_select *sel, pr_r
 /* ---- the fixed rewards of a victory (VictoryPhase): ModifierRewardPhase items, in the order they're given,
  * and whether a reward screen (SelectModifierPhase) follows. Returns how many items. ---- */
 int pr_reward_victory_rewards(const pr_run *run, int wave, uint16_t out[8], bool *select_screen);
+
+/* ---- the trainers' own rewards (card 97, src/trainer_rewards.c) ---- */
+/* The fixed battle's reward screen settings on `wave`. Victory path (VictoryPhase):
+ * gameMode.getFixedBattle(wave)?.customModifierRewardSettings. Biome path (SelectBiomePhase, when a challenge
+ * turns the party heal off): isFixedBattle(wave) ? getFixedBattle(wave)?.customModifierRewardSettings : undefined.
+ * With Single Generation on (run->challenge_generation), its FIXED_BATTLES hook runs first and its Elite Four and
+ * champion waves draw on run->rng (randSeedItem), as upstream's do. Returns true with *out set (reroll_multiplier
+ * NaN, no options or funcs) when there are settings; false with *out untouched when there are none. */
+bool pr_reward_fixed_battle_settings(pr_run *run, int wave, bool biome_path, pr_reward_custom *out);
+
+/* TrainerVictoryPhase.start() for trainerConfigs[trainer_type]: the phases it queues, in order (MoneyRewardPhase,
+ * then a ModifierRewardPhase per modifierRewardFunc, then the voucher's), and what validateVoucher changes. */
+typedef struct {
+    double money_multiplier;      /* MoneyRewardPhase(config.moneyMultiplier) */
+    uint16_t items[4];            /* the ModifierRewardPhase items, in queue order */
+    int n_items;
+    bool unlock_voucher;          /* validateVoucher unlocked the trainer's voucher now: voucherUnlocks[key] is set
+                                   * and voucherCounts[voucher_type] goes up by one */
+    int8_t voucher_type;          /* the trainer's voucher's VoucherType, -1 = it has none */
+} pr_reward_trainer_victory;
+/* voucher_unlocked: gameData.voucherUnlocks has the trainer's voucher before the phase.
+ * upgrade_unlocked_vouchers: timedEventManager.getUpgradeUnlockedVouchers() (false outside events).
+ * Returns 0, or -1 for a TrainerType with no config. */
+int pr_reward_trainer_victory_rewards(int trainer_type, bool voucher_unlocked, bool upgrade_unlocked_vouchers,
+                                      pr_reward_trainer_victory *out);
+
+/* Trainer.genModifiers(party): the enemy trainer's own held items, config.genModifiersFunc for the seven trainers
+ * that have one (Red, Steven, Wallace, Kieran, Guzma's rematch, the rival's 5th and 6th fights; the dump fails if
+ * upstream gives another trainer one). BattleScene.generateEnemyModifiers adds them before the random ones (that
+ * merge is run-core's). None of them rolls. */
+typedef struct {
+    uint16_t species;             /* species.speciesId */
+    uint16_t ability;             /* getAbility(true).id */
+    uint16_t passive;             /* getPassiveAbility().id if hasPassive(), else 0 */
+} pr_reward_enemy_mon;
+/* party: getEnemyParty(). The items in the order the function makes them (owner: the holder's party index,
+ * stack 1). Returns how many (0 for a trainer without the function), or -1 where upstream throws (the party
+ * has no member at a slot the function reads without `?.`). */
+int pr_reward_trainer_items(int trainer_type, const pr_reward_enemy_mon *party, int n_party, pr_owned_item out[2]);
 
 /* ---- Memory Mushroom / move relearning (Task 43) ---- */
 enum {
