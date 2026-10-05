@@ -1075,7 +1075,15 @@ static void resolve_counter_attack_target(pr_battle *bt, pr_engine *e, int ph)
         int filter = (c->nulls & 2u) ? -1 : c->moveFilter; /* bit 1: moveFilter */
         int d = pr_counter_attack_target(bt, m->pokemon, filter);
         if (d != -2 && d != BATTLER_INDEX_ATTACKER) {
-            if (bt->double_battle) pr_note_unported(bt, PR_FEAT_DOUBLES);
+            /* in doubles, an attacker that is no longer active on the field: the first Pokemon of
+             * its side's field with HP left, else ATTACKER */
+            const pr_pokemon *dp = d >= 0 && d < 4 ? bt->field[d] : NULL;
+            if (bt->double_battle && !is_active_on_field(dp)) {
+                int side = d >= BATTLER_INDEX_ENEMY ? 2 : 0;
+                d = BATTLER_INDEX_ATTACKER;
+                for (int k = side; k < side + 2; k++)
+                    if (bt->field[k] && bt->field[k]->hp > 0) { d = pr_battler_index(bt, bt->field[k]); break; }
+            }
             target = d;
         }
     }
@@ -1253,7 +1261,7 @@ static void use_move(pr_battle *bt, pr_engine *e, int ph, bool charging)
     }
     if (charging) {
         /* chargeMove: MoveChargePhase(battlerIndex, targets[0], move, NORMAL ? IGNORE_PP : useMode) */
-        int c = new_pokemon_phase(e, PH_MOVE_CHARGE, m->battler);
+        int c = new_pokemon_phase(e, PH_MOVE_CHARGE, (int8_t)pr_battler_index(bt, user));   /* user.getBattlerIndex() */
         if (c < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }
         pr_target_list *tl = tlist(e, m->targets);
         PH(c)->pokemon = user;
@@ -1265,16 +1273,26 @@ static void use_move(pr_battle *bt, pr_engine *e, int ph, bool charging)
         return;
     }
     /* executeMove: unshiftNew("MoveEffectPhase", battlerIndex, targets, move, useMode) */
-    int fx = new_pokemon_phase(e, PH_MOVE_EFFECT, m->battler);
+    /* user.getBattlerIndex(): the user's field slot now, which a ToggleDoublePositionPhase since
+     * the MovePhase was made can have changed */
+    int fx = new_pokemon_phase(e, PH_MOVE_EFFECT, (int8_t)pr_battler_index(bt, user));
     if (fx < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }
     PH(fx)->targets = m->targets;
     PH(fx)->move_id = m->move.id;
     PH(fx)->use_mode = m->use_mode;
-    /* the constructor drops the user from an ALL_NEAR_OTHERS list (doubles only) */
+    /* the constructor drops the user from an ALL_NEAR_OTHERS list (a doubles slot that took a
+     * fainted ally's index): targets.splice(i, i + 1) on the shared array, which removes i + 1
+     * entries from i */
     pr_target_list *tl = tlist(e, m->targets);
     if (tl && pr_moves[m->move.id].target == MOVE_TARGET_ALL_NEAR_OTHERS)
         for (int k = 0; k < tl->n; k++)
-            if (tl->v[k] == m->battler) pr_note_unported(bt, PR_FEAT_DOUBLES);
+            if (tl->v[k] == PH(fx)->battler) {
+                int del = k + 1 < tl->n - k ? k + 1 : tl->n - k;
+                memmove(&tl->v[k], &tl->v[k + del], (size_t)(tl->n - k - del));
+                tl->n = (uint8_t)(tl->n - del);
+                pr_targets_changed(bt, e, m->targets);
+                break;
+            }
     PH(fx)->n_hit_checks = tl ? tl->n : 0;
     for (int k = 0; k < PH(fx)->n_hit_checks && k < 4; k++) {
         PH(fx)->hit_check[k] = HIT_CHECK_RESULT_PENDING;
@@ -1574,7 +1592,18 @@ static double accuracy_multiplier(pr_battle *bt, pr_pokemon *user, pr_pokemon *t
     double eva = 1;
     pr_ab_params se = {.pokemon = target, .stat = STAT_EVA, .value = &eva, .move = move};
     pr_apply_ab_attrs(bt, PR_AC_StatMultiplierAbAttr, &se);
-    if (pr_get_ally(bt, user)) pr_note_unported(bt, PR_FEAT_DOUBLES);   /* AllyStatMultiplierAbAttr */
+    /* the user's ally's AllyStatMultiplierAbAttr (Victory Star), on both multipliers */
+    const pr_pokemon *ally = pr_get_ally(bt, user);
+    if (ally) {
+        bool ignore = pr_has_ability_with_attr(bt, user, PR_AC_MoveAbilityBypassAbAttr)
+                      || (pr_moves[move].flags & MOVE_FLAGS_IGNORE_ABILITIES);
+        pr_ab_params la = {.pokemon = ally, .stat = STAT_ACC, .value = &acc, .ignore_ability = ignore, .move = move};
+        pr_apply_ab_attrs(bt, PR_AC_AllyStatMultiplierAbAttr, &la);
+        pr_ab_params le = la;
+        le.stat = STAT_EVA;
+        le.value = &eva;
+        pr_apply_ab_attrs(bt, PR_AC_AllyStatMultiplierAbAttr, &le);
+    }
     return acc / eva;
 }
 
@@ -1653,7 +1682,12 @@ static int hit_check(pr_battle *bt, pr_engine *e, int ph, pr_pokemon *target, do
     if (mv->target == MOVE_TARGET_USER) { *eff_out = 1; return HIT_CHECK_RESULT_HIT; }
     bool field_targeted = is_field_targeted(move);
     if (!is_active_on_field(target) && !field_targeted) return HIT_CHECK_RESULT_TARGET_NOT_ON_FIELD;
-    if (!field_targeted && bt->double_battle) pr_note_unported(bt, PR_FEAT_DOUBLES);   /* Commander */
+    /* Commander: moves against a Tatsugiri in its ally's mouth miss */
+    if (!field_targeted && bt->double_battle) {
+        const pr_pokemon *ally = pr_get_ally(bt, target);
+        const pr_battler_tag *cmd = ally ? pr_get_battler_tag(ally, BATTLER_TAG_TYPE_COMMANDED) : NULL;
+        if (cmd && pr_pokemon_by_id(bt, cmd->source_id) == target) return HIT_CHECK_RESULT_MISS;
+    }
     bool bypass = field_targeted || check_bypass_acc_and_invuln(bt, user, target, move);
     const pr_battler_tag *semi = pr_find_battler_tag_class(target, PR_TAGCLASS_SEMI_INVULNERABLE);
     if (semi && !bypass) {
@@ -2648,7 +2682,9 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
             }
         }
     }
-    if (bt->double_battle) pr_note_unported(bt, PR_FEAT_DOUBLES);
+    /* in double battles, moves still to come at the fainted Pokemon go to its ally */
+    const pr_pokemon *fainted_ally = pr_get_ally(bt, p);
+    if (bt->double_battle && fainted_ally) pr_redirect_moves(bt, e, p, fainted_ally);
 
     /* the faint cry's callback, then the tween's */
     pr_event_add(bt, e, PR_EV_FAINT, f->battler, -1, 0, 0, NULL);
@@ -3514,6 +3550,27 @@ static void attempt_run_phase(pr_battle *bt, pr_engine *e, int ph)
     }
 }
 
+/* ToggleDoublePositionPhase: the first of getPlayerField() active on the field moves (its sprite;
+ * to the centre after a faint left it alone); once there, one in field slot 1 swaps party slots
+ * with the Pokemon in slot 0, and so takes field index 0 */
+static void toggle_double_position_phase(pr_battle *bt)
+{
+    if (!bt->double_battle) return;                       /* singles: the one on the field is at index 0 */
+    if (!bt->n_party[0]) { pr_note_unported(bt, PR_FEAT_PARTY); return; }
+    int n = bt->n_party[0] < 2 ? bt->n_party[0] : 2;
+    for (int k = 0; k < n; k++) {
+        pr_pokemon *p = bt->party[0][k];
+        if (!is_active_on_field(p)) continue;
+        if (k == 1) {
+            bt->party[0][1] = bt->party[0][0];
+            bt->party[0][0] = p;
+            bt->field[0] = bt->party[0][0];
+            bt->field[1] = bt->party[0][1];
+        }
+        return;
+    }
+}
+
 void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
 {
     switch (PH(ph)->type) {
@@ -3568,10 +3625,7 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_SUMMON: pr_summon_phase(bt, e, ph); break;
     case PH_INIT_ENCOUNTER: pr_init_encounter_phase(bt, e, ph); break;
     case PH_CHECK_SWITCH: pr_check_switch_phase(bt, e, ph); break;
-    case PH_TOGGLE_DOUBLE_POSITION:
-        /* singles: the Pokemon on the field moves to the centre (only the sprite moves) */
-        if (bt->double_battle) pr_note_unported(bt, PR_FEAT_DOUBLES);
-        break;
+    case PH_TOGGLE_DOUBLE_POSITION: toggle_double_position_phase(bt); break;
     case PH_MOVE_REFLECT: move_reflect_phase(bt, e, ph); break;
     case PH_SHINY_SPARKLE: pr_event_add(bt, e, PR_EV_SHINY_SPARKLE, PH(ph)->battler, -1, 0, 0, NULL); break;
     case PH_QUIET_FORM_CHANGE: quiet_form_change_phase(bt, e, ph); break;

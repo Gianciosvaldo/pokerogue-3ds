@@ -392,6 +392,8 @@ void pr_targets_changed(pr_battle *bt, pr_engine *e, int list);
 /* pokemon.pushMoveHistory(entry) where entry.targets is shared list `list` (-1 = own copy) */
 void pr_push_history_shared(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_turn_move tm, int list);
 void pr_sync_queued_movers(pr_battle *bt, pr_engine *e);
+/* redirectPokemonMoves(removed, ally): queued single-target moves at `removed` go to `ally` */
+void pr_redirect_moves(pr_battle *bt, pr_engine *e, const pr_pokemon *removed, const pr_pokemon *ally);
 
 /* the phases' start() (src/phases.c) */
 void pr_phase_run(pr_battle *bt, pr_engine *e, int ph);

@@ -197,10 +197,18 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
     case PR_AC_HealStatusEffectAttr: {
         const pr_attr_HealStatusEffectAttr *x = P(HealStatusEffectAttr, a);
         if (!effect_can_apply(ef, user, target)) return;
-        /* Shield Dust stops Sparkling Aria's cure when it has one target (getMoveTargets) */
+        /* getMoveTargets(user, move), which draws a RANDOM_NEAR_ENEMY move's target from the battle
+         * RNG when there are two opponents (doubles; in singles it draws nothing) */
+        int8_t mt[4];
+        bool multiple;
+        int nmt = bt->double_battle ? pr_get_move_targets(bt, user, move, -1, mt, &multiple) : 1;
+        /* Shield Dust stops Sparkling Aria's cure when it has one target (left as before in singles) */
         if (move == MOVE_ID_SPARKLING_ARIA && pr_has_ability_with_attr(bt, target, PR_AC_IgnoreMoveEffectsAbAttr)) {
-            pr_note_unported(bt, a->cls);
-            return;
+            if (!bt->double_battle) {
+                pr_note_unported(bt, a->cls);
+                return;
+            }
+            if (nmt == 1) return;
         }
         pr_pokemon *p = ef->self_target ? user : target;
         if (!p->status) return;
@@ -343,7 +351,14 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
             n = last->n_targets;
             memcpy(tg, last->targets, (size_t)n);
         }
-        if (bt->double_battle && n == 1) pr_note_unported(bt, PR_FEAT_DOUBLES);   /* a fainted target's ally */
+        /* in doubles, a lone target that has fainted (and isn't the target's ally): its ally, when
+         * that one hasn't fainted */
+        if (bt->double_battle && n == 1) {
+            const pr_pokemon *ft = tg[0] >= 0 && tg[0] < 4 ? bt->field[tg[0]] : NULL;
+            if (!ft) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }   /* upstream would throw */
+            const pr_pokemon *fa = ft->hp <= 0 && ft != pr_get_ally(bt, target) ? pr_get_ally(bt, ft) : NULL;
+            if (fa && fa->hp > 0) tg[0] = (int8_t)pr_battler_index(bt, fa);
+        }
         pr_queue_msg(bt, e, pr_msg2("moveTriggers:instructingMove", pr_arg_pokemon(bt, "userPokemonName", user),
                                     pr_arg_pokemon(bt, "targetPokemonName", target)));
         pr_unshift_move_phase(bt, e, target, mm, slot, tg, n, MOVE_USE_MODE_NORMAL, MOVE_PHASE_TIMING_MODIFIER_FIRST);

@@ -682,6 +682,12 @@ double pr_calculate_shell_bell_recovery(pr_battle *bt, const pr_pokemon *p)
  * a spread move ("multiple") with more than one active target. */
 static bool spread_with_several_targets(pr_battle *bt, int move, const pr_pokemon *user)
 {
+    if (bt->double_battle) {                      /* the whole call (a RANDOM_NEAR_ENEMY move draws) */
+        int8_t tg[4];
+        bool multiple = false;
+        int n = pr_get_move_targets(bt, user, move, -1, tg, &multiple);
+        return multiple && n > 1;
+    }
     /* applyMoveAttrs("VariableTargetAttr") can change the target first (Expanding Force...) */
     if (pr_hook_move(bt, (uint16_t)move, PR_AC_VariableTargetAttr)) return false;
     bool user_in = false, ally_in = false, opponents_in = false;
