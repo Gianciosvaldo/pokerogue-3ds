@@ -177,7 +177,6 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 | In a wave whose number is a multiple of 10, once every enemy has fainted, upstream's CheckInterludePhase (`onInterlude`) drops the rest of that turn's weather, berry and status-effect phases and flags the TurnEndPhase; battle-core has it unported (`(phase CheckInterludePhase)` in the soak's unported list: 218 of 1000 runs), so those effects run | battle-core: CheckInterludePhase |
 | No weather roll for a new biome | port of `getRandomWeatherType` |
 | Evolution conditions on items, held items or the dex aren't met | reward-core, the dex |
-| Fleeing through the run loop | Task 77 |
 | A catch doesn't count `gameStats`, validate achievements (hidden ability, shiny party, legendary...) or run `Pokemon.addToParty`'s form change trigger; the Limited Catch challenge (`POKEMON_ADD_TO_PARTY`) isn't ported | later cards |
 | The shake rolls are battle-core's, and by reading they differ from upstream's critical-capture chance (`getCriticalCaptureChance`): battle-core's multiplier is 2.5 in a Daily Run and 0 otherwise, where upstream's grows with the species caught (0 to 2.5) and with a Catching Charm, and battle-core gives any Challenge Mode run 0 where upstream does for the Fresh Start challenge only. Not checked by a differential: the upstream test harness skips the rolls. A caught boss's score has the missing multiplier (the row above) | battle-core |
 | A trainer's own rewards (the config's reward items, a boss's voucher) aren't given | reward-core |
