@@ -2,9 +2,12 @@
 #include "run_screen.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "ball_menu.h"
+#include "clear_ui.h"
+#include "game_over_ui.h"
 #include "gm_enum_names.h"
 #include "pr_data.h"
 #include "battle_anim.h"
@@ -14,6 +17,7 @@
 #include "menus.h"
 #include "party_screen.h"
 #include "pr_enums.h"
+#include "save.h"
 #include "shop_ui.h"
 #include "ui.h"
 #include "ui_widgets.h"
@@ -30,28 +34,41 @@ static struct {
   rs_config cfg;
   rs_stats st;
   uint64_t rng;                 /* the stand-in team's */
-  /* the events of the current drain, handled one by one (lazily: the screen must have played the
-   * earlier ones before a later one is converted) */
+  int active_slot;              /* active save slot (0..4) */
+  /* the events of the current drain, handled one by one */
   gc_event q[GC_MAX_EVENTS];
   bool skip[GC_MAX_EVENTS];
   int nq, qi;
   bool swap_prompt;             /* the drain has "swap or release" for a caught Pokemon */
   bool learn_drop;              /* the next drain starts with the learn dialog's own messages */
-  bool swap_replaced;           /* a caught Pokemon replaced the one on the field: the screen must show the new one */
+  bool swap_replaced;           /* a caught Pokemon replaced the one on the field */
   /* what the battle screen shows */
   bool present[2];              /* a Pokemon of each side is out */
   int shown;                    /* party index of the player's Pokemon on screen, -1 none */
-  bool fade_done;               /* a fade is already at black (a new run): the next wave doesn't fade again */
+  bool fade_done;               /* a fade is already at black */
   int wave_ev;                  /* the WAVE event being shown */
   /* the screen events being played */
   bv_event ev[EV_CAP];
   char txt[TXT_CAP][TXT_LEN];
   int n_ev, ev_pos, n_txt;
   int refused_in_row;
-} G = {.shown = -1};
+} G = {.shown = -1, .active_slot = 0};
 
 static void pump(void* arg);
 static void screen_step(void);
+static void new_run(void);
+
+void rs_set_slot(int slot) {
+  if (slot >= 0 && slot < 5) G.active_slot = slot;
+}
+
+int rs_get_slot(void) {
+  return G.active_slot;
+}
+
+void rs_on_end_screen_dismissed(void) {
+  new_run();
+}
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -66,14 +83,12 @@ static int pidx_of(const pr_pokemon* p) {
   return (int)(m - G.run.party);
 }
 
-/* party index -> the party screen's slot (upstream's party order) */
 static int slot_of(int party_index) {
   for (int k = 0; k < G.run.n_party; k++)
     if (G.run.party_order[k] == party_index) return k;
   return -1;
 }
 
-/* A party member as it was before the experience this drain still has to show (the run is ahead of the screen) */
 static gc_mon before_exp(int idx) {
   gc_mon m = G.run.party[idx];
   bool first = true;
@@ -81,7 +96,7 @@ static gc_mon before_exp(int idx) {
     const gc_event* e = &G.q[j];
     if (e->kind != GC_EV_EXP || e->a != idx) continue;
     m.exp -= e->b;
-    if (first) m.b.level = (uint8_t)e->c; /* the level before the first gain */
+    if (first) m.b.level = (uint8_t)e->c;
     first = false;
   }
   return m;
@@ -106,7 +121,6 @@ static uint32_t rnd(uint32_t n) {
   return n ? (uint32_t)(G.rng % n) : 0;
 }
 
-/* "RARE_CANDY" -> "Rare Candy" (stand-in for the reward's own name) */
 static const char* pretty_key(const char* key, char* out, int n) {
   int j = 0;
   bool up = true;
@@ -124,7 +138,6 @@ static const char* pretty_key(const char* key, char* out, int n) {
   return out;
 }
 
-/* game-core's reason for a refusal: an i18n key ("partyUiHandler:noEnergy") or a plain sentence */
 static const char* why_text(const char* why, char* out, int n) {
   if (!why) why = "";
   if (strchr(why, ':') && !strchr(why, ' ')) {
@@ -150,7 +163,7 @@ static void put_msg(const char* text, bool prompt) {
 }
 
 static bool put_gc_msg(const pr_msg* m) {
-  if (!m->key) return false; /* text not ported in battle-core: nothing to show */
+  if (!m->key) return false;
   char* t = txt_new();
   pr_msg_format(m, be_text_source(), t, TXT_LEN);
   if (!t[0]) return false;
@@ -169,7 +182,6 @@ static void play_chunk(void) {
   bv_play(&G.ev[pos], n, pump, NULL);
 }
 
-/* Shows one message, then goes on with the driver */
 static void say(const char* text) {
   G.n_ev = G.ev_pos = G.n_txt = 0;
   put_msg(text, false);
@@ -185,8 +197,6 @@ static void drain(void) {
   while (G.nq < GC_MAX_EVENTS && gc_run_next_event(&G.run, &G.q[G.nq])) G.nq++;
   const gc_screen* s = gc_run_screen(&G.run);
 
-  /* the learn dialog (menus' learn_move_start) shows what game-core says around its screen: drop
-   * game-core's copies, both before the screen and after the answer */
   if (G.learn_drop) {
     G.learn_drop = false;
     for (int i = 0; i < G.nq; i++) {
@@ -205,7 +215,6 @@ static void drain(void) {
     if (msg_is(e, "menu:swapOrRelease")) G.swap_prompt = true;
     if (s->kind == GC_SCREEN_LEARN_MOVE && (msg_is(e, "battle:learnMovePrompt") || msg_is(e, "battle:learnMoveLimitReached")))
       G.skip[i] = true;
-    /* a battle's send-out text is in battle-core's events and again as a game-core message right after them */
     if (e->kind == GC_EV_BATTLE) {
       for (int j = i + 1; j < G.nq && G.q[j].kind == GC_EV_MESSAGE; j++) {
         const char* k = G.q[j].msg.key;
@@ -223,7 +232,6 @@ static void drain(void) {
   }
 }
 
-/* The turn's events are the battle as it stands only when the run stopped right after them */
 static bool settled_after(int i) {
   const gc_screen* s = gc_run_screen(&G.run);
   if (s->kind != GC_SCREEN_COMMAND && s->kind != GC_SCREEN_SWITCH) return false;
@@ -248,7 +256,6 @@ static void preload_moves(void) {
     for (int k = 0; k < G.run.enemy[i].b.n_moves; k++) ba_preload_move(G.run.enemy[i].b.moves[k]);
 }
 
-/* At black: the new wave's scene, and the intro events (already in G.ev up to the call) */
 static void wave_black(void* arg) {
   (void)arg;
   const gc_event* w = &G.q[G.wave_ev];
@@ -275,13 +282,11 @@ static void wave_black(void* arg) {
   G.present[1] = !trainer && !mystery && s.enemy.species > 0;
   if (!G.present[0]) G.shown = -1;
 
-  /* the intro: arenas slide in, then the encounter's message */
   G.n_ev = G.ev_pos = G.n_txt = 0;
   bv_event* e = ev_new();
   char* t = txt_new();
   t[0] = 0;
   if (trainer || mystery) {
-    /* the first game-core message after the wave is the encounter text ("X would like to battle!") */
     for (int j = G.wave_ev + 1; j < G.nq && j <= G.wave_ev + 5; j++) {
       if (G.q[j].kind == GC_EV_MESSAGE && !G.skip[j]) {
         if (G.q[j].msg.key) pr_msg_format(&G.q[j].msg, be_text_source(), t, TXT_LEN);
@@ -293,7 +298,7 @@ static void wave_black(void* arg) {
   } else {
     for (int j = G.wave_ev + 1; j < G.nq && j <= G.wave_ev + 5; j++)
       if (G.q[j].kind == GC_EV_MESSAGE && msg_is(&G.q[j], "battle:singleWildAppeared")) {
-        G.skip[j] = true; /* the intro shows it */
+        G.skip[j] = true;
         break;
       }
   }
@@ -304,7 +309,6 @@ static void wave_black(void* arg) {
 static void begin_wave(int i) {
   G.wave_ev = i;
   G.st.waves++;
-  /* fade between scenes, as upstream does (a new run is already at black) */
   if (G.fade_done || ui_depth() == 0) {
     G.fade_done = false;
     wave_black(NULL);
@@ -313,8 +317,6 @@ static void begin_wave(int i) {
   }
 }
 
-/* The Pokemon on the field, synced into the screen's copy: moves and PP (the fight menu reads them there),
- * name and level */
 static void sync_shown(void) {
   const gc_mon* me = gc_field_mon(&G.run, 0);
   bv_mon* shown = bv_mon_of(BV_PLAYER);
@@ -339,8 +341,6 @@ static void sync_shown(void) {
   for (int i = 0; i < 3; i++) shown->types[i] = m.types[i];
 }
 
-/* Converts and starts the events of one game-core event. True when something is playing (the driver
- * goes on when it ends), false to go straight on to the next event. */
 static bool handle_event(int i) {
   const gc_event* e = &G.q[i];
   G.st.events[e->kind & 15]++;
@@ -401,12 +401,11 @@ static bool handle_event(int i) {
           }
           break;
         }
-        if (G.present[1]) break; /* the wild encounter's intro already has it out */
+        if (G.present[1]) break;
       }
       static bv_mon sent;
       const gc_mon* m = side == 0 ? &G.run.party[e->b] : &G.run.enemy[e->b];
       sent = make_mon(m, side == 0);
-      /* the send-out text follows the summon in game-core's events */
       char* text = NULL;
       if (i + 1 < G.nq && (msg_is(&G.q[i + 1], "battle:playerGo") || msg_is(&G.q[i + 1], "battle:trainerSendOut"))) {
         text = txt_new();
@@ -432,7 +431,6 @@ static bool handle_event(int i) {
 
     case GC_EV_EXP: {
       if (e->a != G.shown || !G.present[0]) break;
-      /* a level up follows: its event runs the bar to full and starts the next level */
       if (i + 1 < G.nq && G.q[i + 1].kind == GC_EV_LEVEL_UP && G.q[i + 1].a == e->a) break;
       *ev_new() = (bv_event){.type = BEV_EXP, .battler = BV_PLAYER, .a = (int)(gc_exp_level_fraction(&G.run.party[e->a]) * 1000)};
       break;
@@ -460,11 +458,22 @@ static bool handle_event(int i) {
         snprintf(sh->name, sizeof sh->name, "%s", m.name);
         sh->max_hp = m.max_hp;
         sh->level = m.level;
-        /* the new species' stats move the HP with the maximum */
         if (m.hp > sh->hp)
           *ev_new() = (bv_event){.type = BEV_HEAL, .battler = BV_PLAYER, .a = m.hp};
         else if (m.hp < sh->hp)
           *ev_new() = (bv_event){.type = BEV_DAMAGE, .battler = BV_PLAYER, .a = m.hp, .b = HIT_RESULT_INDIRECT};
+      }
+      break;
+
+    case GC_EV_SAVE_POINT:
+      if (!bv_playing()) {
+        char name[32];
+        snprintf(name, sizeof name, "session_%d", G.active_slot);
+        char buf[GC_SAVE_MAX];
+        size_t len = gc_run_save(&G.run, buf, sizeof buf);
+        if (len > 0) {
+          save_write(name, buf, len);
+        }
       }
       break;
 
@@ -475,7 +484,7 @@ static bool handle_event(int i) {
       break;
     }
 
-    default: /* TRAINER, BIOME, TURN, MONEY, MOVE_LEARNED, SAVE_POINT: nothing to show (the messages say it) */
+    default:
       break;
   }
   if (G.n_ev == 0) return false;
@@ -505,8 +514,6 @@ static void pump(void* arg) {
   }
 }
 
-/* Gives game-core the player's answer and takes in the events it queued (the driver goes on with pump). A refusal is
- * told to the player, who then answers again. */
 static bool submit(const gc_choice* c) {
   const char* why = NULL;
   if (gc_run_choose(&G.run, c, &why)) {
@@ -517,7 +524,7 @@ static bool submit(const gc_choice* c) {
   char buf[200];
   G.st.refused++;
   G.refused_in_row++;
-  say(why_text(why, buf, sizeof buf)); /* the player answers again; a person is never locked out */
+  say(why_text(why, buf, sizeof buf));
   return false;
 }
 
@@ -532,15 +539,11 @@ static bool answer(const gc_choice* c) {
 static char g_reason[4][160];
 static void on_command(bv_command c, void* arg);
 
-/* The screen shows the Pokemon the run has on the field. A caught Pokemon that replaces the one out leaves the screen
- * behind game-core's field: bring them together before the command is asked. True when events are playing. */
 static bool resync_field(void) {
   const gc_mon* me = gc_field_mon(&G.run, 0);
   if (!me) return false;
   const int idx = (int)(me - G.run.party);
   if (G.present[0] && G.shown == idx && bv_mon_of(BV_PLAYER)->species == me->b.species) {
-    /* the same Pokemon: its HP and status are what the run says (battle-core doesn't make an event for every change, e.g.
-     * a Disguise that busts as the battle ends; the converter catches up only while the battle goes on) */
     G.n_ev = G.ev_pos = G.n_txt = 0;
     for (int side = 0; side < 2; side++) {
       const gc_mon* m = gc_field_mon(&G.run, side);
@@ -650,20 +653,17 @@ static void on_command(bv_command c, void* arg) {
   }
 }
 
-/* ---- the Pokemon to send in (after a faint, or a move that switches out; or which to release for a catch) ---- */
-
 static void on_send_pick(int slot, int option, void* arg) {
   (void)arg;
   if (option != PS_SEND_OUT && option != PS_CANCEL) return;
   const gc_screen* s = gc_run_screen(&G.run);
   gc_choice c = {.kind = GC_CH_PICK, .a = -1};
   if (option == PS_SEND_OUT && slot >= 0 && slot < G.run.n_party) c.a = G.run.party_order[slot];
-  else if (!s->can_skip) return; /* no cancelling a faint switch */
+  else if (!s->can_skip) return;
   ps_close();
   const bool swap = G.swap_prompt;
   if (!submit(&c)) return;
   if (swap && c.a >= 0 && c.a == G.shown) {
-    /* the caught Pokemon took the place of the one on the field: the screen's copy is gone */
     G.present[0] = false;
     G.shown = -1;
     G.swap_replaced = true;
@@ -674,8 +674,6 @@ static void on_send_pick(int slot, int option, void* arg) {
 static void open_switch(const gc_screen* s) {
   ps_open(&G.run.bt, s->can_skip ? PS_SWITCH : PS_FAINT_SWITCH, on_send_pick, NULL);
 }
-
-/* ---- learning a move: menus' own dialog, with the battle's message box and yes/no ---- */
 
 static struct {
   void (*yes)(void*);
@@ -730,9 +728,7 @@ static void open_learn(const gc_screen* s) {
   ps_learn_move(&G.run.bt, slot < 0 ? 0 : slot, s->move, G.run.trainer_id, &host);
 }
 
-/* ---- rewards: shop_ui ---- */
-
-static gc_choice rc;          /* current pending choice */
+static gc_choice rc;
 
 static void open_shop_ui(void);
 
@@ -834,8 +830,6 @@ static void open_shop_ui(void) {
   shop_ui_open(&args, &ev);
 }
 
-/* ---- biome: biome_map ---- */
-
 static void on_biome_map_select(void* ctx, int option) {
   (void)ctx;
   biome_map_close();
@@ -849,8 +843,6 @@ static void open_biome_map(void) {
   biome_map_events be = {on_biome_map_select, NULL};
   biome_map_open(&ba, &be);
 }
-
-/* ---- a mystery encounter, stand-in: the first option that can be taken, with the first healthy Pokemon ---- */
 
 static void mystery_auto(void) {
   const gc_screen* s = gc_run_screen(&G.run);
@@ -870,32 +862,14 @@ static void mystery_auto(void) {
 
 /* ---- the run ends ---- */
 
-static void new_run(void);
-
-static void restart_black(void* arg) {
-  (void)arg;
-  G.fade_done = true;
-  new_run();
-}
-
-static void restart(void* arg) {
-  (void)arg;
-  ui_fade(250, 100, 250, restart_black, NULL);
-}
-
 static void end_run(int kind) {
-  char text[96];
   if (kind == GC_SCREEN_CLEAR) {
     G.st.clears++;
-    i18n_t(text, sizeof text, "battle:congratulations", NULL);
+    clear_ui_open((int)G.run.wave, G.run.score, G.run.money, G.active_slot);
   } else {
     G.st.game_overs++;
-    snprintf(text, sizeof text, "Game over at wave %d. A new run begins.", (int)G.run.wave);
+    game_over_ui_open((int)G.run.wave, G.run.score, G.active_slot);
   }
-  G.n_ev = G.ev_pos = G.n_txt = 0;
-  put_msg(text, true);
-  G.st.bev++;
-  bv_play(&G.ev[0], 1, restart, NULL);
 }
 
 static void screen_step(void) {
@@ -937,7 +911,6 @@ static void screen_step(void) {
 
 /* ---- a new run ---- */
 
-/* a random team within the cost budget, from every species with a starter cost (game-core's own rule) */
 static int random_team(gc_starter* out) {
   int budget = gc_starter_budget(GAME_MODES_CLASSIC), n = 0;
   for (int tries = 0; tries < 400 && n < 6 && budget > 0; tries++) {
@@ -956,6 +929,15 @@ static int random_team(gc_starter* out) {
     s->tera_type = -1;
     for (int i = 0; i < 6; i++) s->ivs[i] = (uint8_t)rnd(32);
     budget -= cost;
+  }
+  if (n == 0) {
+    for (int k = 0; k < gc_default_starter_count && k < 3; k++) {
+      memset(&out[n], 0, sizeof out[n]);
+      out[n].species = gc_default_starters[k];
+      out[n].tera_type = -1;
+      for (int i = 0; i < 6; i++) out[n].ivs[i] = 20;
+      n++;
+    }
   }
   return n;
 }
@@ -994,6 +976,33 @@ void rs_start(const rs_config* cfg) {
   memset(&G.st, 0, sizeof G.st);
   G.cfg = *cfg;
   new_run();
+}
+
+bool rs_load_slot(int slot) {
+  rs_set_slot(slot);
+  char name[32];
+  snprintf(name, sizeof name, "session_%d", slot);
+  char* buf = NULL;
+  size_t len = 0;
+  bool used_bak = false;
+  save_result res = save_read(name, &buf, &len, &used_bak);
+  if (res != SAVE_OK || !buf) return false;
+
+  const char* why = NULL;
+  if (!gc_run_load(&G.run, buf, len, &why)) {
+    free(buf);
+    return false;
+  }
+  free(buf);
+
+  G.present[0] = G.present[1] = false;
+  G.shown = -1;
+  G.refused_in_row = 0;
+  G.learn_drop = false;
+
+  drain();
+  pump(NULL);
+  return true;
 }
 
 const rs_stats* rs_stats_get(void) { return &G.st; }

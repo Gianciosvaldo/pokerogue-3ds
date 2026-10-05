@@ -3,20 +3,11 @@
  * the run's events become screen events (battle_events.c), its screens (command, switch, learn a move,
  * evolve, rewards, biome, game over) become the menus the game already has, and each answer goes back to
  * gc_run_choose. Replaces the demo battle (battle_setup.c).
- *
- * Where a real screen doesn't exist yet it uses a stand-in, listed here so none is mistaken for the real thing:
- *   - starters:   a random team within the cost budget (or the species in rundriver.txt), no starter select
- *   - rewards:    names are the item key in words ("Rare Candy"), picked from an option list, then a Pokemon
- *   - biome:      an option list (the Map screen, menus/biome_map.c, is not wired in)
- *   - evolution:  automatic
- *   - mystery encounters: a message, then the first usable option
- *   - game over / clear: a message, then a new run
- *   - trainers:   the battle starts with their message; the trainer sprite is not drawn
- * Not wired yet: saving, the shop's own screen, the Pokedex, eggs, music.
  */
 #ifndef GM_RUN_SCREEN_H
 #define GM_RUN_SCREEN_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "gc/run.h"
@@ -44,9 +35,18 @@ typedef struct {
   uint32_t bev;               /* screen events played */
 } rs_stats;
 
-/* Starts a new run and shows its first wave. Call once the UI is up; the driver then runs from the UI's
- * callbacks. */
+/* Sets active save slot (0..4). */
+void rs_set_slot(int slot);
+int rs_get_slot(void);
+
+/* Starts a new run and shows its first wave. */
 void rs_start(const rs_config* cfg);
+
+/* Loads an existing run save from slot. Returns true if load succeeded. */
+bool rs_load_slot(int slot);
+
+/* Called when Game Over or Clear screen is dismissed to start next run. */
+void rs_on_end_screen_dismissed(void);
 
 const rs_stats* rs_stats_get(void);
 const gc_run* rs_run(void);

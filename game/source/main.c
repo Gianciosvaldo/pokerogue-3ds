@@ -1,35 +1,33 @@
 /*
- * PokeRogue 3DS: the game app.
+ * PokeRogue 3DS: main entry point and driver loop.
  *
- * Boots into a run: game-core's run loop plays the waves and run_screen.c shows them with the battle screen
- * (battle_events.c turns the turns' events into screen events), the party and summary screens
- * (game/menus), the Poke Ball list and option lists. See run_screen.h for what is still a stand-in
- * (starters, reward names, the biome list, mystery encounters...).
- *
- * Debug file: sdmc:/3ds/pokerogue/rundriver.txt, optional. Lines "seed=<24 characters>" and
- * "starters=<species id>,<species id>..." fix the first run (for repeatable test runs).
- *
- * START + SELECT quits.
+ * Boots into Title UI or Save Slots UI, allows starting a new run or continuing an existing run,
+ * saves progress inter-wave to SD card, and displays Game Over / Clear victory screens.
  */
 #include <3ds.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "clear_ui.h"
+#include "game_over_ui.h"
+#include "gc/system.h"
 #include "i18n.h"
 #include "pak.h"
+#include "party_screen.h"
 #include "rr.h"
 #include "run_screen.h"
 #include "save.h"
+#include "save_slot_ui.h"
 #include "snd.h"
+#include "title_ui.h"
 #include "ui.h"
-#include "ui_widgets.h"
-#include "party_screen.h"
 
-/* ------------------------------------------------------------------ boot */
+static gc_system sys_data;
+static rs_config cfg;
+static int current_slot = 0;
 
-/* sdmc:/3ds/pokerogue/rundriver.txt (see the header comment) */
-static void read_driver_file(rs_config* cfg) {
+static void read_driver_file(rs_config* cfg_out) {
   static char seed[160];
   FILE* f = fopen("sdmc:/3ds/pokerogue/rundriver.txt", "r");
   if (!f) return;
@@ -38,18 +36,17 @@ static void read_driver_file(rs_config* cfg) {
     line[strcspn(line, "\r\n")] = 0;
     if (!strncmp(line, "seed=", 5) && line[5]) {
       snprintf(seed, sizeof seed, "%s", line + 5);
-      cfg->seed = seed;
+      cfg_out->seed = seed;
     } else if (!strncmp(line, "starters=", 9)) {
-      cfg->n_starters = 0;
-      for (char* t = strtok(line + 9, ", "); t && cfg->n_starters < 6; t = strtok(NULL, ", "))
-        cfg->starters[cfg->n_starters++] = atoi(t);
+      cfg_out->n_starters = 0;
+      for (char* t = strtok(line + 9, ", "); t && cfg_out->n_starters < 6; t = strtok(NULL, ", "))
+        cfg_out->starters[cfg_out->n_starters++] = atoi(t);
     }
   }
   fclose(f);
 }
 
 static void fatal(const char* msg) {
-  /* no packs: say so on the bottom screen until START */
   while (aptMainLoop()) {
     hidScanInput();
     if (hidKeysDown() & KEY_START) break;
@@ -61,8 +58,83 @@ static void fatal(const char* msg) {
   }
 }
 
+static void load_system_save(void) {
+  gc_system_init(&sys_data);
+  char* buf = NULL;
+  size_t len = 0;
+  bool used_bak = false;
+  save_result res = save_read("system", &buf, &len, &used_bak);
+  if (res == SAVE_OK && buf) {
+    const char* why = NULL;
+    gc_system_load(&sys_data, buf, len, &why);
+    free(buf);
+  }
+}
+
+static void save_system_save(void) {
+  char buf[GC_SYSTEM_SAVE_MAX];
+  size_t len = gc_system_save(&sys_data, buf, sizeof buf);
+  if (len > 0) {
+    save_write("system", buf, len);
+  }
+}
+
+static void start_new_run_in_slot(int slot) {
+  current_slot = slot;
+  rs_set_slot(slot);
+  memset(&cfg, 0, sizeof cfg);
+  cfg.entropy = (uint32_t)osGetTime();
+  read_driver_file(&cfg);
+  title_ui_close();
+  save_slot_ui_close();
+  rs_start(&cfg);
+}
+
+static void load_run_in_slot(int slot) {
+  current_slot = slot;
+  title_ui_close();
+  save_slot_ui_close();
+  if (!rs_load_slot(slot)) {
+    start_new_run_in_slot(slot);
+  }
+}
+
+static void on_title_option(void* ctx, title_option opt) {
+  (void)ctx;
+  if (opt == TITLE_OPT_NEW_GAME) {
+    start_new_run_in_slot(0);
+  } else if (opt == TITLE_OPT_CONTINUE) {
+    load_run_in_slot(0);
+  } else if (opt == TITLE_OPT_SAVE_SLOTS) {
+    title_ui_close();
+    save_slot_ui_events ev = {
+      .on_load_slot = (void (*)(void*, int))load_run_in_slot,
+      .on_new_slot = (void (*)(void*, int))start_new_run_in_slot,
+      .on_delete_slot = NULL,
+      .on_cancel = NULL,
+      .ctx = NULL
+    };
+    save_slot_ui_open(&ev);
+  }
+}
+
+static void open_title_screen(void) {
+  save_slot_info slots[SAVE_SLOT_COUNT];
+  save_slot_ui_scan_slots(slots);
+
+  bool has_continue = slots[0].exists && slots[0].valid;
+  int wave = slots[0].wave;
+  const char* biome = slots[0].biome_name;
+
+  title_ui_events ev = {
+    .on_select_option = on_title_option,
+    .ctx = NULL
+  };
+  title_ui_open(has_continue, 0, wave, biome, &ev);
+}
+
 int main(void) {
-  osSetSpeedupEnable(true); /* no-op on Old 3DS */
+  osSetSpeedupEnable(true);
   if (!rr_init()) return 1;
   if (pak_mount_default() <= 0) {
     fatal("PokeRogue 3DS\n\nNo asset packs found in\nsdmc:/3ds/pokerogue/\n\nSee assets-pipeline/README.md\nfor how to build them.\n\nSTART: quit");
@@ -74,13 +146,17 @@ int main(void) {
   srand((unsigned)osGetTime());
   ui_init();
   ps_init();
-  rs_config cfg;
-  memset(&cfg, 0, sizeof cfg);
-  cfg.entropy = (uint32_t)osGetTime();
-  read_driver_file(&cfg);
-  rs_start(&cfg);
+
+  load_system_save();
+  open_title_screen();
+
   while (ui_tick()) {
+    if (!title_ui_active() && !save_slot_ui_active() && !clear_ui_active() && !game_over_ui_active() && !rs_run()->wave) {
+      open_title_screen();
+    }
   }
+
+  save_system_save();
   snd_exit();
   rr_exit();
   return 0;
