@@ -5,6 +5,7 @@
 #include "gc/ports.h"
 #include "gc/data.h"
 #include "pr/ai.h"
+#include "pr/reward.h"
 #include <math.h>
 #include <string.h>
 
@@ -23,7 +24,8 @@ enum {
     RP_LEVEL_UP,         /* LevelUpPhase: a = party index, b = last level, c = new level */
     RP_LEARN_MOVE,       /* LearnMovePhase: a = party index, b = move; may wait on LEARN_MOVE */
     RP_EVOLUTION,        /* EvolutionPhase: a = party index, b = gc_evo_data index, c = last level */
-    RP_TRAINER_NEXT,     /* the trainer's next Pokemon (stands in for SwitchSummonPhase) */
+    RP_CONTINUE,         /* the rest of the turn after a VictoryPhase's experience (battle-core's pr_continue) */
+    RP_CHECK_SWITCH,     /* CheckSwitchPhase: waits on CHECK_SWITCH (only with run->ask_switch) */
     RP_BATTLE_END,       /* BattleEndPhase: a = victory */
     RP_TRAINER_VICTORY,  /* TrainerVictoryPhase */
     RP_MONEY_REWARD,     /* MoneyRewardPhase: d = money multiplier */
@@ -35,6 +37,7 @@ enum {
     RP_GAME_OVER,        /* GameOverPhase: a = victory; waits on GAME_OVER / CLEAR */
     RP_PARTY_SWAP,       /* PartySwapPhase: a = enemy party index of caught mon */
     RP_MYSTERY,          /* MysteryEncounterPhase: a = selected type, b = selected tier */
+    RP_REWARD_FORM,      /* bounded FormChangePhase: a = storage party index, b = target form */
     RP_COUNT_
 };
 typedef struct { uint8_t type; int32_t a, b, c; double d; const char *key; } gc_rphase;
@@ -49,6 +52,21 @@ typedef struct {
     bool overflow;
 } gc_rqueue;
 
+/* ---- the reward screen (src/gc_reward.c): what a SelectModifierPhase keeps between its calls ---- */
+typedef struct {
+    pr_reward_option options[PR_REWARD_MAX_OPTIONS];   /* typeOptions of the open phase */
+    int n_options;
+    bool has_custom, is_copy;
+    pr_reward_custom custom;    /* its customModifierSettings: the no-victory screen's, or a copy's old options */
+    pr_reward_thresholds th;    /* modifierPoolThresholds: global upstream, kept so a copy rolls with the old ones */
+    /* copy(): the options, rerollCount and rerollMultiplier a copy of the screen is made from, until it starts */
+    bool copy_pending;
+    int copy_reroll_count;
+    double copy_reroll_multiplier;
+    pr_reward_option copy_options[PR_REWARD_MAX_OPTIONS];
+    int n_copy_options;
+} gc_reward_state;
+
 /* run-level state that isn't part of the public struct */
 typedef struct {
     gc_rqueue rq;
@@ -60,11 +78,13 @@ typedef struct {
      * points into this struct */
     pr_ai ai;
     pr_ai_trainer ai_trainer;
-    bool lock_rarities;
+    bool lock_rarities;         /* globalScene.lockModifierTiers (the Lock Capsule's switch) */
+    gc_reward_state reward;
     int last_battle_type;       /* the finished battle's BattleType, -1 = none yet */
     bool last_final_boss;       /* it was the classic final boss */
     double last_max_exp_level;  /* getMaxExpLevel() when it ended, for LevelCapPhase */
     bool pending_trainer_victory;
+    bool battle_won;            /* a VictoryPhase has run in this battle: its BattleEndPhase is the victory's */
     bool pending_me_miss;       /* EncounterPhase increments spawn chance after the save point */
     bool at_save_point;         /* from GC_EV_SAVE_POINT until the battle's first turn runs (gc_run_can_save) */
     /* gc_trainer_names' ring: run->trainer_names' texts, gc_m_trainer's key for each and whether that
@@ -118,6 +138,45 @@ void gc_mon_recalc(gc_run *run, gc_mon *m);                            /* calcul
 bool gc_mon_fainted(const gc_mon *m);
 bool gc_mon_allowed(const gc_mon *m);                                  /* isAllowedInBattle */
 
+/* ---- learnsets (src/gc_learnset.c): field/learnsets.ts getLevelMoves, as the reward screen reads it ---- */
+/* One row of PlayerPokemon.getLevelMoves: its level (-1 RELEARN_MOVE, 0 EVOLVE_MOVE), the move and its
+ * LearnableMoveSource (PR_LEARN_SOURCE_*) */
+typedef struct { int16_t level; uint16_t move; int8_t source; } gc_learn_row;
+/* Pokemon.getLevelMoves({startingLevel, includeEvolutionMoves, includePrevolutionMoves, includeRelearnerMoves}):
+ * the rows, or -1 when they don't fit in `cap` */
+int gc_level_moves(const gc_mon *m, int starting_level, bool evo, bool prevo, bool relearn, gc_learn_row *out, int cap);
+/* PlayerPokemon.getUnlockedEggMoves(): how many (out holds 4) */
+int gc_unlocked_egg_moves(const gc_run *run, const gc_mon *m, uint16_t out[4]);
+
+/* ---- rewards (src/gc_reward.c): the adapter between game-core's run and reward-core ---- */
+/* getPartyLuckValue(party) */
+int gc_party_luck(gc_run *run);
+/* A pr_reward_ctx made from the run as it is now (a static: valid until the next call). Its party is in
+ * upstream's party order (run->party_order), so ctx party index k is run->party[run->party_order[k]]. */
+pr_reward_ctx *gc_reward_ctx(gc_run *run);
+/* The types an attack move counts as for the type-boosting items: VariableMoveTypeAttr.getTypesForItemSpawn
+ * or Pokemon.getMoveTypeForItemSpawn. Returns how many (out holds 2). */
+int gc_types_for_item_spawn(gc_run *run, const gc_mon *m, int move, int8_t out[2]);
+/* SelectModifierPhase.copy(): queue the screen again, with the options it showed (what a TM or the Memory
+ * Mushroom does when it is taken) */
+void gc_reward_queue_copy(gc_run *run);
+/* SelectModifierPhase.getRerollCost(lockModifierTiers) for the screen that is open */
+double gc_reward_reroll_cost(gc_run *run);
+/* the reward-core item (enum pr_item) of a modifierTypes key, -1 = none */
+int gc_reward_item_index(const char *key);
+/* what a reward is used on (GC_TARGET_*): the type's own PokemonModifierType / PokemonMoveModifierType class */
+uint8_t gc_reward_target(const char *key);
+/* Task 60: the application of healing, revive, PP restore and PP Up rewards (Potions, Full Restore, Revives,
+ * Sacred Ash, Ether, Elixir, PP Up, PP Max) by reward-core's pr_reward_apply, on a context made from the run,
+ * its result written back. `party` is an index into run->party[], `move_slot` a moveset slot. GC_APPLY_REFUSED
+ * (and *why) = it can't be used there, nothing changed; GC_APPLY_UNHANDLED = not one of these items, the
+ * caller's own code applies it. A free reward (offer cost 0) is taken even when it did nothing and has no target
+ * (Sacred Ash with nobody fainted), as SelectModifierPhase.applyModifier does with cost -1. */
+enum { GC_APPLY_UNHANDLED, GC_APPLY_DONE, GC_APPLY_REFUSED };
+int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, const char **why);
+int gc_reward_lifecycle_apply(gc_run *run, const gc_offer *o, int party, const char **why);
+void gc_reward_change_form(gc_run *run, int party, int form);
+
 /* ---- items (src/gc_items.c) ---- */
 int gc_item_stack(const gc_run *run, const char *key);                 /* stack count of a player item, 0 = none */
 void gc_item_add(gc_run *run, const char *key, int16_t arg, uint32_t pokemon_id, int stack);
@@ -149,13 +208,16 @@ void gc_battle_command_screen(gc_run *run);       /* fills run->screen for COMMA
 /* battle-core's turn from TurnStartPhase (or the pick after a SwitchPhase, pick >= -1), to its next
  * stop: returns the stop's phase type */
 int gc_battle_run(gc_run *run, int pick);
+/* After a stop at PH_VICTORY and the experience: the rest of the turn (the other moves, the end-of-turn
+ * effects, the trainer's next Pokemon) to the next stop (pr_continue) */
+int gc_battle_continue(gc_run *run);
+/* After the wild battle's start stopped at PH_CHECK_SWITCH: the answer, run to the next stop */
+int gc_battle_answer_switch(gc_run *run, bool yes);
 void gc_battle_switch_screen(gc_run *run);        /* fills run->screen for SWITCH */
 void gc_battle_end_cleanup(gc_run *run);          /* after a battle: the party off the field */
 int gc_enemy_active_index(const gc_run *run);     /* the enemy party index on the field, -1 = none */
 int gc_player_active_index(const gc_run *run);
 bool gc_battle_queued_command(gc_run *run);       /* a move locked in by the last turn: no COMMAND screen */
-bool gc_battle_trainer_next(gc_run *run);         /* the trainer's next Pokemon onto the field */
-bool gc_battle_turn_tail_lost(const gc_run *run); /* battle-core stopped with turn phases still queued */
 int gc_battle_slot_of(const gc_run *run, int party_index);   /* upstream party slot of party[i] */
 void gc_sync_party_order(gc_run *run);            /* party_order from battle-core's party list */
 

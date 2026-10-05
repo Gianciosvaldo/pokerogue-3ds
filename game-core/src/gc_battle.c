@@ -3,12 +3,13 @@
  * TurnInitPhase's bookkeeping, the player's CommandPhase, the turn itself and the switch prompts.
  *
  * Singles only. What this layer leaves out is counted in run->stubs or comes back from battle-core as
- * unported: the summon phases at the start of a battle (entry abilities, hazards), the trainer's next
- * Pokemon's SwitchSummonPhase, and catching and fleeing. The enemy's commands, the command
- * restrictions and trapping come from ai-core. */
+ * unported: catching and fleeing. The enemy's commands, the command restrictions and trapping come
+ * from ai-core, and so does the trainer's pick of its next Pokemon (next_summon_cb), which
+ * battle-core's own SwitchSummonPhase asks for. */
 #include "internal.h"
 
 static void note_unported(gc_run *run);
+static int next_summon_cb(pr_battle *bt, int trainer_slot, void *ctx);
 
 static int index_of(const gc_mon *arr, int n, const pr_pokemon *p)
 {
@@ -136,7 +137,10 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
         bt->field[0] = &run->party[lead].b;
         pr_reset_turn_data(&run->party[lead].b);
     }
-    bt->battle_style_set = false;
+    /* CheckSwitchPhase asks "Will you switch?" only in the SWITCH battle style (run->ask_switch) */
+    bt->battle_style_set = !run->ask_switch;
+    bt->next_summon_index = next_summon_cb;
+    bt->next_summon_ctx = run;
     bt->trainer_names[0] = run->trainer_names[GC_TNAME_TRAINER];
     bt->trainer_names[1] = run->trainer_names[GC_TNAME_PARTNER];
     if (!restoring) {
@@ -424,7 +428,21 @@ void gc_port_enemy_command(gc_run *run, int enemy_slot)
     pr_ai_enemy_command(bt, &in->ai, enemy_slot - BATTLER_INDEX_ENEMY);
     bt->engine = NULL;
     in->ai.trainer = NULL;
-    if (bt->commands[enemy_slot].command == COMMAND_POKEMON) gc_stub(run, GC_STUB_ENEMY_SWITCH);
+    /* a COMMAND_POKEMON the AI picked (a trainer's switch-out) is left in bt->commands: TurnStartPhase queues
+     * the enemy's SwitchSummonPhase for it */
+}
+
+/* Trainer.getNextSummonIndex(trainerSlot), asked by battle-core's SwitchSummonPhase when its slot is -1
+ * (the Pokemon FaintPhase sends for a trainer whose Pokemon fainted): ai-core's pick, the best matchup
+ * against the player's field with a tie settled by a roll on the session seed and bt->turn. */
+static int next_summon_cb(pr_battle *bt, int trainer_slot, void *ctx)
+{
+    gc_run *run = ctx;
+    gc_internal *in = gc_int(run);
+    ai_trainer_on(run);
+    const int k = pr_ai_next_summon_index(bt, &in->ai, trainer_slot);
+    in->ai.trainer = NULL;
+    return k;
 }
 
 /* The one Pokemon of a side with this species and form, NULL when none or several have them */
@@ -464,24 +482,43 @@ static void note_revealed(gc_run *run)
     }
 }
 
+/* What the run keeps from a battle-core call (the turn, a switch pick, the rest of a turn, the start's answer) */
+static int engine_returned(gc_run *run)
+{
+    note_unported(run);
+    note_revealed(run);
+    gc_items_from_battle(run);
+    gc_ev_battle(run);
+    gc_sync_party_order(run);
+    run->run.rng = run->bt.rng;
+    return run->eng.stop;
+}
+
 int gc_battle_run(gc_run *run, int pick)
 {
     pr_battle *bt = &run->bt;
-    gc_int(run)->at_save_point = false;
     if (pick < -1) {
+        gc_int(run)->at_save_point = false;
         gc_event *ev = gc_ev_new(run, GC_EV_TURN);
         if (ev) ev->a = bt->turn;
         pr_run_turn(bt, &run->eng);
     } else {
         pr_resume_switch(bt, &run->eng, pick >= 0 ? gc_battle_slot_of(run, pick) : -1);
     }
-    note_unported(run);
-    note_revealed(run);
-    gc_items_from_battle(run);
-    gc_ev_battle(run);
-    gc_sync_party_order(run);
-    run->run.rng = bt->rng;
-    return run->eng.stop;
+    return engine_returned(run);
+}
+
+int gc_battle_continue(gc_run *run)
+{
+    gc_int(run)->at_save_point = false;
+    pr_continue(&run->bt, &run->eng);
+    return engine_returned(run);
+}
+
+int gc_battle_answer_switch(gc_run *run, bool yes)
+{
+    pr_answer_check_switch(&run->bt, &run->eng, yes);
+    return engine_returned(run);
 }
 
 void gc_battle_switch_screen(gc_run *run)
@@ -490,38 +527,18 @@ void gc_battle_switch_screen(gc_run *run)
     memset(s, 0, sizeof *s);
     s->kind = GC_SCREEN_SWITCH;
     s->slot = run->eng.stop_phase.sw_field_index;
-    for (int i = 0; i < run->n_party; i++)
-        s->pick_ok[i] = gc_mon_allowed(&run->party[i]) && !run->party[i].b.on_field;
+    /* the Pokemon being switched out (a move's switch-out: Teleport, U-turn) is still in its party slot, and
+     * upstream's party screen doesn't let a Pokemon be sent into the slot it already holds. It's off the
+     * field by now, so on_field doesn't exclude it: picking it left switch_out_status set and the battle
+     * never went on. */
+    const pr_pokemon *leaving = s->slot >= 0 && s->slot < 2 ? run->bt.field[s->slot] : NULL;
+    bool any = false;
+    for (int i = 0; i < run->n_party; i++) {
+        s->pick_ok[i] = gc_mon_allowed(&run->party[i]) && !run->party[i].b.on_field && &run->party[i].b != leaving;
+        any |= s->pick_ok[i];
+    }
     /* a modal SwitchPhase (after a faint) must be answered; a move's switch-out can be left empty */
-    s->can_skip = !run->eng.stop_phase.sw_modal;
-}
-
-/* The trainer sends out its next Pokemon: FaintPhase's SwitchSummonPhase(SWITCH, 0, -1) for the enemy,
- * which battle-core would run after the VictoryPhase. The slot is Trainer.getNextSummonIndex (ai-core:
- * the best matchup against the player's field, a tie settled by a roll on the session seed and
- * bt->turn; the turn's lost tail may leave that count off until battle-core carries on past a stop). As
- * switchAndSummon does, the new Pokemon takes the fainted one's place in the enemy party's order and
- * the fainted one takes its slot. It goes straight onto the field, without its summon phases. */
-bool gc_battle_trainer_next(gc_run *run)
-{
-    pr_battle *bt = &run->bt;
-    gc_internal *in = gc_int(run);
-    ai_trainer_on(run);
-    int k = pr_ai_next_summon_index(bt, &in->ai, TRAINER_SLOT_TRAINER);
-    in->ai.trainer = NULL;
-    /* -1 only when no Pokemon on the bench can fight, which FaintPhase checked before pushing this */
-    int idx = -1;
-    if (k > 0 && k < bt->n_party[1])
-        for (int i = 0; i < run->n_enemy; i++) if (&run->enemy[i].b == bt->party[1][k]) idx = i;
-    if (idx < 0) return false;
-    pr_pokemon *old = bt->field[2];
-    if (old) old->on_field = false;
-    pr_pokemon *t = bt->party[1][0];
-    bt->party[1][0] = bt->party[1][k];
-    bt->party[1][k] = t;
-    summon(run, 1, idx);
-    gc_ev_msg(run, "battle:trainerSendOut", 2, gc_m_trainer(run, "trainerName", GC_TNAME_TRAINER), gc_m_mon_name(run, "pokemonName", 1, idx));
-    return true;
+    s->can_skip = !run->eng.stop_phase.sw_modal || !any;
 }
 
 /* BattleEndPhase's part: the battle is over. The player's Pokemon stay where they are: the next
@@ -535,19 +552,4 @@ void gc_battle_end_cleanup(gc_run *run)
     run->bt.field[2] = run->bt.field[3] = NULL;
     run->bt.n_party[1] = 0;
     run->in_battle = false;
-}
-
-/* The engine stopped at a boundary phase (a VictoryPhase) with phases of the turn still queued: the
- * rest of the turn (other moves, the end-of-turn effects) is lost until battle-core can carry on past
- * a stop */
-bool gc_battle_turn_tail_lost(const gc_run *run)
-{
-    const pr_engine *e = &run->eng;
-    for (int l = 0; l < e->n_levels; l++)
-        for (int k = 0; k < e->level_len[l]; k++) {
-            int t = e->pool[e->levels[l][k]].type;
-            if (t == PH_MARKER || (t >= PH_TURN_START && t <= PH_SWITCH)) return true;
-        }
-    for (int t = 0; t < PH_COUNT_; t++) if (e->n_dyn[t]) return true;
-    return false;
 }

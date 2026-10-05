@@ -87,6 +87,9 @@ it("rival fixed party producer", async () => {
       for (const p of battle.enemyParty) p.destroy();
       battle.enemyParty = [];
       trainer.destroy();
+      // Retaining mock receivers keeps destroyed Pokemon alive across 18,000
+      // fights. No assertion reads this history; behavior and draws are intact.
+      vi.clearAllMocks();
     }
   }
   fs.writeFileSync(OUT, lines.join("\n") + "\n");

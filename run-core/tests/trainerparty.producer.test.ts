@@ -75,7 +75,9 @@ it("trainerparty producer", async () => {
 
   let snap = "";
   (EnemyPokemon.prototype as any).generateAndPopulateMoveset = function (this: any) {
-    snap = [this.abilityIndex, this.id, this.gender, this.formIndex, this.nature, this.teraType, this.fusionSpecies?.speciesId ?? -1, this.fusionAbilityIndex ?? 0, this.fusionGender ?? 0, this.fusionFormIndex ?? 0].join(" ");
+    // The port stops at the FIRST constructor moveset boundary. Rival traits
+    // can trigger another generation after post-processing; retain the first.
+    if (!snap) snap = [this.abilityIndex, this.id, this.gender, this.formIndex, this.nature, this.teraType, this.fusionSpecies?.speciesId ?? -1, this.fusionAbilityIndex ?? 0, this.fusionGender ?? 0, this.fusionFormIndex ?? 0].join(" ");
   };
 
   const lines: string[] = [];

@@ -1,0 +1,550 @@
+/* runtest: the app's run driver (run_screen.c) over the real game-core run, on the host.
+ *
+ *   build/runtest [runs] [first]      N seeded runs (default 20), starting at run number `first`
+ *
+ * The battle screen and the menus are replaced by a fake that keeps a model of what the real screen would show
+ * (who is out, their HP and level) and checks every screen event against it; the fake player answers each
+ * screen at random. A run ends at the game over (or the clear), the driver starts the next one.
+ *
+ * It fails (exit 1) when the driver or the converter breaks the model (a summon over a Pokemon already out, a
+ * hit on nobody, an HP over the maximum...), when the screen shown at a COMMAND screen is not the battle game-core
+ * has, when the driver gets stuck or can't find a switch-in Pokemon, or when a run makes no progress. */
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "battle_view.h"
+#include "ball_menu.h"
+#include "i18n.h"
+#include "party_screen.h"
+#include "pr_data.h"
+#include "pr_enums.h"
+#include "run_screen.h"
+#include "ui.h"
+#include "ui_widgets.h"
+
+/* ------------------------------------------------------------------ the fake world */
+
+static uint32_t rs32 = 1;
+static uint32_t rnd(uint32_t n) {
+  rs32 ^= rs32 << 13;
+  rs32 ^= rs32 >> 17;
+  rs32 ^= rs32 << 5;
+  return n ? rs32 % n : 0;
+}
+
+static struct {
+  bv_mon mon[2];
+  bool present[2];
+  bool fainted_shown[2];  /* fainted and not replaced yet: its data is still on the screen (an ability bar can still name it) */
+  bool begun;
+  /* pending continuations (each is one thing the real UI would be waiting on) */
+  void (*play_done)(void*);
+  void* play_arg;
+  bool playing;
+  void (*on_command)(bv_command, void*);
+  void* command_arg;
+  bv_command_opts opts;
+  bool asking;
+  void (*opt_done)(int, void*);
+  void* opt_arg;
+  int opt_n;
+  char opt_label[40][72];
+  int refused_streak;
+  bool opt_cancel;
+  void (*confirm_done)(int, void*);
+  void* confirm_arg;
+  void (*party_pick)(int, int, void*);
+  void* party_arg;
+  const pr_battle* party_bt;
+  ps_mode party_mode;
+  void (*ball_pick)(int, void*);
+  void* ball_arg;
+  const int* ball_counts;
+  int ball_counts_copy[BALL_TYPES];
+} W;
+
+static int violations, n_scenes, n_ask, n_dialogs, n_options, n_party_opens, n_balls;
+static char first_violation[300];
+
+static void bad(const char* fmt, ...);
+#define BAD(...) bad(__VA_ARGS__)
+
+static int verbose_bad;
+static char trail[120][80];
+static int trail_n;
+static void trail_add(const char* fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(trail[trail_n++ % 120], 80, fmt, ap);
+  va_end(ap);
+}
+static void bad(const char* fmt, ...) {
+  char msg[260];
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(msg, sizeof msg, fmt, ap);
+  va_end(ap);
+  char full[300];
+  snprintf(full, sizeof full, "run %d wave %d: %s", rs_stats_get()->runs, rs_run()->wave, msg);
+  if (!violations++) snprintf(first_violation, sizeof first_violation, "%s", full);
+  if (verbose_bad) {
+    printf("VIOLATION %s\n", full);
+    for (int i = trail_n > 120 ? trail_n - 120 : 0; i < trail_n; i++) printf("    %s\n", trail[i % 120]);
+    const gc_run* r = rs_run();
+    printf("  battle-core events of this drain (%d):\n", r->n_battle_events);
+    for (int i = 0; i < r->n_battle_events; i++) {
+      const pr_event* e = &r->battle_events[i];
+      printf("    ev type=%d b=%d t=%d id=%d v=%d%s%s", e->type, e->battler, e->target, e->id, e->value, e->msg.key ? " key=" : "", e->msg.key ? e->msg.key : "");
+      if (e->battler >= 0 && e->battler < 4) printf(" snap sp=%d slot=%d hp=%d/%d", e->field[e->battler].species, e->field[e->battler].party_slot, e->field[e->battler].hp, e->field[e->battler].max_hp);
+      printf("\n");
+    }
+  }
+}
+
+/* ---- stubs for the app's other modules ---- */
+const char* i18n_language(void) { return "en"; }
+const char* i18n_species_name(int id) {
+  static char name[8][32];
+  static int k;
+  k = (k + 1) & 7;
+  snprintf(name[k], sizeof name[k], "Species_%d", id);
+  return name[k];
+}
+const char* i18n_move_name(int id) {
+  static char name[8][32];
+  static int k;
+  k = (k + 1) & 7;
+  snprintf(name[k], sizeof name[k], "Move_%d", id);
+  return name[k];
+}
+const char* i18n_t(char* out, int n, const char* key, ...) {
+  snprintf(out, (size_t)n, "%s", key);
+  return out;
+}
+void* pak_read(const char* key, size_t* len) {
+  (void)key;
+  if (len) *len = 0;
+  return NULL;
+}
+void ba_preload_move(int move) { (void)move; }
+void ba_drop_moves(void) {}
+void img_drop_prefix(const char* prefix) { (void)prefix; }
+int ui_depth(void) { return W.begun ? 1 : 0; }
+void ui_fade(float out_ms, float hold_ms, float in_ms, void (*at_black)(void* arg), void* arg) {
+  (void)out_ms, (void)hold_ms, (void)in_ms;
+  if (at_black) at_black(arg);
+}
+
+/* ---- the battle screen ---- */
+static bool side_ok(int battler, const char* what) {
+  const int s = battler >= 2 ? 1 : 0;
+  if (!W.present[s]) {
+    BAD("%s on side %d with nobody out", what, s);
+    return false;
+  }
+  return true;
+}
+
+void bv_begin(const bv_setup* setup) {
+  trail_add("--- bv_begin biome %d trainer %d present %d", setup->biome, setup->trainer, setup->player_present);
+  W.begun = true;
+  n_scenes++;
+  W.mon[0] = setup->player;
+  W.mon[1] = setup->enemy;
+  W.present[0] = setup->player_present;
+  W.present[1] = false;
+  W.fainted_shown[0] = W.fainted_shown[1] = false;
+  W.playing = W.asking = false;
+}
+
+bv_mon* bv_mon_of(int battler) { return &W.mon[battler >= 2 ? 1 : 0]; }
+
+void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
+  if (W.playing) BAD("bv_play while the last one is still playing");
+  for (int i = 0; i < n; i++) {
+    const bv_event* e = &ev[i];
+    const int s = e->battler >= 2 ? 1 : 0;
+    if (!(e->type == BEV_MESSAGE && e->text && !strncmp(e->text, "modifierSelectUiHandler", 23)))
+      trail_add("bev %d b=%d a=%d b=%d%s%s", e->type, e->battler, e->a, e->b, e->text ? " t=" : "", e->text ? e->text : "");
+    switch (e->type) {
+      case BEV_MESSAGE:
+        if (!e->text) BAD("a message with no text");
+        break;
+      case BEV_INTRO_WILD:
+        if (e->a == 0) {
+          if (W.mon[1].species <= 0) BAD("wild intro with no enemy");
+          W.present[1] = true;
+        }
+        break;
+      case BEV_SUMMON:
+        if (W.present[s]) BAD("summon over a Pokemon already out (side %d)", s);
+        if (!e->mon || e->mon->species <= 0) {
+          BAD("summon with no Pokemon");
+          break;
+        }
+        if (e->mon->hp <= 0) BAD("summon of a fainted Pokemon (side %d, species %d)", s, e->mon->species);
+        if (e->mon->max_hp <= 0 || e->mon->hp > e->mon->max_hp) BAD("summon with HP %d/%d", e->mon->hp, e->mon->max_hp);
+        W.mon[s] = *e->mon;
+        W.present[s] = true;
+        W.fainted_shown[s] = false;
+        break;
+      case BEV_WITHDRAW:
+        if (side_ok(e->battler, "withdraw")) W.present[s] = false;
+        break;
+      case BEV_DAMAGE:
+        if (side_ok(e->battler, "damage")) {
+          if (e->a < 0 || e->a > W.mon[s].max_hp) BAD("damage to HP %d of %d", e->a, W.mon[s].max_hp);
+          W.mon[s].hp = e->a;
+        }
+        break;
+      case BEV_HEAL:
+        if (side_ok(e->battler, "heal")) {
+          if (e->a < 0 || e->a > W.mon[s].max_hp) BAD("heal to HP %d of %d", e->a, W.mon[s].max_hp);
+          W.mon[s].hp = e->a;
+        }
+        break;
+      case BEV_FAINT:
+        if (side_ok(e->battler, "faint")) {
+          if (W.mon[s].hp != 0) BAD("faint at HP %d (side %d)", W.mon[s].hp, s);
+          W.present[s] = false;
+          W.fainted_shown[s] = true;
+        }
+        break;
+      case BEV_STATUS:
+        if (side_ok(e->battler, "status")) W.mon[s].status = e->a;
+        break;
+      case BEV_ABILITY:
+        /* an ability bar names the Pokemon that has it, and one can trigger as it faints (Air Lock ending,
+         * Aftermath); the bar is an overlay, the screen still has the fainted Pokemon's data */
+        if (!W.fainted_shown[s]) side_ok(e->battler, "ability bar");
+        break;
+      case BEV_STAT_STAGES:
+      case BEV_POKEMON_ANIM:
+      case BEV_VISIBLE:
+        side_ok(e->battler, "effect");
+        break;
+      case BEV_MOVE_ANIM:
+        side_ok(e->battler, "move animation");
+        break;
+      case BEV_EXP:
+        if (side_ok(e->battler, "exp")) {
+          if (e->a < 0 || e->a > 1000) BAD("exp ratio %d", e->a);
+          if (e->b > 0) {
+            if (e->b <= W.mon[s].level) BAD("level up to %d from %d", e->b, W.mon[s].level);
+            W.mon[s].level = e->b;
+            if (e->mon) {
+              W.mon[s].max_hp = e->mon->max_hp;
+              W.mon[s].hp = e->mon->hp;
+            }
+          }
+        }
+        break;
+      case BEV_MAX_HP:
+        if (side_ok(e->battler, "max HP change")) {
+          if (e->a <= 0) BAD("max HP changed to %d", e->a);
+          W.mon[s].max_hp = e->a;
+        }
+        break;
+      case BEV_FORM_CHANGE:
+        if (side_ok(e->battler, "form change")) {
+          W.mon[s].species = e->a;
+          W.mon[s].form = e->b;
+        }
+        break;
+      case BEV_WAIT:
+        break;
+      default:
+        BAD("unknown screen event %d", e->type);
+    }
+  }
+  W.playing = true;
+  W.play_done = on_done;
+  W.play_arg = arg;
+}
+
+bool bv_playing(void) { return W.playing; }
+
+void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, void*), void* arg) {
+  n_ask++;
+  const gc_run* r = rs_run();
+  const gc_mon* me = gc_field_mon(r, 0);
+  const gc_mon* foe = gc_field_mon(r, 1);
+  if (!W.present[0] || !W.present[1]) BAD("asked for a command with %s out", !W.present[0] ? "no player" : "no enemy");
+  if (!me || !foe) {
+    BAD("asked for a command with no Pokemon on the field in the run");
+  } else {
+    /* the screen must show the battle game-core has */
+    const bv_mon* a = &W.mon[0];
+    const bv_mon* b = &W.mon[1];
+    if (a->species != me->b.species || a->level != me->b.level || a->hp != me->b.hp || a->max_hp != me->b.stats[STAT_HP])
+      BAD("screen player %d L%d %d/%d, run %d L%d %d/%d", a->species, a->level, a->hp, a->max_hp, me->b.species, me->b.level,
+          me->b.hp, me->b.stats[STAT_HP]);
+    if (b->species != foe->b.species || b->hp != foe->b.hp)
+      BAD("screen enemy %d %d/%d, run %d %d/%d", b->species, b->hp, b->max_hp, foe->b.species, foe->b.hp, foe->b.stats[STAT_HP]);
+    if (a->n_moves != me->b.n_moves) BAD("fight menu has %d moves, the Pokemon %d", a->n_moves, me->b.n_moves);
+    for (int i = 0; i < me->b.n_moves && i < 4; i++) {
+      int max = me->b.max_pp_override[i] >= 0 ? me->b.max_pp_override[i] : pr_moves[me->b.moves[i]].pp;
+      if (a->moves[i] != me->b.moves[i] || a->pp_left[i] != max - me->b.pp_used[i])
+        BAD("fight menu move %d is %d PP %d, the Pokemon's %d PP %d", i, a->moves[i], a->pp_left[i], me->b.moves[i], max - me->b.pp_used[i]);
+    }
+  }
+  W.opts = *opts;
+  W.on_command = on_command;
+  W.command_arg = arg;
+  W.asking = true;
+}
+
+/* ---- menus ---- */
+void ui_push_options(const char* const* labels, int n, bool can_cancel, void (*on_done)(int, void*), void* arg) {
+  n_options++;
+  if (n <= 0) BAD("an option list with no options");
+  for (int i = 0; i < n; i++)
+    if (!labels[i] || !labels[i][0]) BAD("option %d of %d has no label", i, n);
+  W.opt_done = on_done;
+  W.opt_arg = arg;
+  W.opt_n = n;
+  for (int i = 0; i < n && i < 40; i++) snprintf(W.opt_label[i], sizeof W.opt_label[i], "%s", labels[i]);
+  W.opt_cancel = can_cancel;
+}
+
+void ui_push_confirm(void (*on_done)(int yes, void* arg), void* arg) {
+  W.confirm_done = on_done;
+  W.confirm_arg = arg;
+}
+
+void ps_open(const pr_battle* bt, ps_mode mode, void (*on_pick)(int slot, int option, void* arg), void* arg) {
+  n_party_opens++;
+  W.party_pick = on_pick;
+  W.party_arg = arg;
+  W.party_bt = bt;
+  W.party_mode = mode;
+}
+void ps_close(void) { W.party_pick = NULL; }
+
+void ball_menu_open(const int counts[BALL_TYPES], void (*on_pick)(int ball, void* arg), void* arg) {
+  n_balls++;
+  memcpy(W.ball_counts_copy, counts, sizeof W.ball_counts_copy);
+  W.ball_pick = on_pick;
+  W.ball_arg = arg;
+}
+
+/* the learn dialog: menus' learn_move_start shows a message, asks yes / no, takes the move to forget, shows a last
+ * message and ends */
+static const ps_learn_host* LH;
+static void dlg_end_text_done(void* c) {
+  (void)c;
+  LH->on_end(LH->host);
+}
+static void dlg_yes(void* c) {
+  (void)c;
+  LH->on_result(LH->host, (int)rnd(5) - 1);
+  LH->show_text(LH->host, "learned or not", true, dlg_end_text_done, NULL);
+}
+static void dlg_no(void* c) {
+  (void)c;
+  LH->on_result(LH->host, -1);
+  LH->show_text(LH->host, "not learned", true, dlg_end_text_done, NULL);
+}
+static void dlg_text_done(void* c) {
+  (void)c;
+  LH->confirm(LH->host, dlg_yes, dlg_no, NULL);
+}
+void ps_learn_move(const pr_battle* bt, int party_slot, int move, int trainer_id, const ps_learn_host* host) {
+  (void)bt, (void)move, (void)trainer_id;
+  n_dialogs++;
+  if (party_slot < 0 || party_slot >= bt->n_party[0]) BAD("learn dialog for slot %d of %d", party_slot, bt->n_party[0]);
+  LH = host;
+  host->show_text(host->host, "wants to learn a move", true, dlg_text_done, NULL);
+}
+
+/* ------------------------------------------------------------------ the fake player */
+
+/* The fake player's better half: heal who needs it, revive the fainted, eat Rare Candies */
+static int smart_option(int pick) {
+  const gc_run* r = rs_run();
+  if (!strncmp(W.opt_label[0], "Species_", 8)) {
+    /* a party list (the Pokemon a reward is used on): the most hurt one that is alive */
+    int best = pick;
+    double worst = 2;
+    for (int i = 0; i < W.opt_n && i < r->n_party; i++) {
+      const pr_pokemon* p = &r->party[i].b;
+      double f = p->stats[STAT_HP] ? (double)p->hp / p->stats[STAT_HP] : 1;
+      if (f < worst) worst = f, best = i;
+    }
+    return best;
+  }
+  if (!strncmp(W.opt_label[0], "Move_", 5)) return pick;
+  for (int i = 0; i < W.opt_n; i++)
+    if (strstr(W.opt_label[i], "Revive") || strstr(W.opt_label[i], "Potion") || strstr(W.opt_label[i], "Rare Candy")) return i;
+  return pick;
+}
+
+/* One thing the UI was waiting on is answered. False when nothing is pending. */
+static bool step(void) {
+  {
+    static int last_refused;
+    const int r = rs_stats_get()->refused;
+    W.refused_streak = r != last_refused ? W.refused_streak + 1 : 0;
+    last_refused = r;
+  }
+  if (W.playing) {
+    void (*f)(void*) = W.play_done;
+    void* a = W.play_arg;
+    W.playing = false;
+    W.play_done = NULL;
+    if (f) f(a);
+    return true;
+  }
+  if (W.confirm_done) {
+    void (*f)(int, void*) = W.confirm_done;
+    W.confirm_done = NULL;
+    f((int)rnd(3) != 0, W.confirm_arg);
+    return true;
+  }
+  if (W.opt_done) {
+    void (*f)(int, void*) = W.opt_done;
+    W.opt_done = NULL;
+    int pick = W.opt_cancel && rnd(7) == 0 ? -2 : (int)rnd((uint32_t)W.opt_n);
+    if (rnd(100) < 80 && W.refused_streak < 3) pick = smart_option(pick);
+    f(pick, W.opt_arg);
+    return true;
+  }
+  if (W.ball_pick) {
+    void (*f)(int, void*) = W.ball_pick;
+    W.ball_pick = NULL;
+    int avail[BALL_TYPES], n = 0;
+    for (int i = 0; i < BALL_TYPES; i++)
+      if (W.ball_counts_copy[i] > 0) avail[n++] = i;
+    f(n && rnd(5) ? avail[rnd((uint32_t)n)] : -1, W.ball_arg);
+    return true;
+  }
+  if (W.party_pick) {
+    void (*f)(int, int, void*) = W.party_pick;
+    const pr_battle* bt = W.party_bt;
+    W.party_pick = NULL;
+    int ok[6], n = 0;
+    for (int i = 0; i < bt->n_party[0]; i++)
+      if (bt->party[0][i]->hp > 0 && !bt->party[0][i]->on_field) ok[n++] = i;
+    if (W.party_mode == PS_SWITCH && rnd(6) == 0) f(6, PS_CANCEL, W.party_arg);
+    else if (n && rnd(10)) f(ok[rnd((uint32_t)n)], PS_SEND_OUT, W.party_arg);
+    else f((int)rnd((uint32_t)bt->n_party[0]), PS_SEND_OUT, W.party_arg); /* maybe not allowed: game-core refuses */
+    return true;
+  }
+  if (W.asking) {
+    W.asking = false;
+    bv_command c = {0, 0};
+    const uint32_t x = rnd(100);
+    const bv_command_opts* o = &W.opts;
+    const gc_mon* cur = gc_field_mon(rs_run(), 0);
+    if (cur && o->can_switch && cur->b.hp * 4 < cur->b.stats[STAT_HP] && rnd(100) < 60) c.command = 2;
+    else if (x < 6 && o->can_ball) c.command = 1;
+    else if (x < 14 && o->can_switch) c.command = 2;
+    else if (x < 15 && o->can_run) c.command = 3;
+    else {
+      int ok[4], n = 0;
+      for (int i = 0; i < 4; i++)
+        if (o->move_ok[i]) ok[n++] = i;
+      c.move_slot = o->struggle || !n ? 0 : ok[rnd((uint32_t)n)];
+      if (n && !o->struggle && rnd(100) < 80) {
+        const gc_mon* me = gc_field_mon(rs_run(), 0);
+        int best = -1;
+        for (int k = 0; me && k < n; k++) {
+          int pw = pr_moves[me->b.moves[ok[k]]].power;
+          if (pw > best) best = pw, c.move_slot = ok[k];
+        }
+      }
+    }
+    W.on_command(c, W.command_arg);
+    return true;
+  }
+  return false;
+}
+
+/* ------------------------------------------------------------------ main */
+
+int main(int argc, char** argv) {
+  int runs = argc > 1 ? atoi(argv[1]) : 20;
+  int first = argc > 2 ? atoi(argv[2]) : 0;
+  if (runs < 1) runs = 1;
+  verbose_bad = getenv("RUNTEST_VERBOSE") != NULL;
+  rs32 = 2463534242u ^ (uint32_t)first * 2654435761u;
+  rnd(1);
+
+  rs_config cfg;
+  memset(&cfg, 0, sizeof cfg);
+  cfg.entropy = (uint32_t)first * 7919u + 12345u;
+  char seed[32];
+  snprintf(seed, sizeof seed, "runtest%017d", first);
+  cfg.seed = seed;
+  rs_start(&cfg);
+
+  const rs_stats* st = rs_stats_get();
+  uint32_t digest = 0;
+  int ended = 0, clears = 0, last_ended = 0, idle = 0, deadlock = 0, no_progress = 0;
+  long steps = 0, wave_sum = 0;
+  int wave_hist[21] = {0};
+  int last_waves = 0, last_nf = 0;
+  while (ended < runs) {
+    if (!step()) {
+      deadlock = 1;
+      break;
+    }
+    steps++;
+    if (st->not_found != last_nf) {
+      last_nf = st->not_found;
+      BAD("a switch-in Pokemon was not found in the party");
+    }
+    if (st->game_overs + st->clears != last_ended) {
+      const gc_run* r = rs_run();
+      /* a run just ended (the driver is showing the game over): sample it */
+      uint32_t h = 2166136261u;
+      const uint32_t v[3] = {(uint32_t)r->wave, (uint32_t)r->score, (uint32_t)(st->game_overs + st->clears)};
+      for (int i = 0; i < 3; i++) {
+        h ^= v[i];
+        h *= 16777619u;
+      }
+      digest ^= h;
+      wave_sum += r->wave;
+      wave_hist[r->wave / 10 > 20 ? 20 : r->wave / 10]++;
+      ended++;
+      clears = st->clears;
+      last_ended = st->game_overs + st->clears;
+      idle = 0;
+    }
+    if (st->waves != last_waves) {
+      last_waves = st->waves;
+      idle = 0;
+    } else if (++idle > 20000) {
+      no_progress = 1;
+      break;
+    }
+    if (steps > 200000000L) break;
+  }
+
+  printf("%d runs (%d cleared), %ld steps, %d waves shown, digest %08x\n", ended, clears, steps, st->waves, digest);
+  printf("average final wave %.1f; final wave:", ended ? (double)wave_sum / ended : 0.0);
+  for (int i = 0; i <= 20; i++)
+    if (wave_hist[i]) printf(" %d-%d:%d", i * 10, i * 10 + 9, wave_hist[i]);
+  printf("\ncommands answered: %d fight, %d ball, %d switch, %d run; %d refused by game-core\n", st->fights, st->balls, st->switches,
+         st->runs_tried, st->refused);
+  printf("screens: command %d, switch %d, learn move %d, evolve %d, reward %d, biome %d, mystery %d, game over %d, clear %d\n",
+         st->screens[GC_SCREEN_COMMAND], st->screens[GC_SCREEN_SWITCH], st->screens[GC_SCREEN_LEARN_MOVE],
+         st->screens[GC_SCREEN_EVOLVE], st->screens[GC_SCREEN_REWARD], st->screens[GC_SCREEN_BIOME], st->screens[GC_SCREEN_MYSTERY],
+         st->screens[GC_SCREEN_GAME_OVER], st->screens[GC_SCREEN_CLEAR]);
+  printf("fake screen: %d scenes, %d command prompts, %d option lists, %d party screens, %d ball lists, %d learn dialogs, %u screen events\n",
+         n_scenes, n_ask, n_options, n_party_opens, n_balls, n_dialogs, st->bev);
+  printf("events handled: message %d, battle %d, wave %d, summon %d, recall %d, hp %d, exp %d, level up %d, learned %d, evolved %d, mystery %d\n",
+         st->events[GC_EV_MESSAGE], st->events[GC_EV_BATTLE], st->events[GC_EV_WAVE], st->events[GC_EV_SUMMON], st->events[GC_EV_RECALL],
+         st->events[GC_EV_HP], st->events[GC_EV_EXP], st->events[GC_EV_LEVEL_UP], st->events[GC_EV_MOVE_LEARNED], st->events[GC_EV_EVOLVED],
+         st->events[GC_EV_MYSTERY]);
+  printf("duplicate messages dropped %d; HP/status brought up to date at a command %d; switch-ins not found %d; screen/run mismatches %d; stuck %d; model violations %d\n",
+         st->dup_dropped, st->hp_resynced, st->not_found, st->shown_mismatch, st->stuck, violations);
+  if (violations) printf("first violation: %s\n", first_violation);
+  if (deadlock) printf("DEADLOCK: nothing was pending after %ld steps (run %d, wave %d)\n", steps, st->runs, rs_run()->wave);
+  if (no_progress) printf("NO PROGRESS: no new wave in 20000 steps (wave %d)\n", rs_run()->wave);
+  const bool fail = violations || st->not_found || st->shown_mismatch || st->stuck || deadlock || no_progress || ended < runs;
+  printf(fail ? "FAILED\n" : "OK\n");
+  return fail ? 1 : 0;
+}

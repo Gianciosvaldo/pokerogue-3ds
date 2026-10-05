@@ -321,10 +321,9 @@ int pr_run_enemy_pokemon_base_rng(pr_rng *rng, pr_run *run, const pr_enemy_gen_c
     out->tera_type = n_types == 1 ? types[0] : types[pr_rng_integer_in_range(rng, 0, n_types - 1)];
 
     if (ctx->boss) {
-        if (ctx->species == SPECIES_ID_ETERNATUS && pr_run_is_battle_classic_final_boss(run, ctx->wave))
-            out->boss_segments = (out->form == 1) ? 5 : 4;
-        else
-            out->boss_segments = pr_run_get_encounter_boss_segments(run, ctx->wave, ctx->level, ctx->species, true);
+        /* EnemyPokemon.setBoss uses ordinary encounter segments here. The
+         * special Eternatus segments belong to the later EncounterPhase. */
+        out->boss_segments = pr_run_get_encounter_boss_segments(run, ctx->wave, ctx->level, ctx->species, true);
     }
     return 0;
 }

@@ -45,6 +45,9 @@ it("gym/e4 producer", async () => {
   const biomeIds = Array.from({ length: 32 }, (_, i) => i).concat([40, 41, 50]);
 
   (EnemyPokemon.prototype as any).generateAndPopulateMoveset = function (this: any) {
+    // Trainer post-process callbacks inspect this container after regeneration.
+    // Keep it valid without adding moves or consuming any moveset RNG.
+    this.moveset = [];
     if (this.__task49Snapshot === undefined) {
       this.__task49Snapshot = [
         this.abilityIndex, this.id, this.gender, this.formIndex, this.nature, this.teraType,

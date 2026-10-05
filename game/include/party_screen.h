@@ -5,6 +5,8 @@
 #ifndef GM_PARTY_SCREEN_H
 #define GM_PARTY_SCREEN_H
 
+#include <stdbool.h>
+
 #include "pr/battle.h"
 
 /* (menus.h's party_mode and PartyOption values, so callers needn't include menus.h, whose text
@@ -19,5 +21,25 @@ void ps_init(void); /* once at boot, after ui_init */
  * screen stays open until ps_close. */
 void ps_open(const pr_battle* bt, ps_mode mode, void (*on_pick)(int slot, int option, void* arg), void* arg);
 void ps_close(void);
+
+/* ---- the learn-move dialog (menus' learn_move_start) over the battle ----
+ * The dialog's messages and yes/no box belong to the caller's screen (the battle's message box); the
+ * summary page that picks the move to forget is menus' own, and this puts a screen over the battle
+ * for as long as it is open. Callbacks are upstream's LearnMovePhase steps, with menus.h's meaning: */
+typedef struct {
+  /* show text (with "$" page breaks and @d / @s tags); with prompt wait for A; then done(done_ctx) */
+  void (*show_text)(void* host, const char* text, bool prompt, void (*done)(void*), void* done_ctx);
+  /* Yes / No box: yes(ctx) or no(ctx) */
+  void (*confirm)(void* host, void (*yes)(void*), void (*no)(void*), void* ctx);
+  /* the answer: the move slot to forget (0-3), or -1 = not learned. The dialog goes on with its last messages */
+  void (*on_result)(void* host, int slot);
+  /* after the last message */
+  void (*on_end)(void* host);
+  void* host;
+} ps_learn_host;
+
+/* party slot = battle order (bt->party[0][slot]); the Pokemon wants to learn `move` and knows four.
+ * trainer_id is gameData.trainerId (the summary's ID No.) */
+void ps_learn_move(const pr_battle* bt, int party_slot, int move, int trainer_id, const ps_learn_host* host);
 
 #endif

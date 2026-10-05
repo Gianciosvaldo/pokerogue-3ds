@@ -23,50 +23,11 @@ void gc_port_enemy_moveset(gc_run *run, gc_mon *m)
     for (int k = 0; k < n; k++) gc_mon_set_move(m, k, mv[n - 1 - k]);
 }
 
-/* ---- reward-core: a placeholder pool ---- */
-typedef struct { const char *key; uint8_t target; int8_t tier; } stub_reward;
-static const stub_reward pool[] = {
-    {"POTION", GC_TARGET_POKEMON, 0}, {"SUPER_POTION", GC_TARGET_POKEMON, 1}, {"REVIVE", GC_TARGET_POKEMON, 1},
-    {"FULL_HEAL", GC_TARGET_POKEMON, 1}, {"ETHER", GC_TARGET_MOVE, 0}, {"ELIXIR", GC_TARGET_POKEMON, 1},
-    {"RARE_CANDY", GC_TARGET_POKEMON, 1}, {"POKEBALL", GC_TARGET_NONE, 0}, {"GREAT_BALL", GC_TARGET_NONE, 1},
-    {"HYPER_POTION", GC_TARGET_POKEMON, 2}, {"MAX_REVIVE", GC_TARGET_POKEMON, 2},
-};
-#define POOL_N ((int)(sizeof pool / sizeof pool[0]))
-
-int gc_port_reward_options(gc_run *run, int reroll_count, gc_offer out[GC_MAX_OPTIONS])
-{
-    (void)reroll_count;
-    gc_stub(run, GC_STUB_REWARDS);
-    int n = 3 + gc_item_stack(run, "GOLDEN_POKEBALL");
-    if (n > GC_MAX_OPTIONS) n = GC_MAX_OPTIONS;
-    for (int i = 0; i < n; i++) {
-        const stub_reward *r = &pool[gc_stub_rand(run, POOL_N)];
-        out[i].key = r->key;
-        out[i].arg = -1;
-        out[i].tier = r->tier;
-        out[i].target = r->target;
-        out[i].cost = 0;
-    }
-    return n;
-}
-
-static bool heal(gc_mon *m, int points, int percent, bool revive, bool status)
-{
-    pr_pokemon *b = &m->b;
-    if ((b->hp <= 0) != revive) return false;
-    if (revive || status) {
-        b->status = STATUS_EFFECT_NONE;
-        b->status_toxic_turns = 0;
-        b->status_sleep_turns = b->status_freeze_turns = -1;
-    }
-    const int max = b->stats[0];
-    int add = (int)floor(percent * 0.01 * max);
-    if (add < points) add = points;
-    if (add < 1) add = 1;
-    b->hp = b->hp + add > max ? max : b->hp + add;
-    return true;
-}
-
+/* ---- reward-core: what a reward does when it is taken. The options themselves are reward-core's
+ * (gc_reward.c), and so is the application of healing, revives, PP restores and PP Ups (gc_reward_apply,
+ * Task 60). What is left here is the rest: Poke Balls, Full Heal (reward-core has no application for it),
+ * Rare Candy (without the Candy Jar) and the items that are added to the player's items as they are, each
+ * one that needs a real effect counted ---- */
 static int pokeball_type(const char *key)
 {
     if (!strcmp(key, "POKEBALL")) return POKEBALL_TYPE_POKEBALL;
@@ -80,6 +41,11 @@ static int pokeball_type(const char *key)
 bool gc_port_apply_reward(gc_run *run, const gc_offer *o, int party, int move_slot, const char **why)
 {
     const char *k = o->key;
+    switch (gc_reward_apply(run, o, party, move_slot, why)) {
+    case GC_APPLY_DONE: return true;
+    case GC_APPLY_REFUSED: return false;
+    default: break;
+    }
     const int ball = pokeball_type(k);
     if (ball >= 0) {
         const int add = ball == POKEBALL_TYPE_MASTER_BALL ? 1 : 5;
@@ -91,7 +57,9 @@ bool gc_port_apply_reward(gc_run *run, const gc_offer *o, int party, int move_sl
         gc_ev_msg(run, "battle:rewardGain", 1, pr_arg_key("modifierName", ball_key[ball]));
         return true;
     }
+    const int idx = gc_reward_item_index(k);
     if (o->target == GC_TARGET_NONE) {
+        if (idx < 0 || !(pr_items[idx].flags & PR_ITEMF_PERSISTENT)) gc_stub(run, GC_STUB_REWARD_APPLY);
         gc_item_add(run, k, o->arg, 0, 1);
         return true;
     }
@@ -99,24 +67,9 @@ bool gc_port_apply_reward(gc_run *run, const gc_offer *o, int party, int move_sl
     gc_mon *m = &run->party[party];
     pr_pokemon *b = &m->b;
     bool ok = true;
-    if (!strcmp(k, "POTION")) ok = heal(m, 20, 10, false, false);
-    else if (!strcmp(k, "SUPER_POTION")) ok = heal(m, 50, 25, false, false);
-    else if (!strcmp(k, "HYPER_POTION")) ok = heal(m, 200, 50, false, false);
-    else if (!strcmp(k, "MAX_POTION")) ok = heal(m, 0, 100, false, false);
-    else if (!strcmp(k, "FULL_RESTORE")) ok = heal(m, 0, 100, false, true);
-    else if (!strcmp(k, "REVIVE")) ok = heal(m, 0, 50, true, false);
-    else if (!strcmp(k, "MAX_REVIVE")) ok = heal(m, 0, 100, true, false);
-    else if (!strcmp(k, "FULL_HEAL")) {
+    if (!strcmp(k, "FULL_HEAL")) {
         ok = b->hp > 0 && b->status != STATUS_EFFECT_NONE;
         if (ok) { b->status = STATUS_EFFECT_NONE; b->status_toxic_turns = 0; b->status_sleep_turns = b->status_freeze_turns = -1; }
-    } else if (!strcmp(k, "ETHER") || !strcmp(k, "MAX_ETHER")) {
-        if (move_slot < 0 || move_slot >= b->n_moves) { *why = "pick a move"; return false; }
-        const int pts = k[0] == 'M' ? -1 : 10;
-        b->pp_used[move_slot] = (uint8_t)(pts > -1 ? (b->pp_used[move_slot] > pts ? b->pp_used[move_slot] - pts : 0) : 0);
-    } else if (!strcmp(k, "ELIXIR") || !strcmp(k, "MAX_ELIXIR")) {
-        const int pts = k[0] == 'M' ? -1 : 10;
-        for (int i = 0; i < b->n_moves; i++)
-            b->pp_used[i] = (uint8_t)(pts > -1 ? (b->pp_used[i] > pts ? b->pp_used[i] - pts : 0) : 0);
     } else if (!strcmp(k, "RARE_CANDY")) {
         if (b->level >= pr_run_get_max_exp_level(&run->run, run->wave, false)) { *why = "partyUiHandler:anyEffect"; return false; }
         const pr_species *sp = gc_species(b->species);
@@ -126,6 +79,8 @@ bool gc_port_apply_reward(gc_run *run, const gc_offer *o, int party, int move_sl
         gc_system_add_friendship(run->sys, run, m, 6, true);
         gc_rq_unshift(run, gc_rp(RP_LEVEL_UP, party, b->level - 1, b->level));
     } else {
+        /* a held item is added as it is; anything else would act on the Pokemon, and doesn't yet */
+        if (idx < 0 || !(pr_items[idx].flags & PR_ITEMF_HELD)) gc_stub(run, GC_STUB_REWARD_APPLY);
         gc_item_add(run, k, o->arg, b->id, 1);
     }
     if (!ok) { *why = "partyUiHandler:anyEffect"; return false; }

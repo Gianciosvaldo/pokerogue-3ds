@@ -143,27 +143,37 @@ Dev overrides (`LEVEL_CAP_OVERRIDE`, `ENEMY_HEALTH_SEGMENTS_OVERRIDE`...) aren't
 
 Build: `make` (outputs to `build/`).
 
-## Task 63 baseline blocker (2026-10-04)
+## Task 63: bounded enemy movesets (work in progress)
 
-Enemy moveset generation remains unimplemented. Before any Task 63 code change,
-main `6ac3e321288ef543517279354bf96d7e5c6e5420` fails the unchanged `daily`
-differential: five daily runs / 250 waves, 760 checks passed and 15 mismatches,
-exit 1 under Node 22.23.3. Work stopped as required by the task's baseline rule.
-See [the exact commands, summaries and remaining gates](TASK63-BLOCKER.md).
-After the user authorized repairing the failure, form rolls were fixed to use
-the caller-supplied RNG, preserving the daily temporary stream. A separate
-27-check host regression passes; it fails five checks against the original
-library. An external diagnostic copy clearing the leaked player IV/nature/shiny
-overrides passes 775/775 daily checks with the unchanged comparator. The
-established daily producer is still unchanged and still fails; its input repair
-needs authorization under the earlier producer-edit prohibition. No moveset
-parity result or complete R-baseline pass is established.
+`pr_run_enemy_moveset` (`include/pr/moveset.h`, `src/moveset.c`) implements the
+pinned 8555c08 level-only generator for Caterpie and Weedle, Magikarp below
+level 25 and Ditto, plus EnemyPokemon's fixed Smeargle and Eternatus dispatch
+(including both Eternatus forms, inverse moves and Recover's -4 PP Ups).
+Trainer Caterpie/Weedle/Magikarp are limited to levels 1–24; trainer Ditto to
+1–79. Wild Caterpie/Weedle/Ditto support positive levels. Only native abilities,
+no passive/fusion, and the clean constructor boundary are supported. The battle
+owner supplies effective ATK/SPATK. This does not wire game-core (Task 64).
 
-Update (2026-10-04, later): lorenzo authorized the producer input fix on the review card, and
-`tests/daily.producer.test.ts` now clears the IV, nature and shiny overrides after classic setup
-(three lines, nothing else changed). Under Node v22.22.0, `difftest.sh <upstream> 20000 <seed> daily`
-prints 775 checks passed, 0 mismatches on seeds 777, 9001, 4242 and 31337 (the producer reads no seed:
-it is five fixed daily runs). The original C library on the same trace still prints 773 passed, 2
-mismatches, so the patched producer still catches the form-roll defect. The other Node 22 failures
-(`trainerparty` Rival 5 and 6 members, one `wildenemy` Eternatus case, the `gym_e4` producer crash) and
-the unfinished `rival` run are listed in the PR #112 comment; none of them is touched here.
+The bounded level path preserves pool order, effective-power/stat weighting,
+boss exponent, level-based rejections, forced STAB and trainer remaining-pool
+weighting. Supported roots need no evolution/prevolution/relearn merge,
+superseding pair, signature coin flip or useless-move removal. Those general
+paths, TM/egg pools, Tera-dependent selection, modified ability state, fusion
+and other challenges remain unported. Each rejected input returns a named
+reason and preserves RNG/output; existing snapshot suites are not moveset
+parity evidence. No generated file was hand-edited.
+
+The new suite calls the real upstream method on real Pokemon. Run with Node 22:
+
+```sh
+BUILD=/absolute/build sh run-core/tools/movesetdifftest.sh /external/upstream 2000 777
+```
+
+Producer: `tests/moveset.producer.test.ts`; flags `DIFF_MOVESET=1`, `DIFF_N`,
+`DIFF_SEED`, `DIFF_OUT`; trace `$BUILD/moveset-$SEED.txt`; comparator
+`$BUILD/movesettest TRACE N SEED`. It rejects missing completion footers and
+requires nonzero coverage for every claimed path. Unsupported-reason probes
+are host guard checks, not upstream differential matches.
+
+See [current validation and outstanding gates](TASK63-VALIDATION.md). PR #112
+remains draft until the required R regression is complete.

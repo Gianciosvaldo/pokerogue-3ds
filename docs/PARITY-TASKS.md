@@ -14,9 +14,9 @@ Implementation PRs: [Task 57 #97](https://github.com/Gianciosvaldo/pokerogue-3ds
 |---|---|---|---|
 | A | battle-core/ | 67 → 69 → 70 → 71 → 72 → 73 | Hard coordinator work except bounded 71 |
 | B | reward-core/ | 89; existing reward API tasks first | Hard; reward state validation |
-| C | game-core/ | 87 → 57 → 59 → 60 → 61 → 62 → 64 → 65 → 66 → 75 → 76 → 77 → 78 → 79 → 80 → 81 → 82 → 83 → 84 | One active task; lower-compute cards 60/64/76/77/78/84 |
-| D | run-core/ | Existing 50 → 63 | Lorenzo's run-core owner only; HANDOFF ownership unchanged |
-| E | game/ | 85 | Deferred human/emulator/console gate |
+| C | game-core/ | 87 → 57 → 59 → 60 → 61 (first slice) → 92 → 93 → 94 → 77 → 95 → 96 → 64 → 65 → 66 → 78 → 79 → 61 (further slices) → 62 → 75 → 76 → 80 → 81 → 82 → 83 → 84 | One active task; lower-compute cards 60/64/76/77/78/84/96 |
+| D | run-core/ | Existing 50 → 63; 100 | Lorenzo's run-core owner only; HANDOFF ownership unchanged; producer edits allowed for card 100 only |
+| E | game/ | 110 (authorized); 85 console half | Card 110 is a project thread, Azahar first; console acceptance stays a human gate |
 | F | ai-core/ | 88 → 58 → 68 → 74 | Lower-compute 58/68, hard 74 |
 | G | docs/ | 86 | Lower-compute independent audit documentation |
 
@@ -124,7 +124,7 @@ Task 68 is delegated to Jules: #108 landed its bounded loaded-state contract dir
 
 ### Task 64: Wire enemy movesets into the run (game-core/, lane C)
 
-**Branch:** `outside/enemy-movesets-integration`. **Assignment:** Lower compute. **Prerequisites:** 62 and 63 merged.
+**Branch:** `outside/enemy-movesets-integration`. **Assignment:** Lower compute. **Prerequisites:** 63 merged. 62 (the player's fusion reward lifecycle) is no longer required; lorenzo approved this reorder on 2026-10-04. If an enemy fusion case needs player-side fusion state, stop and report it.
 
 **Problem.** gc_port_enemy_moveset remains a last-four-level-moves fallback even after generation is ported.
 
@@ -254,7 +254,7 @@ Task 68 is delegated to Jules: #108 landed its bounded loaded-state contract dir
 
 ### Task 77: Flee through the run loop (game-core/, lane C)
 
-**Branch:** `outside/flee-run`. **Assignment:** Lower compute. **Prerequisites:** 76 merged; battle flee-roll API available.
+**Branch:** `outside/flee-run`. **Assignment:** Lower compute. **Prerequisites:** 94 merged; battle flee-roll API available (`attempt_run_phase`). Moved ahead of 75/76 by the 2026-10-04 reorder; it needs neither doubles nor weather.
 
 **Problem.** Battle escape eligibility/roll must reach game-core commands and wave progression.
 
@@ -401,6 +401,80 @@ Task 68 is delegated to Jules: #108 landed its bounded loaded-state contract dir
 **Do.** Add an explicit separate relearner list, preserve legacy callers, use base moves for Memory exclusions under summon overrides, and preserve duplicate TM history as actual upstream does. Add a separate simultaneous getter/Memory/TM generator producer. Do not edit established checks; report the stale import and stop readiness pending its separately reviewed repair.
 
 **Pass.** New dual-input comparisons: 2,000 per seeds 777, 9001, 4242 and 31337, zero Memory/TM/RNG mismatches, nonzero distinct-list/fusion/summon-override cases; mutation detected. Explicit-empty/bounds host checks pass. Existing reward option/victory/application coverage and mismatch counts do not worsen. Established Memory producer must execute and replay cleanly after reviewed test-contract repair; no unexecuted cases credited. Host/3DS CI pass. No game lifecycle parity claim.
+
+## Cards added after the parity ledger (2026-10-04)
+
+Numbered from 92 in the post-parity plan (cards 92 to 151 by milestone; the full plan lives in lorenzo's project notes, outside this repo). Lorenzo approved cards 92 to 96, the lane C order in the table above, card 100's producer edits and card 110 on 2026-10-04 (see HANDOFF, "Settled project decisions"). Every card inherits HANDOFF and the validation aliases above. Sizes are not time estimates. Claims about current behaviour were read from code at main `6f944f7`; re-check each against `main` before starting.
+
+### Task 92: Finish the turn: `pr_continue` and the enemy's switch-out (game-core/, lane C)
+
+**Branch:** `outside/turn-tail-and-enemy-switch`. **Assignment:** Hard (exact-port model). **Prerequisites:** None.
+
+**Problem.** game-core never calls battle-core's `pr_continue` (`battle-core/include/pr/engine.h:201`), so after a victory the rest of the turn is dropped (`gc_phases.c:20,34,41`, stub `GC_STUB_TURN_TAIL`), and an AI switch-out loses the enemy's turn (`gc_battle.c:427`, `GC_STUB_ENEMY_SWITCH`). HANDOFF Task 12's leftovers; some README rows may be stale, so check each against code first.
+
+**Do.** Carry on past the victory stop with `pr_continue`, wire the enemy side's switch-out, and the "Will you switch?" prompt at a trainer's next Pokemon if it is still missing. Delete the matching stub counters and README rows.
+
+**Pass.** H. "rest of the turn after a victory lost" and "trainer's switch-out" read 0 in `gcplay --auto 1000`; one focused fixture per path (victory with a pending end-of-turn effect, trainer switch-out, forced switch); any digest change explained.
+
+### Task 93: Boss segments in battles (game-core/, lane C)
+
+**Branch:** `outside/boss-segments-run`. **Assignment:** Lower compute. **Prerequisites:** None (battle-core's boss shield code is merged).
+
+**Problem.** `gc_mon.c:112-113` sets `is_boss` and `gc_mon.boss_segments`, but never battle-core's `boss_segments` / `boss_segment_index` on the battle Pokemon, so shields and their stat boosts never run in a game-core battle.
+
+**Do.** Set both from run-core's segment count when the encounter is created (wild, trainer boss, mystery spawn), keep them through save/resume (`gc_save.c` field list), and expose the segment count to the app. Leave the classic final boss's first-segment rule to Task 66.
+
+**Pass.** H; the soak report's "(boss segments)" count is 0; fixtures for a legendary wave, a trainer boss and a save/load in the middle of a boss; the battle-core boss-segment differential runs unchanged. State plainly that this is host consistency, not a new upstream comparison.
+
+### Task 94: Catching in the run: verify against upstream and finish (game-core/, lane C)
+
+**Branch:** `outside/catching-audit`. **Assignment:** Hard. **Prerequisites:** None. Task 93 first if the caught-boss case is in scope.
+
+**Problem.** Catching is already wired (PR #55): `GC_CH_BALL` reaches battle-core's capture phase (`gc_battle.c:311-325`), `victory()` adds the Pokemon, a full party opens the swap prompt and the dex is updated (`gc_phases.c`). Nothing checks this against upstream's `VictoryPhase` catch branch and `AttemptCapturePhase`; `GC_STUB_CATCH` is declared and never incremented; the game-core README still says "No catching or fleeing". Candy on a catch, a caught boss and the catch-related charms are not shown to be handled (unknown).
+
+**Do.** Audit the catch branch against the pinned upstream, add focused fixtures (each ball type, full party, caught boss, candy and egg-move bookkeeping), delete the dead stub and fix the README row. Fleeing is Task 77, next in lane C.
+
+**Pass.** H; fixtures compare result and RNG with battle-core's capture fixtures and the dex/candy deltas with the existing dex differential; save/resume with the new party member.
+
+### Task 95: Reward application, part 1: TMs and Memory Mushroom (game-core/, lane C)
+
+**Branch:** `outside/reward-apply-tm-memory`. **Assignment:** Hard. **Prerequisites:** 60 and 91 merged (both are).
+
+**Problem.** The soak reports thousands of rewards "taken without their own effect" and the tally cannot say which classes. Nothing applies a TM or Memory Mushroom, so the move-copy screen is unreachable.
+
+**Do.** First add a per-class tally to `gcplay` (additive; do not touch the digest definition). Then apply TM and Memory Mushroom through reward-core, including the copy screen, `usedTMs` and the learn-move flow.
+
+**Pass.** H; the tally lists every class; TM and Memory fixtures plus Task 91's dual-input comparisons pass through the adapter; reward-core regressions unchanged.
+
+### Task 96: Reward application, part 2: stat and level items, balls, Full Heal, lapsing items (game-core/, lane C)
+
+**Branch:** `outside/reward-apply-consumables-2`. **Assignment:** Lower compute. **Prerequisites:** 95 merged.
+
+**Problem.** Mints, vitamins, Rare Candy (Candy Jar), Full Heal, Poke Balls as items, Lures and Charms, and the post-battle lapsing items (`GC_STUB_POST_BATTLE`: Pickup, Honey Gather, Pay Day) are still stand-ins.
+
+**Do.** Apply each through reward-core's API (Rare Candy has `pr_reward_apply_candy`). Evolution, form and fusion items stay with Tasks 61 and 62.
+
+**Pass.** H; the stub counters for these classes read 0; per-item application tallies; table cases as in Task 60.
+
+### Task 100: Run-core producer repairs: `gym_e4` crash and `rival` memory (run-core/, lane D)
+
+**Branch:** `outside/run-core-producer-repairs`. **Assignment:** Hard; run-core owner only. **Prerequisites:** None. Lorenzo allowed these producer edits on 2026-10-04 (HANDOFF rule 2 otherwise forbids them).
+
+**Problem.** The upstream `gym_e4` producer throws a `TypeError` (`p.moveset` undefined in the trainer closures). The `rival` producer needs 3 to 5 GB and over an hour per seed.
+
+**Do.** Repair each producer minimally and state the case counts before and after. Do not loosen any comparison, tolerance, seed or count.
+
+**Pass.** `gym_e4` and `rival` at 3000 cases on seeds 777, 9001, 4242 and 31337 run to completion on Node 22 at zero mismatches, or the PR says exactly what still fails. A planted mutation is caught. The rest of R unchanged.
+
+### Task 110: App: drive the run from game-core (game/, lane E)
+
+**Branch:** `outside/app-run-driver`. **Assignment:** Hard; project thread, not an outside-agent task. **Prerequisites:** Authorized by lorenzo on 2026-10-04. Cards 92 and 93 preferably first. Plan: `game/WIP-run-driver.md` (deleted when the driver landed).
+
+**Problem.** The `game/` app boots a demo battle fed by a stand-in; nothing drives game-core's run (Task 85's software half).
+
+**Do.** A `run_screen.c` that owns the run and drains its events, splitting at each wave; start each battle from run state, answer COMMAND with the battle command screen, SWITCH with the party screen and LEARN_MOVE with the learn dialog; use stand-ins for starter choice, rewards and biome choice (via the existing options UI); evolution automatic; game over starts a new run. Delete `battle_setup.c` and move the event and switch tests to a host test over whole runs. One screen flow at a time.
+
+**Pass.** A host `runtest` plays N seeded runs through the converter without assertion failures; emulator screenshots of one run flow (wave 1, a reward, wave 2). No hardware claim; console acceptance stays Task 85 / card 118.
 
 ## Beyond these bounded slices
 

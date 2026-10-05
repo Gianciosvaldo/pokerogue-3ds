@@ -132,7 +132,8 @@ static void enemy_ctx(gc_run *run, pr_enemy_gen_ctx *ec)
     ec->event_shiny_multiplier = 1;
 }
 
-static int party_luck(gc_run *run)
+/* getPartyLuckValue(party) */
+int gc_party_luck(gc_run *run)
 {
     pr_luck_member m[6];
     for (int i = 0; i < run->n_party; i++) {
@@ -204,7 +205,7 @@ static bool gen_wild(gc_run *run, int level)
     memset(&wc, 0, sizeof wc);
     enemy_ctx(run, &wc.enemy);
     wc.level = level;
-    wc.luck = party_luck(run);
+    wc.luck = gc_party_luck(run);
     wc.golden_bug_net = gc_item_stack(run, "GOLDEN_BUG_NET") > 0;
     pr_wild_enemy w;
     if (pr_run_gen_wild_enemy(&run->run, &wc, &w) < 0) return false;
@@ -290,6 +291,7 @@ void gc_new_battle(gc_run *run)
     run->trainer_name = run->trainer_partner_name = -1;
     gc_ai_reset(run);
     in->reroll_count = 0;
+    in->battle_won = false;
 
     pr_new_battle_ctx ctx;
     memset(&ctx, 0, sizeof ctx);
@@ -427,6 +429,9 @@ void gc_new_battle(gc_run *run)
     if (run->battle_type == BATTLE_TYPE_TRAINER)
         gc_ev_msg(run, "battle:trainerSendOut", 2, gc_m_trainer(run, "trainerName", GC_TNAME_TRAINER), gc_m_mon_name(run, "pokemonName", 1, 0));
     if (sent_out) gc_ev_msg(run, "battle:playerGo", 1, gc_m_mon(run, "pokemonName", 0, gc_player_active_index(run)));
+    /* CheckSwitchPhase: battle-core's start stopped to ask "Will you switch?" (run->ask_switch); the rest of the
+     * start (InitEncounterPhase and the enemy's PostSummonPhase) runs once it is answered */
+    if (run->eng.awaiting_confirm) gc_rq_unshift(run, gc_rp(RP_CHECK_SWITCH, 0, 0, 0));
     /* LevelCapPhase, after a new biome's encounter */
     if (new_biome && run->bt.max_exp_level > in->last_max_exp_level)
         gc_ev_msg(run, "battle:levelCapUp", 1, pr_arg_int("levelCap", run->bt.max_exp_level));

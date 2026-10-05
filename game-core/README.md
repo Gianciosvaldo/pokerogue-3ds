@@ -7,9 +7,10 @@ events and screens and hands back the player's choices.
 
 It calls battle-core for the turns, run-core for the waves and the enemies, ai-core for the enemy's
 commands (and the player's command restrictions and trapping), and goes through `include/gc/ports.h`
-for the enemy movesets and the rewards. Until reward-core and run-core's movesets land, stand-ins in
-`src/gc_stubs.c` keep a run playable. Each stand-in is counted, so the soak runs show how much of a run is
-still standing in.
+for the enemy movesets and the rewards. The reward screens are reward-core's (`src/gc_reward.c`, Task 59).
+Healing, revive, PP restore and PP Up rewards act on the run through reward-core (Task 60). Until run-core's
+movesets land and the other rewards act on the run, stand-ins in `src/gc_stubs.c` keep a run
+playable. Each stand-in is counted, so the soak runs show how much of a run is still standing in.
 
 ## The API (`include/gc/run.h`)
 
@@ -27,7 +28,8 @@ for (;;) {
 }
 ```
 
-Screens: starters, command (Fight / Pokémon; Ball and Run come with catching), switch, learn move,
+Screens: starters, command (Fight / Pokémon; Ball and Run come with catching), switch, check switch
+("Will you switch?", only with `run->ask_switch`), learn move,
 evolve, reward (options, shop, reroll, skip), biome (with a Map), game over, clear. The app may read the
 party, money, wave, biome and the battle's field straight from `gc_run`, but must not change them.
 `party[]` never moves: an index in an event or a choice always means the same Pokémon, and
@@ -40,6 +42,47 @@ battle-core's `pr_event` list (`pr/events.h`), handed over as one `GC_EV_BATTLE`
 `run->battle_events` (valid until the next `gc_run_choose`). The app plays both the same way. Some of
 upstream's texts carry its control codes (`@d{15}` waits, `@s{se/pb_bounce_1}` plays a sound, as in
 the "1, 2, and… Poof!" of a forgotten move): the app acts on them rather than printing them.
+
+### A turn, from its start to the next command
+
+`gc_run_choose` on a Fight runs battle-core's turn (`pr_run_turn`) up to its next stop. When an enemy
+faints, battle-core stops at the VictoryPhase with the rest of the turn still queued; game-core gives out the
+experience (`RP_VICTORY`, `RP_EXP`, level ups, new moves, evolutions) and then lets the engine carry on
+(`RP_CONTINUE`, battle-core's `pr_continue`): the other moves, the turn's end-of-turn effects (burn damage,
+weather, berries), and, at a trainer's, the next Pokémon, which battle-core's own SwitchSummonPhase sends out
+with the slot `Trainer.getNextSummonIndex` gives (ai-core's `pr_ai_next_summon_index`, through the
+`next_summon_index` callback). When no enemy is left, `pr_continue` ends in the BattleEndPhase stop and the
+wave's chain (trainer victory, money, rewards, the biome, the next battle) follows. A fainted player lead gets
+the replacement prompt (a SWITCH screen that can't be skipped) after the trainer's next Pokémon is out. The
+enemy's own switch-out (ai-core's COMMAND_POKEMON) is left in the battle's commands and battle-core's
+TurnStartPhase runs it before the moves.
+
+A wild battle's start (battle-core's `pr_start_battle`) stops at CheckSwitchPhase only in the SWITCH battle
+style. game-core's default is the SET style (`run->ask_switch = false`: no question, the start is carried
+through at once, the enemy's and the player's entry phases included). With `run->ask_switch = true` (a setting
+the app sets after `gc_run_new` and `gc_run_load`, not saved) the run waits on a `GC_SCREEN_CHECK_SWITCH`
+screen, answered with `GC_CH_CONFIRM` (`a` = 1 yes, 0 no); yes opens the SWITCH screen (which can be
+cancelled), no goes on to the first command. Pinned upstream asks nothing at a trainer's next Pokémon:
+`CheckSwitchPhase` is pushed only for a battle that isn't a trainer's (`encounter-phase.ts`), the title's
+continue, a mystery encounter and the game over's retry.
+
+### Boss segments
+
+An enemy that is a boss has battle-core's `pr_pokemon.boss_segments` (run-core's count, from
+`getEncounterBossSegments`: legendary, sub-legendary and mythical species, every tenth wave, the endless
+random bosses, +1 at level 100 and +1 at a base stat total of 670) and `boss_segment_index`, the shields
+left, one under the count to start with, which is upstream's `setBoss`. `gc_mon_new_enemy` sets them from
+the generator's `boss_segments` (0 = not a boss), a mystery encounter's boss from the encounter's own count,
+and battle-core does the rest: a hit stops at the end of the next segment (a big one passes several), each
+broken segment gives a wild boss a random stat boost (a trainer's Pokémon keeps the shield and gets no boost),
+and the classic final boss's first-segment rule (wave 200, form 0) is battle-core's too; Task 66 owns the rest of that fight. The app reads the two fields on the Pokémon it
+converts; game-core keeps no copy of them. They are saved with the rest of `pr_pokemon` (`is_boss`,
+`boss_segments`, `boss_segment_index`). A caught boss comes into the party as a `PlayerPokemon`, which is
+never a boss: its shields are cleared and it loses the passive a boss has by being one.
+
+Only wild bosses and mystery encounters' bosses happen in a run today: run-core gives segments to a trainer's
+Pokémon only in the classic rival's fights 5 and 6, and those waves are still wild stand-ins (fixed battles,
+below). `tests/boss_segments_test.c` runs the rival's party through `gc_mon_new_enemy` for that reason.
 
 ## Saving
 
@@ -97,11 +140,11 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 | Stand-in | Waits on |
 |---|---|
 | Enemy moveset: the last four level moves | run-core |
-| A trainer's switch-out picked by the AI does nothing (the enemy loses its turn) | battle-core: the enemy side's SwitchSummonPhase |
-| Rewards: a fixed placeholder pool (potions, revives, ethers, Rare Candy, balls) | reward-core |
+| A reward taken that isn't a ball, Full Heal, Rare Candy, held item or one of the healing, revive and PP items Task 60 ported (TMs, Memory Mushroom, Mints, money, vouchers, evolution items, DNA Splicers, Rarer Candy) is added to the items and counted (`reward taken without its own effect`) | later reward tasks |
 | Double battles are played as singles (M1 rule) | doubles in battle-core |
 | Mystery encounters and fixed classic battles (rival, evil team, gyms run-core can't make) become wild battles of the wave's level | run-core, later the encounters |
-| The rest of a turn after a victory (end-of-turn effects) is lost | battle-core: carry on past a stop |
+| A boss's battle score: `addFaintedEnemyScore` (and the catch's own copy of it) multiplies it by `sqrt(bossSegments)`, and battle-core's two score sites in `phases.c` don't read `boss_segments` yet, so each boss that faints or is caught is counted as `(boss segments)` in the soak report | battle-core |
+| In a wave whose number is a multiple of 10, once every enemy has fainted, upstream's CheckInterludePhase (`onInterlude`) drops the rest of that turn's weather, berry and status-effect phases and flags the TurnEndPhase; battle-core has it unported (`(phase CheckInterludePhase)` in the soak's unported list: 218 of 1000 runs), so those effects run | battle-core: CheckInterludePhase |
 | No weather roll for a new biome | port of `getRandomWeatherType` |
 | Evolution conditions on items, held items or the dex aren't met | reward-core, the dex |
 | No catching or fleeing | battle-core (AttemptCapturePhase, AttemptRunPhase) |
@@ -109,16 +152,18 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 | A trainer's name in a message goes without its title ("Aaron would like to battle!" for "Ace Trainer Aaron would like to battle!") | battle-core: a message argument made of several locale keys |
 | Pickup, Honey Gather, Pay Day, lapsing items | reward-core |
 
-Not started: the dex and starter unlocks, eggs, the "Will you switch?" prompt at a trainer's new Pokémon, Imprison and the
+Not started: the dex and starter unlocks, eggs, Imprison and the
 restriction texts of their own (a restricted move answers `battle:moveCannotBeSelected` until
 battle-core's `pr_move_usable` lands), the trainer config's boss flag and Terastallization for the fixed
-battles' trainers, form learnsets, and the prevolution-move messages.
+battles' trainers, form learnsets for level-up learning (`gc_level_up_moves`; the TM and Memory Mushroom
+lists read them since Task 59), and the prevolution-move messages.
 
 ## Data
 
 `gen/out/gc_evolutions.c` (each species' evolutions and their conditions), `gen/out/gc_starters.c`
-(starter costs and the default unlocked starters) and `gen/out/gc_trainers.c` (each trainer config's
-money multiplier, boss flag, reward count and names) are dumped from upstream. To dump them again from an
+(starter costs and the default unlocked starters), `gen/out/gc_trainers.c` (each trainer config's
+money multiplier, boss flag, reward count and names) and `gen/out/gc_learnsets.c` (every species' form-specific
+level moves, `formLevelMoves`: 67 lists, 307 moves) are dumped from upstream. To dump them again from an
 upstream checkout prepared by `battle-core/tools/setup-upstream.sh`: `tools/redump.sh <upstream dir>`.
 
 Trainer names are upstream's own `Trainer.getName`, run by the dump on every config and variant for the
@@ -228,3 +273,257 @@ credited as completed runs. No existing producer/comparator was changed. The
 mystery test's printed “76 differential cases” still represents smoke coverage,
 not upstream result comparison. These checks validate deterministic host resume;
 no new upstream differential or hardware/emulator result is claimed.
+
+## Task 59: reward screens from reward-core
+
+At main `6ac3e321288ef543517279354bf96d7e5c6e5420`, `gc_port_reward_options` drew from a fixed placeholder pool.
+It now builds a `pr_reward_ctx` from the run as it is (the party in upstream's party order, held items with
+their holders, unlocks, balls, learnsets, the arena, luck) and calls reward-core's `pr_reward_select_start` on
+`run->run.rng` for each way upstream's `SelectModifierPhase` comes up (`src/gc_reward.c`, `GC_REWARD_*` in
+`include/gc/ports.h`):
+
+| Screen | What it does |
+|---|---|
+| first roll | `resetSeed()`, the pool's thresholds, 3 options plus one per Golden Poké Ball (`getModifierCount`) |
+| reroll | a new phase with `rerollCount + 1`, no reseed; the previous options' tiers are kept only while the Lock Capsule's lock is on (the luck upgrade can still raise them: `upgrade_count` is in `gc_offer`) |
+| copy (after a TM or Memory Mushroom) | `SelectModifierPhase.copy()`: the same options and `rerollCount` as guaranteed options, no luck upgrade, no thresholds, no RNG draw |
+| no victory | `{fillRemaining: false, rerollMultiplier: -1}`: no options and no reroll, but it still reseeds and rolls the thresholds |
+
+The reroll price is `getRerollCost` (reward-core's `pr_reward_reroll_cost`). The Lock Capsule's lock is a
+screen choice (`GC_CH_LOCK_RARITIES`). A screen reward-core flags or can't roll comes up
+empty and is counted (`reward screen reward-core could not roll`), as is an input game-core can't give
+(`reward-core input game-core can't give`); both are 0 in 1,000 runs. The learnsets reward-core reads
+(`src/gc_learnset.c`, `getLevelMoves` with prevolution and fusion rows, `getUnlockedEggMoves`) use
+`gen/out/gc_learnsets.c`, the form-specific level moves dumped by `gen/dump-learnsets.test.ts` through
+`tools/redump.sh` (67 lists, 307 moves; running `tools/redump.sh` again on the 8555c08 checkout leaves every
+generated file unchanged). Applying a reward was still the placeholder; Task 60 (below) replaced it for healing, revives and PP.
+
+Exact commands from the repository root, with an upstream checkout from `battle-core/tools/setup-upstream.sh`:
+
+```sh
+make -C game-core clean
+make -C game-core test
+game-core/build/gcplay --auto 1000 --jobs 8
+game-core/build/gcplay --auto 1000 --jobs 8 --save-test
+for seed in 777 9001 4242 31337; do game-core/tools/rewarddiff.sh <upstream dir> 1500 $seed; done
+reward-core/tools/difftest.sh <upstream dir> 4000 99 all          # unchanged reward-core regression
+```
+
+Results:
+
+- `make -C game-core test` exits 0, no warnings. New: `build/reward_test` **3,512 checks, 0 failures** (hand-built
+  screens replayed straight through reward-core: first roll 192 options, 1 luck upgrade; 120 rerolls with and
+  without the lock; the reroll price; the copy; the no-victory screen; the phase flow; the inputs) and
+  `build/switch_prompt_test` **25 checks, 0 failures**. The 200-run digest is `f12526b9` without and with saves.
+- Differential against upstream (`tests/reward.producer.test.ts` runs upstream's own calls, `tests/reward_diff_test.c`
+  replays them): each of the four seeds, 1,500 cases, **0 mismatches**, 0 cases skipped. It compares every value
+  `gc_reward_ctx` hands reward-core with what upstream returns (about 530,000 input fields per seed) and
+  every screen's options, arguments, tiers, upgrade counts, reroll price and RNG state after, for the first roll,
+  rerolls with and without the lock, the copy and the no-victory screen (3,530 to 3,645 screens and 11,687 to 12,129
+  options per seed). The cases write upstream's own stats over game-core's; stats are not part of this check.
+- Mutation check of that differential (one change in the adapter at a time, same 4 case files): 18 of 20 changes
+  are caught. The two that aren't: *TM list from level 1* is equivalent (with `includeRelearnerMoves` the
+  starting level never changes the rows), and *copy loses rerollCount* is redundant in every flow game-core can
+  reach (the count is captured when the copy is queued and nothing rolls a screen in between). Caught: the
+  Lock Capsule's tiers ignored, Aura Wheel as one type, egg-move unlock bits, `canSetStatus` without `ignoreField`,
+  party luck, time of day, weather, the Memory list not explicit, the reroll price ignoring the lock,
+  move-type abilities, the fusion partner in item-spawn types (by a single case in the 6,000), party order, held items not matched to holders,
+  passive always usable, Golden Punch holders, Tera Blast without the Tera Orb, the unlocked Eviolite, the balls.
+- 1,000 soak runs, with and without saves: 1,000 ended, 0 cleared/stuck/crashed/timed out, **55,280 turns**, digest
+  **`bdfe170b`** both (16,151 save/load round trips, largest save 10,198 of 131,072 bytes). A host build of every core with
+  `-funsigned-char` gives the same digest. Stand-ins: the placeholder reward list (1,000 runs, 14,047 times on
+  main) is gone; the reward screen that couldn't be rolled and the unsupported input are 0; **a reward
+  taken without its own effect (Task 60): 831 runs, 1,466 times**.
+- Size (host x86-64 objects, the ARM size was not measured): `gc_reward.o`, `gc_learnset.o` and `gc_learnsets.o` add
+  about 12 KB of code and tables and 34.8 KB of static memory (the reward context and the learnset scratch rows);
+  `gc_run` is 310,608 bytes and its `internal_` still holds `gc_internal` (12,064 of 16,384 bytes).
+- reward-core's own established regression, unchanged: rewards **3950 pass, 0 fail, 50 unported**, victory 4000/0,
+  application 4000/0, Memory 4000 cases/0 mismatches.
+
+Why the soak digest moved from main's `dd076d77` (57,502 turns): the runs now play real reward screens, so
+potions, balls, held items and Rare Candies differ from the first reward on, and two fixes change the runs they
+touch (a starter's luck is `shiny ? variant + 1 : 0`, as `Pokemon`'s constructor sets it, and the Teleport
+prompt below). I did not split the change by cause. The unported counter for held items on the turn rose
+(886 runs and 34,445 times to 999 runs and 51,528): real held items now reach battles, and battle-core hasn't
+ported all of them.
+
+Two game-core fixes the real rewards forced:
+
+- A Pokémon's own move that switches it out (Teleport) offered the Pokémon that was leaving; picking it left
+  `switch_out_status` set and the battle never went on (soak seed 782). `gc_battle_switch_screen` leaves it out.
+- The four seeds of `tests/resume_test.c` play different runs now, so they no longer reach what they were chosen
+  for: with Task 87's `switch_out_status = false` in the replacement prompt removed, `resume_test` still passed
+  (Task 87 added seed 849 for exactly that). That is a loss of coverage by the same, unchanged check, so `tests/switch_prompt_test.c`
+  pins both prompts directly; removing either fix makes it fail. `resume_test` itself is unchanged: its counts
+  (36,417 checks, max steps 250/296; main 36,471 and 450/472) follow the runs it now plays.
+
+Not done or not checked (reported, not widened into this PR):
+
+- `pr_reward_reroll` keeps `sel->custom` into the rerolled phase; the adapter uses reward-core's primitives instead.
+- battle-core's `pr_apply_variable_move_type` ignores the fusion partner for Judgment, Multi-Attack, Techno
+  Blast, Raging Bull and Ivy Cudgel; the adapter works around it (`with_partner_as_primary`, which also copies
+  upstream's quirk of reading the partner species' own form 0).
+- Nothing applies a TM or the Memory Mushroom yet, so the copy screen is unreachable from a real run and
+  `usedTMs` stays empty.
+- Fusion gender and luck aren't tracked (reward-core's item-evolution gender condition uses fusion gender).
+  Lure and Silver Poké Ball battle counts aren't tracked either (the differential leaves lures out).
+  `metSpecies` is derived from the current species' root. Challenges aren't modelled: no level-up moveset hook,
+  `EGG_MOVE_RELEARN_AVAILABILITY` and `isAllowedInChallenge` keep their defaults.
+- `gc_level_up_moves` (level-up learning) still ignores form learnsets, though the dump now has them.
+- The app (`game/`): the Lock Capsule toggle isn't wired into the UI and how it draws the new item keys is
+  unchecked. The shop, fixed-battle and mystery encounter custom reward settings, and fleeing (a non-victory
+  is always the restricted screen) are untouched.
+- No hardware or emulator result; the 3DS build is CI's (no ARM toolchain here).
+
+## Task 60: healing, revive and PP rewards through reward-core
+
+At main (after Task 59, #113), `gc_port_apply_reward` (`src/gc_stubs.c`) applied potions, revives, ethers and
+elixirs by hand, accepted a Potion at full HP, ignored the Healing Charm and did no PP Up at all. It now hands the 14 items reward-core ports (Potion, Super, Hyper and Max Potion, Full Restore,
+Revive, Max Revive, Sacred Ash, Ether, Max Ether, Elixir, Max Elixir, PP Up, PP Max) to `gc_reward_apply`
+(`src/gc_reward.c`), which calls reward-core's `pr_reward_apply` on the run as game-core holds it and writes
+back what changed:
+
+- The context is the same `gc_reward_ctx` builds for the screens (party in `party_order`, items and holders);
+  the choice's party index is a storage index, mapped to the context's index with `gc_battle_slot_of`.
+- Written back: HP, status (and the toxic, sleep and freeze counters when the status clears), and each move's
+  PP used and PP Ups. An empty move slot is skipped, as reward-core's moves are compacted. `GC_EV_HP` is emitted
+  for every member whose HP changed and for the target.
+- A free reward and a purchase differ the way upstream's `SelectModifierPhase.applyModifier` does: a reward at
+  cost -1 is consumed whatever `addModifier` returned (only Sacred Ash can reach that with a false result); a
+  purchase is taken only if it did something. The party menu's filter (`selectFilter`, `moveSelectFilter`) is
+  reward-core's, so a refusal is `partyUiHandler:anyEffect`, and no target is "pick a Pokemon" or "pick a move".
+- A move with a fixed maximum PP (`max_pp_override`) refuses PP Up and PP Max, as
+  `PokemonPpUpModifierType`'s filter does: reward-core's moves don't carry it, so game-core checks it.
+- Left explicit, still the stand-in: Poké Balls, Full Heal (reward-core has no application for it; game-core's
+  own rule is HP above 0 and a status), Rare Candy (no Candy Jar), held items, and everything that is added to the
+  items as it is. `gcplay` now tallies the 14 items plus Full Heal, taken and refused, so the soak shows what is applied.
+
+Exact commands from the repository root, with an upstream checkout from `battle-core/tools/setup-upstream.sh`:
+
+```sh
+make -C game-core clean
+make -C game-core test
+game-core/build/gcplay --auto 1000 --jobs 8
+game-core/build/gcplay --auto 1000 --jobs 8 --save-test
+for seed in 777 9001 4242 31337; do game-core/tools/applydiff.sh <upstream dir> 4000 $seed; done
+for seed in 777 9001 4242 31337; do game-core/tools/rewarddiff.sh <upstream dir> 1500 $seed; done   # Task 59 regression
+reward-core/tools/difftest.sh <upstream dir> 4000 99 all                                          # unchanged reward-core regression
+```
+
+Results:
+
+- `make -C game-core test` exits 0, no warnings. New: `build/reward_apply_test`, **638,355 checks, 0 failures**: 58
+  table cases (full HP, fainted targets, statuses, empty PP, PP Ups, PP at the 3-Up cap, a move with under 5 PP,
+  invalid targets, Healing Charm stacks, free against bought, rejection), Sacred Ash, a shuffled `party_order`,
+  the items left unhandled, an empty move slot, `max_pp_override`, and 30,000 random states checked against a
+  model written from upstream's `PokemonHpRestoreModifier`, `PokemonPpRestoreModifier`,
+  `PokemonPpUpModifier` and `ReviveModifier` rules (14,682 taken, 15,318 refused; each item from 395 to 1,887 taken
+  and from 280 to 1,729 refused, listed in the test's output). The 200-run digest is `da825571` without and with saves.
+  `build/switch_prompt_test` still 25 checks. `build/resume_test` is unchanged: **36,441 checks**, completion
+  1000/1000 both ways, max steps 274/331 (Task 59: 36,417 and 250/296; the runs it plays changed again).
+- Differential against upstream, `tools/applydiff.sh`: reward-core's apply producer (`reward-core/tests/apply.producer.test.ts`,
+  unchanged, run by upstream's own modifier classes at 8555c08) feeds `tests/reward_apply_diff_test.c`, which replays
+  each healing, revive and PP case through `gc_port_apply_reward` on a real run, once free and once bought, at a
+  rotated `party_order`. It compares taken or refused, the refusal text, every member's HP, status, move count,
+  PP used and PP Ups, and the maximum PP of every move (`getMovePp()`). Four seeds of 4,000 cases:
+
+  | seed | cases replayed (x2: free, bought) | skipped: Hardcore, other items | comparisons | mismatches |
+  |---|---|---|---|---|
+  | 777 | 2,000 | 670, 1,330 | 4,000 | **0** |
+  | 9001 | 1,964 | 706, 1,330 | 3,928 | **0** |
+  | 4242 | 2,000 | 670, 1,330 | 4,000 | **0** |
+  | 31337 | 2,008 | 662, 1,330 | 4,016 | **0** |
+
+  Seed 777, per item (cases, taken, refused, free and bought together): POTION 143/168/118, SUPER_POTION 141/172/110,
+  HYPER_POTION 148/212/84, MAX_POTION 131/142/120, FULL_RESTORE 147/218/76, REVIVE 146/46/246, MAX_REVIVE 143/38/248,
+  SACRED_ASH 148/203/93, ETHER 133/180/86, MAX_ETHER 144/178/110, ELIXIR 141/232/50, MAX_ELIXIR 144/252/36,
+  PP_UP 148/220/76, PP_MAX 143/190/96; 563 HP values, 109 statuses, 612 PP used and 205 PP Ups changed by free
+  rewards; 1,035 cases carry a Healing Charm. Hardcore cases are skipped (game-core models no challenge). The
+  trace doesn't carry `max_pp_override`, so that one is covered by the unit test only.
+- Mutation checks: the unit test caught 12 of 12 changes to the adapter. The differential caught 7 of 8: HP, status, PP used and PP Up
+  not written back, the storage index in place of the party-order index, Sacred Ash taken when bought with no effect,
+  a free reward refused; the one it can't see is the `max_pp_override` check, for the reason above. `switch_prompt_test`
+  fails when either of Task 87's and Task 59's switch-prompt fixes is removed (re-checked, since the runs changed again).
+- 1,000 soak runs, with and without saves: 1,000 ended, 0 cleared/stuck/crashed/timed out, **55,547 turns**, digest
+  **`b3bdf746`** both (16,163 save/load round trips, largest save 10,552 of 131,072 bytes). Task 59's `bdfe170b` (55,280 turns)
+  moved. The old `gcplay.c` (HEAD's, unchanged digest definition) built against the new library gives `b3bdf746` too, so the
+  move is game-core's behaviour, not the tally I added to `gcplay`. The behaviours that differ from the old stand-in: a
+  Potion, Ether or Elixir on a Pokémon that can't use it is now refused (the reward screen stays), the Healing Charm
+  raises potion healing, PP Up and PP Max do something, and the party menu's filter picks which targets are valid. I
+  did not split the digest change by cause. The stand-in counter is **811 runs, 1,330 times**, from 831 and 1,466.
+  What it still counts is outside this card: TMs, money rewards (Nugget, Big Nugget, Relic Gold), vouchers, Memory
+  Mushroom, Mints, Rarer Candy, evolution items and DNA Splicers; the counter never counted potions, so applying
+  them is not what it measures.
+- Applied in the soak (runs, taken, refused): POTION 890 runs, 2,439 taken, 285 refused; SUPER_POTION 61, 75, 8;
+  FULL_RESTORE 1, 1, 0; FULL_HEAL 9, 9, 52 (game-core's own); REVIVE 542, 861, 141; MAX_REVIVE 247, 280, 36;
+  SACRED_ASH 3, 3, 0; ETHER 14, 14, 58; MAX_ETHER 3, 3, 12; ELIXIR 3, 3, 4; MAX_ELIXIR 2, 2, 1; PP_UP 115, 125, 15;
+  PP_MAX 18, 18, 0. HYPER_POTION and MAX_POTION never came up in these 1,000 runs, so only the tests cover them.
+- Regressions, unchanged: `rewarddiff.sh` 1,500 cases each on seeds 777, 9001, 4242 and 31337, **0 mismatches**; reward-core
+  `difftest.sh` 4,000 cases, seed 99, all: apply 4,000 pass 0 fail, Memory 4,000 cases 0 mismatches, the rest pass.
+
+Not done or not checked (reported, not widened into this PR):
+
+- No Hardcore handling (game-core has no challenges); no Candy Jar for Rare Candy; Full Heal stays game-core's own.
+- Enemy movesets are Task 63's, so how often these rewards come up depends on the stand-in moveset.
+- The app (`game/`) isn't changed; no hardware or emulator result. The 3DS build is CI's.
+
+### Task 61: bounded reward evolution/form lifecycle
+
+The reward-screen adapter now executes two families from pinned upstream `8555c08`:
+Growlithe's Fire Stone evolution into Arcanine, and Giratina's Griseous Core
+transition from altered to origin. `gc_reward_lifecycle.c` calls `pr_reward_apply`
+for selection/application and owns the subsequent run phases. The stone is
+consumed before the cancellable evolution screen; cancellation changes neither
+species, stats, moves nor dex and may pause later evolutions. Acceptance uses the
+existing evolution/learn-move screens, ability/stat recalculation and dex updates.
+The Core is retained with its holder's stable Pokemon ID before the form phase;
+form changes update seen/caught records before recalculating stats and preserve
+moves/PP. An active Core on Origin Giratina is installed without activating the
+reverse rule. A full held Core stack substitutes the PLAYER pool's default ball
+reward for the offer tier, retaining the original Core stack and owner.
+
+This is one evolution family and one form-item family, not general evolution/form
+parity. Other Fire Stone recipients, fusion evolutions, other form items, manual
+activation/deactivation and reversal remain outside this slice; their existing
+counted stand-ins remain. The graphical FormChangePhase animation is represented
+by an immediate run phase, not a new cancellable form-animation screen. Console
+presentation and broad held-item battle behavior are not validated here.
+
+The separately added `tests/reward-lifecycle.producer.test.ts` runs real pinned
+selection, `addModifier`, `PlayerPokemon.evolve` / `changeForm`, stat, dex and
+`setMove` methods on real Pokemon. Asset/info loading and animation completion
+are headless boundaries. Free reward selection completes regardless of
+`addModifier`'s Boolean; the test distinguishes ownership from activation. It
+compares species/form, level/nature/ability, pause state, HP/stats, moves/order,
+PP used/PP Ups, seen/caught/nature/IV dex records, transition queue counts, held
+stacks/ownership, substituted balls and global RNG; upstream battle RNG is also
+asserted unchanged. Rendered message text is not a differential claim.
+
+```
+make -C game-core
+NODE=/path/to/node22 game-core/tools/lifecyclediff.sh /external/pokerogue-upstream 280 777
+NODE=/path/to/node22 game-core/tools/lifecyclediff.sh /external/pokerogue-upstream 280 9001
+NODE=/path/to/node22 game-core/tools/lifecyclediff.sh /external/pokerogue-upstream 280 4242
+NODE=/path/to/node22 game-core/tools/lifecyclediff.sh /external/pokerogue-upstream 280 31337
+```
+
+`LC_OUT` selects the trace path; producer flags are `LC_N`, `LC_SEED`, `LC_OUT`.
+The C comparator is `build/reward_lifecycle_test`. Validation used Node 22.23.3.
+Each seed: **280 cases, 280 identical, 0 mismatches**; seven paths each have 40
+cases: accepted evolution, cancelled evolution, invalid target, activated form,
+Core retained without activation, reward skipped, and full-stack replacement.
+`reward_lifecycle_host_test`, included in `make test`, adds **46 checks** for the
+public reward/evolve/learn choices, full-moveset replacement, duplicate stacks,
+invalid targets and ownership/stats/moves persisted at a legal save boundary.
+A temporary mutant retaining altered form produced **40 mismatches**, exit 1;
+a trace with the `Z` completion footer removed was rejected with exit 2.
+
+Before/after main `ff35abf`: `make -C game-core test` retained 36,417 resume
+checks, 39 item-bridge checks, 3,512 reward-adapter checks, 25 switch checks and
+638,355 reward-application checks with zero failures. Its paired 200-run digest
+remained `8ee22b13`. Both `gcplay --auto 1000 --jobs 8` and the same command with
+`--save-test`: 1,000/1,000 ended, 0 stuck/crashed/timed out, 55,491 turns, digest
+`5fd93475`; saved runs made 16,151 round trips (largest save 10,552 bytes).
+All printed stub counts were unchanged; these rare families are established by
+the focused fixtures, not by a fallback reduction in the random soak. No 3DS
+build or console test is claimed.

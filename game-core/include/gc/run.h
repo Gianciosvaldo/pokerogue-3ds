@@ -39,8 +39,9 @@
  * (include/pr/events.h), handed over as GC_EV_BATTLE. */
 typedef enum {
     GC_EV_MESSAGE,       /* a text box: msg */
-    GC_EV_BATTLE,        /* play battle-core's events run->battle_events[a] .. [a + b - 1] (a turn, or the
-                          * rest of one after a switch prompt). They stay valid until the next
+    GC_EV_BATTLE,        /* play battle-core's events run->battle_events[a] .. [a + b - 1] (a turn, the
+                          * rest of one after a switch prompt or after a victory's experience, the start of
+                          * a battle after the "Will you switch?" answer). They stay valid until the next
                           * gc_run_choose */
     GC_EV_WAVE,          /* a new wave: a = wave, b = biome, c = BattleType (the app sets the scene up) */
     GC_EV_BIOME,         /* the run moves to biome a (SwitchBiomePhase) */
@@ -80,6 +81,8 @@ typedef enum {
     GC_SCREEN_MYSTERY,      /* Mystery Encounter node selected; Task 46 supplies its action choices */
     GC_SCREEN_GAME_OVER,    /* the party is out of Pokemon: the run is over */
     GC_SCREEN_CLEAR,        /* the run is won (classic wave 200) */
+    GC_SCREEN_CHECK_SWITCH, /* CheckSwitchPhase: "Will you switch Pokemon?" at the start of a wild battle,
+                             * only when run->ask_switch is set: GC_CH_CONFIRM */
 } gc_screen_kind;
 
 typedef enum {
@@ -100,6 +103,8 @@ typedef enum {
     GC_CH_BIOME,            /* BIOME: a = index into screen.biomes */
     GC_CH_MYSTERY,          /* MYSTERY: Task 45 continuation placeholder; Task 46 replaces with actions */
     GC_CH_CONTINUE,         /* GAME_OVER / CLEAR */
+    GC_CH_LOCK_RARITIES,    /* REWARD: switch the Lock Capsule's lock on or off (toggleRerollLock; needs the capsule) */
+    GC_CH_CONFIRM,          /* CHECK_SWITCH: a = 1 yes (the party screen follows), 0 no */
 } gc_choice_kind;
 
 typedef struct {
@@ -115,6 +120,7 @@ typedef struct {
     int8_t tier;            /* ModifierTier, for the ball colour */
     uint8_t target;         /* GC_TARGET_*: what it must be used on */
     double cost;            /* shop items: the price; 0 for a free reward */
+    int8_t upgrade_count;   /* ModifierTypeOption.upgradeCount: how many tiers the luck upgrade raised it */
 } gc_offer;
 enum { GC_TARGET_NONE, GC_TARGET_POKEMON, GC_TARGET_MOVE };
 
@@ -163,8 +169,6 @@ typedef struct gc_mon {
     int8_t luck;
     uint8_t pokeball;           /* PokeballType it was caught in */
     int16_t met_wave;           /* -1 for a starter */
-    int16_t boss_segments;      /* enemies: 0 = not a boss */
-    int16_t boss_segment_index;
     uint8_t trainer_slot;       /* enemies: TrainerSlot */
 } gc_mon;
 
@@ -279,25 +283,29 @@ typedef struct gc_run {
     int load_dropped;           /* after gc_run_load: saved values this build couldn't read back (0 normally;
                                  * more when the save comes from a build whose battle structs differ) */
     bool finished;
+    /* settings.general.battleStyle: false = SET (the default here), the wild battle's start doesn't ask "Will
+     * you switch Pokemon?"; true = SWITCH (upstream's own default), it opens GC_SCREEN_CHECK_SWITCH. A setting
+     * of the app's, not run state: it isn't saved and the app sets it again after gc_run_load. Off until the
+     * app has the screen */
+    bool ask_switch;
 } gc_run;
 
 /* game-core's own stand-ins, counted in run->stubs */
 enum {
     GC_STUB_ENEMY_MOVESET,      /* run-core has no enemy moveset yet: the last 4 level moves */
-    GC_STUB_REWARDS,            /* no reward-core yet: a fixed placeholder list */
+    GC_STUB_REWARDS,            /* reward-core couldn't roll a reward screen (it flagged it): the screen is empty */
     GC_STUB_DOUBLE_AS_SINGLE,   /* a double battle roll played as a single battle (M1 rule) */
     GC_STUB_MYSTERY_ENCOUNTER,  /* a mystery encounter roll played as a wild battle */
-    GC_STUB_TURN_TAIL,          /* the rest of a turn after a victory was cut short */
     GC_STUB_EVOLUTION,          /* an evolution condition other than level (item, friendship...) not checked */
     GC_STUB_WEATHER,            /* the biome's weather roll isn't ported */
     GC_STUB_UNPORTED_ENEMY,     /* run-core couldn't generate an enemy (a PR_RUN_UNPORTED_* case): a stand-in */
     GC_STUB_CATCH,              /* no catching yet */
     GC_STUB_TRAINER_REWARDS,    /* a trainer's own rewards (modifierRewardFuncs, vouchers) not given */
     GC_STUB_POST_BATTLE,        /* PostBattle abilities (Pickup, Honey Gather), Pay Day money, lapsing items */
-    GC_STUB_ENEMY_SWITCH,       /* the AI switched a trainer's Pokemon out: battle-core doesn't run the enemy
-                                 * side's SwitchSummonPhase yet, so the enemy does nothing that turn */
     GC_STUB_TRAINER_TITLE,      /* a trainer's name in a message without its title ("Aaron" for "Ace Trainer
                                  * Aaron"): battle-core's messages take one locale key per argument */
+    GC_STUB_REWARD_INPUT,       /* a reward-core input game-core can't give: an item it doesn't know, a learnset too long */
+    GC_STUB_REWARD_APPLY,       /* a reward taken without its own effect (not a healing, revive, PP or PP Up item: reward-core applies those) */
     GC_STUB_COUNT_
 };
 extern const char *const gc_stub_name[GC_STUB_COUNT_];

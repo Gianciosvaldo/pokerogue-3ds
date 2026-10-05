@@ -457,6 +457,8 @@ typedef struct pr_ab_params {
     int field_type;                /* PostWeatherChange: the new WeatherType; PostTerrainChange: the new TerrainType */
     int8_t only;                   /* params.passive given: 1 = the ability only, 2 = the passive only; 0 = both */
     bool after_form_change;         /* exclude recursive form callbacks */
+    const int8_t *move_targets; /* PostDancingMoveAbAttr: original targets */
+    int n_move_targets;
     bool on_gain;                  /* applyOnGainAbAttrs: only attrs that shouldActivateOnGain() */
 } pr_ab_params;
 /* applyAbAttrs("<cls>", params): ability then passive, conditions, canApply, apply. */
@@ -560,6 +562,7 @@ void pr_clear_enemy_held_item_modifiers(pr_battle *bt, const pr_pokemon *p);
 extern int pr_kings_rock_fired;
 extern int pr_sitrus_berry_fired, pr_lum_berry_fired, pr_leppa_berry_fired;
 extern int pr_liechi_berry_fired, pr_ganlon_berry_fired, pr_petaya_berry_fired, pr_apicot_berry_fired, pr_salac_berry_fired;
+extern int pr_enigma_berry_fired, pr_lansat_berry_fired, pr_starf_berry_fired;
 bool pr_berry_should_apply(pr_battle *bt, const pr_pokemon *p, const pr_modifier *m);
 void pr_apply_berry(pr_battle *bt, struct pr_engine *e, pr_pokemon *p, pr_modifier *m);
 void pr_apply_berry_ex(pr_battle *bt, struct pr_engine *e, pr_pokemon *p, pr_modifier *m, int8_t *ssc_stats, int8_t *ssc_stages, int *n_ssc);

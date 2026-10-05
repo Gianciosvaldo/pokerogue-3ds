@@ -227,6 +227,51 @@ Upstream ids are compiled into const tables. Custom species, moves, abilities an
 This code has run on a real Old 3DS ([`bench-native/`](../bench-native/), 2026-09-27, an earlier revision): all 2,849 covered turns (of 3,200 from eight turn-test modes) and all 1,000 damage cases matched upstream there too, at a median of 1.51 ms per turn. Later slices haven't been rerun on the console.
 
 
+## Task 71: Enigma, Lansat and Starf berry effects (2026-10-04)
+
+Enigma, Lansat and Starf berries now use their pinned trigger conditions and consumption effects:
+- Enigma Berry triggers when the holder receives a super-effective or extremely-effective attack, healing 25% max HP (doubled by `DoubleBerryEffectAbAttr` if active) and unshifting the heal message (`battle:hpHealBerry`).
+- Lansat Berry triggers when the holder's HP ratio falls below 25% (or threshold modified by `ReduceBerryUseThresholdAbAttr`) provided the holder does not already have a `CRIT_BOOST` tag, adding `BATTLER_TAG_TYPE_CRIT_BOOST`.
+- Starf Berry triggers when the holder's HP ratio falls below 25% (or threshold modified by `ReduceBerryUseThresholdAbAttr`), choosing a random stat stage to boost by +2 (from ATK through SPD, doubled by `DoubleBerryEffectAbAttr` if active).
+
+The NEW producer (`battle-core/tests/berry.producer.test.ts`) tests all 11 berry types (Sitrus, Lum, Leppa, Liechi, Ganlon, Petaya, Apicot, Salac, Enigma, Lansat, Starf) across random HP, status, PP, attacks received, and abilities. The comparator (`battle-core/tests/berrytest.c`) checks trigger selection (`shouldApply`), consumption (`apply`), surviving state, HP, status, tags, stat stages, messages, and global RNG.
+
+Validated against upstream `8555c08c823b856cbec4eb99ca84ea52a955836d`, Node 22.22.1, Vitest 4.1.11, GCC 13.3.0.
+
+| Seed | Cases / identical / mismatches | Consumed Enigma / Lansat / Starf | Rejected Enigma / Lansat / Starf |
+| --- | --- | --- | --- |
+| 777 | 2000 / 2000 / 0 | 89 / 99 / 89 | 92 / 86 / 102 |
+| 9001 | 2000 / 2000 / 0 | 73 / 99 / 89 | 78 / 86 / 109 |
+| 4242 | 2000 / 2000 / 0 | 96 / 97 / 96 | 97 / 97 / 82 |
+| 31337 | 2000 / 2000 / 0 | 85 / 93 / 82 | 94 / 80 / 80 |
+
+8,000 identical cases; zero mismatches. Planted stat mutation fails 2,000/2000 cases (exit 1); planted stack mutation fails 952/2000 cases (exit 1). Missing completion footer is rejected with exit 2.
+
+Fresh B traces replay comparison, seed 777/N2000, before and after:
+- plain: 1942 / 1942 (0 mismatches)
+- rich: 1830 / 1830 (0 mismatches)
+- switch: 1890 / 1890 (0 mismatches)
+- summon: 1862 / 1862 (0 mismatches)
+
+Fresh TURN_COND/N2000: seeds 777/9001/4242/31337 covered/identical 1767/1756/1770/1766 both before and after (0 mismatches).
+Fresh TURN_ITEMS/N2000: seeds 777/9001/4242/31337 covered/identical 1922/1932/1929/1939 both before and after (0 mismatches).
+
+Host `make -C game-core test`: 36,473 resume checks and 39 item-bridge checks pass; 1000-run normal/saved digests both `4355853d`.
+
+Commands to reproduce:
+
+```sh
+make -s -C battle-core
+cp battle-core/tests/berry.producer.test.ts /tmp/pokerogue-upstream/test/tests/zz-dump/
+# In external upstream; repeat seed=777,9001,4242,31337:
+BERRY_N=2000 BERRY_SEED=<seed> BERRY_OUT=/tmp/traces_task71/berry-<seed>.txt node node_modules/vitest/vitest.mjs run test/tests/zz-dump/berry.producer.test.ts
+# In port, repeat each seed:
+TURNTEST_LOCALES=/tmp/pokerogue-upstream/locales/en battle-core/build/berrytest /tmp/traces_task71/berry-<seed>.txt
+TURNTEST_LOCALES=/tmp/pokerogue-upstream/locales/en battle-core/build/berrytest /tmp/traces_task71/berry-777.txt --mutate-stat
+TURNTEST_LOCALES=/tmp/pokerogue-upstream/locales/en battle-core/build/berrytest /tmp/traces_task71/berry-777.txt --mutate-stack
+TURNTEST_LOCALES=/tmp/pokerogue-upstream/locales/en battle-core/build/berrytest /tmp/traces_task71/berry-truncated.txt
+```
+
 ## Task 70: Bounded held-item removal (2026-10-04)
 
 Knock Off and Incinerate now use RemoveHeldItemAttr's actual bounded behavior: player Knock Off immunity; ability/passive Sticky Hold and suppression; list-order filtering by holder, transferability and berry restriction; battle-RNG selection; one-stack loss; post-loss Unburden; exact item messages. Six named item classes (Leftovers, Shell Bell, Focus Band, Quick Claw, King's Rock, White Herb) and all eleven berry identities are covered. A supplied `pr_modifier *removed` receives the original selected identity, owner and stack count; resulting `bt->mods` exports remaining ownership/stacks for the run adapter. Removal does not transfer an item to the user. Unknown item identities stay explicitly unported. Thief/Covet, theft tiers/caps, Bug Bite/Pluck and other transfer families remain outstanding. This does not integrate inventory persistence into game-core or claim full-turn/hardware parity.
@@ -280,3 +325,79 @@ git diff --check
 ```
 
 The focused and repaired established regressions both pass for their recorded scopes. No 3DS result is claimed here; CI status belongs to the published PR's exact head.
+
+
+## Task 72: bounded Dancer dispatch
+
+The pinned `MoveEffectPhase.queueDancerResponses` now queues a distinct
+`DancerPhase` after the original move's end. The phase applies the actual
+`PostDancingMoveAbAttr`, shows/hides the ability, and inserts a detached copied
+`MovePhase` with INDIRECT use and FIRST timing. Self status dances aim at the
+copier; single-target attacks aim back at the original dancer in singles.
+Indirect copies cannot start another Dancer chain. Ability suppression is checked
+both before queueing and when the ability applies. Existing phase IDs stay stable.
+
+The additive producer `tests/dancer.producer.test.ts` calls upstream's real turn
+phases and ability dispatch. It copies the established producer's driver and
+serialization, then bounds all party members to Bulbasaur/form 0 and
+Oricorio/form 0, with Dancer only on the active enemy. The six source moves are
+Swords Dance, Dragon Dance, Quiver Dance, Feather Dance, Fiery Dance and Revelation
+Dance. Level, IVs, nature, speed/order, damage and turn RNG remain randomized.
+Healthy, asleep, frozen and suppressed states cycle across each move. The other
+command is Splash. This is a singles fixture set, not complete Dancer coverage.
+The initial probe left random bench species unrestricted and reported two
+unported form changes; the final fixture bounds bench species too. No established
+producer or comparator was changed, and those two cases were not counted as matches.
+
+`tests/dancertest.c` wraps the established unchanged turn comparator with an
+additive completion contract and requires every requested case covered, identical
+messages, zero parse/stat mismatches, and matching queue/order/targets/RNG/state.
+It rejects missing footers and incomplete cases. The producer rejects exceptions
+rather than silently omitting them. Existing TURN_* mode flags are rejected.
+
+```sh
+# Node 22, upstream pin 8555c08; checkout outside this repository.
+sh battle-core/tools/dancerdiff.sh <upstream> 2000 777
+sh battle-core/tools/dancerdiff.sh <upstream> 2000 9001
+sh battle-core/tools/dancerdiff.sh <upstream> 2000 4242
+sh battle-core/tools/dancerdiff.sh <upstream> 2000 31337
+```
+
+Producer flags: `DANCER_N`, `DANCER_SEED`, `DANCER_OUT`; trace:
+`battle-core/build/dancer-<seed>.txt`; executable:
+`battle-core/build/dancertest`. `TURNTEST_LOCALES=<upstream>/locales/en` is required.
+The PR records the exact counts and baseline replays.
+
+Tera audit: the established serializer does support PRE records; its current
+command builder sets the player's precommand to skipped FIGHT. C's TurnStart
+already queues TeraPhase in speed order before moves, matching the pinned queue
+construction, but TeraPhase execution remains explicitly unported. This Dancer
+change does not validate Tera execution or complete all of Task 72. No Task 73
+unlock is claimed. A separately reviewed Tera fixture/implementation remains.
+Doubles/ally redirection, spread targeting, multiple simultaneous dancers, passive
+Dancer, semi-invulnerable rejection, reflected/delayed source moves and every
+species/form are not validated by this bounded suite. No console result is claimed.
+
+Checked with Node 22.23.3 against pinned upstream 8555c08:
+
+| Seed | Cases / covered / identical | Mismatches | Identical message sets | Dancer responses |
+| --- | --- | --- | --- | --- |
+| 777 | 2000 / 2000 / 2000 | 0 | 2000 | 1428 |
+| 9001 | 2000 / 2000 / 2000 | 0 | 2000 | 1438 |
+| 4242 | 2000 / 2000 / 2000 | 0 | 2000 | 1433 |
+| 31337 | 2000 / 2000 / 2000 | 0 | 2000 | 1424 |
+
+Each seed selects the six moves 334/334/333/333/333/333 times and the four
+states 504/500/498/498 times. Actual response phases per move, in the order above:
+777: 251/251/250/250/214/212; 9001: 251/251/250/250/215/221;
+4242: 251/251/250/250/219/212; 31337: 251/251/250/250/211/211.
+Suppressed Dancer produced zero responses on every seed. Unported cases: zero.
+Dropping the Dancer response in a separately built mutant gives seed 777
+572 identical / 1428 failing cases, exit 1. Removing the completion footer
+from that complete 2000-case trace is rejected with exit 2.
+
+Established 2000-case baselines and identical-message counts were retained:
+plain 1942, switch 1890; rich 1830 to 1831, summon 1862 to 1863 (newly covered
+Dancer turns). Items covered 1922/1932/1929/1939 and conditions
+1767/1756/1770/1766 on 777/9001/4242/31337 respectively; zero failures before
+and after. Items retain their previously reported untranslated message sets.

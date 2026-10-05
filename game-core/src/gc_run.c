@@ -12,18 +12,18 @@ gc_internal *gc_int(gc_run *run) { return (gc_internal *)(void *)run->internal_;
 
 const char *const gc_stub_name[GC_STUB_COUNT_] = {
     [GC_STUB_ENEMY_MOVESET] = "enemy moveset (last 4 level moves)",
-    [GC_STUB_REWARDS] = "rewards (placeholder list)",
+    [GC_STUB_REWARDS] = "reward screen reward-core could not roll (empty)",
     [GC_STUB_DOUBLE_AS_SINGLE] = "double battle played as single",
     [GC_STUB_MYSTERY_ENCOUNTER] = "mystery encounter played as wild",
-    [GC_STUB_TURN_TAIL] = "rest of the turn after a victory lost",
     [GC_STUB_EVOLUTION] = "evolution condition not checked",
     [GC_STUB_WEATHER] = "biome weather roll",
     [GC_STUB_UNPORTED_ENEMY] = "enemy run-core can't generate (stand-in)",
     [GC_STUB_CATCH] = "catching",
     [GC_STUB_TRAINER_REWARDS] = "trainer's own rewards",
     [GC_STUB_POST_BATTLE] = "post-battle abilities, Pay Day, lapsing items",
-    [GC_STUB_ENEMY_SWITCH] = "trainer's switch-out (enemy loses the turn)",
     [GC_STUB_TRAINER_TITLE] = "trainer's name without its title in a message",
+    [GC_STUB_REWARD_INPUT] = "reward-core input game-core can't give",
+    [GC_STUB_REWARD_APPLY] = "reward taken without its own effect",
 };
 
 void gc_stub(gc_run *run, int which)

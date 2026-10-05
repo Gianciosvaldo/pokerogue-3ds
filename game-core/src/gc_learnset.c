@@ -1,0 +1,200 @@
+/* The level moves a Pokemon can learn: Pokemon.getLevelMoves (src/field/learnsets.ts and
+ * src/data/species-data-registry.ts at 8555c08) and PlayerPokemon.getUnlockedEggMoves, as the reward screen
+ * reads them (reward-core takes the rows from its caller). Function names follow upstream's. A species'
+ * own level moves are battle-core's pr_species.level_moves; the form-specific ones are gen/out/gc_learnsets.c.
+ * Not modelled: the LEVEL_UP_MOVESET challenge hook (Species.getLevelMoves applies it). */
+#include "internal.h"
+
+/* Rows before the filter: a three-stage line with form moves, twice over for a fusion. A list that doesn't
+ * fit is reported (-1), never cut. */
+#define ROWS_MAX 768
+typedef gc_learn_row row;
+
+static int base_source(int source) { return source - source % 2; }
+
+/* speciesDataRegistry.getFormKey(species, form): "" for a species without forms, else the form's key
+ * (the base form's for an index no form has) */
+static const char *form_key(const pr_species *sp, int form)
+{
+    return pr_forms[sp->form0 + (form >= 0 && form < sp->nforms ? form : 0)].form_key;
+}
+
+/* PokemonSpecies.getLevelMoves(form): levelMoves then formLevelMoves[formKey] (no duplicate removal: the
+ * Set holds distinct arrays), applyChallenges aside, sorted by level (a stable sort) */
+static int species_level_moves(int species, int form, row *out, int cap)
+{
+    const pr_species *sp = gc_species(species);
+    if (!sp) return 0;
+    int n = 0;
+    if (sp->level_moves.n > cap) return -1;
+    for (int i = 0; i < sp->level_moves.n; i++)
+        out[n++] = (row){sp->level_moves.v[i].level, sp->level_moves.v[i].move, 0};
+    const char *key = form_key(sp, form);
+    for (int i = 0; i < gc_form_level_moves_count; i++) {
+        const gc_form_level_moves *f = &gc_form_level_moves_data[i];
+        if (f->species != species || strcmp(f->form_key, key)) continue;
+        if (n + f->n > cap) return -1;
+        for (int k = 0; k < f->n; k++) out[n++] = (row){f->v[k].level, f->v[k].move, 0};
+    }
+    for (int i = 1; i < n; i++) {
+        const row v = out[i];
+        int j = i;
+        while (j > 0 && out[j - 1].level > v.level) { out[j] = out[j - 1]; j--; }
+        out[j] = v;
+    }
+    return n;
+}
+
+/* getRegularLevelMoves(context, includeEvolutionMoves, includeRelearnerMoves, fromFusion) */
+static int regular_level_moves(const gc_mon *m, bool evo, bool relearn, bool from_fusion, row *out, int cap)
+{
+    static row moves[ROWS_MAX];
+    const pr_pokemon *p = &m->b;
+    const int n = from_fusion ? species_level_moves(p->fusion_species, p->fusion_form, moves, ROWS_MAX)
+                              : species_level_moves(p->species, p->form, moves, ROWS_MAX);
+    if (n < 0) return -1;
+    int w = 0;
+    for (int i = 0; i < n; i++) {
+        const int level = moves[i].level;
+        if (!((evo && level == 0) || (relearn && level == -1) || level > 0)) continue;
+        if (w >= cap) return -1;
+        const int source = level == -1 ? PR_LEARN_SOURCE_RELEARN : level == 0 ? PR_LEARN_SOURCE_EVOLUTION
+                                                                              : PR_LEARN_SOURCE_LEVEL;
+        out[w++] = (row){(int16_t)level, moves[i].move, (int8_t)(source + from_fusion)};
+    }
+    return w;
+}
+
+/* getPrevolutionMoves(context, includeEvolutionMoves, includeRelearnerMoves, fromFusion). Upstream reads
+ * every stage's moves for the primary's form index, the fusion's chain included. */
+static int prevolution_moves(const gc_mon *m, bool evo, bool relearn, bool from_fusion, row *out, int cap)
+{
+    static row moves[ROWS_MAX];
+    const pr_pokemon *p = &m->b;
+    const int base = from_fusion ? p->fusion_species : p->species;
+    if (!base) return 0;
+    /* evolutionLine = [...getPrevolutionChain(base), base]: the nearest prevolution first, the root next to
+     * last, the species itself last. Only the first entry counts as `index 0` below. */
+    int line[16], n_line = 0;
+    {
+        const pr_species *sp = gc_species(base);
+        for (int id = sp ? sp->prevolution : -1, guard = 0; id > 0 && guard < 14; guard++) {
+            line[n_line++] = id;
+            sp = gc_species(id);
+            id = sp ? sp->prevolution : -1;
+        }
+        line[n_line++] = base;
+    }
+    int w = 0;
+    for (int k = 0; k < n_line; k++) {
+        const int index = k;
+        const bool is_prevo = k < n_line - 1;
+        const int n = species_level_moves(line[k], p->form, moves, ROWS_MAX);
+        if (n < 0) return -1;
+        for (int i = 0; i < n; i++) {
+            const int level = moves[i].level;
+            const bool include_level_one = !index || level > 1 || relearn;
+            int source;
+            if (relearn && level == -1) source = is_prevo ? PR_LEARN_SOURCE_PREVO : PR_LEARN_SOURCE_RELEARN;
+            else if (evo && level == 0) source = is_prevo ? PR_LEARN_SOURCE_PREVO : PR_LEARN_SOURCE_EVOLUTION;
+            else if (include_level_one && (!is_prevo || level <= p->level))
+                source = is_prevo ? PR_LEARN_SOURCE_PREVO : PR_LEARN_SOURCE_LEVEL;
+            else continue;
+            if (w >= cap) return -1;
+            out[w++] = (row){(int16_t)level, moves[i].move, (int8_t)(source + from_fusion)};
+        }
+    }
+    return w;
+}
+
+/* filterAndSortLevelMoves(context, levelMoves, includeEvolutionMoves, includeRelearnerMoves): sorted by level,
+ * then by base source (a stable sort); in place, returns the new length */
+static int filter_and_sort(const gc_mon *m, int starting_level, row *rows, int n, bool evo, bool relearn)
+{
+    const int level_cap = m->b.level;
+    for (int i = 1; i < n; i++) {
+        const row v = rows[i];
+        int j = i;
+        while (j > 0 && (rows[j - 1].level > v.level
+                         || (rows[j - 1].level == v.level && base_source(rows[j - 1].source) > base_source(v.source)))) {
+            rows[j] = rows[j - 1];
+            j--;
+        }
+        rows[j] = v;
+    }
+    /* moves the species gets by level above its level, and the ones it already learns by level */
+    static uint8_t above[PR_MOVE_COUNT], own[PR_MOVE_COUNT], seen[PR_MOVE_COUNT];
+    memset(above, 0, sizeof above);
+    memset(own, 0, sizeof own);
+    memset(seen, 0, sizeof seen);
+    for (int i = 0; i < n; i++) {
+        if (base_source(rows[i].source) != PR_LEARN_SOURCE_LEVEL) continue;
+        if (rows[i].level > level_cap) above[rows[i].move] = 1; else own[rows[i].move] = 1;
+    }
+    int w = 0;
+    for (int i = 0; i < n; i++) {
+        const row r = rows[i];
+        const bool is_relearner = r.level < starting_level;
+        const bool allowed_evolution_move = r.level == 0 && evo;
+        const bool is_level_source = base_source(r.source) == PR_LEARN_SOURCE_LEVEL;
+        const bool own_from_non_level = own[r.move] && !is_level_source;
+        const bool locked_prevo = above[r.move] && (r.source == PR_LEARN_SOURCE_PREVO || r.source == PR_LEARN_SOURCE_FUSION_PREVO);
+        if (r.level > level_cap || own_from_non_level || locked_prevo
+            || !(relearn || !is_relearner || allowed_evolution_move))
+            continue;
+        if (seen[r.move]) continue;   /* getUniqueMoves, after the filter */
+        seen[r.move] = 1;
+        rows[w++] = r;
+    }
+    return w;
+}
+
+int gc_level_moves(const gc_mon *m, int starting_level, bool evo, bool prevo, bool relearn, gc_learn_row *out, int cap)
+{
+    static row levels[ROWS_MAX];
+    const pr_pokemon *p = &m->b;
+    const bool is_fusion = p->fusion_species != 0;
+    if (relearn) evo = true;   /* relearner moves inherently allow evolution moves */
+    int n = prevo ? prevolution_moves(m, evo, relearn, false, levels, ROWS_MAX)
+                  : regular_level_moves(m, evo, relearn, false, levels, ROWS_MAX);
+    if (n < 0) return -1;
+    if (is_fusion) {
+        const int k = prevo ? prevolution_moves(m, evo, relearn, true, levels + n, ROWS_MAX - n)
+                            : regular_level_moves(m, evo, relearn, true, levels + n, ROWS_MAX - n);
+        if (k < 0) return -1;
+        n += k;
+    }
+    n = filter_and_sort(m, starting_level, levels, n, evo, relearn);
+    if (n > cap) return -1;
+    memcpy(out, levels, (size_t)n * sizeof *out);
+    return n;
+}
+
+/* PokemonSpeciesForm.getRootSpeciesId(true): back along the prevolutions until a starter */
+static int root_species_for_starter(int species)
+{
+    for (int guard = 0; guard < 15; guard++) {
+        const pr_species *sp = gc_species(species);
+        if (!sp || sp->prevolution <= 0 || gc_starter_cost(species) >= 0) break;
+        species = sp->prevolution;
+    }
+    return species;
+}
+
+/* PlayerPokemon.getUnlockedEggMoves(): speciesEggMoves[metSpecies], or of the root starter when the Pokemon's
+ * metSpecies has none; the ones the player unlocked (starterData.eggMoves bits). game-core keeps no
+ * metSpecies: a starter's is its root species, which is what the current species resolves to. */
+int gc_unlocked_egg_moves(const gc_run *run, const gc_mon *m, uint16_t out[4])
+{
+    int n = 0;
+    const int species = root_species_for_starter(m->b.species);
+    for (int i = 0; i < gc_starter_egg_moves_count; i++) {
+        const gc_starter_egg_moves *e = &gc_starter_egg_moves_data[i];
+        if (e->species != species) continue;
+        const unsigned unlocked = run->sys && species <= GC_MAX_SPECIES_ID ? run->sys->starters[species].egg_moves : 0;
+        for (int k = 0; k < 4; k++)
+            if ((unlocked & (1u << k)) && e->egg_moves[k]) out[n++] = e->egg_moves[k];
+        break;
+    }
+    return n;
+}

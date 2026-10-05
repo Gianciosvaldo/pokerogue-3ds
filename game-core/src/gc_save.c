@@ -99,7 +99,7 @@ static const sfield item_fields[] = {SF(sv_item, key), SF(sv_item, arg), SF(sv_i
 static const sfield mon_fields[] = {
     SF(gc_mon, exp), SF(gc_mon, ability_index), SF(gc_mon, variant), SF(gc_mon, pokerus),
     SF(gc_mon, pause_evolutions), SF(gc_mon, luck), SF(gc_mon, pokeball), SF(gc_mon, met_wave),
-    SF(gc_mon, boss_segments), SF(gc_mon, boss_segment_index), SF(gc_mon, trainer_slot),
+    SF(gc_mon, trainer_slot),
 };
 
 /* battle-core's Pokemon: everything but its turnData (reset before every turn) and the lists, which
@@ -116,7 +116,7 @@ static const sfield pokemon_fields[] = {
     SF(pr_pokemon, shiny), SF(pr_pokemon, tera_type), SF(pr_pokemon, summon_types), SF(pr_pokemon, n_summon_types),
     SF(pr_pokemon, moves), SF(pr_pokemon, pp_used), SF(pr_pokemon, pp_up), SF(pr_pokemon, max_pp_override),
     SF(pr_pokemon, n_moves), SF(pr_pokemon, gender), SF(pr_pokemon, friendship), SF(pr_pokemon, has_trainer),
-    SF(pr_pokemon, is_boss), SF(pr_pokemon, n_tags), SF(pr_pokemon, stellar_types_boosted), SF(pr_pokemon, on_field),
+    SF(pr_pokemon, is_boss), SF(pr_pokemon, boss_segments), SF(pr_pokemon, boss_segment_index), SF(pr_pokemon, n_tags), SF(pr_pokemon, stellar_types_boosted), SF(pr_pokemon, on_field),
     SF(pr_pokemon, switch_out_status), SF(pr_pokemon, ability_suppressed), SF(pr_pokemon, summon_hit_count),
     SF(pr_pokemon, n_move_history), SF(pr_pokemon, n_move_queue), SF(pr_pokemon, temp_turn_count),
     SF(pr_pokemon, temp_wave_turn_count), SF(pr_pokemon, ab_applied_summon), SF(pr_pokemon, ab_applied_wave),

@@ -1,12 +1,13 @@
 /*
  * PokeRogue 3DS: the game app.
  *
- * For now it boots straight into a demo battle: Blaziken, Lapras and Gengar against a wild
- * Pokemon, each turn run by battle-core and shown from its events (battle_events.c). The battle is
- * built by a stand-in (battle_setup.c) until the app drives game-core's run; the enemy's moves come
- * from ai-core. RUN always gets away (fleeing isn't in battle-core yet) and a new wild Pokemon
- * appears. POKEMON opens the party screen (game/menus) to switch, as a faint does; BALL opens
- * the Poke Ball list, and throwing one says catching isn't in yet.
+ * Boots into a run: game-core's run loop plays the waves and run_screen.c shows them with the battle screen
+ * (battle_events.c turns the turns' events into screen events), the party and summary screens
+ * (game/menus), the Poke Ball list and option lists. See run_screen.h for what is still a stand-in
+ * (starters, reward names, the biome list, mystery encounters...).
+ *
+ * Debug file: sdmc:/3ds/pokerogue/rundriver.txt, optional. Lines "seed=<24 characters>" and
+ * "starters=<species id>,<species id>..." fix the first run (for repeatable test runs).
  *
  * START + SELECT quits.
  */
@@ -15,210 +16,37 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "battle_anim.h"
-#include "battle_events.h"
-#include "battle_setup.h"
-#include "ball_menu.h"
-#include "battle_view.h"
-#include "party_screen.h"
 #include "i18n.h"
 #include "pak.h"
-#include "pr_data.h"
-#include "pr_enums.h"
 #include "rr.h"
+#include "run_screen.h"
 #include "save.h"
 #include "snd.h"
 #include "ui.h"
 #include "ui_widgets.h"
-
-/* ------------------------------------------------------------------ demo */
-
-static const int WILD[] = {SPECIES_ID_GARCHOMP, SPECIES_ID_GARDEVOIR, SPECIES_ID_LUCARIO,
-                           SPECIES_ID_GYARADOS, SPECIES_ID_PIKACHU,   SPECIES_ID_MIMIKYU};
-static const int BIOMES[] = {BIOME_ID_GRASS, BIOME_ID_TALL_GRASS, BIOME_ID_CAVE, BIOME_ID_BEACH, BIOME_ID_FOREST};
-
-static struct {
-  bs_battle b;
-  int n;       /* battles so far */
-  int level;   /* the player's level, kept between battles */
-  int balls[BALL_TYPES]; /* pokeballCounts: a new run's 5 Poke Balls */
-} D = {.balls = {5}};
-
-static void new_battle(void* arg);
-static void ask(void* arg);
-
-/* The species' last four level-up moves at or below `level` (a stand-in for run-core's moveset). */
-static int level_moves(int species, int level, int out[4]) {
-  const pr_species* sp = NULL;
-  for (int i = 0; i < PR_SPECIES_COUNT; i++)
-    if (pr_species_table[i].id == species) sp = &pr_species_table[i];
-  if (!sp) return 0;
-  int n = 0;
-  for (int i = 0; i < sp->level_moves.n; i++) {
-    const pr_level_move* lm = &sp->level_moves.v[i];
-    if (lm->level > level || lm->level < 1) continue;
-    bool dup = false;
-    for (int k = 0; k < n; k++) dup |= out[k] == lm->move;
-    if (dup) continue;
-    if (n == 4) memmove(out, out + 1, 3 * sizeof *out), n = 3;
-    out[n++] = lm->move;
-  }
-  return n;
-}
-
-static void add_msg(bv_event* ev, int* n, const char* text, bool prompt) {
-  ev[(*n)++] = (bv_event){.type = BEV_MESSAGE, .text = text, .prompt = prompt};
-}
-
-static void after_turn(void* arg);
-static void on_faint_pick(int slot, int option, void* arg);
-
-/* A battle-core turn's events on screen, then what comes next (after_turn). */
-static void play_turn(void) {
-  static bv_event ev[192];
-  bv_mon before_p = *bv_mon_of(BV_PLAYER), before_e = *bv_mon_of(BV_ENEMY);
-  int n = be_convert(&D.b.bt, &D.b.eng, &before_p, &before_e, ev, 190);
-  bv_play(ev, n, after_turn, NULL);
-}
-
-static void after_turn(void* arg) {
-  (void)arg;
-  /* the fight menu reads PP from the screen's copy */
-  const pr_pokemon* p = D.b.bt.field[0];
-  bv_mon* shown = bv_mon_of(BV_PLAYER);
-  if (p && p->species == shown->species)
-    for (int i = 0; i < p->n_moves && i < 4; i++) {
-      int max = p->max_pp_override[i] >= 0 ? p->max_pp_override[i] : pr_moves[p->moves[i]].pp;
-      shown->pp_left[i] = max - p->pp_used[i];
-    }
-  if (bs_awaiting_player_pick(&D.b)) {
-    /* a faint: SwitchPhase(FAINT_SWITCH) opens the party screen */
-    ps_open(&D.b.bt, PS_FAINT_SWITCH, on_faint_pick, NULL);
-    return;
-  }
-  int out = bs_outcome(&D.b);
-  if (out == 2) D.level = 0; /* lost: start over */
-  if (out)
-    new_battle(NULL);
-  else
-    ask(NULL);
-}
-
-static void on_faint_pick(int slot, int option, void* arg) {
-  (void)arg;
-  if (option != PS_SEND_OUT) return;
-  ps_close();
-  bs_pick(&D.b, slot);
-  play_turn();
-}
-
-static void on_switch_pick(int slot, int option, void* arg) {
-  (void)arg;
-  if (option != PS_SEND_OUT && option != PS_CANCEL) return;
-  ps_close();
-  if (option == PS_CANCEL) {
-    ask(NULL);
-    return;
-  }
-  bs_turn_switch(&D.b, slot);
-  play_turn();
-}
-
-static void on_ball_pick(int ball, void* arg) {
-  (void)arg;
-  static bv_event ev[2];
-  int n = 0;
-  if (ball < 0) {
-    ask(NULL);
-    return;
-  }
-  /* CommandPhase.handleBallCommand passes here (a wild singles battle, no boss); the throw itself
-   * (AttemptCapturePhase) isn't in battle-core yet */
-  add_msg(ev, &n, "Catching isn't in the battle logic yet.", true);
-  bv_play(ev, n, ask, NULL);
-}
-
-static void on_command(bv_command c, void* arg) {
-  (void)arg;
-  static bv_event ev[4];
-  static char text[160];
-  int n = 0;
-  if (c.command == 3) {
-    /* fleeing isn't in battle-core yet: always succeeds here */
-    ui_play_sound("se/flee");
-    i18n_t(text, sizeof text, "battle:runAwaySuccess", NULL);
-    add_msg(ev, &n, text, true);
-    bv_play(ev, n, new_battle, NULL);
-    return;
-  }
-  if (c.command == 2) {
-    ps_open(&D.b.bt, PS_SWITCH, on_switch_pick, NULL);
-    return;
-  }
-  if (c.command == 1) {
-    ball_menu_open(D.balls, on_ball_pick, NULL);
-    return;
-  }
-  bs_turn_fight(&D.b, c.move_slot);
-  play_turn();
-}
-
-static void ask(void* arg) {
-  (void)arg;
-  bv_ask_command(on_command, NULL);
-}
-
-static void start_battle(void* arg) {
-  (void)arg;
-  if (!D.level) D.level = 50;
-  int wild = WILD[D.n % (int)(sizeof WILD / sizeof WILD[0])];
-  int biome = BIOMES[D.n % (int)(sizeof BIOMES / sizeof BIOMES[0])];
-  D.n++;
-  char seed[32];
-  snprintf(seed, sizeof seed, "demo%lu", (unsigned long)(osGetTime() & 0xffffff));
-  bs_begin(&D.b, biome, D.n, seed);
-  static const int PLAYER_MOVES[] = {MOVE_ID_BLAZE_KICK, MOVE_ID_CLOSE_COMBAT, MOVE_ID_BRAVE_BIRD, MOVE_ID_SWORDS_DANCE};
-  bs_add(&D.b, 0, SPECIES_ID_BLAZIKEN, D.level, PLAYER_MOVES, 4);
-  static const int TEAM[] = {SPECIES_ID_LAPRAS, SPECIES_ID_GENGAR};
-  for (int i = 0; i < 2; i++) {
-    int tm[4];
-    bs_add(&D.b, 0, TEAM[i], D.level, tm, level_moves(TEAM[i], D.level, tm));
-  }
-  int em[4];
-  int enl = 45 + rand() % 10;
-  int nm = level_moves(wild, enl, em);
-  bs_add(&D.b, 1, wild, enl, em, nm);
-
-  /* upstream loads the battle's move animations before it starts (loadMoveAnimAssets) */
-  for (int side = 0; side < 2; side++)
-    for (int k = 0; k < D.b.bt.n_party[side]; k++) {
-      const pr_pokemon* p = D.b.bt.party[side][k];
-      for (int i = 0; i < p->n_moves; i++) ba_preload_move(p->moves[i]);
-    }
-
-  bv_setup s = {0};
-  s.biome = biome;
-  be_mon(&D.b.bt, D.b.bt.field[0], &s.player);
-  be_mon(&D.b.bt, D.b.bt.field[2], &s.enemy);
-  s.player.exp_ratio = 0.3f;
-  s.enemy.caught_before = rand() % 2;
-  bv_begin(&s);
-  bv_event ev[] = {
-      {.type = BEV_INTRO_WILD, .battler = BV_ENEMY},
-      {.type = BEV_SUMMON, .battler = BV_PLAYER, .mon = &s.player},
-  };
-  bv_play(ev, 2, ask, NULL);
-}
-
-static void new_battle(void* arg) {
-  (void)arg;
-  img_drop_prefix("images/pokemon/");
-  img_drop_prefix("images/arenas/");
-  ba_drop_moves();
-  ui_fade(250, 100, 250, start_battle, NULL);
-}
+#include "party_screen.h"
 
 /* ------------------------------------------------------------------ boot */
+
+/* sdmc:/3ds/pokerogue/rundriver.txt (see the header comment) */
+static void read_driver_file(rs_config* cfg) {
+  static char seed[160];
+  FILE* f = fopen("sdmc:/3ds/pokerogue/rundriver.txt", "r");
+  if (!f) return;
+  char line[160];
+  while (fgets(line, sizeof line, f)) {
+    line[strcspn(line, "\r\n")] = 0;
+    if (!strncmp(line, "seed=", 5) && line[5]) {
+      snprintf(seed, sizeof seed, "%s", line + 5);
+      cfg->seed = seed;
+    } else if (!strncmp(line, "starters=", 9)) {
+      cfg->n_starters = 0;
+      for (char* t = strtok(line + 9, ", "); t && cfg->n_starters < 6; t = strtok(NULL, ", "))
+        cfg->starters[cfg->n_starters++] = atoi(t);
+    }
+  }
+  fclose(f);
+}
 
 static void fatal(const char* msg) {
   /* no packs: say so on the bottom screen until START */
@@ -246,7 +74,11 @@ int main(void) {
   srand((unsigned)osGetTime());
   ui_init();
   ps_init();
-  start_battle(NULL);
+  rs_config cfg;
+  memset(&cfg, 0, sizeof cfg);
+  cfg.entropy = (uint32_t)osGetTime();
+  read_driver_file(&cfg);
+  rs_start(&cfg);
   while (ui_tick()) {
   }
   snd_exit();
