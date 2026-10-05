@@ -323,8 +323,9 @@ static void start_mystery_wild_battle(gc_run *run, int species, int level, bool 
 
     gc_mon *m = &run->enemy[0];
     if (is_boss) {
-        m->boss_segments = (int16_t)(boss_segments > 0 ? boss_segments : 2);
-        m->boss_segment_index = (int16_t)(m->boss_segments - 1);
+        /* setBoss(true, bossSegments): the encounter's own count */
+        m->b.boss_segments = (uint8_t)(boss_segments > 0 ? boss_segments : 2);
+        m->b.boss_segment_index = (uint8_t)(m->b.boss_segments - 1);
         m->b.is_boss = true;
         if (omni_boost > 0) {
             for (int k = 1; k <= 6; k++) m->b.stat_stages[k] = (int8_t)omni_boost;
