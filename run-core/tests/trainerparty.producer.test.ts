@@ -142,6 +142,7 @@ it("trainerparty producer", async () => {
     }
     battle.enemyParty = [];
     trainer.destroy();
+    vi.clearAllMocks(); // release destroyed receivers after copying scalar snapshots
   }
   lines.push(`# Trainer threw: ${thrown}`);
   fs.writeFileSync(OUT, lines.join("\n") + "\n");

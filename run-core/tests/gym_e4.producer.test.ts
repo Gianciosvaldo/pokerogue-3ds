@@ -127,6 +127,7 @@ it("gym/e4 producer", async () => {
     for (const p of battle.enemyParty) p.destroy();
     battle.enemyParty = [];
     trainer.destroy();
+    vi.clearAllMocks(); // release destroyed receivers; do not change mock implementations
   }
 
   fs.writeFileSync(OUT, lines.join("\n") + "\n");
