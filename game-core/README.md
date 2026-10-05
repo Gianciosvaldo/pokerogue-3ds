@@ -66,6 +66,24 @@ cancelled), no goes on to the first command. Pinned upstream asks nothing at a t
 `CheckSwitchPhase` is pushed only for a battle that isn't a trainer's (`encounter-phase.ts`), the title's
 continue, a mystery encounter and the game over's retry.
 
+### Boss segments
+
+An enemy that is a boss has battle-core's `pr_pokemon.boss_segments` (run-core's count, from
+`getEncounterBossSegments`: legendary, sub-legendary and mythical species, every tenth wave, the endless
+random bosses, +1 at level 100 and +1 at a base stat total of 670) and `boss_segment_index`, the shields
+left, one under the count to start with, which is upstream's `setBoss`. `gc_mon_new_enemy` sets them from
+the generator's `boss_segments` (0 = not a boss), a mystery encounter's boss from the encounter's own count,
+and battle-core does the rest: a hit stops at the end of the next segment (a big one passes several), each
+broken segment gives a wild boss a random stat boost (a trainer's Pokémon keeps the shield and gets no boost),
+and the classic final boss's first-segment rule (wave 200, form 0) is battle-core's too; Task 66 owns the rest of that fight. The app reads the two fields on the Pokémon it
+converts; game-core keeps no copy of them. They are saved with the rest of `pr_pokemon` (`is_boss`,
+`boss_segments`, `boss_segment_index`). A caught boss comes into the party as a `PlayerPokemon`, which is
+never a boss: its shields are cleared and it loses the passive a boss has by being one.
+
+Only wild bosses and mystery encounters' bosses happen in a run today: run-core gives segments to a trainer's
+Pokémon only in the classic rival's fights 5 and 6, and those waves are still wild stand-ins (fixed battles,
+below). `tests/boss_segments_test.c` runs the rival's party through `gc_mon_new_enemy` for that reason.
+
 ## Saving
 
 A run is saved where upstream saves it: at the start of each encounter (`GC_EV_SAVE_POINT`), which in
@@ -125,6 +143,7 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 | A reward taken that isn't a ball, Full Heal, Rare Candy, held item or one of the healing, revive and PP items Task 60 ported (TMs, Memory Mushroom, Mints, money, vouchers, evolution items, DNA Splicers, Rarer Candy) is added to the items and counted (`reward taken without its own effect`) | later reward tasks |
 | Double battles are played as singles (M1 rule) | doubles in battle-core |
 | Mystery encounters and fixed classic battles (rival, evil team, gyms run-core can't make) become wild battles of the wave's level | run-core, later the encounters |
+| A boss's battle score: `addFaintedEnemyScore` (and the catch's own copy of it) multiplies it by `sqrt(bossSegments)`, and battle-core's two score sites in `phases.c` don't read `boss_segments` yet, so each boss that faints or is caught is counted as `(boss segments)` in the soak report | battle-core |
 | In a wave whose number is a multiple of 10, once every enemy has fainted, upstream's CheckInterludePhase (`onInterlude`) drops the rest of that turn's weather, berry and status-effect phases and flags the TurnEndPhase; battle-core has it unported (`(phase CheckInterludePhase)` in the soak's unported list: 218 of 1000 runs), so those effects run | battle-core: CheckInterludePhase |
 | No weather roll for a new biome | port of `getRandomWeatherType` |
 | Evolution conditions on items, held items or the dex aren't met | reward-core, the dex |

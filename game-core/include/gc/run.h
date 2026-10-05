@@ -169,8 +169,6 @@ typedef struct gc_mon {
     int8_t luck;
     uint8_t pokeball;           /* PokeballType it was caught in */
     int16_t met_wave;           /* -1 for a starter */
-    int16_t boss_segments;      /* enemies: 0 = not a boss */
-    int16_t boss_segment_index;
     uint8_t trainer_slot;       /* enemies: TrainerSlot */
 } gc_mon;
 
