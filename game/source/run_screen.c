@@ -452,7 +452,7 @@ static bool handle_event(int i) {
       break;
 
     case GC_EV_SAVE_POINT:
-      if (!bv_playing()) {
+      if (!bv_playing() && !ui_busy()) {
         char name[32];
         snprintf(name, sizeof name, "session_%d", G.active_slot);
         char buf[GC_SAVE_MAX];
