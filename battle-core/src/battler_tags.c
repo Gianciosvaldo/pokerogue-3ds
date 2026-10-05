@@ -892,9 +892,8 @@ static void next_targets(pr_battle *bt, const pr_pokemon *p, int move, const pr_
         return;
     }
     if (pr_move_has_attr((uint16_t)move, PR_AC_VariableTargetAttr)) pr_note_unported(bt, PR_AC_VariableTargetAttr);
-    if (bt->double_battle) pr_note_unported(bt, PR_FEAT_DOUBLES);
     /* set = [opponents[randBattleSeedInt(opponents.length)]], opponents = getOpponents(false) (not
-     * fainted, field order); then only those active on the field */
+     * fainted, field order, both of them in doubles); then only those active on the field */
     const pr_pokemon *opp[2];
     int n = 0;
     for (int k = 0; k < 4; k++) {

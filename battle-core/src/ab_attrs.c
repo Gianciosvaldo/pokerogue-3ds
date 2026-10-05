@@ -809,11 +809,16 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
             if (!(pr_abilities[t->ability].flags & AB_FLAG_UNCOPIABLE) || t->ability == ABILITY_ID_WONDER_GUARD) tg[n++] = t;
         }
         if (n == 0) return 0;
-        if (n > 1 && !pp->simulated) pr_note_unported(bt, PR_FEAT_DOUBLES);   /* randSeedInt over the targets */
         if (!c->e && !pp->simulated) return -1;
-        c->msg_target = tg[0];                                          /* this.target */
+        /* two to pick from (doubles), not simulated: randSeedInt(targets.length), the global generator */
+        int pick = 0;
+        if (n > 1 && !pp->simulated) {
+            if (!bt->rng_live) { pr_note_unported(bt, PR_FEAT_GLOBAL_RNG); return -1; }
+            pick = pr_rng_seed_int(&bt->rng, n, 0);
+        }
+        c->msg_target = tg[pick];                                       /* this.target */
         GATE(true);
-        if (!pp->simulated) pr_set_temp_ability(bt, (pr_pokemon *)p, tg[0]->ability);   /* revealAbility: UI */
+        if (!pp->simulated) pr_set_temp_ability(bt, (pr_pokemon *)p, tg[pick]->ability);   /* revealAbility: UI */
         return 1;
     }
     case PR_AC_PostDamageForceSwitchAbAttr: {                           /* Wimp Out, Emergency Exit */

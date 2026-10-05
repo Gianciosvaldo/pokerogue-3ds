@@ -75,8 +75,9 @@ bool pr_switch_out_condition(pr_battle *bt, bool self_switch, int switch_type, c
     const pr_pokemon *out = self_switch ? user : target;
     if (!out) { pr_note_unported(bt, PR_FEAT_MOVE_CONDITION); return true; }   /* upstream would throw */
     bool player = out->is_player;
-    /* a Dondozo with an allied Tatsugiri in its mouth can't leave (doubles only) */
-    if (pr_get_battler_tag(out, BATTLER_TAG_TYPE_COMMANDED)) pr_note_unported(bt, PR_FEAT_DOUBLES);
+    /* a Dondozo with an allied Tatsugiri in its mouth can't switch or be forced out */
+    const pr_battler_tag *cmd = pr_get_battler_tag(out, BATTLER_TAG_TYPE_COMMANDED);
+    if (cmd && is_active_on_field(pr_pokemon_by_id(bt, cmd->source_id))) return false;
 
     if (!self_switch) {
         if (!target) { pr_note_unported(bt, PR_FEAT_MOVE_CONDITION); return true; }
@@ -226,7 +227,7 @@ void pr_force_switch_out(pr_battle *bt, pr_engine *e, bool self_switch, int swit
     if (out->hp > 0) {
         pr_leave_field(bt, e, out, false);
         pr_queue_msg(bt, e, pr_msg1("moveTriggers:fled", pr_arg_pokemon(bt, "pokemonName", out)));
-        if (bt->double_battle && ally) pr_note_unported(bt, PR_FEAT_DOUBLES);   /* redirectPokemonMoves */
+        if (bt->double_battle && ally) pr_redirect_moves(bt, e, out, ally);
     }
     /* clearEnemyHeldItemModifiers(out), then updateModifiers(false): with none of its held items
      * left to remove, recalculating the enemy party's stats gives the stats they already have */
@@ -335,7 +336,7 @@ void pr_wimp_out_apply(pr_battle *bt, pr_engine *e, pr_pokemon *p)
     if (p->hp > 0) {
         pr_leave_field(bt, e, p, false);
         pr_queue_msg(bt, e, pr_msg1("moveTriggers:fled", pr_arg_pokemon(bt, "pokemonName", p)));
-        if (bt->double_battle && ally) pr_note_unported(bt, PR_FEAT_DOUBLES);   /* redirectPokemonMoves */
+        if (bt->double_battle && ally) pr_redirect_moves(bt, e, p, ally);
     }
     if (!is_active_on_field(ally)) {
         /* clearEnemyHeldItemModifiers(): every enemy held item, then updateModifiers(false) */
@@ -359,7 +360,6 @@ void pr_switch_phase(pr_battle *bt, pr_engine *e, int ph)
     const pr_phase *s = &e->pool[ph];
     /* challenges (isAllowedInChallenge) aren't modelled: every Pokemon that hasn't fainted is allowed */
     if (!bt->n_party[0]) { pr_note_unported(bt, PR_FEAT_PARTY); return; }
-    if (bt->double_battle) pr_note_unported(bt, PR_FEAT_DOUBLES);   /* the field check, fieldIndex 0 */
     if (s->sw_modal) {
         bool all_on_field = true;                              /* getPokemonAllowedInBattle().every(isOnField) */
         for (int k = 0; k < bt->n_party[0]; k++) {
@@ -374,6 +374,14 @@ void pr_switch_phase(pr_battle *bt, pr_engine *e, int ph)
             }
             if (bt->party[0][s->sw_field_index]->hp > 0) return;
         }
+        /* getPlayerField(true).length > getBattlerCount(): never true, the field holds that many at most */
+    }
+    /* a double battle where one Pokemon allowed in battle is left (two of three fainted at once):
+     * the screen and the switch go to field index 0 */
+    if (bt->double_battle) {
+        int allowed = 0;
+        for (int k = 0; k < bt->n_party[0]; k++) allowed += bt->party[0][k]->hp > 0;
+        if (allowed <= 1) e->pool[ph].sw_field_index = 0;
     }
     e->awaiting_pick = true;
 }
@@ -414,7 +422,6 @@ void pr_switch_summon_phase(pr_battle *bt, pr_engine *e, int ph)
     int side = s->sw_player ? 0 : 1, field = s->sw_field_index, slot = s->sw_slot, type = s->sw_type;
     bool do_return = s->sw_do_return, player = s->sw_player;
     if (!bt->n_party[side]) { pr_note_unported(bt, PR_FEAT_PARTY); return; }
-    if (bt->double_battle) pr_note_unported(bt, PR_FEAT_DOUBLES);
     if (field < 0 || field >= bt->n_party[side] || slot < -1 || slot >= PR_MAX_PARTY) {
         pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT);                       /* upstream would throw */
         return;
@@ -611,8 +618,16 @@ void pr_post_summon_phase(pr_battle *bt, pr_engine *e, int ph)
      * loop skip the one after it, as upstream's does */
     for (int i = 0; i < bt->n_arena_tags; i++)
         if (pr_arena_tag_is(bt->arena_tags[i].type, PR_ARENACLASS_ENTRY_HAZARD)) entry_hazard_apply(bt, e, i, p);
-    /* a mystery encounter's post-summon tag, and the allies' Commander: not in a wild single battle */
+    /* a mystery encounter's post-summon tag */
     if (bt->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) pr_note_unported(bt, PR_FEAT_TRAINER);
+    /* CommanderAbAttr over the Pokemon's side (getAlliesGenerator), which only applies in a double
+     * battle next to an active Dondozo with no Pokemon in its mouth yet: not ported */
+    for (int k = 0; bt->double_battle && k < 2; k++) {
+        const pr_pokemon *q = bt->field[(p->is_player ? 0 : 2) + k];
+        const pr_pokemon *a = q && q->hp > 0 ? pr_get_ally(bt, q) : NULL;
+        if (is_active_on_field(a) && a->species == SPECIES_ID_DONDOZO && !pr_get_battler_tag(a, BATTLER_TAG_TYPE_COMMANDED))
+            pr_hook_ab(bt, q, PR_AC_CommanderAbAttr);
+    }
 }
 
 /* SummonPhase(fieldIndex, player) as EncounterPhase queues it (loaded false): the party member in
