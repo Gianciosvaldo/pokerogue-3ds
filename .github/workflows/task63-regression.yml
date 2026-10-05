@@ -1,0 +1,104 @@
+# Task 63 recovery: full counts, real pinned upstream, durable logs and traces.
+# This deliberately applies only to PR #112; established CI is unchanged.
+name: Task 63 full regression
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: task63-regression-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  differential:
+    if: github.event.pull_request.number == 112 && github.event.pull_request.head.ref == 'outside/enemy-movesets'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include:
+          - {seed: 777, group: rival}
+          - {seed: 9001, group: rival}
+          - {seed: 4242, group: rival}
+          - {seed: 31337, group: rival}
+          - {seed: 777, group: remainder}
+          - {seed: 9001, group: remainder}
+          - {seed: 4242, group: remainder}
+          - {seed: 31337, group: remainder}
+          - {seed: 777, group: trainer}
+          - {seed: 9001, group: trainer}
+          - {seed: 4242, group: trainer}
+          - {seed: 31337, group: trainer}
+          - {seed: 777, group: scalar}
+          - {seed: 9001, group: scalar}
+          - {seed: 4242, group: scalar}
+          - {seed: 31337, group: scalar}
+          - {seed: 31337, group: focus}
+          - {seed: 777, group: moveset}
+          - {seed: 9001, group: moveset}
+          - {seed: 4242, group: moveset}
+          - {seed: 31337, group: moveset}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: candidate
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: a3f44d3403c1da26bf4438dc2f598a0b389be017
+          path: baseline
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.3'
+      - name: Prepare pinned upstream outside the port repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --version
+          npm install --global pnpm@10.34.5
+          sh candidate/battle-core/tools/setup-upstream.sh "$RUNNER_TEMP/upstream" 8555c08c823b856cbec4eb99ca84ea52a955836d
+          test "$(git -C "$RUNNER_TEMP/upstream" rev-parse HEAD)" = 8555c08c823b856cbec4eb99ca84ea52a955836d
+      - name: Full-count differential commands and paired original-main C replays
+        env:
+          TASK63_RESULTS: ${{ runner.temp }}/task63-${{ matrix.seed }}-${{ matrix.group }}
+        run: python3 candidate/run-core/tools/task63-regression.py "$RUNNER_TEMP/upstream" "$GITHUB_WORKSPACE/baseline" ${{ matrix.seed }} ${{ matrix.group }}
+      - name: Retain exact commands, exits, logs and traces even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: task63-${{ matrix.seed }}-${{ matrix.group }}
+          path: ${{ runner.temp }}/task63-${{ matrix.seed }}-${{ matrix.group }}
+          if-no-files-found: warn
+          retention-days: 30
+  host:
+    if: github.event.pull_request.number == 112 && github.event.pull_request.head.ref == 'outside/enemy-movesets'
+    runs-on: ubuntu-24.04
+    steps:
+      # The PR merge ref checks host compatibility with current main as well.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Host checks on the proposed merge
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/task63-host"
+          git rev-parse HEAD | tee "$RUNNER_TEMP/task63-host/merge-sha.txt"
+          make -C run-core 2>&1 | tee "$RUNNER_TEMP/task63-host/run-build.log"
+          make -C run-core test-daily-rng 2>&1 | tee "$RUNNER_TEMP/task63-host/daily-rng.log"
+          make -C game-core test 2>&1 | tee "$RUNNER_TEMP/task63-host/game-test.log"
+          git diff --check
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: task63-host
+          path: ${{ runner.temp }}/task63-host
+          retention-days: 30
