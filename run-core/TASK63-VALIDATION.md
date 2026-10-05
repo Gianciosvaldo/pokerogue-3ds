@@ -1,115 +1,168 @@
-# Task 63 validation checkpoint — 2026-10-05
+# Task 63 validation — 2026-10-05
 
-Still draft. This is a bounded implementation, not complete enemy moveset parity.
-Base source: main `a3f44d3403c1da26bf4438dc2f598a0b389be017`.
-Pinned external upstream: `8555c08c823b856cbec4eb99ca84ea52a955836d`.
-Node 22.23.3; GCC 13.3.0; Vitest 4.1.11. Existing external harness reused;
-setup-upstream was not rerun. Host results do not prove console behavior.
+Still draft: the full R regression is in progress. This is a bounded enemy moveset implementation, not complete enemy moveset parity.
+Original baseline source: main `a3f44d3403c1da26bf4438dc2f598a0b389be017`.
+The final candidate incorporates current main `68a60c94527064440b33f3beb321dc6748ef5123` unchanged.
+Upstream pin: `8555c08c823b856cbec4eb99ca84ea52a955836d`.
+Node 22.23.3; GCC 13.3.0; Vitest 4.1.11. The existing external harness was reused;
+setup-upstream was not rerun. Host tests and CI build success do not prove console behavior.
 
 ## Changes and authorization
 
-The user authorized overriding the previous Task 63 restrictions to resolve its
-blockers. No comparison, tolerance, seed or required count is loosened.
-Existing daily correction is retained. Three further baseline repairs:
+The user explicitly authorized overriding the former Task 63 restrictions to repair its blockers.
+No comparator, tolerance, seed or required count was weakened. Port changes are in run-core;
+Task 73 files are incorporated unchanged from main. Game-core wiring remains Task 64.
 
-- C constructor boss segments use ordinary encounter calculation; special
-  Eternatus segments belong to the later EncounterPhase.
-- gym/E4 snapshot stub initializes an empty moveset for trainer post-process
-  callbacks; it consumes no moveset RNG and preserves the first snapshot.
-- Rival producer releases mock call history after each fight; mock implementations
-  and generated cases are unchanged.
-- Trainer-party producer retains the first constructor snapshot; later rival
-  post-process regeneration calls previously overwrote it with changed traits.
+Existing baseline repairs:
 
-All edits are in run-core. Other cores and game-core wiring are unchanged.
-No upstream source/dumps/assets or binaries are committed. Generated tables
-are read-only; redump was not needed and was not run.
+- Daily producer clears IVS/NATURE/SHINY overrides left by classic test setup. Daily C form selection uses the active daily RNG at offset zero.
+- C EnemyPokemon constructor uses the ordinary boss segment calculation. The special Eternatus segments belong to the later EncounterPhase.
+- Gym/E4 snapshot stub initializes an empty moveset for trainer post-process callbacks, consuming no moveset rolls and preserving the first snapshot.
+- Trainer-party producer retains the first constructor snapshot; later rival regeneration calls formerly overwrote it with changed ability/form/Tera traits.
+- Rival, gym/E4 and trainer-party producers clear mock call history and detach destroyed battle-info objects from the mocked UI after complete scalar observations. MockContainer.destroy clears children but does not remove itself from its parent, unlike real Phaser destruction. Implementations, random inputs and case counts remain unchanged.
 
-## Commands and measured outputs
+No upstream source, JSON dumps, art, assets or binaries are committed. Generated tables were read-only;
+redump was neither needed nor run.
 
-Working directory unless noted: `/workspace/scratch/809689da2702/task63-resume`.
-Upstream: `/workspace/scratch/809689da2702/upstream-reference`.
-PATH begins `/root/.npm/_npx/d18f28baf1132559/node_modules/node/bin`.
+## New differential suite
 
-```
-make -C ../task63-baseline/run-core
-```
-Exit 0. Baseline cores/docs were fetched at the main SHA above; their source
-content is main, while the local Git commit is a snapshot rather than remote history.
+Producer: `run-core/tests/moveset.producer.test.ts`. It calls the real upstream method on real
+Pokemon objects. Flags: `DIFF_MOVESET=1`, `DIFF_N`, `DIFF_SEED`, `DIFF_OUT`.
+Trace: `$BUILD/moveset-$SEED.txt`. C comparator: `$BUILD/movesettest TRACE N SEED`.
+Move IDs, order, PP, PP Ups and post-case RNG state are compared; strict completion footer required.
 
-```
+Supported: Caterpie/Weedle form 0 level-only wild enemies and trainer levels 1–24;
+Magikarp form 0 levels 1–24; Ditto form 0 wild enemies and trainer levels 1–79;
+fixed Smeargle and Eternatus forms 0/1, including inverse handling. Native abilities only,
+no passive/fusion, clean constructor boundary, with effective ATK/SPATK supplied by the caller.
+
+General TM/egg/signature paths, evolution/prevolution/relearn merges, superseding/useless-move
+rules, broader species/forms, modified ability state, fusion, Tera and other challenges remain
+unported. Unsupported input returns a named reason with unchanged RNG/output. The bounded
+species do not need those general paths; no broader parity is inferred from existing snapshot suites.
+
+Working directory: `/workspace/scratch/809689da2702/task63-resume`.
+PATH starts `/root/.npm/_npx/d18f28baf1132559/node_modules/node/bin`.
+
+```sh
 BUILD=/workspace/scratch/809689da2702/validation/task63-moveset-current sh run-core/tools/movesetdifftest.sh /workspace/scratch/809689da2702/upstream-reference 2000 777
-```
-Exit 0:
-
-```
-moveset seed 777: cases 2000 identical 2000 mismatches 0
-paths: wild 1002 trainer 998 boss 996 level 1334 fixed 666 STAB 593 rejection 117 Eternatus0 168 Eternatus1 165 inverse 165
-unported guard species: cases 1 reported 1 failures 0 (host only)
-unported guard form: cases 1 reported 1 failures 0 (host only)
-unported guard level-pool: cases 1 reported 1 failures 0 (host only)
-unported guard tm-egg-pool: cases 1 reported 1 failures 0 (host only)
-unported guard ability-state: cases 1 reported 1 failures 0 (host only)
-unported guard fusion: cases 1 reported 1 failures 0 (host only)
-unported guard tera: cases 1 reported 1 failures 0 (host only)
-unported guard challenge: cases 1 reported 1 failures 0 (host only)
-unported guard invalid: cases 1 reported 1 failures 0 (host only)
+BUILD=/workspace/scratch/809689da2702/validation/task63-moveset-current sh run-core/tools/movesetdifftest.sh /workspace/scratch/809689da2702/upstream-reference 2000 9001
+BUILD=/workspace/scratch/809689da2702/validation/task63-moveset-current sh run-core/tools/movesetdifftest.sh /workspace/scratch/809689da2702/upstream-reference 2000 4242
+BUILD=/workspace/scratch/809689da2702/validation/task63-moveset-current sh run-core/tools/movesetdifftest.sh /workspace/scratch/809689da2702/upstream-reference 2000 31337
 ```
 
-The remaining seeds (9001, 4242, 31337) are running; no result is claimed until
-recorded. All unported guard counts above are host-only probes, not differential
-cases: they check reason, unchanged RNG and unchanged output.
+All exit 0:
 
-Mutation command, repository workspace working directory:
+| Seed | Cases | Identical | Mismatches | Forced STAB | Soft rejections |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 777 | 2000 | 2000 | 0 | 593 | 117 |
+| 9001 | 2000 | 2000 | 0 | 603 | 105 |
+| 4242 | 2000 | 2000 | 0 | 603 | 111 |
+| 31337 | 2000 | 2000 | 0 | 610 | 112 |
 
-```
-gcc -Itask63-resume/run-core/include -Itask63-resume/battle-core/include -Itask63-resume/battle-core/gen/out -O2 -std=c99 -Wall -Wextra -ffp-contract=off task63-resume/run-core/tests/movesettest.c validation/task63-moveset-mutant.c validation/task63-moveset-current/librun.a validation/task63-moveset-current/battle-core/libprcore.a -lm -o validation/task63-moveset-mutant
-validation/task63-moveset-mutant validation/task63-moveset-current/moveset-777.txt 2000 777
-```
-Temporary mutant adds one to generated PP. Build exit 0; comparator exit 1:
-`moveset seed 777: cases 2000 identical 0 mismatches 2000`.
+Each seed additionally prints: wild 1002, trainer 998, boss 996, level 1334, fixed 666,
+Eternatus0 168, Eternatus1 165, inverse 165. Each host-only unported probe (species, form,
+level-pool, tm-egg-pool, ability-state, fusion, tera, challenge, invalid) prints
+`cases 1 reported 1 failures 0`. Those nine probes per seed are **not** differential matches.
 
-```
-validation/task63-moveset-current/movesettest validation/task63-moveset-truncated.txt 2000 777
-```
-Trace copied with END footer removed: exit 2, `missing completion footer`.
-Neither mutation nor trace is committed.
+After integrating newer main, each trace was replayed through the rebuilt candidate:
 
+```sh
+run-core/build/movesettest ../validation/task63-moveset-current/moveset-777.txt 2000 777
+run-core/build/movesettest ../validation/task63-moveset-current/moveset-9001.txt 2000 9001
+run-core/build/movesettest ../validation/task63-moveset-current/moveset-4242.txt 2000 4242
+run-core/build/movesettest ../validation/task63-moveset-current/moveset-31337.txt 2000 31337
 ```
+
+Again each prints 2000 cases / 2000 identical / 0 mismatches, with the same path counts.
+
+## Harness cleanup equivalence
+
+The old and repaired rival producers each ran 50 input runs on seed 777 (300 fights)
+in a private harness. This additional check does not replace the required 3000-run suite.
+Both exits were 0; complete traces are byte-identical, SHA-256
+`3f5353a4c20fcb65b52b83dee50bf9daaf272b76ed85b807e39c1abe2c6bd3f2`.
+The command for each producer copy, from `/workspace/scratch/809689da2702/upstream-r63-c`:
+
+```sh
+DIFF_N=50 DIFF_SEED=777 DIFF_OUT=/workspace/scratch/809689da2702/validation/r63-cleanup-equivalence/before.txt npx vitest run test/tests/zz-dump/rival-cleanup-control.producer.test.ts
+DIFF_N=50 DIFF_SEED=777 DIFF_OUT=/workspace/scratch/809689da2702/validation/r63-cleanup-equivalence/after.txt npx vitest run test/tests/zz-dump/rival-cleanup-control.producer.test.ts
+```
+
+Only the copied producer changed between commands; the pin, input generator and assertions did not.
+
+The full trainer-party seed-777 cleanup check also completed:
+
+```sh
+BUILD=/workspace/scratch/809689da2702/validation/r63-cleanup-full sh run-core/tools/difftest.sh /workspace/scratch/809689da2702/upstream-r63-a 3000 777 trainerparty
+```
+
+Exit 0: cases 3000, double 1630, whole parties matched 2525, upstream member throws 106,
+fused members 1793; `pass 9662 fail 0 not covered 1792`.
+The full before/after traces are byte-identical, SHA-256
+`45f59e079669aba4a1b3884ace69034ce00aba5ae0f478ac4d3808b8aeeedb99`.
+The before counts and supported cases are retained.
+
+## Negative controls
+
+From `/workspace/scratch/809689da2702`, a temporary C mutant adds one to generated PP:
+
+```sh
+gcc -Itask63-resume/run-core/include -Itask63-resume/battle-core/include -Itask63-resume/battle-core/gen/out -O2 -std=c99 -Wall -Wextra -ffp-contract=off task63-resume/run-core/tests/movesettest.c validation/task63-moveset-mutant.c task63-resume/run-core/build/librun.a task63-resume/run-core/build/battle-core/libprcore.a -lm -o validation/r63-integrated-moveset-mutant
+validation/r63-integrated-moveset-mutant validation/task63-moveset-current/moveset-777.txt 2000 777
+task63-resume/run-core/build/movesettest validation/task63-moveset-truncated.txt 2000 777
+```
+
+Build exit 0. Mutant exit 1: `cases 2000 identical 0 mismatches 2000`.
+The copied trace with END removed exits 2: `missing completion footer`.
+Neither mutant nor trace is committed.
+
+## R baseline and final regression
+
+[Completed commands, before/after C summaries, integrated replays and explicit coverage counts](TASK63-R-REGRESSION.md). The full matrix is not yet complete; this checkpoint does not claim an R pass.
+That report distinguishes fresh final upstream production from paired unchanged-main C replays;
+it does not claim all original-main producers completed a fresh before matrix.
+
+Fresh unchanged-main attempts, Node 22, working directory `../task63-baseline`:
+
+```sh
+BUILD=/workspace/scratch/809689da2702/validation/task63-before-current/777 sh run-core/tools/difftest.sh /workspace/scratch/809689da2702/upstream-reference 3000 777 wildenemy
+BUILD=/workspace/scratch/809689da2702/validation/task63-before-current/777 sh run-core/tools/difftest.sh /workspace/scratch/809689da2702/upstream-reference 3000 777 trainerparty
+BUILD=/workspace/scratch/809689da2702/validation/task63-before-current/777 sh run-core/tools/difftest.sh /workspace/scratch/809689da2702/upstream-reference 3000 777 gym_e4
+BUILD=/workspace/scratch/809689da2702/validation/task63-before-current/777 sh run-core/tools/difftest.sh /workspace/scratch/809689da2702/upstream-reference 20000 777 wave
+BUILD=/workspace/scratch/809689da2702/validation/task63-before-current/777 sh run-core/tools/difftest.sh /workspace/scratch/809689da2702/upstream-reference 20000 777 shop
+```
+
+Wild exit 1: 2999 pass / 1 fail / 0 not covered, 3000 cases; Eternatus line 1624.
+Trainer-party exit 1: 9651 pass / 11 fail / 1792 not covered; 3000 cases,
+1630 double, 2518 whole parties, 106 upstream member throws, 1790 fused.
+Gym/E4 exit 1 before comparison: upstream TypeError from the snapshot stub's missing moveset.
+Wave and shop exit 0; each existing component printed 20000 pass / 0 fail / 0 not covered.
+A following biome attempt was interrupted and is not counted as completed.
+
+The original wild trace replayed through the repaired C comparator prints 3000 pass / 0 fail /
+0 not covered: bosses 357 vs 356 before, locked 181 unchanged, Bug Net 998 vs 997,
+fusions 605 unchanged. The failing case was repaired, not classified unported.
+
+Local stale build artifacts caused permission errors in an initial integrated game-core attempt
+and a seed-9001 wave attempt. Clean rebuilds and complete reruns resolved them; no source or
+comparator bypass was used. Those failed attempts are not counted as passes.
+
+## Host validation and remaining limits
+
+```sh
+make -C run-core
+make -C game-core clean
 make -C game-core test
+make -C run-core test-daily-rng
 git diff --check
 ```
-Both exit 0. Game-core: resume 35,981 checks; item bridge 39; reward adapter
-3,512; switch prompts 25; turn tail 182; boss segments 152; reward apply
-638,355, all zero failures. Paired digest `8decbf9d` / `8decbf9d`.
 
-Before, unchanged main, Node 22, workspace/task63-baseline:
+Final host checks exit 0. Game-core: reward lifecycle host 46, resume 35981, item bridge 39,
+reward adapter 3512, switch prompts 25, turn tail 182, boss segments 152, reward apply 638355;
+all zero failures. Saved/unsaved digest `8decbf9d` / `8decbf9d`, unchanged from the original
+main host baseline. Daily RNG: 27 passed / 27 checks / 0 failed.
 
-```
-BUILD=/workspace/scratch/809689da2702/validation/task63-before-current/777 sh run-core/tools/difftest.sh /workspace/scratch/809689da2702/upstream-reference 3000 777 wildenemy
-```
-Exit 1: 3000 cases, 2999 pass / 1 fail / 0 not covered; Eternatus line 1624.
-356 bosses / 181 locked / 997 Bug Net / 605 fusions matched.
-
-After correction, same trace and unchanged comparator:
-
-```
-make -s -C run-core BUILD=/workspace/scratch/809689da2702/validation/task63-repaired-current
-../validation/task63-repaired-current/wildenemytest ../validation/task63-before-current/777/wildenemy-cases.txt
-```
-Both exit 0: 3000 cases, 3000 pass / 0 fail / 0 not covered.
-357 bosses / 181 locked / 998 Bug Net / 605 fusions matched.
-Coverage increased by the repaired case; none was reclassified unported.
-
-## Remaining gates
-
-Complete R-before and R-after matrices are running/not yet complete. No blanket
-R pass is claimed. Required counts remain 20000 for wave/shop/biome/encounter/
-newbattle/exp/partyexp/upkeep/trainerspecies/luck/daily; 10000 battlegen; 8000
-pokemongen; 3000 trainerparty/rival/gym_e4/wildenemy/enemyitems; 2000 enemybuffs,
-all four seeds. Challenge and README DIFF_FOCUS=1 runs are still pending.
-Daily's actual scope is five fixed runs / 250 waves / 775 checks, regardless
-of the command's N and seed; it is never counted as 20000 random cases.
-
-The full per-seed table, baseline summary lines and producer repair results
-will replace this checkpoint after completion. No 3DS build is claimed.
+The remaining moveset gap is the explicitly unported general domain listed above and Task 64
+integration. No complete enemy moveset parity, unavailable differential check, or console behavior
+is claimed. GitHub CI build results are separate from upstream differential validation.
