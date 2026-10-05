@@ -84,7 +84,12 @@ it("rival fixed party producer", async () => {
       lines.push(["R", runSeed, wave, type, levels.length, ...levels].join(" "));
       for (const m of members)
         lines.push(["M",m.species,m.level,m.ability,m.tera,m.boss,m.shiny,m.variant,m.form].join(" "));
-      for (const p of battle.enemyParty) p.destroy();
+      for (const p of battle.enemyParty) {
+        // Match Phaser destruction: the headless mock does not detach children.
+        // All scalar observations above are complete; this consumes no RNG.
+        scene.fieldUI.remove(p.battleInfo);
+        p.destroy();
+      }
       battle.enemyParty = [];
       trainer.destroy();
       // Retaining mock receivers keeps destroyed Pokemon alive across 18,000

@@ -124,7 +124,12 @@ it("gym/e4 producer", async () => {
     ].join(" "));
     lines.push(...members);
 
-    for (const p of battle.enemyParty) p.destroy();
+    for (const p of battle.enemyParty) {
+        // Match Phaser destruction: the headless mock does not detach children.
+        // All scalar observations above are complete; this consumes no RNG.
+        scene.fieldUI.remove(p.battleInfo);
+        p.destroy();
+      }
     battle.enemyParty = [];
     trainer.destroy();
     vi.clearAllMocks(); // release destroyed receivers; do not change mock implementations

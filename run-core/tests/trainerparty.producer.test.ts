@@ -138,6 +138,9 @@ it("trainerparty producer", async () => {
       lines.push(`M ${m}`);
     }
     for (const p of battle.enemyParty) {
+      // MockContainer.destroy does not detach from its parent as Phaser does.
+      // Release UI objects only after all scalar observations have been copied.
+      scene.fieldUI.remove(p.battleInfo);
       p.destroy();
     }
     battle.enemyParty = [];
