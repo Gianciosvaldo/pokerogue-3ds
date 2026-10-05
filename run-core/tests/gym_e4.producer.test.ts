@@ -5,6 +5,7 @@
  * moveset/postProcess callbacks).
  */
 import { activeOverrides } from "#app/overrides";
+import { allBiomes } from "#data/data-lists";
 import { GameModes } from "#enums/game-modes";
 import { MoveId } from "#enums/move-id";
 import { SpeciesId } from "#enums/species-id";
@@ -75,6 +76,7 @@ it("gym/e4 producer", async () => {
 
   const lines: string[] = [];
   for (let i = 0; i < N; i++) {
+    const textureCount = scene.textures.list.length;
     scene.seed = seedStr();
     scene.waveCycleOffset = rnd(8) * 5;
     scene.gameData.trainerId = rnd(65536);
@@ -88,6 +90,9 @@ it("gym/e4 producer", async () => {
     const wave = fixed ? e4Waves[rnd(e4Waves.length)] : (offsetGym ? gymOffset : gymNormal)[rnd(6)];
     const biome = biomeIds[rnd(biomeIds.length)];
     scene.arena.biomeId = biome;
+    // The Arena constructor copies its biome's trainer pool; setting biomeId alone kept the starting
+    // biome's pool (no boss tier), so upstream drew a Youngster on every gym wave. Consumes no RNG.
+    scene.arena.trainerPool = allBiomes.get(biome).trainerPool;
     battle.waveIndex = wave - 1;
     battle.enemyParty = [];
 
@@ -124,14 +129,24 @@ it("gym/e4 producer", async () => {
     ].join(" "));
     lines.push(...members);
 
+    // Release this configuration's display objects as Phaser would (see the rival producer): the
+    // mock containers neither destroy their children nor leave their parents, and the field, the
+    // Tera sparkle handler and the mock factory keep references, so memory grew with N.
+    // All scalar observations above are complete; none of this draws RNG.
+    const owned: any[] = [];
+    const subtree = (o: any) => { for (const child of o?.list ?? []) { owned.push(child); subtree(child); } };
+    for (const p of battle.enemyParty) { subtree(p); subtree(p.battleInfo); }
+    subtree(trainer);
     for (const p of battle.enemyParty) {
-        // Match Phaser destruction: the headless mock does not detach children.
-        // All scalar observations above are complete; this consumes no RNG.
-        scene.fieldUI.remove(p.battleInfo);
-        p.destroy();
-      }
+      scene.fieldUI.remove(p.battleInfo);
+      scene.field.remove(p);
+      p.destroy();
+    }
     battle.enemyParty = [];
     trainer.destroy();
+    for (const o of owned) o.destroy?.();
+    scene.spriteTeraSparkleHandler.remove(...owned);
+    scene.textures.list.length = textureCount;
     vi.clearAllMocks(); // release destroyed receivers; do not change mock implementations
   }
 

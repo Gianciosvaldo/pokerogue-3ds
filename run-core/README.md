@@ -143,7 +143,7 @@ Dev overrides (`LEVEL_CAP_OVERRIDE`, `ENEMY_HEALTH_SEGMENTS_OVERRIDE`...) aren't
 
 Build: `make` (outputs to `build/`).
 
-## Task 63: bounded enemy movesets (work in progress)
+## Task 63: bounded enemy movesets (first slice)
 
 `pr_run_enemy_moveset` (`include/pr/moveset.h`, `src/moveset.c`) implements the
 pinned 8555c08 level-only generator for Caterpie and Weedle, Magikarp below
@@ -175,5 +175,5 @@ Producer: `tests/moveset.producer.test.ts`; flags `DIFF_MOVESET=1`, `DIFF_N`,
 requires nonzero coverage for every claimed path. Unsupported-reason probes
 are host guard checks, not upstream differential matches.
 
-See [current validation and outstanding gates](TASK63-VALIDATION.md). PR #112
-remains draft until the required R regression is complete.
+See [validation, producer repairs and limits](TASK63-VALIDATION.md). The full R
+regression for PR #112 runs in CI (`.github/workflows/task63-regression.yml`).

@@ -1,6 +1,6 @@
 # Task 63 validation — 2026-10-05
 
-Still draft: the full R regression is in progress. This is a bounded enemy moveset implementation, not complete enemy moveset parity.
+The final R regression runs in the `Task 63 full regression` workflow on PR #112's head; its results are recorded in the PR. This is a bounded enemy moveset implementation, not complete enemy moveset parity.
 Original baseline source: main `a3f44d3403c1da26bf4438dc2f598a0b389be017`.
 The final candidate incorporates current main `68a60c94527064440b33f3beb321dc6748ef5123` unchanged.
 Upstream pin: `8555c08c823b856cbec4eb99ca84ea52a955836d`.
@@ -20,6 +20,7 @@ Existing baseline repairs:
 - Gym/E4 snapshot stub initializes an empty moveset for trainer post-process callbacks, consuming no moveset rolls and preserving the first snapshot.
 - Trainer-party producer retains the first constructor snapshot; later rival regeneration calls formerly overwrote it with changed ability/form/Tera traits.
 - Rival, gym/E4 and trainer-party producers clear mock call history and detach destroyed battle-info objects from the mocked UI after complete scalar observations. MockContainer.destroy clears children but does not remove itself from its parent, unlike real Phaser destruction. Implementations, random inputs and case counts remain unchanged.
+- Rival producer releases each fight's display objects after its observations, and the gym/E4 producer gives the arena its biome's trainer pool. See [Takeover repairs](#takeover-repairs-2026-10-05).
 
 No upstream source, JSON dumps, art, assets or binaries are committed. Generated tables were read-only;
 redump was neither needed nor run.
@@ -75,6 +76,54 @@ run-core/build/movesettest ../validation/task63-moveset-current/moveset-31337.tx
 ```
 
 Again each prints 2000 cases / 2000 identical / 0 mismatches, with the same path counts.
+
+## Takeover repairs (2026-10-05)
+
+Two producer defects stopped required R commands. Both are card 100 work (lorenzo's producer-edit
+authorization in docs/HANDOFF.md). No comparator, C source, seed, count or tolerance changed.
+Local runs: Node 22.22.0, GCC 13.3.0, upstream `8555c08` prepared by `battle-core/tools/setup-upstream.sh`.
+
+**Rival: leaked display objects.** `MockContainer.destroy` only empties its own list: it neither
+destroys its children (Phaser's Container does) nor leaves its parent, and `scene.field`,
+`scene.spriteTeraSparkleHandler` and the mock factory's `textures.list` keep references too. Every
+fight's EnemyPokemon (26 per input run) and about 78 sprites stayed alive, and each sprite's
+animation listener stayed on the scene's animation manager (807 after setup, +468 per input run),
+so every later destroy scanned a longer list. Time grew with the square of `DIFF_N` (100, 200, 300,
+400 runs: 24, 112, 273, 518 s cumulative) and memory without bound; four 3000-run seeds started
+together were killed by the kernel's out-of-memory killer. After its observations and with no RNG
+draw, the producer now collects each fight's display subtrees, removes the Pokemon from the field,
+destroys the collected objects, drops them from the sparkle handler and truncates the factory list.
+Objects still alive after 50 and 150 runs (seed 9001, `v8.queryObjects` after a forced GC): with
+the child destroys alone, EnemyPokemon 1302 and 3902 and Phaser sprites 30850 and 90849; with the
+whole repair, 3 and 3 and 869 and 869.
+
+```sh
+sh run-core/tools/difftest.sh $UP 500 777 rival
+```
+
+Unchanged-main producer 868 s, PR producer before this repair 829 s, after it 48 s (wall times on
+a shared 4-core machine). Each prints
+`rival summary: 3000 fights, 0 mismatches`, and the three traces are byte-identical (SHA-256
+`88119837e3f91a1cfbc83a29f24de4f07345bc133aa46951d9aebbbbd1a758b8`).
+
+At the required count, through the CI driver (`TASK63_RESULTS=<dir> python3
+run-core/tools/task63-regression.py $UP <main a3f44d3 checkout> <seed> rival`, which runs
+`difftest.sh $UP 3000 <seed> rival`, the unchanged-main C replay and the species mutation), seeds
+777, 9001, 4242 and 31337 each print `rival summary: 18000 fights, 0 mismatches` for the candidate
+and for the unchanged-main replay, and `18000 fights, 18000 mismatches` (exit 1) for the mutant.
+Each producer run took about 2 to 3 minutes; peak resident memory was about 650 MB.
+
+**Gym/E4: wrong trainer pool.** The producer set `scene.arena.biomeId`, but only the Arena
+constructor copies a biome's trainer pool, so every gym wave drew from Town's pool (Youngster only,
+no boss tier). Once the crash repair let the suite run, `difftest.sh $UP 3000 777 gym_e4` printed
+`3000 configurations, 1546 fully matched, 9120 matched members, 1454 mismatches`, every one
+`expected 63` (Youngster). The producer now also sets `scene.arena.trainerPool` from
+`allBiomes.get(biome)`, which draws no RNG. Upstream now picks real gym leaders, so this trace
+changes by design. 300 configurations on seed 777: 300 fully matched, 0 mismatches.
+The gym/E4 producer also gets the rival producer's display cleanup: with the trainer-pool repair
+alone, four 3000-configuration seeds started together were killed for memory. On 300
+configurations (seed 777) the cleaned producer's trace is byte-identical to the uncleaned one.
+The 3000-configuration results for all four seeds are those of the CI regression on PR #112.
 
 ## Harness cleanup equivalence
 
