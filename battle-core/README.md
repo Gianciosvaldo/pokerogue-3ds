@@ -113,7 +113,7 @@ Runs (each case is a random attacker, defender, any implemented damaging move, w
 
 The differential test found real bugs, all fixed: Stellar Tera typing, Shedinja's forced Bug tera type, charging moves (Fly, Dive) not counting as attacks for Wonder Guard, and Disguise's recoil, which upstream deals in the middle of the damage calculation: when it knocks the Pokemon out, a passive checked right after (Fluffy, say) no longer applies. The port had put the recoil off until later; it now happens at once. Until this revision it also skipped every move whose listed power is -1 (35 moves, among them Low Kick, Grass Knot, Heavy Slam, Flail, Gyro Ball, Electro Ball, Punishment, Seismic Toss and Super Fang), so their code was unchecked even though an earlier version of this README counted them as verified. They're in the test now and match.
 
-What the test doesn't cover yet: doubles and fusions. Code that is ported but can't show in this test: status moves hitting a Substitute and Prankster's priority (the test only uses damaging moves, and Prankster only speeds up status moves), Parental Bond's refusal of spread moves (no damaging move has two targets in a single battle), and the condition that turns off Color Change, Pickpocket, Berserk, Anger Shell, Wimp Out and Emergency Exit after a Sheer Force hit (it reads the attacks received and runs, since `hasAbilityWithAttr` and co. ask `canApplyAbility` before looking at the attributes, but none of those abilities has an attribute the damage path reads: 3 deliberate bugs in it change no answer). Side effects that belong to the turn engine (Volt Absorb healing, Sap Sipper's stat raise, Sturdy's tag, Disguise's form change, Present's heal, the stat boosts a boss gets when damage breaks one of its segments) are recorded as *deferred*: the damage result is checked, the side effect isn't applied until the phase engine exists, and nothing compares the deferred list with upstream (so Sturdy skipping its tag when it already has one is ported but unchecked). Of about 110,000 cases 6 stay uncovered: 4 where Disguise's recoil, which upstream deals in the middle of the damage calculation, lands on a Pokemon with Wimp Out or Emergency Exit (`PostDamageAbAttr`: the switch-out belongs to the turn engine), and 2 where Revenge or a Counter-like move scans more received attacks than the 8 kept without finding its answer. Parental Bond's second hit with Expanding Force or Tera Starstorm, whose target can change (`VariableTargetAttr`), is still unported too; it didn't come up in this revision's streams. The game-mode rules around passives (no passive for the classic final boss or endless bosses, the passives challenge, daily-run passives) aren't modelled: they belong to the mode layer.
+What the test doesn't cover yet: fusions, and doubles (they have their own suite, Task 73 below). Code that is ported but can't show in this test: status moves hitting a Substitute and Prankster's priority (the test only uses damaging moves, and Prankster only speeds up status moves), Parental Bond's refusal of spread moves (no damaging move has two targets in a single battle), and the condition that turns off Color Change, Pickpocket, Berserk, Anger Shell, Wimp Out and Emergency Exit after a Sheer Force hit (it reads the attacks received and runs, since `hasAbilityWithAttr` and co. ask `canApplyAbility` before looking at the attributes, but none of those abilities has an attribute the damage path reads: 3 deliberate bugs in it change no answer). Side effects that belong to the turn engine (Volt Absorb healing, Sap Sipper's stat raise, Sturdy's tag, Disguise's form change, Present's heal, the stat boosts a boss gets when damage breaks one of its segments) are recorded as *deferred*: the damage result is checked, the side effect isn't applied until the phase engine exists, and nothing compares the deferred list with upstream (so Sturdy skipping its tag when it already has one is ported but unchecked). Of about 110,000 cases 6 stay uncovered: 4 where Disguise's recoil, which upstream deals in the middle of the damage calculation, lands on a Pokemon with Wimp Out or Emergency Exit (`PostDamageAbAttr`: the switch-out belongs to the turn engine), and 2 where Revenge or a Counter-like move scans more received attacks than the 8 kept without finding its answer. Parental Bond's second hit with Expanding Force or Tera Starstorm, whose target can change (`VariableTargetAttr`), is still unported too; it didn't come up in this revision's streams. The game-mode rules around passives (no passive for the classic final boss or endless bosses, the passives challenge, daily-run passives) aren't modelled: they belong to the mode layer.
 
 Two things upstream does that a reader might not expect, both kept: `getAttackDamage` doesn't cap damage at the target's HP, and with the enemy's damage tokens (up to 999 stacks of x1.05 in endless mode) it can exceed 2^63, so damage is a double in the C port too. And the JS `Math.pow` result depends on the engine: the reference here is Node 22 (V8 12.4), whose pow is fdlibm's; newer V8 versions switched to a correctly rounded pow, so upstream itself can deal 1 point more or less on a different browser.
 
@@ -220,7 +220,7 @@ Upstream ids are compiled into const tables. Custom species, moves, abilities an
 ## Not done (in rough order)
 1. Weather-based and other form changes, the other ~100 ability classes (end-of-turn, fainting, leaving the field...) and the effects of the on-hit ones that only report themselves, and the held items whose effects happen outside the damage calculation (Leftovers, Focus Band, berries, Quick Claw, King's Rock, Shell Bell...).
 2. The rest of the turn history's readers (Gigaton Hammer's restriction...).
-3. The rest of the turn engine: the last 8 battler tag types (Helping Hand, Follow Me and Rage Powder's, Imprison, Quick Claw and Quick Draw's, Commander's, Cramorant's Gulp Missile, the mystery encounters' post-summon one), Transform and Imposter, Neutralizing Gas, the phases before a turn, multi-target doubles, trainer battles. Deferred side effects get applied here.
+3. The rest of the turn engine: the last 8 battler tag types (Helping Hand, Follow Me and Rage Powder's, Imprison, Quick Claw and Quick Draw's, Commander's, Cramorant's Gulp Missile, the mystery encounters' post-summon one), Transform and Imposter, Neutralizing Gas, the phases before a turn, starting a double battle and the doubles-only moves and tags (Task 73 below), trainer battles. Deferred side effects get applied here.
 4. Enemy AI, rewards, eggs, save format. Waves, biomes, trainers and their parties, mystery encounter spawns, new enemies up to their movesets and the shop's economy are in [`run-core/`](../run-core/).
 5. Hooking it to the renderer in `assets-pipeline/app-src`.
 
@@ -401,3 +401,104 @@ plain 1942, switch 1890; rich 1830 to 1831, summon 1862 to 1863 (newly covered
 Dancer turns). Items covered 1922/1932/1929/1939 and conditions
 1767/1756/1770/1766 on 777/9001/4242/31337 respectively; zero failures before
 and after. Items retain their previously reported untranslated message sets.
+
+## Task 73: doubles turn engine, first slice (2026-10-05)
+
+A double battle's turn now runs through the same engine: `field[0..3]` holds the two
+player Pokemon (battlers 0 and 1) and the two enemies (2 and 3), and the paths that used to
+report `PR_FEAT_DOUBLES` are ported against pinned upstream 8555c08:
+
+- Spread damage: a move that hits several targets does 0.75 when `getMoveTargets` gives
+  it more than one. That call (and the ones in `HealStatusEffectAttr` and the Multi Lens /
+  Parental Bond spread check) draws a `RANDOM_NEAR_ENEMY` move's target from the battle RNG,
+  as upstream does every time it is called.
+- Targets: a single-target move aimed at a Pokemon that faints, flees or leaves the field
+  goes to its ally (`redirectPokemonMoves`). `MoveEffectPhase` drops its user from an
+  `ALL_NEAR_OTHERS` list with upstream's `splice(i, i + 1)`. The effect and charge phases
+  use the user's current slot. Instruct's fainted lone target goes to its ally. Counter and
+  Mirror Coat retarget when the attacker has left.
+- Order and slots: `ToggleDoublePositionPhase` swaps party slots 0 and 1 when only slot 1
+  is active. `SwitchPhase` uses field index 0 when one Pokemon allowed in battle is left.
+- The side's abilities: Friend Guard, Victory Star (accuracy; evasion too, which no
+  ability changes), Steely Spirit-style side boosts and the Queenly Majesty-style check in
+  the simulated effectiveness path over the user's side in speed order, and Trace's random
+  pick between two opponents (global RNG).
+- Commander's hit check and switch-out block read the `COMMANDED` tag. Commander itself
+  still reports itself when a Tatsugiri is summoned next to a Dondozo, so no compared turn
+  has that tag.
+
+Still reported, so the turns that need them aren't counted: starting a double battle
+(`pr_start_battle`, `SummonPhase`), Helping Hand, Follow Me / Rage Powder, After You,
+Acupressure, Pollen Puff on an ally, Flame Burst's splash, Order Up, Commander's own
+effect, Receiver, Power of Alchemy and Soul-Heart, and the `MovePhase` Queenly Majesty-style check (a
+singles note already). No run or UI integration and no doubles AI (Task 74).
+
+`tests/doubles.producer.test.ts` (the upstream half, additive) builds a real upstream wild
+double battle and, per case, random species, level, IVs, nature, HP and 1 to 4 moves for
+the four field Pokemon, drawn so spread moves and moves aimed at an ally come up often, plus
+0 to 4 bench Pokemon (a quarter fainted). All four get a FIGHT command built the way the
+command phases build one: a multi-target move keeps all its targets, else one is picked at
+random, which is where a single-target move aimed at the ally comes from. Upstream's own
+phases then run until the next `TurnInitPhase`, exactly as the singles producer drives them.
+Abilities are Ball Fetch. `DOUBLES_RICH=1` (opt-in, not part of the gate) gives half the
+field Pokemon a random ability, half of those from a pool of abilities that read the ally or
+the user's side. Its trace is `build/doubles-rich-<seed>.txt`.
+
+`tests/doublestest.c` wraps the unchanged `tests/turntest.c` comparison. Its only change to
+the replay is upstream's field (`party.slice(0, 2)` per side). It requires the
+`# DOUBLES_CONTRACT 1 <N>` header and a matching `# DOUBLES_COMPLETE <written> <threw>`
+footer (written = cases read, written + threw = N; else exit 2). It fails unless every
+covered turn passes with identical texts and no parse or stat mismatch. It also fails if any
+of these counts over the compared turns is 0: a command aimed at the ally and one that hits
+it, a command aimed at both opponents and a source that hits both, two or more faints in a
+turn, and two or more from one move. `DOUBLES_COVERED=1` also lists the compared case numbers.
+
+```sh
+# Node 22, upstream pin 8555c08; checkout outside this repository.
+sh battle-core/tools/doublesdiff.sh <upstream> 2000 777    # also 9001, 4242, 31337
+DOUBLES_RICH=1 sh battle-core/tools/doublesdiff.sh <upstream> 2000 777
+```
+
+Checked with Node 22.22.0 against pinned upstream 8555c08. Default suite (the gate), 2,000
+cases per seed, upstream threw on 0:
+
+| Seed | Covered = pass | Fail | Not covered | Aimed at ally (hit) | Aimed at both opponents (both hit) | 2+ faints (one side / both sides; from one move) |
+| --- | --- | --- | --- | --- | --- | --- |
+| 777 | 1788 | 0 | 212 | 959 (477) | 1487 (407) | 620 (326 / 294; 352) |
+| 9001 | 1780 | 0 | 220 | 920 (481) | 1464 (383) | 683 (341 / 342; 386) |
+| 4242 | 1792 | 0 | 208 | 948 (486) | 1446 (377) | 631 (319 / 312; 363) |
+| 31337 | 1770 | 0 | 230 | 907 (475) | 1458 (372) | 637 (324 / 313; 374) |
+
+Parse and stat mismatches 0 and texts identical on every covered turn. Top reasons a case
+isn't covered (seed 777): Helping Hand's tag 47, Acupressure 37, Core Enforcer-style
+ability suppression 31, After You 17, form changes 17, Flame Burst 9.
+
+`DOUBLES_RICH=1`: covered 1509 / 1504 / 1520 / 1493 on 777 / 9001 / 4242 / 31337, all pass,
+texts identical, 0 mismatches. The top reasons a rich case isn't covered are the
+`MovePhase` Queenly Majesty-style check (175 on seed 777) and the knock-out abilities (Receiver, Power of Alchemy, Soul-Heart; 90).
+On seed 777 the covered rich turns have a field Pokemon with Friend Guard in 62, Victory
+Star 81, Steely Spirit 69, Power Spot 61, Battery 65, Plus 62, Minus 57, Telepathy 57,
+Lightning Rod 65, Storm Drain 59, Flower Gift 69 and Trace 60. Friend Guard applies to the
+damage in 27 of them, and the accuracy check reads an ally's Victory Star or Flower Gift in 71.
+
+Of 21 deliberate bugs, 13 make a covered turn differ on seed 777 (default or rich trace):
+- the spread multiplier off (835 default cases) or ignoring `multiple` (741);
+- the faint redirect off (144) or ignoring which side the user is on (109);
+- `ToggleDoublePositionPhase` off (84) and the stale effect-phase slot (37);
+- Friend Guard off (27 rich), the side abilities applied only to the Pokemon itself (14
+  rich), Victory Star off (13 rich);
+- the `SwitchPhase` field index (13), the `ALL_NEAR_OTHERS` splice off (4), Instruct's
+  redirect (3), and `HealStatusEffectAttr`'s draw (1, thin).
+
+The 8 left:
+- Victory Star on evasion: no ability has an evasion ally multiplier, so it changes nothing.
+- The splice removing 1 entry instead of `i + 1`: the same for the 2-entry lists the runs
+  reach.
+- Unreached on seed 777 (making them report themselves dropped no covered turn): Trace's
+  random pick (both bugs), Counter's retarget and a fleeing Pokemon's redirect.
+- The Multi Lens / Parental Bond spread check's answer: no Pokemon holds an item, and
+  Parental Bond reports itself. Only the target draw before it is compared.
+- The leave-field redirect is reached by 4 covered turns, but removing it changed none.
+
+These are read against upstream, not proven. Not run here: the devkitARM 3DS build (CI
+runs it) and the console.

@@ -583,6 +583,26 @@ int pr_targets_new(pr_engine *e, const int8_t *v, int n)
     return e->n_target_lists++;
 }
 
+/* BattleScene.redirectPokemonMoves -> MovePhasePriorityQueue.redirectMoves (double battles):
+ * when the ally is active on the field, every queued MovePhase with one target, the removed
+ * Pokemon's battler index, whose user opposes the ally, targets the ally (targets[0] of the
+ * shared array, so the command and history entries sharing it follow) */
+void pr_redirect_moves(pr_battle *bt, pr_engine *e, const pr_pokemon *removed, const pr_pokemon *ally)
+{
+    if (!bt->double_battle || !ally || !(ally->hp > 0 && ally->on_field && !ally->switch_out_status)) return;
+    int rb = pr_battler_index(bt, removed), ab = pr_battler_index(bt, ally);
+    for (int i = 0; i < e->n_dyn[PH_MOVE]; i++) {
+        const pr_phase *mp = &e->pool[e->dyn[PH_MOVE][i]];
+        if (mp->targets < 0 || !mp->pokemon) continue;
+        pr_target_list *tl = &e->target_lists[mp->targets];
+        if (tl->n != 1 || tl->v[0] != rb || !pr_is_opponent(bt, mp->pokemon, ally)) continue;
+        if (tl->v[0] != ab) {
+            tl->v[0] = (int8_t)ab;
+            pr_targets_changed(bt, e, mp->targets);
+        }
+    }
+}
+
 /* ---------------------------------------------------------------- the loop */
 
 static bool is_stop(int type)
