@@ -22,6 +22,10 @@ void ps_init(void); /* once at boot, after ui_init */
 void ps_open(const pr_battle* bt, ps_mode mode, void (*on_pick)(int slot, int option, void* arg), void* arg);
 void ps_close(void);
 
+/* Opens the party screen in item mode (e.g. PARTY_MODIFIER, PARTY_MOVE_MODIFIER) over a gc_run party.
+ * on_pick gets slot (0..5), move_slot (-1 or 0..3), or slot 6 / cancel when backed out. */
+void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, void (*on_pick)(int slot, int move_slot, void* arg), void* arg);
+
 /* ---- the learn-move dialog (menus' learn_move_start) over the battle ----
  * The dialog's messages and yes/no box belong to the caller's screen (the battle's message box); the
  * summary page that picks the move to forget is menus' own, and this puts a screen over the battle

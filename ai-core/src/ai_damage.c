@@ -12,11 +12,23 @@ static int32_t to_dmg_value(double v)
     return v > 1 ? (int32_t)v : 1;
 }
 
-/* getAlliesGenerator(): battle-core models singles only here (the side is p alone) */
-static const pr_pokemon *allies_singles(pr_battle *bt, const pr_pokemon *p)
+/* for (const ally of p.getAlliesGenerator()) applyAbAttrs(cls, {...params, pokemon: ally}):
+ * inSpeedOrder(p's side), the side's active Pokemon in speed order. In singles that is p; in
+ * doubles the side's field (battle-core's apply_allies in src/damage.c) */
+static void apply_allies(pr_battle *bt, const pr_pokemon *p, uint16_t cls, const pr_ab_params *params)
 {
-    if (bt->double_battle) pr_note_unported(bt, PR_FEAT_DOUBLES);
-    return p;
+    pr_ab_params ap = *params;
+    if (!bt->double_battle) {
+        ap.pokemon = p;
+        pr_apply_ab_attrs(bt, cls, &ap);
+        return;
+    }
+    pr_speed_iter it;
+    pr_speed_iter_init(bt, &it, p->is_player ? ARENA_TAG_SIDE_PLAYER : ARENA_TAG_SIDE_ENEMY);
+    for (pr_pokemon *q; (q = pr_speed_iter_next(bt, &it));) {
+        ap.pokemon = q;
+        pr_apply_ab_attrs(bt, cls, &ap);
+    }
 }
 
 static double type_mult(int atk, int def)
@@ -106,9 +118,8 @@ double ai_move_effectiveness(pr_battle *bt, const pr_pokemon *def, const pr_poke
         pr_apply_ab_attrs(bt, PR_AC_TypeImmunityAbAttr, &pp);
         if (!cancelled) pr_apply_ab_attrs(bt, PR_AC_MoveImmunityAbAttr, &pp);
         if (!cancelled) {
-            pr_ab_params fp = {.pokemon = allies_singles(bt, def), .opponent = src, .move = move,
-                               .simulated = simulated, .flag = &cancelled};
-            pr_apply_ab_attrs(bt, PR_AC_FieldPriorityMoveImmunityAbAttr, &fp);
+            pr_ab_params fp = {.pokemon = def, .opponent = src, .move = move, .simulated = simulated, .flag = &cancelled};
+            apply_allies(bt, def, PR_AC_FieldPriorityMoveImmunityAbAttr, &fp);
         }
     }
     if (!ignore_ability && m->category != MOVE_CATEGORY_STATUS) pr_apply_ab_attrs(bt, PR_AC_FullHpResistTypeAbAttr, &pp);
@@ -182,8 +193,16 @@ pr_damage_result ai_attack_damage(pr_battle *bt, pr_pokemon *def, pr_pokemon *sr
         break;
     }
 
-    double target_mult = 1;   /* spread moves in doubles: as battle-core, singles only */
-    if (bt->double_battle) pr_note_unported(bt, PR_FEAT_DOUBLES);
+    /* getMoveTargets(source, move): a move hitting more than one active target does 0.75. The call
+     * draws a RANDOM_NEAR_ENEMY move's target from the battle RNG, as upstream's does; in singles no
+     * damaging move's set holds two targets, so it is made in doubles only (as battle-core) */
+    double target_mult = 1;
+    if (bt->double_battle) {
+        int8_t tg[4];
+        bool multiple = false;
+        int nt = pr_get_move_targets(bt, src, move, -1, tg, &multiple);
+        if ((multiple ? nt : 1) > 1) target_mult = 0.75;
+    }
 
     double multi_strike = 1;
     pr_apply_multi_hit_damage_modifiers(bt, src, move, &multi_strike);
@@ -228,7 +247,13 @@ pr_damage_result ai_attack_damage(pr_battle *bt, pr_pokemon *def, pr_pokemon *sr
     pr_ab_params rp = {.pokemon = def, .opponent = src, .move = move, .simulated = simulated, .value = &dmg};
     if (!ignore_ability) {
         pr_apply_ab_attrs(bt, PR_AC_ReceivedMoveDamageMultiplierAbAttr, &rp);
-        if (bt->double_battle) pr_note_unported(bt, PR_AC_AlliedFieldDamageReductionAbAttr);
+        /* Friend Guard: currentBattle.double && ally?.isActive(true) */
+        const pr_pokemon *fg = bt->double_battle ? pr_get_ally(bt, def) : NULL;
+        if (fg && ai_is_active(fg, true)) {
+            pr_ab_params fgp = rp;
+            fgp.pokemon = fg;
+            pr_apply_ab_attrs(bt, PR_AC_AlliedFieldDamageReductionAbAttr, &fgp);
+        }
     }
     pr_apply_modified_damage(bt, src, def, move, &dmg);
     if (full_hp && !ignore_ability) pr_apply_ab_attrs(bt, PR_AC_PreDefendFullHpEndureAbAttr, &rp);

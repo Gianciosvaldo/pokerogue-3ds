@@ -12,6 +12,7 @@
 #define _POSIX_C_SOURCE 200809L
 #include "gc/run.h"
 #include "pr/ai.h"
+#include "pr/reward.h"
 #include <errno.h>
 #include <math.h>
 #include <signal.h>
@@ -330,13 +331,10 @@ static bool plain_choice(const gc_run *run, gc_choice *c)
     }
 }
 
-/* --auto: how often each healing, revive, PP and PP Up reward was taken or refused (a reward pick or a shop
- * purchase on the reward screen, for any reason it came back false), by key. Full Heal is game-core's own
- * code; the rest is reward-core's application (gc_reward_apply). Each run counts in its own process. */
-static const char *const apply_keys[] = {"POTION", "SUPER_POTION", "HYPER_POTION", "MAX_POTION", "FULL_RESTORE",
-                                         "FULL_HEAL", "REVIVE", "MAX_REVIVE", "SACRED_ASH", "ETHER", "MAX_ETHER",
-                                         "ELIXIR", "MAX_ELIXIR", "PP_UP", "PP_MAX"};
-#define N_APPLY_KEYS ((int)(sizeof apply_keys / sizeof apply_keys[0]))
+/* --auto: how often each reward class was taken or refused (a reward pick or a shop
+ * purchase on the reward screen, for any reason it came back false), by key.
+ * Each run counts in its own process. */
+#define N_APPLY_KEYS PR_ITEM_COUNT_
 static uint32_t apply_taken[N_APPLY_KEYS], apply_refused[N_APPLY_KEYS];
 
 static bool tallied_choose(gc_run *run, const gc_choice *c, const char **why)
@@ -347,7 +345,7 @@ static bool tallied_choose(gc_run *run, const gc_choice *c, const char **why)
         const bool reward = c->kind == GC_CH_REWARD;
         const gc_offer *o = c->a < 0 ? NULL : reward ? (c->a < s->n_options ? &s->options[c->a] : NULL)
                                                       : (c->a < s->n_shop ? &s->shop[c->a] : NULL);
-        for (int i = 0; o && i < N_APPLY_KEYS && k < 0; i++) if (!strcmp(o->key, apply_keys[i])) k = i;
+        for (int i = 0; o && i < PR_ITEM_COUNT_ && k < 0; i++) if (!strcmp(o->key, pr_item_keys[i])) k = i;
     }
     const bool ok = gc_run_choose(run, c, why);
     if (k >= 0) (ok ? apply_taken : apply_refused)[k]++;
@@ -675,10 +673,10 @@ static int soak(int n, int first, int jobs, int verbose, int timeout)
     printf("\n\nstand-ins (runs that used it, times):\n");
     for (int i = 0; i < GC_STUB_COUNT_; i++)
         if (stub_total[i]) printf("  %-50s %6u runs %9u\n", gc_stub_name[i], stub_runs[i], stub_total[i]);
-    printf("\nhealing, revive and PP rewards (taken: runs, times; refused: times):\n");
+    printf("\nreward choices by class (taken: runs, times; refused: times):\n");
     for (int i = 0; i < N_APPLY_KEYS; i++)
         if (taken_total[i] || refused_total[i])
-            printf("  %-50s %6u runs %9u taken %9u refused\n", apply_keys[i], taken_runs[i], taken_total[i], refused_total[i]);
+            printf("  %-50s %6u runs %9u taken %9u refused\n", pr_item_keys[i], taken_runs[i], taken_total[i], refused_total[i]);
     static const char *const rc_name[8] = {"daily custom seed", "challenges", "upstream undefined", "species pool",
                                            "fixed classic battle", "trainer config", "bit 6", "bit 7"};
     printf("\nrun-core stand-ins (runs, times):\n");

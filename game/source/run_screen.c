@@ -11,10 +11,14 @@
 #include "battle_events.h"
 #include "battle_view.h"
 #include "i18n.h"
+#include "menus.h"
 #include "party_screen.h"
 #include "pr_enums.h"
+#include "shop_ui.h"
 #include "ui.h"
 #include "ui_widgets.h"
+
+extern int gc_item_stack(const gc_run *run, const char *key);
 
 #define EV_CAP 400      /* screen events one game-core event can make */
 #define CHUNK 150       /* battle_view queues at most 160 at a time */
@@ -726,143 +730,124 @@ static void open_learn(const gc_screen* s) {
   ps_learn_move(&G.run.bt, slot < 0 ? 0 : slot, s->move, G.run.trainer_id, &host);
 }
 
-/* ---- rewards, stand-in: an option list, then the Pokemon (and move) it is used on ---- */
+/* ---- rewards: shop_ui ---- */
 
-typedef struct {
-  char label[40][72];
-  const char* ptr[40];
-  uint8_t kind[40];   /* 0 reward, 1 shop item, 2 reroll, 3 skip */
-  uint8_t index[40];
-  int n;
-} reward_list;
-static reward_list RL;
-static gc_choice rc;          /* the reward choice being made */
-static char pk_label[7][72];
-static const char* pk_ptr[7];
-static char mv_label[4][72];
-static const char* mv_ptr[4];
+static gc_choice rc;          /* current pending choice */
 
-static void reward_menu(void);
+static void open_shop_ui(void);
 
-static void reward_answer(void) {
+static void on_item_target_picked(int slot, int move_slot, void* arg) {
+  ps_close();
+  if (slot < 0 || slot >= G.run.n_party) {
+    open_shop_ui();
+    return;
+  }
+  rc.b = (int16_t)slot;
+  rc.c = (int16_t)move_slot;
   answer(&rc);
 }
 
-static void on_move_pick(int idx, void* arg) {
-  (void)arg;
-  if (idx < 0) {
-    reward_menu();
-    return;
-  }
-  rc.c = (int16_t)idx;
-  reward_answer();
+static void prompt_item_target(const gc_offer* offer) {
+  bool move_target = (offer->target == GC_TARGET_MOVE);
+  ps_open_item(&G.run, PARTY_MODIFIER, move_target, on_item_target_picked, NULL);
 }
 
-static void on_pokemon_pick(int idx, void* arg) {
-  (void)arg;
-  if (idx < 0 || idx >= G.run.n_party) {
-    reward_menu();
-    return;
-  }
-  rc.b = (int16_t)idx;
+static void on_shop_select_reward(void* ctx, int option_idx) {
+  (void)ctx;
   const gc_screen* s = gc_run_screen(&G.run);
-  const gc_offer* o = rc.kind == GC_CH_SHOP ? &s->shop[rc.a] : &s->options[rc.a];
-  if (o->target != GC_TARGET_MOVE) {
-    reward_answer();
-    return;
-  }
-  const pr_pokemon* p = &G.run.party[idx].b;
-  int n = p->n_moves < 4 ? p->n_moves : 4;
-  for (int i = 0; i < n; i++) {
-    snprintf(mv_label[i], sizeof mv_label[i], "%s", i18n_move_name(p->moves[i]));
-    mv_ptr[i] = mv_label[i];
-  }
-  ui_push_options(mv_ptr, n, true, on_move_pick, NULL);
-}
-
-static void on_reward_pick(int idx, void* arg) {
-  (void)arg;
-  if (idx < 0 || idx >= RL.n) {
-    reward_menu(); /* the list can't be cancelled; this is a safety net */
-    return;
-  }
-  const gc_screen* s = gc_run_screen(&G.run);
+  if (option_idx < 0 || option_idx >= s->n_options) return;
   memset(&rc, 0, sizeof rc);
+  rc.kind = GC_CH_REWARD;
+  rc.a = (int16_t)option_idx;
   rc.b = rc.c = -1;
-  switch (RL.kind[idx]) {
-    case 2:
-      rc.kind = GC_CH_REROLL;
-      reward_answer();
-      return;
-    case 3:
-      rc.kind = GC_CH_SKIP;
-      reward_answer();
-      return;
-    default:
-      break;
+  const gc_offer* offer = &s->options[option_idx];
+  shop_ui_close();
+  if (offer->target != GC_TARGET_NONE) {
+    prompt_item_target(offer);
+  } else {
+    answer(&rc);
   }
-  const bool shop = RL.kind[idx] == 1;
-  rc.kind = shop ? GC_CH_SHOP : GC_CH_REWARD;
-  rc.a = RL.index[idx];
-  const gc_offer* o = shop ? &s->shop[rc.a] : &s->options[rc.a];
-  if (o->target == GC_TARGET_NONE) {
-    reward_answer();
-    return;
-  }
-  for (int i = 0; i < G.run.n_party; i++) {
-    const pr_pokemon* p = &G.run.party[i].b;
-    snprintf(pk_label[i], sizeof pk_label[i], "%s Lv%d  %d/%d", i18n_species_name(p->species), (int)p->level, (int)(p->hp > 0 ? p->hp : 0),
-             (int)p->stats[STAT_HP]);
-    pk_ptr[i] = pk_label[i];
-  }
-  ui_push_options(pk_ptr, G.run.n_party, true, on_pokemon_pick, NULL);
 }
 
-static void reward_menu(void) {
+static void on_shop_select_shop(void* ctx, int shop_idx) {
+  (void)ctx;
   const gc_screen* s = gc_run_screen(&G.run);
-  RL.n = 0;
-  char name[48];
-  for (int i = 0; i < s->n_options && RL.n < 38; i++) {
-    snprintf(RL.label[RL.n], sizeof RL.label[0], "%s", pretty_key(s->options[i].key, name, sizeof name));
-    RL.kind[RL.n] = 0;
-    RL.index[RL.n++] = (uint8_t)i;
+  if (shop_idx < 0 || shop_idx >= s->n_shop) return;
+  memset(&rc, 0, sizeof rc);
+  rc.kind = GC_CH_SHOP;
+  rc.a = (int16_t)shop_idx;
+  rc.b = rc.c = -1;
+  const gc_offer* offer = &s->shop[shop_idx];
+  shop_ui_close();
+  if (offer->target != GC_TARGET_NONE) {
+    prompt_item_target(offer);
+  } else {
+    answer(&rc);
   }
-  for (int i = 0; i < s->n_shop && RL.n < 38; i++) {
-    snprintf(RL.label[RL.n], sizeof RL.label[0], "Buy %s (%.0f)", pretty_key(s->shop[i].key, name, sizeof name), s->shop[i].cost);
-    RL.kind[RL.n] = 1;
-    RL.index[RL.n++] = (uint8_t)i;
-  }
-  if (s->reroll_cost >= 0) {
-    snprintf(RL.label[RL.n], sizeof RL.label[0], "Reroll (%.0f)", s->reroll_cost);
-    RL.kind[RL.n++] = 2;
-  }
-  snprintf(RL.label[RL.n], sizeof RL.label[0], "Skip");
-  RL.kind[RL.n++] = 3;
-  for (int i = 0; i < RL.n; i++) RL.ptr[i] = RL.label[i];
-  ui_push_options(RL.ptr, RL.n, false, on_reward_pick, NULL);
 }
 
-/* ---- biome ---- */
+static void on_shop_reroll(void* ctx, bool lock_capsule) {
+  (void)ctx;
+  shop_ui_close();
+  memset(&rc, 0, sizeof rc);
+  if (lock_capsule) {
+    rc.kind = GC_CH_LOCK_RARITIES;
+  } else {
+    rc.kind = GC_CH_REROLL;
+  }
+  answer(&rc);
+}
 
-static char bi_label[PR_MAX_BIOME_LINKS][48];
-static const char* bi_ptr[PR_MAX_BIOME_LINKS];
+static void on_shop_skip(void* ctx) {
+  (void)ctx;
+  shop_ui_close();
+  memset(&rc, 0, sizeof rc);
+  rc.kind = GC_CH_SKIP;
+  answer(&rc);
+}
 
-static void on_biome_pick(int idx, void* arg) {
-  (void)arg;
-  gc_choice c = {.kind = GC_CH_BIOME, .a = (int16_t)(idx < 0 ? 0 : idx)};
+static int calc_party_luck(void) {
+  int total = 0;
+  for (int i = 0; i < G.run.n_party; i++) {
+    total += G.run.party[i].luck;
+  }
+  return total;
+}
+
+static void open_shop_ui(void) {
+  const gc_screen* s = gc_run_screen(&G.run);
+  shop_ui_args args;
+  memset(&args, 0, sizeof args);
+  args.screen = s;
+  args.player_money = G.run.money;
+  args.has_lock_capsule = gc_item_stack(&G.run, "LOCK_CAPSULE") > 0;
+  args.party_luck = calc_party_luck();
+
+  static const shop_ui_events ev = {
+    on_shop_select_reward,
+    on_shop_select_shop,
+    on_shop_reroll,
+    on_shop_skip,
+    NULL
+  };
+
+  shop_ui_open(&args, &ev);
+}
+
+/* ---- biome: biome_map ---- */
+
+static void on_biome_map_select(void* ctx, int option) {
+  (void)ctx;
+  biome_map_close();
+  gc_choice c = {.kind = GC_CH_BIOME, .a = (int16_t)(option < 0 ? 0 : option)};
   answer(&c);
 }
 
-static void biome_menu(void) {
+static void open_biome_map(void) {
   const gc_screen* s = gc_run_screen(&G.run);
-  for (int i = 0; i < s->n_biomes; i++) {
-    char camel[40], key[64];
-    gm_enum_camel(GM_E_BIOME_ID, s->biomes[i], camel, sizeof camel);
-    snprintf(key, sizeof key, "biome:%s", camel);
-    i18n_t(bi_label[i], sizeof bi_label[i], key, NULL);
-    bi_ptr[i] = bi_label[i];
-  }
-  ui_push_options(bi_ptr, s->n_biomes, false, on_biome_pick, NULL);
+  biome_map_args ba = {s->biomes, s->n_biomes};
+  biome_map_events be = {on_biome_map_select, NULL};
+  biome_map_open(&ba, &be);
 }
 
 /* ---- a mystery encounter, stand-in: the first option that can be taken, with the first healthy Pokemon ---- */
@@ -932,10 +917,10 @@ static void screen_step(void) {
       break;
     }
     case GC_SCREEN_REWARD:
-      reward_menu();
+      open_shop_ui();
       break;
     case GC_SCREEN_BIOME:
-      biome_menu();
+      open_biome_map();
       break;
     case GC_SCREEN_MYSTERY:
       mystery_auto();

@@ -22,6 +22,8 @@ extern "C" {
 #endif
 
 /* Upstream's TextStyle enum, same values (src/enums/text-style.ts). */
+#ifndef GM_TEXT_STYLE_ENUM
+#define GM_TEXT_STYLE_ENUM
 typedef enum {
   TS_NONE = 0,
   TS_MESSAGE = 1,
@@ -82,6 +84,9 @@ typedef enum {
   TS_SHADOW_TEXT,
   TS_COUNT_
 } text_style;
+#else
+typedef int text_style;
+#endif
 
 /* Upstream's getTextColor(style, shadow), default (non-legacy) theme. */
 rr_color text_color(text_style s, bool shadow);

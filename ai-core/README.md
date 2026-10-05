@@ -39,7 +39,7 @@ To check the test itself, 78 one-line bugs were planted in ai-core one at a time
 
 ## What isn't covered yet
 
-- **Doubles.** The code follows upstream's doubles paths (two opponents, allies' scores, Commander) but the test is singles only, as battle-core's turn engine is; battle-core's damage path reports doubles as unported.
+- **Doubles** beyond what the doubles suite (Task 74, below) builds: a disguise in doubles, held items, bosses, mystery encounters, and a Pokemon commanding that is also disguised or Transformed.
 - **Illusion, the ability.** Pinned upstream registers no Illusion ability attrs, so the ability sets no disguise in a real battle and ai-core doesn't model it turning on: a useIllusion read of a Pokemon that has the ability but no loaded disguise still reports `PR_AI_FEAT_ILLUSION` and the case is not covered (131 cases over the four seeds, unchanged). A disguise loaded by hand (`pr_set_illusion*` in battle-core, Task 67's helpers) is modelled, see Task 68 below.
 - **Held items.** The test has no modifiers (battle-core's records skip them), so what the scores read from items is untested: Thief, Knock Off and co. (`StealHeldItemChanceAttr`, `RemoveHeldItemAttr`), the KO check's item damage boosts, and Stuff Cheeks, which needs a berry: battle-core doesn't tell berries from other held items, so any held item of an unknown class reports `PR_AI_FEAT_RESTRICTION`.
 - **A trainer's switching moves.** battle-core's `pr_switch_out_condition` reports `PR_FEAT_TRAINER` for the trainer's side (it doesn't know trainer slots), so U-turn, Baton Pass, Parting Shot and Roar in a trainer battle are uncovered.
@@ -108,6 +108,7 @@ These are local copies or shims, kept in step with battle-core by hand until it 
 - `src/ai.c`: `EnemyCommandPhase`, `getNextMove`, `getNextTargets`, matchup and switch-in scores, trapping, move selection rules. `src/ai_score.c`: the benefit scores. `src/ai_damage.c`: the flagged damage path.
 - `tests/ai.producer.test.ts`, `tests/aitest.c`, `tools/difftest.sh`: the diff test.
 - `tests/illusion.producer.test.ts`, `tests/illusiontest.c`, `tools/illusiondiff.sh`: the same test with disguises loaded by hand (Task 68, below). Both are copies of the established pair plus marked lines; the established files are unchanged.
+- `tests/doubles.producer.test.ts`, `tests/doublestest.c`, `tools/doublesdiff.sh`: the doubles suite (Task 74, below). The producer is a doubles copy of the established one; the replay includes `tests/aitest.c` unchanged and reuses its reader.
 
 
 ## Task 88: runtime-dependent matchup scores
@@ -270,3 +271,136 @@ this change, same upstream checkout, Node v22.22.0. The printed summaries are by
 
 `make -C ai-core test-berry` still prints 404 cases, 404 identical; the upstream berry differential 268 cases, 268
 identical. `make -C game-core test` exits 0 with the same paired 200-run digests before and after (`8ee22b13`).
+
+## Task 74: doubles command selection
+
+In a double battle the AI scores and aims moves against two opponents and an ally: `getNextMove`'s scores flip the
+sign for the ally and divide the ally's effectiveness and STAB out, `getNextTargets` weighs both sides, shifts the
+weights by the lowest, cuts at half the best and draws, Commander skips a commanded Pokemon's turn and makes its
+Tatsugiri a -20 target, and a double trainer's switch-in scores go per trainer slot. ai-core already followed those
+paths; this card checks them against upstream's own commands and fixes what the check found.
+
+### What changed in the C
+
+`src/ai_damage.c`, the KO check's damage path, on double battles only (every change sits behind
+`bt->double_battle`, so singles take the same path as before):
+
+- the spread multiplier: 0.75 when the move hits more than one target (`getMoveTargets`, `multiple`), as upstream's
+  `getAttackDamage` does;
+- `FieldPriorityMoveImmunityAbAttr` (Queenly Majesty, Dazzling, Armor Tail) over the defender's whole side in speed
+  order (`getAlliesGenerator`), not only the defender;
+- Friend Guard: the defender's ally's `AlliedFieldDamageReductionAbAttr` when that ally is active
+  (`currentBattle.double && ally?.isActive(true)`), inside the `!ignoreAbility` block.
+
+Before, all three reported doubles as unported, so no doubles case could be compared. The spread check calls
+`pr_get_move_targets`, which draws a random-near-enemy move's target from the battle RNG as upstream's
+`getMoveTargets` does; the RNG records match.
+
+Nothing in battle-core changed. One thing a caller must know: battle-core's switch-out condition (U-turn, Baton
+Pass, Parting Shot, Roar...) reads `pr_pokemon.trainer_slot`, the AI reads `pr_ai_mon.trainer_slot`, so a game that
+builds a double trainer's party sets both. The suite's reader does (`tests/doublestest.c`); without it two cases in
+8,000 mismatched (a Parting Shot score, a Baton Pass pick).
+
+An upstream quirk the C keeps: in the KO check `ignoreAllyAbility` is set from whether the defender's ally's ability
+is revealed, but `getAttackDamage` passes it to the attacker's Attack read, so it decides whether the attacker's
+ally's Flower Gift counts. The defender's ally's abilities go through `ignoreSourceAllyAbility`, which the KO check
+leaves false.
+
+### How it is checked
+
+`tests/doubles.producer.test.ts` is the established producer made doubles (marked "DOUBLES"): `battleStyle("double")`,
+two Pokemon a side, a third of the abilities drawn half from the AI list and half from abilities that act on an
+ally or a side (Friend Guard, Flower Gift, Plus, Minus, Telepathy, Trace, Queenly Majesty, Lightning Rod, Commander,
+Receiver...), move picks weighted to spread moves, ally-targeting moves (Helping Hand, Pollen Puff, Heal Pulse,
+Decorate, Instruct, Beat Up...), random-near-enemy moves, and Flame Burst / Expanding Force / Tera Starstorm.
+Three quarters of the trainers are double trainers, each enemy Pokemon in the trainer slot upstream gives it. Each
+case can also carry:
+
+- a Tatsugiri commanding from inside its ally (one case in ten, either side; the ally is Dondozo three times in four
+  and gets upstream's `CommandedTag`);
+- a Pokemon fainted in a field slot, as `FaintPhase` leaves it (one in ten);
+- a KO-check edge (one in six): Friend Guard on the defender's ally, Flower Gift in sun on the attacker's ally, or a
+  fainted Friend Guard ally, with the defender's HP put between upstream's own `getAttackDamage` with and without
+  the ability. This runs before the state is written, so the replay starts from its result.
+
+It runs upstream's `EnemyCommandPhase(f).start()` for each enemy `TurnInitPhase` would give one (field index 0 then 1,
+fainted ones skipped) and records each step's command, pre-turn command, switch counter, RNG states, move queue and
+logged scores, then the phases left queued, the abilities applied and revealed for all four Pokemon, and for each of
+the two trainer slots the switch-in scores and the slot `getNextSummonIndex` picks. `tests/doublestest.c` includes
+`tests/aitest.c` unchanged and uses its reader and record comparison for every record that is the same in doubles;
+the doubles-only records (`STEP`, the second enemy's move queue, `APPLIED` for four Pokemon, `MATCHUP`/`NEXT` per
+slot) are compared the same way. It exits 2 if the file's contract lines are missing or don't add up, and 1 on any
+mismatch or if the compared cases don't include a command at the ally, one with two or more targets, one at both
+opponents, a commanding Tatsugiri, a fainted Pokemon in a field slot and partner-slot switch-in scores.
+
+```
+sh ai-core/tools/doublesdiff.sh <upstream> 2000 <seed>    # seeds 777 9001 4242 31337
+```
+
+Checked 2026-10-05 on main `68a60c9` plus this change, Node v22.22.0, GCC 13.3.0, vitest 4.1.11, upstream `8555c08`,
+2,000 cases per seed; upstream threw on none:
+
+| Seed | Covered / identical | Mismatches | Not covered (Illusion / move condition) | Commands at the ally | Two or more targets | At both opponents | Commanding | Fainted in a slot | Double trainers (partner-slot scores) |
+|---|---|---|---|---|---|---|---|---|---|
+| 777 | 1,980 / 1,980 | 0 | 20 (11 / 9) | 724 | 1,322 | 1,212 | 182 | 239 | 767 (388) |
+| 9001 | 1,987 / 1,987 | 0 | 13 (7 / 6) | 760 | 1,358 | 1,241 | 202 | 242 | 761 (394) |
+| 4242 | 1,971 / 1,971 | 0 | 29 (13 / 16) | 761 | 1,285 | 1,185 | 199 | 255 | 797 (394) |
+| 31337 | 1,974 / 1,974 | 0 | 26 (19 / 7) | 732 | 1,332 | 1,226 | 199 | 233 | 734 (364) |
+
+Over the four seeds: 8,000 cases, 7,912 covered and identical, 350 switches and 15,078 moves compared. The 88
+not-covered cases are the established exclusions: 50 read a Pokemon with the Illusion ability and no loaded
+disguise, 38 hit a move condition battle-core hasn't ported.
+
+Planted faults in the C (one at a time, clean build each, on the same four traces; failing cases per seed in the
+order above):
+
+| Planted fault | Failing cases |
+|---|---|
+| targets: no cutoff at half the best weight | 118 / 108 / 135 / 122 |
+| targets: ally's benefit score sign flipped | 1,012 / 1,027 / 1,008 / 1,030 |
+| targets: no shift by the lowest weight | 231 / 232 / 212 / 214 |
+| targets: second target's weight dropped from the draw | 900 / 882 / 850 / 816 |
+| move scores: ally effectiveness not divided out | 10 / 8 / 15 / 20 |
+| move scores: ally STAB not divided out | 5 / 3 / 4 / 3 |
+| move scores: ally benefit sign flipped | 249 / 254 / 263 / 275 |
+| move scores: first target instead of the best | 324 / 353 / 339 / 361 |
+| KO check: ally's ability never ignored | 15 / 15 / 12 / 14 |
+| KO check: the ally counted as a KO target | 211 / 242 / 221 / 263 |
+| damage: no spread 0.75 | 65 / 65 / 69 / 72 |
+| damage: spread 0.75 without `multiple` | 126 / 132 / 130 / 100 |
+| damage: no Friend Guard | 23 / 23 / 25 / 20 |
+| damage: side immunity read on the defender only | 0 / 2 / 0 / 1 |
+| command: commanded Pokemon not skipped | 90 / 89 / 100 / 86 |
+| move scores: no -20 for its Tatsugiri | 61 / 81 / 73 / 83 |
+| trapped: COMMANDED doesn't trap | 1 / 2 / 4 / 4 |
+| switch: matchup against one opponent | 66 / 70 / 77 / 78 |
+| switch: fainted opponents counted | 5 / 8 / 6 / 8 |
+| switch-in scores: bench counted from slot 1 | 986 / 981 / 1,021 / 952 |
+| switch-in scores: a player field of one | 672 / 657 / 711 / 639 |
+| switch-in scores: no trainer-slot filter | 554 / 544 / 586 / 533 |
+| switch-in scores: slot filter in a single-trainer battle | 187 / 177 / 180 / 165 |
+| move scores: no Flame Burst -5 | 25 / 22 / 19 / 15 |
+| terrain: one opponent read for the opponents' side | 4 / 0 / 2 / 2 |
+| damage: Friend Guard from an inactive ally | 0 / 0 / 0 / 0 |
+
+25 of 26 are caught. The last can't change a result: an inactive ally in a field slot is a fainted one, and
+`canApplyAbility` already refuses a Pokemon at 0 HP, so the `isActive` check only matters for a Pokemon a challenge
+bars, which this suite (and battle-core) doesn't build. Side immunity (Queenly Majesty and co. over the side) is
+caught on two seeds of four: it changes the KO check only when the immunity holder is the defender's ally and the
+move is a priority one that would KO.
+
+Not covered by this suite: held items, bosses, mystery encounters, a disguise in doubles, natural Illusion, a
+commanding Tatsugiri that is also Transformed, and anything the turn engine does after the commands (that is
+battle-core's Task 73 suite).
+
+### Established checks, before and after
+
+Same upstream checkout, Node v22.22.0:
+
+- `tools/difftest.sh <upstream> 5000 <seed>`: 4,938 / 4,946 / 4,942 / 4,936 covered and identical, 0 mismatches,
+  62 / 54 / 58 / 64 not covered on 777 / 9001 / 4242 / 31337. Replaying the saved traces with main's build and with
+  this change gives byte-identical output on all four seeds.
+- `tools/illusiondiff.sh <upstream> 5000 <seed>`: 4,945 / 4,959 / 4,947 / 4,959 covered and identical, the planted
+  identity still detected, as in Task 68's table.
+- `make -C ai-core test-berry`: 404 cases, 404 identical.
+- `make -C game-core test`: exits 0 with the same output as main (`8decbf9d` both runs' digests).
