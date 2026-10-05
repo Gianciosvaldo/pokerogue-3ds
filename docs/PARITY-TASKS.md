@@ -468,7 +468,7 @@ Numbered from 92 in the post-parity plan (cards 92 to 151 by milestone; the full
 
 ### Task 110: App: drive the run from game-core (game/, lane E)
 
-**Branch:** `outside/app-run-driver`. **Assignment:** Hard; project thread, not an outside-agent task. **Prerequisites:** Authorized by lorenzo on 2026-10-04. Cards 92 and 93 preferably first. Plan: `game/WIP-run-driver.md`.
+**Branch:** `outside/app-run-driver`. **Assignment:** Hard; project thread, not an outside-agent task. **Prerequisites:** Authorized by lorenzo on 2026-10-04. Cards 92 and 93 preferably first. Plan: `game/WIP-run-driver.md` (deleted when the driver landed).
 
 **Problem.** The `game/` app boots a demo battle fed by a stand-in; nothing drives game-core's run (Task 85's software half).
 

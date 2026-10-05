@@ -87,6 +87,9 @@ static struct {
   void* done_arg;
   void (*on_command)(bv_command, void*);
   void* command_arg;
+  bv_command_opts opts;   /* what the command menu allows */
+  char reason[160];       /* why the move just chosen can't be used (shown over the move's description) */
+  float reason_ms;
   char ability_text[96];
   float ability_t;
   float ko_wait;
@@ -401,7 +404,7 @@ static void draw_player_info(side* sd) {
   draw_types(m, true, bx, by);
   draw_name(m, true, bx - 115, by - 15.2f);
   draw_level(bx - 41, by - 10, m->level, false);
-  float ratio = m->max_hp ? sd->hp_shown / m->max_hp : 0;
+  float ratio = m->max_hp ? fminf(sd->hp_shown / m->max_hp, 1.0f) : 0;
   const rr_frame* hf = img_frame("images/ui/overlay_hp", hp_frame(ratio));
   int w = (int)floorf(48 * ratio + 0.5f);
   if (w < 1 && sd->hp_shown > 0) w = 1;
@@ -428,7 +431,7 @@ static void draw_enemy_info(side* sd) {
   draw_name(m, false, bx - 124, by - 11.2f);
   if (m->caught_before) img_draw("images/ui/icon_owned", NULL, bx - 124, by - 11.2f + 11.75f, 0, 0);
   draw_level(bx - 50, by - 5, m->level, false);
-  float ratio = m->max_hp ? sd->hp_shown / m->max_hp : 0;
+  float ratio = m->max_hp ? fminf(sd->hp_shown / m->max_hp, 1.0f) : 0;
   const rr_frame* hf = img_frame("images/ui/overlay_hp", hp_frame(ratio));
   int w = (int)floorf(48 * ratio + 0.5f);
   if (w < 1 && sd->hp_shown > 0) w = 1;
@@ -517,8 +520,13 @@ static void draw_move_details(void) {
   const bv_mon* m = &B.s[0].mon;
   if (B.move_cursor >= m->n_moves) return;
   char k[96], c[64], s[400];
-  snprintf(k, sizeof k, "move:%s.effect", gm_enum_camel(GM_E_MOVE_ID, m->moves[B.move_cursor], c, sizeof c));
-  i18n_t(s, sizeof s, k, NULL);
+  if (B.reason_ms > 0 && B.reason[0]) {
+    /* the move can't be used: say why where the description is */
+    snprintf(s, sizeof s, "%s", B.reason);
+  } else {
+    snprintf(k, sizeof k, "move:%s.effect", gm_enum_camel(GM_E_MOVE_ID, m->moves[B.move_cursor], c, sizeof c));
+    i18n_t(s, sizeof s, k, NULL);
+  }
   ui_window(0, -48 - 52, 320, 52, WIN_NORMAL);
   text_opts o = text_defaults();
   o.wrap_w = 320 - 16;
@@ -685,11 +693,13 @@ static void run_event(float dt) {
       if (msgbox_done(&B.msg)) finish_event();
       break;
 
-    case BEV_INTRO_WILD:
+    case BEV_INTRO_WILD: {
+      /* a = 1: a trainer battle, nobody on the enemy side yet and `text` is the message */
+      const bool trainer = e->a == 1;
       if (B.step == 0) {
         side* en = &B.s[1];
-        en->present = true;
-        en->black = true;
+        en->present = !trainer && en->mon.species > 0;
+        en->black = en->present;
         en->info_on = false;
         tween_start(&B.tw, 0, 300, 2000, EASE_LINEAR);
         B.step = 1;
@@ -701,13 +711,18 @@ static void run_event(float dt) {
         B.enemy_slide = -300 + B.tw.value;
         if (tween_done(&B.tw)) {
           side* en = &B.s[1];
-          en->black = false; /* untint(100) */
-          cry(&en->mon);
-          en->info_on = true;
-          en->info_dx = -150;
-          tween_start(&B.tw2, -150, 0, 1000, EASE_CUBIC_OUT);
-          char s[128];
-          i18n_t(s, sizeof s, "battle:singleWildAppeared", "pokemonName", en->mon.name, NULL);
+          char s[256];
+          if (trainer) {
+            snprintf(s, sizeof s, "%s", e->text ? e->text : "");
+            tween_start(&B.tw2, 0, 0, 0, EASE_LINEAR);
+          } else {
+            en->black = false; /* untint(100) */
+            cry(&en->mon);
+            en->info_on = true;
+            en->info_dx = -150;
+            tween_start(&B.tw2, -150, 0, 1000, EASE_CUBIC_OUT);
+            i18n_t(s, sizeof s, "battle:singleWildAppeared", "pokemonName", en->mon.name, NULL);
+          }
           msgbox_show(&B.msg, s, -1, false);
           B.msg.wait_ms = 1500;
           B.step = 2;
@@ -715,10 +730,11 @@ static void run_event(float dt) {
       }
       if (B.step == 2) {
         tween_update(&B.tw2, dt);
-        B.s[1].info_dx = B.tw2.value;
+        if (!trainer) B.s[1].info_dx = B.tw2.value;
         if (msgbox_done(&B.msg) && tween_done(&B.tw2)) finish_event();
       }
       break;
+    }
 
     case BEV_SUMMON:
       if (B.step == 0) {
@@ -936,6 +952,12 @@ static void run_event(float dt) {
           if (e->b > 0) {
             ui_play_sound("se/level_up");
             sd->mon.level = e->b;
+            if (e->mon) {
+              /* the level up raised the stats: the HP bar's numbers follow */
+              sd->mon.max_hp = e->mon->max_hp;
+              sd->mon.hp = e->mon->hp;
+              sd->hp_shown = (float)e->mon->hp;
+            }
             sd->exp_shown = 0;
             tween_start(&B.tw, 0, e->a / 1000.0f, 1650 * (e->a / 1000.0f), EASE_SINE_IN);
             B.step = 2;
@@ -971,6 +993,11 @@ static void run_event(float dt) {
         sd->mon.hidden = true;
         sd->show_ms = 0;
       }
+      finish_event();
+      break;
+
+    case BEV_MAX_HP:
+      sd->mon.max_hp = e->a;
       finish_event();
       break;
 
@@ -1021,8 +1048,20 @@ static bool bv_input(ui_screen* s, ui_button b) {
       case BTN_ACTION:
         ui_play_select();
         if (c == 0) {
+          if (B.opts.struggle) {
+            /* every move is unusable: FIGHT uses Struggle (upstream's CommandPhase.handleFightCommand) */
+            B.mode = M_IDLE;
+            msgbox_clear(&B.msg);
+            if (B.on_command) B.on_command((bv_command){0, 0}, B.command_arg);
+            return true;
+          }
           B.mode = M_FIGHT;
+          B.reason_ms = 0;
           return true;
+        }
+        if ((c == 1 && !B.opts.can_ball) || (c == 2 && !B.opts.can_switch) || (c == 3 && !B.opts.can_run)) {
+          ui_play_error();
+          return false;
         }
         if (c == 3 || c == 1 || c == 2) {
           /* BALL and POKEMON open the ball and party screens (the menus thread); RUN answers */
@@ -1056,11 +1095,17 @@ static bool bv_input(ui_screen* s, ui_button b) {
       case BTN_CANCEL:
         ui_play_select();
         B.mode = M_COMMAND;
+        B.reason_ms = 0;
         return true;
       case BTN_ACTION: {
         const bv_mon* m = &B.s[0].mon;
-        if (c >= m->n_moves || m->pp_left[c] <= 0) {
+        if (c >= m->n_moves || m->pp_left[c] <= 0 || !B.opts.move_ok[c]) {
           ui_play_error();
+          B.reason[0] = 0;
+          if (c < m->n_moves && B.opts.move_why[c]) {
+            snprintf(B.reason, sizeof B.reason, "%s", B.opts.move_why[c]);
+            B.reason_ms = 2500;
+          }
           return false;
         }
         ui_play_select();
@@ -1083,6 +1128,7 @@ static void bv_update(ui_screen* s, float dt) {
   float frame_dt = dt;
   msgbox_update(&B.msg, dt);
   if (B.ability_t > 0) B.ability_t -= dt;
+  if (B.reason_ms > 0) B.reason_ms -= dt;
   for (int k = 0; k < 2; k++) {
     if (B.s[k].show_ms > 0 && (B.s[k].show_ms -= dt) <= 0) {
       B.s[k].show_ms = 0;
@@ -1161,6 +1207,10 @@ void bv_begin(const bv_setup* setup) {
   B.arena_player_x = 300;
   B.arena_enemy_x = -280;
   B.enemy_slide = -300;
+  B.s[0].present = B.s[0].info_on = setup->player_present;
+  B.s[1].present = B.s[1].info_on = false;
+  for (int i = 0; i < 4; i++) B.opts.move_ok[i] = true;
+  B.opts.can_ball = B.opts.can_switch = B.opts.can_run = true;
   msgbox_init(&B.msg, TS_MESSAGE, 1780 / 6.0f, 2);
   B.mode = M_IDLE;
   ui_set(&g_battle);
@@ -1191,9 +1241,17 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
 
 bool bv_playing(void) { return B.mode == M_EVENTS; }
 
-void bv_ask_command(void (*on_command)(bv_command, void*), void* arg) {
+void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, void*), void* arg) {
   B.on_command = on_command;
   B.command_arg = arg;
+  if (opts) {
+    B.opts = *opts;
+  } else {
+    memset(&B.opts, 0, sizeof B.opts);
+    B.opts.can_ball = B.opts.can_switch = B.opts.can_run = true;
+    for (int i = 0; i < 4; i++) B.opts.move_ok[i] = true;
+  }
+  B.reason_ms = 0;
   B.mode = M_COMMAND;
   if (B.cmd_cursor == 2) B.cmd_cursor = 0; /* upstream resets POKEMON to FIGHT */
   /* "What will X do?", wrapped to the space left of the command window (1110 / 6) */

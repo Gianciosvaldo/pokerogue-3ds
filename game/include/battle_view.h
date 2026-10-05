@@ -52,7 +52,10 @@ typedef struct {
 typedef enum {
   BEV_MESSAGE,     /* text, like a MessagePhase: a = callbackDelay ms (0 = upstream's default:
                     * 1500, or none with a prompt), prompt = wait for a button */
-  BEV_INTRO_WILD,  /* the wild encounter: arenas slide in, the enemy untints, cries, info box, message */
+  BEV_INTRO_WILD,  /* the encounter: arenas slide in, then the message. Wild (a = 0, the enemy battler's
+                    * Pokemon is on the field): the enemy untints, cries, its info box slides in, and the
+                    * message is "a wild X appeared". Trainer (a = 1): nobody on the enemy side yet, and the
+                    * message is `text` ("X would like to battle!") */
   BEV_SUMMON,      /* battler sent out (mon = its data); player: text, or "Go! X!" when NULL */
   BEV_WITHDRAW,    /* battler returns to its ball */
   BEV_MOVE_ANIM,   /* an animation (battle_anim.h): b = ba_kind (move, common, charge), a = its id
@@ -63,7 +66,8 @@ typedef enum {
   BEV_STAT_STAGES, /* battler, a = stat (1..7, Stat enum), b = stages (+/-) */
   BEV_ABILITY,     /* ability bar: battler, a = AbilityId, b = passive */
   BEV_FAINT,       /* battler faints: cry, sprite drops, info box leaves */
-  BEV_EXP,         /* battler (player), a = new exp ratio x 1000, b = new level (0 = same) */
+  BEV_EXP,         /* battler (player), a = new exp ratio x 1000, b = new level (0 = same); with `mon`, the HP,
+                    * max HP and level after the level up are taken from it */
   BEV_WAIT,        /* a = ms */
   BEV_POKEMON_ANIM,/* PokemonAnimPhase: battler, a = PokemonAnimType (the Substitute doll's
                     * ADD, PRE_MOVE, POST_MOVE, REMOVE), or -1: the doll goes without an animation
@@ -71,6 +75,7 @@ typedef enum {
   BEV_VISIBLE,     /* battler, a = 0: hide it (SemiInvulnerableTag.onAdd), 1: show it again two
                     * frames later (onRemove); the queue doesn't wait */
   BEV_FORM_CHANGE, /* battler, a = species, b = form (Mega Evolution, Gigantamax, form change) */
+  BEV_MAX_HP,      /* battler, a = new max HP (a form with other base stats); the HP follows in a heal or damage event */
 } bev_type;
 
 typedef struct {
@@ -90,15 +95,28 @@ typedef struct {
 
 typedef struct {
   int biome;             /* BiomeId (arena images) */
-  bv_mon player, enemy;  /* the first Pokemon of each side (singles) */
-  bool trainer;          /* a trainer battle (not drawn yet) */
+  bv_mon player, enemy;  /* the first Pokemon of each side (singles); enemy.species 0 = nobody */
+  bool trainer;          /* a trainer battle (the trainer itself is not drawn yet) */
+  bool player_present;   /* the player's lead is already out (it stays out between wild waves): its sprite
+                          * and info box are there from the start, with no summon */
 } bv_setup;
+
+/* What the command menu allows (game-core's COMMAND screen). A command that is off, or a move that can't be
+ * used, plays the error sound; an unusable move shows its reason (an upstream message) instead. */
+typedef struct {
+  bool can_ball, can_switch, can_run;
+  bool move_ok[4];
+  const char* move_why[4];   /* the reason text for each move that is not ok (already translated), or NULL; the strings
+                              * stay the caller's and must live until the command is answered */
+  bool struggle;             /* every move is unusable: FIGHT goes straight to Struggle (move slot 0) */
+} bv_command_opts;
 
 void bv_begin(const bv_setup* setup);
 /* Queues events (copied; text is copied too) and plays them; on_done runs after the last one. */
 void bv_play(const bv_event* ev, int n, void (*on_done)(void* arg), void* arg);
 bool bv_playing(void);
-void bv_ask_command(void (*on_command)(bv_command c, void* arg), void* arg);
+/* opts NULL = everything allowed. */
+void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command c, void* arg), void* arg);
 /* The screen's current view of a side's Pokemon (after the events played so far). */
 bv_mon* bv_mon_of(int battler);
 
