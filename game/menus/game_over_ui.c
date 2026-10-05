@@ -59,23 +59,23 @@ void game_over_ui_draw(void) {
   rr_target(RR_TOP, 0x201010FF);
   mui_window(20, 20, 360, 200);
 
-  mui_text(TS_PARTY_RED, 200, 40, "GAME OVER");
+  mui_text_o(TS_PARTY_RED, 200, 40, 0.5f, 0.0f, "GAME OVER");
 
   char wave_buf[64];
   snprintf(wave_buf, sizeof wave_buf, "Reached Wave: %d", S.wave);
-  mui_text(TS_SUMMARY_ALT, 200, 80, wave_buf);
+  mui_text_o(TS_SUMMARY_ALT, 200, 80, 0.5f, 0.0f, wave_buf);
 
   char score_buf[64];
   snprintf(score_buf, sizeof score_buf, "Final Score: %d", S.score);
-  mui_text(TS_WINDOW, 200, 115, score_buf);
+  mui_text_o(TS_WINDOW, 200, 115, 0.5f, 0.0f, score_buf);
 
-  mui_text(TS_INSTRUCTIONS_TEXT, 200, 180, "Press A to Return to Title");
+  mui_text_o(TS_INSTRUCTIONS_TEXT, 200, 180, 0.5f, 0.0f, "Press A to Return to Title");
 
   /* Bottom Screen */
   rr_target(RR_BOTTOM, 0x180808FF);
   mui_window(10, 10, 300, 220);
 
-  mui_text(TS_HEADER_LABEL, 150, 60, "RUN ENDED");
-  mui_text(TS_SMALLER_WINDOW_ALT, 150, 110, "Save data for this run has been cleared.");
-  mui_text(TS_INSTRUCTIONS_TEXT, 150, 180, "Tap or Press A to Continue");
+  mui_text_o(TS_HEADER_LABEL, 160, 60, 0.5f, 0.0f, "RUN ENDED");
+  mui_text_o(TS_SMALLER_WINDOW_ALT, 160, 110, 0.5f, 0.0f, "Save data for this run has been cleared.");
+  mui_text_o(TS_INSTRUCTIONS_TEXT, 160, 180, 0.5f, 0.0f, "Tap or Press A to Continue");
 }

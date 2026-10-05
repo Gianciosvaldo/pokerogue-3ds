@@ -29,6 +29,8 @@ static int current_slot = 0;
 static int title_continue_slot = 0;
 static bool slot_0_occupied = false;
 
+static void open_title_screen(void);
+
 static void read_driver_file(rs_config* cfg_out) {
   static char seed[160];
   FILE* f = fopen("sdmc:/3ds/pokerogue/rundriver.txt", "r");
@@ -101,13 +103,18 @@ static void load_run_in_slot(int slot) {
   }
 }
 
+static void on_save_slots_cancel(void* ctx) {
+  (void)ctx;
+  open_title_screen();
+}
+
 static void open_save_slots_menu(void) {
   title_ui_close();
   save_slot_ui_events ev = {
     .on_load_slot = (void (*)(void*, int))load_run_in_slot,
     .on_new_slot = (void (*)(void*, int))start_new_run_in_slot,
     .on_delete_slot = NULL,
-    .on_cancel = NULL,
+    .on_cancel = on_save_slots_cancel,
     .ctx = NULL
   };
   save_slot_ui_open(&ev);
@@ -129,6 +136,7 @@ static void on_title_option(void* ctx, title_option opt) {
 }
 
 static void open_title_screen(void) {
+  save_slot_ui_close();
   save_slot_info slots[SAVE_SLOT_COUNT];
   save_slot_ui_scan_slots(slots);
 

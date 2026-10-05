@@ -60,20 +60,20 @@ void clear_ui_draw(void) {
   rr_target(RR_TOP, 0x102010FF);
   mui_window(20, 20, 360, 200);
 
-  mui_text(TS_SUMMARY_GOLD, 200, 40, "CONGRATULATIONS!");
-  mui_text(TS_SUMMARY_ALT, 200, 75, "CLASSIC MODE CLEARED!");
+  mui_text_o(TS_SUMMARY_GOLD, 200, 40, 0.5f, 0.0f, "CONGRATULATIONS!");
+  mui_text_o(TS_SUMMARY_ALT, 200, 75, 0.5f, 0.0f, "CLASSIC MODE CLEARED!");
 
   char stat_buf[128];
   snprintf(stat_buf, sizeof stat_buf, "Wave: %d   Score: %d   Money: ₽%.0f", S.wave, S.score, S.money);
-  mui_text(TS_WINDOW, 200, 115, stat_buf);
+  mui_text_o(TS_WINDOW, 200, 115, 0.5f, 0.0f, stat_buf);
 
-  mui_text(TS_INSTRUCTIONS_TEXT, 200, 180, "Press A to Return to Title");
+  mui_text_o(TS_INSTRUCTIONS_TEXT, 200, 180, 0.5f, 0.0f, "Press A to Return to Title");
 
   /* Bottom Screen */
   rr_target(RR_BOTTOM, 0x081808FF);
   mui_window(10, 10, 300, 220);
 
-  mui_text(TS_HEADER_LABEL, 150, 50, "VICTORY RECORDED");
-  mui_text(TS_SMALLER_WINDOW_ALT, 150, 100, "Vouchers & Stats saved to System Data.");
-  mui_text(TS_INSTRUCTIONS_TEXT, 150, 180, "Tap or Press A to Continue");
+  mui_text_o(TS_HEADER_LABEL, 160, 50, 0.5f, 0.0f, "VICTORY RECORDED");
+  mui_text_o(TS_SMALLER_WINDOW_ALT, 160, 100, 0.5f, 0.0f, "Vouchers & Stats saved to System Data.");
+  mui_text_o(TS_INSTRUCTIONS_TEXT, 160, 180, 0.5f, 0.0f, "Tap or Press A to Continue");
 }

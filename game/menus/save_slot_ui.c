@@ -217,6 +217,7 @@ bool save_slot_ui_input(mui_button b) {
 
     case MB_CANCEL:
       if (S.events.on_cancel) {
+        save_slot_ui_close();
         S.events.on_cancel(S.events.ctx);
       }
       mui_sfx("ui/confirm");
@@ -232,7 +233,7 @@ bool save_slot_ui_input(mui_button b) {
 bool save_slot_ui_touch(float touch_x, float touch_y) {
   if (!S.active) return false;
   if (!S.show_sub_menu && !S.show_refusal_dialog && !S.show_delete_confirm) {
-    float start_y = 20.0f;
+    float start_y = 15.0f;
     float slot_h = 36.0f;
     float spacing = 6.0f;
 
@@ -260,28 +261,28 @@ void save_slot_ui_draw(void) {
   /* Top Screen Header */
   rr_target(RR_TOP, 0x181828FF);
   mui_window(20, 15, 360, 210);
-  mui_text(TS_SUMMARY_HEADER, 200, 30, "SAVE SLOTS");
+  mui_text_o(TS_SUMMARY_HEADER, 200, 30, 0.5f, 0.0f, "SAVE SLOTS");
 
   const save_slot_info* sel = &S.slots[S.selected_slot];
   char sel_buf[128];
   snprintf(sel_buf, sizeof sel_buf, "Selected Slot %d: %s", S.selected_slot + 1,
            !sel->exists ? "EMPTY" : (sel->valid ? sel->biome_name : "CORRUPT / INCOMPATIBLE"));
-  mui_text(TS_SUMMARY_ALT, 200, 60, sel_buf);
+  mui_text_o(TS_SUMMARY_ALT, 200, 60, 0.5f, 0.0f, sel_buf);
 
   if (sel->exists && sel->valid) {
     char stat_buf[128];
     snprintf(stat_buf, sizeof stat_buf, "Wave %d   Score: %d   Money: ₽%.0f", sel->wave, sel->score, sel->money);
-    mui_text(TS_WINDOW, 200, 95, stat_buf);
+    mui_text_o(TS_WINDOW, 200, 95, 0.5f, 0.0f, stat_buf);
     if (sel->lead_species > 0) {
       char lead_buf[64];
       snprintf(lead_buf, sizeof lead_buf, "Lead: Species #%d (L%d)", sel->lead_species, sel->lead_level);
-      mui_text(TS_SMALLER_WINDOW_ALT, 200, 125, lead_buf);
+      mui_text_o(TS_SMALLER_WINDOW_ALT, 200, 125, 0.5f, 0.0f, lead_buf);
     }
   } else if (sel->exists && !sel->valid) {
-    mui_text(TS_PARTY_RED, 200, 100, "Refusal: Save File Incompatible");
-    mui_text(TS_SMALLER_WINDOW_ALT, 200, 130, sel->refusal_reason);
+    mui_text_o(TS_PARTY_RED, 200, 100, 0.5f, 0.0f, "Refusal: Save File Incompatible");
+    mui_text_o(TS_SMALLER_WINDOW_ALT, 200, 130, 0.5f, 0.0f, sel->refusal_reason);
   } else {
-    mui_text(TS_SUMMARY_GRAY, 200, 100, "Select to Start New Game in Slot");
+    mui_text_o(TS_SUMMARY_GRAY, 200, 100, 0.5f, 0.0f, "Select to Start New Game in Slot");
   }
 
   /* Bottom Screen List */
@@ -324,7 +325,7 @@ void save_slot_ui_draw(void) {
   /* Submenu Overlay */
   if (S.show_sub_menu && !S.show_delete_confirm && !S.show_refusal_dialog) {
     mui_window(50, 40, 220, 140);
-    mui_text(TS_HEADER_LABEL, 60, 48, "SLOT OPTIONS");
+    mui_text_o(TS_HEADER_LABEL, 160, 48, 0.5f, 0.0f, "SLOT OPTIONS");
 
     const char* sub_opts[3] = {
       sel->exists ? (sel->valid ? "RESUME RUN" : "ATTEMPT LOAD") : "START NEW RUN",
@@ -346,16 +347,16 @@ void save_slot_ui_draw(void) {
   /* Refusal Dialog Modal */
   if (S.show_refusal_dialog) {
     mui_window(30, 40, 260, 140);
-    mui_text(TS_PARTY_RED, 40, 50, "CANNOT LOAD SAVE");
+    mui_text_o(TS_PARTY_RED, 160, 50, 0.5f, 0.0f, "CANNOT LOAD SAVE");
     mui_text(TS_WINDOW, 40, 80, S.refusal_msg);
-    mui_text(TS_INSTRUCTIONS_TEXT, 130, 150, "Press A to Dismiss");
+    mui_text_o(TS_INSTRUCTIONS_TEXT, 160, 150, 0.5f, 0.0f, "Press A to Dismiss");
   }
 
   /* Delete Confirm Modal */
   if (S.show_delete_confirm) {
     mui_window(40, 50, 240, 120);
-    mui_text(TS_PARTY_RED, 50, 60, "DELETE THIS SAVE SLOT?");
-    mui_text(TS_SMALLER_WINDOW_ALT, 50, 85, "This action cannot be undone.");
+    mui_text_o(TS_PARTY_RED, 160, 60, 0.5f, 0.0f, "DELETE THIS SAVE SLOT?");
+    mui_text_o(TS_SMALLER_WINDOW_ALT, 160, 85, 0.5f, 0.0f, "This action cannot be undone.");
 
     mui_window(60, 115, 80, 28);
     if (S.selected_sub_opt == 0) mui_window(58, 113, 84, 32);

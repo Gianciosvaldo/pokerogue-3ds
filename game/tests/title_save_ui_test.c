@@ -243,7 +243,19 @@ int mui_text(mui_style s, float x, float y, const char* utf8) {
 }
 
 int mui_text_o(mui_style s, float x, float y, float ox, float oy, const char* utf8) {
-  int w = (int)strlen(utf8) * 6;
+  if (!utf8) return 0;
+  size_t max_len = 0, cur_len = 0;
+  for (size_t i = 0; utf8[i]; i++) {
+    if (utf8[i] == '\n') {
+      if (cur_len > max_len) max_len = cur_len;
+      cur_len = 0;
+    } else {
+      cur_len++;
+    }
+  }
+  if (cur_len > max_len) max_len = cur_len;
+
+  int w = (int)max_len * 6;
   float rx = x - ox * w;
   float ry = y - oy * 8;
   return mui_text(s, rx, ry, utf8);

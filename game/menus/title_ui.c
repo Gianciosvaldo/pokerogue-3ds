@@ -107,13 +107,13 @@ void title_ui_draw(void) {
   mui_window(30, 20, 340, 100);
 
   if (!mui_image("title_logo", "logo", 200, 50, 0.5f, 0.5f)) {
-    mui_text(TS_SUMMARY_HEADER, 200, 45, "POKEROGUE 3DS");
-    mui_text(TS_SUMMARY_ALT, 200, 75, "Rogue-lite Pokemon Battle Simulation");
+    mui_text_o(TS_SUMMARY_HEADER, 200, 45, 0.5f, 0.0f, "POKEROGUE 3DS");
+    mui_text_o(TS_SUMMARY_ALT, 200, 75, 0.5f, 0.0f, "Rogue-lite Pokemon Battle Simulation");
   }
 
-  mui_text(TS_SMALLER_WINDOW_ALT, 200, 105, "v1.0.0 (Port Commit 8555c08)");
+  mui_text_o(TS_SMALLER_WINDOW_ALT, 200, 105, 0.5f, 0.0f, "v1.0.0 (Port Commit 8555c08)");
 
-  mui_text(TS_INSTRUCTIONS_TEXT, 200, 220, "D-Pad: Select   A: Confirm");
+  mui_text_o(TS_INSTRUCTIONS_TEXT, 200, 220, 0.5f, 0.0f, "D-Pad: Select   A: Confirm");
 
   /* Bottom Screen */
   rr_target(RR_BOTTOM, 0x202030FF);
