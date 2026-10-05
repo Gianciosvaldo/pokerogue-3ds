@@ -36,6 +36,8 @@ typedef enum {
 } mui_button;
 
 /* upstream TextStyle (src/enums/text-style.ts), same values */
+#ifndef GM_TEXT_STYLE_ENUM
+#define GM_TEXT_STYLE_ENUM
 typedef enum {
   TS_MESSAGE = 1, TS_WINDOW, TS_WINDOW_ALT, TS_WINDOW_BATTLE_COMMAND, TS_BATTLE_INFO, TS_PARTY, TS_PARTY_RED,
   TS_PARTY_CANCEL_BUTTON, TS_INSTRUCTIONS_TEXT, TS_MOVE_LABEL, TS_SUMMARY, TS_SUMMARY_DEX_NUM,
@@ -51,6 +53,9 @@ typedef enum {
   /* not upstream styles: a style with a font size override */
   TSX_WINDOW_ALT_76, /* WINDOW_ALT at fontSize 76px (summary candy and friendship counts) */
 } mui_style;
+#else
+typedef int mui_style;
+#endif
 
 /* lineSpacing in canvas px: addTextObject (scale * 30), addBBCodeTextObject (scale * 60) */
 #define MUI_LS_TEXT 5.0f
