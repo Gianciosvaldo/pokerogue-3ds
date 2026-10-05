@@ -130,8 +130,49 @@ before the consumable is applied.
 The caller supplies parsed learnset rows, unlocked egg moves and challenge egg-relearn availability
 in `pr_reward_mon`; reward-core owns the Memory Mushroom filtering/order and target state, not the UI rendering.
 
+## Card 97: the trainers' own rewards (2026-10-05)
+
+Ported from upstream `8555c08`, in `src/trainer_rewards.c` (API in `include/pr/reward.h`, data dumped into `gen/out/reward_data.c` by `gen/dump-rewards.test.ts`):
+
+| Piece | Upstream | Port |
+|---|---|---|
+| The reward screen settings of the rival's and the evil team boss's fixed battles, on the victory path (`getFixedBattle(w)?.customModifierRewardSettings`) and the biome path (`isFixedBattle(w) ? ... : undefined`, when a challenge turns the party heal off) | `fixed-battle-configs.ts`, `game-mode.ts`, `victory-phase.ts`, `select-biome-phase.ts` | `pr_reward_fixed_battle_settings`. The settings per mode and wave are dumped (the dump fails on a setting other than `guaranteedModifierTiers`, `allowLuckUpgrades`, `fillRemaining`) |
+| Single Generation's `FIXED_BATTLES` hook: which waves it takes over, the boss reward settings it sets, and the `randSeedItem` draws its Elite Four and champion cases make on the run RNG | `challenge.ts` `SingleGenerationChallenge.applyFixedBattle` | Same function; settings dumped per value 1 to 9, draws ported |
+| `TrainerVictoryPhase.start()`: `MoneyRewardPhase(moneyMultiplier)`, a `ModifierRewardPhase` per `modifierRewardFuncs` item (rival fights 1, 2, 4), and the boss voucher. `validateVoucher` unlocks the voucher (and counts it) the first time; the voucher item is only queued once it was already unlocked, one tier down unless `getUpgradeUnlockedVouchers()` | `trainer-victory-phase.ts`, `battle-scene.ts` `validateVoucher`, `system/voucher.ts` | `pr_reward_trainer_victory_rewards`. isBoss, the voucher type (upstream's own `vouchers` table), the money multiplier and the reward items are dumped per TrainerType |
+| `Trainer.genModifiers(party)`: the seven `genModifiersFunc` closures (Red, Steven, Wallace, Kieran, Guzma's rematch, rival fights 5 and 6), including where upstream throws on a short party | `trainer-config.ts`, `field/trainer.ts` | `pr_reward_trainer_items`. The dump fails if upstream gives another trainer a `genModifiersFunc` |
+
+Not covered here: game-core does not call any of this yet (its `trainer_victory` in `game-core/src/gc_phases.c` guesses the voucher from the money multiplier and queues it on the first win, which is the opposite of upstream, and its reward screens pass no fixed battle settings); run-core's `pr_run_generate_enemy_items` still refuses the seven trainers with a `genModifiersFunc` (merging their items with the random ones is run-core's). The victory message (`randSeedItem` under `executeWithSeedOffset`, in a UI callback), the Breeders in Space achievement and timed events' fixed battle rewards are not ported.
+
+### How it is checked
+`tools/trainerdiff.sh <upstream> 2000 <seed>` (refuses to run unless `node --version` is v22) copies `tests/trainer-rewards.producer.test.ts` into the upstream checkout and replays its cases through `build/trainerrewardstest`. Three kinds of case, all on upstream's code:
+- **F**, fixed battles: random mode, Single Generation value (a third of the cases are challenge runs, two thirds of those with it on), wave (two thirds on the fixed battle waves), offsetGym, path, run RNG. The victory path runs `VictoryPhase.start()` with the phase queue stubbed; the biome path evaluates select-biome-phase's expression on upstream's GameMode. Compared: every queued item in order, every field of the settings (a setting the port has no field for is a mismatch), the RNG state after.
+- **V**, `TrainerVictoryPhase.start()` with a real trainer config, a random voucher unlock state and upgrade flag: every queued phase in order with its argument (any phase the port doesn't make is a mismatch), whether the voucher is unlocked after, the four voucher count changes, the RNG state.
+- **G**, `Trainer.genModifiers(party)` on 0 to 6 real `EnemyPokemon` (random species, half the time the closure's species at its slot; random ability index, fusions, passives): every item, its species stat booster key, holder and stack, or that upstream threw; the RNG state.
+
+The inputs are what upstream had before the call (RNG state, unlock state, each enemy's species, `getAbility(true)` and passive), never derived from the answers. An exception outside the call a G case tests fails the producer; the file's last line counts the cases, so a cut file exits 2. The comparator exits 3 when a family went unexercised.
+
+Node v22.22.0, upstream `8555c08`:
+
+| Seed | Cases | Mismatches | F / V / G cases | F with settings (victory / biome), Single Generation cases that drew | V: reward funcs (RIVAL / 2 / 4), vouchers plain / upgraded, unlocked now | G: cases with items (RED STEVEN WALLACE KIERAN GUZMA_2 RIVAL_5 RIVAL_6), threw |
+|---|---|---|---|---|---|---|
+| 777 | 2,000 | 0 | 808 / 598 / 594 | 74 / 36, 23 | 39 / 48 / 43, 96 / 89, 208 | 57 72 72 10 6 15 13, 13 |
+| 9001 | 2,000 | 0 | 811 / 614 / 575 | 89 / 50, 17 | 46 / 44 / 52, 106 / 92, 213 | 62 62 45 10 10 18 15, 15 |
+| 4242 | 2,000 | 0 | 842 / 577 / 581 | 89 / 44, 15 | 45 / 46 / 45, 100 / 74, 192 | 68 75 60 8 11 13 19, 13 |
+| 31337 | 2,000 | 0 | 830 / 567 / 603 | 75 / 37, 21 | 46 / 46 / 48, 98 / 88, 187 | 60 65 80 10 11 15 14, 10 |
+
+Every settings wave (25, 55, 95, 115, 145, 165, 195) has cases on every seed. Planted bugs, `tools/trainerplant.sh <trace>` (one line of `src/trainer_rewards.c` changed per copy), total mismatching cases on seeds 777 / 9001 / 4242 / 31337, every run exit 1:
+
+| Planted bug | Mismatches |
+|---|---|
+| Voucher unlock check inverted | 393 / 411 / 366 / 373 |
+| Passive ability ignored | 4 / 6 / 7 / 10 |
+| Champion hook draws 5 instead of 6 | 3 / 3 / 4 / 4 |
+| Rival's bird: Guts on any species | 8 / 4 / 3 / 5 |
+| Fixed battles' `allowLuckUpgrades` always true | 110 / 139 / 133 / 112 |
+| Money multiplier always 1 | 549 / 559 / 528 / 511 |
+
 ## Not done yet
-- Trainers' `genModifiersFunc` and fixed battles' `customModifierRewardSettings` (the rival's and bosses' reward screens); a caller can pass custom settings already.
+- Wiring card 97's trainer rewards into game-core and the trainers' own items into run-core's enemy items (see Card 97).
 - What each reward does when it is picked or used (healing, revives, PP, TMs, evolution items, vitamins, Rare Candy, held items into the battle's modifier list, lures, charms, exp items). Next in this folder.
 - The Moveset Randomizer's TM shuffle (reported as `PR_REWARD_UNPORTED_CHALLENGE`), timed events' fixed battle rewards, and the dev override `ITEM_REWARD_OVERRIDE`.
 - Rare items (form change items' effects, DNA Splicers, Mega and Tera) wait for M2, as the beta plan says; they already appear in the options.
@@ -141,6 +182,8 @@ in `pr_reward_mon`; reward-core owns the Memory Mushroom filtering/order and tar
 make                                   # build/libreward.a, build/rewardstest, build/victorytest
 tools/redump.sh <upstream>             # regenerate gen/out/ from upstream
 tools/difftest.sh <upstream> 4000 99   # rewards and victory cases, replayed through the port
+tools/trainerdiff.sh <upstream> 2000 777   # card 97: trainer rewards (Node 22 only)
+tools/trainerplant.sh <trace>          # card 97: six planted bugs replayed on a trace; each must fail
 ```
 The upstream checkout is the one `battle-core/tools/setup-upstream.sh` prepares. To look into a mismatch: rerun the producer with `DIFF_ONLY=<case>` (it prints every pool entry's weight and every generator result for that case to stderr), and replay with `DEBUG_CASE=<case>` against a build made with `CFLAGS="-O0 -g -std=c99 -DPR_REWARD_DEBUG"`, which prints the port's.
 

@@ -9,10 +9,15 @@
  * - the item evolutions (getEvolutions, item ones, in order) with their conditions (EvoCondKey data);
  * - the form changes with an item trigger (getFormChanges, in order) with their trigger, keys and conditions
  *   (closures, classified by their source and probed for the species a dex condition reads);
- * - hasEvolutions per species, the G-Max forms (isMax), the form keys of the species the tables above name.
+ * - hasEvolutions per species, the G-Max forms (isMax), the form keys of the species the tables above name;
+ * - per TrainerType what TrainerVictoryPhase reads (isBoss, its voucher's type, moneyMultiplier, the
+ *   modifierRewardFuncs' items, whether it has a genModifiersFunc), and the fixed battles' reward settings per game
+ *   mode and per Single Generation value (card 97).
  * Run with tools/redump.sh <upstream dir>; writes gen/out/reward_data.c and gen/out/reward_items.h.
  * The output is generated: don't edit it.
  */
+import { FixedBattleConfig } from "#app/battle";
+import { getGameMode } from "#app/game-mode";
 import { speciesDataRegistry } from "#app/globals/global-species-data-registry";
 import { globalScene } from "#app/global-scene";
 import { EvoCondKey } from "#balance/pokemon-evolutions";
@@ -22,8 +27,11 @@ import { SpeciesFormChangeCondition } from "#data/pokemon-forms";
 import { SpeciesFormChangeItemTrigger } from "#data/pokemon-forms/form-change-triggers";
 import { AbilityId } from "#enums/ability-id";
 import { BerryType } from "#enums/berry-type";
+import { ChallengeType } from "#enums/challenge-type";
+import { Challenges } from "#enums/challenges";
 import { EvolutionItem } from "#balance/pokemon-evolutions";
 import { FormChangeItem } from "#enums/form-change-item";
+import { GameModes } from "#enums/game-modes";
 import { ModifierPoolType } from "#enums/modifier-pool-type";
 import { ModifierTier } from "#enums/modifier-tier";
 import { MoveId } from "#enums/move-id";
@@ -31,6 +39,7 @@ import { Nature } from "#enums/nature";
 import { PokemonType } from "#enums/pokemon-type";
 import { SpeciesId } from "#enums/species-id";
 import { Stat } from "#enums/stat";
+import { TrainerType } from "#enums/trainer-type";
 import { PersistentModifier, PokemonHeldItemModifier } from "#modifiers/modifier";
 import {
   FormChangeItemModifierType,
@@ -38,7 +47,10 @@ import {
   PokemonHeldItemModifierType,
   PokemonModifierType,
 } from "#modifiers/modifier-type";
+import { vouchers } from "#system/voucher";
 import { GameManager } from "#test/framework/game-manager";
+import { trainerConfigs } from "#trainers/trainer-config";
+import { applyChallenges } from "#utils/challenge-utils";
 import { getModifierPoolForType } from "#utils/modifier-utils";
 import * as fs from "node:fs";
 import Phaser from "phaser";
@@ -474,6 +486,90 @@ it("dump rewards", async () => {
     }
   }
 
+  // ---- the trainers' own rewards (card 97), by TrainerType: config.isBoss, the voucher TrainerVictoryPhase
+  // validates (vouchers[TrainerType[t]].voucherType, -1 when it has none), config.moneyMultiplier, the
+  // modifierRewardFuncs' items and whether it has a genModifiersFunc (src/trainer_rewards.c ports each one) ----
+  const trainerTypeIds = Object.values(TrainerType).filter(v => typeof v === "number") as number[];
+  const maxTrainerType = Math.max(...trainerTypeIds);
+  const trainerRows: string[] = [];
+  const withGenFunc: number[] = [];
+  for (let tt = 0; tt <= maxTrainerType; tt++) {
+    const cfg: any = Object.hasOwn(trainerConfigs, tt) ? (trainerConfigs as any)[tt] : undefined;
+    if (!cfg) {
+      trainerRows.push("{0, 0, -1, 0, 0, {-1, -1}, 0}");
+      continue;
+    }
+    if (cfg.trainerType !== tt) {
+      throw new Error(`trainerConfigs[${tt}].trainerType is ${cfg.trainerType}`);
+    }
+    const name = TrainerType[tt];
+    const voucher = Object.hasOwn(vouchers, name) ? vouchers[name].voucherType : -1;
+    const rewardItems = (cfg.modifierRewardFuncs as (() => any)[]).map(f => itemIndex(f().id));
+    if (rewardItems.length > 2) {
+      throw new Error(`${name}: ${rewardItems.length} modifierRewardFuncs`);
+    }
+    if (typeof cfg.moneyMultiplier !== "number" || !Number.isFinite(cfg.moneyMultiplier)) {
+      throw new Error(`${name}: moneyMultiplier ${cfg.moneyMultiplier}`);
+    }
+    if (cfg.genModifiersFunc) {
+      withGenFunc.push(tt);
+    }
+    const ri = [...rewardItems, -1, -1].slice(0, 2);
+    trainerRows.push(
+      `{1, ${cfg.isBoss ? 1 : 0}, ${voucher}, ${cfg.moneyMultiplier}, ${rewardItems.length}, {${ri.join(", ")}}, ${cfg.genModifiersFunc ? 1 : 0}}`,
+    );
+  }
+  const portedGenFuncs = [
+    TrainerType.RED, TrainerType.STEVEN, TrainerType.WALLACE, TrainerType.KIERAN, TrainerType.RIVAL_5,
+    TrainerType.RIVAL_6, TrainerType.GUZMA_2,
+  ].sort((a, b) => a - b);
+  expect(withGenFunc).toEqual(portedGenFuncs);
+
+  // ---- the fixed battles' reward screens (card 97): per game mode, every wave of gameMode.battleConfig with its
+  // customModifierRewardSettings, then per Single Generation value every wave its FIXED_BATTLES hook takes over
+  // (applyChallenges(FIXED_BATTLES) on a fresh FixedBattleConfig) with the settings it sets. The hook's
+  // randSeedItem draws are code (src/trainer_rewards.c); the RNG is restored after the scan. ----
+  const customRow = (cs: any) => {
+    if (!cs) {
+      return "0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 1, 0";
+    }
+    for (const k of Object.keys(cs)) {
+      if (!["guaranteedModifierTiers", "allowLuckUpgrades", "fillRemaining"].includes(k)) {
+        throw new Error(`fixed battle reward setting ${k} the port doesn't read`);
+      }
+    }
+    const t: number[] = cs.guaranteedModifierTiers ?? [];
+    if (t.length > 8) {
+      throw new Error(`fixed battle reward settings with ${t.length} tiers`);
+    }
+    const tt = [...t, ...Array(8 - t.length).fill(0)];
+    return `1, ${t.length}, {${tt.join(", ")}}, ${cs.allowLuckUpgrades === false ? 0 : 1}, ${cs.fillRemaining ? 1 : 0}`;
+  };
+  const fixedRows: string[] = [];
+  const modeIds = (Object.values(GameModes).filter(v => typeof v === "number") as number[]).sort((a, b) => a - b);
+  for (const m of modeIds) {
+    const gm = getGameMode(m);
+    const waves = Object.keys(gm.battleConfig).map(Number).sort((a, b) => a - b);
+    for (const w of waves) {
+      fixedRows.push(`{${m}, 0, ${w}, ${customRow(gm.battleConfig[w].customModifierRewardSettings)}}`);
+    }
+  }
+  const savedMode = globalScene.gameMode;
+  const savedRnd = Phaser.Math.RND.state();
+  for (let g = 1; g <= 9; g++) {
+    const gm = getGameMode(GameModes.CHALLENGE);
+    gm.setChallengeValue(Challenges.SINGLE_GENERATION, g);
+    (globalScene as any).gameMode = gm;
+    for (let w = 1; w <= 1000; w++) {
+      const cfg = new FixedBattleConfig();
+      if (applyChallenges(ChallengeType.FIXED_BATTLES, w, cfg)) {
+        fixedRows.push(`{-1, ${g}, ${w}, ${customRow(cfg.customModifierRewardSettings)}}`);
+      }
+    }
+  }
+  (globalScene as any).gameMode = savedMode;
+  Phaser.Math.RND.state(savedRnd);
+
   // ---- output ----
   const enumName = (k: string) => `PR_ITEM_${k}`;
   const h = [
@@ -517,6 +613,10 @@ it("dump rewards", async () => {
     `const pr_fc_cond pr_fc_conds[${Math.max(fcCondRows.length, 1)}] = {${fcCondRows.join(", ") || "{0, 0}"}};`,
     `const pr_species_slice pr_item_fc_species[${fcSpecies.length}] = {${fcSpecies.join(", ")}};`,
     `const int pr_item_fc_species_count = ${fcSpecies.length};`,
+    `const pr_reward_trainer pr_reward_trainers[${trainerRows.length}] = {${trainerRows.join(", ")}};`,
+    `const int pr_reward_trainer_count = ${trainerRows.length};`,
+    `const pr_fixed_reward pr_fixed_rewards[${fixedRows.length}] = {${fixedRows.join(", ")}};`,
+    `const int pr_fixed_reward_count = ${fixedRows.length};`,
     "",
   ];
   fs.writeFileSync(outH, h.join("\n"));
@@ -524,5 +624,6 @@ it("dump rewards", async () => {
   console.log(
     "items", keys.length, "gen types", genTypes.length, "pool", entries.length, "tm lists", tmLists.length,
     "tm pool", tmPool.length, "evos", evoRows.length, "fcs", fcRows.length, "strings", strings.length,
+    "trainers", trainerRows.length, "fixed rewards", fixedRows.length,
   );
 });
