@@ -126,6 +126,11 @@ static void victory(gc_run *run, int enemy_idx)
                 gc_system_set_pokemon_caught(run->sys, e_mon, true, false);
                 gc_system_update_species_dex_ivs(run->sys, e_mon->b.species, e_mon->b.ivs);
             }
+            /* addPlayerPokemon(..., dataSource): a PlayerPokemon is no boss (isBoss() is EnemyPokemon's), so its
+             * shields and the boss passive stay behind; the dex and the candy above read the enemy */
+            e_mon->b.is_boss = false;
+            e_mon->b.boss_segments = e_mon->b.boss_segment_index = 0;
+            pr_update_passive(&run->bt, &e_mon->b);
             if (run->n_party < 6) {
                 run->party[run->n_party] = *e_mon;
                 run->party_order[run->n_party] = (int8_t)run->n_party;
@@ -300,7 +305,7 @@ static void battle_end(gc_run *run, gc_rphase *p)
         /* currentBattle.addBattleScore(): Sine.easeIn over the turns taken */
         double mult = run->n_enemy / 2.0 + 0.5;
         for (int i = 0; i < run->n_enemy; i++)
-            if (run->enemy[i].b.is_boss) mult *= run->enemy[i].boss_segments / 1.5 / run->n_enemy;
+            if (run->enemy[i].b.is_boss) mult *= run->enemy[i].b.boss_segments / 1.5 / run->n_enemy;
         double t = bt->turn - 2 < 10 * mult ? bt->turn - 2 : 10 * mult;
         double v = 1 - t / (10 * mult);
         double ease = v == 0 ? 0 : v == 1 ? 1 : 1 - cos(v * 3.141592653589793 / 2);   /* Phaser's Sine.In */
