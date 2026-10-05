@@ -79,13 +79,14 @@ static const rr_frame* icon_find(uint16_t id, int form, bool female, bool shiny,
   return f;
 }
 
-void menu_draw_icon(const menu_mon* m, float x, float y, float ox, float oy) {
+void menu_draw_icon_scaled(const menu_mon* m, float x, float y, float ox, float oy, float scale) {
   const rr_frame* a = icon_find(m->species, m->form, m->gender == MG_FEMALE, m->shiny, m->variant);
   if (!a) return;
   rr_draw_opts o = RR_DEFAULT_OPTS;
+  o.scale_x = o.scale_y = scale;
   /* the icon sprite has origin (0.5, 0) inside a container shifted by the origin */
-  float cx = x - a->src_w * (ox - 0.5f);
-  float cy = y - a->src_h * oy;
+  float cx = x - a->src_w * scale * (ox - 0.5f);
+  float cy = y - a->src_h * scale * oy;
   if (!m->fusion) {
     o.origin_x = 0.5f;
     rr_draw(a, floorf(cx), floorf(cy), &o);
@@ -116,8 +117,11 @@ void menu_draw_icon(const menu_mon* m, float x, float y, float ox, float oy) {
   bot.h = (int16_t)body;
   bot.off_y = 0;
   bot.src_h = bot.h;
-  float left_a = cx - a->src_w * 0.5f + a->off_x, left_b = cx - b->src_w * 0.5f + b->off_x;
+  float left_a = cx - a->src_w * 0.5f * scale + a->off_x * scale, left_b = cx - b->src_w * 0.5f * scale + b->off_x * scale;
   rr_draw_opts p = RR_DEFAULT_OPTS;
-  rr_draw(&top, floorf(left_a), floorf(cy + fy), &p);
-  rr_draw(&bot, floorf(left_b), floorf(cy + fy + head), &p);
+  p.scale_x = p.scale_y = scale;
+  rr_draw(&top, floorf(left_a), floorf(cy + fy * scale), &p);
+  rr_draw(&bot, floorf(left_b), floorf(cy + (fy + head) * scale), &p);
 }
+
+void menu_draw_icon(const menu_mon* m, float x, float y, float ox, float oy) { menu_draw_icon_scaled(m, x, y, ox, oy, 1.0f); }

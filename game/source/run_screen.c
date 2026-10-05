@@ -14,6 +14,8 @@
 #include "menus.h"
 #include "party_screen.h"
 #include "pr_enums.h"
+#include "reward_host.h"
+#include "run_saves.h"
 #include "shop_ui.h"
 #include "ui.h"
 #include "ui_widgets.h"
@@ -48,12 +50,38 @@ static struct {
   char txt[TXT_CAP][TXT_LEN];
   int n_ev, ev_pos, n_txt;
   int refused_in_row;
+  /* saving (cfg.save): game-core allows it from GC_EV_SAVE_POINT until the battle's first turn runs */
+  bool save_due;                /* a SAVE_POINT came and the run has not been written since */
+  bool save_failed_now;         /* the write that just ran failed */
+  bool save_failed_told;        /* the player was told the SD card refused a write (told again after one succeeds) */
+  int step_timer;               /* a postponed screen_step (ui_after id), 0 = none */
+  /* a loaded run (rs_resume): game-core's load makes the wave and the player's summon but not the trainer's intro or the
+   * foe's send-out (they were shown when the battle began, before the save) */
+  bool resume_wave;             /* the next WAVE event is the loaded battle's */
+  bool resume_foe;              /* the foe may be on the field in the run and not on the screen yet */
 } G = {.shown = -1};
 
 static void pump(void* arg);
 static void screen_step(void);
 
 /* ------------------------------------------------------------------ helpers */
+
+/* Everything the driver remembers about the scene on screen and the answer in flight: a new run, or a loaded one, starts
+ * from nothing. */
+static void reset_driver(void) {
+  if (G.step_timer) ui_timer_cancel(G.step_timer);
+  G.step_timer = 0;
+  G.present[0] = G.present[1] = false;
+  G.shown = -1;
+  G.fade_done = false;
+  G.wave_ev = 0;
+  G.nq = G.qi = 0;
+  G.n_ev = G.ev_pos = G.n_txt = 0;
+  G.swap_prompt = G.learn_drop = G.swap_replaced = false;
+  G.refused_in_row = 0;
+  G.save_due = G.save_failed_told = false;
+  G.resume_wave = G.resume_foe = false;
+}
 
 static bool msg_is(const gc_event* e, const char* key) {
   return e->kind == GC_EV_MESSAGE && e->msg.key && !strcmp(e->msg.key, key);
@@ -133,6 +161,16 @@ static const char* why_text(const char* why, char* out, int n) {
     return i18n_t(out, n, why, "pokemonName", name, NULL);
   }
   snprintf(out, (size_t)n, "%s", why);
+  return out;
+}
+
+/* A line with the trainer's name in it ("X would like to battle!"). game-core's name is i18next nesting text
+ * ("$t(trainerClasses:aceTrainer) $t(...)"): i18n resolves it when it is the value of an argument; when it comes out
+ * unresolved the line says "The trainer". */
+static const char* trainer_line(const char* key, int which, const char* mon, char* out, int n) {
+  const char* name = G.run.trainer_names[which];
+  i18n_t(out, n, key, "trainerName", name ? name : "", "pokemonName", mon ? mon : "", NULL);
+  if (!name || strstr(out, "$t(")) i18n_t(out, n, key, "trainerName", "The trainer", "pokemonName", mon ? mon : "", NULL);
   return out;
 }
 
@@ -254,6 +292,8 @@ static void wave_black(void* arg) {
   const gc_event* w = &G.q[G.wave_ev];
   const bool trainer = w->c == BATTLE_TYPE_TRAINER;
   const bool mystery = w->c == BATTLE_TYPE_MYSTERY_ENCOUNTER;
+  const bool loaded = G.resume_wave;
+  G.resume_wave = false;
   img_drop_prefix("images/pokemon/");
   img_drop_prefix("images/arenas/");
   ba_drop_moves();
@@ -289,6 +329,8 @@ static void wave_black(void* arg) {
         break;
       }
     }
+    /* a loaded battle has no encounter message in the run's events: it is made here */
+    if (trainer && loaded && !t[0]) trainer_line("battle:trainerAppeared", GC_TNAME_TITLED, NULL, t, TXT_LEN);
     if (mystery && !t[0]) snprintf(t, TXT_LEN, "A strange encounter!");
   } else {
     for (int j = G.wave_ev + 1; j < G.nq && j <= G.wave_ev + 5; j++)
@@ -475,7 +517,12 @@ static bool handle_event(int i) {
       break;
     }
 
-    default: /* TRAINER, BIOME, TURN, MONEY, MOVE_LEARNED, SAVE_POINT: nothing to show (the messages say it) */
+    case GC_EV_SAVE_POINT:
+      /* nothing to show; the run is written when the scene is up and the command is about to be asked (save_point) */
+      G.save_due = G.cfg.save;
+      break;
+
+    default: /* TRAINER, BIOME, TURN, MONEY, MOVE_LEARNED: nothing to show (the messages say it) */
       break;
   }
   if (G.n_ev == 0) return false;
@@ -507,8 +554,13 @@ static void pump(void* arg) {
 
 /* Gives game-core the player's answer and takes in the events it queued (the driver goes on with pump). A refusal is
  * told to the player, who then answers again. */
+static void write_save(void);
+
 static bool submit(const gc_choice* c) {
   const char* why = NULL;
+  /* the first turn ends the save point: a save postponed until now is written before the answer goes in */
+  if (G.save_due && gc_run_can_save(&G.run)) write_save();
+  G.save_due = false;
   if (gc_run_choose(&G.run, c, &why)) {
     G.refused_in_row = 0;
     drain();
@@ -534,9 +586,32 @@ static void on_command(bv_command c, void* arg);
 
 /* The screen shows the Pokemon the run has on the field. A caught Pokemon that replaces the one out leaves the screen
  * behind game-core's field: bring them together before the command is asked. True when events are playing. */
+/* A loaded battle's foe: a trainer's or an encounter's Pokemon is on the field in the run and was never sent out on the
+ * screen (a wild one is there from the intro). True when events are playing. */
+static bool send_out_foe(void) {
+  const gc_mon* foe = gc_field_mon(&G.run, 1);
+  if (!foe || G.present[1]) return false;
+  G.n_ev = G.ev_pos = G.n_txt = 0;
+  static bv_mon sent;
+  sent = make_mon(foe, false);
+  if (G.run.battle_type == BATTLE_TYPE_TRAINER) {
+    char* t = txt_new();
+    trainer_line("battle:trainerSendOut", GC_TNAME_TRAINER, i18n_species_name(foe->b.species), t, TXT_LEN);
+    put_msg(t, false);
+  }
+  *ev_new() = (bv_event){.type = BEV_SUMMON, .battler = BV_ENEMY, .mon = &sent};
+  G.present[1] = true;
+  play_chunk();
+  return true;
+}
+
 static bool resync_field(void) {
   const gc_mon* me = gc_field_mon(&G.run, 0);
   if (!me) return false;
+  if (G.resume_foe) {
+    G.resume_foe = false;
+    if (send_out_foe()) return true;
+  }
   const int idx = (int)(me - G.run.party);
   if (G.present[0] && G.shown == idx && bv_mon_of(BV_PLAYER)->species == me->b.species) {
     /* the same Pokemon: its HP and status are what the run says (battle-core doesn't make an event for every change, e.g.
@@ -761,7 +836,7 @@ static void on_shop_select_reward(void* ctx, int option_idx) {
   rc.a = (int16_t)option_idx;
   rc.b = rc.c = -1;
   const gc_offer* offer = &s->options[option_idx];
-  shop_ui_close();
+  rh_close();
   if (offer->target != GC_TARGET_NONE) {
     prompt_item_target(offer);
   } else {
@@ -778,7 +853,7 @@ static void on_shop_select_shop(void* ctx, int shop_idx) {
   rc.a = (int16_t)shop_idx;
   rc.b = rc.c = -1;
   const gc_offer* offer = &s->shop[shop_idx];
-  shop_ui_close();
+  rh_close();
   if (offer->target != GC_TARGET_NONE) {
     prompt_item_target(offer);
   } else {
@@ -788,7 +863,7 @@ static void on_shop_select_shop(void* ctx, int shop_idx) {
 
 static void on_shop_reroll(void* ctx, bool lock_capsule) {
   (void)ctx;
-  shop_ui_close();
+  rh_close();
   memset(&rc, 0, sizeof rc);
   if (lock_capsule) {
     rc.kind = GC_CH_LOCK_RARITIES;
@@ -800,7 +875,7 @@ static void on_shop_reroll(void* ctx, bool lock_capsule) {
 
 static void on_shop_skip(void* ctx) {
   (void)ctx;
-  shop_ui_close();
+  rh_close();
   memset(&rc, 0, sizeof rc);
   rc.kind = GC_CH_SKIP;
   answer(&rc);
@@ -831,14 +906,14 @@ static void open_shop_ui(void) {
     NULL
   };
 
-  shop_ui_open(&args, &ev);
+  rh_open_shop(&args, &ev);
 }
 
 /* ---- biome: biome_map ---- */
 
 static void on_biome_map_select(void* ctx, int option) {
   (void)ctx;
-  biome_map_close();
+  rh_close();
   gc_choice c = {.kind = GC_CH_BIOME, .a = (int16_t)(option < 0 ? 0 : option)};
   answer(&c);
 }
@@ -847,7 +922,7 @@ static void open_biome_map(void) {
   const gc_screen* s = gc_run_screen(&G.run);
   biome_map_args ba = {s->biomes, s->n_biomes};
   biome_map_events be = {on_biome_map_select, NULL};
-  biome_map_open(&ba, &be);
+  rh_open_biome_map(&ba, &be);
 }
 
 /* ---- a mystery encounter, stand-in: the first option that can be taken, with the first healthy Pokemon ---- */
@@ -870,12 +945,11 @@ static void mystery_auto(void) {
 
 /* ---- the run ends ---- */
 
-static void new_run(void);
+static bool new_run(bool from_black);
 
 static void restart_black(void* arg) {
   (void)arg;
-  G.fade_done = true;
-  new_run();
+  new_run(true);
 }
 
 static void restart(void* arg) {
@@ -885,17 +959,71 @@ static void restart(void* arg) {
 
 static void end_run(int kind) {
   char text[96];
-  if (kind == GC_SCREEN_CLEAR) {
+  if (G.step_timer) ui_timer_cancel(G.step_timer);
+  G.step_timer = 0;
+  G.save_due = false;
+  if (kind == GC_SCREEN_CLEAR)
     G.st.clears++;
-    i18n_t(text, sizeof text, "battle:congratulations", NULL);
-  } else {
+  else
     G.st.game_overs++;
-    snprintf(text, sizeof text, "Game over at wave %d. A new run begins.", (int)G.run.wave);
+  if (G.cfg.on_end) {
+    /* the app takes the run from here (the result screen); the run stays readable through rs_run() until it starts another */
+    G.cfg.on_end(kind, G.cfg.end_arg);
+    return;
   }
+  /* no app around (the host test): a message, then a new run */
+  if (kind == GC_SCREEN_CLEAR)
+    i18n_t(text, sizeof text, "battle:congratulations", NULL);
+  else
+    snprintf(text, sizeof text, "Game over at wave %d. A new run begins.", (int)G.run.wave);
   G.n_ev = G.ev_pos = G.n_txt = 0;
   put_msg(text, true);
   G.st.bev++;
   bv_play(&G.ev[0], 1, restart, NULL);
+}
+
+/* ---- saving ---- */
+
+/* Writes the run into the slot. A refusal is counted; save_point tells the player. */
+static void write_save(void) {
+  if (rsv_save(G.cfg.slot, &G.run) == RSV_SAVED) {
+    G.st.saves++;
+    G.save_failed_told = false;
+  } else {
+    G.st.save_failed++;
+    G.save_failed_now = true;
+  }
+}
+
+static void step_later(void* arg) {
+  (void)arg;
+  G.step_timer = 0;
+  screen_step();
+}
+
+/* At the COMMAND screen of a battle's first turn, once the scene is up: saves if the run is at a save point. The SD card is
+ * slow, so it is never written while something moves: with a fade or events playing, the step waits and comes back. False when
+ * the caller must stop (waiting, or a message is on its way and the driver goes on after it). */
+static bool save_point(void) {
+  if (!G.save_due) return true;
+  if (!gc_run_can_save(&G.run)) {
+    G.save_due = false;
+    return true;
+  }
+  if (ui_busy() || bv_playing()) {
+    G.step_timer = ui_after(50, step_later, NULL);
+    if (G.step_timer) return false;
+    return true; /* no timer free: submit() writes it before the first turn */
+  }
+  G.save_due = false;
+  G.save_failed_now = false;
+  write_save();
+  if (G.save_failed_now && !G.save_failed_told) {
+    G.save_failed_told = true;
+    say("The game could not be saved to the SD card. It will try again at the next battle.");
+    return false;
+  }
+  return true;
 }
 
 static void screen_step(void) {
@@ -903,6 +1031,7 @@ static void screen_step(void) {
   G.st.screens[s->kind & 15]++;
   switch (s->kind) {
     case GC_SCREEN_COMMAND:
+      if (!save_point()) break;
       if (!resync_field()) ask();
       break;
     case GC_SCREEN_SWITCH:
@@ -960,12 +1089,11 @@ static int random_team(gc_starter* out) {
   return n;
 }
 
-static void new_run(void) {
+/* from_black: a fade is at black now (the wave comes up without fading again) */
+static bool new_run(bool from_black) {
   G.st.runs++;
-  G.present[0] = G.present[1] = false;
-  G.shown = -1;
-  G.refused_in_row = 0;
-  G.learn_drop = false;
+  reset_driver();
+  G.fade_done = from_black;
   G.rng = 0x9E3779B97F4A7C15ull ^ ((uint64_t)G.cfg.entropy * 0xD1B54A32D192ED03ull) ^ ((uint64_t)G.st.runs * 0x2545F4914F6CDD1Dull);
   rnd(1);
   gc_run_new(&G.run, GAME_MODES_CLASSIC, G.st.runs == 1 ? G.cfg.seed : NULL, G.cfg.entropy + (uint32_t)G.st.runs);
@@ -984,16 +1112,35 @@ static void new_run(void) {
   const char* why = NULL;
   if (!n || !gc_run_set_starters(&G.run, team, n, &why)) {
     G.st.stuck++;
-    return;
+    return false;
   }
   drain();
   pump(NULL);
+  return true;
 }
 
-void rs_start(const rs_config* cfg) {
+bool rs_start(const rs_config* cfg) {
   memset(&G.st, 0, sizeof G.st);
   G.cfg = *cfg;
-  new_run();
+  return new_run(false);
+}
+
+rsv_status rs_resume(const rs_config* cfg, char why[RSV_WHY_LEN]) {
+  G.cfg = *cfg; /* the stats go on counting: a resume is not a new session */
+  reset_driver();
+  const rsv_status st = rsv_load(cfg->slot, &G.run, why);
+  if (st != RSV_OK) return st; /* G.run is not usable: the caller must not drive it */
+  G.st.runs++;
+  G.st.loads++;
+  G.resume_wave = G.resume_foe = true;
+  G.rng = 0x9E3779B97F4A7C15ull ^ ((uint64_t)G.cfg.entropy * 0xD1B54A32D192ED03ull);
+  rnd(1);
+  drain();
+  /* the loaded run's own save point is the file it came from: not written again until the next battle */
+  for (int i = 0; i < G.nq; i++)
+    if (G.q[i].kind == GC_EV_SAVE_POINT) G.skip[i] = true;
+  pump(NULL);
+  return RSV_OK;
 }
 
 const rs_stats* rs_stats_get(void) { return &G.st; }

@@ -15,10 +15,20 @@ Pokemon, which steps aside and fades (PokemonAnimPhase's add, pre-move, post-mov
 a faint and a catch that needs a release open the menus thread's party screen (`menus/`) on the bottom screen;
 BALL opens the Poke Ball list; a new move with four known opens menus' learn-move dialog and summary page.
 
+The app opens on the **title screen** (Continue, New Game, Load Game) and a run is saved to the SD card between waves.
+The flow is in [`app_flow.c`](source/app_flow.c): title, the five save slots (`slot_screen.c`: a slot's lead Pokemon, wave,
+biome, score and money; a slot that can't be loaded says why and is never touched), the run (`run_screen.c`), and the
+game over and clear screens (`result_screen.c`). A run is written with game-core's own `gc_run_save` by
+[`run_saves.c`](source/run_saves.c) at each of game-core's save points (`gc_run_can_save`: after the wave's setup, before
+the first turn), through `save.c` (temporary file with a checksum, renamed into place, the previous save kept as `.bak`).
+It is never written during an animation: `run_screen.c` waits until the screen is idle and tries again at the next wave
+if the card refuses. Game over and a win clear the slot, as upstream's `tryClearSession` does.
+
 Stand-ins in the run flow (listed in [`run_screen.h`](include/run_screen.h)): the starters are a random team (or the
-species in `sdmc:/3ds/pokerogue/rundriver.txt`), reward names are the item key in words, rewards and the next biome are
-option lists, evolution is automatic, a mystery encounter is a message and its first usable option, and a game over
-starts a new run. Nothing is saved yet.
+species in `sdmc:/3ds/pokerogue/rundriver.txt`), reward names are the item key in words, evolution is automatic, a
+mystery encounter is a message and its first usable option. The words on the game over and clear screens, and the
+slot list's messages ("The save is damaged...", "Made by a newer version of the game.") are plain English, not upstream's
+strings. Seeing the ending screens without playing 200 waves: `game/tests/mkfixture.c` writes a run one turn from the end.
 
 ## Build and run
 From the repo root (the whole repo is mounted because the game links the cores):
@@ -111,7 +121,8 @@ make -C game/tests animtest && game/tests/build/animtest path/to/pokerogue-asset
 - Checked by eye in Azahar screenshots, not pixel-diffed against upstream yet.
 
 ## Not done yet
-- The real starter select, reward, shop, biome map and evolution screens (the run flow uses option lists), saving, the title screen, the Pokedex, eggs, music; mystery encounter screens.
+- The real starter select and evolution screens (the run picks a random team; evolution is automatic), the Pokedex, eggs, music; mystery encounter screens.
+- Around the save slots (not part of card 113): "Save and Quit" and "Rename Run" in the menu, the run history, unlocks and vouchers on a win, the rival's end dialogue, timed events, and any online or cloud save.
 - Message timing per text (upstream's 500 ms for "X used Y!", prompts after faints): asked of
   battle-core; every text waits 1.5 s for now.
 - In move animations: the grey part of a sprite's tone (upstream's shader pushes it far past
@@ -122,4 +133,4 @@ make -C game/tests animtest && game/tests/build/animtest path/to/pokerogue-asset
   segments, weather and field effects on the field.
 - Sound without snd.pak is silent (the packs in the test rig have no sound yet).
 - Forms, variants and gender sprite differences in sprite keys.
-- Title, save slots, starter select and every other screen in the beta plan.
+- Starter select and every other screen in the beta plan that is not listed above as done.

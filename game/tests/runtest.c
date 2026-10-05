@@ -8,11 +8,19 @@
  *
  * It fails (exit 1) when the driver or the converter breaks the model (a summon over a Pokemon already out, a
  * hit on nobody, an HP over the maximum...), when the screen shown at a COMMAND screen is not the battle game-core
- * has, when the driver gets stuck or can't find a switch-in Pokemon, or when a run makes no progress. */
+ * has, when the driver gets stuck or can't find a switch-in Pokemon, or when a run makes no progress.
+ *
+ *   RUNTEST_SAVE=1       the runs save into slot 0 (in a temporary folder) at their save points. Fails when a first command
+ *                        is asked before the run was written, when a write fails, or when what the slot holds is not the run.
+ *   RUNTEST_SAVE=resume  the same, and every 4th save point the run is dropped and continued from its slot (rs_resume, as
+ *                        the title's Continue does): the loaded run must be the one that was saved, and the fake screen must
+ *                        then agree with it at the next command. */
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "battle_view.h"
 #include "ball_menu.h"
@@ -20,7 +28,10 @@
 #include "party_screen.h"
 #include "pr_data.h"
 #include "pr_enums.h"
+#include "reward_host.h"
+#include "run_saves.h"
 #include "run_screen.h"
+#include "save.h"
 #include "ui.h"
 #include "ui_widgets.h"
 
@@ -63,7 +74,29 @@ static struct {
   void* ball_arg;
   const int* ball_counts;
   int ball_counts_copy[BALL_TYPES];
+  /* saving (RUNTEST_SAVE) */
+  int expected_saves;     /* save points whose first command was asked, not counting a run that was just loaded */
+  int save_points;        /* the same, to pick the ones to resume from */
+  bool resume_now;        /* drop the run and continue it from its slot (the main loop does it) */
+  bool resumed;           /* the run was just loaded: its save point is the file it came from */
+  bool sp_open;           /* this battle's first command was already asked (it is asked again after a refusal) */
 } W;
+
+/* the reward / shop screen, the biome map and the party screen in item mode (the app's own, on the stack, are not built here) */
+static struct {
+  bool shop, biome;
+  shop_ui_args shop_args;
+  gc_screen screen;
+  shop_ui_events shop_ev;
+  biome_map_events biome_ev;
+  int n_biomes;
+  void (*item_pick)(int slot, int move_slot, void* arg);
+  void* item_arg;
+  bool item_move;
+} X;
+static int n_shops, n_maps, n_item_opens;
+static bool save_on, resume_on;
+static int n_resumes;
 
 static int violations, n_scenes, n_ask, n_dialogs, n_options, n_party_opens, n_balls;
 static char first_violation[300];
@@ -132,6 +165,23 @@ void ba_preload_move(int move) { (void)move; }
 void ba_drop_moves(void) {}
 void img_drop_prefix(const char* prefix) { (void)prefix; }
 int ui_depth(void) { return W.begun ? 1 : 0; }
+bool ui_busy(void) { return false; }
+/* one postponed step at most (run_screen.c keeps one): it runs when the fake player next steps */
+static struct {
+  void (*fn)(void*);
+  void* arg;
+  int id;
+} T;
+static int timer_ids;
+int ui_after(float ms, void (*fn)(void* arg), void* arg) {
+  (void)ms;
+  T.fn = fn;
+  T.arg = arg;
+  return T.id = ++timer_ids;
+}
+void ui_timer_cancel(int id) {
+  if (id && id == T.id) T.fn = NULL;
+}
 void ui_fade(float out_ms, float hold_ms, float in_ms, void (*at_black)(void* arg), void* arg) {
   (void)out_ms, (void)hold_ms, (void)in_ms;
   if (at_black) at_black(arg);
@@ -157,6 +207,7 @@ void bv_begin(const bv_setup* setup) {
   W.present[1] = false;
   W.fainted_shown[0] = W.fainted_shown[1] = false;
   W.playing = W.asking = false;
+  W.sp_open = false;
 }
 
 bv_mon* bv_mon_of(int battler) { return &W.mon[battler >= 2 ? 1 : 0]; }
@@ -290,6 +341,35 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
         BAD("fight menu move %d is %d PP %d, the Pokemon's %d PP %d", i, a->moves[i], a->pp_left[i], me->b.moves[i], max - me->b.pp_used[i]);
     }
   }
+  if (save_on && gc_run_can_save(r)) {
+    /* the first command of a battle: the run must be in its slot by now, and the slot must hold this run */
+    const bool just_resumed = W.resumed;
+    if (W.resumed) {
+      W.resumed = false;
+      W.sp_open = true;
+    } else if (!W.sp_open) {
+      W.sp_open = true;
+      W.expected_saves++;
+      W.save_points++;
+    }
+    const rs_stats* st = rs_stats_get();
+    if (st->saves != W.expected_saves) BAD("a first command was asked with %d saves written, %d expected", st->saves, W.expected_saves);
+    rsv_info info;
+    if (rsv_inspect(0, &info) != RSV_OK) {
+      BAD("the slot does not load after a save: %s", info.why);
+    } else {
+      rsv_info now;
+      memset(&now, 0, sizeof now);
+      rsv_summarize(r, &now);
+      if (info.wave != now.wave || info.score != now.score || info.money != now.money || info.n_party != now.n_party ||
+          info.biome != now.biome || memcmp(info.party, now.party, sizeof(rsv_mon) * (size_t)now.n_party))
+        BAD("the slot holds wave %d score %d, the run is at wave %d score %d", info.wave, info.score, now.wave, now.score);
+    }
+    if (resume_on && !just_resumed && W.save_points % 4 == 0) {
+      W.resume_now = true; /* the player quits to the title and continues: the main loop does it */
+      return;
+    }
+  }
   W.opts = *opts;
   W.on_command = on_command;
   W.command_arg = arg;
@@ -322,6 +402,38 @@ void ps_open(const pr_battle* bt, ps_mode mode, void (*on_pick)(int slot, int op
   W.party_mode = mode;
 }
 void ps_close(void) { W.party_pick = NULL; }
+
+void rh_open_shop(const shop_ui_args* args, const shop_ui_events* ev) {
+  n_shops++;
+  if (!args || !args->screen || !ev) {
+    BAD("the shop opened with no screen or no callbacks");
+    return;
+  }
+  X.shop = true;
+  X.screen = *args->screen;
+  X.shop_args = *args;
+  X.shop_args.screen = &X.screen;
+  X.shop_ev = *ev;
+  if (!X.screen.n_options && !X.screen.n_shop) BAD("the reward screen opened with nothing on offer");
+}
+
+void rh_open_biome_map(const biome_map_args* args, const biome_map_events* ev) {
+  n_maps++;
+  if (!args || args->n_biomes <= 0 || !ev) BAD("the biome map opened with no biomes");
+  X.biome = true;
+  X.n_biomes = args ? args->n_biomes : 0;
+  X.biome_ev = *ev;
+}
+
+void rh_close(void) { X.shop = X.biome = false; }
+
+void ps_open_item(const void* run, int pmode, bool target_move, void (*on_pick)(int slot, int move_slot, void* arg), void* arg) {
+  (void)run, (void)pmode;
+  n_item_opens++;
+  X.item_pick = on_pick;
+  X.item_arg = arg;
+  X.item_move = target_move;
+}
 
 void ball_menu_open(const int counts[BALL_TYPES], void (*on_pick)(int ball, void* arg), void* arg) {
   n_balls++;
@@ -395,6 +507,61 @@ static bool step(void) {
     W.playing = false;
     W.play_done = NULL;
     if (f) f(a);
+    return true;
+  }
+  if (T.fn) {
+    void (*f)(void*) = T.fn;
+    T.fn = NULL;
+    f(T.arg);
+    return true;
+  }
+  if (X.shop) {
+    const gc_screen* sc = &X.screen;
+    const shop_ui_events* ev = &X.shop_ev;
+    const int k = (int)rnd(100);
+    X.shop = false; /* the driver closes it before it answers, as the real screen does */
+    if (W.refused_streak >= 3 || (!sc->n_options && !sc->n_shop)) {
+      ev->on_skip(ev->ctx);
+    } else if (sc->n_options && k < 70) {
+      int pick = (int)rnd((uint32_t)sc->n_options);
+      if (rnd(100) < 80)
+        for (int i = 0; i < sc->n_options; i++) {
+          const char* key = sc->options[i].key;
+          if (key && (strstr(key, "REVIVE") || strstr(key, "POTION") || strstr(key, "RARE_CANDY"))) {
+            pick = i;
+            break;
+          }
+        }
+      ev->on_select_reward(ev->ctx, pick);
+    } else if (sc->n_shop && k < 85) {
+      ev->on_select_shop(ev->ctx, (int)rnd((uint32_t)sc->n_shop));
+    } else if (k < 90) {
+      ev->on_reroll(ev->ctx, false);
+    } else {
+      ev->on_skip(ev->ctx);
+    }
+    return true;
+  }
+  if (X.item_pick) {
+    void (*f)(int, int, void*) = X.item_pick;
+    X.item_pick = NULL;
+    const gc_run* r = rs_run();
+    int best = 0;
+    double worst = 2;
+    for (int i = 0; i < r->n_party; i++) {
+      const pr_pokemon* p = &r->party[i].b;
+      const double fr = p->stats[STAT_HP] ? (double)p->hp / p->stats[STAT_HP] : 1;
+      if (fr < worst) worst = fr, best = i;
+    }
+    if (rnd(8) == 0)
+      f(6, -1, X.item_arg); /* backs out: the driver shows the rewards again */
+    else
+      f(best, X.item_move ? (int)rnd(4) : -1, X.item_arg);
+    return true;
+  }
+  if (X.biome) {
+    X.biome = false;
+    X.biome_ev.on_select(X.biome_ev.ctx, (int)rnd((uint32_t)X.n_biomes));
     return true;
   }
   if (W.confirm_done) {
@@ -478,6 +645,20 @@ int main(int argc, char** argv) {
   char seed[32];
   snprintf(seed, sizeof seed, "runtest%017d", first);
   cfg.seed = seed;
+  const char* save_mode = getenv("RUNTEST_SAVE");
+  save_on = save_mode && *save_mode;
+  resume_on = save_on && !strcmp(save_mode, "resume");
+  char save_dir[64] = "";
+  if (save_on) {
+    /* the saves go to a folder of their own (the SD card's path is relative here) */
+    snprintf(save_dir, sizeof save_dir, "/tmp/runtest-saves-XXXXXX");
+    if (!mkdtemp(save_dir) || chdir(save_dir) != 0 || mkdir("sdmc:", 0777) != 0 || !save_init()) {
+      printf("FAILED: no folder for the saves\n");
+      return 1;
+    }
+    cfg.save = true;
+    cfg.slot = 0;
+  }
   rs_start(&cfg);
 
   const rs_stats* st = rs_stats_get();
@@ -487,6 +668,29 @@ int main(int argc, char** argv) {
   int wave_hist[21] = {0};
   int last_waves = 0, last_nf = 0;
   while (ended < runs) {
+    if (W.resume_now) {
+      /* quit to the title and Continue: what the player gets back must be the run that was saved */
+      rsv_info saved;
+      memset(&saved, 0, sizeof saved);
+      rsv_summarize(rs_run(), &saved);
+      W.resume_now = false;
+      W.playing = W.asking = false;
+      W.play_done = NULL;
+      char why[RSV_WHY_LEN] = "";
+      if (rs_resume(&cfg, why) != RSV_OK) {
+        BAD("could not continue from the slot: %s", why);
+        break;
+      }
+      rsv_info back;
+      memset(&back, 0, sizeof back);
+      rsv_summarize(rs_run(), &back);
+      if (back.wave != saved.wave || back.score != saved.score || back.money != saved.money || back.n_party != saved.n_party ||
+          memcmp(back.party, saved.party, sizeof(rsv_mon) * (size_t)saved.n_party))
+        BAD("the run that came back (wave %d) is not the one that was saved (wave %d)", back.wave, saved.wave);
+      W.resumed = true;
+      n_resumes++;
+      continue;
+    }
     if (!step()) {
       deadlock = 1;
       break;
@@ -535,6 +739,15 @@ int main(int argc, char** argv) {
          st->screens[GC_SCREEN_GAME_OVER], st->screens[GC_SCREEN_CLEAR]);
   printf("fake screen: %d scenes, %d command prompts, %d option lists, %d party screens, %d ball lists, %d learn dialogs, %u screen events\n",
          n_scenes, n_ask, n_options, n_party_opens, n_balls, n_dialogs, st->bev);
+  printf("reward screens: %d shops, %d item targets, %d biome maps\n", n_shops, n_item_opens, n_maps);
+  if (save_on) {
+    printf("saving: %d save points, %d written, %d failed, %d resumed from the slot\n", W.expected_saves, st->saves, st->save_failed,
+           n_resumes);
+    if (st->save_failed) BAD("%d saves failed", st->save_failed);
+    if (st->saves != W.expected_saves) BAD("%d saves written for %d save points", st->saves, W.expected_saves);
+    if (!W.expected_saves) BAD("no save points were reached");
+    if (resume_on && !n_resumes) BAD("no run was resumed");
+  }
   printf("events handled: message %d, battle %d, wave %d, summon %d, recall %d, hp %d, exp %d, level up %d, learned %d, evolved %d, mystery %d\n",
          st->events[GC_EV_MESSAGE], st->events[GC_EV_BATTLE], st->events[GC_EV_WAVE], st->events[GC_EV_SUMMON], st->events[GC_EV_RECALL],
          st->events[GC_EV_HP], st->events[GC_EV_EXP], st->events[GC_EV_LEVEL_UP], st->events[GC_EV_MOVE_LEARNED], st->events[GC_EV_EVOLVED],
@@ -546,5 +759,13 @@ int main(int argc, char** argv) {
   if (no_progress) printf("NO PROGRESS: no new wave in 20000 steps (wave %d)\n", rs_run()->wave);
   const bool fail = violations || st->not_found || st->shown_mismatch || st->stuck || deadlock || no_progress || ended < runs;
   printf(fail ? "FAILED\n" : "OK\n");
+  if (save_dir[0]) {
+    /* the temporary folder this run made */
+    char cmd[128];
+    if (chdir("/") == 0) {
+      snprintf(cmd, sizeof cmd, "rm -rf %s", save_dir);
+      if (system(cmd) != 0) printf("(could not remove %s)\n", save_dir);
+    }
+  }
   return fail ? 1 : 0;
 }

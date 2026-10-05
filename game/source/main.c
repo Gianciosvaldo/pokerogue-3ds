@@ -1,13 +1,13 @@
 /*
  * PokeRogue 3DS: the game app.
  *
- * Boots into a run: game-core's run loop plays the waves and run_screen.c shows them with the battle screen
- * (battle_events.c turns the turns' events into screen events), the party and summary screens
- * (game/menus), the Poke Ball list and option lists. See run_screen.h for what is still a stand-in
- * (starters, reward names, the biome list, mystery encounters...).
+ * Boots into the title (app_flow.c: Continue, New Game and Load Game with five save slots). A run is game-core's run
+ * loop; run_screen.c shows it with the battle screen (battle_events.c turns the turns' events into screen events), the
+ * party and summary screens (game/menus), the reward and biome screens, the Poke Ball list and option lists, and saves it
+ * at every save point. See run_screen.h for what is still a stand-in (starters, reward names, mystery encounters...).
  *
  * Debug file: sdmc:/3ds/pokerogue/rundriver.txt, optional. Lines "seed=<24 characters>" and
- * "starters=<species id>,<species id>..." fix the first run (for repeatable test runs).
+ * "starters=<species id>,<species id>..." fix the first New Game of a session (for repeatable test runs).
  *
  * START + SELECT quits.
  */
@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "app_flow.h"
 #include "i18n.h"
 #include "pak.h"
 #include "rr.h"
@@ -78,7 +79,7 @@ int main(void) {
   memset(&cfg, 0, sizeof cfg);
   cfg.entropy = (uint32_t)osGetTime();
   read_driver_file(&cfg);
-  rs_start(&cfg);
+  app_start(&cfg);
   while (ui_tick()) {
   }
   snd_exit();
