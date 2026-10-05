@@ -24,7 +24,8 @@ enum {
     RP_LEVEL_UP,         /* LevelUpPhase: a = party index, b = last level, c = new level */
     RP_LEARN_MOVE,       /* LearnMovePhase: a = party index, b = move; may wait on LEARN_MOVE */
     RP_EVOLUTION,        /* EvolutionPhase: a = party index, b = gc_evo_data index, c = last level */
-    RP_TRAINER_NEXT,     /* the trainer's next Pokemon (stands in for SwitchSummonPhase) */
+    RP_CONTINUE,         /* the rest of the turn after a VictoryPhase's experience (battle-core's pr_continue) */
+    RP_CHECK_SWITCH,     /* CheckSwitchPhase: waits on CHECK_SWITCH (only with run->ask_switch) */
     RP_BATTLE_END,       /* BattleEndPhase: a = victory */
     RP_TRAINER_VICTORY,  /* TrainerVictoryPhase */
     RP_MONEY_REWARD,     /* MoneyRewardPhase: d = money multiplier */
@@ -83,6 +84,7 @@ typedef struct {
     bool last_final_boss;       /* it was the classic final boss */
     double last_max_exp_level;  /* getMaxExpLevel() when it ended, for LevelCapPhase */
     bool pending_trainer_victory;
+    bool battle_won;            /* a VictoryPhase has run in this battle: its BattleEndPhase is the victory's */
     bool pending_me_miss;       /* EncounterPhase increments spawn chance after the save point */
     bool at_save_point;         /* from GC_EV_SAVE_POINT until the battle's first turn runs (gc_run_can_save) */
     /* gc_trainer_names' ring: run->trainer_names' texts, gc_m_trainer's key for each and whether that
@@ -206,13 +208,16 @@ void gc_battle_command_screen(gc_run *run);       /* fills run->screen for COMMA
 /* battle-core's turn from TurnStartPhase (or the pick after a SwitchPhase, pick >= -1), to its next
  * stop: returns the stop's phase type */
 int gc_battle_run(gc_run *run, int pick);
+/* After a stop at PH_VICTORY and the experience: the rest of the turn (the other moves, the end-of-turn
+ * effects, the trainer's next Pokemon) to the next stop (pr_continue) */
+int gc_battle_continue(gc_run *run);
+/* After the wild battle's start stopped at PH_CHECK_SWITCH: the answer, run to the next stop */
+int gc_battle_answer_switch(gc_run *run, bool yes);
 void gc_battle_switch_screen(gc_run *run);        /* fills run->screen for SWITCH */
 void gc_battle_end_cleanup(gc_run *run);          /* after a battle: the party off the field */
 int gc_enemy_active_index(const gc_run *run);     /* the enemy party index on the field, -1 = none */
 int gc_player_active_index(const gc_run *run);
 bool gc_battle_queued_command(gc_run *run);       /* a move locked in by the last turn: no COMMAND screen */
-bool gc_battle_trainer_next(gc_run *run);         /* the trainer's next Pokemon onto the field */
-bool gc_battle_turn_tail_lost(const gc_run *run); /* battle-core stopped with turn phases still queued */
 int gc_battle_slot_of(const gc_run *run, int party_index);   /* upstream party slot of party[i] */
 void gc_sync_party_order(gc_run *run);            /* party_order from battle-core's party list */
 

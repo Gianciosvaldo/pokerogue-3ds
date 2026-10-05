@@ -3,6 +3,7 @@
  *   gcplay [--seed S] [--starters BULBASAUR,CHARMANDER,...]     play a run by typing the choices
  *   gcplay --auto N [--first K] [--jobs J] [--verbose]           N seeded soak runs with random choices
  *   --save-test     soak runs: at each save point, save, wipe the run and load it back (the digest must not change)
+ *   --ask-switch    the SWITCH battle style: a wild battle's start asks "Will you switch Pokemon?" (run->ask_switch)
  *   --locales DIR   upstream's locales/en folder: messages as English text instead of keys
  *
  * The soak runs pick random legal answers on every screen (their own RNG, seeded per run), each in its
@@ -175,6 +176,7 @@ static void print_screen(const gc_run *run)
         printf("MYSTERY (type %d tier %d): options %d\n", s->mystery_type, s->mystery_tier, s->n_options);
         for (int i = 0; i < s->n_options; i++) printf("  option %d: %s\n", i, s->option_ok[i] ? "ok" : "disabled");
         break;
+    case GC_SCREEN_CHECK_SWITCH: printf("WILL YOU SWITCH POKEMON? y / n\n"); break;
     case GC_SCREEN_GAME_OVER: printf("GAME OVER at wave %d, score %d\n", run->wave, run->score); break;
     case GC_SCREEN_CLEAR: printf("CLEAR! score %d\n", run->score); break;
     default: printf("(screen %d)\n", s->kind); break;
@@ -284,6 +286,7 @@ static bool plain_choice(const gc_run *run, gc_choice *c)
         return true;
     }
     case GC_SCREEN_EVOLVE: c->kind = GC_CH_EVOLVE; return true;
+    case GC_SCREEN_CHECK_SWITCH: c->kind = GC_CH_CONFIRM; c->a = 0; return true;
     case GC_SCREEN_MYSTERY: {
         int best = -1;
         for (int i = 0; i < s->n_options; i++) if (s->option_ok[i]) { best = i; break; }
@@ -402,6 +405,10 @@ static bool auto_choose(gc_run *run)
             c.kind = rnd(10) ? GC_CH_EVOLVE : GC_CH_CANCEL;
             c.a = (int16_t)(c.kind == GC_CH_CANCEL && rnd(2));
             break;
+        case GC_SCREEN_CHECK_SWITCH:
+            c.kind = GC_CH_CONFIRM;
+            c.a = (int16_t)(rnd(4) == 0);
+            break;
         case GC_SCREEN_REWARD:
             if (tries > 40) { c.kind = GC_CH_SKIP; break; }
             if (s->n_shop && rnd(100) < 5) {
@@ -482,6 +489,8 @@ typedef struct {
 
 /* --save-test: at each save point, save, wipe the run and load it back, then play on */
 static int save_test;
+/* --ask-switch: run->ask_switch for every run (a setting: gc_run_new and gc_run_load don't keep it) */
+static bool ask_switch;
 
 static void soak_one(int index, int verbose, soak_result *r)
 {
@@ -491,6 +500,7 @@ static void soak_one(int index, int verbose, soak_result *r)
     rs = 0x9E3779B97F4A7C15ull ^ ((uint64_t)index * 0xD1B54A32D192ED03ull);
     rnd(1);
     gc_run_new(&run, GAME_MODES_CLASSIC, seed, (uint32_t)index);
+    run.ask_switch = ask_switch;
     gc_starter team[6];
     int n = random_team(team);
     const char *why;
@@ -531,6 +541,7 @@ static void soak_one(int index, int verbose, soak_result *r)
                 r->stuck_screen = 'L';
                 break;
             }
+            run.ask_switch = ask_switch;
             if (verbose) printf("-- saved (%u bytes) and loaded back\n", (unsigned)len);
             continue;
         }
@@ -699,6 +710,7 @@ static int play(const char *seed, const char *starters)
 {
     static gc_run run;
     gc_run_new(&run, GAME_MODES_CLASSIC, seed, (uint32_t)getpid());
+    run.ask_switch = ask_switch;
     gc_starter team[6];
     int n = 0;
     char buf[256];
@@ -736,6 +748,7 @@ static int play(const char *seed, const char *starters)
         case GC_SCREEN_SWITCH: c.kind = GC_CH_PICK; c.a = (int16_t)atoi(cmd); break;
         case GC_SCREEN_LEARN_MOVE: c.kind = GC_CH_FORGET; c.a = (int16_t)atoi(cmd); break;
         case GC_SCREEN_EVOLVE: c.kind = cmd[0] == 'y' ? GC_CH_EVOLVE : GC_CH_CANCEL; c.a = cmd[0] == 'N'; break;
+        case GC_SCREEN_CHECK_SWITCH: c.kind = GC_CH_CONFIRM; c.a = cmd[0] == 'y'; break;
         case GC_SCREEN_REWARD:
             c.kind = cmd[0] == 'o' ? GC_CH_REWARD : cmd[0] == 's' ? GC_CH_SHOP : cmd[0] == 'r' ? GC_CH_REROLL : GC_CH_SKIP;
             c.a = (int16_t)a; c.b = (int16_t)b; c.c = (int16_t)d;
@@ -761,8 +774,9 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--timeout") && i + 1 < argc) timeout = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--verbose")) verbose = 1;
         else if (!strcmp(argv[i], "--save-test")) save_test = 1;
+        else if (!strcmp(argv[i], "--ask-switch")) ask_switch = true;
         else if (!strcmp(argv[i], "--locales") && i + 1 < argc) locales = argv[++i];
-        else { fprintf(stderr, "usage: %s [--seed S] [--starters A,B,C] | --auto N [--first K] [--jobs J] [--verbose] [--save-test]  [--locales DIR]\n", argv[0]); return 2; }
+        else { fprintf(stderr, "usage: %s [--seed S] [--starters A,B,C] | --auto N [--first K] [--jobs J] [--verbose] [--save-test] [--ask-switch] [--locales DIR]\n", argv[0]); return 2; }
     }
     if (autos > 0) return soak(autos, first, jobs < 1 ? 1 : jobs, verbose, timeout);
     return play(seed, starters);

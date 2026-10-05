@@ -6,6 +6,59 @@
 
 static gc_mon *pm(gc_run *run, int idx) { return &run->party[idx]; }
 
+/* The battle is won: what VictoryPhase queues after the BattleEndPhase it pushes (battle-core's pr_continue
+ * pushed that one, and the turn's rest ran before it). Reached when battle-core stops at that BattleEndPhase. */
+static void queue_battle_end(gc_run *run)
+{
+    gc_internal *in = gc_int(run);
+    if (gc_rq_has(run, RP_TRAINER_VICTORY)) return;   /* upstream's "temporary hotfix": hasPhaseOfType("TrainerVictoryPhase") */
+    gc_rq_push(run, gc_rp(RP_BATTLE_END, 1, 0, 0));
+    if (run->battle_type == BATTLE_TYPE_TRAINER) gc_rq_push(run, gc_rp(RP_TRAINER_VICTORY, 0, 0, 0));
+    const int mode = run->run.mode, wave = run->wave;
+    const bool endless = mode == GAME_MODES_ENDLESS || mode == GAME_MODES_SPLICED_ENDLESS;
+    const bool classic = mode == GAME_MODES_CLASSIC;
+    if (endless || !pr_run_is_wave_final(mode, wave)) {
+        /* EggLapsePhase: increment egg hatch step counters */
+        if (run->sys) {
+            gc_system_increment_egg_steps(run->sys);
+        }
+        if (classic && wave == 165) {
+            gc_rphase p = gc_rp(RP_MODIFIER_REWARD, 0, 0, 0); p.key = "LOCK_CAPSULE"; gc_rq_push(run, p);
+        }
+        if (wave % 10) {
+            gc_rq_push(run, gc_rp(RP_SELECT_MODIFIER, 0, 0, 0));
+        } else if (mode == GAME_MODES_DAILY) {
+            gc_rphase p = gc_rp(RP_MODIFIER_REWARD, 0, 0, 0); p.key = "EXP_CHARM"; gc_rq_push(run, p);
+            if (wave > 10 && !pr_run_is_wave_final(mode, wave)) { p.key = "GOLDEN_POKEBALL"; gc_rq_push(run, p); }
+        } else {
+            const int super_exp_wave = endless ? 10 : run->run.offset_gym ? 0 : 20;
+            gc_rphase p = gc_rp(RP_MODIFIER_REWARD, 0, 0, 0);
+            if (endless && wave == 10) { p.key = "EXP_SHARE"; gc_rq_push(run, p); }
+            if (classic && wave == 10) { p.key = "EXP_CHARM"; gc_rq_push(run, p); }
+            if (wave <= 750 && (wave <= 500 || wave % 30 == super_exp_wave)) {
+                p.key = wave % 30 != super_exp_wave || wave > 250 ? "EXP_CHARM" : "SUPER_EXP_CHARM";
+                gc_rq_push(run, p);
+            }
+            if (wave <= 150 && !(wave % 50)) { p.key = "GOLDEN_POKEBALL"; gc_rq_push(run, p); }
+            if (endless && !(wave % 50)) {
+                int vtype = wave % 250 ? GC_VOUCHER_PLUS : GC_VOUCHER_PREMIUM;
+                p.key = wave % 250 ? "VOUCHER_PLUS" : "VOUCHER_PREMIUM";
+                gc_rq_push(run, p);
+                if (run->sys) {
+                    gc_system_add_voucher_count(run->sys, vtype, 1);
+                }
+            }
+        }
+        if (gc_is_new_biome(run, wave)) gc_rq_push(run, gc_rp(RP_SELECT_BIOME, 0, 0, 0));
+        gc_rq_push(run, gc_rp(RP_NEW_BATTLE, 0, 0, 0));
+    } else {
+        run->battle_type = BATTLE_TYPE_CLEAR;
+        run->score += pr_run_get_clear_score_bonus(&run->run);
+        gc_rq_push(run, gc_rp(RP_GAME_OVER, 1, 0, 0));
+    }
+    (void)in;
+}
+
 /* battle-core stopped: queue what upstream would run next */
 static void after_stop(gc_run *run, int stop)
 {
@@ -17,28 +70,32 @@ static void after_stop(gc_run *run, int stop)
         if (run->eng.awaiting_pick) gc_rq_unshift(run, gc_rp(RP_SWITCH, 0, 0, 0));
         break;
     case PH_VICTORY: {
-        if (gc_battle_turn_tail_lost(run)) gc_stub(run, GC_STUB_TURN_TAIL);
+        /* an enemy fainted (or was caught): its VictoryPhase, with the experience, then the rest of the turn.
+         * A trainer's next Pokemon is battle-core's: FaintPhase pushed its SwitchSummonPhase, which pr_continue
+         * runs where upstream does, after the turn's end-of-turn phases. */
         const pr_pokemon *p = run->bt.field[run->eng.stop_phase.battler >= 0 ? run->eng.stop_phase.battler : 2];
         int idx = -1;
         for (int i = 0; i < run->n_enemy; i++) if (&run->enemy[i].b == p) idx = i;
         gc_rq_unshift(run, gc_rp(RP_VICTORY, idx, 0, 0));
-        /* FaintPhase: a trainer with Pokemon left pushes the SwitchSummonPhase that sends the next one */
-        if (run->battle_type == BATTLE_TYPE_TRAINER) {
-            bool reserve = false;
-            for (int i = 0; i < run->n_enemy; i++) reserve |= run->enemy[i].b.hp > 0 && !run->enemy[i].b.on_field;
-            if (reserve) gc_rq_push(run, gc_rp(RP_TRAINER_NEXT, 0, 0, 0));
-        }
+        in->battle_won = true;
         break;
     }
     case PH_GAME_OVER:
-        if (gc_battle_turn_tail_lost(run)) gc_stub(run, GC_STUB_TURN_TAIL);
+        /* GameOverPhase is unshifted: the rest of the turn never runs, upstream ends the run there */
         gc_rq_clear(run);
         gc_rq_unshift(run, gc_rp(RP_GAME_OVER, 0, 0, 0));
         break;
-    case PH_BATTLE_END: case PH_SELECT_MODIFIER: case PH_SELECT_BIOME: case PH_NEW_BATTLE:
-        /* the wild Pokemon left the field (Roar, Whirlwind, Emergency Exit...): BattleEndPhase(false),
+    case PH_BATTLE_END:
+        /* after a VictoryPhase it is the victory's BattleEndPhase, followed by the wave's rewards */
+        if (in->battle_won) {
+            in->battle_won = false;
+            queue_battle_end(run);
+            break;
+        }
+        /* else the wild Pokemon left the field (Roar, Whirlwind, Emergency Exit...): BattleEndPhase(false),
          * then the next wave */
-        if (gc_battle_turn_tail_lost(run)) gc_stub(run, GC_STUB_TURN_TAIL);
+        /* fall through */
+    case PH_SELECT_MODIFIER: case PH_SELECT_BIOME: case PH_NEW_BATTLE:
         gc_rq_push(run, gc_rp(RP_BATTLE_END, 0, 0, 0));
         if (gc_is_new_biome(run, run->wave)) gc_rq_push(run, gc_rp(RP_SELECT_BIOME, 0, 0, 0));
         gc_rq_push(run, gc_rp(RP_NEW_BATTLE, 0, 0, 0));
@@ -46,13 +103,11 @@ static void after_stop(gc_run *run, int stop)
     default:
         break;
     }
-    (void)in;
 }
 
 /* ---- VictoryPhase ---- */
 static void victory(gc_run *run, int enemy_idx)
 {
-    gc_internal *in = gc_int(run);
     pr_battle *bt = &run->bt;
     if (enemy_idx >= 0) {
         gc_mon *e_mon = &run->enemy[enemy_idx];
@@ -132,58 +187,6 @@ static void victory(gc_run *run, int enemy_idx)
             gc_rq_unshift(run, p);
         }
     }
-
-    /* no enemy left: a wild battle's are all off the field, a trainer's all fainted */
-    for (int i = 0; i < run->n_enemy; i++) {
-        const pr_pokemon *e = &run->enemy[i].b;
-        if (run->battle_type == BATTLE_TYPE_WILD ? e->on_field : e->hp > 0) return;
-    }
-    if (gc_rq_has(run, RP_TRAINER_VICTORY)) return;
-    gc_rq_push(run, gc_rp(RP_BATTLE_END, 1, 0, 0));
-    if (run->battle_type == BATTLE_TYPE_TRAINER) gc_rq_push(run, gc_rp(RP_TRAINER_VICTORY, 0, 0, 0));
-    const int mode = run->run.mode, wave = run->wave;
-    const bool endless = mode == GAME_MODES_ENDLESS || mode == GAME_MODES_SPLICED_ENDLESS;
-    const bool classic = mode == GAME_MODES_CLASSIC;
-    if (endless || !pr_run_is_wave_final(mode, wave)) {
-        /* EggLapsePhase: increment egg hatch step counters */
-        if (run->sys) {
-            gc_system_increment_egg_steps(run->sys);
-        }
-        if (classic && wave == 165) {
-            gc_rphase p = gc_rp(RP_MODIFIER_REWARD, 0, 0, 0); p.key = "LOCK_CAPSULE"; gc_rq_push(run, p);
-        }
-        if (wave % 10) {
-            gc_rq_push(run, gc_rp(RP_SELECT_MODIFIER, 0, 0, 0));
-        } else if (mode == GAME_MODES_DAILY) {
-            gc_rphase p = gc_rp(RP_MODIFIER_REWARD, 0, 0, 0); p.key = "EXP_CHARM"; gc_rq_push(run, p);
-            if (wave > 10 && !pr_run_is_wave_final(mode, wave)) { p.key = "GOLDEN_POKEBALL"; gc_rq_push(run, p); }
-        } else {
-            const int super_exp_wave = endless ? 10 : run->run.offset_gym ? 0 : 20;
-            gc_rphase p = gc_rp(RP_MODIFIER_REWARD, 0, 0, 0);
-            if (endless && wave == 10) { p.key = "EXP_SHARE"; gc_rq_push(run, p); }
-            if (classic && wave == 10) { p.key = "EXP_CHARM"; gc_rq_push(run, p); }
-            if (wave <= 750 && (wave <= 500 || wave % 30 == super_exp_wave)) {
-                p.key = wave % 30 != super_exp_wave || wave > 250 ? "EXP_CHARM" : "SUPER_EXP_CHARM";
-                gc_rq_push(run, p);
-            }
-            if (wave <= 150 && !(wave % 50)) { p.key = "GOLDEN_POKEBALL"; gc_rq_push(run, p); }
-            if (endless && !(wave % 50)) {
-                int vtype = wave % 250 ? GC_VOUCHER_PLUS : GC_VOUCHER_PREMIUM;
-                p.key = wave % 250 ? "VOUCHER_PLUS" : "VOUCHER_PREMIUM";
-                gc_rq_push(run, p);
-                if (run->sys) {
-                    gc_system_add_voucher_count(run->sys, vtype, 1);
-                }
-            }
-        }
-        if (gc_is_new_biome(run, wave)) gc_rq_push(run, gc_rp(RP_SELECT_BIOME, 0, 0, 0));
-        gc_rq_push(run, gc_rp(RP_NEW_BATTLE, 0, 0, 0));
-    } else {
-        run->battle_type = BATTLE_TYPE_CLEAR;
-        run->score += pr_run_get_clear_score_bonus(&run->run);
-        gc_rq_push(run, gc_rp(RP_GAME_OVER, 1, 0, 0));
-    }
-    (void)in;
 }
 
 /* ---- ExpPhase / ShowPartyExpBarPhase ---- */
@@ -536,7 +539,19 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         return false;
     case RP_VICTORY:
         victory(run, p->a);
+        /* VictoryPhase.end(): the experience phases it unshifted run first, then the turn goes on where the
+         * faint interrupted it */
+        gc_rq_unshift(run, gc_rp(RP_CONTINUE, 0, 0, 0));
         return true;
+    case RP_CONTINUE:
+        after_stop(run, gc_battle_continue(run));
+        return true;
+    case RP_CHECK_SWITCH: {
+        gc_screen *s = &run->screen;
+        memset(s, 0, sizeof *s);
+        s->kind = GC_SCREEN_CHECK_SWITCH;
+        return false;
+    }
     case RP_EXP:
         exp_phase(run, p);
         return true;
@@ -549,9 +564,6 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         return evolution_start(run, p);
     case RP_REWARD_FORM:
         gc_reward_change_form(run, p->a, p->b);
-        return true;
-    case RP_TRAINER_NEXT:
-        gc_battle_trainer_next(run);
         return true;
     case RP_BATTLE_END:
         battle_end(run, p);
@@ -684,6 +696,12 @@ bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char *
         }
         *why = "evolve or cancel";
         return false;
+    case RP_CHECK_SWITCH:
+        if (c->kind != GC_CH_CONFIRM || (c->a != 0 && c->a != 1)) { *why = "answer yes or no"; return false; }
+        *ok = true;
+        /* yes: SwitchPhase(INITIAL_SWITCH) opens the party screen (a stop at PH_SWITCH), no: the encounter goes on */
+        after_stop(run, gc_battle_answer_switch(run, c->a == 1));
+        return true;
     case RP_SELECT_MODIFIER:
         return select_modifier_choose(run, p, c, why, ok);
     case RP_SELECT_BIOME:

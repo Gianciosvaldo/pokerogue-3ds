@@ -28,7 +28,8 @@ for (;;) {
 }
 ```
 
-Screens: starters, command (Fight / Pokémon; Ball and Run come with catching), switch, learn move,
+Screens: starters, command (Fight / Pokémon; Ball and Run come with catching), switch, check switch
+("Will you switch?", only with `run->ask_switch`), learn move,
 evolve, reward (options, shop, reroll, skip), biome (with a Map), game over, clear. The app may read the
 party, money, wave, biome and the battle's field straight from `gc_run`, but must not change them.
 `party[]` never moves: an index in an event or a choice always means the same Pokémon, and
@@ -41,6 +42,29 @@ battle-core's `pr_event` list (`pr/events.h`), handed over as one `GC_EV_BATTLE`
 `run->battle_events` (valid until the next `gc_run_choose`). The app plays both the same way. Some of
 upstream's texts carry its control codes (`@d{15}` waits, `@s{se/pb_bounce_1}` plays a sound, as in
 the "1, 2, and… Poof!" of a forgotten move): the app acts on them rather than printing them.
+
+### A turn, from its start to the next command
+
+`gc_run_choose` on a Fight runs battle-core's turn (`pr_run_turn`) up to its next stop. When an enemy
+faints, battle-core stops at the VictoryPhase with the rest of the turn still queued; game-core gives out the
+experience (`RP_VICTORY`, `RP_EXP`, level ups, new moves, evolutions) and then lets the engine carry on
+(`RP_CONTINUE`, battle-core's `pr_continue`): the other moves, the turn's end-of-turn effects (burn damage,
+weather, berries), and, at a trainer's, the next Pokémon, which battle-core's own SwitchSummonPhase sends out
+with the slot `Trainer.getNextSummonIndex` gives (ai-core's `pr_ai_next_summon_index`, through the
+`next_summon_index` callback). When no enemy is left, `pr_continue` ends in the BattleEndPhase stop and the
+wave's chain (trainer victory, money, rewards, the biome, the next battle) follows. A fainted player lead gets
+the replacement prompt (a SWITCH screen that can't be skipped) after the trainer's next Pokémon is out. The
+enemy's own switch-out (ai-core's COMMAND_POKEMON) is left in the battle's commands and battle-core's
+TurnStartPhase runs it before the moves.
+
+A wild battle's start (battle-core's `pr_start_battle`) stops at CheckSwitchPhase only in the SWITCH battle
+style. game-core's default is the SET style (`run->ask_switch = false`: no question, the start is carried
+through at once, the enemy's and the player's entry phases included). With `run->ask_switch = true` (a setting
+the app sets after `gc_run_new` and `gc_run_load`, not saved) the run waits on a `GC_SCREEN_CHECK_SWITCH`
+screen, answered with `GC_CH_CONFIRM` (`a` = 1 yes, 0 no); yes opens the SWITCH screen (which can be
+cancelled), no goes on to the first command. Pinned upstream asks nothing at a trainer's next Pokémon:
+`CheckSwitchPhase` is pushed only for a battle that isn't a trainer's (`encounter-phase.ts`), the title's
+continue, a mystery encounter and the game over's retry.
 
 ## Saving
 
@@ -98,11 +122,10 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 | Stand-in | Waits on |
 |---|---|
 | Enemy moveset: the last four level moves | run-core |
-| A trainer's switch-out picked by the AI does nothing (the enemy loses its turn) | battle-core: the enemy side's SwitchSummonPhase |
 | A reward taken that isn't a ball, Full Heal, Rare Candy, held item or one of the healing, revive and PP items Task 60 ported (TMs, Memory Mushroom, Mints, money, vouchers, evolution items, DNA Splicers, Rarer Candy) is added to the items and counted (`reward taken without its own effect`) | later reward tasks |
 | Double battles are played as singles (M1 rule) | doubles in battle-core |
 | Mystery encounters and fixed classic battles (rival, evil team, gyms run-core can't make) become wild battles of the wave's level | run-core, later the encounters |
-| The rest of a turn after a victory (end-of-turn effects) is lost | battle-core: carry on past a stop |
+| In a wave whose number is a multiple of 10, once every enemy has fainted, upstream's CheckInterludePhase (`onInterlude`) drops the rest of that turn's weather, berry and status-effect phases and flags the TurnEndPhase; battle-core has it unported (`(phase CheckInterludePhase)` in the soak's unported list: 218 of 1000 runs), so those effects run | battle-core: CheckInterludePhase |
 | No weather roll for a new biome | port of `getRandomWeatherType` |
 | Evolution conditions on items, held items or the dex aren't met | reward-core, the dex |
 | No catching or fleeing | battle-core (AttemptCapturePhase, AttemptRunPhase) |
@@ -110,7 +133,7 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 | A trainer's name in a message goes without its title ("Aaron would like to battle!" for "Ace Trainer Aaron would like to battle!") | battle-core: a message argument made of several locale keys |
 | Pickup, Honey Gather, Pay Day, lapsing items | reward-core |
 
-Not started: the dex and starter unlocks, eggs, the "Will you switch?" prompt at a trainer's new Pokémon, Imprison and the
+Not started: the dex and starter unlocks, eggs, Imprison and the
 restriction texts of their own (a restricted move answers `battle:moveCannotBeSelected` until
 battle-core's `pr_move_usable` lands), the trainer config's boss flag and Terastallization for the fixed
 battles' trainers, form learnsets for level-up learning (`gc_level_up_moves`; the TM and Memory Mushroom
