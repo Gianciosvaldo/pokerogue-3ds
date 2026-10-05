@@ -19,6 +19,43 @@ static struct {
   bool open;
 } S;
 
+/* Converts gc_mon to menu_mon for item menus */
+static void gc_to_menu_mon(const gc_mon* gm, menu_mon* m) {
+  memset(m, 0, sizeof *m);
+  const pr_pokemon* p = &gm->b;
+  m->species = p->species;
+  m->form = p->form;
+  m->gender = p->gender;
+  m->shiny = p->shiny;
+  snprintf(m->name, sizeof m->name, "%s", i18n_species_name(p->species));
+  m->level = p->level;
+  m->hp = p->hp > 0 ? (uint32_t)p->hp : 0;
+  m->max_hp = (uint32_t)p->stats[STAT_HP];
+  m->status = p->status;
+  for (int i = 0; i < p->n_moves && i < 4; i++) {
+    int max = p->max_pp_override[i] >= 0 ? p->max_pp_override[i] : pr_moves[p->moves[i]].pp;
+    m->moves[i] = (menu_move){p->moves[i], p->pp_used[i], (uint8_t)max, false, 0};
+  }
+  m->nmoves = p->n_moves;
+  m->allowed_in_battle = true;
+  int8_t types[PR_MAX_TYPES];
+  int nt = pr_get_types(p, types, 0);
+  m->types[0] = nt > 0 ? types[0] : 0;
+  m->types[1] = nt > 1 ? types[1] : -1;
+  m->ability = p->ability;
+  m->passive = p->passive;
+  m->has_passive = p->passive_flag;
+  m->nature = p->nature;
+  for (int i = 0; i < 6; i++) {
+    m->stats[i] = (uint32_t)p->stats[i];
+    m->ivs[i] = p->ivs[i];
+  }
+  m->friendship = p->friendship;
+  m->tera_type = p->tera_type;
+  m->met_biome = -1;
+  m->met_level = p->level;
+}
+
 /* battle-core's Pokemon as the menus show it */
 static void ps_menu_mon(const pr_battle* bt, const pr_pokemon* p, menu_mon* m) {
   (void)bt;
@@ -157,6 +194,56 @@ void ps_close(void) {
   summary_close();
   party_close();
   if (ui_top() == &g_screen) ui_pop();
+}
+
+static struct {
+  void (*on_item_pick)(int slot, int move_slot, void* arg);
+  void* item_arg;
+  bool target_move;
+} ItemS;
+
+static void on_item_select(void* ctx, int slot, int option) {
+  (void)ctx;
+  if (option == PO_CANCEL) {
+    if (ItemS.on_item_pick) ItemS.on_item_pick(6, -1, ItemS.item_arg);
+    return;
+  }
+  if (option >= PO_MOVE_1 && option <= PO_MOVE_4) {
+    int move_idx = option - PO_MOVE_1;
+    if (ItemS.on_item_pick) ItemS.on_item_pick(slot, move_idx, ItemS.item_arg);
+    return;
+  }
+  if (ItemS.on_item_pick) ItemS.on_item_pick(slot, -1, ItemS.item_arg);
+}
+
+void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, void (*on_pick)(int slot, int move_slot, void* arg), void* arg) {
+  const gc_run* run = (const gc_run*)gc_run_ptr;
+  memset(&S, 0, sizeof S);
+  memset(&ItemS, 0, sizeof ItemS);
+  S.mode = (party_mode)pmode;
+  ItemS.on_item_pick = on_pick;
+  ItemS.item_arg = arg;
+  ItemS.target_move = target_move;
+
+  if (run) {
+    for (int i = 0; i < run->n_party && i < PR_MAX_PARTY; i++) {
+      gc_to_menu_mon(&run->party[i], &S.party[i]);
+    }
+    S.n = run->n_party;
+  }
+
+  party_args a;
+  memset(&a, 0, sizeof a);
+  a.mode = S.mode;
+  a.battler_count = 1;
+  a.in_reward_phase = true;
+  a.show_move_pp = target_move;
+
+  static party_events ev;
+  ev = (party_events){on_item_select, NULL, NULL, NULL, NULL, on_summary, NULL};
+  party_open(&a, S.party, S.n, &ev);
+  S.open = true;
+  ui_push(&g_screen);
 }
 
 /* ---- the learn-move dialog ---- */
