@@ -35,7 +35,7 @@ enum {
     RP_SWITCH_BIOME,     /* SwitchBiomePhase: a = biome */
     RP_PARTY_HEAL,       /* PartyHealPhase */
     RP_GAME_OVER,        /* GameOverPhase: a = victory; waits on GAME_OVER / CLEAR */
-    RP_PARTY_SWAP,       /* PartySwapPhase: a = enemy party index of caught mon */
+    RP_CATCH,            /* AttemptCapturePhase.catch() after the roll: a = enemy index, b = ball; waits on SWITCH when the party is full */
     RP_MYSTERY,          /* MysteryEncounterPhase: a = selected type, b = selected tier */
     RP_REWARD_FORM,      /* bounded FormChangePhase: a = storage party index, b = target form */
     RP_COUNT_
@@ -85,6 +85,7 @@ typedef struct {
     double last_max_exp_level;  /* getMaxExpLevel() when it ended, for LevelCapPhase */
     bool pending_trainer_victory;
     bool battle_won;            /* a VictoryPhase has run in this battle: its BattleEndPhase is the victory's */
+    uint8_t thrown_ball;        /* the PokeballType of the last ball command: the one a catch is made with */
     bool pending_me_miss;       /* EncounterPhase increments spawn chance after the save point */
     bool at_save_point;         /* from GC_EV_SAVE_POINT until the battle's first turn runs (gc_run_can_save) */
     /* gc_trainer_names' ring: run->trainer_names' texts, gc_m_trainer's key for each and whether that
@@ -181,6 +182,11 @@ void gc_reward_change_form(gc_run *run, int party, int form);
 int gc_item_stack(const gc_run *run, const char *key);                 /* stack count of a player item, 0 = none */
 void gc_item_add(gc_run *run, const char *key, int16_t arg, uint32_t pokemon_id, int stack);
 void gc_item_remove_at(gc_run *run, int idx);
+/* The enemy's held items (the modifiers with a Pokemon) and the player's, as catching moves them. Each rebuilds
+ * battle-core's modifier lists (gc_items_to_battle) from the lists as they stand. */
+void gc_items_take_enemy_held(gc_run *run);      /* addToParty: findModifiers(held, false) -> addModifier: onto the player's list */
+void gc_items_drop_enemy_held(gc_run *run);      /* clearEnemyHeldItemModifiers() */
+void gc_items_drop_held_of(gc_run *run, uint32_t pokemon_id);   /* removePartyMemberModifiers: a released member's */
 int gc_item_remove_stacks(gc_run *run, const char *key, int count);
 void gc_items_from_battle(gc_run *run); /* persist consumed berries/White Herb */
 void gc_items_to_battle(gc_run *run);                                  /* the player's and the enemy's lists into bt->mods */
@@ -220,6 +226,14 @@ int gc_player_active_index(const gc_run *run);
 bool gc_battle_queued_command(gc_run *run);       /* a move locked in by the last turn: no COMMAND screen */
 int gc_battle_slot_of(const gc_run *run, int party_index);   /* upstream party slot of party[i] */
 void gc_sync_party_order(gc_run *run);            /* party_order from battle-core's party list */
+
+/* ---- catching (src/gc_catch.c) ---- */
+/* CommandPhase.checkCanUseBall + handleBallCommand's boss rule: NULL = this ball may be thrown now, else the locale
+ * key of the text upstream shows instead */
+const char *gc_catch_ball_refusal(const gc_run *run, int ball);
+bool gc_catch_is_catch(const gc_run *run, int enemy_idx);   /* at a stop for a VictoryPhase: the enemy was caught, not fainted */
+bool gc_catch_start(gc_run *run, gc_rphase *p);
+bool gc_catch_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char **why, bool *ok);
 
 /* run-phase handlers (src/gc_phases.c): return true when the phase is done, false when it waits on a screen */
 bool gc_phase_start(gc_run *run, gc_rphase *p);

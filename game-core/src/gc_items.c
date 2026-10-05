@@ -161,3 +161,41 @@ void gc_items_from_battle(gc_run *run)
         gc_int(run)->battle_item_count[side] = tracked - removed;
     }
 }
+
+/* ---- catching: the held items change hands (gc_catch.c) ---- */
+
+/* The entries of one side that are held items (they carry a Pokemon's id): all of them, or one Pokemon's */
+static void drop_held(gc_run *run, int side, uint32_t id, bool all)
+{
+    gc_item *items = side ? run->enemy_items : run->items;
+    int *n = side ? &run->n_enemy_items : &run->n_items;
+    int w = 0;
+    for (int i = 0; i < *n; i++) {
+        if (items[i].pokemon_id && (all || items[i].pokemon_id == id)) continue;
+        items[w++] = items[i];
+    }
+    memset(&items[w], 0, (size_t)(*n - w) * sizeof *items);
+    *n = w;
+}
+
+/* addToParty: every enemy held item is added to the player's modifiers (a Pokemon takes its id with it, so they are
+ * the new member's), stacking where the same item is already held */
+void gc_items_take_enemy_held(gc_run *run)
+{
+    for (int i = 0; i < run->n_enemy_items; i++) {
+        const gc_item *it = &run->enemy_items[i];
+        if (it->pokemon_id) gc_item_add(run, it->key, it->arg, it->pokemon_id, it->stack);
+    }
+}
+
+void gc_items_drop_enemy_held(gc_run *run)
+{
+    drop_held(run, 1, 0, true);
+    gc_items_to_battle(run);
+}
+
+void gc_items_drop_held_of(gc_run *run, uint32_t pokemon_id)
+{
+    drop_held(run, 0, pokemon_id, false);
+    gc_items_to_battle(run);
+}

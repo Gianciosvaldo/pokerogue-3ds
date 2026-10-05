@@ -18,7 +18,6 @@ const char *const gc_stub_name[GC_STUB_COUNT_] = {
     [GC_STUB_EVOLUTION] = "evolution condition not checked",
     [GC_STUB_WEATHER] = "biome weather roll",
     [GC_STUB_UNPORTED_ENEMY] = "enemy run-core can't generate (stand-in)",
-    [GC_STUB_CATCH] = "catching",
     [GC_STUB_TRAINER_REWARDS] = "trainer's own rewards",
     [GC_STUB_POST_BATTLE] = "post-battle abilities, Pay Day, lapsing items",
     [GC_STUB_TRAINER_TITLE] = "trainer's name without its title in a message",

@@ -9,6 +9,9 @@ mkdir -p "$BUILD" "$UP/test/tests/zz-dump"
 make -s -C "$HERE" BUILD="$BUILD"
 cp "$HERE/gen/dump-dex.test.ts" "$UP/test/tests/zz-dump/gc-dump-dex.test.ts"
 cp "$HERE/gen/dump-dexupdates.test.ts" "$UP/test/tests/zz-dump/gc-dump-dexupdates.test.ts"
-(cd "$UP" && DEX_DEFAULTS_OUT="$BUILD/gc_dex_defaults.txt" DEX_UPDATES_OUT="$BUILD/gc_dex_updates.txt" npx vitest run test/tests/zz-dump/gc-dump-dex.test.ts test/tests/zz-dump/gc-dump-dexupdates.test.ts >/dev/null)
+cp "$HERE/gen/dump-dexcatch.test.ts" "$UP/test/tests/zz-dump/gc-dump-dexcatch.test.ts"
+(cd "$UP" && DEX_DEFAULTS_OUT="$BUILD/gc_dex_defaults.txt" DEX_UPDATES_OUT="$BUILD/gc_dex_updates.txt" DEX_CATCH_OUT="$BUILD/gc_dex_catch.txt" npx vitest run test/tests/zz-dump/gc-dump-dex.test.ts test/tests/zz-dump/gc-dump-dexupdates.test.ts test/tests/zz-dump/gc-dump-dexcatch.test.ts >/dev/null)
 "$BUILD/dextest" "$BUILD/gc_dex_defaults.txt"
 "$BUILD/dexupdatetest" "$BUILD/gc_dex_updates.txt"
+# card 94: the catch ops (updateSpeciesDexIvs + setPokemonCaught as AttemptCapturePhase.catch() makes them)
+"$BUILD/dexupdatetest" "$BUILD/gc_dex_catch.txt"

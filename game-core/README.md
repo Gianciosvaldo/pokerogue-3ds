@@ -28,7 +28,7 @@ for (;;) {
 }
 ```
 
-Screens: starters, command (Fight / Pokémon; Ball and Run come with catching), switch, check switch
+Screens: starters, command (Fight / Ball / Pokémon; Run comes with fleeing), switch (also the party-full prompt of a catch), check switch
 ("Will you switch?", only with `run->ask_switch`), learn move,
 evolve, reward (options, shop, reroll, skip), biome (with a Map), game over, clear. The app may read the
 party, money, wave, biome and the battle's field straight from `gc_run`, but must not change them.
@@ -83,6 +83,36 @@ never a boss: its shields are cleared and it loses the passive a boss has by bei
 Only wild bosses and mystery encounters' bosses happen in a run today: run-core gives segments to a trainer's
 Pokémon only in the classic rival's fights 5 and 6, and those waves are still wild stand-ins (fixed battles,
 below). `tests/boss_segments_test.c` runs the rival's party through `gc_mon_new_enemy` for that reason.
+
+### Catching
+
+A Ball command (`GC_CH_BALL`, `a` = PokeballType) first asks `gc_catch_ball_refusal` (`src/gc_catch.c`) what upstream's
+`CommandPhase.checkCanUseBall` and `handleBallCommand` ask: a trainer's battle, a mystery encounter that
+doesn't allow it, the final biome's forced-catch and final-boss rules (classic, Fresh Start, endless, daily),
+and a boss that still has a shield (it takes only a Master Ball, and the classic final boss takes none in a run with
+challenges).
+A refusal is the locale key upstream shows (`battle:noPokeballStrong`...). The roll and the ball counts are
+battle-core's `AttemptCapturePhase`; when it stops at its VictoryPhase with the enemy still standing, the run
+queues `RP_CATCH` ahead of the run's own victory, which does what `AttemptCapturePhase.catch()` does after the roll:
+`updateSpeciesDexIvs(getRootSpeciesId(true))` and `setPokemonCaught` (the dex, the species' candy, ability and
+nature, the "added as a starter" message for each newly unlocked species, in a Daily Run candy only for a catch
+that unlocks something), then either `addToParty` (the Pokémon takes the ball, `metLevel`, `metBiome`, `metWave`
+and `metSpecies`, joins as a `PlayerPokemon`, so a caught boss loses its shields and passive, and the enemy's held
+items become the player's) or, with six in the party, the prompt: a SWITCH screen with `can_skip`, where
+`GC_CH_PICK` of a member releases it (the farewell text, its held items go with it, the new Pokémon takes its
+place, in upstream's order including the splice quirk of releasing the last slot) and `GC_CH_PICK` -1 is "No". Either way
+the enemy is removed (HP 0, fainted, its items cleared) and the run's victory follows.
+
+Checked by `make test` (`catch_test`: the rules, every ball type, a full party, a caught boss, the dex, candy and
+items, a save and resume with the new member) and against upstream by two differentials that need an upstream
+checkout at the pinned commit and Node 22: `tools/difftest.sh <upstream>` (the dex side of a catch, 1500 catches
+against `GameData.setPokemonCaught`, the starter messages included) and `tools/catchdiff.sh <upstream> [cases]
+[rule states] [seed]` (3000 states of the ball rules against the real `handleBallCommand`, and wild battles with a
+ball thrown through the real command UI, a full party answered through the real option menu and party screen:
+the party, items, ball counts, dex, candy, messages and RNG compared field by field). The upstream test harness
+skips the shake rolls (every throw catches), so the producer only makes throws the formula guarantees (a Master
+Ball, or a modified catch rate of 255 or more); the roll itself is battle-core's differential. It also leaves out
+waves that are a multiple of 10: the harness stops before the boss wave's rewards, which card 93 covers.
 
 ## Saving
 
@@ -147,7 +177,9 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 | In a wave whose number is a multiple of 10, once every enemy has fainted, upstream's CheckInterludePhase (`onInterlude`) drops the rest of that turn's weather, berry and status-effect phases and flags the TurnEndPhase; battle-core has it unported (`(phase CheckInterludePhase)` in the soak's unported list: 218 of 1000 runs), so those effects run | battle-core: CheckInterludePhase |
 | No weather roll for a new biome | port of `getRandomWeatherType` |
 | Evolution conditions on items, held items or the dex aren't met | reward-core, the dex |
-| No catching or fleeing | battle-core (AttemptCapturePhase, AttemptRunPhase) |
+| No fleeing (the Run command is refused) | battle-core (AttemptRunPhase), Task 77 |
+| A catch doesn't count `gameStats`, validate achievements (hidden ability, shiny party, legendary...) or run `Pokemon.addToParty`'s form change trigger; the Limited Catch challenge (`POKEMON_ADD_TO_PARTY`) isn't ported | later cards |
+| The shake rolls are battle-core's, and by reading they differ from upstream's critical-capture chance (`getCriticalCaptureChance`): battle-core's multiplier is 2.5 in a Daily Run and 0 otherwise, where upstream's grows with the species caught (0 to 2.5) and with a Catching Charm, and battle-core gives any Challenge Mode run 0 where upstream does for the Fresh Start challenge only. Not checked by a differential: the upstream test harness skips the rolls. A caught boss's score has the missing multiplier (the row above) | battle-core |
 | A trainer's own rewards (the config's reward items, a boss's voucher) aren't given | reward-core |
 | A trainer's name in a message goes without its title ("Aaron would like to battle!" for "Ace Trainer Aaron would like to battle!") | battle-core: a message argument made of several locale keys |
 | Pickup, Honey Gather, Pay Day, lapsing items | reward-core |

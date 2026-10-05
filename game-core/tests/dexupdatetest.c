@@ -2,6 +2,8 @@
  * Differential test for game-core's Dex updates logic.
  * Compares C system data state against upstream GameData after random operations.
  * Usage: dexupdatetest <updates_file>
+ * Reads the dumps of gen/dump-dexupdates.test.ts and gen/dump-dexcatch.test.ts (card 94: OP_CATCH, the dex, candy
+ * and IV side of a catch, and the "added as a starter" messages it shows, OP_MSG).
  */
 #include "gc/system.h"
 #include "gc/run.h"
@@ -11,6 +13,9 @@
 #include <string.h>
 
 static gc_system sys;
+
+/* the species whose "added as a starter" message the last OP_CATCH showed, in order */
+static gc_caught_report last_report;
 
 int main(int argc, char **argv) {
     const char *filepath = (argc > 1) ? argv[1] : "/tmp/gc_dex_updates.txt";
@@ -32,6 +37,7 @@ int main(int argc, char **argv) {
     int species_compared = 0;
     int starters_compared = 0;
     int mismatches = 0;
+    int messages_compared = 0;
 
     while (fgets(line, sizeof(line), f)) {
         if (strncmp(line, "OP_SEEN ", 8) == 0) {
@@ -77,6 +83,53 @@ int main(int argc, char **argv) {
                 m.b.nature = (uint8_t)nature;
                 gc_system_set_pokemon_caught(&sys, &m, false, false);
                 ops_executed++;
+            }
+        } else if (strncmp(line, "OP_UNLOCK_SPECIES ", 18) == 0) {
+            unsigned int species;
+            uint64_t attr;
+            if (sscanf(line + 18, "%u %" SCNu64, &species, &attr) == 2 && species <= GC_MAX_SPECIES_ID) {
+                sys.dex[species].caught_attr = attr;
+                ops_executed++;
+            }
+        } else if (strncmp(line, "OP_CATCH ", 9) == 0) {
+            unsigned int species, form, shiny, variant, ability_idx, nature, daily, boss, ivs[6];
+            int gender;
+            if (sscanf(line + 9, "%u %u %d %u %u %u %u %u %u %u %u %u %u %u %u", &species, &form, &gender, &shiny, &variant,
+                       &ability_idx, &nature, &daily, &boss, &ivs[0], &ivs[1], &ivs[2], &ivs[3], &ivs[4], &ivs[5]) == 15) {
+                gc_mon m;
+                memset(&m, 0, sizeof(m));
+                m.b.species = (uint16_t)species;
+                m.b.form = (uint8_t)form;
+                m.b.gender = (int8_t)gender;
+                m.b.shiny = (bool)shiny;
+                m.variant = (uint8_t)variant;
+                m.ability_index = (uint8_t)ability_idx;
+                m.b.nature = (uint8_t)nature;
+                m.b.is_boss = (bool)boss;
+                for (int k = 0; k < 6; k++) m.b.ivs[k] = (uint8_t)ivs[k];
+                /* AttemptCapturePhase.catch(): the IVs of the species' root, then setPokemonCaught(pokemon) */
+                gc_system_update_species_dex_ivs(&sys, gc_species_root_for_starter((uint16_t)species), m.b.ivs);
+                gc_system_set_pokemon_caught_ex(&sys, &m, true, false, true, (bool)daily, &last_report);
+                ops_executed++;
+            }
+        } else if (strncmp(line, "OP_MSG ", 7) == 0) {
+            int n = 0, off = 0;
+            if (sscanf(line + 7, "%d%n", &n, &off) >= 1) {
+                bool same = n == last_report.n_started;
+                for (int k = 0; k < n; k++) {
+                    int id = -2, used = 0;
+                    if (sscanf(line + 7 + off, "%d%n", &id, &used) != 1) { same = false; break; }
+                    off += used;
+                    if (k >= last_report.n_started || last_report.started[k] != id) same = false;
+                }
+                if (!same) {
+                    fprintf(stderr, "OP_MSG mismatch after op %d: UP %s", ops_executed, line + 7);
+                    fprintf(stderr, "  C started %d:", last_report.n_started);
+                    for (int k = 0; k < last_report.n_started; k++) fprintf(stderr, " %u", last_report.started[k]);
+                    fprintf(stderr, "\n");
+                    mismatches++;
+                }
+                messages_compared++;
             }
         } else if (strncmp(line, "OP_FRIENDSHIP ", 13) == 0) {
             unsigned int species, capped;
@@ -170,13 +223,22 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "STARTER %u friendship mismatch: C=%u UP=%" PRIu32 "\n", id, s->friendship, friendship);
                 mismatches++;
             }
+            /* card 94: what a catch must leave alone (egg moves, passives, cost reduction, the moveset, ribbons) */
+            if (s->passive_attr != passive_attr || s->value_reduction != value_reduction || s->egg_moves != (uint8_t)egg_moves
+                || s->moveset[0] != m0 || s->moveset[1] != m1 || s->moveset[2] != m2 || s->moveset[3] != m3
+                || s->classic_win_count != classic_win) {
+                fprintf(stderr, "STARTER %u egg moves/passives/moveset/wins differ from upstream (egg moves C=%u UP=%u)\n", id, s->egg_moves, egg_moves);
+                mismatches++;
+            }
         }
     }
 
     fclose(f);
 
-    printf("dexupdatetest: executed %d operations, compared %d species and %d starters. Mismatches: %d\n",
-           ops_executed, species_compared, starters_compared, mismatches);
+    printf("dexupdatetest: executed %d operations, compared %d species and %d starters", ops_executed, species_compared,
+           starters_compared);
+    if (messages_compared) printf(" and the starter messages of %d catches", messages_compared);
+    printf(". Mismatches: %d\n", mismatches);
 
     return mismatches > 0 ? 1 : 0;
 }

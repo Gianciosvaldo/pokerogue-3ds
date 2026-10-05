@@ -92,12 +92,26 @@ void gc_system_init_defaults(gc_system *sys);
 
 /* Dex and starter data helpers */
 uint64_t gc_mon_dex_attr(const gc_mon *m);
+/* the dex attributes a species can ever unlock (the mask setPokemonSpeciesCaught ANDs a catch with) */
+uint64_t gc_species_full_unlocks_data(uint16_t species_id);
 int16_t gc_species_prevolution(uint16_t species_id);
 uint16_t gc_species_root_id(uint16_t species_id);
+/* PokemonSpecies.getRootSpeciesId(true): stops at the first starter on the way down */
+uint16_t gc_species_root_for_starter(uint16_t species_id);
 int getStarterValueFriendshipCap(int starter_cost);
 
 void gc_system_set_pokemon_seen(gc_system *sys, const gc_mon *m, bool increment_count, bool trainer);
 bool gc_system_set_pokemon_caught(gc_system *sys, const gc_mon *m, bool increment_count, bool from_egg);
+/* gameData.setPokemonCaught(pokemon, incrementCount, fromEgg, showMessage) for a catch: `show_message` is
+ * upstream's own argument (a new starter's "added as a starter" message, then its prevolution), `daily` the Daily
+ * Run's candy rule. Every species the message is for goes in `report`, in the order it shows. */
+#define GC_CAUGHT_STARTED_MAX 8
+typedef struct {
+    uint16_t started[GC_CAUGHT_STARTED_MAX];
+    int n_started;
+} gc_caught_report;
+bool gc_system_set_pokemon_caught_ex(gc_system *sys, const gc_mon *m, bool increment_count, bool from_egg,
+                                     bool show_message, bool daily, gc_caught_report *report);
 void gc_system_update_species_dex_ivs(gc_system *sys, uint16_t species_id, const uint8_t ivs[6]);
 bool gc_system_add_starter_candy(gc_system *sys, uint16_t species_id, int32_t count);
 void gc_system_add_friendship(gc_system *sys, const gc_run *run, gc_mon *m, int friendship, bool capped);

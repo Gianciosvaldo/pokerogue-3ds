@@ -3,9 +3,9 @@
  * TurnInitPhase's bookkeeping, the player's CommandPhase, the turn itself and the switch prompts.
  *
  * Singles only. What this layer leaves out is counted in run->stubs or comes back from battle-core as
- * unported: catching and fleeing. The enemy's commands, the command restrictions and trapping come
- * from ai-core, and so does the trainer's pick of its next Pokemon (next_summon_cb), which
- * battle-core's own SwitchSummonPhase asks for. */
+ * unported: fleeing (catching is src/gc_catch.c; its roll is battle-core's). The enemy's commands, the
+ * command restrictions and trapping come from ai-core, and so does the trainer's pick of its next Pokemon
+ * (next_summon_cb), which battle-core's own SwitchSummonPhase asks for. */
 #include "internal.h"
 
 static void note_unported(gc_run *run);
@@ -313,11 +313,17 @@ bool gc_battle_player_command(gc_run *run, const gc_choice *c, const char **why)
         return true;
     }
     if (c->kind == GC_CH_BALL) {
-        if (run->battle_type != BATTLE_TYPE_WILD) { *why = "battle:pokeballTrainerBattle"; return false; }
         int ball = c->a;
-        if (ball < 0 || ball >= 8 || run->pokeballs[ball] == 0) { *why = "modifierSelectUiHandler:notEnoughMoney"; return false; }
+        if (ball < 0 || ball >= 8 || run->pokeballs[ball] == 0) { *why = "no ball of that type"; return false; }
+        /* CommandPhase.checkCanUseBall + handleBallCommand: the command takes the five types up to the Master Ball */
+        const char *refused = gc_catch_ball_refusal(run, ball);
+        if (refused) { *why = refused; return false; }
+        if (ball >= 5) { *why = "that ball can't be thrown"; return false; }
+        /* AttemptCapturePhase spends the ball when it starts; it always does once the command is given. The
+         * battle's lastUsedPokeball is set only by a throw that fails (battle-core's phase), and the type a catch
+         * is made with is this one */
         run->pokeballs[ball]--;
-        bt->last_used_pokeball = (int8_t)ball;
+        gc_int(run)->thrown_ball = (uint8_t)ball;
         memset(tc, 0, sizeof *tc);
         tc->command = COMMAND_BALL;
         tc->cursor = (int8_t)ball;

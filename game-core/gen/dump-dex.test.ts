@@ -50,8 +50,18 @@ it("dump dex", () => {
     const malePct = s.malePercent === null ? -1 : Math.round(s.malePercent);
     const hasVar = s.hasVariants() ? "true" : "false";
     const hasAb2 = s.ability2 !== undefined && s.ability2 !== null && s.ability2 !== s.ability1 ? "true" : "false";
-    const hasFC = speciesDataRegistry.getFormChanges(s.speciesId).length > 0 ? "true" : "false";
-    dexInfoRows.push(`    {${s.speciesId}, ${prevo}, ${malePct}, ${hasVar}, ${hasAb2}, ${hasFC}},`);
+    // getFullUnlocksData(): what setPokemonSpeciesCaught ANDs a catch's attributes with (its own sexes, variants and
+    // obtainable forms, which no other column gives)
+    dexInfoRows.push(`    {${s.speciesId}, ${prevo}, ${malePct}, ${hasVar}, ${hasAb2}, ${s.getFullUnlocksData()}ULL},`);
+  }
+
+  // the form keys each species' form changes lead to: setPokemonSpeciesCaught unlocks a species' base form when the
+  // caught Pokemon is in one of them (Castform's weather forms, a Mega, ...)
+  const formChangeRows: string[] = [];
+  for (const s of speciesList) {
+    const keys = new Set<string>();
+    for (const f of speciesDataRegistry.getFormChanges(s.speciesId)) keys.add(f.formKey);
+    for (const key of [...keys].sort()) formChangeRows.push(`    {${s.speciesId}, ${JSON.stringify(key)}},`);
   }
 
   const eggMoveRows: string[] = [];
@@ -73,6 +83,11 @@ it("dump dex", () => {
     `const int gc_species_dex_info_count = ${speciesList.length};`,
     `const gc_species_dex_info gc_species_dex_info_data[${Math.max(speciesList.length, 1)}] = {`,
     ...dexInfoRows,
+    "};",
+    "",
+    `const int gc_form_change_targets_count = ${formChangeRows.length};`,
+    `const gc_form_change_target gc_form_change_targets_data[${Math.max(formChangeRows.length, 1)}] = {`,
+    ...formChangeRows,
     "};",
     "",
     `const int gc_starter_egg_moves_count = ${starterIds.length};`,
