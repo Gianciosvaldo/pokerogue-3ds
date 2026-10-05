@@ -286,6 +286,15 @@ int pr_reward_select_start(pr_reward_ctx *ctx, const pr_reward_select *sel, pr_r
  * and whether a reward screen (SelectModifierPhase) follows. Returns how many items. ---- */
 int pr_reward_victory_rewards(const pr_run *run, int wave, uint16_t out[8], bool *select_screen);
 
+/* Trainer victory phase rewards (modifierRewardFuncs & vouchers) */
+int pr_reward_trainer_victory_rewards(int trainer_type, bool is_boss, bool has_voucher_config, bool has_voucher_unlocked, bool upgrade_unlocked_vouchers, double money_multiplier, uint16_t out[8]);
+
+/* Fixed battle custom settings lookup */
+int pr_reward_fixed_battle_custom_settings(int wave, pr_reward_custom *custom);
+
+/* Trainer genModifiersFunc items */
+int pr_reward_trainer_gen_modifiers(int trainer_type, const pr_reward_mon party[PR_REWARD_MAX_PARTY], int n_party, pr_item_type out[8]);
+
 /* ---- Memory Mushroom / move relearning (Task 43) ---- */
 enum {
     PR_LEARN_SOURCE_LEVEL = 0,
