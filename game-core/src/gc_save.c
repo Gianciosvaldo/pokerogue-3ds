@@ -101,6 +101,7 @@ static const sfield mon_fields[] = {
     SF(gc_mon, exp), SF(gc_mon, ability_index), SF(gc_mon, variant), SF(gc_mon, pokerus),
     SF(gc_mon, pause_evolutions), SF(gc_mon, luck), SF(gc_mon, pokeball), SF(gc_mon, met_wave),
     SF(gc_mon, trainer_slot), SF(gc_mon, met_level), SF(gc_mon, met_biome), SF(gc_mon, met_species),
+    SF(gc_mon, used_tms), SF(gc_mon, n_used_tms),
 };
 
 /* battle-core's Pokemon: everything but its turnData (reset before every turn) and the lists, which
