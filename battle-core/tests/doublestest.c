@@ -33,6 +33,7 @@ static int guarded_printf(const char *format, ...)
     int id;
     if (sscanf(output, "COVERED CASE %d", &id) == 1) {
         if (id >= 0 && id < MAX_CASES) covered_case[id] = 1;
+        if (getenv("DOUBLES_COVERED")) fputs(output, stdout);   /* opt-in: list them */
         return n;                     /* the list is for the counters below, not the report */
     }
     if (!strncmp(output, "texts of covered turns ", 23))
