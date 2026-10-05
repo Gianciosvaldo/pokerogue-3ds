@@ -10,7 +10,7 @@
 
 | Subsystem | Function / Feature | Supported Scope | Source Path | Commit Target | Test Command | Count / Result | Exclusions / Excluded Scope |
 |---|---|---|---|---|---|---|---|
-| `battle-core` | Singles Turn Engine & Damage Path | Damage path, 87/95 battler tags, move effects, stat calculation, JS math (`Math.pow` V8), weather/terrain, called moves, header moves, delayed moves, switching | `battle-core/src/*.c`, `include/pr/*.h` | `8555c08` | `battle-core/build/turntest /tmp/turns.txt` (modes: plain, RICH, STAT, STATUS, ONHIT, CHARGE, TAGS, HEAL, WEATHER, BOOST, TRAPS, PROTECT, ARENA, EFFECTS, CALLED, HEADER, DELAYED, SWITCH, SUMMON) | Plain 1,534/1,534, RICH 3,640/3,640, STAT 3,762/3,762, STATUS 3,818/3,818, ONHIT 11,767/11,767, CHARGE 3,948/3,948, TAGS 7,876/7,876, HEAL 7,716/7,716, WEATHER 7,824/7,824, BOOST 7,859/7,859, TRAPS 7,873/7,873, PROTECT 7,630/7,630, ARENA 7,385/7,385, EFFECTS 7,794/7,794, CALLED 7,781/7,781, HEADER 7,692/7,692, DELAYED 7,610/7,610, SWITCH 7,913/7,913, SUMMON 7,678/7,678 (all 0 mismatches) | Doubles (Task 73), Illusion state (Task 67), Weather form triggers (Task 69), Item theft/removal (Task 70), Special berries (Task 71), Dancer/Tera precommands (Task 72) |
+| `battle-core` | Singles & Doubles Turn Engine & Damage Path | Damage path, 87/95 battler tags, move effects, stat calculation, JS math (`Math.pow` V8), weather/terrain, called moves, header moves, delayed moves, switching, Weather forms (Task 69), Item removal (Task 70), Special berries (Task 71), Dancer dispatch (Task 72), Doubles first slice (Task 73) | `battle-core/src/*.c`, `include/pr/*.h` | `8555c08` | `turntest`, `weatherformtest`, `itemremovaltest`, `berrytest`, `dancertest`, `doublestest` | Plain 1,534/1,534, RICH 3,640/3,640, STAT 3,762/3,762, STATUS 3,818/3,818, ONHIT 11,767/11,767, CHARGE 3,948/3,948, TAGS 7,876/7,876, HEAL 7,716/7,716, WEATHER 7,824/7,824, BOOST 7,859/7,859, TRAPS 7,873/7,873, PROTECT 7,630/7,630, ARENA 7,385/7,385, EFFECTS 7,794/7,794, CALLED 7,781/7,781, HEADER 7,692/7,692, DELAYED 7,610/7,610, SWITCH 7,913/7,913, SUMMON 7,678/7,678; Weather forms 8000/8000; Removal 8000/8000; Berries 8000/8000; Dancer 8000/8000; Doubles 8000/8000 (all 0 mismatches) | Full doubles AI/life-cycle (Task 74), Natural Illusion ability dispatch, Tera precommands execution |
 | `battle-core` | Command Screen Probes (`pr_cprobe`) | Command validations (`pr_fight_move`, `pr_move_usable`, `pr_move_selectable`, `pr_is_trapped`, `pr_can_switch`, `pr_can_run`) | `battle-core/src/commands.c` | `8555c08` | `TURN_CPROBE=1` with `turntest` | 56,155 probes, 0 mismatches | None for command probe API |
 | `battle-core` | Battle Initialization (`pr_start_battle`) | Encounter setup, wild and trainer battle start sequences, Set/Switch style switch prompt checks | `battle-core/src/phases.c` | `8555c08` | `TURN_START=1` (wild & trainer) with `turntest` | Wild 7,646/7,646, Trainer 7,673/7,673, 0 mismatches | Doubles battle start |
 | `battle-core` | Held Items & Berries (Slice 1) | Leftovers, Shell Bell, Focus Band, Quick Claw, King's Rock, White Herb, Sitrus Berry, Lum Berry, Leppa Berry | `battle-core/src/modifiers.c`, `src/phases.c` | `8555c08` | `TURN_ITEMS=1` with `turntest` | 2,000+ cases per seed (777, 9001, 4242, 31337), 0 mismatches | Stat-pinch berries (Liechi, Ganlon, Petaya, Apicot, Salac), Enigma/Lansat/Starf berries |
@@ -32,24 +32,24 @@ This inventory lists known unported or partially supported classes at pinned tar
 ### Move Classes
 - **Transform & Sketch:** In-battle species/moveset copying.
 - **Revival Blessing:** Party revival handling.
-- **Stuff Cheeks:** Turn execution and berry consumption in `battle-core`.
+- **Stuff Cheeks:** Turn execution and berry consumption in `battle-core` (restriction in `ai-core` Task 58).
 - **No Retreat:** Once-per-switch-in constraint.
 - **Gigaton Hammer:** Consecutive turn usage restriction in turn history.
-- **Spread moves in doubles:** Multi-target damage dispatch.
-- **Theft and Removal:** `Thief`, `Knock Off`, `Covet` item ownership transfers.
+- **Spread moves in doubles:** Multi-target damage dispatch (first slice ported in Task 73).
+- **Theft and Removal:** `Knock Off` / `Incinerate` item removal ported in Task 70; `Thief` / `Covet` transfers unported.
 
 ### Ability Classes
 - **Imposter:** Automatic Transform on entry.
-- **Illusion:** Disguise state and apparent identity/type reads in `battle-core` (Task 67).
-- **Weather Form Triggers:** `Forecast`, `Flower Gift`, `Ice Face` form transformations (Task 69).
+- **Illusion:** Disguise state and apparent identity/type reads in `battle-core` (Task 67); natural ability dispatch unported.
+- **Weather Form Triggers:** `Forecast`, `Flower Gift`, `Ice Face` form transformations (Task 69 / PR #110).
 - **Passive Trace:** Passive ability copy on entry.
 - **Neutralizing Gas:** Field-wide ability suppression.
 - **Commander & Cramorant Gulp Missile:** Special form and battle triggers.
-- **Dancer:** Copied move queueing (Task 72).
+- **Dancer:** Copied move queueing (Task 72 / PR #117).
 
 ### Item and Modifier Classes
 - **Stat-pinch Berries:** `Liechi`, `Ganlon`, `Petaya`, `Apicot`, `Salac` berries.
-- **Special Berries:** `Enigma`, `Lansat`, `Starf` berries (Task 71).
+- **Special Berries:** `Enigma`, `Lansat`, `Starf` berries (Task 71 / PR #111).
 - **Evolution, Form, and Fusion Items:** In-run item lifecycle and party mutation in `game-core` (Tasks 61, 62).
 - **Mints and TMs:** In-run stat nature changes and TM move learning choices.
 
@@ -76,6 +76,16 @@ The public beta branch contains new upstream features and balance changes that d
 
 ## 4. Landed PRs and Merged Task Index
 
+- [PR #124](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/124): Task 94 (Catching in the run audit against upstream `VictoryPhase` & `AttemptCapturePhase` in `game-core`).
+- [PR #122](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/122): Task 93 (Boss segments in battles in `game-core`).
+- [PR #118](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/118): Task 73 (Doubles turn engine first slice in `battle-core`).
+- [PR #117](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/117): Task 72 (Bounded Dancer dispatch in `battle-core`).
+- [PR #111](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/111): Task 70 (Held-item theft/removal) and Task 71 (Enigma, Lansat, Starf berries in `battle-core`).
+- [PR #110](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/110): Task 69 (Weather-driven form changes in `battle-core`).
+- [PR #108](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/108): Task 67 (Dormant Illusion identity/type helpers in `battle-core`).
+- [PR #106](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/106): Task 90 (Battle baseline regression repairs in `battle-core`).
+- [PR #102](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/102): Task 88 (AI matchup differential diagnosis in `ai-core`).
+- [PR #101](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/101): Task 87 (Expanded save/no-save divergence repair in `game-core`).
 - [PR #97](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/97) (`outside/held-item-bridge`, commit [`58030d6`](https://github.com/Gianciosvaldo/pokerogue-3ds/commit/58030d6)): Task 57 (Held-item mapping and consumed-stack persistence in `game-core`).
 - [PR #92](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/92) (commit [`506d20e`](https://github.com/Gianciosvaldo/pokerogue-3ds/commit/506d20e)): Task 50 (Eternatus & Paradox Fixed Generation in `run-core`).
 - [PR #86](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/86) (final head [`e7f54b3`](https://github.com/Gianciosvaldo/pokerogue-3ds/commit/e7f54b3)): CI check & diagnostic cleanup audit.

@@ -218,9 +218,9 @@ Upstream ids are compiled into const tables. Custom species, moves, abilities an
 - A closure's hash covers its own source and probed captures, not named helpers it calls (`anyTypeMoveConversionCondition`, `targetSleptOrComatoseCondition`). Check those by hand after an upstream bump.
 
 ## Not done (in rough order)
-1. Weather-based and other form changes, the other ~100 ability classes (end-of-turn, fainting, leaving the field...) and the effects of the on-hit ones that only report themselves, and the held items whose effects happen outside the damage calculation (Leftovers, Focus Band, berries, Quick Claw, King's Rock, Shell Bell...).
+1. Remaining form changes (weather forms Forecast/Flower Gift/Ice Face ported in Task 69 / PR #110; mid-battle Aegislash/Darmanitan/Minior/Morpeko in Task 41), the other ~100 ability classes (end-of-turn, fainting, leaving the field...), and held items (Leftovers, Shell Bell, Focus Band, Quick Claw, King's Rock, White Herb, Sitrus, Lum, Leppa berries in Tasks 7-9 / PR #114; Enigma, Lansat, Starf berries in Task 71 / PR #111; item removal/theft in Task 70 / PR #111).
 2. The rest of the turn history's readers (Gigaton Hammer's restriction...).
-3. The rest of the turn engine: the last 8 battler tag types (Helping Hand, Follow Me and Rage Powder's, Imprison, Quick Claw and Quick Draw's, Commander's, Cramorant's Gulp Missile, the mystery encounters' post-summon one), Transform and Imposter, Neutralizing Gas, the phases before a turn, starting a double battle and the doubles-only moves and tags (Task 73 below), trainer battles. Deferred side effects get applied here.
+3. The rest of the turn engine: the last 8 battler tag types (Helping Hand, Follow Me and Rage Powder's, Imprison, Quick Claw and Quick Draw's, Commander's, Cramorant's Gulp Missile, the mystery encounters' post-summon one), Transform and Imposter, Neutralizing Gas, dormant Illusion identity helpers (Task 67 / PR #108), Dancer dispatch (Task 72 / PR #117), starting a double battle and doubles turn engine first slice (Task 73 / PR #118). Deferred side effects get applied here.
 4. Enemy AI, rewards, eggs, save format. Waves, biomes, trainers and their parties, mystery encounter spawns, new enemies up to their movesets and the shop's economy are in [`run-core/`](../run-core/).
 5. Hooking it to the renderer in `assets-pipeline/app-src`.
 

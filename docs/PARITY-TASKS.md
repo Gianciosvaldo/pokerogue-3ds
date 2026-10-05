@@ -16,9 +16,9 @@ Implementation PRs: [Task 57 #97](https://github.com/Gianciosvaldo/pokerogue-3ds
 | B | reward-core/ | 89; existing reward API tasks first | Hard; reward state validation |
 | C | game-core/ | 87 → 57 → 59 → 60 → 61 (first slice) → 92 → 93 → 94 → 77 → 95 → 96 → 64 → 65 → 66 → 78 → 79 → 61 (further slices) → 62 → 75 → 76 → 80 → 81 → 82 → 83 → 84 | One active task; lower-compute cards 60/64/76/77/78/84/96 |
 | D | run-core/ | Existing 50 → 63; 100 | Lorenzo's run-core owner only; HANDOFF ownership unchanged; producer edits allowed for card 100 only |
-| E | game/ | 110 (authorized) → 112; 85 console half | Card 110 is a project thread, Azahar first; card 112 drives reward and biome screens; console acceptance stays a human gate |
+| E | game/ | 110 (authorized); 85 console half | Card 110 is a project thread, Azahar first; console acceptance stays a human gate |
 | F | ai-core/ | 88 → 58 → 68 → 74 | Lower-compute 58/68, hard 74 |
-| G | docs/ | 86 → 149 | Lower-compute independent audit documentation |
+| G | docs/ | 86 | Lower-compute independent audit documentation |
 
 A prerequisite API is a real gate: verify it exists and has recorded checks before beginning. If absent, report the missing bounded prerequisite instead of changing its owner's folder. Different folders may proceed in parallel; each lane starts its next task only after the previous PR merges. Lower-compute describes bounded scope, not lower correctness requirements.
 
@@ -475,26 +475,6 @@ Numbered from 92 in the post-parity plan (cards 92 to 151 by milestone; the full
 **Do.** A `run_screen.c` that owns the run and drains its events, splitting at each wave; start each battle from run state, answer COMMAND with the battle command screen, SWITCH with the party screen and LEARN_MOVE with the learn dialog; use stand-ins for starter choice, rewards and biome choice (via the existing options UI); evolution automatic; game over starts a new run. Delete `battle_setup.c` and move the event and switch tests to a host test over whole runs. One screen flow at a time.
 
 **Pass.** A host `runtest` plays N seeded runs through the converter without assertion failures; emulator screenshots of one run flow (wave 1, a reward, wave 2). No hardware claim; console acceptance stays Task 85 / card 118.
-
-### Task 112: App: reward and biome screens driven by the run (game/, lane E)
-
-**Branch:** `outside/app-reward-biome-screens`. **Assignment:** Size L. **Prerequisites:** Task 110 merged.
-
-**Problem.** The app driver runs battles and wave progression, but reward selection and biome selection screens are not connected to `GC_SCREEN_REWARD` / `GC_SCREEN_BIOME`; `shop_ui.c`, Lock Capsule toggle, reroll, party screen item modes, and `biome_map.c` are unwired in the run driver. (`game/menus/README.md` still lists reward select and next biome as "To do" [read]).
-
-**Do.** Connect `shop_ui.c` (Task 51), the party screen's item modes, the Lock Capsule toggle (noted unwired in README), reroll, and `biome_map.c` to `GC_SCREEN_REWARD` / `GC_SCREEN_BIOME`.
-
-**Pass.** A host run driver test verifies transition to reward and biome screens without errors, and emulator/Azahar verification confirms UI flow.
-
-### Task 149: README and ledger refresh (docs/, lane G)
-
-**Branch:** `outside/readme-ledger-refresh`. **Assignment:** Lower compute. **Prerequisites:** Task 86.
-
-**Problem.** Documentation contains stale rows: `battle-core` "Not done" list, `game/README.md` "Not done yet" (claiming catching/fleeing are battle-core gaps), `game/menus/README.md` (listing reward select and next biome as "To do"), `game-core` stand-in table, and `PARITY-LEDGER.md` statuses.
-
-**Do.** Extend Task 86 to audit and update stale rows across `battle-core/README.md`, `game/README.md`, `game/menus/README.md`, `game-core/README.md`, and `docs/PARITY-LEDGER.md`. Ensure every row links a PR or command and no stale status remains. Run again after each milestone.
-
-**Pass.** `git diff --check`; every row links a PR or command; no stale status remains across the READMEs and parity ledger.
 
 ## Beyond these bounded slices
 
