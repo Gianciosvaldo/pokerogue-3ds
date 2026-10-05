@@ -256,7 +256,7 @@ void gc_battle_command_screen(gc_run *run)
     s->struggle = p && !any;
     s->can_switch = p && allowed_bench(run) > 0 && !trapped(run, p);
     s->can_ball = run->battle_type == BATTLE_TYPE_WILD && has_any_pokeball(run);
-    s->can_run = false;    /* fleeing isn't ported yet (AttemptRunPhase) */
+    s->can_run = p && pr_can_run(&run->bt, p, NULL);
 }
 
 /* CommandPhase.handleFightCommand / handleSwitchCommand for field slot 0 */
@@ -337,7 +337,23 @@ bool gc_battle_player_command(gc_run *run, const gc_choice *c, const char **why)
         pc->cursor = PR_CURSOR_UNDEFINED;
         return true;
     }
-    if (c->kind == GC_CH_RUN) { *why = "fleeing isn't ported yet"; return false; }
+    if (c->kind == GC_CH_RUN) {
+        pr_msg run_why = {0};
+        if (!p || !pr_can_run(bt, p, &run_why)) {
+            *why = run_why.key ? run_why.key : "battle:noEscapePokemon";
+            return false;
+        }
+        memset(tc, 0, sizeof *tc);
+        tc->command = COMMAND_RUN;
+        tc->cursor = PR_CURSOR_UNDEFINED;
+        memset(pc, 0, sizeof *pc);
+        pc->command = COMMAND_RUN;
+        pc->targets[0] = 0;
+        pc->n_targets = 1;
+        pc->skip = true;
+        pc->cursor = PR_CURSOR_UNDEFINED;
+        return true;
+    }
     *why = "not a command";
     return false;
 }
