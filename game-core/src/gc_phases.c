@@ -288,7 +288,7 @@ static void battle_end(gc_run *run, gc_rphase *p)
     if (bt->money_scattered) gc_stub(run, GC_STUB_POST_BATTLE);
     /* clearEnemyHeldItemModifiers; lapsing items (Lures, X items) aren't given yet */
     run->n_enemy_items = 0;
-    if (!victory && !gc_rq_has(run, RP_SELECT_MODIFIER)) {
+    if (!victory && !bt->successful_run && !gc_rq_has(run, RP_SELECT_MODIFIER)) {
         if (bt->enemy_faints > 0) gc_rq_unshift(run, gc_rp(RP_SELECT_MODIFIER, 0, 0, 0));
         else gc_rq_unshift(run, gc_rp(RP_SELECT_MODIFIER, 1, 0, 0));   /* no reroll, no fill: rewards stub */
     }
