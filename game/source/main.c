@@ -26,6 +26,8 @@
 static gc_system sys_data;
 static rs_config cfg;
 static int current_slot = 0;
+static int title_continue_slot = 0;
+static bool slot_0_occupied = false;
 
 static void read_driver_file(rs_config* cfg_out) {
   static char seed[160];
@@ -59,7 +61,7 @@ static void fatal(const char* msg) {
 }
 
 static void load_system_save(void) {
-  gc_system_init(&sys_data);
+  gc_system_init_defaults(&sys_data);
   char* buf = NULL;
   size_t len = 0;
   bool used_bak = false;
@@ -72,7 +74,7 @@ static void load_system_save(void) {
 }
 
 static void save_system_save(void) {
-  char buf[GC_SYSTEM_SAVE_MAX];
+  char buf[GC_SAVE_MAX];
   size_t len = gc_system_save(&sys_data, buf, sizeof buf);
   if (len > 0) {
     save_write("system", buf, len);
@@ -99,22 +101,30 @@ static void load_run_in_slot(int slot) {
   }
 }
 
+static void open_save_slots_menu(void) {
+  title_ui_close();
+  save_slot_ui_events ev = {
+    .on_load_slot = (void (*)(void*, int))load_run_in_slot,
+    .on_new_slot = (void (*)(void*, int))start_new_run_in_slot,
+    .on_delete_slot = NULL,
+    .on_cancel = NULL,
+    .ctx = NULL
+  };
+  save_slot_ui_open(&ev);
+}
+
 static void on_title_option(void* ctx, title_option opt) {
   (void)ctx;
   if (opt == TITLE_OPT_NEW_GAME) {
-    start_new_run_in_slot(0);
+    if (slot_0_occupied) {
+      open_save_slots_menu();
+    } else {
+      start_new_run_in_slot(0);
+    }
   } else if (opt == TITLE_OPT_CONTINUE) {
-    load_run_in_slot(0);
+    load_run_in_slot(title_continue_slot);
   } else if (opt == TITLE_OPT_SAVE_SLOTS) {
-    title_ui_close();
-    save_slot_ui_events ev = {
-      .on_load_slot = (void (*)(void*, int))load_run_in_slot,
-      .on_new_slot = (void (*)(void*, int))start_new_run_in_slot,
-      .on_delete_slot = NULL,
-      .on_cancel = NULL,
-      .ctx = NULL
-    };
-    save_slot_ui_open(&ev);
+    open_save_slots_menu();
   }
 }
 
@@ -122,15 +132,28 @@ static void open_title_screen(void) {
   save_slot_info slots[SAVE_SLOT_COUNT];
   save_slot_ui_scan_slots(slots);
 
-  bool has_continue = slots[0].exists && slots[0].valid;
-  int wave = slots[0].wave;
-  const char* biome = slots[0].biome_name;
+  bool has_continue = false;
+  title_continue_slot = 0;
+  int wave = 1;
+  const char* biome = "";
+
+  slot_0_occupied = slots[0].exists;
+
+  for (int i = 0; i < SAVE_SLOT_COUNT; i++) {
+    if (slots[i].exists && slots[i].valid) {
+      has_continue = true;
+      title_continue_slot = i;
+      wave = slots[i].wave;
+      biome = slots[i].biome_name;
+      break;
+    }
+  }
 
   title_ui_events ev = {
     .on_select_option = on_title_option,
     .ctx = NULL
   };
-  title_ui_open(has_continue, 0, wave, biome, &ev);
+  title_ui_open(has_continue, title_continue_slot, wave, biome, &ev);
 }
 
 int main(void) {

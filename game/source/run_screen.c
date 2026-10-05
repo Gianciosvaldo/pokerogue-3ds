@@ -56,7 +56,6 @@ static struct {
 
 static void pump(void* arg);
 static void screen_step(void);
-static void new_run(void);
 
 void rs_set_slot(int slot) {
   if (slot >= 0 && slot < 5) G.active_slot = slot;
@@ -67,7 +66,7 @@ int rs_get_slot(void) {
 }
 
 void rs_on_end_screen_dismissed(void) {
-  new_run();
+  memset(&G.run, 0, sizeof G.run);
 }
 
 /* ------------------------------------------------------------------ helpers */
@@ -119,23 +118,6 @@ static uint32_t rnd(uint32_t n) {
   G.rng ^= G.rng >> 7;
   G.rng ^= G.rng << 17;
   return n ? (uint32_t)(G.rng % n) : 0;
-}
-
-static const char* pretty_key(const char* key, char* out, int n) {
-  int j = 0;
-  bool up = true;
-  for (int i = 0; key && key[i] && j < n - 1; i++) {
-    char c = key[i];
-    if (c == '_') {
-      out[j++] = ' ';
-      up = true;
-    } else {
-      out[j++] = up ? c : (char)(c >= 'A' && c <= 'Z' ? c + 32 : c);
-      up = false;
-    }
-  }
-  out[j] = 0;
-  return out;
 }
 
 static const char* why_text(const char* why, char* out, int n) {
@@ -275,6 +257,7 @@ static void wave_black(void* arg) {
     s.player_present = true;
   } else if (G.run.n_party > 0) {
     s.player = make_mon(&G.run.party[G.run.party_order[0]], true);
+    s.player_present = true;
   }
   if (!trainer && !mystery && G.run.n_enemy > 0) s.enemy = make_mon(&G.run.enemy[0], false);
   bv_begin(&s);
@@ -432,7 +415,8 @@ static bool handle_event(int i) {
     case GC_EV_EXP: {
       if (e->a != G.shown || !G.present[0]) break;
       if (i + 1 < G.nq && G.q[i + 1].kind == GC_EV_LEVEL_UP && G.q[i + 1].a == e->a) break;
-      *ev_new() = (bv_event){.type = BEV_EXP, .battler = BV_PLAYER, .a = (int)(gc_exp_level_fraction(&G.run.party[e->a]) * 1000)};
+      const gc_mon m = before_exp(e->a);
+      *ev_new() = (bv_event){.type = BEV_EXP, .battler = BV_PLAYER, .a = (int)(gc_exp_level_fraction(&m) * 1000)};
       break;
     }
 
@@ -441,8 +425,10 @@ static bool handle_event(int i) {
       bool last = true;
       for (int j = i + 1; j < G.nq; j++)
         if (G.q[j].kind == GC_EV_LEVEL_UP && G.q[j].a == e->a) last = false;
+      gc_mon m = before_exp(e->a);
+      m.b.level = e->b;
       static bv_mon after;
-      after = make_mon(&G.run.party[e->a], true);
+      after = make_mon(&m, true);
       *ev_new() = (bv_event){.type = BEV_EXP, .battler = BV_PLAYER, .a = last ? (int)(after.exp_ratio * 1000) : 0,
                              .b = e->b, .mon = &after};
       break;

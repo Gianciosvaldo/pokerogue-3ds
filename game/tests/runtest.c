@@ -16,11 +16,15 @@
 
 #include "battle_view.h"
 #include "ball_menu.h"
+#include "clear_ui.h"
+#include "game_over_ui.h"
 #include "i18n.h"
+#include "menus.h"
 #include "party_screen.h"
 #include "pr_data.h"
 #include "pr_enums.h"
 #include "run_screen.h"
+#include "shop_ui.h"
 #include "ui.h"
 #include "ui_widgets.h"
 
@@ -67,6 +71,7 @@ static struct {
 
 static int violations, n_scenes, n_ask, n_dialogs, n_options, n_party_opens, n_balls;
 static char first_violation[300];
+static rs_config saved_cfg;
 
 static void bad(const char* fmt, ...);
 #define BAD(...) bad(__VA_ARGS__)
@@ -132,9 +137,52 @@ void ba_preload_move(int move) { (void)move; }
 void ba_drop_moves(void) {}
 void img_drop_prefix(const char* prefix) { (void)prefix; }
 int ui_depth(void) { return W.begun ? 1 : 0; }
+bool ui_busy(void) { return false; }
 void ui_fade(float out_ms, float hold_ms, float in_ms, void (*at_black)(void* arg), void* arg) {
   (void)out_ms, (void)hold_ms, (void)in_ms;
   if (at_black) at_black(arg);
+}
+
+/* ---- mui stubs ---- */
+const rr_draw_opts RR_DEFAULT_OPTS = {0};
+void rr_draw(const rr_frame* frame, float x, float y, const rr_draw_opts* opts) { (void)frame; (void)x; (void)y; (void)opts; }
+void rr_draw_cropped(const rr_frame* frame, float x, float y, int w, int h, const rr_draw_opts* opts) { (void)frame; (void)x; (void)y; (void)w; (void)h; (void)opts; }
+void rr_target(rr_screen s, rr_color clear) { (void)s; (void)clear; }
+void mui_set_origin(rr_screen s, int px, int py) { (void)s; (void)px; (void)py; }
+void mui_sfx(const char* key) { (void)key; }
+const char* mui_t(const char* key) { return key; }
+char* mui_tf(char* out, size_t n, const char* key, ...) { snprintf(out, n, "%s", key); return out; }
+int mui_text_width(mui_style s, const char* utf8) { (void)s; return (int)strlen(utf8) * 8; }
+float mui_text_height(mui_style s, const char* utf8) { (void)s; (void)utf8; return 12.0f; }
+float mui_text_height_ls(mui_style s, float ls, const char* utf8) { (void)s; (void)ls; (void)utf8; return 12.0f; }
+rr_color mui_style_color(mui_style s, bool shadow) { (void)s; (void)shadow; return 0xFFFFFFFF; }
+void mui_window(float x, float y, float w, float h) { (void)x; (void)y; (void)w; (void)h; }
+int mui_text(mui_style s, float x, float y, const char* utf8) { (void)s; (void)x; (void)y; (void)utf8; return 0; }
+int mui_text_o(mui_style s, float x, float y, float ox, float oy, const char* utf8) { (void)s; (void)x; (void)y; (void)ox; (void)oy; (void)utf8; return 0; }
+int mui_text_ls(mui_style s, float x, float y, float ls, const char* utf8, rr_color c, rr_color shadow) { (void)s; (void)x; (void)y; (void)ls; (void)utf8; (void)c; (void)shadow; return 0; }
+int mui_bbtext(mui_style s, float x, float y, const char* bb) { (void)s; (void)x; (void)y; (void)bb; return 0; }
+bool mui_image(const char* key, const char* frame, float x, float y, float ox, float oy) { (void)key; (void)frame; (void)x; (void)y; (void)ox; (void)oy; return false; }
+bool mui_image_ex(const char* key, const char* frame, float x, float y, const rr_draw_opts* o) { (void)key; (void)frame; (void)x; (void)y; (void)o; return false; }
+const rr_frame* mui_frame(const char* key, const char* frame) { static rr_frame dummy = {0}; return &dummy; }
+void mui_clip(float x, float y, float w, float h) { (void)x; (void)y; (void)w; (void)h; }
+void mui_clip_off(void) {}
+const rr_frame* menu_sprite_frame(const menu_sprite* s, uint32_t ms) { (void)s; (void)ms; static rr_frame dummy = {0}; return &dummy; }
+void menu_sprite_free(menu_sprite* s) { (void)s; }
+
+void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, void (*on_pick)(int slot, int move_slot, void* arg), void* arg) {
+  (void)gc_run_ptr; (void)pmode; (void)target_move;
+  const gc_run* r = (const gc_run*)gc_run_ptr;
+  int best_slot = 0;
+  if (r && r->n_party > 0) {
+    best_slot = rnd((uint32_t)r->n_party);
+    for (int i = 0; i < r->n_party; i++) {
+      if (r->party[i].b.hp > 0 && r->party[i].b.hp < r->party[i].b.stats[STAT_HP]) {
+        best_slot = i;
+        break;
+      }
+    }
+  }
+  if (on_pick) on_pick(best_slot, -1, arg);
 }
 
 /* ---- the battle screen ---- */
@@ -216,8 +264,6 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
         if (side_ok(e->battler, "status")) W.mon[s].status = e->a;
         break;
       case BEV_ABILITY:
-        /* an ability bar names the Pokemon that has it, and one can trigger as it faints (Air Lock ending,
-         * Aftermath); the bar is an overlay, the screen still has the fainted Pokemon's data */
         if (!W.fainted_shown[s]) side_ok(e->battler, "ability bar");
         break;
       case BEV_STAT_STAGES:
@@ -275,7 +321,6 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
   if (!me || !foe) {
     BAD("asked for a command with no Pokemon on the field in the run");
   } else {
-    /* the screen must show the battle game-core has */
     const bv_mon* a = &W.mon[0];
     const bv_mon* b = &W.mon[1];
     if (a->species != me->b.species || a->level != me->b.level || a->hp != me->b.hp || a->max_hp != me->b.stats[STAT_HP])
@@ -330,8 +375,6 @@ void ball_menu_open(const int counts[BALL_TYPES], void (*on_pick)(int ball, void
   W.ball_arg = arg;
 }
 
-/* the learn dialog: menus' learn_move_start shows a message, asks yes / no, takes the move to forget, shows a last
- * message and ends */
 static const ps_learn_host* LH;
 static void dlg_end_text_done(void* c) {
   (void)c;
@@ -361,11 +404,9 @@ void ps_learn_move(const pr_battle* bt, int party_slot, int move, int trainer_id
 
 /* ------------------------------------------------------------------ the fake player */
 
-/* The fake player's better half: heal who needs it, revive the fainted, eat Rare Candies */
 static int smart_option(int pick) {
   const gc_run* r = rs_run();
   if (!strncmp(W.opt_label[0], "Species_", 8)) {
-    /* a party list (the Pokemon a reward is used on): the most hurt one that is alive */
     int best = pick;
     double worst = 2;
     for (int i = 0; i < W.opt_n && i < r->n_party; i++) {
@@ -381,7 +422,6 @@ static int smart_option(int pick) {
   return pick;
 }
 
-/* One thing the UI was waiting on is answered. False when nothing is pending. */
 static bool step(void) {
   {
     static int last_refused;
@@ -389,12 +429,41 @@ static bool step(void) {
     W.refused_streak = r != last_refused ? W.refused_streak + 1 : 0;
     last_refused = r;
   }
+  if (!rs_run()->wave) {
+    rs_start(&saved_cfg);
+    return true;
+  }
   if (W.playing) {
     void (*f)(void*) = W.play_done;
     void* a = W.play_arg;
     W.playing = false;
     W.play_done = NULL;
     if (f) f(a);
+    return true;
+  }
+  if (shop_ui_active()) {
+    if (W.refused_streak > 0) {
+      if (W.refused_streak % 3 == 1) {
+        shop_ui_input(MB_RIGHT);
+        shop_ui_input(MB_ACTION);
+      } else if (W.refused_streak % 3 == 2) {
+        shop_ui_input(MB_DOWN);
+        shop_ui_input(MB_ACTION);
+      } else {
+        shop_ui_input(MB_CANCEL);
+        shop_ui_input(MB_ACTION);
+      }
+    } else {
+      shop_ui_input(MB_ACTION);
+    }
+    return true;
+  }
+  if (clear_ui_active()) {
+    clear_ui_input(MB_ACTION);
+    return true;
+  }
+  if (game_over_ui_active()) {
+    game_over_ui_input(MB_ACTION);
     return true;
   }
   if (W.confirm_done) {
@@ -429,7 +498,7 @@ static bool step(void) {
       if (bt->party[0][i]->hp > 0 && !bt->party[0][i]->on_field) ok[n++] = i;
     if (W.party_mode == PS_SWITCH && rnd(6) == 0) f(6, PS_CANCEL, W.party_arg);
     else if (n && rnd(10)) f(ok[rnd((uint32_t)n)], PS_SEND_OUT, W.party_arg);
-    else f((int)rnd((uint32_t)bt->n_party[0]), PS_SEND_OUT, W.party_arg); /* maybe not allowed: game-core refuses */
+    else f((int)rnd((uint32_t)bt->n_party[0]), PS_SEND_OUT, W.party_arg);
     return true;
   }
   if (W.asking) {
@@ -472,13 +541,12 @@ int main(int argc, char** argv) {
   rs32 = 2463534242u ^ (uint32_t)first * 2654435761u;
   rnd(1);
 
-  rs_config cfg;
-  memset(&cfg, 0, sizeof cfg);
-  cfg.entropy = (uint32_t)first * 7919u + 12345u;
+  memset(&saved_cfg, 0, sizeof saved_cfg);
+  saved_cfg.entropy = (uint32_t)first * 7919u + 12345u;
   char seed[32];
   snprintf(seed, sizeof seed, "runtest%017d", first);
-  cfg.seed = seed;
-  rs_start(&cfg);
+  saved_cfg.seed = seed;
+  rs_start(&saved_cfg);
 
   const rs_stats* st = rs_stats_get();
   uint32_t digest = 0;
@@ -498,7 +566,6 @@ int main(int argc, char** argv) {
     }
     if (st->game_overs + st->clears != last_ended) {
       const gc_run* r = rs_run();
-      /* a run just ended (the driver is showing the game over): sample it */
       uint32_t h = 2166136261u;
       const uint32_t v[3] = {(uint32_t)r->wave, (uint32_t)r->score, (uint32_t)(st->game_overs + st->clears)};
       for (int i = 0; i < 3; i++) {
