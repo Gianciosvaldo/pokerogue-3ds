@@ -328,7 +328,7 @@ static void unhandled_items(void)
 {
     setup("reward-apply-unhandled", 3);
     const char *why = "";
-    static const char *const others[] = {"FULL_HEAL", "RARE_CANDY", "POKEBALL", "LEFTOVERS", "TM_COMMON", "MEMORY_MUSHROOM", "EXP_SHARE"};
+    static const char *const others[] = {"FULL_HEAL", "RARE_CANDY", "POKEBALL", "LEFTOVERS", "EXP_SHARE"};
     for (size_t i = 0; i < sizeof others / sizeof others[0]; i++) {
         const gc_offer o = offer(others[i], 0);
         CHECK(gc_reward_apply(&run, &o, 0, 0, &why) == GC_APPLY_UNHANDLED);
@@ -593,6 +593,40 @@ static void random_cases(int count)
     }
 }
 
+static void test_tm_and_memory_mushroom(void)
+{
+    setup("tm-memory-test", 1);
+    gc_mon *m = mon(0);
+    m->b.level = 50;
+    gc_mon_recalc(&run, m);
+
+    /* TM application */
+    const char *why = NULL;
+    gc_offer tm_offer = offer("TM_COMMON", 0);
+    tm_offer.arg = MOVE_ID_FLAMETHROWER;
+    int res = gc_reward_apply(&run, &tm_offer, 0, 0, &why);
+    CHECK(res == GC_APPLY_DONE);
+    CHECK(m->n_used_tms == 1);
+    CHECK(m->used_tms[0] == MOVE_ID_FLAMETHROWER);
+
+    /* duplicate TM application doesn't duplicate in used_tms */
+    res = gc_reward_apply(&run, &tm_offer, 0, 0, &why);
+    CHECK(res == GC_APPLY_DONE);
+    CHECK(m->n_used_tms == 1);
+
+    /* Memory Mushroom application on mon level 50 with relearnable moves */
+    gc_offer mm_offer = offer("MEMORY_MUSHROOM", 0);
+    res = gc_reward_apply(&run, &mm_offer, 0, 0, &why);
+    CHECK(res == GC_APPLY_DONE);
+
+    /* Invalid party member for TM or Memory Mushroom */
+    res = gc_reward_apply(&run, &tm_offer, -1, 0, &why);
+    CHECK(res == GC_APPLY_REFUSED && !strcmp(why, "pick a Pokemon"));
+
+    res = gc_reward_apply(&run, &mm_offer, 5, 0, &why);
+    CHECK(res == GC_APPLY_REFUSED && !strcmp(why, "pick a Pokemon"));
+}
+
 int main(void)
 {
     for (int i = 0; i < N_TABLE; i++) run_case(&table[i]);
@@ -603,7 +637,8 @@ int main(void)
     empty_slot_is_no_move();
     max_pp_override_blocks_pp_up();
     low_pp_move_refuses_pp_up();
-    printf("sacred ash, party order, unhandled items, empty slot, max PP override, low-PP move: ok\n");
+    test_tm_and_memory_mushroom();
+    printf("sacred ash, party order, unhandled items, empty slot, max PP override, low-PP move, tm/memory: ok\n");
     random_cases(30000);
     printf("reward apply: %ld checks, 0 failures\n", checks);
     return 0;

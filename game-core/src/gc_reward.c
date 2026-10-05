@@ -144,7 +144,8 @@ static void fill_learnsets(gc_run *run, const gc_mon *m, pr_reward_mon *r)
     r->n_egg_moves = (uint8_t)gc_unlocked_egg_moves(run, m, r->egg_moves);
     r->met_as_starter = m->met_wave == -1;
     r->egg_relearn_allowed = true;   /* no challenge hook yet: ChallengeType.EGG_MOVE_RELEARN_AVAILABILITY keeps its default */
-    r->n_used_tms = 0;               /* game-core doesn't apply TMs yet: usedTMs stays empty */
+    r->n_used_tms = (uint8_t)(m->n_used_tms < PR_REWARD_MAX_USED_TMS ? m->n_used_tms : PR_REWARD_MAX_USED_TMS);
+    for (int i = 0; i < r->n_used_tms; i++) r->used_tms[i] = m->used_tms[i];
 }
 
 static void fill_mon(gc_run *run, gc_mon *m, pr_reward_mon *r)
@@ -423,7 +424,44 @@ int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, co
     const int item = gc_reward_item_index(o->key);
     const int lifecycle = gc_reward_lifecycle_apply(run, o, party, why);
     if (lifecycle != GC_APPLY_UNHANDLED) return lifecycle;
-    if (item < 0 || !core_applies(item)) return GC_APPLY_UNHANDLED;
+    if (item < 0) return GC_APPLY_UNHANDLED;
+
+    if (item == PR_ITEM_TM_COMMON || item == PR_ITEM_TM_GREAT || item == PR_ITEM_TM_ULTRA) {
+        int k;
+        if (party < 0 || party >= run->n_party || (k = gc_battle_slot_of(run, party)) < 0) {
+            *why = "pick a Pokemon";
+            return GC_APPLY_REFUSED;
+        }
+        gc_mon *m = &run->party[party];
+        bool dup = false;
+        for (int i = 0; i < m->n_used_tms; i++) if (m->used_tms[i] == (uint16_t)o->arg) dup = true;
+        if (!dup && m->n_used_tms < 64) m->used_tms[m->n_used_tms++] = (uint16_t)o->arg;
+        gc_reward_queue_copy(run);
+        gc_rq_unshift(run, gc_rp(RP_LEARN_MOVE, party, o->arg, 0));
+        return GC_APPLY_DONE;
+    }
+
+    if (item == PR_ITEM_MEMORY_MUSHROOM) {
+        int k;
+        if (party < 0 || party >= run->n_party || (k = gc_battle_slot_of(run, party)) < 0) {
+            *why = "pick a Pokemon";
+            return GC_APPLY_REFUSED;
+        }
+        pr_reward_ctx *ctx = gc_reward_ctx(run);
+        static pr_reward_memory_move moves[PR_REWARD_MAX_LEVEL_MOVES + 4 + PR_REWARD_MAX_USED_TMS];
+        const int n = pr_reward_memory_moves(ctx, k, moves, (int)(sizeof moves / sizeof moves[0]));
+        if (n <= 0) {
+            *why = "partyUiHandler:anyEffect";
+            return GC_APPLY_REFUSED;
+        }
+        const int idx = (move_slot >= 0 && move_slot < n) ? move_slot : 0;
+        const uint16_t move_id = moves[idx].move;
+        gc_reward_queue_copy(run);
+        gc_rq_unshift(run, gc_rp(RP_LEARN_MOVE, party, move_id, 0));
+        return GC_APPLY_DONE;
+    }
+
+    if (!core_applies(item)) return GC_APPLY_UNHANDLED;
     /* a free reward is applied with cost -1, a purchase with its price (a shop item: cost > 0) */
     const bool purchase = o->cost > 0;
     int k = -1, move = -1;

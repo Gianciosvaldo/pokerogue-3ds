@@ -175,6 +175,8 @@ typedef struct gc_mon {
     uint8_t met_level;          /* Pokemon.metLevel: its level when it joined (a catch sets it again) */
     int8_t met_biome;           /* Pokemon.metBiome (BiomeId), -1 for a starter */
     uint16_t met_species;       /* Pokemon.metSpecies */
+    uint16_t used_tms[64];      /* TMs used on this Pokemon (up to 64) */
+    uint8_t n_used_tms;
 } gc_mon;
 
 /* The player's items and the enemy's: upstream's modifier list entries, by modifierTypes key */
