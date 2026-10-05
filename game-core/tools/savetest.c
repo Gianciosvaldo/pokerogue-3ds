@@ -66,6 +66,8 @@ int main(void)
     run.party[1].b.fusion_species = SPECIES_ID_CHARMANDER;
     run.party[1].b.fusion_form = 0;
     run.party[1].b.fusion_ability_index = 1;
+    run.party[0].n_used_tms = 1;
+    run.party[0].used_tms[0] = MOVE_ID_FLAMETHROWER;
     CHECK(gc_run_can_save(&run), "saving is allowed at wave 1's first command");
     const size_t n = gc_run_save(&run, buf, sizeof buf);
     CHECK(n > 0 && n <= GC_SAVE_MAX, "the save fits in GC_SAVE_MAX");
@@ -88,6 +90,16 @@ int main(void)
              && back.party[1].b.fusion_form == run.party[1].b.fusion_form
              && back.party[1].b.fusion_ability_index == run.party[1].b.fusion_ability_index);
     CHECK(same, "each party member's species, form, fusion data, HP, exp and moves");
+    CHECK(back.party[0].n_used_tms == 1 && back.party[0].used_tms[0] == MOVE_ID_FLAMETHROWER,
+          "format-2 save retains used_tms");
+
+    /* a format-1 save loads successfully and has empty used_tms */
+    memcpy(copy, buf, n);
+    uint16_t fmt1 = 1;
+    memcpy(copy + 8, &fmt1, 2);
+    fix_crc(copy);
+    CHECK(gc_run_load(&back, copy, n, &why), "a format-1 save loads successfully");
+    CHECK(back.party[0].n_used_tms == 0, "format-1 save has empty used_tms");
 
     /* one turn later the save point is over */
     gc_choice c = {GC_CH_FIGHT, 0, -1, 0};

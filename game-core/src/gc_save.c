@@ -21,7 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define SAVE_FORMAT 1
+#define SAVE_FORMAT 2
 static const char magic[8] = {'P', 'R', '3', 'D', 'S', 'R', 'U', 'N'};
 static const char sys_magic[8] = {'P', 'R', '3', 'D', 'S', 'S', 'Y', 'S'};
 
@@ -524,6 +524,7 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
         *why = "the save is damaged";
         return false;
     }
+
     bool seen[6] = {false};
     for (int i = 0; i < v.n_party; i++) {
         if (v.party_order[i] < 0 || v.party_order[i] >= v.n_party || seen[v.party_order[i]]) { *why = "the save is damaged"; return false; }
@@ -612,6 +613,17 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
         memset(run, 0, sizeof *run);
         *why = "the save is damaged";
         return false;
+    }
+
+    if (format < 2) {
+        for (int i = 0; i < run->n_party; i++) {
+            run->party[i].n_used_tms = 0;
+            memset(run->party[i].used_tms, 0, sizeof run->party[i].used_tms);
+        }
+        for (int i = 0; i < run->n_enemy; i++) {
+            run->enemy[i].n_used_tms = 0;
+            memset(run->enemy[i].used_tms, 0, sizeof run->enemy[i].used_tms);
+        }
     }
 
     /* the arena the battle keeps, then the battle as gc_battle_setup_field builds it with the lead

@@ -609,15 +609,46 @@ static void test_tm_and_memory_mushroom(void)
     CHECK(m->n_used_tms == 1);
     CHECK(m->used_tms[0] == MOVE_ID_FLAMETHROWER);
 
+    gc_internal *in = gc_int(&run);
+    gc_rphase queued_p;
+    CHECK(gc_rq_next(&in->rq, &queued_p) && queued_p.type == RP_SELECT_MODIFIER);
+    CHECK(gc_rq_next(&in->rq, &queued_p) && queued_p.type == RP_LEARN_MOVE && queued_p.b == MOVE_ID_FLAMETHROWER);
+    gc_rq_clear(&run);
+
     /* duplicate TM application doesn't duplicate in used_tms */
     res = gc_reward_apply(&run, &tm_offer, 0, 0, &why);
     CHECK(res == GC_APPLY_DONE);
     CHECK(m->n_used_tms == 1);
+    gc_rq_clear(&run);
 
     /* Memory Mushroom application on mon level 50 with relearnable moves */
+    pr_reward_ctx *ctx = gc_reward_ctx(&run);
+    static pr_reward_memory_move moves[PR_REWARD_MAX_LEVEL_MOVES + 4 + PR_REWARD_MAX_USED_TMS];
+    const int n_moves = pr_reward_memory_moves(ctx, 0, moves, (int)(sizeof moves / sizeof moves[0]));
+    CHECK(n_moves >= 2);
+
     gc_offer mm_offer = offer("MEMORY_MUSHROOM", 0);
+
+    /* Memory Mushroom with no move chosen or invalid slot: refused */
+    res = gc_reward_apply(&run, &mm_offer, 0, -1, &why);
+    CHECK(res == GC_APPLY_REFUSED && !strcmp(why, "pick a move"));
+
+    res = gc_reward_apply(&run, &mm_offer, 0, n_moves, &why);
+    CHECK(res == GC_APPLY_REFUSED && !strcmp(why, "pick a move"));
+
+    /* Memory Mushroom applying slot 0 asserts moves[0].move is learned */
     res = gc_reward_apply(&run, &mm_offer, 0, 0, &why);
     CHECK(res == GC_APPLY_DONE);
+    CHECK(gc_rq_next(&in->rq, &queued_p) && queued_p.type == RP_SELECT_MODIFIER);
+    CHECK(gc_rq_next(&in->rq, &queued_p) && queued_p.type == RP_LEARN_MOVE && queued_p.b == moves[0].move);
+    gc_rq_clear(&run);
+
+    /* Memory Mushroom applying slot 1 asserts moves[1].move is learned */
+    res = gc_reward_apply(&run, &mm_offer, 0, 1, &why);
+    CHECK(res == GC_APPLY_DONE);
+    CHECK(gc_rq_next(&in->rq, &queued_p) && queued_p.type == RP_SELECT_MODIFIER);
+    CHECK(gc_rq_next(&in->rq, &queued_p) && queued_p.type == RP_LEARN_MOVE && queued_p.b == moves[1].move);
+    gc_rq_clear(&run);
 
     /* Invalid party member for TM or Memory Mushroom */
     res = gc_reward_apply(&run, &tm_offer, -1, 0, &why);

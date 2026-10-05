@@ -454,8 +454,11 @@ int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, co
             *why = "partyUiHandler:anyEffect";
             return GC_APPLY_REFUSED;
         }
-        const int idx = (move_slot >= 0 && move_slot < n) ? move_slot : 0;
-        const uint16_t move_id = moves[idx].move;
+        if (move_slot < 0 || move_slot >= n) {
+            *why = "pick a move";
+            return GC_APPLY_REFUSED;
+        }
+        const uint16_t move_id = moves[move_slot].move;
         gc_reward_queue_copy(run);
         gc_rq_unshift(run, gc_rp(RP_LEARN_MOVE, party, move_id, 0));
         return GC_APPLY_DONE;
