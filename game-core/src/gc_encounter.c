@@ -291,6 +291,7 @@ void gc_new_battle(gc_run *run)
     run->trainer_name = run->trainer_partner_name = -1;
     gc_ai_reset(run);
     in->reroll_count = 0;
+    in->battle_won = false;
 
     pr_new_battle_ctx ctx;
     memset(&ctx, 0, sizeof ctx);
@@ -428,6 +429,9 @@ void gc_new_battle(gc_run *run)
     if (run->battle_type == BATTLE_TYPE_TRAINER)
         gc_ev_msg(run, "battle:trainerSendOut", 2, gc_m_trainer(run, "trainerName", GC_TNAME_TRAINER), gc_m_mon_name(run, "pokemonName", 1, 0));
     if (sent_out) gc_ev_msg(run, "battle:playerGo", 1, gc_m_mon(run, "pokemonName", 0, gc_player_active_index(run)));
+    /* CheckSwitchPhase: battle-core's start stopped to ask "Will you switch?" (run->ask_switch); the rest of the
+     * start (InitEncounterPhase and the enemy's PostSummonPhase) runs once it is answered */
+    if (run->eng.awaiting_confirm) gc_rq_unshift(run, gc_rp(RP_CHECK_SWITCH, 0, 0, 0));
     /* LevelCapPhase, after a new biome's encounter */
     if (new_biome && run->bt.max_exp_level > in->last_max_exp_level)
         gc_ev_msg(run, "battle:levelCapUp", 1, pr_arg_int("levelCap", run->bt.max_exp_level));
