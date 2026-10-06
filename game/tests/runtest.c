@@ -114,6 +114,8 @@ static struct {
   int pick;               /* the place in the party the player picked in the release list (-1: none yet) */
 } REL;
 
+extern int gc_evolution_moves(const gc_mon *m, uint16_t *out, int max);
+
 /* An evolution prompt: party member, species before, target species, choice */
 static struct {
   bool armed;
@@ -122,8 +124,10 @@ static struct {
   int species_target;
   int choice;
   bool expect_move_learn;
-  int evolved_party_idx;
-  int learning_move;
+  int n_expected_moves;
+  uint16_t expected_moves[16];
+  bool received_moves[16];
+  int n_received_moves;
 } EVO;
 static int n_evo_checked, n_cancel_checked, n_evo_move_learned_checked;
 
@@ -491,10 +495,17 @@ static void evo_check(void) {
       return;
     }
     n_evo_checked++;
-    const gc_screen* sc = gc_run_screen(r);
-    if (sc->kind == GC_SCREEN_LEARN_MOVE && sc->party == EVO.party_idx) {
+    const gc_mon* m = &r->party[EVO.party_idx];
+    uint16_t mv[16];
+    const int n = gc_evolution_moves(m, mv, 16);
+    if (n > 0) {
       EVO.expect_move_learn = true;
-      EVO.evolved_party_idx = EVO.party_idx;
+      EVO.n_expected_moves = n;
+      EVO.n_received_moves = 0;
+      for (int i = 0; i < n; i++) {
+        EVO.expected_moves[i] = mv[i];
+        EVO.received_moves[i] = false;
+      }
     }
   } else {
     if (current_species != EVO.species_before) {
@@ -503,6 +514,32 @@ static void evo_check(void) {
       return;
     }
     n_cancel_checked++;
+  }
+}
+
+static void evo_move_check(void) {
+  if (!EVO.expect_move_learn) return;
+  const gc_run* r = rs_run();
+  const gc_screen* sc = gc_run_screen(r);
+  if (sc->kind != GC_SCREEN_LEARN_MOVE && sc->kind != GC_SCREEN_NONE) {
+    if (EVO.party_idx >= 0 && EVO.party_idx < r->n_party) {
+      const pr_pokemon* p = &r->party[EVO.party_idx].b;
+      for (int i = 0; i < EVO.n_expected_moves; i++) {
+        uint16_t mv = EVO.expected_moves[i];
+        bool in_moves = false;
+        for (int k = 0; k < p->n_moves; k++) {
+          if (p->moves[k] == mv) { in_moves = true; break; }
+        }
+        if (!in_moves && !EVO.received_moves[i]) {
+          BAD("evolution move %d for slot %d (species %d) was neither in moveset nor offered in ps_learn_move",
+              (int)mv, EVO.party_idx, p->species);
+          EVO.expect_move_learn = false;
+          return;
+        }
+      }
+      n_evo_move_learned_checked++;
+    }
+    EVO.expect_move_learn = false;
   }
 }
 
@@ -647,9 +684,14 @@ void ps_learn_move(const pr_battle* bt, int party_slot, int move, int trainer_id
   (void)bt, (void)move, (void)trainer_id;
   n_dialogs++;
   if (party_slot < 0 || party_slot >= bt->n_party[0]) BAD("learn dialog for slot %d of %d", party_slot, bt->n_party[0]);
-  if (EVO.expect_move_learn && party_slot == EVO.evolved_party_idx) {
-    EVO.expect_move_learn = false;
-    n_evo_move_learned_checked++;
+  if (EVO.expect_move_learn && party_slot == EVO.party_idx) {
+    for (int i = 0; i < EVO.n_expected_moves; i++) {
+      if (EVO.expected_moves[i] == (uint16_t)move && !EVO.received_moves[i]) {
+        EVO.received_moves[i] = true;
+        EVO.n_received_moves++;
+        break;
+      }
+    }
   }
   LH = host;
   host->show_text(host->host, "wants to learn a move", true, dlg_text_done, NULL);
@@ -907,6 +949,7 @@ int main(int argc, char** argv) {
     steps++;
     rel_check();
     evo_check();
+    evo_move_check();
     if (st->not_found != last_nf) {
       last_nf = st->not_found;
       BAD("a switch-in Pokemon was not found in the party");
@@ -965,11 +1008,9 @@ int main(int argc, char** argv) {
   if (REL.armed) BAD("a full-party question was left unanswered");
   printf("evolution: %d evolutions completed, %d cancelled; party species checked after %d evolutions and %d cancels; %d post-evolution moves learned\n",
          st->evolves, st->cancels, n_evo_checked, n_cancel_checked, n_evo_move_learned_checked);
-  if (runs >= 1000) {
-    if (st->evolves < 5) BAD("fewer than 5 evolutions completed (%d)", st->evolves);
-    if (st->cancels < 5) BAD("fewer than 5 evolutions cancelled (%d)", st->cancels);
-    if (n_evo_move_learned_checked < 3) BAD("fewer than 3 post-evolution moves learned (%d)", n_evo_move_learned_checked);
-  }
+  if (st->evolves < 5) BAD("fewer than 5 evolutions completed (%d)", st->evolves);
+  if (st->cancels < 5) BAD("fewer than 5 evolutions cancelled (%d)", st->cancels);
+  if (n_evo_move_learned_checked < 3) BAD("fewer than 3 post-evolution moves learned (%d)", n_evo_move_learned_checked);
   if (st->evolves != n_evo_checked || st->cancels != n_cancel_checked)
     BAD("evolution count mismatch (driver %d / %d, checked %d / %d)", st->evolves, st->cancels, n_evo_checked, n_cancel_checked);
   printf("reward screens: %d shops, %d item targets, %d biome maps\n", n_shops, n_item_opens, n_maps);
