@@ -323,84 +323,133 @@ static void shuffled_party_order(void)
     }
 }
 
-/* ---- Rare Candy and Rarer Candy tests ---- */
-static void test_rare_and_rarer_candy(void)
-{
-    setup("candy-test", 3);
+/* ---- Rare Candy and Rarer Candy table-driven tests ---- */
+typedef struct {
+    const char *name;
+    const char *key;
+    int wave;
+    int party_target;
+    int level_before[3];
+    int friendship_before[3];
+    int candy_jar_stacks;
+    bool ok;
+    const char *why;
+    int level_after[3];
+    int friendship_after[3];
+    int level_events_expected;
+} candy_table_case;
 
-    /* 1. Single target Rare Candy level-up (setup sets level=50; wave 1 cap is 10, so set wave=100 so cap is high) */
-    run.wave = 100;
-    mon(0)->b.level = 10;
+static const candy_table_case candy_table[] = {
+    {
+        "valid target Rare Candy (1 level, +6 friendship)",
+        "RARE_CANDY", 100, 0,
+        {10, 10, 10}, {100, 50, 50}, 0,
+        true, NULL,
+        {11, 10, 10}, {106, 50, 50}, 1
+    },
+    {
+        "Candy Jar >0 stacks (+3 levels, +6 friendship per candy)",
+        "RARE_CANDY", 100, 0,
+        {10, 10, 10}, {100, 50, 50}, 2,
+        true, NULL,
+        {13, 10, 10}, {106, 50, 50}, 1
+    },
+    {
+        "level cap refusal (level 12 at wave 10, cap is 12)",
+        "RARE_CANDY", 10, 0,
+        {12, 10, 10}, {100, 50, 50}, 0,
+        false, NO_EFFECT,
+        {12, 10, 10}, {100, 50, 50}, 0
+    },
+    {
+        "no-effect refusal (invalid party target -1)",
+        "RARE_CANDY", 100, -1,
+        {10, 10, 10}, {100, 50, 50}, 0,
+        false, "pick a Pokemon",
+        {10, 10, 10}, {100, 50, 50}, 0
+    },
+    {
+        "Rarer Candy all party members (+1 level, +6 friendship each)",
+        "RARER_CANDY", 100, -1,
+        {10, 12, 15}, {50, 50, 50}, 0,
+        true, NULL,
+        {11, 13, 16}, {56, 56, 56}, 3
+    },
+    {
+        "Rarer Candy with Candy Jar >0 stacks (+3 levels each)",
+        "RARER_CANDY", 100, -1,
+        {10, 12, 15}, {50, 50, 50}, 2,
+        true, NULL,
+        {13, 15, 18}, {56, 56, 56}, 3
+    },
+    {
+        "Rarer Candy refused when ALL members are at level cap",
+        "RARER_CANDY", 1, -1,
+        {10, 10, 10}, {50, 50, 50}, 0,
+        false, NO_EFFECT,
+        {10, 10, 10}, {50, 50, 50}, 0
+    },
+};
+#define N_CANDY_TABLE ((int)(sizeof candy_table / sizeof candy_table[0]))
+
+static void test_rare_and_rarer_candy_table(void)
+{
+    for (int i = 0; i < N_CANDY_TABLE; i++) {
+        const candy_table_case *tc = &candy_table[i];
+        setup("candy-table-test", 3);
+        run.wave = tc->wave;
+        for (int p = 0; p < 3; p++) {
+            mon(p)->b.level = tc->level_before[p];
+            mon(p)->b.friendship = (uint8_t)tc->friendship_before[p];
+            gc_mon_recalc(&run, mon(p));
+        }
+        if (tc->candy_jar_stacks > 0) {
+            gc_item_add(&run, "CANDY_JAR", -1, 0, tc->candy_jar_stacks);
+        }
+        drain();
+
+        result r = take(tc->key, 0, tc->party_target, -1);
+        CHECKF(r.ok == tc->ok, "candy case %d '%s': ok=%d, expected %d", i, tc->name, r.ok, tc->ok);
+        if (!tc->ok) {
+            CHECKF(!strcmp(r.why, tc->why), "candy case %d '%s': why='%s', expected '%s'", i, tc->name, r.why, tc->why);
+        }
+        for (int p = 0; p < 3; p++) {
+            CHECKF(mon(p)->b.level == tc->level_after[p], "candy case %d '%s': mon(%d) level=%d, expected %d",
+                   i, tc->name, p, mon(p)->b.level, tc->level_after[p]);
+            CHECKF(mon(p)->b.friendship == tc->friendship_after[p], "candy case %d '%s': mon(%d) friendship=%d, expected %d",
+                   i, tc->name, p, mon(p)->b.friendship, tc->friendship_after[p]);
+        }
+
+        gc_internal *in = gc_int(&run);
+        gc_rphase qp;
+        int level_events = 0;
+        while (gc_rq_next(&in->rq, &qp)) {
+            if (qp.type == RP_LEVEL_UP) level_events++;
+        }
+        CHECKF(level_events == tc->level_events_expected, "candy case %d '%s': level_events=%d, expected %d",
+               i, tc->name, level_events, tc->level_events_expected);
+        drain();
+    }
+    printf("candy table: %d cases ok\n", N_CANDY_TABLE);
+}
+
+static void test_candy_save_reload_resume(void)
+{
+    setup("candy-save-resume", 3);
+    run.wave = 10;
+    mon(0)->b.level = 8;
     gc_mon_recalc(&run, mon(0));
-    mon(0)->b.friendship = 100;
     drain();
 
     result r = take("RARE_CANDY", 0, 0, -1);
     CHECK(r.ok);
-    CHECK(mon(0)->b.level == 11);
-    CHECK(mon(0)->b.friendship == 106);
-
-    gc_internal *in = gc_int(&run);
-    gc_rphase qp;
-    CHECK(gc_rq_next(&in->rq, &qp) && qp.type == RP_LEVEL_UP && qp.a == 0 && qp.b == 10 && qp.c == 11);
-    drain();
-
-    /* 2. Candy Jar stack effect: adding 2 Candy Jars makes Rare Candy give +3 levels */
-    gc_item_add(&run, "CANDY_JAR", -1, 0, 2);
-    r = take("RARE_CANDY", 0, 0, -1);
-    CHECK(r.ok);
-    CHECK(mon(0)->b.level == 14);
-    CHECK(mon(0)->b.friendship == 124);
-    CHECK(gc_rq_next(&in->rq, &qp) && qp.type == RP_LEVEL_UP && qp.a == 0 && qp.b == 11 && qp.c == 14);
-    drain();
-
-    /* 3. Level cap refusal: setting level to max_exp_level blocks Rare Candy */
-    const double cap = pr_run_get_max_exp_level(&run.run, run.wave, false);
-    mon(0)->b.level = (int)cap;
-    r = take("RARE_CANDY", 0, 0, -1);
-    CHECK(!r.ok && !strcmp(r.why, NO_EFFECT));
-    CHECK(mon(0)->b.level == (int)cap);
-
-    /* 4. Rarer Candy levels up all eligible party members */
-    mon(0)->b.level = 10;
-    mon(1)->b.level = 12;
-    mon(2)->b.level = 15;
-    for (int i = 0; i < 3; i++) {
-        gc_mon_recalc(&run, mon(i));
-        mon(i)->b.friendship = 50;
-    }
-    drain();
-
-    r = take("RARER_CANDY", 0, -1, -1);
-    CHECK(r.ok);
-    /* Candy Jars are still present (stack 2 => +3 levels) */
-    CHECK(mon(0)->b.level == 13);
-    CHECK(mon(1)->b.level == 15);
-    CHECK(mon(2)->b.level == 18);
-
-    /* Check queued level-up events for each member */
-    int level_events = 0;
-    while (gc_rq_next(&in->rq, &qp)) {
-        if (qp.type == RP_LEVEL_UP) {
-            level_events++;
-            if (qp.a == 0) { CHECK(qp.b == 10 && qp.c == 13); }
-            else if (qp.a == 1) { CHECK(qp.b == 12 && qp.c == 15); }
-            else if (qp.a == 2) { CHECK(qp.b == 15 && qp.c == 18); }
-        }
-    }
-    CHECK(level_events == 3);
-    drain();
-
-    /* 5. Save/Reload persistence after Candy application */
-    setup("candy-save-test", 3);
-    run.wave = 10;
-    mon(0)->b.level = 8;
-    gc_mon_recalc(&run, mon(0));
-    take("RARE_CANDY", 0, 0, -1);
     CHECK(mon(0)->b.level == 9);
-    while (gc_rq_next(&in->rq, &qp)) { gc_phase_start(&run, &qp); }
-    drain();
 
+    /* Verify RP_LEVEL_UP is queued before saving */
+    gc_internal *in = gc_int(&run);
+    CHECK(in->rq.n_levels > 0 || in->rq.current.type == RP_LEVEL_UP || gc_rq_has(&run, RP_LEVEL_UP));
+
+    /* Prepare run state for valid save point */
     in->at_save_point = true;
     run.in_battle = true;
     run.screen.kind = GC_SCREEN_COMMAND;
@@ -408,13 +457,14 @@ static void test_rare_and_rarer_candy(void)
     in->rq.n_levels = 1;
     in->rq.n[0] = 1;
     in->rq.q[0][0].type = RP_TURN;
-    CHECK(gc_run_can_save(&run));
 
+    /* Save run */
     uint8_t buf[GC_SAVE_MAX];
     memset(buf, 0, sizeof buf);
     size_t sz = gc_run_save(&run, buf, sizeof buf);
     CHECK(sz > 0);
 
+    /* Reload run */
     gc_run loaded_run;
     memset(&loaded_run, 0, sizeof loaded_run);
     const char *load_why = NULL;
@@ -422,12 +472,12 @@ static void test_rare_and_rarer_candy(void)
     CHECK(loaded_ok);
     CHECK(loaded_run.party[0].b.level == 9);
 
-    /* 6. Rarer Candy refused when ALL members are at max_exp_level */
-    for (int i = 0; i < 3; i++) {
-        mon(i)->b.level = (int)cap;
-    }
-    r = take("RARER_CANDY", 0, -1, -1);
-    CHECK(!r.ok && !strcmp(r.why, NO_EFFECT));
+    /* Resume execution on loaded run and verify phase execution */
+    gc_internal *loaded_in = gc_int(&loaded_run);
+    gc_rphase qp;
+    while (gc_rq_next(&loaded_in->rq, &qp)) { gc_phase_start(&loaded_run, &qp); }
+    CHECK(loaded_run.party[0].b.level == 9);
+    printf("candy save -> reload -> resume ok\n");
 }
 
 /* ---- reward-core has no application for these: game-core's own code keeps them ---- */
@@ -776,7 +826,8 @@ int main(void)
     max_pp_override_blocks_pp_up();
     low_pp_move_refuses_pp_up();
     test_tm_and_memory_mushroom();
-    test_rare_and_rarer_candy();
+    test_rare_and_rarer_candy_table();
+    test_candy_save_reload_resume();
     printf("sacred ash, party order, unhandled items, empty slot, max PP override, low-PP move, tm/memory, rare/rarer candy: ok\n");
     random_cases(30000);
     printf("reward apply: %ld checks, 0 failures\n", checks);

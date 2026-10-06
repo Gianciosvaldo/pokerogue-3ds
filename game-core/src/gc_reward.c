@@ -541,8 +541,9 @@ int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, co
             const int old_level = b->level;
             b->level = r->level;
             m->exp = r->exp;
-            gc_system_add_friendship(run->sys, run, m, 6 * (r->level - old_level), true);
-            gc_mon_recalc(run, m);
+            const int f_gain = (int)r->friendship - (int)b->friendship;
+            gc_system_add_friendship(run->sys, run, m, f_gain > 0 ? f_gain : 0, true);
+            b->friendship = r->friendship;
             gc_rq_unshift(run, gc_rp(RP_LEVEL_UP, storage, old_level, b->level));
         }
         if (hp_changed || (i == k && item != PR_ITEM_SACRED_ASH && item != PR_ITEM_RARE_CANDY && item != PR_ITEM_RARER_CANDY)) {
