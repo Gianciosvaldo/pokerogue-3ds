@@ -357,6 +357,106 @@ int gc_starter_cost(int species)
     return -1;
 }
 
+/* game-data.ts:2018 getSpeciesStarterValue */
+double gc_starter_value(const gc_system *sys, int species)
+{
+    int base = gc_starter_cost(species);
+    if (base < 0) return -1.0;
+    uint32_t red = (sys && species > 0 && species <= GC_MAX_SPECIES_ID) ? sys->starters[species].value_reduction : 0;
+    double v = base;
+    for (uint32_t i = 0; i < red; i++) {
+        if (v > 1.0) v -= 1.0;
+        else v /= 2.0;
+    }
+    return v;
+}
+
+/* Validates starter preferences / unlocks against system data (or defaults if NULL).
+ * Cites upstream rules:
+ * - starter-select-ui-handler.ts:638 (uncaught/locked species)
+ * - starter-select-ui-handler.ts:646 (shiny/variant unlock check against caughtAttr)
+ * - starter-select-ui-handler.ts:674 (gender unlock check against caughtAttr)
+ * - starter-select-ui-handler.ts:688 (ability unlock check against abilityAttr and species single-ability logic)
+ * - starter-select-ui-handler.ts:707 (form unlock check against formIndex & caughtAttr)
+ * - starter-select-ui-handler.ts:1810 / 2219 (passive unlock check against passiveAttr & 1)
+ */
+bool gc_starter_is_available(const gc_system *sys, const gc_starter *starter, double *cost_out, const char **why)
+{
+    const char *dummy;
+    if (!why) why = &dummy;
+    if (!starter) { *why = "null starter"; return false; }
+
+    int sp_id = starter->species;
+    int base_c = gc_starter_cost(sp_id);
+    if (base_c < 0) { *why = "not a starter species"; return false; }
+
+    double val = gc_starter_value(sys, sp_id);
+    if (cost_out) *cost_out = val;
+
+    const pr_species *sp = gc_species(sp_id);
+    if (!sp) { *why = "not a starter species"; return false; }
+
+    uint64_t caught_attr = 0;
+    uint32_t ability_attr = 0;
+    uint32_t passive_attr = 0;
+
+    if (starter->ability_index > 2 || starter->nature > 24) { *why = "bad ability or nature"; return false; }
+    int form = starter->form;
+    if (form >= sp->nforms) { *why = "no such form"; return false; }
+
+    /* If sys is NULL, unconstrained mode (or run has no system attached yet) */
+    if (!sys) {
+        return true;
+    }
+
+    if (sp_id > GC_MAX_SPECIES_ID) { *why = "not a starter species"; return false; }
+
+    caught_attr = sys->dex[sp_id].caught_attr;
+    ability_attr = sys->starters[sp_id].ability_attr;
+    passive_attr = sys->starters[sp_id].passive_attr;
+
+    /* starter-select-ui-handler.ts:638: species locked if not caught */
+    if (!caught_attr) { *why = "starterSelectUiHandler:lockedSpecies"; return false; }
+
+    /* starter-select-ui-handler.ts:646: shiny & variant check */
+    if (starter->shiny) {
+        if (!(caught_attr & (1ULL << 1))) { *why = "starterSelectUiHandler:lockedShiny"; return false; }
+        uint64_t variant_bit = 1ULL << (4 + starter->variant); /* DEFAULT_VARIANT=16 (bit 4), VARIANT_2=32 (bit 5), VARIANT_3=64 (bit 6) */
+        if (starter->variant > 2 || !(caught_attr & variant_bit)) { *why = "starterSelectUiHandler:lockedVariant"; return false; }
+    } else {
+        if (!(caught_attr & (1ULL << 0))) { *why = "starterSelectUiHandler:lockedShiny"; return false; }
+    }
+
+    /* starter-select-ui-handler.ts:674: gender check */
+    if (sp->male_permille >= 0) {
+        uint64_t gender_bit = starter->female ? (1ULL << 3) : (1ULL << 2); /* FEMALE=8 (bit 3), MALE=4 (bit 2) */
+        if (!(caught_attr & gender_bit)) { *why = "starterSelectUiHandler:lockedGender"; return false; }
+    }
+
+    /* starter-select-ui-handler.ts:688: ability check */
+    bool species_has_single_ability = (sp->form0 < PR_FORM_COUNT && pr_forms[sp->form0].ability1 == pr_forms[sp->form0].ability2);
+    bool has_abil1 = (ability_attr & 1U) != 0;
+    bool has_abil2 = (ability_attr & 2U) != 0;
+    bool has_abil_hidden = (ability_attr & 4U) != 0;
+    bool unlocked_abils[3] = {
+        has_abil1,
+        species_has_single_ability ? (has_abil2 && !has_abil1) : has_abil2,
+        has_abil_hidden
+    };
+    if (!unlocked_abils[starter->ability_index]) { *why = "starterSelectUiHandler:lockedAbility"; return false; }
+
+    /* starter-select-ui-handler.ts:707: form check */
+    uint64_t form_bit = 1ULL << (7 + form); /* DEFAULT_FORM=128 (bit 7) */
+    if (!(caught_attr & form_bit)) { *why = "starterSelectUiHandler:lockedForm"; return false; }
+
+    /* starter-select-ui-handler.ts:1810,2219: passive check */
+    if (starter->passive) {
+        if (!(passive_attr & 1U)) { *why = "starterSelectUiHandler:lockedPassive"; return false; }
+    }
+
+    return true;
+}
+
 /* getStarterMoves(starterId, formIndex) with no egg moves unlocked, sliced to 4 */
 int gc_starter_default_moves(int species, uint16_t out[4])
 {
