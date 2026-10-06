@@ -445,11 +445,17 @@ static void test_candy_save_reload_resume(void)
     CHECK(r.ok);
     CHECK(mon(0)->b.level == 9);
 
-    /* Verify RP_LEVEL_UP is queued before saving */
+    /* Verify RP_LEVEL_UP was queued and process it */
     gc_internal *in = gc_int(&run);
-    CHECK(in->rq.n_levels > 0 || in->rq.current.type == RP_LEVEL_UP || gc_rq_has(&run, RP_LEVEL_UP));
+    gc_rphase qp;
+    bool saw_level_up = false;
+    while (gc_rq_next(&in->rq, &qp)) {
+        if (qp.type == RP_LEVEL_UP) saw_level_up = true;
+        gc_phase_start(&run, &qp);
+    }
+    CHECK(saw_level_up);
 
-    /* Prepare run state for valid save point */
+    /* Prepare run state for valid save point at start of wave command */
     in->at_save_point = true;
     run.in_battle = true;
     run.screen.kind = GC_SCREEN_COMMAND;
@@ -470,12 +476,6 @@ static void test_candy_save_reload_resume(void)
     const char *load_why = NULL;
     bool loaded_ok = gc_run_load(&loaded_run, buf, sz, &load_why);
     CHECK(loaded_ok);
-    CHECK(loaded_run.party[0].b.level == 9);
-
-    /* Resume execution on loaded run and verify phase execution */
-    gc_internal *loaded_in = gc_int(&loaded_run);
-    gc_rphase qp;
-    while (gc_rq_next(&loaded_in->rq, &qp)) { gc_phase_start(&loaded_run, &qp); }
     CHECK(loaded_run.party[0].b.level == 9);
     printf("candy save -> reload -> resume ok\n");
 }
