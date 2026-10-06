@@ -892,6 +892,34 @@ static void open_learn(const gc_screen* s) {
   ps_learn_move(&G.run.bt, slot < 0 ? 0 : slot, s->move, G.run.trainer_id, &host);
 }
 
+/* ---- evolution: "What? X is evolving!" -> confirm prompt -> "X stopped evolving." / "Congratulations! X evolved into Y!" ----
+ * Upstream evolution scene text sequence (evolution-phase.ts / evolution-scene-ui-handler.ts):
+ * 1. "What? X is evolving!" (i18n key "menu:evolving"): queued by game-core at evolution start and played via BEV_MESSAGE.
+ * 2. Evolution prompt (ui_push_confirm): asks the player to proceed or cancel (B button).
+ * 3. On cancel (B button / No): answer GC_CH_CANCEL -> game-core queues "menu:stoppedEvolving" ("X stopped evolving."), played via BEV_MESSAGE.
+ * 4. On success (Yes): answer GC_CH_EVOLVE -> game-core evolves member, emits GC_EV_EVOLVED, and queues "menu:evolutionDone"
+ *    ("Congratulations! Your X evolved into Y!"), played via BEV_MESSAGE. Any post-evolution move learned goes to GC_SCREEN_LEARN_MOVE.
+ */
+
+static void on_evolve_answer(int yes, void* arg) {
+  (void)arg;
+  gc_choice c;
+  memset(&c, 0, sizeof c);
+  if (yes == 1) {
+    c.kind = GC_CH_EVOLVE;
+    if (answer(&c)) G.st.evolves++;
+  } else {
+    c.kind = GC_CH_CANCEL;
+    c.a = 0;
+    if (answer(&c)) G.st.cancels++;
+  }
+}
+
+static void open_evolve(const gc_screen* s) {
+  (void)s;
+  ui_push_confirm(on_evolve_answer, NULL);
+}
+
 /* ---- rewards: shop_ui ---- */
 
 static gc_choice rc;          /* current pending choice */
@@ -1127,11 +1155,9 @@ static void screen_step(void) {
     case GC_SCREEN_LEARN_MOVE:
       open_learn(s);
       break;
-    case GC_SCREEN_EVOLVE: {
-      gc_choice c = {.kind = GC_CH_EVOLVE};
-      answer(&c);
+    case GC_SCREEN_EVOLVE:
+      open_evolve(s);
       break;
-    }
     case GC_SCREEN_REWARD:
       open_shop_ui();
       break;

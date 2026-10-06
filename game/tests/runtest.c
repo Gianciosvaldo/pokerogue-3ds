@@ -113,6 +113,31 @@ static struct {
   int caught_species;
   int pick;               /* the place in the party the player picked in the release list (-1: none yet) */
 } REL;
+
+extern int gc_evolution_moves(const gc_mon *m, uint16_t *out, int max);
+
+/* An evolution prompt: party member, species before, target species, the moves it knew, the player's answer */
+static struct {
+  bool armed;
+  int party_idx;
+  int species_before;
+  int species_target;
+  int n_moves_before;
+  uint16_t moves_before[4];
+  int choice;
+} EVO;
+/* After an accepted evolution: the new species' evolution moves the party member did not know (game-core skips the known ones and the
+ * unimplemented ones). Each must be learned straight away (room in the moveset) or offered in the learn dialog (a full moveset). */
+static struct {
+  bool pending;
+  int party_idx;
+  int n_moves_before;
+  int n;
+  uint16_t move[16];
+  bool offered[16];
+} EVM;
+static int n_evo_checked, n_cancel_checked, n_evo_moves_checked;
+
 static char first_violation[300];
 
 static void bad(const char* fmt, ...);
@@ -452,6 +477,76 @@ void ui_push_confirm(void (*on_done)(int yes, void* arg), void* arg) {
       for (int j = 0; j < i; j++)
         if (REL.id[i] == REL.id[j] || REL.id[i] == REL.caught_id) BAD("two Pokemon with the id %u", REL.id[i]);
   }
+  if (sc->kind == GC_SCREEN_EVOLVE && !EVO.armed) {
+    EVO.armed = true;
+    EVO.party_idx = sc->party;
+    EVO.species_before = r->party[sc->party].b.species;
+    EVO.species_target = sc->species;
+    EVO.n_moves_before = r->party[sc->party].b.n_moves;
+    for (int i = 0; i < EVO.n_moves_before && i < 4; i++) EVO.moves_before[i] = r->party[sc->party].b.moves[i];
+    EVO.choice = -1;
+  }
+}
+
+static void evo_check(void) {
+  if (!EVO.armed || EVO.choice == -1) return;
+  EVO.armed = false;
+  const gc_run* r = rs_run();
+  if (EVO.party_idx < 0 || EVO.party_idx >= r->n_party) {
+    BAD("evolution party index %d out of bounds (n_party %d)", EVO.party_idx, r->n_party);
+    return;
+  }
+  int current_species = r->party[EVO.party_idx].b.species;
+  if (EVO.choice == 1) {
+    if (current_species != EVO.species_target) {
+      BAD("party slot %d holds species %d after evolution, expected target species %d",
+          EVO.party_idx, current_species, EVO.species_target);
+      return;
+    }
+    n_evo_checked++;
+    uint16_t mv[16];
+    const int n = gc_evolution_moves(&r->party[EVO.party_idx], mv, 16);
+    EVM.pending = true;
+    EVM.party_idx = EVO.party_idx;
+    EVM.n_moves_before = EVO.n_moves_before;
+    EVM.n = 0;
+    for (int i = 0; i < n; i++) {
+      bool known = false;
+      for (int k = 0; k < EVO.n_moves_before; k++) known |= EVO.moves_before[k] == mv[i];
+      if (pr_moves[mv[i]].unimplemented || (known && mv[i] != MOVE_ID_SKETCH)) continue;
+      EVM.move[EVM.n] = mv[i];
+      EVM.offered[EVM.n++] = false;
+    }
+  } else {
+    if (current_species != EVO.species_before) {
+      BAD("party slot %d holds species %d after cancelled evolution, expected original species %d",
+          EVO.party_idx, current_species, EVO.species_before);
+      return;
+    }
+    n_cancel_checked++;
+  }
+}
+
+/* Once the screen has moved past the learn dialogs: every evolution move must have been learned or offered */
+static void evo_move_check(void) {
+  if (!EVM.pending) return;
+  const gc_run* r = rs_run();
+  const gc_screen* sc = gc_run_screen(r);
+  if (sc->kind == GC_SCREEN_LEARN_MOVE || sc->kind == GC_SCREEN_NONE) return;
+  EVM.pending = false;
+  const pr_pokemon* p = &r->party[EVM.party_idx].b;
+  for (int i = 0; i < EVM.n; i++) {
+    bool in_moves = false;
+    for (int k = 0; k < p->n_moves; k++) in_moves |= p->moves[k] == EVM.move[i];
+    /* a full moveset always gets the dialog; with room the move is simply learned */
+    const bool ok = EVM.offered[i] || (EVM.n_moves_before < 4 && in_moves);
+    if (!ok) {
+      BAD("evolution move %d of party slot %d (species %d, %d moves before) was neither learned nor offered in the learn dialog",
+          (int)EVM.move[i], EVM.party_idx, p->species, EVM.n_moves_before);
+      return;
+    }
+    n_evo_moves_checked++;
+  }
 }
 
 /* The question was answered: the party must be the one before, with the released member's place taken by the caught Pokemon (game-core
@@ -595,6 +690,18 @@ void ps_learn_move(const pr_battle* bt, int party_slot, int move, int trainer_id
   (void)bt, (void)move, (void)trainer_id;
   n_dialogs++;
   if (party_slot < 0 || party_slot >= bt->n_party[0]) BAD("learn dialog for slot %d of %d", party_slot, bt->n_party[0]);
+  if (EVM.pending) {
+    /* the dialog's slot is the battle place of the party member (party_order), not its party index */
+    const gc_run* r = rs_run();
+    for (int k = 0; k < r->n_party; k++) {
+      if (r->party_order[k] != EVM.party_idx || k != party_slot) continue;
+      for (int i = 0; i < EVM.n; i++)
+        if (EVM.move[i] == (uint16_t)move && !EVM.offered[i]) {
+          EVM.offered[i] = true;
+          break;
+        }
+    }
+  }
   LH = host;
   host->show_text(host->host, "wants to learn a move", true, dlg_text_done, NULL);
 }
@@ -695,7 +802,14 @@ static bool step(void) {
   if (W.confirm_done) {
     void (*f)(int, void*) = W.confirm_done;
     W.confirm_done = NULL;
-    f((int)rnd(3) != 0, W.confirm_arg);
+    int yes;
+    if (EVO.armed && EVO.choice == -1) {
+      yes = (int)rnd(2);
+      EVO.choice = yes;
+    } else {
+      yes = (int)rnd(3) != 0;
+    }
+    f(yes, W.confirm_arg);
     return true;
   }
   if (W.opt_done) {
@@ -804,6 +918,7 @@ int main(int argc, char** argv) {
     cfg.save = true;
     cfg.slot = 0;
   }
+  cfg.n_starters = 0;
   rs_start(&cfg);
 
   const rs_stats* st = rs_stats_get();
@@ -842,6 +957,8 @@ int main(int argc, char** argv) {
     }
     steps++;
     rel_check();
+    evo_check();
+    evo_move_check();
     if (st->not_found != last_nf) {
       last_nf = st->not_found;
       BAD("a switch-in Pokemon was not found in the party");
@@ -898,6 +1015,21 @@ int main(int argc, char** argv) {
   if (pf_farewells() != n_real_releases || pf_farewells() != st->releases) BAD("%d farewells for %d releases", pf_farewells(), st->releases);
   if (n_bv_farewell) BAD("game-core's farewell reached the screen %d times (the party screen already said it)", n_bv_farewell);
   if (REL.armed) BAD("a full-party question was left unanswered");
+  printf("evolution: %d evolutions completed, %d cancelled; party species checked after %d evolutions and %d cancels; %d post-evolution moves checked (learned or offered)\n",
+         st->evolves, st->cancels, n_evo_checked, n_cancel_checked, n_evo_moves_checked);
+  if (EVO.armed) BAD("an evolution prompt was left unanswered");
+  if (EVM.pending) BAD("an evolution's moves were left unchecked");
+  if (st->evolves != n_evo_checked || st->cancels != n_cancel_checked)
+    BAD("evolution count mismatch (driver %d / %d, checked %d / %d)", st->evolves, st->cancels, n_evo_checked, n_cancel_checked);
+  /* Evolutions are rare in a random run (about 0.7 per 100 runs): the coverage floor needs the documented 1000 runs. Below that it is
+   * reported as not checked, never skipped silently. */
+  if (runs >= 1000) {
+    if (st->evolves < 5) BAD("fewer than 5 evolutions completed (%d)", st->evolves);
+    if (st->cancels < 5) BAD("fewer than 5 evolutions cancelled (%d)", st->cancels);
+    if (n_evo_moves_checked < 3) BAD("fewer than 3 post-evolution moves learned or offered (%d)", n_evo_moves_checked);
+  } else {
+    printf("evolution coverage floor (5 evolved, 5 cancelled, 3 moves) NOT checked: it needs 1000+ runs, this one has %d\n", runs);
+  }
   printf("reward screens: %d shops, %d item targets, %d biome maps\n", n_shops, n_item_opens, n_maps);
   if (save_on) {
     printf("saving: %d save points, %d written, %d failed, %d resumed from the slot\n", W.expected_saves, st->saves, st->save_failed,

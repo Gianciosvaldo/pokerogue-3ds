@@ -12,6 +12,8 @@
  *   catch:    wave 1, a Master Ball in the bag: Ball, then the Master Ball, is a catch (3 shakes, "Gotcha!").
  *   breakfree: wave 1, five Poke Balls: Ball, then the Poke Ball, is a throw that breaks free (a seed is searched for it).
  *   fullparty: wave 1, six in the party and a Master Ball: Ball, then the Master Ball, catches and asks which member to release.
+ *   evolve:   wave 1, Igglybuff (Lv 7, four moves, full friendship) one knockout from Lv 8: the first turn ends in the evolution prompt; Yes into
+ *             Jigglypuff comes with the learn dialog for Echoed Voice (a full moveset), No stops the evolution.
  *
  * The fixtures are made with the real game-core and written with the app's own run_saves.c, then loaded back and played
  * to their ending with the run's own rules (never the screens): the tool fails when a fixture does not end the way its
@@ -22,6 +24,7 @@
 #include <sys/stat.h>
 
 #include "gc/run.h"
+#include "../../game-core/src/internal.h"
 #include "pr_enums.h"
 #include "run_saves.h"
 #include "save.h"
@@ -163,12 +166,79 @@ static int make_catch_fixture(const char* name) {
   return 1;
 }
 
+/* evolve: Igglybuff (Lv 7, four moves, one point of experience short of Lv 8, where it evolves) against a wild Pokemon with 1 HP. The seed
+ * is searched until the first turn reaches the evolution prompt, and Yes then asks about Echoed Voice (the moveset is full). */
+static int make_evolve_fixture(void) {
+  mkdir("sdmc:", 0777);
+  if (!save_init()) {
+    printf("FAILED: no folder for the saves\n");
+    return 1;
+  }
+  for (int attempt = 0; attempt < 200; attempt++) {
+    char seed[40];
+    snprintf(seed, sizeof seed, "fixtureevolve%014d", attempt);
+    if (!begin(seed, SPECIES_ID_IGGLYBUFF, 1, BIOME_ID_PLAINS)) continue;
+    gc_mon* m = &R.party[0];
+    m->b.level = 7;
+    m->b.friendship = 255; /* Igglybuff evolves by level and friendship */
+    gc_mon_recalc(&R, m);
+    m->b.hp = m->b.stats[STAT_HP];
+    m->exp = gc_level_total_exp(8, gc_species(SPECIES_ID_IGGLYBUFF)->growth_rate) - 1;
+    static const int four[4] = {MOVE_ID_POUND, MOVE_ID_SING, MOVE_ID_DEFENSE_CURL, MOVE_ID_TACKLE};
+    m->b.n_moves = 0;
+    for (int i = 0; i < 4; i++) gc_mon_set_move(m, i, four[i]);
+    R.enemy[0].b.hp = 1;
+    R.enemy[0].b.stats[STAT_SPD] = 1;
+    if (rsv_save(0, &R) != RSV_SAVED) {
+      printf("FAILED: could not save\n");
+      return 1;
+    }
+    static gc_run L;
+    char why[RSV_WHY_LEN];
+    if (rsv_load(0, &L, why) != RSV_OK) {
+      printf("FAILED: the slot does not load back: %s\n", why);
+      return 1;
+    }
+    /* the app's own answers: Fight with the first move; the screens it will show, in order */
+    gc_choice c;
+    memset(&c, 0, sizeof c);
+    c.kind = GC_CH_FIGHT;
+    c.a = 0;
+    c.b = c.c = -1;
+    const char* why2 = NULL;
+    const int wild = L.enemy[0].b.species;
+    if (!gc_run_choose(&L, &c, &why2)) continue;
+    drain(&L);
+    int guard = 0;
+    while (gc_run_screen(&L)->kind == GC_SCREEN_LEARN_MOVE && guard++ < 4) {
+      memset(&c, 0, sizeof c);
+      c.kind = GC_CH_FORGET;
+      c.a = -1;
+      if (!gc_run_choose(&L, &c, &why2)) break;
+      drain(&L);
+    }
+    if (gc_run_screen(&L)->kind != GC_SCREEN_EVOLVE || gc_run_screen(&L)->species != SPECIES_ID_JIGGLYPUFF) continue;
+    memset(&c, 0, sizeof c);
+    c.kind = GC_CH_EVOLVE;
+    if (!gc_run_choose(&L, &c, &why2)) continue;
+    drain(&L);
+    const gc_screen* s = gc_run_screen(&L);
+    if (s->kind != GC_SCREEN_LEARN_MOVE || s->move != MOVE_ID_ECHOED_VOICE) continue;
+    printf("evolve fixture: seed %s, wave 1, wild species %d at 1 HP, Igglybuff Lv 7 with 4 moves: Fight (first move) -> %d learn dialog(s) "
+           "before the evolution prompt, Yes -> the learn dialog for Echoed Voice\n", seed, wild, guard);
+    return 0;
+  }
+  printf("FAILED: no seed in 200 makes the first turn end in the evolution prompt\n");
+  return 1;
+}
+
 int main(int argc, char** argv) {
   if (argc != 2 || (strcmp(argv[1], "gameover") && strcmp(argv[1], "clear") && strcmp(argv[1], "reward") && strcmp(argv[1], "catch") &&
-                    strcmp(argv[1], "breakfree") && strcmp(argv[1], "fullparty"))) {
-    printf("usage: mkfixture gameover|clear|reward|catch|breakfree|fullparty   (writes ./sdmc:/3ds/pokerogue/save/session_0.sav)\n");
+                    strcmp(argv[1], "breakfree") && strcmp(argv[1], "fullparty") && strcmp(argv[1], "evolve"))) {
+    printf("usage: mkfixture gameover|clear|reward|catch|breakfree|fullparty|evolve   (writes ./sdmc:/3ds/pokerogue/save/session_0.sav)\n");
     return 2;
   }
+  if (!strcmp(argv[1], "evolve")) return make_evolve_fixture();
   if (!strcmp(argv[1], "catch") || !strcmp(argv[1], "breakfree") || !strcmp(argv[1], "fullparty")) return make_catch_fixture(argv[1]);
   const bool clear = !strcmp(argv[1], "clear");
   const bool reward = !strcmp(argv[1], "reward");

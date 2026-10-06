@@ -54,6 +54,7 @@ typedef struct {
   int refused;                /* answers game-core refused (the player was told why) */
   int throws, catches;        /* balls thrown (the throw animation shown), and the ones that held */
   int releases, kept_out;     /* full-party catches: a member was released for the caught Pokemon / the caught Pokemon was let go */
+  int evolves, cancels;       /* evolutions accepted / cancelled */
   int events[16];             /* game-core events handled, by gc_event_kind */
   int screens[16];            /* screens handled, by gc_screen_kind */
   int dup_dropped;            /* game-core messages dropped because the battle events already showed them */
