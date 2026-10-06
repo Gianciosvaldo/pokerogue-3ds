@@ -140,23 +140,6 @@ static uint32_t rnd(uint32_t n) {
   return n ? (uint32_t)(G.rng % n) : 0;
 }
 
-/* "RARE_CANDY" -> "Rare Candy" (stand-in for the reward's own name) */
-static const char* pretty_key(const char* key, char* out, int n) {
-  int j = 0;
-  bool up = true;
-  for (int i = 0; key && key[i] && j < n - 1; i++) {
-    char c = key[i];
-    if (c == '_') {
-      out[j++] = ' ';
-      up = true;
-    } else {
-      out[j++] = up ? c : (char)(c >= 'A' && c <= 'Z' ? c + 32 : c);
-      up = false;
-    }
-  }
-  out[j] = 0;
-  return out;
-}
 
 /* game-core's reason for a refusal: an i18n key ("partyUiHandler:noEnergy") or a plain sentence */
 static const char* why_text(const char* why, char* out, int n) {
@@ -892,6 +875,27 @@ static void open_learn(const gc_screen* s) {
   ps_learn_move(&G.run.bt, slot < 0 ? 0 : slot, s->move, G.run.trainer_id, &host);
 }
 
+/* ---- evolution: ui_push_confirm prompt ---- */
+
+static void on_evolve_answer(int yes, void* arg) {
+  (void)arg;
+  gc_choice c;
+  memset(&c, 0, sizeof c);
+  if (yes == 1) {
+    c.kind = GC_CH_EVOLVE;
+    if (answer(&c)) G.st.evolves++;
+  } else {
+    c.kind = GC_CH_CANCEL;
+    c.a = 0;
+    if (answer(&c)) G.st.cancels++;
+  }
+}
+
+static void open_evolve(const gc_screen* s) {
+  (void)s;
+  ui_push_confirm(on_evolve_answer, NULL);
+}
+
 /* ---- rewards: shop_ui ---- */
 
 static gc_choice rc;          /* current pending choice */
@@ -1127,11 +1131,9 @@ static void screen_step(void) {
     case GC_SCREEN_LEARN_MOVE:
       open_learn(s);
       break;
-    case GC_SCREEN_EVOLVE: {
-      gc_choice c = {.kind = GC_CH_EVOLVE};
-      answer(&c);
+    case GC_SCREEN_EVOLVE:
+      open_evolve(s);
       break;
-    }
     case GC_SCREEN_REWARD:
       open_shop_ui();
       break;

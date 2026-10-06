@@ -113,6 +113,17 @@ static struct {
   int caught_species;
   int pick;               /* the place in the party the player picked in the release list (-1: none yet) */
 } REL;
+
+/* An evolution prompt: party member, species before, target species, choice */
+static struct {
+  bool armed;
+  int party_idx;
+  int species_before;
+  int species_target;
+  int choice;
+} EVO;
+static int n_evo_checked, n_cancel_checked;
+
 static char first_violation[300];
 
 static void bad(const char* fmt, ...);
@@ -452,6 +463,39 @@ void ui_push_confirm(void (*on_done)(int yes, void* arg), void* arg) {
       for (int j = 0; j < i; j++)
         if (REL.id[i] == REL.id[j] || REL.id[i] == REL.caught_id) BAD("two Pokemon with the id %u", REL.id[i]);
   }
+  if (sc->kind == GC_SCREEN_EVOLVE && !EVO.armed) {
+    EVO.armed = true;
+    EVO.party_idx = sc->party;
+    EVO.species_before = r->party[sc->party].b.species;
+    EVO.species_target = sc->species;
+    EVO.choice = -1;
+  }
+}
+
+static void evo_check(void) {
+  if (!EVO.armed || EVO.choice == -1) return;
+  EVO.armed = false;
+  const gc_run* r = rs_run();
+  if (EVO.party_idx < 0 || EVO.party_idx >= r->n_party) {
+    BAD("evolution party index %d out of bounds (n_party %d)", EVO.party_idx, r->n_party);
+    return;
+  }
+  int current_species = r->party[EVO.party_idx].b.species;
+  if (EVO.choice == 1) {
+    if (current_species != EVO.species_target) {
+      BAD("party slot %d holds species %d after evolution, expected target species %d",
+          EVO.party_idx, current_species, EVO.species_target);
+      return;
+    }
+    n_evo_checked++;
+  } else {
+    if (current_species != EVO.species_before) {
+      BAD("party slot %d holds species %d after cancelled evolution, expected original species %d",
+          EVO.party_idx, current_species, EVO.species_before);
+      return;
+    }
+    n_cancel_checked++;
+  }
 }
 
 /* The question was answered: the party must be the one before, with the released member's place taken by the caught Pokemon (game-core
@@ -695,7 +739,13 @@ static bool step(void) {
   if (W.confirm_done) {
     void (*f)(int, void*) = W.confirm_done;
     W.confirm_done = NULL;
-    f((int)rnd(3) != 0, W.confirm_arg);
+    int yes = (int)rnd(2);
+    if (EVO.armed && EVO.choice == -1) {
+      if (n_cancel_checked == 0) yes = 0;
+      else yes = 1;
+      EVO.choice = yes;
+    }
+    f(yes, W.confirm_arg);
     return true;
   }
   if (W.opt_done) {
@@ -804,6 +854,11 @@ int main(int argc, char** argv) {
     cfg.save = true;
     cfg.slot = 0;
   }
+  cfg.starters[0] = 1;   /* Bulbasaur (3) */
+  cfg.starters[1] = 10;  /* Caterpie (1) */
+  cfg.starters[2] = 13;  /* Weedle (1) */
+  cfg.starters[3] = 265; /* Wurmple (1) */
+  cfg.n_starters = 4;
   rs_start(&cfg);
 
   const rs_stats* st = rs_stats_get();
@@ -842,6 +897,7 @@ int main(int argc, char** argv) {
     }
     steps++;
     rel_check();
+    evo_check();
     if (st->not_found != last_nf) {
       last_nf = st->not_found;
       BAD("a switch-in Pokemon was not found in the party");
@@ -898,6 +954,12 @@ int main(int argc, char** argv) {
   if (pf_farewells() != n_real_releases || pf_farewells() != st->releases) BAD("%d farewells for %d releases", pf_farewells(), st->releases);
   if (n_bv_farewell) BAD("game-core's farewell reached the screen %d times (the party screen already said it)", n_bv_farewell);
   if (REL.armed) BAD("a full-party question was left unanswered");
+  printf("evolution: %d evolutions completed, %d cancelled; party species checked after %d evolutions and %d cancels\n",
+         st->evolves, st->cancels, n_evo_checked, n_cancel_checked);
+  if (!st->evolves || !n_evo_checked) BAD("no evolution completed");
+  if (!st->cancels || !n_cancel_checked) BAD("no evolution cancelled");
+  if (st->evolves != n_evo_checked || st->cancels != n_cancel_checked)
+    BAD("evolution count mismatch (driver %d / %d, checked %d / %d)", st->evolves, st->cancels, n_evo_checked, n_cancel_checked);
   printf("reward screens: %d shops, %d item targets, %d biome maps\n", n_shops, n_item_opens, n_maps);
   if (save_on) {
     printf("saving: %d save points, %d written, %d failed, %d resumed from the slot\n", W.expected_saves, st->saves, st->save_failed,
