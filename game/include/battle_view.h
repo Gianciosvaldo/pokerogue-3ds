@@ -76,6 +76,10 @@ typedef enum {
                     * frames later (onRemove); the queue doesn't wait */
   BEV_FORM_CHANGE, /* battler, a = species, b = form (Mega Evolution, Gigantamax, form change) */
   BEV_MAX_HP,      /* battler, a = new max HP (a form with other base stats); the HP follows in a heal or damage event */
+  BEV_CATCH,       /* AttemptCapturePhase's animation on the enemy battler: the ball (a = PokeballType 0..4) is thrown, takes
+                    * the Pokemon in, bounces and shakes b times. caught: the ball locks and the event ends with the Pokemon
+                    * inside, for the messages and the enemy's withdraw that follow (the ball fades at that withdraw). Not
+                    * caught: the ball breaks free after the shakes, the Pokemon is back whole and the ball fades */
 } bev_type;
 
 typedef struct {
@@ -84,6 +88,7 @@ typedef struct {
   int a, b;
   const char* text;          /* BEV_MESSAGE, BEV_SUMMON: the text (already translated) */
   bool prompt;               /* BEV_MESSAGE: wait for a button */
+  bool caught;               /* BEV_CATCH: the ball holds (b is then 3: a catch always passes the three shake checks) */
   const bv_mon* mon;         /* BEV_SUMMON */
 } bv_event;
 

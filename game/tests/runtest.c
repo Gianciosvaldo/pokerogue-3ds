@@ -25,6 +25,7 @@
 #include "battle_view.h"
 #include "ball_menu.h"
 #include "i18n.h"
+#include "party_fake.h"
 #include "party_screen.h"
 #include "pr_data.h"
 #include "pr_enums.h"
@@ -68,6 +69,7 @@ static struct {
   void* confirm_arg;
   void (*party_pick)(int, int, void*);
   void* party_arg;
+  bool rel_open;          /* the full-party release list (menus' party.c, through party_fake.c) is open */
   const pr_battle* party_bt;
   ps_mode party_mode;
   void (*ball_pick)(int, void*);
@@ -99,6 +101,18 @@ static bool save_on, resume_on;
 static int n_resumes;
 
 static int violations, n_scenes, n_ask, n_dialogs, n_options, n_party_opens, n_balls, n_party_full_swaps;
+static int n_throw_ev, n_caught_ev, n_broke_ev, n_bv_farewell, n_real_releases, n_list_backs, n_rel_checked, n_decl_checked;
+
+/* A full-party catch: the party as the question "release one?" found it, and the Pokemon about to be caught */
+static struct {
+  bool armed;
+  int n, releases0, kept0;
+  uint32_t id[6];
+  int species[6];
+  uint32_t caught_id;
+  int caught_species;
+  int pick;               /* the place in the party the player picked in the release list (-1: none yet) */
+} REL;
 static char first_violation[300];
 
 static void bad(const char* fmt, ...);
@@ -222,7 +236,29 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
     switch (e->type) {
       case BEV_MESSAGE:
         if (!e->text) BAD("a message with no text");
+        else {
+          /* game-core's copy of the farewell must not reach the screen: the party screen said it (party_fake.c counts those) */
+          static const char* const K[] = {"goodbye", "byebye", "farewell", "soLong", "thisIsWhereWePart",
+                                          "illMissYou", "illNeverForgetYou", "untilWeMeetAgain", "sayonara", "smellYaLater"};
+          for (size_t k = 0; k < sizeof K / sizeof *K; k++)
+            if (!strcmp(e->text, K[k])) n_bv_farewell++;
+        }
         break;
+      case BEV_CATCH: {
+        n_throw_ev++;
+        if (e->battler != BV_ENEMY || !W.present[1]) BAD("a ball thrown at nobody (battler %d, enemy out %d)", e->battler, W.present[1]);
+        if (e->a < 0 || e->a >= BALL_TYPES) BAD("a ball of type %d", e->a);
+        if (e->caught ? e->b != 3 : (e->b < 0 || e->b > 2)) BAD("a ball that %s shows %d shakes", e->caught ? "holds" : "breaks free", e->b);
+        /* the throw says what the run decided: "Gotcha!" (battle:pokemonCaught) comes with it when it held, and only then */
+        bool gotcha = false;
+        for (int j = i + 1; j < n; j++)
+          if (ev[j].type == BEV_MESSAGE && ev[j].text && strstr(ev[j].text, "pokemonCaught")) gotcha = true;
+        if (gotcha != e->caught) BAD("the ball %s but the messages %s Gotcha!", e->caught ? "held" : "broke free", gotcha ? "have" : "have no");
+        if (e->caught) n_caught_ev++;
+        else n_broke_ev++;
+        if (W.mon[1].hp <= 0) BAD("a ball thrown at a Pokemon with no HP");
+        break;
+      }
       case BEV_INTRO_WILD:
         if (e->a == 0) {
           if (W.mon[1].species <= 0) BAD("wild intro with no enemy");
@@ -392,16 +428,108 @@ void ui_push_options(const char* const* labels, int n, bool can_cancel, void (*o
 void ui_push_confirm(void (*on_done)(int yes, void* arg), void* arg) {
   W.confirm_done = on_done;
   W.confirm_arg = arg;
+  /* On a switch screen the only yes / no is the full-party question: the party and the Pokemon about to be caught are noted now */
+  const gc_run* r = rs_run();
+  const gc_screen* sc = gc_run_screen(r);
+  if (sc->kind == GC_SCREEN_SWITCH && !REL.armed) {
+    if (r->n_party != 6 || sc->party < 0 || sc->party >= r->n_enemy) {
+      BAD("a switch screen asked yes / no with %d in the party and the caught Pokemon %d", r->n_party, sc->party);
+      return;
+    }
+    REL.armed = true;
+    REL.pick = -1;
+    REL.n = r->n_party;
+    REL.releases0 = rs_stats_get()->releases;
+    REL.kept0 = rs_stats_get()->kept_out;
+    for (int i = 0; i < REL.n; i++) {
+      const pr_pokemon* p = &r->party[r->party_order[i]].b;
+      REL.id[i] = p->id;
+      REL.species[i] = p->species;
+    }
+    REL.caught_id = r->enemy[sc->party].b.id;
+    REL.caught_species = r->enemy[sc->party].b.species;
+    for (int i = 0; i < REL.n; i++)
+      for (int j = 0; j < i; j++)
+        if (REL.id[i] == REL.id[j] || REL.id[i] == REL.caught_id) BAD("two Pokemon with the id %u", REL.id[i]);
+  }
+}
+
+/* The question was answered: the party must be the one before, with the released member's place taken by the caught Pokemon (game-core
+ * splices it in at the cursor, except that releasing the last place puts it one before: the party screen's RELEASE mode), or, when it
+ * was let go, the same party */
+static void rel_check(void) {
+  const rs_stats* st = rs_stats_get();
+  if (!REL.armed || (st->releases == REL.releases0 && st->kept_out == REL.kept0)) return;
+  REL.armed = false;
+  const gc_run* r = rs_run();
+  uint32_t id[6];
+  int species[6];
+  if (r->n_party != REL.n) {
+    BAD("the party has %d members after a full-party catch, it had %d", r->n_party, REL.n);
+    return;
+  }
+  for (int i = 0; i < REL.n; i++) {
+    const pr_pokemon* p = &r->party[r->party_order[i]].b;
+    id[i] = p->id;
+    species[i] = p->species;
+  }
+  uint32_t want_id[6];
+  int want_species[6];
+  memcpy(want_id, REL.id, sizeof want_id);
+  memcpy(want_species, REL.species, sizeof want_species);
+  if (st->releases != REL.releases0) {
+    int k = -1;
+    for (int i = 0; i < REL.n; i++) {
+      bool still = false;
+      for (int j = 0; j < REL.n; j++) still |= id[j] == REL.id[i];
+      if (still) continue;
+      if (k >= 0) BAD("two members left the party for one catch");
+      k = i;
+    }
+    if (k < 0) {
+      BAD("a member was released and all of them are still in the party");
+      return;
+    }
+    if (REL.pick >= 0 && k != REL.pick) BAD("the player picked place %d in the release list, place %d left the party", REL.pick, k);
+    want_id[k] = REL.caught_id;
+    want_species[k] = REL.caught_species;
+    if (k == REL.n - 1 && k > 0) {
+      const uint32_t ti = want_id[k - 1];
+      const int ts = want_species[k - 1];
+      want_id[k - 1] = want_id[k];
+      want_species[k - 1] = want_species[k];
+      want_id[k] = ti;
+      want_species[k] = ts;
+    }
+    n_rel_checked++;
+  } else {
+    n_decl_checked++;
+  }
+  for (int i = 0; i < REL.n; i++)
+    if (id[i] != want_id[i] || species[i] != want_species[i])
+      BAD("party slot %d holds species %d (id %u) after the full-party catch, expected species %d (id %u)", i, species[i], id[i],
+          want_species[i], want_id[i]);
 }
 
 void ps_open(const pr_battle* bt, ps_mode mode, void (*on_pick)(int slot, int option, void* arg), void* arg) {
   n_party_opens++;
+  if (mode == PS_RELEASE) {
+    /* the real party screen (menus/party.c) in RELEASE mode: the player's actions go in as buttons */
+    if (!REL.armed) BAD("the release list opened without the question before it");
+    pf_open_release(bt, on_pick, arg);
+    W.rel_open = true;
+    return;
+  }
   W.party_pick = on_pick;
   W.party_arg = arg;
   W.party_bt = bt;
   W.party_mode = mode;
 }
-void ps_close(void) { W.party_pick = NULL; }
+void ps_close(void) {
+  W.party_pick = NULL;
+  if (W.rel_open) pf_close();
+  W.rel_open = false;
+}
 
 void rh_open_shop(const shop_ui_args* args, const shop_ui_events* ev) {
   n_shops++;
@@ -587,25 +715,33 @@ static bool step(void) {
     f(n && rnd(5) ? avail[rnd((uint32_t)n)] : -1, W.ball_arg);
     return true;
   }
+  if (W.rel_open && pf_active()) {
+    /* the full-party release list: pick a member (the options list, Release, the farewell), or back out to the question */
+    n_party_full_swaps++;
+    const int n = rs_run()->n_party;
+    const int slot = rnd(10) < 7 ? (int)rnd((uint32_t)n) : -1;
+    const int said = pf_farewells();
+    REL.pick = slot;
+    pf_release(slot);
+    if (slot >= 0) {
+      n_real_releases++;
+      if (pf_farewells() != said + 1) BAD("the party screen said goodbye %d times for one release", pf_farewells() - said);
+    } else {
+      n_list_backs++;
+      if (pf_farewells() != said) BAD("the party screen said goodbye after backing out");
+    }
+    return true;
+  }
   if (W.party_pick) {
     void (*f)(int, int, void*) = W.party_pick;
     const pr_battle* bt = W.party_bt;
     W.party_pick = NULL;
-    if (W.party_mode == PS_RELEASE) {
-      n_party_full_swaps++;
-      int slot = rnd(10) < 8 ? (int)rnd((uint32_t)bt->n_party[0]) : -1;
-      f(slot, slot >= 0 ? PO_RELEASE : PS_CANCEL, W.party_arg);
-      /* Verify game-core party state matches driver's party after swap/release prompt */
-      const gc_run* r = rs_run();
-      if (r->n_party != bt->n_party[0]) BAD("party size mismatch post-release: gc=%d bt=%d", r->n_party, bt->n_party[0]);
-    } else {
-      int ok[6], n = 0;
-      for (int i = 0; i < bt->n_party[0]; i++)
-        if (bt->party[0][i]->hp > 0 && !bt->party[0][i]->on_field) ok[n++] = i;
-      if (W.party_mode == PS_SWITCH && rnd(6) == 0) f(6, PS_CANCEL, W.party_arg);
-      else if (n && rnd(10)) f(ok[rnd((uint32_t)n)], PS_SEND_OUT, W.party_arg);
-      else f((int)rnd((uint32_t)bt->n_party[0]), PS_SEND_OUT, W.party_arg); /* maybe not allowed: game-core refuses */
-    }
+    int ok[6], n = 0;
+    for (int i = 0; i < bt->n_party[0]; i++)
+      if (bt->party[0][i]->hp > 0 && !bt->party[0][i]->on_field) ok[n++] = i;
+    if (W.party_mode == PS_SWITCH && rnd(6) == 0) f(6, PS_CANCEL, W.party_arg);
+    else if (n && rnd(10)) f(ok[rnd((uint32_t)n)], PS_SEND_OUT, W.party_arg);
+    else f((int)rnd((uint32_t)bt->n_party[0]), PS_SEND_OUT, W.party_arg); /* maybe not allowed: game-core refuses */
     return true;
   }
   if (W.asking) {
@@ -705,6 +841,7 @@ int main(int argc, char** argv) {
       break;
     }
     steps++;
+    rel_check();
     if (st->not_found != last_nf) {
       last_nf = st->not_found;
       BAD("a switch-in Pokemon was not found in the party");
@@ -746,9 +883,21 @@ int main(int argc, char** argv) {
          st->screens[GC_SCREEN_COMMAND], st->screens[GC_SCREEN_SWITCH], st->screens[GC_SCREEN_LEARN_MOVE],
          st->screens[GC_SCREEN_EVOLVE], st->screens[GC_SCREEN_REWARD], st->screens[GC_SCREEN_BIOME], st->screens[GC_SCREEN_MYSTERY],
          st->screens[GC_SCREEN_GAME_OVER], st->screens[GC_SCREEN_CLEAR]);
-  printf("fake screen: %d scenes, %d command prompts, %d option lists, %d party screens (%d full-party swaps), %d ball lists, %d learn dialogs, %u screen events\n",
-         n_scenes, n_ask, n_options, n_party_opens, n_party_full_swaps, n_balls, n_dialogs, st->bev);
-  if (n_party_full_swaps == 0) BAD("no full party catch release/swap path reached");
+  printf("fake screen: %d scenes, %d command prompts, %d option lists, %d party screens, %d ball lists, %d learn dialogs, %u screen events\n",
+         n_scenes, n_ask, n_options, n_party_opens, n_balls, n_dialogs, st->bev);
+  printf("catching: %d throws shown (%d held, %d broke free); full-party catches: %d release lists opened, %d members released through the party "
+         "screen (%d farewells there, %d from game-core's events), %d let go, %d times backed out of the list; party checked after %d "
+         "releases and %d let go\n",
+         n_throw_ev, n_caught_ev, n_broke_ev, n_party_full_swaps, n_real_releases, pf_farewells(), n_bv_farewell, st->kept_out, n_list_backs,
+         n_rel_checked, n_decl_checked);
+  if (!n_caught_ev || !n_broke_ev) BAD("a throw outcome never came up (held %d, broke free %d)", n_caught_ev, n_broke_ev);
+  if (n_throw_ev != st->throws || n_caught_ev != st->catches) BAD("the driver counted %d throws (%d held), the screen saw %d (%d)", st->throws, st->catches, n_throw_ev, n_caught_ev);
+  if (!n_rel_checked) BAD("no full-party release reached");
+  if (!st->kept_out || !n_decl_checked) BAD("no full-party catch was let go");
+  if (!n_list_backs) BAD("backing out of the release list never came up");
+  if (pf_farewells() != n_real_releases || pf_farewells() != st->releases) BAD("%d farewells for %d releases", pf_farewells(), st->releases);
+  if (n_bv_farewell) BAD("game-core's farewell reached the screen %d times (the party screen already said it)", n_bv_farewell);
+  if (REL.armed) BAD("a full-party question was left unanswered");
   printf("reward screens: %d shops, %d item targets, %d biome maps\n", n_shops, n_item_opens, n_maps);
   if (save_on) {
     printf("saving: %d save points, %d written, %d failed, %d resumed from the slot\n", W.expected_saves, st->saves, st->save_failed,

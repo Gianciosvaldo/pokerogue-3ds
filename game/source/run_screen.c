@@ -24,6 +24,9 @@ extern int gc_item_stack(const gc_run *run, const char *key);
 
 #define EV_CAP 400      /* screen events one game-core event can make */
 #define CHUNK 150       /* battle_view queues at most 160 at a time */
+/* battle-core rolls the three shake checks (attempt_capture_phase) and keeps only whether the ball held: the number of shakes
+ * before a ball breaks free is not in its events. A ball that breaks free wobbles once (a stand-in: it can be 0, 1 or 2). */
+#define BREAK_FREE_SHAKES 1
 #define TXT_CAP 12
 #define TXT_LEN 320
 
@@ -38,6 +41,8 @@ static struct {
   bool skip[GC_MAX_EVENTS];
   int nq, qi;
   bool swap_prompt;             /* the drain has "swap or release" for a caught Pokemon */
+  bool release_drop;            /* the next drain follows a release picked on the party screen, which said goodbye itself */
+  int ball;                     /* PokeballType of the ball the player just threw (the turn's first events start with its throw), -1 none */
   bool learn_drop;              /* the next drain starts with the learn dialog's own messages */
   bool swap_replaced;           /* a caught Pokemon replaced the one on the field: the screen must show the new one */
   /* what the battle screen shows */
@@ -59,7 +64,7 @@ static struct {
    * foe's send-out (they were shown when the battle began, before the save) */
   bool resume_wave;             /* the next WAVE event is the loaded battle's */
   bool resume_foe;              /* the foe may be on the field in the run and not on the screen yet */
-} G = {.shown = -1};
+} G = {.shown = -1, .ball = -1};
 
 static void pump(void* arg);
 static void screen_step(void);
@@ -77,7 +82,8 @@ static void reset_driver(void) {
   G.wave_ev = 0;
   G.nq = G.qi = 0;
   G.n_ev = G.ev_pos = G.n_txt = 0;
-  G.swap_prompt = G.learn_drop = G.swap_replaced = false;
+  G.swap_prompt = G.learn_drop = G.swap_replaced = G.release_drop = false;
+  G.ball = -1;
   G.refused_in_row = 0;
   G.save_due = G.save_failed_told = false;
   G.resume_wave = G.resume_foe = false;
@@ -216,6 +222,16 @@ static void say(const char* text) {
 
 /* ------------------------------------------------------------------ events */
 
+/* PartyUiHandler.getReleaseMessage's ten farewells (game-core's copy of what the party screen shows when a member is released) */
+static bool is_farewell(const gc_event* e) {
+  static const char* const KEYS[] = {"goodbye", "byebye", "farewell", "soLong", "thisIsWhereWePart",
+                                     "illMissYou", "illNeverForgetYou", "untilWeMeetAgain", "sayonara", "smellYaLater"};
+  if (e->kind != GC_EV_MESSAGE || !e->msg.key || strncmp(e->msg.key, "partyUiHandler:", 15)) return false;
+  for (size_t i = 0; i < sizeof KEYS / sizeof *KEYS; i++)
+    if (!strcmp(e->msg.key + 15, KEYS[i])) return true;
+  return false;
+}
+
 static void drain(void) {
   G.nq = G.qi = 0;
   G.swap_prompt = false;
@@ -238,9 +254,20 @@ static void drain(void) {
       break;
     }
   }
+  const bool release_drop = G.release_drop;
+  G.release_drop = false;
   for (int i = 0; i < G.nq; i++) {
     const gc_event* e = &G.q[i];
-    if (msg_is(e, "menu:swapOrRelease")) G.swap_prompt = true;
+    /* the app's marker for the full-party question: no text of its own (the locale has no such key) */
+    if (msg_is(e, "menu:swapOrRelease")) {
+      G.swap_prompt = true;
+      G.skip[i] = true;
+    }
+    /* the party screen already said goodbye when the member was picked (menus' do_release): once is enough */
+    if (release_drop && is_farewell(e)) {
+      G.skip[i] = true;
+      G.st.dup_dropped++;
+    }
     if (s->kind == GC_SCREEN_LEARN_MOVE && (msg_is(e, "battle:learnMovePrompt") || msg_is(e, "battle:learnMoveLimitReached")))
       G.skip[i] = true;
     /* a battle's send-out text is in battle-core's events and again as a game-core message right after them */
@@ -409,7 +436,22 @@ static bool handle_event(int i) {
       for (int k = 0; k < G.run.n_enemy && k < 6; k++) enemy_ptr[k] = &G.run.enemy[k].b;
       v.enemy_party = enemy_ptr;
       v.n_enemy_party = G.run.n_enemy < 6 ? G.run.n_enemy : 6;
-      G.n_ev = be_convert_events(&G.run.bt, &G.run.battle_events[e->a], e->b, settled_after(i), &v, G.ev, EV_CAP);
+      if (G.ball >= 0 && G.present[1]) {
+        /* the ball is thrown first in the turn (commands other than FIGHT go first). Whether it holds is the run's: battle-core
+         * shows "Gotcha!" only for a catch. How many shakes a ball that breaks free made is not in the events (see
+         * BREAK_FREE_SHAKES) */
+        bool caught = false;
+        for (int k = 0; k < e->b; k++) {
+          const pr_event* be = &G.run.battle_events[e->a + k];
+          if (be->type == PR_EV_TEXT && be->msg.key && !strcmp(be->msg.key, "battle:pokemonCaught")) caught = true;
+        }
+        bv_event* t = ev_new();
+        *t = (bv_event){.type = BEV_CATCH, .battler = BV_ENEMY, .a = G.ball, .b = caught ? 3 : BREAK_FREE_SHAKES, .caught = caught};
+        G.st.throws++;
+        if (caught) G.st.catches++;
+      }
+      G.ball = -1;
+      G.n_ev += be_convert_events(&G.run.bt, &G.run.battle_events[e->a], e->b, settled_after(i), &v, G.ev + G.n_ev, EV_CAP - G.n_ev);
       G.present[0] = v.present[0];
       G.present[1] = v.present[1];
       if (v.sent[0]) G.shown = pidx_of(v.sent[0]);
@@ -650,6 +692,7 @@ static bool resync_field(void) {
 
 static void ask(void) {
   const gc_screen* s = gc_run_screen(&G.run);
+  G.ball = -1;
   sync_shown();
   bv_command_opts o;
   memset(&o, 0, sizeof o);
@@ -695,7 +738,11 @@ static void on_ball_pick(int ball, void* arg) {
     return;
   }
   gc_choice c = {.kind = GC_CH_BALL, .a = (int16_t)ball};
-  if (answer(&c)) G.st.balls++;
+  G.ball = ball;
+  if (answer(&c))
+    G.st.balls++;
+  else
+    G.ball = -1; /* refused (the player was told why): nothing was thrown */
 }
 
 static void on_command(bv_command c, void* arg) {
@@ -727,17 +774,24 @@ static void on_command(bv_command c, void* arg) {
 
 /* ---- the Pokemon to send in (after a faint, or a move that switches out; or which to release for a catch) ---- */
 
-static void on_send_pick(int slot, int option, void* arg) {
-  (void)arg;
-  if (option != PS_SEND_OUT && option != PO_RELEASE && option != PS_CANCEL) return;
-  const gc_screen* s = gc_run_screen(&G.run);
-  gc_choice c = {.kind = GC_CH_PICK, .a = -1};
-  if ((option == PS_SEND_OUT || option == PO_RELEASE) && slot >= 0 && slot < G.run.n_party) c.a = G.run.party_order[slot];
-  else if (!s->can_skip) return; /* no cancelling a faint switch */
-  ps_close();
+static void ask_release(void);
+
+/* Answers the switch screen with party index `a` (-1: nobody: the full-party question's No, or backing out of a switch) */
+static void finish_pick(int a) {
   const bool swap = G.swap_prompt;
-  if (!submit(&c)) return;
-  if (swap && c.a >= 0 && c.a == G.shown) {
+  gc_choice c = {.kind = GC_CH_PICK, .a = (int16_t)a};
+  G.release_drop = swap && a >= 0;
+  if (!submit(&c)) {
+    G.release_drop = false;
+    return;
+  }
+  if (swap) {
+    if (a >= 0)
+      G.st.releases++;
+    else
+      G.st.kept_out++;
+  }
+  if (swap && a >= 0 && a == G.shown) {
     /* the caught Pokemon took the place of the one on the field: the screen's copy is gone */
     G.present[0] = false;
     G.shown = -1;
@@ -746,8 +800,41 @@ static void on_send_pick(int slot, int option, void* arg) {
   pump(NULL);
 }
 
+static void on_send_pick(int slot, int option, void* arg) {
+  (void)arg;
+  if (option != PS_SEND_OUT && option != PS_RELEASE_PICK && option != PS_CANCEL) return;
+  const gc_screen* s = gc_run_screen(&G.run);
+  if (G.swap_prompt && option == PS_CANCEL) {
+    /* backing out of the release list goes back to the question (upstream's promptRelease) */
+    ps_close();
+    ask_release();
+    return;
+  }
+  int a = -1;
+  if ((option == PS_SEND_OUT || option == PS_RELEASE_PICK) && slot >= 0 && slot < G.run.n_party) a = G.run.party_order[slot];
+  else if (!s->can_skip) return; /* no cancelling a faint switch */
+  ps_close();
+  finish_pick(a);
+}
+
+/* "Your party is full. Release a Pokemon to make room for X?" is on screen (game-core's message): Yes picks who goes,
+ * No lets the caught Pokemon go */
+static void on_release_answer(int yes, void* arg) {
+  (void)arg;
+  if (yes == 1) {
+    ps_open(&G.run.bt, PS_RELEASE, on_send_pick, NULL);
+    return;
+  }
+  finish_pick(-1);
+}
+
+static void ask_release(void) { ui_push_confirm(on_release_answer, NULL); }
+
 static void open_switch(const gc_screen* s) {
-  ps_open(&G.run.bt, G.swap_prompt ? PS_RELEASE : (s->can_skip ? PS_SWITCH : PS_FAINT_SWITCH), on_send_pick, NULL);
+  if (G.swap_prompt)
+    ask_release();
+  else
+    ps_open(&G.run.bt, s->can_skip ? PS_SWITCH : PS_FAINT_SWITCH, on_send_pick, NULL);
 }
 
 /* ---- learning a move: menus' own dialog, with the battle's message box and yes/no ---- */

@@ -62,6 +62,11 @@ typedef struct {
   bool tint_on, tint_above; /* the doll's white copy (setTintFill) and whether it's over the Pokemon */
   float tint_scale, tint_alpha;
   char sprite_key[64];
+  /* a Poke Ball's catch attempt (BEV_CATCH) */
+  float catch_dy;     /* px the Pokemon has moved up into the ball (negative) */
+  bool catch_on;      /* drawn as a silhouette in the ball's colour, fading back to normal as catch_untint goes 0 -> 1 */
+  float catch_untint;
+  int catch_rgb[3];
 } side;
 
 typedef enum { M_IDLE, M_EVENTS, M_COMMAND, M_FIGHT } mode;
@@ -97,6 +102,17 @@ static struct {
   float fps;
   int fps_frames;
   float fps_t;
+  /* the thrown ball (it outlives its event: a caught ball stays on the field for the messages) */
+  struct {
+    bool on;
+    int type;              /* PokeballType 0..4 */
+    int look;              /* 0 closed, 1 opening, 2 open */
+    float x, y, angle, alpha, flash;
+    bool behind;           /* moved below the Pokemon (upstream does that 300 ms into the throw) */
+    bool fading;
+    float fade_t;
+    bool sub;              /* the enemy had a Substitute doll the throw put away */
+  } ball;
 } B;
 
 static side* side_of(int battler) { return &B.s[battler >= 2 ? 1 : 0]; }
@@ -236,7 +252,7 @@ static void anim_field(ba_mon out[4]) {
  * the player's steps back left and down, the enemy's right and up). */
 static void mon_pos(const side* sd, bool player, float* x, float* y) {
   *x = (player ? 106 : 236 + B.enemy_slide) + sd->sub_off * (player ? -30 : 30);
-  *y = (player ? 148 : 84) + sd->sub_off * (player ? 10 : -10);
+  *y = (player ? 148 : 84) + sd->sub_off * (player ? 10 : -10) + sd->catch_dy;
 }
 
 /* The doll ("pkmn__sub" / "pkmn__back__sub", origin (0.5, 1), half size on the player's side) at
@@ -272,7 +288,13 @@ static void draw_sprite(side* sd, bool player) {
   o.origin_y = 1.0f;
   o.scale_x = o.scale_y = sd->scale;
   if (sd->black) o.tint = RR_RGBA(0, 0, 0, 255);
-  else if (sd->mon_alpha < 1) o.tint = RR_RGBA(255, 255, 255, (int)(sd->mon_alpha * 255 + 0.5f));
+  else if (sd->catch_on) {
+    /* pokemon.tint(color) is a flat fill: black through the multiply, then the colour added back as the tone */
+    const int v = (int)(255 * sd->catch_untint + 0.5f);
+    o.tint = RR_RGBA(v, v, v, 255);
+    rr_set_tone((int)(sd->catch_rgb[0] * (1 - sd->catch_untint)), (int)(sd->catch_rgb[1] * (1 - sd->catch_untint)),
+                (int)(sd->catch_rgb[2] * (1 - sd->catch_untint)));
+  } else if (sd->mon_alpha < 1) o.tint = RR_RGBA(255, 255, 255, (int)(sd->mon_alpha * 255 + 0.5f));
   if (sd->drop > 0) {
     /* fainting: the sprite sinks below its base line */
     int vis = (int)(f->src_h - sd->drop);
@@ -282,6 +304,31 @@ static void draw_sprite(side* sd, bool player) {
     return;
   }
   rr_draw(f, x, y, &o);
+  if (sd->catch_on) rr_set_tone(0, 0, 0);
+}
+
+/* The thrown ball (pb atlas: "pb", "pb_opening", "pb_open", and gb/ub/rb/mb), origin (0.5, 0.625) */
+static void draw_ball(void) {
+  static const char* const NAME[5] = {"pb", "gb", "ub", "rb", "mb"};
+  if (!B.ball.on || B.ball.alpha <= 0) return;
+  const int type = B.ball.type >= 0 && B.ball.type < 5 ? B.ball.type : 0;
+  char frame[16];
+  snprintf(frame, sizeof frame, "%s%s", NAME[type], B.ball.look == 1 ? "_opening" : B.ball.look == 2 ? "_open" : "");
+  const rr_frame* f = img_frame("images/pb", frame);
+  rr_draw_opts o = RR_DEFAULT_OPTS;
+  o.origin_x = 0.5f;
+  o.origin_y = 0.625f;
+  o.angle = B.ball.angle * 3.14159265f / 180.0f;
+  o.tint = RR_RGBA(255, 255, 255, (int)(B.ball.alpha * 255 + 0.5f));
+  if (!f) {
+    rr_rect(B.ball.x - 5, B.ball.y - 5, 10, 10, RR_RGBA(0xd5, 0x29, 0x29, (int)(B.ball.alpha * 255)));
+    return;
+  }
+  rr_draw(f, B.ball.x, B.ball.y, &o);
+  if (B.ball.flash > 0) {
+    o.tint = RR_RGBA(0, 0, 0, (int)(B.ball.flash * 255 * B.ball.alpha + 0.5f));
+    rr_draw(f, B.ball.x, B.ball.y, &o);
+  }
 }
 
 static void draw_field(void) {
@@ -300,6 +347,7 @@ static void draw_field(void) {
   ba_draw(BA_LAYER_BELOW_ENEMY, field);
   /* the enemy's doll is added over it; the player's Pokemon is brought over its doll */
   side *en = &B.s[1], *pl = &B.s[0];
+  if (B.ball.behind) draw_ball();
   draw_sprite(en, false);
   if (en->present && en->sub_on) draw_sub(en, false, false);
   if (en->present && en->tint_on) draw_sub(en, false, true);
@@ -309,6 +357,7 @@ static void draw_field(void) {
   draw_sprite(pl, true);
   if (pl->present && pl->tint_on && pl->tint_above) draw_sub(pl, true, true);
   ba_draw(BA_LAYER_TOP, field);
+  if (!B.ball.behind) draw_ball();
 }
 
 /* ------------------------------------------------------------------ drawing: info boxes */
@@ -678,6 +727,176 @@ static bool substitute_anim(side* sd, int type, float t) {
   }
 }
 
+/* AttemptCapturePhase's animation (src/phases/attempt-capture-phase.ts, doPokeballBounceAnim in data/pokeball.ts), t in ms
+ * since the throw. The ball flies to the enemy (500 ms), opens, the Pokemon is pulled in as a silhouette in the ball's colour
+ * (500 ms), the ball closes, falls and bounces (1044 ms), then shakes: the shake counter's checks come at 1 s, 2 s and 3 s after
+ * the bounce and each ball that holds wobbles for 500 ms after its check; a ball that holds past the third check locks at 4 s
+ * and the catch is done at 4.5 s. A ball that breaks free at check k has wobbled k - 1 times: it opens, the Pokemon grows back
+ * (250 ms) and the ball fades. The shake checks themselves are battle-core's: `b` says how many the ball passed. */
+#define BOUNCE_MAX 20
+typedef struct {
+  float t0, dur, y0, y1;
+  bool fall;
+} bounce_seg;
+
+/* doPokeballBounceAnim(ball, 16, 72, 350): falls to 72, rebounds to half the way up each time, until the power is gone */
+static int bounce_build(bounce_seg* sg, float* total) {
+  float power = 1, y = 16, t = 0;
+  int n = 0;
+  for (;;) {
+    sg[n++] = (bounce_seg){t, power * 350, y, 72, true};
+    t += power * 350;
+    power = power > 0.01f ? power * 0.5f : 0;
+    if (power == 0 || n >= BOUNCE_MAX - 1) break;
+    y = 72 - 56 * power;
+    sg[n++] = (bounce_seg){t, power * 350, 72, y, false};
+    t += power * 350;
+  }
+  *total = t;
+  return n;
+}
+
+#define CATCH_THROW 500   /* the ball arrives and opens */
+#define CATCH_IN 1000     /* the Pokemon is inside and the ball closes */
+#define CATCH_BOUNCE 1250 /* the bounce starts 250 ms later */
+
+enum {
+  CS_THROW = 1, CS_OPEN = 2, CS_CLOSE = 4, CS_BOUNCE0 = 8, /* 8 falls: 8 .. 1024 */
+  CS_MOVE0 = 1 << 11, /* 3 passed checks: 2^11 .. 2^13 */
+  CS_LOCK = 1 << 14, CS_FAIL = 1 << 15, CS_FAIL_DONE = 1 << 16, CS_INIT = 1 << 20
+};
+#define ONCE(bit, key)          \
+  do {                          \
+    if (!(B.step & (bit))) {    \
+      B.step |= (bit);          \
+      ui_play_sound(key);       \
+    }                           \
+  } while (0)
+
+static bool catch_anim(side* sd, const bv_event* e, float t) {
+  static const int BALL_RGB[5][3] = {{0xd5, 0x29, 0x29}, {0x94, 0xb4, 0xde}, {0xe6, 0xcd, 0x31}, {0xd5, 0x29, 0x29}, {0xa4, 0x41, 0xbd}};
+  const int type = e->a >= 0 && e->a < 5 ? e->a : 0;
+  const bool caught = e->caught;
+  const int w = caught ? 3 : e->b < 0 ? 0 : e->b > 2 ? 2 : e->b; /* checks passed */
+  if (!sd->present) return false;
+  if (!(B.step & CS_INIT)) {
+    B.step |= CS_INIT;
+    memset(&B.ball, 0, sizeof B.ball);
+    B.ball.on = true;
+    B.ball.type = type;
+    B.ball.x = 16;
+    B.ball.y = 80;
+    B.ball.alpha = 1;
+    B.ball.sub = sd->sub_on; /* substitute.sprite.setVisible(false) */
+    sd->sub_on = false;
+    for (int i = 0; i < 3; i++) sd->catch_rgb[i] = BALL_RGB[type][i];
+  }
+  bounce_seg sg[BOUNCE_MAX];
+  float btotal;
+  const int nseg = bounce_build(sg, &btotal);
+  const float S = CATCH_BOUNCE + btotal; /* the shake counter starts */
+  const float t_fail = S + (w + 1) * 1000.0f;
+  const float mon_scale = get_mon_scale(&sd->mon);
+
+  ONCE(CS_THROW, "se/pb_throw");
+  if (t < CATCH_THROW) {
+    const float u = t / CATCH_THROW;
+    B.ball.x = 16 + (236 - 16) * u;                          /* Linear */
+    B.ball.y = 80 + (16 - 80) * ease(EASE_CUBIC_OUT, u);
+    B.ball.behind = t >= 300;                                 /* moveBelow(pokeball, pokemon) */
+    return true;
+  }
+  B.ball.behind = true;
+  B.ball.x = 236;
+  if (t < CATCH_IN) {
+    ONCE(CS_OPEN, "se/pb_rel");
+    B.ball.y = 16;
+    B.ball.look = t < CATCH_THROW + 17 ? 1 : 2;
+    sd->catch_on = true;
+    sd->catch_untint = 0;
+    const float u = ease(EASE_SINE_IN, (t - CATCH_THROW) / (CATCH_IN - CATCH_THROW));
+    sd->scale = mon_scale + (0.25f - mon_scale) * u;
+    sd->catch_dy = -64 * u; /* y: 20, from the field position 84 */
+    return true;
+  }
+  if (t < t_fail || caught) {
+    sd->scale = 0.25f;
+    sd->catch_dy = -64;
+    sd->sprite_on = false; /* it is inside */
+    ONCE(CS_CLOSE, "se/pb_catch");
+    B.ball.look = t < CATCH_IN + 17 ? 1 : 0;
+    /* the bounce */
+    const float tb = t - CATCH_BOUNCE;
+    B.ball.y = 16;
+    if (tb >= 0) {
+      B.ball.y = 72;
+      for (int i = 0; i < nseg; i++) {
+        if (tb < sg[i].t0 || tb >= sg[i].t0 + sg[i].dur) continue;
+        const float u = (tb - sg[i].t0) / sg[i].dur;
+        B.ball.y = sg[i].y0 + (sg[i].y1 - sg[i].y0) * ease(sg[i].fall ? EASE_CUBIC_IN : EASE_CUBIC_OUT, u);
+      }
+      int k = 0;
+      for (int i = 0; i < nseg; i++) {
+        if (!sg[i].fall) continue;
+        const int bit = CS_BOUNCE0 << k++; /* (ONCE takes its bit twice) */
+        if (k <= 8 && tb >= sg[i].t0 + sg[i].dur) ONCE(bit, "se/pb_bounce_1");
+      }
+    }
+    /* the shakes */
+    const float ts = t - S;
+    B.ball.angle = 0;
+    for (int k = 1; k <= w; k++) {
+      if (ts < k * 1000.0f) continue;
+      const int mbit = CS_MOVE0 << (k - 1);
+      ONCE(mbit, "se/pb_move");
+      const float local = ts - k * 1000.0f;
+      if (local >= 500) continue;
+      const float p = local < 250 ? local / 250 : 1 - (local - 250) / 250;
+      const float v = ease(EASE_CUBIC_OUT, p) * (k % 2 ? 1 : -1);
+      B.ball.x = 236 + v * 4;
+      B.ball.angle = v * 27.5f;
+    }
+    if (caught) {
+      if (ts >= 4000) {
+        ONCE(CS_LOCK, "se/pb_lock");
+        /* pbTint: a black copy fades in to 0.375 and out again, 200 ms each */
+        const float f = ts - 4000;
+        B.ball.flash = f < 200 ? 0.375f * ease(EASE_SINE_OUT, f / 200) : f < 400 ? 0.375f * (1 - ease(EASE_SINE_IN, (f - 200) / 200)) : 0;
+      }
+      if (ts < 4500) return true;
+      B.ball.flash = 0;
+      B.ball.x = 236;
+      B.ball.y = 72;
+      B.ball.angle = 0;
+      return false;
+    }
+    return true;
+  }
+  /* failCatch: the ball opens, the Pokemon is back at its place and grows to its size, the tint fades off it */
+  const float tf = t - t_fail;
+  ONCE(CS_FAIL, "se/pb_rel");
+  if (!(B.step & CS_FAIL_DONE)) {
+    B.step |= CS_FAIL_DONE;
+    if (sd->mon.status != STATUS_EFFECT_SLEEP) cry(&sd->mon);
+    sd->sub_on = B.ball.sub;
+    B.ball.fading = true;
+    B.ball.fade_t = 0;
+  }
+  B.ball.x = 236;
+  B.ball.y = 72;
+  B.ball.angle = 0;
+  B.ball.look = tf < 17 ? 1 : 2;
+  sd->sprite_on = true;
+  sd->catch_dy = 0;
+  const float u = ease(EASE_SINE_OUT, tf >= 250 ? 1 : tf / 250);
+  sd->scale = 0.25f + (mon_scale - 0.25f) * u;
+  sd->catch_untint = u;
+  if (tf < 250) return true;
+  sd->catch_on = false;
+  sd->scale = mon_scale;
+  return false;
+}
+
 static void run_event(float dt) {
   bv_event* e = &B.ev[B.cur];
   side* sd = side_of(e->battler);
@@ -780,6 +999,7 @@ static void run_event(float dt) {
 
     case BEV_WITHDRAW:
       if (B.step == 0) {
+        if (!player && B.ball.on && !B.ball.fading) B.ball.fading = true, B.ball.fade_t = 0; /* removePb() */
         tween_start(&B.tw, 1, 0, 250, EASE_SINE_IN);
         tween_start(&B.tw2, 0, player ? 150 : -150, 500, EASE_CUBIC_IN);
         B.step = 1;
@@ -1001,6 +1221,10 @@ static void run_event(float dt) {
       finish_event();
       break;
 
+    case BEV_CATCH:
+      if (!catch_anim(sd, e, B.t)) finish_event();
+      break;
+
     case BEV_FORM_CHANGE:
       if (B.step == 0) {
         update_mon_form(&sd->mon, e->a, e->b);
@@ -1129,6 +1353,12 @@ static void bv_update(ui_screen* s, float dt) {
   msgbox_update(&B.msg, dt);
   if (B.ability_t > 0) B.ability_t -= dt;
   if (B.reason_ms > 0) B.reason_ms -= dt;
+  if (B.ball.on && B.ball.fading) {
+    /* removePb(): delay 250, Sine.easeIn to alpha 0 over 250 */
+    B.ball.fade_t += dt;
+    B.ball.alpha = B.ball.fade_t < 250 ? 1 : 1 - ease(EASE_SINE_IN, (B.ball.fade_t - 250) / 250);
+    if (B.ball.fade_t >= 500) B.ball.on = false;
+  }
   for (int k = 0; k < 2; k++) {
     if (B.s[k].show_ms > 0 && (B.s[k].show_ms -= dt) <= 0) {
       B.s[k].show_ms = 0;
