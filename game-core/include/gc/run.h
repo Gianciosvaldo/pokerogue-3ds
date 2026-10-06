@@ -353,7 +353,9 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why);
 
 /* ---- starters (upstream's starter select rules) ---- */
 int gc_starter_budget(int mode);                       /* the cost limit: 10 in classic */
-int gc_starter_cost(int species);                      /* speciesStarterCosts, -1 = not a starter */
+int gc_starter_cost(int species);                      /* base speciesStarterCosts, -1 = not a starter */
+double gc_starter_value(const gc_system *sys, int species); /* cost with value reduction (game-data.ts:2018) */
+bool gc_starter_is_available(const gc_system *sys, const gc_starter *starter, double *cost_out, const char **why);
 /* The default moveset: the first four level 1-5 moves (getStarterMoves). Returns how many. */
 int gc_starter_default_moves(int species, uint16_t out[4]);
 extern const uint16_t gc_default_starters[];           /* defaultStarterSpecies (unlocked in a new save) */
