@@ -8,12 +8,12 @@ The screens don't read battle-core or game-core state. The caller fills plain di
 
 | Screen | Upstream | State |
 |---|---|---|
-| Party | `party-ui-handler.ts` (2,341 lines) | Done. All 14 modes are ported. Run in Azahar: switching (with the fainted-Pokémon message), item use, move items with PP, TMs (Able, Not able, Learned), Memory Mushroom, held item transfer with quantities, discard, release from the team check (confirm and goodbye line), singles and doubles layouts. Written but not yet run: faint switch, pre-battle switch, Revival Blessing, DNA Splicer, release when catching with a full party |
+| Party | `party-ui-handler.ts` (2,341 lines) | Done. All 14 modes are ported. Run in Azahar: switching (with the fainted-Pokémon message), item use, move items with PP, TMs (Able, Not able, Learned), Memory Mushroom, held item transfer with quantities, discard, release from the team check (confirm and goodbye line), release when catching with a full party (Card 114 / PR #135), singles and doubles layouts. Written but not yet run: faint switch, pre-battle switch, Revival Blessing, DNA Splicer |
 | Summary | `summary-ui-handler.ts` (1,413 lines) | Done. Run in Azahar: the three pages with their slides, the passive and IV toggles, move select and swap, paging through the party from the party screen, shiny variant sprite and star, status and Pokérus box, move effect box |
-| Reward select | `modifier-select-ui-handler.ts` | Done. Shop and Reward selection UI (`shop_ui.c`) driven by game-core (`GC_SCREEN_REWARD`), including item targeting via party screen and Lock Capsule toggle. Hosted in the app by `../source/reward_host.c` (card 113). |
+| Reward select | `modifier-select-ui-handler.ts` | Done. Shop and Reward selection UI (`shop_ui.c`) driven by game-core (`GC_SCREEN_REWARD`), including item targeting via party screen and Lock Capsule toggle. Hosted in the app by `../source/reward_host.c` (Card 113 / PR #134). |
 | Starter select | `starter-select-ui-handler.ts` | To do |
 | Learn move | `learn-move-phase.ts` + the summary in learn-move mode | Done. Run in Azahar end to end: prompt, yes/no, "Which move should be forgotten?", the summary, "1, 2, and… Poof!", "learned" |
-| Next biome | option select after a Map | Done. Biome Map selection UI (`biome_map.c`) driven by game-core (`GC_SCREEN_BIOME`). Hosted in the app by `../source/reward_host.c` (card 113). |
+| Next biome | option select after a Map | Done. Biome Map selection UI (`biome_map.c`) driven by game-core (`GC_SCREEN_BIOME`). Hosted in the app by `../source/reward_host.c` (Card 113 / PR #134). |
 
 Not ported yet in the summary: the hover tooltips (no pointer), the tera type icon, the rainbow on a maxed candy count, held item stack counts (the `item-count` bitmap font isn't in the SD packs yet) and the fusion palette swap on the big sprite (fusions show the base species' sprite). Forms whose sprite is shared with the base form, and female sprites, are found by trying the file and falling back, because battle-core's tables don't carry `formSpriteKey` or `genderDiffs`.
 

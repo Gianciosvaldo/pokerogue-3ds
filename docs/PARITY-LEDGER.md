@@ -76,6 +76,14 @@ The public beta branch contains new upstream features and balance changes that d
 
 ## 4. Landed PRs and Merged Task Index
 
+- [PR #139](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/139) (commit [`639a086`](https://github.com/Gianciosvaldo/pokerogue-3ds/commit/639a086)): Task 78 / Card 78 (Starter unlocks, genderless species, and cost enforcement in `game-core`).
+- [PR #136](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/136) (commit [`6fd4cff`](https://github.com/Gianciosvaldo/pokerogue-3ds/commit/6fd4cff)): Task 96, Rare Candy and Rarer Candy slice only (application through `reward-core` in `game-core`).
+- [PR #135](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/135) (commit [`102905a`](https://github.com/Gianciosvaldo/pokerogue-3ds/commit/102905a)): Card 114 (Catching animation, full-party release flow in `game/`).
+- [PR #134](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/134) (commit [`07b1cfe`](https://github.com/Gianciosvaldo/pokerogue-3ds/commit/07b1cfe)): Card 113 (Title, save slots, continue, game over, clear screens in `game/`).
+- [PR #132](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/132) (commit [`705a79e`](https://github.com/Gianciosvaldo/pokerogue-3ds/commit/705a79e)): Card 97 (Trainers' own rewards in `reward-core`).
+- [PR #129](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/129) (commit [`c70691b`](https://github.com/Gianciosvaldo/pokerogue-3ds/commit/c70691b)): Card 112 (Reward, shop, biome screens driven by the run in `game/`).
+- [PR #128](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/128) (commit [`0ac92b9`](https://github.com/Gianciosvaldo/pokerogue-3ds/commit/0ac92b9)): Task 95 (TM and Memory Mushroom reward application in `game-core`).
+- [PR #112](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/112): Task 63 (Bounded enemy moveset generation in `run-core`: a few species, not wired into `game-core` yet).
 - [PR #127](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/127): Task 74 (Doubles AI command selection in `ai-core`).
 - [PR #125](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/125): Task 77 (Fleeing through the run loop in `game-core`).
 - [PR #124](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/124): Task 94 (Catching in the run audit against upstream `VictoryPhase` & `AttemptCapturePhase` in `game-core`).
