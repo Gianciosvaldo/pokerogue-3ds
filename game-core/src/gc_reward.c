@@ -400,6 +400,7 @@ uint8_t gc_reward_target(const char *key)
 static bool core_applies(int item)
 {
     switch (item) {
+    case PR_ITEM_RARE_CANDY: case PR_ITEM_RARER_CANDY:
     case PR_ITEM_POTION: case PR_ITEM_SUPER_POTION: case PR_ITEM_HYPER_POTION: case PR_ITEM_MAX_POTION:
     case PR_ITEM_FULL_RESTORE: case PR_ITEM_REVIVE: case PR_ITEM_MAX_REVIVE: case PR_ITEM_SACRED_ASH:
     case PR_ITEM_ETHER: case PR_ITEM_MAX_ETHER: case PR_ITEM_ELIXIR: case PR_ITEM_MAX_ELIXIR:
@@ -468,7 +469,26 @@ int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, co
     /* a free reward is applied with cost -1, a purchase with its price (a shop item: cost > 0) */
     const bool purchase = o->cost > 0;
     int k = -1, move = -1;
-    if (item != PR_ITEM_SACRED_ASH) {
+    if (item == PR_ITEM_RARE_CANDY) {
+        if (party < 0 || party >= run->n_party || (k = gc_battle_slot_of(run, party)) < 0) {
+            *why = "pick a Pokemon";
+            return GC_APPLY_REFUSED;
+        }
+        if (run->party[party].b.level >= pr_run_get_max_exp_level(&run->run, run->wave, false)) {
+            *why = "partyUiHandler:anyEffect";
+            return GC_APPLY_REFUSED;
+        }
+    } else if (item == PR_ITEM_RARER_CANDY) {
+        bool any_can = false;
+        const double max_lvl = pr_run_get_max_exp_level(&run->run, run->wave, false);
+        for (int i = 0; i < run->n_party; i++) {
+            if (run->party[i].b.level < max_lvl) { any_can = true; break; }
+        }
+        if (!any_can) {
+            *why = "partyUiHandler:anyEffect";
+            return GC_APPLY_REFUSED;
+        }
+    } else if (item != PR_ITEM_SACRED_ASH) {
         if (party < 0 || party >= run->n_party || (k = gc_battle_slot_of(run, party)) < 0) {
             *why = "pick a Pokemon";
             return GC_APPLY_REFUSED;
@@ -499,7 +519,8 @@ int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, co
      * PP used and PP Ups. Sacred Ash can touch the whole party, anything else the one member */
     for (int i = 0; i < ctx->n_party; i++) {
         const int storage = run->party_order[i];
-        pr_pokemon *b = &run->party[storage].b;
+        gc_mon *m = &run->party[storage];
+        pr_pokemon *b = &m->b;
         const pr_reward_mon *r = &ctx->party[i];
         const bool hp_changed = b->hp != r->hp;
         if (b->status != r->status) {
@@ -516,7 +537,15 @@ int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, co
             b->pp_up[s] = r->moves[c].pp_up;
             c++;
         }
-        if (hp_changed || (i == k && item != PR_ITEM_SACRED_ASH)) {
+        if (b->level != r->level) {
+            const int old_level = b->level;
+            b->level = r->level;
+            m->exp = r->exp;
+            gc_system_add_friendship(run->sys, run, m, 6 * (r->level - old_level), true);
+            gc_mon_recalc(run, m);
+            gc_rq_unshift(run, gc_rp(RP_LEVEL_UP, storage, old_level, b->level));
+        }
+        if (hp_changed || (i == k && item != PR_ITEM_SACRED_ASH && item != PR_ITEM_RARE_CANDY && item != PR_ITEM_RARER_CANDY)) {
             gc_event *ev = gc_ev_new(run, GC_EV_HP);
             if (ev) { ev->a = 0; ev->b = storage; ev->c = b->hp; }
         }

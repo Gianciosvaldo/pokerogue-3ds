@@ -170,7 +170,7 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 | Stand-in | Waits on |
 |---|---|
 | Enemy moveset: the last four level moves | run-core |
-| A reward taken that isn't a ball, Full Heal, Rare Candy, held item or one of the healing, revive and PP items Task 60 ported (TMs, Memory Mushroom, Mints, money, vouchers, evolution items, DNA Splicers, Rarer Candy) is added to the items and counted (`reward taken without its own effect`) | later reward tasks |
+| A reward taken that isn't a ball, Full Heal, Rare Candy, Rarer Candy, held item or one of the healing, revive and PP items Task 60/96 ported (TMs, Memory Mushroom, Mints, money, vouchers, evolution items, DNA Splicers) is added to the items and counted (`reward taken without its own effect`) | later reward tasks |
 | Double battles are played as singles (M1 rule) | doubles in battle-core |
 | Mystery encounters and fixed classic battles (rival, evil team, gyms run-core can't make) become wild battles of the wave's level | run-core, later the encounters |
 | A boss's battle score: `addFaintedEnemyScore` (and the catch's own copy of it) multiplies it by `sqrt(bossSegments)`; Task 93 sets `boss_segments` on Pokemon encounters and `gc_phases.c` calculates score using `boss_segments` | Task 93 (PR #122) |
@@ -558,3 +558,14 @@ remained `8ee22b13`. Both `gcplay --auto 1000 --jobs 8` and the same command wit
 All printed stub counts were unchanged; these rare families are established by
 the focused fixtures, not by a fallback reduction in the random soak. No 3DS
 build or console test is claimed.
+
+## Task 96: Rare Candy and Rarer Candy through reward-core
+
+`gc_reward_apply` (`src/gc_reward.c`) now applies `RARE_CANDY` and `RARER_CANDY` using reward-core's `pr_reward_apply_candy`, integrating Candy Jar stacks (`PR_ITEM_CANDY_JAR`), level cap checks (`pr_run_get_max_exp_level`), friendship updates via `gc_system_add_friendship`, stat recalculation via `gc_mon_recalc`, and unshifting `RP_LEVEL_UP` events for level-up moves and evolutions.
+
+- `RARE_CANDY`: applied to a single party member (refused with `partyUiHandler:anyEffect` if level >= max_exp_level).
+- `RARER_CANDY`: applied across all party members (refused if all members are at or above max_exp_level).
+- Candy Jar stacks scale levels gained per candy (`1 + Candy_Jar_stacks`).
+- Full Heal remains in game-core (`src/gc_stubs.c`) as reward-core does not provide an application for it.
+- Poké Balls remain added to `run->pokeballs`.
+- Mints, vitamins, Pickup, Honey Gather, and Pay Day remain counted under stand-in counters (`GC_STUB_REWARD_APPLY` / `GC_STUB_POST_BATTLE`).
