@@ -142,3 +142,38 @@ Dev overrides (`LEVEL_CAP_OVERRIDE`, `ENEMY_HEALTH_SEGMENTS_OVERRIDE`...) aren't
 - `tools/difftest.sh <upstream dir> [N] [seed] [wave|shop|biome|encounter|newbattle|exp|partyexp|upkeep|battlegen|pokemongen|trainerspecies|trainerparty|wildenemy|luck|enemyitems|enemybuffs|daily|all]` (the upstream checkout comes from `battle-core/tools/setup-upstream.sh`)
 
 Build: `make` (outputs to `build/`).
+
+## Task 63: bounded enemy movesets (first slice)
+
+`pr_run_enemy_moveset` (`include/pr/moveset.h`, `src/moveset.c`) implements the
+pinned 8555c08 level-only generator for Caterpie and Weedle, Magikarp below
+level 25 and Ditto, plus EnemyPokemon's fixed Smeargle and Eternatus dispatch
+(including both Eternatus forms, inverse moves and Recover's -4 PP Ups).
+Trainer Caterpie/Weedle/Magikarp are limited to levels 1–24; trainer Ditto to
+1–79. Wild Caterpie/Weedle/Ditto support positive levels. Only native abilities,
+no passive/fusion, and the clean constructor boundary are supported. The battle
+owner supplies effective ATK/SPATK. This does not wire game-core (Task 64).
+
+The bounded level path preserves pool order, effective-power/stat weighting,
+boss exponent, level-based rejections, forced STAB and trainer remaining-pool
+weighting. Supported roots need no evolution/prevolution/relearn merge,
+superseding pair, signature coin flip or useless-move removal. Those general
+paths, TM/egg pools, Tera-dependent selection, modified ability state, fusion
+and other challenges remain unported. Each rejected input returns a named
+reason and preserves RNG/output; existing snapshot suites are not moveset
+parity evidence. No generated file was hand-edited.
+
+The new suite calls the real upstream method on real Pokemon. Run with Node 22:
+
+```sh
+BUILD=/absolute/build sh run-core/tools/movesetdifftest.sh /external/upstream 2000 777
+```
+
+Producer: `tests/moveset.producer.test.ts`; flags `DIFF_MOVESET=1`, `DIFF_N`,
+`DIFF_SEED`, `DIFF_OUT`; trace `$BUILD/moveset-$SEED.txt`; comparator
+`$BUILD/movesettest TRACE N SEED`. It rejects missing completion footers and
+requires nonzero coverage for every claimed path. Unsupported-reason probes
+are host guard checks, not upstream differential matches.
+
+See [validation, producer repairs and limits](TASK63-VALIDATION.md). The full R
+regression for PR #112 runs in CI (`.github/workflows/task63-regression.yml`).

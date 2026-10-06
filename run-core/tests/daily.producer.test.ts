@@ -32,6 +32,10 @@ it("daily run producer", async () => {
   vi.spyOn(activeOverrides, "BATTLE_TYPE_OVERRIDE", "get").mockReturnValue(null);
   vi.spyOn(activeOverrides, "RANDOM_TRAINER_OVERRIDE", "get").mockReturnValue(null);
   vi.spyOn(activeOverrides, "DISABLE_STANDARD_TRAINERS_OVERRIDE", "get").mockReturnValue(false);
+  // Restore natural player inputs after classic setup normalizes the fixtures.
+  vi.spyOn(activeOverrides, "IVS_OVERRIDE", "get").mockReturnValue(null);
+  vi.spyOn(activeOverrides, "NATURE_OVERRIDE", "get").mockReturnValue(null);
+  vi.spyOn(activeOverrides, "SHINY_OVERRIDE", "get").mockReturnValue(null);
 
   // Moveset generation isn't ported in run-core yet (generateAndPopulateMoveset)
   vi.spyOn(PlayerPokemon.prototype, "generateAndPopulateMoveset").mockImplementation(() => {});

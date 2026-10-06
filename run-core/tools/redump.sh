@@ -4,6 +4,7 @@
 # pokemongen also reads the variant masterlist from the assets repo, at the commit upstream pins
 # (fetched once into the upstream checkout).
 set -e
+. "$(dirname "$0")/require-node22.sh"
 UP=${1:?upstream dir}
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 ASSETS=$(git -C "$UP" ls-tree HEAD assets | awk '{print $3}')

@@ -61,6 +61,7 @@ it("rival fixed party producer", async () => {
       battle.waveIndex = wave;
       battle.battleType = 1;
       battle.enemyParty = [];
+      const textureCount = (scene.textures as any).list.length;
 
       const trainer: any = new Trainer(type, TrainerVariant.DEFAULT);
       battle.trainer = trainer;
@@ -84,9 +85,28 @@ it("rival fixed party producer", async () => {
       lines.push(["R", runSeed, wave, type, levels.length, ...levels].join(" "));
       for (const m of members)
         lines.push(["M",m.species,m.level,m.ability,m.tera,m.boss,m.shiny,m.variant,m.form].join(" "));
-      for (const p of battle.enemyParty) p.destroy();
+      // Release this fight's display objects as Phaser would. MockContainer.destroy only empties its
+      // own list: it neither destroys its children nor leaves its parent, and the mock factory, the
+      // field and the Tera sparkle handler keep references too. Each fight leaked its Pokemon and ~78
+      // sprites whose animation listeners slowed every later destroy (time grew with DIFF_N squared,
+      // memory without bound). All scalar observations above are complete; none of this draws RNG.
+      const owned: any[] = [];
+      const subtree = (o: any) => { for (const child of o?.list ?? []) { owned.push(child); subtree(child); } };
+      for (const p of battle.enemyParty) { subtree(p); subtree(p.battleInfo); }
+      subtree(trainer);
+      for (const p of battle.enemyParty) {
+        scene.fieldUI.remove(p.battleInfo);
+        scene.field.remove(p);
+        p.destroy();
+      }
       battle.enemyParty = [];
       trainer.destroy();
+      for (const o of owned) o.destroy?.();
+      scene.spriteTeraSparkleHandler.remove(...owned);
+      (scene.textures as any).list.length = textureCount;
+      // Retaining mock receivers keeps destroyed Pokemon alive across 18,000
+      // fights. No assertion reads this history; behavior and draws are intact.
+      vi.clearAllMocks();
     }
   }
   fs.writeFileSync(OUT, lines.join("\n") + "\n");
