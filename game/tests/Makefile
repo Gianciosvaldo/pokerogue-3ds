@@ -92,10 +92,11 @@ summary_ui_test: build/summary_ui_test
 .PHONY: summary_ui_test
 
 # the app's run driver (run_screen.c + battle_events.c) over the real game-core run, with a fake battle screen and menus
-# that check every screen event; make runtest && build/runtest [runs] [first]
+# that check every screen event (the full-party release list is the real menus/party.c, through party_fake.c);
+# make runtest && build/runtest [runs] [first]
 RW := ../../reward-core
 RUN_CPPFLAGS := $(CPPFLAGS) -I../menus -I../gen -I$(GC)/include -I$(GC)/gen/out -I$(RC)/include -I$(RC)/gen/out -I$(RW)/include -I$(RW)/gen/out -I$(APP)/include
-RUN_SRCS := runtest.c ../source/run_screen.c ../source/battle_events.c ../source/run_saves.c $(APP)/source/save.c ../gen/gm_enum_names.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+RUN_SRCS := runtest.c party_fake.c ../menus/party.c ../menus/menus_names.c ../menus/menus_data.c ../source/run_screen.c ../source/battle_events.c ../source/run_saves.c $(APP)/source/save.c ../gen/gm_enum_names.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/runtest: $(RUN_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) $(RUN_SRCS) -lm -o $@

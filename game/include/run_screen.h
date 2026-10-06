@@ -13,6 +13,10 @@
  *   - mystery encounters: a message, then the first usable option
  *   - game over / clear: with an app around (cfg.on_end) the result screen; without one a message, then a new run
  *   - trainers:   the battle starts with their message; the trainer sprite is not drawn
+ *   - catching:   the throw, bounce, shakes and "Gotcha!" are upstream's (AttemptCapturePhase); whether the ball held is the run's.
+ *                 battle-core drops the number of shakes a ball made before it broke free, so a break-free always wobbles once.
+ *                 Not drawn: the ball's open and star particles, the caught Pokemon's info panel, critical captures (battle-core
+ *                 does not report them). A full party asks "release one?" (Yes / No) where upstream also offers Summary and Pokedex
  * Saving and loading are wired (cfg.save, rs_resume). Not wired yet: the Pokedex, eggs, music.
  */
 #ifndef GM_RUN_SCREEN_H
@@ -48,6 +52,8 @@ typedef struct {
   int waves;                  /* WAVE events shown */
   int fights, balls, switches, runs_tried;    /* commands answered (accepted by game-core) */
   int refused;                /* answers game-core refused (the player was told why) */
+  int throws, catches;        /* balls thrown (the throw animation shown), and the ones that held */
+  int releases, kept_out;     /* full-party catches: a member was released for the caught Pokemon / the caught Pokemon was let go */
   int events[16];             /* game-core events handled, by gc_event_kind */
   int screens[16];            /* screens handled, by gc_screen_kind */
   int dup_dropped;            /* game-core messages dropped because the battle events already showed them */
