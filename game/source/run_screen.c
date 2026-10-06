@@ -141,7 +141,6 @@ static uint32_t rnd(uint32_t n) {
 }
 
 /* "RARE_CANDY" -> "Rare Candy" (stand-in for the reward's own name) */
-static const char* pretty_key(const char* key, char* out, int n) __attribute__((unused));
 static const char* pretty_key(const char* key, char* out, int n) {
   int j = 0;
   bool up = true;
