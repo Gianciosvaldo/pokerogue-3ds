@@ -128,7 +128,7 @@ make -C game/tests animtest && game/tests/build/animtest path/to/pokerogue-asset
 - In move animations: the grey part of a sprite's tone (upstream's shader pushes it far past
   grey; not reproduced), hitting a Substitute doll (animations aimed at the doll, `onSubstitute`),
   and the KO colour inversion.
-- Catching and fleeing are ported in battle-core (Task 5 / Task 6) and wired in game-core's run loop (`GC_CH_BALL` in PR #55, Task 94 / PR #124 catch audit, `GC_CH_RUN` in Task 77); the app's `run_screen.c` handles ball choices and run commands.
+- Catching and fleeing are ported in battle-core (Task 5 / Task 6) and wired in game-core's run loop (`GC_CH_BALL` in PR #55, Task 94 / PR #124 catch audit, `GC_CH_RUN` in Task 77); catching animation and full-party release flow in the app are ported (Card 114 / PR #114); reward, shop, and biome map screens are driven by the run (Card 112 / PR #129); the app's `run_screen.c` handles ball choices and run commands.
 - Trainer battles, doubles, stat stage and shiny effects, boss HP
   segments, weather and field effects on the field.
 - Sound without snd.pak is silent (the packs in the test rig have no sound yet).

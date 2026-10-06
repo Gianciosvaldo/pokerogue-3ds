@@ -12,13 +12,13 @@ Implementation PRs: [Task 57 #97](https://github.com/Gianciosvaldo/pokerogue-3ds
 
 | Lane | Folder | Sequential tasks | Assignment |
 |---|---|---|---|
-| A | battle-core/ | 67 → 69 → 70 → 71 → 72 → 73 | Hard coordinator work except bounded 71 |
-| B | reward-core/ | 89; existing reward API tasks first | Hard; reward state validation |
-| C | game-core/ | 87 → 57 → 59 → 60 → 61 (first slice) → 92 → 93 → 94 → 77 → 95 → 96 → 64 → 65 → 66 → 78 → 79 → 61 (further slices) → 62 → 75 → 76 → 80 → 81 → 82 → 83 → 84 | One active task; lower-compute cards 60/64/76/77/78/84/96 |
-| D | run-core/ | Existing 50 → 63; 100 | Lorenzo's run-core owner only; HANDOFF ownership unchanged; producer edits allowed for card 100 only |
-| E | game/ | 110 (authorized); 85 console half | Card 110 is a project thread, Azahar first; console acceptance stays a human gate |
-| F | ai-core/ | 88 → 58 → 68 → 74 | Lower-compute 58/68, hard 74 |
-| G | docs/ | 86 | Lower-compute independent audit documentation |
+| A | battle-core/ | 67 (#108) → 69 (#110) → 70 (#111) → 71 (#115) → 72 (#119) → 73 (#123) | Hard coordinator work; Tasks 67–73 merged |
+| B | reward-core/ | 89 (#104); Card 97 (#132) | Hard; Card 97 merged in PR #132; reward state validation |
+| C | game-core/ | 87 (#101) → 57 (#97) → 59 → 60 → 61 (first slice) → 92 → 93 (#122) → 94 (#124) → 77 (#125) → 95 (#135) → 96 (#136) → 64 → 65 → 66 → 78 (#139) → 79 → 61 (further slices) → 62 → 75 → 76 → 80 → 81 → 82 → 83 → 84 | Tasks 87, 57, 93 (#122), 94 (#124), 77 (#125), 95 (#135), 96 (#136), 78 (#139) merged |
+| D | run-core/ | 50 (#92) → 63 (#112); 100 | Tasks 50 (#92) and 63 (#112) merged; Task 100 next; Lorenzo's run-core owner only |
+| E | game/ | 110 (#110) → 112 (#129) → 113 (#130) → 114 (#114); 85 console half | Cards 110, 112 (#129), 113 (#130), 114 (#114) merged; console acceptance stays a human gate |
+| F | ai-core/ | 88 (#102) → 58 (`836d10c`) → 68 (#108) → 74 (#127) | Tasks 88 (#102), 58 (`836d10c`), 68 (#108), 74 (#127) merged |
+| G | docs/ | 86 (#86) | Task 86 merged |
 
 A prerequisite API is a real gate: verify it exists and has recorded checks before beginning. If absent, report the missing bounded prerequisite instead of changing its owner's folder. Different folders may proceed in parallel; each lane starts its next task only after the previous PR merges. Lower-compute describes bounded scope, not lower correctness requirements.
 
@@ -182,9 +182,9 @@ Task 68 is delegated to Jules: #108 landed its bounded loaded-state contract dir
 
 **Pass.** Approved focused differential mode: 2,000 cases per four seeds, zero mismatches, each named ability triggers; B and weather regressions retain coverage.
 
-### Task 70: Held-item theft and removal (battle-core/, lane A)
+### Card 111 / Task 70: Held-item theft and removal (battle-core/, lane A)
 
-**Branch:** `outside/item-theft-removal`. **Assignment:** Hard. **Prerequisites:** 69 merged.
+**Branch:** `outside/item-theft-removal`. **Assignment:** Hard; PR #111. **Prerequisites:** 69 merged.
 
 **Problem.** Thief/Knock Off and related modifier removal must update both holders and stack ownership.
 
@@ -192,9 +192,9 @@ Task 68 is delegated to Jules: #108 landed its bounded loaded-state contract dir
 
 **Pass.** Approved focused mode: 2,000 cases per four seeds, zero mismatches for source/target stacks, messages and RNG; B unchanged. Other theft families stay explicitly outstanding.
 
-### Task 71: Enigma, Lansat and Starf berry effects (battle-core/, lane A)
+### Card 115 / Task 71: Enigma, Lansat and Starf berry effects (battle-core/, lane A)
 
-**Branch:** `outside/special-berries`. **Assignment:** Lower compute. **Prerequisites:** 70 merged.
+**Branch:** `outside/special-berries`. **Assignment:** Lower compute; PR #115. **Prerequisites:** 70 merged.
 
 **Problem.** These berries need effect triggers and consumption, beyond the first HP/status/PP slice.
 
@@ -202,9 +202,9 @@ Task 68 is delegated to Jules: #108 landed its bounded loaded-state contract dir
 
 **Pass.** Approved focused mode: 2,000 cases per four seeds, zero mismatches, each named berry consumed at least once and rejected at least once; B unchanged.
 
-### Task 72: Dancer and Tera dispatch order (battle-core/, lane A)
+### Card 116 / Task 72: Dancer and Tera dispatch order (battle-core/, lane A)
 
-**Branch:** `outside/dancer-tera-dispatch`. **Assignment:** Hard. **Prerequisites:** 71 merged.
+**Branch:** `outside/dancer-tera-dispatch`. **Assignment:** Hard; PR #119. **Prerequisites:** 71 merged.
 
 **Problem.** Dispatch order, copied moves and Tera precommands need focused coverage; broad singles results do not prove every branch.
 
@@ -212,9 +212,9 @@ Task 68 is delegated to Jules: #108 landed its bounded loaded-state contract dir
 
 **Pass.** Approved focused fixtures compare queue/order/targets/RNG/messages; randomized 2,000 cases per four seeds, zero mismatches. B unchanged; report unreachable branches.
 
-### Task 73: Doubles turn engine, first slice (battle-core/, lane A)
+### Card 117 / Task 73: Doubles turn engine, first slice (battle-core/, lane A)
 
-**Branch:** `outside/doubles-turn-core`. **Assignment:** Hard. **Prerequisites:** 72 merged.
+**Branch:** `outside/doubles-turn-core`. **Assignment:** Hard; PR #123. **Prerequisites:** 72 merged.
 
 **Problem.** Doubles paths and spread damage remain outside established singles coverage.
 
@@ -466,7 +466,17 @@ Numbered from 92 in the post-parity plan (cards 92 to 151 by milestone; the full
 
 **Pass.** `gym_e4` and `rival` at 3000 cases on seeds 777, 9001, 4242 and 31337 run to completion on Node 22 at zero mismatches, or the PR says exactly what still fails. A planted mutation is caught. The rest of R unchanged.
 
-### Task 110: App: drive the run from game-core (game/, lane E)
+### Card 97: Trainers' own rewards (reward-core/, lane B)
+
+**Branch:** `outside/trainer-rewards`. **Assignment:** Hard; PR #132 (commit `705a79e`). **Prerequisites:** None.
+
+**Problem.** `reward-core` lacked fixed battle settings, Single Generation challenge hooks, trainer victory rewards (vouchers, money multipliers), and trainer-specific item generation.
+
+**Do.** Port `pr_reward_fixed_battle_settings`, `SingleGenerationChallenge.applyFixedBattle`, `pr_reward_trainer_victory_rewards`, and `pr_reward_trainer_items` from upstream `8555c08`.
+
+**Pass.** `tools/trainerdiff.sh <upstream> 2000 <seed>` (seeds 777, 9001, 4242, 31337) shows 0 mismatches over 2,000 cases per seed; `tools/trainerplant.sh` fails on all six planted bugs. Merged in PR #132.
+
+### Card 110: App: drive the run from game-core (game/, lane E)
 
 **Branch:** `outside/app-run-driver`. **Assignment:** Hard; project thread, not an outside-agent task. **Prerequisites:** Authorized by lorenzo on 2026-10-04. Cards 92 and 93 preferably first. Plan: `game/WIP-run-driver.md` (deleted when the driver landed).
 
@@ -475,6 +485,36 @@ Numbered from 92 in the post-parity plan (cards 92 to 151 by milestone; the full
 **Do.** A `run_screen.c` that owns the run and drains its events, splitting at each wave; start each battle from run state, answer COMMAND with the battle command screen, SWITCH with the party screen and LEARN_MOVE with the learn dialog; use stand-ins for starter choice, rewards and biome choice (via the existing options UI); evolution automatic; game over starts a new run. Delete `battle_setup.c` and move the event and switch tests to a host test over whole runs. One screen flow at a time.
 
 **Pass.** A host `runtest` plays N seeded runs through the converter without assertion failures; emulator screenshots of one run flow (wave 1, a reward, wave 2). No hardware claim; console acceptance stays Task 85 / card 118.
+
+### Card 112: App reward and biome screens driven by run (game/, lane E)
+
+**Branch:** `outside/app-reward-biome`. **Assignment:** Hard; PR #129.
+
+**Problem.** Reward select and biome map UI handlers needed to be driven by game-core run states.
+
+**Do.** Drive shop/reward selection (`GC_SCREEN_REWARD`) and biome map selection (`GC_SCREEN_BIOME`) in the app via `reward_host.c`.
+
+**Pass.** Driven by game-core (`GC_SCREEN_REWARD`, `GC_SCREEN_BIOME`); shop and biome map UI hosted in app. Merged in PR #129.
+
+### Card 113: App title, save slots, continue, game over, and clear screens (game/, lane E)
+
+**Branch:** `outside/app-title-slots`. **Assignment:** Hard; PR #130.
+
+**Problem.** App needed title screen, save slot management, and result screen flows.
+
+**Do.** Implement title screen, save slot screen (`slot_screen.c`), game over, and clear result screens (`result_screen.c`).
+
+**Pass.** Title screen, save slot list, game over, and clear screens hosted in app. Merged in PR #130.
+
+### Card 114: App catching animation and full-party release flow (game/, lane E)
+
+**Branch:** `outside/app-catch-animation`. **Assignment:** Hard; PR #114.
+
+**Problem.** App lacked catching animation and full-party release menu flow.
+
+**Do.** Implement catching animation, ball selection menu, and full-party swap/release prompt in app.
+
+**Pass.** Catching animation, ball menu, full-party release flow in real app. Merged in PR #114.
 
 ## Beyond these bounded slices
 
