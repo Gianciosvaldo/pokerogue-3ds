@@ -13,7 +13,14 @@
  *     taken; one it refuses is not. Sacred Ash has no party menu: free, it is taken whatever it did;
  *     bought, taken only if it did something (SelectModifierPhase.applyModifier, cost -1 against a price);
  *   - every member's HP, status and each move's PP used, PP Ups and maximum PP (getMovePp()) after.
- * Hardcore cases are skipped (game-core models no challenge). Usage: reward_apply_diff_test <trace> */
+ * Hardcore cases are skipped (game-core models no challenge).
+ *
+ * Rare Candy and Rarer Candy (Task 96) are in a trace of their own, game-core/tests/candy.producer.test.ts (the apply
+ * trace above has no levels, exp, friendship or starter data to compare): upstream's PokemonLevelIncrementModifier through
+ * addModifier on random parties at, below and above the level cap, with Candy Jars, in Classic and Endless. Replayed free
+ * and bought, compared on taken or refused, every member's level, exp and friendship, the LevelUpPhases queued (party
+ * index, old level, new level, in order) and each member's starter friendship progress and candy count.
+ * Usage: reward_apply_diff_test <trace> (an apply trace or a candy trace; the records say which) */
 #include "../src/internal.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -83,6 +90,190 @@ static void setup(const member *m, int n, int rot, int stacks)
     if (stacks > 0) gc_item_add(&run, "HEALING_CHARM", -1, 0, stacks);
 }
 
+/* ---- Rare Candy / Rarer Candy: the candy trace's records ---- */
+typedef struct { int species, level, friendship, growth; double exp; } cmember;
+typedef struct { int root; long friendship, candy; } cstarter;
+
+static void candy_setup(const cmember *m, const cstarter *st, int n, int rot, int stacks, int wave, int mode)
+{
+    memset(&run, 0, sizeof run);
+    gc_system_init_defaults(&sys);
+    gc_run_new(&run, mode, "candy-diff", 7);
+    gc_starter team[6];
+    memset(team, 0, sizeof team);
+    int k = 0;
+    for (int i = 0; i < gc_starter_cost_count && k < n; i++) {
+        if (gc_starter_costs[i].cost != 1) continue;
+        team[k].species = gc_starter_costs[i].id;
+        team[k].tera_type = -1;
+        for (int j = 0; j < 6; j++) team[k].ivs[j] = 15;
+        k++;
+    }
+    const char *why;
+    if (k != n || !gc_run_set_starters(&run, team, n, &why)) { fputs("could not set up a party\n", stderr); exit(2); }
+    run.sys = &sys;
+    run.wave = wave;
+    for (int i = 0; i < n; i++) run.party_order[i] = (int8_t)((i + rot) % n);
+    for (int i = 0; i < n; i++) {
+        gc_mon *g = &run.party[run.party_order[i]];
+        gc_starter s;
+        memset(&s, 0, sizeof s);
+        s.species = (uint16_t)m[i].species;
+        s.tera_type = -1;
+        for (int j = 0; j < 6; j++) s.ivs[j] = 15;
+        gc_mon_new_player(&run, g, &s, m[i].level);
+        g->b.level = (uint8_t)m[i].level;
+        g->b.friendship = (uint8_t)m[i].friendship;
+        g->exp = m[i].exp;
+    }
+    for (int i = 0; i < n; i++) {
+        sys.starters[st[i].root].friendship = (int)st[i].friendship;
+        sys.starters[st[i].root].candy_count = (int)st[i].candy;
+    }
+    run.n_items = 0;
+    if (stacks > 0) gc_item_add(&run, "CANDY_JAR", -1, 0, stacks);
+}
+
+static const char *const candy_keys[] = {"RARE_CANDY", "RARER_CANDY"};
+typedef struct {
+    long cases, replayed, comparisons, mismatches, shown;
+    long taken[2], refused[2], cases_by_key[2];
+    long at_or_over_cap, friendship_capped, friendship_near_cap, with_jar, level_ups, starter_gains, classic, endless;
+} candy_stats;
+
+/* one case, the C record `line` already read; returns false on a malformed trace */
+static bool candy_case(FILE *f, char *line, size_t cap_line, candy_stats *cs)
+{
+    char key[64];
+    char *p = line + 1;
+    word(&p, key, sizeof key);
+    const int target = (int)num(&p), wave = (int)num(&p), mode = (int)num(&p), stacks = (int)num(&p), n = (int)num(&p);
+    if (n < 1 || n > 6) { fputs("malformed trace: candy party size\n", stderr); return false; }
+    cmember before[6];
+    cstarter st_before[6], st_after[6];
+    memset(before, 0, sizeof before);
+    for (int i = 0; i < n; i++) {
+        if (!fgets(line, (int)cap_line, f) || line[0] != 'P') { fputs("malformed trace: candy P record\n", stderr); return false; }
+        char *q = line + 1;
+        before[i].species = (int)num(&q);
+        before[i].level = (int)num(&q);
+        before[i].exp = (double)num(&q);
+        before[i].friendship = (int)num(&q);
+        before[i].growth = (int)num(&q);
+    }
+    for (int i = 0; i < n; i++) {
+        if (!fgets(line, (int)cap_line, f) || line[0] != 'S') { fputs("malformed trace: candy S record\n", stderr); return false; }
+        char *q = line + 1;
+        st_before[i].root = (int)num(&q);
+        st_before[i].friendship = num(&q);
+        st_before[i].candy = num(&q);
+    }
+    if (!fgets(line, (int)cap_line, f) || line[0] != 'R') { fputs("malformed trace: candy R record\n", stderr); return false; }
+    char *r = line + 1;
+    const int applied = (int)num(&r);
+    char filter[160];
+    word(&r, filter, sizeof filter);
+    const bool filter_ok = !strcmp(filter, "OK");
+    const int level_cap = (int)num(&r);
+    cmember after[6];
+    memset(after, 0, sizeof after);
+    for (int i = 0; i < n; i++) {
+        after[i].level = (int)num(&r);
+        after[i].exp = (double)num(&r);
+        after[i].friendship = (int)num(&r);
+        const double expected_exp = (double)num(&r);
+        if (after[i].level != before[i].level && after[i].exp != expected_exp) { fprintf(stderr, "case %ld %s: upstream exp %.0f is not getLevelTotalExp %.0f\n", cs->cases, key, after[i].exp, expected_exp); return false; }
+    }
+    if (!fgets(line, (int)cap_line, f) || line[0] != 'T') { fputs("malformed trace: candy T record\n", stderr); return false; }
+    r = line + 1;
+    for (int i = 0; i < n; i++) { st_after[i].root = st_before[i].root; st_after[i].friendship = num(&r); st_after[i].candy = num(&r); }
+    if (!fgets(line, (int)cap_line, f) || line[0] != 'L') { fputs("malformed trace: candy L record\n", stderr); return false; }
+    r = line + 1;
+    const int n_up = (int)num(&r);
+    if (n_up > 6) { fputs("malformed trace: candy level-up count\n", stderr); return false; }
+    int up[6][3];
+    for (int i = 0; i < n_up; i++) { up[i][0] = (int)num(&r); up[i][1] = (int)num(&r); up[i][2] = (int)num(&r); }
+    if (!fgets(line, (int)cap_line, f) || line[0] != 'E') { fputs("malformed trace: candy E record\n", stderr); return false; }
+
+    int item = -1;
+    for (int k = 0; k < 2; k++) if (!strcmp(key, candy_keys[k])) item = k;
+    if (item < 0) { fprintf(stderr, "malformed trace: candy key %s\n", key); return false; }
+    cs->cases++;
+    cs->cases_by_key[item]++;
+    cs->with_jar += stacks > 0;
+    cs->classic += mode == GAME_MODES_CLASSIC;
+    cs->endless += mode == GAME_MODES_ENDLESS;
+    for (int i = 0; i < n; i++) {
+        cs->at_or_over_cap += before[i].level >= level_cap;
+        cs->friendship_capped += before[i].friendship >= 200;
+        cs->friendship_near_cap += before[i].friendship >= 195 && before[i].friendship < 200;
+    }
+    if (mode != GAME_MODES_CLASSIC && mode != GAME_MODES_ENDLESS) { fputs("malformed trace: candy mode\n", stderr); return false; }
+
+    for (int purchase = 0; purchase < 2; purchase++) {
+        const int rot = (int)((cs->cases + purchase) % n);
+        candy_setup(before, st_before, n, rot, stacks, wave, mode);
+        gc_offer o;
+        memset(&o, 0, sizeof o);
+        o.key = key;
+        o.arg = -1;
+        o.target = gc_reward_target(key);
+        o.cost = purchase ? 400 : 0;
+        const char *why = "";
+        const bool rare = item == 0;
+        const bool ok = gc_port_apply_reward(&run, &o, rare ? run.party_order[target] : -1, -1, &why);
+        const bool expect_ok = filter_ok && applied;
+        cs->comparisons++;
+        bool bad = false;
+        if (ok != expect_ok) { bad = true; if (cs->shown++ < 12) fprintf(stderr, "case %ld %s (%s): taken %d, upstream %d (filter %s, applied %d)\n", cs->cases, key, purchase ? "bought" : "free", ok, expect_ok, filter, applied); }
+        for (int i = 0; i < n && !bad; i++) {
+            const gc_mon *g = &run.party[run.party_order[i]];
+            const int want_level = expect_ok ? after[i].level : before[i].level;
+            if (g->b.level != want_level || g->exp != after[i].exp || g->b.friendship != after[i].friendship) {
+                bad = true;
+                if (cs->shown++ < 12) fprintf(stderr, "case %ld %s (%s) wave %d mode %d jars %d: member %d (species %d) level %d exp %.0f friendship %d, upstream %d %.0f %d (before %d %.0f %d, cap %d)\n",
+                                              cs->cases, key, purchase ? "bought" : "free", wave, mode, stacks, i, before[i].species, g->b.level, g->exp, g->b.friendship,
+                                              want_level, after[i].exp, after[i].friendship, before[i].level, before[i].exp, before[i].friendship, level_cap);
+            }
+        }
+        for (int i = 0; i < n && !bad; i++) {
+            const gc_starter_entry *e = &sys.starters[st_after[i].root];
+            if (e->friendship != st_after[i].friendship || e->candy_count != st_after[i].candy) {
+                bad = true;
+                if (cs->shown++ < 12) fprintf(stderr, "case %ld %s (%s) mode %d: member %d starter %d friendship %d candy %d, upstream %ld %ld (before %ld %ld, member friendship %d)\n",
+                                              cs->cases, key, purchase ? "bought" : "free", mode, i, st_after[i].root, e->friendship, e->candy_count, st_after[i].friendship, st_after[i].candy,
+                                              st_before[i].friendship, st_before[i].candy, before[i].friendship);
+            }
+        }
+        /* the LevelUpPhases the candy queued, in the order upstream unshifted them */
+        gc_internal *in = gc_int(&run);
+        gc_rphase qp;
+        int n_got = 0, got[6][3];
+        while (gc_rq_next(&in->rq, &qp)) {
+            if (qp.type != RP_LEVEL_UP) continue;
+            int idx = -1;
+            for (int i = 0; i < n; i++) if (run.party_order[i] == qp.a) idx = i;
+            if (n_got < 6) { got[n_got][0] = idx; got[n_got][1] = qp.b; got[n_got][2] = qp.c; }
+            n_got++;
+        }
+        const int want_up = expect_ok ? n_up : 0;
+        if (!bad && n_got != want_up) { bad = true; if (cs->shown++ < 12) fprintf(stderr, "case %ld %s (%s): %d LevelUpPhases queued, upstream %d\n", cs->cases, key, purchase ? "bought" : "free", n_got, want_up); }
+        for (int i = 0; i < want_up && !bad; i++)
+            if (got[i][0] != up[i][0] || got[i][1] != up[i][1] || got[i][2] != up[i][2]) {
+                bad = true;
+                if (cs->shown++ < 12) fprintf(stderr, "case %ld %s (%s): LevelUpPhase %d is member %d %d -> %d, upstream %d %d -> %d\n", cs->cases, key, purchase ? "bought" : "free", i, got[i][0], got[i][1], got[i][2], up[i][0], up[i][1], up[i][2]);
+            }
+        if (bad) { cs->mismatches++; continue; }
+        (ok ? cs->taken : cs->refused)[item]++;
+        if (!purchase) {
+            cs->level_ups += n_got;
+            for (int i = 0; i < n; i++) cs->starter_gains += st_after[i].friendship != st_before[i].friendship || st_after[i].candy != st_before[i].candy;
+        }
+    }
+    cs->replayed++;
+    return true;
+}
+
 int main(int argc, char **argv)
 {
     FILE *f = argc == 2 ? fopen(argv[1], "r") : NULL;
@@ -92,9 +283,15 @@ int main(int argc, char **argv)
     long taken[N_KEYS] = {0}, refused[N_KEYS] = {0}, cases_by_key[N_KEYS] = {0};
     long free_no_effect = 0, hp_changed = 0, pp_changed = 0, pp_up_changed = 0, status_cured = 0, charm_cases = 0;
     long bought_taken = 0, bought_refused = 0, free_taken = 0, free_refused = 0;
+    candy_stats cs;
+    memset(&cs, 0, sizeof cs);
     while (fgets(line, sizeof line, f)) {
         if (line[0] == '#') continue;
         if (line[0] == 'X') { fprintf(stderr, "upstream threw: %s", line); return 2; }
+        if (line[0] == 'C') {
+            if (!candy_case(f, line, sizeof line, &cs)) return 2;
+            continue;
+        }
         if (line[0] != 'A') continue;
         cases++;
         char *p = line + 1, key[64];
@@ -217,11 +414,19 @@ int main(int argc, char **argv)
         replayed++;
     }
     fclose(f);
+    if (cs.cases) {
+        printf("%ld candy cases in the trace: %ld replayed twice (free and bought), %ld comparisons, %ld mismatches\n", cs.cases, cs.replayed, cs.comparisons, cs.mismatches);
+        printf("free and bought: Rare Candy %ld taken %ld refused, Rarer Candy %ld taken %ld refused; %ld Classic, %ld Endless; %ld with Candy Jars\n",
+               cs.taken[0], cs.refused[0], cs.taken[1], cs.refused[1], cs.classic, cs.endless, cs.with_jar);
+        printf("members: %ld at or above the wave's level cap, %ld with friendship 195-199, %ld with friendship 200 or more; %ld LevelUpPhases queued, %ld cases moved a starter's friendship or candy (free)\n",
+               cs.at_or_over_cap, cs.friendship_near_cap, cs.friendship_capped, cs.level_ups, cs.starter_gains);
+    }
+    if (!cases) return (mismatches || cs.mismatches) ? 1 : 0;
     printf("%ld cases in the trace: %ld replayed twice (free and bought), %ld skipped (%ld Hardcore, %ld other items), %ld comparisons, %ld mismatches\n",
            cases, replayed, skipped_hardcore + skipped_other, skipped_hardcore, skipped_other, comparisons, mismatches);
     printf("free rewards: %ld taken, %ld refused; bought: %ld taken, %ld refused; %ld cases with a Healing Charm\n", free_taken, free_refused, bought_taken, bought_refused, charm_cases);
     printf("what changed (free rewards): %ld HP values, %ld statuses, %ld PP used, %ld PP Ups; %ld taken with no effect (Sacred Ash)\n", hp_changed, status_cured, pp_changed, pp_up_changed, free_no_effect);
     printf("%-14s %7s %7s %7s\n", "item", "cases", "taken", "refused");
     for (int k = 0; k < N_KEYS; k++) printf("%-14s %7ld %7ld %7ld\n", keys[k], cases_by_key[k], taken[k], refused[k]);
-    return mismatches ? 1 : 0;
+    return (mismatches || cs.mismatches) ? 1 : 0;
 }
