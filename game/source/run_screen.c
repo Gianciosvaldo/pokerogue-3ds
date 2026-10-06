@@ -140,6 +140,24 @@ static uint32_t rnd(uint32_t n) {
   return n ? (uint32_t)(G.rng % n) : 0;
 }
 
+/* "RARE_CANDY" -> "Rare Candy" (stand-in for the reward's own name) */
+static const char* pretty_key(const char* key, char* out, int n) __attribute__((unused));
+static const char* pretty_key(const char* key, char* out, int n) {
+  int j = 0;
+  bool up = true;
+  for (int i = 0; key && key[i] && j < n - 1; i++) {
+    char c = key[i];
+    if (c == '_') {
+      out[j++] = ' ';
+      up = true;
+    } else {
+      out[j++] = up ? c : (char)(c >= 'A' && c <= 'Z' ? c + 32 : c);
+      up = false;
+    }
+  }
+  out[j] = 0;
+  return out;
+}
 
 /* game-core's reason for a refusal: an i18n key ("partyUiHandler:noEnergy") or a plain sentence */
 static const char* why_text(const char* why, char* out, int n) {
@@ -875,7 +893,14 @@ static void open_learn(const gc_screen* s) {
   ps_learn_move(&G.run.bt, slot < 0 ? 0 : slot, s->move, G.run.trainer_id, &host);
 }
 
-/* ---- evolution: ui_push_confirm prompt ---- */
+/* ---- evolution: "What? X is evolving!" -> confirm prompt -> "X stopped evolving." / "Congratulations! X evolved into Y!" ----
+ * Upstream evolution scene text sequence (evolution-phase.ts / evolution-scene-ui-handler.ts):
+ * 1. "What? X is evolving!" (i18n key "menu:evolving"): queued by game-core at evolution start and played via BEV_MESSAGE.
+ * 2. Evolution prompt (ui_push_confirm): asks the player to proceed or cancel (B button).
+ * 3. On cancel (B button / No): answer GC_CH_CANCEL -> game-core queues "menu:stoppedEvolving" ("X stopped evolving."), played via BEV_MESSAGE.
+ * 4. On success (Yes): answer GC_CH_EVOLVE -> game-core evolves member, emits GC_EV_EVOLVED, and queues "menu:evolutionDone"
+ *    ("Congratulations! Your X evolved into Y!"), played via BEV_MESSAGE. Any post-evolution move learned goes to GC_SCREEN_LEARN_MOVE.
+ */
 
 static void on_evolve_answer(int yes, void* arg) {
   (void)arg;
@@ -1188,7 +1213,7 @@ static bool new_run(bool from_black) {
   gc_run_new(&G.run, GAME_MODES_CLASSIC, G.st.runs == 1 ? G.cfg.seed : NULL, G.cfg.entropy + (uint32_t)G.st.runs);
   gc_starter team[6];
   int n = 0;
-  if (G.st.runs == 1 && G.cfg.n_starters > 0) {
+  if (G.cfg.n_starters > 0) {
     for (; n < G.cfg.n_starters && n < 6; n++) {
       memset(&team[n], 0, sizeof team[n]);
       team[n].species = (uint16_t)G.cfg.starters[n];

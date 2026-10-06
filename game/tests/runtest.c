@@ -121,8 +121,11 @@ static struct {
   int species_before;
   int species_target;
   int choice;
+  bool expect_move_learn;
+  int evolved_party_idx;
+  int learning_move;
 } EVO;
-static int n_evo_checked, n_cancel_checked;
+static int n_evo_checked, n_cancel_checked, n_evo_move_learned_checked;
 
 static char first_violation[300];
 
@@ -488,6 +491,9 @@ static void evo_check(void) {
       return;
     }
     n_evo_checked++;
+    EVO.expect_move_learn = true;
+    EVO.evolved_party_idx = EVO.party_idx;
+    EVO.learning_move = 0;
   } else {
     if (current_species != EVO.species_before) {
       BAD("party slot %d holds species %d after cancelled evolution, expected original species %d",
@@ -639,6 +645,10 @@ void ps_learn_move(const pr_battle* bt, int party_slot, int move, int trainer_id
   (void)bt, (void)move, (void)trainer_id;
   n_dialogs++;
   if (party_slot < 0 || party_slot >= bt->n_party[0]) BAD("learn dialog for slot %d of %d", party_slot, bt->n_party[0]);
+  if (EVO.expect_move_learn && party_slot == EVO.evolved_party_idx) {
+    EVO.expect_move_learn = false;
+    n_evo_move_learned_checked++;
+  }
   LH = host;
   host->show_text(host->host, "wants to learn a move", true, dlg_text_done, NULL);
 }
@@ -739,11 +749,12 @@ static bool step(void) {
   if (W.confirm_done) {
     void (*f)(int, void*) = W.confirm_done;
     W.confirm_done = NULL;
-    int yes = (int)rnd(2);
+    int yes;
     if (EVO.armed && EVO.choice == -1) {
-      if (n_cancel_checked == 0) yes = 0;
-      else yes = 1;
+      yes = (int)rnd(2);
       EVO.choice = yes;
+    } else {
+      yes = (int)rnd(3) != 0;
     }
     f(yes, W.confirm_arg);
     return true;
@@ -854,11 +865,12 @@ int main(int argc, char** argv) {
     cfg.save = true;
     cfg.slot = 0;
   }
-  cfg.starters[0] = 1;   /* Bulbasaur (3) */
-  cfg.starters[1] = 10;  /* Caterpie (1) */
-  cfg.starters[2] = 13;  /* Weedle (1) */
-  cfg.starters[3] = 265; /* Wurmple (1) */
-  cfg.n_starters = 4;
+  cfg.starters[0] = SPECIES_ID_BULBASAUR;
+  cfg.starters[1] = SPECIES_ID_CATERPIE;
+  cfg.starters[2] = SPECIES_ID_WEEDLE;
+  cfg.starters[3] = SPECIES_ID_WURMPLE;
+  cfg.starters[4] = SPECIES_ID_PIDGEY;
+  cfg.n_starters = 5;
   rs_start(&cfg);
 
   const rs_stats* st = rs_stats_get();
@@ -954,10 +966,11 @@ int main(int argc, char** argv) {
   if (pf_farewells() != n_real_releases || pf_farewells() != st->releases) BAD("%d farewells for %d releases", pf_farewells(), st->releases);
   if (n_bv_farewell) BAD("game-core's farewell reached the screen %d times (the party screen already said it)", n_bv_farewell);
   if (REL.armed) BAD("a full-party question was left unanswered");
-  printf("evolution: %d evolutions completed, %d cancelled; party species checked after %d evolutions and %d cancels\n",
-         st->evolves, st->cancels, n_evo_checked, n_cancel_checked);
-  if (!st->evolves || !n_evo_checked) BAD("no evolution completed");
-  if (!st->cancels || !n_cancel_checked) BAD("no evolution cancelled");
+  printf("evolution: %d evolutions completed, %d cancelled; party species checked after %d evolutions and %d cancels; %d post-evolution moves learned\n",
+         st->evolves, st->cancels, n_evo_checked, n_cancel_checked, n_evo_move_learned_checked);
+  if (st->evolves < 5) BAD("fewer than 5 evolutions completed (%d)", st->evolves);
+  if (st->cancels < 5) BAD("fewer than 5 evolutions cancelled (%d)", st->cancels);
+  if (!n_evo_move_learned_checked) BAD("no post-evolution move learning was verified");
   if (st->evolves != n_evo_checked || st->cancels != n_cancel_checked)
     BAD("evolution count mismatch (driver %d / %d, checked %d / %d)", st->evolves, st->cancels, n_evo_checked, n_cancel_checked);
   printf("reward screens: %d shops, %d item targets, %d biome maps\n", n_shops, n_item_opens, n_maps);
