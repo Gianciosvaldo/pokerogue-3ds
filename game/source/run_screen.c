@@ -729,10 +729,10 @@ static void on_command(bv_command c, void* arg) {
 
 static void on_send_pick(int slot, int option, void* arg) {
   (void)arg;
-  if (option != PS_SEND_OUT && option != PS_CANCEL) return;
+  if (option != PS_SEND_OUT && option != PO_RELEASE && option != PS_CANCEL) return;
   const gc_screen* s = gc_run_screen(&G.run);
   gc_choice c = {.kind = GC_CH_PICK, .a = -1};
-  if (option == PS_SEND_OUT && slot >= 0 && slot < G.run.n_party) c.a = G.run.party_order[slot];
+  if ((option == PS_SEND_OUT || option == PO_RELEASE) && slot >= 0 && slot < G.run.n_party) c.a = G.run.party_order[slot];
   else if (!s->can_skip) return; /* no cancelling a faint switch */
   ps_close();
   const bool swap = G.swap_prompt;
@@ -747,7 +747,7 @@ static void on_send_pick(int slot, int option, void* arg) {
 }
 
 static void open_switch(const gc_screen* s) {
-  ps_open(&G.run.bt, s->can_skip ? PS_SWITCH : PS_FAINT_SWITCH, on_send_pick, NULL);
+  ps_open(&G.run.bt, G.swap_prompt ? PS_RELEASE : (s->can_skip ? PS_SWITCH : PS_FAINT_SWITCH), on_send_pick, NULL);
 }
 
 /* ---- learning a move: menus' own dialog, with the battle's message box and yes/no ---- */

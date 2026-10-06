@@ -166,6 +166,7 @@ void ps_init(void) { mui_init(); }
 
 void ps_open(const pr_battle* bt, ps_mode pmode, void (*on_pick)(int, int, void*), void* arg) {
   _Static_assert((int)PS_SWITCH == (int)PARTY_SWITCH && (int)PS_FAINT_SWITCH == (int)PARTY_FAINT_SWITCH &&
+                     (int)PS_RELEASE == (int)PARTY_RELEASE &&
                      (int)PS_SEND_OUT == (int)PO_SEND_OUT && (int)PS_CANCEL == (int)PO_CANCEL,
                  "party_screen.h values");
   party_mode mode = (party_mode)pmode;

@@ -11,7 +11,7 @@
 
 /* (menus.h's party_mode and PartyOption values, so callers needn't include menus.h, whose text
  * style names clash with ui_text.h's) */
-typedef enum { PS_SWITCH = 0, PS_FAINT_SWITCH = 1 } ps_mode;
+typedef enum { PS_SWITCH = 0, PS_FAINT_SWITCH = 1, PS_RELEASE = 10 } ps_mode;
 enum { PS_CANCEL = -1, PS_SEND_OUT = 0 };
 
 void ps_init(void); /* once at boot, after ui_init */

@@ -98,7 +98,7 @@ static int n_shops, n_maps, n_item_opens;
 static bool save_on, resume_on;
 static int n_resumes;
 
-static int violations, n_scenes, n_ask, n_dialogs, n_options, n_party_opens, n_balls;
+static int violations, n_scenes, n_ask, n_dialogs, n_options, n_party_opens, n_balls, n_party_full_swaps;
 static char first_violation[300];
 
 static void bad(const char* fmt, ...);
@@ -591,12 +591,21 @@ static bool step(void) {
     void (*f)(int, int, void*) = W.party_pick;
     const pr_battle* bt = W.party_bt;
     W.party_pick = NULL;
-    int ok[6], n = 0;
-    for (int i = 0; i < bt->n_party[0]; i++)
-      if (bt->party[0][i]->hp > 0 && !bt->party[0][i]->on_field) ok[n++] = i;
-    if (W.party_mode == PS_SWITCH && rnd(6) == 0) f(6, PS_CANCEL, W.party_arg);
-    else if (n && rnd(10)) f(ok[rnd((uint32_t)n)], PS_SEND_OUT, W.party_arg);
-    else f((int)rnd((uint32_t)bt->n_party[0]), PS_SEND_OUT, W.party_arg); /* maybe not allowed: game-core refuses */
+    if (W.party_mode == PS_RELEASE) {
+      n_party_full_swaps++;
+      int slot = rnd(10) < 8 ? (int)rnd((uint32_t)bt->n_party[0]) : -1;
+      f(slot, slot >= 0 ? PO_RELEASE : PS_CANCEL, W.party_arg);
+      /* Verify game-core party state matches driver's party after swap/release prompt */
+      const gc_run* r = rs_run();
+      if (r->n_party != bt->n_party[0]) BAD("party size mismatch post-release: gc=%d bt=%d", r->n_party, bt->n_party[0]);
+    } else {
+      int ok[6], n = 0;
+      for (int i = 0; i < bt->n_party[0]; i++)
+        if (bt->party[0][i]->hp > 0 && !bt->party[0][i]->on_field) ok[n++] = i;
+      if (W.party_mode == PS_SWITCH && rnd(6) == 0) f(6, PS_CANCEL, W.party_arg);
+      else if (n && rnd(10)) f(ok[rnd((uint32_t)n)], PS_SEND_OUT, W.party_arg);
+      else f((int)rnd((uint32_t)bt->n_party[0]), PS_SEND_OUT, W.party_arg); /* maybe not allowed: game-core refuses */
+    }
     return true;
   }
   if (W.asking) {
@@ -737,8 +746,9 @@ int main(int argc, char** argv) {
          st->screens[GC_SCREEN_COMMAND], st->screens[GC_SCREEN_SWITCH], st->screens[GC_SCREEN_LEARN_MOVE],
          st->screens[GC_SCREEN_EVOLVE], st->screens[GC_SCREEN_REWARD], st->screens[GC_SCREEN_BIOME], st->screens[GC_SCREEN_MYSTERY],
          st->screens[GC_SCREEN_GAME_OVER], st->screens[GC_SCREEN_CLEAR]);
-  printf("fake screen: %d scenes, %d command prompts, %d option lists, %d party screens, %d ball lists, %d learn dialogs, %u screen events\n",
-         n_scenes, n_ask, n_options, n_party_opens, n_balls, n_dialogs, st->bev);
+  printf("fake screen: %d scenes, %d command prompts, %d option lists, %d party screens (%d full-party swaps), %d ball lists, %d learn dialogs, %u screen events\n",
+         n_scenes, n_ask, n_options, n_party_opens, n_party_full_swaps, n_balls, n_dialogs, st->bev);
+  if (n_party_full_swaps == 0) BAD("no full party catch release/swap path reached");
   printf("reward screens: %d shops, %d item targets, %d biome maps\n", n_shops, n_item_opens, n_maps);
   if (save_on) {
     printf("saving: %d save points, %d written, %d failed, %d resumed from the slot\n", W.expected_saves, st->saves, st->save_failed,
