@@ -130,9 +130,9 @@ before the consumable is applied.
 The caller supplies parsed learnset rows, unlocked egg moves and challenge egg-relearn availability
 in `pr_reward_mon`; reward-core owns the Memory Mushroom filtering/order and target state, not the UI rendering.
 
-## Card 97: the trainers' own rewards (2026-10-05)
+## Card 97: the trainers' own rewards (PR #132, 2026-10-05)
 
-Ported from upstream `8555c08`, in `src/trainer_rewards.c` (API in `include/pr/reward.h`, data dumped into `gen/out/reward_data.c` by `gen/dump-rewards.test.ts`):
+Ported from upstream `8555c08`, in `src/trainer_rewards.c` (API in `include/pr/reward.h`, data dumped into `gen/out/reward_data.c` by `gen/dump-rewards.test.ts`), merged in PR #132 (commit `705a79e`):
 
 | Piece | Upstream | Port |
 |---|---|---|

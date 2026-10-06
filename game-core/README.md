@@ -170,8 +170,8 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 
 | Stand-in | Waits on |
 |---|---|
-| Enemy moveset: the last four level moves | run-core |
-| A reward taken that isn't a ball, Full Heal, Rare Candy, Rarer Candy, held item or one of the healing, revive and PP items Task 60/96 ported (TMs, Memory Mushroom, Mints, money, vouchers, evolution items, DNA Splicers) is added to the items and counted (`reward taken without its own effect`) | later reward tasks |
+| Enemy moveset: the last four level moves (run-core's generator, Task 63 / PR #112, covers only a few species and is not wired in yet: Task 64) | run-core |
+| A reward taken that isn't a ball, Full Heal, Rare Candy, Rarer Candy (Task 96 / PR #136), held item or one of the healing, revive and PP items Task 60/96 ported (TMs, Memory Mushroom, Mints, money, vouchers, evolution items, DNA Splicers) is added to the items and counted (`reward taken without its own effect`) | later reward tasks |
 | Double battles are played as singles (M1 rule) | doubles in battle-core |
 | Mystery encounters and fixed classic battles (rival, evil team, gyms run-core can't make) become wild battles of the wave's level | run-core, later the encounters |
 | A boss's battle score: `addFaintedEnemyScore` (and the catch's own copy of it) multiplies it by `sqrt(bossSegments)`; Task 93 sets `boss_segments` on Pokemon encounters and `gc_phases.c` calculates score using `boss_segments` | Task 93 (PR #122) |

@@ -269,18 +269,15 @@ bool gc_run_set_starters(gc_run *run, const gc_starter *starters, int n, const c
     if (!why) why = &dummy;
     if (run->screen.kind != GC_SCREEN_STARTERS) { *why = "not on the starter screen"; return false; }
     if (n < 1 || n > 6) { *why = "starterSelectUiHandler:invalidParty"; return false; }
-    int cost = 0;
+    double cost = 0;
     for (int i = 0; i < n; i++) {
-        int c = gc_starter_cost(starters[i].species);
-        if (c < 0) { *why = "not a starter species"; return false; }
-        const pr_species *sp = gc_species(starters[i].species);
-        if (!sp || starters[i].form >= (sp->nforms ? sp->nforms : 1)) { *why = "no such form"; return false; }
-        if (starters[i].ability_index > 2 || starters[i].nature > 24) { *why = "bad ability or nature"; return false; }
+        double c = 0;
+        if (!gc_starter_is_available(run->sys, &starters[i], &c, why)) return false;
         for (int k = 0; k < i; k++)
             if (starters[k].species == starters[i].species) { *why = "the same species twice"; return false; }
         cost += c;
     }
-    if (cost > gc_starter_budget(run->run.mode)) { *why = "starterSelectUiHandler:cost"; return false; }
+    if (cost > (double)gc_starter_budget(run->run.mode) + 1e-9) { *why = "starterSelectUiHandler:cost"; return false; }
     /* SelectStarterPhase.initBattle: the party at the starting level, each built on Phaser.Math.RND */
     const int level = pr_run_get_starting_level(&run->run);
     for (int i = 0; i < n; i++) {
