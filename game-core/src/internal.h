@@ -176,6 +176,11 @@ uint8_t gc_reward_target(const char *key);
 enum { GC_APPLY_UNHANDLED, GC_APPLY_DONE, GC_APPLY_REFUSED };
 int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, const char **why);
 int gc_reward_lifecycle_apply(gc_run *run, const gc_offer *o, int party, const char **why);
+/* Task 96: Poke Ball rewards. add_pokeballs = AddPokeballModifier.apply (+5, Master Ball +1, at most 99) for a reward
+ * key, false when the key is not a Poke Ball; gc_reward_gain = ModifierRewardPhase.doReward: give the reward, then
+ * queue battle:rewardGain naming it. */
+bool gc_reward_add_pokeballs(gc_run *run, const char *key);
+void gc_reward_gain(gc_run *run, const char *key);
 void gc_reward_change_form(gc_run *run, int party, int form);
 
 /* ---- items (src/gc_items.c) ---- */

@@ -20,7 +20,12 @@
  * addModifier on random parties at, below and above the level cap, with Candy Jars, in Classic and Endless. Replayed free
  * and bought, compared on taken or refused, every member's level, exp and friendship, the LevelUpPhases queued (party
  * index, old level, new level, in order) and each member's starter friendship progress and candy count.
- * Usage: reward_apply_diff_test <trace> (an apply trace or a candy trace; the records say which) */
+ *
+ * Poke Balls (Task 96) are in a third trace, game-core/tests/pokeball.producer.test.ts: upstream's AddPokeballModifierType /
+ * AddPokeballModifier through addModifier (the reward screen: counts after, and that no text is shown) and through
+ * ModifierRewardPhase.doReward (counts after, and the "You received 5x Poke Ball!" text, compared with game-core's message
+ * formatted from upstream's own locale files, GC_LOCALES), on random counts with the cap's edges over-represented.
+ * Usage: reward_apply_diff_test <trace> (an apply, candy or pokeball trace; the records say which) */
 #include "../src/internal.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -140,6 +145,179 @@ typedef struct {
     long taken[2], refused[2], cases_by_key[2];
     long at_or_over_cap, friendship_capped, friendship_near_cap, with_jar, level_ups, starter_gains, classic, endless;
 } candy_stats;
+
+static const char *const pokeball_keys[] = {"POKEBALL", "GREAT_BALL", "ULTRA_BALL", "ROGUE_BALL", "MASTER_BALL"};
+typedef struct {
+    long cases, replayed, comparisons, mismatches, shown, texts;
+    long taken[5], cases_by_key[5], cap_hit[5], cap_crossed[5], from_zero[5];
+} pokeball_stats;
+
+/* upstream's locales/en folder (GC_LOCALES, set by tools/applydiff.sh): the text of the "You received" message is
+ * compared as text, formatted by battle-core's pr_msg_format from the same files upstream's i18next read */
+static const char *pokeball_locale(void *ctx, const char *file, int fallback, size_t *len)
+{
+    (void)ctx;
+    static struct { char name[64]; char *text; size_t len; } cache[8];
+    static int n_cache;
+    const char *dir = getenv("GC_LOCALES");
+    if (fallback) return NULL;
+    if (!dir) { fputs("GC_LOCALES must name upstream's locales/en folder (tools/applydiff.sh sets it)\n", stderr); exit(2); }
+    for (int i = 0; i < n_cache; i++)
+        if (!strcmp(cache[i].name, file)) { *len = cache[i].len; return cache[i].text; }
+    if (n_cache >= 8) return NULL;
+    char path[512];
+    snprintf(path, sizeof path, "%s/%s.json", dir, file);
+    FILE *f = fopen(path, "rb");
+    if (!f) { fprintf(stderr, "cannot read %s\n", path); exit(2); }
+    fseek(f, 0, SEEK_END);
+    const long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    char *text = malloc((size_t)sz + 1);
+    const size_t n = fread(text, 1, (size_t)sz, f);
+    text[n] = 0;
+    fclose(f);
+    snprintf(cache[n_cache].name, sizeof cache[n_cache].name, "%s", file);
+    cache[n_cache].text = text;
+    cache[n_cache].len = n;
+    n_cache++;
+    *len = n;
+    return text;
+}
+
+static long drain_events(gc_run *r, gc_event *first)
+{
+    gc_event e;
+    long n = 0;
+    while (gc_run_next_event(r, &e)) if (n++ == 0) *first = e;
+    return n;
+}
+
+static void ball_setup(const int *init_counts)
+{
+    memset(&run, 0, sizeof run);
+    gc_system_init_defaults(&sys);
+    gc_run_new(&run, GAME_MODES_CLASSIC, "pokeball-diff", 7);
+    run.sys = &sys;
+    for (int k = 0; k < 5; k++) run.pokeballs[k] = (uint8_t)init_counts[k];
+    gc_event e;
+    drain_events(&run, &e);
+}
+
+/* K / R / G / E records (tests/pokeball.producer.test.ts): the reward taken from the reward screen
+ * (SelectModifierPhase.applyModifier -> addModifier, free and bought) and the reward given by ModifierRewardPhase,
+ * each compared with the counts upstream ended with and the text upstream showed (none on the reward screen) */
+static bool pokeball_case(FILE *f, char *line, size_t cap_line, pokeball_stats *ps)
+{
+    char key[64];
+    char *p = line + 1;
+    word(&p, key, sizeof key);
+    int init_counts[5];
+    for (int k = 0; k < 5; k++) init_counts[k] = (int)num(&p);
+
+    if (!fgets(line, (int)cap_line, f) || line[0] != 'R') { fputs("malformed trace: pokeball R record\n", stderr); return false; }
+    char *r = line + 1;
+    const int applied = (int)num(&r);
+    char filter[160];
+    word(&r, filter, sizeof filter);
+    int pick_counts[5];
+    for (int k = 0; k < 5; k++) pick_counts[k] = (int)num(&r);
+    const long pick_texts = num(&r);
+
+    if (!fgets(line, (int)cap_line, f) || line[0] != 'G') { fputs("malformed trace: pokeball G record\n", stderr); return false; }
+    char *g = line + 1;
+    int give_counts[5];
+    for (int k = 0; k < 5; k++) give_counts[k] = (int)num(&g);
+    const long give_texts = num(&g);
+    char give_text[256];
+    if (*g == ' ') g++;
+    snprintf(give_text, sizeof give_text, "%s", g);
+    give_text[strcspn(give_text, "\n")] = 0;
+    for (char *c = give_text; *c; c++) if (*c == '|') *c = '\n';
+
+    if (!fgets(line, (int)cap_line, f) || line[0] != 'E') { fputs("malformed trace: pokeball E record\n", stderr); return false; }
+
+    int item = -1;
+    for (int k = 0; k < 5; k++) if (!strcmp(key, pokeball_keys[k])) item = k;
+    if (item < 0) { fprintf(stderr, "malformed trace: pokeball key %s\n", key); return false; }
+
+    ps->cases++;
+    ps->cases_by_key[item]++;
+    /* coverage only (the comparison is with upstream's own counts): where the cap's edges are */
+    const int add = item == 4 ? 1 : 5;
+    ps->from_zero[item] += init_counts[item] == 0;
+    ps->cap_hit[item] += init_counts[item] + add == 99;
+    ps->cap_crossed[item] += init_counts[item] + add > 99;
+
+    const bool expect_ok = !strcmp(filter, "OK") && applied;
+    for (int purchase = 0; purchase < 2; purchase++) {
+        ball_setup(init_counts);
+        gc_offer o;
+        memset(&o, 0, sizeof o);
+        o.key = key;
+        o.arg = -1;
+        o.target = gc_reward_target(key);
+        o.cost = purchase ? 400 : 0;
+        const char *why = "";
+        const bool ok = gc_port_apply_reward(&run, &o, -1, -1, &why);
+        gc_event first;
+        const long texts = drain_events(&run, &first);
+        ps->comparisons++;
+        bool bad = false;
+        if (ok != expect_ok || texts != pick_texts) {
+            bad = true;
+            if (ps->shown++ < 12)
+                fprintf(stderr, "pokeball case %ld %s (%s): taken %d, upstream %d; %ld messages, upstream %ld\n", ps->cases, key,
+                        purchase ? "bought" : "free", ok, expect_ok, texts, pick_texts);
+        }
+        for (int k = 0; k < 5 && !bad; k++)
+            if (run.pokeballs[k] != pick_counts[k]) {
+                bad = true;
+                if (ps->shown++ < 12)
+                    fprintf(stderr, "pokeball case %ld %s (%s): ball %d count %d, upstream %d (initial %d)\n", ps->cases, key,
+                            purchase ? "bought" : "free", k, run.pokeballs[k], pick_counts[k], init_counts[k]);
+            }
+        if (bad) ps->mismatches++;
+        else ps->taken[item] += ok;
+    }
+
+    /* given by ModifierRewardPhase.doReward */
+    ball_setup(init_counts);
+    gc_reward_gain(&run, key);
+    gc_event first;
+    memset(&first, 0, sizeof first);
+    const long texts = drain_events(&run, &first);
+    ps->comparisons++;
+    bool bad = false;
+    for (int k = 0; k < 5 && !bad; k++)
+        if (run.pokeballs[k] != give_counts[k]) {
+            bad = true;
+            if (ps->shown++ < 12)
+                fprintf(stderr, "pokeball case %ld %s (given): ball %d count %d, upstream %d (initial %d)\n", ps->cases, key, k,
+                        run.pokeballs[k], give_counts[k], init_counts[k]);
+        }
+    if (!bad && texts != give_texts) {
+        bad = true;
+        if (ps->shown++ < 12) fprintf(stderr, "pokeball case %ld %s (given): %ld messages, upstream %ld\n", ps->cases, key, texts, give_texts);
+    }
+    if (!bad && texts > 0) {
+        char text[256];
+        static const pr_text_source src = {pokeball_locale, NULL, "en"};
+        if (first.kind != GC_EV_MESSAGE || !first.msg.key) {
+            bad = true;
+            if (ps->shown++ < 12) fprintf(stderr, "pokeball case %ld %s (given): the event is not a message\n", ps->cases, key);
+        } else {
+            pr_msg_format(&first.msg, &src, text, sizeof text);
+            ps->texts++;
+            if (strcmp(text, give_text)) {
+                bad = true;
+                if (ps->shown++ < 12) fprintf(stderr, "pokeball case %ld %s (given): text '%s', upstream '%s'\n", ps->cases, key, text, give_text);
+            }
+        }
+    }
+    if (bad) ps->mismatches++;
+    ps->replayed++;
+    return true;
+}
 
 /* one case, the C record `line` already read; returns false on a malformed trace */
 static bool candy_case(FILE *f, char *line, size_t cap_line, candy_stats *cs)
@@ -285,11 +463,17 @@ int main(int argc, char **argv)
     long bought_taken = 0, bought_refused = 0, free_taken = 0, free_refused = 0;
     candy_stats cs;
     memset(&cs, 0, sizeof cs);
+    pokeball_stats ps;
+    memset(&ps, 0, sizeof ps);
     while (fgets(line, sizeof line, f)) {
         if (line[0] == '#') continue;
         if (line[0] == 'X') { fprintf(stderr, "upstream threw: %s", line); return 2; }
         if (line[0] == 'C') {
             if (!candy_case(f, line, sizeof line, &cs)) return 2;
+            continue;
+        }
+        if (line[0] == 'K') {
+            if (!pokeball_case(f, line, sizeof line, &ps)) return 2;
             continue;
         }
         if (line[0] != 'A') continue;
@@ -414,6 +598,7 @@ int main(int argc, char **argv)
         replayed++;
     }
     fclose(f);
+    printf("TOTAL mismatches in this trace: %ld\n", mismatches + cs.mismatches + ps.mismatches);
     if (cs.cases) {
         printf("%ld candy cases in the trace: %ld replayed twice (free and bought), %ld comparisons, %ld mismatches\n", cs.cases, cs.replayed, cs.comparisons, cs.mismatches);
         printf("free and bought: Rare Candy %ld taken %ld refused, Rarer Candy %ld taken %ld refused; %ld Classic, %ld Endless; %ld with Candy Jars\n",
@@ -421,12 +606,22 @@ int main(int argc, char **argv)
         printf("members: %ld at or above the wave's level cap, %ld with friendship 195-199, %ld with friendship 200 or more; %ld LevelUpPhases queued, %ld cases moved a starter's friendship or candy (free)\n",
                cs.at_or_over_cap, cs.friendship_near_cap, cs.friendship_capped, cs.level_ups, cs.starter_gains);
     }
-    if (!cases) return (mismatches || cs.mismatches) ? 1 : 0;
+    if (ps.cases) {
+        printf("%ld pokeball cases in the trace: %ld replayed (taken free, taken bought, given), %ld comparisons, %ld mismatches\n", ps.cases, ps.replayed, ps.comparisons, ps.mismatches);
+        printf("%ld \"You received\" texts compared with upstream's; taken free and bought: POKEBALL %ld, GREAT_BALL %ld, ULTRA_BALL %ld, ROGUE_BALL %ld, MASTER_BALL %ld\n",
+               ps.texts, ps.taken[0], ps.taken[1], ps.taken[2], ps.taken[3], ps.taken[4]);
+        printf("starting at 0: %ld %ld %ld %ld %ld; reaching 99 exactly: %ld %ld %ld %ld %ld; passing 99: %ld %ld %ld %ld %ld (POKEBALL GREAT ULTRA ROGUE MASTER)\n",
+               ps.from_zero[0], ps.from_zero[1], ps.from_zero[2], ps.from_zero[3], ps.from_zero[4],
+               ps.cap_hit[0], ps.cap_hit[1], ps.cap_hit[2], ps.cap_hit[3], ps.cap_hit[4],
+               ps.cap_crossed[0], ps.cap_crossed[1], ps.cap_crossed[2], ps.cap_crossed[3], ps.cap_crossed[4]);
+    }
+    if (!cases && !cs.cases && !ps.cases) return 1;
+    if (!cases) return (mismatches || cs.mismatches || ps.mismatches) ? 1 : 0;
     printf("%ld cases in the trace: %ld replayed twice (free and bought), %ld skipped (%ld Hardcore, %ld other items), %ld comparisons, %ld mismatches\n",
            cases, replayed, skipped_hardcore + skipped_other, skipped_hardcore, skipped_other, comparisons, mismatches);
     printf("free rewards: %ld taken, %ld refused; bought: %ld taken, %ld refused; %ld cases with a Healing Charm\n", free_taken, free_refused, bought_taken, bought_refused, charm_cases);
     printf("what changed (free rewards): %ld HP values, %ld statuses, %ld PP used, %ld PP Ups; %ld taken with no effect (Sacred Ash)\n", hp_changed, status_cured, pp_changed, pp_up_changed, free_no_effect);
     printf("%-14s %7s %7s %7s\n", "item", "cases", "taken", "refused");
     for (int k = 0; k < N_KEYS; k++) printf("%-14s %7ld %7ld %7ld\n", keys[k], cases_by_key[k], taken[k], refused[k]);
-    return (mismatches || cs.mismatches) ? 1 : 0;
+    return (mismatches || cs.mismatches || ps.mismatches) ? 1 : 0;
 }
