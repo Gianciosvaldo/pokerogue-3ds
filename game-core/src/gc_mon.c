@@ -374,10 +374,12 @@ double gc_starter_value(const gc_system *sys, int species)
 /* Validates starter preferences / unlocks against system data (or defaults if NULL).
  * Cites upstream rules:
  * - starter-select-ui-handler.ts:638 (uncaught/locked species)
- * - starter-select-ui-handler.ts:646 (shiny/variant unlock check against caughtAttr)
- * - starter-select-ui-handler.ts:674 (gender unlock check against caughtAttr)
+ * - starter-select-ui-handler.ts:646 (shiny unlock check against caughtAttr)
+ * - starter-select-ui-handler.ts:657 (variant unlock check against caughtAttr)
+ * - starter-select-ui-handler.ts:678 (gender unlock check against caughtAttr)
  * - starter-select-ui-handler.ts:688 (ability unlock check against abilityAttr and species single-ability logic)
  * - starter-select-ui-handler.ts:707 (form unlock check against formIndex & caughtAttr)
+ * - starter-select-ui-handler.ts:718, game-data.ts:1989 (nature unlock check against natureAttr)
  * - starter-select-ui-handler.ts:1810 / 2219 (passive unlock check against passiveAttr & 1)
  */
 bool gc_starter_is_available(const gc_system *sys, const gc_starter *starter, double *cost_out, const char **why)
@@ -399,6 +401,7 @@ bool gc_starter_is_available(const gc_system *sys, const gc_starter *starter, do
     uint64_t caught_attr = 0;
     uint32_t ability_attr = 0;
     uint32_t passive_attr = 0;
+    uint32_t nature_attr = 0;
 
     if (starter->ability_index > 2 || starter->nature > 24) { *why = "bad ability or nature"; return false; }
     int form = starter->form;
@@ -414,24 +417,25 @@ bool gc_starter_is_available(const gc_system *sys, const gc_starter *starter, do
     caught_attr = sys->dex[sp_id].caught_attr;
     ability_attr = sys->starters[sp_id].ability_attr;
     passive_attr = sys->starters[sp_id].passive_attr;
+    nature_attr = sys->dex[sp_id].nature_attr;
 
     /* starter-select-ui-handler.ts:638: species locked if not caught */
     if (!caught_attr) { *why = "starterSelectUiHandler:lockedSpecies"; return false; }
 
-    /* starter-select-ui-handler.ts:646: shiny & variant check */
+    /* starter-select-ui-handler.ts:646: shiny check */
     if (starter->shiny) {
         if (!(caught_attr & (1ULL << 1))) { *why = "starterSelectUiHandler:lockedShiny"; return false; }
-        uint64_t variant_bit = 1ULL << (4 + starter->variant); /* DEFAULT_VARIANT=16 (bit 4), VARIANT_2=32 (bit 5), VARIANT_3=64 (bit 6) */
-        if (starter->variant > 2 || !(caught_attr & variant_bit)) { *why = "starterSelectUiHandler:lockedVariant"; return false; }
+        /* starter-select-ui-handler.ts:657: variant check */
+        if (starter->variant > 2) { *why = "starterSelectUiHandler:lockedVariant"; return false; }
+        uint64_t variant_bit = 1ULL << (4 + starter->variant);
+        if (!(caught_attr & variant_bit)) { *why = "starterSelectUiHandler:lockedVariant"; return false; }
     } else {
         if (!(caught_attr & (1ULL << 0))) { *why = "starterSelectUiHandler:lockedShiny"; return false; }
     }
 
-    /* starter-select-ui-handler.ts:674: gender check */
-    if (sp->male_permille >= 0) {
-        uint64_t gender_bit = starter->female ? (1ULL << 3) : (1ULL << 2); /* FEMALE=8 (bit 3), MALE=4 (bit 2) */
-        if (!(caught_attr & gender_bit)) { *why = "starterSelectUiHandler:lockedGender"; return false; }
-    }
+    /* starter-select-ui-handler.ts:678: gender check (matches upstream female ? FEMALE : MALE) */
+    uint64_t gender_bit = starter->female ? (1ULL << 3) : (1ULL << 2); /* FEMALE=8 (bit 3), MALE=4 (bit 2) */
+    if (!(caught_attr & gender_bit)) { *why = "starterSelectUiHandler:lockedGender"; return false; }
 
     /* starter-select-ui-handler.ts:688: ability check */
     bool species_has_single_ability = (sp->form0 < PR_FORM_COUNT && pr_forms[sp->form0].ability1 == pr_forms[sp->form0].ability2);
@@ -448,6 +452,9 @@ bool gc_starter_is_available(const gc_system *sys, const gc_starter *starter, do
     /* starter-select-ui-handler.ts:707: form check */
     uint64_t form_bit = 1ULL << (7 + form); /* DEFAULT_FORM=128 (bit 7) */
     if (!(caught_attr & form_bit)) { *why = "starterSelectUiHandler:lockedForm"; return false; }
+
+    /* starter-select-ui-handler.ts:718, game-data.ts:1989: nature check */
+    if (!(nature_attr & (1U << (starter->nature + 1)))) { *why = "starterSelectUiHandler:lockedNature"; return false; }
 
     /* starter-select-ui-handler.ts:1810,2219: passive check */
     if (starter->passive) {
