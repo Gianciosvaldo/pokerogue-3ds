@@ -24,10 +24,9 @@ void gc_port_enemy_moveset(gc_run *run, gc_mon *m)
 }
 
 /* ---- reward-core: what a reward does when it is taken. The options themselves are reward-core's
- * (gc_reward.c), and so is the application of healing, revives, PP restores and PP Ups (gc_reward_apply,
- * Task 60). What is left here is the rest: Poke Balls, Full Heal (reward-core has no application for it),
- * Rare Candy (without the Candy Jar) and the items that are added to the player's items as they are, each
- * one that needs a real effect counted ---- */
+ * (gc_reward.c), and so is the application of Poke Balls, healing, revives, PP restores and PP Ups (gc_reward_apply).
+ * What is left here is the rest: Full Heal (reward-core has no application for it) and the items that are
+ * added to the player's items as they are, each one that needs a real effect counted ---- */
 static int pokeball_type(const char *key)
 {
     if (!strcmp(key, "POKEBALL")) return POKEBALL_TYPE_POKEBALL;
@@ -45,17 +44,6 @@ bool gc_port_apply_reward(gc_run *run, const gc_offer *o, int party, int move_sl
     case GC_APPLY_DONE: return true;
     case GC_APPLY_REFUSED: return false;
     default: break;
-    }
-    const int ball = pokeball_type(k);
-    if (ball >= 0) {
-        const int add = ball == POKEBALL_TYPE_MASTER_BALL ? 1 : 5;
-        run->pokeballs[ball] = (uint8_t)(run->pokeballs[ball] + add > 99 ? 99 : run->pokeballs[ball] + add);
-        /* upstream's name is "5× Poké Ball" (AddPokeballModifierType.name with its count): the stand-in
-         * names the ball alone */
-        static const char *const ball_key[] = {"pokeball:pokeBall", "pokeball:greatBall", "pokeball:ultraBall",
-                                               "pokeball:rogueBall", "pokeball:masterBall"};
-        gc_ev_msg(run, "battle:rewardGain", 1, pr_arg_key("modifierName", ball_key[ball]));
-        return true;
     }
     const int idx = gc_reward_item_index(k);
     if (o->target == GC_TARGET_NONE) {
@@ -84,7 +72,12 @@ bool gc_port_apply_reward(gc_run *run, const gc_offer *o, int party, int move_sl
 void gc_port_give_reward(gc_run *run, const char *key)
 {
     const int ball = pokeball_type(key);
-    if (ball >= 0) { run->pokeballs[ball] = (uint8_t)(run->pokeballs[ball] + 5); return; }
+    if (ball >= 0) {
+        const int add = ball == POKEBALL_TYPE_MASTER_BALL ? 1 : 5;
+        const int count = run->pokeballs[ball] + add;
+        run->pokeballs[ball] = (uint8_t)(count > 99 ? 99 : count);
+        return;
+    }
     /* vouchers are system data (the gacha): nothing in the run */
     if (!strncmp(key, "VOUCHER", 7)) return;
     gc_item_add(run, key, -1, 0, 1);

@@ -1,7 +1,8 @@
 #!/bin/sh
 # Generate N upstream reward-application cases and replay them through game-core's gc_port_apply_reward on a real run:
 #  - reward-core's own apply producer, unchanged (healing, revive, PP and PP Up items; Task 60), and
-#  - game-core's candy producer, tests/candy.producer.test.ts (Rare Candy and Rarer Candy; Task 96).
+#  - game-core's candy producer, tests/candy.producer.test.ts (Rare Candy and Rarer Candy; Task 96), and
+#  - game-core's pokeball producer, tests/pokeball.producer.test.ts (Poke Balls; Task 96).
 # Usage: tools/applydiff.sh <upstream dir> [N] [seed]
 # The upstream checkout is the one battle-core/tools/setup-upstream.sh prepares (pinned commit); needs Node 22.
 set -e
@@ -15,9 +16,13 @@ mkdir -p "$BUILD" "$UP/test/tests/zz-dump"
 make -s -C "$HERE" BUILD="$BUILD" "$BUILD/reward_apply_diff_test"
 cp "$HERE/../reward-core/tests/apply.producer.test.ts" "$UP/test/tests/zz-dump/gc-apply.producer.test.ts"
 cp "$HERE/tests/candy.producer.test.ts" "$UP/test/tests/zz-dump/gc-candy.producer.test.ts"
+cp "$HERE/tests/pokeball.producer.test.ts" "$UP/test/tests/zz-dump/gc-pokeball.producer.test.ts"
 (cd "$UP" && DIFF_SEED=$SEED DIFF_N=$N DIFF_OUT="$BUILD/gc-apply-$SEED.txt" npx vitest run --no-cache test/tests/zz-dump/gc-apply.producer.test.ts >/dev/null)
 (cd "$UP" && DIFF_SEED=$SEED DIFF_N=$N DIFF_OUT="$BUILD/gc-candy-$SEED.txt" npx vitest run --no-cache test/tests/zz-dump/gc-candy.producer.test.ts >/dev/null)
+(cd "$UP" && DIFF_SEED=$SEED DIFF_N=$N DIFF_OUT="$BUILD/gc-pokeball-$SEED.txt" npx vitest run --no-cache test/tests/zz-dump/gc-pokeball.producer.test.ts >/dev/null)
 echo "== apply (healing, revive, PP) seed $SEED"
 "$BUILD/reward_apply_diff_test" "$BUILD/gc-apply-$SEED.txt"
 echo "== candy seed $SEED"
 "$BUILD/reward_apply_diff_test" "$BUILD/gc-candy-$SEED.txt"
+echo "== pokeball seed $SEED"
+"$BUILD/reward_apply_diff_test" "$BUILD/gc-pokeball-$SEED.txt"

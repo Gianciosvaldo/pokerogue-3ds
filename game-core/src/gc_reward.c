@@ -400,9 +400,36 @@ uint8_t gc_reward_target(const char *key)
 /* FRIENDSHIP_GAIN_FROM_RARE_CANDY (#balance/starters): reward-core's candy.c adds the same 6 to the Pokemon itself */
 #define GC_FRIENDSHIP_GAIN_FROM_RARE_CANDY 6
 
+/* Upstream 8555c08: AddPokeballModifier and AddPokeballModifierType (src/modifier/modifier.ts & modifier-type.ts):
+ * "export class AddPokeballModifier extends ConsumableModifier {
+ *    private pokeballType: PokeballType;
+ *    private count: number;
+ *    override apply(): boolean {
+ *      const pokeballCounts = globalScene.pokeballCounts;
+ *      pokeballCounts[this.pokeballType] = Math.min(
+ *        pokeballCounts[this.pokeballType] + this.count,
+ *        MAX_PER_TYPE_POKEBALLS,
+ *      );
+ *      return true;
+ *    }
+ *  }"
+ * "POKEBALL: () => new AddPokeballModifierType("pb", PokeballType.POKEBALL, 5),
+ *  GREAT_BALL: () => new AddPokeballModifierType("gb", PokeballType.GREAT_BALL, 5),
+ *  ULTRA_BALL: () => new AddPokeballModifierType("ub", PokeballType.ULTRA_BALL, 5),
+ *  ROGUE_BALL: () => new AddPokeballModifierType("rb", PokeballType.ROGUE_BALL, 5),
+ *  MASTER_BALL: () => new AddPokeballModifierType("mb", PokeballType.MASTER_BALL, 1),"
+ * "get name(): string {
+ *    return i18next.t("modifierType:ModifierType.AddPokeballModifierType.name", {
+ *      modifierCount: this.count,
+ *      pokeballName: getPokeballName(this.pokeballType),
+ *    });
+ *  }"
+ */
+
 static bool core_applies(int item)
 {
     switch (item) {
+    case PR_ITEM_POKEBALL: case PR_ITEM_GREAT_BALL: case PR_ITEM_ULTRA_BALL: case PR_ITEM_ROGUE_BALL: case PR_ITEM_MASTER_BALL:
     case PR_ITEM_RARE_CANDY: case PR_ITEM_RARER_CANDY:
     case PR_ITEM_POTION: case PR_ITEM_SUPER_POTION: case PR_ITEM_HYPER_POTION: case PR_ITEM_MAX_POTION:
     case PR_ITEM_FULL_RESTORE: case PR_ITEM_REVIVE: case PR_ITEM_MAX_REVIVE: case PR_ITEM_SACRED_ASH:
@@ -429,6 +456,16 @@ int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, co
     const int lifecycle = gc_reward_lifecycle_apply(run, o, party, why);
     if (lifecycle != GC_APPLY_UNHANDLED) return lifecycle;
     if (item < 0) return GC_APPLY_UNHANDLED;
+
+    if (item == PR_ITEM_POKEBALL || item == PR_ITEM_GREAT_BALL || item == PR_ITEM_ULTRA_BALL ||
+        item == PR_ITEM_ROGUE_BALL || item == PR_ITEM_MASTER_BALL) {
+        const int ball = item - PR_ITEM_POKEBALL;
+        const int add = item == PR_ITEM_MASTER_BALL ? 1 : 5;
+        const int count = run->pokeballs[ball] + add;
+        run->pokeballs[ball] = (uint8_t)(count > 99 ? 99 : count);
+        gc_ev_msg(run, "battle:rewardGain", 1, gc_m_item("modifierName", o->key));
+        return GC_APPLY_DONE;
+    }
 
     if (item == PR_ITEM_TM_COMMON || item == PR_ITEM_TM_GREAT || item == PR_ITEM_TM_ULTRA) {
         int k;

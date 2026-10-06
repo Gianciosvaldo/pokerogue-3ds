@@ -588,11 +588,65 @@ static void test_candy_level_up_save_reload_resume(void)
 }
 
 /* ---- reward-core has no application for these: game-core's own code keeps them ---- */
+static void test_pokeballs(void)
+{
+    setup("reward-apply-pokeballs", 2);
+    /* Test initial counts */
+    run.pokeballs[POKEBALL_TYPE_POKEBALL] = 10;
+    run.pokeballs[POKEBALL_TYPE_GREAT_BALL] = 96;
+    run.pokeballs[POKEBALL_TYPE_ULTRA_BALL] = 98;
+    run.pokeballs[POKEBALL_TYPE_ROGUE_BALL] = 0;
+    run.pokeballs[POKEBALL_TYPE_MASTER_BALL] = 98;
+
+    drain();
+
+    /* 1. Poke Ball (+5) via gc_port_apply_reward */
+    result r = take("POKEBALL", 0, -1, -1);
+    CHECK(r.ok);
+    CHECK(run.pokeballs[POKEBALL_TYPE_POKEBALL] == 15);
+    gc_event e;
+    CHECK(gc_run_next_event(&run, &e) && e.kind == GC_EV_MESSAGE);
+    CHECK(!strcmp(e.msg.key, "battle:rewardGain"));
+    CHECK(e.msg.n_args == 1 && e.msg.args[0].kind == PR_ARG_KEY && !strcmp(e.msg.args[0].name, "modifierName") && !strcmp(e.msg.args[0].s, "modifierType:ModifierType.POKEBALL.name"));
+    CHECK(!gc_run_next_event(&run, &e));
+
+    /* 2. Great Ball (+5) capping at 99 via gc_port_apply_reward */
+    r = take("GREAT_BALL", 0, -1, -1);
+    CHECK(r.ok);
+    CHECK(run.pokeballs[POKEBALL_TYPE_GREAT_BALL] == 99);
+    CHECK(gc_run_next_event(&run, &e) && e.kind == GC_EV_MESSAGE);
+    CHECK(!strcmp(e.msg.key, "battle:rewardGain"));
+    CHECK(e.msg.n_args == 1 && e.msg.args[0].kind == PR_ARG_KEY && !strcmp(e.msg.args[0].name, "modifierName") && !strcmp(e.msg.args[0].s, "modifierType:ModifierType.GREAT_BALL.name"));
+    CHECK(!gc_run_next_event(&run, &e));
+
+    /* 3. Ultra Ball (+5) capping at 99 via gc_port_give_reward */
+    gc_port_give_reward(&run, "ULTRA_BALL");
+    CHECK(run.pokeballs[POKEBALL_TYPE_ULTRA_BALL] == 99);
+
+    /* 4. Rogue Ball (+5) via gc_port_give_reward */
+    gc_port_give_reward(&run, "ROGUE_BALL");
+    CHECK(run.pokeballs[POKEBALL_TYPE_ROGUE_BALL] == 5);
+
+    /* 5. Master Ball (+1) via gc_port_apply_reward */
+    r = take("MASTER_BALL", 0, -1, -1);
+    CHECK(r.ok);
+    CHECK(run.pokeballs[POKEBALL_TYPE_MASTER_BALL] == 99);
+    CHECK(gc_run_next_event(&run, &e) && e.kind == GC_EV_MESSAGE);
+    CHECK(!strcmp(e.msg.key, "battle:rewardGain"));
+    CHECK(e.msg.n_args == 1 && e.msg.args[0].kind == PR_ARG_KEY && !strcmp(e.msg.args[0].name, "modifierName") && !strcmp(e.msg.args[0].s, "modifierType:ModifierType.MASTER_BALL.name"));
+    CHECK(!gc_run_next_event(&run, &e));
+
+    /* 6. Master Ball (+1) via gc_port_give_reward */
+    run.pokeballs[POKEBALL_TYPE_MASTER_BALL] = 5;
+    gc_port_give_reward(&run, "MASTER_BALL");
+    CHECK(run.pokeballs[POKEBALL_TYPE_MASTER_BALL] == 6);
+}
+
 static void unhandled_items(void)
 {
     setup("reward-apply-unhandled", 3);
     const char *why = "";
-    static const char *const others[] = {"FULL_HEAL", "POKEBALL", "LEFTOVERS", "EXP_SHARE"};
+    static const char *const others[] = {"FULL_HEAL", "LEFTOVERS", "EXP_SHARE"};
     for (size_t i = 0; i < sizeof others / sizeof others[0]; i++) {
         const gc_offer o = offer(others[i], 0);
         CHECK(gc_reward_apply(&run, &o, 0, 0, &why) == GC_APPLY_UNHANDLED);
@@ -928,6 +982,7 @@ int main(void)
     printf("table: %d cases ok\n", N_TABLE);
     sacred_ash();
     shuffled_party_order();
+    test_pokeballs();
     unhandled_items();
     empty_slot_is_no_move();
     max_pp_override_blocks_pp_up();
