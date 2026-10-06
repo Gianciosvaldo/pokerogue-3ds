@@ -12,13 +12,13 @@ Implementation PRs: [Task 57 #97](https://github.com/Gianciosvaldo/pokerogue-3ds
 
 | Lane | Folder | Sequential tasks | Assignment |
 |---|---|---|---|
-| A | battle-core/ | 67 (#108) → 69 (#110) → 70 (#111) → 71 (#115) → 72 (#119) → 73 (#123) | Hard coordinator work; Tasks 67–73 merged |
+| A | battle-core/ | 67 (#108) → 69 (#110) → 70 (#111) → 71 (#115) → 72 (#119) → 73 (#123) | Hard coordinator work; PRs merged, as bounded slices: 72 is the Dancer slice (Tera unported), 73 the first doubles slice |
 | B | reward-core/ | 89 (#104); Card 97 (#132) | Hard; Card 97 merged in PR #132; reward state validation |
-| C | game-core/ | 87 (#101) → 57 (#97) → 59 → 60 → 61 (first slice) → 92 → 93 (#122) → 94 (#124) → 77 (#125) → 95 (#135) → 96 (#136) → 64 → 65 → 66 → 78 (#139) → 79 → 61 (further slices) → 62 → 75 → 76 → 80 → 81 → 82 → 83 → 84 | Tasks 87, 57, 93 (#122), 94 (#124), 77 (#125), 95 (#135), 96 (#136), 78 (#139) merged |
-| D | run-core/ | 50 (#92) → 63 (#112); 100 | Tasks 50 (#92) and 63 (#112) merged; Task 100 next; Lorenzo's run-core owner only |
-| E | game/ | 110 (#110) → 112 (#129) → 113 (#130) → 114 (#114); 85 console half | Cards 110, 112 (#129), 113 (#130), 114 (#114) merged; console acceptance stays a human gate |
-| F | ai-core/ | 88 (#102) → 58 (`836d10c`) → 68 (#108) → 74 (#127) | Tasks 88 (#102), 58 (`836d10c`), 68 (#108), 74 (#127) merged |
-| G | docs/ | 86 (#86) | Task 86 merged |
+| C | game-core/ | 87 (#101) → 57 (#97) → 59 (#113) → 60 (#114) → 61 (first slice, #116) → 92 (#121) → 93 (#122) → 94 (#124) → 77 (#125) → 95 (#128) → 96 (#136, Rare and Rarer Candy slice) → 64 → 65 → 66 → 78 (#139) → 79 → 61 (further slices) → 62 → 75 → 76 → 80 → 81 → 82 → 83 → 84 | Merged: 87, 57, 59, 60, 61 (first slice), 92, 93, 94, 77, 95, 78, and 96's candy slice; 96's remaining items and 64 onward are not done |
+| D | run-core/ | 50 (#92) → 63 (#112); 100 | Tasks 50 (#92) and 63 (#112, bounded: a few species) merged; Lorenzo's run-core owner only |
+| E | game/ | 110 (#120) → 112 (#129) → 113 (#134) → 114 (#135); 85 console half | Cards 110, 112, 113 and 114 merged; console acceptance stays a human gate |
+| F | ai-core/ | 88 (#102) → 58 (`836d10c`) → 68 (#117) → 74 (#127) | Tasks 88, 58, 68 and 74 merged |
+| G | docs/ | 86 (#100) | Task 86 merged |
 
 A prerequisite API is a real gate: verify it exists and has recorded checks before beginning. If absent, report the missing bounded prerequisite instead of changing its owner's folder. Different folders may proceed in parallel; each lane starts its next task only after the previous PR merges. Lower-compute describes bounded scope, not lower correctness requirements.
 
@@ -182,7 +182,7 @@ Task 68 is delegated to Jules: #108 landed its bounded loaded-state contract dir
 
 **Pass.** Approved focused differential mode: 2,000 cases per four seeds, zero mismatches, each named ability triggers; B and weather regressions retain coverage.
 
-### Card 111 / Task 70: Held-item theft and removal (battle-core/, lane A)
+### Task 70: Held-item theft and removal (battle-core/, lane A)
 
 **Branch:** `outside/item-theft-removal`. **Assignment:** Hard; PR #111. **Prerequisites:** 69 merged.
 
@@ -192,7 +192,7 @@ Task 68 is delegated to Jules: #108 landed its bounded loaded-state contract dir
 
 **Pass.** Approved focused mode: 2,000 cases per four seeds, zero mismatches for source/target stacks, messages and RNG; B unchanged. Other theft families stay explicitly outstanding.
 
-### Card 115 / Task 71: Enigma, Lansat and Starf berry effects (battle-core/, lane A)
+### Task 71: Enigma, Lansat and Starf berry effects (battle-core/, lane A)
 
 **Branch:** `outside/special-berries`. **Assignment:** Lower compute; PR #115. **Prerequisites:** 70 merged.
 
@@ -202,7 +202,7 @@ Task 68 is delegated to Jules: #108 landed its bounded loaded-state contract dir
 
 **Pass.** Approved focused mode: 2,000 cases per four seeds, zero mismatches, each named berry consumed at least once and rejected at least once; B unchanged.
 
-### Card 116 / Task 72: Dancer and Tera dispatch order (battle-core/, lane A)
+### Task 72: Dancer and Tera dispatch order (battle-core/, lane A)
 
 **Branch:** `outside/dancer-tera-dispatch`. **Assignment:** Hard; PR #119. **Prerequisites:** 71 merged.
 
@@ -212,7 +212,7 @@ Task 68 is delegated to Jules: #108 landed its bounded loaded-state contract dir
 
 **Pass.** Approved focused fixtures compare queue/order/targets/RNG/messages; randomized 2,000 cases per four seeds, zero mismatches. B unchanged; report unreachable branches.
 
-### Card 117 / Task 73: Doubles turn engine, first slice (battle-core/, lane A)
+### Task 73: Doubles turn engine, first slice (battle-core/, lane A)
 
 **Branch:** `outside/doubles-turn-core`. **Assignment:** Hard; PR #123. **Prerequisites:** 72 merged.
 
@@ -468,7 +468,7 @@ Numbered from 92 in the post-parity plan (cards 92 to 151 by milestone; the full
 
 ### Card 97: Trainers' own rewards (reward-core/, lane B)
 
-**Branch:** `outside/trainer-rewards`. **Assignment:** Hard; PR #132 (commit `705a79e`). **Prerequisites:** None.
+**Branch:** `claude/card-97-trainer-rewards-dmcct3`. **Assignment:** Hard; PR #132 (commit `705a79e`). **Prerequisites:** None.
 
 **Problem.** `reward-core` lacked fixed battle settings, Single Generation challenge hooks, trainer victory rewards (vouchers, money multipliers), and trainer-specific item generation.
 
@@ -488,33 +488,33 @@ Numbered from 92 in the post-parity plan (cards 92 to 151 by milestone; the full
 
 ### Card 112: App reward and biome screens driven by run (game/, lane E)
 
-**Branch:** `outside/app-reward-biome`. **Assignment:** Hard; PR #129.
+**Branch:** `jules-card-112-reward-biome-screens-7610086162230303278`. **Assignment:** Hard; PR #129.
 
 **Problem.** Reward select and biome map UI handlers needed to be driven by game-core run states.
 
 **Do.** Drive shop/reward selection (`GC_SCREEN_REWARD`) and biome map selection (`GC_SCREEN_BIOME`) in the app via `reward_host.c`.
 
-**Pass.** Driven by game-core (`GC_SCREEN_REWARD`, `GC_SCREEN_BIOME`); shop and biome map UI hosted in app. Merged in PR #129.
+**Landed.** Reward and biome map screens driven by game-core (`GC_SCREEN_REWARD`, `GC_SCREEN_BIOME`). Merged in PR #129.
 
 ### Card 113: App title, save slots, continue, game over, and clear screens (game/, lane E)
 
-**Branch:** `outside/app-title-slots`. **Assignment:** Hard; PR #130.
+**Branch:** `claude/card-113-title-saves-9pzot8`. **Assignment:** Hard; PR #134.
 
 **Problem.** App needed title screen, save slot management, and result screen flows.
 
 **Do.** Implement title screen, save slot screen (`slot_screen.c`), game over, and clear result screens (`result_screen.c`).
 
-**Pass.** Title screen, save slot list, game over, and clear screens hosted in app. Merged in PR #130.
+**Landed.** Title screen, save slot list, game over and clear screens hosted in the app. Merged in PR #134.
 
 ### Card 114: App catching animation and full-party release flow (game/, lane E)
 
-**Branch:** `outside/app-catch-animation`. **Assignment:** Hard; PR #114.
+**Branch:** `jules-9596796303711035693-card114-catching-release`. **Assignment:** Hard; PR #135.
 
 **Problem.** App lacked catching animation and full-party release menu flow.
 
 **Do.** Implement catching animation, ball selection menu, and full-party swap/release prompt in app.
 
-**Pass.** Catching animation, ball menu, full-party release flow in real app. Merged in PR #114.
+**Landed.** Catching animation, ball menu and full-party release flow in the app. Merged in PR #135.
 
 ## Beyond these bounded slices
 
