@@ -8,7 +8,8 @@ events and screens and hands back the player's choices.
 It calls battle-core for the turns, run-core for the waves and the enemies, ai-core for the enemy's
 commands (and the player's command restrictions and trapping), and goes through `include/gc/ports.h`
 for the enemy movesets and the rewards. The reward screens are reward-core's (`src/gc_reward.c`, Task 59).
-Healing, revive, PP restore and PP Up rewards act on the run through reward-core (Task 60). Until run-core's
+Healing, revive, PP restore and PP Up rewards act on the run through reward-core (Task 60), and so do Rare Candy and
+Rarer Candy (Task 96). Until run-core's
 movesets land and the other rewards act on the run, stand-ins in `src/gc_stubs.c` keep a run
 playable. Each stand-in is counted, so the soak runs show how much of a run is still standing in.
 
@@ -561,11 +562,44 @@ build or console test is claimed.
 
 ## Task 96: Rare Candy and Rarer Candy through reward-core
 
-`gc_reward_apply` (`src/gc_reward.c`) now applies `RARE_CANDY` and `RARER_CANDY` using reward-core's `pr_reward_apply_candy`, integrating Candy Jar stacks (`PR_ITEM_CANDY_JAR`), level cap checks (`pr_run_get_max_exp_level`), friendship updates via `gc_system_add_friendship`, stat recalculation via `gc_mon_recalc`, and unshifting `RP_LEVEL_UP` events for level-up moves and evolutions.
+Rare Candy was a hand-made stand-in in `src/gc_stubs.c` (one level, friendship, no Candy Jar) and Rarer Candy was
+only added to the items. Both now go through reward-core's `pr_reward_apply_candy` (`reward-core/src/candy.c`, unchanged)
+in `gc_reward_apply` (`src/gc_reward.c`), which writes back what changed:
 
-- `RARE_CANDY`: applied to a single party member (refused with `partyUiHandler:anyEffect` if level >= max_exp_level).
-- `RARER_CANDY`: applied across all party members (refused if all members are at or above max_exp_level).
-- Candy Jar stacks scale levels gained per candy (`1 + Candy_Jar_stacks`).
-- Full Heal remains in game-core (`src/gc_stubs.c`) as reward-core does not provide an application for it.
-- Poké Balls remain added to `run->pokeballs`.
-- Mints, vitamins, Pickup, Honey Gather, and Pay Day remain counted under stand-in counters (`GC_STUB_REWARD_APPLY` / `GC_STUB_POST_BATTLE`).
+- Levels: `1 + Candy Jar stacks` on the target (Rare Candy, a storage index like the other party items) or on every
+  member (Rarer Candy, no target). The level is capped at 255 because battle-core's level is a byte (a Candy Jar
+  stack that pushed past it would otherwise wrap to a low level).
+- Exp: the new level's total (`getLevelTotalExp`), as upstream does: `getMaxExpLevel(true)` has no limit.
+- Friendship: reward-core's: +6 once per candy (the Candy Jar adds levels, not friendship), up to 200, an existing
+  friendship above 200 stays.
+- The starter's candy progress, through `gc_system_add_friendship`: the candy's 6 (times 3 in Classic), **not** the
+  change in the Pokemon's own friendship. Upstream's `addFriendship(6, true)` adds the whole 6 to the starter even when
+  the Pokemon is at 199 (own gain 1) or at 200 and above (own gain 0). The first version of this task passed the
+  change, which gave the starter 3 instead of 18 at friendship 199 and nothing at 200.
+- One `RP_LEVEL_UP` per member that got levels, in party order, old level to new level; the level-up screens, moves and
+  evolutions are the existing phases'.
+- **No level cap check.** The first version refused a Rare Candy at the wave's level cap and a Rarer Candy when every
+  member was at it (`partyUiHandler:anyEffect`, as the old stand-in did). Upstream at 8555c08 has no such check:
+  `PokemonLevelIncrementModifierType`'s `selectFilter` always returns null and Rarer Candy has none, and `getMaxExpLevel()`
+  only decides whether the exp follows the level. The differential below replays upstream's own candy on members at,
+  below and above the cap and every case is applied. The only refusal left is game-core's own: no Pokemon picked
+  for a Rare Candy (`pick a Pokemon`).
+- Not done: a held Soothe Bell raises `addFriendship`'s amount upstream (`PokemonFriendshipBoosterModifier`); neither
+  reward-core nor `gc_system_add_friendship` applies it yet (`src/gc_phases.c` has the same gap for the battle friendship gain).
+  Fused Pokemon (a second starter's progress) are not modelled either.
+- Full Heal stays in `gc_stubs.c`; Poké Balls still go to `run->pokeballs`; Mints, vitamins, Pickup, Honey Gather and
+  Pay Day stay counted stand-ins (`GC_STUB_REWARD_APPLY` / `GC_STUB_POST_BATTLE`).
+
+Tests: `tests/reward_apply_test.c` has a 17-row candy table (levels, Candy Jars, the cap, friendship 199, 200 and 250,
+the starter's progress and its wrap into a candy, Endless, a shuffled party order, the 255 clamp, the refusals,
+Rarer Candy), and `test_candy_level_up_save_reload_resume`: a real wave is won, a candy is taken from the reward
+screen, the level-up and the Leech Seed prompt run, the next wave's command screen is reached, the run is saved and
+loaded, and the turn after plays the same on both. A level-up that is still pending is never saved: `gc_run_can_save`
+is false and `gc_run_save` returns 0 while the prompt is open (the save holds no phase queue).
+
+Differential against upstream: `tools/applydiff.sh` also runs `tests/candy.producer.test.ts` (upstream's own
+`PokemonLevelIncrementModifier` through `addModifier`, in Classic and Endless, waves 1-199, members below, at and above
+the cap, friendship around 195-200 and above, 0-5 Candy Jars) and `tests/reward_apply_diff_test.c` replays it free and
+bought, comparing taken or refused, every member's level, exp and friendship, the `LevelUpPhase`s queued and the
+starters' friendship progress and candy count. It needs Node 22 and the pinned upstream commit (it refuses otherwise).
+Endless waves past about 330 are not in the trace: their level caps are above 255.
