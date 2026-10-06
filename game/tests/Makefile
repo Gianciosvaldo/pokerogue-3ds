@@ -65,7 +65,7 @@ map_ui_test: build/map_ui_test
 .PHONY: map_ui_test
 
 # unit test for DNA Splicers target selection UI
-SPLICER_CPPFLAGS := $(CPPFLAGS) -I../menus -I$(APP)/include
+SPLICER_CPPFLAGS := $(CPPFLAGS) -I../menus -I$(GC)/include -I$(GC)/gen/out -I$(RC)/include -I$(RC)/gen/out -I$(APP)/include
 SPLICER_SRCS := splicer_ui_test.c ../menus/party.c ../menus/menus_names.c ../menus/menus_data.c $(BC)/gen/out/pr_data.c
 build/splicer_ui_test: $(SPLICER_SRCS)
 	@mkdir -p build
@@ -94,10 +94,42 @@ summary_ui_test: build/summary_ui_test
 # the app's run driver (run_screen.c + battle_events.c) over the real game-core run, with a fake battle screen and menus
 # that check every screen event; make runtest && build/runtest [runs] [first]
 RW := ../../reward-core
-RUN_CPPFLAGS := $(CPPFLAGS) -I../gen -I$(GC)/include -I$(GC)/gen/out -I$(RC)/include -I$(RC)/gen/out -I$(RW)/include -I$(RW)/gen/out -I$(APP)/include
-RUN_SRCS := runtest.c ../source/run_screen.c ../source/party_screen.c ../source/battle_events.c ../menus/shop_ui.c ../menus/biome_map.c ../menus/party.c ../menus/summary.c ../menus/learnmove.c ../menus/mui.c ../menus/sprite.c ../menus/icon.c ../menus/menus_names.c ../menus/menus_data.c ../gen/gm_enum_names.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+RUN_CPPFLAGS := $(CPPFLAGS) -I../menus -I../gen -I$(GC)/include -I$(GC)/gen/out -I$(RC)/include -I$(RC)/gen/out -I$(RW)/include -I$(RW)/gen/out -I$(APP)/include
+RUN_SRCS := runtest.c ../source/run_screen.c ../source/battle_events.c ../source/run_saves.c $(APP)/source/save.c ../gen/gm_enum_names.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/runtest: $(RUN_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) $(RUN_SRCS) -lm -o $@
 runtest: build/runtest
 .PHONY: runtest
+
+# the run's save slots (run_saves.c + the app's save.c) over real game-core runs; make saves_test && build/saves_test
+SAVES_SRCS := saves_test.c ../source/run_saves.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+build/saves_test: $(SAVES_SRCS)
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) $(SAVES_SRCS) -lm -o $@
+saves_test: build/saves_test
+.PHONY: saves_test
+
+# the run driver with saving: every save point is written and the slot loads back as the run; with `resume` the run is also dropped and
+# continued from its slot at every 4th save point, and the same seed must end the same way (wave and score) with and without it
+runtest-save: build/runtest
+	RUNTEST_SAVE=1 build/runtest 100 0
+	RUNTEST_SAVE=resume build/runtest 100 0
+	@for n in 0 1 2 3 4 5 6 7 8 9; do a=$$(RUNTEST_SAVE=1 build/runtest 1 $$n | grep -o 'digest [0-9a-f]*'); b=$$(RUNTEST_SAVE=resume build/runtest 1 $$n | grep -o 'digest [0-9a-f]*'); if [ "$$a" != "$$b" ] || [ -z "$$a" ]; then echo "seed $$n: the resumed run ended differently ($$a / $$b)"; exit 1; fi; done; echo "10 seeds: a run resumed at every 4th save point ends at the same wave and score: OK"
+.PHONY: runtest-save
+
+# the app's screen flow (app_flow.c) with fake screens and a fake run driver, over the real save slots; make flowtest && build/flowtest
+FLOW_SRCS := flowtest.c ../source/app_flow.c ../source/run_saves.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+build/flowtest: $(FLOW_SRCS)
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) $(FLOW_SRCS) -lm -o $@
+flowtest: build/flowtest
+.PHONY: flowtest
+
+# a run save one turn away from game over or from clearing the run, for looking at those screens on a real build (see mkfixture.c);
+# make mkfixture && (cd /some/folder && /path/to/build/mkfixture clear)
+build/mkfixture: mkfixture.c ../source/run_saves.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+mkfixture: build/mkfixture
+.PHONY: mkfixture

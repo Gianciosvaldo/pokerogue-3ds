@@ -285,6 +285,8 @@ void menu_cry_key(const menu_mon* m, char* out, size_t n);
  * half of one icon over the bottom half of the other). ox/oy as in upstream:
  * x is the icon's centre when ox = 0.5; oy 0.5 centres it vertically. */
 void menu_draw_icon(const menu_mon* m, float x, float y, float ox, float oy);
+/* The same scaled around its origin (upstream draws the save slots' icons at 0.75). */
+void menu_draw_icon_scaled(const menu_mon* m, float x, float y, float ox, float oy, float scale);
 
 /* ------------------------------------------------------------ biome map choice */
 
