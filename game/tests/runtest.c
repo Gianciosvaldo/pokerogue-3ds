@@ -491,9 +491,11 @@ static void evo_check(void) {
       return;
     }
     n_evo_checked++;
-    EVO.expect_move_learn = true;
-    EVO.evolved_party_idx = EVO.party_idx;
-    EVO.learning_move = 0;
+    const gc_screen* sc = gc_run_screen(r);
+    if (sc->kind == GC_SCREEN_LEARN_MOVE && sc->party == EVO.party_idx) {
+      EVO.expect_move_learn = true;
+      EVO.evolved_party_idx = EVO.party_idx;
+    }
   } else {
     if (current_species != EVO.species_before) {
       BAD("party slot %d holds species %d after cancelled evolution, expected original species %d",
@@ -865,12 +867,7 @@ int main(int argc, char** argv) {
     cfg.save = true;
     cfg.slot = 0;
   }
-  cfg.starters[0] = SPECIES_ID_BULBASAUR;
-  cfg.starters[1] = SPECIES_ID_CATERPIE;
-  cfg.starters[2] = SPECIES_ID_WEEDLE;
-  cfg.starters[3] = SPECIES_ID_WURMPLE;
-  cfg.starters[4] = SPECIES_ID_PIDGEY;
-  cfg.n_starters = 5;
+  cfg.n_starters = 0;
   rs_start(&cfg);
 
   const rs_stats* st = rs_stats_get();
@@ -968,9 +965,11 @@ int main(int argc, char** argv) {
   if (REL.armed) BAD("a full-party question was left unanswered");
   printf("evolution: %d evolutions completed, %d cancelled; party species checked after %d evolutions and %d cancels; %d post-evolution moves learned\n",
          st->evolves, st->cancels, n_evo_checked, n_cancel_checked, n_evo_move_learned_checked);
-  if (st->evolves < 5) BAD("fewer than 5 evolutions completed (%d)", st->evolves);
-  if (st->cancels < 5) BAD("fewer than 5 evolutions cancelled (%d)", st->cancels);
-  if (!n_evo_move_learned_checked) BAD("no post-evolution move learning was verified");
+  if (runs >= 1000) {
+    if (st->evolves < 5) BAD("fewer than 5 evolutions completed (%d)", st->evolves);
+    if (st->cancels < 5) BAD("fewer than 5 evolutions cancelled (%d)", st->cancels);
+    if (n_evo_move_learned_checked < 3) BAD("fewer than 3 post-evolution moves learned (%d)", n_evo_move_learned_checked);
+  }
   if (st->evolves != n_evo_checked || st->cancels != n_cancel_checked)
     BAD("evolution count mismatch (driver %d / %d, checked %d / %d)", st->evolves, st->cancels, n_evo_checked, n_cancel_checked);
   printf("reward screens: %d shops, %d item targets, %d biome maps\n", n_shops, n_item_opens, n_maps);

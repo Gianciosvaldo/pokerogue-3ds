@@ -1213,7 +1213,7 @@ static bool new_run(bool from_black) {
   gc_run_new(&G.run, GAME_MODES_CLASSIC, G.st.runs == 1 ? G.cfg.seed : NULL, G.cfg.entropy + (uint32_t)G.st.runs);
   gc_starter team[6];
   int n = 0;
-  if (G.cfg.n_starters > 0) {
+  if (G.st.runs == 1 && G.cfg.n_starters > 0) {
     for (; n < G.cfg.n_starters && n < 6; n++) {
       memset(&team[n], 0, sizeof team[n]);
       team[n].species = (uint16_t)G.cfg.starters[n];
