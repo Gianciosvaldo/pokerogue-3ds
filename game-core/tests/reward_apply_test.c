@@ -323,12 +323,276 @@ static void shuffled_party_order(void)
     }
 }
 
+/* ---- Task 96: Rare Candy and Rarer Candy ----
+ * Upstream's PokemonLevelIncrementModifier (and the two types that make it) at 8555c08, worked out by hand:
+ *  - levels: 1 + the Candy Jar's stacks, whatever level the Pokemon is at. There is NO level cap check: the
+ *    type's selectFilter always returns null and Rarer Candy has no filter, so a candy is taken at or above
+ *    getMaxExpLevel() (the differential, tools/applydiff.sh, replays upstream's own candy on members at, below and
+ *    above the cap: every one is applied). The only refusal is game-core's own: no Pokemon picked for a Rare Candy;
+ *  - exp: set to the new level's total (getLevelTotalExp) because getMaxExpLevel(true) has no limit;
+ *  - friendship: addFriendship(6, true): +6 once per candy (the Candy Jar adds levels, not friendship), stopping at
+ *    200, and a friendship already above 200 stays;
+ *  - the starter's candy progress, in the same addFriendship: the 6 (not what the Pokemon's own friendship rose
+ *    by) times 3 in Classic, 1 in the other modes, against the starter's cost-based cap (25 for cost 1); a full
+ *    cap is a candy and the rest stays as progress;
+ *  - one LevelUpPhase per member that got the levels (party order), old level -> new level.
+ * The exp formula and the friendship rule themselves are reward-core's (reward-core/tests/candytest.c, and the
+ * differential's 4000 cases a seed); this table is about what game-core does with them. */
+typedef struct {
+    const char *name, *key;
+    int wave, mode, rot;                /* party_order is rotated by `rot` places */
+    int target;                         /* the storage index a Rare Candy is used on (-1 = none) */
+    int level[3], friendship[3];        /* before; the exp is 12345 for every member */
+    int jars;                           /* Candy Jar stacks */
+    int starter_progress;               /* each member's starter's friendship progress before */
+    bool ok;
+    const char *why;                    /* the refusal */
+    int level_after[3], friendship_after[3];
+    int starter_progress_after, starter_candy_after;   /* the starters of the members that got levels (the others' stay) */
+} candy_table_case;
+
+#define CAP (-1000)                     /* in a level slot: the wave's level cap; CAP + 3 is three above it */
+static const candy_table_case candy_table[] = {
+    {"Rare Candy: +1 level, +6 friendship, starter +18 (Classic)", "RARE_CANDY", 100, GAME_MODES_CLASSIC, 0, 0,
+     {10, 10, 10}, {100, 50, 50}, 0, 2, true, NULL, {11, 10, 10}, {106, 50, 50}, 20, 0},
+    {"Candy Jar x2: +3 levels, still +6 friendship and +18 starter progress", "RARE_CANDY", 100, GAME_MODES_CLASSIC, 0, 0,
+     {10, 10, 10}, {100, 50, 50}, 2, 2, true, NULL, {13, 10, 10}, {106, 50, 50}, 20, 0},
+    {"at the wave's level cap: still taken", "RARE_CANDY", 10, GAME_MODES_CLASSIC, 0, 0,
+     {CAP, 10, 10}, {100, 50, 50}, 0, 2, true, NULL, {CAP + 1, 10, 10}, {106, 50, 50}, 20, 0},
+    {"above the wave's level cap with Candy Jars: still taken", "RARE_CANDY", 10, GAME_MODES_CLASSIC, 0, 0,
+     {CAP + 5, 10, 10}, {100, 50, 50}, 2, 2, true, NULL, {CAP + 8, 10, 10}, {106, 50, 50}, 20, 0},
+    {"friendship 199 stops at 200, the starter still gets the whole +18", "RARE_CANDY", 100, GAME_MODES_CLASSIC, 0, 0,
+     {10, 10, 10}, {199, 50, 50}, 0, 2, true, NULL, {11, 10, 10}, {200, 50, 50}, 20, 0},
+    {"friendship 200 stays, the starter still gets +18", "RARE_CANDY", 100, GAME_MODES_CLASSIC, 0, 0,
+     {10, 10, 10}, {200, 50, 50}, 0, 2, true, NULL, {11, 10, 10}, {200, 50, 50}, 20, 0},
+    {"friendship above 200 is kept", "RARE_CANDY", 100, GAME_MODES_CLASSIC, 0, 0,
+     {10, 10, 10}, {250, 50, 50}, 1, 2, true, NULL, {12, 10, 10}, {250, 50, 50}, 20, 0},
+    {"starter progress reaches its cap of 25: a candy, the rest kept", "RARE_CANDY", 100, GAME_MODES_CLASSIC, 0, 0,
+     {10, 10, 10}, {100, 50, 50}, 0, 10, true, NULL, {11, 10, 10}, {106, 50, 50}, 3, 1},
+    {"Endless: starter +6, not +18", "RARE_CANDY", 100, GAME_MODES_ENDLESS, 0, 0,
+     {10, 10, 10}, {100, 50, 50}, 0, 2, true, NULL, {11, 10, 10}, {106, 50, 50}, 8, 0},
+    {"shuffled party order: the storage index asked for gets it", "RARE_CANDY", 100, GAME_MODES_CLASSIC, 1, 2,
+     {10, 10, 10}, {100, 50, 50}, 0, 2, true, NULL, {10, 10, 11}, {100, 50, 56}, 20, 0},
+    {"level 254 with 5 Candy Jars stays at 255 (battle-core's level is a byte)", "RARE_CANDY", 100, GAME_MODES_CLASSIC, 0, 0,
+     {254, 10, 10}, {100, 50, 50}, 5, 2, true, NULL, {255, 10, 10}, {106, 50, 50}, 20, 0},
+    {"no Pokemon picked: refused, nothing changes", "RARE_CANDY", 100, GAME_MODES_CLASSIC, 0, -1,
+     {10, 10, 10}, {100, 50, 50}, 0, 2, false, "pick a Pokemon", {10, 10, 10}, {100, 50, 50}, 2, 0},
+    {"a place past the party: refused, nothing changes", "RARE_CANDY", 100, GAME_MODES_CLASSIC, 0, 3,
+     {10, 10, 10}, {100, 50, 50}, 0, 2, false, "pick a Pokemon", {10, 10, 10}, {100, 50, 50}, 2, 0},
+    {"Rarer Candy: every member +1 level and +6 friendship, no target needed", "RARER_CANDY", 100, GAME_MODES_CLASSIC, 0, -1,
+     {10, 12, 15}, {50, 50, 50}, 0, 2, true, NULL, {11, 13, 16}, {56, 56, 56}, 20, 0},
+    {"Rarer Candy with Candy Jar x2: +3 levels each", "RARER_CANDY", 100, GAME_MODES_CLASSIC, 0, -1,
+     {10, 12, 15}, {50, 50, 50}, 2, 2, true, NULL, {13, 15, 18}, {56, 56, 56}, 20, 0},
+    {"Rarer Candy when every member is at or above the level cap: still taken", "RARER_CANDY", 10, GAME_MODES_CLASSIC, 0, -1,
+     {CAP, CAP + 3, CAP + 10}, {199, 200, 250}, 0, 2, true, NULL, {CAP + 1, CAP + 4, CAP + 11}, {200, 200, 250}, 20, 0},
+    {"Rarer Candy with a shuffled party order", "RARER_CANDY", 100, GAME_MODES_CLASSIC, 2, -1,
+     {10, 12, 15}, {50, 60, 70}, 0, 10, true, NULL, {11, 13, 16}, {56, 66, 76}, 3, 1},
+};
+#define N_CANDY_TABLE ((int)(sizeof candy_table / sizeof candy_table[0]))
+
+static int candy_level(int v, int cap) { return v <= CAP + 20 ? cap + (v - CAP) : v; }
+
+/* the party's three starters' progress and candy, to compare what a candy did to them */
+static void set_starters_progress(int progress)
+{
+    for (int p = 0; p < 3; p++) {
+        gc_starter_entry *e = &sys.starters[gc_species_root_id(mon(p)->b.species)];
+        e->friendship = progress;
+        e->candy_count = 0;
+    }
+}
+
+static void test_rare_and_rarer_candy_table(void)
+{
+    long levelled = 0, refused = 0;
+    for (int i = 0; i < N_CANDY_TABLE; i++) {
+        const candy_table_case *tc = &candy_table[i];
+        setup("candy-table-test", 3);
+        run.wave = tc->wave;
+        run.run.mode = tc->mode;
+        const int cap = (int)pr_run_get_max_exp_level(&run.run, run.wave, false);
+        CHECK(cap >= 10 && cap < 200);
+        /* the three members must have three starters of their own, at cost 1 (progress cap 25) */
+        for (int p = 0; p < 3; p++) {
+            const int root = gc_species_root_id(mon(p)->b.species);
+            CHECK(gc_starter_cost(root) == 1);
+            for (int q = 0; q < p; q++) CHECK(root != gc_species_root_id(mon(q)->b.species));
+        }
+        for (int p = 0; p < 3; p++) {
+            mon(p)->b.level = (uint8_t)candy_level(tc->level[p], cap);
+            mon(p)->b.friendship = (uint8_t)tc->friendship[p];
+            mon(p)->exp = 12345;
+            gc_mon_recalc(&run, mon(p));
+        }
+        for (int p = 0; p < 3; p++) run.party_order[p] = (int8_t)((p + tc->rot) % 3);
+        if (tc->jars > 0) gc_item_add(&run, "CANDY_JAR", -1, 0, tc->jars);
+        set_starters_progress(tc->starter_progress);
+        drain();
+        gc_rq_reset(&gc_int(&run)->rq);          /* what the battle left queued is not what the candy queues */
+        gc_mon before[3];
+        for (int p = 0; p < 3; p++) before[p] = *mon(p);
+
+        result r = take(tc->key, 0, tc->target, -1);
+        CHECKF(r.ok == tc->ok, "candy case %d '%s': ok=%d, expected %d", i, tc->name, r.ok, tc->ok);
+        if (!tc->ok) {
+            CHECKF(!strcmp(r.why, tc->why), "candy case %d '%s': why='%s', expected '%s'", i, tc->name, r.why, tc->why);
+            refused++;
+        }
+
+        int expected_ups[3][3], n_ups = 0;
+        for (int p = 0; p < 3; p++) {            /* by storage index; the LevelUpPhases come in party order */
+            const gc_mon *m = mon(p);
+            const int want = candy_level(tc->level_after[p], cap);
+            CHECKF(m->b.level == want, "candy case %d '%s': mon(%d) level=%d, expected %d", i, tc->name, p, m->b.level, want);
+            CHECKF(m->b.friendship == tc->friendship_after[p], "candy case %d '%s': mon(%d) friendship=%d, expected %d",
+                   i, tc->name, p, m->b.friendship, tc->friendship_after[p]);
+            const bool got_levels = m->b.level != before[p].b.level;
+            const double want_exp = got_levels ? pr_reward_level_total_exp(m->b.level, gc_species(m->b.species)->growth_rate) : 12345;
+            CHECKF(m->exp == want_exp, "candy case %d '%s': mon(%d) exp=%.0f, expected %.0f", i, tc->name, p, m->exp, want_exp);
+            const gc_starter_entry *e = &sys.starters[gc_species_root_id(m->b.species)];
+            CHECKF(e->friendship == (got_levels ? tc->starter_progress_after : tc->starter_progress) &&
+                   e->candy_count == (got_levels ? tc->starter_candy_after : 0),
+                   "candy case %d '%s': mon(%d) starter progress %d candy %d, expected %d %d", i, tc->name, p, e->friendship, e->candy_count,
+                   got_levels ? tc->starter_progress_after : tc->starter_progress, got_levels ? tc->starter_candy_after : 0);
+            /* nothing else of the member moved: HP, moves, PP, status */
+            CHECK(m->b.hp == before[p].b.hp && m->b.status == before[p].b.status && !memcmp(m->b.moves, before[p].b.moves, sizeof m->b.moves)
+                  && !memcmp(m->b.pp_used, before[p].b.pp_used, sizeof m->b.pp_used));
+            if (got_levels) levelled++;
+        }
+        for (int k = 0; k < 3; k++) {             /* party index k = storage party_order[k] */
+            const gc_mon *m = mon(run.party_order[k]);
+            if (m->b.level != before[run.party_order[k]].b.level) {
+                expected_ups[n_ups][0] = run.party_order[k];
+                expected_ups[n_ups][1] = before[run.party_order[k]].b.level;
+                expected_ups[n_ups][2] = m->b.level;
+                n_ups++;
+            }
+        }
+        gc_internal *in = gc_int(&run);
+        gc_rphase qp;
+        int n_got = 0;
+        while (gc_rq_next(&in->rq, &qp)) {
+            CHECKF(qp.type == RP_LEVEL_UP, "candy case %d '%s': queued phase type %d", i, tc->name, qp.type);
+            CHECKF(n_got < n_ups && qp.a == expected_ups[n_got][0] && qp.b == expected_ups[n_got][1] && qp.c == expected_ups[n_got][2],
+                   "candy case %d '%s': LevelUpPhase %d is storage %d %d -> %d", i, tc->name, n_got, qp.a, qp.b, qp.c);
+            n_got++;
+        }
+        CHECKF(n_got == n_ups, "candy case %d '%s': %d LevelUpPhases queued, expected %d", i, tc->name, n_got, n_ups);
+        CHECKF(tc->ok == (n_ups > 0), "candy case %d '%s': %d members got levels", i, tc->name, n_ups);
+        gc_event e;                               /* a candy changes no HP: no HP event */
+        while (gc_run_next_event(&run, &e)) CHECK(e.kind != GC_EV_HP);
+    }
+    printf("candy table: %d cases ok (%ld members levelled, %ld refused)\n", N_CANDY_TABLE, levelled, refused);
+}
+
+/* ---- the same through the real flow: a wave won, the reward screen, a candy, the level-up and the move it
+ * brings, the next wave's command screen (the only place a run saves), a save, a load, the turn after ---- */
+static gc_run flow_loaded;
+
+static void flow_events(int *level_ups, int *new_level)
+{
+    gc_event e;
+    while (gc_run_next_event(&run, &e))
+        if (e.kind == GC_EV_LEVEL_UP) { (*level_ups)++; *new_level = e.b; }
+}
+
+static const gc_screen *flow_fight(gc_run *r)
+{
+    const char *why;
+    gc_choice c = {GC_CH_FIGHT, 0, -1, 0};
+    CHECK(gc_run_choose(r, &c, &why));
+    return gc_run_screen(r);
+}
+
+static void test_candy_level_up_save_reload_resume(void)
+{
+    memset(&run, 0, sizeof run);
+    gc_system_init_defaults(&sys);
+    gc_run_new(&run, GAME_MODES_CLASSIC, "candy-flow", 7);
+    gc_starter team = {.species = SPECIES_ID_BULBASAUR, .tera_type = -1};
+    for (int j = 0; j < 6; j++) team.ivs[j] = 15;
+    const char *why;
+    CHECK(gc_run_set_starters(&run, &team, 1, &why));
+    run.sys = &sys;
+    drain();
+    CHECK(run.screen.kind == GC_SCREEN_COMMAND && gc_run_can_save(&run));
+    gc_mon *lead = mon(0);
+    static const int moves[4] = {MOVE_ID_TACKLE, MOVE_ID_GROWL, MOVE_ID_VINE_WHIP, MOVE_ID_SCRATCH};
+    for (int j = 0; j < 4; j++) gc_mon_set_move(lead, j, moves[j]);
+    lead->b.n_moves = 4;
+    lead->b.level = 6;
+    lead->exp = pr_reward_level_total_exp(6, gc_species(SPECIES_ID_BULBASAUR)->growth_rate);
+    gc_mon_recalc(&run, lead);
+    lead->b.friendship = 150;
+    run.enemy[0].b.hp = 1;
+
+    /* win the wave: the reward screen */
+    for (int turn = 0; turn < 8 && run.screen.kind == GC_SCREEN_COMMAND; turn++) { flow_fight(&run); drain(); }
+    CHECK(run.screen.kind == GC_SCREEN_REWARD);
+    CHECK(lead->b.level == 6);   /* the wave's experience is far from a level */
+    const int wave = run.wave;
+    /* the wave's victory already gave the lead friendship and its starter some candy progress */
+    const int f0 = lead->b.friendship, progress0 = sys.starters[SPECIES_ID_BULBASAUR].friendship;
+    const int candies0 = sys.starters[SPECIES_ID_BULBASAUR].candy_count;
+
+    /* the candy, with two Candy Jars (+3 levels), on the lead: level 7's Leech Seed is the one new move, and it
+     * asks which of the four moves to forget */
+    gc_item_add(&run, "CANDY_JAR", -1, 0, 2);
+    run.screen.options[0] = offer("RARE_CANDY", 0);
+    gc_choice pick = {GC_CH_REWARD, 0, 0, -1};
+    CHECK(gc_run_choose(&run, &pick, &why));
+    int level_ups = 0, new_level = 0;
+    flow_events(&level_ups, &new_level);
+    CHECK(level_ups == 1 && new_level == 9);
+    CHECK(lead->b.level == 9 && lead->b.friendship == f0 + 6);
+    CHECK(lead->exp == pr_reward_level_total_exp(9, gc_species(SPECIES_ID_BULBASAUR)->growth_rate));
+    CHECK(sys.starters[SPECIES_ID_BULBASAUR].friendship == progress0 + 18 && sys.starters[SPECIES_ID_BULBASAUR].candy_count == candies0);
+    CHECK(run.screen.kind == GC_SCREEN_LEARN_MOVE && run.screen.party == 0 && run.screen.move == MOVE_ID_LEECH_SEED);
+    /* a level-up that isn't finished is never saved: the queue isn't part of a save */
+    CHECK(!gc_run_can_save(&run));
+    static uint8_t buf[GC_SAVE_MAX];
+    CHECK(gc_run_save(&run, buf, sizeof buf) == 0);
+    gc_choice forget = {GC_CH_FORGET, 3, 0, 0};
+    CHECK(gc_run_choose(&run, &forget, &why));
+    CHECK(lead->b.moves[3] == MOVE_ID_LEECH_SEED && lead->b.moves[0] == MOVE_ID_TACKLE);
+    drain();
+    /* the next wave, at its command screen: the save point */
+    for (int step = 0; step < 20 && run.screen.kind == GC_SCREEN_CHECK_SWITCH; step++) {
+        gc_choice no = {GC_CH_CONFIRM, 0, 0, 0};
+        CHECK(gc_run_choose(&run, &no, &why));
+        drain();
+    }
+    CHECK(run.screen.kind == GC_SCREEN_COMMAND && run.wave == wave + 1);
+    CHECK(gc_run_can_save(&run));
+    const size_t n = gc_run_save(&run, buf, sizeof buf);
+    CHECK(n > 0);
+    memset(&flow_loaded, 0, sizeof flow_loaded);
+    CHECK(gc_run_load(&flow_loaded, buf, n, &why) && !flow_loaded.load_dropped);
+    flow_loaded.sys = &sys;
+    const gc_mon *back = &flow_loaded.party[0];
+    CHECK(back->b.level == 9 && back->b.friendship == f0 + 6 && back->exp == lead->exp);
+    CHECK(back->b.moves[3] == MOVE_ID_LEECH_SEED && back->b.moves[0] == MOVE_ID_TACKLE && back->b.n_moves == 4);
+    CHECK(!memcmp(back->b.stats, lead->b.stats, sizeof lead->b.stats) && back->b.hp == lead->b.hp);
+    CHECK(flow_loaded.screen.kind == GC_SCREEN_COMMAND && flow_loaded.wave == wave + 1);
+    CHECK(flow_loaded.n_items == run.n_items);
+    /* the turn after the load is the turn the original plays */
+    const int hp = lead->b.hp, foe_hp = run.enemy[0].b.hp, pp = lead->b.pp_used[0];
+    CHECK(flow_loaded.party[0].b.pp_used[0] == pp);
+    flow_fight(&run);
+    flow_fight(&flow_loaded);
+    CHECK(run.screen.kind == flow_loaded.screen.kind);
+    CHECK(run.party[0].b.hp == flow_loaded.party[0].b.hp && run.enemy[0].b.hp == flow_loaded.enemy[0].b.hp);
+    CHECK(run.party[0].b.pp_used[0] == pp + 1 && flow_loaded.party[0].b.pp_used[0] == pp + 1);
+    CHECK(run.party[0].b.hp != hp || run.enemy[0].b.hp != foe_hp);
+    printf("candy flow: reward -> level-up -> Leech Seed -> next wave -> save -> load -> turn ok\n");
+}
+
 /* ---- reward-core has no application for these: game-core's own code keeps them ---- */
 static void unhandled_items(void)
 {
     setup("reward-apply-unhandled", 3);
     const char *why = "";
-    static const char *const others[] = {"FULL_HEAL", "RARE_CANDY", "POKEBALL", "LEFTOVERS", "EXP_SHARE"};
+    static const char *const others[] = {"FULL_HEAL", "POKEBALL", "LEFTOVERS", "EXP_SHARE"};
     for (size_t i = 0; i < sizeof others / sizeof others[0]; i++) {
         const gc_offer o = offer(others[i], 0);
         CHECK(gc_reward_apply(&run, &o, 0, 0, &why) == GC_APPLY_UNHANDLED);
@@ -669,7 +933,9 @@ int main(void)
     max_pp_override_blocks_pp_up();
     low_pp_move_refuses_pp_up();
     test_tm_and_memory_mushroom();
-    printf("sacred ash, party order, unhandled items, empty slot, max PP override, low-PP move, tm/memory: ok\n");
+    test_rare_and_rarer_candy_table();
+    test_candy_level_up_save_reload_resume();
+    printf("sacred ash, party order, unhandled items, empty slot, max PP override, low-PP move, tm/memory, rare/rarer candy: ok\n");
     random_cases(30000);
     printf("reward apply: %ld checks, 0 failures\n", checks);
     return 0;

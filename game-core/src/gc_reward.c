@@ -397,9 +397,13 @@ uint8_t gc_reward_target(const char *key)
     return item < 0 ? GC_TARGET_NONE : target_of(item);
 }
 
+/* FRIENDSHIP_GAIN_FROM_RARE_CANDY (#balance/starters): reward-core's candy.c adds the same 6 to the Pokemon itself */
+#define GC_FRIENDSHIP_GAIN_FROM_RARE_CANDY 6
+
 static bool core_applies(int item)
 {
     switch (item) {
+    case PR_ITEM_RARE_CANDY: case PR_ITEM_RARER_CANDY:
     case PR_ITEM_POTION: case PR_ITEM_SUPER_POTION: case PR_ITEM_HYPER_POTION: case PR_ITEM_MAX_POTION:
     case PR_ITEM_FULL_RESTORE: case PR_ITEM_REVIVE: case PR_ITEM_MAX_REVIVE: case PR_ITEM_SACRED_ASH:
     case PR_ITEM_ETHER: case PR_ITEM_MAX_ETHER: case PR_ITEM_ELIXIR: case PR_ITEM_MAX_ELIXIR:
@@ -468,7 +472,11 @@ int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, co
     /* a free reward is applied with cost -1, a purchase with its price (a shop item: cost > 0) */
     const bool purchase = o->cost > 0;
     int k = -1, move = -1;
-    if (item != PR_ITEM_SACRED_ASH) {
+    /* Sacred Ash and Rarer Candy have no party menu: Sacred Ash touches the whole party, and Rarer Candy
+     * (AllPokemonLevelIncrementModifierType, pokemonId -1) every member. Neither candy has a filter or a level
+     * cap check: PokemonLevelIncrementModifierType's selectFilter always returns null, and getMaxExpLevel() only
+     * decides whether the exp is brought up to the new level (it always is: getMaxExpLevel(true) has no limit) */
+    if (item != PR_ITEM_SACRED_ASH && item != PR_ITEM_RARER_CANDY) {
         if (party < 0 || party >= run->n_party || (k = gc_battle_slot_of(run, party)) < 0) {
             *why = "pick a Pokemon";
             return GC_APPLY_REFUSED;
@@ -499,7 +507,8 @@ int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, co
      * PP used and PP Ups. Sacred Ash can touch the whole party, anything else the one member */
     for (int i = 0; i < ctx->n_party; i++) {
         const int storage = run->party_order[i];
-        pr_pokemon *b = &run->party[storage].b;
+        gc_mon *m = &run->party[storage];
+        pr_pokemon *b = &m->b;
         const pr_reward_mon *r = &ctx->party[i];
         const bool hp_changed = b->hp != r->hp;
         if (b->status != r->status) {
@@ -516,7 +525,21 @@ int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, co
             b->pp_up[s] = r->moves[c].pp_up;
             c++;
         }
-        if (hp_changed || (i == k && item != PR_ITEM_SACRED_ASH)) {
+        if (b->level != r->level) {
+            /* a candy: PokemonLevelIncrementModifier. Its addFriendship(FRIENDSHIP_GAIN_FROM_RARE_CANDY, true)
+             * adds the candy's 6 to the starter's candy progress whether or not the Pokemon's own friendship rose
+             * (at 199 it rises by 1, at 200 or more not at all), so the amount is the candy's, not the change in
+             * friendship. The Pokemon's own friendship is reward-core's (the 200 cap keeps what is above it) */
+            const int old_level = b->level;
+            const bool too_high = r->level > 255;   /* battle-core's level is a byte: stop at 255, not wrap to a low level */
+            b->level = too_high ? 255 : (uint8_t)r->level;
+            const pr_species *sp = gc_species(b->species);
+            m->exp = too_high && sp ? pr_reward_level_total_exp(255, sp->growth_rate) : r->exp;
+            gc_system_add_friendship(run->sys, run, m, GC_FRIENDSHIP_GAIN_FROM_RARE_CANDY, true);
+            b->friendship = r->friendship;
+            gc_rq_unshift(run, gc_rp(RP_LEVEL_UP, storage, old_level, b->level));
+        }
+        if (hp_changed || (i == k && item != PR_ITEM_SACRED_ASH && item != PR_ITEM_RARE_CANDY && item != PR_ITEM_RARER_CANDY)) {
             gc_event *ev = gc_ev_new(run, GC_EV_HP);
             if (ev) { ev->a = 0; ev->b = storage; ev->c = b->hp; }
         }

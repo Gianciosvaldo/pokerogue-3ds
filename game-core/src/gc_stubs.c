@@ -70,14 +70,6 @@ bool gc_port_apply_reward(gc_run *run, const gc_offer *o, int party, int move_sl
     if (!strcmp(k, "FULL_HEAL")) {
         ok = b->hp > 0 && b->status != STATUS_EFFECT_NONE;
         if (ok) { b->status = STATUS_EFFECT_NONE; b->status_toxic_turns = 0; b->status_sleep_turns = b->status_freeze_turns = -1; }
-    } else if (!strcmp(k, "RARE_CANDY")) {
-        if (b->level >= pr_run_get_max_exp_level(&run->run, run->wave, false)) { *why = "partyUiHandler:anyEffect"; return false; }
-        const pr_species *sp = gc_species(b->species);
-        b->level++;
-        if (b->level <= pr_run_get_max_exp_level(&run->run, run->wave, true)) m->exp = gc_level_total_exp(b->level, sp ? sp->growth_rate : 0);
-        /* FRIENDSHIP_GAIN_FROM_RARE_CANDY (6), capped at RARE_CANDY_FRIENDSHIP_CAP (200) */
-        gc_system_add_friendship(run->sys, run, m, 6, true);
-        gc_rq_unshift(run, gc_rp(RP_LEVEL_UP, party, b->level - 1, b->level));
     } else {
         /* a held item is added as it is; anything else would act on the Pokemon, and doesn't yet */
         if (idx < 0 || !(pr_items[idx].flags & PR_ITEMF_HELD)) gc_stub(run, GC_STUB_REWARD_APPLY);
