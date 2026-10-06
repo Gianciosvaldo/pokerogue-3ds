@@ -476,6 +476,168 @@ static void test_duplicate_species(void)
     printf("ok\n");
 }
 
+
+/* ---- helpers for the cases below ---- */
+
+/* A fresh classic run with `sys` attached, one starter offered. True when accepted. */
+static bool offer(gc_system *sys, const gc_starter *st, const char **why)
+{
+    gc_run run;
+    gc_run_new(&run, GAME_MODES_CLASSIC, "unlockoffer", 2001);
+    run.sys = sys;
+    return gc_run_set_starters(&run, st, 1, why);
+}
+
+/* The offer must be refused with `want`, and neither the run nor the system data may change. */
+static void expect_refused(gc_system *sys, const gc_starter *st, const char *want)
+{
+    gc_run run;
+    gc_run_new(&run, GAME_MODES_CLASSIC, "unlockrefuse", 2002);
+    run.sys = sys;
+    gc_run run_before = run;
+    gc_system sys_before = *sys;
+    const char *why = NULL;
+    CHECK_WHY(!gc_run_set_starters(&run, st, 1, &why), why);
+    CHECK_WHY(why && !strcmp(why, want), why);
+    CHECK(memcmp(&run, &run_before, sizeof(gc_run)) == 0);
+    CHECK(memcmp(sys, &sys_before, sizeof(gc_system)) == 0);
+}
+
+static gc_starter starter_of(int species)
+{
+    gc_starter st;
+    memset(&st, 0, sizeof st);
+    st.species = (uint16_t)species;
+    st.nature = NATURE_DOCILE;
+    st.tera_type = -1;
+    return st;
+}
+
+/* variant is an index 0-2 (DEFAULT_VARIANT, VARIANT_2, VARIANT_3 = bits 4-6). Index 3 would test bit 7, which is
+ * DEFAULT_FORM and set here, and 255 would shift by 259: the range has to be checked before the shift. */
+static void test_variant_out_of_range(void)
+{
+    printf("test_variant_out_of_range...\n");
+    gc_system sys;
+    gc_system_init_defaults(&sys);
+    /* shiny + all three variants + male + female + default form, no non-shiny: 2 | 4 | 8 | 16 | 32 | 64 | 128 */
+    sys.dex[SPECIES_ID_BULBASAUR].caught_attr = 254ULL;
+
+    gc_starter st = starter_of(SPECIES_ID_BULBASAUR);
+    st.shiny = true;
+    st.variant = 3;
+    expect_refused(&sys, &st, "starterSelectUiHandler:lockedVariant");
+    st.variant = 255;
+    expect_refused(&sys, &st, "starterSelectUiHandler:lockedVariant");
+    printf("ok\n");
+}
+
+/* Upstream only refuses an explicit non-shiny when NON_SHINY (bit 0) was never caught (:659-662). */
+static void test_locked_nonshiny(void)
+{
+    printf("test_locked_nonshiny...\n");
+    gc_system sys;
+    gc_system_init_defaults(&sys);
+    sys.dex[SPECIES_ID_BULBASAUR].caught_attr = 2ULL | 4ULL | 8ULL | 16ULL | 128ULL; /* shiny only, never non-shiny */
+
+    gc_starter st = starter_of(SPECIES_ID_BULBASAUR);
+    expect_refused(&sys, &st, "starterSelectUiHandler:lockedShiny");
+    st.shiny = true;
+    const char *why = NULL;
+    CHECK_WHY(offer(&sys, &st, &why), why);
+    printf("ok\n");
+}
+
+/* The same options, unlocked, are accepted: the refusals above come from the locks and not from the option itself. */
+static void test_unlocked_options_accepted(void)
+{
+    printf("test_unlocked_options_accepted...\n");
+    gc_system sys;
+    gc_system_init_defaults(&sys);
+    sys.dex[SPECIES_ID_BULBASAUR].caught_attr = 157ULL | 2ULL | 32ULL | 64ULL; /* + shiny, variants 2 and 3 */
+    sys.dex[SPECIES_ID_BULBASAUR].nature_attr |= 1U << (NATURE_ADAMANT + 1);
+
+    const char *why = NULL;
+    for (int variant = 0; variant < 3; variant++) {
+        gc_starter st = starter_of(SPECIES_ID_BULBASAUR);
+        st.shiny = true;
+        st.variant = (uint8_t)variant;
+        CHECK_WHY(offer(&sys, &st, &why), why);
+    }
+    gc_starter fem = starter_of(SPECIES_ID_BULBASAUR);
+    fem.female = true;
+    CHECK_WHY(offer(&sys, &fem, &why), why);
+    gc_starter nat = starter_of(SPECIES_ID_BULBASAUR);
+    nat.nature = NATURE_ADAMANT;
+    CHECK_WHY(offer(&sys, &nat, &why), why);
+    printf("ok\n");
+}
+
+/* Genderless Magnemite: pokemon.ts:611-613 gives a caught genderless Pokemon neither MALE nor FEMALE, and the gender
+ * defaults without a bit (game-data.ts:1923 female = malePercent === 0), so the starter must be accepted with no gender
+ * bit in caught_attr. Insisting on the MALE bit would make every genderless species unselectable. */
+static void test_genderless_starter(void)
+{
+    printf("test_genderless_starter...\n");
+    gc_system sys;
+    gc_system_init_defaults(&sys);
+
+    gc_mon caught;
+    memset(&caught, 0, sizeof caught);
+    caught.b.gender = -1;
+    uint64_t attr = gc_mon_dex_attr(&caught);
+    CHECK(attr == (1ULL | 16ULL | 128ULL)); /* non-shiny, default variant, default form: no MALE, no FEMALE */
+
+    CHECK(gc_starter_cost(SPECIES_ID_MAGNEMITE) >= 0);
+    CHECK(gc_species(SPECIES_ID_MAGNEMITE)->male_permille < 0);
+    sys.dex[SPECIES_ID_MAGNEMITE].caught_attr = attr;
+    sys.dex[SPECIES_ID_MAGNEMITE].nature_attr = 1U << (NATURE_DOCILE + 1);
+    sys.starters[SPECIES_ID_MAGNEMITE].ability_attr = 1;
+
+    gc_starter st = starter_of(SPECIES_ID_MAGNEMITE);
+    const char *why = NULL;
+    CHECK_WHY(offer(&sys, &st, &why), why);
+    st.female = true; /* a bit nobody can have */
+    expect_refused(&sys, &st, "starterSelectUiHandler:lockedGender");
+    printf("ok\n");
+}
+
+/* Happiny is female only (malePercent 0): female is its default, so it needs no bit, but a male starter is a
+ * non-default preference and needs MALE in caught_attr. */
+static void test_female_only_starter(void)
+{
+    printf("test_female_only_starter...\n");
+    gc_system sys;
+    gc_system_init_defaults(&sys);
+    CHECK(gc_starter_cost(SPECIES_ID_HAPPINY) >= 0);
+    CHECK(gc_species(SPECIES_ID_HAPPINY)->male_permille == 0);
+    sys.dex[SPECIES_ID_HAPPINY].caught_attr = 1ULL | 8ULL | 16ULL | 128ULL; /* FEMALE only */
+    sys.dex[SPECIES_ID_HAPPINY].nature_attr = 1U << (NATURE_DOCILE + 1);
+    sys.starters[SPECIES_ID_HAPPINY].ability_attr = 1;
+
+    gc_starter st = starter_of(SPECIES_ID_HAPPINY);
+    st.female = true;
+    const char *why = NULL;
+    CHECK_WHY(offer(&sys, &st, &why), why);
+    st.female = false;
+    expect_refused(&sys, &st, "starterSelectUiHandler:lockedGender");
+    printf("ok\n");
+}
+
+/* getSpeciesStarterValue's decrementValue: -1 above 1, halved at 1 and below. Cost 3: 3, 2, 1, 0.5, 0.25. */
+static void test_value_reduction_steps(void)
+{
+    printf("test_value_reduction_steps...\n");
+    gc_system sys;
+    gc_system_init_defaults(&sys);
+    const double want[5] = { 3.0, 2.0, 1.0, 0.5, 0.25 };
+    for (int r = 0; r < 5; r++) {
+        sys.starters[SPECIES_ID_BULBASAUR].value_reduction = (uint32_t)r;
+        CHECK(gc_starter_value(&sys, SPECIES_ID_BULBASAUR) == want[r]);
+    }
+    printf("ok\n");
+}
+
 int main(void)
 {
     test_locked_species();
@@ -492,6 +654,12 @@ int main(void)
     test_exact_budget();
     test_over_budget_by_one();
     test_duplicate_species();
+    test_variant_out_of_range();
+    test_locked_nonshiny();
+    test_unlocked_options_accepted();
+    test_genderless_starter();
+    test_female_only_starter();
+    test_value_reduction_steps();
     printf("All starter unlock and cost enforcement tests passed successfully!\n");
     return 0;
 }
