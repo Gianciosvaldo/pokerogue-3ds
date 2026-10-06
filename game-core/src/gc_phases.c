@@ -553,8 +553,7 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         money_reward(run, p->d);
         return true;
     case RP_MODIFIER_REWARD:
-        gc_port_give_reward(run, p->key);
-        gc_ev_msg(run, "battle:rewardGain", 1, gc_m_item("modifierName", p->key));
+        gc_reward_gain(run, p->key);
         return true;
     case RP_SELECT_MODIFIER:
         return select_modifier_start(run, p);

@@ -27,16 +27,6 @@ void gc_port_enemy_moveset(gc_run *run, gc_mon *m)
  * (gc_reward.c), and so is the application of Poke Balls, healing, revives, PP restores and PP Ups (gc_reward_apply).
  * What is left here is the rest: Full Heal (reward-core has no application for it) and the items that are
  * added to the player's items as they are, each one that needs a real effect counted ---- */
-static int pokeball_type(const char *key)
-{
-    if (!strcmp(key, "POKEBALL")) return POKEBALL_TYPE_POKEBALL;
-    if (!strcmp(key, "GREAT_BALL")) return POKEBALL_TYPE_GREAT_BALL;
-    if (!strcmp(key, "ULTRA_BALL")) return POKEBALL_TYPE_ULTRA_BALL;
-    if (!strcmp(key, "ROGUE_BALL")) return POKEBALL_TYPE_ROGUE_BALL;
-    if (!strcmp(key, "MASTER_BALL")) return POKEBALL_TYPE_MASTER_BALL;
-    return -1;
-}
-
 bool gc_port_apply_reward(gc_run *run, const gc_offer *o, int party, int move_slot, const char **why)
 {
     const char *k = o->key;
@@ -71,13 +61,7 @@ bool gc_port_apply_reward(gc_run *run, const gc_offer *o, int party, int move_sl
 
 void gc_port_give_reward(gc_run *run, const char *key)
 {
-    const int ball = pokeball_type(key);
-    if (ball >= 0) {
-        const int add = ball == POKEBALL_TYPE_MASTER_BALL ? 1 : 5;
-        const int count = run->pokeballs[ball] + add;
-        run->pokeballs[ball] = (uint8_t)(count > 99 ? 99 : count);
-        return;
-    }
+    if (gc_reward_add_pokeballs(run, key)) return;
     /* vouchers are system data (the gacha): nothing in the run */
     if (!strncmp(key, "VOUCHER", 7)) return;
     gc_item_add(run, key, -1, 0, 1);

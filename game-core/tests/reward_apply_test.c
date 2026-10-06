@@ -587,61 +587,79 @@ static void test_candy_level_up_save_reload_resume(void)
     printf("candy flow: reward -> level-up -> Leech Seed -> next wave -> save -> load -> turn ok\n");
 }
 
-/* ---- reward-core has no application for these: game-core's own code keeps them ---- */
-static void test_pokeballs(void)
+/* ---- Poke Balls (Task 96): AddPokeballModifier at 8555c08, numbers worked out from its source ---- */
+/* the three locale entries the name and the "You received" text come from, copied from upstream's locales/en */
+static const char *poke_locale(void *ctx, const char *file, int fallback, size_t *len)
 {
-    setup("reward-apply-pokeballs", 2);
-    /* Test initial counts */
-    run.pokeballs[POKEBALL_TYPE_POKEBALL] = 10;
-    run.pokeballs[POKEBALL_TYPE_GREAT_BALL] = 96;
-    run.pokeballs[POKEBALL_TYPE_ULTRA_BALL] = 98;
-    run.pokeballs[POKEBALL_TYPE_ROGUE_BALL] = 0;
-    run.pokeballs[POKEBALL_TYPE_MASTER_BALL] = 98;
-
-    drain();
-
-    /* 1. Poke Ball (+5) via gc_port_apply_reward */
-    result r = take("POKEBALL", 0, -1, -1);
-    CHECK(r.ok);
-    CHECK(run.pokeballs[POKEBALL_TYPE_POKEBALL] == 15);
-    gc_event e;
-    CHECK(gc_run_next_event(&run, &e) && e.kind == GC_EV_MESSAGE);
-    CHECK(!strcmp(e.msg.key, "battle:rewardGain"));
-    CHECK(e.msg.n_args == 1 && e.msg.args[0].kind == PR_ARG_KEY && !strcmp(e.msg.args[0].name, "modifierName") && !strcmp(e.msg.args[0].s, "modifierType:ModifierType.POKEBALL.name"));
-    CHECK(!gc_run_next_event(&run, &e));
-
-    /* 2. Great Ball (+5) capping at 99 via gc_port_apply_reward */
-    r = take("GREAT_BALL", 0, -1, -1);
-    CHECK(r.ok);
-    CHECK(run.pokeballs[POKEBALL_TYPE_GREAT_BALL] == 99);
-    CHECK(gc_run_next_event(&run, &e) && e.kind == GC_EV_MESSAGE);
-    CHECK(!strcmp(e.msg.key, "battle:rewardGain"));
-    CHECK(e.msg.n_args == 1 && e.msg.args[0].kind == PR_ARG_KEY && !strcmp(e.msg.args[0].name, "modifierName") && !strcmp(e.msg.args[0].s, "modifierType:ModifierType.GREAT_BALL.name"));
-    CHECK(!gc_run_next_event(&run, &e));
-
-    /* 3. Ultra Ball (+5) capping at 99 via gc_port_give_reward */
-    gc_port_give_reward(&run, "ULTRA_BALL");
-    CHECK(run.pokeballs[POKEBALL_TYPE_ULTRA_BALL] == 99);
-
-    /* 4. Rogue Ball (+5) via gc_port_give_reward */
-    gc_port_give_reward(&run, "ROGUE_BALL");
-    CHECK(run.pokeballs[POKEBALL_TYPE_ROGUE_BALL] == 5);
-
-    /* 5. Master Ball (+1) via gc_port_apply_reward */
-    r = take("MASTER_BALL", 0, -1, -1);
-    CHECK(r.ok);
-    CHECK(run.pokeballs[POKEBALL_TYPE_MASTER_BALL] == 99);
-    CHECK(gc_run_next_event(&run, &e) && e.kind == GC_EV_MESSAGE);
-    CHECK(!strcmp(e.msg.key, "battle:rewardGain"));
-    CHECK(e.msg.n_args == 1 && e.msg.args[0].kind == PR_ARG_KEY && !strcmp(e.msg.args[0].name, "modifierName") && !strcmp(e.msg.args[0].s, "modifierType:ModifierType.MASTER_BALL.name"));
-    CHECK(!gc_run_next_event(&run, &e));
-
-    /* 6. Master Ball (+1) via gc_port_give_reward */
-    run.pokeballs[POKEBALL_TYPE_MASTER_BALL] = 5;
-    gc_port_give_reward(&run, "MASTER_BALL");
-    CHECK(run.pokeballs[POKEBALL_TYPE_MASTER_BALL] == 6);
+    (void)ctx;
+    const char *t = NULL;
+    if (fallback) return NULL;
+    if (!strcmp(file, "battle")) t = "{\"rewardGain\": \"You received\\n{{modifierName}}!\"}";
+    else if (!strcmp(file, "modifier-type")) t = "{\"ModifierType\": {\"AddPokeballModifierType\": {\"name\": \"{{modifierCount}}\u00d7 {{pokeballName}}\"}}}";
+    else if (!strcmp(file, "pokeball"))
+        t = "{\"pokeBall\": \"Pok\u00e9 Ball\", \"greatBall\": \"Great Ball\", \"ultraBall\": \"Ultra Ball\", "
+            "\"rogueBall\": \"Rogue Ball\", \"masterBall\": \"Master Ball\"}";
+    if (t) *len = strlen(t);
+    return t;
 }
 
+static void test_pokeballs(void)
+{
+    static const struct { const char *key; int ball; int add; const char *text; } balls[] = {
+        {"POKEBALL", POKEBALL_TYPE_POKEBALL, 5, "You received\n5\xc3\x97 Pok\xc3\xa9 Ball!"},
+        {"GREAT_BALL", POKEBALL_TYPE_GREAT_BALL, 5, "You received\n5\xc3\x97 Great Ball!"},
+        {"ULTRA_BALL", POKEBALL_TYPE_ULTRA_BALL, 5, "You received\n5\xc3\x97 Ultra Ball!"},
+        {"ROGUE_BALL", POKEBALL_TYPE_ROGUE_BALL, 5, "You received\n5\xc3\x97 Rogue Ball!"},
+        {"MASTER_BALL", POKEBALL_TYPE_MASTER_BALL, 1, "You received\n1\xc3\x97 Master Ball!"},
+    };
+    static const int starts[] = {0, 1, 93, 94, 95, 97, 98, 99};
+    static const pr_text_source src = {poke_locale, NULL, "en"};
+    int cases = 0;
+    for (int b = 0; b < 5; b++) {
+        for (size_t c = 0; c < sizeof starts / sizeof starts[0]; c++) {
+            const int want = starts[c] + balls[b].add > 99 ? 99 : starts[c] + balls[b].add;
+            for (int path = 0; path < 4; path++) {
+                /* 0: taken from the reward screen free, 1: bought, 2: given by ModifierRewardPhase (with its text) */
+                setup("reward-apply-pokeballs", 1);
+                for (int k = 0; k < 8; k++) run.pokeballs[k] = (uint8_t)(10 + k);
+                run.pokeballs[balls[b].ball] = (uint8_t)starts[c];
+                uint8_t others[8];
+                memcpy(others, run.pokeballs, sizeof others);
+                drain();
+                gc_event e;
+                if (path < 2) {
+                    const result r = take(balls[b].key, path ? 400 : 0, -1, -1);
+                    CHECKF(r.ok, "%s taken from %d (%s)", balls[b].key, starts[c], path ? "bought" : "free");
+                    CHECK(!gc_run_next_event(&run, &e));   /* addModifier shows no text */
+                } else if (path == 2) {
+                    gc_reward_gain(&run, balls[b].key);
+                    CHECK(gc_run_next_event(&run, &e) && e.kind == GC_EV_MESSAGE);
+                    CHECK(!strcmp(e.msg.key, "battle:rewardGain"));
+                    CHECK(e.msg.n_args == 3 && !strcmp(e.msg.args[0].name, "modifierName") && e.msg.args[0].kind == PR_ARG_TEMPLATE);
+                    CHECK(!strcmp(e.msg.args[1].name, "modifierCount") && e.msg.args[1].kind == PR_ARG_INT && (int)e.msg.args[1].v == balls[b].add);
+                    CHECK(!strcmp(e.msg.args[2].name, "pokeballName") && e.msg.args[2].kind == PR_ARG_KEY);
+                    char text[128];
+                    pr_msg_format(&e.msg, &src, text, sizeof text);
+                    CHECKF(!strcmp(text, balls[b].text), "text '%s', want '%s'", text, balls[b].text);
+                    CHECK(!gc_run_next_event(&run, &e));
+                } else {
+                    gc_port_give_reward(&run, balls[b].key);   /* the state change alone, as the Mystery Encounters call it */
+                    CHECK(!gc_run_next_event(&run, &e));
+                }
+                CHECKF(run.pokeballs[balls[b].ball] == want, "%s from %d: %d, want %d (path %d)", balls[b].key, starts[c],
+                       run.pokeballs[balls[b].ball], want, path);
+                for (int k = 0; k < 8; k++)
+                    if (k != balls[b].ball) CHECK(run.pokeballs[k] == others[k]);
+                cases++;
+            }
+        }
+    }
+    printf("pokeballs: %d cases ok (5 balls x 8 starting counts x free, bought, given with text, given plain)\n", cases);
+    CHECK(!gc_reward_add_pokeballs(&run, "POTION"));
+    CHECK(!gc_reward_add_pokeballs(&run, "GOLDEN_POKEBALL"));
+}
+
+/* ---- reward-core has no application for these: game-core's own code keeps them ---- */
 static void unhandled_items(void)
 {
     setup("reward-apply-unhandled", 3);
@@ -990,7 +1008,7 @@ int main(void)
     test_tm_and_memory_mushroom();
     test_rare_and_rarer_candy_table();
     test_candy_level_up_save_reload_resume();
-    printf("sacred ash, party order, unhandled items, empty slot, max PP override, low-PP move, tm/memory, rare/rarer candy: ok\n");
+    printf("sacred ash, party order, Poke Balls, unhandled items, empty slot, max PP override, low-PP move, tm/memory, rare/rarer candy: ok\n");
     random_cases(30000);
     printf("reward apply: %ld checks, 0 failures\n", checks);
     return 0;

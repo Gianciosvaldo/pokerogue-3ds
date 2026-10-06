@@ -424,12 +424,62 @@ uint8_t gc_reward_target(const char *key)
  *      pokeballName: getPokeballName(this.pokeballType),
  *    });
  *  }"
- */
+ * "export const MAX_PER_TYPE_POKEBALLS: number = 99;" (src/data/pokeball.ts)
+ * Taken from the reward screen, SelectModifierPhase.applyModifier -> BattleScene.addModifier runs apply() and shows
+ * no text. Given by ModifierRewardPhase.doReward (addModifier, then the text below), the text is
+ * "i18next.t("battle:rewardGain", { modifierName: newModifier?.type.name })", i.e. "5× Poké Ball".
+ * reward-core has no application for Poke Balls (its pools.c only reads the same 99 for hasMaximumBalls), so the rule
+ * is game-core's; tools/applydiff.sh compares it with upstream's own classes (tests/pokeball.producer.test.ts). */
+#define GC_MAX_PER_TYPE_POKEBALLS 99
+
+/* AddPokeballModifierType's pokeballType and count for a reward item; -1 = not a Poke Ball reward */
+static int pokeball_reward(int item, int *count)
+{
+    switch (item) {
+    case PR_ITEM_POKEBALL: *count = 5; return POKEBALL_TYPE_POKEBALL;
+    case PR_ITEM_GREAT_BALL: *count = 5; return POKEBALL_TYPE_GREAT_BALL;
+    case PR_ITEM_ULTRA_BALL: *count = 5; return POKEBALL_TYPE_ULTRA_BALL;
+    case PR_ITEM_ROGUE_BALL: *count = 5; return POKEBALL_TYPE_ROGUE_BALL;
+    case PR_ITEM_MASTER_BALL: *count = 1; return POKEBALL_TYPE_MASTER_BALL;
+    default: return -1;
+    }
+}
+
+/* AddPokeballModifier.apply, for the reward whose key is `key`; false = not a Poke Ball reward, nothing changed */
+bool gc_reward_add_pokeballs(gc_run *run, const char *key)
+{
+    int count = 0;
+    const int item = gc_reward_item_index(key);
+    const int ball = item < 0 ? -1 : pokeball_reward(item, &count);
+    if (ball < 0) return false;
+    const int total = run->pokeballs[ball] + count;
+    run->pokeballs[ball] = (uint8_t)(total < GC_MAX_PER_TYPE_POKEBALLS ? total : GC_MAX_PER_TYPE_POKEBALLS);
+    return true;
+}
+
+/* ModifierRewardPhase.doReward: the reward is added as it is, then the text names it. A Poke Ball's name is
+ * AddPokeballModifierType.name, "{{modifierCount}}× {{pokeballName}}": its two values ride on the message and the
+ * name nests that key ($t() takes the message's own values), so the text is the locale's, not ours. */
+void gc_reward_gain(gc_run *run, const char *key)
+{
+    static const char *const ball_name[] = {"pokeball:pokeBall", "pokeball:greatBall", "pokeball:ultraBall",
+                                            "pokeball:rogueBall", "pokeball:masterBall"};
+    int count = 0;
+    const int item = gc_reward_item_index(key);
+    const int ball = item < 0 ? -1 : pokeball_reward(item, &count);
+    gc_port_give_reward(run, key);
+    if (ball < 0) {
+        gc_ev_msg(run, "battle:rewardGain", 1, gc_m_item("modifierName", key));
+        return;
+    }
+    gc_ev_msg(run, "battle:rewardGain", 3,
+              (pr_msg_arg){"modifierName", PR_ARG_TEMPLATE, 0, "$t(modifierType:ModifierType.AddPokeballModifierType.name)"},
+              pr_arg_int("modifierCount", count), pr_arg_key("pokeballName", ball_name[ball]));
+}
 
 static bool core_applies(int item)
 {
     switch (item) {
-    case PR_ITEM_POKEBALL: case PR_ITEM_GREAT_BALL: case PR_ITEM_ULTRA_BALL: case PR_ITEM_ROGUE_BALL: case PR_ITEM_MASTER_BALL:
     case PR_ITEM_RARE_CANDY: case PR_ITEM_RARER_CANDY:
     case PR_ITEM_POTION: case PR_ITEM_SUPER_POTION: case PR_ITEM_HYPER_POTION: case PR_ITEM_MAX_POTION:
     case PR_ITEM_FULL_RESTORE: case PR_ITEM_REVIVE: case PR_ITEM_MAX_REVIVE: case PR_ITEM_SACRED_ASH:
@@ -457,15 +507,7 @@ int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, co
     if (lifecycle != GC_APPLY_UNHANDLED) return lifecycle;
     if (item < 0) return GC_APPLY_UNHANDLED;
 
-    if (item == PR_ITEM_POKEBALL || item == PR_ITEM_GREAT_BALL || item == PR_ITEM_ULTRA_BALL ||
-        item == PR_ITEM_ROGUE_BALL || item == PR_ITEM_MASTER_BALL) {
-        const int ball = item - PR_ITEM_POKEBALL;
-        const int add = item == PR_ITEM_MASTER_BALL ? 1 : 5;
-        const int count = run->pokeballs[ball] + add;
-        run->pokeballs[ball] = (uint8_t)(count > 99 ? 99 : count);
-        gc_ev_msg(run, "battle:rewardGain", 1, gc_m_item("modifierName", o->key));
-        return GC_APPLY_DONE;
-    }
+    if (gc_reward_add_pokeballs(run, o->key)) return GC_APPLY_DONE;   /* no text: addModifier shows none */
 
     if (item == PR_ITEM_TM_COMMON || item == PR_ITEM_TM_GREAT || item == PR_ITEM_TM_ULTRA) {
         int k;

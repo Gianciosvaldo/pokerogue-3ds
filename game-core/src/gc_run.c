@@ -97,13 +97,13 @@ pr_msg_arg gc_m_trainer(gc_run *run, const char *name, int which)
 /* modifierType.name: "modifierType:ModifierType.<KEY>.name" for the plain modifier types */
 pr_msg_arg gc_m_item(const char *name, const char *item_key)
 {
-    static struct { char item[32]; char key[72]; } pool[48];
+    static struct { const char *item; char key[72]; } pool[48];
     static int n_pool;
     pr_msg_arg a = {name, PR_ARG_STR, 0, item_key};
     for (int i = 0; i < n_pool; i++)
-        if (!strcmp(pool[i].item, item_key)) { a.kind = PR_ARG_KEY; a.s = pool[i].key; return a; }
+        if (pool[i].item == item_key || !strcmp(pool[i].item, item_key)) { a.kind = PR_ARG_KEY; a.s = pool[i].key; return a; }
     if (n_pool >= 48) return a;
-    snprintf(pool[n_pool].item, sizeof pool[n_pool].item, "%s", item_key);
+    pool[n_pool].item = item_key;
     snprintf(pool[n_pool].key, sizeof pool[n_pool].key, "modifierType:ModifierType.%s.name", item_key);
     a.kind = PR_ARG_KEY;
     a.s = pool[n_pool++].key;
