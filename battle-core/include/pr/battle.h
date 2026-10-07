@@ -84,6 +84,7 @@ enum {
     PR_MOD_RESET_NEGATIVE_STAT_STAGE,/* White Herb */
     PR_MOD_BERRY,                    /* Berries */
     PR_MOD_TURN_STATUS_EFFECT,       /* Toxic Orb / Flame Orb; status_effect selects identity */
+    PR_MOD_MOVE_ACCURACY_BOOSTER,    /* Wide Lens: num=accuracyAmount (5) */
     PR_MOD_COUNT_
 };
 extern const uint8_t pr_mod_parent[PR_MOD_COUNT_];
@@ -552,6 +553,7 @@ void pr_apply_temp_stat_stage_booster_modifiers(pr_battle *bt, bool player, int 
 void pr_apply_crit_booster_modifiers(pr_battle *bt, const pr_pokemon *src, int *stage);
 void pr_apply_temp_crit_booster_modifiers(pr_battle *bt, bool player, int *stage);
 void pr_apply_attack_type_booster_modifiers(pr_battle *bt, const pr_pokemon *src, int move_type, double *power);
+void pr_apply_accuracy_booster_modifiers(pr_battle *bt, const pr_pokemon *p, double *accuracy);
 void pr_apply_turn_status_modifiers(pr_battle *bt, struct pr_engine *e, pr_pokemon *p);
 void pr_apply_turn_heal_modifiers(pr_battle *bt, struct pr_engine *e, pr_pokemon *p);
 void pr_apply_hit_heal_modifiers(pr_battle *bt, struct pr_engine *e, pr_pokemon *p);

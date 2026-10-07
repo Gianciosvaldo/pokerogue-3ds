@@ -48,6 +48,7 @@ const uint8_t pr_mod_parent[PR_MOD_COUNT_] = {
     [PR_MOD_RESET_NEGATIVE_STAT_STAGE] = PR_MOD_HELD_ITEM,
     [PR_MOD_BERRY] = PR_MOD_HELD_ITEM,
     [PR_MOD_TURN_STATUS_EFFECT] = PR_MOD_HELD_ITEM,
+    [PR_MOD_MOVE_ACCURACY_BOOSTER] = PR_MOD_HELD_ITEM,
 };
 
 const char *const pr_mod_class_name[PR_MOD_COUNT_] = {
@@ -86,6 +87,7 @@ const char *const pr_mod_class_name[PR_MOD_COUNT_] = {
     [PR_MOD_RESET_NEGATIVE_STAT_STAGE] = "ResetNegativeStatStageModifier",
     [PR_MOD_BERRY] = "BerryModifier",
     [PR_MOD_TURN_STATUS_EFFECT] = "TurnStatusEffectModifier",
+    [PR_MOD_MOVE_ACCURACY_BOOSTER] = "PokemonMoveAccuracyBoosterModifier",
 };
 
 int pr_mod_class_by_name(const char *name)
@@ -118,6 +120,8 @@ bool pr_mod_is_ported_item(const pr_modifier *m)
             || m->berry_type == BERRY_TYPE_LANSAT
             || m->berry_type == BERRY_TYPE_STARF;
     }
+    if (m->cls == PR_MOD_MOVE_ACCURACY_BOOSTER)
+        return !m->unknown_subclass && m->num == 5;
     if (m->cls == PR_MOD_TURN_STATUS_EFFECT)
         return !m->unknown_subclass && (m->status_effect == STATUS_EFFECT_TOXIC || m->status_effect == STATUS_EFFECT_BURN);
     int cls = m->cls;
@@ -639,6 +643,23 @@ void pr_apply_attack_type_booster_modifiers(pr_battle *bt, const pr_pokemon *src
     EACH_MOD(m, bt, src->is_player, PR_MOD_ATTACK_TYPE_BOOSTER) {
         if (!held_applies(m, src) || m->move_type != move_type) continue;
         if (*power >= 1) *power = floor(*power * (1 + pr_mod_get_stack_count(m) * m->mult));
+    }
+}
+
+/* PokemonMoveAccuracyBoosterModifier: shouldApply requires the matching holder
+ * and a NumberHolder; apply adds accuracyAmount * getStackCount(), without RNG.
+ * Only the pinned Wide Lens identity (amount 5) is bounded here. */
+void pr_apply_accuracy_booster_modifiers(pr_battle *bt, const pr_pokemon *p, double *accuracy)
+{
+    if (!accuracy) return;
+    pr_modifier *m;
+    EACH_MOD(m, bt, p->is_player, PR_MOD_MOVE_ACCURACY_BOOSTER) {
+        if (!held_applies(m, p)) continue;
+        if (!pr_mod_is_ported_item(m)) {
+            pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
+            continue;
+        }
+        *accuracy += m->num * pr_mod_get_stack_count(m);
     }
 }
 
