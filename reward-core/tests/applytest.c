@@ -12,6 +12,7 @@ static uint16_t parse_item_key(const char *key) {
     if (strcmp(key, "FULL_RESTORE") == 0) return PR_ITEM_FULL_RESTORE;
     if (strcmp(key, "REVIVE") == 0) return PR_ITEM_REVIVE;
     if (strcmp(key, "MAX_REVIVE") == 0) return PR_ITEM_MAX_REVIVE;
+    if (strcmp(key, "FULL_HEAL") == 0) return PR_ITEM_FULL_HEAL;
     if (strcmp(key, "SACRED_ASH") == 0) return PR_ITEM_SACRED_ASH;
     if (strcmp(key, "ETHER") == 0) return PR_ITEM_ETHER;
     if (strcmp(key, "MAX_ETHER") == 0) return PR_ITEM_MAX_ETHER;
@@ -415,11 +416,98 @@ static void test_fusion_status_input(void) {
     puts("PASS: fusion_status_input unit tests");
 }
 
+static void test_full_heal_apply(void) {
+    pr_reward_ctx ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.n_party = 1;
+    pr_reward_mon *p = &ctx.party[0];
+    p->id = 1;
+    p->hp = 100;
+    p->max_hp = 100;
+
+    const char *msg = NULL;
+
+    /* Refuse healthy mon (status == 0) */
+    p->status = 0;
+    if (pr_reward_apply(&ctx, PR_ITEM_FULL_HEAL, 0, 0, -1, &msg) || !msg || strcmp(msg, "It won’t have any effect.") != 0) {
+        fprintf(stderr, "FAIL: Full Heal on healthy target\n");
+        exit(1);
+    }
+
+    /* Refuse fainted mon (hp == 0) */
+    p->hp = 0;
+    p->status = 1;
+    if (pr_reward_apply(&ctx, PR_ITEM_FULL_HEAL, 0, 0, -1, &msg) || !msg || strcmp(msg, "It won’t have any effect.") != 0) {
+        fprintf(stderr, "FAIL: Full Heal on fainted target\n");
+        exit(1);
+    }
+
+    /* Test every non-volatile status effect */
+    static const uint8_t statuses[] = {1, 2, 3, 4, 5, 6}; /* POISON, TOXIC, PARALYSIS, SLEEP, FREEZE, BURN */
+    for (size_t i = 0; i < sizeof(statuses)/sizeof(statuses[0]); i++) {
+        memset(&ctx, 0, sizeof(ctx));
+        ctx.n_party = 1;
+        p = &ctx.party[0];
+        p->id = 1;
+        p->hp = 50;
+        p->max_hp = 100;
+        p->status = statuses[i];
+
+        msg = "INIT";
+        if (!pr_reward_apply(&ctx, PR_ITEM_FULL_HEAL, 0, 0, -1, &msg) || msg != NULL || p->status != 0 || p->hp != 50) {
+            fprintf(stderr, "FAIL: Full Heal on status %d\n", statuses[i]);
+            exit(1);
+        }
+    }
+
+#define HEAL_CHECK(cond, what) do { if (!(cond)) { fprintf(stderr, "FAIL: Full Heal %s\n", what); exit(1); } } while (0)
+    /* confusion with no status is enough to be accepted; the cure shows "snapped out of confusion" */
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.n_party = 2;
+    for (int k = 0; k < 2; k++) { ctx.party[k].id = k + 1; ctx.party[k].hp = 50; ctx.party[k].max_hp = 100; ctx.party[k].status_sleep_turns = ctx.party[k].status_freeze_turns = -1; }
+    ctx.party[1].confused = true;
+    msg = "INIT";
+    HEAL_CHECK(pr_reward_apply(&ctx, PR_ITEM_FULL_HEAL, 0, 1, -1, &msg) && msg == NULL, "on a confused target with no status");
+    HEAL_CHECK(!ctx.party[1].confused && ctx.party[1].status == 0 && ctx.party[1].hp == 50, "confusion cured, nothing else changed");
+    HEAL_CHECK(ctx.n_apply_texts == 1 && ctx.party[1].confused == false && ctx.apply_texts[0].party_idx == 1 &&
+               strcmp(ctx.apply_texts[0].key, "battlerTags:confusedOnRemove") == 0, "confusion text");
+    HEAL_CHECK(!pr_reward_apply(&ctx, PR_ITEM_FULL_HEAL, 0, 1, -1, &msg) && ctx.n_apply_texts == 0, "again on the cured target (refused, texts reset)");
+    /* a status and a confusion: both go, one text; Nightmare goes only with a sleep */
+    ctx.party[0].status = STATUS_EFFECT_SLEEP; ctx.party[0].status_sleep_turns = 3; ctx.party[0].nightmare = true; ctx.party[0].confused = true;
+    HEAL_CHECK(pr_reward_apply(&ctx, PR_ITEM_FULL_HEAL, 0, 0, -1, &msg), "on a sleeper with Nightmare and confusion");
+    HEAL_CHECK(ctx.party[0].status == 0 && ctx.party[0].status_sleep_turns == -1 && !ctx.party[0].nightmare && !ctx.party[0].confused &&
+               ctx.n_apply_texts == 1, "sleep, Nightmare and confusion all cleared");
+    ctx.party[0].status = STATUS_EFFECT_TOXIC; ctx.party[0].status_toxic_turns = 4; ctx.party[0].nightmare = true;
+    HEAL_CHECK(pr_reward_apply(&ctx, PR_ITEM_FULL_HEAL, 0, 0, -1, &msg), "on a toxic target");
+    HEAL_CHECK(ctx.party[0].status == 0 && ctx.party[0].status_toxic_turns == 0 && ctx.party[0].nightmare && ctx.n_apply_texts == 0,
+               "toxic counter reset, Nightmare kept without a sleep, no text without confusion");
+    /* Full Restore uses the same rule: at full HP a confusion alone is enough */
+    ctx.party[0].hp = 100; ctx.party[0].nightmare = false; ctx.party[0].confused = true;
+    HEAL_CHECK(pr_reward_apply(&ctx, PR_ITEM_FULL_RESTORE, 0, 0, -1, &msg) && !ctx.party[0].confused && ctx.n_apply_texts == 1,
+               "Full Restore at full HP on a confused target");
+    HEAL_CHECK(!pr_reward_apply(&ctx, PR_ITEM_FULL_RESTORE, 0, 0, -1, &msg), "Full Restore at full HP on a healthy target");
+#undef HEAL_CHECK
+
+    printf("PASS: full_heal_apply unit tests\n");
+}
+
+/* the producer writes a refusal's text with its spaces as '_', and "OK" when upstream accepted it */
+static bool same_msg(const char *msg, const char *exp) {
+    if (!msg) return strcmp(exp, "OK") == 0;
+    size_t n = strlen(msg);
+    if (strlen(exp) != n) return false;
+    for (size_t i = 0; i < n; i++) {
+        if ((msg[i] == ' ' ? '_' : msg[i]) != exp[i]) return false;
+    }
+    return true;
+}
+
 int main(int argc, char **argv) {
     test_passive_multipliers();
     test_transfer_and_stealing();
     test_shop_economy_and_lock_capsule();
     test_fusion_status_input();
+    test_full_heal_apply();
 
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <cases file>\n", argv[0]);
@@ -432,11 +520,11 @@ int main(int argc, char **argv) {
     }
 
     char line[4096];
-    int cases = 0, pass = 0, fail = 0;
-    int item_counts[21] = {0};
-    const char *item_keys[21] = {
+    int cases = 0, pass = 0, fail = 0, texts_compared = 0;
+    int item_counts[22] = {0};
+    const char *item_keys[22] = {
         "POTION", "SUPER_POTION", "HYPER_POTION", "MAX_POTION", "FULL_RESTORE",
-        "REVIVE", "MAX_REVIVE", "SACRED_ASH",
+        "REVIVE", "MAX_REVIVE", "FULL_HEAL", "SACRED_ASH",
         "ETHER", "MAX_ETHER", "ELIXIR", "MAX_ELIXIR",
         "PP_UP", "PP_MAX",
         "EVOLUTION_ITEM", "RARE_EVOLUTION_ITEM",
@@ -459,9 +547,13 @@ int main(int argc, char **argv) {
             int target_move_idx = (int)num(&p);
             uint32_t challenges = (uint32_t)num(&p);
             int n_party = (int)num(&p);
+            /* the arena the upstream run was in: evolution conditions read it */
+            int time_of_day = (int)num(&p);
+            int biome = (int)num(&p);
+            int weather = (int)num(&p);
 
             uint16_t item_id = parse_item_key(key);
-            for (int k = 0; k < 21; k++) {
+            for (int k = 0; k < 22; k++) {
                 if (strcmp(key, item_keys[k]) == 0) {
                     item_counts[k]++;
                     break;
@@ -472,6 +564,9 @@ int main(int argc, char **argv) {
             memset(&ctx, 0, sizeof(ctx));
             ctx.challenges = challenges;
             ctx.n_party = n_party;
+            ctx.time_of_day = time_of_day;
+            ctx.biome = biome;
+            ctx.weather = weather;
 
             for (int i = 0; i < n_party; i++) {
                 if (!fgets(line, sizeof(line), f) || line[0] != 'P') break;
@@ -520,6 +615,11 @@ int main(int argc, char **argv) {
                 for(int s=0;s<6;s++)m->stats[s]=(int32_t)num(&pp);
                 m->ability_index=(int8_t)num(&pp);m->shiny=num(&pp)!=0;
                 m->variant=(uint8_t)num(&pp);m->luck=(uint8_t)num(&pp);
+                m->status_toxic_turns = (int16_t)num(&pp);
+                m->status_sleep_turns = (int16_t)num(&pp);
+                m->status_freeze_turns = (int16_t)num(&pp);
+                m->confused = num(&pp) != 0;
+                m->nightmare = num(&pp) != 0;
             }
 
             /* Read items */
@@ -557,49 +657,95 @@ int main(int argc, char **argv) {
             char *rp = line + 1;
             int exp_applied = (int)num(&rp);
             char exp_msg[128];
-            sscanf(rp, "%127s", exp_msg);
-            while (*rp && *rp != ' ') rp++;
+            if (sscanf(rp, "%127s", exp_msg) != 1) return 2;
             while (*rp == ' ') rp++;
             while (*rp && *rp != ' ') rp++;
+            int exp_texts = (int)num(&rp);
+            char exp_text[PR_REWARD_MAX_TEXTS + 4][96];
+            if (exp_texts < 0 || exp_texts > PR_REWARD_MAX_TEXTS + 4) return 2;
+            for (int t = 0; t < exp_texts; t++) {
+                if (sscanf(rp, "%95s", exp_text[t]) != 1) return 2;
+                while (*rp == ' ') rp++;
+                while (*rp && *rp != ' ') rp++;
+            }
 
             bool ok = (res == (exp_applied != 0));
             char diff_reason[256] = "";
 
             if (!ok) {
                 snprintf(diff_reason, sizeof(diff_reason), "result mismatch: C res=%d, exp_applied=%d", res ? 1 : 0, exp_applied);
+            } else if (res ? (msg != NULL || strcmp(exp_msg, "OK") != 0)
+                          /* an item without a select filter (Sacred Ash with nobody fainted) has no upstream
+                           * text to compare: upstream's apply just returns false */
+                          : (strcmp(exp_msg, "OK") != 0 && !same_msg(msg, exp_msg))) {
+                ok = false;
+                snprintf(diff_reason, sizeof(diff_reason), "refusal text: C=%.60s, exp=%.60s", msg ? msg : "(none)", exp_msg);
+            } else if ((int)ctx.n_apply_texts != exp_texts) {
+                ok = false;
+                snprintf(diff_reason, sizeof(diff_reason), "text count mismatch: C=%d, exp_texts=%d (first exp %.60s)",
+                         ctx.n_apply_texts, exp_texts, exp_texts ? exp_text[0] : "-");
             } else {
-                for (int i = 0; i < ctx.n_party && ok; i++) {
-                    int exp_hp = (int)num(&rp);
-                    int exp_status = (int)num(&rp);
-                    int exp_n_moves = (int)num(&rp);
-                    if (ctx.party[i].hp != exp_hp) {
+                for (int t = 0; t < exp_texts && ok; t++) {
+                    char got[96];
+                    snprintf(got, sizeof got, "queue:%s", ctx.apply_texts[t].key);
+                    if (strcmp(got, exp_text[t]) != 0 || ctx.apply_texts[t].party_idx != target_party_idx) {
                         ok = false;
-                        snprintf(diff_reason, sizeof(diff_reason), "p[%d].hp: C=%d, exp=%d", i, ctx.party[i].hp, exp_hp);
-                        break;
+                        snprintf(diff_reason, sizeof(diff_reason), "text %d: C=%.60s (p%d), exp=%.60s (p%d)", t, got,
+                                 ctx.apply_texts[t].party_idx, exp_text[t], target_party_idx);
                     }
-                    if (ctx.party[i].status != exp_status) {
+                }
+                if (exp_texts && ok) texts_compared++;
+            }
+            for (int i = 0; i < ctx.n_party && ok; i++) {
+                int exp_hp = (int)num(&rp);
+                int exp_status = (int)num(&rp);
+                int exp_toxic = (int)num(&rp);
+                int exp_sleep = (int)num(&rp);
+                int exp_freeze = (int)num(&rp);
+                int exp_confused = (int)num(&rp);
+                int exp_nightmare = (int)num(&rp);
+                int exp_n_moves = (int)num(&rp);
+                if (ctx.party[i].hp != exp_hp) {
+                    ok = false;
+                    snprintf(diff_reason, sizeof(diff_reason), "p[%d].hp: C=%d, exp=%d", i, ctx.party[i].hp, exp_hp);
+                    break;
+                }
+                if (ctx.party[i].status != exp_status) {
+                    ok = false;
+                    snprintf(diff_reason, sizeof(diff_reason), "p[%d].status: C=%d, exp=%d", i, ctx.party[i].status, exp_status);
+                    break;
+                }
+                if (ctx.party[i].status_toxic_turns != exp_toxic || ctx.party[i].status_sleep_turns != exp_sleep ||
+                    ctx.party[i].status_freeze_turns != exp_freeze) {
+                    ok = false;
+                    snprintf(diff_reason, sizeof(diff_reason), "p[%d] counters (toxic,sleep,freeze): C=(%d,%d,%d), exp=(%d,%d,%d)", i,
+                             ctx.party[i].status_toxic_turns, ctx.party[i].status_sleep_turns, ctx.party[i].status_freeze_turns,
+                             exp_toxic, exp_sleep, exp_freeze);
+                    break;
+                }
+                if ((int)ctx.party[i].confused != exp_confused || (int)ctx.party[i].nightmare != exp_nightmare) {
+                    ok = false;
+                    snprintf(diff_reason, sizeof(diff_reason), "p[%d] tags (confused,nightmare): C=(%d,%d), exp=(%d,%d)", i,
+                             ctx.party[i].confused, ctx.party[i].nightmare, exp_confused, exp_nightmare);
+                    break;
+                }
+                if (ctx.party[i].n_moves != exp_n_moves) {
+                    ok = false;
+                    snprintf(diff_reason, sizeof(diff_reason), "p[%d].n_moves: C=%d, exp=%d", i, ctx.party[i].n_moves, exp_n_moves);
+                    break;
+                }
+                for (int m = 0; m < ctx.party[i].n_moves; m++) {
+                    int exp_pp_used = (int)num(&rp);
+                    int exp_pp_up = (int)num(&rp);
+                    int exp_max_pp = (int)num(&rp);
+                    if (ctx.party[i].moves[m].pp_used != exp_pp_used ||
+                        ctx.party[i].moves[m].pp_up != exp_pp_up ||
+                        ctx.party[i].moves[m].max_pp != exp_max_pp) {
                         ok = false;
-                        snprintf(diff_reason, sizeof(diff_reason), "p[%d].status: C=%d, exp=%d", i, ctx.party[i].status, exp_status);
+                        snprintf(diff_reason, sizeof(diff_reason), "p[%d].m[%d]: C=(used:%d,up:%d,max:%d), exp=(used:%d,up:%d,max:%d)",
+                                 i, m, ctx.party[i].moves[m].pp_used, ctx.party[i].moves[m].pp_up, ctx.party[i].moves[m].max_pp,
+                                 exp_pp_used, exp_pp_up, exp_max_pp);
                         break;
-                    }
-                    if (ctx.party[i].n_moves != exp_n_moves) {
-                        ok = false;
-                        snprintf(diff_reason, sizeof(diff_reason), "p[%d].n_moves: C=%d, exp=%d", i, ctx.party[i].n_moves, exp_n_moves);
-                        break;
-                    }
-                    for (int m = 0; m < ctx.party[i].n_moves; m++) {
-                        int exp_pp_used = (int)num(&rp);
-                        int exp_pp_up = (int)num(&rp);
-                        int exp_max_pp = (int)num(&rp);
-                        if (ctx.party[i].moves[m].pp_used != exp_pp_used ||
-                            ctx.party[i].moves[m].pp_up != exp_pp_up ||
-                            ctx.party[i].moves[m].max_pp != exp_max_pp) {
-                            ok = false;
-                            snprintf(diff_reason, sizeof(diff_reason), "p[%d].m[%d]: C=(used:%d,up:%d,max:%d), exp=(used:%d,up:%d,max:%d)",
-                                     i, m, ctx.party[i].moves[m].pp_used, ctx.party[i].moves[m].pp_up, ctx.party[i].moves[m].max_pp,
-                                     exp_pp_used, exp_pp_up, exp_max_pp);
-                            break;
-                        }
                     }
                 }
             }
@@ -618,8 +764,9 @@ int main(int argc, char **argv) {
 
     printf("== apply\n");
     printf("cases %d: pass %d, fail %d\n", cases, pass, fail);
+    printf("cases with an upstream text compared: %d\n", texts_compared);
     printf("cases per item:\n");
-    for (int k = 0; k < 21; k++) {
+    for (int k = 0; k < 22; k++) {
         printf("  %-22s: %d\n", item_keys[k], item_counts[k]);
     }
 

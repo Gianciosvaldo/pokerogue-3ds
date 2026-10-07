@@ -9,17 +9,20 @@ import { speciesDataRegistry } from "#app/globals/global-species-data-registry";
 import { allMoves, modifierTypes } from "#data/data-lists";
 import { SpeciesFormChangeItemTrigger } from "#data/form-change-triggers";
 import { Status } from "#data/status-effect";
+import { BattlerTagType } from "#enums/battler-tag-type";
 import { Challenges } from "#enums/challenges";
 import { FormChangeItem } from "#enums/form-change-item";
 import { GameModes } from "#enums/game-modes";
 import { MoveId } from "#enums/move-id";
 import { SpeciesId } from "#enums/species-id";
 import { StatusEffect } from "#enums/status-effect";
+import { getPokemonNameWithAffix } from "#app/messages";
 import { PokemonHeldItemModifier } from "#modifiers/modifier";
 import { PokemonMove } from "#moves/pokemon-move";
 import { EvolutionItemModifierType, FormChangeItemModifierType, PokemonMoveModifierType } from "#modifiers/modifier-type";
 import { GameManager } from "#test/framework/game-manager";
 import * as fs from "node:fs";
+import i18next from "i18next";
 import Phaser from "phaser";
 import { it, vi } from "vitest";
 import * as statusHelpers from "#data/status-effect";
@@ -43,13 +46,28 @@ it("reward apply producer", async () => {
 
   const itemKeys = [
     "POTION", "SUPER_POTION", "HYPER_POTION", "MAX_POTION", "FULL_RESTORE",
-    "REVIVE", "MAX_REVIVE", "SACRED_ASH",
+    "REVIVE", "MAX_REVIVE", "FULL_HEAL", "SACRED_ASH",
     "ETHER", "MAX_ETHER", "ELIXIR", "MAX_ELIXIR",
     "PP_UP", "PP_MAX",
     "EVOLUTION_ITEM", "RARE_EVOLUTION_ITEM",
     "FORM_CHANGE_ITEM", "RARE_FORM_CHANGE_ITEM",
     "MEGA_BRACELET", "DYNAMAX_BAND", "DNA_SPLICERS",
   ];
+
+  // Every text the application shows goes through phaseManager.queueMessage (what the tags and modifiers use)
+  // or ui.showText. Both are only observed (pass-through spies), never replaced, so upstream runs as it would.
+  // Each text is recorded as the locale key that made it (i18next.t results are remembered while recording), so
+  // the C side can compare keys without carrying the English strings.
+  let recording = false;
+  const keyOfText = new Map<string, { key: string; name?: string }>();
+  const realT = i18next.t.bind(i18next);
+  vi.spyOn(i18next, "t").mockImplementation(((key: any, opts?: any) => {
+    const text = realT(key, opts);
+    if (recording) keyOfText.set(String(text), { key: String(key), name: opts?.pokemonNameWithAffix });
+    return text;
+  }) as any);
+  const queued = vi.spyOn(scene.phaseManager, "queueMessage");
+  const showText = scene.ui ? vi.spyOn(scene.ui, "showText") : null;
 
   const evoItemIds = Object.values(EvolutionItem).filter((v): v is number => typeof v === "number" && v > 0);
   const formChangeItemIds = Object.values(FormChangeItem).filter((v): v is number => typeof v === "number" && v > 0);
@@ -122,7 +140,21 @@ it("reward apply producer", async () => {
         const r = rnd(8);
         p.hp = r < 2 ? max : r === 2 ? 0 : 1 + rnd(max);
         const st = p.hp === 0 ? (rnd(2) === 0 ? StatusEffect.FAINT : 0) : rnd(3) === 0 ? pick(statuses) : 0;
-        p.status = st ? new Status(st) : null;
+        // The Status object's counters: toxic's turn count, sleep's and freeze's turns remaining
+        p.status = st
+          ? new Status(
+              st,
+              st === StatusEffect.TOXIC ? rnd(6) : 0,
+              st === StatusEffect.SLEEP ? 1 + rnd(4) : undefined,
+              st === StatusEffect.FREEZE ? 1 + rnd(3) : undefined,
+            )
+          : null;
+        // Tags live in summonData and survive to the reward screen; a fainted Pokemon has none (FaintPhase).
+        // Confusion alone, with a status, and Nightmare on sleepers (and now and then on others).
+        if (p.hp > 0) {
+          if (rnd(8) < 3) p.addTag(BattlerTagType.CONFUSED, 2 + rnd(4), MoveId.CONFUSE_RAY);
+          if (st === StatusEffect.SLEEP ? rnd(2) === 0 : rnd(16) === 0) p.addTag(BattlerTagType.NIGHTMARE);
+        }
         party.push(p);
       }
 
@@ -211,7 +243,12 @@ it("reward apply producer", async () => {
       }
 
       // Record input state for C
-      lines.push(["A", itemKey, arg, targetPartyIdx, targetMoveIdx, challenges, party.length].join(" "));
+      // The arena's time of day, biome and weather are evolution conditions: getTimeOfDay() follows a random
+      // per-game waveCycleOffset, so they have to travel with the case.
+      lines.push([
+        "A", itemKey, arg, targetPartyIdx, targetMoveIdx, challenges, party.length,
+        scene.arena.getTimeOfDay(), scene.arena.biomeId, scene.arena.weatherType,
+      ].join(" "));
       for (const p of party) {
         const ms = p.getMoveset();
         const baseMs = p.moveset;
@@ -227,6 +264,8 @@ it("reward apply producer", async () => {
             ms.length, ...ms.flatMap((m: any) => [m.moveId, m.ppUsed, m.ppUp, m.getMovePp()]),
             baseMs.length, ...baseMs.map((m: any) => m.moveId),
             ...p.ivs,...p.stats,p.abilityIndex,p.shiny?1:0,p.variant,p.luck,
+            p.status?.toxicTurnCount ?? 0, p.status?.sleepTurnsRemaining ?? -1, p.status?.freezeTurnsRemaining ?? -1,
+            p.getTag(BattlerTagType.CONFUSED) ? 1 : 0, p.getTag(BattlerTagType.NIGHTMARE) ? 1 : 0,
           ].join(" "),
         );
       }
@@ -253,6 +292,10 @@ it("reward apply producer", async () => {
       }
 
       fusionDraws=[];
+      queued.mockClear();
+      showText?.mockClear();
+      keyOfText.clear();
+      recording = true;
       let applied = false;
       if (filterMsg === null) {
         let mod: any;
@@ -271,15 +314,32 @@ it("reward apply producer", async () => {
         }
       }
 
+      recording = false;
       if(fusionDraws.length>1) throw new Error("unexpected fusion draw count");
       lines.push(["D",fusionDraws.length,...fusionDraws].join(" "));
 
-      // Record result state after upstream apply
+      // The texts it showed, in order, as "queue:<locale key>" / "show:<locale key>" (a text no i18next.t made
+      // is kept as "queue:text:<text>"). One naming a Pokemon must name the target, the only one an item acts on.
+      const shown: string[] = [];
+      const note = (via: string, text: unknown) => {
+        const hit = keyOfText.get(String(text));
+        if (hit?.name !== undefined && hit.name !== getPokemonNameWithAffix(targetMon)) {
+          throw new Error(`text names another Pokemon: ${text}`);
+        }
+        shown.push(`${via}:${hit ? hit.key : `text:${String(text).replace(/\s+/g, "_")}`}`);
+      };
+      for (const c of queued.mock.calls) note("queue", c[0]);
+      for (const c of showText?.mock.calls ?? []) note("show", c[0]);
+
+      // Record result state after upstream apply: hp, status and its counters, the two tags, the moves
       const outMon = party.flatMap((p: any) => [
-        p.hp, p.status?.effect ?? 0, p.moveset.length,
+        p.hp, p.status?.effect ?? 0,
+        p.status?.toxicTurnCount ?? 0, p.status?.sleepTurnsRemaining ?? -1, p.status?.freezeTurnsRemaining ?? -1,
+        p.getTag(BattlerTagType.CONFUSED) ? 1 : 0, p.getTag(BattlerTagType.NIGHTMARE) ? 1 : 0,
+        p.moveset.length,
         ...p.moveset.flatMap((m: any) => [m.ppUsed, m.ppUp, m.getMovePp()]),
       ]);
-      lines.push(["R", applied ? 1 : 0, filterMsg ? filterMsg.replace(/\s+/g, "_") : "OK", ...outMon].join(" "));
+      lines.push(["R", applied ? 1 : 0, filterMsg ? filterMsg.replace(/\s+/g, "_") : "OK", shown.length, ...shown, ...outMon].join(" "));
       lines.push("E");
     } catch (e) {
       thrown++;
