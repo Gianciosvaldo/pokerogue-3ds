@@ -141,6 +141,11 @@ typedef struct {
     int32_t hp, max_hp;           /* hp, getMaxHp() */
     uint8_t status;               /* status.effect (StatusEffect), 0 = none */
     uint8_t nature;               /* getNature() */
+    /* Mint caller contract: preserve Pokemon.nature separately from customPokemonData.nature.
+     * Explicit input is required; custom_nature -1 means no override. nature remains getNature(). */
+    bool has_explicit_nature;
+    uint8_t base_nature;
+    int8_t custom_nature;
     int8_t tera_type;             /* teraType */
     uint8_t friendship;
     uint16_t ability;             /* getAbility(true).id */
@@ -215,6 +220,7 @@ typedef struct {
 #define PR_REWARD_MAX_PARTY 6
 #define PR_REWARD_MAX_OWNED 256
 #define PR_REWARD_MAX_EVOLUTION_EVENTS 8
+#define PR_REWARD_MAX_NATURE_EVENTS 8
 /* In enqueue (unshiftNew call) order; the phase runner consumes in reverse order.
  * Target species/form belong to the evolving component. Fusion requests retain
  * primary_species as FusionSpeciesFormEvolution does. form_key -1 means null. */
@@ -260,6 +266,11 @@ typedef struct {
     pr_reward_evolution_event evolution_events[PR_REWARD_MAX_EVOLUTION_EVENTS];
     uint8_t n_evolution_events;
     bool evolution_events_overflow; /* no success reported when the request cannot be retained */
+    /* Mint application requests gameData.unlockSpeciesNature(primary species, nature).
+     * Caller executes the real dex/root-unlock/prevolution policy and persists the result.
+     * Consume in recorded order and clear the count; capacity exhaustion refuses mutation. */
+    struct { uint16_t species; uint8_t nature; } nature_unlock_events[PR_REWARD_MAX_NATURE_EVENTS];
+    uint8_t n_nature_unlock_events;
 } pr_reward_ctx;
 
 /* ---- the reward options ---- */
@@ -429,6 +440,11 @@ bool pr_reward_memory_choose(const pr_reward_ctx *ctx, int party_idx, int option
  * msg: if non-NULL, set to "It won’t have any effect." on failure, or NULL on success.
  * Returns true if applied, false if no effect. */
 bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_idx, int move_idx, const char **msg);
+/* Bounded Mint selection + application: all 25 natures, explicit base/custom input,
+ * ordinary and fused species/forms, levels 1..255, permanent/passive Wonder Guard, HP preservation.
+ * Refuses unsupported stat inventories, Flip Stat, unfused Spliced Endless, invalid inputs
+ * or a full unlock-request queue before mutation. No RNG draw; no game-core/dex persistence here. */
+bool pr_reward_apply_mint(pr_reward_ctx *ctx, int nature, int party_idx);
 /* Task 44: LevelIncrementBoosterModifier / PokemonLevelIncrementModifier.
  * Upstream has RARE_CANDY (one party member) and RARER_CANDY (all party members); there is no
  * BITE_SIZED_CANDY in pinned 8555c08. Each Candy Jar stack adds one extra level to either item. */
