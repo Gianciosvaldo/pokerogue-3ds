@@ -152,6 +152,113 @@ typedef struct {
     long taken[5], cases_by_key[5], cap_hit[5], cap_crossed[5], from_zero[5];
 } pokeball_stats;
 
+typedef struct {
+    long cases, replayed, comparisons, mismatches, shown;
+    long taken, refused;
+    long with_charm, status_cured, confusion_cured, nightmare_cured;
+} full_heal_stats;
+
+typedef struct { int hp, max_hp, status, confused, nightmare; } fhmember;
+
+static bool full_heal_case(FILE *f, char *line, size_t cap_line, full_heal_stats *fs)
+{
+    char key[64];
+    char *p = line + 1;
+    word(&p, key, sizeof key);
+    const int target = (int)num(&p), stacks = (int)num(&p), n = (int)num(&p);
+    if (n < 1 || n > 6) { fputs("malformed trace: full heal party size\n", stderr); return false; }
+    fhmember before[6], after[6];
+    memset(before, 0, sizeof before);
+    for (int i = 0; i < n; i++) {
+        if (!fgets(line, (int)cap_line, f) || line[0] != 'P') { fputs("malformed trace: full heal P record\n", stderr); return false; }
+        char *q = line + 1;
+        before[i].hp = (int)num(&q);
+        before[i].max_hp = (int)num(&q);
+        before[i].status = (int)num(&q);
+        before[i].confused = (int)num(&q);
+        before[i].nightmare = (int)num(&q);
+    }
+    if (!fgets(line, (int)cap_line, f) || line[0] != 'R') { fputs("malformed trace: full heal R record\n", stderr); return false; }
+    char *r = line + 1;
+    const int applied = (int)num(&r);
+    char filter[160];
+    word(&r, filter, sizeof filter);
+    const bool filter_ok = !strcmp(filter, "OK");
+    memset(after, 0, sizeof after);
+    for (int i = 0; i < n; i++) {
+        if (!fgets(line, (int)cap_line, f) || line[0] != 'A') { fputs("malformed trace: full heal A record\n", stderr); return false; }
+        char *q = line + 1;
+        after[i].hp = (int)num(&q);
+        after[i].status = (int)num(&q);
+        after[i].confused = (int)num(&q);
+        after[i].nightmare = (int)num(&q);
+    }
+    if (!fgets(line, (int)cap_line, f) || line[0] != 'E') { fputs("malformed trace: full heal E record\n", stderr); return false; }
+
+    fs->cases++;
+    fs->with_charm += stacks > 0;
+    const bool expect_ok = filter_ok && applied;
+
+    for (int purchase = 0; purchase < 2; purchase++) {
+        const int rot = (int)((fs->cases + purchase) % n);
+        member m_before[6];
+        memset(m_before, 0, sizeof m_before);
+        for (int i = 0; i < n; i++) {
+            m_before[i].max_hp = before[i].max_hp;
+            m_before[i].hp = before[i].hp;
+            m_before[i].status = before[i].status;
+        }
+        setup(m_before, n, rot, stacks);
+        for (int i = 0; i < n; i++) {
+            pr_pokemon *b = &run.party[run.party_order[i]].b;
+            if (before[i].confused) pr_add_tag(&run.bt, &run.eng, b, BATTLER_TAG_TYPE_CONFUSED, 3, 0, -1);
+            if (before[i].nightmare) pr_add_tag(&run.bt, &run.eng, b, BATTLER_TAG_TYPE_NIGHTMARE, 0, 0, -1);
+        }
+
+        gc_offer o;
+        memset(&o, 0, sizeof o);
+        o.key = "FULL_HEAL";
+        o.arg = -1;
+        o.target = gc_reward_target("FULL_HEAL");
+        o.cost = purchase ? 400 : 0;
+        const char *why = "";
+        const int party = run.party_order[target];
+        const bool ok = gc_port_apply_reward(&run, &o, party, -1, &why);
+
+        fs->comparisons++;
+        bool bad = false;
+        if (ok != expect_ok) {
+            bad = true;
+            if (fs->shown++ < 12) fprintf(stderr, "full heal case %ld (%s): taken %d, upstream %d (filter %s, applied %d)\n",
+                                          fs->cases, purchase ? "bought" : "free", ok, expect_ok, filter, applied);
+        }
+        for (int i = 0; i < n && !bad; i++) {
+            const pr_pokemon *b = &run.party[run.party_order[i]].b;
+            const bool got_confused = pr_has_battler_tag(&run.bt, b, BATTLER_TAG_TYPE_CONFUSED);
+            const bool got_nightmare = pr_has_battler_tag(&run.bt, b, BATTLER_TAG_TYPE_NIGHTMARE);
+            const int want_status = expect_ok ? after[i].status : before[i].status;
+            const int want_confused = expect_ok ? after[i].confused : before[i].confused;
+            const int want_nightmare = expect_ok ? after[i].nightmare : before[i].nightmare;
+
+            if (b->hp != before[i].hp || b->status != want_status || got_confused != want_confused || got_nightmare != want_nightmare) {
+                bad = true;
+                if (fs->shown++ < 12) fprintf(stderr, "full heal case %ld (%s) member %d: hp %d status %d confused %d nightmare %d, upstream %d %d %d %d\n",
+                                              fs->cases, purchase ? "bought" : "free", i, b->hp, b->status, got_confused, got_nightmare,
+                                              after[i].hp, want_status, want_confused, want_nightmare);
+            }
+        }
+        if (bad) { fs->mismatches++; continue; }
+        if (ok) fs->taken++; else fs->refused++;
+        if (!purchase && ok) {
+            if (before[target].status != STATUS_EFFECT_NONE) fs->status_cured++;
+            if (before[target].confused) fs->confusion_cured++;
+            if (before[target].nightmare) fs->nightmare_cured++;
+        }
+    }
+    fs->replayed++;
+    return true;
+}
+
 /* upstream's locales/en folder (GC_LOCALES, set by tools/applydiff.sh): the text of the "You received" message is
  * compared as text, formatted by battle-core's pr_msg_format from the same files upstream's i18next read */
 static const char *pokeball_locale(void *ctx, const char *file, int fallback, size_t *len)
@@ -465,6 +572,8 @@ int main(int argc, char **argv)
     memset(&cs, 0, sizeof cs);
     pokeball_stats ps;
     memset(&ps, 0, sizeof ps);
+    full_heal_stats fhs;
+    memset(&fhs, 0, sizeof fhs);
     while (fgets(line, sizeof line, f)) {
         if (line[0] == '#') continue;
         if (line[0] == 'X') { fprintf(stderr, "upstream threw: %s", line); return 2; }
@@ -474,6 +583,10 @@ int main(int argc, char **argv)
         }
         if (line[0] == 'K') {
             if (!pokeball_case(f, line, sizeof line, &ps)) return 2;
+            continue;
+        }
+        if (line[0] == 'F') {
+            if (!full_heal_case(f, line, sizeof line, &fhs)) return 2;
             continue;
         }
         if (line[0] != 'A') continue;
@@ -598,7 +711,7 @@ int main(int argc, char **argv)
         replayed++;
     }
     fclose(f);
-    printf("TOTAL mismatches in this trace: %ld\n", mismatches + cs.mismatches + ps.mismatches);
+    printf("TOTAL mismatches in this trace: %ld\n", mismatches + cs.mismatches + ps.mismatches + fhs.mismatches);
     if (cs.cases) {
         printf("%ld candy cases in the trace: %ld replayed twice (free and bought), %ld comparisons, %ld mismatches\n", cs.cases, cs.replayed, cs.comparisons, cs.mismatches);
         printf("free and bought: Rare Candy %ld taken %ld refused, Rarer Candy %ld taken %ld refused; %ld Classic, %ld Endless; %ld with Candy Jars\n",
@@ -615,8 +728,13 @@ int main(int argc, char **argv)
                ps.cap_hit[0], ps.cap_hit[1], ps.cap_hit[2], ps.cap_hit[3], ps.cap_hit[4],
                ps.cap_crossed[0], ps.cap_crossed[1], ps.cap_crossed[2], ps.cap_crossed[3], ps.cap_crossed[4]);
     }
-    if (!cases && !cs.cases && !ps.cases) return 1;
-    if (!cases) return (mismatches || cs.mismatches || ps.mismatches) ? 1 : 0;
+    if (fhs.cases) {
+        printf("%ld full heal cases in the trace: %ld replayed twice (free and bought), %ld comparisons, %ld mismatches\n", fhs.cases, fhs.replayed, fhs.comparisons, fhs.mismatches);
+        printf("free and bought: %ld taken, %ld refused; %ld with Healing Charm\n", fhs.taken, fhs.refused, fhs.with_charm);
+        printf("cured (free): %ld statuses, %ld confused tags, %ld nightmare tags\n", fhs.status_cured, fhs.confusion_cured, fhs.nightmare_cured);
+    }
+    if (!cases && !cs.cases && !ps.cases && !fhs.cases) return 1;
+    if (!cases) return (mismatches || cs.mismatches || ps.mismatches || fhs.mismatches) ? 1 : 0;
     printf("%ld cases in the trace: %ld replayed twice (free and bought), %ld skipped (%ld Hardcore, %ld other items), %ld comparisons, %ld mismatches\n",
            cases, replayed, skipped_hardcore + skipped_other, skipped_hardcore, skipped_other, comparisons, mismatches);
     printf("free rewards: %ld taken, %ld refused; bought: %ld taken, %ld refused; %ld cases with a Healing Charm\n", free_taken, free_refused, bought_taken, bought_refused, charm_cases);
