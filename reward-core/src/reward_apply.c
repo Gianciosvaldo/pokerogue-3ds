@@ -66,6 +66,14 @@ bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_i
     const bool hardcore = (ctx->challenges & (1u << CHALLENGES_HARDCORE)) != 0;
 
     switch (item) {
+        case PR_ITEM_BASE_STAT_BOOSTER:
+            if (pr_reward_apply_vitamin(ctx, arg, party_idx, -1, NULL) != PR_REWARD_VITAMIN_APPLIED) {
+                if (msg) *msg = NO_EFFECT_MSG;
+                return false;
+            }
+            if (msg) *msg = NULL;
+            return true;
+
         case PR_ITEM_MINT:
             if (!pr_reward_apply_mint(ctx, arg, party_idx)) {
                 if (msg) *msg = NO_EFFECT_MSG;
