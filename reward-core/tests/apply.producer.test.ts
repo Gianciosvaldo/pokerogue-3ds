@@ -55,9 +55,9 @@ it("reward apply producer", async () => {
   ];
 
   // Every text the application shows goes through phaseManager.queueMessage (what the tags and modifiers use)
-  // or ui.showText. Both are only observed, never replaced: a stand-in that ran showText's callback changed what
-  // upstream did. Each text is recorded as the locale key that made it (i18next.t results are remembered while
-  // recording), so the C side can compare keys without carrying the English strings.
+  // or ui.showText. Both are only observed (pass-through spies), never replaced, so upstream runs as it would.
+  // Each text is recorded as the locale key that made it (i18next.t results are remembered while recording), so
+  // the C side can compare keys without carrying the English strings.
   let recording = false;
   const keyOfText = new Map<string, { key: string; name?: string }>();
   const realT = i18next.t.bind(i18next);
