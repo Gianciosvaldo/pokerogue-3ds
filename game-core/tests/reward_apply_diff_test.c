@@ -5,14 +5,18 @@
  * result upstream got: the party menu's filter (selectFilter / moveSelectFilter), then the modifier's apply
  * through BattleScene.addModifier.
  *
- * For the healing, revive, PP restore and PP Up items (the rest of the trace is evolution, form change,
+ * For the healing, revive, PP restore, PP Up and Full Heal items (the rest of the trace is evolution, form change,
  * Mega Bracelet, Dynamax Band and DNA Splicer cases, reward-core's own), the party is set up in a gc_run as
  * game-core holds it (the case's members at a rotated party_order, so a wrong party index shows), the
  * reward is taken once for free and once as a purchase, and compared with upstream:
  *   - taken or refused (a refusal: "partyUiHandler:anyEffect"). A free reward the party menu lets through is
  *     taken; one it refuses is not. Sacred Ash has no party menu: free, it is taken whatever it did;
  *     bought, taken only if it did something (SelectModifierPhase.applyModifier, cost -1 against a price);
- *   - every member's HP, status and each move's PP used, PP Ups and maximum PP (getMovePp()) after.
+ *   - every member's HP, status and each move's PP used, PP Ups and maximum PP (getMovePp()) after;
+ *   - the status's counters (toxic turns, sleep and freeze turns remaining) and the confusion and Nightmare tags,
+ *     which the trace carries on every member before and after (a cure ends them: Full Heal and Full Restore);
+ *   - the texts upstream's application queued (phaseManager.queueMessage, recorded as their locale keys; ui.showText
+ *     is recorded too and never called): game-core's message events must be the same keys, in order, naming the target.
  * Hardcore cases are skipped (game-core models no challenge).
  *
  * Rare Candy and Rarer Candy (Task 96) are in a trace of their own, game-core/tests/candy.producer.test.ts (the apply
@@ -32,8 +36,10 @@
 #include <string.h>
 
 static const char *const keys[] = {"POTION", "SUPER_POTION", "HYPER_POTION", "MAX_POTION", "FULL_RESTORE", "REVIVE",
-                                   "MAX_REVIVE", "SACRED_ASH", "ETHER", "MAX_ETHER", "ELIXIR", "MAX_ELIXIR", "PP_UP", "PP_MAX"};
+                                   "MAX_REVIVE", "SACRED_ASH", "ETHER", "MAX_ETHER", "ELIXIR", "MAX_ELIXIR", "PP_UP", "PP_MAX",
+                                   "FULL_HEAL"};
 #define N_KEYS ((int)(sizeof keys / sizeof keys[0]))
+#define FULL_HEAL_KEY (N_KEYS - 1)
 
 static long num(char **p)
 {
@@ -52,8 +58,23 @@ static void word(char **p, char *out, size_t cap)
 
 typedef struct {
     int hp, max_hp, status, n_moves;
+    int toxic, sleep, freeze;            /* Status.toxicTurnCount, sleepTurnsRemaining, freezeTurnsRemaining */
+    bool confused, nightmare;            /* getTag(CONFUSED), getTag(NIGHTMARE) */
     int moves[4], pp_used[4], pp_up[4], max_pp[4];
 } member;
+
+/* summonData.tags gets the tag the way a battle left it (only the type and the turns matter to a cure) */
+static void add_tag(pr_pokemon *b, int type)
+{
+    if (b->n_tags >= PR_MAX_BATTLER_TAGS) { fputs("too many tags\n", stderr); exit(2); }
+    pr_battler_tag t;
+    memset(&t, 0, sizeof t);
+    t.type = (uint8_t)type;
+    t.turn_count = 3;
+    t.source_id = -1;
+    t.source_index = -1;
+    b->tags[b->n_tags++] = t;
+}
 
 static gc_run run;
 static gc_system sys;
@@ -82,6 +103,12 @@ static void setup(const member *m, int n, int rot, int stacks)
         b->stats[0] = m[i].max_hp;
         b->hp = m[i].hp;
         b->status = (uint8_t)m[i].status;
+        b->status_toxic_turns = (int16_t)m[i].toxic;
+        b->status_sleep_turns = (int16_t)m[i].sleep;
+        b->status_freeze_turns = (int16_t)m[i].freeze;
+        b->n_tags = 0;
+        if (m[i].confused) add_tag(b, BATTLER_TAG_TYPE_CONFUSED);
+        if (m[i].nightmare) add_tag(b, BATTLER_TAG_TYPE_NIGHTMARE);
         memset(b->moves, 0, sizeof b->moves);
         for (int s = 0; s < 4; s++) { b->pp_used[s] = 0; b->pp_up[s] = 0; b->max_pp_override[s] = -1; }
         for (int s = 0; s < m[i].n_moves; s++) {
@@ -189,6 +216,16 @@ static long drain_events(gc_run *r, gc_event *first)
     gc_event e;
     long n = 0;
     while (gc_run_next_event(r, &e)) if (n++ == 0) *first = e;
+    return n;
+}
+
+/* the message events the last call queued, in order (the party screen's HP events are not texts); n returned, at most cap kept */
+static int collect_messages(gc_run *r, gc_event *out, int cap)
+{
+    gc_event e;
+    int n = 0;
+    while (gc_run_next_event(r, &e))
+        if (e.kind == GC_EV_MESSAGE) { if (n < cap) out[n] = e; n++; }
     return n;
 }
 
@@ -461,6 +498,7 @@ int main(int argc, char **argv)
     long taken[N_KEYS] = {0}, refused[N_KEYS] = {0}, cases_by_key[N_KEYS] = {0};
     long free_no_effect = 0, hp_changed = 0, pp_changed = 0, pp_up_changed = 0, status_cured = 0, charm_cases = 0;
     long bought_taken = 0, bought_refused = 0, free_taken = 0, free_refused = 0;
+    long texts_compared = 0, confusion_cured = 0, nightmare_cleared = 0, counters_reset = 0, heal_confused_only = 0;
     candy_stats cs;
     memset(&cs, 0, sizeof cs);
     pokeball_stats ps;
@@ -503,6 +541,15 @@ int main(int argc, char **argv)
                 before[i].pp_up[s] = (int)num(&q);
                 before[i].max_pp[s] = (int)num(&q);
             }
+            /* the base moveset (a length and that many ids), ivs, stats, ability index, shiny, variant, luck: 16 more numbers,
+             * then the Status counters and the two tags */
+            const int n_base = (int)num(&q);
+            for (int k = 0; k < n_base + 16; k++) num(&q);
+            before[i].toxic = (int)num(&q);
+            before[i].sleep = (int)num(&q);
+            before[i].freeze = (int)num(&q);
+            before[i].confused = num(&q) != 0;
+            before[i].nightmare = num(&q) != 0;
         }
         if (!fgets(line, sizeof line, f) || line[0] != 'I') { fputs("malformed trace: I record\n", stderr); return 2; }
         int stacks = 0;
@@ -531,9 +578,20 @@ int main(int argc, char **argv)
             skipped_other++;
             continue;
         }
+        /* the texts upstream's application showed, as "queue:<locale key>" / "show:<locale key>" */
+        enum { MAX_SHOWN = 4 };
+        char shown_text[MAX_SHOWN][96];
+        const int n_shown = (int)num(&r);
+        if (n_shown < 0 || n_shown > MAX_SHOWN) { fputs("malformed trace: text count\n", stderr); return 2; }
+        for (int k = 0; k < n_shown; k++) word(&r, shown_text[k], sizeof shown_text[k]);
         for (int i = 0; i < n; i++) {
             after[i].hp = (int)num(&r);
             after[i].status = (int)num(&r);
+            after[i].toxic = (int)num(&r);
+            after[i].sleep = (int)num(&r);
+            after[i].freeze = (int)num(&r);
+            after[i].confused = num(&r) != 0;
+            after[i].nightmare = num(&r) != 0;
             after[i].n_moves = (int)num(&r);
             for (int s = 0; s < after[i].n_moves; s++) {
                 after[i].pp_used[s] = (int)num(&r);
@@ -551,6 +609,8 @@ int main(int argc, char **argv)
         for (int purchase = 0; purchase < 2; purchase++) {
             const int rot = (int)((cases + purchase) % n);
             setup(before, n, rot, stacks);
+            gc_event drained;
+            drain_events(&run, &drained);
             gc_offer o;
             memset(&o, 0, sizeof o);
             o.key = key;
@@ -561,6 +621,8 @@ int main(int argc, char **argv)
             const int party = run.party_order[target];
             const bool ok = gc_port_apply_reward(&run, &o, sacred_ash ? -1 : party, sacred_ash ? -1 : slot, &why);
             const bool expect_ok = sacred_ash ? (!purchase || applied) : (filter_ok && (!purchase || applied));
+            gc_event msgs[MAX_SHOWN];
+            const int n_msgs = collect_messages(&run, msgs, MAX_SHOWN);
             comparisons++;
             bool bad = false;
             if (ok != expect_ok) { bad = true; if (shown++ < 12) fprintf(stderr, "case %ld %s (%s): taken %d, upstream %d (filter %s, applied %d)\n", cases, key, purchase ? "bought" : "free", ok, expect_ok, filter, applied); }
@@ -571,20 +633,52 @@ int main(int argc, char **argv)
                     bad = true;
                     if (shown++ < 12) fprintf(stderr, "case %ld %s (%s): member %d hp %d status %d moves %d, upstream %d %d %d\n", cases, key, purchase ? "bought" : "free", i, b->hp, b->status, b->n_moves, after[i].hp, after[i].status, after[i].n_moves);
                 }
+                if (!bad && (b->status_toxic_turns != after[i].toxic || b->status_sleep_turns != after[i].sleep || b->status_freeze_turns != after[i].freeze)) {
+                    bad = true;
+                    if (shown++ < 12) fprintf(stderr, "case %ld %s (%s): member %d status counters toxic %d sleep %d freeze %d, upstream %d %d %d (before %d %d %d, status %d)\n", cases, key, purchase ? "bought" : "free", i, b->status_toxic_turns, b->status_sleep_turns, b->status_freeze_turns, after[i].toxic, after[i].sleep, after[i].freeze, before[i].toxic, before[i].sleep, before[i].freeze, before[i].status);
+                }
+                const bool conf = pr_get_battler_tag(b, BATTLER_TAG_TYPE_CONFUSED) != NULL, night = pr_get_battler_tag(b, BATTLER_TAG_TYPE_NIGHTMARE) != NULL;
+                if (!bad && (conf != after[i].confused || night != after[i].nightmare)) {
+                    bad = true;
+                    if (shown++ < 12) fprintf(stderr, "case %ld %s (%s): member %d confused %d nightmare %d, upstream %d %d (before %d %d, status %d)\n", cases, key, purchase ? "bought" : "free", i, conf, night, after[i].confused, after[i].nightmare, before[i].confused, before[i].nightmare, before[i].status);
+                }
                 for (int s = 0; s < after[i].n_moves && !bad; s++)
                     if (b->pp_used[s] != after[i].pp_used[s] || b->pp_up[s] != after[i].pp_up[s] || gc_move_max_pp(b, s) != after[i].max_pp[s]) {
                         bad = true;
                         if (shown++ < 12) fprintf(stderr, "case %ld %s (%s): member %d move %d (id %d) pp_used %d pp_up %d max %d, upstream %d %d %d\n", cases, key, purchase ? "bought" : "free", i, s, b->moves[s], b->pp_used[s], b->pp_up[s], gc_move_max_pp(b, s), after[i].pp_used[s], after[i].pp_up[s], after[i].max_pp[s]);
                     }
             }
+            /* the texts: upstream's queueMessage calls, as the same keys in the same order, each naming the target (the only
+             * Pokemon an item acts on); a refusal or a reward that was not applied shows none */
+            const int want_msgs = ok ? n_shown : 0;
+            if (!bad && n_msgs != want_msgs) {
+                bad = true;
+                if (shown++ < 12) fprintf(stderr, "case %ld %s (%s): %d messages, upstream %d\n", cases, key, purchase ? "bought" : "free", n_msgs, want_msgs);
+            }
+            for (int k = 0; k < want_msgs && !bad; k++) {
+                const char *want_key = strncmp(shown_text[k], "queue:", 6) == 0 ? shown_text[k] + 6 : "(not a queued text)";
+                const pr_msg *m = &msgs[k].msg;
+                const int target_species = run.party[party].b.species;
+                if (!m->key || strcmp(m->key, want_key)) {
+                    bad = true;
+                    if (shown++ < 12) fprintf(stderr, "case %ld %s (%s): message %d is '%s', upstream '%s'\n", cases, key, purchase ? "bought" : "free", k, m->key ? m->key : "(none)", shown_text[k]);
+                } else if (m->args[0].kind != PR_ARG_POKEMON || (int)(m->args[0].v >> 16) != target_species) {
+                    bad = true;
+                    if (shown++ < 12) fprintf(stderr, "case %ld %s (%s): message %d does not name the target (species %d)\n", cases, key, purchase ? "bought" : "free", k, target_species);
+                }
+            }
             if (bad) { mismatches++; continue; }
             (ok ? taken : refused)[item]++;
+            texts_compared += want_msgs;
             if (purchase) { bought_taken += ok; bought_refused += !ok; } else { free_taken += ok; free_refused += !ok; }
             if (!purchase) {
                 bool changed = false;
                 for (int i = 0; i < n; i++) {
                     hp_changed += before[i].hp != after[i].hp;
                     status_cured += before[i].status != after[i].status;
+                    confusion_cured += before[i].confused && !after[i].confused;
+                    nightmare_cleared += before[i].nightmare && !after[i].nightmare;
+                    counters_reset += before[i].toxic != after[i].toxic || before[i].sleep != after[i].sleep || before[i].freeze != after[i].freeze;
                     for (int s = 0; s < before[i].n_moves; s++) {
                         pp_changed += before[i].pp_used[s] != after[i].pp_used[s];
                         pp_up_changed += before[i].pp_up[s] != after[i].pp_up[s];
@@ -593,6 +687,7 @@ int main(int argc, char **argv)
                     for (int s = 0; s < before[i].n_moves; s++) changed |= before[i].pp_used[s] != after[i].pp_used[s] || before[i].pp_up[s] != after[i].pp_up[s];
                 }
                 free_no_effect += ok && !changed;
+                heal_confused_only += ok && item == FULL_HEAL_KEY && !before[target].status && before[target].confused;
             }
         }
         replayed++;
@@ -621,6 +716,8 @@ int main(int argc, char **argv)
            cases, replayed, skipped_hardcore + skipped_other, skipped_hardcore, skipped_other, comparisons, mismatches);
     printf("free rewards: %ld taken, %ld refused; bought: %ld taken, %ld refused; %ld cases with a Healing Charm\n", free_taken, free_refused, bought_taken, bought_refused, charm_cases);
     printf("what changed (free rewards): %ld HP values, %ld statuses, %ld PP used, %ld PP Ups; %ld taken with no effect (Sacred Ash)\n", hp_changed, status_cured, pp_changed, pp_up_changed, free_no_effect);
+    printf("cures (free rewards): %ld confusions ended, %ld Nightmares lapsed, %ld status counter sets reset, %ld Full Heals on a Pokemon that was only confused; %ld texts compared with upstream's (free and bought)\n",
+           confusion_cured, nightmare_cleared, counters_reset, heal_confused_only, texts_compared);
     printf("%-14s %7s %7s %7s\n", "item", "cases", "taken", "refused");
     for (int k = 0; k < N_KEYS; k++) printf("%-14s %7ld %7ld %7ld\n", keys[k], cases_by_key[k], taken[k], refused[k]);
     return (mismatches || cs.mismatches || ps.mismatches) ? 1 : 0;
