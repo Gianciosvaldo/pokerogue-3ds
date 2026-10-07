@@ -2,7 +2,7 @@
 
 Audit baseline: port main `2a740ab66bce22dd94aa34c6cbf2c8e665ad6a79`; upstream target `pagefaultgames/pokerogue` at `8555c08`. Public beta inspected separately at `4f0969875845fb412c5b0af8ed4bc006484a8f2a`; it is a moving target and is not the port target. This document is a source-backed planning inventory, **not an exhaustive per-move audit, a measured completion percentage, or evidence that the checks below ran**. See [PARITY-LEDGER.md](PARITY-LEDGER.md) for the active subsystem parity matrix, public beta drift analysis, landed PR index, and untested class inventory.
 
-Read [HANDOFF.md](HANDOFF.md), the root README and the owning folder README before each task. HANDOFF remains unchanged and controls every task: one task/branch/PR, never push main or merge; named-folder scope; generated data only via redump; no copyrighted assets, upstream source/dumps or binaries; preserve existing producers/comparators, tolerances, seeds, case counts and coverage. A test defect requires stopping the affected task and reporting it. New harnesses and modes below are additive, separately reviewed work, never permission to loosen or rewrite established checks. Exact commands and printed counts belong in each PR.
+Read [HANDOFF.md](HANDOFF.md), the root README and the owning folder README before each task. HANDOFF controls every task: one task/branch/PR, never push main; Codex may merge its validated PRs under the user’s October 7 authorization recorded there; named-folder scope; generated data only via redump; no copyrighted assets, upstream source/dumps or binaries; preserve existing producers/comparators, tolerances, seeds, case counts and coverage. A test defect requires stopping the affected task and reporting it. New harnesses and modes below are additive, separately reviewed work, never permission to loosen or rewrite established checks. Exact commands and printed counts belong in each PR.
 
 Existing Tasks 50–56 retain their assigned numbers; Task 50 fixed Eternatus/Paradox generation is merged in PR #92. Do not duplicate their implementations. Supplementary cards start at 57 to avoid collisions; inspect current integration and recorded validation before starting. Tasks 57 and 58 are merged on `main` (PR #97 / commit `58030d6` and commit `836d10c`).
 
@@ -14,11 +14,39 @@ Implementation PRs: [Task 57 #97](https://github.com/Gianciosvaldo/pokerogue-3ds
 |---|---|---|---|
 | A | battle-core/ | 67 (#108) → 69 (#110) → 70 (#111) → 71 (#115) → 72 (#119) → 73 (#123) | Hard coordinator work; PRs merged, as bounded slices: 72 is the Dancer slice (Tera unported), 73 the first doubles slice |
 | B | reward-core/ | 89 (#104); Card 97 (#132) | Hard; Card 97 merged in PR #132; reward state validation |
-| C | game-core/ | 87 (#101) → 57 (#97) → 59 (#113) → 60 (#114) → 61 (first slice, #116) → 92 (#121) → 93 (#122) → 94 (#124) → 77 (#125) → 95 (#128) → 96 (#136, Rare and Rarer Candy slice) → 64 → 65 → 66 → 78 (#139) → 79 → 61 (further slices) → 62 → 75 → 76 → 80 → 81 → 82 → 83 → 84 | Merged: 87, 57, 59, 60, 61 (first slice), 92, 93, 94, 77, 95, 78, and 96's candy slice; 96's remaining items and 64 onward are not done |
+| C | game-core/ | 87 (#101) → 57 (#97) → 59 (#113) → 60 (#114) → 61 (first slice, #116) → 92 (#121) → 93 (#122) → 94 (#124) → 77 (#125) → 95 (#128) → 96 (#136 candy, #141 balls, #142/#143 Full Heal slices) → 64 (#145 clean wild slice) → 65 → 66 → 78 (#139) → 79 → 61 (further slices) → 62 → 75 → 76 → 80 → 81 → 82 → 83 → 84 | Merged: 87, 57, 59, 60, 61 (first slice), 92, 93, 94, 77, 95, 78, 96's candy/ball/Full Heal slices and 64's clean wild slice; remaining 96 items and full 64/65/66 are not done |
 | D | run-core/ | 50 (#92) → 63 (#112); 100 | Tasks 50 (#92) and 63 (#112, bounded: a few species) merged; Lorenzo's run-core owner only |
-| E | game/ | 110 (#120) → 112 (#129) → 113 (#134) → 114 (#135); 85 console half | Cards 110, 112, 113 and 114 merged; console acceptance stays a human gate |
+| E | game/ | 110 (#120) → 112 (#129) → 113 (#134) → 114 (#135) → 116 (#138); 85 console half | Cards 110, 112, 113, 114 and 116 merged; console acceptance stays a human gate |
 | F | ai-core/ | 88 (#102) → 58 (`836d10c`) → 68 (#117) → 74 (#127) | Tasks 88, 58, 68 and 74 merged |
-| G | docs/ | 86 (#100) | Task 86 merged |
+| G | docs/ | 86 (#100) → 149 (follow-up status refresh) | Task 86 and earlier #140 refresh merged; refresh after each milestone |
+
+### Current next work (2026-10-07)
+
+Checked main `92e56dca4b74a47d106f419c845688dfa41412bd` and GitHub merge metadata.
+The uploaded October 4 roadmap is historical planning context; later landed
+slices below take precedence for scheduling. None of the remaining gates is
+waived by the user's autonomous merge/continuation authorization.
+
+- **Task 96 remains partial:** Rare/Rarer Candy (#136), balls (#141), and Full Heal
+  (#142/#143) landed. Audit the reward-core application API prerequisites for
+  Mints, vitamins and lapsing/post-battle items before another game-core adapter.
+- **Task 64 remains partial:** #145 wires Task 63's clean supported wild constructor
+  slice, with exact RNG/PP adapter and save checks. Unsupported constructors retain
+  the fallback counter. Trainer generation restores member seed-offset RNG streams
+  before returning; exposing the correct boundary is a run-core owner prerequisite.
+  Broader species/TM/egg/passive/fusion pools remain Task 63 work.
+- **Tasks 65/66 stay gated:** a bounded #145 merge does not establish full moveset
+  integration or unlock fixed-trainer/final-boss integration.
+- **Other lane C backlog:** further Task 61 families, 62, 75/76 and 79–84 remain;
+  78 is already merged in #139. Keep the lane order unless separately authorized.
+- **Documentation follow-up (Card 149):** reconcile current planning/ledger statuses
+  and preserve historical check/runtime limits. Root and component README audits
+  remain separate folder-scoped follow-ups where their historical rows are stale.
+
+[Task 64 validation](../game-core/TASK64-VALIDATION.md) includes the 1000-run app
+coverage failure and expanded 5000-run passing check, not just the required host
+suite/paired soaks. Host CI and the 3DS build passed for #145; upstream whole-run
+and hardware behavior were not validated.
 
 A prerequisite API is a real gate: verify it exists and has recorded checks before beginning. If absent, report the missing bounded prerequisite instead of changing its owner's folder. Different folders may proceed in parallel; each lane starts its next task only after the previous PR merges. Lower-compute describes bounded scope, not lower correctness requirements.
 
@@ -34,9 +62,9 @@ These aliases specify exact baseline commands; substitute the absolute upstream 
 
 Missing upstream dependencies/network are a validation gap. Host fixtures, build success and code inspection do not substitute for unrun upstream differential checks. In particular, existing mystery traces are not validated money/party/modifier parity unless the comparator actually checks those outputs.
 
-## Coordinator status after save and battle repairs (2026-10-03)
+## Historical coordinator status after save and battle repairs (2026-10-03)
 
-Main checked: `ee476524016b0dc0ce6edc93db5baf4f76521325`. Actual code on main controls prerequisites; a side-branch merge does not unlock integration.
+This section preserves the dated checkpoint; use the current scheduling table above for next work. Main checked: `ee476524016b0dc0ce6edc93db5baf4f76521325`. Actual code on main controls prerequisites; a side-branch merge does not unlock integration.
 
 | Task | State | Gate |
 | --- | --- | --- |
@@ -123,6 +151,12 @@ Task 68 is delegated to Jules: #108 landed its bounded loaded-state contract dir
 **Pass.** New approved differential suite: 2,000 cases on each of 777, 9001, 4242, 31337, zero mismatches for move IDs/order/PP/RNG; each supported path exercised. Existing run suites R retain coverage.
 
 ### Task 64: Wire enemy movesets into the run (game-core/, lane C)
+
+**Landed first slice:** [#145](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/145),
+clean supported Classic/Endless wild constructors only. Trainer member RNG boundaries,
+Daily/custom, challenges, fusion and broader pools remain explicit fallbacks.
+[Exact host/CI scope](../game-core/TASK64-VALIDATION.md). Full Task 64 is not complete,
+and this partial merge does not unlock 65/66.
 
 **Branch:** `outside/enemy-movesets-integration`. **Assignment:** Lower compute. **Prerequisites:** 63 merged. 62 (the player's fusion reward lifecycle) is no longer required; lorenzo approved this reorder on 2026-10-04. If an enemy fusion case needs player-side fusion state, stop and report it.
 
@@ -448,6 +482,12 @@ Numbered from 92 in the post-parity plan (cards 92 to 151 by milestone; the full
 
 ### Task 96: Reward application, part 2: stat and level items, balls, Full Heal, lapsing items (game-core/, lane C)
 
+**Landed slices:** Rare/Rarer Candy [#136](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/136),
+Poké Balls [#141](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/141),
+Full Heal reward-core/game-core [#142](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/142)/[#143](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/143).
+The remaining item families and post-battle lifecycle are not complete. Read the
+owning README's Full Heal bought-item timing limitation before claiming full parity.
+
 **Branch:** `outside/reward-apply-consumables-2`. **Assignment:** Lower compute. **Prerequisites:** 95 merged.
 
 **Problem.** Mints, vitamins, Rare Candy (Candy Jar), Full Heal, Poke Balls as items, Lures and Charms, and the post-battle lapsing items (`GC_STUB_POST_BATTLE`: Pickup, Honey Gather, Pay Day) are still stand-ins.
@@ -533,6 +573,6 @@ PR #86 is now merged. Its final head `e7f54b36c422f53e5f269f22047737ed9612a769` 
 
 The original four unavailable rival checks were subsequently run in [#75](https://github.com/Gianciosvaldo/pokerogue-3ds/actions/runs/37114586055), at head `3966f42930a8e0a399b808a47a786f328419e7f3`. Job logs explicitly show `run-core/tools/difftest.sh /tmp/pokerogue-upstream-8555c08 500 <seed> rival` for seeds 777, 9001, 4242 and 31337: each prints **3000 fights, 0 mismatches**; total 12,000. Save digests there are `b7c0a91b`/`b7c0a91b`. These are historical, actual recorded comparisons, not results run by this audit on final head or current main. Final rebased-head upstream comparison remains a distinct gap; fixed-team traces also stop at the deliberate moveset boundary and do not establish full game-core rival lifecycle parity.
 
-## Authorized draft-blocker repairs (2026-10-04)
+## Historical authorized draft-blocker repairs (2026-10-04)
 
 Results describe the respective unmerged PR branches, not code already on main. Task70/#111: status-token effect is now recorded and required; 8000 focused comparisons and7722 covered item turns pass, B/condition coverage retained; CI#110 host/3DS pass. Task91/#107: correct ValueHolder import restores4000 legacy Memory cases with zero mismatches;8000 dual-input cases and24,000 TM/RNG results pass. Its unchanged135 existing application failures are fixed separately in Task89/#104. Task89: real unseeded status draw is recorded, old-max fusion HP and actual form/IV stat calculation repaired, form selection/hardcore gates corrected, duplicate TM history preserved;12000 established applications and8000 bounded evolution-state comparisons pass. Established options3950pass/0fail/50unported and victory4000pass/0fail. Missing inputs/footer are rejected and planted mutations fail. Latest-head CI is required before marking reward PRs ready. Complete fusion/form/evolution execution, broader held-stat inventories, whole-run upstream and hardware parity remain unvalidated. No unavailable comparison is called a pass.
