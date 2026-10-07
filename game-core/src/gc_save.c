@@ -102,6 +102,7 @@ static const sfield mon_fields[] = {
     SF(gc_mon, pause_evolutions), SF(gc_mon, luck), SF(gc_mon, pokeball), SF(gc_mon, met_wave),
     SF(gc_mon, trainer_slot), SF(gc_mon, met_level), SF(gc_mon, met_biome), SF(gc_mon, met_species),
     SF(gc_mon, used_tms), SF(gc_mon, n_used_tms),
+    SF(gc_mon, base_nature), SF(gc_mon, has_custom_nature),
 };
 
 /* battle-core's Pokemon: everything but its turnData (reset before every turn) and the lists, which
@@ -441,6 +442,7 @@ static bool mon_ok(const gc_mon *m)
     const pr_pokemon *b = &m->b;
     const pr_species *sp = gc_species(b->species);
     if (!sp || b->form >= sp->nforms || b->level < 1) return false;
+    if (m->has_custom_nature && (m->base_nature > 24 || b->nature > 24)) return false;
     if (b->fusion_species != 0) {
         const pr_species *fsp = gc_species(b->fusion_species);
         if (!fsp || b->fusion_form >= fsp->nforms) return false;

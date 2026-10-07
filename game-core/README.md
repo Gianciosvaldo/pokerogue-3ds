@@ -9,7 +9,8 @@ It calls battle-core for the turns, run-core for the waves and the enemies, ai-c
 commands (and the player's command restrictions and trapping), and goes through `include/gc/ports.h`
 for the enemy movesets and the rewards. The reward screens are reward-core's (`src/gc_reward.c`, Task 59).
 Healing, revive, PP restore and PP Up rewards act on the run through reward-core (Task 60), and so do Rare Candy and
-Rarer Candy (Task 96). Until run-core's
+Rarer Candy (Task 96). Bounded Nature Mint application and save compatibility are
+documented in [MINT-VALIDATION.md](MINT-VALIDATION.md). Until run-core's
 remaining movesets land and the other rewards act on the run, stand-ins in `src/gc_stubs.c` keep a run
 playable. Each stand-in is counted, so the soak runs show how much of a run is still standing in.
 

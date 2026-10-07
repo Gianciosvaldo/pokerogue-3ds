@@ -177,6 +177,10 @@ typedef struct gc_mon {
     uint16_t met_species;       /* Pokemon.metSpecies */
     uint16_t used_tms[64];      /* TMs used on this Pokemon (up to 64) */
     uint8_t n_used_tms;
+    /* b.nature is getNature() for battle/stat callers. Before a Mint it is also
+     * the base nature; old saves default has_custom_nature to false. */
+    uint8_t base_nature;
+    bool has_custom_nature;
 } gc_mon;
 
 /* The player's items and the enemy's: upstream's modifier list entries, by modifierTypes key */
