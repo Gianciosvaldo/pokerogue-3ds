@@ -852,6 +852,64 @@ static void test_full_heal(void)
     printf("full heal: status, counters, confusion and Nightmare cures and their text: ok\n");
 }
 
+/* ---- the same through the real flow: confused in battle, the wave won, Full Heal on the reward screen, the next wave's
+ * command screen, a save and a load. The confusion is added by battle-core's own addTag, so this also shows that the tag
+ * is still on the lead when the reward screen opens (upstream keeps summonData until the next battle's ReturnPhase) ---- */
+static void test_full_heal_flow(void)
+{
+    memset(&run, 0, sizeof run);
+    gc_system_init_defaults(&sys);
+    gc_run_new(&run, GAME_MODES_CLASSIC, "full-heal-flow", 7);
+    gc_starter team = {.species = SPECIES_ID_BULBASAUR, .tera_type = -1};
+    for (int j = 0; j < 6; j++) team.ivs[j] = 15;
+    const char *why;
+    CHECK(gc_run_set_starters(&run, &team, 1, &why));
+    run.sys = &sys;
+    drain();
+    CHECK(run.screen.kind == GC_SCREEN_COMMAND);
+    gc_mon *lead = mon(0);
+    run.enemy[0].b.hp = 1;
+    CHECK(pr_add_tag(&run.bt, &run.eng, &lead->b, BATTLER_TAG_TYPE_CONFUSED, 5, MOVE_ID_CONFUSE_RAY, -1));
+    CHECK(pr_get_battler_tag(&lead->b, BATTLER_TAG_TYPE_CONFUSED));
+    drain();
+
+    /* win the wave (a confused lead can hit itself, so give it a few turns) */
+    for (int turn = 0; turn < 8 && run.screen.kind == GC_SCREEN_COMMAND; turn++) { flow_fight(&run); drain(); }
+    CHECK(run.screen.kind == GC_SCREEN_REWARD);
+    const int wave = run.wave;
+    CHECK(pr_get_battler_tag(&lead->b, BATTLER_TAG_TYPE_CONFUSED) != NULL);   /* the tag came through the victory */
+
+    /* Full Heal on the lead: the tag goes, the one text is the first thing shown, then the next wave */
+    run.screen.options[0] = offer("FULL_HEAL", 0);
+    gc_choice pick = {GC_CH_REWARD, 0, 0, -1};
+    CHECK(gc_run_choose(&run, &pick, &why));
+    CHECK(lead->b.n_tags == 0 && lead->b.status == STATUS_EFFECT_NONE);
+    gc_event e;
+    int texts = 0;
+    bool first_text_is_cure = false;
+    while (gc_run_next_event(&run, &e))
+        if (e.kind == GC_EV_MESSAGE) {
+            if (!texts) first_text_is_cure = !strcmp(e.msg.key, "battlerTags:confusedOnRemove");
+            texts += !strcmp(e.msg.key, "battlerTags:confusedOnRemove");
+        }
+    CHECK(texts == 1 && first_text_is_cure);
+    for (int step = 0; step < 20 && run.screen.kind == GC_SCREEN_CHECK_SWITCH; step++) {
+        gc_choice no = {GC_CH_CONFIRM, 0, 0, 0};
+        CHECK(gc_run_choose(&run, &no, &why));
+        drain();
+    }
+    CHECK(run.screen.kind == GC_SCREEN_COMMAND && run.wave == wave + 1 && gc_run_can_save(&run));
+    CHECK(lead->b.n_tags == 0);   /* the next battle's lead keeps what is left: nothing */
+    static uint8_t buf[GC_SAVE_MAX];
+    const size_t n = gc_run_save(&run, buf, sizeof buf);
+    CHECK(n > 0);
+    memset(&flow_loaded, 0, sizeof flow_loaded);
+    CHECK(gc_run_load(&flow_loaded, buf, n, &why) && !flow_loaded.load_dropped);
+    flow_loaded.sys = &sys;
+    CHECK(flow_loaded.party[0].b.n_tags == 0 && flow_loaded.party[0].b.status == STATUS_EFFECT_NONE);
+    printf("full heal flow: confused in battle -> reward -> Full Heal -> text -> next wave -> save -> load ok\n");
+}
+
 /* a slot in the moveset range with no move (reward-core's moveset leaves empty slots out) is no move */
 static void empty_slot_is_no_move(void)
 {
@@ -1171,6 +1229,7 @@ int main(void)
     test_pokeballs();
     unhandled_items();
     test_full_heal();
+    test_full_heal_flow();
     empty_slot_is_no_move();
     max_pp_override_blocks_pp_up();
     low_pp_move_refuses_pp_up();
