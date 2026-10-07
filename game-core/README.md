@@ -426,9 +426,9 @@ back what changed:
   reward-core's, so a refusal is `partyUiHandler:anyEffect`, and no target is "pick a Pokemon" or "pick a move".
 - A move with a fixed maximum PP (`max_pp_override`) refuses PP Up and PP Max, as
   `PokemonPpUpModifierType`'s filter does: reward-core's moves don't carry it, so game-core checks it.
-- Left explicit, still the stand-in: Poké Balls, Full Heal (reward-core has no application for it; game-core's
-  own rule is HP above 0 and a status), Rare Candy (no Candy Jar), held items, and everything that is added to the
-  items as it is. `gcplay` now tallies the 14 items plus Full Heal, taken and refused, so the soak shows what is applied.
+- Left explicit, still the stand-in: Poké Balls, Full Heal (reward-core had no application for it; game-core's
+  own rule was HP above 0 and a status; since Task 96 it goes through reward-core, see "Task 96: Full Heal" below),
+  Rare Candy (no Candy Jar), held items, and everything that is added to the items as it is. `gcplay` now tallies the 14 items plus Full Heal, taken and refused, so the soak shows what is applied.
 
 Exact commands from the repository root, with an upstream checkout from `battle-core/tools/setup-upstream.sh`:
 
@@ -487,7 +487,7 @@ Results:
   Mushroom, Mints, Rarer Candy, evolution items and DNA Splicers; the counter never counted potions, so applying
   them is not what it measures.
 - Applied in the soak (runs, taken, refused): POTION 890 runs, 2,439 taken, 285 refused; SUPER_POTION 61, 75, 8;
-  FULL_RESTORE 1, 1, 0; FULL_HEAL 9, 9, 52 (game-core's own); REVIVE 542, 861, 141; MAX_REVIVE 247, 280, 36;
+  FULL_RESTORE 1, 1, 0; FULL_HEAL 9, 9, 52 (game-core's own then); REVIVE 542, 861, 141; MAX_REVIVE 247, 280, 36;
   SACRED_ASH 3, 3, 0; ETHER 14, 14, 58; MAX_ETHER 3, 3, 12; ELIXIR 3, 3, 4; MAX_ELIXIR 2, 2, 1; PP_UP 115, 125, 15;
   PP_MAX 18, 18, 0. HYPER_POTION and MAX_POTION never came up in these 1,000 runs, so only the tests cover them.
 - Regressions, unchanged: `rewarddiff.sh` 1,500 cases each on seeds 777, 9001, 4242 and 31337, **0 mismatches**; reward-core
@@ -495,7 +495,7 @@ Results:
 
 Not done or not checked (reported, not widened into this PR):
 
-- No Hardcore handling (game-core has no challenges); no Candy Jar for Rare Candy; Full Heal stays game-core's own.
+- No Hardcore handling (game-core has no challenges); no Candy Jar for Rare Candy; Full Heal stayed game-core's own (until Task 96, below).
 - Enemy movesets are Task 63's, so how often these rewards come up depends on the stand-in moveset.
 - The app (`game/`) isn't changed; no hardware or emulator result. The 3DS build is CI's.
 
@@ -587,7 +587,7 @@ in `gc_reward_apply` (`src/gc_reward.c`), which writes back what changed:
 - Not done: a held Soothe Bell raises `addFriendship`'s amount upstream (`PokemonFriendshipBoosterModifier`); neither
   reward-core nor `gc_system_add_friendship` applies it yet (`src/gc_phases.c` has the same gap for the battle friendship gain).
   Fused Pokemon (a second starter's progress) are not modelled either.
-- Full Heal stays in `gc_stubs.c`; Poké Balls still go to `run->pokeballs`; Mints, vitamins, Pickup, Honey Gather and
+- Full Heal stays in `gc_stubs.c` (until the Full Heal section below); Poké Balls still go to `run->pokeballs`; Mints, vitamins, Pickup, Honey Gather and
   Pay Day stay counted stand-ins (`GC_STUB_REWARD_APPLY` / `GC_STUB_POST_BATTLE`).
 
 Tests: `tests/reward_apply_test.c` has a 17-row candy table (levels, Candy Jars, the cap, friendship 199, 200 and 250,
@@ -603,3 +603,30 @@ the cap, friendship around 195-200 and above, 0-5 Candy Jars) and `tests/reward_
 bought, comparing taken or refused, every member's level, exp and friendship, the `LevelUpPhase`s queued and the
 starters' friendship progress and candy count. It needs Node 22 and the pinned upstream commit (it refuses otherwise).
 Endless waves past about 330 are not in the trace: their level caps are above 255.
+
+## Task 96: Full Heal (and Full Restore's cure) through reward-core
+
+`gc_stubs.c` no longer has a Full Heal of its own. `gc_reward_apply` hands it to reward-core's `pr_reward_apply` like the
+other healing items (reward-core side: PR #142).
+
+- **Filled in** (`fill_mon`): `confused` and `nightmare` from `summonData.tags` (`pr_get_battler_tag`), and the three
+  status counters from `pr_pokemon`. The tags come through a won wave with the lead: `setup_field` only clears a
+  lead's summon data when it is recalled, as upstream's ReturnPhase does, so a confusion still active on the last turn is
+  on the Pokemon at the reward screen (`test_full_heal_flow` plays that wave in the real flow).
+- **Written back**: status and the three counters (always, from reward-core), the CONFUSED and NIGHTMARE tags a cure ended
+  (taken out of `tags`, the rest keep their order; battle-core's own `pr_remove_tag` is not used, its text is the caller's),
+  HP, PP. The one HP event for the target is unchanged.
+- **Text**: upstream's application calls neither `ui.showText` nor, for a status alone, `queueMessage`. Only a cure that ends a
+  confusion queues `battlerTags:confusedOnRemove` ("{{pokemonNameWithAffix}} snapped out of confusion!"); game-core emits it
+  as one `GC_EV_MESSAGE` naming the member (through `party_order`, so a shuffled party names the right one). Nothing is shown
+  when the reward is picked otherwise, as for the Poke Balls. Nightmare lapses without a text.
+- **Rules** (8555c08): Full Heal is refused for a fainted Pokemon or one with no status and no confusion; Full Restore at
+  full HP is refused unless it has a status or a confusion; a Nightmare alone is no reason, and it lapses only if the cured
+  status was sleep. Counters go back to 0 / -1 / -1 with the status.
+- **Known timing difference**: upstream's `queueMessage` is an `unshiftPhase`, so a *bought* Full Heal shows its text after
+  the shop screen ends (the phase does not end on a purchase). game-core emits the event at once. A free pick (the usual
+  case) matches. There is no message phase in the run queue to defer it with.
+
+Tests: `reward_apply_test` (Full Heal table rows, `test_full_heal`, `test_full_heal_flow`) and `tools/applydiff.sh`, whose apply
+section reads reward-core's producer trace as it has been since #142 (status counters, both tags, the queued texts) and now
+replays `FULL_HEAL` too. Before this change that section stopped with `malformed trace` on the new format.
