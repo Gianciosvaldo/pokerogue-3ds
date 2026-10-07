@@ -189,7 +189,18 @@ typedef struct {
     bool shiny, fusion_shiny, passive_flag;
     uint8_t variant, fusion_variant;
     int8_t luck, fusion_luck;
+    /* Status.toxicTurnCount, sleepTurnsRemaining, freezeTurnsRemaining (-1 = undefined; 0, -1, -1 with no
+     * status), as battle-core's pr_pokemon keeps them. A cleared status takes them back to 0, -1, -1. */
+    int16_t status_toxic_turns, status_sleep_turns, status_freeze_turns;
+    /* getTag(CONFUSED) and getTag(NIGHTMARE): the tags live in summonData, which a battle's end leaves alone
+     * until the next one's ReturnPhase, so they are still on the Pokemon at the reward screen (caller). A
+     * fainted Pokemon has none (FaintPhase resets its summonData). */
+    bool confused, nightmare;
 } pr_reward_mon;
+
+/* A text an item's application queues (queueMessage), as its locale key and the party member it names */
+typedef struct { const char *key; int8_t party_idx; } pr_reward_text;
+#define PR_REWARD_MAX_TEXTS 4
 
 /* One of the player's modifiers (globalScene.modifiers, in order) */
 typedef struct {
@@ -236,6 +247,10 @@ typedef struct {
     /* Task 44: LevelUpPhase requests produced by Rare/Rarer Candy application. */
     struct { int8_t party_idx; uint16_t old_level, new_level; } level_events[PR_REWARD_MAX_PARTY];
     uint8_t n_level_events;
+    /* The texts the last pr_reward_apply queued, in order (it resets the list): a status cure shows
+     * "battlerTags:confusedOnRemove" when it ends a confusion. The caller shows them. */
+    pr_reward_text apply_texts[PR_REWARD_MAX_TEXTS];
+    uint8_t n_apply_texts;
     /* Caller supplies the actual unseeded getRandomStatus coin flip for DNA Splicers.
      * Required only when both input statuses are nonvolatile. Seeded RNG cannot reproduce it. */
     /* Current application only: caller resets availability before each use.

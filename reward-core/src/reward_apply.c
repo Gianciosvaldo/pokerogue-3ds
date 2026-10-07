@@ -19,12 +19,50 @@ static double get_healing_booster_multiplier(const pr_reward_ctx *ctx) {
     return mult;
 }
 
+/* Status = null: the Status object's counters go with it (pr_pokemon's convention for no status) */
+static void drop_status(pr_reward_mon *p) {
+    p->status = 0;
+    p->status_toxic_turns = 0;
+    p->status_sleep_turns = p->status_freeze_turns = -1;
+}
+
+/* fuse(): this.status = pokemon.status moves the Status object, counters included */
+static void take_status(pr_reward_mon *to, const pr_reward_mon *from) {
+    to->status = from->status;
+    to->status_toxic_turns = from->status_toxic_turns;
+    to->status_sleep_turns = from->status_sleep_turns;
+    to->status_freeze_turns = from->status_freeze_turns;
+}
+
+/* upstream Pokemon.resetStatus(true, true, false, false) -> clearStatus(true, false) (pokemon.ts):
+ *   lastStatus = status?.effect; status = null;
+ *   if (lastStatus === SLEEP && getTag(NIGHTMARE)) lapseTag(NIGHTMARE);
+ *   if (confusion && getTag(CONFUSED)) lapseTag(CONFUSED);
+ * lapseTag(tag) = tag.lapse(this, CUSTOM), and the tag is removed when that returns false. Nightmare's
+ * lapse(CUSTOM) is --turnCount > 0 with turnCount 1: false, no text. ConfusedTag.lapse(CUSTOM) only ticks on
+ * PRE_MOVE: false, so the tag goes and onRemove queues "battlerTags:confusedOnRemove". */
+static void reset_status(pr_reward_ctx *ctx, int party_idx) {
+    pr_reward_mon *p = &ctx->party[party_idx];
+    const bool was_asleep = p->status == STATUS_EFFECT_SLEEP;
+    drop_status(p);
+    if (was_asleep && p->nightmare) p->nightmare = false;
+    if (p->confused) {
+        p->confused = false;
+        if (ctx->n_apply_texts < PR_REWARD_MAX_TEXTS) {
+            ctx->apply_texts[ctx->n_apply_texts].key = "battlerTags:confusedOnRemove";
+            ctx->apply_texts[ctx->n_apply_texts].party_idx = (int8_t)party_idx;
+            ctx->n_apply_texts++;
+        }
+    }
+}
+
 bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_idx, int move_idx, const char **msg) {
     if (!ctx) {
         if (msg) *msg = NO_EFFECT_MSG;
         return false;
     }
 
+    ctx->n_apply_texts = 0;
     const bool hardcore = (ctx->challenges & (1u << CHALLENGES_HARDCORE)) != 0;
 
     switch (item) {
@@ -62,8 +100,10 @@ bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_i
             else if (item == PR_ITEM_MAX_POTION) { restore_pts = 0; restore_pct = 100; }
             else if (item == PR_ITEM_FULL_RESTORE) { restore_pts = 0; restore_pct = 100; heal_status = true; }
 
+            /* PokemonHpRestoreModifierType's filter: !hp || (isFullHp() && (!healStatus ||
+             * (!status && !getTag(CONFUSED)))) */
             if (p->hp >= p->max_hp) {
-                if (!heal_status || p->status == 0) {
+                if (!heal_status || (p->status == 0 && !p->confused)) {
                     if (msg) *msg = NO_EFFECT_MSG;
                     return false;
                 }
@@ -79,7 +119,7 @@ bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_i
             if (p->hp > p->max_hp) p->hp = p->max_hp;
 
             if (heal_status) {
-                p->status = 0;
+                reset_status(ctx, party_idx);
             }
 
             if (msg) *msg = NULL;
@@ -99,7 +139,7 @@ bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_i
             }
 
             int restore_pct = (item == PR_ITEM_REVIVE) ? 50 : 100;
-            p->status = 0;
+            drop_status(p);
 
             int percent_pts = (int)floor((double)restore_pct * 0.01 * (double)p->max_hp);
             if (percent_pts < 1) percent_pts = 1;
@@ -116,12 +156,14 @@ bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_i
                 return false;
             }
             pr_reward_mon *p = &ctx->party[party_idx];
-            if (p->hp <= 0 || p->status == 0) {
+            /* PokemonStatusHealModifierType's filter: !hp || (!status && !getTag(CONFUSED)) */
+            if (p->hp <= 0 || (p->status == 0 && !p->confused)) {
                 if (msg) *msg = NO_EFFECT_MSG;
                 return false;
             }
 
-            p->status = 0;
+            /* PokemonStatusHealModifier.apply: resetStatus(true, true, false, false) */
+            reset_status(ctx, party_idx);
 
             if (msg) *msg = NULL;
             return true;
@@ -142,7 +184,7 @@ bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_i
 
             for (int i = 0; i < ctx->n_party; i++) {
                 if (ctx->party[i].hp <= 0) {
-                    ctx->party[i].status = 0;
+                    drop_status(&ctx->party[i]);
                     ctx->party[i].hp = ctx->party[i].max_hp;
                 }
             }
@@ -442,11 +484,11 @@ bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_i
             p1->hp = new_hp;
             if (p1->hp > 0) {
                 if (p1->hp > original_max_hp) p1->hp = original_max_hp;
-                if (!first_valid_status) p1->status = p2->status;
-                else if (second_valid_status && !ctx->fusion_status_choice) p1->status = p2->status;
+                if (!first_valid_status) take_status(p1, p2);
+                else if (second_valid_status && !ctx->fusion_status_choice) take_status(p1, p2);
             } else if (p2->hp > 0) {
                 if (p1->hp < 1) p1->hp = 1;
-                p1->status = p2->status;
+                take_status(p1, p2);
             }
 
             /* updateModifiers recalculates the new fusion maximum after assigning old-max HP. */
