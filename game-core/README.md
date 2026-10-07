@@ -14,6 +14,9 @@ documented in [MINT-VALIDATION.md](MINT-VALIDATION.md). Until run-core's
 remaining movesets land and the other rewards act on the run, stand-ins in `src/gc_stubs.c` keep a run
 playable. Each stand-in is counted, so the soak runs show how much of a run is still standing in.
 
+Toxic Orb and Flame Orb inventory mapping, full-turn comparisons and save
+boundaries are documented in [ORB-VALIDATION.md](ORB-VALIDATION.md).
+
 ## The API (`include/gc/run.h`)
 
 ```c
