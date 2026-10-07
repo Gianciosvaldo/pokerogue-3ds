@@ -60,7 +60,7 @@ inoperable 67/66/66/67/67/67, full 67/67/66/66/67/67, with **799** added paid
 items producing the upstream error/no deduction and **401** free rewards ending.
 Each stat has both paid and free accepted applications. **8000/8000 identical**,
 zero skipped/thrown; random levels are 1..100 (higher supported levels remain
-undiffed here). **30** host refusal checks preserve the whole context; partial,
+undiffed here). **31** host refusal checks preserve the whole context; partial,
 full and fainted HP behavior and detailed/generic application checks pass.
 An actual C-source cap=31 mutation fails **776/2000** seed777 cases (exit1).
 Ownership/money/stat boundary mutations fail **1200/799/2000** cases (exit1);
