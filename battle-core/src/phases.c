@@ -2580,6 +2580,43 @@ static void remove_participant(pr_battle *bt, uint32_t id)
         }
 }
 
+/* FaintPhase.applyModifier stops at the first holder-matching Reviver Seed.
+ * Queue revival, clear status immediately, then consume the item before returning
+ * from FaintPhase: the ordinary faint history/field/friendship path is skipped. */
+static bool instant_revive(pr_battle *bt, pr_engine *e, pr_pokemon *p)
+{
+    int side = p->is_player ? 0 : 1;
+    for (int i = 0; i < bt->n_mods[side]; i++) {
+        pr_modifier *m = &bt->mods[side][i];
+        if (!pr_mod_is(m, PR_MOD_INSTANT_REVIVE)) continue;
+        if (m->pokemon_id != -1 && m->pokemon_id != (int64_t)p->id) continue;
+        if (!pr_mod_is_ported_item(m)) { pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS); continue; }
+        pr_msg message = pr_msg2("modifier:pokemonInstantReviveApply",
+            pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+            pr_arg_key("typeName", "modifierType:ModifierType.REVIVER_SEED.name"));
+        pr_unshift_heal_msg(bt, e, pr_battler_index(bt, p), to_dmg_value(max_hp(p) / 2.0),
+                           PR_HEAL_MESSAGE | PR_HEAL_REVIVE, message);
+        clear_status(bt, e, p, false);
+        pr_speed_iter it;
+        pr_pokemon *ally;
+        pr_speed_iter_init(bt, &it, p->is_player ? ARENA_TAG_SIDE_PLAYER : ARENA_TAG_SIDE_ENEMY);
+        while ((ally = pr_speed_iter_next(bt, &it))) pr_hook_ab(bt, ally, PR_AC_CommanderAbAttr);
+        pr_lose_held_item(bt, e, p, m);
+        /* updateModifiers clears virtual stacks and orphaned held items. */
+        int w = 0;
+        for (int j = 0; j < bt->n_mods[side]; j++) {
+            pr_modifier copy = bt->mods[side][j];
+            if (pr_mod_is(&copy, PR_MOD_HELD_ITEM) && !pr_pokemon_by_id(bt, copy.pokemon_id)) continue;
+            copy.virtual_stack_count = 0;
+            if (copy.stack_count) bt->mods[side][w++] = copy;
+        }
+        bt->n_mods[side] = w;
+        for (int j = 0; j < bt->n_party[side]; j++) pr_recalculate_stats(bt, bt->party[side][j]);
+        return true;
+    }
+    return false;
+}
+
 static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
 {
     pr_phase *f = PH(ph);
@@ -2596,7 +2633,10 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
         if (pr_get_battler_tag(p, BATTLER_TAG_TYPE_GRUDGE)) pr_grudge_lapse(bt, e, p, source);
     }
     reset_summon_data(p);
-    if (!f->prevent_instant_revive) turn_modifiers(bt, player, p);   /* Reviver Seed */
+    if (!f->prevent_instant_revive) {
+        if (instant_revive(bt, e, p)) return;
+        turn_modifiers(bt, player, p); /* Preserve refusal for other missing item families. */
+    }
     for (int i = 0; i < 2; i++) {
         pr_pokemon *q = bt->field[i];
         if (q && (is_active(q) || q->hp <= 0)) add_participant(bt, q->id);

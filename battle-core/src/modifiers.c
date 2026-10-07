@@ -49,6 +49,7 @@ const uint8_t pr_mod_parent[PR_MOD_COUNT_] = {
     [PR_MOD_BERRY] = PR_MOD_HELD_ITEM,
     [PR_MOD_TURN_STATUS_EFFECT] = PR_MOD_HELD_ITEM,
     [PR_MOD_MOVE_ACCURACY_BOOSTER] = PR_MOD_HELD_ITEM,
+    [PR_MOD_INSTANT_REVIVE] = PR_MOD_HELD_ITEM,
 };
 
 const char *const pr_mod_class_name[PR_MOD_COUNT_] = {
@@ -88,6 +89,7 @@ const char *const pr_mod_class_name[PR_MOD_COUNT_] = {
     [PR_MOD_BERRY] = "BerryModifier",
     [PR_MOD_TURN_STATUS_EFFECT] = "TurnStatusEffectModifier",
     [PR_MOD_MOVE_ACCURACY_BOOSTER] = "PokemonMoveAccuracyBoosterModifier",
+    [PR_MOD_INSTANT_REVIVE] = "PokemonInstantReviveModifier",
 };
 
 int pr_mod_class_by_name(const char *name)
@@ -120,6 +122,8 @@ bool pr_mod_is_ported_item(const pr_modifier *m)
             || m->berry_type == BERRY_TYPE_LANSAT
             || m->berry_type == BERRY_TYPE_STARF;
     }
+    if (m->cls == PR_MOD_INSTANT_REVIVE)
+        return !m->unknown_subclass;
     if (m->cls == PR_MOD_MOVE_ACCURACY_BOOSTER)
         return !m->unknown_subclass && m->num == 5;
     if (m->cls == PR_MOD_TURN_STATUS_EFFECT)
