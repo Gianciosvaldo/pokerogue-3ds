@@ -4,6 +4,137 @@ Native C port of PokeRogue's player rewards: the reward options after a wave (po
 
 The API is [`include/pr/reward.h`](include/pr/reward.h). The run loop (game-core) fills a `pr_reward_ctx` from the run before each reward screen: the party as the rolls see it, the player's items, ball counts, unlocks, the arena. A few of its fields are other ports' answers, marked "caller" in the header: `canSetStatus` (battle-core), `canApplyAbility`, the learnable level moves and the level-move list the TM filter leaves out (learnsets, not ported yet), each attack move's types for item spawns. The diff test takes those from upstream, so reward-core is checked given correct inputs.
 
+## Task 96 prerequisite: bounded Nature Mint application (lane B, 2026-10-07)
+
+`pr_reward_apply_mint(ctx, nature, party_idx)` and the `PR_ITEM_MINT` path of
+`pr_reward_apply` mirror pinned upstream `PokemonNatureChangeModifierType`'s
+selection filter and `PokemonNatureChangeModifier.apply`. A different nature
+sets **custom** nature, recalculates six permanent stats and preserves HP using
+the upstream max-HP adjustment rules; fainting does not forbid a Mint. Base
+nature remains unchanged. Callers must supply `has_explicit_nature`,
+`base_nature`, `custom_nature` (-1 means absent), and the consistent effective
+`nature`, plus real species/forms, IVs, level, current stats/HP, permanent
+ability/passive and inventory. battle-core's stat calculator is used read-only.
+
+Successful applications retain a `{species, nature}` request in
+`nature_unlock_events` (primary species, not fusion). The caller must execute
+`GameData.unlockSpeciesNature`'s policy: only an already unlocked root permits
+the nature bit to be applied to that exact species and every prevolution. The
+caller consumes requests in order, clears the count and persists dex/custom
+nature. The eight-request capacity refuses a ninth application before mutation.
+This API records the call boundary; it does not implement or validate that dex
+policy, save format or game-core adapter.
+
+The supported subset includes all 25 natures, ordinary and fused species/forms,
+existing custom natures, levels **1..255** (the battle-core calculator's level
+field is eight bits), and permanent/passive Wonder Guard. Refusals mean two
+different things: matching the effective nature is upstream's **no effect**;
+missing/invalid caller inputs or an unsupported stat configuration are an
+**unsupported application**, which an adapter must keep counted rather than
+crediting as applied. Target-owned or wildcard (owner -1) vitamins, Soul Dew, Shuckle Juice, Old Gateau
+and Macho Brace are refused because their permanent-stat effects are not
+transported here. Flip Stat and unfused Spliced Endless are also refused.
+Other holders' stat items do not affect the selected target. Custom species/stat
+overrides, broader stat-item inventories and full reward/run lifecycle parity
+remain outside this contract. No RNG is consumed.
+
+The additive `tests/mint.producer.test.ts` runs real selection, construction,
+`scene.addModifier`, `setCustomNature`, `calculateStats` and
+`unlockSpeciesNature`; a wrapper records the unlock call and still calls its
+original implementation. Unexpected queues/exceptions fail the test. The new
+strict comparator `build/minttest` compares 65 named numeric party fields
+(including base/custom/effective nature, IVs, stats, HP/status, species/forms,
+abilities and move/PP data), all test inventory entries (Leftovers and Healing
+Charm), the request and global RNG. The producer asserts battle RNG is unchanged.
+Status-object counters, untransported caller fields and caller dex results are
+not part of these 65 fields. Version, count, ordering and completion footer are
+mandatory; no skipped or caught/thrown cases are accepted.
+The random differential cases use levels 1..100; higher supported levels have
+not been checked against this upstream producer.
+
+Node **22.23.3**, Vitest **4.1.11**, upstream
+`8555c08c823b856cbec4eb99ca84ea52a955836d`:
+
+| Seed | Identical / cases | Mismatches | Fusion | Fainted | Existing custom nature | Non-base forms | Wonder Guard |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 777 | 2000 / 2000 | 0 | 674 | 164 | 963 | 964 | 312 |
+| 9001 | 2000 / 2000 | 0 | 647 | 196 | 987 | 952 | 330 |
+| 4242 | 2000 / 2000 | 0 | 645 | 189 | 975 | 932 | 339 |
+| 31337 | 2000 / 2000 | 0 | 683 | 195 | 959 | 944 | 347 |
+
+Each nature has 60 accepted and 20 rejected selections per seed: 8000/8000
+identical overall, zero skipped/thrown. Separate host guards verify **33**
+refusals preserve the entire context, including invalid metadata/bounds,
+unsupported stats, levels 256/65535 and queue exhaustion; capacity, fainted application, base
+nature and HP checks pass. These host refusal checks are distinct from upstream
+selection comparisons. A real C-source mutant overwriting base nature fails
+1480/2000 seed-777 cases (exit 1). Boundary base/stat mutations fail 2000/2000;
+wrong unlock species fails 1500/2000. An absent completion footer exits 2.
+
+Established Node-22 seed-99/N=4000 traces replayed before and after with
+byte-identical output: reward options **3950 pass / 0 fail / 50 unported**, 8052
+screens; victory **4000 pass / 0 fail**, 2055 items / 2459 reward screens;
+application **4000 pass / 0 fail**, 115 cases with text compared; Memory **4000
+cases / 0 mismatches**. Established producers, comparators, seeds and counts
+are unchanged; the 50 Moveset Randomizer cases remain unported.
+
+The separate established evolution-state, dual-learnset and trainer-reward
+producers were also regenerated at N=2000 on all four seeds. Before/after
+comparisons are byte-identical: evolution **8000/8000 identical**, dual inputs
+**8000/8000 identical** (24,000 TM/RNG comparisons), trainers **8000 cases / 0
+mismatches**. Trainer F/V/G counts are 808/598/594, 811/614/575, 842/577/581 and
+830/567/603 respectively; the intentionally tested upstream short-party throws
+remain coverage, not skipped cases. `make -s -C game-core -j2 test` passes,
+including **32725** resume checks, **641335** reward-application checks and
+identical 200-run save/no-save digests **a6662b64**. This does not credit game-core
+with applying Mints; its integration is a separate lane-C task.
+
+Commands used (from the port unless a subshell changes directory; dependencies
+are in the external pinned harness, never committed):
+
+```sh
+. /workspace/shared/activate-parity.sh
+make -s -C reward-core -j2
+cp reward-core/tests/mint.producer.test.ts /workspace/shared/upstream-lane-b/test/tests/zz-dump/
+(cd /workspace/shared/upstream-lane-b && MINT_N=2000 MINT_SEED=777 MINT_OUT=/tmp/mint-777.txt node node_modules/vitest/vitest.mjs run --maxWorkers=1 test/tests/zz-dump/mint.producer.test.ts)
+reward-core/build/minttest /tmp/mint-777.txt
+for seed in 9001 4242 31337; do
+  BUILD=/tmp/mint-check sh reward-core/tools/mintdiff.sh /workspace/shared/upstream-lane-b 2000 "$seed"
+done
+reward-core/build/minttest --selftest
+BUILD=/tmp/mint-check sh reward-core/tools/mintplant.sh /tmp/mint-777.txt
+for mutation in base unlock stats; do
+  reward-core/build/minttest /tmp/mint-777.txt --mutate-$mutation # expected exit 1
+done
+sed '$d' /tmp/mint-777.txt > /tmp/mint-truncated.txt
+reward-core/build/minttest /tmp/mint-truncated.txt # expected exit 2
+# Original reward-core source extracted from c7e54c3 for the baseline:
+mkdir -p /tmp/mint-baseline
+git archive c7e54c3 reward-core | tar -x -C /tmp/mint-baseline
+export BATTLE_CORE="$PWD/battle-core" RUN_CORE="$PWD/run-core"
+BUILD=/tmp/mint-baseline-build sh /tmp/mint-baseline/reward-core/tools/difftest.sh /workspace/shared/upstream-lane-b 4000 99 all
+for mode in rewards victory apply memory; do
+  /tmp/mint-baseline-build/${mode}test /tmp/mint-baseline-build/${mode}-cases.txt > /tmp/mint-before-${mode}.log
+  reward-core/build/${mode}test /tmp/mint-baseline-build/${mode}-cases.txt > /tmp/mint-after-${mode}.log
+  cmp /tmp/mint-before-${mode}.log /tmp/mint-after-${mode}.log
+done
+# Established prerequisite suites: generate once, replay with both versions.
+for suite in evolution-state learnset-inputs trainer-rewards; do
+  cp "reward-core/tests/$suite.producer.test.ts" /workspace/shared/upstream-lane-b/test/tests/zz-dump/
+done
+for seed in 777 9001 4242 31337; do
+  for suite in evolution-state learnset-inputs trainer-rewards; do
+    trace=/tmp/mint-regression-${suite}-${seed}.txt
+    (cd /workspace/shared/upstream-lane-b && EVO_N=2000 EVO_SEED="$seed" EVO_OUT="$trace" DIFF_N=2000 DIFF_SEED="$seed" DIFF_OUT="$trace" node node_modules/vitest/vitest.mjs run --maxWorkers=1 "test/tests/zz-dump/$suite.producer.test.ts")
+    case "$suite" in evolution-state) executable=evolutionstatetest;; learnset-inputs) executable=learnsetinputtest;; trainer-rewards) executable=trainerrewardstest;; esac
+    /tmp/mint-baseline-build/$executable "$trace" > /tmp/mint-before-${suite}-${seed}.txt
+    reward-core/build/$executable "$trace" > /tmp/mint-after-${suite}-${seed}.txt
+    cmp /tmp/mint-before-${suite}-${seed}.txt /tmp/mint-after-${suite}-${seed}.txt
+  done
+done
+make -s -C game-core -j2 test
+```
+
 
 ## Task 89: evolution application state (2026-10-04)
 
