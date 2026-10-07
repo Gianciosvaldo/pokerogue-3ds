@@ -12,6 +12,7 @@ static uint16_t parse_item_key(const char *key) {
     if (strcmp(key, "FULL_RESTORE") == 0) return PR_ITEM_FULL_RESTORE;
     if (strcmp(key, "REVIVE") == 0) return PR_ITEM_REVIVE;
     if (strcmp(key, "MAX_REVIVE") == 0) return PR_ITEM_MAX_REVIVE;
+    if (strcmp(key, "FULL_HEAL") == 0) return PR_ITEM_FULL_HEAL;
     if (strcmp(key, "SACRED_ASH") == 0) return PR_ITEM_SACRED_ASH;
     if (strcmp(key, "ETHER") == 0) return PR_ITEM_ETHER;
     if (strcmp(key, "MAX_ETHER") == 0) return PR_ITEM_MAX_ETHER;
@@ -415,11 +416,59 @@ static void test_fusion_status_input(void) {
     puts("PASS: fusion_status_input unit tests");
 }
 
+static void test_full_heal_apply(void) {
+    pr_reward_ctx ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.n_party = 1;
+    pr_reward_mon *p = &ctx.party[0];
+    p->id = 1;
+    p->hp = 100;
+    p->max_hp = 100;
+
+    const char *msg = NULL;
+
+    /* Refuse healthy mon (status == 0) */
+    p->status = 0;
+    if (pr_reward_apply(&ctx, PR_ITEM_FULL_HEAL, 0, 0, -1, &msg) || !msg || strcmp(msg, "It won’t have any effect.") != 0) {
+        fprintf(stderr, "FAIL: Full Heal on healthy target\n");
+        exit(1);
+    }
+
+    /* Refuse fainted mon (hp == 0) */
+    p->hp = 0;
+    p->status = 1;
+    if (pr_reward_apply(&ctx, PR_ITEM_FULL_HEAL, 0, 0, -1, &msg) || !msg || strcmp(msg, "It won’t have any effect.") != 0) {
+        fprintf(stderr, "FAIL: Full Heal on fainted target\n");
+        exit(1);
+    }
+
+    /* Test every non-volatile status effect */
+    static const uint8_t statuses[] = {1, 2, 3, 4, 5, 6}; /* POISON, TOXIC, PARALYSIS, SLEEP, FREEZE, BURN */
+    for (size_t i = 0; i < sizeof(statuses)/sizeof(statuses[0]); i++) {
+        memset(&ctx, 0, sizeof(ctx));
+        ctx.n_party = 1;
+        p = &ctx.party[0];
+        p->id = 1;
+        p->hp = 50;
+        p->max_hp = 100;
+        p->status = statuses[i];
+
+        msg = "INIT";
+        if (!pr_reward_apply(&ctx, PR_ITEM_FULL_HEAL, 0, 0, -1, &msg) || msg != NULL || p->status != 0 || p->hp != 50) {
+            fprintf(stderr, "FAIL: Full Heal on status %d\n", statuses[i]);
+            exit(1);
+        }
+    }
+
+    printf("PASS: full_heal_apply unit tests\n");
+}
+
 int main(int argc, char **argv) {
     test_passive_multipliers();
     test_transfer_and_stealing();
     test_shop_economy_and_lock_capsule();
     test_fusion_status_input();
+    test_full_heal_apply();
 
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <cases file>\n", argv[0]);
@@ -433,10 +482,10 @@ int main(int argc, char **argv) {
 
     char line[4096];
     int cases = 0, pass = 0, fail = 0;
-    int item_counts[21] = {0};
-    const char *item_keys[21] = {
+    int item_counts[22] = {0};
+    const char *item_keys[22] = {
         "POTION", "SUPER_POTION", "HYPER_POTION", "MAX_POTION", "FULL_RESTORE",
-        "REVIVE", "MAX_REVIVE", "SACRED_ASH",
+        "REVIVE", "MAX_REVIVE", "FULL_HEAL", "SACRED_ASH",
         "ETHER", "MAX_ETHER", "ELIXIR", "MAX_ELIXIR",
         "PP_UP", "PP_MAX",
         "EVOLUTION_ITEM", "RARE_EVOLUTION_ITEM",
@@ -461,7 +510,7 @@ int main(int argc, char **argv) {
             int n_party = (int)num(&p);
 
             uint16_t item_id = parse_item_key(key);
-            for (int k = 0; k < 21; k++) {
+            for (int k = 0; k < 22; k++) {
                 if (strcmp(key, item_keys[k]) == 0) {
                     item_counts[k]++;
                     break;
@@ -557,16 +606,19 @@ int main(int argc, char **argv) {
             char *rp = line + 1;
             int exp_applied = (int)num(&rp);
             char exp_msg[128];
-            sscanf(rp, "%127s", exp_msg);
-            while (*rp && *rp != ' ') rp++;
+            if (sscanf(rp, "%127s", exp_msg) != 1) return 2;
             while (*rp == ' ') rp++;
             while (*rp && *rp != ' ') rp++;
+            int exp_texts = (int)num(&rp);
 
             bool ok = (res == (exp_applied != 0));
             char diff_reason[256] = "";
 
             if (!ok) {
                 snprintf(diff_reason, sizeof(diff_reason), "result mismatch: C res=%d, exp_applied=%d", res ? 1 : 0, exp_applied);
+            } else if (exp_texts != 0) {
+                ok = false;
+                snprintf(diff_reason, sizeof(diff_reason), "text count mismatch: C=0, exp_texts=%d", exp_texts);
             } else {
                 for (int i = 0; i < ctx.n_party && ok; i++) {
                     int exp_hp = (int)num(&rp);
@@ -619,7 +671,7 @@ int main(int argc, char **argv) {
     printf("== apply\n");
     printf("cases %d: pass %d, fail %d\n", cases, pass, fail);
     printf("cases per item:\n");
-    for (int k = 0; k < 21; k++) {
+    for (int k = 0; k < 22; k++) {
         printf("  %-22s: %d\n", item_keys[k], item_counts[k]);
     }
 

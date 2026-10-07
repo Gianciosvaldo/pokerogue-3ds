@@ -110,6 +110,23 @@ bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_i
             return true;
         }
 
+        case PR_ITEM_FULL_HEAL: {
+            if (party_idx < 0 || party_idx >= ctx->n_party) {
+                if (msg) *msg = NO_EFFECT_MSG;
+                return false;
+            }
+            pr_reward_mon *p = &ctx->party[party_idx];
+            if (p->hp <= 0 || p->status == 0) {
+                if (msg) *msg = NO_EFFECT_MSG;
+                return false;
+            }
+
+            p->status = 0;
+
+            if (msg) *msg = NULL;
+            return true;
+        }
+
         case PR_ITEM_SACRED_ASH: {
             bool any_fainted = false;
             for (int i = 0; i < ctx->n_party; i++) {

@@ -659,76 +659,6 @@ static void test_pokeballs(void)
     CHECK(!gc_reward_add_pokeballs(&run, "GOLDEN_POKEBALL"));
 }
 
-/* ---- Task 96: Full Heal ---- */
-static void test_full_heal_table(void)
-{
-    setup("full-heal-test", 4);
-    static const int statuses[] = {
-        STATUS_EFFECT_POISON, STATUS_EFFECT_TOXIC, STATUS_EFFECT_PARALYSIS,
-        STATUS_EFFECT_SLEEP, STATUS_EFFECT_FREEZE, STATUS_EFFECT_BURN
-    };
-    for (size_t i = 0; i < sizeof statuses / sizeof statuses[0]; i++) {
-        for (int charm_stacks = 0; charm_stacks <= 5; charm_stacks += 5) {
-            setup("full-heal-status", 4);
-            charm(charm_stacks);
-            pr_pokemon *b = &mon(T)->b;
-            b->status = (uint8_t)statuses[i];
-            b->status_toxic_turns = 3;
-            b->status_sleep_turns = 2;
-            b->status_freeze_turns = 1;
-            drain();
-
-            result r = take("FULL_HEAL", 0, T, 0);
-            CHECKF(r.ok, "Full Heal on status %d (charm %d)", statuses[i], charm_stacks);
-            CHECK(b->status == STATUS_EFFECT_NONE);
-            CHECK(b->status_toxic_turns == 0);
-            CHECK(b->status_sleep_turns == -1);
-            CHECK(b->status_freeze_turns == -1);
-        }
-    }
-
-    /* SLEEP with NIGHTMARE tag -> both cleared */
-    setup("full-heal-nightmare", 4);
-    pr_pokemon *b = &mon(T)->b;
-    b->status = STATUS_EFFECT_SLEEP;
-    pr_add_tag(&run.bt, &run.eng, b, BATTLER_TAG_TYPE_NIGHTMARE, 0, 0, -1);
-    CHECK(pr_has_battler_tag(&run.bt, b, BATTLER_TAG_TYPE_NIGHTMARE));
-    drain();
-    result r = take("FULL_HEAL", 0, T, 0);
-    CHECK(r.ok);
-    CHECK(b->status == STATUS_EFFECT_NONE);
-    CHECK(!pr_has_battler_tag(&run.bt, b, BATTLER_TAG_TYPE_NIGHTMARE));
-
-    /* CONFUSED tag alone -> cleared */
-    setup("full-heal-confused", 4);
-    b = &mon(T)->b;
-    b->status = STATUS_EFFECT_NONE;
-    pr_add_tag(&run.bt, &run.eng, b, BATTLER_TAG_TYPE_CONFUSED, 3, 0, -1);
-    CHECK(pr_has_battler_tag(&run.bt, b, BATTLER_TAG_TYPE_CONFUSED));
-    drain();
-    r = take("FULL_HEAL", 0, T, 0);
-    CHECK(r.ok);
-    CHECK(!pr_has_battler_tag(&run.bt, b, BATTLER_TAG_TYPE_CONFUSED));
-
-    /* Healthy target (no status, no confusion) -> refused */
-    setup("full-heal-healthy", 4);
-    b = &mon(T)->b;
-    b->status = STATUS_EFFECT_NONE;
-    b->hp = 150;
-    drain();
-    r = take("FULL_HEAL", 0, T, 0);
-    CHECK(!r.ok && !strcmp(r.why, NO_EFFECT));
-
-    /* Fainted target -> refused */
-    setup("full-heal-fainted", 4);
-    faint(T);
-    drain();
-    r = take("FULL_HEAL", 0, T, 0);
-    CHECK(!r.ok && !strcmp(r.why, NO_EFFECT));
-
-    printf("Full Heal table: all cases ok (each status, nightmare tag, confusion tag, fainted, healthy refusal, charm irrelevance)\n");
-}
-
 /* ---- reward-core has no application for these: game-core's own code keeps them ---- */
 static void unhandled_items(void)
 {
@@ -739,7 +669,7 @@ static void unhandled_items(void)
         const gc_offer o = offer(others[i], 0);
         CHECK(gc_reward_apply(&run, &o, 0, 0, &why) == GC_APPLY_UNHANDLED);
     }
-    /* Full Heal: real rule checks */
+    /* Full Heal: the stand-in's own rules, as before (a living Pokemon with a status; nothing else) */
     mon(0)->b.status = STATUS_EFFECT_POISON;
     result r = take("FULL_HEAL", 0, 0, 0);
     CHECK(r.ok && mon(0)->b.status == STATUS_EFFECT_NONE);
@@ -1071,7 +1001,6 @@ int main(void)
     sacred_ash();
     shuffled_party_order();
     test_pokeballs();
-    test_full_heal_table();
     unhandled_items();
     empty_slot_is_no_move();
     max_pp_override_blocks_pp_up();
@@ -1079,7 +1008,7 @@ int main(void)
     test_tm_and_memory_mushroom();
     test_rare_and_rarer_candy_table();
     test_candy_level_up_save_reload_resume();
-    printf("sacred ash, party order, Poke Balls, Full Heal, unhandled items, empty slot, max PP override, low-PP move, tm/memory, rare/rarer candy: ok\n");
+    printf("sacred ash, party order, Poke Balls, unhandled items, empty slot, max PP override, low-PP move, tm/memory, rare/rarer candy: ok\n");
     random_cases(30000);
     printf("reward apply: %ld checks, 0 failures\n", checks);
     return 0;

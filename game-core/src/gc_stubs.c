@@ -46,18 +46,8 @@ bool gc_port_apply_reward(gc_run *run, const gc_offer *o, int party, int move_sl
     pr_pokemon *b = &m->b;
     bool ok = true;
     if (!strcmp(k, "FULL_HEAL")) {
-        ok = b->hp > 0 && (b->status != STATUS_EFFECT_NONE || pr_has_battler_tag(&run->bt, b, BATTLER_TAG_TYPE_CONFUSED));
-        if (ok) {
-            if (b->status == STATUS_EFFECT_SLEEP && pr_has_battler_tag(&run->bt, b, BATTLER_TAG_TYPE_NIGHTMARE)) {
-                pr_lapse_tag(&run->bt, &run->eng, b, BATTLER_TAG_TYPE_NIGHTMARE, BATTLER_TAG_LAPSE_TYPE_CUSTOM);
-            }
-            b->status = STATUS_EFFECT_NONE;
-            b->status_toxic_turns = 0;
-            b->status_sleep_turns = b->status_freeze_turns = -1;
-            if (pr_has_battler_tag(&run->bt, b, BATTLER_TAG_TYPE_CONFUSED)) {
-                pr_lapse_tag(&run->bt, &run->eng, b, BATTLER_TAG_TYPE_CONFUSED, BATTLER_TAG_LAPSE_TYPE_CUSTOM);
-            }
-        }
+        ok = b->hp > 0 && b->status != STATUS_EFFECT_NONE;
+        if (ok) { b->status = STATUS_EFFECT_NONE; b->status_toxic_turns = 0; b->status_sleep_turns = b->status_freeze_turns = -1; }
     } else {
         /* a held item is added as it is; anything else would act on the Pokemon, and doesn't yet */
         if (idx < 0 || !(pr_items[idx].flags & PR_ITEMF_HELD)) gc_stub(run, GC_STUB_REWARD_APPLY);

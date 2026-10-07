@@ -43,13 +43,21 @@ it("reward apply producer", async () => {
 
   const itemKeys = [
     "POTION", "SUPER_POTION", "HYPER_POTION", "MAX_POTION", "FULL_RESTORE",
-    "REVIVE", "MAX_REVIVE", "SACRED_ASH",
+    "REVIVE", "MAX_REVIVE", "FULL_HEAL", "SACRED_ASH",
     "ETHER", "MAX_ETHER", "ELIXIR", "MAX_ELIXIR",
     "PP_UP", "PP_MAX",
     "EVOLUTION_ITEM", "RARE_EVOLUTION_ITEM",
     "FORM_CHANGE_ITEM", "RARE_FORM_CHANGE_ITEM",
     "MEGA_BRACELET", "DYNAMAX_BAND", "DNA_SPLICERS",
   ];
+
+  const shown: string[] = [];
+  if (scene.ui) {
+    vi.spyOn(scene.ui, "showText").mockImplementation((...args: any[]) => {
+      shown.push(String(args[0]));
+      if (typeof args[2] === "function") args[2]();
+    });
+  }
 
   const evoItemIds = Object.values(EvolutionItem).filter((v): v is number => typeof v === "number" && v > 0);
   const formChangeItemIds = Object.values(FormChangeItem).filter((v): v is number => typeof v === "number" && v > 0);
@@ -253,6 +261,7 @@ it("reward apply producer", async () => {
       }
 
       fusionDraws=[];
+      shown.length = 0;
       let applied = false;
       if (filterMsg === null) {
         let mod: any;
@@ -274,12 +283,12 @@ it("reward apply producer", async () => {
       if(fusionDraws.length>1) throw new Error("unexpected fusion draw count");
       lines.push(["D",fusionDraws.length,...fusionDraws].join(" "));
 
-      // Record result state after upstream apply
+      // Record result state after upstream apply (including text count)
       const outMon = party.flatMap((p: any) => [
         p.hp, p.status?.effect ?? 0, p.moveset.length,
         ...p.moveset.flatMap((m: any) => [m.ppUsed, m.ppUp, m.getMovePp()]),
       ]);
-      lines.push(["R", applied ? 1 : 0, filterMsg ? filterMsg.replace(/\s+/g, "_") : "OK", ...outMon].join(" "));
+      lines.push(["R", applied ? 1 : 0, filterMsg ? filterMsg.replace(/\s+/g, "_") : "OK", shown.length, ...outMon].join(" "));
       lines.push("E");
     } catch (e) {
       thrown++;
