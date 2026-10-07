@@ -123,6 +123,8 @@ const pr_form *gc_form(int species, int form);
 int gc_form_ability(const pr_form *f, int ability_index);
 void gc_mon_new_player(gc_run *run, gc_mon *m, const gc_starter *s, int level);
 void gc_mon_new_enemy(gc_run *run, gc_mon *m, int species, int level, const pr_enemy_gen *g, int trainer_slot);
+/* Task 63's clean wild constructor slice; false leaves the RNG/mon untouched. */
+bool gc_enemy_moveset(gc_run *run, gc_mon *m, const pr_enemy_gen *g);
 void gc_mon_set_move(gc_mon *m, int slot, int move);                  /* setMove */
 int gc_move_max_pp(const pr_pokemon *p, int slot);                     /* PokemonMove.getMovePp */
 bool gc_move_usable(const pr_pokemon *p, int slot, const char **why);  /* the PP and implementation checks */
