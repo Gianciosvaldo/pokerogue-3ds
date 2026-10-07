@@ -4,6 +4,104 @@ Native C port of PokeRogue's player rewards: the reward options after a wave (po
 
 The API is [`include/pr/reward.h`](include/pr/reward.h). The run loop (game-core) fills a `pr_reward_ctx` from the run before each reward screen: the party as the rolls see it, the player's items, ball counts, unlocks, the arena. A few of its fields are other ports' answers, marked "caller" in the header: `canSetStatus` (battle-core), `canApplyAbility`, the learnable level moves and the level-move list the TM filter leaves out (learnsets, not ported yet), each attack move's types for item spawns. The diff test takes those from upstream, so reward-core is checked given correct inputs.
 
+## Task 96 prerequisite: bounded vitamins (lane B, 2026-10-07)
+
+`pr_reward_apply_vitamin` implements real `BaseStatBoosterModifierType` selection,
+`PersistentModifier.add` and `BattleScene.updateModifiers` at pinned `8555c08`.
+All six vitamins use the selected holder's IV as their stack cap. IV zero is
+inoperable; an existing matching stack exactly at the IV cap is rejected. An
+accepted application adds or increments the holder/stat entry in original list
+order, then refreshes **every** party member's stats/HP through battle-core's
+read-only calculator. Fusion, effective nature and permanent/passive Wonder
+Guard are included. Base/custom nature, IVs and the other transported party
+fields remain unchanged. HP Up preserves absolute damage, keeps a full target
+full and does not revive a fainted target.
+
+The detailed API separates inventory addition from upstream's raw return:
+**pinned `BattleScene.addModifier` returns false for an ordinary persistent
+vitamin even when it adds the item**. Real `SelectModifierPhase.applyModifier`
+therefore reports a purchase error, leaves money unchanged and keeps the screen
+open for cost >= 0; a free reward (cost -1) ends normally. Result flags preserve
+this behavior. Generic `pr_reward_apply(...BASE_STAT_BOOSTER...)` applies a free
+reward and returns whether its item was added. Shop offerings, affordability,
+rendering, saves and game-core integration are caller-owned and unvalidated;
+this does not claim that the normal shop offers vitamins.
+
+Inputs must be ordinary, nonvirtual, positive persistent inventories with valid
+holder indices and unique holder/stat vitamin entries at or below the IV cap.
+The API refuses malformed inputs, full capacity, levels outside 1..255, Flip
+Stat, unfused Spliced Endless, wildcard held ownership, Evolution Tracker
+cleanup, and Soul Dew/Shuckle Juice/Old Gateau/Macho Brace inventories before
+context mutation. Other custom species/stat overrides remain unsupported.
+Mint's existing five stat-inventory guards remain in place: this does not expand
+Mint or game-core stat-item support, or complete Task 96.
+
+The additive `vitamin.producer.test.ts` invokes real selection, construction,
+persistent addition, stat refresh and the private purchase/free application
+method. Only UI error and phase-end boundaries are recorded; no application or
+stat method is replaced. `vitamintest` strictly compares 65 named numeric party
+fields, the entire test inventory, status/result flags, unchanged money and RNG.
+Unexpected queues/exceptions fail; version/count/order/footer are mandatory.
+Test inventories include vitamins on other holders/stats, Leftovers and Healing
+Charm. Status-object counters, other caller fields, virtual/over-cap inventories
+and the surrounding UI/run lifecycle are outside this bounded transport.
+
+Node22.23.3/Vitest4.1.11, upstream `8555c08c823b856cbec4eb99ca84ea52a955836d`:
+
+| Seed | Identical / cases | Mismatches | Fusion | Fainted | Custom nature | Nonbase forms | Wonder Guard |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 777 | 2000 / 2000 | 0 | 684 | 555 | 1018 | 960 | 371 |
+| 9001 | 2000 / 2000 | 0 | 624 | 543 | 985 | 962 | 321 |
+| 4242 | 2000 / 2000 | 0 | 658 | 554 | 1013 | 944 | 309 |
+| 31337 | 2000 / 2000 | 0 | 659 | 540 | 1024 | 969 | 321 |
+
+Each seed exercises all six vitamins: applied 200/201/201/200/199/199,
+inoperable 67/66/66/67/67/67, full 67/67/66/66/67/67, with **799** added paid
+items producing the upstream error/no deduction and **401** free rewards ending.
+Each stat has both paid and free accepted applications. **8000/8000 identical**,
+zero skipped/thrown; random levels are 1..100 (higher supported levels remain
+undiffed here). **31** host refusal checks preserve the whole context; partial,
+full and fainted HP behavior and detailed/generic application checks pass.
+An actual C-source cap=31 mutation fails **776/2000** seed777 cases (exit1).
+Ownership/money/stat boundary mutations fail **1200/799/2000** cases (exit1);
+an absent footer exits2.
+
+Fresh established seed99/N4000 traces at baseline `9cd7a03` replay byte-identically
+before/after: options **3950/0/50 unported**, 8052 screens; victory **4000/0**,
+2055 items/2459 screens; application **4000/0**, 115 with text; Memory **4000/0**.
+Unchanged Mint suite: four seeds x2000, **8000/8000 identical**, 33 guards pass.
+Host `make -s -C game-core -j2 test` passes with paired 200-run digests
+**a6662b64** and no reward/run lifecycle claim beyond that gate.
+
+Exact commands (persistent evidence outside the checkout):
+
+```sh
+. /workspace/shared/activate-parity.sh
+E=/workspace/validation/lane-b/vitamins
+mkdir -p "$E/baseline"
+git archive 9cd7a03 reward-core | tar -x -C "$E/baseline"
+export BATTLE_CORE="$PWD/battle-core" RUN_CORE="$PWD/run-core"
+BUILD="$E/baseline-build" sh "$E/baseline/reward-core/tools/difftest.sh" /workspace/shared/upstream-lane-b 4000 99 all
+for seed in 777 9001 4242 31337; do
+  BUILD="$E/build" sh reward-core/tools/vitamindiff.sh /workspace/shared/upstream-lane-b 2000 "$seed"
+  BUILD="$E/mint-regression" sh reward-core/tools/mintdiff.sh /workspace/shared/upstream-lane-b 2000 "$seed"
+done
+make -s -C reward-core -j2
+reward-core/build/vitamintest --selftest
+BUILD="$E/build" sh reward-core/tools/vitaminplant.sh "$E/build/vitamin-777.txt"
+for mutation in owner money stats; do
+  reward-core/build/vitamintest "$E/build/vitamin-777.txt" --mutate-$mutation # expected exit1
+done
+sed '$d' "$E/build/vitamin-777.txt" > "$E/truncated.txt"
+reward-core/build/vitamintest "$E/truncated.txt" # expected exit2
+for mode in rewards victory apply memory; do
+  "$E/baseline-build/${mode}test" "$E/baseline-build/${mode}-cases.txt" > "$E/before-${mode}.log"
+  reward-core/build/${mode}test "$E/baseline-build/${mode}-cases.txt" > "$E/after-${mode}.log"
+  cmp "$E/before-${mode}.log" "$E/after-${mode}.log"
+done
+make -s -C game-core -j2 test
+```
+
 ## Task 96 prerequisite: bounded Nature Mint application (lane B, 2026-10-07)
 
 `pr_reward_apply_mint(ctx, nature, party_idx)` and the `PR_ITEM_MINT` path of

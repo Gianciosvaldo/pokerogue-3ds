@@ -445,6 +445,23 @@ bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_i
  * Refuses unsupported stat inventories, Flip Stat, unfused Spliced Endless, invalid inputs
  * or a full unlock-request queue before mutation. No RNG draw; no game-core/dex persistence here. */
 bool pr_reward_apply_mint(pr_reward_ctx *ctx, int nature, int party_idx);
+/* Bounded BaseStatBoosterModifierType selection + persistent addition/update.
+ * All six permanent stats; caps use the selected holder's IV. Valid ordinary/fused
+ * stats and vitamin-only stat inventories, levels 1..255; refuses unsupported
+ * stat configurations/capacity before context mutation. cost=-1 is a free reward,
+ * cost>=0 a preauthorized purchase; affordability/shop offerings are caller-owned.
+ * Pinned addModifier returns FALSE even when a vitamin was added: purchased
+ * vitamins keep money unchanged and report an error; free rewards end normally.
+ * Generic pr_reward_apply returns whether inventory was added, not that raw return. */
+enum pr_reward_vitamin_status {
+    PR_REWARD_VITAMIN_UNSUPPORTED, PR_REWARD_VITAMIN_INOPERABLE,
+    PR_REWARD_VITAMIN_MAX_STACK, PR_REWARD_VITAMIN_APPLIED
+};
+typedef struct {
+    bool added, add_modifier_result, purchase_error, reward_finished;
+} pr_reward_vitamin_result;
+enum pr_reward_vitamin_status pr_reward_apply_vitamin(pr_reward_ctx *ctx, int stat,
+    int party_idx, double cost, pr_reward_vitamin_result *result);
 /* Task 44: LevelIncrementBoosterModifier / PokemonLevelIncrementModifier.
  * Upstream has RARE_CANDY (one party member) and RARER_CANDY (all party members); there is no
  * BITE_SIZED_CANDY in pinned 8555c08. Each Candy Jar stack adds one extra level to either item. */

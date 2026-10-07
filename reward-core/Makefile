@@ -8,10 +8,10 @@ CPPFLAGS += -Iinclude -Igen/out -I$(RUN_CORE)/include -I$(BATTLE_CORE)/include -
 BUILD ?= build
 CORE_LIB := $(BUILD)/battle-core/libprcore.a
 RUN_LIB := $(BUILD)/run-core/librun.a
-SRCS := src/reward.c src/pools.c src/victory.c src/trainer_rewards.c src/reward_apply.c src/memory.c src/candy.c src/mint.c gen/out/reward_data.c
+SRCS := src/reward.c src/pools.c src/victory.c src/trainer_rewards.c src/reward_apply.c src/memory.c src/candy.c src/mint.c src/vitamin.c gen/out/reward_data.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
-all: $(BUILD)/libreward.a $(BUILD)/rewardstest $(BUILD)/victorytest $(BUILD)/applytest $(BUILD)/memorytest $(BUILD)/candytest $(BUILD)/evolutionstatetest $(BUILD)/learnsetinputtest $(BUILD)/trainerrewardstest $(BUILD)/minttest
+all: $(BUILD)/libreward.a $(BUILD)/rewardstest $(BUILD)/victorytest $(BUILD)/applytest $(BUILD)/memorytest $(BUILD)/candytest $(BUILD)/evolutionstatetest $(BUILD)/learnsetinputtest $(BUILD)/trainerrewardstest $(BUILD)/minttest $(BUILD)/vitamintest
 
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -51,6 +51,9 @@ $(BUILD)/trainerrewardstest: tests/trainerrewardstest.c $(BUILD)/libreward.a $(R
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
 $(BUILD)/minttest: tests/minttest.c $(BUILD)/libreward.a $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+$(BUILD)/vitamintest: tests/vitamintest.c $(BUILD)/libreward.a $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
 clean:
