@@ -34,7 +34,7 @@ This task adds only the two-orb family; it does not complete Card 104.
 | `TurnStatusEffectModifier` | **Added:** `PR_MOD_TURN_STATUS_EFFECT`; TurnEnd self-status dispatch | Toxic/Flame Orb only; reward acquisition and run inventory bridge excluded |
 | `HitHealModifier` | `PR_MOD_HIT_HEAL`; damage-dependent recovery dispatch | Existing Shell Bell scope |
 | `BerryModifier` | `PR_MOD_BERRY`; trigger/consume dispatch for all eleven pinned berries | Existing bounded berry suites; lifecycle outside their fixtures not implied |
-| `PokemonInstantReviveModifier` | No C class; FaintPhase reports turn modifiers | Missing Reviver Seed battle dispatch |
+| `PokemonInstantReviveModifier` | `PR_MOD_INSTANT_REVIVE`; FaintPhase early return, queued revival and item consumption | Added bounded singles Reviver Seed; Commander/doubles and acquisition/save integration remain outside this slice |
 | `ResetNegativeStatStageModifier` | `PR_MOD_RESET_NEGATIVE_STAT_STAGE`; adverse-stage reset dispatch | Existing White Herb scope |
 | `FieldEffectModifier` | `PR_MOD_FIELD_EFFECT`; field-duration helper used by weather/terrain changes | Full-turn fixtures/whitelist |
 | `PokemonExpBoosterModifier` | No C class in battle-core | Held Lucky/Golden Egg experience dispatch; side-wide Exp. Charm helper is a different class |
@@ -69,3 +69,11 @@ while preserving OHKO and accuracy=-1 rejection. The new ID is appended after
 the orb ID; the existing `num` field holds the bounded identity amount of five.
 Neither promotion implies reward acquisition, save bridging, removal or theft
 parity for those identities.
+
+The Reviver Seed slice appends `PR_MOD_INSTANT_REVIVE` after Wide Lens without
+changing existing IDs or modifier fields. Its FaintPhase path follows pinned
+upstream's `preventInstantRevive` gate, immediate status reset, first matching
+item consumption and early return. Direct-hit knockouts can revive; indirect
+self-KOs cannot. The scope is supported singles fixtures and stat-neutral
+adjacent Leftovers; promotion does not establish acquisition, inventory/save,
+Commander or general doubles parity.

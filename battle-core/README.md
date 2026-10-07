@@ -647,3 +647,62 @@ seeds covered/pass 1922/1932/1929/1939 with existing untranslated sets 1/1/2/1
 retained; COND covered/pass 1767/1756/1770/1766 with every covered text set
 identical. Failing covered turns and parser/stat mismatches are zero. No existing
 producer/comparator was changed; no new console result is claimed.
+
+
+## Bounded Reviver Seed faint dispatch (Card 104, partial)
+
+`PokemonInstantReviveModifier` now maps to appended `PR_MOD_INSTANT_REVIVE`.
+Existing IDs and modifier fields remain unchanged. After Destiny Bond/Grudge
+and summon-data reset, FaintPhase applies the first seed matching the holder
+(or wildcard ID -1) unless `preventInstantRevive` is set. It queues a revive
+heal of `max(1, floor(maxHP / 2))` with the actual item message, clears status
+and its counters immediately, visits Commander callbacks, consumes one seed
+through the existing item-loss path, updates the side's modifiers/stats, and
+returns before ordinary faint bookkeeping. Unknown subclasses remain unported.
+Indirect damage and self-sacrifice retain the normal faint path.
+
+The additive producer runs real pinned FaintPhase, the real item apply and
+PokemonHealPhase. Instrumentation counts item calls while delegating unchanged
+upstream methods. Ten states, each exercised on both sides, cover direct-hit
+revival, existing burn, summon stages, wrong owner, indirect Memento self-KO,
+nonfatal damage, wildcard owner, Unburden, and Leftovers before/after the seed
+in the modifier list. Full state, owner/stacks, counters, histories, friendship,
+field membership, phase/queue order, both RNG states and every message are
+compared with the unchanged established turn comparator. The new wrapper
+requires a complete trace, one known input seed per case and stack=1. Twelve
+C guards additionally check holder refusal, unknown subclass refusal, living
+holder, the indirect gate, wildcard ownership, odd-max-HP flooring, immediate
+counter reset and absence of faint bookkeeping before the queued heal.
+
+```sh
+# Node22, external upstream8555c08; repeat all four required seeds.
+sh battle-core/tools/reviverseeddiff.sh <upstream> 2000 777
+sh battle-core/tools/reviverseeddiff.sh <upstream> 2000 9001
+sh battle-core/tools/reviverseeddiff.sh <upstream> 2000 4242
+sh battle-core/tools/reviverseeddiff.sh <upstream> 2000 31337
+```
+
+Node22.23.3 / Vitest4.1.11 / GCC14.2.0 results: each seed has 2000 cases,
+2000 covered/pass and 2000 identical message sets, with zero parser/stat
+mismatches, exceptions or uncovered cases. Each has 1400 real item applications
+and consumptions, 600 rejected/unused seeds, 200 owner refusals and 200 cases
+in every state. Twelve guards pass. Disabling only the actual faint dispatch
+fails 1400/2000 full turns and message sets, with zero parser/stat errors
+(exit1). Missing footer, missing input seed, unknown input class and stack256
+are refused (exit2).
+
+Fresh Node22 reference traces from the preceding Wide Lens slice were reused
+unchanged against an archived current-main833aab0 baseline and this change:
+B seed777/N2000 plain 1942, rich 1831, switch 1890, summon 1863 covered/pass;
+ITEMS four-seed coverage/pass 1922/1932/1929/1939 with established untranslated
+sets 1/1/2/1 retained; COND 1767/1756/1770/1766 covered/pass with every covered
+text set identical. Wide Lens remains 4x2000 covered/pass with all text sets
+identical. All before/after outputs match; parser/stat and covered-turn failure
+counts stay zero. Established producer/comparator hashes remain unchanged.
+Host `make -C game-core test` passes, including 32,725 resume and 39 item bridge
+checks; normal/save 200-run digests both `a6662b64`.
+
+This slice covers Rattata form0 singles with Ball Fetch or Unburden and
+stat-neutral neighboring Leftovers. Commander/doubles, other abilities/forms,
+reward acquisition, inventory/save integration, generic theft and hardware
+acceptance remain outside this evidence. Card104 remains partial.

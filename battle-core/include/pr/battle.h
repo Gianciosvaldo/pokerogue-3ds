@@ -85,6 +85,7 @@ enum {
     PR_MOD_BERRY,                    /* Berries */
     PR_MOD_TURN_STATUS_EFFECT,       /* Toxic Orb / Flame Orb; status_effect selects identity */
     PR_MOD_MOVE_ACCURACY_BOOSTER,    /* Wide Lens: num=accuracyAmount (5) */
+    PR_MOD_INSTANT_REVIVE,          /* Reviver Seed; max held stack 1 */
     PR_MOD_COUNT_
 };
 extern const uint8_t pr_mod_parent[PR_MOD_COUNT_];
