@@ -1,6 +1,7 @@
 #!/bin/sh
 # Generate N upstream reward-application cases and replay them through game-core's gc_port_apply_reward on a real run:
-#  - reward-core's own apply producer, unchanged (healing, revive, PP and PP Up items; Task 60), and
+#  - reward-core's own apply producer, unchanged (healing, revive, PP, PP Up and Full Heal items, with the statuses'
+#    counters, the confusion and Nightmare tags and the texts it queues; Tasks 60 and 96), and
 #  - game-core's candy producer, tests/candy.producer.test.ts (Rare Candy and Rarer Candy; Task 96), and
 #  - game-core's pokeball producer, tests/pokeball.producer.test.ts (Poke Balls taken and given, with the text; Task 96).
 # Usage: tools/applydiff.sh <upstream dir> [N] [seed]
@@ -31,7 +32,7 @@ run_compare() {
     N_BAD=$(sed -n 's/^TOTAL mismatches in this trace: //p' "$OUTF")
     TOTAL=$((TOTAL + ${N_BAD:-0}))
 }
-run_compare "apply (healing, revive, PP)" "$BUILD/gc-apply-$SEED.txt"
+run_compare "apply (healing, revive, PP, Full Heal)" "$BUILD/gc-apply-$SEED.txt"
 run_compare "candy" "$BUILD/gc-candy-$SEED.txt"
 run_compare "pokeball" "$BUILD/gc-pokeball-$SEED.txt"
 echo "TOTAL mismatches: $TOTAL (seed $SEED, N $N)"

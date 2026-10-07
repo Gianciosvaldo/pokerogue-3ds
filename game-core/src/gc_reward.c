@@ -164,6 +164,14 @@ static void fill_mon(gc_run *run, gc_mon *m, pr_reward_mon *r)
     r->hp = p->hp;
     r->max_hp = p->stats[STAT_HP];
     r->status = p->status;
+    r->status_toxic_turns = p->status_toxic_turns;
+    r->status_sleep_turns = p->status_sleep_turns;
+    r->status_freeze_turns = p->status_freeze_turns;
+    /* getTag(CONFUSED), getTag(NIGHTMARE): the tags stay in summonData until the next battle's ReturnPhase, so a
+     * confusion or Nightmare still active on the last turn is on the Pokemon at the reward screen. A fainted one has
+     * none upstream (FaintPhase resets its summonData); its HP decides first in every filter that reads these */
+    r->confused = pr_get_battler_tag(p, BATTLER_TAG_TYPE_CONFUSED) != NULL;
+    r->nightmare = pr_get_battler_tag(p, BATTLER_TAG_TYPE_NIGHTMARE) != NULL;
     r->nature = p->nature;
     r->tera_type = p->tera_type;
     r->friendship = p->friendship;
@@ -482,7 +490,7 @@ static bool core_applies(int item)
     switch (item) {
     case PR_ITEM_RARE_CANDY: case PR_ITEM_RARER_CANDY:
     case PR_ITEM_POTION: case PR_ITEM_SUPER_POTION: case PR_ITEM_HYPER_POTION: case PR_ITEM_MAX_POTION:
-    case PR_ITEM_FULL_RESTORE: case PR_ITEM_REVIVE: case PR_ITEM_MAX_REVIVE: case PR_ITEM_SACRED_ASH:
+    case PR_ITEM_FULL_RESTORE: case PR_ITEM_FULL_HEAL: case PR_ITEM_REVIVE: case PR_ITEM_MAX_REVIVE: case PR_ITEM_SACRED_ASH:
     case PR_ITEM_ETHER: case PR_ITEM_MAX_ETHER: case PR_ITEM_ELIXIR: case PR_ITEM_MAX_ELIXIR:
     case PR_ITEM_PP_UP: case PR_ITEM_PP_MAX:
         return true;
@@ -498,6 +506,18 @@ static int core_move_index(const pr_pokemon *p, int slot)
     int k = 0;
     for (int i = 0; i < slot; i++) k += p->moves[i] != 0;
     return k;
+}
+
+/* the tag a cure ended, out of summonData.tags (the order of the rest stays). The cure's own text is the caller's:
+ * reward-core reports it, so pr_remove_tag's (battle-core's onRemove) is not used */
+static void drop_tag(pr_pokemon *b, int type)
+{
+    for (int i = 0; i < b->n_tags; i++) {
+        if (b->tags[i].type != type) continue;
+        memmove(&b->tags[i], &b->tags[i + 1], (size_t)(b->n_tags - i - 1) * sizeof b->tags[0]);
+        b->n_tags--;
+        return;
+    }
 }
 
 int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, const char **why)
@@ -582,21 +602,21 @@ int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, co
         *why = "partyUiHandler:anyEffect";
         return GC_APPLY_REFUSED;
     }
-    /* what reward-core changed, back into the run: hp, status (and the counters its Status object carried),
-     * PP used and PP Ups. Sacred Ash can touch the whole party, anything else the one member */
+    /* what reward-core changed, back into the run: hp, status (and the counters its Status object carried), the
+     * confusion and Nightmare tags a cure ended, PP used and PP Ups. Sacred Ash can touch the whole party, anything
+     * else the one member */
     for (int i = 0; i < ctx->n_party; i++) {
         const int storage = run->party_order[i];
         gc_mon *m = &run->party[storage];
         pr_pokemon *b = &m->b;
         const pr_reward_mon *r = &ctx->party[i];
         const bool hp_changed = b->hp != r->hp;
-        if (b->status != r->status) {
-            if (r->status == STATUS_EFFECT_NONE) {
-                b->status_toxic_turns = 0;
-                b->status_sleep_turns = b->status_freeze_turns = -1;
-            }
-            b->status = (uint8_t)r->status;
-        }
+        b->status = (uint8_t)r->status;
+        b->status_toxic_turns = r->status_toxic_turns;
+        b->status_sleep_turns = r->status_sleep_turns;
+        b->status_freeze_turns = r->status_freeze_turns;
+        if (!r->confused) drop_tag(b, BATTLER_TAG_TYPE_CONFUSED);
+        if (!r->nightmare) drop_tag(b, BATTLER_TAG_TYPE_NIGHTMARE);
         b->hp = r->hp;
         for (int s = 0, c = 0; s < b->n_moves && s < 4; s++) {
             if (!b->moves[s]) continue;
@@ -622,6 +642,12 @@ int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, co
             gc_event *ev = gc_ev_new(run, GC_EV_HP);
             if (ev) { ev->a = 0; ev->b = storage; ev->c = b->hp; }
         }
+    }
+    /* the texts the application queued (queueMessage, after its effect): a cure that ends a confusion says so. Taking
+     * the reward shows nothing else (SelectModifierPhase.applyModifier only ends the phase) */
+    for (int i = 0; i < ctx->n_apply_texts; i++) {
+        const pr_reward_text *t = &ctx->apply_texts[i];
+        gc_ev_msg(run, t->key, 1, gc_m_mon(run, "pokemonNameWithAffix", 0, run->party_order[t->party_idx]));
     }
     return GC_APPLY_DONE;
 }

@@ -148,6 +148,14 @@ static const acase table[] = {
     {"Full Restore at full HP still cures a status", "FULL_RESTORE", 0, 300, 300, STATUS_EFFECT_SLEEP, 0, ANY, ANY, T, 0, true, NULL, 300, 0, ANY, ANY},
     {"Full Restore at full HP with no status: no effect", "FULL_RESTORE", 0, 300, 300, 0, 0, ANY, ANY, T, 0, false, NO_EFFECT, 300, 0, ANY, ANY},
     {"Full Restore on a fainted Pokemon: no effect", "FULL_RESTORE", 0, 300, 0, STATUS_EFFECT_FAINT, 0, ANY, ANY, T, 0, false, NO_EFFECT, 0, STATUS_EFFECT_FAINT, ANY, ANY},
+    /* ---- Full Heal: a status (and only that; HP is not touched) or a confusion, a living Pokemon ---- */
+    {"Full Heal cures a burn and leaves HP alone", "FULL_HEAL", 0, 300, 100, STATUS_EFFECT_BURN, 0, ANY, ANY, T, 0, true, NULL, 100, 0, ANY, ANY},
+    {"Full Heal cures a sleeper at full HP", "FULL_HEAL", 0, 300, 300, STATUS_EFFECT_SLEEP, 0, ANY, ANY, T, 0, true, NULL, 300, 0, ANY, ANY},
+    {"Full Heal ignores the Healing Charm", "FULL_HEAL", 0, 300, 100, STATUS_EFFECT_TOXIC, 5, ANY, ANY, T, 0, true, NULL, 100, 0, ANY, ANY},
+    {"Full Heal on a Pokemon with no status: no effect", "FULL_HEAL", 0, 300, 100, 0, 0, ANY, ANY, T, 0, false, NO_EFFECT, 100, 0, ANY, ANY},
+    {"Full Heal on a fainted Pokemon: no effect", "FULL_HEAL", 0, 300, 0, STATUS_EFFECT_FAINT, 0, ANY, ANY, T, 0, false, NO_EFFECT, 0, STATUS_EFFECT_FAINT, ANY, ANY},
+    {"Bought Full Heal on a healthy Pokemon: refused", "FULL_HEAL", 300, 300, 100, 0, 0, ANY, ANY, T, 0, false, NO_EFFECT, 100, 0, ANY, ANY},
+    {"Bought Full Heal cures", "FULL_HEAL", 300, 300, 100, STATUS_EFFECT_PARALYSIS, 0, ANY, ANY, T, 0, true, NULL, 100, 0, ANY, ANY},
     /* ---- Revives: the fainted only; the Healing Charm doesn't count; a status is cleared ---- */
     {"Revive brings back half", "REVIVE", 0, 300, 0, STATUS_EFFECT_FAINT, 0, ANY, ANY, T, 0, true, NULL, 150, 0, ANY, ANY},
     {"Revive on a Pokemon that can still fight: no effect", "REVIVE", 0, 300, 100, 0, 0, ANY, ANY, T, 0, false, NO_EFFECT, 100, 0, ANY, ANY},
@@ -664,24 +672,242 @@ static void unhandled_items(void)
 {
     setup("reward-apply-unhandled", 3);
     const char *why = "";
-    static const char *const others[] = {"FULL_HEAL", "LEFTOVERS", "EXP_SHARE"};
+    static const char *const others[] = {"LEFTOVERS", "EXP_SHARE"};
     for (size_t i = 0; i < sizeof others / sizeof others[0]; i++) {
         const gc_offer o = offer(others[i], 0);
         CHECK(gc_reward_apply(&run, &o, 0, 0, &why) == GC_APPLY_UNHANDLED);
     }
-    /* Full Heal: the stand-in's own rules, as before (a living Pokemon with a status; nothing else) */
-    mon(0)->b.status = STATUS_EFFECT_POISON;
-    result r = take("FULL_HEAL", 0, 0, 0);
-    CHECK(r.ok && mon(0)->b.status == STATUS_EFFECT_NONE);
-    r = take("FULL_HEAL", 0, 0, 0);
-    CHECK(!r.ok && !strcmp(r.why, NO_EFFECT));
-    faint(1);
-    r = take("FULL_HEAL", 0, 1, 0);
-    CHECK(!r.ok && !strcmp(r.why, NO_EFFECT));
     /* a Poke Ball is added to the bag, not applied */
     const int balls = run.pokeballs[POKEBALL_TYPE_POKEBALL];
-    r = take("POKEBALL", 0, -1, -1);
+    const result r = take("POKEBALL", 0, -1, -1);
     CHECK(r.ok && run.pokeballs[POKEBALL_TYPE_POKEBALL] == balls + 5);
+}
+
+/* ---- Full Heal, and the cure inside Full Restore: the status and its counters, the confusion and Nightmare tags, and
+ * the one text upstream queues (battlerTags:confusedOnRemove, when a confusion ends). Worked out from 8555c08:
+ * PokemonStatusHealModifierType's filter is !hp || (!status && !getTag(CONFUSED)); PokemonStatusHealModifier.apply and
+ * PokemonHpRestoreModifier.apply (healStatus) call resetStatus(true, true, false, false), which clears the status
+ * (counters with it), lapses Nightmare only if the status was sleep, and lapses the confusion. ---- */
+static void add_tag(pr_pokemon *b, int type)
+{
+    CHECK(b->n_tags < PR_MAX_BATTLER_TAGS);
+    pr_battler_tag t;
+    memset(&t, 0, sizeof t);
+    t.type = (uint8_t)type;
+    t.turn_count = 3;
+    t.source_id = -1;
+    t.source_index = -1;
+    b->tags[b->n_tags++] = t;
+}
+static bool has_tag(int storage, int type) { return pr_get_battler_tag(&mon(storage)->b, type) != NULL; }
+
+/* the message events the last call queued: n returned, `msgs` filled up to 4; HP events are counted in *hp_events */
+static int messages(gc_event msgs[4], int *hp_events)
+{
+    gc_event e;
+    int n = 0;
+    *hp_events = 0;
+    while (gc_run_next_event(&run, &e)) {
+        if (e.kind == GC_EV_HP) (*hp_events)++;
+        else if (e.kind == GC_EV_MESSAGE) { if (n < 4) msgs[n] = e; n++; }
+        else CHECKF(0, "event kind %d", e.kind);
+    }
+    return n;
+}
+
+static void test_full_heal(void)
+{
+    gc_event msgs[4];
+    int hp_events;
+    result r;
+
+    /* a rotated party order: the member at party index 1 is storage 3, so a text naming the wrong member shows */
+    setup("full-heal-tags", 4);
+    run.party_order[0] = 2; run.party_order[1] = 3; run.party_order[2] = 0; run.party_order[3] = 1;
+    const int tgt = 1, st = run.party_order[tgt];
+    pr_pokemon *b = &mon(st)->b;
+    b->hp = 100;
+    drain();
+
+    /* confusion alone is enough (the filter reads the tag too), and the cure says so: one text, naming the target */
+    add_tag(b, BATTLER_TAG_TYPE_CONFUSED);
+    r = take("FULL_HEAL", 0, st, 0);
+    CHECK(r.ok && b->hp == 100 && b->status == STATUS_EFFECT_NONE && !has_tag(st, BATTLER_TAG_TYPE_CONFUSED) && b->n_tags == 0);
+    CHECK(messages(msgs, &hp_events) == 1 && hp_events == 1);
+    CHECK(!strcmp(msgs[0].msg.key, "battlerTags:confusedOnRemove"));
+    CHECK(msgs[0].msg.args[0].kind == PR_ARG_POKEMON && !strcmp(msgs[0].msg.args[0].name, "pokemonNameWithAffix"));
+    CHECK((int)(msgs[0].msg.args[0].v >> 16) == b->species);
+    for (int i = 0; i < 4; i++) if (i != st) CHECK((int)(msgs[0].msg.args[0].v >> 16) != mon(i)->b.species);
+    /* again: nothing left to cure, refused, no event */
+    r = take("FULL_HEAL", 0, st, 0);
+    CHECK(!r.ok && !strcmp(r.why, NO_EFFECT));
+    CHECK(messages(msgs, &hp_events) == 0 && hp_events == 0);
+
+    /* a status and a confusion: both go, one text */
+    b->status = STATUS_EFFECT_POISON;
+    add_tag(b, BATTLER_TAG_TYPE_CONFUSED);
+    r = take("FULL_HEAL", 0, st, 0);
+    CHECK(r.ok && b->status == STATUS_EFFECT_NONE && b->n_tags == 0);
+    CHECK(messages(msgs, &hp_events) == 1 && !strcmp(msgs[0].msg.key, "battlerTags:confusedOnRemove"));
+
+    /* a status alone: no text at all (upstream calls neither queueMessage nor ui.showText for it) */
+    b->status = STATUS_EFFECT_BURN;
+    r = take("FULL_HEAL", 0, st, 0);
+    CHECK(r.ok && b->status == STATUS_EFFECT_NONE);
+    CHECK(messages(msgs, &hp_events) == 0 && hp_events == 1);
+
+    /* sleep: the counter goes back to "undefined" (-1), and the Nightmare lapses with the sleep, the confusion too */
+    b->status = STATUS_EFFECT_SLEEP;
+    b->status_sleep_turns = 3;
+    add_tag(b, BATTLER_TAG_TYPE_NIGHTMARE);
+    add_tag(b, BATTLER_TAG_TYPE_CONFUSED);
+    r = take("FULL_HEAL", 0, st, 0);
+    CHECK(r.ok && b->status == STATUS_EFFECT_NONE && b->status_sleep_turns == -1 && b->status_toxic_turns == 0 && b->status_freeze_turns == -1);
+    CHECK(b->n_tags == 0);
+    CHECK(messages(msgs, &hp_events) == 1);   /* Nightmare lapses without a text */
+
+    /* the toxic counter and the freeze counter */
+    b->status = STATUS_EFFECT_TOXIC;
+    b->status_toxic_turns = 4;
+    r = take("FULL_HEAL", 0, st, 0);
+    CHECK(r.ok && b->status == STATUS_EFFECT_NONE && b->status_toxic_turns == 0 && b->status_sleep_turns == -1 && b->status_freeze_turns == -1);
+    drain();
+    b->status = STATUS_EFFECT_FREEZE;
+    b->status_freeze_turns = 2;
+    r = take("FULL_HEAL", 0, st, 0);
+    CHECK(r.ok && b->status_freeze_turns == -1);
+    drain();
+
+    /* Nightmare without the sleep stays, and is no reason to take the item (the filter reads the status and the confusion only) */
+    add_tag(b, BATTLER_TAG_TYPE_NIGHTMARE);
+    r = take("FULL_HEAL", 0, st, 0);
+    CHECK(!r.ok && !strcmp(r.why, NO_EFFECT) && has_tag(st, BATTLER_TAG_TYPE_NIGHTMARE));
+    b->status = STATUS_EFFECT_PARALYSIS;
+    r = take("FULL_HEAL", 0, st, 0);
+    CHECK(r.ok && b->status == STATUS_EFFECT_NONE && has_tag(st, BATTLER_TAG_TYPE_NIGHTMARE));
+    CHECK(messages(msgs, &hp_events) == 0);
+
+    /* tags the cure does not touch stay, in order, and nobody else changes */
+    add_tag(b, BATTLER_TAG_TYPE_CONFUSED);
+    add_tag(b, BATTLER_TAG_TYPE_TAUNT);
+    b->status = STATUS_EFFECT_POISON;
+    pr_pokemon *o = &mon(0)->b;
+    o->status = STATUS_EFFECT_BURN;
+    add_tag(o, BATTLER_TAG_TYPE_CONFUSED);
+    drain();
+    r = take("FULL_HEAL", 0, st, 0);
+    CHECK(r.ok && b->n_tags == 2 && b->tags[0].type == BATTLER_TAG_TYPE_NIGHTMARE && b->tags[1].type == BATTLER_TAG_TYPE_TAUNT);
+    CHECK(o->status == STATUS_EFFECT_BURN && has_tag(0, BATTLER_TAG_TYPE_CONFUSED));
+    CHECK(messages(msgs, &hp_events) == 1);
+
+    /* a bought Full Heal that the filter refuses keeps the screen (refused, nothing happens) */
+    b->status = STATUS_EFFECT_NONE;
+    drain();
+    r = take("FULL_HEAL", 300, st, 0);
+    CHECK(!r.ok && !strcmp(r.why, NO_EFFECT));
+    CHECK(messages(msgs, &hp_events) == 0 && hp_events == 0);
+    /* and one that cures a confusion alone says so just the same */
+    add_tag(b, BATTLER_TAG_TYPE_CONFUSED);
+    r = take("FULL_HEAL", 300, st, 0);
+    CHECK(r.ok && messages(msgs, &hp_events) == 1);
+
+    /* Full Restore at full HP: the confusion alone is a reason to take it (PokemonHpRestoreModifierType's filter), the cure is
+     * the same, a healthy full-HP member is still refused */
+    setup("full-restore-confusion", 3);
+    b = &mon(1)->b;
+    drain();
+    r = take("FULL_RESTORE", 0, 1, 0);
+    CHECK(!r.ok && !strcmp(r.why, NO_EFFECT));
+    add_tag(b, BATTLER_TAG_TYPE_CONFUSED);
+    drain();
+    r = take("FULL_RESTORE", 0, 1, 0);
+    CHECK(r.ok && b->hp == 300 && b->n_tags == 0);
+    CHECK(messages(msgs, &hp_events) == 1 && !strcmp(msgs[0].msg.key, "battlerTags:confusedOnRemove"));
+    /* below full HP, with a confusion and a toxic counter: healed, cured, one text */
+    b->hp = 40;
+    b->status = STATUS_EFFECT_TOXIC;
+    b->status_toxic_turns = 3;
+    add_tag(b, BATTLER_TAG_TYPE_CONFUSED);
+    drain();
+    r = take("FULL_RESTORE", 0, 1, 0);
+    CHECK(r.ok && b->hp == 300 && b->status == STATUS_EFFECT_NONE && b->status_toxic_turns == 0 && b->n_tags == 0);
+    CHECK(messages(msgs, &hp_events) == 1);
+    /* a Potion heals and leaves the status, the counters and the tags alone */
+    b->hp = 40;
+    b->status = STATUS_EFFECT_TOXIC;
+    b->status_toxic_turns = 3;
+    add_tag(b, BATTLER_TAG_TYPE_CONFUSED);
+    drain();
+    r = take("POTION", 0, 1, 0);
+    CHECK(r.ok && b->hp > 40 && b->status == STATUS_EFFECT_TOXIC && b->status_toxic_turns == 3 && b->n_tags == 1);
+    CHECK(messages(msgs, &hp_events) == 0);
+
+    /* a Revive leaves the counters at their cleared values (a fainted Pokemon has no tags upstream) */
+    faint(2);
+    mon(2)->b.status_toxic_turns = 0;
+    r = take("REVIVE", 0, 2, 0);
+    CHECK(r.ok && mon(2)->b.status == STATUS_EFFECT_NONE && mon(2)->b.status_sleep_turns == -1 && mon(2)->b.status_freeze_turns == -1);
+    drain();
+
+    printf("full heal: status, counters, confusion and Nightmare cures and their text: ok\n");
+}
+
+/* ---- the same through the real flow: confused in battle, the wave won, Full Heal on the reward screen, the next wave's
+ * command screen, a save and a load. The confusion is added by battle-core's own addTag, so this also shows that the tag
+ * is still on the lead when the reward screen opens (upstream keeps summonData until the next battle's ReturnPhase) ---- */
+static void test_full_heal_flow(void)
+{
+    memset(&run, 0, sizeof run);
+    gc_system_init_defaults(&sys);
+    gc_run_new(&run, GAME_MODES_CLASSIC, "full-heal-flow", 7);
+    gc_starter team = {.species = SPECIES_ID_BULBASAUR, .tera_type = -1};
+    for (int j = 0; j < 6; j++) team.ivs[j] = 15;
+    const char *why;
+    CHECK(gc_run_set_starters(&run, &team, 1, &why));
+    run.sys = &sys;
+    drain();
+    CHECK(run.screen.kind == GC_SCREEN_COMMAND);
+    gc_mon *lead = mon(0);
+    run.enemy[0].b.hp = 1;
+    CHECK(pr_add_tag(&run.bt, &run.eng, &lead->b, BATTLER_TAG_TYPE_CONFUSED, 5, MOVE_ID_CONFUSE_RAY, -1));
+    CHECK(pr_get_battler_tag(&lead->b, BATTLER_TAG_TYPE_CONFUSED));
+    drain();
+
+    /* win the wave (a confused lead can hit itself, so give it a few turns) */
+    for (int turn = 0; turn < 8 && run.screen.kind == GC_SCREEN_COMMAND; turn++) { flow_fight(&run); drain(); }
+    CHECK(run.screen.kind == GC_SCREEN_REWARD);
+    const int wave = run.wave;
+    CHECK(pr_get_battler_tag(&lead->b, BATTLER_TAG_TYPE_CONFUSED) != NULL);   /* the tag came through the victory */
+
+    /* Full Heal on the lead: the tag goes, the one text is the first thing shown, then the next wave */
+    run.screen.options[0] = offer("FULL_HEAL", 0);
+    gc_choice pick = {GC_CH_REWARD, 0, 0, -1};
+    CHECK(gc_run_choose(&run, &pick, &why));
+    CHECK(lead->b.n_tags == 0 && lead->b.status == STATUS_EFFECT_NONE);
+    gc_event e;
+    int texts = 0;
+    bool first_text_is_cure = false;
+    while (gc_run_next_event(&run, &e))
+        if (e.kind == GC_EV_MESSAGE) {
+            if (!texts) first_text_is_cure = !strcmp(e.msg.key, "battlerTags:confusedOnRemove");
+            texts += !strcmp(e.msg.key, "battlerTags:confusedOnRemove");
+        }
+    CHECK(texts == 1 && first_text_is_cure);
+    for (int step = 0; step < 20 && run.screen.kind == GC_SCREEN_CHECK_SWITCH; step++) {
+        gc_choice no = {GC_CH_CONFIRM, 0, 0, 0};
+        CHECK(gc_run_choose(&run, &no, &why));
+        drain();
+    }
+    CHECK(run.screen.kind == GC_SCREEN_COMMAND && run.wave == wave + 1 && gc_run_can_save(&run));
+    CHECK(lead->b.n_tags == 0);   /* the next battle's lead keeps what is left: nothing */
+    static uint8_t buf[GC_SAVE_MAX];
+    const size_t n = gc_run_save(&run, buf, sizeof buf);
+    CHECK(n > 0);
+    memset(&flow_loaded, 0, sizeof flow_loaded);
+    CHECK(gc_run_load(&flow_loaded, buf, n, &why) && !flow_loaded.load_dropped);
+    flow_loaded.sys = &sys;
+    CHECK(flow_loaded.party[0].b.n_tags == 0 && flow_loaded.party[0].b.status == STATUS_EFFECT_NONE);
+    printf("full heal flow: confused in battle -> reward -> Full Heal -> text -> next wave -> save -> load ok\n");
 }
 
 /* a slot in the moveset range with no move (reward-core's moveset leaves empty slots out) is no move */
@@ -1002,6 +1228,8 @@ int main(void)
     shuffled_party_order();
     test_pokeballs();
     unhandled_items();
+    test_full_heal();
+    test_full_heal_flow();
     empty_slot_is_no_move();
     max_pp_override_blocks_pp_up();
     low_pp_move_refuses_pp_up();
