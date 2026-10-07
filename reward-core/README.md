@@ -4,6 +4,98 @@ Native C port of PokeRogue's player rewards: the reward options after a wave (po
 
 The API is [`include/pr/reward.h`](include/pr/reward.h). The run loop (game-core) fills a `pr_reward_ctx` from the run before each reward screen: the party as the rolls see it, the player's items, ball counts, unlocks, the arena. A few of its fields are other ports' answers, marked "caller" in the header: `canSetStatus` (battle-core), `canApplyAbility`, the learnable level moves and the level-move list the TM filter leaves out (learnsets, not ported yet), each attack move's types for item spawns. The diff test takes those from upstream, so reward-core is checked given correct inputs.
 
+## Task 96 prerequisite: canonical Lure primitives (lane B, 2026-10-07)
+
+`pr_reward_add_lure`, `pr_reward_lapse_lures` and `pr_reward_lure_chance`
+mirror pinned `LapsingPersistentModifier.add/lapse` and
+`DoubleBattleChanceBoosterModifier.apply` for Lure/Super Lure/Max Lure's
+canonical **10/15/30** battle durations. Addition appends a new stack-one
+entry, refreshes the **first** matching duration to its original maximum, or
+returns FULL without mutation. Refresh preserves stack and list order and
+requests `se/restore` through its distinct REFRESHED status. Duplicate objects
+retain upstream's first-match behavior. Every object divides the raw chance
+denominator by four, even with stack two. Each lapse ticks **Lures only** and
+removes expired objects while preserving the remaining inventory order.
+
+This is a modifier prerequisite, not the `pr_reward_apply` or
+`BattleScene.addModifier` boundary. Full-item tier fallback, scene stat refresh,
+purchases/selection phases, complete BattleEnd processing, other lapsing
+families, game-core/save integration, wave/ability chance rules, final minimum-one
+clamp and RNG rolls are excluded. Task 96 remains partial. The caller guarantees
+canonical maximum durations: `setNewBattleCount` changes an upstream field not
+transported here and is unsupported even if its current count fits these bounds.
+Lures require owner -1, arg zero, nonvirtual stack 1..2 and remaining count
+1..maximum. Unsupported shapes/capacity leave context and output arguments
+unchanged. FULL is a supported no-effect result. Unrelated known-item entries
+are opaque, so this API never validates their holder/stat semantics or updates
+party stats. Lure `active` has no upstream counterpart: existing values are
+preserved and new entries use false. Chance accepts finite nonnegative values.
+
+Node22.23.3/Vitest4.1.11, upstream
+`8555c08c823b856cbec4eb99ca84ea52a955836d`: real factory constructors, modifier
+`add`, scene `applyModifiers`, real `lapse` and scene removal provide the oracle.
+Every intermediate inventory, result, refresh sound and denominator is replayed
+strictly; upstream party serialization/money/battle/global RNG invariance and C
+whole non-inventory context/run invariance are checked. No exceptions or cases
+are caught/skipped. These are modifier-state comparisons, not a party/stat
+transport differential or full run lifecycle test.
+
+| Seed | Identical / cases | Mismatches | Expired Lure / Super / Max | Stack-two initial objects | Lapse ticks |
+| --- | --- | --- | --- | --- | --- |
+| 777 | 2000 / 2000 | 0 | 1218 / 1115 / 604 | 1921 | 35611 |
+| 9001 | 2000 / 2000 | 0 | 1197 / 1123 / 619 | 1921 | 35565 |
+| 4242 | 2000 / 2000 | 0 | 1208 / 1108 / 629 | 2086 | 36111 |
+| 31337 | 2000 / 2000 | 0 | 1223 / 1096 / 587 | 1928 | 35309 |
+
+Each seed has added **167/167/167**, refreshed **333/167/333**, full
+**167/333/166**, and **498** duplicate-duration cases. **8000/8000 identical**,
+zero skipped/thrown; **26** host guard/capacity checks plus opaque-item and
+stack/expiry checks pass. Actual C-source refresh/early-expiry/chance mutations
+reject **167/1557/1114** seed777 cases (exit1); missing footer exits2.
+
+The unchanged established seed99/N4000 traces from the vitamin task replay
+byte-identically against merged base `ab94a380` and this API: options
+**3950/0/50 unported**, 8052 screens; victory **4000/0**, 2055 items/2459
+screens; application **4000/0**, 115 text cases; Memory **4000/0**. Existing
+Mint and vitamin four-seed2000 traces each retain **8000/8000 identical**, with
+**33/31** guards. No established producer/comparator/seed/count is changed.
+
+Exact commands (evidence outside the checkout; baseline traces reused rather
+than represented as newly generated):
+
+```sh
+. /workspace/shared/activate-parity.sh
+E=/workspace/validation/lane-b/lures
+mkdir -p "$E/baseline"
+git archive ab94a38022313493b5b1414d931740042da646eb reward-core | tar -x -C "$E/baseline"
+for seed in 777 9001 4242 31337; do
+  BUILD="$E/build" sh reward-core/tools/lurediff.sh /workspace/shared/upstream-lane-b 2000 "$seed"
+done
+make -s -j2 -C reward-core BUILD="$E/build"
+make -s -j2 -C "$E/baseline/reward-core" BUILD="$E/baseline-build" BATTLE_CORE="$PWD/battle-core" RUN_CORE="$PWD/run-core" CORE_LIB="$E/build/battle-core/libprcore.a" RUN_LIB="$E/build/run-core/librun.a"
+for mode in rewards victory apply memory; do
+  TRACE=/workspace/validation/lane-b/vitamins/baseline-build/$mode-cases.txt
+  "$E/baseline-build/${mode}test" "$TRACE" > "$E/before-$mode.log"
+  "$E/build/${mode}test" "$TRACE" > "$E/after-$mode.log"
+  cmp "$E/before-$mode.log" "$E/after-$mode.log"
+done
+for seed in 777 9001 4242 31337; do
+  for type in mint vitamin; do
+    case "$type" in
+      mint) TRACE=/workspace/validation/lane-b/vitamins/mint-regression/mint-$seed.txt;;
+      vitamin) TRACE=/workspace/validation/lane-b/vitamins/build/vitamin-$seed.txt;;
+    esac
+    "$E/baseline-build/${type}test" "$TRACE" > "$E/before-$type-$seed.log"
+    "$E/build/${type}test" "$TRACE" > "$E/after-$type-$seed.log"
+    cmp "$E/before-$type-$seed.log" "$E/after-$type-$seed.log"
+  done
+done
+BUILD="$E/build" sh reward-core/tools/lureplant.sh "$E/build/lure-777.txt"
+sed '$d' "$E/build/lure-777.txt" > "$E/truncated.txt"
+"$E/build/luretest" "$E/truncated.txt" # expected exit2
+make -s -C game-core -j2 test
+```
+
 ## Task 96 prerequisite: bounded vitamins (lane B, 2026-10-07)
 
 `pr_reward_apply_vitamin` implements real `BaseStatBoosterModifierType` selection,
