@@ -15,6 +15,18 @@ REWARD_LIB := $(BUILD)/reward-core/libreward.a
 SRCS := src/gc_moveset.c src/gc_run.c src/gc_phases.c src/gc_mon.c src/gc_items.c src/gc_encounter.c src/gc_battle.c src/gc_save.c src/gc_stubs.c src/gc_system.c src/gc_mystery.c src/gc_reward.c src/gc_reward_lifecycle.c src/gc_learnset.c src/gc_catch.c gen/out/gc_evolutions.c gen/out/gc_starters.c gen/out/gc_trainers.c gen/out/gc_dex.c gen/out/gc_learnsets.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
+all: $(BUILD)/mint_diff_test $(BUILD)/mint_host_test
+
+$(BUILD)/mint_diff_test: tests/mint_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+$(BUILD)/mint_host_test: tests/mint_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+test: mint-host-test
+mint-host-test: $(BUILD)/mint_host_test
+	$(BUILD)/mint_host_test
+
 all: $(BUILD)/enemy_moveset_test $(BUILD)/reward_lifecycle_host_test $(BUILD)/reward_lifecycle_test $(BUILD)/resume_test $(BUILD)/itembridge_test $(BUILD)/libgc.a $(BUILD)/gcplay $(BUILD)/savetest $(BUILD)/system_save_test $(BUILD)/dextest $(BUILD)/dexupdatetest $(BUILD)/level_evo_test $(BUILD)/biome_test $(BUILD)/voucher_egg_test $(BUILD)/mystery_test $(BUILD)/mystery_diff_test $(BUILD)/reward_test $(BUILD)/reward_diff_test $(BUILD)/switch_prompt_test $(BUILD)/turn_tail_test $(BUILD)/boss_segments_test $(BUILD)/catch_test $(BUILD)/catch_diff_test $(BUILD)/reward_apply_test $(BUILD)/reward_apply_diff_test $(BUILD)/flee_test $(BUILD)/starter_unlock_test
 
 $(BUILD)/%.o: %.c
@@ -144,5 +156,5 @@ clean:
 	rm -rf $(BUILD)
 
 FORCE:
-.PHONY: all clean test FORCE
+.PHONY: all clean test FORCE mint-host-test
 -include $(OBJS:.o=.d)

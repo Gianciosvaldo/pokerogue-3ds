@@ -113,6 +113,9 @@ typedef struct {
 bool gc_system_set_pokemon_caught_ex(gc_system *sys, const gc_mon *m, bool increment_count, bool from_egg,
                                      bool show_message, bool daily, gc_caught_report *report);
 void gc_system_update_species_dex_ivs(gc_system *sys, uint16_t species_id, const uint8_t ivs[6]);
+/* GameData.unlockSpeciesNature: requires an unlocked root, then marks the
+ * exact species and every prevolution, without caught counts or candy. */
+void gc_system_unlock_species_nature(gc_system *sys, uint16_t species_id, uint8_t nature);
 bool gc_system_add_starter_candy(gc_system *sys, uint16_t species_id, int32_t count);
 void gc_system_add_friendship(gc_system *sys, const gc_run *run, gc_mon *m, int friendship, bool capped);
 

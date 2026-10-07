@@ -80,6 +80,19 @@ uint16_t gc_species_root_id(uint16_t species_id) {
     return root;
 }
 
+void gc_system_unlock_species_nature(gc_system *sys, uint16_t species_id, uint8_t nature) {
+    if (!sys || nature > 24 || !species_id || species_id > GC_MAX_SPECIES_ID
+        || !gc_species(species_id)) return;
+    const uint16_t root = gc_species_root_id(species_id);
+    if (!sys->dex[root].caught_attr) return;
+    for (int depth = 0; depth < 10; depth++) {
+        sys->dex[species_id].nature_attr |= 1U << (nature + 1);
+        const int16_t pre = gc_species_prevolution(species_id);
+        if (pre <= 0) break;
+        species_id = (uint16_t)pre;
+    }
+}
+
 /* getRootSpeciesId(forStarter = true): down the prevolutions, stopping at the first species that is a starter
  * (Pikachu stops at Pikachu, a species whose chain has no starter ends at its root) */
 uint16_t gc_species_root_for_starter(uint16_t species_id) {
@@ -195,8 +208,11 @@ static void set_pokemon_species_caught(gc_system *sys, const gc_mon *m, uint16_t
         sys->starters[species_id].ability_attr |= (1U << m->ability_index);
     }
 
-    if (m->b.nature <= 24) {
-        dex_entry->nature_attr |= (1U << (m->b.nature + 1));
+    /* setPokemonSpeciesCaught reads Pokemon.nature, not getNature(). A Mint's
+     * custom override has its separate unlockSpeciesNature call. */
+    const uint8_t nature = m->has_custom_nature ? m->base_nature : m->b.nature;
+    if (nature <= 24) {
+        dex_entry->nature_attr |= (1U << (nature + 1));
     }
 
     int16_t pre = gc_species_prevolution(species_id);

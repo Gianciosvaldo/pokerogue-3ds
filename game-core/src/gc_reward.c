@@ -173,6 +173,9 @@ static void fill_mon(gc_run *run, gc_mon *m, pr_reward_mon *r)
     r->confused = pr_get_battler_tag(p, BATTLER_TAG_TYPE_CONFUSED) != NULL;
     r->nightmare = pr_get_battler_tag(p, BATTLER_TAG_TYPE_NIGHTMARE) != NULL;
     r->nature = p->nature;
+    r->has_explicit_nature = true;
+    r->base_nature = m->has_custom_nature ? m->base_nature : p->nature;
+    r->custom_nature = m->has_custom_nature ? p->nature : -1;
     r->tera_type = p->tera_type;
     r->friendship = p->friendship;
     r->ability = p->base_ability;
@@ -520,12 +523,57 @@ static void drop_tag(pr_pokemon *b, int type)
     }
 }
 
+/* Bounded Nature Mint adapter. Unsupported permanent-stat configurations keep
+ * their existing counted stand-in path; they are never credited to this API. */
+static int apply_mint(gc_run *run, const gc_offer *o, int party, const char **why)
+{
+    int k;
+    if (party < 0 || party >= run->n_party || (k = gc_battle_slot_of(run, party)) < 0) {
+        *why = "pick a Pokemon";
+        return GC_APPLY_REFUSED;
+    }
+    gc_mon *m = &run->party[party];
+    if (o->arg < 0 || o->arg > 24 || m->b.nature == o->arg) {
+        *why = "partyUiHandler:anyEffect";
+        return GC_APPLY_REFUSED;
+    }
+    if (run->run.has_challenges) return GC_APPLY_UNHANDLED;
+    static const char *const stat_items[] = {"BASE_STAT_BOOSTER", "SOUL_DEW",
+        "MYSTERY_ENCOUNTER_SHUCKLE_JUICE", "MYSTERY_ENCOUNTER_OLD_GATEAU",
+        "MYSTERY_ENCOUNTER_MACHO_BRACE"};
+    for (int i = 0; i < run->n_items; i++) {
+        const gc_item *it = &run->items[i];
+        if (it->stack <= 0 || (it->pokemon_id && it->pokemon_id != m->b.id)) continue;
+        for (unsigned j = 0; j < sizeof stat_items / sizeof *stat_items; j++)
+            if (!strcmp(it->key, stat_items[j])) return GC_APPLY_UNHANDLED;
+    }
+    pr_reward_ctx *c = ctx_base(run, false);
+    if (!pr_reward_apply_mint(c, o->arg, k)) return GC_APPLY_UNHANDLED;
+    const pr_reward_mon *r = &c->party[k];
+    const int old_hp = m->b.hp;
+    m->base_nature = r->base_nature;
+    m->has_custom_nature = true;
+    m->b.nature = r->nature;
+    memcpy(m->b.stats, r->stats, sizeof m->b.stats);
+    m->b.hp = r->hp;
+    for (int i = 0; i < c->n_nature_unlock_events; i++)
+        gc_system_unlock_species_nature(run->sys, c->nature_unlock_events[i].species,
+                                       c->nature_unlock_events[i].nature);
+    c->n_nature_unlock_events = 0;
+    if (m->b.hp != old_hp) {
+        gc_event *ev = gc_ev_new(run, GC_EV_HP);
+        if (ev) { ev->a = 0; ev->b = party; ev->c = m->b.hp; }
+    }
+    return GC_APPLY_DONE;
+}
+
 int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, const char **why)
 {
     const int item = gc_reward_item_index(o->key);
     const int lifecycle = gc_reward_lifecycle_apply(run, o, party, why);
     if (lifecycle != GC_APPLY_UNHANDLED) return lifecycle;
     if (item < 0) return GC_APPLY_UNHANDLED;
+    if (item == PR_ITEM_MINT) return apply_mint(run, o, party, why);
 
     if (gc_reward_add_pokeballs(run, o->key)) return GC_APPLY_DONE;   /* no text: addModifier shows none */
 
