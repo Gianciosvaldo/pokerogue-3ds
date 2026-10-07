@@ -100,7 +100,13 @@ static void to_modifier(const gc_item *it, pr_modifier *m)
         if (m->cls == PR_MOD_BERRY) m->berry_type = (int8_t)it->arg;
         return;
     }
-    if (!strcmp(it->key, "BASE_STAT_BOOSTER")) {          /* vitamins: BaseStatModifier(stat) */
+    if (!strcmp(it->key, "TOXIC_ORB") || !strcmp(it->key, "FLAME_ORB")) {
+        /* modifierTypes: PokemonTurnStatusEffectModifier(TOXIC/BURN). Both
+         * share a class; the item identity selects its explicit status. */
+        m->cls = PR_MOD_TURN_STATUS_EFFECT;
+        m->status_effect = !strcmp(it->key, "TOXIC_ORB") ? STATUS_EFFECT_TOXIC : STATUS_EFFECT_BURN;
+        m->unknown_subclass = false;
+    } else if (!strcmp(it->key, "BASE_STAT_BOOSTER")) {          /* vitamins: BaseStatModifier(stat) */
         m->cls = PR_MOD_BASE_STAT; m->stat = (int8_t)it->arg; m->unknown_subclass = false;
     } else if (!strcmp(it->key, "ATTACK_TYPE_BOOSTER")) { /* AttackTypeBoosterModifier(type, 20) */
         m->cls = PR_MOD_ATTACK_TYPE_BOOSTER; m->move_type = (int8_t)it->arg; m->mult = 0.2; m->unknown_subclass = false;
