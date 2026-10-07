@@ -37,7 +37,7 @@ Start with [`README.md`](../README.md) (folder table), then the README of the fo
 - Nothing of the game app has run on a real console. Only the speed and graphics benchmarks have.
 
 ## Rules (read these before touching anything)
-1. **Branch and pull request only.** Never push to `main`. Never merge your own PR. One task per branch, one PR per task.
+1. **Branch and pull request only.** Never push to `main`. Do not merge your own PR unless explicitly authorized; the October 7 Codex exception below applies here. One task per branch, one PR per task.
 2. **Never weaken, skip, or edit a check to make it pass.** If a diff test fails, the fix goes in the C port. Do not
    change `*.producer.test.ts`, the comparison in `turntest.c` / `difftest.c` / `aitest.c`, tolerances, seeds, or case
    counts, and do not make a failing case report "unported" or "not covered" instead of matching. If you believe the
@@ -83,6 +83,16 @@ Lorenzo answered these; a task PR does not reopen them. If one looks wrong for y
    (date-driven seasonal boosts and rewards; none is ported, and the pinned list's one event active today, the "Item
    Update waiting room", gives a Mega Bracelet and a Dynamax Band at Classic wave 115), the second soak chooser (109)
    and the differential CI job (148).
+
+## Codex continuation authorization (user instruction, 2026-10-07)
+
+The user explicitly overrode review before merging: Codex may merge its own PRs
+once their required validation passes, and start the next unblocked task without
+asking for approval. Keep separate task branches/PRs and check CI on the actual
+head before merging. This exception changes the review/merge checkpoint only;
+it does not authorize pushing directly to main, weakening checks, changing the
+upstream pin, taking over the reserved run-core lane, or waiving human hardware
+gates. Partial task slices do not unlock prerequisites that remain missing.
 
 ## Setting up the upstream checks
 Needs `git`, `gcc`, `make`, `python3`, Node 22 with `corepack`/`pnpm`, and network access (to clone upstream and
