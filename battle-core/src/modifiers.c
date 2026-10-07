@@ -47,6 +47,7 @@ const uint8_t pr_mod_parent[PR_MOD_COUNT_] = {
     [PR_MOD_FLINCH_CHANCE] = PR_MOD_HELD_ITEM,
     [PR_MOD_RESET_NEGATIVE_STAT_STAGE] = PR_MOD_HELD_ITEM,
     [PR_MOD_BERRY] = PR_MOD_HELD_ITEM,
+    [PR_MOD_TURN_STATUS_EFFECT] = PR_MOD_HELD_ITEM,
 };
 
 const char *const pr_mod_class_name[PR_MOD_COUNT_] = {
@@ -84,6 +85,7 @@ const char *const pr_mod_class_name[PR_MOD_COUNT_] = {
     [PR_MOD_FLINCH_CHANCE] = "FlinchChanceModifier",
     [PR_MOD_RESET_NEGATIVE_STAT_STAGE] = "ResetNegativeStatStageModifier",
     [PR_MOD_BERRY] = "BerryModifier",
+    [PR_MOD_TURN_STATUS_EFFECT] = "TurnStatusEffectModifier",
 };
 
 int pr_mod_class_by_name(const char *name)
@@ -116,6 +118,8 @@ bool pr_mod_is_ported_item(const pr_modifier *m)
             || m->berry_type == BERRY_TYPE_LANSAT
             || m->berry_type == BERRY_TYPE_STARF;
     }
+    if (m->cls == PR_MOD_TURN_STATUS_EFFECT)
+        return !m->unknown_subclass && (m->status_effect == STATUS_EFFECT_TOXIC || m->status_effect == STATUS_EFFECT_BURN);
     int cls = m->cls;
     return cls == PR_MOD_TURN_HEAL || cls == PR_MOD_HIT_HEAL
         || cls == PR_MOD_SURVIVE_DAMAGE || cls == PR_MOD_BYPASS_SPEED_CHANCE
@@ -635,6 +639,27 @@ void pr_apply_attack_type_booster_modifiers(pr_battle *bt, const pr_pokemon *src
     EACH_MOD(m, bt, src->is_player, PR_MOD_ATTACK_TYPE_BOOSTER) {
         if (!held_applies(m, src) || m->move_type != move_type) continue;
         if (*power >= 1) *power = floor(*power * (1 + pr_mod_get_stack_count(m) * m->mult));
+    }
+}
+
+/* TurnStatusEffectModifier.apply: use the holder as source and the actual orb name.
+ * trySetStatus owns rejection, pending status, ability callbacks and phase ordering.
+ * Item stacks are retained; neither orb is consumed and there is no item RNG draw. */
+void pr_apply_turn_status_modifiers(pr_battle *bt, pr_engine *e, pr_pokemon *p)
+{
+    pr_modifier *m;
+    EACH_MOD(m, bt, p->is_player, PR_MOD_TURN_STATUS_EFFECT) {
+        if (!held_applies(m, p)) continue;
+        if (!pr_mod_is_ported_item(m)) {
+            pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
+            continue;
+        }
+        const char *name = m->status_effect == STATUS_EFFECT_TOXIC
+            ? "modifierType:ModifierType.TOXIC_ORB.name" : "modifierType:ModifierType.FLAME_ORB.name";
+        pr_msg msg = pr_msg2(pr_status_key(m->status_effect, PR_ST_OBTAIN_SOURCE),
+                             pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
+                             pr_arg_key("sourceText", name));
+        pr_try_set_status_msg(bt, e, p, m->status_effect, p, -1, false, true, &msg);
     }
 }
 

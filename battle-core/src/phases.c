@@ -3105,7 +3105,8 @@ static void turn_end_phase(pr_battle *bt, pr_engine *e)
                 revert_dynamax(p);
             }
         }
-        turn_modifiers(bt, p->is_player, p);              /* TurnStatusEffectModifier, TurnHeldItemTransferModifier */
+        pr_apply_turn_status_modifiers(bt, e, p);        /* Toxic Orb / Flame Orb */
+        turn_modifiers(bt, p->is_player, p);              /* TurnHeldItemTransferModifier */
         p->temp_turn_count++;
         p->temp_wave_turn_count++;
     }

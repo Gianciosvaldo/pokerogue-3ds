@@ -502,3 +502,81 @@ The 8 left:
 
 These are read against upstream, not proven. Not run here: the devkitARM 3DS build (CI
 runs it) and the console.
+
+## Card 104: bounded Toxic/Flame Orb turn dispatch
+
+The full held-item subclass inventory is in
+[HELD-ITEM-INVENTORY.md](HELD-ITEM-INVENTORY.md). It separates existing stat/damage
+helpers from genuinely absent turn dispatch. This slice adds only
+`TurnStatusEffectModifier`: Toxic Orb and Flame Orb apply after PostTurn abilities
+in `TurnEndPhase`, with the holder as source and the item name in the obtain-status
+message. Existing status rejection, ability suppression, pending status, status
+counters and phase queues are reused. Orbs retain their ownership and one stack;
+there is no item RNG draw or consumption. Unsupported status identities and
+unknown subclasses remain unported. The appended `PR_MOD_TURN_STATUS_EFFECT` ID
+preserves previous modifier IDs; rebuild consumers of `pr_modifier` for its new
+explicit `status_effect` field.
+
+The additive producer uses actual upstream item instances with populated type
+IDs and runs the real upstream whole turn. Ten fixture states cycle independently
+of the randomized level/IV/nature/speed/turn stream: healthy, existing paralysis,
+ability immunity, species-type immunity, Comatose, suppressed immunity,
+Synchronize, Poison Heal, wrong holder, and Misty Terrain. Every field Pokemon
+uses Splash; all party forms are bounded to supported Rattata/form 0, with
+Charmander/Magnemite/form 0 for type immunity. Both sides carry the chosen orb.
+Bench stats are recalculated when species change. Item effects, status application
+and ability dispatch are never stubbed; presentation follows the established
+turn driver.
+
+`statusorbtest` preserves the existing whole-turn comparisons in an additive
+copy, extending only the orb effect input/output transport. It checks every
+requested case, complete footer, parser/stat agreement, all state/queue/phase/RNG
+records and every message. Item owner, stack and status identity survive the
+round trip. Missing or unsupported effect records fail with exit 2. Fourteen
+additional C guards check non-holder/fainted/existing-status rejection,
+unsupported identity/subclass refusal, wildcard holder selection, source identity
+and both status identities on both sides. The established producer and comparator
+are unchanged.
+
+```sh
+# Node 22; pinned upstream checkout outside this repository.
+sh battle-core/tools/statusorbdiff.sh <upstream> 2000 777
+sh battle-core/tools/statusorbdiff.sh <upstream> 2000 9001
+sh battle-core/tools/statusorbdiff.sh <upstream> 2000 4242
+sh battle-core/tools/statusorbdiff.sh <upstream> 2000 31337
+```
+
+This bounds ordinary singles turns with these two item identities. Reward
+acquisition, run inventory/save bridging, switches, item removal/theft,
+doubles, additional statuses/forms/abilities and hardware acceptance require
+separate validation. It does not claim Card 104 complete.
+
+Validated against upstream `8555c08`, Node 22.23.3, Vitest 4.1.11 and GCC 14.2.0:
+
+| Seed | Cases / covered / identical | Mismatches | Toxic / Flame applied | Toxic / Flame rejected |
+| --- | --- | --- | --- | --- |
+| 777 | 2000 / 2000 / 2000 | 0 | 800 / 800 | 1200 / 1200 |
+| 9001 | 2000 / 2000 / 2000 | 0 | 800 / 800 | 1200 / 1200 |
+| 4242 | 2000 / 2000 / 2000 | 0 | 800 / 800 | 1200 / 1200 |
+| 31337 | 2000 / 2000 / 2000 | 0 | 800 / 800 | 1200 / 1200 |
+
+Every seed has 200 cases in each of the ten states, zero upstream exceptions,
+zero uncovered cases, zero parser/stat mismatches and 2,000 identical message
+sets. Fourteen C ownership/refusal guards also pass. A separate mutant omitting
+TurnEnd orb dispatch fails 800/2,000 cases (exit 1); missing completion footer,
+missing orb effect and out-of-range effect 258 are rejected (exit 2).
+
+Fresh established B traces, seed 777/N2000, have exactly the same covered and
+identical-message counts before/after: plain 1942, rich 1831, switch 1890, summon
+1863. Parser/stat mismatches and failing covered turns are zero. Host
+`make -s -C game-core -j2 test` passes 32,725 resume checks and 39 item bridge
+checks; the normal/save 200-run digests are both `a6662b64`. No console result is
+claimed. PR CI belongs to its exact published head.
+
+Fresh unchanged `TURN_ITEMS`/`TURN_COND`, N2000 on seeds
+777/9001/4242/31337, also replay identically before/after: items covered/pass
+1922/1932/1929/1939 and conditions 1767/1756/1770/1766, zero failing covered
+turns or parser/stat mismatches. Items retain their existing 1/1/2/1 untranslated
+message sets (identical sets 1921/1931/1927/1938); they are not credited as
+newly validated text parity. Conditions have identical texts on every covered
+turn. All established producers/comparators remain byte-for-byte unchanged.
