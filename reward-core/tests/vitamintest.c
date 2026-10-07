@@ -131,6 +131,7 @@ static void selftest(void)
     c = fixture(); c.party[0].fusion_species = -2; refused(&c, 0, 0, -1, 0);
     c = fixture(); c.challenges = 1u << CHALLENGES_FLIP_STAT; refused(&c, 0, 0, -1, 0);
     c = fixture(); c.n_items = 1; c.items[0] = (pr_owned_item){.item=PR_ITEM_MINT,.owner=0,.stack=1}; refused(&c, 0, 0, -1, 0);
+    c = fixture(); c.n_items = 1; c.items[0] = (pr_owned_item){.item=PR_ITEM_HEALING_CHARM,.owner=0,.stack=1}; refused(&c, 0, 0, -1, 0);
     c = fixture(); c.n_items = 1; c.items[0] = (pr_owned_item){.item=PR_ITEM_EVOLUTION_TRACKER_GIMMIGHOUL,.owner=0,.stack=1}; refused(&c, 0, 0, -1, 0);
     c = fixture(); c.n_party = 2; c.party[1] = c.party[0]; refused(&c, 0, 0, -1, 0);
     c = fixture(); pr_run run = {0}; run.mode = GAME_MODES_SPLICED_ENDLESS; c.run = &run; refused(&c, 0, 0, -1, 0);

@@ -50,6 +50,8 @@ enum pr_reward_vitamin_status pr_reward_apply_vitamin(pr_reward_ctx *ctx, int st
             || !(pr_items[it->item].flags & (PR_ITEMF_PERSISTENT | PR_ITEMF_HELD | PR_ITEMF_FORM_CHANGE))
             || it->item == PR_ITEM_EVOLUTION_TRACKER_GIMMIGHOUL
             || (it->owner < 0 && (pr_items[it->item].flags & PR_ITEMF_HELD))) return PR_REWARD_VITAMIN_UNSUPPORTED;
+        if (!(pr_items[it->item].flags & (PR_ITEMF_HELD | PR_ITEMF_FORM_CHANGE)) && it->owner != -1)
+            return PR_REWARD_VITAMIN_UNSUPPORTED; /* globals have no Pokemon holder */
         if (it->item == PR_ITEM_SOUL_DEW || it->item == PR_ITEM_MYSTERY_ENCOUNTER_SHUCKLE_JUICE
             || it->item == PR_ITEM_MYSTERY_ENCOUNTER_OLD_GATEAU || it->item == PR_ITEM_MYSTERY_ENCOUNTER_MACHO_BRACE)
             return PR_REWARD_VITAMIN_UNSUPPORTED;
