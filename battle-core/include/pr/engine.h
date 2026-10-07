@@ -464,6 +464,9 @@ void pr_set_temp_ability(pr_battle *bt, pr_pokemon *p, uint16_t ability);
 /* Pokemon.resetStatus(revive, false, false, asPhase=true): a ResetStatusPhase, unshifted */
 void pr_reset_status_phase(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool revive);
 void pr_reset_status_phase_ex(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool revive, bool confusion);
+/* Move.calculateBattleAccuracy: variable accuracy, held modifiers, Fog then Gravity. */
+double pr_calculate_battle_accuracy(pr_battle *bt, pr_pokemon *user, pr_pokemon *target, int move);
+
 /* Pokemon.trySetStatus(effect, sourcePokemon, sleepTurnsRemaining (-1 = undefined), sourceText,
  * overrideStatus, quiet): canSetStatus, then an ObtainStatusEffectPhase is unshifted */
 bool pr_try_set_status(pr_battle *bt, pr_engine *e, pr_pokemon *p, int effect, pr_pokemon *source, int sleep_turns,

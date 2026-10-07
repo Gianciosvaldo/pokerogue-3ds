@@ -580,3 +580,70 @@ turns or parser/stat mismatches. Items retain their existing 1/1/2/1 untranslate
 message sets (identical sets 1921/1931/1927/1938); they are not credited as
 newly validated text parity. Conditions have identical texts on every covered
 turn. All established producers/comparators remain byte-for-byte unchanged.
+
+## Card 104: bounded Wide Lens accuracy dispatch
+
+`PokemonMoveAccuracyBoosterModifier` now has an appended C class ID,
+`PR_MOD_MOVE_ACCURACY_BOOSTER`, with the pinned Wide Lens amount (five) stored
+in `pr_modifier.num`. The existing battle-accuracy path adds
+`5 * (stack_count + virtual_stack_count)` after variable accuracy, before Fog's
+`floor(accuracy * 0.9)` and Gravity's `floor(accuracy * 1.67)`. OHKO moves and
+accuracy=-1 skip the modifier, matching pinned upstream. Existing IDs and all
+other comparisons remain unchanged; unsupported identities/subclasses remain
+unported. The existing calculation is exposed as
+`pr_calculate_battle_accuracy` so callers and the additive oracle can compare
+its numeric answer independently from the turn's hit/miss result.
+
+The additive upstream suite uses real Wide Lens instances and runs real full
+turns. Its apply/shouldApply instrumentation counts calls while delegating to the
+original upstream methods; it never synthesizes an effect. Twelve fixture modes
+cover ordinary accuracy, Fog, Gravity, both, OHKO, always-hit Swift, wrong owner,
+virtual stacks, Poison-type Toxic, No Guard, accuracy/evasion stages, and self
+Splash. The ordinary moves are Sing, Screech and String Shot. Both sides receive
+one to three effective stacks; levels/IVs/natures/turn RNG remain randomized.
+Each before-turn numeric accuracy probe uses upstream's actual
+calculateBattleAccuracy and asserts unchanged global/battle RNG. The C replay
+calculates both accuracy values itself and compares them exactly, then compares
+all turn phase/state/queue/RNG records and every message as before. Modifier
+amount, owner, real and virtual stacks must round-trip; missing amount/virtual
+or either accuracy probe is rejected. Sixteen C guards cover ownership, missing
+holder, unsupported amount/subclass, opposite side, wildcard IDs and virtual
+stacks without mutation or RNG use.
+
+```sh
+# Node22, pinned upstream outside this repository; repeat each listed seed.
+sh battle-core/tools/widelensdiff.sh <upstream> 2000 777
+sh battle-core/tools/widelensdiff.sh <upstream> 2000 9001
+sh battle-core/tools/widelensdiff.sh <upstream> 2000 4242
+sh battle-core/tools/widelensdiff.sh <upstream> 2000 31337
+```
+
+This is a singles slice on supported Rattata/Grimer form0 fixtures with Ball
+Fetch or No Guard. Wonder Skin, additional abilities/forms/moves, doubles,
+reward acquisition, inventory/save integration, item removal/theft and hardware
+acceptance are outside the recorded scope. Card 104 remains partial.
+
+Checked against upstream `8555c08`, Node 22.23.3, Vitest 4.1.11, GCC 14.2.0:
+
+| Seed | Cases / covered / identical | Mismatches | Actual applies | Owner rejections |
+| --- | --- | --- | --- | --- |
+| 777 | 2000 / 2000 / 2000 | 0 | 2031 | 301 |
+| 9001 | 2000 / 2000 / 2000 | 0 | 2020 | 310 |
+| 4242 | 2000 / 2000 / 2000 | 0 | 2007 | 302 |
+| 31337 | 2000 / 2000 / 2000 | 0 | 2035 | 306 |
+
+Every seed has 167 cases in each of the first eight modes and 166 in each of
+the last four, zero exceptions/uncovered/parser/stat mismatches, and identical
+texts for every turn. Sixteen helper guards pass. A mutant whose actual turn hit
+check ignores held items while retaining the correct numeric probe API fails
+70/2000 turns/message sets, with zero parser/stat mismatches (exit 1). Missing
+footer, missing accuracy probe, missing amount, and out-of-range amount 261 all
+exit 2. Host `make -s -C game-core -j2 test`: 32,725 resume checks and 39 bridge
+checks pass; normal/save 200-run digests both `a6662b64`.
+
+Fresh unchanged established traces replay identically before/after: B seed 777/
+N2000 plain 1942, rich 1831, switch 1890, summon 1863; ITEMS N2000 across the four
+seeds covered/pass 1922/1932/1929/1939 with existing untranslated sets 1/1/2/1
+retained; COND covered/pass 1767/1756/1770/1766 with every covered text set
+identical. Failing covered turns and parser/stat mismatches are zero. No existing
+producer/comparator was changed; no new console result is claimed.

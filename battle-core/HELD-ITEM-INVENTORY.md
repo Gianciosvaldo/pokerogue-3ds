@@ -40,7 +40,7 @@ This task adds only the two-orb family; it does not complete Card 104.
 | `PokemonExpBoosterModifier` | No C class in battle-core | Held Lucky/Golden Egg experience dispatch; side-wide Exp. Charm helper is a different class |
 | `PokemonFriendshipBoosterModifier` | No C class in battle-core | Held Soothe Bell friendship dispatch |
 | `PokemonNatureWeightModifier` | `PR_MOD_NATURE_WEIGHT`; nature-stat helper | Full-turn fixtures/whitelist |
-| `PokemonMoveAccuracyBoosterModifier` | No C class; accuracy path reports turn modifiers | Missing Wide Lens accuracy dispatch |
+| `PokemonMoveAccuracyBoosterModifier` | `PR_MOD_MOVE_ACCURACY_BOOSTER`; battle-accuracy dispatch | Added bounded Wide Lens amount=5, stacks 1–3 including virtual stacks; other identities remain unported |
 | `PokemonMultiHitModifier` | `PR_MOD_MULTI_HIT`; damage scaling/held-stack helpers exist | Missing turn hit-count dispatch; not just a whitelist omission |
 | `PokemonFormChangeItemModifier` | No C class | Held form-change activation/lifecycle; supported species form changes are separate |
 | `DamageMoneyRewardModifier` | No C class; post-damage path reports turn modifiers | Missing Golden Punch money reward dispatch |
@@ -62,3 +62,10 @@ continue to report unported.
 `pr_modifier.status_effect` field carries TOXIC/BURN identity explicitly. Struct
 layout changes require dependent C consumers to rebuild; no existing enum ID,
 phase ID, generated table, application save schema or bridge is changed.
+
+The later Wide Lens slice adds the actual missing battle-accuracy dispatch. It
+adds five accuracy points per effective stack before Fog and Gravity flooring,
+while preserving OHKO and accuracy=-1 rejection. The new ID is appended after
+the orb ID; the existing `num` field holds the bounded identity amount of five.
+Neither promotion implies reward acquisition, save bridging, removal or theft
+parity for those identities.

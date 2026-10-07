@@ -1608,7 +1608,7 @@ static double accuracy_multiplier(pr_battle *bt, pr_pokemon *user, pr_pokemon *t
 }
 
 /* Move.calculateBattleAccuracy(user, target) */
-static double battle_accuracy(pr_battle *bt, pr_pokemon *user, pr_pokemon *target, int move)
+double pr_calculate_battle_accuracy(pr_battle *bt, pr_pokemon *user, pr_pokemon *target, int move)
 {
     double acc = pr_moves[move].accuracy;
     const pr_move *mv = &pr_moves[move];
@@ -1645,7 +1645,10 @@ static double battle_accuracy(pr_battle *bt, pr_pokemon *user, pr_pokemon *targe
     pr_hook_ab(bt, target, PR_AC_WonderSkinAbAttr);
     if (acc == -1) return acc;
     bool ohko = pr_move_has_attr((uint16_t)move, PR_AC_OneHitKOAccuracyAttr);
-    if (!ohko) turn_modifiers(bt, user->is_player, user);        /* Wide Lens */
+    if (!ohko) {
+        pr_apply_accuracy_booster_modifiers(bt, user, &acc);
+        turn_modifiers(bt, user->is_player, user);
+    }
     if (bt->weather == WEATHER_TYPE_FOG) acc = floor(acc * 0.9);
     if (!ohko && pr_arena_get_tag_on_side(bt, ARENA_TAG_TYPE_GRAVITY, ARENA_TAG_SIDE_BOTH)) acc = floor(acc * 1.67);
     return acc;
@@ -1733,7 +1736,7 @@ static int hit_check(pr_battle *bt, pr_engine *e, int ph, pr_pokemon *target, do
     bool cancel_msg = false;
     double eff = pr_get_move_effectiveness_ex(bt, target, user, move, false, &cancel_msg);
     if (eff == 0) return cancel_msg ? HIT_CHECK_RESULT_NO_EFFECT_NO_MESSAGE : HIT_CHECK_RESULT_NO_EFFECT;
-    double accuracy = battle_accuracy(bt, user, target, move);
+    double accuracy = pr_calculate_battle_accuracy(bt, user, target, move);
     if (user->hits_left < user->hit_count
         && (!(mv->flags & MOVE_FLAGS_CHECK_ALL_HITS) || pr_has_ability_with_attr(bt, user, PR_AC_MaxMultiHitAbAttr))) {
         *eff_out = eff;
