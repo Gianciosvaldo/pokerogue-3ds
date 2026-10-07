@@ -10,7 +10,7 @@ commands (and the player's command restrictions and trapping), and goes through 
 for the enemy movesets and the rewards. The reward screens are reward-core's (`src/gc_reward.c`, Task 59).
 Healing, revive, PP restore and PP Up rewards act on the run through reward-core (Task 60), and so do Rare Candy and
 Rarer Candy (Task 96). Until run-core's
-movesets land and the other rewards act on the run, stand-ins in `src/gc_stubs.c` keep a run
+remaining movesets land and the other rewards act on the run, stand-ins in `src/gc_stubs.c` keep a run
 playable. Each stand-in is counted, so the soak runs show how much of a run is still standing in.
 
 ## The API (`include/gc/run.h`)
@@ -170,7 +170,7 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 
 | Stand-in | Waits on |
 |---|---|
-| Enemy moveset: the last four level moves (run-core's generator, Task 63 / PR #112, covers only a few species and is not wired in yet: Task 64) | run-core |
+| Enemy moveset: the last four level moves for unsupported constructors. Task 64's first slice calls Task 63 for supported clean wild enemies; trainer streams and broader pools still use the counted fallback | run-core |
 | A reward taken that isn't a ball, Full Heal, Rare Candy, Rarer Candy (Task 96 / PR #136), held item or one of the healing, revive and PP items Task 60/96 ported (TMs, Memory Mushroom, Mints, money, vouchers, evolution items, DNA Splicers) is added to the items and counted (`reward taken without its own effect`) | later reward tasks |
 | Double battles are played as singles (M1 rule) | doubles in battle-core |
 | Mystery encounters and fixed classic battles (rival, evil team, gyms run-core can't make) become wild battles of the wave's level | run-core, later the encounters |

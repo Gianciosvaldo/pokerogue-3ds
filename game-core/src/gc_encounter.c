@@ -191,10 +191,18 @@ static void enemy_items(gc_run *run)
 static void refresh_enemy(gc_run *run, gc_mon *m, int species, int level, const pr_enemy_gen *g, int slot)
 {
     uint16_t mv[4];
+    uint8_t pp_up[4];
+    int16_t max_pp[4];
     const int n = m->b.n_moves;
     memcpy(mv, m->b.moves, sizeof mv);
+    memcpy(pp_up, m->b.pp_up, sizeof pp_up);
+    memcpy(max_pp, m->b.max_pp_override, sizeof max_pp);
     gc_mon_new_enemy(run, m, species, level, g, slot);
-    for (int k = 0; k < n; k++) gc_mon_set_move(m, k, mv[k]);
+    for (int k = 0; k < n; k++) {
+        gc_mon_set_move(m, k, mv[k]);
+        m->b.pp_up[k] = pp_up[k];
+        m->b.max_pp_override[k] = max_pp[k];
+    }
 }
 
 /* A wild battle's enemy: the species and addEnemyPokemon's rolls (run-core), the moveset, then the rest
@@ -211,7 +219,7 @@ static bool gen_wild(gc_run *run, int level)
     if (pr_run_gen_wild_enemy(&run->run, &wc, &w) < 0) return false;
     gc_mon *m = &run->enemy[0];
     gc_mon_new_enemy(run, m, w.species, level, &w.mon, 0);
-    gc_port_enemy_moveset(run, m);
+    if (!gc_enemy_moveset(run, m, &w.mon)) gc_port_enemy_moveset(run, m);
     wc.enemy.species = w.species;
     wc.enemy.level = level;
     wc.enemy.boss = w.boss;
