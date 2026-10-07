@@ -525,4 +525,19 @@ int pr_reward_reroll(pr_reward_ctx *ctx, double *money, bool lock_rarities,
                      pr_reward_select *sel, pr_reward_thresholds *th,
                      pr_reward_option *out_options);
 
+/* Task 96 bounded canonical Lure modifier primitives. Unlike pr_reward_apply,
+ * these do not run Scene.addModifier, its full-tier fallback, purchases or stats.
+ * Add reports the first matching duration's result; REFRESHED asks the caller
+ * to play se/restore. Lapse ticks/removes Lures only, preserving other modifiers.
+ * Chance applies raw /4 per Lure object, ignoring stack; caller owns clamp,
+ * wave/ability rules and RNG. Canonical durations only; no setNewBattleCount.
+ * Unsupported inputs leave context and output arguments unchanged. */
+enum pr_reward_lure_status {
+    PR_REWARD_LURE_UNSUPPORTED = 0, PR_REWARD_LURE_FULL,
+    PR_REWARD_LURE_ADDED, PR_REWARD_LURE_REFRESHED
+};
+enum pr_reward_lure_status pr_reward_add_lure(pr_reward_ctx *ctx, int item);
+bool pr_reward_lapse_lures(pr_reward_ctx *ctx, int *expired);
+bool pr_reward_lure_chance(const pr_reward_ctx *ctx, double base, double *result);
+
 #endif
