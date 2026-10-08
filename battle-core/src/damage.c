@@ -243,7 +243,7 @@ double pr_calculate_battle_power(pr_battle *bt, const pr_pokemon *src, const pr_
             if (pr_arena_tag_is(t->type, PR_ARENACLASS_WEAKEN_MOVE_TYPE) && pr_weaken_move_type_tag_type(t->type) == type_change)
                 power *= 0.33;
         }
-        pr_apply_attack_type_booster_modifiers(bt, src, type_change, &power);
+        pr_project_attack_type_booster_modifiers(bt, src, type_change, &power);
     }
     if (pr_has_battler_tag_class(bt, src, PR_TAGCLASS_HELPING_HAND)) power *= 1.5;
     /* SupremeOverlordTag.getBoost(): 1 + 0.1 * faintCount */
@@ -508,7 +508,7 @@ bool pr_get_critical_hit_result(pr_battle *bt, const pr_pokemon *def, const pr_p
     const pr_move *m = &pr_moves[move];
     for (unsigned i = 0; i < m->nattr; i++)
         if (pr_attr_is(pr_attrs[m->attr0 + i].cls, PR_AC_HighCritAttr)) stage++;
-    pr_apply_crit_booster_modifiers(bt, src, &stage);           /* Scope Lens, Leek */
+    pr_project_crit_booster_modifiers(bt, src, &stage);           /* Scope Lens, Leek */
     pr_apply_temp_crit_booster_modifiers(bt, src->is_player, &stage); /* Dire Hit */
     pr_ab_params sp = {.pokemon = src, .move = -1, .holder = &stage};
     pr_apply_ab_attrs(bt, PR_AC_BonusCritAbAttr, &sp);

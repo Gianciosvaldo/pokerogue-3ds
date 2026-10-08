@@ -552,11 +552,16 @@ void pr_apply_field_effect_modifier(pr_battle *bt, const pr_pokemon *user, int32
 void pr_apply_base_stat_modifiers(pr_battle *bt, const pr_pokemon *p, double base[6]);
 void pr_apply_incrementing_stat_modifier(pr_battle *bt, const pr_pokemon *p, int stat, double *value);
 void pr_apply_nature_weight_modifier(pr_battle *bt, const pr_pokemon *p, double *mult);
+/* Raw projection APIs preserve pinned apply arithmetic outside acquisition caps.
+ * Full-turn unsupported inventory admission is handled by the phase engine. */
+void pr_project_nature_weight_modifier(pr_battle *bt, const pr_pokemon *p, double *mult);
 void pr_apply_stat_booster_modifiers(pr_battle *bt, const pr_pokemon *p, int stat, double *value);
 void pr_apply_temp_stat_stage_booster_modifiers(pr_battle *bt, bool player, int stat, double *mult);
 void pr_apply_crit_booster_modifiers(pr_battle *bt, const pr_pokemon *src, int *stage);
+void pr_project_crit_booster_modifiers(pr_battle *bt, const pr_pokemon *src, int *stage);
 void pr_apply_temp_crit_booster_modifiers(pr_battle *bt, bool player, int *stage);
 void pr_apply_attack_type_booster_modifiers(pr_battle *bt, const pr_pokemon *src, int move_type, double *power);
+void pr_project_attack_type_booster_modifiers(pr_battle *bt, const pr_pokemon *src, int move_type, double *power);
 void pr_apply_accuracy_booster_modifiers(pr_battle *bt, const pr_pokemon *p, double *accuracy);
 void pr_apply_turn_status_modifiers(pr_battle *bt, struct pr_engine *e, pr_pokemon *p);
 void pr_apply_turn_heal_modifiers(pr_battle *bt, struct pr_engine *e, pr_pokemon *p);
