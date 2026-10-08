@@ -189,7 +189,8 @@ typedef struct {
     const char *key;            /* "LEFTOVERS", "EXP_SHARE", "BERRY"... (a static string) */
     int16_t arg;                /* BerryType, Stat, PokemonType...; -1 = none */
     int32_t stack;
-    uint32_t pokemon_id;        /* held items: the Pokemon's id; 0 = not a held item */
+    uint32_t pokemon_id;        /* stable holder ID; 0 maps to wildcard -1 */
+    bool detached;             /* battle loot owner 0, distinct from wildcard -1 */
 } gc_item;
 #define GC_MAX_ITEMS 128
 

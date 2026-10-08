@@ -24,6 +24,7 @@ void gc_item_add(gc_run *run, const char *key, int16_t arg, uint32_t pokemon_id,
     it->key = key;
     it->arg = arg;
     it->pokemon_id = pokemon_id;
+    it->detached = false;
     it->stack = stack;
 }
 
@@ -81,7 +82,7 @@ static void to_modifier(const gc_item *it, pr_modifier *m)
 {
     memset(m, 0, sizeof *m);
     m->stack_count = it->stack;
-    m->pokemon_id = it->pokemon_id ? (int64_t)it->pokemon_id : -1;
+    m->pokemon_id = it->detached ? 0 : it->pokemon_id ? (int64_t)it->pokemon_id : -1;
     m->is_transferable = true;
     m->unknown_subclass = true;
     m->cls = it->pokemon_id ? PR_MOD_HELD_ITEM : PR_MOD_PERSISTENT;
@@ -100,7 +101,14 @@ static void to_modifier(const gc_item *it, pr_modifier *m)
         if (m->cls == PR_MOD_BERRY) m->berry_type = (int8_t)it->arg;
         return;
     }
-    if (!strcmp(it->key, "TOXIC_ORB") || !strcmp(it->key, "FLAME_ORB")) {
+    if (!strcmp(it->key, "REVIVER_SEED")) {
+        /* InstantRevive has one real stack. Generic acquisition may retain an
+         * invalid stack; keep that opaque rather than crediting its effect. */
+        if (it->stack == 1 && (it->arg == -1 || it->arg == 0)) {
+            m->cls = PR_MOD_INSTANT_REVIVE;
+            m->unknown_subclass = false;
+        }
+    } else if (!strcmp(it->key, "TOXIC_ORB") || !strcmp(it->key, "FLAME_ORB")) {
         /* modifierTypes: PokemonTurnStatusEffectModifier(TOXIC/BURN). Both
          * share a class; the item identity selects its explicit status. */
         m->cls = PR_MOD_TURN_STATUS_EFFECT;
@@ -119,6 +127,17 @@ static void to_modifier(const gc_item *it, pr_modifier *m)
     }
 }
 
+/* A canonical held Seed is unique per owner. Duplicate generic entries have
+ * no validated replacement policy, so all of them stay opaque. */
+static bool duplicate_seed(const gc_item *items, int n, int index)
+{
+    if (strcmp(items[index].key, "REVIVER_SEED")) return false;
+    for (int i = 0; i < n; i++)
+        if (i != index && !strcmp(items[i].key, "REVIVER_SEED")
+            && items[i].pokemon_id == items[index].pokemon_id) return true;
+    return false;
+}
+
 void gc_items_to_battle(gc_run *run)
 {
     pr_battle *bt = &run->bt;
@@ -127,6 +146,15 @@ void gc_items_to_battle(gc_run *run)
         to_modifier(&run->items[i], &bt->mods[0][bt->n_mods[0]++]);
     for (int i = 0; i < run->n_enemy_items && bt->n_mods[1] < PR_MAX_MODIFIERS; i++)
         to_modifier(&run->enemy_items[i], &bt->mods[1][bt->n_mods[1]++]);
+    for (int side = 0; side < 2; side++) {
+        const gc_item *items = side ? run->enemy_items : run->items;
+        int n = side ? run->n_enemy_items : run->n_items;
+        for (int i = 0; i < bt->n_mods[side]; i++)
+            if (duplicate_seed(items, n, i)) {
+                bt->mods[side][i].cls = items[i].pokemon_id ? PR_MOD_HELD_ITEM : PR_MOD_PERSISTENT;
+                bt->mods[side][i].unknown_subclass = true;
+            }
+    }
     gc_int(run)->battle_item_count[0] = bt->n_mods[0];
     gc_int(run)->battle_item_count[1] = bt->n_mods[1];
 }
@@ -142,11 +170,31 @@ void gc_items_from_battle(gc_run *run)
         gc_item *items = side ? run->enemy_items : run->items;
         int *n = side ? &run->n_enemy_items : &run->n_items;
         const int tracked = gc_int(run)->battle_item_count[side];
+        bool used[PR_MAX_MODIFIERS] = {false};
+        bool duplicate[GC_MAX_ITEMS];
+        for (int i = 0; i < *n; i++) duplicate[i] = duplicate_seed(items, *n, i);
         int w = 0, removed = 0;
         for (int i = 0; i < *n; i++) {
             gc_item it = items[i];
             pr_modifier expected;
             to_modifier(&it, &expected);
+            if (i < tracked && expected.cls == PR_MOD_INSTANT_REVIVE
+                && !duplicate[i]) {
+                int remaining = 0;
+                const pr_pokemon *holder = pr_pokemon_by_id(&run->bt, it.pokemon_id);
+                for (int j = 0; j < run->bt.n_mods[side]; j++) {
+                    const pr_modifier *m = &run->bt.mods[side][j];
+                    if (used[j] || m->unknown_subclass || m->cls != expected.cls) continue;
+                    bool detached = side && m->pokemon_id == 0 && holder && holder->hp <= 0;
+                    if (m->pokemon_id != expected.pokemon_id && !detached) continue;
+                    remaining = m->stack_count;
+                    it.detached = m->pokemon_id == 0;
+                    used[j] = true;
+                    break;
+                }
+                if (remaining <= 0) { removed++; continue; }
+                it.stack = remaining;
+            }
             if (i < tracked && (expected.cls == PR_MOD_BERRY ||
                                 expected.cls == PR_MOD_RESET_NEGATIVE_STAT_STAGE)) {
                 int remaining = 0;
