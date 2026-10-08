@@ -4,6 +4,101 @@ Native C port of PokeRogue's player rewards: the reward options after a wave (po
 
 The API is [`include/pr/reward.h`](include/pr/reward.h). The run loop (game-core) fills a `pr_reward_ctx` from the run before each reward screen: the party as the rolls see it, the player's items, ball counts, unlocks, the arena. A few of its fields are other ports' answers, marked "caller" in the header: `canSetStatus` (battle-core), `canApplyAbility`, the learnable level moves and the level-move list the TM filter leaves out (learnsets, not ported yet), each attack move's types for item spawns. The diff test takes those from upstream, so reward-core is checked given correct inputs.
 
+## Task 96 prerequisite: Soothe Bell primitives (lane B, 2026-10-08)
+
+`pr_reward_add_soothe_bell(ctx,target)` mirrors real `PersistentModifier.add`:
+append a stack-one held Bell or increment the first same-holder Bell to its
+three-stack cap. FULL is a supported no-effect refusal; it never uses a later
+duplicate's spare capacity. Existing wildcard entries do not match a concrete
+holder during acquisition. Addition preserves other inventory order and all
+non-inventory context. Invalid arguments/shape/capacity refuse before mutation.
+
+`pr_reward_soothe_bell_gain` models **singular** `Scene.applyModifier`: only the
+first eligible target or wildcard Bell applies `floor(base*(1+0.5*stack))`.
+It returns the raw amount and optional matched inventory index (-1 if absent),
+without changing context, party friendship or RNG. Whole `Pokemon.addFriendship`
+is excluded: its nonpositive short circuit, 255/rare-candy caps, starter candy
+progress, timed-event/fusion multipliers, achievements and ribbons are not
+ported by this helper. Zero base is supported **raw-helper** behavior;
+`addFriendship` short-circuits <=0 before invoking any Bell.
+
+Party IDs must be unique, target valid, base finite 0..1000000, inventory IDs
+known and Soothe entries nonvirtual stack 1..3, arg/count zero, owner -1 or a
+valid party index. Other known entries are opaque. Existing active values are
+preserved; new entries use false. Refusals preserve balance/output arguments
+and the whole context. This does not port acquisition through Scene.addModifier
+(raw return/stat updates/fallback), phase purchases, held cleanup/transfer,
+Candy/game-core integration or saves. Existing wildcard raw records are tested
+via actual classes, but the API never acquires them: absent holders have
+getMaxStackCount 0 and Scene cleanup would remove them. Raw wildcard support is
+not a claim that those records survive the wider scene lifecycle. Task 96 stays
+partial; existing Candy friendship behavior is not expanded by this PR.
+
+Node 22.23.3/Vitest4.1.11, pin 8555c08c823b856cbec4eb99ca84ea52a955836d.
+Real factories/PokemonFriendshipBoosterModifier instances, real `.add`, and
+singular scene `.applyModifier` generate before/after gain, matching index,
+status and complete inventories. Supplemental real `.applyModifiers` calls
+prove singular-vs-all coverage. Upstream party serialization/money/battle/global
+RNG invariance and whole non-inventory C context/run invariance are checked.
+All records/fields/footer are strict; zero caught/skipped cases/exceptions.
+This is held acquisition/raw boost parity, not full friendship or stat transport.
+
+All four seeds 777/9001/4242/31337: 2000/2000 identical each (8000 total), zero
+mismatches/skips/throws. Each has FULL 800/ADDED 400/STACKED 800, 667 wildcard
+matches, 800 duplicate cases, 335 zero-base cases, 665 fractional bases and 999
+cases where singular output differs from applying all Bells. 25 host refusal/
+capacity checks pass, plus exact floor/first/wildcard/optional-output checks.
+Actual C wildcard-acquisition/all-owned-boost/wrong-cap mutants reject
+582/533/122 seed777 cases (exit1). Missing footer exits2.
+
+Established seed99/N4000 traces replay byte-identically against 188f2d7:
+options 3950/0/50 unported (8052 screens), victory 4000/0 (2055 items/2459 screens),
+application 4000/0 (115 text cases), Memory 4000/0. Existing Mint/vitamin/Lure/
+money/temporary four-seed2000 traces each remain 8000/8000 identical with
+33/31/26/33/25 guards. All original producers/comparators/seeds/counts and
+generated tables are unchanged. Host H passes: resume 32657/apply 641335,
+Money 110/vitamin 187/Mint 107, paired 200-run 39213240.
+
+Full H before/after baseline 188f2d7 logs are byte-identical: each normal/saved
+1000 ends 1000/clear0/stuck0/crash0/timeout0,49100 turns. All four digests 2473e509,
+saved 14271 roundtrips, largest save 11373/131072 bytes. The difference from the
+previous temporary API's 403b442f comes from already-merged game-core Money #159,
+not this read-only raw Bell API. Nonzero stub rows (runs/times) stay:
+movesets1000/14681, doubles761/1543, evolution2/3, weather1000/1847,
+ungenerated enemies1000/2258, post-battle3/4, trainer messages307/402,
+reward without effect139/169. Zero categories remain zero; no stub removal or
+whole-run upstream parity is claimed.
+
+Exact commands, durable evidence outside checkout (old traces explicitly reused):
+
+```sh
+. /workspace/shared/activate-parity.sh
+E=/workspace/validation/lane-b/soothe-bell
+for seed in 777 9001 4242 31337; do
+ BUILD="$E/build" sh reward-core/tools/soothebelldiff.sh /workspace/shared/upstream-lane-b 2000 "$seed"
+done
+sh /workspace/validation/lane-b/run-reward-regressions.sh 188f2d7 "$E" 'mint vitamin lure moneyitem tempbooster'
+for seed in 777 9001 4242 31337; do
+ "$E/build/soothebelltest" "$E/build/soothebell-$seed.txt"
+done
+BUILD="$E/build" sh reward-core/tools/soothebellplant.sh "$E/build/soothebell-777.txt"
+sed '$d' "$E/build/soothebell-777.txt" > "$E/truncated.txt"
+"$E/build/soothebelltest" "$E/truncated.txt" # expected exit2
+make -s -C game-core -j2 BUILD="$E/baseline-game" REWARD_CORE="$E/baseline/reward-core" REWARD_LIB="$E/baseline-build/libreward.a" AI_LIB="$PWD/game-core/build/ai-core/libai.a" RUN_LIB="$PWD/game-core/build/run-core/librun.a" CORE_LIB="$PWD/game-core/build/run-core/battle-core/libprcore.a" "$E/baseline-game/gcplay"
+"$E/baseline-game/gcplay" --auto 1000 --jobs 8 > "$E/before-normal1000.log"
+"$E/baseline-game/gcplay" --auto 1000 --jobs 8 --save-test > "$E/before-saved1000.log"
+game-core/build/gcplay --auto 1000 --jobs 8 > "$E/after-normal1000.log"
+game-core/build/gcplay --auto 1000 --jobs 8 --save-test > "$E/after-saved1000.log"
+cmp "$E/before-normal1000.log" "$E/after-normal1000.log"
+cmp "$E/before-saved1000.log" "$E/after-saved1000.log"
+```
+
+The retained external regression helper extracts baseline reward-core, builds
+with j2 and read-only dependency paths, compares before/after logs for four
+established suites plus all 20 previous focused traces, then runs
+`make -s -C game-core -j2 test`. Its source and full logs remain in the durable
+validation directory. No established producer is rerun/edited by this gate.
+
 ## Task 96 prerequisite: canonical temporary boosters (lane B, 2026-10-08)
 
 `pr_reward_add_temp_booster(ctx,item,arg)` and `pr_reward_lapse_temp_boosters`
