@@ -625,12 +625,32 @@ static int apply_vitamin(gc_run *run, const gc_offer *o, int party, const char *
     return GC_APPLY_DONE;
 }
 
+/* Monetary consumables have no persistent inventory. UI animation and money
+ * achievement validation remain caller-owned; Gimmighoul's EvoTracker is guarded. */
+static int apply_money_item(gc_run *run, int item)
+{
+    if (run->run.has_challenges || run->n_items < 0 || run->n_items > PR_REWARD_MAX_OWNED
+        || run->n_items > GC_MAX_ITEMS || run->n_party < 1 || run->n_party > PR_REWARD_MAX_PARTY)
+        return GC_APPLY_UNHANDLED;
+    /* ctx_base intentionally skips unknown keys: reject them before transport. */
+    for (int i = 0; i < run->n_items; i++)
+        if (gc_reward_item_index(run->items[i].key) < 0
+            || (!strcmp(run->items[i].key, "AMULET_COIN") && run->items[i].pokemon_id))
+            return GC_APPLY_UNHANDLED;
+    pr_reward_ctx *c = ctx_base(run, false);
+    pr_reward_money_item_result result;
+    if (!pr_reward_apply_money_item(c, item, &run->money, &result)) return GC_APPLY_UNHANDLED;
+    return GC_APPLY_DONE;
+}
+
 int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, const char **why)
 {
     const int item = gc_reward_item_index(o->key);
     const int lifecycle = gc_reward_lifecycle_apply(run, o, party, why);
     if (lifecycle != GC_APPLY_UNHANDLED) return lifecycle;
     if (item < 0) return GC_APPLY_UNHANDLED;
+    if (item == PR_ITEM_NUGGET || item == PR_ITEM_BIG_NUGGET || item == PR_ITEM_RELIC_GOLD)
+        return apply_money_item(run, item);
     if (item == PR_ITEM_MINT) return apply_mint(run, o, party, why);
     if (item == PR_ITEM_BASE_STAT_BOOSTER) return apply_vitamin(run, o, party, why);
 
