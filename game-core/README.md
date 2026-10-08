@@ -637,3 +637,10 @@ other healing items (reward-core side: PR #142).
 Tests: `reward_apply_test` (Full Heal table rows, `test_full_heal`, `test_full_heal_flow`) and `tools/applydiff.sh`, whose apply
 section reads reward-core's producer trace as it has been since #142 (status counters, both tags, the queued texts) and now
 replays `FULL_HEAL` too. Before this change that section stopped with `malformed trace` on the new format.
+
+## Task 96: bounded Nugget-family adapter
+
+Nugget, Big Nugget and Relic Gold use the reward-core monetary API for supported
+party/inventory inputs and consume without ghost storage. Paid/free choices,
+capped credit and persistence are covered; Gimmighoul, challenges and malformed
+inputs remain counted. See [scope and validation](MONEY-VALIDATION.md).
