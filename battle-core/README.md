@@ -1001,3 +1001,12 @@ Scope: Ball Fetch Rattata/Mew form0 singles, pinned 18 types/20% identity and
 effective stacks 1–99. Ability-driven types, other forms, doubles, acquisition,
 inventory/save bridging and generic transfer remain outside this proof. Card 104
 remains partial.
+
+## Critical held-item proof and raw projection repair (Card 104, partial)
+
+See [validation](CRITICAL-VALIDATION.md) for four seeds ×2000 exact Scope Lens/Leek
+full turns, canonical identities and fusion refusals. This slice also repairs a
+legacy direct-damage/stat coverage regression introduced by strict Soul/type
+helper admission: explicit raw projection callers preserve original arithmetic
+and flags, strict leaf checks stay unchanged, and full-turn admission remains
+bounded. No whole held-item or fusion lifecycle completion is claimed.

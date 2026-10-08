@@ -130,6 +130,12 @@ bool pr_mod_is_ported_item(const pr_modifier *m)
         int64_t stacks = (int64_t)m->stack_count + m->virtual_stack_count;
         return !m->unknown_subclass && m->stack_count >= 1 && m->virtual_stack_count >= 0 && stacks <= 5;
     }
+    if (m->cls == PR_MOD_CRIT_BOOSTER || m->cls == PR_MOD_SPECIES_CRIT_BOOSTER) {
+        if (m->unknown_subclass || m->stack_count != 1 || m->virtual_stack_count != 0) return false;
+        if (m->cls == PR_MOD_CRIT_BOOSTER) return m->num == 1 && m->n_species == 0;
+        return m->num == 2 && m->n_species == 3 && m->species[0] == SPECIES_ID_FARFETCHD
+            && m->species[1] == SPECIES_ID_GALAR_FARFETCHD && m->species[2] == SPECIES_ID_SIRFETCHD;
+    }
     if (m->cls == PR_MOD_ATTACK_TYPE_BOOSTER) {
         int64_t stacks = (int64_t)m->stack_count + m->virtual_stack_count;
         return !m->unknown_subclass && m->stack_count >= 1 && m->virtual_stack_count >= 0 && stacks <= 99
@@ -292,18 +298,31 @@ void pr_apply_incrementing_stat_modifier(pr_battle *bt, const pr_pokemon *p, int
 
 /* applyModifier(PokemonNatureWeightModifier, ...): apply is false when the nature is neutral
  * for the stat, so the search goes on to the next one */
-void pr_apply_nature_weight_modifier(pr_battle *bt, const pr_pokemon *p, double *mult)
+static void apply_nature_weight_modifier(pr_battle *bt, const pr_pokemon *p, double *mult, bool bounded)
 {
     if (!p || !mult) return;
     pr_modifier *m;
     EACH_MOD(m, bt, p->is_player, PR_MOD_NATURE_WEIGHT) {
         if (!held_applies(m, p)) continue;
-        if (!pr_mod_is_ported_item(m)) { pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS); return; }
+        if (bounded && !pr_mod_is_ported_item(m)) { pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS); return; }
         if (*mult != 1) {
             *mult += 0.1 * pr_mod_get_stack_count(m) * (*mult > 1 ? 1 : -1);
             return;
         }
     }
+}
+
+/* Strict leaf admission and raw upstream projection have separate contracts.
+ * Raw callers preserve the pinned helper arithmetic even for synthetic inventory
+ * states outside acquisition caps; full turns flag those states at admission. */
+void pr_apply_nature_weight_modifier(pr_battle *bt, const pr_pokemon *p, double *mult)
+{
+    apply_nature_weight_modifier(bt, p, mult, true);
+}
+
+void pr_project_nature_weight_modifier(pr_battle *bt, const pr_pokemon *p, double *mult)
+{
+    apply_nature_weight_modifier(bt, p, mult, false);
 }
 
 void pr_apply_enemy_status_heal_modifiers(pr_battle *bt, pr_engine *e, pr_pokemon *p)
@@ -644,14 +663,31 @@ void pr_apply_temp_stat_stage_booster_modifiers(pr_battle *bt, bool player, int 
 }
 
 /* applyModifiers(CritBoosterModifier, source.isPlayer(), source, critStage) */
-void pr_apply_crit_booster_modifiers(pr_battle *bt, const pr_pokemon *src, int *stage)
+static void apply_crit_booster_modifiers(pr_battle *bt, const pr_pokemon *src, int *stage, bool bounded)
 {
+    if (!src || !stage) return;
     pr_modifier *m;
     EACH_MOD(m, bt, src->is_player, PR_MOD_CRIT_BOOSTER) {
         if (!held_applies(m, src)) continue;
+        if (bounded && (!pr_mod_is_ported_item(m) || (m->cls == PR_MOD_SPECIES_CRIT_BOOSTER && src->fusion_species))) {
+            pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS); continue;
+        }
         if (m->cls == PR_MOD_SPECIES_CRIT_BOOSTER && !species_listed(m, src->species)) continue;
         *stage += m->num;
     }
+}
+
+/* Strict leaf admission and raw upstream projection have separate contracts.
+ * Raw callers preserve the pinned helper arithmetic even for synthetic inventory
+ * states outside acquisition caps; full turns flag those states at admission. */
+void pr_apply_crit_booster_modifiers(pr_battle *bt, const pr_pokemon *src, int *stage)
+{
+    apply_crit_booster_modifiers(bt, src, stage, true);
+}
+
+void pr_project_crit_booster_modifiers(pr_battle *bt, const pr_pokemon *src, int *stage)
+{
+    apply_crit_booster_modifiers(bt, src, stage, false);
 }
 
 /* applyModifiers(TempCritBoosterModifier, source.isPlayer(), critStage): Dire Hit, +1 each */
@@ -662,15 +698,28 @@ void pr_apply_temp_crit_booster_modifiers(pr_battle *bt, bool player, int *stage
 }
 
 /* applyModifiers(AttackTypeBoosterModifier, source.isPlayer(), source, moveType, power) */
-void pr_apply_attack_type_booster_modifiers(pr_battle *bt, const pr_pokemon *src, int move_type, double *power)
+static void apply_attack_type_booster_modifiers(pr_battle *bt, const pr_pokemon *src, int move_type, double *power, bool bounded)
 {
     if (!src || !power) return;
     pr_modifier *m;
     EACH_MOD(m, bt, src->is_player, PR_MOD_ATTACK_TYPE_BOOSTER) {
         if (!held_applies(m, src) || m->move_type != move_type) continue;
-        if (!pr_mod_is_ported_item(m)) { pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS); continue; }
+        if (bounded && !pr_mod_is_ported_item(m)) { pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS); continue; }
         if (*power >= 1) *power = floor(*power * (1 + pr_mod_get_stack_count(m) * m->mult));
     }
+}
+
+/* Strict leaf admission and raw upstream projection have separate contracts.
+ * Raw callers preserve the pinned helper arithmetic even for synthetic inventory
+ * states outside acquisition caps; full turns flag those states at admission. */
+void pr_apply_attack_type_booster_modifiers(pr_battle *bt, const pr_pokemon *src, int move_type, double *power)
+{
+    apply_attack_type_booster_modifiers(bt, src, move_type, power, true);
+}
+
+void pr_project_attack_type_booster_modifiers(pr_battle *bt, const pr_pokemon *src, int move_type, double *power)
+{
+    apply_attack_type_booster_modifiers(bt, src, move_type, power, false);
 }
 
 /* PokemonMoveAccuracyBoosterModifier: shouldApply requires the matching holder

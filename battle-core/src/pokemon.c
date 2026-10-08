@@ -78,7 +78,7 @@ void pr_calculate_stats(pr_battle *bt, pr_pokemon *p)
         } else {
             v += 5;
             double m = pr_nature_mult[p->nature][s];
-            pr_apply_nature_weight_modifier(bt, p, &m);
+            pr_project_nature_weight_modifier(bt, p, &m);
             if (m != 1) {
                 v = (m > 1) ? ceil(v * m) : floor(v * m);
                 if (v < 1) v = 1;
