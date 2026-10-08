@@ -8,10 +8,10 @@ CPPFLAGS += -Iinclude -Igen/out -I$(RUN_CORE)/include -I$(BATTLE_CORE)/include -
 BUILD ?= build
 CORE_LIB := $(BUILD)/battle-core/libprcore.a
 RUN_LIB := $(BUILD)/run-core/librun.a
-SRCS := src/reward.c src/pools.c src/victory.c src/trainer_rewards.c src/reward_apply.c src/memory.c src/candy.c src/mint.c src/vitamin.c src/lure.c src/money_item.c src/temp_booster.c gen/out/reward_data.c
+SRCS := src/reward.c src/pools.c src/victory.c src/trainer_rewards.c src/reward_apply.c src/memory.c src/candy.c src/mint.c src/vitamin.c src/lure.c src/money_item.c src/temp_booster.c src/soothe_bell.c gen/out/reward_data.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
-all: $(BUILD)/libreward.a $(BUILD)/rewardstest $(BUILD)/victorytest $(BUILD)/applytest $(BUILD)/memorytest $(BUILD)/candytest $(BUILD)/evolutionstatetest $(BUILD)/learnsetinputtest $(BUILD)/trainerrewardstest $(BUILD)/minttest $(BUILD)/vitamintest $(BUILD)/luretest $(BUILD)/moneyitemtest $(BUILD)/tempboostertest
+all: $(BUILD)/libreward.a $(BUILD)/rewardstest $(BUILD)/victorytest $(BUILD)/applytest $(BUILD)/memorytest $(BUILD)/candytest $(BUILD)/evolutionstatetest $(BUILD)/learnsetinputtest $(BUILD)/trainerrewardstest $(BUILD)/minttest $(BUILD)/vitamintest $(BUILD)/luretest $(BUILD)/moneyitemtest $(BUILD)/tempboostertest $(BUILD)/soothebelltest
 
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -63,6 +63,9 @@ $(BUILD)/moneyitemtest: tests/moneyitemtest.c $(BUILD)/libreward.a $(RUN_LIB) $(
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
 $(BUILD)/tempboostertest: tests/tempboostertest.c $(BUILD)/libreward.a $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+$(BUILD)/soothebelltest: tests/soothebelltest.c $(BUILD)/libreward.a $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
 clean:
