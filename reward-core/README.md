@@ -4,6 +4,106 @@ Native C port of PokeRogue's player rewards: the reward options after a wave (po
 
 The API is [`include/pr/reward.h`](include/pr/reward.h). The run loop (game-core) fills a `pr_reward_ctx` from the run before each reward screen: the party as the rolls see it, the player's items, ball counts, unlocks, the arena. A few of its fields are other ports' answers, marked "caller" in the header: `canSetStatus` (battle-core), `canApplyAbility`, the learnable level moves and the level-move list the TM filter leaves out (learnsets, not ported yet), each attack move's types for item spawns. The diff test takes those from upstream, so reward-core is checked given correct inputs.
 
+## Task 96 prerequisite: money-item monetary application (lane B, 2026-10-08)
+
+`pr_reward_apply_money_item(ctx, item, &money, &result)` mirrors the monetary
+state of pinned `MoneyRewardModifier.apply` for **Nugget / Big Nugget / Relic
+Gold**, using multipliers **1 / 2.5 / 10**. It reads run-core's wave-money
+calculator, applies every Amulet Coin object **in inventory order** with its
+own floored 20%-per-stack bonus, then caps the balance at
+**9007199254740991** (`Number.MAX_SAFE_INTEGER`). It does not apply Happy Hour.
+The optional result distinguishes the nominal amount from actual credited
+money. Success remains true at the cap even when credit is zero, matching
+upstream. Context, party, inventory and RNG remain unchanged.
+
+The bounded input contract is wave **1..10000**, party **1..6** with known
+primary/fusion species, finite money **0..MAX_SAFE_INTEGER** (fractional
+balances allowed), and ordinary nonvirtual inventories. Amulet entries require
+owner -1, arg/count zero, stack **1..5**; duplicate objects are supported.
+Other known-item entries are opaque. Invalid shapes, money, capacity or species
+and **primary/fused Gimmighoul anywhere in the party** are refused before any
+context, balance or result mutation. Gholdengo is supported: upstream checks
+Gimmighoul's exact species ID rather than its evolution family.
+
+This is monetary-state parity, not the complete item/phase lifecycle. Real
+Gimmighoul application additionally creates an EvoTracker and triggers scene
+modifier updates; that path remains unsupported. Rendering, MoneyAchv unlocks,
+selection/purchase/affordability, scene-wide ModifierAchv checks, saves and
+game-core integration remain caller-owned and unvalidated. The upstream
+producer counts the real `Scene.addMoney` requests for UI update, positive
+animation and MoneyAchv validation (one each), intercepting those boundaries
+rather than claiming their implementation. Generic `pr_reward_apply` has no
+money transport and is unchanged. Task 96 remains partial.
+
+Node22.23.3/Vitest4.1.11, upstream
+`8555c08c823b856cbec4eb99ca84ea52a955836d`: the oracle uses real factories,
+`MoneyRewardModifier.apply`, scene wave-money calculation, real Amulet class
+application and real `Scene.addMoney` clamp. Every produced record/field is
+consumed strictly. Upstream party serialization, inventory, battle/global RNG
+invariance and C whole-context/run invariance are checked. This is not a
+party/stat transport differential. Each family includes waves 1 and 10000 plus
+wave-set boundaries, capped/fractional balances and coin combinations.
+
+| Seed | Identical / cases | Mismatches | Capped balances | Fusion mons | Gholdengo mons | Coin-order-sensitive cases |
+| --- | --- | --- | --- | --- | --- | --- |
+| 777 | 2000 / 2000 | 0 | 1201 | 3508 | 2000 | 473 |
+| 9001 | 2000 / 2000 | 0 | 1189 | 3494 | 1945 | 474 |
+| 4242 | 2000 / 2000 | 0 | 1178 | 3414 | 1957 | 491 |
+| 31337 | 2000 / 2000 | 0 | 1189 | 3447 | 1910 | 502 |
+
+Each seed covers **667/667/666** Nugget/Big/Relic cases, **1332** cases with
+multiple coin objects and **333** fractional starting balances. **8000/8000
+identical**, zero skipped/thrown. **33** host no-mutation refusal guards pass,
+plus cap success, optional result, fractional credit and a full inventory of 256 coin objects with finite large amount. Actual C-source multiplier/reversed-order/
+missing-cap mutations reject **667/473/410** seed777 cases (exit1); missing
+footer exits2. Unsupported Gimmighoul has host refusal proof, not an upstream
+successful-application differential or an omitted-effect success.
+
+Unchanged established seed99/N4000 traces replay byte-identically against main
+`0a10696` and this API: options **3950/0/50 unported**, 8052 screens; victory
+**4000/0**, 2055 items/2459 screens; application **4000/0**, 115 text cases;
+Memory **4000/0**. Existing Mint, vitamin and Lure four-seed2000 traces each
+retain **8000/8000 identical**, with **33/31/26** guards. All established
+producers/comparators/seeds/counts and generated tables remain unchanged.
+Host `make -s -C game-core -j2 test` passes: resume **32729**, reward
+application **641335**, Mint **107**, paired200-run digest **a6662b64**.
+
+Exact commands (durable evidence outside the checkout; existing traces are
+replayed, not represented as newly generated):
+
+```sh
+. /workspace/shared/activate-parity.sh
+E=/workspace/validation/lane-b/money-items
+mkdir -p "$E/baseline"
+git archive 0a10696 reward-core | tar -x -C "$E/baseline"
+for seed in 777 9001 4242 31337; do
+  BUILD="$E/build" sh reward-core/tools/moneyitemdiff.sh /workspace/shared/upstream-lane-b 2000 "$seed"
+done
+make -s -j2 -C "$E/baseline/reward-core" BUILD="$E/baseline-build" BATTLE_CORE="$PWD/battle-core" RUN_CORE="$PWD/run-core" CORE_LIB="$E/build/battle-core/libprcore.a" RUN_LIB="$E/build/run-core/librun.a"
+for mode in rewards victory apply memory; do
+  TRACE=/workspace/validation/lane-b/vitamins/baseline-build/$mode-cases.txt
+  "$E/baseline-build/${mode}test" "$TRACE" > "$E/before-$mode.log"
+  "$E/build/${mode}test" "$TRACE" > "$E/after-$mode.log"
+  cmp "$E/before-$mode.log" "$E/after-$mode.log"
+done
+for seed in 777 9001 4242 31337; do
+  for type in mint vitamin lure; do
+    case "$type" in
+      mint) TRACE=/workspace/validation/lane-b/vitamins/mint-regression/mint-$seed.txt;;
+      vitamin) TRACE=/workspace/validation/lane-b/vitamins/build/vitamin-$seed.txt;;
+      lure) TRACE=/workspace/validation/lane-b/lures/build/lure-$seed.txt;;
+    esac
+    "$E/baseline-build/${type}test" "$TRACE" > "$E/before-$type-$seed.log"
+    "$E/build/${type}test" "$TRACE" > "$E/after-$type-$seed.log"
+    cmp "$E/before-$type-$seed.log" "$E/after-$type-$seed.log"
+  done
+done
+BUILD="$E/build" sh reward-core/tools/moneyitemplant.sh "$E/build/moneyitem-777.txt"
+sed '$d' "$E/build/moneyitem-777.txt" > "$E/truncated.txt"
+"$E/build/moneyitemtest" "$E/truncated.txt" # expected exit2
+make -s -C game-core -j2 test
+```
+
 ## Task 96 prerequisite: canonical Lure primitives (lane B, 2026-10-07)
 
 `pr_reward_add_lure`, `pr_reward_lapse_lures` and `pr_reward_lure_chance`
