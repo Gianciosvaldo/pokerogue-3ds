@@ -1,6 +1,6 @@
-/* Additive game-core money boundary oracle: real selectFilter, PersistentModifier.add,
- * BattleScene.addModifier/updateModifiers and SelectModifierPhase.applyModifier.
- * Only UI error/phase-end boundaries are captured; stats/items/purchase logic are real.
+/* Additive game-core money oracle: real factories, MoneyRewardModifier,
+ * Scene.addModifier/addMoney and SelectModifierPhase.applyModifier.
+ * UI/achievement/phase-end boundaries are intercepted; balance logic is real.
  * GC_MONEY_N=2000 GC_MONEY_SEED=777 GC_MONEY_OUT=/abs/money.txt, Node22. */
 import { speciesDataRegistry } from "#app/globals/global-species-data-registry";
 import { modifierTypes } from "#data/data-lists";
