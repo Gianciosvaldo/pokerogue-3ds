@@ -78,7 +78,7 @@ four seeds and 2000 cases per seed. These scopes and observations remain distinc
 | --- | --- | --- |
 | [Game money #159](../game-core/MONEY-VALIDATION.md) | 8000 cases / 16000 direct-public comparisons, 0 mismatches; 110 host checks; ordered Coin floors, cap, fractional and free/paid balances | Gimmighoul tracker/stat refresh, achievements, text/animation, guarded inputs; source monetary API is #156 |
 | Reward temporary boosters #160 | 8000/8000 modifier-state/effect-projection cases identical; 25 guards; canonical five-battle X stats and Dire Hit add/refresh/full/lapse | Scene/purchase/tier fallback, full BattleEnd/game/save, final stat/accuracy/crit clamps |
-| Battle Golden Punch #161 | 8000/8000 full turns, exact wallets and texts identical; 12 guards; post-hit money and ordered Coin bonus | Ball Fetch form0 singles, effective stacks1–5; game wallet/inventory/save, achievements/presentation excluded |
+| Battle Golden Punch #161 | 8000/8000 full turns, exact wallets and texts identical; 12 guards; post-hit money and ordered Coin bonus | Limited to Ball Fetch form0 singles, effective stacks1–5; excludes game wallet/inventory/save and achievements/presentation |
 | [Game Reviver #162](../game-core/SEED-VALIDATION.md) | 8000/8000 full turns/texts identical; 126 host / 130 true-old-save checks plus 12 battle guards; consumption and detached provenance | Generic acquisition/stock/replacement/transfers/loot pickup; malformed duplicate stock stays opaque |
 | Reward Soothe Bell #163 | 8000/8000 identical; 25 guards; held add/full/stack and first eligible singular raw floor boost | Full addFriendship/caps/candy/events/fusion/achievements; scene/purchases/game/save; raw wildcard records are not acquired |
 | Battle Soul Dew #164 | 8000/8000 full turns/input stats/texts identical; 16 guards; existing nature-stat arithmetic proven and bounded class promoted | Existing helper, not newly invented effect; broad forms/abilities/doubles/acquisition/game/save remain unproved |
@@ -106,7 +106,7 @@ The coordinator independently reran on the merged `ee695e9` source:
 and the same command with `--save-test`; all underlying exits were zero.
 Durable logs: `/workspace/validation/eight-batch/final-{host,normal,saved}.log`.
 These combined host results agree with the final #165 checkpoint:
- 32697 resume, 39 existing bridge / 641335 existing
+32697 resume, 39 existing bridge / 641335 existing
 application checks; paired 200-run `79d84c65`. Both 1000-run modes end all runs,
 zero cleared/stuck/crashed/timed out, 49206 turns and paired `c2937ca0`; 14291
 save round trips, max11400 bytes. Earlier C checkpoints remain dated: money
