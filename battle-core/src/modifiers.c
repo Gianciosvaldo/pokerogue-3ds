@@ -130,6 +130,11 @@ bool pr_mod_is_ported_item(const pr_modifier *m)
         int64_t stacks = (int64_t)m->stack_count + m->virtual_stack_count;
         return !m->unknown_subclass && m->stack_count >= 1 && m->virtual_stack_count >= 0 && stacks <= 5;
     }
+    if (m->cls == PR_MOD_ATTACK_TYPE_BOOSTER) {
+        int64_t stacks = (int64_t)m->stack_count + m->virtual_stack_count;
+        return !m->unknown_subclass && m->stack_count >= 1 && m->virtual_stack_count >= 0 && stacks <= 99
+            && m->move_type >= 0 && m->move_type < 18 && m->mult == 20 * 0.01;
+    }
     if (m->cls == PR_MOD_NATURE_WEIGHT) {
         int64_t stacks = (int64_t)m->stack_count + m->virtual_stack_count;
         return !m->unknown_subclass && m->stack_count >= 1 && m->virtual_stack_count >= 0 && stacks <= 10;
@@ -659,9 +664,11 @@ void pr_apply_temp_crit_booster_modifiers(pr_battle *bt, bool player, int *stage
 /* applyModifiers(AttackTypeBoosterModifier, source.isPlayer(), source, moveType, power) */
 void pr_apply_attack_type_booster_modifiers(pr_battle *bt, const pr_pokemon *src, int move_type, double *power)
 {
+    if (!src || !power) return;
     pr_modifier *m;
     EACH_MOD(m, bt, src->is_player, PR_MOD_ATTACK_TYPE_BOOSTER) {
         if (!held_applies(m, src) || m->move_type != move_type) continue;
+        if (!pr_mod_is_ported_item(m)) { pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS); continue; }
         if (*power >= 1) *power = floor(*power * (1 + pr_mod_get_stack_count(m) * m->mult));
     }
 }
