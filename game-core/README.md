@@ -14,6 +14,10 @@ documented in [MINT-VALIDATION.md](MINT-VALIDATION.md). Until run-core's
 remaining movesets land and the other rewards act on the run, stand-ins in `src/gc_stubs.c` keep a run
 playable. Each stand-in is counted, so the soak runs show how much of a run is still standing in.
 
+Golden Punch loaded-inventory and double-wallet transport, ordered Amulet Coin
+dependencies and bounded command/save proof are documented in
+[GOLDEN-VALIDATION.md](GOLDEN-VALIDATION.md).
+
 Toxic Orb and Flame Orb inventory mapping, full-turn comparisons and save
 boundaries are documented in [ORB-VALIDATION.md](ORB-VALIDATION.md).
 

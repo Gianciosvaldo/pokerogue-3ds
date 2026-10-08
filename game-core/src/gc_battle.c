@@ -11,6 +11,9 @@
 static void note_unported(gc_run *run);
 static int next_summon_cb(pr_battle *bt, int trainer_slot, void *ctx);
 
+void gc_wallet_to_battle(gc_run *run) { run->bt.money = run->money; }
+void gc_wallet_from_battle(gc_run *run) { run->money = run->bt.money; }
+
 static int index_of(const gc_mon *arr, int n, const pr_pokemon *p)
 {
     for (int i = 0; i < n; i++) if (&arr[i].b == p) return i;
@@ -72,6 +75,7 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
         /* resetArenaEffects: the biome's weather is rolled again (not ported: no weather) */
         gc_stub(run, GC_STUB_WEATHER);
     }
+    gc_wallet_to_battle(run);
     bt->rng = run->run.rng;
     bt->rng_live = true;
     pr_seed_from_ascii(&bt->battle_seed, run->battle_seed);
@@ -507,6 +511,7 @@ static void note_revealed(gc_run *run)
 /* What the run keeps from a battle-core call (the turn, a switch pick, the rest of a turn, the start's answer) */
 static int engine_returned(gc_run *run)
 {
+    gc_wallet_from_battle(run);
     note_unported(run);
     note_revealed(run);
     gc_items_from_battle(run);
@@ -519,6 +524,7 @@ static int engine_returned(gc_run *run)
 int gc_battle_run(gc_run *run, int pick)
 {
     pr_battle *bt = &run->bt;
+    gc_wallet_to_battle(run);
     if (pick < -1) {
         gc_int(run)->at_save_point = false;
         gc_event *ev = gc_ev_new(run, GC_EV_TURN);
@@ -532,6 +538,7 @@ int gc_battle_run(gc_run *run, int pick)
 
 int gc_battle_continue(gc_run *run)
 {
+    gc_wallet_to_battle(run);
     gc_int(run)->at_save_point = false;
     pr_continue(&run->bt, &run->eng);
     return engine_returned(run);
@@ -539,6 +546,7 @@ int gc_battle_continue(gc_run *run)
 
 int gc_battle_answer_switch(gc_run *run, bool yes)
 {
+    gc_wallet_to_battle(run);
     pr_answer_check_switch(&run->bt, &run->eng, yes);
     return engine_returned(run);
 }

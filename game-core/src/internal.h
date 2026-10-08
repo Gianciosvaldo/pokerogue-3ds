@@ -250,4 +250,8 @@ bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char *
 
 uint32_t gc_stub_rand(gc_run *run, uint32_t n);
 
+/* GlobalScene wallet transport, separate from currentBattle Pay Day money. */
+void gc_wallet_to_battle(gc_run *run);
+void gc_wallet_from_battle(gc_run *run);
+
 #endif

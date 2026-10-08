@@ -79,7 +79,22 @@ double gc_apply_exp_boosters(const gc_run *run, double exp)
 /* One gc_item as battle-core's modifier. The held items and tokens battle-core reads on the damage path
  * get their class; everything else is a PokemonHeldItemModifier or PersistentModifier with
  * unknown_subclass set, so a query that would call its own apply reports itself unported. */
-static void to_modifier(const gc_item *it, pr_modifier *m)
+static bool golden_bridge(const gc_run *run)
+{
+    for (int side = 0; side < 2; side++) {
+        const gc_item *items = side ? run->enemy_items : run->items;
+        int n = side ? run->n_enemy_items : run->n_items;
+        if (n < 0 || n > GC_MAX_ITEMS) continue;
+        if (n > PR_MAX_MODIFIERS) n = PR_MAX_MODIFIERS;
+        for (int i = 0; i < n; i++) {
+            const gc_item *it = &items[i];
+            if (!strcmp(it->key, "GOLDEN_PUNCH") && it->stack >= 1 && it->virtual_stack >= 0
+                && (int64_t)it->stack + it->virtual_stack <= 5 && (it->arg == -1 || it->arg == 0)) return true;
+        }
+    }
+    return false;
+}
+static void to_modifier(const gc_item *it, pr_modifier *m, bool golden)
 {
     memset(m, 0, sizeof *m);
     m->stack_count = it->stack;
@@ -87,8 +102,9 @@ static void to_modifier(const gc_item *it, pr_modifier *m)
     m->is_transferable = true;
     m->unknown_subclass = true;
     m->cls = it->pokemon_id ? PR_MOD_HELD_ITEM : PR_MOD_PERSISTENT;
-    /* This adapter validates transient stacks only for Wide Lens. */
-    if (it->virtual_stack && strcmp(it->key, "WIDE_LENS")) return;
+    /* Transient Amulet Coin is a bounded Golden Punch dependency. */
+    if (it->virtual_stack && strcmp(it->key, "WIDE_LENS")
+        && strcmp(it->key, "GOLDEN_PUNCH") && strcmp(it->key, "AMULET_COIN")) return;
     /* These classes now have turn-path implementations in battle-core.  Parameters and
      * transferability come from upstream modifierTypes, not an inferred item name. */
     static const struct { const char *key; uint8_t cls; } held[] = {
@@ -104,7 +120,18 @@ static void to_modifier(const gc_item *it, pr_modifier *m)
         if (m->cls == PR_MOD_BERRY) m->berry_type = (int8_t)it->arg;
         return;
     }
-    if (!strcmp(it->key, "WIDE_LENS")) {
+    if (!strcmp(it->key, "GOLDEN_PUNCH") || !strcmp(it->key, "AMULET_COIN")) {
+        bool coin = !strcmp(it->key, "AMULET_COIN");
+        m->cls = coin ? PR_MOD_MONEY_MULTIPLIER : PR_MOD_DAMAGE_MONEY_REWARD;
+        if (it->stack >= 1 && it->virtual_stack >= 0
+            && (int64_t)it->stack + it->virtual_stack <= 5
+            && (it->arg == -1 || it->arg == 0) && (!coin || (!it->pokemon_id && !it->detached))
+            && (!coin || !it->virtual_stack || golden)) {
+            if (coin) m->pokemon_id = 0; /* persistent source class has no holder */
+            m->virtual_stack_count = it->virtual_stack;
+            m->unknown_subclass = false;
+        }
+    } else if (!strcmp(it->key, "WIDE_LENS")) {
         /* modifierTypes.WIDE_LENS: +5 for every real and transient virtual stack. */
         if (it->stack >= 1 && it->stack <= 3 && it->virtual_stack >= 0
             && (int64_t)it->stack + it->virtual_stack <= 3 && (it->arg == -1 || it->arg == 0)) {
@@ -154,11 +181,12 @@ static bool duplicate_seed(const gc_item *items, int n, int index)
 void gc_items_to_battle(gc_run *run)
 {
     pr_battle *bt = &run->bt;
+    const bool golden = golden_bridge(run);
     bt->n_mods[0] = bt->n_mods[1] = 0;
     for (int i = 0; i < run->n_items && bt->n_mods[0] < PR_MAX_MODIFIERS; i++)
-        to_modifier(&run->items[i], &bt->mods[0][bt->n_mods[0]++]);
+        to_modifier(&run->items[i], &bt->mods[0][bt->n_mods[0]++], golden);
     for (int i = 0; i < run->n_enemy_items && bt->n_mods[1] < PR_MAX_MODIFIERS; i++)
-        to_modifier(&run->enemy_items[i], &bt->mods[1][bt->n_mods[1]++]);
+        to_modifier(&run->enemy_items[i], &bt->mods[1][bt->n_mods[1]++], golden);
     for (int side = 0; side < 2; side++) {
         const gc_item *items = side ? run->enemy_items : run->items;
         int n = side ? run->n_enemy_items : run->n_items;
@@ -168,6 +196,13 @@ void gc_items_to_battle(gc_run *run)
                 bt->mods[side][i].unknown_subclass = true;
             }
     }
+    /* The battle monetary primitive requires a representable scene wallet.
+     * Keep malformed known dependencies typed/opaque so its preflight refuses
+     * rather than silently omitting an Amulet bonus. */
+    if (!isfinite(run->money) || run->money < 0 || run->money > 9007199254740991.0)
+        for (int side = 0; side < 2; side++) for (int i = 0; i < bt->n_mods[side]; i++)
+            if (bt->mods[side][i].cls == PR_MOD_DAMAGE_MONEY_REWARD || bt->mods[side][i].cls == PR_MOD_MONEY_MULTIPLIER)
+                bt->mods[side][i].unknown_subclass = true;
     gc_int(run)->battle_item_count[0] = bt->n_mods[0];
     gc_int(run)->battle_item_count[1] = bt->n_mods[1];
 }
@@ -179,6 +214,7 @@ void gc_items_to_battle(gc_run *run)
  * an unrepresented overflow item for a consumed one. Transfers/additions require a later adapter. */
 void gc_items_from_battle(gc_run *run)
 {
+    const bool golden = golden_bridge(run);
     for (int side = 0; side < 2; side++) {
         gc_item *items = side ? run->enemy_items : run->items;
         int *n = side ? &run->n_enemy_items : &run->n_items;
@@ -190,10 +226,18 @@ void gc_items_from_battle(gc_run *run)
         for (int i = 0; i < *n; i++) {
             gc_item it = items[i];
             pr_modifier expected;
-            to_modifier(&it, &expected);
-            if (i < tracked && (expected.cls == PR_MOD_INSTANT_REVIVE
-                                || expected.cls == PR_MOD_MOVE_ACCURACY_BOOSTER)
+            to_modifier(&it, &expected, golden);
+            if (i < tracked && !expected.unknown_subclass && (expected.cls == PR_MOD_INSTANT_REVIVE
+                                || expected.cls == PR_MOD_MOVE_ACCURACY_BOOSTER
+                                || expected.cls == PR_MOD_DAMAGE_MONEY_REWARD)
                 && !duplicate[i]) {
+                bool opaque = false;
+                for (int j = 0; j < run->bt.n_mods[side]; j++) {
+                    const pr_modifier *m = &run->bt.mods[side][j];
+                    if (m->cls == expected.cls && m->pokemon_id == expected.pokemon_id && m->unknown_subclass)
+                        opaque = true;
+                }
+                if (opaque) { items[w++] = it; continue; }
                 int remaining = 0;
                 const pr_pokemon *holder = pr_pokemon_by_id(&run->bt, it.pokemon_id);
                 for (int j = 0; j < run->bt.n_mods[side]; j++) {
@@ -203,7 +247,7 @@ void gc_items_from_battle(gc_run *run)
                     if (m->pokemon_id != expected.pokemon_id && !detached) continue;
                     remaining = m->stack_count;
                     it.detached = m->pokemon_id == 0;
-                    if (expected.cls == PR_MOD_MOVE_ACCURACY_BOOSTER)
+                    if (expected.cls == PR_MOD_MOVE_ACCURACY_BOOSTER || expected.cls == PR_MOD_DAMAGE_MONEY_REWARD)
                         it.virtual_stack = m->virtual_stack_count;
                     used[j] = true;
                     break;
