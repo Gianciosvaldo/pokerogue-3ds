@@ -1,5 +1,5 @@
 #!/bin/sh
-# Bounded tempbooster modifier add/lapse/chance oracle, Node22 only.
+# Bounded temporary-booster acquisition/lapse and effect projection oracle, Node22 only.
 set -eu
 UP=${1:?upstream dir}; N=${2:-2000}; SEED=${3:-777}
 HERE=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)

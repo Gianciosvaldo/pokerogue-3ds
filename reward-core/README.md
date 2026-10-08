@@ -78,6 +78,32 @@ logs for reward/victory/apply/Memory and all 16 focused traces, then runs
 `make -s -C game-core -j2 test`. Its full source and all before/after logs are
 retained beside evidence; no existing producer is rerun or modified in that gate.
 
+Full H contract also passes before/after against extracted reward baseline1c984b7:
+1000 normal +1000 saved each end1000/clear0/stuck0/crash0/timeout0,49284 turns;
+all four digests403b442f,14302 saved round trips,largest save11582/131072 bytes.
+Before/after full logs are byte-identical. Nonzero stub counts (runs/times):
+enemy movesets1000/14713, doubles-as-single763/1565, evolution2/3,
+biome weather1000/1850, ungenerated enemies1000/2269, post-battle3/4,
+trainer message306/400, reward-without-effect371/467. Zero stub categories
+remain zero; this API creates no game-core caller and does not remove stubs.
+
+```sh
+E=/workspace/validation/lane-b/temp-boosters
+make -s -C game-core -j2 BUILD="$E/baseline-game" REWARD_CORE="$E/baseline/reward-core" REWARD_LIB="$E/baseline-build/libreward.a" AI_LIB="$PWD/game-core/build/ai-core/libai.a" RUN_LIB="$PWD/game-core/build/run-core/librun.a" CORE_LIB="$PWD/game-core/build/run-core/battle-core/libprcore.a" "$E/baseline-game/gcplay"
+"$E/baseline-game/gcplay" --auto 1000 --jobs 8 > "$E/before-normal1000.log"
+"$E/baseline-game/gcplay" --auto 1000 --jobs 8 --save-test > "$E/before-saved1000.log"
+game-core/build/gcplay --auto 1000 --jobs 8 > "$E/after-normal1000.log"
+game-core/build/gcplay --auto 1000 --jobs 8 --save-test > "$E/after-saved1000.log"
+cmp "$E/before-normal1000.log" "$E/after-normal1000.log"
+cmp "$E/before-saved1000.log" "$E/after-saved1000.log"
+```
+
+One initial baseline link invocation used nonexistent cached
+`game-core/build/battle-core/libprcore.a` (exit2); correcting the actual nested
+run-core/battle-core path above succeeds. The failed log is retained and is
+not counted as validation. Header descriptions were corrected before final CI;
+no runtime source or established check changed for that documentation update.
+
 ## Task 96 prerequisite: money-item monetary application (lane B, 2026-10-08)
 
 `pr_reward_apply_money_item(ctx, item, &money, &result)` mirrors the monetary

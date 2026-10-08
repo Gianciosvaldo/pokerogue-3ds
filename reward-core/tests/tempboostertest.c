@@ -1,4 +1,4 @@
-/* Independent strict replay of the additive real-class Lure oracle. */
+/* Independent strict replay of the additive real-class temporary-booster oracle. */
 #include "pr/reward.h"
 #include "pr/battle.h"
 #include <ctype.h>
