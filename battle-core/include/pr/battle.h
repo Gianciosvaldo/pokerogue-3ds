@@ -86,6 +86,8 @@ enum {
     PR_MOD_TURN_STATUS_EFFECT,       /* Toxic Orb / Flame Orb; status_effect selects identity */
     PR_MOD_MOVE_ACCURACY_BOOSTER,    /* Wide Lens: num=accuracyAmount (5) */
     PR_MOD_INSTANT_REVIVE,          /* Reviver Seed; max held stack 1 */
+    PR_MOD_DAMAGE_MONEY_REWARD,    /* Golden Punch */
+    PR_MOD_MONEY_MULTIPLIER,       /* Amulet Coin dependency of damage money */
     PR_MOD_COUNT_
 };
 extern const uint8_t pr_mod_parent[PR_MOD_COUNT_];
@@ -361,6 +363,7 @@ typedef struct pr_battle {
     uint8_t n_participants;
     int post_battle_loot;      /* currentBattle.postBattleLoot.length */
     double battle_score;       /* currentBattle.battleScore */
+    double money;             /* globalScene.money; independent of Pay Day */
     int32_t money_scattered;   /* currentBattle.moneyScattered (Pay Day) */
     const char *player_name;   /* loggedInUser.username for Celebrate's text; NULL: none (upstream shows "") */
     /* A trainer battle's trainer (currentBattle.trainer). trainer_names: getName(TRAINER) and
@@ -572,6 +575,8 @@ extern int pr_enigma_berry_fired, pr_lansat_berry_fired, pr_starf_berry_fired;
 bool pr_berry_should_apply(pr_battle *bt, const pr_pokemon *p, const pr_modifier *m);
 void pr_apply_berry(pr_battle *bt, struct pr_engine *e, pr_pokemon *p, pr_modifier *m);
 void pr_apply_berry_ex(pr_battle *bt, struct pr_engine *e, pr_pokemon *p, pr_modifier *m, int8_t *ssc_stats, int8_t *ssc_stages, int *n_ssc);
+/* DamageMoneyRewardModifier.apply: called after player-to-enemy final damage. */
+void pr_apply_damage_money_modifiers(pr_battle *bt, const pr_pokemon *p, double damage);
 /* PokemonMultiHitModifier.apply(pokemon, moveId, hitCount) for each Multi Lens */
 void pr_apply_multi_hit_count_modifiers(pr_battle *bt, const pr_pokemon *p, int move, int *count);
 /* PokemonMultiHitModifier.apply(pokemon, moveId, null, damageMultiplier) for each Multi Lens */

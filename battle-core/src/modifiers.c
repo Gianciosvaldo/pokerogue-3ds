@@ -50,6 +50,8 @@ const uint8_t pr_mod_parent[PR_MOD_COUNT_] = {
     [PR_MOD_TURN_STATUS_EFFECT] = PR_MOD_HELD_ITEM,
     [PR_MOD_MOVE_ACCURACY_BOOSTER] = PR_MOD_HELD_ITEM,
     [PR_MOD_INSTANT_REVIVE] = PR_MOD_HELD_ITEM,
+    [PR_MOD_DAMAGE_MONEY_REWARD] = PR_MOD_HELD_ITEM,
+    [PR_MOD_MONEY_MULTIPLIER] = PR_MOD_PERSISTENT,
 };
 
 const char *const pr_mod_class_name[PR_MOD_COUNT_] = {
@@ -90,6 +92,8 @@ const char *const pr_mod_class_name[PR_MOD_COUNT_] = {
     [PR_MOD_TURN_STATUS_EFFECT] = "TurnStatusEffectModifier",
     [PR_MOD_MOVE_ACCURACY_BOOSTER] = "PokemonMoveAccuracyBoosterModifier",
     [PR_MOD_INSTANT_REVIVE] = "PokemonInstantReviveModifier",
+    [PR_MOD_DAMAGE_MONEY_REWARD] = "DamageMoneyRewardModifier",
+    [PR_MOD_MONEY_MULTIPLIER] = "MoneyMultiplierModifier",
 };
 
 int pr_mod_class_by_name(const char *name)
@@ -121,6 +125,10 @@ bool pr_mod_is_ported_item(const pr_modifier *m)
             || m->berry_type == BERRY_TYPE_ENIGMA
             || m->berry_type == BERRY_TYPE_LANSAT
             || m->berry_type == BERRY_TYPE_STARF;
+    }
+    if (m->cls == PR_MOD_DAMAGE_MONEY_REWARD || m->cls == PR_MOD_MONEY_MULTIPLIER) {
+        int64_t stacks = (int64_t)m->stack_count + m->virtual_stack_count;
+        return !m->unknown_subclass && m->stack_count >= 1 && m->virtual_stack_count >= 0 && stacks <= 5;
     }
     if (m->cls == PR_MOD_MULTI_HIT)
         return !m->unknown_subclass;
@@ -784,6 +792,33 @@ bool pr_move_can_be_multi_strike_enhanced_ex(pr_battle *bt, int move, const pr_p
 bool pr_move_can_be_multi_strike_enhanced(int move)
 {
     return pr_move_can_be_multi_strike_enhanced_ex(NULL, move, NULL, false, NULL);
+}
+
+/* Golden Punch uses final damage, then each player's MoneyMultiplierModifier
+ * sequentially floors its increment. addMoney clamps the IEEE754 sum at JS's
+ * Number.MAX_SAFE_INTEGER; moneyScattered is a separate Pay Day balance. */
+void pr_apply_damage_money_modifiers(pr_battle *bt, const pr_pokemon *p, double damage)
+{
+    if (!p || !p->is_player || !(damage > 0)) return;
+    /* Refuse unsupported applicable items/dependencies before changing the wallet. */
+    for (int i = 0; i < bt->n_mods[0]; i++) {
+        const pr_modifier *m = &bt->mods[0][i];
+        bool applicable = pr_mod_is(m, PR_MOD_MONEY_MULTIPLIER)
+            || (pr_mod_is(m, PR_MOD_DAMAGE_MONEY_REWARD) && held_applies(m, p));
+        if (applicable && !pr_mod_is_ported_item(m)) { pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS); return; }
+    }
+    pr_modifier *m;
+    EACH_MOD(m, bt, true, PR_MOD_DAMAGE_MONEY_REWARD) {
+        if (!held_applies(m, p)) continue;
+        if (!pr_mod_is_ported_item(m)) { pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS); continue; }
+        double amount = floor(damage * (0.5 * pr_mod_get_stack_count(m)));
+        pr_modifier *coin;
+        EACH_MOD(coin, bt, true, PR_MOD_MONEY_MULTIPLIER) {
+            if (!pr_mod_is_ported_item(coin)) { pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS); continue; }
+            amount += floor(amount * 0.2 * pr_mod_get_stack_count(coin));
+        }
+        bt->money = fmin(bt->money + amount, 9007199254740991.0);
+    }
 }
 
 /* PokemonMultiHitModifier.apply(pokemon, moveId, hitCount): called once,

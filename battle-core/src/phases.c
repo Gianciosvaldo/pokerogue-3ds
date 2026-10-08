@@ -1983,7 +1983,10 @@ static move_damage apply_move_damage(pr_battle *bt, pr_engine *e, int ph, pr_pok
                             .source_battler_index = (int8_t)pr_battler_index(bt, user), .source_id = user->id,
                             .damage = final};
     pr_unshift_attack_received(target, &rec);
-    if (user->is_player && !target->is_player) turn_modifiers(bt, true, user);   /* DamageMoneyRewardModifier */
+    if (user->is_player && !target->is_player) {
+        pr_apply_damage_money_modifiers(bt, user, final);
+        turn_modifiers(bt, true, user); /* Preserve other missing item-family refusals. */
+    }
     r.damage = final;
     return r;
 }
