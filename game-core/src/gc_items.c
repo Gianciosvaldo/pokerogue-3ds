@@ -132,6 +132,7 @@ static void to_modifier(const gc_item *it, pr_modifier *m)
 static bool duplicate_seed(const gc_item *items, int n, int index)
 {
     if (strcmp(items[index].key, "REVIVER_SEED")) return false;
+    if (n < 0 || n > GC_MAX_ITEMS) return true;
     for (int i = 0; i < n; i++)
         if (i != index && !strcmp(items[i].key, "REVIVER_SEED")
             && items[i].pokemon_id == items[index].pokemon_id) return true;
