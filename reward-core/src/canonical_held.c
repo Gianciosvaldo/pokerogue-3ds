@@ -4,6 +4,7 @@
 static int canonical_cap(int item)
 {
     switch (item) {
+    case PR_ITEM_GOLDEN_PUNCH: return 5;
     case PR_ITEM_REVIVER_SEED: return 1;
     case PR_ITEM_WIDE_LENS: return 3; /* canonical accuracyAmount=5 */
     default: return 0;

@@ -4,6 +4,114 @@ Native C port of PokeRogue's player rewards: the reward options after a wave (po
 
 The API is [`include/pr/reward.h`](include/pr/reward.h). The run loop (game-core) fills a `pr_reward_ctx` from the run before each reward screen: the party as the rolls see it, the player's items, ball counts, unlocks, the arena. A few of its fields are other ports' answers, marked "caller" in the header: `canSetStatus` (battle-core), `canApplyAbility`, the learnable level moves and the level-move list the TM filter leaves out (learnsets, not ported yet), each attack move's types for item spawns. The diff test takes those from upstream, so reward-core is checked given correct inputs.
 
+## Task 96 prerequisite: canonical Golden Punch acquisition (lane B, 2026-10-08)
+
+`pr_reward_add_canonical_held_item` now supports Golden Punch in addition to
+Wide Lens and Reviver Seed. The actual `DamageMoneyRewardModifier` factory's
+held cap is5: append stack1 or increment the first exact-holder Punch to5;
+FULL refuses unchanged and never searches a later duplicate. Other class/holder
+entries, wildcard records, active flags and order survive. Complete party and
+RNG/money invariance demonstrate acquisition has no damage reward effect.
+
+Newly supported Golden Punch entries are validated on every supported family
+acquisition: stack1..5, owner-1 or valid index, arg/count0. Previously opaque
+malformed Punch records now refuse when acquiring Wide Lens or Reviver Seed,
+without mutation. Other known classes remain opaque. Both earlier focused
+canonical-held suites remain unchanged and are replayed at full counts.
+The API requires unique party IDs and canonical ordinary/nonvirtual records;
+invalid shape/append capacity refuses, while matching stacking/full refusal
+works at256 slots. Missing/detached-holder and transient stacks, custom incoming
+quantities, raw wildcard Scene persistence, cleanup/transfers, full Scene tier
+replacement/update/raw return and selection/purchase behavior stay excluded.
+Battle damage money/Amulet Coin effects, wallet transport, achievements and
+save/game-core lifecycle are separately owned; this does not replace or expand
+the existing `pr_reward_damage_money_multiplier` helper. Task96 remains partial.
+
+Measured with Node22.23.3/Vitest4.1.11 at8555c08c823b856cbec4eb99ca84ea52a955836d,
+using actual factories/classes and `.add(modifiers,false)`, complete inventories
+(including order/active), party PokemonData, money, global/battle RNG invariance;
+C compares the entire non-inventory context and run unchanged. Zero skipped or
+caught exceptions. `GOLDENHELD guards=28 no-mutation/capacity/first-match checks passed`. Supplemental host guards cover capacity256, invalid known
+family shape/party IDs/target, full refusal and first matching duplicate.
+
+```text
+GOLDENHELD cases=2000 identical=2000 failed=0 skipped=0 thrown=0 full=964 added=400 stacked=636 wildcard=667 duplicate=800 reordered=1000 fainted=1007
+GOLDENHELD cases=2000 identical=2000 failed=0 skipped=0 thrown=0 full=948 added=400 stacked=652 wildcard=667 duplicate=800 reordered=1000 fainted=1016
+GOLDENHELD cases=2000 identical=2000 failed=0 skipped=0 thrown=0 full=959 added=400 stacked=641 wildcard=667 duplicate=800 reordered=1000 fainted=1018
+GOLDENHELD cases=2000 identical=2000 failed=0 skipped=0 thrown=0 full=946 added=400 stacked=654 wildcard=667 duplicate=800 reordered=1000 fainted=1012
+```
+
+Actual C source mutants (seed777; every mutant exits1; missing footer exits2):
+
+```text
+GOLDENHELD cases=2000 identical=1815 failed=185 skipped=0 thrown=0 full=964 added=400 stacked=636 wildcard=667 duplicate=800 reordered=1000 fainted=1007
+canonical held wildcard source mutant rejected (exit 1)
+GOLDENHELD cases=2000 identical=1722 failed=278 skipped=0 thrown=0 full=964 added=400 stacked=636 wildcard=667 duplicate=800 reordered=1000 fainted=1007
+canonical held first source mutant rejected (exit 1)
+GOLDENHELD cases=2000 identical=1950 failed=50 skipped=0 thrown=0 full=964 added=400 stacked=636 wildcard=667 duplicate=800 reordered=1000 fainted=1007
+canonical held cap source mutant rejected (exit 1)
+```
+
+Unchanged traces replay before/after baseline `492a0ea`: options3950pass/0fail/
+50unported (8052screens), victory4000/0 (2055items/2459screens), application4000/0
+(115text cases), Memory4000/0. Mint/vitamin/Lure/money/temp/Soothe each retain
+4seeds×2000=8000 identical, with33/31/26/33/25/25 host guards respectively.
+All corresponding logs are byte-identical; no original producer/comparator,
+seed, coverage rule or generated table changes. Prior new canonical-held traces
+are also replayed unchanged in subsequent family extensions.
+
+H passes (`resume regression: 32697 checks passed`; reward_apply641335). The200-run pair is
+`without saves: runs' digest: 79d84c65` (saved identical). Full normal/saved1000-run before/after outputs
+are byte-identical per mode, including every stub and coverage count:
+
+```text
+1000 runs: 1000 ended (0 cleared), 0 stuck, 0 crashed, 0 timed out; 49206 turns (49.2 per run)
+final wave:  0-9:125 10-19:708 20-29:156 30-39:10 40-49:1
+runs' digest: c2937ca0
+
+stand-ins (runs that used it, times):
+  enemy moveset (last 4 level moves)                   1000 runs     14701
+  double battle played as single                        762 runs      1544
+  evolution condition not checked                         2 runs         3
+  biome weather roll                                   1000 runs      1851
+  enemy run-core can't generate (stand-in)             1000 runs      2258
+  post-battle abilities, Pay Day, lapsing items           3 runs         4
+  trainer's name without its title in a message         307 runs       402
+  reward taken without its own effect                   139 runs       169
+1000 runs: 1000 ended (0 cleared), 0 stuck, 0 crashed, 0 timed out; 49206 turns (49.2 per run)
+final wave:  0-9:125 10-19:708 20-29:156 30-39:10 40-49:1
+runs' digest: c2937ca0
+save/load round trips: 14291 (largest save 11400 bytes of 131072)
+```
+
+This API has no runtime caller added, so H digests are retained from the stated
+baseline. Host consistency does not establish upstream whole-run parity.
+
+Exact commands (port root; every producer runs serially with one worker):
+
+```sh
+. /workspace/shared/activate-parity.sh
+# Repeat for777 9001 4242 31337:
+BUILD=/workspace/validation/lane-b/ten/golden-punch/build sh reward-core/tools/goldenhelddiff.sh /workspace/shared/upstream-lane-b 2000 <seed>
+# Script runs in upstream, with GOLDEN_HELD_N=2000,
+# GOLDEN_HELD_SEED=<seed>, GOLDEN_HELD_OUT=/workspace/validation/lane-b/ten/golden-punch/build/goldenheld-<seed>.txt:
+# node node_modules/vitest/vitest.mjs run --maxWorkers=1 test/tests/zz-dump/golden-held.producer.test.ts
+# Then replays through /workspace/validation/lane-b/ten/golden-punch/build/goldenheldtest.
+BUILD=/workspace/validation/lane-b/ten/golden-punch/build sh reward-core/tools/goldenheldplant.sh /workspace/validation/lane-b/ten/golden-punch/build/goldenheld-777.txt
+# Remove final Z footer to build/truncated.txt; replay must exit2:
+/workspace/validation/lane-b/ten/golden-punch/build/goldenheldtest /workspace/validation/lane-b/ten/golden-punch/build/truncated.txt
+sh /workspace/validation/lane-b/ten/regressions.sh 492a0ea /workspace/validation/lane-b/ten/golden-punch 'mint vitamin lure moneyitem tempbooster soothebell wideheld reviverheld'
+sh /workspace/validation/lane-b/ten/full-h.sh /workspace/validation/lane-b/ten/golden-punch
+# full-h builds baseline reward-core extraction against identical read-only cores,
+# then both binaries run --auto 1000 --jobs 8 and --auto 1000 --jobs 8 --save-test,
+# comparing complete per-mode logs. make -s -C game-core -j2 test is included.
+```
+
+External helper sources, before/after logs, fullH and four complete oracle traces
+remain at `/workspace/validation/lane-b/ten/golden-punch`; no traces/upstream source/assets or binaries are committed.
+Actual-head host and3DS CI are required before matched-SHA merge; skipped
+conditional jobs are not credited. This is a bounded Task96 prerequisite.
+
 ## Task 96 prerequisite: canonical Reviver Seed acquisition (lane B, 2026-10-08)
 
 The shared `pr_reward_add_canonical_held_item` now also supports Reviver Seed,
