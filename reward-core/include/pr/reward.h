@@ -583,4 +583,19 @@ enum pr_reward_lure_status pr_reward_add_lure(pr_reward_ctx *ctx, int item);
 bool pr_reward_lapse_lures(pr_reward_ctx *ctx, int *expired);
 bool pr_reward_lure_chance(const pr_reward_ctx *ctx, double base, double *result);
 
+/* Canonical ordinary held acquisition only: WIDE_LENS (accuracy5, max3).
+ * Adds one real stack via pinned PersistentModifier.add: first exact holder
+ * and family matches; wildcard -1 is not an acquisition match. FULL is a
+ * supported no-effect refusal. Invalid/capacity inputs refuse unchanged.
+ * Unique party IDs; known inventory; supported family arg/count0, stack1..cap,
+ * owner-1 or valid party index. Other known families are opaque. Existing active
+ * flags are preserved, newfalse. Caller guarantees zero virtual stacks and
+ * canonical constructors. No Scene fallback/update effects, purchases,
+ * selection, transfers, battle application, cleanup or persistence lifecycle. */
+enum pr_reward_held_status {
+    PR_REWARD_HELD_UNSUPPORTED=0, PR_REWARD_HELD_FULL,
+    PR_REWARD_HELD_ADDED, PR_REWARD_HELD_STACKED
+};
+enum pr_reward_held_status pr_reward_add_canonical_held_item(pr_reward_ctx *ctx, int item, int party_idx);
+
 #endif

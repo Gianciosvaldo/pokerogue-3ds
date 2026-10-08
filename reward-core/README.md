@@ -4,6 +4,119 @@ Native C port of PokeRogue's player rewards: the reward options after a wave (po
 
 The API is [`include/pr/reward.h`](include/pr/reward.h). The run loop (game-core) fills a `pr_reward_ctx` from the run before each reward screen: the party as the rolls see it, the player's items, ball counts, unlocks, the arena. A few of its fields are other ports' answers, marked "caller" in the header: `canSetStatus` (battle-core), `canApplyAbility`, the learnable level moves and the level-move list the TM filter leaves out (learnsets, not ported yet), each attack move's types for item spawns. The diff test takes those from upstream, so reward-core is checked given correct inputs.
 
+## Task 96 prerequisite: canonical Wide Lens acquisition (lane B, 2026-10-08)
+
+`pr_reward_add_canonical_held_item(ctx,item,target)` currently supports Wide
+Lens only: the canonical factory's accuracyAmount=5 and maximum held count3.
+It models `PersistentModifier.add(modifiers,false)` for one new real stack:
+append stack1 or increment the **first** same-family, exact-holder entry. A full
+first match returns FULL without trying later duplicate entries. Wildcard
+owner-1 entries do not match a concrete holder during acquisition. Other holder
+items and inventory order are preserved. FULL is a supported no-effect refusal;
+UNSUPPORTED covers malformed inputs, unsupported families and append capacity.
+Matching entries can stack/refuse even when all256 inventory slots are occupied.
+
+Party IDs must be unique; target valid; all inventory IDs known. Supported-family
+records require ordinary stacks1..3, owner-1 or a valid party index, arg/count0.
+Other known families remain opaque. Existing active flags survive; newly appended
+entries use false. All other context, party and run RNG remain unchanged. The
+caller guarantees canonical constructors and zero virtual stacks, which the
+reward inventory cannot represent. Custom accuracy amounts, virtual/addVirtual
+flows, missing/detached holders, multi-stack incoming items and oversize existing
+stacks are outside this boundary. Raw wildcard fixtures are not acquired here:
+getMaxStackCount is0 without an actual holder, and Scene cleanup would remove
+them. Class-level raw inventory parity does not establish wildcard persistence.
+
+This does not replace generic `pr_reward_apply`, port Scene.addModifier's tier
+replacement/stat updates/raw return, selection/purchase messages or money,
+held-item cleanup/transfer, battle accuracy, game-core transport or saves. Those
+callers/effects remain separately owned and checked. Task96 remains partial.
+
+Measured with Node22.23.3/Vitest4.1.11 at8555c08c823b856cbec4eb99ca84ea52a955836d,
+using actual factories/classes and `.add(modifiers,false)`, complete inventories
+(including order/active), party PokemonData, money, global/battle RNG invariance;
+C compares the entire non-inventory context and run unchanged. Zero skipped or
+caught exceptions. 25 host checks pass. Supplemental host guards cover capacity256, invalid known
+family shape/party IDs/target, full refusal and first matching duplicate.
+
+```text
+WIDEHELD cases=2000 identical=2000 failed=0 skipped=0 thrown=0 full=1071 added=400 stacked=529 wildcard=667 duplicate=800 reordered=1000 fainted=990
+WIDEHELD cases=2000 identical=2000 failed=0 skipped=0 thrown=0 full=1072 added=400 stacked=528 wildcard=667 duplicate=800 reordered=1000 fainted=1052
+WIDEHELD cases=2000 identical=2000 failed=0 skipped=0 thrown=0 full=1074 added=400 stacked=526 wildcard=667 duplicate=800 reordered=1000 fainted=963
+WIDEHELD cases=2000 identical=2000 failed=0 skipped=0 thrown=0 full=1068 added=400 stacked=532 wildcard=667 duplicate=800 reordered=1000 fainted=968
+```
+
+Actual C source mutants (seed777; every mutant exits1; missing footer exits2):
+
+```text
+WIDEHELD cases=2000 identical=1847 failed=153 skipped=0 thrown=0 full=1071 added=400 stacked=529 wildcard=667 duplicate=800 reordered=1000 fainted=990
+canonical held wildcard source mutant rejected (exit 1)
+WIDEHELD cases=2000 identical=1697 failed=303 skipped=0 thrown=0 full=1071 added=400 stacked=529 wildcard=667 duplicate=800 reordered=1000 fainted=990
+canonical held first source mutant rejected (exit 1)
+WIDEHELD cases=2000 identical=1927 failed=73 skipped=0 thrown=0 full=1071 added=400 stacked=529 wildcard=667 duplicate=800 reordered=1000 fainted=990
+canonical held cap source mutant rejected (exit 1)
+```
+
+Unchanged traces replay before/after baseline `432ee53`: options3950pass/0fail/
+50unported (8052screens), victory4000/0 (2055items/2459screens), application4000/0
+(115text cases), Memory4000/0. Mint/vitamin/Lure/money/temp/Soothe each retain
+4seeds×2000=8000 identical, with33/31/26/33/25/25 host guards respectively.
+All corresponding logs are byte-identical; no original producer/comparator,
+seed, coverage rule or generated table changes. Prior new canonical-held traces
+are also replayed unchanged in subsequent family extensions.
+
+H passes (`resume regression: 32697 checks passed`; reward_apply641335). The200-run pair is
+`without saves: runs' digest: 79d84c65` (saved identical). Full normal/saved1000-run before/after outputs
+are byte-identical per mode, including every stub and coverage count:
+
+```text
+1000 runs: 1000 ended (0 cleared), 0 stuck, 0 crashed, 0 timed out; 49206 turns (49.2 per run)
+final wave:  0-9:125 10-19:708 20-29:156 30-39:10 40-49:1
+runs' digest: c2937ca0
+
+stand-ins (runs that used it, times):
+  enemy moveset (last 4 level moves)                   1000 runs     14701
+  double battle played as single                        762 runs      1544
+  evolution condition not checked                         2 runs         3
+  biome weather roll                                   1000 runs      1851
+  enemy run-core can't generate (stand-in)             1000 runs      2258
+  post-battle abilities, Pay Day, lapsing items           3 runs         4
+  trainer's name without its title in a message         307 runs       402
+  reward taken without its own effect                   139 runs       169
+1000 runs: 1000 ended (0 cleared), 0 stuck, 0 crashed, 0 timed out; 49206 turns (49.2 per run)
+final wave:  0-9:125 10-19:708 20-29:156 30-39:10 40-49:1
+runs' digest: c2937ca0
+save/load round trips: 14291 (largest save 11400 bytes of 131072)
+```
+
+This API has no runtime caller added, so H digests are retained from the stated
+baseline. Host consistency does not establish upstream whole-run parity.
+
+Exact commands (port root; every producer runs serially with one worker):
+
+```sh
+. /workspace/shared/activate-parity.sh
+# Repeat for777 9001 4242 31337:
+BUILD=/workspace/validation/lane-b/ten/wide-lens/build sh reward-core/tools/widehelddiff.sh /workspace/shared/upstream-lane-b 2000 <seed>
+# Script runs in upstream, with WIDE_HELD_N=2000,
+# WIDE_HELD_SEED=<seed>, WIDE_HELD_OUT=/workspace/validation/lane-b/ten/wide-lens/build/wideheld-<seed>.txt:
+# node node_modules/vitest/vitest.mjs run --maxWorkers=1 test/tests/zz-dump/wide-held.producer.test.ts
+# Then replays through /workspace/validation/lane-b/ten/wide-lens/build/wideheldtest.
+BUILD=/workspace/validation/lane-b/ten/wide-lens/build sh reward-core/tools/wideheldplant.sh /workspace/validation/lane-b/ten/wide-lens/build/wideheld-777.txt
+# Remove final Z footer to build/truncated.txt; replay must exit2:
+/workspace/validation/lane-b/ten/wide-lens/build/wideheldtest /workspace/validation/lane-b/ten/wide-lens/build/truncated.txt
+sh /workspace/validation/lane-b/ten/regressions.sh 432ee53 /workspace/validation/lane-b/ten/wide-lens 'mint vitamin lure moneyitem tempbooster soothebell'
+sh /workspace/validation/lane-b/ten/full-h.sh /workspace/validation/lane-b/ten/wide-lens
+# full-h builds baseline reward-core extraction against identical read-only cores,
+# then both binaries run --auto 1000 --jobs 8 and --auto 1000 --jobs 8 --save-test,
+# comparing complete per-mode logs. make -s -C game-core -j2 test is included.
+```
+
+External helper sources, before/after logs, fullH and four complete oracle traces
+remain at `/workspace/validation/lane-b/ten/wide-lens`; no traces/upstream source/assets or binaries are committed.
+Actual-head host and3DS CI are required before matched-SHA merge; skipped
+conditional jobs are not credited. This is a bounded Task96 prerequisite.
+
 ## Task 96 prerequisite: Soothe Bell primitives (lane B, 2026-10-08)
 
 `pr_reward_add_soothe_bell(ctx,target)` mirrors real `PersistentModifier.add`:
