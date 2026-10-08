@@ -4,9 +4,115 @@ Native C port of PokeRogue's player rewards: the reward options after a wave (po
 
 The API is [`include/pr/reward.h`](include/pr/reward.h). The run loop (game-core) fills a `pr_reward_ctx` from the run before each reward screen: the party as the rolls see it, the player's items, ball counts, unlocks, the arena. A few of its fields are other ports' answers, marked "caller" in the header: `canSetStatus` (battle-core), `canApplyAbility`, the learnable level moves and the level-move list the TM filter leaves out (learnsets, not ported yet), each attack move's types for item spawns. The diff test takes those from upstream, so reward-core is checked given correct inputs.
 
+## Task 96 prerequisite: canonical Reviver Seed acquisition (lane B, 2026-10-08)
+
+The shared `pr_reward_add_canonical_held_item` now also supports Reviver Seed,
+using the real `PokemonInstantReviveModifier` factory/class and max-held-count1.
+Canonical stack1 appends; any first same-holder Reviver entry is already full
+and refuses unchanged. No STACKED outcome is possible for ordinary Seeds. A
+wildcard raw record is distinct from a concrete holder; duplicate full records
+never cause replacement or revival. Stock is independent of current HP/status.
+Wide Lens support and its complete source traces remain unchanged.
+
+The guard now validates Reviver records (owner-1 or valid index, arg/count0,
+stack1) on every supported acquisition. Previously opaque malformed Reviver
+records therefore refuse instead of passing through when acquiring Wide Lens;
+this deliberate supported-subset narrowing occurs before mutation. Other known
+families remain opaque. Unique IDs/capacity, ordinary/nonvirtual caller guarantees,
+canonical constructors, active/order preservation and the raw-only boundary are
+the same. No Scene tier fallback/update/raw return, selection/purchases,
+transfer/cleanup, battle revival/status/Commander/phase/consumption effects or
+game-core/save lifecycle is implemented by acquisition. Raw wildcard fixtures do
+not claim Scene persistence (missing-holder maxStackCount0/cleanup still apply).
+
+Measured with Node22.23.3/Vitest4.1.11 at8555c08c823b856cbec4eb99ca84ea52a955836d,
+using actual factories/classes and `.add(modifiers,false)`, complete inventories
+(including order/active), party PokemonData, money, global/battle RNG invariance;
+C compares the entire non-inventory context and run unchanged. Zero skipped or
+caught exceptions. `REVIVERHELD guards=26 no-mutation/capacity/first-match checks passed`. Supplemental host guards cover capacity256, invalid known
+family shape/party IDs/target, full refusal and first matching duplicate.
+
+```text
+REVIVERHELD cases=2000 identical=2000 failed=0 skipped=0 thrown=0 full=1600 added=400 stacked=0 wildcard=667 duplicate=800 reordered=1000 fainted=1006
+REVIVERHELD cases=2000 identical=2000 failed=0 skipped=0 thrown=0 full=1600 added=400 stacked=0 wildcard=667 duplicate=800 reordered=1000 fainted=1004
+REVIVERHELD cases=2000 identical=2000 failed=0 skipped=0 thrown=0 full=1600 added=400 stacked=0 wildcard=667 duplicate=800 reordered=1000 fainted=1005
+REVIVERHELD cases=2000 identical=2000 failed=0 skipped=0 thrown=0 full=1600 added=400 stacked=0 wildcard=667 duplicate=800 reordered=1000 fainted=1011
+```
+
+Actual C source mutants (seed777; every mutant exits1; missing footer exits2):
+
+```text
+REVIVERHELD cases=2000 identical=1963 failed=37 skipped=0 thrown=0 full=1600 added=400 stacked=0 wildcard=667 duplicate=800 reordered=1000 fainted=1006
+canonical held wildcard source mutant rejected (exit 1)
+REVIVERHELD cases=2000 identical=1545 failed=455 skipped=0 thrown=0 full=1600 added=400 stacked=0 wildcard=667 duplicate=800 reordered=1000 fainted=1006
+canonical held first source mutant rejected (exit 1)
+REVIVERHELD cases=2000 identical=1545 failed=455 skipped=0 thrown=0 full=1600 added=400 stacked=0 wildcard=667 duplicate=800 reordered=1000 fainted=1006
+canonical held cap source mutant rejected (exit 1)
+```
+
+Unchanged traces replay before/after baseline `2a63abd`: options3950pass/0fail/
+50unported (8052screens), victory4000/0 (2055items/2459screens), application4000/0
+(115text cases), Memory4000/0. Mint/vitamin/Lure/money/temp/Soothe each retain
+4seeds×2000=8000 identical, with33/31/26/33/25/25 host guards respectively.
+All corresponding logs are byte-identical; no original producer/comparator,
+seed, coverage rule or generated table changes. Prior new canonical-held traces
+are also replayed unchanged in subsequent family extensions.
+
+H passes (`resume regression: 32697 checks passed`; reward_apply641335). The200-run pair is
+`without saves: runs' digest: 79d84c65` (saved identical). Full normal/saved1000-run before/after outputs
+are byte-identical per mode, including every stub and coverage count:
+
+```text
+1000 runs: 1000 ended (0 cleared), 0 stuck, 0 crashed, 0 timed out; 49206 turns (49.2 per run)
+final wave:  0-9:125 10-19:708 20-29:156 30-39:10 40-49:1
+runs' digest: c2937ca0
+
+stand-ins (runs that used it, times):
+  enemy moveset (last 4 level moves)                   1000 runs     14701
+  double battle played as single                        762 runs      1544
+  evolution condition not checked                         2 runs         3
+  biome weather roll                                   1000 runs      1851
+  enemy run-core can't generate (stand-in)             1000 runs      2258
+  post-battle abilities, Pay Day, lapsing items           3 runs         4
+  trainer's name without its title in a message         307 runs       402
+  reward taken without its own effect                   139 runs       169
+1000 runs: 1000 ended (0 cleared), 0 stuck, 0 crashed, 0 timed out; 49206 turns (49.2 per run)
+final wave:  0-9:125 10-19:708 20-29:156 30-39:10 40-49:1
+runs' digest: c2937ca0
+save/load round trips: 14291 (largest save 11400 bytes of 131072)
+```
+
+This API has no runtime caller added, so H digests are retained from the stated
+baseline. Host consistency does not establish upstream whole-run parity.
+
+Exact commands (port root; every producer runs serially with one worker):
+
+```sh
+. /workspace/shared/activate-parity.sh
+# Repeat for777 9001 4242 31337:
+BUILD=/workspace/validation/lane-b/ten/reviver-seed/build sh reward-core/tools/reviverhelddiff.sh /workspace/shared/upstream-lane-b 2000 <seed>
+# Script runs in upstream, with REVIVER_HELD_N=2000,
+# REVIVER_HELD_SEED=<seed>, REVIVER_HELD_OUT=/workspace/validation/lane-b/ten/reviver-seed/build/reviverheld-<seed>.txt:
+# node node_modules/vitest/vitest.mjs run --maxWorkers=1 test/tests/zz-dump/reviver-held.producer.test.ts
+# Then replays through /workspace/validation/lane-b/ten/reviver-seed/build/reviverheldtest.
+BUILD=/workspace/validation/lane-b/ten/reviver-seed/build sh reward-core/tools/reviverheldplant.sh /workspace/validation/lane-b/ten/reviver-seed/build/reviverheld-777.txt
+# Remove final Z footer to build/truncated.txt; replay must exit2:
+/workspace/validation/lane-b/ten/reviver-seed/build/reviverheldtest /workspace/validation/lane-b/ten/reviver-seed/build/truncated.txt
+sh /workspace/validation/lane-b/ten/regressions.sh 2a63abd /workspace/validation/lane-b/ten/reviver-seed 'mint vitamin lure moneyitem tempbooster soothebell wideheld'
+sh /workspace/validation/lane-b/ten/full-h.sh /workspace/validation/lane-b/ten/reviver-seed
+# full-h builds baseline reward-core extraction against identical read-only cores,
+# then both binaries run --auto 1000 --jobs 8 and --auto 1000 --jobs 8 --save-test,
+# comparing complete per-mode logs. make -s -C game-core -j2 test is included.
+```
+
+External helper sources, before/after logs, fullH and four complete oracle traces
+remain at `/workspace/validation/lane-b/ten/reviver-seed`; no traces/upstream source/assets or binaries are committed.
+Actual-head host and3DS CI are required before matched-SHA merge; skipped
+conditional jobs are not credited. This is a bounded Task96 prerequisite.
+
 ## Task 96 prerequisite: canonical Wide Lens acquisition (lane B, 2026-10-08)
 
-`pr_reward_add_canonical_held_item(ctx,item,target)` currently supports Wide
+`pr_reward_add_canonical_held_item(ctx,item,target)` initially supported Wide
 Lens only: the canonical factory's accuracyAmount=5 and maximum held count3.
 It models `PersistentModifier.add(modifiers,false)` for one new real stack:
 append stack1 or increment the **first** same-family, exact-holder entry. A full
@@ -16,7 +122,7 @@ items and inventory order are preserved. FULL is a supported no-effect refusal;
 UNSUPPORTED covers malformed inputs, unsupported families and append capacity.
 Matching entries can stack/refuse even when all256 inventory slots are occupied.
 
-Party IDs must be unique; target valid; all inventory IDs known. Supported-family
+Party IDs must be unique; target valid; all inventory IDs known. Wide Lens
 records require ordinary stacks1..3, owner-1 or a valid party index, arg/count0.
 Other known families remain opaque. Existing active flags survive; newly appended
 entries use false. All other context, party and run RNG remain unchanged. The
