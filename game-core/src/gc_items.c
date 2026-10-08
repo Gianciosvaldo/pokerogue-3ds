@@ -25,6 +25,7 @@ void gc_item_add(gc_run *run, const char *key, int16_t arg, uint32_t pokemon_id,
     it->arg = arg;
     it->pokemon_id = pokemon_id;
     it->detached = false;
+    it->virtual_stack = 0;
     it->stack = stack;
 }
 
@@ -86,6 +87,8 @@ static void to_modifier(const gc_item *it, pr_modifier *m)
     m->is_transferable = true;
     m->unknown_subclass = true;
     m->cls = it->pokemon_id ? PR_MOD_HELD_ITEM : PR_MOD_PERSISTENT;
+    /* This adapter validates transient stacks only for Wide Lens. */
+    if (it->virtual_stack && strcmp(it->key, "WIDE_LENS")) return;
     /* These classes now have turn-path implementations in battle-core.  Parameters and
      * transferability come from upstream modifierTypes, not an inferred item name. */
     static const struct { const char *key; uint8_t cls; } held[] = {
@@ -101,10 +104,19 @@ static void to_modifier(const gc_item *it, pr_modifier *m)
         if (m->cls == PR_MOD_BERRY) m->berry_type = (int8_t)it->arg;
         return;
     }
-    if (!strcmp(it->key, "REVIVER_SEED")) {
+    if (!strcmp(it->key, "WIDE_LENS")) {
+        /* modifierTypes.WIDE_LENS: +5 for every real and transient virtual stack. */
+        if (it->stack >= 1 && it->stack <= 3 && it->virtual_stack >= 0
+            && (int64_t)it->stack + it->virtual_stack <= 3 && (it->arg == -1 || it->arg == 0)) {
+            m->cls = PR_MOD_MOVE_ACCURACY_BOOSTER;
+            m->num = 5;
+            m->virtual_stack_count = it->virtual_stack;
+            m->unknown_subclass = false;
+        }
+    } else if (!strcmp(it->key, "REVIVER_SEED")) {
         /* InstantRevive has one real stack. Generic acquisition may retain an
          * invalid stack; keep that opaque rather than crediting its effect. */
-        if (it->stack == 1 && (it->arg == -1 || it->arg == 0)) {
+        if (it->stack == 1 && it->virtual_stack == 0 && (it->arg == -1 || it->arg == 0)) {
             m->cls = PR_MOD_INSTANT_REVIVE;
             m->unknown_subclass = false;
         }
@@ -179,7 +191,8 @@ void gc_items_from_battle(gc_run *run)
             gc_item it = items[i];
             pr_modifier expected;
             to_modifier(&it, &expected);
-            if (i < tracked && expected.cls == PR_MOD_INSTANT_REVIVE
+            if (i < tracked && (expected.cls == PR_MOD_INSTANT_REVIVE
+                                || expected.cls == PR_MOD_MOVE_ACCURACY_BOOSTER)
                 && !duplicate[i]) {
                 int remaining = 0;
                 const pr_pokemon *holder = pr_pokemon_by_id(&run->bt, it.pokemon_id);
@@ -190,6 +203,8 @@ void gc_items_from_battle(gc_run *run)
                     if (m->pokemon_id != expected.pokemon_id && !detached) continue;
                     remaining = m->stack_count;
                     it.detached = m->pokemon_id == 0;
+                    if (expected.cls == PR_MOD_MOVE_ACCURACY_BOOSTER)
+                        it.virtual_stack = m->virtual_stack_count;
                     used[j] = true;
                     break;
                 }

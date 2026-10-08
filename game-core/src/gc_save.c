@@ -491,6 +491,7 @@ static bool get_items(const reader *body, const char *name, gc_item *items, int 
         items[i].stack = sv[i].stack;
         items[i].pokemon_id = sv[i].pokemon_id;
         items[i].detached = sv[i].detached;
+        items[i].virtual_stack = 0; /* pinned ModifierData saves real stacks only */
     }
     return true;
 }

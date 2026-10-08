@@ -651,3 +651,10 @@ Existing canonical Seed inventory now reaches battle-core FaintPhase and persist
 actual consumption. Detached loot owner 0 stays distinct from wildcard -1 across
 rebuild/save. Duplicate/invalid stock remains opaque; acquisition/loot pickup
 policy remains separate. See [scope and evidence](SEED-VALIDATION.md).
+
+## Wide Lens inventory bridge
+
+Existing bounded Lens inventory reaches battle-core’s actual hit check with +5
+per real/transient stack. Real stocks persist; virtual stocks reset on load as
+pinned ModifierData does. Unsupported virtual caller inputs remain counted.
+See [scope and validation](LENS-VALIDATION.md).
