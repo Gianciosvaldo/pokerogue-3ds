@@ -525,6 +525,19 @@ int pr_reward_reroll(pr_reward_ctx *ctx, double *money, bool lock_rarities,
                      pr_reward_select *sel, pr_reward_thresholds *th,
                      pr_reward_option *out_options);
 
+/* Task 96 bounded Nugget/Big Nugget/Relic Gold monetary application.
+ * Caller guarantees ordinary nonvirtual inventories and owns UI/MoneyAchv,
+ * phase purchases, and persistence. Primary/fused Gimmighoul is unsupported:
+ * its real apply additionally creates an EvoTracker and refreshes modifiers.
+ * Waves1..10000, finite balance0..MAX_SAFE_INTEGER, Amulet stacks1..5/global.
+ * Applies each Amulet object in list order; no Happy Hour. Successful calls
+ * leave ctx unchanged, cap balance and report nominal amount/actual credit.
+ * True includes zero credit at cap. Refusals leave all arguments unchanged.
+ * Generic pr_reward_apply has no money transport and remains separate. */
+typedef struct { double amount, credited; } pr_reward_money_item_result;
+bool pr_reward_apply_money_item(const pr_reward_ctx *ctx, int item, double *money,
+                               pr_reward_money_item_result *result);
+
 /* Task 96 bounded canonical Lure modifier primitives. Unlike pr_reward_apply,
  * these do not run Scene.addModifier, its full-tier fallback, purchases or stats.
  * Add reports the first matching duration's result; REFRESHED asks the caller
