@@ -36,6 +36,26 @@ Start with [`README.md`](../README.md) (folder table), then the README of the fo
   Substitute doll (PRs #34 and #35, merged). It is still fed by a stand-in, not by game-core's run.
 - Nothing of the game app has run on a real console. Only the speed and graphics benchmarks have.
 
+## Current checkpoint (2026-10-08; historical sections retained)
+
+The opening September 30 status and original task problem statements are dated
+history. Use [current scheduling](PARITY-TASKS.md#current-next-work-2026-10-08)
+and [ledger](PARITY-LEDGER.md) for source-backed state at main `0a10696`.
+Merged #147–#154 add bounded reward Mint/vitamin/Lure prerequisites, battle
+Orb/Wide Lens/Reviver Seed dispatch, and game Mint/Orb adapters. These do not
+complete Tasks 96/104 or unlock full Task 64/65/66. Vitamin/Lure caller integration,
+unsupported Mint inputs and other held-item lifecycle still need bounded work.
+The dex/starter foundation and app run driver are already landed; do not
+implement the old opening descriptions again. Root/component historical rows
+may also be stale: consult owning code and dated validation records.
+
+Actual-head host/3DS build CI succeeded for each #147–#154; conditional Task 63
+jobs were skipped, not validated. Source differentials establish only their
+compared scope; soaks establish host consistency. Console acceptance, whole-run
+upstream parity and the reserved run-core owner boundaries remain unchanged.
+One task may run in each independent folder lane, and each lane merges its
+current validated PR before starting another; stop at the user's session limit.
+
 ## Rules (read these before touching anything)
 1. **Branch and pull request only.** Never push to `main`. Do not merge your own PR unless explicitly authorized; the October 7 Codex exception below applies here. One task per branch, one PR per task.
 2. **Never weaken, skip, or edit a check to make it pass.** If a diff test fails, the fix goes in the C port. Do not
