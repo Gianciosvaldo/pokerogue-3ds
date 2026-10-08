@@ -525,6 +525,23 @@ int pr_reward_reroll(pr_reward_ctx *ctx, double *money, bool lock_rarities,
                      pr_reward_select *sel, pr_reward_thresholds *th,
                      pr_reward_option *out_options);
 
+/* Soothe Bell held modifier primitives. Add stacks the first same-holder entry
+ * to3; FULL is supported no-effect, capacity/invalid inputs refuse unchanged.
+ * Gain models singular Scene.applyModifier: first target/wildcard Bell floors
+ * base*(1+0.5*stack), matched_index=-1 if absent. Base finite0..1000000;
+ * ordinary nonvirtual stack1..3, arg/count0, valid owner(-1 wildcard), unique
+ * party IDs required. Other known entries are opaque. Outputs unchanged on
+ * refusal. Pokemon.addFriendship's nonpositive short circuit,255/candy caps,
+ * starter progress,timed/fusion multipliers,ribbons/achievements, Scene updates,
+ * purchases,saves and Candy/game-core integration are outside this boundary. */
+enum pr_reward_soothe_status {
+    PR_REWARD_SOOTHE_UNSUPPORTED=0, PR_REWARD_SOOTHE_FULL,
+    PR_REWARD_SOOTHE_ADDED, PR_REWARD_SOOTHE_STACKED
+};
+enum pr_reward_soothe_status pr_reward_add_soothe_bell(pr_reward_ctx *ctx, int party_idx);
+bool pr_reward_soothe_bell_gain(const pr_reward_ctx *ctx, int party_idx, double base,
+                               double *amount, int *matched_index);
+
 /* Canonical5-battle TempStatStageBooster/Dire Hit modifier primitives only.
  * X argsATK..ACC, Dire Hit arg0, global owner-1, stack1..2, count1..5.
  * First match refreshes timer (requests se/restore) preserving stack/order.
