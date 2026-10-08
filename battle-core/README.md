@@ -919,3 +919,85 @@ consistency evidence, not whole-run upstream or console acceptance.
 Scope: Ball Fetch Rattata/Snorlax form0 singles with all 25 natures and effective
 stacks 1–10. Acquisition, inventory/save bridging, transfer, other abilities/forms,
 doubles and hardware acceptance remain outside the proof. Card 104 remains partial.
+
+
+## Bounded attack-type booster proof of existing damage calculation (Card 104)
+
+`PR_MOD_ATTACK_TYPE_BOOSTER` and its damage-power caller already existed.
+The new known-class promotion accepts pinned 20% identities, types 0–17, real
+stacks 1–99, nonnegative virtual stacks and effective count<=99 (sum checked with
+int64). Applicable unsupported identities report unported before power mutation.
+The existing formula stays `floor(power * (1 + effectiveStacks * 0.2))` and applies
+sequentially to every matching item, only when power>=1. There are no new IDs,
+fields, arithmetic formulas, game adapter or save schema.
+
+The additive Node22 producer delegates real MoveEffectPhase and real item
+apply/shouldApply. Ten states (200 cases each) cover both sides, all 18 type
+identities, cap 99 ordinary moves, mismatched types/owners, wildcard ownership,
+virtual stacks, Splash, fixed Sonic Boom, typeless Struggle, sequential items
+and variable Hidden Power. Levels/IVs/natures/turns remain varied. State 8's
+Normal Return adds friendship-dependent power and flooring. Full state/stats,
+HP/damage/hits, item owner/real/virtual/type/boost fields, phase/queue order,
+global/battle RNG and every message are compared exactly. Established producers
+and comparators remain unchanged.
+
+Pinned `Move.calculateBattlePower` starts booster matching from base move.type
+plus ability changes; it does not apply VariableMoveTypeAttr there. Hidden
+Power's computed damage type therefore rejects the corresponding item, while
+its base Normal-type item applies. The suite proves both source behaviors.
+Ball Fetch is the only ability in the focused scope; ability-driven type changes
+are not established here. Twenty C guards separately cover identity/type/stack
+bounds, null arguments, ownership/sides, power<1, fractional input power,
+virtual/cap stacks and both sequential item orders without RNG/item mutation.
+The source turn suite has zero below-one power applies; low-power refusal is
+host guard evidence, not a claimed real-turn firing.
+
+```sh
+sh battle-core/tools/typeboostdiff.sh <upstream8555c08> 2000 777
+sh battle-core/tools/typeboostdiff.sh <upstream8555c08> 2000 9001
+sh battle-core/tools/typeboostdiff.sh <upstream8555c08> 2000 4242
+sh battle-core/tools/typeboostdiff.sh <upstream8555c08> 2000 31337
+```
+
+Measured Node22.23.3 / Vitest4.1.11 / GCC14.2.0:
+
+| Seed | Cases / covered / identical texts | Real applies | Owner/type refusals |
+| --- | --- | --- | --- |
+| 777 | 2000 / 2000 / 2000 | 1091 | 495 |
+| 9001 | 2000 / 2000 / 2000 | 1092 | 499 |
+| 4242 | 2000 / 2000 / 2000 | 1092 | 498 |
+| 31337 | 2000 / 2000 / 2000 | 1098 | 496 |
+
+All seeds have zero exceptions, parser/stat mismatches, uncovered turns and
+text differences; all 18 types occur, ten states have 200 cases. Twenty guards
+pass. A source mutant disconnecting only the damage.c caller keeps guards
+passing but fails 889/2000 seed777 turns and 2 message sets (exit1), with zero
+parser/stat mismatches. Twelve malformed transports (missing footer/item/virtual/
+stack/type, unknown class, wrong boost, overcap, fractional virtual/header/footer,
+out-of-range type) refuse exit2. Fractional requested N is rejected before output;
+Node22 is checked directly in the new producer and tool.
+
+Archived main432ee53 and changed C retain 32 byte-identical replay pairs: B
+plain/rich/switch/summon 1942/1831/1890/1863; ITEMS four seeds 1922/1932/1929/1939
+with untranslated sets 1/1/2/1 unchanged; COND 1767/1756/1770/1766, covered texts
+exact; Wide Lens/Reviver Seed/Multi Lens/Golden Punch/Soul Dew each 4x2000 fully
+covered/pass/text-exact, with zero parser/stat/covered-turn failures.
+
+`make -s -C game-core -j2 test all` before/after passes 32,697 resume and 39 item
+bridge checks; normal/save 200-run digests change 79d84c65→04c33894. Both
+`game-core/build/gcplay --auto 1000 --jobs 8` and the same with `--save-test`
+retain 1000 ended (0 cleared), zero stuck/crashed/timed out, 49,206 turns,
+14,291 save round trips and max 11,400/131,072 bytes. Each build's normal/save
+1000-run digest matches: before `c2937ca0`, after `5022ea67`. Entire printed
+stand-in tables and every other report row are unchanged; the held-turn-modifier
+unported row drops 985 runs/52,161 uses→983 runs/52,064 uses (97 fewer reports).
+The existing game item adapter already builds these type modifiers. Promotion
+removes unsupported reports; gcplay's digest explicitly hashes unported counts
+in addition to outcomes. This explains the digest change, with terminal/turn/
+save metrics unchanged. Host consistency does not establish whole-run upstream
+or hardware acceptance.
+
+Scope: Ball Fetch Rattata/Mew form0 singles, pinned 18 types/20% identity and
+effective stacks 1–99. Ability-driven types, other forms, doubles, acquisition,
+inventory/save bridging and generic transfer remain outside this proof. Card 104
+remains partial.

@@ -26,7 +26,7 @@ The bounded slices below add dispatch or prove existing helpers; Card 104 remain
 | `SpeciesStatBoosterModifier` | `PR_MOD_SPECIES_STAT_BOOSTER`; stat helper includes species check | Full-turn fixtures/whitelist |
 | `CritBoosterModifier` | `PR_MOD_CRIT_BOOSTER`; `pr_apply_crit_booster_modifiers` helper | Full-turn fixtures/whitelist |
 | `SpeciesCritBoosterModifier` | `PR_MOD_SPECIES_CRIT_BOOSTER`; crit helper includes species check | Full-turn fixtures/whitelist |
-| `AttackTypeBoosterModifier` | `PR_MOD_ATTACK_TYPE_BOOSTER`; damage helper | Full-turn fixtures/whitelist |
+| `AttackTypeBoosterModifier` | Existing `PR_MOD_ATTACK_TYPE_BOOSTER` damage-power calculation; bounded known identity promoted | Pinned20%/18types/cap99 singles proof; acquisition/save/transfer excluded |
 | `SurviveDamageModifier` | `PR_MOD_SURVIVE_DAMAGE`; fatal-hit chance dispatch | Existing Focus Band scope; broader item lifecycle/identities not implied |
 | `BypassSpeedChanceModifier` | `PR_MOD_BYPASS_SPEED_CHANCE`; turn-order chance dispatch | Existing Quick Claw scope |
 | `FlinchChanceModifier` | `PR_MOD_FLINCH_CHANCE`; post-hit chance dispatch | Existing King's Rock scope |
@@ -102,3 +102,11 @@ All 25 natures, both sides, real/virtual stacks, wildcard and bench ownership,
 first-success matching and neutral/down-stat boundaries receive focused proof.
 Reward acquisition, save bridging, transfer, other abilities/forms and doubles
 remain outside this evidence.
+
+The type-booster slice proves the existing real damage-power caller with all18
+pinned item types, 20% boost and effective cap99. IDs/fields/formula are unchanged.
+Pinned booster matching uses the base move type plus ability changes, not the
+separate VariableMoveTypeAttr result: Hidden Power can have a different damage
+type while only its Normal-type booster matches the power caller. The focused
+suite records this behavior. Unsupported type/multiplier/stack identities remain
+unported; this promotion does not establish acquisition, transfer or a save bridge.
