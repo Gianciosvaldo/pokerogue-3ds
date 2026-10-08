@@ -4,6 +4,80 @@ Native C port of PokeRogue's player rewards: the reward options after a wave (po
 
 The API is [`include/pr/reward.h`](include/pr/reward.h). The run loop (game-core) fills a `pr_reward_ctx` from the run before each reward screen: the party as the rolls see it, the player's items, ball counts, unlocks, the arena. A few of its fields are other ports' answers, marked "caller" in the header: `canSetStatus` (battle-core), `canApplyAbility`, the learnable level moves and the level-move list the TM filter leaves out (learnsets, not ported yet), each attack move's types for item spawns. The diff test takes those from upstream, so reward-core is checked given correct inputs.
 
+## Task 96 prerequisite: canonical temporary boosters (lane B, 2026-10-08)
+
+`pr_reward_add_temp_booster(ctx,item,arg)` and `pr_reward_lapse_temp_boosters`
+mirror real `TempStatStageBoosterModifier`/`TempCritBoosterModifier` acquisition
+and lapsing at pinned 8555c08. Six X items use stat args ATK..ACC; Dire Hit uses
+arg 0. All have canonical 5-battle duration. The first matching stat/class is
+refreshed to 5, preserving stack/order and reporting REFRESHED for `se/restore`;
+FULL is a supported no-effect refusal. New entries append stack 1. Lapse ticks
+and removes only these two families, preserving unrelated modifiers (including
+Lure timers). Invalid shape/arguments/capacity refuse without mutation.
+
+Inputs require known item IDs, global owner -1, nonvirtual stack 1..2 and remaining
+count 1..5. Callers guarantee canonical maxBattles; `setNewBattleCount` changes
+an untransported upstream field and is excluded. Existing active flags are
+preserved; new entries use false. Other known inventory entries are opaque.
+Scene.addModifier tier fallback/stat refresh/return value, selection/purchases,
+full BattleEnd, saves and game-core integration are excluded. Task 96 stays
+partial. Battle-core already owns stat/crit effects: this API does not duplicate
+or replace those implementations. The oracle compares raw projections through
+its existing read-only helpers, including ACC+1, other supported stats+0.2,
+Dire Hit+1 per object, ignored stack magnitude, and unchanged HP/EVA probes;
+final stat/accuracy/critical-stage pipeline clamps are outside this test.
+Focused effect projections fit battle-core's96-object-per-side bound; the
+acquisition API independently supports reward-core's256-entry inventory.
+
+Node22.23.3/Vitest4.1.11, upstream 8555c08c823b856cbec4eb99ca84ea52a955836d.
+Real constructors/add/scene applyModifiers/lapse/removal provide the oracle;
+all intermediate inventory/result/restore-sound/stat/crit fields are replayed,
+with strict footer and upstream party/money/battle/global RNG invariance plus
+whole non-inventory C context/run invariance. No cases/exceptions caught or
+skipped. This is a modifier prerequisite, not party/stat transport parity.
+
+| Seed | Identical/cases | Failed | Duplicate stat/class cases | Stack-two initial objects | Lapse ticks |
+| --- | --- | --- | --- | --- | --- |
+| 777 | 2000/2000 | 0 | 497 | 4172 | 8013 |
+| 9001 | 2000/2000 | 0 | 497 | 4184 | 7992 |
+| 4242 | 2000/2000 | 0 | 497 | 4057 | 8028 |
+| 31337 | 2000/2000 | 0 | 497 | 4169 | 8007 |
+
+Every seed/family has added/refreshed/full/expired cases. Seed777 counts below
+are in ATK/DEF/SPATK/SPDEF/SPD/ACC/Dire Hit order:
+
+- Added 72/72/72/72/72/72/72; refreshed 143/72/143/72/143/71/142.
+- Full 71/142/71/142/71/142/71; expired 814/783/648/849/785/830/833.
+
+8000/8000 identical; 25 host guard/capacity checks plus opaque Lure expiry pass.
+Actual C refresh/early-expiry/wrong-stat-match mutants fail 72/1763/404 seed777
+cases (exit1), and missing footer exits2. Established seed99/N4000 traces replay
+byte-identically against base 1c984b7: options 3950/0/50 unported, 8052 screens;
+victory 4000/0 (2055 items/2459 screens), application 4000/0 (115 text cases),
+Memory 4000/0. Mint/vitamin/Lure/money four-seed2000 traces each stay 8000/8000
+identical with 33/31/26/33 guards. Existing producers/comparators/seeds/counts and
+generated tables remain unchanged. H passes with paired200-run digest 803ad8cf.
+
+Exact commands/evidence outside checkout (prior traces explicitly reused):
+
+```sh
+. /workspace/shared/activate-parity.sh
+E=/workspace/validation/lane-b/temp-boosters
+for seed in 777 9001 4242 31337; do
+ BUILD="$E/build" sh reward-core/tools/tempboosterdiff.sh /workspace/shared/upstream-lane-b 2000 "$seed"
+done
+BUILD="$E/build" sh reward-core/tools/tempboosterplant.sh "$E/build/tempbooster-777.txt"
+sed '$d' "$E/build/tempbooster-777.txt" > "$E/truncated.txt"
+"$E/build/tempboostertest" "$E/truncated.txt" # expected exit2
+sh /workspace/validation/lane-b/run-reward-regressions.sh 1c984b7 "$E"
+```
+
+The durable regression helper extracts baseline reward-core outside the checkout,
+builds both libraries with j2 and read-only battle/run paths, compares before/after
+logs for reward/victory/apply/Memory and all 16 focused traces, then runs
+`make -s -C game-core -j2 test`. Its full source and all before/after logs are
+retained beside evidence; no existing producer is rerun or modified in that gate.
+
 ## Task 96 prerequisite: money-item monetary application (lane B, 2026-10-08)
 
 `pr_reward_apply_money_item(ctx, item, &money, &result)` mirrors the monetary

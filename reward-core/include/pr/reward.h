@@ -213,7 +213,7 @@ typedef struct {
     int16_t arg;                  /* generated types: the argument (a form change item: FormChangeItem) */
     int32_t stack;                /* stackCount */
     int8_t owner;                 /* a held item: its holder's party index; -1 otherwise */
-    int16_t battle_count;         /* lures and the Silver Poke Ball: getBattleCount() */
+    int16_t battle_count;         /* lures, temporary boosters and the Silver Poke Ball: getBattleCount() */
     bool active;                  /* a form change item: .active */
 } pr_owned_item;
 
@@ -524,6 +524,19 @@ int pr_reward_reroll(pr_reward_ctx *ctx, double *money, bool lock_rarities,
                      const pr_reward_option *prev_options, int n_prev_options,
                      pr_reward_select *sel, pr_reward_thresholds *th,
                      pr_reward_option *out_options);
+
+/* Canonical5-battle TempStatStageBooster/Dire Hit modifier primitives only.
+ * X argsATK..ACC, Dire Hit arg0, global owner-1, stack1..2, count1..5.
+ * First match refreshes timer (requests se/restore) preserving stack/order.
+ * FULL is supported no-effect; UNSUPPORTED/capacity refuse before mutation.
+ * Lapse ticks/removes these families only. No custom maxBattles, virtual stacks,
+ * Scene fallback/updates/purchases or full BattleEnd. Battle-core owns effects. */
+enum pr_reward_temp_status {
+    PR_REWARD_TEMP_UNSUPPORTED = 0, PR_REWARD_TEMP_FULL,
+    PR_REWARD_TEMP_ADDED, PR_REWARD_TEMP_REFRESHED
+};
+enum pr_reward_temp_status pr_reward_add_temp_booster(pr_reward_ctx *ctx, int item, int arg);
+bool pr_reward_lapse_temp_boosters(pr_reward_ctx *ctx, int *expired);
 
 /* Task 96 bounded Nugget/Big Nugget/Relic Gold monetary application.
  * Caller guarantees ordinary nonvirtual inventories and owns UI/MoneyAchv,
