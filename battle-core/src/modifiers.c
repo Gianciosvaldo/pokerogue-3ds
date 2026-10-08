@@ -130,6 +130,10 @@ bool pr_mod_is_ported_item(const pr_modifier *m)
         int64_t stacks = (int64_t)m->stack_count + m->virtual_stack_count;
         return !m->unknown_subclass && m->stack_count >= 1 && m->virtual_stack_count >= 0 && stacks <= 5;
     }
+    if (m->cls == PR_MOD_NATURE_WEIGHT) {
+        int64_t stacks = (int64_t)m->stack_count + m->virtual_stack_count;
+        return !m->unknown_subclass && m->stack_count >= 1 && m->virtual_stack_count >= 0 && stacks <= 10;
+    }
     if (m->cls == PR_MOD_MULTI_HIT)
         return !m->unknown_subclass;
     if (m->cls == PR_MOD_INSTANT_REVIVE)
@@ -285,9 +289,11 @@ void pr_apply_incrementing_stat_modifier(pr_battle *bt, const pr_pokemon *p, int
  * for the stat, so the search goes on to the next one */
 void pr_apply_nature_weight_modifier(pr_battle *bt, const pr_pokemon *p, double *mult)
 {
+    if (!p || !mult) return;
     pr_modifier *m;
     EACH_MOD(m, bt, p->is_player, PR_MOD_NATURE_WEIGHT) {
         if (!held_applies(m, p)) continue;
+        if (!pr_mod_is_ported_item(m)) { pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS); return; }
         if (*mult != 1) {
             *mult += 0.1 * pr_mod_get_stack_count(m) * (*mult > 1 ? 1 : -1);
             return;
