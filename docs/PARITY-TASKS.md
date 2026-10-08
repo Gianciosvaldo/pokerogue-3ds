@@ -12,57 +12,63 @@ Implementation PRs: [Task 57 #97](https://github.com/Gianciosvaldo/pokerogue-3ds
 
 | Lane | Folder | Sequential tasks | Assignment |
 |---|---|---|---|
-| A | battle-core/ | 67 (#108) → 69 (#110) → 70 (#111) → 71 (#115) → 72 (#119) → 73 (#123); 104 slices: Orbs (#148), Wide Lens (#149), Reviver Seed (#152) | Hard coordinator work; PRs merged, as bounded slices: 72 is the Dancer slice (Tera unported), 73 the first doubles slice |
-| B | reward-core/ | 89 (#104); Card 97 (#132); 96 prerequisites: Mint (#147), vitamins (#150), canonical Lures (#153) | Hard; Card 97 merged in PR #132; reward state validation |
-| C | game-core/ | 87 (#101) → 57 (#97) → 59 (#113) → 60 (#114) → 61 (first slice, #116) → 92 (#121) → 93 (#122) → 94 (#124) → 77 (#125) → 95 (#128) → 96 (#136 candy, #141 balls, #142/#143 Full Heal, #151 bounded Mint slices); #154 Orb inventory bridge → 64 (#145 clean wild slice) → 65 → 66 → 78 (#139) → 79 → 61 (further slices) → 62 → 75 → 76 → 80 → 81 → 82 → 83 → 84 | Merged: 87, 57, 59, 60, 61 (first slice), 92, 93, 94, 77, 95, 78, 96's candy/ball/Full Heal/bounded Mint slices and 64's clean wild slice; #154 Orb bridge merged; remaining 96 items and full 64/65/66 are not done |
+| A | battle-core/ | 67 (#108) → 69 (#110) → 70 (#111) → 71 (#115) → 72 (#119) → 73 (#123); 104 slices: Orbs (#148), Wide Lens (#149), Reviver Seed (#152), Multi Lens (#157), Golden Punch (#161), Soul Dew proof (#164) | Hard coordinator work; PRs merged, as bounded slices: 72 is the Dancer slice (Tera unported), 73 the first doubles slice |
+| B | reward-core/ | 89 (#104); Card 97 (#132); 96 prerequisites: Mint (#147), vitamins (#150), canonical Lures (#153), money (#156), temporary boosters (#160), Soothe Bell (#163) | Hard; Card 97 merged in PR #132; reward state validation |
+| C | game-core/ | 87 (#101) → 57 (#97) → 59 (#113) → 60 (#114) → 61 (first slice, #116) → 92 (#121) → 93 (#122) → 94 (#124) → 77 (#125) → 95 (#128) → 96 (#136 candy, #141 balls, #142/#143 Full Heal, #151 bounded Mint, #158 vitamins, #159 money slices); #154 Orb, #162 Reviver Seed, #165 Wide Lens bridges → 64 (#145 clean wild slice) → 65 → 66 → 78 (#139) → 79 → 61 (further slices) → 62 → 75 → 76 → 80 → 81 → 82 → 83 → 84 | Merged: 87, 57, 59, 60, 61 (first slice), 92, 93, 94, 77, 95, 78, 96's candy/ball/Full Heal/bounded Mint/vitamin/money slices and 64's clean wild slice; #154/#162/#165 inventory bridges merged; remaining 96 items and full 64/65/66 are not done |
 | D | run-core/ | 50 (#92) → 63 (#112); 100 | Tasks 50 (#92) and 63 (#112, bounded: a few species) merged; Lorenzo's run-core owner only |
 | E | game/ | 110 (#120) → 112 (#129) → 113 (#134) → 114 (#135) → 116 (#138); 85 console half | Cards 110, 112, 113, 114 and 116 merged; console acceptance stays a human gate |
 | F | ai-core/ | 88 (#102) → 58 (`836d10c`) → 68 (#117) → 74 (#127) | Tasks 88, 58, 68 and 74 merged |
-| G | docs/ | 86 (#100) → 149 (follow-up status refresh) | Task 86 and #140 merged; this Card 149 checkpoint covers through #154; refresh after each milestone |
+| G | docs/ | 86 (#100) → 149 (follow-up status refresh) | Task 86 and #140 merged; this final Card 149 checkpoint covers through #165; refresh after each milestone |
 
 ### Current next work (2026-10-08)
 
-Checked main `0a10696f3728cc1b6ddaea63af763663da9284d7`, through merged
-[#154](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/154), against owning
-sources/READMEs and GitHub final-head CI metadata. The uploaded October 4
-roadmap and older checkpoints remain historical context.
+Checked main `ee695e966e50f486ba8cf6a009015c1a53b01882`, through merged
+[#165](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/165), against owning
+sources/READMEs, durable implementation logs and final-head GitHub CI metadata.
+This checkpoint follows the seven implementation tasks #159–#165; the final
+Card 149 documentation refresh is the eighth task. Earlier checkpoints remain
+historical evidence rather than current scheduling.
 
-- **Lane A / Card 104 remains partial:** Toxic/Flame Orb dispatch (#148), Wide
-  Lens accuracy (#149) and bounded singles Reviver Seed (#152) landed. Use the
-  [33-class pinned inventory](../battle-core/HELD-ITEM-INVENTORY.md) to select
-  an actually absent dispatch. Multi Lens hit-count, Golden Punch money, held
-  Baton transfer, Mini Black Hole and Grip Claw are remaining examples; a
-  stat/damage helper is not full-turn coverage. No duplicate implementation of
-  the three merged slices is needed.
-- **Lane B / Task 96 prerequisites:** bounded Mint (#147), IV-capped vitamins
-  (#150), and canonical Lure add/refresh/lapse/chance primitives (#153) exist.
-  Lures do not yet implement the selection/purchase/scene boundary or whole
-  BattleEnd lifecycle. Other lapsing/stat families need source-backed APIs
-  before a caller claims their effects.
-- **Lane C / Task 96 remains partial:** candy, balls and Full Heal slices plus
-  the bounded Mint adapter (#151) landed. A vitamin adapter can now use #150;
-  it must preserve pinned purchased-vitamin addition/error/no-money-deduction
-  behavior and distinguish real additions from unsupported stand-ins. Lure
-  integration still needs its caller-owned acquisition/lifecycle boundary.
-  Mint guards for challenges and target/wildcard stat inventory remain real
-  exclusions. The Orb inventory bridge (#154) is separately landed; shared
-  acquisition stack/replacement policy and Reviver/Wide Lens bridges remain.
-- **Task 64 remains partial:** #145 wires the supported clean wild constructor.
-  Trainer member seed-offset RNG boundaries and broader species/TM/egg/passive/
-  fusion pools remain run-core owner prerequisites. **65/66 stay gated.**
-- **Other lane C backlog:** further 61 families, 62, 75/76 and 79–84 remain;
-  78 is already merged. Run-core stays reserved; console acceptance stays human.
-- **Documentation / Card 149:** this refresh reconciles the landed slices only.
-  Root/component historical README rows remain separate folder-scoped work.
-  The current parallel batch's new implementations are not credited before
-  merge and required validation.
+- **Lane A / Card 104 remains partial:** Orb, Wide Lens and Reviver dispatch
+  (#148/#149/#152), Multi Lens hit count (#157), Golden Punch money (#161),
+  and bounded Soul Dew proof/promotion of existing arithmetic (#164) landed.
+  Use the [33-class pinned inventory](../battle-core/HELD-ITEM-INVENTORY.md)
+  to distinguish missing dispatch from existing helpers needing proof. Held
+  Baton transfer, Mini Black Hole, Grip Claw, Lucky/Golden Egg and broader
+  remaining lifecycle are examples of further work. Golden Punch's wallet
+  bridge remains absent; Soul Dew proof does not unlock guarded Mint/vitamin
+  stat inventories or establish broad abilities/forms/doubles parity.
+- **Lane B / Task 96 prerequisites:** Mint/vitamins (#147/#150), canonical
+  Lures (#153), monetary items (#156), five-battle X-item/Dire Hit add/lapse
+  (#160), and Soothe Bell acquisition/raw singular boost (#163) exist.
+  Lure/temporary APIs exclude selection/purchase/scene/full BattleEnd lifecycle;
+  Soothe Bell excludes full friendship/candy progression. Caller adapters must
+  validate those boundaries rather than treat primitives as full integration.
+- **Lane C / Task 96 remains partial:** candy/balls/Full Heal, bounded Mint
+  (#151), vitamins (#158) and monetary rewards (#159) landed. Purchased vitamin
+  addition/error/no deduction is preserved; guarded Mint/stat/virtual inputs
+  and Gimmighoul monetary side effects remain unsupported. Lure/temporary/Soothe
+  caller integration and post-battle Pickup/Honey Gather/Pay Day remain.
+  Orb (#154), Reviver consumption/detached ownership (#162) and Wide Lens
+  accuracy/transient stacks (#165) bridges landed. Shared acquisition stock/
+  default replacement policies and broader transfers remain unvalidated.
+- **Save boundary:** detached owner 0 is distinct from wildcard -1. Wide Lens
+  transient virtual stacks are omitted from saves and load as zero, as pinned
+  ModifierData does; virtual-fixture outcomes do not claim save/no-save equality.
+  Normal soaks use zero transient stacks and retain paired digests.
+- **Task 64 remains partial:** #145 is supported clean wild constructors only.
+  Trainer seed-offset boundaries and broader pools remain reserved run-core
+  owner prerequisites. **65/66 stay gated.** Further 61 families, 62, 75/76 and
+  79–84 remain; 78 is merged. Console acceptance stays human.
+- **Batch boundary:** the seven new implementation PRs are merged. This is the
+  final documentation task; stop after it. Root/component historical README
+  cleanup remains separately scoped work, not an additional task in this batch.
 
-[#147–#154 evidence](PARITY-LEDGER.md#4-landed-prs-and-merged-task-index)
-separates upstream comparisons, host consistency and final-head build CI.
-Conditional Task 63 differential/host jobs were skipped on those PRs, not passed.
-[Task 64 validation](../game-core/TASK64-VALIDATION.md) retains both the 1000-run
-app coverage failure and expanded 5000-run passing check. No whole-run upstream
-or hardware pass is inferred.
+[Ledger evidence](PARITY-LEDGER.md#4-landed-prs-and-merged-task-index) separates
+source comparisons, host consistency, actual-head CI and skipped conditional
+Task 63 jobs. [Task 64 validation](../game-core/TASK64-VALIDATION.md) retains the
+1000-run app coverage failure and expanded 5000-run pass. No whole-run upstream,
+cleared Classic run, frontend/hardware or complete Task 96/104 claim follows.
 
 A prerequisite API is a real gate: verify it exists and has recorded checks before beginning. If absent, report the missing bounded prerequisite instead of changing its owner's folder. Different folders may proceed in parallel; each lane starts its next task only after the previous PR merges. Lower-compute describes bounded scope, not lower correctness requirements.
 
@@ -504,13 +510,19 @@ Full Heal reward-core/game-core [#142](https://github.com/Gianciosvaldo/pokerogu
 Bounded Mint API/adapter [#147](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/147)/[#151](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/151),
 vitamin API [#150](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/150), and
 canonical Lure primitives [#153](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/153)
-also landed. Vitamin/Lure game adapters and remaining item/post-battle lifecycle
-are not complete. See [Mint scope/results](../game-core/MINT-VALIDATION.md). Read the
+also landed. Vitamin [#158](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/158)
+and monetary [#159](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/159) adapters,
+temporary booster primitives [#160](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/160)
+and Soothe Bell primitives [#163](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/163)
+are merged. Remaining Lure/temporary/friendship callers, guarded stat/virtual
+inputs, Gimmighoul monetary side effects and post-battle lifecycle are incomplete.
+See [Mint](../game-core/MINT-VALIDATION.md), [vitamins](../game-core/VITAMIN-VALIDATION.md)
+and [money](../game-core/MONEY-VALIDATION.md) scope/results. Read the
 owning README's Full Heal bought-item timing limitation before claiming full parity.
 
 **Branch:** `outside/reward-apply-consumables-2`. **Assignment:** Lower compute. **Prerequisites:** 95 merged.
 
-**Original problem (historical).** These families initially used stand-ins. Current gaps are vitamins and Lure/Charm lifecycle, guarded unsupported Mint applications, and post-battle effects (`GC_STUB_POST_BATTLE`: Pickup, Honey Gather, Pay Day). The merged slices above do not satisfy the original whole-card zero-stand-in pass gate.
+**Original problem (historical).** These families initially used stand-ins. Current gaps are Lure/temporary/Charm/friendship lifecycle, guarded unsupported Mint/vitamin/monetary applications, and post-battle effects (`GC_STUB_POST_BATTLE`: Pickup, Honey Gather, Pay Day). The merged slices above do not satisfy the original whole-card zero-stand-in pass gate.
 
 **Do.** Apply each through reward-core's API (Rare Candy has `pr_reward_apply_candy`). Evolution, form and fusion items stay with Tasks 61 and 62.
 

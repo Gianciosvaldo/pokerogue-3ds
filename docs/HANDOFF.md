@@ -40,16 +40,21 @@ Start with [`README.md`](../README.md) (folder table), then the README of the fo
 
 The opening September 30 status and original task problem statements are dated
 history. Use [current scheduling](PARITY-TASKS.md#current-next-work-2026-10-08)
-and [ledger](PARITY-LEDGER.md) for source-backed state at main `0a10696`.
-Merged #147–#154 add bounded reward Mint/vitamin/Lure prerequisites, battle
-Orb/Wide Lens/Reviver Seed dispatch, and game Mint/Orb adapters. These do not
-complete Tasks 96/104 or unlock full Task 64/65/66. Vitamin/Lure caller integration,
-unsupported Mint inputs and other held-item lifecycle still need bounded work.
+and [ledger](PARITY-LEDGER.md) for source-backed state at main `ee695e9`.
+Merged #147–#165 add bounded reward Mint/vitamin/Lure/money/temporary/Soothe Bell
+prerequisites; battle Orb/Wide Lens/Reviver/Multi Lens/Golden Punch dispatch and
+Soul Dew proof; game Mint/vitamin/money adapters and Orb/Reviver/Wide Lens bridges.
+These do not complete Tasks 96/104 or unlock full Task 64/65/66. Lure/temporary/
+friendship callers, unsupported stat/virtual inputs, Gimmighoul side effects,
+Golden Punch wallet transport and broader held lifecycle remain separate.
+Detached owner 0 is preserved separately from wildcard -1; transient Lens virtual
+stacks are intentionally absent from saves and reset on load. Do not claim
+virtual-fixture normal/save equality or full source session migration.
 The dex/starter foundation and app run driver are already landed; do not
 implement the old opening descriptions again. Root/component historical rows
 may also be stale: consult owning code and dated validation records.
 
-Actual-head host/3DS build CI succeeded for each #147–#154; conditional Task 63
+Actual-head host/3DS build CI succeeded for each implementation #147–#165; conditional Task 63
 jobs were skipped, not validated. Source differentials establish only their
 compared scope; soaks establish host consistency. Console acceptance, whole-run
 upstream parity and the reserved run-core owner boundaries remain unchanged.
