@@ -662,3 +662,9 @@ Existing bounded Lens inventory reaches battle-core’s actual hit check with +5
 per real/transient stack. Real stocks persist; virtual stocks reset on load as
 pinned ModifierData does. Unsupported virtual caller inputs remain counted.
 See [scope and validation](LENS-VALIDATION.md).
+
+## Multi Lens inventory bridge
+
+Canonical loaded stacks reach the existing actual hit-count and damage helpers;
+real stocks persist and transient stacks reset on load. Malformed inputs stay
+opaque. See [scope and validation](MULTI-VALIDATION.md).

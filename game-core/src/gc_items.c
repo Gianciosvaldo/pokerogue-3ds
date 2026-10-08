@@ -104,7 +104,7 @@ static void to_modifier(const gc_item *it, pr_modifier *m, bool golden)
     m->cls = it->pokemon_id ? PR_MOD_HELD_ITEM : PR_MOD_PERSISTENT;
     /* Transient Amulet Coin is a bounded Golden Punch dependency. */
     if (it->virtual_stack && strcmp(it->key, "WIDE_LENS")
-        && strcmp(it->key, "GOLDEN_PUNCH") && strcmp(it->key, "AMULET_COIN")) return;
+        && strcmp(it->key, "GOLDEN_PUNCH") && strcmp(it->key, "AMULET_COIN") && strcmp(it->key, "MULTI_LENS")) return;
     /* These classes now have turn-path implementations in battle-core.  Parameters and
      * transferability come from upstream modifierTypes, not an inferred item name. */
     static const struct { const char *key; uint8_t cls; } held[] = {
@@ -128,6 +128,15 @@ static void to_modifier(const gc_item *it, pr_modifier *m, bool golden)
             && (it->arg == -1 || it->arg == 0) && (!coin || (!it->pokemon_id && !it->detached))
             && (!coin || !it->virtual_stack || golden)) {
             if (coin) m->pokemon_id = 0; /* persistent source class has no holder */
+            m->virtual_stack_count = it->virtual_stack;
+            m->unknown_subclass = false;
+        }
+    } else if (!strcmp(it->key, "MULTI_LENS")) {
+        /* PokemonMultiHitModifier: one or two effective loaded stacks. Invalid
+         * records stay generic/opaque: the damage helper reads matching classes. */
+        if (it->stack >= 1 && it->virtual_stack >= 0
+            && (int64_t)it->stack + it->virtual_stack <= 2 && (it->arg == -1 || it->arg == 0)) {
+            m->cls = PR_MOD_MULTI_HIT;
             m->virtual_stack_count = it->virtual_stack;
             m->unknown_subclass = false;
         }
@@ -229,7 +238,7 @@ void gc_items_from_battle(gc_run *run)
             to_modifier(&it, &expected, golden);
             if (i < tracked && !expected.unknown_subclass && (expected.cls == PR_MOD_INSTANT_REVIVE
                                 || expected.cls == PR_MOD_MOVE_ACCURACY_BOOSTER
-                                || expected.cls == PR_MOD_DAMAGE_MONEY_REWARD)
+                                || expected.cls == PR_MOD_DAMAGE_MONEY_REWARD || expected.cls == PR_MOD_MULTI_HIT)
                 && !duplicate[i]) {
                 bool opaque = false;
                 for (int j = 0; j < run->bt.n_mods[side]; j++) {
@@ -247,7 +256,7 @@ void gc_items_from_battle(gc_run *run)
                     if (m->pokemon_id != expected.pokemon_id && !detached) continue;
                     remaining = m->stack_count;
                     it.detached = m->pokemon_id == 0;
-                    if (expected.cls == PR_MOD_MOVE_ACCURACY_BOOSTER || expected.cls == PR_MOD_DAMAGE_MONEY_REWARD)
+                    if (expected.cls == PR_MOD_MOVE_ACCURACY_BOOSTER || expected.cls == PR_MOD_DAMAGE_MONEY_REWARD || expected.cls == PR_MOD_MULTI_HIT)
                         it.virtual_stack = m->virtual_stack_count;
                     used[j] = true;
                     break;
