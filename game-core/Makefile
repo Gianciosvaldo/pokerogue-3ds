@@ -17,6 +17,15 @@ OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
 all: $(BUILD)/orb_diff_test $(BUILD)/orb_host_test $(BUILD)/mint_diff_test $(BUILD)/mint_host_test
 
+all: $(BUILD)/vitamin_diff_test $(BUILD)/vitamin_host_test
+$(BUILD)/vitamin_diff_test: tests/vitamin_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+$(BUILD)/vitamin_host_test: tests/vitamin_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: vitamin-host-test
+vitamin-host-test: $(BUILD)/vitamin_host_test
+	$(BUILD)/vitamin_host_test
+
 $(BUILD)/orb_diff_test: tests/orb_diff_test.c $(BATTLE_CORE)/tests/status-orb-replay.inc $(BATTLE_CORE)/tests/statusorb-guards.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/orb_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
 
@@ -166,5 +175,5 @@ clean:
 	rm -rf $(BUILD)
 
 FORCE:
-.PHONY: all clean test FORCE mint-host-test orb-host-test
+.PHONY: all clean test FORCE mint-host-test orb-host-test vitamin-host-test
 -include $(OBJS:.o=.d)

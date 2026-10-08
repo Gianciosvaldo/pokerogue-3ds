@@ -172,9 +172,11 @@ uint8_t gc_reward_target(const char *key);
 /* Task 60: the application of healing, revive, PP restore and PP Up rewards (Potions, Full Restore, Revives,
  * Sacred Ash, Ether, Elixir, PP Up, PP Max) by reward-core's pr_reward_apply, on a context made from the run,
  * its result written back. `party` is an index into run->party[], `move_slot` a moveset slot. GC_APPLY_REFUSED
- * (and *why) = it can't be used there, nothing changed; GC_APPLY_UNHANDLED = not one of these items, the
+ * (and *why) = it can't be used there; GC_APPLY_UNHANDLED = not one of these items, the
  * caller's own code applies it. A free reward (offer cost 0) is taken even when it did nothing and has no target
- * (Sacred Ash with nobody fainted), as SelectModifierPhase.applyModifier does with cost -1. */
+ * (Sacred Ash with nobody fainted), as SelectModifierPhase.applyModifier does with cost -1.
+ * Vitamin exception: an applied purchase returns REFUSED with an empty reason,
+ * preserving upstream's persistent-add error/no-payment result after mutation. */
 enum { GC_APPLY_UNHANDLED, GC_APPLY_DONE, GC_APPLY_REFUSED };
 int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, const char **why);
 int gc_reward_lifecycle_apply(gc_run *run, const gc_offer *o, int party, const char **why);

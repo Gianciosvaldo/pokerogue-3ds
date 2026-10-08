@@ -123,6 +123,7 @@ typedef struct {
     uint8_t target;         /* GC_TARGET_*: what it must be used on */
     double cost;            /* shop items: the price; 0 for a free reward */
     int8_t upgrade_count;   /* ModifierTypeOption.upgradeCount: how many tiers the luck upgrade raised it */
+    bool is_purchase;       /* set by SHOP even at price 0; free offers use cost 0 or -1 */
 } gc_offer;
 enum { GC_TARGET_NONE, GC_TARGET_POKEMON, GC_TARGET_MOVE };
 
@@ -340,7 +341,9 @@ bool gc_run_next_event(gc_run *run, gc_event *out);
 const gc_screen *gc_run_screen(const gc_run *run);
 
 /* The player's answer to the current screen. Runs on to the next screen, queuing events. false (and
- * *why) if the choice isn't legal on this screen; nothing changes then. */
+ * *why) if the choice isn't legal on this screen. Vitamin purchase exception:
+ * pinned upstream may add the item/update stats, then report an error with an
+ * empty reason and no payment. That applied purchase also returns false. */
 bool gc_run_choose(gc_run *run, const gc_choice *c, const char **why);
 
 /* Saving, at upstream's save point: from GC_EV_SAVE_POINT (the start of an encounter) until the battle's
