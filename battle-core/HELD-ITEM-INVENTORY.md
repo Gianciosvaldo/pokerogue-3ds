@@ -39,7 +39,7 @@ The bounded slices below add dispatch or prove existing helpers; Card 104 remain
 | `FieldEffectModifier` | `PR_MOD_FIELD_EFFECT`; field-duration helper used by weather/terrain changes | Full-turn fixtures/whitelist |
 | `PokemonExpBoosterModifier` | No C class in battle-core | Held Lucky/Golden Egg experience dispatch; side-wide Exp. Charm helper is a different class |
 | `PokemonFriendshipBoosterModifier` | No C class in battle-core | Held Soothe Bell friendship dispatch |
-| `PokemonNatureWeightModifier` | `PR_MOD_NATURE_WEIGHT`; nature-stat helper | Full-turn fixtures/whitelist |
+| `PokemonNatureWeightModifier` | Existing `PR_MOD_NATURE_WEIGHT` nature-stat calculation; bounded Soul Dew class promoted | Proven singles stats/full-turn scope; acquisition/save/transfer excluded |
 | `PokemonMoveAccuracyBoosterModifier` | `PR_MOD_MOVE_ACCURACY_BOOSTER`; battle-accuracy dispatch | Added bounded Wide Lens amount=5, stacks 1–3 including virtual stacks; other identities remain unported |
 | `PokemonMultiHitModifier` | `PR_MOD_MULTI_HIT`; hit-count dispatch plus existing damage scaling/held-stack helpers | Added bounded singles Multi Lens (effective stacks1–2); Parental Bond/doubles and acquisition/save integration remain outside this slice |
 | `PokemonFormChangeItemModifier` | No C class | Held form-change activation/lifecycle; supported species form changes are separate |
@@ -94,6 +94,11 @@ damage, sequential Amulet Coin rounding, saturation at JS MAX_SAFE_INTEGER,
 real/virtual stacks and ownership/refusal boundaries. It does not implement
 MoneyUI, money achievements, reward acquisition or a game save bridge.
 
-The next bounded candidate is Soul Dew / `PokemonNatureWeightModifier`: the
-nature-stat helper already exists. It needs full-turn differential proof and
-conservative whitelist promotion, rather than a claim of missing arithmetic.
+The Soul Dew slice proves the existing `PokemonNatureWeightModifier` stat
+calculation through real upstream stats and full turns, then promotes the
+bounded known class. It adds no class ID, field or arithmetic formula. Unknown
+or invalid-stack identities refuse before changing the nature multiplier.
+All 25 natures, both sides, real/virtual stacks, wildcard and bench ownership,
+first-success matching and neutral/down-stat boundaries receive focused proof.
+Reward acquisition, save bridging, transfer, other abilities/forms and doubles
+remain outside this evidence.

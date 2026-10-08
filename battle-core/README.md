@@ -844,3 +844,78 @@ consistency, not cleared Classic runs or whole-run upstream parity.
 Scope: Ball Fetch Rattata/Snorlax form0 singles, effective cash stacks1–5.
 MoneyUI/achievements, acquisition, inventory/save bridging, doubles, generic
 theft, other abilities/forms and hardware acceptance remain outside the proof.
+
+
+## Bounded Soul Dew proof of existing nature-stat calculation (Card 104, partial)
+
+`PR_MOD_NATURE_WEIGHT` and its stat arithmetic already existed. This slice adds
+full-turn proof and promotes only known `PokemonNatureWeightModifier` identities
+with real stacks 1–10, nonnegative virtual stacks and effective count <=10. It
+keeps the pinned arithmetic: a nonneutral nature multiplier gains or loses
+`0.1 * effectiveStacks`; neutral multipliers return false, and applyModifier
+stops after the first matching successful item. Stat rounding and minimum-one
+clamping remain in the existing `pr_calculate_stats` path. Unknown or invalid
+applicable identities refuse before multiplier mutation. There is no new enum
+ID, modifier/battle field, save schema or game adapter.
+
+The additive Node22 producer delegates real calculateStats and item applies,
+then drives real MoveEffectPhase full turns. Ten states cover both sides,
+all 25 natures, neutral natures, bench/wrong/wildcard/opposite-side owners,
+real/virtual/max stacks and two first-match instances. Physical Tackle and
+special Swift exercise resulting stat differences. Level/IV/turn randomness
+remains varied. Input and final stats, HP, damage/hits, modifier stacks/owners,
+phase/queue order, global/battle RNG and every message use exact comparisons in
+an additive replay copy. Established producers/comparators remain unchanged.
+Each N=2000 run asserts all 25 natures occur; all ten states have 200 cases.
+Sixteen C guards cover null arguments, owners/sides, neutral multipliers,
+first-success behavior, wildcard/virtual stacks, unknown identity and stack
+boundaries without item or RNG mutation.
+
+```sh
+sh battle-core/tools/souldewdiff.sh <upstream8555c08> 2000 777
+sh battle-core/tools/souldewdiff.sh <upstream8555c08> 2000 9001
+sh battle-core/tools/souldewdiff.sh <upstream8555c08> 2000 4242
+sh battle-core/tools/souldewdiff.sh <upstream8555c08> 2000 31337
+```
+
+Measured Node22.23.3 / Vitest4.1.11 / GCC14.2.0:
+
+| Seed | Cases / covered / identical texts | Real applies (up / down) | Neutral refusals / owner refusals |
+| --- | --- | --- | --- |
+| 777 | 2000 / 2000 / 2000 | 4416 (2208 / 2208) | 8224 / 22270 |
+| 9001 | 2000 / 2000 / 2000 | 4380 (2190 / 2190) | 8170 / 21725 |
+| 4242 | 2000 / 2000 / 2000 | 4504 (2252 / 2252) | 8356 / 21930 |
+| 31337 | 2000 / 2000 / 2000 | 4398 (2199 / 2199) | 8197 / 21940 |
+
+Every seed has zero exceptions/uncovered/parser/stat mismatches/text differences.
+All 16 guards pass. A source mutant disconnecting only the pokemon.c stat caller
+while preserving the helper passes guards but yields 2208 stat mismatches on
+seed 777 (exit1). The unchanged replay independently checks C input stats and
+then restores the provided upstream stats to keep testing turns; consequently
+that mutant still has 2000 passing turn-state/message comparisons. Stat failures
+are mandatory failures in the new wrapper. Ten malformed transports (missing
+footer/item/virtual/stack, unknown class, stack256/overcap/fractional virtual,
+fractional header/footer counts) exit2. Fractional requested N exits1 before
+reference output; Node22 is checked directly by the producer and tool.
+
+Against archived merged-main188f2d7, all 28 unchanged before/after replay logs
+are byte-identical: B plain/rich/switch/summon 1942/1831/1890/1863; ITEMS four seeds
+1922/1932/1929/1939 retaining untranslated sets 1/1/2/1; COND 1767/1756/1770/1766
+with every covered text set identical; Wide Lens/Reviver Seed/Multi Lens/Golden
+Punch each 4x2000 fully covered/pass/text-exact. Every parser/stat and covered-turn
+failure count is zero.
+
+`make -s -C game-core -j2 test all` before/after passes 32,657 resume and 39 item bridge
+checks, plus 110 money / 187 vitamin / 235 Orb / 107 Mint / 46 reward-lifecycle checks;
+normal/save 200-run digests both `39213240`. Both
+`game-core/build/gcplay --auto 1000 --jobs 8` and the same with `--save-test`
+retain 1000 ended (0 cleared), 0 stuck/crashed/timed out, 49,100 turns,digest `2473e509`;
+save 14,271 round trips, max 11,373/131,072 bytes. Entire printed normal/save reports
+including stand-in tables are byte-identical before/after. Intervening reward
+and game-money integration on this base changed historical digest numbers;
+Soul Dew does not change these fresh baseline results. This is host
+consistency evidence, not whole-run upstream or console acceptance.
+
+Scope: Ball Fetch Rattata/Snorlax form0 singles with all 25 natures and effective
+stacks 1–10. Acquisition, inventory/save bridging, transfer, other abilities/forms,
+doubles and hardware acceptance remain outside the proof. Card 104 remains partial.
