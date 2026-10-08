@@ -122,6 +122,8 @@ bool pr_mod_is_ported_item(const pr_modifier *m)
             || m->berry_type == BERRY_TYPE_LANSAT
             || m->berry_type == BERRY_TYPE_STARF;
     }
+    if (m->cls == PR_MOD_MULTI_HIT)
+        return !m->unknown_subclass;
     if (m->cls == PR_MOD_INSTANT_REVIVE)
         return !m->unknown_subclass;
     if (m->cls == PR_MOD_MOVE_ACCURACY_BOOSTER)
@@ -782,6 +784,20 @@ bool pr_move_can_be_multi_strike_enhanced_ex(pr_battle *bt, int move, const pr_p
 bool pr_move_can_be_multi_strike_enhanced(int move)
 {
     return pr_move_can_be_multi_strike_enhanced_ex(NULL, move, NULL, false, NULL);
+}
+
+/* PokemonMultiHitModifier.apply(pokemon, moveId, hitCount): called once,
+ * after intrinsic strikes/Parental Bond and before this move's hit checks. */
+void pr_apply_multi_hit_count_modifiers(pr_battle *bt, const pr_pokemon *src, int move, int *count)
+{
+    if (!src || !count) return;
+    pr_modifier *m;
+    EACH_MOD(m, bt, src->is_player, PR_MOD_MULTI_HIT) {
+        if (!held_applies(m, src)) continue;
+        if (!pr_mod_is_ported_item(m)) { pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS); continue; }
+        if (!pr_move_can_be_multi_strike_enhanced_ex(bt, move, src, false, NULL)) continue;
+        *count += pr_mod_get_stack_count(m);
+    }
 }
 
 /* PokemonMultiHitModifier.apply(pokemon, moveId, null, damageMultiplier) */

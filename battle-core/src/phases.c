@@ -2310,7 +2310,8 @@ static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
             }
         }
         pr_hook_ab(bt, user, PR_AC_AddSecondStrikeAbAttr);
-        turn_modifiers(bt, user->is_player, user);           /* Multi Lens */
+        pr_apply_multi_hit_count_modifiers(bt, user, move, &hits);
+        turn_modifiers(bt, user->is_player, user); /* Preserve other missing item-family refusals. */
         user->hit_count = (int8_t)hits;
         user->hits_left = (int8_t)hits;
     }

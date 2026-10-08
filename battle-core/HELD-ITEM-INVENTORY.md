@@ -41,7 +41,7 @@ This task adds only the two-orb family; it does not complete Card 104.
 | `PokemonFriendshipBoosterModifier` | No C class in battle-core | Held Soothe Bell friendship dispatch |
 | `PokemonNatureWeightModifier` | `PR_MOD_NATURE_WEIGHT`; nature-stat helper | Full-turn fixtures/whitelist |
 | `PokemonMoveAccuracyBoosterModifier` | `PR_MOD_MOVE_ACCURACY_BOOSTER`; battle-accuracy dispatch | Added bounded Wide Lens amount=5, stacks 1–3 including virtual stacks; other identities remain unported |
-| `PokemonMultiHitModifier` | `PR_MOD_MULTI_HIT`; damage scaling/held-stack helpers exist | Missing turn hit-count dispatch; not just a whitelist omission |
+| `PokemonMultiHitModifier` | `PR_MOD_MULTI_HIT`; hit-count dispatch plus existing damage scaling/held-stack helpers | Added bounded singles Multi Lens (effective stacks1–2); Parental Bond/doubles and acquisition/save integration remain outside this slice |
 | `PokemonFormChangeItemModifier` | No C class | Held form-change activation/lifecycle; supported species form changes are separate |
 | `DamageMoneyRewardModifier` | No C class; post-damage path reports turn modifiers | Missing Golden Punch money reward dispatch |
 | `SwitchEffectTransferModifier` | No C class; switching explicitly leaves held Baton transfer unported | Held Baton ownership transfer; Baton Pass move/tag transfer is already implemented separately |
@@ -77,3 +77,10 @@ item consumption and early return. Direct-hit knockouts can revive; indirect
 self-KOs cannot. The scope is supported singles fixtures and stat-neutral
 adjacent Leftovers; promotion does not establish acquisition, inventory/save,
 Commander or general doubles parity.
+
+The Multi Lens slice fills the actual missing MoveEffectPhase hit-count dispatch,
+after intrinsic multi-hit/Parental Bond callbacks and before hit checks. It uses
+the existing `PR_MOD_MULTI_HIT` ID and fields; earlier per-strike damage scaling
+is retained. Count increases by real plus virtual stacks only for eligible
+moves/owners. Parental Bond's ability hook remains unported, so the recorded
+singles oracle uses Ball Fetch and does not claim that ability interaction.
