@@ -299,6 +299,7 @@ static void to_offer(const pr_reward_option *o, gc_offer *g)
     g->target = target_of(o->type.item);
     g->cost = o->cost;
     g->upgrade_count = o->upgrade_count;
+    g->is_purchase = false;
 }
 
 /* ---- SelectModifierPhase ---- */
@@ -567,6 +568,63 @@ static int apply_mint(gc_run *run, const gc_offer *o, int party, const char **wh
     return GC_APPLY_DONE;
 }
 
+/* updateModifiers recalculates the whole party. Refused purchases may still
+ * have added their persistent item: pinned addModifier returns false there. */
+static int apply_vitamin(gc_run *run, const gc_offer *o, int party, const char **why)
+{
+    int target;
+    if (party < 0 || party >= run->n_party || (target = gc_battle_slot_of(run, party)) < 0) {
+        *why = "pick a Pokemon";
+        return GC_APPLY_REFUSED;
+    }
+    if (o->arg < 0 || o->arg >= 6) { *why = "partyUiHandler:anyEffect"; return GC_APPLY_REFUSED; }
+    if (run->run.has_challenges || run->n_items < 0 || run->n_items > GC_MAX_ITEMS
+        || run->n_items > PR_REWARD_MAX_OWNED || run->n_items > PR_MAX_MODIFIERS) return GC_APPLY_UNHANDLED;
+    bool existing = false;
+    /* ctx_base omits unknown keys and maps missing holders to -1. Do not let
+     * either conversion silently widen this API's bounded inventory contract. */
+    for (int i = 0; i < run->n_items; i++) {
+        if (gc_reward_item_index(run->items[i].key) < 0) return GC_APPLY_UNHANDLED;
+        if (!strcmp(run->items[i].key, "BASE_STAT_BOOSTER") && run->items[i].arg == o->arg
+            && run->items[i].pokemon_id == run->party[party].b.id) existing = true;
+        if (!run->items[i].pokemon_id) continue;
+        bool found = false;
+        for (int k = 0; k < run->n_party; k++) if (run->party[k].b.id == run->items[i].pokemon_id) found = true;
+        if (!found) return GC_APPLY_UNHANDLED;
+    }
+    if ((run->n_items == GC_MAX_ITEMS || run->n_items == PR_MAX_MODIFIERS) && !existing)
+        return GC_APPLY_UNHANDLED;
+    pr_reward_ctx *c = ctx_base(run, false);
+    const double cost = o->is_purchase || o->cost > 0 ? o->cost : -1;
+    pr_reward_vitamin_result result;
+    const int status = pr_reward_apply_vitamin(c, o->arg, target, cost, &result);
+    if (status == PR_REWARD_VITAMIN_UNSUPPORTED) return GC_APPLY_UNHANDLED;
+    if (status != PR_REWARD_VITAMIN_APPLIED) {
+        *why = status == PR_REWARD_VITAMIN_INOPERABLE
+            ? "modifierType:ModifierType.PokemonHeldItemModifierType.extra.inoperable"
+            : "modifierType:ModifierType.PokemonHeldItemModifierType.extra.tooMany";
+        return GC_APPLY_REFUSED;
+    }
+    gc_item_add(run, "BASE_STAT_BOOSTER", o->arg, run->party[party].b.id, 1);
+    gc_items_to_battle(run); /* later candy/evolution stat recalculations read this list */
+    for (int k = 0; k < c->n_party; k++) {
+        const int storage = run->party_order[k];
+        pr_pokemon *p = &run->party[storage].b;
+        const int old_hp = p->hp;
+        memcpy(p->stats, c->party[k].stats, sizeof p->stats);
+        p->hp = c->party[k].hp;
+        if (p->hp != old_hp) {
+            gc_event *ev = gc_ev_new(run, GC_EV_HP);
+            if (ev) { ev->a = 0; ev->b = storage; ev->c = p->hp; }
+        }
+    }
+    if (result.purchase_error) {
+        *why = ""; /* upstream plays an error with no text; caller owns presentation */
+        return GC_APPLY_REFUSED; /* keeps shop open and prevents money deduction */
+    }
+    return GC_APPLY_DONE;
+}
+
 int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, const char **why)
 {
     const int item = gc_reward_item_index(o->key);
@@ -574,6 +632,7 @@ int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, co
     if (lifecycle != GC_APPLY_UNHANDLED) return lifecycle;
     if (item < 0) return GC_APPLY_UNHANDLED;
     if (item == PR_ITEM_MINT) return apply_mint(run, o, party, why);
+    if (item == PR_ITEM_BASE_STAT_BOOSTER) return apply_vitamin(run, o, party, why);
 
     if (gc_reward_add_pokeballs(run, o->key)) return GC_APPLY_DONE;   /* no text: addModifier shows none */
 

@@ -17,6 +17,9 @@ playable. Each stand-in is counted, so the soak runs show how much of a run is s
 Toxic Orb and Flame Orb inventory mapping, full-turn comparisons and save
 boundaries are documented in [ORB-VALIDATION.md](ORB-VALIDATION.md).
 
+Vitamin application, the pinned purchase-error behavior and remaining guarded
+paths are documented in [VITAMIN-VALIDATION.md](VITAMIN-VALIDATION.md).
+
 ## The API (`include/gc/run.h`)
 
 ```c

@@ -386,7 +386,8 @@ static bool select_modifier_choose(gc_run *run, gc_rphase *p, const gc_choice *c
         return true;
     case GC_CH_SHOP: {
         if (c->a < 0 || c->a >= s->n_shop) { *why = "no such item"; return false; }
-        const gc_offer o = s->shop[c->a];
+        gc_offer o = s->shop[c->a];
+        o.is_purchase = true;
         if (run->money < o.cost) { *why = "modifierSelectUiHandler:notEnoughMoney"; return false; }
         if (!gc_port_apply_reward(run, &o, c->b, c->c, why)) return false;
         run->money -= o.cost;
