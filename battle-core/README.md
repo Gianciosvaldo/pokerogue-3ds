@@ -706,3 +706,68 @@ This slice covers Rattata form0 singles with Ball Fetch or Unburden and
 stat-neutral neighboring Leftovers. Commander/doubles, other abilities/forms,
 reward acquisition, inventory/save integration, generic theft and hardware
 acceptance remain outside this evidence. Card104 remains partial.
+
+
+## Bounded Multi Lens hit-count dispatch (Card104, partial)
+
+The existing `PR_MOD_MULTI_HIT` ID already had held-stack and per-strike damage
+helpers. Its missing full-turn hit-count path now calls
+`pr_apply_multi_hit_count_modifiers` after intrinsic multi-hit/Parental Bond
+callbacks and before hit checks. It adds the holder's real plus virtual stacks
+to the existing count, using the pinned eligibility restrictions: status,
+native multi-hit, charging, self-sacrifice, Fling, Uproar, Rollout, Ice Ball and
+Endeavor do not receive extra strikes. The pinned item cap is two. Existing
+IDs/fields and damage scaling are unchanged; known-class promotion follows the
+new dispatch, and unknown subclasses remain unported.
+
+The additive Node22 producer runs real MoveEffectPhase and delegates real item
+apply/shouldApply methods unchanged while counting them. Ten states on both
+sides cover ordinary Tackle/Scratch/Pound, early-KO Swift, virtual stacks,
+wrong/wildcard owners, Splash, Double Kick, Fury Swipes, first-turn Fly,
+Explosion and Endeavor. Level/IV/nature/turn RNG remain varied. Full state,
+planned/remaining hits, item owner/real/virtual stacks, damage records,
+phase/queue order, global/battle RNG and every message are compared using a
+new replay copy with only additive modifier transport changes. The established
+producer/comparator files remain byte-for-byte unchanged. Eighteen C guards
+cover ownership, missing holder/count, unknown subclass, opposite side,
+wildcards, virtual stacks and move exclusions without item mutation or RNG use.
+
+```sh
+# Node22, external upstream8555c08; all four required seeds.
+sh battle-core/tools/multilensdiff.sh <upstream> 2000 777
+sh battle-core/tools/multilensdiff.sh <upstream> 2000 9001
+sh battle-core/tools/multilensdiff.sh <upstream> 2000 4242
+sh battle-core/tools/multilensdiff.sh <upstream> 2000 31337
+```
+
+Measured on Node22.23.3 / Vitest4.1.11 / GCC14.2.0:
+
+| Seed | Cases / covered / identical | Accepted / rejected count calls | Damage applies | Owner refusals |
+| --- | --- | --- | --- | --- |
+| 777 | 2000 / 2000 / 2000 | 600 / 1000 | 1309 | 400 |
+| 9001 | 2000 / 2000 / 2000 | 600 / 1000 | 1296 | 400 |
+| 4242 | 2000 / 2000 / 2000 | 600 / 1000 | 1291 | 400 |
+| 31337 | 2000 / 2000 / 2000 | 600 / 1000 | 1305 | 400 |
+
+Every state has 200 cases per seed, with zero exceptions, uncovered cases,
+parser/stat mismatches or text differences. First-turn charging and wrong-owner
+states have no accepted item count apply. Eighteen guards pass. A source mutant
+that disconnects only the actual turn dispatch while leaving the public helper
+correct passes all guards but fails 600/2000 turns and message sets, with zero
+parser/stat mismatches (exit1). Missing footer/item/virtual field, unknown
+class, stack256, over-cap effective stacks and fractional virtual stacks are
+refused (exit2); fractional requested N is rejected by the producer.
+
+Durable unchanged pinned Node22 traces were replayed against archived
+current-main0a10696 and changed C: B seed777/N2000 plain 1942, rich 1831,
+switch 1890, summon 1863 covered/pass; ITEMS 1922/1932/1929/1939, retaining
+established untranslated sets 1/1/2/1; COND 1767/1756/1770/1766, all covered texts
+identical; Wide Lens and Reviver Seed each 4x2000 fully covered/pass/text-exact.
+All 20 before/after replay logs are byte-identical. Host
+`make -s -C game-core -j2 test` passes, including 32,729 resume and 39 item bridge
+checks; normal/save 200-run digests both `a6662b64`.
+
+This slice covers Ball Fetch singles with Rattata/Snorlax form0 and effective
+stacks 1–2. Parental Bond, other abilities/forms/moves, doubles, acquisition,
+inventory/save integration, generic theft and hardware acceptance remain
+outside the evidence. Card104 remains partial.
