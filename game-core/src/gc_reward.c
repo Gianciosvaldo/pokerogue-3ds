@@ -544,6 +544,7 @@ static int apply_mint(gc_run *run, const gc_offer *o, int party, const char **wh
         "MYSTERY_ENCOUNTER_MACHO_BRACE"};
     for (int i = 0; i < run->n_items; i++) {
         const gc_item *it = &run->items[i];
+        if (it->virtual_stack) return GC_APPLY_UNHANDLED;
         if (it->stack <= 0 || (it->pokemon_id && it->pokemon_id != m->b.id)) continue;
         for (unsigned j = 0; j < sizeof stat_items / sizeof *stat_items; j++)
             if (!strcmp(it->key, stat_items[j])) return GC_APPLY_UNHANDLED;
@@ -584,7 +585,9 @@ static int apply_vitamin(gc_run *run, const gc_offer *o, int party, const char *
     /* ctx_base omits unknown keys and maps missing holders to -1. Do not let
      * either conversion silently widen this API's bounded inventory contract. */
     for (int i = 0; i < run->n_items; i++) {
-        if (gc_reward_item_index(run->items[i].key) < 0) return GC_APPLY_UNHANDLED;
+        if (gc_reward_item_index(run->items[i].key) < 0
+            || run->items[i].virtual_stack)
+            return GC_APPLY_UNHANDLED;
         if (!strcmp(run->items[i].key, "BASE_STAT_BOOSTER") && run->items[i].arg == o->arg
             && run->items[i].pokemon_id == run->party[party].b.id) existing = true;
         if (!run->items[i].pokemon_id) continue;
@@ -634,7 +637,7 @@ static int apply_money_item(gc_run *run, int item)
         return GC_APPLY_UNHANDLED;
     /* ctx_base intentionally skips unknown keys: reject them before transport. */
     for (int i = 0; i < run->n_items; i++)
-        if (gc_reward_item_index(run->items[i].key) < 0
+        if (run->items[i].virtual_stack || gc_reward_item_index(run->items[i].key) < 0
             || (!strcmp(run->items[i].key, "AMULET_COIN") && run->items[i].pokemon_id))
             return GC_APPLY_UNHANDLED;
     pr_reward_ctx *c = ctx_base(run, false);

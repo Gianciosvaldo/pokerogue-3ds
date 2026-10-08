@@ -191,6 +191,7 @@ typedef struct {
     int32_t stack;
     uint32_t pokemon_id;        /* stable holder ID; 0 maps to wildcard -1 */
     bool detached;             /* battle loot owner 0, distinct from wildcard -1 */
+    int32_t virtual_stack;     /* transient battle state; excluded from saves */
 } gc_item;
 #define GC_MAX_ITEMS 128
 
