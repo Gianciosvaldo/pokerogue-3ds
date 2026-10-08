@@ -644,3 +644,10 @@ Nugget, Big Nugget and Relic Gold use the reward-core monetary API for supported
 party/inventory inputs and consume without ghost storage. Paid/free choices,
 capped credit and persistence are covered; Gimmighoul, challenges and malformed
 inputs remain counted. See [scope and validation](MONEY-VALIDATION.md).
+
+## Reviver Seed inventory bridge
+
+Existing canonical Seed inventory now reaches battle-core FaintPhase and persists
+actual consumption. Detached loot owner 0 stays distinct from wildcard -1 across
+rebuild/save. Duplicate/invalid stock remains opaque; acquisition/loot pickup
+policy remains separate. See [scope and evidence](SEED-VALIDATION.md).
