@@ -69,14 +69,18 @@ Mint/vitamin/Money/Orb/Seed/Lens real-source traces still pass at established
 counts. No established source harness was weakened or edited.
 
 Before and after, `gcplay --auto 1000 --jobs 8`, with and without `--save-test`:
-1,000 ended, zero stuck/crashed/timed out, 49,206 turns. Paired digest changes
-from `c2937ca0` to `876746da` as the modeled wallet now receives Golden credit;
-14,291 save/load round trips, largest 11,400 bytes. The 200-run paired test is
-`522c1e4f`. External actual-dispatch observation records seven player credit calls
-and seven wallet increases totaling 33; the instrumented digest equals the normal
-one. Eight Golden and eleven Coin rewards were taken; taking an item and mapping
-it are distinct from an actual hit effect. Existing fallback reward tally remains
-139 runs/169 occurrences: canonical acquisition/stacking/replacement is unclaimed.
+1,000 ended, zero stuck/crashed/timed out, 49,206 turns; 14,291 save/load round
+trips, largest 11,400 bytes. On original base432ee53, paired digest changes from
+`c2937ca0` to `876746da` and held-item unsupported reports fall 52,161→52,115.
+After integration of main50f279b/#169, the clean baseline is `5022ea67` and
+Golden's final paired digest is `15d6d01d`, reports 52,064→52,018. Outcome,
+terminal, reward-choice and stand-in rows remain unchanged. The digest hashes
+outcomes/stubs/unported counters, not money: its change does not itself prove
+wallet credits. Final 200-run paired test is `2f376abe` (original base Golden
+pair `522c1e4f`). External actual-dispatch observation records seven player
+credit calls and seven wallet increases totaling33, distinct from eight Golden
+and eleven Coin rewards taken. Existing fallback reward tally remains139runs/
+169occurrences: canonical acquisition/stacking/replacement is unclaimed.
 
 MoneyMultiplier/DamageMoneyReward and Scene.addMoney audit shows this Golden
 source path has no GimmighoulTracker dispatch (unlike consumable MoneyReward).
