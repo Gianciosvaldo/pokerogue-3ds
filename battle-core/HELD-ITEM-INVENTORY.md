@@ -11,7 +11,7 @@ The C class registry in `src/modifiers.c` is distinct from the conservative
 alone does not establish full-turn parity; absence from that whitelist alone
 does not establish missing behavior. Rows marked "helper" remain conservatively
 unported in turns and need their own bounded turn fixtures before promotion.
-This task adds only the two-orb family; it does not complete Card 104.
+The bounded slices below add dispatch or prove existing helpers; Card 104 remains partial.
 
 | Pinned class | C mapping / actual dispatch | Remaining scope |
 | --- | --- | --- |
@@ -43,7 +43,7 @@ This task adds only the two-orb family; it does not complete Card 104.
 | `PokemonMoveAccuracyBoosterModifier` | `PR_MOD_MOVE_ACCURACY_BOOSTER`; battle-accuracy dispatch | Added bounded Wide Lens amount=5, stacks 1–3 including virtual stacks; other identities remain unported |
 | `PokemonMultiHitModifier` | `PR_MOD_MULTI_HIT`; hit-count dispatch plus existing damage scaling/held-stack helpers | Added bounded singles Multi Lens (effective stacks1–2); Parental Bond/doubles and acquisition/save integration remain outside this slice |
 | `PokemonFormChangeItemModifier` | No C class | Held form-change activation/lifecycle; supported species form changes are separate |
-| `DamageMoneyRewardModifier` | No C class; post-damage path reports turn modifiers | Missing Golden Punch money reward dispatch |
+| `DamageMoneyRewardModifier` | `PR_MOD_DAMAGE_MONEY_REWARD`; player-to-enemy final-damage money dispatch | Golden Punch bounded singles proof; wallet bridge/acquisition/UI/achievement lifecycle excluded |
 | `SwitchEffectTransferModifier` | No C class; switching explicitly leaves held Baton transfer unported | Held Baton ownership transfer; Baton Pass move/tag transfer is already implemented separately |
 | `HeldItemTransferModifier` (abstract) | No C class | General stealing base; bounded Knock Off/Incinerate removal is a separate move attribute |
 | `TurnHeldItemTransferModifier` | No C class; TurnEnd reports turn modifiers | Missing Mini Black Hole end-turn theft |
@@ -84,3 +84,16 @@ the existing `PR_MOD_MULTI_HIT` ID and fields; earlier per-strike damage scaling
 is retained. Count increases by real plus virtual stacks only for eligible
 moves/owners. Parental Bond's ability hook remains unported, so the recorded
 singles oracle uses Ball Fetch and does not claim that ability interaction.
+
+The Golden Punch slice appends `PR_MOD_DAMAGE_MONEY_REWARD` and its side-wide
+`PR_MOD_MONEY_MULTIPLIER` dependency after existing IDs. `pr_battle.money` is a
+new double wallet field; `money_scattered` remains the distinct Pay Day balance.
+Dependent consumers must rebuild and explicitly transport their wallet to use
+this dispatch. The reference covers fractional initial wallets, per-hit final
+damage, sequential Amulet Coin rounding, saturation at JS MAX_SAFE_INTEGER,
+real/virtual stacks and ownership/refusal boundaries. It does not implement
+MoneyUI, money achievements, reward acquisition or a game save bridge.
+
+The next bounded candidate is Soul Dew / `PokemonNatureWeightModifier`: the
+nature-stat helper already exists. It needs full-turn differential proof and
+conservative whitelist promotion, rather than a claim of missing arithmetic.

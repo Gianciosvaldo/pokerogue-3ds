@@ -771,3 +771,76 @@ This slice covers Ball Fetch singles with Rattata/Snorlax form0 and effective
 stacks 1–2. Parental Bond, other abilities/forms/moves, doubles, acquisition,
 inventory/save integration, generic theft and hardware acceptance remain
 outside the evidence. Card104 remains partial.
+
+
+## Bounded Golden Punch damage money dispatch (Card104, partial)
+
+Pinned upstream MoveEffectPhase awards Golden Punch money after final damage
+and damage-record updates, only for a player attacking an enemy. Each hit earns
+`floor(finalDamage * 0.5 * effectiveStacks)`; each player's Amulet Coin modifier
+then sequentially adds `floor(amount * 0.2 * effectiveStacks)`. The wallet sum
+is clamped to JS `Number.MAX_SAFE_INTEGER`. Cash items accept real stacks 1–5,
+nonnegative virtual stacks and an effective cap of five. Applicable unknown or
+unsupported cash modifiers refuse before wallet mutation. Existing other-family
+refusals remain. Both class IDs are appended; `pr_battle.money` is a new double
+field independent of Pay Day's `money_scattered`, requiring consumers to rebuild
+and explicitly transport a wallet. No game adapter/save schema changes here.
+
+The additive Node22 producer drives real MoveEffectPhase and delegates real
+Golden Punch/Amulet Coin applies. Ten states cover ordinary moves, Coin stacks,
+virtual/wildcard/wrong owners, enemy holders, Splash, early KO Swift, native
+Double Kick, two sequential Coin instances and ignored enemy Coin. Sampled
+initial wallets include .1/.125/.5/.75 fractions and near-cap balances. Its
+new replay compares full state, exact wallet values, damage/hit counts, item
+stacks/owners, phase/queue order, global/battle RNG and every message. Original
+producers/comparators/tolerances are unchanged. Transport requires finite wallet
+balances in [0, MAX_SAFE_INTEGER], all item fields and a complete requested
+case footer. The producer directly requires Node22 and integer N >=20.
+
+```sh
+sh battle-core/tools/goldendiff.sh <upstream8555c08> 2000 777
+sh battle-core/tools/goldendiff.sh <upstream8555c08> 2000 9001
+sh battle-core/tools/goldendiff.sh <upstream8555c08> 2000 4242
+sh battle-core/tools/goldendiff.sh <upstream8555c08> 2000 31337
+```
+
+Measured Node22.23.3 / Vitest4.1.11 / GCC14.2.0:
+
+| Seed | Cases / covered / identical text sets | Golden applies / Coin applies | Wallet gains / owner refusals |
+| --- | --- | --- | --- |
+| 777 | 2000 / 2000 / 2000 | 1600 / 800 | 1362 / 200 |
+| 9001 | 2000 / 2000 / 2000 | 1600 / 800 | 1357 / 200 |
+| 4242 | 2000 / 2000 / 2000 | 1600 / 800 | 1358 / 200 |
+| 31337 | 2000 / 2000 / 2000 | 1600 / 800 | 1372 / 200 |
+
+Each state has 200 cases per seed. Exceptions, uncovered turns, parser/stat
+mismatches and text differences are zero. Twelve C guards pass, including
+atomic refusal, owner/side boundaries, wildcard/virtual stacks and saturation.
+A source mutant disconnecting only the actual post-hit caller retains passing
+guards but fails 1362/2000 seed777 turns (exit1); all 2000 message sets remain
+identical because this item queues no money message. Twelve malformed transports
+(missing footer/item/virtual/wallet, unknown class, stack256/overcap/fractional
+virtual, NaN/infinity/negative/overcap wallet) refuse exit2. Fractional requested
+N is rejected before reference output.
+
+Unchanged pinned Node22 traces replayed against archived main1c984b7 and changed
+C give byte-identical outputs for all 24 pairs: B plain/rich/switch/summon
+1942/1831/1890/1863; ITEMS four seeds 1922/1932/1929/1939 (historical untranslated
+sets 1/1/2/1 retained); COND 1767/1756/1770/1766 with covered texts identical;
+Wide Lens, Reviver Seed and Multi Lens each 4x2000 fully covered/pass/text-exact.
+Every parser/stat and covered-turn failure count is zero.
+
+`make -s -C game-core -j2 test all` passes before/after: 32,719 resume checks,
+39 item bridge checks, normal/save 200-run digests `803ad8cf`. Both
+`game-core/build/gcplay --auto 1000 --jobs 8` and the same command with
+`--save-test` retain 1000 ended (0 cleared), zero stuck/crashed/timed out,
+49,284 turns and digest `403b442f`; save mode has 14,302 round trips and largest
+save 11,582/131,072 bytes. Complete printed stand-in tables are unchanged,
+including enemy moveset 1000 runs/14713 uses, doubles-as-single 763/1565,
+evolution condition 2/3, biome weather 1000/1850, ungeneratable enemy 1000/2269,
+and post-battle ability/Pay Day/lapsing 3/4. These soaks establish host
+consistency, not cleared Classic runs or whole-run upstream parity.
+
+Scope: Ball Fetch Rattata/Snorlax form0 singles, effective cash stacks1–5.
+MoneyUI/achievements, acquisition, inventory/save bridging, doubles, generic
+theft, other abilities/forms and hardware acceptance remain outside the proof.
