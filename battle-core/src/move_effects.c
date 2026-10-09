@@ -596,7 +596,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         return;
     case PR_AC_CopyStatsAttr: {
         /* CopyStatsAttr: every battle stat stage straight onto the user, no StatStageChangePhase;
-         * Focus Energy's tag follows the target's (an existing one is only overlapped) */
+         * CRIT_BOOST presence follows the target's (an existing one is only overlapped) */
         if (!effect_can_apply(ef, user, target)) return;
         for (int s = 0; s < 7; s++) {
             int v = target->stat_stages[s];
