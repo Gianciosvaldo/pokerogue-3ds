@@ -89,6 +89,13 @@ static bool stat_stage_change(pr_battle *bt, pr_engine *e, const pr_effect_info 
     if (ef->condition != PR_NO_FN && !pr_closure_call(bt, ef->condition, cls, 0, user, target, move)) return false;
     double chance = get_move_chance(bt, ef, user, target, move, ef->self_target, true);
     if (!chance_roll(bt, chance)) return false;
+    /* Growth.getLevels runs only after the parent apply gates and chance roll.
+     * The existing effective-weather helper applies the user's override before
+     * checking field weather suppression, matching the pinned source. */
+    if (cls == PR_AC_GrowthStatStageChangeAttr) {
+        int weather = pr_get_effective_weather_for_move(bt, user);
+        if (weather == WEATHER_TYPE_SUNNY || weather == WEATHER_TYPE_HARSH_SUN) stages++;
+    }
     pr_pokemon *on = ef->self_target ? user : target;
     if (pr_unshift_stat_stage_change(bt, e, pr_battler_index(bt, on), stats, n, stages, user) < 0) e->overflow = true;
     return true;
@@ -133,6 +140,11 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
     switch (a->cls) {
     case PR_AC_StatStageChangeAttr: {
         const pr_attr_StatStageChangeAttr *x = P(StatStageChangeAttr, a);
+        stat_stage_change(bt, e, ef, a->cls, user, target, move, x->stats.v, x->stats.n, x->stages);
+        return;
+    }
+    case PR_AC_GrowthStatStageChangeAttr: {
+        const pr_attr_GrowthStatStageChangeAttr *x = P(GrowthStatStageChangeAttr, a);
         stat_stage_change(bt, e, ef, a->cls, user, target, move, x->stats.v, x->stats.n, x->stages);
         return;
     }

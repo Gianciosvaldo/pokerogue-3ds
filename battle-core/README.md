@@ -1053,3 +1053,14 @@ Full state, numerical stats, text, phase order, callback arguments/answers and
 RNG match. Missing callbacks remain flagged. This proves ordinary allowed
 singles fixture inputs, not challenge policy, natural partner doubles, mystery
 encounters, trainer party generation or AI selection ownership.
+
+## Growth move effect (Card 105, 2026-10-09)
+
+[Validation](GROWTH-VALIDATION.md) records four seeds ×2000 exact actual Growth
+turns, fresh numerical stats, RNG and text. Growth now uses the existing
+stat-stage pipeline with +2 under effective SUNNY/HARSH_SUN and +1 otherwise,
+including source weather override before suppression. Bounded singles fixtures
+prove caps, Simple, Contrary and Taunt refusal. All72 retained battle pairs
+preserve or increase coverage; existing ITEMS missing-text failures remain
+explicit. All56 retained game outputs are unchanged. Host normal/save trajectories
+change with the active effect while their paired digests still agree.
