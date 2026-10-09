@@ -599,4 +599,15 @@ enum pr_reward_held_status {
 };
 enum pr_reward_held_status pr_reward_add_canonical_held_item(pr_reward_ctx *ctx, int item, int party_idx);
 
+/* Canonical TOXIC_ORB/FLAME_ORB raw acquisition, cap1 shared modifier class.
+ * Either Orb on the exact holder refuses FULL, including the opposite Orb.
+ * Unique party IDs, known inventory IDs; Orb stock stack1/arg0/count0 with
+ * owner-1 or valid index. Other known classes are opaque. Ordinary canonical
+ * nonvirtual records only, as guaranteed by caller; incoming real stack1.
+ * Wildcards do not match acquisition. Order/flags and noninventory state remain
+ * unchanged; append inactive. Invalid/append-capacity refuse unchanged.
+ * Separate entry point preserves the older held API's opaque Orb contract.
+ * No Scene fallback/updates, purchases, effects, transfer or save lifecycle. */
+enum pr_reward_held_status pr_reward_add_canonical_orb_item(pr_reward_ctx *ctx, int item, int party_idx);
+
 #endif
