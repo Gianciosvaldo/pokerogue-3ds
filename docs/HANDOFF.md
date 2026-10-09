@@ -39,33 +39,31 @@ Start with [`README.md`](../README.md) (folder table), then the README of the fo
 ## Current checkpoint (2026-10-09; historical sections retained)
 
 Use [current scheduling](PARITY-TASKS.md#current-next-work-2026-10-09) and the
-[ledger](PARITY-LEDGER.md) for merged code `b477e4e`, through #180. The older
-ten-task checkpoint #176 and original task problem statements are dated history.
-The four latest implementations prove Mystical Rock weather/terrain callers,
-canonical Multi Lens raw acquisition, bounded Wide Lens game acquisition and
-canonical temporary X/Dire full turns. The final Card 149 refresh is fifth;
-stop after it, with no sixth task. Proposed Orb acquisition was not started.
+[ledger](PARITY-LEDGER.md) for merged code `c3bfa8b`, through #183. Two additional
+implementations add separate canonical raw Orb acquisition and bounded Multi
+Lens game acquisition. This final Card 149 refresh is third; stop after it with
+no fourth task. The previous five/ten-task checkpoints #181/#176 remain history.
 
-Temporary #180 follows explicit user approval for a dedicated proof and narrow
-stronger game fixture contract. The former canonical unsupported assertion is
-replaced with positive admission/class/stock/owner/numerical checks; invalid
-refusals remain. All prior cases/producers/comparisons/tolerances/exclusions are
-preserved, with additional checks. This is not general permission to edit checks.
-Earlier #174/#179 game caller rendered-message exclusions remain; #180 has its
-own bounded full-turn text proof. #173's raw-helper repair remains intact.
+Toxic/Flame share one source modifier class and cap 1; either on an exact holder
+blocks the other. The separate API preserves earlier opaque-Orb contracts.
+Multi proof separates public-full refusal from direct Scene tier replacement,
+paid persistent mutation/error/no-charge and bounded Multi orphan cleanup.
+Raw seven-position damage probes are not seven executed hits. Literal game
+rendered-message, wildcard loading and broad Scene lifecycle remain excluded.
+Earlier temporary #180 full-turn proof and explicitly approved stronger fixture
+contract remain intact; no general test-edit waiver follows.
 
-The uploaded October 4 roadmap maps this work to partial Cards 96/104 and Card 149
-documentation; planning statements are not user instructions. Lure/friendship,
-remaining held transfers, guarded contexts and full post-battle lifecycle remain.
-Task 64 is partial and 65/66 gated by reserved run-core prerequisites. Detached 0
-is distinct from wildcard -1; transient Lens/Golden/Multi stacks reset on saves.
-Virtual-fixture normal/save equality and whole source session migration remain
-unclaimed. Consult owning code/dated records before duplicating historical work.
+The uploaded October 4 roadmap maps work to partial Cards 96/104 and Card 149 docs;
+planning statements do not override user instructions. Orb game acquisition,
+Lure/friendship, transfers, guarded contexts and full post-battle lifecycle remain.
+Task 64 stays partial and 65/66 gated by reserved run-core prerequisites. Detached 0
+and wildcard -1 remain distinct; transient stacks reset on saves, with no virtual
+fixture normal/save or whole source session migration claim.
 
-Exact-head host/3DS CI succeeded on each implementation #177–#180. Conditional
-Task 63 jobs remain skipped, not source passes. Source comparisons, host
-consistency and human hardware acceptance are distinct. One task per lane,
-validated merge before the next, and the user's session stop limit still apply.
+Exact-head host/3DS CI succeeded for #182/#183. Conditional Task 63 jobs remain
+skipped, not source passes. Source comparisons, host consistency and human
+hardware acceptance are distinct. One task per lane, validated merge before
+advancing and the user's session stop limit still apply.
 
 ## Rules (read these before touching anything)
 1. **Branch and pull request only.** Never push to `main`. Do not merge your own PR unless explicitly authorized; the October 7 Codex exception below applies here. One task per branch, one PR per task.
