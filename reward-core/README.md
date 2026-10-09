@@ -4,6 +4,80 @@ Native C port of PokeRogue's player rewards: the reward options after a wave (po
 
 The API is [`include/pr/reward.h`](include/pr/reward.h). The run loop (game-core) fills a `pr_reward_ctx` from the run before each reward screen: the party as the rolls see it, the player's items, ball counts, unlocks, the arena. A few of its fields are other ports' answers, marked "caller" in the header: `canSetStatus` (battle-core), `canApplyAbility`, the learnable level moves and the level-move list the TM filter leaves out (learnsets, not ported yet), each attack move's types for item spawns. The diff test takes those from upstream, so reward-core is checked given correct inputs.
 
+## Task 96 prerequisite: canonical Toxic/Flame Orb acquisition (lane B, 2026-10-09)
+
+The new `pr_reward_add_canonical_orb_item(ctx,item,target)` ports raw ordinary
+`PersistentModifier.add` for the actual Toxic/Flame factories, real stack1 and
+virtual0. Both factories produce `TurnStatusEffectModifier`, whose matchType
+intentionally ignores status. Thus either Orb already on the exact holder
+refuses FULL, including the opposite Orb: these are one shared modifier class,
+not two independently stackable inventory families. Wildcard owner-1 does not
+match acquisition. New items append with the requested Orb identity, stack1
+and inactive; other holders/classes, order and existing flags remain unchanged.
+
+This separate API leaves `pr_reward_add_canonical_held_item` and its established
+opaque-Orb contracts unchanged. All four earlier held families still accept and
+preserve otherwise-opaque Orb stock, even custom arg/count/stack/owner fields.
+The new Orb boundary requires valid unique party IDs, known item IDs, and every
+Orb record stack1/arg0/count0 with owner-1 or a valid party index. Other known
+families remain opaque, including Wide constructorarg-1. Invalid inputs or
+append at256 slots refuse unchanged; matching FULL works at capacity.
+Non-inventory context, party, money and global/battle RNG remain unchanged.
+The caller guarantees canonical constructors, real ordinary records and no
+virtual stacks; the reward representation cannot verify omitted virtual data.
+
+This fills a missing acquisition prerequisite, separate from existing Orb
+battle dispatch #148 and loaded-inventory bridge #154. Scene tier replacement,
+updates, selection/purchases, status application, cleanup/transfers and save
+lifecycle are excluded; Task96 and full held lifecycle remain partial.
+Source: pinned `modifier-type.ts` TOXIC_ORB/FLAME_ORB factories;
+`modifier.ts` PersistentModifier.add/incrementStack, PokemonHeldItemModifier.match,
+TurnStatusEffectModifier.matchType/getMaxHeldItemCount (cap1).
+
+Node22.23.3/Vitest4.1.11 at8555c08c823b856cbec4eb99ca84ea52a955836d:
+actual factories and `.add(modifiers,false)` yield8000/8000 complete inventory
+comparisons over four2k seeds, with no skipped/caught exceptions. Each seed has
+1000 requests for each Orb and800 opposite-Orb refusals; both added/full paths,
+class/owner/wildcard isolation, duplicates, reordered and fainted parties occur.
+Upstream compares complete PokemonData, wallet and global/battle RNG invariance;
+C compares full inventory/order/flags plus noninventory context/run invariance.
+37 host checks include strict invalid/capacity guards, shared-class refusals,
+requested Flame identity and old opaque contracts.
+
+```text
+ORBHELD cases=2000 identical=2000 failed=0 skipped=0 thrown=0 full=1600 added=400 stacked=0 wildcard=667 duplicate=800 reordered=1000 fainted=1004 toxic=1000 flame=1000 oppositeFull=800
+ORBHELD cases=2000 identical=2000 failed=0 skipped=0 thrown=0 full=1600 added=400 stacked=0 wildcard=667 duplicate=800 reordered=1000 fainted=1001 toxic=1000 flame=1000 oppositeFull=800
+ORBHELD cases=2000 identical=2000 failed=0 skipped=0 thrown=0 full=1600 added=400 stacked=0 wildcard=667 duplicate=800 reordered=1000 fainted=995 toxic=1000 flame=1000 oppositeFull=800
+ORBHELD cases=2000 identical=2000 failed=0 skipped=0 thrown=0 full=1600 added=400 stacked=0 wildcard=667 duplicate=800 reordered=1000 fainted=1002 toxic=1000 flame=1000 oppositeFull=800
+```
+
+Four actual C source mutants produce39 wildcard,116 separate-class,
+461 over-cap mutation and60 wrong-appended-Orb failures on seed777, each exit1.
+Missing footer, fractional count, extra footer, nonfinite RNG and invalid owner
+traces exit2; fractional producer count and negative seed requests exit2 before
+changing trace files. No established producer/comparator, count, seed, tolerance,
+exclusion, coverage rule or generated table is changed.
+
+Before/after116638e retained logs are byte-identical: options3950pass/0fail/
+50unported; victory/application/Memory4000/0 each; ten focused suites (Mint,
+vitamin, Lure, money, temporary, Soothe, Wide, Reviver, Golden and Multi)
+each4×2000; candy9/0 host checks. `make -C game-core -j2 test` passes with200-run
+normal/saved digestbc0fbf1c. Both1000 normal and saved H paths end1000 with
+0clear/stuck/crash/timeout,50394turns and digest5b6c9ee2;14679save/load round trips,
+max11472bytes. Every before/after1000 log, including all stand-in counts, is
+byte-identical. H establishes host consistency, not upstream whole-run parity.
+
+Reproduce:
+```sh
+for seed in 777 9001 4242 31337; do
+  BUILD=/tmp/reward-orbheld-build sh reward-core/tools/orbhelddiff.sh /path/to/upstream-8555c08 2000 "$seed"
+done
+BUILD=/tmp/reward-orbheld-build sh reward-core/tools/orbheldplant.sh /tmp/reward-orbheld-build/orbheld-777.txt
+make -C game-core -j2 test
+game-core/build/gcplay --auto 1000 --jobs 8
+game-core/build/gcplay --auto 1000 --jobs 8 --save-test
+```
+
 ## Task 96 prerequisite: canonical Multi Lens acquisition (lane B, 2026-10-09)
 
 `pr_reward_add_canonical_held_item` now accepts Multi Lens with its pinned cap2.
