@@ -583,7 +583,10 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
     case RP_GAME_OVER: {
         gc_screen *s = &run->screen;
         memset(s, 0, sizeof *s);
-        s->kind = p->a ? GC_SCREEN_CLEAR : GC_SCREEN_GAME_OVER;
+        bool clear = p->a || (run->run.mode == GAME_MODES_CLASSIC && run->wave > 200);
+        if (run->terminal_result) clear = run->terminal_result == 2;
+        if (run->run.mode == GAME_MODES_CLASSIC && !gc_classic_finish(run,clear,NULL)) gc_stub(run,GC_STUB_REWARD_INPUT);
+        s->kind = clear ? GC_SCREEN_CLEAR : GC_SCREEN_GAME_OVER;
         if (run->in_battle) gc_battle_end_cleanup(run);
         run->finished = true;
         return false;
