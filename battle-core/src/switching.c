@@ -100,12 +100,12 @@ bool pr_switch_out_condition(pr_battle *bt, bool self_switch, int switch_type, c
     if (!self_switch) {
         if (!target) { pr_note_unported(bt, PR_FEAT_MOVE_CONDITION); return true; }
         if (pr_move_hits_substitute(bt, move, user, target)) return false;
-        /* Roar and Whirlwind in a trainer battle whose targeted side has one Pokemon left */
+        /* Pinned trainer-presence guard counts the enemy party, including when a trainer's
+         * Roar targets the player. Preserve that source behavior rather than infer a side. */
         if (has_force_switch_attr(move) && bt->battle_type == BATTLE_TYPE_TRAINER) {
-            int target_side = player ? 0 : 1;
-            if (!bt->n_party[target_side]) { pr_note_unported(bt, PR_FEAT_PARTY); return true; }
+            if (!bt->n_party[1]) { pr_note_unported(bt, PR_FEAT_PARTY); return true; }
             int remaining = 0;
-            for (int k = 0; k < bt->n_party[target_side]; k++) remaining += bt->party[target_side][k]->hp > 0;
+            for (int k = 0; k < bt->n_party[1]; k++) remaining += bt->party[1][k]->hp > 0;
             if (remaining <= 1) return false;
         }
         /* no forcing a wild Pokemon out of a mystery encounter that doesn't allow fleeing */
