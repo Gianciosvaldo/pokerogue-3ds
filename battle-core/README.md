@@ -1010,3 +1010,13 @@ legacy direct-damage/stat coverage regression introduced by strict Soul/type
 helper admission: explicit raw projection callers preserve original arithmetic
 and flags, strict leaf checks stay unchanged, and full-turn admission remains
 bounded. No whole held-item or fusion lifecycle completion is claimed.
+
+## Bounded effective-stat held-item proof (Card 104, partial)
+
+[Validation](STAT-ITEM-VALIDATION.md) records four seeds ×2000 exact full turns
+and effective-stat snapshots for Eviolite and the six pinned species-stat items,
+including Quick Powder's numerical SPD effect. Canonical identity admission and
+fusion refusals stay separate from existing raw math. Canonical stat-item orphan
+cleanup at summon fixes wildcard records surviving forced replacements. The 40
+previous turn suites and four legacy damage/stat pairs retain their exact output;
+whole held-item acquisition, transfer, fusion and save lifecycle remain separate.
