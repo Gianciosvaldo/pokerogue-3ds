@@ -2,7 +2,7 @@
 
 **Port Target:** `pagefaultgames/pokerogue` pinned commit [`8555c08c823b856cbec4eb99ca84ea52a955836d`](https://github.com/pagefaultgames/pokerogue/commit/8555c08c823b856cbec4eb99ca84ea52a955836d) (short `8555c08`).
 **Public Beta Baseline (Inspected Separately):** `pagefaultgames/pokerogue` commit [`4f0969875845fb412c5b0af8ed4bc006484a8f2a`](https://github.com/pagefaultgames/pokerogue/commit/4f0969875845fb412c5b0af8ed4bc006484a8f2a) (42 commits ahead of target `8555c08`). Public beta mechanics are outside the port target and are not mixed into pinned parity claims.
-**Initial ledger baseline:** `58030d6` after Task 57 merged. **Current status refresh:** main `2470cb39a6f8e39102f5b75246fa32ed4c917338` after [#175](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/175), 2026-10-09. Merge/final-head CI metadata, owning source/READMEs and durable lane validation logs were inspected. Counts below are recorded implementation evidence; this documentation task did not rerun producers. Historical matrix counts remain dated evidence and do not describe a fresh exhaustive current-main comparison.
+**Initial ledger baseline:** `58030d6` after Task 57 merged. **Current status refresh:** main `b477e4e7d5f885fafd7d36423bb3ad04d13284a1` after [#180](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/180), 2026-10-09. Merge/final-head CI metadata, owning source/READMEs and durable lane validation logs were inspected. Counts below are recorded implementation evidence; this documentation task did not rerun producers. Historical matrix counts remain dated evidence and do not describe a fresh exhaustive current-main comparison.
 
 ---
 
@@ -202,6 +202,82 @@ acquisition, game Wide Lens caller acquisition, final docs refresh. Task 64
 remains partial and 65/66 gated; reserved run-core, human hardware and broader
 Task 96/104 boundaries remain. Source comparisons, host soaks and CI are distinct.
 
+
+### Final five-task checkpoint (2026-10-09)
+
+After #176 completed the ten-task batch, four further implementations #177–#180
+merged. This final Card 149 docs refresh is fifth; stop after it. The proposed
+Orb acquisition task was never started. Source audit first deferred temporary
+promotion because an established game fixture explicitly required unsupported
+status; independent Mystical Rock proceeded. The user then explicitly approved
+a dedicated temporary proof with a narrow stronger fixture contract, replacing
+the unstarted Orb slot. Historical scheduling/deferral records above and in
+owning records remain dated history.
+
+| Slice | Recorded source/guard evidence | Remaining boundary |
+| --- | --- | --- |
+| Reward Multi Lens #177 | 8000 exact raw canonical acquisitions; 29 guards; actual wildcard/duplicate/cap mutants fail 145/337/123 cases | Cap 2 first-exact-holder raw add; Scene tier fallback, purchase, transfer and full lifecycle excluded |
+| [Mystical Rock #178](../battle-core/FIELD-EFFECT-VALIDATION.md) | 8000 exact full turns/texts; 19 guards; 1296 actual applications per seed; 4 actual caller/selection/cleanup/reset mutations fail | Existing weather/terrain callers, first success, real-only extension; cap 2 canonical admission; no acquisition/save proof |
+| [Wide Lens caller #179](../game-core/WIDE-ACQUISITION-VALIDATION.md) | 8000 unchanged raw cases plus 8000 actual Scene/selection cases; 25 raw + 16 atomic contexts + 2 nonpositive Scene guards; 3 source mutations fail | Public full refusal differs from direct Scene tier replacement; paid persistent mutation/error/no-charge; literal rendered messages and broad opaque/fusion/stat contexts excluded |
+| [Temporary full turns #180](../battle-core/TEMPORARY-BOOSTER-VALIDATION.md) | 8000 exact full turns/texts and fresh numerical snapshots; 105 guards + 12 mixed admission checks; 13 malformed traces rejected; 6 actual caller/clamp mutations fail | Canonical real 1–2/virtual 0/owner 0; once per record, not stack-scaled; broader blocked-critical abilities/doubles/fusion and lifecycle excluded |
+
+All four focused source families use pin `8555c08`, Node 22.23.3 and seeds
+777/9001/4242/31337, 2000 per seed. Mystical Rock adds 2×real stacks and ignores
+virtual stacks, stopping at first matching success. Its summon proof adds scoped
+orphan removal/virtual reset. Weather/arena/form baselines retain covered counts
+1957/1960/1955/1963,1852/1842/1832/1846 and 2000 each, respectively. All 60 old
+Field proof replay pairs are byte-identical; temporary retains 64 battle pairs.
+Legacy direct damage/stat stays 2000/2000/2000/1999 with zero numerical failures
+and its one existing upstream thrown case, preserving #173's raw-helper repair.
+
+Temporary promotion is supported by actual stat, accuracy and critical callers,
+not by suppressing unknown flags. A record contributes once even at stack 2;
+duplicate records each contribute. Stat multiplier/accuracy-stage clamps and
+ignored-stage early returns are tested numerically. Canonical admission is
+positive; malformed/unknown/held/virtual contexts still refuse. The user-approved
+`game-core/tests/temp_caller_test.c` update replaces the former unsupported
+assertion with stronger identity/admission/helper outcomes and invalid refusals.
+Existing source cases, comparisons, paid/full/BattleEnd results and exclusions
+remain. Checks increase 6000 per seed: 107059→113059,105641→111641,
+105718→111718,107224→113224; host 90→98, raw 25 unchanged. Of 48 retained game
+outputs, 44 are byte-identical and four have only those approved stronger checks.
+The authorization is narrow, not permission to relax other established checks.
+
+Wide actual source accuracy changes occur in all 8000 focused cases, distinct
+from acquisitions/mapping; Scene inventory changes 949/954/940/939 per seed.
+Public first-full filter refusal and direct full tier-default ball substitution
+are separately proved. Unsupported public contexts still take counted fallback.
+Earlier game caller literal rendered-message exclusions remain; temporary's new
+full-turn suite independently compares its messages exactly. Named timer saves,
+transient resets, detached 0 versus wildcard -1 and old save 113/130/199 checks
+remain bounded source contracts, not whole source session migration.
+
+Multi and Field before/after 1000 H logs remain byte-identical 43f24f9f.
+Wide changes only reward stand-in accounting 145 runs/178 uses→148/185 and digest
+43f24f9f→30c8d270. Temporary changes only held unsupported reports 982 runs/52572
+→924/46316 (6256 fewer) and digest 30c8d270→5b6c9ee2. Turns 50394, 14679 save/load
+trips, max 11472 bytes and terminal/outcome/other counters remain unchanged.
+These report hashes do not directly establish effect or wallet parity.
+
+The coordinator independently reran merged code `b477e4e7d5f885fafd7d36423bb3ad04d13284a1`:
+`make -s -j2 -C game-core test`, `game-core/build/gcplay --auto 1000 --jobs 8`,
+and the same command with `--save-test`, all underlying exits 0. The 200-run pair
+is `bc0fbf1c`. Both 1000-run paths end 1000, zero cleared/stuck/crashed/timed out,
+50394 turns, paired digest `5b6c9ee2`; 14679 save/load round trips, max 11472 bytes.
+Normal and saved logs are each byte-identical to the final temporary proof's
+corresponding logs. Evidence: `/workspace/validation/five-batch/combined-results.json`
+and `final-{host,normal,saved}.log` in that directory. This checks integration of
+the four merges; it establishes host consistency, not whole-run upstream or
+hardware parity.
+
+The uploaded roadmap-after-parity-ledger-2026-10-04 maps these adapters and
+prerequisites to **partial Card 96**, battle item proofs to **partial Card 104**,
+and this status refresh to **Card 149 documentation**. It is planning context;
+its old problem statements neither override user instructions nor imply
+completion. No full 96/104, whole-run upstream, cleared Classic, frontend or
+hardware result is claimed. Task 64 remains partial, 65/66 remain gated, run-core
+owner scope and skipped Task 63 CI remain unchanged. Stop after this fifth task.
+
 ---
 
 ## 2. Inventory of Untested Move, Ability, and Item Classes
@@ -234,8 +310,8 @@ Entries describing landed slices are scope reminders, not blanket unported claim
 - **Evolution, Form, and Fusion Items:** In-run item lifecycle and party mutation in `game-core` (Tasks 61, 62).
 - **Mints:** bounded API #147 and game adapter #151 landed; original/custom nature, stats/HP and local unlocks are covered. Challenges/stat-inventory guards remain unsupported; Task 96 is partial.
 - **Vitamins:** bounded API #150 landed; bounded game adapter #158 landed, including purchase-error/no-deduction behavior; unsupported inputs remain counted.
-- **Lures:** canonical modifier primitives #153 landed; full caller/lifecycle remains pending. Canonical X/Dire Hit primitives #160 have a bounded caller/timer bridge #174, still without full-turn support; raw Soothe Bell #163 does not establish full friendship integration.
-- **Orbs / Wide Lens / Reviver Seed:** bounded dispatch #148/#149/#152 landed; game Orb/Reviver/Wide Lens bridges #154/#162/#165 landed; bounded Multi Lens/Golden Punch dispatch #157/#161 and Soul Dew proof #164 landed. Golden wallet #170 and Multi bridge #172 landed; raw Wide/Reviver/Golden acquisition #167/#168/#171 landed. Full caller acquisition, stock replacement and transfers remain separate. Use the [pinned class inventory](../battle-core/HELD-ITEM-INVENTORY.md) before scheduling further held work.
+- **Lures:** canonical modifier primitives #153 landed; full caller/lifecycle remains pending. Canonical X/Dire Hit primitives #160 have a bounded caller/timer bridge #174, now complemented by bounded full-turn proof #180; raw Soothe Bell #163 does not establish full friendship integration.
+- **Orbs / Wide Lens / Reviver Seed:** bounded dispatch #148/#149/#152 landed; game Orb/Reviver/Wide Lens bridges #154/#162/#165 landed; bounded Multi Lens/Golden Punch dispatch #157/#161 and Soul Dew proof #164 landed. Golden wallet #170 and Multi bridge #172 landed; raw Wide/Reviver/Golden acquisition #167/#168/#171 landed. Multi raw acquisition #177 and bounded Wide caller #179 also landed. Broader caller stock replacement/transfers remain separate. Use the [pinned class inventory](../battle-core/HELD-ITEM-INVENTORY.md) before scheduling further held work.
 - **TMs / Memory Mushroom:** reward learn-move flow landed in [#128](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/128), with follow-up Memory/save repair in [#131](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/131).
 
 ---
@@ -260,6 +336,15 @@ The public beta branch contains new upstream features and balance changes that d
 ---
 
 ## 4. Landed PRs and Merged Task Index
+
+- [PR #177](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/177): Canonical Multi Lens raw acquisition; final head `c6e375aa`, merge `ba4f85cd`; [actual-head CI](https://github.com/Gianciosvaldo/pokerogue-3ds/actions/runs/37896617802) host `test` / `build-3ds` SUCCESS.
+- [PR #178](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/178): Mystical Rock weather/terrain caller proof; final head `eb32226b`, merge `f89a5195`; [actual-head CI](https://github.com/Gianciosvaldo/pokerogue-3ds/actions/runs/37898017752) host `test` / `build-3ds` SUCCESS.
+- [PR #179](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/179): Canonical Wide Lens game acquisition; final head `b31e59b0`, merge `c7f379ab`; [actual-head CI](https://github.com/Gianciosvaldo/pokerogue-3ds/actions/runs/37898178474) host `test` / `build-3ds` SUCCESS.
+- [PR #180](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/180): Temporary X/Dire full-turn proof and approved stronger fixture contract; final head `519e535a`, merge `b477e4e7`; [actual-head CI](https://github.com/Gianciosvaldo/pokerogue-3ds/actions/runs/37901092693) host `test` / `build-3ds` SUCCESS.
+
+Conditional Task63 jobs on #177–#180 were SKIPPED, not source passes.
+
+- [PR #176](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/176): ten-task Card149 documentation checkpoint; final head `34cbcdab`, merge `766bd059`; [actual-head CI](https://github.com/Gianciosvaldo/pokerogue-3ds/actions/runs/37895561946) host `test` / `build-3ds` SUCCESS.
 
 - [PR #167](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/167): Wide Lens acquisition; final head `d0229167`, merge `2a63abd3`; [actual-head CI](https://github.com/Gianciosvaldo/pokerogue-3ds/actions/runs/37820972966) host `test` / `build-3ds` SUCCESS.
 - [PR #168](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/168): Reviver Seed acquisition; final head `db9041e6`, merge `492a0ead`; [actual-head CI](https://github.com/Gianciosvaldo/pokerogue-3ds/actions/runs/37821709822) host `test` / `build-3ds` SUCCESS.
@@ -359,4 +444,4 @@ are not card numbers: PR #149 is Wide Lens, while Card 149 is documentation.
 8. **Task 63 / merged [#112](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/112):** bounded species/form/pool generator only. [Validation](../run-core/TASK63-VALIDATION.md) and the [incomplete R checkpoint](../run-core/TASK63-R-REGRESSION.md) distinguish completed commands from pending work; a merge is not evidence that every planned R command ran.
 9. **Task 64 / merged [#145](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/145):** first clean wild adapter slice only. All 1000 soaks still use unsupported movesets somewhere. Trainer member RNG boundaries and broader Task 63 pools remain real gates to full Task 64 and Tasks 65/66. The app's 1000-run rare-evolution coverage failure and expanded 5000-run passing check are both retained in [the validation record](../game-core/TASK64-VALIDATION.md).
 
-The next authorized lane C task is canonical Wide Lens caller acquisition. Bounded Lure/friendship caller integration and remaining held boundaries remain future work, alongside the remaining Task 96 item families and the missing bounded prerequisites for full Task 64. Task 78 is already merged; Classic win progression 79 is still pending. Further Task 61 slices, fusion 62, doubles lifecycle 75, weather 76 and later modes/eggs/mystery/system work are not complete. Do not duplicate merged slices or infer whole-run upstream parity from host consistency. Run-core ownership, Node 22 reference policy and human hardware gates remain in force. Codex merge/continuation authorization is recorded in HANDOFF's October 7 update; it does not waive validation or change owner scope.
+Canonical Wide Lens caller acquisition #179 is merged; the five-task batch ends with this documentation refresh. Bounded Lure/friendship caller integration and remaining held boundaries remain future work, alongside the remaining Task 96 item families and the missing bounded prerequisites for full Task 64. Task 78 is already merged; Classic win progression 79 is still pending. Further Task 61 slices, fusion 62, doubles lifecycle 75, weather 76 and later modes/eggs/mystery/system work are not complete. Do not duplicate merged slices or infer whole-run upstream parity from host consistency. Run-core ownership, Node 22 reference policy and human hardware gates remain in force. Codex merge/continuation authorization is recorded in HANDOFF's October 7 update; it does not waive validation or change owner scope.
