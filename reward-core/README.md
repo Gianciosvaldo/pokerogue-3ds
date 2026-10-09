@@ -4,6 +4,75 @@ Native C port of PokeRogue's player rewards: the reward options after a wave (po
 
 The API is [`include/pr/reward.h`](include/pr/reward.h). The run loop (game-core) fills a `pr_reward_ctx` from the run before each reward screen: the party as the rolls see it, the player's items, ball counts, unlocks, the arena. A few of its fields are other ports' answers, marked "caller" in the header: `canSetStatus` (battle-core), `canApplyAbility`, the learnable level moves and the level-move list the TM filter leaves out (learnsets, not ported yet), each attack move's types for item spawns. The diff test takes those from upstream, so reward-core is checked given correct inputs.
 
+## Task 96 prerequisite: canonical Multi Lens acquisition (lane B, 2026-10-09)
+
+`pr_reward_add_canonical_held_item` now accepts Multi Lens with its pinned cap2.
+This fills the raw acquisition prerequisite; the existing battle hit-count
+implementation (#157) and loaded-inventory bridge (#172) are separate work.
+The actual `PokemonMultiHitModifier` factory starts with real stack1 and virtual0;
+`PersistentModifier.add` returns the result of incrementing the first exact
+class/holder match. A full first duplicate refuses rather than searching later
+entries. Wildcard -1 is not an acquisition match. Other holder/class entries,
+order and active flags survive; appended entries start inactive.
+
+Multi Lens inventory records now require stack1..2, owner-1 or a valid party
+index, and arg/count0 on every supported canonical-held acquisition. Malformed
+Multi records previously treated as opaque now refuse unchanged, including when
+acquiring Wide Lens or Reviver Seed. Unique party IDs and zero virtual stacks
+remain caller requirements. Other known unsupported families remain opaque.
+Matching stacks/full refusals work at the256-slot capacity; append at capacity
+refuses unchanged. No party, wallet, RNG or non-inventory context changes.
+
+This API is raw `.add(modifiers,false)`, not Scene.addModifier tier fallback,
+stat updates, purchase/selection flow, effects, transfer/cleanup or persistence.
+Missing/detached holders, custom constructors/incoming quantities, and virtual
+additions remain excluded. Task96 and full held-item lifecycle remain partial.
+Source boundaries: pinned `modifier.ts` PersistentModifier.add/incrementStack,
+PokemonHeldItemModifier.match, PokemonMultiHitModifier.getMaxHeldItemCount;
+`modifier-type.ts` PokemonMultiHitModifierType and MULTI_LENS factory.
+
+Measured Node22.23.3/Vitest4.1.11 at the named pin: four seeds777/9001/4242/31337
+at2000 each, all8000 identical, no failures/skips/caught exceptions. 29 host
+checks cover malformed inventory/context, all-slot capacity, duplicate first
+match, class/holder/wildcard isolation and nonmutation. Complete factory-backed
+inventories include order/active flags; upstream checks full PokemonData,
+wallet and global/battle RNG, while C checks full noninventory context/run.
+
+```text
+MULTIHELD cases=2000 identical=2000 failed=0 skipped=0 thrown=0 full=1178 added=400 stacked=422 wildcard=667 duplicate=800 reordered=1000 fainted=1007
+MULTIHELD cases=2000 identical=2000 failed=0 skipped=0 thrown=0 full=1202 added=400 stacked=398 wildcard=667 duplicate=800 reordered=1000 fainted=1016
+MULTIHELD cases=2000 identical=2000 failed=0 skipped=0 thrown=0 full=1210 added=400 stacked=390 wildcard=667 duplicate=800 reordered=1000 fainted=1018
+MULTIHELD cases=2000 identical=2000 failed=0 skipped=0 thrown=0 full=1202 added=400 stacked=398 wildcard=667 duplicate=800 reordered=1000 fainted=1012
+```
+
+Real canonical-held C source mutants on seed777 produce145 wildcard-matching,
+337 later-duplicate-search and123 premature-cap failures (each exits1).
+Missing footer, fractional case count, extra footer field and nonfinite RNG
+traces exit2; fractional producer requests and negative seeds also exit2.
+The wrappers validate counts/seeds before touching a trace output.
+
+Unchanged baseline766bd05 before/after logs are byte-identical: reward options
+3950pass/0fail/50unported, victory/application/Memory4000/0 each; Mint, vitamin,
+Lure, money, temporary, Soothe, Wide, Reviver and Golden suites each4×2000 exact.
+No established producer, comparator, seed, tolerance, exclusion or count changed.
+`make -C game-core -j2 test` passes, including200-run normal/saved digest74adeffb.
+Both1000 normal and saved H runs end1000/1000 with0clear/stuck/crash/timeout,
+50394turns and digest43f24f9f;14679save/load round trips, max11472bytes.
+Full before/after1000 logs (including every stand-in count) are byte-identical.
+These H results establish host consistency, not upstream whole-run parity.
+
+Reproduce:
+```sh
+. /workspace/shared/activate-parity.sh
+for seed in 777 9001 4242 31337; do
+  BUILD=/tmp/reward-multiheld-build sh reward-core/tools/multihelddiff.sh /path/to/upstream-8555c08 2000 "$seed"
+done
+BUILD=/tmp/reward-multiheld-build sh reward-core/tools/multiheldplant.sh /tmp/reward-multiheld-build/multiheld-777.txt
+make -C game-core -j2 test
+game-core/build/gcplay --auto 1000 --jobs 8
+game-core/build/gcplay --auto 1000 --jobs 8 --save-test
+```
+
 ## Task 96 prerequisite: canonical Golden Punch acquisition (lane B, 2026-10-08)
 
 `pr_reward_add_canonical_held_item` now supports Golden Punch in addition to
