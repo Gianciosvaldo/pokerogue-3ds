@@ -35,7 +35,7 @@ were inspected; this docs task did not rerun producers.
   trainer reserve/callback/continuation paths for U-turn/Baton Pass/Parting Shot/
   Roar and fixes the pinned live-enemy-party guard. [Card 105/#188](../battle-core/GROWTH-VALIDATION.md)
   adds Growth +1/+2 effective-weather behavior. [Card 106/#190](../battle-core/SPEED-BOOST-VALIDATION.md)
-  adds Speed Boost's real post-turn leaf, switch/flee refusals and Speed phase.
+  adds Speed Boost's real post-turn leaf, switched-in/failed-run-away refusals and Speed phase.
   Each has 8000 exact bounded full turns/texts; no whole trainer/doubles/ability
   suite completion follows. Broad trainer seed 4242 CASE 1051 optional-index queue
   metadata remains **FAILED**; ITEMS text-completeness 1/1/2/1 remains **FAILED**,

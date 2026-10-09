@@ -359,7 +359,7 @@ complete all corresponding broader systems or a Classic gameplay run.
 | --- | --- | --- |
 | [Trainer switches #185 / Card 103](../battle-core/TRAINER-SWITCH-VALIDATION.md) | 8000 exact U-turn/Baton Pass/Parting Shot/Roar full turns/texts; pinned live-enemy-party Roar guard fixes 25 failures/seed; actual callback/reserve/transfer/guard mutations fail | Existing routing/caller continuation, ordinary allowed loaded slots; natural partner doubles/challenge policy and broad queue serializer excluded |
 | [Growth #188 / Card 105](../battle-core/GROWTH-VALIDATION.md) | 8000 exact full turns/texts; per seed 1072 +1, 796 +2, 132 Taunt refusals; 5 actual dispatch/weather/stat mutations fail; 17 malformed traces refuse | Growth handler only; bounded effective-weather/CloudNine/MegaSol/Simple/Contrary singles, not all effects/abilities/forms |
-| [Speed Boost #190 / Card 106](../battle-core/SPEED-BOOST-VALIDATION.md) | 8000 exact full turns/texts; 1332 actual applies/336 leaf refusals per seed; 6 actual handler/gate/stat mutations fail; 17 malformed traces + 4 queue guards | Actual post-turn leaf and switched/fled flags; no invented minimum turn count; queue-less simulated/wider ability/run-away/doubles lifecycle excluded |
+| [Speed Boost #190 / Card 106](../battle-core/SPEED-BOOST-VALIDATION.md) | 8000 exact full turns/texts; 1332 actual applies/336 leaf refusals per seed; 6 actual handler/gate/stat mutations fail; 17 malformed traces + 4 queue guards | Actual post-turn leaf and switched-in/failed-run-away flags; no invented minimum turn count; queue-less simulated/wider ability/run-away/doubles lifecycle excluded |
 | [Trainer/held AI #187 / partial 108](../ai-core/TRAINER-HELD-VALIDATION.md) | 8000 exact actual command/scoring/switch cases; 52/54/46/43 real switches; 872 held contexts/seed; 3 actual scoring/KO/reserve mutants fail; 25 malformed/request probes refuse | Existing math proof with canonical type boosts; boss segments/natural partner/unknown or virtual stock and full trainer sessions excluded |
 | [Classic terminal #186 / bounded 79](../game-core/CLASSIC-WIN-VALIDATION.md) | 8000 actual phase cases, 6184 supplied clears/1816 defeats; 213 new GOLDEN/3004 PLUS/5764 PREMIUM vouchers; 136 host/148 with old saves; 6 caller mutants fail | Terminal profile bookkeeping/saves, local duplicate guard; no gameplay clear/source idempotency/browser history/server or atomic paired-save contract |
 | [Endgame diagnostic #189 / Card 109](../game-core/ENDGAME-DIAGNOSTIC-VALIDATION.md) | Separate policy, 842 focused host checks; fresh enemy-stock initialization repair, 5 reload/policy/transport/init mutants fail; paired per-seed full state | Illegal initial level 200 stress fixture, 0 actual clears; six genuine final-boss ball refusals remain explicit; no upstream whole-run/hardware proof |
@@ -373,8 +373,11 @@ transport/guard limits are in the linked records.
 **Retained failures remain failures.** Broad TURN_TRAINER seed 4242 CASE 1051 has
 a pending SwitchSummonPhase optional-index serialization mismatch (`-1` versus
 undefined empty metadata); it remains FAILED, not repaired or hidden by the
-dedicated 8000 proof. Other broad trainer seeds retain 1936/1935/1934 covered
-with prior Roar failures repaired. Historical ITEMS missing-text counts 1/1/2/1
+dedicated 8000 proof. At #185, the other broad trainer seeds retained historical
+1936/1935/1934 coverage with prior Roar failures repaired. The final #190 broad
+trainer coverage is 1937/1936/1932/1936 for seeds 777/9001/4242/31337; seed 4242
+has 1931 passing and one unchanged failure, while the other three pass.
+Historical ITEMS missing-text counts 1/1/2/1
 remain FAILED and receive no completeness pass credit even though covered state
 comparisons pass. No established fixture/comparator/exclusion was changed to
 make those results pass. Fixing that transport/text contract requires separate
