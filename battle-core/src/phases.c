@@ -181,12 +181,13 @@ static void turn_modifiers(pr_battle *bt, bool player, const pr_pokemon *p)
     int side = player ? 0 : 1;
     for (int i = 0; i < bt->n_mods[side]; i++) {
         const pr_modifier *m = &bt->mods[side][i];
-        /* Fusion-specific Leek eligibility remains outside the full-turn proof.
+        /* Fusion-specific Leek/stat-item eligibility remains outside the full-turn proof.
          * Do not contaminate the raw damage API's source-proven projection. */
-        bool fused_crit = p && p->fusion_species && m->cls == PR_MOD_SPECIES_CRIT_BOOSTER
+        bool fused_item = p && p->fusion_species && (m->cls == PR_MOD_SPECIES_CRIT_BOOSTER || m->cls == PR_MOD_SPECIES_STAT_BOOSTER
+                || m->cls == PR_MOD_EVOLUTION_STAT_BOOSTER)
             && (m->pokemon_id == -1 || m->pokemon_id == (int64_t)p->id);
-        if (pr_mod_is_ported_item(m) && !fused_crit) continue;
-        if (fused_crit || !pr_mod_is(m, PR_MOD_HELD_ITEM) || !p || m->pokemon_id == (int64_t)p->id) {
+        if (pr_mod_is_ported_item(m) && !fused_item) continue;
+        if (fused_item || !pr_mod_is(m, PR_MOD_HELD_ITEM) || !p || m->pokemon_id == (int64_t)p->id) {
             pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
             return;
         }
