@@ -44,8 +44,8 @@ bool gc_port_apply_reward(gc_run *run, const gc_offer *o, int party, int move_sl
     if (party < 0 || party >= run->n_party) { *why = "pick a Pokemon"; return false; }
     const pr_pokemon *b = &run->party[party].b;
     /* a held item is added as it is; anything else would act on the Pokemon, and doesn't yet */
-    if (idx < 0 || !(pr_items[idx].flags & PR_ITEMF_HELD) || idx == PR_ITEM_BASE_STAT_BOOSTER)
-        gc_stub(run, GC_STUB_REWARD_APPLY); /* unsupported vitamin adapter path */
+    if (idx < 0 || !(pr_items[idx].flags & PR_ITEMF_HELD) || idx == PR_ITEM_BASE_STAT_BOOSTER || idx == PR_ITEM_WIDE_LENS)
+        gc_stub(run, GC_STUB_REWARD_APPLY); /* unsupported bounded persistent adapter path */
     gc_item_add(run, k, o->arg, b->id, 1);
     gc_event *ev = gc_ev_new(run, GC_EV_HP);
     if (ev) { ev->a = 0; ev->b = party; ev->c = b->hp; }

@@ -675,3 +675,9 @@ Bounded X-item and Dire Hit acquisition/refresh, full-stack ball replacement,
 named timer persistence and actual BattleEnd lapse now call reward-core. Raw
 battle helper projection is covered; full turns still flag these modifiers as
 unsupported. See [scope and validation](TEMP-VALIDATION.md).
+
+## Canonical Wide Lens acquisition caller
+
+Canonical stock additions reach the existing Lens bridge with source selection,
+paid-result and bounded Scene cleanup behavior. See
+[scope and validation](WIDE-ACQUISITION-VALIDATION.md).
