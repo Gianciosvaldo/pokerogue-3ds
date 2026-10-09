@@ -84,6 +84,13 @@ cleared Classic or frontend/hardware result follows.
 
 A prerequisite API is a real gate: verify it exists and has recorded checks before beginning. If absent, report the missing bounded prerequisite instead of changing its owner's folder. Different folders may proceed in parallel; each lane starts its next task only after the previous PR merges. Lower-compute describes bounded scope, not lower correctness requirements.
 
+For individually pasteable outside-agent prompts, see the dated
+[15-task evidence-gated pack](DEVIN-PARITY-BATCH-2026-10-09.md). It audits current
+source, identifies already-landed prerequisites, and separates bounded
+implementation, caller-proof and diagnostic tasks. It is a future handoff plan;
+it neither records those tasks as completed nor authorizes automatic execution
+or inherits Codex's personal merge permission.
+
 ## Validation command contracts
 
 These aliases specify exact baseline commands; substitute the absolute upstream checkout for `<upstream>`, kept outside this repo. Capture baseline and final output.
