@@ -703,3 +703,11 @@ and drives actual game screens and choices to report late-game deaths, refusals
 and stand-ins. It leaves the legacy chooser and digest unchanged. Its 100-run
 paired diagnostic reaches wave 200 and identifies final-boss blockers, with no
 clear claim. See [scope and validation](ENDGAME-DIAGNOSTIC-VALIDATION.md).
+
+## Offline egg generation and voucher gacha
+
+A bounded profile API now purchases and generates eggs with explicit entropy,
+scene RNG and offline time inputs, including guarantees, pity, machine effects,
+statistics and named-save metadata. This is a partial Task 80 slice; screens,
+rehydration and hatching remain separate. See
+[scope and validation](EGG-GACHA-VALIDATION.md).
