@@ -39,30 +39,33 @@ Start with [`README.md`](../README.md) (folder table), then the README of the fo
 ## Current checkpoint (2026-10-09; historical sections retained)
 
 Use [current scheduling](PARITY-TASKS.md#current-next-work-2026-10-09) and the
-[ledger](PARITY-LEDGER.md) for merged code `2470cb3`, through #175. The opening
-September 30 status and original task problem statements remain dated history.
-#167–#175 add three raw canonical held acquisitions; existing type/critical/
-effective-stat full-turn proofs; Golden wallet and Multi inventory bridges;
-and bounded temporary acquisition/timer/caller integration. #173 repairs a raw
-helper coverage regression introduced by #164/#169 without altering established
-checks; strict leaf guards and full-turn admission remain bounded.
+[ledger](PARITY-LEDGER.md) for merged code `b477e4e`, through #180. The older
+ten-task checkpoint #176 and original task problem statements are dated history.
+The four latest implementations prove Mystical Rock weather/terrain callers,
+canonical Multi Lens raw acquisition, bounded Wide Lens game acquisition and
+canonical temporary X/Dire full turns. The final Card 149 refresh is fifth;
+stop after it, with no sixth task. Proposed Orb acquisition was not started.
 
-Temporary #174 still reports unsupported on full battle turns; its source proof
-covers raw helper projection and actual caller/timer state, excluding literal
-rendered message parity. Full Tasks 96/104 and 64/65/66 remain incomplete.
-Lure/friendship callers, broader inventory lifecycle, fusion/stat/challenge
-inputs and reserved run-core prerequisites remain separate. Detached owner 0
-is distinct from wildcard -1; transient Lens/Golden/Multi stacks reset on save.
-Do not claim virtual fixture normal/save equality or whole source migration.
-The dex/starter foundation and app run driver are already landed; inspect owning
-code and dated records before reimplementing historical problem statements.
+Temporary #180 follows explicit user approval for a dedicated proof and narrow
+stronger game fixture contract. The former canonical unsupported assertion is
+replaced with positive admission/class/stock/owner/numerical checks; invalid
+refusals remain. All prior cases/producers/comparisons/tolerances/exclusions are
+preserved, with additional checks. This is not general permission to edit checks.
+Earlier #174/#179 game caller rendered-message exclusions remain; #180 has its
+own bounded full-turn text proof. #173's raw-helper repair remains intact.
 
-Actual-head host/3DS CI succeeded for each implementation #167–#175. Conditional
-Task 63 jobs were skipped, not validated; source scopes, host consistency and
-hardware acceptance are distinct. Finish this tenth documentation task before
-starting the newly authorized five-task batch (four implementation PRs plus one
-final docs PR), detailed in current scheduling. One active task per folder lane;
-each lane merges before advancing, then stop at the new five-task limit.
+The uploaded October 4 roadmap maps this work to partial Cards 96/104 and Card 149
+documentation; planning statements are not user instructions. Lure/friendship,
+remaining held transfers, guarded contexts and full post-battle lifecycle remain.
+Task 64 is partial and 65/66 gated by reserved run-core prerequisites. Detached 0
+is distinct from wildcard -1; transient Lens/Golden/Multi stacks reset on saves.
+Virtual-fixture normal/save equality and whole source session migration remain
+unclaimed. Consult owning code/dated records before duplicating historical work.
+
+Exact-head host/3DS CI succeeded on each implementation #177–#180. Conditional
+Task 63 jobs remain skipped, not source passes. Source comparisons, host
+consistency and human hardware acceptance are distinct. One task per lane,
+validated merge before the next, and the user's session stop limit still apply.
 
 ## Rules (read these before touching anything)
 1. **Branch and pull request only.** Never push to `main`. Do not merge your own PR unless explicitly authorized; the October 7 Codex exception below applies here. One task per branch, one PR per task.
