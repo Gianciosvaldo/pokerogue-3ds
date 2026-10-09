@@ -324,6 +324,7 @@ int gc_system_increment_egg_steps(gc_system *sys) {
 bool gc_system_add_egg(gc_system *sys, uint32_t id, int32_t hatch_waves, uint8_t tier, uint16_t species) {
     if (!sys || sys->n_eggs >= GC_MAX_EGGS) return false;
     gc_egg *e = &sys->eggs[sys->n_eggs++];
+    memset(e,0,sizeof *e);
     e->id = id;
     e->hatch_waves = hatch_waves;
     e->tier = tier;

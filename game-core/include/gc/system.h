@@ -52,6 +52,9 @@ typedef struct {
     int32_t hatch_waves;  /* waves remaining to hatch */
     uint8_t tier;         /* EggTier */
     uint16_t species;     /* species ID (0 = random) */
+    uint8_t source_type,variant_tier,egg_move_index;
+    bool is_shiny,override_hidden_ability;
+    uint64_t timestamp_ms;
 } gc_egg;
 
 /* VoucherType enum values */
@@ -66,6 +69,7 @@ enum {
 typedef struct {
     uint32_t classic_wins;
     uint32_t ribbons_owned; /* first counted roots (GameStats.ribbonsOwned) */
+    uint32_t eggs_pulled,rare_eggs_pulled,epic_eggs_pulled,legendary_eggs_pulled,manaphy_eggs_pulled;
     uint32_t endless_wins;
     uint32_t total_battles;
     uint32_t total_catches;
@@ -87,6 +91,7 @@ typedef struct {
     uint8_t voucher_unlocks[512];                       /* 1 if voucher for trainer_type is unlocked */
     uint8_t achievement_flags[256];                     /* 1 if achievement_id is unlocked */
     bool classic_voucher_unlocked; /* achievement voucher, separate from trainer unlocks */
+    uint32_t egg_pity[4],unlock_pity[4];
     gc_stat_milestones stats;                          /* profile stat milestones */
 } gc_system;
 

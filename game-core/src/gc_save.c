@@ -757,10 +757,14 @@ static const sfield stat_milestone_fields[] = {
     SF(gc_stat_milestones, total_hatches), SF(gc_stat_milestones, total_shinies),
     SF(gc_stat_milestones, highest_wave), SF(gc_stat_milestones, highest_damage),
     SF(gc_stat_milestones, total_money_earned),
+    SF(gc_stat_milestones, eggs_pulled), SF(gc_stat_milestones, rare_eggs_pulled),
+    SF(gc_stat_milestones, epic_eggs_pulled), SF(gc_stat_milestones, legendary_eggs_pulled), SF(gc_stat_milestones, manaphy_eggs_pulled),
 };
 
+static const sfield pity_fields[]={SF(gc_system, egg_pity),SF(gc_system, unlock_pity)};
 static const sfield egg_fields[] = {
-    SF(gc_egg, id), SF(gc_egg, hatch_waves), SF(gc_egg, tier), SF(gc_egg, species),
+    SF(gc_egg, id), SF(gc_egg, hatch_waves), SF(gc_egg, tier), SF(gc_egg, species), SF(gc_egg, source_type), SF(gc_egg, variant_tier), SF(gc_egg, egg_move_index),
+    SF(gc_egg, is_shiny), SF(gc_egg, override_hidden_ability), SF(gc_egg, timestamp_ms),
 };
 
 size_t gc_system_save(const gc_system *sys, void *buf, size_t cap)
@@ -801,6 +805,10 @@ size_t gc_system_save(const gc_system *sys, void *buf, size_t cap)
         put_block(&w, egg_fields, NF(egg_fields), sys->eggs, sizeof sys->eggs[0], sys->n_eggs);
         section_end(&w, s);
     }
+
+    s=section_start(&w,"egg_pity");
+    put_block(&w,pity_fields,NF(pity_fields),sys,sizeof *sys,1);
+    section_end(&w,s);
 
     int n_dex = 0;
     for (int i = 1; i <= GC_MAX_SPECIES_ID; i++) {
@@ -911,6 +919,9 @@ bool gc_system_load(gc_system *sys, const void *buf, size_t len, const char **wh
     if (!r.bad) {
         sys->n_eggs = get_block(&r, egg_fields, NF(egg_fields), sys->eggs, sizeof sys->eggs[0], GC_MAX_EGGS, &dropped);
     }
+
+    r=section(&body,"egg_pity");
+    if(!r.bad)get_block(&r,pity_fields,NF(pity_fields),sys,sizeof *sys,1,&dropped);
 
     r = section(&body, "dex");
     if (!r.bad) {
