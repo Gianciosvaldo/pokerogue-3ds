@@ -835,6 +835,16 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
             if (pr_get_battler_tag(p, x->immuneTags.v[i])) return -1;       /* removeTag: onRemove */
         return 0;
     }
+    case PR_AC_SpeedBoostAbAttr: {
+        /* Source canApply has no minimum turn-count condition. The existing
+         * ability gate supplies faint/suppression checks before this leaf. */
+        GATE(pp->simulated || (!p->switched_in_this_turn && !p->failed_run_away));
+        if (!c->e) return -1;                           /* queue requires an actual turn engine */
+        static const int32_t stat = STAT_SPD;
+        if (pr_unshift_stat_stage_change(bt, c->e, pr_battler_index(bt, p), &stat, 1, 1, (pr_pokemon *)p) < 0)
+            c->e->overflow = true;
+        return 1;
+    }
     case PR_AC_PostTurnStatusHealAbAttr: {                              /* Poison Heal */
         const pr_attr_PostTurnStatusHealAbAttr *x = P(PostTurnStatusHealAbAttr, a);
         if (!(p->status && type_in(&x->effects, p->status) && p->hp < pr_get_stat(p, STAT_HP, true))) return 0;
