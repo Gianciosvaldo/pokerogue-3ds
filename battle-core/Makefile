@@ -7,7 +7,7 @@ BUILD ?= build
 SRCS := src/rng.c src/hooks.c src/pokemon.c src/damage.c src/move_attrs.c src/closures.c src/closures_moves.c src/closures_conditions.c src/ab_attrs.c src/closures_abilities.c src/modifiers.c src/tags.c src/battler_tags.c src/arena_tags.c src/history.c src/engine.c src/phases.c src/move_effects.c src/called_moves.c src/switching.c src/commands.c src/js_math.c src/text.c src/events.c gen/out/pr_data.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
-all: $(BUILD)/fielditemtest $(BUILD)/statitemtest $(BUILD)/crititemtest $(BUILD)/typeboosttest $(BUILD)/goldentest $(BUILD)/souldewtest $(BUILD)/multilenstest $(BUILD)/reviverseedtest $(BUILD)/widelenstest $(BUILD)/statusorbtest $(BUILD)/dancertest $(BUILD)/doublestest $(BUILD)/itemremovaltest $(BUILD)/berrytest $(BUILD)/weatherformtest $(BUILD)/illusiontest $(BUILD)/libprcore.a $(BUILD)/rng_cli $(BUILD)/difftest $(BUILD)/turntest $(BUILD)/bosssegmenttest
+all: $(BUILD)/tempturntest $(BUILD)/fielditemtest $(BUILD)/statitemtest $(BUILD)/crititemtest $(BUILD)/typeboosttest $(BUILD)/goldentest $(BUILD)/souldewtest $(BUILD)/multilenstest $(BUILD)/reviverseedtest $(BUILD)/widelenstest $(BUILD)/statusorbtest $(BUILD)/dancertest $(BUILD)/doublestest $(BUILD)/itemremovaltest $(BUILD)/berrytest $(BUILD)/weatherformtest $(BUILD)/illusiontest $(BUILD)/libprcore.a $(BUILD)/rng_cli $(BUILD)/difftest $(BUILD)/turntest $(BUILD)/bosssegmenttest
 
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -85,3 +85,6 @@ $(BUILD)/statitemtest: tests/statitemtest.c tests/effective-stat-item-replay.inc
 
 $(BUILD)/fielditemtest: tests/fielditemtest.c tests/field-effect-replay.inc tests/fielditem-guards.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/fielditemtest.c $(BUILD)/libprcore.a -lm -o $@
+
+$(BUILD)/tempturntest: tests/tempturntest.c tests/temporary-turn-replay.inc tests/tempturn-guards.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/tempturntest.c $(BUILD)/libprcore.a -lm -o $@
