@@ -12,58 +12,75 @@ Implementation PRs: [Task 57 #97](https://github.com/Gianciosvaldo/pokerogue-3ds
 
 | Lane | Folder | Sequential tasks | Assignment |
 |---|---|---|---|
-| A | battle-core/ | 67 (#108) → 69 (#110) → 70 (#111) → 71 (#115) → 72 (#119) → 73 (#123); 104 slices: Orbs (#148), Wide Lens (#149), Reviver Seed (#152), Multi Lens (#157), Golden Punch (#161), Soul Dew proof (#164), type proof (#169), critical/raw-helper repair (#173), Eviolite/species-stat proof (#175), Mystical Rock proof (#178), temporary X/Dire full-turn proof (#180) | Hard coordinator work; PRs merged, as bounded slices: 72 is the Dancer slice (Tera unported), 73 the first doubles slice |
+| A | battle-core/ | 67 (#108) → 69 (#110) → 70 (#111) → 71 (#115) → 72 (#119) → 73 (#123); 104 slices: Orbs (#148), Wide Lens (#149), Reviver Seed (#152), Multi Lens (#157), Golden Punch (#161), Soul Dew proof (#164), type proof (#169), critical/raw-helper repair (#173), Eviolite/species-stat proof (#175), Mystical Rock proof (#178), temporary X/Dire full-turn proof (#180); 103 trainer switches (#185), 105 Growth (#188), 106 Speed Boost (#190) | Hard coordinator work; PRs merged, as bounded slices: 72 is the Dancer slice (Tera unported), 73 the first doubles slice |
 | B | reward-core/ | 89 (#104); Card 97 (#132); 96 prerequisites: Mint (#147), vitamins (#150), canonical Lures (#153), money (#156), temporary boosters (#160), Soothe Bell (#163); canonical Wide Lens/Reviver/Golden acquisition (#167/#168/#171), Multi Lens acquisition (#177), separate canonical Orb acquisition (#182) | Hard; Card 97 merged in PR #132; reward state validation |
-| C | game-core/ | 87 (#101) → 57 (#97) → 59 (#113) → 60 (#114) → 61 (first slice, #116) → 92 (#121) → 93 (#122) → 94 (#124) → 77 (#125) → 95 (#128) → 96 (#136 candy, #141 balls, #142/#143 Full Heal, #151 bounded Mint, #158 vitamins, #159 money slices); #154 Orb, #162 Reviver Seed, #165 Wide Lens, #170 Golden Punch, #172 Multi Lens bridges; #174 temporary caller, #179 Wide Lens acquisition, #183 Multi Lens acquisition → 64 (#145 clean wild slice) → 65 → 66 → 78 (#139) → 79 → 61 (further slices) → 62 → 75 → 76 → 80 → 81 → 82 → 83 → 84 | Merged: 87, 57, 59, 60, 61 (first slice), 92, 93, 94, 77, 95, 78, 96's candy/ball/Full Heal/bounded Mint/vitamin/money slices and 64's clean wild slice; #154/#162/#165/#170/#172 inventory bridges and #174 bounded temporary caller/#179 Wide/#183 Multi acquisition merged; remaining 96 items and full 64/65/66 are not done |
+| C | game-core/ | 87 (#101) → 57 (#97) → 59 (#113) → 60 (#114) → 61 (first slice, #116) → 92 (#121) → 93 (#122) → 94 (#124) → 77 (#125) → 95 (#128) → 96 (#136 candy, #141 balls, #142/#143 Full Heal, #151 bounded Mint, #158 vitamins, #159 money slices); #154 Orb, #162 Reviver Seed, #165 Wide Lens, #170 Golden Punch, #172 Multi Lens bridges; #174 temporary caller, #179 Wide Lens acquisition, #183 Multi Lens acquisition → 64 (#145 clean wild slice) → 65 → 66 → 78 (#139) → 79 (bounded terminal #186) → 109 diagnostic (#189) → 80 (bounded gacha #191) → 61 (further slices) → 62 → 75 → 76 → 80 (further lifecycle) → 81 → 82 → 83 → 84 | Merged: 87, 57, 59, 60, 61 (first slice), 92, 93, 94, 77, 95, 78, 96's candy/ball/Full Heal/bounded Mint/vitamin/money slices and 64's clean wild slice; #154/#162/#165/#170/#172 inventory bridges and #174 bounded temporary caller/#179 Wide/#183 Multi acquisition merged; bounded 79/80/109 slices merged; remaining 96, full 64/65/66 and egg 81 are not done |
 | D | run-core/ | 50 (#92) → 63 (#112); 100 | Tasks 50 (#92) and 63 (#112, bounded: a few species) merged; Lorenzo's run-core owner only |
 | E | game/ | 110 (#120) → 112 (#129) → 113 (#134) → 114 (#135) → 116 (#138); 85 console half | Cards 110, 112, 113, 114 and 116 merged; console acceptance stays a human gate |
-| F | ai-core/ | 88 (#102) → 58 (`836d10c`) → 68 (#117) → 74 (#127) | Tasks 88, 58, 68 and 74 merged |
-| G | docs/ | 86 (#100) → 149 (follow-up status refresh) | Task 86 and #140 merged; this final Card 149 checkpoint covers two further implementations through #183; stop after three-task batch |
+| F | ai-core/ | 88 (#102) → 58 (`836d10c`) → 68 (#117) → 74 (#127) → 108 trainer/held recheck (#187) | Tasks 88, 58, 68 and 74 merged; 108 bounded proof |
+| G | docs/ | 86 (#100) → 149 (follow-up status refresh) | Task 86 and #140 merged; this final Card 149 checkpoint covers seven implementations through #191; stop after eight-task batch |
 
 ### Current next work (2026-10-09)
 
-Checked merged code `c3bfa8b33a4180b13d1385e8878f21fcff4cb94a`, through #183.
-Two new implementation tasks #182/#183 are merged; this final Card 149 refresh
-is third. The prior five-task checkpoint #181 and ten-task checkpoint #176
-remain dated ledger history. Owning records, source, retained logs and exact-head
-CI were inspected; this docs task did not rerun producers.
+Checked merged code `f40dc52b4e8d605bedc23638fa6a9359270bf1d6`, through #191.
+Seven implementations #185–#191 are merged; this final Card 149 refresh is
+eighth. Prior three/five/ten-task ledger checkpoints remain dated history.
+The updated ledger and uploaded October 4 roadmap guide priorities; the roadmap's
+old trainer-routing absence is stale: routing already existed and #185 proves
+bounded behavior plus a source-backed Roar guard repair. Planning documents do
+not override user instructions. Owning records, source, retained logs and CI
+were inspected; this docs task did not rerun producers.
 
-- **Lane B / partial Card 96:** #182 adds a separate canonical raw Toxic/Flame
-  Orb acquisition API. Both share the source status-modifier class and cap 1:
-  either Orb on the same exact holder blocks either incoming Orb. Earlier four
-  canonical-held API families keep their opaque-Orb contracts. Full Scene,
-  selection/purchases, game acquisition, transfer and cleanup remain separate.
-- **Lane C / partial Card 96:** #183 integrates Multi Lens raw cap 2 acquisition
-  plus actual public filter/Scene behavior. First-full public refusal differs
-  from direct full tier-ball replacement; persistent paid mutation returns false
-  and does not charge. Multi-only wildcard cleanup and bounded party recalculation
-  are proved. Malformed/virtual/detached, challenge, overflow, fusion/stat-changing
-  and selected opaque contexts remain guarded/counting fallbacks. Literal
-  rendered-message and wildcard loaded-source parity remain excluded.
-  Seven raw damage-helper numerical positions are probes, not seven executed
-  strikes; existing #157/#172 full-turn evidence remains separate.
-- **Lane A / partial Card 104:** existing #178 Mystical Rock and #180 canonical
-  temporary proofs remain intact, alongside type/critical/species-stat proofs
-  and #173 raw coverage repair. The approved stronger temporary game contract
-  preserves prior cases and adds positive numerical/invalid checks. No wider
-  ability/form/fusion/doubles or full held lifecycle completion follows.
-- **Remaining work:** Orb game acquisition, Lure/friendship callers, consumable
-  Gimmighoul side effects, broader transfers and full post-battle abilities/Pay
-  Day remain. Detached 0 differs from wildcard -1; transient Lens/Golden/Multi
-  stacks reset on saves. Virtual-fixture normal/save equality and whole source
-  migration remain unclaimed. Older timerless temporary entries stay opaque.
-  Task 64 is partial; broader pools/trainer seed-offset prerequisites remain
-  reserved run-core work. **65/66 remain gated**;78 is merged and79 onward pending.
-- **Roadmap mapping and stop:** the uploaded October 4 roadmap is planning
-  context. These are bounded Card 96 adapters/prerequisites and partial Card 104
-  proofs, with Card 149 documentation. Stop after this third task; no fourth
-  task starts. Future candidates require a new session authorization/source audit.
+- **Lane A:** [Card 103/#185](../battle-core/TRAINER-SWITCH-VALIDATION.md) proves
+  trainer reserve/callback/continuation paths for U-turn/Baton Pass/Parting Shot/
+  Roar and fixes the pinned live-enemy-party guard. [Card 105/#188](../battle-core/GROWTH-VALIDATION.md)
+  adds Growth +1/+2 effective-weather behavior. [Card 106/#190](../battle-core/SPEED-BOOST-VALIDATION.md)
+  adds Speed Boost's real post-turn leaf, switched-in/failed-run-away refusals and Speed phase.
+  Each has 8000 exact bounded full turns/texts; no whole trainer/doubles/ability
+  suite completion follows. Broad trainer seed 4242 CASE 1051 optional-index queue
+  metadata remains **FAILED**; ITEMS text-completeness 1/1/2/1 remains **FAILED**,
+  without pass credit. Established coverage is retained or increases; no old
+  checks/exclusions are weakened.
+- **Lane F / partial Card 108:** [#187](../ai-core/TRAINER-HELD-VALIDATION.md)
+  proves 8000 actual trainer/held scoring/command/switch cases with canonical
+  type-boost stock and numerical probes. Production AI math is unchanged.
+  Existing 20000 requests retain 4938/4946/4942/4936 covered/identical, with
+  62/54/58/64 exclusions. Boss segments, natural partner doubles, wider held
+  lifecycle and Node 24/natural Illusion limits remain separate.
+- **Lane C / bounded Task 79:** [#186](../game-core/CLASSIC-WIN-VALIDATION.md)
+  proves actual terminal profile awards/unlocks/vouchers/ribbons, named saves
+  and local duplicate-processing protection. It receives supplied terminal
+  fixtures; it does not complete a gameplay-driven Classic clear. Source phase
+  reprocessing can award again, so local idempotency is intentionally separate.
+  Browser history/server persistence, paired atomic save transactions and
+  general challenge/non-Classic lifecycle remain excluded.
+- **Lane C / Card 109 diagnostics:** [#189](../game-core/ENDGAME-DIAGNOSTIC-VALIDATION.md)
+  adds a separate chooser with an explicit level 200 stress starter fixture,
+  bypassing legal initial starter/level policy. It fixes dirty-unused enemy-stock
+  initialization and checks per-seed full-state save equality. On final merged
+  source, 100/100 reach wave 200; 94 defeats, 6 actual final-boss ball refusals and
+  **0 clears**. Exit 1 preserves the refusal result, not a passing completion.
+  Actual final-boss transition remains gated; no legal whole Classic run claim.
+- **Lane C / partial Task 80:** [#191](../game-core/EGG-GACHA-VALIDATION.md)
+  proves 8000 actual voucher admission/debit/pull/creation/shuffle cases, bounded
+  daily featured rotation, pity, two RNG streams and named save fields.
+  Egg/EggData constructor serialization is compared. EggData.toEgg rehydration,
+  legacy missing-species migration, hatching 81, offspring egg moves, gacha UI
+  and account/server persistence remain excluded.
+- **Next priorities and stop:** stop after this eighth task; no ninth starts.
+  Next authorized work should coordinate actual final-boss phase transitions,
+  full enemy movesets/fixed teams with reserved run-core owner Lorenzo, retaining
+  Task 64 partial and 65/66 gates until their exact prerequisites are proven.
+  Task 81 egg rehydration/hatching is a separate future scope. Broader 96/104,
+  forms/fusion/doubles/weather, Lure/friendship/transfer/post-battle and human
+  console/presentation gates remain; 78 is merged. Do not infer completion from
+  diagnostic reach, terminal fixtures, gacha generation or host digest agreement.
 
 [Ledger evidence](PARITY-LEDGER.md#4-landed-prs-and-merged-task-index) separates
-source scopes, host consistency, exact-head CI and skipped Task 63 jobs.
-[Task 64 evidence](../game-core/TASK64-VALIDATION.md) preserves the 1000-run app
-coverage failure and expanded 5000-run pass. No complete 96/104, whole-run
-upstream, cleared Classic, frontend or hardware claim follows.
+source scopes, host consistency, exact-head CI, skipped Task 63 jobs and explicit
+failed checks. [Task 64 evidence](../game-core/TASK64-VALIDATION.md) retains the
+1000-run app coverage failure and expanded 5000-run pass. No full-run upstream,
+cleared Classic or frontend/hardware result follows.
 
 A prerequisite API is a real gate: verify it exists and has recorded checks before beginning. If absent, report the missing bounded prerequisite instead of changing its owner's folder. Different folders may proceed in parallel; each lane starts its next task only after the previous PR merges. Lower-compute describes bounded scope, not lower correctness requirements.
 
@@ -325,6 +342,8 @@ and this partial merge does not unlock 65/66.
 
 ### Task 79: Classic win progression (game-core/, lane C)
 
+**Current bounded status (2026-10-09):** #186 proves supplied Classic terminal awards and local persistence/idempotency, not a whole gameplay clear. [Validation](../game-core/CLASSIC-WIN-VALIDATION.md). The original card below remains the broader contract.
+
 **Branch:** `outside/classic-win-progression`. **Assignment:** Hard. **Prerequisites:** 78 merged.
 
 **Problem.** A clear screen alone is not classicWinCount, ribbons, unlocks, vouchers and terminal save parity.
@@ -334,6 +353,8 @@ and this partial merge does not unlock 65/66.
 **Pass.** H; fixtures compare first clear, repeated clear, fused team members and defeat to source-derived expected system updates; persisted reload does not award twice.
 
 ### Task 80: Egg generation and voucher gacha (game-core/, lane C)
+
+**Current partial status (2026-10-09):** #191 proves bounded purchase/generation, Egg/EggData serialization and named saves. EggData.toEgg migration/rehydration, UI/account persistence and Task 81 hatching remain separate. [Validation](../game-core/EGG-GACHA-VALIDATION.md).
 
 **Branch:** `outside/egg-generation`. **Assignment:** Hard. **Prerequisites:** 79 merged.
 
