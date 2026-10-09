@@ -301,6 +301,7 @@ typedef struct gc_run {
     int load_dropped;           /* after gc_run_load: saved values this build couldn't read back (0 normally;
                                  * more when the save comes from a build whose battle structs differ) */
     bool finished;
+    uint8_t terminal_result; /* 0 unprocessed, 1 defeat, 2 awarded Classic clear */
     /* settings.general.battleStyle: false = SET (the default here), the wild battle's start doesn't ask "Will
      * you switch Pokemon?"; true = SWITCH (upstream's own default), it opens GC_SCREEN_CHECK_SWITCH. A setting
      * of the app's, not run state: it isn't saved and the app sets it again after gc_run_load. Off until the

@@ -687,3 +687,11 @@ paid-result and bounded Scene cleanup behavior. See
 Cap-two additions now reach the inventory bridge through bounded source selection,
 paid-result and Scene cleanup behavior. See
 [scope and validation](MULTI-ACQUISITION-VALIDATION.md).
+
+## Classic terminal progression
+
+Bounded Classic terminal victories now award team-level session totals, root
+counts, species-line ribbons, unlocks and vouchers. A named terminal marker
+prevents duplicate awards across reloads. This proves actual source terminal
+bookkeeping with legal fixture outcomes; whole-run clears remain gated. See
+[scope and validation](CLASSIC-WIN-VALIDATION.md).

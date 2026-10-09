@@ -70,6 +70,8 @@ typedef struct {
     int16_t weather_turns_left, weather_max_duration, terrain_turns_left, terrain_max_duration;
     int32_t player_faints, n_arena_tags, n_pos_tags;
 } sv_run;
+typedef struct { uint8_t terminal_result; } sv_terminal;
+static const sfield terminal_fields[]={SF(sv_terminal,terminal_result)};
 static const sfield run_fields[] = {
     SF(sv_run, mode), SF(sv_run, has_challenges), SF(sv_run, offset_gym), SF(sv_run, daily_custom),
     SF(sv_run, seed), SF(sv_run, seed_len), SF(sv_run, wave_seed), SF(sv_run, wave_seed_len), SF(sv_run, rng),
@@ -283,6 +285,13 @@ static const char *intern(const char *key)
 /* ---------------------------------------------------------------- the calls */
 bool gc_run_can_save(const gc_run *run)
 {
+    if (run->terminal_result) return run->finished && run->terminal_result >= 1 && run->terminal_result <= 2
+        && !run->in_battle && run->run.mode == GAME_MODES_CLASSIC
+        && run->n_party >= 1 && run->n_party <= 6 && run->n_enemy >= 1 && run->n_enemy <= 6
+        && run->n_items >= 0 && run->n_items <= GC_MAX_ITEMS
+        && run->n_enemy_items >= 0 && run->n_enemy_items <= GC_MAX_ITEMS
+        && run->wave >= 1 && (run->terminal_result == 2 ? run->wave >= 200 && !run->run.has_challenges : run->wave <= 200)
+        && run->screen.kind == (run->terminal_result == 2 ? GC_SCREEN_CLEAR : GC_SCREEN_GAME_OVER);
     gc_internal *in = gc_int((gc_run *)run);
     if (!in->at_save_point || !run->in_battle || run->screen.kind != GC_SCREEN_COMMAND) return false;
     /* only the turn this COMMAND screen belongs to may be waiting: the load starts it again */
@@ -413,6 +422,10 @@ size_t gc_run_save(const gc_run *run, void *buf, size_t cap)
     s = section_start(&w, "stats");
     put_block(&w, stat_fields, NF(stat_fields), run, sizeof *run, 1);
     section_end(&w, s);
+    if (run->terminal_result) {
+        sv_terminal terminal={run->terminal_result};
+        s=section_start(&w,"terminal");put_block(&w,terminal_fields,NF(terminal_fields),&terminal,sizeof terminal,1);section_end(&w,s);
+    }
     if (w.full) { memset(buf, 0, 8); return 0; }   /* nothing that looks like a save is left behind */
     const uint32_t len = (uint32_t)(w.n - body), crc = crc32(w.p + body, len);
     memcpy(w.p + 12, &len, 4);
@@ -523,7 +536,16 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     int dropped = 0;
     reader r = section(&body, "run");
     if (r.bad || get_block(&r, run_fields, NF(run_fields), &v, sizeof v, 1, &dropped) != 1) { *why = "the save is damaged"; return false; }
-    if (!v.in_battle || v.wave < 1 || v.n_party < 1 || v.n_party > 6 || v.n_enemy < 1 || v.n_enemy > 6
+    sv_terminal terminal={0};reader tr=section(&body,"terminal");
+    if (!tr.bad) {
+        reader scan=body;scan.pos=0;int terminal_sections=0;
+        while(scan.pos+8<=scan.n){uint32_t sh=take32(&scan),len=take32(&scan);if(sh==hash("terminal"))terminal_sections++;if(len>scan.n-scan.pos){scan.bad=true;break;}scan.pos+=len;}
+        if(scan.bad||scan.pos!=scan.n||terminal_sections!=1||tr.n!=11){*why="the terminal save is damaged";return false;}
+    }
+    if (!tr.bad && (get_block(&tr,terminal_fields,NF(terminal_fields),&terminal,sizeof terminal,1,&dropped)!=1
+        || tr.bad || tr.pos!=tr.n || terminal.terminal_result<1 || terminal.terminal_result>2)) { *why="the terminal save is damaged";return false; }
+    if (terminal.terminal_result && (v.in_battle || v.mode!=GAME_MODES_CLASSIC || (terminal.terminal_result==2&&(v.wave<200||v.has_challenges))||(terminal.terminal_result==1&&v.wave>200))) { *why="the terminal save is damaged";return false; }
+    if ((!v.in_battle && !terminal.terminal_result) || v.wave < 1 || v.n_party < 1 || v.n_party > 6 || v.n_enemy < 1 || v.n_enemy > 6
         || v.n_items < 0 || v.n_items > GC_MAX_ITEMS || v.n_enemy_items < 0 || v.n_enemy_items > GC_MAX_ITEMS
         || v.n_mystery_history > GC_MAX_MYSTERY_HISTORY
         || v.seed_len > 64 || v.wave_seed_len > 64 || v.n_arena_tags < 0 || v.n_arena_tags > PR_MAX_ARENA_TAGS
@@ -652,6 +674,22 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     } else if (v.n_arena_tags || v.n_pos_tags) {
         dropped++;
     }
+    if (terminal.terminal_result) {
+        bool used[6]={0};
+        for(int k=0;k<run->n_party;k++){
+            int j=run->party_order[k];if(j<0||j>=run->n_party||used[j]){*why="the terminal party is damaged";return false;}used[j]=true;
+            const pr_pokemon *p=&run->party[j].b;const pr_species *species=gc_species(p->species);
+            if(!p->id||!species||p->form>=species->nforms){*why="the terminal party is damaged";return false;}
+            for(int q=0;q<k;q++)if(run->party[run->party_order[q]].b.id==p->id){*why="the terminal party is damaged";return false;}
+            if(p->fusion_species){const pr_species *fusion=gc_species(p->fusion_species);if(!fusion||p->fusion_form>=fusion->nforms){*why="the terminal party is damaged";return false;}}
+        }
+        run->in_battle=false;run->finished=true;run->terminal_result=terminal.terminal_result;
+        memset(&run->screen,0,sizeof run->screen);
+        run->screen.kind=terminal.terminal_result==2?GC_SCREEN_CLEAR:GC_SCREEN_GAME_OVER;
+        in->rq.waiting=true;in->rq.current=gc_rp(RP_GAME_OVER,terminal.terminal_result==2,0,0);
+        r=section(&body,"stats");if(!r.bad)get_block(&r,stat_fields,NF(stat_fields),run,sizeof *run,1,&dropped);
+        run->load_dropped=dropped;gc_items_to_battle(run);return true;
+    }
     gc_trainer_names(run);
     gc_event *ev = gc_ev_new(run, GC_EV_WAVE);
     if (ev) { ev->a = run->wave; ev->b = run->biome; ev->c = run->battle_type; }
@@ -688,7 +726,7 @@ typedef struct { uint16_t species; gc_dex_entry entry; } sv_dex_entry;
 static const sfield dex_fields[] = {
     SF(sv_dex_entry, species), SF(sv_dex_entry, entry.seen_attr), SF(sv_dex_entry, entry.caught_attr),
     SF(sv_dex_entry, entry.nature_attr), SF(sv_dex_entry, entry.seen_count), SF(sv_dex_entry, entry.caught_count),
-    SF(sv_dex_entry, entry.hatched_count), SF(sv_dex_entry, entry.ivs),
+    SF(sv_dex_entry, entry.hatched_count), SF(sv_dex_entry, entry.ivs), SF(sv_dex_entry, entry.ribbon_flags),
 };
 
 typedef struct { uint16_t species; gc_starter_entry entry; } sv_starter_entry;
@@ -708,13 +746,13 @@ static const sfield voucher_fields[] = {
     SF(sv_vouchers, voucher_counts), SF(sv_vouchers, voucher_unlocks),
 };
 
-typedef struct { uint8_t flags[256]; } sv_achievements;
+typedef struct { uint8_t flags[256]; bool classic_voucher_unlocked; } sv_achievements;
 static const sfield achievement_fields[] = {
-    SF(sv_achievements, flags),
+    SF(sv_achievements, flags), SF(sv_achievements, classic_voucher_unlocked),
 };
 
 static const sfield stat_milestone_fields[] = {
-    SF(gc_stat_milestones, classic_wins), SF(gc_stat_milestones, endless_wins),
+    SF(gc_stat_milestones, ribbons_owned), SF(gc_stat_milestones, classic_wins), SF(gc_stat_milestones, endless_wins),
     SF(gc_stat_milestones, total_battles), SF(gc_stat_milestones, total_catches),
     SF(gc_stat_milestones, total_hatches), SF(gc_stat_milestones, total_shinies),
     SF(gc_stat_milestones, highest_wave), SF(gc_stat_milestones, highest_damage),
@@ -749,6 +787,7 @@ size_t gc_system_save(const gc_system *sys, void *buf, size_t cap)
 
     sv_achievements sv_a;
     memcpy(sv_a.flags, sys->achievement_flags, sizeof sv_a.flags);
+    sv_a.classic_voucher_unlocked=sys->classic_voucher_unlocked;
     s = section_start(&w, "achievements");
     put_block(&w, achievement_fields, NF(achievement_fields), &sv_a, sizeof sv_a, 1);
     section_end(&w, s);
@@ -765,14 +804,14 @@ size_t gc_system_save(const gc_system *sys, void *buf, size_t cap)
 
     int n_dex = 0;
     for (int i = 1; i <= GC_MAX_SPECIES_ID; i++) {
-        if (sys->dex[i].seen_attr || sys->dex[i].caught_attr) n_dex++;
+        if (sys->dex[i].seen_attr || sys->dex[i].caught_attr || sys->dex[i].ribbon_flags) n_dex++;
     }
     if (n_dex > 0) {
         sv_dex_entry *dex_buf = malloc(sizeof(sv_dex_entry) * n_dex);
         if (dex_buf) {
             int k = 0;
             for (int i = 1; i <= GC_MAX_SPECIES_ID; i++) {
-                if (sys->dex[i].seen_attr || sys->dex[i].caught_attr) {
+                if (sys->dex[i].seen_attr || sys->dex[i].caught_attr || sys->dex[i].ribbon_flags) {
                     dex_buf[k].species = (uint16_t)i;
                     dex_buf[k].entry = sys->dex[i];
                     k++;
@@ -860,6 +899,7 @@ bool gc_system_load(gc_system *sys, const void *buf, size_t len, const char **wh
         memset(&sv_a, 0, sizeof sv_a);
         get_block(&r, achievement_fields, NF(achievement_fields), &sv_a, sizeof sv_a, 1, &dropped);
         memcpy(sys->achievement_flags, sv_a.flags, sizeof sys->achievement_flags);
+        sys->classic_voucher_unlocked=sv_a.classic_voucher_unlocked;
     }
 
     r = section(&body, "stats");
@@ -874,9 +914,12 @@ bool gc_system_load(gc_system *sys, const void *buf, size_t len, const char **wh
 
     r = section(&body, "dex");
     if (!r.bad) {
-        sv_dex_entry dex_buf[256];
+        sv_dex_entry *dex_buf=calloc(GC_MAX_SPECIES_ID+1,sizeof *dex_buf);
+        if(!dex_buf){*why="system save allocation failed";return false;}
         int count;
-        while ((count = get_block(&r, dex_fields, NF(dex_fields), dex_buf, sizeof(sv_dex_entry), 256, &dropped)) > 0) {
+        while (true) {
+            memset(dex_buf,0,(GC_MAX_SPECIES_ID+1)*sizeof *dex_buf);
+            count=get_block(&r,dex_fields,NF(dex_fields),dex_buf,sizeof(sv_dex_entry),GC_MAX_SPECIES_ID+1,&dropped);if(count<=0)break;
             for (int i = 0; i < count; i++) {
                 uint16_t sp = dex_buf[i].species;
                 if (sp > 0 && sp <= GC_MAX_SPECIES_ID) {
@@ -884,13 +927,17 @@ bool gc_system_load(gc_system *sys, const void *buf, size_t len, const char **wh
                 }
             }
         }
+        free(dex_buf);
     }
 
     r = section(&body, "starters");
     if (!r.bad) {
-        sv_starter_entry st_buf[256];
+        sv_starter_entry *st_buf=calloc(GC_MAX_SPECIES_ID+1,sizeof *st_buf);
+        if(!st_buf){*why="system save allocation failed";return false;}
         int count;
-        while ((count = get_block(&r, starter_fields, NF(starter_fields), st_buf, sizeof(sv_starter_entry), 256, &dropped)) > 0) {
+        while (true) {
+            memset(st_buf,0,(GC_MAX_SPECIES_ID+1)*sizeof *st_buf);
+            count=get_block(&r,starter_fields,NF(starter_fields),st_buf,sizeof(sv_starter_entry),GC_MAX_SPECIES_ID+1,&dropped);if(count<=0)break;
             for (int i = 0; i < count; i++) {
                 uint16_t sp = st_buf[i].species;
                 if (sp > 0 && sp <= GC_MAX_SPECIES_ID) {
@@ -898,6 +945,7 @@ bool gc_system_load(gc_system *sys, const void *buf, size_t len, const char **wh
                 }
             }
         }
+        free(st_buf);
     }
 
     return true;

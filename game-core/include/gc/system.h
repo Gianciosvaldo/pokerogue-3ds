@@ -23,6 +23,7 @@ typedef struct {
     uint32_t caught_count;
     uint32_t hatched_count;
     uint8_t ivs[6];
+    uint64_t ribbon_flags; /* RibbonData payload; independent of win counters */
 } gc_dex_entry;
 
 /* Per-starter data entry (upstream StarterDataEntry) */
@@ -64,6 +65,7 @@ enum {
 /* Stat milestones tracked across the system profile */
 typedef struct {
     uint32_t classic_wins;
+    uint32_t ribbons_owned; /* first counted roots (GameStats.ribbonsOwned) */
     uint32_t endless_wins;
     uint32_t total_battles;
     uint32_t total_catches;
@@ -84,6 +86,7 @@ typedef struct {
     uint32_t voucher_counts[4];                         /* by VoucherType */
     uint8_t voucher_unlocks[512];                       /* 1 if voucher for trainer_type is unlocked */
     uint8_t achievement_flags[256];                     /* 1 if achievement_id is unlocked */
+    bool classic_voucher_unlocked; /* achievement voucher, separate from trainer unlocks */
     gc_stat_milestones stats;                          /* profile stat milestones */
 } gc_system;
 
@@ -126,6 +129,11 @@ bool gc_system_has_voucher_unlock(const gc_system *sys, int trainer_type);
 bool gc_system_unlock_voucher(gc_system *sys, int trainer_type, int voucher_type);
 void gc_system_add_voucher_count(gc_system *sys, int voucher_type, int count);
 
+/* Stable local slots for the named Classic victory achievements. */
+enum { GC_ACHV_CLASSIC_VICTORY=192, GC_ACHV_UNEVOLVED_CLASSIC,
+ GC_ACHV_10_RIBBONS, GC_ACHV_25_RIBBONS, GC_ACHV_50_RIBBONS,
+ GC_ACHV_75_RIBBONS, GC_ACHV_100_RIBBONS };
+#define GC_RIBBON_CLASSIC UINT64_C(0x08000000)
 /* Achievements, Ribbons, and Stat Milestones helpers */
 bool gc_system_has_achievement(const gc_system *sys, int achievement_id);
 bool gc_system_unlock_achievement(gc_system *sys, int achievement_id);

@@ -258,6 +258,8 @@ int gc_temp_add(gc_run *run, int item, int arg);
 int gc_temp_apply(gc_run *run, const gc_offer *o, const char **why);
 bool gc_temp_lapse(gc_run *run, int *expired);
 
+bool gc_classic_finish(gc_run *run,bool victory,const char **why);
+
 int gc_multi_add(gc_run *run,int storage);
 int gc_multi_scene_apply(gc_run *run,const gc_offer *o,int storage,const char **why,bool selection);
 int gc_wide_add(gc_run *run,int storage);
