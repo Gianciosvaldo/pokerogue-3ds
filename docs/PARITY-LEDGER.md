@@ -2,7 +2,7 @@
 
 **Port Target:** `pagefaultgames/pokerogue` pinned commit [`8555c08c823b856cbec4eb99ca84ea52a955836d`](https://github.com/pagefaultgames/pokerogue/commit/8555c08c823b856cbec4eb99ca84ea52a955836d) (short `8555c08`).
 **Public Beta Baseline (Inspected Separately):** `pagefaultgames/pokerogue` commit [`4f0969875845fb412c5b0af8ed4bc006484a8f2a`](https://github.com/pagefaultgames/pokerogue/commit/4f0969875845fb412c5b0af8ed4bc006484a8f2a) (42 commits ahead of target `8555c08`). Public beta mechanics are outside the port target and are not mixed into pinned parity claims.
-**Initial ledger baseline:** `58030d6` after Task 57 merged. **Current status refresh:** main `ee695e966e50f486ba8cf6a009015c1a53b01882` after [#165](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/165), 2026-10-08. Merge/final-head CI metadata, owning source/READMEs and durable lane validation logs were inspected. Counts below are recorded implementation evidence; this documentation task did not rerun producers. Historical matrix counts remain dated evidence and do not describe a fresh exhaustive current-main comparison.
+**Initial ledger baseline:** `58030d6` after Task 57 merged. **Current status refresh:** main `2470cb39a6f8e39102f5b75246fa32ed4c917338` after [#175](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/175), 2026-10-09. Merge/final-head CI metadata, owning source/READMEs and durable lane validation logs were inspected. Counts below are recorded implementation evidence; this documentation task did not rerun producers. Historical matrix counts remain dated evidence and do not describe a fresh exhaustive current-main comparison.
 
 ---
 
@@ -119,6 +119,89 @@ full-run upstream, cleared Classic, complete Task 96/104, frontend or console
 acceptance. Golden Punch has no game wallet bridge; Soul Dew remains a guarded
 Mint/vitamin inventory. Task 64/65/66 and run-core/hardware gates remain.
 
+
+### Ten-task checkpoint (2026-10-09)
+
+Nine implementation PRs #167–#175 are merged; this Card 149 refresh is task ten.
+Each new focused source suite uses Node 22.23.3, pin `8555c08`, seeds 777/9001/4242/
+31337 and 2000 cases per seed. Counts describe their exact scopes, not overall
+parity. Historical eight-task evidence above is retained, including statements
+that were true at that checkpoint.
+
+| Slice | Recorded evidence | Remaining boundary |
+| --- | --- | --- |
+| Reward Wide Lens #167 / Reviver #168 / Golden #171 | Each 8000 exact raw canonical acquisitions; 25/26/28 guards; actual source mutants fail; caps 3/1/5 | Full Scene.addModifier tier replacement/purchases/transfer and game callers are separate |
+| Battle type proof #169 | 8000 exact full turns/input stats/texts; 20 guards; actual damage-caller mutant889/2000 failures | Existing20%/18types/cap99 helper; Hidden Power matches base move type at pin; acquisition/fusion/broader forms remain |
+| [Battle critical + raw repair #173](../battle-core/CRITICAL-VALIDATION.md) | 8000 exact full turns/texts; 24 critical guards plus 3 fusion admission checks; actual critical caller mutant581/2000 failures | Scope Lens/Leek only, real 1/virtual 0; fusion Leek refused, raw primary-species behavior unclaimed as fusion parity |
+| [Battle Eviolite/species-stat #175](../battle-core/STAT-ITEM-VALIDATION.md) | 8000 exact effective-stat snapshots/full turns/texts; 63 identity+4 fusion guards; Quick Powder caller mutant 198 SPD mismatches; summon orphan mutant 20 failures | Seven existing callers, no new math; generic StatBooster unpromoted; acquisitions/save/transfer and fused admission excluded |
+| [Game Golden #170](../game-core/GOLDEN-VALIDATION.md) | 8000 exact full turns/wallets/texts; 330 host/454 with 10 real ModifierData answers; actual wallet-return omission fails at turn 0 | Ordered Coin dependency, double wallet, cap and separate Pay Day; source achievements/UI/full acquisition excluded |
+| [Game Multi #172](../game-core/MULTI-VALIDATION.md) | 8000 exact full turns/texts; 201 host/253 with 4 real storage answers; actual mapping-source mutant fails | Effective 1–2; malformed stock generic opaque; acquisition/transfers and transient creator lifecycle excluded |
+| [Game temporary caller #174](../game-core/TEMP-VALIDATION.md) | 8000 actual Scene/selection/BattleEnd callers plus 8000 unchanged raw cases; 90 host + 25 raw guards; lapse/save/projection mutants fail | Canonical X stats/Dire, five-battle timers, purchase/tier fallback; literal rendered messages/full-turn support/full BattleEnd excluded |
+
+**Raw helper regression and repair:** #164 and #169 retained their measured
+bounded full-turn results but introduced a regression outside those fixture
+bounds. The unchanged legacy producer independently constructs real stacks up
+to acquisition caps plus virtual stacks; upstream raw helpers still apply them.
+Seed 777 / N=2000 pre-Soul had 2000 covered/pass and 0 stat differences. Post-Soul:
+1990 covered/7 all-case stat differences/10 uncovered; post-type:1989/7/11;
+unmerged strict critical:1940/7/60. This was a C-port regression, not a comparator
+defect. #173 restores explicit raw `pr_project_*` arithmetic and flags while
+retaining strict `pr_apply_*` leaf guards and full-turn inventory admission.
+Four unchanged legacy seeds now match the pre-Soul baseline byte-for-byte:
+2000/2000/2000/1999 covered/pass, 0 stat/carried-state differences/uncovered;
+seed 31337 retains its existing upstream Fusion Flare throw exclusion. No test,
+seed/count/tolerance/exclusion changed. #175 retains all 44 old before/after pairs.
+
+Actual effects remain distinct from mapping/acquisition. Golden gain turns per
+seed are 1362/1357/1358/1372; its stock soak observer saw seven credit calls,
+total 33, versus eight Golden rewards taken. Multi count-helper gains are 300
+per side per seed; damage-helper changes are 659/650,651/645,644/647,660/645.
+Mapping visits (1000 per side) do not establish those effects. Real source
+ModifierData answers prove transient stacks omitted/reset, not virtual-fixture
+normal/save equality. Older Mint/Seed/Lens saves retain 113/130/199 checks.
+Standalone virtual Coins remain opaque unless a valid represented-prefix Golden
+enables the dependency; Golden itself has no Gimmighoul tracker side effect.
+
+Temporary #174 persists named battle_count; older timerless stock stays opaque.
+It lapses once after enemy cleanup at one culled BattleEnd, including flee,
+not per trainer-member KO. At the pin a persistent temporary add mutates stock
+but returns false: paid selection preserves money and errors; full-duration
+replacement returns true and deducts. Source callers compare result/error
+presence and state, not translated rendered messages. Raw temporary helpers
+receive projected inputs, but full-turn unsupported flags remain unchanged.
+This boundary is the next lane A prerequisite, not silently claimed complete.
+
+Implementation H histories remain separate: type report-only digest shift
+`c2937ca0`→5022ea67 removes 97 unsupported reports; critical's own earlier baseline
+5022ea67→086babdb removes 14. Golden on50f279b shifts5022ea67→15d6d01d with 46
+fewer reports. Multi before/after remains byte-identical15d6d01d. Digest hashes
+unported counters, not wallet directly. Integrated pre-temporary/A3 H is
+4d9f91a1; A3 leaves all rows unchanged. Temporary changes turns 49206→50394,
+saves 14291→14679, max 11400→11472; its earlier C baseline15d6d01d→9e0f75df.
+[Every changed temporary soak row](../game-core/TEMP-SOAK-DELTA.md) is retained:
+counted post-battle refusals 3 runs/4 uses→167/1380 and reward stand-ins 139/169→
+145/178. No zero-fallback or whole-run parity claim follows.
+
+The coordinator independently reran on merged code `2470cb3`:
+`make -s -j2 -C game-core test`, `game-core/build/gcplay --auto 1000 --jobs 8`,
+and the same command with `--save-test`; all underlying exits are zero.
+Logs: `/workspace/validation/ten-batch/final-{host,normal,saved}.log`.
+Host checks include 33473 resume, 39 existing bridge / 641335 application checks;
+new temporary/Multi/Golden host checks are 90/201/330. The 200-run pair is
+`74adeffb`. Both 1000-run paths end all runs, zero cleared/stuck/crashed/timed
+out, 50394 turns, paired digest `43f24f9f`; 14679 save/load round trips,
+max11472 bytes. Compared with #174's `9e0f75df`, only digest and held unsupported
+report differ: 983 runs/52586 occurrences → 982/52572,14 fewer from critical
+promotion. Every other row is identical, including post-battle167/1380 and
+reward stand-ins145/178. The report hash does not directly prove wallets or
+timers. These are host consistency results, not whole-run upstream parity.
+
+The separately authorized next five tasks begin only after this tenth task:
+battle temporary full-turn proof, reward Multi Lens acquisition then Orb
+acquisition, game Wide Lens caller acquisition, final docs refresh. Task 64
+remains partial and 65/66 gated; reserved run-core, human hardware and broader
+Task 96/104 boundaries remain. Source comparisons, host soaks and CI are distinct.
+
 ---
 
 ## 2. Inventory of Untested Move, Ability, and Item Classes
@@ -151,8 +234,8 @@ Entries describing landed slices are scope reminders, not blanket unported claim
 - **Evolution, Form, and Fusion Items:** In-run item lifecycle and party mutation in `game-core` (Tasks 61, 62).
 - **Mints:** bounded API #147 and game adapter #151 landed; original/custom nature, stats/HP and local unlocks are covered. Challenges/stat-inventory guards remain unsupported; Task 96 is partial.
 - **Vitamins:** bounded API #150 landed; bounded game adapter #158 landed, including purchase-error/no-deduction behavior; unsupported inputs remain counted.
-- **Lures:** canonical modifier primitives #153 landed; full caller/lifecycle remains pending. Canonical X/Dire Hit primitives #160 and raw Soothe Bell primitives #163 are similarly bounded; they do not establish full friendship or BattleEnd integration.
-- **Orbs / Wide Lens / Reviver Seed:** bounded dispatch #148/#149/#152 landed; game Orb/Reviver/Wide Lens bridges #154/#162/#165 landed; bounded Multi Lens/Golden Punch dispatch #157/#161 and Soul Dew proof #164 landed. Acquisition policies, Golden Punch wallet transport and other bridges remain. Use the [pinned class inventory](../battle-core/HELD-ITEM-INVENTORY.md) before scheduling further held work.
+- **Lures:** canonical modifier primitives #153 landed; full caller/lifecycle remains pending. Canonical X/Dire Hit primitives #160 have a bounded caller/timer bridge #174, still without full-turn support; raw Soothe Bell #163 does not establish full friendship integration.
+- **Orbs / Wide Lens / Reviver Seed:** bounded dispatch #148/#149/#152 landed; game Orb/Reviver/Wide Lens bridges #154/#162/#165 landed; bounded Multi Lens/Golden Punch dispatch #157/#161 and Soul Dew proof #164 landed. Golden wallet #170 and Multi bridge #172 landed; raw Wide/Reviver/Golden acquisition #167/#168/#171 landed. Full caller acquisition, stock replacement and transfers remain separate. Use the [pinned class inventory](../battle-core/HELD-ITEM-INVENTORY.md) before scheduling further held work.
 - **TMs / Memory Mushroom:** reward learn-move flow landed in [#128](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/128), with follow-up Memory/save repair in [#131](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/131).
 
 ---
@@ -177,6 +260,18 @@ The public beta branch contains new upstream features and balance changes that d
 ---
 
 ## 4. Landed PRs and Merged Task Index
+
+- [PR #167](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/167): Wide Lens acquisition; final head `d0229167`, merge `2a63abd3`; [actual-head CI](https://github.com/Gianciosvaldo/pokerogue-3ds/actions/runs/37820972966) host `test` / `build-3ds` SUCCESS.
+- [PR #168](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/168): Reviver Seed acquisition; final head `db9041e6`, merge `492a0ead`; [actual-head CI](https://github.com/Gianciosvaldo/pokerogue-3ds/actions/runs/37821709822) host `test` / `build-3ds` SUCCESS.
+- [PR #169](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/169): Existing type-boost full-turn proof; final head `0b90cc7b`, merge `50f279b4`; [actual-head CI](https://github.com/Gianciosvaldo/pokerogue-3ds/actions/runs/37821908798) host `test` / `build-3ds` SUCCESS.
+- [PR #170](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/170): Golden Punch inventory/wallet bridge; final head `da744251`, merge `bde7ceea`; [actual-head CI](https://github.com/Gianciosvaldo/pokerogue-3ds/actions/runs/37822550964) host `test` / `build-3ds` SUCCESS.
+- [PR #171](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/171): Golden Punch acquisition; final head `05bcb097`, merge `8534067b`; [actual-head CI](https://github.com/Gianciosvaldo/pokerogue-3ds/actions/runs/37822445608) host `test` / `build-3ds` SUCCESS.
+- [PR #172](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/172): Multi Lens inventory bridge; final head `345a04c4`, merge `6b655754`; [actual-head CI](https://github.com/Gianciosvaldo/pokerogue-3ds/actions/runs/37830365249) host `test` / `build-3ds` SUCCESS.
+- [PR #173](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/173): Critical caller proof and raw-helper repair; final head `50b776e5`, merge `e99b5f9b`; [actual-head CI](https://github.com/Gianciosvaldo/pokerogue-3ds/actions/runs/37830945898) host `test` / `build-3ds` SUCCESS.
+- [PR #174](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/174): Canonical temporary caller/timer bridge; final head `79b5d31b`, merge `ae1e7240`; [actual-head CI](https://github.com/Gianciosvaldo/pokerogue-3ds/actions/runs/37894966596) host `test` / `build-3ds` SUCCESS.
+- [PR #175](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/175): Eviolite and six species-stat caller proofs; final head `a08eddf1`, merge `2470cb39`; [actual-head CI](https://github.com/Gianciosvaldo/pokerogue-3ds/actions/runs/37895060929) host `test` / `build-3ds` SUCCESS.
+
+Conditional Task63 jobs on #167–#175 were SKIPPED; no source/whole-run or hardware credit.
 
 - [PR #155](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/155): docs: refresh bounded item parity and next-task prerequisites; final head `da8c0a8b`, merge `25cb8825`; [actual-head CI](https://github.com/Gianciosvaldo/pokerogue-3ds/actions/runs/37744930015) host `test` / `build-3ds` SUCCESS.
 - [PR #156](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/156): Add bounded money-item application with ordered Amulet bonuses; final head `4cdbf320`, merge `582f2018`; [actual-head CI](https://github.com/Gianciosvaldo/pokerogue-3ds/actions/runs/37745709255) host `test` / `build-3ds` SUCCESS.
@@ -264,4 +359,4 @@ are not card numbers: PR #149 is Wide Lens, while Card 149 is documentation.
 8. **Task 63 / merged [#112](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/112):** bounded species/form/pool generator only. [Validation](../run-core/TASK63-VALIDATION.md) and the [incomplete R checkpoint](../run-core/TASK63-R-REGRESSION.md) distinguish completed commands from pending work; a merge is not evidence that every planned R command ran.
 9. **Task 64 / merged [#145](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/145):** first clean wild adapter slice only. All 1000 soaks still use unsupported movesets somewhere. Trainer member RNG boundaries and broader Task 63 pools remain real gates to full Task 64 and Tasks 65/66. The app's 1000-run rare-evolution coverage failure and expanded 5000-run passing check are both retained in [the validation record](../game-core/TASK64-VALIDATION.md).
 
-The next lane C work is bounded Lure/temporary/friendship caller integration and remaining held boundaries and the remaining Task 96 item families and the missing bounded prerequisites for full Task 64. Task 78 is already merged; Classic win progression 79 is still pending. Further Task 61 slices, fusion 62, doubles lifecycle 75, weather 76 and later modes/eggs/mystery/system work are not complete. Do not duplicate merged slices or infer whole-run upstream parity from host consistency. Run-core ownership, Node 22 reference policy and human hardware gates remain in force. Codex merge/continuation authorization is recorded in HANDOFF's October 7 update; it does not waive validation or change owner scope.
+The next authorized lane C task is canonical Wide Lens caller acquisition. Bounded Lure/friendship caller integration and remaining held boundaries remain future work, alongside the remaining Task 96 item families and the missing bounded prerequisites for full Task 64. Task 78 is already merged; Classic win progression 79 is still pending. Further Task 61 slices, fusion 62, doubles lifecycle 75, weather 76 and later modes/eggs/mystery/system work are not complete. Do not duplicate merged slices or infer whole-run upstream parity from host consistency. Run-core ownership, Node 22 reference policy and human hardware gates remain in force. Codex merge/continuation authorization is recorded in HANDOFF's October 7 update; it does not waive validation or change owner scope.

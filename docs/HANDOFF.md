@@ -36,30 +36,33 @@ Start with [`README.md`](../README.md) (folder table), then the README of the fo
   Substitute doll (PRs #34 and #35, merged). It is still fed by a stand-in, not by game-core's run.
 - Nothing of the game app has run on a real console. Only the speed and graphics benchmarks have.
 
-## Current checkpoint (2026-10-08; historical sections retained)
+## Current checkpoint (2026-10-09; historical sections retained)
 
-The opening September 30 status and original task problem statements are dated
-history. Use [current scheduling](PARITY-TASKS.md#current-next-work-2026-10-08)
-and [ledger](PARITY-LEDGER.md) for source-backed state at main `ee695e9`.
-Merged #147–#165 add bounded reward Mint/vitamin/Lure/money/temporary/Soothe Bell
-prerequisites; battle Orb/Wide Lens/Reviver/Multi Lens/Golden Punch dispatch and
-Soul Dew proof; game Mint/vitamin/money adapters and Orb/Reviver/Wide Lens bridges.
-These do not complete Tasks 96/104 or unlock full Task 64/65/66. Lure/temporary/
-friendship callers, unsupported stat/virtual inputs, Gimmighoul side effects,
-Golden Punch wallet transport and broader held lifecycle remain separate.
-Detached owner 0 is preserved separately from wildcard -1; transient Lens virtual
-stacks are intentionally absent from saves and reset on load. Do not claim
-virtual-fixture normal/save equality or full source session migration.
-The dex/starter foundation and app run driver are already landed; do not
-implement the old opening descriptions again. Root/component historical rows
-may also be stale: consult owning code and dated validation records.
+Use [current scheduling](PARITY-TASKS.md#current-next-work-2026-10-09) and the
+[ledger](PARITY-LEDGER.md) for merged code `2470cb3`, through #175. The opening
+September 30 status and original task problem statements remain dated history.
+#167–#175 add three raw canonical held acquisitions; existing type/critical/
+effective-stat full-turn proofs; Golden wallet and Multi inventory bridges;
+and bounded temporary acquisition/timer/caller integration. #173 repairs a raw
+helper coverage regression introduced by #164/#169 without altering established
+checks; strict leaf guards and full-turn admission remain bounded.
 
-Actual-head host/3DS build CI succeeded for each implementation #147–#165; conditional Task 63
-jobs were skipped, not validated. Source differentials establish only their
-compared scope; soaks establish host consistency. Console acceptance, whole-run
-upstream parity and the reserved run-core owner boundaries remain unchanged.
-One task may run in each independent folder lane, and each lane merges its
-current validated PR before starting another; stop at the user's session limit.
+Temporary #174 still reports unsupported on full battle turns; its source proof
+covers raw helper projection and actual caller/timer state, excluding literal
+rendered message parity. Full Tasks 96/104 and 64/65/66 remain incomplete.
+Lure/friendship callers, broader inventory lifecycle, fusion/stat/challenge
+inputs and reserved run-core prerequisites remain separate. Detached owner 0
+is distinct from wildcard -1; transient Lens/Golden/Multi stacks reset on save.
+Do not claim virtual fixture normal/save equality or whole source migration.
+The dex/starter foundation and app run driver are already landed; inspect owning
+code and dated records before reimplementing historical problem statements.
+
+Actual-head host/3DS CI succeeded for each implementation #167–#175. Conditional
+Task 63 jobs were skipped, not validated; source scopes, host consistency and
+hardware acceptance are distinct. Finish this tenth documentation task before
+starting the newly authorized five-task batch (four implementation PRs plus one
+final docs PR), detailed in current scheduling. One active task per folder lane;
+each lane merges before advancing, then stop at the new five-task limit.
 
 ## Rules (read these before touching anything)
 1. **Branch and pull request only.** Never push to `main`. Do not merge your own PR unless explicitly authorized; the October 7 Codex exception below applies here. One task per branch, one PR per task.
