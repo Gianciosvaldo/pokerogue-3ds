@@ -41,8 +41,8 @@ To check the test itself, 78 one-line bugs were planted in ai-core one at a time
 
 - **Doubles** beyond what the doubles suite (Task 74, below) builds: a disguise in doubles, held items, bosses, mystery encounters, and a Pokemon commanding that is also disguised or Transformed.
 - **Illusion, the ability.** Pinned upstream registers no Illusion ability attrs, so the ability sets no disguise in a real battle and ai-core doesn't model it turning on: a useIllusion read of a Pokemon that has the ability but no loaded disguise still reports `PR_AI_FEAT_ILLUSION` and the case is not covered (131 cases over the four seeds, unchanged). A disguise loaded by hand (`pr_set_illusion*` in battle-core, Task 67's helpers) is modelled, see Task 68 below.
-- **Held items.** The test has no modifiers (battle-core's records skip them), so what the scores read from items is untested: Thief, Knock Off and co. (`StealHeldItemChanceAttr`, `RemoveHeldItemAttr`), the KO check's item damage boosts, and Stuff Cheeks, which needs a berry: battle-core doesn't tell berries from other held items, so any held item of an unknown class reports `PR_AI_FEAT_RESTRICTION`.
-- **A trainer's switching moves.** battle-core's `pr_switch_out_condition` reports `PR_FEAT_TRAINER` for the trainer's side (it doesn't know trainer slots), so U-turn, Baton Pass, Parting Shot and Roar in a trainer battle are uncovered.
+- **Held items outside the bounded Card 108 proof below.** The established random suite skips modifier records. The new suite proves Thief/Knock Off scores and KO selection with canonical Normal type boosts; other families, virtual stock and broader held lifecycle remain outside it. The focused Stuff Cheeks restriction has its separate proof below. Unknown held subclasses still report `PR_AI_FEAT_RESTRICTION` when no known berry resolves that check.
+- **Broader trainer switching contexts.** Card 103 (#185) proves canonical loaded trainer move switching; the additive Card 108 proof below checks AI scores/commands for U-turn, Baton Pass, Parting Shot and Roar. Natural partner doubles and challenge legality remain outside that proof.
 - **Boss enemies** (boss segments are unported in battle-core) and **Transform** (`summonData.moveset`) aren't in the test.
 - **Messages at command time.** What a condition queues on `bt->engine` (above) is what upstream queues, but `pr_run_turn` starts the engine afresh, so the game doesn't show them yet.
 
@@ -404,3 +404,20 @@ Same upstream checkout, Node v22.22.0:
   identity still detected, as in Task 68's table.
 - `make -C ai-core test-berry`: 404 cases, 404 identical.
 - `make -C game-core test`: exits 0 with the same output as main (`8decbf9d` both runs' digests).
+
+## Card 108: trainer moves and canonical held-aware AI
+
+After Card 103 (#185), the additive
+[trainer/held proof](TRAINER-HELD-VALIDATION.md) compares actual source enemy
+commands, trainer scores/picks, benefit scores and damage for eight profiles
+across four seeds: **8000/8000 identical**, zero mismatches/uncovered. It includes
+Thief/Knock Off held scores and type-boosted KO selection, both reserve refusals
+and actual voluntary switches. The established 20,000-case suite remains
+4938/4946/4942/4936 covered and identical under Node 22.
+
+`tools/trainerhelddiff.sh <upstream> 2000 <seed>` runs the new suite. Its dedicated
+reader requires complete source records/counts; 25 malformed/request probes
+exit 2 and three actual C callsite mutants fail. Existing producers/comparators
+are unchanged; no production AI behavior needed repair. This is partial Card
+108, excluding boss segments, Transform, natural partner doubles/challenges,
+natural Illusion and broader item lifecycle.
