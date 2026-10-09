@@ -584,7 +584,7 @@ bool pr_reward_lapse_lures(pr_reward_ctx *ctx, int *expired);
 bool pr_reward_lure_chance(const pr_reward_ctx *ctx, double base, double *result);
 
 /* Canonical ordinary held acquisition only: WIDE_LENS (accuracy5,max3),
- * REVIVER_SEED (max1), GOLDEN_PUNCH (max5).
+ * REVIVER_SEED (max1), GOLDEN_PUNCH (max5), MULTI_LENS (max2).
  * Adds one real stack via pinned PersistentModifier.add: first exact holder
  * and family matches; wildcard -1 is not an acquisition match. FULL is a
  * supported no-effect refusal. Invalid/capacity inputs refuse unchanged.
