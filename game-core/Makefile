@@ -277,3 +277,14 @@ classic-win-host: $(BUILD)/classic_win_host_test
 	$(BUILD)/classic_win_host_test
 $(BUILD)/classic_win_host_test: tests/classic_win_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/gcstress
+$(BUILD)/gcstress: tools/gcstress.c tools/endgame-diagnostic.h $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tools/gcstress.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+
+test: endgame-diagnostic-test
+endgame-diagnostic-test: $(BUILD)/endgame_diagnostic_test $(BUILD)/gcstress
+	$(BUILD)/endgame_diagnostic_test
+	python3 tests/endgame_diagnostic_checks.py $(BUILD)/gcstress
+$(BUILD)/endgame_diagnostic_test: tests/endgame_diagnostic_test.c tools/gcstress.c tools/endgame-diagnostic.h $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/endgame_diagnostic_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@

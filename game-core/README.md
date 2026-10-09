@@ -695,3 +695,11 @@ counts, species-line ribbons, unlocks and vouchers. A named terminal marker
 prevents duplicate awards across reloads. This proves actual source terminal
 bookkeeping with legal fixture outcomes; whole-run clears remain gated. See
 [scope and validation](CLASSIC-WIN-VALIDATION.md).
+
+## Endgame diagnostic chooser
+
+The separate host `gcstress` tool starts a documented strong fixture at wave 1
+and drives actual game screens and choices to report late-game deaths, refusals
+and stand-ins. It leaves the legacy chooser and digest unchanged. Its 100-run
+paired diagnostic reaches wave 200 and identifies final-boss blockers, with no
+clear claim. See [scope and validation](ENDGAME-DIAGNOSTIC-VALIDATION.md).

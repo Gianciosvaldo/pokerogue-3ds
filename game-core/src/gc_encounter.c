@@ -169,6 +169,7 @@ static void enemy_items(gc_run *run)
     for (int i = 0; i < run->n_enemy; i++)
         for (int k = 0; k < out.n[i] && run->n_enemy_items < GC_MAX_ITEMS; k++) {
             gc_item *it = &run->enemy_items[run->n_enemy_items++];
+            memset(it, 0, sizeof *it); /* fresh generated stock must not inherit prior-holder state */
             const bool token = out.items[i][k].item >= 14;   /* the ENEMY_* tokens and the Mini Black Hole */
             it->key = pr_item_names[out.items[i][k].item];
             it->arg = out.items[i][k].arg;
