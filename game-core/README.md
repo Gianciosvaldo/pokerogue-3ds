@@ -668,3 +668,10 @@ See [scope and validation](LENS-VALIDATION.md).
 Canonical loaded stacks reach the existing actual hit-count and damage helpers;
 real stocks persist and transient stacks reset on load. Malformed inputs stay
 opaque. See [scope and validation](MULTI-VALIDATION.md).
+
+## Canonical temporary booster caller
+
+Bounded X-item and Dire Hit acquisition/refresh, full-stack ball replacement,
+named timer persistence and actual BattleEnd lapse now call reward-core. Raw
+battle helper projection is covered; full turns still flag these modifiers as
+unsupported. See [scope and validation](TEMP-VALIDATION.md).

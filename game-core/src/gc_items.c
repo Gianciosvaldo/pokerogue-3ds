@@ -26,6 +26,7 @@ void gc_item_add(gc_run *run, const char *key, int16_t arg, uint32_t pokemon_id,
     it->pokemon_id = pokemon_id;
     it->detached = false;
     it->virtual_stack = 0;
+    it->battle_count = 0;
     it->stack = stack;
 }
 
@@ -130,6 +131,16 @@ static void to_modifier(const gc_item *it, pr_modifier *m, bool golden)
             if (coin) m->pokemon_id = 0; /* persistent source class has no holder */
             m->virtual_stack_count = it->virtual_stack;
             m->unknown_subclass = false;
+        }
+    } else if (!strcmp(it->key, "TEMP_STAT_STAGE_BOOSTER") || !strcmp(it->key, "DIRE_HIT")) {
+        const bool crit = !strcmp(it->key, "DIRE_HIT");
+        if (!it->pokemon_id && !it->detached && !it->virtual_stack
+            && it->stack >= 1 && it->stack <= 2 && it->battle_count >= 1 && it->battle_count <= 5
+            && (crit ? it->arg == 0 : it->arg >= STAT_ATK && it->arg <= STAT_ACC)) {
+            m->cls = crit ? PR_MOD_TEMP_CRIT_BOOSTER : PR_MOD_TEMP_STAT_STAGE_BOOSTER;
+            m->pokemon_id = 0; m->stat = it->arg;
+            m->mult = it->arg == STAT_ACC ? 1.0 : 0.2;
+            m->unknown_subclass = false; m->is_transferable = false;
         }
     } else if (!strcmp(it->key, "MULTI_LENS")) {
         /* PokemonMultiHitModifier: one or two effective loaded stacks. Invalid

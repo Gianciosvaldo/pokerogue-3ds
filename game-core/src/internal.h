@@ -254,4 +254,8 @@ uint32_t gc_stub_rand(gc_run *run, uint32_t n);
 void gc_wallet_to_battle(gc_run *run);
 void gc_wallet_from_battle(gc_run *run);
 
+int gc_temp_add(gc_run *run, int item, int arg);
+int gc_temp_apply(gc_run *run, const gc_offer *o, const char **why);
+bool gc_temp_lapse(gc_run *run, int *expired);
+
 #endif
