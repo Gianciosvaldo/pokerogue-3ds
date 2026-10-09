@@ -286,8 +286,9 @@ static void battle_end(gc_run *run, gc_rphase *p)
     }
     /* PostBattleAbAttr (Pickup, Honey Gather) and Pay Day's scattered money wait on the rewards */
     if (bt->money_scattered) gc_stub(run, GC_STUB_POST_BATTLE);
-    /* clearEnemyHeldItemModifiers; lapsing items (Lures, X items) aren't given yet */
+    /* clearEnemyHeldItemModifiers; then the bounded temporary booster lapse. */
     run->n_enemy_items = 0;
+    if (!gc_temp_lapse(run, NULL)) gc_stub(run, GC_STUB_POST_BATTLE);
     if (!victory && !bt->successful_run && !gc_rq_has(run, RP_SELECT_MODIFIER)) {
         if (bt->enemy_faints > 0) gc_rq_unshift(run, gc_rp(RP_SELECT_MODIFIER, 0, 0, 0));
         else gc_rq_unshift(run, gc_rp(RP_SELECT_MODIFIER, 1, 0, 0));   /* no reroll, no fill: rewards stub */

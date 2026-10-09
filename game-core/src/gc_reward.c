@@ -250,6 +250,7 @@ static pr_reward_ctx *ctx_base(gc_run *run, bool count)
         o->item = (uint16_t)item;
         o->arg = it->arg;
         o->stack = it->stack;
+        o->battle_count = it->battle_count;
         o->owner = -1;
         if (it->pokemon_id)
             for (int k = 0; k < c->n_party; k++)
@@ -654,6 +655,8 @@ int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, co
     if (item < 0) return GC_APPLY_UNHANDLED;
     if (item == PR_ITEM_NUGGET || item == PR_ITEM_BIG_NUGGET || item == PR_ITEM_RELIC_GOLD)
         return apply_money_item(run, item);
+    if (item == PR_ITEM_TEMP_STAT_STAGE_BOOSTER || item == PR_ITEM_DIRE_HIT)
+        return gc_temp_apply(run, o, why);
     if (item == PR_ITEM_MINT) return apply_mint(run, o, party, why);
     if (item == PR_ITEM_BASE_STAT_BOOSTER) return apply_vitamin(run, o, party, why);
 

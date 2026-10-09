@@ -93,8 +93,8 @@ static const sfield mystery_history_fields[] = {
 };
 
 /* An item, its key as text (gc_item.key is a pointer) */
-typedef struct { char key[40]; int16_t arg; int32_t stack; uint32_t pokemon_id; bool detached; } sv_item;
-static const sfield item_fields[] = {SF(sv_item, key), SF(sv_item, arg), SF(sv_item, stack), SF(sv_item, pokemon_id), SF(sv_item, detached)};
+typedef struct { char key[40]; int16_t arg; int32_t stack; uint32_t pokemon_id; bool detached; int32_t battle_count; } sv_item;
+static const sfield item_fields[] = {SF(sv_item, key), SF(sv_item, arg), SF(sv_item, stack), SF(sv_item, pokemon_id), SF(sv_item, detached), SF(sv_item, battle_count)};
 
 /* What the run keeps of a Pokemon beside battle-core's part */
 static const sfield mon_fields[] = {
@@ -318,6 +318,7 @@ static void put_items(writer *w, const char *name, const gc_item *items, int n)
         sv[i].stack = items[i].stack;
         sv[i].pokemon_id = items[i].pokemon_id;
         sv[i].detached = items[i].detached;
+        sv[i].battle_count = items[i].battle_count;
     }
     size_t s = section_start(w, name);
     put_block(w, item_fields, NF(item_fields), sv, sizeof sv[0], n);
@@ -491,6 +492,7 @@ static bool get_items(const reader *body, const char *name, gc_item *items, int 
         items[i].stack = sv[i].stack;
         items[i].pokemon_id = sv[i].pokemon_id;
         items[i].detached = sv[i].detached;
+        items[i].battle_count = sv[i].battle_count;
         items[i].virtual_stack = 0; /* pinned ModifierData saves real stacks only */
     }
     return true;
