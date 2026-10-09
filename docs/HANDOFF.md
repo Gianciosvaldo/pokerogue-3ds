@@ -39,31 +39,34 @@ Start with [`README.md`](../README.md) (folder table), then the README of the fo
 ## Current checkpoint (2026-10-09; historical sections retained)
 
 Use [current scheduling](PARITY-TASKS.md#current-next-work-2026-10-09) and the
-[ledger](PARITY-LEDGER.md) for merged code `c3bfa8b`, through #183. Two additional
-implementations add separate canonical raw Orb acquisition and bounded Multi
-Lens game acquisition. This final Card 149 refresh is third; stop after it with
-no fourth task. The previous five/ten-task checkpoints #181/#176 remain history.
+[ledger](PARITY-LEDGER.md) for merged code `f40dc52`, through #191. Seven bounded
+implementations cover trainer switch/Roar proof, Growth, Speed Boost, trainer/
+held AI recheck, Classic terminal awards, a separate endgame diagnostic and egg
+gacha. The final Card 149 docs refresh is eighth; stop with no ninth task.
+Prior three/five/ten-task checkpoints remain history. The roadmap's older claim
+that trainer routing was absent is stale; inspect current code before duplicating.
 
-Toxic/Flame share one source modifier class and cap 1; either on an exact holder
-blocks the other. The separate API preserves earlier opaque-Orb contracts.
-Multi proof separates public-full refusal from direct Scene tier replacement,
-paid persistent mutation/error/no-charge and bounded Multi orphan cleanup.
-Raw seven-position damage probes are not seven executed hits. Literal game
-rendered-message, wildcard loading and broad Scene lifecycle remain excluded.
-Earlier temporary #180 full-turn proof and explicitly approved stronger fixture
-contract remain intact; no general test-edit waiver follows.
+Dedicated source suites pass their bounded scopes. Broad trainer seed 4242
+CASE 1051 queue optional-index metadata remains FAILED; ITEMS text-completeness
+1/1/2/1 remains FAILED, with no pass credit despite covered state comparisons.
+No established producer/comparator/tolerance/seed/count/exclusion was weakened.
+Earlier raw-helper repair and approved stronger temporary contract remain intact.
 
-The uploaded October 4 roadmap maps work to partial Cards 96/104 and Card 149 docs;
-planning statements do not override user instructions. Orb game acquisition,
-Lure/friendship, transfers, guarded contexts and full post-battle lifecycle remain.
-Task 64 stays partial and 65/66 gated by reserved run-core prerequisites. Detached 0
-and wildcard -1 remain distinct; transient stacks reset on saves, with no virtual
-fixture normal/save or whole source session migration claim.
+Classic #186 uses supplied terminal outcomes; local duplicate award protection
+is separate from source phase behavior. Diagnostic #189 uses an explicit stress fixture that
+bypasses normal starter/level rules: all 100 reach wave 200, 94 defeats and six actual final-boss
+capture refusals, 0 clears. Expected exit 1 reports refusals, not successful
+completion. Egg #191 proves bounded gacha/constructor serialization; toEgg
+rehydration/migration, hatching 81, UI and account persistence remain unproved.
 
-Exact-head host/3DS CI succeeded for #182/#183. Conditional Task 63 jobs remain
-skipped, not source passes. Source comparisons, host consistency and human
-hardware acceptance are distinct. One task per lane, validated merge before
-advancing and the user's session stop limit still apply.
+Actual final-boss transitions, enemy movesets/fixed teams and full 64/65/66 remain
+owner-coordinated gates; run-core belongs to Lorenzo. Wider 96/104, ability/
+form/fusion/doubles and human console acceptance remain separate. Uploaded
+roadmap statements are planning context, not overrides of user instructions.
+Exact-head host/3DS CI passed for each #185–#191; conditional Task 63 jobs were
+skipped, not source passes. Source proof, host consistency, diagnostics and
+hardware are distinct. One active task per lane, verified merge before the next,
+and the user's session stop limit still apply.
 
 ## Rules (read these before touching anything)
 1. **Branch and pull request only.** Never push to `main`. Do not merge your own PR unless explicitly authorized; the October 7 Codex exception below applies here. One task per branch, one PR per task.
