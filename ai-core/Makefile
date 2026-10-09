@@ -10,7 +10,7 @@ CORE_LIB := $(BUILD)/battle-core/libprcore.a
 SRCS := src/ai.c src/ai_score.c src/ai_damage.c gen/out/ai_data.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
-all: $(BUILD)/libai.a $(BUILD)/aitest $(BUILD)/illusiontest $(BUILD)/doublestest
+all: $(BUILD)/libai.a $(BUILD)/aitest $(BUILD)/illusiontest $(BUILD)/doublestest $(BUILD)/trainerheldtest
 
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -45,3 +45,5 @@ FORCE:
 .PHONY: all clean FORCE test-berry
 -include $(OBJS:.o=.d)
 
+$(BUILD)/trainerheldtest: tests/trainerheldtest.c tests/aitest.c $(BUILD)/libai.a $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/trainerheldtest.c $(BUILD)/libai.a $(CORE_LIB) -lm -o $@
