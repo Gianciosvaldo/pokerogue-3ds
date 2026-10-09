@@ -681,3 +681,9 @@ unsupported. See [scope and validation](TEMP-VALIDATION.md).
 Canonical stock additions reach the existing Lens bridge with source selection,
 paid-result and bounded Scene cleanup behavior. See
 [scope and validation](WIDE-ACQUISITION-VALIDATION.md).
+
+## Canonical Multi Lens acquisition caller
+
+Cap-two additions now reach the inventory bridge through bounded source selection,
+paid-result and Scene cleanup behavior. See
+[scope and validation](MULTI-ACQUISITION-VALIDATION.md).
