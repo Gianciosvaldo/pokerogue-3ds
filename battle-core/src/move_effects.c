@@ -594,6 +594,23 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         pr_queue_msg(bt, e, P(ResetStatsAttr, a)->targetAllPokemon ? pr_msg0("moveTriggers:statEliminated")
                             : pr_msg1("moveTriggers:resetStats", pr_arg_pokemon(bt, "pokemonName", target)));
         return;
+    case PR_AC_CopyStatsAttr: {
+        /* CopyStatsAttr: every battle stat stage straight onto the user, no StatStageChangePhase;
+         * Focus Energy's tag follows the target's (an existing one is only overlapped) */
+        if (!effect_can_apply(ef, user, target)) return;
+        for (int s = 0; s < 7; s++) {
+            int v = target->stat_stages[s];
+            user->stat_stages[s] = (int8_t)(v < -6 ? -6 : v > 6 ? 6 : v);
+        }
+        if (pr_get_battler_tag(target, BATTLER_TAG_TYPE_CRIT_BOOST))
+            pr_add_tag(bt, e, user, BATTLER_TAG_TYPE_CRIT_BOOST, 0, move, -1);
+        else
+            pr_remove_tag(bt, e, user, BATTLER_TAG_TYPE_CRIT_BOOST);
+        pr_queue_msg(bt, e, pr_msg2("moveTriggers:copiedStatChanges",
+                                    pr_arg_pokemon(bt, "pokemonName", user),
+                                    pr_arg_pokemon(bt, "targetName", target)));
+        return;
+    }
     case PR_AC_SwapStatStagesAttr: {                     /* Heart Swap, Power Swap, Guard Swap */
         if (!effect_can_apply(ef, user, target)) return;
         const pr_intlist *st = &P(SwapStatStagesAttr, a)->stats;
