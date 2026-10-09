@@ -12,7 +12,7 @@ RUN_LIB := $(BUILD)/run-core/librun.a
 CORE_LIB := $(BUILD)/run-core/battle-core/libprcore.a
 AI_LIB := $(BUILD)/ai-core/libai.a
 REWARD_LIB := $(BUILD)/reward-core/libreward.a
-SRCS := src/gc_temp.c src/gc_moveset.c src/gc_run.c src/gc_phases.c src/gc_mon.c src/gc_items.c src/gc_encounter.c src/gc_battle.c src/gc_save.c src/gc_stubs.c src/gc_system.c src/gc_mystery.c src/gc_reward.c src/gc_reward_lifecycle.c src/gc_learnset.c src/gc_catch.c gen/out/gc_evolutions.c gen/out/gc_starters.c gen/out/gc_trainers.c gen/out/gc_dex.c gen/out/gc_learnsets.c
+SRCS := src/gc_wide.c src/gc_temp.c src/gc_moveset.c src/gc_run.c src/gc_phases.c src/gc_mon.c src/gc_items.c src/gc_encounter.c src/gc_battle.c src/gc_save.c src/gc_stubs.c src/gc_system.c src/gc_mystery.c src/gc_reward.c src/gc_reward_lifecycle.c src/gc_learnset.c src/gc_catch.c gen/out/gc_evolutions.c gen/out/gc_starters.c gen/out/gc_trainers.c gen/out/gc_dex.c gen/out/gc_learnsets.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
 test: temp-host-test temp-raw-guards
@@ -20,6 +20,23 @@ temp-raw-guards: $(BUILD)/temp_diff_test
 	$(BUILD)/temp_diff_test --selftest
 temp-host-test: $(BUILD)/temp_caller_test
 	$(BUILD)/temp_caller_test --selftest
+
+test: wide-acquire-host wide-raw-guards
+wide-acquire-host: $(BUILD)/wide_acquire_host_test
+	$(BUILD)/wide_acquire_host_test
+wide-raw-guards: $(BUILD)/wide_raw_test
+	$(BUILD)/wide_raw_test --selftest
+all: $(BUILD)/wide_acquire_host_test
+$(BUILD)/wide_acquire_host_test: tests/wide_acquire_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/wide_raw_test
+$(BUILD)/wide_raw_test: tests/wide_raw_test.c tests/wide-raw-bridge.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/wide_raw_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+
+all: $(BUILD)/wide_acquire_diff_test
+$(BUILD)/wide_acquire_diff_test: tests/wide_acquire_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
 all: $(BUILD)/temp_caller_test
 $(BUILD)/temp_caller_test: tests/temp_caller_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
