@@ -170,7 +170,9 @@ source, which changes later turns. Normal and save runs match on each build. 0 c
   message compared (`copiedStatChanges`, `critBoostOnRemove`, protect/taunt/sleep texts).
 - 3DS hardware not run. CI host/3DS jobs on the PR head are the remaining external check.
 
-Trace hashes (sha256):
+Trace hashes (sha256) of the replayed files. Upstream Pokemon ids are not seeded, so a regenerated
+trace differs only in id-derived fields (`id=`, `participants=`, `PARTY list=`, tag `sid=`): the final-head
+rerun of the 4×2000 suite differed from these files in exactly those fields and gave the same results.
 
 ```
 5c3d45e6282fd657663d800f28f2d2c01dca8f048005418bb43300a0fbd8faf4  cond-31337.txt
