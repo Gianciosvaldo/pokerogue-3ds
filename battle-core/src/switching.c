@@ -8,15 +8,18 @@
 #include <math.h>
 #include <string.h>
 
-/* Bounded stat-item portion of SummonPhase.updateModifiers: discard orphaned
- * canonical held records before recalculating party stats. Other families and
- * transient virtual acquisition remain in their existing lifecycle scopes. */
-static void update_canonical_stat_items(pr_battle *bt, int side)
+/* Proven stat/FieldEffect portion of SummonPhase.updateModifiers: discard
+ * canonical orphans and clear FieldEffect virtual stacks before party recalc.
+ * Other families remain in their existing lifecycle scopes. */
+static void update_proven_held_items(pr_battle *bt, int side)
 {
     int w=0;
     for(int i=0;i<bt->n_mods[side];i++) {
         pr_modifier m=bt->mods[side][i];
-        if((m.cls==PR_MOD_EVOLUTION_STAT_BOOSTER||m.cls==PR_MOD_SPECIES_STAT_BOOSTER)
+        if(m.cls==PR_MOD_FIELD_EFFECT && pr_mod_is_ported_item(&m)) {
+            if(!pr_pokemon_by_id(bt,m.pokemon_id)) continue;
+            m.virtual_stack_count=0;
+        } else if((m.cls==PR_MOD_EVOLUTION_STAT_BOOSTER||m.cls==PR_MOD_SPECIES_STAT_BOOSTER)
             && pr_mod_is_ported_item(&m) && !pr_pokemon_by_id(bt,m.pokemon_id)) continue;
         bt->mods[side][w++]=m;
     }
@@ -514,7 +517,7 @@ void pr_switch_summon_phase(pr_battle *bt, pr_engine *e, int ph)
      * and fieldSetup() again */
     in->on_field = true;
     if (side_has_unported_modifier(bt, side)) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
-    update_canonical_stat_items(bt,side);
+    update_proven_held_items(bt,side);
     for (int k = 0; k < bt->n_party[side]; k++) pr_recalculate_stats(bt, bt->party[side][k]);
     field_setup(bt, e, in, false);
     pr_event_add(bt, e, PR_EV_SWITCH_IN, side * 2 + field, -1, 0, field, NULL);
@@ -690,7 +693,7 @@ void pr_summon_phase(pr_battle *bt, pr_engine *e, int ph)
     p->on_field = true;
     p->switch_out_status = false;
     if (side_has_unported_modifier(bt, side)) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
-    update_canonical_stat_items(bt,side);
+    update_proven_held_items(bt,side);
     for (int k = 0; k < bt->n_party[side]; k++) pr_recalculate_stats(bt, bt->party[side][k]);
     field_setup(bt, e, p, false);
     pr_event_add(bt, e, PR_EV_SWITCH_IN, b, -1, 0, field, NULL);

@@ -36,7 +36,7 @@ The bounded slices below add dispatch or prove existing helpers; Card 104 remain
 | `BerryModifier` | `PR_MOD_BERRY`; trigger/consume dispatch for all eleven pinned berries | Existing bounded berry suites; lifecycle outside their fixtures not implied |
 | `PokemonInstantReviveModifier` | `PR_MOD_INSTANT_REVIVE`; FaintPhase early return, queued revival and item consumption | Added bounded singles Reviver Seed; Commander/doubles and acquisition/save integration remain outside this slice |
 | `ResetNegativeStatStageModifier` | `PR_MOD_RESET_NEGATIVE_STAT_STAGE`; adverse-stage reset dispatch | Existing White Herb scope |
-| `FieldEffectModifier` | `PR_MOD_FIELD_EFFECT`; field-duration helper used by weather/terrain changes | Full-turn fixtures/whitelist |
+| `FieldEffectModifier` | `PR_MOD_FIELD_EFFECT`; existing weather/terrain duration callers | [Bounded Mystical Rock proof](FIELD-EFFECT-VALIDATION.md): four seeds ×2000 full turns, effective cap2, real-only duration/first-match, scoped summon orphan/virtual cleanup; broader lifecycle remains separate |
 | `PokemonExpBoosterModifier` | No C class in battle-core | Held Lucky/Golden Egg experience dispatch; side-wide Exp. Charm helper is a different class |
 | `PokemonFriendshipBoosterModifier` | No C class in battle-core | Held Soothe Bell friendship dispatch |
 | `PokemonNatureWeightModifier` | Existing `PR_MOD_NATURE_WEIGHT` nature-stat calculation; bounded Soul Dew class promoted | Proven singles stats/full-turn scope; acquisition/save/transfer excluded |

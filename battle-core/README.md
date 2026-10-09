@@ -1020,3 +1020,13 @@ fusion refusals stay separate from existing raw math. Canonical stat-item orphan
 cleanup at summon fixes wildcard records surviving forced replacements. The 40
 previous turn suites and four legacy damage/stat pairs retain their exact output;
 whole held-item acquisition, transfer, fusion and save lifecycle remain separate.
+
+## Mystical Rock weather/terrain caller proof (Card 104, partial)
+
+[Validation](FIELD-EFFECT-VALIDATION.md) records four seeds ×2000 exact full turns
+for existing FieldEffect weather/terrain callers. Canonical effective cap2 is
+admitted; real count alone adds two turns per stack and first matching item wins.
+Virtual, duplicate, owner/refusal and expiry behavior is source-compared,
+including weather faint/replacement orphan cleanup and virtual reset. Raw
+helper arithmetic stays unchanged. Broader held acquisition/save lifecycle and
+temporary-booster full-turn admission remain separate tasks.
