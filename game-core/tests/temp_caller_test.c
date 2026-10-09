@@ -17,7 +17,7 @@ static void selftest(void){
   switch(guard){case 0:run.items[0].battle_count=0;break;case 1:run.items[0].battle_count=6;break;case 2:run.items[0].stack=3;break;case 3:run.items[0].arg=0;break;case 4:run.items[0].pokemon_id=123;break;case 5:run.items[0].virtual_stack=1;break;case 6:run.items[0].detached=true;break;case 7:run.n_items=2;run.items[1]=(gc_item){.key="UNRECOGNIZED",.stack=1};break;case 8:run.run.has_challenges=true;break;case 9:run.items[0].key="DIRE_HIT";break;}
   gc_item before[GC_MAX_ITEMS];memcpy(before,run.items,sizeof before);int count=run.n_items,expired=99;
   CHECK(gc_temp_add(&run,PR_ITEM_DIRE_HIT,0)==PR_REWARD_TEMP_UNSUPPORTED);CHECK(!gc_temp_lapse(&run,&expired)&&expired==99);CHECK(run.n_items==count&&!memcmp(before,run.items,sizeof before));
-  gc_items_to_battle(&run);if(guard!=7&&guard!=8)CHECK(run.bt.mods[0][0].unknown_subclass);
+  gc_items_to_battle(&run);if(guard!=7&&guard!=8){CHECK(run.bt.mods[0][0].unknown_subclass);CHECK(!pr_mod_is_ported_item(&run.bt.mods[0][0]));}
  }
  for(int timer=1;timer<=5;timer++){setup();run.n_items=1;run.items[0]=(gc_item){.key="DIRE_HIT",.arg=0,.stack=1,.battle_count=timer};gc_items_to_battle(&run);size_t size=gc_run_save(&run,saved,sizeof saved);CHECK(size&&gc_run_load(&loaded,saved,size,&why));CHECK(loaded.items[0].battle_count==timer);int expired=99;CHECK(gc_temp_lapse(&loaded,&expired));CHECK(expired==(timer==1)&&loaded.n_items==(timer>1));if(timer>1)CHECK(loaded.items[0].battle_count==timer-1);}
  setup();run.n_items=1;run.items[0]=(gc_item){.key="UNRECOGNIZED",.stack=1};int expired=-1;CHECK(gc_temp_lapse(&run,&expired)&&expired==0);
@@ -40,7 +40,12 @@ for(int ci=0;ci<n;ci++){
  gc_rq_clear(&run);gc_int(&run)->rq.current=gc_rp(RP_COMMAND,0,0,0);gc_int(&run)->rq.waiting=true;run.screen.kind=GC_SCREEN_COMMAND;
  CHECK(gc_run_can_save(&run));size_t size=gc_run_save(&run,saved,sizeof saved);CHECK(size&&gc_run_load(&loaded,saved,size,&why));CHECK(loaded.n_items==1&&loaded.items[0].battle_count==run.items[0].battle_count&&loaded.items[0].stack==run.items[0].stack);
  CHECK(loaded.bt.mods[0][0].cls==(family==6?PR_MOD_TEMP_CRIT_BOOSTER:PR_MOD_TEMP_STAT_STAGE_BOOSTER));
- CHECK(!pr_mod_is_ported_item(&loaded.bt.mods[0][0])); /* Full-turn whitelist stays bounded. */
+ /* Canonical full-turn admission is backed by the separate upstream turn suite. */
+ CHECK(pr_mod_is_ported_item(&loaded.bt.mods[0][0]));
+ CHECK(!loaded.bt.mods[0][0].unknown_subclass&&loaded.bt.mods[0][0].stack_count==loaded.items[0].stack&&loaded.bt.mods[0][0].virtual_stack_count==0&&loaded.bt.mods[0][0].pokemon_id==0);
+ double boost=1;pr_apply_temp_stat_stage_booster_modifiers(&loaded.bt,true,family==6?STAT_ATK:arg,&boost);
+ CHECK(boost==(family==6?1:1+(arg==STAT_ACC?1.0:0.2)));
+ int crit=0;pr_apply_temp_crit_booster_modifiers(&loaded.bt,true,&crit);CHECK(crit==(family==6));
  for(int tick=0;tick<ticks;tick++){double t[3];numbers('T',t,3);CHECK(t[0]==tick);battle_end(&run,victory);battle_end(&loaded,victory);CHECK(!gc_run_can_save(&run)&&!gc_run_can_save(&loaded));CHECK(run.n_items==(t[1]?1:0)&&loaded.n_items==run.n_items);if(run.n_items){CHECK(run.items[0].stack==t[1]&&run.items[0].battle_count==t[2]);CHECK(loaded.items[0].battle_count==t[2]);}ticksTotal++;}
  double e;numbers('E',&e,1);CHECK(e==ci);paid+=purchase;full+=duration==5;
 }

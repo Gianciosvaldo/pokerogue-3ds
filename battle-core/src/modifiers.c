@@ -130,6 +130,12 @@ bool pr_mod_is_ported_item(const pr_modifier *m)
         int64_t stacks = (int64_t)m->stack_count + m->virtual_stack_count;
         return !m->unknown_subclass && m->stack_count >= 1 && m->virtual_stack_count >= 0 && stacks <= 5;
     }
+    if (m->cls == PR_MOD_TEMP_STAT_STAGE_BOOSTER || m->cls == PR_MOD_TEMP_CRIT_BOOSTER) {
+        if (m->unknown_subclass || m->stack_count<1 || m->stack_count>2
+            || m->virtual_stack_count!=0 || m->pokemon_id!=0) return false;
+        if (m->cls == PR_MOD_TEMP_CRIT_BOOSTER) return m->stat==0;
+        return m->stat>=STAT_ATK && m->stat<=STAT_ACC && m->mult==(m->stat==STAT_ACC?1.0:0.2);
+    }
     if (m->cls == PR_MOD_FIELD_EFFECT) {
         int64_t stacks=(int64_t)m->stack_count+m->virtual_stack_count;
         return !m->unknown_subclass && m->stack_count>=1 && m->virtual_stack_count>=0 && stacks<=2;

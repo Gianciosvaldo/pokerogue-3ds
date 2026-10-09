@@ -1029,4 +1029,15 @@ admitted; real count alone adds two turns per stack and first matching item wins
 Virtual, duplicate, owner/refusal and expiry behavior is source-compared,
 including weather faint/replacement orphan cleanup and virtual reset. Raw
 helper arithmetic stays unchanged. Broader held acquisition/save lifecycle and
-temporary-booster full-turn admission remain separate tasks.
+temporary-booster lifecycle remain separate tasks; its bounded full-turn
+proof is recorded below.
+
+## Bounded temporary X / Dire Hit caller proof (Card 104, partial)
+
+[Validation](TEMPORARY-BOOSTER-VALIDATION.md) records four seeds ×2000 exact
+full turns and actual numerical stat/accuracy/crit projections. Canonical
+side-wide real1–2/virtual0 records are admitted; stacks do not multiply an
+individual record's boost, while duplicates each contribute. Existing math
+and64 battle regression pairs remain unchanged. The explicitly authorized
+stronger game caller contract retains outcomes and invalid refusal checks.
+Duration/lapse remains the separately validated game-core lifecycle scope.
