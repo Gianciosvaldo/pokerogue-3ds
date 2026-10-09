@@ -1064,3 +1064,13 @@ prove caps, Simple, Contrary and Taunt refusal. All72 retained battle pairs
 preserve or increase coverage; existing ITEMS missing-text failures remain
 explicit. All56 retained game outputs are unchanged. Host normal/save trajectories
 change with the active effect while their paired digests still agree.
+
+## Speed Boost post-turn ability (Card 106, 2026-10-09)
+
+[Validation](SPEED-BOOST-VALIDATION.md) proves four seeds × 2000 exact actual
+post-turn Speed Boost turns, fresh numerical stats, RNG and text. The existing
+post-turn routing now handles Speed +1, source switched-in/failed-run refusals,
+and existing suppression/faint gates, passive combinations, Simple/Contrary,
+caps and Protect. Source activation has no minimum temporary turn-count rule.
+Queue-less simulated application remains unsupported. Historical ITEMS text
+and trainer metadata transport failures remain explicit; no old checks change.
