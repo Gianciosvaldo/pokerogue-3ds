@@ -68,3 +68,19 @@ int gc_soothe_scene_apply(gc_run *run,const gc_offer *o,int storage,const char *
  if(o->is_purchase){if(why)*why="";return GC_APPLY_REFUSED;}
  return GC_APPLY_DONE;
 }
+
+/* Only VictoryPhase's ordinary positive gain. Shared friendship/Candy callers
+ * retain their existing semantics. Projection never changes inventory. */
+bool gc_soothe_battle_gain(gc_run *run,int storage) {
+ if(!run||run->n_party<1||run->n_party>PR_REWARD_MAX_PARTY||storage<0||storage>=run->n_party)return false;
+ bool any=false;
+ if(run->n_items<0||run->n_items>GC_MAX_ITEMS)return false;
+ for(int j=0;j<run->n_items;j++)any|=!strcmp(run->items[j].key,"SOOTHE_BELL");
+ if(!any){gc_system_add_friendship(run->sys,run,&run->party[storage],3,false);return true;}
+ if(run->run.mode!=GAME_MODES_CLASSIC&&run->run.mode!=GAME_MODES_ENDLESS)return false;
+ for(int j=0;j<run->n_party;j++)if(run->party[j].b.fusion_species)return false;
+ static pr_reward_ctx c;int target;double amount;
+ if(!context(run,&c,storage,&target)||!pr_reward_soothe_bell_gain(&c,target,3,&amount,NULL))return false;
+ gc_system_add_friendship(run->sys,run,&run->party[storage],(int)amount,false);
+ return true;
+}
