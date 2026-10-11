@@ -1,0 +1,8 @@
+/* Separate constructed method controls; not legal whole turns. */
+#include "pr/engine.h"
+#include <stdio.h>
+#include <string.h>
+static pr_battle bt;static pr_engine e;
+int main(int argc,char **argv){if(argc!=2)return 2;FILE *f=fopen(argv[1],"r");char l[256];if(!f||!fgets(l,sizeof l,f)||strcmp(l,"BAD_DREAMS_HELPERS 1 9\n"))return 2;int fails=0;for(int i=0;i<9;i++){int id,max,hp,status,ability,passive,ho,vo,sim,after,msg;char extra;if(!fgets(l,sizeof l,f)||sscanf(l,"H %d %d %d %d %d %d %d %d %d %d %d %c",&id,&max,&hp,&status,&ability,&passive,&ho,&vo,&sim,&after,&msg,&extra)!=11||id!=i||max<1||hp<1||hp>max||status<0||status>STATUS_EFFECT_FAINT||ability<0||ability>=PR_ABILITY_COUNT||passive<0||passive>=PR_ABILITY_COUNT||ho<0||ho>1||vo<0||vo>1||sim<0||sim>1||after<0||after>max||msg<0||msg>1)return 2;
+memset(&bt,0,sizeof bt);memset(&e,0,sizeof e);pr_pokemon h={0},v={0};h.id=1;h.species=SPECIES_ID_RATTATA;h.hp=h.stats[0]=50;h.ability=h.ability_override=ABILITY_ID_BAD_DREAMS;h.passive=passive;h.is_player=true;h.on_field=true;h.switch_out_status=ho;v=h;v.id=2;v.is_player=false;v.passive=0;v.hp=hp;v.stats[0]=max;v.status=status;v.ability=v.ability_override=ability;v.switch_out_status=vo;bt.field[0]=&h;bt.field[2]=&v;bt.engine=&e;e.current=-1;pr_ab_params p={.pokemon=&h,.move=-1,.simulated=sim};pr_apply_ab_attrs(&bt,PR_AC_PostTurnHurtIfSleepingAbAttr,&p);int messages=0;for(int k=0;k<PR_MAX_PHASES;k++)if(e.used[k]&&e.pool[k].type==PH_MESSAGE)messages++;if(v.hp!=after||messages!=msg){printf("Bad helper case%d hp%d/%d msg%d/%d\n",i,(int)v.hp,after,messages,msg);fails++;}}
+if(!fgets(l,sizeof l,f)||strcmp(l,"END 9\n")||fgetc(f)!=EOF)return 2;printf("Bad Dreams helpers9 identical%d failures%d\n",9-fails,fails);return fails?1:0;}

@@ -143,3 +143,14 @@ $(BUILD)/fell-stinger-test: tests/fell-stinger-test.c $(BUILD)/fell-stinger-repl
 all: $(BUILD)/fell-stinger-helper-test
 $(BUILD)/fell-stinger-helper-test: tests/fell-stinger-helper-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/bad-dreams-test
+$(BUILD)/bad-dreams-replay.inc: tests/growth-replay.inc tools/build-bad-dreams-replay.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-bad-dreams-replay.py $< $@
+$(BUILD)/bad-dreams-test: tests/bad-dreams-test.c $(BUILD)/bad-dreams-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) tests/bad-dreams-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/bad-dreams-helper-test
+$(BUILD)/bad-dreams-helper-test: tests/bad-dreams-helper-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
