@@ -398,15 +398,61 @@ is easy to change before C02 builds on it.
 
 ## 5. Validation record
 
-*(Filled in below after the checks ran; see the PR description for the exact head.)*
+Run on the final tree of this PR, in a Linux container with gcc 13.3.0, clang 18.1.3 and Python 3.13 (4 vCPU). The PR
+description repeats this with the head commit and the CI results.
 
-RESULTS_PLACEHOLDER
+| Command | Result |
+|---|---|
+| `make -C custom-core clean && make -C custom-core test` | exit 0 in 2 m 24 s |
+| &nbsp;&nbsp;unit + layout, gcc `-O2 -std=c99 -Wall -Wextra -Wpedantic -Werror` | `model_test: 916 checks, 0 failed`; `layout_test: 55 checks, 0 failed` |
+| &nbsp;&nbsp;the same under `-fsanitize=address,undefined -fno-sanitize-recover=undefined` | 916 / 0 failed and 55 / 0 failed, no sanitizer report |
+| &nbsp;&nbsp;mutation check | `368 run, 368 killed, 0 survived, 0 invalid; 7 more are documented as behavior-neutral and not run` |
+| `make -C custom-core CC=clang BUILD=build/clang unit-test` | 916 / 0 failed and 55 / 0 failed, no warnings |
+| `make -C custom-core arm-check` with Ubuntu `arm-none-eabi-gcc` 13.2.1 and the 3DS CPU flags (`-march=armv6k -mtune=mpcore -mfpu=vfp -mfloat-abi=hard -mtp=soft`) | all six sources and both test files compile with `-Werror`; this evaluates `layout_test.c`'s static assertions with ARM type sizes |
+
+**Sizes.** `sizeof` was measured on x86-64 (`make -C custom-core report`) and, with a probe file, with the ARM
+compiler above; **the two agree for every type**, so the structs have no 64-bit-only padding:
+
+| Type | `sizeof` | Type | `sizeof` |
+|---|---|---|---|
+| `cc_obs` | 40 | `cc_nemesis` | 392 |
+| `cc_actor` | 12 | `cc_roster` (16 records) | 6,280 |
+| `cc_event` | 40 | `cc_schedule` | 120 |
+| `cc_turn` (64 events) | 2,572 | `cc_counters` | 24 |
+| `cc_history` (5 turns) | 12,864 | `cc_ledger` (8 entries) | 200 |
+| `cc_terminal` | 48 | `cc_meta` | 19,432 |
+| `cc_item` | 38 | `cc_meta` + `cc_schedule` + `cc_obs` | 19,592 (budget 131,072) |
+
+Encoded size of version 1: 35 bytes empty, 18,378 bytes at every limit at once (budget 65,536). The ARM `.text` of the
+six objects at `-O2` is 751 + 2,280 + 2,432 + 712 + 1,360 + 1,284 = 8,819 bytes. These are compile-time figures. They say
+nothing about speed on an Old 3DS; no run, benchmark or hardware measurement was made.
+
+**What the mutation check is.** `custom-core/tools/mutations.py` holds 368 single-change mutations: 14 changes to the wire constants, 27
+limits and ceilings, and 327 changes to validators, the lifecycle table, the allocators, the ledger and the size
+arithmetic (an off-by-one on every count and ID ceiling, each removed ordering, uniqueness, canonical-zero and lifecycle
+check, each removed identity comparison of the insertion gate, a swapped idempotency key, a shifted eviction, a skipped
+overflow guard). It applies one change at a time to a scratch copy, rebuilds both tests with ASan/UBSan and requires a
+failure. A mutation that does not match exactly once, or does not compile, fails the run. It proves that the tests detect
+those changes; it does not prove there is no other defect.
+
+The first run left 37 mutations alive and 5 invalid. Of the 37: 28 were real gaps in the tests (for example the stored-UID
+checks of `cc_meta_validate`, the report fields of an empty state, the upper character of an item key, both ends of a
+few ID ceilings) and got new tests; 2 were clauses made redundant by an earlier check (`n_frozen < 1` and the
+`LOADOUT`-known term of the truncation rule), which were removed from the code; 7 cannot change behavior and are listed
+with their reasons in `python3 custom-core/tools/mutations.py --equivalent`. Of the 5 invalid: 3 are killed by
+`layout_test.c`'s compile-time assertions (the script now counts that as a kill) and 2 were mistakes in the mutation table.
+
+**Not run in this PR's evidence:** `make -C game-core test` and the 3DS build of `game/` (neither is touched; the existing
+`CI` workflow runs them on this PR), and the `custom-core-arm` job of the new workflow, which uses the `devkitpro/devkitarm`
+image like `ci.yml` and could not be run here (no Docker daemon in the container); the equivalent compile above used
+Ubuntu's `arm-none-eabi-gcc`, not devkitARM.
 
 ## 6. Not established by this PR
 
 - No upstream behavior was consulted or compared. There is no differential, no seed, no Node 22 run, and none is needed
   for a module that ports no upstream rule.
 - No emulator or console check: there is no screen or app change.
-- No Old 3DS memory or time measurement. `sizeof` figures are x86-64 host numbers.
+- No Old 3DS memory or time measurement. `sizeof` and code-size figures come from compilers (x86-64 host, and Ubuntu's
+  `arm-none-eabi-gcc` with the 3DS CPU flags), not from a device or emulator.
 - No codec, no file I/O, no live hook, no scheduler, no reducer, no profile or reward code. Those are C02 to C10.
 - Range checks only for species, form, move and ability: membership in the game's tables is the adapters' job.
