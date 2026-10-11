@@ -255,9 +255,24 @@ static void anim_field(ba_mon out[4]) {
 
 /* Where a side's Pokemon stands: its field position plus the Substitute offset (getSubstituteOffset:
  * the player's steps back left and down, the enemy's right and up). */
+/* Empty rows under the Pokemon's feet in its sprite: the fewest across its frames, so an animation keeps its bounce. Most sprites have
+ * none; about 95 front and 110 back sprites (mostly Gen 9's single 96x96 pictures, e.g. Lechonk's 32) have 10 or more, and upstream
+ * stands them on the picture's bottom edge, so they float above the platform. Here they stand on their lowest drawn row instead
+ * (lorenzo, 2026-10-11); a sprite with no gap is drawn exactly as before. */
+static int foot_gap(const side* sd) {
+  rr_atlas* a = img_get(sd->sprite_key);
+  int n = a ? rr_atlas_count(a) : 0, gap = 0;
+  for (int i = 0; i < n; i++) {
+    const rr_frame* f = rr_atlas_frame(a, i);
+    int g = f->src_h - f->off_y - f->h;
+    if (i == 0 || g < gap) gap = g;
+  }
+  return gap > 0 ? gap : 0;
+}
+
 static void mon_pos(const side* sd, bool player, float* x, float* y) {
   *x = (player ? 106 : 236 + B.enemy_slide) + sd->sub_off * (player ? -30 : 30);
-  *y = (player ? PLAYER_Y : 84) + sd->sub_off * (player ? 10 : -10) + sd->catch_dy;
+  *y = (player ? PLAYER_Y : 84) + sd->sub_off * (player ? 10 : -10) + sd->catch_dy + foot_gap(sd) * sd->scale;
 }
 
 /* The doll ("pkmn__sub" / "pkmn__back__sub", origin (0.5, 1), half size on the player's side) at
