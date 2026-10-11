@@ -1,5 +1,5 @@
-/* Additive Psych Up contract guard over its own copy of the turn comparator; the copy only adds
- * the CRITPROBE record (a later pr_get_critical_hit_result call). */
+/* Additive Psych Up contract guard over a build-time extension of the unchanged
+ * Growth comparator. The extension adds a later pr_get_critical_hit_result probe. */
 #include <stdarg.h>
 #include <errno.h>
 #include <limits.h>
@@ -50,6 +50,31 @@ static int count_line(const char *line, const char *prefix, int minimum, int *co
     *count=(int)value;return 1;
 }
 
+/* Strict scalar validation before the inherited reader's permissive atoi/strtol.
+ * A malformed trace is a transport error (2), never a semantic mismatch (1). */
+static int scalar(const char *line, const char *key, long long lo, long long hi, int undefined)
+{
+    const char *v = field(line, key);
+    if (!v) return 0;
+    if (undefined && !strcmp(v, "u")) return 1;
+    const char *p = v;
+    if (*p == '-') p++;
+    if (*p < '0' || *p > '9') return 0;
+    for (; *p; p++) if (*p < '0' || *p > '9') return 0;
+    char *end; errno = 0;
+    long long n = strtoll(v, &end, 10);
+    return !errno && !*end && n >= lo && n <= hi;
+}
+
+static int command_valid(const char *line)
+{
+    const char *b = field(line, "b");
+    if (!b || (strcmp(b, "0") && strcmp(b, "2"))) return 0;
+    return scalar(line,"cmd",0,0,0) && scalar(line,"move",1,PR_MOVE_COUNT-1,0)
+        && scalar(line,"mode",MOVE_USE_MODE_NORMAL,MOVE_USE_MODE_NORMAL,0) && scalar(line,"skip",0,1,0)
+        && scalar(line,"cursor",0,3,1) && scalar(line,"baton",0,1,0);
+}
+
 int main(int argc, char **argv)
 {
     if (argc != 2 || !getenv("TURNTEST_LOCALES")) {
@@ -60,8 +85,10 @@ int main(int argc, char **argv)
     if (!f) { perror("trace"); return 2; }
     char line[LINE_LEN];
     int wanted, cases = 0, ends = 0, footer = 0, inputs = 0, ran = 0, probes_seen = 0, probe = 0;
+    int trace = 0, text = 0, queue = 0, commands = 0, command_sides = 0;
     if (!fgets(line, sizeof line, f) || !count_line(line,"# PSYCH_UP_CONTRACT 1 ",20,&wanted)) { fclose(f); return 2; }
     while (fgets(line, sizeof line, f)) {
+        if (!strchr(line, '\n')) { fclose(f); fprintf(stderr, "truncated/oversized record\n"); return 2; }
         line[strcspn(line,"\n")]=0;
         if (footer) { fclose(f); fprintf(stderr, "records after completion\n"); return 2; }
         if (line[0] == '#' && strncmp(line, "# PSYCH_UP_COMPLETE ", 20)) {
@@ -70,18 +97,35 @@ int main(int argc, char **argv)
             int id;
             if (!count_line(line,"CASE ",0,&id) || id != cases || cases != ends) { fclose(f); return 2; }
             cases++; inputs = 0; ran = 0; probe = 0;
+            trace = text = queue = commands = command_sides = 0;
         } else if (!strncmp(line,"MOD ",4)) {fclose(f);return 2;
         } else if(!strncmp(line,"CMD ",4)&&!ran){
+            if (cases != ends + 1 || !command_valid(line)) { fclose(f); return 2; }
+            int side = !strcmp(need(line,"b"),"0") ? 1 : 2;
+            if (command_sides & side) { fclose(f); return 2; }
+            command_sides |= side; commands++;
             int move=atoi(need(line,"move"));
             if(move==MOVE_ID_PSYCH_UP)inputs++;
         } else if (!strcmp(line, "RUN")) {
-            if (ran || inputs != 1) { fclose(f); return 2; }
+            if (ran || inputs != 1 || commands != 2 || command_sides != 3) { fclose(f); return 2; }
             ran = 1;
+        } else if (!strncmp(line,"TRACE ",6)) {
+            if (!ran || trace++) { fclose(f); return 2; }
+        } else if (!strncmp(line,"TEXTS ",6)) {
+            if (!ran || text++) { fclose(f); return 2; }
+        } else if (!strncmp(line,"QUEUE ",6)) {
+            if (!ran || queue++) { fclose(f); return 2; }
+        } else if (!strncmp(line,"CMD ",4)) { fclose(f); return 2;
         } else if (!strncmp(line, "CRITPROBE ", 10)) {
+            if (!scalar(line,"move",1,PR_MOVE_COUNT-1,0) || !scalar(line,"crit",0,1,0)) { fclose(f); return 2; }
+            const char *v = need(line,"att");
+            if (strcmp(v,"0") && strcmp(v,"2")) { fclose(f); return 2; }
+            v = need(line,"def");
+            if (strcmp(v,"0") && strcmp(v,"2")) { fclose(f); return 2; }
             if (!ran || probe++) { fclose(f); return 2; }
             probes_seen++;
         } else if (!strncmp(line, "END ", 4)) {
-            if (!ran || probe != 1 || cases != ends + 1) { fclose(f); return 2; }
+            if (!ran || probe != 1 || trace != 1 || text != 1 || queue != 1 || cases != ends + 1) { fclose(f); return 2; }
             ends++;
         } else if (!strncmp(line, "# PSYCH_UP_COMPLETE ", 20)) {
             int count;

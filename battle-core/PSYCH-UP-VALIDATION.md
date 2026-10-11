@@ -205,3 +205,45 @@ c1dfa4632468401c6300c64b268c7628b077e68c6ec098d2e3ad668de827ac08  psych-up-2000-
 00bb3f5fc70c99d84c1d0cc81369f383d81d667a60a308093e1cb19216d9a8d4  psych-up-2000-777.txt
 54bb8bb621686960fda430abd7c5511336dc5b4619bd7fc86c980f46b5d4c9b7  psych-up-2000-9001.txt
 ```
+
+## PR #194 follow-up (2026-10-11)
+
+Base: `8489efa3be16236f897b1e210c5cc1fc69e7af13`; upstream pin unchanged.
+The production CopyStatsAttr case is unchanged. Fresh Node 22.23.3 source runs
+completed 2000 cases on each of 777/9001/4242/31337: covered/pass 2000/2000,
+parse/stat/semantic/text differences 0, unknown texts 0, critical probes 2000/2000.
+Replayed those same four files after this harness repair: identical results.
+Raw evidence is in `/workspace/work/batch-2026-10-11`, including source logs;
+the four fresh traces are `battle-core/build/psych-up-2000-<seed>.txt` (ignored).
+
+The copied comparator has been removed. `tools/build-psych-up-replay.py` applies
+six narrowly anchored critical-probe extensions to the current unchanged
+`tests/growth-replay.inc` at build time. Its generated output lives in BUILD.
+Existing parser/comparison changes propagate; changed extension anchors fail the
+build for review. No established Growth producer/comparator was edited.
+
+The contract guard now requires exactly two distinct command owners and one
+TRACE, TEXTS and QUEUE per case, validates command/probe integer ranges before
+permissive inherited conversions, and rejects oversized or unterminated records.
+Missing TRACE/TEXTS and fractional/duplicate command variants formerly exited 1
+(semantic mismatch); they now exit 2 (transport refusal). The existing 26
+malformed variants still exit 2. Thirteen additive variants also exit 2:
+`TURNTEST_LOCALES=<upstream>/locales/en python3 tools/psych-up-contract-check.py
+build/psych-up-test build/psych-up-2000-777.txt`.
+
+The wrapper now uses a unique `BUILD/psych-up-evidence.XXXXXX` directory, retains
+the first nonzero producer/replay exit code, and rejects empty/duplicate/out-of-range
+seed lists and out-of-range counts. Two N20/seed777 invocations used different
+paths and passed; empty/duplicate lists exited 2. This addresses evidence loss
+and false zero-work success without altering seeds/counts of the owning suite.
+
+`tools/psych-up-mutations.sh <upstream> build/psych-up-2000-777.txt`: intact exit 0;
+omit accuracy/evasion exit 1, 1344 failures; stale critical tag exit 1, 327 failures
+and 224 critical-probe failures. Restored four-seed replay exits 0.
+
+Contract H: `make -j2 -C game-core test` exit 0; normal and save N1000/jobs8 each
+1000 ended, 0 cleared/stuck/crashed/timed out, 50406 turns, digest `66edb535`.
+Save path: 14701 round trips. Test-only changes cannot alter these runtime results.
+The historical ITEMS/trainer/START failures above remain failures; conditional
+Task63 CI skips are not passes. Exact-head ordinary host/3DS CI is still required.
+No hardware test was run. This repair does not broaden D01's runtime scope.
