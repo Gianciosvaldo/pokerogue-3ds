@@ -23,7 +23,7 @@ Final dedicated 2000 cases per seed777/9001/4242/31337:8000 covered,8000 state/q
 
 Unchanged upstream Heal Bell/Aromatherapy/Sparkly Swirl tests:8 pass, including actual double-field Soundproof refusal vs user/bench cure. New C boundary executes actual dispatcher for all3 factories:9 atomic unsupported refusals (double battle, other active partner, empty party). Singles corpus cures user/bench regardless of immunity. Full partner display remains explicitly unsupported, never silently partial.
 
-45 malformed owning transports exit2. Actual rebuilt C mutants user-only and wrong-bench Soundproof gate exit1; intact exit0;1098 and208 state failures respectively (see retained logs for exact totals). Existing source producers/comparators untouched. Replay60 unchanged broad/focused files: only retained general trainer4242 case1051 optional SwitchSummonPhase mismatch exit1; ITEMS missing1/1/2/1 texts remain failed, not counted text passes. Stat-item/trainerswitch/Growth/typeboost/field/PsychUp/AverageStats 56000 focused cases all pass.
+The original45 malformed invocation omitted TURNTEST_LOCALES, so it exited before parsing and was not valid negative evidence. Corrected follow-up requires that locale and an intact trace to pass before variants;45 actual malformed transports now exit2. Explicit type/added-type, terrain/biome and END-stop guards added;8000 original source traces replayed again: all fully covered/state/text identical. Actual rebuilt C mutants user-only and wrong-bench Soundproof gate exit1; intact exit0;1098 and208 state failures respectively (see retained logs for exact totals). Existing source producers/comparators untouched. Replay60 unchanged broad/focused files: only retained general trainer4242 case1051 optional SwitchSummonPhase mismatch exit1; ITEMS missing1/1/2/1 texts remain failed, not counted text passes. Stat-item/trainerswitch/Growth/typeboost/field/PsychUp/AverageStats 56000 focused cases all pass.
 
 H final host pass4a43b96f;1000 normal/save ended each,clear0/stuck0/crash0/timeout0,50412 turns each,paired dca55868,14703 saves. Baseline50406/b8b28c8b changed because newly ported party cures affect play; same final build pair identical. No Classic clear/hardware claim.
 
@@ -35,3 +35,5 @@ Reproduce using tools/party-status-cure-diff.sh pinned-upstream2000 fourseeds; t
 |party-status-cure-2000-4242.txt|`b2feddddac9b8e3f49208ccffbc69194e6d3222531b9f8ed717405836d1dd100`|
 |party-status-cure-2000-777.txt|`8969c1e2c723b8879e565037889449369f867b2dace180d6087cb8e6b52867f9`|
 |party-status-cure-2000-9001.txt|`66e18693d58d408baf656c3a47bd4f03a66be939fa1b1f38899b8a59595c38a8`|
+
+Transport-only correction after PR200: production behavior unchanged. Real logs d04-malformed-real-final.log/d04-repair-final-replay-*.log retained.

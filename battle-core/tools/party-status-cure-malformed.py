@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Separate malformed-transport checks; production/source expectations stay intact."""
 from pathlib import Path
-import subprocess, sys, tempfile
-exe,trace=sys.argv[1:];s=Path(trace).read_text();lines=s.splitlines(True)
+import subprocess, sys, tempfile, os
+if not os.environ.get("TURNTEST_LOCALES"):raise SystemExit("TURNTEST_LOCALES required: refuse to run vacuous negative checks")
+exe,trace=sys.argv[1:];
+if subprocess.run([exe,trace],capture_output=True).returncode!=0:raise SystemExit("intact trace must pass before malformed checks")
+s=Path(trace).read_text();lines=s.splitlines(True)
 variants={'invalid-end-phase':s.replace('END stop=TurnInitPhase','END stop=NoSuchPhase',1),'missing-footer':''.join(lines[:-1]),'truncated-record':s[:-8], 'fractional-count':s.replace('CONTRACT 1 2000','CONTRACT 1 2000.5',1), 'wrong-count':s.replace('COMPLETE 2000','COMPLETE 1999'), 'duplicate-case':s.replace('CASE 1\n','CASE 0\n',1), 'out-of-order-case':s.replace('CASE 1\n','CASE 3\n',1), 'trailing-case':s+'CASE 2000\n'}
 for prefix in ['TRACE ','TEXTS ','QUEUE ','MON ','TURN ','MOVES ','HIST ','MQ ','EFFECTIVE ','PARTY ','ARENA ','RNG ','RUN\n']:
  i=next(i for i,l in enumerate(lines) if l.startswith(prefix))
