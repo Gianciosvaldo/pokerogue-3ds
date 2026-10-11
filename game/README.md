@@ -48,7 +48,7 @@ docker run --rm -v "$PWD":/src -w /src/game devkitpro/devkitarm make
 ```
 
 That gives `game/pokerogue.3dsx`. It needs the packs (`gfx.pak`, `data.pak`, `font.pak`; `snd.pak`
-for sound) in `sdmc:/3ds/pokerogue/`, built with [`assets-pipeline/`](../assets-pipeline/). Without
+for sound effects, `bgm.pak` for music) in `sdmc:/3ds/pokerogue/`, built with [`assets-pipeline/`](../assets-pipeline/). Without
 them it shows a message saying so.
 
 In the emulator rig ([`tools/azahar-libretro/`](../tools/azahar-libretro/)), put the packs in
@@ -68,6 +68,29 @@ Upstream draws everything on one 320x180 canvas. Here:
 
 Every position in the code is upstream's own number in one of these spaces (see `ui_space` in
 [`include/ui.h`](include/ui.h)), so layouts can be copied from upstream's handlers directly.
+
+## Music
+The app plays upstream's music from `bgm.pak` (built from the player's own copy of the assets, never in Git). Without the pack, or
+without the DSP firmware (`sdmc:/3ds/dspfirm.cdc` on a console), it is silent and nothing else changes. Azahar's HLE audio also wants
+that file to exist; any bytes will do for the emulator.
+
+- **Which track**: `source/bgm_choose.c`, pure, so the host test can check every answer. Ported from upstream (`8555c08`):
+  `Battle.getBgmOverride` (trainers' encounter and battle music, the Classic end waves, legendary / sub-legendary / mythical / Paradox wild
+  Pokemon, wave 1-4's `battle_wild`, the final boss), the biome's music (`Arena.bgm`) and the title date rule
+  (`winter_title` from December to January 15). The trainer table (`gen/gm_bgm_data.c`) is generated from upstream's `trainerConfigs`
+  by `tools/dump-bgm.test.ts` (`tools/redump-bgm.sh <upstream dir>`).
+- **Playing it**: `source/bgm_player.c` (`bgm_play` does nothing for the track already playing, as upstream's `playBgm`; a track the
+  pack lacks leaves silence; `bgm_fade_out`) over `snd.c`; the loop point is the pack's, which is upstream's.
+- **When**: `source/bgm.c`, called where upstream changes the music: the title and starter select screens as they come up, a new wave at
+  black (the old music goes down with the screen when the track changes), a trainer's first Pokemon sent out (encounter music gives way
+  to battle music), the trainer's defeat (its victory music) and the end of a run (a fade of 10 s after a win, 5 s after a loss). A
+  track starts with a few SD card reads on the main thread, so it is only ever started at black or between two screen events, never
+  while an animation plays.
+- **Checked**: `make -C game/tests bgmtest && game/tests/build/bgmtest [BGM_TRACKS=<one track name per line>]` compares the chooser with
+  what upstream's own `getBgmOverride` answered for every wave, species and form, trainer and variant (`tests/bgm_expected.c`,
+  generated), then runs the player and the scene calls over a fake DSP (`tests/snd_fake.c`). `runtest` runs the real scene calls in
+  every run and fails when a scene starts with other music than the chooser gives, a command is asked with the wrong music playing, a
+  trainer's reward screen is not under its victory music, or a track starts while a battle animation plays.
 
 ## Framework (for anyone writing a screen)
 | Header | What it is |
@@ -139,7 +162,11 @@ make -C game/tests animtest && game/tests/build/animtest path/to/pokerogue-asset
 - Checked by eye in Azahar screenshots, not pixel-diffed against upstream yet.
 
 ## Not done yet
-- The real evolution screen (evolution is automatic), the Pokedex, eggs, music; mystery encounter screens.
+- The real evolution screen (evolution is automatic), the Pokedex, eggs; mystery encounter screens.
+- Music not done: the timed events' music replacements, the mystery encounters' own tracks (their encounters are stand-ins), the evolution,
+  egg and heal fanfares (upstream plays them over the music; `snd.c` has one music stream), the Classic final boss's second stage (not in
+  game-core), Daily / Endless / Challenge music, and a volume or music-preference setting (the app plays at full volume and follows
+  upstream's default preference, all generations). What starting a track costs on a real console (the SD reads) is not measured.
 - The starter select is the basic legal team only. Missing from it (each a task of its own, none faked): the filter bar and sort, the
   cycle buttons (shiny, form, gender, ability, nature, tera), IVs, moves, nature management, candy purchases, favourites, rename,
   the Pokedex page, egg moves, Pokerus, the tutorial, challenges, Daily and Endless. UP from the first row wraps (upstream goes to the

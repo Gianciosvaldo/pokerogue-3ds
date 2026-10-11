@@ -96,7 +96,7 @@ summary_ui_test: build/summary_ui_test
 # make runtest && build/runtest [runs] [first]
 RW := ../../reward-core
 RUN_CPPFLAGS := $(CPPFLAGS) -I../menus -I../gen -I$(GC)/include -I$(GC)/gen/out -I$(RC)/include -I$(RC)/gen/out -I$(RW)/include -I$(RW)/gen/out -I$(APP)/include
-RUN_SRCS := runtest.c party_fake.c ../menus/party.c ../menus/menus_names.c ../menus/menus_data.c ../source/starter_data.c ../source/run_screen.c ../source/battle_events.c ../source/run_saves.c $(APP)/source/save.c ../gen/gm_enum_names.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+RUN_SRCS := runtest.c snd_fake.c ../source/bgm.c ../source/bgm_choose.c ../source/bgm_player.c ../gen/gm_bgm_data.c party_fake.c ../menus/party.c ../menus/menus_names.c ../menus/menus_data.c ../source/starter_data.c ../source/run_screen.c ../source/battle_events.c ../source/run_saves.c $(APP)/source/save.c ../gen/gm_enum_names.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/runtest: $(RUN_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) $(RUN_SRCS) -lm -o $@
@@ -164,3 +164,13 @@ build/starter_ui_test: $(SUI_SRCS)
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(SUI_SRCS) -lm -o $@
 starter_ui_test: build/starter_ui_test
 .PHONY: starter_ui_test
+
+# the music: the chooser (source/bgm_choose.c) against upstream's own Battle.getBgmOverride (bgm_expected.c, dumped by tools/dump-bgm.test.ts:
+# every wave, every species and form, every trainer), then the player (bgm_player.c) and the scene calls (bgm.c) over a fake DSP (snd_fake.c);
+# make bgmtest && build/bgmtest [BGM_TRACKS=<one track name per line>]
+BGM_SRCS := bgmtest.c snd_fake.c bgm_expected.c ../source/bgm_choose.c ../source/bgm.c ../source/bgm_player.c ../gen/gm_bgm_data.c ../gen/gm_enum_names.c $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c
+build/bgmtest: $(BGM_SRCS)
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(BGM_SRCS) -lm -o $@
+bgmtest: build/bgmtest
+.PHONY: bgmtest

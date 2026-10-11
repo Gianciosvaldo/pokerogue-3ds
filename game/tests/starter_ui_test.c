@@ -270,6 +270,9 @@ void ui_set(ui_screen* s) {
   g_screen = s;
   if (s->enter) s->enter(s);
 }
+/* SelectStarterPhase.start plays the menu music: the screen asks for it once as it comes up */
+static int g_menu_music;
+void bgm_on_starter_select(void) { g_menu_music++; }
 bool ui_space(ui_space_id sp) {
   (void)sp;
   return true;
@@ -373,8 +376,10 @@ static void random_system(int catches) {
 /* the way through a new save: pick two species, change one's mind, begin */
 static void test_happy_path(void) {
   gc_system_init_defaults(&SYS);
+  g_menu_music = 0;
   CHECK(open_screen(NULL), "the screen opens on a new save");
   CHECK(g_screen && !strcmp(g_screen->name, "starter-select"), "it is on the stack");
+  CHECK(g_menu_music == 1, "the menu music was asked for %d times as the screen came up", g_menu_music);
   draw();
   CHECK(drawn("0/10"), "an empty team costs 0/10");
   CHECK(drawn("starterSelectUiHandler:randomize") && drawn("common:start"), "Randomize and Start are labelled");
