@@ -656,6 +656,7 @@ int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, co
     if (item == PR_ITEM_NUGGET || item == PR_ITEM_BIG_NUGGET || item == PR_ITEM_RELIC_GOLD)
         return apply_money_item(run, item);
     if (item == PR_ITEM_MULTI_LENS) return gc_multi_scene_apply(run,o,party,why,true);
+    if (item == PR_ITEM_TOXIC_ORB || item == PR_ITEM_FLAME_ORB) return gc_orb_scene_apply(run,o,party,why,true);
     if (item == PR_ITEM_WIDE_LENS) return gc_wide_scene_apply(run,o,party,why,true);
     if (item == PR_ITEM_TEMP_STAT_STAGE_BOOSTER || item == PR_ITEM_DIRE_HIT)
         return gc_temp_apply(run, o, why);
