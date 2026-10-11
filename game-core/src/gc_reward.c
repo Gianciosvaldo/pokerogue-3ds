@@ -658,6 +658,8 @@ int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, co
     if (item == PR_ITEM_MULTI_LENS) return gc_multi_scene_apply(run,o,party,why,true);
     if (item == PR_ITEM_TOXIC_ORB || item == PR_ITEM_FLAME_ORB) return gc_orb_scene_apply(run,o,party,why,true);
     if (item == PR_ITEM_SOOTHE_BELL) return gc_soothe_scene_apply(run,o,party,why,true);
+    if (item == PR_ITEM_LURE || item == PR_ITEM_SUPER_LURE || item == PR_ITEM_MAX_LURE)
+        return gc_lure_apply(run,o,why);
     if (item == PR_ITEM_WIDE_LENS) return gc_wide_scene_apply(run,o,party,why,true);
     if (item == PR_ITEM_TEMP_STAT_STAGE_BOOSTER || item == PR_ITEM_DIRE_HIT)
         return gc_temp_apply(run, o, why);
