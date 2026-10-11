@@ -272,6 +272,7 @@ int gc_orb_scene_apply(gc_run *run,const gc_offer *o,int storage,const char **wh
 
 int gc_lure_add(gc_run *run,int item);
 bool gc_lure_lapse(gc_run *run,int *expired);
+bool gc_lure_count(gc_run *run,int *count);
 int gc_lure_apply(gc_run *run,const gc_offer *o,const char **why);
 int gc_soothe_add(gc_run *run,int storage);
 bool gc_soothe_battle_gain(gc_run *run,int storage);

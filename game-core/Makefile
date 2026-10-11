@@ -350,3 +350,14 @@ $(BUILD)/lure_lapse_host_test: tests/lure_lapse_host_test.c $(BUILD)/libgc.a $(R
 test: lure-lapse-host
 lure-lapse-host: $(BUILD)/lure_lapse_host_test
 	$(BUILD)/lure_lapse_host_test
+
+all: $(BUILD)/lure_encounter_test
+$(BUILD)/lure_encounter_test: tests/lure_encounter_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -Wl,--wrap=pr_run_new_battle -Wl,--wrap=pr_rng_seed_int -lm -o $@
+
+all: $(BUILD)/lure_encounter_host_test
+$(BUILD)/lure_encounter_host_test: tests/lure_encounter_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -Wl,--wrap=pr_run_new_battle -lm -o $@
+test: lure-encounter-host
+lure-encounter-host: $(BUILD)/lure_encounter_host_test
+	$(BUILD)/lure_encounter_host_test
