@@ -52,6 +52,8 @@ typedef enum {
   TS_COUNT_,
   /* not upstream styles: a style with a font size override */
   TSX_WINDOW_ALT_76, /* WINDOW_ALT at fontSize 76px (summary candy and friendship counts) */
+  TSX_METRICS_32,    /* font metrics of a 32px text (starter select cost labels); draw it with mui_text_c and the colours of the style it stands for */
+  TSX_METRICS_36,    /* the same at 36px (starter select growth rate) */
 } mui_style;
 #else
 typedef int mui_style;

@@ -5,7 +5,9 @@
  * gc_run_choose. Replaces the demo battle (battle_setup.c).
  *
  * Where a real screen doesn't exist yet it uses a stand-in, listed here so none is mistaken for the real thing:
- *   - starters:   a random team within the cost budget (or the species in rundriver.txt), no starter select
+ *   - starters:   the team the starter select screen handed over (cfg.team); the species in rundriver.txt (a developer's run,
+ *                 which has no system data); or, with neither (the host test's runs after the first), a random team within the
+ *                 cost budget (of the species the system data has caught, when the run has system data)
  *   - rewards:    the reward / shop screen (menus/shop_ui.c, on the stack through reward_host.c); item names are the
  *                 item key ("RARE_CANDY"), and a Pokemon is picked on the party screen
  *   - biome:      the biome map (menus/biome_map.c, through reward_host.c)
@@ -27,13 +29,24 @@
 #include <stdbool.h>
 
 #include "gc/run.h"
+#include "gc/system.h"
 #include "run_saves.h"
 
 typedef struct {
   const char* seed;       /* upstream's 24-character run seed; NULL = a random one from `entropy` */
   uint32_t entropy;       /* a new run's randomness (and the stand-in team's) */
-  int starters[6];        /* species of the stand-in team; n_starters 0 = a random team within the budget */
+  int starters[6];        /* species of the stand-in team (a developer's rundriver.txt: checked against the system data when `sys` is
+                           * set, so set it to NULL for those); n_starters 0 = a random team within the budget */
   int n_starters;
+  /* The team the player chose on the starter select screen, for a new run's first start (before `starters`). The caller has
+   * checked it with gc_starter_is_available; game-core checks it again. */
+  gc_starter team[6];
+  int n_team;
+  /* The system data (dex, starter unlocks, candy...) the run reads and updates, attached to the run as gc_run.sys; NULL = the run
+   * has none and nothing is unlocked or recorded. `save_sys` writes it (system_data.h's sysd_save): called after each save of the
+   * run, and a false return counts as a refused write. */
+  gc_system* sys;
+  bool (*save_sys)(void);
   /* Saving: with `save`, the run is written into save slot `slot` (run_saves.h) at each of game-core's save points: the
    * COMMAND screen of a battle's first turn, once the scene is up. Without it the run is never written. */
   bool save;
