@@ -1,7 +1,8 @@
 # custom-core
 
 The portable data model of the custom content mode ("Legacy": post-mortem, Nemesis roster, run-bound rematch
-schedule, transaction ledger). Task C01 of `docs/CUSTOM-CONTENT-ADVANCED-AGENT.md`.
+schedule, transaction ledger) and the bounded history reducer. Tasks C01 and C02 of
+`docs/CUSTOM-CONTENT-ADVANCED-AGENT.md`.
 
 The contract, its limits, the audit it rests on and every choice still open for review are in
 `docs/CUSTOM-CONTENT-CONTRACTS.md`. This folder only implements that contract.
@@ -14,8 +15,9 @@ The contract, its limits, the audit it rests on and every choice still open for 
 | `include/cc/types.h` | primitive-data structs: observation, event, turn, history, terminal summary, Nemesis record and roster, schedule, counters, ledger, metadata |
 | `include/cc/wire.h` | byte widths of the persisted layout (no codec yet) |
 | `include/cc/model.h` | validators, record lifecycle, identifier allocators, ledger, checked size arithmetic |
+| `include/cc/reducer.h` | C02: the reducer (`cc_reduce`), its state and result, per-turn totals |
 | `src/` | the implementation; C99, no allocation, no I/O, no globals except the constant window table |
-| `tests/` | `model_test.c` (behavior), `layout_test.c` (wire sizes, budgets, ID ceilings against battle-core's generated enums) |
+| `tests/` | `model_test.c` and `reducer_test.c` (behavior), `layout_test.c` (wire sizes, budgets, ID ceilings against battle-core's generated enums) |
 | `tools/mutations.py` | the mutation check: each listed single change to the sources must make a test fail |
 
 ## Run
@@ -34,5 +36,5 @@ python3 custom-core/tools/mutations.py -k nemesis   # a subset of the mutations
 ## What it deliberately does not do
 
 No live hooks into battle-core, game-core or `game/`, no save codec or file I/O, no wallet, no spawning, no UI. The
-module cannot touch a save file or the RNG, so it cannot change normal saves or battle results. Those belong to
-tasks C02 onward and start only after this one is merged.
+module cannot touch a save file or the RNG, so it cannot change normal saves or battle results. The reducer (C02) is
+a pure function of batches the caller builds; nothing here observes the game. The observer is C03, the codec C04.

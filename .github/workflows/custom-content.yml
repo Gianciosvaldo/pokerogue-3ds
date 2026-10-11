@@ -1,4 +1,5 @@
-# Checks of custom-core, the portable data model of the custom content mode (docs/CUSTOM-CONTENT-CONTRACTS.md).
+# Checks of custom-core, the portable data model and history reducer of the custom content mode
+# (docs/CUSTOM-CONTENT-CONTRACTS.md). The make targets run model_test, reducer_test and layout_test.
 # Additive: ci.yml is untouched. custom-core has no dependency on the game or the other cores; its layout test only
 # reads battle-core/gen/out/pr_enums.h, so a regenerated enum that outgrows an ID ceiling fails here.
 name: Custom content

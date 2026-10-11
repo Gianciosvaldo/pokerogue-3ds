@@ -393,8 +393,9 @@ numbers, no file, no allocation, no game call. It does not observe anything itse
 **Batch identity.** An input is a `cc_batch`: `run_uid`, `batch_id`, `battle_seq`, `wave`, `turn`, `flags` and up to
 `CC_MAX_BATCH_OBS` (384, `GC_MAX_BATTLE_EVENTS`) observations, oldest first. All of one batch belongs to one turn; a range
 that spans turns is split by the adapter into batches with their own ids. `batch_id` is chosen by the adapter, is `>= 1`,
-and strictly increases within a run. The reducer remembers the id and a 64-bit FNV-1a digest (field by field, never raw
-struct bytes) of the **last accepted** batch only. Rejection is checked in this order and the first failure wins:
+and strictly increases within a run. The reducer remembers the id and a 64-bit FNV-1a digest of the **last accepted** batch
+only. The digest is taken field by field in a fixed byte order, never over struct bytes, and covers the turn key, the flags and
+every field of every observation; `run_uid` and `batch_id` are left out because they are equal wherever it is compared. Rejection is checked in this order and the first failure wins:
 
 | Condition | Result |
 |---|---|
@@ -403,6 +404,7 @@ struct bytes) of the **last accepted** batch only. Rejection is checked in this 
 | `run_uid`, `batch_id`, `battle_seq` or `wave` is 0 | `CC_E_RANGE` |
 | no run begun, or the run was ended | `CC_E_LIFECYCLE` |
 | `run_uid` is not the active run | `CC_E_CONSISTENCY` |
+| the stored state is structurally impossible (`n_turns` or a turn's `n_events` over its limit, or an accepted batch with no turn) | `CC_E_CONSISTENCY`, before any index is computed |
 | `batch_id` below the last accepted | `CC_E_ORDER` (an older replay cannot be proven to be one, so it is never applied) |
 | `batch_id` equal to the last, digest equal | **`CC_OK`, `duplicate = 1`, nothing changed**: a retry, an animation replay or a redraw is counted once |
 | `batch_id` equal to the last, digest different | `CC_E_DUPLICATE` (the same identity with other content) |
@@ -421,8 +423,10 @@ one appends to it (this is how the several ranges of one turn merge); anything o
 numbered turns of different battles or waves never merge. An accepted batch always materializes its turn, even with no
 stored event; the adapter should not submit batches for things it did not observe. A sixth turn drops the oldest.
 
-**Event order.** `seq` is assigned by the reducer from a per-run counter starting at 1, in batch order; evicted events
-consume theirs, so a gap in `seq` at the front of a turn is visible evidence of eviction.
+**Event order.** `seq` is assigned by the reducer from a per-run counter starting at 1, in batch order. An event that is
+evicted keeps its number, so numbering does not depend on what was retained; the retained events of one turn are
+consecutive, and `dropped` says how many came before them. The counter never wraps: a batch that would pass `UINT32_MAX`
+is `CC_E_OVERFLOW`.
 
 **Eviction.** Appending to a turn keeps the newest 64 events. The number to drop is computed once per batch: first from the
 turn's existing events (oldest first), then from the front of the batch's own new events when the batch alone exceeds 64.
@@ -575,6 +579,57 @@ here that suggests roughly half a millisecond, **an inference from a different w
 runs at load and at run end, never per frame; the figure matters only if C02's per-event reducer or C04's codec turn out to
 be hot, and those are the places to measure on the console.
 
+### 5.1 C02 (history reducer)
+
+Run on the final tree of the C02 PR, same container (gcc 13.3.0, clang 18.1.3, Python 3.13, 4 vCPU). The PR description
+repeats this with the head commit and the CI results.
+
+| Command | Result |
+|---|---|
+| `make -C custom-core clean && make -C custom-core test` | exit 0 in 7 m 04 s |
+| &nbsp;&nbsp;unit + layout, gcc `-O2 -std=c99 -Wall -Wextra -Wpedantic -Werror` | `model_test: 953 checks, 0 failed`; `reducer_test: 6916 checks, 0 failed`; `layout_test: 56 checks, 0 failed` |
+| &nbsp;&nbsp;the same under ASan + UBSan | 953 / 6916 / 56 checks, 0 failed, no sanitizer report |
+| &nbsp;&nbsp;mutation check | `671 run, 671 killed, 0 survived, 0 invalid; 13 more are documented as behavior-neutral and not run` |
+| `make -C custom-core CC=clang BUILD=build/clang unit-test` | 953 / 6916 / 56 checks, 0 failed, no warnings |
+| `make -C custom-core arm-check` (Ubuntu `arm-none-eabi-gcc` 13.2.1, 3DS CPU flags) | all seven sources and three test files compile with `-Werror`; `reducer.o` `.text` 5,512 bytes |
+
+The ARM compile found one real defect the host compilers did not: `uint32_t` is `unsigned long` there, and a helper took
+`unsigned *`. Fixed. The `custom-core-arm` CI job (devkitARM) is the second ARM result and is reported in the PR.
+
+**Sizes** (x86-64 `make report`; the ARM compiler agrees for `cc_obs` 52, `cc_event` 40, `cc_turn` 2,572, `cc_history` 12,864,
+`cc_reducer` 12,928, `cc_turn_summary` 216, `cc_reduce_result` 16, `cc_meta` 19,432, checked with a probe file): the reducer
+holds its own copy of the last turns, so the runtime figure is the persisted state 19,432 + schedule 120 + reducer 12,928 +
+a full 384-observation batch 19,968 = 52,448 bytes against the 131,072 budget (enforced by a compile-time assertion in
+`layout_test.c`). The persisted layout is unchanged (`cc_obs` is runtime only; encoded maximum still 18,378 bytes).
+
+**What the reducer tests are.** `reducer_test.c` has literal fixtures with hand-computed expected events for: empty and
+resumed runs; every raw event kind and its known bits; attribution passed through and never inferred (a move animation before
+a faint leaves the faint with no source); shown and measured HP kept apart (multi-hit with ordered and with all-final
+snapshots, a heal that shows more than it gained, status damage, sign conflicts); the HP tracker (reused field position and a
+same-species replacement, switch-out, faint, missing snapshots, species/form change, batch, turn and battle boundaries); 64
+and 65 events, 64 + 1 and 40 + 25 split across batches, 60 + 10, a lone 384, 384 on top of a full turn, the saturating
+`dropped` counter; five and six turns; repeated, conflicting and older batches (the digest is varied byte by byte over every
+observation field and the header); wave and battle boundaries; malformed order; a lost batch and the incompleteness flags;
+a recorded session replayed into a fresh reducer (byte-equal), into the same one (refused) and into a new run; per-turn
+totals including 64-bit sums and `INT32_MIN`; every structural check of a state. Every accepted call re-runs
+`cc_reducer_validate`; every rejection checks the status, the named observation index, an all-zero result and a
+byte-identical reducer. A 600-batch differential run compares the reducer with a naive one-event-at-a-time model (seed fixed
+in the file).
+
+**Mutation check, C02 part.** 306 new single-change mutations (reducer: batch digest, mapping, tracker, rejection order,
+turn keys, eviction arithmetic, window rotation, flags, result fields, state validation, totals; plus the attribution
+rules of `cc_obs_validate` and the new constants). Examples that must fail and do: eviction off by one in either direction,
+dropping the oldest turn from the wrong end, accepting a replayed batch twice, ignoring the digest, merging identically
+numbered turns, letting an ignored `PR_EV_HP` of 0 or a move animation move the tracker. The first run left 6 alive: 4 were
+test gaps (a snapshot of 0 HP that is not a faint, a far out-of-range `n_turns`, a full unflagged turn being `exact`) and got
+tests; 1 was a clear of a tail that is always overwritten by the same batch, and was removed from the code; 1
+(`!t ||` in `cc_turn_summarize`) is behavior-neutral because `cc_turn_validate` refuses NULL with the same status. The
+13 documented neutral mutations are listed with reasons by `python3 custom-core/tools/mutations.py --equivalent`.
+
+**Not run / not established.** No Old 3DS timing or memory measurement; the reducer's cost is stated only as operation
+counts (section 2.8). No test drives real `battle-core` events: the fixtures are written from the header and the cited
+`phases.c`/`switching.c` lines, so whether the adapter (C03) produces exactly these observations is C03's to show.
+
 ## 6. Not established by this PR
 
 - No upstream behavior was consulted or compared. There is no differential, no seed, no Node 22 run, and none is needed
@@ -582,5 +637,5 @@ be hot, and those are the places to measure on the console.
 - No emulator or console check: there is no screen or app change.
 - No Old 3DS memory or time measurement. `sizeof` and code-size figures come from compilers (x86-64 host, Ubuntu's
   `arm-none-eabi-gcc`, and devkitARM in CI, with the 3DS CPU flags), not from a device or emulator.
-- No codec, no file I/O, no live hook, no scheduler, no reducer, no profile or reward code. Those are C02 to C10.
+- No codec, no file I/O, no live hook, no scheduler, no profile or reward code, and no observer feeding the reducer (C03). Those are C03 to C10.
 - Range checks only for species, form, move and ability: membership in the game's tables is the adapters' job.
