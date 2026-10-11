@@ -1381,9 +1381,10 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         if (pp->value) *pp->value *= 2.0;
         return 1;
     case PR_AC_HealFromBerryUseAbAttr:
-        GATE(p->has_eaten_berry && pr_has_ability_with_attr(bt, p, PR_AC_HealFromBerryUseAbAttr));
+        GATE(true);
+        if (pp->simulated) return 1;
         if (c->e) {
-            double hp_healed = to_dmg_value(pr_get_stat(p, STAT_HP, true) / 3.0);
+            double hp_healed = to_dmg_value(pr_get_stat(p, STAT_HP, true) * P(HealFromBerryUseAbAttr, a)->healPercent);
             pr_msg msg = pr_msg2("abilityTriggers:healFromBerryUse",
                                  pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
                                  pr_arg_ability("abilityName", c->ability));

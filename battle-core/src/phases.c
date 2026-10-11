@@ -2951,8 +2951,12 @@ static void berry_phase(pr_battle *bt, pr_engine *e)
         }
 
         bool cancelled = false;
-        pr_ab_params pp = {.pokemon = p, .move = -1, .flag = &cancelled};
-        pr_apply_ab_attrs(bt, PR_AC_PreventBerryUseAbAttr, &pp);
+        for(int j=0;j<4;j++) {
+            pr_pokemon *opp=bt->field[j];
+            if(!opp || opp->is_player==p->is_player || !is_active_on_field(opp))continue;
+            pr_ab_params pp = {.pokemon = opp, .move = -1, .flag = &cancelled};
+            pr_apply_ab_attrs(bt, PR_AC_PreventBerryUseAbAttr, &pp);
+        }
         if (cancelled) {
             pr_msg msg = pr_msg1("abilityTriggers:preventBerryUse",
                                  pr_arg_pokemon(bt, "pokemonNameWithAffix", p));
@@ -2968,8 +2972,10 @@ static void berry_phase(pr_battle *bt, pr_engine *e)
 
         for (int i = 0; i < bt->n_mods[side]; i++) {
             if (pr_berry_should_apply(bt, p, &bt->mods[side][i])) {
+                int before_count=bt->n_mods[side];
                 pr_apply_berry_ex(bt, e, p, &bt->mods[side][i], ssc_stats, ssc_stages, &n_ssc);
-                break;
+                /* Removing a depleted record shifts the next source record into i. */
+                if(bt->n_mods[side]<before_count)i--;
             }
         }
 
@@ -2977,7 +2983,8 @@ static void berry_phase(pr_battle *bt, pr_engine *e)
             pr_unshift_stat_stage_change_ex(bt, e, pr_battler_index(bt, p), ssc_stats, ssc_stages, n_ssc, p, 0);
         }
 
-        pr_hook_ab(bt, p, PR_AC_HealFromBerryUseAbAttr);
+        pr_ab_params berry_callback={.pokemon=p,.move=-1};
+        pr_apply_ab_attrs(bt,PR_AC_HealFromBerryUseAbAttr,&berry_callback);
         pr_hook_ab(bt, p, PR_AC_CudChewConsumeBerryAbAttr);
     }
 }
