@@ -507,7 +507,13 @@ static bool handle_event(int i) {
 
     case GC_EV_HP: {
       if (e->a != 0 || e->b != G.shown || !G.present[0]) break;
-      const bv_mon* sh = bv_mon_of(BV_PLAYER);
+      bv_mon* sh = bv_mon_of(BV_PLAYER);
+      /* a Vitamin or a Mint changes the maximum HP and game-core only says the new HP: the bar's maximum follows the Pokemon */
+      const int max_hp = G.run.party[e->b].b.stats[STAT_HP];
+      if (max_hp > 0 && max_hp != sh->max_hp) {
+        *ev_new() = (bv_event){.type = BEV_MAX_HP, .battler = BV_PLAYER, .a = max_hp};
+        sh->max_hp = max_hp;
+      }
       if (e->c > sh->hp)
         *ev_new() = (bv_event){.type = BEV_HEAL, .battler = BV_PLAYER, .a = e->c};
       else if (e->c < sh->hp)
