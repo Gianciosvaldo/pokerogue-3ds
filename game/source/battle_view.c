@@ -331,6 +331,19 @@ static void draw_ball(void) {
   }
 }
 
+/* Upstream's arena art stops 132 px down: below it, the ui container's 48 px strip (the message window's bg frame) covers the
+ * field. Here the strip and its text are on the bottom screen, so the top screen draws the same empty strip where upstream has it,
+ * instead of leaving the bare biome background under the platforms. It goes under the Pokemon (upstream's covers the player's
+ * Pokemon's lower half, which here would hide it with no text to show for it). */
+static void draw_field_strip(void) {
+  char fr[4];
+  snprintf(fr, sizeof fr, "%d", ui_window_style());
+  if (img_frame("images/ui/bg", fr))
+    img_draw("images/ui/bg", fr, 0, 180, 0, 1);
+  else
+    rr_rect(0, 180 - 48, 320, 48, RR_RGBA(0x30, 0x50, 0x68, 255));
+}
+
 static void draw_field(void) {
   char k[64];
   snprintf(k, sizeof k, "images/arenas/%s_bg", B.biome);
@@ -342,6 +355,7 @@ static void draw_field(void) {
   img_draw(k, NULL, B.arena_enemy_x, 0, 0, 0);
   snprintf(k, sizeof k, "images/arenas/%s_a", B.biome);
   img_draw(k, NULL, B.arena_player_x, 0, 0, 0);
+  draw_field_strip();
   ba_mon field[4];
   anim_field(field);
   ba_draw(BA_LAYER_BELOW_ENEMY, field);
