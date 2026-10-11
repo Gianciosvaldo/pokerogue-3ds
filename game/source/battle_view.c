@@ -416,6 +416,15 @@ static void draw_types(const bv_mon* m, bool player, float bx, float by) {
   }
 }
 
+/* The name and gender sign: upstream's BATTLE_INFO is emerald at 72 canvas px (12 px here), which smears at 1:1 on the 3DS. They
+ * use pkmnems at 8 px (INSTRUCTIONS_TEXT's font) in BATTLE_INFO's colours, 2 px higher so the baseline stays where it was. */
+static float name_text(float x, float y, const char* t, rr_color c, rr_color sh) {
+  text_opts o = text_defaults();
+  o.color = c ? c : text_color(TS_BATTLE_INFO, false);
+  o.shadow = sh ? sh : text_color(TS_BATTLE_INFO, true);
+  return text_draw(TS_INSTRUCTIONS_TEXT, x, y - 2, t, &o);
+}
+
 static void draw_name(const bv_mon* m, bool player, float x, float y) {
   /* updateNameText: shortened with "." until it fits */
   char name[48];
@@ -423,20 +432,18 @@ static void draw_name(const bv_mon* m, bool player, float x, float y) {
   float limit = 60 - ((m->gender < 0 ? 0 : 6) + (m->shiny ? 8 : 0) +
                       (fminf((float)snprintf(NULL, 0, "%d", m->level), 3) - 3) * 8);
   if (!player && m->boss) limit += 38;
-  while (text_width(TS_BATTLE_INFO, name, NULL) > limit && strlen(name) > 2) {
+  while (text_width(TS_INSTRUCTIONS_TEXT, name, NULL) > limit && strlen(name) > 2) {
     size_t n = strlen(name);
     int cut = name[n - 1] == '.' ? 2 : 1;
     name[n - cut] = 0;
     while (n > 1 && name[strlen(name) - 1] == ' ') name[strlen(name) - 1] = 0;
     strcat(name, ".");
   }
-  float w = text_draw(TS_BATTLE_INFO, x, y, name, NULL);
+  float w = name_text(x, y, name, 0, 0);
   if (m->gender >= 0) {
     /* getGenderSymbol / getGenderColor */
-    text_opts o = text_defaults();
-    o.color = m->gender == 0 ? RR_RGBA(0x40, 0xc8, 0xf8, 255) : RR_RGBA(0xf8, 0x90, 0x90, 255);
-    o.shadow = m->gender == 0 ? RR_RGBA(0x00, 0x60, 0x90, 255) : RR_RGBA(0x98, 0x40, 0x38, 255);
-    text_draw(TS_BATTLE_INFO, x + w, y, m->gender == 0 ? "♂" : "♀", &o);
+    name_text(x + w, y, m->gender == 0 ? "♂" : "♀", m->gender == 0 ? RR_RGBA(0x40, 0xc8, 0xf8, 255) : RR_RGBA(0xf8, 0x90, 0x90, 255),
+              m->gender == 0 ? RR_RGBA(0x00, 0x60, 0x90, 255) : RR_RGBA(0x98, 0x40, 0x38, 255));
   }
   if (m->status) {
     char fr[24];
