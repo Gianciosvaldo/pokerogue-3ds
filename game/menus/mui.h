@@ -52,8 +52,11 @@ typedef enum {
   TS_COUNT_,
   /* not upstream styles: a style with a font size override */
   TSX_WINDOW_ALT_76, /* WINDOW_ALT at fontSize 76px (summary candy and friendship counts) */
-  TSX_METRICS_32,    /* font metrics of a 32px text (starter select cost labels); draw it with mui_text_c and the colours of the style it stands for */
-  TSX_METRICS_36,    /* the same at 36px (starter select growth rate) */
+  /* pkmnems, the pixel font, at 6 and 8 px. Upstream's small emerald texts (32-64 canvas px: 5-11 px here) are drawn on a canvas
+   * several times larger than the 3DS screen; baked 1:1 at those sizes the emerald glyphs smear into each other, while pkmnems
+   * stays sharp. Metrics only: draw them with mui_text_c and the colours of the style they stand in for. */
+  TSX_PIXEL_6,
+  TSX_PIXEL_8,
 } mui_style;
 #else
 typedef int mui_style;

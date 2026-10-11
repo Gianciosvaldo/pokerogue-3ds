@@ -31,8 +31,15 @@ static int closest_party(int y, int team) {
   return best;
 }
 
-/* calcStarterContainerPosition (:113): the y of grid row r is 13 + r * 17 */
-static int row_y(int row) { return 13 + row * 17; }
+/* calcStarterContainerPosition (:113): the y of grid row r is 13 + r * 17 (SM_CELL_H here) */
+static int row_y(int row) { return 13 + row * SM_CELL_H; }
+
+/* processPartyIconInput's closestRowIndex (:1386): upstream takes member i + 1, the row level with the member's icon when rows are
+ * 17 px apart. The same row for any row height: the one whose y is nearest the icon's (which gives i + 1 at 17 px). */
+static int party_row(int i) {
+  const int r = (int)floor((double)(sm_party_icon_y(i) - 13 - 13) / SM_CELL_H + 0.5);
+  return r < SM_ROWS - 1 ? r : SM_ROWS - 1;
+}
 
 /* ---------------------------------------------------------------- the list */
 
@@ -167,7 +174,7 @@ static sm_result box_input(sm_model* m, mui_button b) {
       }
       break;
     case MB_DOWN:
-      /* :1460. Upstream compares the on-screen cursor with the list's length; the cell below is first + cursor + 9 */
+      /* :1460. Upstream compares the on-screen cursor with the list's length; the cell below is first + cursor + SM_COLS */
       if (cur_row < rows - 1 && first + m->cursor + SM_COLS < n) {
         if (cur_row - m->scroll == SM_ROWS - 1) {
           m->scroll++;
@@ -198,11 +205,11 @@ static sm_result box_input(sm_model* m, mui_button b) {
         const int step = left ? imin(SM_COLS - 1, on_screen_last(m) - m->cursor) : -imin(SM_COLS - 1, m->cursor % SM_COLS);
         ok = set_cursor(m, m->cursor + step);
         break;
-      } else if (on_row < 7) {
+      } else if (on_row < SM_PARTY_ROWS) {
         m->focus = SM_PARTY; /* the team member level with the row */
         m->party_cursor = closest_party(row_y(on_row), m->n_party);
       } else {
-        m->focus = SM_START; /* the bottom two rows go to the Start button */
+        m->focus = SM_START; /* the rows below the team (upstream's bottom two) go to the Start button */
       }
       ok = true;
       break;
@@ -233,10 +240,10 @@ static sm_result party_input(sm_model* m, mui_button b) {
     case MB_LEFT:
     case MB_RIGHT: {
       if (n <= 0) return SM_IGNORED;
-      const int closest_row = m->party_cursor + 1;
+      const int closest_row = party_row(m->party_cursor);
       m->focus = SM_GRID;
       if (b == MB_LEFT)
-        set_cursor(m, closest_row * SM_COLS + 8 < last ? closest_row * SM_COLS + 8 : last);
+        set_cursor(m, closest_row * SM_COLS + SM_COLS - 1 < last ? closest_row * SM_COLS + SM_COLS - 1 : last);
       else
         set_cursor(m, closest_row * SM_COLS < last - last % SM_COLS ? closest_row * SM_COLS : last - last % SM_COLS);
       return SM_OK;
@@ -268,7 +275,7 @@ static sm_result start_input(sm_model* m, mui_button b) {
       return SM_OK;
     case MB_RIGHT: {
       if (m->n <= 0) return SM_IGNORED;
-      const int rows_on_screen = (last + SM_COLS - 1) / SM_COLS; /* ceil(onScreenLastIndex / 9), as upstream has it */
+      const int rows_on_screen = (last + SM_COLS - 1) / SM_COLS; /* ceil(onScreenLastIndex / 9) with SM_COLS for 9, as upstream has it */
       m->focus = SM_GRID;
       set_cursor(m, (rows_on_screen - 1) * SM_COLS);
       return SM_OK;
@@ -297,7 +304,7 @@ static sm_result random_input(sm_model* m, mui_button b) {
     case MB_LEFT:
       if (m->n <= 0) return SM_IGNORED;
       m->focus = SM_GRID;
-      set_cursor(m, 8 < m->n - 1 ? 8 : m->n - 1);
+      set_cursor(m, SM_COLS - 1 < m->n - 1 ? SM_COLS - 1 : m->n - 1); /* the end of the first row (upstream's 8) */
       return SM_OK;
     case MB_RIGHT:
       if (m->n <= 0) return SM_IGNORED;
