@@ -44,6 +44,22 @@ cc_status cc_obs_validate(const cc_obs *o)
         if (o->id || o->value) return CC_E_NONCANONICAL;
         break;
     }
+
+    /* optional attribution: the adapter's assertion, with the same known-bit rules as cc_event */
+    const uint16_t sk = o->src_known;
+    if (sk & ~(uint16_t)CC_EK_SOURCE_ALL) return CC_E_UNKNOWN_BITS;
+    if ((sk & (CC_EK_SOURCE_ID | CC_EK_SOURCE_SPECIES)) && !(sk & CC_EK_SOURCE_SIDE)) return CC_E_CONSISTENCY;
+    if (!(sk & CC_EK_SOURCE_SIDE) && o->src_side) return CC_E_NONCANONICAL;
+    if (!(sk & CC_EK_SOURCE_ID) && o->src_id) return CC_E_NONCANONICAL;
+    if (!(sk & CC_EK_SOURCE_SPECIES) && (o->src_species || o->src_form)) return CC_E_NONCANONICAL;
+    if (!(sk & CC_EK_MOVE) && o->src_move) return CC_E_NONCANONICAL;
+    if ((sk & CC_EK_SOURCE_SIDE) && o->src_side > CC_SIDE_ENEMY) return CC_E_RANGE;
+    if ((sk & CC_EK_SOURCE_ID) && o->src_id == 0) return CC_E_RANGE;
+    if ((sk & CC_EK_SOURCE_SPECIES) && (o->src_species < 1 || o->src_species > CC_SPECIES_ID_MAX)) return CC_E_RANGE;
+    if ((sk & CC_EK_MOVE) && (o->src_move < 1 || o->src_move > CC_MOVE_ID_MAX)) return CC_E_RANGE;
+    /* only a hit, a heal or a faint can name a source; a loss without a hit, a switch or an animation never does */
+    if (sk && o->kind != CC_OBS_DAMAGE && o->kind != CC_OBS_FAINT && !(o->kind == CC_OBS_HP && o->value > 0))
+        return CC_E_CONSISTENCY;
     return CC_OK;
 }
 

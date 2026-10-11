@@ -33,8 +33,9 @@ enum { CC_SIDE_PLAYER = 0, CC_SIDE_ENEMY = 1 };
 
 enum {
     CC_OBS_NONE = 0,
-    CC_OBS_DAMAGE,       /* PR_EV_DAMAGE: id = HitResult, value = the shown damage number (>= 0) */
-    CC_OBS_HP,           /* PR_EV_HP: value > 0 a shown heal, value < 0 status/indirect HP loss */
+    CC_OBS_DAMAGE,       /* PR_EV_DAMAGE: battler = the position hit, id = HitResult, value = the shown damage number (>= 0) */
+    CC_OBS_HP,           /* PR_EV_HP: value > 0 a shown heal, value < 0 an HP loss measured by the engine, value == 0
+                          * cannot be told apart (a heal of 0 or a loss of 0) and is not recorded */
     CC_OBS_FAINT,        /* PR_EV_FAINT */
     CC_OBS_SWITCH_OUT,   /* PR_EV_SWITCH_OUT */
     CC_OBS_SWITCH_IN,    /* PR_EV_SWITCH_IN */
@@ -44,7 +45,12 @@ enum {
 
 /* One observation as the adapter hands it to the reducer. `battler`/`target` are field POSITIONS; they identify
  * nobody across events. battler_id/target_id are stable Pokemon ids and are 0 unless the adapter derived them
- * independently (never from a field index alone). */
+ * independently (never from a field index alone).
+ *
+ * src_*: optional attribution the adapter established independently of the event; nothing in a raw event names an
+ * attacker or a move. src_known uses the CC_EK_SOURCE_SIDE / SOURCE_ID / SOURCE_SPECIES / MOVE bits with the meaning
+ * they have in cc_event (a clear bit requires a zero value). Accepted on DAMAGE, on a heal and on FAINT only; the
+ * reducer copies it and never derives it (docs/CUSTOM-CONTENT-CONTRACTS.md, section 2.8). */
 typedef struct {
     uint8_t kind;                   /* CC_OBS_* */
     int8_t battler;                 /* BattlerIndex 0..3, -1 none */
@@ -56,6 +62,12 @@ typedef struct {
     int32_t value;                  /* kind specific, see above */
     int32_t hp_after, hp_max_after; /* `battler` in the event's field snapshot; -1 = no snapshot */
     uint8_t status_after;           /* StatusEffect in that snapshot, 0 none */
+    uint16_t src_known;             /* CC_EK_SOURCE_SIDE | SOURCE_ID | SOURCE_SPECIES | MOVE */
+    uint8_t src_side;               /* iff CC_EK_SOURCE_SIDE */
+    uint8_t src_form;               /* iff CC_EK_SOURCE_SPECIES */
+    uint16_t src_species;           /* iff CC_EK_SOURCE_SPECIES */
+    uint16_t src_move;              /* iff CC_EK_MOVE */
+    uint32_t src_id;                /* iff CC_EK_SOURCE_ID */
 } cc_obs;
 
 /* ======================================================================== persistent history */
@@ -92,7 +104,8 @@ enum {
     CC_EK_SHOWN         = 1u << 6,  /* shown: the number the game displayed (a magnitude, >= 0) */
     CC_EK_HP_DELTA      = 1u << 7,  /* hp_delta: measured from consecutive snapshots (damage < 0, heal > 0) */
     CC_EK_HP_AFTER      = 1u << 8,  /* hp_after */
-    CC_EK_ALL           = (1u << 9) - 1u
+    CC_EK_ALL           = (1u << 9) - 1u,
+    CC_EK_SOURCE_ALL    = CC_EK_SOURCE_SIDE | CC_EK_SOURCE_ID | CC_EK_SOURCE_SPECIES | CC_EK_MOVE  /* what cc_obs.src_known may carry */
 };
 
 /* shown and hp_delta are separate observations. They are never added together. */
