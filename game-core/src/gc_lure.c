@@ -51,3 +51,20 @@ int gc_lure_apply(gc_run *run,const gc_offer *o,const char **why){
  gc_offer replacement={.key=pr_item_keys[fallback],.arg=-1,.target=GC_TARGET_NONE};
  return gc_port_apply_reward(run,&replacement,-1,-1,why)?GC_APPLY_DONE:GC_APPLY_REFUSED;
 }
+
+/* BattleEnd only, one tick per canonical record. Unrelated fields and timers
+ * retain their original representation through compaction. */
+bool gc_lure_lapse(gc_run *run,int *expired){
+ if(!run||run->n_items<0||run->n_items>GC_MAX_ITEMS)return false;
+ bool any=false;for(int j=0;j<run->n_items;j++)any|=lure_duration(run->items[j].key)!=0;
+ if(!any){if(expired)*expired=0;return true;}
+ static pr_reward_ctx c;if(!context(run,&c))return false;
+ int removed;if(!pr_reward_lapse_lures(&c,&removed))return false;
+ int out=0;for(int j=0;j<run->n_items;j++){
+  gc_item it=run->items[j];if(lure_duration(it.key)&&it.battle_count==1)continue;
+  it.battle_count=c.items[out].battle_count;run->items[out++]=it;
+ }
+ memset(&run->items[out],0,(run->n_items-out)*sizeof run->items[0]);run->n_items=out;
+ if(expired)*expired=removed;
+ gc_items_to_battle(run);return true;
+}

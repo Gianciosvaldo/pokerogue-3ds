@@ -339,3 +339,14 @@ $(BUILD)/lure_acquisition_host_test: tests/lure_acquisition_host_test.c $(BUILD)
 test: lure-acquisition-host
 lure-acquisition-host: $(BUILD)/lure_acquisition_host_test
 	$(BUILD)/lure_acquisition_host_test
+
+all: $(BUILD)/lure_lapse_test
+$(BUILD)/lure_lapse_test: tests/lure_lapse_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/lure_lapse_host_test
+$(BUILD)/lure_lapse_host_test: tests/lure_lapse_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: lure-lapse-host
+lure-lapse-host: $(BUILD)/lure_lapse_host_test
+	$(BUILD)/lure_lapse_host_test
