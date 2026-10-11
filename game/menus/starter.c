@@ -16,6 +16,7 @@ const pr_species* menu_species(uint16_t id);
 #define BOX_X 115
 #define BOX_Y 9
 #define TEAM_X 285 /* teamWindowX */
+#define INFO_RIGHT 104 /* the last white column of the panel's ability / passive / nature box */
 #define SPRITE_DELAY_MS 120.0f
 
 enum { ASK_NONE, ASK_START, ASK_EXIT };
@@ -315,34 +316,33 @@ static void window_merged_top(float x, float y, float w, float h) {
   mui_clip_off();
 }
 
-static void draw_icon(const sm_entry* e, float x, float y, rr_color tint) {
+static void draw_icon(const sm_entry* e, float x, float y, float ox, float scale, rr_color tint) {
   entry_mon(e, &g_icon_mon);
-  menu_draw_icon_tinted(&g_icon_mon, x, y, 0, 0, 0.5f, tint);
+  menu_draw_icon_tinted(&g_icon_mon, x, y, ox, 0, scale, tint);
 }
 
+/* the top left corner of grid cell i (calcStarterContainerPosition, with the cells of starter_model.h) */
+static float cell_x(int i) { return BOX_X + (i % SM_COLS) * SM_CELL_W; }
+static float cell_y(int i) { return BOX_Y + 13 + (i / SM_COLS) * SM_CELL_H; }
+
+/* Upstream's container at twice its size around a full-size icon: the passive background (16 px at 0.75 behind a half-size icon)
+ * at 1.5, the hidden ability capsule and the ribbon at 1 instead of 0.5, the cost label in the 8 px pixel font (at 6 px its 3 reads as a B). */
 static void draw_cell(int i, const sm_entry* e) {
-  const float x = BOX_X + (i % SM_COLS) * 18, y = BOX_Y + 13 + (i / SM_COLS) * 17;
+  const float x = cell_x(i), y = cell_y(i);
   if (e->passive) {
     rr_draw_opts o = RR_DEFAULT_OPTS;
-    o.scale_x = o.scale_y = 0.75f;
-    mui_image_ex("ui/passive_bg", NULL, x + 2, y + 5, &o);
+    o.scale_x = o.scale_y = 1.5f;
+    o.origin_x = o.origin_y = 0.5f;
+    mui_image_ex("ui/passive_bg", NULL, x + SM_CELL_W / 2, y + SM_CELL_H / 2 + 1, &o);
   }
-  draw_icon(e, x - 2, y + 2, sm_lit(&S.m, e) ? RR_RGBA(255, 255, 255, 255) : RR_RGBA(255, 255, 255, 96)); /* alpha 1 / 0.375 */
+  draw_icon(e, x + SM_CELL_W / 2, y, 0.5f, 1.0f, sm_lit(&S.m, e) ? RR_RGBA(255, 255, 255, 255) : RR_RGBA(255, 255, 255, 96)); /* alpha 1 / 0.375 */
   char t[16];
   sm_cost_text(t, sizeof t, e->cost);
   static const mui_style styles[3] = {TS_WINDOW, TS_SUMMARY_BLUE, TS_SUMMARY_GOLD};
   const mui_style st = styles[sm_cost_style(e)];
-  mui_text_c(TSX_METRICS_32, x + 1, y + 2, t, mui_style_color(st, false), mui_style_color(st, true));
-  if (e->hidden_ability) {
-    rr_draw_opts o = RR_DEFAULT_OPTS;
-    o.scale_x = o.scale_y = 0.5f;
-    mui_image_ex("ui/ha_capsule", NULL, x + 12, y + 7, &o);
-  }
-  if (e->won) {
-    rr_draw_opts o = RR_DEFAULT_OPTS;
-    o.scale_x = o.scale_y = 0.5f;
-    mui_image_ex("ui/champion_ribbon", NULL, x, y + 12, &o);
-  }
+  mui_text_c(TSX_PIXEL_8, x + 1, y, t, mui_style_color(st, false), mui_style_color(st, true));
+  if (e->hidden_ability) mui_image("ui/ha_capsule", NULL, x + SM_CELL_W - 8, y + 12, 0, 0);
+  if (e->won) mui_image("ui/champion_ribbon", NULL, x + 1, y + SM_CELL_H - 10, 0, 0);
 }
 
 static void draw_scroll_bar(void) {
@@ -357,6 +357,13 @@ static void draw_scroll_bar(void) {
   draw_nine("ui/scroll_bar_handle", x + 1, y + body_y + body_h, w - 2, bottom_h, 2);
 }
 
+/* the team column's labels: upstream's emerald at 60-64 canvas px, here the 8 px pixel font in the same colours, centred on x and
+ * placed by eye in their windows */
+static void centred_text(float x, float y, const char* t, mui_style colours) {
+  const int w = mui_text_width(TSX_PIXEL_8, t);
+  mui_text_c(TSX_PIXEL_8, floorf(x - w / 2.0f), y, t, mui_style_color(colours, false), mui_style_color(colours, true));
+}
+
 static void draw_team_column(void) {
   window_merged_top(TEAM_X, 38 - 20, 34, 20); /* the Randomize label's window */
   mui_window(TEAM_X, 38, 34, 107);
@@ -366,9 +373,9 @@ static void draw_team_column(void) {
    * pink flash of a refused add (SUMMARY_PINK for half a second) is never reached here and is left out. */
   char t[32];
   sm_value_text(t, sizeof t, sm_value(&S.m), S.m.budget);
-  mui_text_o(TS_STARTER_VALUE_LIMIT, TEAM_X + 17, 150, 0.5f, 0, t);
-  mui_text_o(TS_TOOLTIP_CONTENT, TEAM_X + 17, 162, 0.5f, 0, mui_t("common:start"));
-  mui_text_o(TS_TOOLTIP_CONTENT, TEAM_X + 17, 23, 0.5f, 0, mui_t("starterSelectUiHandler:randomize"));
+  centred_text(TEAM_X + 17, 146, t, TS_STARTER_VALUE_LIMIT);
+  centred_text(TEAM_X + 17, 160, mui_t("common:start"), TS_TOOLTIP_CONTENT);
+  centred_text(TEAM_X + 17, 21, mui_t("starterSelectUiHandler:randomize"), TS_TOOLTIP_CONTENT);
 
   if (S.m.focus == SM_START) draw_nine("ui/select_cursor", TEAM_X + 4, 160, 26, 15, 6);
   if (S.m.focus == SM_RANDOM) draw_nine("ui/select_cursor", TEAM_X + 4, 21, 26, 15, 6);
@@ -377,7 +384,7 @@ static void draw_team_column(void) {
     const float y = (float)sm_party_icon_y(i);
     const sm_entry* e = i < S.m.n_party ? sm_find(&S.m, S.m.party[i]) : NULL;
     if (e) {
-      draw_icon(e, TEAM_X + 7, y, RR_RGBA(255, 255, 255, 255));
+      draw_icon(e, TEAM_X + 7, y, 0, 0.5f, RR_RGBA(255, 255, 255, 255));
     } else {
       rr_draw_opts o = RR_DEFAULT_OPTS;
       o.scale_x = o.scale_y = 0.5f;
@@ -398,22 +405,21 @@ static void draw_grid(void) {
   for (int i = 0; i < SM_PAGE; i++) {
     const sm_entry* e = sm_cell(&S.m, i);
     if (!e) break;
-    if (sm_in_party(&S.m, e->species, NULL))
-      mui_image("ui/select_cursor_highlight", NULL, BOX_X + (i % SM_COLS) * 18 - 1, BOX_Y + 13 + (i / SM_COLS) * 17 + 1, 0, 0);
+    if (sm_in_party(&S.m, e->species, NULL)) draw_nine("ui/select_cursor_highlight", cell_x(i) - 1, cell_y(i), SM_CELL_W + 1, SM_CELL_H + 1, 6);
   }
-  if (S.m.focus == SM_GRID)
-    mui_image("ui/select_cursor", NULL, BOX_X + (S.m.cursor % SM_COLS) * 18 - 1, BOX_Y + 13 + (S.m.cursor / SM_COLS) * 17 + 1, 0, 0);
+  /* upstream's 18 x 18 cursor one pixel left of and below an 18 x 17 cell; stretched (nine-slice) over the larger cell */
+  if (S.m.focus == SM_GRID) draw_nine("ui/select_cursor", cell_x(S.m.cursor) - 1, cell_y(S.m.cursor), SM_CELL_W + 1, SM_CELL_H + 1, 6);
   draw_scroll_bar();
 }
 
-/* the text of the panel at 56px (starterInfoTextSize) in a style's colours */
+/* the text of the panel: upstream's 56px (starterInfoTextSize) emerald, here the 6 px pixel font, in a style's colours */
 static void info_text(float x, float y, const char* t, mui_style colours, int alpha, int* width) {
   rr_color c = mui_style_color(colours, false), s = mui_style_color(colours, true);
   if (alpha < 255) {
     c = with_alpha(c, alpha);
     s = with_alpha(s, alpha);
   }
-  const int w = mui_text_c(TS_MOVE_INFO_CONTENT, x, y, t, c, s);
+  const int w = mui_text_c(TSX_PIXEL_6, x, y, t, c, s);
   if (width) *width = w;
 }
 
@@ -449,7 +455,7 @@ static void draw_panel(void) {
     o.scale_x = o.scale_y = 0.5f;
     mui_image_ex("types", tf, 8 + 18 * i, 98, &o);
   }
-  /* growth rate (36px) */
+  /* growth rate (36px; the value 2 px after the label) */
   {
     static const char* const keys[6] = {"erratic", "fast", "mediumFast", "mediumSlow", "slow", "fluctuating"};
     static const uint32_t fg[6] = {0xf85888, 0xf8d030, 0x78c850, 0x6890f0, 0xf08030, 0xa040a0};
@@ -458,9 +464,9 @@ static void draw_panel(void) {
     if (sp && sp->growth_rate < 6) {
       char key[48];
       snprintf(key, sizeof key, "growth:%s", keys[sp->growth_rate]);
-      mui_text_c(TSX_METRICS_36, 8, 106, mui_t("starterSelectUiHandler:growthRate"), mui_style_color(TS_WINDOW_ALT, false),
-                 mui_style_color(TS_WINDOW_ALT, true));
-      mui_text_c(TSX_METRICS_36, 34, 106, mui_t(key), MUI_RGB(fg[sp->growth_rate]), MUI_RGB(sh[sp->growth_rate]));
+      const int w = mui_text_c(TSX_PIXEL_6, 8, 106, mui_t("starterSelectUiHandler:growthRate"), mui_style_color(TS_WINDOW_ALT, false),
+                               mui_style_color(TS_WINDOW_ALT, true));
+      mui_text_c(TSX_PIXEL_6, 8 + w + 2, 106, mui_t(key), MUI_RGB(fg[sp->growth_rate]), MUI_RGB(sh[sp->growth_rate]));
     }
   }
   /* name and gender */
@@ -479,27 +485,37 @@ static void draw_panel(void) {
                  MUI_RGB(female ? 0x984038 : 0x006090));
     }
   }
-  /* ability, passive, nature */
+  /* ability, passive, nature. Upstream puts the labels at 6 and the values at 31; the pixel font's labels are wider, so here the
+   * labels start at 5 (the box is white from 4 to 104) and the values 2 px after the widest label. */
   {
+    const char* const labels[3] = {mui_t("starterSelectUiHandler:ability"), mui_t("starterSelectUiHandler:passive"),
+                                   mui_t("starterSelectUiHandler:nature")};
+    int vx = 0;
+    for (int i = 0; i < 3; i++) {
+      const int lw = mui_text_width(TSX_PIXEL_6, labels[i]);
+      if (lw > vx) vx = lw;
+    }
+    vx += 5 + 2;
     int w;
-    info_text(6, 127, mui_t("starterSelectUiHandler:ability"), TS_SUMMARY_ALT, 255, NULL);
-    info_text(31, 127, ability_name(m->ability), S.info.ability_hidden ? TS_SUMMARY_GOLD : TS_SUMMARY_ALT, 255, NULL);
+    info_text(5, 127, labels[0], TS_SUMMARY_ALT, 255, NULL);
+    info_text(vx, 127, ability_name(m->ability), S.info.ability_hidden ? TS_SUMMARY_GOLD : TS_SUMMARY_ALT, 255, NULL);
     if (m->has_passive) {
       const bool lit = S.info.passive_unlocked && S.info.passive_enabled;
-      info_text(6, 136, mui_t("starterSelectUiHandler:passive"), TS_SUMMARY_ALT, 255, NULL);
-      info_text(31, 136, ability_name(m->passive), lit ? TS_SUMMARY_ALT : TS_SUMMARY_GRAY, lit ? 255 : 128, &w);
+      info_text(5, 136, labels[1], TS_SUMMARY_ALT, 255, NULL);
+      info_text(vx, 136, ability_name(m->passive), lit ? TS_SUMMARY_ALT : TS_SUMMARY_GRAY, lit ? 255 : 128, &w);
       if (!S.info.passive_unlocked || !S.info.passive_enabled) {
         rr_draw_opts o = RR_DEFAULT_OPTS;
         o.origin_y = 0.5f;
         o.scale_x = S.info.passive_unlocked ? 0.35f : 0.42f;
         o.scale_y = S.info.passive_unlocked ? 0.35f : 0.38f;
-        mui_image_ex(S.info.passive_unlocked ? "ui/icon_stop" : "ui/icon_lock", NULL, 31 + w + 1, 137, &o);
+        mui_image_ex(S.info.passive_unlocked ? "ui/icon_stop" : "ui/icon_lock", NULL, vx + w + 1, 140, &o);
       }
     }
-    info_text(6, 145, mui_t("starterSelectUiHandler:nature"), TS_SUMMARY_ALT, 255, NULL);
+    info_text(5, 145, labels[2], TS_SUMMARY_ALT, 255, NULL);
     int nw;
-    info_text(31, 145, nature_name(m->nature), TS_SUMMARY_ALT, 255, &nw);
-    /* getNatureName(nature, true, true): " (+Atk/-SpAtk)" with the stats in the pink and blue of the summary */
+    info_text(vx, 145, nature_name(m->nature), TS_SUMMARY_ALT, 255, &nw);
+    /* getNatureName(nature, true, true): " (+Atk/-SpAtk)" with the stats in the pink and blue of the summary. When that does not
+     * fit in the box (the longest natures), the same without the brackets, and when that does not fit either, the name alone. */
     int up = -1, down = -1;
     for (int s = 1; s < 6 && m->nature < PR_NATURE_COUNT; s++) {
       if (pr_nature_mult[m->nature][s] > 1.0) up = s;
@@ -508,23 +524,34 @@ static void draw_panel(void) {
     static const char* const short_keys[6] = {"pokemonInfo:stat.hpShortened", "pokemonInfo:stat.atkShortened",
                                               "pokemonInfo:stat.defShortened", "pokemonInfo:stat.spatkShortened",
                                               "pokemonInfo:stat.spdefShortened", "pokemonInfo:stat.spdShortened"};
-    float x = 31 + nw;
-    int w2;
-    if (up >= 0 && down >= 0) {
-      char t[48];
-      info_text(x, 145, " (", TS_SUMMARY_ALT, 255, &w2);
-      x += w2;
-      snprintf(t, sizeof t, "+%s", mui_t(short_keys[up]));
-      info_text(x, 145, t, TS_SUMMARY_PINK, 255, &w2);
-      x += w2;
-      info_text(x, 145, "/", TS_SUMMARY_ALT, 255, &w2);
-      x += w2;
-      snprintf(t, sizeof t, "-%s", mui_t(short_keys[down]));
-      info_text(x, 145, t, TS_SUMMARY_BLUE, 255, &w2);
-      x += w2;
-      info_text(x, 145, ")", TS_SUMMARY_ALT, 255, NULL);
-    } else {
-      info_text(x, 145, " (-)", TS_SUMMARY_ALT, 255, NULL);
+    char plus[48] = "", minus[48] = "";
+    const bool effect = up >= 0 && down >= 0;
+    if (effect) {
+      snprintf(plus, sizeof plus, "+%s", mui_t(short_keys[up]));
+      snprintf(minus, sizeof minus, "-%s", mui_t(short_keys[down]));
+    }
+    /* the pieces and their colours: open, plus, slash, minus, close */
+    static const char* const forms[2][3] = {{" (", "/", ")"}, {" ", "/", ""}};
+    const float room = INFO_RIGHT - (vx + nw);
+    for (int f = 0; f < 2; f++) {
+      const char* const* p = forms[f];
+      if (!effect) {
+        const char* t = f ? " -" : " (-)";
+        if (mui_text_width(TSX_PIXEL_6, t) > room) continue;
+        info_text(vx + nw, 145, t, TS_SUMMARY_ALT, 255, NULL);
+        break;
+      }
+      const int pw[5] = {mui_text_width(TSX_PIXEL_6, p[0]), mui_text_width(TSX_PIXEL_6, plus), mui_text_width(TSX_PIXEL_6, p[1]),
+                         mui_text_width(TSX_PIXEL_6, minus), mui_text_width(TSX_PIXEL_6, p[2])};
+      if (pw[0] + pw[1] + pw[2] + pw[3] + pw[4] > room) continue;
+      const char* const text[5] = {p[0], plus, p[1], minus, p[2]};
+      static const mui_style colours[5] = {TS_SUMMARY_ALT, TS_SUMMARY_PINK, TS_SUMMARY_ALT, TS_SUMMARY_BLUE, TS_SUMMARY_ALT};
+      float x = vx + nw;
+      for (int k = 0; k < 5; k++) {
+        if (text[k][0]) info_text(x, 145, text[k], colours[k], 255, NULL);
+        x += pw[k];
+      }
+      break;
     }
   }
 }

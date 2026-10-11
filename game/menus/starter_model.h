@@ -27,8 +27,24 @@
 extern "C" {
 #endif
 
+/* The grid. Upstream has 9 x 9 containers 18 x 17 px apart with each 40 x 30 icon at half size. Drawn 1:1 on the 3DS, a half-size
+ * icon has 20 x 15 real pixels and is not recognisable, so the screen shows the icons at full size in 6 x 5 cells 26 x 30 px
+ * apart (lorenzo's choice, 2026-10-11). SM_PARTY_ROWS: the rows whose LEFT/RIGHT edge goes to the team member level with them
+ * (the rows below go to Start; upstream rows 0-6 of 9). Building with -DSM_UPSTREAM_GRID gives upstream's geometry back:
+ * startertest runs its upstream checks that way. */
+#ifdef SM_UPSTREAM_GRID
 #define SM_COLS 9
 #define SM_ROWS 9
+#define SM_CELL_W 18
+#define SM_CELL_H 17
+#define SM_PARTY_ROWS 7
+#else
+#define SM_COLS 6
+#define SM_ROWS 5
+#define SM_CELL_W 26
+#define SM_CELL_H 30
+#define SM_PARTY_ROWS 4
+#endif
 #define SM_PAGE (SM_COLS * SM_ROWS) /* the containers on screen */
 #define SM_TEAM_MAX 6               /* PLAYER_PARTY_MAX_SIZE */
 

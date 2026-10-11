@@ -6,7 +6,11 @@
  * starter_model.c). The arithmetic of calcStarterIconY and findClosestStarterIndex was also run in Node 22 (the tables below). The
  * handler itself needs Phaser and the whole scene, so there is no differential against the running upstream handler.
  *
- *   make -C game/tests startertest && game/tests/build/startertest
+ * The screen's grid is 6 x 5 cells with the icons at full size (starter_model.h); upstream's is 9 x 9. build/startertest_upstream
+ * is this file built with upstream's grid and runs the checks whose numbers come from upstream; build/startertest runs the same
+ * rules on the screen's grid, with expectations worked out by hand.
+ *
+ *   make -C game/tests startertest && game/tests/build/startertest && game/tests/build/startertest_upstream
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -66,6 +70,9 @@ static void test_icon_positions(void) {
   for (int i = 0; i < 6; i++) CHECK(sm_party_icon_y(i) == want[i], "icon %d at %d", i, sm_party_icon_y(i));
 }
 
+#ifdef SM_UPSTREAM_GRID
+/* The checks from here to the #endif use upstream's grid (9 x 9 cells 17 px high): build/startertest_upstream. */
+
 /* node: findClosestStarterIndex(13 + row * 17, team) for team 1..6 and grid rows 0..6 */
 static void test_closest_party_member(void) {
   static const char* const want[6] = {"0,0,0,0,0,0,0", "0,0,1,1,1,1,1", "0,0,1,2,2,2,2",
@@ -92,30 +99,6 @@ static void test_closest_party_member(void) {
     /* row 0 is the Randomize button, whose party index upstream never reads: the table's first entry is 0 for every team */
     CHECK(!strcmp(got, want[team - 1]), "team %d: %s (want %s)", team, got, want[team - 1]);
   }
-}
-
-static void test_value_text(void) {
-  char t[32];
-  static const struct { double v; const char* s; } cases[] = {{0.5, ".5"}, {3, "3"}, {4.5, "4.5"}, {10, "10"}, {0.25, ".25"}, {3.25, "3.25"}, {0.75, ".75"}, {0, "0"}};
-  for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
-    sm_cost_text(t, sizeof t, cases[i].v);
-    CHECK(!strcmp(t, cases[i].s), "%g -> %s (want %s)", cases[i].v, t, cases[i].s);
-  }
-  sm_value_text(t, sizeof t, 4.5, 10);
-  CHECK(!strcmp(t, "4.5/10"), "%s", t);
-  sm_value_text(t, sizeof t, 0, 10);
-  CHECK(!strcmp(t, "0/10"), "%s", t);
-  sm_value_text(t, sizeof t, 0.5, 10);
-  CHECK(!strcmp(t, ".5/10"), "%s", t);
-  sm_entry e = {.species = 1, .cost = 3, .base_cost = 3};
-  CHECK(sm_cost_style(&e) == 0, "unchanged");
-  e.cost = 2;
-  CHECK(sm_cost_style(&e) == 1, "reduced by one");
-  e.cost = 2.5;
-  e.base_cost = 3;
-  CHECK(sm_cost_style(&e) == 1, "reduced by a half");
-  e.cost = 1;
-  CHECK(sm_cost_style(&e) == 2, "reduced by two");
 }
 
 /* ---------------------------------------------------------------- the grid */
@@ -146,15 +129,6 @@ static void test_grid_moves(void) {
   M.cursor = 5;
   CHECK(press(MB_UP) == SM_OK && at() == 23, "up into a short last row takes the row above (%d)", at());
   CHECK(press(MB_UP) == SM_OK && at() == 14, "up (%d)", at());
-}
-
-static void test_single_row(void) {
-  start(5, ONES, 1, 10);
-  CHECK(press(MB_DOWN) == SM_IGNORED && at() == 0, "down in a single row does nothing without a filter bar");
-  CHECK(press(MB_UP) == SM_IGNORED && at() == 0, "up in a single row does nothing");
-  presses(MB_RIGHT, 4);
-  CHECK(at() == 4, "right x4");
-  CHECK(press(MB_RIGHT) == SM_OK && M.focus == SM_RANDOM, "right at the end of the first row goes to Randomize");
 }
 
 static void test_scrolling(void) {
@@ -215,6 +189,118 @@ static void test_leaving_the_grid(void) {
   CHECK(press(MB_RIGHT) == SM_OK && M.focus == SM_GRID && at() == 36, "right from Start: first column of the last row on screen (%d)", at());
 }
 
+#else /* the screen's grid: 6 x 5 cells 26 x 30 px (starter_model.h); the expectations are worked out by hand from the same rules */
+
+/* findClosestStarterIndex(13 + row * 30, team) for rows 1..3 (row 0 is Randomize, row 4 goes to Start). The rows' y are 43, 73
+ * and 103; the icons' y - 13 are 33, 48, 63, 79, 94 and 109. */
+static void test_closest_party_member(void) {
+  static const char* const want[6] = {"0,0,0", "1,1,1", "1,2,2", "1,3,3", "1,3,4", "1,3,5"};
+  for (int team = 1; team <= 6; team++) {
+    char got[64] = "";
+    for (int row = 1; row < SM_PARTY_ROWS; row++) {
+      start(100, ONES, 1, 10);
+      for (int t = 0; t < team; t++) sm_add(&M, (uint16_t)(t + 1));
+      M.cursor = row * SM_COLS;
+      sm_result r = press(MB_LEFT);
+      CHECK(r == SM_OK && M.focus == SM_PARTY, "team %d row %d focus %d", team, row, M.focus);
+      char one[8];
+      snprintf(one, sizeof one, "%s%d", row > 1 ? "," : "", M.party_cursor);
+      strcat(got, one);
+    }
+    CHECK(!strcmp(got, want[team - 1]), "team %d: %s (want %s)", team, got, want[team - 1]);
+    start(100, ONES, 1, 10);
+    for (int t = 0; t < team; t++) sm_add(&M, (uint16_t)(t + 1));
+    M.cursor = SM_PARTY_ROWS * SM_COLS;
+    CHECK(press(MB_LEFT) == SM_OK && M.focus == SM_START, "team %d: row %d goes to Start (%d)", team, SM_PARTY_ROWS, M.focus);
+  }
+}
+
+static void test_grid_moves(void) {
+  start(20, ONES, 1, 10); /* 4 rows: 6, 6, 6, 2 */
+  CHECK(M.focus == SM_GRID && at() == 0, "starts on the first species");
+  CHECK(press(MB_RIGHT) == SM_OK && at() == 1, "right");
+  CHECK(press(MB_DOWN) == SM_OK && at() == 7, "down");
+  CHECK(press(MB_LEFT) == SM_OK && at() == 6, "left");
+  CHECK(press(MB_LEFT) == SM_OK && at() == 11, "left wraps within the row (%d)", at());
+  CHECK(press(MB_RIGHT) == SM_OK && at() == 6, "right wraps within the row (%d)", at());
+  M.cursor = 18; /* the last row: 18 and 19 */
+  CHECK(press(MB_RIGHT) == SM_OK && at() == 19, "right in the last row");
+  CHECK(press(MB_RIGHT) == SM_OK && at() == 18, "right at the end of the last row wraps (%d)", at());
+  M.cursor = 19;
+  CHECK(press(MB_DOWN) == SM_OK && at() == 1, "down from the last row wraps (%d)", at());
+  M.cursor = 15; /* row 2, column 3: below it 21 > 19 */
+  CHECK(press(MB_DOWN) == SM_OK && at() == 3, "no cell below: wraps to the first row (%d)", at());
+  M.cursor = 1;
+  CHECK(press(MB_UP) == SM_OK && at() == 19, "up from the first row (%d)", at());
+  M.cursor = 3;
+  CHECK(press(MB_UP) == SM_OK && at() == 15, "up into a short last row takes the row above (%d)", at());
+  CHECK(press(MB_UP) == SM_OK && at() == 9, "up (%d)", at());
+}
+
+static void test_scrolling(void) {
+  start(40, ONES, 1, 10); /* 7 rows: 6 full + 4 */
+  presses(MB_DOWN, 4);
+  CHECK(M.scroll == 0 && M.cursor == 24, "4 downs reach the fifth row (cursor %d scroll %d)", M.cursor, M.scroll);
+  CHECK(press(MB_DOWN) == SM_OK && M.scroll == 1 && M.cursor == 24 && at() == 30, "5th down scrolls one row (scroll %d cursor %d)", M.scroll, M.cursor);
+  CHECK(press(MB_DOWN) == SM_OK && M.scroll == 2 && M.cursor == 24 && at() == 36, "bottom (scroll %d at %d)", M.scroll, at());
+  CHECK(press(MB_DOWN) == SM_OK && M.scroll == 0 && at() == 0, "down from the bottom wraps to the top (at %d scroll %d)", at(), M.scroll);
+  CHECK(press(MB_UP) == SM_OK && M.scroll == 2 && at() == 36, "up from the top (scroll %d at %d)", M.scroll, at());
+  CHECK(press(MB_UP) == SM_OK && M.scroll == 2 && at() == 30, "up (scroll %d at %d)", M.scroll, at());
+  presses(MB_UP, 3);
+  CHECK(M.scroll == 2 && M.cursor == 0 && at() == 12, "up to the top row on screen (scroll %d at %d)", M.scroll, at());
+  CHECK(press(MB_UP) == SM_OK && M.scroll == 1 && M.cursor == 0 && at() == 6, "up at the top of the screen scrolls (scroll %d at %d)", M.scroll, at());
+}
+
+static void test_leaving_the_grid(void) {
+  start(40, ONES, 1, 10);
+  CHECK(press(MB_LEFT) == SM_OK && M.focus == SM_RANDOM, "left from the first row");
+  CHECK(press(MB_RIGHT) == SM_OK && M.focus == SM_GRID && at() == 0, "right from Randomize to the first species");
+  CHECK(press(MB_LEFT) == SM_OK && M.focus == SM_RANDOM, "left again");
+  CHECK(press(MB_LEFT) == SM_OK && M.focus == SM_GRID && at() == 5, "left from Randomize to the end of the first row (%d)", at());
+  sm_add(&M, 1);
+  sm_add(&M, 2);
+  M.focus = SM_GRID;
+  M.cursor = 4 * SM_COLS + 5;
+  CHECK(press(MB_RIGHT) == SM_OK && M.focus == SM_START, "right from row 4 goes to Start (%d)", M.focus);
+  CHECK(press(MB_LEFT) == SM_OK && M.focus == SM_GRID && at() == 29, "left from Start: the last species on screen (%d)", at());
+  M.focus = SM_START;
+  CHECK(press(MB_RIGHT) == SM_OK && M.focus == SM_GRID && at() == 24, "right from Start: first column of the last row on screen (%d)", at());
+}
+#endif
+
+static void test_value_text(void) {
+  char t[32];
+  static const struct { double v; const char* s; } cases[] = {{0.5, ".5"}, {3, "3"}, {4.5, "4.5"}, {10, "10"}, {0.25, ".25"}, {3.25, "3.25"}, {0.75, ".75"}, {0, "0"}};
+  for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+    sm_cost_text(t, sizeof t, cases[i].v);
+    CHECK(!strcmp(t, cases[i].s), "%g -> %s (want %s)", cases[i].v, t, cases[i].s);
+  }
+  sm_value_text(t, sizeof t, 4.5, 10);
+  CHECK(!strcmp(t, "4.5/10"), "%s", t);
+  sm_value_text(t, sizeof t, 0, 10);
+  CHECK(!strcmp(t, "0/10"), "%s", t);
+  sm_value_text(t, sizeof t, 0.5, 10);
+  CHECK(!strcmp(t, ".5/10"), "%s", t);
+  sm_entry e = {.species = 1, .cost = 3, .base_cost = 3};
+  CHECK(sm_cost_style(&e) == 0, "unchanged");
+  e.cost = 2;
+  CHECK(sm_cost_style(&e) == 1, "reduced by one");
+  e.cost = 2.5;
+  e.base_cost = 3;
+  CHECK(sm_cost_style(&e) == 1, "reduced by a half");
+  e.cost = 1;
+  CHECK(sm_cost_style(&e) == 2, "reduced by two");
+}
+
+static void test_single_row(void) {
+  start(5, ONES, 1, 10);
+  CHECK(press(MB_DOWN) == SM_IGNORED && at() == 0, "down in a single row does nothing without a filter bar");
+  CHECK(press(MB_UP) == SM_IGNORED && at() == 0, "up in a single row does nothing");
+  presses(MB_RIGHT, 4);
+  CHECK(at() == 4, "right x4");
+  CHECK(press(MB_RIGHT) == SM_OK && M.focus == SM_RANDOM, "right at the end of the first row goes to Randomize");
+}
+
 static void test_team_column(void) {
   start(40, ONES, 1, 10);
   for (int i = 1; i <= 3; i++) sm_add(&M, (uint16_t)i);
@@ -234,6 +320,25 @@ static void test_team_column(void) {
   M.focus = SM_RANDOM;
   CHECK(press(MB_DOWN) == SM_IGNORED && M.focus == SM_RANDOM, "down from Randomize with no team");
   CHECK(press(MB_UP) == SM_IGNORED && M.focus == SM_RANDOM, "up from Randomize with no team");
+}
+
+/* LEFT and RIGHT from each team member: the row level with its icon (upstream: member i + 1), at its end or its start */
+static void test_team_to_grid(void) {
+#ifdef SM_UPSTREAM_GRID
+  static const int row[6] = {1, 2, 3, 4, 5, 6};
+#else
+  static const int row[6] = {1, 1, 2, 2, 3, 3}; /* the icons' y - 26 over 30, rounded */
+#endif
+  for (int i = 0; i < SM_TEAM_MAX; i++) {
+    start(200, ONES, 1, 10);
+    for (int t = 0; t < SM_TEAM_MAX; t++) sm_add(&M, (uint16_t)(t + 1));
+    M.focus = SM_PARTY;
+    M.party_cursor = i;
+    CHECK(press(MB_LEFT) == SM_OK && M.focus == SM_GRID && at() == row[i] * SM_COLS + SM_COLS - 1, "member %d left: %d", i, at());
+    M.focus = SM_PARTY;
+    M.party_cursor = i;
+    CHECK(press(MB_RIGHT) == SM_OK && M.focus == SM_GRID && at() == row[i] * SM_COLS, "member %d right: %d", i, at());
+  }
 }
 
 /* ---------------------------------------------------------------- the team and the budget */
@@ -395,8 +500,11 @@ int main(void) {
   test_grid_moves();
   test_single_row();
   test_scrolling();
+#ifdef SM_UPSTREAM_GRID
   test_scrolled_partial_row();
+#endif
   test_leaving_the_grid();
+  test_team_to_grid();
   test_team_column();
   test_budget();
   test_options_menu_and_cancel();

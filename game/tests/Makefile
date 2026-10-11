@@ -139,7 +139,11 @@ mkfixture: build/mkfixture
 build/startertest: startertest.c ../menus/starter_model.c
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) -I../menus -I$(APP)/include $(CFLAGS) -fsanitize=address,undefined $^ -lm -o $@
-startertest: build/startertest
+# the same rules built with upstream's 9 x 9 grid (-DSM_UPSTREAM_GRID): the checks taken from upstream's numbers
+build/startertest_upstream: startertest.c ../menus/starter_model.c
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) -DSM_UPSTREAM_GRID -I../menus -I$(APP)/include $(CFLAGS) -fsanitize=address,undefined $^ -lm -o $@
+startertest: build/startertest build/startertest_upstream
 .PHONY: startertest
 
 # the starter select's data (starter_data.c) and the system data on the SD card (system_data.c) over real game-core and the real

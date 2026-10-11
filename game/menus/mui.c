@@ -177,10 +177,10 @@ static style_metrics style_metrics_of(mui_style s) {
       return (style_metrics){"emerald", 9, 56, 42, 49, 0, 6, 7};
     case TSX_WINDOW_ALT_76:
       return (style_metrics){"emerald", 13, 76, 58, 68, 0, 6, 10};
-    case TSX_METRICS_32:
-      return (style_metrics){"emerald", 5, 32, 24, 28, 0, 6, 4};
-    case TSX_METRICS_36:
-      return (style_metrics){"emerald", 6, 36, 27, 32, 0, 6, 5};
+    case TSX_PIXEL_6: /* pkmnems 48 px scaled to 36 */
+      return (style_metrics){"pkmnems", 6, 36, 49.5f, 49.5f, 0, 0, 9};
+    case TSX_PIXEL_8:
+      return (style_metrics){"pkmnems", 8, 48, 66, 66, 0, 0, 12};
     default:
       return (style_metrics){"emerald", 16, 96, 72, 84, 0, 6, 12};
   }
