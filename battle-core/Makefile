@@ -132,3 +132,14 @@ party-status-cure-boundary: $(BUILD)/party-status-cure-boundary
 	$(BUILD)/party-status-cure-boundary
 $(BUILD)/party-status-cure-boundary: tests/party-status-cure-boundary.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/fell-stinger-test
+$(BUILD)/fell-stinger-replay.inc: tests/growth-replay.inc tools/build-fell-stinger-replay.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-fell-stinger-replay.py $< $@
+$(BUILD)/fell-stinger-test: tests/fell-stinger-test.c $(BUILD)/fell-stinger-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) tests/fell-stinger-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/fell-stinger-helper-test
+$(BUILD)/fell-stinger-helper-test: tests/fell-stinger-helper-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

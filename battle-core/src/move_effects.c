@@ -101,6 +101,16 @@ static bool stat_stage_change(pr_battle *bt, pr_engine *e, const pr_effect_info 
     return true;
 }
 
+/* FaintPhase's generated callback creates a fresh StatStageChangeAttr. */
+void pr_apply_post_victory_stat_change(pr_battle *bt, pr_engine *e, int attr, pr_pokemon *source, int move)
+{
+    const pr_attr_PostVictoryStatStageChangeAttr *x = P(PostVictoryStatStageChangeAttr, &pr_attrs[attr]);
+    /* The only pinned factory has no condition; its generated field has no closure API. */
+    if (!(x->nulls & 0x8u)) { pr_note_unported(bt, PR_AC_PostVictoryStatStageChangeAttr); return; }
+    pr_effect_info fresh = {.self_target=x->showMessage, .chance_override=-1, .condition=PR_NO_FN};
+    stat_stage_change(bt,e,&fresh,PR_AC_StatStageChangeAttr,source,source,move,x->stats.v,x->stats.n,x->stages);
+}
+
 /* PartingShotAttr: after the stat drop is queued, the user switches out only if the drop will
  * happen: no Mist on the target's side, and Attack or Sp. Atk can move (the stat-protecting
  * abilities simulated, the stages inside ±6, Contrary turning the drop into a raise) */

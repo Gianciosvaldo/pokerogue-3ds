@@ -408,6 +408,7 @@ void pr_stop_multi_hit(pr_battle *bt, pr_engine *e, pr_pokemon *target);
  * No transfer to the user occurs. The caller may persist the resulting bt->mods. */
 bool pr_remove_move_held_item(pr_battle *bt, pr_engine *e, pr_pokemon *user,
                              pr_pokemon *target, bool berries_only, pr_modifier *removed);
+void pr_apply_post_victory_stat_change(pr_battle *bt, pr_engine *e, int attr, pr_pokemon *source, int move);
 void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, pr_pokemon *user, pr_pokemon *target);
 /* unshiftNew("StatStageChangePhase", {battlerIndex, changes: groupStatChange(stats, stages),
  * sourcePokemon}) with no message and no other option; returns the phase (-1 when out of room) */
