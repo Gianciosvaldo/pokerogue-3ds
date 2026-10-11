@@ -23,7 +23,7 @@ $(BUILD)/difftest: tests/difftest.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
 $(BUILD)/turntest: tests/turntest.c tests/optional-phase-map.inc $(BUILD)/libprcore.a
-	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/turntest.c $(BUILD)/libprcore.a -lm -o $@
 
 $(BUILD)/bosssegmenttest: tests/bosssegmenttest.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
