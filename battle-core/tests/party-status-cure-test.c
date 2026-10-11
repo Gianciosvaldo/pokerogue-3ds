@@ -90,6 +90,12 @@ static int number_list(const char *line, const char *key, int count, double lo, 
     return 0;
 }
 
+static int type_list(const char *line){
+ const char *v=field(line,"types");if(!v)return 0;if(!strcmp(v,"-"))return 1;
+ int count=1;for(const char *p=v;*p;p++)if(*p==',')count++;
+ return count<=PR_MAX_SUMMON_TYPES&&number_list(line,"types",count,POKEMON_TYPE_UNKNOWN,POKEMON_TYPE_STELLAR,1);
+}
+
 static int owner(const char *line)
 {
     const char *v=field(line,"b");
@@ -109,6 +115,7 @@ static int snapshot_line(const char *line, unsigned masks[12], unsigned *globals
         if(b<0 || masks[b]&bit) return 0;
         masks[b]|=bit;
         if(k==0) {
+            if(!type_list(line)||!scalar(line,"added",0,POKEMON_TYPE_STELLAR,0))return 0;
             if(!scalar(line,"id",0,4294967295LL,0) || !scalar(line,"sp",1,PR_SPECIES_COUNT-1,0)
                 || !scalar(line,"form",0,255,0) || !scalar(line,"lv",1,100,0)
                 || !scalar(line,"abil",0,PR_ABILITY_COUNT-1,0) || !scalar(line,"babil",0,PR_ABILITY_COUNT-1,0)
@@ -123,6 +130,7 @@ static int snapshot_line(const char *line, unsigned masks[12], unsigned *globals
     }
     const char *const global[]={"RNG ","BATTLE ","ARENA ","PICK "};
     for(int k=0;k<4;k++) if(!strncmp(line,global[k],strlen(global[k]))) {
+        if(k==2 && (!scalar(line,"terrain",0,TERRAIN_PSYCHIC,0)||!scalar(line,"biome",0,50,0)))return 0;
         unsigned bit=1u<<k;if(*globals&bit)return 0;*globals|=bit;return 1;
     }
     if(!strncmp(line,"PARTY ",6)) {
@@ -192,6 +200,7 @@ int main(int argc, char **argv)
             if(after_command_sides&side){fclose(f);return 2;}after_command_sides|=side;
 
         } else if (!strncmp(line, "END ", 4)) {
+            if(strcmp(line,"END stop=TurnInitPhase") && strcmp(line,"END stop=BattleEndPhase") && strcmp(line,"END stop=GameOverPhase")){fclose(f);return 2;}
             if (!ran || probe != 0 || trace != 1 || text != 1 || queue != 1 || cases != ends + 1) { fclose(f); return 2; }
             if(!snapshot_complete(masks[1],globals[1])) {fclose(f);return 2;}
             ends++;
