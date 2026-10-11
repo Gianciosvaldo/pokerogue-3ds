@@ -1,0 +1,99 @@
+/*
+ * combat_observer: the app's side of the custom content history (task C03; docs/CUSTOM-CONTENT-CONTRACTS.md, section 2.8).
+ *
+ * It reads game-core's raw GC_EV_WAVE / GC_EV_TURN / GC_EV_BATTLE events as run_screen.c pulls them off the run's queue
+ * (drain(), before be_convert_events and before anything is played), turns battle-core's pr_event list into custom-core
+ * observations and gives each BATTLE range to the reducer once, as one batch. It does not decide, draw or change anything in the
+ * run: no gameplay call, no gameplay random number, no file. What it keeps is its own: the reducer, a batch buffer and, once the run
+ * ends, a report that owns its data (nothing in it points into the gc_run).
+ *
+ * What is observed (battle-core/include/pr/events.h): PR_EV_DAMAGE, PR_EV_HP, PR_EV_FAINT, PR_EV_SWITCH_OUT, PR_EV_SWITCH_IN, each
+ * with the field snapshot the event carries. Everything else (texts, animations, stat arrows...) is outside the contract and is not
+ * counted as lost. PR_EV_MOVE_ANIM is not given to the reducer at all: it produces no stored event and would only add a way for a
+ * batch to be refused.
+ *
+ * What is NOT established, on purpose: who dealt a hit, with which move, and what caused a loss. Nothing in a raw event says so, and
+ * this module never infers it from event order, a move animation or an amount. Every stored event has its source bits clear.
+ * Stable Pokemon identities are not derived either (a snapshot's party_slot is an index into a party that can be re-ordered
+ * between the event and the drain): species and form come from the snapshot, ids stay unknown.
+ *
+ * The run uid is a counter of this session, not a durable identifier: nothing is saved yet (C04). It is never compared across
+ * restarts.
+ */
+#ifndef GM_COMBAT_OBSERVER_H
+#define GM_COMBAT_OBSERVER_H
+
+#include <stdbool.h>
+#include <stdint.h>
+
+#include "cc/reducer.h"
+#include "gc/run.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* What the observer did, for the host tests and the debug overlay. Counts since co_begin_run. */
+typedef struct {
+  uint32_t drains;            /* co_observe calls taken in (a replay is not one) */
+  uint32_t replayed_drains;   /* calls whose drain number was not new: ignored */
+  uint32_t skipped_drains;    /* drain numbers that never arrived (the history is flagged incomplete) */
+  uint32_t ranges;            /* GC_EV_BATTLE ranges seen */
+  uint32_t batches;           /* batches handed to the reducer, including flagged empty ones */
+  uint32_t accepted;          /* ... the reducer took */
+  uint32_t rejected;          /* ... it refused (nothing changed; the loss is recorded) */
+  uint32_t empty_ranges;      /* ranges with no observed event: no batch, so no empty turn */
+  uint32_t bad_range;         /* BATTLE ranges outside the game's event buffer */
+  uint32_t unkeyed;           /* ranges seen before the wave or the turn was known (not observed) */
+  uint32_t unrepresentable;   /* observed-kind events the reducer could not take (dropped, the batch is flagged) */
+  uint32_t loss_flagged;      /* batches flagged because the game said events were lost */
+  uint32_t events_in;         /* observations given to the reducer in accepted batches */
+  uint32_t ignored;           /* ... of which the reducer made no event from (a PR_EV_HP of 0) */
+  uint32_t sign_conflicts;    /* measured HP movement contradicting an event kind */
+  uint32_t evicted;           /* events pushed out of a full turn */
+  int last_status;            /* cc_status of the last refusal, CC_OK if none */
+} co_stats;
+
+/* What a finished run leaves, by value. Valid until the next co_begin_run. */
+typedef struct {
+  bool valid;                 /* a run was observed and has ended */
+  uint8_t outcome;            /* CC_OUT_DEFEAT or CC_OUT_CLEAR */
+  int16_t biome;              /* the run's biome id as it ended */
+  uint16_t wave;              /* the wave it ended on */
+  bool began_mid;             /* the run was continued from a save: earlier battles were not observed */
+  bool untracked_loss;        /* something was lost that no stored turn records (the history is incomplete beyond its flags) */
+  /* The player's Pokemon that fell last in the retained events, by the snapshot of its FAINT event. Only for a defeat. It is a
+   * statement about the retained history, not about who finished the run. */
+  bool fallen_known;
+  uint16_t fallen_species;
+  uint8_t fallen_form;
+  cc_history history;         /* the last turns, oldest first */
+  co_stats stats;
+} co_report;
+
+/* Starts observing a new run (any earlier report is dropped). `resumed`: the run was loaded from a save. */
+void co_begin_run(bool resumed);
+
+/* Takes in the events one drain pulled off game-core's queue, once.
+ *   drain_no   1, 2, 3... per run, one per drain. A number that is not new is a replay (ignored); a jump means a drain was never
+ *              observed (the history is flagged incomplete).
+ *   q, nq      the drain's gc events in order. Only WAVE, TURN and BATTLE are read.
+ *   be, n_be   run->battle_events and run->n_battle_events as they stand during the drain (valid until the next gc_run_choose).
+ *   battle_overflow  run->battle_events_overflow: some battle events never reached the buffer. The drain's batches are flagged.
+ *   queue_overflow   run->ev_overflow: game-core's own queue dropped an event at some point. game-core never clears it, so this
+ *                    counts once per run; a drain that filled the whole queue counts too.
+ * Ignored when no run is being observed or the run has ended. */
+void co_observe(uint32_t drain_no, const gc_event* q, int nq, const pr_event* be, int n_be, bool battle_overflow, bool queue_overflow);
+
+/* The run has ended: closes the reducer and captures the report from what it holds. Call once the run object is still valid and
+ * before its slot is cleared. A second call changes nothing. False when no run was observed. */
+bool co_finish(bool victory, int biome, int wave);
+
+/* The report of the run that just ended; NULL when there is none (no run, or it has not ended). */
+const co_report* co_report_get(void);
+const co_stats* co_stats_get(void);
+
+#ifdef __cplusplus
+}
+#endif
+#endif

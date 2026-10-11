@@ -17,6 +17,7 @@
 #include <unistd.h>
 
 #include "app_flow.h"
+#include "combat_observer.h"
 #include "pr_data.h"
 #include "pr_enums.h"
 #include "result_screen.h"
@@ -138,6 +139,39 @@ static void new_run(gc_run* r, const char* seed) {
   }
 }
 
+/* What the real driver does around a run, with a tiny battle: it starts observing with the run, sees one turn in which the player's lead
+ * faints, and takes the report as the run ends (run_screen.c: drain() and end_run()). */
+static uint32_t obs_drain;
+static void observe_start(bool resumed) {
+  co_begin_run(resumed);
+  obs_drain = 0;
+  pr_event be[2];
+  memset(be, 0, sizeof be);
+  be[0].type = PR_EV_DAMAGE;
+  be[0].battler = 0;
+  be[0].id = 1;
+  be[0].value = 20;
+  be[0].field[0] = (pr_event_field){.species = 25, .hp = 0, .max_hp = 20};
+  be[1] = be[0];
+  be[1].type = PR_EV_FAINT;
+  be[1].value = 0;
+  be[1].id = 0;
+  gc_event q[3];
+  memset(q, 0, sizeof q);
+  q[0].kind = GC_EV_WAVE;
+  q[0].a = 4;
+  q[1].kind = GC_EV_TURN;
+  q[1].a = 1;
+  q[2].kind = GC_EV_BATTLE;
+  q[2].a = 0;
+  q[2].b = 2;
+  co_observe(++obs_drain, q, 3, be, 2, false, false);
+}
+static void driver_end(int kind) {
+  co_finish(kind == GC_SCREEN_CLEAR, RUN.biome, RUN.wave);
+  CFG.on_end(kind, CFG.end_arg);
+}
+
 bool rs_start(const rs_config* c) {
   CFG = *c;
   n_start++;
@@ -160,6 +194,7 @@ bool rs_start(const rs_config* c) {
     new_run(&RUN, c->seed);
   }
   CHECK(c->save, "a new run must save");
+  observe_start(false);
   rsv_save(c->slot, &RUN); /* the first save point */
   sys_saved_ok = c->sys && c->save_sys ? c->save_sys() : true; /* the driver writes it with the run */
   return true;
@@ -169,7 +204,10 @@ rsv_status rs_resume(const rs_config* c, char why[RSV_WHY_LEN]) {
   CFG = *c;
   n_resume++;
   const rsv_status st = rsv_load(c->slot, &RUN, why);
-  if (st == RSV_OK) RUN.sys = c->sys; /* a saved run holds none: the driver attaches the player's */
+  if (st == RSV_OK) {
+    RUN.sys = c->sys; /* a saved run holds none: the driver attaches the player's */
+    observe_start(true);
+  }
   return st;
 }
 
@@ -231,9 +269,15 @@ int main(void) {
   CHECK(status_of(1) == RSV_OK && rsv_last_slot() == 1, "the run is in slot 1, the last slot");
 
   /* the run ends in a game over: the slot is cleared and the result screen shows the run */
-  CFG.on_end(GC_SCREEN_GAME_OVER, CFG.end_arg);
+  CHECK(co_report_get() == NULL, "the run is on: no report yet");
+  driver_end(GC_SCREEN_GAME_OVER);
   CHECK(n_result == 1 && !R.victory && R.run.status == RSV_OK && R.run.wave == RUN.wave && R.run.n_party == 2, "game over screen");
+  CHECK(R.report && R.report == co_report_get() && R.report->valid && R.report->outcome == CC_OUT_DEFEAT, "the result screen gets the run's combat report");
+  CHECK(R.report && R.report->wave == RUN.wave && R.report->biome == RUN.biome && R.report->fallen_known && R.report->fallen_species == 25 &&
+            R.report->history.n_turns == 1 && R.report->history.turns[0].wave == 4,
+        "the report describes the run that ended");
   CHECK(status_of(1) == RSV_EMPTY && rsv_last_slot() == -1, "the slot of a finished run is cleared and forgotten");
+  CHECK(R.report && R.report->valid && R.report->history.n_turns == 1, "and the report is still whole after the slot is cleared");
   R.on_done(R.arg);
   CHECK(n_title == 2 && !T.can_continue, "back to the title, nothing to continue");
 
@@ -297,8 +341,9 @@ int main(void) {
   }
   CHECK(sysd_get()->dex[25].caught_attr != 0, "the run caught a Pikachu");
   memcpy(&snap, sysd_get(), sizeof snap);
-  CFG.on_end(GC_SCREEN_CLEAR, CFG.end_arg);
+  driver_end(GC_SCREEN_CLEAR);
   CHECK(n_result == 2 && R.victory && status_of(0) == RSV_EMPTY, "clear screen, slot cleared");
+  CHECK(R.report && R.report->outcome == CC_OUT_CLEAR && !R.report->fallen_known, "a clear's report says clear and names nobody");
   sysd_reset(); /* quit and boot again */
   CHECK(sysd_state(NULL) == SYSD_LOADED && !memcmp(&snap, sysd_get(), sizeof snap), "the run's catch is in the system data on the SD card");
   R.on_done(R.arg);
@@ -366,7 +411,9 @@ int main(void) {
   sh_confirm(1); /* the defaults are enough to begin */
   CHECK(n_start == 4 && CFG.sys == sysd_get() && sys_saved_ok, "the run starts; saving its system data reports no failure (it writes nothing)");
   CHECK(file_size(p) == sizeof junk, "the damaged system file is untouched");
-  CFG.on_end(GC_SCREEN_GAME_OVER, CFG.end_arg);
+  CHECK(co_report_get() == NULL, "the new run has no report of the one before");
+  CFG.on_end(GC_SCREEN_GAME_OVER, CFG.end_arg); /* a driver that never finished the observer: nothing stale is passed on */
+  CHECK(R.report == NULL, "no report: the result screen gets none, not the old one");
   CHECK(file_size(p) == sizeof junk, "and still untouched when the run ends");
   R.on_done(R.arg);
   remove(p);

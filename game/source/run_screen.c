@@ -10,6 +10,7 @@
 #include "battle_anim.h"
 #include "battle_events.h"
 #include "battle_view.h"
+#include "combat_observer.h"
 #include "i18n.h"
 #include "menus.h"
 #include "party_screen.h"
@@ -51,6 +52,7 @@ static struct {
   int shown;                    /* party index of the player's Pokemon on screen, -1 none */
   bool fade_done;               /* a fade is already at black (a new run): the next wave doesn't fade again */
   int wave_ev;                  /* the WAVE event being shown */
+  uint32_t drain_no;            /* drain() calls of this run, for the combat observer (one number per drain, never reused) */
   /* the screen events being played */
   bv_event ev[EV_CAP];
   char txt[TXT_CAP][TXT_LEN];
@@ -81,6 +83,7 @@ static void reset_driver(void) {
   G.shown = -1;
   G.fade_done = false;
   G.wave_ev = 0;
+  G.drain_no = 0;
   G.nq = G.qi = 0;
   G.n_ev = G.ev_pos = G.n_txt = 0;
   G.swap_prompt = G.learn_drop = G.swap_replaced = G.release_drop = false;
@@ -238,6 +241,9 @@ static void drain(void) {
   G.swap_prompt = false;
   memset(G.skip, 0, sizeof G.skip);
   while (G.nq < GC_MAX_EVENTS && gc_run_next_event(&G.run, &G.q[G.nq])) G.nq++;
+  /* The combat history takes the raw events here, once per drain, before anything is converted or played: the screen's timing,
+   * its redraws and its skips cannot count a turn twice or leave one out. */
+  co_observe(++G.drain_no, G.q, G.nq, G.run.battle_events, G.run.n_battle_events, G.run.battle_events_overflow, G.run.ev_overflow);
   const gc_screen* s = gc_run_screen(&G.run);
 
   /* the learn dialog (menus' learn_move_start) shows what game-core says around its screen: drop
@@ -1084,6 +1090,8 @@ static void end_run(int kind) {
   if (G.step_timer) ui_timer_cancel(G.step_timer);
   G.step_timer = 0;
   G.save_due = false;
+  /* the combat history's report is taken now, while the run is whole and before the app clears the slot or starts another */
+  co_finish(kind == GC_SCREEN_CLEAR, G.run.biome, G.run.wave);
   if (kind == GC_SCREEN_CLEAR)
     G.st.clears++;
   else
@@ -1231,6 +1239,7 @@ static int random_team(gc_starter* out) {
 static bool new_run(bool from_black) {
   G.st.runs++;
   reset_driver();
+  co_begin_run(false);
   G.fade_done = from_black;
   G.rng = 0x9E3779B97F4A7C15ull ^ ((uint64_t)G.cfg.entropy * 0xD1B54A32D192ED03ull) ^ ((uint64_t)G.st.runs * 0x2545F4914F6CDD1Dull);
   rnd(1);
@@ -1272,6 +1281,7 @@ rsv_status rs_resume(const rs_config* cfg, char why[RSV_WHY_LEN]) {
   const rsv_status st = rsv_load(cfg->slot, &G.run, why);
   if (st != RSV_OK) return st; /* G.run is not usable: the caller must not drive it */
   G.run.sys = cfg->sys; /* a saved run holds no system data: it takes the player's */
+  co_begin_run(true);   /* observation starts here: the battles before the save were not seen */
   G.st.runs++;
   G.st.loads++;
   G.resume_wave = G.resume_foe = true;

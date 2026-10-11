@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "combat_observer.h"
 #include "gc/run.h"
 #include "result_screen.h"
 #include "run_saves.h"
@@ -133,6 +134,7 @@ static void on_run_end(int kind, void* arg) {
   A.result.victory = kind == GC_SCREEN_CLEAR;
   rsv_summarize(rs_run(), &A.result.run);
   A.result.run.status = RSV_OK;
+  A.result.report = co_report_get(); /* taken by the run driver as the run ended, before the slot is cleared below */
   A.result.on_done = on_result_done;
   rsv_clear(A.slot);
   /* what the run won or caught (a Classic clear is recorded by game-core as the run ends) goes to the SD card now. A refusal is not
