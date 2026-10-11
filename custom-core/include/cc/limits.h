@@ -17,6 +17,7 @@
 #define CC_NUM_WINDOWS 4                 /* rematch windows: waves 27, 77, 127, 177 */
 #define CC_MAX_FROZEN CC_MAX_NEMESES     /* candidates frozen into a run's schedule */
 #define CC_LEDGER_ENTRIES 8              /* committed transactions remembered for idempotency */
+#define CC_MAX_BATCH_OBS 384             /* observations in one reducer batch: GC_MAX_BATTLE_EVENTS (game-core/include/gc/run.h) */
 
 /* ---- record shape ---- */
 #define CC_MAX_MOVES 4

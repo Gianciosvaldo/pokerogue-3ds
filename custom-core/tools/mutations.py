@@ -2,8 +2,8 @@
 """Mutation check for custom-core: the unit tests must be able to fail.
 
 Each mutation is a single textual change to one source or header file. For every mutation this script copies
-include/, src/ and tests/ to a scratch directory, applies the change, builds model_test and layout_test from that copy
-and runs them. A mutation is KILLED when a test fails (a nonzero exit, a sanitizer abort or a timeout) and SURVIVES
+include/, src/ and tests/ to a scratch directory, applies the change, builds model_test, reducer_test and layout_test
+from that copy and runs them. A mutation is KILLED when a test fails (a nonzero exit, a sanitizer abort or a timeout) and SURVIVES
 when both tests still pass. The script exits nonzero if
 
   * the unmodified copy does not build and pass (nothing is learned from mutating a broken tree),
@@ -25,7 +25,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 ENUMS = ROOT.parent / "battle-core" / "gen" / "out" / "pr_enums.h"
 CFLAGS = ["-O0", "-g", "-w", "-std=c99", "-fsanitize=address,undefined", "-fno-sanitize-recover=undefined"]
-SOURCES = ["src/status.c", "src/history.c", "src/nemesis.c", "src/schedule.c", "src/ids.c", "src/meta.c"]
+SOURCES = ["src/status.c", "src/history.c", "src/nemesis.c", "src/schedule.c", "src/ids.c", "src/meta.c", "src/reducer.c"]
 BUILD_TIMEOUT = 120
 RUN_TIMEOUT = 30
 
@@ -492,11 +492,347 @@ equiv(M, "const unsigned n_turns = m->has_report ? m->history.n_turns : 0;", "co
 mut(M, "events[i] = m->history.turns[i].n_events;", "events[i] = CC_MAX_EVENTS_PER_TURN;")
 
 
+# ---------------------------------------------------------------- history.c: the attribution of an observation (C02)
+for old, new in [
+    ("if (sk & ~(uint16_t)CC_EK_SOURCE_ALL) return CC_E_UNKNOWN_BITS;", ";"),
+    ("(sk & (CC_EK_SOURCE_ID | CC_EK_SOURCE_SPECIES)) && !(sk & CC_EK_SOURCE_SIDE)", "(sk & (CC_EK_SOURCE_SPECIES)) && !(sk & CC_EK_SOURCE_SIDE)"),
+    ("(sk & (CC_EK_SOURCE_ID | CC_EK_SOURCE_SPECIES)) && !(sk & CC_EK_SOURCE_SIDE)", "(sk & (CC_EK_SOURCE_ID)) && !(sk & CC_EK_SOURCE_SIDE)"),
+    ("if ((sk & (CC_EK_SOURCE_ID | CC_EK_SOURCE_SPECIES)) && !(sk & CC_EK_SOURCE_SIDE)) return CC_E_CONSISTENCY;", ";"),
+    ("if (!(sk & CC_EK_SOURCE_SIDE) && o->src_side) return CC_E_NONCANONICAL;", ";"),
+    ("if (!(sk & CC_EK_SOURCE_ID) && o->src_id) return CC_E_NONCANONICAL;", ";"),
+    ("if (!(sk & CC_EK_SOURCE_SPECIES) && (o->src_species || o->src_form)) return CC_E_NONCANONICAL;", ";"),
+    ("(o->src_species || o->src_form)) return CC_E_NONCANONICAL;", "(o->src_species)) return CC_E_NONCANONICAL;"),
+    ("if (!(sk & CC_EK_MOVE) && o->src_move) return CC_E_NONCANONICAL;", ";"),
+    ("if ((sk & CC_EK_SOURCE_SIDE) && o->src_side > CC_SIDE_ENEMY) return CC_E_RANGE;", ";"),
+    ("o->src_side > CC_SIDE_ENEMY) return CC_E_RANGE;", "o->src_side > CC_SIDE_ENEMY + 1) return CC_E_RANGE;"),
+    ("if ((sk & CC_EK_SOURCE_ID) && o->src_id == 0) return CC_E_RANGE;", ";"),
+    ("(o->src_species < 1 || o->src_species > CC_SPECIES_ID_MAX)) return CC_E_RANGE;", "(o->src_species > CC_SPECIES_ID_MAX)) return CC_E_RANGE;"),
+    ("(o->src_species < 1 || o->src_species > CC_SPECIES_ID_MAX)) return CC_E_RANGE;", "(o->src_species < 1 || o->src_species > CC_SPECIES_ID_MAX + 1)) return CC_E_RANGE;"),
+    ("(o->src_species < 1 || o->src_species > CC_SPECIES_ID_MAX)) return CC_E_RANGE;", "(o->src_species < 1 || o->src_species >= CC_SPECIES_ID_MAX)) return CC_E_RANGE;"),
+    ("(o->src_move < 1 || o->src_move > CC_MOVE_ID_MAX)) return CC_E_RANGE;", "(o->src_move > CC_MOVE_ID_MAX)) return CC_E_RANGE;"),
+    ("(o->src_move < 1 || o->src_move > CC_MOVE_ID_MAX)) return CC_E_RANGE;", "(o->src_move < 1 || o->src_move > CC_MOVE_ID_MAX + 1)) return CC_E_RANGE;"),
+    ("if (sk && o->kind != CC_OBS_DAMAGE && o->kind != CC_OBS_FAINT && !(o->kind == CC_OBS_HP && o->value > 0))", "if (0 && sk && o->kind != CC_OBS_DAMAGE && o->kind != CC_OBS_FAINT && !(o->kind == CC_OBS_HP && o->value > 0))"),
+    ("if (sk && o->kind != CC_OBS_DAMAGE &&", "if (sk && o->kind != CC_OBS_HP &&"),
+    ("o->kind != CC_OBS_DAMAGE && o->kind != CC_OBS_FAINT &&", "o->kind != CC_OBS_FAINT &&"),
+    ("o->kind != CC_OBS_DAMAGE && o->kind != CC_OBS_FAINT &&", "o->kind != CC_OBS_DAMAGE &&"),
+    ("!(o->kind == CC_OBS_HP && o->value > 0))", "!(o->kind == CC_OBS_HP && o->value >= 0))"),
+    ("!(o->kind == CC_OBS_HP && o->value > 0))", "!(o->kind == CC_OBS_HP))"),
+    ("!(o->kind == CC_OBS_HP && o->value > 0))", "!(o->kind == CC_OBS_HP && o->value < 0))"),
+]:
+    mut(H, old, new)
+mut(L, "#define CC_MAX_BATCH_OBS 384 ", "#define CC_MAX_BATCH_OBS 383 ")
+mut(L, "#define CC_MAX_BATCH_OBS 384 ", "#define CC_MAX_BATCH_OBS 385 ")
+mut("include/cc/types.h", "CC_EK_SOURCE_ALL    = CC_EK_SOURCE_SIDE | CC_EK_SOURCE_ID | CC_EK_SOURCE_SPECIES | CC_EK_MOVE",
+    "CC_EK_SOURCE_ALL    = CC_EK_SOURCE_SIDE | CC_EK_SOURCE_ID | CC_EK_SOURCE_SPECIES")
+mut("include/cc/types.h", "CC_EK_SOURCE_ALL    = CC_EK_SOURCE_SIDE | CC_EK_SOURCE_ID | CC_EK_SOURCE_SPECIES | CC_EK_MOVE",
+    "CC_EK_SOURCE_ALL    = CC_EK_SOURCE_SIDE | CC_EK_SOURCE_ID | CC_EK_MOVE")
+
+# ---------------------------------------------------------------- reducer.c (C02)
+R = "src/reducer.c"
+# batch digest
+for stmt in ["*h ^= v;", "*h *= FNV_PRIME;", "fnv8(h, (uint8_t)v);", "fnv8(h, (uint8_t)(v >> 8));", "fnv16(h, (uint16_t)v);",
+             "fnv16(h, (uint16_t)(v >> 16));", "fnv32(&h, b->battle_seq);", "fnv16(&h, b->wave);", "fnv16(&h, b->turn);",
+             "fnv8(&h, b->flags);", "fnv8(&h, o->kind);", "fnv8(&h, (uint8_t)o->battler);", "fnv8(&h, (uint8_t)o->target);",
+             "fnv8(&h, o->battler_form);", "fnv8(&h, o->target_form);", "fnv16(&h, o->battler_species);",
+             "fnv16(&h, o->target_species);", "fnv32(&h, o->battler_id);", "fnv32(&h, o->target_id);", "fnv16(&h, o->id);",
+             "fnv32(&h, (uint32_t)o->value);", "fnv32(&h, (uint32_t)o->hp_after);", "fnv32(&h, (uint32_t)o->hp_max_after);",
+             "fnv8(&h, o->status_after);", "fnv16(&h, o->src_known);", "fnv8(&h, o->src_side);", "fnv8(&h, o->src_form);",
+             "fnv16(&h, o->src_species);", "fnv16(&h, o->src_move);", "fnv32(&h, o->src_id);"]:
+    drop(R, stmt)
+mut(R, "for (unsigned i = 0; i < b->n_obs; i++) {\n        const cc_obs *o = &b->obs[i];",
+    "for (unsigned i = 0; i + 1 < b->n_obs; i++) {\n        const cc_obs *o = &b->obs[i];", "digest skips the last observation")
+# measuring HP movement
+drop(R, "if (o->hp_after < 0) return false;")
+mut(R, "prev->species != o->battler_species || prev->form != o->battler_form", "prev->form != o->battler_form")
+mut(R, "prev->species != o->battler_species || prev->form != o->battler_form", "prev->species != o->battler_species")
+mut(R, "*delta = o->hp_after - prev->hp;", "*delta = prev->hp - o->hp_after;")
+# one observation -> one event
+drop(R, "if (o->kind == CC_OBS_MOVE_ANIM) return false;")
+drop(R, "if (o->kind == CC_OBS_HP && o->value == 0) return false;")
+mut(R, "o->kind == CC_OBS_HP && o->value == 0", "o->kind == CC_OBS_HP && o->value == 1")
+mut(R, "o->kind == CC_OBS_HP && o->value == 0", "o->kind == CC_OBS_HP && o->value <= 0")
+mut(R, "e->target_side = p >= 2 ? CC_SIDE_ENEMY : CC_SIDE_PLAYER;", "e->target_side = p >= 3 ? CC_SIDE_ENEMY : CC_SIDE_PLAYER;")
+mut(R, "e->target_side = p >= 2 ? CC_SIDE_ENEMY : CC_SIDE_PLAYER;", "e->target_side = p >= 1 ? CC_SIDE_ENEMY : CC_SIDE_PLAYER;")
+mut(R, "e->target_side = p >= 2 ? CC_SIDE_ENEMY : CC_SIDE_PLAYER;", "e->target_side = p >= 2 ? CC_SIDE_PLAYER : CC_SIDE_ENEMY;")
+mut(R, "e->target_species = o->battler_species;", "e->target_species = o->target_species;")
+mut(R, "e->target_form = o->battler_form;", "e->target_form = o->target_form;")
+mut(R, "if (o->battler_id) {", "if (o->target_id) {")
+mut(R, "e->target_id = o->battler_id;", "e->target_id = o->target_id;")
+drop(R, "e->known |= CC_EK_TARGET_ID;")
+drop(R, "e->known |= o->src_known;")
+for stmt in ["e->source_side = o->src_side;", "e->source_form = o->src_form;", "e->source_species = o->src_species;",
+             "e->move_id = o->src_move;", "e->source_id = o->src_id;"]:
+    drop(R, stmt)
+mut(R, "e->source_side = o->src_side;", "e->source_side = o->src_form;")
+mut(R, "e->move_id = o->src_move;", "e->move_id = o->src_species;")
+mut(R, "e->kind = CC_EV_DAMAGE;", "e->kind = CC_EV_HP_LOSS;")
+mut(R, "e->known |= CC_EK_RESULT | CC_EK_SHOWN;", "e->known |= CC_EK_SHOWN;")
+mut(R, "e->known |= CC_EK_RESULT | CC_EK_SHOWN;", "e->known |= CC_EK_RESULT;")
+drop(R, "e->result = (uint8_t)o->id;")
+mut(R, "e->shown = o->value;\n        if (measured) {\n            if (delta > 0) {",
+    "e->shown = 0;\n        if (measured) {\n            if (delta > 0) {")
+mut(R, "if (delta > 0) {", "if (delta >= 0) {")
+mut(R, "if (delta > 0) {", "if (delta < 0) {")
+mut(R, "(*conflicts)++;                                 /* HP rose", ";                                 /* HP rose")
+mut(R, "                e->known |= CC_EK_HP_DELTA;\n                e->hp_delta = delta;\n            }\n        }\n        break;\n    case CC_OBS_HP:",
+    "                e->known |= CC_EK_HP_DELTA;\n                e->hp_delta = 0;\n            }\n        }\n        break;\n    case CC_OBS_HP:")
+mut(R, "                e->known |= CC_EK_HP_DELTA;\n                e->hp_delta = delta;\n            }\n        }\n        break;\n    case CC_OBS_HP:",
+    "                e->hp_delta = delta;\n            }\n        }\n        break;\n    case CC_OBS_HP:", "damage: hp_delta stored without its known bit")
+mut(R, "if (o->value > 0) {\n            e->kind = CC_EV_HEAL;", "if (o->value > 1) {\n            e->kind = CC_EV_HEAL;")
+mut(R, "e->kind = CC_EV_HEAL;", "e->kind = CC_EV_DAMAGE;")
+mut(R, "e->known |= CC_EK_SHOWN;\n            e->shown = o->value;", "e->shown = o->value;", "heal: shown stored without its known bit")
+mut(R, "e->shown = o->value;\n            if (measured) {\n                if (delta < 0) {",
+    "e->shown = 0;\n            if (measured) {\n                if (delta < 0) {")
+mut(R, "if (delta < 0) {", "if (delta <= 0) {")
+mut(R, "if (delta < 0) {", "if (delta > 0) {")
+mut(R, "(*conflicts)++;\n                } else {", ";\n                } else {")
+mut(R, "                    e->known |= CC_EK_HP_DELTA;\n                    e->hp_delta = delta;", "                    e->known |= CC_EK_HP_DELTA;\n                    e->hp_delta = -delta;")
+mut(R, "e->kind = CC_EV_HP_LOSS;\n            e->known |= CC_EK_HP_DELTA;", "e->kind = CC_EV_DAMAGE;\n            e->known |= CC_EK_HP_DELTA;")
+mut(R, "e->kind = CC_EV_HP_LOSS;\n            e->known |= CC_EK_HP_DELTA;", "e->kind = CC_EV_HP_LOSS;\n            e->known |= CC_EK_SHOWN;")
+mut(R, "e->hp_delta = o->value;", "e->hp_delta = -o->value;")
+mut(R, "e->kind = CC_EV_FAINT;", "e->kind = CC_EV_SWITCH_OUT;")
+mut(R, "e->kind = CC_EV_SWITCH_OUT;", "e->kind = CC_EV_SWITCH_IN;")
+mut(R, "e->kind = CC_EV_SWITCH_IN;", "e->kind = CC_EV_FAINT;")
+mut(R, "if (o->hp_after >= 0) {\n        e->known |= CC_EK_HP_AFTER;", "if (o->hp_after > 0) {\n        e->known |= CC_EK_HP_AFTER;")
+mut(R, "    if (o->hp_after >= 0) {\n        e->known |= CC_EK_HP_AFTER;\n        e->hp_after = o->hp_after;", "    if (o->hp_after >= 0) {\n        e->known |= CC_EK_HP_AFTER;\n        e->hp_after = 0;")
+mut(R, "    if (o->hp_after >= 0) {\n        e->known |= CC_EK_HP_AFTER;\n        e->hp_after = o->hp_after;", "    if (o->hp_after >= 0) {\n        e->hp_after = o->hp_after;")
+# the tracker
+mut(R, "if (o->kind == CC_OBS_FAINT || o->kind == CC_OBS_SWITCH_OUT) {", "if (o->kind == CC_OBS_SWITCH_OUT) {")
+mut(R, "if (o->kind == CC_OBS_FAINT || o->kind == CC_OBS_SWITCH_OUT) {", "if (o->kind == CC_OBS_FAINT) {")
+drop(R, "memset(&trk[p], 0, sizeof trk[p]);                      /* the occupant is gone */")
+mut(R, "} else if (o->hp_after >= 0) {\n        trk[p].species", "} else if (o->hp_after > 0) {\n        trk[p].species")
+drop(R, "trk[p].species = o->battler_species;")
+drop(R, "trk[p].form = o->battler_form;")
+drop(R, "trk[p].hp = o->hp_after;")
+drop(R, "memset(&trk[p], 0, sizeof trk[p]);                      /* HP now unknown */")
+# plan: argument and state checks
+mut(R, "if (!r || !b) return CC_E_NULL;", "if (!r) return CC_E_NULL;")
+mut(R, "if (!r || !b) return CC_E_NULL;", "if (!b) return CC_E_NULL;")
+drop(R, "if (b->n_obs > 0 && !b->obs) return CC_E_NULL;")
+drop(R, "if (b->flags & ~(uint8_t)CC_BF_ALL) return CC_E_UNKNOWN_BITS;")
+mut(R, "if (b->n_obs > CC_MAX_BATCH_OBS) return CC_E_COUNT;", "if (b->n_obs >= CC_MAX_BATCH_OBS) return CC_E_COUNT;")
+mut(R, "if (b->n_obs > CC_MAX_BATCH_OBS) return CC_E_COUNT;", "if (b->n_obs > CC_MAX_BATCH_OBS + 1) return CC_E_COUNT;")
+mut(R, "b->run_uid == 0 || b->batch_id == 0 ||", "b->batch_id == 0 ||")
+mut(R, "b->batch_id == 0 || b->battle_seq < 1 ||", "b->battle_seq < 1 ||")
+mut(R, "b->battle_seq < 1 || b->wave < 1) return CC_E_RANGE;", "b->wave < 1) return CC_E_RANGE;")
+mut(R, "b->battle_seq < 1 || b->wave < 1) return CC_E_RANGE;", "b->battle_seq < 1) return CC_E_RANGE;")
+mut(R, "if (r->run_uid == 0 || r->closed) return CC_E_LIFECYCLE;", "if (r->closed) return CC_E_LIFECYCLE;")
+mut(R, "if (r->run_uid == 0 || r->closed) return CC_E_LIFECYCLE;", "if (r->run_uid == 0) return CC_E_LIFECYCLE;")
+drop(R, "if (b->run_uid != r->run_uid) return CC_E_CONSISTENCY;")
+mut(R, "if (h->n_turns > CC_HISTORY_TURNS) return CC_E_CONSISTENCY;", "if (h->n_turns >= CC_HISTORY_TURNS) return CC_E_CONSISTENCY;")
+drop(R, "if (h->n_turns > CC_HISTORY_TURNS) return CC_E_CONSISTENCY;")
+mut(R, "if (last && last->n_events > CC_MAX_EVENTS_PER_TURN) return CC_E_CONSISTENCY;", "if (last && last->n_events >= CC_MAX_EVENTS_PER_TURN) return CC_E_CONSISTENCY;")
+drop(R, "if (last && last->n_events > CC_MAX_EVENTS_PER_TURN) return CC_E_CONSISTENCY;")
+drop(R, "if (r->last_batch_id != 0 && !last) return CC_E_CONSISTENCY;")
+# plan: batch identity
+mut(R, "if (b->batch_id < r->last_batch_id) return CC_E_ORDER;", "if (b->batch_id <= r->last_batch_id) return CC_E_ORDER;")
+drop(R, "if (b->batch_id < r->last_batch_id) return CC_E_ORDER;")
+mut(R, "if (b->batch_id == r->last_batch_id) {", "if (b->batch_id >= r->last_batch_id) {")
+mut(R, "if (b->batch_id == r->last_batch_id) {", "if (b->batch_id != r->last_batch_id) {")
+drop(R, "if (pl->digest != r->last_digest) return CC_E_DUPLICATE;")
+mut(R, "if (pl->digest != r->last_digest) return CC_E_DUPLICATE;", "if (pl->digest == r->last_digest) return CC_E_DUPLICATE;")
+drop(R, "pl->replay = true;")
+mut(R, "pl->gap = r->last_batch_id != 0 && b->batch_id - r->last_batch_id > 1;", "pl->gap = r->last_batch_id != 0 && b->batch_id - r->last_batch_id > 2;")
+mut(R, "pl->gap = r->last_batch_id != 0 && b->batch_id - r->last_batch_id > 1;", "pl->gap = r->last_batch_id != 0 && b->batch_id - r->last_batch_id >= 1;")
+mut(R, "pl->gap = r->last_batch_id != 0 && b->batch_id - r->last_batch_id > 1;", "pl->gap = b->batch_id - r->last_batch_id > 1;")
+# plan: the turn key
+mut(R, "pl->fresh_tracker = pl->gap || (b->flags & CC_BF_SOURCE_LOSS) != 0;", "pl->fresh_tracker = (b->flags & CC_BF_SOURCE_LOSS) != 0;")
+mut(R, "pl->fresh_tracker = pl->gap || (b->flags & CC_BF_SOURCE_LOSS) != 0;", "pl->fresh_tracker = pl->gap;")
+mut(R, "if (b->battle_seq < last->battle_seq) return CC_E_ORDER;", "if (b->battle_seq <= last->battle_seq) return CC_E_ORDER;")
+drop(R, "if (b->battle_seq < last->battle_seq) return CC_E_ORDER;")
+mut(R, "if (b->battle_seq == last->battle_seq) {", "if (b->battle_seq != last->battle_seq) {")
+drop(R, "if (b->wave != last->wave) return CC_E_CONSISTENCY;")
+mut(R, "if (b->turn < last->turn) return CC_E_ORDER;", "if (b->turn <= last->turn) return CC_E_ORDER;")
+drop(R, "if (b->turn < last->turn) return CC_E_ORDER;")
+mut(R, "pl->new_turn = b->turn != last->turn;", "pl->new_turn = b->turn == last->turn;")
+mut(R, "pl->new_turn = b->turn != last->turn;", "pl->new_turn = true;")
+mut(R, "pl->new_turn = b->turn != last->turn;", "pl->new_turn = false;")
+mut(R, "if (b->wave < last->wave) return CC_E_ORDER;", "if (b->wave <= last->wave) return CC_E_ORDER;")
+drop(R, "if (b->wave < last->wave) return CC_E_ORDER;")
+drop(R, "pl->fresh_tracker = true;                           /* another battle: other Pokemon */")
+drop(R, "if (!pl->new_turn && (b->flags & CC_BF_BEGAN_MID)) return CC_E_CONSISTENCY;")
+mut(R, "if (!pl->new_turn && (b->flags & CC_BF_BEGAN_MID)) return CC_E_CONSISTENCY;", "if ((b->flags & CC_BF_BEGAN_MID)) return CC_E_CONSISTENCY;")
+# plan: the simulation
+mut(R, "    if (pl->fresh_tracker) memset(trk, 0, sizeof trk);\n    else memcpy(trk, r->pos, sizeof trk);\n    cc_event ev;\n    for (",
+    "    memset(trk, 0, sizeof trk);\n    cc_event ev;\n    for (", "plan: tracker always cleared")
+mut(R, "    if (pl->fresh_tracker) memset(trk, 0, sizeof trk);\n    else memcpy(trk, r->pos, sizeof trk);\n    cc_event ev;\n    for (",
+    "    memcpy(trk, r->pos, sizeof trk);\n    cc_event ev;\n    for (", "plan: tracker never cleared")
+mut(R, "cc_status s = cc_obs_validate(&b->obs[i]);", "cc_status s = CC_OK;")
+mut(R, "            pl->n_events++;", "            pl->n_events += 2;")
+drop(R, "pl->ignored++;")
+mut(R, "*bad_obs = (int32_t)i;", "*bad_obs = (int32_t)i + 1;")
+mut(R, "if ((uint64_t)r->next_seq + pl->n_events > UINT32_MAX) return CC_E_OVERFLOW;", "if ((uint64_t)r->next_seq + pl->n_events >= UINT32_MAX) return CC_E_OVERFLOW;")
+mut(R, "if ((uint64_t)r->next_seq + pl->n_events > UINT32_MAX) return CC_E_OVERFLOW;", "if ((uint32_t)r->next_seq + pl->n_events > UINT32_MAX) return CC_E_OVERFLOW;")
+drop(R, "if ((uint64_t)r->next_seq + pl->n_events > UINT32_MAX) return CC_E_OVERFLOW;")
+equiv(R, "s = cc_event_validate(&ev);                         /* cannot fail for a valid observation; a guard, not a rule */",
+      "(void)cc_event_validate(&ev);",
+      "a guard on a proved property: every event built from a valid observation passes cc_event_validate (tests check each event shape)")
+# apply: turns
+mut(R, "if (pl->gap) h->turns[h->n_turns - 1].flags |= CC_TF_SOURCE_LOSS;", "if (pl->gap) h->turns[h->n_turns - 1].flags |= CC_TF_BEGAN_MID;")
+drop(R, "if (pl->gap) h->turns[h->n_turns - 1].flags |= CC_TF_SOURCE_LOSS;")
+mut(R, "if (h->n_turns == CC_HISTORY_TURNS) {", "if (h->n_turns > CC_HISTORY_TURNS) {")
+mut(R, "if (h->n_turns == CC_HISTORY_TURNS) {", "if (h->n_turns == CC_HISTORY_TURNS - 1) {")
+mut(R, "memmove(&h->turns[0], &h->turns[1], (CC_HISTORY_TURNS - 1) * sizeof h->turns[0]);", "memmove(&h->turns[0], &h->turns[2], (CC_HISTORY_TURNS - 2) * sizeof h->turns[0]);")
+mut(R, "memmove(&h->turns[0], &h->turns[1], (CC_HISTORY_TURNS - 1) * sizeof h->turns[0]);", "memmove(&h->turns[0], &h->turns[1], (CC_HISTORY_TURNS - 2) * sizeof h->turns[0]);")
+drop(R, "res->turn_evicted = 1;")
+drop(R, "h->n_turns++;")
+drop(R, "memset(t, 0, sizeof *t);")
+drop(R, "t->battle_seq = b->battle_seq;")
+drop(R, "t->wave = b->wave;")
+drop(R, "t->turn = b->turn;")
+mut(R, "if (b->flags & CC_BF_BEGAN_MID) t->flags |= CC_TF_BEGAN_MID;", "if (b->flags & CC_BF_BEGAN_MID) t->flags |= CC_TF_SOURCE_LOSS;")
+drop(R, "if (b->flags & CC_BF_BEGAN_MID) t->flags |= CC_TF_BEGAN_MID;")
+mut(R, "if (pl->gap || (b->flags & CC_BF_SOURCE_LOSS)) t->flags |= CC_TF_SOURCE_LOSS;", "if ((b->flags & CC_BF_SOURCE_LOSS)) t->flags |= CC_TF_SOURCE_LOSS;")
+mut(R, "if (pl->gap || (b->flags & CC_BF_SOURCE_LOSS)) t->flags |= CC_TF_SOURCE_LOSS;", "if (pl->gap) t->flags |= CC_TF_SOURCE_LOSS;")
+mut(R, "if (pl->gap || (b->flags & CC_BF_SOURCE_LOSS)) t->flags |= CC_TF_SOURCE_LOSS;", "if (pl->gap || (b->flags & CC_BF_SOURCE_LOSS)) t->flags |= CC_TF_BEGAN_MID;")
+# apply: eviction inside a turn
+mut(R, "const unsigned total = existing + pl->n_events;", "const unsigned total = pl->n_events;")
+mut(R, "const unsigned drop = total > CC_MAX_EVENTS_PER_TURN ? total - CC_MAX_EVENTS_PER_TURN : 0;", "const unsigned drop = total > CC_MAX_EVENTS_PER_TURN + 1 ? total - CC_MAX_EVENTS_PER_TURN : 0;")
+mut(R, "const unsigned drop = total > CC_MAX_EVENTS_PER_TURN ? total - CC_MAX_EVENTS_PER_TURN : 0;", "const unsigned drop = total > CC_MAX_EVENTS_PER_TURN ? total - CC_MAX_EVENTS_PER_TURN + 1 : 0;")
+mut(R, "const unsigned drop = total > CC_MAX_EVENTS_PER_TURN ? total - CC_MAX_EVENTS_PER_TURN : 0;", "const unsigned drop = total > CC_MAX_EVENTS_PER_TURN ? total - CC_MAX_EVENTS_PER_TURN - 1 : 0;")
+equiv(R, "const unsigned drop = total > CC_MAX_EVENTS_PER_TURN ? total - CC_MAX_EVENTS_PER_TURN : 0;",
+      "const unsigned drop = total >= CC_MAX_EVENTS_PER_TURN ? total - CC_MAX_EVENTS_PER_TURN : 0;",
+      "at total == 64 both give a drop of 0")
+mut(R, "const unsigned drop_old = drop < existing ? drop : existing;", "const unsigned drop_old = drop > existing ? drop : existing;")
+mut(R, "const unsigned drop_old = drop < existing ? drop : existing;", "const unsigned drop_old = drop;")
+equiv(R, "const unsigned drop_old = drop < existing ? drop : existing;", "const unsigned drop_old = drop <= existing ? drop : existing;",
+      "at drop == existing both give the same value")
+mut(R, "const unsigned drop_new = drop - drop_old;", "const unsigned drop_new = drop;")
+equiv(R, "    if (drop_old) {\n        memmove(", "    if (1) {\n        memmove(",
+      "with drop_old == 0 the move and the clear are no-ops; the guard only saves a copy of the turn onto itself")
+mut(R, "memmove(&t->events[0], &t->events[drop_old], (existing - drop_old) * sizeof t->events[0]);", "memmove(&t->events[0], &t->events[drop_old + 1], (existing - drop_old) * sizeof t->events[0]);")
+mut(R, "memmove(&t->events[0], &t->events[drop_old], (existing - drop_old) * sizeof t->events[0]);", "memmove(&t->events[0], &t->events[drop_old], (existing - drop_old - 1) * sizeof t->events[0]);")
+mut(R, "memmove(&t->events[0], &t->events[drop_old], (existing - drop_old) * sizeof t->events[0]);", "memmove(&t->events[0], &t->events[0], (existing - drop_old) * sizeof t->events[0]);")
+drop(R, "t->n_events = (uint8_t)(existing - drop_old);")
+mut(R, "t->n_events = (uint8_t)(existing - drop_old);", "t->n_events = (uint8_t)(existing - drop_old + 1);")
+# apply: the batch's own events
+drop(R, "if (!make_event(trk, &b->obs[i], &ev, &conflicts)) continue;")
+mut(R, "if (!make_event(trk, &b->obs[i], &ev, &conflicts)) continue;", "if (make_event(trk, &b->obs[i], &ev, &conflicts)) continue;")
+mut(R, "ev.seq = r->next_seq++;", "ev.seq = r->next_seq;")
+mut(R, "ev.seq = r->next_seq++;", "ev.seq = ++r->next_seq;")
+mut(R, "if (produced++ < drop_new) continue;", "if (produced++ <= drop_new) continue;")
+mut(R, "if (produced++ < drop_new) continue;", "if (produced < drop_new) continue;")
+drop(R, "if (produced++ < drop_new) continue;")
+drop(R, "memcpy(&t->events[t->n_events], &ev, sizeof ev);")
+drop(R, "t->n_events++;")
+mut(R, "if (drop) {\n        const uint32_t d", "if (drop > 1) {\n        const uint32_t d")
+mut(R, "const uint32_t d = (uint32_t)t->dropped + drop;", "const uint32_t d = (uint32_t)t->dropped + drop - 1;")
+mut(R, "const uint32_t d = (uint32_t)t->dropped + drop;", "const uint32_t d = drop;")
+mut(R, "t->dropped = d > 0xFFFFu ? 0xFFFFu : (uint16_t)d;", "t->dropped = (uint16_t)d;")
+mut(R, "t->dropped = d > 0xFFFFu ? 0xFFFFu : (uint16_t)d;", "t->dropped = d > 0xFFFFu ? 0xFFFEu : (uint16_t)d;")
+equiv(R, "t->dropped = d > 0xFFFFu ? 0xFFFFu : (uint16_t)d;", "t->dropped = d >= 0xFFFFu ? 0xFFFFu : (uint16_t)d;", "at d == 0xFFFF both give 0xFFFF")
+drop(R, "t->flags |= CC_TF_EVICTED;")
+drop(R, "memcpy(r->pos, trk, sizeof trk);")
+drop(R, "r->last_batch_id = b->batch_id;")
+drop(R, "r->last_digest = pl->digest;")
+for stmt in ["res->new_turn = pl->new_turn;", "res->gap = pl->gap;", "res->events_added = (uint16_t)pl->n_events;",
+             "res->ignored = (uint16_t)pl->ignored;", "res->evicted = (uint16_t)drop;", "res->sign_conflicts = (uint16_t)pl->sign_conflicts;"]:
+    drop(R, stmt)
+# API
+mut(R, "r->next_seq = 1;", "r->next_seq = 0;")
+drop(R, "memset(r, 0, sizeof *r);")
+drop(R, "if (uid == 0) return CC_E_RANGE;")
+drop(R, "if (uid == r->run_uid) return CC_E_DUPLICATE;")
+mut(R, "    cc_reducer_init(r);\n    r->run_uid = uid;", "    r->run_uid = uid;", "begin_run no longer resets")
+drop(R, "r->run_uid = uid;")
+mut(R, "if (resumed) r->hist.flags |= CC_HF_BEGAN_MID;", "if (!resumed) r->hist.flags |= CC_HF_BEGAN_MID;")
+drop(R, "if (resumed) r->hist.flags |= CC_HF_BEGAN_MID;")
+drop(R, "if (r->run_uid == 0) return CC_E_LIFECYCLE;")
+drop(R, "r->closed = 1;")
+mut(R, "if (pl.replay) res.duplicate = 1;\n        else apply_batch(r, b, &pl, &res);", "if (pl.replay) res.duplicate = 1;\n        apply_batch(r, b, &pl, &res);", "a replay is applied again")
+mut(R, "if (pl.replay) res.duplicate = 1;\n        else apply_batch(r, b, &pl, &res);", "if (pl.replay) ;\n        else apply_batch(r, b, &pl, &res);", "a replay is not reported")
+mut(R, "int32_t bad_obs = -1;", "int32_t bad_obs = 0;")
+mut(R, "res.bad_obs = bad_obs;", "res.bad_obs = 0;")
+drop(R, "if (out) *out = res;")
+# state check
+mut(R, "cc_status s = cc_history_validate(&r->hist);\n    if (s != CC_OK) return s;", "cc_status s = cc_history_validate(&r->hist);\n    (void)s;")
+drop(R, "if (r->closed > 1) return CC_E_RANGE;")
+mut(R, "if (r->closed > 1) return CC_E_RANGE;", "if (r->closed >= 1) return CC_E_RANGE;")
+drop(R, "if (r->next_seq < 1) return CC_E_RANGE;")
+mut(R, "if (r->next_seq < 1) return CC_E_RANGE;", "if (r->next_seq < 2) return CC_E_RANGE;")
+mut(R, "if (sn->form || sn->hp) return CC_E_NONCANONICAL;", "if (sn->hp) return CC_E_NONCANONICAL;")
+mut(R, "if (sn->form || sn->hp) return CC_E_NONCANONICAL;", "if (sn->form) return CC_E_NONCANONICAL;")
+drop(R, "any_pos = true;")
+drop(R, "if (sn->species > CC_SPECIES_ID_MAX) return CC_E_RANGE;")
+mut(R, "if (sn->species > CC_SPECIES_ID_MAX) return CC_E_RANGE;", "if (sn->species >= CC_SPECIES_ID_MAX) return CC_E_RANGE;")
+drop(R, "if (sn->hp < 0) return CC_E_RANGE;")
+mut(R, "if (sn->hp < 0) return CC_E_RANGE;", "if (sn->hp <= 0) return CC_E_RANGE;")
+mut(R, "if (i >= h->n_turns) {\n            if (!all_zero", "if (i > h->n_turns) {\n            if (!all_zero")
+drop(R, "if (!all_zero(t, sizeof *t)) return CC_E_NONCANONICAL;")
+mut(R, "(CC_MAX_EVENTS_PER_TURN - t->n_events) * sizeof t->events[0])) {", "(CC_MAX_EVENTS_PER_TURN - t->n_events - 1) * sizeof t->events[0])) {")
+mut(R, "!all_zero(&t->events[t->n_events], (CC_MAX", "!all_zero(&t->events[t->n_events + 1], (CC_MAX")
+mut(R, "sizeof t->events[0])) {\n            return CC_E_NONCANONICAL;", "sizeof t->events[0])) {\n            ;")
+full = "if (r->closed || r->last_batch_id || r->last_digest || r->next_seq != 1 || h->n_turns || h->flags || any_pos)"
+for new in ["if (r->last_batch_id || r->last_digest || r->next_seq != 1 || h->n_turns || h->flags || any_pos)",
+            "if (r->closed || r->last_digest || r->next_seq != 1 || h->n_turns || h->flags || any_pos)",
+            "if (r->closed || r->last_batch_id || r->next_seq != 1 || h->n_turns || h->flags || any_pos)",
+            "if (r->closed || r->last_batch_id || r->last_digest || h->n_turns || h->flags || any_pos)",
+            "if (r->closed || r->last_batch_id || r->last_digest || r->next_seq != 1 || h->flags || any_pos)",
+            "if (r->closed || r->last_batch_id || r->last_digest || r->next_seq != 1 || h->n_turns || any_pos)",
+            "if (r->closed || r->last_batch_id || r->last_digest || r->next_seq != 1 || h->n_turns || h->flags)"]:
+    mut(R, full, new)
+full = "if (r->last_digest || r->next_seq != 1 || h->n_turns || any_pos) return CC_E_CONSISTENCY;"
+for new in ["if (r->next_seq != 1 || h->n_turns || any_pos) return CC_E_CONSISTENCY;",
+            "if (r->last_digest || h->n_turns || any_pos) return CC_E_CONSISTENCY;",
+            "if (r->last_digest || r->next_seq != 1 || any_pos) return CC_E_CONSISTENCY;",
+            "if (r->last_digest || r->next_seq != 1 || h->n_turns) return CC_E_CONSISTENCY;"]:
+    mut(R, full, new)
+drop(R, "if (h->n_turns == 0) return CC_E_CONSISTENCY;")
+drop(R, "if (i > 0 && t->wave < h->turns[i - 1].wave) return CC_E_ORDER;")
+mut(R, "if (i > 0 && t->wave < h->turns[i - 1].wave) return CC_E_ORDER;", "if (i > 0 && t->wave <= h->turns[i - 1].wave) return CC_E_ORDER;")
+drop(R, "if (i > 0 && t->battle_seq == h->turns[i - 1].battle_seq && t->wave != h->turns[i - 1].wave) return CC_E_CONSISTENCY;")
+mut(R, "if (i > 0 && t->battle_seq == h->turns[i - 1].battle_seq && t->wave != h->turns[i - 1].wave)", "if (i > 0 && t->wave != h->turns[i - 1].wave)")
+drop(R, "have_last = true;")
+mut(R, "newest = t->events[t->n_events - 1].seq;", "newest = t->events[0].seq;")
+drop(R, "if (have_last && newest >= r->next_seq) return CC_E_CONSISTENCY;")
+mut(R, "if (have_last && newest >= r->next_seq) return CC_E_CONSISTENCY;", "if (have_last && newest > r->next_seq) return CC_E_CONSISTENCY;")
+# per-turn totals
+mut(R, "return v < 0 ? (uint64_t)(-(int64_t)v) : (uint64_t)v;", "return v < 0 ? (uint64_t)(-v) : (uint64_t)v;")
+mut(R, "return v < 0 ? (uint64_t)(-(int64_t)v) : (uint64_t)v;", "return (uint64_t)v;")
+drop(R, "a->n++;")
+mut(R, "if (e->known & CC_EK_SHOWN) {", "if (1) {")
+drop(R, "a->n_shown++;")
+drop(R, "a->shown += (uint64_t)e->shown;")
+mut(R, "a->shown += (uint64_t)e->shown;", "a->shown += (uint64_t)e->shown + 1;")
+mut(R, "if (e->known & CC_EK_HP_DELTA) {", "if (1) {")
+drop(R, "a->n_measured++;")
+drop(R, "a->measured += magnitude(e->hp_delta);")
+mut(R, "if (!t || !out) return CC_E_NULL;", "if (!t) return CC_E_NULL;")
+equiv(R, "if (!t || !out) return CC_E_NULL;", "if (!out) return CC_E_NULL;", "cc_turn_validate refuses a NULL turn with the same status")
+mut(R, "cc_status s = cc_turn_validate(t);\n    if (s != CC_OK) return s;", "cc_status s = cc_turn_validate(t);\n    (void)s;")
+mut(R, "sm.exact = t->flags == 0;", "sm.exact = 1;")
+mut(R, "sm.exact = t->flags == 0;", "sm.exact = t->flags == 0 && t->dropped == 0 && t->n_events < CC_MAX_EVENTS_PER_TURN;")
+mut(R, "sm.exact = t->flags == 0;", "sm.exact = (t->flags & CC_TF_EVICTED) == 0;")
+drop(R, "sm.flags = t->flags;")
+drop(R, "sm.dropped = t->dropped;")
+drop(R, "sm.n_events = t->n_events;")
+mut(R, "const unsigned side = e->target_side;", "const unsigned side = e->source_side;")
+mut(R, "case CC_EV_DAMAGE: add_amounts(&sm.damage[side], e); break;", "case CC_EV_DAMAGE: add_amounts(&sm.heal[side], e); break;")
+mut(R, "case CC_EV_HEAL: add_amounts(&sm.heal[side], e); break;", "case CC_EV_HEAL: add_amounts(&sm.damage[side], e); break;")
+mut(R, "case CC_EV_HP_LOSS: add_amounts(&sm.hp_loss[side], e); break;", "case CC_EV_HP_LOSS: add_amounts(&sm.damage[side], e); break;")
+mut(R, "case CC_EV_FAINT: sm.n_faint[side]++; break;", "case CC_EV_FAINT: sm.n_switch_out[side]++; break;")
+mut(R, "case CC_EV_SWITCH_OUT: sm.n_switch_out[side]++; break;", "case CC_EV_SWITCH_OUT: sm.n_switch_in[side]++; break;")
+mut(R, "case CC_EV_SWITCH_IN: sm.n_switch_in[side]++; break;", "case CC_EV_SWITCH_IN: sm.n_switch_out[side]++; break;")
+mut(R, "default: sm.n_status[side]++; break;", "default: break;")
+drop(R, "memcpy(out, &sm, sizeof sm);")
+
+
 def build_and_run(workdir: Path):
-    """Returns (stage, detail): stage is 'ok' when both tests pass, else where it failed."""
-    exes = {"model_test": "tests/model_test.c", "layout_test": "tests/layout_test.c"}
+    """Returns (stage, detail): stage is 'ok' when all tests pass, else where it failed."""
+    exes = {"model_test": "tests/model_test.c", "reducer_test": "tests/reducer_test.c", "layout_test": "tests/layout_test.c"}
+    objs = []
+    for src in SOURCES:
+        obj = src.replace("/", "_")[:-2] + ".o"
+        try:
+            r = subprocess.run(["cc", *CFLAGS, "-Iinclude", "-c", src, "-o", obj], cwd=workdir, capture_output=True,
+                               text=True, timeout=BUILD_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            return "build-error", f"{src}: compiler timed out"
+        if r.returncode != 0:
+            return "build-error", f"{src}: {r.stderr.strip()[:300]}"
+        objs.append(obj)
     for name, src in exes.items():
-        cmd = ["cc", *CFLAGS, "-Iinclude", src, *SOURCES, "-o", name]
+        cmd = ["cc", *CFLAGS, "-Iinclude", src, *objs, "-o", name]
         try:
             r = subprocess.run(cmd, cwd=workdir, capture_output=True, text=True, timeout=BUILD_TIMEOUT)
         except subprocess.TimeoutExpired:

@@ -10,14 +10,17 @@
 #include <string.h>
 
 #include "cc/model.h"
+#include "cc/reducer.h"
 #include "check.h"
 
 /* C99 compile-time assertion: a negative array size is a compile error. */
 #define CC_STATIC_ASSERT(name, cond) typedef char cc_assert_##name[(cond) ? 1 : -1]
 
 CC_STATIC_ASSERT(meta_fits_budget, CC_WIRE_META_MAX <= CC_META_BUDGET_BYTES);
+/* the persisted state, the run's schedule, the reducer (with its own copy of the last turns) and the caller's largest batch */
 CC_STATIC_ASSERT(runtime_fits_budget,
-                 sizeof(cc_meta) + sizeof(cc_schedule) + sizeof(cc_obs) <= CC_RUNTIME_BUDGET_BYTES);
+                 sizeof(cc_meta) + sizeof(cc_schedule) + sizeof(cc_reducer) + CC_MAX_BATCH_OBS * sizeof(cc_obs) <=
+                     CC_RUNTIME_BUDGET_BYTES);
 CC_STATIC_ASSERT(frozen_matches_roster, CC_MAX_FROZEN == CC_MAX_NEMESES);
 CC_STATIC_ASSERT(windows_match_table, CC_NUM_WINDOWS == 4);
 CC_STATIC_ASSERT(key_fits_wire_item, CC_ITEM_KEY_BYTES == 33 && CC_WIRE_ITEM == CC_ITEM_KEY_BYTES + 4);
@@ -90,6 +93,7 @@ static void test_default_limits(void)
     CHECK_EQ(CC_MAX_NEMESES, 16);
     CHECK_EQ(CC_HISTORY_TURNS, 5);
     CHECK_EQ(CC_MAX_EVENTS_PER_TURN, 64);
+    CHECK_EQ(CC_MAX_BATCH_OBS, 384);
     CHECK_EQ(CC_NUM_WINDOWS, 4);
     CHECK_EQ(CC_MAX_MOVES, 4);
     CHECK_EQ(CC_META_BUDGET_BYTES, 65536);
@@ -241,7 +245,11 @@ static void report(void)
     printf("  cc_counters       %zu\n", sizeof(cc_counters));
     printf("  cc_ledger         %zu\n", sizeof(cc_ledger));
     printf("  cc_meta           %zu\n", sizeof(cc_meta));
-    printf("  meta+schedule+obs %zu (budget %u)\n", sizeof(cc_meta) + sizeof(cc_schedule) + sizeof(cc_obs),
+    printf("  cc_reducer        %zu\n", sizeof(cc_reducer));
+    printf("  cc_turn_summary   %zu\n", sizeof(cc_turn_summary));
+    printf("  batch of %d obs    %zu\n", CC_MAX_BATCH_OBS, CC_MAX_BATCH_OBS * sizeof(cc_obs));
+    printf("  meta+schedule+reducer+batch %zu (budget %u)\n",
+           sizeof(cc_meta) + sizeof(cc_schedule) + sizeof(cc_reducer) + CC_MAX_BATCH_OBS * sizeof(cc_obs),
            (unsigned)CC_RUNTIME_BUDGET_BYTES);
     printf("encoded size (version 1, bytes)\n");
     printf("  actor %u event %u turn max %u history max %u terminal %u nemesis %u\n", (unsigned)CC_WIRE_ACTOR,

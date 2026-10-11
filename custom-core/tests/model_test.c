@@ -162,6 +162,56 @@ static void test_obs(void)
     o = mk_obs(); o.kind = CC_OBS_FAINT; o.id = 0; o.value = 0;       CHECK_STATUS(cc_obs_validate(&o), CC_OK);
     o = mk_obs(); o.kind = CC_OBS_FAINT; o.id = 0; o.value = 1;       CHECK_STATUS(cc_obs_validate(&o), CC_E_NONCANONICAL);
     o = mk_obs(); o.kind = CC_OBS_SWITCH_OUT; o.id = 2; o.value = 0;  CHECK_STATUS(cc_obs_validate(&o), CC_E_NONCANONICAL);
+
+    /* optional attribution (C02): the adapter's assertion, same known-bit rules as an event */
+    const uint16_t all_src = CC_EK_SOURCE_SIDE | CC_EK_SOURCE_ID | CC_EK_SOURCE_SPECIES | CC_EK_MOVE;
+    o = mk_obs();
+    o.src_known = all_src; o.src_side = 1; o.src_id = 9; o.src_species = 6; o.src_form = 2; o.src_move = 33;
+    CHECK_STATUS(cc_obs_validate(&o), CC_OK);
+    CHECK_EQ(CC_EK_SOURCE_ALL, all_src);
+    o = mk_obs(); o.src_known = CC_EK_SOURCE_SIDE;                  CHECK_STATUS(cc_obs_validate(&o), CC_OK);
+    o = mk_obs(); o.src_known = CC_EK_MOVE; o.src_move = 920;       CHECK_STATUS(cc_obs_validate(&o), CC_OK);
+    o = mk_obs(); o.src_known = CC_EK_MOVE; o.src_move = 1;         CHECK_STATUS(cc_obs_validate(&o), CC_OK);
+    o = mk_obs(); o.src_known = CC_EK_SOURCE_SIDE | CC_EK_SOURCE_ID; o.src_id = 1; CHECK_STATUS(cc_obs_validate(&o), CC_OK);
+    o = mk_obs(); o.src_known = CC_EK_SOURCE_SIDE | CC_EK_SOURCE_SPECIES; o.src_species = 8901; CHECK_STATUS(cc_obs_validate(&o), CC_OK);
+    o = mk_obs(); o.src_known = CC_EK_SOURCE_SIDE | CC_EK_SOURCE_SPECIES; o.src_species = 1; CHECK_STATUS(cc_obs_validate(&o), CC_OK);
+    o = mk_obs(); o.src_known = CC_EK_SOURCE_ID; o.src_id = 9;      CHECK_STATUS(cc_obs_validate(&o), CC_E_CONSISTENCY);
+    o = mk_obs(); o.src_known = CC_EK_SOURCE_SPECIES; o.src_species = 6; CHECK_STATUS(cc_obs_validate(&o), CC_E_CONSISTENCY);
+    o = mk_obs(); o.src_known = CC_EK_SHOWN;                        CHECK_STATUS(cc_obs_validate(&o), CC_E_UNKNOWN_BITS);
+    o = mk_obs(); o.src_known = CC_EK_TARGET_ID;                    CHECK_STATUS(cc_obs_validate(&o), CC_E_UNKNOWN_BITS);
+    o = mk_obs(); o.src_known = CC_EK_RESULT;                       CHECK_STATUS(cc_obs_validate(&o), CC_E_UNKNOWN_BITS);
+    o = mk_obs(); o.src_known = CC_EK_HP_AFTER;                     CHECK_STATUS(cc_obs_validate(&o), CC_E_UNKNOWN_BITS);
+    o = mk_obs(); o.src_known = 1u << 9;                            CHECK_STATUS(cc_obs_validate(&o), CC_E_UNKNOWN_BITS);
+    o = mk_obs(); o.src_known = 0x8000u;                            CHECK_STATUS(cc_obs_validate(&o), CC_E_UNKNOWN_BITS);
+    /* a clear bit requires a zero value */
+    o = mk_obs(); o.src_side = 1;                                   CHECK_STATUS(cc_obs_validate(&o), CC_E_NONCANONICAL);
+    o = mk_obs(); o.src_id = 1;                                     CHECK_STATUS(cc_obs_validate(&o), CC_E_NONCANONICAL);
+    o = mk_obs(); o.src_species = 1;                                CHECK_STATUS(cc_obs_validate(&o), CC_E_NONCANONICAL);
+    o = mk_obs(); o.src_form = 1;                                   CHECK_STATUS(cc_obs_validate(&o), CC_E_NONCANONICAL);
+    o = mk_obs(); o.src_move = 1;                                   CHECK_STATUS(cc_obs_validate(&o), CC_E_NONCANONICAL);
+    o = mk_obs(); o.src_known = CC_EK_SOURCE_SIDE | CC_EK_SOURCE_ID; o.src_id = 1; o.src_form = 1;
+    CHECK_STATUS(cc_obs_validate(&o), CC_E_NONCANONICAL);           /* the form belongs to the species bit */
+    /* known values in range */
+    o = mk_obs(); o.src_known = CC_EK_SOURCE_SIDE; o.src_side = 2;  CHECK_STATUS(cc_obs_validate(&o), CC_E_RANGE);
+    o = mk_obs(); o.src_known = CC_EK_SOURCE_SIDE | CC_EK_SOURCE_ID; o.src_id = 0; CHECK_STATUS(cc_obs_validate(&o), CC_E_RANGE);
+    o = mk_obs(); o.src_known = CC_EK_SOURCE_SIDE | CC_EK_SOURCE_SPECIES; o.src_species = 0; CHECK_STATUS(cc_obs_validate(&o), CC_E_RANGE);
+    o = mk_obs(); o.src_known = CC_EK_SOURCE_SIDE | CC_EK_SOURCE_SPECIES; o.src_species = 8902; CHECK_STATUS(cc_obs_validate(&o), CC_E_RANGE);
+    o = mk_obs(); o.src_known = CC_EK_MOVE; o.src_move = 0;         CHECK_STATUS(cc_obs_validate(&o), CC_E_RANGE);
+    o = mk_obs(); o.src_known = CC_EK_MOVE; o.src_move = 921;       CHECK_STATUS(cc_obs_validate(&o), CC_E_RANGE);
+    /* only a hit, a heal or a faint may name a source */
+    {
+        cc_obs base = mk_obs();
+        base.src_known = CC_EK_SOURCE_SIDE | CC_EK_MOVE; base.src_side = 1; base.src_move = 33;
+        o = base; o.kind = CC_OBS_FAINT; o.id = 0; o.value = 0;     CHECK_STATUS(cc_obs_validate(&o), CC_OK);
+        o = base; o.kind = CC_OBS_HP; o.id = 0; o.value = 7;        CHECK_STATUS(cc_obs_validate(&o), CC_OK);
+        o = base; o.kind = CC_OBS_HP; o.id = 0; o.value = 1;        CHECK_STATUS(cc_obs_validate(&o), CC_OK);
+        o = base; o.kind = CC_OBS_HP; o.id = 0; o.value = 0;        CHECK_STATUS(cc_obs_validate(&o), CC_E_CONSISTENCY);
+        o = base; o.kind = CC_OBS_HP; o.id = 0; o.value = -7;       CHECK_STATUS(cc_obs_validate(&o), CC_E_CONSISTENCY);
+        o = base; o.kind = CC_OBS_HP; o.id = 0; o.value = -1;       CHECK_STATUS(cc_obs_validate(&o), CC_E_CONSISTENCY);
+        o = base; o.kind = CC_OBS_SWITCH_IN; o.id = 0; o.value = 0; CHECK_STATUS(cc_obs_validate(&o), CC_E_CONSISTENCY);
+        o = base; o.kind = CC_OBS_SWITCH_OUT; o.id = 0; o.value = 0; CHECK_STATUS(cc_obs_validate(&o), CC_E_CONSISTENCY);
+        o = base; o.kind = CC_OBS_MOVE_ANIM; o.id = 33; o.value = 0; CHECK_STATUS(cc_obs_validate(&o), CC_E_CONSISTENCY);
+    }
 }
 
 /* ------------------------------------------------------------------ events */
