@@ -266,3 +266,6 @@ int gc_wide_add(gc_run *run,int storage);
 int gc_wide_scene_apply(gc_run *run,const gc_offer *o,int storage,const char **why,bool selection);
 
 #endif
+
+int gc_orb_add(gc_run *run,int storage,int item);
+int gc_orb_scene_apply(gc_run *run,const gc_offer *o,int storage,const char **why,bool selection);
