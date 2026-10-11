@@ -639,6 +639,45 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
                                         pr_arg_stat("firstStat", st->v[0]), pr_arg_stat("secondStat", st->v[1])));
         return;
     }
+    case PR_AC_CopyBiomeTypeAttr: {
+        if (!effect_can_apply(ef, user, target)) return;
+        int8_t one = POKEMON_TYPE_UNKNOWN;
+        if (bt->terrain != TERRAIN_NONE) {
+            switch (bt->terrain) {
+            case TERRAIN_ELECTRIC: one = POKEMON_TYPE_ELECTRIC; break;
+            case TERRAIN_MISTY: one = POKEMON_TYPE_FAIRY; break;
+            case TERRAIN_GRASSY: one = POKEMON_TYPE_GRASS; break;
+            case TERRAIN_PSYCHIC: one = POKEMON_TYPE_PSYCHIC; break;
+            default: break;
+            }
+        } else if (bt->has_biome) {
+            switch (bt->biome) {
+            case BIOME_ID_TOWN: case BIOME_ID_PLAINS: case BIOME_ID_METROPOLIS: one = POKEMON_TYPE_NORMAL; break;
+            case BIOME_ID_GRASS: case BIOME_ID_TALL_GRASS: one = POKEMON_TYPE_GRASS; break;
+            case BIOME_ID_FOREST: case BIOME_ID_JUNGLE: one = POKEMON_TYPE_BUG; break;
+            case BIOME_ID_SLUM: case BIOME_ID_SWAMP: one = POKEMON_TYPE_POISON; break;
+            case BIOME_ID_SEA: case BIOME_ID_BEACH: case BIOME_ID_LAKE: case BIOME_ID_SEABED: one = POKEMON_TYPE_WATER; break;
+            case BIOME_ID_MOUNTAIN: one = POKEMON_TYPE_FLYING; break;
+            case BIOME_ID_BADLANDS: one = POKEMON_TYPE_GROUND; break;
+            case BIOME_ID_CAVE: case BIOME_ID_DESERT: one = POKEMON_TYPE_ROCK; break;
+            case BIOME_ID_ICE_CAVE: case BIOME_ID_SNOWY_FOREST: one = POKEMON_TYPE_ICE; break;
+            case BIOME_ID_MEADOW: case BIOME_ID_FAIRY_CAVE: case BIOME_ID_ISLAND: one = POKEMON_TYPE_FAIRY; break;
+            case BIOME_ID_POWER_PLANT: one = POKEMON_TYPE_ELECTRIC; break;
+            case BIOME_ID_VOLCANO: one = POKEMON_TYPE_FIRE; break;
+            case BIOME_ID_GRAVEYARD: case BIOME_ID_TEMPLE: one = POKEMON_TYPE_GHOST; break;
+            case BIOME_ID_DOJO: case BIOME_ID_CONSTRUCTION_SITE: one = POKEMON_TYPE_FIGHTING; break;
+            case BIOME_ID_FACTORY: case BIOME_ID_LABORATORY: one = POKEMON_TYPE_STEEL; break;
+            case BIOME_ID_RUINS: case BIOME_ID_SPACE: one = POKEMON_TYPE_PSYCHIC; break;
+            case BIOME_ID_WASTELAND: case BIOME_ID_END: one = POKEMON_TYPE_DRAGON; break;
+            case BIOME_ID_ABYSS: one = POKEMON_TYPE_DARK; break;
+            default: break;
+            }
+        }
+        pr_set_summon_types(bt, user, &one, 1);
+        pr_queue_msg(bt, e, pr_msg2("moveTriggers:transformedIntoType",
+                                  pr_arg_pokemon(bt, "pokemonName", user), pr_arg_type("typeName", one)));
+        return;
+    }
     case PR_AC_ChangeTypeAttr: {                         /* Soak, Magic Powder: no canApply check */
         int8_t one = (int8_t)P(ChangeTypeAttr, a)->type;   /* summonData.types = [type] */
         pr_set_summon_types(bt, target, &one, 1);

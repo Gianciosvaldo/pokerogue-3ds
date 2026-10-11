@@ -7,7 +7,7 @@ BUILD ?= build
 SRCS := src/rng.c src/hooks.c src/pokemon.c src/damage.c src/move_attrs.c src/closures.c src/closures_moves.c src/closures_conditions.c src/ab_attrs.c src/closures_abilities.c src/modifiers.c src/tags.c src/battler_tags.c src/arena_tags.c src/history.c src/engine.c src/phases.c src/move_effects.c src/called_moves.c src/switching.c src/commands.c src/js_math.c src/text.c src/events.c gen/out/pr_data.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
-all: $(BUILD)/average-stats-test $(BUILD)/speedboosttest $(BUILD)/growthtest $(BUILD)/psych-up-test $(BUILD)/trainerswitchtest $(BUILD)/tempturntest $(BUILD)/fielditemtest $(BUILD)/statitemtest $(BUILD)/crititemtest $(BUILD)/typeboosttest $(BUILD)/goldentest $(BUILD)/souldewtest $(BUILD)/multilenstest $(BUILD)/reviverseedtest $(BUILD)/widelenstest $(BUILD)/statusorbtest $(BUILD)/dancertest $(BUILD)/doublestest $(BUILD)/itemremovaltest $(BUILD)/berrytest $(BUILD)/weatherformtest $(BUILD)/illusiontest $(BUILD)/libprcore.a $(BUILD)/rng_cli $(BUILD)/difftest $(BUILD)/turntest $(BUILD)/bosssegmenttest
+all: $(BUILD)/camouflage-test $(BUILD)/average-stats-test $(BUILD)/speedboosttest $(BUILD)/growthtest $(BUILD)/psych-up-test $(BUILD)/trainerswitchtest $(BUILD)/tempturntest $(BUILD)/fielditemtest $(BUILD)/statitemtest $(BUILD)/crititemtest $(BUILD)/typeboosttest $(BUILD)/goldentest $(BUILD)/souldewtest $(BUILD)/multilenstest $(BUILD)/reviverseedtest $(BUILD)/widelenstest $(BUILD)/statusorbtest $(BUILD)/dancertest $(BUILD)/doublestest $(BUILD)/itemremovaltest $(BUILD)/berrytest $(BUILD)/weatherformtest $(BUILD)/illusiontest $(BUILD)/libprcore.a $(BUILD)/rng_cli $(BUILD)/difftest $(BUILD)/turntest $(BUILD)/bosssegmenttest
 
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -109,3 +109,13 @@ $(BUILD)/average-stats-replay.inc: tests/growth-replay.inc tools/build-average-s
 	python3 tools/build-average-stats-replay.py $< $@
 $(BUILD)/average-stats-test: tests/average-stats-test.c $(BUILD)/average-stats-replay.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) tests/average-stats-test.c $(BUILD)/libprcore.a -lm -o $@
+
+$(BUILD)/camouflage-replay.inc: tests/growth-replay.inc tools/build-camouflage-replay.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-camouflage-replay.py $< $@
+$(BUILD)/camouflage-test: tests/camouflage-test.c $(BUILD)/camouflage-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) tests/camouflage-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/camouflage-helper-test
+$(BUILD)/camouflage-helper-test: tests/camouflage-helper-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
