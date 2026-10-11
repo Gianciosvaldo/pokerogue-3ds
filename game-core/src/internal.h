@@ -271,4 +271,5 @@ int gc_orb_add(gc_run *run,int storage,int item);
 int gc_orb_scene_apply(gc_run *run,const gc_offer *o,int storage,const char **why,bool selection);
 
 int gc_soothe_add(gc_run *run,int storage);
+bool gc_soothe_battle_gain(gc_run *run,int storage);
 int gc_soothe_scene_apply(gc_run *run,const gc_offer *o,int storage,const char **why,bool selection);

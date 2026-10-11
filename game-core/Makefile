@@ -317,3 +317,14 @@ $(BUILD)/soothe_acquisition_diff_test: tests/soothe_acquisition_diff_test.c $(BU
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 $(BUILD)/soothe_acquisition_host_test: tests/soothe_acquisition_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/soothe_battle_test
+$(BUILD)/soothe_battle_test: tests/soothe_battle_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/soothe_battle_host_test
+$(BUILD)/soothe_battle_host_test: tests/soothe_battle_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: soothe-battle-host
+soothe-battle-host: $(BUILD)/soothe_battle_host_test
+	$(BUILD)/soothe_battle_host_test

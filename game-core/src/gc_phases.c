@@ -147,12 +147,16 @@ static void victory(gc_run *run, int enemy_idx)
                 pp.n_eggs++;
             }
         }
-        /* the participants that didn't faint gain friendship (FRIENDSHIP_GAIN_FROM_BATTLE; a Soothe Bell
-         * held item isn't applied yet) */
+        /* Participating survivors gain friendship through the bounded Bell
+         * projection. Unrepresented stock retains the counted legacy gain. */
         if (bt->n_participants > 0)
             for (int k = 0; k < run->n_party; k++) {
                 gc_mon *m = pm(run, run->party_order[k]);
-                if (m->b.hp > 0 && pp.party[k].participated) gc_system_add_friendship(run->sys, run, m, 3, false);
+                if (m->b.hp > 0 && pp.party[k].participated
+                    && !gc_soothe_battle_gain(run,run->party_order[k])) {
+                    gc_stub(run,GC_STUB_REWARD_APPLY);
+                    gc_system_add_friendship(run->sys, run, m, 3, false);
+                }
             }
         int idx[PR_MAX_EXP_PARTY];
         double amount[PR_MAX_EXP_PARTY];
