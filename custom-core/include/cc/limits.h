@@ -2,8 +2,8 @@
  *
  * Product defaults come from docs/CUSTOM-CONTENT-ADVANCED-AGENT.md ("Explicit first-release choices"). They are
  * custom policy, not upstream rules. The ID ceilings are the largest values of the pinned upstream enums
- * (8555c08) as generated into battle-core/gen/out/pr_enums.h; tests/layout_test.c fails when a regenerated enum
- * exceeds one of them, so a pin update cannot silently outgrow this file. */
+ * (8555c08) as generated into battle-core/gen/out/pr_enums.h; tests/layout_test.c fails when a regenerated enum's
+ * largest value differs from one of them, so a pin update cannot silently outgrow (or leave stale) this file. */
 #ifndef CC_LIMITS_H
 #define CC_LIMITS_H
 
