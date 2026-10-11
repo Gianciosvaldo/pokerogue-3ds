@@ -594,6 +594,19 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         pr_queue_msg(bt, e, P(ResetStatsAttr, a)->targetAllPokemon ? pr_msg0("moveTriggers:statEliminated")
                             : pr_msg1("moveTriggers:resetStats", pr_arg_pokemon(bt, "pokemonName", target)));
         return;
+    case PR_AC_AverageStatsAttr: {
+        if (!effect_can_apply(ef, user, target)) return;
+        const pr_attr_AverageStatsAttr *x = P(AverageStatsAttr, a);
+        for (int k = 0; k < x->stats.n; k++) {
+            int stat = x->stats.v[k];
+            double average = floor((pr_get_stat(user, stat, false)
+                                  + pr_get_stat(target, stat, false)) / 2.0);
+            /* Pokemon.setStat(..., false) ignores nonpositive values. */
+            if (average > 0) user->summon_stats[stat] = target->summon_stats[stat] = average;
+        }
+        pr_queue_msg(bt, e, pr_msg1(x->msgKey, pr_arg_pokemon(bt, "pokemonName", user)));
+        return;
+    }
     case PR_AC_CopyStatsAttr: {
         /* CopyStatsAttr: every battle stat stage straight onto the user, no StatStageChangePhase;
          * CRIT_BOOST presence follows the target's (an existing one is only overlapped) */
