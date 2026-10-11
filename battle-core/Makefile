@@ -94,8 +94,12 @@ $(BUILD)/trainerswitchtest: tests/trainerswitchtest.c tests/trainer-switch-repla
 
 $(BUILD)/growthtest: tests/growthtest.c tests/growth-replay.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/growthtest.c $(BUILD)/libprcore.a -lm -o $@
-$(BUILD)/psych-up-test: tests/psych-up-test.c tests/psych-up-replay.inc $(BUILD)/libprcore.a
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/psych-up-test.c $(BUILD)/libprcore.a -lm -o $@
+$(BUILD)/psych-up-replay.inc: tests/growth-replay.inc tools/build-psych-up-replay.py
+	mkdir -p $(BUILD)
+	python3 tools/build-psych-up-replay.py $< $@
+
+$(BUILD)/psych-up-test: tests/psych-up-test.c $(BUILD)/psych-up-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) tests/psych-up-test.c $(BUILD)/libprcore.a -lm -o $@
 
 $(BUILD)/speedboosttest: tests/speedboosttest.c tests/speed-boost-replay.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/speedboosttest.c $(BUILD)/libprcore.a -lm -o $@
