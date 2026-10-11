@@ -154,3 +154,14 @@ $(BUILD)/bad-dreams-test: tests/bad-dreams-test.c $(BUILD)/bad-dreams-replay.inc
 all: $(BUILD)/bad-dreams-helper-test
 $(BUILD)/bad-dreams-helper-test: tests/bad-dreams-helper-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/cheek-pouch-test
+$(BUILD)/cheek-pouch-replay.inc: tests/growth-replay.inc tools/build-cheek-pouch-replay.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-cheek-pouch-replay.py $< $@
+$(BUILD)/cheek-pouch-test: tests/cheek-pouch-test.c $(BUILD)/cheek-pouch-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) tests/cheek-pouch-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/cheek-pouch-helper-test
+$(BUILD)/cheek-pouch-helper-test: tests/cheek-pouch-helper-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
