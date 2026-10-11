@@ -1396,6 +1396,33 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         return 1;
 
     /* ---- end of turn ---- */
+    case PR_AC_PostTurnHurtIfSleepingAbAttr: {
+        if(bt->double_battle)return -1;
+        bool eligible=false;
+        for(int j=0;j<4;j++){
+            const pr_pokemon *v=bt->field[j];
+            if(v && pr_is_opponent(bt,p,v) && v->hp>0 && v->on_field && !v->switch_out_status
+                && (v->status==STATUS_EFFECT_SLEEP || pr_has_ability_active(bt,v,ABILITY_ID_COMATOSE))
+                && !pr_has_ability_with_attr(bt,v,PR_AC_BlockNonDirectDamageAbAttr))eligible=true;
+        }
+        GATE(eligible);
+        if(pp->simulated)return 1;
+        if(!c->e)return -1;
+        for(int j=0;j<4;j++){
+            pr_pokemon *v=bt->field[j];
+            if(!v || !pr_is_opponent(bt,p,v) || v->hp<=0 || !v->on_field || v->switch_out_status
+                || (v->status!=STATUS_EFFECT_SLEEP && !pr_has_ability_active(bt,v,ABILITY_ID_COMATOSE)))continue;
+            bool cancelled=false;
+            /* Pinned source deliberately invokes the blocker on the ability HOLDER. */
+            pr_ab_params bp={.pokemon=p,.move=-1,.simulated=pp->simulated,.flag=&cancelled};
+            pr_apply_ab_attrs(bt,PR_AC_BlockNonDirectDamageAbAttr,&bp);
+            if(!cancelled){
+                pr_damage_and_update(bt,c->e,v,to_dmg_value(pr_get_stat(v,STAT_HP,true)/8.0),HIT_RESULT_INDIRECT,false,NULL);
+                pr_queue_msg(bt,c->e,pr_msg1("abilityTriggers:badDreams",pr_arg_pokemon(bt,"pokemonName",v)));
+            }
+        }
+        return 1;
+    }
     case PR_AC_FetchBallAbAttr:
         GATE(!pp->simulated && bt->last_used_pokeball >= 0 && p->is_player);
         pr_note_unported(bt, a->cls); /* globalScene.pokeballCounts isn't modelled */
