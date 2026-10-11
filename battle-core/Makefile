@@ -22,7 +22,7 @@ $(BUILD)/rng_cli: tests/rng_cli.c $(BUILD)/libprcore.a
 $(BUILD)/difftest: tests/difftest.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
-$(BUILD)/turntest: tests/turntest.c $(BUILD)/libprcore.a
+$(BUILD)/turntest: tests/turntest.c tests/optional-phase-map.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
 $(BUILD)/bosssegmenttest: tests/bosssegmenttest.c $(BUILD)/libprcore.a
@@ -175,3 +175,7 @@ $(BUILD)/optional-phase-test: tests/optional-phase-test.c tests/optional-phase-m
 	$(CC) $(CPPFLAGS) $(CFLAGS) -Itests -I$(BUILD) tests/optional-phase-test.c $(BUILD)/libprcore.a -lm -o $@
 $(BUILD)/optional-phase-fixtures-test: tests/optional-phase-fixtures-test.c tests/optional-phase-map.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) -Itests tests/optional-phase-fixtures-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/poltergeist-message-test
+$(BUILD)/poltergeist-message-test: tests/poltergeist-message-test.c tests/turntest.c tests/optional-phase-map.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/poltergeist-message-test.c $(BUILD)/libprcore.a -lm -o $@

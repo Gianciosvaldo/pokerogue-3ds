@@ -1,5 +1,7 @@
 # D15 optional phase metadata, separately typed
 
+**Follow-up:** the original legacy comparator now uses the independently proven presence classification, fixing trainer CASE 1051 while retaining genuine negative indices. The typed probe, malformed guards and mutations still pass; see [current repair](RETAINED-FAILURES-REPAIR.md). Statements below about unchanged established tests describe the original D15 snapshot.
+
 Base9e819df6ed9f3837b3a30edc49248edf0603b636 (D13 #215 merged).
 Lane A additive tests/tools only. Production and established producers/comparators
 are read-only. Pin8555c08c823b856cbec4eb99ca84ea52a955836d, Node22.23.3.

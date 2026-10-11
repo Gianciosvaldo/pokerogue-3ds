@@ -841,9 +841,9 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
     pr_note_unported(bt, a->cls);
 }
 
-/* Bounded removal family: supported named battle items and all berry identities.
+/* Shared announcement/removal identities: named battle items and all berries.
  * Unsupported item names remain explicit rather than producing a false message. */
-static const char *removed_item_key(const pr_modifier *m)
+const char *pr_held_item_name_key(const pr_modifier *m)
 {
     static const char *const berries[] = {
         "berry:sitrus.name", "berry:lum.name", "berry:enigma.name", "berry:liechi.name",
@@ -882,7 +882,7 @@ bool pr_remove_move_held_item(pr_battle *bt, pr_engine *e, pr_pokemon *user,
     if (!n) return false;
     int selected = pr_battle_rand_seed_int(bt, n, 0);
     pr_modifier *m = &bt->mods[side][indices[selected]];
-    const char *key = removed_item_key(m);
+    const char *key = pr_held_item_name_key(m);
     if (!key) { pr_note_unported(bt, PR_AC_RemoveHeldItemAttr); return false; }
     if (removed) *removed = *m;
     pr_lose_held_item(bt, e, target, m);
