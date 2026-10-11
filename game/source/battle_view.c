@@ -1404,10 +1404,25 @@ static void bv_update(ui_screen* s, float dt) {
   }
 }
 
+/* Upstream's arena art stops 132 px down: below it, the ui container's 48 px strip (the message window's bg frame) covers the
+ * field. Here the strip and its text are on the bottom screen, so the top screen draws the same empty strip where upstream has it,
+ * instead of leaving the bare biome background under the platforms. */
+static void draw_field_strip(void) {
+  char fr[4];
+  snprintf(fr, sizeof fr, "%d", ui_window_style());
+  if (img_frame("images/ui/bg", fr))
+    img_draw("images/ui/bg", fr, 0, 180, 0, 1);
+  else
+    rr_rect(0, 180 - 48, 320, 48, RR_RGBA(0x30, 0x50, 0x68, 255));
+}
+
 static void bv_draw(ui_screen* s, rr_screen which) {
   (void)s;
   if (which == RR_TOP) {
-    if (ui_space(UI_FIELD)) draw_field();
+    if (ui_space(UI_FIELD)) {
+      draw_field();
+      draw_field_strip();
+    }
     if (ui_space(UI_FIELD_UI)) {
       draw_enemy_info(&B.s[1]);
       draw_player_info(&B.s[0]);
