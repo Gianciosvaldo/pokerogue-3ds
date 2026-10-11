@@ -91,6 +91,12 @@ implementation, caller-proof and diagnostic tasks. It is a future handoff plan;
 it neither records those tasks as completed nor authorizes automatic execution
 or inherits Codex's personal merge permission.
 
+The separate [advanced-agent custom content handoff](CUSTOM-CONTENT-ADVANCED-AGENT.md)
+turns the user's Nemesis/post-mortem/capsule ideas into staged future work.
+It keeps original custom policies distinct from upstream parity, starts with
+isolated models/UI, and gates live rematches on owner-coordinated core adapters.
+Its proposed tasks are not completed parity work.
+
 ## Validation command contracts
 
 These aliases specify exact baseline commands; substitute the absolute upstream checkout for `<upstream>`, kept outside this repo. Capture baseline and final output.
