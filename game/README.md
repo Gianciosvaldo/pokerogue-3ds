@@ -24,8 +24,18 @@ the first turn), through `save.c` (temporary file with a checksum, renamed into 
 It is never written during an animation: `run_screen.c` waits until the screen is idle and tries again at the next wave
 if the card refuses. Game over and a win clear the slot, as upstream's `tryClearSession` does.
 
-Stand-ins in the run flow (listed in [`run_screen.h`](include/run_screen.h)): the starters are a random team (or the
-species in `sdmc:/3ds/pokerogue/rundriver.txt`), reward names are the item key in words, evolution is automatic, a
+New Game goes through the **starter select** (`menus/starter.c`, hosted by `starter_host.c`): the species the dex says are caught,
+a team of up to six within the Classic cost budget (10), Begin / Exit. What can be picked, what it costs and whether game-core
+takes the team is game-core's own (`gc_starter_is_available`, `gc_starter_value`, `gc_starter_budget`, `gc_run_set_starters`),
+glued in [`starter_data.c`](source/starter_data.c). The dex and the starter unlocks are game-core's `gc_system`, kept on the card
+as `save/system.sav` by [`system_data.c`](source/system_data.c): read when the app first needs it, attached to each run, and
+written with each save point of a run and when a run ends, only when it changed. A file that can't be read (damaged, or from a newer
+version) is never overwritten: the player is told, starts with the defaults, and nothing is saved to it until it is removed. Backing
+out of the starter select leaves the slot's old run as it was; it is cleared only once a team is confirmed. A developer's team in
+`rundriver.txt` skips the screen and runs without system data, as before.
+
+Stand-ins in the run flow (listed in [`run_screen.h`](include/run_screen.h)): the starters of a run with no starter select (the host
+tests' later runs) are a random team, reward names are the item key in words, evolution is automatic, a
 mystery encounter is a message and its first usable option. The words on the game over and clear screens, and the
 slot list's messages ("The save is damaged...", "Made by a newer version of the game.") are plain English, not upstream's
 strings. Seeing the ending screens without playing 200 waves: `game/tests/mkfixture.c` writes a run one turn from the end.
@@ -88,6 +98,14 @@ RUNTEST_VERBOSE=1 game/tests/build/runtest 200                    # each violati
 ```
 It exits 1 on a violation, a Pokemon the converter could not find, a screen that doesn't match the run at a command,
 a stuck driver or a run that stops making progress. It does not show how anything looks.
+`RUNTEST_SYS=1` (or `all`: every starter unlocked) gives the runs system data, as the app does, and with `RUNTEST_SAVE` every save
+point serializes it and loads it back.
+
+**The starter select and the system data** have host tests of their own (`make -C game/tests <name> && game/tests/build/<name>`):
+`startertest` (the model: every button, the cursor, the team and the cost), `starter_data_test` (the system file on the card, and the
+list, panel and team against game-core's own functions, with a fuzz of random systems), `starter_ui_test` (the screen over a fake
+drawing layer, with the host that hands the team to the app), and `flowtest` (New Game, Continue and Load around it). CI does not
+run them; the 3DS build is the only check CI makes of `game/`.
 
 The single-turn converter tests use `tests/battle_setup.c`, a test-only fixture that builds a battle-core battle by hand
 (the app no longer has it). `game/tests/` prints each turn's events with their English text (needs upstream's
@@ -121,7 +139,14 @@ make -C game/tests animtest && game/tests/build/animtest path/to/pokerogue-asset
 - Checked by eye in Azahar screenshots, not pixel-diffed against upstream yet.
 
 ## Not done yet
-- The real starter select and evolution screens (the run picks a random team; evolution is automatic), the Pokedex, eggs, music; mystery encounter screens.
+- The real evolution screen (evolution is automatic), the Pokedex, eggs, music; mystery encounter screens.
+- The starter select is the basic legal team only. Missing from it (each a task of its own, none faked): the filter bar and sort, the
+  cycle buttons (shiny, form, gender, ability, nature, tera), IVs, moves, nature management, candy purchases, favourites, rename,
+  the Pokedex page, egg moves, Pokerus, the tutorial, challenges, Daily and Endless. UP from the first row wraps (upstream goes to the
+  filter bar). A caught species that game-core refuses with its defaults (a prevolution reached through a form it can't have: Litleo
+  after a female Pyroar) is not listed; see `starter_data.h`. Not measured: what writing `system.sav` costs on a real SD card.
+- Runs started from the starter select now carry system data, so a run updates the dex, candy, friendship and Classic win records
+  (game-core's `gc_system_*` calls in the run). Runs already saved are not back-filled into the dex.
 - Around the save slots (not part of card 113): "Save and Quit" and "Rename Run" in the menu, the run history, unlocks and vouchers on a win, the rival's end dialogue, timed events, and any online or cloud save.
 - Message timing per text (upstream's 500 ms for "X used Y!", prompts after faints): asked of
   battle-core; every text waits 1.5 s for now.
@@ -133,4 +158,4 @@ make -C game/tests animtest && game/tests/build/animtest path/to/pokerogue-asset
   segments, weather and field effects on the field.
 - Sound without snd.pak is silent (the packs in the test rig have no sound yet).
 - Forms, variants and gender sprite differences in sprite keys.
-- Starter select and every other screen in the beta plan that is not listed above as done.
+- Every other screen in the beta plan that is not listed above as done.

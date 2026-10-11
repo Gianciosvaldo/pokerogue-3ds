@@ -17,6 +17,7 @@
 #include "reward_host.h"
 #include "run_saves.h"
 #include "shop_ui.h"
+#include "starter_data.h"
 #include "ui.h"
 #include "ui_widgets.h"
 
@@ -506,7 +507,13 @@ static bool handle_event(int i) {
 
     case GC_EV_HP: {
       if (e->a != 0 || e->b != G.shown || !G.present[0]) break;
-      const bv_mon* sh = bv_mon_of(BV_PLAYER);
+      bv_mon* sh = bv_mon_of(BV_PLAYER);
+      /* a Vitamin or a Mint changes the maximum HP and game-core only says the new HP: the bar's maximum follows the Pokemon */
+      const int max_hp = G.run.party[e->b].b.stats[STAT_HP];
+      if (max_hp > 0 && max_hp != sh->max_hp) {
+        *ev_new() = (bv_event){.type = BEV_MAX_HP, .battler = BV_PLAYER, .a = max_hp};
+        sh->max_hp = max_hp;
+      }
       if (e->c > sh->hp)
         *ev_new() = (bv_event){.type = BEV_HEAL, .battler = BV_PLAYER, .a = e->c};
       else if (e->c < sh->hp)
@@ -1099,9 +1106,12 @@ static void end_run(int kind) {
 
 /* ---- saving ---- */
 
-/* Writes the run into the slot. A refusal is counted; save_point tells the player. */
+/* Writes the run into the slot, and the system data it updated (the species it caught) beside it. A refusal of either is counted;
+ * save_point tells the player. */
 static void write_save(void) {
-  if (rsv_save(G.cfg.slot, &G.run) == RSV_SAVED) {
+  bool ok = rsv_save(G.cfg.slot, &G.run) == RSV_SAVED;
+  if (G.cfg.sys && G.cfg.save_sys && !G.cfg.save_sys()) ok = false;
+  if (ok) {
     G.st.saves++;
     G.save_failed_told = false;
   } else {
@@ -1179,9 +1189,24 @@ static void screen_step(void) {
 
 /* ---- a new run ---- */
 
-/* a random team within the cost budget, from every species with a starter cost (game-core's own rule) */
+/* a random team within the cost budget, from every species with a starter cost (game-core's own rule). With system data on the
+ * run, from the species it lets the player pick, each with the defaults the starter select screen would give it. */
 static int random_team(gc_starter* out) {
-  int budget = gc_starter_budget(GAME_MODES_CLASSIC), n = 0;
+  double budget = gc_starter_budget(GAME_MODES_CLASSIC);
+  int n = 0;
+  const gc_system* sys = G.run.sys;
+  if (sys) {
+    const int first = (int)rnd(PR_SPECIES_COUNT);
+    for (int k = 0; k < PR_SPECIES_COUNT && n < 6 && budget > 0; k++) {
+      const pr_species* sp = &pr_species_table[(first + k) % PR_SPECIES_COUNT];
+      gc_starter s;
+      double cost = 0;
+      if (!ss_starter(sys, (uint16_t)sp->id, &s) || !gc_starter_is_available(sys, &s, &cost, NULL) || cost > budget) continue;
+      out[n++] = s;
+      budget -= cost;
+    }
+    return n;
+  }
   for (int tries = 0; tries < 400 && n < 6 && budget > 0; tries++) {
     const pr_species* sp = &pr_species_table[rnd(PR_SPECIES_COUNT)];
     const int cost = gc_starter_cost(sp->id);
@@ -1210,9 +1235,12 @@ static bool new_run(bool from_black) {
   G.rng = 0x9E3779B97F4A7C15ull ^ ((uint64_t)G.cfg.entropy * 0xD1B54A32D192ED03ull) ^ ((uint64_t)G.st.runs * 0x2545F4914F6CDD1Dull);
   rnd(1);
   gc_run_new(&G.run, GAME_MODES_CLASSIC, G.st.runs == 1 ? G.cfg.seed : NULL, G.cfg.entropy + (uint32_t)G.st.runs);
+  G.run.sys = G.cfg.sys;
   gc_starter team[6];
   int n = 0;
-  if (G.st.runs == 1 && G.cfg.n_starters > 0) {
+  if (G.st.runs == 1 && G.cfg.n_team > 0) {
+    for (; n < G.cfg.n_team && n < 6; n++) team[n] = G.cfg.team[n];
+  } else if (G.st.runs == 1 && G.cfg.n_starters > 0) {
     for (; n < G.cfg.n_starters && n < 6; n++) {
       memset(&team[n], 0, sizeof team[n]);
       team[n].species = (uint16_t)G.cfg.starters[n];
@@ -1243,6 +1271,7 @@ rsv_status rs_resume(const rs_config* cfg, char why[RSV_WHY_LEN]) {
   reset_driver();
   const rsv_status st = rsv_load(cfg->slot, &G.run, why);
   if (st != RSV_OK) return st; /* G.run is not usable: the caller must not drive it */
+  G.run.sys = cfg->sys; /* a saved run holds no system data: it takes the player's */
   G.st.runs++;
   G.st.loads++;
   G.resume_wave = G.resume_foe = true;

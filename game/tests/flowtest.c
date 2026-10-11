@@ -7,7 +7,9 @@
  * run). The fake run driver starts a real game-core run, saves it at once as the real driver does at the first save point,
  * and loads slots through the real rsv_load. Checks the flow: Continue, New Game with a slot (and the overwrite), Load Game,
  * game over and clear (the slot is cleared, back to the title), a slot that can't be loaded (it says why and is never
- * overwritten), Delete Run, and that the debug config (seed, starters) is used for the first New Game only. */
+ * overwritten), Delete Run, and that the debug config (seed, starters) is used for the first New Game only. New Game goes
+ * through the starter select (fake here): the old run in the slot stays until a team is confirmed, Exit goes back to the title, the
+ * team confirmed is the run's, and the run reads and saves the system data (system_data.c, real) unless it is a developer's. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,6 +23,9 @@
 #include "run_saves.h"
 #include "save.h"
 #include "slot_screen.h"
+#include "starter_data.h"
+#include "starter_host.h"
+#include "system_data.h"
 #include "title_screen.h"
 
 static int checks, failed;
@@ -69,13 +74,48 @@ void result_screen_open(const result_args* a) {
   n_result++;
 }
 
+/* the starter select: records how it was opened; the test answers as the player would */
+static sh_events SH;
+static char sh_notice[200];
+static int n_sh;
+static bool sh_has_species = true;
+bool sh_open(const gc_system* sys, const char* notice, const sh_events* ev) {
+  (void)sys;
+  if (!sh_has_species) return false;
+  SH = *ev;
+  n_sh++;
+  snprintf(sh_notice, sizeof sh_notice, "%s", notice ? notice : "");
+  return true;
+}
+/* the player confirms the first `n` species the system data lists */
+static void sh_confirm(int n) {
+  static sm_entry list[SS_MAX_ENTRIES];
+  uint16_t pick[6];
+  const int total = ss_list(sysd_get(), list, SS_MAX_ENTRIES, NULL);
+  for (int i = 0; i < n && i < total; i++) pick[i] = list[i].species;
+  gc_starter team[6];
+  const char* why = NULL;
+  if (!ss_team(sysd_get(), pick, n, team, &why)) {
+    printf("the fake player's team was refused: %s\n", why ? why : "?");
+    exit(1);
+  }
+  SH.on_start(team, n, SH.arg);
+}
+
+const pr_species* menu_species(uint16_t id);
+const char* i18n_species_name(int id) {
+  const pr_species* sp = menu_species((uint16_t)id);
+  return sp ? sp->name : "?";
+}
+
 static uint32_t frames = 100;
 uint32_t ui_frame(void) { return frames; }
 
 static gc_run RUN;
 static rs_config CFG;
 static int n_start, n_resume;
-static bool fail_start, slot_empty_at_start;
+static bool fail_start, slot_empty_at_start, sys_saved_ok;
+static gc_system snap; /* 724 KB: not on the stack */
 
 static void new_run(gc_run* r, const char* seed) {
   gc_run_new(r, GAME_MODES_CLASSIC, seed, 99);
@@ -104,16 +144,33 @@ bool rs_start(const rs_config* c) {
   rsv_info in;
   slot_empty_at_start = rsv_inspect(c->slot, &in) == RSV_EMPTY;
   if (fail_start) return false;
-  new_run(&RUN, c->seed);
+  if (c->n_team > 0) {
+    /* the run takes the team the player confirmed, as the real driver does */
+    gc_run_new(&RUN, GAME_MODES_CLASSIC, c->seed, 99);
+    RUN.sys = c->sys;
+    const char* why = NULL;
+    if (!gc_run_set_starters(&RUN, c->team, c->n_team, &why)) {
+      printf("game-core refused the team: %s\n", why ? why : "?");
+      exit(1);
+    }
+    gc_event e;
+    while (gc_run_next_event(&RUN, &e)) {
+    }
+  } else {
+    new_run(&RUN, c->seed);
+  }
   CHECK(c->save, "a new run must save");
   rsv_save(c->slot, &RUN); /* the first save point */
+  sys_saved_ok = c->sys && c->save_sys ? c->save_sys() : true; /* the driver writes it with the run */
   return true;
 }
 
 rsv_status rs_resume(const rs_config* c, char why[RSV_WHY_LEN]) {
   CFG = *c;
   n_resume++;
-  return rsv_load(c->slot, &RUN, why);
+  const rsv_status st = rsv_load(c->slot, &RUN, why);
+  if (st == RSV_OK) RUN.sys = c->sys; /* a saved run holds none: the driver attaches the player's */
+  return st;
 }
 
 const gc_run* rs_run(void) { return &RUN; }
@@ -156,6 +213,9 @@ int main(void) {
   }
   char p[256], p2[256];
   rs_config first = first_cfg();
+  rs_config plain = first_cfg();
+  plain.n_starters = 0;
+  plain.seed = NULL;
 
   /* ---- a fresh install: the title has no Continue; New Game asks for a slot; the run is saved in it */
   app_start(&first);
@@ -166,6 +226,7 @@ int main(void) {
   S.on_pick(1, S.arg);
   CHECK(n_start == 1 && CFG.slot == 1 && CFG.save && CFG.on_end, "the run starts in slot 1 with saving on");
   CHECK(CFG.seed && !strcmp(CFG.seed, "flowtestseed000000000001") && CFG.n_starters == 1 && CFG.starters[0] == 25, "the debug config is used");
+  CHECK(n_sh == 0 && !CFG.sys && CFG.n_team == 0, "a developer's team skips the starter select and runs without system data");
   const uint32_t entropy1 = CFG.entropy;
   CHECK(status_of(1) == RSV_OK && rsv_last_slot() == 1, "the run is in slot 1, the last slot");
 
@@ -180,16 +241,22 @@ int main(void) {
   frames += 357;
   T.on_choose(TITLE_NEW_GAME, T.arg);
   S.on_pick(0, S.arg);
+  CHECK(n_sh == 1 && n_start == 1 && !sh_notice[0], "the slot is picked, then the starter select opens (no run yet, no notice)");
+  sh_confirm(2);
   CHECK(n_start == 2 && CFG.slot == 0 && !CFG.seed && CFG.n_starters == 0, "the second New Game has no debug seed or starters");
+  CHECK(CFG.n_team == 2 && CFG.team[0].species && CFG.sys == sysd_get() && CFG.save_sys == sysd_save, "it has the team chosen and the system data");
+  CHECK(RUN.n_party == 2 && RUN.party[0].b.species == CFG.team[0].species && RUN.sys == sysd_get(), "the run is the team's");
+  CHECK(sys_saved_ok && file_size((snprintf(p, sizeof p, "%s/system.sav", SAVE_DIR), p)) > 0, "the system data was written with the run's first save");
   CHECK(CFG.entropy != entropy1, "each run has its own entropy");
   const int biome0 = RUN.biome;
 
   /* ---- quit and boot again: Continue loads the last slot; the title shows its biome */
-  app_start(&first);
+  app_start(&plain); /* boots again with no developer team */
   CHECK(T.can_continue && T.biome == biome0, "Continue is offered, with the biome %d (%d)", T.biome, biome0);
   T.on_choose(TITLE_CONTINUE, T.arg);
   CHECK(n_resume == 1 && CFG.slot == 0 && CFG.save && CFG.on_end, "Continue loads slot 0 with saving on");
   CHECK(!CFG.seed && CFG.n_starters == 0, "a loaded run takes no debug config");
+  CHECK(CFG.sys == sysd_get() && RUN.sys == sysd_get() && CFG.save_sys == sysd_save, "a loaded run takes the player's system data");
 
   /* ---- Load Game: the list in LOAD mode; picking a run loads it */
   T.on_choose(TITLE_LOAD_GAME, T.arg);
@@ -206,13 +273,34 @@ int main(void) {
   T.on_choose(TITLE_NEW_GAME, T.arg);
   CHECK(S_info[0].status == RSV_OK, "the list shows the run in slot 0");
   S.on_pick(0, S.arg); /* the list asked "Overwrite?" and the answer was yes */
-  CHECK(n_start == 3 && slot_empty_at_start, "the old run was removed before the new run started");
+  CHECK(n_sh == 2 && n_start == 2 && status_of(0) == RSV_OK && exists(p), "the starter select opens; the old run and its backup are still there (%d %d %d %d)", n_sh, n_start, status_of(0), exists(p));
+  const int titles = n_title;
+  SH.on_exit(SH.arg); /* "Do you want to exit?" Yes */
+  CHECK(n_title == titles + 1 && n_start == 2 && status_of(0) == RSV_OK && exists(p), "Exit goes back to the title and the old run is untouched");
+  CHECK(T.can_continue, "and Continue still offers it");
+  T.on_choose(TITLE_NEW_GAME, T.arg);
+  S.on_pick(0, S.arg);
+  CHECK(n_sh == 3 && n_start == 2 && status_of(0) == RSV_OK, "the second time: starter select again, still no new run");
+  sh_confirm(1); /* Begin */
+  CHECK(n_start == 3 && slot_empty_at_start && CFG.n_team == 1, "the old run was removed once the team was confirmed, before the new run started");
   slot_path(0, ".sav.bak", p, sizeof p);
   CHECK(!exists(p), "the new run has no backup of the old one");
 
-  /* ---- clear: the same, with the clear flag */
+  /* ---- clear: the same, with the clear flag; what the run caught is on the SD card when it ends */
+  {
+    gc_mon pikachu;
+    memset(&pikachu, 0, sizeof pikachu);
+    pikachu.b.species = 25;
+    pikachu.b.nature = 11;
+    pikachu.b.gender = 0;
+    gc_system_set_pokemon_caught(RUN.sys, &pikachu, true, false);
+  }
+  CHECK(sysd_get()->dex[25].caught_attr != 0, "the run caught a Pikachu");
+  memcpy(&snap, sysd_get(), sizeof snap);
   CFG.on_end(GC_SCREEN_CLEAR, CFG.end_arg);
   CHECK(n_result == 2 && R.victory && status_of(0) == RSV_EMPTY, "clear screen, slot cleared");
+  sysd_reset(); /* quit and boot again */
+  CHECK(sysd_state(NULL) == SYSD_LOADED && !memcmp(&snap, sysd_get(), sizeof snap), "the run's catch is in the system data on the SD card");
   R.on_done(R.arg);
 
   /* ---- a slot that can't be loaded: Continue says why, the file is never touched, never overwritten */
@@ -226,7 +314,7 @@ int main(void) {
   slot_path(2, ".sav.bak", p2, sizeof p2);
   remove(p2);
   CHECK(good > 0 && file_size(p) == sizeof junk, "the damaged file");
-  app_start(&first);
+  app_start(&plain); /* boots again with no developer team */
   CHECK(T.can_continue, "an unreadable slot still offers Continue (to say why)");
   const int slots_before = n_slots, resumes_before = n_resume;
   T.on_choose(TITLE_CONTINUE, T.arg);
@@ -264,11 +352,42 @@ int main(void) {
   CHECK(n_refresh == refresh_before + 1 && last_msg[0] && S_info[3].status == RSV_INCOMPATIBLE, "the list was refreshed and says why: \"%s\"", last_msg);
   CHECK(file_size(p) == sizeof junk, "untouched");
 
-  /* ---- a run that can't be set up: told, nothing started */
+  /* ---- a system file that can't be read: the starter select says so, the file is never written over */
+  snprintf(p, sizeof p, "%s/system.sav", SAVE_DIR);
+  write_raw(p, junk, sizeof junk);
+  snprintf(p2, sizeof p2, "%s/system.sav.bak", SAVE_DIR);
+  remove(p2);
+  sysd_reset();
+  S.on_back(S.arg);
+  T.on_choose(TITLE_NEW_GAME, T.arg);
+  const int sh_before = n_sh;
+  S.on_pick(4, S.arg);
+  CHECK(n_sh == sh_before + 1 && strstr(sh_notice, "damaged") && strstr(sh_notice, "left as it is"), "the starter select tells the player: \"%s\"", sh_notice);
+  sh_confirm(1); /* the defaults are enough to begin */
+  CHECK(n_start == 4 && CFG.sys == sysd_get() && sys_saved_ok, "the run starts; saving its system data reports no failure (it writes nothing)");
+  CHECK(file_size(p) == sizeof junk, "the damaged system file is untouched");
+  CFG.on_end(GC_SCREEN_GAME_OVER, CFG.end_arg);
+  CHECK(file_size(p) == sizeof junk, "and still untouched when the run ends");
+  R.on_done(R.arg);
+  remove(p);
+  sysd_reset();
+
+  /* ---- nothing to start with: told, nothing opened */
+  sh_has_species = false;
+  T.on_choose(TITLE_NEW_GAME, T.arg);
+  const int starts_none = n_start;
+  S.on_pick(4, S.arg);
+  CHECK(n_start == starts_none && last_msg[0], "no species: told \"%s\"", last_msg);
+  sh_has_species = true;
+
+  /* ---- a run that can't be set up: told, nothing started, and the slot list is back (the starter select is gone) */
   fail_start = true;
   S.on_back(S.arg);
   T.on_choose(TITLE_NEW_GAME, T.arg);
   S.on_pick(4, S.arg);
+  const int slots_open = n_slots;
+  sh_confirm(1);
+  CHECK(n_slots == slots_open + 1 && S.mode == SLOTS_NEW && S.cursor == 4, "the slot list is shown again, on the slot");
   CHECK(last_msg[0] && status_of(4) == RSV_EMPTY, "told: \"%s\"", last_msg);
 
   printf("%d checks, %d failed\n", checks, failed);

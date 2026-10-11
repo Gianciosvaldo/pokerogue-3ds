@@ -287,6 +287,8 @@ void menu_cry_key(const menu_mon* m, char* out, size_t n);
 void menu_draw_icon(const menu_mon* m, float x, float y, float ox, float oy);
 /* The same scaled around its origin (upstream draws the save slots' icons at 0.75). */
 void menu_draw_icon_scaled(const menu_mon* m, float x, float y, float ox, float oy, float scale);
+/* The same with a tint (RR_RGBA(255, 255, 255, a) draws it at alpha a: the starter select greys what the budget can't pay for). */
+void menu_draw_icon_tinted(const menu_mon* m, float x, float y, float ox, float oy, float scale, rr_color tint);
 
 /* ------------------------------------------------------------ biome map choice */
 
@@ -313,6 +315,7 @@ void biome_map_draw(void);
 /* ------------------------------------------------------------ shop & reward select UI */
 
 #include "shop_ui.h"
+#include "starter.h"
 
 #ifdef __cplusplus
 }
