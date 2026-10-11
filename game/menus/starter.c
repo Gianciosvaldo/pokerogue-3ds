@@ -423,6 +423,24 @@ static void info_text(float x, float y, const char* t, mui_style colours, int al
   if (width) *width = w;
 }
 
+/* the growth rates' locale keys and colours (starter-select-ui-handler's growth rate text) */
+static const char* const growth_keys[6] = {"erratic", "fast", "mediumFast", "mediumSlow", "slow", "fluctuating"};
+static const uint32_t growth_fg[6] = {0xf85888, 0xf8d030, 0x78c850, 0x6890f0, 0xf08030, 0xa040a0};
+static const uint32_t growth_sh[6] = {0x906060, 0xb8a038, 0x588040, 0x807870, 0xc03028, 0x483850};
+
+/* the stats a nature raises and lowers (-1, -1 for a neutral one) */
+static void nature_stats(uint8_t nature, int* up, int* down) {
+  *up = *down = -1;
+  for (int s = 1; s < 6 && nature < PR_NATURE_COUNT; s++) {
+    if (pr_nature_mult[nature][s] > 1.0) *up = s;
+    else if (pr_nature_mult[nature][s] < 1.0) *down = s;
+  }
+}
+
+static const char* const stat_short_keys[6] = {"pokemonInfo:stat.hpShortened", "pokemonInfo:stat.atkShortened",
+                                               "pokemonInfo:stat.defShortened", "pokemonInfo:stat.spatkShortened",
+                                               "pokemonInfo:stat.spdefShortened", "pokemonInfo:stat.spdShortened"};
+
 static void draw_panel(void) {
   const menu_mon* m = &S.info.mon;
   /* No (the label) and the dex number */
@@ -457,16 +475,13 @@ static void draw_panel(void) {
   }
   /* growth rate (36px; the value 2 px after the label) */
   {
-    static const char* const keys[6] = {"erratic", "fast", "mediumFast", "mediumSlow", "slow", "fluctuating"};
-    static const uint32_t fg[6] = {0xf85888, 0xf8d030, 0x78c850, 0x6890f0, 0xf08030, 0xa040a0};
-    static const uint32_t sh[6] = {0x906060, 0xb8a038, 0x588040, 0x807870, 0xc03028, 0x483850};
     const pr_species* sp = menu_species(S.info_species);
     if (sp && sp->growth_rate < 6) {
       char key[48];
-      snprintf(key, sizeof key, "growth:%s", keys[sp->growth_rate]);
+      snprintf(key, sizeof key, "growth:%s", growth_keys[sp->growth_rate]);
       const int w = mui_text_c(TSX_PIXEL_6, 8, 106, mui_t("starterSelectUiHandler:growthRate"), mui_style_color(TS_WINDOW_ALT, false),
                                mui_style_color(TS_WINDOW_ALT, true));
-      mui_text_c(TSX_PIXEL_6, 8 + w + 2, 106, mui_t(key), MUI_RGB(fg[sp->growth_rate]), MUI_RGB(sh[sp->growth_rate]));
+      mui_text_c(TSX_PIXEL_6, 8 + w + 2, 106, mui_t(key), MUI_RGB(growth_fg[sp->growth_rate]), MUI_RGB(growth_sh[sp->growth_rate]));
     }
   }
   /* name and gender */
@@ -516,19 +531,13 @@ static void draw_panel(void) {
     info_text(vx, 145, nature_name(m->nature), TS_SUMMARY_ALT, 255, &nw);
     /* getNatureName(nature, true, true): " (+Atk/-SpAtk)" with the stats in the pink and blue of the summary. When that does not
      * fit in the box (the longest natures), the same without the brackets, and when that does not fit either, the name alone. */
-    int up = -1, down = -1;
-    for (int s = 1; s < 6 && m->nature < PR_NATURE_COUNT; s++) {
-      if (pr_nature_mult[m->nature][s] > 1.0) up = s;
-      else if (pr_nature_mult[m->nature][s] < 1.0) down = s;
-    }
-    static const char* const short_keys[6] = {"pokemonInfo:stat.hpShortened", "pokemonInfo:stat.atkShortened",
-                                              "pokemonInfo:stat.defShortened", "pokemonInfo:stat.spatkShortened",
-                                              "pokemonInfo:stat.spdefShortened", "pokemonInfo:stat.spdShortened"};
+    int up, down;
+    nature_stats(m->nature, &up, &down);
     char plus[48] = "", minus[48] = "";
     const bool effect = up >= 0 && down >= 0;
     if (effect) {
-      snprintf(plus, sizeof plus, "+%s", mui_t(short_keys[up]));
-      snprintf(minus, sizeof minus, "-%s", mui_t(short_keys[down]));
+      snprintf(plus, sizeof plus, "+%s", mui_t(stat_short_keys[up]));
+      snprintf(minus, sizeof minus, "-%s", mui_t(stat_short_keys[down]));
     }
     /* the pieces and their colours: open, plus, slash, minus, close */
     static const char* const forms[2][3] = {{" (", "/", ")"}, {" ", "/", ""}};
@@ -592,35 +601,97 @@ void starter_draw(void) {
   draw_options_menu();
 }
 
-/* The top screen: the species large, and its moves (upstream's panel draws them small beside the sprite) */
+/* The top screen (upstream has none): the species on upstream's summary background, and beside it the summary's profile panel
+ * with what the bottom panel can only show in 6 px text (types, ability, passive, nature, growth rate) in the 16 px summary text,
+ * then the moves. */
 void starter_draw_top(void) {
   if (!S.active) return;
   rr_rect(0, 0, MUI_W, MUI_H, RR_RGBA(0x00, 0x68, 0x60, 255));
+  mui_image("ui/summary_bg", NULL, 0, MUI_H, 0, 1);
+  mui_image("ui/summary_profile", NULL, 106, MUI_H, 0, 1);
   if (!S.info_species) return;
   const menu_mon* m = &S.info.mon;
+  const float px = 106, py = MUI_H - 159; /* the profile panel is 214 x 159 */
+
+  /* left: number, sprite, name (the summary's places) */
+  mui_image("ui/text_images/en/summary/summary_dexnb_label", NULL, 6, MUI_H - 151, 0, 1);
+  char num[8];
+  snprintf(num, sizeof num, "%04u", S.info_species);
+  {
+    const int w = mui_text_width(TS_SUMMARY_DEX_NUM, num);
+    const float h = mui_text_height(TS_SUMMARY_DEX_NUM, num);
+    const mui_style ns = m->shiny ? TS_SUMMARY_GOLD : TS_SUMMARY;
+    mui_text_c(TS_SUMMARY_DEX_NUM, 41 - w, MUI_H - 149 - h, num, mui_style_color(ns, false), mui_style_color(ns, true));
+  }
   const rr_frame* sf = menu_sprite_frame(&S.sprite, (uint32_t)(S.now - S.sprite_t0));
   if (sf) {
     rr_draw_opts o = RR_DEFAULT_OPTS;
     o.origin_x = o.origin_y = 0.5f;
-    o.scale_x = o.scale_y = 1.5f;
-    rr_draw(sf, 80, 92, &o);
+    rr_draw(sf, 56, MUI_H - 106, &o);
   }
   char name[48];
   snprintf(name, sizeof name, "%.40s", m->name);
-  mui_text(TS_SUMMARY, 160, 16, name);
+  mui_text(TS_SUMMARY, 6, MUI_H - 53, name);
+
+  /* the panel: type, ability, passive, nature and growth rate, then the moves two by two */
+  char buf[96];
+  snprintf(buf, sizeof buf, "%s/", mui_t("pokemonSummary:type"));
+  const int tw = mui_text(TS_WINDOW_ALT, px + 7, py + 10, buf);
   for (int i = 0; i < 2; i++) {
     const char* tf = m->types[i] >= 0 ? type_frame(m->types[i]) : NULL;
-    if (!tf) continue;
-    rr_draw_opts o = RR_DEFAULT_OPTS;
-    o.scale_x = o.scale_y = 1.0f;
-    mui_image_ex("types", tf, 160 + 36 * i, 38, &o);
+    if (tf) mui_image("types", tf, px + tw + 9 + 34 * i, py + 24, 0, 1);
+  }
+  struct { const char* label; const char* value; mui_style colours; } rows[2] = {
+      {mui_t("starterSelectUiHandler:ability"), ability_name(m->ability), S.info.ability_hidden ? TS_SUMMARY_GOLD : TS_SUMMARY_ALT},
+      {mui_t("starterSelectUiHandler:passive"), NULL, TS_SUMMARY_ALT},
+  };
+  /* the panel's white areas run from 10 to 42, 53 to 102 and 113 to 158: type and ability, passive, nature and growth rate, the
+   * moves */
+  float y = py + 26;
+  for (int r = 0; r < 2; r++) {
+    if (r == 1) y = py + 53;
+    if (r == 1 && !m->has_passive) continue;
+    const int lw = mui_text(TS_WINDOW_ALT, px + 7, y, rows[r].label);
+    const bool lit = S.info.passive_unlocked && S.info.passive_enabled;
+    const char* v = r == 0 ? rows[0].value : ability_name(m->passive);
+    const mui_style st = r == 0 ? rows[0].colours : lit ? TS_SUMMARY_ALT : TS_SUMMARY_GRAY;
+    mui_text_c(TS_SUMMARY_ALT, px + 7 + lw + 4, y, v, mui_style_color(st, false), mui_style_color(st, true));
+    y += 16;
+  }
+  if (!m->has_passive) y = py + 53;
+  {
+    const int lw = mui_text(TS_WINDOW_ALT, px + 7, y, mui_t("starterSelectUiHandler:nature"));
+    float x = px + 7 + lw + 4;
+    x += mui_text(TS_SUMMARY_ALT, x, y, nature_name(m->nature));
+    int up, down;
+    nature_stats(m->nature, &up, &down);
+    if (up >= 0 && down >= 0) {
+      char t[48];
+      x += mui_text(TS_SUMMARY_ALT, x, y, " (");
+      snprintf(t, sizeof t, "+%s", mui_t(stat_short_keys[up]));
+      x += mui_text_c(TS_SUMMARY_ALT, x, y, t, mui_style_color(TS_SUMMARY_PINK, false), mui_style_color(TS_SUMMARY_PINK, true));
+      x += mui_text(TS_SUMMARY_ALT, x, y, "/");
+      snprintf(t, sizeof t, "-%s", mui_t(stat_short_keys[down]));
+      x += mui_text_c(TS_SUMMARY_ALT, x, y, t, mui_style_color(TS_SUMMARY_BLUE, false), mui_style_color(TS_SUMMARY_BLUE, true));
+      mui_text(TS_SUMMARY_ALT, x, y, ")");
+    } else {
+      mui_text(TS_SUMMARY_ALT, x, y, " (-)");
+    }
+    y += 16;
+  }
+  const pr_species* sp = menu_species(S.info_species);
+  if (sp && sp->growth_rate < 6) {
+    char key[48];
+    snprintf(key, sizeof key, "growth:%s", growth_keys[sp->growth_rate]);
+    const int lw = mui_text(TS_WINDOW_ALT, px + 7, y, mui_t("starterSelectUiHandler:growthRate"));
+    mui_text_c(TS_SUMMARY_ALT, px + 7 + lw + 4, y, mui_t(key), MUI_RGB(growth_fg[sp->growth_rate]), MUI_RGB(growth_sh[sp->growth_rate]));
   }
   for (int i = 0; i < 4; i++) {
     const uint16_t mv = S.info.moves[i];
     if (!mv) continue;
-    const float y = 70 + 18 * i;
+    const float mx = px + 7 + (i % 2) * 104, my = py + 115 + (i / 2) * 20;
     const char* tf = mv < PR_MOVE_COUNT ? type_frame(pr_moves[mv].type) : NULL;
-    if (tf) mui_image("types", tf, 160, y, 0, 0);
-    mui_text(TS_SUMMARY, 160 + 35, y, menu_move_name(mv));
+    if (tf) mui_image("types", tf, mx, my + 2, 0, 0);
+    mui_text(TS_SUMMARY_ALT, mx + 34, my, menu_move_name(mv));
   }
 }

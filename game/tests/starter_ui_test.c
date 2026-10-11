@@ -96,6 +96,10 @@ int mui_text_width(mui_style s, const char* utf8) {
   (void)s;
   return (int)strlen(utf8) * 6;
 }
+float mui_text_height(mui_style s, const char* utf8) {
+  (void)s, (void)utf8;
+  return 14;
+}
 /* Phaser's basicWordWrap as mui.c does it, with the 6 px a character has in this fake */
 int mui_wrap(mui_style s, const char* in, float width, char* out, size_t n) {
   (void)s;
