@@ -138,6 +138,33 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         return;
     }
     switch (a->cls) {
+    case PR_AC_PartyStatusCureAttr: {
+        const pr_attr_PartyStatusCureAttr *x = P(PartyStatusCureAttr, a);
+        /* This leaf proves singles, not the distinct active-partner display path. */
+        int side = user->is_player ? 0 : 1;
+        if (bt->double_battle || bt->n_party[side] < 1) { pr_note_unported(bt, a->cls); return; }
+        for (int k = 0; k < bt->n_party[side]; k++) {
+            pr_pokemon *p = bt->party[side][k];
+            if (!p || (p != user && p->on_field && !p->switch_out_status)) { pr_note_unported(bt, a->cls); return; }
+        }
+        /* Custom canApply deliberately omits target HP. */
+        if (ef->self_target) {
+            if (user->hp <= 0 || pr_get_battler_tag(user, BATTLER_TAG_TYPE_FRENZY)) return;
+        } else if (target && pr_get_battler_tag(target, BATTLER_TAG_TYPE_PROTECTED)
+                   && !(pr_moves[move].flags & MOVE_FLAGS_IGNORE_PROTECT)) return;
+        for (int k = 0; k < bt->n_party[side]; k++)
+            pr_reset_status_phase(bt, e, bt->party[side][k], false);
+        if (x->message) {
+            /* The pin's dumped payload is already rendered English. Use its
+             * exact factory value to select the existing locale representation. */
+            const char *key = !strcmp(x->message, "A bell chimed!") ? "moveTriggers:bellChimed"
+                : !strcmp(x->message, "A soothing aroma wafted through the area!")
+                    ? "moveTriggers:soothingAromaWaftedThroughArea" : NULL;
+            if (key) pr_queue_msg(bt, e, pr_msg0(key));
+            else pr_queue_message(bt, e);
+        }
+        return;
+    }
     case PR_AC_StatStageChangeAttr: {
         const pr_attr_StatStageChangeAttr *x = P(StatStageChangeAttr, a);
         stat_stage_change(bt, e, ef, a->cls, user, target, move, x->stats.v, x->stats.n, x->stages);
