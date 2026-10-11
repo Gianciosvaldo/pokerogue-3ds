@@ -2679,8 +2679,11 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
     while ((q = pr_speed_iter_next(bt, &it))) pr_hook_ab(bt, q, PR_AC_PostKnockOutAbAttr);
     if (p->n_attacks_received > 0 && is_on_field(source)) {
         pr_hook_ab(bt, source, PR_AC_PostVictoryAbAttr);
-        if (pr_move_has_attr(p->attacks_received[0].move, PR_AC_PostVictoryStatStageChangeAttr))
-            pr_note_unported(bt, PR_AC_PostVictoryStatStageChangeAttr);
+        int victory_move = p->attacks_received[0].move;
+        const pr_move *vm = &pr_moves[victory_move];
+        for (int a=vm->attr0; a<vm->attr0+vm->nattr; a++)
+            if (pr_attrs[a].cls == PR_AC_PostVictoryStatStageChangeAttr)
+                pr_apply_post_victory_stat_change(bt,e,a,source,victory_move);
     }
     /* attacksReceived was cleared by nothing yet: resetSummonData leaves turnData alone */
 
