@@ -835,6 +835,33 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
             if (pr_get_battler_tag(p, x->immuneTags.v[i])) return -1;       /* removeTag: onRemove */
         return 0;
     }
+    case PR_AC_MoodyAbAttr: {
+        GATE(true);
+        if (pp->simulated) return 1;
+        if (!c->e) return -1;
+        /* Source EFFECTIVE_STATS order; choices use pre-queued stage values. */
+        static const int32_t stats[] = {STAT_ATK, STAT_DEF, STAT_SPATK, STAT_SPDEF, STAT_SPD};
+        int32_t raise[5], lower[5];
+        int nr = 0, nl = 0;
+        for (int j = 0; j < 5; j++) {
+            if (p->stat_stages[stats[j] - 1] < 6) raise[nr++] = stats[j];
+            if (p->stat_stages[stats[j] - 1] > -6) lower[nl++] = stats[j];
+        }
+        if (nr) {
+            int32_t chosen = raise[pr_battle_rand_seed_int(bt, nr, 0)];
+            int keep = 0;
+            for (int j = 0; j < nl; j++) if (lower[j] != chosen) lower[keep++] = lower[j];
+            nl = keep;
+            if (pr_unshift_stat_stage_change(bt, c->e, pr_battler_index(bt, p), &chosen, 1, 2, (pr_pokemon *)p) < 0)
+                c->e->overflow = true;
+        }
+        if (nl) {
+            int32_t chosen = lower[pr_battle_rand_seed_int(bt, nl, 0)];
+            if (pr_unshift_stat_stage_change(bt, c->e, pr_battler_index(bt, p), &chosen, 1, -1, (pr_pokemon *)p) < 0)
+                c->e->overflow = true;
+        }
+        return 1;
+    }
     case PR_AC_SpeedBoostAbAttr: {
         /* Source canApply has no minimum turn-count condition. The existing
          * ability gate supplies faint/suppression checks before this leaf. */

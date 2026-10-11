@@ -179,3 +179,7 @@ $(BUILD)/optional-phase-fixtures-test: tests/optional-phase-fixtures-test.c test
 all: $(BUILD)/poltergeist-message-test
 $(BUILD)/poltergeist-message-test: tests/poltergeist-message-test.c tests/turntest.c tests/optional-phase-map.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/poltergeist-message-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/moodytest
+$(BUILD)/moodytest: tests/moodytest.c tests/speed-boost-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/moodytest.c $(BUILD)/libprcore.a -lm -o $@
