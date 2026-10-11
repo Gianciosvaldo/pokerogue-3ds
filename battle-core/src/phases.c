@@ -643,6 +643,26 @@ static void move_queue_shift(pr_pokemon *p, pr_turn_move *out)
     p->n_move_queue--;
 }
 
+/* attackedByItemMessageFunc: getHeldItems uses exact owner IDs and list order,
+ * then filters transferable items. No RNG, removal, or stack-count selection. */
+bool pr_poltergeist_message(pr_battle *bt, const pr_pokemon *target, pr_msg *out)
+{
+    if (!target) return false;
+    int side = target->is_player ? 0 : 1;
+    for (int k = 0; k < bt->n_mods[side]; k++) {
+        const pr_modifier *m = &bt->mods[side][k];
+        if (m->pokemon_id != (int64_t)target->id || !m->is_transferable
+            || !pr_mod_is(m, PR_MOD_HELD_ITEM)) continue;
+        const char *key = pr_held_item_name_key(m);
+        /* An unsupported identity remains a visible missing-text failure. */
+        if (!key) { *out = pr_msg0(NULL); return true; }
+        *out = pr_msg2("moveTriggers:attackedByItem",
+            pr_arg_pokemon(bt, "pokemonName", target), pr_arg_key("itemName", key));
+        return true;
+    }
+    return false;
+}
+
 /* PreMoveMessageAttr.apply: a message when the move's message function returns one. The
  * functions live in the move list, so each user is ported by move id. */
 /* PreMoveMessageAttr's text (Struggle, Magnitude, Fickle Beam, Poltergeist, Chilly Reception);
@@ -668,9 +688,7 @@ static bool pre_move_message(pr_battle *bt, int move, const pr_pokemon *user, co
         return true;
     }
     case MOVE_ID_POLTERGEIST:        /* attackedByItemMessageFunc: the target's first transferable item */
-        if (!(target && pr_held_item_count(bt, target, true) > 0)) return false;
-        *out = pr_msg0(NULL);        /* the item's name isn't ported yet */
-        return true;
+        return pr_poltergeist_message(bt, target, out);
     case MOVE_ID_CHILLY_RECEPTION:   /* no text when called indirectly */
         if (mode >= MOVE_USE_MODE_INDIRECT) return false;
         *out = pr_msg1("moveTriggers:chillyReception", pr_arg_pokemon(bt, "pokemonName", user));

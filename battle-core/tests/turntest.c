@@ -8,6 +8,7 @@
  * side effect only recorded with pr_note_deferred) is "not covered" and listed by reason,
  * never counted as a pass. A covered case must match on every record. */
 #include "pr/engine.h"
+#include "optional-phase-map.inc"
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -859,7 +860,14 @@ static void dump_trace_queue(lines_t *L, const pr_engine *e)
         if (!e->n_dyn[t]) continue;
         sbuf q = {{0}, 0};
         sb(&q, "%s:", pr_phase_name[t]);
-        for (int k = 0; k < e->n_dyn[t]; k++) sb(&q, k ? "/%d" : "%d", e->pool[e->dyn[t][k]].battler);
+        for (int k = 0; k < e->n_dyn[t]; k++) {
+            const pr_phase *p = &e->pool[e->dyn[t][k]];
+            if (k) sb(&q, "/");
+            /* Legacy source join serializes an absent property as an empty slot.
+             * Class identity determines presence; a genuine index -1 stays -1.
+             * The owning typed probe separately distinguishes A/U/N/I. */
+            if (!optional_phase_absent(p)) sb(&q, "%d", p->battler);
+        }
         snprintf(items[n++], sizeof items[0], "%s", q.s);
     }
     for (int i = 1; i < n; i++)
@@ -1490,5 +1498,5 @@ int main(int argc, char **argv)
            pr_liechi_berry_fired, pr_ganlon_berry_fired, pr_petaya_berry_fired, pr_apicot_berry_fired, pr_salac_berry_fired);
     fail += probes.fail;
     (void)cs0;
-    return fail || parse_fail ? 1 : 0;
+    return fail || parse_fail || stat_fail || skipped || texts.differ || texts.unported ? 1 : 0;
 }

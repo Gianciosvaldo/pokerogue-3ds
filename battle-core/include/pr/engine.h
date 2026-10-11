@@ -486,4 +486,8 @@ bool pr_move_apply_conditions(pr_battle *bt, int move, const pr_pokemon *user, c
 /* getCounterAttackTarget(user, damageCategory): the battler index, or -2 for null (category -1 = any) */
 int pr_counter_attack_target(pr_battle *bt, const pr_pokemon *user, int category);
 
+/* Source held-item identity for translated battle messages; NULL means unsupported. */
+const char *pr_held_item_name_key(const pr_modifier *m);
+bool pr_poltergeist_message(pr_battle *bt, const pr_pokemon *target, pr_msg *out);
+
 #endif

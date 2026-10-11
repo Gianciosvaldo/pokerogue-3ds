@@ -1,5 +1,7 @@
 # D14: retained ITEMS text failures (2026-10-11)
 
+**Follow-up:** the user subsequently requested a runtime repair. The five missing announcements are now fixed and the original comparator rejects missing text; see [current repair and validation](../battle-core/RETAINED-FAILURES-REPAIR.md). The investigation below records the pre-repair behavior.
+
 **Investigation complete; strict ITEMS text completeness remains FAILED.** All five
 missing texts are production placeholders for Poltergeist's pre-move held-item
 announcement. They are not missing locales or comparator formatting errors.

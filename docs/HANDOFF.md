@@ -1,5 +1,7 @@
 # Handoff for outside coding agents
 
+**2026-10-11 follow-up:** [retained ITEMS/TRAINER failure repairs](../battle-core/RETAINED-FAILURES-REPAIR.md) implement the user's subsequent request to fix the remaining test failures. Poltergeist now announces the first transferable held item; trainer CASE 1051 compares absent metadata correctly without erasing genuine `-1`. The established test exits nonzero for missing/differing covered texts. See the linked record for current source/host evidence; older failure statements below are historical.
+
 Written 2026-09-30 from the repo at `fb8d2dc` (main). **The author read the repo and did not build or run anything**,
 so every number below is what the READMEs and stop notes record, not something re-checked today.
 
