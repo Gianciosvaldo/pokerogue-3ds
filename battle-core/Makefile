@@ -165,3 +165,13 @@ $(BUILD)/cheek-pouch-test: tests/cheek-pouch-test.c $(BUILD)/cheek-pouch-replay.
 all: $(BUILD)/cheek-pouch-helper-test
 $(BUILD)/cheek-pouch-helper-test: tests/cheek-pouch-helper-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+# Additive optional queue transport; established turntest remains untouched.
+all: $(BUILD)/optional-phase-test $(BUILD)/optional-phase-fixtures-test
+$(BUILD)/optional-phase-replay.inc: tests/turntest.c tools/build-optional-phase-replay.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-optional-phase-replay.py $< $@
+$(BUILD)/optional-phase-test: tests/optional-phase-test.c tests/optional-phase-map.inc $(BUILD)/optional-phase-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) -Itests -I$(BUILD) tests/optional-phase-test.c $(BUILD)/libprcore.a -lm -o $@
+$(BUILD)/optional-phase-fixtures-test: tests/optional-phase-fixtures-test.c tests/optional-phase-map.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) -Itests tests/optional-phase-fixtures-test.c $(BUILD)/libprcore.a -lm -o $@
