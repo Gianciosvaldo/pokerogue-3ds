@@ -308,7 +308,7 @@ void gc_new_battle(gc_run *run)
     ctx.biome = run->biome;
     ctx.trainer_chance = run->biome >= 0 && run->biome < PR_BIOME_ID_LIMIT ? pr_biomes[run->biome].trainer_chance : 0;
     ctx.prev_wave = prev_wave;
-    ctx.n_lures = 0;   /* the Lures aren't items yet (reward-core) */
+    if (!gc_lure_count(run, &ctx.n_lures)) gc_stub(run, GC_STUB_REWARD_INPUT);
     ctx.me = run->me;
     pr_new_battle nb;
     unsigned before = run->run.unported;

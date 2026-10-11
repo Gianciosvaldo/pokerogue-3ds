@@ -68,3 +68,16 @@ bool gc_lure_lapse(gc_run *run,int *expired){
  if(expired)*expired=removed;
  gc_items_to_battle(run);return true;
 }
+
+/* getDoubleBattleChance applies each modifier record once, regardless of stack.
+ * Validate through the same canonical projection as acquisition/lapse. The
+ * numerical chance remains run-core's responsibility. No-Lure stock is opaque. */
+bool gc_lure_count(gc_run *run,int *count){
+ if(!run||!count||run->n_items<0||run->n_items>GC_MAX_ITEMS)return false;
+ bool any=false;for(int j=0;j<run->n_items;j++)any|=lure_duration(run->items[j].key)!=0;
+ if(!any){*count=0;return true;}
+ static pr_reward_ctx c;double unused;
+ if(!context(run,&c)||!pr_reward_lure_chance(&c,1,&unused))return false;
+ int n=0;for(int j=0;j<run->n_items;j++)n+=lure_duration(run->items[j].key)!=0;
+ *count=n;return true;
+}
