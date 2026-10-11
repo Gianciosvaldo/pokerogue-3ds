@@ -82,6 +82,10 @@ pass. Fresh IDs may differ because source constructor IDs are not seeded.
   14629 round trips, largest save 11472 bytes. Each run ended; zero stuck,
   crashed or timed out, **zero gameplay clears**.
 
+Host CI now also builds the four affected battle-core runners, so a broken
+comparator build rule fails CI even without the optional upstream checkout.
+Source comparisons remain the separately executed pinned validation above.
+
 These results repair the two named retained failures, not full game parity,
 natural doubles, every custom item name, or hardware rendering.
 
