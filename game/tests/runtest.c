@@ -14,7 +14,11 @@
  *                        is asked before the run was written, when a write fails, or when what the slot holds is not the run.
  *   RUNTEST_SAVE=resume  the same, and every 4th save point the run is dropped and continued from its slot (rs_resume, as
  *                        the title's Continue does): the loaded run must be the one that was saved, and the fake screen must
- *                        then agree with it at the next command. */
+ *                        then agree with it at the next command.
+ *   RUNTEST_SYS=1        the runs have system data (gc_run.sys), as the app gives them: a new save's (the nine default starters),
+ *                        and every run starts with a team the starter select would offer. RUNTEST_SYS=all: every starter unlocked.
+ *                        The system data lives across the runs (what one catches the next one can pick), and with RUNTEST_SAVE
+ *                        each save point serializes it and loads it back: the copy must be byte for byte the same. */
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,6 +26,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "gc/data.h"
 #include "battle_view.h"
 #include "ball_menu.h"
 #include "i18n.h"
@@ -888,6 +893,37 @@ static bool step(void) {
   return false;
 }
 
+/* ------------------------------------------------------------------ system data (RUNTEST_SYS) */
+
+static gc_system g_sys, g_sys_back; /* 724 KB each */
+static int n_sys_saves, caught_at_start;
+static void unlock_all_starters(gc_system* sys) {
+  gc_system_init_defaults(sys);
+  for (int i = 0; i < gc_starter_cost_count; i++) {
+    const uint16_t id = gc_starter_costs[i].id;
+    sys->dex[id].caught_attr = gc_species_full_unlocks_data(id) | 1ull;
+    sys->dex[id].seen_attr = sys->dex[id].caught_attr;
+    sys->dex[id].nature_attr = 0x3FFFFFEu;
+    sys->starters[id].ability_attr = 7;
+    sys->starters[id].passive_attr = 3;
+    for (int k = 0; k < 6; k++) sys->dex[id].ivs[k] = 15;
+  }
+}
+/* the app's sysd_save, with a check instead of the SD card: the system data serialized and loaded back is the same */
+static bool save_sys_check(void) {
+  const size_t cap = 1024 * 1024;
+  uint8_t* buf = malloc(cap);
+  if (!buf) return false;
+  const size_t n = gc_system_save(&g_sys, buf, cap);
+  const char* why = NULL;
+  if (!n) BAD("the system data could not be serialized");
+  else if (!gc_system_load(&g_sys_back, buf, n, &why)) BAD("the system data did not load back: %s", why ? why : "?");
+  else if (memcmp(&g_sys, &g_sys_back, sizeof g_sys)) BAD("the system data loaded back is not the one that was saved");
+  free(buf);
+  n_sys_saves++;
+  return n > 0;
+}
+
 /* ------------------------------------------------------------------ main */
 
 int main(int argc, char** argv) {
@@ -919,6 +955,17 @@ int main(int argc, char** argv) {
     cfg.slot = 0;
   }
   cfg.n_starters = 0;
+  const char* sys_mode = getenv("RUNTEST_SYS");
+  const bool sys_on = sys_mode && *sys_mode;
+  if (sys_on) {
+    if (!strcmp(sys_mode, "all"))
+      unlock_all_starters(&g_sys);
+    else
+      gc_system_init_defaults(&g_sys);
+    cfg.sys = &g_sys;
+    cfg.save_sys = save_sys_check;
+    for (int i = 0; i <= GC_MAX_SPECIES_ID; i++) caught_at_start += g_sys.dex[i].caught_attr != 0;
+  }
   rs_start(&cfg);
 
   const rs_stats* st = rs_stats_get();
@@ -1038,6 +1085,17 @@ int main(int argc, char** argv) {
     if (st->saves != W.expected_saves) BAD("%d saves written for %d save points", st->saves, W.expected_saves);
     if (!W.expected_saves) BAD("no save points were reached");
     if (resume_on && !n_resumes) BAD("no run was resumed");
+  }
+  if (sys_on) {
+    int caught = 0, seen = 0;
+    for (int i = 0; i <= GC_MAX_SPECIES_ID; i++) {
+      caught += g_sys.dex[i].caught_attr != 0;
+      seen += g_sys.dex[i].seen_attr != 0;
+    }
+    if (save_on && !n_sys_saves) BAD("the system data was never saved");
+    save_sys_check(); /* and once more at the end */
+    printf("system data (%s): %d species caught at the start, %d at the end (%d seen); %d serialized and loaded back\n", sys_mode,
+           caught_at_start, caught, seen, n_sys_saves);
   }
   printf("events handled: message %d, battle %d, wave %d, summon %d, recall %d, hp %d, exp %d, level up %d, learned %d, evolved %d, mystery %d\n",
          st->events[GC_EV_MESSAGE], st->events[GC_EV_BATTLE], st->events[GC_EV_WAVE], st->events[GC_EV_SUMMON], st->events[GC_EV_RECALL],

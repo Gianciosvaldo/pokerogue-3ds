@@ -79,11 +79,12 @@ static const rr_frame* icon_find(uint16_t id, int form, bool female, bool shiny,
   return f;
 }
 
-void menu_draw_icon_scaled(const menu_mon* m, float x, float y, float ox, float oy, float scale) {
+void menu_draw_icon_tinted(const menu_mon* m, float x, float y, float ox, float oy, float scale, rr_color tint) {
   const rr_frame* a = icon_find(m->species, m->form, m->gender == MG_FEMALE, m->shiny, m->variant);
   if (!a) return;
   rr_draw_opts o = RR_DEFAULT_OPTS;
   o.scale_x = o.scale_y = scale;
+  o.tint = tint;
   /* the icon sprite has origin (0.5, 0) inside a container shifted by the origin */
   float cx = x - a->src_w * scale * (ox - 0.5f);
   float cy = y - a->src_h * scale * oy;
@@ -120,8 +121,13 @@ void menu_draw_icon_scaled(const menu_mon* m, float x, float y, float ox, float 
   float left_a = cx - a->src_w * 0.5f * scale + a->off_x * scale, left_b = cx - b->src_w * 0.5f * scale + b->off_x * scale;
   rr_draw_opts p = RR_DEFAULT_OPTS;
   p.scale_x = p.scale_y = scale;
+  p.tint = tint;
   rr_draw(&top, floorf(left_a), floorf(cy + fy * scale), &p);
   rr_draw(&bot, floorf(left_b), floorf(cy + (fy + head) * scale), &p);
+}
+
+void menu_draw_icon_scaled(const menu_mon* m, float x, float y, float ox, float oy, float scale) {
+  menu_draw_icon_tinted(m, x, y, ox, oy, scale, RR_RGBA(255, 255, 255, 255));
 }
 
 void menu_draw_icon(const menu_mon* m, float x, float y, float ox, float oy) { menu_draw_icon_scaled(m, x, y, ox, oy, 1.0f); }

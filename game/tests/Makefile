@@ -96,7 +96,7 @@ summary_ui_test: build/summary_ui_test
 # make runtest && build/runtest [runs] [first]
 RW := ../../reward-core
 RUN_CPPFLAGS := $(CPPFLAGS) -I../menus -I../gen -I$(GC)/include -I$(GC)/gen/out -I$(RC)/include -I$(RC)/gen/out -I$(RW)/include -I$(RW)/gen/out -I$(APP)/include
-RUN_SRCS := runtest.c party_fake.c ../menus/party.c ../menus/menus_names.c ../menus/menus_data.c ../source/run_screen.c ../source/battle_events.c ../source/run_saves.c $(APP)/source/save.c ../gen/gm_enum_names.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+RUN_SRCS := runtest.c party_fake.c ../menus/party.c ../menus/menus_names.c ../menus/menus_data.c ../source/starter_data.c ../source/run_screen.c ../source/battle_events.c ../source/run_saves.c $(APP)/source/save.c ../gen/gm_enum_names.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/runtest: $(RUN_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) $(RUN_SRCS) -lm -o $@
@@ -120,7 +120,7 @@ runtest-save: build/runtest
 .PHONY: runtest-save
 
 # the app's screen flow (app_flow.c) with fake screens and a fake run driver, over the real save slots; make flowtest && build/flowtest
-FLOW_SRCS := flowtest.c ../source/app_flow.c ../source/run_saves.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+FLOW_SRCS := flowtest.c ../source/app_flow.c ../source/run_saves.c ../source/system_data.c ../source/starter_data.c ../menus/menus_data.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/flowtest: $(FLOW_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) $(FLOW_SRCS) -lm -o $@
@@ -134,3 +134,29 @@ build/mkfixture: mkfixture.c ../source/run_saves.c $(APP)/source/save.c $(wildca
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 mkfixture: build/mkfixture
 .PHONY: mkfixture
+
+# the starter select screen's input rules (menus/starter_model.c), button by button; no game-core in it
+build/startertest: startertest.c ../menus/starter_model.c
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) -I../menus -I$(APP)/include $(CFLAGS) -fsanitize=address,undefined $^ -lm -o $@
+startertest: build/startertest
+.PHONY: startertest
+
+# the starter select's data (starter_data.c) and the system data on the SD card (system_data.c) over real game-core and the real
+# save.c; make starter_data_test && build/starter_data_test [random systems]
+CORE_SRCS := $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+SDATA_SRCS := starter_data_test.c ../source/starter_data.c ../source/system_data.c ../menus/menus_data.c $(APP)/source/save.c $(CORE_SRCS)
+build/starter_data_test: $(SDATA_SRCS)
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(SDATA_SRCS) -lm -o $@
+starter_data_test: build/starter_data_test
+.PHONY: starter_data_test
+
+# the starter select screen itself (menus/starter.c, the host and the data) with a fake drawing layer, over real game-core;
+# make starter_ui_test && build/starter_ui_test [fuzz sessions]
+SUI_SRCS := starter_ui_test.c ../menus/starter.c ../menus/starter_model.c ../menus/menus_data.c ../menus/menus_names.c ../source/starter_host.c ../source/starter_data.c $(CORE_SRCS)
+build/starter_ui_test: $(SUI_SRCS)
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(SUI_SRCS) -lm -o $@
+starter_ui_test: build/starter_ui_test
+.PHONY: starter_ui_test

@@ -8,6 +8,8 @@
 #include "result_screen.h"
 #include "run_saves.h"
 #include "slot_screen.h"
+#include "starter_host.h"
+#include "system_data.h"
 #include "title_screen.h"
 #include "ui.h"
 
@@ -40,6 +42,12 @@ static rs_config run_config(int slot, bool fresh) {
   c.save = true;
   c.slot = slot;
   c.on_end = on_run_end;
+  /* the run reads and updates the system data (the dex, the starter unlocks), written with each save of the run. The species in
+   * rundriver.txt are a developer's team and may not be unlocked: that run has none. */
+  if (c.n_starters == 0) {
+    c.sys = sysd_get();
+    c.save_sys = sysd_save;
+  }
   A.slot = slot;
   return c;
 }
@@ -64,19 +72,53 @@ static void load_slot(int slot, bool from_list) {
   tell(st == RSV_EMPTY ? "There is no run in that slot." : why);
 }
 
+/* The run starts with `team` (NULL: a developer's team from rundriver.txt, no starter select). The slot's old run goes only now,
+ * once the player has confirmed a team: backing out of the starter select leaves it as it was. */
+static void start_new_run(int slot, const gc_starter* team, int n_team, bool from_starter_select) {
+  if (!rsv_clear(slot)) {
+    if (from_starter_select) show_slots(SLOTS_NEW, slot);
+    tell("The old run in that slot could not be removed from the SD card.");
+    return;
+  }
+  rs_config c = run_config(slot, true);
+  if (team) {
+    memcpy(c.team, team, (size_t)n_team * sizeof team[0]);
+    c.n_team = n_team;
+  }
+  if (!rs_start(&c)) {
+    if (from_starter_select) show_slots(SLOTS_NEW, slot);
+    tell("The run could not be started.");
+  }
+}
+
+static void on_starters_chosen(const gc_starter* team, int n, void* arg) { start_new_run((int)(long)arg, team, n, true); }
+
+/* upstream's Exit on the starter select: back to the title */
+static void on_starters_exit(void* arg) {
+  (void)arg;
+  show_title();
+}
+
 static void new_run_in(int slot) {
   /* the list never offers this: what can't be read is not overwritten */
   if (A.info[slot].status == RSV_INCOMPATIBLE) {
     tell("That slot holds a save this version can't read. It is not overwritten.");
     return;
   }
-  /* the run being replaced goes, with its backup: the new run's first save has no old one behind it */
-  if (!rsv_clear(slot)) {
-    tell("The old run in that slot could not be removed from the SD card.");
+  /* a developer's team (rundriver.txt) starts the run without the starter select, as before it existed */
+  if (!A.first_used && A.first.n_starters > 0) {
+    start_new_run(slot, NULL, 0, false);
     return;
   }
-  rs_config c = run_config(slot, true);
-  if (!rs_start(&c)) tell("The run could not be started.");
+  /* an unreadable system file is not repaired or overwritten: the player starts with the defaults, and is told */
+  char why[SYSD_WHY_LEN], notice[SYSD_WHY_LEN + 96];
+  const char* text = NULL;
+  if (sysd_state(why) == SYSD_UNREADABLE) {
+    snprintf(notice, sizeof notice, "%s The file is left as it is, and nothing is saved to it until it is removed.", why);
+    text = notice;
+  }
+  const sh_events ev = {on_starters_chosen, on_starters_exit, (void*)(long)slot};
+  if (!sh_open(sysd_get(), text, &ev)) tell("There is no Pokemon to start with.");
 }
 
 static void on_result_done(void* arg) {
@@ -93,6 +135,9 @@ static void on_run_end(int kind, void* arg) {
   A.result.run.status = RSV_OK;
   A.result.on_done = on_result_done;
   rsv_clear(A.slot);
+  /* what the run won or caught (a Classic clear is recorded by game-core as the run ends) goes to the SD card now. A refusal is not
+   * lost: the next save point of the next run writes it again. */
+  if (rs_run()->sys) sysd_save();
   result_screen_open(&A.result);
 }
 
