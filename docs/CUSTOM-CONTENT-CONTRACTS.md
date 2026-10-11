@@ -409,6 +409,7 @@ description repeats this with the head commit and the CI results.
 | &nbsp;&nbsp;mutation check | `368 run, 368 killed, 0 survived, 0 invalid; 7 more are documented as behavior-neutral and not run` |
 | `make -C custom-core CC=clang BUILD=build/clang unit-test` | 916 / 0 failed and 55 / 0 failed, no warnings |
 | `make -C custom-core arm-check` with Ubuntu `arm-none-eabi-gcc` 13.2.1 and the 3DS CPU flags (`-march=armv6k -mtune=mpcore -mfpu=vfp -mfloat-abi=hard -mtp=soft`) | all six sources and both test files compile with `-Werror`; this evaluates `layout_test.c`'s static assertions with ARM type sizes |
+| the same target in the `custom-core-arm` CI job (`devkitpro/devkitarm` image, `/opt/devkitpro/devkitARM/bin/arm-none-eabi-gcc`), run 38155367297 on head `e71cdb9` | passed: same flags, `-Werror`, all eight files compile |
 
 **Sizes.** `sizeof` was measured on x86-64 (`make -C custom-core report`) and, with a probe file, with the ARM
 compiler above; **the two agree for every type**, so the structs have no 64-bit-only padding:
@@ -424,7 +425,8 @@ compiler above; **the two agree for every type**, so the structs have no 64-bit-
 | `cc_item` | 38 | `cc_meta` + `cc_schedule` + `cc_obs` | 19,592 (budget 131,072) |
 
 Encoded size of version 1: 35 bytes empty, 18,378 bytes at every limit at once (budget 65,536). The ARM `.text` of the
-six objects at `-O2` is 751 + 2,280 + 2,432 + 712 + 1,360 + 1,284 = 8,819 bytes. These are compile-time figures. They say
+six objects at `-O2` is 751 + 2,280 + 2,432 + 712 + 1,360 + 1,284 = 8,819 bytes with Ubuntu's compiler and
+751 + 2,408 + 2,768 + 716 + 1,372 + 1,392 = 9,407 bytes with devkitARM (CI log). These are compile-time figures. They say
 nothing about speed on an Old 3DS; no run, benchmark or hardware measurement was made.
 
 **What the mutation check is.** `custom-core/tools/mutations.py` holds 368 single-change mutations: 14 changes to the wire constants, 27
@@ -442,17 +444,23 @@ few ID ceilings) and got new tests; 2 were clauses made redundant by an earlier 
 with their reasons in `python3 custom-core/tools/mutations.py --equivalent`. Of the 5 invalid: 3 are killed by
 `layout_test.c`'s compile-time assertions (the script now counts that as a kill) and 2 were mistakes in the mutation table.
 
-**Not run in this PR's evidence:** `make -C game-core test` and the 3DS build of `game/` (neither is touched; the existing
-`CI` workflow runs them on this PR), and the `custom-core-arm` job of the new workflow, which uses the `devkitpro/devkitarm`
-image like `ci.yml` and could not be run here (no Docker daemon in the container); the equivalent compile above used
-Ubuntu's `arm-none-eabi-gcc`, not devkitARM.
+**Not run locally:** `make -C game-core test` and the 3DS build of `game/` (neither is touched; the existing `CI` workflow
+runs them on this PR). The `custom-core-arm` job could not be run in the authoring container (no Docker daemon), which is
+why the local ARM compile used Ubuntu's `arm-none-eabi-gcc`; the CI run above is the devkitARM result.
+
+**Cost.** One worst-case `cc_meta_validate` (16 full records, 8 ledger entries, a report with 5 x 64 events) took 9.35 us
+on the x86-64 authoring host in a hot loop (gcc `-O2`; scratch benchmark, not committed). The only comparable ratio in the
+repo is battle-core's turn: 0.025 ms on a PC against 1.51 ms median on an Old 3DS (`bench-native`), about 60 x. Applied
+here that suggests roughly half a millisecond, **an inference from a different workload, not a measurement**. Validation
+runs at load and at run end, never per frame; the figure matters only if C02's per-event reducer or C04's codec turn out to
+be hot, and those are the places to measure on the console.
 
 ## 6. Not established by this PR
 
 - No upstream behavior was consulted or compared. There is no differential, no seed, no Node 22 run, and none is needed
   for a module that ports no upstream rule.
 - No emulator or console check: there is no screen or app change.
-- No Old 3DS memory or time measurement. `sizeof` and code-size figures come from compilers (x86-64 host, and Ubuntu's
-  `arm-none-eabi-gcc` with the 3DS CPU flags), not from a device or emulator.
+- No Old 3DS memory or time measurement. `sizeof` and code-size figures come from compilers (x86-64 host, Ubuntu's
+  `arm-none-eabi-gcc`, and devkitARM in CI, with the 3DS CPU flags), not from a device or emulator.
 - No codec, no file I/O, no live hook, no scheduler, no reducer, no profile or reward code. Those are C02 to C10.
 - Range checks only for species, form, move and ability: membership in the game's tables is the adapters' job.
