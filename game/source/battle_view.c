@@ -248,11 +248,16 @@ static void anim_field(ba_mon out[4]) {
   }
 }
 
+/* The player's Pokemon stands at y 132 instead of upstream's 148: upstream's message strip (132 down) covers its lower 16 px, and
+ * here, with the strip's text on the bottom screen, that would hide part of the Pokemon for nothing (lorenzo, 2026-10-11). Its feet
+ * sit on the strip's top edge. Animations follow (battle_anim.c maps upstream's positions onto these). */
+#define PLAYER_Y 132
+
 /* Where a side's Pokemon stands: its field position plus the Substitute offset (getSubstituteOffset:
  * the player's steps back left and down, the enemy's right and up). */
 static void mon_pos(const side* sd, bool player, float* x, float* y) {
   *x = (player ? 106 : 236 + B.enemy_slide) + sd->sub_off * (player ? -30 : 30);
-  *y = (player ? 148 : 84) + sd->sub_off * (player ? 10 : -10) + sd->catch_dy;
+  *y = (player ? PLAYER_Y : 84) + sd->sub_off * (player ? 10 : -10) + sd->catch_dy;
 }
 
 /* The doll ("pkmn__sub" / "pkmn__back__sub", origin (0.5, 1), half size on the player's side) at
@@ -270,7 +275,7 @@ static void draw_sub(const side* sd, bool player, bool tint) {
   int a = (int)(alpha * 255 + 0.5f);
   o.tint = RR_RGBA(255, 255, 255, a > 255 ? 255 : a);
   if (tint) rr_set_tone(255, 255, 255);
-  rr_draw(f, player ? 106 : 236 + B.enemy_slide, player ? 148 : 84, &o);
+  rr_draw(f, player ? 106 : 236 + B.enemy_slide, player ? PLAYER_Y : 84, &o);
   if (tint) rr_set_tone(0, 0, 0);
 }
 
