@@ -1,11 +1,11 @@
-/* Bounded Task 61 caller lifecycle at upstream 8555c08: Growlithe's Fire Stone
- * and Giratina's Griseous Core. Other families keep their counted stand-in. */
+/* Caller lifecycle at upstream 8555c08: evolution items (EvolutionItemModifier.apply, every species) and Giratina's
+ * Griseous Core. A fusion keeps its counted stand-in. */
 #include "internal.h"
 
 int gc_reward_lifecycle_apply(gc_run *run, const gc_offer *o, int party, const char **why)
 {
     const int item = gc_reward_item_index(o->key);
-    const bool evolution = (item == PR_ITEM_EVOLUTION_ITEM || item == PR_ITEM_RARE_EVOLUTION_ITEM) && o->arg == 5;
+    const bool evolution = (item == PR_ITEM_EVOLUTION_ITEM || item == PR_ITEM_RARE_EVOLUTION_ITEM);
     const bool form = (item == PR_ITEM_FORM_CHANGE_ITEM || item == PR_ITEM_RARE_FORM_CHANGE_ITEM)
                       && o->arg == FORM_CHANGE_ITEM_GRISEOUS_CORE;
     if (!evolution && !form) return GC_APPLY_UNHANDLED;
@@ -15,20 +15,9 @@ int gc_reward_lifecycle_apply(gc_run *run, const gc_offer *o, int party, const c
         return GC_APPLY_REFUSED;
     }
     gc_mon *m = &run->party[party];
-    if (m->b.fusion_species || (evolution && m->b.species != SPECIES_ID_GROWLITHE))
-        return GC_APPLY_UNHANDLED;
-    int evo = -1, target_form = -1;
-    if (evolution) {
-        for (int i = 0; i < gc_species_evo_count; i++) {
-            const gc_species_evo *s = &gc_species_evos[i];
-            if (s->id != SPECIES_ID_GROWLITHE) continue;
-            for (int j = 0; j < s->n; j++) {
-                int index = s->start + j;
-                if (gc_evo_data[index].item == 5 && gc_evo_data[index].species == SPECIES_ID_ARCANINE) evo = index;
-            }
-        }
-        if (evo < 0) { *why = "unavailable evolution data"; return GC_APPLY_REFUSED; }
-    } else {
+    if (m->b.fusion_species) return GC_APPLY_UNHANDLED;
+    int target_form = -1;
+    if (!evolution) {
         const pr_species *s = gc_species(SPECIES_ID_GIRATINA);
         if (s) for (int i = 0; i < s->nforms; i++)
             if (!strcmp(gc_form(s->id, i)->form_key, "origin")) target_form = i;
@@ -66,9 +55,13 @@ int gc_reward_lifecycle_apply(gc_run *run, const gc_offer *o, int party, const c
         return GC_APPLY_REFUSED;
     }
     if (evolution) {
-        if (ctx->n_evolution_events != 1 || ctx->evolution_events[0].fusion
-            || ctx->evolution_events[0].pokemon_id != m->b.id
-            || ctx->evolution_events[0].target_species != gc_evo_data[evo].species) {
+        const pr_reward_evolution_event *ev = &ctx->evolution_events[0];
+        /* reward-core decided that the item works; game-core's own lookup must reach the same evolution */
+        int evo;
+        if (ctx->n_evolution_events != 1 || ev->fusion || ev->pokemon_id != m->b.id
+            || (evo = gc_mon_item_evolution(run, m, ev->item)) < 0
+            || gc_evo_data[evo].species != ev->target_species) {
+            gc_stub(run, GC_STUB_EVOLUTION);
             *why = "unexpected evolution request";
             return GC_APPLY_REFUSED;
         }
@@ -95,7 +88,7 @@ void gc_reward_change_form(gc_run *run, int party, int form)
     const pr_form *f = gc_form(m->b.species, form);
     const int count = f->ability_hidden ? 3 : f->ability2 ? 2 : 1;
     if (m->ability_index >= count) m->ability_index = count - 1;
-    m->b.base_ability = (uint16_t)gc_form_ability(f, m->ability_index);
+    m->b.base_ability = (uint16_t)gc_form_ability(m->b.species, f, m->ability_index);
     if (m->b.ability_override < 0) m->b.ability = m->b.base_ability;
     /* PlayerPokemon.changeForm marks seen/caught before stats. Unlike evolution
      * it neither records IVs nor learns moves. Origin preserves Terastallization. */

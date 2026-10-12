@@ -252,10 +252,13 @@ static void evolve(gc_run *run, gc_rphase *p)
     gc_event *ev = gc_ev_new(run, GC_EV_EVOLVED);
     if (ev) { ev->a = p->a; ev->b = before; ev->c = m->b.species; }
     gc_ev_msg(run, "menu:evolutionDone", 2, pre_name, pr_arg_pokemon_name(&run->bt, "evolvedPokemonName", &m->b));
-    /* postEvolve: the new species' evolution moves (level 0) */
-    uint16_t mv[16];
-    const int n = gc_evolution_moves(m, mv, 16);
-    for (int i = 0; i < n; i++) gc_rq_unshift(run, gc_rp(RP_LEARN_MOVE, p->a, mv[i], 0));
+    /* postEvolve: getLevelMoves({startingLevel: lastLevel + 1, includeEvolutionMoves}) filtered to the evolution moves
+     * (level 0) of the evolved form, one LearnMovePhase each */
+    gc_learn_row rows[64];
+    const int n = gc_level_moves(m, p->c + 1, true, false, false, rows, 64);
+    int learned[64], n_learned = 0;
+    for (int i = 0; i < n; i++) if (rows[i].level == 0) learned[n_learned++] = rows[i].move;
+    for (int i = 0; i < n_learned; i++) gc_rq_unshift(run, gc_rp(RP_LEARN_MOVE, p->a, learned[i], 0));
 }
 
 /* ---- BattleEndPhase ---- */

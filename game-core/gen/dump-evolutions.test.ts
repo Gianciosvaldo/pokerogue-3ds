@@ -16,12 +16,14 @@ it("dump player evolutions", () => {
   new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
   const out = process.env.DUMP_OUT ?? "/tmp/gc_evolutions.c";
   const ids = Object.keys(speciesDataRegistry.data).map(Number).sort((a, b) => a - b);
-  const formIndex = (speciesId: number, key: string | null | undefined) => {
+  const formIndex = (speciesId: number, key: string | null | undefined, pre = false) => {
     if (key == null) {
       return -1;
     }
     const i = speciesDataRegistry.getSpecies(speciesId).forms.findIndex(f => f.formKey === key);
-    return i < 0 ? -2 : i;   // -2: a key no form has (upstream then uses form 0 when it evolves)
+    // -2: a key no form has (upstream then uses form 0 when it evolves); -3: the empty key on a species whose forms have
+    // none (getFormKey() is "" for a species without forms, so a preFormKey of "" matches it)
+    return i < 0 ? (pre && key === "" ? -3 : -2) : i;
   };
   const evos: string[] = [];
   const conds: string[] = [];
@@ -53,7 +55,7 @@ it("dump player evolutions", () => {
         conds.push(`{${c.key}, ${vals.length}, {${vals.join(", ") || "0"}}, ${key}}`);
       }
       evos.push(
-        `{${e.speciesId}, ${e.level}, ${e.item ?? 0}, ${formIndex(id, e.preFormKey)}, ${formIndex(e.speciesId, e.evoFormKey)}, ${cStart}, ${conds.length - cStart}}`,
+        `{${e.speciesId}, ${e.level}, ${e.item ?? 0}, ${formIndex(id, e.preFormKey, true)}, ${formIndex(e.speciesId, e.evoFormKey)}, ${cStart}, ${conds.length - cStart}}`,
       );
     }
     rows.push(`    {${id}, ${start}, ${es.length}},`);

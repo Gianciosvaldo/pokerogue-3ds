@@ -120,7 +120,7 @@ void gc_stub(gc_run *run, int which);
 /* ---- Pokemon (src/gc_mon.c) ---- */
 const pr_species *gc_species(int id);
 const pr_form *gc_form(int species, int form);
-int gc_form_ability(const pr_form *f, int ability_index);
+int gc_form_ability(int species, const pr_form *f, int ability_index);
 void gc_mon_new_player(gc_run *run, gc_mon *m, const gc_starter *s, int level);
 void gc_mon_new_enemy(gc_run *run, gc_mon *m, int species, int level, const pr_enemy_gen *g, int trainer_slot);
 /* Task 63's clean wild constructor slice; false leaves the RNG/mon untouched. */
@@ -131,9 +131,10 @@ bool gc_move_usable(const pr_pokemon *p, int slot, const char **why);  /* the PP
 /* the moves LevelUpPhase queues for levels last+1..level (own level moves, no prevolution ones) */
 int gc_level_up_moves(const gc_mon *m, int starting_level, uint16_t *out, int max);
 /* the level-0 (EVOLVE_MOVE) moves EvolutionPhase queues */
-int gc_evolution_moves(const gc_mon *m, uint16_t *out, int max);
 void gc_mon_add_exp(gc_run *run, gc_mon *m, double exp);              /* addExp */
 double gc_level_total_exp(int level, int growth_rate);
+/* EvolutionItemModifier.apply's evolution: the gc_evo_data index, -1 = none */
+int gc_mon_item_evolution(gc_run *run, const gc_mon *m, int item);
 /* getEvolution(): the gc_evo_data index, -1 = none */
 int gc_mon_get_evolution(gc_run *run, const gc_mon *m);
 void gc_mon_evolve(gc_run *run, gc_mon *m, int evo);

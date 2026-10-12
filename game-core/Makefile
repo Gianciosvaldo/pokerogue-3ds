@@ -90,6 +90,9 @@ $(BUILD)/money_host_test: tests/money_host_test.c $(BUILD)/libgc.a $(REWARD_LIB)
 all: $(BUILD)/payday_diff_test
 $(BUILD)/payday_diff_test: tests/payday_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+all: $(BUILD)/item_evolution_test
+$(BUILD)/item_evolution_test: tests/item_evolution_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 test: money-host-test
 money-host-test: $(BUILD)/money_host_test
 	$(BUILD)/money_host_test
