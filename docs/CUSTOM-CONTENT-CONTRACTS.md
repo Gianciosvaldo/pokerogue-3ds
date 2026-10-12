@@ -695,13 +695,16 @@ button handling, screen bounds and the text styles. The mutation script changes 
 **Emulator check (Azahar, Old 3DS mode).** The app was built in Docker (`devkitpro/devkitarm`), the `gfx`, `font` and `data` packs
 were built from the pinned upstream checkouts with `build_sd.py --only gfx,font,data`, and a run with one Magikarp (`rundriver.txt`:
 a fixed seed and `starters=129`) was driven with scripted A presses through the real title, battle and result screens. The post-mortem
-opened from the result screen showed the real events of three turns, and LEFT / RIGHT paged them. **The defeat itself was forced:** a
-Magikarp could not lose to the wave 1 Sentret in 9,000 emulated frames, so the screenshots come from a throwaway copy of `game/`
-(outside the repo, not committed) that ends the run after five observed battle ranges. The turns, damage and HP shown are real
-observations; a real faint, a real "Last to fall" line, a scroll past ten rows and a clear were not seen in the emulator (the host
-tests cover them with a fake font). The first emulator run found that the totals, rows, notice and footer, drawn in the 9 px emerald
-style, were unreadable; they now use `TS_INSTRUCTIONS_TEXT` (the 8 px pixel font the party screen uses), and the same flow was
-re-run on the merged tree to confirm. Screenshots are in the shared project files, not in Git.
+opened from the result screen showed the real events of three turns, and LEFT / RIGHT paged them. **The first defeat was forced:** a
+Magikarp could not lose to the wave 1 Sentret in 9,000 emulated frames, so those screenshots come from a throwaway copy of `game/`
+(outside the repo, not committed) that ends the run after five observed battle ranges; the turns, damage and HP shown are real
+observations. **A real faint was then seen** with a second throwaway copy that only sets the first Pokemon's HP to 1 at the first
+command (and ignores A and B in the post-mortem so the screen stays up): the engine itself fainted the Magikarp, the run ended on its
+own, and the report read "Defeated at wave 1", "Last to fall: Magikarp", "Final blow: source not recorded", "Last 2 turns, nothing
+missing", with the rows "Your Magikarp took 1 damage (HP 0)" and "Your Magikarp fainted" (red). A clear and a list longer than ten rows
+(scrolling) were not seen in the emulator (the host tests cover them with a fake font). The first emulator run found that the totals,
+rows, notice and footer, drawn in the 9 px emerald style, were unreadable; they now use `TS_INSTRUCTIONS_TEXT` (the 8 px pixel font the
+party screen uses), and the same flow was re-run on the merged tree to confirm. Screenshots are in the shared project files, not in Git.
 
 **Not run / not established.** No timing on an Old 3DS or a real console. The new game tests are not part of the CI workflow (it
 runs game-core tests and the 3DS build). The finishing source of a defeat is never known. Stable Pokemon identity and a durable run

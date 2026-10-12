@@ -183,8 +183,8 @@ make -C game/tests animtest && game/tests/build/animtest path/to/pokerogue-asset
 
 ## Not done yet
 - The post-mortem (C03) does not know who finished the run: no event names an attacker or a move, and battle-core is not changed to say so. It
-  does not save anything (C04) and creates no Nemesis. Its layout was seen in Azahar (Old 3DS mode) on a run whose defeat was forced in a
-  scratch build; a real faint, a clear and a list longer than ten rows were not seen on screen. Pokemon are named by species and form only
+  does not save anything (C04) and creates no Nemesis. Its layout was seen in Azahar (Old 3DS mode), including a real faint and the "Last to fall" line (a scratch
+  build only lowered the first Pokemon's HP); a clear and a list longer than ten rows were not seen on screen. Pokemon are named by species and form only
   (stable ids are not derived).
 - The real evolution screen (evolution is automatic), the Pokedex, eggs; mystery encounter screens.
 - Music not done: the timed events' music replacements, the mystery encounters' own tracks (their encounters are stand-ins), the evolution,
