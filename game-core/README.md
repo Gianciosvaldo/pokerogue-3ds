@@ -182,7 +182,7 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 | Stand-in | Waits on |
 |---|---|
 | Enemy moveset: the last four level moves for unsupported constructors. Task 64's first slice calls Task 63 for supported clean wild enemies; trainer streams and broader pools still use the counted fallback | run-core |
-| A reward taken that isn't a ball, Full Heal, Rare Candy, Rarer Candy (Task 96 / PR #136), held item or one of the healing, revive and PP items Task 60/96 ported (TMs, Memory Mushroom, Mints, money, vouchers, evolution items, DNA Splicers) is added to the items and counted (`reward taken without its own effect`) | later reward tasks |
+| A reward taken that isn't a ball, Full Heal, Rare Candy, Rarer Candy (Task 96 / PR #136), held item or one of the healing, revive and PP items Task 60/96 ported (TMs, Memory Mushroom, Mints, money, evolution items, DNA Splicers) is added to the items and counted (`reward taken without its own effect`) | later reward tasks |
 | Double battles are played as singles (M1 rule) | doubles in battle-core |
 | Mystery encounters and fixed classic battles (rival, evil team, gyms run-core can't make) become wild battles of the wave's level | run-core, later the encounters |
 | A boss's battle score: `addFaintedEnemyScore` (and the catch's own copy of it) multiplies it by `sqrt(bossSegments)`; Task 93 sets `boss_segments` on Pokemon encounters and `gc_phases.c` calculates score using `boss_segments` | Task 93 (PR #122) |
@@ -725,9 +725,17 @@ Endless mode's wave-50 Plus and wave-250 Premium vouchers now count (they were c
 when queued). Which trainers have a voucher, its type and the item come from reward-core's
 `pr_reward_trainer_victory_rewards` (differential-tested in card 97); bosses without a
 voucher, such as the rivals, give nothing of that kind. Without system data (`run->sys`
-NULL) nothing unlocks and nothing is given. Not ported: the timed event that upgrades the
-later-win reward (`getUpgradeUnlockedVouchers`), and the vouchers offered on the reward
-screen, which are still added to the items like the other unported rewards.
+NULL) nothing unlocks and nothing is given. Not ported, on purpose: the timed event that
+upgrades the later-win reward (`getUpgradeUnlockedVouchers`).
+
+A voucher on the reward screen is taken as upstream takes it: `addModifier` runs
+`AddVoucherModifier.apply`, which adds one to the count of its type (`gc_port_apply_reward`,
+`give_voucher` in `gc_stubs.c`), shows no text, adds nothing to the run's items and is no stand-in
+(`GC_STUB_REWARD_APPLY` is not counted). Given by a `ModifierRewardPhase` the text is
+`AddVoucherModifierType.name`, "1× Egg Voucher Plus". `tools/voucherapplydiff.sh <upstream dir>
+[N] [seed]` replays both on random starting counts of the four voucher types
+(`voucher-apply.producer.test.ts`, `build/voucher_apply_diff_test`: counts, taken or not, messages,
+run items, text) and `tools/voucherapplyplant.sh <trace>` shows ten one-line breakages fail it.
 
 The trainer's own reward items (the config's `modifierRewardFuncs`: the rivals' Exp. Share,
 Super Exp. Charm and Tera Orb) are queued before the voucher, one `ModifierRewardPhase`

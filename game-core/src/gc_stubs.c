@@ -23,6 +23,17 @@ void gc_port_enemy_moveset(gc_run *run, gc_mon *m)
     for (int k = 0; k < n; k++) gc_mon_set_move(m, k, mv[n - 1 - k]);
 }
 
+/* AddVoucherModifier.apply: vouchers are system data (the gacha), not run items; adds one to the count of the
+ * reward's VoucherType (sys NULL = no system updates). false = not a voucher, nothing changed */
+static bool give_voucher(gc_run *run, const char *key)
+{
+    if (!strcmp(key, "VOUCHER")) gc_system_add_voucher_count(run->sys, GC_VOUCHER_REGULAR, 1);
+    else if (!strcmp(key, "VOUCHER_PLUS")) gc_system_add_voucher_count(run->sys, GC_VOUCHER_PLUS, 1);
+    else if (!strcmp(key, "VOUCHER_PREMIUM")) gc_system_add_voucher_count(run->sys, GC_VOUCHER_PREMIUM, 1);
+    else return false;
+    return true;
+}
+
 /* ---- reward-core: what a reward does when it is taken. The options themselves are reward-core's
  * (gc_reward.c), and so is the application of Poke Balls, Full Heal, healing, revives, PP restores and PP Ups
  * (gc_reward_apply). What is left here is the rest: the items that are added to the player's items as they are,
@@ -35,6 +46,9 @@ bool gc_port_apply_reward(gc_run *run, const gc_offer *o, int party, int move_sl
     case GC_APPLY_REFUSED: return false;
     default: break;
     }
+    /* an egg voucher taken from the reward screen: addModifier -> AddVoucherModifier.apply adds one to its count (no
+     * text on the screen, no modifier in the player's list) */
+    if (give_voucher(run, k)) return true;
     const int idx = gc_reward_item_index(k);
     if (o->target == GC_TARGET_NONE) {
         if (idx < 0 || !(pr_items[idx].flags & PR_ITEMF_PERSISTENT)) gc_stub(run, GC_STUB_REWARD_APPLY);
@@ -55,11 +69,7 @@ bool gc_port_apply_reward(gc_run *run, const gc_offer *o, int party, int move_sl
 int gc_port_give_reward(gc_run *run, const char *key)
 {
     if (gc_reward_add_pokeballs(run, key)) return -1;
-    /* vouchers are system data (the gacha), not run items: AddVoucherModifier.apply adds one to the count of its
-     * VoucherType (sys NULL = no system updates) */
-    if (!strcmp(key, "VOUCHER")) { gc_system_add_voucher_count(run->sys, GC_VOUCHER_REGULAR, 1); return -1; }
-    if (!strcmp(key, "VOUCHER_PLUS")) { gc_system_add_voucher_count(run->sys, GC_VOUCHER_PLUS, 1); return -1; }
-    if (!strcmp(key, "VOUCHER_PREMIUM")) { gc_system_add_voucher_count(run->sys, GC_VOUCHER_PREMIUM, 1); return -1; }
+    if (give_voucher(run, key)) return -1;
     /* addModifier(newModifier): PersistentModifier.add stacks it onto the one the player has (match()), and
      * incrementStack refuses to go past getMaxStackCount(). The four access items (MapModifier,
      * MegaEvolutionAccessModifier, GigantamaxAccessModifier, TerastallizeAccessModifier) don't override match(), which

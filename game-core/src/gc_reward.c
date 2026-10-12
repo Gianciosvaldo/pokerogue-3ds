@@ -483,7 +483,14 @@ void gc_reward_gain(gc_run *run, const char *key)
     const int item = gc_reward_item_index(key);
     const int ball = item < 0 ? -1 : pokeball_reward(item, &count);
     const int instead = gc_port_give_reward(run, key);
-    if (ball < 0) {
+    const int voucher = !strcmp(key, "VOUCHER") ? 0 : !strcmp(key, "VOUCHER_PLUS") ? 1 : !strcmp(key, "VOUCHER_PREMIUM") ? 2 : -1;
+    if (voucher >= 0) {
+        /* AddVoucherModifierType.name: "{{modifierCount}}× {{voucherTypeName}}", the type name from the voucher namespace */
+        static const char *const voucher_name[] = {"voucher:eggVoucher", "voucher:eggVoucherPlus", "voucher:eggVoucherPremium"};
+        gc_ev_msg(run, "battle:rewardGain", 3,
+                  (pr_msg_arg){"modifierName", PR_ARG_TEMPLATE, 0, "$t(modifierType:ModifierType.AddVoucherModifierType.name)"},
+                  pr_arg_int("modifierCount", 1), pr_arg_key("voucherTypeName", voucher_name[voucher]));
+    } else if (ball < 0) {
         gc_ev_msg(run, "battle:rewardGain", 1, gc_m_item("modifierName", key));
     } else {
         gc_ev_msg(run, "battle:rewardGain", 3,

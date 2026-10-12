@@ -30,7 +30,7 @@ plant event-upgrade-on gc_phases.c 's/pr_reward_trainer_victory_rewards(run->tra
 plant reward-key-always-plus gc_phases.c 's/vp.key = pr_item_keys\[tv.items\[tv.n_items - 1\]\];/vp.key = "VOUCHER_PLUS";/'
 plant unlock-counts-plus gc_phases.c 's/gc_system_unlock_voucher(run->sys, run->trainer_type, tv.voucher_type);/gc_system_unlock_voucher(run->sys, run->trainer_type, GC_VOUCHER_PLUS);/'
 plant reward-counts-wrong-type gc_stubs.c 's/gc_system_add_voucher_count(run->sys, GC_VOUCHER_REGULAR, 1)/gc_system_add_voucher_count(run->sys, GC_VOUCHER_PLUS, 1)/'
-plant reward-counts-nothing gc_stubs.c 's/if (!strcmp(key, "VOUCHER_PLUS")) { gc_system_add_voucher_count(run->sys, GC_VOUCHER_PLUS, 1); return -1; }/if (!strcmp(key, "VOUCHER_PLUS")) return -1;/'
+plant reward-counts-nothing gc_stubs.c 's/\(VOUCHER_PLUS")) \)gc_system_add_voucher_count(run->sys, GC_VOUCHER_PLUS, 1);/\1(void)0;/'
 plant reward-funcs-not-queued gc_phases.c 's/for (int i = 0; i < n_funcs \&\& i < tv.n_items; i++) {/for (int i = 0; i < 0 \&\& i < tv.n_items; i++) {/'
 plant reward-funcs-first-item gc_phases.c 's/rp.key = pr_item_keys\[tv.items\[i\]\];/rp.key = pr_item_keys[tv.items[0]];/'
 plant stack-cap-ignored gc_stubs.c 's/gc_item_stack(run, key) + 1 > pr_items\[idx\].max_stack)/gc_item_stack(run, key) + 1 > 999)/'
