@@ -4,7 +4,7 @@
  * MysteryEncounterOptionSelectedPhase runs it (executeWithSeedOffset(.., getSeedOffset() * 500)). Records the
  * RNG before and after the option, money, the party's levels, the items owned, whether the encounter left without
  * a battle, the shop it set up (setEncounterRewards' customModifierSettings) and the options that shop shows
- * (SelectModifierPhase.start's own calls). Families: Department Store Sale, Shady Vitamin Dealer, Lost at Sea, Field Trip (below).
+ * (SelectModifierPhase.start's own calls). Families: Department Store Sale, Shady Vitamin Dealer, Lost at Sea, Field Trip, Part Timer (below).
  * GC_MYS_N=400 GC_MYS_SEED=777 GC_MYS_OUT=/abs/mystery.txt, Node22. */
 import { modifierTypes } from "#data/data-lists";
 import { BiomeId } from "#enums/biome-id";
@@ -13,6 +13,7 @@ import { MysteryEncounterType } from "#enums/mystery-encounter-type";
 import { MysteryEncounterRewardsPhase } from "#phases/mystery-encounter-phases";
 import { SpeciesId } from "#enums/species-id";
 import * as EncounterPhaseUtils from "#mystery-encounters/encounter-phase-utils";
+import * as EncounterDialogueUtils from "#mystery-encounters/encounter-dialogue-utils";
 import * as MysteryEncounters from "#mystery-encounters/mystery-encounter-biomes";
 import { CIVILIZATION_ENCOUNTER_BIOMES } from "#mystery-encounters/mystery-encounter-biomes";
 import { regenerateModifierPoolThresholds } from "#modifiers/modifier-type";
@@ -52,6 +53,11 @@ const argOf = (t: any): number => {
     case "ATTACK_TYPE_BOOSTER": return t.moveType;
     case "SPECIES_STAT_BOOSTER": case "RARE_SPECIES_STAT_BOOSTER": return ssbKeys.indexOf(t.key);
     case "TM_COMMON": case "TM_GREAT": case "TM_ULTRA": return t.moveId;
+    case "EVOLUTION_ITEM": case "RARE_EVOLUTION_ITEM": return t.evolutionItem;
+    case "FORM_CHANGE_ITEM": case "RARE_FORM_CHANGE_ITEM": return t.formChangeItem;
+    case "MINT": return t.nature;
+    case "TERA_SHARD": return t.teraType;
+    case "MYSTERY_ENCOUNTER_SHUCKLE_JUICE": return t.statModifier;
   }
   return -1;
 };
@@ -629,4 +635,214 @@ it("writes the field trip trace", () => {
   fs.writeFileSync((process.env.GC_MYS_OUT ?? "/tmp/mystery.txt").replace(/\.txt$/, "") + "-trip.txt", tripLines.join("\n") + "\n");
   console.log(`TRIP ${SEED}: options=${tripCover.options} correct=${tripCover.correct} wrong=${tripCover.wrong} fainted picks=${tripCover.fainted} shops by option=${tripCover.shops} exp phases=${tripCover.expPhases} wrong with oval charm=${tripCover.oval}`);
   expect(tripCover.shops.every(n => n > 0) && tripCover.wrong > 0).toBe(true);
+});
+
+
+/* ---- Part Timer ----
+ * Per case: a party with random levels, natures, IVs, HP (a fifth fainted), Pokerus, the experience items, an Amulet Coin,
+ * and 1-4 random moves each (a third with a charming move among them) with random PP used, PP Ups and the odd maximum
+ * override; the wave and the money. The options' own meetsRequirements() and the party screen filter give what the app may
+ * offer, and the primary Pokemon of the third option. Then the chosen option runs the way the phases run it:
+ * onPreOptionPhase in executeWithSeedOffset(.., getSeedOffset()) with selectPokemonForOption captured and the party
+ * screen's callback called after it (outside any seed offset), onOptionPhase in (.., * 500) with the dialogue it shows
+ * recorded, then MysteryEncounterRewardsPhase's own doEncounterRewardsAndContinue() with the PartyExpPhase really started
+ * (the experience phases it unshifts), the shop it queues opened with SelectModifierPhase's own calls, and
+ * EggLapsePhase.start(). */
+const timerConfigs: SpeciesId[][] = [
+  [SpeciesId.SHUCKLE, SpeciesId.NINJASK, SpeciesId.SNORLAX, SpeciesId.BLISSEY, SpeciesId.DITTO, SpeciesId.MAGIKARP],
+  [SpeciesId.REGIELEKI, SpeciesId.MEW, SpeciesId.SHEDINJA],
+  [SpeciesId.RATTATA, SpeciesId.ABRA, SpeciesId.GROUDON, SpeciesId.PIKACHU],
+  [SpeciesId.BULBASAUR],
+];
+const charming = [MoveId.CHARM, MoveId.FLATTER, MoveId.DRAGON_CHEER, MoveId.ALLURING_VOICE, MoveId.ATTRACT, MoveId.SWEET_SCENT, MoveId.CAPTIVATE, MoveId.AROMATIC_MIST];
+const timerLines: string[] = [];
+const timerCover = { options: [0, 0, 0], noPick: 0, disabled: 0, good: [0, 0, 0], bad: [0, 0, 0], low: 0, high: 0, fainted: 0, amulet: 0, ppCut: 0, shops: 0, expPhases: 0, oval: 0, charmFirstFainted: 0 };
+for (let ci = 0; ci < timerConfigs.length; ci++) {
+  it(`part timer, party ${ci}`, async () => {
+    const game = new GameManager(phaserGame);
+    game.override.mysteryEncounterChance(100).startingWave(37).startingBiome(BiomeId.PLAINS).disableTrainerWaves().startingLevel(5);
+    const biomes = new Map<BiomeId, MysteryEncounterType[]>([[BiomeId.VOLCANO, [MysteryEncounterType.MYSTERIOUS_CHALLENGERS]]]);
+    CIVILIZATION_ENCOUNTER_BIOMES.forEach(b => biomes.set(b, [MysteryEncounterType.PART_TIMER]));
+    vi.spyOn(MysteryEncounters, "mysteryEncountersByBiome", "get").mockReturnValue(biomes);
+    await game.runToMysteryEncounter(MysteryEncounterType.PART_TIMER, timerConfigs[ci]);
+    const scene = game.scene as any, encounter = scene.currentBattle.mysteryEncounter, party = scene.getPlayerParty();
+    expect(encounter.options.length).toBe(3);
+    let captured: { cb: (p: any) => void; filter: (p: any) => string | null } | undefined;
+    vi.spyOn(EncounterPhaseUtils, "selectPokemonForOption").mockImplementation(((cb: any, _no: any, filter: any) => {
+      captured = { cb, filter };
+      return Promise.resolve(true);
+    }) as any);
+    vi.spyOn(EncounterPhaseUtils, "transitionMysteryEncounterIntroVisuals").mockImplementation((() => Promise.resolve(true)) as any);
+    const leave = vi.spyOn(EncounterPhaseUtils, "leaveEncounterWithoutBattle").mockImplementation(() => {});
+    const keys: string[] = [];
+    vi.spyOn(EncounterDialogueUtils, "showEncounterDialogue").mockImplementation(((key: string) => { keys.push(key.replace(/^.*:/, "")); return Promise.resolve(); }) as any);
+    vi.spyOn(EncounterDialogueUtils, "showEncounterText").mockImplementation(((text: string) => {
+      if (/^mysteryEncounters\/partTimer:/.test(text)) keys.push(text.replace(/^.*:/, ""));
+      return Promise.resolve();
+    }) as any);
+    const realT = i18next.t.bind(i18next);
+    vi.spyOn(i18next, "t").mockImplementation(((k: any, o?: any) => {
+      const key = String(k);
+      if (/receiveMoney/.test(key)) keys.push(`receiveMoney:${o?.amount}`);
+      return realT(k, o);
+    }) as any);
+    const filters: Array<(p: any) => string | null> = [];
+    for (const k of [0, 1]) {
+      captured = undefined;
+      encounter.selectedOption = encounter.options[k];
+      scene.executeWithSeedOffset(() => { void encounter.options[k].onPreOptionPhase(); }, encounter.getSeedOffset());
+      expect(captured).toBeDefined();
+      filters.push(captured!.filter);
+    }
+    timerLines.push(`P ${party.length} ${party.map((p: any) => `${p.species.speciesId} ${p.formIndex}`).join(" ")}`);
+    const share = Math.floor(N / timerConfigs.length);
+    const addItem = (id: string, stack: number, mon?: any) => {
+      const type = (modifierTypes as any)[id]();
+      // getModifierType(func) names the type after its key; the shop pool's stack check finds owned items by that id
+      if (!type.id) type.id = id;
+      const modifier = type.newModifier(mon);
+      modifier.stackCount = stack;
+      scene.addModifier(modifier, true);
+    };
+    const pps = () => party.map((mon: any) => mon.moveset.map((m: any) => m.ppUsed).join(" ")).join(" ");
+    for (let i = 0; i < share; i++) {
+      const k = i % 3, wave = 10 + rnd(171), runSeed = word(), waveSeed = word();
+      scene.seed = runSeed; scene.waveSeed = waveSeed;
+      scene.currentBattle.waveIndex = wave;
+      encounter.seedOffset = undefined;
+      encounter.updateSeedOffset();
+      encounter.misc = undefined;
+      encounter.doEncounterExp = undefined;
+      encounter.doEncounterRewards = undefined;
+      scene.modifiers.length = 0;
+      const mons: string[] = [];
+      for (const mon of party) {
+        mon.fusionSpecies = null;
+        mon.level = 1 + rnd(rnd(2) ? 100 : 20);
+        mon.nature = rnd(25);
+        mon.ivs = mon.ivs.map(() => rnd(32));
+        mon.pokerus = rnd(4) === 0;
+        const n = 1 + rnd(4), ids: number[] = [];
+        while (ids.length < n) {
+          const id = 1 + rnd(allMoves.length - 1);
+          if (allMoves[id] && !ids.includes(id)) ids.push(id);
+        }
+        if (rnd(3) === 0) ids[rnd(n)] = charming[rnd(charming.length)];
+        mon.moveset = ids.map(id => {
+          const mv = new PokemonMove(id, 0, rnd(4) === 0 ? 1 + rnd(3) : 0, rnd(12) === 0 ? 1 + rnd(40) : undefined);
+          const max = mv.getMovePp();
+          mv.ppUsed = rnd(3) === 0 ? max : rnd(max + 1);
+          return mv;
+        });
+      }
+      party.forEach((mon: any) => mon.calculateStats());
+      const exps = { share: 0, balance: 0, oval: 0, amulet: 0 };
+      if (rnd(3) === 0) { exps.share = 1 + rnd(3); addItem("EXP_SHARE", exps.share); }
+      if (rnd(4) === 0) { exps.balance = 1 + rnd(4); addItem("EXP_BALANCE", exps.balance); }
+      if (rnd(2) === 0) { exps.oval = 1 + rnd(2); addItem("OVAL_CHARM", exps.oval); }
+      if (rnd(2) === 0) { exps.amulet = 1 + rnd(5); addItem("AMULET_COIN", exps.amulet); }
+      const eggItems: string[] = [];
+      for (let m = 0; m < party.length; m++) {
+        if (rnd(4) === 0) { const st = 1 + rnd(4); addItem("LUCKY_EGG", st, party[m]); eggItems.push(`${m} 40 ${st}`); }
+        if (rnd(6) === 0) { const st = 1 + rnd(3); addItem("GOLDEN_EGG", st, party[m]); eggItems.push(`${m} 100 ${st}`); }
+      }
+      scene.money = rnd(3) === 0 ? Number.MAX_SAFE_INTEGER - rnd(5000) : 12345 + rnd(100000);
+      for (const mon of party) {
+        const max = mon.getMaxHp();
+        mon.hp = rnd(5) === 0 ? 0 : 1 + rnd(max);
+        mons.push(`${mon.species.speciesId} ${mon.formIndex} ${mon.level} ${mon.nature} ${mon.ivs.join(" ")} ${mon.pokerus ? 1 : 0} ${mon.getAbility(true).id} ${mon.hasPassive() ? mon.getPassiveAbility().id : 0} ${mon.hp} ${max} ${mon.stats.join(" ")} ${mon.moveset.length} ${mon.moveset.map((m: any) => `${m.moveId} ${m.ppUsed} ${m.ppUp} ${m.maxPpOverride ?? -1}`).join(" ")}`);
+      }
+      const eggs = Array.from({ length: rnd(3) }, () => 2 + rnd(40));
+      scene.gameData.eggs = eggs.map(w => ({ hatchWaves: w }));
+      const meets = encounter.options.map((o: any) => (o.meetsRequirements() ? 1 : 0));
+      const primary = meets[2] ? party.indexOf(encounter.options[2].primaryPokemon) : -1;
+      const mask = party.reduce((m: number, mon: any, idx: number) => m | (filters[0](mon) === null ? 1 << idx : 0), 0);
+      const valid = k < 2 ? party.map((_: any, idx: number) => idx).filter((idx: number) => (mask >> idx) & 1) : [];
+      const runs = k === 2 ? meets[2] === 1 : valid.length > 0;
+      const pick = k === 2 ? primary : runs ? valid[rnd(valid.length)] : -1;
+      timerLines.push(`C ${ci * share + i} ${runSeed} ${waveSeed} ${wave} ${k} ${scene.money} ${pick} ${runs ? 1 : 0}`, `U ${mons.join(" ")}`,
+        `I ${exps.share} ${exps.balance} ${exps.oval} ${exps.amulet} ${eggItems.length} ${eggItems.join(" ")}`, `G ${eggs.length} ${eggs.join(" ")}`,
+        `A ${meets.join(" ")} ${mask} ${primary} ${scene.getMaxExpLevel()}`);
+      if (!runs) { timerCover.disabled++; timerCover.noPick += k < 2 ? 1 : 0; timerLines.push("E"); continue; }
+
+      const option = encounter.options[k];
+      encounter.selectedOption = option;
+      leave.mockClear(); keys.length = 0;
+      Phaser.Math.RND.sow([`timer-${SEED}-${ci}-${i}`]);
+      const before = rng(), money0 = scene.money, ppBefore = pps();
+      captured = undefined;
+      let pre: Promise<boolean> | undefined;
+      scene.executeWithSeedOffset(() => { pre = option.onPreOptionPhase(); }, encounter.getSeedOffset());
+      await pre;
+      const afterPre = rng();
+      if (k < 2) {
+        expect(captured).toBeDefined();
+        captured!.cb(party[pick]);   // the party screen's callback: outside any seed offset
+      }
+      const afterPick = rng();
+      const multiplier = k < 2 ? encounter.misc.moneyMultiplier : 2.5;
+      const ppAfter = pps();
+      let done: Promise<boolean> | undefined;
+      scene.executeWithSeedOffset(() => { done = option.onOptionPhase(); }, encounter.getSeedOffset() * 500);
+      await done;
+      const afterOption = rng();
+      expect(leave).toHaveBeenCalledTimes(1);
+      const pm = scene.phaseManager, queued: string[] = [], expPhases: string[] = [];
+      let shopSettings: any, shopArgs = "-";
+      vi.spyOn(pm, "unshiftNew").mockImplementation(((name: string, ...a: any[]) => {
+        queued.push(name);
+        if (name === "PartyExpPhase") {
+          const phase = new PartyExpPhase(a[0], a[1], a[2]);
+          vi.spyOn(phase, "end").mockImplementation(() => {});
+          phase.start();
+        } else if (name === "SelectModifierPhase") {
+          shopSettings = a[2];
+          shopArgs = `${a[0]} ${a[1] === undefined ? "u" : a[1]} ${a[2]?.fillRemaining ? 1 : 0} ${a[2]?.rerollMultiplier ?? "nan"} ${a[2]?.guaranteedModifierTypeOptions?.length ?? 0} ${a[2]?.allowLuckUpgrades === undefined ? -1 : +a[2].allowLuckUpgrades}`;
+        }
+      }) as any);
+      vi.spyOn(pm, "pushNew").mockImplementation(((name: string) => { queued.push(`+${name}`); }) as any);
+      vi.spyOn(pm, "removeAllPhasesOfType").mockImplementation((() => {}) as any);
+      vi.spyOn(pm, "create").mockImplementation(((name: string, index: number, exp: number) => ({ phaseName: name, index, exp })) as any);
+      vi.spyOn(pm, "unshiftPhase").mockImplementation(((ph: any) => { expPhases.push(`${ph.phaseName === "ExpPhase" ? 0 : 1} ${ph.index} ${ph.exp}`); }) as any);
+      const rewards = new MysteryEncounterRewardsPhase(leave.mock.calls[0][0]);
+      vi.spyOn(rewards, "end").mockImplementation(() => {});
+      rewards.doEncounterRewardsAndContinue();
+      for (const fn of [pm.unshiftNew, pm.pushNew, pm.removeAllPhasesOfType, pm.create, pm.unshiftPhase]) vi.mocked(fn).mockRestore();
+      let shop = "0 0";
+      let afterShop = rng();
+      if (shopSettings) {
+        const phase: any = new SelectModifierPhase(0, undefined, shopSettings);
+        phase.updateSeed();
+        regenerateModifierPoolThresholds(scene.getPlayerParty(), ModifierPoolType.PLAYER, 0);
+        const count = phase.getModifierCount();
+        const opts = phase.getModifierTypeOptions(count);
+        shop = `${count} ${opts.length} ${opts.map((o: any) => `${o.type.id} ${argOf(o.type)} ${o.type.tier ?? -1} ${o.upgradeCount}`).join(" ")}`;
+        afterShop = rng();
+      }
+      const lapse = new EggLapsePhase();
+      vi.spyOn(lapse, "end").mockImplementation(() => {});
+      lapse.start();
+      timerLines.push(`R ${before}`, `B ${afterPre}`, `Y ${afterPick} ${multiplier}`, `W ${ppAfter}`, `Q ${afterOption} ${scene.money} ${leave.mock.calls[0][0] ? 1 : 0}`,
+        `N ${keys.length} ${keys.join(" ")}`, `X ${queued.length} ${queued.join(" ")}`, `T ${shopArgs}`, `F ${expPhases.length} ${expPhases.join(" ")}`,
+        `O ${shop}`, `S ${afterShop}`, `H ${scene.gameData.eggs.map((e: any) => e.hatchWaves).join(" ") || "-"}`, "E");
+      void money0; void ppBefore;
+      timerCover.options[k]++;
+      (keys[0] === "jobCompleteGood" ? timerCover.good : timerCover.bad)[k]++;
+      timerCover.low += k < 2 && multiplier === 1 ? 1 : 0;
+      timerCover.high += k < 2 && multiplier === 4 ? 1 : 0;
+      timerCover.amulet += exps.amulet ? 1 : 0;
+      timerCover.ppCut += ppAfter !== ppBefore ? 1 : 0;
+      timerCover.shops += shopSettings ? 1 : 0;
+      timerCover.expPhases += expPhases.length;
+      timerCover.oval += exps.oval ? 1 : 0;
+    }
+  }, 1200000);
+}
+
+it("writes the part timer trace", () => {
+  timerLines.unshift(`V 1 ${N}`);
+  timerLines.push(`Z ${Math.floor(N / timerConfigs.length) * timerConfigs.length}`);
+  fs.writeFileSync((process.env.GC_MYS_OUT ?? "/tmp/mystery.txt").replace(/\.txt$/, "") + "-timer.txt", timerLines.join("\n") + "\n");
+  console.log(`TIMER ${SEED}: options=${timerCover.options} no-pick=${timerCover.noPick} disabled=${timerCover.disabled} good=${timerCover.good} bad=${timerCover.bad} clamped low=${timerCover.low} high=${timerCover.high} amulet=${timerCover.amulet} pp changed=${timerCover.ppCut} exp phases=${timerCover.expPhases} oval=${timerCover.oval}`);
+  expect(timerCover.options.every(n => n > 0) && timerCover.low > 0 && timerCover.high > 0).toBe(true);
 });
