@@ -14,7 +14,8 @@ enum {
 /* One SpeciesEvolutionCondition entry: its key and the values it compares with */
 typedef struct { uint8_t key, n; int16_t v[16]; const char *item_key; } gc_evo_cond;
 /* A SpeciesFormEvolution: target species, level, EvolutionItem, preFormKey and evoFormKey as form
- * indexes (-1 = null, -2 = a key no form has), and its conditions in gc_evo_conds */
+ * indexes (-1 = null, -2 = a key no form has; for preFormKey also -3 = "" when no form has it: matches a species whose
+ * getFormKey() is "", i.e. one without forms), and its conditions in gc_evo_conds */
 typedef struct {
     uint16_t species;
     uint8_t level, item;

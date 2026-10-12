@@ -22,12 +22,12 @@ const pr_form *gc_form(int species, int form)
     return &pr_forms[s->form0 + (form >= 0 && form < s->nforms ? form : 0)];
 }
 
-/* PokemonSpeciesForm.getAbility(abilityIndex): ability2 is ability1 for a one-ability species */
-int gc_form_ability(const pr_form *f, int ability_index)
+/* Pokemon.getAbility(): PokemonSpeciesForm.getAbility(abilityIndex), and a NONE (a one-ability species at index 1, no hidden
+ * ability at index 2) is the species' ability1 */
+int gc_form_ability(int species, const pr_form *f, int ability_index)
 {
-    if (ability_index == 0) return f->ability1;
-    if (ability_index == 1) return f->ability2;
-    return f->ability_hidden;
+    const int id = ability_index == 0 ? f->ability1 : ability_index == 1 ? f->ability2 : f->ability_hidden;
+    return id ? id : gc_form(species, 0)->ability1;
 }
 
 bool gc_mon_fainted(const gc_mon *m) { return m->b.hp <= 0; }
@@ -65,7 +65,7 @@ void gc_mon_new_player(gc_run *run, gc_mon *m, const gc_starter *s, int level)
     p->nature = s->nature;
     m->ability_index = s->ability_index;
     const pr_form *f = gc_form(s->species, s->form);
-    p->base_ability = p->ability = (uint16_t)gc_form_ability(f, s->ability_index);
+    p->base_ability = p->ability = (uint16_t)gc_form_ability(s->species, f, s->ability_index);
     p->gender = sp && sp->male_permille < 0 ? -1 : (s->female ? 1 : 0);
     p->shiny = s->shiny;
     m->variant = s->variant;
@@ -104,7 +104,7 @@ void gc_mon_new_enemy(gc_run *run, gc_mon *m, int species, int level, const pr_e
     p->nature = (uint8_t)g->nature;
     m->ability_index = (uint8_t)g->ability_index;
     const pr_form *f = gc_form(species, g->form);
-    p->base_ability = p->ability = (uint16_t)gc_form_ability(f, g->ability_index);
+    p->base_ability = p->ability = (uint16_t)gc_form_ability(p->species, f, g->ability_index);
     p->gender = (int8_t)g->gender;
     p->shiny = g->shiny;
     m->variant = (uint8_t)g->variant;
@@ -182,21 +182,6 @@ int gc_level_up_moves(const gc_mon *m, int starting_level, uint16_t *out, int ma
     return n;
 }
 
-int gc_evolution_moves(const gc_mon *m, uint16_t *out, int max)
-{
-    const pr_species *sp = gc_species(m->b.species);
-    if (!sp) return 0;
-    int n = 0;
-    for (int i = 0; i < sp->level_moves.n; i++) {
-        const pr_level_move *lm = &sp->level_moves.v[i];
-        if (lm->level != 0) continue;
-        bool dup = false;
-        for (int k = 0; k < n; k++) dup |= out[k] == lm->move;
-        if (!dup && n < max) out[n++] = lm->move;
-    }
-    return n;
-}
-
 /* addExp(exp): levels up to getMaxExpLevel(), and the exp is cut back to the cap's level */
 void gc_mon_add_exp(gc_run *run, gc_mon *m, double exp)
 {
@@ -234,6 +219,17 @@ static bool has_value(const gc_evo_cond *c, int v)
 {
     for (int i = 0; i < c->n; i++) if (c->v[i] == v) return true;
     return false;
+}
+
+/* correctForm in SpeciesFormEvolution.validate: preFormKey null, or the mon's getFormKey() equals it. -2 is a key no form
+ * has (never matches); -3 is "" with no form that has it, which a species without forms (or a form out of range) answers */
+static bool pre_form_ok(const gc_mon *m, const gc_evo *e)
+{
+    if (e->pre_form == -1) return true;
+    if (e->pre_form >= 0) return e->pre_form == m->b.form;
+    if (e->pre_form != -3) return false;
+    const pr_species *s = gc_species(m->b.species);
+    return !s || s->nforms == 0 || m->b.form >= s->nforms || !gc_form(m->b.species, m->b.form)->form_key[0];
 }
 
 /* SpeciesEvolutionCondition.conditionsFulfilled (not a fusion) */
@@ -287,9 +283,19 @@ static bool conditions_fulfilled(gc_run *run, const gc_mon *m, const gc_evo *e)
                 ok = false;
             }
             break;
+        case GC_EVO_HELD_ITEM: {
+            /* getHeldItems().some(SpeciesStatBoosterModifier with this key): "SPECIES_STAT_BOOSTER" and its rare twin carry
+             * the key as their argument, in the order of SpeciesStatBoosterModifierTypeGenerator.items */
+            static const char *const keys[] = {"LIGHT_BALL", "THICK_CLUB", "METAL_POWDER", "QUICK_POWDER", "DEEP_SEA_SCALE", "DEEP_SEA_TOOTH"};
+            int want = -1;
+            for (int k = 0; k < 6; k++) if (c->item_key && !strcmp(c->item_key, keys[k])) want = k;
+            for (int k = 0; want >= 0 && k < run->n_items && !ok; k++)
+                ok = run->items[k].pokemon_id == p->id && run->items[k].arg == want
+                     && (!strcmp(run->items[k].key, "SPECIES_STAT_BOOSTER") || !strcmp(run->items[k].key, "RARE_SPECIES_STAT_BOOSTER"));
+            break;
+        }
         case GC_EVO_TREASURE_TRACKER:
-        case GC_EVO_HELD_ITEM:
-            /* held items (Gimmighoul's coins, Deep Sea Tooth/Scale) wait on reward-core */
+            /* Gimmighoul's coins (the tracker plus the persistent treasure count) wait on reward-core */
             gc_stub(run, GC_STUB_EVOLUTION);
             ok = false;
             break;
@@ -308,8 +314,22 @@ int gc_mon_get_evolution(gc_run *run, const gc_mon *m)
         const gc_evo *e = &gc_evo_data[se->start + i];
         if (e->item) continue;                                   /* item === this.item: NONE only */
         if (m->b.level < e->level) continue;
-        if (e->pre_form >= 0 && e->pre_form != m->b.form) continue;   /* getFormKey() === preFormKey */
-        if (e->pre_form == -2) continue;                          /* a key no form has never matches */
+        if (!pre_form_ok(m, e)) continue;                         /* getFormKey() === preFormKey */
+        if (!conditions_fulfilled(run, m, e)) continue;
+        return se->start + i;
+    }
+    return -1;
+}
+
+/* EvolutionItemModifier.apply, not a fusion: the first of the species' evolutions whose item matches and validates
+ * (level, form, conditions); -1 = none. Mirrors getEvolution() with an item instead of NONE. */
+int gc_mon_item_evolution(gc_run *run, const gc_mon *m, int item)
+{
+    const gc_species_evo *se = species_evo(m->b.species);
+    if (!se) return -1;
+    for (int i = 0; i < se->n; i++) {
+        const gc_evo *e = &gc_evo_data[se->start + i];
+        if (e->item != item || m->b.level < e->level || !pre_form_ok(m, e)) continue;
         if (!conditions_fulfilled(run, m, e)) continue;
         return se->start + i;
     }
@@ -331,7 +351,7 @@ void gc_mon_evolve(gc_run *run, gc_mon *m, int evo)
     int count = f->ability_hidden ? 3 : 2;
     if (m->ability_index > 2) m->ability_index = 0;
     if (m->ability_index == 2 && pre_count == 3 && count == 2) m->ability_index = 1;
-    p->base_ability = (uint16_t)gc_form_ability(f, m->ability_index);
+    p->base_ability = (uint16_t)gc_form_ability(p->species, f, m->ability_index);
     if (p->ability_override < 0) p->ability = p->base_ability;
     gc_mon_recalc(run, m);
 
