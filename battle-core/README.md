@@ -1083,3 +1083,12 @@ records 8000 exact complete source turns/texts, candidate/cap/passive/refusal
 controls, ten rejected runtime mutations, nine malformed refusals and retained
 battle/host checks. This is bounded singles parity, not all ability or hardware
 coverage. Reproduce with `tools/moodydiff.sh <upstream> 2000 <seed>`.
+
+## Knockout stat abilities
+
+Moxie, both Neigh and As One variants, Beast Boost/Eelevate, and Soul-Heart
+now run through the actual faint-phase ability dispatcher. The additive
+`tools/knockout-stats-diff.sh` suite compares complete source turns, including
+raw highest-stat ties, indirect knockouts, passives, suppression, and Simple/Contrary.
+See [KNOCKOUT-STATS-VALIDATION.md](KNOCKOUT-STATS-VALIDATION.md) for pins,
+reproduction, mutation checks, regressions, and bounded exclusions.

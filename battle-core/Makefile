@@ -183,3 +183,6 @@ $(BUILD)/poltergeist-message-test: tests/poltergeist-message-test.c tests/turnte
 all: $(BUILD)/moodytest
 $(BUILD)/moodytest: tests/moodytest.c tests/speed-boost-replay.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/moodytest.c $(BUILD)/libprcore.a -lm -o $@
+all: $(BUILD)/knockout-stats-test
+$(BUILD)/knockout-stats-test: tests/knockout-stats-test.c $(BUILD)/fell-stinger-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) tests/knockout-stats-test.c $(BUILD)/libprcore.a -lm -o $@
