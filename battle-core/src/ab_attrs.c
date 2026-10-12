@@ -327,6 +327,11 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
     int move = pp->move;
     switch (a->cls) {
     /* ---- stats ---- */
+    case PR_AC_WonderSkinAbAttr:
+        GATE(move >= 0 && move < PR_MOVE_COUNT
+             && pr_moves[move].category == MOVE_CATEGORY_STATUS && *pp->value >= 50);
+        *pp->value = 50; /* Source also modifies the holder during simulation. */
+        return 1;
     case PR_AC_StatMultiplierAbAttr: {
         const pr_attr_StatMultiplierAbAttr *x = P(StatMultiplierAbAttr, a);
         GATE(pp->stat == x->stat
@@ -558,6 +563,74 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         GATE(true);                                   /* its trigger message names the status cured last time */
         pr_status_healed_set(c->ability, p->status);
         pr_reset_status_phase(bt, c->e, (pr_pokemon *)p, false);
+        return 1;
+    }
+    case PR_AC_PostVictoryStatStageChangeAbAttr: {
+        /* Moxie/Neigh: fixed changes; Beast Boost/Eelevate: raw highest stat. */
+        GATE(true);
+        if (pp->simulated) return 1;
+        if (!c->e) return -1;
+        const pr_stat_change_source *changes = &P(PostVictoryStatStageChangeAbAttr, a)->changes;
+        int8_t st[7], sg[7];
+        int n = 0;
+        if (changes->fn != PR_NO_FN) {
+            pr_fn_id fn = changes->fn;
+            const char *hash = fn < PR_CLOSURE_COUNT ? pr_closures_meta[fn].hash : "";
+            if (strcmp(hash, "6297309b617b")) {
+                if (fn < PR_CLOSURE_COUNT) pr_closure_misses[fn]++;
+                return -1;
+            }
+            static const int stats[] = {STAT_ATK, STAT_DEF, STAT_SPATK, STAT_SPDEF, STAT_SPD};
+            double highest = 0;
+            int best = -1;
+            for (unsigned i = 0; i < sizeof(stats) / sizeof(stats[0]); i++) {
+                double value = pr_get_stat(p, stats[i], false);
+                if (value > highest) { highest = value; best = stats[i]; }
+            }
+            if (best < 0) return -1;
+            pr_closure_hits[fn]++;
+            st[0] = (int8_t)best; sg[0] = 1; n = 1;
+        } else {
+            if (changes->fixed.n > 7) return -1;
+            for (unsigned i = 0; i < changes->fixed.n; i++) {
+                st[n] = changes->fixed.v[i].stat;
+                sg[n++] = changes->fixed.v[i].stages;
+            }
+        }
+        return pr_unshift_stat_stage_change_ex(bt, c->e, pr_battler_index(bt, p), st, sg, n,
+                                               (pr_pokemon *)p, 0) < 0 ? -1 : 1;
+    }
+    case PR_AC_PostKnockOutStatStageChangeAbAttr: {                     /* Soul-Heart */
+        const pr_attr_PostKnockOutStatStageChangeAbAttr *x = P(PostKnockOutStatStageChangeAbAttr, a);
+        GATE(true);
+        if (pp->simulated) return 1;
+        if (!c->e) return -1;
+        int8_t st = (int8_t)x->stat, sg = (int8_t)x->stages;
+        return pr_unshift_stat_stage_change_ex(bt, c->e, pr_battler_index(bt, p), &st, &sg, 1,
+                                               (pr_pokemon *)p, 0) < 0 ? -1 : 1;
+    }
+    case PR_AC_PreLeaveFieldClearWeatherAbAttr: {
+        int weather = P(PreLeaveFieldClearWeatherAbAttr, a)->weatherType;
+        bool another = false;
+        for (int b = 0; b < 4 && !another; b++) {
+            const pr_pokemon *q = bt->field[b];
+            /* getField(true) checks legal/faint eligibility, not isOnField(). */
+            if (!q || q == p || q->hp <= 0) continue;
+            for (int passive = 0; passive < 2 && !another; passive++) {
+                int ability = passive ? q->passive : q->ability;
+                if (!ability || !pr_can_apply_ability(bt, q, ability)) continue;
+                const pr_ability *ab = &pr_abilities[ability];
+                for (unsigned i = 0; i < ab->nattr; i++) {
+                    const pr_attr *other = &pr_attrs[ab->attr0 + i];
+                    if (other->cls == PR_AC_PreLeaveFieldClearWeatherAbAttr
+                        && P(PreLeaveFieldClearWeatherAbAttr, other)->weatherType == weather) another = true;
+                }
+            }
+        }
+        GATE(bt->weather == weather && !another);
+        if (pp->simulated) return 1;
+        if (!c->e) return -1;
+        pr_try_set_weather(bt, c->e, WEATHER_TYPE_NONE, NULL);
         return 1;
     }
     /* ---- coming in: PostSummonActivateAbilityPhase ---- */

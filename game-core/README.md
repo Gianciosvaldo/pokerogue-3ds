@@ -191,7 +191,7 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 | Evolution conditions on items, held items or the dex aren't met | reward-core, the dex |
 | A catch doesn't count `gameStats`, validate achievements (hidden ability, shiny party, legendary...) or run `Pokemon.addToParty`'s form change trigger; the Limited Catch challenge (`POKEMON_ADD_TO_PARTY`) isn't ported | later cards |
 | The shake rolls are battle-core's, and by reading they differ from upstream's critical-capture chance (`getCriticalCaptureChance`): battle-core's multiplier is 2.5 in a Daily Run and 0 otherwise, where upstream's grows with the species caught (0 to 2.5) and with a Catching Charm, and battle-core gives any Challenge Mode run 0 where upstream does for the Fresh Start challenge only. Not checked by a differential: the upstream test harness skips the rolls. A caught boss's score has the missing multiplier (the row above) | battle-core |
-| A trainer's own rewards (the config's reward items, a boss's voucher) aren't given | reward-core |
+| A trainer's own reward items (the config's `modifierRewardFuncs`, counted as `trainer's own rewards`) aren't given. The boss voucher is, see [Boss voucher](#boss-voucher) | reward-core |
 | A trainer's name in a message goes without its title ("Aaron would like to battle!" for "Ace Trainer Aaron would like to battle!") | battle-core: a message argument made of several locale keys |
 | Pickup, Honey Gather, Pay Day, lapsing items | reward-core |
 
@@ -711,3 +711,31 @@ scene RNG and offline time inputs, including guarantees, pity, machine effects,
 statistics and named-save metadata. This is a partial Task 80 slice; screens,
 rehydration and hatching remain separate. See
 [scope and validation](EGG-GACHA-VALIDATION.md).
+
+## Boss voucher
+
+`TrainerVictoryPhase` (`trainer_victory` in `gc_phases.c`) now follows upstream's
+`validateVoucher` rule for the bosses that have a voucher. The first win unlocks the
+voucher and adds one to the count of its own type (`gc_system_unlock_voucher`: Plus for
+a moneyMultiplier below 10, Premium otherwise) and queues no reward. Only a later win,
+when the voucher is unlocked already, queues the `ModifierRewardPhase`, and its item is
+`[VOUCHER, VOUCHER, VOUCHER_PLUS, VOUCHER_PREMIUM][voucherType]`: a Gym Leader gives an
+Egg Voucher, a Champion an Egg Voucher Plus. Running that phase adds one to the count of
+the item's type (`AddVoucherModifier.apply`, `gc_port_give_reward`), which is also where
+Endless mode's wave-50 Plus and wave-250 Premium vouchers now count (they were counted
+when queued). Which trainers have a voucher, its type and the item come from reward-core's
+`pr_reward_trainer_victory_rewards` (differential-tested in card 97); bosses without a
+voucher, such as the rivals, give nothing. Without system data (`run->sys` NULL) nothing
+unlocks and nothing is given. Not ported: the timed event that upgrades the later-win
+reward (`getUpgradeUnlockedVouchers`), and the vouchers offered on the reward screen, which
+are still added to the items like the other unported rewards.
+
+Replay of upstream's own phase: `tools/trainervictorydiff.sh <upstream dir> [N] [seed]`
+runs `trainer-victory.producer.test.ts` in the pinned checkout (Node 22) and replays it
+through `build/trainer_victory_diff_test`. Every trainerConfigs entry is defeated once
+with its voucher unlocked and once without, then random ones up to N, and the voucher
+`ModifierRewardPhase`s are run. Compared: the queued phases in order, the voucher reward's
+key, the unlock afterwards and the four voucher count changes. `tools/trainervictoryplant.sh
+<trace>` replays one trace through eight copies of game-core with one line changed each
+(the old inverted rule among them); all eight must fail. The unit test is
+`tests/voucher_egg_test.c`, part of `make test`.

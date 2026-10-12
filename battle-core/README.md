@@ -1083,3 +1083,37 @@ records 8000 exact complete source turns/texts, candidate/cap/passive/refusal
 controls, ten rejected runtime mutations, nine malformed refusals and retained
 battle/host checks. This is bounded singles parity, not all ability or hardware
 coverage. Reproduce with `tools/moodydiff.sh <upstream> 2000 <seed>`.
+
+## Consecutive move selection
+
+Gigaton Hammer and Blood Moon's existing selection restriction now has additive
+source-caller proof covering failed/virtual/long histories, PP, error text, and
+Struggle fallback. Runtime behavior is unchanged. Reproduce with
+`tools/consecutive-move-diff.sh <upstream>`; see
+[CONSECUTIVE-MOVE-VALIDATION.md](CONSECUTIVE-MOVE-VALIDATION.md) for scope and controls.
+## Knockout stat abilities
+
+Moxie, both Neigh and As One variants, Beast Boost/Eelevate, and Soul-Heart
+now run through the actual faint-phase ability dispatcher. The additive
+`tools/knockout-stats-diff.sh` suite compares complete source turns, including
+raw highest-stat ties, indirect knockouts, passives, suppression, and Simple/Contrary.
+See [KNOCKOUT-STATS-VALIDATION.md](KNOCKOUT-STATS-VALIDATION.md) for pins,
+reproduction, mutation checks, regressions, and bounded exclusions.
+
+## Task 103 continuation: primal-weather leave-field cleanup
+
+The real leave-field dispatcher now runs Primordial Sea, Desolate Land and
+Delta Stream cleanup, including other-holder/passive/suppression guards and
+fainting. [LEAVE-WEATHER-VALIDATION.md](LEAVE-WEATHER-VALIDATION.md) records
+8,000 exact source turns and retained regressions. Reproduce with
+`tools/leave-weather-diff.sh <upstream> 2000 <seed>`.
+The [remaining-core audit](REMAINING-BATTLE-CORE.md) separates concrete next
+slices from absent inputs and broader integration; this is not full-core parity.
+
+## Wonder Skin accuracy
+
+The real move-accuracy caller now dispatches Wonder Skin's status-only cap,
+including source simulation behavior and ordering before Wide Lens/Fog/Gravity.
+[WONDER-SKIN-VALIDATION.md](WONDER-SKIN-VALIDATION.md) records 8,000 exact
+turns, 16,000 numerical probes, 56 dispatcher cases and mutation/regression checks.
+Reproduce with `tools/wonder-skin-diff.sh <upstream> 2000 <seed>`.

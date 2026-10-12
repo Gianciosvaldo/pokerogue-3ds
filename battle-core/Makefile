@@ -183,3 +183,25 @@ $(BUILD)/poltergeist-message-test: tests/poltergeist-message-test.c tests/turnte
 all: $(BUILD)/moodytest
 $(BUILD)/moodytest: tests/moodytest.c tests/speed-boost-replay.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/moodytest.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/consecutive-move-test
+$(BUILD)/consecutive-move-test: tests/consecutive-move-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/consecutive-move-test.c $(BUILD)/libprcore.a -lm -o $@
+all: $(BUILD)/knockout-stats-test
+$(BUILD)/knockout-stats-test: tests/knockout-stats-test.c $(BUILD)/fell-stinger-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) tests/knockout-stats-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/leave-weather-test
+$(BUILD)/leave-weather-test: tests/leave-weather-test.c tests/trainer-switch-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/leave-weather-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/wonder-skin-test
+$(BUILD)/wonder-skin-replay.inc: tests/speed-boost-replay.inc tools/build-wonder-skin-replay.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-wonder-skin-replay.py $< $@
+$(BUILD)/wonder-skin-test: tests/wonder-skin-test.c $(BUILD)/wonder-skin-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) tests/wonder-skin-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/wonder-skin-helper-test
+$(BUILD)/wonder-skin-helper-test: tests/wonder-skin-helper-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/wonder-skin-helper-test.c $(BUILD)/libprcore.a -lm -o $@

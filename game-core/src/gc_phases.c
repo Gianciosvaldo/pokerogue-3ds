@@ -41,12 +41,8 @@ static void queue_battle_end(gc_run *run)
             }
             if (wave <= 150 && !(wave % 50)) { p.key = "GOLDEN_POKEBALL"; gc_rq_push(run, p); }
             if (endless && !(wave % 50)) {
-                int vtype = wave % 250 ? GC_VOUCHER_PLUS : GC_VOUCHER_PREMIUM;
                 p.key = wave % 250 ? "VOUCHER_PLUS" : "VOUCHER_PREMIUM";
                 gc_rq_push(run, p);
-                if (run->sys) {
-                    gc_system_add_voucher_count(run->sys, vtype, 1);
-                }
             }
         }
         if (gc_is_new_biome(run, wave)) gc_rq_push(run, gc_rp(RP_SELECT_BIOME, 0, 0, 0));
@@ -311,25 +307,24 @@ static void trainer_victory(gc_run *run)
     gc_rphase p = gc_rp(RP_MONEY_REWARD, 0, 0, 0);
     p.d = c ? c->money_multiplier : 1;   /* config.moneyMultiplier */
     gc_rq_unshift(run, p);
-    /* Classic Gym Leaders (100..124) / Boss Trainers voucher unlock */
-    if (c && c->is_boss) {
-        int vtype = (c->money_multiplier >= 10) ? GC_VOUCHER_PREMIUM : GC_VOUCHER_PLUS;
-        const char *vkey = (c->money_multiplier >= 10) ? "VOUCHER_PREMIUM" : "VOUCHER_PLUS";
-        bool should_queue = true;
-        if (run->sys) {
-            if (gc_system_has_voucher_unlock(run->sys, run->trainer_type)) {
-                should_queue = false;
-            } else {
-                gc_system_unlock_voucher(run->sys, run->trainer_type, vtype);
-            }
-        }
-        if (should_queue) {
+    if (c && c->n_reward_funcs) gc_stub(run, GC_STUB_TRAINER_REWARDS);
+    /* The boss voucher: Object.hasOwn(vouchers, key) && !globalScene.validateVoucher(voucher) && config.isBoss.
+     * validateVoucher unlocks the voucher now and counts it (the first win of a boss: unlocked, +1 of the voucher's
+     * own type, no reward) and returns true, so the ModifierRewardPhase is queued only on a later win, when it was
+     * unlocked already. Which trainers have a voucher, its type and the item are reward-core's
+     * (pr_reward_trainer_victory_rewards, diff-tested); the item is its last one, after the config's reward funcs.
+     * Without system data (sys NULL = no system updates) nothing unlocks and nothing is given. */
+    pr_reward_trainer_victory tv;
+    const bool unlocked = gc_system_has_voucher_unlock(run->sys, run->trainer_type);
+    if (pr_reward_trainer_victory_rewards(run->trainer_type, unlocked, false, &tv) == 0 && tv.voucher_type >= 0) {
+        if (tv.unlock_voucher) {
+            gc_system_unlock_voucher(run->sys, run->trainer_type, tv.voucher_type);
+        } else if (tv.n_items > (c ? c->n_reward_funcs : 0)) {
             gc_rphase vp = gc_rp(RP_MODIFIER_REWARD, 0, 0, 0);
-            vp.key = vkey;
+            vp.key = pr_item_keys[tv.items[tv.n_items - 1]];
             gc_rq_unshift(run, vp);
         }
     }
-    if (c && c->n_reward_funcs) gc_stub(run, GC_STUB_TRAINER_REWARDS);
     gc_ev_msg(run, "battle:trainerDefeated", 1, gc_m_trainer(run, "trainerName", GC_TNAME_TITLED));
 }
 

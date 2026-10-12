@@ -55,7 +55,10 @@ bool gc_port_apply_reward(gc_run *run, const gc_offer *o, int party, int move_sl
 void gc_port_give_reward(gc_run *run, const char *key)
 {
     if (gc_reward_add_pokeballs(run, key)) return;
-    /* vouchers are system data (the gacha): nothing in the run */
-    if (!strncmp(key, "VOUCHER", 7)) return;
+    /* vouchers are system data (the gacha), not run items: AddVoucherModifier.apply adds one to the count of its
+     * VoucherType (sys NULL = no system updates) */
+    if (!strcmp(key, "VOUCHER")) { gc_system_add_voucher_count(run->sys, GC_VOUCHER_REGULAR, 1); return; }
+    if (!strcmp(key, "VOUCHER_PLUS")) { gc_system_add_voucher_count(run->sys, GC_VOUCHER_PLUS, 1); return; }
+    if (!strcmp(key, "VOUCHER_PREMIUM")) { gc_system_add_voucher_count(run->sys, GC_VOUCHER_PREMIUM, 1); return; }
     gc_item_add(run, key, -1, 0, 1);
 }

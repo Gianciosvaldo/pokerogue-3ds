@@ -1665,7 +1665,8 @@ double pr_calculate_battle_accuracy(pr_battle *bt, pr_pokemon *user, pr_pokemon 
             pr_note_unported(bt, cls);
         }
     }
-    pr_hook_ab(bt, target, PR_AC_WonderSkinAbAttr);
+    pr_ab_params wonder = {.pokemon = target, .opponent = user, .move = move, .value = &acc};
+    pr_apply_ab_attrs(bt, PR_AC_WonderSkinAbAttr, &wonder);
     if (acc == -1) return acc;
     bool ohko = pr_move_has_attr((uint16_t)move, PR_AC_OneHitKOAccuracyAttr);
     if (!ohko) {
@@ -2694,9 +2695,13 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
     pr_speed_iter it;
     pr_pokemon *q;
     pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
-    while ((q = pr_speed_iter_next(bt, &it))) pr_hook_ab(bt, q, PR_AC_PostKnockOutAbAttr);
+    while ((q = pr_speed_iter_next(bt, &it))) {
+        pr_ab_params params = {.pokemon = q, .move = -1};
+        pr_apply_ab_attrs(bt, PR_AC_PostKnockOutAbAttr, &params);
+    }
     if (p->n_attacks_received > 0 && is_on_field(source)) {
-        pr_hook_ab(bt, source, PR_AC_PostVictoryAbAttr);
+        pr_ab_params params = {.pokemon = source, .move = -1};
+        pr_apply_ab_attrs(bt, PR_AC_PostVictoryAbAttr, &params);
         int victory_move = p->attacks_received[0].move;
         const pr_move *vm = &pr_moves[victory_move];
         for (int a=vm->attr0; a<vm->attr0+vm->nattr; a++)
@@ -2810,7 +2815,8 @@ void pr_leave_field(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool clear_effec
         if (q != p)
             pr_remove_tags_by_source_id(bt, e, q, (int64_t)p->id);
     if (clear_effects) reset_summon_data(p);
-    pr_hook_ab(bt, p, PR_AC_PreLeaveFieldAbAttr);
+    pr_ab_params params = {.pokemon = p, .move = -1};
+    pr_apply_ab_attrs(bt, PR_AC_PreLeaveFieldAbAttr, &params);
     p->switch_out_status = true;
     form_change(bt, p, PR_FCT_SpeciesFormChangeActiveTrigger);
     p->on_field = false;
