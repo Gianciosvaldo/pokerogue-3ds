@@ -10,10 +10,12 @@
  * Cases: every trainerConfigs entry once with the voucher unlocked and once without, then random trainers (voucher
  * trainers over-represented) and random states up to N.
  * Output, one line per case:
- *   T <TrainerType> <unlocked before> <unlocked after> <delta of voucherCounts 0..3> <n> then n phases in queue
- *   order, each "M <moneyMultiplier>" or "R <modifierTypes key> <stack before> <stack after>" (the stack of the
- *   player's modifiers with that type id around the phase; a voucher is no modifier: 0 0), then the text each
- *   reward phase showed, one after a tab each, in the same order (a line break in a text is a |)
+ *   T <TrainerType> <unlocked before> <unlocked after> <delta of voucherCounts 0..3> <pokeballCounts 0..4 before>
+ *   <pokeballCounts 0..4 after> <n> then n phases in queue order, each "M <moneyMultiplier>" or
+ *   "R <modifierTypes key> <stack before> <stack after>" (the stack of the player's modifiers with that type id around
+ *   the phase; a voucher is no modifier: 0 0), then the text each reward phase showed, one after a tab each, in the
+ *   same order (a line break in a text is a |); when addModifier found the stack full it queued battle:itemStackFull
+ *   and gave the tier's default item (a Poke Ball): that message follows the reward's text after a \x01
  * and a last line "# cases N", so a cut file can't pass. The Phaser RNG state is checked here: TrainerVictoryPhase
  * must not roll, because game-core's trainer_victory does not. An exception anywhere fails the producer.
  * build/trainer_victory_diff_test replays the cases.
@@ -46,10 +48,17 @@ it("trainer victory producer", async () => {
   vi.spyOn(timedEventManager, "getUpgradeUnlockedVouchers").mockReturnValue(false);
   let runRewards = false;
   let shown: string[] = [];
+  let queuedMessages: string[] = [];
   vi.spyOn(scene.ui, "showText").mockImplementation((text: string, _d: any, callback: any) => {
     if (runRewards) {
       shown.push(text);
       callback?.();
+    }
+  });
+  // addModifier's itemStackFull: queueMessage builds a MessagePhase; the text is what the player reads
+  vi.spyOn(scene.phaseManager, "queueMessage").mockImplementation((text: string) => {
+    if (runRewards) {
+      queuedMessages.push(text);
     }
   });
   vi.spyOn(scene.ui.achvBar, "showAchv").mockImplementation(() => {});
@@ -102,6 +111,7 @@ it("trainer victory producer", async () => {
       delete scene.gameData.voucherUnlocks[key];
     }
     const counts = [0, 1, 2, 3].map(k => scene.gameData.voucherCounts[k]);
+    const ballsBefore = [0, 1, 2, 3, 4].map(k => scene.pokeballCounts[k]);
     battle.trainer = { config, getName: () => key, getVictoryMessages: () => [], getKey: () => key };
     queued = [];
     runRewards = false;
@@ -122,6 +132,7 @@ it("trainer victory producer", async () => {
         const stackBefore = stackOf(k);
         // the same phase upstream would have run; the text it shows is recorded with the case
         shown = [];
+        queuedMessages = [];
         runRewards = true;
         await new ModifierRewardPhase(q[2]).doReward();
         runRewards = false;
@@ -129,7 +140,11 @@ it("trainer victory producer", async () => {
         if (shown.length !== 1) {
           throw new Error(`trainer ${key}: ${k} showed ${shown.length} texts`);
         }
-        texts.push(shown[0].replace(/\n/g, "|"));   // a text can have a line break: it is a | here
+        if (queuedMessages.length > 1) {
+          throw new Error(`trainer ${key}: ${k} queued ${queuedMessages.length} messages`);
+        }
+        // a text can have a line break: it is a | here
+        texts.push([shown[0], ...queuedMessages].map(x => x.replace(/\n/g, "|")).join("\x01"));
       } else {
         throw new Error(`trainer ${key}: unexpected phase ${q[1]}`);
       }
@@ -140,7 +155,7 @@ it("trainer victory producer", async () => {
     const delta = [0, 1, 2, 3].map(k => scene.gameData.voucherCounts[k] - counts[k]);
     lines.push(
       `T ${tt} ${unlockedBefore ? 1 : 0} ${Object.hasOwn(scene.gameData.voucherUnlocks, key) ? 1 : 0} ${delta.join(" ")} `
-        + `${out.length} ${out.join(" ")}${texts.map(x => `\t${x}`).join("")}`,
+        + `${ballsBefore.join(" ")} ${[0, 1, 2, 3, 4].map(k => scene.pokeballCounts[k]).join(" ")} ${out.length} ${out.join(" ")}${texts.map(x => `\t${x}`).join("")}`,
     );
     battle.trainer = undefined;
   }

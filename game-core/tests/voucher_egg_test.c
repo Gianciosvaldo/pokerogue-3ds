@@ -177,8 +177,8 @@ static void test_voucher_reward_phase(void) {
 
 /* The trainer's own rewards (config.modifierRewardFuncs, upstream 8555c08 trainer-config.ts): RIVAL gives a Super Exp.
  * Charm then an Exp. Share, RIVAL_2 an Exp. Share, RIVAL_4 a Tera Orb. Each is a ModifierRewardPhase run through
- * addModifier: PersistentModifier.add stacks it and incrementStack refuses past getMaxStackCount() (Exp. Share 5);
- * the Tera Orb has no match(), so it is added again each time with no cap. */
+ * addModifier: PersistentModifier.add stacks it and incrementStack refuses past getMaxStackCount() (Exp. Share 5;
+ * addModifier then queues itemStackFull and gives the COMMON tier's default item, 5 Poke Balls); the Tera Orb has no match(), so it is added again each time with no cap. */
 static int defeat_trainer_rewards(gc_run *run, int trainer_type, const char *keys[4]) {
     gc_internal *in = gc_int(run);
     int n = 0;
@@ -209,6 +209,7 @@ static void test_trainer_reward_items(void) {
     assert(gc_item_stack(&run, "EXP_SHARE") == 2);
     for (int i = 0; i < 6; i++) defeat_trainer_rewards(&run, TRAINER_TYPE_RIVAL_2, keys);
     assert(gc_item_stack(&run, "EXP_SHARE") == 5);          /* getMaxStackCount(): the sixth is refused */
+    assert(run.pokeballs[POKEBALL_TYPE_POKEBALL] == 15);    /* ...and itemStackFull gives 5 Poke Balls each time (3 times) */
     assert(gc_item_stack(&run, "SUPER_EXP_CHARM") == 1);
 
     assert(defeat_trainer_rewards(&run, TRAINER_TYPE_RIVAL_4, keys) == 1 && !strcmp(keys[0], "TERA_ORB"));

@@ -11,6 +11,8 @@
  *  - the stack of each reward item after its phase, from the stack the player had before it: the scene keeps its
  *    modifiers from case to case, so the stacks reach getMaxStackCount() and addModifier adds nothing past it
  *  - the text each reward shows, formatted from upstream's locale files (GC_LOCALES). A voucher's text is not compared
+ *  - a reward whose stack was full: addModifier queued battle:itemStackFull and gave the tier's default item (a Poke
+ *    Ball). Compared: that message's text, and the five Poke Ball counts after the rewards, from the counts before
  *  - whether the trainer's voucher is unlocked afterwards and the four voucherCounts changes, after the rewards ran
  * Prints the totals and what the cases exercised. Exit 1 on any mismatch, 2 on a malformed or cut file (the last line
  * counts the cases), 3 when a kind of case went unexercised. */
@@ -81,7 +83,7 @@ int main(int argc, char **argv)
     int cases = 0, bad = 0, declared = -1;
     /* what the cases exercised */
     int first_plus = 0, first_premium = 0, later_voucher = 0, later_voucher_plus = 0, no_voucher = 0, funcs = 0,
-        boss_no_voucher = 0, texts_compared = 0, at_cap = 0, from_zero = 0, shown = 0;
+        boss_no_voucher = 0, texts_compared = 0, at_cap = 0, from_zero = 0, shown = 0, full_stacks = 0, ball_cases = 0;
     int by_key[3] = {0, 0, 0};
     static const char *const func_keys[3] = {"EXP_SHARE", "SUPER_EXP_CHARM", "TERA_ORB"};
     while (fgets(line, sizeof line, fp)) {
@@ -102,6 +104,9 @@ int main(int argc, char **argv)
         const int tt = (int)num(&save), unlocked_before = (int)num(&save), unlocked_after = (int)num(&save);
         int delta[4];
         for (int k = 0; k < 4; k++) delta[k] = (int)num(&save);
+        int balls_before[5], balls_after[5];
+        for (int k = 0; k < 5; k++) balls_before[k] = (int)num(&save);
+        for (int k = 0; k < 5; k++) balls_after[k] = (int)num(&save);
         const int n = (int)num(&save);
         if (tt < 0 || tt >= 512) { fprintf(stderr, "line %d: TrainerType %d is out of voucher_unlocks\n", line_no, tt); return 2; }
         if (n < 1 || n > MAX_PHASES) { fprintf(stderr, "line %d: %d phases\n", line_no, n); return 2; }
@@ -126,13 +131,17 @@ int main(int argc, char **argv)
                 return 2;
             }
         }
-        char *up_text[MAX_PHASES] = {NULL};
+        char *up_text[MAX_PHASES] = {NULL}, *up_full[MAX_PHASES] = {NULL};
         if (texts) {
             texts[strcspn(texts, "\n")] = 0;
             char *s2 = NULL;
             int k = 0;
             for (char *x = strtok_r(texts, "\t", &s2); x && k < MAX_PHASES; x = strtok_r(NULL, "\t", &s2)) {
+                char *full = strchr(x, '\x01');   /* the itemStackFull message follows the reward's text */
+                if (full) *full++ = 0;
                 for (char *c2 = x; *c2; c2++) if (*c2 == '|') *c2 = '\n';   /* the producer wrote a line break as | */
+                for (char *c2 = full ? full : x + strlen(x); *c2; c2++) if (*c2 == '|') *c2 = '\n';
+                up_full[k] = full;
                 up_text[k++] = x;
             }
         }
@@ -146,6 +155,7 @@ int main(int argc, char **argv)
         run.sys = &sys;
         run.trainer_type = tt;
         run.run.mode = GAME_MODES_CLASSIC;
+        for (int k = 0; k < 5; k++) run.pokeballs[k] = (uint8_t)balls_before[k];
         const gc_trainer_config *c = gc_trainer_config_of(tt);
         const int n_funcs = c ? c->n_reward_funcs : 0;
         if (n != 1 + n_funcs && n != 2 + n_funcs) MISMATCH("trainer %d: upstream queued %d phases, config has %d reward funcs", tt, n, n_funcs);
@@ -164,7 +174,7 @@ int main(int argc, char **argv)
         /* what is queued, in the order it runs; every reward is run, as upstream's producer ran them */
         double money = -1;
         const char *rewards[MAX_PHASES];
-        char text[MAX_PHASES][256];
+        char text[MAX_PHASES][256], full_text[MAX_PHASES][256];
         int n_rewards = 0, n_mine = 0;
         gc_rphase q;
         while (gc_rq_next(&in->rq, &q)) {
@@ -174,13 +184,15 @@ int main(int argc, char **argv)
             } else if (q.type == RP_MODIFIER_REWARD && n_mine >= 2 && q.key && n_rewards < MAX_PHASES) {
                 rewards[n_rewards] = q.key;
                 gc_phase_start(&run, &q);
-                text[n_rewards][0] = 0;
+                text[n_rewards][0] = full_text[n_rewards][0] = 0;
                 int msgs = 0;
                 while (gc_run_next_event(&run, &ev)) {
                     if (ev.kind != GC_EV_MESSAGE || !ev.msg.key) continue;
-                    if (msgs++ == 0) pr_msg_format(&ev.msg, &src, text[n_rewards], sizeof text[n_rewards]);
+                    if (msgs == 0) pr_msg_format(&ev.msg, &src, text[n_rewards], sizeof text[n_rewards]);
+                    else if (msgs == 1) pr_msg_format(&ev.msg, &src, full_text[n_rewards], sizeof full_text[n_rewards]);
+                    msgs++;
                 }
-                if (msgs != 1) MISMATCH("trainer %d: reward %s showed %d messages", tt, q.key, msgs);
+                if (msgs < 1 || msgs > 2) MISMATCH("trainer %d: reward %s showed %d messages", tt, q.key, msgs);
                 n_rewards++;
             } else {
                 MISMATCH("trainer %d: unexpected phase %d at position %d", tt, q.type, n_mine);
@@ -200,6 +212,9 @@ int main(int argc, char **argv)
                     if (stack != up_after[i + 1]) MISMATCH("trainer %d: %s stack %d after (%d before), upstream %d", tt, rewards[i], stack, up_before[i + 1], up_after[i + 1]);
                     if (!up_text[i] || strcmp(text[i], up_text[i])) MISMATCH("trainer %d: %s text '%s', upstream '%s'", tt, rewards[i], text[i], up_text[i] ? up_text[i] : "none");
                     else texts_compared++;
+                    if (!up_full[i] != !full_text[i][0] || (up_full[i] && strcmp(full_text[i], up_full[i])))
+                        MISMATCH("trainer %d: %s stack-full text '%s', upstream '%s'", tt, rewards[i], full_text[i], up_full[i] ? up_full[i] : "none");
+                    full_stacks += up_full[i] != NULL;
                     at_cap += up_before[i + 1] == up_after[i + 1] && up_before[i + 1] > 0;
                     from_zero += up_before[i + 1] == 0 && up_after[i + 1] == 1;
                     for (int k = 0; k < 3; k++) by_key[k] += !strcmp(rewards[i], func_keys[k]);
@@ -211,6 +226,10 @@ int main(int argc, char **argv)
         }
         if (!up_voucher != !voucher || (voucher && strcmp(voucher, up_voucher)))
             MISMATCH("trainer %d: voucher reward port %s, upstream %s", tt, voucher ? voucher : "none", up_voucher ? up_voucher : "none");
+        for (int k = 0; k < 5; k++)
+            if (run.pokeballs[k] != balls_after[k])
+                MISMATCH("trainer %d: Poke Ball type %d count %d (%d before), upstream %d", tt, k, run.pokeballs[k], balls_before[k], balls_after[k]);
+        ball_cases += memcmp(balls_before, balls_after, sizeof balls_before) != 0;
         if (run.stubs[GC_STUB_TRAINER_REWARDS])
             MISMATCH("trainer %d: trainer rewards stub counted %u", tt, run.stubs[GC_STUB_TRAINER_REWARDS]);
         if ((sys.voucher_unlocks[tt] != 0) != (unlocked_after != 0))
@@ -241,10 +260,11 @@ int main(int argc, char **argv)
            first_plus, first_premium, later_voucher, later_voucher_plus, no_voucher, boss_no_voucher);
     printf("trainers with reward funcs %d: rewards EXP_SHARE %d, SUPER_EXP_CHARM %d, TERA_ORB %d; stack from zero %d, refused at the cap %d; %d texts compared\n",
            funcs, by_key[0], by_key[1], by_key[2], from_zero, at_cap, texts_compared);
+    printf("stack full: %d itemStackFull messages compared, %d cases where the Poke Ball counts moved\n", full_stacks, ball_cases);
     printf("TOTAL mismatches: %d\n", bad);
     if (bad) return 1;
     if (!first_plus || !first_premium || !later_voucher || !later_voucher_plus || !no_voucher || !funcs || !at_cap || !from_zero ||
-        !by_key[0] || !by_key[1] || !by_key[2]) {
+        !by_key[0] || !by_key[1] || !by_key[2] || !full_stacks || !ball_cases) {
         fprintf(stderr, "a kind of case went unexercised\n");
         return 3;
     }

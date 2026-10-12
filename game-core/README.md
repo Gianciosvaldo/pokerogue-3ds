@@ -734,9 +734,18 @@ Super Exp. Charm and Tera Orb) are queued before the voucher, one `ModifierRewar
 each, in the order `pr_reward_trainer_victory_rewards` returns them, as upstream unshifts
 them. Running one goes through `gc_port_give_reward`, which does what
 `PersistentModifier.add` does: it stacks onto the player's item and refuses to go past
-`getMaxStackCount()` (the "You received" text is shown anyway). The Map, Mega Bracelet,
+`getMaxStackCount()`. A refused modifier is not just dropped: `addModifier` queues
+`battle:itemStackFull` and adds the default modifier type of the type's tier instead. A
+reward phase's type has no tier, so that is the COMMON pool's first entry, 5 Poke Balls
+(`gc_port_give_reward` returns that item, `gc_reward_gain` shows "You received ..." and then
+"The stack for ... is full. You will receive 5× Poké Ball instead."; the message comes second
+because upstream's queued `MessagePhase` runs after the reward phase, read in the source, the
+replay can't see the order). The Map, Mega Bracelet,
 Dynamax Band and Tera Orb are the exception: their modifiers have no `match()`, so
 upstream adds each one as a modifier of its own with no cap, and here the stack just grows.
+Mystery encounter rewards (`gc_mystery.c`) call the same function and ignore the message.
+Timed events are not ported on purpose (lorenzo, 2026-10-12): no event calendar and no event
+rule, such as the Plus voucher for later wins or the wave-115 Mega Bracelet and Dynamax Band.
 `GC_STUB_TRAINER_REWARDS` is counted only if reward-core has no row for a reward the config
 lists (none does today). The rivals themselves are still wild stand-ins in run-core's
 encounters, so these rewards are only reachable once run-core produces the fixed battles.
@@ -748,8 +757,9 @@ with its voucher unlocked and once without, then random ones up to N, and the vo
 `ModifierRewardPhase`s are run. Compared: the queued phases in order, the voucher reward's
 key, the unlock afterwards and the four voucher count changes; for each reward item, the
 key, the stack of that item before and after (the player's items keep their stacks from
-case to case, so they reach and pass the cap) and the "You received" text, formatted from
-upstream's locales (`GC_LOCALES`, which the script sets). `tools/trainervictoryplant.sh
-<trace>` replays one trace through eleven copies of game-core with one line changed each
-(the old inverted rule among them); all eleven must fail. The unit test is
+case to case, so they reach and pass the cap), the "You received" text and, past the cap,
+the itemStackFull text, formatted from upstream's locales (`GC_LOCALES`, which the script
+sets), and the five Poke Ball counts before and after. `tools/trainervictoryplant.sh
+<trace>` replays one trace through fourteen copies of game-core with one line changed each
+(the old inverted rule among them); all fourteen must fail. The unit test is
 `tests/voucher_egg_test.c`, part of `make test`.

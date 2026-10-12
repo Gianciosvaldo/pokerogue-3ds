@@ -32,7 +32,8 @@ int gc_port_reward_options(gc_run *run, int kind, gc_offer out[GC_MAX_OPTIONS], 
  * *why) when it can't be used there; nothing changes then. o->cost > 0 means a purchase: a reward that does
  * nothing is refused and keeps the screen; a free reward is taken either way where upstream takes it. */
 bool gc_port_apply_reward(gc_run *run, const gc_offer *o, int party, int move_slot, const char **why);
-/* ModifierRewardPhase: a fixed reward (EXP_CHARM at wave 10, GOLDEN_POKEBALL...) given as it is. */
-void gc_port_give_reward(gc_run *run, const char *key);
+/* ModifierRewardPhase: a fixed reward (EXP_CHARM at wave 10, GOLDEN_POKEBALL...) given as it is. Returns -1, or the
+ * reward-core item index given instead when the item's stack was full (addModifier's itemStackFull fallback). */
+int gc_port_give_reward(gc_run *run, const char *key);
 
 #endif
