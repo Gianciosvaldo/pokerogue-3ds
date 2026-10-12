@@ -2336,8 +2336,10 @@ static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
             }
             switch (hit_type) {
             case MULTI_HIT_TYPE_TWO_TO_FIVE: {
-                int v = pr_battle_rand_seed_int(bt, 20, 0);
-                pr_hook_ab(bt, user, PR_AC_MaxMultiHitAbAttr);
+                double rolled = pr_battle_rand_seed_int(bt, 20, 0);
+                pr_ab_params max_hits = {.pokemon = user, .move = -1, .value = &rolled};
+                pr_apply_ab_attrs(bt, PR_AC_MaxMultiHitAbAttr, &max_hits);
+                int v = (int)rolled;
                 hits = v >= 13 ? 2 : v >= 6 ? 3 : v >= 3 ? 4 : 5;
                 break;
             }
@@ -2347,7 +2349,10 @@ static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
             default: pr_note_unported(bt, PR_AC_MultiHitAttr); break;   /* Beat Up's count */
             }
         }
-        pr_hook_ab(bt, user, PR_AC_AddSecondStrikeAbAttr);
+        double count = hits;
+        pr_ab_params second_strike = {.pokemon = user, .opponent = first, .move = move, .value = &count};
+        pr_apply_ab_attrs(bt, PR_AC_AddSecondStrikeAbAttr, &second_strike);
+        hits = (int)count;
         pr_apply_multi_hit_count_modifiers(bt, user, move, &hits);
         turn_modifiers(bt, user->is_player, user); /* Preserve other missing item-family refusals. */
         user->hit_count = (int8_t)hits;

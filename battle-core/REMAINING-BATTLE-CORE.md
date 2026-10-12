@@ -18,9 +18,10 @@ Completed continuation slices and remaining source-backed work:
 | Wonder Skin (merged #232) | Real accuracy dispatcher and leaf now implemented | Status versus damage, accuracy below/at/above 50, bypass/suppression, stage/item ordering, whole turns/RNG/text |
 | Priority brackets and Quick Draw (merged #235) | Real bracket, chance and refusal callbacks now implemented | Real source conditions and seeded order, refusals, passives, priority ties; preserve Quick Claw |
 | Protean/Libero (merged #237) | Real normal/failure callers, leaf and message now implemented | Source type-change timing, existing type and Tera exclusions, repeated type changes (the pin has no Gen 9 once-per-summon gate), switch reset |
-| Field priority immunity (this slice) | Defending-field caller now dispatches and honors cancellation | Source positive/zero/negative and modified priority, passives, bypass, source phase/text/RNG; broader doubles remain |
+| Field priority immunity (merged #240) | Defending-field caller now dispatches and honors cancellation | Source positive/zero/negative and modified priority, passives, bypass, source phase/text/RNG; broader doubles remain |
 | Receiver/Power of Alchemy | CopyFaintedAlly needs victim context in the knockout dispatcher | Ally versus enemy victim, eligibility, copied primary/passive and source order, loaded doubles |
-| Parental Bond / Beat Up | AddSecondStrike and variable multi-hit dispatch remain | Move exclusions, hit powers/order, targets, KO interruption, exact RNG consumption |
+| Parental Bond / Skill Link (this slice) | Real hit-count callbacks now implemented; existing final-strike reduction retained | Move exclusions, hit powers/order, targets, KO interruption, exact RNG consumption |
+| Beat Up | Party hit-count case is missing; existing per-hit power is implemented | Pinned party/status ordering, self contribution, base species Attack, KO interruption and modifiers |
 | Cud Chew / Harvest | Berry recording, repeat consumption and restoration callbacks remain | Actual named held-item history and delays, ownership, duplication/refusal and RNG |
 | Transform / Sketch / ability copying | Remaining move effects and identity overrides | Real source identity/stat/moveset copying, bounds, reset and state serialization |
 | Forms / Battle Bond | Remaining form callbacks and one-use battle flags | Actual conditions and new required state; do not invent absent lifecycle inputs |
@@ -61,3 +62,10 @@ exact covered turns, up from 1,906, with no retained covered mismatch or loss.
 The dedicated matrix compares 8,000 complete ordinary singles turns. Natural
 partner-field coverage still requires broader doubles proof; the global doubles
 flags and source disabled Illusion registrations are not silently bypassed.
+
+Hit-count ability continuation on base main `699f9e8`: rich seed777 now covers
+1,929/2,000 turns exactly, up from 1,924. Parental Bond/Skill Link source proof
+matches 8,000 full turns and 440 dispatcher boundaries. The remaining 71 rich
+turns are a prioritization sample, not the whole remaining battle-core scope.
+Leading sampled gaps include forms, berry restoration, Battle Bond predicates,
+stat-changing moves, ability copying, Beat Up, suppression and Sketch.

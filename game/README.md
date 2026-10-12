@@ -143,8 +143,11 @@ point serializes it and loads it back.
 **The starter select and the system data** have host tests of their own (`make -C game/tests <name> && game/tests/build/<name>`):
 `startertest` (the model: every button, the cursor, the team and the cost), `starter_data_test` (the system file on the card, and the
 list, panel and team against game-core's own functions, with a fuzz of random systems), `starter_ui_test` (the screen over a fake
-drawing layer, with the host that hands the team to the app), and `flowtest` (New Game, Continue and Load around it). CI does not
-run them; the 3DS build is the only check CI makes of `game/`.
+drawing layer, with the host that hands the team to the app), and `flowtest` (New Game, Continue and Load around it).
+CI runs all of them with `game/tests/run_host_tests.sh` (the `game-tests` job): the targets that need nothing outside the repo, and
+`runtest` for 10000 runs and for 100 with system data and saves. Not in CI: `evtest` and `switchtest` (need upstream's `locales/en`),
+`startertest` (compares against an upstream checkout), `animtest` and `anim_details_test` (need libjansson and upstream's animation
+files), `mkfixture` (a tool) and `observer_mutations.py` (about 6 minutes).
 
 **The combat observer and the post-mortem** (custom content, C03): `runtest` also checks, at the end of every run, that the combat report is
 there, matches the run (outcome, wave, biome), holds a history custom-core accepts, and that no real event was refused, dropped, lost or

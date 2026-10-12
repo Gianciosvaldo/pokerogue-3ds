@@ -1,4 +1,4 @@
-# Runs C logic tests on host (Linux runner) and builds the 3DS app in devkitPro Docker
+# Runs C logic tests on host (Linux runner), the game/ host tests (game/tests/run_host_tests.sh), and builds the 3DS app in devkitPro Docker
 # on every pull request and manual dispatch.
 # Note: Differential tests against upstream PokeRogue require an upstream checkout
 # (using setup-upstream.sh) and are run by hand.
@@ -24,6 +24,13 @@ jobs:
         run: make -C battle-core build/turntest build/poltergeist-message-test build/optional-phase-test build/optional-phase-fixtures-test
       - name: Run game-core tests
         run: make -C game-core test
+
+  game-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run game/ host tests
+        run: game/tests/run_host_tests.sh
 
   build-3ds:
     runs-on: ubuntu-24.04

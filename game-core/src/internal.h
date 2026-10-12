@@ -150,6 +150,8 @@ typedef struct { int16_t level; uint16_t move; int8_t source; } gc_learn_row;
 /* Pokemon.getLevelMoves({startingLevel, includeEvolutionMoves, includePrevolutionMoves, includeRelearnerMoves}):
  * the rows, or -1 when they don't fit in `cap` */
 int gc_level_moves(const gc_mon *m, int starting_level, bool evo, bool prevo, bool relearn, gc_learn_row *out, int cap);
+/* the level-0 (EVOLVE_MOVE) moves postEvolve queues for the mon's current species and form, one LearnMovePhase each */
+int gc_evolution_moves(const gc_mon *m, uint16_t *out, int max);
 /* PlayerPokemon.getUnlockedEggMoves(): how many (out holds 4) */
 int gc_unlocked_egg_moves(const gc_run *run, const gc_mon *m, uint16_t out[4]);
 
