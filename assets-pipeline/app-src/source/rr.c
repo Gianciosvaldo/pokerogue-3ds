@@ -41,6 +41,7 @@ const rr_draw_opts RR_DEFAULT_OPTS = {0, 0, 1, 1, 0, RR_RGBA(255, 255, 255, 255)
 static C3D_RenderTarget* g_targets[2];
 static int g_origin[2][2] = {{40, 30}, {0, 60}};
 static rr_screen g_cur = RR_TOP;
+static float g_zoom = 1, g_zoom_x, g_zoom_y; /* rr_set_zoom */
 static rr_tex* g_live;
 static C2D_TextBuf g_sysbuf;
 static float g_cpu_ms, g_gpu_ms;
@@ -518,6 +519,7 @@ void rr_target(rr_screen s, rr_color clear) {
   C2D_SceneBegin(g_targets[s]);
   rr_set_blend(RR_BLEND_NORMAL);
   rr_set_tone(0, 0, 0);
+  rr_set_zoom(1, 0, 0);
 }
 
 static rr_blend g_blend = RR_BLEND_NORMAL;
@@ -589,6 +591,11 @@ static void draw_sub_k(rr_tex* t, int sx, int sy, int sw, int sh, float px, floa
       (u16)sw, (u16)sh, sx / tw, 1.0f - sy / th, (sx + sw) / tw, 1.0f - (sy + sh) / th,
   };
   C2D_Image img = {&t->tex, &sub};
+  if (g_zoom != 1) {
+    px = g_zoom_x + (px - g_zoom_x) * g_zoom;
+    py = g_zoom_y + (py - g_zoom_y) * g_zoom;
+    cx *= g_zoom, cy *= g_zoom, scale_x *= g_zoom, scale_y *= g_zoom;
+  }
   C2D_DrawParams p = {{px + g_origin[g_cur][0], py + g_origin[g_cur][1], sw * scale_x, sh * scale_y},
                       {cx, cy}, 0.0f, angle};
   if (angle == 0.0f && fabsf(scale_x) == 1.0f && fabsf(scale_y) == 1.0f) {
@@ -644,7 +651,17 @@ void rr_draw_cropped(const rr_frame* f, float x, float y, int w, int h, const rr
   draw_frame_region(f, x, y, w, h, o);
 }
 
+void rr_set_zoom(float s, float ax, float ay) {
+  g_zoom = s;
+  g_zoom_x = ax;
+  g_zoom_y = ay;
+}
+
 void rr_rect(float x, float y, float w, float h, rr_color c) {
+  if (g_zoom != 1) {
+    x = g_zoom_x + (x - g_zoom_x) * g_zoom, y = g_zoom_y + (y - g_zoom_y) * g_zoom;
+    w *= g_zoom, h *= g_zoom;
+  }
   C2D_DrawRectSolid(x + g_origin[g_cur][0], y + g_origin[g_cur][1], 0.0f, w, h, to_c2d(c));
 }
 
