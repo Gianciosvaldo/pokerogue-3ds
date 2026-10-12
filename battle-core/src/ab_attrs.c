@@ -347,6 +347,15 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         return 1;
     }
     /* ---- stats ---- */
+    case PR_AC_AddSecondStrikeAbAttr:
+        if (move <= MOVE_ID_NONE || move >= PR_MOVE_COUNT) return -1;
+        GATE(pr_move_can_be_multi_strike_enhanced_ex(bt, move, p, true, o));
+        *pp->value += 1;
+        return 1;
+    case PR_AC_MaxMultiHitAbAttr:
+        GATE(true);
+        *pp->value = 0; /* Source replaces the rolled bucket, not the final hit count. */
+        return 1;
     case PR_AC_ChangeMovePriorityInBracketAbAttr: {
         const pr_attr_ChangeMovePriorityInBracketAbAttr *x = P(ChangeMovePriorityInBracketAbAttr, a);
         GATE(call_bool(bt, x->moveFunc, a->cls, p, NULL, move));

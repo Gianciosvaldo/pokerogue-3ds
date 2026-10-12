@@ -2,7 +2,7 @@
 
 Current continuation (2026-10-12): leave-field primal weather, Wonder Skin,
 priority brackets/Quick Draw, Protean/Libero and defending-field priority immunity
-have bounded source proofs. Retained rich seed777 covers 1,924/2,000 turns exactly;
+have bounded source proofs. Retained rich seed777 covers 1,929/2,000 turns exactly;
 this is sample coverage, not a battle-core completion percentage. See the
 [remaining inventory](REMAINING-BATTLE-CORE.md) and the validation records below.
 
@@ -1164,3 +1164,19 @@ Ten production mutations fail and nine malformed traces reject. Rich retained
 coverage grows from 1,906 to 1,924; no retained covered mismatch or loss.
 See [validation and reproduction](FIELD-PRIORITY-VALIDATION.md). Singles proof
 does not establish natural ally-field or broader doubles behavior.
+
+## Parental Bond and Skill Link (2026-10-12)
+
+The move-effect phase now dispatches both source hit-count abilities. Parental
+Bond adds to the count only when the existing source eligibility helper permits
+it; its existing final-strike damage reduction is preserved. Skill Link replaces
+the already drawn random bucket with zero, preserving the RNG draw even though
+the resulting count is five. Both modify their numerical holders in simulation,
+as the pin does. No Pokemon/save fields or generated data changes are needed.
+
+Source proof matches 8,000 complete turns and 440 dispatch helpers; twelve
+production mutations are detected and nine malformed traces reject. Retained
+rich coverage increases from 1,924 to 1,929, without covered mismatch or loss.
+See [validation and reproduction](MULTI-HIT-ABILITIES-VALIDATION.md). The proof
+includes knockout interruption, Substitute, fixed/intrinsic hits, Multi-Lens,
+per-hit defenses, Tera and damage exclusions; broader doubles remain separate.
