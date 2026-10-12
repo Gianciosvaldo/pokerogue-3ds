@@ -113,12 +113,39 @@ static int berry_stacks(const gc_run *r)
     return n;
 }
 
+/* HealthRatioRequirement([0.51, 1]): Pokemon.getHpRatio() is Math.round((hp / getMaxHp()) * 100) / 100, so a Pokemon
+ * at 50.5% of its HP already counts as 0.51 */
+static bool hp_ratio_in_half_to_full(const pr_pokemon *p)
+{
+    if (p->stats[0] <= 0) return false;
+    const double ratio = js_round((double)p->hp / p->stats[0] * 100.0) / 100.0;
+    return ratio >= 0.51 && ratio <= 1.0;
+}
+
 static bool any_over_half_hp(const gc_run *r)
 {
-    for (int i = 0; i < r->n_party; i++) {
-        const pr_pokemon *p = &r->party[i].b;
-        if (p->hp > 0 && p->stats[0] > 0 && (double)p->hp / p->stats[0] >= 0.51) return true;
+    for (int i = 0; i < r->n_party; i++)
+        if (hp_ratio_in_half_to_full(&r->party[i].b)) return true;
+    return false;
+}
+
+/* The party screen's selectableFilter of the option (null = selectable), for the encounters whose options pick a
+ * Pokemon: Shady Vitamin Dealer's cheap deal needs a Pokemon in the HealthRatioRequirement's range, the expensive one
+ * any Pokemon that is not fainted */
+bool gc_mystery_pick_ok(const gc_run *run, int type, int option, int idx)
+{
+    if (idx < 0 || idx >= run->n_party) return false;
+    const gc_mon *m = &run->party[idx];
+    if (type == GC_ME_SHADY_VITAMIN_DEALER) {
+        if (option == 0) return hp_ratio_in_half_to_full(&m->b);
+        if (option == 1) return gc_mon_allowed(m);
     }
+    return false;
+}
+
+static bool any_pick_ok(const gc_run *run, int type, int option)
+{
+    for (int i = 0; i < run->n_party; i++) if (gc_mystery_pick_ok(run, type, option, i)) return true;
     return false;
 }
 
@@ -242,8 +269,10 @@ void gc_mystery_setup_screen(gc_run *run)
     if (type == GC_ME_DARK_DEAL || type == GC_ME_AN_OFFER_YOU_CANT_REFUSE) {
         s->option_ok[0] = legal_party(run) > 0;
     } else if (type == GC_ME_SHADY_VITAMIN_DEALER) {
-        bool ok = any_over_half_hp(run);
-        s->option_ok[0] = ok; s->option_ok[1] = ok;
+        /* MoneyRequirement(0, 1.5) / (0, 5): the option is disabled without the money; it also needs a Pokemon the
+         * party screen would let the player pick */
+        s->option_ok[0] = run->money >= pr_run_get_wave_money_amount(run->wave, 1.5) && any_pick_ok(run, type, 0);
+        s->option_ok[1] = run->money >= pr_run_get_wave_money_amount(run->wave, 5.0) && any_pick_ok(run, type, 1);
     } else if (type == GC_ME_THE_POKEMON_SALESMAN) {
         s->option_ok[0] = run->money >= pr_run_get_wave_money_amount(run->wave, 4.0) && run->n_party < 6;
     } else if (type == GC_ME_DELIBIRDY) {
@@ -268,6 +297,8 @@ void gc_mystery_setup_screen(gc_run *run)
 
 static void end_mystery_encounter_leave(gc_run *run)
 {
+    /* leaveEncounterWithoutBattle -> handleMysteryEncounterVictory pushes MysteryEncounterRewardsPhase and an EggLapsePhase */
+    if (run->sys) gc_system_increment_egg_steps(run->sys);
     run->in_battle = false;
     run->mystery_type = run->mystery_tier = -1;
     if (gc_is_new_biome(run, run->wave)) gc_rq_push(run, gc_rp(RP_SELECT_BIOME, 0, 0, 0));
@@ -408,6 +439,104 @@ static void department_store_sale(gc_run *run, int option)
     end_mystery_encounter_shop(run);
 }
 
+/* Shady Vitamin Dealer (src/data/mystery-encounters/encounters/shady-vitamin-dealer-encounter.ts).
+ * Picking a Pokemon on the party screen runs the option's onPreOptionPhase callback: updatePlayerMoney(-price) and two
+ * generateModifierType(BASE_STAT_BOOSTER), which roll randSeedInt(6) each. The callback fires from the party screen,
+ * after the executeWithSeedOffset that wrapped onPreOptionPhase has put the run's RNG back, so they draw from the run's
+ * own RNG. The option phase (seed offset * 500, no draws) gives both vitamins to the Pokemon with
+ * applyModifierTypeToPlayerPokemon and leaves with leaveEncounterWithoutBattle(true): the heal-only shop, then the
+ * post-option phase (seed offset * 2000), then the next wave. */
+static void me_update_modifiers(gc_run *run)
+{
+    /* BattleScene.updateModifiers: virtual stacks reset, every party member's stats calculated again */
+    for (int i = 0; i < run->n_items; i++) run->items[i].virtual_stack = 0;
+    gc_items_to_battle(run);
+    for (int i = 0; i < run->n_party; i++) pr_recalculate_stats(&run->bt, &run->party[i].b);
+}
+
+/* applyModifierTypeToPlayerPokemon(pokemon, BASE_STAT_BOOSTER type): an existing stack at its maximum (the IV of the
+ * stat) is left alone, else addModifier: a new one is added whatever the maximum (even one of 0: PersistentModifier.add
+ * only checks it when it stacks onto an existing one) */
+static void me_give_vitamin(gc_run *run, int idx, int stat)
+{
+    const gc_mon *m = &run->party[idx];
+    const gc_item *existing = NULL;
+    for (int i = 0; i < run->n_items; i++) {
+        const gc_item *it = &run->items[i];
+        if (!strcmp(it->key, "BASE_STAT_BOOSTER") && it->arg == stat && it->pokemon_id == m->b.id) existing = it;
+    }
+    if (existing && existing->stack + existing->virtual_stack >= m->b.ivs[stat]) return;
+    if (!existing && (run->n_items >= GC_MAX_ITEMS || run->n_items >= PR_MAX_MODIFIERS)) { gc_stub(run, GC_STUB_REWARD_APPLY); return; }
+    gc_item_add(run, "BASE_STAT_BOOSTER", (int16_t)stat, m->b.id, 1);
+    me_update_modifiers(run);
+}
+
+/* leaveEncounterWithoutBattle(true): MysteryEncounterRewardsPhase puts the heal-only shop (SelectModifierPhase(0,
+ * undefined, {fillRemaining: false, rerollMultiplier: -1})) in front of the PostMysteryEncounterPhase, which runs the
+ * option's onPostOptionPhase and then queues the next wave */
+static void me_leave_with_heal_shop(gc_run *run, bool post, int type, int mon, int option)
+{
+    gc_rq_push(run, gc_rp(RP_SELECT_MODIFIER, 1, 0, 0));
+    if (post) gc_rq_push(run, gc_rp(RP_ME_POST, type, mon, option));
+    end_mystery_encounter_leave(run);
+}
+
+static void shady_vitamin_dealer(gc_run *run, int option, int b)
+{
+    if (option == 2) {   /* leave with nothing: no exp, no rewards */
+        me_leave_with_heal_shop(run, false, GC_ME_SHADY_VITAMIN_DEALER, 0, option);
+        return;
+    }
+    /* the Pokemon of the party screen; the screen would not let a Pokemon the filter refuses be picked, so a refused
+     * one (the app has no party screen for encounters yet) is taken as the first that passes */
+    int mon = gc_mystery_pick_ok(run, GC_ME_SHADY_VITAMIN_DEALER, option, b) ? b : -1;
+    for (int i = 0; mon < 0 && i < run->n_party; i++) if (gc_mystery_pick_ok(run, GC_ME_SHADY_VITAMIN_DEALER, option, i)) mon = i;
+    const double price = pr_run_get_wave_money_amount(run->wave, option == 0 ? 1.5 : 5.0);
+    run->money = fmin(fmax(run->money - price, 0.0), 9007199254740991.0);
+    gc_ev_msg(run, "mysteryEncounterMessages:paidMoney", 1, pr_arg_int("amount", (int32_t)price));
+    const int first = pr_rng_seed_int(&run->run.rng, 6, 0);
+    const int second = pr_rng_seed_int(&run->run.rng, 6, 0);
+    me_give_vitamin(run, mon, first);
+    me_give_vitamin(run, mon, second);
+    me_leave_with_heal_shop(run, true, GC_ME_SHADY_VITAMIN_DEALER, mon, option);
+}
+
+/* PostMysteryEncounterPhase: the option's onPostOptionPhase in executeWithSeedOffset(.., getSeedOffset() * 2000). The
+ * setEncounterExp(.., 100) both options end with only sets doEncounterExp; MysteryEncounterRewardsPhase has already
+ * run by then and nothing calls it afterwards, so the experience is never given (traced in the producer) */
+void gc_mystery_post(gc_run *run, const gc_rphase *p)
+{
+    if (p->a != GC_ME_SHADY_VITAMIN_DEALER || p->b < 0 || p->b >= run->n_party) return;
+    gc_mon *m = &run->party[p->b];
+    if (p->c == 1) {
+        gc_ev_msg(run, "mysteryEncounters/shadyVitaminDealer:noBadEffects", 0);
+        return;
+    }
+    /* applyDamageToPokemon(floor(maxHp / 2)): a Pokemon that would faint is left at 1 HP */
+    int damage = (int)floor(m->b.stats[0] / 2.0);
+    if (m->b.hp > 0 && m->b.hp - damage <= 0) damage = m->b.hp - 1;
+    {
+        const int next = m->b.hp - damage;
+        m->b.hp = next < m->b.stats[0] ? (next > 0 ? next : 0) : m->b.stats[0];
+    }
+    /* the nature is drawn until it differs from Pokemon.nature, the base one (not a Mint's), and set as the custom one */
+    pr_rng r = pr_run_seed_offset_rng(&run->run, (run->wave * 1000 + 512) * 2000, NULL);
+    const int current = m->has_custom_nature ? m->base_nature : m->b.nature;
+    int nature = pr_rng_seed_int(&r, 25, 0);
+    while (nature == current) nature = pr_rng_seed_int(&r, 25, 0);
+    if (!m->has_custom_nature) m->base_nature = m->b.nature;
+    m->has_custom_nature = true;
+    m->b.nature = (uint8_t)nature;
+    gc_items_to_battle(run);
+    pr_recalculate_stats(&run->bt, &m->b);
+    static const char *const nature_keys[25] = {
+        "nature:hardy", "nature:lonely", "nature:brave", "nature:adamant", "nature:naughty", "nature:bold", "nature:docile",
+        "nature:relaxed", "nature:impish", "nature:lax", "nature:timid", "nature:hasty", "nature:serious", "nature:jolly",
+        "nature:naive", "nature:modest", "nature:mild", "nature:quiet", "nature:bashful", "nature:rash", "nature:calm",
+        "nature:gentle", "nature:sassy", "nature:careful", "nature:quirky"};
+    gc_ev_msg(run, "mysteryEncounters/shadyVitaminDealer:cheapSideEffects", 1, pr_arg_key("newNature", nature_keys[nature]));
+}
+
 bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why, bool *ok)
 {
     if (option < 0 || option >= run->screen.n_options || !run->screen.option_ok[option]) {
@@ -521,18 +650,7 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_SHADY_VITAMIN_DEALER:
-        if (option == 0 || option == 1) {
-            double cost = pr_run_get_wave_money_amount(run->wave, option == 0 ? 1.5 : 3.5);
-            if (run->money >= cost) run->money -= cost;
-            double mult = option == 0 ? 0.75 : 0.50;
-            for (int i = 0; i < run->n_party; i++) {
-                if (run->party[i].b.hp > 0) run->party[i].b.hp = (int32_t)(run->party[i].b.hp * mult);
-            }
-            gc_port_give_reward(run, "HP_UP");
-            end_mystery_encounter_leave(run);
-            return true;
-        }
-        end_mystery_encounter_leave(run);
+        shady_vitamin_dealer(run, option, b);
         return true;
 
     case GC_ME_FIELD_TRIP:

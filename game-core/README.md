@@ -785,9 +785,36 @@ money, items owned, that the encounter left without a battle, the shop's `custom
 Pikachu, Eevee), the RNG after the shop, and that the next wave is queued. The old `gen/dump-mystery-actions.test.ts`
 and `tests/mystery_diff_test.c` are untouched and still only smoke coverage.
 
-Only Department Store Sale is ported and compared. Every other encounter's actions in `gc_mystery.c` are still the
-Task 46 stand-ins; the encounter *selection* (`gc_mystery_select`) and the intro/requirement checks are not part of
-this comparison.
+Department Store Sale and Shady Vitamin Dealer are ported and compared. Every other encounter's actions in
+`gc_mystery.c` are still the Task 46 stand-ins; the encounter *selection* (`gc_mystery_select`) and the intro checks
+are not part of this comparison.
+
+### Shady Vitamin Dealer
+
+The same script also writes `<trace>-shady.txt`, replayed by `tests/mystery_shady_diff_test.c`. Each case builds a party
+of random levels, IVs, natures (a fifth with a Mint's custom nature), vitamins already held (up to and at the IV cap) and
+HP around the 0.51 boundary, sets the wave and a wallet around both prices, and records what upstream offers
+(`option.meetsRequirements()` and each party-screen filter on each Pokemon), then runs the chosen option as the phases
+do: `onPreOptionPhase` in `executeWithSeedOffset(.., getSeedOffset())` with `selectPokemonForOption` captured, the party
+screen's callback after it returns (traced to run outside any seed offset, so the two `randSeedInt(6)` vitamin rolls use
+the run's own RNG), `onOptionPhase` in `(.., * 500)`, `MysteryEncounterRewardsPhase.doEncounterRewardsAndContinue()` (the
+phases it queues), `EggLapsePhase.start()` and `onPostOptionPhase` in `(.., * 2000)`. Compared: the options offered and the
+Pokemon each filter accepts, the run RNG, money, vitamin entries, every party member's HP, stats, nature and vitamin
+stacks after the option and after the post-option phase, the queue (the heal-only shop, then the post-option phase, then
+the next wave), the messages with the money paid, and the eggs' wave counters.
+
+Upstream behaviours this reproduces on purpose, all found by the comparison or by reading the pinned code:
+- `HealthRatioRequirement` goes through `getHpRatio()`, which rounds to two decimals: 50.5% of the HP already counts as 0.51.
+- A vitamin is added whatever the IV cap when the Pokemon has none of that stat yet (`PersistentModifier.add` only checks
+  the cap when it stacks), so a stat with IV 0 can hold one stack; an existing stack at the cap is left alone.
+- The post-option phase runs after the heal-only shop, so the damage (half the max HP after the vitamins) and the new nature
+  land after it. The nature is drawn until it differs from `Pokemon.nature`, the base one, not a Mint's.
+- `setEncounterExp(.., 100)` in `onPostOptionPhase` only sets `doEncounterExp`, which `MysteryEncounterRewardsPhase` already
+  ran: no experience is ever given (the producer records that no experience phase is queued).
+- `applyDamageToPokemon`'s "never faint" floor cannot be reached here (the cheap deal needs more than half the HP), so no
+  planted bug on it can be caught; it is kept to follow upstream.
+- The party screen is the app's: until it exists, `gc_mystery_execute` takes the first Pokemon the filter accepts when the
+  one it is given is refused.
 
 ## Fleeing: upstream differential (Task 77 / #125)
 
