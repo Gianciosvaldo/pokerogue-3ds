@@ -1132,3 +1132,17 @@ rejected. Retained rich coverage rises from 1,872 to 1,896/2,000, with no retain
 covered mismatch or coverage loss. See [validation and reproduction](PRIORITY-BRACKETS-VALIDATION.md).
 This is bounded singles proof, with no complete doubles, hardware or battle-core
 completion claim.
+
+## Protean and Libero (2026-10-12)
+
+Both move call sites now dispatch the real type-change leaf: normal execution
+and the source's selected failure paths. The leaf uses converted move typing,
+retains added types, refuses Tera/Struggle/called moves/already matching type, and
+preserves simulation. It follows the pin's repeated activation behavior; its
+Gen 9 once-per-summon restriction is commented out upstream.
+
+Source proof: 8,000 complete turns plus 80 actual dispatcher checks; 12 production
+mutations detected and nine malformed traces rejected. Rich retained coverage
+rises from 1,896 to 1,906/2,000; no retained covered mismatch or coverage loss.
+See [validation and reproduction](PROTEAN-VALIDATION.md). No new save state or
+complete doubles, boss, switch-lifecycle or hardware parity is claimed.

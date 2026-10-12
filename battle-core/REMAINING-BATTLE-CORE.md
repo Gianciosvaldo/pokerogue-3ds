@@ -16,8 +16,8 @@ Next independent source-backed slices, in likely implementation order:
 | Slice | Current concrete gap | Required proof |
 | --- | --- | --- |
 | Wonder Skin (merged #232) | Real accuracy dispatcher and leaf now implemented | Status versus damage, accuracy below/at/above 50, bypass/suppression, stage/item ordering, whole turns/RNG/text |
-| Priority brackets and Quick Draw (this slice) | Real bracket, chance and refusal callbacks now implemented | Real source conditions and seeded order, refusals, passives, priority ties; preserve Quick Claw |
-| Protean/Libero | PokemonTypeChangeAbAttr move callers record unsupported | Source type-change timing, existing type and Tera exclusions, repeated type changes (the pin has no Gen 9 once-per-summon gate), switch reset |
+| Priority brackets and Quick Draw (merged #235) | Real bracket, chance and refusal callbacks now implemented | Real source conditions and seeded order, refusals, passives, priority ties; preserve Quick Claw |
+| Protean/Libero (this slice) | Real normal/failure callers, leaf and message now implemented | Source type-change timing, existing type and Tera exclusions, repeated type changes (the pin has no Gen 9 once-per-summon gate), switch reset |
 | Receiver/Power of Alchemy | CopyFaintedAlly needs victim context in the knockout dispatcher | Ally versus enemy victim, eligibility, copied primary/passive and source order, loaded doubles |
 | Parental Bond / Beat Up | AddSecondStrike and variable multi-hit dispatch remain | Move exclusions, hit powers/order, targets, KO interruption, exact RNG consumption |
 | Cud Chew / Harvest | Berry recording, repeat consumption and restoration callbacks remain | Actual named held-item history and delays, ownership, duplication/refusal and RNG |
@@ -48,3 +48,9 @@ covered turns, up from 1,872; summon 1,869, up from 1,868. Other retained covera
 is unchanged. The dedicated source matrix matches 8,000 complete turns and
 16,000 direct bracket probes. See PRIORITY-BRACKETS-VALIDATION.md for the
 boundaries; these counts do not establish a completion percentage.
+
+Protean/Libero continuation on base main `1930826`: rich seed777 now has 1,906
+exact covered turns, up from 1,896. Dedicated source proof matches 8,000 full
+turns and 80 normal/simulated dispatch boundaries. The next simple caller gap is
+FieldPriorityMoveImmunityAbAttr: the leaf exists, while MovePhase's defending-
+field caller still records unsupported instead of honoring cancellation.
