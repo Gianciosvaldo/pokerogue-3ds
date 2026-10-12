@@ -291,6 +291,7 @@ enum {
     CC_REFUSE_REMATCH,
     CC_REFUSE_ABILITY_UNKNOWN,
     CC_REFUSE_MOVES_UNKNOWN,
+    CC_REFUSE_ROSTER_FULL,          /* all 16 slots hold a record that must not be overwritten (cc_life_overwritable) */
     CC_REFUSE_COUNT_
 };
 

@@ -17,8 +17,9 @@
  * Stable Pokemon identities are not derived either (a snapshot's party_slot is an index into a party that can be re-ordered
  * between the event and the drain): species and form come from the snapshot, ids stay unknown.
  *
- * The run uid is a counter of this session, not a durable identifier: nothing is saved yet (C04). It is never compared across
- * restarts.
+ * The run uid comes from a source the app installs (co_set_uid_source: custom_store.c hands out durable ones, persisted before the
+ * run is observed). Without one, or when it gives none, the uid is a counter of this session: the report says so (uid_durable) and
+ * nothing is stored for it.
  */
 #ifndef GM_COMBAT_OBSERVER_H
 #define GM_COMBAT_OBSERVER_H
@@ -57,6 +58,8 @@ typedef struct {
 /* What a finished run leaves, by value. Valid until the next co_begin_run. */
 typedef struct {
   bool valid;                 /* a run was observed and has ended */
+  cc_run_uid run_uid;         /* the uid this observation ran under (never 0) */
+  bool uid_durable;           /* ... and it came from the uid source: a stored report may name it. False: a session counter */
   uint8_t outcome;            /* CC_OUT_DEFEAT or CC_OUT_CLEAR */
   int16_t biome;              /* the run's biome id as it ended */
   uint16_t wave;              /* the wave it ended on */
@@ -70,6 +73,11 @@ typedef struct {
   cc_history history;         /* the last turns, oldest first */
   co_stats stats;
 } co_report;
+
+/* Where run uids come from: called once per co_begin_run, returns a durable uid (persisted before it is returned) or 0 for none.
+ * NULL (the default) means none. The observer works the same either way; only the report's uid_durable differs. */
+typedef cc_run_uid (*co_uid_source)(void);
+void co_set_uid_source(co_uid_source source);
 
 /* Starts observing a new run (any earlier report is dropped). `resumed`: the run was loaded from a save. */
 void co_begin_run(bool resumed);

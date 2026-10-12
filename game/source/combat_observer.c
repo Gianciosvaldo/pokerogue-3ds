@@ -15,6 +15,7 @@ static struct {
   bool finished;          /* ... and has ended */
   bool resumed;
   cc_run_uid uid;
+  bool uid_durable;
   uint32_t batch_id;      /* the last id used; every batch built takes one, accepted or not, so a refused one shows as a gap */
   uint32_t drain_no;      /* the last drain number taken in */
   uint32_t battle_seq;    /* GC_EV_WAVE seen in this run */
@@ -26,6 +27,9 @@ static struct {
 } C;
 
 static cc_run_uid g_next_uid = 1;   /* this session only */
+static co_uid_source g_uid_source;
+
+void co_set_uid_source(co_uid_source source) { g_uid_source = source; }
 
 /* ------------------------------------------------------------------ one event -> one observation */
 
@@ -173,7 +177,9 @@ void co_begin_run(bool resumed) {
   C.wave_ok = C.turn_ok = false;
   C.pending_loss = false;
   C.queue_overflow_seen = false;
-  C.uid = g_next_uid++;
+  C.uid = g_uid_source ? g_uid_source() : 0;
+  C.uid_durable = C.uid != 0;
+  if (!C.uid_durable) C.uid = g_next_uid++;     /* only this observation needs a name; nothing stores it */
   cc_reducer_init(&C.red);
   C.active = cc_reducer_begin_run(&C.red, C.uid, resumed) == CC_OK;
 }
@@ -231,6 +237,8 @@ bool co_finish(bool victory, int biome, int wave) {
   co_report* r = &C.report;
   memset(r, 0, sizeof *r);
   r->valid = true;
+  r->run_uid = C.uid;
+  r->uid_durable = C.uid_durable;
   r->outcome = victory ? CC_OUT_CLEAR : CC_OUT_DEFEAT;
   r->biome = (int16_t)biome;
   r->wave = (uint16_t)(wave < 0 ? 0 : wave > 0xFFFF ? 0xFFFF : wave);

@@ -12,9 +12,9 @@ CFLAGS ?= -O2 -g -std=c99 -Wall -Wextra -Wpedantic -Werror
 CPPFLAGS += -Iinclude
 BUILD ?= build
 BATTLE_GEN ?= ../battle-core/gen/out
-SRCS := src/status.c src/history.c src/nemesis.c src/schedule.c src/ids.c src/meta.c src/reducer.c
+SRCS := src/status.c src/history.c src/nemesis.c src/schedule.c src/ids.c src/meta.c src/reducer.c src/codec.c src/commit.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
-TESTS := $(BUILD)/model_test $(BUILD)/reducer_test $(BUILD)/layout_test
+TESTS := $(BUILD)/model_test $(BUILD)/reducer_test $(BUILD)/layout_test $(BUILD)/codec_test $(BUILD)/commit_test
 ARM_CC ?= arm-none-eabi-gcc
 ARM_SIZE ?= arm-none-eabi-size
 ARM_FLAGS ?= -march=armv6k -mtune=mpcore -mfpu=vfp -mfloat-abi=hard -mtp=soft -O2 -std=c99 -Wall -Wextra -Wpedantic -Werror
@@ -24,6 +24,8 @@ test: unit-test san-test mutation-test
 unit-test: $(TESTS)
 	$(BUILD)/model_test
 	$(BUILD)/reducer_test
+	$(BUILD)/codec_test
+	$(BUILD)/commit_test
 	$(BUILD)/layout_test $(BATTLE_GEN)/pr_enums.h
 
 san-test:
@@ -48,6 +50,12 @@ $(BUILD)/model_test: tests/model_test.c tests/check.h $(BUILD)/libcc.a
 $(BUILD)/reducer_test: tests/reducer_test.c tests/check.h $(BUILD)/libcc.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/reducer_test.c $(BUILD)/libcc.a -o $@
 
+$(BUILD)/codec_test: tests/codec_test.c tests/check.h $(BUILD)/libcc.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/codec_test.c $(BUILD)/libcc.a -o $@
+
+$(BUILD)/commit_test: tests/commit_test.c tests/check.h $(BUILD)/libcc.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/commit_test.c $(BUILD)/libcc.a -o $@
+
 $(BUILD)/layout_test: tests/layout_test.c tests/check.h $(BUILD)/libcc.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/layout_test.c $(BUILD)/libcc.a -o $@
 
@@ -55,7 +63,7 @@ $(BUILD)/layout_test: tests/layout_test.c tests/check.h $(BUILD)/libcc.a
 # assertions (encoded maximum within 64 KiB, in-memory contract within 128 KiB) with the ARM type sizes.
 arm-check:
 	@mkdir -p $(BUILD)/arm
-	for f in $(SRCS) tests/model_test.c tests/reducer_test.c tests/layout_test.c; do \
+	for f in $(SRCS) tests/model_test.c tests/reducer_test.c tests/layout_test.c tests/codec_test.c tests/commit_test.c; do \
 		$(ARM_CC) $(CPPFLAGS) $(ARM_FLAGS) -c $$f -o $(BUILD)/arm/$$(basename $$f .c).o || exit 1; \
 	done
 	$(ARM_SIZE) $(addprefix $(BUILD)/arm/,$(notdir $(SRCS:.c=.o)))

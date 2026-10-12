@@ -10,3 +10,5 @@
 #include "../../custom-core/src/ids.c"
 #include "../../custom-core/src/meta.c"
 #include "../../custom-core/src/reducer.c"
+#include "../../custom-core/src/codec.c"
+#include "../../custom-core/src/commit.c"

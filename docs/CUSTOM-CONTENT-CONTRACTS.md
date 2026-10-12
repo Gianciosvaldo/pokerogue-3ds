@@ -1,10 +1,11 @@
-# Custom content contracts, version 1 (tasks C01, C02, C03)
+# Custom content contracts, version 1 (tasks C01, C02, C03, C04)
 
 Written for task C01 of [CUSTOM-CONTENT-ADVANCED-AGENT.md](CUSTOM-CONTENT-ADVANCED-AGENT.md). It does three things:
 audits the interfaces the custom content will touch, fixes the version-1 data contracts, and records what the new
 `custom-core/` module proves. It is not a record of a working custom mode: the module has no live hooks, no file
 access, no wallet access and no spawn code. Since C03 the app feeds the reducer and shows a read-only post-mortem screen
-(sections 2.9 and 5.2); nothing is saved and no custom mode exists yet.
+(sections 2.9 and 5.2). Since C04 it keeps the last run's report and the id counters in one file on the SD card (sections 2.10 and
+5.3); no Nemesis is ever inserted by the app yet, and no custom mode exists.
 
 | Item | Value |
 |---|---|
@@ -94,6 +95,9 @@ handoff did not fix (listed again in "Choices to confirm").
   before `rsv_clear`, Continue reloads that save and the player replays the wave. If a custom commit ran before the clear
   and the app then stops, a Nemesis exists for a defeat that was undone by the reload. If the clear ran first and the app
   stops before a custom commit, the defeat leaves no record. C04 must choose the order knowingly; neither is free.
+- **[choice, C04]** The app commits the custom report **before** `rsv_clear` (section 2.10). A stale report (of a defeat the
+  player undid by reloading) is the worse outcome of that order, a missing report of a defeat that stood is the worse outcome of the
+  other; a report is only a post-mortem, and the app never inserts a Nemesis from it, so the stale one cannot invent an enemy.
 
 ### 1.4 Run identity
 
@@ -159,6 +163,7 @@ Consequences for the custom work:
   versions. A file written by a *newer* version is CRC-valid, so the first write by this build would move it to `.bak`
   and the second would destroy it. **Any custom adapter must read, check the version, and refuse to write when the
   existing file is unsupported.** C04 owns that check; `CC_E_VERSION` is the status for it.
+  (Done in C04: `custom_store.c` decodes before it writes, and a file it cannot use is never written, section 2.10.)
 - There is no atomicity across names. `save_init` creates `sdmc:/3ds/pokerogue/save`; names are plain strings with no
   sanitising (`save.h`).
 
@@ -508,6 +513,55 @@ SD access.
   (`custom_core_build.c`) because the devkitPro Makefile names objects by basename and `custom-core/src/history.c` collides with
   `battle-core/src/history.c`; renaming it is an area X change and is left to a later task.
 
+### 2.10 The store and the terminal transaction (C04)
+
+Two parts. `custom-core` (pure, no I/O) has the codec (`cc/codec.h`, `codec.c`) and the transaction (`commit.c`). The app side
+(`game/source/custom_store.c`) owns the file. Everything below is exercised by `custom-core/tests/codec_test.c` and `commit_test.c`
+(core) and `game/tests/store_test.c` and `flowtest.c` (app, over the real `save.c` in a temporary folder).
+
+**The file.** One save slot named `custom` (`custom.sav`, `.sav.bak` next to the run slots and `system.sav`), holding the section 2.6
+blob (magic `PRCM`, schema 1) inside the transport's header and CRC. It is separate from the run slots, the system data and every
+existing schema: none of them is read, written or changed by C04. The largest possible file is 18,378 bytes plus the 12-byte transport
+header (budget 64 KiB); a file holding one full report and a full ledger is 12,486 bytes.
+
+**Codec.** Every field is written and read one by one with its stated width, little-endian; no struct is copied to or from a buffer.
+`cc_meta_decode` is strict: magic, schema (any other than 1, older or newer, is `CC_E_VERSION`), the reserved field, a body length that
+is exactly the bytes present, every count, every enum and "known" bit, and then every `cc_meta_validate` rule (ordering, duplicates,
+canonical unknowns, ids below the counters, lifecycle bookkeeping). A blob that decodes re-encodes to the same bytes. On any error the
+output is all zero bytes. Truncation, trailing bytes and a count over its limit are `CC_E_FORMAT` / `CC_E_COUNT`.
+
+**Transaction.** `cc_commit_terminal(meta, terminal, history, candidate, result)` is one run's end as one change of `meta`:
+the report with its history, the counters, the ledger entry and (only when a candidate is given and `cc_insertion_check` accepts it)
+one roster record. Rules:
+- Idempotent by run uid through the ledger (the last 8 runs): a run already in it returns `replayed` and changes nothing, even if the
+  roster has changed since. The uid must be one this install issued (`cc_run_uid_issued`).
+- All checks run before the first write; any error leaves `meta` exactly as it was.
+- Ids are allocated by the transaction: the transaction id always, the record id only when a record is inserted. A candidate with a
+  record id of its own, a lifecycle other than STORED, or the same (run, Pokemon) source as a stored record is refused.
+- Insertion is bounded: a full roster (16) gives up its oldest record that `cc_life_overwritable` allows (STORED or REWARD_CLAIMED);
+  when none is, the report is stored with `CC_REFUSE_ROSTER_FULL` and no record. Records stay ordered by record id.
+- With no candidate (the enemy that ended the run is not reliably known) the report is stored with an unknown cause.
+
+**The app's store.** `cs_begin_run` (installed as the observer's uid source) reads the file on first use, hands out the next uid and
+writes the advanced counter **before** returning it, so a uid is never issued twice across a crash. `cs_commit` stages the transaction
+on a copy of the state, encodes it, writes it, and only after the write succeeded does memory change: a refused write leaves the card
+and memory as they were. `cs_commit` is safe to call again for the same report.
+- A file that is there and cannot be used (damaged, a different schema, or unreadable) is **never repaired, overwritten, rotated or
+  deleted**: the game goes on, no uid is issued, nothing is stored, and the result screen says why in one line. A missing file is a
+  new install. A damaged main file with a good backup is used from the backup (the transport's fallback), and the next write replaces
+  the damaged file.
+- A run's uid is per observation, as in section 1.4: a resumed run gets a new uid and its report is stored under it.
+- If the card refuses the write at the run's end, the result screen says the report could not be saved, and leaving the screen tries
+  once more (idempotent, so a write that did land is not repeated). After that the report is lost; nothing retries in the background.
+
+**The boundary that stays open.** The app calls the transaction with **no candidate**. Building a record needs the finishing enemy's
+species, ability, moves, held items and a stable Pokemon id, and the battle events carry none of them (section 1.8, items 1 and 2).
+The tests exercise real insertion, overwriting and refusal with synthetic candidates; the live path stores the report with an unknown
+cause and an empty roster. Closing this belongs to C10 and needs a battle-core change that is not part of this task.
+
+**Memory.** `custom_store.c` holds 57,410 bytes of static storage (the `cc_meta` state, the staging copy and the encode and read
+buffers), beside the observer's about 52.9 KB: about 110 KB of the 128 KiB runtime budget.
+
 ## 3. Choices to confirm
 
 These are version-1 decisions this PR had to make. The handoff either left them open or said "documented policy". Each
@@ -536,13 +590,24 @@ Added by C02 (section 2.8):
    fields to `custom-core`.
 9. **`hp_delta` is a snapshot-to-snapshot measurement**, not a per-hit damage figure (section 2.8, shown versus measured).
 
+Added by C04 (section 2.10):
+
+10. **Report before slot clear** (section 1.3). Alternative: clear first, accepting a missing report after a crash.
+11. **A uid is persisted before use, per observation.** A run that is never ended still spent a uid; only the last 8 runs' outcomes
+    are kept, so a long gap of uncommitted runs does not matter. Alternative: allocate at the end, which would not let the report
+    carry the uid that was observed.
+12. **An unusable custom file stops custom tracking for the session, it never repairs itself.** The cost: the player must delete
+    `custom.sav` by hand (there is no screen for it) to restart tracking. Alternative: move it aside to a new name, which writes
+    to the card on its own and was not authorised.
+13. **One retry on leaving the result screen**, no background retries.
+
 ## 4. What C02 to C10 inherit, and what they still must decide
 
 | Task | Imports | Still undecided / must verify |
 |---|---|---|
 | C02 reducer (decided in section 2.8) | `cc_obs`, `cc_event`, `cc_turn`, `cc_history`, the eviction invariant | nothing left open: the raw-event mapping, the batch and sequence rules and how `shown` and `hp_delta` are filled are in section 2.8 |
 | C03 observer + UI (decided in section 2.9) | `cc_reducer`, `cc_reduce`, `cc_turn_summarize`, `cc_terminal`, `cc_history`, the "complete only when `flags == 0`" rule | nothing left open for C03, except that stable ids and the finishing source are not derivable from the events (section 2.9); C04 must decide the durable run uid |
-| C04 store | `cc_meta`, wire widths, `cc_insertion_check`, ledger, `cc_nemesis_transition` | the codec, file name, version-refusal before write, the clear/commit order (section 1.3), the run-UID write |
+| C04 store (decided in section 2.10) | `cc_meta`, wire widths, `cc_insertion_check`, ledger, `cc_nemesis_transition` | nothing left open for the store itself. Live Nemesis insertion needs the finishing enemy's identity (section 1.8): C10 |
 | C05 scheduler | `cc_schedule`, window waves, `CC_RNG_ALGO_V1`, lifecycle | the algorithm; the draw; the eligibility predicate |
 | C06 radar | `cc_nemesis` read-only, `cc_schedule` | touch layer if wanted (section 1.7) |
 | C08 profile | `cc_ledger` `REWARD_CLAIM`, the one-envelope rule | the profile owner (section 1.5), the envelope |
@@ -713,6 +778,58 @@ party screen uses), and the same flow was re-run on the merged tree to confirm. 
 runs game-core tests and the 3DS build). The finishing source of a defeat is never known. Stable Pokemon identity and a durable run
 uid are not provided.
 
+### 5.3 C04 (store and terminal transaction)
+
+Run on the final tree of the C04 PR, same container as 5.2 (gcc 13.3.0, clang 18.1.3, Python 3.13, Ubuntu `arm-none-eabi-gcc` 13.2.1, devkitARM in
+Docker, Azahar's libretro build in Old 3DS mode). The branch was based on `main` at `27f7c0c`; the digest comparisons below are against a
+clean checkout of that commit. The PR description repeats this with the head commit and the CI results.
+
+| Command | Result |
+|---|---|
+| `make -C custom-core clean && make -C custom-core test` | builds with `-std=c99 -Wall -Wextra -Wpedantic -Werror` under gcc and clang and under ASan + UBSan |
+| &nbsp;&nbsp;`model_test` / `reducer_test` / `layout_test` | 980 / 6,916 / 56 checks, 0 failed (gcc, clang and sanitizers) |
+| &nbsp;&nbsp;`codec_test` | 3,341 checks, 0 failed: every field's width and offset against hand-computed bytes, round trips, every truncation length, one bit flipped in every byte (each result refused, or a different valid state that re-encodes to the same bytes), every enum, count and canonical rule, a header with each wrong value, 3,000 rounds of random damage (2,914 refused, 86 accepted as other valid states, none non-canonical) |
+| &nbsp;&nbsp;`commit_test` | 11,585 checks, 0 failed: insertion, a full roster giving up its oldest overwritable record, 15 protected records, `ROSTER_FULL`, replay, every refusal, a candidate with a record id, a duplicate source, errors leaving the state untouched byte for byte, a long random sequence of run ends and lifecycle moves (385 inserted, 369 of them overwriting, 2,618 report-only of which 1,524 roster-full, 626 replays) with the invariants checked after every 25 steps |
+| `python3 custom-core/tools/mutations.py` (also run by `make -C custom-core test`) | 768 mutations run, 768 killed, 0 survived, 0 invalid; 18 more are documented as behavior-neutral and not run (60 codec and 37 commit mutations are new in this task) |
+| `make -C custom-core arm-check` | passes with `-Werror`; `.text` bytes: `codec.o` 8,180, `commit.o` 1,168, `ids.o` 1,416, `meta.o` 1,268; no `.data` or `.bss` |
+| `make -C game/tests store_test flowtest observer_test postmortem_test` | build; the only warnings are the existing `ai.c:542` and `run_screen.c` ones |
+| `game/tests/build/store_test` (ASan + UBSan) | 284 checks, 0 failed |
+| `game/tests/build/flowtest` | 96 checks, 0 failed (71 before this task; the 71 are unchanged) |
+| `game/tests/build/observer_test`, `postmortem_test` | 188 and 250 checks, 0 failed (unchanged) |
+| `python3 game/tests/observer_mutations.py` (numbers 31 to 47 are new) | 30 of 30 earlier and 16 of 16 new mutations killed (46 run, 0 survived, 0 invalid); one more (dropping the `CS_UNREADABLE` guard in `cs_begin_run`) is behavior-neutral, because the zeroed state's counters make `cc_alloc_run_uid` refuse anyway, and is not listed |
+| `build/runtest 1000 0` plain, `RUNTEST_SAVE=resume`, `RUNTEST_SYS=all` | digests `2cee3f72`, `3ab8ea70`, `7701f977`, each equal to a clean build of `27f7c0c`; the plain run prints the same evolution-coverage `FAILED` as the base (needs 2,000+ runs; unchanged) |
+| Docker `devkitpro/devkitarm` `make` in `game/` | builds `pokerogue.3dsx`; no warning from the new files |
+
+**Storage** (what was measured, not estimated). `store_test` prints it: `sizeof(cc_meta)` 19,432; static storage of the store
+57,410 bytes (`cc_meta` state, staging copy, 18,378-byte encode buffer and the module state) against the 128 KiB runtime budget; the
+largest file 18,378 bytes (budget 64 KiB metadata); a file with one full report and a full ledger 12,486 bytes. Built for the 3DS
+(`.bss`): `custom_store.o` 57,424, `combat_observer.o` 45,976, so about 103 KB for the two modules; `.text`: `custom_store.o` 1,993,
+`custom_core_build.o` 25,075 (the whole of custom-core).
+
+**What the tests are.** The codec and the transaction are tested by their own checks and their own mutations (every one must make a
+test fail). `store_test.c` runs the real `save.c` in a temporary folder: a missing file, uid issue (written first, never repeated, a
+failed write gives no uid and leaves memory as it was), one commit, replay, malformed reports, every kind of unusable file left byte
+for byte as it was (garbage, a flipped byte, schema 0/2/3/0xFFFF, wrong magic, truncation, trailing byte, a count over its limit, a zero
+counter, an oversized file, main and backup both damaged, an unreadable file), the backup fallback, a write that fails at each of the
+four steps of `save_write`, and the budget. `flowtest.c` runs the app's flow over it. The wiring mutations change one line of
+`app_flow.c` or `custom_store.c` at a time.
+
+**Emulator check (Azahar, Old 3DS mode).** Same rig as 5.2 (packs from the pinned upstream checkouts, `rundriver.txt` with a fixed seed and
+`starters=129`), on a **scratch copy** of the tree that only sets the first Pokemon's HP to 1 at the first command (not committed): the
+engine itself fainted the Magikarp. Two runs started from an empty save folder and from a folder holding a 460-byte `custom.sav` of
+text:
+- Normal run: `custom.sav.bak` (the first write, at the run's start) is 47 bytes, `custom.sav` 250 bytes after the run's end; decoded
+  with the codec: one ledger entry, the report of run uid 1 (defeat, wave 1, two turns), an empty roster. The result screen had no note.
+- Damaged file: the run was played to the end and the result screen shows "The custom content file is damaged (it failed its
+  checksum). It is left as it is, and nothing is saved to it until it is removed." The file is byte for byte the 460 bytes it was, and no
+  `.bak` or `.tmp` appeared.
+Screenshots are in the shared project files (`game-screens/c04`), not in Git.
+
+**Not run / not established.** No timing of the SD writes on an Old 3DS or a real console (a run now costs two small writes: the first
+one at its start, the second at its end). No resumed-run check in the emulator (the flow tests and `RUNTEST_SAVE=resume` cover it on
+the host). The write-failure retry and the power-loss windows are exercised on the host with a fake `save_write` that stops at each step;
+the real card was not made to fail. The new game tests are not part of CI. **No Nemesis is ever inserted by the app.**
+
 ## 6. Not established by this PR
 
 - No upstream behavior was consulted or compared. There is no differential, no seed, no Node 22 run, and none is needed
@@ -720,5 +837,5 @@ uid are not provided.
 - No emulator or console check by C01/C02 (no screen or app change then). C03's emulator check, and what it did not cover, is in section 5.2.
 - No Old 3DS memory or time measurement. `sizeof` and code-size figures come from compilers (x86-64 host, Ubuntu's
   `arm-none-eabi-gcc`, and devkitARM in CI, with the 3DS CPU flags), not from a device or emulator.
-- No codec, no file I/O, no scheduler and no profile or reward code. (C03 added the live observer hook and the post-mortem screen; section 2.9.) The rest is C04 to C10.
+- No scheduler and no profile or reward code. (C03 added the live observer hook and the post-mortem screen, section 2.9; C04 added the codec, the transaction and the one custom file, section 2.10.) The app never inserts a Nemesis: the finishing enemy is not identifiable. The rest is C05 to C10.
 - Range checks only for species, form, move and ability: membership in the game's tables is the adapters' job.

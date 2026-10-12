@@ -18,6 +18,7 @@ const char *cc_status_str(cc_status s)
     case CC_E_LIFECYCLE: return "forbidden lifecycle transition";
     case CC_E_OVERFLOW: return "overflow or exhausted identifier space";
     case CC_E_VERSION: return "unsupported schema version";
+    case CC_E_FORMAT: return "not a custom metadata blob";
     }
     return "unknown status";
 }
@@ -38,6 +39,7 @@ const char *cc_refusal_str(int r)
     case CC_REFUSE_REMATCH: return "itself a rematch enemy";
     case CC_REFUSE_ABILITY_UNKNOWN: return "ability not known";
     case CC_REFUSE_MOVES_UNKNOWN: return "moves not known";
+    case CC_REFUSE_ROSTER_FULL: return "the roster is full and none of its records may be overwritten";
     }
     return "unknown refusal";
 }

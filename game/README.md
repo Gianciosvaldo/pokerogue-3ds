@@ -40,7 +40,12 @@ and the result screen's A opens [`postmortem_screen.c`](source/postmortem_screen
 last on the top screen, the last turns' hits, heals, HP losses, faints and switches on the bottom (LEFT/RIGHT turn, UP/DOWN scroll, A
 continue, B back). It says what the battle log showed and no more: **who dealt a hit, with what move, and why HP was lost are not in the
 events and are never guessed**, so the screen says "source not recorded". A turn that lost events says so and its totals read "at least". The
-history is held in memory for this session only; nothing is saved and no Nemesis is created (C04 and later).
+history is no longer lost when the app closes (C04): [`custom_store.c`](source/custom_store.c) keeps the last run's report with its
+last turns, the id counters and the transaction ledger in one file, `save/custom.sav`, written once at the start of a run (the run's
+durable uid) and once at its end (the report; before the run's slot is cleared). A file that can't be used (damaged, or from another
+version) is never overwritten or removed: the result screen says why and nothing is stored until the player removes it. The app stores
+the report with an unknown cause and **never inserts a Nemesis**: the finishing enemy is not identifiable from the battle events
+(contracts section 2.10).
 
 Stand-ins in the run flow (listed in [`run_screen.h`](include/run_screen.h)): the starters of a run with no starter select (the host
 tests' later runs) are a random team, reward names are the item key in words, evolution is automatic, a
@@ -116,6 +121,7 @@ that file to exist; any bytes will do for the emulator.
 | [`run_screen.h`](include/run_screen.h) | The run driver: owns the `gc_run`, turns its events into battle screen events and its screens (command, switch, learn a move, evolve, rewards, biome, game over) into the menus the game has, and gives each answer to `gc_run_choose`. `rs_start(&cfg)` boots a run. |
 | [`combat_observer.h`](include/combat_observer.h) | The custom content's view of a run: `co_observe` takes the raw WAVE / TURN / BATTLE events of one drain (once, from `run_screen.c`'s `drain()`), gives each battle range to the reducer as a batch, and `co_finish` captures a report that owns its data. Never changes the run. |
 | [`postmortem_screen.h`](include/postmortem_screen.h) | The post-mortem screen over that report, opened from the result screen. |
+| [`custom_store.h`](include/custom_store.h) | The custom content file on the SD card (`save/custom.sav`): `cs_begin_run` hands the observer a durable run uid (written first), `cs_commit` stores a finished run's report as one idempotent transaction, and a file it can't use is left exactly as it is. |
 | [`gen/gm_enum_names.h`](gen/gm_enum_names.h) | Names of battle-core's enums (`gm_enum_camel(GM_E_SPECIES_ID, id, ...)` gives upstream's i18n key). Regenerate with `python3 game/tools/gen_enum_names.py` when battle-core's enums change. |
 
 New screens go in their own source files; `menus/` (party, summary, starter select, reward
@@ -147,6 +153,15 @@ counted twice (its battle ranges must equal the ones the screen played). Their o
 make -C game/tests observer_test && game/tests/build/observer_test        # the observer + reducer: drains, switches, faints, overflow, replay/skip...
 make -C game/tests postmortem_test && game/tests/build/postmortem_test    # the screen's words, pages, buttons, and the result screen's flow into it
 python3 game/tests/observer_mutations.py                                  # one-line mutations of the wiring and the screen; every one must make a test fail
+```
+
+**The custom store** (C04): `store_test` runs `custom_store.c` over the real `save.c` in a temporary folder (new install, restart, backup
+fallback, every kind of unusable file left byte for byte as it was, a write that fails at each step of `save_write`, a replayed commit,
+budgets); `flowtest` checks it through the app's flow (the file is created at a run's start, one report is stored at its end, the same
+end twice stores nothing, a refusing card is told and retried once, an unusable file is reported). The pure codec and transaction are in
+`custom-core` (`make -C custom-core test`).
+```
+make -C game/tests store_test && game/tests/build/store_test
 ```
 `flowtest` checks that the result screen is given the report of the run that ended (and none after a new run starts).
 
@@ -182,8 +197,8 @@ make -C game/tests animtest && game/tests/build/animtest path/to/pokerogue-asset
 - Checked by eye in Azahar screenshots, not pixel-diffed against upstream yet.
 
 ## Not done yet
-- The post-mortem (C03) does not know who finished the run: no event names an attacker or a move, and battle-core is not changed to say so. It
-  does not save anything (C04) and creates no Nemesis. Its layout was seen in Azahar (Old 3DS mode), including a real faint and the "Last to fall" line (a scratch
+- The post-mortem (C03) does not know who finished the run: no event names an attacker or a move, and battle-core is not changed to say so. Its
+  report is stored (C04) but no Nemesis is ever created: that needs the finishing enemy's identity (C10). Its layout was seen in Azahar (Old 3DS mode), including a real faint and the "Last to fall" line (a scratch
   build only lowered the first Pokemon's HP); a clear and a list longer than ten rows were seen on screen only with scratch builds
   (a forced clear; a report of invented events). Pokemon are named by species and form only
   (stable ids are not derived).

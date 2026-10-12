@@ -1,7 +1,7 @@
 /* custom-core: byte widths of the version-1 persisted layout (little-endian, packed, no padding).
  * Each constant is the sum of the field widths listed in docs/CUSTOM-CONTENT-CONTRACTS.md, "Wire layout".
- * There is no encoder in this module yet (the codec belongs to task C04); these constants and cc_wire_meta_size
- * fix the sizes it must produce. tests/layout_test.c checks every one against a literal computed by hand. */
+ * The codec (cc/codec.h, task C04) writes and reads exactly these widths; tests/layout_test.c checks every one against a literal
+ * computed by hand and tests/codec_test.c checks the bytes themselves. */
 #ifndef CC_WIRE_H
 #define CC_WIRE_H
 

@@ -2,7 +2,7 @@
 """Mutation check for custom-core: the unit tests must be able to fail.
 
 Each mutation is a single textual change to one source or header file. For every mutation this script copies
-include/, src/ and tests/ to a scratch directory, applies the change, builds model_test, reducer_test and layout_test
+include/, src/ and tests/ to a scratch directory, applies the change, builds model_test, reducer_test, layout_test, codec_test and commit_test
 from that copy and runs them. A mutation is KILLED when a test fails (a nonzero exit, a sanitizer abort or a timeout) and SURVIVES
 when both tests still pass. The script exits nonzero if
 
@@ -25,7 +25,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 ENUMS = ROOT.parent / "battle-core" / "gen" / "out" / "pr_enums.h"
 CFLAGS = ["-O0", "-g", "-w", "-std=c99", "-fsanitize=address,undefined", "-fno-sanitize-recover=undefined"]
-SOURCES = ["src/status.c", "src/history.c", "src/nemesis.c", "src/schedule.c", "src/ids.c", "src/meta.c", "src/reducer.c"]
+SOURCES = ["src/status.c", "src/history.c", "src/nemesis.c", "src/schedule.c", "src/ids.c", "src/meta.c", "src/reducer.c",
+           "src/codec.c", "src/commit.c"]
 BUILD_TIMEOUT = 120
 RUN_TIMEOUT = 30
 
@@ -424,9 +425,9 @@ mut(M, "m->counters.next_run_seq = 1;", "m->counters.next_run_seq = 0;")
 mut(M, "m->counters.next_txn_id = 1;", "m->counters.next_txn_id = 0;")
 mut(M, "m->counters.install_nonce = install_nonce;", "m->counters.install_nonce = 0;")
 mut(M, "m->schema = CC_SCHEMA_VERSION;", "m->schema = 0;")
-mut(M, "(uint32_t)(uid >> 32) == c->install_nonce && ", "")
-mut(M, "(uint32_t)uid >= 1 && ", "")
-mut(M, "(uint32_t)uid < c->next_run_seq", "(uint32_t)uid <= c->next_run_seq")
+mut(D, "(uint32_t)(uid >> 32) == c->install_nonce && ", "")
+mut(D, "(uint32_t)uid >= 1 && ", "")
+mut(D, "(uint32_t)uid < c->next_run_seq", "(uint32_t)uid <= c->next_run_seq")
 mut(M, "if (m->schema != CC_SCHEMA_VERSION) return CC_E_VERSION;", "if (m->schema > CC_SCHEMA_VERSION) return CC_E_VERSION;")
 mut(M, "if (m->schema != CC_SCHEMA_VERSION) return CC_E_VERSION;", "if (m->schema < CC_SCHEMA_VERSION) return CC_E_VERSION;")
 mut(M, "    s = cc_ledger_validate(&m->ledger);\n    if (s != CC_OK) return s;\n", "")
@@ -817,9 +818,127 @@ mut(R, "default: sm.n_status[side]++; break;", "default: break;")
 drop(R, "memcpy(out, &sm, sizeof sm);")
 
 
+# ---------------------------------------------------------------- codec.c (C04)
+K = "src/codec.c"
+mut(K, "if (want > cap || want > CC_META_BUDGET_BYTES) return CC_E_COUNT;", "if (want >= cap || want > CC_META_BUDGET_BYTES) return CC_E_COUNT;")
+mut(K, "if (want > cap || want > CC_META_BUDGET_BYTES) return CC_E_COUNT;", "if (want > CC_META_BUDGET_BYTES) return CC_E_COUNT;",
+    "encode no longer checks the caller's buffer size")
+equiv(K, "if (want > cap || want > CC_META_BUDGET_BYTES) return CC_E_COUNT;", "if (want > cap) return CC_E_COUNT;",
+      "the budget check cannot fire: the largest valid blob is 18,378 bytes, far below 64 KiB (layout_test asserts it)")
+mut(K, "w8(w, (uint8_t)(v >> 8));", "w8(w, (uint8_t)(v >> 7));", "w16 byte order")
+mut(K, "w16(w, (uint16_t)(v >> 16));", "w16(w, (uint16_t)(v >> 15));", "w32 byte order")
+mut(K, "w32(w, (uint32_t)(v >> 32));", "w32(w, (uint32_t)(v >> 31));", "w64 byte order")
+mut(K, "w16(&w, 0);\n    w32(&w, (uint32_t)(want", "w16(&w, 1);\n    w32(&w, (uint32_t)(want", "reserved written as 1")
+mut(K, "(uint32_t)(want - CC_WIRE_ENVELOPE_HEADER)", "(uint32_t)(want - CC_WIRE_ENVELOPE_HEADER + 1)", "body_len one too long")
+mut(K, "w32(&w, m->counters.next_record_id);", "w32(&w, m->counters.next_run_seq);", "counter order")
+mut(K, "w32(&w, m->counters.install_nonce);", "w32(&w, 0);", "nonce not written")
+mut(K, "w64(&w, m->counters.next_txn_id);", "w64(&w, m->counters.next_txn_id & 0xFFFFFFFFu);", "txn counter truncated")
+mut(K, "w8(&w, e->outcome);", ";", "ledger outcome not written")
+mut(K, "w32(&w, e->record_id);", "w32(&w, 0);", "ledger record id not written")
+mut(K, "w64(&w, e->run_uid);", "w64(&w, e->txn_id);", "ledger run uid replaced")
+mut(K, "w8(&w, m->roster.count);", "w8(&w, (uint8_t)(m->roster.count - 1));", "roster count off by one")
+mut(K, "w8(&w, m->has_report);", "w8(&w, 1);", "has_report always 1")
+mut(K, "for (unsigned i = 0; i < m->history.n_turns; i++) w_turn(&w, &m->history.turns[i]);", "for (unsigned i = 0; i + 1 < m->history.n_turns; i++) w_turn(&w, &m->history.turns[i]);", "last turn not written")
+mut(K, "for (unsigned i = 0; i < t->n_events; i++) w_event(w, &t->events[i]);", "for (unsigned i = 0; i + 1 < t->n_events; i++) w_event(w, &t->events[i]);", "last event not written")
+mut(K, "    w32(w, e->seq);\n    w8(w, e->kind);", "    w32(w, e->seq);\n    w8(w, e->target_side);", "event kind replaced")
+mut(K, "wi32(w, e->hp_delta);", "wi32(w, e->hp_after);", "event hp_delta replaced")
+mut(K, "w32(w, e->source_id);", "w32(w, e->target_id);", "event source id replaced")
+mut(K, "w16(w, e->move_id);", "w16(w, e->source_species);", "event move replaced")
+mut(K, "w16(w, e->known);", "w16(w, e->known & 0xFF);", "event known truncated")
+mut(K, "w16(w, t->dropped);", "w16(w, 0);", "turn dropped count not written")
+mut(K, "w8(w, t->flags);\n    w8(w, t->n_events);", "w8(w, 0);\n    w8(w, t->n_events);", "turn flags not written")
+mut(K, "w64(w, t->txn_id);", "w64(w, 0);", "terminal txn not written")
+mut(K, "w_actor(w, &t->finish_actor);\n    w_actor(w, &t->fallen_actor);", "w_actor(w, &t->fallen_actor);\n    w_actor(w, &t->finish_actor);", "terminal actors swapped")
+mut(K, "w8(w, a->level);", "w8(w, a->side);", "actor level replaced")
+mut(K, "w8(w, n->life);", "w8(w, n->traits);", "record life replaced")
+mut(K, "wi8(w, n->gender);", "w8(w, 0);", "record gender not written")
+mut(K, "w8(w, n->shiny);", "w8(w, 0);", "record shiny not written")
+mut(K, "for (int i = 0; i < 6; i++) w8(w, n->ivs[i]);", "for (int i = 0; i < 5; i++) w8(w, n->ivs[i]);", "last IV not written")
+mut(K, "for (int k = 0; k < CC_ITEM_KEY_BYTES; k++) w8(w, (uint8_t)n->items[i].key[k]);", "for (int k = 0; k < CC_ITEM_KEY_BYTES - 1; k++) w8(w, (uint8_t)n->items[i].key[k]);", "item key one byte short")
+mut(K, "wi16(w, n->items[i].arg);", "w16(w, 0);", "item arg not written")
+mut(K, "w16(w, n->items[i].stack);", "w16(w, 1);", "item stack not written")
+mut(K, "w64(w, n->sched_run_uid);", "w64(w, 0);", "sched run uid not written")
+mut(K, "w16(w, n->challenge_wave);", "w16(w, 0);", "challenge wave not written")
+mut(K, "w64(w, n->reward_txn);", "w64(w, 0);", "reward txn not written")
+mut(K, "w16(w, n->fallen_species);", "w16(w, n->finish_move);", "fallen species replaced")
+equiv(K, "if (w.pos != want) return CC_E_CONSISTENCY;", ";",
+      "a defensive check for a bug in this file: it fires only if the writer and cc_wire_meta_size disagree, and every size the tests produce agrees")
+# decode
+mut(K, "return (int32_t)r32(r); }", "return (int32_t)(r32(r) & 0x7FFFFFFFu); }", "negative values lost on read")
+mut(K, "return (int16_t)r16(r); }", "return (int16_t)(r16(r) & 0x7FFFu); }", "negative 16-bit values lost on read")
+mut(K, "(uint16_t)(lo | ((uint16_t)r8(r) << 8))", "(uint16_t)(lo | ((uint16_t)r8(r) << 7))", "r16 byte order")
+mut(K, "return lo | ((uint32_t)r16(r) << 16);", "return lo | ((uint32_t)r16(r) << 15);", "r32 byte order")
+mut(K, "return lo | ((uint64_t)r32(r) << 32);", "return lo | ((uint64_t)r32(r) << 31);", "r64 byte order")
+mut(K, "if (r->bad || r->pos >= r->len) {", "if (r->bad || r->pos > r->len) {", "reader allows one byte past the end")
+mut(K, "if (magic != CC_META_MAGIC) return CC_E_FORMAT;", ";", "magic not checked")
+mut(K, "if (schema != CC_SCHEMA_VERSION) return CC_E_VERSION;", "if (schema > CC_SCHEMA_VERSION) return CC_E_VERSION;", "older schema accepted")
+mut(K, "if (schema != CC_SCHEMA_VERSION) return CC_E_VERSION;", "if (schema < CC_SCHEMA_VERSION) return CC_E_VERSION;", "newer schema accepted")
+mut(K, "if (reserved != 0) return CC_E_FORMAT;", ";", "reserved not checked")
+mut(K, "if (body_len != len - CC_WIRE_ENVELOPE_HEADER) return CC_E_FORMAT;", ";", "body_len not checked")
+equiv(K, "if (len < CC_WIRE_ENVELOPE_HEADER) return CC_E_FORMAT;", "if (len < CC_WIRE_ENVELOPE_HEADER - 1) return CC_E_FORMAT;",
+      "a blob of 11 bytes still fails: the header length check then compares body_len with an underflowed length and returns the same CC_E_FORMAT (the header read itself is bounded by the reader)")
+equiv(K, "if (len > CC_WIRE_META_MAX) return CC_E_FORMAT;", ";",
+      "a blob over the maximum cannot be a valid one: body_len equals its length, the body parse then leaves bytes over and the trailing-byte check refuses it with the same status")
+mut(K, "if (n_ledger > CC_LEDGER_ENTRIES) return CC_E_COUNT;", "if (n_ledger >= CC_LEDGER_ENTRIES) return CC_E_COUNT;", "")
+mut(K, "if (n_ledger > CC_LEDGER_ENTRIES) return CC_E_COUNT;", ";", "ledger count not limited")
+mut(K, "if (n_records > CC_MAX_NEMESES) return CC_E_COUNT;", ";", "record count not limited")
+equiv(K, "if (out->has_report > 1) return CC_E_RANGE;", ";",
+      "cc_meta_validate refuses has_report > 1 with the same status (CC_E_RANGE) right after the body is read")
+mut(K, "if (n_turns > CC_HISTORY_TURNS) return CC_E_COUNT;", ";", "turn count not limited")
+mut(K, "if (n_events > CC_MAX_EVENTS_PER_TURN) return CC_E_COUNT;", ";", "event count not limited")
+mut(K, "    if (r->bad) return CC_E_FORMAT;                      /* a count promised more bytes than the body has */\n", "", "truncation at the end not noticed")
+mut(K, "if (r->pos != r->len) return CC_E_FORMAT;", ";", "trailing bytes accepted")
+mut(K, "    out->schema = CC_SCHEMA_VERSION;\n", "", "decoded schema not set")
+mut(K, "if (s == CC_OK) s = cc_meta_validate(out);", ";", "decoded state not validated")
+mut(K, "if (s != CC_OK) memset(out, 0, sizeof *out);", ";", "a refused blob leaves a half-read state")
+mut(K, "    if (!out) return CC_E_NULL;\n    memset(out, 0, sizeof *out);\n", "    if (!out) return CC_E_NULL;\n", "output not cleared first")
+
+# ---------------------------------------------------------------- commit.c (C04)
+T = "src/commit.c"
+mut(T, "        if (cc_life_overwritable(r->rec[i].life)) return (int)i;", "        if (!cc_life_overwritable(r->rec[i].life)) return (int)i;", "overwrite picks a protected record")
+mut(T, "    for (unsigned i = 0; i < r->count; i++)\n        if (cc_life_overwritable", "    for (unsigned i = r->count; i-- > 0;)\n        if (cc_life_overwritable", "overwrite picks the newest, not the oldest")
+mut(T, "r->rec[i].source_run_uid == n->source_run_uid && r->rec[i].source_pokemon_id == n->source_pokemon_id", "r->rec[i].source_run_uid == n->source_run_uid || r->rec[i].source_pokemon_id == n->source_pokemon_id", "")
+mut(T, "r->rec[i].source_run_uid == n->source_run_uid && r->rec[i].source_pokemon_id == n->source_pokemon_id", "r->rec[i].source_pokemon_id == n->source_pokemon_id", "")
+mut(T, "    memset(res, 0, sizeof *res);\n", "", "result not cleared")
+mut(T, "    cc_status s = cc_meta_validate(m);\n    if (s != CC_OK) return s;\n    s = cc_terminal_validate", "    cc_status s = CC_OK;\n    s = cc_terminal_validate", "stored state not validated")
+mut(T, "    s = cc_terminal_validate(term, false);\n    if (s != CC_OK) return s;\n", "", "terminal not validated")
+mut(T, "    s = cc_history_validate(hist);\n    if (s != CC_OK) return s;\n", "", "history not validated")
+mut(T, "if (!cc_run_uid_issued(&m->counters, term->run_uid)) return CC_E_CONSISTENCY;", ";", "run uid not checked against the counters")
+mut(T, "        res->replayed = true;", "        res->replayed = false;", "")
+mut(T, "res->refusal = prior.outcome == CC_TXO_INSERTED ? CC_SUPPORT_OK : -1;", "res->refusal = prior.outcome == CC_TXO_INSERTED ? -1 : CC_SUPPORT_OK;", "")
+mut(T, "        res->record_id = prior.record_id;", "        res->record_id = 0;", "")
+mut(T, "        res->txn_id = prior.txn_id;", "        res->txn_id = 0;", "")
+mut(T, "if (cand->record_id != 0) return CC_E_RANGE;", ";", "candidate may carry its own record id")
+mut(T, "rec.record_id = counters.next_record_id;", "rec.record_id = 0;", "")
+mut(T, "if (rec.life != CC_LIFE_STORED) return CC_E_LIFECYCLE;", ";", "a scheduled candidate accepted")
+mut(T, "refusal = cc_insertion_check(term, &rec);", "refusal = CC_SUPPORT_OK;", "the insertion gate is skipped")
+mut(T, "if (roster_has_source(&m->roster, &rec)) return CC_E_DUPLICATE;", ";", "same enemy of the same run inserted twice")
+mut(T, "            if (m->roster.count == CC_MAX_NEMESES) {\n                slot = overwrite_slot", "            if (m->roster.count >= CC_MAX_NEMESES - 1) {\n                slot = overwrite_slot", "")
+mut(T, "if (slot < 0) refusal = CC_REFUSE_ROSTER_FULL;", "if (slot < 0) refusal = CC_REFUSE_BOSS;", "")
+mut(T, "if (slot < 0) refusal = CC_REFUSE_ROSTER_FULL;", ";", "a full protected roster still inserts")
+mut(T, "const bool insert = refusal == CC_SUPPORT_OK;", "const bool insert = true;", "")
+mut(T, "    if (insert) {\n        s = cc_alloc_record_id", "    if (1) {\n        s = cc_alloc_record_id", "a record id is spent without inserting")
+mut(T, "(uint8_t)(insert ? CC_TXO_INSERTED : CC_TXO_REPORT_ONLY)", "(uint8_t)(insert ? CC_TXO_REPORT_ONLY : CC_TXO_INSERTED)", "")
+mut(T, "    m->counters = counters;\n", "", "counters not advanced")
+mut(T, "    m->ledger = ledger;\n", "", "ledger not appended")
+mut(T, "    m->has_report = 1;\n", "", "has_report not set")
+mut(T, "    m->report = *term;\n", "    memset(&m->report, 0, sizeof m->report);\n", "report not stored")
+mut(T, "    m->report.txn_id = txn_id;\n", "", "report keeps txn 0")
+mut(T, "    m->history = *hist;\n", "", "history not stored")
+mut(T, "            res->overwritten = m->roster.rec[slot].record_id;\n", "", "overwritten id not reported")
+mut(T, "for (int i = slot + 1; i < CC_MAX_NEMESES; i++)", "for (int i = slot; i < CC_MAX_NEMESES; i++)", "")
+mut(T, "            m->roster.count--;\n", "", "roster not shortened before the append")
+mut(T, "m->roster.rec[m->roster.count++] = rec;", "m->roster.rec[m->roster.count] = rec;", "inserted record not counted")
+mut(T, "    res->outcome = entry.outcome;\n", "", "")
+mut(T, "    res->refusal = refusal;\n", "", "")
+mut(T, "    res->record_id = record_id;\n    return CC_OK;", "    return CC_OK;", "")
+
+
+
 def build_and_run(workdir: Path):
     """Returns (stage, detail): stage is 'ok' when all tests pass, else where it failed."""
-    exes = {"model_test": "tests/model_test.c", "reducer_test": "tests/reducer_test.c", "layout_test": "tests/layout_test.c"}
+    exes = {"model_test": "tests/model_test.c", "reducer_test": "tests/reducer_test.c", "layout_test": "tests/layout_test.c",
+            "codec_test": "tests/codec_test.c", "commit_test": "tests/commit_test.c"}
     objs = []
     for src in SOURCES:
         obj = src.replace("/", "_")[:-2] + ".o"

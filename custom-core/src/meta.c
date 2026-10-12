@@ -16,10 +16,7 @@ void cc_meta_init(cc_meta *m, uint32_t install_nonce)
 }
 
 /* A run UID in the file must be one this install's counters have issued. */
-static bool uid_issued(const cc_counters *c, cc_run_uid uid)
-{
-    return (uint32_t)(uid >> 32) == c->install_nonce && (uint32_t)uid >= 1 && (uint32_t)uid < c->next_run_seq;
-}
+#define uid_issued cc_run_uid_issued
 
 cc_status cc_meta_validate(const cc_meta *m)
 {

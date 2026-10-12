@@ -21,7 +21,8 @@ typedef enum {
     CC_E_CONSISTENCY,    /* fields that contradict each other */
     CC_E_LIFECYCLE,      /* a forbidden record transition */
     CC_E_OVERFLOW,       /* arithmetic would overflow, or an identifier space is exhausted */
-    CC_E_VERSION         /* a schema version this build does not read (older or newer) */
+    CC_E_VERSION,        /* a schema version this build does not read (older or newer) */
+    CC_E_FORMAT          /* bytes that are not a custom metadata blob: wrong magic, reserved bits, truncation, trailing bytes */
 } cc_status;
 
 const char *cc_status_str(cc_status s);
@@ -74,6 +75,9 @@ cc_status cc_counters_validate(const cc_counters *c);
 cc_status cc_alloc_record_id(cc_counters *c, cc_record_id *out);
 cc_status cc_alloc_txn_id(cc_counters *c, cc_txn_id *out);
 cc_status cc_alloc_run_uid(cc_counters *c, cc_run_uid *out);
+/* True when `uid` is one these counters have issued: its high half is the install nonce, its low half a sequence number
+ * below next_run_seq. A stored run UID, in the report, a record or the ledger, has to be one. */
+bool cc_run_uid_issued(const cc_counters *c, cc_run_uid uid);
 
 cc_status cc_ledger_validate(const cc_ledger *l);
 /* The remembered transaction of `kind` for this run (CC_TXN_TERMINAL) or this record (CC_TXN_REWARD_CLAIM), if any.

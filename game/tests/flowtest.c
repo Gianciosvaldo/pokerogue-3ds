@@ -18,6 +18,7 @@
 
 #include "app_flow.h"
 #include "combat_observer.h"
+#include "custom_store.h"
 #include "pr_data.h"
 #include "pr_enums.h"
 #include "result_screen.h"
@@ -243,6 +244,18 @@ static rs_config first_cfg(void) {
   return c;
 }
 
+/* The custom store's writes can be made to fail (the SD card refusing), to check what the flow does with a report it could not keep. */
+static bool refuse_custom_writes;
+static save_result flow_write(const char* name, const void* data, size_t len) {
+  if (refuse_custom_writes) return SAVE_IO_ERROR;
+  return save_write(name, data, len);
+}
+static const cs_io FLOW_IO = {save_read, flow_write};
+
+static bool ledger_has(cc_run_uid uid) {
+  return cs_meta() && cc_ledger_find(&cs_meta()->ledger, CC_TXN_TERMINAL, uid, 0, NULL);
+}
+
 int main(void) {
   char dir[64] = "/tmp/flow-test-XXXXXX";
   if (!mkdtemp(dir) || chdir(dir) != 0 || mkdir("sdmc:", 0777) != 0 || !save_init()) {
@@ -278,6 +291,9 @@ int main(void) {
         "the report describes the run that ended");
   CHECK(status_of(1) == RSV_EMPTY && rsv_last_slot() == -1, "the slot of a finished run is cleared and forgotten");
   CHECK(R.report && R.report->valid && R.report->history.n_turns == 1, "and the report is still whole after the slot is cleared");
+  CHECK(R.report && R.report->uid_durable && cs_meta() && cs_meta()->has_report && cs_meta()->report.run_uid == R.report->run_uid &&
+            ledger_has(R.report->run_uid) && cs_meta()->ledger.n == 1 && !R.note,
+        "the run's end stored one report under its durable uid, and the result screen has nothing to apologise for");
   R.on_done(R.arg);
   CHECK(n_title == 2 && !T.can_continue, "back to the title, nothing to continue");
 
@@ -436,6 +452,105 @@ int main(void) {
   sh_confirm(1);
   CHECK(n_slots == slots_open + 1 && S.mode == SLOTS_NEW && S.cursor == 4, "the slot list is shown again, on the slot");
   CHECK(last_msg[0] && status_of(4) == RSV_EMPTY, "told: \"%s\"", last_msg);
+
+  /* ---- C04: the custom store through the whole flow (run start, run end, reopen, reboot, a refusing card, an unusable file) */
+  fail_start = false;
+  S.on_back(S.arg);
+  remove((snprintf(p, sizeof p, "%s/custom.sav", SAVE_DIR), p));
+  remove((snprintf(p2, sizeof p2, "%s/custom.sav.bak", SAVE_DIR), p2));
+  cs_reset();
+  T.on_choose(TITLE_NEW_GAME, T.arg);
+  S.on_pick(4, S.arg);
+  sh_confirm(1);
+  CHECK(exists(p) && cs_get_state(NULL) == CS_LOADED && cs_meta()->counters.next_run_seq == 2 && !cs_meta()->has_report,
+        "a run's start created the custom file with the first uid issued and no report");
+  const cc_run_uid uid_a = ((cc_run_uid)cs_meta()->counters.install_nonce << 32) | 1u;
+  driver_end(GC_SCREEN_GAME_OVER);
+  CHECK(R.report && R.report->run_uid == uid_a && R.report->uid_durable && !R.note, "the run ended under the uid the file handed out");
+  CHECK(cs_meta()->has_report && cs_meta()->report.run_uid == uid_a && cs_meta()->ledger.n == 1 && ledger_has(uid_a) && cs_meta()->roster.count == 0,
+        "one report stored, one ledger entry, no Nemesis (none is ever invented)");
+  CHECK(cs_meta()->history.n_turns == 1 && cs_meta()->history.turns[0].wave == 4, "with the post-mortem's last turn");
+  {
+    const size_t before_size = file_size(p);
+    char* raw_a = NULL;
+    size_t len_a = 0;
+    bool used_backup = false;
+    CHECK(save_read("custom", &raw_a, &len_a, &used_backup) == SAVE_OK, "read the file");
+    const cc_txn_id next_txn = cs_meta()->counters.next_txn_id;
+    /* the same end delivered again (a retried callback): nothing changes on the card */
+    CFG.on_end(GC_SCREEN_GAME_OVER, CFG.end_arg);
+    char* raw_b = NULL;
+    size_t len_b = 0;
+    CHECK(save_read("custom", &raw_b, &len_b, &used_backup) == SAVE_OK && len_a == len_b && !memcmp(raw_a, raw_b, len_a) && file_size(p) == before_size,
+          "the same end twice leaves the file byte for byte as it was");
+    CHECK(cs_meta()->ledger.n == 1 && cs_meta()->counters.next_txn_id == next_txn, "and the ledger and counters unchanged");
+    free(raw_a);
+    free(raw_b);
+  }
+  R.on_done(R.arg);
+
+  /* quit and boot again: the card holds the report */
+  cs_reset();
+  CHECK(cs_get_state(NULL) == CS_LOADED && !cs_from_backup() && cs_meta()->has_report && cs_meta()->report.run_uid == uid_a && ledger_has(uid_a),
+        "after a reboot the report and the ledger are read back");
+  app_start(&plain);
+  T.on_choose(TITLE_NEW_GAME, T.arg);
+  S.on_pick(4, S.arg);
+  sh_confirm(1);
+  CHECK(cs_meta()->counters.next_run_seq == 3, "the next run took the next uid, even across a reboot");
+  const cc_run_uid uid_b = uid_a + 1;
+
+  /* the card refuses the write at the run's end: the player is told, the old report stays, and leaving the result screen tries once more */
+  cs_set_io(&FLOW_IO);
+  refuse_custom_writes = true;
+  driver_end(GC_SCREEN_GAME_OVER);
+  CHECK(R.report && R.report->run_uid == uid_b && R.note && strstr(R.note, "SD card"), "a refused write is told: \"%s\"", R.note ? R.note : "(none)");
+  CHECK(cs_meta()->report.run_uid == uid_a && !ledger_has(uid_b), "memory still matches the card: the old report");
+  refuse_custom_writes = false;
+  R.on_done(R.arg);
+  CHECK(cs_meta()->report.run_uid == uid_b && ledger_has(uid_b) && ledger_has(uid_a) && cs_meta()->ledger.n == 2,
+        "leaving the result screen stored it (once more), next to the first");
+  cs_reset();
+  CHECK(cs_get_state(NULL) == CS_LOADED && cs_meta()->report.run_uid == uid_b && cs_meta()->ledger.n == 2, "and the card agrees after a reboot");
+
+  /* a refusing card for good: the retry fails too, nothing is stored and the game goes on */
+  T.on_choose(TITLE_NEW_GAME, T.arg);
+  S.on_pick(4, S.arg);
+  sh_confirm(1);
+  const cc_run_uid uid_c = uid_b + 1;
+  refuse_custom_writes = true;
+  driver_end(GC_SCREEN_GAME_OVER);
+  const int titles_c = n_title;
+  R.on_done(R.arg);
+  CHECK(n_title == titles_c + 1 && cs_meta()->report.run_uid == uid_b && !ledger_has(uid_c), "still refused after the retry: back to the title, nothing stored");
+  refuse_custom_writes = false;
+  cs_set_io(NULL);
+
+  /* the custom file is unusable: nothing stored, nothing touched, the run is not affected, the player is told why */
+  {
+    char* raw = NULL;
+    size_t len = 0;
+    bool used_backup = false;
+    cs_reset();
+    CHECK(save_read("custom", &raw, &len, &used_backup) == SAVE_OK, "read the good file");
+    free(raw);
+    remove(p2);
+    write_raw(p, junk, sizeof junk);
+    cs_reset();
+    T.on_choose(TITLE_NEW_GAME, T.arg);
+    S.on_pick(4, S.arg);
+    sh_confirm(1);
+    CHECK(cs_get_state(NULL) == CS_UNREADABLE && cs_meta() == NULL, "an unusable custom file is not used");
+    driver_end(GC_SCREEN_GAME_OVER);
+    CHECK(n_result > 0 && R.report && !R.report->uid_durable, "the run goes on and ends under a session uid");
+    CHECK(R.note && strstr(R.note, "damaged") && strstr(R.note, "left as it is"), "the player is told why: \"%s\"", R.note ? R.note : "(none)");
+    R.on_done(R.arg);
+    CHECK(file_size(p) == sizeof junk && !exists(p2), "the unusable file is exactly as it was and no backup or temporary file appeared");
+    snprintf(p2, sizeof p2, "%s/custom.sav.tmp", SAVE_DIR);
+    CHECK(!exists(p2), "no temporary file");
+  }
+  remove(p);
+  cs_reset();
 
   printf("%d checks, %d failed\n", checks, failed);
   printf(failed ? "FAILED\n" : "OK\n");

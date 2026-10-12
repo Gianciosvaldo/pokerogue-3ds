@@ -41,6 +41,11 @@ cc_status cc_alloc_run_uid(cc_counters *c, cc_run_uid *out)
     return CC_OK;
 }
 
+bool cc_run_uid_issued(const cc_counters *c, cc_run_uid uid)
+{
+    return c && (uint32_t)(uid >> 32) == c->install_nonce && (uint32_t)uid >= 1 && (uint32_t)uid < c->next_run_seq;
+}
+
 static cc_status entry_validate(const cc_ledger_entry *e)
 {
     if (e->txn_id == 0 || e->run_uid == 0) return CC_E_RANGE;
