@@ -6,6 +6,18 @@
 #define ATTR(m, i) (&pr_attrs[pr_moves[m].attr0 + (i)])
 #define P(T, a) ((const pr_attr_##T *)(a)->p)
 
+int pr_beat_up_hit_count(pr_battle *bt, const pr_pokemon *user)
+{
+    int side = user->is_player ? 0 : 1, count = 0;
+    if (!bt->n_party[side]) pr_note_unported(bt, PR_FEAT_PARTY);
+    for (int i = 0; i < bt->n_party[side]; i++) {
+        const pr_pokemon *p = bt->party[side][i];
+        /* The pin checks status and identity, not HP or field activity. */
+        if (p->id == user->id || p->status == STATUS_EFFECT_NONE) count++;
+    }
+    return count;
+}
+
 static int count_positive_stat_stages(const pr_pokemon *p)
 {
     int n = 0;

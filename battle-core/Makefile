@@ -235,3 +235,11 @@ $(BUILD)/multi-hit-abilities-test: tests/multi-hit-abilities-test.c tests/speed-
 all: $(BUILD)/multi-hit-abilities-helper-test
 $(BUILD)/multi-hit-abilities-helper-test: tests/multi-hit-abilities-helper-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/beat-up-test
+$(BUILD)/beat-up-test: tests/beat-up-test.c tests/speed-boost-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/beat-up-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/beat-up-helper-test
+$(BUILD)/beat-up-helper-test: tests/beat-up-helper-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
