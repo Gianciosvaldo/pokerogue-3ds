@@ -34,6 +34,14 @@ version) is never overwritten: the player is told, starts with the defaults, and
 out of the starter select leaves the slot's old run as it was; it is cleared only once a team is confirmed. A developer's team in
 `rundriver.txt` skips the screen and runs without system data, as before.
 
+The end of a run has a **post-mortem** (custom content, task C03): the run driver hands the raw battle events of every drain to
+[`combat_observer.c`](source/combat_observer.c), which feeds custom-core's bounded history reducer (the last 5 turns, 64 events each),
+and the result screen's A opens [`postmortem_screen.c`](source/postmortem_screen.c): how the run ended and the player's Pokemon that fell
+last on the top screen, the last turns' hits, heals, HP losses, faints and switches on the bottom (LEFT/RIGHT turn, UP/DOWN scroll, A
+continue, B back). It says what the battle log showed and no more: **who dealt a hit, with what move, and why HP was lost are not in the
+events and are never guessed**, so the screen says "source not recorded". A turn that lost events says so and its totals read "at least". The
+history is held in memory for this session only; nothing is saved and no Nemesis is created (C04 and later).
+
 Stand-ins in the run flow (listed in [`run_screen.h`](include/run_screen.h)): the starters of a run with no starter select (the host
 tests' later runs) are a random team, reward names are the item key in words, evolution is automatic, a
 mystery encounter is a message and its first usable option. The words on the game over and clear screens, and the
@@ -106,6 +114,8 @@ that file to exist; any bytes will do for the emulator.
 | [`party_screen.h`](include/party_screen.h) | `menus/`' party and summary screens as an overlay on the bottom screen, filled from battle-core's party: `ps_open(bt, PS_SWITCH or PS_FAINT_SWITCH, on_pick)`. |
 | [`ball_menu.h`](include/ball_menu.h) | Upstream's `BallUiHandler`: the Poke Ball list with counts, `ball_menu_open(counts, on_pick)`. |
 | [`run_screen.h`](include/run_screen.h) | The run driver: owns the `gc_run`, turns its events into battle screen events and its screens (command, switch, learn a move, evolve, rewards, biome, game over) into the menus the game has, and gives each answer to `gc_run_choose`. `rs_start(&cfg)` boots a run. |
+| [`combat_observer.h`](include/combat_observer.h) | The custom content's view of a run: `co_observe` takes the raw WAVE / TURN / BATTLE events of one drain (once, from `run_screen.c`'s `drain()`), gives each battle range to the reducer as a batch, and `co_finish` captures a report that owns its data. Never changes the run. |
+| [`postmortem_screen.h`](include/postmortem_screen.h) | The post-mortem screen over that report, opened from the result screen. |
 | [`gen/gm_enum_names.h`](gen/gm_enum_names.h) | Names of battle-core's enums (`gm_enum_camel(GM_E_SPECIES_ID, id, ...)` gives upstream's i18n key). Regenerate with `python3 game/tools/gen_enum_names.py` when battle-core's enums change. |
 
 New screens go in their own source files; `menus/` (party, summary, starter select, reward
@@ -129,6 +139,16 @@ point serializes it and loads it back.
 list, panel and team against game-core's own functions, with a fuzz of random systems), `starter_ui_test` (the screen over a fake
 drawing layer, with the host that hands the team to the app), and `flowtest` (New Game, Continue and Load around it). CI does not
 run them; the 3DS build is the only check CI makes of `game/`.
+
+**The combat observer and the post-mortem** (custom content, C03): `runtest` also checks, at the end of every run, that the combat report is
+there, matches the run (outcome, wave, biome), holds a history custom-core accepts, and that no real event was refused, dropped, lost or
+counted twice (its battle ranges must equal the ones the screen played). Their own tests, on literal fixtures:
+```
+make -C game/tests observer_test && game/tests/build/observer_test        # the observer + reducer: drains, switches, faints, overflow, replay/skip...
+make -C game/tests postmortem_test && game/tests/build/postmortem_test    # the screen's words, pages, buttons, and the result screen's flow into it
+python3 game/tests/observer_mutations.py                                  # one-line mutations of the wiring and the screen; every one must make a test fail
+```
+`flowtest` checks that the result screen is given the report of the run that ended (and none after a new run starts).
 
 The single-turn converter tests use `tests/battle_setup.c`, a test-only fixture that builds a battle-core battle by hand
 (the app no longer has it). `game/tests/` prints each turn's events with their English text (needs upstream's
@@ -162,6 +182,11 @@ make -C game/tests animtest && game/tests/build/animtest path/to/pokerogue-asset
 - Checked by eye in Azahar screenshots, not pixel-diffed against upstream yet.
 
 ## Not done yet
+- The post-mortem (C03) does not know who finished the run: no event names an attacker or a move, and battle-core is not changed to say so. It
+  does not save anything (C04) and creates no Nemesis. Its layout was seen in Azahar (Old 3DS mode), including a real faint and the "Last to fall" line (a scratch
+  build only lowered the first Pokemon's HP); a clear and a list longer than ten rows were seen on screen only with scratch builds
+  (a forced clear; a report of invented events). Pokemon are named by species and form only
+  (stable ids are not derived).
 - The real evolution screen (evolution is automatic), the Pokedex, eggs; mystery encounter screens.
 - Music not done: the timed events' music replacements, the mystery encounters' own tracks (their encounters are stand-ins), the evolution,
   egg and heal fanfares (upstream plays them over the music; `snd.c` has one music stream), the Classic final boss's second stage (not in

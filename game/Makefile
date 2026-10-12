@@ -33,7 +33,7 @@ DATA		:=	data
 INCLUDES	:=	include gen $(wildcard menus) $(APPSRC)/include \
 			$(wildcard ../battle-core/include ../battle-core/gen/out ../run-core/include \
 			../ai-core/include ../ai-core/gen/out ../reward-core/include ../reward-core/gen/out \
-			../game-core/include ../game-core/gen/out)
+			../game-core/include ../game-core/gen/out ../custom-core/include)
 GRAPHICS	:=	gfx
 GFXBUILD	:=	$(BUILD)
 ROMFS		:=

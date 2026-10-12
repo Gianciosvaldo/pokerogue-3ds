@@ -9,6 +9,9 @@
  * Both: the bottom screen has the run's summary (wave, biome, score, money, party) and a line that waits for A. A hands over
  * to on_done, which leaves the screen (the app's flow clears the slot and goes to the title).
  *
+ * With a combat report (the combat observer's, taken as the run ended) A on the line opens the post-mortem (postmortem_screen.h)
+ * instead of leaving; the post-mortem's B comes back here, its A leaves. Without a report A leaves, as before.
+ *
  * Stand-ins, not upstream's: the words "Game Over" and the lines at the bottom (the locales have none); the end dialogue with the
  * rival, the unlocks and vouchers, and the run history entry are not built.
  */
@@ -17,6 +20,7 @@
 
 #include <stdbool.h>
 
+#include "combat_observer.h"
 #include "run_saves.h"
 
 #ifdef __cplusplus
@@ -26,6 +30,7 @@ extern "C" {
 typedef struct {
   bool victory;          /* the run was cleared */
   rsv_info run;          /* the run as it ended (rsv_summarize) */
+  const co_report* report; /* the combat history of the run, NULL = none (A leaves); owned by the observer, valid until the next run */
   void (*on_done)(void* arg);
   void* arg;
 } result_args;

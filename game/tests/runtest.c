@@ -35,6 +35,7 @@
 #include "gc/data.h"
 #include "battle_view.h"
 #include "ball_menu.h"
+#include "combat_observer.h"
 #include "bgm.h"
 #include "bgm_choose.h"
 #include "i18n.h"
@@ -1020,6 +1021,53 @@ static bool save_sys_check(void) {
   return n > 0;
 }
 
+/* ------------------------------------------------------------------ the combat observer, over real runs */
+
+/* The driver hands the observer every drain of every run. When a run has just ended its report must be there, describe that run, hold a
+ * history custom-core accepts, and show that the real game-core events were all taken: nothing refused, dropped or lost. */
+static bool g_run_resumed;   /* the run on screen was continued from its slot at some point */
+static struct {
+  long runs, ranges, batches, events, turns, faint_known, defeats, clears, resumed, empty_ranges, ignored, evicted, full_turns;
+} OBS;
+
+static void obs_check(const gc_run* r, bool cleared) {
+  const co_report* rep = co_report_get();
+  if (!rep) {
+    BAD("no combat report when the run ended");
+    return;
+  }
+  const co_stats* o = &rep->stats;
+  if (rep->outcome != (cleared ? CC_OUT_CLEAR : CC_OUT_DEFEAT)) BAD("the combat report says outcome %d for a %s", rep->outcome, cleared ? "clear" : "game over");
+  if (rep->wave != r->wave) BAD("the combat report says wave %u, the run ended on %d", (unsigned)rep->wave, r->wave);
+  if (rep->biome != r->biome) BAD("the combat report says biome %d, the run ended in %d", (int)rep->biome, r->biome);
+  if (cc_history_validate(&rep->history) != CC_OK) BAD("the combat report's history is not a valid cc_history");
+  for (int t = 0; t < rep->history.n_turns; t++)
+    if (cc_turn_validate(&rep->history.turns[t]) != CC_OK) BAD("turn %d of the combat report is not valid", t);
+  if (o->rejected || o->unrepresentable || o->bad_range || o->unkeyed || o->skipped_drains || o->replayed_drains)
+    BAD("the observer refused or lost real events: rejected %u, unrepresentable %u, bad range %u, unkeyed %u, skipped drains %u, replayed %u (last status %d)",
+        o->rejected, o->unrepresentable, o->bad_range, o->unkeyed, o->skipped_drains, o->replayed_drains, o->last_status);
+  if (o->loss_flagged || rep->untracked_loss) BAD("the observer flagged a loss in a real run (%u batches flagged)", o->loss_flagged);
+  if (!o->drains || !o->ranges || !o->batches || !o->events_in) BAD("the observer saw nothing of the run (drains %u, ranges %u, events %u)", o->drains, o->ranges, o->events_in);
+  if (o->ranges != o->batches + o->empty_ranges) BAD("%u battle ranges but %u batches and %u empty", o->ranges, o->batches, o->empty_ranges);
+  if (rep->history.n_turns < 1) BAD("a finished run left no turn in the combat history");
+  if (rep->began_mid != g_run_resumed) BAD("began_mid %d, the run was%s resumed", rep->began_mid, g_run_resumed ? "" : " not");
+  if (!cleared && !rep->fallen_known) BAD("a game over with no last-fallen Pokemon in the combat history");
+  if (cleared && rep->fallen_known) BAD("a clear names a Pokemon that fell last");
+  OBS.runs++;
+  OBS.ranges += o->ranges;
+  OBS.batches += o->batches;
+  OBS.events += o->events_in;
+  OBS.turns += rep->history.n_turns;
+  OBS.faint_known += rep->fallen_known;
+  OBS.defeats += !cleared;
+  OBS.clears += cleared;
+  OBS.resumed += rep->began_mid;
+  OBS.empty_ranges += o->empty_ranges;
+  OBS.ignored += o->ignored;
+  OBS.evicted += o->evicted;
+  for (int t = 0; t < rep->history.n_turns; t++) OBS.full_turns += rep->history.turns[t].flags == 0;
+}
+
 /* ------------------------------------------------------------------ main */
 
 int main(int argc, char** argv) {
@@ -1092,6 +1140,7 @@ int main(int argc, char** argv) {
           memcmp(back.party, saved.party, sizeof(rsv_mon) * (size_t)saved.n_party))
         BAD("the run that came back (wave %d) is not the one that was saved (wave %d)", back.wave, saved.wave);
       W.resumed = true;
+      g_run_resumed = true;
       n_resumes++;
       continue;
     }
@@ -1124,6 +1173,8 @@ int main(int argc, char** argv) {
       M.run_end_fades++;
       wave_sum += r->wave;
       wave_hist[r->wave / 10 > 20 ? 20 : r->wave / 10]++;
+      obs_check(r, st->clears != clears);
+      g_run_resumed = false;
       ended++;
       clears = st->clears;
       last_ended = st->game_overs + st->clears;
@@ -1179,6 +1230,15 @@ int main(int argc, char** argv) {
   } else {
     printf("evolution coverage floor (5 evolved, 5 cancelled, 3 moves) NOT checked: it needs 1000+ runs, this one has %d\n", runs);
   }
+  printf("combat observer: %ld reports checked (%ld defeats, %ld clears, %ld from a resumed run), %ld batches, %ld observed events, %ld turns kept "
+         "(%ld complete), %ld last-fallen named, %ld empty ranges, %ld HP-0 events ignored, %ld events evicted\n",
+         OBS.runs, OBS.defeats, OBS.clears, OBS.resumed, OBS.batches, OBS.events, OBS.turns, OBS.full_turns, OBS.faint_known, OBS.empty_ranges,
+         OBS.ignored, OBS.evicted);
+  /* every GC_EV_BATTLE the screen played the observer took in at its drain, once (a run dropped and continued from its slot leaves its first
+   * part out of the reports, so this holds for runs played through) */
+  if (!resume_on && OBS.ranges != st->events[GC_EV_BATTLE])
+    BAD("the observer took in %ld battle ranges, the screen played %d", OBS.ranges, st->events[GC_EV_BATTLE]);
+  if (OBS.runs != ended) BAD("%ld combat reports checked for %d runs", OBS.runs, ended);
   printf("reward screens: %d shops, %d item targets, %d biome maps\n", n_shops, n_item_opens, n_maps);
   printf("music: %d scenes under upstream's track (%d with encounter music before the trainer's first send-out), %d commands under the battle's "
          "music, %d trainer victories under their victory music, %d run ends faded; %d track starts, %d different tracks heard\n",

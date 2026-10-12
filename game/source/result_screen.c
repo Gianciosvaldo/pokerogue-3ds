@@ -6,6 +6,7 @@
 
 #include "gm_enum_names.h"
 #include "i18n.h"
+#include "postmortem_screen.h"
 #include "run_summary.h"
 #include "ui.h"
 #include "ui_text.h"
@@ -17,13 +18,29 @@ static struct {
   bool done;
 } R;
 
+static void leave_result(void) {
+  R.done = true;
+  if (R.a.on_done) R.a.on_done(R.a.arg);
+}
+
+/* the post-mortem's buttons: A leaves for the title, B comes back to this screen with its line waiting again */
+static void on_postmortem(pm_exit how, void* arg) {
+  (void)arg;
+  if (how == PM_CONTINUE) {
+    leave_result();
+    return;
+  }
+  const result_args again = R.a; /* result_screen_open clears R */
+  result_screen_open(&again);
+}
+
 static bool rs_input(ui_screen* s, ui_button b) {
   (void)s;
   if (R.done) return true;
   if (msgbox_input(&R.msg, b)) {
     if (msgbox_done(&R.msg)) {
-      R.done = true;
-      if (R.a.on_done) R.a.on_done(R.a.arg);
+      const pm_args pm = {R.a.report, on_postmortem, NULL};
+      if (!postmortem_open(&pm)) leave_result();
     }
     return true;
   }

@@ -1,9 +1,10 @@
-# Custom content contracts, version 1 (tasks C01, C02)
+# Custom content contracts, version 1 (tasks C01, C02, C03)
 
 Written for task C01 of [CUSTOM-CONTENT-ADVANCED-AGENT.md](CUSTOM-CONTENT-ADVANCED-AGENT.md). It does three things:
 audits the interfaces the custom content will touch, fixes the version-1 data contracts, and records what the new
 `custom-core/` module proves. It is not a record of a working custom mode: the module has no live hooks, no file
-access, no wallet access and no spawn code, and nothing in the app calls it.
+access, no wallet access and no spawn code. Since C03 the app feeds the reducer and shows a read-only post-mortem screen
+(sections 2.9 and 5.2); nothing is saved and no custom mode exists yet.
 
 | Item | Value |
 |---|---|
@@ -480,6 +481,33 @@ timing was measured**; memory is `sizeof(cc_reducer)` (section 5) plus the calle
 **Not in this contract.** No codec (C04), no live observer, no stable-identity derivation (section 1.8), no rendering, no
 SD access.
 
+### 2.9 The observer in the app (C03)
+
+`game/source/combat_observer.c` is the only code that feeds the reducer. Decisions, each checked by `game/tests/observer_test.c`:
+
+- **Where.** `run_screen.c drain()` calls `co_observe()` right after the queue is pulled from game-core, before
+  `be_convert_events` and before anything is played. Observation therefore happens once per pull of the game's queue and does not
+  depend on animation, skipping or the player's speed setting. `end_run()` calls `co_finish()` first; `new_run()` and a
+  successful `rs_resume()` call `co_begin_run(false/true)`. A continued run has `began_mid` set and its history says so.
+- **Input.** `GC_EV_WAVE` (battle number), `GC_EV_TURN` (turn, starting at 1) and `GC_EV_BATTLE` (a range into
+  `run->battle_events`, read only during that drain). One non-empty range becomes one batch with a fresh id; a range with no
+  observed event makes no batch, so no empty turn. Events before the first TURN of a battle are turn 0. The turn number is kept
+  across drains so the chunks after a switch prompt join the same turn.
+- **Mapping.** `PR_EV_DAMAGE`, `PR_EV_HP`, `PR_EV_FAINT`, `PR_EV_SWITCH_OUT`, `PR_EV_SWITCH_IN`, with the field snapshot
+  the event carries (HP -1/-1 when the snapshot is unusable). `PR_EV_MOVE_ANIM` and all text/animation events are not given to the
+  reducer and are not counted as lost.
+- **Loss.** `battle_events_overflow`, a full game-core queue (`GC_MAX_EVENTS`), `ev_overflow` (once), a refused batch, an event the
+  reducer cannot represent, a bad range and a drain number that never arrived all set `SOURCE_LOSS`: on the stored turn when there is
+  one, otherwise carried to the next batch or to `report.untracked_loss`. Nothing is guessed to fill a gap.
+- **Not known, never inferred.** Who dealt a hit, with what move, and what caused an HP loss: no raw event carries it, so every
+  stored event has its source bits clear. Pokemon identity is species and form from the snapshot; stable ids stay unknown (a
+  snapshot `party_slot` can be re-ordered between the event and the drain). The run uid is a counter of this session.
+- **Report.** `co_finish()` copies the history by value into a `co_report` that owns its data. A defeat names the player Pokemon of
+  the last `FAINT` in the retained turns as "last to fall", or "not recorded". It is idempotent.
+- **Shape.** About 52.9 KB static (reducer, 384 observations, report). Built as one translation unit
+  (`custom_core_build.c`) because the devkitPro Makefile names objects by basename and `custom-core/src/history.c` collides with
+  `battle-core/src/history.c`; renaming it is an area X change and is left to a later task.
+
 ## 3. Choices to confirm
 
 These are version-1 decisions this PR had to make. The handoff either left them open or said "documented policy". Each
@@ -513,7 +541,7 @@ Added by C02 (section 2.8):
 | Task | Imports | Still undecided / must verify |
 |---|---|---|
 | C02 reducer (decided in section 2.8) | `cc_obs`, `cc_event`, `cc_turn`, `cc_history`, the eviction invariant | nothing left open: the raw-event mapping, the batch and sequence rules and how `shown` and `hp_delta` are filled are in section 2.8 |
-| C03 observer + UI | `cc_reducer`, `cc_reduce`, `cc_turn_summarize`, `cc_terminal`, `cc_history`, the "complete only when `flags == 0`" rule | how stable ids are derived (section 1.8, item 1); where in `drain()`/`handle_event` to observe; numbering batches and splitting ranges at turn boundaries; passing `SOURCE_LOSS` from the overflow flags; `begin_run`/`end_run`; keeping the reducer static; copy `r->hist` by value after `end_run` |
+| C03 observer + UI (decided in section 2.9) | `cc_reducer`, `cc_reduce`, `cc_turn_summarize`, `cc_terminal`, `cc_history`, the "complete only when `flags == 0`" rule | nothing left open for C03, except that stable ids and the finishing source are not derivable from the events (section 2.9); C04 must decide the durable run uid |
 | C04 store | `cc_meta`, wire widths, `cc_insertion_check`, ledger, `cc_nemesis_transition` | the codec, file name, version-refusal before write, the clear/commit order (section 1.3), the run-UID write |
 | C05 scheduler | `cc_schedule`, window waves, `CC_RNG_ALGO_V1`, lifecycle | the algorithm; the draw; the eligibility predicate |
 | C06 radar | `cc_nemesis` read-only, `cc_schedule` | touch layer if wanted (section 1.7) |
@@ -630,12 +658,67 @@ tests; 1 was a clear of a tail that is always overwritten by the same batch, and
 counts (section 2.8). No test drives real `battle-core` events: the fixtures are written from the header and the cited
 `phases.c`/`switching.c` lines, so whether the adapter (C03) produces exactly these observations is C03's to show.
 
+### 5.2 C03 (observer and post-mortem screen)
+
+Run on the final tree of the C03 PR (`main` after the music PR #225 merged into the branch), same container (gcc 13.3.0, Python 3.13,
+Ubuntu `arm-none-eabi-gcc` 13.2.1, devkitARM in Docker, Azahar's libretro build in Old 3DS mode). The PR description repeats this
+with the head commit and the CI results. Test commands run from `game/tests`.
+
+| Command | Result |
+|---|---|
+| `make clean && make observer_test postmortem_test flowtest saves_test startertest starter_data_test starter_ui_test bgmtest runtest` | builds; the only warnings are the existing `ai.c:542` and `run_screen.c` (`pretty_key`, unused parameter) ones, also present on `main` |
+| `build/observer_test` (ASan + UBSan) | 188 checks, 0 failed |
+| `build/postmortem_test` | 250 checks, 0 failed (includes a check that every line is drawn in a style that was readable in Azahar) |
+| `build/flowtest` | 71 checks, 0 failed (64 on `main`) |
+| `build/saves_test`, `startertest`, `starter_data_test`, `starter_ui_test`, `bgmtest` | 68 / 737,655 / 51,280 / 4,470 / 11,421 checks, 0 failed |
+| `python3 game/tests/observer_mutations.py` | 30 run, 30 killed, 0 survived, 0 invalid |
+| `build/runtest 1000 0` (plain and `RUNTEST_SAVE=1`) | digest `1b42b380`, equal to `main`; 1000 reports checked, 50,069 batches, 94,651 observed events, 5,000 turns kept (5,000 complete), 4,331 empty ranges, 0 refused, 0 lost, 0 evicted |
+| `RUNTEST_SAVE=resume build/runtest 1000 0` | digest `b764f66a`, equal to `main`; 998 of 1000 reports from a resumed run, 15,900 batches |
+| `RUNTEST_SYS=all build/runtest 1000 0` | digest `80268d9a`, equal to `main`; 52,958 batches, 102,160 observed events |
+| `make runtest-save` | OK (10 seeds) |
+
+`runtest 1000 0` prints `FAILED` in all four modes **on `main` as well**, at the same digests, with the identical first violations
+(`run 1000 wave 9: fewer than 5 evolutions cancelled (3)` plain and SAVE=1; `run 4023 wave 19: fewer than 5 evolutions completed (3)`
+resume; `run 1000 wave 10: fewer than 5 evolutions cancelled (4)` SYS=all). That is the harness's coverage floor on evolutions at
+1000 runs, not an observer check; it was not changed here.
+
+ARM compile of the new and changed sources with the 3DS CPU flags (`-O2 -Wall -Wextra`, no new warning): `.text` / `.bss` bytes:
+`combat_observer.o` 2,348 / 45,952; `custom_core_build.o` 14,787 / 0; `postmortem_screen.o` 5,631 / 6,992; `result_screen.o`
+1,267 / 2,064; `app_flow.o` 2,222 / 1,369; `run_screen.o` 17,925 / 1,332. The 3DS build of `game/` in the devkitARM image also succeeds.
+
+**What the tests are.** `observer_test.c` feeds literal gc events and battle events through `co_observe` and checks the stored
+turns field by field (see section 2.9 for the rules). `runtest.c` checks every real run's report, including that every
+`GC_EV_BATTLE` range was observed once and none was refused, dropped or replayed. `postmortem_test.c` draws against a fake text
+layer (6 px per character) and checks the wording (including a list of words that would claim a cause), the pages, scrolling,
+button handling, screen bounds and the text styles. The mutation script changes the wiring and the screen one edit at a time.
+
+**Emulator check (Azahar, Old 3DS mode).** The app was built in Docker (`devkitpro/devkitarm`), the `gfx`, `font` and `data` packs
+were built from the pinned upstream checkouts with `build_sd.py --only gfx,font,data`, and a run with one Magikarp (`rundriver.txt`:
+a fixed seed and `starters=129`) was driven with scripted A presses through the real title, battle and result screens. The post-mortem
+opened from the result screen showed the real events of three turns, and LEFT / RIGHT paged them. **The first defeat was forced:** a
+Magikarp could not lose to the wave 1 Sentret in 9,000 emulated frames, so those screenshots come from a throwaway copy of `game/`
+(outside the repo, not committed) that ends the run after five observed battle ranges; the turns, damage and HP shown are real
+observations. **A real faint was then seen** with a second throwaway copy that only sets the first Pokemon's HP to 1 at the first
+command (and ignores A and B in the post-mortem so the screen stays up): the engine itself fainted the Magikarp, the run ended on its
+own, and the report read "Defeated at wave 1", "Last to fall: Magikarp", "Final blow: source not recorded", "Last 2 turns, nothing
+missing", with the rows "Your Magikarp took 1 damage (HP 0)" and "Your Magikarp fainted" (red). **A clear was seen** with a third throwaway copy that ends the
+run as a clear after five observed battle ranges ("Cleared at wave 1", no "Last to fall" line). **Scrolling was seen** with a fourth
+throwaway copy whose report is made of invented events fed through the real observer and reducer (no battle can fill 64 events in a
+turn quickly): "N more above / below" and the incomplete-turn notice drew on screen. That run also showed that a long notice could
+run into the "N more above" label, so the notice is now cut short on a turn that can scroll (one test, one mutation). The first emulator run found that the totals,
+rows, notice and footer, drawn in the 9 px emerald style, were unreadable; they now use `TS_INSTRUCTIONS_TEXT` (the 8 px pixel font the
+party screen uses), and the same flow was re-run on the merged tree to confirm. Screenshots are in the shared project files, not in Git.
+
+**Not run / not established.** No timing on an Old 3DS or a real console. The new game tests are not part of the CI workflow (it
+runs game-core tests and the 3DS build). The finishing source of a defeat is never known. Stable Pokemon identity and a durable run
+uid are not provided.
+
 ## 6. Not established by this PR
 
 - No upstream behavior was consulted or compared. There is no differential, no seed, no Node 22 run, and none is needed
   for a module that ports no upstream rule.
-- No emulator or console check: there is no screen or app change.
+- No emulator or console check by C01/C02 (no screen or app change then). C03's emulator check, and what it did not cover, is in section 5.2.
 - No Old 3DS memory or time measurement. `sizeof` and code-size figures come from compilers (x86-64 host, Ubuntu's
   `arm-none-eabi-gcc`, and devkitARM in CI, with the 3DS CPU flags), not from a device or emulator.
-- No codec, no file I/O, no live hook, no scheduler, no profile or reward code, and no observer feeding the reducer (C03). Those are C03 to C10.
+- No codec, no file I/O, no scheduler and no profile or reward code. (C03 added the live observer hook and the post-mortem screen; section 2.9.) The rest is C04 to C10.
 - Range checks only for species, form, move and ability: membership in the game's tables is the adapters' job.
