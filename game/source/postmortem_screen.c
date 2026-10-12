@@ -152,7 +152,8 @@ static void build_page(void) {
     if (P.totals[0][0] >= 'a' && P.totals[0][0] <= 'z') P.totals[0][0] = (char)(P.totals[0][0] - 32);
     if (P.totals[1][0] >= 'a' && P.totals[1][0] <= 'z') P.totals[1][0] = (char)(P.totals[1][0] - 32);
   }
-  fit(P.notice[0], TS_INSTRUCTIONS_TEXT, LIST_W);
+  /* "N more above" is drawn at x 236 on the notice's line once the list scrolls, so a notice on a turn that can scroll stops short of it */
+  fit(P.notice[0], TS_INSTRUCTIONS_TEXT, P.n_rows > VISIBLE ? LIST_W - 72 : LIST_W);
   fit(P.totals[0], TS_INSTRUCTIONS_TEXT, LIST_W);
   fit(P.totals[1], TS_INSTRUCTIONS_TEXT, LIST_W);
 }

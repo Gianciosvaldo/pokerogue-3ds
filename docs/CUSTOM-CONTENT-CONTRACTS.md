@@ -668,10 +668,10 @@ with the head commit and the CI results. Test commands run from `game/tests`.
 |---|---|
 | `make clean && make observer_test postmortem_test flowtest saves_test startertest starter_data_test starter_ui_test bgmtest runtest` | builds; the only warnings are the existing `ai.c:542` and `run_screen.c` (`pretty_key`, unused parameter) ones, also present on `main` |
 | `build/observer_test` (ASan + UBSan) | 188 checks, 0 failed |
-| `build/postmortem_test` | 248 checks, 0 failed (includes a check that every line is drawn in a style that was readable in Azahar) |
+| `build/postmortem_test` | 250 checks, 0 failed (includes a check that every line is drawn in a style that was readable in Azahar) |
 | `build/flowtest` | 71 checks, 0 failed (64 on `main`) |
 | `build/saves_test`, `startertest`, `starter_data_test`, `starter_ui_test`, `bgmtest` | 68 / 737,655 / 51,280 / 4,470 / 11,421 checks, 0 failed |
-| `python3 game/tests/observer_mutations.py` | 29 run, 29 killed, 0 survived, 0 invalid |
+| `python3 game/tests/observer_mutations.py` | 30 run, 30 killed, 0 survived, 0 invalid |
 | `build/runtest 1000 0` (plain and `RUNTEST_SAVE=1`) | digest `1b42b380`, equal to `main`; 1000 reports checked, 50,069 batches, 94,651 observed events, 5,000 turns kept (5,000 complete), 4,331 empty ranges, 0 refused, 0 lost, 0 evicted |
 | `RUNTEST_SAVE=resume build/runtest 1000 0` | digest `b764f66a`, equal to `main`; 998 of 1000 reports from a resumed run, 15,900 batches |
 | `RUNTEST_SYS=all build/runtest 1000 0` | digest `80268d9a`, equal to `main`; 52,958 batches, 102,160 observed events |
@@ -701,8 +701,11 @@ Magikarp could not lose to the wave 1 Sentret in 9,000 emulated frames, so those
 observations. **A real faint was then seen** with a second throwaway copy that only sets the first Pokemon's HP to 1 at the first
 command (and ignores A and B in the post-mortem so the screen stays up): the engine itself fainted the Magikarp, the run ended on its
 own, and the report read "Defeated at wave 1", "Last to fall: Magikarp", "Final blow: source not recorded", "Last 2 turns, nothing
-missing", with the rows "Your Magikarp took 1 damage (HP 0)" and "Your Magikarp fainted" (red). A clear and a list longer than ten rows
-(scrolling) were not seen in the emulator (the host tests cover them with a fake font). The first emulator run found that the totals,
+missing", with the rows "Your Magikarp took 1 damage (HP 0)" and "Your Magikarp fainted" (red). **A clear was seen** with a third throwaway copy that ends the
+run as a clear after five observed battle ranges ("Cleared at wave 1", no "Last to fall" line). **Scrolling was seen** with a fourth
+throwaway copy whose report is made of invented events fed through the real observer and reducer (no battle can fill 64 events in a
+turn quickly): "N more above / below" and the incomplete-turn notice drew on screen. That run also showed that a long notice could
+run into the "N more above" label, so the notice is now cut short on a turn that can scroll (one test, one mutation). The first emulator run found that the totals,
 rows, notice and footer, drawn in the 9 px emerald style, were unreadable; they now use `TS_INSTRUCTIONS_TEXT` (the 8 px pixel font the
 party screen uses), and the same flow was re-run on the merged tree to confirm. Screenshots are in the shared project files, not in Git.
 

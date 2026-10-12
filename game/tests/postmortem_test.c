@@ -439,6 +439,26 @@ static void test_scroll_and_fit(void) {
   press(BTN_UP);
   draw(1);
   CHECK(has_text("53 more above") && has_text("1 more below"), "one up");
+  /* a long notice on a turn that scrolls stops before the "N more above" label (x 236) */
+  begin(true); /* began mid-run: that notice is added to the lost-events one */
+  {
+    static pr_event big[14];
+    for (int i = 0; i < 14; i++) big[i] = dmg(0, 25, 1000 - i, 1000, 1);
+    turn(3, 1, big, 14, true);
+    co_finish(false, 1, 3);
+    const co_report* rl = co_report_get();
+    const pm_args al = {rl, on_exit_cb, NULL};
+    postmortem_open(&al);
+    for (int i = 0; i < 3; i++) press(BTN_DOWN);
+    draw(1);
+    bool seen = false;
+    for (int i = 0; i < n_drawn; i++)
+      if (!strncmp(g_drawn[i].text, "Incomplete turn", 15)) {
+        seen = true;
+        CHECK(g_drawn[i].x + 6.0f * (float)strlen(g_drawn[i].text) <= 236.0f, "the notice \"%s\" runs into the \"more above\" label", g_drawn[i].text);
+      }
+    CHECK(seen && has_text("more above"), "a notice and a scrolled list");
+  }
   /* a turn change starts at the top */
   const co_report* r2 = make_defeat();
   const pm_args b = {r2, on_exit_cb, NULL};

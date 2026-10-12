@@ -138,6 +138,10 @@ M = [
      "  if (P.totals[0][0]) line(10, 44, P.totals[0], TS_INSTRUCTIONS_TEXT, 0);",
      "  if (P.totals[0][0]) line(10, 44, P.totals[0], TS_MOVE_INFO_CONTENT, 0);",
      "postmortem_test", ["build/postmortem_test"], "the totals are drawn in the 9 px style that was unreadable in Azahar"),
+    ("source/postmortem_screen.c",
+     "P.n_rows > VISIBLE ? LIST_W - 72 : LIST_W",
+     "LIST_W",
+     "postmortem_test", ["build/postmortem_test"], "a long notice runs into the 'more above' label on a scrolling turn"),
 ]
 
 
