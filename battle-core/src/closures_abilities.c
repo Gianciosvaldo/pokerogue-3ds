@@ -11,6 +11,14 @@
 #define ARGS pr_battle *bt, const pr_closure_info *self, const pr_pokemon *a, const pr_pokemon *b, int m
 #define UNUSED (void)bt; (void)self; (void)a; (void)b; (void)m
 
+static double stall_priority(ARGS) { UNUSED; return 1; }
+static double mycelium_status_move(ARGS)
+{
+    UNUSED;
+    if (m < 0 || m >= PR_MOVE_COUNT) UNPORTED(PR_FEAT_MOVE_CONDITION);
+    return pr_moves[m].category == MOVE_CATEGORY_STATUS;
+}
+
 /* The single value a capture was probed at (boostedType, moveType...). */
 static int cap_value(const pr_closure_info *self)
 {
@@ -431,6 +439,8 @@ static double hunger_toggle(ARGS) { UNUSED; const pr_form *f = pr_pokemon_form(a
 static double hunger_stay(ARGS) { UNUSED; const pr_form *f = pr_pokemon_form(a); return f && f->form_key && f->form_key[0] ? 1 : 0; }
 
 const pr_closure_reg pr_ability_closures[] = {
+    {"ability:100", "93207d9890eb", stall_priority},
+    {"ability:298", "74fa5cb6b41e", mycelium_status_move},
     {"ability:161", "5e264af5663d", form_zero},
     {"ability:161", "38014e3c8e4b", zen_form},
     {"ability:197", "6bab2eeebf7d", meteor_base},

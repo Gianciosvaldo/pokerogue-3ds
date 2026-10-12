@@ -327,6 +327,34 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
     int move = pp->move;
     switch (a->cls) {
     /* ---- stats ---- */
+    case PR_AC_ChangeMovePriorityInBracketAbAttr: {
+        const pr_attr_ChangeMovePriorityInBracketAbAttr *x = P(ChangeMovePriorityInBracketAbAttr, a);
+        GATE(call_bool(bt, x->moveFunc, a->cls, p, NULL, move));
+        *pp->value = x->newModifier;
+        return 1;
+    }
+    case PR_AC_BypassSpeedChanceAbAttr: {
+        if (pp->simulated) return 0;
+        if (!c->e) return -1;
+        int battler = pr_battler_index(bt, p);
+        int chosen = battler >= 0 ? bt->commands[battler].move : MOVE_ID_NONE;
+        bool damage = chosen > MOVE_ID_NONE && chosen < PR_MOVE_COUNT
+            && (pr_moves[chosen].category == MOVE_CATEGORY_PHYSICAL || pr_moves[chosen].category == MOVE_CATEGORY_SPECIAL);
+        /* Source draws before checking the move category or existing bypass tag. */
+        GATE(pr_battle_rand_seed_int(bt, 100, 0) < P(BypassSpeedChanceAbAttr, a)->chance
+             && damage && pr_can_add_tag(bt, (pr_pokemon *)p, BATTLER_TAG_TYPE_BYPASS_SPEED));
+        pr_add_tag(bt, c->e, (pr_pokemon *)p, BATTLER_TAG_TYPE_BYPASS_SPEED, 0, 0, -1);
+        return 1;
+    }
+    case PR_AC_PreventBypassSpeedChanceAbAttr: {
+        int battler = pr_battler_index(bt, p);
+        if (battler < 0 || bt->commands[battler].command != COMMAND_FIGHT) return 0;
+        int chosen = bt->commands[battler].move;
+        if (chosen <= MOVE_ID_NONE || chosen >= PR_MOVE_COUNT) return -1;
+        GATE(call_bool(bt, P(PreventBypassSpeedChanceAbAttr, a)->condition, a->cls, p, NULL, chosen));
+        *pp->flag = false;
+        return 1;
+    }
     case PR_AC_WonderSkinAbAttr:
         GATE(move >= 0 && move < PR_MOVE_COUNT
              && pr_moves[move].category == MOVE_CATEGORY_STATUS && *pp->value >= 50);

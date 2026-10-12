@@ -271,11 +271,13 @@ static pr_pokemon *phase_pokemon(pr_battle *bt, pr_engine *e, int ph)
 }
 
 /* Move.getPriorityModifier(user, simulated = true) */
-static int priority_modifier(pr_battle *bt, int move, const pr_pokemon *user)
+int pr_move_get_priority_modifier(pr_battle *bt, int move, const pr_pokemon *user)
 {
     if (pr_get_battler_tag(user, BATTLER_TAG_TYPE_BYPASS_SPEED)) return MOVE_PRIORITY_IN_BRACKET_FIRST;
-    pr_hook_ab(bt, user, PR_AC_ChangeMovePriorityInBracketAbAttr);
-    return MOVE_PRIORITY_IN_BRACKET_NORMAL;
+    double modifier = MOVE_PRIORITY_IN_BRACKET_NORMAL;
+    pr_ab_params params = {.pokemon = user, .move = move, .simulated = true, .value = &modifier};
+    pr_apply_ab_attrs(bt, PR_AC_ChangeMovePriorityInBracketAbAttr, &params);
+    return (int)modifier;
 }
 
 /* PriorityQueue.reorder for the queue of `type` */
@@ -309,7 +311,7 @@ static void dyn_reorder(pr_battle *bt, pr_engine *e, int type)
             pr_phase *p = &e->pool[pay[i]];
             key[i][0] = p->timing;
             key[i][1] = pr_move_get_priority(bt, p->move.id, p->pokemon);
-            key[i][2] = priority_modifier(bt, p->move.id, p->pokemon);
+            key[i][2] = pr_move_get_priority_modifier(bt, p->move.id, p->pokemon);
         }
         for (int i = 1; i < n; i++) {
             int kp = pay[i], kk[3] = {key[i][0], key[i][1], key[i][2]};

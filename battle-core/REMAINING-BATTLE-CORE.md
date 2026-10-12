@@ -7,7 +7,7 @@ This is a work inventory, not a completion percentage or a passing test record.
 Card 103 trainer routing is already merged in #185. Ordinary reserve ownership,
 callbacks, switching moves and the pinned Roar guard should not be reimplemented.
 Its historical optional-index regression was subsequently repaired in #218.
-The next concrete continuation is the leave-field ability dispatcher:
+The leave-field primal weather dispatcher is merged in #230:
 Primordial Sea/Desolate Land/Delta Stream weather cleanup. Neutralizing Gas's
 source-leave tag lifecycle is a separate slice, not covered by that repair.
 
@@ -15,9 +15,9 @@ Next independent source-backed slices, in likely implementation order:
 
 | Slice | Current concrete gap | Required proof |
 | --- | --- | --- |
-| Wonder Skin | Accuracy caller uses pr_hook_ab instead of the real leaf | Status versus damage, accuracy below/at/above 50, bypass/suppression, stage/item ordering, whole turns/RNG/text |
-| Priority brackets and Quick Draw | Remaining ChangeMovePriorityInBracket/BypassSpeedChance callbacks | Real source conditions and seeded order, refusals, passives, priority ties; preserve Quick Claw |
-| Protean/Libero | PokemonTypeChangeAbAttr move callers record unsupported | Source type-change timing, existing type and Tera exclusions, per-summon use state, switch reset |
+| Wonder Skin (merged #232) | Real accuracy dispatcher and leaf now implemented | Status versus damage, accuracy below/at/above 50, bypass/suppression, stage/item ordering, whole turns/RNG/text |
+| Priority brackets and Quick Draw (this slice) | Real bracket, chance and refusal callbacks now implemented | Real source conditions and seeded order, refusals, passives, priority ties; preserve Quick Claw |
+| Protean/Libero | PokemonTypeChangeAbAttr move callers record unsupported | Source type-change timing, existing type and Tera exclusions, repeated type changes (the pin has no Gen 9 once-per-summon gate), switch reset |
 | Receiver/Power of Alchemy | CopyFaintedAlly needs victim context in the knockout dispatcher | Ally versus enemy victim, eligibility, copied primary/passive and source order, loaded doubles |
 | Parental Bond / Beat Up | AddSecondStrike and variable multi-hit dispatch remain | Move exclusions, hit powers/order, targets, KO interruption, exact RNG consumption |
 | Cud Chew / Harvest | Berry recording, repeat consumption and restoration callbacks remain | Actual named held-item history and delays, ownership, duplication/refusal and RNG |
@@ -42,3 +42,9 @@ counts and tolerances remain unchanged. Host save/load consistency and 3DS CI
 are required separately. Custom-core CI is excluded from these battle tasks by
 the user's current instruction. No full battle-core, run or hardware parity is
 claimed until the remaining source paths and their prerequisites are proven.
+
+Priority continuation on base main `fa1cb29`: rich seed777 now has 1,896 exact
+covered turns, up from 1,872; summon 1,869, up from 1,868. Other retained coverage
+is unchanged. The dedicated source matrix matches 8,000 complete turns and
+16,000 direct bracket probes. See PRIORITY-BRACKETS-VALIDATION.md for the
+boundaries; these counts do not establish a completion percentage.
