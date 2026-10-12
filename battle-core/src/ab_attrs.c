@@ -604,6 +604,30 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         return pr_unshift_stat_stage_change_ex(bt, c->e, pr_battler_index(bt, p), &st, &sg, 1,
                                                (pr_pokemon *)p, 0) < 0 ? -1 : 1;
     }
+    case PR_AC_PreLeaveFieldClearWeatherAbAttr: {
+        int weather = P(PreLeaveFieldClearWeatherAbAttr, a)->weatherType;
+        bool another = false;
+        for (int b = 0; b < 4 && !another; b++) {
+            const pr_pokemon *q = bt->field[b];
+            /* getField(true) checks legal/faint eligibility, not isOnField(). */
+            if (!q || q == p || q->hp <= 0) continue;
+            for (int passive = 0; passive < 2 && !another; passive++) {
+                int ability = passive ? q->passive : q->ability;
+                if (!ability || !pr_can_apply_ability(bt, q, ability)) continue;
+                const pr_ability *ab = &pr_abilities[ability];
+                for (unsigned i = 0; i < ab->nattr; i++) {
+                    const pr_attr *other = &pr_attrs[ab->attr0 + i];
+                    if (other->cls == PR_AC_PreLeaveFieldClearWeatherAbAttr
+                        && P(PreLeaveFieldClearWeatherAbAttr, other)->weatherType == weather) another = true;
+                }
+            }
+        }
+        GATE(bt->weather == weather && !another);
+        if (pp->simulated) return 1;
+        if (!c->e) return -1;
+        pr_try_set_weather(bt, c->e, WEATHER_TYPE_NONE, NULL);
+        return 1;
+    }
     /* ---- coming in: PostSummonActivateAbilityPhase ---- */
     case PR_AC_PostSummonMessageAbAttr:                                 /* Pressure, Mold Breaker, Anticipation... */
     case PR_AC_PostSummonUnnamedMessageAbAttr:                          /* Air Lock, Cloud Nine */

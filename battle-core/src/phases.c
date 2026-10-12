@@ -2814,7 +2814,8 @@ void pr_leave_field(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool clear_effec
         if (q != p)
             pr_remove_tags_by_source_id(bt, e, q, (int64_t)p->id);
     if (clear_effects) reset_summon_data(p);
-    pr_hook_ab(bt, p, PR_AC_PreLeaveFieldAbAttr);
+    pr_ab_params params = {.pokemon = p, .move = -1};
+    pr_apply_ab_attrs(bt, PR_AC_PreLeaveFieldAbAttr, &params);
     p->switch_out_status = true;
     form_change(bt, p, PR_FCT_SpeciesFormChangeActiveTrigger);
     p->on_field = false;

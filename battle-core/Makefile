@@ -190,3 +190,7 @@ $(BUILD)/consecutive-move-test: tests/consecutive-move-test.c $(BUILD)/libprcore
 all: $(BUILD)/knockout-stats-test
 $(BUILD)/knockout-stats-test: tests/knockout-stats-test.c $(BUILD)/fell-stinger-replay.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) tests/knockout-stats-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/leave-weather-test
+$(BUILD)/leave-weather-test: tests/leave-weather-test.c tests/trainer-switch-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/leave-weather-test.c $(BUILD)/libprcore.a -lm -o $@

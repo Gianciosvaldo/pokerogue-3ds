@@ -1099,3 +1099,13 @@ now run through the actual faint-phase ability dispatcher. The additive
 raw highest-stat ties, indirect knockouts, passives, suppression, and Simple/Contrary.
 See [KNOCKOUT-STATS-VALIDATION.md](KNOCKOUT-STATS-VALIDATION.md) for pins,
 reproduction, mutation checks, regressions, and bounded exclusions.
+
+## Task 103 continuation: primal-weather leave-field cleanup
+
+The real leave-field dispatcher now runs Primordial Sea, Desolate Land and
+Delta Stream cleanup, including other-holder/passive/suppression guards and
+fainting. [LEAVE-WEATHER-VALIDATION.md](LEAVE-WEATHER-VALIDATION.md) records
+8,000 exact source turns and retained regressions. Reproduce with
+`tools/leave-weather-diff.sh <upstream> 2000 <seed>`.
+The [remaining-core audit](REMAINING-BATTLE-CORE.md) separates concrete next
+slices from absent inputs and broader integration; this is not full-core parity.
