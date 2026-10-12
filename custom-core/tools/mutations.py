@@ -2,7 +2,7 @@
 """Mutation check for custom-core: the unit tests must be able to fail.
 
 Each mutation is a single textual change to one source or header file. For every mutation this script copies
-include/, src/ and tests/ to a scratch directory, applies the change, builds model_test, reducer_test, layout_test, codec_test and commit_test
+include/, src/ and tests/ to a scratch directory, applies the change, builds model_test, reducer_test, layout_test, codec_test, commit_test and scheduler_test
 from that copy and runs them. A mutation is KILLED when a test fails (a nonzero exit, a sanitizer abort or a timeout) and SURVIVES
 when both tests still pass. The script exits nonzero if
 
@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parent.parent
 ENUMS = ROOT.parent / "battle-core" / "gen" / "out" / "pr_enums.h"
 CFLAGS = ["-O0", "-g", "-w", "-std=c99", "-fsanitize=address,undefined", "-fno-sanitize-recover=undefined"]
 SOURCES = ["src/status.c", "src/history.c", "src/nemesis.c", "src/schedule.c", "src/ids.c", "src/meta.c", "src/reducer.c",
-           "src/codec.c", "src/commit.c"]
+           "src/codec.c", "src/commit.c", "src/scheduler.c"]
 BUILD_TIMEOUT = 120
 RUN_TIMEOUT = 30
 
@@ -935,10 +935,183 @@ mut(T, "    res->record_id = record_id;\n    return CC_OK;", "    return CC_OK;"
 
 
 
+# ---------------------------------------------------------------- scheduler.c (C05)
+Q = "src/scheduler.c"
+# the stream and the one integer selection
+mut(Q, "*state += 0x9E3779B97F4A7C15ull;", "*state += 0x9E3779B97F4A7C16ull;", "stream increment")
+mut(Q, "z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;", "z = (z ^ (z >> 29)) * 0xBF58476D1CE4E5B9ull;", "stream shift 30")
+mut(Q, "z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;", "z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5BAull;", "stream multiplier 1")
+mut(Q, "z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;", "z = (z ^ (z >> 26)) * 0x94D049BB133111EBull;", "stream shift 27")
+mut(Q, "z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;", "z = (z ^ (z >> 27)) * 0x94D049BB133111ECull;", "stream multiplier 2")
+mut(Q, "return z ^ (z >> 31);", "return z ^ (z >> 30);", "stream final shift")
+mut(Q, "return z ^ (z >> 31);", "return z;", "stream final xorshift removed")
+mut(Q, "(unsigned)(r % n)", "(unsigned)(r % (n > 1 ? n - 1 : n))", "selection: modulus one short")
+mut(Q, "(unsigned)(r % n)", "(unsigned)((r >> 1) % n)", "selection: shifted output")
+mut(Q, "(unsigned)(r % n)", "(unsigned)(r & (n - 1))", "selection: mask instead of modulus")
+mut(Q, "(unsigned)(r % n)", "(unsigned)((r >> 32) % n)", "selection: high half only")
+mut(Q, "(unsigned)(r % n)", "(unsigned)(n - 1 - r % n)", "selection: reversed")
+mut(Q, "    const uint64_t r = cc_rng_v1_next(state);\n    return", "    const uint64_t r = cc_rng_v1_next(state);\n    cc_rng_v1_next(state);\n    return", "pick draws twice")
+mut(Q, "        const unsigned pick = cc_rng_v1_pick(&state, ns.n_frozen);", "        const unsigned pick = cc_rng_v1_pick(&state, ns.n_frozen);\n        cc_rng_v1_next(&state);", "start draws a second time")
+mut(Q, "        uint64_t state = seed;", "        uint64_t state = seed ^ 1;", "start does not seed the stream with the seed")
+mut(Q, "        ns.rng_seed = seed;\n", "", "seed not recorded")
+mut(Q, "        ns.rng_state = state;\n", "        ns.rng_state = seed;\n", "state after the draw not stored")
+mut(Q, "        ns.chosen_id = ns.frozen_ids[pick];", "        ns.chosen_id = ns.frozen_ids[0];", "first candidate always chosen")
+mut(Q, "        ns.chosen_id = ns.frozen_ids[pick];", "        ns.chosen_id = ns.frozen_ids[ns.n_frozen - 1];", "last candidate always chosen")
+mut(Q, "        ns.chosen_id = ns.frozen_ids[pick];", "        ns.chosen_id = ns.frozen_ids[(pick + 1) % ns.n_frozen];", "pick shifted by one")
+# the candidate and record-count rules
+mut(Q, "if (n->life != CC_LIFE_STORED || cc_nemesis_support(n) != CC_SUPPORT_OK) continue;", "if (cc_nemesis_support(n) != CC_SUPPORT_OK) continue;", "candidates: life not required")
+mut(Q, "if (n->life != CC_LIFE_STORED || cc_nemesis_support(n) != CC_SUPPORT_OK) continue;", "if (n->life != CC_LIFE_STORED && n->life != CC_LIFE_DEFEATED || cc_nemesis_support(n) != CC_SUPPORT_OK) continue;", "candidates: defeated records allowed")
+mut(Q, "if (n->life != CC_LIFE_STORED || cc_nemesis_support(n) != CC_SUPPORT_OK) continue;", "if (n->life != CC_LIFE_STORED && n->life != CC_LIFE_REWARD_CLAIMED || cc_nemesis_support(n) != CC_SUPPORT_OK) continue;", "candidates: claimed records allowed")
+mut(Q, "        if (representable && !representable[i]) continue;\n", "", "candidates: representable mask ignored")
+mut(Q, "if (representable && !representable[i]) continue;", "if (representable && representable[i]) continue;", "candidates: representable mask inverted")
+mut(Q, "if (representable && !representable[i]) continue;", "if (representable && !representable[0]) continue;", "candidates: mask read at slot 0")
+mut(Q, "    for (unsigned i = 0; i < r->count; i++) {\n        const cc_nemesis *n = &r->rec[i];", "    for (unsigned i = 0; i + 1 < r->count; i++) {\n        const cc_nemesis *n = &r->rec[i];", "candidates: last record never counted")
+mut(Q, "    for (unsigned i = 0; i < r->count; i++) {\n        const cc_nemesis *n = &r->rec[i];", "    for (unsigned i = 1; i < r->count; i++) {\n        const cc_nemesis *n = &r->rec[i];", "candidates: first record never counted")
+mut(Q, "    for (unsigned i = 0; i < r->count; i++) {\n        const cc_nemesis *n = &r->rec[i];", "    for (unsigned i = 0; i < r->count && ns.n_frozen < 8; i++) {\n        const cc_nemesis *n = &r->rec[i];", "candidates: at most eight counted")
+mut(Q, "ns.frozen_ids[ns.n_frozen++] = n->record_id;", "ns.frozen_ids[ns.n_frozen] = n->record_id;", "candidate count never grows")
+mut(Q, "if (ns.n_frozen == 0) {", "if (ns.n_frozen <= 1) {", "no candidate: one record is not enough")
+mut(Q, "if (ns.n_frozen == 0) {", "if (ns.n_frozen == 0 || r->count < 2) {", "no candidate: a single stored record is not enough")
+mut(Q, "if (ns.n_frozen == 0) {", "if (ns.n_frozen == 1) {", "no candidate: exactly one record")
+mut(Q, "        ns.state = CC_SCHED_NO_CANDIDATE;\n", "        ns.state = CC_SCHED_EXHAUSTED;\n", "no candidate: wrong state")
+mut(Q, "        ns.rng_algo = CC_RNG_ALGO_V1;\n", "", "algorithm not recorded")
+mut(Q, "        ns.n_windows = CC_NUM_WINDOWS;\n", "        ns.n_windows = CC_NUM_WINDOWS - 1;\n", "one window fewer")
+mut(Q, "        for (int i = 0; i < CC_NUM_WINDOWS; i++) ns.windows[i].wave = cc_window_waves[i];", "        for (int i = 0; i < CC_NUM_WINDOWS; i++) ns.windows[i].wave = cc_window_waves[0];", "every window at the first wave")
+mut(Q, "    ns.run_uid = run_uid;\n", "", "run uid not recorded")
+drop(Q, "if (is_held(&r->rec[i])) return CC_E_CONSISTENCY;")
+mut(Q, "        r->rec[chosen_slot] = rec;\n", "", "chosen record not scheduled")
+mut(Q, "cc_nemesis_transition(&rec, CC_LIFE_SCHEDULED, run_uid, 0, 0)", "cc_nemesis_transition(&rec, CC_LIFE_SCHEDULED, run_uid + 1, 0, 0)", "scheduled by another run")
+mut(Q, "    *s = ns;\n    return CC_OK;\n}\n\n/* `out` already holds", "    return CC_OK;\n}\n\n/* `out` already holds", "schedule not stored")
+# encounter classification
+mut(Q, "case CC_ENC_FINAL: r = CC_SKIP_FINAL; break;", "case CC_ENC_FINAL: r = CC_SKIP_BOSS; break;", "classify: final reported as boss")
+mut(Q, "case CC_ENC_BOSS: r = CC_SKIP_BOSS; break;", "case CC_ENC_BOSS: r = CC_SKIP_FINAL; break;", "classify: boss reported as final")
+mut(Q, "case CC_ENC_TRAINER: r = CC_SKIP_TRAINER; break;", "case CC_ENC_TRAINER: r = CC_SKIP_NONE; break;", "classify: trainer allowed")
+mut(Q, "case CC_ENC_MYSTERY: r = CC_SKIP_MYSTERY; break;", "case CC_ENC_MYSTERY: r = CC_SKIP_NONE; break;", "classify: mystery allowed")
+mut(Q, "case CC_ENC_FIXED_OR_SCRIPTED: r = CC_SKIP_FIXED_OR_SCRIPTED; break;", "case CC_ENC_FIXED_OR_SCRIPTED: r = CC_SKIP_NONE; break;", "classify: scripted allowed")
+mut(Q, "case CC_ENC_FIXED_OR_SCRIPTED: r = CC_SKIP_FIXED_OR_SCRIPTED; break;", "case CC_ENC_FIXED_OR_SCRIPTED: r = CC_SKIP_TRAINER; break;", "classify: scripted reported as trainer")
+mut(Q, "case CC_ENC_UNSUPPORTED: r = CC_SKIP_UNSUPPORTED; break;", "case CC_ENC_UNSUPPORTED: r = CC_SKIP_NONE; break;", "classify: unsupported allowed")
+mut(Q, "default: r = enc->flags ? CC_SKIP_UNSUPPORTED : CC_SKIP_NONE; break;", "default: r = CC_SKIP_NONE; break;", "classify: fusion, Tera and doubles allowed")
+mut(Q, "default: r = enc->flags ? CC_SKIP_UNSUPPORTED : CC_SKIP_NONE; break;", "default: r = (enc->flags & ~CC_ENF_DOUBLES) ? CC_SKIP_UNSUPPORTED : CC_SKIP_NONE; break;", "classify: doubles allowed")
+mut(Q, "default: r = enc->flags ? CC_SKIP_UNSUPPORTED : CC_SKIP_NONE; break;", "default: r = (enc->flags & ~CC_ENF_TERA) ? CC_SKIP_UNSUPPORTED : CC_SKIP_NONE; break;", "classify: Tera allowed")
+mut(Q, "default: r = enc->flags ? CC_SKIP_UNSUPPORTED : CC_SKIP_NONE; break;", "default: r = (enc->flags & ~CC_ENF_FUSED) ? CC_SKIP_UNSUPPORTED : CC_SKIP_NONE; break;", "classify: fusion allowed")
+mut(Q, "if (enc->kind >= CC_ENC_COUNT_ || (enc->flags & ~CC_ENF_ALL)) return CC_E_RANGE;", "if (enc->kind >= CC_ENC_COUNT_) return CC_E_RANGE;", "classify: unknown flag accepted")
+mut(Q, "if (enc->kind >= CC_ENC_COUNT_ || (enc->flags & ~CC_ENF_ALL)) return CC_E_RANGE;", "if ((enc->flags & ~CC_ENF_ALL)) return CC_E_RANGE;", "classify: unknown kind accepted")
+mut(Q, "    *reason = r;\n    return CC_OK;", "    return CC_OK;", "classify: reason not written")
+# windows
+mut(Q, "    if (j < 0) {\n        p.why = CC_WHY_NOT_A_WINDOW;", "    if (j < 0 && s->state == 99) {\n        p.why = CC_WHY_NOT_A_WINDOW;", "any wave is a window")
+mut(Q, "    p.wave = enc->wave;\n", "", "proposal wave not set")
+mut(Q, "    p.opportunity = (uint8_t)(j + 1);\n    if (s->state", "    if (s->state", "window answer without opportunity")
+mut(Q, "    p.opportunity = (uint8_t)(j + 1);\n    if (s->state", "    p.opportunity = (uint8_t)j;\n    if (s->state", "opportunity numbered from 0")
+mut(Q, "    if (s->state == CC_SCHED_NO_CANDIDATE) {\n        p.why = CC_WHY_NO_CANDIDATE;", "    if (s->state == CC_SCHED_NO_CANDIDATE) {\n        p.why = CC_WHY_SKIPPED;", "no-candidate reported as skipped")
+mut(Q, "        p.skip = w->reason;\n", "", "replayed skip loses its reason")
+mut(Q, "    case CC_WIN_OFFERED:\n        fill_offer(&p, CC_PROP_OFFER, s->chosen_id);", "    case CC_WIN_OFFERED:\n        fill_offer(&p, CC_PROP_RESUME, s->chosen_id);", "replayed offer reported as resume")
+mut(Q, "    case CC_WIN_ACCEPTED:\n        fill_offer(&p, CC_PROP_RESUME, s->chosen_id);", "    case CC_WIN_ACCEPTED:\n        fill_offer(&p, CC_PROP_OFFER, s->chosen_id);", "accepted window reported as a fresh offer")
+mut(Q, "    if (s->state == CC_SCHED_DECLINED) {\n        p.why = CC_WHY_DECLINED;", "    if (s->state == CC_SCHED_DECLINED && j == 0) {\n        p.why = CC_WHY_DECLINED;", "decline consumes only the first window")
+mut(Q, "    if (s->state == CC_SCHED_ACCEPTED) {\n        p.why = CC_WHY_RESOLVED;", "    if (s->state == CC_SCHED_ACCEPTED) {\n        p.why = CC_WHY_DECLINED;", "resolved reported as declined")
+mut(Q, "if (s->state != CC_SCHED_ACTIVE || j != first_in_state(s, CC_WIN_PENDING)) return CC_E_ORDER;", "if (s->state != CC_SCHED_ACTIVE) return CC_E_ORDER;", "windows may be reported out of order")
+mut(Q, "if (s->state != CC_SCHED_ACTIVE || j != first_in_state(s, CC_WIN_PENDING)) return CC_E_ORDER;", "if (j != first_in_state(s, CC_WIN_PENDING)) return CC_E_ORDER;", "window order check misses a non-active schedule")
+mut(Q, "        ns.windows[j].reason = reason;\n", "", "skip reason not stored")
+mut(Q, "        ns.windows[j].state = CC_WIN_SKIPPED;\n", "        ns.windows[j].state = CC_WIN_DECLINED;\n", "skipped window stored as declined")
+mut(Q, "if (j == CC_NUM_WINDOWS - 1) {", "if (j == CC_NUM_WINDOWS - 2) {", "exhausted one window early")
+mut(Q, "if (j == CC_NUM_WINDOWS - 1) {", "if (j >= 0) {", "exhausted at every skip")
+mut(Q, "if (j == CC_NUM_WINDOWS - 1) {", "if (j == CC_NUM_WINDOWS) {", "never exhausted")
+mut(Q, "            ns.state = CC_SCHED_EXHAUSTED;\n", "", "exhausted state not set")
+mut(Q, "            st = cc_nemesis_transition(&rec, CC_LIFE_STORED, 0, 0, 0);\n            if (st != CC_OK) return st;\n        }", "        }", "record not released at exhaustion")
+mut(Q, "        if (slot >= 0) r->rec[slot] = rec;\n", "", "released record not stored")
+mut(Q, "        ns.windows[j].state = CC_WIN_OFFERED;\n", "        ns.windows[j].state = CC_WIN_ACCEPTED;\n", "offered window stored as accepted")
+mut(Q, "        ns.state = CC_SCHED_OFFERED;\n", "        ns.state = CC_SCHED_ACCEPTED;\n", "offered schedule stored as accepted")
+mut(Q, "    out->kind = kind;\n", "", "offer kind missing")
+mut(Q, "    out->level_rule = CC_LEVEL_ORDINARY_WAVE;\n", "", "offer level rule missing")
+mut(Q, "    out->reward_vouchers = (uint8_t)CC_REMATCH_REWARD_VOUCHERS;\n", "    out->reward_vouchers = 2;\n", "offer allowance of two vouchers")
+mut(Q, "    out->reward_vouchers = (uint8_t)CC_REMATCH_REWARD_VOUCHERS;\n", "", "offer allowance missing")
+mut(Q, "    out->record_id = id;\n", "", "offer record missing")
+# the answer
+mut(Q, "    if (s->state == CC_SCHED_ACCEPTED && accept) {", "    if (s->state == CC_SCHED_ACCEPTED) {", "accept replay also swallows a decline")
+mut(Q, "    if (s->state == CC_SCHED_DECLINED && !accept) {", "    if (s->state == CC_SCHED_DECLINED) {", "decline replay also swallows an accept")
+mut(Q, "        if (replayed) *replayed = true;\n        return CC_OK;\n    }\n    if (s->state == CC_SCHED_DECLINED", "        return CC_OK;\n    }\n    if (s->state == CC_SCHED_DECLINED", "accept replay not flagged")
+mut(Q, "    if (s->state != CC_SCHED_OFFERED) return CC_E_LIFECYCLE;\n    const int j", "    const int j", "answer without an offer")
+mut(Q, "cc_nemesis_transition(&rec, CC_LIFE_CHALLENGED, s->run_uid, s->windows[j].wave, 0)", "cc_nemesis_transition(&rec, CC_LIFE_CHALLENGED, s->run_uid, 0, 0)", "challenge without its wave")
+mut(Q, "cc_nemesis_transition(&rec, CC_LIFE_CHALLENGED, s->run_uid, s->windows[j].wave, 0)", "cc_nemesis_transition(&rec, CC_LIFE_CHALLENGED, s->run_uid, cc_window_waves[0], 0)", "challenge at the first window's wave")
+mut(Q, "        ns.state = CC_SCHED_ACCEPTED;\n        ns.windows[j].state = CC_WIN_ACCEPTED;", "        ns.state = CC_SCHED_ACCEPTED;", "accepted window not marked")
+mut(Q, "        ns.state = CC_SCHED_DECLINED;\n        ns.windows[j].state = CC_WIN_DECLINED;", "        ns.state = CC_SCHED_ACTIVE;\n        ns.windows[j].state = CC_WIN_PENDING;", "decline does not consume the schedule")
+mut(Q, "        ns.state = CC_SCHED_DECLINED;\n        ns.windows[j].state = CC_WIN_DECLINED;", "        ns.state = CC_SCHED_DECLINED;\n        ns.windows[j].state = CC_WIN_SKIPPED;", "declined window marked skipped")
+mut(Q, "        st = cc_nemesis_transition(&rec, CC_LIFE_STORED, 0, 0, 0);\n        ns.state = CC_SCHED_DECLINED;", "        ns.state = CC_SCHED_DECLINED;", "decline keeps the record scheduled")
+mut(Q, "    r->rec[slot] = rec;\n    *s = ns;\n    return CC_OK;\n}\n\ncc_status cc_rematch_result", "    *s = ns;\n    return CC_OK;\n}\n\ncc_status cc_rematch_result", "answer does not store the record")
+mut(Q, "    r->rec[slot] = rec;\n    *s = ns;\n    return CC_OK;\n}\n\ncc_status cc_rematch_result", "    r->rec[slot] = rec;\n    return CC_OK;\n}\n\ncc_status cc_rematch_result", "answer does not store the schedule")
+# the result
+mut(Q, "    if (s->state != CC_SCHED_ACCEPTED) return CC_E_LIFECYCLE;\n    const int slot = find_record(r, s->chosen_id);\n    if (slot < 0) return CC_E_CONSISTENCY;", "    const int slot = find_record(r, s->chosen_id);\n    if (slot < 0) return CC_E_CONSISTENCY;", "result without an accepted rematch")
+mut(Q, "if (rec.life == CC_LIFE_CHALLENGED && rec.sched_run_uid == s->run_uid) {", "if (rec.life == CC_LIFE_CHALLENGED) {", "result ignores the run that holds the record")
+mut(Q, "won ? CC_LIFE_DEFEATED : CC_LIFE_STORED", "won ? CC_LIFE_STORED : CC_LIFE_DEFEATED", "win and loss swapped")
+mut(Q, "won ? CC_LIFE_DEFEATED : CC_LIFE_STORED", "CC_LIFE_DEFEATED", "a loss counts as a win")
+mut(Q, "won ? CC_LIFE_DEFEATED : CC_LIFE_STORED", "CC_LIFE_STORED", "a win counts as a loss")
+mut(Q, "        r->rec[slot] = rec;\n        return CC_OK;\n    }\n    /* the outcome", "        return CC_OK;\n    }\n    /* the outcome", "result not stored")
+mut(Q, "(rec.life == CC_LIFE_DEFEATED || rec.life == CC_LIFE_REWARD_CLAIMED) && rec.sched_run_uid == s->run_uid", "rec.life == CC_LIFE_DEFEATED && rec.sched_run_uid == s->run_uid", "claimed record is no longer a won replay")
+mut(Q, "(rec.life == CC_LIFE_DEFEATED || rec.life == CC_LIFE_REWARD_CLAIMED) && rec.sched_run_uid == s->run_uid", "(rec.life == CC_LIFE_DEFEATED || rec.life == CC_LIFE_REWARD_CLAIMED)", "won replay ignores the run")
+mut(Q, "const bool was_lost = rec.life == CC_LIFE_STORED;", "const bool was_lost = rec.life != CC_LIFE_CHALLENGED;", "lost replay matches anything")
+mut(Q, "    if ((won && was_won) || (!won && was_lost)) {\n        if (replayed) *replayed = true;", "    if ((won && was_won) || (!won && was_lost)) {", "result replay not flagged")
+mut(Q, "if ((won && was_won) || (!won && was_lost)) {", "if (was_won || was_lost) {", "result replay accepts the other outcome")
+# the view
+mut(Q, "    v.n_candidates = s->n_frozen;\n", "", "view hides the candidate count")
+mut(Q, "    v.record_id = s->chosen_id;\n", "", "view hides the record")
+mut(Q, "        v.next_opportunity = (uint8_t)(next + 1);\n", "", "view hides the next opportunity")
+mut(Q, "        v.next_wave = s->windows[next].wave;\n", "", "view hides the next wave")
+mut(Q, "        next = first_in_state(s, CC_WIN_OFFERED);\n", "        next = -1;\n", "view hides the offered window")
+mut(Q, "    v.state = s->state;\n", "", "view hides the state")
+# release
+mut(Q, "if (uid == 0 && !except) return CC_E_RANGE;", "if (uid == 0) return CC_E_RANGE;", "release-except refuses uid 0")
+mut(Q, "if (uid == 0 && !except) return CC_E_RANGE;", "", "release accepts uid 0")
+mut(Q, "if ((r->rec[i].sched_run_uid == uid) == except) continue;", "if ((r->rec[i].sched_run_uid == uid) != except) continue;", "release polarity inverted")
+mut(Q, "if ((r->rec[i].sched_run_uid == uid) == except) continue;", "", "release ignores the run")
+mut(Q, "        if (!is_held(&r->rec[i])) continue;\n", "", "release also touches records that are not held")
+mut(Q, "        r->rec[i] = rec;                                           /* a valid", "        /* a valid", "release does not store")
+mut(Q, "        if (released) *released = 1;\n", "", "release count missing")
+mut(Q, "    if (released) *released = 0;\n    if (!r) return CC_E_NULL;", "    if (!r) return CC_E_NULL;", "release count not reset")
+# entitlement and claim
+mut(Q, "    cc_status st = cc_nemesis_validate(n);\n    if (st != CC_OK) return st;\n    cc_reward_entitlement e;", "    cc_reward_entitlement e;", "entitlement of an invalid record")
+mut(Q, "        e.state = CC_RW_OWED;\n        e.vouchers = (uint8_t)CC_REMATCH_REWARD_VOUCHERS;", "        e.state = CC_RW_OWED;", "owed without vouchers")
+mut(Q, "        e.state = CC_RW_OWED;\n        e.vouchers = (uint8_t)CC_REMATCH_REWARD_VOUCHERS;", "        e.state = CC_RW_OWED;\n        e.vouchers = 2;", "owed two vouchers")
+mut(Q, "    } else if (n->life == CC_LIFE_REWARD_CLAIMED) {\n        e.state = CC_RW_CLAIMED;", "    } else if (n->life == CC_LIFE_REWARD_CLAIMED) {\n        e.state = CC_RW_OWED;", "claimed record still owed")
+mut(Q, "    if (n->life == CC_LIFE_DEFEATED) {\n        e.state", "    if (n->life == CC_LIFE_DEFEATED || n->life == CC_LIFE_CHALLENGED) {\n        e.state", "challenged record already owed")
+mut(Q, "    if (n->life == CC_LIFE_DEFEATED) {\n        e.state", "    if (n->life == CC_LIFE_DEFEATED || n->life == CC_LIFE_STORED) {\n        e.state", "stored record owed")
+mut(Q, "    if (slot < 0) return CC_E_RANGE;\n    const cc_nemesis *n = &m->roster", "    const cc_nemesis *n = &m->roster", "claim of an unknown record")
+mut(Q, "if (have_prior && prior.txn_id != n->reward_txn) return CC_E_CONSISTENCY;", "", "claimed record with a foreign ledger entry accepted")
+mut(Q, "        res->replayed = true;\n        res->txn_id = n->reward_txn;", "        res->txn_id = n->reward_txn;", "claim replay not flagged")
+mut(Q, "        res->replayed = true;\n        res->txn_id = n->reward_txn;", "        res->replayed = true;", "claim replay without its transaction")
+mut(Q, "    if (n->life != CC_LIFE_DEFEATED) return CC_E_LIFECYCLE;", "    if (n->life != CC_LIFE_DEFEATED && n->life != CC_LIFE_STORED) return CC_E_LIFECYCLE;", "claim of a stored record")
+mut(Q, "    if (have_prior) return CC_E_CONSISTENCY;", "", "ledger/record disagreement accepted")
+mut(Q, "    const cc_ledger_entry entry = {txn_id, n->sched_run_uid, record_id, CC_TXN_REWARD_CLAIM, CC_TXO_CLAIMED};", "    const cc_ledger_entry entry = {txn_id, n->sched_run_uid, record_id, CC_TXN_REWARD_CLAIM, CC_TXO_NONE};", "ledger entry with another outcome")
+mut(Q, "    st = cc_ledger_append(&ledger, &entry);\n    if (st != CC_OK) return st;\n", "", "no ledger entry")
+mut(Q, "cc_nemesis_transition(&rec, CC_LIFE_REWARD_CLAIMED, 0, 0, txn_id)", "cc_nemesis_transition(&rec, CC_LIFE_REWARD_CLAIMED, 0, 0, txn_id + 1)", "record keeps another transaction")
+mut(Q, "    m->counters = counters;\n", "", "transaction counter not advanced")
+mut(Q, "    m->ledger = ledger;\n", "", "ledger not stored")
+mut(Q, "    m->roster.rec[slot] = rec;\n    res->txn_id = txn_id;", "    res->txn_id = txn_id;", "record not marked claimed")
+mut(Q, "    m->roster.rec[slot] = rec;\n    res->txn_id = txn_id;", "    m->roster.rec[slot] = rec;", "claim result without its transaction")
+mut(Q, "    memset(res, 0, sizeof *res);\n    cc_status st = cc_meta_validate(m);", "    cc_status st = cc_meta_validate(m);", "claim result not cleared")
+# the agreement checks on every entry point
+mut(Q, "    if (i < 0) return CC_E_CONSISTENCY;\n    const cc_nemesis *n = &r->rec[i];", "    if (i < 0) return CC_OK;\n    const cc_nemesis *n = &r->rec[i];", "agreement: missing chosen record tolerated")
+mut(Q, "return n->life == CC_LIFE_SCHEDULED && n->sched_run_uid == s->run_uid ? CC_OK : CC_E_CONSISTENCY;", "return n->life == CC_LIFE_SCHEDULED ? CC_OK : CC_E_CONSISTENCY;", "agreement: other run's hold tolerated")
+mut(Q, "return n->life == CC_LIFE_SCHEDULED && n->sched_run_uid == s->run_uid ? CC_OK : CC_E_CONSISTENCY;", "return CC_OK;", "agreement not checked")
+mut(Q, "    if (s->state != CC_SCHED_ACTIVE && s->state != CC_SCHED_OFFERED) return CC_OK;", "    if (s->state != CC_SCHED_ACTIVE) return CC_OK;", "agreement: offered schedule not checked")
+mut(Q, "    return check_agreement(s, r);\n}", "    return CC_OK;\n}", "inputs: agreement dropped")
+mut(Q, "    st = cc_roster_validate(r);\n    if (st != CC_OK) return st;\n    return check_agreement", "    return check_agreement", "inputs: roster not validated")
+mut(Q, "    cc_status st = cc_schedule_validate(s);\n    if (st != CC_OK) return st;\n    st = cc_roster_validate(r);", "    cc_status st = CC_OK;\n    st = cc_roster_validate(r);", "inputs: schedule not validated")
+
+
+equiv(Q, "if (n->life != CC_LIFE_STORED || cc_nemesis_support(n) != CC_SUPPORT_OK) continue;", "if (n->life != CC_LIFE_STORED) continue;",
+      "cc_roster_validate (called first) already rejects any record cc_nemesis_support refuses, so no valid roster holds an unsupported record; the check names the rule")
+equiv(Q, "            if (s->windows[i].state == CC_WIN_PENDING) v.n_pending++;", "            if (s->windows[i].state != CC_WIN_SKIPPED) v.n_pending++;",
+      "in the ACTIVE state a valid schedule has only SKIPPED and PENDING windows, so the two conditions count the same windows")
+
+equiv(Q, "    if (run_uid == 0) return CC_E_RANGE;\n    cc_status st = cc_roster_validate(r);", "    cc_status st = cc_roster_validate(r);",
+      "cc_schedule_validate (no candidate) and cc_nemesis_transition (a candidate) both refuse run uid 0 with the same status, CC_E_RANGE, before anything is stored")
+equiv(Q, "    if (n->life != CC_LIFE_DEFEATED) return CC_E_LIFECYCLE;", "    if (n->life != CC_LIFE_DEFEATED && n->life != CC_LIFE_CHALLENGED) return CC_E_LIFECYCLE;",
+      "cc_nemesis_transition has no CHALLENGED -> REWARD_CLAIMED edge and refuses with the same status, CC_E_LIFECYCLE, on the staged copy (nothing is committed)")
+
+
 def build_and_run(workdir: Path):
     """Returns (stage, detail): stage is 'ok' when all tests pass, else where it failed."""
     exes = {"model_test": "tests/model_test.c", "reducer_test": "tests/reducer_test.c", "layout_test": "tests/layout_test.c",
-            "codec_test": "tests/codec_test.c", "commit_test": "tests/commit_test.c"}
+            "codec_test": "tests/codec_test.c", "commit_test": "tests/commit_test.c",
+            "scheduler_test": "tests/scheduler_test.c"}
     objs = []
     for src in SOURCES:
         obj = src.replace("/", "_")[:-2] + ".o"

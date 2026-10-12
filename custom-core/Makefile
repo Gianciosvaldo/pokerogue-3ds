@@ -4,6 +4,7 @@
 #   make test            unit + layout tests, the same under ASan/UBSan, and the mutation check
 #   make unit-test       tests built with the project's usual flags
 #   make san-test        the same tests under AddressSanitizer and UBSan
+#   make purity-check    the library objects reference nothing outside cc_*, mem* and the stack protector (part of unit-test)
 #   make mutation-test   every mutation in tools/mutations.py must make the unit tests fail
 #   make report          sizeof of the in-memory contract and the encoded-size bounds
 #   make arm-check       compile (no link, no run) for the 3DS CPU flags; needs arm-none-eabi-gcc, e.g. the devkitarm image
@@ -12,9 +13,9 @@ CFLAGS ?= -O2 -g -std=c99 -Wall -Wextra -Wpedantic -Werror
 CPPFLAGS += -Iinclude
 BUILD ?= build
 BATTLE_GEN ?= ../battle-core/gen/out
-SRCS := src/status.c src/history.c src/nemesis.c src/schedule.c src/ids.c src/meta.c src/reducer.c src/codec.c src/commit.c
+SRCS := src/status.c src/history.c src/nemesis.c src/schedule.c src/ids.c src/meta.c src/reducer.c src/codec.c src/commit.c src/scheduler.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
-TESTS := $(BUILD)/model_test $(BUILD)/reducer_test $(BUILD)/layout_test $(BUILD)/codec_test $(BUILD)/commit_test
+TESTS := $(BUILD)/model_test $(BUILD)/reducer_test $(BUILD)/layout_test $(BUILD)/codec_test $(BUILD)/commit_test $(BUILD)/scheduler_test
 ARM_CC ?= arm-none-eabi-gcc
 ARM_SIZE ?= arm-none-eabi-size
 ARM_FLAGS ?= -march=armv6k -mtune=mpcore -mfpu=vfp -mfloat-abi=hard -mtp=soft -O2 -std=c99 -Wall -Wextra -Wpedantic -Werror
@@ -26,7 +27,17 @@ unit-test: $(TESTS)
 	$(BUILD)/reducer_test
 	$(BUILD)/codec_test
 	$(BUILD)/commit_test
+	$(BUILD)/scheduler_test
 	$(BUILD)/layout_test $(BATTLE_GEN)/pr_enums.h
+	$(MAKE) --no-print-directory BUILD=$(BUILD) purity-check
+
+# No object of the library may call anything but its own cc_* functions, the compiler's mem*/stack-protector helpers and (in the
+# sanitizer builds) the sanitizer runtime: no clock,
+# no rand, no allocation, no I/O. (The scheduler's randomness is the explicit stream in scheduler.c.)
+purity-check: $(OBJS)
+	@bad=$$(nm -u $(OBJS) | awk 'NF == 2 && $$1 == "U" { print $$2 }' | grep -v -E '^(cc_|mem(cpy|move|set|cmp)$$|__stack_chk_fail$$|__(asan|ubsan|sanitizer)_)' | sort -u); \
+	if [ -n "$$bad" ]; then echo "purity-check: unexpected external symbols: $$bad"; exit 1; fi; \
+	echo "purity-check: ok ($(words $(OBJS)) objects call only cc_*, mem* and __stack_chk_fail)"
 
 san-test:
 	$(MAKE) --no-print-directory BUILD=$(BUILD)/san CFLAGS="-O1 -g -std=c99 -Wall -Wextra -Wpedantic -Werror -fsanitize=address,undefined -fno-sanitize-recover=undefined" unit-test
@@ -56,6 +67,9 @@ $(BUILD)/codec_test: tests/codec_test.c tests/check.h $(BUILD)/libcc.a
 $(BUILD)/commit_test: tests/commit_test.c tests/check.h $(BUILD)/libcc.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/commit_test.c $(BUILD)/libcc.a -o $@
 
+$(BUILD)/scheduler_test: tests/scheduler_test.c tests/check.h tests/builders.h $(BUILD)/libcc.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/scheduler_test.c $(BUILD)/libcc.a -o $@
+
 $(BUILD)/layout_test: tests/layout_test.c tests/check.h $(BUILD)/libcc.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/layout_test.c $(BUILD)/libcc.a -o $@
 
@@ -63,7 +77,7 @@ $(BUILD)/layout_test: tests/layout_test.c tests/check.h $(BUILD)/libcc.a
 # assertions (encoded maximum within 64 KiB, in-memory contract within 128 KiB) with the ARM type sizes.
 arm-check:
 	@mkdir -p $(BUILD)/arm
-	for f in $(SRCS) tests/model_test.c tests/reducer_test.c tests/layout_test.c tests/codec_test.c tests/commit_test.c; do \
+	for f in $(SRCS) tests/model_test.c tests/reducer_test.c tests/layout_test.c tests/codec_test.c tests/commit_test.c tests/scheduler_test.c; do \
 		$(ARM_CC) $(CPPFLAGS) $(ARM_FLAGS) -c $$f -o $(BUILD)/arm/$$(basename $$f .c).o || exit 1; \
 	done
 	$(ARM_SIZE) $(addprefix $(BUILD)/arm/,$(notdir $(SRCS:.c=.o)))
@@ -71,5 +85,5 @@ arm-check:
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: test unit-test san-test mutation-test report arm-check clean
+.PHONY: test unit-test purity-check san-test mutation-test report arm-check clean
 -include $(OBJS:.o=.d)

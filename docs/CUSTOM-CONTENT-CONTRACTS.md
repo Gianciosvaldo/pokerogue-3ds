@@ -1,11 +1,12 @@
-# Custom content contracts, version 1 (tasks C01, C02, C03, C04)
+# Custom content contracts, version 1 (tasks C01, C02, C03, C04, C05)
 
 Written for task C01 of [CUSTOM-CONTENT-ADVANCED-AGENT.md](CUSTOM-CONTENT-ADVANCED-AGENT.md). It does three things:
 audits the interfaces the custom content will touch, fixes the version-1 data contracts, and records what the new
 `custom-core/` module proves. It is not a record of a working custom mode: the module has no live hooks, no file
 access, no wallet access and no spawn code. Since C03 the app feeds the reducer and shows a read-only post-mortem screen
 (sections 2.9 and 5.2). Since C04 it keeps the last run's report and the id counters in one file on the SD card (sections 2.10 and
-5.3); no Nemesis is ever inserted by the app yet, and no custom mode exists.
+5.3); no Nemesis is ever inserted by the app yet, and no custom mode exists. Since C05 `custom-core` also holds the rematch
+policy as pure data (section 2.11, 5.4): nothing in the app calls it yet.
 
 | Item | Value |
 |---|---|
@@ -562,6 +563,64 @@ cause and an empty roster. Closing this belongs to C10 and needs a battle-core c
 **Memory.** `custom_store.c` holds 57,410 bytes of static storage (the `cc_meta` state, the staging copy and the encode and read
 buffers), beside the observer's about 52.9 KB: about 110 KB of the 128 KiB runtime budget.
 
+### 2.11 The rematch policy (C05)
+
+`custom-core/include/cc/scheduler.h`, `src/scheduler.c`. Pure like the rest of the module: it decides, as data. It spawns no enemy,
+reads no game state, touches no wallet and grants nothing; the adapter (C10) acts on the answers. Every call is atomic in memory
+(all checks before the first write, an error changes nothing) and a retry or a reload that repeats a call gets the first answer back
+and changes nothing.
+
+**The stream.** The custom policy stream is SplitMix64, `CC_RNG_ALGO_V1`: `state += 0x9E3779B97F4A7C15`, then the two multiply-xorshift
+rounds (30, 27) and the final xorshift 31, all modulo 2^64. `cc_rng_v1_pick(state, n)` is the next output modulo `n`. The bias of the
+modulo is below `n / 2^64` (under 10^-18 for the 16 records a roster holds); it is accepted instead of a rejection loop so that the
+run's draw is **exactly one step** of the stream. The seed is an argument and is recorded in the schedule; the module reads no clock,
+no `rand`, no `Math.random` and no gameplay or gacha generator (the adapter keeps the seed independent of them, section 4). The tests
+hold the first five outputs of two seeds, and a table of state, first output and `output % n` (n = 1..16) for six seeds, produced by an
+independent Python implementation (`tools/golden_rematch.py`) that agrees with the published SplitMix64 vectors.
+
+**At the start of a run** (`cc_rematch_start`). The candidates are the records whose life is STORED, whose `cc_nemesis_support` is
+`CC_SUPPORT_OK`, and (when the adapter passes the mask) whose snapshot the adapter can rebuild; a record the adapter cannot represent
+(a form, ability, move or item it does not know) is never silently reshaped, it just is not a candidate. They are frozen, in record
+id order, into `frozen_ids`. No candidate: state `NO_CANDIDATE`, no draw. Otherwise one draw picks `frozen_ids[pick]`, the stream's
+state after it is stored, the record goes STORED to SCHEDULED for this run, and the windows 27, 77, 127, 177 start PENDING. Nothing
+ever draws again, so scouting, redrawing, reloading or declining cannot change who was chosen. Refused with no change: a run uid of
+0, an invalid roster, a record still held by any run (`cc_roster_release_except` returns what a crashed run left first).
+
+**Windows** (`cc_rematch_window`). At each window wave the adapter reports, before the wave is generated, what the encounter is
+(ordinary wild, trainer, fixed or scripted, mystery, boss, final wave, unsupported mechanic) and whether the enemy is fused, Tera or
+in a double battle. Only an ordinary single wild encounter without those flags is eligible; the reasons keep a fixed precedence
+(final, boss, trainer, mystery, fixed, unsupported, then fused/Tera/doubles as unsupported). The first pending window that is eligible
+is OFFERED. An ineligible one is SKIPPED with its reason and the next window is tried; after the fourth, the schedule is `EXHAUSTED`,
+nothing happens this run and the record goes back to STORED. Windows must be reported in order (`CC_E_ORDER` otherwise). The answer
+for a window already answered is the stored answer and the report is not looked at again: an offered window gives the same offer, an
+accepted one gives `CC_PROP_RESUME` (the reload case), a skipped one its reason.
+
+**The proposal** is data: kind (nothing / offer / resume), why, the skip reason, the opportunity 1..4, the wave, the record id, the
+level rule `CC_LEVEL_ORDINARY_WAVE`, and the fixed reward allowance of **one regular egg voucher**. There is no stat buff and no level
+formula: the enemy is built by the game's own path at the level the wave already generated, and custom-core knows no level or
+stat formula. The record keeps its original identity for history; what the rematch applies of it is the adapter's decision, as
+section 2.4 says.
+
+**The answer** (`cc_rematch_decide`). Accept: window and schedule ACCEPTED, record CHALLENGED at that wave. Decline: window DECLINED,
+record back to STORED, schedule DECLINED, **consumed**: no later window is offered this run. The same answer again is a replay; the
+opposite answer is `CC_E_LIFECYCLE`. **The outcome** (`cc_rematch_result`): won, CHALLENGED to DEFEATED; lost, back to STORED
+(the schedule stays ACCEPTED, so there is no second try this run). Replays are idempotent; the opposite outcome is refused.
+`cc_rematch_view_of` is read only.
+
+**The reward** is once per record and does not depend on a write. `cc_reward_entitlement_of` is a function of the record's life
+alone: DEFEATED is owed one voucher, REWARD_CLAIMED is claimed, everything else was not won. `cc_reward_claim(meta, record)` is the
+transaction (section 2.5's `REWARD_CLAIM`, keyed by record): it allocates a transaction id, appends the ledger entry and moves
+DEFEATED to REWARD_CLAIMED with that id, all on `cc_meta`, staged and committed together. A claim of a REWARD_CLAIMED record is a
+replay and changes nothing; a ledger and a record that disagree are `CC_E_CONSISTENCY`. If the write of the staged copy fails the
+record is still DEFEATED and still owed, and the adapter claims again; **the voucher is granted only after that write succeeded**
+(C08/C10 own the wallet side; custom-core never mutates a wallet).
+
+**Resuming the same decision.** Everything needed is in `cc_schedule` (run uid, seed, state after the draw, frozen ids, chosen id, the
+four window states and reasons) and in the record's `sched_run_uid` and `challenge_wave`. The schedule has **no wire codec in this
+task**: it lives in C10's overlay of the run's save. Two things C10 must keep: the schedule's `run_uid` must be the same value when a
+run is loaded again (C04 gives a resumed ordinary run a new uid per observation, section 2.10, so C10 must key the schedule by the uid
+it stored, not by the observer's), and `cc_roster_release_except(roster, current_run_uid)` must run before `cc_rematch_start`.
+
 ## 3. Choices to confirm
 
 These are version-1 decisions this PR had to make. The handoff either left them open or said "documented policy". Each
@@ -601,6 +660,19 @@ Added by C04 (section 2.10):
     to the card on its own and was not authorised.
 13. **One retry on leaving the result screen**, no background retries.
 
+Added by C05 (section 2.11):
+
+14. **One draw per run, taken modulo the candidate count.** The bias (below 10^-18) is accepted so the stream is never advanced a
+    variable number of times. Alternative: a rejection loop, which would make the stream position depend on the output.
+15. **Candidates are STORED, supported and adapter-representable records only**, frozen at the start of the run. A record that becomes
+    eligible mid-run (a defeat is stored at the run's end) is not a candidate until the next run.
+16. **A record is held only while the run can still use it.** When all four windows are skipped, or the offer is declined, the record
+    returns to STORED at once; a crash or quit while it is held is cleaned by `cc_roster_release_except` at the next run start.
+17. **Windows are reported in order, each one.** An adapter that never reports wave 27 and then reports wave 77 gets `CC_E_ORDER`, not a
+    silent skip. Alternative: infer skipped windows from the waves seen, which hides adapter bugs.
+18. **The reward allowance is one regular voucher per record, claimed in its own transaction**, and granted by the adapter only after
+    the claim's write succeeded. A failed write leaves the record DEFEATED, so the entitlement is not lost and not repeated.
+
 ## 4. What C02 to C10 inherit, and what they still must decide
 
 | Task | Imports | Still undecided / must verify |
@@ -608,7 +680,7 @@ Added by C04 (section 2.10):
 | C02 reducer (decided in section 2.8) | `cc_obs`, `cc_event`, `cc_turn`, `cc_history`, the eviction invariant | nothing left open: the raw-event mapping, the batch and sequence rules and how `shown` and `hp_delta` are filled are in section 2.8 |
 | C03 observer + UI (decided in section 2.9) | `cc_reducer`, `cc_reduce`, `cc_turn_summarize`, `cc_terminal`, `cc_history`, the "complete only when `flags == 0`" rule | nothing left open for C03, except that stable ids and the finishing source are not derivable from the events (section 2.9); C04 must decide the durable run uid |
 | C04 store (decided in section 2.10) | `cc_meta`, wire widths, `cc_insertion_check`, ledger, `cc_nemesis_transition` | nothing left open for the store itself. Live Nemesis insertion needs the finishing enemy's identity (section 1.8): C10 |
-| C05 scheduler | `cc_schedule`, window waves, `CC_RNG_ALGO_V1`, lifecycle | the algorithm; the draw; the eligibility predicate |
+| C05 scheduler (decided in section 2.11) | `cc_schedule`, window waves, `CC_RNG_ALGO_V1`, lifecycle | nothing left open for the policy itself. C10 must: supply a seed independent of gameplay and gacha RNG, report each window's encounter kind and flags before the wave is generated, pass the representable mask, key the stored schedule by the uid it saved (not C04's per-observation uid), call `cc_roster_release_except` before `cc_rematch_start`, and persist the schedule (no codec yet). C08 must grant the voucher only after `cc_reward_claim`'s write |
 | C06 radar | `cc_nemesis` read-only, `cc_schedule` | touch layer if wanted (section 1.7) |
 | C08 profile | `cc_ledger` `REWARD_CLAIM`, the one-envelope rule | the profile owner (section 1.5), the envelope |
 | C10 live | all of the above | every item of section 1.8 that is still missing |
@@ -830,6 +902,62 @@ one at its start, the second at its end). No resumed-run check in the emulator (
 the host). The write-failure retry and the power-loss windows are exercised on the host with a fake `save_write` that stops at each step;
 the real card was not made to fail. The new game tests are not part of CI. **No Nemesis is ever inserted by the app.**
 
+### 5.4 C05 (rematch scheduler)
+
+Run on the final tree of the C05 PR, same container as 5.2 and 5.3 (gcc 13.3.0, clang 18.1.3, Python 3.13, Ubuntu `arm-none-eabi-gcc` 13.2.1). The
+branch was based on `main` at `699f9e8` (C04 merged). The PR description repeats this with the head commit and the CI results. The task touches
+`custom-core/` and this document only: no game, battle, run or reward folder is read for writing, and the app does not call the scheduler.
+
+| Command | Result |
+|---|---|
+| `make -C custom-core clean && make -C custom-core unit-test` | `-std=c99 -Wall -Wextra -Wpedantic -Werror`, gcc: model 980, reducer 6,916, codec 3,341, commit 11,585, **scheduler 121,222**, layout 56 checks, 0 failed |
+| `make -C custom-core CC=clang BUILD=build/clang unit-test` | the same counts, 0 failed |
+| `make -C custom-core san-test` (ASan + UBSan, `-fno-sanitize-recover`) | the same counts, 0 failed |
+| `make -C custom-core purity-check` (also run by every `unit-test`) | all 10 library objects reference only `cc_*`, `mem*`, `__stack_chk_fail` (and the sanitizer runtime in the sanitizer build): no `rand`, `time`, `clock`, `malloc`, `printf`. Shown to fail when a `rand()` call is added to `scheduler.c` in a scratch copy |
+| `python3 custom-core/tools/mutations.py` (also run by `make -C custom-core test`) | **915 mutations run, 915 killed, 0 survived, 0 invalid**; 22 more are documented as behavior-neutral and not run (147 are new in this task; the 768 earlier ones still die) |
+| `make -C custom-core arm-check` | passes with `-Werror`; `scheduler.o` `.text` 4,528 bytes, no `.data` or `.bss` |
+
+**What `scheduler_test.c` holds.**
+- The stream: two seeds' first five outputs, and for six seeds the state after one draw, the first output and `output % n` for n = 1..16
+  (96 picks), against values produced by the independent `tools/golden_rematch.py`.
+- The start: no records, one, 16 (all ids and positions), a roster of mixed lives, the representable mask (a masked record never chosen,
+  all masked is `NO_CANDIDATE` with no draw), the frozen list in id order and the stream's stored state; the same inputs give the same
+  bytes; every refusal (NULL, run uid 0, an invalid roster, a record still held) leaves both structures byte for byte as they were.
+- The windows: the offer at each of the four windows when the earlier ones are skipped, each skip reason of every encounter kind and flag
+  (and the precedence between them), all four windows unavailable (`EXHAUSTED`, the record back to STORED, no further offer), a wave
+  that is not a window, an out-of-order report, a schedule and a roster that disagree (before and after the offer), and an invalid
+  schedule or roster at every entry point.
+- The answer and the outcome: accept, decline (consumed: no later window is offered), win, loss (no second try), every replay of each,
+  and every wrong answer refused unchanged.
+- The reward: owed for DEFEATED only, claimed once as one transaction (counter, ledger entry and record together), replay, a forgotten
+  ledger entry, a ledger that contradicts the record, an exhausted transaction id space, and every other life refused unchanged.
+- Reload and scouting: a schedule copied at every step and asked again gives the same answers and the same bytes; 1,000 repeated reads
+  and non-window questions leave the schedule, the roster, the policy stream's state and the process's ambient `rand()` sequence
+  unchanged.
+- A 3,000-round random walk (run uids, growing rosters, random masks, random encounters, random answers and outcomes, claims, some
+  twice): 1,714 offers (874 accepted, 840 declined), 422 won, 452 lost, 1,280 exhausted runs, 24 runs without a candidate, 421
+  rewards paid, 421 replays; after every call both structures are valid, at most one record is held, the stream never moves after the
+  draw, and no record id is ever paid twice. The walk uses its own generator with the order of every call fixed, so gcc and clang run
+  the same sequence.
+
+**The selection and record-count mutations** (the card asks for them by name): the modulus one short, a shifted or masked or
+high-half or reversed output, a second draw, a different seed, always the first or last candidate, a pick shifted by one, the
+candidate count capped at 8, the first or last record never counted, one record treated as none, two records required, every one of
+the four stream constants and shifts, and the candidate predicate (life, mask, claimed or defeated records allowed): each makes a
+test fail. The mutations that survived on the first run (13) each exposed a missing test, now written, or code that did the same
+thing twice (two assignments in `fill_offer` that the caller had already made, removed). Two guards remain that cannot change an
+outcome and are listed under `--equivalent` with the reason: the `cc_nemesis_support` term of the candidate predicate (a valid
+roster cannot hold an unsupported record) and the `run_uid == 0` early return in `cc_rematch_start` (both later checks refuse the
+same status); the same list names the pending-window count in the view, which equals the non-skipped count while the schedule is ACTIVE,
+and the claim guard on CHALLENGED records, which `cc_nemesis_transition` refuses with the same status before anything is committed.
+
+**Not run / not established.** No emulator or console check: nothing in the app changed and nothing calls the scheduler. No timing. No
+wire codec for the schedule (C10 keeps it in its overlay of the run's save; the in-memory size is `sizeof(cc_schedule)`, owned by the
+caller). No claim that an enemy was spawned, that any wallet changed, or that the adapter's classification of a real wave is right: the
+adapter (C10) and the reward side (C08) do not exist yet. The modulo bias (below 10^-18) is accepted, not eliminated (section 3, item 14).
+The scheduler's status for this task: **COMPLETE** against the C05 card's scope (a pure policy with golden fixtures); the live
+behavior it describes is **not shipped** until C10.
+
 ## 6. Not established by this PR
 
 - No upstream behavior was consulted or compared. There is no differential, no seed, no Node 22 run, and none is needed
@@ -837,5 +965,5 @@ the real card was not made to fail. The new game tests are not part of CI. **No 
 - No emulator or console check by C01/C02 (no screen or app change then). C03's emulator check, and what it did not cover, is in section 5.2.
 - No Old 3DS memory or time measurement. `sizeof` and code-size figures come from compilers (x86-64 host, Ubuntu's
   `arm-none-eabi-gcc`, and devkitARM in CI, with the 3DS CPU flags), not from a device or emulator.
-- No scheduler and no profile or reward code. (C03 added the live observer hook and the post-mortem screen, section 2.9; C04 added the codec, the transaction and the one custom file, section 2.10.) The app never inserts a Nemesis: the finishing enemy is not identifiable. The rest is C05 to C10.
+- No profile or wallet code, no live use of the scheduler (C05 is a pure policy: nothing in the app calls it, it has no wire codec and nothing spawns a rematch enemy). (C03 added the live observer hook and the post-mortem screen, section 2.9; C04 added the codec, the transaction and the one custom file, section 2.10.) The app never inserts a Nemesis: the finishing enemy is not identifiable. The rest is C06 to C10.
 - Range checks only for species, form, move and ability: membership in the game's tables is the adapters' job.
