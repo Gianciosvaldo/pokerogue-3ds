@@ -307,6 +307,10 @@ enum {
     PR_REWARD_UNPORTED_FUNC = 1u << 10,       /* a guaranteed item func the port doesn't make */
 };
 
+/* generateModifierTypeOption(func, pregenArgs): the item and its tier from the PLAYER pool; pregen_arg is the one argument of a
+ * generator (a stat for TEMP_STAT_STAGE_BOOSTER). Rolls nothing. */
+pr_reward_option pr_reward_pregen_option(pr_reward_ctx *ctx, int item, int pregen_arg);
+
 /* regenerateModifierPoolThresholds(party, PLAYER, rerollCount) on ctx->run->rng (the generators roll) */
 void pr_reward_regenerate_thresholds(pr_reward_ctx *ctx, int reroll_count, pr_reward_thresholds *th);
 /* getPlayerModifierTypeOptions(count, party, modifierTiers, customModifierSettings) on ctx->run->rng.
