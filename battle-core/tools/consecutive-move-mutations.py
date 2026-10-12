@@ -14,7 +14,7 @@ mutants=[
  ('filter-virtual-history','commands.c','pr_last_move(bt, p, 0);\n        if (last && last->move == move)', 'pr_last_non_virtual_move(bt, p, false, true, (bool[]){false});\n        if (last && last->move == move)'),
  ('restriction-during-execution','commands.c','if (for_selection && !pr_move_selectable','if (!pr_move_selectable'),
  ('no-struggle-fallback','commands.c','return MOVE_ID_STRUGGLE;','return -1;'),
- 
+
 ]
 with tempfile.TemporaryDirectory(prefix='consecutive-move-mutants-') as work:
     tmp=Path(work);flags=[os.environ.get('CC','gcc'),'-O2','-std=c99','-ffp-contract=off','-I'+str(root/'include'),'-I'+str(root/'gen/out')]
