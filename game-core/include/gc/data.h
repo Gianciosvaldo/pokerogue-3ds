@@ -29,6 +29,12 @@ extern const int gc_species_evo_count;
 extern const gc_evo gc_evo_data[];
 extern const gc_evo_cond gc_evo_conds[];
 
+/* Each biome's weatherPool and terrainPool as weights by WeatherType (0..9) and TerrainType (0..4); a missing entry is 0.
+ * By BiomeId, ascending (gen/out/gc_biome_fields.c) */
+typedef struct { uint16_t biome; uint16_t weather[10]; uint16_t terrain[5]; } gc_biome_field;
+extern const gc_biome_field gc_biome_fields[];
+extern const int gc_biome_field_count;
+
 /* speciesStarterCosts: the starter species (sorted by id) and their cost */
 typedef struct { uint16_t id; uint8_t cost; } gc_starter_cost_entry;
 extern const gc_starter_cost_entry gc_starter_costs[];
