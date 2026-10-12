@@ -1,5 +1,11 @@
 # battle-core: native C port of PokeRogue's battle logic
 
+Current continuation (2026-10-12): leave-field primal weather, Wonder Skin,
+priority brackets/Quick Draw, Protean/Libero and defending-field priority immunity
+have bounded source proofs. Retained rich seed777 covers 1,924/2,000 turns exactly;
+this is sample coverage, not a battle-core completion percentage. See the
+[remaining inventory](REMAINING-BATTLE-CORE.md) and the validation records below.
+
 Status 2026-09-28: **damage path with abilities and passives, move effects, held items, battler and arena tags, and the turn history verified against upstream** (singles); the turn engine has started and replays about 96% of the plain random test turns exactly, with stat changes, statuses, on-hit abilities, two-turn moves, 87 of the 95 battler tag types (all but Helping Hand, Follow Me's, Imprison, Quick Claw's, Commander's, Cramorant's two and the mystery encounters' one), recoil, drain, recharge, pre-move texts, the healing phase, weather and terrain over a turn, the damaging traps, Leech Seed, Substitute, the protections and Endure, arena tags being laid, stacked, cleared and swapped, the weather and terrain moves with about 25 smaller move effects, the moves that call other moves (Metronome, Mirror Move, Copycat, Sleep Talk, Assist, Nature Power, Instruct), Focus Punch-style header moves, Future Sight and Wish, and switching (the moves that switch a Pokemon out, the switch command, the party prompt as a pause the caller answers, and the switch itself with entry hazards, entry abilities, Baton Pass and Shed Tail passing their effects, Wimp Out and Emergency Exit) ported (see "Turn engine"). Every damaging move in the random test is now covered except 6 cases in about 110,000. Upstream is `pagefaultgames/pokerogue` @ `8555c08`.
 
 ## Task 69: Weather-driven quiet form changes (2026-10-04)
@@ -1146,3 +1152,15 @@ mutations detected and nine malformed traces rejected. Rich retained coverage
 rises from 1,896 to 1,906/2,000; no retained covered mismatch or coverage loss.
 See [validation and reproduction](PROTEAN-VALIDATION.md). No new save state or
 complete doubles, boss, switch-lifecycle or hardware parity is claimed.
+
+## Defending-field priority immunity (2026-10-12)
+
+MovePhase now dispatches the existing Queenly Majesty/Dazzling/Armor Tail leaf
+on the defending field and honors its shared cancellation holder. Terrain and
+third-sequence failures retain precedence, and cancellation occurs before Protean
+or move effects. Actual source proof covers 8,000 full turns: original/modified
+priority, passive and dual holders, suppression, Mold Breaker and failure ordering.
+Ten production mutations fail and nine malformed traces reject. Rich retained
+coverage grows from 1,906 to 1,924; no retained covered mismatch or loss.
+See [validation and reproduction](FIELD-PRIORITY-VALIDATION.md). Singles proof
+does not establish natural ally-field or broader doubles behavior.

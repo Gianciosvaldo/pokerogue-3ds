@@ -1255,11 +1255,16 @@ static bool third_failure_check(pr_battle *bt, pr_engine *e, int ph)
     }
     bool failed = fails_conditions || terrain;
     if (!failed && nt && pr_is_opponent(bt, user, targets[0])) {
-        /* FieldPriorityMoveImmunityAbAttr on the defending side (Queenly Majesty, Dazzling) */
+        /* Source walks the defending field with one shared cancellation holder. */
+        bool cancelled = false;
         for (int i = 0; i < 4; i++) {
             pr_pokemon *o = bt->field[i];
-            if (o && (i < 2) != user->is_player) pr_hook_ab(bt, o, PR_AC_FieldPriorityMoveImmunityAbAttr);
+            if (o && (i < 2) != user->is_player) {
+                pr_ab_params params = {.pokemon = o, .opponent = user, .move = m->move.id, .flag = &cancelled};
+                pr_apply_ab_attrs(bt, PR_AC_FieldPriorityMoveImmunityAbAttr, &params);
+            }
         }
+        failed = cancelled;
     }
     if (failed) {
         fail_move(bt, e, ph, terrain);

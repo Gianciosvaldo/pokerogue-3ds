@@ -222,3 +222,8 @@ $(BUILD)/protean-test: tests/protean-test.c tests/speed-boost-replay.inc $(BUILD
 all: $(BUILD)/protean-helper-test
 $(BUILD)/protean-helper-test: tests/protean-helper-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+# Defending-field priority immunity: actual source turns, unchanged projection.
+all: $(BUILD)/field-priority-test
+$(BUILD)/field-priority-test: tests/field-priority-test.c tests/speed-boost-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/field-priority-test.c $(BUILD)/libprcore.a -lm -o $@
