@@ -785,7 +785,7 @@ money, items owned, that the encounter left without a battle, the shop's `custom
 Pikachu, Eevee), the RNG after the shop, and that the next wave is queued. The old `gen/dump-mystery-actions.test.ts`
 and `tests/mystery_diff_test.c` are untouched and still only smoke coverage.
 
-Department Store Sale, Shady Vitamin Dealer, Lost at Sea and Field Trip are ported and compared. Every other encounter's actions in
+Department Store Sale, Shady Vitamin Dealer, Lost at Sea, Field Trip and Part Timer are ported and compared. Every other encounter's actions in
 `gc_mystery.c` are still the Task 46 stand-ins; the encounter *selection* (`gc_mystery_select`) and the intro checks
 are not part of this comparison.
 
@@ -865,6 +865,37 @@ Upstream behaviours reproduced on purpose:
 - The experience phases are taken out of the queue before the shop is opened: upstream's shop is computed without them applied.
 - The app's party/move screen does not exist yet: `gc_mystery_execute(.., b, c)` takes the Pokemon (storage index) and the move
   slot, and reads a value out of range as the first Pokemon and the first move.
+
+### Part Timer
+
+`<trace>-timer.txt` is replayed by `tests/mystery_timer_diff_test.c`. Four parties (up to six Pokemon, including Shuckle, Ninjask,
+Regieleki, Shedinja and Groudon so the Speed and HP/Attack/Defense multipliers reach both clamps) with levels 1-100, random
+natures, IVs, Pokerus, one to four random moves each (a third with a charming move among them) with random PP used, PP Ups and
+the odd maximum override, HP (a fifth fainted), a wallet that is sometimes within a few thousand of `Number.MAX_SAFE_INTEGER`,
+Exp. Share / Exp. Balance / Oval Charm, an Amulet Coin and Lucky / Golden Eggs. Each case runs the chosen option as the phases do:
+`onPreOptionPhase` in `executeWithSeedOffset(.., getSeedOffset())` with `selectPokemonForOption` captured, the party screen's
+callback after it (outside any seed offset), `onOptionPhase` in `(.., * 500)` with the dialogue it shows recorded,
+`doEncounterRewardsAndContinue()` with the `PartyExpPhase` really started, the shop's own `SelectModifierPhase` calls, and
+`EggLapsePhase.start()`. Compared: the starting stats and level cap; which options are offered (the party screen filter's mask
+per Pokemon, the third option's `MoveRequirement` and the primary Pokemon it picks); the run RNG (nothing is drawn); the money
+multiplier, exactly; every move's PP used afterwards; money (Amulet Coin counted, clamped); the messages in order; the order of the
+queued phases (experience first, then the shop); the experience phase with its exact amount; the shop's settings (`fillRemaining`,
+no guaranteed items, luck upgrades allowed, no reroll override) and the options the reward screen shows with the RNG after it;
+and the eggs.
+
+Upstream behaviours reproduced on purpose:
+- Delivery work pays by the picked Pokemon's Speed against a baseline of base 90 / 16 IVs at its level; Strong Work by
+  HP + 1.5 * (Attack + Defense) against a base-75 baseline. Both are `min(max(2.5 * (1 + percentDiff), 1), 4)` times
+  `getWaveMoneyAmount`, and more than 2.5 is the "good" job message. Assist with Sales always pays 2.5 and always says good.
+- Every move of the picked Pokemon is taken down to 2 PP left if it had more (`ppUsed = max(ppUsed, maxPp - 2)`); a move with
+  fewer than 2 PP in total is left alone.
+- Experience is 100 (scaled by the wave) for that Pokemon alone and comes before the shop. The money is added with the Amulet
+  Coin bonus on top (`floor(amount * 0.2 * stack)`), clamped to 0..`Number.MAX_SAFE_INTEGER`.
+- The third option needs a Pokemon *allowed in battle* with one of the eight charming moves; the primary Pokemon is the first
+  such one in party order.
+- The shop is `setEncounterRewards({fillRemaining: true})`: the ordinary rolled shop, no heal shop.
+- The app's party screen does not exist yet: `gc_mystery_execute(.., b, ..)` takes the Pokemon (storage index); one the filter
+  refuses is read as the first that passes.
 
 ## Fleeing: upstream differential (Task 77 / #125)
 
