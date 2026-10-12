@@ -183,3 +183,7 @@ $(BUILD)/poltergeist-message-test: tests/poltergeist-message-test.c tests/turnte
 all: $(BUILD)/moodytest
 $(BUILD)/moodytest: tests/moodytest.c tests/speed-boost-replay.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/moodytest.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/consecutive-move-test
+$(BUILD)/consecutive-move-test: tests/consecutive-move-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/consecutive-move-test.c $(BUILD)/libprcore.a -lm -o $@
