@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "ball_menu.h"
+#include "bgm.h"
 #include "gm_enum_names.h"
 #include "pr_data.h"
 #include "battle_anim.h"
@@ -326,6 +327,7 @@ static void wave_black(void* arg) {
   img_drop_prefix("images/arenas/");
   ba_drop_moves();
   preload_moves();
+  bgm_on_wave(&G.run, (int)w->a, (int)w->b, (int)w->c); /* at black: the music starts here, never while something moves */
 
   bv_setup s;
   memset(&s, 0, sizeof s);
@@ -379,6 +381,8 @@ static void begin_wave(int i) {
     G.fade_done = false;
     wave_black(NULL);
   } else {
+    const gc_event* w = &G.q[i];
+    bgm_on_wave_coming(&G.run, (int)w->a, (int)w->b, (int)w->c); /* the old music goes down with the screen */
     ui_fade(250, 100, 250, wave_black, NULL);
   }
 }
@@ -417,6 +421,7 @@ static bool handle_event(int i) {
   G.n_ev = G.ev_pos = G.n_txt = 0;
   switch (e->kind) {
     case GC_EV_MESSAGE:
+      if (msg_is(e, "battle:trainerDefeated")) bgm_on_trainer_defeated(&G.run); /* TrainerVictoryPhase.start */
       put_gc_msg(&e->msg);
       break;
 
@@ -455,6 +460,13 @@ static bool handle_event(int i) {
       G.n_ev += be_convert_events(&G.run.bt, &G.run.battle_events[e->a], e->b, settled_after(i), &v, G.ev + G.n_ev, EV_CAP - G.n_ev);
       G.present[0] = v.present[0];
       G.present[1] = v.present[1];
+      /* a trainer sends out its first Pokemon (battle-core's start of the battle): Battle.started, and the encounter music gives way to the
+       * battle music. Here, before the events play: upstream's doSummon plays the music, then the send-out. */
+      for (int k = 0; k < G.n_ev; k++)
+        if (G.ev[k].type == BEV_SUMMON && G.ev[k].battler == BV_ENEMY) {
+          bgm_on_foe_sent_out(&G.run);
+          break;
+        }
       if (v.sent[0]) G.shown = pidx_of(v.sent[0]);
       G.st.not_found += v.not_found;
       break;
@@ -647,6 +659,7 @@ static bool send_out_foe(void) {
     char* t = txt_new();
     trainer_line("battle:trainerSendOut", GC_TNAME_TRAINER, i18n_species_name(foe->b.species), t, TXT_LEN);
     put_msg(t, false);
+    bgm_on_foe_sent_out(&G.run);
   }
   *ev_new() = (bv_event){.type = BEV_SUMMON, .battler = BV_ENEMY, .mon = &sent};
   G.present[1] = true;
@@ -1088,6 +1101,7 @@ static void end_run(int kind) {
     G.st.clears++;
   else
     G.st.game_overs++;
+  bgm_on_run_end(kind == GC_SCREEN_CLEAR);
   if (G.cfg.on_end) {
     /* the app takes the run from here (the result screen); the run stays readable through rs_run() until it starts another */
     G.cfg.on_end(kind, G.cfg.end_arg);

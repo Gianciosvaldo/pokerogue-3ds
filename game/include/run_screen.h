@@ -19,7 +19,7 @@
  *                 battle-core drops the number of shakes a ball made before it broke free, so a break-free always wobbles once.
  *                 Not drawn: the ball's open and star particles, the caught Pokemon's info panel, critical captures (battle-core
  *                 does not report them). A full party asks "release one?" (Yes / No) where upstream also offers Summary and Pokedex
- * Saving and loading are wired (cfg.save, rs_resume). Not wired yet: the Pokedex, eggs, music.
+ * Saving and loading are wired (cfg.save, rs_resume). The music follows the scenes (bgm.h). Not wired yet: the Pokedex, eggs.
  */
 #ifndef GM_RUN_SCREEN_H
 #define GM_RUN_SCREEN_H

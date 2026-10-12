@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "bgm.h"
 #include "gm_enum_names.h"
 #include "i18n.h"
 #include "ui.h"
@@ -58,7 +59,13 @@ static void ts_draw(ui_screen* s, rr_screen which) {
   }
 }
 
-static ui_screen g_screen = {"title", UI_FADE, NULL, NULL, NULL, ts_input, NULL, ts_draw, NULL};
+/* TitlePhase.start: the title music (the slot list keeps it playing) */
+static void ts_enter(ui_screen* s) {
+  (void)s;
+  bgm_on_title();
+}
+
+static ui_screen g_screen = {"title", UI_FADE, ts_enter, NULL, NULL, ts_input, NULL, ts_draw, NULL};
 
 void title_screen_open(const title_args* a) {
   memset(&T, 0, sizeof T);
