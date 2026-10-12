@@ -223,12 +223,47 @@ static void test_trainer_reward_items(void) {
     printf("test_trainer_reward_items... ok\n");
 }
 
+/* A voucher taken from the reward screen (SelectModifierPhase.applyModifier -> addModifier): AddVoucherModifier.apply adds
+ * one to the count of its type. No text, no run item, not a stand-in. */
+static void test_voucher_reward_screen(void) {
+    static gc_system sys;
+    static gc_run run;
+    new_run(&run, &sys);
+    const char *keys[] = {"VOUCHER", "VOUCHER_PLUS", "VOUCHER_PREMIUM", "VOUCHER_PLUS"};
+    const int types[] = {GC_VOUCHER_REGULAR, GC_VOUCHER_PLUS, GC_VOUCHER_PREMIUM, GC_VOUCHER_PLUS};
+    uint32_t want[4] = {0, 0, 0, 0};
+    for (int i = 0; i < 4; i++) {
+        gc_offer o;
+        memset(&o, 0, sizeof o);
+        o.key = keys[i];
+        o.arg = -1;
+        o.target = gc_reward_target(keys[i]);
+        const char *why = "";
+        assert(gc_port_apply_reward(&run, &o, -1, -1, &why));
+        want[types[i]]++;
+        assert(!memcmp(sys.voucher_counts, want, sizeof want));
+    }
+    assert(run.n_items == 0);
+    assert(run.stubs[GC_STUB_REWARD_APPLY] == 0);
+    gc_event ev;
+    while (gc_run_next_event(&run, &ev)) assert(ev.kind != GC_EV_MESSAGE);
+
+    /* no system data: taken, nothing counted, nothing dereferenced */
+    run.sys = NULL;
+    gc_offer o = {.key = "VOUCHER", .arg = -1, .target = gc_reward_target("VOUCHER")};
+    const char *why = "";
+    assert(gc_port_apply_reward(&run, &o, -1, -1, &why));
+    assert(run.n_items == 0);
+    printf("test_voucher_reward_screen... ok\n");
+}
+
 int main(void) {
     test_egg_hatch_steps();
     test_voucher_unlocks();
     test_run_boss_defeat_voucher();
     test_voucher_reward_phase();
     test_trainer_reward_items();
+    test_voucher_reward_screen();
 
     printf("All voucher and egg tests passed successfully!\n");
     return 0;

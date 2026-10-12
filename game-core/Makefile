@@ -96,6 +96,11 @@ all: $(BUILD)/trainer_victory_diff_test
 $(BUILD)/trainer_victory_diff_test: tests/trainer_victory_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
+# replays the upstream trace of tools/voucherapplydiff.sh; run by hand, it needs the trace
+all: $(BUILD)/voucher_apply_diff_test
+$(BUILD)/voucher_apply_diff_test: tests/voucher_apply_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
 all: $(BUILD)/orb_diff_test $(BUILD)/orb_host_test $(BUILD)/mint_diff_test $(BUILD)/mint_host_test
 
 all: $(BUILD)/vitamin_diff_test $(BUILD)/vitamin_host_test

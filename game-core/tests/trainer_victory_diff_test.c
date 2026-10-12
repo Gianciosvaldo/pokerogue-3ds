@@ -10,7 +10,7 @@
  *    TrainerVictoryPhase)
  *  - the stack of each reward item after its phase, from the stack the player had before it: the scene keeps its
  *    modifiers from case to case, so the stacks reach getMaxStackCount() and addModifier adds nothing past it
- *  - the text each reward shows, formatted from upstream's locale files (GC_LOCALES). A voucher's text is not compared
+ *  - the text each reward shows, the voucher's included, formatted from upstream's locale files (GC_LOCALES)
  *  - a reward whose stack was full: addModifier queued battle:itemStackFull and gave the tier's default item (a Poke
  *    Ball). Compared: that message's text, and the five Poke Ball counts after the rewards, from the counts before
  *  - whether the trainer's voucher is unlocked afterwards and the four voucherCounts changes, after the rewards ran
@@ -222,6 +222,8 @@ int main(int argc, char **argv)
             } else {
                 voucher = rewards[i];
                 if (gc_item_stack(&run, voucher)) MISMATCH("trainer %d: %s was added to the items", tt, voucher);
+                if (!up_text[i] || strcmp(text[i], up_text[i])) MISMATCH("trainer %d: %s text '%s', upstream '%s'", tt, voucher, text[i], up_text[i] ? up_text[i] : "none");
+                else texts_compared++;
             }
         }
         if (!up_voucher != !voucher || (voucher && strcmp(voucher, up_voucher)))
