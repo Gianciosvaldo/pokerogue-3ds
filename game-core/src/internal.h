@@ -38,6 +38,7 @@ enum {
     RP_CATCH,            /* AttemptCapturePhase.catch() after the roll: a = enemy index, b = ball; waits on SWITCH when the party is full */
     RP_MYSTERY,          /* MysteryEncounterPhase: a = selected type, b = selected tier */
     RP_REWARD_FORM,      /* bounded FormChangePhase: a = storage party index, b = target form */
+    RP_ME_POST,          /* PostMysteryEncounterPhase's onPostOptionPhase: a = encounter type, b = party index, c = option */
     RP_COUNT_
 };
 typedef struct { uint8_t type; int32_t a, b, c; double d; const char *key; } gc_rphase;
@@ -213,6 +214,8 @@ void gc_mystery_record(gc_run *run, int type, int tier);
 void gc_mystery_increment_miss(gc_run *run);
 void gc_mystery_setup_screen(gc_run *run);
 bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why, bool *ok);
+bool gc_mystery_pick_ok(const gc_run *run, int type, int option, int idx);   /* the option's party screen filter accepts the Pokemon */
+void gc_mystery_post(gc_run *run, const gc_rphase *p);
 bool gc_gen_wild(gc_run *run, int level);
 void gc_trainer_names(gc_run *run);               /* run->trainer_names for the current trainer */
 bool gc_is_new_biome(const gc_run *run, int wave);   /* isNewBiome for the battle of `wave` */

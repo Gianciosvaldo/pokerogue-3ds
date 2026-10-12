@@ -631,6 +631,9 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
     }
     case RP_CATCH:
         return gc_catch_start(run, p);
+    case RP_ME_POST:
+        gc_mystery_post(run, p);
+        return true;
     default:
         (void)in;
         return true;
