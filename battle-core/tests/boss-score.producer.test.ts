@@ -42,7 +42,7 @@ it("actual enemy score API", async () => {
       const constructors=[()=>new AttackTypeBoosterModifier(mt,owner,0,20,stack),
         ()=>new BaseStatModifier(mt,owner,Stat.ATK,stack),()=>new PokemonBaseStatTotalModifier(mt,owner,10,stack),
         ()=>new PokemonBaseStatFlatModifier(mt,owner,stack),()=>new PokemonIncrementingStatModifier(mt,owner,stack),
-        ()=>new TurnHealModifier(mt,owner,6.25,stack)];
+        ()=>new TurnHealModifier(mt,owner,stack)];
       const mod:any=constructors[cls]();(side?scene.enemyModifiers:scene.modifiers).push(mod);
       mods.push([cls,side,+(owner===enemy.id),stack]);classes[cls]++;
     }

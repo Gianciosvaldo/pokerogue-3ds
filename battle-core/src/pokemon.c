@@ -62,9 +62,21 @@ void pr_calculate_stats(pr_battle *bt, pr_pokemon *p)
     for (int s = 0; s < 6; s++) {
         if (ff) {
             base[s] = ceil((f->base_stats[s] + ff->base_stats[s]) / 2.0);
+        } else if (bt->game_mode == GAME_MODES_SPLICED_ENDLESS) {
+            /* calculateBaseStats: an unfused Pokemon has halved base stats in spliced-only mode. */
+            base[s] = ceil(f->base_stats[s] / 2.0);
         } else {
             base[s] = f->base_stats[s];
         }
+    }
+    if (!ff && bt->game_mode == GAME_MODES_SPLICED_ENDLESS) {
+        /* These source modifiers precede halving; the combined modifier helper cannot yet
+         * express that ordering. Flee clears held items before recalculating. */
+        int side = p->is_player ? 0 : 1;
+        for (int i = 0; i < bt->n_mods[side]; i++)
+            if (bt->mods[side][i].pokemon_id == (int64_t)p->id
+                && (bt->mods[side][i].cls == PR_MOD_BASE_STAT_TOTAL || bt->mods[side][i].cls == PR_MOD_BASE_STAT_FLAT))
+                pr_note_unported(bt, PR_FEAT_MODIFIERS);
     }
     pr_apply_base_stat_modifiers(bt, p, base);
     for (int s = 0; s < 6; s++) {
