@@ -25,23 +25,26 @@ int gc_lure_add(gc_run *run,int item){
 }
 int gc_lure_apply(gc_run *run,const gc_offer *o,const char **why){
  if((o->arg!=-1&&o->arg!=0)||o->tier>=5||run->n_party<1||run->n_party>PR_REWARD_MAX_PARTY||run->n_items<0||run->n_items>GC_MAX_ITEMS)return GC_APPLY_UNHANDLED;
- /* Scene.updateModifiers recalculates stats. Do not claim opaque/fused
-  * stat-changing inventories through this bounded caller. */
- static const char *stats[]={"BASE_STAT_BOOSTER","SOUL_DEW","SPECIES_STAT_BOOSTER","RARE_SPECIES_STAT_BOOSTER","EVIOLITE","MYSTERY_ENCOUNTER_SHUCKLE_JUICE","MYSTERY_ENCOUNTER_OLD_GATEAU","MYSTERY_ENCOUNTER_MACHO_BRACE"};
- for(int j=0;j<run->n_party;j++)if(run->party[j].b.fusion_species)return GC_APPLY_UNHANDLED;
+ /* Scene.updateModifiers recalculates stats. The vitamins (BASE_STAT_BOOSTER) are in battle-core's modifier list, so the
+  * recalculation sees them; the other stat-changing stock and fused Pokemon are not, so for those the Lure is still added
+  * with its timer (the inventory does not depend on the stats) but the party's stats are left as they were. Refusing the
+  * add instead left an untimed, opaque Lure that never lapsed. */
+ static const char *stats[]={"SOUL_DEW","SPECIES_STAT_BOOSTER","RARE_SPECIES_STAT_BOOSTER","EVIOLITE","MYSTERY_ENCOUNTER_SHUCKLE_JUICE","MYSTERY_ENCOUNTER_OLD_GATEAU","MYSTERY_ENCOUNTER_MACHO_BRACE"};
+ bool recalc=true;
+ for(int j=0;j<run->n_party;j++)if(run->party[j].b.fusion_species)recalc=false;
  for(int j=0;j<run->n_items;j++){
   if(run->items[j].stack<1)return GC_APPLY_UNHANDLED;
-  for(unsigned k=0;k<sizeof stats/sizeof *stats;k++)if(!strcmp(run->items[j].key,stats[k]))return GC_APPLY_UNHANDLED;
+  for(unsigned k=0;k<sizeof stats/sizeof *stats;k++)if(!strcmp(run->items[j].key,stats[k]))recalc=false;
   int item=gc_reward_item_index(run->items[j].key);
   if(item>=0&&(pr_items[item].flags&PR_ITEMF_HELD)){
    bool found=false;for(int k=0;k<run->n_party;k++)found|=run->items[j].pokemon_id==run->party[k].b.id;
-   if(!found)return GC_APPLY_UNHANDLED;
+   if(!found)recalc=false;
   }
  }
  int item=gc_reward_item_index(o->key),result=gc_lure_add(run,item);
  if(result==PR_REWARD_LURE_UNSUPPORTED)return GC_APPLY_UNHANDLED;
  if(result!=PR_REWARD_LURE_FULL){
-  for(int j=0;j<run->n_party;j++)gc_mon_recalc(run,&run->party[j]);
+  if(recalc)for(int j=0;j<run->n_party;j++)gc_mon_recalc(run,&run->party[j]);
   if(o->is_purchase){if(why)*why="";return GC_APPLY_REFUSED;}
   return GC_APPLY_DONE;
  }

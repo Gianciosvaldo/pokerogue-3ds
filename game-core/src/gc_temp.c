@@ -41,7 +41,11 @@ bool gc_temp_lapse(gc_run *run,int *expired) {
  gc_items_to_battle(run);return true;
 }
 int gc_temp_apply(gc_run *run,const gc_offer *o,const char **why) {
- int item=gc_reward_item_index(o->key),result=gc_temp_add(run,item,o->arg);
+ int item=gc_reward_item_index(o->key);
+ /* The reward-core offer carries no argument for a Dire Hit (arg -1); the canonical record, like upstream's
+  * TempCritBoosterModifier, has arg 0. Passing -1 on made every Dire Hit unsupported and left an untimed entry that
+  * stopped all temporary boosters and Lures of the run from lapsing. */
+ int result=gc_temp_add(run,item,item==PR_ITEM_DIRE_HIT?0:o->arg);
  if(result==PR_REWARD_TEMP_UNSUPPORTED)return GC_APPLY_UNHANDLED;
  if(result!=PR_REWARD_TEMP_FULL) {
   /* Persistent Scene.addModifier mutates stock but returns false. Paid caller
