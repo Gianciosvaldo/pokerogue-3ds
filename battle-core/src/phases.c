@@ -524,7 +524,8 @@ static void turn_start(pr_battle *bt, pr_engine *e)
     while ((p = pr_speed_iter_next(bt, &it))) {
         int b = pr_battler_index(bt, p);
         if (bt->commands[b].command != COMMAND_FIGHT) continue;
-        pr_hook_ab(bt, p, PR_AC_BypassSpeedChanceAbAttr);     /* Quick Draw */
+        pr_ab_params params = {.pokemon = p, .move = -1};
+        pr_apply_ab_attrs(bt, PR_AC_BypassSpeedChanceAbAttr, &params);
         pr_apply_bypass_speed_chance_modifiers(bt, e, p);     /* Quick Claw */
     }
 

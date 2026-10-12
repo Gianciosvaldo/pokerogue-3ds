@@ -1,6 +1,6 @@
 #!/bin/sh
-# Boss voucher (TrainerVictoryPhase): replays upstream's own phase for every trainerConfigs entry, with its voucher
-# unlocked or not and the voucher ModifierRewardPhases run, through game-core's trainer victory.
+# TrainerVictoryPhase: replays upstream's own phase for every trainerConfigs entry, with its voucher unlocked or not and
+# every ModifierRewardPhase it queued run (the boss voucher, the rivals' reward items), through game-core's trainer victory.
 # Usage: tools/trainervictorydiff.sh <upstream checkout> [N] [seed]
 # The upstream checkout is the one battle-core/tools/setup-upstream.sh prepares (pinned commit); needs Node 22.
 set -eu
@@ -20,4 +20,4 @@ TRACE=${GC_VOUCHER_OUT:-$BUILD/game-trainer-victory-$SEED.txt}
 rm -f "$TRACE"
 (cd "$UP" && GC_VOUCHER_N="$N" GC_VOUCHER_SEED="$SEED" GC_VOUCHER_OUT="$TRACE" "$NODE" node_modules/vitest/vitest.mjs run --maxWorkers=1 test/tests/zz-dump/game-trainer-victory.producer.test.ts >"$BUILD/game-trainer-victory-$SEED.log" 2>&1) \
   || { echo "producer failed (log: $BUILD/game-trainer-victory-$SEED.log)" >&2; exit 2; }
-"$BUILD/trainer_victory_diff_test" "$TRACE"
+GC_LOCALES="$UP/locales/en" "$BUILD/trainer_victory_diff_test" "$TRACE"

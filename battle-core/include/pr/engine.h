@@ -467,6 +467,8 @@ void pr_reset_status_phase(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool revi
 void pr_reset_status_phase_ex(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool revive, bool confusion);
 /* Move.calculateBattleAccuracy: variable accuracy, held modifiers, Fog then Gravity. */
 double pr_calculate_battle_accuracy(pr_battle *bt, pr_pokemon *user, pr_pokemon *target, int move);
+/* Move.getPriorityModifier(user), with its source default simulated=true. */
+int pr_move_get_priority_modifier(pr_battle *bt, int move, const pr_pokemon *user);
 
 /* Pokemon.trySetStatus(effect, sourcePokemon, sleepTurnsRemaining (-1 = undefined), sourceText,
  * overrideStatus, quiet): canSetStatus, then an ObtainStatusEffectPhase is unshifted */

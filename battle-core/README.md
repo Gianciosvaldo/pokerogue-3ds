@@ -1117,3 +1117,18 @@ including source simulation behavior and ordering before Wide Lens/Fog/Gravity.
 [WONDER-SKIN-VALIDATION.md](WONDER-SKIN-VALIDATION.md) records 8,000 exact
 turns, 16,000 numerical probes, 56 dispatcher cases and mutation/regression checks.
 Reproduce with `tools/wonder-skin-diff.sh <upstream> 2000 <seed>`.
+
+## Priority brackets, Quick Draw and Mycelium Might (2026-10-12)
+
+Stall and Mycelium Might now modify within-bracket move order through the real
+ability dispatcher. Quick Draw preserves the source's draw-before-category/tag
+checks and runs before Quick Claw. Actual bypass-tag addition dispatches Mycelium
+Might's status-move refusal. Primary/passive conditions use source owner/hash
+registrations; ordinary move priority and speed tie behavior stay source ordered.
+
+The additive source matrix matches 8,000 full turns and 16,000 direct bracket
+probes on four seeds; 12 runtime mutations fail and 12 malformed transports are
+rejected. Retained rich coverage rises from 1,872 to 1,896/2,000, with no retained
+covered mismatch or coverage loss. See [validation and reproduction](PRIORITY-BRACKETS-VALIDATION.md).
+This is bounded singles proof, with no complete doubles, hardware or battle-core
+completion claim.

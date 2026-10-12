@@ -259,6 +259,22 @@ static void evolve(gc_run *run, gc_rphase *p)
 }
 
 /* ---- BattleEndPhase ---- */
+/* Battle.pickUpScatteredMoney: every MoneyMultiplierModifier (Amulet Coin) in the list's order adds
+ * floor(value * 0.2 * stacks), Happy Hour doubles it, then addMoney and the "picked up" message */
+void gc_pick_up_scattered_money(gc_run *run)
+{
+    pr_battle *bt = &run->bt;
+    double amount = bt->money_scattered;
+    for (int i = 0; i < run->n_items; i++)
+        if (!strcmp(run->items[i].key, "AMULET_COIN")) amount += floor(amount * 0.2 * run->items[i].stack);
+    if (pr_arena_has_tag(bt, ARENA_TAG_TYPE_HAPPY_HOUR, ARENA_TAG_SIDE_BOTH)) amount *= 2;
+    run->money = pr_run_add_money(run->money, amount);
+    gc_event *ev = gc_ev_new(run, GC_EV_MONEY);
+    if (ev) { ev->a = (int32_t)amount; ev->b = (int32_t)run->money; }
+    gc_ev_msg(run, "battle:moneyPickedUp", 1, pr_arg_int("moneyAmount", (int)amount));
+    bt->money_scattered = 0;
+}
+
 static void battle_end(gc_run *run, gc_rphase *p)
 {
     gc_internal *in = gc_int(run);
@@ -284,8 +300,17 @@ static void battle_end(gc_run *run, gc_rphase *p)
         double ease = v == 0 ? 0 : v == 1 ? 1 : 1 - cos(v * 3.141592653589793 / 2);   /* Phaser's Sine.In */
         run->score += (int)ceil(bt->battle_score * ease);
     }
-    /* PostBattleAbAttr (Pickup, Honey Gather) and Pay Day's scattered money wait on the rewards */
-    if (bt->money_scattered) gc_stub(run, GC_STUB_POST_BATTLE);
+    /* PostBattleAbAttr: Pickup (PostBattleLootAbAttr) takes an item from the enemies' loot after a victory. battle-core keeps
+     * only the loot's count and game-core drops the enemy items at the battle's end, so the transfer is not ported:
+     * counted when it would have happened. */
+    if (victory && bt->post_battle_loot > 0)
+        for (int i = 0; i < run->n_party; i++)
+            if (gc_mon_allowed(&run->party[i]) && pr_has_ability_active(bt, &run->party[i].b, ABILITY_ID_PICKUP)) {
+                gc_stub(run, GC_STUB_POST_BATTLE);
+                break;
+            }
+    /* BattleEndPhase: currentBattle.pickUpScatteredMoney() (Pay Day) */
+    if (bt->money_scattered) gc_pick_up_scattered_money(run);
     /* clearEnemyHeldItemModifiers; then the bounded temporary booster lapse. */
     run->n_enemy_items = 0;
     if (!gc_temp_lapse(run, NULL)) gc_stub(run, GC_STUB_POST_BATTLE);
@@ -307,19 +332,31 @@ static void trainer_victory(gc_run *run)
     gc_rphase p = gc_rp(RP_MONEY_REWARD, 0, 0, 0);
     p.d = c ? c->money_multiplier : 1;   /* config.moneyMultiplier */
     gc_rq_unshift(run, p);
-    if (c && c->n_reward_funcs) gc_stub(run, GC_STUB_TRAINER_REWARDS);
+    /* TrainerVictoryPhase's rewards: the config's modifierRewardFuncs, one ModifierRewardPhase each, in order, then the
+     * boss voucher. Which items and which trainer has a voucher are reward-core's (pr_reward_trainer_victory_rewards,
+     * diff-tested): its items are the reward funcs' first and the voucher's reward last. If reward-core doesn't have
+     * the trainer's rewards, they are not given and the stand-in counts it. */
+    const int n_funcs = c ? c->n_reward_funcs : 0;
+    pr_reward_trainer_victory tv;
+    const bool unlocked = gc_system_has_voucher_unlock(run->sys, run->trainer_type);
+    if (pr_reward_trainer_victory_rewards(run->trainer_type, unlocked, false, &tv) != 0 || tv.n_items < n_funcs) {
+        if (n_funcs) gc_stub(run, GC_STUB_TRAINER_REWARDS);
+        tv.voucher_type = -1;
+        tv.n_items = 0;
+    }
+    for (int i = 0; i < n_funcs && i < tv.n_items; i++) {
+        gc_rphase rp = gc_rp(RP_MODIFIER_REWARD, 0, 0, 0);
+        rp.key = pr_item_keys[tv.items[i]];
+        gc_rq_unshift(run, rp);
+    }
     /* The boss voucher: Object.hasOwn(vouchers, key) && !globalScene.validateVoucher(voucher) && config.isBoss.
      * validateVoucher unlocks the voucher now and counts it (the first win of a boss: unlocked, +1 of the voucher's
      * own type, no reward) and returns true, so the ModifierRewardPhase is queued only on a later win, when it was
-     * unlocked already. Which trainers have a voucher, its type and the item are reward-core's
-     * (pr_reward_trainer_victory_rewards, diff-tested); the item is its last one, after the config's reward funcs.
-     * Without system data (sys NULL = no system updates) nothing unlocks and nothing is given. */
-    pr_reward_trainer_victory tv;
-    const bool unlocked = gc_system_has_voucher_unlock(run->sys, run->trainer_type);
-    if (pr_reward_trainer_victory_rewards(run->trainer_type, unlocked, false, &tv) == 0 && tv.voucher_type >= 0) {
+     * unlocked already. Without system data (sys NULL = no system updates) nothing unlocks and no voucher is given. */
+    if (tv.voucher_type >= 0) {
         if (tv.unlock_voucher) {
             gc_system_unlock_voucher(run->sys, run->trainer_type, tv.voucher_type);
-        } else if (tv.n_items > (c ? c->n_reward_funcs : 0)) {
+        } else if (tv.n_items > n_funcs) {
             gc_rphase vp = gc_rp(RP_MODIFIER_REWARD, 0, 0, 0);
             vp.key = pr_item_keys[tv.items[tv.n_items - 1]];
             gc_rq_unshift(run, vp);

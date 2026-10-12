@@ -87,6 +87,9 @@ $(BUILD)/money_diff_test: tests/money_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 $(BUILD)/money_host_test: tests/money_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+all: $(BUILD)/payday_diff_test
+$(BUILD)/payday_diff_test: tests/payday_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 test: money-host-test
 money-host-test: $(BUILD)/money_host_test
 	$(BUILD)/money_host_test
@@ -94,6 +97,11 @@ money-host-test: $(BUILD)/money_host_test
 # replays the upstream trace of tools/trainervictorydiff.sh; run by hand, it needs the trace
 all: $(BUILD)/trainer_victory_diff_test
 $(BUILD)/trainer_victory_diff_test: tests/trainer_victory_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+# replays the upstream trace of tools/voucherapplydiff.sh; run by hand, it needs the trace
+all: $(BUILD)/voucher_apply_diff_test
+$(BUILD)/voucher_apply_diff_test: tests/voucher_apply_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
 all: $(BUILD)/orb_diff_test $(BUILD)/orb_host_test $(BUILD)/mint_diff_test $(BUILD)/mint_host_test
@@ -127,7 +135,7 @@ test: mint-host-test
 mint-host-test: $(BUILD)/mint_host_test
 	$(BUILD)/mint_host_test
 
-all: $(BUILD)/enemy_moveset_test $(BUILD)/reward_lifecycle_host_test $(BUILD)/reward_lifecycle_test $(BUILD)/resume_test $(BUILD)/itembridge_test $(BUILD)/libgc.a $(BUILD)/gcplay $(BUILD)/savetest $(BUILD)/system_save_test $(BUILD)/dextest $(BUILD)/dexupdatetest $(BUILD)/level_evo_test $(BUILD)/biome_test $(BUILD)/voucher_egg_test $(BUILD)/mystery_test $(BUILD)/mystery_diff_test $(BUILD)/reward_test $(BUILD)/reward_diff_test $(BUILD)/switch_prompt_test $(BUILD)/turn_tail_test $(BUILD)/boss_segments_test $(BUILD)/catch_test $(BUILD)/catch_diff_test $(BUILD)/reward_apply_test $(BUILD)/reward_apply_diff_test $(BUILD)/flee_test $(BUILD)/starter_unlock_test
+all: $(BUILD)/enemy_moveset_test $(BUILD)/reward_lifecycle_host_test $(BUILD)/reward_lifecycle_test $(BUILD)/resume_test $(BUILD)/itembridge_test $(BUILD)/libgc.a $(BUILD)/gcplay $(BUILD)/savetest $(BUILD)/system_save_test $(BUILD)/dextest $(BUILD)/dexupdatetest $(BUILD)/level_evo_test $(BUILD)/biome_test $(BUILD)/voucher_egg_test $(BUILD)/mystery_test $(BUILD)/mystery_diff_test $(BUILD)/reward_test $(BUILD)/reward_diff_test $(BUILD)/switch_prompt_test $(BUILD)/turn_tail_test $(BUILD)/boss_segments_test $(BUILD)/catch_test $(BUILD)/catch_diff_test $(BUILD)/reward_apply_test $(BUILD)/reward_apply_diff_test $(BUILD)/flee_test $(BUILD)/lapse_test $(BUILD)/starter_unlock_test
 
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -218,6 +226,9 @@ $(BUILD)/itembridge_test: tests/itembridge_test.c $(BUILD)/libgc.a $(REWARD_LIB)
 $(BUILD)/flee_test: tests/flee_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
+$(BUILD)/lapse_test: tests/lapse_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
 $(BUILD)/starter_unlock_test: tests/starter_unlock_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
@@ -247,6 +258,7 @@ test: all
 	$(BUILD)/boss_segments_test
 	$(BUILD)/catch_test
 	$(BUILD)/flee_test
+	$(BUILD)/lapse_test
 	$(BUILD)/reward_apply_test
 	$(BUILD)/starter_unlock_test
 	@a=$$($(BUILD)/gcplay --auto 200 --jobs 8 | grep digest); b=$$($(BUILD)/gcplay --auto 200 --jobs 8 --save-test | grep digest); \

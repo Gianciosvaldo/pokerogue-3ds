@@ -472,7 +472,9 @@ bool gc_reward_add_pokeballs(gc_run *run, const char *key)
 
 /* ModifierRewardPhase.doReward: the reward is added as it is, then the text names it. A Poke Ball's name is
  * AddPokeballModifierType.name, "{{modifierCount}}× {{pokeballName}}": its two values ride on the message and the
- * name nests that key ($t() takes the message's own values), so the text is the locale's, not ours. */
+ * name nests that key ($t() takes the message's own values), so the text is the locale's, not ours. When the item's
+ * stack was full, addModifier queued battle:itemStackFull ("The stack for X is full. You will receive Y instead.")
+ * and gave Y; the queued message comes after the phase's own text. */
 void gc_reward_gain(gc_run *run, const char *key)
 {
     static const char *const ball_name[] = {"pokeball:pokeBall", "pokeball:greatBall", "pokeball:ultraBall",
@@ -480,14 +482,24 @@ void gc_reward_gain(gc_run *run, const char *key)
     int count = 0;
     const int item = gc_reward_item_index(key);
     const int ball = item < 0 ? -1 : pokeball_reward(item, &count);
-    gc_port_give_reward(run, key);
-    if (ball < 0) {
+    const int instead = gc_port_give_reward(run, key);
+    const int voucher = !strcmp(key, "VOUCHER") ? 0 : !strcmp(key, "VOUCHER_PLUS") ? 1 : !strcmp(key, "VOUCHER_PREMIUM") ? 2 : -1;
+    if (voucher >= 0) {
+        /* AddVoucherModifierType.name: "{{modifierCount}}× {{voucherTypeName}}", the type name from the voucher namespace */
+        static const char *const voucher_name[] = {"voucher:eggVoucher", "voucher:eggVoucherPlus", "voucher:eggVoucherPremium"};
+        gc_ev_msg(run, "battle:rewardGain", 3,
+                  (pr_msg_arg){"modifierName", PR_ARG_TEMPLATE, 0, "$t(modifierType:ModifierType.AddVoucherModifierType.name)"},
+                  pr_arg_int("modifierCount", 1), pr_arg_key("voucherTypeName", voucher_name[voucher]));
+    } else if (ball < 0) {
         gc_ev_msg(run, "battle:rewardGain", 1, gc_m_item("modifierName", key));
-        return;
+    } else {
+        gc_ev_msg(run, "battle:rewardGain", 3,
+                  (pr_msg_arg){"modifierName", PR_ARG_TEMPLATE, 0, "$t(modifierType:ModifierType.AddPokeballModifierType.name)"},
+                  pr_arg_int("modifierCount", count), pr_arg_key("pokeballName", ball_name[ball]));
     }
-    gc_ev_msg(run, "battle:rewardGain", 3,
-              (pr_msg_arg){"modifierName", PR_ARG_TEMPLATE, 0, "$t(modifierType:ModifierType.AddPokeballModifierType.name)"},
-              pr_arg_int("modifierCount", count), pr_arg_key("pokeballName", ball_name[ball]));
+    if (instead >= 0)   /* the default item's name is reward-core's interned "5× Poké Ball", as at the other stack-full sites */
+        gc_ev_msg(run, "battle:itemStackFull", 2, gc_m_item("fullItemName", key),
+                  (pr_msg_arg){"itemName", PR_ARG_STR, 0, pr_reward_strings[pr_items[instead].name]});
 }
 
 static bool core_applies(int item)

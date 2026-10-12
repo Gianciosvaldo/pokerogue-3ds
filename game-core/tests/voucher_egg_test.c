@@ -175,11 +175,95 @@ static void test_voucher_reward_phase(void) {
     printf("test_voucher_reward_phase... ok\n");
 }
 
+/* The trainer's own rewards (config.modifierRewardFuncs, upstream 8555c08 trainer-config.ts): RIVAL gives a Super Exp.
+ * Charm then an Exp. Share, RIVAL_2 an Exp. Share, RIVAL_4 a Tera Orb. Each is a ModifierRewardPhase run through
+ * addModifier: PersistentModifier.add stacks it and incrementStack refuses past getMaxStackCount() (Exp. Share 5;
+ * addModifier then queues itemStackFull and gives the COMMON tier's default item, 5 Poke Balls); the Tera Orb has no match(), so it is added again each time with no cap. */
+static int defeat_trainer_rewards(gc_run *run, int trainer_type, const char *keys[4]) {
+    gc_internal *in = gc_int(run);
+    int n = 0;
+    gc_rq_reset(&in->rq);
+    run->trainer_type = trainer_type;
+    gc_phase_start(run, &(gc_rphase){.type = RP_TRAINER_VICTORY});
+    gc_rphase q;
+    while (gc_rq_next(&in->rq, &q)) {
+        if (q.type == RP_MODIFIER_REWARD && q.key && strncmp(q.key, "VOUCHER", 7)) {
+            assert(n < 4);
+            keys[n++] = q.key;
+            gc_phase_start(run, &q);
+        }
+    }
+    return n;
+}
+
+static void test_trainer_reward_items(void) {
+    static gc_system sys;
+    static gc_run run;
+    const char *keys[4];
+    new_run(&run, &sys);
+
+    assert(defeat_trainer_rewards(&run, TRAINER_TYPE_RIVAL, keys) == 2);
+    assert(!strcmp(keys[0], "SUPER_EXP_CHARM") && !strcmp(keys[1], "EXP_SHARE"));
+    assert(gc_item_stack(&run, "SUPER_EXP_CHARM") == 1 && gc_item_stack(&run, "EXP_SHARE") == 1);
+    assert(defeat_trainer_rewards(&run, TRAINER_TYPE_RIVAL_2, keys) == 1 && !strcmp(keys[0], "EXP_SHARE"));
+    assert(gc_item_stack(&run, "EXP_SHARE") == 2);
+    for (int i = 0; i < 6; i++) defeat_trainer_rewards(&run, TRAINER_TYPE_RIVAL_2, keys);
+    assert(gc_item_stack(&run, "EXP_SHARE") == 5);          /* getMaxStackCount(): the sixth is refused */
+    assert(run.pokeballs[POKEBALL_TYPE_POKEBALL] == 15);    /* ...and itemStackFull gives 5 Poke Balls each time (3 times) */
+    assert(gc_item_stack(&run, "SUPER_EXP_CHARM") == 1);
+
+    assert(defeat_trainer_rewards(&run, TRAINER_TYPE_RIVAL_4, keys) == 1 && !strcmp(keys[0], "TERA_ORB"));
+    assert(gc_item_stack(&run, "TERA_ORB") == 1);
+    defeat_trainer_rewards(&run, TRAINER_TYPE_RIVAL_4, keys);
+    assert(gc_item_stack(&run, "TERA_ORB") == 2);           /* a modifier of its own each time */
+    assert(run.stubs[GC_STUB_TRAINER_REWARDS] == 0);
+
+    /* a trainer without reward funcs gives none, and the voucher rule is untouched */
+    assert(defeat_trainer_rewards(&run, TRAINER_TYPE_BROCK, keys) == 0);
+    printf("test_trainer_reward_items... ok\n");
+}
+
+/* A voucher taken from the reward screen (SelectModifierPhase.applyModifier -> addModifier): AddVoucherModifier.apply adds
+ * one to the count of its type. No text, no run item, not a stand-in. */
+static void test_voucher_reward_screen(void) {
+    static gc_system sys;
+    static gc_run run;
+    new_run(&run, &sys);
+    const char *keys[] = {"VOUCHER", "VOUCHER_PLUS", "VOUCHER_PREMIUM", "VOUCHER_PLUS"};
+    const int types[] = {GC_VOUCHER_REGULAR, GC_VOUCHER_PLUS, GC_VOUCHER_PREMIUM, GC_VOUCHER_PLUS};
+    uint32_t want[4] = {0, 0, 0, 0};
+    for (int i = 0; i < 4; i++) {
+        gc_offer o;
+        memset(&o, 0, sizeof o);
+        o.key = keys[i];
+        o.arg = -1;
+        o.target = gc_reward_target(keys[i]);
+        const char *why = "";
+        assert(gc_port_apply_reward(&run, &o, -1, -1, &why));
+        want[types[i]]++;
+        assert(!memcmp(sys.voucher_counts, want, sizeof want));
+    }
+    assert(run.n_items == 0);
+    assert(run.stubs[GC_STUB_REWARD_APPLY] == 0);
+    gc_event ev;
+    while (gc_run_next_event(&run, &ev)) assert(ev.kind != GC_EV_MESSAGE);
+
+    /* no system data: taken, nothing counted, nothing dereferenced */
+    run.sys = NULL;
+    gc_offer o = {.key = "VOUCHER", .arg = -1, .target = gc_reward_target("VOUCHER")};
+    const char *why = "";
+    assert(gc_port_apply_reward(&run, &o, -1, -1, &why));
+    assert(run.n_items == 0);
+    printf("test_voucher_reward_screen... ok\n");
+}
+
 int main(void) {
     test_egg_hatch_steps();
     test_voucher_unlocks();
     test_run_boss_defeat_voucher();
     test_voucher_reward_phase();
+    test_trainer_reward_items();
+    test_voucher_reward_screen();
 
     printf("All voucher and egg tests passed successfully!\n");
     return 0;

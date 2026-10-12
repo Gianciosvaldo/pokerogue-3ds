@@ -2,15 +2,15 @@
 # (docs/CUSTOM-CONTENT-CONTRACTS.md). The make targets run model_test, reducer_test and layout_test.
 # Additive: ci.yml is untouched. custom-core has no dependency on the game or the other cores; its layout test only
 # reads battle-core/gen/out/pr_enums.h, so a regenerated enum that outgrows an ID ceiling fails here.
-# Runs only on pull requests that touch custom-core or the generated enums its layout test reads. The mutation check alone takes
-# about 20 minutes, which other PRs (game/, the cores) should not wait for. After editing this file, run it by hand (workflow_dispatch).
+# Runs only on pull requests that touch custom-core or the one generated file its layout test reads (battle-core/gen/out/pr_enums.h).
+# The mutation check alone takes about 20 minutes, which other PRs (game/, the cores, other battle-core/gen changes) should not wait for. After editing this file, run it by hand (workflow_dispatch).
 name: Custom content
 
 on:
   pull_request:
     paths:
       - "custom-core/**"
-      - "battle-core/gen/**"
+      - "battle-core/gen/out/pr_enums.h"
   workflow_dispatch:
 
 concurrency:

@@ -205,3 +205,11 @@ $(BUILD)/wonder-skin-test: tests/wonder-skin-test.c $(BUILD)/wonder-skin-replay.
 all: $(BUILD)/wonder-skin-helper-test
 $(BUILD)/wonder-skin-helper-test: tests/wonder-skin-helper-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/wonder-skin-helper-test.c $(BUILD)/libprcore.a -lm -o $@
+
+# Source-backed priority bracket turns, using an additive owning projection.
+all: $(BUILD)/priority-brackets-test
+$(BUILD)/priority-brackets-replay.inc: tests/speed-boost-replay.inc tools/build-priority-brackets-replay.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-priority-brackets-replay.py $< $@
+$(BUILD)/priority-brackets-test: tests/priority-brackets-test.c $(BUILD)/priority-brackets-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) tests/priority-brackets-test.c $(BUILD)/libprcore.a -lm -o $@
