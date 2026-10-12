@@ -23,8 +23,10 @@ void gc_port_enemy_moveset(gc_run *run, gc_mon *m);
  *                         Lock Capsule's lock is on)
  *   GC_REWARD_COPY        the screen again after a TM or Memory Mushroom (gc_reward_queue_copy): the same
  *                         options, nothing rolled
+ *   GC_REWARD_CUSTOM      a mystery encounter's shop: SelectModifierPhase(0, undefined, the encounter's
+ *                         customModifierSettings), which the encounter left in the run (gc_mystery.c)
  * Fills out, and *reroll_cost (SelectModifierPhase.getRerollCost; < 0: no reroll). Returns how many options. */
-enum { GC_REWARD_FIRST, GC_REWARD_RESTRICTED, GC_REWARD_REROLL, GC_REWARD_COPY };
+enum { GC_REWARD_FIRST, GC_REWARD_RESTRICTED, GC_REWARD_REROLL, GC_REWARD_COPY, GC_REWARD_CUSTOM };
 int gc_port_reward_options(gc_run *run, int kind, gc_offer out[GC_MAX_OPTIONS], double *reroll_cost);
 /* Take reward `o` (what it does: reward-core's application for healing, revives, PP restores and PP Ups,
  * src/gc_reward.c; for the other items a stand-in that adds them to run->items or applies the few it knows),

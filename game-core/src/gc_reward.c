@@ -371,10 +371,14 @@ int gc_port_reward_options(gc_run *run, int kind, gc_offer out[GC_MAX_OPTIONS], 
         /* start(): a first screen. The no-victory one is (0, undefined, {fillRemaining: false, rerollMultiplier: -1}) */
         in->reroll_count = 0;
         rs->is_copy = false;
-        rs->has_custom = kind == GC_REWARD_RESTRICTED;
+        rs->has_custom = kind == GC_REWARD_RESTRICTED || kind == GC_REWARD_CUSTOM;
         memset(&rs->custom, 0, sizeof rs->custom);
         rs->custom.reroll_multiplier = kind == GC_REWARD_RESTRICTED ? -1 : NAN;
         rs->custom.allow_luck_upgrades = true;
+        if (kind == GC_REWARD_CUSTOM) {
+            rs->custom = rs->me_custom;
+            memset(&rs->me_custom, 0, sizeof rs->me_custom);
+        }
         break;
     }
     sel.custom = rs->has_custom ? &rs->custom : NULL;

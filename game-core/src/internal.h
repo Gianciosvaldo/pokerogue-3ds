@@ -65,6 +65,7 @@ typedef struct {
     double copy_reroll_multiplier;
     pr_reward_option copy_options[PR_REWARD_MAX_OPTIONS];
     int n_copy_options;
+    pr_reward_custom me_custom; /* the customModifierSettings of a mystery encounter's setEncounterRewards, until its screen opens */
 } gc_reward_state;
 
 /* run-level state that isn't part of the public struct */

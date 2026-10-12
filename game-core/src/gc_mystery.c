@@ -355,6 +355,59 @@ static void start_mystery_wild_battle(gc_run *run, int species, int level, bool 
     gc_rq_push(run, gc_rp(RP_TURN_INIT, 0, 0, 0));
 }
 
+/* MysteryEncounterOptionSelectedPhase: the option's code runs in executeWithSeedOffset(.., getSeedOffset() * 500),
+ * and the seed offset is wave * 1000 + 512 on an encounter's first option select. The run's RNG is untouched */
+static pr_rng me_option_rng(const gc_run *run)
+{
+    return pr_run_seed_offset_rng(&run->run, (run->wave * 1000 + 512) * 500, NULL);
+}
+
+/* setEncounterRewards({guaranteedModifierTypeFuncs: funcs, fillRemaining: false}): the shop the encounter opens
+ * once it has left without a battle (MysteryEncounterRewardsPhase -> SelectModifierPhase(0, undefined, settings)) */
+static void me_set_shop_funcs(gc_run *run, const char *const *keys, const int *which, int n)
+{
+    pr_reward_custom *c = &gc_int(run)->reward.me_custom;
+    memset(c, 0, sizeof *c);
+    for (int i = 0; i < n && i < PR_REWARD_MAX_OPTIONS; i++) c->funcs[c->n_funcs++] = (uint16_t)gc_reward_item_index(keys[which[i]]);
+    c->fill_remaining = false;
+    c->reroll_multiplier = NAN;
+    c->allow_luck_upgrades = true;
+}
+
+/* leaveEncounterWithoutBattle after a setEncounterRewards: the shop, then on to the next wave */
+static void end_mystery_encounter_shop(gc_run *run)
+{
+    gc_rq_push(run, gc_rp(RP_SELECT_MODIFIER, 2, 0, 0));
+    end_mystery_encounter_leave(run);
+}
+
+/* Department Store Sale (src/data/mystery-encounters/encounters/department-store-sale-encounter.ts): every option
+ * rolls its shop's items with randSeedInt: 2/2/1 TM tiers, 2/1 Base Stat Booster vs PP Up, 4/1 X item vs Dire Hit,
+ * 10/30/20/5 balls */
+static void department_store_sale(gc_run *run, int option)
+{
+    static const char *const keys[] = {"TM_COMMON", "TM_GREAT", "TM_ULTRA", "PP_UP", "BASE_STAT_BOOSTER", "DIRE_HIT",
+                                       "TEMP_STAT_STAGE_BOOSTER", "POKEBALL", "GREAT_BALL", "ULTRA_BALL", "ROGUE_BALL"};
+    pr_rng r = me_option_rng(run);
+    int which[5], n = 0;
+    switch (option) {
+    case 0:
+        for (; n < 5; n++) { const int roll = pr_rng_seed_int(&r, 5, 0); which[n] = roll < 2 ? 0 : roll < 4 ? 1 : 2; }
+        break;
+    case 1:
+        for (; n < 3; n++) which[n] = pr_rng_seed_int(&r, 3, 0) == 0 ? 3 : 4;
+        break;
+    case 2:
+        for (; n < 5; n++) which[n] = pr_rng_seed_int(&r, 5, 0) == 0 ? 5 : 6;
+        break;
+    default:
+        for (; n < 4; n++) { const int roll = pr_rng_seed_int(&r, 65, 0); which[n] = roll < 10 ? 7 : roll < 40 ? 8 : roll < 60 ? 9 : 10; }
+        break;
+    }
+    me_set_shop_funcs(run, keys, which, n);
+    end_mystery_encounter_shop(run);
+}
+
 bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why, bool *ok)
 {
     if (option < 0 || option >= run->screen.n_options || !run->screen.option_ok[option]) {
@@ -464,15 +517,7 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_DEPARTMENT_STORE_SALE:
-        if (option >= 0 && option <= 2) {
-            double mult = option == 0 ? 1.0 : option == 1 ? 2.0 : 3.0;
-            double cost = pr_run_get_wave_money_amount(run->wave, mult);
-            if (run->money >= cost) run->money -= cost;
-            gc_port_give_reward(run, option == 0 ? "POTION" : option == 1 ? "SUPER_POTION" : "MAX_POTION");
-            end_mystery_encounter_leave(run);
-            return true;
-        }
-        end_mystery_encounter_leave(run);
+        department_store_sale(run, option);
         return true;
 
     case GC_ME_SHADY_VITAMIN_DEALER:

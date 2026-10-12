@@ -93,6 +93,9 @@ $(BUILD)/payday_diff_test: tests/payday_diff_test.c $(BUILD)/libgc.a $(REWARD_LI
 all: $(BUILD)/biome_fields_diff_test
 $(BUILD)/biome_fields_diff_test: tests/biome_fields_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+all: $(BUILD)/mystery_actions_diff_test
+$(BUILD)/mystery_actions_diff_test: tests/mystery_actions_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 all: $(BUILD)/item_evolution_test
 $(BUILD)/item_evolution_test: tests/item_evolution_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
