@@ -227,3 +227,11 @@ $(BUILD)/protean-helper-test: tests/protean-helper-test.c $(BUILD)/libprcore.a
 all: $(BUILD)/field-priority-test
 $(BUILD)/field-priority-test: tests/field-priority-test.c tests/speed-boost-replay.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/field-priority-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/multi-hit-abilities-test
+$(BUILD)/multi-hit-abilities-test: tests/multi-hit-abilities-test.c tests/speed-boost-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/multi-hit-abilities-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/multi-hit-abilities-helper-test
+$(BUILD)/multi-hit-abilities-helper-test: tests/multi-hit-abilities-helper-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

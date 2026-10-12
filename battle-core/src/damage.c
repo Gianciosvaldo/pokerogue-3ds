@@ -432,7 +432,7 @@ pr_damage_result pr_get_attack_damage_ex(pr_battle *bt, pr_pokemon *def, pr_poke
         if ((multiple ? nt : 1) > 1) target_mult = 0.75;
     }
 
-    double multi_strike = 1; /* Multi Lens (Parental Bond's own hits aren't ported) */
+    double multi_strike = 1; /* Multi Lens; Parental Bond's final-strike reduction uses its ability. */
     pr_apply_multi_hit_damage_modifiers(bt, src, move, &multi_strike);
     double glaive = pr_has_battler_tag(bt, def, BATTLER_TAG_TYPE_RECEIVE_DOUBLE_DAMAGE) ? 2 : 1;
     double crit_mult = is_critical ? 1.5 : 1;
