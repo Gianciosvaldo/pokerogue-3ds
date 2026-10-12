@@ -771,3 +771,20 @@ sets), and the five Poke Ball counts before and after. `tools/trainervictoryplan
 <trace>` replays one trace through fourteen copies of game-core with one line changed each
 (the old inverted rule among them); all fourteen must fail. The unit test is
 `tests/voucher_egg_test.c`, part of `make test`.
+
+## Mystery encounter actions: upstream harness (card 82) and Department Store Sale
+
+`tools/mysterydiff.sh <upstream 8555c08> [N=2000] [seed]` runs the real encounters' own option code through
+`tests/mystery-actions.producer.test.ts` (the game manager starts the encounter; each case changes the run seed, wave
+seed and wave and runs the chosen option's `onOptionPhase` exactly as `MysteryEncounterOptionSelectedPhase` does, in
+`executeWithSeedOffset(.., getSeedOffset() * 500)`) and replays the trace in `tests/mystery_actions_diff_test.c`
+through `gc_mystery_execute` and the shop it opens. Compared per case: the run RNG after the option (must not move),
+money, items owned, that the encounter left without a battle, the shop's `customModifierSettings` (the items rolled,
+`fillRemaining`, `rerollMultiplier`, `allowLuckUpgrades`, guaranteed tiers and options), the options that shop shows
+(key, argument, tier, upgrade count) for four parties (Bulbasaur; Lapras, Gengar, Abra; Mew; Rattata, Magikarp,
+Pikachu, Eevee), the RNG after the shop, and that the next wave is queued. The old `gen/dump-mystery-actions.test.ts`
+and `tests/mystery_diff_test.c` are untouched and still only smoke coverage.
+
+Only Department Store Sale is ported and compared. Every other encounter's actions in `gc_mystery.c` are still the
+Task 46 stand-ins; the encounter *selection* (`gc_mystery_select`) and the intro/requirement checks are not part of
+this comparison.

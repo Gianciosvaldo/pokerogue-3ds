@@ -405,10 +405,10 @@ static void reward_screen(gc_run *run, int kind)
     s->can_skip = true;
 }
 
-/* SelectModifierPhase.start(): p->a = the no-victory screen, p->b = a copy of the screen (copy()) */
+/* SelectModifierPhase.start(): p->a = 1 the no-victory screen, 2 a mystery encounter's custom shop; p->b = a copy of the screen (copy()) */
 static bool select_modifier_start(gc_run *run, gc_rphase *p)
 {
-    reward_screen(run, p->b ? GC_REWARD_COPY : p->a ? GC_REWARD_RESTRICTED : GC_REWARD_FIRST);
+    reward_screen(run, p->b ? GC_REWARD_COPY : p->a == 2 ? GC_REWARD_CUSTOM : p->a ? GC_REWARD_RESTRICTED : GC_REWARD_FIRST);
     return false;
 }
 
