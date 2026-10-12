@@ -1335,14 +1335,14 @@ static void test_sizes(void)
 static void test_text(void)
 {
     CHECK(strcmp(cc_status_str(CC_OK), "ok") == 0);
-    for (int s = CC_OK; s <= CC_E_VERSION; s++) CHECK(cc_status_str((cc_status)s)[0] != 0);
+    for (int s = CC_OK; s <= CC_E_FORMAT; s++) CHECK(cc_status_str((cc_status)s)[0] != 0);
     CHECK(strcmp(cc_status_str((cc_status)99), "unknown status") == 0);
     for (int r = CC_SUPPORT_OK; r < CC_REFUSE_COUNT_; r++) CHECK(cc_refusal_str(r)[0] != 0);
     CHECK(strcmp(cc_refusal_str(CC_SUPPORT_OK), "supported") == 0);
     CHECK(strcmp(cc_refusal_str(99), "unknown refusal") == 0);
     /* every code has its own text, so a message cannot be attached to the wrong code */
-    for (int x = CC_OK; x <= CC_E_VERSION; x++)
-        for (int y = x + 1; y <= CC_E_VERSION; y++)
+    for (int x = CC_OK; x <= CC_E_FORMAT; x++)
+        for (int y = x + 1; y <= CC_E_FORMAT; y++)
             CHECK(strcmp(cc_status_str((cc_status)x), cc_status_str((cc_status)y)) != 0);
     for (int x = CC_SUPPORT_OK; x < CC_REFUSE_COUNT_; x++)
         for (int y = x + 1; y < CC_REFUSE_COUNT_; y++)
