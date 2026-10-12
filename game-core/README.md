@@ -788,3 +788,25 @@ and `tests/mystery_diff_test.c` are untouched and still only smoke coverage.
 Only Department Store Sale is ported and compared. Every other encounter's actions in `gc_mystery.c` are still the
 Task 46 stand-ins; the encounter *selection* (`gc_mystery_select`) and the intro/requirement checks are not part of
 this comparison.
+
+## Fleeing: upstream differential (Task 77 / #125)
+
+`tools/fleediff.sh <upstream 8555c08> [N=600] [seed]` runs the real `AttemptRunPhase.start()` on a live battle in
+`tests/flee.producer.test.ts` and replays it in `tests/flee_diff_test.c` through a real game-core run
+(`gc_run_choose` with Run). Each case sets the game mode, wave, the lead's and the enemy's raw speed, stat stages,
+paralysis, abilities (Run Away on either side), the boss shield, the escape attempts so far and the battle seed. A
+third of the cases leave the roll to the seed; the others search the battle seed for a first `randSeedInt(100)` of
+exactly chance-1 (it must succeed) or chance (it must fail), so a chance off by one in either direction flips the
+outcome. Compared: success, the flee message, the attempts counter after a failure and the command screen that
+follows, and after a success the next wave and that the biome changed exactly when upstream pushed a
+`SelectBiomePhase` (`hasRandomBiomes || isNewBiome()`).
+
+Not covered: doubles (game-core plays them as singles; the sum over two active Pokemon on a side is battle-core's
+loop, read but not run), the RNG state after the roll (the turn's end resets it in C and in upstream, and the producer
+stops before it), speed ties (skipped: the turn's order is drawn first), the Challenge-mode rules, held items and
+weather that change an effective speed (upstream's `getStat(SPD)` is the raw stat, which is what is compared).
+
+battle-core's own `attempt_run_phase` pushes `SelectBiomePhase` for Endless and Spliced Endless on every flee
+(`phases.c`, `|| game_mode == ENDLESS || SPLICED_ENDLESS`) where upstream's `hasRandomBiomes` is never set by any
+mode; game-core ignores that push and decides with `gc_is_new_biome`, so the run is unaffected. Seen by reading, not by
+a test, and left alone (battle-core is not touched here).
