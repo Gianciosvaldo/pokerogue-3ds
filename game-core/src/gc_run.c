@@ -16,7 +16,6 @@ const char *const gc_stub_name[GC_STUB_COUNT_] = {
     [GC_STUB_DOUBLE_AS_SINGLE] = "double battle played as single",
     [GC_STUB_MYSTERY_ENCOUNTER] = "mystery encounter played as wild",
     [GC_STUB_EVOLUTION] = "evolution condition not checked",
-    [GC_STUB_WEATHER] = "biome weather roll",
     [GC_STUB_UNPORTED_ENEMY] = "enemy run-core can't generate (stand-in)",
     [GC_STUB_TRAINER_REWARDS] = "trainer's own rewards",
     [GC_STUB_POST_BATTLE] = "post-battle abilities, Pay Day, lapsing items",

@@ -213,6 +213,10 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
 bool gc_gen_wild(gc_run *run, int level);
 void gc_trainer_names(gc_run *run);               /* run->trainer_names for the current trainer */
 bool gc_is_new_biome(const gc_run *run, int wave);   /* isNewBiome for the battle of `wave` */
+int gc_roll_biome_weather(gc_run *run);            /* Arena.setBiomeWeather's pick (consumes the run RNG) */
+int gc_roll_biome_terrain(gc_run *run);            /* Arena.setBiomeTerrain's pick */
+void gc_arena_reset_effects(gc_run *run);          /* Arena.resetArenaEffects: weather and terrain */
+void gc_arena_new_battle(gc_run *run, bool reset, bool roll);   /* ...then the biome's rolls */
 bool gc_battle_setup_field(gc_run *run, bool reset_arena);   /* bt from the parties, before the first turn */
 void gc_battle_restore_field(gc_run *run); /* pointers only; summon effects already saved */
 void gc_ai_reset(gc_run *run);                    /* ai-core's state for a new battle */

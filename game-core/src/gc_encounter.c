@@ -286,6 +286,17 @@ bool gc_is_new_biome(const gc_run *run, int wave)
     return wave % 10 == 0 || (short_biomes && wave % 5 == 0) || ((short_biomes || daily) && wave % 50 == 49);
 }
 
+/* doPostBattleCleanup's resetArenaState for the battle of `wave` (prev_wave 0 = the run's first), and whether
+ * EncounterPhase rolls the biome's weather and terrain for it (not NextEncounterPhase, a wave in the same biome) */
+static void arena_flags(const gc_run *run, int prev_wave, bool *reset, bool *new_biome, bool *roll)
+{
+    const gc_internal *in = gc_int((gc_run *)run);
+    *new_biome = prev_wave && gc_is_new_biome(run, prev_wave);
+    *reset = !prev_wave || *new_biome || in->last_battle_type == BATTLE_TYPE_TRAINER
+             || in->last_battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER || in->last_final_boss;
+    *roll = !prev_wave || *new_biome || run->run.mode == GAME_MODES_DAILY;
+}
+
 /* newBattle() + EncounterPhase.start() for the next wave */
 void gc_new_battle(gc_run *run)
 {
@@ -360,6 +371,11 @@ void gc_new_battle(gc_run *run)
         ev = gc_ev_new(run, GC_EV_MYSTERY);
         if (ev) { ev->a = type; ev->b = tier; ev->c = wave; }
 
+        /* resetArenaEffects, then the biome's weather and terrain, before the save */
+        bool reset, new_biome, roll;
+        arena_flags(run, prev_wave, &reset, &new_biome, &roll);
+        gc_arena_new_battle(run, reset, roll);
+
         /* Upstream saves at the encounter start before showing the mystery node. */
         gc_ev_new(run, GC_EV_SAVE_POINT);
         in->at_save_point = true;
@@ -407,8 +423,12 @@ void gc_new_battle(gc_run *run)
     enemy_items(run);
     gc_ai_enemy_party(run);
     gc_trainer_names(run);
-    /* arena.setBiomeWeather / setBiomeTerrain on a new biome: not ported (they roll on the RNG) */
     run->run.unported = before;
+    /* newBattle's resetArenaEffects, then arena.setBiomeWeather / setBiomeTerrain: before the save point and
+     * resetSeed, so what they roll is only the arena, not the rolls after them */
+    bool reset, new_biome, roll;
+    arena_flags(run, prev_wave, &reset, &new_biome, &roll);
+    gc_arena_new_battle(run, reset, roll);
 
     gc_event *ev = gc_ev_new(run, GC_EV_WAVE);
     if (ev) { ev->a = wave; ev->b = run->biome; ev->c = run->battle_type; }
@@ -432,9 +452,6 @@ void gc_new_battle(gc_run *run)
         gc_ev_msg(run, "battle:singleWildAppeared", 1, gc_m_mon_name(run, "pokemonName", 1, 0));
     }
     /* doPostBattleCleanup's resetArenaState */
-    const bool new_biome = prev_wave && gc_is_new_biome(run, prev_wave);
-    const bool reset = !prev_wave || new_biome || in->last_battle_type == BATTLE_TYPE_TRAINER
-                       || in->last_battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER || in->last_final_boss;
     const bool sent_out = gc_battle_setup_field(run, reset);
     if (run->battle_type == BATTLE_TYPE_TRAINER)
         gc_ev_msg(run, "battle:trainerSendOut", 2, gc_m_trainer(run, "trainerName", GC_TNAME_TRAINER), gc_m_mon_name(run, "pokemonName", 1, 0));

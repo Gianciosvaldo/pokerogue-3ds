@@ -39,6 +39,99 @@ static void summon(gc_run *run, int side, int idx)
     if (ev) { ev->a = side; ev->b = idx; ev->c = 0; }
 }
 
+/* ---- the arena's weather and terrain at a new battle ---- */
+
+/* Arena.setBiomeWeather's pick: the biome's weatherPool as weights by WeatherType, no sun at dusk or night, fog in
+ * the forest then, NONE alone when every weight is 0; weightedPick = one randSeedInt(total) */
+int gc_roll_biome_weather(gc_run *run)
+{
+    int w[10] = {0};
+    for (int i = 0; i < gc_biome_field_count; i++)
+        if (gc_biome_fields[i].biome == run->biome) for (int k = 0; k < 10; k++) w[k] = gc_biome_fields[i].weather[k];
+    const int tod = pr_run_get_time_of_day(run->biome, run->wave, run->wave_cycle_offset);
+    if (tod == TIME_OF_DAY_DUSK || tod == TIME_OF_DAY_NIGHT) {
+        w[WEATHER_TYPE_SUNNY] = 0;
+        if (run->biome == BIOME_ID_FOREST) w[WEATHER_TYPE_FOG] = 1;
+    }
+    int total = 0;
+    for (int k = 0; k < 10; k++) total += w[k];
+    if (!total) { w[WEATHER_TYPE_NONE] = 1; total = 1; }
+    const int roll = pr_rng_seed_int(&run->run.rng, total, 0);
+    int so_far = 0;
+    for (int k = 0; k < 10; k++) {
+        so_far += w[k];
+        if (roll < so_far) return k;
+    }
+    return 0;
+}
+
+/* Arena.setBiomeTerrain's pick: the terrainPool by TerrainType, the same weightedPick */
+int gc_roll_biome_terrain(gc_run *run)
+{
+    int w[5] = {0};
+    for (int i = 0; i < gc_biome_field_count; i++)
+        if (gc_biome_fields[i].biome == run->biome) for (int k = 0; k < 5; k++) w[k] = gc_biome_fields[i].terrain[k];
+    int total = 0;
+    for (int k = 0; k < 5; k++) total += w[k];
+    if (!total) return 0;   /* upstream's failsafe picks the first entry, NONE (every biome has a NONE weight) */
+    const int roll = pr_rng_seed_int(&run->run.rng, total, 0);
+    int so_far = 0;
+    for (int k = 0; k < 5; k++) {
+        so_far += w[k];
+        if (roll < so_far) return k;
+    }
+    return 0;
+}
+
+/* Arena.trySetWeather(weather) with no user (a permanent weather) on the arena the next battle keeps. Only what is
+ * on the arena: the field is empty or about to be recalled, so there are no PostWeatherChange abilities to run, and
+ * the start / clear / "continues" text goes straight out as game-core's own message */
+static void arena_set_weather(gc_run *run, int weather)
+{
+    pr_battle *bt = &run->bt;
+    if (bt->weather == weather) return;
+    if (pr_weather_immutable(bt->weather) && !pr_weather_immutable(weather) && weather != WEATHER_TYPE_NONE) {
+        gc_ev_msg(run, pr_weather_key(bt->weather, PR_WEATHER_CONTINUE), 0);
+        return;
+    }
+    const int old = bt->weather;
+    bt->weather = (uint8_t)weather;
+    bt->weather_turns_left = bt->weather_max_duration = 0;
+    gc_ev_msg(run, pr_weather_key(weather == WEATHER_TYPE_NONE ? old : weather,
+                                  weather == WEATHER_TYPE_NONE ? PR_WEATHER_CLEAR : PR_WEATHER_START), 0);
+}
+
+static void arena_set_terrain(gc_run *run, int terrain)
+{
+    pr_battle *bt = &run->bt;
+    if (bt->terrain == terrain) return;
+    const int old = bt->terrain;
+    bt->terrain = (uint8_t)terrain;
+    bt->terrain_turns_left = bt->terrain_max_duration = 0;
+    gc_ev_msg(run, terrain == TERRAIN_NONE ? pr_terrain_key(old, PR_TERRAIN_CLEAR) : pr_terrain_key(terrain, PR_TERRAIN_START), 0);
+}
+
+/* Arena.resetArenaEffects' weather and terrain: a timed one goes, a permanent one (the biome's, a primal weather)
+ * stays across trainer battles, mystery encounters and the next biome */
+void gc_arena_reset_effects(gc_run *run)
+{
+    pr_battle *bt = &run->bt;
+    if (bt->weather != WEATHER_TYPE_NONE && bt->weather_turns_left != 0) arena_set_weather(run, WEATHER_TYPE_NONE);
+    if (bt->terrain != TERRAIN_NONE && bt->terrain_turns_left != 0) arena_set_terrain(run, TERRAIN_NONE);
+}
+
+/* newBattle's resetArenaEffects when the arena is reset, then EncounterPhase's trySetWeatherIfNewBiome and
+ * trySetTerrainIfNewBiome (the first wave, a new biome, every wave of a mode with random biomes), weather first.
+ * They roll on the run's RNG before resetSeed(), so the rest of the wave's rolls are not moved by them */
+void gc_arena_new_battle(gc_run *run, bool reset, bool roll)
+{
+    if (reset) gc_arena_reset_effects(run);
+    if (roll) {
+        arena_set_weather(run, gc_roll_biome_weather(run));
+        arena_set_terrain(run, gc_roll_biome_terrain(run));
+    }
+}
+
 /* The scene for a new battle: battle-core's pr_battle built from the run. SummonPhase swaps a fainted
  * lead with the first Pokemon that can fight, as upstream reorders the party.
  *
@@ -64,16 +157,14 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
     const int player_faints = bt->player_faints;
 
     memset(bt, 0, sizeof *bt);
+    /* the weather and terrain: gc_arena_new_battle has already cleared or rolled them in the previous scene */
+    bt->weather = weather; bt->terrain = terrain;
+    bt->weather_turns_left = wt; bt->weather_max_duration = wm;
+    bt->terrain_turns_left = tt; bt->terrain_max_duration = tm;
     if (!reset_arena) {
-        bt->weather = weather; bt->terrain = terrain;
-        bt->weather_turns_left = wt; bt->weather_max_duration = wm;
-        bt->terrain_turns_left = tt; bt->terrain_max_duration = tm;
         memcpy(bt->arena_tags, tags, sizeof tags); bt->n_arena_tags = n_tags;
         memcpy(bt->pos_tags, pos, sizeof pos); bt->n_pos_tags = n_pos;
         bt->player_faints = player_faints;
-    } else {
-        /* resetArenaEffects: the biome's weather is rolled again (not ported: no weather) */
-        gc_stub(run, GC_STUB_WEATHER);
     }
     gc_wallet_to_battle(run);
     bt->rng = run->run.rng;
