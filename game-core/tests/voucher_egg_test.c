@@ -1,9 +1,10 @@
 /*
- * Unit tests for egg hatch step counters and boss defeat voucher unlocks.
+ * Unit tests for egg hatch step counters, boss defeat voucher unlocks and voucher rewards.
  */
 #include "gc/system.h"
 #include "gc/run.h"
 #include "../src/internal.h"
+#include "pr_enums.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -60,64 +61,125 @@ static void test_voucher_unlocks(void) {
     printf("test_voucher_unlocks... ok\n");
 }
 
+/* One defeat of `trainer_type` through the run's TrainerVictoryPhase. Returns the voucher key of the ModifierRewardPhase
+ * it queued (NULL = none) after running that phase, as upstream does: AddVoucherModifier.apply adds the count. */
+static const char *defeat_trainer(gc_run *run, int trainer_type) {
+    gc_internal *in = gc_int(run);
+    const char *key = NULL;
+    gc_rq_reset(&in->rq);
+    run->trainer_type = trainer_type;
+    gc_phase_start(run, &(gc_rphase){.type = RP_TRAINER_VICTORY});
+    gc_rphase q;
+    while (gc_rq_next(&in->rq, &q)) {
+        if (q.type == RP_MODIFIER_REWARD && q.key && !strncmp(q.key, "VOUCHER", 7)) {
+            assert(!key);
+            key = q.key;
+            gc_phase_start(run, &q);
+        }
+    }
+    return key;
+}
+
+static void new_run(gc_run *run, gc_system *sys) {
+    gc_system_init_defaults(sys);
+    memset(run, 0, sizeof(*run));
+    run->sys = sys;
+    run->run.mode = 0; /* GAME_MODES_CLASSIC */
+}
+
+/* TrainerVictoryPhase (upstream 8555c08, src/phases/trainer-victory-phase.ts): the first win over a boss with a voucher
+ * is validateVoucher unlocking it, +1 of the voucher's own type and no reward; only the later wins queue the
+ * ModifierRewardPhase, [VOUCHER, VOUCHER, VOUCHER_PLUS, VOUCHER_PREMIUM][voucherType], which adds a voucher count. */
 static void test_run_boss_defeat_voucher(void) {
-    gc_system sys;
-    gc_system_init_defaults(&sys);
+    static gc_system sys;
+    static gc_run run;
 
-    gc_run run;
-    memset(&run, 0, sizeof(run));
-    run.sys = &sys;
-    run.run.mode = 0; /* GAME_MODES_CLASSIC */
-    run.trainer_type = 100; /* Brock (Gym Leader) */
-
-    gc_internal *in = gc_int(&run);
-    gc_rq_reset(&in->rq);
-
-    /* Initial state: no voucher unlocked for Brock (100) */
-    assert(!gc_system_has_voucher_unlock(&sys, 100));
-
-    /* Simulate defeating Brock in trainer_victory */
-    gc_phase_start(&run, &(gc_rphase){.type = RP_TRAINER_VICTORY});
-
-    /* Brock's voucher should now be unlocked in sys */
-    assert(gc_system_has_voucher_unlock(&sys, 100));
+    /* Brock, a Gym Leader: a Plus voucher (moneyMultiplier below 10) */
+    new_run(&run, &sys);
+    assert(!gc_system_has_voucher_unlock(&sys, TRAINER_TYPE_BROCK));
+    assert(defeat_trainer(&run, TRAINER_TYPE_BROCK) == NULL);      /* the first win: unlocked, no reward */
+    assert(gc_system_has_voucher_unlock(&sys, TRAINER_TYPE_BROCK));
     assert(sys.voucher_counts[GC_VOUCHER_PLUS] == 1);
-
-    /* Queue should contain RP_MODIFIER_REWARD with key VOUCHER_PLUS */
-    bool found_voucher_reward = false;
-    for (int l = 0; l < in->rq.n_levels; l++) {
-        for (int k = 0; k < in->rq.n[l]; k++) {
-            if (in->rq.q[l][k].type == RP_MODIFIER_REWARD && in->rq.q[l][k].key &&
-                strcmp(in->rq.q[l][k].key, "VOUCHER_PLUS") == 0) {
-                found_voucher_reward = true;
-            }
-        }
-    }
-    assert(found_voucher_reward);
-
-    /* Clear queue and defeat Brock again - no new voucher reward should be queued */
-    gc_rq_reset(&in->rq);
-    gc_phase_start(&run, &(gc_rphase){.type = RP_TRAINER_VICTORY});
-
-    found_voucher_reward = false;
-    for (int l = 0; l < in->rq.n_levels; l++) {
-        for (int k = 0; k < in->rq.n[l]; k++) {
-            if (in->rq.q[l][k].type == RP_MODIFIER_REWARD && in->rq.q[l][k].key &&
-                strcmp(in->rq.q[l][k].key, "VOUCHER_PLUS") == 0) {
-                found_voucher_reward = true;
-            }
-        }
-    }
-    assert(!found_voucher_reward);
+    assert(sys.voucher_counts[GC_VOUCHER_REGULAR] == 0);
+    const char *key = defeat_trainer(&run, TRAINER_TYPE_BROCK);    /* later wins: an Egg Voucher */
+    assert(key && !strcmp(key, "VOUCHER"));
+    assert(sys.voucher_counts[GC_VOUCHER_REGULAR] == 1);
     assert(sys.voucher_counts[GC_VOUCHER_PLUS] == 1);
+    key = defeat_trainer(&run, TRAINER_TYPE_BROCK);
+    assert(key && !strcmp(key, "VOUCHER"));
+    assert(sys.voucher_counts[GC_VOUCHER_REGULAR] == 2);
+    assert(sys.voucher_counts[GC_VOUCHER_PLUS] == 1);
+    assert(sys.voucher_counts[GC_VOUCHER_PREMIUM] == 0 && sys.voucher_counts[GC_VOUCHER_GOLDEN] == 0);
+
+    /* Red, a Champion: a Premium voucher (moneyMultiplier 10), its later wins give an Egg Voucher Plus */
+    new_run(&run, &sys);
+    assert(defeat_trainer(&run, TRAINER_TYPE_RED) == NULL);
+    assert(gc_system_has_voucher_unlock(&sys, TRAINER_TYPE_RED));
+    assert(sys.voucher_counts[GC_VOUCHER_PREMIUM] == 1);
+    key = defeat_trainer(&run, TRAINER_TYPE_RED);
+    assert(key && !strcmp(key, "VOUCHER_PLUS"));
+    assert(sys.voucher_counts[GC_VOUCHER_PLUS] == 1);
+    assert(sys.voucher_counts[GC_VOUCHER_PREMIUM] == 1);
+    assert(sys.voucher_counts[GC_VOUCHER_REGULAR] == 0);
+
+    /* each trainer's voucher is its own: Brock's unlock does not stand for another trainer's */
+    new_run(&run, &sys);
+    defeat_trainer(&run, TRAINER_TYPE_BROCK);
+    assert(defeat_trainer(&run, TRAINER_TYPE_RED) == NULL);
+    assert(sys.voucher_counts[GC_VOUCHER_PLUS] == 1 && sys.voucher_counts[GC_VOUCHER_PREMIUM] == 1);
+
+    /* a boss that has no voucher, and a trainer that is no boss: no unlock, no reward, any number of wins. The boss
+     * is found in the tables: reward-core says it has no voucher, game-core's config says it is a boss. */
+    int boss_without = -1;
+    for (int i = 0; i < gc_trainer_config_count && boss_without < 0; i++) {
+        pr_reward_trainer_victory tv;
+        const gc_trainer_config *c = &gc_trainer_configs[i];
+        if (c->is_boss && pr_reward_trainer_victory_rewards(c->type, false, false, &tv) == 0 && tv.voucher_type < 0)
+            boss_without = c->type;
+    }
+    assert(boss_without >= 0);
+    const int plain[] = {boss_without, TRAINER_TYPE_ACE_TRAINER};
+    for (int i = 0; i < 2; i++) {
+        new_run(&run, &sys);
+        for (int win = 0; win < 3; win++) assert(defeat_trainer(&run, plain[i]) == NULL);
+        assert(!gc_system_has_voucher_unlock(&sys, plain[i]));
+        for (int k = 0; k < 4; k++) assert(sys.voucher_counts[k] == 0);
+    }
+
+    /* no system data: nothing unlocks, nothing is given, nothing is dereferenced */
+    new_run(&run, &sys);
+    run.sys = NULL;
+    assert(defeat_trainer(&run, TRAINER_TYPE_BROCK) == NULL);
+    assert(defeat_trainer(&run, TRAINER_TYPE_BROCK) == NULL);
 
     printf("test_run_boss_defeat_voucher... ok\n");
+}
+
+/* ModifierRewardPhase with a voucher: AddVoucherModifier.apply adds one to the count of its VoucherType. Endless mode
+ * queues Plus every 50 waves and Premium every 250 (VictoryPhase), and the count comes when the phase runs. */
+static void test_voucher_reward_phase(void) {
+    static gc_system sys;
+    static gc_run run;
+    new_run(&run, &sys);
+    gc_rq_reset(&gc_int(&run)->rq);
+    const char *keys[] = {"VOUCHER", "VOUCHER_PLUS", "VOUCHER_PREMIUM", "VOUCHER_PLUS"};
+    const int types[] = {GC_VOUCHER_REGULAR, GC_VOUCHER_PLUS, GC_VOUCHER_PREMIUM, GC_VOUCHER_PLUS};
+    uint32_t want[4] = {0, 0, 0, 0};
+    for (int i = 0; i < 4; i++) {
+        gc_rphase p = {.type = RP_MODIFIER_REWARD, .key = keys[i]};
+        gc_phase_start(&run, &p);
+        want[types[i]]++;
+        assert(!memcmp(sys.voucher_counts, want, sizeof want));
+    }
+    assert(run.n_items == 0);   /* a voucher is system data, not a run item */
+    printf("test_voucher_reward_phase... ok\n");
 }
 
 int main(void) {
     test_egg_hatch_steps();
     test_voucher_unlocks();
     test_run_boss_defeat_voucher();
+    test_voucher_reward_phase();
 
     printf("All voucher and egg tests passed successfully!\n");
     return 0;
