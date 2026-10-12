@@ -155,6 +155,11 @@ int gc_level_moves(const gc_mon *m, int starting_level, bool evo, bool prevo, bo
 int gc_evolution_moves(const gc_mon *m, uint16_t *out, int max);
 /* PlayerPokemon.getUnlockedEggMoves(): how many (out holds 4) */
 int gc_unlocked_egg_moves(const gc_run *run, const gc_mon *m, uint16_t out[4]);
+int gc_egg_moves(const gc_mon *m, uint16_t out[4]);
+int gc_mystery_primary_pokemon(const gc_run *run, int type, int option);   /* the option's primaryPokemon (storage index) or -1 */
+bool gc_can_learn_move(const gc_mon *m, int move);   /* CanLearnMoveRequirement: level (now), TM or egg move */
+void gc_exp_party_build(gc_run *run, pr_exp_party *pp, const uint32_t *participants, int n_participants);
+void gc_exp_party_queue(gc_run *run, const pr_exp_party *pp, double exp_value, bool use_wave_index_multiplier);
 
 /* ---- rewards (src/gc_reward.c): the adapter between game-core's run and reward-core ---- */
 /* getPartyLuckValue(party) */

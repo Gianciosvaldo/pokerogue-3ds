@@ -244,6 +244,23 @@ static bool bug_in_party(const gc_run *r)
     return false;
 }
 
+/* applyDamageToPokemon(pokemon, damage): a Pokemon that is allowed in battle and would faint is left at 1 HP;
+ * applyHpChangeToPokemon rounds, clamps to 0..max HP */
+static void me_apply_damage(gc_mon *m, int damage)
+{
+    if (m->b.hp > 0 && m->b.hp - damage <= 0) damage = m->b.hp - 1;
+    const int next = m->b.hp - damage;
+    m->b.hp = next < m->b.stats[0] ? (next > 0 ? next : 0) : m->b.stats[0];
+}
+
+static bool lost_at_sea_move_ok(const gc_run *run, int option)
+{
+    const int move = option == 0 ? MOVE_ID_SURF : MOVE_ID_FLY;
+    for (int i = 0; i < run->n_party; i++)
+        if (gc_mon_allowed(&run->party[i]) && gc_can_learn_move(&run->party[i], move)) return true;
+    return false;
+}
+
 void gc_mystery_setup_screen(gc_run *run)
 {
     gc_screen *s = &run->screen;
@@ -273,6 +290,9 @@ void gc_mystery_setup_screen(gc_run *run)
          * party screen would let the player pick */
         s->option_ok[0] = run->money >= pr_run_get_wave_money_amount(run->wave, 1.5) && any_pick_ok(run, type, 0);
         s->option_ok[1] = run->money >= pr_run_get_wave_money_amount(run->wave, 5.0) && any_pick_ok(run, type, 1);
+    } else if (type == GC_ME_LOST_AT_SEA) {
+        s->option_ok[0] = lost_at_sea_move_ok(run, 0);
+        s->option_ok[1] = lost_at_sea_move_ok(run, 1);
     } else if (type == GC_ME_THE_POKEMON_SALESMAN) {
         s->option_ok[0] = run->money >= pr_run_get_wave_money_amount(run->wave, 4.0) && run->n_party < 6;
     } else if (type == GC_ME_DELIBIRDY) {
@@ -481,6 +501,43 @@ static void me_leave_with_heal_shop(gc_run *run, bool post, int type, int mon, i
     end_mystery_encounter_leave(run);
 }
 
+/* Lost at Sea (src/data/mystery-encounters/encounters/lost-at-sea-encounter.ts).
+ * Surf and Fly: CanLearnMoveRequirement (default options) as the option's primary requirement. The option is enabled
+ * when a Pokemon that is not fainted can learn the move (meetsRequirement filters the party to allowed ones), and the
+ * primary Pokemon is the first of the whole party that can, fainted or not (meetsPrimaryRequirementAndPrimaryPokemon-
+ * Selected queries getPlayerParty()). Both options give experience to that Pokemon alone: setEncounterExp(id, Lapras'
+ * base exp, true), PartyExpPhase in the rewards phase, then leaveEncounterWithoutBattle() (no heal shop).
+ * Wander aimlessly: applyDamageToPokemon(floor(maxHp * 25 / 100)) to every Pokemon allowed in battle, then leaves. */
+/* the option's primaryPokemon (a storage index, -1 = none): the first of the whole party, fainted or not, whose
+ * CanLearnMoveRequirement query passes */
+int gc_mystery_primary_pokemon(const gc_run *run, int type, int option)
+{
+    if (type != GC_ME_LOST_AT_SEA || option < 0 || option > 1 || !lost_at_sea_move_ok(run, option)) return -1;
+    const int move = option == 0 ? MOVE_ID_SURF : MOVE_ID_FLY;
+    for (int k = 0; k < run->n_party; k++)
+        if (gc_can_learn_move(&run->party[run->party_order[k]], move)) return run->party_order[k];
+    return -1;
+}
+
+static void lost_at_sea(gc_run *run, int option)
+{
+    if (option < 2) {
+        const int primary = gc_mystery_primary_pokemon(run, GC_ME_LOST_AT_SEA, option);
+        if (primary >= 0) {
+            pr_exp_party pp;
+            const uint32_t id = run->party[primary].b.id;
+            gc_exp_party_build(run, &pp, &id, 1);
+            pp.trainer_battle = false;
+            pp.me_exp_multiplier = 1.0;   /* isBattleMysteryEncounter(): the encounter's expMultiplier, 1 */
+            gc_exp_party_queue(run, &pp, gc_form(SPECIES_ID_LAPRAS, 0)->base_exp, true);
+        }
+    } else {
+        for (int i = 0; i < run->n_party; i++)
+            if (gc_mon_allowed(&run->party[i])) me_apply_damage(&run->party[i], (int)floor(run->party[i].b.stats[0] * 0.25));
+    }
+    end_mystery_encounter_leave(run);
+}
+
 static void shady_vitamin_dealer(gc_run *run, int option, int b)
 {
     if (option == 2) {   /* leave with nothing: no exp, no rewards */
@@ -512,13 +569,7 @@ void gc_mystery_post(gc_run *run, const gc_rphase *p)
         gc_ev_msg(run, "mysteryEncounters/shadyVitaminDealer:noBadEffects", 0);
         return;
     }
-    /* applyDamageToPokemon(floor(maxHp / 2)): a Pokemon that would faint is left at 1 HP */
-    int damage = (int)floor(m->b.stats[0] / 2.0);
-    if (m->b.hp > 0 && m->b.hp - damage <= 0) damage = m->b.hp - 1;
-    {
-        const int next = m->b.hp - damage;
-        m->b.hp = next < m->b.stats[0] ? (next > 0 ? next : 0) : m->b.stats[0];
-    }
+    me_apply_damage(m, (int)floor(m->b.stats[0] / 2.0));
     /* the nature is drawn until it differs from Pokemon.nature, the base one (not a Mint's), and set as the custom one */
     pr_rng r = pr_run_seed_offset_rng(&run->run, (run->wave * 1000 + 512) * 2000, NULL);
     const int current = m->has_custom_nature ? m->base_nature : m->b.nature;
@@ -690,16 +741,7 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_LOST_AT_SEA:
-        if (option == 0) {
-            for (int i = 0; i < run->n_party; i++) run->party[i].b.hp = run->party[i].b.stats[0];
-            gc_port_give_reward(run, "ETHER");
-            end_mystery_encounter_leave(run);
-            return true;
-        } else if (option == 1) {
-            start_mystery_wild_battle(run, SPECIES_ID_LAPRAS, wave_level, true, 3, 1);
-            return true;
-        }
-        end_mystery_encounter_leave(run);
+        lost_at_sea(run, option);
         return true;
 
     case GC_ME_FIERY_FALLOUT:

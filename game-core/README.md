@@ -785,7 +785,7 @@ money, items owned, that the encounter left without a battle, the shop's `custom
 Pikachu, Eevee), the RNG after the shop, and that the next wave is queued. The old `gen/dump-mystery-actions.test.ts`
 and `tests/mystery_diff_test.c` are untouched and still only smoke coverage.
 
-Department Store Sale and Shady Vitamin Dealer are ported and compared. Every other encounter's actions in
+Department Store Sale, Shady Vitamin Dealer and Lost at Sea are ported and compared. Every other encounter's actions in
 `gc_mystery.c` are still the Task 46 stand-ins; the encounter *selection* (`gc_mystery_select`) and the intro checks
 are not part of this comparison.
 
@@ -815,6 +815,32 @@ Upstream behaviours this reproduces on purpose, all found by the comparison or b
   planted bug on it can be caught; it is kept to follow upstream.
 - The party screen is the app's: until it exists, `gc_mystery_execute` takes the first Pokemon the filter accepts when the
   one it is given is refused.
+
+### Lost at Sea
+
+`<trace>-lost.txt` is replayed by `tests/mystery_lost_diff_test.c`. Five parties (Squirtle, Pidgeot, Ditto, Gengar,
+Snorlax, Abra; Lapras, Charizard, Mew; Rattata, Ditto, Shedinja; Gliscor, Gholdengo, Miraidon, Magikarp, Zubat, Dragonite;
+Bulbasaur) with random levels (half the time the exact level a Surf / Fly level move is learned), IVs, natures, HP (a fifth
+fainted), Pokerus, a third fused with another species, Exp. Share / Exp. Balance / Oval Charm and Lucky / Golden Eggs, and
+the wave and eggs. Upstream records which Pokemon `CanLearnMoveRequirement.queryParty` accepts for Surf and Fly, each
+option's `meetsRequirements()` and the primary Pokemon it picks, then the real `onOptionPhase`, `doEncounterRewardsAndContinue`
+with the `PartyExpPhase` really started (every `ExpPhase` / `ShowPartyExpBarPhase` it unshifts: party index and experience)
+and `EggLapsePhase.start()`. Compared: the starting stats, the accepted Pokemon, the primary, the options offered, the run RNG
+and money, every Pokemon's HP, the experience phases in order with their exact amounts (and the level cap), that the wander
+option queues none, and the eggs.
+
+Upstream behaviours reproduced on purpose:
+- The option is enabled by a Pokemon that is not fainted, but the primary Pokemon is the first of the whole party that can learn
+  the move, fainted or not. A fainted primary gets no experience of its own; the Exp. Share holders still do (one participant).
+- "Can learn" is the union of `getLevelMoves()` with its defaults (only the move learned at exactly the current level), the
+  species' TM list for its form, the fusion's, and the egg moves of the root of the evolution line (all four, unlocked or not).
+- Both learn options give `setEncounterExp(primary, Lapras' base exp, true)`: the wave-scaled value, times the encounter's
+  `expMultiplier` (1); no heal shop. The wander option gives nothing and damages every Pokemon not fainted by 25% of its max HP,
+  never below 1 HP (this floor is reachable here, unlike in Shady Vitamin Dealer).
+- With the pinned data every Pokemon that learns Surf or Fly by level also has the TM, so the level-move term can never decide the
+  outcome: a planted bug on it is an equivalent mutant.
+- Whether the lead is still on the field when the encounter starts (an `ExpPhase` instead of a `ShowPartyExpBarPhase`, display only)
+  is not established by the harness, which starts from a fresh encounter with nobody out; the comparison keeps everyone off the field.
 
 ## Fleeing: upstream differential (Task 77 / #125)
 

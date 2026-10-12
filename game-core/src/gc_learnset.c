@@ -209,3 +209,64 @@ int gc_unlocked_egg_moves(const gc_run *run, const gc_mon *m, uint16_t out[4])
     }
     return n;
 }
+
+/* PokemonSpeciesForm.getRootSpeciesId(false): back along the prevolutions to the first stage */
+static int root_species(int species)
+{
+    for (int guard = 0; guard < 15; guard++) {
+        const pr_species *sp = gc_species(species);
+        if (!sp || sp->prevolution <= 0) break;
+        species = sp->prevolution;
+    }
+    return species;
+}
+
+/* Pokemon.getEggMoves(): speciesEggMoves[getSpeciesForm().getRootSpeciesId()], all four, unlocked or not */
+int gc_egg_moves(const gc_mon *m, uint16_t out[4])
+{
+    const int species = root_species(m->b.species);
+    for (int i = 0; i < gc_starter_egg_moves_count; i++) {
+        const gc_starter_egg_moves *e = &gc_starter_egg_moves_data[i];
+        if (e->species != species) continue;
+        int n = 0;
+        for (int k = 0; k < 4; k++) if (e->egg_moves[k]) out[n++] = e->egg_moves[k];
+        return n;
+    }
+    return 0;
+}
+
+/* species.getTms(getFormKey()) of one species form (speciesDataRegistry.getTms: its own list plus the prevolutions'
+ * are all in the generated pr_tm_lists row). A form index past the species' forms (no Pokemon has one) is read as the base form */
+static bool form_tms_have(int species, int form, int move)
+{
+    int lo = 0, hi = pr_reward_species_count - 1;
+    const pr_reward_species *s = NULL;
+    while (lo <= hi && !s) {
+        const int mid = (lo + hi) / 2;
+        const int id = pr_reward_species_data[mid].id;
+        if (id == species) s = &pr_reward_species_data[mid];
+        else if (id < species) lo = mid + 1;
+        else hi = mid - 1;
+    }
+    if (!s) return false;
+    const int f = s->n_forms && form >= 0 && form < s->n_forms ? form : 0;
+    const pr_tm_list *l = &pr_tm_lists[pr_reward_forms[s->form_start + f].tms];
+    for (unsigned i = 0; i < l->n; i++) if (pr_tm_pool[l->start + i] == move) return true;
+    return false;
+}
+
+/* CanLearnMoveRequirement.getAllPokemonMoves(pkm) includes the move: getLevelMoves() with its defaults (startingLevel =
+ * the level, nothing extra: the move learned at exactly this level), getCompatibleTms() (the species' TMs for its form
+ * and the fusion's) and getEggMoves() */
+bool gc_can_learn_move(const gc_mon *m, int move)
+{
+    gc_learn_row rows[64];
+    const int n = gc_level_moves(m, m->b.level, false, false, false, rows, 64);
+    for (int i = 0; i < n; i++) if (rows[i].move == move) return true;
+    if (form_tms_have(m->b.species, m->b.form, move)) return true;
+    if (m->b.fusion_species && form_tms_have(m->b.fusion_species, m->b.fusion_form, move)) return true;
+    uint16_t egg[4];
+    const int ne = gc_egg_moves(m, egg);
+    for (int i = 0; i < ne; i++) if (egg[i] == move) return true;
+    return false;
+}
