@@ -1084,6 +1084,13 @@ controls, ten rejected runtime mutations, nine malformed refusals and retained
 battle/host checks. This is bounded singles parity, not all ability or hardware
 coverage. Reproduce with `tools/moodydiff.sh <upstream> 2000 <seed>`.
 
+## Consecutive move selection
+
+Gigaton Hammer and Blood Moon's existing selection restriction now has additive
+source-caller proof covering failed/virtual/long histories, PP, error text, and
+Struggle fallback. Runtime behavior is unchanged. Reproduce with
+`tools/consecutive-move-diff.sh <upstream>`; see
+[CONSECUTIVE-MOVE-VALIDATION.md](CONSECUTIVE-MOVE-VALIDATION.md) for scope and controls.
 ## Knockout stat abilities
 
 Moxie, both Neigh and As One variants, Beast Boost/Eelevate, and Soul-Heart
