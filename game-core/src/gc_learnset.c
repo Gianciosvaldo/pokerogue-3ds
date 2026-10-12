@@ -170,6 +170,17 @@ int gc_level_moves(const gc_mon *m, int starting_level, bool evo, bool prevo, bo
     return n;
 }
 
+/* postEvolve: getLevelMoves({startingLevel: lastLevel + 1, includeEvolutionMoves}) filtered to the evolution moves (level 0)
+ * of the evolved form. The starting level does not matter to level-0 rows (the evolution moves are always allowed). */
+int gc_evolution_moves(const gc_mon *m, uint16_t *out, int max)
+{
+    gc_learn_row rows[64];
+    const int n = gc_level_moves(m, m->b.level + 1, true, false, false, rows, 64);
+    int k = 0;
+    for (int i = 0; i < n && k < max; i++) if (rows[i].level == 0) out[k++] = rows[i].move;
+    return k;
+}
+
 /* PokemonSpeciesForm.getRootSpeciesId(true): back along the prevolutions until a starter */
 static int root_species_for_starter(int species)
 {

@@ -254,10 +254,8 @@ static void evolve(gc_run *run, gc_rphase *p)
     gc_ev_msg(run, "menu:evolutionDone", 2, pre_name, pr_arg_pokemon_name(&run->bt, "evolvedPokemonName", &m->b));
     /* postEvolve: getLevelMoves({startingLevel: lastLevel + 1, includeEvolutionMoves}) filtered to the evolution moves
      * (level 0) of the evolved form, one LearnMovePhase each */
-    gc_learn_row rows[64];
-    const int n = gc_level_moves(m, p->c + 1, true, false, false, rows, 64);
-    int learned[64], n_learned = 0;
-    for (int i = 0; i < n; i++) if (rows[i].level == 0) learned[n_learned++] = rows[i].move;
+    uint16_t learned[64];
+    const int n_learned = gc_evolution_moves(m, learned, 64);
     for (int i = 0; i < n_learned; i++) gc_rq_unshift(run, gc_rp(RP_LEARN_MOVE, p->a, learned[i], 0));
 }
 
