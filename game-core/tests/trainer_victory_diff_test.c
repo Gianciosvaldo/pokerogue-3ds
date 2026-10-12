@@ -1,13 +1,16 @@
 #define _POSIX_C_SOURCE 200809L
-/* C half of game-core's boss voucher replay (tools/trainervictorydiff.sh; trainer-victory.producer.test.ts is the
+/* C half of game-core's trainer victory replay (tools/trainervictorydiff.sh; trainer-victory.producer.test.ts is the
  * upstream half). Every case is upstream's TrainerVictoryPhase for one trainer, with its voucher unlocked or not, and
- * the voucher ModifierRewardPhases it queued run. Here the same trainer is defeated through gc_phase_start(
- * RP_TRAINER_VICTORY) on a gc_system with the same unlock, and the queued voucher rewards are run through
- * gc_phase_start(RP_MODIFIER_REWARD). Compared per case:
- *  - the queued phases in order: the money multiplier, then the config's modifierRewardFuncs (game-core queues none of
- *    them yet: it counts GC_STUB_TRAINER_REWARDS once instead, which is compared too), then at most the voucher
+ * every ModifierRewardPhase it queued run (addModifier). Here the same trainer is defeated through gc_phase_start(
+ * RP_TRAINER_VICTORY) on a gc_system with the same unlock and the same stacks of the reward items, and the queued
+ * rewards are run through gc_phase_start(RP_MODIFIER_REWARD). Compared per case:
+ *  - the queued phases in order: the money multiplier, the config's modifierRewardFuncs (rewards, rival battles'
+ *    EXP. Share, Super EXP. Charm and Tera Orb), then at most the voucher's reward
  *  - the voucher reward's key (VOUCHER for a Plus voucher, VOUCHER_PLUS for a Premium one: the table in
  *    TrainerVictoryPhase)
+ *  - the stack of each reward item after its phase, from the stack the player had before it: the scene keeps its
+ *    modifiers from case to case, so the stacks reach getMaxStackCount() and addModifier adds nothing past it
+ *  - the text each reward shows, formatted from upstream's locale files (GC_LOCALES). A voucher's text is not compared
  *  - whether the trainer's voucher is unlocked afterwards and the four voucherCounts changes, after the rewards ran
  * Prints the totals and what the cases exercised. Exit 1 on any mismatch, 2 on a malformed or cut file (the last line
  * counts the cases), 3 when a kind of case went unexercised. */
@@ -33,20 +36,59 @@ static double num(char **save)
     return v;
 }
 
-static char why[256];
+/* upstream's locales/en folder (GC_LOCALES, set by tools/trainervictorydiff.sh): a reward's text is compared as text,
+ * formatted by battle-core's pr_msg_format from the same files upstream's i18next read */
+static const char *locale_file(void *ctx, const char *file, int fallback, size_t *len)
+{
+    (void)ctx;
+    static struct { char name[64]; char *text; size_t len; } cache[8];
+    static int n_cache;
+    const char *dir = getenv("GC_LOCALES");
+    if (fallback) return NULL;
+    if (!dir) { fputs("GC_LOCALES must name upstream's locales/en folder (tools/trainervictorydiff.sh sets it)\n", stderr); exit(2); }
+    for (int i = 0; i < n_cache; i++)
+        if (!strcmp(cache[i].name, file)) { *len = cache[i].len; return cache[i].text; }
+    if (n_cache >= 8) return NULL;
+    char path[512];
+    snprintf(path, sizeof path, "%s/%s.json", dir, file);
+    FILE *f = fopen(path, "rb");
+    if (!f) { fprintf(stderr, "cannot read %s\n", path); exit(2); }
+    fseek(f, 0, SEEK_END);
+    const long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    char *text = malloc((size_t)sz + 1);
+    const size_t n = fread(text, 1, (size_t)sz, f);
+    text[n] = 0;
+    fclose(f);
+    snprintf(cache[n_cache].name, sizeof cache[n_cache].name, "%s", file);
+    cache[n_cache].text = text;
+    cache[n_cache].len = n;
+    n_cache++;
+    *len = n;
+    return text;
+}
+
+static char why[4096];
 #define MISMATCH(...) do { if (ok) snprintf(why, sizeof why, __VA_ARGS__); ok = false; } while (0)
+#define MAX_PHASES 8
 
 int main(int argc, char **argv)
 {
     FILE *fp;
     if (argc != 2 || !(fp = fopen(argv[1], "r"))) { fprintf(stderr, "usage: trainer_victory_diff_test <trace>\n"); return 2; }
-    char line[1024];
+    static const pr_text_source src = {locale_file, NULL, "en"};
+    char line[2048];
     int cases = 0, bad = 0, declared = -1;
     /* what the cases exercised */
     int first_plus = 0, first_premium = 0, later_voucher = 0, later_voucher_plus = 0, no_voucher = 0, funcs = 0,
-        boss_no_voucher = 0, shown = 0;
+        boss_no_voucher = 0, texts_compared = 0, at_cap = 0, from_zero = 0, shown = 0;
+    int by_key[3] = {0, 0, 0};
+    static const char *const func_keys[3] = {"EXP_SHARE", "SUPER_EXP_CHARM", "TERA_ORB"};
     while (fgets(line, sizeof line, fp)) {
         line_no++;
+        /* the texts follow the phases, each after a tab */
+        char *texts = strchr(line, '\t');
+        if (texts) *texts++ = 0;
         char *save = NULL, *t = strtok_r(line, " \n", &save);
         if (!t) continue;
         if (!strcmp(t, "#")) {
@@ -62,6 +104,38 @@ int main(int argc, char **argv)
         for (int k = 0; k < 4; k++) delta[k] = (int)num(&save);
         const int n = (int)num(&save);
         if (tt < 0 || tt >= 512) { fprintf(stderr, "line %d: TrainerType %d is out of voucher_unlocks\n", line_no, tt); return 2; }
+        if (n < 1 || n > MAX_PHASES) { fprintf(stderr, "line %d: %d phases\n", line_no, n); return 2; }
+
+        /* upstream's phases: M, the config's reward funcs, then the voucher's reward when there is one */
+        double up_money = -1;
+        char up_key[MAX_PHASES][48];
+        int up_before[MAX_PHASES], up_after[MAX_PHASES];
+        for (int i = 0; i < n; i++) {
+            const char *what = tok(&save);
+            up_key[i][0] = 0;
+            up_before[i] = up_after[i] = 0;
+            if (!strcmp(what, "M")) {
+                if (i != 0) { fprintf(stderr, "line %d: money phase %d\n", line_no, i); return 2; }
+                up_money = num(&save);
+            } else if (!strcmp(what, "R")) {
+                snprintf(up_key[i], sizeof up_key[i], "%s", tok(&save));
+                up_before[i] = (int)num(&save);
+                up_after[i] = (int)num(&save);
+            } else {
+                fprintf(stderr, "line %d: unknown entry %s\n", line_no, what);
+                return 2;
+            }
+        }
+        char *up_text[MAX_PHASES] = {NULL};
+        if (texts) {
+            texts[strcspn(texts, "\n")] = 0;
+            char *s2 = NULL;
+            int k = 0;
+            for (char *x = strtok_r(texts, "\t", &s2); x && k < MAX_PHASES; x = strtok_r(NULL, "\t", &s2)) {
+                for (char *c2 = x; *c2; c2++) if (*c2 == '|') *c2 = '\n';   /* the producer wrote a line break as | */
+                up_text[k++] = x;
+            }
+        }
 
         /* the same defeat here, on counts that are not zero so that a write that replaces the count is seen */
         gc_system_init_defaults(&sys);
@@ -72,51 +146,73 @@ int main(int argc, char **argv)
         run.sys = &sys;
         run.trainer_type = tt;
         run.run.mode = GAME_MODES_CLASSIC;
+        const gc_trainer_config *c = gc_trainer_config_of(tt);
+        const int n_funcs = c ? c->n_reward_funcs : 0;
+        if (n != 1 + n_funcs && n != 2 + n_funcs) MISMATCH("trainer %d: upstream queued %d phases, config has %d reward funcs", tt, n, n_funcs);
+        for (int i = 1; i <= n_funcs && i < n; i++) {
+            const int item = gc_reward_item_index(up_key[i]);
+            if (item < 0) { fprintf(stderr, "line %d: unknown reward %s\n", line_no, up_key[i]); return 2; }
+            if (up_before[i]) gc_item_add(&run, pr_item_keys[item], -1, 0, up_before[i]);
+        }
         gc_internal *in = gc_int(&run);
         gc_rq_reset(&in->rq);
         gc_rphase start = gc_rp(RP_TRAINER_VICTORY, 0, 0, 0);
         gc_phase_start(&run, &start);
-        const gc_trainer_config *c = gc_trainer_config_of(tt);
-        const int n_funcs = c ? c->n_reward_funcs : 0;
+        gc_event ev;
+        while (gc_run_next_event(&run, &ev)) {}   /* "trainer defeated" is not a reward's text */
 
-        /* what is queued, in the order it runs; a voucher reward is run, as upstream's producer ran it */
+        /* what is queued, in the order it runs; every reward is run, as upstream's producer ran them */
         double money = -1;
-        const char *voucher = NULL;
-        int n_mine = 0;
+        const char *rewards[MAX_PHASES];
+        char text[MAX_PHASES][256];
+        int n_rewards = 0, n_mine = 0;
         gc_rphase q;
         while (gc_rq_next(&in->rq, &q)) {
             n_mine++;
             if (q.type == RP_MONEY_REWARD && n_mine == 1) {
                 money = q.d;
-            } else if (q.type == RP_MODIFIER_REWARD && n_mine == 2 && q.key && !strncmp(q.key, "VOUCHER", 7)) {
-                voucher = q.key;
+            } else if (q.type == RP_MODIFIER_REWARD && n_mine >= 2 && q.key && n_rewards < MAX_PHASES) {
+                rewards[n_rewards] = q.key;
                 gc_phase_start(&run, &q);
+                text[n_rewards][0] = 0;
+                int msgs = 0;
+                while (gc_run_next_event(&run, &ev)) {
+                    if (ev.kind != GC_EV_MESSAGE || !ev.msg.key) continue;
+                    if (msgs++ == 0) pr_msg_format(&ev.msg, &src, text[n_rewards], sizeof text[n_rewards]);
+                }
+                if (msgs != 1) MISMATCH("trainer %d: reward %s showed %d messages", tt, q.key, msgs);
+                n_rewards++;
             } else {
                 MISMATCH("trainer %d: unexpected phase %d at position %d", tt, q.type, n_mine);
             }
         }
+        if (money != up_money) MISMATCH("trainer %d: money phase x%g, port x%g", tt, up_money, money);
 
-        /* upstream: M, the config's reward funcs, then the voucher's reward when there is one */
-        const char *up_voucher = NULL;
-        if (n != 1 + n_funcs && n != 2 + n_funcs) MISMATCH("trainer %d: upstream queued %d phases, config has %d reward funcs", tt, n, n_funcs);
-        for (int i = 0; i < n; i++) {
-            const char *what = tok(&save);
-            if (!strcmp(what, "M")) {
-                const double m = num(&save);
-                if (i != 0 || m != money) MISMATCH("trainer %d: money phase %d x%g, port x%g", tt, i, m, money);
-            } else if (!strcmp(what, "R")) {
-                const char *key = tok(&save);
-                if (i == n_funcs + 1) up_voucher = key;
-                else if (i < 1 || i > n_funcs) MISMATCH("trainer %d: upstream phase %d is a reward", tt, i);
+        /* the reward funcs (positions 1..n_funcs), then the voucher's reward */
+        const char *voucher = NULL;
+        const char *up_voucher = n > 1 + n_funcs ? up_key[n - 1] : NULL;
+        if (n_rewards != n - 1) MISMATCH("trainer %d: %d rewards, upstream %d", tt, n_rewards, n - 1);
+        for (int i = 0; i < n_rewards; i++) {
+            if (i < n_funcs) {
+                if (i + 1 >= n || strcmp(rewards[i], up_key[i + 1])) MISMATCH("trainer %d: reward %d is %s, upstream %s", tt, i, rewards[i], i + 1 < n ? up_key[i + 1] : "none");
+                else {
+                    const int stack = gc_item_stack(&run, rewards[i]);
+                    if (stack != up_after[i + 1]) MISMATCH("trainer %d: %s stack %d after (%d before), upstream %d", tt, rewards[i], stack, up_before[i + 1], up_after[i + 1]);
+                    if (!up_text[i] || strcmp(text[i], up_text[i])) MISMATCH("trainer %d: %s text '%s', upstream '%s'", tt, rewards[i], text[i], up_text[i] ? up_text[i] : "none");
+                    else texts_compared++;
+                    at_cap += up_before[i + 1] == up_after[i + 1] && up_before[i + 1] > 0;
+                    from_zero += up_before[i + 1] == 0 && up_after[i + 1] == 1;
+                    for (int k = 0; k < 3; k++) by_key[k] += !strcmp(rewards[i], func_keys[k]);
+                }
             } else {
-                fprintf(stderr, "line %d: unknown entry %s\n", line_no, what);
-                return 2;
+                voucher = rewards[i];
+                if (gc_item_stack(&run, voucher)) MISMATCH("trainer %d: %s was added to the items", tt, voucher);
             }
         }
         if (!up_voucher != !voucher || (voucher && strcmp(voucher, up_voucher)))
             MISMATCH("trainer %d: voucher reward port %s, upstream %s", tt, voucher ? voucher : "none", up_voucher ? up_voucher : "none");
-        if (run.stubs[GC_STUB_TRAINER_REWARDS] != (n_funcs ? 1u : 0u))
-            MISMATCH("trainer %d: trainer rewards stub counted %u, config has %d reward funcs", tt, run.stubs[GC_STUB_TRAINER_REWARDS], n_funcs);
+        if (run.stubs[GC_STUB_TRAINER_REWARDS])
+            MISMATCH("trainer %d: trainer rewards stub counted %u", tt, run.stubs[GC_STUB_TRAINER_REWARDS]);
         if ((sys.voucher_unlocks[tt] != 0) != (unlocked_after != 0))
             MISMATCH("trainer %d: voucher unlocked after %d, upstream %d", tt, sys.voucher_unlocks[tt] != 0, unlocked_after);
         for (int k = 0; k < 4; k++) {
@@ -141,11 +237,14 @@ int main(int argc, char **argv)
     fclose(fp);
     if (declared != cases || cases < 1) { fprintf(stderr, "cut or malformed trace: %d cases read, %d declared\n", cases, declared); return 2; }
     printf("cases %d: mismatching %d\n", cases, bad);
-    printf("first win unlocks: Plus %d, Premium %d; later wins: VOUCHER %d, VOUCHER_PLUS %d; no voucher %d (%d of them boss trainers); with reward funcs %d\n",
-           first_plus, first_premium, later_voucher, later_voucher_plus, no_voucher, boss_no_voucher, funcs);
+    printf("first win unlocks: Plus %d, Premium %d; later wins: VOUCHER %d, VOUCHER_PLUS %d; no voucher %d (%d of them boss trainers)\n",
+           first_plus, first_premium, later_voucher, later_voucher_plus, no_voucher, boss_no_voucher);
+    printf("trainers with reward funcs %d: rewards EXP_SHARE %d, SUPER_EXP_CHARM %d, TERA_ORB %d; stack from zero %d, refused at the cap %d; %d texts compared\n",
+           funcs, by_key[0], by_key[1], by_key[2], from_zero, at_cap, texts_compared);
     printf("TOTAL mismatches: %d\n", bad);
     if (bad) return 1;
-    if (!first_plus || !first_premium || !later_voucher || !later_voucher_plus || !no_voucher || !funcs) {
+    if (!first_plus || !first_premium || !later_voucher || !later_voucher_plus || !no_voucher || !funcs || !at_cap || !from_zero ||
+        !by_key[0] || !by_key[1] || !by_key[2]) {
         fprintf(stderr, "a kind of case went unexercised\n");
         return 3;
     }

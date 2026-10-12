@@ -1,9 +1,11 @@
 #!/bin/sh
-# Boss voucher: show the comparator can fail. Replays one trace (from tools/trainervictorydiff.sh) through copies of
+# Trainer victory: show the comparator can fail. Replays one trace (from tools/trainervictorydiff.sh) through copies of
 # game-core, each with one line of src/gc_phases.c or src/gc_stubs.c changed, and prints each one's totals. Every copy
 # must exit 1. The first one is the bug game-core had before: the voucher reward on the first win instead of later ones.
-# Usage: tools/trainervictoryplant.sh <trace>
+# Usage: GC_LOCALES=<upstream dir>/locales/en tools/trainervictoryplant.sh <trace>
 set -e
+: "${GC_LOCALES:?GC_LOCALES must name upstream's locales/en folder}"
+export GC_LOCALES
 TRACE=$(CDPATH= cd -- "$(dirname "${1:?trace}")" && pwd)/$(basename "$1")
 HERE=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 ROOT=$(CDPATH= cd -- "$HERE/.." && pwd)
@@ -29,7 +31,10 @@ plant reward-key-always-plus gc_phases.c 's/vp.key = pr_item_keys\[tv.items\[tv.
 plant unlock-counts-plus gc_phases.c 's/gc_system_unlock_voucher(run->sys, run->trainer_type, tv.voucher_type);/gc_system_unlock_voucher(run->sys, run->trainer_type, GC_VOUCHER_PLUS);/'
 plant reward-counts-wrong-type gc_stubs.c 's/gc_system_add_voucher_count(run->sys, GC_VOUCHER_REGULAR, 1)/gc_system_add_voucher_count(run->sys, GC_VOUCHER_PLUS, 1)/'
 plant reward-counts-nothing gc_stubs.c 's/if (!strcmp(key, "VOUCHER_PLUS")) { gc_system_add_voucher_count(run->sys, GC_VOUCHER_PLUS, 1); return; }/if (!strcmp(key, "VOUCHER_PLUS")) return;/'
-plant trainer-rewards-uncounted gc_phases.c 's/if (c \&\& c->n_reward_funcs) gc_stub(run, GC_STUB_TRAINER_REWARDS);/;/'
+plant reward-funcs-not-queued gc_phases.c 's/for (int i = 0; i < n_funcs \&\& i < tv.n_items; i++) {/for (int i = 0; i < 0 \&\& i < tv.n_items; i++) {/'
+plant reward-funcs-first-item gc_phases.c 's/rp.key = pr_item_keys\[tv.items\[i\]\];/rp.key = pr_item_keys[tv.items[0]];/'
+plant stack-cap-ignored gc_stubs.c 's/gc_item_stack(run, key) + 1 > pr_items\[idx\].max_stack)/gc_item_stack(run, key) + 1 > 999)/'
+plant access-item-capped gc_stubs.c 's/idx != PR_ITEM_TERA_ORB;/1;/'
 plant money-multiplier-1 gc_phases.c 's/p.d = c ? c->money_multiplier : 1;   \/\* config.moneyMultiplier \*\//p.d = 1;/'
 [ "$fails" = 0 ] || { echo "$fails planted bug(s) not caught"; exit 1; }
-echo "all eight planted bugs caught"
+echo "all eleven planted bugs caught"
