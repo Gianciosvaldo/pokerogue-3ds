@@ -52,13 +52,31 @@ bool gc_port_apply_reward(gc_run *run, const gc_offer *o, int party, int move_sl
     return true;
 }
 
-void gc_port_give_reward(gc_run *run, const char *key)
+int gc_port_give_reward(gc_run *run, const char *key)
 {
-    if (gc_reward_add_pokeballs(run, key)) return;
+    if (gc_reward_add_pokeballs(run, key)) return -1;
     /* vouchers are system data (the gacha), not run items: AddVoucherModifier.apply adds one to the count of its
      * VoucherType (sys NULL = no system updates) */
-    if (!strcmp(key, "VOUCHER")) { gc_system_add_voucher_count(run->sys, GC_VOUCHER_REGULAR, 1); return; }
-    if (!strcmp(key, "VOUCHER_PLUS")) { gc_system_add_voucher_count(run->sys, GC_VOUCHER_PLUS, 1); return; }
-    if (!strcmp(key, "VOUCHER_PREMIUM")) { gc_system_add_voucher_count(run->sys, GC_VOUCHER_PREMIUM, 1); return; }
+    if (!strcmp(key, "VOUCHER")) { gc_system_add_voucher_count(run->sys, GC_VOUCHER_REGULAR, 1); return -1; }
+    if (!strcmp(key, "VOUCHER_PLUS")) { gc_system_add_voucher_count(run->sys, GC_VOUCHER_PLUS, 1); return -1; }
+    if (!strcmp(key, "VOUCHER_PREMIUM")) { gc_system_add_voucher_count(run->sys, GC_VOUCHER_PREMIUM, 1); return -1; }
+    /* addModifier(newModifier): PersistentModifier.add stacks it onto the one the player has (match()), and
+     * incrementStack refuses to go past getMaxStackCount(). The four access items (MapModifier,
+     * MegaEvolutionAccessModifier, GigantamaxAccessModifier, TerastallizeAccessModifier) don't override match(), which
+     * is false by default: each one is added as a modifier of its own, with no stacking and no cap */
+    const int idx = gc_reward_item_index(key);
+    const bool stacks = idx != PR_ITEM_MAP && idx != PR_ITEM_MEGA_BRACELET && idx != PR_ITEM_DYNAMAX_BAND &&
+                        idx != PR_ITEM_TERA_ORB;
+    if (stacks && idx >= 0 && (pr_items[idx].flags & PR_ITEMF_PERSISTENT) && pr_items[idx].max_stack > 0 &&
+        gc_item_stack(run, key) + 1 > pr_items[idx].max_stack) {
+        /* add() failed and the modifier isn't virtual: itemStackFull is queued and addModifier runs again with the
+         * default modifier type of the type's tier. A ModifierRewardPhase's type has no tier, so the COMMON pool's
+         * first entry (a Poke Ball); the caller shows the message after the reward's own text, as the queued
+         * MessagePhase comes after the phase */
+        const int fallback = pr_player_pool_entries[pr_player_pool[0].start].item;
+        gc_port_give_reward(run, pr_item_keys[fallback]);
+        return fallback;
+    }
     gc_item_add(run, key, -1, 0, 1);
+    return -1;
 }

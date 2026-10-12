@@ -318,7 +318,7 @@ enum {
     GC_STUB_EVOLUTION,          /* an evolution condition other than level (item, friendship...) not checked */
     GC_STUB_WEATHER,            /* the biome's weather roll isn't ported */
     GC_STUB_UNPORTED_ENEMY,     /* run-core couldn't generate an enemy (a PR_RUN_UNPORTED_* case): a stand-in */
-    GC_STUB_TRAINER_REWARDS,    /* a trainer's own rewards (modifierRewardFuncs, vouchers) not given */
+    GC_STUB_TRAINER_REWARDS,    /* a trainer's own rewards (modifierRewardFuncs, voucher) that reward-core has no row for: not given */
     GC_STUB_POST_BATTLE,        /* PostBattle abilities (Pickup, Honey Gather), Pay Day money, lapsing items */
     GC_STUB_TRAINER_TITLE,      /* a trainer's name in a message without its title ("Aaron" for "Ace Trainer
                                  * Aaron"): battle-core's messages take one locale key per argument */

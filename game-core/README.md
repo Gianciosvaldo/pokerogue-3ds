@@ -191,7 +191,6 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 | Evolution conditions on items, held items or the dex aren't met | reward-core, the dex |
 | A catch doesn't count `gameStats`, validate achievements (hidden ability, shiny party, legendary...) or run `Pokemon.addToParty`'s form change trigger; the Limited Catch challenge (`POKEMON_ADD_TO_PARTY`) isn't ported | later cards |
 | The shake rolls are battle-core's, and by reading they differ from upstream's critical-capture chance (`getCriticalCaptureChance`): battle-core's multiplier is 2.5 in a Daily Run and 0 otherwise, where upstream's grows with the species caught (0 to 2.5) and with a Catching Charm, and battle-core gives any Challenge Mode run 0 where upstream does for the Fresh Start challenge only. Not checked by a differential: the upstream test harness skips the rolls. A caught boss's score has the missing multiplier (the row above) | battle-core |
-| A trainer's own reward items (the config's `modifierRewardFuncs`, counted as `trainer's own rewards`) aren't given. The boss voucher is, see [Boss voucher](#boss-voucher) | reward-core |
 | A trainer's name in a message goes without its title ("Aaron would like to battle!" for "Ace Trainer Aaron would like to battle!") | battle-core: a message argument made of several locale keys |
 | Pickup, Honey Gather, Pay Day, lapsing items | reward-core |
 
@@ -725,17 +724,42 @@ the item's type (`AddVoucherModifier.apply`, `gc_port_give_reward`), which is al
 Endless mode's wave-50 Plus and wave-250 Premium vouchers now count (they were counted
 when queued). Which trainers have a voucher, its type and the item come from reward-core's
 `pr_reward_trainer_victory_rewards` (differential-tested in card 97); bosses without a
-voucher, such as the rivals, give nothing. Without system data (`run->sys` NULL) nothing
-unlocks and nothing is given. Not ported: the timed event that upgrades the later-win
-reward (`getUpgradeUnlockedVouchers`), and the vouchers offered on the reward screen, which
-are still added to the items like the other unported rewards.
+voucher, such as the rivals, give nothing of that kind. Without system data (`run->sys`
+NULL) nothing unlocks and nothing is given. Not ported: the timed event that upgrades the
+later-win reward (`getUpgradeUnlockedVouchers`), and the vouchers offered on the reward
+screen, which are still added to the items like the other unported rewards.
+
+The trainer's own reward items (the config's `modifierRewardFuncs`: the rivals' Exp. Share,
+Super Exp. Charm and Tera Orb) are queued before the voucher, one `ModifierRewardPhase`
+each, in the order `pr_reward_trainer_victory_rewards` returns them, as upstream unshifts
+them. Running one goes through `gc_port_give_reward`, which does what
+`PersistentModifier.add` does: it stacks onto the player's item and refuses to go past
+`getMaxStackCount()`. A refused modifier is not just dropped: `addModifier` queues
+`battle:itemStackFull` and adds the default modifier type of the type's tier instead. A
+reward phase's type has no tier, so that is the COMMON pool's first entry, 5 Poke Balls
+(`gc_port_give_reward` returns that item, `gc_reward_gain` shows "You received ..." and then
+"The stack for ... is full. You will receive 5× Poké Ball instead."; the message comes second
+because upstream's queued `MessagePhase` runs after the reward phase, read in the source, the
+replay can't see the order). The Map, Mega Bracelet,
+Dynamax Band and Tera Orb are the exception: their modifiers have no `match()`, so
+upstream adds each one as a modifier of its own with no cap, and here the stack just grows.
+Mystery encounter rewards (`gc_mystery.c`) call the same function and ignore the message.
+Timed events are not ported on purpose (lorenzo, 2026-10-12): no event calendar and no event
+rule, such as the Plus voucher for later wins or the wave-115 Mega Bracelet and Dynamax Band.
+`GC_STUB_TRAINER_REWARDS` is counted only if reward-core has no row for a reward the config
+lists (none does today). The rivals themselves are still wild stand-ins in run-core's
+encounters, so these rewards are only reachable once run-core produces the fixed battles.
 
 Replay of upstream's own phase: `tools/trainervictorydiff.sh <upstream dir> [N] [seed]`
 runs `trainer-victory.producer.test.ts` in the pinned checkout (Node 22) and replays it
 through `build/trainer_victory_diff_test`. Every trainerConfigs entry is defeated once
 with its voucher unlocked and once without, then random ones up to N, and the voucher
 `ModifierRewardPhase`s are run. Compared: the queued phases in order, the voucher reward's
-key, the unlock afterwards and the four voucher count changes. `tools/trainervictoryplant.sh
-<trace>` replays one trace through eight copies of game-core with one line changed each
-(the old inverted rule among them); all eight must fail. The unit test is
+key, the unlock afterwards and the four voucher count changes; for each reward item, the
+key, the stack of that item before and after (the player's items keep their stacks from
+case to case, so they reach and pass the cap), the "You received" text and, past the cap,
+the itemStackFull text, formatted from upstream's locales (`GC_LOCALES`, which the script
+sets), and the five Poke Ball counts before and after. `tools/trainervictoryplant.sh
+<trace>` replays one trace through fourteen copies of game-core with one line changed each
+(the old inverted rule among them); all fourteen must fail. The unit test is
 `tests/voucher_egg_test.c`, part of `make test`.
