@@ -4,7 +4,7 @@
  * MysteryEncounterOptionSelectedPhase runs it (executeWithSeedOffset(.., getSeedOffset() * 500)). Records the
  * RNG before and after the option, money, the party's levels, the items owned, whether the encounter left without
  * a battle, the shop it set up (setEncounterRewards' customModifierSettings) and the options that shop shows
- * (SelectModifierPhase.start's own calls). Families: Department Store Sale, Shady Vitamin Dealer, Lost at Sea, Field Trip, Part Timer (below).
+ * (SelectModifierPhase.start's own calls). Families: Department Store Sale, Shady Vitamin Dealer, Lost at Sea, Field Trip, Part Timer, An Offer You Can't Refuse (below).
  * GC_MYS_N=400 GC_MYS_SEED=777 GC_MYS_OUT=/abs/mystery.txt, Node22. */
 import { modifierTypes } from "#data/data-lists";
 import { BiomeId } from "#enums/biome-id";
@@ -21,8 +21,10 @@ import { EggLapsePhase } from "#phases/egg-lapse-phase";
 import { SelectModifierPhase } from "#phases/select-modifier-phase";
 import { Stat } from "#enums/stat";
 import { MoveId } from "#enums/move-id";
+import { AbilityId } from "#enums/ability-id";
 import { speciesDataRegistry } from "#app/global-species-data-registry";
 import { PartyExpPhase } from "#phases/party-exp-phase";
+import { ModifierRewardPhase } from "#phases/modifier-reward-phase";
 import { allMoves } from "#data/data-lists";
 import { PokemonMove } from "#moves/pokemon-move";
 import { GameManager } from "#test/framework/game-manager";
@@ -845,4 +847,221 @@ it("writes the part timer trace", () => {
   fs.writeFileSync((process.env.GC_MYS_OUT ?? "/tmp/mystery.txt").replace(/\.txt$/, "") + "-timer.txt", timerLines.join("\n") + "\n");
   console.log(`TIMER ${SEED}: options=${timerCover.options} no-pick=${timerCover.noPick} disabled=${timerCover.disabled} good=${timerCover.good} bad=${timerCover.bad} clamped low=${timerCover.low} high=${timerCover.high} amulet=${timerCover.amulet} pp changed=${timerCover.ppCut} exp phases=${timerCover.expPhases} oval=${timerCover.oval}`);
   expect(timerCover.options.every(n => n > 0) && timerCover.low > 0 && timerCover.high > 0).toBe(true);
+});
+
+
+/* ---- An Offer You Can't Refuse ----
+ * Per case: a party of two to six with random levels (twins with the same level, IVs and nature to make ties in the
+ * stat total), HP (a fifth fainted), Pokerus, abilities and passives (some enabled), one to four random moves each (a
+ * quarter with an extortion move), and the items in a shuffled order: held Leftovers / Shell Bell / vitamins / berries,
+ * Gimmighoul's evolution tracker (a few on a Pokemon that is not a Gimmighoul), Exp. Share, Exp. Balance, Oval Charm,
+ * Amulet Coin, Lucky / Golden Eggs and 0-4 Shiny Charms; the wave, money, Poke Ball count and eggs. The encounter's own
+ * onInit runs again (the strongest Pokemon and its price), the options' meetsRequirements() and the Pokemon option 2 picks
+ * are recorded, then the chosen option runs as the phases run it: onPreOptionPhase (sell) in executeWithSeedOffset(..,
+ * getSeedOffset()) with removePokemonFromPlayerParty really run (its updateModifiers prunes the list), onOptionPhase in
+ * (.., * 500) with the phases it unshifts recorded, the ModifierRewardPhase it queued really rewarded (doReward), then
+ * MysteryEncounterRewardsPhase's own doEncounterRewardsAndContinue() with the PartyExpPhase really started, and
+ * EggLapsePhase.start(). The item list is recorded before and after, in order. */
+const offerConfigs: SpeciesId[][] = [
+  [SpeciesId.GIMMIGHOUL, SpeciesId.RATTATA, SpeciesId.RATTATA, SpeciesId.GYARADOS, SpeciesId.MUK],
+  [SpeciesId.DUGTRIO, SpeciesId.WOBBUFFET, SpeciesId.MEW, SpeciesId.DRAGONITE, SpeciesId.GHOLDENGO, SpeciesId.OCTILLERY],
+  [SpeciesId.MAGIKARP, SpeciesId.PIKACHU, SpeciesId.EEVEE, SpeciesId.SHEDINJA, SpeciesId.GROUDON],
+  [SpeciesId.MIRAIDON, SpeciesId.LAPRAS, SpeciesId.ARCANINE],
+  [SpeciesId.GIMMIGHOUL, SpeciesId.GIMMIGHOUL, SpeciesId.RATTATA],
+];
+const extortion = [MoveId.BIND, MoveId.CLAMP, MoveId.INFESTATION, MoveId.SAND_TOMB, MoveId.SNAP_TRAP, MoveId.THUNDER_CAGE, MoveId.WRAP, MoveId.SPIRIT_SHACKLE,
+  MoveId.MEAN_LOOK, MoveId.JAW_LOCK, MoveId.BLOCK, MoveId.SPIDER_WEB, MoveId.ANCHOR_SHOT, MoveId.OCTOLOCK, MoveId.PURSUIT, MoveId.CONSTRICT, MoveId.BEAT_UP,
+  MoveId.COIL, MoveId.WRING_OUT, MoveId.STRING_SHOT];
+const extortionAbilities = [AbilityId.INTIMIDATE, AbilityId.ARENA_TRAP, AbilityId.SHADOW_TAG, AbilityId.SUCTION_CUPS, AbilityId.STICKY_HOLD];
+const offerLines: string[] = [];
+const offerCover = { options: [0, 0, 0], disabled: 0, byMove: 0, byAbility: 0, ties: 0, orphans: 0, doubleCuts: 0, full: 0, fallback: 0, exp: 0, prices: new Set<number>() };
+for (let ci = 0; ci < offerConfigs.length; ci++) {
+  it(`offer, party ${ci}`, async () => {
+    const game = new GameManager(phaserGame);
+    game.override.mysteryEncounterChance(100).startingWave(37).startingBiome(BiomeId.PLAINS).disableTrainerWaves().startingLevel(5);
+    const biomes = new Map<BiomeId, MysteryEncounterType[]>([[BiomeId.VOLCANO, [MysteryEncounterType.MYSTERIOUS_CHALLENGERS]]]);
+    CIVILIZATION_ENCOUNTER_BIOMES.forEach(b => biomes.set(b, [MysteryEncounterType.AN_OFFER_YOU_CANT_REFUSE]));
+    vi.spyOn(MysteryEncounters, "mysteryEncountersByBiome", "get").mockReturnValue(biomes);
+    await game.runToMysteryEncounter(MysteryEncounterType.AN_OFFER_YOU_CANT_REFUSE, offerConfigs[ci]);
+    const scene = game.scene as any, encounter = scene.currentBattle.mysteryEncounter, party = scene.getPlayerParty();
+    expect(encounter.options.length).toBe(3);
+    const leave = vi.spyOn(EncounterPhaseUtils, "leaveEncounterWithoutBattle").mockImplementation(() => {});
+    const realRemove = scene.removePokemonFromPlayerParty.bind(scene);
+    vi.spyOn(scene, "removePokemonFromPlayerParty").mockImplementation(((p: any) => realRemove(p, false)) as any);
+    const keys: string[] = [];
+    const realT = i18next.t.bind(i18next);
+    vi.spyOn(i18next, "t").mockImplementation(((k: any, o?: any) => {
+      const key = String(k);
+      if (/receiveMoney/.test(key)) keys.push(`receiveMoney:${o?.amount}`);
+      else if (/battle:rewardGain/.test(key)) keys.push("rewardGain");
+      else if (/battle:itemStackFull/.test(key)) keys.push("itemStackFull");
+      return realT(k, o);
+    }) as any);
+    const pmAll = scene.phaseManager;
+    vi.spyOn(pmAll, "queueMessage").mockImplementation((() => {}) as any);
+    const funcKey = new Map<any, string>(Object.entries(modifierTypes as any).map(([k, f]) => [f, k]));
+    const original = [...party];
+    offerLines.push(`P ${party.length} ${party.map((p: any) => `${p.species.speciesId} ${p.formIndex}`).join(" ")}`);
+    const share = Math.floor(N / offerConfigs.length);
+    const mk = (id: string, mon?: any, arg?: number, stack = 1) => () => {
+      const type: any = arg === undefined ? (modifierTypes as any)[id]() : (EncounterPhaseUtils.generateModifierType((modifierTypes as any)[id], [arg]) as any);
+      if (!type.id) type.id = id;
+      const modifier = type.newModifier(mon);
+      modifier.stackCount = stack;
+      scene.addModifier(modifier, true);
+    };
+    const list = () => scene.modifiers.map((m: any) => {
+      const idx = m.pokemonId == null ? -1 : original.findIndex((p: any) => p.id === m.pokemonId);
+      return `${m.type.id} ${argOf(m.type)} ${m.pokemonId == null ? -1 : idx} ${m.stackCount}`;
+    });
+    for (let i = 0; i < share; i++) {
+      const k = i % 3, wave = 10 + rnd(171), runSeed = word(), waveSeed = word();
+      scene.seed = runSeed; scene.waveSeed = waveSeed;
+      scene.currentBattle.waveIndex = wave;
+      encounter.seedOffset = undefined;
+      encounter.updateSeedOffset();
+      encounter.misc = undefined;
+      encounter.doEncounterExp = undefined;
+      encounter.doEncounterRewards = undefined;
+      scene.modifiers.length = 0;
+      party.length = 0; party.push(...original);
+      const mons: string[] = [];
+      for (let m = 0; m < party.length; m++) {
+        const mon = party[m];
+        mon.fusionSpecies = null;
+        mon.level = 1 + rnd(rnd(2) ? 100 : 20);
+        mon.nature = rnd(25);
+        mon.ivs = mon.ivs.map(() => rnd(32));
+        mon.pokerus = rnd(4) === 0;
+        mon.passive = rnd(2) === 0;
+        const twin = party.findIndex((q: any, j: number) => j < m && q.species.speciesId === mon.species.speciesId);
+        if (twin >= 0 && rnd(2) === 0) { mon.level = party[twin].level; mon.nature = party[twin].nature; mon.ivs = [...party[twin].ivs]; }
+        const n = 1 + rnd(4), ids: number[] = [];
+        while (ids.length < n) {
+          const id = 1 + rnd(allMoves.length - 1);
+          if (allMoves[id] && !ids.includes(id)) ids.push(id);
+        }
+        if (rnd(4) === 0) ids[rnd(n)] = extortion[rnd(extortion.length)];
+        mon.customPokemonData.passive = rnd(5) === 0 ? extortionAbilities[rnd(extortionAbilities.length)] : -1;
+        mon.customPokemonData.ability = rnd(12) === 0 ? extortionAbilities[rnd(extortionAbilities.length)] : -1;
+        mon.moveset = ids.map(id => new PokemonMove(id));
+      }
+      party.forEach((mon: any) => mon.calculateStats());
+      const adds: Array<() => void> = [];
+      for (const mon of party) {
+        if (rnd(3) === 0) adds.push(mk("LEFTOVERS", mon));
+        if (rnd(4) === 0) adds.push(mk("SHELL_BELL", mon));
+        if (rnd(4) === 0) adds.push(mk("BASE_STAT_BOOSTER", mon, rnd(6), 1 + rnd(3)));
+        if (rnd(5) === 0) adds.push(mk("BERRY", mon, rnd(11), 1 + rnd(3)));
+        if (mon.species.speciesId === SpeciesId.GIMMIGHOUL ? rnd(4) !== 0 : rnd(8) === 0) adds.push(mk("EVOLUTION_TRACKER_GIMMIGHOUL", mon, undefined, 1 + rnd(9)));
+        if (rnd(5) === 0) adds.push(mk("LUCKY_EGG", mon, undefined, 1 + rnd(4)));
+        if (rnd(6) === 0) adds.push(mk("GOLDEN_EGG", mon, undefined, 1 + rnd(3)));
+      }
+      if (rnd(3) === 0) adds.push(mk("EXP_SHARE", undefined, undefined, 1 + rnd(3)));
+      if (rnd(4) === 0) adds.push(mk("EXP_BALANCE", undefined, undefined, 1 + rnd(4)));
+      if (rnd(2) === 0) adds.push(mk("OVAL_CHARM", undefined, undefined, 1 + rnd(2)));
+      if (rnd(2) === 0) adds.push(mk("AMULET_COIN", undefined, undefined, 1 + rnd(5)));
+      const charms = rnd(5);
+      if (charms) adds.push(mk("SHINY_CHARM", undefined, undefined, charms));
+      for (let a = adds.length - 1; a > 0; a--) { const b2 = rnd(a + 1); [adds[a], adds[b2]] = [adds[b2], adds[a]]; }
+      adds.forEach(f => f());
+      party.forEach((mon: any) => mon.calculateStats());   // the vitamins count
+      scene.money = rnd(3) === 0 ? Number.MAX_SAFE_INTEGER - rnd(5000) : 12345 + rnd(100000);
+      const balls = [rnd(3) === 0 ? 90 + rnd(10) : rnd(30), 0, 0, 0, 0];
+      scene.pokeballCounts = { 0: balls[0], 1: 0, 2: 0, 3: 0, 4: 0 };
+      for (const mon of party) {
+        const max = mon.getMaxHp();
+        mon.hp = rnd(5) === 0 ? 0 : 1 + rnd(max);
+        mons.push(`${mon.species.speciesId} ${mon.formIndex} ${mon.level} ${mon.nature} ${mon.ivs.join(" ")} ${mon.pokerus ? 1 : 0} ${mon.getAbility().id} ${mon.getPassiveAbility().id} ${mon.hasPassive() ? 1 : 0} ${mon.hp} ${max} ${mon.stats.join(" ")} ${mon.moveset.length} ${mon.moveset.map((mv: any) => mv.moveId).join(" ")}`);
+      }
+      const eggs = Array.from({ length: rnd(3) }, () => 2 + rnd(40));
+      scene.gameData.eggs = eggs.map(w => ({ hatchWaves: w }));
+      encounter.onInit();
+      const strongest = party.indexOf(encounter.misc.pokemon), price = encounter.misc.price;
+      const meets = encounter.options.map((o: any) => (o.meetsRequirements() ? 1 : 0));
+      const primary = meets[1] ? party.indexOf(encounter.options[1].primaryPokemon) : -1;
+      const runs = meets[k] === 1;
+      const before0 = list();
+      offerLines.push(`C ${ci * share + i} ${runSeed} ${waveSeed} ${wave} ${k} ${scene.money} ${balls[0]} ${runs ? 1 : 0}`, `U ${mons.join(" ")}`,
+        `L ${before0.length} ${before0.join(" ")}`, `G ${eggs.length} ${eggs.join(" ")}`,
+        `A ${meets.join(" ")} ${primary} ${strongest} ${price} ${scene.getMaxExpLevel()}`);
+      if (!runs) { offerCover.disabled++; offerLines.push("E"); continue; }
+
+      const option = encounter.options[k];
+      encounter.selectedOption = option;
+      leave.mockClear(); keys.length = 0;
+      Phaser.Math.RND.sow([`offer-${SEED}-${ci}-${i}`]);
+      const before = rng(), money0 = scene.money;
+      let pre: Promise<boolean> | undefined;
+      if (option.onPreOptionPhase) scene.executeWithSeedOffset(() => { pre = option.onPreOptionPhase(); }, encounter.getSeedOffset());
+      await pre;
+      const afterPre = rng();
+      const pm = scene.phaseManager, queued: string[] = [], expPhases: string[] = [];
+      let shopArgs = "-";
+      vi.spyOn(pm, "unshiftNew").mockImplementation(((name: string, ...a: any[]) => {
+        if (name === "ModifierRewardPhase") queued.push(`ModifierRewardPhase:${funcKey.get(a[0]) ?? "?"}`);
+        else queued.push(name);
+        if (name === "PartyExpPhase") {
+          const phase = new PartyExpPhase(a[0], a[1], a[2]);
+          vi.spyOn(phase, "end").mockImplementation(() => {});
+          phase.start();
+        } else if (name === "SelectModifierPhase") {
+          shopArgs = `${a[0]} ${a[1] === undefined ? "u" : a[1]} ${a[2]?.fillRemaining ? 1 : 0} ${a[2]?.rerollMultiplier ?? "nan"} ${a[2]?.guaranteedModifierTypeOptions?.length ?? 0} ${a[2]?.allowLuckUpgrades === undefined ? -1 : +a[2].allowLuckUpgrades}`;
+        }
+      }) as any);
+      vi.spyOn(pm, "pushNew").mockImplementation(((name: string) => { queued.push(`+${name}`); }) as any);
+      vi.spyOn(pm, "removeAllPhasesOfType").mockImplementation((() => {}) as any);
+      vi.spyOn(pm, "create").mockImplementation(((name: string, index: number, exp: number) => ({ phaseName: name, index, exp })) as any);
+      vi.spyOn(pm, "unshiftPhase").mockImplementation(((ph: any) => { expPhases.push(`${ph.phaseName === "ExpPhase" ? 0 : 1} ${ph.index} ${ph.exp}`); }) as any);
+      let done: Promise<boolean> | undefined;
+      scene.executeWithSeedOffset(() => { done = option.onOptionPhase(); }, encounter.getSeedOffset() * 500);
+      await done;
+      const afterOption = rng();
+      expect(leave).toHaveBeenCalledTimes(1);
+      // the ModifierRewardPhase it queued runs first (it is unshifted ahead of the rewards phase)
+      const stacksBefore = scene.modifiers.filter((m: any) => m.type?.id === "SHINY_CHARM").reduce((n: number, m: any) => n + m.stackCount, 0);
+      if (queued.includes("ModifierRewardPhase:SHINY_CHARM")) {
+        const keysBefore = keys.length;
+        try { await Promise.race([new ModifierRewardPhase(modifierTypes.SHINY_CHARM).doReward(), new Promise(r => setTimeout(r, 0))]); } catch { /* showText has no UI here */ }
+        const got = keys.splice(keysBefore);
+        // the text of the phase first, then the message addModifier queued when the stack was full
+        keys.push(...got.filter(x => x === "rewardGain"), ...got.filter(x => x === "itemStackFull"));
+        offerCover.full += got.includes("itemStackFull") ? 1 : 0;
+      }
+      const rewards = new MysteryEncounterRewardsPhase(leave.mock.calls[0][0]);
+      vi.spyOn(rewards, "end").mockImplementation(() => {});
+      rewards.doEncounterRewardsAndContinue();
+      for (const fn of [pm.unshiftNew, pm.pushNew, pm.removeAllPhasesOfType, pm.create, pm.unshiftPhase]) vi.mocked(fn).mockRestore();
+      const afterShop = rng();
+      const lapse = new EggLapsePhase();
+      vi.spyOn(lapse, "end").mockImplementation(() => {});
+      lapse.start();
+      const after = list();
+      const order = party.map((p: any) => original.indexOf(p));
+      offerLines.push(`R ${before}`, `B ${afterPre}`, `Q ${afterOption} ${scene.money} ${leave.mock.calls[0][0] ? 1 : 0}`,
+        `N ${keys.length} ${keys.join(" ")}`, `X ${queued.length} ${queued.join(" ")}`, `T ${shopArgs}`, `F ${expPhases.length} ${expPhases.join(" ")}`,
+        `S ${afterShop}`, `W ${order.length} ${order.join(" ")}`, `M ${scene.pokeballCounts[0]} ${stacksBefore}`, `V ${after.length} ${after.join(" ")}`,
+        `H ${scene.gameData.eggs.map((e: any) => e.hatchWaves).join(" ") || "-"}`, "E");
+      void money0;
+      offerCover.options[k]++;
+      offerCover.prices.add(price);
+      if (k === 1) { const byMove = encounter.options[1].primaryPokemon.moveset.some((mv: any) => extortion.includes(mv.moveId)); offerCover.byMove += byMove ? 1 : 0; offerCover.byAbility += byMove ? 0 : 1; }
+      if (k === 0) {
+        const lost = original.find((p: any) => !party.includes(p));
+        offerCover.orphans += before0.some(l => l.split(" ")[2] === String(original.indexOf(lost))) ? 1 : 0;
+        offerCover.doubleCuts += before0.length - after.length > before0.filter(l => l.split(" ")[2] === String(original.indexOf(lost))).length ? 1 : 0;
+        offerCover.fallback += keys.includes("itemStackFull") ? 1 : 0;
+      }
+      offerCover.exp += expPhases.length;
+      party.length = 0; party.push(...original);
+    }
+  }, 1200000);
+}
+
+it("writes the offer trace", () => {
+  offerLines.unshift(`V 1 ${N}`);
+  offerLines.push(`Z ${Math.floor(N / offerConfigs.length) * offerConfigs.length}`);
+  fs.writeFileSync((process.env.GC_MYS_OUT ?? "/tmp/mystery.txt").replace(/\.txt$/, "") + "-offer.txt", offerLines.join("\n") + "\n");
+  console.log(`OFFER ${SEED}: options=${offerCover.options} disabled=${offerCover.disabled} extort by move=${offerCover.byMove} by ability=${offerCover.byAbility} stack-full=${offerCover.full} items cut beyond the seller's=${offerCover.doubleCuts} sold with held items=${offerCover.orphans} prices=${offerCover.prices.size} exp phases=${offerCover.exp}`);
+  expect(offerCover.options.every(n => n > 0) && offerCover.byMove > 0 && offerCover.byAbility > 0).toBe(true);
 });
