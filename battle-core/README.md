@@ -1109,3 +1109,11 @@ fainting. [LEAVE-WEATHER-VALIDATION.md](LEAVE-WEATHER-VALIDATION.md) records
 `tools/leave-weather-diff.sh <upstream> 2000 <seed>`.
 The [remaining-core audit](REMAINING-BATTLE-CORE.md) separates concrete next
 slices from absent inputs and broader integration; this is not full-core parity.
+
+## Wonder Skin accuracy
+
+The real move-accuracy caller now dispatches Wonder Skin's status-only cap,
+including source simulation behavior and ordering before Wide Lens/Fog/Gravity.
+[WONDER-SKIN-VALIDATION.md](WONDER-SKIN-VALIDATION.md) records 8,000 exact
+turns, 16,000 numerical probes, 56 dispatcher cases and mutation/regression checks.
+Reproduce with `tools/wonder-skin-diff.sh <upstream> 2000 <seed>`.
