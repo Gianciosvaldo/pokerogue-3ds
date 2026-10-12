@@ -1,4 +1,4 @@
-# Custom content contracts, version 1 (tasks C01, C02, C03, C04, C05, C06)
+# Custom content contracts, version 1 (tasks C01, C02, C03, C04, C05, C06, C07)
 
 Written for task C01 of [CUSTOM-CONTENT-ADVANCED-AGENT.md](CUSTOM-CONTENT-ADVANCED-AGENT.md). It does three things:
 audits the interfaces the custom content will touch, fixes the version-1 data contracts, and records what the new
@@ -7,7 +7,8 @@ access, no wallet access and no spawn code. Since C03 the app feeds the reducer 
 (sections 2.9 and 5.2). Since C04 it keeps the last run's report and the id counters in one file on the SD card (sections 2.10 and
 5.3); no Nemesis is ever inserted by the app yet, and no custom mode exists. Since C05 `custom-core` also holds the rematch
 policy as pure data (section 2.11, 5.4): nothing in the app calls it yet. Since C06 the title screen has a read-only
-Nemesis Radar over the stored roster (section 2.12, 5.5); it starts nothing.
+Nemesis Radar over the stored roster (section 2.12, 5.5); it starts nothing. Since C07 the app has a capsule-machine presentation
+prototype that only a debug file opens (section 2.13, 5.6); it shows fixed results and is connected to nothing.
 
 | Item | Value |
 |---|---|
@@ -659,6 +660,47 @@ number, and has no fight, invasion or purchase button; its text says "Live remat
   here only if a file holds records; the app cannot create one (section 2.10), so on a real install the Radar shows the empty state until
   C10. `game/tests/mkcustom.c` writes a file with records for looking at the screen on an emulator.
 
+### 2.13 The capsule presentation prototype (C07)
+
+`game/source/capsule_model.c` (pure motion and timeline, no ui, no clock, no allocation, no random numbers) and `capsule_screen.c` (the
+two screens). **It is a presentation over a result list it is given, not a machine that decides anything**, and it is not connected to the
+gacha (that is C09, over C08's profile).
+
+- **The result contract.** `cap_fixture`: `n` in 1..25 items, each a tier (0..3: a colour and a word, nothing else) and a non-empty,
+  NUL-terminated label of at most 31 bytes. `capsule_screen_open` refuses (returns false, opens nothing) NULL, an empty or oversized list,
+  a tier out of range and a label with no end or no text; it **copies** the fixture, so the caller's data may change or go away. Nothing
+  in the model writes to a fixture and the shown labels are the supplied labels in the supplied order. An egg or capsule is not shown as
+  an unlocked Pokemon: the result list prints the label as given and the screen says "These results were fixed before the machine ran."
+- **Who may open it.** Only the debug file: `rundriver.txt` line `capsule=<1..25>` opens the preview before the title with `n` results
+  made from the position alone (`capsule_debug_fixture`: tiers by position, labels "Fixture result N"). Normal play has no entry, and
+  the text says it is a preview ("A preview with fixed results.", "Nothing is bought."). No wallet, profile, unlock, voucher, save or
+  RNG function is called by either file.
+- **Motion.** Gravity 0.0016 px/ms^2, restitution 0.35 (a bounce under 0.08 px/ms stays down), the chute above the field's top, floor
+  at y 164. Item i has a fixed slot (reading order, five to a row, rows centred, the last row centred on itself) and a fixed x spread at
+  the chute, both functions of i and n only; the capsule arrives over its slot with its horizontal speed chosen for the fall time, so
+  **where a capsule lands is not where it is "pushed": slot i always holds item i** (no collision is simulated between capsules, only the
+  floor; capsules in different rows are 28 px apart and in a row 40 px apart for radius 10, so they cannot overlap at rest). The bottom
+  row leaves the chute first, one every 16 ms after the 200 ms knob turn.
+- **Time.** dt is in milliseconds (ui.h). `cap_step` ignores dt <= 0 and NaN, clamps one call to 100 ms (a long pause is not a jump),
+  and integrates in fixed 8 ms steps, at most 16 per call, so the result does not depend on the frame rate. The model is SETTLED when
+  every capsule is open (measured natural settle: 1216 ms for one result, 1280 ms for 5, 10 or 25) or at **1500 ms at the latest**, when
+  whatever still moves is placed at its slot and opened. Allocation: none (the model is one fixed struct, `sizeof(cap_model)` = 1,748 bytes).
+- **Skip.** B or START during the knob turn or the drop calls `cap_skip`: every capsule goes to its slot, open, the results are shown at
+  once, and `on_settled` fires then. Nothing is pulled again and no result changes. A pull before the first A is not skippable (B leaves).
+- **Callbacks.** `on_settled` fires **once per opening**, the first time the results are all shown (time or skip) and never if the
+  screen was left before. `on_exit(how)` fires **once per opening, from the player's input only** (B before the pull, A / B / START
+  after the results have been up 300 ms, so a held button does not close it at once); `how` says whether the results were shown. Neither
+  is called from `leave()`, a timer or a stale screen; a callback of an earlier opening never reaches a later one (the screen keeps one
+  state, cleared at each opening). The callee of `on_exit` leaves the screen (the debug entry shows the title).
+- **Input.** Buttons only; A is the pull ("the same pull" as a touch gesture would be). **There is no touch**: the framework gives no
+  touch input to ui screens (only the shop reads the touch screen), so a gesture would need a new API; none is invented. No pressure or
+  crank input. A held button's auto-repeat is ignored through `ui_input_repeating()` (added to ui.c: true only while the framework
+  delivers a repeat), so holding A pulls once and holding B does not skip and then leave.
+- **Both screens.** Top (the 320 x 180 field): a backdrop, the chute, capsules drawn as seven horizontal strips of a circle (lid lifts
+  and a mark appears when open), the selected result outlined while scrolling. Bottom: the title, the knob (the owned
+  `images/egg/gacha_knob` from the locally built packs, turned by the model's knob angle; a plain rectangle when the packs lack it), the
+  instruction lines, then the result list (five rows, tier chip and label). No art is added to Git.
+
 ## 3. Choices to confirm
 
 These are version-1 decisions this PR had to make. The handoff either left them open or said "documented policy". Each
@@ -721,6 +763,20 @@ Added by C06 (section 2.12):
     The icon stands in meanwhile. The value is a guess at "feels instant when you stop"; it is not measured on a device.
 22. **No touch.** The framework has no touch path for these screens. Adding one belongs to the framework, not to this screen.
 
+Added by C07 (section 2.13):
+
+23. **Slot i holds item i; the capsules do not collide with each other.** The wish for a "collision" is met by the floor bounce only:
+    capsule-to-capsule collision would make the landing depend on contact order and tempt a result to depend on it. Alternative: a real
+    pile, which needs a physics engine or much more tuning and gains nothing the player can use.
+24. **Skip is B or START; a skip shows the supplied results at once.** A is only the pull, so a skip is not a second pull.
+25. **A held button acts once** (`ui_input_repeating`); the results can be closed only after 300 ms.
+26. **No touch gesture.** See section 2.13; touch needs a framework change.
+27. **The 1.5 s limit is enforced by a snap, not by tuning.** Natural settling is 1.2 to 1.3 s; if integration ever ran long the capsules
+    would jump to their slots at 1.5 s. Alternative: no limit, which is what the card forbids.
+28. **Two callbacks, not one.** `on_settled` (the results are shown) and `on_exit` (the player leaves), because the card's "completion
+    fires once regardless of skip" and "leaving and reentering" are different events: C09 will grant nothing on either; it grants in C08's
+    transaction before the screen opens.
+
 ## 4. What C02 to C10 inherit, and what they still must decide
 
 | Task | Imports | Still undecided / must verify |
@@ -730,6 +786,7 @@ Added by C06 (section 2.12):
 | C04 store (decided in section 2.10) | `cc_meta`, wire widths, `cc_insertion_check`, ledger, `cc_nemesis_transition` | nothing left open for the store itself. Live Nemesis insertion needs the finishing enemy's identity (section 1.8): C10 |
 | C05 scheduler (decided in section 2.11) | `cc_schedule`, window waves, `CC_RNG_ALGO_V1`, lifecycle | nothing left open for the policy itself. C10 must: supply a seed independent of gameplay and gacha RNG, report each window's encounter kind and flags before the wave is generated, pass the representable mask, key the stored schedule by the uid it saved (not C04's per-observation uid), call `cc_roster_release_except` before `cc_rematch_start`, and persist the schedule (no codec yet). C08 must grant the voucher only after `cc_reward_claim`'s write |
 | C06 radar (decided in section 2.12) | `cc_nemesis` read-only, `cc_schedule` | nothing left open for the screen itself. C10 must pass the run's schedule to `radar_open` once it persists one, and create records for it to show |
+| C07 capsule preview (decided in section 2.13) | an immutable result list (`cap_fixture`), the framework's `ui` screens | nothing left open for the presentation itself. C09 must build the fixture from results C08 has already committed, never from the screen; the screen may be shown after or before the grant but must not decide or repeat it; touch needs a framework path |
 | C08 profile | `cc_ledger` `REWARD_CLAIM`, the one-envelope rule | the profile owner (section 1.5), the envelope |
 | C10 live | all of the above | every item of section 1.8 that is still missing |
 
@@ -1037,6 +1094,39 @@ empty state: no record can be created yet (section 2.10). The emulator check use
 Status for this task: **COMPLETE** against the C06 card's scope (the screen and its states over merged contracts); the live behavior it
 will show is **not shipped** until C10.
 
+### 5.6 C07 (capsule presentation prototype)
+
+Run on the final tree of the C07 PR (same container as 5.2 to 5.5). The task touches `game/` and this document only.
+
+| Command | Result |
+|---|---|
+| `make -C game/tests capsule_test && game/tests/build/capsule_test` (ASan + UBSan, `-fno-sanitize-recover`) | 223,456 checks, 0 failed (300 fuzz sessions of random buttons and frame times) |
+| `game/tests/build/capsule_test 2000` | 1,253,784 checks, 0 failed |
+| `make -C game/tests flowtest && game/tests/build/flowtest` | 108 checks, 0 failed (103 before, 5 new: `capsule=7` opens the preview with 7 results and not the title, leaving it is the title, 26 / 0 / -3 ignored) |
+| `game/tests/run_host_tests.sh` (the CI script, now including `capsule_test`) | all passed |
+| `python3 game/tests/capsule_mutations.py` | **43 mutations run, 43 killed, 0 survived, 0 invalid**; 4 more are documented as equivalent and not run (the `CAP_MAX_STEPS` loop bound, which one call's 100 ms clamp can never reach; the screen's repeated `settled_fired` and `exited` guards; the debug entry's repeated 1..25 clamp). Includes a duplicate-callback mutant (the settle reported every time it is asked; on_exit twice) and dt-unit mutants (dt read as seconds in the opening and in the gravity), all killed |
+| `docker run --rm -v "$PWD":/src -w /src/game devkitpro/devkitarm make` | builds `pokerogue.3dsx`, no warning from the new files |
+| Azahar (libretro core, the real packs, the Docker-built `pokerogue.3dsx`, `rundriver.txt` with `capsule=25`, `capsule=10`, `capsule=1`) | `capsule=25`: idle (both screens), the knob pulled with A, capsules falling and bouncing on the top screen (three moments), settled with the 25-result list and the outline on item 1, UP / DOWN scrolling, A closing to the title. `capsule=10`: A held for 45 frames (about 0.75 s, so the auto-repeat would have fired) pulled once; B skipped to the results while it was dropping; the screen was still open 100 frames later with the hold released. `capsule=1`: B before the pull went to the title. Screens are not in Git |
+**What the host test holds.** The fixture contract (0, 1, 10, 25, 26 items, bad tier, empty label, unterminated label are refused or accepted
+as stated; the supplied copy is never written). Timeline for 1, 10 and 25 items: stage order, settle times pinned (1216 ms for one item,
+1280 ms for 5, 10, 25) and always before the 1500 ms deadline, a bounce is observed, no capsule below the floor or outside the field, slot i
+holds item i, the landing order differs from the fixture order (capsules are not pushed into place). Time: the same fixture stepped at 8,
+16.7, 33 and 50 ms frames gives the same state; dt = 0, negative, NaN, infinite and 1e9 do not move or break anything; a hand-damaged
+body is still placed by the deadline. Skip at the knob turn, at every stage of the drop and after the settle; skip then repeated skip,
+pull, input. The C library's `rand()` state is not advanced by the model's whole timeline, and the test binary links only the two capsule files and the fake drawing layer, so a call to a wallet, profile or unlock function would not link. Screens: every drawn line is on its screen, readable, and free of
+Buy, Purchase, Price, voucher, coin, currency, unlock, caught and hatch; capsule rectangles are at most 60 px wide and inside the field;
+at most 265 rectangles in the busiest frame (25 capsules). Input: a held button's repeats are ignored (pull once; no skip-then-close);
+A / B / START cannot close before 300 ms of settled time; repeated submit pulls once; the callback counts are exactly 1 after a skip, a
+natural settle, a skip and a settle; leaving mid-animation calls nothing and the stale screen calls nothing whatever it is given; a
+second opening has its own callbacks; reopening from inside a callback is safe.
+
+**Not established.** No Old 3DS device run: the frame cost and the allocation behaviour on hardware are not measured. The host figure is
+at most 265 rectangle draws per frame on the top screen with 25 capsules and no allocation in the model; the emulator ran at real speed
+but is not a timing measurement. No touch gesture (no framework path). The mutation proof is of the model, screen and debug entry; the
+drawing layer is a fake in host tests, so how the strips look is judged only from emulator screenshots (not in Git). The preview is not
+reachable in normal play and is connected to no profile, voucher, egg or RNG: the voucher-to-egg pull is C09 over C08.
+Status for this task: **COMPLETE** against the C07 card's scope (a debug / test presentation over a fixture result contract).
+
 ## 6. Not established by this PR
 
 - No upstream behavior was consulted or compared. There is no differential, no seed, no Node 22 run, and none is needed
@@ -1044,5 +1134,5 @@ will show is **not shipped** until C10.
 - No emulator or console check by C01/C02 (no screen or app change then). C03's emulator check, and what it did not cover, is in section 5.2.
 - No Old 3DS memory or time measurement. `sizeof` and code-size figures come from compilers (x86-64 host, Ubuntu's
   `arm-none-eabi-gcc`, and devkitARM in CI, with the 3DS CPU flags), not from a device or emulator.
-- No profile or wallet code, no live use of the scheduler (C05 is a pure policy: nothing in the app calls it, it has no wire codec and nothing spawns a rematch enemy). (C03 added the live observer hook and the post-mortem screen, section 2.9; C04 added the codec, the transaction and the one custom file, section 2.10.) The app never inserts a Nemesis: the finishing enemy is not identifiable. C06 added the read-only Radar (section 2.12). The rest is C07 to C10.
+- No profile or wallet code, no live use of the scheduler (C05 is a pure policy: nothing in the app calls it, it has no wire codec and nothing spawns a rematch enemy). (C03 added the live observer hook and the post-mortem screen, section 2.9; C04 added the codec, the transaction and the one custom file, section 2.10.) The app never inserts a Nemesis: the finishing enemy is not identifiable. C06 added the read-only Radar (section 2.12) and C07 a debug-only capsule presentation over fixed results (section 2.13). The rest is C08 to C10.
 - Range checks only for species, form, move and ability: membership in the game's tables is the adapters' job.

@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "capsule_screen.h"
 #include "combat_observer.h"
 #include "custom_store.h"
 #include "gc/run.h"
@@ -29,6 +30,8 @@ static struct {
 
 static void show_title(void);
 static void show_radar(void);
+static void show_capsule_preview(int n);
+static int g_capsule_preview; /* the debug preview's result count, 0 = none (survives app_start's reset) */
 static void show_slots(slots_mode mode, int cursor);
 static void on_run_end(int kind, void* arg);
 
@@ -255,6 +258,30 @@ static void show_radar(void) {
   }
 }
 
+/* ------------------------------------------------------------------ the capsule preview (debug) */
+
+static cap_fixture g_capsule_fixture; /* the screen copies it when it opens */
+
+static void on_capsule_exit(caps_exit how, void* arg) {
+  (void)how;
+  (void)arg;
+  show_title();
+}
+
+static void show_capsule_preview(int n) {
+  caps_args c;
+  memset(&c, 0, sizeof c);
+  if (!capsule_debug_fixture(n, &g_capsule_fixture)) {
+    show_title();
+    return;
+  }
+  c.fixture = &g_capsule_fixture;
+  c.on_exit = on_capsule_exit;
+  if (!capsule_screen_open(&c)) show_title();
+}
+
+void app_debug_capsule(int n) { g_capsule_preview = n >= 1 && n <= CAP_MAX ? n : 0; }
+
 static void show_title(void) {
   rsv_inspect_all(A.info);
   int last = rsv_last_slot();
@@ -274,5 +301,8 @@ void app_start(const rs_config* first_run) {
   A.first = *first_run;
   cs_set_nonce(A.first.entropy); /* only used by a new custom file; an existing one keeps its own */
   co_set_uid_source(cs_begin_run);
-  show_title();
+  if (g_capsule_preview > 0)
+    show_capsule_preview(g_capsule_preview);
+  else
+    show_title();
 }

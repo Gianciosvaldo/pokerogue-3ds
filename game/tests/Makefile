@@ -193,6 +193,14 @@ build/radar_test: $(RADAR_SRCS)
 radar_test: build/radar_test
 .PHONY: radar_test
 
+# the capsule-machine presentation (source/capsule_model.c + capsule_screen.c) with a fake drawing layer; make capsule_test && build/capsule_test [fuzz sessions]
+CAPSULE_SRCS := capsule_test.c ../source/capsule_model.c ../source/capsule_screen.c
+build/capsule_test: $(CAPSULE_SRCS)
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) -I$(APP)/include $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(CAPSULE_SRCS) -lm -o $@
+capsule_test: build/capsule_test
+.PHONY: capsule_test
+
 # a custom.sav with remembered enemies, for looking at the Radar on a real build (see mkcustom.c); make mkcustom && (cd /some/folder && /path/to/build/mkcustom few)
 build/mkcustom: mkcustom.c ../source/custom_core_build.c $(APP)/source/save.c
 	@mkdir -p build
