@@ -132,7 +132,7 @@ test: mint-host-test
 mint-host-test: $(BUILD)/mint_host_test
 	$(BUILD)/mint_host_test
 
-all: $(BUILD)/enemy_moveset_test $(BUILD)/reward_lifecycle_host_test $(BUILD)/reward_lifecycle_test $(BUILD)/resume_test $(BUILD)/itembridge_test $(BUILD)/libgc.a $(BUILD)/gcplay $(BUILD)/savetest $(BUILD)/system_save_test $(BUILD)/dextest $(BUILD)/dexupdatetest $(BUILD)/level_evo_test $(BUILD)/biome_test $(BUILD)/voucher_egg_test $(BUILD)/mystery_test $(BUILD)/mystery_diff_test $(BUILD)/reward_test $(BUILD)/reward_diff_test $(BUILD)/switch_prompt_test $(BUILD)/turn_tail_test $(BUILD)/boss_segments_test $(BUILD)/catch_test $(BUILD)/catch_diff_test $(BUILD)/reward_apply_test $(BUILD)/reward_apply_diff_test $(BUILD)/flee_test $(BUILD)/starter_unlock_test
+all: $(BUILD)/enemy_moveset_test $(BUILD)/reward_lifecycle_host_test $(BUILD)/reward_lifecycle_test $(BUILD)/resume_test $(BUILD)/itembridge_test $(BUILD)/libgc.a $(BUILD)/gcplay $(BUILD)/savetest $(BUILD)/system_save_test $(BUILD)/dextest $(BUILD)/dexupdatetest $(BUILD)/level_evo_test $(BUILD)/biome_test $(BUILD)/voucher_egg_test $(BUILD)/mystery_test $(BUILD)/mystery_diff_test $(BUILD)/reward_test $(BUILD)/reward_diff_test $(BUILD)/switch_prompt_test $(BUILD)/turn_tail_test $(BUILD)/boss_segments_test $(BUILD)/catch_test $(BUILD)/catch_diff_test $(BUILD)/reward_apply_test $(BUILD)/reward_apply_diff_test $(BUILD)/flee_test $(BUILD)/lapse_test $(BUILD)/starter_unlock_test
 
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -223,6 +223,9 @@ $(BUILD)/itembridge_test: tests/itembridge_test.c $(BUILD)/libgc.a $(REWARD_LIB)
 $(BUILD)/flee_test: tests/flee_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
+$(BUILD)/lapse_test: tests/lapse_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
 $(BUILD)/starter_unlock_test: tests/starter_unlock_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
@@ -252,6 +255,7 @@ test: all
 	$(BUILD)/boss_segments_test
 	$(BUILD)/catch_test
 	$(BUILD)/flee_test
+	$(BUILD)/lapse_test
 	$(BUILD)/reward_apply_test
 	$(BUILD)/starter_unlock_test
 	@a=$$($(BUILD)/gcplay --auto 200 --jobs 8 | grep digest); b=$$($(BUILD)/gcplay --auto 200 --jobs 8 --save-test | grep digest); \

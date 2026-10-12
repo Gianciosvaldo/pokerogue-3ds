@@ -259,6 +259,22 @@ static void evolve(gc_run *run, gc_rphase *p)
 }
 
 /* ---- BattleEndPhase ---- */
+/* Battle.pickUpScatteredMoney: every MoneyMultiplierModifier (Amulet Coin) in the list's order adds
+ * floor(value * 0.2 * stacks), Happy Hour doubles it, then addMoney and the "picked up" message */
+void gc_pick_up_scattered_money(gc_run *run)
+{
+    pr_battle *bt = &run->bt;
+    double amount = bt->money_scattered;
+    for (int i = 0; i < run->n_items; i++)
+        if (!strcmp(run->items[i].key, "AMULET_COIN")) amount += floor(amount * 0.2 * run->items[i].stack);
+    if (pr_arena_has_tag(bt, ARENA_TAG_TYPE_HAPPY_HOUR, ARENA_TAG_SIDE_BOTH)) amount *= 2;
+    run->money = pr_run_add_money(run->money, amount);
+    gc_event *ev = gc_ev_new(run, GC_EV_MONEY);
+    if (ev) { ev->a = (int32_t)amount; ev->b = (int32_t)run->money; }
+    gc_ev_msg(run, "battle:moneyPickedUp", 1, pr_arg_int("moneyAmount", (int)amount));
+    bt->money_scattered = 0;
+}
+
 static void battle_end(gc_run *run, gc_rphase *p)
 {
     gc_internal *in = gc_int(run);
@@ -284,8 +300,17 @@ static void battle_end(gc_run *run, gc_rphase *p)
         double ease = v == 0 ? 0 : v == 1 ? 1 : 1 - cos(v * 3.141592653589793 / 2);   /* Phaser's Sine.In */
         run->score += (int)ceil(bt->battle_score * ease);
     }
-    /* PostBattleAbAttr (Pickup, Honey Gather) and Pay Day's scattered money wait on the rewards */
-    if (bt->money_scattered) gc_stub(run, GC_STUB_POST_BATTLE);
+    /* PostBattleAbAttr: Pickup (PostBattleLootAbAttr) takes an item from the enemies' loot after a victory. battle-core keeps
+     * only the loot's count and game-core drops the enemy items at the battle's end, so the transfer is not ported:
+     * counted when it would have happened. */
+    if (victory && bt->post_battle_loot > 0)
+        for (int i = 0; i < run->n_party; i++)
+            if (gc_mon_allowed(&run->party[i]) && pr_has_ability_active(bt, &run->party[i].b, ABILITY_ID_PICKUP)) {
+                gc_stub(run, GC_STUB_POST_BATTLE);
+                break;
+            }
+    /* BattleEndPhase: currentBattle.pickUpScatteredMoney() (Pay Day) */
+    if (bt->money_scattered) gc_pick_up_scattered_money(run);
     /* clearEnemyHeldItemModifiers; then the bounded temporary booster lapse. */
     run->n_enemy_items = 0;
     if (!gc_temp_lapse(run, NULL)) gc_stub(run, GC_STUB_POST_BATTLE);

@@ -229,6 +229,7 @@ int gc_battle_continue(gc_run *run);
 /* After the wild battle's start stopped at PH_CHECK_SWITCH: the answer, run to the next stop */
 int gc_battle_answer_switch(gc_run *run, bool yes);
 void gc_battle_switch_screen(gc_run *run);        /* fills run->screen for SWITCH */
+void gc_pick_up_scattered_money(gc_run *run);     /* pickUpScatteredMoney (src/battle.ts:204) */
 void gc_battle_end_cleanup(gc_run *run);          /* after a battle: the party off the field */
 int gc_enemy_active_index(const gc_run *run);     /* the enemy party index on the field, -1 = none */
 int gc_player_active_index(const gc_run *run);
