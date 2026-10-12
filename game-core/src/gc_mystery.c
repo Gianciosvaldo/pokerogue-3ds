@@ -140,6 +140,8 @@ bool gc_mystery_pick_ok(const gc_run *run, int type, int option, int idx)
         if (option == 0) return hp_ratio_in_half_to_full(&m->b);
         if (option == 1) return gc_mon_allowed(m);
     }
+    /* Part Timer's first two options: isPokemonValidForEncounterOptionSelection, any Pokemon that is not fainted */
+    if (type == GC_ME_PART_TIMER && option < 2) return gc_mon_allowed(m);
     return false;
 }
 
@@ -261,6 +263,21 @@ static bool lost_at_sea_move_ok(const gc_run *run, int option)
     return false;
 }
 
+/* CHARMING_MOVES (src/data/mystery-encounters/requirements/requirement-groups.ts) */
+static bool is_charming_move(int move)
+{
+    return move == MOVE_ID_CHARM || move == MOVE_ID_FLATTER || move == MOVE_ID_DRAGON_CHEER || move == MOVE_ID_ALLURING_VOICE
+        || move == MOVE_ID_ATTRACT || move == MOVE_ID_SWEET_SCENT || move == MOVE_ID_CAPTIVATE || move == MOVE_ID_AROMATIC_MIST;
+}
+
+/* MoveRequirement(CHARMING_MOVES, true): a Pokemon allowed in battle with a charming move among its moves */
+static bool has_charming_move(const gc_mon *m)
+{
+    if (!gc_mon_allowed(m)) return false;
+    for (int k = 0; k < m->b.n_moves; k++) if (m->b.moves[k] > 0 && is_charming_move(m->b.moves[k])) return true;
+    return false;
+}
+
 void gc_mystery_setup_screen(gc_run *run)
 {
     gc_screen *s = &run->screen;
@@ -293,6 +310,10 @@ void gc_mystery_setup_screen(gc_run *run)
     } else if (type == GC_ME_LOST_AT_SEA) {
         s->option_ok[0] = lost_at_sea_move_ok(run, 0);
         s->option_ok[1] = lost_at_sea_move_ok(run, 1);
+    } else if (type == GC_ME_PART_TIMER) {
+        s->option_ok[0] = any_pick_ok(run, type, 0);
+        s->option_ok[1] = any_pick_ok(run, type, 1);
+        s->option_ok[2] = gc_mystery_primary_pokemon(run, type, 2) >= 0;
     } else if (type == GC_ME_THE_POKEMON_SALESMAN) {
         s->option_ok[0] = run->money >= pr_run_get_wave_money_amount(run->wave, 4.0) && run->n_party < 6;
     } else if (type == GC_ME_DELIBIRDY) {
@@ -512,6 +533,12 @@ static void me_leave_with_heal_shop(gc_run *run, bool post, int type, int mon, i
  * CanLearnMoveRequirement query passes */
 int gc_mystery_primary_pokemon(const gc_run *run, int type, int option)
 {
+    if (type == GC_ME_PART_TIMER) {
+        if (option != 2) return -1;
+        for (int k = 0; k < run->n_party; k++)
+            if (has_charming_move(&run->party[run->party_order[k]])) return run->party_order[k];
+        return -1;
+    }
     if (type != GC_ME_LOST_AT_SEA || option < 0 || option > 1 || !lost_at_sea_move_ok(run, option)) return -1;
     const int move = option == 0 ? MOVE_ID_SURF : MOVE_ID_FLY;
     for (int k = 0; k < run->n_party; k++)
@@ -581,6 +608,75 @@ static void field_trip(gc_run *run, int option, int b, int c)
     pr_reward_ctx *ctx = gc_reward_ctx(run);
     for (int k = 0; k < 5; k++) cs->options[cs->n_options++] = pr_reward_pregen_option(ctx, shops[option][k].item, shops[option][k].stat);
     cs->fill_remaining = false;
+    cs->reroll_multiplier = NAN;
+    cs->allow_luck_upgrades = true;
+    end_mystery_encounter_shop(run);
+}
+
+/* Part Timer (src/data/mystery-encounters/encounters/part-timer-encounter.ts).
+ * Delivery work (option 1) is paid by the Pokemon's Speed, Strong Work (option 2) by its HP, Attack and Defense, against
+ * a baseline Pokemon of the same level (Math.min(Math.max(2.5 * (1 + percentDiff), 1), 4) times the wave's money);
+ * Assist with Sales (option 3, needs a Pokemon allowed in battle with a charming move: the first one in the party) always
+ * pays 2.5. The party screen's callback (outside any seed offset: nothing is drawn) works the multiplier out, takes every
+ * move of the Pokemon down to 2 PP at most and sets its experience (100, alone); the option phase pays the money (Amulet
+ * Coin counted) with the messages, sets the shop (fillRemaining: true, the rolled items) and leaves without a heal shop.
+ * The experience phase comes before the shop. b = the Pokemon (a storage index): one the filter refuses is taken as the first
+ * that passes (the app has no party screen for encounters yet). */
+double gc_part_timer_multiplier(const gc_mon *m, int option)
+{
+    const double level = m->b.level;
+    if (option == 0) {
+        const double baseline = floor((2 * 90 + 16) * level * 0.01) + 5;
+        const double percent_diff = (m->b.stats[STAT_SPD] - baseline) / baseline;
+        return fmin(fmax(2.5 * (1 + percent_diff), 1), 4);
+    }
+    if (option == 1) {
+        const double baseline_hp = floor((2 * 75 + 16) * level * 0.01) + level + 10;
+        const double baseline_atk_def = floor((2 * 75 + 16) * level * 0.01) + 5;
+        const double baseline = baseline_hp + 1.5 * (baseline_atk_def * 2);
+        const double strongest = m->b.stats[STAT_HP] + 1.5 * (m->b.stats[STAT_ATK] + m->b.stats[STAT_DEF]);
+        const double percent_diff = (strongest - baseline) / baseline;
+        return fmin(fmax(2.5 * (1 + percent_diff), 1), 4);
+    }
+    return 2.5;
+}
+
+static void part_timer(gc_run *run, int option, int b)
+{
+    int mon = -1;
+    double multiplier = 2.5;
+    if (option == 2) {
+        mon = gc_mystery_primary_pokemon(run, GC_ME_PART_TIMER, 2);
+    } else {
+        mon = gc_mystery_pick_ok(run, GC_ME_PART_TIMER, option, b) ? b : -1;
+        for (int i = 0; mon < 0 && i < run->n_party; i++) if (gc_mystery_pick_ok(run, GC_ME_PART_TIMER, option, i)) mon = i;
+    }
+    if (mon < 0) { end_mystery_encounter_leave(run); return; }
+    gc_mon *m = &run->party[mon];
+    multiplier = gc_part_timer_multiplier(m, option);
+    for (int k = 0; k < m->b.n_moves; k++) {
+        if (m->b.moves[k] <= 0) continue;
+        const int new_pp_used = gc_move_max_pp(&m->b, k) - 2;
+        if (m->b.pp_used[k] < new_pp_used) m->b.pp_used[k] = (uint8_t)new_pp_used;
+    }
+    {
+        pr_exp_party pp;
+        const uint32_t id = m->b.id;
+        gc_exp_party_build(run, &pp, &id, 1);
+        pp.trainer_battle = false;
+        pp.me_exp_multiplier = 1.0;   /* isBattleMysteryEncounter(): the encounter's expMultiplier, 1 */
+        gc_exp_party_queue(run, &pp, 100, true);
+    }
+    gc_ev_msg(run, multiplier > 2.5 || option == 2 ? "mysteryEncounters/partTimer:jobCompleteGood" : "mysteryEncounters/partTimer:jobCompleteBad", 0);
+    double amount = pr_run_get_wave_money_amount(run->wave, multiplier);
+    for (int i = 0; i < run->n_items; i++)
+        if (!strcmp(run->items[i].key, "AMULET_COIN")) amount += floor(amount * 0.2 * run->items[i].stack);
+    run->money = fmin(fmax(run->money + amount, 0.0), 9007199254740991.0);
+    gc_ev_msg(run, "mysteryEncounterMessages:receiveMoney", 1, pr_arg_int("amount", (int32_t)amount));
+    gc_ev_msg(run, "mysteryEncounters/partTimer:pokemonTired", 0);
+    pr_reward_custom *cs = &gc_int(run)->reward.me_custom;
+    memset(cs, 0, sizeof *cs);
+    cs->fill_remaining = true;
     cs->reroll_multiplier = NAN;
     cs->allow_luck_upgrades = true;
     end_mystery_encounter_shop(run);
@@ -899,16 +995,7 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_PART_TIMER:
-        if (option == 0 || option == 1) {
-            double mult = option == 0 ? 0.8 : 0.5;
-            for (int i = 0; i < run->n_party; i++) {
-                if (run->party[i].b.hp > 0) run->party[i].b.hp = (int32_t)(run->party[i].b.hp * mult);
-            }
-            run->money = pr_run_add_money(run->money, pr_run_get_wave_money_amount(run->wave, option == 0 ? 2.0 : 5.0));
-            end_mystery_encounter_leave(run);
-            return true;
-        }
-        end_mystery_encounter_leave(run);
+        part_timer(run, option, b);
         return true;
 
     case GC_ME_DANCING_LESSONS:
