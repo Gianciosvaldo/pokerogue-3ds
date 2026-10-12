@@ -1180,3 +1180,14 @@ rich coverage increases from 1,924 to 1,929, without covered mismatch or loss.
 See [validation and reproduction](MULTI-HIT-ABILITIES-VALIDATION.md). The proof
 includes knockout interruption, Substitute, fixed/intrinsic hits, Multi-Lens,
 per-hit defenses, Tera and damage exclusions; broader doubles remain separate.
+
+## Beat Up party hit count (2026-10-12)
+
+The move-effect phase now counts eligible party contributors using the pinned
+source's status and self-identity rules. Existing per-hit power preserves the
+source's unfiltered party indexing and primary base-species Attack.
+Source proof matches 8,000 complete turns, 72 direct count checks and 324 power
+probes; twelve production mutations fail and nine malformed traces reject.
+Retained rich coverage rises from 1,929 to 1,932, with no covered mismatch or loss.
+See [validation and reproduction](BEAT-UP-VALIDATION.md). Mixed-fusion identity,
+broader doubles and the remaining boss/flee completion gates remain separate.

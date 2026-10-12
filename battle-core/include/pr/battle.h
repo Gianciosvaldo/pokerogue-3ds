@@ -408,6 +408,8 @@ bool pr_hook_ab(pr_battle *bt, const pr_pokemon *p, uint16_t cls);
 /* applyMoveAttrs("<Class>", ...) presence check for a move. */
 bool pr_hook_move(pr_battle *bt, uint16_t move, uint16_t cls);
 bool pr_move_has_attr(uint16_t move, uint16_t cls);
+/* MultiHitAttr.getHitCount(BEAT_UP): user plus party members without a status. */
+int pr_beat_up_hit_count(pr_battle *bt, const pr_pokemon *user);
 void pr_note_unported(pr_battle *bt, uint16_t cls);
 /* Record a side effect of class `cls` for the phase engine (heal, stat change, tag) */
 void pr_note_deferred(pr_battle *bt, uint16_t cls);

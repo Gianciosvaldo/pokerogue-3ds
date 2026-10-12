@@ -20,8 +20,8 @@ Completed continuation slices and remaining source-backed work:
 | Protean/Libero (merged #237) | Real normal/failure callers, leaf and message now implemented | Source type-change timing, existing type and Tera exclusions, repeated type changes (the pin has no Gen 9 once-per-summon gate), switch reset |
 | Field priority immunity (merged #240) | Defending-field caller now dispatches and honors cancellation | Source positive/zero/negative and modified priority, passives, bypass, source phase/text/RNG; broader doubles remain |
 | Receiver/Power of Alchemy | CopyFaintedAlly needs victim context in the knockout dispatcher | Ally versus enemy victim, eligibility, copied primary/passive and source order, loaded doubles |
-| Parental Bond / Skill Link (this slice) | Real hit-count callbacks now implemented; existing final-strike reduction retained | Move exclusions, hit powers/order, targets, KO interruption, exact RNG consumption |
-| Beat Up | Party hit-count case is missing; existing per-hit power is implemented | Pinned party/status ordering, self contribution, base species Attack, KO interruption and modifiers |
+| Parental Bond / Skill Link (merged #244) | Real hit-count callbacks now implemented; existing final-strike reduction retained | Move exclusions, hit powers/order, targets, KO interruption, exact RNG consumption |
+| Beat Up (this slice) | Party hit-count case now implemented; existing per-hit power verified | Pinned party/status ordering, self contribution, base species Attack, KO interruption and modifiers |
 | Cud Chew / Harvest | Berry recording, repeat consumption and restoration callbacks remain | Actual named held-item history and delays, ownership, duplication/refusal and RNG |
 | Transform / Sketch / ability copying | Remaining move effects and identity overrides | Real source identity/stat/moveset copying, bounds, reset and state serialization |
 | Forms / Battle Bond | Remaining form callbacks and one-use battle flags | Actual conditions and new required state; do not invent absent lifecycle inputs |
@@ -69,3 +69,20 @@ matches 8,000 full turns and 440 dispatcher boundaries. The remaining 71 rich
 turns are a prioritization sample, not the whole remaining battle-core scope.
 Leading sampled gaps include forms, berry restoration, Battle Bond predicates,
 stat-changing moves, ability copying, Beat Up, suppression and Sketch.
+
+Beat Up continuation on base main `7d555af`: rich seed777 now covers 1,932/2,000
+turns exactly, up from 1,929. Source proof matches 8,000 complete turns, 72 party
+count checks and 324 power probes, with no retained covered mismatch or loss.
+These sampled coverage counts do not establish whole-core completion.
+
+User-specified completion gates (2026-10-12):
+
+- Boss score: capture and faint callers in phases.c (original reported lines
+  434/2674) currently flag boss segments without applying the source's
+  sqrt(bossSegments) multiplier before ceil. Fix both actual callers and compare
+  actual BattleScene.addFaintedEnemyScore, including item/order boundaries.
+- Flee: concurrent merged #243 adds an actual-source game-core differential;
+  it covers singles outcomes and run transitions, but excludes RNG, speed ties
+  and doubles. It also documents a battle-core ENDLESS biome-queue discrepancy
+  masked by the game-core integration. Run and extend source proof at the
+  battle-core phase boundary before declaring the flee gate complete.

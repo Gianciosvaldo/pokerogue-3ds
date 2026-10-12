@@ -2346,6 +2346,7 @@ static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
             case MULTI_HIT_TYPE_TWO: hits = 2; break;
             case MULTI_HIT_TYPE_THREE: hits = 3; break;
             case MULTI_HIT_TYPE_TEN: hits = 10; break;
+            case MULTI_HIT_TYPE_BEAT_UP: hits = pr_beat_up_hit_count(bt, user); break;
             default: pr_note_unported(bt, PR_AC_MultiHitAttr); break;   /* Beat Up's count */
             }
         }
