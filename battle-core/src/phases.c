@@ -1220,8 +1220,12 @@ static void fail_move(pr_battle *bt, pr_engine *e, int ph, bool due_to_terrain)
     pr_pokemon *user = m->pokemon;
     int id = m->move.id;
     if (due_to_terrain || id == MOVE_ID_ROAR || id == MOVE_ID_WHIRLWIND || id == MOVE_ID_TRICK_OR_TREAT
-        || id == MOVE_ID_FORESTS_CURSE)
-        pr_hook_ab(bt, user, PR_AC_PokemonTypeChangeAbAttr);
+        || id == MOVE_ID_FORESTS_CURSE) {
+        pr_pokemon *targets[4];
+        int nt = active_in_list(bt, tlist(e, m->targets), targets);
+        pr_ab_params params = {.pokemon = user, .opponent = nt ? targets[0] : NULL, .move = id};
+        pr_apply_ab_attrs(bt, PR_AC_PokemonTypeChangeAbAttr, &params);
+    }
     pr_turn_move tm = {.move = (uint16_t)id, .use_mode = m->use_mode, .result = MOVE_RESULT_FAIL};
     pr_push_history_shared(bt, e, user, tm, m->targets);
     pr_queue_msg(bt, e, failed_text(bt, e, ph, due_to_terrain));
@@ -1278,7 +1282,8 @@ static void use_move(pr_battle *bt, pr_engine *e, int ph, bool charging)
     if (third_failure_check(bt, e, ph)) return;
     pr_pokemon *targets[4];
     int nt = active_in_list(bt, tlist(e, m->targets), targets);
-    pr_hook_ab(bt, user, PR_AC_PokemonTypeChangeAbAttr);     /* Protean, Libero */
+    pr_ab_params type_change = {.pokemon = user, .opponent = nt ? targets[0] : NULL, .move = m->move.id};
+    pr_apply_ab_attrs(bt, PR_AC_PokemonTypeChangeAbAttr, &type_change);
     if (!pr_move_apply_conditions(bt, m->move.id, user, nt ? targets[0] : NULL, 4)) {
         fail_move(bt, e, ph, false);
         return;

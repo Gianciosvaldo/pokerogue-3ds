@@ -326,6 +326,26 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
     const pr_pokemon *p = pp->pokemon, *o = pp->opponent;
     int move = pp->move;
     switch (a->cls) {
+    case PR_AC_PokemonTypeChangeAbAttr: {
+        if (move <= MOVE_ID_NONE || move >= PR_MOVE_COUNT) return -1;
+        if (p->terastallized || move == MOVE_ID_STRUGGLE
+            || pr_move_has_attr((uint16_t)move, PR_AC_CallMoveAttr)
+            || pr_move_has_attr((uint16_t)move, PR_AC_NaturePowerAttr)) return 0;
+        int type = pr_get_move_type(bt, p, move);
+        int8_t types[PR_MAX_TYPES];
+        int n = pr_get_types(p, types, 0);
+        bool same = true;
+        for (int i = 0; i < n; i++) if (types[i] != type) same = false;
+        if (same) return 0;
+        if (!pp->simulated && !c->e) return -1;
+        c->msg_type = type; /* Source canApply sets the trigger message's moveType. */
+        GATE(true);
+        if (!pp->simulated) {
+            int8_t one = (int8_t)pr_get_move_type(bt, p, move);
+            pr_set_summon_types(bt, (pr_pokemon *)p, &one, 1);
+        }
+        return 1;
+    }
     /* ---- stats ---- */
     case PR_AC_ChangeMovePriorityInBracketAbAttr: {
         const pr_attr_ChangeMovePriorityInBracketAbAttr *x = P(ChangeMovePriorityInBracketAbAttr, a);
@@ -1694,9 +1714,7 @@ static bool trigger_message(pr_battle *bt, const pr_attr *a, const pr_ab_params 
         *out = pr_msg2("abilityTriggers:postDefendAbilityGive", name, ability);
         return true;
     case PR_AC_PokemonTypeChangeAbAttr:
-        /* Protean, Libero: pokemonTypeChange {moveType: this.moveType}, which canApply sets; the class
-         * isn't ported (no case sets it here) */
-        *out = pr_msg0(NULL);
+        *out = pr_msg2("abilityTriggers:pokemonTypeChange", name, pr_arg_type("moveType", c->msg_type));
         return true;
     case PR_AC_IntimidateImmunityAbAttr:
         *out = pr_msg2("abilityTriggers:intimidateImmunity", name, ability);

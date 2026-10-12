@@ -213,3 +213,12 @@ $(BUILD)/priority-brackets-replay.inc: tests/speed-boost-replay.inc tools/build-
 	python3 tools/build-priority-brackets-replay.py $< $@
 $(BUILD)/priority-brackets-test: tests/priority-brackets-test.c $(BUILD)/priority-brackets-replay.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) tests/priority-brackets-test.c $(BUILD)/libprcore.a -lm -o $@
+
+# Protean/Libero actual source turns; unchanged projection and additive strict guard.
+all: $(BUILD)/protean-test
+$(BUILD)/protean-test: tests/protean-test.c tests/speed-boost-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/protean-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/protean-helper-test
+$(BUILD)/protean-helper-test: tests/protean-helper-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
