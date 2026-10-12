@@ -16,6 +16,7 @@ static struct {
   result_args a;
   msgbox msg;
   bool done;
+  char note[192]; /* a.note copied: the caller's text may be gone by the time the screen is drawn */
 } R;
 
 static void leave_result(void) {
@@ -85,6 +86,14 @@ static void draw_bottom(void) {
   rr_rect(0, 0, 320, 240, RR_RGBA(0x10, 0x10, 0x18, 255));
   ui_window(8, 8, 304, 160, WIN_NORMAL);
   rsum_draw(&R.a.run, 22, 18);
+  /* something that was not stored (the custom file): small print in the gap above the line, the 8 px pixel font that is legible here */
+  if (R.note[0]) {
+    text_opts o = text_defaults();
+    o.wrap_w = 300;
+    char wrapped[256];
+    text_wrap(TS_INSTRUCTIONS_TEXT, R.note, &o, wrapped, sizeof wrapped);
+    text_draw(TS_INSTRUCTIONS_TEXT, 10, 170, wrapped, &o);
+  }
   ui_window(1, 239 - 42, 318, 42, WIN_NORMAL);
   msgbox_draw(&R.msg, 8, 239 - 42 + 8);
 }
@@ -100,8 +109,15 @@ static void rs_draw(ui_screen* s, rr_screen which) {
 static ui_screen g_screen = {"run-result", UI_FADE, NULL, NULL, NULL, rs_input, rs_update, rs_draw, NULL};
 
 void result_screen_open(const result_args* a) {
+  /* a->note may point into R itself (the post-mortem's B comes back here with R.a): take it out before R is cleared */
+  char keep[sizeof R.note];
+  keep[0] = 0;
+  if (a->note) snprintf(keep, sizeof keep, "%s", a->note);
+  const result_args args = *a;
   memset(&R, 0, sizeof R);
-  R.a = *a;
+  R.a = args;
+  memcpy(R.note, keep, sizeof R.note);
+  R.a.note = R.note[0] ? R.note : NULL;
   char line[160], wrapped[256];
   if (a->victory)
     snprintf(line, sizeof line, "You cleared the run at wave %d!", a->run.wave);

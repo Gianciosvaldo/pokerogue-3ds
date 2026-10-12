@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "combat_observer.h"
+#include "custom_store.h"
 #include "gc/run.h"
 #include "result_screen.h"
 #include "run_saves.h"
@@ -21,6 +22,8 @@ static struct {
   rsv_info info[RSV_SLOTS]; /* what each slot holds, as of the last look */
   int slot;                 /* the slot the run on screen is saved into */
   result_args result;
+  const co_report* kept;    /* the report whose custom store write failed: tried once more when the result screen is left */
+  char note[CS_WHY_LEN + 64];
 } A;
 
 static void show_title(void);
@@ -124,6 +127,12 @@ static void new_run_in(int slot) {
 
 static void on_result_done(void* arg) {
   (void)arg;
+  /* the SD card refused the report at the run's end: one more try before it is gone (the store is idempotent by run, so a report
+   * that did get written cannot be stored twice) */
+  if (A.kept) {
+    cs_commit(A.kept);
+    A.kept = NULL;
+  }
   show_title();
 }
 
@@ -136,6 +145,26 @@ static void on_run_end(int kind, void* arg) {
   A.result.run.status = RSV_OK;
   A.result.report = co_report_get(); /* taken by the run driver as the run ended, before the slot is cleared below */
   A.result.on_done = on_result_done;
+  /* The custom store takes the report BEFORE the slot is cleared. If the app stops between the two, Continue reloads the save from the
+   * start of the lost encounter and the player plays the wave again, with a stored report of the defeat they undid (and no Nemesis: the
+   * app never inserts one). The other order would lose the report of a defeat that stood. A report is also only ever a post-mortem: the
+   * worse outcome of the first order is a stale report, the worse outcome of the second is a missing one. */
+  A.kept = NULL;
+  A.note[0] = 0;
+  if (A.result.report) {
+    const cs_result stored = cs_commit(A.result.report);
+    if (stored.outcome == CS_WRITE_FAILED) A.kept = A.result.report;
+    const char* note = cs_note(stored.outcome);
+    if (stored.outcome == CS_FILE_UNUSABLE || stored.outcome == CS_NO_DURABLE_RUN) {
+      char why[CS_WHY_LEN];
+      if (cs_get_state(why) == CS_UNREADABLE) { /* the run had no durable uid because the file cannot be used: say why */
+        snprintf(A.note, sizeof A.note, "%s", why);
+        note = NULL;
+      }
+    }
+    if (note) snprintf(A.note, sizeof A.note, "%s", note);
+    A.result.note = A.note[0] ? A.note : NULL;
+  }
   rsv_clear(A.slot);
   /* what the run won or caught (a Classic clear is recorded by game-core as the run ends) goes to the SD card now. A refusal is not
    * lost: the next save point of the next run writes it again. */
@@ -212,5 +241,7 @@ static void show_title(void) {
 void app_start(const rs_config* first_run) {
   memset(&A, 0, sizeof A);
   A.first = *first_run;
+  cs_set_nonce(A.first.entropy); /* only used by a new custom file; an existing one keeps its own */
+  co_set_uid_source(cs_begin_run);
   show_title();
 }

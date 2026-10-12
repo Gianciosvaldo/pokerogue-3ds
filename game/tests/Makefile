@@ -122,7 +122,7 @@ runtest-save: build/runtest
 .PHONY: runtest-save
 
 # the app's screen flow (app_flow.c) with fake screens and a fake run driver, over the real save slots; make flowtest && build/flowtest
-FLOW_SRCS := flowtest.c ../source/app_flow.c $(OBS_SRCS) ../source/run_saves.c ../source/system_data.c ../source/starter_data.c ../menus/menus_data.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+FLOW_SRCS := flowtest.c ../source/app_flow.c ../source/custom_store.c $(OBS_SRCS) ../source/run_saves.c ../source/system_data.c ../source/starter_data.c ../menus/menus_data.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/flowtest: $(FLOW_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) $(FLOW_SRCS) -lm -o $@
@@ -193,3 +193,11 @@ build/bgmtest: $(BGM_SRCS)
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(BGM_SRCS) -lm -o $@
 bgmtest: build/bgmtest
 .PHONY: bgmtest
+
+# the custom content metadata on the SD card (custom_store.c + custom-core's codec, over the app's real save.c); make store_test && build/store_test
+STORE_SRCS := store_test.c ../source/custom_store.c ../source/custom_core_build.c $(APP)/source/save.c
+build/store_test: $(STORE_SRCS)
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) -I$(CCORE)/include -I$(GC)/include -I$(GC)/gen/out -I$(RC)/include -I$(RC)/gen/out -I$(APP)/include $(CFLAGS) -fsanitize=address,undefined $(STORE_SRCS) -lm -o $@
+store_test: build/store_test
+.PHONY: store_test

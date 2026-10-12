@@ -31,6 +31,7 @@ typedef struct {
   bool victory;          /* the run was cleared */
   rsv_info run;          /* the run as it ended (rsv_summarize) */
   const co_report* report; /* the combat history of the run, NULL = none (A leaves); owned by the observer, valid until the next run */
+  const char* note;      /* one more line under the result (the report could not be stored...), NULL = none; copied */
   void (*on_done)(void* arg);
   void* arg;
 } result_args;
