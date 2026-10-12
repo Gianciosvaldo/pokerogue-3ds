@@ -219,6 +219,9 @@ void ui_inject(ui_button b) {
   if (g_n_inject < INJECT_MAX) g_inject[g_n_inject++] = b;
 }
 
+static bool g_repeating; /* the button being delivered is an auto-repeat of a held one */
+bool ui_input_repeating(void) { return g_repeating; }
+
 static void deliver(ui_button b) {
   if (ui_busy()) return;
   ui_screen* s = ui_top();
@@ -242,7 +245,9 @@ static void read_input(void) {
       deliver(KEYMAP[i].b);
     } else if ((held & k) && repeats && g_next_repeat[i] > 0 && g_now >= g_next_repeat[i]) {
       g_next_repeat[i] += REPEAT_MS;
+      g_repeating = true;
       deliver(KEYMAP[i].b);
+      g_repeating = false;
     } else if (!(held & k)) {
       g_next_repeat[i] = 0;
     }

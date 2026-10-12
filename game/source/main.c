@@ -7,7 +7,8 @@
  * at every save point. See run_screen.h for what is still a stand-in (starters, reward names, mystery encounters...).
  *
  * Debug file: sdmc:/3ds/pokerogue/rundriver.txt, optional. Lines "seed=<24 characters>" and
- * "starters=<species id>,<species id>..." fix the first New Game of a session (for repeatable test runs).
+ * "starters=<species id>,<species id>..." fix the first New Game of a session (for repeatable test runs). A line "capsule=<1..25>" opens
+ * the capsule-machine preview (a debug view with fixed results, capsule_screen.h) before the title.
  *
  * START + SELECT quits.
  */
@@ -31,6 +32,7 @@
 
 /* sdmc:/3ds/pokerogue/rundriver.txt (see the header comment) */
 static void read_driver_file(rs_config* cfg) {
+  app_debug_capsule(0);
   static char seed[160];
   FILE* f = fopen("sdmc:/3ds/pokerogue/rundriver.txt", "r");
   if (!f) return;
@@ -40,6 +42,8 @@ static void read_driver_file(rs_config* cfg) {
     if (!strncmp(line, "seed=", 5) && line[5]) {
       snprintf(seed, sizeof seed, "%s", line + 5);
       cfg->seed = seed;
+    } else if (!strncmp(line, "capsule=", 8)) {
+      app_debug_capsule(atoi(line + 8)); /* anything outside 1..25 is ignored there */
     } else if (!strncmp(line, "starters=", 9)) {
       cfg->n_starters = 0;
       for (char* t = strtok(line + 9, ", "); t && cfg->n_starters < 6; t = strtok(NULL, ", "))
