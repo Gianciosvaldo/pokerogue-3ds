@@ -529,6 +529,12 @@ int pr_encore_try_override(pr_pokemon *p)
 static bool can_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t)
 {
     switch (t->type) {
+    case BATTLER_TAG_TYPE_BYPASS_SPEED: {
+        bool bypass = true;
+        pr_ab_params params = {.pokemon = p, .move = -1, .flag = &bypass};
+        pr_apply_ab_attrs(bt, PR_AC_PreventBypassSpeedChanceAbAttr, &params);
+        return bypass;
+    }
     case BATTLER_TAG_TYPE_ENCORE: {
         int move = pr_encore_move(bt, p);
         if (move <= 0) return false;
