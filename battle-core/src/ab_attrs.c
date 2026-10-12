@@ -327,6 +327,11 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
     int move = pp->move;
     switch (a->cls) {
     /* ---- stats ---- */
+    case PR_AC_WonderSkinAbAttr:
+        GATE(move >= 0 && move < PR_MOVE_COUNT
+             && pr_moves[move].category == MOVE_CATEGORY_STATUS && *pp->value >= 50);
+        *pp->value = 50; /* Source also modifies the holder during simulation. */
+        return 1;
     case PR_AC_StatMultiplierAbAttr: {
         const pr_attr_StatMultiplierAbAttr *x = P(StatMultiplierAbAttr, a);
         GATE(pp->stat == x->stat

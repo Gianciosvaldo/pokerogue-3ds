@@ -194,3 +194,14 @@ $(BUILD)/knockout-stats-test: tests/knockout-stats-test.c $(BUILD)/fell-stinger-
 all: $(BUILD)/leave-weather-test
 $(BUILD)/leave-weather-test: tests/leave-weather-test.c tests/trainer-switch-replay.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/leave-weather-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/wonder-skin-test
+$(BUILD)/wonder-skin-replay.inc: tests/speed-boost-replay.inc tools/build-wonder-skin-replay.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-wonder-skin-replay.py $< $@
+$(BUILD)/wonder-skin-test: tests/wonder-skin-test.c $(BUILD)/wonder-skin-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) tests/wonder-skin-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/wonder-skin-helper-test
+$(BUILD)/wonder-skin-helper-test: tests/wonder-skin-helper-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/wonder-skin-helper-test.c $(BUILD)/libprcore.a -lm -o $@
