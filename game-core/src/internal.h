@@ -157,6 +157,9 @@ int gc_evolution_moves(const gc_mon *m, uint16_t *out, int max);
 int gc_unlocked_egg_moves(const gc_run *run, const gc_mon *m, uint16_t out[4]);
 int gc_egg_moves(const gc_mon *m, uint16_t out[4]);
 int gc_mystery_primary_pokemon(const gc_run *run, int type, int option);   /* the option's primaryPokemon (storage index) or -1 */
+int gc_root_species(int species);   /* PokemonSpeciesForm.getRootSpeciesId(): the first stage of the species' evolution line */
+void gc_party_remove(gc_run *run, int idx);   /* removePokemonFromPlayerParty: storage index; the storage behind it moves down */
+int gc_offer_terms(const gc_run *run, double *price);   /* An Offer You Can't Refuse: the strongest Pokemon (storage index) and what it is worth */
 double gc_part_timer_multiplier(const gc_mon *m, int option);   /* Part Timer's money multiplier for a Pokemon: option 0 by Speed, 1 by HP/Attack/Defense, 2 fixed */
 bool gc_can_learn_move(const gc_mon *m, int move);   /* CanLearnMoveRequirement: level (now), TM or egg move */
 void gc_exp_party_build(gc_run *run, pr_exp_party *pp, const uint32_t *participants, int n_participants);
