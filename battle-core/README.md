@@ -1201,3 +1201,15 @@ production mutations detected and nine malformed inputs refused. Retained
 battle and save regressions pass. See [validation and scope](BOSS-SCORE-VALIDATION.md).
 The wider level field/save prerequisite and remaining flee phase proof are open;
 this numerical proof does not establish full boss or capture lifecycle parity.
+
+## Flee phase boundary (2026-10-12)
+
+Successful escapes now use the source biome predicate, enemy-slot speed/boss
+semantics, status cleanup and modifier/stat refresh. Actual source proof matches
+10,000 phase cases, including natural doubles, meaningful ties, stages, RNG,
+queue order/presence/passive payload and rendered text. Eighteen production
+mutations fail and eleven malformed traces refuse; retained battle/save checks
+pass. The original game-core differential remains unchanged and passing.
+See [validation and scope](FLEE-PHASE-VALIDATION.md). Full doubles turns, broader
+leave-field abilities, challenge rules, wide levels and stat-modifier ordering
+remain separate. Ditto/Transform is the user's next implementation priority.

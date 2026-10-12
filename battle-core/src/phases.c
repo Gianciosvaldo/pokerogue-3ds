@@ -3562,7 +3562,7 @@ static void pokemon_heal_phase(pr_battle *bt, pr_engine *e, int ph)
 }
 
 /* AttemptRunPhase.calculateEscapeChance(escapeAttempts) */
-static double calculate_escape_chance(pr_battle *bt, int current_attempts)
+double pr_calculate_escape_chance(pr_battle *bt, int current_attempts)
 {
     double enemy_speed = 0.0;
     double player_speed = 0.0;
@@ -3570,13 +3570,13 @@ static double calculate_escape_chance(pr_battle *bt, int current_attempts)
 
     for (int i = 0; i < 2; i++) {
         pr_pokemon *p = bt->field[i];
-        if (is_active_on_field(p)) {
+        if (p && p->hp > 0) {
             player_speed += pr_get_stat(p, STAT_SPD, true);
         }
     }
     for (int i = 2; i < 4; i++) {
         pr_pokemon *p = bt->field[i];
-        if (is_active_on_field(p)) {
+        if (p) {
             enemy_speed += pr_get_stat(p, STAT_SPD, true);
             if (p->is_boss) is_boss = true;
         }
@@ -3602,7 +3602,7 @@ static void attempt_run_phase(pr_battle *bt, pr_engine *e, int ph)
     (void)ph;
     int current_attempts = bt->escape_attempts++;
     int escape_roll = pr_battle_rand_seed_int(bt, 100, 0);
-    double escape_chance = calculate_escape_chance(bt, current_attempts);
+    double escape_chance = pr_calculate_escape_chance(bt, current_attempts);
 
     pr_speed_iter it;
     pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_PLAYER);
@@ -3615,7 +3615,7 @@ static void attempt_run_phase(pr_battle *bt, pr_engine *e, int ph)
     if ((double)escape_roll < escape_chance) {
         for (int b = 2; b < 4; b++) {
             pr_pokemon *ep = bt->field[b];
-            if (is_active_on_field(ep)) {
+            if (ep) {
                 pr_ab_params pp = {.pokemon = ep};
                 pr_apply_ab_attrs(bt, PR_AC_PreLeaveFieldAbAttr, &pp);
             }
@@ -3629,31 +3629,39 @@ static void attempt_run_phase(pr_battle *bt, pr_engine *e, int ph)
         int w = 0;
         for (int i = 0; i < bt->n_mods[1]; i++) {
             if (!pr_mod_is(&bt->mods[1][i], PR_MOD_HELD_ITEM)) {
-                bt->mods[1][w++] = bt->mods[1][i];
+                if (pr_mod_is(&bt->mods[1][i], PR_MOD_PERSISTENT)) bt->mods[1][i].virtual_stack_count = 0;
+                if (pr_mod_get_stack_count(&bt->mods[1][i])) bt->mods[1][w++] = bt->mods[1][i];
             } else {
                 if (!pr_mod_is_ported_item(&bt->mods[1][i])) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
             }
         }
         bt->n_mods[1] = w;
+        /* updateModifiers(false): refresh all enemy party stats after removing held items. */
+        if (!bt->n_party[1]) pr_note_unported(bt, PR_FEAT_PARTY);
+        for (int k = 0; k < bt->n_party[1]; k++)
+            if (bt->party[1][k]) pr_recalculate_stats(bt, bt->party[1][k]);
 
         for (int b = 2; b < 4; b++) {
             pr_pokemon *ep = bt->field[b];
-            if (ep && is_active_on_field(ep)) {
+            if (ep) {
                 ep->hp = 0;
                 ep->status = STATUS_EFFECT_FAINT;
+                ep->pending_status = STATUS_EFFECT_NONE;
+                ep->status_toxic_turns = 0;
                 ep->status_sleep_turns = 0;
+                ep->status_freeze_turns = -1;
             }
         }
 
         push_new(bt, e, PH_BATTLE_END, -1);
-        if (pr_is_new_biome(bt) || bt->game_mode == GAME_MODES_ENDLESS || bt->game_mode == GAME_MODES_SPLICED_ENDLESS) {
+        if (pr_is_new_biome(bt)) {
             push_new(bt, e, PH_SELECT_BIOME, -1);
         }
         push_new(bt, e, PH_NEW_BATTLE, -1);
     } else {
         for (int b = 0; b < 2; b++) {
             pr_pokemon *pp = bt->field[b];
-            if (is_active_on_field(pp)) {
+            if (pp && pp->hp > 0) {
                 pp->failed_run_away = true;
             }
         }

@@ -628,6 +628,9 @@ double pr_hits_tag_multiplier(pr_battle *bt, const pr_pokemon *target, int move)
 void pr_apply_modified_damage(pr_battle *bt, const pr_pokemon *user, const pr_pokemon *target, int move, double *dmg);
 void pr_apply_pledge_stab(const pr_pokemon *user, int move, double *stab);
 
+/* AttemptRunPhase.calculateEscapeChance: does not consume RNG or increment attempts. */
+double pr_calculate_escape_chance(pr_battle *bt, int current_attempts);
+
 /* ---- rng (battle.ts randSeedInt) ---- */
 int32_t pr_battle_rand_seed_int(pr_battle *bt, int32_t range, int32_t min);
 

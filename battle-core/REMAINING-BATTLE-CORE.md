@@ -23,7 +23,8 @@ Completed continuation slices and remaining source-backed work:
 | Parental Bond / Skill Link (merged #244) | Real hit-count callbacks now implemented; existing final-strike reduction retained | Move exclusions, hit powers/order, targets, KO interruption, exact RNG consumption |
 | Beat Up (merged #246) | Party hit-count case now implemented; existing per-hit power verified | Pinned party/status ordering, self contribution, base species Attack, KO interruption and modifiers |
 | Cud Chew / Harvest | Berry recording, repeat consumption and restoration callbacks remain | Actual named held-item history and delays, ownership, duplication/refusal and RNG |
-| Transform / Sketch / ability copying | Remaining move effects and identity overrides | Real source identity/stat/moveset copying, bounds, reset and state serialization |
+| Ditto / Transform / Imposter (user's next priority) | Remaining effective identity/sprite, copied stats/types/moves and reset/save paths | Actual pinned Transform and shared Imposter behavior; preserve real species/HP/identity and source exclusions |
+| Sketch / other ability copying | Remaining move effects and identity overrides | Real source identity/stat/moveset copying, bounds, reset and state serialization |
 | Forms / Battle Bond | Remaining form callbacks and one-use battle flags | Actual conditions and new required state; do not invent absent lifecycle inputs |
 | Redirect / Commander / broader doubles | Singles proofs do not close all partner behavior | Natural field/partner state, target redirect and phase ordering with exact source fixtures |
 | Final-boss and interlude boundaries | Explicit PR_FEAT_FINAL_BOSS / interlude caller flags | Actual source phase transitions; coordinate run/game prerequisites with their owners |
@@ -77,7 +78,7 @@ These sampled coverage counts do not establish whole-core completion.
 
 User-specified completion gates (2026-10-12):
 
-- Boss score (this slice): capture and faint callers in phases.c (original
+- Boss score (merged #250): capture and faint callers in phases.c (original
   reported lines 434/2674) now share the actual source calculation, including
   item multipliers and sqrt(bossSegments) before ceil. Four thousand actual
   source API cases match both C callers, within represented levels 1–255.
@@ -87,10 +88,19 @@ User-specified completion gates (2026-10-12):
   with game-core's serialized field before whole-core/Endless completion.
   The bounded score harness explicitly refuses oversized inputs instead of
   masking this prerequisite. No save representation is changed by scoring.
-- Flee: concurrent merged #243 adds an actual-source game-core differential;
-  it covers singles outcomes and run transitions, but excludes RNG, speed ties
-  and doubles. It also documents a battle-core ENDLESS biome-queue discrepancy
-  masked by the game-core integration. Run and extend source proof at the
-  battle-core phase boundary before declaring the flee gate complete. A fresh
-  unchanged #243 run on seed777 matches 587 singles cases with zero mismatches;
-  thirteen source speed ties are explicitly skipped. This is not RNG/doubles proof.
+- Flee phase (this slice): 10,000 actual-source phase cases now match RNG,
+  meaningful ties, natural doubles, chance, field/stat/item state, queues and
+  rendered text with no skips/unsupported cases. Biome selection, inactive
+  enemy-slot semantics, status/stack cleanup and enemy stat refresh are fixed.
+  Unchanged #243 still matches 587 singles and skips thirteen source ties;
+  the new phase proof covers ties directly. Full doubles turns, arbitrary
+  challenge rules and broader weather/Neutralizing Gas leave callbacks remain
+  separate; see FLEE-PHASE-VALIDATION.md.
+- Stat ordering: unfused Spliced Endless halving now works after flee's held-item
+  cleanup. Source base-stat total/flat effects precede halving/fusion, while the
+  combined modifier helper does not yet represent that order; keep explicit
+  unsupported reporting until a dedicated source-backed slice closes it.
+
+Latest user steering: complete and merge the current flee task, then prioritize
+Ditto/Transform (effective sprite/form identity, copied stats/types/moves,
+reset/save behavior and shared Imposter paths) before another generic slice.
