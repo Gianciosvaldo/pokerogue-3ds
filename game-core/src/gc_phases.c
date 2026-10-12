@@ -104,6 +104,55 @@ static void after_stop(gc_run *run, int stop)
     }
 }
 
+/* ---- applyPartyExp ---- */
+/* The party as applyPartyExp reads it. participants = the Set of participant ids; the caller sets trainer_battle and
+ * me_exp_multiplier (NAN: not a mystery encounter's battle) */
+void gc_exp_party_build(gc_run *run, pr_exp_party *pp, const uint32_t *participants, int n_participants)
+{
+    memset(pp, 0, sizeof *pp);
+    for (int k = 0; k < run->n_party; k++) {
+        const gc_mon *m = pm(run, run->party_order[k]);
+        pp->party[k].id = m->b.id;
+        pp->party[k].level = m->b.level;
+        pp->party[k].hp = m->b.hp;
+        pp->party[k].pokerus = m->pokerus;
+        for (int i = 0; i < n_participants; i++) pp->party[k].participated |= participants[i] == m->b.id;
+    }
+    pp->n_party = run->n_party;
+    pp->n_participants = n_participants;
+    pp->max_exp_level = pr_run_get_max_exp_level(&run->run, run->wave, false);
+    pp->trainer_battle = run->battle_type == BATTLE_TYPE_TRAINER;
+    pp->me_exp_multiplier = NAN;
+    pp->exp_share_stacks = gc_item_stack(run, "EXP_SHARE");
+    pp->exp_balance_stacks = gc_item_stack(run, "EXP_BALANCE");
+    pp->oval_charm_stacks = gc_item_stack(run, "OVAL_CHARM");
+    for (int i = 0; i < run->n_items && pp->n_eggs < 16; i++) {
+        const gc_item *it = &run->items[i];
+        double boost = !strcmp(it->key, "LUCKY_EGG") ? 40 : !strcmp(it->key, "GOLDEN_EGG") ? 100 : 0;
+        if (boost > 0 && it->pokemon_id) {
+            pp->eggs[pp->n_eggs].pokemon_id = it->pokemon_id;
+            pp->eggs[pp->n_eggs].stacks = it->stack;
+            pp->eggs[pp->n_eggs].boost_percent = boost;
+            pp->n_eggs++;
+        }
+    }
+}
+
+/* the phases applyPartyExp unshifts: an ExpPhase / ShowPartyExpBarPhase per member that gets experience */
+void gc_exp_party_queue(gc_run *run, const pr_exp_party *pp, double exp_value, bool use_wave_index_multiplier)
+{
+    int idx[PR_MAX_EXP_PARTY];
+    double amount[PR_MAX_EXP_PARTY];
+    const int n = pr_run_apply_party_exp(pp, exp_value, use_wave_index_multiplier, run->wave, idx, amount);
+    for (int i = 0; i < n; i++) {
+        if (!amount[i]) continue;
+        const int storage = run->party_order[idx[i]];
+        gc_rphase p = gc_rp(RP_EXP, storage, pm(run, storage)->b.on_field, 0);
+        p.d = amount[i];
+        gc_rq_unshift(run, p);
+    }
+}
+
 /* ---- VictoryPhase ---- */
 static void victory(gc_run *run, int enemy_idx)
 {
@@ -116,33 +165,7 @@ static void victory(gc_run *run, int enemy_idx)
         const double exp_value = base * e->level / 5 + 1;
         /* applyPartyExp(expValue, pokemonDefeated = true) */
         pr_exp_party pp;
-        memset(&pp, 0, sizeof pp);
-        for (int k = 0; k < run->n_party; k++) {
-            const gc_mon *m = pm(run, run->party_order[k]);
-            pp.party[k].id = m->b.id;
-            pp.party[k].level = m->b.level;
-            pp.party[k].hp = m->b.hp;
-            pp.party[k].pokerus = m->pokerus;
-            for (int i = 0; i < bt->n_participants; i++) pp.party[k].participated |= bt->participants[i] == m->b.id;
-        }
-        pp.n_party = run->n_party;
-        pp.n_participants = bt->n_participants;
-        pp.max_exp_level = pr_run_get_max_exp_level(&run->run, run->wave, false);
-        pp.trainer_battle = run->battle_type == BATTLE_TYPE_TRAINER;
-        pp.me_exp_multiplier = NAN;
-        pp.exp_share_stacks = gc_item_stack(run, "EXP_SHARE");
-        pp.exp_balance_stacks = gc_item_stack(run, "EXP_BALANCE");
-        pp.oval_charm_stacks = gc_item_stack(run, "OVAL_CHARM");
-        for (int i = 0; i < run->n_items && pp.n_eggs < 16; i++) {
-            const gc_item *it = &run->items[i];
-            double boost = !strcmp(it->key, "LUCKY_EGG") ? 40 : !strcmp(it->key, "GOLDEN_EGG") ? 100 : 0;
-            if (boost > 0 && it->pokemon_id) {
-                pp.eggs[pp.n_eggs].pokemon_id = it->pokemon_id;
-                pp.eggs[pp.n_eggs].stacks = it->stack;
-                pp.eggs[pp.n_eggs].boost_percent = boost;
-                pp.n_eggs++;
-            }
-        }
+        gc_exp_party_build(run, &pp, bt->participants, bt->n_participants);
         /* Participating survivors gain friendship through the bounded Bell
          * projection. Unrepresented stock retains the counted legacy gain. */
         if (bt->n_participants > 0)
@@ -154,16 +177,7 @@ static void victory(gc_run *run, int enemy_idx)
                     gc_system_add_friendship(run->sys, run, m, 3, false);
                 }
             }
-        int idx[PR_MAX_EXP_PARTY];
-        double amount[PR_MAX_EXP_PARTY];
-        const int n = pr_run_apply_party_exp(&pp, exp_value, false, run->wave, idx, amount);
-        for (int i = 0; i < n; i++) {
-            if (!amount[i]) continue;
-            const int storage = run->party_order[idx[i]];
-            gc_rphase p = gc_rp(RP_EXP, storage, pm(run, storage)->b.on_field, 0);
-            p.d = amount[i];
-            gc_rq_unshift(run, p);
-        }
+        gc_exp_party_queue(run, &pp, exp_value, false);
     }
 }
 

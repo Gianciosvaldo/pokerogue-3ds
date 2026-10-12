@@ -4,7 +4,7 @@
  * MysteryEncounterOptionSelectedPhase runs it (executeWithSeedOffset(.., getSeedOffset() * 500)). Records the
  * RNG before and after the option, money, the party's levels, the items owned, whether the encounter left without
  * a battle, the shop it set up (setEncounterRewards' customModifierSettings) and the options that shop shows
- * (SelectModifierPhase.start's own calls). Families: Department Store Sale, Shady Vitamin Dealer (below).
+ * (SelectModifierPhase.start's own calls). Families: Department Store Sale, Shady Vitamin Dealer, Lost at Sea (below).
  * GC_MYS_N=400 GC_MYS_SEED=777 GC_MYS_OUT=/abs/mystery.txt, Node22. */
 import { modifierTypes } from "#data/data-lists";
 import { BiomeId } from "#enums/biome-id";
@@ -19,6 +19,9 @@ import { regenerateModifierPoolThresholds } from "#modifiers/modifier-type";
 import { EggLapsePhase } from "#phases/egg-lapse-phase";
 import { SelectModifierPhase } from "#phases/select-modifier-phase";
 import { Stat } from "#enums/stat";
+import { MoveId } from "#enums/move-id";
+import { speciesDataRegistry } from "#app/global-species-data-registry";
+import { PartyExpPhase } from "#phases/party-exp-phase";
 import { GameManager } from "#test/framework/game-manager";
 import Phaser from "phaser";
 import i18next from "i18next";
@@ -290,4 +293,169 @@ it("writes the shady trace", () => {
   fs.writeFileSync((process.env.GC_MYS_OUT ?? "/tmp/mystery.txt").replace(/\.txt$/, "") + "-shady.txt", shadyLines.join("\n") + "\n");
   console.log(`SHADY ${SEED}: options run=${shadyCover.options} picks=${shadyCover.picks} disabled-or-no-pick=${shadyCover.disabled} hp-ratio-boundary mons=${shadyCover.boundary} custom-nature mons=${shadyCover.custom}`);
   expect(shadyCover.options.every(n => n > 0)).toBe(true);
+});
+
+
+/* ---- Lost at Sea ----
+ * Per case: a party with random levels (some at the exact level a Surf / Fly level move is learned), HP (some fainted),
+ * Pokerus, some fused with a Pokemon of another species, and the experience items (Exp. Share, Exp. Balance, Oval
+ * Charm, Lucky / Golden Egg); the wave and the eggs. Records which Pokemon the options' CanLearnMoveRequirement lets
+ * through (queryParty over the whole party) with each option's meetsRequirements() and the primary Pokemon it picks,
+ * then runs the chosen option's real onOptionPhase in executeWithSeedOffset(.., getSeedOffset() * 500), and the rewards
+ * phase's own doEncounterRewardsAndContinue(): doEncounterExp's PartyExpPhase is really started with the phases it
+ * would unshift recorded (an ExpPhase or ShowPartyExpBarPhase, party index, experience), then EggLapsePhase.start(). */
+const lostConfigs: SpeciesId[][] = [
+  [SpeciesId.SQUIRTLE, SpeciesId.PIDGEOT, SpeciesId.DITTO, SpeciesId.GENGAR, SpeciesId.SNORLAX, SpeciesId.ABRA],
+  [SpeciesId.LAPRAS, SpeciesId.CHARIZARD, SpeciesId.MEW],
+  [SpeciesId.RATTATA, SpeciesId.DITTO, SpeciesId.SHEDINJA],
+  [SpeciesId.GLISCOR, SpeciesId.GHOLDENGO, SpeciesId.MIRAIDON, SpeciesId.MAGIKARP, SpeciesId.ZUBAT, SpeciesId.DRAGONITE],
+  [SpeciesId.BULBASAUR],
+];
+const fusionPool = [SpeciesId.LAPRAS, SpeciesId.PIDGEOT, SpeciesId.GYARADOS, SpeciesId.MAGIKARP, SpeciesId.DITTO, SpeciesId.RATTATA, SpeciesId.SQUIRTLE];
+const lostLines: string[] = [];
+const lostCover = { options: [0, 0, 0], disabled: 0, faintedPrimary: 0, levelOnly: 0, tmOnly: 0, eggOnly: 0, fusionTmOnly: 0, shareRuns: 0, balanceRuns: 0, expMons: 0, shown: 0 };
+const learnLevels = new Map<string, number[]>();
+for (let ci = 0; ci < lostConfigs.length; ci++) {
+  it(`lost at sea, party ${ci}`, async () => {
+    const game = new GameManager(phaserGame);
+    game.override.mysteryEncounterChance(100).startingWave(37).startingBiome(BiomeId.PLAINS).disableTrainerWaves().startingLevel(5);
+    const biomes = new Map<BiomeId, MysteryEncounterType[]>([[BiomeId.VOLCANO, [MysteryEncounterType.MYSTERIOUS_CHALLENGERS]]]);
+    CIVILIZATION_ENCOUNTER_BIOMES.forEach(b => biomes.set(b, [MysteryEncounterType.LOST_AT_SEA]));
+    vi.spyOn(MysteryEncounters, "mysteryEncountersByBiome", "get").mockReturnValue(biomes);
+    await game.runToMysteryEncounter(MysteryEncounterType.LOST_AT_SEA, lostConfigs[ci]);
+    const scene = game.scene as any, encounter = scene.currentBattle.mysteryEncounter, party = scene.getPlayerParty();
+    expect(encounter.options.length).toBe(3);
+    const leave = vi.spyOn(EncounterPhaseUtils, "leaveEncounterWithoutBattle").mockImplementation(() => {});
+    lostLines.push(`P ${party.length} ${party.map((p: any) => `${p.species.speciesId} ${p.formIndex}`).join(" ")}`);
+    const moves = [MoveId.SURF, MoveId.FLY];
+    // the levels at which a species learns Surf / Fly by level (the requirement's level moves are the ones learned at the current level)
+    const levelsFor = (mon: any): number[] => {
+      const key = `${mon.species.speciesId}-${mon.fusionSpecies?.speciesId ?? 0}`;
+      if (!learnLevels.has(key)) {
+        const out: number[] = [], saved = mon.level;
+        for (let l = 1; l <= 100; l++) {
+          mon.level = l;
+          if (mon.getLevelMoves().some((lm: any) => moves.includes(lm[1]))) out.push(l);
+        }
+        mon.level = saved;
+        learnLevels.set(key, out);
+      }
+      return learnLevels.get(key)!;
+    };
+    const share = Math.floor(N / lostConfigs.length);
+    for (let i = 0; i < share; i++) {
+      const k = i % 3, wave = 10 + rnd(171), runSeed = word(), waveSeed = word();
+      scene.seed = runSeed; scene.waveSeed = waveSeed;
+      scene.currentBattle.waveIndex = wave;
+      encounter.seedOffset = undefined;
+      encounter.updateSeedOffset();
+      encounter.misc = undefined;
+      encounter.doEncounterExp = undefined;
+      scene.modifiers.length = 0;
+      scene.money = 12345;
+      const mons: string[] = [];
+      for (const mon of party) {
+        mon.fusionSpecies = null;
+        mon.fusionFormIndex = 0;
+        if (rnd(3) === 0) { mon.fusionSpecies = speciesDataRegistry.getSpecies(fusionPool[rnd(fusionPool.length)]); }
+        mon.level = 5 + rnd(rnd(2) ? 90 : 20);
+        const exact = levelsFor(mon);
+        if (exact.length && rnd(2) === 0) mon.level = exact[rnd(exact.length)];
+        mon.nature = rnd(25);
+        mon.ivs = mon.ivs.map(() => rnd(32));
+        mon.pokerus = rnd(4) === 0;
+      }
+      party.forEach((mon: any) => mon.calculateStats());
+      const exps = { share: 0, balance: 0, oval: 0 };
+      const addItem = (id: string, stack: number, mon?: any) => {
+        const type = (modifierTypes as any)[id]();
+        const modifier = type.newModifier(mon);
+        modifier.stackCount = stack;
+        scene.addModifier(modifier, true);
+      };
+      if (rnd(3) === 0) { exps.share = 1 + rnd(3); addItem("EXP_SHARE", exps.share); }
+      if (rnd(4) === 0) { exps.balance = 1 + rnd(4); addItem("EXP_BALANCE", exps.balance); }
+      if (rnd(3) === 0) { exps.oval = 1 + rnd(2); addItem("OVAL_CHARM", exps.oval); }
+      const eggItems: string[] = [];
+      for (let m = 0; m < party.length; m++) {
+        if (rnd(4) === 0) { const st = 1 + rnd(4); addItem("LUCKY_EGG", st, party[m]); eggItems.push(`${m} 40 ${st}`); }
+        if (rnd(6) === 0) { const st = 1 + rnd(3); addItem("GOLDEN_EGG", st, party[m]); eggItems.push(`${m} 100 ${st}`); }
+      }
+      for (const mon of party) {
+        const max = mon.getMaxHp();
+        mon.hp = rnd(5) === 0 ? 0 : 1 + rnd(max);
+        mons.push(`${mon.species.speciesId} ${mon.formIndex} ${mon.fusionSpecies?.speciesId ?? 0} ${mon.fusionFormIndex} ${mon.level} ${mon.nature} ${mon.ivs.join(" ")} ${mon.pokerus ? 1 : 0} ${mon.getAbility(true).id} ${mon.hasPassive() ? mon.getPassiveAbility().id : 0} ${mon.hp} ${max} ${mon.stats.join(" ")}`);
+      }
+      const eggs = Array.from({ length: rnd(3) }, () => 2 + rnd(40));
+      scene.gameData.eggs = eggs.map(w => ({ hatchWaves: w }));
+      const meets = encounter.options.map((o: any) => (o.meetsRequirements() ? 1 : 0));
+      const masks = [0, 1].map(k2 => encounter.options[k2].primaryPokemonRequirements[0].queryParty(party).reduce((m: number, mon: any) => m | (1 << party.indexOf(mon)), 0));
+      const primaries = [0, 1].map(k2 => (meets[k2] ? party.indexOf(encounter.options[k2].primaryPokemon) : -1));
+      lostLines.push(`C ${ci * share + i} ${runSeed} ${waveSeed} ${wave} ${k} ${meets[k]}`, `U ${mons.join(" ")}`,
+        `I ${exps.share} ${exps.balance} ${exps.oval} ${eggItems.length} ${eggItems.join(" ")}`, `G ${eggs.length} ${eggs.join(" ")}`,
+        `A ${meets.join(" ")} ${masks.join(" ")} ${primaries.join(" ")} ${scene.getMaxExpLevel()}`);
+      if (!meets[k]) { lostCover.disabled++; lostLines.push("E"); continue; }
+      lostCover.options[k]++;
+      if (k < 2) {
+        const primary = party[primaries[k]];
+        lostCover.faintedPrimary += primary.hp <= 0 ? 1 : 0;
+        const why = {
+          level: primary.getLevelMoves().some((lm: any) => lm[1] === moves[k]),
+          tm: primary.species.getTms(primary.getFormKey()).includes(moves[k]),
+          egg: !!primary.getEggMoves()?.includes(moves[k]),
+          fusion: !!primary.fusionSpecies?.getTms(primary.getFusionFormKey() ?? undefined).includes(moves[k]),
+        };
+        lostCover.levelOnly += why.level && !why.tm && !why.egg && !why.fusion ? 1 : 0;
+        lostCover.tmOnly += !why.level && why.tm && !why.egg && !why.fusion ? 1 : 0;
+        lostCover.eggOnly += !why.level && !why.tm && why.egg && !why.fusion ? 1 : 0;
+        lostCover.fusionTmOnly += !why.level && !why.tm && !why.egg && why.fusion ? 1 : 0;
+        lostCover.shareRuns += exps.share ? 1 : 0;
+        lostCover.balanceRuns += exps.balance ? 1 : 0;
+      }
+      const option = encounter.options[k];
+      encounter.selectedOption = option;
+      leave.mockClear();
+      Phaser.Math.RND.sow([`lost-${SEED}-${ci}-${i}`]);
+      const before = rng();
+      let done: Promise<boolean> | undefined;
+      scene.executeWithSeedOffset(() => { done = option.onOptionPhase(); }, encounter.getSeedOffset() * 500);
+      await done;
+      const afterOption = rng();
+      expect(leave).toHaveBeenCalledTimes(1);
+      const hpAfter = party.map((p: any) => p.hp);
+      // MysteryEncounterRewardsPhase.doEncounterRewardsAndContinue(), the PartyExpPhase it queues really started
+      const pm = scene.phaseManager, queued: string[] = [], expPhases: string[] = [];
+      vi.spyOn(pm, "unshiftNew").mockImplementation(((name: string, ...a: any[]) => {
+        queued.push(name);
+        if (name === "PartyExpPhase") {
+          const phase = new PartyExpPhase(a[0], a[1], a[2]);
+          vi.spyOn(phase, "end").mockImplementation(() => {});
+          phase.start();
+        }
+      }) as any);
+      vi.spyOn(pm, "pushNew").mockImplementation(((name: string) => { queued.push(`+${name}`); }) as any);
+      vi.spyOn(pm, "removeAllPhasesOfType").mockImplementation((() => {}) as any);
+      vi.spyOn(pm, "create").mockImplementation(((name: string, index: number, exp: number) => ({ phaseName: name, index, exp })) as any);
+      vi.spyOn(pm, "unshiftPhase").mockImplementation(((ph: any) => { expPhases.push(`${ph.phaseName === "ExpPhase" ? 0 : 1} ${ph.index} ${ph.exp}`); }) as any);
+      const rewards = new MysteryEncounterRewardsPhase(leave.mock.calls[0][0]);
+      vi.spyOn(rewards, "end").mockImplementation(() => {});
+      rewards.doEncounterRewardsAndContinue();
+      for (const fn of [pm.unshiftNew, pm.pushNew, pm.removeAllPhasesOfType, pm.create, pm.unshiftPhase]) vi.mocked(fn).mockRestore();
+      const lapse = new EggLapsePhase();
+      vi.spyOn(lapse, "end").mockImplementation(() => {});
+      lapse.start();
+      lostCover.expMons += expPhases.length;
+      lostLines.push(`R ${before}`, `Q ${afterOption} ${scene.money} ${leave.mock.calls[0][0] ? 1 : 0}`, `W ${hpAfter.join(" ")}`,
+        `X ${queued.length} ${queued.join(" ")}`, `F ${expPhases.length} ${expPhases.join(" ")}`,
+        `H ${scene.gameData.eggs.map((e: any) => e.hatchWaves).join(" ") || "-"}`, "E");
+    }
+  }, 1200000);
+}
+
+it("writes the lost at sea trace", () => {
+  lostLines.unshift(`V 1 ${N}`);
+  lostLines.push(`Z ${Math.floor(N / lostConfigs.length) * lostConfigs.length}`);
+  fs.writeFileSync((process.env.GC_MYS_OUT ?? "/tmp/mystery.txt").replace(/\.txt$/, "") + "-lost.txt", lostLines.join("\n") + "\n");
+  console.log(`LOST ${SEED}: options run=${lostCover.options} disabled=${lostCover.disabled} fainted-primary=${lostCover.faintedPrimary} level-only=${lostCover.levelOnly} tm-only=${lostCover.tmOnly} egg-only=${lostCover.eggOnly} fusion-tm-only=${lostCover.fusionTmOnly} exp-share runs=${lostCover.shareRuns} exp-balance runs=${lostCover.balanceRuns} exp phases=${lostCover.expMons}`);
+  expect(lostCover.options.every(n => n > 0)).toBe(true);
 });
