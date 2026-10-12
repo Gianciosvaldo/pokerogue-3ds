@@ -271,9 +271,9 @@ void gc_mystery_setup_screen(gc_run *run)
     case GC_ME_SHADY_VITAMIN_DEALER: case GC_ME_LOST_AT_SEA: case GC_ME_FIERY_FALLOUT:
     case GC_ME_ABSOLUTE_AVARICE: case GC_ME_CLOWNING_AROUND: case GC_ME_PART_TIMER:
     case GC_ME_DANCING_LESSONS: case GC_ME_WEIRD_DREAM: case GC_ME_TELEPORTING_HIJINKS:
-    case GC_ME_FUN_AND_GAMES: case GC_ME_UNCOMMON_BREED: case GC_ME_THE_EXPERT_POKEMON_BREEDER:
+    case GC_ME_FUN_AND_GAMES: case GC_ME_UNCOMMON_BREED: case GC_ME_THE_EXPERT_POKEMON_BREEDER: case GC_ME_FIELD_TRIP:
         n = 3; break;
-    case GC_ME_TRAINING_SESSION: case GC_ME_DEPARTMENT_STORE_SALE: case GC_ME_FIELD_TRIP:
+    case GC_ME_TRAINING_SESSION: case GC_ME_DEPARTMENT_STORE_SALE:
     case GC_ME_SAFARI_ZONE: case GC_ME_DELIBIRDY: case GC_ME_GLOBAL_TRADE_SYSTEM:
         n = 4; break;
     default:
@@ -538,6 +538,54 @@ static void lost_at_sea(gc_run *run, int option)
     end_mystery_encounter_leave(run);
 }
 
+/* Field Trip (src/data/mystery-encounters/encounters/field-trip-encounter.ts).
+ * The three options differ in the move category they ask for (physical, special, status). Each one's onPreOptionPhase
+ * opens the party screen (no filter: any Pokemon, fainted or not) and then the Pokemon's moves; choosing one runs
+ * pokemonAndMoveChosen: a move of the asked category is correct, and sets the experience of that Pokemon alone (base 100,
+ * scaled by the wave); a wrong one sets 50 for the whole party. The option phase then, for a correct move, sets the shop
+ * (guaranteedModifierTypeOptions, five fixed items, no fill) and leaves without the heal shop; for a wrong one leaves with
+ * leaveEncounterWithoutBattle(true): the heal-only shop. The experience phases come first either way.
+ * b = the Pokemon (a storage index), c = the move slot; the app has no party/move screen for encounters yet, so a b or c
+ * out of range is read as the first Pokemon of the party and the first move. */
+static void field_trip(gc_run *run, int option, int b, int c)
+{
+    static const int category[3] = {MOVE_CATEGORY_PHYSICAL, MOVE_CATEGORY_SPECIAL, MOVE_CATEGORY_STATUS};
+    const int mon = b >= 0 && b < run->n_party ? b : run->party_order[0];
+    const gc_mon *m = &run->party[mon];
+    const int slot = c >= 0 && c < m->b.n_moves ? c : 0;
+    const bool correct = m->b.n_moves > 0 && pr_moves[m->b.moves[slot]].category == category[option];
+    uint32_t ids[PR_MAX_PARTY] = {0};
+    int n_ids = 0;
+    if (correct) ids[n_ids++] = m->b.id;
+    else for (int k = 0; k < run->n_party; k++) ids[n_ids++] = run->party[run->party_order[k]].b.id;
+    {
+        pr_exp_party pp;
+        gc_exp_party_build(run, &pp, ids, n_ids);
+        pp.trainer_battle = false;
+        pp.me_exp_multiplier = 1.0;   /* isBattleMysteryEncounter(): the encounter's expMultiplier, 1 */
+        gc_exp_party_queue(run, &pp, correct ? 100 : 50, true);
+    }
+    if (!correct) {
+        me_leave_with_heal_shop(run, false, GC_ME_FIELD_TRIP, 0, option);
+        return;
+    }
+    static const struct { int item, stat; } shops[3][5] = {
+        {{PR_ITEM_TEMP_STAT_STAGE_BOOSTER, STAT_ATK}, {PR_ITEM_TEMP_STAT_STAGE_BOOSTER, STAT_DEF}, {PR_ITEM_TEMP_STAT_STAGE_BOOSTER, STAT_SPD},
+         {PR_ITEM_DIRE_HIT, -1}, {PR_ITEM_RARER_CANDY, -1}},
+        {{PR_ITEM_TEMP_STAT_STAGE_BOOSTER, STAT_SPATK}, {PR_ITEM_TEMP_STAT_STAGE_BOOSTER, STAT_SPDEF}, {PR_ITEM_TEMP_STAT_STAGE_BOOSTER, STAT_SPD},
+         {PR_ITEM_DIRE_HIT, -1}, {PR_ITEM_RARER_CANDY, -1}},
+        {{PR_ITEM_TEMP_STAT_STAGE_BOOSTER, STAT_ACC}, {PR_ITEM_TEMP_STAT_STAGE_BOOSTER, STAT_SPD}, {PR_ITEM_GREAT_BALL, -1},
+         {PR_ITEM_IV_SCANNER, -1}, {PR_ITEM_RARER_CANDY, -1}}};
+    pr_reward_custom *cs = &gc_int(run)->reward.me_custom;
+    memset(cs, 0, sizeof *cs);
+    pr_reward_ctx *ctx = gc_reward_ctx(run);
+    for (int k = 0; k < 5; k++) cs->options[cs->n_options++] = pr_reward_pregen_option(ctx, shops[option][k].item, shops[option][k].stat);
+    cs->fill_remaining = false;
+    cs->reroll_multiplier = NAN;
+    cs->allow_luck_upgrades = true;
+    end_mystery_encounter_shop(run);
+}
+
 static void shady_vitamin_dealer(gc_run *run, int option, int b)
 {
     if (option == 2) {   /* leave with nothing: no exp, no rewards */
@@ -705,19 +753,7 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_FIELD_TRIP:
-        if (option == 0) {
-            gc_port_give_reward(run, "RARE_CANDY");
-            end_mystery_encounter_leave(run);
-            return true;
-        } else if (option == 1) {
-            for (int i = 0; i < run->n_party; i++) run->party[i].b.hp = run->party[i].b.stats[0];
-            end_mystery_encounter_leave(run);
-            return true;
-        } else if (option == 2) {
-            start_mystery_wild_battle(run, 0, wave_level, true, 2, 1);
-            return true;
-        }
-        end_mystery_encounter_leave(run);
+        field_trip(run, option, b, c);
         return true;
 
     case GC_ME_SAFARI_ZONE:

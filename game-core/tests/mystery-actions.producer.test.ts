@@ -4,7 +4,7 @@
  * MysteryEncounterOptionSelectedPhase runs it (executeWithSeedOffset(.., getSeedOffset() * 500)). Records the
  * RNG before and after the option, money, the party's levels, the items owned, whether the encounter left without
  * a battle, the shop it set up (setEncounterRewards' customModifierSettings) and the options that shop shows
- * (SelectModifierPhase.start's own calls). Families: Department Store Sale, Shady Vitamin Dealer, Lost at Sea (below).
+ * (SelectModifierPhase.start's own calls). Families: Department Store Sale, Shady Vitamin Dealer, Lost at Sea, Field Trip (below).
  * GC_MYS_N=400 GC_MYS_SEED=777 GC_MYS_OUT=/abs/mystery.txt, Node22. */
 import { modifierTypes } from "#data/data-lists";
 import { BiomeId } from "#enums/biome-id";
@@ -22,6 +22,8 @@ import { Stat } from "#enums/stat";
 import { MoveId } from "#enums/move-id";
 import { speciesDataRegistry } from "#app/global-species-data-registry";
 import { PartyExpPhase } from "#phases/party-exp-phase";
+import { allMoves } from "#data/data-lists";
+import { PokemonMove } from "#moves/pokemon-move";
 import { GameManager } from "#test/framework/game-manager";
 import Phaser from "phaser";
 import i18next from "i18next";
@@ -458,4 +460,173 @@ it("writes the lost at sea trace", () => {
   fs.writeFileSync((process.env.GC_MYS_OUT ?? "/tmp/mystery.txt").replace(/\.txt$/, "") + "-lost.txt", lostLines.join("\n") + "\n");
   console.log(`LOST ${SEED}: options run=${lostCover.options} disabled=${lostCover.disabled} fainted-primary=${lostCover.faintedPrimary} level-only=${lostCover.levelOnly} tm-only=${lostCover.tmOnly} egg-only=${lostCover.eggOnly} fusion-tm-only=${lostCover.fusionTmOnly} exp-share runs=${lostCover.shareRuns} exp-balance runs=${lostCover.balanceRuns} exp phases=${lostCover.expMons}`);
   expect(lostCover.options.every(n => n > 0)).toBe(true);
+});
+
+
+/* ---- Field Trip ----
+ * Per case: a party with random levels, HP (a fifth fainted, and any of them can be picked: the party screen has no
+ * filter), Pokerus, the experience items and 1-4 random moves each; the option (physical / special / status), the Pokemon
+ * and the move picked. Runs the option as the phases do: onPreOptionPhase in executeWithSeedOffset(.., getSeedOffset())
+ * with selectPokemonForOption captured, the party screen's callback with the Pokemon, the handler of the move picked
+ * (pokemonAndMoveChosen: sets doEncounterExp and encounter.misc), onOptionPhase in (.., * 500) (setEncounterRewards for a
+ * correct move), then MysteryEncounterRewardsPhase's own doEncounterRewardsAndContinue() with the PartyExpPhase really
+ * started (the experience phases it unshifts) and the phases it queues in order, the shop opened with its own
+ * SelectModifierPhase calls, and EggLapsePhase.start(). */
+const tripConfigs: SpeciesId[][] = [
+  [SpeciesId.SQUIRTLE, SpeciesId.PIDGEOT, SpeciesId.DITTO, SpeciesId.GENGAR, SpeciesId.SNORLAX, SpeciesId.ABRA],
+  [SpeciesId.LAPRAS, SpeciesId.CHARIZARD, SpeciesId.MEW],
+  [SpeciesId.RATTATA, SpeciesId.DITTO, SpeciesId.SHEDINJA, SpeciesId.MAGIKARP],
+  [SpeciesId.BULBASAUR],
+];
+const tripLines: string[] = [];
+const tripCover = { options: [0, 0, 0], correct: 0, wrong: 0, fainted: 0, shops: [0, 0, 0], expPhases: 0, oval: 0, shown: 0 };
+for (let ci = 0; ci < tripConfigs.length; ci++) {
+  it(`field trip, party ${ci}`, async () => {
+    const game = new GameManager(phaserGame);
+    game.override.mysteryEncounterChance(100).startingWave(37).startingBiome(BiomeId.PLAINS).disableTrainerWaves().startingLevel(5);
+    const biomes = new Map<BiomeId, MysteryEncounterType[]>([[BiomeId.VOLCANO, [MysteryEncounterType.MYSTERIOUS_CHALLENGERS]]]);
+    CIVILIZATION_ENCOUNTER_BIOMES.forEach(b => biomes.set(b, [MysteryEncounterType.FIELD_TRIP]));
+    vi.spyOn(MysteryEncounters, "mysteryEncountersByBiome", "get").mockReturnValue(biomes);
+    await game.runToMysteryEncounter(MysteryEncounterType.FIELD_TRIP, tripConfigs[ci]);
+    const scene = game.scene as any, encounter = scene.currentBattle.mysteryEncounter, party = scene.getPlayerParty();
+    expect(encounter.options.length).toBe(3);
+    let captured: { cb: (p: any) => any } | undefined;
+    vi.spyOn(EncounterPhaseUtils, "selectPokemonForOption").mockImplementation(((cb: any) => {
+      captured = { cb };
+      return Promise.resolve(true);
+    }) as any);
+    const leave = vi.spyOn(EncounterPhaseUtils, "leaveEncounterWithoutBattle").mockImplementation(() => {});
+    tripLines.push(`P ${party.length} ${party.map((p: any) => `${p.species.speciesId} ${p.formIndex}`).join(" ")}`);
+    const share = Math.floor(N / tripConfigs.length);
+    const addItem = (id: string, stack: number, mon?: any) => {
+      const type = (modifierTypes as any)[id]();
+      const modifier = type.newModifier(mon);
+      modifier.stackCount = stack;
+      scene.addModifier(modifier, true);
+    };
+    for (let i = 0; i < share; i++) {
+      const k = i % 3, wave = 10 + rnd(91), runSeed = word(), waveSeed = word();
+      scene.seed = runSeed; scene.waveSeed = waveSeed;
+      scene.currentBattle.waveIndex = wave;
+      encounter.seedOffset = undefined;
+      encounter.updateSeedOffset();
+      encounter.misc = undefined;
+      encounter.doEncounterExp = undefined;
+      encounter.doEncounterRewards = undefined;
+      scene.modifiers.length = 0;
+      scene.money = 12345;
+      const mons: string[] = [];
+      for (const mon of party) {
+        mon.fusionSpecies = null;
+        mon.level = 5 + rnd(rnd(2) ? 90 : 20);
+        mon.nature = rnd(25);
+        mon.ivs = mon.ivs.map(() => rnd(32));
+        mon.pokerus = rnd(4) === 0;
+        const n = 1 + rnd(4), ids: number[] = [];
+        while (ids.length < n) {
+          const id = 1 + rnd(allMoves.length - 1);
+          if (allMoves[id] && !ids.includes(id)) ids.push(id);
+        }
+        mon.moveset = ids.map(id => new PokemonMove(id));
+      }
+      party.forEach((mon: any) => mon.calculateStats());
+      const exps = { share: 0, balance: 0, oval: 0 };
+      if (rnd(3) === 0) { exps.share = 1 + rnd(3); addItem("EXP_SHARE", exps.share); }
+      if (rnd(4) === 0) { exps.balance = 1 + rnd(4); addItem("EXP_BALANCE", exps.balance); }
+      if (rnd(2) === 0) { exps.oval = 1 + rnd(2); addItem("OVAL_CHARM", exps.oval); }
+      const eggItems: string[] = [];
+      for (let m = 0; m < party.length; m++) {
+        if (rnd(4) === 0) { const st = 1 + rnd(4); addItem("LUCKY_EGG", st, party[m]); eggItems.push(`${m} 40 ${st}`); }
+        if (rnd(6) === 0) { const st = 1 + rnd(3); addItem("GOLDEN_EGG", st, party[m]); eggItems.push(`${m} 100 ${st}`); }
+      }
+      for (const mon of party) {
+        const max = mon.getMaxHp();
+        mon.hp = rnd(5) === 0 ? 0 : 1 + rnd(max);
+        mons.push(`${mon.species.speciesId} ${mon.formIndex} ${mon.level} ${mon.nature} ${mon.ivs.join(" ")} ${mon.pokerus ? 1 : 0} ${mon.getAbility(true).id} ${mon.hasPassive() ? mon.getPassiveAbility().id : 0} ${mon.hp} ${max} ${mon.stats.join(" ")} ${mon.moveset.length} ${mon.moveset.map((m: any) => m.moveId).join(" ")}`);
+      }
+      const eggs = Array.from({ length: rnd(3) }, () => 2 + rnd(40));
+      scene.gameData.eggs = eggs.map(w => ({ hatchWaves: w }));
+      const meets = encounter.options.map((o: any) => (o.meetsRequirements() ? 1 : 0));
+      expect(meets).toEqual([1, 1, 1]);
+      const pick = rnd(party.length), slot = rnd(party[pick].moveset.length);
+      tripLines.push(`C ${ci * share + i} ${runSeed} ${waveSeed} ${wave} ${k} ${pick} ${slot}`, `U ${mons.join(" ")}`,
+        `I ${exps.share} ${exps.balance} ${exps.oval} ${eggItems.length} ${eggItems.join(" ")}`, `G ${eggs.length} ${eggs.join(" ")}`,
+        `A ${scene.getMaxExpLevel()}`);
+      const option = encounter.options[k];
+      encounter.selectedOption = option;
+      leave.mockClear();
+      Phaser.Math.RND.sow([`trip-${SEED}-${ci}-${i}`]);
+      const before = rng();
+      captured = undefined;
+      let pre: Promise<boolean> | undefined;
+      scene.executeWithSeedOffset(() => { pre = option.onPreOptionPhase(); }, encounter.getSeedOffset());
+      await pre;
+      const afterPre = rng();
+      expect(captured).toBeDefined();
+      const choices = captured!.cb(party[pick]);
+      expect(choices.length).toBe(party[pick].moveset.length);
+      choices[slot].handler();
+      const afterPick = rng();
+      const correct = encounter.misc.correctMove ? 1 : 0;
+      let done: Promise<boolean> | undefined;
+      scene.executeWithSeedOffset(() => { done = option.onOptionPhase(); }, encounter.getSeedOffset() * 500);
+      await done;
+      const afterOption = rng();
+      expect(leave).toHaveBeenCalledTimes(1);
+      const pm = scene.phaseManager, queued: string[] = [], expPhases: string[] = [];
+      let shopSettings: any, shopArgs = "-";
+      vi.spyOn(pm, "unshiftNew").mockImplementation(((name: string, ...a: any[]) => {
+        queued.push(name);
+        if (name === "PartyExpPhase") {
+          const phase = new PartyExpPhase(a[0], a[1], a[2]);
+          vi.spyOn(phase, "end").mockImplementation(() => {});
+          phase.start();
+        } else if (name === "SelectModifierPhase") {
+          shopSettings = a[2];
+          shopArgs = `${a[0]} ${a[1] === undefined ? "u" : a[1]} ${a[2]?.fillRemaining ? 1 : 0} ${a[2]?.rerollMultiplier ?? "nan"} ${a[2]?.guaranteedModifierTypeOptions?.length ?? 0} ${a[2]?.allowLuckUpgrades === undefined ? -1 : +a[2].allowLuckUpgrades}`;
+        }
+      }) as any);
+      vi.spyOn(pm, "pushNew").mockImplementation(((name: string) => { queued.push(`+${name}`); }) as any);
+      vi.spyOn(pm, "removeAllPhasesOfType").mockImplementation((() => {}) as any);
+      vi.spyOn(pm, "create").mockImplementation(((name: string, index: number, exp: number) => ({ phaseName: name, index, exp })) as any);
+      vi.spyOn(pm, "unshiftPhase").mockImplementation(((ph: any) => { expPhases.push(`${ph.phaseName === "ExpPhase" ? 0 : 1} ${ph.index} ${ph.exp}`); }) as any);
+      const rewards = new MysteryEncounterRewardsPhase(leave.mock.calls[0][0]);
+      vi.spyOn(rewards, "end").mockImplementation(() => {});
+      rewards.doEncounterRewardsAndContinue();
+      for (const fn of [pm.unshiftNew, pm.pushNew, pm.removeAllPhasesOfType, pm.create, pm.unshiftPhase]) vi.mocked(fn).mockRestore();
+      // the shop SelectModifierPhase.start() would open (the heal-only one shows no items)
+      let shop = "0 0";
+      let afterShop = rng();
+      if (shopSettings) {
+        const phase: any = new SelectModifierPhase(0, undefined, shopSettings);
+        phase.updateSeed();
+        regenerateModifierPoolThresholds(scene.getPlayerParty(), ModifierPoolType.PLAYER, 0);
+        const count = phase.getModifierCount();
+        const opts = phase.getModifierTypeOptions(count);
+        shop = `${count} ${opts.length} ${opts.map((o: any) => `${o.type.id} ${argOf(o.type)} ${o.type.tier ?? -1} ${o.upgradeCount}`).join(" ")}`;
+        afterShop = rng();
+      }
+      const lapse = new EggLapsePhase();
+      vi.spyOn(lapse, "end").mockImplementation(() => {});
+      lapse.start();
+      tripLines.push(`R ${before}`, `B ${afterPre}`, `Y ${afterPick} ${correct} ${choices.length}`, `Q ${afterOption} ${scene.money} ${leave.mock.calls[0][0] ? 1 : 0}`,
+        `X ${queued.length} ${queued.join(" ")}`, `T ${shopArgs}`, `F ${expPhases.length} ${expPhases.join(" ")}`,
+        `O ${shop}`, `S ${afterShop}`, `H ${scene.gameData.eggs.map((e: any) => e.hatchWaves).join(" ") || "-"}`, "E");
+      tripCover.options[k]++;
+      tripCover.correct += correct;
+      tripCover.wrong += correct ? 0 : 1;
+      tripCover.fainted += party[pick].hp <= 0 ? 1 : 0;
+      if (correct) tripCover.shops[k]++;
+      tripCover.expPhases += expPhases.length;
+      tripCover.oval += exps.oval && !correct ? 1 : 0;
+    }
+  }, 1200000);
+}
+
+it("writes the field trip trace", () => {
+  tripLines.unshift(`V 1 ${N}`);
+  tripLines.push(`Z ${Math.floor(N / tripConfigs.length) * tripConfigs.length}`);
+  fs.writeFileSync((process.env.GC_MYS_OUT ?? "/tmp/mystery.txt").replace(/\.txt$/, "") + "-trip.txt", tripLines.join("\n") + "\n");
+  console.log(`TRIP ${SEED}: options=${tripCover.options} correct=${tripCover.correct} wrong=${tripCover.wrong} fainted picks=${tripCover.fainted} shops by option=${tripCover.shops} exp phases=${tripCover.expPhases} wrong with oval charm=${tripCover.oval}`);
+  expect(tripCover.shops.every(n => n > 0) && tripCover.wrong > 0).toBe(true);
 });

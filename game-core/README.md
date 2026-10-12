@@ -785,7 +785,7 @@ money, items owned, that the encounter left without a battle, the shop's `custom
 Pikachu, Eevee), the RNG after the shop, and that the next wave is queued. The old `gen/dump-mystery-actions.test.ts`
 and `tests/mystery_diff_test.c` are untouched and still only smoke coverage.
 
-Department Store Sale, Shady Vitamin Dealer and Lost at Sea are ported and compared. Every other encounter's actions in
+Department Store Sale, Shady Vitamin Dealer, Lost at Sea and Field Trip are ported and compared. Every other encounter's actions in
 `gc_mystery.c` are still the Task 46 stand-ins; the encounter *selection* (`gc_mystery_select`) and the intro checks
 are not part of this comparison.
 
@@ -841,6 +841,30 @@ Upstream behaviours reproduced on purpose:
   outcome: a planted bug on it is an equivalent mutant.
 - Whether the lead is still on the field when the encounter starts (an `ExpPhase` instead of a `ShowPartyExpBarPhase`, display only)
   is not established by the harness, which starts from a fresh encounter with nobody out; the comparison keeps everyone off the field.
+
+### Field Trip
+
+`<trace>-trip.txt` is replayed by `tests/mystery_trip_diff_test.c`. Four parties (up to six Pokemon) with random levels, IVs,
+natures, one to four random moves each (any move of the table, so the move categories are the real ones), HP (a fifth
+fainted, and a fainted Pokemon can be picked: the party screen has no filter), Pokerus, Exp. Share / Exp. Balance / Oval Charm
+and Lucky / Golden Eggs. Each case runs the chosen option as the phases do: `onPreOptionPhase` with `selectPokemonForOption`
+captured, the party screen's callback with the Pokemon picked, the handler of the move picked (`pokemonAndMoveChosen`), the
+option phase in `(.., * 500)`, `doEncounterRewardsAndContinue()` with the `PartyExpPhase` really started, the shop's own
+`SelectModifierPhase` calls, and `EggLapsePhase.start()`. Compared: the starting stats and level cap, that all three options
+are offered, the run RNG (never moves), money, the order of the queued phases (experience first, then the shop), every
+experience phase with its exact amount, the shop's settings, the options the reward screen shows (item, argument, tier,
+upgrade count) with the RNG after it, and the eggs.
+
+Upstream behaviours reproduced on purpose:
+- A move of the asked category (physical / special / status, `move.getMove().category`) is correct: experience 100 for that
+  Pokemon alone, then the five fixed items (`guaranteedModifierTypeOptions`, no fill, luck upgrades allowed, no reroll
+  override) and no heal shop. Any other move gives 50 to *every* party member as a participant (fainted ones count in the
+  participant total, so with an Oval Charm the bonus applies) and the heal-only shop.
+- The shop items are `generateModifierTypeOption`s: tier from the player pool (`withTierFromPool`), a stat for the X items.
+  `pr_reward_pregen_option` (reward-core) makes them without rolling anything.
+- The experience phases are taken out of the queue before the shop is opened: upstream's shop is computed without them applied.
+- The app's party/move screen does not exist yet: `gc_mystery_execute(.., b, c)` takes the Pokemon (storage index) and the move
+  slot, and reads a value out of range as the first Pokemon and the first move.
 
 ## Fleeing: upstream differential (Task 77 / #125)
 

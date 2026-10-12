@@ -99,6 +99,9 @@ $(BUILD)/flee_diff_test: tests/flee_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $
 all: $(BUILD)/mystery_actions_diff_test
 $(BUILD)/mystery_actions_diff_test: tests/mystery_actions_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+all: $(BUILD)/mystery_trip_diff_test
+$(BUILD)/mystery_trip_diff_test: tests/mystery_trip_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 all: $(BUILD)/mystery_lost_diff_test
 $(BUILD)/mystery_lost_diff_test: tests/mystery_lost_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

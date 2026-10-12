@@ -657,6 +657,15 @@ static int tier_from_pool(pr_reward_ctx *ctx, int item)
     return def > 0 ? def : -1;
 }
 
+/* generateModifierTypeOption(func, pregenArgs) of a mystery encounter (encounter-phase-utils): the item's id and its tier
+ * from the PLAYER pool (withTierFromPool with the party), a generator given its one argument returning the type of that
+ * argument (pregen_arg; -1 for an item without one). Rolls nothing. cost 0, no luck upgrade. */
+pr_reward_option pr_reward_pregen_option(pr_reward_ctx *ctx, int item, int pregen_arg)
+{
+    const int tier = tier_from_pool(ctx, item);
+    return (pr_reward_option){{(uint16_t)item, (int16_t)(pr_items[item].gen == PR_GEN_NONE ? -1 : pregen_arg)}, (int8_t)tier, 0, 0};
+}
+
 int pr_reward_get_player_options(pr_reward_ctx *ctx, const pr_reward_thresholds *th, int count, const int8_t *tiers,
                                  int n_tiers, const pr_reward_custom *custom, pr_reward_option *out)
 {
