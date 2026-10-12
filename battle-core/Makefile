@@ -187,3 +187,6 @@ $(BUILD)/moodytest: tests/moodytest.c tests/speed-boost-replay.inc $(BUILD)/libp
 all: $(BUILD)/consecutive-move-test
 $(BUILD)/consecutive-move-test: tests/consecutive-move-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/consecutive-move-test.c $(BUILD)/libprcore.a -lm -o $@
+all: $(BUILD)/knockout-stats-test
+$(BUILD)/knockout-stats-test: tests/knockout-stats-test.c $(BUILD)/fell-stinger-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) tests/knockout-stats-test.c $(BUILD)/libprcore.a -lm -o $@

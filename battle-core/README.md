@@ -1091,3 +1091,11 @@ source-caller proof covering failed/virtual/long histories, PP, error text, and
 Struggle fallback. Runtime behavior is unchanged. Reproduce with
 `tools/consecutive-move-diff.sh <upstream>`; see
 [CONSECUTIVE-MOVE-VALIDATION.md](CONSECUTIVE-MOVE-VALIDATION.md) for scope and controls.
+## Knockout stat abilities
+
+Moxie, both Neigh and As One variants, Beast Boost/Eelevate, and Soul-Heart
+now run through the actual faint-phase ability dispatcher. The additive
+`tools/knockout-stats-diff.sh` suite compares complete source turns, including
+raw highest-stat ties, indirect knockouts, passives, suppression, and Simple/Contrary.
+See [KNOCKOUT-STATS-VALIDATION.md](KNOCKOUT-STATS-VALIDATION.md) for pins,
+reproduction, mutation checks, regressions, and bounded exclusions.
