@@ -14,9 +14,9 @@
 static struct {
   title_args args;
   optlist list;
-  char labels[3][48];
-  const char* label_ptrs[3];
-  title_choice choice[3];
+  char labels[4][48];
+  const char* label_ptrs[4];
+  title_choice choice[4];
   char biome[48];
 } T;
 
@@ -79,6 +79,8 @@ void title_screen_open(const title_args* a) {
   T.choice[n++] = TITLE_NEW_GAME;
   i18n_t(T.labels[n], sizeof T.labels[n], "menu:loadGame", NULL);
   T.choice[n++] = TITLE_LOAD_GAME;
+  snprintf(T.labels[n], sizeof T.labels[n], "Nemesis Radar"); /* the custom content's own entry: no upstream string */
+  T.choice[n++] = TITLE_RADAR;
   for (int i = 0; i < n; i++) T.label_ptrs[i] = T.labels[i];
   optlist_init(&T.list, T.label_ptrs, n);
   T.list.no_cancel = true; /* blockCancelButton: true */

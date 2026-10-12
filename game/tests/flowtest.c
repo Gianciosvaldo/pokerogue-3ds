@@ -21,6 +21,7 @@
 #include "custom_store.h"
 #include "pr_data.h"
 #include "pr_enums.h"
+#include "radar_screen.h"
 #include "result_screen.h"
 #include "run_saves.h"
 #include "save.h"
@@ -68,6 +69,28 @@ void slot_screen_refresh(void) {
   copy_info();
 }
 void slot_screen_message(const char* t) { snprintf(last_msg, sizeof last_msg, "%s", t); }
+
+/* the Nemesis Radar: records how it was opened (and what it was given, copied: the real screen copies it too) */
+static radar_args RA;
+static char ra_why[200];
+static cc_meta ra_meta;
+static int n_radar;
+static int radar_refusals; /* the next N opens are refused */
+bool radar_open(const radar_args* a) {
+  n_radar++;
+  if (radar_refusals > 0) {
+    radar_refusals--;
+    return false;
+  }
+  RA = *a;
+  snprintf(ra_why, sizeof ra_why, "%s", a->why ? a->why : "");
+  RA.why = ra_why;
+  if (a->meta) {
+    ra_meta = *a->meta;
+    RA.meta = &ra_meta;
+  }
+  return true;
+}
 
 static result_args R;
 static int n_result;
@@ -548,8 +571,33 @@ int main(void) {
     CHECK(file_size(p) == sizeof junk && !exists(p2), "the unusable file is exactly as it was and no backup or temporary file appeared");
     snprintf(p2, sizeof p2, "%s/custom.sav.tmp", SAVE_DIR);
     CHECK(!exists(p2), "no temporary file");
+
+    /* the Nemesis Radar over the same unusable file: shown with its reason, handed no records, nothing written, back to the title on exit */
+    {
+      cs_reset();
+      const int radars = n_radar, titles = n_title;
+      T.on_choose(TITLE_RADAR, T.arg);
+      CHECK(n_radar == radars + 1 && !RA.meta && strstr(RA.why, "damaged") && !RA.schedule && RA.on_exit, "the Radar is told the file cannot be used, and why: \"%s\"", RA.why);
+      CHECK(file_size(p) == sizeof junk && !exists(p2), "and it left the unusable file exactly as it was");
+      RA.on_exit(RA.arg);
+      CHECK(n_title == titles + 1, "leaving the Radar is the title again");
+    }
   }
   remove(p);
+  cs_reset();
+
+  /* no custom file yet: the Radar opens on an empty roster and does not create the file */
+  {
+    CHECK(!exists(p), "no custom file");
+    const int radars = n_radar;
+    T.on_choose(TITLE_RADAR, T.arg);
+    CHECK(n_radar == radars + 1 && RA.meta && RA.meta->roster.count == 0 && !RA.schedule, "an absent file is an empty roster");
+    CHECK(!exists(p), "and opening the Radar did not create the file");
+    /* the screen refusing to open (a roster that does not validate): it is tried once more as unusable, never silently nothing */
+    radar_refusals = 1;
+    T.on_choose(TITLE_RADAR, T.arg);
+    CHECK(n_radar == radars + 3 && !RA.meta && RA.why[0], "a refused open falls back to the unusable view with a reason: \"%s\"", RA.why);
+  }
   cs_reset();
 
   printf("%d checks, %d failed\n", checks, failed);

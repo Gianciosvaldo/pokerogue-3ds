@@ -184,6 +184,22 @@ build/postmortem_test: $(PM_SRCS)
 postmortem_test: build/postmortem_test
 .PHONY: postmortem_test
 
+# the Nemesis Radar (source/radar_screen.c) over custom-core's real validators, with a fake drawing layer; make radar_test && build/radar_test [fuzz sessions]
+RADAR_CPPFLAGS := $(CPPFLAGS) -I$(CCORE)/include -I$(CCORE)/tests -I../gen -I$(APP)/include
+RADAR_SRCS := radar_test.c ../source/radar_screen.c ../source/custom_core_build.c ../gen/gm_enum_names.c
+build/radar_test: $(RADAR_SRCS)
+	@mkdir -p build
+	$(CC) $(RADAR_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(RADAR_SRCS) -o $@
+radar_test: build/radar_test
+.PHONY: radar_test
+
+# a custom.sav with remembered enemies, for looking at the Radar on a real build (see mkcustom.c); make mkcustom && (cd /some/folder && /path/to/build/mkcustom few)
+build/mkcustom: mkcustom.c ../source/custom_core_build.c $(APP)/source/save.c
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) -I$(CCORE)/include -I$(APP)/include $(CFLAGS) mkcustom.c ../source/custom_core_build.c $(APP)/source/save.c -o $@
+mkcustom: build/mkcustom
+.PHONY: mkcustom
+
 # the music: the chooser (source/bgm_choose.c) against upstream's own Battle.getBgmOverride (bgm_expected.c, dumped by tools/dump-bgm.test.ts:
 # every wave, every species and form, every trainer), then the player (bgm_player.c) and the scene calls (bgm.c) over a fake DSP (snd_fake.c);
 # make bgmtest && build/bgmtest [BGM_TRACKS=<one track name per line>]
