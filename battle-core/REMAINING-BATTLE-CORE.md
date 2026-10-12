@@ -21,7 +21,7 @@ Completed continuation slices and remaining source-backed work:
 | Field priority immunity (merged #240) | Defending-field caller now dispatches and honors cancellation | Source positive/zero/negative and modified priority, passives, bypass, source phase/text/RNG; broader doubles remain |
 | Receiver/Power of Alchemy | CopyFaintedAlly needs victim context in the knockout dispatcher | Ally versus enemy victim, eligibility, copied primary/passive and source order, loaded doubles |
 | Parental Bond / Skill Link (merged #244) | Real hit-count callbacks now implemented; existing final-strike reduction retained | Move exclusions, hit powers/order, targets, KO interruption, exact RNG consumption |
-| Beat Up (this slice) | Party hit-count case now implemented; existing per-hit power verified | Pinned party/status ordering, self contribution, base species Attack, KO interruption and modifiers |
+| Beat Up (merged #246) | Party hit-count case now implemented; existing per-hit power verified | Pinned party/status ordering, self contribution, base species Attack, KO interruption and modifiers |
 | Cud Chew / Harvest | Berry recording, repeat consumption and restoration callbacks remain | Actual named held-item history and delays, ownership, duplication/refusal and RNG |
 | Transform / Sketch / ability copying | Remaining move effects and identity overrides | Real source identity/stat/moveset copying, bounds, reset and state serialization |
 | Forms / Battle Bond | Remaining form callbacks and one-use battle flags | Actual conditions and new required state; do not invent absent lifecycle inputs |
@@ -77,12 +77,20 @@ These sampled coverage counts do not establish whole-core completion.
 
 User-specified completion gates (2026-10-12):
 
-- Boss score: capture and faint callers in phases.c (original reported lines
-  434/2674) currently flag boss segments without applying the source's
-  sqrt(bossSegments) multiplier before ceil. Fix both actual callers and compare
-  actual BattleScene.addFaintedEnemyScore, including item/order boundaries.
+- Boss score (this slice): capture and faint callers in phases.c (original
+  reported lines 434/2674) now share the actual source calculation, including
+  item multipliers and sqrt(bossSegments) before ceil. Four thousand actual
+  source API cases match both C callers, within represented levels 1–255.
+  Separate form/item lifecycle flags remain; see BOSS-SCORE-VALIDATION.md.
+- Wide levels: the initial score matrix exposed uint8_t level truncation above
+  255. Keep the failing 1–1,000 source matrix; coordinate a wider level field
+  with game-core's serialized field before whole-core/Endless completion.
+  The bounded score harness explicitly refuses oversized inputs instead of
+  masking this prerequisite. No save representation is changed by scoring.
 - Flee: concurrent merged #243 adds an actual-source game-core differential;
   it covers singles outcomes and run transitions, but excludes RNG, speed ties
   and doubles. It also documents a battle-core ENDLESS biome-queue discrepancy
   masked by the game-core integration. Run and extend source proof at the
-  battle-core phase boundary before declaring the flee gate complete.
+  battle-core phase boundary before declaring the flee gate complete. A fresh
+  unchanged #243 run on seed777 matches 587 singles cases with zero mismatches;
+  thirteen source speed ties are explicitly skipped. This is not RNG/doubles proof.

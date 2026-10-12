@@ -372,6 +372,32 @@ static int get_critical_capture_chance(const pr_battle *bt, int modified_catch_r
     return (int)floor((charm_multiplier * dex_multiplier * cap_rate) / 6.0);
 }
 
+/* BattleScene.addFaintedEnemyScore: capture and faint use the same calculation. */
+static void add_fainted_enemy_score(pr_battle *bt, const pr_pokemon *pokemon)
+{
+    if (bt->max_exp_level <= 0) { pr_note_unported(bt, PR_FEAT_WAVE); return; }
+    int iv = 0;
+    for (int i = 0; i < 6; i++) iv += pokemon->ivs[i];
+    const pr_form *fm = pr_pokemon_form(pokemon);
+    double score = fm->base_exp * (fm->exp_boost ? 1.5 : 1)
+        * ((double)pokemon->level / bt->max_exp_level) * ((iv / 93.0) * 0.2 + 0.8);
+    for (int i = 0; i < bt->n_mods[1]; i++) {
+        const pr_modifier *m = &bt->mods[1][i];
+        if (!pr_mod_is(m, PR_MOD_HELD_ITEM) || m->pokemon_id != (int64_t)pokemon->id) continue;
+        if (!pr_mod_is_ported_item(m) || m->unknown_subclass)
+            pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
+        /* getScoreMultiplier is per modifier object, independent of stack count. */
+        if (m->cls == PR_MOD_BASE_STAT || m->cls == PR_MOD_BASE_STAT_FLAT) score *= 1.1;
+        else if (m->cls == PR_MOD_BASE_STAT_TOTAL || m->cls == PR_MOD_INCREMENTING_STAT
+            || m->cls == PR_MOD_ATTACK_TYPE_BOOSTER) score *= 1.2;
+    }
+    if (pokemon->is_boss) {
+        if (pokemon->boss_segments) score *= sqrt(pokemon->boss_segments);
+        else pr_note_unported(bt, PR_FEAT_BOSS_SEGMENTS); /* missing source context */
+    }
+    bt->battle_score += ceil(score);
+}
+
 static void attempt_capture_phase(pr_battle *bt, pr_engine *e, int ph)
 {
     int b = PH(ph)->battler;
@@ -428,16 +454,7 @@ static void attempt_capture_phase(pr_battle *bt, pr_engine *e, int ph)
     }
 
     if (caught) {
-        int iv = 0;
-        for (int i = 0; i < 6; i++) iv += pokemon->ivs[i];
-        const pr_form *fm = pr_pokemon_form(pokemon);
-        double score = fm->base_exp * (fm->exp_boost ? 1.5 : 1) * ((double)pokemon->level / bt->max_exp_level) * ((iv / 93.0) * 0.2 + 0.8);
-        if (bt->max_exp_level <= 0) pr_note_unported(bt, PR_FEAT_WAVE);
-        for (int i = 0; i < bt->n_mods[1]; i++)
-            if (!pr_mod_is_ported_item(&bt->mods[1][i]) && pr_mod_is(&bt->mods[1][i], PR_MOD_HELD_ITEM) && bt->mods[1][i].pokemon_id == (int64_t)pokemon->id)
-                pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
-        if (pokemon->is_boss) pr_note_unported(bt, PR_FEAT_BOSS_SEGMENTS);
-        bt->battle_score += ceil(score);
+        add_fainted_enemy_score(bt, pokemon);
 
         pr_show_text(bt, e, pr_msg1("battle:pokemonCaught", pr_arg_pokemon(bt, "pokemonName", pokemon)));
         unshift_new(bt, e, PH_VICTORY, b);
@@ -2793,17 +2810,7 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
     p->status_freeze_turns = -1;
     if (player) remove_participant(bt, p->id);
     else {
-        /* addFaintedEnemyScore */
-        int iv = 0;
-        for (int i = 0; i < 6; i++) iv += p->ivs[i];
-        const pr_form *fm = pr_pokemon_form(p);
-        double score = fm->base_exp * (fm->exp_boost ? 1.5 : 1) * ((double)p->level / bt->max_exp_level) * ((iv / 93.0) * 0.2 + 0.8);
-        if (bt->max_exp_level <= 0) pr_note_unported(bt, PR_FEAT_WAVE);
-        for (int i = 0; i < bt->n_mods[1]; i++)
-            if (!pr_mod_is_ported_item(&bt->mods[1][i]) && pr_mod_is(&bt->mods[1][i], PR_MOD_HELD_ITEM) && bt->mods[1][i].pokemon_id == (int64_t)p->id)
-                pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);                /* getScoreMultiplier */
-        if (p->is_boss) pr_note_unported(bt, PR_FEAT_BOSS_SEGMENTS);
-        bt->battle_score += ceil(score);
+        add_fainted_enemy_score(bt, p);
         /* addPostBattleLoot: the enemy's transferable held items */
         for (int i = 0; i < bt->n_mods[1]; i++) {
             pr_modifier *m = &bt->mods[1][i];

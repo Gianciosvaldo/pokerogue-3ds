@@ -1191,3 +1191,13 @@ probes; twelve production mutations fail and nine malformed traces reject.
 Retained rich coverage rises from 1,929 to 1,932, with no covered mismatch or loss.
 See [validation and reproduction](BEAT-UP-VALIDATION.md). Mixed-fusion identity,
 broader doubles and the remaining boss/flee completion gates remain separate.
+
+## Capture/faint boss scoring (2026-10-12)
+
+Both score callers now share the pinned source calculation, including per-object
+held-item multipliers and sqrt(bossSegments) before ceil. Source API comparisons
+match 8,000 actual C caller checks within represented levels 1–255, with twelve
+production mutations detected and nine malformed inputs refused. Retained
+battle and save regressions pass. See [validation and scope](BOSS-SCORE-VALIDATION.md).
+The wider level field/save prerequisite and remaining flee phase proof are open;
+this numerical proof does not establish full boss or capture lifecycle parity.
