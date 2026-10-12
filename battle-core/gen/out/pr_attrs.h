@@ -13,6 +13,8 @@ typedef struct { const char *const *v; uint8_t n; } pr_strlist;
 typedef struct { int8_t stat, stages; } pr_statchange;
 typedef struct { const pr_statchange *v; uint8_t n; } pr_statchanges;
 
+typedef struct { pr_statchanges fixed; pr_fn_id fn; } pr_stat_change_source;
+
 enum pr_attr_class {
     PR_AC_AbAttr = 0,
     PR_AC_AbilityChangeAttr = 1,
@@ -2404,7 +2406,7 @@ typedef struct pr_attr_PostVictoryStatStageChangeAbAttr {
     uint32_t nulls; /* bit i set = field i below was null/undefined upstream */
     bool showAbility;
     pr_fn_id extraCondition;
-    const char * /* raw JSON */ changes;
+    pr_stat_change_source changes;
 } pr_attr_PostVictoryStatStageChangeAbAttr;
 
 /* PostVictoryStatStageChangeAttr (1 uses) : PostVictoryStatStageChangeAttr > MoveAttr */

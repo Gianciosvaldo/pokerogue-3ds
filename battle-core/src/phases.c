@@ -2694,9 +2694,13 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
     pr_speed_iter it;
     pr_pokemon *q;
     pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
-    while ((q = pr_speed_iter_next(bt, &it))) pr_hook_ab(bt, q, PR_AC_PostKnockOutAbAttr);
+    while ((q = pr_speed_iter_next(bt, &it))) {
+        pr_ab_params params = {.pokemon = q, .move = -1};
+        pr_apply_ab_attrs(bt, PR_AC_PostKnockOutAbAttr, &params);
+    }
     if (p->n_attacks_received > 0 && is_on_field(source)) {
-        pr_hook_ab(bt, source, PR_AC_PostVictoryAbAttr);
+        pr_ab_params params = {.pokemon = source, .move = -1};
+        pr_apply_ab_attrs(bt, PR_AC_PostVictoryAbAttr, &params);
         int victory_move = p->attacks_received[0].move;
         const pr_move *vm = &pr_moves[victory_move];
         for (int a=vm->attr0; a<vm->attr0+vm->nattr; a++)
