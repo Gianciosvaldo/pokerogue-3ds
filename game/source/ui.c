@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "bgm.h"
 #include "snd.h"
 #include "tween.h"
 
@@ -329,6 +330,7 @@ bool ui_tick(void) {
   int from = first_drawn();
   for (int i = from; i < g_depth; i++)
     if (g_stack[i]->update) g_stack[i]->update(g_stack[i], dt);
+  bgm_tick(dt);
   snd_update();
 
   rr_frame_begin();

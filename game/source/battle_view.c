@@ -76,6 +76,8 @@ static struct {
   char biome[32];
   side s[2]; /* 0 player, 1 enemy */
   float arena_player_x, arena_enemy_x, enemy_slide;
+  float field_scale;  /* the field container's scale (updateFieldScale), tweened by field_tw */
+  tween field_tw;
   msgbox msg;
   float msg_wrap;
   mode mode;
@@ -139,7 +141,8 @@ static const char* mon_form_key(uint16_t species, int form) {
 
 static float get_mon_scale(const bv_mon* m) {
   const char* fk = mon_form_key((uint16_t)m->species, m->form);
-  if (fk && (strstr(fk, "gigantamax") || strstr(fk, "eternamax"))) {
+  /* getSpriteScale: G-Max and the starmobiles are 1.5x (isMax(); a mystery encounter's customPokemonData.spriteScale isn't here yet) */
+  if (fk && (strstr(fk, "gigantamax") || strstr(fk, "eternamax") || strstr(fk, "starmobile"))) {
     return 1.5f;
   }
   return 1.0f;
@@ -255,9 +258,24 @@ static void anim_field(ba_mon out[4]) {
 
 /* Where a side's Pokemon stands: its field position plus the Substitute offset (getSubstituteOffset:
  * the player's steps back left and down, the enemy's right and up). */
+/* Empty rows under the Pokemon's feet in its sprite: the fewest across its frames, so an animation keeps its bounce. Most sprites have
+ * none; about 95 front and 110 back sprites (mostly Gen 9's single 96x96 pictures, e.g. Lechonk's 32) have 10 or more, and upstream
+ * stands them on the picture's bottom edge, so they float above the platform. Here they stand on their lowest drawn row instead
+ * (lorenzo, 2026-10-11); a sprite with no gap is drawn exactly as before. */
+static int foot_gap(const side* sd) {
+  rr_atlas* a = img_get(sd->sprite_key);
+  int n = a ? rr_atlas_count(a) : 0, gap = 0;
+  for (int i = 0; i < n; i++) {
+    const rr_frame* f = rr_atlas_frame(a, i);
+    int g = f->src_h - f->off_y - f->h;
+    if (i == 0 || g < gap) gap = g;
+  }
+  return gap > 0 ? gap : 0;
+}
+
 static void mon_pos(const side* sd, bool player, float* x, float* y) {
   *x = (player ? 106 : 236 + B.enemy_slide) + sd->sub_off * (player ? -30 : 30);
-  *y = (player ? PLAYER_Y : 84) + sd->sub_off * (player ? 10 : -10) + sd->catch_dy;
+  *y = (player ? PLAYER_Y : 84) + sd->sub_off * (player ? 10 : -10) + sd->catch_dy + foot_gap(sd) * sd->scale;
 }
 
 /* The doll ("pkmn__sub" / "pkmn__back__sub", origin (0.5, 1), half size on the player's side) at
@@ -349,6 +367,27 @@ static void draw_field_strip(void) {
     rr_rect(0, 180 - 48, 320, 48, RR_RGBA(0x30, 0x50, 0x68, 255));
 }
 
+/* updateFieldScale(): when a bigger-than-normal Pokemon (G-Max, starmobile) is on the field, the field (platforms, Pokemon, battle
+ * animations; not the background or the strip) zooms out about the arena's bottom centre (160, 132): floor((1 / biggest scale)^0.7 * 40)
+ * / 40, so 1.5x gives 0.75. setFieldScale tweens it over |change| * 6 * 200 ms, Sine.easeInOut. Upstream calls it when a Pokemon is
+ * summoned or returned, after a form change and when the wild Pokemon appears; with nobody on the field the scale stays as it is. */
+static void update_field_scale(bool instant) {
+  float biggest = 0;
+  for (int k = 0; k < 2; k++)
+    if (B.s[k].present && B.s[k].mon.species > 0) {
+      const float sc = get_mon_scale(&B.s[k].mon);
+      if (sc > biggest) biggest = sc;
+    }
+  if (biggest <= 0) return;
+  const float target = floorf(powf(1 / biggest, 0.7f) * 40) / 40;
+  const float from = B.field_scale;
+  if (fabsf(target - from) < 0.0001f) return;
+  tween_start(&B.field_tw, from, target, instant ? 0 : fabsf(from - target) * 6 * 200, EASE_SINE_IN_OUT);
+  if (instant) B.field_scale = target;
+}
+
+static void field_zoom(bool on) { rr_set_zoom(on ? B.field_scale : 1, 160, 132); }
+
 static void draw_field(void) {
   char k[64];
   snprintf(k, sizeof k, "images/arenas/%s_bg", B.biome);
@@ -356,11 +395,14 @@ static void draw_field(void) {
     img_draw(k, NULL, 0, 0, 0, 0);
   else
     rr_rect(0, 0, 320, 180, RR_RGBA(0x88, 0xc8, 0xf0, 255));
+  field_zoom(true);
   snprintf(k, sizeof k, "images/arenas/%s_b", B.biome);
   img_draw(k, NULL, B.arena_enemy_x, 0, 0, 0);
   snprintf(k, sizeof k, "images/arenas/%s_a", B.biome);
   img_draw(k, NULL, B.arena_player_x, 0, 0, 0);
+  field_zoom(false);
   draw_field_strip();
+  field_zoom(true);
   ba_mon field[4];
   anim_field(field);
   ba_draw(BA_LAYER_BELOW_ENEMY, field);
@@ -377,6 +419,7 @@ static void draw_field(void) {
   if (pl->present && pl->tint_on && pl->tint_above) draw_sub(pl, true, true);
   ba_draw(BA_LAYER_TOP, field);
   if (!B.ball.behind) draw_ball();
+  field_zoom(false);
 }
 
 /* ------------------------------------------------------------------ drawing: info boxes */
@@ -962,6 +1005,7 @@ static void run_event(float dt) {
             tween_start(&B.tw2, 0, 0, 0, EASE_LINEAR);
           } else {
             en->black = false; /* untint(100) */
+            update_field_scale(false);
             cry(&en->mon);
             en->info_on = true;
             en->info_dx = -150;
@@ -1002,6 +1046,7 @@ static void run_event(float dt) {
       if (B.step == 1 && B.t >= (player ? 750 : 250)) {
         /* the ball opens: the Pokemon grows in, cries, and its info box slides in */
         ui_play_sound("se/pb_rel");
+        update_field_scale(false);
         tween_start(&B.tw, 0, get_mon_scale(&sd->mon), 250, EASE_SINE_IN);
         B.step = 2;
       }
@@ -1036,6 +1081,7 @@ static void run_event(float dt) {
       sd->info_dx = B.tw2.value;
       if (tween_done(&B.tw) && tween_done(&B.tw2)) {
         sd->present = false;
+        update_field_scale(false); /* ReturnPhase.onEnd */
         finish_event();
       }
       break;
@@ -1256,6 +1302,7 @@ static void run_event(float dt) {
         update_mon_form(&sd->mon, e->a, e->b);
         sprite_key(&sd->mon, player, sd->sprite_key, sizeof sd->sprite_key);
         float target_scale = get_mon_scale(&sd->mon);
+        update_field_scale(false);
         ui_play_sound("battle_anims/PRSFX- Transform");
         if (fabsf(sd->scale - target_scale) > 0.01f) {
           tween_start(&B.tw, sd->scale, target_scale, 300, EASE_SINE_IN_OUT);
@@ -1379,6 +1426,10 @@ static void bv_update(ui_screen* s, float dt) {
   msgbox_update(&B.msg, dt);
   if (B.ability_t > 0) B.ability_t -= dt;
   if (B.reason_ms > 0) B.reason_ms -= dt;
+  if (!tween_done(&B.field_tw)) {
+    tween_update(&B.field_tw, dt);
+    B.field_scale = B.field_tw.value;
+  }
   if (B.ball.on && B.ball.fading) {
     /* removePb(): delay 250, Sine.easeIn to alpha 0 over 250 */
     B.ball.fade_t += dt;
@@ -1465,6 +1516,8 @@ void bv_begin(const bv_setup* setup) {
   B.enemy_slide = -300;
   B.s[0].present = B.s[0].info_on = setup->player_present;
   B.s[1].present = B.s[1].info_on = false;
+  B.field_scale = 1;
+  update_field_scale(true);
   for (int i = 0; i < 4; i++) B.opts.move_ok[i] = true;
   B.opts.can_ball = B.opts.can_switch = B.opts.can_run = true;
   msgbox_init(&B.msg, TS_MESSAGE, 1780 / 6.0f, 2);

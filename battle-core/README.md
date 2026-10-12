@@ -1074,3 +1074,12 @@ and existing suppression/faint gates, passive combinations, Simple/Contrary,
 caps and Protect. Source activation has no minimum temporary turn-count rule.
 Queue-less simulated application remains unsupported. Historical ITEMS text
 and trainer metadata transport failures remain explicit; no old checks change.
+
+## Moody post-turn stat choices (2026-10-11)
+
+The missing Moody leaf now selects and queues the pinned source's random +2/-1
+changes through the existing stat phase. [Validation](MOODY-VALIDATION.md)
+records 8000 exact complete source turns/texts, candidate/cap/passive/refusal
+controls, ten rejected runtime mutations, nine malformed refusals and retained
+battle/host checks. This is bounded singles parity, not all ability or hardware
+coverage. Reproduce with `tools/moodydiff.sh <upstream> 2000 <seed>`.

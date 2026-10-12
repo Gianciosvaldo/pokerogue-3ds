@@ -660,44 +660,58 @@ counts (section 2.8). No test drives real `battle-core` events: the fixtures are
 
 ### 5.2 C03 (observer and post-mortem screen)
 
-Run on the final tree of the C03 PR, same container (gcc 13.3.0, Python 3.13, Ubuntu `arm-none-eabi-gcc` 13.2.1). The PR
-description repeats this with the head commit and the CI results. All commands from `game/tests`.
+Run on the final tree of the C03 PR (`main` after the music PR #225 merged into the branch), same container (gcc 13.3.0, Python 3.13,
+Ubuntu `arm-none-eabi-gcc` 13.2.1, devkitARM in Docker, Azahar's libretro build in Old 3DS mode). The PR description repeats this
+with the head commit and the CI results. Test commands run from `game/tests`.
 
 | Command | Result |
 |---|---|
-| `make clean && make observer_test postmortem_test flowtest saves_test startertest starter_data_test starter_ui_test runtest` | builds; the only warnings are the existing `ai.c:542` and `run_screen.c` (`pretty_key`, unused parameter) ones, also present on `main` |
+| `make clean && make observer_test postmortem_test flowtest saves_test startertest starter_data_test starter_ui_test bgmtest runtest` | builds; the only warnings are the existing `ai.c:542` and `run_screen.c` (`pretty_key`, unused parameter) ones, also present on `main` |
 | `build/observer_test` (ASan + UBSan) | 188 checks, 0 failed |
-| `build/postmortem_test` | 202 checks, 0 failed |
+| `build/postmortem_test` | 248 checks, 0 failed (includes a check that every line is drawn in a style that was readable in Azahar) |
 | `build/flowtest` | 71 checks, 0 failed (64 on `main`) |
-| `build/saves_test`, `build/startertest`, `build/starter_data_test`, `build/starter_ui_test` | 68 / 737,655 / 51,280 / 4,469 checks, 0 failed (equal to `main`) |
-| `python3 game/tests/observer_mutations.py` | 28 run, 28 killed, 0 survived, 0 invalid |
-| `build/runtest 1000 0` (plain, `RUNTEST_SAVE=1`) | digest `f344a4a0`, equal to `main`; 1000 reports checked, 50,458 batches, 95,435 observed events, 5,000 turns kept (5,000 complete), 4,402 empty ranges, 0 refused, 0 lost, 0 evicted |
-| `RUNTEST_SAVE=resume build/runtest 1000 0` | digest `c545a9b2`, equal to `main`; 998 of 1000 reports from a resumed run, 15,635 batches |
-| `RUNTEST_SYS=all build/runtest 1000 0` | digest `c31845a0`, equal to `main`, `OK`; 53,932 batches, 103,948 observed events |
+| `build/saves_test`, `startertest`, `starter_data_test`, `starter_ui_test`, `bgmtest` | 68 / 737,655 / 51,280 / 4,470 / 11,421 checks, 0 failed |
+| `python3 game/tests/observer_mutations.py` | 29 run, 29 killed, 0 survived, 0 invalid |
+| `build/runtest 1000 0` (plain and `RUNTEST_SAVE=1`) | digest `1b42b380`, equal to `main`; 1000 reports checked, 50,069 batches, 94,651 observed events, 5,000 turns kept (5,000 complete), 4,331 empty ranges, 0 refused, 0 lost, 0 evicted |
+| `RUNTEST_SAVE=resume build/runtest 1000 0` | digest `b764f66a`, equal to `main`; 998 of 1000 reports from a resumed run, 15,900 batches |
+| `RUNTEST_SYS=all build/runtest 1000 0` | digest `80268d9a`, equal to `main`; 52,958 batches, 102,160 observed events |
+| `make runtest-save` | OK (10 seeds) |
 
-`runtest 1000 0` prints `FAILED` in the first three modes **on `main` as well**, with the identical line `first violation: run 1000 wave 10: fewer than 5 evolutions completed (4)` (resume mode: `run 4043 wave 6: fewer than 5 evolutions cancelled (3)`). That is the harness's coverage floor on evolutions at 1000 runs, not
-an observer check; it was not changed here. The `RUNTEST_SYS=all` mode, which reaches the floor, is `OK`.
+`runtest 1000 0` prints `FAILED` in all four modes **on `main` as well**, at the same digests, with the identical first violations
+(`run 1000 wave 9: fewer than 5 evolutions cancelled (3)` plain and SAVE=1; `run 4023 wave 19: fewer than 5 evolutions completed (3)`
+resume; `run 1000 wave 10: fewer than 5 evolutions cancelled (4)` SYS=all). That is the harness's coverage floor on evolutions at
+1000 runs, not an observer check; it was not changed here.
 
-ARM compile of the new and changed sources with the 3DS CPU flags (`-O2 -Wall -Wextra`, no new warning): `.text` / `.bss`
-bytes: `combat_observer.o` 2,348 / 45,952; `custom_core_build.o` 14,787 / 0; `postmortem_screen.o` 5,631 / 6,992; `result_screen.o`
-1,267 / 2,064; `app_flow.o` 2,222 / 1,369; `run_screen.o` +68 `.text` over `main`.
+ARM compile of the new and changed sources with the 3DS CPU flags (`-O2 -Wall -Wextra`, no new warning): `.text` / `.bss` bytes:
+`combat_observer.o` 2,348 / 45,952; `custom_core_build.o` 14,787 / 0; `postmortem_screen.o` 5,631 / 6,992; `result_screen.o`
+1,267 / 2,064; `app_flow.o` 2,222 / 1,369; `run_screen.o` 17,925 / 1,332. The 3DS build of `game/` in the devkitARM image also succeeds.
 
 **What the tests are.** `observer_test.c` feeds literal gc events and battle events through `co_observe` and checks the stored
 turns field by field (see section 2.9 for the rules). `runtest.c` checks every real run's report, including that every
 `GC_EV_BATTLE` range was observed once and none was refused, dropped or replayed. `postmortem_test.c` draws against a fake text
 layer (6 px per character) and checks the wording (including a list of words that would claim a cause), the pages, scrolling,
-button handling and screen bounds. The mutation script changes the wiring and the screen one edit at a time.
+button handling, screen bounds and the text styles. The mutation script changes the wiring and the screen one edit at a time.
 
-**Not run / not established.** No emulator (Azahar) or console run: no emulator binary and no asset pack were available, so
-text width and layout were checked only against the fake 6 px font, **the card's emulator requirement is unmet**. No timing
-on an Old 3DS. The new game tests are not part of the CI workflow (it runs game-core tests and the 3DS build). The finishing
-source of a defeat is never known. Stable Pokemon identity and a durable run uid are not provided.
+**Emulator check (Azahar, Old 3DS mode).** The app was built in Docker (`devkitpro/devkitarm`), the `gfx`, `font` and `data` packs
+were built from the pinned upstream checkouts with `build_sd.py --only gfx,font,data`, and a run with one Magikarp (`rundriver.txt`:
+a fixed seed and `starters=129`) was driven with scripted A presses through the real title, battle and result screens. The post-mortem
+opened from the result screen showed the real events of three turns, and LEFT / RIGHT paged them. **The defeat itself was forced:** a
+Magikarp could not lose to the wave 1 Sentret in 9,000 emulated frames, so the screenshots come from a throwaway copy of `game/`
+(outside the repo, not committed) that ends the run after five observed battle ranges. The turns, damage and HP shown are real
+observations; a real faint, a real "Last to fall" line, a scroll past ten rows and a clear were not seen in the emulator (the host
+tests cover them with a fake font). The first emulator run found that the totals, rows, notice and footer, drawn in the 9 px emerald
+style, were unreadable; they now use `TS_INSTRUCTIONS_TEXT` (the 8 px pixel font the party screen uses), and the same flow was
+re-run on the merged tree to confirm. Screenshots are in the shared project files, not in Git.
+
+**Not run / not established.** No timing on an Old 3DS or a real console. The new game tests are not part of the CI workflow (it
+runs game-core tests and the 3DS build). The finishing source of a defeat is never known. Stable Pokemon identity and a durable run
+uid are not provided.
 
 ## 6. Not established by this PR
 
 - No upstream behavior was consulted or compared. There is no differential, no seed, no Node 22 run, and none is needed
   for a module that ports no upstream rule.
-- No emulator or console check by C01/C02 (no screen or app change then). C03's own emulator gap is stated in section 5.2.
+- No emulator or console check by C01/C02 (no screen or app change then). C03's emulator check, and what it did not cover, is in section 5.2.
 - No Old 3DS memory or time measurement. `sizeof` and code-size figures come from compilers (x86-64 host, Ubuntu's
   `arm-none-eabi-gcc`, and devkitARM in CI, with the 3DS CPU flags), not from a device or emulator.
 - No codec, no file I/O, no scheduler and no profile or reward code. (C03 added the live observer hook and the post-mortem screen; section 2.9.) The rest is C04 to C10.

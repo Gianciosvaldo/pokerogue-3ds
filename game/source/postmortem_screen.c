@@ -14,7 +14,7 @@
 #define ROW_MAX (CC_MAX_EVENTS_PER_TURN + 1)
 #define ROW_LEN 96
 #define VISIBLE 10       /* event rows on the bottom screen */
-#define ROW_H 12
+#define ROW_H 14
 #define LIST_Y 74
 #define LIST_W 296       /* the list's text is cut to this many px */
 
@@ -127,7 +127,7 @@ static void build_page(void) {
   for (int i = 0; i < t->n_events; i++) {
     const cc_event* e = &t->events[i];
     pm_describe(e, P.rows[P.n_rows], ROW_LEN);
-    fit(P.rows[P.n_rows], TS_MOVE_INFO_CONTENT, LIST_W);
+    fit(P.rows[P.n_rows], TS_INSTRUCTIONS_TEXT, LIST_W);
     P.tone[P.n_rows] = e->kind == CC_EV_FAINT ? TONE_FAINT : TONE_NORMAL;
     P.n_rows++;
   }
@@ -152,9 +152,9 @@ static void build_page(void) {
     if (P.totals[0][0] >= 'a' && P.totals[0][0] <= 'z') P.totals[0][0] = (char)(P.totals[0][0] - 32);
     if (P.totals[1][0] >= 'a' && P.totals[1][0] <= 'z') P.totals[1][0] = (char)(P.totals[1][0] - 32);
   }
-  fit(P.notice[0], TS_MOVE_INFO_CONTENT, LIST_W);
-  fit(P.totals[0], TS_MOVE_INFO_CONTENT, LIST_W);
-  fit(P.totals[1], TS_MOVE_INFO_CONTENT, LIST_W);
+  fit(P.notice[0], TS_INSTRUCTIONS_TEXT, LIST_W);
+  fit(P.totals[0], TS_INSTRUCTIONS_TEXT, LIST_W);
+  fit(P.totals[1], TS_INSTRUCTIONS_TEXT, LIST_W);
 }
 
 /* ------------------------------------------------------------------ input */
@@ -249,7 +249,7 @@ static void draw_top(void) {
     snprintf(t, sizeof t, "Last %d turns, history incomplete", r->history.n_turns);
   text_draw(TS_WINDOW, 160, y, t, &o);
   o.color = RR_RGBA(0xa0, 0xa0, 0xa0, 255);
-  text_draw(TS_MOVE_INFO_CONTENT, 160, 156, "Read from the battle log. It names no cause.", &o);
+  text_draw(TS_INSTRUCTIONS_TEXT, 160, 156, "Read from the battle log. It names no cause.", &o);
 }
 
 static void draw_bottom(void) {
@@ -260,8 +260,8 @@ static void draw_bottom(void) {
   if (r->history.n_turns == 0) {
     line(10, 5, "Last turns", TS_WINDOW, 0);
     line(10, 40, "No battle events were recorded for this run.", TS_WINDOW, 0);
-    if (r->began_mid) line(10, 62, "The run was continued from a save.", TS_MOVE_INFO_CONTENT, 0);
-    line(10, 222, "A: continue    B: back", TS_MOVE_INFO_CONTENT, 0);
+    if (r->began_mid) line(10, 62, "The run was continued from a save.", TS_INSTRUCTIONS_TEXT, 0);
+    line(10, 222, "A: continue    B: back", TS_INSTRUCTIONS_TEXT, 0);
     return;
   }
   line(10, 5, P.head, TS_WINDOW, 0);
@@ -270,9 +270,9 @@ static void draw_bottom(void) {
   text_opts o = text_defaults();
   o.origin_x = 1.0f;
   text_draw(TS_WINDOW, 310, 5, pg, &o);
-  if (P.notice[0][0]) line(10, 30, P.notice[0], TS_MOVE_INFO_CONTENT, RR_RGBA(0xe8, 0xe8, 0xa8, 255));
-  if (P.totals[0][0]) line(10, 44, P.totals[0], TS_MOVE_INFO_CONTENT, 0);
-  if (P.totals[1][0]) line(10, 58, P.totals[1], TS_MOVE_INFO_CONTENT, 0);
+  if (P.notice[0][0]) line(10, 30, P.notice[0], TS_INSTRUCTIONS_TEXT, RR_RGBA(0xe8, 0xe8, 0xa8, 255));
+  if (P.totals[0][0]) line(10, 44, P.totals[0], TS_INSTRUCTIONS_TEXT, 0);
+  if (P.totals[1][0]) line(10, 58, P.totals[1], TS_INSTRUCTIONS_TEXT, 0);
 
   ui_window(1, LIST_Y - 4, 318, VISIBLE * ROW_H + 8, WIN_NORMAL);
   for (int i = 0; i < VISIBLE && P.scroll + i < P.n_rows; i++) {
@@ -280,18 +280,18 @@ static void draw_bottom(void) {
     rr_color c = 0;
     if (P.tone[k] == TONE_FAINT) c = RR_RGBA(0xf8, 0x58, 0x58, 255);
     if (P.tone[k] == TONE_NOTE) c = RR_RGBA(0xe8, 0xe8, 0xa8, 255);
-    line(12, LIST_Y + i * ROW_H, P.rows[k], TS_MOVE_INFO_CONTENT, c);
+    line(12, LIST_Y + i * ROW_H, P.rows[k], TS_INSTRUCTIONS_TEXT, c);
   }
   char more[40];
   if (P.scroll > 0) {
     snprintf(more, sizeof more, "%d more above", P.scroll);
-    line(236, 30, more, TS_MOVE_INFO_CONTENT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
+    line(236, 30, more, TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
   }
   if (P.scroll + VISIBLE < P.n_rows) {
     snprintf(more, sizeof more, "%d more below", P.n_rows - P.scroll - VISIBLE);
-    line(236, LIST_Y + VISIBLE * ROW_H + 6, more, TS_MOVE_INFO_CONTENT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
+    line(236, LIST_Y + VISIBLE * ROW_H + 6, more, TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
   }
-  line(10, 222, "A: continue   B: back   </>: turn   ^/v: scroll", TS_MOVE_INFO_CONTENT, 0);
+  line(10, 222, "A: continue   B: back   </>: turn   ^/v: scroll", TS_INSTRUCTIONS_TEXT, 0);
 }
 
 static void pm_draw(ui_screen* s, rr_screen which) {

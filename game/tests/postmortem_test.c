@@ -45,6 +45,7 @@ typedef struct {
   float x, y;
   int screen;     /* 0 top, 1 bottom */
   int space;
+  text_style style;
   char text[160];
 } drawn_t;
 #define DRAWN_MAX 256
@@ -84,9 +85,9 @@ float text_width(text_style st, const char* s, const text_opts* o) {
   return 6.0f * (float)strlen(s);
 }
 float text_draw(text_style st, float x, float y, const char* s, const text_opts* o) {
-  (void)st;
   if (n_drawn < DRAWN_MAX) {
     drawn_t* d = &g_drawn[n_drawn++];
+    d->style = st;
     d->x = x;
     d->y = y;
     d->screen = g_which;
@@ -168,6 +169,8 @@ static void check_on_screen(int which) {
     const float right = d->x + 6.0f * (float)strlen(d->text);
     CHECK(d->x >= 0 && d->y >= 0 && d->y + 12 <= h + 1, "\"%s\" is off the screen at (%.0f, %.0f)", d->text, d->x, d->y);
     CHECK(right <= w + 1, "\"%s\" runs to x %.0f", d->text, right);
+    /* the 9 and 12 px emerald styles (TS_MOVE_INFO_CONTENT, TS_BATTLE_INFO) were unreadable in Azahar: only the 16 px emerald (TS_WINDOW, TS_SUMMARY) and the 8 px pixel font (TS_INSTRUCTIONS_TEXT) are used */
+    CHECK(d->style == TS_WINDOW || d->style == TS_SUMMARY || d->style == TS_INSTRUCTIONS_TEXT, "\"%s\" is drawn in a style that was not readable on screen (%d)", d->text, (int)d->style);
   }
 }
 

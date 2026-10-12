@@ -134,6 +134,10 @@ M = [
      '  if (t->flags & CC_TF_SOURCE_LOSS) add_phrase(why, sizeof why, "some events were not observed");',
      "",
      "postmortem_test", ["build/postmortem_test"], "a turn that lost events carries no notice"),
+    ("source/postmortem_screen.c",
+     "  if (P.totals[0][0]) line(10, 44, P.totals[0], TS_INSTRUCTIONS_TEXT, 0);",
+     "  if (P.totals[0][0]) line(10, 44, P.totals[0], TS_MOVE_INFO_CONTENT, 0);",
+     "postmortem_test", ["build/postmortem_test"], "the totals are drawn in the 9 px style that was unreadable in Azahar"),
 ]
 
 

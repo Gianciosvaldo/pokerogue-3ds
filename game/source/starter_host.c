@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "bgm.h"
 #include "i18n.h"
 #include "starter_data.h"
 #include "ui.h"
@@ -85,7 +86,13 @@ static void sh_leave(ui_screen* s) {
   starter_close();
 }
 
-static ui_screen g_screen = {"starter-select", UI_FADE, NULL, sh_leave, NULL, sh_input, sh_update, sh_draw, NULL};
+/* SelectStarterPhase.start: the menu music */
+static void sh_enter(ui_screen* s) {
+  (void)s;
+  bgm_on_starter_select();
+}
+
+static ui_screen g_screen = {"starter-select", UI_FADE, sh_enter, sh_leave, NULL, sh_input, sh_update, sh_draw, NULL};
 
 bool sh_open(const gc_system* sys, const char* notice, const sh_events* ev) {
   H.sys = sys;

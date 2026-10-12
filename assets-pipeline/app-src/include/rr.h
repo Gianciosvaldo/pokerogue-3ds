@@ -117,6 +117,9 @@ void rr_set_blend(rr_blend b);
 /* A signed colour (-255..255 per channel) added to every drawn pixel's RGB before blending,
  * until changed (reset to 0 at each rr_target): upstream's sprite shader "tone" (rgb part). */
 void rr_set_tone(int r, int g, int b);
+/* Scales everything drawn next (images, rects, 9-slices; not text) by s about the screen point (ax, ay), until changed
+ * (reset to 1 at each rr_target): a Phaser container's scale, e.g. upstream's battle field zoom. s = 1 turns it off. */
+void rr_set_zoom(float s, float ax, float ay);
 /* 9-slice window from a 24x24 upstream window image (ui/windows/window_N.png). */
 void rr_nineslice(const rr_frame* f, float x, float y, float w, float h, int border);
 

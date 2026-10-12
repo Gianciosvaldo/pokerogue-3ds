@@ -15,6 +15,12 @@
  *   RUNTEST_SAVE=resume  the same, and every 4th save point the run is dropped and continued from its slot (rs_resume, as
  *                        the title's Continue does): the loaded run must be the one that was saved, and the fake screen must
  *                        then agree with it at the next command.
+ * The music is the app's own (bgm.c, bgm_choose.c, bgm_player.c) over a fake DSP (snd_fake.c). The runs fail when a track is started
+ * while a battle animation plays (the SD card reads would stall it), when a scene starts with other music than upstream's
+ * Battle.getBgmOverride gives (checked against bgm_choose, not the app's own scene code), when a command is asked with other music
+ * playing (a trainer's battle music must have replaced its encounter music by then), when a trainer's reward screen is not under its
+ * victory music, or when the music does not fade at the end of a run.
+ *
  *   RUNTEST_SYS=1        the runs have system data (gc_run.sys), as the app gives them: a new save's (the nine default starters),
  *                        and every run starts with a team the starter select would offer. RUNTEST_SYS=all: every starter unlocked.
  *                        The system data lives across the runs (what one catches the next one can pick), and with RUNTEST_SAVE
@@ -30,6 +36,8 @@
 #include "battle_view.h"
 #include "ball_menu.h"
 #include "combat_observer.h"
+#include "bgm.h"
+#include "bgm_choose.h"
 #include "i18n.h"
 #include "party_fake.h"
 #include "party_screen.h"
@@ -39,6 +47,7 @@
 #include "run_saves.h"
 #include "run_screen.h"
 #include "save.h"
+#include "snd_fake.h"
 #include "ui.h"
 #include "ui_widgets.h"
 
@@ -232,6 +241,90 @@ void ui_fade(float out_ms, float hold_ms, float in_ms, void (*at_black)(void* ar
   if (at_black) at_black(arg);
 }
 
+/* ---- the music ---- */
+static struct {
+  bool have;
+  char battle[BGM_NAME_LEN]; /* what this wave's battle plays once it is going, as the chooser answers for the run when the scene is set up */
+  int scenes, encounter_scenes, commands, victories, run_end_fades, starts;
+  char seen[400][BGM_NAME_LEN];
+  int n_seen;
+} M;
+
+/* every track start is SD card reading on the main thread: never while a battle animation plays */
+static void snd_start(const char* key) {
+  if (W.playing) BAD("the music track %s was started while a battle animation plays", key);
+  M.starts++;
+}
+
+/* what upstream's Battle.getBgmOverride / the biome's music gives for the run as it is now (bgm_choose, not the app's scene code) */
+static const char* expect_track(const gc_run* r, bool started, char buf[BGM_NAME_LEN]) {
+  bgm_scene sc;
+  memset(&sc, 0, sizeof sc);
+  sc.wave = r->wave;
+  sc.biome = r->biome;
+  sc.battle_type = r->battle_type;
+  sc.me_default = r->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER;
+  sc.started = started;
+  sc.final_boss = r->run.mode == GAME_MODES_CLASSIC && r->wave == 200;
+  sc.all_gens = true;
+  sc.trainer_type = r->trainer_type;
+  sc.trainer_variant = r->trainer_variant;
+  for (int i = 0; i < r->n_enemy && i < 6; i++) {
+    sc.enemy[i].species = r->enemy[i].b.species;
+    sc.enemy[i].form = r->enemy[i].b.form;
+    sc.n_enemy++;
+  }
+  return bgm_scene_track(&sc, buf);
+}
+
+static void music_seen(const char* name) {
+  for (int i = 0; i < M.n_seen; i++)
+    if (!strcmp(M.seen[i], name)) return;
+  if (M.n_seen < 400) snprintf(M.seen[M.n_seen++], BGM_NAME_LEN, "%s", name);
+}
+
+/* a scene was just set up (at black): its music is upstream's, with the trainer's encounter music before its first send-out */
+static void music_scene(void) {
+  const gc_run* r = rs_run();
+  char b1[BGM_NAME_LEN], b2[BGM_NAME_LEN];
+  const char* first = expect_track(r, false, b1);
+  const char* battle = expect_track(r, true, b2);
+  if (strcmp(bgm_current(), first)) BAD("the wave starts with the music \"%s\", upstream plays \"%s\"", bgm_current(), first);
+  char key[BGM_NAME_LEN + 16];
+  snprintf(key, sizeof key, "audio/bgm/%s", first);
+  if (strcmp(SND.key, key) || SND.volume != 1.0f) BAD("the DSP plays \"%s\" at volume %.2f, the wave wants \"%s\"", SND.key, SND.volume, key);
+  snprintf(M.battle, sizeof M.battle, "%s", battle);
+  M.have = true;
+  M.scenes++;
+  if (strcmp(first, battle)) M.encounter_scenes++;
+  music_seen(first);
+}
+
+/* a command is asked: the battle is on, with the music it plays from here on */
+static void music_command(void) {
+  if (!M.have) return;
+  M.commands++;
+  char key[BGM_NAME_LEN + 16];
+  snprintf(key, sizeof key, "audio/bgm/%s", M.battle);
+  if (strcmp(bgm_current(), M.battle)) BAD("a command was asked with the music \"%s\", the battle plays \"%s\"", bgm_current(), M.battle);
+  if (strcmp(SND.key, key) || SND.volume != 1.0f) BAD("a command was asked with the DSP on \"%s\" at volume %.2f, want \"%s\"", SND.key, SND.volume, key);
+  music_seen(M.battle);
+}
+
+/* the reward screen: a won trainer battle has its victory music, a won wild battle the music it had */
+static void music_reward(void) {
+  if (!M.have) return;
+  const gc_run* r = rs_run();
+  if (r->battle_type == BATTLE_TYPE_TRAINER) {
+    const char* v = bgm_trainer_victory(r->trainer_type);
+    if (strcmp(bgm_current(), v)) BAD("the reward screen after trainer %d plays \"%s\", its victory music is \"%s\"", r->trainer_type, bgm_current(), v);
+    M.victories++;
+    music_seen(v);
+  } else if (strcmp(bgm_current(), M.battle)) {
+    BAD("the reward screen after a wild battle plays \"%s\", the battle played \"%s\"", bgm_current(), M.battle);
+  }
+}
+
 /* ---- the battle screen ---- */
 static bool side_ok(int battler, const char* what) {
   const int s = battler >= 2 ? 1 : 0;
@@ -253,6 +346,7 @@ void bv_begin(const bv_setup* setup) {
   W.fainted_shown[0] = W.fainted_shown[1] = false;
   W.playing = W.asking = false;
   W.sp_open = false;
+  music_scene();
 }
 
 bv_mon* bv_mon_of(int battler) { return &W.mon[battler >= 2 ? 1 : 0]; }
@@ -386,6 +480,7 @@ bool bv_playing(void) { return W.playing; }
 
 void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, void*), void* arg) {
   n_ask++;
+  music_command();
   const gc_run* r = rs_run();
   const gc_mon* me = gc_field_mon(r, 0);
   const gc_mon* foe = gc_field_mon(r, 1);
@@ -634,6 +729,7 @@ void ps_close(void) {
 
 void rh_open_shop(const shop_ui_args* args, const shop_ui_events* ev) {
   n_shops++;
+  music_reward();
   if (!args || !args->screen || !ev) {
     BAD("the shop opened with no screen or no callbacks");
     return;
@@ -1014,6 +1110,7 @@ int main(int argc, char** argv) {
     cfg.save_sys = save_sys_check;
     for (int i = 0; i <= GC_MAX_SPECIES_ID; i++) caught_at_start += g_sys.dex[i].caught_attr != 0;
   }
+  SND.on_start = snd_start;
   rs_start(&cfg);
 
   const rs_stats* st = rs_stats_get();
@@ -1052,6 +1149,7 @@ int main(int argc, char** argv) {
       break;
     }
     steps++;
+    bgm_tick(16.0f);
     rel_check();
     evo_check();
     evo_move_check();
@@ -1069,6 +1167,10 @@ int main(int argc, char** argv) {
         h *= 16777619u;
       }
       digest ^= h;
+      /* the music fades out at the end of a run (bgm_tick: a little time passes and the volume is below full) */
+      bgm_tick(1.0f);
+      if (SND.key[0] && SND.volume >= 1.0f) BAD("the music did not fade at the end of the run (volume %.4f)", SND.volume);
+      M.run_end_fades++;
       wave_sum += r->wave;
       wave_hist[r->wave / 10 > 20 ? 20 : r->wave / 10]++;
       obs_check(r, st->clears != clears);
@@ -1138,6 +1240,17 @@ int main(int argc, char** argv) {
     BAD("the observer took in %ld battle ranges, the screen played %d", OBS.ranges, st->events[GC_EV_BATTLE]);
   if (OBS.runs != ended) BAD("%ld combat reports checked for %d runs", OBS.runs, ended);
   printf("reward screens: %d shops, %d item targets, %d biome maps\n", n_shops, n_item_opens, n_maps);
+  printf("music: %d scenes under upstream's track (%d with encounter music before the trainer's first send-out), %d commands under the battle's "
+         "music, %d trainer victories under their victory music, %d run ends faded; %d track starts, %d different tracks heard\n",
+         M.scenes, M.encounter_scenes, M.commands, M.victories, M.run_end_fades, M.starts, M.n_seen);
+  if (M.scenes != st->waves) BAD("%d scenes set up, the driver counted %d waves", M.scenes, st->waves);
+  /* a trainer is beaten in about one run in nine: the floor needs a few hundred runs */
+  if (runs >= 300) {
+    if (!M.victories) BAD("no trainer victory reached the reward screen");
+    if (!M.encounter_scenes) BAD("no trainer with encounter music came up");
+  } else {
+    printf("music coverage floor (a trainer victory, a trainer with encounter music) NOT checked: it needs 300+ runs, this one has %d\n", runs);
+  }
   if (save_on) {
     printf("saving: %d save points, %d written, %d failed, %d resumed from the slot\n", W.expected_saves, st->saves, st->save_failed,
            n_resumes);
