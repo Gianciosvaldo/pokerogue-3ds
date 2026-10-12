@@ -47,6 +47,12 @@ version) is never overwritten or removed: the result screen says why and nothing
 the report with an unknown cause and **never inserts a Nemesis**: the finishing enemy is not identifiable from the battle events
 (contracts section 2.10).
 
+The title screen has a **Nemesis Radar** (custom content, task C06): [`radar_screen.c`](source/radar_screen.c) lists the remembered enemies
+of `custom.sav`, newest first, with a free Scout page for each (what the record remembers, "not recorded" for the rest). It is a read-only
+look: it writes nothing, starts no rematch, spends nothing and says that live rematches are not available yet (they need C10). The
+app cannot create a record yet, so on a real install it shows an empty roster; [`mkcustom.c`](tests/mkcustom.c) writes a file with
+records for the emulator (contracts section 2.12). Buttons only: the framework has no touch path for these screens.
+
 Stand-ins in the run flow (listed in [`run_screen.h`](include/run_screen.h)): the starters of a run with no starter select (the host
 tests' later runs) are a random team, reward names are the item key in words, evolution is automatic, a
 mystery encounter is a message and its first usable option. The words on the game over and clear screens, and the
@@ -121,6 +127,7 @@ that file to exist; any bytes will do for the emulator.
 | [`run_screen.h`](include/run_screen.h) | The run driver: owns the `gc_run`, turns its events into battle screen events and its screens (command, switch, learn a move, evolve, rewards, biome, game over) into the menus the game has, and gives each answer to `gc_run_choose`. `rs_start(&cfg)` boots a run. |
 | [`combat_observer.h`](include/combat_observer.h) | The custom content's view of a run: `co_observe` takes the raw WAVE / TURN / BATTLE events of one drain (once, from `run_screen.c`'s `drain()`), gives each battle range to the reducer as a batch, and `co_finish` captures a report that owns its data. Never changes the run. |
 | [`postmortem_screen.h`](include/postmortem_screen.h) | The post-mortem screen over that report, opened from the result screen. |
+| [`radar_screen.h`](include/radar_screen.h) | The Nemesis Radar (C06): `radar_open` copies a roster and an optional schedule and shows the list and Scout pages. Read-only. `radar_assets.h` is its bridge to the menus layer (species types, icons, sprites, move and nature names). |
 | [`custom_store.h`](include/custom_store.h) | The custom content file on the SD card (`save/custom.sav`): `cs_begin_run` hands the observer a durable run uid (written first), `cs_commit` stores a finished run's report as one idempotent transaction, and a file it can't use is left exactly as it is. |
 | [`gen/gm_enum_names.h`](gen/gm_enum_names.h) | Names of battle-core's enums (`gm_enum_camel(GM_E_SPECIES_ID, id, ...)` gives upstream's i18n key). Regenerate with `python3 game/tools/gen_enum_names.py` when battle-core's enums change. |
 
@@ -167,6 +174,16 @@ end twice stores nothing, a refusing card is told and retried once, an unusable 
 make -C game/tests store_test && game/tests/build/store_test
 ```
 `flowtest` checks that the result screen is given the report of the run that ended (and none after a new run starts).
+
+**The Nemesis Radar** (C06): `radar_test` runs `radar_screen.c` over custom-core's real validators with a fake drawing layer (every drawn
+line must be on its screen, in a readable style, and free of words that offer a fight, an invasion or a purchase), plus a seeded fuzz of
+button presses; `flowtest` checks the title entry (an unusable file is explained and left untouched, an absent file is not created,
+a refused open is not silent, leaving returns to the title).
+```
+make -C game/tests radar_test && game/tests/build/radar_test [fuzz sessions]
+python3 game/tests/radar_mutations.py     # one-line mutations of the screen and its hook; every one must make a test fail
+make -C game/tests mkcustom && (cd some/folder && /path/to/build/mkcustom few|full|empty|junk|future)   # a custom.sav for the emulator
+```
 
 The single-turn converter tests use `tests/battle_setup.c`, a test-only fixture that builds a battle-core battle by hand
 (the app no longer has it). `game/tests/` prints each turn's events with their English text (needs upstream's

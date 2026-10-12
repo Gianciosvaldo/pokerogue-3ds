@@ -7,6 +7,7 @@
 #include "combat_observer.h"
 #include "custom_store.h"
 #include "gc/run.h"
+#include "radar_screen.h"
 #include "result_screen.h"
 #include "run_saves.h"
 #include "slot_screen.h"
@@ -27,6 +28,7 @@ static struct {
 } A;
 
 static void show_title(void);
+static void show_radar(void);
 static void show_slots(slots_mode mode, int cursor);
 static void on_run_end(int kind, void* arg);
 
@@ -221,6 +223,35 @@ static void on_title(title_choice c, void* arg) {
     case TITLE_LOAD_GAME:
       show_slots(SLOTS_LOAD, 0);
       break;
+    case TITLE_RADAR:
+      show_radar();
+      break;
+  }
+}
+
+/* ------------------------------------------------------------------ the Nemesis Radar */
+
+static void on_radar_exit(void* arg) {
+  (void)arg;
+  show_title();
+}
+
+/* A read-only look at the custom file's roster. The app has no stored schedule yet (the live adapter keeps it), so none is passed. The
+ * screen copies what it is given; nothing here writes, and an unusable file is shown with its reason and left as it is. */
+static void show_radar(void) {
+  char why[CS_WHY_LEN];
+  why[0] = 0;
+  const bool usable = cs_get_state(why) != CS_UNREADABLE;
+  radar_args r;
+  memset(&r, 0, sizeof r);
+  r.meta = usable ? cs_meta() : NULL;
+  r.why = why;
+  r.on_exit = on_radar_exit;
+  if (!radar_open(&r)) {
+    /* a roster that does not validate cannot come out of cs_meta (the decoder checks it); say so rather than showing nothing */
+    snprintf(why, sizeof why, "The remembered enemies could not be shown.");
+    r.meta = NULL;
+    radar_open(&r);
   }
 }
 

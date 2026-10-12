@@ -1,4 +1,4 @@
-# Custom content contracts, version 1 (tasks C01, C02, C03, C04, C05)
+# Custom content contracts, version 1 (tasks C01, C02, C03, C04, C05, C06)
 
 Written for task C01 of [CUSTOM-CONTENT-ADVANCED-AGENT.md](CUSTOM-CONTENT-ADVANCED-AGENT.md). It does three things:
 audits the interfaces the custom content will touch, fixes the version-1 data contracts, and records what the new
@@ -6,7 +6,8 @@ audits the interfaces the custom content will touch, fixes the version-1 data co
 access, no wallet access and no spawn code. Since C03 the app feeds the reducer and shows a read-only post-mortem screen
 (sections 2.9 and 5.2). Since C04 it keeps the last run's report and the id counters in one file on the SD card (sections 2.10 and
 5.3); no Nemesis is ever inserted by the app yet, and no custom mode exists. Since C05 `custom-core` also holds the rematch
-policy as pure data (section 2.11, 5.4): nothing in the app calls it yet.
+policy as pure data (section 2.11, 5.4): nothing in the app calls it yet. Since C06 the title screen has a read-only
+Nemesis Radar over the stored roster (section 2.12, 5.5); it starts nothing.
 
 | Item | Value |
 |---|---|
@@ -621,6 +622,43 @@ task**: it lives in C10's overlay of the run's save. Two things C10 must keep: t
 run is loaded again (C04 gives a resumed ordinary run a new uid per observation, section 2.10, so C10 must key the schedule by the uid
 it stored, not by the observer's), and `cc_roster_release_except(roster, current_run_uid)` must run before `cc_rematch_start`.
 
+### 2.12 The Nemesis Radar (C06)
+
+`game/source/radar_screen.c` (+ `radar_assets.c`, the bridge to the menus layer for species types, icons, sprites and move and nature
+names, the same split `party_icon.c` makes), opened from a fourth title entry, "Nemesis Radar". **It is a read-only look at the stored
+roster and starts nothing.** It never writes the custom file, never calls the scheduler, spends no voucher or currency, draws no random
+number, and has no fight, invasion or purchase button; its text says "Live rematches are not available yet." because they are not (C10).
+
+- **What it holds.** At `radar_open` it validates and **copies** the roster (about 6.3 KB) and an optional schedule into its own
+  state, and keeps nothing of the caller's pointers except the exit callback. A roster or schedule that fails custom-core's validators
+  is refused (`radar_open` returns false) and the app says so instead of showing it. The copy is the model the screen runs on: the
+  owner can change or free its data while the screen is up.
+- **The list** (bottom screen): newest record first, five rows (icon, name, level, wave and biome, life tag Remembered / Held /
+  Challenged / Beaten / Claimed). UP/DOWN move, LEFT/RIGHT move a page, A opens the Scout page, B leaves. The top screen shows the
+  highlighted record: name, level, where it ended a run, the type in words (only for the eighteen known types), and a sprite read
+  from the SD card **after the cursor has rested 140 ms** (a held button crosses records without reading any), with the species icon
+  at double size standing in until then and when the packs have no sprite. A faint tint of the type's colour (alpha 70 of 255, under
+  the text) is drawn only for a known type; it is colour only and no rule reads it.
+- **The Scout page** (A): a free page of what the record remembers: species, level, shiny and gender, wave and biome (or "an unknown
+  place"), the last of the player's Pokemon to fall, the final move, ability, passive (only when recorded), nature, moves, IVs and held
+  items (the game's names; a key the locale does not name is shown readable; a cut-short loadout says "and more"), then the rematch
+  status line, and the policy's four windows with their reasons when a schedule names this record. Anything the record does not
+  hold is "not recorded". Twelve lines are visible; UP/DOWN scroll.
+- **Rematch status** (`radar_rematch_text`, one line per record): "No rematch is scheduled." for a stored record; "Held by a run whose
+  plan is not loaded here." for a held record when no schedule is given; the real window ("Planned for this run. The next window is
+  wave N.", "Offered at wave N.", "Accepted at wave N.", declined, exhausted) only when the schedule passed in names that record and
+  agrees with the record's life; when they contradict each other it says so and shows neither as scheduled. **The app has no stored
+  schedule** (it lives in C10's overlay of the run's save), so the app passes none: the windows are shown only in host tests that pass a
+  frozen schedule.
+- **Empty and unusable.** No file or no records: "No enemy is remembered yet." and that this version does not add enemies during play.
+  An unusable file (damaged, other version, unreadable): its reason from `cs_get_state`, "It is left as it is."; the file is not read
+  again or written.
+- **Input.** Buttons only. **There is no touch input for `ui.h` screens** (only the shop reads the touch screen), so there are no
+  touch buttons to keep in parity; B leaves from either page. Leaving calls `on_exit` once; the screen takes no more input after it.
+- **Boundaries.** The title is the only entry (the result screen has none: it lists the current run, not the roster). Enemies appear
+  here only if a file holds records; the app cannot create one (section 2.10), so on a real install the Radar shows the empty state until
+  C10. `game/tests/mkcustom.c` writes a file with records for looking at the screen on an emulator.
+
 ## 3. Choices to confirm
 
 These are version-1 decisions this PR had to make. The handoff either left them open or said "documented policy". Each
@@ -673,6 +711,16 @@ Added by C05 (section 2.11):
 18. **The reward allowance is one regular voucher per record, claimed in its own transaction**, and granted by the adapter only after
     the claim's write succeeded. A failed write leaves the record DEFEATED, so the entitlement is not lost and not repeated.
 
+Added by C06 (section 2.12):
+
+19. **The Radar is a title entry, not a results-screen one.** The result screen belongs to the run that just ended; the roster is
+    cross-run. Alternative: also add a button there, once C10 can create records.
+20. **The Radar keeps copies, not pointers** (about 6.3 KB roster, `sizeof(cc_schedule)` schedule). Alternative: read the live store
+    each frame, which would make the screen change under the player's cursor and keep a pointer the owner may free.
+21. **The sprite waits 140 ms of rest.** The SD card is slow (README); loading one sprite per record crossed would stall the cursor.
+    The icon stands in meanwhile. The value is a guess at "feels instant when you stop"; it is not measured on a device.
+22. **No touch.** The framework has no touch path for these screens. Adding one belongs to the framework, not to this screen.
+
 ## 4. What C02 to C10 inherit, and what they still must decide
 
 | Task | Imports | Still undecided / must verify |
@@ -681,7 +729,7 @@ Added by C05 (section 2.11):
 | C03 observer + UI (decided in section 2.9) | `cc_reducer`, `cc_reduce`, `cc_turn_summarize`, `cc_terminal`, `cc_history`, the "complete only when `flags == 0`" rule | nothing left open for C03, except that stable ids and the finishing source are not derivable from the events (section 2.9); C04 must decide the durable run uid |
 | C04 store (decided in section 2.10) | `cc_meta`, wire widths, `cc_insertion_check`, ledger, `cc_nemesis_transition` | nothing left open for the store itself. Live Nemesis insertion needs the finishing enemy's identity (section 1.8): C10 |
 | C05 scheduler (decided in section 2.11) | `cc_schedule`, window waves, `CC_RNG_ALGO_V1`, lifecycle | nothing left open for the policy itself. C10 must: supply a seed independent of gameplay and gacha RNG, report each window's encounter kind and flags before the wave is generated, pass the representable mask, key the stored schedule by the uid it saved (not C04's per-observation uid), call `cc_roster_release_except` before `cc_rematch_start`, and persist the schedule (no codec yet). C08 must grant the voucher only after `cc_reward_claim`'s write |
-| C06 radar | `cc_nemesis` read-only, `cc_schedule` | touch layer if wanted (section 1.7) |
+| C06 radar (decided in section 2.12) | `cc_nemesis` read-only, `cc_schedule` | nothing left open for the screen itself. C10 must pass the run's schedule to `radar_open` once it persists one, and create records for it to show |
 | C08 profile | `cc_ledger` `REWARD_CLAIM`, the one-envelope rule | the profile owner (section 1.5), the envelope |
 | C10 live | all of the above | every item of section 1.8 that is still missing |
 
@@ -958,6 +1006,37 @@ adapter (C10) and the reward side (C08) do not exist yet. The modulo bias (below
 The scheduler's status for this task: **COMPLETE** against the C05 card's scope (a pure policy with golden fixtures); the live
 behavior it describes is **not shipped** until C10.
 
+### 5.5 C06 (Nemesis Radar)
+
+Run on the final tree of the C06 PR (same container as 5.2 to 5.4; devkitARM from the `devkitpro/devkitarm` image). The task touches `game/` and
+this document only (`custom-core/` is not changed, so the custom-content workflow does not run for it).
+
+| Command | Result |
+|---|---|
+| `make -C game/tests radar_test && game/tests/build/radar_test` (ASan + UBSan, `-fno-sanitize-recover`) | 2,618,873 checks, 0 failed (400 fuzz sessions of random buttons over random rosters, schedules, unusable files) |
+| `game/tests/build/radar_test 2000` | 10.5 million checks, 0 failed |
+| `make -C game/tests flowtest && game/tests/build/flowtest` | 103 checks, 0 failed (96 before, 7 new: title entry, unusable file explained and untouched, absent file not created, refused open not silent, back to the title) |
+| `game/tests/run_host_tests.sh` (the CI script, now including `radar_test`) | all passed |
+| `python3 game/tests/radar_mutations.py` | **50 mutations run, 50 killed, 0 survived, 0 invalid**; 2 more are documented as equivalent and not run (an unconditional ability or moves line: a valid roster always has both known) |
+| `docker run --rm -v "$PWD":/src -w /src/game devkitpro/devkitarm make` | builds `pokerogue.3dsx`, no warning from the new files |
+| Azahar (libretro core, the real packs, `game/tests/mkcustom.c` files: `few` 9 records, `full` 16, `empty`, `junk`, `future`) | title entry, list, top-screen sprite and type, Scout pages (minimal record, 8-item loadout, held record), paging, empty roster, unusable file (damaged, schema 2) and back to the title all as designed. After every run the `custom.sav` is byte for byte what the tool wrote. Screens are not in Git |
+
+**What the host test holds.** Every drawn line, on both screens and every page, is inside its screen, in a style that is readable on the
+real build, and free of words that offer a fight, invasion, purchase, location or currency. Navigation: order, scrolling, page jumps and
+their clamps, the sound only when the cursor moved, A on an empty roster is the error sound, B on each page, one `on_exit` per opening and
+no input after it. Words: every life tag and rematch line for every schedule state, a plan and a record that contradict each other, a
+record the plan does not name, "not recorded" for each unknown field, the game's item names, stack counts, a cut-short loadout, an unnamed
+biome, an 80-letter and a 40-letter name. Scouting: after any sequence of presses the roster, the schedule and the caller's meta are
+byte for byte what they were, no RNG is touched, and the screen's copies survive the caller changing or freeing its data. Sprite: none
+read before 140 ms of rest, one per stop, none for a record without one, freed on leaving. Tint: only for a known type, one rectangle,
+alpha 70. Refusals: a roster or schedule that does not validate.
+
+**Not established.** No Old 3DS device run and no timing (the 140 ms rest is a guess, section 3 item 21). No touch input exists, so no touch
+parity was checked. The Radar shows no live rematch window in the app, because the app stores no schedule (C10). A real install shows the
+empty state: no record can be created yet (section 2.10). The emulator check used files made by `mkcustom.c`, not records the game made.
+Status for this task: **COMPLETE** against the C06 card's scope (the screen and its states over merged contracts); the live behavior it
+will show is **not shipped** until C10.
+
 ## 6. Not established by this PR
 
 - No upstream behavior was consulted or compared. There is no differential, no seed, no Node 22 run, and none is needed
@@ -965,5 +1044,5 @@ behavior it describes is **not shipped** until C10.
 - No emulator or console check by C01/C02 (no screen or app change then). C03's emulator check, and what it did not cover, is in section 5.2.
 - No Old 3DS memory or time measurement. `sizeof` and code-size figures come from compilers (x86-64 host, Ubuntu's
   `arm-none-eabi-gcc`, and devkitARM in CI, with the 3DS CPU flags), not from a device or emulator.
-- No profile or wallet code, no live use of the scheduler (C05 is a pure policy: nothing in the app calls it, it has no wire codec and nothing spawns a rematch enemy). (C03 added the live observer hook and the post-mortem screen, section 2.9; C04 added the codec, the transaction and the one custom file, section 2.10.) The app never inserts a Nemesis: the finishing enemy is not identifiable. The rest is C06 to C10.
+- No profile or wallet code, no live use of the scheduler (C05 is a pure policy: nothing in the app calls it, it has no wire codec and nothing spawns a rematch enemy). (C03 added the live observer hook and the post-mortem screen, section 2.9; C04 added the codec, the transaction and the one custom file, section 2.10.) The app never inserts a Nemesis: the finishing enemy is not identifiable. C06 added the read-only Radar (section 2.12). The rest is C07 to C10.
 - Range checks only for species, form, move and ability: membership in the game's tables is the adapters' job.
