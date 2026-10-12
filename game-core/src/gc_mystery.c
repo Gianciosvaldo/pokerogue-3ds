@@ -263,6 +263,27 @@ static bool lost_at_sea_move_ok(const gc_run *run, int option)
     return false;
 }
 
+/* EXTORTION_MOVES / EXTORTION_ABILITIES (requirement-groups.ts) */
+static bool has_extortion_move(const gc_mon *m)
+{
+    static const int moves[] = {MOVE_ID_BIND, MOVE_ID_CLAMP, MOVE_ID_INFESTATION, MOVE_ID_SAND_TOMB, MOVE_ID_SNAP_TRAP,
+        MOVE_ID_THUNDER_CAGE, MOVE_ID_WRAP, MOVE_ID_SPIRIT_SHACKLE, MOVE_ID_MEAN_LOOK, MOVE_ID_JAW_LOCK, MOVE_ID_BLOCK,
+        MOVE_ID_SPIDER_WEB, MOVE_ID_ANCHOR_SHOT, MOVE_ID_OCTOLOCK, MOVE_ID_PURSUIT, MOVE_ID_CONSTRICT, MOVE_ID_BEAT_UP,
+        MOVE_ID_COIL, MOVE_ID_WRING_OUT, MOVE_ID_STRING_SHOT};
+    for (int k = 0; k < m->b.n_moves; k++)
+        for (size_t j = 0; j < sizeof moves / sizeof moves[0]; j++) if (m->b.moves[k] > 0 && m->b.moves[k] == moves[j]) return true;
+    return false;
+}
+
+/* Pokemon.hasAbility(a, false): the ability, or the passive when it is unlocked and enabled */
+static bool has_extortion_ability(const gc_mon *m)
+{
+    static const int abilities[] = {ABILITY_ID_INTIMIDATE, ABILITY_ID_ARENA_TRAP, ABILITY_ID_SHADOW_TAG, ABILITY_ID_SUCTION_CUPS, ABILITY_ID_STICKY_HOLD};
+    for (size_t j = 0; j < sizeof abilities / sizeof abilities[0]; j++)
+        if (m->b.ability == abilities[j] || (m->b.passive_flag && m->b.passive == abilities[j])) return true;
+    return false;
+}
+
 /* CHARMING_MOVES (src/data/mystery-encounters/requirements/requirement-groups.ts) */
 static bool is_charming_move(int move)
 {
@@ -289,6 +310,7 @@ void gc_mystery_setup_screen(gc_run *run)
     case GC_ME_ABSOLUTE_AVARICE: case GC_ME_CLOWNING_AROUND: case GC_ME_PART_TIMER:
     case GC_ME_DANCING_LESSONS: case GC_ME_WEIRD_DREAM: case GC_ME_TELEPORTING_HIJINKS:
     case GC_ME_FUN_AND_GAMES: case GC_ME_UNCOMMON_BREED: case GC_ME_THE_EXPERT_POKEMON_BREEDER: case GC_ME_FIELD_TRIP:
+    case GC_ME_AN_OFFER_YOU_CANT_REFUSE:
         n = 3; break;
     case GC_ME_TRAINING_SESSION: case GC_ME_DEPARTMENT_STORE_SALE:
     case GC_ME_SAFARI_ZONE: case GC_ME_DELIBIRDY: case GC_ME_GLOBAL_TRADE_SYSTEM:
@@ -300,7 +322,10 @@ void gc_mystery_setup_screen(gc_run *run)
     s->n_options = n;
     for (int i = 0; i < 8; i++) s->option_ok[i] = i < n;
 
-    if (type == GC_ME_DARK_DEAL || type == GC_ME_AN_OFFER_YOU_CANT_REFUSE) {
+    if (type == GC_ME_AN_OFFER_YOU_CANT_REFUSE) {
+        /* selling and leaving need nothing; extorting needs a Pokemon allowed in battle with an extortion move or ability */
+        s->option_ok[1] = gc_mystery_primary_pokemon(run, type, 1) >= 0;
+    } else if (type == GC_ME_DARK_DEAL) {
         s->option_ok[0] = legal_party(run) > 0;
     } else if (type == GC_ME_SHADY_VITAMIN_DEALER) {
         /* MoneyRequirement(0, 1.5) / (0, 5): the option is disabled without the money; it also needs a Pokemon the
@@ -533,6 +558,18 @@ static void me_leave_with_heal_shop(gc_run *run, bool post, int type, int mon, i
  * CanLearnMoveRequirement query passes */
 int gc_mystery_primary_pokemon(const gc_run *run, int type, int option)
 {
+    if (type == GC_ME_AN_OFFER_YOU_CANT_REFUSE) {
+        if (option != 1) return -1;
+        /* CombinationPokemonRequirement.Some(MoveRequirement, AbilityRequirement): queryParty answers with the FIRST
+         * requirement that matches anyone, so a Pokemon with one of the moves wins over every holder of an ability */
+        for (int by_move = 1; by_move >= 0; by_move--)
+            for (int k = 0; k < run->n_party; k++) {
+                const gc_mon *m = &run->party[run->party_order[k]];
+                if (!gc_mon_allowed(m)) continue;
+                if (by_move ? has_extortion_move(m) : has_extortion_ability(m)) return run->party_order[k];
+            }
+        return -1;
+    }
     if (type == GC_ME_PART_TIMER) {
         if (option != 2) return -1;
         for (int k = 0; k < run->n_party; k++)
@@ -680,6 +717,114 @@ static void part_timer(gc_run *run, int option, int b)
     cs->reroll_multiplier = NAN;
     cs->allow_luck_upgrades = true;
     end_mystery_encounter_shop(run);
+}
+
+/* removePokemonFromPlayerParty(pokemon): out of party[] and of the party order; the storage behind it moves down, so a
+ * storage index held across the call (an event, a choice) is stale */
+void gc_party_remove(gc_run *run, int idx)
+{
+    if (idx < 0 || idx >= run->n_party) return;
+    int w = 0;
+    for (int k = 0; k < run->n_party; k++) {
+        if (run->party_order[k] == idx) continue;
+        run->party_order[w++] = (int8_t)(run->party_order[k] > idx ? run->party_order[k] - 1 : run->party_order[k]);
+    }
+    for (int i = idx; i < run->n_party - 1; i++) run->party[i] = run->party[i + 1];
+    memset(&run->party[run->n_party - 1], 0, sizeof run->party[0]);
+    run->n_party--;
+    run->party_order[run->n_party] = 0;
+}
+
+/* Array.prototype.splice(index, 1) on the item list: a negative index counts from the end, one past it removes nothing */
+static void js_splice_one(gc_run *run, int index)
+{
+    if (index < 0) { index += run->n_items; if (index < 0) index = 0; }
+    if (index < run->n_items) gc_item_remove_at(run, index);
+}
+
+/* BattleScene.updateModifiers(true), the part that prunes the list: a held item whose holder is not in the party (or
+ * an enemy) any more is dropped. The loop splices at m-- and then checks the SAME item again for a species it needs
+ * (EvoTrackerModifier.getSpecies(): Gimmighoul's tracker): a missing holder fails that too, and that second splice
+ * lands one place earlier (the last item when the dropped one was first) */
+static void me_prune_items(gc_run *run)
+{
+    for (int m = 0; m < run->n_items; m++) {
+        if (m < 0) continue;   /* modifiers[-1] is undefined: neither check applies */
+        const gc_item it = run->items[m];
+        if (it.pokemon_id == 0) continue;
+        const gc_mon *holder = NULL;
+        for (int i = 0; i < run->n_party; i++) if (run->party[i].b.id == it.pokemon_id) holder = &run->party[i];
+        const bool tracker = !strcmp(it.key, "EVOLUTION_TRACKER_GIMMIGHOUL");
+        if (!holder) {
+            js_splice_one(run, m--);
+            if (tracker) js_splice_one(run, m--);
+        } else if (tracker && holder->b.species != SPECIES_ID_GIMMIGHOUL && holder->b.fusion_species != SPECIES_ID_GIMMIGHOUL) {
+            js_splice_one(run, m--);
+        }
+    }
+}
+
+/* An Offer You Can't Refuse (src/data/mystery-encounters/encounters/an-offer-you-cant-refuse-encounter.ts).
+ * onInit: the strongest Pokemon (the highest sum of its six stats, fainted ones too, the one nearer the front of the
+ * party on a tie) and its price, the wave's money times max(3 * starter cost of its first stage (1 when it has none),
+ * 10). Sell: the price is paid (with its message) and the Pokemon leaves the party (its held items stay in the item list
+ * until the next updateModifiers prunes them), the Shiny Charm is given by a ModifierRewardPhase unshifted ahead of the
+ * rewards phase, and the heal-only shop follows. Extort (needs the Some(extortion move, extortion ability) Pokemon):
+ * the price is paid, Liepard's base experience goes to that Pokemon alone (before the shop), then the heal-only shop.
+ * Leave: the heal-only shop. Nothing draws from the RNG. */
+int gc_offer_terms(const gc_run *run, double *price)
+{
+    int best = -1;
+    int best_total = 0;
+    for (int k = 0; k < run->n_party; k++) {
+        const gc_mon *m = &run->party[run->party_order[k]];
+        int total = 0;
+        for (int j = 0; j < 6; j++) total += m->b.stats[j];
+        if (best < 0 || best_total < total) { best = run->party_order[k]; best_total = total; }
+    }
+    if (best < 0) return -1;
+    if (price) {
+        const int cost = gc_starter_cost(gc_root_species(run->party[best].b.species));
+        const double starter_value = cost >= 0 ? cost : 1;
+        const double multiplier = fmax((30 / 10) * starter_value, 10);
+        *price = pr_run_get_wave_money_amount(run->wave, multiplier);
+    }
+    return best;
+}
+
+static void an_offer_you_cant_refuse(gc_run *run, int option)
+{
+    if (option == 2) {
+        me_leave_with_heal_shop(run, false, GC_ME_AN_OFFER_YOU_CANT_REFUSE, 0, option);
+        return;
+    }
+    double price = 0;
+    const int strongest = gc_offer_terms(run, &price);
+    if (strongest < 0) { end_mystery_encounter_leave(run); return; }
+    if (option == 1) {
+        const int primary = gc_mystery_primary_pokemon(run, GC_ME_AN_OFFER_YOU_CANT_REFUSE, 1);
+        run->money = fmin(fmax(run->money + price, 0.0), 9007199254740991.0);
+        gc_ev_msg(run, "mysteryEncounterMessages:receiveMoney", 1, pr_arg_int("amount", (int32_t)price));
+        if (primary >= 0) {
+            pr_exp_party pp;
+            const uint32_t id = run->party[primary].b.id;
+            gc_exp_party_build(run, &pp, &id, 1);
+            pp.trainer_battle = false;
+            pp.me_exp_multiplier = 1.0;   /* isBattleMysteryEncounter(): the encounter's expMultiplier, 1 */
+            gc_exp_party_queue(run, &pp, gc_form(SPECIES_ID_LIEPARD, 0)->base_exp, true);
+        }
+        me_leave_with_heal_shop(run, false, GC_ME_AN_OFFER_YOU_CANT_REFUSE, 0, option);
+        return;
+    }
+    run->money = fmin(fmax(run->money + price, 0.0), 9007199254740991.0);
+    gc_ev_msg(run, "mysteryEncounterMessages:receiveMoney", 1, pr_arg_int("amount", (int32_t)price));
+    gc_party_remove(run, strongest);
+    me_prune_items(run);
+    me_update_modifiers(run);
+    gc_rphase reward = gc_rp(RP_MODIFIER_REWARD, 0, 0, 0);
+    reward.key = "SHINY_CHARM";
+    gc_rq_unshift(run, reward);
+    me_leave_with_heal_shop(run, false, GC_ME_AN_OFFER_YOU_CANT_REFUSE, 0, option);
 }
 
 static void shady_vitamin_dealer(gc_run *run, int option, int b)
@@ -917,13 +1062,7 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_AN_OFFER_YOU_CANT_REFUSE:
-        if (option == 0) {
-            int target = (b >= 0 && b < run->n_party) ? b : 0;
-            init_player_mon(run, &run->party[target], SPECIES_ID_DITTO, wave_level);
-            end_mystery_encounter_leave(run);
-            return true;
-        }
-        end_mystery_encounter_leave(run);
+        an_offer_you_cant_refuse(run, option);
         return true;
 
     case GC_ME_DELIBIRDY:
