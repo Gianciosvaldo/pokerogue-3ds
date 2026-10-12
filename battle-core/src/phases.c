@@ -1665,7 +1665,8 @@ double pr_calculate_battle_accuracy(pr_battle *bt, pr_pokemon *user, pr_pokemon 
             pr_note_unported(bt, cls);
         }
     }
-    pr_hook_ab(bt, target, PR_AC_WonderSkinAbAttr);
+    pr_ab_params wonder = {.pokemon = target, .opponent = user, .move = move, .value = &acc};
+    pr_apply_ab_attrs(bt, PR_AC_WonderSkinAbAttr, &wonder);
     if (acc == -1) return acc;
     bool ohko = pr_move_has_attr((uint16_t)move, PR_AC_OneHitKOAccuracyAttr);
     if (!ohko) {
