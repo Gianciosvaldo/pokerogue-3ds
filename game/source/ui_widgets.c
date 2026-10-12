@@ -155,9 +155,9 @@ size_t img_bytes(void) {
 
 /* ------------------------------------------------------------------ windows */
 
-static int g_window_style = 1; /* UiWindowStyle.RED_ORANGE, upstream's default */
+static int g_window_style = GM_DEFAULT_WINDOW_STYLE;
 int ui_window_style(void) { return g_window_style; }
-void ui_set_window_style(int s) { g_window_style = s < 1 || s > 5 ? 1 : s; }
+void ui_set_window_style(int s) { g_window_style = s < 1 || s > 5 ? GM_DEFAULT_WINDOW_STYLE : s; }
 
 void ui_window(float x, float y, float w, float h, win_variant v) {
   char key[64];

@@ -354,19 +354,6 @@ static void draw_ball(void) {
   }
 }
 
-/* Upstream's arena art stops 132 px down: below it, the ui container's 48 px strip (the message window's bg frame) covers the
- * field. Here the strip and its text are on the bottom screen, so the top screen draws the same empty strip where upstream has it,
- * instead of leaving the bare biome background under the platforms. It goes under the Pokemon (upstream's covers the player's
- * Pokemon's lower half, which here would hide it with no text to show for it). */
-static void draw_field_strip(void) {
-  char fr[4];
-  snprintf(fr, sizeof fr, "%d", ui_window_style());
-  if (img_frame("images/ui/bg", fr))
-    img_draw("images/ui/bg", fr, 0, 180, 0, 1);
-  else
-    rr_rect(0, 180 - 48, 320, 48, RR_RGBA(0x30, 0x50, 0x68, 255));
-}
-
 /* updateFieldScale(): when a bigger-than-normal Pokemon (G-Max, starmobile) is on the field, the field (platforms, Pokemon, battle
  * animations; not the background or the strip) zooms out about the arena's bottom centre (160, 132): floor((1 / biggest scale)^0.7 * 40)
  * / 40, so 1.5x gives 0.75. setFieldScale tweens it over |change| * 6 * 200 ms, Sine.easeInOut. Upstream calls it when a Pokemon is
@@ -401,7 +388,6 @@ static void draw_field(void) {
   snprintf(k, sizeof k, "images/arenas/%s_a", B.biome);
   img_draw(k, NULL, B.arena_player_x, 0, 0, 0);
   field_zoom(false);
-  draw_field_strip();
   field_zoom(true);
   ba_mon field[4];
   anim_field(field);
@@ -659,7 +645,11 @@ static void draw_ability_bar(void) {
   text_draw(TS_WINDOW, 8, -48 - 30 + 5, B.ability_text, NULL);
 }
 
-static void draw_bottom(void) {
+/* Upstream's ui container strip (y -48..0): the message window's bg frame, the command window or the fight windows, and the text.
+ * It is drawn twice: on the bottom screen, where the touch-free controls live, and on the top screen over the field's last 48 rows,
+ * where upstream puts it (it covers the lower part of the player's Pokemon, as upstream's does). `top` leaves out what upstream
+ * draws elsewhere: the move description (MoveInfoOverlay) and the ability bar. */
+static void draw_bottom(bool top) {
   /* the strip's background: bg frame <window style> at (0,0), origin (0,1) */
   char fr[4];
   snprintf(fr, sizeof fr, "%d", ui_window_style());
@@ -672,11 +662,11 @@ static void draw_bottom(void) {
   if (B.mode == M_COMMAND) draw_command_menu();
   if (B.mode == M_FIGHT) {
     draw_fight_menu();
-    draw_move_details();
+    if (!top) draw_move_details();
   } else {
     msgbox_draw(&B.msg, 12, -39);
   }
-  draw_ability_bar();
+  if (!top) draw_ability_bar();
 }
 
 static void draw_debug(void) {
@@ -1489,6 +1479,7 @@ static void bv_draw(ui_screen* s, rr_screen which) {
       draw_enemy_info(&B.s[1]);
       draw_player_info(&B.s[0]);
     }
+    if (ui_space(UI_TOP_CANVAS_UI)) draw_bottom(true);
     /* the field is 320x180 on a 400x240 screen: keep sprites that slide past it off the border */
     if (ui_space(UI_PHYS_TOP)) {
       rr_rect(0, 0, 40, 240, RR_RGBA(0, 0, 0, 255));
@@ -1498,7 +1489,7 @@ static void bv_draw(ui_screen* s, rr_screen which) {
     }
   } else {
     if (ui_space(UI_PHYS_BOTTOM)) rr_rect(0, 0, 320, 240, RR_RGBA(0x10, 0x10, 0x18, 255));
-    if (ui_space(UI_BOTTOM_UI)) draw_bottom();
+    if (ui_space(UI_BOTTOM_UI)) draw_bottom(false);
     draw_debug();
   }
 }
