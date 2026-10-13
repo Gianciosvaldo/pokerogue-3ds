@@ -556,8 +556,16 @@ void pr_refresh_berry_modifiers(pr_battle *bt, int side)
         if (bt->party[side][k]) pr_recalculate_stats(bt, bt->party[side][k]);
 }
 
+void pr_reset_wave_data(pr_pokemon *p)
+{
+    p->n_ab_applied_wave=0;
+    p->temp_wave_turn_count=1;
+    p->wave_endured=false;
+}
+
 void pr_reset_battle_data(pr_pokemon *p)
 {
+    pr_reset_wave_data(p);
     p->has_eaten_berry = false;
     p->n_battle_berries = 0;
 }

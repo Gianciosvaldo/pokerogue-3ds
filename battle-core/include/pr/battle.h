@@ -637,6 +637,7 @@ extern int pr_liechi_berry_fired, pr_ganlon_berry_fired, pr_petaya_berry_fired, 
 extern int pr_enigma_berry_fired, pr_lansat_berry_fired, pr_starf_berry_fired;
 bool pr_berry_should_apply(pr_battle *bt, const pr_pokemon *p, const pr_modifier *m);
 void pr_refresh_berry_modifiers(pr_battle *bt, int side);
+void pr_reset_wave_data(pr_pokemon *p);
 void pr_reset_battle_data(pr_pokemon *p);
 void pr_record_eaten_berry(pr_battle *bt, pr_pokemon *p, int berry, bool consumed);
 void pr_berry_effect(pr_battle *bt, struct pr_engine *e, pr_pokemon *p, int berry, int8_t *stats, int8_t *stages, int *n);

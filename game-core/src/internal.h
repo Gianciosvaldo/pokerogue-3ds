@@ -246,6 +246,7 @@ int gc_roll_biome_weather(gc_run *run);            /* Arena.setBiomeWeather's pi
 int gc_roll_biome_terrain(gc_run *run);            /* Arena.setBiomeTerrain's pick */
 void gc_arena_reset_effects(gc_run *run);          /* Arena.resetArenaEffects: weather and terrain */
 void gc_arena_new_battle(gc_run *run, bool reset, bool roll);   /* ...then the biome's rolls */
+void gc_battle_cleanup_players(gc_run *run);   /* outgoing field, before generating the encounter */
 bool gc_battle_setup_field(gc_run *run, bool reset_arena);   /* bt from the parties, before the first turn */
 void gc_battle_restore_field(gc_run *run); /* pointers only; summon effects already saved */
 void gc_ai_reset(gc_run *run);                    /* ai-core's state for a new battle */

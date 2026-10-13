@@ -122,3 +122,11 @@ Indexed ability lookup (merged #266): explicit index/custom/scene/daily and temp
 Form-state continuation (merged #267): ability-index clamping, ability/HP/stat refresh, major-form Tera reset and quiet callback-history/text semantics now have 8,000 actual source API cases plus 8,000 actual quiet-phase cases. See FORM-LIFECYCLE-VALIDATION.md. Native gain/loss combinations, fusion/Transform transitions, form eligibility, Battle Bond/Ash, Mega item choice and the Max caller are separate remaining contexts.
 
 Battle Bond callback continuation: ordinary per-summon stat boosts and the separate non-fused Greninja victory/faint/init form callbacks have actual source phase/API and whole-turn matrices. See BATTLE-BOND-VALIDATION.md. The Scene.newBattle resetArenaState controller must still invoke PostBattleInit before ReturnPhase clears summon data; ordinary same-arena continuation keeps Ash. Do not substitute a reset on every wave. Fused faint naming remains outside the non-fusion own-faint matrix.
+
+Player-cleanup continuation (2026-10-13): PostBattleInit now precedes actual
+Return processing; the incoming battle type selects recall, ordinary wild
+continuation keeps Ash, and wave-only data resets without clearing summon data.
+The non-fused player boundary matches 8,000 actual source cases plus 256 Tera
+cases, with phase order and exact text. See RESET-ARENA-VALIDATION.md. Arena-tag
+removal callbacks/messages, suppression, Commander, time-of-day and other native
+forms, fused return naming and complete doubles transitions remain open.

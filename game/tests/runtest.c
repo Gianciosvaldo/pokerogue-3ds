@@ -810,13 +810,17 @@ void ball_menu_open(const int counts[BALL_TYPES], void (*on_pick)(int ball, void
 /* the learn dialog: menus' learn_move_start shows a message, asks yes / no, takes the move to forget, shows a last
  * message and ends */
 static const ps_learn_host* LH;
+static int learn_forget_ally_only = -1;
 static void dlg_end_text_done(void* c) {
   (void)c;
+  learn_forget_ally_only = -1;
   LH->on_end(LH->host);
 }
 static void dlg_yes(void* c) {
   (void)c;
-  LH->on_result(LH->host, (int)rnd(5) - 1);
+  int forget = (int)rnd(5) - 1;
+  if (learn_forget_ally_only >= 0) forget = learn_forget_ally_only;
+  LH->on_result(LH->host, forget);
   LH->show_text(LH->host, "learned or not", true, dlg_end_text_done, NULL);
 }
 static void dlg_no(void* c) {
@@ -829,7 +833,8 @@ static void dlg_text_done(void* c) {
   LH->confirm(LH->host, dlg_yes, dlg_no, NULL);
 }
 void ps_learn_move(const pr_battle* bt, int party_slot, int move, int trainer_id, const ps_learn_host* host) {
-  (void)bt, (void)move, (void)trainer_id;
+  (void)trainer_id;
+  learn_forget_ally_only = -1;
   n_dialogs++;
   if (party_slot < 0 || party_slot >= bt->n_party[0]) BAD("learn dialog for slot %d of %d", party_slot, bt->n_party[0]);
   if (EVM.pending) {
@@ -843,6 +848,18 @@ void ps_learn_move(const pr_battle* bt, int party_slot, int move, int trainer_id
           break;
         }
     }
+  }
+  /* In singles, replace an ally-only move when learning a move that can
+   * target the user or opponent. Helping Hand with no ally spends no PP in
+   * the pinned source and can otherwise leave both sides in a stalemate. */
+  if (!bt->double_battle && party_slot >= 0 && party_slot < bt->n_party[0]
+      && pr_moves[move].target != MOVE_TARGET_NEAR_ALLY) {
+    const pr_pokemon* p = bt->party[0][party_slot];
+    for (int i = 0; i < p->n_moves; i++)
+      if (pr_moves[p->moves[i]].target == MOVE_TARGET_NEAR_ALLY) {
+        learn_forget_ally_only = i;
+        break;
+      }
   }
   LH = host;
   host->show_text(host->host, "wants to learn a move", true, dlg_text_done, NULL);
@@ -996,6 +1013,7 @@ static bool step(void) {
       EVO.choice = yes;
     } else {
       yes = (int)rnd(3) != 0;
+      if (learn_forget_ally_only >= 0) yes = 1;
     }
     f(yes, W.confirm_arg);
     return true;

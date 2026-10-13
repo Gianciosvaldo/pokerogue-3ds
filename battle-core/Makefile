@@ -289,3 +289,7 @@ $(BUILD)/battle-bond-test: tests/battle-bond-test.c $(BUILD)/libprcore.a
 all: $(BUILD)/battle-bond-turn-test
 $(BUILD)/battle-bond-turn-test: tests/battle-bond-turn-test.c $(BUILD)/fell-stinger-replay.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -Itests -I$(BUILD) $(CFLAGS) tests/battle-bond-turn-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/reset-arena-test
+$(BUILD)/reset-arena-test: tests/reset-arena-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

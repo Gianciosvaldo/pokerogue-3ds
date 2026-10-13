@@ -63,10 +63,9 @@ battle-core/tools/battle-bond-diff.sh /path/to/upstream 2000 777 turn
 make -C game-core battle-bond-host-test
 ```
 
-The source Scene.newBattle resetArenaState boundary invokes PostBattleInit
-before ReturnPhase clears summon data. That game-core reset controller is not
-yet wired to these callbacks and needs its own source/order proof; the API
-matrix does not establish that integration. Fusion faint naming, broader
-forms/native gain-loss, held-modifier scene refresh and complete doubles remain
-separate work. No full Battle Bond integration, battle-core, emulator or
-hardware parity is claimed by these matrices.
+The player-cleanup/Return caller is now connected separately; see
+[RESET-ARENA-VALIDATION.md](RESET-ARENA-VALIDATION.md) for its actual source order
+proof and game-core save tests. Ordinary same-arena continuation keeps Ash.
+Fusion naming, broader native gain/loss, arena-tag lifecycle, held-modifier
+scene refresh and complete doubles remain separate work. No whole-core,
+emulator or hardware parity is claimed by these matrices.
