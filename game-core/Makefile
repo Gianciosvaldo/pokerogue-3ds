@@ -449,3 +449,11 @@ form-lifecycle-host-test: $(BUILD)/form_lifecycle_host_test
 $(BUILD)/form_lifecycle_host_test: tests/form_lifecycle_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
 .PHONY: form-lifecycle-host-test
+
+all: $(BUILD)/battle_bond_host_test
+test: battle-bond-host-test
+battle-bond-host-test: $(BUILD)/battle_bond_host_test
+	$(BUILD)/battle_bond_host_test
+$(BUILD)/battle_bond_host_test: tests/battle_bond_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+.PHONY: battle-bond-host-test
