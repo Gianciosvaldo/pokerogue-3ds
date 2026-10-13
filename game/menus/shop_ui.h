@@ -33,6 +33,10 @@ typedef struct {
   int8_t locked_tiers[GC_MAX_OPTIONS]; /* tiers locked by Lock Capsule */
   int n_locked_tiers;
   int party_luck;           /* total party luck value */
+  int wave;                 /* the wave and the biome's name, for the top line ("Plains - 147") */
+  char location[48];
+  /* what the money items grant now (getWaveMoneyAmount with the Amulet Coin's multiplier): NUGGET, BIG_NUGGET, RELIC_GOLD */
+  double money_item_amount[3];
 } shop_ui_args;
 
 typedef struct {
@@ -65,10 +69,14 @@ typedef struct {
   int8_t locked_tiers[GC_MAX_OPTIONS];
   int n_locked_tiers;
   int party_luck;
+  int wave;
+  char location[48];
+  double money_item_amount[3];
 
-  /* Cursor navigation state */
-  int row;    /* 0: rewards, 1..2: shop rows, 3: bottom buttons */
+  /* Cursor navigation state: the rows in the order they are drawn (shop rows, reward rows, the buttons) */
+  int row;
   int col;    /* column index in current row */
+  int n_rows;
 
   /* Touch slots */
   shop_touch_slot touch_slots[SHOP_MAX_TOUCH_SLOTS];
@@ -84,6 +92,10 @@ bool shop_ui_input(mui_button b);
 bool shop_ui_touch(float touch_x, float touch_y);
 void shop_ui_update(float dt_ms);
 void shop_ui_draw(void);
+
+/* The touch slots as laid out (for the test of the layout) */
+int shop_ui_slot_count(void);
+const shop_touch_slot* shop_ui_slot(int i);
 
 /* Helper for hit testing touch bounds */
 bool shop_ui_hit_test(const shop_ui_rect* rect, float x, float y);

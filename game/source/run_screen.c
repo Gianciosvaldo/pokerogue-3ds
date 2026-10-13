@@ -19,6 +19,7 @@
 #include "pr_enums.h"
 #include "reward_host.h"
 #include "run_saves.h"
+#include "run_text.h"
 #include "shop_ui.h"
 #include "starter_data.h"
 #include "ui.h"
@@ -1046,6 +1047,17 @@ static void open_shop_ui(void) {
   args.player_money = G.run.money;
   args.has_lock_capsule = gc_item_stack(&G.run, "LOCK_CAPSULE") > 0;
   args.party_luck = calc_party_luck();
+  args.wave = G.run.wave;
+  rt_biome_name(G.run.biome, args.location, sizeof args.location);
+  /* what the money items grant now: MoneyRewardPhase's amount at their multipliers (Nugget 1, Big Nugget 2.5, Relic Gold 10)
+   * with the Amulet Coins' bonus, which is what upstream's description for them shows */
+  {
+    static const double mult[3] = {1.0, 2.5, 10.0};
+    int stacks[8], n = 0;
+    for (int i = 0; i < G.run.n_items && n < 8; i++)
+      if (!strcmp(G.run.items[i].key, "AMULET_COIN")) stacks[n++] = G.run.items[i].stack;
+    for (int k = 0; k < 3; k++) args.money_item_amount[k] = pr_run_get_money_reward(G.run.wave, mult[k], stacks, n, false);
+  }
 
   static const shop_ui_events ev = {
     on_shop_select_reward,

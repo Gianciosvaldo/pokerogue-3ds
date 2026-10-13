@@ -412,15 +412,23 @@ static void draw_grid(void) {
   draw_scroll_bar();
 }
 
-/* the text of the panel: upstream's 56px (starterInfoTextSize) emerald, here the 6 px pixel font, in a style's colours */
+/* the text of the panel: upstream's 56px (starterInfoTextSize) emerald. Here the 8 px pixel font: the 6 px one is what upstream's 0.1
+ * scale gives and cannot be read at 1:1 pixels on the 3DS. In a style's colours. */
+#define INFO_FONT TSX_PIXEL_8
+static void info_text_rgb(float x, float y, const char* t, rr_color c, rr_color s, int* width) {
+  /* a value that would run out of the white box (Neutralizing Gas) drops to the 6 px font */
+  const int font = x + mui_text_width(INFO_FONT, t) > INFO_RIGHT ? TSX_PIXEL_6 : INFO_FONT;
+  const int w = mui_text_c(font, x, y + (font == INFO_FONT ? 0 : 1), t, c, s);
+  if (width) *width = w;
+}
+
 static void info_text(float x, float y, const char* t, mui_style colours, int alpha, int* width) {
   rr_color c = mui_style_color(colours, false), s = mui_style_color(colours, true);
   if (alpha < 255) {
     c = with_alpha(c, alpha);
     s = with_alpha(s, alpha);
   }
-  const int w = mui_text_c(TSX_PIXEL_6, x, y, t, c, s);
-  if (width) *width = w;
+  info_text_rgb(x, y, t, c, s, width);
 }
 
 /* the growth rates' locale keys and colours (starter-select-ui-handler's growth rate text) */
@@ -465,13 +473,12 @@ static void draw_panel(void) {
     rr_draw(sf, 53, 63, &o);
   }
 
-  /* types (8, 98) and (26, 98) at 0.5 */
+  /* types: upstream draws them at 0.5; at 1:1 pixels that turns the 5 px lettering to mud, so full size (32 x 14) above the growth
+   * rate, over the foot of the sprite's box */
   for (int i = 0; i < 2; i++) {
     const char* tf = m->types[i] >= 0 ? type_frame(m->types[i]) : NULL;
     if (!tf) continue;
-    rr_draw_opts o = RR_DEFAULT_OPTS;
-    o.scale_x = o.scale_y = 0.5f;
-    mui_image_ex("types", tf, 8 + 18 * i, 98, &o);
+    mui_image("types", tf, 7 + 35 * i, 88, 0, 0);
   }
   /* growth rate (36px; the value 2 px after the label) */
   {
@@ -479,9 +486,10 @@ static void draw_panel(void) {
     if (sp && sp->growth_rate < 6) {
       char key[48];
       snprintf(key, sizeof key, "growth:%s", growth_keys[sp->growth_rate]);
-      const int w = mui_text_c(TSX_PIXEL_6, 8, 106, mui_t("starterSelectUiHandler:growthRate"), mui_style_color(TS_WINDOW_ALT, false),
+      /* the label in 6 px (it is the muted part) so label and value both fit in the box's width */
+      const int w = mui_text_c(TSX_PIXEL_6, 8, 104, mui_t("starterSelectUiHandler:growthRate"), mui_style_color(TS_WINDOW_ALT, false),
                                mui_style_color(TS_WINDOW_ALT, true));
-      mui_text_c(TSX_PIXEL_6, 8 + w + 2, 106, mui_t(key), MUI_RGB(growth_fg[sp->growth_rate]), MUI_RGB(growth_sh[sp->growth_rate]));
+      info_text_rgb(8 + w + 2, 103, mui_t(key), MUI_RGB(growth_fg[sp->growth_rate]), MUI_RGB(growth_sh[sp->growth_rate]), NULL);
     }
   }
   /* name and gender */
@@ -507,28 +515,31 @@ static void draw_panel(void) {
                                    mui_t("starterSelectUiHandler:nature")};
     int vx = 0;
     for (int i = 0; i < 3; i++) {
-      const int lw = mui_text_width(TSX_PIXEL_6, labels[i]);
+      const int lw = mui_text_width(INFO_FONT, labels[i]);
       if (lw > vx) vx = lw;
     }
     vx += 5 + 2;
     int w;
-    info_text(5, 127, labels[0], TS_SUMMARY_ALT, 255, NULL);
-    info_text(vx, 127, ability_name(m->ability), S.info.ability_hidden ? TS_SUMMARY_GOLD : TS_SUMMARY_ALT, 255, NULL);
+    info_text(5, 126, labels[0], TS_SUMMARY_ALT, 255, NULL);
+    info_text(vx, 126, ability_name(m->ability), S.info.ability_hidden ? TS_SUMMARY_GOLD : TS_SUMMARY_ALT, 255, NULL);
     if (m->has_passive) {
       const bool lit = S.info.passive_unlocked && S.info.passive_enabled;
-      info_text(5, 136, labels[1], TS_SUMMARY_ALT, 255, NULL);
-      info_text(vx, 136, ability_name(m->passive), lit ? TS_SUMMARY_ALT : TS_SUMMARY_GRAY, lit ? 255 : 128, &w);
+      info_text(5, 134.5f, labels[1], TS_SUMMARY_ALT, 255, NULL);
+      /* a passive not yet usable is a mid grey (the faded 50% alpha it had was unreadable on the white box) */
+      const char* pn = ability_name(m->passive);
+      if (lit) info_text(vx, 134.5f, pn, TS_SUMMARY_ALT, 255, &w);
+      else info_text_rgb(vx, 134.5f, pn, MUI_RGB(0x686868), MUI_RGB(0xd8d8d0), &w);
       if (!S.info.passive_unlocked || !S.info.passive_enabled) {
         rr_draw_opts o = RR_DEFAULT_OPTS;
         o.origin_y = 0.5f;
         o.scale_x = S.info.passive_unlocked ? 0.35f : 0.42f;
         o.scale_y = S.info.passive_unlocked ? 0.35f : 0.38f;
-        mui_image_ex(S.info.passive_unlocked ? "ui/icon_stop" : "ui/icon_lock", NULL, vx + w + 1, 140, &o);
+        mui_image_ex(S.info.passive_unlocked ? "ui/icon_stop" : "ui/icon_lock", NULL, vx + w + 1, 138.5f, &o);
       }
     }
-    info_text(5, 145, labels[2], TS_SUMMARY_ALT, 255, NULL);
+    info_text(5, 143, labels[2], TS_SUMMARY_ALT, 255, NULL);
     int nw;
-    info_text(vx, 145, nature_name(m->nature), TS_SUMMARY_ALT, 255, &nw);
+    info_text(vx, 143, nature_name(m->nature), TS_SUMMARY_ALT, 255, &nw);
     /* getNatureName(nature, true, true): " (+Atk/-SpAtk)" with the stats in the pink and blue of the summary. When that does not
      * fit in the box (the longest natures), the same without the brackets, and when that does not fit either, the name alone. */
     int up, down;
@@ -546,18 +557,18 @@ static void draw_panel(void) {
       const char* const* p = forms[f];
       if (!effect) {
         const char* t = f ? " -" : " (-)";
-        if (mui_text_width(TSX_PIXEL_6, t) > room) continue;
-        info_text(vx + nw, 145, t, TS_SUMMARY_ALT, 255, NULL);
+        if (mui_text_width(INFO_FONT, t) > room) continue;
+        info_text(vx + nw, 143, t, TS_SUMMARY_ALT, 255, NULL);
         break;
       }
-      const int pw[5] = {mui_text_width(TSX_PIXEL_6, p[0]), mui_text_width(TSX_PIXEL_6, plus), mui_text_width(TSX_PIXEL_6, p[1]),
-                         mui_text_width(TSX_PIXEL_6, minus), mui_text_width(TSX_PIXEL_6, p[2])};
+      const int pw[5] = {mui_text_width(INFO_FONT, p[0]), mui_text_width(INFO_FONT, plus), mui_text_width(INFO_FONT, p[1]),
+                         mui_text_width(INFO_FONT, minus), mui_text_width(INFO_FONT, p[2])};
       if (pw[0] + pw[1] + pw[2] + pw[3] + pw[4] > room) continue;
       const char* const text[5] = {p[0], plus, p[1], minus, p[2]};
       static const mui_style colours[5] = {TS_SUMMARY_ALT, TS_SUMMARY_PINK, TS_SUMMARY_ALT, TS_SUMMARY_BLUE, TS_SUMMARY_ALT};
       float x = vx + nw;
       for (int k = 0; k < 5; k++) {
-        if (text[k][0]) info_text(x, 145, text[k], colours[k], 255, NULL);
+        if (text[k][0]) info_text(x, 143, text[k], colours[k], 255, NULL);
         x += pw[k];
       }
       break;
