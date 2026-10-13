@@ -1253,3 +1253,10 @@ semantics. Mimic changes the effective moveset without changing identity;
 shared PP survives save/load and summon cleanup. See
 [COPYING-VALIDATION.md](COPYING-VALIDATION.md) for the API, complete-turn and
 legal-save comparisons, reproduction commands and remaining boundaries.
+
+### Native ability form callbacks
+
+Zen Mode, Shields Down, Schooling, Hunger Switch, Ice Face, Disguise and Power
+Construct now use queued registered form changes. See
+[NATIVE-FORMS-VALIDATION.md](NATIVE-FORMS-VALIDATION.md) for actual source API,
+quiet-phase, complete-turn and save/controller checks and the remaining scope.

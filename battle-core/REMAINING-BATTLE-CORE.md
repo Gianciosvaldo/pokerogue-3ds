@@ -138,3 +138,10 @@ new moveset metadata. See COPYING-VALIDATION.md. Rich seed777 increases to
 1,951 exact covered turns; this remains a prioritization sample, not a measured
 whole-core completion percentage. Native forms/fusion and suppression/arena-tag
 removal are the next source-backed slices.
+
+Native-form continuation: eight unfused species now queue their registered
+ability transitions, with actual source callback/quiet and complete-turn
+comparisons plus legal command/save/controller checks. See
+NATIVE-FORMS-VALIDATION.md. Rich seed777 increases to 1,955 exact covered turns;
+this does not establish whole-core completion. Other forms, Stance Change's
+caller, fusion/Transform transitions and suppression/arena-tag removal remain.
