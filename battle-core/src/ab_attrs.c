@@ -730,9 +730,10 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
     /* ---- coming in: PostSummonActivateAbilityPhase ---- */
     case PR_AC_PostSummonMessageAbAttr:                                 /* Pressure, Mold Breaker, Anticipation... */
     case PR_AC_PostSummonUnnamedMessageAbAttr:                          /* Air Lock, Cloud Nine */
-        if (!c->e) return -1;
         GATE(true);
-        if (!pp->simulated) pr_queue_msg(bt, c->e, post_summon_message(bt, a, c->ability, p));
+        if (pp->simulated) return 1;
+        if (!c->e) return -1;
+        pr_queue_msg(bt, c->e, post_summon_message(bt, a, c->ability, p));
         return 1;
     case PR_AC_PostSummonAddBattlerTagAbAttr: {                         /* Protosynthesis, Quark Drive... */
         const pr_attr_PostSummonAddBattlerTagAbAttr *x = P(PostSummonAddBattlerTagAbAttr, a);

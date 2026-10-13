@@ -302,3 +302,14 @@ $(BUILD)/copying-turn-replay.inc: tests/speed-boost-replay.inc tools/build-trans
 	python3 tools/build-copying-turn-proof.py replay $@
 $(BUILD)/copying-turn-test: tests/copying-turn-test.c $(BUILD)/copying-turn-replay.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/copying-turn-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/native-form-test
+$(BUILD)/native-form-test: tests/native-form-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/native-form-turn-test
+$(BUILD)/native-form-turn-replay.inc: tests/speed-boost-replay.inc tools/build-transform-turn-proof.py tools/build-native-form-turn-proof.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-native-form-turn-proof.py replay $@
+$(BUILD)/native-form-turn-test: tests/native-form-turn-test.c $(BUILD)/native-form-turn-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/native-form-turn-test.c $(BUILD)/libprcore.a -lm -o $@

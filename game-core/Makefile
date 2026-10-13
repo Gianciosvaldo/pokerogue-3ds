@@ -465,3 +465,11 @@ copying-host-test: $(BUILD)/copying_host_test
 $(BUILD)/copying_host_test: tests/copying_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: copying-host-test
+
+all: $(BUILD)/native_form_host_test
+test: native-form-host-test
+native-form-host-test: $(BUILD)/native_form_host_test
+	$(BUILD)/native_form_host_test
+$(BUILD)/native_form_host_test: tests/native_form_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) -Isrc $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+.PHONY: native-form-host-test

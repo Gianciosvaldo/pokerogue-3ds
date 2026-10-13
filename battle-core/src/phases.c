@@ -50,6 +50,32 @@ static int active_in_list(pr_battle *bt, const pr_target_list *t, pr_pokemon **o
 
 static pr_target_list *tlist(pr_engine *e, int list) { return list >= 0 ? &e->target_lists[list] : NULL; }
 
+/* Registered native ability-trigger transitions. Attribute predicates choose
+ * whether to call the scene trigger; the scene then matches the raw form key. */
+static bool native_ability_form_target(const pr_pokemon *p, int *target)
+{
+    switch(p->species) {
+    case SPECIES_ID_DARMANITAN: case SPECIES_ID_GALAR_DARMANITAN:
+    case SPECIES_ID_WISHIWASHI: case SPECIES_ID_MORPEKO:
+    case SPECIES_ID_EISCUE: case SPECIES_ID_MIMIKYU:
+        if(p->form<2)*target=1-p->form;
+        return true;
+    case SPECIES_ID_MINIOR:
+        if(p->form<14)*target=p->form<7?p->form+7:p->form-7;
+        return true;
+    case SPECIES_ID_ZYGARDE: {
+        const pr_form *from=pr_pokemon_base_form(p);
+        const char *keys[]={"50-pc","complete","10-pc","10-complete"};
+        const char *to=NULL;
+        for(int i=0;i<4;i++)if(from->form_key&&!strcmp(from->form_key,keys[i]))to=keys[i^1];
+        const pr_species *sp=pr_pokemon_species(p);
+        for(int i=0;to&&i<sp->nforms;i++)if(!strcmp(pr_forms[sp->form0+i].form_key,to))*target=i;
+        return true;
+    }
+    default:return false;
+    }
+}
+
 /* globalScene.triggerPokemonFormChange(pokemon, <trigger class>): mid-battle form changes */
 static void form_change(pr_battle *bt, const pr_pokemon *p, int trigger_class)
 {
@@ -61,7 +87,9 @@ static void form_change(pr_battle *bt, const pr_pokemon *p, int trigger_class)
     int target_form = -1;
 
     /* Weather form triggers are quiet phases upstream, queued before mutation. */
-    if (mon->species == SPECIES_ID_CASTFORM || mon->species == SPECIES_ID_CHERRIM) {
+    if (trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger && native_ability_form_target(mon,&target_form)) {
+        /* Match source registrations; queue the mutation below. */
+    } else if (mon->species == SPECIES_ID_CASTFORM || mon->species == SPECIES_ID_CHERRIM) {
         int ability = mon->species == SPECIES_ID_CASTFORM ? ABILITY_ID_FORECAST : ABILITY_ID_FLOWER_GIFT;
         bool raw = mon->base_ability == ability || mon->passive == ability;
         bool suppressed = pr_weather_effect_suppressed(bt);
@@ -115,39 +143,6 @@ other_forms:
         } else if (trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger) {
             if (!is_active(mon) && mon->form == 1) {
                 target_form = 0; /* Revert to Shield when leaving field */
-            }
-        }
-    }
-    /* 2. Zen Mode (Darmanitan #555, Galar Darmanitan #4555) */
-    else if ((mon->species == SPECIES_ID_DARMANITAN || mon->species == SPECIES_ID_GALAR_DARMANITAN) &&
-             pr_has_ability_active(bt, mon, ABILITY_ID_ZEN_MODE)) {
-        if (trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger) {
-            double hp_ratio = pr_get_hp_ratio(mon, false);
-            int base_form = (mon->form / 2) * 2;
-            if (hp_ratio <= 0.5) {
-                target_form = base_form + 1; /* Zen form */
-            } else {
-                target_form = base_form;     /* Standard form */
-            }
-        }
-    }
-    /* 3. Shields Down (Minior #774) */
-    else if (mon->species == SPECIES_ID_MINIOR && pr_has_ability_active(bt, mon, ABILITY_ID_SHIELDS_DOWN)) {
-        if (trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger) {
-            double hp_ratio = pr_get_hp_ratio(mon, false);
-            int color_offset = mon->form % 7;
-            if (hp_ratio <= 0.5) {
-                target_form = color_offset + 7; /* Core Form (7..13) */
-            } else {
-                target_form = color_offset;     /* Meteor Form (0..6) */
-            }
-        }
-    }
-    /* 4. Hunger Switch (Morpeko #877) */
-    else if (mon->species == SPECIES_ID_MORPEKO && pr_has_ability_active(bt, mon, ABILITY_ID_HUNGER_SWITCH)) {
-        if (trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger) {
-            if (!mon->terastallized) {
-                target_form = (mon->form == 0) ? 1 : 0; /* Full Belly (0) <-> Hangry (1) */
             }
         }
     }
