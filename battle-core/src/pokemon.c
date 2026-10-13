@@ -125,6 +125,8 @@ void pr_change_form_state(pr_battle *bt, pr_pokemon *p, int form)
 void pr_restore_transform(pr_pokemon *p)
 {
     p->transformed = false;
+    p->summon_moves_active=false;
+    p->summon_moves_alias_mask=0;
     p->transform_species = p->transform_form = p->transform_gender = 0;
     memset(p->transform_moves, 0, sizeof p->transform_moves);
     memset(p->transform_pp_used, 0, sizeof p->transform_pp_used);
@@ -137,13 +139,111 @@ void pr_restore_transform(pr_pokemon *p)
 void pr_set_original_move(pr_pokemon *p, int slot, uint16_t move)
 {
     if (slot < 0 || slot >= 4 || !move || move >= PR_MOVE_COUNT) return;
+    p->summon_moves_alias_mask &= (uint8_t)~(1u << slot);
     uint16_t *moves = p->moves;
     uint8_t *used = p->pp_used;
     uint8_t *up = p->pp_up;
     int16_t *max = p->max_pp_override;
     uint8_t *n = &p->n_moves;
+    for(int i=*n;i<slot;i++){moves[i]=0;used[i]=up[i]=0;max[i]=-1;}
     moves[slot] = move; used[slot] = up[slot] = 0; max[slot] = -1;
     if (slot >= *n) *n = (uint8_t)(slot + 1);
+}
+
+/* The C arrays represent object identity with a per-slot alias mask. */
+void pr_sync_moveset_aliases(pr_pokemon *p)
+{
+    if (!PR_HAS_SUMMON_MOVES(p)) return;
+    for (int i=0;i<4;i++) if (p->summon_moves_alias_mask & (1u<<i)) {
+        p->moves[i]=p->transform_moves[i];
+        p->pp_used[i]=p->transform_pp_used[i];
+        p->pp_up[i]=p->transform_pp_up[i];
+        p->max_pp_override[i]=p->transform_max_pp_override[i];
+    }
+}
+
+/* PokemonMove.usePp on a linked permanent or summon-data slot. */
+void pr_use_moveset_pp(pr_pokemon *p, int slot, bool temporary, int count)
+{
+    if(slot<0 || slot>=4)return;
+    uint16_t *moves=temporary?p->transform_moves:p->moves;
+    uint8_t *used=temporary?p->transform_pp_used:p->pp_used;
+    uint8_t *up=temporary?p->transform_pp_up:p->pp_up;
+    int16_t *override=temporary?p->transform_max_pp_override:p->max_pp_override;
+    int step=(int)floor(pr_moves[moves[slot]].pp/5.0);if(step<1)step=1;
+    int max=override[slot]>0?override[slot]:pr_moves[moves[slot]].pp+up[slot]*step;
+    int next=used[slot]+count;used[slot]=(uint8_t)(next>max?max:next);
+    if(p->summon_moves_alias_mask & (1u<<slot)) {
+        if(temporary)p->pp_used[slot]=used[slot];
+        else p->transform_pp_used[slot]=used[slot];
+    }
+}
+
+static void detach_move_refs(pr_engine *e, pr_pokemon *p, int slot, bool original, bool temporary)
+{
+    /* A queued phase retains its old PokemonMove object after array replacement. */
+    if (!e) return;
+    for (int i=0;i<PR_MAX_PHASES;i++) if (e->used[i]) {
+        pr_phase *ph=&e->pool[i];
+        if ((ph->type!=PH_MOVE && ph->type!=PH_MOVE_HEADER) || ph->pokemon!=p || ph->move.slot!=slot) continue;
+        bool temp=ph->move.from_transform;
+        if ((temp && !temporary) || (!temp && !original)) continue;
+        ph->move.pp_used=(temp?p->transform_pp_used:p->pp_used)[slot];
+        ph->move.pp_up=(temp?p->transform_pp_up:p->pp_up)[slot];
+        ph->move.max_pp_override=(temp?p->transform_max_pp_override:p->max_pp_override)[slot];
+        ph->move.slot=-1;
+    }
+}
+
+void pr_detach_temporary_moves(pr_engine *e, pr_pokemon *p)
+{
+    for(int i=0;i<4;i++)detach_move_refs(e,p,i,false,true);
+}
+
+void pr_set_move(pr_battle *bt, pr_engine *e, pr_pokemon *p, int slot, uint16_t move)
+{
+    (void)bt;
+    if (slot<0 || slot>=4 || !move || move>=PR_MOVE_COUNT) return;
+    detach_move_refs(e,p,slot,true,true);
+    pr_set_original_move(p,slot,move);
+    if (PR_HAS_SUMMON_MOVES(p)) {
+        p->transform_moves[slot]=move;
+        p->transform_pp_used[slot]=p->transform_pp_up[slot]=0;
+        p->transform_max_pp_override[slot]=-1;
+        if (slot>=p->transform_n_moves)p->transform_n_moves=(uint8_t)(slot+1);
+        p->summon_moves_alias_mask|=(uint8_t)(1u<<slot);
+    }
+}
+
+bool pr_copy_last_move(pr_battle *bt, pr_engine *e, pr_pokemon *user,
+                       const pr_pokemon *target, int move, bool permanent)
+{
+    if (!target || (permanent && user->hp<=0)) return false;
+    bool unknown=false;
+    const pr_turn_move *last=pr_last_non_virtual_move(bt,target,false,true,&unknown);
+    if (unknown || !last || !last->move) return false;
+    int slot=-1;
+    for (int i=0;i<PR_N_MOVES(user);i++)if(PR_MOVES(user)[i]==move){slot=i;break;}
+    if (slot<0) return false;
+    int copied=last->move;
+    if (permanent)pr_set_move(bt,e,user,slot,(uint16_t)copied);
+    else {
+        if (PR_HAS_SUMMON_MOVES(user)) detach_move_refs(e,user,slot,false,true);
+        uint16_t moves[4];uint8_t used[4],up[4];int16_t max[4];
+        int count=PR_N_MOVES(user);
+        uint8_t aliases=PR_HAS_SUMMON_MOVES(user)?user->summon_moves_alias_mask:(uint8_t)((1u<<count)-1);
+        memcpy(moves,PR_MOVES(user),sizeof moves);memcpy(used,PR_PP_USED(user),sizeof used);
+        memcpy(up,PR_PP_UP(user),sizeof up);memcpy(max,PR_MAX_PP(user),sizeof max);
+        memcpy(user->transform_moves,moves,sizeof moves);memcpy(user->transform_pp_used,used,sizeof used);
+        memcpy(user->transform_pp_up,up,sizeof up);memcpy(user->transform_max_pp_override,max,sizeof max);
+        user->transform_n_moves=(uint8_t)count;user->summon_moves_active=true;
+        user->summon_moves_alias_mask=aliases & (uint8_t)~(1u<<slot);
+        user->transform_moves[slot]=(uint16_t)copied;user->transform_pp_used[slot]=user->transform_pp_up[slot]=0;
+        user->transform_max_pp_override[slot]=-1;
+    }
+    if(e)pr_queue_msg(bt,e,pr_msg2(permanent?"moveTriggers:sketchedMove":"moveTriggers:copiedMove",
+                                  pr_arg_pokemon(bt,"pokemonName",user),pr_arg_move("moveName",copied)));
+    return true;
 }
 
 const pr_species *pr_pokemon_fusion_species(const pr_pokemon *p)

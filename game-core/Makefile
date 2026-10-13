@@ -457,3 +457,11 @@ battle-bond-host-test: $(BUILD)/battle_bond_host_test
 $(BUILD)/battle_bond_host_test: tests/battle_bond_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
 .PHONY: battle-bond-host-test
+
+all: $(BUILD)/copying_host_test
+test: copying-host-test
+copying-host-test: $(BUILD)/copying_host_test
+	$(BUILD)/copying_host_test
+$(BUILD)/copying_host_test: tests/copying_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: copying-host-test

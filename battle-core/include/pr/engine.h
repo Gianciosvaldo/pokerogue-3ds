@@ -47,7 +47,8 @@ extern const char *const pr_phase_name[PH_COUNT_];
 typedef struct {
     uint16_t id;
     int8_t slot;               /* moveset index, -1 = detached */
-    uint8_t pp_used;           /* detached only */
+    uint8_t pp_used, pp_up;    /* detached only */
+    int16_t max_pp_override;   /* detached only */
     bool from_transform;      /* selected PokemonMove belonged to summonData.moveset */
 } pr_move_ref;
 
@@ -331,6 +332,12 @@ void pr_instruct_keep(const pr_pokemon *p, int slot);   /* RepeatMoveAttr.movese
 int pr_instruct_slot(const pr_pokemon *p);              /* that slot when it is p's, else -1 */
 int pr_unshift_move_phase(pr_battle *bt, pr_engine *e, pr_pokemon *p, int move, int slot, const int8_t *targets,
                           int n_targets, int use_mode, int timing);
+/* Pokemon.setMove replaces permanent and temporary slots with one new object. */
+void pr_set_move(pr_battle *bt, pr_engine *e, pr_pokemon *p, int slot, uint16_t move);
+void pr_detach_temporary_moves(pr_engine *e, pr_pokemon *p);
+bool pr_copy_last_move(pr_battle *bt, pr_engine *e, pr_pokemon *user,
+                       const pr_pokemon *target, int move, bool permanent);
+
 /* RandomMovesetMoveAttr.selectedMove, one per move (session state upstream keeps on the attribute) */
 void pr_called_selected_reset(void);
 void pr_called_selected_set(int move, int sel);

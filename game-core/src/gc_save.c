@@ -129,6 +129,7 @@ static const sfield pokemon_fields[] = {
     SF(pr_pokemon, transformed), SF(pr_pokemon, transform_species), SF(pr_pokemon, transform_form),
     SF(pr_pokemon, transform_gender), SF(pr_pokemon, transform_moves), SF(pr_pokemon, transform_pp_used),
     SF(pr_pokemon, transform_pp_up), SF(pr_pokemon, transform_max_pp_override), SF(pr_pokemon, transform_n_moves),
+    SF(pr_pokemon, summon_moves_active), SF(pr_pokemon, summon_moves_alias_mask),
     SF(pr_pokemon, variant),
     SF(pr_pokemon, ability_lookup_known), SF(pr_pokemon, ability_index),
     SF(pr_pokemon, custom_ability), SF(pr_pokemon, fusion_custom_ability),
@@ -317,6 +318,22 @@ static bool ability_schema_ok(reader r)
         }
     }
     return !r.bad && (found==0 || found==8);
+}
+
+/* Old Transform-only saves have no alias metadata. New moveset identity is atomic. */
+static bool moveset_schema_ok(reader r)
+{
+    const char *fields[]={"summon_moves_active","summon_moves_alias_mask"};
+    bool present[2]={false};int count=0,n=take16(&r);
+    if(r.bad || n>128)return false;
+    for(int i=0;i<n;i++){
+        uint32_t name=take32(&r);uint16_t size=take16(&r);
+        for(int k=0;k<2;k++)if(name==hash(fields[k])){
+            if(size!=1 || present[k])return false;
+            present[k]=true;count++;
+        }
+    }
+    return !r.bad && (count==0 || count==2);
 }
 
 /* ---------------------------------------------------------------- CRC-32 (IEEE) */
@@ -555,12 +572,23 @@ static bool mon_ok(const gc_mon *m)
     for (int i = 0; i < b->n_moves; i++) if (b->moves[i] >= PR_MOVE_COUNT) return false;
     if (b->n_summon_types > PR_MAX_SUMMON_TYPES || b->n_ab_applied_summon > 4 || b->n_ab_applied_wave > 4) return false;
     if (!berry_history_ok(b)) return false;
+    uint8_t active_byte;memcpy(&active_byte,&b->summon_moves_active,1);
+    if(active_byte>1 || b->summon_moves_alias_mask>15) return false;
+    if(!PR_HAS_SUMMON_MOVES(b) && b->summon_moves_alias_mask) return false;
     if (b->transformed) {
         const pr_species *target = gc_species(b->transform_species);
         if (!target || b->transform_form >= target->nforms || b->transform_gender < -1
-            || b->transform_gender > 1 || b->transform_n_moves > 4) return false;
+            || b->transform_gender > 1) return false;
+    }
+    if (PR_HAS_SUMMON_MOVES(b)) {
+        if(b->transform_n_moves>4)return false;
         for (int i = 0; i < 4; i++) if (b->transform_moves[i] >= PR_MOVE_COUNT || b->transform_pp_up[i] > 3
             || b->transform_max_pp_override[i] < -1) return false;
+    }
+    for(int i=0;i<4;i++)if(b->summon_moves_alias_mask & (1u<<i)) {
+        if(i>=b->n_moves || i>=b->transform_n_moves || b->moves[i]!=b->transform_moves[i]
+            || b->pp_used[i]!=b->transform_pp_used[i] || b->pp_up[i]!=b->transform_pp_up[i]
+            || b->max_pp_override[i]!=b->transform_max_pp_override[i])return false;
     }
     return true;
 }
@@ -572,7 +600,7 @@ static bool get_mons(const reader *body, const char *name, gc_mon *mons, int n, 
     if (r.bad) return false;
     if (get_block(&r, mon_fields, NF(mon_fields), mons, sizeof(gc_mon), n, dropped) != n) return false;
     const bool transform_schema = has_transform_schema(r);
-    if (!berry_schema_ok(r) || !ability_schema_ok(r)) return false;
+    if (!berry_schema_ok(r) || !ability_schema_ok(r) || !moveset_schema_ok(r)) return false;
     if (get_block(&r, pokemon_fields, NF(pokemon_fields), &mons[0].b, sizeof(gc_mon), n, dropped) != n) return false;
     for (int i = 0; i < n; i++) {
         pr_pokemon *b = &mons[i].b;
@@ -585,10 +613,14 @@ static bool get_mons(const reader *body, const char *name, gc_mon *mons, int n, 
         if (!berry_history_ok(b)) return false;
         pr_reset_turn_data(b);
         if (b->transformed && !transform_schema) return false;
+        uint8_t active_byte;memcpy(&active_byte,&b->summon_moves_active,1);if(active_byte>1)return false;
         b->variant = mons[i].variant; /* also restores this bridge for older saves */
         if (!b->transformed) {
-            if (b->transform_species) return false;
-            pr_restore_transform(b);
+            if (b->transform_species || b->transform_form || b->transform_gender) return false;
+            if (!b->summon_moves_active) {
+                if (b->transform_n_moves) return false;
+                pr_restore_transform(b);
+            }
         }
         if (r.bad || !mon_ok(&mons[i])) return false;
     }

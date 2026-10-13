@@ -699,6 +699,8 @@ static bool resync_field(void) {
       const bv_mon* sh = bv_mon_of(side ? BV_ENEMY : BV_PLAYER);
       if (!m || !G.present[side] || sh->species != pr_pokemon_form(&m->b)->species) continue;
       const int battler = side ? BV_ENEMY : BV_PLAYER;
+      if (m->b.stats[STAT_HP] > 0 && m->b.stats[STAT_HP] != sh->max_hp)
+        *ev_new() = (bv_event){.type = BEV_MAX_HP, .battler = battler, .a = m->b.stats[STAT_HP]};
       if (m->b.hp > sh->hp)
         *ev_new() = (bv_event){.type = BEV_HEAL, .battler = battler, .a = m->b.hp};
       else if (m->b.hp < sh->hp)

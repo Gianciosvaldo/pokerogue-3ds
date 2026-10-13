@@ -1465,6 +1465,7 @@ void pr_grudge_lapse(pr_battle *bt, pr_engine *e, pr_pokemon *fainted, pr_pokemo
                   : pr_moves[move].pp + PR_PP_UP(source)[s] * (int)(step < 1 ? 1 : step);
         int used = PR_PP_USED(source)[s] + (max - PR_PP_USED(source)[s]);   /* usePp(remaining) */
         PR_PP_USED(source)[s] = (uint8_t)(used > max ? max : used);
+        pr_sync_moveset_aliases(source);
         pr_queue_msg(bt, e, pr_msg2("battlerTags:grudgeLapse", pr_arg_pokemon(bt, "pokemonNameWithAffix", source),
                                     pr_arg_move("moveName", move)));   /* movesetMove.getName() */
         return;

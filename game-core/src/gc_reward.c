@@ -779,6 +779,7 @@ int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, co
             PR_PP_UP(b)[s] = r->moves[c].pp_up;
             c++;
         }
+        pr_sync_moveset_aliases(b);
         if (b->level != r->level) {
             /* a candy: PokemonLevelIncrementModifier. Its addFriendship(FRIENDSHIP_GAIN_FROM_RARE_CANDY, true)
              * adds the candy's 6 to the starter's candy progress whether or not the Pokemon's own friendship rose

@@ -293,3 +293,12 @@ $(BUILD)/battle-bond-turn-test: tests/battle-bond-turn-test.c $(BUILD)/fell-stin
 all: $(BUILD)/reset-arena-test
 $(BUILD)/reset-arena-test: tests/reset-arena-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/copying-test $(BUILD)/copying-turn-test
+$(BUILD)/copying-test: tests/copying-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+$(BUILD)/copying-turn-replay.inc: tests/speed-boost-replay.inc tools/build-transform-turn-proof.py tools/build-copying-turn-proof.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-copying-turn-proof.py replay $@
+$(BUILD)/copying-turn-test: tests/copying-turn-test.c $(BUILD)/copying-turn-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/copying-turn-test.c $(BUILD)/libprcore.a -lm -o $@

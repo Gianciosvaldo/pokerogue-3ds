@@ -148,6 +148,9 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         return;
     }
     switch (a->cls) {
+    case PR_AC_SketchAttr:
+        if (effect_can_apply(ef,user,target)) pr_copy_last_move(bt,e,user,target,move,true);
+        return;
     case PR_AC_TransformAttr: {
         if (!effect_can_apply(ef, user, target)) return;
         int transform = pr_phase_new(e, PH_TRANSFORM, (int8_t)pr_battler_index(bt, user));
@@ -216,6 +219,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         }
         int last = PR_PP_USED(target)[s], v = last + reduction;
         PR_PP_USED(target)[s] = (uint8_t)(v < max ? v : max);
+        pr_sync_moveset_aliases(target);
         pr_queue_msg(bt, e, pr_msg3("battle:ppReduced", pr_arg_pokemon(bt, "targetName", target),
                                     pr_arg_move("moveName", PR_MOVES(target)[s]),
                                     pr_arg_int("reduction", PR_PP_USED(target)[s] - last)));
