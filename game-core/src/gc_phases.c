@@ -519,6 +519,7 @@ static void party_heal(gc_run *run)
         b->status_toxic_turns = 0;
         b->status_sleep_turns = b->status_freeze_turns = -1;
         for (int k = 0; k < 4; k++) PR_PP_USED(b)[k] = 0;
+        pr_sync_moveset_aliases(b);
         gc_event *ev = gc_ev_new(run, GC_EV_HP);
         if (ev) { ev->a = 0; ev->b = i; ev->c = b->hp; }
     }

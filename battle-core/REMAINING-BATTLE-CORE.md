@@ -130,3 +130,11 @@ The non-fused player boundary matches 8,000 actual source cases plus 256 Tera
 cases, with phase order and exact text. See RESET-ARENA-VALIDATION.md. Arena-tag
 removal callbacks/messages, suppression, Commander, time-of-day and other native
 forms, fused return naming and complete doubles transitions remain open.
+
+Sketch/Mimic continuation (2026-10-13): permanent/effective moves and source
+PokemonMove sharing now have 8,000 API comparisons, 8,000 complete copying turns
+and 2,000 Mimic-to-Transform turns. Legal command/save/reset checks cover the
+new moveset metadata. See COPYING-VALIDATION.md. Rich seed777 increases to
+1,951 exact covered turns; this remains a prioritization sample, not a measured
+whole-core completion percentage. Native forms/fusion and suppression/arena-tag
+removal are the next source-backed slices.

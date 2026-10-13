@@ -895,6 +895,18 @@ static double target_move_copiable(ARGS)
     return 1;
 }
 
+/* Sketch's target condition and banlist precede the effective-moveset duplicate check. */
+static double sketch_condition(ARGS)
+{
+    NEED_TARGET;
+    if (!target_move_copiable(bt,self,u,t,m)) return 0;
+    bool unknown=false;
+    const pr_turn_move *last=last_non_virtual_move(bt,t,&unknown);
+    if (unknown || !last || last->move==MOVE_ID_NONE || last->move==MOVE_ID_STRUGGLE || last->move==MOVE_ID_SKETCH) return 0;
+    for(int i=0;i<PR_N_MOVES(u);i++)if(PR_MOVES(u)[i]==last->move)return 0;
+    return 1;
+}
+
 /* Instruct (RepeatMoveAttr.getCondition): the target's last non-virtual move, still in its
  * moveset with PP left and not one Instruct can't repeat; that moveset move is kept for apply */
 static double instruct(ARGS)
@@ -1003,6 +1015,7 @@ const pr_closure_reg pr_condition_closures[] = {
     {NULL, "286341e0a59e", no_damp},
     {NULL, "9ff91522e088", call_move_possible},
     {NULL, "be284c144c45", target_move_copiable},
+    {"move:166", "a438c7083039", sketch_condition},
     {NULL, "f4ea51926183", instruct},
 };
 const int pr_condition_closures_n = sizeof pr_condition_closures / sizeof pr_condition_closures[0];

@@ -628,6 +628,7 @@ void pr_berry_effect(pr_battle *bt, pr_engine *e, pr_pokemon *p, int btype, int8
         }
         if (slot >= 0) {
             PR_PP_USED(p)[slot] = PR_PP_USED(p)[slot] > 10 ? PR_PP_USED(p)[slot] - 10 : 0;
+            pr_sync_moveset_aliases(p);
             pr_msg msg = pr_msg3("battle:ppHealBerry",
                                  pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
                                  pr_arg_move("moveName", PR_MOVES(p)[slot]),

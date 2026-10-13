@@ -311,16 +311,19 @@ typedef struct pr_pokemon {
     uint16_t transform_moves[4];
     uint8_t transform_pp_used[4], transform_pp_up[4], transform_n_moves;
     int16_t transform_max_pp_override[4];
+    bool summon_moves_active; /* Mimic can override moves without transforming identity. */
+    uint8_t summon_moves_alias_mask; /* slots sharing their PokemonMove with permanent moves */
     uint8_t variant;           /* permanent shiny variant; Transform does not copy it */
 } pr_pokemon;
 
-/* getMoveset(): temporary collection while transformed; the fields above named
+/* getMoveset(): temporary collection from Transform or Mimic; the fields above named
  * moves/PP always represent the permanent Pokemon.moveset. These selectors also
  * preserve constness and allow PP updates; pass an expression without side effects. */
-#define PR_MOVES(p) ((p)->transformed ? (p)->transform_moves : (p)->moves)
-#define PR_PP_USED(p) ((p)->transformed ? (p)->transform_pp_used : (p)->pp_used)
-#define PR_PP_UP(p) ((p)->transformed ? (p)->transform_pp_up : (p)->pp_up)
-#define PR_MAX_PP(p) ((p)->transformed ? (p)->transform_max_pp_override : (p)->max_pp_override)
+#define PR_HAS_SUMMON_MOVES(p) ((p)->transformed || (p)->summon_moves_active)
+#define PR_MOVES(p) (PR_HAS_SUMMON_MOVES(p) ? (p)->transform_moves : (p)->moves)
+#define PR_PP_USED(p) (PR_HAS_SUMMON_MOVES(p) ? (p)->transform_pp_used : (p)->pp_used)
+#define PR_PP_UP(p) (PR_HAS_SUMMON_MOVES(p) ? (p)->transform_pp_up : (p)->pp_up)
+#define PR_MAX_PP(p) (PR_HAS_SUMMON_MOVES(p) ? (p)->transform_max_pp_override : (p)->max_pp_override)
 #define PR_N_MOVES(p) (*((p)->transformed ? &(p)->transform_n_moves : &(p)->n_moves))
 
 #define PR_MAX_PARTY 6
@@ -725,6 +728,9 @@ double pr_get_sprite_scale(const pr_pokemon *p);
 bool pr_can_transform_into(const pr_pokemon *user, const pr_pokemon *target);
 void pr_restore_transform(pr_pokemon *p);
 void pr_set_original_move(pr_pokemon *p, int slot, uint16_t move);
+/* Synchronize the shared PokemonMove slots after modifying effective PP. */
+void pr_sync_moveset_aliases(pr_pokemon *p);
+void pr_use_moveset_pp(pr_pokemon *p, int slot, bool temporary, int count);
 const pr_species *pr_pokemon_fusion_species(const pr_pokemon *p);
 bool pr_is_mega(const pr_pokemon *p);
 uint16_t pr_get_ability(const pr_pokemon *p, bool ignore_override);

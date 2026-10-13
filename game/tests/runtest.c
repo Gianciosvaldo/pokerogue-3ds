@@ -811,9 +811,11 @@ void ball_menu_open(const int counts[BALL_TYPES], void (*on_pick)(int ball, void
  * message and ends */
 static const ps_learn_host* LH;
 static int learn_forget_ally_only = -1;
+static bool learn_decline_ally_only;
 static void dlg_end_text_done(void* c) {
   (void)c;
   learn_forget_ally_only = -1;
+  learn_decline_ally_only = false;
   LH->on_end(LH->host);
 }
 static void dlg_yes(void* c) {
@@ -835,6 +837,7 @@ static void dlg_text_done(void* c) {
 void ps_learn_move(const pr_battle* bt, int party_slot, int move, int trainer_id, const ps_learn_host* host) {
   (void)trainer_id;
   learn_forget_ally_only = -1;
+  learn_decline_ally_only = !bt->double_battle && pr_moves[move].target == MOVE_TARGET_NEAR_ALLY;
   n_dialogs++;
   if (party_slot < 0 || party_slot >= bt->n_party[0]) BAD("learn dialog for slot %d of %d", party_slot, bt->n_party[0]);
   if (EVM.pending) {
@@ -1014,6 +1017,7 @@ static bool step(void) {
     } else {
       yes = (int)rnd(3) != 0;
       if (learn_forget_ally_only >= 0) yes = 1;
+      if (learn_decline_ally_only) yes = 0;
     }
     f(yes, W.confirm_arg);
     return true;

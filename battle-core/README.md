@@ -1245,3 +1245,11 @@ Receiver and Power of Alchemy now receive the actual knockout victim and copy
 its current primary ability through the source gain/loss dispatcher. See
 [RECEIVER-VALIDATION.md](RECEIVER-VALIDATION.md) for the natural-double phase/API
 proof, simulation/reset behavior and separate whole-battle gates.
+
+### Sketch and Mimic
+
+Sketch updates permanent and temporary moves with source object-sharing
+semantics. Mimic changes the effective moveset without changing identity;
+shared PP survives save/load and summon cleanup. See
+[COPYING-VALIDATION.md](COPYING-VALIDATION.md) for the API, complete-turn and
+legal-save comparisons, reproduction commands and remaining boundaries.
