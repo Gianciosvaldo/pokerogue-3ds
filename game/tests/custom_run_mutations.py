@@ -138,7 +138,7 @@ M = [
 # Mutations that survive and are expected to, and why (listed, run, and not counted as failures)
 EXPECTED = {
     "a fusion is reported as an ordinary wild encounter":
-        "game-core's wild generator never produces a fused (or terastallized) wild enemy: 0 of 2000+ real waves, up to wave 220, had one (check 2b), "
+        "game-core's wild generator never produces a fused (or terastallized) wild enemy: 0 of the 1,700+ real waves classified, up to wave 220, had one (check 2b), "
         "so no real wave reaches the line. The controller's gate for a fusion / Tera finisher is tested with synthetic reports (check 2).",
     "the claim is attempted for a record that is not owed (the duplicate grant)":
         "redundant with ptx_begin_claim's own refusal of a record that is not owed (profile_tx_mutations.py kills the mutations of that check); "
