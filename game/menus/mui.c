@@ -119,9 +119,14 @@ void mui_clip_off(void) {
   g_clipped = false;
 }
 
+static int g_window_style = 1;
+void mui_set_window_style(int style) { g_window_style = style < 1 || style > 5 ? 1 : style; }
+
 /* ui-theme.ts addWindow: window_<uiWindowStyle>, border 8 (6 in the legacy theme) */
 void mui_window(float x, float y, float w, float h) {
-  const rr_frame* f = mui_frame("ui/windows/window_1", NULL);
+  char key[40];
+  snprintf(key, sizeof key, "ui/windows/window_%d", g_window_style);
+  const rr_frame* f = mui_frame(key, NULL);
   if (f)
     rr_nineslice(f, floorf(x), floorf(y), floorf(w), floorf(h), 8);
   else

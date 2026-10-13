@@ -97,7 +97,8 @@ ZL = CYCLE_GENDER, ZR = CYCLE_ABILITY. START + SELECT together quits.
 
 ## Screens
 Upstream draws everything on one 320x180 canvas. Here:
-- **Top screen (400x240)**: the battle field at 1:1, centred (the field and its info boxes).
+- **Top screen (400x240)**: the battle field at 1:1, centred (the field and its info boxes), and upstream's message / command / fight strip over its last 48 rows (`draw_bottom(true)`, drawn through `UI_TOP_CANVAS_UI`, where upstream puts it; it covers the lower part of the player's Pokemon as upstream's does).
+- **Window style**: `GM_DEFAULT_WINDOW_STYLE` (`ui_widgets.h`) is 5, the grey windows of the reference screenshots (lorenzo, 2026-10-12); upstream's own default is 1 (red). `main.c` hands it to the menus (`mui_set_window_style`), so every window uses the same style. Change the one constant to go back.
 - **Bottom screen (320x240)**: upstream's `ui` container, bottom-aligned, so the message and
   command strip (upstream y -48..0) is the last 48 rows. Full-screen menus (party, summary,
   starter select...) use `UI_BOTTOM_CANVAS`: a whole 320x180 canvas, centred.

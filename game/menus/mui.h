@@ -90,8 +90,10 @@ void mui_set_origin(rr_screen s, int px, int py);
 void mui_clip(float x, float y, float w, float h);
 void mui_clip_off(void);
 
-/* upstream addWindow: 9-slice window_1 (the default red/orange style) */
+/* upstream addWindow: 9-slice window_<uiWindowStyle> */
 void mui_window(float x, float y, float w, float h);
+/* uiWindowStyle 1..5 (default 1): which window_<n> mui_window draws; the app sets it once from ui_window_style() */
+void mui_set_window_style(int style);
 
 /* ---- text ---- */
 /* Draws text with the style's font, colour and shadow; x,y is the top-left of
