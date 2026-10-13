@@ -103,7 +103,8 @@ void pr_set_temp_ability(pr_battle *bt, pr_pokemon *p, uint16_t ability)
     /* getAbility ignores a zero summonData.ability in the pin. An ordinary
      * actor therefore gains the permanent ability's effects again. */
     p->ability = ability ? ability : p->base_ability;
-    if (!ability && p->transformed) pr_note_unported(bt, PR_FEAT_FORM_CHANGE);
+    pr_refresh_ability(p);
+    if (!ability && p->transformed && !p->ability_lookup_known) pr_note_unported(bt, PR_FEAT_FORM_CHANGE);
     pr_ab_params gain = {.pokemon = p, .move = -1, .only = 1, .on_gain = true};
     pr_apply_ab_attrs(bt, PR_AC_PostSummonAbAttr, &gain);               /* applyOnGainAbAttrs */
 }

@@ -38,6 +38,10 @@ static void init_common(gc_mon *m)
 {
     pr_pokemon *p = &m->b;
     p->variant = m->variant;
+    p->ability_lookup_known = true;
+    p->ability_index = (int8_t)m->ability_index;
+    p->custom_ability = p->fusion_custom_ability = -1;
+    p->lookup_ability_override = p->daily_boss_ability = -1;
     p->ability_override = -1;
     p->custom_passive = -1;
     p->status_toxic_turns = 0;
@@ -348,8 +352,10 @@ void gc_mon_evolve(gc_run *run, gc_mon *m, int evo)
     int count = f->ability_hidden ? 3 : 2;
     if (m->ability_index > 2) m->ability_index = 0;
     if (m->ability_index == 2 && pre_count == 3 && count == 2) m->ability_index = 1;
+    p->ability_index = (int8_t)m->ability_index;
     p->base_ability = (uint16_t)gc_form_ability(p->species, f, m->ability_index);
-    if (p->ability_override < 0) p->ability = p->base_ability;
+    if (p->ability_override <= 0) p->ability = p->base_ability;
+    pr_refresh_ability(p);
     gc_mon_recalc(run, m);
 
     if (run->sys) {

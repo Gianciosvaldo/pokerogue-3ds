@@ -433,3 +433,11 @@ receiver-save-host-test: $(BUILD)/receiver_save_host_test
 $(BUILD)/receiver_save_host_test: tests/receiver_save_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
 .PHONY: receiver-save-host-test
+
+all: $(BUILD)/ability_lookup_host_test
+test: ability-lookup-host-test
+ability-lookup-host-test: $(BUILD)/ability_lookup_host_test
+	$(BUILD)/ability_lookup_host_test
+$(BUILD)/ability_lookup_host_test: tests/ability_lookup_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+.PHONY: ability-lookup-host-test

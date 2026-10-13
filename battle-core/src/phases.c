@@ -2558,7 +2558,10 @@ static void reset_summon_data(pr_pokemon *p)
     p->ability_suppressed = false;
     p->summon_hit_count = 0;
     p->ability_override = -1;
+    p->temporary_fusion_species = 0;
+    p->temporary_fusion_form = 0;
     p->ability = p->base_ability;
+    pr_refresh_ability(p);
     memset(p->summon_stats, 0, sizeof p->summon_stats);
     p->n_summon_types = 0;
     p->added_type = 0;

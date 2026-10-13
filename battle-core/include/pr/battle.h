@@ -217,6 +217,13 @@ typedef struct pr_pokemon {
     uint8_t nature;
     uint16_t ability;          /* active ability (getAbility()) */
     uint16_t base_ability;     /* getAbility(ignoreOverride=true): what calculateStats checks */
+    bool ability_lookup_known; /* source index/override metadata supplied by the caller */
+    int8_t ability_index;      /* Pokemon.abilityIndex; 0, 1, 2 (hidden) */
+    int16_t custom_ability, fusion_custom_ability; /* -1 absent, NONE(0) is an override */
+    int16_t lookup_ability_override; /* caller's active side override; -1 absent, zero ignored */
+    int16_t daily_boss_ability; /* applicable daily event override, -1 absent */
+    uint16_t temporary_fusion_species; /* summonData.fusionSpeciesForm, 0 absent */
+    uint8_t temporary_fusion_form;
     int32_t ability_override;  /* summonData.ability (-1 = undefined); ability follows it while set */
     uint16_t passive;          /* hasPassive() ? getPassiveAbility() : 0 (NONE); pr_update_passive sets it */
     bool passive_flag;         /* Pokemon.passive (the passive is unlocked and enabled) */
@@ -719,6 +726,8 @@ void pr_restore_transform(pr_pokemon *p);
 void pr_set_original_move(pr_pokemon *p, int slot, uint16_t move);
 const pr_species *pr_pokemon_fusion_species(const pr_pokemon *p);
 bool pr_is_mega(const pr_pokemon *p);
+uint16_t pr_get_ability(const pr_pokemon *p, bool ignore_override);
+void pr_refresh_ability(pr_pokemon *p);
 bool pr_is_max(const pr_pokemon *p);
 void pr_mega_evolve(pr_battle *bt, pr_pokemon *p);
 void pr_dynamax(pr_battle *bt, pr_pokemon *p);
