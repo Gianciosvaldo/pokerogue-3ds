@@ -36,6 +36,7 @@ typedef enum {
     PH_QUIET_FORM_CHANGE,
     PH_DANCER, PH_TERA,
     PH_TRANSFORM,              /* appended: keep existing phase identifiers stable */
+    PH_RETURN,                 /* Scene.newBattle reset-arena return, no replacement */
     PH_COUNT_
 } pr_phase_type;
 #define PH_FIRST_UNPORTED PH_TERA
@@ -184,6 +185,10 @@ void pr_run_turn(pr_battle *bt, pr_engine *e);
  * it, the "Set" battle style), or at a switch pick after a "yes". The game shows the encounter
  * text and the trainer's intro before calling this. Singles only. */
 void pr_start_battle(pr_battle *bt, pr_engine *e);
+/* Scene.newBattle's player cleanup queue, before Encounter/Return clears summon
+ * data. The caller resets the arena itself and removes the old enemy field. */
+void pr_prepare_player_cleanup(pr_battle *bt, pr_engine *e, bool reset_arena);
+void pr_run_player_cleanup(pr_battle *bt, pr_engine *e);
 
 /* After a stop at PH_CHECK_SWITCH: the player's answer. Yes opens the party screen (a PH_SWITCH
  * stop, answered with pr_resume_switch); no goes on. Runs on to the next stop. */

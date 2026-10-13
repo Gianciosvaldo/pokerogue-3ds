@@ -290,10 +290,10 @@ bool gc_is_new_biome(const gc_run *run, int wave)
  * EncounterPhase rolls the biome's weather and terrain for it (not NextEncounterPhase, a wave in the same biome) */
 static void arena_flags(const gc_run *run, int prev_wave, bool *reset, bool *new_biome, bool *roll)
 {
-    const gc_internal *in = gc_int((gc_run *)run);
     *new_biome = prev_wave && gc_is_new_biome(run, prev_wave);
-    *reset = !prev_wave || *new_biome || in->last_battle_type == BATTLE_TYPE_TRAINER
-             || in->last_battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER || in->last_final_boss;
+    *reset = !prev_wave || *new_biome || run->battle_type == BATTLE_TYPE_TRAINER
+             || run->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER
+             || (run->run.mode == GAME_MODES_CLASSIC && pr_run_is_wave_final(run->run.mode,run->wave));
     *roll = !prev_wave || *new_biome || run->run.mode == GAME_MODES_DAILY;
 }
 
@@ -374,6 +374,17 @@ void gc_new_battle(gc_run *run)
         for (int i = 0; i < run->n_party; i++) pk[i] = run->party[i].pokerus;
         pr_run_try_spread_pokerus(&run->run, wave, pk, run->n_party);
         for (int i = 0; i < run->n_party; i++) run->party[i].pokerus = pk[i];
+    }
+
+    /* doPostBattleCleanup precedes the new encounter's generation and save point.
+     * The old double flag and player field still belong to the outgoing battle. */
+    if (prev_wave) {
+        bool reset, new_biome, roll;
+        arena_flags(run,prev_wave,&reset,&new_biome,&roll);
+        if (reset) {
+            gc_arena_reset_effects(run);
+            gc_battle_cleanup_players(run);
+        }
     }
 
     if (nb.battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) {

@@ -1,9 +1,11 @@
 # battle-core: native C port of PokeRogue's battle logic
 
-Current continuation (2026-10-12): leave-field primal weather, Wonder Skin,
-priority brackets/Quick Draw, Protean/Libero and defending-field priority immunity
-have bounded source proofs. Retained rich seed777 covers 1,929/2,000 turns exactly;
-this is sample coverage, not a battle-core completion percentage. See the
+Current continuation (2026-10-13): Ditto/Transform, berry lifecycle,
+Receiver/Power of Alchemy, indexed ability lookup, form-state callbacks and
+Battle Bond have bounded source proofs. The player-cleanup/Return continuation
+is documented in [RESET-ARENA-VALIDATION.md](RESET-ARENA-VALIDATION.md).
+Retained rich seed777 covers 1,950/2,000 turns exactly; this is sample coverage,
+not a battle-core completion percentage. See the
 [remaining inventory](REMAINING-BATTLE-CORE.md) and the validation records below.
 
 Status 2026-09-28: **damage path with abilities and passives, move effects, held items, battler and arena tags, and the turn history verified against upstream** (singles); the turn engine has started and replays about 96% of the plain random test turns exactly, with stat changes, statuses, on-hit abilities, two-turn moves, 87 of the 95 battler tag types (all but Helping Hand, Follow Me's, Imprison, Quick Claw's, Commander's, Cramorant's two and the mystery encounters' one), recoil, drain, recharge, pre-move texts, the healing phase, weather and terrain over a turn, the damaging traps, Leech Seed, Substitute, the protections and Endure, arena tags being laid, stacked, cleared and swapped, the weather and terrain moves with about 25 smaller move effects, the moves that call other moves (Metronome, Mirror Move, Copycat, Sleep Talk, Assist, Nature Power, Instruct), Focus Punch-style header moves, Future Sight and Wish, and switching (the moves that switch a Pokemon out, the switch command, the party prompt as a pause the caller answers, and the switch itself with entry hazards, entry abilities, Baton Pass and Shed Tail passing their effects, Wimp Out and Emergency Exit) ported (see "Turn engine"). Every damaging move in the random test is now covered except 6 cases in about 110,000. Upstream is `pagefaultgames/pokerogue` @ `8555c08`.

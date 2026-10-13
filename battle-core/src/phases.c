@@ -2898,6 +2898,25 @@ void pr_leave_field(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool clear_effec
     p->on_field = false;
 }
 
+/* ReturnPhase inherits Summon.start/preSummon, then ends without a replacement.
+ * The timer executes switchAndSummon after leaveField in the tween callback. */
+static void return_phase(pr_battle *bt, pr_engine *e, int ph)
+{
+    int field=PH(ph)->sw_field_index;
+    pr_pokemon *p=field>=0 && field<bt->n_party[0] ? bt->party[0][field] : NULL;
+    if (!p) { pr_note_unported(bt,PR_FEAT_PARTY);return; }
+    pr_hook_ab(bt,p,PR_AC_PreSummonAbAttr);
+    pr_speed_iter it;pr_speed_iter_init(bt,&it,ARENA_TAG_SIDE_ENEMY);pr_pokemon *q;
+    while ((q=pr_speed_iter_next(bt,&it))) pr_remove_tags_by_source_id(bt,e,q,(int64_t)p->id);
+    pr_show_text(bt,e,pr_msg1("battle:playerComeBack",pr_arg_pokemon(bt,"pokemonName",p)));
+    pr_event_add(bt,e,PR_EV_SWITCH_OUT,field,-1,0,0,NULL);
+    pr_leave_field(bt,e,p,true);
+    /* ReturnPhase.onEnd */
+    pr_reset_turn_data(p);
+    pr_reset_summon_data(p);
+    pr_form_change(bt,p,PR_FCT_SpeciesFormChangeActiveTrigger);
+}
+
 /* ---------------------------------------------------------------- end of turn */
 
 static void check_interlude_phase(pr_battle *bt, pr_engine *e)
@@ -3847,6 +3866,7 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_MOVE_REFLECT: move_reflect_phase(bt, e, ph); break;
     case PH_SHINY_SPARKLE: pr_event_add(bt, e, PR_EV_SHINY_SPARKLE, PH(ph)->battler, -1, 0, 0, NULL); break;
     case PH_QUIET_FORM_CHANGE: quiet_form_change_phase(bt, e, ph); break;
+    case PH_RETURN: return_phase(bt,e,ph); break;
     case PH_ATTEMPT_CAPTURE: attempt_capture_phase(bt, e, ph); break;
     default:
         /* a phase with no port: it was reported when it was queued */
