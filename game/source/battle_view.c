@@ -594,12 +594,11 @@ static void draw_fight_menu(void) {
   const pr_move* pm = mv >= 0 && mv < PR_MOVE_COUNT ? &pr_moves[mv] : NULL;
   char fr[24];
   /* moveInfoContainer at (1, 0) */
-  rr_draw_opts o = RR_DEFAULT_OPTS;
-  o.origin_x = o.origin_y = 0.5f;
-  o.scale_x = o.scale_y = 0.8f;
+  /* upstream scales the type icon by 0.8; at 1:1 pixels that turns its 5 px lettering to mud ("NORMAL" cannot be read), so it is
+   * drawn at full size, a little to the left of upstream's centre so it and the category icon (28 px) still fit the window */
   if (pm) {
-    img_draw_opts("images/types", gm_enum_lower(GM_E_POKEMON_TYPE, pm->type, fr, sizeof fr), 1 + 320 - 57, -36, &o);
-    img_draw("images/categories", gm_enum_lower(GM_E_MOVE_CATEGORY, pm->category, fr, sizeof fr), 1 + 320 - 25, -36,
+    img_draw("images/types", gm_enum_lower(GM_E_POKEMON_TYPE, pm->type, fr, sizeof fr), 1 + 320 - 56, -36, 0.5f, 0.5f);
+    img_draw("images/categories", gm_enum_lower(GM_E_MOVE_CATEGORY, pm->category, fr, sizeof fr), 1 + 320 - 24, -36,
              0.5f, 0.5f);
   }
   /* upstream draws these at 56 canvas px of the emerald font (about 9 px here), which is unreadable at 1:1 on the 3DS; the 8 px pixel
