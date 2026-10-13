@@ -100,7 +100,10 @@ void pr_set_temp_ability(pr_battle *bt, pr_pokemon *p, uint16_t ability)
     pr_apply_ab_attrs(bt, PR_AC_PreLeaveFieldAbAttr, &lose);            /* applyOnLoseAbAttrs (no ability has an
                                                                          * IllusionBreakAbAttr in the dump) */
     p->ability_override = ability;
-    p->ability = ability;
+    /* getAbility ignores a zero summonData.ability in the pin. An ordinary
+     * actor therefore gains the permanent ability's effects again. */
+    p->ability = ability ? ability : p->base_ability;
+    if (!ability && p->transformed) pr_note_unported(bt, PR_FEAT_FORM_CHANGE);
     pr_ab_params gain = {.pokemon = p, .move = -1, .only = 1, .on_gain = true};
     pr_apply_ab_attrs(bt, PR_AC_PostSummonAbAttr, &gain);               /* applyOnGainAbAttrs */
 }
@@ -675,6 +678,20 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         }
         return pr_unshift_stat_stage_change_ex(bt, c->e, pr_battler_index(bt, p), st, sg, n,
                                                (pr_pokemon *)p, 0) < 0 ? -1 : 1;
+    }
+    case PR_AC_CopyFaintedAllyAbilityAbAttr: {
+        const pr_pokemon *victim = pp->victim;
+        if (!victim || victim->ability >= PR_ABILITY_COUNT) return -1;
+        GATE(p->is_player == victim->is_player
+             && !(pr_abilities[victim->ability].flags & AB_FLAG_UNCOPIABLE));
+        if (pp->simulated) return 1;
+        if (!c->e) return -1;
+        pr_set_temp_ability(bt, (pr_pokemon *)p, victim->ability);
+        /* Source reads the victim again after the copied ability's gain effects. */
+        pr_queue_msg(bt, c->e, pr_msg2("abilityTriggers:copyFaintedAllyAbility",
+                                     pr_arg_pokemon(bt, "pokemonNameWithAffix", victim),
+                                     pr_arg_ability("abilityName", victim->ability)));
+        return 1;
     }
     case PR_AC_PostKnockOutStatStageChangeAbAttr: {                     /* Soul-Heart */
         const pr_attr_PostKnockOutStatStageChangeAbAttr *x = P(PostKnockOutStatStageChangeAbAttr, a);

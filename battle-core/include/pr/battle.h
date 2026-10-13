@@ -467,6 +467,7 @@ int pr_closures_ported(void);
 typedef struct pr_ab_params {
     const pr_pokemon *pokemon;     /* the ability's owner */
     const pr_pokemon *opponent;    /* attacker/defender, or FieldMultiplyStat's target */
+    const pr_pokemon *victim;      /* PostKnockOutAbAttr: the Pokemon whose FaintPhase is running */
     int move;                      /* -1 = none */
     bool simulated;
     bool ignore_ability;           /* AllyStatMultiplierAbAttr.ignoreAbility */
