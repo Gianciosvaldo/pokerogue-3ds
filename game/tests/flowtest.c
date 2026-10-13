@@ -18,6 +18,7 @@
 
 #include "app_flow.h"
 #include "capsule_screen.h"
+#include "gacha_screen.h"
 #include "profile_tx.h"
 #include "system_data.h"
 #include "combat_observer.h"
@@ -112,6 +113,15 @@ bool capsule_screen_open(const caps_args* a) {
   CP = *a;
   last_caps_n = a->fixture ? a->fixture->n : 0;
   n_caps++;
+  return true;
+}
+
+/* the capsule machine (C09): records how it was opened */
+static gachas_args GS;
+static int n_gacha;
+bool gacha_screen_open(const gachas_args* a) {
+  GS = *a;
+  n_gacha++;
   return true;
 }
 
@@ -645,6 +655,15 @@ int main(void) {
     app_debug_capsule(-3);
     app_start(&(rs_config){0});
     CHECK(n_caps == caps + 1 && n_title == titles + 4, "a negative count is ignored");
+  }
+
+  /* the title's Capsule Machine entry opens the machines, and leaving them is the title (the app has no other way in) */
+  {
+    const int g = n_gacha, titles = n_title;
+    T.on_choose(TITLE_CAPSULE, T.arg);
+    CHECK(n_gacha == g + 1 && GS.on_exit && n_title == titles, "the title's Capsule Machine entry opens the machines");
+    GS.on_exit(GS.arg);
+    CHECK(n_title == titles + 1, "leaving the machines is the title");
   }
 
   /* the app boots the profile transactions: a pull a crash left committed but not on the card is finished at app_start (profile_tx.h) */

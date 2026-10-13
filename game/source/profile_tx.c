@@ -12,7 +12,7 @@
 
 #define PROFILE_MAX (1024 * 1024)       /* the bound system_data.c uses for a serialized profile */
 #define ENV_FIXED (32 * 1024)           /* the envelope's own fields, with room to spare (about 10 KB are used) */
-#define VERSION 1
+#define VERSION 2   /* 2 added revealed_txn (task C09); version 1 files are still read */
 #define TS_MAX 8640000000000000.0
 
 enum { PEND_NONE = 0, PEND_PREPARED = 1, PEND_COMMITTED = 2 };
@@ -20,6 +20,7 @@ enum { PEND_NONE = 0, PEND_PREPARED = 1, PEND_COMMITTED = 2 };
 /* Everything the envelope holds besides the candidate profile bytes. */
 typedef struct {
   uint32_t next_txn;                    /* the next transaction id, >= 1 */
+  uint32_t revealed_txn;                /* every pull up to this id has been shown to the player (a watermark; 0 = none) */
   bool scene_seeded;
   pr_rng scene;                         /* the gacha scene RNG: its own stream, never a run's */
   int n_results;
@@ -209,6 +210,7 @@ static uint8_t* encode(const core* c, const uint8_t* profile, size_t* len) {
   w16(&w, VERSION);
   w16(&w, 0);
   w32(&w, c->next_txn);
+  w32(&w, c->revealed_txn);
   w8(&w, c->scene_seeded);
   put_rng(&w, &c->scene);
   w8(&w, (uint8_t)c->n_results);
@@ -242,10 +244,12 @@ static int decode(const uint8_t* buf, size_t len, core* c, uint8_t** profile) {
   const uint16_t ver = r16(&r);
   r16(&r);
   if (r.bad) return 1;
-  if (ver != VERSION) return ver > VERSION ? 2 : 1;
+  if (ver != VERSION && ver != 1) return ver > VERSION ? 2 : 1;
   memset(c, 0, sizeof *c);
   *profile = NULL;
   c->next_txn = r32(&r);
+  /* version 1 had no watermark and no screen could show a result: every result it kept counts as shown */
+  c->revealed_txn = ver == 1 ? (c->next_txn > 0 ? c->next_txn - 1 : 0) : r32(&r);
   c->scene_seeded = r8(&r) != 0;
   get_rng(&r, &c->scene);
   const int nr = r8(&r);
@@ -267,7 +271,7 @@ static int decode(const uint8_t* buf, size_t len, core* c, uint8_t** profile) {
   c->profile_len = r32(&r);
   if (r.bad) return 1;
   /* every field must make sense, not only parse */
-  if (c->next_txn < 1) return 1;
+  if (c->next_txn < 1 || c->revealed_txn >= c->next_txn) return 1;
   uint32_t last = 0;
   for (int i = 0; i < nr; i++) {
     const ptx_result* x = &c->results[i];
@@ -495,6 +499,36 @@ uint32_t ptx_pending(void) {
 bool ptx_apply_pending(void) {
   if (!usable()) return false;
   return P.pend == PEND_COMMITTED;
+}
+
+/* The oldest kept pull that was committed and not shown yet (a watermark: txn > revealed_txn). */
+static const ptx_result* unrevealed(void) {
+  for (int i = 0; i < P.n_results; i++) {
+    const ptx_result* x = &P.results[i];
+    if (x->txn > P.revealed_txn && x->kind == PTX_KIND_PULL && x->outcome == PTX_R_DONE) return x;
+  }
+  return NULL;
+}
+
+uint32_t ptx_unrevealed(ptx_result* out) {
+  if (!usable()) return 0;
+  const ptx_result* x = unrevealed();
+  if (!x) return 0;
+  if (out) *out = *x;
+  return x->txn;
+}
+
+bool ptx_mark_revealed(uint32_t txn) {
+  if (!usable()) return false;
+  const ptx_result* x = find_result(txn);
+  if (!x || x->kind != PTX_KIND_PULL || x->outcome != PTX_R_DONE) return false;
+  if (txn <= P.revealed_txn) return true;   /* already marked: nothing to write */
+  memcpy(&N, &P, sizeof N);
+  N.revealed_txn = txn;
+  /* a committed transaction that is not rolled forward yet keeps its candidate bytes in this write */
+  if (!write_core(&N, P.pend == PEND_COMMITTED ? g_profile : NULL)) return false;
+  memcpy(&P, &N, sizeof P);
+  return true;
 }
 
 static ptx_status profile_ready(void) {

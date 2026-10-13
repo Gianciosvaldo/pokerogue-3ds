@@ -3,7 +3,9 @@
  *
  * Top screen: the biome background of the last save (or the plains) and the logo from gfx.pak at upstream's place (centred,
  * 8 px from the top). Bottom screen: the option list in its corner: Continue (only with a last save), New Game, Load Game and, last,
- * the custom content's own "Nemesis Radar" (radar_screen.h: a read-only look at the remembered enemies; upstream has no such entry).
+ * the custom content's own "Nemesis Radar" (radar_screen.h: a read-only look at the remembered enemies; upstream has no such entry)
+ * and "Capsule Machine" (gacha_screen.h: the voucher-to-egg machines; upstream reaches them from the in-run menu, which this app does
+ * not have yet).
  *
  * Not on it, on purpose: Daily Run, Run History and Settings (no such screens yet), the player count and the account line (the
  * game is fully offline), the splash message and the version text.
@@ -17,7 +19,7 @@
 extern "C" {
 #endif
 
-typedef enum { TITLE_CONTINUE, TITLE_NEW_GAME, TITLE_LOAD_GAME, TITLE_RADAR } title_choice;
+typedef enum { TITLE_CONTINUE, TITLE_NEW_GAME, TITLE_LOAD_GAME, TITLE_RADAR, TITLE_CAPSULE } title_choice;
 
 typedef struct {
   bool can_continue;   /* shows the Continue entry */

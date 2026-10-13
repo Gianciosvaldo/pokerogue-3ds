@@ -208,6 +208,13 @@ build/mkcustom: mkcustom.c ../source/custom_core_build.c $(APP)/source/save.c
 mkcustom: build/mkcustom
 .PHONY: mkcustom
 
+# a system.sav with chosen vouchers and eggs, for looking at the Capsule Machine on a real build (see mksystem.c); make mksystem && (cd /some/folder && /path/to/build/mksystem 12 3 2 1)
+build/mksystem: mksystem.c $(APP)/source/save.c build/ptx_core.a
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) mksystem.c $(APP)/source/save.c build/ptx_core.a -lm -o $@
+mksystem: build/mksystem
+.PHONY: mksystem
+
 # the music: the chooser (source/bgm_choose.c) against upstream's own Battle.getBgmOverride (bgm_expected.c, dumped by tools/dump-bgm.test.ts:
 # every wave, every species and form, every trainer), then the player (bgm_player.c) and the scene calls (bgm.c) over a fake DSP (snd_fake.c);
 # make bgmtest && build/bgmtest [BGM_TRACKS=<one track name per line>]
@@ -237,6 +244,20 @@ build/profile_tx_test_fast: $(PTX_OWN) build/ptx_core.a
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(PTX_OWN) build/ptx_core.a -lm -o $@
 profile_tx_test_fast: build/profile_tx_test_fast
 .PHONY: profile_tx_test_fast
+
+# the capsule machine (task C09). gacha_host_test: the purchase logic (gacha_host.c over profile_tx.c, system_data.c and the real save.c, real
+# game-core gacha) under fault injection; gacha_screen_test: the menu (gacha_screen.c) driven by buttons over the real capsule screen, with a fake
+# drawing layer. Both link the game-core archive built once for profile_tx_test_fast (only the files under test are rebuilt; the test files are
+# sanitized): make gacha_host_test gacha_screen_test && build/gacha_host_test [states] && build/gacha_screen_test [fuzz steps]
+GH_OWN := gacha_host_test.c ../source/gacha_host.c ../source/capsule_model.c ../source/profile_tx.c ../source/system_data.c ../source/custom_store.c ../source/custom_core_build.c $(APP)/source/save.c
+GS_OWN := gacha_screen_test.c ../source/gacha_screen.c ../source/capsule_screen.c $(wordlist 2,99,$(GH_OWN))
+build/gacha_host_test: $(GH_OWN) build/ptx_core.a gacha_test_common.h
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(GH_OWN) build/ptx_core.a -lm -o $@
+gacha_host_test: build/gacha_host_test
+build/gacha_screen_test: $(GS_OWN) build/ptx_core.a gacha_test_common.h
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(GS_OWN) build/ptx_core.a -lm -o $@
+gacha_screen_test: build/gacha_screen_test
+.PHONY: gacha_host_test gacha_screen_test
 
 # the custom content metadata on the SD card (custom_store.c + custom-core's codec, over the app's real save.c); make store_test && build/store_test
 STORE_SRCS := store_test.c ../source/custom_store.c ../source/custom_core_build.c $(APP)/source/save.c

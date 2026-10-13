@@ -1,4 +1,4 @@
-# Custom content contracts, version 1 (tasks C01, C02, C03, C04, C05, C06, C07, C08)
+# Custom content contracts, version 1 (tasks C01, C02, C03, C04, C05, C06, C07, C08, C09)
 
 Written for task C01 of [CUSTOM-CONTENT-ADVANCED-AGENT.md](CUSTOM-CONTENT-ADVANCED-AGENT.md). It does three things:
 audits the interfaces the custom content will touch, fixes the version-1 data contracts, and records what the new
@@ -9,8 +9,9 @@ access, no wallet access and no spawn code. Since C03 the app feeds the reducer 
 policy as pure data (section 2.11, 5.4): nothing in the app calls it yet. Since C06 the title screen has a read-only
 Nemesis Radar over the stored roster (section 2.12, 5.5); it starts nothing. Since C07 the app has a capsule-machine presentation
 prototype that only a debug file opens (section 2.13, 5.6); it shows fixed results and is connected to nothing. Since C08 the app
-owns the profile transactions (voucher-to-egg pull, the once-per-record Nemesis reward) behind one write-ahead envelope (section 2.14, 5.7);
-nothing in the UI calls it yet.
+owns the profile transactions (voucher-to-egg pull, the once-per-record Nemesis reward) behind one write-ahead envelope (section 2.14, 5.7).
+Since C09 the title has a **Capsule Machine** entry: the three voucher-to-egg machines, one committed transaction per accepted pull,
+shown through the C07 capsule screen (section 2.15, 5.8). That is the first purchase a player can make; it hatches nothing.
 
 | Item | Value |
 |---|---|
@@ -781,6 +782,75 @@ Rules that make this safe:
 - **Boot.** `app_start` calls `ptx_boot()` (installs the gate, finishes a half-applied transaction). Cheap when there is no `ptx` file. The scene
   RNG's seed is supplied once by the app before its first begin (`ptx_set_scene_seed`); C09 must supply it from the real clock.
 
+### 2.15 The capsule machine (C09)
+
+**What exists now.** The title has a custom entry **Capsule Machine** (upstream reaches its gacha from the in-run menu, which this app does not
+have yet; the Radar set the precedent for a custom title entry). It opens `gacha_screen.c`: LEFT / RIGHT choose one of the three machines, UP / DOWN
+one of the five options, A asks, the question opens on **No**, Yes buys, B leaves. It is a menu over three things that already exist and adds no
+rule: game-core's `gc_system_gacha_pull` (machines, options, costs, capacity, pity, guarantees, entropy, display order), C08's `profile_tx`
+(the only thing that runs a pull and commits it) and C07's capsule screen (the presentation). Files: `gacha_host.c/.h` (logic, no ui),
+`gacha_screen.c/.h` (menu), `capsule_screen.c` (words and `autoplay`), `profile_tx.c` (the shown-mark), `title_screen.c`, `app_flow.c`.
+
+**Upstream core behavior (the source decides; this task compares nothing new and calls nothing by a copy).** Which voucher an option debits,
+how many, how many eggs it adds, the capacity, the refusal order (capacity before cost), every egg field, the pity and guarantee rules, the
+statistics and the display permutation are `gc_system_gacha_pull`'s, validated against the pinned upstream by `egggachadiff.sh`
+(game-core/EGG-GACHA-VALIDATION.md; **not re-run here**, game-core is unchanged). **Original custom presentation:** the title entry, the
+menu, the question, the words ("Move Gacha", "Legendary Gacha", "Shiny Gacha", "Regular / Plus / Premium / Golden", the refusal sentences),
+that the eggs are shown by tier and an id (no species, no shiny flag: nothing hatches yet), the capsule motion (C07), the shown-mark, and the
+restart behavior below. The three machine notes ("better odds of a rare egg move / of a legendary with a daily featured one / of a shiny
+egg") say what the source's offsets do and nothing more; the odds are not stated as numbers.
+
+**The table is read from the source.** `gh_rules` runs the real `gc_system_gacha_pull` once per option on a scratch profile with plenty of
+every voucher and reads which voucher dropped, by how much, and how many eggs appeared; it finds the capacity by a binary search on a
+one-egg pull. Nothing is inferred from the cursor labels. The result is cached (about twelve scratch pulls once per run of the app; not
+timed on a device). The test checks it against upstream's documented table (1 Regular -> 1, 10 Regular -> 10, 1 Plus -> 5, 1 Premium -> 10,
+1 Golden -> 25, 99 eggs) and the screen's "can be bought / which refusal" against `gc_system_gacha_pull` itself over 7,800 comparisons.
+
+**One accepted pull.**
+
+```
+ menu --A--> question (No) --Yes--> gh_buy:  unreadable profile / unusable record -> message, nothing written
+                                             a purchase or unshown eggs pending   -> BUSY, nothing written
+                                             refused by the table (same keys, same order as the source) -> message, nothing written
+                                             ptx_begin_pull (clock and entropy seed supplied ONCE, saved) -> ptx_execute (ONE pull, ONE commit)
+                                             -> capsule screen on the committed result (autoplay: already accepted)
+ capsule screen settles (time or B/START skip) -> ptx_mark_revealed(txn) -> closing returns to the menu
+```
+
+- **Duplicates.** Held buttons act once (`ui_input_repeating`); A on the question's default is "No", so a double tap asks and declines; a
+  screen that was left takes no input; `gh_buy` is not re-entrant and is BUSY while `ptx_pending()` or an unshown committed pull exists. So
+  no second transaction id can be created before the first is finished and shown. There is no touch path (the framework routes none to ui
+  screens): the buttons are the whole control.
+- **Refusals.** The table refuses (not enough vouchers, too many eggs; capacity first, as the source) before anything is written: zero
+  writes, files byte-identical, no record created. If something still reaches the source and it refuses (the profile changed after
+  `begin`: `ptx:profileChanged`), that is the same: nothing changes and nothing is shown. A refused write (SD card) before the commit point
+  changes no live profile and no RNG (C08), shows no egg and says "Nothing was spent"; a purchase already begun is finished with A (the same
+  transaction, the same request) or, if the player leaves, the next time the machine opens.
+- **The shown-mark.** `ptx_unrevealed` / `ptx_mark_revealed` (envelope version 2: one `revealed_txn` watermark; version 1 files are still read
+  and count everything they kept as shown, since no screen could show it). Marking happens when the capsule screen settles, by time or by
+  skip, and is one `ptx` write that carries a pending transaction unchanged. If the card refuses it the eggs are not offered again in this
+  session and the mark is retried; if the app stops before it is made, the **same** eggs are shown once more after the restart (never a new
+  pull). If the player closes the app mid-animation, the same.
+- **Opening the machine** first finishes what a restart left (`gh_resume`: the pull runs from the SAVED clock and seed, so the result is the
+  one the interrupted purchase would have had), then shows any committed pull that was not shown, then the menu.
+
+| Stopped during a purchase | Next time the machine opens |
+|---|---|
+| before the first write | nothing happened: the menu |
+| after `begin` (PREPARED) | the pull is finished from the saved request and its eggs are shown |
+| after the commit write, or later in the roll-forward | boot finished the files; the eggs are shown |
+| during the animation, or the mark not written | the same eggs are shown again once, then marked |
+| after the mark | the menu; nothing is shown |
+
+- **What a result is.** Eggs in the profile (`sys->eggs`), tier, id, hatch waves, machine, clock, variant, shiny and move index as the source
+  made them. Not caught, not unlocked, no candy, no hatching call, no custom form or item, no rehydration (`EggData.toEgg` stays excluded). The
+  capsule screen shows `Egg <id mod 10^6>` per capsule in the source's display order (not the order the capsules land in) with the tier; the
+  dex and starter data are compared byte for byte with the pre-pull profile in the test.
+- **Time and entropy.** The request's clock is `time(NULL) * 1000` and its entropy seed text is built from `time`, `clock` and a counter,
+  supplied once per request by `gh_set_env`'s defaults (tests inject fixed ones). They are saved in the request; a retry or restart never
+  re-reads a clock. The daily featured legendary follows the console's clock; no synchronization is claimed. Animation timing never reaches
+  a random or date decision: the animation starts after the commit.
+
 ## 3. Choices to confirm
 
 These are version-1 decisions this PR had to make. The handoff either left them open or said "documented policy". Each
@@ -875,6 +945,25 @@ Added by C08 (section 2.14):
     gate (it fails, and says so, until the transaction is finished). Alternative: write memory, which loses the proof that the card holds the
     candidate.
 
+Added by C09 (section 2.15):
+
+36. **The machine is a title entry.** Upstream's gacha lives in the in-run menu, which the app does not have. Alternative: wait for that menu;
+    the screen takes plain `on_exit`, so moving it is a wiring change.
+37. **The question opens on No, and a held button acts once.** A costs real vouchers and the same A opened the question, so Yes must be a
+    second, deliberate input. Alternative: no question (one tap buys), which the held-A hazard makes unsafe.
+38. **The option table is read from game-core by pulling, not written in `game/`.** Cost: about twelve scratch pulls (one 724 KB scratch
+    profile, freed) the first time the machine opens, not timed on a device. Alternative: a copy of upstream's table, which is the
+    "inferred from cursor labels" risk the card names.
+39. **Eggs are shown by tier and id, not by species or shiny.** Species and shininess are decided and stored; showing them is hatching's job
+    (not in scope) and would turn the reveal into a loot display the original game does not have at this step. The tier is the colour.
+40. **Shown is a watermark in the purchase record (envelope version 2), set when the capsule screen settles.** Alternative: a flag per result,
+    or marking at commit; the first costs a format change per field, the second would lose the reveal after a crash. Cost: a mark lost
+    to a crash shows the same eggs once more.
+41. **The words are plain English, not upstream's locale strings** (the machine names, the refusal sentences). The strings are not loaded
+    for custom screens (the Radar and the post-mortem do the same); the refusal KEYS are the source's.
+42. **The clock is the console's** (`time(NULL)`), supplied once per request and saved with it. A wrong console clock picks a different daily
+    featured legendary; it cannot change a result already committed.
+
 ## 4. What C02 to C10 inherit, and what they still must decide
 
 | Task | Imports | Still undecided / must verify |
@@ -886,6 +975,7 @@ Added by C08 (section 2.14):
 | C06 radar (decided in section 2.12) | `cc_nemesis` read-only, `cc_schedule` | nothing left open for the screen itself. C10 must pass the run's schedule to `radar_open` once it persists one, and create records for it to show |
 | C07 capsule preview (decided in section 2.13) | an immutable result list (`cap_fixture`), the framework's `ui` screens | nothing left open for the presentation itself. C09 must build the fixture from results C08 has already committed, never from the screen; the screen may be shown after or before the grant but must not decide or repeat it; touch needs a framework path |
 | C08 profile (decided in section 2.14) | `cc_ledger` `REWARD_CLAIM`, `cc_reward_claim`, the shared `sysd` profile | nothing left open for the owner itself. C09 must: supply the scene seed from the real clock (`ptx_set_scene_seed`) and the request's clock and entropy once per tap, run a pull only through `ptx_begin_pull` / `ptx_execute`, keep the transaction id across retries and read `ptx_pending()` when the screen opens, show what `ptx_result_of` returns (never its own draw), and not call `gc_system_gacha_pull` or write a voucher count. C10 claims a won record with `ptx_begin_claim` |
+| C09 machine (decided in section 2.15) | `ptx_begin_pull` / `ptx_execute` / `ptx_unrevealed` / `ptx_mark_revealed`, the C07 screen, `gc_system_gacha_pull` (read-only) | nothing left open for the machine itself. C10 must remember that a Nemesis reward voucher is spent through this same machine, that the machine is BUSY while a `ptx` transaction is pending (including a claim), and that the title entry is the only way in |
 | C10 live | all of the above | every item of section 1.8 that is still missing |
 
 ## 5. Validation record
@@ -1260,6 +1350,37 @@ are as they were (CI runs it only when game-core changes). No Old 3DS device run
 of 3 to 90 KB, a ptx file of the same size while pending) is not measured. Status for this task: **COMPLETE** against the C08 card's scope
 (the owner, the envelope, the idempotent pull and reward transactions, their fault tests); no user-visible purchase exists until C09.
 
+### 5.8 C09 (the capsule machine)
+
+Run on the final tree of the C09 PR. The task touches `game/` and this document only; `game-core/` and `custom-core/` are unchanged
+(`git diff origin/main -- game-core custom-core` is empty), so the game-core differential and the custom-content workflow do not run for it.
+
+| Command | Result |
+|---|---|
+| `game/tests/build/gacha_host_test` (ASan + UBSan; game-core's real `gc_system_gacha_pull` behind `profile_tx`, real `save.c` on a temporary folder, fault-injecting layer) | 22,615 checks, 0 failed. Includes the table read from the source against upstream's documented table, 7,800 comparisons of the screen's can-buy / refusal rows with `gc_system_gacha_pull` itself, the capacity edges, refusals writing nothing (files byte-identical), one and many pulls, no second pull for a repeated call, the saved result equal to the source's order, and a restart after every C08 crash point finishing with the same eggs shown once |
+| `game/tests/build/gacha_screen_test` (the real screen driven by a fake `ui`: held input, double tap, skip, re-entry, stale input, the fuzz of restarts) | 34,487 checks, 0 failed |
+| `game/tests/build/profile_tx_test` | 2,330 checks, 0 failed (new: the shown-mark watermark, envelope version 1 still read) |
+| `python3 game/tests/gacha_mutations.py` | **43 run, 43 killed, 0 survived, 0 invalid**, 1 documented as equivalent and not run. Includes two mutants that make a real double pull (a left screen that takes input while a second purchase may start; a callback that buys twice with nothing stopping it), cost checked before capacity, costs, egg counts and capacity wrong against the source, a refusal that begins a transaction, a purchase started while another is unfinished or unshown, an unreadable profile treated as an empty wallet, shown eggs offered again or never recorded, storage order shown instead of the saved display order, a question that opens on Yes, a held button that repeats, and a restart that neither finishes the purchase nor shows the eggs |
+| `python3 game/tests/profile_tx_mutations.py` | 47 run, 47 killed, 0 survived, 0 invalid (36 from C08 plus 11 for the watermark) |
+| `python3 game/tests/capsule_mutations.py` | 42 run, 42 killed, 0 survived, 0 invalid (the capsule screen still passes its own suite with `live` / `autoplay`) |
+| `make -C game/tests flowtest` | 116 checks, 0 failed (the title entry, the machine reachable from the title) |
+| `game/tests/run_host_tests.sh` (the CI script) | all passed; `capsule_test` 223,456 checks, `radar_test` 2,618,873 checks, the retained suites unchanged |
+| `docker run --rm -v "$PWD":/src -w /src/game devkitpro/devkitarm make` | builds `pokerogue.3dsx` (2,423,860 bytes, +22 KB over the C08 build); the warnings are the ones already on main (`run_screen.c`, `icon.c`, `summary.c`), none from the C09 files |
+| Azahar (libretro core, the real packs, the Docker-built 3dsx, `system.sav` written by `game/tests/mksystem.c`: 5 Regular, 3 Plus, 2 Premium, 1 Golden, 7 eggs) | Run A: title (5 entries) -> Capsule Machine -> machines with L/R (wraps) -> option 5 -> question on **No** -> UP -> **Yes** -> A -> fade -> "Here they come..." -> 25 capsules -> a held A has no effect -> eggs list (25 eggs, tier colours, "20 more below") -> A -> menu: golden voucher 1 -> 0, eggs 7 -> 32 / 99, the 25-egg row greyed. Run B: A held for 90 frames on the question stays on No: no purchase, no `ptx.sav` created, `system.sav` byte-identical (after release a single DOWN moves to Yes). Rows that cannot be bought are greyed (10 Regular and 25 Golden in the run-C screens); the refusal sentence itself was not captured on the emulator, the host tests cover its text. Run C: purchase, app stopped at frame 960 mid-animation (`ptx.sav` present, profile already updated) -> the next start opens the machine and shows the 25 eggs once (eggs 32 / 99, voucher still spent once) -> closing goes to the menu -> a third start goes straight to the menu. Screens are in `/mnt/project-files/game-screens/c09/` (not in Git) |
+
+**Found on the emulator.** Nothing needed a code change: the question's default is No and survives a held A, the screen fades through black
+between the menu and the capsule screen (not a hang: later frames show the animation), and a restart mid-animation shows the same
+eggs once. Egg numbers differ between runs A and C because each is a separate purchase on a separate profile; the identical-result property is
+what the host tests prove (saved clock and seed, 22,615 checks), not the screenshots.
+
+**Not established.** The upstream differential `egggachadiff.sh` was **not run** (it needs the pinned upstream checkout and Node 22; game-core is
+byte for byte unchanged, CI runs it only when game-core changes). No Old 3DS device run: the option table costs about twelve scratch pulls once
+per start and a transient 724 KB scratch profile, a purchase writes the profile and a ptx file of up to 2 MiB; none of it is timed on a device.
+The power-cut model is "write n and everything after never happens" (as in 5.7). No touch path (the framework routes none to ui screens). Eggs
+are shown by tier and id only: no species, no shiny flag, no hatching, no egg moves screen. The words are plain English of this port, not
+upstream strings. The clock is the console's `time(NULL)`; no synchronization is claimed. Status for this task: **COMPLETE** against the C09
+card's scope; the title entry is the only way in (no in-run menu exists yet), and the custom mode is not live before C10.
+
 ## 6. Not established by this PR
 
 - No upstream behavior was consulted or compared. There is no differential, no seed, no Node 22 run, and none is needed
@@ -1267,5 +1388,5 @@ of 3 to 90 KB, a ptx file of the same size while pending) is not measured. Statu
 - No emulator or console check by C01/C02 (no screen or app change then). C03's emulator check, and what it did not cover, is in section 5.2.
 - No Old 3DS memory or time measurement. `sizeof` and code-size figures come from compilers (x86-64 host, Ubuntu's
   `arm-none-eabi-gcc`, and devkitARM in CI, with the 3DS CPU flags), not from a device or emulator.
-- No profile or wallet code, no live use of the scheduler (C05 is a pure policy: nothing in the app calls it, it has no wire codec and nothing spawns a rematch enemy). (C03 added the live observer hook and the post-mortem screen, section 2.9; C04 added the codec, the transaction and the one custom file, section 2.10.) The app never inserts a Nemesis: the finishing enemy is not identifiable. C06 added the read-only Radar (section 2.12) C07 a debug-only capsule presentation over fixed results (section 2.13) and C08 the profile transaction owner (section 2.14), still called by nothing in the UI. The rest is C09 and C10.
+- No profile or wallet code, no live use of the scheduler (C05 is a pure policy: nothing in the app calls it, it has no wire codec and nothing spawns a rematch enemy). (C03 added the live observer hook and the post-mortem screen, section 2.9; C04 added the codec, the transaction and the one custom file, section 2.10.) The app never inserts a Nemesis: the finishing enemy is not identifiable. C06 added the read-only Radar (section 2.12) C07 a debug-only capsule presentation over fixed results (section 2.13) and C08 the profile transaction owner (section 2.14); C09 added the Capsule Machine (section 2.15), the first caller of a purchase, from the title. The rest is C10.
 - Range checks only for species, form, move and ability: membership in the game's tables is the adapters' job.

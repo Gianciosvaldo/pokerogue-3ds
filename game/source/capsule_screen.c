@@ -24,6 +24,7 @@ static struct {
   caps_args a;
   bool open;                 /* between open and leave */
   bool exited;               /* on_exit was called: no more input */
+  bool live;                 /* a committed purchase (words only) */
   bool settled_fired;
   float since_settled;
   int sel;                   /* the result the list and the top screen point at */
@@ -193,11 +194,12 @@ static void draw_top(void) {
   }
   char t[64];
   if (C.m.stage == CAP_SETTLED) {
-    snprintf(t, sizeof t, "%d result%s", n, n == 1 ? "" : "s");
+    snprintf(t, sizeof t, C.live ? "%d egg%s" : "%d result%s", n, n == 1 ? "" : "s");
     centred(160, 8, t, TS_WINDOW, 0);
   } else if (C.m.stage == CAP_IDLE) {
     centred(160, 70, "Capsule machine", TS_SUMMARY, 0);
-    centred(160, 96, "A preview of the animation. Nothing is bought.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xc8, 0xc8, 0xc8, 255));
+    centred(160, 96, C.live ? "Your eggs are ready." : "A preview of the animation. Nothing is bought.", TS_INSTRUCTIONS_TEXT,
+            RR_RGBA(0xc8, 0xc8, 0xc8, 255));
   }
 }
 
@@ -220,7 +222,7 @@ static void draw_bottom(void) {
   if (!ui_space(UI_PHYS_BOTTOM)) return;
   rr_rect(0, 0, 320, 240, RR_RGBA(0x10, 0x10, 0x18, 255));
   ui_window(1, 1, 318, 24, WIN_NORMAL);
-  line(10, 5, "Capsule machine (preview)", TS_WINDOW, 0);
+  line(10, 5, C.live ? "Capsule machine" : "Capsule machine (preview)", TS_WINDOW, 0);
   char t[96];
   if (C.m.stage == CAP_SETTLED) {
     ui_window(1, LIST_Y - 6, 318, LIST_ROWS * ROW_H + 12, WIN_NORMAL);
@@ -238,14 +240,20 @@ static void draw_bottom(void) {
       snprintf(t, sizeof t, "%d more below", C.m.fx.n - C.scroll - LIST_ROWS);
       line(232, LIST_Y + LIST_ROWS * ROW_H + 8, t, TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
     }
-    line(10, 190, "These results were fixed before the machine ran.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xc8, 0xc8, 0xc8, 255));
+    if (C.live) {
+      line(10, 190, "These eggs were decided when you pulled.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xc8, 0xc8, 0xc8, 255));
+      line(10, 204, "They are stored with your other eggs.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xc8, 0xc8, 0xc8, 255));
+    } else {
+      line(10, 190, "These results were fixed before the machine ran.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xc8, 0xc8, 0xc8, 255));
+    }
     line(10, 224, "UP/DOWN: look   A: close", TS_INSTRUCTIONS_TEXT, 0);
     return;
   }
   draw_knob(C.m.knob * 6.2831853f);
   if (C.m.stage == CAP_IDLE) {
-    centred(160, 52, "Pull the knob to run the machine.", TS_WINDOW, 0);
-    centred(160, 76, "A preview with fixed results.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xc8, 0xc8, 0xc8, 255));
+    centred(160, 52, C.live ? "Pull the knob to see your eggs." : "Pull the knob to run the machine.", TS_WINDOW, 0);
+    centred(160, 76, C.live ? "They are paid for: nothing more is spent." : "A preview with fixed results.", TS_INSTRUCTIONS_TEXT,
+            RR_RGBA(0xc8, 0xc8, 0xc8, 255));
     line(10, 224, "A: pull   B: back", TS_INSTRUCTIONS_TEXT, 0);
   } else {
     centred(160, 52, "Here they come...", TS_WINDOW, 0);
@@ -269,6 +277,8 @@ bool capsule_screen_open(const caps_args* a) {
   cap_init(&C.m, a->fixture);
   C.a = *a;
   C.a.fixture = NULL; /* the model holds the copy */
+  C.live = a->live;
+  if (a->autoplay) cap_pull(&C.m); /* the player already accepted: nothing more to decide */
   ui_set(&g_screen);
   return true;
 }
