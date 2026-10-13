@@ -441,3 +441,11 @@ ability-lookup-host-test: $(BUILD)/ability_lookup_host_test
 $(BUILD)/ability_lookup_host_test: tests/ability_lookup_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
 .PHONY: ability-lookup-host-test
+
+all: $(BUILD)/form_lifecycle_host_test
+test: form-lifecycle-host-test
+form-lifecycle-host-test: $(BUILD)/form_lifecycle_host_test
+	$(BUILD)/form_lifecycle_host_test
+$(BUILD)/form_lifecycle_host_test: tests/form_lifecycle_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+.PHONY: form-lifecycle-host-test

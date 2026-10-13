@@ -3,10 +3,26 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+#include <limits.h>
 static char line[1024];static FILE *fp;
 static void bad(void){fputs("malformed ability lookup trace\n",stderr);exit(2);}
-static void read_line(void){if(!fgets(line,sizeof line,fp)||!strchr(line,'\n'))bad();}
-static bool valid_form(int species,int form){pr_pokemon p={0};p.species=species;const pr_species *s=pr_pokemon_species(&p);return s&&form>=0&&form<s->nforms;}
+static void read_line(void)
+{
+ if(!fgets(line,sizeof line,fp)||!strchr(line,'\n'))bad();
+ char *p=strchr(line,' '),*end;if(!p)bad();
+ while(*p){
+  while(*p==' '||*p=='\t'||*p=='\n')p++;
+  if(!*p)break;
+  char *digits=p;if(*digits=='-')digits++;
+  if(*digits<'0'||*digits>'9')bad();
+  errno=0;long long value=strtoll(p,&end,10);
+  if(errno||end==p||value<INT_MIN||value>INT_MAX||(*end&&*end!=' '&&*end!='\t'&&*end!='\n'))bad();
+  p=end;
+ }
+}
+
+static bool valid_form(int species,int form){if(species<1||species>UINT16_MAX)return false;pr_pokemon p={0};p.species=species;const pr_species *s=pr_pokemon_species(&p);return s&&form>=0&&form<s->nforms;}
 static bool ability(int a){return a>=-1&&a<PR_ABILITY_COUNT;}
 int main(int argc,char **argv){
  if(argc!=2||(fp=fopen(argv[1],"r"))==NULL)return 2;

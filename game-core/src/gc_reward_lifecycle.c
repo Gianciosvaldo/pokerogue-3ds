@@ -86,7 +86,7 @@ void gc_reward_change_form(gc_run *run, int party, int form)
     const pr_msg_arg pre_name = gc_m_mon(run,"preName",0,party);
     m->b.form = (uint8_t)form;
     const pr_form *f = gc_form(m->b.species, form);
-    const int count = f->ability_hidden ? 3 : f->ability2 ? 2 : 1;
+    const int count = f->ability_hidden ? 3 : 2;
     if (m->ability_index >= count) m->ability_index = count - 1;
     m->b.ability_index = (int8_t)m->ability_index;
     m->b.base_ability = (uint16_t)gc_form_ability(m->b.species, f, m->ability_index);
@@ -98,7 +98,8 @@ void gc_reward_change_form(gc_run *run, int party, int form)
         gc_system_set_pokemon_seen(run->sys, m, false, false);
         gc_system_set_pokemon_caught(run->sys, m, false, false);
     }
-    gc_mon_recalc(run, m);
+    pr_change_form_state(&run->bt, &m->b, form);
+    if (m->b.ability_lookup_known) m->ability_index = (uint8_t)m->b.ability_index;
     gc_ev_msg(run,"battlePokemonForm:formChange",1,pre_name);
     gc_event *ev = gc_ev_new(run, GC_EV_EVOLVED);
     if (ev) { ev->a = party; ev->b = m->b.species; ev->c = m->b.species; }

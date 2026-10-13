@@ -277,3 +277,7 @@ $(BUILD)/receiver-test: tests/receiver-test.c $(BUILD)/libprcore.a
 all: $(BUILD)/ability-lookup-test
 $(BUILD)/ability-lookup-test: tests/ability-lookup-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/form-lifecycle-test
+$(BUILD)/form-lifecycle-test: tests/form-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

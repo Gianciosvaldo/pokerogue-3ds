@@ -8,6 +8,8 @@
  * (next_summon_cb), which battle-core's own SwitchSummonPhase asks for. */
 #include "internal.h"
 
+static void sync_ability_indices(gc_run *run);
+
 static void note_unported(gc_run *run);
 static int next_summon_cb(pr_battle *bt, int trainer_slot, void *ctx);
 
@@ -242,6 +244,7 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
     bt->trainer_names[1] = run->trainer_names[GC_TNAME_PARTNER];
     if (!restoring) {
         pr_start_battle(bt, &run->eng);
+        sync_ability_indices(run);
         note_unported(run);
         gc_items_from_battle(run);
         gc_ev_battle(run);
@@ -601,10 +604,24 @@ static void note_revealed(gc_run *run)
     }
 }
 
+/* changeForm can clamp the battle actor's permanent abilityIndex. Keep the
+ * game-core bridge used by evolution, reward adapters and saves in step. */
+static void sync_ability_indices(gc_run *run)
+{
+    for (int side=0;side<2;side++) {
+        gc_mon *mons=side ? run->enemy : run->party;
+        int n=side ? run->n_enemy : run->n_party;
+        for (int i=0;i<n;i++)
+            if (mons[i].b.ability_lookup_known)
+                mons[i].ability_index=(uint8_t)mons[i].b.ability_index;
+    }
+}
+
 /* What the run keeps from a battle-core call (the turn, a switch pick, the rest of a turn, the start's answer) */
 static int engine_returned(gc_run *run)
 {
     gc_wallet_from_battle(run);
+    sync_ability_indices(run);
     note_unported(run);
     note_revealed(run);
     gc_items_from_battle(run);

@@ -96,6 +96,32 @@ void pr_refresh_ability(pr_pokemon *p)
     p->ability = pr_get_ability(p, false);
 }
 
+/* Core state portion of Pokemon.changeForm. Scene assets, seen/caught records
+ * and modifier inventory refresh remain with the owning game/phase caller. */
+void pr_change_form_state(pr_battle *bt, pr_pokemon *p, int form)
+{
+    const pr_species *species = pr_pokemon_species(p);
+    if (!species || form < 0 || form >= species->nforms) {
+        pr_note_unported(bt, PR_FEAT_FORM_CHANGE);
+        return;
+    }
+    p->form = (uint8_t)form;
+    if (p->ability_lookup_known) {
+        /* getAbilityCount returns two when there is no hidden ability, even
+         * when ability2 itself is NONE. It reads the effective species form. */
+        int count = pr_pokemon_form(p)->ability_hidden ? 3 : 2;
+        if (p->ability_index >= count) p->ability_index = (int8_t)(count - 1);
+        pr_refresh_ability(p);
+    }
+    if (p->terastallized && (pr_is_mega(p) || pr_is_max(p))) {
+        p->terastallized = false;
+        p->stellar_types_boosted = 0;
+        pr_form_change(bt, p, PR_FCT_SpeciesFormChangeLapseTeraTrigger);
+    }
+    pr_update_passive(bt, p);
+    pr_recalculate_stats(bt, p);
+}
+
 void pr_restore_transform(pr_pokemon *p)
 {
     p->transformed = false;
@@ -600,16 +626,16 @@ void pr_mega_evolve(pr_battle *bt, pr_pokemon *p)
     if (mega_form_idx < 0) return;
 
     pr_msg_arg pre_name_arg = pr_arg_pokemon(bt, "preName", p);
-    p->form = (uint8_t)mega_form_idx;
-
-    pr_recalculate_stats(bt, p);
+    pr_change_form_state(bt, p, mega_form_idx);
 
     const pr_form *mf = pr_pokemon_base_form(p);
-    p->base_ability = mf->ability1;
-    if (p->ability_override < 0) p->ability = mf->ability1;
+    if (!p->ability_lookup_known) {
+        p->base_ability = mf->ability1;
+        if (p->ability_override < 0) p->ability = mf->ability1;
+    }
 
     if (bt->engine) {
-        pr_queue_msg(bt, bt->engine, pr_msg1("battlePokemonForm:megaChange", pre_name_arg));
+        pr_queue_msg(bt, bt->engine, pr_msg2("battlePokemonForm:megaChange", pre_name_arg, pr_arg_pokemon_name(bt, "pokemonName", p)));
     }
 
     pr_ab_params gain = {.pokemon = p, .move = -1, .only = 1, .on_gain = true};

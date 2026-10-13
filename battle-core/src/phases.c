@@ -152,10 +152,7 @@ other_forms:
         bool is_revert = (target_form == 0 || (mon->species == SPECIES_ID_MINIOR && target_form < 7));
         pr_msg_arg pre_name_arg = pr_arg_pokemon(bt, "preName", mon);
 
-        mon->form = (uint8_t)target_form;
-
-        /* Recalculate stats with the new form's base stats */
-        pr_recalculate_stats(bt, mon);
+        pr_change_form_state(bt, mon, target_form);
 
         if (bt->engine) {
             pr_remove_tag(bt, bt->engine, mon, BATTLER_TAG_TYPE_AUTOTOMIZED);
@@ -2599,9 +2596,7 @@ static void quiet_form_change_phase(pr_battle *bt, pr_engine *e, int ph)
     pr_msg_arg pre = pr_arg_pokemon(bt, "preName", p);
     pr_ab_params pp = {.pokemon = p, .move = -1};
     pr_apply_ab_attrs(bt, PR_AC_PreLeaveFieldAbAttr, &pp);
-    p->form = (uint8_t)target;
-    pr_recalculate_stats(bt, p);
-    pr_update_passive(bt, p);
+    pr_change_form_state(bt, p, target);
     if (is_active_on_field(p)) {
         bool active_seen = false, passive_seen = false;
         for (int i = 0; i < p->n_form_change_abilities; i++) {
@@ -2609,19 +2604,32 @@ static void quiet_form_change_phase(pr_battle *bt, pr_engine *e, int ph)
             passive_seen |= p->form_change_abilities[i] == p->passive;
         }
         if (!active_seen || !passive_seen) {
-            if (p->n_form_change_abilities + 2 > 16) pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT);
+            bool add_passive = !passive_seen;
+            bool add_active = !active_seen && (passive_seen || p->ability != p->passive);
+            int needed = add_passive + add_active;
+            if (p->n_form_change_abilities + needed > 16) pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT);
             else {
-                if (!active_seen) p->form_change_abilities[p->n_form_change_abilities++] = p->ability;
-                if (!passive_seen) p->form_change_abilities[p->n_form_change_abilities++] = p->passive;
+                /* Source Set insertion: passive first, then active, no duplicate NONE. */
+                if (add_passive) p->form_change_abilities[p->n_form_change_abilities++] = p->passive;
+                if (add_active) p->form_change_abilities[p->n_form_change_abilities++] = p->ability;
                 pp.only = active_seen ? 2 : passive_seen ? 1 : 0;
                 pp.after_form_change = true;
                 pr_apply_ab_attrs(bt, PR_AC_PostSummonAbAttr, &pp);
             }
         }
     }
-    pr_show_text(bt, e, target == 0
-        ? pr_msg1("battlePokemonForm:revertChange", pr_arg_pokemon(bt, "pokemonName", p))
-        : pr_msg1("battlePokemonForm:formChange", pre));
+    const char *key = pr_pokemon_base_form(p)->form_key;
+    if (key && strstr(key, "mega"))
+        pr_show_text(bt, e, pr_msg2("battlePokemonForm:megaChange", pre, pr_arg_pokemon_name(bt, "pokemonName", p)));
+    else if (key && strstr(key, "gigantamax"))
+        pr_show_text(bt, e, pr_msg2("battlePokemonForm:gigantamaxChange", pre, pr_arg_pokemon_name(bt, "pokemonName", p)));
+    else if (key && strstr(key, "eternamax"))
+        pr_show_text(bt, e, pr_msg2("battlePokemonForm:eternamaxChange", pre, pr_arg_pokemon_name(bt, "pokemonName", p)));
+    else if (target == 0)
+        pr_show_text(bt, e, pr_msg1("battlePokemonForm:revertChange", pr_arg_pokemon(bt, "pokemonName", p)));
+    else if (p->ability == ABILITY_ID_DISGUISE)
+        pr_show_text(bt, e, pr_msg0("battlePokemonForm:disguiseChange"));
+    else pr_show_text(bt, e, pr_msg1("battlePokemonForm:formChange", pre));
     pr_remove_tag(bt, e, p, BATTLER_TAG_TYPE_AUTOTOMIZED);
 }
 

@@ -728,6 +728,7 @@ const pr_species *pr_pokemon_fusion_species(const pr_pokemon *p);
 bool pr_is_mega(const pr_pokemon *p);
 uint16_t pr_get_ability(const pr_pokemon *p, bool ignore_override);
 void pr_refresh_ability(pr_pokemon *p);
+void pr_change_form_state(pr_battle *bt, pr_pokemon *p, int form);
 bool pr_is_max(const pr_pokemon *p);
 void pr_mega_evolve(pr_battle *bt, pr_pokemon *p);
 void pr_dynamax(pr_battle *bt, pr_pokemon *p);
