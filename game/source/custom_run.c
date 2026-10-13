@@ -9,6 +9,7 @@
 #include "cc/scheduler.h"
 #include "profile_tx.h"
 #include "save.h"
+#include "system_data.h"
 
 /* ------------------------------------------------------------------ state */
 
@@ -42,6 +43,7 @@ static struct {
   /* rewards */
   cc_record_id reward_record;
   uint32_t reward_txn;
+  bool claim_pending;        /* a voucher is owed and the card refused its claim: tried again at the next wave */
   char msg[160];
   co_carry carry;            /* what cr_load found, until cr_begin_observer takes it */
   bool have_carry;
@@ -205,12 +207,26 @@ static bool settle_record(cc_record_id id, bool announce) {
     ptx_execute(pending, &res);
   }
   if (cs_reward_state(id) != CS_CLAIM_OWED) return cs_reward_state(id) == CS_CLAIM_REPLAYED;
+  /* The claim's recovery decides from the profile on the card: the card has to hold the profile as it is in memory when the claim begins,
+   * or a crash between the two would leave "the system data changed while a purchase was waiting" and block the wallet. (The run's
+   * dex entries and unlocks are in memory between its saves.) A card that refuses: the voucher stays owed and is tried again. */
+  if (!sysd_save()) {
+    R.claim_pending = true;
+    return false;
+  }
   uint32_t txn = 0;
-  if (ptx_begin_claim(id, &txn) != PTX_OK) return false;
+  if (ptx_begin_claim(id, &txn) != PTX_OK) {
+    R.claim_pending = true;
+    return false;
+  }
   ptx_result res;
   const ptx_exec x = ptx_execute(txn, &res);
-  if (x != PTX_X_DONE && x != PTX_X_DONE_APPLY_PENDING) return false;
+  if (x != PTX_X_DONE && x != PTX_X_DONE_APPLY_PENDING) {
+    R.claim_pending = true;
+    return false;
+  }
   if (res.outcome != PTX_R_DONE) return false;
+  R.claim_pending = false;
   R.st.claims++;
   R.reward_record = id;
   R.reward_txn = txn;
@@ -282,6 +298,10 @@ static bool hk_encounter(void* user, const struct gc_run* run, const gc_custom_e
   /* the battle before this wave is over: whatever it left unresolved is settled now (the enemy fell: won; anything else: lost) */
   if (R.rematch_live) write_result(R.enemy_down ? 1 : 2);
   retry_result();
+  if (R.claim_pending) {
+    R.claim_pending = false;
+    cr_settle_owed();
+  }
   R.cand.valid = false;
   R.enemy_down = false;
   R.rematch_enemy = false;

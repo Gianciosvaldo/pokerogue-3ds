@@ -265,6 +265,14 @@ build/gacha_screen_test: $(GS_OWN) build/ptx_core.a gacha_test_common.h
 gacha_screen_test: build/gacha_screen_test
 .PHONY: gacha_host_test gacha_screen_test
 
+# the optional Nemesis rematch of a custom run (task C10): custom_run.c over the real game-core run (through ptx_core.a), the real store,
+# profile_tx, run_saves and observer, with a mini driver that mirrors run_screen.c; make custom_run_test && build/custom_run_test [seeds]
+CR_OWN := custom_run_test.c ../source/custom_run.c ../source/custom_store.c ../source/profile_tx.c ../source/system_data.c ../source/run_saves.c ../source/combat_observer.c ../source/custom_core_build.c $(APP)/source/save.c
+build/custom_run_test: $(CR_OWN) build/ptx_core.a
+	$(CC) $(RUN_CPPFLAGS) -I$(GC)/src $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(CR_OWN) build/ptx_core.a -lm -o $@
+custom_run_test: build/custom_run_test
+.PHONY: custom_run_test
+
 # the custom content metadata on the SD card (custom_store.c + custom-core's codec, over the app's real save.c); make store_test && build/store_test
 STORE_SRCS := store_test.c ../source/custom_store.c ../source/custom_core_build.c $(APP)/source/save.c
 build/store_test: $(STORE_SRCS)
