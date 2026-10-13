@@ -998,7 +998,7 @@ static bool step(void) {
         const gc_mon* me = gc_field_mon(rs_run(), 0);
         int best = -1;
         for (int k = 0; me && k < n; k++) {
-          int pw = pr_moves[me->b.moves[ok[k]]].power;
+          int pw = pr_moves[PR_MOVES(&me->b)[ok[k]]].power;
           if (pw > best) best = pw, c.move_slot = ok[k];
         }
       }

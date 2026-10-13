@@ -1229,3 +1229,10 @@ seeds prove 8,000 actual phase cases and 8,000 full turns, including following
 turns using copied moves. See [validation and limits](TRANSFORM-VALIDATION.md).
 Natural doubles here prove the owning phase; broader doubles and unrelated
 ability/form/run prerequisites remain in the continuation audit.
+
+### Harvest and Cud Chew
+
+Berry histories, restoration, delayed repeat effects, Berry Pouch preservation,
+modifier refresh and legal save/inventory integration now follow the pinned
+source. See [BERRY-LIFECYCLE-VALIDATION.md](BERRY-LIFECYCLE-VALIDATION.md) for the
+8,000 complete-turn differential, bounds and separate validation gates.

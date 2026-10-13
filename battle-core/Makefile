@@ -262,3 +262,10 @@ $(BUILD)/beat-up-test: tests/beat-up-test.c tests/speed-boost-replay.inc $(BUILD
 all: $(BUILD)/beat-up-helper-test
 $(BUILD)/beat-up-helper-test: tests/beat-up-helper-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/berry-turn-test
+$(BUILD)/berry-turn-replay.inc: tests/speed-boost-replay.inc tools/build-berry-turn-proof.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-berry-turn-proof.py replay $@
+$(BUILD)/berry-turn-test: tests/berry-turn-test.c $(BUILD)/berry-turn-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/berry-turn-test.c $(BUILD)/libprcore.a -lm -o $@

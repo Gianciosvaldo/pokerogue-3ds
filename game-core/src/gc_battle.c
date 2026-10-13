@@ -194,6 +194,7 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
                 if (ev) { ev->a = 0; ev->b = i; }
             }
             run->party[i].b.on_field = false;
+            pr_reset_battle_data(&run->party[i].b);
             pr_reset_summon_data(&run->party[i].b);
             pr_reset_turn_data(&run->party[i].b);
         }

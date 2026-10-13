@@ -1543,6 +1543,68 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         return 1;
 
     /* ---- berries ---- */
+    case PR_AC_CudChewRecordBerryAbAttr: {
+        if (p->n_turn_berries > PR_MAX_BERRY_HISTORY) {pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return -1;}
+        GATE(true);
+        /* Pinned apply intentionally also runs during simulated dispatch. */
+        pr_pokemon *q = (pr_pokemon *)p;
+        q->n_last_berries = q->n_turn_berries;
+        memcpy(q->last_berries, q->turn_berries, q->n_last_berries);
+        return 1;
+    }
+    case PR_AC_CudChewConsumeBerryAbAttr: {
+        if (p->n_last_berries > PR_MAX_BERRY_HISTORY) {pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return -1;}
+        GATE(p->n_last_berries > 0);
+        if (!c->e) return -1;
+        pr_unshift_common_anim(bt, c->e, pr_battler_index(bt, p), pr_battler_index(bt, p), COMMON_ANIM_USE_ITEM);
+        for (int i = 0; i < p->n_last_berries; i++)
+            pr_berry_effect(bt, c->e, (pr_pokemon *)p, p->last_berries[i], NULL, NULL, NULL);
+        return 1;
+    }
+    case PR_AC_PostTurnRestoreBerryAbAttr: {
+        if (p->n_battle_berries > PR_MAX_BERRY_HISTORY) {pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return -1;}
+        int side = p->is_player ? 0 : 1;
+        uint8_t eligible[PR_MAX_BERRY_HISTORY];
+        int n = 0;
+        for (int i = 0; i < p->n_battle_berries; i++) {
+            int berry = p->battle_berries[i];
+            int cap = (berry <= BERRY_TYPE_ENIGMA || berry == BERRY_TYPE_LEPPA) ? 2 : 3;
+            bool capped = false;
+            for (int j = 0; j < bt->n_mods[side]; j++) {
+                const pr_modifier *m = &bt->mods[side][j];
+                if (m->cls == PR_MOD_BERRY && m->pokemon_id == (int64_t)p->id && m->berry_type == berry
+                    && pr_mod_get_stack_count(m) >= cap) capped = true;
+            }
+            if (!capped) eligible[n++] = (uint8_t)berry;
+        }
+        if (!n) return 0;
+        double pass = pr_rng_seed_float(&bt->rng);
+        double chance = pr_closure_call(bt, P(PostTurnRestoreBerryAbAttr, a)->procChance, a->cls, 0, p, NULL, -1);
+        GATE(chance >= pass);
+        if (pp->simulated) return 1;
+        if (!c->e) return -1;
+        int idx = pr_rng_seed_int(&bt->rng, n, 0), berry = eligible[idx];
+        pr_pokemon *q = (pr_pokemon *)p;
+        /* Pin splices the FILTERED index in the original list. Preserve that quirk. */
+        memmove(q->battle_berries + idx, q->battle_berries + idx + 1, q->n_battle_berries - idx - 1);
+        q->n_battle_berries--;
+        pr_modifier *restored = NULL;
+        for (int j = 0; j < bt->n_mods[side]; j++) {
+            pr_modifier *m = &bt->mods[side][j];
+            if (m->cls == PR_MOD_BERRY && m->pokemon_id == (int64_t)p->id && m->berry_type == berry) {restored = m; break;}
+        }
+        if (restored) restored->stack_count++;
+        else {
+            if (bt->n_mods[side] >= PR_MAX_MODIFIERS) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return -1; }
+            restored = &bt->mods[side][bt->n_mods[side]++];
+            *restored = (pr_modifier){.cls = PR_MOD_BERRY, .pokemon_id = p->id, .stack_count = 1, .berry_type = berry, .is_transferable = true};
+        }
+        pr_refresh_berry_modifiers(bt, side);
+        static const char *keys[] = {"berry:sitrus.name", "berry:lum.name", "berry:enigma.name", "berry:liechi.name", "berry:ganlon.name", "berry:petaya.name", "berry:apicot.name", "berry:salac.name", "berry:lansat.name", "berry:starf.name", "berry:leppa.name"};
+        if (berry < 0 || berry >= (int)(sizeof keys / sizeof keys[0])) return -1;
+        pr_queue_msg(bt, c->e, pr_msg2("abilityTriggers:postTurnLootCreateEatenBerry", pr_arg_pokemon(bt, "pokemonNameWithAffix", p), pr_arg_key("berryName", keys[berry])));
+        return 1;
+    }
     case PR_AC_ReduceBerryUseThresholdAbAttr:
         GATE(pr_has_ability_with_attr(bt, p, PR_AC_ReduceBerryUseThresholdAbAttr));
         if (pp->value) {

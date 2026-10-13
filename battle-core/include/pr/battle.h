@@ -9,6 +9,7 @@
 #include "pr_data.h"
 
 #define PR_MAX_UNPORTED 16
+#define PR_MAX_BERRY_HISTORY 128
 
 /* arena.terrainType (src/data/terrain.ts TerrainType; not part of the dumped enums) */
 enum { TERRAIN_NONE, TERRAIN_MISTY, TERRAIN_ELECTRIC, TERRAIN_GRASSY, TERRAIN_PSYCHIC };
@@ -88,6 +89,7 @@ enum {
     PR_MOD_INSTANT_REVIVE,          /* Reviver Seed; max held stack 1 */
     PR_MOD_DAMAGE_MONEY_REWARD,    /* Golden Punch */
     PR_MOD_MONEY_MULTIPLIER,       /* Amulet Coin dependency of damage money */
+    PR_MOD_PRESERVE_BERRY,          /* Berry Pouch; side-wide */
     PR_MOD_COUNT_
 };
 extern const uint8_t pr_mod_parent[PR_MOD_COUNT_];
@@ -284,6 +286,8 @@ typedef struct pr_pokemon {
     bool wave_endured;                 /* waveData.endured (EnemyEndureChanceModifier) */
     /* battleData */
     bool has_eaten_berry;              /* battleData.hasEatenBerry (Belch) */
+    uint8_t battle_berries[PR_MAX_BERRY_HISTORY], turn_berries[PR_MAX_BERRY_HISTORY], last_berries[PR_MAX_BERRY_HISTORY];
+    uint16_t n_battle_berries, n_turn_berries, n_last_berries;
     /* Task 53: Mega Evolution & Dynamax */
     bool queued_mega;
     bool queued_dynamax;
@@ -599,6 +603,10 @@ extern int pr_sitrus_berry_fired, pr_lum_berry_fired, pr_leppa_berry_fired;
 extern int pr_liechi_berry_fired, pr_ganlon_berry_fired, pr_petaya_berry_fired, pr_apicot_berry_fired, pr_salac_berry_fired;
 extern int pr_enigma_berry_fired, pr_lansat_berry_fired, pr_starf_berry_fired;
 bool pr_berry_should_apply(pr_battle *bt, const pr_pokemon *p, const pr_modifier *m);
+void pr_refresh_berry_modifiers(pr_battle *bt, int side);
+void pr_reset_battle_data(pr_pokemon *p);
+void pr_record_eaten_berry(pr_battle *bt, pr_pokemon *p, int berry, bool consumed);
+void pr_berry_effect(pr_battle *bt, struct pr_engine *e, pr_pokemon *p, int berry, int8_t *stats, int8_t *stages, int *n);
 void pr_apply_berry(pr_battle *bt, struct pr_engine *e, pr_pokemon *p, pr_modifier *m);
 void pr_apply_berry_ex(pr_battle *bt, struct pr_engine *e, pr_pokemon *p, pr_modifier *m, int8_t *ssc_stats, int8_t *ssc_stages, int *n_ssc);
 /* DamageMoneyRewardModifier.apply: called after player-to-enemy final damage. */

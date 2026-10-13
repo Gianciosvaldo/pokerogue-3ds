@@ -2515,6 +2515,7 @@ static void move_end_phase(pr_battle *bt, pr_engine *e, int ph)
 static void reset_turn_data(pr_pokemon *p)
 {
     p->n_form_change_abilities = 0;
+    p->n_turn_berries = 0;
     p->hit_count = 0;
     p->hits_left = -1;
     p->total_damage_dealt = p->single_hit_damage_dealt = p->damage_taken = 0;
@@ -2543,6 +2544,7 @@ static void revert_dynamax(pr_pokemon *p)
 
 static void reset_summon_data(pr_pokemon *p)
 {
+    p->n_last_berries = 0;
     pr_restore_transform(p);
     pr_break_illusion(p);
     revert_dynamax(p);
@@ -3000,7 +3002,8 @@ static void berry_phase(pr_battle *bt, pr_engine *e)
             }
         }
         if (!has_usable_berry) {
-            pr_hook_ab(bt, p, PR_AC_CudChewConsumeBerryAbAttr);
+            pr_ab_params chew={.pokemon=p,.move=-1};
+            pr_apply_ab_attrs(bt, PR_AC_CudChewConsumeBerryAbAttr, &chew);
             continue;
         }
 
@@ -3015,7 +3018,8 @@ static void berry_phase(pr_battle *bt, pr_engine *e)
             pr_msg msg = pr_msg1("abilityTriggers:preventBerryUse",
                                  pr_arg_pokemon(bt, "pokemonNameWithAffix", p));
             pr_queue_msg(bt, e, msg);
-            pr_hook_ab(bt, p, PR_AC_CudChewConsumeBerryAbAttr);
+            pr_ab_params chew={.pokemon=p,.move=-1};
+            pr_apply_ab_attrs(bt, PR_AC_CudChewConsumeBerryAbAttr, &chew);
             continue;
         }
 
@@ -3037,9 +3041,10 @@ static void berry_phase(pr_battle *bt, pr_engine *e)
             pr_unshift_stat_stage_change_ex(bt, e, pr_battler_index(bt, p), ssc_stats, ssc_stages, n_ssc, p, 0);
         }
 
+        pr_refresh_berry_modifiers(bt, side);
         pr_ab_params berry_callback={.pokemon=p,.move=-1};
         pr_apply_ab_attrs(bt,PR_AC_HealFromBerryUseAbAttr,&berry_callback);
-        pr_hook_ab(bt, p, PR_AC_CudChewConsumeBerryAbAttr);
+        pr_apply_ab_attrs(bt, PR_AC_CudChewConsumeBerryAbAttr, &berry_callback);
     }
 }
 
