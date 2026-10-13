@@ -117,4 +117,6 @@ See RECEIVER-VALIDATION.md. A temporary NONE ability on a transformed actor
 requires the source ability-index/custom-override lookup state; it remains an
 explicit prerequisite in the broader ability/form copying gate.
 
-Indexed ability lookup continuation: explicit index/custom/scene/daily and temporary fusion-form inputs now have an 8,000-case actual-source getter matrix and additive save coverage. See ABILITY-LOOKUP-VALIDATION.md. This closes transformed NONE lookup when metadata is supplied; historical actors with only concrete caches remain explicitly limited. The broader form lifecycle and copying-move slices remain open.
+Indexed ability lookup (merged #266): explicit index/custom/scene/daily and temporary fusion-form inputs now have an 8,000-case actual-source getter matrix and additive save coverage. See ABILITY-LOOKUP-VALIDATION.md. This closes transformed NONE lookup when metadata is supplied; historical actors with only concrete caches remain explicitly limited. The broader form lifecycle and copying-move slices remain open.
+
+Form-state continuation: ability-index clamping, ability/HP/stat refresh, major-form Tera reset and quiet callback-history/text semantics now have 8,000 actual source API cases plus 8,000 actual quiet-phase cases. See FORM-LIFECYCLE-VALIDATION.md. Native gain/loss combinations, fusion/Transform transitions, form eligibility, Battle Bond/Ash, Mega item choice and the Max caller are separate remaining contexts.
