@@ -8,22 +8,22 @@
 /* PokemonMove.getMovePp(): maxPpOverride, else pp + ppUp * toDmgValue(pp / 5) */
 static int move_max_pp(const pr_pokemon *p, int slot)
 {
-    if (p->max_pp_override[slot] > 0) return p->max_pp_override[slot];
-    int pp = pr_moves[p->moves[slot]].pp;
+    if (PR_MAX_PP(p)[slot] > 0) return PR_MAX_PP(p)[slot];
+    int pp = pr_moves[PR_MOVES(p)[slot]].pp;
     double step = floor(pp / 5.0);
-    return pp + p->pp_up[slot] * (int)(step > 1 ? step : 1);
+    return pp + PR_PP_UP(p)[slot] * (int)(step > 1 ? step : 1);
 }
 
 static bool out_of_pp(const pr_pokemon *p, int slot)
 {
     int max = move_max_pp(p, slot);
-    return max != -1 && p->pp_used[slot] >= max;
+    return max != -1 && PR_PP_USED(p)[slot] >= max;
 }
 
 static bool in_moveset(const pr_pokemon *p, int move)
 {
-    for (int i = 0; i < p->n_moves; i++)
-        if (p->moves[i] == move) return true;
+    for (int i = 0; i < PR_N_MOVES(p); i++)
+        if (PR_MOVES(p)[i] == move) return true;
     return false;
 }
 
@@ -129,7 +129,7 @@ bool pr_move_usable(pr_battle *bt, const pr_pokemon *p, int slot, bool ignore_pp
     pr_msg m = {0};
     if (why) *why = m;
     if (slot < 0 || slot >= 4) return false;
-    int move = p->moves[slot];
+    int move = PR_MOVES(p)[slot];
     if (move == MOVE_ID_NONE || pr_moves[move].unimplemented) {
         /* moveName.replace(" (N)", "") */
         if (why) *why = pr_msg1("battle:moveNotImplemented", pr_arg_move("moveName", move | PR_MSG_MOVE_BARE));
@@ -148,9 +148,9 @@ int pr_fight_move(pr_battle *bt, const pr_pokemon *p, int slot, bool ignore_pp, 
     if (why) *why = (pr_msg){0};
     if (slot == -1) return MOVE_ID_NONE;
     pr_msg reason;
-    if (slot < p->n_moves && pr_move_usable(bt, p, slot, ignore_pp, true, &reason)) return p->moves[slot];
-    if (slot >= p->n_moves) reason = pr_msg0("");               /* trySelectMove: no move there ("") */
-    for (int i = 0; i < p->n_moves; i++)
+    if (slot < PR_N_MOVES(p) && pr_move_usable(bt, p, slot, ignore_pp, true, &reason)) return PR_MOVES(p)[slot];
+    if (slot >= PR_N_MOVES(p)) reason = pr_msg0("");               /* trySelectMove: no move there ("") */
+    for (int i = 0; i < PR_N_MOVES(p); i++)
         if (pr_move_usable(bt, p, i, ignore_pp, true, NULL)) {
             if (why) *why = reason;
             return -1;

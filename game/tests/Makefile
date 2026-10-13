@@ -45,6 +45,12 @@ stat_banner_test: build/stat_banner_test
 
 # unit test for Mega/Dynamax/Gigantamax form animation states, event conversion, sprite keys, and scaling
 FORM_ANIM_SRCS := form_anim_test.c battle_setup.c ../source/battle_events.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+TRANSFORM_VISUAL_SRCS := transform_visual_test.c battle_setup.c ../source/battle_events.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+build/transform_visual_test: $(TRANSFORM_VISUAL_SRCS)
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) -I../gen -I../../assets-pipeline/app-src/include $(CFLAGS) $(TRANSFORM_VISUAL_SRCS) -lm -o $@
+transform_visual_test: build/transform_visual_test
+.PHONY: transform_visual_test
 build/form_anim_test: $(FORM_ANIM_SRCS)
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) -I../gen -I../../assets-pipeline/app-src/include $(CFLAGS) $(FORM_ANIM_SRCS) -lm -o $@

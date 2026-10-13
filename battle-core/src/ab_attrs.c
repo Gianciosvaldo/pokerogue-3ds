@@ -622,6 +622,25 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         pr_reset_status_phase(bt, c->e, (pr_pokemon *)p, false);
         return 1;
     }
+    case PR_AC_PostSummonTransformAbAttr: {                            /* Imposter */
+        const pr_pokemon *targets[2]; int n = 0;
+        for (int k = 0; k < 4; k++) {
+            const pr_pokemon *q = bt->field[k];
+            if (q && q->is_player != p->is_player && q->hp > 0 && q->on_field && !q->switch_out_status
+                && pr_can_transform_into(p, q)) targets[n++] = q;
+        }
+        if (!n) return 0;
+        /* canApply selects once; apply uses that target without another RNG draw. */
+        const pr_pokemon *target = targets[pr_battle_rand_seed_int(bt, n, 0)];
+        if (!c->e) return -1;
+        GATE(true);
+        int ph = pr_phase_new(c->e, PH_TRANSFORM, (int8_t)pr_battler_index(bt, p));
+        if (ph < 0) return -1;
+        c->e->pool[ph].transform_target = (int8_t)pr_battler_index(bt, target);
+        c->e->pool[ph].transform_sound = true;
+        pr_phase_unshift(bt, c->e, ph);
+        return 1;
+    }
     case PR_AC_PostVictoryStatStageChangeAbAttr: {
         /* Moxie/Neigh: fixed changes; Beast Boost/Eelevate: raw highest stat. */
         GATE(true);
@@ -848,7 +867,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
             const pr_pokemon *q = bt->field[k];
             if (!q || q->is_player == p->is_player || !(q->hp > 0 && q->on_field && !q->switch_out_status)) continue;
             opps[no++] = q;
-            any_moves |= q->n_moves > 0;
+            any_moves |= PR_N_MOVES(q) > 0;
         }
         if (!c->e) return -1;
         GATE(any_moves);
@@ -857,8 +876,8 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         int max_power = 0, n_at_max = 0;
         uint16_t at_max[4 * 4];                                         /* movesAtMaxPower's moves */
         for (int k = 0; k < no; k++)
-            for (int j = 0; j < opps[k]->n_moves; j++) {
-                int mv = opps[k]->moves[j];
+            for (int j = 0; j < PR_N_MOVES(opps[k]); j++) {
+                int mv = PR_MOVES(opps[k])[j];
                 if (!mv) continue;
                 int power = pr_moves[mv].category == MOVE_CATEGORY_STATUS ? 1
                             : pr_move_has_attr((uint16_t)mv, PR_AC_OneHitKOAttr) ? 150

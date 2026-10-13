@@ -47,6 +47,7 @@ typedef struct {
   bool hidden;               /* out of sight in the air, underground or underwater (upstream's
                               * pokemon.setVisible(false) from a SemiInvulnerableTag); the info
                               * box stays */
+  float sprite_scale;        /* getSpriteScale, which uses permanent form keys even after Transform */
 } bv_mon;
 
 typedef enum {
@@ -80,6 +81,7 @@ typedef enum {
                     * the Pokemon in, bounces and shakes b times. caught: the ball locks and the event ends with the Pokemon
                     * inside, for the messages and the enemy's withdraw that follow (the ball fades at that withdraw). Not
                     * caught: the ball breaks free after the shakes, the Pokemon is back whole and the ball fades */
+  BEV_TRANSFORM,   /* mon = temporary display; a = play Transform sound (Imposter) */
 } bev_type;
 
 typedef struct {

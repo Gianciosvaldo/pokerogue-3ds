@@ -37,11 +37,12 @@ bool gc_mon_allowed(const gc_mon *m) { return m->b.hp > 0; }
 static void init_common(gc_mon *m)
 {
     pr_pokemon *p = &m->b;
+    p->variant = m->variant;
     p->ability_override = -1;
     p->custom_passive = -1;
     p->status_toxic_turns = 0;
     p->status_sleep_turns = p->status_freeze_turns = -1;
-    for (int i = 0; i < 4; i++) p->max_pp_override[i] = -1;
+    for (int i = 0; i < 4; i++) PR_MAX_PP(p)[i] = -1;
     pr_reset_summon_data(p);
     pr_reset_turn_data(p);
 }
@@ -130,29 +131,25 @@ void gc_mon_set_move(gc_mon *m, int slot, int move)
 {
     pr_pokemon *p = &m->b;
     if (move == 0 || slot < 0 || slot > 3) return;
-    p->moves[slot] = (uint16_t)move;
-    p->pp_used[slot] = 0;
-    p->pp_up[slot] = 0;
-    p->max_pp_override[slot] = -1;
-    if (slot >= p->n_moves) p->n_moves = (uint8_t)(slot + 1);
+    pr_set_original_move(p, slot, (uint16_t)move);
 }
 
 /* PokemonMove.getMovePp(): maxPpOverride || pp + ppUp * toDmgValue(pp / 5) */
 int gc_move_max_pp(const pr_pokemon *p, int slot)
 {
-    if (p->max_pp_override[slot] > 0) return p->max_pp_override[slot];
-    int pp = pr_moves[p->moves[slot]].pp;
+    if (PR_MAX_PP(p)[slot] > 0) return PR_MAX_PP(p)[slot];
+    int pp = pr_moves[PR_MOVES(p)[slot]].pp;
     int step = pp / 5 < 1 ? 1 : pp / 5;
-    return pp + p->pp_up[slot] * step;
+    return pp + PR_PP_UP(p)[slot] * step;
 }
 
 /* PokemonMove.isUsable's PP and implementation checks (the move restrictions Disable, Taunt, Torment,
  * Imprison, Encore... are battle-core's CommandPhase work: not checked here yet) */
 bool gc_move_usable(const pr_pokemon *p, int slot, const char **why)
 {
-    if (slot < 0 || slot >= p->n_moves || !p->moves[slot]) { if (why) *why = ""; return false; }
-    if (pr_moves[p->moves[slot]].unimplemented) { if (why) *why = "battle:moveNotImplemented"; return false; }
-    if (p->pp_used[slot] >= gc_move_max_pp(p, slot)) { if (why) *why = "battle:moveNoPp"; return false; }
+    if (slot < 0 || slot >= PR_N_MOVES(p) || !PR_MOVES(p)[slot]) { if (why) *why = ""; return false; }
+    if (pr_moves[PR_MOVES(p)[slot]].unimplemented) { if (why) *why = "battle:moveNotImplemented"; return false; }
+    if (PR_PP_USED(p)[slot] >= gc_move_max_pp(p, slot)) { if (why) *why = "battle:moveNoPp"; return false; }
     return true;
 }
 
@@ -246,7 +243,7 @@ static bool conditions_fulfilled(gc_run *run, const gc_mon *m, const gc_evo *e)
             break;
         case GC_EVO_MOVE: ok = knows(p, c->v[0]); break;
         case GC_EVO_MOVE_TYPE:
-            for (int k = 0; k < p->n_moves; k++) ok |= p->moves[k] && pr_moves[p->moves[k]].type == c->v[0];
+            for (int k = 0; k < PR_N_MOVES(p); k++) ok |= PR_MOVES(p)[k] && pr_moves[PR_MOVES(p)[k]].type == c->v[0];
             break;
         case GC_EVO_PARTY_TYPE:
             for (int k = 0; k < run->n_party; k++) {
@@ -261,9 +258,9 @@ static bool conditions_fulfilled(gc_run *run, const gc_mon *m, const gc_evo *e)
         case GC_EVO_TYROGUE: {
             /* the first of Low Sweep, Mach Punch, Rapid Spin in the moveset is the one named */
             int first = 0;
-            for (int k = 0; k < p->n_moves && !first; k++)
-                if (p->moves[k] == MOVE_ID_LOW_SWEEP || p->moves[k] == MOVE_ID_MACH_PUNCH || p->moves[k] == MOVE_ID_RAPID_SPIN)
-                    first = p->moves[k];
+            for (int k = 0; k < PR_N_MOVES(p) && !first; k++)
+                if (PR_MOVES(p)[k] == MOVE_ID_LOW_SWEEP || PR_MOVES(p)[k] == MOVE_ID_MACH_PUNCH || PR_MOVES(p)[k] == MOVE_ID_RAPID_SPIN)
+                    first = PR_MOVES(p)[k];
             ok = first == c->v[0];
             break;
         }

@@ -316,9 +316,9 @@ static bv_mon make_mon(const gc_mon* m, bool player) {
 
 static void preload_moves(void) {
   for (int i = 0; i < G.run.n_party; i++)
-    for (int k = 0; k < G.run.party[i].b.n_moves; k++) ba_preload_move(G.run.party[i].b.moves[k]);
+    for (int k = 0; k < PR_N_MOVES(&G.run.party[i].b); k++) ba_preload_move(PR_MOVES(&G.run.party[i].b)[k]);
   for (int i = 0; i < G.run.n_enemy; i++)
-    for (int k = 0; k < G.run.enemy[i].b.n_moves; k++) ba_preload_move(G.run.enemy[i].b.moves[k]);
+    for (int k = 0; k < PR_N_MOVES(&G.run.enemy[i].b); k++) ba_preload_move(PR_MOVES(&G.run.enemy[i].b)[k]);
 }
 
 /* At black: the new wave's scene, and the intro events (already in G.ev up to the call) */
@@ -681,14 +681,14 @@ static bool resync_field(void) {
     if (send_out_foe()) return true;
   }
   const int idx = (int)(me - G.run.party);
-  if (G.present[0] && G.shown == idx && bv_mon_of(BV_PLAYER)->species == me->b.species) {
+  if (G.present[0] && G.shown == idx && bv_mon_of(BV_PLAYER)->species == pr_pokemon_form(&me->b)->species) {
     /* the same Pokemon: its HP and status are what the run says (battle-core doesn't make an event for every change, e.g.
      * a Disguise that busts as the battle ends; the converter catches up only while the battle goes on) */
     G.n_ev = G.ev_pos = G.n_txt = 0;
     for (int side = 0; side < 2; side++) {
       const gc_mon* m = gc_field_mon(&G.run, side);
       const bv_mon* sh = bv_mon_of(side ? BV_ENEMY : BV_PLAYER);
-      if (!m || !G.present[side] || sh->species != m->b.species) continue;
+      if (!m || !G.present[side] || sh->species != pr_pokemon_form(&m->b)->species) continue;
       const int battler = side ? BV_ENEMY : BV_PLAYER;
       if (m->b.hp > sh->hp)
         *ev_new() = (bv_event){.type = BEV_HEAL, .battler = battler, .a = m->b.hp};
@@ -729,10 +729,10 @@ static void ask(void) {
   const gc_mon* me = gc_field_mon(&G.run, 0);
   for (int i = 0; i < 4; i++) {
     o.move_ok[i] = s->move_ok[i];
-    if (!s->move_ok[i] && s->move_why[i] && me && i < me->b.n_moves) {
+    if (!s->move_ok[i] && s->move_why[i] && me && i < PR_N_MOVES(&me->b)) {
       char name[48];
       snprintf(name, sizeof name, "%s", i18n_species_name(me->b.species));
-      i18n_t(g_reason[i], sizeof g_reason[i], s->move_why[i], "moveName", i18n_move_name(me->b.moves[i]),
+      i18n_t(g_reason[i], sizeof g_reason[i], s->move_why[i], "moveName", i18n_move_name(PR_MOVES(&me->b)[i]),
              "pokemonNameWithAffix", name, "pokemonName", name, NULL);
       o.move_why[i] = g_reason[i];
     }

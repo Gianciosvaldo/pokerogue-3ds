@@ -7,6 +7,17 @@ BUILD ?= build
 SRCS := src/rng.c src/hooks.c src/pokemon.c src/damage.c src/move_attrs.c src/closures.c src/closures_moves.c src/closures_conditions.c src/ab_attrs.c src/closures_abilities.c src/modifiers.c src/tags.c src/battler_tags.c src/arena_tags.c src/history.c src/engine.c src/phases.c src/move_effects.c src/called_moves.c src/switching.c src/commands.c src/js_math.c src/text.c src/events.c gen/out/pr_data.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
+all: $(BUILD)/transform-test
+$(BUILD)/transform-test: tests/transform-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/transform-turn-test
+$(BUILD)/transform-turn-replay.inc: tests/speed-boost-replay.inc tools/build-transform-turn-proof.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-transform-turn-proof.py replay $@
+$(BUILD)/transform-turn-test: tests/transform-turn-test.c $(BUILD)/transform-turn-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/transform-turn-test.c $(BUILD)/libprcore.a -lm -o $@
+
 all: $(BUILD)/flee-phase-test
 $(BUILD)/flee-phase-test: tests/flee-phase-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

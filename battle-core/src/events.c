@@ -97,8 +97,9 @@ void pr_event_add(pr_battle *bt, pr_engine *e, int type, int battler, int target
         pr_event_field *f = &ev->field[i];
         f->party_slot = -1;
         if (!p) continue;
-        f->species = p->species;
-        f->form = p->form;
+        const pr_form *form = pr_pokemon_form(p);
+        f->species = form->species;
+        f->form = form->form_index;
         int side = i < 2 ? 0 : 1;
         for (int k = 0; k < bt->n_party[side]; k++)
             if (bt->party[side][k] == p) f->party_slot = (int8_t)k;
@@ -109,6 +110,25 @@ void pr_event_add(pr_battle *bt, pr_engine *e, int type, int battler, int target
         f->substitute = pr_get_battler_tag(p, BATTLER_TAG_TYPE_SUBSTITUTE) != NULL;
         /* SemiInvulnerableTag.onAdd hides the sprite, onRemove shows it again; leaveField hides it */
         f->visible = p->on_field && !pr_find_battler_tag_class(p, PR_TAGCLASS_SEMI_INVULNERABLE);
+        f->gender = (int8_t)pr_get_gender(p);
+        f->variant = p->variant;
+        f->sprite_scale = (float)pr_get_sprite_scale(p);
+        int8_t types[PR_MAX_TYPES]; int n = pr_get_types(p, types, 0);
+        for (int j = 0; j < n && j < 3; j++) f->types[f->n_types++] = types[j];
+    }
+    if (type == PR_EV_TRANSFORM && battler >= 0 && battler < 4 && bt->field[battler]) {
+        const pr_pokemon *p = bt->field[battler];
+        ev->transform.gender = (int8_t)pr_get_gender(p);
+        ev->transform.sprite_scale = (float)pr_get_sprite_scale(p);
+        int8_t types[PR_MAX_TYPES]; int n = pr_get_types(p, types, 0);
+        for (int i = 0; i < n && i < 3; i++) ev->transform.types[ev->transform.n_types++] = types[i];
+        memcpy(ev->transform.stat_stages, p->stat_stages, sizeof p->stat_stages);
+        ev->transform.n_moves = PR_N_MOVES(p);
+        for (int i = 0; i < PR_N_MOVES(p) && i < 4; i++) {
+            ev->transform.moves[i] = PR_MOVES(p)[i];
+            ev->transform.pp_max[i] = PR_MAX_PP(p)[i] > 0 ? PR_MAX_PP(p)[i] : pr_moves[PR_MOVES(p)[i]].pp;
+            ev->transform.pp_left[i] = ev->transform.pp_max[i] - PR_PP_USED(p)[i];
+        }
     }
 }
 

@@ -1213,3 +1213,19 @@ pass. The original game-core differential remains unchanged and passing.
 See [validation and scope](FLEE-PHASE-VALIDATION.md). Full doubles turns, broader
 leave-field abilities, challenge rules, wide levels and stat-modifier ordering
 remain separate. Ditto/Transform is the user's next implementation priority.
+
+## Ditto, Transform and Imposter (2026-10-12)
+
+The move and ability share the real transformation phase. Temporary form,
+ability, gender, stats, stages, types and moves retain the user's permanent
+identity and HP. Copied PP is independently consumed and capped at five (Sketch
+one); switching/fainting/reset discard the copy. Imposter randomly selects one
+eligible opposing Pokemon, preserving the pinned fusion/illusion/Substitute
+restrictions. The renderer and hashed saves carry the effective sprite state
+without losing original moves, PP or shiny identity.
+
+Run `tools/transform-diff.sh /path/to/pinned/upstream 2000 SEED`; the four retained
+seeds prove 8,000 actual phase cases and 8,000 full turns, including following
+turns using copied moves. See [validation and limits](TRANSFORM-VALIDATION.md).
+Natural doubles here prove the owning phase; broader doubles and unrelated
+ability/form/run prerequisites remain in the continuation audit.

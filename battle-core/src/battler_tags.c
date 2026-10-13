@@ -142,11 +142,11 @@ static bool active_on_field(const pr_pokemon *p)
  * !m.isOutOfPp())), -1 when none; isOutOfPp: getMovePp() !== -1 && ppUsed >= getMovePp() */
 int pr_moveset_slot_with_pp(const pr_pokemon *p, int move)
 {
-    for (int s = 0; s < p->n_moves; s++) {
-        if (p->moves[s] != move) continue;
+    for (int s = 0; s < PR_N_MOVES(p); s++) {
+        if (PR_MOVES(p)[s] != move) continue;
         double step = floor(pr_moves[move].pp / 5.0);                     /* toDmgValue(pp / 5) */
-        int max = p->max_pp_override[s] > 0 ? p->max_pp_override[s] : pr_moves[move].pp + p->pp_up[s] * (int)(step < 1 ? 1 : step);
-        if (max == -1 || p->pp_used[s] < max) return s;
+        int max = PR_MAX_PP(p)[s] > 0 ? PR_MAX_PP(p)[s] : pr_moves[move].pp + PR_PP_UP(p)[s] * (int)(step < 1 ? 1 : step);
+        if (max == -1 || PR_PP_USED(p)[s] < max) return s;
     }
     return -1;
 }
@@ -1457,14 +1457,14 @@ void pr_grudge_lapse(pr_battle *bt, pr_engine *e, pr_pokemon *fainted, pr_pokemo
     bool unknown;
     const pr_turn_move *last = pr_last_non_virtual_move(bt, source, false, true, &unknown);
     if (!last || last->move == MOVE_ID_STRUGGLE) return;
-    for (int s = 0; s < source->n_moves; s++) {
-        if (source->moves[s] != last->move) continue;
-        int move = source->moves[s];
+    for (int s = 0; s < PR_N_MOVES(source); s++) {
+        if (PR_MOVES(source)[s] != last->move) continue;
+        int move = PR_MOVES(source)[s];
         double step = floor(pr_moves[move].pp / 5.0);
-        int max = source->max_pp_override[s] > 0 ? source->max_pp_override[s]
-                  : pr_moves[move].pp + source->pp_up[s] * (int)(step < 1 ? 1 : step);
-        int used = source->pp_used[s] + (max - source->pp_used[s]);   /* usePp(remaining) */
-        source->pp_used[s] = (uint8_t)(used > max ? max : used);
+        int max = PR_MAX_PP(source)[s] > 0 ? PR_MAX_PP(source)[s]
+                  : pr_moves[move].pp + PR_PP_UP(source)[s] * (int)(step < 1 ? 1 : step);
+        int used = PR_PP_USED(source)[s] + (max - PR_PP_USED(source)[s]);   /* usePp(remaining) */
+        PR_PP_USED(source)[s] = (uint8_t)(used > max ? max : used);
         pr_queue_msg(bt, e, pr_msg2("battlerTags:grudgeLapse", pr_arg_pokemon(bt, "pokemonNameWithAffix", source),
                                     pr_arg_move("moveName", move)));   /* movesetMove.getName() */
         return;
@@ -1660,7 +1660,7 @@ void pr_transfer_summon(pr_battle *bt, pr_pokemon *to, const pr_pokemon *from)
         const pr_battler_tag *t = &from->tags[i];
         bool pass = pr_battler_tags_info[t->type].baton;
         if (t->type == BATTLER_TAG_TYPE_TELEKINESIS && to->species == SPECIES_ID_GENGAR) {
-            const char *fk = pr_pokemon_form(to)->form_key;
+            const char *fk = pr_pokemon_base_form(to)->form_key;
             pass = !(fk && (!strcmp(fk, "mega") || !strcmp(fk, "gigantamax")));
         }
         if (!pass) continue;

@@ -411,7 +411,7 @@ void pr_apply_enemy_endure_modifiers(pr_battle *bt, pr_engine *e, pr_pokemon *ta
 /* Pokemon.isMax(): Gigantamax / Eternamax forms (fusion form keys not ported) */
 static bool is_max(const pr_pokemon *p)
 {
-    const char *k = pr_pokemon_form(p)->form_key;
+    const char *k = pr_pokemon_base_form(p)->form_key;
     return !strcmp(k, "gigantamax") || !strcmp(k, "gigantamax-rapid") || !strcmp(k, "gigantamax-single")
            || !strcmp(k, "eternamax");
 }
@@ -432,14 +432,14 @@ int pr_enigma_berry_fired = 0, pr_lansat_berry_fired = 0, pr_starf_berry_fired =
 
 static int pr_pokemon_move_max_pp(const pr_pokemon *p, int s)
 {
-    if (s < 0 || s >= p->n_moves) return 0;
-    int move = p->moves[s];
+    if (s < 0 || s >= PR_N_MOVES(p)) return 0;
+    int move = PR_MOVES(p)[s];
     if (move <= 0 || move >= PR_MOVE_COUNT) return 0;
-    int ovr = p->max_pp_override[s];
+    int ovr = PR_MAX_PP(p)[s];
     if (ovr >= 0) return ovr;
     int base = pr_moves[move].pp;
     if (base <= 0) return 0;
-    return base + (base * p->pp_up[s]) / 5;
+    return base + (base * PR_PP_UP(p)[s]) / 5;
 }
 
 static double get_hp_ratio(const pr_pokemon *p)
@@ -470,9 +470,9 @@ bool pr_berry_should_apply(pr_battle *bt, const pr_pokemon *p, const pr_modifier
         double hp_ratio_req = 0.25;
         pr_ab_params pp = {.pokemon = (pr_pokemon *)p, .move = -1, .value = &hp_ratio_req};
         pr_apply_ab_attrs((pr_battle *)bt, PR_AC_ReduceBerryUseThresholdAbAttr, &pp);
-        for (int i = 0; i < p->n_moves; i++) {
+        for (int i = 0; i < PR_N_MOVES(p); i++) {
             int max_pp = pr_pokemon_move_max_pp(p, i);
-            if (max_pp > 0 && p->pp_used[i] >= max_pp) return true;
+            if (max_pp > 0 && PR_PP_USED(p)[i] >= max_pp) return true;
         }
         return false;
     }
@@ -550,27 +550,27 @@ void pr_apply_berry_ex(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_modifier *
     case BERRY_TYPE_LEPPA: {
         pr_leppa_berry_fired++;
         int slot = -1;
-        for (int i = 0; i < p->n_moves; i++) {
+        for (int i = 0; i < PR_N_MOVES(p); i++) {
             int max_pp = pr_pokemon_move_max_pp(p, i);
-            if (max_pp > 0 && p->pp_used[i] >= max_pp) {
+            if (max_pp > 0 && PR_PP_USED(p)[i] >= max_pp) {
                 slot = i;
                 break;
             }
         }
         if (slot < 0) {
-            for (int i = 0; i < p->n_moves; i++) {
+            for (int i = 0; i < PR_N_MOVES(p); i++) {
                 int max_pp = pr_pokemon_move_max_pp(p, i);
-                if (max_pp > 0 && p->pp_used[i] > 0) {
+                if (max_pp > 0 && PR_PP_USED(p)[i] > 0) {
                     slot = i;
                     break;
                 }
             }
         }
         if (slot >= 0) {
-            p->pp_used[slot] = p->pp_used[slot] > 10 ? p->pp_used[slot] - 10 : 0;
+            PR_PP_USED(p)[slot] = PR_PP_USED(p)[slot] > 10 ? PR_PP_USED(p)[slot] - 10 : 0;
             pr_msg msg = pr_msg3("battle:ppHealBerry",
                                  pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
-                                 pr_arg_move("moveName", p->moves[slot]),
+                                 pr_arg_move("moveName", PR_MOVES(p)[slot]),
                                  pr_arg_key("berryName", "berry:leppa.name"));
             pr_queue_msg(bt, e, msg);
         }

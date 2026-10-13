@@ -35,6 +35,7 @@ typedef enum {
      * the turn is reported unported */
     PH_QUIET_FORM_CHANGE,
     PH_DANCER, PH_TERA,
+    PH_TRANSFORM,              /* appended: keep existing phase identifiers stable */
     PH_COUNT_
 } pr_phase_type;
 #define PH_FIRST_UNPORTED PH_TERA
@@ -46,6 +47,7 @@ typedef struct {
     uint16_t id;
     int8_t slot;               /* moveset index, -1 = detached */
     uint8_t pp_used;           /* detached only */
+    bool from_transform;      /* selected PokemonMove belonged to summonData.moveset */
 } pr_move_ref;
 
 typedef struct pr_phase {
@@ -110,6 +112,8 @@ typedef struct pr_phase {
      * PokemonAnimType, DamageAnimPhase's amount, result and critical flag, MoveAnimPhase's move */
     uint16_t anim;
     int8_t anim_target;
+    int8_t transform_target;
+    bool transform_sound;
     int32_t anim_amount;
     uint8_t anim_result;
     bool anim_critical;

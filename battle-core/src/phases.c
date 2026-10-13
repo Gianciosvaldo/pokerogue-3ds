@@ -203,7 +203,7 @@ static int move_pp(const pr_move *m, int pp_up, int max_pp_override)
 
 static int ref_pp_used(const pr_phase *ph)
 {
-    return ph->move.slot >= 0 ? ph->pokemon->pp_used[ph->move.slot] : ph->move.pp_used;
+    return ph->move.slot >= 0 ? (ph->move.from_transform ? ph->pokemon->transform_pp_used : ph->pokemon->pp_used)[ph->move.slot] : ph->move.pp_used;
 }
 
 static int ref_move_pp(const pr_phase *ph)
@@ -211,7 +211,8 @@ static int ref_move_pp(const pr_phase *ph)
     const pr_move *m = &pr_moves[ph->move.id];
     if (ph->move.slot < 0) return move_pp(m, 0, 0);
     int s = ph->move.slot;
-    return move_pp(m, ph->pokemon->pp_up[s], ph->pokemon->max_pp_override[s]);
+    return move_pp(m, ph->move.from_transform ? ph->pokemon->transform_pp_up[s] : ph->pokemon->pp_up[s],
+                   ph->move.from_transform ? ph->pokemon->transform_max_pp_override[s] : ph->pokemon->max_pp_override[s]);
 }
 
 /* pokemonMove.usePp(count): ppUsed = min(ppUsed + count, getMovePp()) */
@@ -219,7 +220,7 @@ static void ref_use_pp(pr_phase *ph, int count)
 {
     int v = ref_pp_used(ph) + count, max = ref_move_pp(ph);
     if (v > max) v = max;
-    if (ph->move.slot >= 0) ph->pokemon->pp_used[ph->move.slot] = (uint8_t)v;
+    if (ph->move.slot >= 0) (ph->move.from_transform ? ph->pokemon->transform_pp_used : ph->pokemon->pp_used)[ph->move.slot] = (uint8_t)v;
     else ph->move.pp_used = (uint8_t)v;
 }
 
@@ -313,6 +314,7 @@ int pr_unshift_move_phase(pr_battle *bt, pr_engine *e, pr_pokemon *p, int move, 
     m->pokemon = p;
     m->move.id = (uint16_t)move;
     m->move.slot = (int8_t)slot;
+    m->move.from_transform = p->transformed;
     m->move.pp_used = 0;
     m->use_mode = (uint8_t)use_mode;
     m->timing = (uint8_t)timing;
@@ -475,9 +477,9 @@ static void handle_fight_command(pr_battle *bt, pr_engine *e, pr_pokemon *p, int
      * own targets there: NONE targets the user) */
     /* moveset.find(m => m.moveId === queuedMove.move && m.ppUsed < m.getMovePp()) ?? new PokemonMove */
     int slot = -1;
-    for (int k = 0; k < p->n_moves; k++)
-        if (p->moves[k] == c->move
-            && p->pp_used[k] < move_pp(&pr_moves[c->move], p->pp_up[k], p->max_pp_override[k])) {
+    for (int k = 0; k < PR_N_MOVES(p); k++)
+        if (PR_MOVES(p)[k] == c->move
+            && PR_PP_USED(p)[k] < move_pp(&pr_moves[c->move], PR_PP_UP(p)[k], PR_MAX_PP(p)[k])) {
             slot = k;
             break;
         }
@@ -488,6 +490,7 @@ static void handle_fight_command(pr_battle *bt, pr_engine *e, pr_pokemon *p, int
             PH(h)->pokemon = p;
             PH(h)->move.id = c->move;
             PH(h)->move.slot = (int8_t)slot;
+            PH(h)->move.from_transform = p->transformed;
             PH(h)->move.pp_used = 0;
         }
         pr_phase_unshift(bt, e, h);
@@ -498,6 +501,7 @@ static void handle_fight_command(pr_battle *bt, pr_engine *e, pr_pokemon *p, int
     m->pokemon = p;
     m->move.id = c->move;
     m->move.slot = (int8_t)slot;
+    m->move.from_transform = p->transformed;
     m->move.pp_used = 0;
     m->use_mode = c->use_mode;
     /* turnCommand.targets ?? queuedMove.targets: the command's own array */
@@ -1169,7 +1173,7 @@ static void resolve_redirect_target(pr_battle *bt, pr_engine *e, int ph)
         redirect = current;
         /* passive: getPassiveAbility().hasAttr(...), the species' passive whether unlocked or not */
         const pr_pokemon *u = m->pokemon;
-        int pa = u->custom_passive >= 0 ? u->custom_passive : pr_pokemon_form(u)->passive;
+        int pa = u->custom_passive >= 0 ? u->custom_passive : pr_pokemon_base_form(u)->passive;
         bool passive = pr_ability_first_attr((uint16_t)pa, PR_AC_BlockRedirectAbAttr) != NULL;
         pr_queue_ability_display(bt, e, u, passive, true);
         pr_queue_ability_display(bt, e, u, passive, false);
@@ -1369,7 +1373,7 @@ static void move_phase(pr_battle *bt, pr_engine *e, int ph)
      * the old targets array) */
     int encore_slot = pr_encore_try_override(user);
     if (encore_slot >= 0) {
-        int move = user->moves[encore_slot];
+        int move = PR_MOVES(user)[encore_slot];
         int8_t tg[4], mt[4];
         int n = 1;
         if (pr_moves[move].target == MOVE_TARGET_USER_OR_NEAR_ALLY) {
@@ -1393,6 +1397,7 @@ static void move_phase(pr_battle *bt, pr_engine *e, int ph)
         if (m->entry_targets == -2) m->entry_targets = m->targets;
         m->move.id = (uint16_t)move;
         m->move.slot = (int8_t)encore_slot;
+        m->move.from_transform = user->transformed;
         m->move.pp_used = 0;
         m->targets = (int8_t)pr_targets_new(e, tg, n);
     }
@@ -2538,6 +2543,7 @@ static void revert_dynamax(pr_pokemon *p)
 
 static void reset_summon_data(pr_pokemon *p)
 {
+    pr_restore_transform(p);
     pr_break_illusion(p);
     revert_dynamax(p);
     p->queued_mega = p->queued_dynamax = false;
@@ -3557,7 +3563,7 @@ static void pokemon_heal_phase(pr_battle *bt, pr_engine *e, int ph)
         reset_status_as_phase(bt, e, p, true, false);
     }
     if (f & PR_HEAL_RESTORE_PP)
-        for (int i = 0; i < p->n_moves; i++) p->pp_used[i] = 0;
+        for (int i = 0; i < PR_N_MOVES(p); i++) PR_PP_USED(p)[i] = 0;
     if (message) pr_queue_msg(bt, e, text);
 }
 
@@ -3690,6 +3696,49 @@ static void toggle_double_position_phase(pr_battle *bt)
     }
 }
 
+/* PokemonTransformPhase.start: callers check eligibility when they queue this phase.
+ * The phase only guards a disappeared target; it does not repeat that condition. */
+static void transform_phase(pr_battle *bt, pr_engine *e, int ph)
+{
+    pr_phase *phase = PH(ph);
+    pr_pokemon *user = phase->battler >= 0 && phase->battler < 4 ? bt->field[phase->battler] : NULL;
+    pr_pokemon *target = phase->transform_target >= 0 && phase->transform_target < 4 ? bt->field[phase->transform_target] : NULL;
+    if (!target) return;
+    if (!user) { pr_note_unported(bt, PR_FEAT_PARTY); return; }
+    const pr_form *form = pr_pokemon_form(target);
+    int target_count = PR_N_MOVES(target);
+    uint16_t copied_moves[4];
+    memcpy(copied_moves, PR_MOVES(target), sizeof copied_moves);
+    int target_gender = pr_get_gender(target);
+    user->transformed = true;
+    user->transform_species = form->species;
+    user->transform_form = form->form_index;
+    user->ability_override = user->ability = target->ability;
+    user->transform_gender = (int8_t)target_gender;
+    pr_remove_tag(bt, e, user, BATTLER_TAG_TYPE_POWER_TRICK);
+    for (int s = STAT_ATK; s <= STAT_SPD; s++) user->summon_stats[s] = pr_get_stat(target, s, false);
+    memcpy(user->stat_stages, target->stat_stages, sizeof user->stat_stages);
+    user->transform_n_moves = (uint8_t)target_count;
+    for (int i = 0; i < 4; i++) {
+        user->transform_moves[i] = i < target_count ? copied_moves[i] : 0;
+        user->transform_pp_used[i] = user->transform_pp_up[i] = 0;
+        int pp = pr_moves[user->transform_moves[i]].pp;
+        user->transform_max_pp_override[i] = i < target_count && user->transform_moves[i] ? (pp < 5 ? pp : 5) : -1;
+    }
+    int8_t types[PR_MAX_TYPES];
+    int n = pr_get_types(target, types, PR_TYPES_NO_TERA);
+    pr_set_summon_types(bt, user, types, n);
+    /* The source names target.name, not its illusion's rendered name. */
+    pr_msg_arg target_name = {"targetName", PR_ARG_POKEMON_NAME,
+        pr_msg_pokemon(target->species, target->form, 0), NULL};
+    pr_queue_msg(bt, e, pr_msg2("abilityTriggers:postSummonTransform",
+        pr_arg_pokemon(bt, "pokemonNameWithAffix", user), target_name));
+    pr_event_add(bt, e, PR_EV_TRANSFORM, phase->battler, phase->transform_target, 0, phase->transform_sound, NULL);
+    /* Source assigns the copied ability first, then runs setTempAbility after
+     * loadAssets resolves. In the headless engine the visual event is the boundary. */
+    pr_set_temp_ability(bt, user, target->ability);
+}
+
 void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
 {
     switch (PH(ph)->type) {
@@ -3736,6 +3785,7 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_OBTAIN_STATUS_EFFECT: obtain_status_effect_phase(bt, e, ph); break;
     case PH_MOVE_CHARGE: move_charge_phase(bt, e, ph); break;
     case PH_ATTEMPT_RUN: attempt_run_phase(bt, e, ph); break;
+    case PH_TRANSFORM: transform_phase(bt, e, ph); break;
     case PH_MOVE_HEADER: move_header_phase(bt, e, ph); break;
     case PH_POKEMON_HEAL: pokemon_heal_phase(bt, e, ph); break;
     case PH_SWITCH_SUMMON: pr_switch_summon_phase(bt, e, ph); break;
