@@ -588,33 +588,35 @@ static void draw_fight_menu(void) {
     img_draw("images/categories", gm_enum_lower(GM_E_MOVE_CATEGORY, pm->category, fr, sizeof fr), 1 + 320 - 25, -36,
              0.5f, 0.5f);
   }
+  /* upstream draws these at 56 canvas px of the emerald font (about 9 px here), which is unreadable at 1:1 on the 3DS; the 8 px pixel
+   * font (TS_MOVE_LABEL, the party screen's move labels) says the same words and numbers legibly in the same places. */
   text_opts lo = text_defaults();
   lo.origin_y = 0.5f;
   text_opts ro = text_defaults();
   ro.origin_x = 1;
   ro.origin_y = 0.5f;
   char s[32];
-  text_draw(TS_MOVE_INFO_CONTENT, 1 + 320 - 70, -26, i18n_t(s, sizeof s, "fightUiHandler:pp", NULL), &lo);
-  text_draw(TS_MOVE_INFO_CONTENT, 1 + 320 - 70, -18, i18n_t(s, sizeof s, "fightUiHandler:power", NULL), &lo);
-  text_draw(TS_MOVE_INFO_CONTENT, 1 + 320 - 70, -10, i18n_t(s, sizeof s, "fightUiHandler:accuracy", NULL), &lo);
+  text_draw(TS_MOVE_LABEL, 1 + 320 - 70, -26, i18n_t(s, sizeof s, "fightUiHandler:pp", NULL), &lo);
+  text_draw(TS_MOVE_LABEL, 1 + 320 - 70, -18, i18n_t(s, sizeof s, "fightUiHandler:power", NULL), &lo);
+  text_draw(TS_MOVE_LABEL, 1 + 320 - 70, -10, i18n_t(s, sizeof s, "fightUiHandler:accuracy", NULL), &lo);
   int left = m->pp_left[B.move_cursor], max = m->pp_max[B.move_cursor];
   snprintf(s, sizeof s, "%2d/%2d", left, max);
   text_style ps = pp_style(left, max);
   text_opts po = ro;
   po.color = text_color(ps, false);
   po.shadow = text_color(ps, true);
-  text_draw(TS_MOVE_INFO_CONTENT, 1 + 320 - 12, -26, s, &po);
+  text_draw(TS_MOVE_LABEL, 1 + 320 - 12, -26, s, &po);
   if (pm) {
     if (pm->power >= 0)
       snprintf(s, sizeof s, "%d", pm->power);
     else
       snprintf(s, sizeof s, "---");
-    text_draw(TS_MOVE_INFO_CONTENT, 1 + 320 - 12, -18, s, &ro);
+    text_draw(TS_MOVE_LABEL, 1 + 320 - 12, -18, s, &ro);
     if (pm->accuracy >= 0)
       snprintf(s, sizeof s, "%d", pm->accuracy);
     else
       snprintf(s, sizeof s, "---");
-    text_draw(TS_MOVE_INFO_CONTENT, 1 + 320 - 12, -10, s, &ro);
+    text_draw(TS_MOVE_LABEL, 1 + 320 - 12, -10, s, &ro);
   }
 }
 
