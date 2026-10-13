@@ -2,6 +2,7 @@
 #ifndef GC_INTERNAL_H
 #define GC_INTERNAL_H
 #include "gc/run.h"
+#include "gc/custom.h"
 #include "gc/ports.h"
 #include "gc/data.h"
 #include "pr/ai.h"
@@ -39,6 +40,7 @@ enum {
     RP_MYSTERY,          /* MysteryEncounterPhase: a = selected type, b = selected tier */
     RP_REWARD_FORM,      /* bounded FormChangePhase: a = storage party index, b = target form */
     RP_ME_POST,          /* PostMysteryEncounterPhase's onPostOptionPhase: a = encounter type, b = party index, c = option */
+    RP_CUSTOM_OFFER,     /* custom content: the app's rematch offer, waits on CUSTOM_OFFER (gc/custom.h) */
     RP_COUNT_
 };
 typedef struct { uint8_t type; int32_t a, b, c; double d; const char *key; } gc_rphase;
@@ -95,6 +97,11 @@ typedef struct {
     uint8_t name_ring, name_exact[3];
     char name_text[3][GC_TNAME_COUNT_][128];
     char name_arg[3][GC_TNAME_COUNT_][72];
+    /* custom content (gc/custom.h): the app's hooks (not saved, the app installs them again after a load) and the offer a wave is waiting on */
+    const gc_custom_hooks *custom;
+    bool custom_offering, custom_offer_reset, custom_offer_new_biome;
+    uint16_t enemy_start_species[6];   /* the enemy party's species and forms when the battle began (gc_custom_actor.start_*); not saved */
+    uint8_t enemy_start_form[6];
 } gc_internal;
 gc_internal *gc_int(gc_run *run);
 
@@ -217,6 +224,13 @@ double gc_apply_exp_boosters(const gc_run *run, double exp);          /* ExpBoos
 
 /* ---- the encounter and the battle (src/gc_encounter.c, src/gc_battle.c) ---- */
 void gc_new_battle(gc_run *run);                  /* NewBattlePhase + EncounterPhase */
+void gc_new_battle_start(gc_run *run, bool reset, bool new_biome);   /* the part of EncounterPhase from the save point on (after a custom offer) */
+/* custom hooks (src/gc_custom.c) */
+void gc_custom_install_observer(gc_run *run);                        /* puts the faint observer into the battle when hooks want it */
+bool gc_custom_report(gc_run *run, const gc_custom_encounter *enc);  /* encounter(): true = the player is asked */
+void gc_custom_answer(gc_run *run, bool accept);                     /* the player's answer: builds the enemy for an accept, then the battle starts */
+bool gc_custom_build_enemy(gc_run *run, const gc_custom_enemy *spec, const char **why);   /* the ordinary enemy replaced by spec's identity */
+void gc_enemy_finish_party(gc_run *run);                             /* passives, stats, seen flags, items, AI, trainer names of the enemy party */
 /* Task 45: getMysteryEncounter() inside executeWithSeedOffset(wave * 16). */
 bool gc_mystery_select(gc_run *run, int *type, int *tier);
 void gc_mystery_record(gc_run *run, int type, int tier);

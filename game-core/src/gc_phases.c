@@ -584,6 +584,12 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         s->kind = GC_SCREEN_CHECK_SWITCH;
         return false;
     }
+    case RP_CUSTOM_OFFER: {
+        gc_screen *s = &run->screen;
+        memset(s, 0, sizeof *s);
+        s->kind = GC_SCREEN_CUSTOM_OFFER;
+        return false;
+    }
     case RP_EXP:
         exp_phase(run, p);
         return true;
@@ -729,6 +735,11 @@ bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char *
         *ok = true;
         /* yes: SwitchPhase(INITIAL_SWITCH) opens the party screen (a stop at PH_SWITCH), no: the encounter goes on */
         after_stop(run, gc_battle_answer_switch(run, c->a == 1));
+        return true;
+    case RP_CUSTOM_OFFER:
+        if (c->kind != GC_CH_CONFIRM || (c->a != 0 && c->a != 1)) { *why = "answer yes or no"; return false; }
+        *ok = true;
+        gc_custom_answer(run, c->a == 1);
         return true;
     case RP_SELECT_MODIFIER:
         return select_modifier_choose(run, p, c, why, ok);

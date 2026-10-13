@@ -19,6 +19,8 @@
  *                 battle-core drops the number of shakes a ball made before it broke free, so a break-free always wobbles once.
  *                 Not drawn: the ball's open and star particles, the caught Pokemon's info panel, critical captures (battle-core
  *                 does not report them). A full party asks "release one?" (Yes / No) where upstream also offers Summary and Pokedex
+ *   - custom rematch: a custom run (cfg.custom) asks "Fight it?" on game-core's GC_SCREEN_CUSTOM_OFFER; the intro of that wave is the
+ *                 statement, the enemy appears after the answer
  * Saving and loading are wired (cfg.save, rs_resume). The music follows the scenes (bgm.h). Not wired yet: the Pokedex, eggs.
  */
 #ifndef GM_RUN_SCREEN_H
@@ -29,6 +31,7 @@
 #include <stdbool.h>
 
 #include "gc/run.h"
+#include "custom_store.h"
 #include "gc/system.h"
 #include "run_saves.h"
 
@@ -51,6 +54,9 @@ typedef struct {
    * COMMAND screen of a battle's first turn, once the scene is up. Without it the run is never written. */
   bool save;
   int slot;
+  /* A custom run (task C10, custom_run.h): the rematch hooks are installed, the run saves into the custom slot `slot` (a file the ordinary
+   * loader never reads) with its overlay, and rs_resume loads from there. false = an ordinary run, played and saved exactly as before. */
+  bool custom;
   /* The run ended (screen kind GC_SCREEN_GAME_OVER or GC_SCREEN_CLEAR). The driver stops and calls this from the UI loop; the
    * run stays readable through rs_run() until the next rs_start / rs_resume. NULL = the stand-in: a message, then a new run. */
   void (*on_end)(int screen_kind, void* arg);
@@ -86,6 +92,10 @@ bool rs_start(const rs_config* cfg);
  * INCOMPATIBLE mean nothing was started and the file was not touched (`why` says why for INCOMPATIBLE); the driver is then idle.
  * The stats (rs_stats) keep counting, they are reset by rs_start only. */
 rsv_status rs_resume(const rs_config* cfg, char why[RSV_WHY_LEN]);
+
+/* The finisher of the defeat that ended the custom run, when game-core's faint hook named one (valid from the call of cfg.on_end until the
+ * next rs_start / rs_resume); NULL for an ordinary run, a clear, or a defeat with no reliable finisher. Hand it to cs_commit_defeat. */
+const cs_defeat* rs_custom_defeat(void);
 
 const rs_stats* rs_stats_get(void);
 const gc_run* rs_run(void);

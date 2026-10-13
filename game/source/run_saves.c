@@ -56,6 +56,28 @@ static void refusal(const char* why, char out[RSV_WHY_LEN]) {
     snprintf(out, RSV_WHY_LEN, "Can't be read: %.60s.", why);
 }
 
+/* Loads core bytes into `run`. `info` (may be NULL) gets the status and the reason. */
+rsv_status rsv_load_bytes(const char* buf, size_t len, gc_run* run, rsv_info* info) {
+  char why[RSV_WHY_LEN] = "";
+  rsv_status st;
+  const char* gc_why = NULL;
+  if (gc_run_load(run, buf, len, &gc_why)) {
+    st = RSV_OK;
+  } else {
+    st = RSV_INCOMPATIBLE;
+    refusal(gc_why, why);
+  }
+  if (info) {
+    memset(info, 0, sizeof *info);
+    info->status = st;
+    snprintf(info->why, sizeof info->why, "%s", why);
+    if (st == RSV_OK) rsv_summarize(run, info);
+  }
+  return st;
+}
+
+rsv_status rsv_inspect_bytes(const char* buf, size_t len, rsv_info* info) { return rsv_load_bytes(buf, len, &g_scratch, info); }
+
 /* Reads the slot's file and loads it into `run`. `info` (may be NULL) gets the status and the reason. */
 static rsv_status read_into(int slot, gc_run* run, rsv_info* info) {
   char name[16];
@@ -77,24 +99,21 @@ static rsv_status read_into(int slot, gc_run* run, rsv_info* info) {
       st = RSV_INCOMPATIBLE;
       snprintf(why, sizeof why, "The save could not be read from the SD card.");
     } else {
-      const char* gc_why = NULL;
-      if (gc_run_load(run, buf, len, &gc_why)) {
-        st = RSV_OK;
-      } else {
-        st = RSV_INCOMPATIBLE;
-        refusal(gc_why, why);
-      }
+      rsv_info loaded;
+      st = rsv_load_bytes(buf, len, run, &loaded);
+      snprintf(why, sizeof why, "%s", loaded.why);
       free(buf);
+      if (info && st == RSV_OK) {
+        *info = loaded;
+        info->from_backup = bak;
+        return st;
+      }
     }
   }
   if (info) {
     memset(info, 0, sizeof *info);
     info->status = st;
     snprintf(info->why, sizeof info->why, "%s", why);
-    if (st == RSV_OK) {
-      rsv_summarize(run, info);
-      info->from_backup = bak;
-    }
   }
   return st;
 }
@@ -125,7 +144,7 @@ rsv_save_result rsv_save(int slot, const gc_run* run) {
 }
 
 /* Removes `name`.sav, `name`.sav.bak and `name`.sav.tmp (save.c's files); false when one that exists would not go. */
-static bool remove_files(const char* name) {
+bool rsv_remove_files(const char* name) {
   static const char* const ext[] = {".sav", ".sav.bak", ".sav.tmp"};
   char path[256];
   bool ok = true;
@@ -143,9 +162,9 @@ bool rsv_clear(int slot) {
   if (!rsv_slot_ok(slot)) return false;
   char name[16];
   const bool was_last = rsv_last_slot() == slot;
-  if (!remove_files(rsv_slot_name(slot, name))) return false;
+  if (!rsv_remove_files(rsv_slot_name(slot, name))) return false;
   /* upstream's deleteSession: the slot is no longer the one Continue loads */
-  if (was_last) remove_files(LAST_SLOT_FILE);
+  if (was_last) rsv_remove_files(LAST_SLOT_FILE);
   return true;
 }
 

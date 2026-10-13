@@ -320,6 +320,28 @@ typedef struct pr_pokemon {
 #define PR_MAX_QUEUED_MOVERS 8
 #define PR_MAX_TURN_ORDER 8
 
+/* A Pokemon has fainted (custom content, task C10). Reported from FaintPhase at doFaint, after a Reviver Seed could no longer save it and
+ * before attacksReceived is cleared, so the caller can read, without guessing, who landed the hit that took the last HP.
+ * `direct` is set only when the engine's own state names the attacker: the FaintPhase was queued by the hit itself (source != -1) AND the
+ * fainted Pokemon's newest attacksReceived record names that same attacker with damage > 0. Every other loss of the last HP (poison,
+ * weather, recoil, a tag, a faint with no attack record) is not direct, and nothing is inferred for it. The note and the Pokemon it
+ * points at are valid only during the call, which must not change the battle. */
+typedef struct pr_faint_note {
+    int64_t id;                    /* the fainted Pokemon's id */
+    int8_t battler;                /* its field position */
+    uint8_t side;                  /* 0 player, 1 enemy */
+    uint8_t remaining;             /* Pokemon of its side with HP left after this one (party members, on the field or not) */
+    bool direct;                   /* see above */
+    int8_t source_battler;         /* direct: the attacker's field position when it hit, else -1 */
+    int64_t source_id;             /* direct: the attacker's id, else 0 */
+    uint16_t move;                 /* direct: the move of the hit, else 0 */
+    int wave, turn;
+    const struct pr_pokemon *fainted;
+    const struct pr_pokemon *source;   /* direct: the attacker where it stands now (pr_pokemon_by_id), NULL if it is gone from the parties */
+} pr_faint_note;
+struct pr_battle;
+typedef void (*pr_faint_observer_fn)(const struct pr_battle *bt, const pr_faint_note *note, void *ctx);
+
 typedef struct pr_battle {
     pr_rng rng;                /* Phaser.Math.RND (global) */
     bool rng_live;             /* false = the caller didn't provide its state */
@@ -422,6 +444,9 @@ typedef struct pr_battle {
      * carry out; recorded, not yet executed. They don't change the damage result. */
     uint16_t deferred[PR_MAX_UNPORTED];
     uint8_t n_deferred;
+    /* Optional (NULL = none, the default): told of every faint at doFaint. Never changes the battle, an RNG draw, an event or a phase. */
+    pr_faint_observer_fn faint_observer;
+    void *faint_observer_ctx;
 } pr_battle;
 
 /* ---- hooks (src/hooks.c) ---- */

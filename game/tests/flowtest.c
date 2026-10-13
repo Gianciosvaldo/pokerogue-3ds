@@ -269,6 +269,8 @@ rsv_status rs_resume(const rs_config* c, char why[RSV_WHY_LEN]) {
 }
 
 const gc_run* rs_run(void) { return &RUN; }
+static const cs_defeat* g_defeat; /* what a custom run's fake driver names as the finisher (NULL: none) */
+const cs_defeat* rs_custom_defeat(void) { return g_defeat; }
 
 /* ------------------------------------------------------------------ helpers */
 

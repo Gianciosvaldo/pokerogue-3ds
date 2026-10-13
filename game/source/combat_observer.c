@@ -184,6 +184,29 @@ void co_begin_run(bool resumed) {
   C.active = cc_reducer_begin_run(&C.red, C.uid, resumed) == CC_OK;
 }
 
+bool co_carry_get(co_carry* out) {
+  if (!C.active || C.finished) return false;
+  out->hist = C.red.hist;
+  out->next_seq = C.red.next_seq;
+  out->battle_seq = C.battle_seq;
+  return true;
+}
+
+bool co_begin_run_carry(const co_carry* carry) {
+  co_begin_run(true);
+  if (!C.active || !carry) return false;
+  C.red.hist = carry->hist;
+  C.red.hist.flags |= CC_HF_BEGAN_MID;
+  C.red.next_seq = carry->next_seq;
+  if (cc_reducer_validate(&C.red) != CC_OK) {
+    cc_reducer_init(&C.red);   /* the carry is refused: an empty, began-mid observation */
+    C.active = cc_reducer_begin_run(&C.red, C.uid, true) == CC_OK;
+    return false;
+  }
+  C.battle_seq = carry->battle_seq;
+  return true;
+}
+
 void co_observe(uint32_t drain_no, const gc_event* q, int nq, const pr_event* be, int n_be, bool battle_overflow, bool queue_overflow) {
   if (!C.active || C.finished) return;
   if (drain_no <= C.drain_no) {

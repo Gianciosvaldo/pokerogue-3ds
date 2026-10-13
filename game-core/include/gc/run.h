@@ -85,6 +85,8 @@ typedef enum {
     GC_SCREEN_CLEAR,        /* the run is won (classic wave 200) */
     GC_SCREEN_CHECK_SWITCH, /* CheckSwitchPhase: "Will you switch Pokemon?" at the start of a wild battle,
                              * only when run->ask_switch is set: GC_CH_CONFIRM */
+    GC_SCREEN_CUSTOM_OFFER, /* custom content (gc/custom.h): the app's hook offered a rematch before the battle's save point:
+                             * GC_CH_CONFIRM, a = 1 accept, 0 decline. Only with hooks installed; never saved (no save point yet) */
 } gc_screen_kind;
 
 typedef enum {
@@ -106,7 +108,7 @@ typedef enum {
     GC_CH_MYSTERY,          /* MYSTERY: Task 45 continuation placeholder; Task 46 replaces with actions */
     GC_CH_CONTINUE,         /* GAME_OVER / CLEAR */
     GC_CH_LOCK_RARITIES,    /* REWARD: switch the Lock Capsule's lock on or off (toggleRerollLock; needs the capsule) */
-    GC_CH_CONFIRM,          /* CHECK_SWITCH: a = 1 yes (the party screen follows), 0 no */
+    GC_CH_CONFIRM,          /* CHECK_SWITCH: a = 1 yes (the party screen follows), 0 no; CUSTOM_OFFER: a = 1 accept, 0 decline */
 } gc_choice_kind;
 
 typedef struct {

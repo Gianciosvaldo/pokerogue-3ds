@@ -779,6 +779,11 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     }
     gc_ai_reset(run);
     gc_ai_enemy_party(run);
+    /* the species and forms the enemy party began with (the save point is before the first turn: they are the current ones) */
+    for (int i = 0; i < run->n_enemy && i < 6; i++) {
+        in->enemy_start_species[i] = run->enemy[i].b.species;
+        in->enemy_start_form[i] = run->enemy[i].b.form;
+    }
 
     /* the counters last: setting the field up counts its stand-ins again */
     r = section(&body, "stats");

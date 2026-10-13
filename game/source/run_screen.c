@@ -12,6 +12,7 @@
 #include "battle_events.h"
 #include "battle_view.h"
 #include "combat_observer.h"
+#include "custom_run.h"
 #include "i18n.h"
 #include "menus.h"
 #include "party_screen.h"
@@ -68,6 +69,8 @@ static struct {
    * foe's send-out (they were shown when the battle began, before the save) */
   bool resume_wave;             /* the next WAVE event is the loaded battle's */
   bool resume_foe;              /* the foe may be on the field in the run and not on the screen yet */
+  cs_defeat defeat;             /* a custom run's attributed defeat (rs_custom_defeat) */
+  bool have_defeat;
 } G = {.shown = -1, .ball = -1};
 
 static void pump(void* arg);
@@ -327,6 +330,9 @@ static void wave_black(void* arg) {
   const gc_event* w = &G.q[G.wave_ev];
   const bool trainer = w->c == BATTLE_TYPE_TRAINER;
   const bool mystery = w->c == BATTLE_TYPE_MYSTERY_ENCOUNTER;
+  /* a custom rematch is on offer: the ordinary enemy in the run is about to be replaced (or kept), so nobody is shown on the enemy side
+   * yet; it appears when the battle starts, after the answer */
+  const bool offer = G.cfg.custom && gc_run_screen(&G.run)->kind == GC_SCREEN_CUSTOM_OFFER;
   const bool loaded = G.resume_wave;
   G.resume_wave = false;
   img_drop_prefix("images/pokemon/");
@@ -345,10 +351,10 @@ static void wave_black(void* arg) {
   } else if (G.run.n_party > 0) {
     s.player = make_mon(&G.run.party[G.run.party_order[0]], true);
   }
-  if (!trainer && !mystery && G.run.n_enemy > 0) s.enemy = make_mon(&G.run.enemy[0], false);
+  if (!trainer && !mystery && !offer && G.run.n_enemy > 0) s.enemy = make_mon(&G.run.enemy[0], false);
   bv_begin(&s);
   G.present[0] = s.player_present;
-  G.present[1] = !trainer && !mystery && s.enemy.species > 0;
+  G.present[1] = !trainer && !mystery && !offer && s.enemy.species > 0;
   if (!G.present[0]) G.shown = -1;
 
   /* the intro: arenas slide in, then the encounter's message */
@@ -356,7 +362,9 @@ static void wave_black(void* arg) {
   bv_event* e = ev_new();
   char* t = txt_new();
   t[0] = 0;
-  if (trainer || mystery) {
+  if (offer) {
+    snprintf(t, TXT_LEN, "The %s that beat you wants a rematch!", i18n_species_name(cr_offer_species()));
+  } else if (trainer || mystery) {
     /* the first game-core message after the wave is the encounter text ("X would like to battle!") */
     for (int j = G.wave_ev + 1; j < G.nq && j <= G.wave_ev + 5; j++) {
       if (G.q[j].kind == GC_EV_MESSAGE && !G.skip[j]) {
@@ -375,7 +383,7 @@ static void wave_black(void* arg) {
         break;
       }
   }
-  *e = (bv_event){.type = BEV_INTRO_WILD, .battler = BV_ENEMY, .a = trainer || mystery ? 1 : 0, .text = t};
+  *e = (bv_event){.type = BEV_INTRO_WILD, .battler = BV_ENEMY, .a = trainer || mystery || offer ? 1 : 0, .text = t};
   play_chunk();
 }
 
@@ -1084,6 +1092,26 @@ static void mystery_auto(void) {
   answer(&c);
 }
 
+/* ---- a custom rematch: the offer (the intro of the wave already said who wants it) ---- */
+
+static void on_offer_answer(int yes, void* arg) {
+  (void)arg;
+  gc_choice c = {.kind = GC_CH_CONFIRM, .a = yes == 1 ? 1 : 0};   /* No and B decline */
+  answer(&c);
+}
+
+static void offer_asked(void* arg) {
+  (void)arg;
+  ui_push_confirm(on_offer_answer, NULL);
+}
+
+static void open_custom_offer(void) {
+  G.n_ev = G.ev_pos = G.n_txt = 0;
+  put_msg("Fight it?", false);
+  G.st.bev++;
+  bv_play(&G.ev[0], 1, offer_asked, NULL);
+}
+
 /* ---- the run ends ---- */
 
 static bool new_run(bool from_black);
@@ -1105,6 +1133,9 @@ static void end_run(int kind) {
   G.save_due = false;
   /* the combat history's report is taken now, while the run is whole and before the app clears the slot or starts another */
   co_finish(kind == GC_SCREEN_CLEAR, G.run.biome, G.run.wave);
+  /* a custom run settles its rematch and names the enemy that finished the party, from the same moment: the run is whole */
+  G.have_defeat = G.cfg.custom && cr_on_run_end(&G.run, kind, &G.defeat);
+  if (G.cfg.custom) cr_end();
   if (kind == GC_SCREEN_CLEAR)
     G.st.clears++;
   else
@@ -1131,7 +1162,7 @@ static void end_run(int kind) {
 /* Writes the run into the slot, and the system data it updated (the species it caught) beside it. A refusal of either is counted;
  * save_point tells the player. */
 static void write_save(void) {
-  bool ok = rsv_save(G.cfg.slot, &G.run) == RSV_SAVED;
+  bool ok = (G.cfg.custom ? cr_save(G.cfg.slot, &G.run) : rsv_save(G.cfg.slot, &G.run)) == RSV_SAVED;
   if (G.cfg.sys && G.cfg.save_sys && !G.cfg.save_sys()) ok = false;
   if (ok) {
     G.st.saves++;
@@ -1173,8 +1204,20 @@ static bool save_point(void) {
   return true;
 }
 
+static void open_custom_offer(void);
+
 static void screen_step(void) {
   const gc_screen* s = gc_run_screen(&G.run);
+  if (G.cfg.custom) {
+    /* a rematch won with this screen's events behind it is written first (custom_run.c), and anything it has to tell the player is told
+     * before the screen is handled */
+    cr_on_screen(&G.run, s->kind);
+    const char* note = cr_take_message();
+    if (note) {
+      say(note);
+      return;
+    }
+  }
   G.st.screens[s->kind & 15]++;
   switch (s->kind) {
     case GC_SCREEN_COMMAND:
@@ -1198,6 +1241,9 @@ static void screen_step(void) {
       break;
     case GC_SCREEN_MYSTERY:
       mystery_auto();
+      break;
+    case GC_SCREEN_CUSTOM_OFFER:
+      open_custom_offer();
       break;
     case GC_SCREEN_GAME_OVER:
     case GC_SCREEN_CLEAR:
@@ -1259,6 +1305,16 @@ static bool new_run(bool from_black) {
   rnd(1);
   gc_run_new(&G.run, GAME_MODES_CLASSIC, G.st.runs == 1 ? G.cfg.seed : NULL, G.cfg.entropy + (uint32_t)G.st.runs);
   G.run.sys = G.cfg.sys;
+  G.have_defeat = false;
+  if (G.cfg.custom) {
+    /* the run's identity, its schedule and the hooks, before the starters (the first wave is reported to them) */
+    if (!cr_begin(&G.run, G.cfg.entropy + (uint32_t)G.st.runs)) {
+      G.st.stuck++;
+      return false;
+    }
+  } else {
+    cr_end();
+  }
   gc_starter team[6];
   int n = 0;
   if (G.st.runs == 1 && G.cfg.n_team > 0) {
@@ -1292,10 +1348,16 @@ bool rs_start(const rs_config* cfg) {
 rsv_status rs_resume(const rs_config* cfg, char why[RSV_WHY_LEN]) {
   G.cfg = *cfg; /* the stats go on counting: a resume is not a new session */
   reset_driver();
-  const rsv_status st = rsv_load(cfg->slot, &G.run, why);
+  G.have_defeat = false;
+  if (!cfg->custom) cr_end();
+  const rsv_status st = cfg->custom ? cr_load(cfg->slot, &G.run, why) : rsv_load(cfg->slot, &G.run, why);
   if (st != RSV_OK) return st; /* G.run is not usable: the caller must not drive it */
   G.run.sys = cfg->sys; /* a saved run holds no system data: it takes the player's */
-  co_begin_run(true);   /* observation starts here: the battles before the save were not seen */
+  /* observation starts here: the battles before the save were not seen (a custom run's save carries the turns it had kept) */
+  if (cfg->custom)
+    cr_begin_observer();
+  else
+    co_begin_run(true);
   G.st.runs++;
   G.st.loads++;
   G.resume_wave = G.resume_foe = true;
@@ -1309,5 +1371,6 @@ rsv_status rs_resume(const rs_config* cfg, char why[RSV_WHY_LEN]) {
   return RSV_OK;
 }
 
+const cs_defeat* rs_custom_defeat(void) { return G.have_defeat ? &G.defeat : NULL; }
 const rs_stats* rs_stats_get(void) { return &G.st; }
 const gc_run* rs_run(void) { return &G.run; }
