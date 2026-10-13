@@ -1064,8 +1064,12 @@ static void test_gate(void) {
       {"ability unknown",    GC_ENC_ORDINARY_WILD, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 1, CC_REFUSE_ABILITY_UNKNOWN},
       {"moves unknown",      GC_ENC_ORDINARY_WILD, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 62, 0, 0, 0, 1, CC_REFUSE_MOVES_UNKNOWN},
   };
-  for (unsigned t = 0; t < sizeof T / sizeof T[0]; t++) {
-    const gate_case* c = &T[t];
+  const unsigned nT = sizeof T / sizeof T[0];
+  for (unsigned t = 0; t <= nT; t++) {
+    /* the last pass is the first case again, but the run ends in a Classic clear: a clear names no finisher */
+    const bool clear_end = t == nT;
+    const gate_case* c = &T[clear_end ? 0 : t];
+    const int cand = clear_end ? 0 : c->candidate;
     sd_new();
     char seed[32];
     snprintf(seed, sizeof seed, "c10-gate-%u", t);
@@ -1107,13 +1111,13 @@ static void test_gate(void) {
       h->faint(h->user, R, &g);
     }
     bot.wipe = false;
-    end_run(GC_SCREEN_GAME_OVER, true);
-    CHECK(g_have_defeat == c->candidate, "%s: candidate %d, expected %d", c->name, g_have_defeat, c->candidate);
+    end_run(clear_end ? GC_SCREEN_CLEAR : GC_SCREEN_GAME_OVER, true);
+    CHECK(g_have_defeat == cand, "%s%s: candidate %d, expected %d", c->name, clear_end ? " (a clear)" : "", g_have_defeat, cand);
     CHECK(g_commit.outcome == CS_STORED || g_commit.outcome == CS_REPLAYED, "%s: the report is stored (%d)", c->name, (int)g_commit.outcome);
     const cc_meta* m = cs_meta();
-    if (c->candidate && c->refusal == CC_SUPPORT_OK) {
+    if (cand && c->refusal == CC_SUPPORT_OK) {
       CHECK(g_commit.commit.refusal == CC_SUPPORT_OK && m->roster.count == 1, "%s: a record (%s)", c->name, cc_refusal_str(g_commit.commit.refusal));
-    } else if (c->candidate) {
+    } else if (cand) {
       CHECK(g_commit.commit.refusal == c->refusal && m->roster.count == 0, "%s: refused as %s, no record (got %s, %u)", c->name,
             cc_refusal_str(c->refusal), cc_refusal_str(g_commit.commit.refusal), m->roster.count);
     } else {
@@ -1121,7 +1125,7 @@ static void test_gate(void) {
       CHECK(m->has_report && !(m->report.known & CC_TK_FINISH_ACTOR), "%s: the report does not say who finished the run", c->name);
     }
   }
-  printf("2  finisher gate: %zu cases\n", sizeof T / sizeof T[0]);
+  printf("2  finisher gate: %u cases and a clear\n", nT);
 }
 
 /* ------------------------------------------------------------------ 3. the windows, by hand */
@@ -1652,6 +1656,86 @@ static void test_saves(void) {
     CHECK(life_of(FX.rid) == CC_LIFE_STORED, "the record is free at the run's end (%d)", life_of(FX.rid));
   }
   drop(&early);
+
+  /* the roster still says the rematch is being fought, the save is from after it (the result write of the roster was lost): the fight is
+   * lost, not live again, and nothing is paid twice */
+  fx_restore();
+  fx_run();
+  CHECK(go_wave(26) == STEP_STOPPED, "wave 26");
+  CHECK(go_wave(27) == STEP_STOPPED && view().rematch_live && life_of(FX.rid) == CC_LIFE_CHALLENGED, "the rematch's first turn, saved");
+  const snap fighting = take();
+  CHECK(go_wave(29) == STEP_STOPPED && life_of(FX.rid) == CC_LIFE_REWARD_CLAIMED && vouchers() == 1, "won and paid");
+  cr_end();
+  put_named(&fighting, cust);   /* the roster as it was while the fight was on */
+  reboot();
+  {
+    char why[RSV_WHY_LEN];
+    CHECK(life_of(FX.rid) == CC_LIFE_CHALLENGED, "the roster says challenged");
+    CHECK(resume_run(slot_used, why) == RSV_OK, "the later save loads over it: %s", why);
+    CHECK(!view().rematch_live, "the fight is not live: its enemy is gone");
+    CHECK(life_of(FX.rid) == CC_LIFE_STORED, "the record is stored again, not left challenged (%d)", life_of(FX.rid));
+    CHECK(vouchers() == 1 && cr_settle_owed() == 0, "nothing more is paid (%u)", vouchers());
+    cr_end();
+  }
+  drop(&fighting);
+
+  /* the roster still holds the record for a run whose schedule ended in a decline (the roster write after the save was lost) */
+  fx_restore();
+  fx_run();
+  CHECK(go_wave(26) == STEP_STOPPED, "wave 26");
+  const snap held = take();
+  bot.offer_answer = 0;
+  CHECK(go_wave(28) == STEP_STOPPED && life_of(FX.rid) == CC_LIFE_STORED, "declined, saved at wave 28");
+  cr_end();
+  put_named(&held, cust);   /* the roster from before the decline: scheduled for this run */
+  reboot();
+  {
+    char why[RSV_WHY_LEN];
+    CHECK(life_of(FX.rid) == CC_LIFE_SCHEDULED, "the roster still holds the record");
+    CHECK(resume_run(slot_used, why) == RSV_OK, "the save loads: %s", why);
+    CHECK(life_of(FX.rid) == CC_LIFE_STORED, "the finished schedule gave the record back (%d)", life_of(FX.rid));
+    cr_end();
+  }
+  drop(&held);
+
+  /* a resumed run keeps the turns the observation had retained */
+  fx_restore();
+  fx_run();
+  CHECK(go_wave(26) == STEP_STOPPED, "wave 26");
+  {
+    static co_carry before, after;
+    CHECK(co_carry_get(&before) && before.hist.n_turns > 0, "turns were retained before the save (%u)", before.hist.n_turns);
+    cr_end();
+    reboot();
+    char why[RSV_WHY_LEN];
+    CHECK(resume_run(slot_used, why) == RSV_OK, "the save loads: %s", why);
+    CHECK(co_carry_get(&after), "the resumed run is observed");
+    CHECK(after.hist.n_turns >= before.hist.n_turns && after.battle_seq >= before.battle_seq && after.next_seq >= before.next_seq,
+          "and has the turns it had (%u, %u of %u turns)", after.hist.n_turns, after.battle_seq, before.hist.n_turns);
+    cr_end();
+  }
+
+  /* a custom file that cannot be used: the custom run does not resume, says why, and no file changes */
+  fx_restore();
+  fx_run();
+  CHECK(go_wave(26) == STEP_STOPPED, "wave 26");
+  cr_end();
+  {
+    static const char junk[] = "this is not a custom content file, and it is long enough to be taken for one by its size alone....................";
+    put_file(cust, junk, sizeof junk);
+    del_named("custom.sav.bak");   /* no good backup to fall back to */
+    reboot();
+    const snap before = take();
+    char why[RSV_WHY_LEN] = "";
+    CHECK(resume_run(slot_used, why) == RSV_INCOMPATIBLE, "a custom run does not resume with an unusable custom file");
+    CHECK(strstr(why, "cannot be used") != NULL, "and says that: %s", why);
+    const snap after = take();
+    bool same = before.n == after.n;
+    for (int i = 0; same && i < before.n; i++) same = same_file(&before, &after, before.f[i].name);
+    CHECK(same, "no file changed");
+    drop(&before);
+    drop(&after);
+  }
   printf("5  saves: done\n");
 }
 

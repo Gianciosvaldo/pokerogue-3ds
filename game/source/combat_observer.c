@@ -198,6 +198,12 @@ bool co_begin_run_carry(const co_carry* carry) {
   C.red.hist = carry->hist;
   C.red.hist.flags |= CC_HF_BEGAN_MID;
   C.red.next_seq = carry->next_seq;
+  if (C.red.hist.n_turns) {
+    /* the retained turns came from accepted batches: the reducer must say so, or it refuses turns without one. The next batch takes
+     * the following id, so the carried turns are not marked as followed by a gap. */
+    C.red.last_batch_id = 1;
+    C.batch_id = 1;
+  }
   if (cc_reducer_validate(&C.red) != CC_OK) {
     cc_reducer_init(&C.red);   /* the carry is refused: an empty, began-mid observation */
     C.active = cc_reducer_begin_run(&C.red, C.uid, true) == CC_OK;

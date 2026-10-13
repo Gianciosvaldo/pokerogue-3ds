@@ -131,7 +131,7 @@ M = [
     (CR, "  gc_run_set_custom(run, &HOOKS);\n  cr_settle_owed();", "  cr_settle_owed();", T, "a resumed run has no rematch hooks"),
     (CR, "  R.carry = carry_in;\n  R.have_carry = x.o.has_carry;", "  R.have_carry = false;", T, "the observer's turns are not carried over a resume"),
     (CR, "  if (!cr_usable(fw)) {", "  if (false) {", T, "a custom run is resumed with an unusable custom file"),
-    (CR, "  if (kind == GC_SCREEN_GAME_OVER) {\n    have = build_defeat(run, out);", "  if (kind != GC_SCREEN_CLEAR) {\n    have = build_defeat(run, out);", T, "a Classic clear can name a finisher"),
+    (CR, "  if (kind == GC_SCREEN_GAME_OVER) {\n    have = build_defeat(run, out);", "  if (true) {\n    have = build_defeat(run, out);", T, "a Classic clear can name a finisher"),
     (CR, "  gc_run_set_custom(run, &HOOKS);\n  return true;\n}\n\n/* ----", "  return true;\n}\n\n/* ----", T, "a new custom run installs no hooks"),
 ]
 
