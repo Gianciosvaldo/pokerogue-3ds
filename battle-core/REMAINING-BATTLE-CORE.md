@@ -22,8 +22,8 @@ Completed continuation slices and remaining source-backed work:
 | Receiver/Power of Alchemy | CopyFaintedAlly needs victim context in the knockout dispatcher | Ally versus enemy victim, eligibility, copied primary/passive and source order, loaded doubles |
 | Parental Bond / Skill Link (merged #244) | Real hit-count callbacks now implemented; existing final-strike reduction retained | Move exclusions, hit powers/order, targets, KO interruption, exact RNG consumption |
 | Beat Up (merged #246) | Party hit-count case now implemented; existing per-hit power verified | Pinned party/status ordering, self contribution, base species Attack, KO interruption and modifiers |
-| Cud Chew / Harvest | Berry recording, repeat consumption and restoration callbacks remain | Actual named held-item history and delays, ownership, duplication/refusal and RNG |
-| Ditto / Transform / Imposter (implemented; merge validation pending) | Shared move/ability phase, temporary identity/moves/stats, effective sprite and save/reset now implemented | 8,000 actual phase cases and 8,000 full turns; following-turn PP, switch-in visual regression and active saves; broader doubles remain |
+| Cud Chew / Harvest (implemented; merge validation pending) | Source histories, repeat/restore callbacks, preservation, inventory and saves now implemented | Actual named held-item history and delays, ownership, duplication/refusal and RNG |
+| Ditto / Transform / Imposter (merged #261) | Shared move/ability phase, temporary identity/moves/stats, effective sprite and save/reset now implemented | 8,000 actual phase cases and 8,000 full turns; following-turn PP, switch-in visual regression and active saves; broader doubles remain |
 | Sketch / other ability copying | Remaining move effects and identity overrides | Real source identity/stat/moveset copying, bounds, reset and state serialization |
 | Forms / Battle Bond | Remaining form callbacks and one-use battle flags | Actual conditions and new required state; do not invent absent lifecycle inputs |
 | Redirect / Commander / broader doubles | Singles proofs do not close all partner behavior | Natural field/partner state, target redirect and phase ordering with exact source fixtures |
@@ -88,7 +88,7 @@ User-specified completion gates (2026-10-12):
   with game-core's serialized field before whole-core/Endless completion.
   The bounded score harness explicitly refuses oversized inputs instead of
   masking this prerequisite. No save representation is changed by scoring.
-- Flee phase (this slice): 10,000 actual-source phase cases now match RNG,
+- Flee phase (merged #253): 10,000 actual-source phase cases now match RNG,
   meaningful ties, natural doubles, chance, field/stat/item state, queues and
   rendered text with no skips/unsupported cases. Biome selection, inactive
   enemy-slot semantics, status/stack cleanup and enemy stat refresh are fixed.
@@ -102,7 +102,11 @@ User-specified completion gates (2026-10-12):
   unsupported reporting until a dedicated source-backed slice closes it.
 
 Latest user steering: continue until battle-core is fully covered. Flee is
-merged in #253. Ditto/Transform is implemented and undergoing merge validation
-before the next independent slice; see TRANSFORM-VALIDATION.md. Its owning
+merged in #253. Ditto/Transform is merged in #261; see TRANSFORM-VALIDATION.md. Its owning
 phase proof does not close the remaining doubles, forms, berries, wide-level
 and final-boss/run prerequisites listed above.
+
+Harvest/Cud Chew continuation on main `756c40d`: the owning 8,000 full turns
+match the source. See BERRY-LIFECYCLE-VALIDATION.md for the histories, source
+quirks, bounds and separate merge-validation gates. Receiver/Power of Alchemy's
+knockout victim context is the next independent ability slice.

@@ -413,3 +413,11 @@ $(BUILD)/lure_encounter_host_test: tests/lure_encounter_host_test.c $(BUILD)/lib
 test: lure-encounter-host
 lure-encounter-host: $(BUILD)/lure_encounter_host_test
 	$(BUILD)/lure_encounter_host_test
+
+all: $(BUILD)/berry_history_host_test
+test: berry-history-host-test
+berry-history-host-test: $(BUILD)/berry_history_host_test
+	$(BUILD)/berry_history_host_test
+$(BUILD)/berry_history_host_test: tests/berry_history_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+.PHONY: berry-history-host-test
