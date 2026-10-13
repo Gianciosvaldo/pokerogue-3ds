@@ -1,139 +1,55 @@
 /*
- * shop_ui.c: Bottom-screen citro2d rendering and touch bounds for the Shop and Reroll UI,
- * linked to game-core & reward-core state machine.
+ * shop_ui.c: the reward and shop screen on the bottom screen (upstream's ModifierSelectUiHandler), linked to game-core and
+ * reward-core state through the events in shop_ui.h.
+ *
+ * Layout, top to bottom, on upstream's 320 x 180 canvas: the top line (place and wave, luck, money); the shop's rows (7 items
+ * a row, SHOP_OPTIONS_ROW_LIMIT) as an icon and a price; the reward options, each an icon with its name beside it; the buttons
+ * (Reroll, Lock Rarities, Continue); and the description window with the name and description of what the cursor is on.
+ * Upstream draws the shop's names in 6 px emerald under each icon; on the 3DS that cannot be read, so the name of an item in
+ * the shop is in the description window while the cursor is on it. All text is the 8 px pixel font.
+ * The icons, names and descriptions are upstream's (gen/gm_item_ui.c, dumped from its modifier types).
+ *
+ * Not here: Manage Items and Check Team (the held-item transfer and the party view from the shop are not ported).
  */
 
 #include "shop_ui.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "gm_item_ui.h"
 #include "mui.h"
 
+#define FONT TSX_PIXEL_8
+
+#define SHOP_COLS 7 /* SHOP_OPTIONS_ROW_LIMIT */
+#define OPT_MAX_COLS 4
+#define HEADER_H 12
+#define BTN_H 18
+#define MARGIN 4
+
+typedef enum { ROW_SHOP, ROW_OPTION, ROW_BUTTONS } row_kind;
+
+typedef struct {
+  row_kind kind;
+  int first;  /* index of the first item (shop or option) of the row */
+  int count;
+  int slot0;  /* the row's first slot in touch_slots */
+  float y, h;
+} shop_row;
+
+#define MAX_ROWS 6
+
 static shop_ui_state S;
+static shop_row rows[MAX_ROWS];
+static float desc_y, desc_h;
 
 bool shop_ui_hit_test(const shop_ui_rect* rect, float x, float y) {
   if (!rect) return false;
   return (x >= rect->x && x <= (rect->x + rect->w) &&
           y >= rect->y && y <= (rect->y + rect->h));
-}
-
-static void shop_ui_add_touch_slot(shop_target_type type, int index, float x, float y, float w, float h) {
-  if (S.n_touch_slots >= SHOP_MAX_TOUCH_SLOTS) return;
-  shop_touch_slot* slot = &S.touch_slots[S.n_touch_slots++];
-  slot->type = type;
-  slot->index = index;
-  slot->bounds.x = x;
-  slot->bounds.y = y;
-  slot->bounds.w = w;
-  slot->bounds.h = h;
-}
-
-static int shop_ui_num_rows(void) {
-  int n_shop = S.screen_copy.n_shop;
-  int rows = 1; /* Row 0: Reward options */
-  if (n_shop > 0) {
-    rows += (n_shop <= 4) ? 1 : 2; /* Shop Row 1 (and 2 if > 4 items) */
-  }
-  rows += 1; /* Row 3 (or 2/3): Action buttons */
-  return rows;
-}
-
-static int shop_ui_row_max_cols(int row) {
-  int num_r = shop_ui_num_rows();
-  if (row == 0) {
-    return S.screen_copy.n_options > 0 ? S.screen_copy.n_options : 1;
-  }
-  if (row == num_r - 1) {
-    /* Action row: Reroll, Lock (if available), Skip */
-    int count = 1; /* Skip button always present */
-    if (S.screen_copy.reroll_cost >= 0) count++;
-    if (S.has_lock_capsule) count++;
-    return count;
-  }
-  /* Shop rows */
-  int n_shop = S.screen_copy.n_shop;
-  if (row == 1) {
-    return (n_shop > 4) ? 4 : (n_shop > 0 ? n_shop : 1);
-  }
-  if (row == 2 && n_shop > 4) {
-    return n_shop - 4 > 4 ? 4 : n_shop - 4;
-  }
-  return 1;
-}
-
-static void shop_ui_recalc_layout(void) {
-  S.n_touch_slots = 0;
-
-  /* 1. Reward Options (Row 0) */
-  int n_opts = S.screen_copy.n_options;
-  if (n_opts > 0) {
-    float start_x = 10.0f;
-    float card_w = (300.0f - (n_opts - 1) * 6.0f) / n_opts;
-    if (card_w > 70.0f) card_w = 70.0f;
-    float total_w = n_opts * card_w + (n_opts - 1) * 6.0f;
-    start_x = (320.0f - total_w) / 2.0f;
-
-    for (int i = 0; i < n_opts; i++) {
-      float x = start_x + i * (card_w + 6.0f);
-      float y = 20.0f;
-      float h = 36.0f;
-      shop_ui_add_touch_slot(SHOP_TARGET_REWARD, i, x, y, card_w, h);
-    }
-  }
-
-  /* 2. Shop Options (Row 1 & Row 2) */
-  int n_shop = S.screen_copy.n_shop;
-  if (n_shop > 0) {
-    int row1_count = (n_shop > 4) ? 4 : n_shop;
-    float card_w = 70.0f;
-    float card_h = 32.0f;
-
-    /* Row 1 */
-    float total_w1 = row1_count * card_w + (row1_count - 1) * 6.0f;
-    float start_x1 = (320.0f - total_w1) / 2.0f;
-    for (int i = 0; i < row1_count; i++) {
-      float x = start_x1 + i * (card_w + 6.0f);
-      float y = 62.0f;
-      shop_ui_add_touch_slot(SHOP_TARGET_SHOP, i, x, y, card_w, card_h);
-    }
-
-    /* Row 2 */
-    if (n_shop > 4) {
-      int row2_count = n_shop - 4;
-      if (row2_count > 4) row2_count = 4;
-      float total_w2 = row2_count * card_w + (row2_count - 1) * 6.0f;
-      float start_x2 = (320.0f - total_w2) / 2.0f;
-      for (int i = 0; i < row2_count; i++) {
-        float x = start_x2 + i * (card_w + 6.0f);
-        float y = 98.0f;
-        shop_ui_add_touch_slot(SHOP_TARGET_SHOP, 4 + i, x, y, card_w, card_h);
-      }
-    }
-  }
-
-  /* 3. Action Buttons (Bottom Row) */
-  float btn_y = 142.0f;
-  float btn_h = 28.0f;
-
-  int action_btn_idx = 0;
-  if (S.screen_copy.reroll_cost >= 0) {
-    float x = 10.0f;
-    float w = 95.0f;
-    shop_ui_add_touch_slot(SHOP_TARGET_REROLL, action_btn_idx++, x, btn_y, w, btn_h);
-  }
-
-  if (S.has_lock_capsule) {
-    float x = (S.screen_copy.reroll_cost >= 0) ? 112.0f : 10.0f;
-    float w = 95.0f;
-    shop_ui_add_touch_slot(SHOP_TARGET_LOCK, action_btn_idx++, x, btn_y, w, btn_h);
-  }
-
-  /* Skip/Continue button */
-  float skip_x = 215.0f;
-  float skip_w = 95.0f;
-  shop_ui_add_touch_slot(SHOP_TARGET_SKIP, action_btn_idx++, skip_x, btn_y, skip_w, btn_h);
 }
 
 const char* shop_ui_luck_grade(int luck) {
@@ -146,6 +62,212 @@ const char* shop_ui_luck_grade(int luck) {
   return "SSS";
 }
 
+/* ---------------------------------------------------------------- what an offer shows */
+
+typedef struct {
+  const char* icon;  /* frame of the items atlas, or NULL */
+  char name[64];
+  char desc[200];
+} offer_view;
+
+/* "SUPER_POTION" -> "Super Potion" for an item the dump does not know */
+static void humanize(const char* key, char* out, size_t n) {
+  size_t k = 0;
+  bool start = true;
+  for (const char* p = key; *p && k + 1 < n; p++) {
+    if (*p == '_') {
+      out[k++] = ' ';
+      start = true;
+    } else {
+      char c = *p;
+      if (c >= 'A' && c <= 'Z' && !start) c = (char)(c + 32);
+      out[k++] = c;
+      start = false;
+    }
+  }
+  out[k] = 0;
+}
+
+static void fmt_money(char* out, size_t n, double v) {
+  char digits[32];
+  snprintf(digits, sizeof digits, "%.0f", v < 0 ? 0 : v);
+  const int len = (int)strlen(digits);
+  size_t k = 0;
+  for (int i = 0; i < len && k + 2 < n; i++) {
+    if (i && (len - i) % 3 == 0) out[k++] = ',';
+    out[k++] = digits[i];
+  }
+  out[k] = 0;
+}
+
+static void money_item_index(const char* key, int* idx) {
+  *idx = -1;
+  if (!strcmp(key, "NUGGET")) *idx = 0;
+  else if (!strcmp(key, "BIG_NUGGET")) *idx = 1;
+  else if (!strcmp(key, "RELIC_GOLD")) *idx = 2;
+}
+
+static void offer_info(const gc_offer* o, offer_view* v) {
+  memset(v, 0, sizeof *v);
+  const char* key = o->key ? o->key : "";
+  const gm_item_ui* r = gm_item_ui_find(key, o->arg);
+  if (!r && o->arg >= 0) r = gm_item_ui_find(key, -1);
+  if (!r) {
+    humanize(key, v->name, sizeof v->name);
+    return;
+  }
+  v->icon = r->icon;
+  snprintf(v->name, sizeof v->name, "%s", r->name);
+  if (r->dynamic) {
+    /* the money items: {money} is what the item grants now */
+    int mi;
+    money_item_index(key, &mi);
+    const char* at = strstr(r->desc, "{money}");
+    if (at && mi >= 0) {
+      char amount[32], money[40];
+      fmt_money(amount, sizeof amount, S.money_item_amount[mi]);
+      snprintf(money, sizeof money, "\xe2\x82\xbd%s", amount);
+      snprintf(v->desc, sizeof v->desc, "%.*s%s%s", (int)(at - r->desc), r->desc, money, at + 7);
+    }
+  } else {
+    snprintf(v->desc, sizeof v->desc, "%s", r->desc);
+  }
+}
+
+/* ---------------------------------------------------------------- colours */
+
+static rr_color dim(rr_color c, int percent) {
+  const uint32_t r = (c >> 24) & 255, g = (c >> 16) & 255, b = (c >> 8) & 255;
+  return (rr_color)(((r * percent / 100) << 24) | ((g * percent / 100) << 16) | ((b * percent / 100) << 8) | 0xFF);
+}
+
+/* getModifierTierTextTint */
+static rr_color tier_color(int tier) {
+  static const uint32_t tint[6] = {0xf8f8f8, 0x4998f8, 0xf8d038, 0xdb4343, 0xe331c5, 0xe74c18};
+  return MUI_RGB(tint[tier < 0 || tier > 5 ? 0 : tier]);
+}
+
+static int text8(float x, float y, const char* t, rr_color c) {
+  return mui_text_c(FONT, x, y, t, c, dim(c, 35));
+}
+
+static int text8_style(float x, float y, const char* t, mui_style st) {
+  return mui_text_c(FONT, x, y, t, mui_style_color(st, false), mui_style_color(st, true));
+}
+
+/* ---------------------------------------------------------------- layout */
+
+static void add_slot(shop_target_type type, int index, float x, float y, float w, float h) {
+  if (S.n_touch_slots >= SHOP_MAX_TOUCH_SLOTS) return;
+  shop_touch_slot* slot = &S.touch_slots[S.n_touch_slots++];
+  slot->type = type;
+  slot->index = index;
+  slot->bounds = (shop_ui_rect){x, y, w, h};
+}
+
+static int n_buttons(void) {
+  int n = 1; /* Continue */
+  if (S.screen_copy.reroll_cost >= 0) n++;
+  if (S.has_lock_capsule) n++;
+  return n;
+}
+
+static void shop_ui_recalc_layout(void) {
+  S.n_touch_slots = 0;
+  S.n_rows = 0;
+  const int n_shop = S.screen_copy.n_shop < 16 ? S.screen_copy.n_shop : 16;
+  const int n_opts = S.screen_copy.n_options < GC_MAX_OPTIONS ? S.screen_copy.n_options : GC_MAX_OPTIONS;
+  const int shop_rows = (n_shop + SHOP_COLS - 1) / SHOP_COLS;
+  const int opt_rows = n_opts > OPT_MAX_COLS ? 2 : (n_opts ? 1 : 0);
+
+  /* the heights, best first: the description window sits at the bottom with the buttons above it, and the rows share what is
+   * left; they shrink before the description window does */
+  static const float fit[][2] = {{40, 38}, {36, 38}, {34, 38}, {34, 34}, {32, 34}, {30, 32}, {28, 30}, {28, 26}};
+  float row_h = 28, d_h = 26;
+  const float top = HEADER_H + 2;
+  float region = 0;
+  for (size_t i = 0; i < sizeof fit / sizeof fit[0]; i++) {
+    row_h = fit[i][0];
+    d_h = fit[i][1];
+    region = MUI_H - 3 - d_h - 2 - BTN_H - 2 - top;
+    if ((shop_rows + opt_rows) * (row_h + 1) <= region) break;
+  }
+  const float shop_h = row_h, opt_h = row_h;
+  const float extra = region - (shop_rows + opt_rows) * (row_h + 1);
+
+  float y = top + (extra > 0 ? extra / 2 : 0);
+  /* the shop's rows */
+  for (int r = 0; r < shop_rows && S.n_rows < MAX_ROWS; r++) {
+    const int first = r * SHOP_COLS;
+    const int count = n_shop - first < SHOP_COLS ? n_shop - first : SHOP_COLS;
+    const float cw = (MUI_W - 2 * MARGIN) / (float)SHOP_COLS;
+    const float x0 = (MUI_W - cw * count) / 2.0f;
+    shop_row* row = &rows[S.n_rows++];
+    *row = (shop_row){ROW_SHOP, first, count, S.n_touch_slots, y, shop_h};
+    for (int i = 0; i < count; i++) add_slot(SHOP_TARGET_SHOP, first + i, x0 + cw * i, y, cw, shop_h);
+    y += shop_h + 1;
+  }
+  /* the reward options */
+  if (opt_rows) {
+    const int per_row = opt_rows == 1 ? n_opts : (n_opts + 1) / 2;
+    for (int r = 0; r < opt_rows && S.n_rows < MAX_ROWS; r++) {
+      const int first = r * per_row;
+      const int count = n_opts - first < per_row ? n_opts - first : per_row;
+      const float cw = (MUI_W - 2 * MARGIN) / (float)(per_row < 3 ? 3 : per_row);
+      const float x0 = (MUI_W - cw * count) / 2.0f;
+      shop_row* row = &rows[S.n_rows++];
+      *row = (shop_row){ROW_OPTION, first, count, S.n_touch_slots, y, opt_h};
+      for (int i = 0; i < count; i++) add_slot(SHOP_TARGET_REWARD, first + i, x0 + cw * i, y, cw, opt_h);
+      y += opt_h + 1;
+    }
+  }
+  /* the buttons: Reroll and Lock Rarities on the left, Continue on the right */
+  desc_h = d_h;
+  desc_y = MUI_H - 3 - d_h;
+  const float by = desc_y - 2 - BTN_H;
+  if (S.n_rows < MAX_ROWS) {
+    shop_row* row = &rows[S.n_rows++];
+    *row = (shop_row){ROW_BUTTONS, 0, n_buttons(), S.n_touch_slots, by, BTN_H};
+    float x = MARGIN;
+    if (S.screen_copy.reroll_cost >= 0) {
+      add_slot(SHOP_TARGET_REROLL, 0, x, by, 84, BTN_H);
+      x += 88;
+    }
+    if (S.has_lock_capsule) {
+      add_slot(SHOP_TARGET_LOCK, 0, x, by, 112, BTN_H);
+      x += 116;
+    }
+    add_slot(SHOP_TARGET_SKIP, 0, MUI_W - MARGIN - 70, by, 70, BTN_H);
+  }
+}
+
+static const shop_touch_slot* slot_at(int row, int col) {
+  if (row < 0 || row >= S.n_rows) return NULL;
+  if (col < 0 || col >= rows[row].count) return NULL;
+  return &S.touch_slots[rows[row].slot0 + col];
+}
+
+static float slot_cx(int row, int col) {
+  const shop_touch_slot* s = slot_at(row, col);
+  return s ? s->bounds.x + s->bounds.w / 2 : 0;
+}
+
+/* the column of `row` whose centre is nearest to x */
+static int nearest_col(int row, float x) {
+  int best = 0;
+  float bd = 1e9f;
+  for (int c = 0; c < rows[row].count; c++) {
+    const float d = fabsf(slot_cx(row, c) - x);
+    if (d < bd) {
+      bd = d;
+      best = c;
+    }
+  }
+  return best;
+}
+
+/* ---------------------------------------------------------------- state */
+
 void shop_ui_open(const shop_ui_args* args, const shop_ui_events* ev) {
   memset(&S, 0, sizeof S);
   if (args && args->screen) {
@@ -155,17 +277,25 @@ void shop_ui_open(const shop_ui_args* args, const shop_ui_events* ev) {
     S.lock_capsule_active = args->lock_capsule_active;
     S.n_locked_tiers = args->n_locked_tiers;
     S.party_luck = args->party_luck;
+    S.wave = args->wave;
+    snprintf(S.location, sizeof S.location, "%s", args->location);
+    memcpy(S.money_item_amount, args->money_item_amount, sizeof S.money_item_amount);
     if (args->n_locked_tiers > 0) {
       memcpy(S.locked_tiers, args->locked_tiers, sizeof(args->locked_tiers));
     }
   }
   if (ev) S.events = *ev;
 
+  shop_ui_recalc_layout();
+  /* the cursor starts on the first reward option (the first thing on the screen when there are no options) */
   S.row = 0;
+  for (int r = 0; r < S.n_rows; r++)
+    if (rows[r].kind == ROW_OPTION) {
+      S.row = r;
+      break;
+    }
   S.col = 0;
   S.active = true;
-
-  shop_ui_recalc_layout();
 }
 
 void shop_ui_close(void) {
@@ -176,50 +306,32 @@ bool shop_ui_active(void) {
   return S.active;
 }
 
-static void shop_ui_trigger_current(void) {
-  int action_row = shop_ui_num_rows() - 1;
-
-  if (S.row == 0) {
-    /* Reward Option */
-    if (S.col >= 0 && S.col < S.screen_copy.n_options) {
-      if (S.events.on_select_reward) {
-        S.events.on_select_reward(S.events.ctx, S.col);
-      }
-    }
-  } else if (S.row < action_row) {
-    /* Shop Option */
-    int shop_idx = (S.row == 1) ? S.col : (4 + S.col);
-    if (shop_idx >= 0 && shop_idx < S.screen_copy.n_shop) {
-      if (S.events.on_select_shop) {
-        S.events.on_select_shop(S.events.ctx, shop_idx);
-      }
-    }
-  } else if (S.row == action_row) {
-    /* Action Buttons */
-    int btn_map = S.col;
-    bool has_reroll = (S.screen_copy.reroll_cost >= 0);
-    bool has_lock = S.has_lock_capsule;
-
-    if (has_reroll && btn_map == 0) {
-      if (S.events.on_reroll) {
-        S.events.on_reroll(S.events.ctx, S.lock_capsule_active);
-      }
-    } else if ((has_reroll && has_lock && btn_map == 1) || (!has_reroll && has_lock && btn_map == 0)) {
-      /* Toggle Lock Capsule */
+static void trigger_slot(const shop_touch_slot* slot) {
+  switch (slot->type) {
+    case SHOP_TARGET_REWARD:
+      if (slot->index >= 0 && slot->index < S.screen_copy.n_options && S.events.on_select_reward)
+        S.events.on_select_reward(S.events.ctx, slot->index);
+      break;
+    case SHOP_TARGET_SHOP:
+      if (slot->index >= 0 && slot->index < S.screen_copy.n_shop && S.events.on_select_shop)
+        S.events.on_select_shop(S.events.ctx, slot->index);
+      break;
+    case SHOP_TARGET_REROLL:
+      if (S.events.on_reroll) S.events.on_reroll(S.events.ctx, S.lock_capsule_active);
+      break;
+    case SHOP_TARGET_LOCK:
       S.lock_capsule_active = !S.lock_capsule_active;
-    } else {
-      /* Skip / Continue */
-      if (S.events.on_skip) {
-        S.events.on_skip(S.events.ctx);
-      }
-    }
+      break;
+    case SHOP_TARGET_SKIP:
+      if (S.events.on_skip) S.events.on_skip(S.events.ctx);
+      break;
+    default:
+      break;
   }
 }
 
 bool shop_ui_input(mui_button b) {
-  if (!S.active) return false;
-
-  int num_rows = shop_ui_num_rows();
+  if (!S.active || S.n_rows == 0) return false;
 
   switch (b) {
     case MB_LEFT:
@@ -229,43 +341,39 @@ bool shop_ui_input(mui_button b) {
       }
       return true;
 
-    case MB_RIGHT: {
-      int max_cols = shop_ui_row_max_cols(S.row);
-      if (S.col < max_cols - 1) {
+    case MB_RIGHT:
+      if (S.col < rows[S.row].count - 1) {
         S.col++;
+        mui_sfx("ui/select");
+      }
+      return true;
+
+    case MB_UP:
+    case MB_DOWN: {
+      const int to = S.row + (b == MB_UP ? -1 : 1);
+      if (to >= 0 && to < S.n_rows) {
+        const float cx = slot_cx(S.row, S.col);
+        S.row = to;
+        S.col = nearest_col(to, cx);
         mui_sfx("ui/select");
       }
       return true;
     }
 
-    case MB_UP:
-      if (S.row > 0) {
-        S.row--;
-        int max_cols = shop_ui_row_max_cols(S.row);
-        if (S.col >= max_cols) S.col = max_cols - 1;
-        mui_sfx("ui/select");
-      }
-      return true;
-
-    case MB_DOWN:
-      if (S.row < num_rows - 1) {
-        S.row++;
-        int max_cols = shop_ui_row_max_cols(S.row);
-        if (S.col >= max_cols) S.col = max_cols - 1;
-        mui_sfx("ui/select");
-      }
-      return true;
-
     case MB_ACTION:
-    case MB_SUBMIT:
-      mui_sfx("ui/confirm");
-      shop_ui_trigger_current();
+    case MB_SUBMIT: {
+      const shop_touch_slot* slot = slot_at(S.row, S.col);
+      if (slot) {
+        mui_sfx("ui/confirm");
+        trigger_slot(slot);
+      }
       return true;
+    }
 
     case MB_CANCEL:
-      /* Move to skip button or trigger skip */
-      S.row = num_rows - 1;
-      S.col = shop_ui_row_max_cols(S.row) - 1;
+      /* to the Continue button, which is the last slot */
+      S.row = S.n_rows - 1;
+      S.col = rows[S.row].count - 1;
       mui_sfx("ui/select");
       return true;
 
@@ -279,60 +387,17 @@ bool shop_ui_input(mui_button b) {
 bool shop_ui_touch(float touch_x, float touch_y) {
   if (!S.active) return false;
 
-  for (int i = 0; i < S.n_touch_slots; i++) {
-    const shop_touch_slot* slot = &S.touch_slots[i];
-    if (shop_ui_hit_test(&slot->bounds, touch_x, touch_y)) {
+  for (int r = 0; r < S.n_rows; r++) {
+    for (int c = 0; c < rows[r].count; c++) {
+      const shop_touch_slot* slot = &S.touch_slots[rows[r].slot0 + c];
+      if (!shop_ui_hit_test(&slot->bounds, touch_x, touch_y)) continue;
       mui_sfx("ui/confirm");
-      switch (slot->type) {
-        case SHOP_TARGET_REWARD:
-          S.row = 0;
-          S.col = slot->index;
-          if (S.events.on_select_reward) {
-            S.events.on_select_reward(S.events.ctx, slot->index);
-          }
-          return true;
-
-        case SHOP_TARGET_SHOP:
-          if (slot->index < 4) {
-            S.row = 1;
-            S.col = slot->index;
-          } else {
-            S.row = 2;
-            S.col = slot->index - 4;
-          }
-          if (S.events.on_select_shop) {
-            S.events.on_select_shop(S.events.ctx, slot->index);
-          }
-          return true;
-
-        case SHOP_TARGET_REROLL:
-          S.row = shop_ui_num_rows() - 1;
-          S.col = 0;
-          if (S.events.on_reroll) {
-            S.events.on_reroll(S.events.ctx, S.lock_capsule_active);
-          }
-          return true;
-
-        case SHOP_TARGET_LOCK:
-          S.row = shop_ui_num_rows() - 1;
-          S.col = (S.screen_copy.reroll_cost >= 0) ? 1 : 0;
-          S.lock_capsule_active = !S.lock_capsule_active;
-          return true;
-
-        case SHOP_TARGET_SKIP:
-          S.row = shop_ui_num_rows() - 1;
-          S.col = shop_ui_row_max_cols(S.row) - 1;
-          if (S.events.on_skip) {
-            S.events.on_skip(S.events.ctx);
-          }
-          return true;
-
-        default:
-          break;
-      }
+      S.row = r;
+      S.col = c;
+      trigger_slot(slot);
+      return true;
     }
   }
-
   return false;
 }
 
@@ -340,150 +405,208 @@ void shop_ui_update(float dt_ms) {
   (void)dt_ms;
 }
 
-static const char* shop_ui_tier_name(int tier) {
-  switch (tier) {
-    case 0: return "Common";
-    case 1: return "Great";
-    case 2: return "Ultra";
-    case 3: return "Rogue";
-    case 4: return "Master";
-    default: return "Common";
+/* ---------------------------------------------------------------- drawing */
+
+static bool locale_label(const char* key, char* out, size_t n, const char* fallback) {
+  const char* t = mui_t(key);
+  const bool ok = t && strcmp(t, key) != 0;
+  snprintf(out, n, "%s", ok ? t : fallback);
+  return ok;
+}
+
+static void draw_focus(const shop_ui_rect* r) {
+  const rr_color c = RR_RGBA(0xf8, 0xf8, 0xf8, 255);
+  rr_rect(r->x, r->y, r->w, 1, c);
+  rr_rect(r->x, r->y + r->h - 1, r->w, 1, c);
+  rr_rect(r->x, r->y, 1, r->h, c);
+  rr_rect(r->x + r->w - 1, r->y, 1, r->h, c);
+  rr_rect(r->x + 1, r->y + 1, r->w - 2, r->h - 2, RR_RGBA(0xf8, 0xf8, 0xf8, 36));
+}
+
+static void draw_icon(const char* icon, float x, float y) {
+  if (icon) mui_image("items", icon, x, y, 0, 0);
+}
+
+/* a name wrapped into the width, drawn from y; returns the lines drawn */
+static int draw_wrapped(const char* text, float x, float y, float w, rr_color c, int max_lines) {
+  char wrapped[256];
+  const int lines = mui_wrap(FONT, text, w, wrapped, sizeof wrapped);
+  int n = 0;
+  for (char* line = wrapped; line && *line && n < max_lines;) {
+    char* nl = strchr(line, '\n');
+    char one[96];
+    snprintf(one, sizeof one, "%.*s", nl ? (int)(nl - line) : (int)strlen(line), line);
+    text8(x, y + 9.0f * n, one, c);
+    n++;
+    line = nl ? nl + 1 : NULL;
+  }
+  (void)lines;
+  return n;
+}
+
+static void draw_shop_item(const shop_touch_slot* slot, bool focus) {
+  const gc_offer* o = &S.screen_copy.shop[slot->index];
+  offer_view v;
+  offer_info(o, &v);
+  const float cx = slot->bounds.x + slot->bounds.w / 2;
+  const float y = slot->bounds.y;
+  if (focus) draw_focus(&slot->bounds);
+  draw_icon(v.icon, cx - 16, y - 2);
+  char amount[32], price[40];
+  fmt_money(amount, sizeof amount, o->cost);
+  snprintf(price, sizeof price, "\xe2\x82\xbd%s", amount);
+  const int w = mui_text_width(FONT, price);
+  text8_style(cx - w / 2.0f, y + slot->bounds.h - 10, price, S.player_money >= o->cost ? TS_MONEY : TS_PARTY_RED);
+}
+
+static void draw_reward_option(const shop_touch_slot* slot, bool focus) {
+  const gc_offer* o = &S.screen_copy.options[slot->index];
+  offer_view v;
+  offer_info(o, &v);
+  const shop_ui_rect* b = &slot->bounds;
+  if (focus) draw_focus(b);
+  draw_icon(v.icon, b->x + 1, b->y + (b->h - 32) / 2);
+  const float tx = b->x + 33, tw = b->w - 33 - 2;
+  const bool priced = o->is_purchase || o->cost > 0;
+  const int max_lines = priced ? 2 : 3;
+  /* the name in its tier's colour, vertically centred with the price under it */
+  char wrapped[256];
+  const int want = mui_wrap(FONT, v.name, tw, wrapped, sizeof wrapped);
+  const int lines = want < max_lines ? want : max_lines;
+  const int total = lines + (priced ? 1 : 0);
+  const float ty = b->y + (b->h - 9.0f * total) / 2.0f;
+  draw_wrapped(v.name, tx, ty, tw, tier_color(o->tier), max_lines);
+  if (priced) {
+    char amount[32], price[40];
+    fmt_money(amount, sizeof amount, o->cost);
+    snprintf(price, sizeof price, "\xe2\x82\xbd%s", amount);
+    text8_style(tx, ty + 9.0f * lines, price, S.player_money >= o->cost ? TS_MONEY : TS_PARTY_RED);
   }
 }
 
-static mui_style shop_ui_tier_style(int tier) {
-  switch (tier) {
-    case 0: return TS_WINDOW;
-    case 1: return TS_SUMMARY_BLUE;
-    case 2: return TS_SUMMARY_GOLD;
-    case 3: return TS_SUMMARY_PINK;
-    case 4: return TS_PARTY_RED;
-    default: return TS_WINDOW;
+static void draw_button(const shop_touch_slot* slot, bool focus) {
+  const shop_ui_rect* b = &slot->bounds;
+  mui_window(b->x, b->y, b->w, b->h);
+  if (focus) draw_focus(b);
+  char label[64], buf[96];
+  rr_color c = MUI_RGB(0xf8f8f8);
+  switch (slot->type) {
+    case SHOP_TARGET_REROLL: {
+      char amount[32];
+      locale_label("modifierSelectUiHandler:reroll", label, sizeof label, "Reroll");
+      fmt_money(amount, sizeof amount, S.screen_copy.reroll_cost);
+      snprintf(buf, sizeof buf, "%s \xe2\x82\xbd%s", label, amount);
+      c = S.player_money >= S.screen_copy.reroll_cost ? mui_style_color(TS_MONEY, false) : mui_style_color(TS_PARTY_RED, false);
+      break;
+    }
+    case SHOP_TARGET_LOCK:
+      locale_label("modifierSelectUiHandler:lockRarities", label, sizeof label, "Lock Rarities");
+      snprintf(buf, sizeof buf, "%s: %s", label, S.lock_capsule_active ? "ON" : "OFF");
+      if (S.lock_capsule_active) c = mui_style_color(TS_SUMMARY_GOLD, false);
+      break;
+    default:
+      locale_label("modifierSelectUiHandler:continueNextWaveButton", buf, sizeof buf, "Continue");
+      break;
+  }
+  const int w = mui_text_width(FONT, buf);
+  text8(b->x + (b->w - w) / 2.0f, b->y + (b->h - 12) / 2.0f - 1.0f, buf, c); /* the 8 px font's text box is 12 high */
+}
+
+static void draw_description(void) {
+  mui_window(MARGIN, desc_y, MUI_W - 2 * MARGIN, desc_h);
+  const shop_touch_slot* slot = slot_at(S.row, S.col);
+  if (!slot) return;
+  const float x = MARGIN + 7, w = MUI_W - 2 * MARGIN - 14;
+  char name[96] = "", desc[240] = "";
+  rr_color nc = MUI_RGB(0xf8f8f8);
+  switch (slot->type) {
+    case SHOP_TARGET_REWARD:
+    case SHOP_TARGET_SHOP: {
+      const gc_offer* o = slot->type == SHOP_TARGET_REWARD ? &S.screen_copy.options[slot->index] : &S.screen_copy.shop[slot->index];
+      offer_view v;
+      offer_info(o, &v);
+      snprintf(name, sizeof name, "%s", v.name);
+      snprintf(desc, sizeof desc, "%s", v.desc);
+      if (slot->type == SHOP_TARGET_REWARD) nc = tier_color(o->tier);
+      break;
+    }
+    case SHOP_TARGET_REROLL:
+      locale_label("modifierSelectUiHandler:reroll", name, sizeof name, "Reroll");
+      locale_label("modifierSelectUiHandler:rerollDesc", desc, sizeof desc, "Spend money to reroll your item options.");
+      break;
+    case SHOP_TARGET_LOCK:
+      locale_label("modifierSelectUiHandler:lockRarities", name, sizeof name, "Lock Rarities");
+      locale_label("modifierSelectUiHandler:lockRaritiesDesc", desc, sizeof desc, "Lock item rarities on reroll (affects reroll cost).");
+      break;
+    default:
+      locale_label("modifierSelectUiHandler:continueNextWaveButton", name, sizeof name, "Continue");
+      locale_label("modifierSelectUiHandler:continueNextWaveDescription", desc, sizeof desc, "Continue to the next wave.");
+      break;
+  }
+  text8(x, desc_y + 4, name, nc);
+  /* the description in what is left of the window; a longer one is cut with "..." */
+  const int room = (int)((desc_h - 4 - 9 - 3) / 9);
+  char wrapped[512];
+  mui_wrap(FONT, desc, w, wrapped, sizeof wrapped);
+  int n = 0;
+  for (char* line = wrapped; line && *line && n < room;) {
+    char* nl = strchr(line, '\n');
+    char one[128];
+    snprintf(one, sizeof one, "%.*s", nl ? (int)(nl - line) : (int)strlen(line), line);
+    if (n == room - 1 && nl && *(nl + 1)) {
+      const size_t len = strlen(one);
+      if (len > 3) strcpy(one + len - 3, "...");
+    }
+    text8_style(x, desc_y + 4 + 9 + 9.0f * n, one, TS_WINDOW);
+    n++;
+    line = nl ? nl + 1 : NULL;
   }
 }
 
 void shop_ui_draw(void) {
   if (!S.active) return;
 
-  /* Background window */
-  mui_window(0, 0, 320, 180);
+  /* the background */
+  mui_window(0, 0, MUI_W, MUI_H);
 
-  /* Title bar, Luck Grade & Money balance */
-  mui_text(TS_HEADER_LABEL, 10, 4, "REWARDS & SHOP");
+  /* the top line: place and wave on the left, luck and money on the right */
+  char buf[128];
+  if (S.location[0]) snprintf(buf, sizeof buf, "%s - %d", S.location, S.wave);
+  else snprintf(buf, sizeof buf, "%d", S.wave);
+  text8_style(MARGIN + 3, 3, buf, TS_WINDOW);
+  char amount[32];
+  fmt_money(amount, sizeof amount, S.player_money);
+  snprintf(buf, sizeof buf, "\xe2\x82\xbd%s", amount);
+  const int mw = mui_text_width(FONT, buf);
+  text8_style(MUI_W - MARGIN - 3 - mw, 3, buf, TS_MONEY);
+  snprintf(buf, sizeof buf, "Luck: %s", shop_ui_luck_grade(S.party_luck));
+  const int lw = mui_text_width(FONT, buf);
+  text8_style(MUI_W - MARGIN - 3 - mw - 10 - lw, 3, buf, TS_LUCK_VALUE);
 
-  char luck_buf[32];
-  snprintf(luck_buf, sizeof luck_buf, "Luck: %s", shop_ui_luck_grade(S.party_luck));
-  mui_text(TS_LUCK_VALUE, 140, 4, luck_buf);
-
-  char money_buf[32];
-  snprintf(money_buf, sizeof money_buf, "Money: ₽%.0f", S.player_money);
-  mui_text_o(TS_MONEY, 310, 4, 1.0f, 0.0f, money_buf);
-
-  /* 1. Draw Reward Options */
-  int n_opts = S.screen_copy.n_options;
-  for (int i = 0; i < S.n_touch_slots; i++) {
-    const shop_touch_slot* slot = &S.touch_slots[i];
-    if (slot->type == SHOP_TARGET_REWARD) {
-      int idx = slot->index;
-      if (idx >= 0 && idx < n_opts) {
-        const gc_offer* offer = &S.screen_copy.options[idx];
-        float x = slot->bounds.x;
-        float y = slot->bounds.y;
-        float w = slot->bounds.w;
-        float h = slot->bounds.h;
-
-        /* Window box */
-        mui_window(x, y, w, h);
-
-        /* Highlight box if focused */
-        if (S.row == 0 && S.col == idx) {
-          mui_window(x - 2, y - 2, w + 4, h + 4);
-        }
-
-        /* Tier label */
-        mui_style tstyle = shop_ui_tier_style(offer->tier);
-        mui_text(tstyle, x + 4, y + 2, shop_ui_tier_name(offer->tier));
-
-        /* Key / Item Name */
-        const char* name = offer->key ? offer->key : "REWARD";
-        mui_text(TS_SMALLER_WINDOW_ALT, x + 4, y + 18, name);
+  for (int r = 0; r < S.n_rows; r++) {
+    for (int c = 0; c < rows[r].count; c++) {
+      const shop_touch_slot* slot = &S.touch_slots[rows[r].slot0 + c];
+      const bool focus = r == S.row && c == S.col;
+      switch (rows[r].kind) {
+        case ROW_SHOP:
+          draw_shop_item(slot, focus);
+          break;
+        case ROW_OPTION:
+          draw_reward_option(slot, focus);
+          break;
+        case ROW_BUTTONS:
+          draw_button(slot, focus);
+          break;
       }
     }
   }
+  draw_description();
+}
 
-  /* 2. Draw Shop Options */
-  int n_shop = S.screen_copy.n_shop;
-  for (int i = 0; i < S.n_touch_slots; i++) {
-    const shop_touch_slot* slot = &S.touch_slots[i];
-    if (slot->type == SHOP_TARGET_SHOP) {
-      int idx = slot->index;
-      if (idx >= 0 && idx < n_shop) {
-        const gc_offer* offer = &S.screen_copy.shop[idx];
-        float x = slot->bounds.x;
-        float y = slot->bounds.y;
-        float w = slot->bounds.w;
-        float h = slot->bounds.h;
+int shop_ui_slot_count(void) {
+  return S.n_touch_slots;
+}
 
-        mui_window(x, y, w, h);
-
-        int current_shop_row = (idx < 4) ? 1 : 2;
-        int current_shop_col = (idx < 4) ? idx : (idx - 4);
-        if (S.row == current_shop_row && S.col == current_shop_col) {
-          mui_window(x - 2, y - 2, w + 4, h + 4);
-        }
-
-        const char* name = offer->key ? offer->key : "ITEM";
-        mui_style name_style = (S.player_money < offer->cost) ? TS_SUMMARY_GRAY : TS_WINDOW;
-        mui_text(name_style, x + 4, y + 2, name);
-
-        char cost_buf[24];
-        snprintf(cost_buf, sizeof cost_buf, "₽%.0f", offer->cost);
-        mui_text(TS_MONEY_WINDOW, x + 4, y + 16, cost_buf);
-      }
-    }
-  }
-
-  /* 3. Draw Lock Capsule Visuals & Indicator */
-  if (S.has_lock_capsule || S.n_locked_tiers > 0) {
-    mui_text(TS_HEADER_LABEL, 10, 128, S.lock_capsule_active ? "Lock Capsule: ACTIVE" : "Lock Capsule: READY");
-  }
-
-  /* 4. Draw Action Buttons */
-  for (int i = 0; i < S.n_touch_slots; i++) {
-    const shop_touch_slot* slot = &S.touch_slots[i];
-    float x = slot->bounds.x;
-    float y = slot->bounds.y;
-    float w = slot->bounds.w;
-    float h = slot->bounds.h;
-
-    int action_row = shop_ui_num_rows() - 1;
-
-    if (slot->type == SHOP_TARGET_REROLL) {
-      mui_window(x, y, w, h);
-      if (S.row == action_row && S.col == 0) {
-        mui_window(x - 2, y - 2, w + 4, h + 4);
-      }
-      char reroll_buf[32];
-      if (S.screen_copy.reroll_cost >= 0) {
-        snprintf(reroll_buf, sizeof reroll_buf, "Reroll ₽%.0f", S.screen_copy.reroll_cost);
-      } else {
-        snprintf(reroll_buf, sizeof reroll_buf, "Reroll N/A");
-      }
-      mui_text(TS_WINDOW, x + 6, y + 6, reroll_buf);
-    } else if (slot->type == SHOP_TARGET_LOCK) {
-      mui_window(x, y, w, h);
-      int lock_col = (S.screen_copy.reroll_cost >= 0) ? 1 : 0;
-      if (S.row == action_row && S.col == lock_col) {
-        mui_window(x - 2, y - 2, w + 4, h + 4);
-      }
-      mui_text(TS_WINDOW, x + 6, y + 6, S.lock_capsule_active ? "Lock: ON" : "Lock: OFF");
-    } else if (slot->type == SHOP_TARGET_SKIP) {
-      mui_window(x, y, w, h);
-      int skip_col = shop_ui_row_max_cols(action_row) - 1;
-      if (S.row == action_row && S.col == skip_col) {
-        mui_window(x - 2, y - 2, w + 4, h + 4);
-      }
-      mui_text(TS_WINDOW, x + 16, y + 6, "Skip / Cont");
-    }
-  }
+const shop_touch_slot* shop_ui_slot(int i) {
+  return i >= 0 && i < S.n_touch_slots ? &S.touch_slots[i] : NULL;
 }
