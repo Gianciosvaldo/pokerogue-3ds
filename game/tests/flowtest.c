@@ -224,8 +224,14 @@ static void observe_start(bool resumed) {
   q[2].b = 2;
   co_observe(++obs_drain, q, 3, be, 2, false, false);
 }
+static const cs_defeat* g_defeat; /* what a custom run's fake driver names as the finisher (NULL: none) */
+static cs_defeat g_defeat_store;
 static void driver_end(int kind) {
   co_finish(kind == GC_SCREEN_CLEAR, RUN.biome, RUN.wave);
+  if (CFG.custom) {   /* run_screen.c's end_run: the controller settles the rematch and may name the finisher */
+    g_defeat = cr_on_run_end(&RUN, kind, &g_defeat_store) ? &g_defeat_store : NULL;
+    cr_end();
+  }
   CFG.on_end(kind, CFG.end_arg);
 }
 
@@ -239,6 +245,10 @@ bool rs_start(const rs_config* c) {
     /* the run takes the team the player confirmed, as the real driver does */
     gc_run_new(&RUN, GAME_MODES_CLASSIC, c->seed, 99);
     RUN.sys = c->sys;
+    if (c->custom) {   /* run_screen.c's new_run: the controller starts with the run, before its starters */
+      co_begin_run(false);
+      if (!cr_begin(&RUN, c->entropy)) return false;
+    }
     const char* why = NULL;
     if (!gc_run_set_starters(&RUN, c->team, c->n_team, &why)) {
       printf("game-core refused the team: %s\n", why ? why : "?");
@@ -252,7 +262,10 @@ bool rs_start(const rs_config* c) {
   }
   CHECK(c->save, "a new run must save");
   observe_start(false);
-  rsv_save(c->slot, &RUN); /* the first save point */
+  if (c->custom)
+    CHECK(cr_save(c->slot, &RUN) == RSV_SAVED, "the custom run's first save point");
+  else
+    rsv_save(c->slot, &RUN); /* the first save point */
   sys_saved_ok = c->sys && c->save_sys ? c->save_sys() : true; /* the driver writes it with the run */
   return true;
 }
@@ -260,16 +273,18 @@ bool rs_start(const rs_config* c) {
 rsv_status rs_resume(const rs_config* c, char why[RSV_WHY_LEN]) {
   CFG = *c;
   n_resume++;
-  const rsv_status st = rsv_load(c->slot, &RUN, why);
+  const rsv_status st = c->custom ? cr_load(c->slot, &RUN, why) : rsv_load(c->slot, &RUN, why);
   if (st == RSV_OK) {
     RUN.sys = c->sys; /* a saved run holds none: the driver attaches the player's */
-    observe_start(true);
+    if (c->custom)
+      cr_begin_observer();
+    else
+      observe_start(true);
   }
   return st;
 }
 
 const gc_run* rs_run(void) { return &RUN; }
-static const cs_defeat* g_defeat; /* what a custom run's fake driver names as the finisher (NULL: none) */
 const cs_defeat* rs_custom_defeat(void) { return g_defeat; }
 
 /* ------------------------------------------------------------------ helpers */
@@ -639,6 +654,109 @@ int main(void) {
     CHECK(n_radar == radars + 3 && !RA.meta && RA.why[0], "a refused open falls back to the unusable view with a reason: \"%s\"", RA.why);
   }
   cs_reset();
+
+  /* ---- C10: the title's Custom Run and Custom Load: slot lists of their own, a sticky custom run, never mixed with the ordinary slots */
+  {
+    sh_has_species = true;
+    cs_reset();
+    sysd_reset();
+    ptx_reset();
+    app_start(&plain);
+    char cp[300];
+    snprintf(cp, sizeof cp, "%s/custom.sav", SAVE_DIR);
+    remove(cp);
+    snprintf(cp, sizeof cp, "%s/custom.sav.bak", SAVE_DIR);
+    remove(cp);
+    cs_reset();
+    new_run(&RUN, "flowcustomseed00000000001");
+    CHECK(rsv_save(0, &RUN) == RSV_SAVED, "an ordinary run in slot 0");
+    app_start(&plain);
+    CHECK(T.can_continue, "the ordinary run is on the title");
+
+    /* Custom Run: its own list (empty although ordinary slot 0 is not), the starter select, a custom config */
+    const int slots0 = n_slots, sh0 = n_sh, start0 = n_start;
+    T.on_choose(TITLE_CUSTOM_RUN, T.arg);
+    CHECK(n_slots == slots0 + 1 && S.mode == SLOTS_NEW, "Custom Run opens a list to save a new run in");
+    for (int i = 0; i < RSV_SLOTS; i++) CHECK(S_info[i].status == RSV_EMPTY, "custom slot %d is empty", i);
+    S.on_pick(2, S.arg);
+    CHECK(n_sh == sh0 + 1 && n_start == start0, "the starter select opens (a developer's team is not used for a custom run)");
+    sh_confirm(1);
+    CHECK(n_start == start0 + 1 && CFG.custom && CFG.slot == 2 && CFG.save && CFG.on_end && CFG.n_team == 1 && !CFG.seed, "the run starts as a custom run in slot 2");
+    rsv_info inf;
+    CHECK(cr_inspect(2, &inf) == RSV_OK && cr_active(), "it is saved in the custom slot and the controller is on");
+    CHECK(status_of(2) == RSV_EMPTY && status_of(0) == RSV_OK, "the ordinary slots are as they were");
+    snprintf(cp, sizeof cp, "%s/csession_2.sav", SAVE_DIR);
+    CHECK(exists(cp), "the file is csession_2");
+    slot_path(2, ".sav", p, sizeof p);
+    CHECK(!exists(p), "and there is no ordinary session_2");
+
+    /* the run ends: the custom slot is cleared, the controller is off, the ordinary slot 0 is still there */
+    driver_end(GC_SCREEN_GAME_OVER);
+    CHECK(!cr_active() && cr_inspect(2, &inf) == RSV_EMPTY && !exists(cp), "the custom slot of a finished run is cleared");
+    CHECK(status_of(0) == RSV_OK, "the ordinary run is untouched");
+    R.on_done(R.arg);
+
+    /* New Game afterwards is an ordinary run again (the custom flag does not stick to the title) */
+    T.on_choose(TITLE_NEW_GAME, T.arg);
+    CHECK(S.mode == SLOTS_NEW && S_info[0].status == RSV_OK, "New Game lists the ordinary slots");
+    S.on_pick(1, S.arg);
+    sh_confirm(1);
+    CHECK(!CFG.custom && CFG.slot == 1 && !cr_active(), "an ordinary run: no custom flag, no controller");
+    driver_end(GC_SCREEN_GAME_OVER);
+    R.on_done(R.arg);
+
+    /* Custom Run again, left unfinished; Custom Load lists it and brings it back */
+    T.on_choose(TITLE_CUSTOM_RUN, T.arg);
+    S.on_pick(3, S.arg);
+    sh_confirm(1);
+    CHECK(CFG.custom && CFG.slot == 3 && cr_inspect(3, &inf) == RSV_OK, "a custom run in slot 3");
+    cr_end();   /* the app is closed */
+    app_start(&plain);
+    const int res0 = n_resume;
+    T.on_choose(TITLE_CUSTOM_LOAD, T.arg);
+    CHECK(S.mode == SLOTS_LOAD && S_info[3].status == RSV_OK && S_info[0].status == RSV_EMPTY, "Custom Load lists the custom run, not the ordinary ones");
+    S.on_pick(3, S.arg);
+    CHECK(n_resume == res0 + 1 && CFG.custom && CFG.slot == 3 && cr_active(), "picking it resumes it as a custom run");
+    CHECK(RUN.sys == sysd_get(), "with the player's system data");
+
+    /* Load Game never sees it, and Continue is the ordinary run's */
+    cr_end();
+    app_start(&plain);
+    T.on_choose(TITLE_LOAD_GAME, T.arg);
+    CHECK(S.mode == SLOTS_LOAD && S_info[3].status != RSV_OK, "Load Game does not list the custom run");
+    S.on_back(S.arg);
+
+    /* Delete Run in the custom list removes the custom slot only and gives back what it held */
+    T.on_choose(TITLE_CUSTOM_LOAD, T.arg);
+    S.on_delete(3, S.arg);
+    snprintf(cp, sizeof cp, "%s/csession_3.sav", SAVE_DIR);
+    CHECK(!exists(cp) && S_info[3].status == RSV_EMPTY && status_of(0) == RSV_OK, "Delete Run removes the custom slot only");
+    S.on_back(S.arg);
+
+    /* an unusable custom file: the list says so, no custom run starts, ordinary runs are not affected */
+    snprintf(cp, sizeof cp, "%s/custom.sav", SAVE_DIR);
+    write_raw(cp, junk, sizeof junk);
+    snprintf(p2, sizeof p2, "%s/custom.sav.bak", SAVE_DIR);
+    remove(p2);
+    cs_reset();
+    app_start(&plain);
+    const int start1 = n_start;
+    T.on_choose(TITLE_CUSTOM_RUN, T.arg);
+    CHECK(S.mode == SLOTS_NEW && last_msg[0], "the custom list says the custom file cannot be used: \"%s\"", last_msg);
+    last_msg[0] = 0;
+    S.on_pick(0, S.arg);
+    CHECK(n_start == start1 && last_msg[0], "and no custom run starts: \"%s\"", last_msg);
+    CHECK(file_size(cp) == sizeof junk, "the unusable file is untouched");
+    S.on_back(S.arg);
+    T.on_choose(TITLE_NEW_GAME, T.arg);
+    S.on_pick(4, S.arg);
+    sh_confirm(1);
+    CHECK(!CFG.custom && n_start == start1 + 1, "an ordinary run still starts");
+    driver_end(GC_SCREEN_GAME_OVER);
+    R.on_done(R.arg);
+    remove(cp);
+    cs_reset();
+  }
 
   /* the capsule preview is debug only: it opens before the title when the debug file asks for it, and leaving it is the title */
   {

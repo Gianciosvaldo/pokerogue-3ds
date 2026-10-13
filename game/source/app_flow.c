@@ -122,6 +122,13 @@ static void on_starters_exit(void* arg) {
 }
 
 static void new_run_in(int slot) {
+  if (A.custom) {
+    char why[CR_WHY_LEN];
+    if (!cr_usable(why)) {
+      tell(why[0] ? why : "The custom content file cannot be used.");
+      return;
+    }
+  }
   /* the list never offers this: what can't be read is not overwritten */
   if (A.info[slot].status == RSV_INCOMPATIBLE) {
     tell("That slot holds a save this version can't read. It is not overwritten.");
@@ -251,12 +258,9 @@ static void on_title(title_choice c, void* arg) {
     case TITLE_CUSTOM_LOAD: {
       /* the custom runs have a slot list of their own (custom_run.h); a custom file that cannot be used is said so, not guessed around */
       char why[CR_WHY_LEN];
-      if (!cr_usable(why)) {
-        show_title();
-        break;
-      }
       A.custom = true;
       show_slots(c == TITLE_CUSTOM_RUN ? SLOTS_NEW : SLOTS_LOAD, 0);
+      if (!cr_usable(why)) tell(why[0] ? why : "The custom content file cannot be used.");
       break;
     }
     case TITLE_RADAR:
