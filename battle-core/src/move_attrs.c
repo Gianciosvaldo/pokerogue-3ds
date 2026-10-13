@@ -193,7 +193,7 @@ void pr_apply_variable_power(pr_battle *bt, const pr_pokemon *user, const pr_pok
         case PR_AC_LessPPMorePowerAttr: { /* Trump Card */
             int pp_used = 0;
             for (int k = 0; k < 4; k++)
-                if (user->moves[k] == move) { pp_used = user->pp_used[k]; break; }
+                if (PR_MOVES(user)[k] == move) { pp_used = PR_PP_USED(user)[k]; break; }
             int remains = pr_moves[move].pp - pp_used;
             if (remains < 0) remains = 0;
             static const double pw[4] = {200, 80, 60, 50};

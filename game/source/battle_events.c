@@ -65,11 +65,14 @@ const pr_text_source* be_text_source(void) {
 
 void be_mon(const pr_battle* bt, const pr_pokemon* p, bv_mon* m) {
   memset(m, 0, sizeof *m);
-  m->species = p->species;
-  m->form = p->form;
-  m->gender = p->gender;
-  m->female = p->gender == 1;
+  const pr_form* form = pr_pokemon_form(p);
+  m->species = form->species;
+  m->form = form->form_index;
+  m->gender = pr_get_gender(p);
+  m->female = m->gender == 1;
   m->shiny = p->shiny;
+  m->variant = p->variant;
+  m->sprite_scale = (float)pr_get_sprite_scale(p);
   snprintf(m->name, sizeof m->name, "%s", i18n_species_name(p->species));
   m->level = p->level;
   m->hp = p->hp;
@@ -78,13 +81,15 @@ void be_mon(const pr_battle* bt, const pr_pokemon* p, bv_mon* m) {
   int8_t types[PR_MAX_TYPES];
   int n = pr_get_types(p, types, 0);
   for (int i = 0; i < n && i < 3; i++) m->types[m->n_types++] = types[i];
-  for (int i = 0; i < p->n_moves && i < 4; i++) {
-    int max = p->max_pp_override[i] >= 0 ? p->max_pp_override[i] : pr_moves[p->moves[i]].pp;
-    m->moves[i] = p->moves[i];
+  for (int i = 0; i < PR_N_MOVES(p) && i < 4; i++) {
+    int base = pr_moves[PR_MOVES(p)[i]].pp;
+    int step = base / 5 < 1 ? 1 : base / 5;
+    int max = PR_MAX_PP(p)[i] > 0 ? PR_MAX_PP(p)[i] : base + PR_PP_UP(p)[i] * step;
+    m->moves[i] = PR_MOVES(p)[i];
     m->pp_max[i] = max;
-    m->pp_left[i] = max - p->pp_used[i];
+    m->pp_left[i] = max - PR_PP_USED(p)[i];
   }
-  m->n_moves = p->n_moves;
+  m->n_moves = PR_N_MOVES(p);
   m->boss = p->is_boss;
   for (int i = 0; i < 7; i++) m->stat_stages[i] = p->stat_stages[i];
   (void)bt;
@@ -134,6 +139,7 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
   const bv_mon* shown_enemy = &view->mon[1];
   seen[0] = (seen_t){shown_player->species, shown_player->form, shown_player->hp, shown_player->status, shown_player->hp <= 0, view->present[0], !shown_player->hidden, shown_player->substitute, shown_player->max_hp};
   seen[2] = (seen_t){shown_enemy->species, shown_enemy->form, shown_enemy->hp, shown_enemy->status, shown_enemy->hp <= 0, view->present[1], !shown_enemy->hidden, shown_enemy->substitute, shown_enemy->max_hp};
+  bv_mon current[2] = {*shown_player, *shown_enemy};
   enum { SENT_MAX = 16 };
   static bv_mon sent[SENT_MAX];
   int n_sent = 0;
@@ -166,7 +172,10 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
             PUT(.type = BEV_MAX_HP, .battler = k, .a = ev->field[k].max_hp);
             seen[k].max_hp = ev->field[k].max_hp;
           }
-          if (ev->field[k].species != seen[k].species || ev->field[k].form != seen[k].form) {
+            bool transforming = ev->type == PR_EV_TRANSFORM && b == k;
+            for (int j = i + 1; j < n_events && !transforming; j++)
+              transforming = events[j].type == PR_EV_TRANSFORM && events[j].battler == k;
+            if (!transforming && (ev->field[k].species != seen[k].species || ev->field[k].form != seen[k].form)) {
             PUT(.type = BEV_FORM_CHANGE, .battler = k, .a = ev->field[k].species, .b = ev->field[k].form);
             seen[k].species = ev->field[k].species;
             seen[k].form = ev->field[k].form;
@@ -175,6 +184,35 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
       }
     }
     switch (ev->type) {
+      case PR_EV_TRANSFORM: {
+        if (!single || !seen[b].present || n_sent >= SENT_MAX) break;
+        bv_mon* mon = &sent[n_sent++];
+        *mon = current[b >= 2 ? 1 : 0];
+        mon->species = ev->field[b].species;
+        mon->form = ev->field[b].form;
+        mon->gender = ev->transform.gender;
+        mon->female = mon->gender == 1;
+        mon->sprite_scale = ev->transform.sprite_scale;
+        mon->hp = ev->field[b].hp;
+        mon->max_hp = ev->field[b].max_hp;
+        mon->status = ev->field[b].status;
+        mon->substitute = ev->field[b].substitute;
+        mon->hidden = !ev->field[b].visible;
+        mon->n_types = ev->transform.n_types;
+        for (int k = 0; k < 3; k++) mon->types[k] = ev->transform.types[k];
+        mon->n_moves = ev->transform.n_moves;
+        for (int k = 0; k < 4; k++) {
+          mon->moves[k] = ev->transform.moves[k];
+          mon->pp_max[k] = ev->transform.pp_max[k];
+          mon->pp_left[k] = ev->transform.pp_left[k];
+        }
+        memcpy(mon->stat_stages, ev->transform.stat_stages, sizeof mon->stat_stages);
+        PUT(.type = BEV_TRANSFORM, .battler = b, .a = ev->value, .mon = mon);
+        seen[b].species = mon->species;
+        seen[b].form = mon->form;
+        current[b >= 2 ? 1 : 0] = *mon;
+        break;
+      }
       case PR_EV_TEXT:
         if (!ev->msg.key || nt >= TXT_MAX) break;
         /* "Will you switch Pokemon?" is asked as a prompt in upstream (SET battle style only); the run doesn't
@@ -253,7 +291,7 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
           be_mon(bt, p, &(*sm));
           if (!side && view->exp_ratio) (*sm).exp_ratio = view->exp_ratio(p);
           if (!side && view->level_of) (*sm).level = view->level_of(p);
-          if (p->species != ev->field[b].species || p->form != ev->field[b].form) {
+          if ((*sm).species != ev->field[b].species || (*sm).form != ev->field[b].form) {
             /* it changed after being sent out (the events that follow show that): send it out as it was */
             (*sm).species = ev->field[b].species;
             (*sm).form = ev->field[b].form;
@@ -271,6 +309,13 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
         (*sm).hp = ev->field[b].hp;
         if (ev->field[b].max_hp > 0) (*sm).max_hp = ev->field[b].max_hp;
         (*sm).status = ev->field[b].status;
+        (*sm).gender = ev->field[b].gender;
+        (*sm).female = (*sm).gender == 1;
+        (*sm).variant = ev->field[b].variant;
+        (*sm).sprite_scale = ev->field[b].sprite_scale;
+        (*sm).n_types = ev->field[b].n_types;
+        for (int k = 0; k < 3; k++) (*sm).types[k] = ev->field[b].types[k];
+        current[b >= 2 ? 1 : 0] = *sm;
         /* a Pokemon dragged out (Roar, Whirlwind, Dragon Tail) has no SWITCH_OUT: the one on the field leaves */
         if (seen[b].present) PUT(.type = BEV_WITHDRAW, .battler = b);
         PUT(.type = BEV_SUMMON, .battler = b, .mon = &(*sm), .text = go_text);
@@ -309,10 +354,11 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
     /* a doll gone without its animation (SubstituteTag.onRemove while the Pokemon was in focus) */
     if (seen[k].substitute && !pr_get_battler_tag(p, BATTLER_TAG_TYPE_SUBSTITUTE))
       PUT(.type = BEV_POKEMON_ANIM, .battler = k, .a = -1);
-    if (p->hp > 0 && (p->species != seen[k].species || p->form != seen[k].form)) {
-      PUT(.type = BEV_FORM_CHANGE, .battler = k, .a = p->species, .b = p->form);
-      seen[k].species = p->species;
-      seen[k].form = p->form;
+    const pr_form* form = pr_pokemon_form(p);
+    if (p->hp > 0 && (form->species != seen[k].species || form->form_index != seen[k].form)) {
+      PUT(.type = BEV_FORM_CHANGE, .battler = k, .a = form->species, .b = form->form_index);
+      seen[k].species = form->species;
+      seen[k].form = form->form_index;
     }
   }
 #undef PUT

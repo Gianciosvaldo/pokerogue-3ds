@@ -23,7 +23,7 @@ Completed continuation slices and remaining source-backed work:
 | Parental Bond / Skill Link (merged #244) | Real hit-count callbacks now implemented; existing final-strike reduction retained | Move exclusions, hit powers/order, targets, KO interruption, exact RNG consumption |
 | Beat Up (merged #246) | Party hit-count case now implemented; existing per-hit power verified | Pinned party/status ordering, self contribution, base species Attack, KO interruption and modifiers |
 | Cud Chew / Harvest | Berry recording, repeat consumption and restoration callbacks remain | Actual named held-item history and delays, ownership, duplication/refusal and RNG |
-| Ditto / Transform / Imposter (user's next priority) | Remaining effective identity/sprite, copied stats/types/moves and reset/save paths | Actual pinned Transform and shared Imposter behavior; preserve real species/HP/identity and source exclusions |
+| Ditto / Transform / Imposter (implemented; merge validation pending) | Shared move/ability phase, temporary identity/moves/stats, effective sprite and save/reset now implemented | 8,000 actual phase cases and 8,000 full turns; following-turn PP, switch-in visual regression and active saves; broader doubles remain |
 | Sketch / other ability copying | Remaining move effects and identity overrides | Real source identity/stat/moveset copying, bounds, reset and state serialization |
 | Forms / Battle Bond | Remaining form callbacks and one-use battle flags | Actual conditions and new required state; do not invent absent lifecycle inputs |
 | Redirect / Commander / broader doubles | Singles proofs do not close all partner behavior | Natural field/partner state, target redirect and phase ordering with exact source fixtures |
@@ -101,6 +101,8 @@ User-specified completion gates (2026-10-12):
   combined modifier helper does not yet represent that order; keep explicit
   unsupported reporting until a dedicated source-backed slice closes it.
 
-Latest user steering: complete and merge the current flee task, then prioritize
-Ditto/Transform (effective sprite/form identity, copied stats/types/moves,
-reset/save behavior and shared Imposter paths) before another generic slice.
+Latest user steering: continue until battle-core is fully covered. Flee is
+merged in #253. Ditto/Transform is implemented and undergoing merge validation
+before the next independent slice; see TRANSFORM-VALIDATION.md. Its owning
+phase proof does not close the remaining doubles, forms, berries, wide-level
+and final-boss/run prerequisites listed above.

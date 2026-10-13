@@ -124,8 +124,8 @@ static int eligible_moves(pr_battle *bt, const char *invalid, bool include_party
 {
     int n = 0;
     if (!include_party) {
-        for (int k = 0; k < user->n_moves; k++)
-            if (move_allowed(invalid, user->moves[k])) out[n++] = user->moves[k];
+        for (int k = 0; k < PR_N_MOVES(user); k++)
+            if (move_allowed(invalid, PR_MOVES(user)[k])) out[n++] = PR_MOVES(user)[k];
         return n;
     }
     int side = user->is_player ? 0 : 1;
@@ -136,8 +136,8 @@ static int eligible_moves(pr_battle *bt, const char *invalid, bool include_party
     for (int i = 0; i < bt->n_party[side]; i++) {
         const pr_pokemon *m = bt->party[side][i];
         if (m->id == user->id) continue;
-        for (int k = 0; k < m->n_moves; k++)
-            if (move_allowed(invalid, m->moves[k])) out[n++] = m->moves[k];
+        for (int k = 0; k < PR_N_MOVES(m); k++)
+            if (move_allowed(invalid, PR_MOVES(m)[k])) out[n++] = PR_MOVES(m)[k];
     }
     return n;
 }

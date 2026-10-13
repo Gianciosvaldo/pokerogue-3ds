@@ -60,6 +60,7 @@ typedef enum {
      * before the send-out text */
     PR_EV_TRAINER_SHOW,
     PR_EV_TRAINER_HIDE,
+    PR_EV_TRANSFORM,           /* battler; value = play sound (Imposter only); transform = display state */
     PR_EV_COUNT_
 } pr_event_type;
 
@@ -77,6 +78,9 @@ typedef struct {
                                 * Sky Drop). Upstream shows it again two frames after the tag goes. A
                                 * fainting Pokemon is still visible in the FAINT event (its animation
                                 * starts there) and hidden in the events after it. */
+    int8_t gender, types[3];
+    uint8_t variant, n_types;
+    float sprite_scale;
 } pr_event_field;
 
 typedef struct {
@@ -88,6 +92,13 @@ typedef struct {
     pr_msg msg;                /* PR_EV_TEXT */
     uint8_t weather, terrain;  /* WeatherType and TerrainType after the event */
     pr_event_field field[4];   /* by BattlerIndex, after the event */
+    struct {
+        int8_t gender, types[3], stat_stages[7];
+        uint8_t n_types, n_moves;
+        uint16_t moves[4];
+        int16_t pp_max[4], pp_left[4];
+        float sprite_scale;
+    } transform;
 } pr_event;
 
 #define PR_MAX_EVENTS 192

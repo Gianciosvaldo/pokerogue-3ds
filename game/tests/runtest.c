@@ -465,6 +465,19 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
           W.mon[s].form = e->b;
         }
         break;
+      case BEV_TRANSFORM:
+        if (side_ok(e->battler, "Transform")) {
+          if (!e->mon || e->mon->species <= 0 || e->mon->n_moves < 0 || e->mon->n_moves > 4) {
+            BAD("Transform without a valid display payload");
+            break;
+          }
+          if (e->mon->hp != W.mon[s].hp || e->mon->max_hp != W.mon[s].max_hp
+              || e->mon->level != W.mon[s].level || strcmp(e->mon->name, W.mon[s].name)
+              || e->mon->shiny != W.mon[s].shiny || e->mon->variant != W.mon[s].variant)
+            BAD("Transform changed permanent HP, level, name or shiny identity");
+          W.mon[s] = *e->mon;
+        }
+        break;
       case BEV_WAIT:
         break;
       default:
@@ -491,16 +504,22 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
     /* the screen must show the battle game-core has */
     const bv_mon* a = &W.mon[0];
     const bv_mon* b = &W.mon[1];
-    if (a->species != me->b.species || a->level != me->b.level || a->hp != me->b.hp || a->max_hp != me->b.stats[STAT_HP])
-      BAD("screen player %d L%d %d/%d, run %d L%d %d/%d", a->species, a->level, a->hp, a->max_hp, me->b.species, me->b.level,
+    const pr_form* player_form = pr_pokemon_form(&me->b);
+    const pr_form* enemy_form = pr_pokemon_form(&foe->b);
+    if (a->species != player_form->species || a->level != me->b.level || a->hp != me->b.hp || a->max_hp != me->b.stats[STAT_HP])
+      BAD("screen player %d L%d %d/%d, run %d L%d %d/%d", a->species, a->level, a->hp, a->max_hp, player_form->species, me->b.level,
           me->b.hp, me->b.stats[STAT_HP]);
-    if (b->species != foe->b.species || b->hp != foe->b.hp)
-      BAD("screen enemy %d %d/%d, run %d %d/%d", b->species, b->hp, b->max_hp, foe->b.species, foe->b.hp, foe->b.stats[STAT_HP]);
-    if (a->n_moves != me->b.n_moves) BAD("fight menu has %d moves, the Pokemon %d", a->n_moves, me->b.n_moves);
-    for (int i = 0; i < me->b.n_moves && i < 4; i++) {
-      int max = me->b.max_pp_override[i] >= 0 ? me->b.max_pp_override[i] : pr_moves[me->b.moves[i]].pp;
-      if (a->moves[i] != me->b.moves[i] || a->pp_left[i] != max - me->b.pp_used[i])
-        BAD("fight menu move %d is %d PP %d, the Pokemon's %d PP %d", i, a->moves[i], a->pp_left[i], me->b.moves[i], max - me->b.pp_used[i]);
+    if (b->species != enemy_form->species || b->hp != foe->b.hp)
+      BAD("screen enemy %d %d/%d, run %d %d/%d", b->species, b->hp, b->max_hp, enemy_form->species, foe->b.hp, foe->b.stats[STAT_HP]);
+    if (a->form != player_form->form_index || a->gender != pr_get_gender(&me->b) || a->shiny != me->b.shiny || a->variant != me->variant)
+      BAD("the displayed form, gender or shiny identity differs from the effective battle Pokemon");
+    if (a->n_moves != PR_N_MOVES(&me->b)) BAD("fight menu has %d moves, the Pokemon %d", a->n_moves, PR_N_MOVES(&me->b));
+    for (int i = 0; i < PR_N_MOVES(&me->b) && i < 4; i++) {
+      int base = pr_moves[PR_MOVES(&me->b)[i]].pp;
+      int step = base / 5 < 1 ? 1 : base / 5;
+      int max = PR_MAX_PP(&me->b)[i] > 0 ? PR_MAX_PP(&me->b)[i] : base + PR_PP_UP(&me->b)[i] * step;
+      if (a->moves[i] != PR_MOVES(&me->b)[i] || a->pp_left[i] != max - PR_PP_USED(&me->b)[i])
+        BAD("fight menu move %d is %d PP %d, the Pokemon's %d PP %d", i, a->moves[i], a->pp_left[i], PR_MOVES(&me->b)[i], max - PR_PP_USED(&me->b)[i]);
     }
   }
   if (save_on && gc_run_can_save(r)) {

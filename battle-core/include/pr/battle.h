@@ -291,7 +291,26 @@ typedef struct pr_pokemon {
     uint8_t dynamax_turns_left;
     uint8_t dynamax_level;
     uint8_t pre_dynamax_form;
+    /* Transform's summonData identity and temporary moveset. Ordinary moves/PP
+     * are Pokemon.moveset and remain permanent, as in the pinned source. */
+    bool transformed;
+    uint16_t transform_species;
+    uint8_t transform_form;
+    int8_t transform_gender;
+    uint16_t transform_moves[4];
+    uint8_t transform_pp_used[4], transform_pp_up[4], transform_n_moves;
+    int16_t transform_max_pp_override[4];
+    uint8_t variant;           /* permanent shiny variant; Transform does not copy it */
 } pr_pokemon;
+
+/* getMoveset(): temporary collection while transformed; the fields above named
+ * moves/PP always represent the permanent Pokemon.moveset. These selectors also
+ * preserve constness and allow PP updates; pass an expression without side effects. */
+#define PR_MOVES(p) ((p)->transformed ? (p)->transform_moves : (p)->moves)
+#define PR_PP_USED(p) ((p)->transformed ? (p)->transform_pp_used : (p)->pp_used)
+#define PR_PP_UP(p) ((p)->transformed ? (p)->transform_pp_up : (p)->pp_up)
+#define PR_MAX_PP(p) ((p)->transformed ? (p)->transform_max_pp_override : (p)->max_pp_override)
+#define PR_N_MOVES(p) (*((p)->transformed ? &(p)->transform_n_moves : &(p)->n_moves))
 
 #define PR_MAX_PARTY 6
 #define PR_MAX_QUEUED_MOVERS 8
@@ -658,6 +677,12 @@ bool pr_are_allies(int a, int b);
 /* ---- pokemon.ts ---- */
 const pr_species *pr_pokemon_species(const pr_pokemon *p);
 const pr_form *pr_pokemon_form(const pr_pokemon *p);
+const pr_form *pr_pokemon_base_form(const pr_pokemon *p);
+int pr_get_gender(const pr_pokemon *p);
+double pr_get_sprite_scale(const pr_pokemon *p);
+bool pr_can_transform_into(const pr_pokemon *user, const pr_pokemon *target);
+void pr_restore_transform(pr_pokemon *p);
+void pr_set_original_move(pr_pokemon *p, int slot, uint16_t move);
 const pr_species *pr_pokemon_fusion_species(const pr_pokemon *p);
 bool pr_is_mega(const pr_pokemon *p);
 bool pr_is_max(const pr_pokemon *p);

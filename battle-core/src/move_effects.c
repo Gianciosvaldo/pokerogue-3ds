@@ -16,9 +16,9 @@ static double to_dmg_value(double v) { double f = floor(v); return f < 1 ? 1 : f
 /* pokemonMove.getMovePp() for moveset slot s: maxPpOverride || pp + ppUp * toDmgValue(pp / 5) */
 static int reduce_pp_move_pp(const pr_pokemon *p, int s)
 {
-    if (p->max_pp_override[s] > 0) return p->max_pp_override[s];
-    int pp = pr_moves[p->moves[s]].pp;
-    return pp + p->pp_up[s] * (int)to_dmg_value(pp / 5.0);
+    if (PR_MAX_PP(p)[s] > 0) return PR_MAX_PP(p)[s];
+    int pp = pr_moves[PR_MOVES(p)[s]].pp;
+    return pp + PR_PP_UP(p)[s] * (int)to_dmg_value(pp / 5.0);
 }
 
 /* MoveEffectAttr.canApply(user, target): the Pokemon the effect lands on isn't fainted */
@@ -148,6 +148,14 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         return;
     }
     switch (a->cls) {
+    case PR_AC_TransformAttr: {
+        if (!effect_can_apply(ef, user, target)) return;
+        int transform = pr_phase_new(e, PH_TRANSFORM, (int8_t)pr_battler_index(bt, user));
+        if (transform < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }
+        e->pool[transform].transform_target = (int8_t)pr_battler_index(bt, target);
+        pr_phase_unshift(bt, e, transform);
+        return;
+    }
     case PR_AC_PartyStatusCureAttr: {
         const pr_attr_PartyStatusCureAttr *x = P(PartyStatusCureAttr, a);
         /* This leaf proves singles, not the distinct active-partner display path. */
@@ -196,21 +204,21 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         const pr_turn_move *tm = pr_last_non_virtual_move(bt, target, false, true, &unknown);
         if (unknown) return;                             /* reported */
         int s = -1;
-        for (int k = 0; tm && k < target->n_moves; k++)
-            if (target->moves[k] == tm->move) { s = k; break; }
+        for (int k = 0; tm && k < PR_N_MOVES(target); k++)
+            if (PR_MOVES(target)[k] == tm->move) { s = k; break; }
         int max = s < 0 ? 0 : reduce_pp_move_pp(target, s);
         if (a->cls == PR_AC_AttackReducePpMoveAttr) {
-            double ratio = s < 0 ? 0 : 1.0 - (double)target->pp_used[s] / max;   /* getPpRatio() */
+            double ratio = s < 0 ? 0 : 1.0 - (double)PR_PP_USED(target)[s] / max;   /* getPpRatio() */
             if (!(ratio == ratio && ratio != 0)) return;
         } else if (s < 0) {
             pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT);  /* the condition rules it out; upstream would throw */
             return;
         }
-        int last = target->pp_used[s], v = last + reduction;
-        target->pp_used[s] = (uint8_t)(v < max ? v : max);
+        int last = PR_PP_USED(target)[s], v = last + reduction;
+        PR_PP_USED(target)[s] = (uint8_t)(v < max ? v : max);
         pr_queue_msg(bt, e, pr_msg3("battle:ppReduced", pr_arg_pokemon(bt, "targetName", target),
-                                    pr_arg_move("moveName", target->moves[s]),
-                                    pr_arg_int("reduction", target->pp_used[s] - last)));
+                                    pr_arg_move("moveName", PR_MOVES(target)[s]),
+                                    pr_arg_int("reduction", PR_PP_USED(target)[s] - last)));
         return;
     }
     case PR_AC_ForceSwitchOutAttr: {                     /* Roar, Whirlwind, Dragon Tail, U-turn, Baton Pass... */
@@ -390,7 +398,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         bool unknown;
         const pr_turn_move *last = pr_last_non_virtual_move(bt, target, false, true, &unknown);
         if (slot < 0 || !last) { pr_note_unported(bt, a->cls); return; }
-        int mm = target->moves[slot];
+        int mm = PR_MOVES(target)[slot];
         int8_t tg[4];
         int n;
         if (pr_move_is_multi_target(mm)) {
