@@ -103,6 +103,12 @@ static void to_modifier(const gc_item *it, pr_modifier *m, bool golden)
     m->is_transferable = true;
     m->unknown_subclass = true;
     m->cls = it->pokemon_id ? PR_MOD_HELD_ITEM : PR_MOD_PERSISTENT;
+    if (!strcmp(it->key, "BERRY_POUCH")) {
+        m->cls=PR_MOD_PRESERVE_BERRY; m->virtual_stack_count=it->virtual_stack;
+        m->pokemon_id=0; m->is_transferable=false; m->unknown_subclass=false;
+        m->unknown_subclass=it->pokemon_id || it->detached || !pr_mod_is_ported_item(m);
+        return;
+    }
     /* Transient Amulet Coin is a bounded Golden Punch dependency. */
     if (it->virtual_stack && strcmp(it->key, "WIDE_LENS")
         && strcmp(it->key, "GOLDEN_PUNCH") && strcmp(it->key, "AMULET_COIN") && strcmp(it->key, "MULTI_LENS")) return;
@@ -231,7 +237,7 @@ void gc_items_to_battle(gc_run *run)
  * a save serializes the run inventory. Match owner AND berry kind: two party members' berries
  * are separate entries. Unsupported items and entries beyond battle-core's capacity stay intact.
  * The tracked prefix shrinks with removed entries, so repeated synchronization never mistakes
- * an unrepresented overflow item for a consumed one. Transfers/additions require a later adapter. */
+ * an unrepresented overflow item for a consumed one. Restored berries are inserted into that represented prefix; other additions remain separate. */
 void gc_items_from_battle(gc_run *run)
 {
     const bool golden = golden_bridge(run);
@@ -249,7 +255,7 @@ void gc_items_from_battle(gc_run *run)
             to_modifier(&it, &expected, golden);
             if (i < tracked && !expected.unknown_subclass && (expected.cls == PR_MOD_INSTANT_REVIVE
                                 || expected.cls == PR_MOD_MOVE_ACCURACY_BOOSTER
-                                || expected.cls == PR_MOD_DAMAGE_MONEY_REWARD || expected.cls == PR_MOD_MULTI_HIT)
+                                || expected.cls == PR_MOD_DAMAGE_MONEY_REWARD || expected.cls == PR_MOD_MULTI_HIT || expected.cls == PR_MOD_PRESERVE_BERRY)
                 && !duplicate[i]) {
                 bool opaque = false;
                 for (int j = 0; j < run->bt.n_mods[side]; j++) {
@@ -266,8 +272,8 @@ void gc_items_from_battle(gc_run *run)
                     bool detached = side && m->pokemon_id == 0 && holder && holder->hp <= 0;
                     if (m->pokemon_id != expected.pokemon_id && !detached) continue;
                     remaining = m->stack_count;
-                    it.detached = m->pokemon_id == 0;
-                    if (expected.cls == PR_MOD_MOVE_ACCURACY_BOOSTER || expected.cls == PR_MOD_DAMAGE_MONEY_REWARD || expected.cls == PR_MOD_MULTI_HIT)
+                    it.detached = expected.cls != PR_MOD_PRESERVE_BERRY && m->pokemon_id == 0;
+                    if (expected.cls == PR_MOD_MOVE_ACCURACY_BOOSTER || expected.cls == PR_MOD_DAMAGE_MONEY_REWARD || expected.cls == PR_MOD_MULTI_HIT || expected.cls == PR_MOD_PRESERVE_BERRY)
                         it.virtual_stack = m->virtual_stack_count;
                     used[j] = true;
                     break;
@@ -292,7 +298,20 @@ void gc_items_from_battle(gc_run *run)
         }
         memset(&items[w], 0, (size_t)(*n - w) * sizeof *items);
         *n = w;
-        gc_int(run)->battle_item_count[side] = tracked - removed;
+        int prefix = tracked - removed;
+        for (int j = 0; j < run->bt.n_mods[side]; j++) {
+            const pr_modifier *m = &run->bt.mods[side][j];
+            if (m->cls != PR_MOD_BERRY || m->unknown_subclass || m->stack_count <= 0) continue;
+            bool found = false;
+            for (int i = 0; i < *n; i++)
+                if (!strcmp(items[i].key, "BERRY") && items[i].pokemon_id == m->pokemon_id && items[i].arg == m->berry_type) found = true;
+            if (found) continue;
+            if (*n >= GC_MAX_ITEMS) {pr_note_unported(&run->bt, PR_FEAT_ENGINE_LIMIT); continue;}
+            memmove(items + prefix + 1, items + prefix, (size_t)(*n - prefix) * sizeof *items);
+            items[prefix] = (gc_item){.key="BERRY", .arg=m->berry_type, .pokemon_id=(uint32_t)m->pokemon_id, .stack=m->stack_count};
+            prefix++; (*n)++;
+        }
+        gc_int(run)->battle_item_count[side] = prefix;
     }
 }
 

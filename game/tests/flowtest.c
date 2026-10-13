@@ -17,6 +17,10 @@
 #include <unistd.h>
 
 #include "app_flow.h"
+#include "capsule_screen.h"
+#include "gacha_screen.h"
+#include "profile_tx.h"
+#include "system_data.h"
 #include "combat_observer.h"
 #include "custom_store.h"
 #include "pr_data.h"
@@ -89,6 +93,35 @@ bool radar_open(const radar_args* a) {
     ra_meta = *a->meta;
     RA.meta = &ra_meta;
   }
+  return true;
+}
+
+/* the capsule preview (debug): records how it was opened */
+static caps_args CP;
+static int n_caps, last_caps_n;
+bool capsule_debug_fixture(int n, cap_fixture* out) {
+  if (n < 1 || n > CAP_MAX) return false;
+  memset(out, 0, sizeof *out);
+  out->n = (uint8_t)n;
+  for (int i = 0; i < n; i++) {
+    out->item[i].tier = 0;
+    snprintf(out->item[i].label, CAP_LABEL, "r%d", i);
+  }
+  return true;
+}
+bool capsule_screen_open(const caps_args* a) {
+  CP = *a;
+  last_caps_n = a->fixture ? a->fixture->n : 0;
+  n_caps++;
+  return true;
+}
+
+/* the capsule machine (C09): records how it was opened */
+static gachas_args GS;
+static int n_gacha;
+bool gacha_screen_open(const gachas_args* a) {
+  GS = *a;
+  n_gacha++;
   return true;
 }
 
@@ -277,6 +310,11 @@ static const cs_io FLOW_IO = {save_read, flow_write};
 
 static bool ledger_has(cc_run_uid uid) {
   return cs_meta() && cc_ledger_find(&cs_meta()->ledger, CC_TXN_TERMINAL, uid, 0, NULL);
+}
+
+static save_result fail_system_write(const char* name, const void* data, size_t len) {
+  if (!strcmp(name, "system")) return SAVE_IO_ERROR;
+  return save_write(name, data, len);
 }
 
 int main(void) {
@@ -599,6 +637,66 @@ int main(void) {
     CHECK(n_radar == radars + 3 && !RA.meta && RA.why[0], "a refused open falls back to the unusable view with a reason: \"%s\"", RA.why);
   }
   cs_reset();
+
+  /* the capsule preview is debug only: it opens before the title when the debug file asks for it, and leaving it is the title */
+  {
+    app_debug_capsule(7);
+    const int caps = n_caps, titles = n_title;
+    app_start(&(rs_config){0});
+    CHECK(n_caps == caps + 1 && last_caps_n == 7 && n_title == titles && CP.on_exit, "capsule=7 opens the preview with 7 results, not the title");
+    CP.on_exit(CAPS_EXIT_AFTER_REVEAL, CP.arg);
+    CHECK(n_title == titles + 1, "leaving the preview is the title");
+    app_debug_capsule(26);
+    app_start(&(rs_config){0});
+    CHECK(n_caps == caps + 1 && n_title == titles + 2, "26 results are ignored: the normal title");
+    app_debug_capsule(0);
+    app_start(&(rs_config){0});
+    CHECK(n_caps == caps + 1 && n_title == titles + 3, "no capsule line: the normal title");
+    app_debug_capsule(-3);
+    app_start(&(rs_config){0});
+    CHECK(n_caps == caps + 1 && n_title == titles + 4, "a negative count is ignored");
+  }
+
+  /* the title's Capsule Machine entry opens the machines, and leaving them is the title (the app has no other way in) */
+  {
+    const int g = n_gacha, titles = n_title;
+    T.on_choose(TITLE_CAPSULE, T.arg);
+    CHECK(n_gacha == g + 1 && GS.on_exit && n_title == titles, "the title's Capsule Machine entry opens the machines");
+    GS.on_exit(GS.arg);
+    CHECK(n_title == titles + 1, "leaving the machines is the title");
+  }
+
+  /* the app boots the profile transactions: a pull a crash left committed but not on the card is finished at app_start (profile_tx.h) */
+  {
+    remove("sdmc:/3ds/pokerogue/save/system.sav");
+    remove("sdmc:/3ds/pokerogue/save/system.sav.bak");
+    sysd_reset();
+    ptx_reset();
+    gc_system* sys = sysd_get();
+    gc_system_init_defaults(sys);
+    sys->voucher_counts[GC_VOUCHER_REGULAR] = 10;
+    CHECK(sysd_save(), "a profile with vouchers");
+    const sysd_io fio = {save_read, fail_system_write};
+    sysd_set_io(&fio);
+    ptx_set_scene_seed("flow");
+    ptx_pull_request rq;
+    memset(&rq, 0, sizeof rq);
+    rq.option = 0;
+    rq.timestamp_ms = 1791504000000ull;
+    rq.seed_len = 4;
+    memcpy(rq.seed, "flow", 4);
+    uint32_t txn = 0;
+    ptx_result res;
+    CHECK(ptx_begin_pull(&rq, &txn) == PTX_OK && ptx_execute(txn, &res) == PTX_X_DONE_APPLY_PENDING, "the pull commits, the profile write fails");
+    CHECK(ptx_apply_pending() && res.n == 1, "committed, waiting to be applied");
+    sysd_set_io(NULL);
+    sysd_reset();
+    ptx_reset();   /* the restart */
+    app_start(&plain);
+    CHECK(!ptx_apply_pending() && ptx_pending() == 0, "app_start finished it");
+    CHECK(sysd_get()->n_eggs == res.n && sysd_get()->voucher_counts[GC_VOUCHER_REGULAR] < 10, "the pulled egg is in the profile and the voucher is spent");
+    CHECK(ptx_result_of(txn, NULL), "and the result is kept");
+  }
 
   printf("%d checks, %d failed\n", checks, failed);
   printf(failed ? "FAILED\n" : "OK\n");

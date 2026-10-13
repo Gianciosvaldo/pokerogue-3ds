@@ -17,11 +17,70 @@ const pr_species *pr_pokemon_species(const pr_pokemon *p)
     return NULL;
 }
 
-const pr_form *pr_pokemon_form(const pr_pokemon *p)
+const pr_form *pr_pokemon_base_form(const pr_pokemon *p)
 {
     const pr_species *s = pr_pokemon_species(p);
     if (!s) return &pr_forms[0];
     return &pr_forms[s->form0 + (p->form < s->nforms ? p->form : 0)];
+}
+
+const pr_form *pr_pokemon_form(const pr_pokemon *p)
+{
+    if (!p->transformed) return pr_pokemon_base_form(p);
+    pr_pokemon identity = {0};
+    identity.species = p->transform_species;
+    identity.form = p->transform_form;
+    return pr_pokemon_base_form(&identity);
+}
+
+int pr_get_gender(const pr_pokemon *p)
+{
+    return p->transformed ? p->transform_gender : p->gender;
+}
+
+/* Pokemon.getSpriteScale: Transform changes the image but getFormKey/isMax
+ * still read the permanent forms. Mystery custom spriteScale is not modeled. */
+double pr_get_sprite_scale(const pr_pokemon *p)
+{
+    const char *key = pr_pokemon_base_form(p)->form_key;
+    if (pr_is_max(p)) return 1.5;
+    static const char *const starmobiles[] = {"segin-starmobile", "schedar-starmobile", "navi-starmobile",
+                                            "ruchbah-starmobile", "caph-starmobile"};
+    for (unsigned i = 0; key && i < sizeof starmobiles / sizeof starmobiles[0]; i++)
+        if (!strcmp(key, starmobiles[i])) return 1.5;
+    return 1;
+}
+
+bool pr_can_transform_into(const pr_pokemon *user, const pr_pokemon *target)
+{
+    return user && target && !user->transformed && !target->transformed
+        && !user->illusion.active && !target->illusion.active
+        && !user->fusion_species && !target->fusion_species
+        && !pr_get_battler_tag(target, BATTLER_TAG_TYPE_SUBSTITUTE);
+}
+
+void pr_restore_transform(pr_pokemon *p)
+{
+    p->transformed = false;
+    p->transform_species = p->transform_form = p->transform_gender = 0;
+    memset(p->transform_moves, 0, sizeof p->transform_moves);
+    memset(p->transform_pp_used, 0, sizeof p->transform_pp_used);
+    memset(p->transform_pp_up, 0, sizeof p->transform_pp_up);
+    memset(p->transform_max_pp_override, 0, sizeof p->transform_max_pp_override);
+    p->transform_n_moves = 0;
+}
+
+/* Learning changes Pokemon.moveset, even while getMoveset() returns a temporary copy. */
+void pr_set_original_move(pr_pokemon *p, int slot, uint16_t move)
+{
+    if (slot < 0 || slot >= 4 || !move || move >= PR_MOVE_COUNT) return;
+    uint16_t *moves = p->moves;
+    uint8_t *used = p->pp_used;
+    uint8_t *up = p->pp_up;
+    int16_t *max = p->max_pp_override;
+    uint8_t *n = &p->n_moves;
+    moves[slot] = move; used[slot] = up[slot] = 0; max[slot] = -1;
+    if (slot >= *n) *n = (uint8_t)(slot + 1);
 }
 
 const pr_species *pr_pokemon_fusion_species(const pr_pokemon *p)
@@ -56,7 +115,7 @@ void pr_recalculate_stats(pr_battle *bt, pr_pokemon *p)
 
 void pr_calculate_stats(pr_battle *bt, pr_pokemon *p)
 {
-    const pr_form *f = pr_pokemon_form(p);
+    const pr_form *f = pr_pokemon_base_form(p);
     const pr_form *ff = pr_pokemon_fusion_form(p);
     double base[6];
     for (int s = 0; s < 6; s++) {
@@ -150,7 +209,7 @@ bool pr_break_illusion(pr_pokemon *p)
 
 const pr_form *pr_apparent_form(const pr_pokemon *p, bool use_illusion)
 {
-    if (!use_illusion || !p->illusion.active) return pr_pokemon_form(p);
+    if (p->transformed || !use_illusion || !p->illusion.active) return pr_pokemon_form(p);
     pr_pokemon identity = {0};
     identity.species = p->illusion.species; identity.form = p->illusion.form;
     return pr_pokemon_form(&identity);
@@ -167,7 +226,7 @@ const pr_form *pr_apparent_fusion_form(const pr_pokemon *p, bool use_illusion)
 
 int pr_apparent_gender(const pr_pokemon *p, bool use_illusion)
 {
-    return use_illusion && p->illusion.active ? p->illusion.gender : p->gender;
+    return p->transformed ? pr_get_gender(p) : use_illusion && p->illusion.active ? p->illusion.gender : p->gender;
 }
 
 /* getTypes({}) : returns count, out gets up to 3 types. */
@@ -404,7 +463,7 @@ void pr_update_passive(pr_battle *bt, pr_pokemon *p)
 {
     if (!pr_has_passive(bt, p)) { p->passive = 0; return; }
     if (p->custom_passive >= 0) p->passive = (uint16_t)p->custom_passive;
-    else p->passive = pr_pokemon_form(p)->passive;
+    else p->passive = pr_pokemon_base_form(p)->passive;
 }
 
 double pr_damage_indirect(pr_battle *bt, pr_pokemon *p, double damage)
@@ -456,7 +515,7 @@ int pr_get_effective_weather_for_move(pr_battle *bt, const pr_pokemon *user)
 bool pr_is_mega(const pr_pokemon *p)
 {
     if (!p) return false;
-    const pr_form *f = pr_pokemon_form(p);
+    const pr_form *f = pr_pokemon_base_form(p); /* isMega uses getFormKey(), ignoring Transform */
     if (f && f->form_key) {
         if (!strncmp(f->form_key, "mega", 4) || !strcmp(f->form_key, "primal"))
             return true;
@@ -473,7 +532,7 @@ bool pr_is_max(const pr_pokemon *p)
 {
     if (!p) return false;
     if (p->is_dynamaxed) return true;
-    const pr_form *f = pr_pokemon_form(p);
+    const pr_form *f = pr_pokemon_base_form(p); /* isMax uses getFormKey(), ignoring Transform */
     if (f && f->form_key) {
         if (!strncmp(f->form_key, "gigantamax", 10) || !strcmp(f->form_key, "eternamax"))
             return true;
@@ -508,7 +567,7 @@ void pr_mega_evolve(pr_battle *bt, pr_pokemon *p)
 
     pr_recalculate_stats(bt, p);
 
-    const pr_form *mf = pr_pokemon_form(p);
+    const pr_form *mf = pr_pokemon_base_form(p);
     p->base_ability = mf->ability1;
     if (p->ability_override < 0) p->ability = mf->ability1;
 
@@ -545,7 +604,7 @@ void pr_dynamax(pr_battle *bt, pr_pokemon *p)
     p->hp = (int32_t)js_round((double)p->hp * mult);
 
     if (bt->engine) {
-        const pr_form *f = pr_pokemon_form(p);
+        const pr_form *f = pr_pokemon_base_form(p);
         if (f->form_key && strstr(f->form_key, "gigantamax")) {
             pr_msg_arg pre_name_arg = pr_arg_pokemon(bt, "preName", p);
             pr_queue_msg(bt, bt->engine, pr_msg1("battlePokemonForm:gigantamaxChange", pre_name_arg));

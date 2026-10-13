@@ -25,6 +25,10 @@ extern "C" {
  * session only; its `entropy` is the base of every run's randomness. */
 void app_start(const rs_config* first_run);
 
+/* Debug only (rundriver.txt "capsule=<n>"): the next app_start opens the capsule-machine preview with n fixed results (1..25) before the
+ * title, and leaving it goes to the title. Any other n (0 clears it) leaves the normal start. Nothing in normal play calls this. */
+void app_debug_capsule(int n);
+
 #ifdef __cplusplus
 }
 #endif

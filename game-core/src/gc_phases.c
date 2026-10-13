@@ -231,8 +231,8 @@ static bool learn_move_start(gc_run *run, gc_rphase *p)
     gc_mon *m = pm(run, p->a);
     const int move = p->b;
     if (pr_moves[move].unimplemented) return true;
-    for (int i = 0; i < m->b.n_moves; i++) if (m->b.moves[i] == move && move != MOVE_ID_SKETCH) return true;
-    if (m->b.n_moves < 4) { learn(run, p->a, move, m->b.n_moves); return true; }
+    for (int i = 0; i < PR_N_MOVES(&m->b); i++) if (PR_MOVES(&m->b)[i] == move && move != MOVE_ID_SKETCH) return true;
+    if (PR_N_MOVES(&m->b) < 4) { learn(run, p->a, move, PR_N_MOVES(&m->b)); return true; }
     gc_ev_msg(run, "battle:learnMovePrompt", 2, gc_m_mon(run, "pokemonName", 0, p->a), pr_arg_move("moveName", move));
     gc_ev_msg(run, "battle:learnMoveLimitReached", 1, gc_m_mon(run, "pokemonName", 0, p->a));
     gc_screen *s = &run->screen;
@@ -518,7 +518,7 @@ static void party_heal(gc_run *run)
         b->pending_status = STATUS_EFFECT_NONE;
         b->status_toxic_turns = 0;
         b->status_sleep_turns = b->status_freeze_turns = -1;
-        for (int k = 0; k < 4; k++) b->pp_used[k] = 0;
+        for (int k = 0; k < 4; k++) PR_PP_USED(b)[k] = 0;
         gc_event *ev = gc_ev_new(run, GC_EV_HP);
         if (ev) { ev->a = 0; ev->b = i; ev->c = b->hp; }
     }
@@ -699,7 +699,7 @@ bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char *
     case RP_LEARN_MOVE: {
         if (c->kind != GC_CH_FORGET) { *why = "forget a move or not"; return false; }
         gc_mon *m = pm(run, p->a);
-        if (c->a < -1 || c->a >= m->b.n_moves) { *why = "no such move slot"; return false; }
+        if (c->a < -1 || c->a >= PR_N_MOVES(&m->b)) { *why = "no such move slot"; return false; }
         *ok = true;
         if (c->a == -1) {
             gc_ev_msg(run, "battle:learnMoveNotLearned", 2, gc_m_mon(run, "pokemonName", 0, p->a), pr_arg_move("moveName", p->b));

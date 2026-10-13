@@ -52,6 +52,7 @@ const uint8_t pr_mod_parent[PR_MOD_COUNT_] = {
     [PR_MOD_INSTANT_REVIVE] = PR_MOD_HELD_ITEM,
     [PR_MOD_DAMAGE_MONEY_REWARD] = PR_MOD_HELD_ITEM,
     [PR_MOD_MONEY_MULTIPLIER] = PR_MOD_PERSISTENT,
+    [PR_MOD_PRESERVE_BERRY] = PR_MOD_PERSISTENT,
 };
 
 const char *const pr_mod_class_name[PR_MOD_COUNT_] = {
@@ -94,6 +95,7 @@ const char *const pr_mod_class_name[PR_MOD_COUNT_] = {
     [PR_MOD_INSTANT_REVIVE] = "PokemonInstantReviveModifier",
     [PR_MOD_DAMAGE_MONEY_REWARD] = "DamageMoneyRewardModifier",
     [PR_MOD_MONEY_MULTIPLIER] = "MoneyMultiplierModifier",
+    [PR_MOD_PRESERVE_BERRY] = "PreserveBerryModifier",
 };
 
 int pr_mod_class_by_name(const char *name)
@@ -113,6 +115,7 @@ bool pr_mod_is(const pr_modifier *m, int cls)
 bool pr_mod_is_ported_item(const pr_modifier *m)
 {
     if (!m) return false;
+    if (m->cls == PR_MOD_PRESERVE_BERRY) return !m->unknown_subclass && m->stack_count >= 0 && m->virtual_stack_count >= 0 && (int64_t)m->stack_count + m->virtual_stack_count >= 1 && (int64_t)m->stack_count + m->virtual_stack_count <= 3;
     if (m->cls == PR_MOD_BERRY) {
         return m->berry_type == BERRY_TYPE_SITRUS
             || m->berry_type == BERRY_TYPE_LUM
@@ -411,7 +414,7 @@ void pr_apply_enemy_endure_modifiers(pr_battle *bt, pr_engine *e, pr_pokemon *ta
 /* Pokemon.isMax(): Gigantamax / Eternamax forms (fusion form keys not ported) */
 static bool is_max(const pr_pokemon *p)
 {
-    const char *k = pr_pokemon_form(p)->form_key;
+    const char *k = pr_pokemon_base_form(p)->form_key;
     return !strcmp(k, "gigantamax") || !strcmp(k, "gigantamax-rapid") || !strcmp(k, "gigantamax-single")
            || !strcmp(k, "eternamax");
 }
@@ -432,14 +435,14 @@ int pr_enigma_berry_fired = 0, pr_lansat_berry_fired = 0, pr_starf_berry_fired =
 
 static int pr_pokemon_move_max_pp(const pr_pokemon *p, int s)
 {
-    if (s < 0 || s >= p->n_moves) return 0;
-    int move = p->moves[s];
+    if (s < 0 || s >= PR_N_MOVES(p)) return 0;
+    int move = PR_MOVES(p)[s];
     if (move <= 0 || move >= PR_MOVE_COUNT) return 0;
-    int ovr = p->max_pp_override[s];
+    int ovr = PR_MAX_PP(p)[s];
     if (ovr >= 0) return ovr;
     int base = pr_moves[move].pp;
     if (base <= 0) return 0;
-    return base + (base * p->pp_up[s]) / 5;
+    return base + (base * PR_PP_UP(p)[s]) / 5;
 }
 
 static double get_hp_ratio(const pr_pokemon *p)
@@ -470,9 +473,9 @@ bool pr_berry_should_apply(pr_battle *bt, const pr_pokemon *p, const pr_modifier
         double hp_ratio_req = 0.25;
         pr_ab_params pp = {.pokemon = (pr_pokemon *)p, .move = -1, .value = &hp_ratio_req};
         pr_apply_ab_attrs((pr_battle *)bt, PR_AC_ReduceBerryUseThresholdAbAttr, &pp);
-        for (int i = 0; i < p->n_moves; i++) {
+        for (int i = 0; i < PR_N_MOVES(p); i++) {
             int max_pp = pr_pokemon_move_max_pp(p, i);
-            if (max_pp > 0 && p->pp_used[i] >= max_pp) return true;
+            if (max_pp > 0 && PR_PP_USED(p)[i] >= max_pp) return true;
         }
         return false;
     }
@@ -518,11 +521,60 @@ void pr_apply_berry(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_modifier *m)
 void pr_apply_berry_ex(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_modifier *m, int8_t *ssc_stats, int8_t *ssc_stages, int *n_ssc)
 {
     if (!m || m->cls != PR_MOD_BERRY) return;
+    const int btype = m->berry_type;
+    bool preserve = false;
+    const int side = p->is_player ? 0 : 1;
+    for (int i = 0; i < bt->n_mods[side]; i++) {
+        const pr_modifier *pouch = &bt->mods[side][i];
+        if (pouch->cls != PR_MOD_PRESERVE_BERRY) continue;
+        if (!pr_mod_is_ported_item(pouch)) { pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS); continue; }
+        if (!preserve) preserve = pr_battle_rand_seed_int(bt, 10, 0) < pr_mod_get_stack_count(pouch) * 3;
+    }
+    pr_berry_effect(bt, e, p, btype, ssc_stats, ssc_stages, n_ssc);
+    pr_ab_params pp = {.pokemon = p, .move = -1};
+    pr_apply_ab_attrs(bt, PR_AC_PostItemLostAbAttr, &pp);
+    pr_record_eaten_berry(bt, p, btype, !preserve);
+    if (!preserve) pr_lose_held_item(bt, e, p, m);
+}
+
+/* BattleScene.updateModifiers at the berry boundaries: no item-loss callbacks.
+ * Unknown item families retain explicit unsupported reporting. */
+void pr_refresh_berry_modifiers(pr_battle *bt, int side)
+{
+    int w = 0;
+    for (int i = 0; i < bt->n_mods[side]; i++) {
+        pr_modifier m = bt->mods[side][i];
+        if (pr_mod_is(&m, PR_MOD_HELD_ITEM) && !pr_pokemon_by_id(bt, m.pokemon_id)) continue;
+        if (!pr_mod_is_ported_item(&m)) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
+        m.virtual_stack_count = 0;
+        if (m.stack_count == 0) continue;
+        bt->mods[side][w++] = m;
+    }
+    bt->n_mods[side] = w;
+    if (!bt->n_party[side]) {pr_note_unported(bt, PR_FEAT_PARTY); return;}
+    for (int k = 0; k < bt->n_party[side]; k++)
+        if (bt->party[side][k]) pr_recalculate_stats(bt, bt->party[side][k]);
+}
+
+void pr_reset_battle_data(pr_pokemon *p)
+{
+    p->has_eaten_berry = false;
+    p->n_battle_berries = 0;
+}
+
+void pr_record_eaten_berry(pr_battle *bt, pr_pokemon *p, int berry, bool consumed)
+{
     p->has_eaten_berry = true;
-    int btype = m->berry_type;
+    if (consumed) {
+        if (p->n_battle_berries >= PR_MAX_BERRY_HISTORY) pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT);
+        else p->battle_berries[p->n_battle_berries++] = (uint8_t)berry;
+    }
+    if (p->n_turn_berries >= PR_MAX_BERRY_HISTORY) pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT);
+    else p->turn_berries[p->n_turn_berries++] = (uint8_t)berry;
+}
 
-    pr_lose_held_item(bt, e, p, m);
-
+void pr_berry_effect(pr_battle *bt, pr_engine *e, pr_pokemon *p, int btype, int8_t *ssc_stats, int8_t *ssc_stages, int *n_ssc)
+{
     switch (btype) {
     case BERRY_TYPE_SITRUS:
     case BERRY_TYPE_ENIGMA: {
@@ -550,27 +602,27 @@ void pr_apply_berry_ex(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_modifier *
     case BERRY_TYPE_LEPPA: {
         pr_leppa_berry_fired++;
         int slot = -1;
-        for (int i = 0; i < p->n_moves; i++) {
+        for (int i = 0; i < PR_N_MOVES(p); i++) {
             int max_pp = pr_pokemon_move_max_pp(p, i);
-            if (max_pp > 0 && p->pp_used[i] >= max_pp) {
+            if (PR_PP_USED(p)[i] == max_pp) {
                 slot = i;
                 break;
             }
         }
         if (slot < 0) {
-            for (int i = 0; i < p->n_moves; i++) {
+            for (int i = 0; i < PR_N_MOVES(p); i++) {
                 int max_pp = pr_pokemon_move_max_pp(p, i);
-                if (max_pp > 0 && p->pp_used[i] > 0) {
+                if (PR_PP_USED(p)[i] < max_pp) {
                     slot = i;
                     break;
                 }
             }
         }
         if (slot >= 0) {
-            p->pp_used[slot] = p->pp_used[slot] > 10 ? p->pp_used[slot] - 10 : 0;
+            PR_PP_USED(p)[slot] = PR_PP_USED(p)[slot] > 10 ? PR_PP_USED(p)[slot] - 10 : 0;
             pr_msg msg = pr_msg3("battle:ppHealBerry",
                                  pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
-                                 pr_arg_move("moveName", p->moves[slot]),
+                                 pr_arg_move("moveName", PR_MOVES(p)[slot]),
                                  pr_arg_key("berryName", "berry:leppa.name"));
             pr_queue_msg(bt, e, msg);
         }

@@ -11,6 +11,11 @@
 #define ARGS pr_battle *bt, const pr_closure_info *self, const pr_pokemon *a, const pr_pokemon *b, int m
 #define UNUSED (void)bt; (void)self; (void)a; (void)b; (void)m
 
+static double harvest_chance(ARGS)
+{
+    UNUSED;
+    return !pr_weather_effect_suppressed(bt) && (bt->weather == WEATHER_TYPE_SUNNY || bt->weather == WEATHER_TYPE_HARSH_SUN) ? 1 : 0.5;
+}
 static double stall_priority(ARGS) { UNUSED; return 1; }
 static double mycelium_status_move(ARGS)
 {
@@ -65,7 +70,7 @@ static double anticipation(ARGS)
         const pr_pokemon *o = bt->field[k];
         if (!o || o->is_player == a->is_player || !(o->hp > 0 && o->on_field && !o->switch_out_status)) continue;
         for (int j = 0; j < 4; j++) {
-            int mv = o->moves[j];
+            int mv = PR_MOVES(o)[j];
             if (!mv || pr_moves[mv].category == MOVE_CATEGORY_STATUS) continue;     /* move.is("AttackMove") */
             if (pr_move_has_attr((uint16_t)mv, PR_AC_OneHitKOAttr)) return 1;
             int type = pr_move_has_attr((uint16_t)mv, PR_AC_HiddenPowerTypeAttr) ? pr_hidden_power_type(o) : pr_moves[mv].type;
@@ -435,10 +440,11 @@ static double zen_form(ARGS) { UNUSED; return pr_get_hp_ratio(a, false) <= .5 ? 
 static double meteor_base(ARGS) { UNUSED; return a->form % 7; }
 static double shields_form(ARGS) { UNUSED; return a->form % 7 + (pr_get_hp_ratio(a, false) <= .5 ? 7 : 0); }
 static double schooling_form(ARGS) { UNUSED; return a->level < 20 || pr_get_hp_ratio(a, false) <= .25 ? 0 : 1; }
-static double hunger_toggle(ARGS) { UNUSED; const pr_form *f = pr_pokemon_form(a); return f && f->form_key && f->form_key[0] ? 0 : 1; }
-static double hunger_stay(ARGS) { UNUSED; const pr_form *f = pr_pokemon_form(a); return f && f->form_key && f->form_key[0] ? 1 : 0; }
+static double hunger_toggle(ARGS) { UNUSED; const pr_form *f = pr_pokemon_base_form(a); return f && f->form_key && f->form_key[0] ? 0 : 1; }
+static double hunger_stay(ARGS) { UNUSED; const pr_form *f = pr_pokemon_base_form(a); return f && f->form_key && f->form_key[0] ? 1 : 0; }
 
 const pr_closure_reg pr_ability_closures[] = {
+    {"ability:139", "9f8f86d8acdc", harvest_chance}, /* closure 527 */
     {"ability:100", "93207d9890eb", stall_priority},
     {"ability:298", "74fa5cb6b41e", mycelium_status_move},
     {"ability:161", "5e264af5663d", form_zero},

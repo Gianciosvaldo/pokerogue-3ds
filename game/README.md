@@ -53,6 +53,23 @@ look: it writes nothing, starts no rematch, spends nothing and says that live re
 app cannot create a record yet, so on a real install it shows an empty roster; [`mkcustom.c`](tests/mkcustom.c) writes a file with
 records for the emulator (contracts section 2.12). Buttons only: the framework has no touch path for these screens.
 
+There is a **capsule machine preview** (custom content, task C07): [`capsule_screen.c`](source/capsule_screen.c) over the pure
+[`capsule_model.c`](source/capsule_model.c) plays a dual-screen capsule drop (top: up to 25 capsules fall from a chute, bounce, settle
+and open; bottom: the knob, then the list of results) over a *fixed list of results it is given*. It is a debug / test preview, not a
+purchase: normal play never opens it, it touches no wallet, profile, unlock or random number, and it is not connected to the gacha
+until C09. Put `capsule=<1..25>` in `rundriver.txt` to open it before the title with that many fixed results. A pulls the knob, B or
+START skips to the results, UP/DOWN scroll the list, A / B / START close it; a held button acts once (`ui_input_repeating`). No touch
+(same reason as the Radar). Contracts section 2.13.
+
+There is a **Capsule Machine** on the title (custom content, task C09; upstream reaches its gacha from the in-run menu, which the app does not
+have yet): [`gacha_screen.c`](source/gacha_screen.c) shows the three machines (LEFT/RIGHT) and their five options (UP/DOWN) with the real voucher
+balances and egg count; an option the source refuses is greyed with the source's own words. A asks, the question opens on **No**, Yes buys. The
+cost, the eggs given and the capacity are read from game-core by [`gacha_host.c`](source/gacha_host.c) (it pulls once per option on a scratch
+profile), never from the labels. One accepted pull is one `profile_tx` transaction; the capsule screen (C07) then plays the committed result in
+the source's display order and records it as shown. Opening the machine first finishes a purchase a restart left unfinished and shows eggs a
+restart left unshown, once; neither pulls again. The result is eggs only: no species is marked caught, nothing hatches. A held button acts once;
+no touch (same reason as the Radar). Contracts section 2.15.
+
 Stand-ins in the run flow (listed in [`run_screen.h`](include/run_screen.h)): the starters of a run with no starter select (the host
 tests' later runs) are a random team, reward names are the item key in words, evolution is automatic, a
 mystery encounter is a message and its first usable option. The words on the game over and clear screens, and the
@@ -129,6 +146,9 @@ that file to exist; any bytes will do for the emulator.
 | [`combat_observer.h`](include/combat_observer.h) | The custom content's view of a run: `co_observe` takes the raw WAVE / TURN / BATTLE events of one drain (once, from `run_screen.c`'s `drain()`), gives each battle range to the reducer as a batch, and `co_finish` captures a report that owns its data. Never changes the run. |
 | [`postmortem_screen.h`](include/postmortem_screen.h) | The post-mortem screen over that report, opened from the result screen. |
 | [`radar_screen.h`](include/radar_screen.h) | The Nemesis Radar (C06): `radar_open` copies a roster and an optional schedule and shows the list and Scout pages. Read-only. `radar_assets.h` is its bridge to the menus layer (species types, icons, sprites, move and nature names). |
+| [`capsule_model.h`](include/capsule_model.h), [`capsule_screen.h`](include/capsule_screen.h) | The capsule machine preview (C07): `capsule_model` is the pure motion and timeline (fixed 8 ms steps, dt in ms, clamped; settled by 1.5 s at the latest); `capsule_screen_open` plays it over an immutable `cap_fixture` and calls `on_settled` once and `on_exit` once from the player's input. |
+| [`gacha_host.h`](include/gacha_host.h), [`gacha_screen.h`](include/gacha_screen.h) | The capsule machine (C09): `gacha_host` reads the option table from game-core, decides what can be bought, runs ONE purchase through `profile_tx` (busy while another is unfinished or unshown), builds the capsule fixture in the source's display order and records eggs as shown; `gacha_screen_open` is the menu (machine, option, question defaulting to No) and opens the capsule screen on the committed result. |
+| [`profile_tx.h`](include/profile_tx.h) | The profile transaction owner (C08; C09 added the shown-eggs mark `ptx_unrevealed` / `ptx_mark_revealed`): a voucher-to-egg pull (`ptx_begin_pull` / `ptx_execute`) or a Nemesis reward claim (`ptx_begin_claim`) commits through ONE write-ahead envelope (`save/ptx.sav`: candidate profile bytes, gacha scene RNG, immutable result) and is rolled forward to `system.sav` and `custom.sav`; a retry or restart returns the same result and never pulls twice. `ptx_boot()` runs in `app_start`. |
 | [`custom_store.h`](include/custom_store.h) | The custom content file on the SD card (`save/custom.sav`): `cs_begin_run` hands the observer a durable run uid (written first), `cs_commit` stores a finished run's report as one idempotent transaction, and a file it can't use is left exactly as it is. |
 | [`gen/gm_enum_names.h`](gen/gm_enum_names.h) | Names of battle-core's enums (`gm_enum_camel(GM_E_SPECIES_ID, id, ...)` gives upstream's i18n key). Regenerate with `python3 game/tools/gen_enum_names.py` when battle-core's enums change. |
 
@@ -184,6 +204,33 @@ a refused open is not silent, leaving returns to the title).
 make -C game/tests radar_test && game/tests/build/radar_test [fuzz sessions]
 python3 game/tests/radar_mutations.py     # one-line mutations of the screen and its hook; every one must make a test fail
 make -C game/tests mkcustom && (cd some/folder && /path/to/build/mkcustom few|full|empty|junk|future)   # a custom.sav for the emulator
+```
+
+**The capsule preview** (C07): `capsule_test` runs the model and the screen with a fake drawing layer (every line on screen and
+readable, no word that offers a purchase, unlock or currency, capsule rectangles inside the field) plus a seeded fuzz of buttons and
+frame times; `flowtest` checks the debug entry (`capsule=7` opens the preview before the title, leaving it is the title, 26 / 0 / -3 are
+ignored).
+```
+make -C game/tests capsule_test && game/tests/build/capsule_test [fuzz sessions]
+python3 game/tests/capsule_mutations.py   # one-line mutations of the model, the screen and the debug entry; every one must make a test fail
+```
+
+**The profile transactions** (C08): `profile_tx_test` runs `profile_tx.c` over game-core's real gacha and the real `save.c` with a fault-injecting
+layer under every file: a power cut or a failed write at every write of a pull, a claim and a refusal, and a seeded fuzz; after each, the card
+holds exactly one coherent state and a retry ends in the clean run's result.
+```
+make -C game/tests profile_tx_test && game/tests/build/profile_tx_test [fuzz scenarios]
+python3 game/tests/profile_tx_mutations.py   # one-line mutations of profile_tx.c and its hooks; every one must make a test fail
+```
+
+**The capsule machine** (C09): `gacha_host_test` checks the option table and the screen's "can be bought / refused with key" against game-core's own
+answer over a grid of edge states, every machine x option against a direct `gc_system_gacha_pull` on the same inputs, refusals (they write nothing),
+no second purchase, and a power cut and a failed write at every write of a purchase and of its shown-mark. `gacha_screen_test` drives the real menu and
+the real capsule screen with buttons over a fake drawing layer (the question's default, held buttons, stale input, refusal rows, restarts at every
+write, a seeded fuzz of buttons, frame times, held buttons, cuts and restarts). They share `gacha_test_common.h`.
+```
+make -C game/tests gacha_host_test gacha_screen_test && game/tests/build/gacha_host_test [states] && game/tests/build/gacha_screen_test [fuzz steps]
+python3 game/tests/gacha_mutations.py   # one-line mutations of the machine; every one must make one of the two tests fail
 ```
 
 The single-turn converter tests use `tests/battle_setup.c`, a test-only fixture that builds a battle-core battle by hand

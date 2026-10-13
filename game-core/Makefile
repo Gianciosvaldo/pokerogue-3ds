@@ -15,6 +15,14 @@ REWARD_LIB := $(BUILD)/reward-core/libreward.a
 SRCS := src/gc_gacha.c gen/out/gc_egg_pool.c src/gc_classic.c src/gc_multi.c src/gc_wide.c src/gc_orb_add.c src/gc_soothe.c src/gc_lure.c src/gc_temp.c src/gc_moveset.c src/gc_run.c src/gc_phases.c src/gc_mon.c src/gc_items.c src/gc_encounter.c src/gc_battle.c src/gc_save.c src/gc_stubs.c src/gc_system.c src/gc_mystery.c src/gc_reward.c src/gc_reward_lifecycle.c src/gc_learnset.c src/gc_catch.c gen/out/gc_evolutions.c gen/out/gc_biome_fields.c gen/out/gc_starters.c gen/out/gc_trainers.c gen/out/gc_dex.c gen/out/gc_learnsets.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
+all: $(BUILD)/transform_host_test
+test: transform-host-test
+transform-host-test: $(BUILD)/transform_host_test
+	$(BUILD)/transform_host_test
+$(BUILD)/transform_host_test: tests/transform_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: transform-host-test
+
 test: temp-host-test temp-raw-guards
 temp-raw-guards: $(BUILD)/temp_diff_test
 	$(BUILD)/temp_diff_test --selftest
@@ -405,3 +413,19 @@ $(BUILD)/lure_encounter_host_test: tests/lure_encounter_host_test.c $(BUILD)/lib
 test: lure-encounter-host
 lure-encounter-host: $(BUILD)/lure_encounter_host_test
 	$(BUILD)/lure_encounter_host_test
+
+all: $(BUILD)/berry_history_host_test
+test: berry-history-host-test
+berry-history-host-test: $(BUILD)/berry_history_host_test
+	$(BUILD)/berry_history_host_test
+$(BUILD)/berry_history_host_test: tests/berry_history_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+.PHONY: berry-history-host-test
+
+all: $(BUILD)/receiver_save_host_test
+test: receiver-save-host-test
+receiver-save-host-test: $(BUILD)/receiver_save_host_test
+	$(BUILD)/receiver_save_host_test
+$(BUILD)/receiver_save_host_test: tests/receiver_save_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+.PHONY: receiver-save-host-test

@@ -45,6 +45,12 @@ stat_banner_test: build/stat_banner_test
 
 # unit test for Mega/Dynamax/Gigantamax form animation states, event conversion, sprite keys, and scaling
 FORM_ANIM_SRCS := form_anim_test.c battle_setup.c ../source/battle_events.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+TRANSFORM_VISUAL_SRCS := transform_visual_test.c battle_setup.c ../source/battle_events.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+build/transform_visual_test: $(TRANSFORM_VISUAL_SRCS)
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) -I../gen -I../../assets-pipeline/app-src/include $(CFLAGS) $(TRANSFORM_VISUAL_SRCS) -lm -o $@
+transform_visual_test: build/transform_visual_test
+.PHONY: transform_visual_test
 build/form_anim_test: $(FORM_ANIM_SRCS)
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) -I../gen -I../../assets-pipeline/app-src/include $(CFLAGS) $(FORM_ANIM_SRCS) -lm -o $@
@@ -122,7 +128,7 @@ runtest-save: build/runtest
 .PHONY: runtest-save
 
 # the app's screen flow (app_flow.c) with fake screens and a fake run driver, over the real save slots; make flowtest && build/flowtest
-FLOW_SRCS := flowtest.c ../source/app_flow.c ../source/custom_store.c $(OBS_SRCS) ../source/run_saves.c ../source/system_data.c ../source/starter_data.c ../menus/menus_data.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+FLOW_SRCS := flowtest.c ../source/app_flow.c ../source/profile_tx.c ../source/custom_store.c $(OBS_SRCS) ../source/run_saves.c ../source/system_data.c ../source/starter_data.c ../menus/menus_data.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/flowtest: $(FLOW_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) $(FLOW_SRCS) -lm -o $@
@@ -193,12 +199,27 @@ build/radar_test: $(RADAR_SRCS)
 radar_test: build/radar_test
 .PHONY: radar_test
 
+# the capsule-machine presentation (source/capsule_model.c + capsule_screen.c) with a fake drawing layer; make capsule_test && build/capsule_test [fuzz sessions]
+CAPSULE_SRCS := capsule_test.c ../source/capsule_model.c ../source/capsule_screen.c
+build/capsule_test: $(CAPSULE_SRCS)
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) -I$(APP)/include $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(CAPSULE_SRCS) -lm -o $@
+capsule_test: build/capsule_test
+.PHONY: capsule_test
+
 # a custom.sav with remembered enemies, for looking at the Radar on a real build (see mkcustom.c); make mkcustom && (cd /some/folder && /path/to/build/mkcustom few)
 build/mkcustom: mkcustom.c ../source/custom_core_build.c $(APP)/source/save.c
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) -I$(CCORE)/include -I$(APP)/include $(CFLAGS) mkcustom.c ../source/custom_core_build.c $(APP)/source/save.c -o $@
 mkcustom: build/mkcustom
 .PHONY: mkcustom
+
+# a system.sav with chosen vouchers and eggs, for looking at the Capsule Machine on a real build (see mksystem.c); make mksystem && (cd /some/folder && /path/to/build/mksystem 12 3 2 1)
+build/mksystem: mksystem.c $(APP)/source/save.c build/ptx_core.a
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) mksystem.c $(APP)/source/save.c build/ptx_core.a -lm -o $@
+mksystem: build/mksystem
+.PHONY: mksystem
 
 # the music: the chooser (source/bgm_choose.c) against upstream's own Battle.getBgmOverride (bgm_expected.c, dumped by tools/dump-bgm.test.ts:
 # every wave, every species and form, every trainer), then the player (bgm_player.c) and the scene calls (bgm.c) over a fake DSP (snd_fake.c);
@@ -209,6 +230,40 @@ build/bgmtest: $(BGM_SRCS)
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(BGM_SRCS) -lm -o $@
 bgmtest: build/bgmtest
 .PHONY: bgmtest
+
+# the profile transaction owner (profile_tx.c over system_data.c and custom_store.c, real game-core gacha and the real save.c) under fault
+# injection; make profile_tx_test && build/profile_tx_test [fuzz scenarios]
+PTX_SRCS := profile_tx_test.c ../source/profile_tx.c ../source/system_data.c ../source/custom_store.c ../source/custom_core_build.c $(APP)/source/save.c $(CORE_SRCS)
+build/profile_tx_test: $(PTX_SRCS)
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(PTX_SRCS) -lm -o $@
+profile_tx_test: build/profile_tx_test
+.PHONY: profile_tx_test
+
+# the same test with game-core compiled once into an archive: only the files under test are rebuilt (profile_tx_mutations.py uses it)
+PTX_OWN := profile_tx_test.c ../source/profile_tx.c ../source/system_data.c ../source/custom_store.c ../source/custom_core_build.c $(APP)/source/save.c
+build/ptx_core.a: $(CORE_SRCS)
+	@mkdir -p build/ptxobj
+	@for f in $(CORE_SRCS); do o=build/ptxobj/$$(echo $$f | tr '/.' '__').o; $(CC) $(RUN_CPPFLAGS) $(CFLAGS) -c $$f -o $$o || exit 1; done
+	ar rcs $@ build/ptxobj/*.o
+build/profile_tx_test_fast: $(PTX_OWN) build/ptx_core.a
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(PTX_OWN) build/ptx_core.a -lm -o $@
+profile_tx_test_fast: build/profile_tx_test_fast
+.PHONY: profile_tx_test_fast
+
+# the capsule machine (task C09). gacha_host_test: the purchase logic (gacha_host.c over profile_tx.c, system_data.c and the real save.c, real
+# game-core gacha) under fault injection; gacha_screen_test: the menu (gacha_screen.c) driven by buttons over the real capsule screen, with a fake
+# drawing layer. Both link the game-core archive built once for profile_tx_test_fast (only the files under test are rebuilt; the test files are
+# sanitized): make gacha_host_test gacha_screen_test && build/gacha_host_test [states] && build/gacha_screen_test [fuzz steps]
+GH_OWN := gacha_host_test.c ../source/gacha_host.c ../source/capsule_model.c ../source/profile_tx.c ../source/system_data.c ../source/custom_store.c ../source/custom_core_build.c $(APP)/source/save.c
+GS_OWN := gacha_screen_test.c ../source/gacha_screen.c ../source/capsule_screen.c $(wordlist 2,99,$(GH_OWN))
+build/gacha_host_test: $(GH_OWN) build/ptx_core.a gacha_test_common.h
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(GH_OWN) build/ptx_core.a -lm -o $@
+gacha_host_test: build/gacha_host_test
+build/gacha_screen_test: $(GS_OWN) build/ptx_core.a gacha_test_common.h
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(GS_OWN) build/ptx_core.a -lm -o $@
+gacha_screen_test: build/gacha_screen_test
+.PHONY: gacha_host_test gacha_screen_test
 
 # the custom content metadata on the SD card (custom_store.c + custom-core's codec, over the app's real save.c); make store_test && build/store_test
 STORE_SRCS := store_test.c ../source/custom_store.c ../source/custom_core_build.c $(APP)/source/save.c

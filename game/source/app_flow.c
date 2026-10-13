@@ -4,6 +4,9 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "capsule_screen.h"
+#include "gacha_screen.h"
+#include "profile_tx.h"
 #include "combat_observer.h"
 #include "custom_store.h"
 #include "gc/run.h"
@@ -29,6 +32,9 @@ static struct {
 
 static void show_title(void);
 static void show_radar(void);
+static void show_gacha(void);
+static void show_capsule_preview(int n);
+static int g_capsule_preview; /* the debug preview's result count, 0 = none (survives app_start's reset) */
 static void show_slots(slots_mode mode, int cursor);
 static void on_run_end(int kind, void* arg);
 
@@ -226,6 +232,9 @@ static void on_title(title_choice c, void* arg) {
     case TITLE_RADAR:
       show_radar();
       break;
+    case TITLE_CAPSULE:
+      show_gacha();
+      break;
   }
 }
 
@@ -255,6 +264,44 @@ static void show_radar(void) {
   }
 }
 
+/* ------------------------------------------------------------------ the capsule machine (task C09) */
+
+static void on_gacha_exit(void* arg) {
+  (void)arg;
+  show_title();
+}
+
+/* The voucher-to-egg machines. Every purchase goes through profile_tx (one committed transaction, one immutable result); this screen
+ * first finishes whatever a restart left unfinished or unshown (gacha_screen.h). */
+static void show_gacha(void) {
+  const gachas_args g = {on_gacha_exit, NULL};
+  gacha_screen_open(&g);
+}
+
+/* ------------------------------------------------------------------ the capsule preview (debug) */
+
+static cap_fixture g_capsule_fixture; /* the screen copies it when it opens */
+
+static void on_capsule_exit(caps_exit how, void* arg) {
+  (void)how;
+  (void)arg;
+  show_title();
+}
+
+static void show_capsule_preview(int n) {
+  caps_args c;
+  memset(&c, 0, sizeof c);
+  if (!capsule_debug_fixture(n, &g_capsule_fixture)) {
+    show_title();
+    return;
+  }
+  c.fixture = &g_capsule_fixture;
+  c.on_exit = on_capsule_exit;
+  if (!capsule_screen_open(&c)) show_title();
+}
+
+void app_debug_capsule(int n) { g_capsule_preview = n >= 1 && n <= CAP_MAX ? n : 0; }
+
 static void show_title(void) {
   rsv_inspect_all(A.info);
   int last = rsv_last_slot();
@@ -274,5 +321,9 @@ void app_start(const rs_config* first_run) {
   A.first = *first_run;
   cs_set_nonce(A.first.entropy); /* only used by a new custom file; an existing one keeps its own */
   co_set_uid_source(cs_begin_run);
-  show_title();
+  ptx_boot(); /* finishes a purchase or reward a crash left half applied, and stops the profile being saved over it (profile_tx.h) */
+  if (g_capsule_preview > 0)
+    show_capsule_preview(g_capsule_preview);
+  else
+    show_title();
 }

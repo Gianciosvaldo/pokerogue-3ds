@@ -9,6 +9,7 @@
 #include "pr_data.h"
 
 #define PR_MAX_UNPORTED 16
+#define PR_MAX_BERRY_HISTORY 128
 
 /* arena.terrainType (src/data/terrain.ts TerrainType; not part of the dumped enums) */
 enum { TERRAIN_NONE, TERRAIN_MISTY, TERRAIN_ELECTRIC, TERRAIN_GRASSY, TERRAIN_PSYCHIC };
@@ -88,6 +89,7 @@ enum {
     PR_MOD_INSTANT_REVIVE,          /* Reviver Seed; max held stack 1 */
     PR_MOD_DAMAGE_MONEY_REWARD,    /* Golden Punch */
     PR_MOD_MONEY_MULTIPLIER,       /* Amulet Coin dependency of damage money */
+    PR_MOD_PRESERVE_BERRY,          /* Berry Pouch; side-wide */
     PR_MOD_COUNT_
 };
 extern const uint8_t pr_mod_parent[PR_MOD_COUNT_];
@@ -284,6 +286,8 @@ typedef struct pr_pokemon {
     bool wave_endured;                 /* waveData.endured (EnemyEndureChanceModifier) */
     /* battleData */
     bool has_eaten_berry;              /* battleData.hasEatenBerry (Belch) */
+    uint8_t battle_berries[PR_MAX_BERRY_HISTORY], turn_berries[PR_MAX_BERRY_HISTORY], last_berries[PR_MAX_BERRY_HISTORY];
+    uint16_t n_battle_berries, n_turn_berries, n_last_berries;
     /* Task 53: Mega Evolution & Dynamax */
     bool queued_mega;
     bool queued_dynamax;
@@ -291,7 +295,26 @@ typedef struct pr_pokemon {
     uint8_t dynamax_turns_left;
     uint8_t dynamax_level;
     uint8_t pre_dynamax_form;
+    /* Transform's summonData identity and temporary moveset. Ordinary moves/PP
+     * are Pokemon.moveset and remain permanent, as in the pinned source. */
+    bool transformed;
+    uint16_t transform_species;
+    uint8_t transform_form;
+    int8_t transform_gender;
+    uint16_t transform_moves[4];
+    uint8_t transform_pp_used[4], transform_pp_up[4], transform_n_moves;
+    int16_t transform_max_pp_override[4];
+    uint8_t variant;           /* permanent shiny variant; Transform does not copy it */
 } pr_pokemon;
+
+/* getMoveset(): temporary collection while transformed; the fields above named
+ * moves/PP always represent the permanent Pokemon.moveset. These selectors also
+ * preserve constness and allow PP updates; pass an expression without side effects. */
+#define PR_MOVES(p) ((p)->transformed ? (p)->transform_moves : (p)->moves)
+#define PR_PP_USED(p) ((p)->transformed ? (p)->transform_pp_used : (p)->pp_used)
+#define PR_PP_UP(p) ((p)->transformed ? (p)->transform_pp_up : (p)->pp_up)
+#define PR_MAX_PP(p) ((p)->transformed ? (p)->transform_max_pp_override : (p)->max_pp_override)
+#define PR_N_MOVES(p) (*((p)->transformed ? &(p)->transform_n_moves : &(p)->n_moves))
 
 #define PR_MAX_PARTY 6
 #define PR_MAX_QUEUED_MOVERS 8
@@ -444,6 +467,7 @@ int pr_closures_ported(void);
 typedef struct pr_ab_params {
     const pr_pokemon *pokemon;     /* the ability's owner */
     const pr_pokemon *opponent;    /* attacker/defender, or FieldMultiplyStat's target */
+    const pr_pokemon *victim;      /* PostKnockOutAbAttr: the Pokemon whose FaintPhase is running */
     int move;                      /* -1 = none */
     bool simulated;
     bool ignore_ability;           /* AllyStatMultiplierAbAttr.ignoreAbility */
@@ -580,6 +604,10 @@ extern int pr_sitrus_berry_fired, pr_lum_berry_fired, pr_leppa_berry_fired;
 extern int pr_liechi_berry_fired, pr_ganlon_berry_fired, pr_petaya_berry_fired, pr_apicot_berry_fired, pr_salac_berry_fired;
 extern int pr_enigma_berry_fired, pr_lansat_berry_fired, pr_starf_berry_fired;
 bool pr_berry_should_apply(pr_battle *bt, const pr_pokemon *p, const pr_modifier *m);
+void pr_refresh_berry_modifiers(pr_battle *bt, int side);
+void pr_reset_battle_data(pr_pokemon *p);
+void pr_record_eaten_berry(pr_battle *bt, pr_pokemon *p, int berry, bool consumed);
+void pr_berry_effect(pr_battle *bt, struct pr_engine *e, pr_pokemon *p, int berry, int8_t *stats, int8_t *stages, int *n);
 void pr_apply_berry(pr_battle *bt, struct pr_engine *e, pr_pokemon *p, pr_modifier *m);
 void pr_apply_berry_ex(pr_battle *bt, struct pr_engine *e, pr_pokemon *p, pr_modifier *m, int8_t *ssc_stats, int8_t *ssc_stages, int *n_ssc);
 /* DamageMoneyRewardModifier.apply: called after player-to-enemy final damage. */
@@ -658,6 +686,12 @@ bool pr_are_allies(int a, int b);
 /* ---- pokemon.ts ---- */
 const pr_species *pr_pokemon_species(const pr_pokemon *p);
 const pr_form *pr_pokemon_form(const pr_pokemon *p);
+const pr_form *pr_pokemon_base_form(const pr_pokemon *p);
+int pr_get_gender(const pr_pokemon *p);
+double pr_get_sprite_scale(const pr_pokemon *p);
+bool pr_can_transform_into(const pr_pokemon *user, const pr_pokemon *target);
+void pr_restore_transform(pr_pokemon *p);
+void pr_set_original_move(pr_pokemon *p, int slot, uint16_t move);
 const pr_species *pr_pokemon_fusion_species(const pr_pokemon *p);
 bool pr_is_mega(const pr_pokemon *p);
 bool pr_is_max(const pr_pokemon *p);

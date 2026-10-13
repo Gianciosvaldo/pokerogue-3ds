@@ -185,8 +185,8 @@ static double attr_ubs(pr_battle *bt, const ai_attr_info *a, pr_pokemon *user, p
 
 static bool has_physical_attack(const pr_pokemon *u)
 {
-    for (int i = 0; i < u->n_moves; i++) {
-        int m = u->moves[i];
+    for (int i = 0; i < PR_N_MOVES(u); i++) {
+        int m = PR_MOVES(u)[i];
         if (pr_move_is_attack(m) && pr_moves[m].category == MOVE_CATEGORY_PHYSICAL) return true;
     }
     return false;
@@ -276,11 +276,11 @@ static double attr_tbs(pr_battle *bt, const ai_attr_info *a, int attr_index, pr_
         bool unknown;
         const pr_turn_move *last = pr_last_non_virtual_move(bt, t, false, true, &unknown);
         int slot = -1;
-        for (int i = 0; last && i < t->n_moves && slot < 0; i++)
-            if (t->moves[i] == last->move) slot = i;
+        for (int i = 0; last && i < PR_N_MOVES(t) && slot < 0; i++)
+            if (PR_MOVES(t)[i] == last->move) slot = i;
         if (slot < 0) return 0;
         double max_pp = ai_move_pp(t, slot);
-        double pp_left = max_pp - t->pp_used[slot];
+        double pp_left = max_pp - PR_PP_USED(t)[slot];
         double value = -(8 - ceil(fmin(max_pp, 30) / 5));
         return pp_left < 4 ? value / 4 * pp_left : value;
     }

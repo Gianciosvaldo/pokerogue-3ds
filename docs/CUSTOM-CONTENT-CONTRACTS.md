@@ -1,4 +1,4 @@
-# Custom content contracts, version 1 (tasks C01, C02, C03, C04, C05, C06)
+# Custom content contracts, version 1 (tasks C01, C02, C03, C04, C05, C06, C07, C08, C09)
 
 Written for task C01 of [CUSTOM-CONTENT-ADVANCED-AGENT.md](CUSTOM-CONTENT-ADVANCED-AGENT.md). It does three things:
 audits the interfaces the custom content will touch, fixes the version-1 data contracts, and records what the new
@@ -7,7 +7,11 @@ access, no wallet access and no spawn code. Since C03 the app feeds the reducer 
 (sections 2.9 and 5.2). Since C04 it keeps the last run's report and the id counters in one file on the SD card (sections 2.10 and
 5.3); no Nemesis is ever inserted by the app yet, and no custom mode exists. Since C05 `custom-core` also holds the rematch
 policy as pure data (section 2.11, 5.4): nothing in the app calls it yet. Since C06 the title screen has a read-only
-Nemesis Radar over the stored roster (section 2.12, 5.5); it starts nothing.
+Nemesis Radar over the stored roster (section 2.12, 5.5); it starts nothing. Since C07 the app has a capsule-machine presentation
+prototype that only a debug file opens (section 2.13, 5.6); it shows fixed results and is connected to nothing. Since C08 the app
+owns the profile transactions (voucher-to-egg pull, the once-per-record Nemesis reward) behind one write-ahead envelope (section 2.14, 5.7).
+Since C09 the title has a **Capsule Machine** entry: the three voucher-to-egg machines, one committed transaction per accepted pull,
+shown through the C07 capsule screen (section 2.15, 5.8). That is the first purchase a player can make; it hatches nothing.
 
 | Item | Value |
 |---|---|
@@ -659,6 +663,194 @@ number, and has no fight, invasion or purchase button; its text says "Live remat
   here only if a file holds records; the app cannot create one (section 2.10), so on a real install the Radar shows the empty state until
   C10. `game/tests/mkcustom.c` writes a file with records for looking at the screen on an emulator.
 
+### 2.13 The capsule presentation prototype (C07)
+
+`game/source/capsule_model.c` (pure motion and timeline, no ui, no clock, no allocation, no random numbers) and `capsule_screen.c` (the
+two screens). **It is a presentation over a result list it is given, not a machine that decides anything**, and it is not connected to the
+gacha (that is C09, over C08's profile).
+
+- **The result contract.** `cap_fixture`: `n` in 1..25 items, each a tier (0..3: a colour and a word, nothing else) and a non-empty,
+  NUL-terminated label of at most 31 bytes. `capsule_screen_open` refuses (returns false, opens nothing) NULL, an empty or oversized list,
+  a tier out of range and a label with no end or no text; it **copies** the fixture, so the caller's data may change or go away. Nothing
+  in the model writes to a fixture and the shown labels are the supplied labels in the supplied order. An egg or capsule is not shown as
+  an unlocked Pokemon: the result list prints the label as given and the screen says "These results were fixed before the machine ran."
+- **Who may open it.** Only the debug file: `rundriver.txt` line `capsule=<1..25>` opens the preview before the title with `n` results
+  made from the position alone (`capsule_debug_fixture`: tiers by position, labels "Fixture result N"). Normal play has no entry, and
+  the text says it is a preview ("A preview with fixed results.", "Nothing is bought."). No wallet, profile, unlock, voucher, save or
+  RNG function is called by either file.
+- **Motion.** Gravity 0.0016 px/ms^2, restitution 0.35 (a bounce under 0.08 px/ms stays down), the chute above the field's top, floor
+  at y 164. Item i has a fixed slot (reading order, five to a row, rows centred, the last row centred on itself) and a fixed x spread at
+  the chute, both functions of i and n only; the capsule arrives over its slot with its horizontal speed chosen for the fall time, so
+  **where a capsule lands is not where it is "pushed": slot i always holds item i** (no collision is simulated between capsules, only the
+  floor; capsules in different rows are 28 px apart and in a row 40 px apart for radius 10, so they cannot overlap at rest). The bottom
+  row leaves the chute first, one every 16 ms after the 200 ms knob turn.
+- **Time.** dt is in milliseconds (ui.h). `cap_step` ignores dt <= 0 and NaN, clamps one call to 100 ms (a long pause is not a jump),
+  and integrates in fixed 8 ms steps, at most 16 per call, so the result does not depend on the frame rate. The model is SETTLED when
+  every capsule is open (measured natural settle: 1216 ms for one result, 1280 ms for 5, 10 or 25) or at **1500 ms at the latest**, when
+  whatever still moves is placed at its slot and opened. Allocation: none (the model is one fixed struct, `sizeof(cap_model)` = 1,748 bytes).
+- **Skip.** B or START during the knob turn or the drop calls `cap_skip`: every capsule goes to its slot, open, the results are shown at
+  once, and `on_settled` fires then. Nothing is pulled again and no result changes. A pull before the first A is not skippable (B leaves).
+- **Callbacks.** `on_settled` fires **once per opening**, the first time the results are all shown (time or skip) and never if the
+  screen was left before. `on_exit(how)` fires **once per opening, from the player's input only** (B before the pull, A / B / START
+  after the results have been up 300 ms, so a held button does not close it at once); `how` says whether the results were shown. Neither
+  is called from `leave()`, a timer or a stale screen; a callback of an earlier opening never reaches a later one (the screen keeps one
+  state, cleared at each opening). The callee of `on_exit` leaves the screen (the debug entry shows the title).
+- **Input.** Buttons only; A is the pull ("the same pull" as a touch gesture would be). **There is no touch**: the framework gives no
+  touch input to ui screens (only the shop reads the touch screen), so a gesture would need a new API; none is invented. No pressure or
+  crank input. A held button's auto-repeat is ignored through `ui_input_repeating()` (added to ui.c: true only while the framework
+  delivers a repeat), so holding A pulls once and holding B does not skip and then leave.
+- **Both screens.** Top (the 320 x 180 field): a backdrop, the chute, capsules drawn as seven horizontal strips of a circle (lid lifts
+  and a mark appears when open), the selected result outlined while scrolling. Bottom: the title, the knob (the owned
+  `images/egg/gacha_knob` from the locally built packs, turned by the model's knob angle; a plain rectangle when the packs lack it), the
+  instruction lines, then the result list (five rows, tier chip and label). No art is added to Git.
+
+### 2.14 The profile transaction owner (C08)
+
+**Audit of "who owns the profile".** C01's section 1.5 said no file in `game/` mentions `gc_system`; that was true then and is not now. Main
+already owns **one shared `gc_system`**: `system_data.c` loads `save/system.sav` once (`sysd_get`, static 724 KB), attaches it to each run
+and to the starter select, and writes it at run save points (`sysd_save`, skipped while unchanged, never over an unreadable file). What
+did **not** exist: any caller of `gc_system_gacha_pull`, any persistence of the gacha scene RNG, and any way to change the profile together
+with the custom file. C08 adds exactly that, as an adapter over the existing calls; `gc_system_gacha_pull`, `gc_system_save/load`,
+`save_read/save_write` and the system.sav and custom.sav formats are unchanged and read-only here (`git diff main -- game-core` is empty).
+
+`game/source/profile_tx.c` (+ small hooks in `system_data.c` and `custom_store.c`). **One write-ahead envelope**, the file `ptx`, is the
+only authority for a transaction in flight. It holds: the next transaction id, the gacha scene RNG (its own stream, never a run's battle or
+generation RNG), the last 8 immutable results, and at most one pending transaction. The save library is atomic per file only, so
+cross-file consistency is a redo log: the commit is ONE `ptx` write that carries the candidate profile bytes, the resulting scene RNG, the
+transaction id and the result together; the profile file and the custom file are then rolled forward from it, each step idempotent.
+
+```
+            begin_pull / begin_claim                    execute
+   IDLE ---------------------------------> PREPARED ---------------> pull ONCE on the live profile (claim: add the voucher)
+    ^        1 write: request + txn id        |                          |
+    |        (clock, entropy seed, record,    | refused (cost, capacity, |  serialize the candidate (gc_system_save)
+    |         digest of the profile now;      | voucher cap, not owed,   v
+    |         scene RNG seeded at the first)  | profile changed)    ONE write: candidate bytes + scene RNG + result + txn id
+    |                                         v                     fails -> live profile put back from its pre-image
+    |  <------- 1 write: result kept (REFUSED), nothing else        |        (bytes a restart would read); stays PREPARED, retry
+    |                                                               v
+    |                                                          COMMITTED   <== the commit point; the result is durable
+    |                                                               |
+    |   roll-forward, each step idempotent:                         |  1. claim only: custom.sav (cc_reward_claim: ledger + CLAIMED)
+    |   boot (ptx_recover), the gate on sysd_save, or a retry       |  2. system.sav = the candidate bytes
+    +<--------------------------------------------------------------+  3. ptx: pending cleared (the result stays in the ring)
+```
+
+Writes in a clean run: a pull 4 (begin, commit, system.sav, clear), a claim 5 (plus custom.sav), a refusal 2.
+
+**What each crash leaves, and what finishes it** (all tried by the test, section 5.7):
+
+| Stopped | Card | Next boot / next call |
+|---|---|---|
+| before `begin` | nothing | nothing happened |
+| after `begin` | PREPARED: request saved | `ptx_pending()` names it; `ptx_execute(txn)` runs the pull from the SAVED clock and seed (the caller supplies nothing again) |
+| after the commit write | COMMITTED, profile and custom still old | boot sees the card holds the profile the transaction started from, installs the candidate in memory and on the card (claim: the claimed flag first), clears. The same result, no second pull |
+| after `custom.sav` (claim) | claimed, voucher not yet | boot: the claim is a replay, the profile is installed, cleared |
+| after `system.sav` | profile applied | boot sees the candidate on the card, clears |
+| after the clear | done | the result is kept: asking again returns it |
+
+Rules that make this safe:
+
+- **Nothing before the commit point.** The pull runs once, on the live profile, then the profile is serialized; if the commit write fails the
+  live profile is loaded back from the bytes serialized before the pull (the same bytes a restart reads), the scene RNG is not advanced, no
+  result is stored and nothing is handed to the caller (`PTX_X_IO`; a retry is safe). A profile that cannot be serialized refuses at
+  `begin` and at `execute` without running anything. If even the put-back fails the module stops for the session (`PTX_X_FATAL`).
+- **Exactly one pull.** The result is looked up by transaction id before anything runs, so a retry, a repeated tap or a restart gets the
+  committed result (`PTX_X_DONE`) and never calls `gc_system_gacha_pull` again. Clock and entropy seed are fields of the request, saved at
+  `begin`; the pull reads them from the saved record, never from a live clock.
+- **A committed result is returned even if the roll-forward failed** (`PTX_X_DONE_APPLY_PENDING`): it is durable, and the files catch up.
+  Meanwhile `sysd_save` asks the gate first and **returns false instead of writing the profile**, so nothing can overwrite the candidate
+  with a profile that does not contain it; the next save point (or boot) finishes the transaction and then saves.
+- **A request is only run on the profile it was made for.** `begin` records the canonical digest of the profile; `execute` refuses
+  (`ptx:profileChanged`, closing the request) if it differs. This covers the one hazard of the save library (section 1.6: a damaged main
+  file silently rolls the state back by one write): a `ptx` file restored to its PREPARED write after the pull had completed can never run
+  the pull a second time. Tested by putting the old file back.
+- **The boot does not guess.** If a transaction is COMMITTED and the card's profile is neither the one it started from nor the candidate, or
+  the profile is unreadable, the boot reports it in words, writes nothing and refuses new transactions. A `ptx` file that is damaged or
+  from a newer version is reported and left as it is.
+- **The reward is claimed once, with its voucher.** `ptx_begin_claim` needs the record owed (`cc_reward_entitlement_of`: DEFEATED), the
+  voucher is one regular voucher (`CC_REMATCH_REWARD_VOUCHERS`; no currency, no unlock), and the roll-forward writes the claimed flag
+  (`custom_store.c`: `cs_claim_reward`, one `cc_reward_claim` transaction) BEFORE the profile, so a voucher is on the card only once the claim
+  is. A record claimed meanwhile by another path is refused at `execute` (`cc:notOwed`); a voucher count at the 32-bit maximum is refused
+  (`profile:voucherCap`) and the record stays owed.
+- **No default wallet.** Both `begin` calls refuse (`PTX_E_UNUSABLE`) when the profile file is unreadable: the defaults a damaged install
+  falls back to are not the player's vouchers. Nothing in this module writes a voucher count except the claim.
+- **Memory.** The profile is never copied as a struct. A transaction allocates two buffers of 1 MiB (the largest profile gc_system_save can
+  write, a synthetic every-species-maxed one, is 714,695 bytes; a normal one is 3 to 90 KB) and frees them; the module's static state is
+  14,624 bytes (`ptx_static_bytes`). The `ptx` file holds the candidate profile bytes while a transaction is pending, so it is as large as the
+  profile for that time and a few KB otherwise.
+- **Boot.** `app_start` calls `ptx_boot()` (installs the gate, finishes a half-applied transaction). Cheap when there is no `ptx` file. The scene
+  RNG's seed is supplied once by the app before its first begin (`ptx_set_scene_seed`); C09 must supply it from the real clock.
+
+### 2.15 The capsule machine (C09)
+
+**What exists now.** The title has a custom entry **Capsule Machine** (upstream reaches its gacha from the in-run menu, which this app does not
+have yet; the Radar set the precedent for a custom title entry). It opens `gacha_screen.c`: LEFT / RIGHT choose one of the three machines, UP / DOWN
+one of the five options, A asks, the question opens on **No**, Yes buys, B leaves. It is a menu over three things that already exist and adds no
+rule: game-core's `gc_system_gacha_pull` (machines, options, costs, capacity, pity, guarantees, entropy, display order), C08's `profile_tx`
+(the only thing that runs a pull and commits it) and C07's capsule screen (the presentation). Files: `gacha_host.c/.h` (logic, no ui),
+`gacha_screen.c/.h` (menu), `capsule_screen.c` (words and `autoplay`), `profile_tx.c` (the shown-mark), `title_screen.c`, `app_flow.c`.
+
+**Upstream core behavior (the source decides; this task compares nothing new and calls nothing by a copy).** Which voucher an option debits,
+how many, how many eggs it adds, the capacity, the refusal order (capacity before cost), every egg field, the pity and guarantee rules, the
+statistics and the display permutation are `gc_system_gacha_pull`'s, validated against the pinned upstream by `egggachadiff.sh`
+(game-core/EGG-GACHA-VALIDATION.md; **not re-run here**, game-core is unchanged). **Original custom presentation:** the title entry, the
+menu, the question, the words ("Move Gacha", "Legendary Gacha", "Shiny Gacha", "Regular / Plus / Premium / Golden", the refusal sentences),
+that the eggs are shown by tier and an id (no species, no shiny flag: nothing hatches yet), the capsule motion (C07), the shown-mark, and the
+restart behavior below. The three machine notes ("better odds of a rare egg move / of a legendary with a daily featured one / of a shiny
+egg") say what the source's offsets do and nothing more; the odds are not stated as numbers.
+
+**The table is read from the source.** `gh_rules` runs the real `gc_system_gacha_pull` once per option on a scratch profile with plenty of
+every voucher and reads which voucher dropped, by how much, and how many eggs appeared; it finds the capacity by a binary search on a
+one-egg pull. Nothing is inferred from the cursor labels. The result is cached (about twelve scratch pulls once per run of the app; not
+timed on a device). The test checks it against upstream's documented table (1 Regular -> 1, 10 Regular -> 10, 1 Plus -> 5, 1 Premium -> 10,
+1 Golden -> 25, 99 eggs) and the screen's "can be bought / which refusal" against `gc_system_gacha_pull` itself over 7,800 comparisons.
+
+**One accepted pull.**
+
+```
+ menu --A--> question (No) --Yes--> gh_buy:  unreadable profile / unusable record -> message, nothing written
+                                             a purchase or unshown eggs pending   -> BUSY, nothing written
+                                             refused by the table (same keys, same order as the source) -> message, nothing written
+                                             ptx_begin_pull (clock and entropy seed supplied ONCE, saved) -> ptx_execute (ONE pull, ONE commit)
+                                             -> capsule screen on the committed result (autoplay: already accepted)
+ capsule screen settles (time or B/START skip) -> ptx_mark_revealed(txn) -> closing returns to the menu
+```
+
+- **Duplicates.** Held buttons act once (`ui_input_repeating`); A on the question's default is "No", so a double tap asks and declines; a
+  screen that was left takes no input; `gh_buy` is not re-entrant and is BUSY while `ptx_pending()` or an unshown committed pull exists. So
+  no second transaction id can be created before the first is finished and shown. There is no touch path (the framework routes none to ui
+  screens): the buttons are the whole control.
+- **Refusals.** The table refuses (not enough vouchers, too many eggs; capacity first, as the source) before anything is written: zero
+  writes, files byte-identical, no record created. If something still reaches the source and it refuses (the profile changed after
+  `begin`: `ptx:profileChanged`), that is the same: nothing changes and nothing is shown. A refused write (SD card) before the commit point
+  changes no live profile and no RNG (C08), shows no egg and says "Nothing was spent"; a purchase already begun is finished with A (the same
+  transaction, the same request) or, if the player leaves, the next time the machine opens.
+- **The shown-mark.** `ptx_unrevealed` / `ptx_mark_revealed` (envelope version 2: one `revealed_txn` watermark; version 1 files are still read
+  and count everything they kept as shown, since no screen could show it). Marking happens when the capsule screen settles, by time or by
+  skip, and is one `ptx` write that carries a pending transaction unchanged. If the card refuses it the eggs are not offered again in this
+  session and the mark is retried; if the app stops before it is made, the **same** eggs are shown once more after the restart (never a new
+  pull). If the player closes the app mid-animation, the same.
+- **Opening the machine** first finishes what a restart left (`gh_resume`: the pull runs from the SAVED clock and seed, so the result is the
+  one the interrupted purchase would have had), then shows any committed pull that was not shown, then the menu.
+
+| Stopped during a purchase | Next time the machine opens |
+|---|---|
+| before the first write | nothing happened: the menu |
+| after `begin` (PREPARED) | the pull is finished from the saved request and its eggs are shown |
+| after the commit write, or later in the roll-forward | boot finished the files; the eggs are shown |
+| during the animation, or the mark not written | the same eggs are shown again once, then marked |
+| after the mark | the menu; nothing is shown |
+
+- **What a result is.** Eggs in the profile (`sys->eggs`), tier, id, hatch waves, machine, clock, variant, shiny and move index as the source
+  made them. Not caught, not unlocked, no candy, no hatching call, no custom form or item, no rehydration (`EggData.toEgg` stays excluded). The
+  capsule screen shows `Egg <id mod 10^6>` per capsule in the source's display order (not the order the capsules land in) with the tier; the
+  dex and starter data are compared byte for byte with the pre-pull profile in the test.
+- **Time and entropy.** The request's clock is `time(NULL) * 1000` and its entropy seed text is built from `time`, `clock` and a counter,
+  supplied once per request by `gh_set_env`'s defaults (tests inject fixed ones). They are saved in the request; a retry or restart never
+  re-reads a clock. The daily featured legendary follows the console's clock; no synchronization is claimed. Animation timing never reaches
+  a random or date decision: the animation starts after the commit.
+
 ## 3. Choices to confirm
 
 These are version-1 decisions this PR had to make. The handoff either left them open or said "documented policy". Each
@@ -721,6 +913,57 @@ Added by C06 (section 2.12):
     The icon stands in meanwhile. The value is a guess at "feels instant when you stop"; it is not measured on a device.
 22. **No touch.** The framework has no touch path for these screens. Adding one belongs to the framework, not to this screen.
 
+Added by C07 (section 2.13):
+
+23. **Slot i holds item i; the capsules do not collide with each other.** The wish for a "collision" is met by the floor bounce only:
+    capsule-to-capsule collision would make the landing depend on contact order and tempt a result to depend on it. Alternative: a real
+    pile, which needs a physics engine or much more tuning and gains nothing the player can use.
+24. **Skip is B or START; a skip shows the supplied results at once.** A is only the pull, so a skip is not a second pull.
+25. **A held button acts once** (`ui_input_repeating`); the results can be closed only after 300 ms.
+26. **No touch gesture.** See section 2.13; touch needs a framework change.
+27. **The 1.5 s limit is enforced by a snap, not by tuning.** Natural settling is 1.2 to 1.3 s; if integration ever ran long the capsules
+    would jump to their slots at 1.5 s. Alternative: no limit, which is what the card forbids.
+28. **Two callbacks, not one.** `on_settled` (the results are shown) and `on_exit` (the player leaves), because the card's "completion
+    fires once regardless of skip" and "leaving and reentering" are different events: C09 will grant nothing on either; it grants in C08's
+    transaction before the screen opens.
+
+Added by C08 (section 2.14):
+
+29. **A redo log carrying the candidate profile bytes, not one merged file.** Merging system.sav and custom.sav into one file would change
+    both formats and the run slots' system-data path; a log in a third file leaves them as they are and costs one extra write. The log holds
+    the whole candidate profile (3 to 90 KB, at most 715 KB) only while a transaction is pending.
+30. **One transaction in flight.** A second `begin` is `PTX_E_BUSY`; C09 asks `ptx_pending()` when it opens. Simpler to reason about than a queue.
+31. **Eight kept results.** Enough for a screen to ask again after a restart; older ones are forgotten (`ptx_result_of` false). The profile
+    itself, not the ring, is what a pull changes.
+32. **Claim order: custom file, then profile.** Alternative: profile first, which would leave a window with a voucher and an owed record on the
+    card; the redo log makes either recoverable, this order matches decision 18.
+33. **Divergence is reported, not repaired.** If the card's profile is neither the start nor the candidate, the boot stops and says so; guessing
+    could discard a run's progress or double a grant.
+34. **A request is bound to the profile it began on** (a digest, refused if the profile changed). Alternative: run it anyway; that is the
+    double-pull hazard section 1.6 describes.
+35. **The roll-forward writes the candidate bytes, not the live profile.** A run that changed memory in between is saved later through the
+    gate (it fails, and says so, until the transaction is finished). Alternative: write memory, which loses the proof that the card holds the
+    candidate.
+
+Added by C09 (section 2.15):
+
+36. **The machine is a title entry.** Upstream's gacha lives in the in-run menu, which the app does not have. Alternative: wait for that menu;
+    the screen takes plain `on_exit`, so moving it is a wiring change.
+37. **The question opens on No, and a held button acts once.** A costs real vouchers and the same A opened the question, so Yes must be a
+    second, deliberate input. Alternative: no question (one tap buys), which the held-A hazard makes unsafe.
+38. **The option table is read from game-core by pulling, not written in `game/`.** Cost: about twelve scratch pulls (one 724 KB scratch
+    profile, freed) the first time the machine opens, not timed on a device. Alternative: a copy of upstream's table, which is the
+    "inferred from cursor labels" risk the card names.
+39. **Eggs are shown by tier and id, not by species or shiny.** Species and shininess are decided and stored; showing them is hatching's job
+    (not in scope) and would turn the reveal into a loot display the original game does not have at this step. The tier is the colour.
+40. **Shown is a watermark in the purchase record (envelope version 2), set when the capsule screen settles.** Alternative: a flag per result,
+    or marking at commit; the first costs a format change per field, the second would lose the reveal after a crash. Cost: a mark lost
+    to a crash shows the same eggs once more.
+41. **The words are plain English, not upstream's locale strings** (the machine names, the refusal sentences). The strings are not loaded
+    for custom screens (the Radar and the post-mortem do the same); the refusal KEYS are the source's.
+42. **The clock is the console's** (`time(NULL)`), supplied once per request and saved with it. A wrong console clock picks a different daily
+    featured legendary; it cannot change a result already committed.
+
 ## 4. What C02 to C10 inherit, and what they still must decide
 
 | Task | Imports | Still undecided / must verify |
@@ -730,7 +973,9 @@ Added by C06 (section 2.12):
 | C04 store (decided in section 2.10) | `cc_meta`, wire widths, `cc_insertion_check`, ledger, `cc_nemesis_transition` | nothing left open for the store itself. Live Nemesis insertion needs the finishing enemy's identity (section 1.8): C10 |
 | C05 scheduler (decided in section 2.11) | `cc_schedule`, window waves, `CC_RNG_ALGO_V1`, lifecycle | nothing left open for the policy itself. C10 must: supply a seed independent of gameplay and gacha RNG, report each window's encounter kind and flags before the wave is generated, pass the representable mask, key the stored schedule by the uid it saved (not C04's per-observation uid), call `cc_roster_release_except` before `cc_rematch_start`, and persist the schedule (no codec yet). C08 must grant the voucher only after `cc_reward_claim`'s write |
 | C06 radar (decided in section 2.12) | `cc_nemesis` read-only, `cc_schedule` | nothing left open for the screen itself. C10 must pass the run's schedule to `radar_open` once it persists one, and create records for it to show |
-| C08 profile | `cc_ledger` `REWARD_CLAIM`, the one-envelope rule | the profile owner (section 1.5), the envelope |
+| C07 capsule preview (decided in section 2.13) | an immutable result list (`cap_fixture`), the framework's `ui` screens | nothing left open for the presentation itself. C09 must build the fixture from results C08 has already committed, never from the screen; the screen may be shown after or before the grant but must not decide or repeat it; touch needs a framework path |
+| C08 profile (decided in section 2.14) | `cc_ledger` `REWARD_CLAIM`, `cc_reward_claim`, the shared `sysd` profile | nothing left open for the owner itself. C09 must: supply the scene seed from the real clock (`ptx_set_scene_seed`) and the request's clock and entropy once per tap, run a pull only through `ptx_begin_pull` / `ptx_execute`, keep the transaction id across retries and read `ptx_pending()` when the screen opens, show what `ptx_result_of` returns (never its own draw), and not call `gc_system_gacha_pull` or write a voucher count. C10 claims a won record with `ptx_begin_claim` |
+| C09 machine (decided in section 2.15) | `ptx_begin_pull` / `ptx_execute` / `ptx_unrevealed` / `ptx_mark_revealed`, the C07 screen, `gc_system_gacha_pull` (read-only) | nothing left open for the machine itself. C10 must remember that a Nemesis reward voucher is spent through this same machine, that the machine is BUSY while a `ptx` transaction is pending (including a claim), and that the title entry is the only way in |
 | C10 live | all of the above | every item of section 1.8 that is still missing |
 
 ## 5. Validation record
@@ -1037,6 +1282,105 @@ empty state: no record can be created yet (section 2.10). The emulator check use
 Status for this task: **COMPLETE** against the C06 card's scope (the screen and its states over merged contracts); the live behavior it
 will show is **not shipped** until C10.
 
+### 5.6 C07 (capsule presentation prototype)
+
+Run on the final tree of the C07 PR (same container as 5.2 to 5.5). The task touches `game/` and this document only.
+
+| Command | Result |
+|---|---|
+| `make -C game/tests capsule_test && game/tests/build/capsule_test` (ASan + UBSan, `-fno-sanitize-recover`) | 223,456 checks, 0 failed (300 fuzz sessions of random buttons and frame times) |
+| `game/tests/build/capsule_test 2000` | 1,253,784 checks, 0 failed |
+| `make -C game/tests flowtest && game/tests/build/flowtest` | 108 checks, 0 failed (103 before, 5 new: `capsule=7` opens the preview with 7 results and not the title, leaving it is the title, 26 / 0 / -3 ignored) |
+| `game/tests/run_host_tests.sh` (the CI script, now including `capsule_test`) | all passed |
+| `python3 game/tests/capsule_mutations.py` | **43 mutations run, 43 killed, 0 survived, 0 invalid**; 4 more are documented as equivalent and not run (the `CAP_MAX_STEPS` loop bound, which one call's 100 ms clamp can never reach; the screen's repeated `settled_fired` and `exited` guards; the debug entry's repeated 1..25 clamp). Includes a duplicate-callback mutant (the settle reported every time it is asked; on_exit twice) and dt-unit mutants (dt read as seconds in the opening and in the gravity), all killed |
+| `docker run --rm -v "$PWD":/src -w /src/game devkitpro/devkitarm make` | builds `pokerogue.3dsx`, no warning from the new files |
+| Azahar (libretro core, the real packs, the Docker-built `pokerogue.3dsx`, `rundriver.txt` with `capsule=25`, `capsule=10`, `capsule=1`) | `capsule=25`: idle (both screens), the knob pulled with A, capsules falling and bouncing on the top screen (three moments), settled with the 25-result list and the outline on item 1, UP / DOWN scrolling, A closing to the title. `capsule=10`: A held for 45 frames (about 0.75 s, so the auto-repeat would have fired) pulled once; B skipped to the results while it was dropping; the screen was still open 100 frames later with the hold released. `capsule=1`: B before the pull went to the title. Screens are not in Git |
+**What the host test holds.** The fixture contract (0, 1, 10, 25, 26 items, bad tier, empty label, unterminated label are refused or accepted
+as stated; the supplied copy is never written). Timeline for 1, 10 and 25 items: stage order, settle times pinned (1216 ms for one item,
+1280 ms for 5, 10, 25) and always before the 1500 ms deadline, a bounce is observed, no capsule below the floor or outside the field, slot i
+holds item i, the landing order differs from the fixture order (capsules are not pushed into place). Time: the same fixture stepped at 8,
+16.7, 33 and 50 ms frames gives the same state; dt = 0, negative, NaN, infinite and 1e9 do not move or break anything; a hand-damaged
+body is still placed by the deadline. Skip at the knob turn, at every stage of the drop and after the settle; skip then repeated skip,
+pull, input. The C library's `rand()` state is not advanced by the model's whole timeline, and the test binary links only the two capsule files and the fake drawing layer, so a call to a wallet, profile or unlock function would not link. Screens: every drawn line is on its screen, readable, and free of
+Buy, Purchase, Price, voucher, coin, currency, unlock, caught and hatch; capsule rectangles are at most 60 px wide and inside the field;
+at most 265 rectangles in the busiest frame (25 capsules). Input: a held button's repeats are ignored (pull once; no skip-then-close);
+A / B / START cannot close before 300 ms of settled time; repeated submit pulls once; the callback counts are exactly 1 after a skip, a
+natural settle, a skip and a settle; leaving mid-animation calls nothing and the stale screen calls nothing whatever it is given; a
+second opening has its own callbacks; reopening from inside a callback is safe.
+
+**Not established.** No Old 3DS device run: the frame cost and the allocation behaviour on hardware are not measured. The host figure is
+at most 265 rectangle draws per frame on the top screen with 25 capsules and no allocation in the model; the emulator ran at real speed
+but is not a timing measurement. No touch gesture (no framework path). The mutation proof is of the model, screen and debug entry; the
+drawing layer is a fake in host tests, so how the strips look is judged only from emulator screenshots (not in Git). The preview is not
+reachable in normal play and is connected to no profile, voucher, egg or RNG: the voucher-to-egg pull is C09 over C08.
+Status for this task: **COMPLETE** against the C07 card's scope (a debug / test presentation over a fixture result contract).
+
+### 5.7 C08 (profile and reward transactions)
+
+Run on the final tree of the C08 PR (same container as 5.2 to 5.6). The task touches `game/` and this document only; `game-core/` and
+`custom-core/` are unchanged (`git diff origin/main -- game-core custom-core` is empty), so the game-core differential and the custom-content
+workflow do not run for it.
+
+| Command | Result |
+|---|---|
+| `make -C game/tests profile_tx_test && game/tests/build/profile_tx_test` (ASan + UBSan, game-core's real `gc_system_gacha_pull`, the real `save.c` on a temporary folder, one fault-injecting layer under system.sav, custom.sav and ptx.sav) | 2,289 checks, 0 failed: pull matrix (4 writes in a clean run: 5 power cuts and 4 failed writes), claim matrix (5 writes: 6 power cuts and 5 failed writes), refusal matrix, 150 fuzz scenarios (464 pulls and 87 claims committed through 160 power cuts and 178 failed writes) |
+| `game/tests/build/profile_tx_test 1000` | 12,819 checks, 0 failed (3,123 pulls and 568 claims committed, 1,187 power cuts, 1,216 failed writes) |
+| `python3 game/tests/profile_tx_mutations.py` | **36 mutations run, 36 killed, 0 survived, 0 invalid**; 2 more documented as equivalent and not run (a repeated busy check, a last-resort guard in `sysd_write_bytes`). Includes grant-before-commit (a failed commit write leaves the pull in the live profile), a commit write whose failure is ignored, a result revealed before the commit, a retry that would pull again, a scene RNG that is not saved or is re-seeded, a seed or clock that is not the saved one, the roll-forward steps removed one at a time, the gate removed, the boot's recovery cases (including finishing onto an unreadable profile), a request run on a changed profile, an unreadable wallet, a newer file version, a reward of two vouchers or a plus voucher, a wrapping voucher count, a claimed record still owed and a claim write failure ignored |
+| `make -C game/tests flowtest && game/tests/build/flowtest` | 114 checks, 0 failed (6 new: a pull committed while the profile write failed is finished by `app_start`, the egg is in the profile, the voucher spent, the result kept) |
+| `game/tests/run_host_tests.sh` (the CI script, now including `profile_tx_test`) | all passed |
+| `make -C game-core ... egg_gacha_host_test` (game-core's own host test, not changed) | 191 checks passed |
+| `docker run --rm -v "$PWD":/src -w /src/game devkitpro/devkitarm make` | builds `pokerogue.3dsx` (2,401,664 bytes, +12 KB over the C07 build), no warning from the new files |
+| Azahar (libretro core, the real packs, the Docker-built 3dsx) | The app boots with `ptx_boot()` in `app_start`: the title appears and the cursor moves as before; no `ptx` file is created by a boot with nothing pending. No purchase is reachable from the UI, so nothing else could be checked on the emulator. Screens are not in Git |
+
+**What the matrix holds.** After every power cut and every failed write, and after the boot: the card's profile is exactly the one before or
+exactly the one after (never half, never twice); the profile after is on the card exactly when the result is on record; a retry (or the
+boot) ends in the clean run's result, eggs, display order, profile and scene RNG; a failed commit write leaves the live profile and the
+scene RNG as they were and reveals nothing; for a claim the voucher and the claimed flag are always both or neither, and a second claim is
+refused. Also: the pull equals the real `gc_system_gacha_pull` run directly on the same profile (same eggs, same order, same profile bytes);
+duplicates and a restart return the same result without a second pull; a refusal (not enough vouchers, capacity, voucher cap, not owed, a
+profile that changed) changes nothing but the pending record; the damaged, newer-version and backup-restored `ptx` file; a `ptx` file put back
+to its PREPARED write (refused, no second pull); a committed transaction whose card profile was replaced by something else (reported, nothing
+overwritten); an unreadable profile (nothing written, the record kept); the gate on `sysd_save`; an unserializable profile; the result ring.
+
+**Not established.** Nothing in the app calls a purchase yet: no screen, no clock or entropy source, no hatching (C09). The power-cut model is
+"write n and everything after never happens"; save.c's own windows inside one write (tmp written, rename not done) are the ones listed in
+section 1.6 (the old state wins), they are not re-simulated. The upstream differential `egggachadiff.sh` was **not run** here: it needs the
+pinned upstream checkout and Node 22, which this container does not have; game-core is byte for byte unchanged, so its owning counts and seeds
+are as they were (CI runs it only when game-core changes). No Old 3DS device run: the cost of the extra writes (a pull is 4 writes of a profile
+of 3 to 90 KB, a ptx file of the same size while pending) is not measured. Status for this task: **COMPLETE** against the C08 card's scope
+(the owner, the envelope, the idempotent pull and reward transactions, their fault tests); no user-visible purchase exists until C09.
+
+### 5.8 C09 (the capsule machine)
+
+Run on the final tree of the C09 PR. The task touches `game/` and this document only; `game-core/` and `custom-core/` are unchanged
+(`git diff origin/main -- game-core custom-core` is empty), so the game-core differential and the custom-content workflow do not run for it.
+
+| Command | Result |
+|---|---|
+| `game/tests/build/gacha_host_test` (ASan + UBSan; game-core's real `gc_system_gacha_pull` behind `profile_tx`, real `save.c` on a temporary folder, fault-injecting layer) | 22,615 checks, 0 failed. Includes the table read from the source against upstream's documented table, 7,800 comparisons of the screen's can-buy / refusal rows with `gc_system_gacha_pull` itself, the capacity edges, refusals writing nothing (files byte-identical), one and many pulls, no second pull for a repeated call, the saved result equal to the source's order, and a restart after every C08 crash point finishing with the same eggs shown once |
+| `game/tests/build/gacha_screen_test` (the real screen driven by a fake `ui`: held input, double tap, skip, re-entry, stale input, the fuzz of restarts) | 34,487 checks, 0 failed |
+| `game/tests/build/profile_tx_test` | 2,330 checks, 0 failed (new: the shown-mark watermark, envelope version 1 still read) |
+| `python3 game/tests/gacha_mutations.py` | **43 run, 43 killed, 0 survived, 0 invalid**, 1 documented as equivalent and not run. Includes two mutants that make a real double pull (a left screen that takes input while a second purchase may start; a callback that buys twice with nothing stopping it), cost checked before capacity, costs, egg counts and capacity wrong against the source, a refusal that begins a transaction, a purchase started while another is unfinished or unshown, an unreadable profile treated as an empty wallet, shown eggs offered again or never recorded, storage order shown instead of the saved display order, a question that opens on Yes, a held button that repeats, and a restart that neither finishes the purchase nor shows the eggs |
+| `python3 game/tests/profile_tx_mutations.py` | 47 run, 47 killed, 0 survived, 0 invalid (36 from C08 plus 11 for the watermark) |
+| `python3 game/tests/capsule_mutations.py` | 42 run, 42 killed, 0 survived, 0 invalid (the capsule screen still passes its own suite with `live` / `autoplay`) |
+| `make -C game/tests flowtest` | 116 checks, 0 failed (the title entry, the machine reachable from the title) |
+| `game/tests/run_host_tests.sh` (the CI script) | all passed; `capsule_test` 223,456 checks, `radar_test` 2,618,873 checks, the retained suites unchanged |
+| `docker run --rm -v "$PWD":/src -w /src/game devkitpro/devkitarm make` | builds `pokerogue.3dsx` (2,423,860 bytes, +22 KB over the C08 build); the warnings are the ones already on main (`run_screen.c`, `icon.c`, `summary.c`), none from the C09 files |
+| Azahar (libretro core, the real packs, the Docker-built 3dsx, `system.sav` written by `game/tests/mksystem.c`: 5 Regular, 3 Plus, 2 Premium, 1 Golden, 7 eggs) | Run A: title (5 entries) -> Capsule Machine -> machines with L/R (wraps) -> option 5 -> question on **No** -> UP -> **Yes** -> A -> fade -> "Here they come..." -> 25 capsules -> a held A has no effect -> eggs list (25 eggs, tier colours, "20 more below") -> A -> menu: golden voucher 1 -> 0, eggs 7 -> 32 / 99, the 25-egg row greyed. Run B: A held for 90 frames on the question stays on No: no purchase, no `ptx.sav` created, `system.sav` byte-identical (after release a single DOWN moves to Yes). Rows that cannot be bought are greyed (10 Regular and 25 Golden in the run-C screens); the refusal sentence itself was not captured on the emulator, the host tests cover its text. Run C: purchase, app stopped at frame 960 mid-animation (`ptx.sav` present, profile already updated) -> the next start opens the machine and shows the 25 eggs once (eggs 32 / 99, voucher still spent once) -> closing goes to the menu -> a third start goes straight to the menu. Screens are in `/mnt/project-files/game-screens/c09/` (not in Git) |
+
+**Found on the emulator.** Nothing needed a code change: the question's default is No and survives a held A, the screen fades through black
+between the menu and the capsule screen (not a hang: later frames show the animation), and a restart mid-animation shows the same
+eggs once. Egg numbers differ between runs A and C because each is a separate purchase on a separate profile; the identical-result property is
+what the host tests prove (saved clock and seed, 22,615 checks), not the screenshots.
+
+**Not established.** The upstream differential `egggachadiff.sh` was **not run** (it needs the pinned upstream checkout and Node 22; game-core is
+byte for byte unchanged, CI runs it only when game-core changes). No Old 3DS device run: the option table costs about twelve scratch pulls once
+per start and a transient 724 KB scratch profile, a purchase writes the profile and a ptx file of up to 2 MiB; none of it is timed on a device.
+The power-cut model is "write n and everything after never happens" (as in 5.7). No touch path (the framework routes none to ui screens). Eggs
+are shown by tier and id only: no species, no shiny flag, no hatching, no egg moves screen. The words are plain English of this port, not
+upstream strings. The clock is the console's `time(NULL)`; no synchronization is claimed. Status for this task: **COMPLETE** against the C09
+card's scope; the title entry is the only way in (no in-run menu exists yet), and the custom mode is not live before C10.
+
 ## 6. Not established by this PR
 
 - No upstream behavior was consulted or compared. There is no differential, no seed, no Node 22 run, and none is needed
@@ -1044,5 +1388,5 @@ will show is **not shipped** until C10.
 - No emulator or console check by C01/C02 (no screen or app change then). C03's emulator check, and what it did not cover, is in section 5.2.
 - No Old 3DS memory or time measurement. `sizeof` and code-size figures come from compilers (x86-64 host, Ubuntu's
   `arm-none-eabi-gcc`, and devkitARM in CI, with the 3DS CPU flags), not from a device or emulator.
-- No profile or wallet code, no live use of the scheduler (C05 is a pure policy: nothing in the app calls it, it has no wire codec and nothing spawns a rematch enemy). (C03 added the live observer hook and the post-mortem screen, section 2.9; C04 added the codec, the transaction and the one custom file, section 2.10.) The app never inserts a Nemesis: the finishing enemy is not identifiable. C06 added the read-only Radar (section 2.12). The rest is C07 to C10.
+- No profile or wallet code, no live use of the scheduler (C05 is a pure policy: nothing in the app calls it, it has no wire codec and nothing spawns a rematch enemy). (C03 added the live observer hook and the post-mortem screen, section 2.9; C04 added the codec, the transaction and the one custom file, section 2.10.) The app never inserts a Nemesis: the finishing enemy is not identifiable. C06 added the read-only Radar (section 2.12) C07 a debug-only capsule presentation over fixed results (section 2.13) and C08 the profile transaction owner (section 2.14); C09 added the Capsule Machine (section 2.15), the first caller of a purchase, from the title. The rest is C10.
 - Range checks only for species, form, move and ability: membership in the game's tables is the adapters' job.

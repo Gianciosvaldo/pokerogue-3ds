@@ -194,6 +194,7 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
                 if (ev) { ev->a = 0; ev->b = i; }
             }
             run->party[i].b.on_field = false;
+            pr_reset_battle_data(&run->party[i].b);
             pr_reset_summon_data(&run->party[i].b);
             pr_reset_turn_data(&run->party[i].b);
         }
@@ -372,7 +373,7 @@ bool gc_battle_player_command(gc_run *run, const gc_choice *c, const char **why)
             struggle = slot >= 0 && !any;
             if (!struggle) { *why = reason; return false; }
         }
-        int move = struggle ? MOVE_ID_STRUGGLE : p->moves[slot];
+        int move = struggle ? MOVE_ID_STRUGGLE : PR_MOVES(p)[slot];
         memset(tc, 0, sizeof *tc);
         tc->command = COMMAND_FIGHT;
         tc->cursor = (int8_t)slot;
@@ -469,7 +470,7 @@ bool gc_battle_queued_command(gc_run *run)
     tc->n_targets = q->n_targets;
     memcpy(tc->targets, q->targets, sizeof tc->targets);
     int slot = -1;
-    for (int i = 0; i < p->n_moves; i++) if (p->moves[i] == q->move) { slot = i; break; }
+    for (int i = 0; i < PR_N_MOVES(p); i++) if (PR_MOVES(p)[i] == q->move) { slot = i; break; }
     tc->cursor = (int8_t)(q->move == 0 ? -1 : slot);
     memset(pc, 0, sizeof *pc);
     pc->command = COMMAND_FIGHT;

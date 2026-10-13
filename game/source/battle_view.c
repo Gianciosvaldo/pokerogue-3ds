@@ -10,6 +10,7 @@
 #include "battle_anim.h"
 #include "gm_enum_names.h"
 #include "i18n.h"
+#include "menus.h"
 #include "pr_data.h"
 #include "pr_enums.h"
 #include "tween.h"
@@ -62,6 +63,7 @@ typedef struct {
   bool tint_on, tint_above; /* the doll's white copy (setTintFill) and whether it's over the Pokemon */
   float tint_scale, tint_alpha;
   char sprite_key[64];
+  menu_sprite sprite; /* shared species/form/gender/shiny/variant loader */
   /* a Poke Ball's catch attempt (BEV_CATCH) */
   float catch_dy;     /* px the Pokemon has moved up into the ball (negative) */
   bool catch_on;      /* drawn as a silhouette in the ball's colour, fading back to normal as catch_untint goes 0 -> 1 */
@@ -140,6 +142,7 @@ static const char* mon_form_key(uint16_t species, int form) {
 }
 
 static float get_mon_scale(const bv_mon* m) {
+  if (m->sprite_scale > 0) return m->sprite_scale;
   const char* fk = mon_form_key((uint16_t)m->species, m->form);
   /* getSpriteScale: G-Max and the starmobiles are 1.5x (isMax(); a mystery encounter's customPokemonData.spriteScale isn't here yet) */
   if (fk && (strstr(fk, "gigantamax") || strstr(fk, "eternamax") || strstr(fk, "starmobile"))) {
@@ -149,6 +152,7 @@ static float get_mon_scale(const bv_mon* m) {
 }
 
 static void update_mon_form(bv_mon* m, int species, int form) {
+  m->sprite_scale = 0; /* a permanent form change derives a new scale */
   m->species = species;
   m->form = form;
   int lo = 0, hi = PR_SPECIES_COUNT - 1;
@@ -189,9 +193,18 @@ static void sprite_key(const bv_mon* m, bool back, char* out, int n) {
   }
 }
 
+static void load_mon_sprite(side* sd, bool player) {
+  const bv_mon* m = &sd->mon;
+  menu_sprite_free(&sd->sprite);
+  menu_mon visual = {.species = m->species, .form = m->form, .gender = m->gender,
+                     .shiny = m->shiny, .variant = m->variant};
+  menu_sprite_load(&sd->sprite, &visual, player);
+  sprite_key(m, player, sd->sprite_key, sizeof sd->sprite_key);
+}
+
 static void set_mon(side* sd, const bv_mon* m, bool player) {
   sd->mon = *m;
-  sprite_key(m, player, sd->sprite_key, sizeof sd->sprite_key);
+  load_mon_sprite(sd, player);
   sd->hp_shown = m->hp;
   sd->exp_shown = m->exp_ratio;
   sd->sprite_on = true;
@@ -229,6 +242,7 @@ static const char* name_with_affix(int battler) {
 /* ------------------------------------------------------------------ drawing: field */
 
 static const rr_frame* sprite_frame(side* sd) {
+  if (sd->sprite.n) return menu_sprite_frame(&sd->sprite, ui_now());
   int frame = (int)(ui_now() * 10 / 1000); /* upstream anims run at 10 fps */
   return img_anim_frame(sd->sprite_key, frame);
 }
@@ -263,7 +277,7 @@ static void anim_field(ba_mon out[4]) {
  * stands them on the picture's bottom edge, so they float above the platform. Here they stand on their lowest drawn row instead
  * (lorenzo, 2026-10-11); a sprite with no gap is drawn exactly as before. */
 static int foot_gap(const side* sd) {
-  rr_atlas* a = img_get(sd->sprite_key);
+  rr_atlas* a = sd->sprite.atlas ? sd->sprite.atlas : img_get(sd->sprite_key);
   int n = a ? rr_atlas_count(a) : 0, gap = 0;
   for (int i = 0; i < n; i++) {
     const rr_frame* f = rr_atlas_frame(a, i);
@@ -1290,12 +1304,14 @@ static void run_event(float dt) {
       break;
 
     case BEV_FORM_CHANGE:
+    case BEV_TRANSFORM:
       if (B.step == 0) {
-        update_mon_form(&sd->mon, e->a, e->b);
-        sprite_key(&sd->mon, player, sd->sprite_key, sizeof sd->sprite_key);
+        if (e->type == BEV_TRANSFORM && e->mon) sd->mon = *e->mon;
+        else update_mon_form(&sd->mon, e->a, e->b);
+        load_mon_sprite(sd, player);
         float target_scale = get_mon_scale(&sd->mon);
         update_field_scale(false);
-        ui_play_sound("battle_anims/PRSFX- Transform");
+        if (e->type != BEV_TRANSFORM || e->a) ui_play_sound("battle_anims/PRSFX- Transform");
         if (fabsf(sd->scale - target_scale) > 0.01f) {
           tween_start(&B.tw, sd->scale, target_scale, 300, EASE_SINE_IN_OUT);
           B.step = 1;
@@ -1499,6 +1515,8 @@ static void bv_draw(ui_screen* s, rr_screen which) {
 static ui_screen g_battle = {"battle", 0, NULL, NULL, NULL, bv_input, bv_update, bv_draw, NULL};
 
 void bv_begin(const bv_setup* setup) {
+  menu_sprite_free(&B.s[0].sprite);
+  menu_sprite_free(&B.s[1].sprite);
   memset(&B, 0, sizeof B);
   B.setup = *setup;
   gm_enum_lower(GM_E_BIOME_ID, setup->biome, B.biome, sizeof B.biome);
