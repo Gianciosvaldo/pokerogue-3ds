@@ -269,3 +269,7 @@ $(BUILD)/berry-turn-replay.inc: tests/speed-boost-replay.inc tools/build-berry-t
 	python3 tools/build-berry-turn-proof.py replay $@
 $(BUILD)/berry-turn-test: tests/berry-turn-test.c $(BUILD)/berry-turn-replay.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/berry-turn-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/receiver-test
+$(BUILD)/receiver-test: tests/receiver-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

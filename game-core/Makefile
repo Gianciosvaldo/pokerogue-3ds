@@ -421,3 +421,11 @@ berry-history-host-test: $(BUILD)/berry_history_host_test
 $(BUILD)/berry_history_host_test: tests/berry_history_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
 .PHONY: berry-history-host-test
+
+all: $(BUILD)/receiver_save_host_test
+test: receiver-save-host-test
+receiver-save-host-test: $(BUILD)/receiver_save_host_test
+	$(BUILD)/receiver_save_host_test
+$(BUILD)/receiver_save_host_test: tests/receiver_save_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+.PHONY: receiver-save-host-test

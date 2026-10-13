@@ -1236,3 +1236,10 @@ Berry histories, restoration, delayed repeat effects, Berry Pouch preservation,
 modifier refresh and legal save/inventory integration now follow the pinned
 source. See [BERRY-LIFECYCLE-VALIDATION.md](BERRY-LIFECYCLE-VALIDATION.md) for the
 8,000 complete-turn differential, bounds and separate validation gates.
+
+### Fainted-ally ability copying
+
+Receiver and Power of Alchemy now receive the actual knockout victim and copy
+its current primary ability through the source gain/loss dispatcher. See
+[RECEIVER-VALIDATION.md](RECEIVER-VALIDATION.md) for the natural-double phase/API
+proof, simulation/reset behavior and separate whole-battle gates.
