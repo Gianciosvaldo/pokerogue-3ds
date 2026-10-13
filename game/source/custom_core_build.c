@@ -12,3 +12,4 @@
 #include "../../custom-core/src/reducer.c"
 #include "../../custom-core/src/codec.c"
 #include "../../custom-core/src/commit.c"
+#include "../../custom-core/src/scheduler.c"

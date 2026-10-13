@@ -211,7 +211,7 @@ int gc_unlocked_egg_moves(const gc_run *run, const gc_mon *m, uint16_t out[4])
 }
 
 /* PokemonSpeciesForm.getRootSpeciesId(false): back along the prevolutions to the first stage */
-static int root_species(int species)
+int gc_root_species(int species)
 {
     for (int guard = 0; guard < 15; guard++) {
         const pr_species *sp = gc_species(species);
@@ -224,7 +224,7 @@ static int root_species(int species)
 /* Pokemon.getEggMoves(): speciesEggMoves[getSpeciesForm().getRootSpeciesId()], all four, unlocked or not */
 int gc_egg_moves(const gc_mon *m, uint16_t out[4])
 {
-    const int species = root_species(m->b.species);
+    const int species = gc_root_species(m->b.species);
     for (int i = 0; i < gc_starter_egg_moves_count; i++) {
         const gc_starter_egg_moves *e = &gc_starter_egg_moves_data[i];
         if (e->species != species) continue;

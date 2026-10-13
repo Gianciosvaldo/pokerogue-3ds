@@ -785,7 +785,7 @@ money, items owned, that the encounter left without a battle, the shop's `custom
 Pikachu, Eevee), the RNG after the shop, and that the next wave is queued. The old `gen/dump-mystery-actions.test.ts`
 and `tests/mystery_diff_test.c` are untouched and still only smoke coverage.
 
-Department Store Sale, Shady Vitamin Dealer, Lost at Sea, Field Trip and Part Timer are ported and compared. Every other encounter's actions in
+Department Store Sale, Shady Vitamin Dealer, Lost at Sea, Field Trip, Part Timer and An Offer You Can't Refuse are ported and compared. Every other encounter's actions in
 `gc_mystery.c` are still the Task 46 stand-ins; the encounter *selection* (`gc_mystery_select`) and the intro checks
 are not part of this comparison.
 
@@ -896,6 +896,32 @@ Upstream behaviours reproduced on purpose:
 - The shop is `setEncounterRewards({fillRemaining: true})`: the ordinary rolled shop, no heal shop.
 - The app's party screen does not exist yet: `gc_mystery_execute(.., b, ..)` takes the Pokemon (storage index); one the filter
   refuses is read as the first that passes.
+
+### An Offer You Can't Refuse
+
+`<trace>-offer.txt` is replayed by `tests/mystery_offer_diff_test.c`. Five parties (up to six Pokemon, including Gimmighoul and
+Rattata) with random level, nature, IVs, Pokerus, one to four random moves (a quarter with an extortion move among them), a
+passive forced to an extortion ability on a fifth and the ability itself on a twelfth, passives sometimes enabled, HP (a fifth
+fainted), and held Leftovers / Shell Bell / vitamins / berries / the Gimmighoul tracker / Lucky and Golden Eggs in a shuffled
+order plus Exp. Share / Exp. Balance / Oval Charm / Amulet Coin / Shiny Charm and a wallet that is sometimes near
+`Number.MAX_SAFE_INTEGER`. The three options run as the phases do (see Part Timer). Compared: which options are offered, the
+strongest Pokemon and the primary one, the price, money (clamped), messages, queued phases, the Liepard experience, the
+shop, the party after a sale (order, slots), every held item after the sale (`updateModifiers`) and the eggs.
+
+Upstream behaviours reproduced on purpose:
+- The strongest Pokemon is the highest base-stat total (the six current stats) among *all* party members, fainted ones included,
+  first in party order on a tie. It is fixed when the option is picked, not when the encounter spawns. The price is
+  `getWaveMoneyAmount(max(3 * starterCost(rootSpecies), 10))` (cost `?? 1`).
+- Extort needs a Pokemon allowed in battle with one of the extortion moves *or* an extortion ability (the passive counts only
+  when it is unlocked and enabled). Moves are tried before abilities, party order within each. That Pokemon alone gets Liepard's
+  base experience (wave-scaled); the shop is the heal-only one. Sell and Leave work with nothing special.
+- Sell removes the strongest Pokemon, then `updateModifiers` drops its held items. Upstream's loop splices the holder's item and
+  then re-checks the *same* item: a Gimmighoul tracker (the only species-specific item) therefore also takes the entry before it
+  (the last item if the tracker was first), and a tracker on any other species is removed too. This is reproduced exactly
+  (`me_prune_items`); 550-580 sales per seed cut more than the seller's own items. A Shiny Charm is queued ahead of the heal shop.
+- Leave pays nothing and opens the heal shop.
+- `gc_party_remove` compacts `party[]` and renumbers `party_order`. It is new: storage indices held by anything outside the run
+  (the app's party screen) go stale after a sale. Nothing in game-core keeps one across the encounter.
 
 ## Fleeing: upstream differential (Task 77 / #125)
 

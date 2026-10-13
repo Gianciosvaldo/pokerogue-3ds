@@ -155,6 +155,40 @@ cs_result cs_commit(const co_report* r) {
   return out;
 }
 
+static const cc_nemesis* find_record(const cc_meta* m, cc_record_id id) {
+  for (unsigned i = 0; i < m->roster.count; i++)
+    if (m->roster.rec[i].record_id == id) return &m->roster.rec[i];
+  return NULL;
+}
+
+cs_claim_outcome cs_reward_state(cc_record_id id) {
+  ensure_loaded();
+  if (S.state == CS_UNREADABLE) return CS_CLAIM_FILE_UNUSABLE;
+  const cc_nemesis* n = find_record(&g_live, id);
+  if (!n) return CS_CLAIM_UNKNOWN;
+  cc_reward_entitlement e;
+  if (cc_reward_entitlement_of(n, &e) != CC_OK) return CS_CLAIM_NOT_OWED;
+  if (e.state == CC_RW_OWED) return CS_CLAIM_OWED;
+  return e.state == CC_RW_CLAIMED ? CS_CLAIM_REPLAYED : CS_CLAIM_NOT_OWED;
+}
+
+cs_claim_outcome cs_claim_reward(cc_record_id id, cc_txn_id* txn) {
+  if (txn) *txn = 0;
+  const cs_claim_outcome st = cs_reward_state(id);
+  if (st == CS_CLAIM_REPLAYED) {
+    if (txn) *txn = find_record(&g_live, id)->reward_txn;
+    return CS_CLAIM_REPLAYED;
+  }
+  if (st != CS_CLAIM_OWED) return st;
+  memcpy(&g_stage, &g_live, sizeof g_stage);
+  cc_claim_result res;
+  memset(&res, 0, sizeof res);
+  if (cc_reward_claim(&g_stage, id, &res) != CC_OK) return CS_CLAIM_NOT_OWED;
+  if (!write_stage()) return CS_CLAIM_WRITE_FAILED;
+  if (txn) *txn = res.txn_id;
+  return CS_CLAIM_DONE;
+}
+
 const char* cs_note(cs_outcome o) {
   switch (o) {
     case CS_STORED:

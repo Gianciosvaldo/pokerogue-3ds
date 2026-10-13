@@ -145,6 +145,9 @@ void ui_init(void);
 /* Reads the buttons, runs timers, updates and draws every screen. Returns false to quit. */
 bool ui_tick(void);
 void ui_request_quit(void);
+/* True while an input callback is being given the auto-repeat of a held button (not the first press). For screens where a held
+ * button must not do an action twice (a pull, a skip). Only meaningful inside the input callback. */
+bool ui_input_repeating(void);
 /* Feed a button as if pressed (demo scripts, tests). */
 void ui_inject(ui_button b);
 

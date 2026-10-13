@@ -32,6 +32,7 @@
 #include <stdint.h>
 
 #include "cc/codec.h"
+#include "cc/scheduler.h"
 #include "combat_observer.h"
 #include "save.h"
 
@@ -81,6 +82,23 @@ cs_result cs_commit(const co_report* report);
 
 /* A line for the player when something was not stored, in the result screen's words; NULL when the report is on the card. */
 const char* cs_note(cs_outcome outcome);
+
+/* ---- the once-per-record Nemesis reward (task C08: profile_tx.c is the only caller) ---- */
+typedef enum {
+  CS_CLAIM_OWED,          /* cs_reward_state: the reward is owed and can be claimed */
+  CS_CLAIM_DONE,          /* cs_claim_reward: the claim is on the SD card now */
+  CS_CLAIM_REPLAYED,      /* already claimed: nothing was written */
+  CS_CLAIM_NOT_OWED,      /* the record was not won (or is not in a state that owes a reward) */
+  CS_CLAIM_UNKNOWN,       /* no such record */
+  CS_CLAIM_FILE_UNUSABLE, /* the custom file cannot be used: nothing written */
+  CS_CLAIM_WRITE_FAILED,  /* the SD card refused the write: the file and memory are as they were; a retry is safe */
+} cs_claim_outcome;
+/* Reads only: CS_CLAIM_OWED, CS_CLAIM_REPLAYED, CS_CLAIM_NOT_OWED, CS_CLAIM_UNKNOWN or CS_CLAIM_FILE_UNUSABLE. */
+cs_claim_outcome cs_reward_state(cc_record_id record_id);
+/* Claims the record's reward as one transaction of the custom file (cc_reward_claim): the ledger entry and the record's REWARD_CLAIMED
+ * in one write, idempotent by record. It grants nothing: the voucher is the profile transaction's (profile_tx.c). *txn gets the
+ * claim's custom transaction id for DONE and REPLAYED (may be NULL). */
+cs_claim_outcome cs_claim_reward(cc_record_id record_id, cc_txn_id* txn);
 
 /* ---- for tests ---- */
 typedef struct {

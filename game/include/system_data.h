@@ -15,7 +15,11 @@
 
 #include <stdbool.h>
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "gc/system.h"
+#include "save.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,6 +44,31 @@ sysd_status sysd_state(char why[SYSD_WHY_LEN]);
  * SD card as it is now (including "unchanged"), or the file on the card could not be read (SYSD_UNREADABLE), which is never written
  * over and is not reported as a failure at every save. False when the SD card refused the write; the next call retries it. */
 bool sysd_save(void);
+
+/* ---- for the profile transaction owner (profile_tx.c, task C08) ---- */
+
+/* The canonical bytes of the system data as it is now (gc_system_save): what a save would write. 0: it could not be serialized (the
+ * buffer is too small or the profile is not representable); nothing is changed. */
+size_t sysd_serialize(uint8_t* buf, size_t cap);
+/* A hash of canonical bytes (the same one the "unchanged" check of sysd_save uses). */
+uint64_t sysd_digest(const uint8_t* buf, size_t len);
+/* The canonical digest of what the SD card holds (the file as sysd_get read it, saved again; no file = the new-install defaults), or
+ * false when the file is unreadable. Only true to the card while nothing has changed memory since the first sysd_get: ask at boot. */
+bool sysd_card_digest(uint64_t* out);
+/* Replaces the system data in memory with canonical bytes (gc_system_load). False when they do not load: the system data is then left
+ * as the loader made it, so the caller must have a way back (the bytes it serialized before). */
+bool sysd_restore(const uint8_t* buf, size_t len);
+/* Writes these canonical bytes to the card as the system data, whatever memory holds now (one save_write). False when the card
+ * refused, or when the file on the card was unreadable (never written over). Memory is not changed. */
+bool sysd_write_bytes(const uint8_t* buf, size_t len);
+/* sysd_save asks this first when it is set; false means "do not write now" and sysd_save returns false. */
+void sysd_set_gate(bool (*gate)(void));
+
+typedef struct {
+  save_result (*read)(const char* name, char** out, size_t* len, bool* used_backup);
+  save_result (*write)(const char* name, const void* data, size_t len);
+} sysd_io;
+void sysd_set_io(const sysd_io* io);   /* NULL: save_read / save_write. The next sysd_get reads again only after sysd_reset */
 
 /* For tests: forget what was read, so the next sysd_get reads the folder again. */
 void sysd_reset(void);
