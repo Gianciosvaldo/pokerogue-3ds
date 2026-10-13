@@ -136,7 +136,8 @@ static snap take(void) {
   if (d) closedir(d);
   return s;
 }
-static void drop(snap* s) {
+static void drop(const snap* cs) {
+  snap* s = (snap*)cs;
   for (int i = 0; i < s->n; i++) free(s->f[i].bytes);
   s->n = 0;
 }
@@ -166,11 +167,6 @@ static void put_file(const char* name, const void* data, size_t len) {
   FILE* fp = fopen(path, "wb");
   fwrite(data, 1, len, fp);
   fclose(fp);
-}
-static bool file_exists(const char* name) {
-  char path[600];
-  snprintf(path, sizeof path, "%s/%s", SAVE_DIR, name);
-  return access(path, F_OK) == 0;
 }
 
 static unsigned vouchers(void) { return sysd_get()->voucher_counts[GC_VOUCHER_REGULAR]; }
@@ -827,10 +823,6 @@ static void rm_play(const rm_cfg* c, rm_out* o) {
   hashing = false;
 }
 
-/* The pre-battle stats the game's own formula gives (an independent copy of it). */
-static int stat_of(int base, int iv, int level, int nature_pct) {
-  return (int)((((2 * base + iv) * level) / 100 + 5) * nature_pct / 100);
-}
 
 static void test_rematch_real(void) {
   int shown = 0;
@@ -1474,8 +1466,8 @@ static void test_saves(void) {
     bool same = before.n == after.n;
     for (int i = 0; same && i < before.n; i++) same = same_file(&before, &after, before.f[i].name);
     CHECK(same, "no file changed");
-    drop((snap*)&before);
-    drop((snap*)&after);
+    drop(&before);
+    drop(&after);
     rsv_info info;
     CHECK(cr_inspect(slot_used, &info) == RSV_OK, "the slot itself is still a good save");
     CHECK(vouchers() == 1, "and nothing was paid");
@@ -1530,8 +1522,8 @@ static void test_saves(void) {
       for (int i = 0; same && i < before.n; i++)
         if (strncmp(before.f[i].name, CR_FILE_PREFIX, strlen(CR_FILE_PREFIX))) same = same_file(&before, &after, before.f[i].name);
       CHECK(same, "damaged slot (%d): the roster and profile files are untouched", pos);
-      drop((snap*)&before);
-      drop((snap*)&after);
+      drop(&before);
+      drop(&after);
     }
     drop(&good);
   }
@@ -1563,7 +1555,7 @@ static void test_saves(void) {
       CHECK(rsv_load(slot_used, other, why) != RSV_OK, "... and does not load them (%s)", why);
       del_named(name);
     }
-    drop((snap*)&now);
+    drop(&now);
     /* an ordinary run's session in the custom slot */
     CHECK(new_run("c10-ordinary", false, 100), "an ordinary run");
     bot.heal = true;
@@ -1586,7 +1578,7 @@ static void test_saves(void) {
       gc_run* other = R == &RUN ? &RUN2 : &RUN;
       CHECK(cr_load(slot_used, other, why) != RSV_OK, "... and does not load it (%s)", why);
     }
-    drop((snap*)&ord);
+    drop(&ord);
     cr_end();
   }
 
@@ -1610,7 +1602,7 @@ static void test_saves(void) {
     end_run(GC_SCREEN_GAME_OVER, true);
     CHECK(life_of(FX.rid) == CC_LIFE_STORED, "the record is free at the run's end (%d)", life_of(FX.rid));
   }
-  drop((snap*)&early);
+  drop(&early);
   printf("5  saves: done\n");
 }
 
@@ -1743,7 +1735,7 @@ static void test_reward_crash(void) {
     survived = n;
   }
   CHECK(max_writes >= 4, "the flow wrote at least a few times (%d), so the crash points are real", max_writes);
-  drop((snap*)&pre);
+  drop(&pre);
   printf("6  reward under a crash at each of %d writes: done\n", survived);
 }
 
