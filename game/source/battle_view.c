@@ -368,19 +368,6 @@ static void draw_ball(void) {
   }
 }
 
-/* Upstream's arena art stops 132 px down: below it, the ui container's 48 px strip (the message window's bg frame) covers the
- * field. Here the strip and its text are on the bottom screen, so the top screen draws the same empty strip where upstream has it,
- * instead of leaving the bare biome background under the platforms. It goes under the Pokemon (upstream's covers the player's
- * Pokemon's lower half, which here would hide it with no text to show for it). */
-static void draw_field_strip(void) {
-  char fr[4];
-  snprintf(fr, sizeof fr, "%d", ui_window_style());
-  if (img_frame("images/ui/bg", fr))
-    img_draw("images/ui/bg", fr, 0, 180, 0, 1);
-  else
-    rr_rect(0, 180 - 48, 320, 48, RR_RGBA(0x30, 0x50, 0x68, 255));
-}
-
 /* updateFieldScale(): when a bigger-than-normal Pokemon (G-Max, starmobile) is on the field, the field (platforms, Pokemon, battle
  * animations; not the background or the strip) zooms out about the arena's bottom centre (160, 132): floor((1 / biggest scale)^0.7 * 40)
  * / 40, so 1.5x gives 0.75. setFieldScale tweens it over |change| * 6 * 200 ms, Sine.easeInOut. Upstream calls it when a Pokemon is
@@ -415,7 +402,6 @@ static void draw_field(void) {
   snprintf(k, sizeof k, "images/arenas/%s_a", B.biome);
   img_draw(k, NULL, B.arena_player_x, 0, 0, 0);
   field_zoom(false);
-  draw_field_strip();
   field_zoom(true);
   ba_mon field[4];
   anim_field(field);
@@ -608,41 +594,42 @@ static void draw_fight_menu(void) {
   const pr_move* pm = mv >= 0 && mv < PR_MOVE_COUNT ? &pr_moves[mv] : NULL;
   char fr[24];
   /* moveInfoContainer at (1, 0) */
-  rr_draw_opts o = RR_DEFAULT_OPTS;
-  o.origin_x = o.origin_y = 0.5f;
-  o.scale_x = o.scale_y = 0.8f;
+  /* upstream scales the type icon by 0.8; at 1:1 pixels that turns its 5 px lettering to mud ("NORMAL" cannot be read), so it is
+   * drawn at full size, a little to the left of upstream's centre so it and the category icon (28 px) still fit the window */
   if (pm) {
-    img_draw_opts("images/types", gm_enum_lower(GM_E_POKEMON_TYPE, pm->type, fr, sizeof fr), 1 + 320 - 57, -36, &o);
-    img_draw("images/categories", gm_enum_lower(GM_E_MOVE_CATEGORY, pm->category, fr, sizeof fr), 1 + 320 - 25, -36,
+    img_draw("images/types", gm_enum_lower(GM_E_POKEMON_TYPE, pm->type, fr, sizeof fr), 1 + 320 - 56, -36, 0.5f, 0.5f);
+    img_draw("images/categories", gm_enum_lower(GM_E_MOVE_CATEGORY, pm->category, fr, sizeof fr), 1 + 320 - 24, -36,
              0.5f, 0.5f);
   }
+  /* upstream draws these at 56 canvas px of the emerald font (about 9 px here), which is unreadable at 1:1 on the 3DS; the 8 px pixel
+   * font (TS_MOVE_LABEL, the party screen's move labels) says the same words and numbers legibly in the same places. */
   text_opts lo = text_defaults();
   lo.origin_y = 0.5f;
   text_opts ro = text_defaults();
   ro.origin_x = 1;
   ro.origin_y = 0.5f;
   char s[32];
-  text_draw(TS_MOVE_INFO_CONTENT, 1 + 320 - 70, -26, i18n_t(s, sizeof s, "fightUiHandler:pp", NULL), &lo);
-  text_draw(TS_MOVE_INFO_CONTENT, 1 + 320 - 70, -18, i18n_t(s, sizeof s, "fightUiHandler:power", NULL), &lo);
-  text_draw(TS_MOVE_INFO_CONTENT, 1 + 320 - 70, -10, i18n_t(s, sizeof s, "fightUiHandler:accuracy", NULL), &lo);
+  text_draw(TS_MOVE_LABEL, 1 + 320 - 70, -26, i18n_t(s, sizeof s, "fightUiHandler:pp", NULL), &lo);
+  text_draw(TS_MOVE_LABEL, 1 + 320 - 70, -18, i18n_t(s, sizeof s, "fightUiHandler:power", NULL), &lo);
+  text_draw(TS_MOVE_LABEL, 1 + 320 - 70, -10, i18n_t(s, sizeof s, "fightUiHandler:accuracy", NULL), &lo);
   int left = m->pp_left[B.move_cursor], max = m->pp_max[B.move_cursor];
   snprintf(s, sizeof s, "%2d/%2d", left, max);
   text_style ps = pp_style(left, max);
   text_opts po = ro;
   po.color = text_color(ps, false);
   po.shadow = text_color(ps, true);
-  text_draw(TS_MOVE_INFO_CONTENT, 1 + 320 - 12, -26, s, &po);
+  text_draw(TS_MOVE_LABEL, 1 + 320 - 12, -26, s, &po);
   if (pm) {
     if (pm->power >= 0)
       snprintf(s, sizeof s, "%d", pm->power);
     else
       snprintf(s, sizeof s, "---");
-    text_draw(TS_MOVE_INFO_CONTENT, 1 + 320 - 12, -18, s, &ro);
+    text_draw(TS_MOVE_LABEL, 1 + 320 - 12, -18, s, &ro);
     if (pm->accuracy >= 0)
       snprintf(s, sizeof s, "%d", pm->accuracy);
     else
       snprintf(s, sizeof s, "---");
-    text_draw(TS_MOVE_INFO_CONTENT, 1 + 320 - 12, -10, s, &ro);
+    text_draw(TS_MOVE_LABEL, 1 + 320 - 12, -10, s, &ro);
   }
 }
 
@@ -673,7 +660,11 @@ static void draw_ability_bar(void) {
   text_draw(TS_WINDOW, 8, -48 - 30 + 5, B.ability_text, NULL);
 }
 
-static void draw_bottom(void) {
+/* Upstream's ui container strip (y -48..0): the message window's bg frame, the command window or the fight windows, and the text.
+ * It is drawn twice: on the bottom screen, where the touch-free controls live, and on the top screen over the field's last 48 rows,
+ * where upstream puts it (it covers the lower part of the player's Pokemon, as upstream's does). `top` leaves out what upstream
+ * draws elsewhere: the move description (MoveInfoOverlay) and the ability bar. */
+static void draw_bottom(bool top) {
   /* the strip's background: bg frame <window style> at (0,0), origin (0,1) */
   char fr[4];
   snprintf(fr, sizeof fr, "%d", ui_window_style());
@@ -686,11 +677,11 @@ static void draw_bottom(void) {
   if (B.mode == M_COMMAND) draw_command_menu();
   if (B.mode == M_FIGHT) {
     draw_fight_menu();
-    draw_move_details();
+    if (!top) draw_move_details();
   } else {
     msgbox_draw(&B.msg, 12, -39);
   }
-  draw_ability_bar();
+  if (!top) draw_ability_bar();
 }
 
 static void draw_debug(void) {
@@ -1505,6 +1496,7 @@ static void bv_draw(ui_screen* s, rr_screen which) {
       draw_enemy_info(&B.s[1]);
       draw_player_info(&B.s[0]);
     }
+    if (ui_space(UI_TOP_CANVAS_UI)) draw_bottom(true);
     /* the field is 320x180 on a 400x240 screen: keep sprites that slide past it off the border */
     if (ui_space(UI_PHYS_TOP)) {
       rr_rect(0, 0, 40, 240, RR_RGBA(0, 0, 0, 255));
@@ -1514,7 +1506,7 @@ static void bv_draw(ui_screen* s, rr_screen which) {
     }
   } else {
     if (ui_space(UI_PHYS_BOTTOM)) rr_rect(0, 0, 320, 240, RR_RGBA(0x10, 0x10, 0x18, 255));
-    if (ui_space(UI_BOTTOM_UI)) draw_bottom();
+    if (ui_space(UI_BOTTOM_UI)) draw_bottom(false);
     draw_debug();
   }
 }

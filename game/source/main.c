@@ -19,6 +19,7 @@
 
 #include "app_flow.h"
 #include "i18n.h"
+#include "mui.h"
 #include "pak.h"
 #include "rr.h"
 #include "run_screen.h"
@@ -78,6 +79,7 @@ int main(void) {
   save_init();
   srand((unsigned)osGetTime());
   ui_init();
+  mui_set_window_style(ui_window_style());
   ps_init();
   rs_config cfg;
   memset(&cfg, 0, sizeof cfg);

@@ -46,9 +46,12 @@ int img_count(void);
 size_t img_bytes(void);
 
 /* ---- windows ---- */
+/* uiWindowStyle: upstream's default is 1 (UiWindowStyle.RED_ORANGE, red edges); the screenshots the project is matched against
+ * (lorenzo, 2026-10-12) use 5 (MEDIUM_GRAY, the grey bevelled windows). main.c hands this to the menus (mui_set_window_style). */
+#define GM_DEFAULT_WINDOW_STYLE 5
 typedef enum { WIN_NORMAL, WIN_THIN, WIN_XTHIN } win_variant;
 /* Upstream's addWindow(x, y, w, h): window_<style><variant> as a 9-slice with 8 px borders,
- * origin (0,0). ui_window_style() is upstream's uiWindowStyle setting (1..5, default 1). */
+ * origin (0,0). ui_window_style() is upstream's uiWindowStyle setting (1..5, default GM_DEFAULT_WINDOW_STYLE). */
 void ui_window(float x, float y, float w, float h, win_variant v);
 int ui_window_style(void);
 void ui_set_window_style(int style);
