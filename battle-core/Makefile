@@ -273,3 +273,7 @@ $(BUILD)/berry-turn-test: tests/berry-turn-test.c $(BUILD)/berry-turn-replay.inc
 all: $(BUILD)/receiver-test
 $(BUILD)/receiver-test: tests/receiver-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/ability-lookup-test
+$(BUILD)/ability-lookup-test: tests/ability-lookup-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

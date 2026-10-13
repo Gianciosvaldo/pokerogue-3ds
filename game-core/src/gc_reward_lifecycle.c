@@ -88,8 +88,10 @@ void gc_reward_change_form(gc_run *run, int party, int form)
     const pr_form *f = gc_form(m->b.species, form);
     const int count = f->ability_hidden ? 3 : f->ability2 ? 2 : 1;
     if (m->ability_index >= count) m->ability_index = count - 1;
+    m->b.ability_index = (int8_t)m->ability_index;
     m->b.base_ability = (uint16_t)gc_form_ability(m->b.species, f, m->ability_index);
-    if (m->b.ability_override < 0) m->b.ability = m->b.base_ability;
+    if (m->b.ability_override <= 0) m->b.ability = m->b.base_ability;
+    pr_refresh_ability(&m->b);
     /* PlayerPokemon.changeForm marks seen/caught before stats. Unlike evolution
      * it neither records IVs nor learns moves. Origin preserves Terastallization. */
     if (run->sys) {

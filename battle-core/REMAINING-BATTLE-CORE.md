@@ -19,7 +19,7 @@ Completed continuation slices and remaining source-backed work:
 | Priority brackets and Quick Draw (merged #235) | Real bracket, chance and refusal callbacks now implemented | Real source conditions and seeded order, refusals, passives, priority ties; preserve Quick Claw |
 | Protean/Libero (merged #237) | Real normal/failure callers, leaf and message now implemented | Source type-change timing, existing type and Tera exclusions, repeated type changes (the pin has no Gen 9 once-per-summon gate), switch reset |
 | Field priority immunity (merged #240) | Defending-field caller now dispatches and honors cancellation | Source positive/zero/negative and modified priority, passives, bypass, source phase/text/RNG; broader doubles remain |
-| Receiver/Power of Alchemy (implemented; merge validation pending) | Actual victim context and copy/gain/reset callback now implemented | Ally versus enemy victim, eligibility, copied primary/passive and source order, loaded doubles |
+| Receiver/Power of Alchemy (merged #263) | Actual victim context and copy/gain/reset callback now implemented | Ally versus enemy victim, eligibility, copied primary/passive and source order, loaded doubles |
 | Parental Bond / Skill Link (merged #244) | Real hit-count callbacks now implemented; existing final-strike reduction retained | Move exclusions, hit powers/order, targets, KO interruption, exact RNG consumption |
 | Beat Up (merged #246) | Party hit-count case now implemented; existing per-hit power verified | Pinned party/status ordering, self contribution, base species Attack, KO interruption and modifiers |
 | Cud Chew / Harvest (merged #262) | Source histories, repeat/restore callbacks, preservation, inventory and saves now implemented | Actual named held-item history and delays, ownership, duplication/refusal and RNG |
@@ -116,3 +116,5 @@ now compare victim ownership, primary/passive copying, gain effects and reset.
 See RECEIVER-VALIDATION.md. A temporary NONE ability on a transformed actor
 requires the source ability-index/custom-override lookup state; it remains an
 explicit prerequisite in the broader ability/form copying gate.
+
+Indexed ability lookup continuation: explicit index/custom/scene/daily and temporary fusion-form inputs now have an 8,000-case actual-source getter matrix and additive save coverage. See ABILITY-LOOKUP-VALIDATION.md. This closes transformed NONE lookup when metadata is supplied; historical actors with only concrete caches remain explicitly limited. The broader form lifecycle and copying-move slices remain open.

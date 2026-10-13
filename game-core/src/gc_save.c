@@ -130,6 +130,10 @@ static const sfield pokemon_fields[] = {
     SF(pr_pokemon, transform_gender), SF(pr_pokemon, transform_moves), SF(pr_pokemon, transform_pp_used),
     SF(pr_pokemon, transform_pp_up), SF(pr_pokemon, transform_max_pp_override), SF(pr_pokemon, transform_n_moves),
     SF(pr_pokemon, variant),
+    SF(pr_pokemon, ability_lookup_known), SF(pr_pokemon, ability_index),
+    SF(pr_pokemon, custom_ability), SF(pr_pokemon, fusion_custom_ability),
+    SF(pr_pokemon, lookup_ability_override), SF(pr_pokemon, daily_boss_ability),
+    SF(pr_pokemon, temporary_fusion_species), SF(pr_pokemon, temporary_fusion_form),
     SF(pr_pokemon, battle_berries), SF(pr_pokemon, turn_berries), SF(pr_pokemon, last_berries),
     SF(pr_pokemon, n_battle_berries), SF(pr_pokemon, n_turn_berries), SF(pr_pokemon, n_last_berries),
 };
@@ -294,6 +298,25 @@ static bool berry_schema_ok(reader r)
         }
     }
     return !r.bad && (found==0 || found==6);
+}
+
+/* Keep historical concrete caches when lookup inputs are absent. New metadata
+ * is an indivisible schema: partial records must not create default overrides. */
+static bool ability_schema_ok(reader r)
+{
+    const char *fields[]={"ability_lookup_known","ability_index","custom_ability","fusion_custom_ability",
+        "lookup_ability_override","daily_boss_ability","temporary_fusion_species","temporary_fusion_form"};
+    const uint16_t sizes[]={1,1,2,2,2,2,2,1};
+    bool present[8]={false}; int n=take16(&r), found=0;
+    if(r.bad || n>128)return false;
+    for(int i=0;i<n;i++){
+        uint32_t name=take32(&r);uint16_t size=take16(&r);
+        for(int k=0;k<8;k++)if(name==hash(fields[k])){
+            if(size!=sizes[k] || present[k])return false;
+            present[k]=true;found++;
+        }
+    }
+    return !r.bad && (found==0 || found==8);
 }
 
 /* ---------------------------------------------------------------- CRC-32 (IEEE) */
@@ -485,6 +508,8 @@ static void mon_defaults(gc_mon *m)
     pr_pokemon *b = &m->b;
     b->ability_override = -1;
     b->custom_passive = -1;
+    b->custom_ability=b->fusion_custom_ability=b->lookup_ability_override=b->daily_boss_ability=-1;
+    b->ability_index=-1;
     b->status_toxic_turns = 0;
     b->status_sleep_turns = b->status_freeze_turns = -1;
     b->tera_type = -1;
@@ -517,6 +542,15 @@ static bool mon_ok(const gc_mon *m)
         if (!fsp || b->fusion_form >= fsp->nforms) return false;
         if (b->fusion_ability_index < -1 || b->fusion_ability_index > 2) return false;
     }
+    if (b->ability_lookup_known && (b->ability_index < 0 || b->ability_index > 2
+        || b->custom_ability < -1 || b->custom_ability >= PR_ABILITY_COUNT
+        || b->fusion_custom_ability < -1 || b->fusion_custom_ability >= PR_ABILITY_COUNT
+        || b->lookup_ability_override < -1 || b->lookup_ability_override >= PR_ABILITY_COUNT
+        || b->daily_boss_ability < -1 || b->daily_boss_ability >= PR_ABILITY_COUNT)) return false;
+    if (b->temporary_fusion_species) {
+        const pr_species *sp=gc_species(b->temporary_fusion_species);
+        if (!b->fusion_species || !sp || b->temporary_fusion_form>=sp->nforms) return false;
+    } else if (b->temporary_fusion_form) return false;
     if (b->n_moves > 4 || b->n_tags > PR_MAX_BATTLER_TAGS || b->n_move_queue > PR_MAX_MOVE_QUEUE) return false;
     for (int i = 0; i < b->n_moves; i++) if (b->moves[i] >= PR_MOVE_COUNT) return false;
     if (b->n_summon_types > PR_MAX_SUMMON_TYPES || b->n_ab_applied_summon > 4 || b->n_ab_applied_wave > 4) return false;
@@ -538,7 +572,7 @@ static bool get_mons(const reader *body, const char *name, gc_mon *mons, int n, 
     if (r.bad) return false;
     if (get_block(&r, mon_fields, NF(mon_fields), mons, sizeof(gc_mon), n, dropped) != n) return false;
     const bool transform_schema = has_transform_schema(r);
-    if (!berry_schema_ok(r)) return false;
+    if (!berry_schema_ok(r) || !ability_schema_ok(r)) return false;
     if (get_block(&r, pokemon_fields, NF(pokemon_fields), &mons[0].b, sizeof(gc_mon), n, dropped) != n) return false;
     for (int i = 0; i < n; i++) {
         pr_pokemon *b = &mons[i].b;

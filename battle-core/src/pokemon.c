@@ -59,6 +59,43 @@ bool pr_can_transform_into(const pr_pokemon *user, const pr_pokemon *target)
         && !pr_get_battler_tag(target, BATTLER_TAG_TYPE_SUBSTITUTE);
 }
 
+/* Pokemon.getAbility: zero temporary IDs are ignored, custom NONE is retained.
+ * Scene/day overrides are supplied by the owning caller, not generated here. */
+uint16_t pr_get_ability(const pr_pokemon *p, bool ignore_override)
+{
+    if (!ignore_override && p->ability_override > 0) return (uint16_t)p->ability_override;
+    if (!p->ability_lookup_known) return ignore_override ? p->base_ability : p->ability;
+    if (p->lookup_ability_override > 0) return (uint16_t)p->lookup_ability_override;
+    if (p->fusion_species) {
+        if (p->fusion_custom_ability >= 0) return (uint16_t)p->fusion_custom_ability;
+        const pr_form *form = pr_pokemon_fusion_form(p);
+        if (!ignore_override && p->temporary_fusion_species) {
+            pr_pokemon identity = {0};
+            identity.species = p->temporary_fusion_species;
+            identity.form = p->temporary_fusion_form;
+            form = pr_pokemon_base_form(&identity);
+        }
+        if (!form || p->fusion_ability_index < 0) return p->base_ability;
+        return p->fusion_ability_index == 0 ? form->ability1 : p->fusion_ability_index == 1 ? form->ability2 : form->ability_hidden;
+    }
+    if (p->custom_ability >= 0) return (uint16_t)p->custom_ability;
+    if (p->daily_boss_ability >= 0) return (uint16_t)p->daily_boss_ability;
+    const pr_form *form = ignore_override ? pr_pokemon_base_form(p) : pr_pokemon_form(p);
+    uint16_t ability = p->ability_index == 0 ? form->ability1 : p->ability_index == 1 ? form->ability2 : form->ability_hidden;
+    if (!ability) {
+        const pr_species *species = pr_pokemon_species(p);
+        ability = pr_forms[species->form0].ability1;
+    }
+    return ability;
+}
+
+void pr_refresh_ability(pr_pokemon *p)
+{
+    if (!p->ability_lookup_known) return;
+    p->base_ability = pr_get_ability(p, true);
+    p->ability = pr_get_ability(p, false);
+}
+
 void pr_restore_transform(pr_pokemon *p)
 {
     p->transformed = false;
