@@ -121,11 +121,24 @@ static void on_starters_exit(void* arg) {
   show_title();
 }
 
+/* The custom file cannot be used: its reason is long ("... It is left as it is, and nothing is saved to it ..."), the message box holds two
+ * lines, so the player gets the first sentence. */
+static void tell_custom_unusable(const char* why) {
+  char t[CR_WHY_LEN];
+  snprintf(t, sizeof t, "%s", why && why[0] ? why : "The custom content file cannot be used.");
+  for (char* p = t; *p; p++)
+    if (*p == '.' && (p[1] == ' ' || p[1] == 0)) {
+      p[1] = 0;
+      break;
+    }
+  tell(t);
+}
+
 static void new_run_in(int slot) {
   if (A.custom) {
     char why[CR_WHY_LEN];
     if (!cr_usable(why)) {
-      tell(why[0] ? why : "The custom content file cannot be used.");
+      tell_custom_unusable(why);
       return;
     }
   }
@@ -260,7 +273,7 @@ static void on_title(title_choice c, void* arg) {
       char why[CR_WHY_LEN];
       A.custom = true;
       show_slots(c == TITLE_CUSTOM_RUN ? SLOTS_NEW : SLOTS_LOAD, 0);
-      if (!cr_usable(why)) tell(why[0] ? why : "The custom content file cannot be used.");
+      if (!cr_usable(why)) tell_custom_unusable(why);
       break;
     }
     case TITLE_RADAR:

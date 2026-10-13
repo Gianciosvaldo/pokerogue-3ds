@@ -22,6 +22,7 @@
 #include "profile_tx.h"
 #include "system_data.h"
 #include "combat_observer.h"
+#include "custom_run.h"
 #include "custom_store.h"
 #include "pr_data.h"
 #include "pr_enums.h"
