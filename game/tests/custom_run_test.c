@@ -1470,6 +1470,30 @@ static void test_saves(void) {
   }
   drop(&s26);
 
+  /* an older save after the offer was ACCEPTED (the roster says challenged, the save says the offer is still to come): the record is
+   * scheduled again for this run and the offer comes back, once */
+  fx_restore();
+  fx_run();
+  CHECK(go_wave(26) == STEP_STOPPED, "wave 26");
+  s26 = take();
+  CHECK(go_wave(27) == STEP_STOPPED && life_of(FX.rid) == CC_LIFE_CHALLENGED, "accepted at wave 27: challenged");
+  cr_end();
+  put_slot_files(&s26);
+  reboot();
+  {
+    char why[RSV_WHY_LEN];
+    CHECK(resume_run(slot_used, why) == RSV_OK, "the older save loads over a challenged record: %s", why);
+    CHECK(life_of(FX.rid) == CC_LIFE_SCHEDULED, "the record is scheduled again (%d)", life_of(FX.rid));
+    cr_stats_reset();
+    bot.offer_answer = 1;
+    bot.save_every = 1;
+    CHECK(go_wave(27) == STEP_STOPPED, "wave 27 again");
+    CHECK(cr_stats_get()->offers == 1 && cr_stats_get()->accepts == 1 && view().rematch_live && life_of(FX.rid) == CC_LIFE_CHALLENGED,
+          "the offer comes back once and the rematch is live again (%u offers)", cr_stats_get()->offers);
+    cr_end();
+  }
+  drop(&s26);
+
   /* another run used the record up (won it) after this save: the older run is refused, with a reason, and nothing on the card changes */
   fx_restore();
   fx_run();
