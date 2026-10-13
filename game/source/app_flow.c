@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "capsule_screen.h"
+#include "gacha_screen.h"
 #include "profile_tx.h"
 #include "combat_observer.h"
 #include "custom_store.h"
@@ -31,6 +32,7 @@ static struct {
 
 static void show_title(void);
 static void show_radar(void);
+static void show_gacha(void);
 static void show_capsule_preview(int n);
 static int g_capsule_preview; /* the debug preview's result count, 0 = none (survives app_start's reset) */
 static void show_slots(slots_mode mode, int cursor);
@@ -230,6 +232,9 @@ static void on_title(title_choice c, void* arg) {
     case TITLE_RADAR:
       show_radar();
       break;
+    case TITLE_CAPSULE:
+      show_gacha();
+      break;
   }
 }
 
@@ -257,6 +262,20 @@ static void show_radar(void) {
     r.meta = NULL;
     radar_open(&r);
   }
+}
+
+/* ------------------------------------------------------------------ the capsule machine (task C09) */
+
+static void on_gacha_exit(void* arg) {
+  (void)arg;
+  show_title();
+}
+
+/* The voucher-to-egg machines. Every purchase goes through profile_tx (one committed transaction, one immutable result); this screen
+ * first finishes whatever a restart left unfinished or unshown (gacha_screen.h). */
+static void show_gacha(void) {
+  const gachas_args g = {on_gacha_exit, NULL};
+  gacha_screen_open(&g);
 }
 
 /* ------------------------------------------------------------------ the capsule preview (debug) */

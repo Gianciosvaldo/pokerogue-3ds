@@ -122,6 +122,16 @@ bool ptx_apply_pending(void);
 /* Retries the roll-forward now. True when nothing is left to apply. */
 bool ptx_settle(void);
 
+/* Whether a committed pull has been SHOWN to the player (task C09). A watermark in this file: every pull with an id up to it has been
+ * shown. Showing is not part of the transaction (the result is durable and immutable either way); this only keeps a restart from
+ * showing the same eggs twice, or never. */
+/* The oldest committed pull that was not shown yet (its id, and the result in *out when out is not NULL); 0 when none. */
+uint32_t ptx_unrevealed(ptx_result* out);
+/* Records that the pull txn (a kept, committed pull) was shown. One write of this file; the pending transaction, if any, is carried
+ * unchanged. True when it is recorded (or already was); false when the card refused (nothing changed: the eggs would be shown again
+ * after a restart, never pulled again), or when txn is not a kept committed pull. */
+bool ptx_mark_revealed(uint32_t txn);
+
 /* ---- for tests ---- */
 typedef struct {
   save_result (*read)(const char* name, char** out, size_t* len, bool* used_backup);

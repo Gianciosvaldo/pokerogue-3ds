@@ -1088,6 +1088,155 @@ static void test_fuzz(const snap* s0, int scenarios) {
 
 /* ------------------------------------------------------------------ main */
 
+
+/* ------------------------------------------------------------------ the shown-eggs watermark (task C09) */
+
+static void put32(uint8_t* b, size_t* n, uint32_t v) {
+  for (int i = 0; i < 4; i++) b[(*n)++] = (uint8_t)(v >> (8 * i));
+}
+/* An empty purchase record, by hand: version 1 has no watermark, version 2 has one. */
+static size_t craft_empty(uint8_t* b, int version, uint32_t next_txn, uint32_t revealed) {
+  size_t n = 0;
+  memcpy(b, "PTX1", 4);
+  n = 4;
+  b[n++] = (uint8_t)version;
+  b[n++] = 0;
+  b[n++] = 0;
+  b[n++] = 0;
+  put32(b, &n, next_txn);
+  if (version >= 2) put32(b, &n, revealed);
+  b[n++] = 0;                                  /* scene not seeded */
+  for (int i = 0; i < 40; i++) b[n++] = 0;     /* its RNG */
+  b[n++] = 0;                                  /* no results */
+  b[n++] = 0;                                  /* nothing pending */
+  b[n++] = 0;                                  /* kind */
+  put32(b, &n, 0);                             /* pending txn */
+  b[n++] = 0, b[n++] = 0, b[n++] = 0;          /* machine, option, seed_len */
+  for (int i = 0; i < 8; i++) b[n++] = 0;      /* clock */
+  for (int i = 0; i < PTX_SEED_MAX; i++) b[n++] = 0;
+  put32(b, &n, 0);                             /* claim record */
+  for (int i = 0; i < 16; i++) b[n++] = 0;     /* pre and post digests */
+  put32(b, &n, 0);                             /* candidate length */
+  return n;
+}
+
+static void test_watermark(const snap* s0) {
+  /* a pull is committed and not shown until marked; the mark survives a restart; older marks are covered by newer ones */
+  restore(s0);
+  reboot();
+  ptx_result r1, r2, u;
+  uint32_t t1 = 0, t2 = 0;
+  CHECK(ptx_unrevealed(&u) == 0, "nothing to show on a fresh file");
+  CHECK(!ptx_mark_revealed(1) && !ptx_mark_revealed(0), "an unknown transaction cannot be marked");
+  CHECK(ptx_begin_pull(&REQ_A, &t1) == PTX_OK && ptx_execute(t1, &r1) == PTX_X_DONE, "pull one");
+  CHECK(ptx_unrevealed(&u) == t1 && result_eq(&u, &r1), "the committed pull is the one to show");
+  reboot();
+  CHECK(ptx_unrevealed(&u) == t1 && result_eq(&u, &r1), "and it still is after a restart");
+  faults(0, 0);
+  CHECK(ptx_mark_revealed(t1) && g_w == 1, "marking is one write (%d)", g_w);
+  faults(0, 0);
+  CHECK(ptx_mark_revealed(t1) && g_w == 0, "marking again writes nothing");
+  CHECK(ptx_unrevealed(NULL) == 0, "shown");
+  reboot();
+  CHECK(ptx_unrevealed(NULL) == 0, "and not offered again after a restart");
+  CHECK(ptx_result_of(t1, &u) && result_eq(&u, &r1), "the result itself is still kept, unchanged");
+
+  /* two unshown pulls come oldest first, and a mark on the newer one covers the older */
+  ptx_pull_request rb = REQ_A;
+  memcpy(rb.seed, "e-two ", 6);
+  rb.seed_len = 5;
+  CHECK(ptx_begin_pull(&rb, &t2) == PTX_OK && ptx_execute(t2, &r2) == PTX_X_DONE && t2 == t1 + 1, "pull two");
+  rb.seed[0] = 'f';
+  uint32_t t3 = 0;
+  ptx_result r3;
+  CHECK(ptx_begin_pull(&rb, &t3) == PTX_OK && ptx_execute(t3, &r3) == PTX_X_DONE, "pull three");
+  CHECK(ptx_unrevealed(&u) == t2 && result_eq(&u, &r2), "the oldest unshown pull comes first");
+  CHECK(ptx_mark_revealed(t2) && ptx_unrevealed(&u) == t3 && result_eq(&u, &r3), "marking it offers the next");
+  CHECK(ptx_mark_revealed(t3) && ptx_unrevealed(NULL) == 0, "and the last");
+
+  /* only a committed pull can be marked */
+  uint32_t tc = 0;
+  CHECK(ptx_begin_claim(5, &tc) == PTX_OK, "a claim begun");
+  ptx_result rc;
+  CHECK(ptx_execute(tc, &rc) == PTX_X_DONE && rc.kind == PTX_KIND_CLAIM, "a claim committed");
+  CHECK(!ptx_mark_revealed(tc) && ptx_unrevealed(NULL) == 0, "a claim is not a pull to show");
+
+  /* a refused pull is not shown either */
+  restore(s0);
+  reboot();
+  ptx_pull_request big = req(0, 4, "refuse", 1791504000000ull);
+  gc_system* sys = sysd_get();
+  for (int i = 0; i < 4; i++) sys->voucher_counts[i] = 0;
+  uint32_t tr = 0;
+  ptx_result rr;
+  CHECK(ptx_begin_pull(&big, &tr) == PTX_OK && ptx_execute(tr, &rr) == PTX_X_REFUSED, "a refused pull");
+  CHECK(ptx_unrevealed(NULL) == 0 && !ptx_mark_revealed(tr), "a refusal shows nothing and cannot be marked");
+
+  /* a mark made while a committed transaction waits for its roll-forward carries that transaction unchanged */
+  restore(s0);
+  reboot();
+  const uint64_t pre = live_digest();
+  faults(3, 0);   /* the third write (system.sav) fails: committed, not applied */
+  uint32_t ta = 0;
+  ptx_result ra;
+  CHECK(ptx_begin_pull(&REQ_A, &ta) == PTX_OK && ptx_execute(ta, &ra) == PTX_X_DONE_APPLY_PENDING, "committed, the card not caught up");
+  no_faults();
+  CHECK(ptx_apply_pending() && ptx_mark_revealed(ta), "marked while the roll-forward waits");
+  CHECK(ptx_apply_pending() && ptx_pending() == ta, "the transaction is still waiting, unchanged");
+  const uint64_t post = live_digest();
+  CHECK(post != pre, "the live profile has the pull");
+  reboot();   /* the boot finishes it from the envelope the mark wrote */
+  CHECK(!ptx_apply_pending() && ptx_pending() == 0 && live_digest() == post && card_digest() == post, "a restart finishes it: the pull is on the card, once");
+  CHECK(ptx_unrevealed(NULL) == 0, "and the mark held");
+
+  /* versions: a version 1 file (no watermark) is read, and what it kept counts as shown; a damaged watermark is refused */
+  restore(s0);
+  reboot();
+  uint32_t tv = 0;
+  ptx_result rv;
+  CHECK(ptx_begin_pull(&REQ_A, &tv) == PTX_OK && ptx_execute(tv, &rv) == PTX_X_DONE && ptx_unrevealed(NULL) == tv, "an unshown pull on the card");
+  {
+    char* raw = NULL;
+    size_t rn = 0;
+    CHECK(save_read("ptx", &raw, &rn, NULL) == SAVE_OK && rn > 16 && !memcmp(raw, "PTX1", 4), "its record");
+    uint8_t* v1 = malloc(rn);
+    memcpy(v1, raw, 12);
+    v1[4] = 1;                                   /* version 1 */
+    memcpy(v1 + 12, raw + 16, rn - 16);          /* without the 4-byte watermark */
+    CHECK(save_write("ptx", v1, rn - 4) == SAVE_OK, "rewritten as version 1");
+    free(v1);
+    free(raw);
+    ptx_reset();
+    char why1[PTX_WHY_LEN];
+    CHECK(ptx_get_state(why1) == PTX_LOADED, "version 1 with a kept result is read: %s", why1);
+    CHECK(ptx_result_of(tv, &u) && result_eq(&u, &rv), "the kept result is intact");
+    CHECK(ptx_unrevealed(NULL) == 0, "and it counts as shown (version 1 had no screen that could show it)");
+  }
+  uint8_t b[1024];
+  wipe();
+  size_t n = craft_empty(b, 1, 5, 0);
+  CHECK(save_write("ptx", b, n) == SAVE_OK, "a version 1 file");
+  ptx_reset();
+  char why[PTX_WHY_LEN];
+  CHECK(ptx_get_state(why) == PTX_LOADED, "version 1 is read: %s", why);
+  CHECK(ptx_unrevealed(NULL) == 0, "and has nothing to show");
+  wipe();
+  n = craft_empty(b, 2, 5, 4);
+  CHECK(save_write("ptx", b, n) == SAVE_OK, "a version 2 file");
+  ptx_reset();
+  CHECK(ptx_get_state(why) == PTX_LOADED, "version 2 is read: %s", why);
+  wipe();
+  n = craft_empty(b, 2, 5, 5);   /* a watermark past every id issued */
+  CHECK(save_write("ptx", b, n) == SAVE_OK, "a watermark beyond the issued ids");
+  ptx_reset();
+  CHECK(ptx_get_state(why) == PTX_UNUSABLE, "is refused as damaged: %s", why);
+  wipe();
+  n = craft_empty(b, 3, 5, 0);
+  CHECK(save_write("ptx", b, n) == SAVE_OK, "a version 3 file");
+  ptx_reset();
+  CHECK(ptx_get_state(why) == PTX_UNUSABLE && strstr(why, "different version"), "a newer version is refused: %s", why);
+}
+
 int main(int argc, char** argv) {
   const int scenarios = argc > 1 ? atoi(argv[1]) : 150;
   char dir[] = "/tmp/ptxtestXXXXXX";
@@ -1124,6 +1273,7 @@ int main(int argc, char** argv) {
   test_unreadable_profile_at_boot(&s0);
   test_refusal_matrix(&s0);
   test_ring_and_ids(&s0);
+  test_watermark(&s0);
   test_fuzz(&s0, scenarios);
 
   printf("profile_tx_test: static bytes %zu (ptx), the profile buffers are allocated per transaction (2 x 1 MiB)\n", ptx_static_bytes());
