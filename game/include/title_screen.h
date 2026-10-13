@@ -5,7 +5,8 @@
  * 8 px from the top). Bottom screen: the option list in its corner: Continue (only with a last save), New Game, Load Game and, last,
  * the custom content's own "Nemesis Radar" (radar_screen.h: a read-only look at the remembered enemies; upstream has no such entry)
  * and "Capsule Machine" (gacha_screen.h: the voucher-to-egg machines; upstream reaches them from the in-run menu, which this app does
- * not have yet).
+ * not have yet), then "Custom Run" and "Custom Load" (custom_run.h: a Classic run with the optional Nemesis rematch, and its own five save
+ * slots; New Game and Load Game never see them).
  *
  * Not on it, on purpose: Daily Run, Run History and Settings (no such screens yet), the player count and the account line (the
  * game is fully offline), the splash message and the version text.
@@ -19,7 +20,7 @@
 extern "C" {
 #endif
 
-typedef enum { TITLE_CONTINUE, TITLE_NEW_GAME, TITLE_LOAD_GAME, TITLE_RADAR, TITLE_CAPSULE } title_choice;
+typedef enum { TITLE_CONTINUE, TITLE_NEW_GAME, TITLE_LOAD_GAME, TITLE_RADAR, TITLE_CAPSULE, TITLE_CUSTOM_RUN, TITLE_CUSTOM_LOAD } title_choice;
 
 typedef struct {
   bool can_continue;   /* shows the Continue entry */

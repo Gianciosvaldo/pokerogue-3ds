@@ -2687,6 +2687,34 @@ static bool instant_revive(pr_battle *bt, pr_engine *e, pr_pokemon *p)
     return false;
 }
 
+/* The optional faint observer (pr_faint_note): reads state only. `direct` needs the FaintPhase's own source AND the newest attack record to
+ * agree on the attacker, so a switch of the slot between the hit and the FaintPhase cannot misname it. */
+static void faint_notify(pr_battle *bt, const pr_phase *f, const pr_pokemon *p, bool player)
+{
+    pr_faint_note n;
+    memset(&n, 0, sizeof n);
+    n.id = (int64_t)p->id;
+    n.battler = f->battler;
+    n.side = player ? 0 : 1;
+    n.source_battler = -1;
+    n.wave = bt->wave_index;
+    n.turn = bt->turn;
+    n.fainted = p;
+    for (int k = 0; k < bt->n_party[n.side]; k++)
+        if (bt->party[n.side][k] != p && bt->party[n.side][k]->hp > 0 && n.remaining < 255) n.remaining++;
+    if (f->source >= 0 && p->n_attacks_received > 0) {
+        const pr_attack_record *r = &p->attacks_received[0];
+        if (r->source_battler_index == f->source && r->damage > 0) {
+            n.direct = true;
+            n.source_battler = r->source_battler_index;
+            n.source_id = r->source_id;
+            n.move = r->move;
+            n.source = pr_pokemon_by_id(bt, r->source_id);
+        }
+    }
+    bt->faint_observer(bt, &n, bt->faint_observer_ctx);
+}
+
 static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
 {
     pr_phase *f = PH(ph);
@@ -2714,6 +2742,7 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
     if (bt->wave_index == 200 && !player) pr_note_unported(bt, PR_FEAT_FINAL_BOSS);
 
     /* doFaint */
+    if (bt->faint_observer) faint_notify(bt, f, p, player);
     if (player) {
         bt->player_faints++;
         int k = bt->n_faint_history[0] < 12 ? bt->n_faint_history[0]++ : (pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT), 11);

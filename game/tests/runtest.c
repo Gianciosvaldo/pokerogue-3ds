@@ -21,6 +21,13 @@
  * playing (a trainer's battle music must have replaced its encounter music by then), when a trainer's reward screen is not under its
  * victory music, or when the music does not fade at the end of a run.
  *
+ *   RUNTEST_CUSTOM=1     the runs are custom runs (task C10): saved into the custom slot, with the rematch hooks, over a real custom store, profile
+ *                        transactions and system data in a temporary folder; every defeat is committed as the app does (a Nemesis when the
+ *                        faint hook named the finisher). The fake player answers the offer at random. RUNTEST_CUSTOM=strong: once a
+ *                        Nemesis is remembered the party is level 100 and healed at every command until wave 36 (so the runs reach the
+ *                        rematch windows), then it is left at 1 HP. Fails when an offer is left unanswered, a rematch is paid other
+ *                        than once, a voucher is not a claim, or the roster stops validating. With RUNTEST_SAVE=resume the custom
+ *                        slot is dropped and continued from as well.
  *   RUNTEST_SYS=1        the runs have system data (gc_run.sys), as the app gives them: a new save's (the nine default starters),
  *                        and every run starts with a team the starter select would offer. RUNTEST_SYS=all: every starter unlocked.
  *                        The system data lives across the runs (what one catches the next one can pick), and with RUNTEST_SAVE
@@ -33,9 +40,14 @@
 #include <unistd.h>
 
 #include "gc/data.h"
+#include "../../game-core/src/internal.h"   /* gc_mon_recalc, for the strong party of RUNTEST_CUSTOM=strong */
 #include "battle_view.h"
 #include "ball_menu.h"
 #include "combat_observer.h"
+#include "custom_run.h"
+#include "custom_store.h"
+#include "profile_tx.h"
+#include "system_data.h"
 #include "bgm.h"
 #include "bgm_choose.h"
 #include "i18n.h"
@@ -113,6 +125,13 @@ static struct {
 } X;
 static int n_shops, n_maps, n_item_opens;
 static bool save_on, resume_on;
+/* RUNTEST_CUSTOM */
+static bool custom_on, custom_strong;
+static unsigned vouchers0;
+static struct {
+  int commits, nemeses, store_refused, no_finisher;
+  int refusal[CC_REFUSE_COUNT_];
+} CU;
 static int n_resumes;
 
 static int violations, n_scenes, n_ask, n_dialogs, n_options, n_party_opens, n_balls, n_party_full_swaps;
@@ -536,7 +555,7 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
     const rs_stats* st = rs_stats_get();
     if (st->saves != W.expected_saves) BAD("a first command was asked with %d saves written, %d expected", st->saves, W.expected_saves);
     rsv_info info;
-    if (rsv_inspect(0, &info) != RSV_OK) {
+    if ((custom_on ? cr_inspect(0, &info) : rsv_inspect(0, &info)) != RSV_OK) {
       BAD("the slot does not load after a save: %s", info.why);
     } else {
       rsv_info now;
@@ -544,7 +563,9 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
       rsv_summarize(r, &now);
       if (info.wave != now.wave || info.score != now.score || info.money != now.money || info.n_party != now.n_party ||
           info.biome != now.biome || memcmp(info.party, now.party, sizeof(rsv_mon) * (size_t)now.n_party))
-        BAD("the slot holds wave %d score %d, the run is at wave %d score %d", info.wave, info.score, now.wave, now.score);
+        BAD("the slot holds wave %d score %d, the run is at wave %d score %d (money %d/%d, biome %d/%d, party %d/%d, party bytes %s)", info.wave, info.score,
+            now.wave, now.score, (int)info.money, (int)now.money, (int)info.biome, (int)now.biome, (int)info.n_party, (int)now.n_party,
+            memcmp(info.party, now.party, sizeof(rsv_mon) * (size_t)now.n_party) ? "differ" : "same");
     }
     if (resume_on && !just_resumed && W.save_points % 4 == 0) {
       W.resume_now = true; /* the player quits to the title and continues: the main loop does it */
@@ -626,7 +647,7 @@ static void evo_check(void) {
     n_evo_checked++;
     uint16_t mv[16];
     const int n = gc_evolution_moves(&r->party[EVO.party_idx], mv, 16);
-    EVM.pending = true;
+    EVM.pending = !custom_strong;   /* a party the strong mode set to level 100 gets moves the evolution check does not expect */
     EVM.party_idx = EVO.party_idx;
     EVM.n_moves_before = EVO.n_moves_before;
     EVM.n = 0;
@@ -849,6 +870,52 @@ static int smart_option(int pick) {
   return pick;
 }
 
+/* RUNTEST_CUSTOM=strong: a run that holds a Nemesis for a rematch is played by a party that cannot lose before wave 36 (and cannot win after) */
+static void strong_cheat(void) {
+  if (!custom_on || !custom_strong) return;
+  cr_view v;
+  cr_view_get(&v);
+  if (!v.active || v.sched.state == CC_SCHED_NO_CANDIDATE) return;
+  gc_run* r = (gc_run*)rs_run();
+  if (save_on && gc_run_can_save(r)) return;   /* the first turn is in the slot as it is: the slot check compares the two at every ask */
+  if (r->wave > 36) {
+    for (int i = 0; i < r->n_party; i++) r->party[i].b.hp = r->party[i].b.hp > 1 ? 1 : r->party[i].b.hp;
+    const gc_mon* f = gc_field_mon(r, 0);
+    if (f && W.present[0] && W.mon[0].species == f->b.species) W.mon[0].hp = f->b.hp;
+    return;
+  }
+  for (int i = 0; i < r->n_party; i++) {
+    if (r->party[i].b.level < 100) {
+      r->party[i].b.level = 100;
+      gc_mon_recalc(r, &r->party[i]);
+    }
+    r->party[i].b.hp = r->party[i].b.stats[0];
+  }
+  /* the fake screen's model of the Pokemon on the field follows (it is built from events, and this edit has none) */
+  const gc_mon* f = gc_field_mon(r, 0);
+  if (f && W.present[0] && W.mon[0].species == f->b.species) {
+    W.mon[0].level = f->b.level;
+    W.mon[0].max_hp = f->b.stats[0];
+    W.mon[0].hp = f->b.hp;
+  }
+}
+
+/* A custom run just ended: what the app does at its end (the defeat's report, the Nemesis if the faint hook named the finisher, the slot) */
+static void custom_commit(void) {
+  const cs_result res = cs_commit_defeat(co_report_get(), rs_custom_defeat());
+  CU.commits++;
+  if (res.outcome != CS_STORED && res.outcome != CS_REPLAYED) BAD("a custom run's report was not stored (outcome %d)", (int)res.outcome);
+  if (res.outcome == CS_STORED && res.commit.record_id && res.commit.refusal == CC_SUPPORT_OK) CU.nemeses++;
+  else if (rs_custom_defeat()) {
+    CU.store_refused++;
+    if (res.commit.refusal > 0 && res.commit.refusal < CC_REFUSE_COUNT_) CU.refusal[res.commit.refusal]++;
+  }
+  else CU.no_finisher++;
+  cr_clear(0);
+  const cc_meta* m = cs_meta();
+  if (!m || cc_meta_validate(m) != CC_OK) BAD("the remembered enemies no longer validate after a run");
+}
+
 /* One thing the UI was waiting on is answered. False when nothing is pending. */
 static bool step(void) {
   {
@@ -981,6 +1048,7 @@ static bool step(void) {
   }
   if (W.asking) {
     W.asking = false;
+    strong_cheat();
     bv_command c = {0, 0};
     const uint32_t x = rnd(100);
     const bv_command_opts* o = &W.opts;
@@ -1129,6 +1197,32 @@ int main(int argc, char** argv) {
     cfg.save_sys = save_sys_check;
     for (int i = 0; i <= GC_MAX_SPECIES_ID; i++) caught_at_start += g_sys.dex[i].caught_attr != 0;
   }
+  const char* custom_mode = getenv("RUNTEST_CUSTOM");
+  custom_on = custom_mode && *custom_mode;
+  custom_strong = custom_on && !strcmp(custom_mode, "strong");
+  if (custom_on) {
+    /* custom runs need the whole stack the app gives them: a folder, the custom store, profile transactions and the system data */
+    if (!save_dir[0]) {
+      snprintf(save_dir, sizeof save_dir, "/tmp/runtest-saves-XXXXXX");
+      if (!mkdtemp(save_dir) || chdir(save_dir) != 0 || mkdir("sdmc:", 0777) != 0 || !save_init()) {
+        printf("FAILED: no folder for the saves\n");
+        return 1;
+      }
+    }
+    cfg.custom = true;
+    cfg.save = true;
+    cfg.slot = 0;
+    gc_system* sys = sysd_get();
+    unlock_all_starters(sys);
+    cfg.sys = sys;
+    cfg.save_sys = sysd_save;
+    sysd_save();
+    ptx_set_scene_seed("runtest-custom");
+    ptx_boot();
+    vouchers0 = sys->voucher_counts[GC_VOUCHER_REGULAR];
+    co_set_uid_source(cs_begin_run);
+    cr_settle_owed();
+  }
   SND.on_start = snd_start;
   rs_start(&cfg);
 
@@ -1193,6 +1287,7 @@ int main(int argc, char** argv) {
       wave_sum += r->wave;
       wave_hist[r->wave / 10 > 20 ? 20 : r->wave / 10]++;
       obs_check(r, st->clears != clears);
+      if (custom_on) custom_commit();
       g_run_resumed = false;
       ended++;
       clears = st->clears;
@@ -1277,6 +1372,38 @@ int main(int argc, char** argv) {
     if (st->saves != W.expected_saves) BAD("%d saves written for %d save points", st->saves, W.expected_saves);
     if (!W.expected_saves) BAD("no save points were reached");
     if (resume_on && !n_resumes) BAD("no run was resumed");
+  }
+  if (custom_on) {
+    const cr_stats* cs = cr_stats_get();
+    unsigned regular = sysd_get()->voucher_counts[GC_VOUCHER_REGULAR];
+    const cc_meta* m = cs_meta();
+    unsigned claimed = 0, stored = 0;
+    for (unsigned i = 0; m && i < m->roster.count; i++) {
+      claimed += m->roster.rec[i].life == CC_LIFE_REWARD_CLAIMED;
+      stored += m->roster.rec[i].life == CC_LIFE_STORED;
+    }
+    printf("custom: %d runs ended and committed (%d Nemeses made, %d finishers the store refused, %d defeats with no reliable finisher); %u waves reported, %u windows; "
+           "%u offers (%u accepted, %u declined), %u enemies built, %u refused; %u won, %u lost, %u vouchers claimed (%u in the wallet); roster %u (%u claimed, %u stored); "
+           "%u runs resumed, %u candidates handed over, %u without; %u stopped for the card\n",
+           CU.commits, CU.nemeses, CU.store_refused, CU.no_finisher, cs->waves, cs->windows, cs->offers, cs->accepts, cs->declines, cs->built, cs->refused, cs->wins,
+           cs->losses, cs->claims, regular, m ? m->roster.count : 0, claimed, stored, cs->runs_resumed, cs->candidates, cs->candidates_none, cs->degraded);
+    printf("custom: finishers the store refused, by reason:");
+    for (int k = 1; k < CC_REFUSE_COUNT_; k++)
+      if (CU.refusal[k]) printf(" %s %d,", cc_refusal_str(k), CU.refusal[k]);
+    printf("\n");
+    if (CU.commits != ended) BAD("%d custom runs ended, %d committed", ended, CU.commits);
+    /* the runs' own rewards (trainer vouchers) are in the wallet too: it holds at least the claims */
+    if (regular - vouchers0 < cs->claims) BAD("%u vouchers claimed, %u more in the wallet", cs->claims, regular - vouchers0);
+    if (cs->wins != cs->claims) BAD("%u rematches won, %u vouchers claimed", cs->wins, cs->claims);
+    if (cs->offers != cs->accepts + cs->declines) BAD("%u offers, %u answers", cs->offers, cs->accepts + cs->declines);
+    if (cs->built + cs->refused != cs->accepts) BAD("%u accepted, %u built or refused", cs->accepts, cs->built + cs->refused);
+    if (cs->degraded) BAD("%u runs lost their rematch to a card that refused a write", cs->degraded);
+    if (m && cc_meta_validate(m) != CC_OK) BAD("the remembered enemies do not validate");
+    if (ptx_pending()) BAD("a transaction is left pending");
+    if (custom_strong && runs >= 100) {
+      if (!cs->offers) BAD("no rematch was offered");
+      if (!cs->wins) BAD("no rematch was won");
+    }
   }
   if (sys_on) {
     int caught = 0, seen = 0;

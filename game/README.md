@@ -43,14 +43,14 @@ events and are never guessed**, so the screen says "source not recorded". A turn
 history is no longer lost when the app closes (C04): [`custom_store.c`](source/custom_store.c) keeps the last run's report with its
 last turns, the id counters and the transaction ledger in one file, `save/custom.sav`, written once at the start of a run (the run's
 durable uid) and once at its end (the report; before the run's slot is cleared). A file that can't be used (damaged, or from another
-version) is never overwritten or removed: the result screen says why and nothing is stored until the player removes it. The app stores
-the report with an unknown cause and **never inserts a Nemesis**: the finishing enemy is not identifiable from the battle events
-(contracts section 2.10).
+version) is never overwritten or removed: the result screen says why and nothing is stored until the player removes it. An ordinary run stores
+the report with an unknown cause and inserts no Nemesis; a Custom Run (C10, below) can name the finishing enemy
+(contracts sections 2.10 and 2.16).
 
 The title screen has a **Nemesis Radar** (custom content, task C06): [`radar_screen.c`](source/radar_screen.c) lists the remembered enemies
 of `custom.sav`, newest first, with a free Scout page for each (what the record remembers, "not recorded" for the rest). It is a read-only
-look: it writes nothing, starts no rematch, spends nothing and says that live rematches are not available yet (they need C10). The
-app cannot create a record yet, so on a real install it shows an empty roster; [`mkcustom.c`](tests/mkcustom.c) writes a file with
+look: it writes nothing, starts no rematch, spends nothing and says that rematches are offered during a Custom Run (C10). Only a custom
+run creates records, so a fresh install shows an empty roster; [`mkcustom.c`](tests/mkcustom.c) writes a file with
 records for the emulator (contracts section 2.12). Buttons only: the framework has no touch path for these screens.
 
 There is a **capsule machine preview** (custom content, task C07): [`capsule_screen.c`](source/capsule_screen.c) over the pure
@@ -69,6 +69,15 @@ profile), never from the labels. One accepted pull is one `profile_tx` transacti
 the source's display order and records it as shown. Opening the machine first finishes a purchase a restart left unfinished and shows eggs a
 restart left unshown, once; neither pulls again. The result is eggs only: no species is marked caught, nothing hatches. A held button acts once;
 no touch (same reason as the Radar). Contracts section 2.15.
+
+There are **Custom Run** and **Custom Load** on the title (custom content, task C10): a Classic run with the optional hooks of game-core's
+[`gc/custom.h`](../game-core/include/gc/custom.h) installed and the controller [`custom_run.c`](source/custom_run.c) behind them, saved in its own slot list
+(`csession_<n>.sav`: the run bytes and the run's custom state in one file, never readable as an ordinary session). At the windows of the frozen
+schedule (waves 27, 77, 127 and 177) it may ask, before any combat, whether to fight a remembered Nemesis; Yes builds that enemy through game-core's
+own enemy construction at the wave's ordinary level (no scaling, boosts, boss segments or change to what the player carries), No gives the ordinary
+encounter. A win pays one regular voucher, once. Only an ordinary single wild encounter can be offered; the defeat that makes a Nemesis is named only
+when battle-core's own state names the attacker. An ordinary run never installs a hook. If `custom.sav` cannot be used the custom entries say so and start
+nothing. Contracts section 2.16.
 
 Stand-ins in the run flow (listed in [`run_screen.h`](include/run_screen.h)): the starters of a run with no starter select (the host
 tests' later runs) are a random team, reward names are the item key in words, evolution is automatic, a
@@ -150,6 +159,7 @@ that file to exist; any bytes will do for the emulator.
 | [`gacha_host.h`](include/gacha_host.h), [`gacha_screen.h`](include/gacha_screen.h) | The capsule machine (C09): `gacha_host` reads the option table from game-core, decides what can be bought, runs ONE purchase through `profile_tx` (busy while another is unfinished or unshown), builds the capsule fixture in the source's display order and records eggs as shown; `gacha_screen_open` is the menu (machine, option, question defaulting to No) and opens the capsule screen on the committed result. |
 | [`profile_tx.h`](include/profile_tx.h) | The profile transaction owner (C08; C09 added the shown-eggs mark `ptx_unrevealed` / `ptx_mark_revealed`): a voucher-to-egg pull (`ptx_begin_pull` / `ptx_execute`) or a Nemesis reward claim (`ptx_begin_claim`) commits through ONE write-ahead envelope (`save/ptx.sav`: candidate profile bytes, gacha scene RNG, immutable result) and is rolled forward to `system.sav` and `custom.sav`; a retry or restart returns the same result and never pulls twice. `ptx_boot()` runs in `app_start`. |
 | [`custom_store.h`](include/custom_store.h) | The custom content file on the SD card (`save/custom.sav`): `cs_begin_run` hands the observer a durable run uid (written first), `cs_commit` stores a finished run's report as one idempotent transaction, and a file it can't use is left exactly as it is. |
+| [`custom_run.h`](include/custom_run.h) | The live rematch of a custom run (C10): `cr_begin` / `cr_load` / `cr_save` / `cr_clear` for the custom slot, `cr_on_screen` / `cr_on_run_end` for the run driver, the offer's species and message for the screen, `cr_settle_owed` at boot (a win whose voucher a crash left unclaimed). The hooks, the roster changes (each one `cs_txn`) and the voucher (`profile_tx`) are inside. |
 | [`gen/gm_enum_names.h`](gen/gm_enum_names.h) | Names of battle-core's enums (`gm_enum_camel(GM_E_SPECIES_ID, id, ...)` gives upstream's i18n key). Regenerate with `python3 game/tools/gen_enum_names.py` when battle-core's enums change. |
 
 New screens go in their own source files; `menus/` (party, summary, starter select, reward
@@ -195,6 +205,20 @@ end twice stores nothing, a refusing card is told and retried once, an unusable 
 make -C game/tests store_test && game/tests/build/store_test
 ```
 `flowtest` checks that the result screen is given the report of the run that ended (and none after a new run starts).
+
+**The live rematch** (C10): `custom_run_test` drives `custom_run.c` and game-core's real hooks with a mini driver over the real `save.c`, `custom_store.c`
+and `profile_tx.c` in a temporary folder: real defeats that must create a Nemesis (and the ones that must not), the finisher gate, the four windows
+and every way to skip them, accept / decline, the rematch matrix (won, lost, caught, fled; reload before and after the offer, accept, victory,
+defeat and reward), the real enemy checked against the generated one and a control, five exact identity fixtures, saves (older, damaged,
+mismatched, custom bytes as an ordinary session and the reverse) and a crash at every write of the reward. `runtest` has `RUNTEST_CUSTOM=1|strong`
+(custom runs with offers and wins end to end through the real `run_screen.c`; `strong` makes the party win the rematch) and `RUNTEST_SAVE=resume`.
+`flowtest` checks the title entries. `custom_run_mutations.py` removes the hook, the duplicate-grant guard, the gates and the reconcile rules one line
+at a time; every mutation must make a test fail (the two documented exceptions are listed by the script).
+```
+make -C game/tests custom_run_test && game/tests/build/custom_run_test [extra seeds]
+python3 game/tests/custom_run_mutations.py [mutation numbers]
+RUNTEST_CUSTOM=strong game/tests/build/runtest 200 0
+```
 
 **The Nemesis Radar** (C06): `radar_test` runs `radar_screen.c` over custom-core's real validators with a fake drawing layer (every drawn
 line must be on its screen, in a readable style, and free of words that offer a fight, an invasion or a purchase), plus a seeded fuzz of

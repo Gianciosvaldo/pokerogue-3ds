@@ -111,7 +111,30 @@ cc_run_uid cs_begin_run(void) {
   return write_stage() ? uid : 0;   /* the counter is on the card before anyone sees the uid */
 }
 
-cs_result cs_commit(const co_report* r) {
+/* Builds the terminal summary of a report, with what a defeat's attribution adds. */
+static bool build_terminal(const co_report* r, const cs_defeat* d, cc_terminal* t) {
+  memset(t, 0, sizeof *t);
+  t->run_uid = r->run_uid;
+  t->outcome = r->outcome;
+  if (r->biome < 0 || r->biome > CC_BIOME_ID_MAX || r->wave < 1 || (r->outcome != CC_OUT_DEFEAT && r->outcome != CC_OUT_CLEAR)) return false;
+  t->biome = (uint8_t)r->biome;
+  t->wave = r->wave;
+  if (d && r->outcome == CC_OUT_DEFEAT) {
+    t->finish_actor = d->finish_actor;
+    t->known |= CC_TK_FINISH_ACTOR;
+    if (d->has_finish_move) {
+      t->finish_move = d->finish_move;
+      t->known |= CC_TK_FINISH_MOVE;
+    }
+    if (d->has_fallen) {
+      t->fallen_actor = d->fallen_actor;
+      t->known |= CC_TK_FALLEN_ACTOR;
+    }
+  }
+  return true;
+}
+
+cs_result cs_commit_defeat(const co_report* r, const cs_defeat* d) {
   cs_result out;
   memset(&out, 0, sizeof out);
   if (!r || !r->valid) {
@@ -128,22 +151,42 @@ cs_result cs_commit(const co_report* r) {
     out.outcome = CS_FILE_UNUSABLE;
     return out;
   }
-  /* what the app can say about how the run ended: the outcome, where, and the last turns. Who finished it and which Pokemon fell
-   * last (a stable id) are not known, so those parts stay unknown instead of being guessed. */
+  /* what the app can say about how the run ended: the outcome, where, and the last turns. Who finished it stays unknown unless the
+   * caller established it (a custom run's faint hook): it is never guessed here. */
   cc_terminal t;
-  memset(&t, 0, sizeof t);
-  t.run_uid = r->run_uid;
-  t.outcome = r->outcome;
-  if (r->biome < 0 || r->biome > CC_BIOME_ID_MAX || r->wave < 1 || (r->outcome != CC_OUT_DEFEAT && r->outcome != CC_OUT_CLEAR)) {
+  if (!build_terminal(r, d, &t)) {
     out.outcome = CS_BAD_REPORT;
     out.status = CC_E_RANGE;
     return out;
   }
-  t.biome = (uint8_t)r->biome;
-  t.wave = r->wave;
+  cc_nemesis cand;
+  const cc_nemesis* pc = NULL;
+  if (d && r->outcome == CC_OUT_DEFEAT) {
+    cand = d->candidate;
+    cand.record_id = 0;
+    cand.life = CC_LIFE_STORED;
+    cand.source_run_uid = r->run_uid;
+    cand.source_wave = r->wave;
+    cand.source_biome = (uint8_t)r->biome;
+    pc = &cand;
+  }
   memcpy(&g_stage, &g_live, sizeof g_stage);
-  out.status = cc_commit_terminal(&g_stage, &t, &r->history, NULL, &out.commit);
-  if (out.status != CC_OK) {
+  cc_status st = cc_commit_terminal(&g_stage, &t, &r->history, pc, &out.commit);
+  if (st != CC_OK && pc) {
+    /* a candidate that does not validate must not cost the player the report: store the run with an unknown cause, and say so */
+    cc_terminal plain;
+    build_terminal(r, NULL, &plain);
+    memcpy(&g_stage, &g_live, sizeof g_stage);
+    memset(&out.commit, 0, sizeof out.commit);
+    const cc_status again = cc_commit_terminal(&g_stage, &plain, &r->history, NULL, &out.commit);
+    if (again == CC_OK) {
+      out.commit.refusal = CC_REFUSE_NOT_ATTRIBUTED;
+      out.status = st;   /* why the candidate was dropped */
+      st = CC_OK;
+    }
+  }
+  if (st != CC_OK) {
+    out.status = st;
     out.outcome = CS_BAD_REPORT;
     return out;
   }
@@ -153,6 +196,23 @@ cs_result cs_commit(const co_report* r) {
   }
   out.outcome = write_stage() ? CS_STORED : CS_WRITE_FAILED;
   return out;
+}
+
+cs_result cs_commit(const co_report* r) { return cs_commit_defeat(r, NULL); }
+
+cs_tx_outcome cs_txn(cs_txn_fn fn, void* ctx, cc_status* status) {
+  cc_status dummy;
+  if (!status) status = &dummy;
+  *status = CC_OK;
+  ensure_loaded();
+  if (S.state == CS_UNREADABLE) return CS_TX_UNUSABLE;
+  memcpy(&g_stage, &g_live, sizeof g_stage);
+  *status = fn(&g_stage, ctx);
+  if (*status != CC_OK) return CS_TX_REFUSED;
+  *status = cc_meta_validate(&g_stage);
+  if (*status != CC_OK) return CS_TX_REFUSED;
+  if (!memcmp(&g_stage, &g_live, sizeof g_stage)) return CS_TX_UNCHANGED;
+  return write_stage() ? CS_TX_DONE : CS_TX_WRITE_FAILED;
 }
 
 static const cc_nemesis* find_record(const cc_meta* m, cc_record_id id) {

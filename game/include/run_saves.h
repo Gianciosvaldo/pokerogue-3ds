@@ -71,6 +71,14 @@ rsv_status rsv_inspect(int slot, rsv_info* out);
 /* Same for every slot. */
 void rsv_inspect_all(rsv_info out[RSV_SLOTS]);
 
+/* The same two for bytes already in memory (the core run bytes inside another file, custom_run.h): `buf` is what gc_run_save wrote.
+ * `info` (may be NULL) gets the status, the reason and, on RSV_OK, the summary. rsv_load_bytes replaces `run`; rsv_inspect_bytes loads
+ * into the module's scratch run and changes nothing else. */
+rsv_status rsv_load_bytes(const char* buf, size_t len, gc_run* run, rsv_info* info);
+rsv_status rsv_inspect_bytes(const char* buf, size_t len, rsv_info* info);
+/* Removes `name`.sav, `name`.sav.bak and `name`.sav.tmp (save.h's files); false when one that exists would not go. */
+bool rsv_remove_files(const char* name);
+
 /* Loads the slot into `run`, which is replaced. EMPTY: nothing there. INCOMPATIBLE: `why` says why and the file is
  * untouched (`run` is then unusable until gc_run_new or another load). */
 rsv_status rsv_load(int slot, gc_run* run, char why[RSV_WHY_LEN]);

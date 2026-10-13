@@ -8,6 +8,7 @@
 #include "gacha_screen.h"
 #include "profile_tx.h"
 #include "combat_observer.h"
+#include "custom_run.h"
 #include "custom_store.h"
 #include "gc/run.h"
 #include "radar_screen.h"
@@ -27,6 +28,7 @@ static struct {
   int slot;                 /* the slot the run on screen is saved into */
   result_args result;
   const co_report* kept;    /* the report whose custom store write failed: tried once more when the result screen is left */
+  bool custom;              /* the slot list and the run on screen are the custom ones (csession_<n>, custom_run.h) */
   char note[CS_WHY_LEN + 64];
 } A;
 
@@ -44,10 +46,11 @@ static void on_run_end(int kind, void* arg);
 static rs_config run_config(int slot, bool fresh) {
   rs_config c;
   memset(&c, 0, sizeof c);
-  if (fresh && !A.first_used) {
-    c = A.first; /* seed and starters from rundriver.txt */
+  if (fresh && !A.first_used && !A.custom) {
+    c = A.first; /* seed and starters from rundriver.txt (an ordinary run's) */
     A.first_used = true;
   }
+  c.custom = A.custom;
   /* each run has its own randomness: the session's base, and when the player got here (frames since boot) */
   c.entropy = A.first.entropy ^ (A.runs_started * 0x9E3779B1u) ^ (ui_frame() * 2654435761u);
   A.runs_started++;
@@ -65,8 +68,15 @@ static rs_config run_config(int slot, bool fresh) {
 }
 
 /* A message on the slot list, with the slots as they are now (a load that did not work, a run that did not start) */
+static void look(void) {
+  if (A.custom)
+    cr_inspect_all(A.info);
+  else
+    rsv_inspect_all(A.info);
+}
+
 static void tell(const char* text) {
-  rsv_inspect_all(A.info);
+  look();
   slot_screen_refresh();
   slot_screen_message(text);
 }
@@ -78,7 +88,7 @@ static void load_slot(int slot, bool from_list) {
   const rsv_status st = rs_resume(&c, why);
   if (st == RSV_OK) return;
   if (!from_list) {
-    rsv_inspect_all(A.info);
+    look();
     show_slots(SLOTS_LOAD, slot);
   }
   tell(st == RSV_EMPTY ? "There is no run in that slot." : why);
@@ -87,7 +97,7 @@ static void load_slot(int slot, bool from_list) {
 /* The run starts with `team` (NULL: a developer's team from rundriver.txt, no starter select). The slot's old run goes only now,
  * once the player has confirmed a team: backing out of the starter select leaves it as it was. */
 static void start_new_run(int slot, const gc_starter* team, int n_team, bool from_starter_select) {
-  if (!rsv_clear(slot)) {
+  if (!(A.custom ? cr_clear(slot) : rsv_clear(slot))) {
     if (from_starter_select) show_slots(SLOTS_NEW, slot);
     tell("The old run in that slot could not be removed from the SD card.");
     return;
@@ -99,7 +109,7 @@ static void start_new_run(int slot, const gc_starter* team, int n_team, bool fro
   }
   if (!rs_start(&c)) {
     if (from_starter_select) show_slots(SLOTS_NEW, slot);
-    tell("The run could not be started.");
+    tell(A.custom && cr_error()[0] ? cr_error() : "The run could not be started.");
   }
 }
 
@@ -111,14 +121,34 @@ static void on_starters_exit(void* arg) {
   show_title();
 }
 
+/* The custom file cannot be used: its reason is long ("... It is left as it is, and nothing is saved to it ..."), the message box holds two
+ * lines, so the player gets the first sentence. */
+static void tell_custom_unusable(const char* why) {
+  char t[CR_WHY_LEN];
+  snprintf(t, sizeof t, "%s", why && why[0] ? why : "The custom content file cannot be used.");
+  for (char* p = t; *p; p++)
+    if (*p == '.' && (p[1] == ' ' || p[1] == 0)) {
+      p[1] = 0;
+      break;
+    }
+  tell(t);
+}
+
 static void new_run_in(int slot) {
+  if (A.custom) {
+    char why[CR_WHY_LEN];
+    if (!cr_usable(why)) {
+      tell_custom_unusable(why);
+      return;
+    }
+  }
   /* the list never offers this: what can't be read is not overwritten */
   if (A.info[slot].status == RSV_INCOMPATIBLE) {
     tell("That slot holds a save this version can't read. It is not overwritten.");
     return;
   }
   /* a developer's team (rundriver.txt) starts the run without the starter select, as before it existed */
-  if (!A.first_used && A.first.n_starters > 0) {
+  if (!A.custom && !A.first_used && A.first.n_starters > 0) {
     start_new_run(slot, NULL, 0, false);
     return;
   }
@@ -138,7 +168,7 @@ static void on_result_done(void* arg) {
   /* the SD card refused the report at the run's end: one more try before it is gone (the store is idempotent by run, so a report
    * that did get written cannot be stored twice) */
   if (A.kept) {
-    cs_commit(A.kept);
+    cs_commit_defeat(A.kept, rs_custom_defeat());
     A.kept = NULL;
   }
   show_title();
@@ -160,7 +190,8 @@ static void on_run_end(int kind, void* arg) {
   A.kept = NULL;
   A.note[0] = 0;
   if (A.result.report) {
-    const cs_result stored = cs_commit(A.result.report);
+    /* a custom run's defeat comes with the enemy the faint hook named (NULL for an ordinary run: cs_commit_defeat is cs_commit then) */
+    const cs_result stored = cs_commit_defeat(A.result.report, rs_custom_defeat());
     if (stored.outcome == CS_WRITE_FAILED) A.kept = A.result.report;
     const char* note = cs_note(stored.outcome);
     if (stored.outcome == CS_FILE_UNUSABLE || stored.outcome == CS_NO_DURABLE_RUN) {
@@ -171,9 +202,14 @@ static void on_run_end(int kind, void* arg) {
       }
     }
     if (note) snprintf(A.note, sizeof A.note, "%s", note);
+    else if (stored.outcome == CS_STORED && stored.commit.record_id)
+      snprintf(A.note, sizeof A.note, "The enemy that beat you was remembered. It may challenge you again.");
     A.result.note = A.note[0] ? A.note : NULL;
   }
-  rsv_clear(A.slot);
+  if (A.custom)
+    cr_clear(A.slot);
+  else
+    rsv_clear(A.slot);
   /* what the run won or caught (a Classic clear is recorded by game-core as the run ends) goes to the SD card now. A refusal is not
    * lost: the next save point of the next run writes it again. */
   if (rs_run()->sys) sysd_save();
@@ -194,11 +230,11 @@ static void on_pick(int slot, void* arg) {
 
 static void on_delete(int slot, void* arg) {
   (void)arg;
-  if (!rsv_clear(slot)) {
+  if (!(A.custom ? cr_clear(slot) : rsv_clear(slot))) {
     tell("The run could not be deleted from the SD card.");
     return;
   }
-  rsv_inspect_all(A.info);
+  look();
   slot_screen_refresh();
 }
 
@@ -209,7 +245,7 @@ static void on_back(void* arg) {
 
 static void show_slots(slots_mode mode, int cursor) {
   g_mode = mode;
-  rsv_inspect_all(A.info);
+  look();
   slot_screen_open(&(slots_args){mode, A.info, cursor, on_pick, on_delete, on_back, NULL});
 }
 
@@ -224,11 +260,22 @@ static void on_title(title_choice c, void* arg) {
       break;
     }
     case TITLE_NEW_GAME:
+      A.custom = false;
       show_slots(SLOTS_NEW, 0);
       break;
     case TITLE_LOAD_GAME:
+      A.custom = false;
       show_slots(SLOTS_LOAD, 0);
       break;
+    case TITLE_CUSTOM_RUN:
+    case TITLE_CUSTOM_LOAD: {
+      /* the custom runs have a slot list of their own (custom_run.h); a custom file that cannot be used is said so, not guessed around */
+      char why[CR_WHY_LEN];
+      A.custom = true;
+      show_slots(c == TITLE_CUSTOM_RUN ? SLOTS_NEW : SLOTS_LOAD, 0);
+      if (!cr_usable(why)) tell_custom_unusable(why);
+      break;
+    }
     case TITLE_RADAR:
       show_radar();
       break;
@@ -303,6 +350,7 @@ static void show_capsule_preview(int n) {
 void app_debug_capsule(int n) { g_capsule_preview = n >= 1 && n <= CAP_MAX ? n : 0; }
 
 static void show_title(void) {
+  A.custom = false;
   rsv_inspect_all(A.info);
   int last = rsv_last_slot();
   /* Continue needs a file in the slot it would load; a slot that is gone (cleared, deleted by hand) is forgotten. An
@@ -322,6 +370,7 @@ void app_start(const rs_config* first_run) {
   cs_set_nonce(A.first.entropy); /* only used by a new custom file; an existing one keeps its own */
   co_set_uid_source(cs_begin_run);
   ptx_boot(); /* finishes a purchase or reward a crash left half applied, and stops the profile being saved over it (profile_tx.h) */
+  cr_settle_owed(); /* the voucher of a rematch won just before a crash that never got to claim it (custom_run.h) */
   if (g_capsule_preview > 0)
     show_capsule_preview(g_capsule_preview);
   else

@@ -432,8 +432,8 @@ static void draw_top(void) {
       centred(160, 150, "It is left as it is.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
     } else {
       centred(160, 66, "No enemy is remembered yet.", TS_WINDOW, 0);
-      centred(160, 96, "This version does not add enemies during play,", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
-      centred(160, 108, "and rematches cannot start.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
+      centred(160, 96, "Only a Custom Run adds enemies,", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
+      centred(160, 108, "and only from defeats it can explain.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
     }
     return;
   }
@@ -505,7 +505,7 @@ static void draw_bottom_list(void) {
     o.origin_x = 1.0f;
     text_draw(TS_WINDOW, 310, 5, t, &o);
   }
-  line(10, 28, "Live rematches are not available yet.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xe8, 0xe8, 0xa8, 255));
+  line(10, 28, "Rematches are offered during a Custom Run.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xe8, 0xe8, 0xa8, 255));
 
   ui_window(1, LIST_Y + 2, 318, VISIBLE * ROW_H + 10, WIN_NORMAL);
   if (!R.usable) {
@@ -517,7 +517,7 @@ static void draw_bottom_list(void) {
     line(12, LIST_Y + 60, "The file is left as it is.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
   } else if (R.roster.count == 0) {
     line(12, LIST_Y + 14, "No enemy is remembered.", TS_WINDOW, 0);
-    line(12, LIST_Y + 38, "This version does not add enemies during play.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
+    line(12, LIST_Y + 38, "Only a Custom Run adds enemies to this list.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
   } else {
     for (int i = 0; i < VISIBLE && R.scroll + i < R.roster.count; i++) draw_row(R.scroll + i, (float)(LIST_Y + 6 + i * ROW_H));
     if (R.scroll > 0) {

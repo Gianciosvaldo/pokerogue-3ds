@@ -12,10 +12,14 @@
  *     write, idempotent by run uid, so a retried callback, a reopened result screen or a restart cannot store a run twice. The
  *     in-memory state changes only after the write succeeded; a failed write leaves the previous durable state and memory as they were.
  *
- * What it does NOT do: it never inserts a Nemesis. A record needs the enemy that finished the run, reliably identified, with its ability,
- * moves and held items; the app has none of that (the battle events carry no attacker, no move, no stable Pokemon id: contracts section
- * 1.8, items 1 and 2), so every commit passes no candidate and stores the report with an unknown cause. The tested store and
- * cc_commit_terminal do insert; the live insertion is a boundary C10 has to cross.
+ * Who finished the run: cs_commit passes no candidate, so an ordinary run's report is stored with an unknown cause, as it always was.
+ * cs_commit_defeat (task C10) takes the finishing enemy a CUSTOM run's defeat identified through game-core's faint hook (gc/custom.h),
+ * and hands it to cc_commit_terminal, whose insertion gate (cc_insertion_check) is still the only judge of whether a record is made:
+ * a candidate it refuses (a trainer's Pokemon, a boss, a rematch enemy...) leaves the report stored with that refusal, and a candidate
+ * that does not even validate is dropped so the report itself is never lost.
+ *
+ * cs_txn (task C10) is the one door for the roster changes of a custom run (a rematch accepted, declined, won or lost): the caller's
+ * function edits a staged copy, which is validated, written, and only then becomes the state.
  *
  * A file that is there and cannot be used (damaged, made by another version, or one the SD card would not read) is never repaired,
  * overwritten or deleted by this module: the game goes on, nothing is stored, and cs_get_state says why. A file that is not there is a
@@ -79,6 +83,33 @@ typedef struct {
 
 /* Stores the finished run as one transaction. Safe to call again for the same report. */
 cs_result cs_commit(const co_report* report);
+
+/* ---- a defeat whose finisher is known (task C10) ---- */
+typedef struct {
+  cc_nemesis candidate;       /* record_id 0, life STORED, traits set from what the encounter was; source_run_uid, source_wave and
+                               * source_biome are taken from the report */
+  cc_actor finish_actor;      /* the candidate as the terminal summary names it (side CC_SIDE_ENEMY) */
+  bool has_finish_move;
+  uint16_t finish_move;
+  bool has_fallen;
+  cc_actor fallen_actor;      /* the player's Pokemon that fell last */
+} cs_defeat;
+
+/* cs_commit for a run whose defeat is attributed: the report is stored with the finishing actor, the move and the fallen Pokemon the
+ * app established, and the candidate goes through cc_commit_terminal's gate. Idempotent by run like cs_commit. `defeat` NULL = cs_commit. */
+cs_result cs_commit_defeat(const co_report* report, const cs_defeat* defeat);
+
+/* ---- one transaction on the metadata (task C10) ---- */
+typedef cc_status (*cs_txn_fn)(cc_meta* staged, void* ctx);
+typedef enum {
+  CS_TX_DONE,           /* the staged state was written and is the state now */
+  CS_TX_UNCHANGED,      /* fn changed nothing: nothing was written */
+  CS_TX_UNUSABLE,       /* the custom file cannot be used: nothing written */
+  CS_TX_REFUSED,        /* fn returned an error, or the result did not validate: the state is as it was (*status says why) */
+  CS_TX_WRITE_FAILED,   /* the SD card refused the write: the file and the memory state are as they were; a retry is safe */
+} cs_tx_outcome;
+/* Runs fn on a staged copy of the state (never on the live one). Only a successful write makes the copy the state. */
+cs_tx_outcome cs_txn(cs_txn_fn fn, void* ctx, cc_status* status);
 
 /* A line for the player when something was not stored, in the result screen's words; NULL when the report is on the card. */
 const char* cs_note(cs_outcome outcome);

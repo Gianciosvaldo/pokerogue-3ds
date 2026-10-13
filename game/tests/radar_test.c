@@ -381,10 +381,10 @@ static void test_empty_and_unusable(void) {
   draw_both();
   draw(0);
   CHECK(has_text("No enemy is remembered yet."), "top says nothing is remembered");
-  CHECK(has_text("rematches cannot start"), "top says rematches cannot start");
+  CHECK(has_text("and only from defeats it can explain."), "top says where enemies come from");
   draw(1);
   CHECK(has_text("No enemy is remembered."), "bottom says so");
-  CHECK(has_text("Live rematches are not available yet."), "bottom says live rematches are unavailable");
+  CHECK(has_text("Rematches are offered during a Custom Run."), "bottom says where rematches are offered");
   CHECK(has_text("0/16"), "the count is 0 of 16");
   CHECK(!has_text("A: scout"), "no Scout button with nothing to scout");
   press(BTN_ACTION);

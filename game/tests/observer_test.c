@@ -451,6 +451,41 @@ static void test_resumed(void) {
   CHECK(r && r->began_mid && (r->history.flags & CC_HF_BEGAN_MID) && r->history.n_turns == 1 && r->history.turns[0].flags == 0, "resumed: the history is flagged, the turn is whole");
 }
 
+/* A run's retained turns carried over a save (task C10): the resumed observation has them, validates, and goes on after them */
+static void test_carry(void) {
+  begin(false);
+  pr_event be1[] = {switch_in(0, PIKACHU, 55, 55), switch_in(2, PIDGEY, 40, 40), damage(0, PIKACHU, 31, 55, 24)};
+  gc_event q1[] = {gev(GC_EV_WAVE, 3, 1), gev(GC_EV_TURN, 1, 0), gev(GC_EV_BATTLE, 0, 3)};
+  drain(q1, 3, be1, 3);
+  static co_carry carry, again;
+  CHECK(co_carry_get(&carry) && carry.hist.n_turns == 1 && carry.battle_seq == 1 && carry.next_seq > 1, "the carry holds the turn");
+
+  /* the empty carry, and the run's own carry, are taken */
+  begin(true);
+  CHECK(co_carry_get(&again) && again.hist.n_turns == 0, "a fresh resumed observation has no turns");
+  CHECK(co_begin_run_carry(&carry), "a carry with turns is accepted");
+  drain_no = 0;
+  CHECK(co_carry_get(&again) && again.hist.n_turns == 1 && again.battle_seq == carry.battle_seq && again.next_seq == carry.next_seq, "and restored as it was");
+  CHECK(!memcmp(&again.hist.turns[0], &carry.hist.turns[0], sizeof carry.hist.turns[0]), "the same turn, byte for byte");
+  CHECK((again.hist.flags & CC_HF_BEGAN_MID) != 0, "flagged as observed from a save");
+
+  /* the next battle follows the carried one: its turn is kept after it, with no loss flagged */
+  pr_event be2[] = {switch_in(0, PIKACHU, 31, 55), switch_in(2, RATTATA, 20, 20), damage(0, PIKACHU, 11, 55, 20)};
+  gc_event q2[] = {gev(GC_EV_WAVE, 4, 1), gev(GC_EV_TURN, 1, 0), gev(GC_EV_BATTLE, 0, 3)};
+  drain(q2, 3, be2, 3);
+  const co_stats* st = co_stats_get();
+  CHECK(st->accepted == 1 && st->rejected == 0 && st->last_status == CC_OK, "the next battle is accepted (%u, %u, %d)", st->accepted, st->rejected, st->last_status);
+  const co_report* r = finish(false);
+  CHECK(r && r->history.n_turns == 2 && r->history.turns[0].wave == 3 && r->history.turns[1].wave == 4, "both battles are in the report");
+  CHECK(r && r->history.turns[1].battle_seq == 2 && r->history.turns[0].flags == 0 && r->history.turns[1].flags == 0, "numbered on and no gap flagged");
+  CHECK(r && r->began_mid && !r->untracked_loss, "the report says it was resumed and lost nothing");
+
+  /* a carry that does not validate is refused, and the observation starts empty and flagged as began-mid */
+  begin(false);
+  CHECK(!co_begin_run_carry(&(co_carry){.hist = carry.hist, .next_seq = 1, .battle_seq = 1}), "turns with events but a next_seq that precedes them are refused");
+  CHECK(co_carry_get(&again) && again.hist.n_turns == 0 && (again.hist.flags & CC_HF_BEGAN_MID), "empty, began mid");
+}
+
 /* The clear and the foe's faint */
 static void test_outcomes(void) {
   begin(false);
@@ -486,6 +521,7 @@ int main(void) {
   test_reducer_refusal();
   test_run_lifecycle();
   test_resumed();
+  test_carry();
   test_outcomes();
   printf("observer_test: %d checks, %d failed\n", checks, failed);
   return failed ? 1 : 0;

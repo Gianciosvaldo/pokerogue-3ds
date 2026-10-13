@@ -82,6 +82,19 @@ void co_set_uid_source(co_uid_source source);
 /* Starts observing a new run (any earlier report is dropped). `resumed`: the run was loaded from a save. */
 void co_begin_run(bool resumed);
 
+/* What a custom run's save carries of the observation (task C10): the retained turns and the counters that keep the next battle's turns
+ * after them. The reducer's own state is not copied: co_carry_restore rebuilds it from these and validates it, so a damaged carry is
+ * refused (and the observation starts empty, flagged as began-mid, exactly as co_begin_run(true) does). */
+typedef struct {
+  cc_history hist;
+  uint32_t next_seq;          /* the seq of the next stored event */
+  uint32_t battle_seq;        /* battles seen so far: the next battle is battle_seq + 1 */
+} co_carry;
+/* The observation as it stands. False when no run is being observed (nothing is written to *out). */
+bool co_carry_get(co_carry* out);
+/* co_begin_run(true), then the carry. False when the carry does not validate (the observation then starts empty). */
+bool co_begin_run_carry(const co_carry* carry);
+
 /* Takes in the events one drain pulled off game-core's queue, once.
  *   drain_no   1, 2, 3... per run, one per drain. A number that is not new is a replay (ignored); a jump means a drain was never
  *              observed (the history is flagged incomplete).

@@ -1,4 +1,4 @@
-# Custom content contracts, version 1 (tasks C01, C02, C03, C04, C05, C06, C07, C08, C09)
+# Custom content contracts, version 1 (tasks C01, C02, C03, C04, C05, C06, C07, C08, C09, C10)
 
 Written for task C01 of [CUSTOM-CONTENT-ADVANCED-AGENT.md](CUSTOM-CONTENT-ADVANCED-AGENT.md). It does three things:
 audits the interfaces the custom content will touch, fixes the version-1 data contracts, and records what the new
@@ -12,6 +12,8 @@ prototype that only a debug file opens (section 2.13, 5.6); it shows fixed resul
 owns the profile transactions (voucher-to-egg pull, the once-per-record Nemesis reward) behind one write-ahead envelope (section 2.14, 5.7).
 Since C09 the title has a **Capsule Machine** entry: the three voucher-to-egg machines, one committed transaction per accepted pull,
 shown through the C07 capsule screen (section 2.15, 5.8). That is the first purchase a player can make; it hatches nothing.
+Since C10 the title has **Custom Run** and **Custom Load**: a custom run offers, at the scheduled windows, a rematch against a remembered Nemesis, builds that
+enemy through game-core's own construction, records the result and pays the one voucher (section 2.16, 5.9).
 
 | Item | Value |
 |---|---|
@@ -851,6 +853,64 @@ timed on a device). The test checks it against upstream's documented table (1 Re
   re-reads a clock. The daily featured legendary follows the console's clock; no synchronization is claimed. Animation timing never reaches
   a random or date decision: the animation starts after the commit.
 
+### 2.16 The live rematch (C10)
+
+**What exists now.** The title has two more custom entries, **Custom Run** and **Custom Load** (a separate slot list, `csession_<n>.sav`). A custom
+run is an ordinary Classic run with the optional hooks of `game-core/include/gc/custom.h` installed and the controller `game/source/custom_run.c`
+behind them. An ordinary run never installs a hook: it is played, saved and observed as before (`gcplay --auto 1000 --jobs 8`, with and without
+`--save-test`, prints output byte for byte equal to `main`'s, digest `798a34b3`). Custom bytes are never loaded as an ordinary session and
+the reverse (both refusals are tested).
+
+**Three small cuts into the cores, all optional and off by default.**
+
+| Where | What | Why it is allowed |
+|---|---|---|
+| battle-core `pr_faint_note`, `pr_battle.faint_observer` (called from `FaintPhase` at `doFaint`) | Reads state only: who fainted, how many of its side are left, and the attacker **only** when the FaintPhase's own `source` and the newest `attacksReceived` record (damage > 0) name the same attacker. Everything else (poison, weather, recoil, tags, a record-less faint) is `direct = false`: nothing is inferred. | lorenzo's instruction of 2026-10-13 07:06 to make the necessary battle-core changes for C10 (this is the one battle-core edit). NULL by default; no phase, RNG draw or event changes. |
+| game-core `gc_run_set_custom` (`encounter` / `answer` / `built` / `faint`) | `encounter` is told the kind of every wave once its ordinary enemy is final and before the save point, and may stop the run on the new `GC_SCREEN_CUSTOM_OFFER`; an accepted `gc_custom_enemy` is built **through game-core's own enemy construction** at the wave's ordinary level (species, form, gender, shiny, nature, ability, moves are applied; level, IVs, items follow the ordinary paths); `faint` forwards the note with both Pokemon by value. | No hand-assigned `pr_pokemon`, no scaling, no boss segments, no change to what the player carries; a spec game-core cannot build is an explicit refusal and the ordinary enemy stays. |
+| the save | the run bytes are untouched; the overlay is outside them (below) | `PR3DSRUN` is unchanged. |
+
+**Which encounters can be offered.** Only an ordinary single wild encounter (`GC_ENC_ORDINARY_WILD`, no fused / Tera flag, no double roll). Fixed or
+scripted stand-ins, trainers, mystery encounters, bosses, the final wave and doubles are `kind`/`flags` the controller reports to the scheduler
+(so a window falling on one is an accounted skip: four windows, 27 / 77 / 127 / 177, then EXHAUSTED) and never offers. Wild fused and
+terastallized enemies are never produced by this port (0 of 1,720 real waves, up to wave 220, check 2b of `custom_run_test`), so those two
+flags are defensive. A double roll *is* produced (130 of 1,720) and played as a single battle; it is flagged `GC_ENF_DOUBLES`, so it is never
+offered, and a defeat by one is refused by the store (`CC_REFUSE_DOUBLES`).
+
+**The flow of one rematch.**
+
+```
+cr_begin (Custom Run): uid durable first -> release what an earlier run held -> frozen schedule (one draw of its own stream, never the game's RNG)
+wave 27 / 77 / 127 / 177: encounter hook -> scheduler (C05) -> OFFER (accept / decline, before any combat)
+   decline  -> the ordinary encounter, schedule DECLINED, the record is given back (nothing was written to the roster by the offer itself)
+   accept   -> record SCHEDULED -> CHALLENGED (one staged cs_txn); game-core builds the enemy; built(ok) or refusal (counted, not a custom combat)
+   fight    -> the first non-COMMAND / GAME_OVER / CLEAR screen after the rematch enemy's faint = WON (DEFEATED, then ONE ptx claim = ONE regular voucher)
+               anything else (the player's side wiped, a catch, a flight) = LOST: the record goes back to STORED, no second try this run
+```
+
+- **Defeat attribution.** A defeat becomes a candidate Nemesis only when the last faint of the player's party was `direct`, its attacker was an enemy of
+  that battle with a known id, the wave matched, the species/form did not change, and the encounter kind was not unsupported. Otherwise nothing is
+  handed to the store (`candidates_none`) and the report says the finisher is unknown. Boss / trainer / mystery / fixed finishers are handed to the
+  store, which refuses them with the contract's reasons (`CC_REFUSE_*`); over 200 real runs of `RUNTEST_CUSTOM=strong` the store refused 67 boss, 45 double, 18 trainer-owned and 6 fixed or scripted finishers.
+  Nemeses are created **only** in custom runs.
+- **The overlay and the slot.** Sticky flag (the slot's own file), run uid, the frozen schedule, whether the enemy on the field is a rematch
+  enemy and its id, the encounter's wave / kind / flags, the reward ids, and the observation's retained turns are in ONE `save_write` with the
+  core run bytes (magic `PRCS`, checksum, previous kept). The roster stays in `custom.sav`. So a crash between the two files is possible and
+  `cr_load` reconciles them by the rules in `custom_run.c`: a schedule that ended gives its record back; an open schedule must hold its
+  record (CHALLENGED by it goes back to SCHEDULED so the offer returns, STORED is reserved again, DEFEATED or REWARD_CLAIMED by it means the
+  win happened after the save: nothing more is offered); an accepted rematch is live again only when CHALLENGED by this run and its enemy and wave match, otherwise it is lost; a record that is gone, or used by another run,
+  is `CC_E_CONSISTENCY`: **the load is refused with a reason and no file is written**. A damaged overlay or core is refused the same way.
+- **The reward.** `settle_record` saves the profile first (`sysd_save`) and then runs `ptx_begin_claim` / `ptx_execute`: one transaction per record, so
+  one win pays at most one regular voucher, and a repeat, a reload, an older save or a boot pays nothing again (`cs_reward_state`, the ledger,
+  and `ptx`'s own refusal of a record that is not owed). A claim that could not be made is retried at the next encounter hook and at boot
+  (`cr_settle_owed`). **Found by `custom_run_test`:** claiming with an unsaved in-memory profile (a purchase made earlier in the session) left
+  `ptx` unusable after a crash, because recovery decides from the card's `system.sav` digest; hence the save first.
+- **Sticky decisions.** The IVs and held items of the rematch enemy are the ordinary generated ones (the record's are not applied); the
+  rematch enemy keeps the wave's ordinary level; a lost rematch is not retried in the same run; an older save that returns an accepted offer
+  asks again (the frozen schedule prevents rerolling it); declining is not durable across loading an older save.
+- **Observer carry.** `co_begin_run_carry` restores the retained turns (last five) so a resumed custom run's post-mortem keeps them. Found by the
+  mutation script: a carry with turns had been refused by the reducer's own consistency check (it demands an accepted batch behind any
+  turn); `co_begin_run_carry` now sets that batch id.
+
 ## 3. Choices to confirm
 
 These are version-1 decisions this PR had to make. The handoff either left them open or said "documented policy". Each
@@ -976,7 +1036,7 @@ Added by C09 (section 2.15):
 | C07 capsule preview (decided in section 2.13) | an immutable result list (`cap_fixture`), the framework's `ui` screens | nothing left open for the presentation itself. C09 must build the fixture from results C08 has already committed, never from the screen; the screen may be shown after or before the grant but must not decide or repeat it; touch needs a framework path |
 | C08 profile (decided in section 2.14) | `cc_ledger` `REWARD_CLAIM`, `cc_reward_claim`, the shared `sysd` profile | nothing left open for the owner itself. C09 must: supply the scene seed from the real clock (`ptx_set_scene_seed`) and the request's clock and entropy once per tap, run a pull only through `ptx_begin_pull` / `ptx_execute`, keep the transaction id across retries and read `ptx_pending()` when the screen opens, show what `ptx_result_of` returns (never its own draw), and not call `gc_system_gacha_pull` or write a voucher count. C10 claims a won record with `ptx_begin_claim` |
 | C09 machine (decided in section 2.15) | `ptx_begin_pull` / `ptx_execute` / `ptx_unrevealed` / `ptx_mark_revealed`, the C07 screen, `gc_system_gacha_pull` (read-only) | nothing left open for the machine itself. C10 must remember that a Nemesis reward voucher is spent through this same machine, that the machine is BUSY while a `ptx` transaction is pending (including a claim), and that the title entry is the only way in |
-| C10 live | all of the above | every item of section 1.8 that is still missing |
+| C10 live (decided in section 2.16) | all of the above | nothing left open for the rematch itself; the items of section 1.8 are closed as section 2.16 says (finisher: battle-core `pr_faint_note`; encounter hook and enemy construction: game-core `gc/custom.h`; the overlay: the custom slot file) |
 
 ## 5. Validation record
 
@@ -1381,6 +1441,40 @@ are shown by tier and id only: no species, no shiny flag, no hatching, no egg mo
 upstream strings. The clock is the console's `time(NULL)`; no synchronization is claimed. Status for this task: **COMPLETE** against the C09
 card's scope; the title entry is the only way in (no in-run menu exists yet), and the custom mode is not live before C10.
 
+### 5.9 C10 (the live optional Nemesis rematch)
+
+Run on the final tree of the C10 PR (lanes C and E: one battle-core observer, game-core hooks and the offer screen kind, `game/`). The task replaces
+the earlier BLOCKED proposal (PR #260's first revision), after lorenzo's instruction of 2026-10-13 07:06 to make the necessary battle-core changes.
+
+| Command | Result |
+|---|---|
+| `make -j2 -C game-core test` | all passed; the runs' digest 9a82f439 with and without saves; includes `custom_hooks_test` (3,747 checks: the hooks off change nothing, the observer on changes nothing, the answers, the refusals, the faint notes) |
+| `game-core/build/gcplay --auto 1000 --jobs 8` and with `--save-test` (the custom-off control, run beside `origin/main`'s own build) | the **whole output of both commands is identical** to `main`'s, diff empty: 1000 runs ended, 0 stuck, 0 crashed, 0 timed out, 49,258 turns, digest 798a34b3, 14,491 save/load round trips, unsupported-feature accounting included |
+| `make -j3 -C battle-core test` | exit 0, no failure line (the only battle-core change is the optional observer, NULL by default) |
+| `make -C custom-core unit-test` | ok (custom-core is unchanged: `git diff origin/main -- custom-core` is empty; the custom-content workflow does not run) |
+| `game/tests/build/custom_run_test` (ASan + UBSan; the real hooks and controller over the real `save.c`, `custom_store.c`, `profile_tx.c`, a fault-injecting I/O layer) | 8,159 checks, 0 failed: 23 real defeats made a Nemesis (1 refused by the store, 0 without a reliable finisher), the 23-case finisher gate and a Classic clear, 1,720 real waves classified (1,230 ordinary wild, 130 double rolls, 0 fused, 0 Tera, 66 trainer, 170 boss, 2 final, 158 stand-ins, 94 mystery), the windows by hand (four windows, skips, refusal, no roster), 3 real rematch scenarios (Nemesis L2 -> rematch enemy of the same species at the wave's own level, control enemy different, wave end 29, vouchers 0 -> 1), saves (an older save after a win, after a decline, after an accept; another run used the record up: refused with a reason and no file changed; the roster behind the save; the roster ahead of the save; a record held by a finished schedule; the retained turns; a damaged slot; custom bytes under an ordinary name and the reverse; an unusable custom file), 5 exact initialization fixtures all built, and a crash at each of the 7 writes of the reward (always one voucher) |
+| `python3 game/tests/custom_run_mutations.py` | **74 run, 72 killed, 2 expected survivors, 0 survived, 0 invalid.** Includes the card's two required mutants: removing the real encounter hook (killed: "a new custom run installs no hooks", "a resumed run has no rematch hooks") and a second voucher beside the claimed one (killed). The two documented survivors: a fusion reported as ordinary (the port never produces a fused wild enemy; the gate is tested with synthetic reports) and the redundant claim guard (ptx refuses a record that is not owed itself, killed in `profile_tx_mutations.py`). The first full run left 14 survivors; each led to a test or a fix below |
+| `game/tests/run_host_tests.sh` (the CI script) | all passed (6 min 22 s). `runtest 10000` digest **1ebbbb63**, 2,079,079 steps, and `RUNTEST_SYS=1 RUNTEST_SAVE=1 runtest 100 0` digest **ce13ebe2**, 14,260 steps: both **equal to `origin/main`'s** on the same machine (ordinary runs unchanged). `RUNTEST_CUSTOM=strong runtest 200 0`: 200 runs ended and committed, 52 Nemeses made, 136 finishers refused (boss 67, double 45, trainer 18, fixed 6), 12 defeats with no reliable finisher, 7,568 waves, 174 windows, 78 offers (50 accepted, 28 declined), 50 enemies built, 0 refused, 48 won, 2 lost, 48 vouchers claimed (wallet 100), roster 16, 0 degraded. `RUNTEST_CUSTOM=strong RUNTEST_SAVE=resume runtest 100 0`: 100 runs, 1,038 resumes from the custom slot, 4,003 saves, 40 offers, 29 won, 29 vouchers. `flowtest` 150 checks, `observer_test` 205, `radar_test` 2,618,873, `custom_run_test` 8,159, `profile_tx_test` 2,330, `store_test` 284, `postmortem_test` 250 |
+| `docker run --rm -v "$PWD":/src -w /src/game devkitpro/devkitarm make` | builds `pokerogue.3dsx` (2,525,156 bytes, +101 KB over the C09 build); the warnings are the ones already on main (`run_screen.c`, `icon.c`, `summary.c`), none from C10's files |
+| Azahar (libretro core, the real packs, the Docker-built 3dsx; `system.sav` from `mksystem`, `custom.sav` from `mkcustom few`) | Title has 6 entries (no Continue on a fresh card): New Game, Load Game, Nemesis Radar, Capsule Machine, **Custom Run**, **Custom Load**. Custom Run opens a custom slot list (5 x Empty), slot 1 opens the real starter select (Bulbasaur page, Random, 0/10, Add to Party / Cancel). With a damaged `custom.sav` the Custom Run entry shows the reason, two lines, and starts nothing. Screens in `/mnt/project-files/game-screens/c10/` (not in Git) |
+
+**Found by this task's own tests, and fixed in this PR.** (1) Claiming a voucher with an unsaved in-memory profile (any purchase earlier in the session)
+left `ptx` unusable after a crash at two write points: `settle_record` now saves the profile before the claim and retries a claim that could not
+be made. (2) A resumed custom run lost its retained turns: the reducer refused every carry that had turns (it demands an accepted batch behind a
+turn); `co_begin_run_carry` now sets it (`observer_test` has the case; `custom_run_mutations.py` #71 killed it). (3) The Radar said "Live rematches
+are not available yet" and "this version does not add enemies during play"; both are now false and the text says where rematches are offered. (4) The
+unusable-file message was three lines in a two-line box on the emulator: the player now gets its first sentence.
+
+**Not established.** No Old 3DS device run; no wave-27 offer on the emulator (reaching it needs 26 waves of input; the offer, the enemy construction, the
+win and the voucher are exercised through the real `run_screen.c` by `RUNTEST_CUSTOM`, not on a screen). The upstream differential for battle-core was not
+run (it needs the pinned upstream checkout, network and Node 22): the one battle-core change is a read-only observer, NULL by default, and the digests above
+show the ordinary game unchanged; CI runs what it runs. No fused or Tera wild enemy is exercised by a real wave (the port generates none), so those
+refusals are tested with synthetic reports only. The IVs and held items of the record are not applied to the rematch enemy (they stay the ordinary generated ones);
+a lost rematch has no second try in the same run; catching or fleeing the rematch enemy is a loss. A load that finds the overlay and the roster in
+disagreement is refused (not silently resumed). Declining is not durable across loading an older save (the offer returns; the frozen schedule prevents a reroll).
+Nemeses are made only in custom runs. No final-boss or Classic-clear claim. The power-cut model is "write n and everything after never happens", as in 5.7.
+The custom runs' memory and time were not measured on a device. Status for this task: **COMPLETE** against the C10 card's scope.
+
 ## 6. Not established by this PR
 
 - No upstream behavior was consulted or compared. There is no differential, no seed, no Node 22 run, and none is needed
@@ -1388,5 +1482,5 @@ card's scope; the title entry is the only way in (no in-run menu exists yet), an
 - No emulator or console check by C01/C02 (no screen or app change then). C03's emulator check, and what it did not cover, is in section 5.2.
 - No Old 3DS memory or time measurement. `sizeof` and code-size figures come from compilers (x86-64 host, Ubuntu's
   `arm-none-eabi-gcc`, and devkitARM in CI, with the 3DS CPU flags), not from a device or emulator.
-- No profile or wallet code, no live use of the scheduler (C05 is a pure policy: nothing in the app calls it, it has no wire codec and nothing spawns a rematch enemy). (C03 added the live observer hook and the post-mortem screen, section 2.9; C04 added the codec, the transaction and the one custom file, section 2.10.) The app never inserts a Nemesis: the finishing enemy is not identifiable. C06 added the read-only Radar (section 2.12) C07 a debug-only capsule presentation over fixed results (section 2.13) and C08 the profile transaction owner (section 2.14); C09 added the Capsule Machine (section 2.15), the first caller of a purchase, from the title. The rest is C10.
+- No profile or wallet code, no live use of the scheduler (C05 is a pure policy: nothing in the app calls it, it has no wire codec and nothing spawns a rematch enemy). (C03 added the live observer hook and the post-mortem screen, section 2.9; C04 added the codec, the transaction and the one custom file, section 2.10.) Until C10 the app never inserted a Nemesis (the finishing enemy was not identifiable). C06 added the read-only Radar (section 2.12) C07 a debug-only capsule presentation over fixed results (section 2.13) and C08 the profile transaction owner (section 2.14); C09 added the Capsule Machine (section 2.15), the first caller of a purchase, from the title. C10 added the live rematch of a custom run (section 2.16, 5.9); what it does not establish is listed in 5.9.
 - Range checks only for species, form, move and ability: membership in the game's tables is the adapters' job.

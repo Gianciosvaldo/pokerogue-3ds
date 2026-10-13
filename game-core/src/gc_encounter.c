@@ -297,6 +297,26 @@ static void arena_flags(const gc_run *run, int prev_wave, bool *reset, bool *new
     *roll = !prev_wave || *new_biome || run->run.mode == GAME_MODES_DAILY;
 }
 
+/* What follows the enemy party's generation: passives and stats, the dex's seen flags, the enemy's items, the AI's view, the trainer names.
+ * Also run after a custom rematch replaced the wild enemy (gc_custom_build_enemy), so the rematch enemy goes through the same paths. */
+void gc_enemy_finish_party(gc_run *run)
+{
+    gc_internal *in = gc_int(run);
+    for (int i = 0; i < run->n_enemy; i++) {
+        in->enemy_start_species[i] = run->enemy[i].b.species;
+        in->enemy_start_form[i] = run->enemy[i].b.form;
+        pr_update_passive(&run->bt, &run->enemy[i].b);
+        pr_calculate_stats(&run->bt, &run->enemy[i].b);
+        if (run->sys) {
+            bool is_trainer = (run->battle_type == BATTLE_TYPE_TRAINER);
+            gc_system_set_pokemon_seen(run->sys, &run->enemy[i], true, is_trainer);
+        }
+    }
+    enemy_items(run);
+    gc_ai_enemy_party(run);
+    gc_trainer_names(run);
+}
+
 /* newBattle() + EncounterPhase.start() for the next wave */
 void gc_new_battle(gc_run *run)
 {
@@ -325,6 +345,7 @@ void gc_new_battle(gc_run *run)
     unsigned before = run->run.unported;
     int rc = pr_run_new_battle(&run->run, wave, &ctx, &nb);
     note_run_core(run, before);
+    bool stand_in = rc < 0;   /* a stand-in for a battle run-core could not make (gc/custom.h: GC_ENC_FIXED_OR_SCRIPTED) */
     if (rc < 0) {
         /* A fixed battle/config closure still outside the current game-core integration: use the
          * established wild stand-in. Mystery Encounters are handled separately below. */
@@ -376,6 +397,15 @@ void gc_new_battle(gc_run *run)
         arena_flags(run, prev_wave, &reset, &new_biome, &roll);
         gc_arena_new_battle(run, reset, roll);
 
+        if (in->custom) {   /* custom content: the wave is reported (a mystery encounter is never offered a rematch) */
+            gc_custom_encounter enc;
+            memset(&enc, 0, sizeof enc);
+            enc.wave = wave;
+            enc.biome = run->biome;
+            enc.kind = pr_run_is_wave_final(run->run.mode, wave) ? GC_ENC_FINAL : GC_ENC_MYSTERY;
+            gc_custom_report(run, &enc);
+        }
+
         /* Upstream saves at the encounter start before showing the mystery node. */
         gc_ev_new(run, GC_EV_SAVE_POINT);
         in->at_save_point = true;
@@ -393,6 +423,7 @@ void gc_new_battle(gc_run *run)
     if (!ok) {
         /* run-core couldn't make it (a trainer's config closure, an unported species pool...): a wild
          * battle of the same level stands in, rolled again on the wave's seed */
+        stand_in = true;
         gc_stub(run, GC_STUB_UNPORTED_ENEMY);
         run->run.unported = before;
         run->battle_type = BATTLE_TYPE_WILD;
@@ -412,17 +443,7 @@ void gc_new_battle(gc_run *run)
             run->run.unported = before;
         }
     }
-    for (int i = 0; i < run->n_enemy; i++) {
-        pr_update_passive(&run->bt, &run->enemy[i].b);
-        pr_calculate_stats(&run->bt, &run->enemy[i].b);
-        if (run->sys) {
-            bool is_trainer = (run->battle_type == BATTLE_TYPE_TRAINER);
-            gc_system_set_pokemon_seen(run->sys, &run->enemy[i], true, is_trainer);
-        }
-    }
-    enemy_items(run);
-    gc_ai_enemy_party(run);
-    gc_trainer_names(run);
+    gc_enemy_finish_party(run);
     run->run.unported = before;
     /* newBattle's resetArenaEffects, then arena.setBiomeWeather / setBiomeTerrain: before the save point and
      * resetSeed, so what they roll is only the arena, not the rolls after them */
@@ -436,6 +457,41 @@ void gc_new_battle(gc_run *run)
         ev = gc_ev_new(run, GC_EV_TRAINER);
         if (ev) { ev->a = run->trainer_type; ev->b = run->trainer_variant; }
     }
+    /* custom content (gc/custom.h): the wave is reported once its enemy is final, before the save point. The player may be asked here; the
+     * rest of the encounter (from the save point on) then runs when the answer comes (gc_custom_answer), or at once when nobody is asked. */
+    if (in->custom) {
+        gc_custom_encounter enc;
+        memset(&enc, 0, sizeof enc);
+        enc.wave = wave;
+        enc.biome = run->biome;
+        enc.level = run->n_enemy ? run->enemy[0].b.level : 0;
+        enc.species = run->n_enemy ? run->enemy[0].b.species : 0;
+        bool boss = false;
+        for (int i = 0; i < run->n_enemy; i++) boss |= run->enemy[i].b.is_boss;
+        if (pr_run_is_wave_final(run->run.mode, wave)) enc.kind = GC_ENC_FINAL;
+        else if (boss) enc.kind = GC_ENC_BOSS;
+        else if (run->battle_type == BATTLE_TYPE_TRAINER) enc.kind = GC_ENC_TRAINER;
+        else if (stand_in) enc.kind = GC_ENC_FIXED_OR_SCRIPTED;
+        else enc.kind = GC_ENC_ORDINARY_WILD;
+        if (nb.double_battle) enc.flags |= GC_ENF_DOUBLES;
+        if (run->n_enemy && run->enemy[0].b.fusion_species) enc.flags |= GC_ENF_FUSED;
+        if (run->n_enemy && run->enemy[0].b.terastallized) enc.flags |= GC_ENF_TERA;
+        if (gc_custom_report(run, &enc)) {
+            in->custom_offering = true;
+            in->custom_offer_reset = reset;
+            in->custom_offer_new_biome = new_biome;
+            gc_rq_unshift(run, gc_rp(RP_CUSTOM_OFFER, 0, 0, 0));
+            return;
+        }
+    }
+    gc_new_battle_start(run, reset, new_biome);
+}
+
+/* EncounterPhase from the save point on: what newBattle's start does once the enemy and the arena are set */
+void gc_new_battle_start(gc_run *run, bool reset, bool new_biome)
+{
+    gc_internal *in = gc_int(run);
+    const int wave = run->wave;
     /* the save point: gameData.saveAll at the start of the encounter, before anything is shown */
     gc_ev_new(run, GC_EV_SAVE_POINT);
     in->at_save_point = true;
