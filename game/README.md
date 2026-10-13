@@ -137,6 +137,7 @@ that file to exist; any bytes will do for the emulator.
 | [`postmortem_screen.h`](include/postmortem_screen.h) | The post-mortem screen over that report, opened from the result screen. |
 | [`radar_screen.h`](include/radar_screen.h) | The Nemesis Radar (C06): `radar_open` copies a roster and an optional schedule and shows the list and Scout pages. Read-only. `radar_assets.h` is its bridge to the menus layer (species types, icons, sprites, move and nature names). |
 | [`capsule_model.h`](include/capsule_model.h), [`capsule_screen.h`](include/capsule_screen.h) | The capsule machine preview (C07): `capsule_model` is the pure motion and timeline (fixed 8 ms steps, dt in ms, clamped; settled by 1.5 s at the latest); `capsule_screen_open` plays it over an immutable `cap_fixture` and calls `on_settled` once and `on_exit` once from the player's input. |
+| [`profile_tx.h`](include/profile_tx.h) | The profile transaction owner (C08): a voucher-to-egg pull (`ptx_begin_pull` / `ptx_execute`) or a Nemesis reward claim (`ptx_begin_claim`) commits through ONE write-ahead envelope (`save/ptx.sav`: candidate profile bytes, gacha scene RNG, immutable result) and is rolled forward to `system.sav` and `custom.sav`; a retry or restart returns the same result and never pulls twice. `ptx_boot()` runs in `app_start`. |
 | [`custom_store.h`](include/custom_store.h) | The custom content file on the SD card (`save/custom.sav`): `cs_begin_run` hands the observer a durable run uid (written first), `cs_commit` stores a finished run's report as one idempotent transaction, and a file it can't use is left exactly as it is. |
 | [`gen/gm_enum_names.h`](gen/gm_enum_names.h) | Names of battle-core's enums (`gm_enum_camel(GM_E_SPECIES_ID, id, ...)` gives upstream's i18n key). Regenerate with `python3 game/tools/gen_enum_names.py` when battle-core's enums change. |
 
@@ -201,6 +202,14 @@ ignored).
 ```
 make -C game/tests capsule_test && game/tests/build/capsule_test [fuzz sessions]
 python3 game/tests/capsule_mutations.py   # one-line mutations of the model, the screen and the debug entry; every one must make a test fail
+```
+
+**The profile transactions** (C08): `profile_tx_test` runs `profile_tx.c` over game-core's real gacha and the real `save.c` with a fault-injecting
+layer under every file: a power cut or a failed write at every write of a pull, a claim and a refusal, and a seeded fuzz; after each, the card
+holds exactly one coherent state and a retry ends in the clean run's result.
+```
+make -C game/tests profile_tx_test && game/tests/build/profile_tx_test [fuzz scenarios]
+python3 game/tests/profile_tx_mutations.py   # one-line mutations of profile_tx.c and its hooks; every one must make a test fail
 ```
 
 The single-turn converter tests use `tests/battle_setup.c`, a test-only fixture that builds a battle-core battle by hand

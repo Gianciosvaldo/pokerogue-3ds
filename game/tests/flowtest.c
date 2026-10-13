@@ -18,6 +18,8 @@
 
 #include "app_flow.h"
 #include "capsule_screen.h"
+#include "profile_tx.h"
+#include "system_data.h"
 #include "combat_observer.h"
 #include "custom_store.h"
 #include "pr_data.h"
@@ -298,6 +300,11 @@ static const cs_io FLOW_IO = {save_read, flow_write};
 
 static bool ledger_has(cc_run_uid uid) {
   return cs_meta() && cc_ledger_find(&cs_meta()->ledger, CC_TXN_TERMINAL, uid, 0, NULL);
+}
+
+static save_result fail_system_write(const char* name, const void* data, size_t len) {
+  if (!strcmp(name, "system")) return SAVE_IO_ERROR;
+  return save_write(name, data, len);
 }
 
 int main(void) {
@@ -638,6 +645,38 @@ int main(void) {
     app_debug_capsule(-3);
     app_start(&(rs_config){0});
     CHECK(n_caps == caps + 1 && n_title == titles + 4, "a negative count is ignored");
+  }
+
+  /* the app boots the profile transactions: a pull a crash left committed but not on the card is finished at app_start (profile_tx.h) */
+  {
+    remove("sdmc:/3ds/pokerogue/save/system.sav");
+    remove("sdmc:/3ds/pokerogue/save/system.sav.bak");
+    sysd_reset();
+    ptx_reset();
+    gc_system* sys = sysd_get();
+    gc_system_init_defaults(sys);
+    sys->voucher_counts[GC_VOUCHER_REGULAR] = 10;
+    CHECK(sysd_save(), "a profile with vouchers");
+    const sysd_io fio = {save_read, fail_system_write};
+    sysd_set_io(&fio);
+    ptx_set_scene_seed("flow");
+    ptx_pull_request rq;
+    memset(&rq, 0, sizeof rq);
+    rq.option = 0;
+    rq.timestamp_ms = 1791504000000ull;
+    rq.seed_len = 4;
+    memcpy(rq.seed, "flow", 4);
+    uint32_t txn = 0;
+    ptx_result res;
+    CHECK(ptx_begin_pull(&rq, &txn) == PTX_OK && ptx_execute(txn, &res) == PTX_X_DONE_APPLY_PENDING, "the pull commits, the profile write fails");
+    CHECK(ptx_apply_pending() && res.n == 1, "committed, waiting to be applied");
+    sysd_set_io(NULL);
+    sysd_reset();
+    ptx_reset();   /* the restart */
+    app_start(&plain);
+    CHECK(!ptx_apply_pending() && ptx_pending() == 0, "app_start finished it");
+    CHECK(sysd_get()->n_eggs == res.n && sysd_get()->voucher_counts[GC_VOUCHER_REGULAR] < 10, "the pulled egg is in the profile and the voucher is spent");
+    CHECK(ptx_result_of(txn, NULL), "and the result is kept");
   }
 
   printf("%d checks, %d failed\n", checks, failed);

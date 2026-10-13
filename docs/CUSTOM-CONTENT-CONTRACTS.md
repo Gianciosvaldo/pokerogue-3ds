@@ -1,4 +1,4 @@
-# Custom content contracts, version 1 (tasks C01, C02, C03, C04, C05, C06, C07)
+# Custom content contracts, version 1 (tasks C01, C02, C03, C04, C05, C06, C07, C08)
 
 Written for task C01 of [CUSTOM-CONTENT-ADVANCED-AGENT.md](CUSTOM-CONTENT-ADVANCED-AGENT.md). It does three things:
 audits the interfaces the custom content will touch, fixes the version-1 data contracts, and records what the new
@@ -8,7 +8,9 @@ access, no wallet access and no spawn code. Since C03 the app feeds the reducer 
 5.3); no Nemesis is ever inserted by the app yet, and no custom mode exists. Since C05 `custom-core` also holds the rematch
 policy as pure data (section 2.11, 5.4): nothing in the app calls it yet. Since C06 the title screen has a read-only
 Nemesis Radar over the stored roster (section 2.12, 5.5); it starts nothing. Since C07 the app has a capsule-machine presentation
-prototype that only a debug file opens (section 2.13, 5.6); it shows fixed results and is connected to nothing.
+prototype that only a debug file opens (section 2.13, 5.6); it shows fixed results and is connected to nothing. Since C08 the app
+owns the profile transactions (voucher-to-egg pull, the once-per-record Nemesis reward) behind one write-ahead envelope (section 2.14, 5.7);
+nothing in the UI calls it yet.
 
 | Item | Value |
 |---|---|
@@ -701,6 +703,84 @@ gacha (that is C09, over C08's profile).
   `images/egg/gacha_knob` from the locally built packs, turned by the model's knob angle; a plain rectangle when the packs lack it), the
   instruction lines, then the result list (five rows, tier chip and label). No art is added to Git.
 
+### 2.14 The profile transaction owner (C08)
+
+**Audit of "who owns the profile".** C01's section 1.5 said no file in `game/` mentions `gc_system`; that was true then and is not now. Main
+already owns **one shared `gc_system`**: `system_data.c` loads `save/system.sav` once (`sysd_get`, static 724 KB), attaches it to each run
+and to the starter select, and writes it at run save points (`sysd_save`, skipped while unchanged, never over an unreadable file). What
+did **not** exist: any caller of `gc_system_gacha_pull`, any persistence of the gacha scene RNG, and any way to change the profile together
+with the custom file. C08 adds exactly that, as an adapter over the existing calls; `gc_system_gacha_pull`, `gc_system_save/load`,
+`save_read/save_write` and the system.sav and custom.sav formats are unchanged and read-only here (`git diff main -- game-core` is empty).
+
+`game/source/profile_tx.c` (+ small hooks in `system_data.c` and `custom_store.c`). **One write-ahead envelope**, the file `ptx`, is the
+only authority for a transaction in flight. It holds: the next transaction id, the gacha scene RNG (its own stream, never a run's battle or
+generation RNG), the last 8 immutable results, and at most one pending transaction. The save library is atomic per file only, so
+cross-file consistency is a redo log: the commit is ONE `ptx` write that carries the candidate profile bytes, the resulting scene RNG, the
+transaction id and the result together; the profile file and the custom file are then rolled forward from it, each step idempotent.
+
+```
+            begin_pull / begin_claim                    execute
+   IDLE ---------------------------------> PREPARED ---------------> pull ONCE on the live profile (claim: add the voucher)
+    ^        1 write: request + txn id        |                          |
+    |        (clock, entropy seed, record,    | refused (cost, capacity, |  serialize the candidate (gc_system_save)
+    |         digest of the profile now;      | voucher cap, not owed,   v
+    |         scene RNG seeded at the first)  | profile changed)    ONE write: candidate bytes + scene RNG + result + txn id
+    |                                         v                     fails -> live profile put back from its pre-image
+    |  <------- 1 write: result kept (REFUSED), nothing else        |        (bytes a restart would read); stays PREPARED, retry
+    |                                                               v
+    |                                                          COMMITTED   <== the commit point; the result is durable
+    |                                                               |
+    |   roll-forward, each step idempotent:                         |  1. claim only: custom.sav (cc_reward_claim: ledger + CLAIMED)
+    |   boot (ptx_recover), the gate on sysd_save, or a retry       |  2. system.sav = the candidate bytes
+    +<--------------------------------------------------------------+  3. ptx: pending cleared (the result stays in the ring)
+```
+
+Writes in a clean run: a pull 4 (begin, commit, system.sav, clear), a claim 5 (plus custom.sav), a refusal 2.
+
+**What each crash leaves, and what finishes it** (all tried by the test, section 5.7):
+
+| Stopped | Card | Next boot / next call |
+|---|---|---|
+| before `begin` | nothing | nothing happened |
+| after `begin` | PREPARED: request saved | `ptx_pending()` names it; `ptx_execute(txn)` runs the pull from the SAVED clock and seed (the caller supplies nothing again) |
+| after the commit write | COMMITTED, profile and custom still old | boot sees the card holds the profile the transaction started from, installs the candidate in memory and on the card (claim: the claimed flag first), clears. The same result, no second pull |
+| after `custom.sav` (claim) | claimed, voucher not yet | boot: the claim is a replay, the profile is installed, cleared |
+| after `system.sav` | profile applied | boot sees the candidate on the card, clears |
+| after the clear | done | the result is kept: asking again returns it |
+
+Rules that make this safe:
+
+- **Nothing before the commit point.** The pull runs once, on the live profile, then the profile is serialized; if the commit write fails the
+  live profile is loaded back from the bytes serialized before the pull (the same bytes a restart reads), the scene RNG is not advanced, no
+  result is stored and nothing is handed to the caller (`PTX_X_IO`; a retry is safe). A profile that cannot be serialized refuses at
+  `begin` and at `execute` without running anything. If even the put-back fails the module stops for the session (`PTX_X_FATAL`).
+- **Exactly one pull.** The result is looked up by transaction id before anything runs, so a retry, a repeated tap or a restart gets the
+  committed result (`PTX_X_DONE`) and never calls `gc_system_gacha_pull` again. Clock and entropy seed are fields of the request, saved at
+  `begin`; the pull reads them from the saved record, never from a live clock.
+- **A committed result is returned even if the roll-forward failed** (`PTX_X_DONE_APPLY_PENDING`): it is durable, and the files catch up.
+  Meanwhile `sysd_save` asks the gate first and **returns false instead of writing the profile**, so nothing can overwrite the candidate
+  with a profile that does not contain it; the next save point (or boot) finishes the transaction and then saves.
+- **A request is only run on the profile it was made for.** `begin` records the canonical digest of the profile; `execute` refuses
+  (`ptx:profileChanged`, closing the request) if it differs. This covers the one hazard of the save library (section 1.6: a damaged main
+  file silently rolls the state back by one write): a `ptx` file restored to its PREPARED write after the pull had completed can never run
+  the pull a second time. Tested by putting the old file back.
+- **The boot does not guess.** If a transaction is COMMITTED and the card's profile is neither the one it started from nor the candidate, or
+  the profile is unreadable, the boot reports it in words, writes nothing and refuses new transactions. A `ptx` file that is damaged or
+  from a newer version is reported and left as it is.
+- **The reward is claimed once, with its voucher.** `ptx_begin_claim` needs the record owed (`cc_reward_entitlement_of`: DEFEATED), the
+  voucher is one regular voucher (`CC_REMATCH_REWARD_VOUCHERS`; no currency, no unlock), and the roll-forward writes the claimed flag
+  (`custom_store.c`: `cs_claim_reward`, one `cc_reward_claim` transaction) BEFORE the profile, so a voucher is on the card only once the claim
+  is. A record claimed meanwhile by another path is refused at `execute` (`cc:notOwed`); a voucher count at the 32-bit maximum is refused
+  (`profile:voucherCap`) and the record stays owed.
+- **No default wallet.** Both `begin` calls refuse (`PTX_E_UNUSABLE`) when the profile file is unreadable: the defaults a damaged install
+  falls back to are not the player's vouchers. Nothing in this module writes a voucher count except the claim.
+- **Memory.** The profile is never copied as a struct. A transaction allocates two buffers of 1 MiB (the largest profile gc_system_save can
+  write, a synthetic every-species-maxed one, is 714,695 bytes; a normal one is 3 to 90 KB) and frees them; the module's static state is
+  14,624 bytes (`ptx_static_bytes`). The `ptx` file holds the candidate profile bytes while a transaction is pending, so it is as large as the
+  profile for that time and a few KB otherwise.
+- **Boot.** `app_start` calls `ptx_boot()` (installs the gate, finishes a half-applied transaction). Cheap when there is no `ptx` file. The scene
+  RNG's seed is supplied once by the app before its first begin (`ptx_set_scene_seed`); C09 must supply it from the real clock.
+
 ## 3. Choices to confirm
 
 These are version-1 decisions this PR had to make. The handoff either left them open or said "documented policy". Each
@@ -777,6 +857,24 @@ Added by C07 (section 2.13):
     fires once regardless of skip" and "leaving and reentering" are different events: C09 will grant nothing on either; it grants in C08's
     transaction before the screen opens.
 
+Added by C08 (section 2.14):
+
+29. **A redo log carrying the candidate profile bytes, not one merged file.** Merging system.sav and custom.sav into one file would change
+    both formats and the run slots' system-data path; a log in a third file leaves them as they are and costs one extra write. The log holds
+    the whole candidate profile (3 to 90 KB, at most 715 KB) only while a transaction is pending.
+30. **One transaction in flight.** A second `begin` is `PTX_E_BUSY`; C09 asks `ptx_pending()` when it opens. Simpler to reason about than a queue.
+31. **Eight kept results.** Enough for a screen to ask again after a restart; older ones are forgotten (`ptx_result_of` false). The profile
+    itself, not the ring, is what a pull changes.
+32. **Claim order: custom file, then profile.** Alternative: profile first, which would leave a window with a voucher and an owed record on the
+    card; the redo log makes either recoverable, this order matches decision 18.
+33. **Divergence is reported, not repaired.** If the card's profile is neither the start nor the candidate, the boot stops and says so; guessing
+    could discard a run's progress or double a grant.
+34. **A request is bound to the profile it began on** (a digest, refused if the profile changed). Alternative: run it anyway; that is the
+    double-pull hazard section 1.6 describes.
+35. **The roll-forward writes the candidate bytes, not the live profile.** A run that changed memory in between is saved later through the
+    gate (it fails, and says so, until the transaction is finished). Alternative: write memory, which loses the proof that the card holds the
+    candidate.
+
 ## 4. What C02 to C10 inherit, and what they still must decide
 
 | Task | Imports | Still undecided / must verify |
@@ -787,7 +885,7 @@ Added by C07 (section 2.13):
 | C05 scheduler (decided in section 2.11) | `cc_schedule`, window waves, `CC_RNG_ALGO_V1`, lifecycle | nothing left open for the policy itself. C10 must: supply a seed independent of gameplay and gacha RNG, report each window's encounter kind and flags before the wave is generated, pass the representable mask, key the stored schedule by the uid it saved (not C04's per-observation uid), call `cc_roster_release_except` before `cc_rematch_start`, and persist the schedule (no codec yet). C08 must grant the voucher only after `cc_reward_claim`'s write |
 | C06 radar (decided in section 2.12) | `cc_nemesis` read-only, `cc_schedule` | nothing left open for the screen itself. C10 must pass the run's schedule to `radar_open` once it persists one, and create records for it to show |
 | C07 capsule preview (decided in section 2.13) | an immutable result list (`cap_fixture`), the framework's `ui` screens | nothing left open for the presentation itself. C09 must build the fixture from results C08 has already committed, never from the screen; the screen may be shown after or before the grant but must not decide or repeat it; touch needs a framework path |
-| C08 profile | `cc_ledger` `REWARD_CLAIM`, the one-envelope rule | the profile owner (section 1.5), the envelope |
+| C08 profile (decided in section 2.14) | `cc_ledger` `REWARD_CLAIM`, `cc_reward_claim`, the shared `sysd` profile | nothing left open for the owner itself. C09 must: supply the scene seed from the real clock (`ptx_set_scene_seed`) and the request's clock and entropy once per tap, run a pull only through `ptx_begin_pull` / `ptx_execute`, keep the transaction id across retries and read `ptx_pending()` when the screen opens, show what `ptx_result_of` returns (never its own draw), and not call `gc_system_gacha_pull` or write a voucher count. C10 claims a won record with `ptx_begin_claim` |
 | C10 live | all of the above | every item of section 1.8 that is still missing |
 
 ## 5. Validation record
@@ -1127,6 +1225,41 @@ drawing layer is a fake in host tests, so how the strips look is judged only fro
 reachable in normal play and is connected to no profile, voucher, egg or RNG: the voucher-to-egg pull is C09 over C08.
 Status for this task: **COMPLETE** against the C07 card's scope (a debug / test presentation over a fixture result contract).
 
+### 5.7 C08 (profile and reward transactions)
+
+Run on the final tree of the C08 PR (same container as 5.2 to 5.6). The task touches `game/` and this document only; `game-core/` and
+`custom-core/` are unchanged (`git diff origin/main -- game-core custom-core` is empty), so the game-core differential and the custom-content
+workflow do not run for it.
+
+| Command | Result |
+|---|---|
+| `make -C game/tests profile_tx_test && game/tests/build/profile_tx_test` (ASan + UBSan, game-core's real `gc_system_gacha_pull`, the real `save.c` on a temporary folder, one fault-injecting layer under system.sav, custom.sav and ptx.sav) | 2,289 checks, 0 failed: pull matrix (4 writes in a clean run: 5 power cuts and 4 failed writes), claim matrix (5 writes: 6 power cuts and 5 failed writes), refusal matrix, 150 fuzz scenarios (464 pulls and 87 claims committed through 160 power cuts and 178 failed writes) |
+| `game/tests/build/profile_tx_test 1000` | 12,819 checks, 0 failed (3,123 pulls and 568 claims committed, 1,187 power cuts, 1,216 failed writes) |
+| `python3 game/tests/profile_tx_mutations.py` | **36 mutations run, 36 killed, 0 survived, 0 invalid**; 2 more documented as equivalent and not run (a repeated busy check, a last-resort guard in `sysd_write_bytes`). Includes grant-before-commit (a failed commit write leaves the pull in the live profile), a commit write whose failure is ignored, a result revealed before the commit, a retry that would pull again, a scene RNG that is not saved or is re-seeded, a seed or clock that is not the saved one, the roll-forward steps removed one at a time, the gate removed, the boot's recovery cases (including finishing onto an unreadable profile), a request run on a changed profile, an unreadable wallet, a newer file version, a reward of two vouchers or a plus voucher, a wrapping voucher count, a claimed record still owed and a claim write failure ignored |
+| `make -C game/tests flowtest && game/tests/build/flowtest` | 114 checks, 0 failed (6 new: a pull committed while the profile write failed is finished by `app_start`, the egg is in the profile, the voucher spent, the result kept) |
+| `game/tests/run_host_tests.sh` (the CI script, now including `profile_tx_test`) | all passed |
+| `make -C game-core ... egg_gacha_host_test` (game-core's own host test, not changed) | 191 checks passed |
+| `docker run --rm -v "$PWD":/src -w /src/game devkitpro/devkitarm make` | builds `pokerogue.3dsx` (2,401,664 bytes, +12 KB over the C07 build), no warning from the new files |
+| Azahar (libretro core, the real packs, the Docker-built 3dsx) | The app boots with `ptx_boot()` in `app_start`: the title appears and the cursor moves as before; no `ptx` file is created by a boot with nothing pending. No purchase is reachable from the UI, so nothing else could be checked on the emulator. Screens are not in Git |
+
+**What the matrix holds.** After every power cut and every failed write, and after the boot: the card's profile is exactly the one before or
+exactly the one after (never half, never twice); the profile after is on the card exactly when the result is on record; a retry (or the
+boot) ends in the clean run's result, eggs, display order, profile and scene RNG; a failed commit write leaves the live profile and the
+scene RNG as they were and reveals nothing; for a claim the voucher and the claimed flag are always both or neither, and a second claim is
+refused. Also: the pull equals the real `gc_system_gacha_pull` run directly on the same profile (same eggs, same order, same profile bytes);
+duplicates and a restart return the same result without a second pull; a refusal (not enough vouchers, capacity, voucher cap, not owed, a
+profile that changed) changes nothing but the pending record; the damaged, newer-version and backup-restored `ptx` file; a `ptx` file put back
+to its PREPARED write (refused, no second pull); a committed transaction whose card profile was replaced by something else (reported, nothing
+overwritten); an unreadable profile (nothing written, the record kept); the gate on `sysd_save`; an unserializable profile; the result ring.
+
+**Not established.** Nothing in the app calls a purchase yet: no screen, no clock or entropy source, no hatching (C09). The power-cut model is
+"write n and everything after never happens"; save.c's own windows inside one write (tmp written, rename not done) are the ones listed in
+section 1.6 (the old state wins), they are not re-simulated. The upstream differential `egggachadiff.sh` was **not run** here: it needs the
+pinned upstream checkout and Node 22, which this container does not have; game-core is byte for byte unchanged, so its owning counts and seeds
+are as they were (CI runs it only when game-core changes). No Old 3DS device run: the cost of the extra writes (a pull is 4 writes of a profile
+of 3 to 90 KB, a ptx file of the same size while pending) is not measured. Status for this task: **COMPLETE** against the C08 card's scope
+(the owner, the envelope, the idempotent pull and reward transactions, their fault tests); no user-visible purchase exists until C09.
+
 ## 6. Not established by this PR
 
 - No upstream behavior was consulted or compared. There is no differential, no seed, no Node 22 run, and none is needed
@@ -1134,5 +1267,5 @@ Status for this task: **COMPLETE** against the C07 card's scope (a debug / test 
 - No emulator or console check by C01/C02 (no screen or app change then). C03's emulator check, and what it did not cover, is in section 5.2.
 - No Old 3DS memory or time measurement. `sizeof` and code-size figures come from compilers (x86-64 host, Ubuntu's
   `arm-none-eabi-gcc`, and devkitARM in CI, with the 3DS CPU flags), not from a device or emulator.
-- No profile or wallet code, no live use of the scheduler (C05 is a pure policy: nothing in the app calls it, it has no wire codec and nothing spawns a rematch enemy). (C03 added the live observer hook and the post-mortem screen, section 2.9; C04 added the codec, the transaction and the one custom file, section 2.10.) The app never inserts a Nemesis: the finishing enemy is not identifiable. C06 added the read-only Radar (section 2.12) and C07 a debug-only capsule presentation over fixed results (section 2.13). The rest is C08 to C10.
+- No profile or wallet code, no live use of the scheduler (C05 is a pure policy: nothing in the app calls it, it has no wire codec and nothing spawns a rematch enemy). (C03 added the live observer hook and the post-mortem screen, section 2.9; C04 added the codec, the transaction and the one custom file, section 2.10.) The app never inserts a Nemesis: the finishing enemy is not identifiable. C06 added the read-only Radar (section 2.12) C07 a debug-only capsule presentation over fixed results (section 2.13) and C08 the profile transaction owner (section 2.14), still called by nothing in the UI. The rest is C09 and C10.
 - Range checks only for species, form, move and ability: membership in the game's tables is the adapters' job.

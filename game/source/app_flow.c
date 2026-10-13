@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "capsule_screen.h"
+#include "profile_tx.h"
 #include "combat_observer.h"
 #include "custom_store.h"
 #include "gc/run.h"
@@ -301,6 +302,7 @@ void app_start(const rs_config* first_run) {
   A.first = *first_run;
   cs_set_nonce(A.first.entropy); /* only used by a new custom file; an existing one keeps its own */
   co_set_uid_source(cs_begin_run);
+  ptx_boot(); /* finishes a purchase or reward a crash left half applied, and stops the profile being saved over it (profile_tx.h) */
   if (g_capsule_preview > 0)
     show_capsule_preview(g_capsule_preview);
   else

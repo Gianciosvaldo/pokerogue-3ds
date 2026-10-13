@@ -122,7 +122,7 @@ runtest-save: build/runtest
 .PHONY: runtest-save
 
 # the app's screen flow (app_flow.c) with fake screens and a fake run driver, over the real save slots; make flowtest && build/flowtest
-FLOW_SRCS := flowtest.c ../source/app_flow.c ../source/custom_store.c $(OBS_SRCS) ../source/run_saves.c ../source/system_data.c ../source/starter_data.c ../menus/menus_data.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+FLOW_SRCS := flowtest.c ../source/app_flow.c ../source/profile_tx.c ../source/custom_store.c $(OBS_SRCS) ../source/run_saves.c ../source/system_data.c ../source/starter_data.c ../menus/menus_data.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/flowtest: $(FLOW_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) $(FLOW_SRCS) -lm -o $@
@@ -217,6 +217,26 @@ build/bgmtest: $(BGM_SRCS)
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(BGM_SRCS) -lm -o $@
 bgmtest: build/bgmtest
 .PHONY: bgmtest
+
+# the profile transaction owner (profile_tx.c over system_data.c and custom_store.c, real game-core gacha and the real save.c) under fault
+# injection; make profile_tx_test && build/profile_tx_test [fuzz scenarios]
+PTX_SRCS := profile_tx_test.c ../source/profile_tx.c ../source/system_data.c ../source/custom_store.c ../source/custom_core_build.c $(APP)/source/save.c $(CORE_SRCS)
+build/profile_tx_test: $(PTX_SRCS)
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(PTX_SRCS) -lm -o $@
+profile_tx_test: build/profile_tx_test
+.PHONY: profile_tx_test
+
+# the same test with game-core compiled once into an archive: only the files under test are rebuilt (profile_tx_mutations.py uses it)
+PTX_OWN := profile_tx_test.c ../source/profile_tx.c ../source/system_data.c ../source/custom_store.c ../source/custom_core_build.c $(APP)/source/save.c
+build/ptx_core.a: $(CORE_SRCS)
+	@mkdir -p build/ptxobj
+	@for f in $(CORE_SRCS); do o=build/ptxobj/$$(echo $$f | tr '/.' '__').o; $(CC) $(RUN_CPPFLAGS) $(CFLAGS) -c $$f -o $$o || exit 1; done
+	ar rcs $@ build/ptxobj/*.o
+build/profile_tx_test_fast: $(PTX_OWN) build/ptx_core.a
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(PTX_OWN) build/ptx_core.a -lm -o $@
+profile_tx_test_fast: build/profile_tx_test_fast
+.PHONY: profile_tx_test_fast
 
 # the custom content metadata on the SD card (custom_store.c + custom-core's codec, over the app's real save.c); make store_test && build/store_test
 STORE_SRCS := store_test.c ../source/custom_store.c ../source/custom_core_build.c $(APP)/source/save.c
