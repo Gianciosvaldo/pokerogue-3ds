@@ -79,17 +79,17 @@ static double to_dmg_value(double v)
 /* maxPpOverride || move.pp + ppUp * toDmgValue(move.pp / 5) */
 double ai_move_pp(const pr_pokemon *p, int slot)
 {
-    if (p->max_pp_override[slot] > 0) return p->max_pp_override[slot];
-    double pp = pr_moves[p->moves[slot]].pp;
-    return pp + p->pp_up[slot] * to_dmg_value(pp / 5);
+    if (PR_MAX_PP(p)[slot] > 0) return PR_MAX_PP(p)[slot];
+    double pp = pr_moves[PR_MOVES(p)[slot]].pp;
+    return pp + PR_PP_UP(p)[slot] * to_dmg_value(pp / 5);
 }
 
-double ai_pp_ratio(const pr_pokemon *p, int slot) { return 1 - p->pp_used[slot] / ai_move_pp(p, slot); }
+double ai_pp_ratio(const pr_pokemon *p, int slot) { return 1 - PR_PP_USED(p)[slot] / ai_move_pp(p, slot); }
 
 static bool out_of_pp(const pr_pokemon *p, int slot)
 {
     double max = ai_move_pp(p, slot);
-    return max != -1 && p->pp_used[slot] >= max;
+    return max != -1 && PR_PP_USED(p)[slot] >= max;
 }
 
 void ai_note_illusion(pr_battle *bt, const pr_pokemon *p)
@@ -212,8 +212,8 @@ static bool conditions_all(pr_battle *bt, int move, const pr_pokemon *user, cons
 
 static bool in_moveset(const pr_pokemon *p, int move)
 {
-    for (int i = 0; i < p->n_moves; i++)
-        if (p->moves[i] == move) return true;
+    for (int i = 0; i < PR_N_MOVES(p); i++)
+        if (PR_MOVES(p)[i] == move) return true;
     return false;
 }
 
@@ -284,7 +284,7 @@ bool pr_ai_move_selectable(pr_battle *bt, const pr_pokemon *p, int move)
 
 bool pr_ai_move_usable(pr_battle *bt, const pr_pokemon *p, int slot, bool ignore_pp, bool for_selection)
 {
-    int move = p->moves[slot];
+    int move = PR_MOVES(p)[slot];
     if (move == MOVE_ID_NONE || pr_moves[move].unimplemented) return false;
     if (!ignore_pp && out_of_pp(p, slot)) return false;
     if (for_selection && !pr_ai_move_selectable(bt, p, move)) return false;
@@ -379,11 +379,11 @@ double pr_ai_matchup_score(pr_battle *bt, pr_ai *ai, pr_pokemon *p, pr_pokemon *
 
     double atk = 0;
     int n_atk = 0;
-    for (int s = 0; s < p->n_moves; s++) {
-        const pr_move *m = &pr_moves[p->moves[s]];
+    for (int s = 0; s < PR_N_MOVES(p); s++) {
+        const pr_move *m = &pr_moves[PR_MOVES(p)[s]];
         if (m->category == MOVE_CATEGORY_STATUS || ai_pp_ratio(p, s) <= 0) continue;
         double score = ai_attack_type_effectiveness(bt, opponent, m->type, p, -1, true, true);
-        if (pr_is_of_type(p, m->type) && !pr_move_has_attr(p->moves[s], PR_AC_VariableMoveTypeAttr)) score *= 1.5;
+        if (pr_is_of_type(p, m->type) && !pr_move_has_attr(PR_MOVES(p)[s], PR_AC_VariableMoveTypeAttr)) score *= 1.5;
         atk += score;
         n_atk++;
     }
@@ -614,29 +614,29 @@ pr_turn_move pr_ai_get_next_move(pr_battle *bt, pr_ai *ai, pr_pokemon *p)
     p->n_move_queue = 0;
 
     int pool[4], n = 0;
-    for (int s = 0; s < p->n_moves; s++)
+    for (int s = 0; s < PR_N_MOVES(p); s++)
         if (pr_ai_move_usable(bt, p, s, false, true)) pool[n++] = s;
     if (n > 0) {
         if (n == 1) {
-            int move = p->moves[pool[0]];
+            int move = PR_MOVES(p)[pool[0]];
             return turn_move(move, tg, pr_ai_get_next_targets(bt, ai, p, move, tg), MOVE_USE_MODE_NORMAL);
         }
         const pr_battler_tag *encore = pr_get_battler_tag(p, BATTLER_TAG_TYPE_ENCORE);
         if (encore)
             for (int k = 0; k < n; k++)
-                if (p->moves[pool[k]] == encore->move_id) {
-                    int move = p->moves[pool[k]];
+                if (PR_MOVES(p)[pool[k]] == encore->move_id) {
+                    int move = PR_MOVES(p)[pool[k]];
                     return turn_move(move, tg, pr_ai_get_next_targets(bt, ai, p, move, tg), MOVE_USE_MODE_NORMAL);
                 }
         int type = ai_type_of(ai, p);
         if (type == AI_TYPE_RANDOM) {
-            int move = p->moves[pool[pr_battle_rand_seed_int(bt, n, 0)]];
+            int move = PR_MOVES(p)[pool[pr_battle_rand_seed_int(bt, n, 0)]];
             return turn_move(move, tg, pr_ai_get_next_targets(bt, ai, p, move, tg), MOVE_USE_MODE_NORMAL);
         }
         if (type == AI_TYPE_SMART_RANDOM || type == AI_TYPE_SMART) {
             int ko[4], nko = 0;
             for (int k = 0; k < n; k++)
-                if (move_can_ko(bt, ai, p, p->moves[pool[k]])) ko[nko++] = pool[k];
+                if (move_can_ko(bt, ai, p, PR_MOVES(p)[pool[k]])) ko[nko++] = pool[k];
             if (nko > 0) {
                 memcpy(pool, ko, sizeof(int) * (size_t)nko);
                 n = nko;
@@ -645,16 +645,16 @@ pr_turn_move pr_ai_get_next_move(pr_battle *bt, pr_ai *ai, pr_pokemon *p)
             int8_t targets[4][4];
             int n_targets[4];
             for (int k = 0; k < n; k++)
-                n_targets[k] = pr_ai_get_next_targets(bt, ai, p, p->moves[pool[k]], targets[k]);
+                n_targets[k] = pr_ai_get_next_targets(bt, ai, p, PR_MOVES(p)[pool[k]], targets[k]);
             int of_move[4];
             for (int k = 0; k < n; k++) {
                 of_move[k] = k;
                 for (int j = k + 1; j < n; j++)
-                    if (p->moves[pool[j]] == p->moves[pool[k]]) of_move[k] = j;
+                    if (PR_MOVES(p)[pool[j]] == PR_MOVES(p)[pool[k]]) of_move[k] = j;
             }
             ai_scored scores[4];
             for (int k = 0; k < n; k++) {
-                int move = p->moves[pool[k]];
+                int move = PR_MOVES(p)[pool[k]];
                 const pr_move *m = &pr_moves[move];
                 int tl = of_move[k];
                 double best = -INFINITY;
@@ -702,7 +702,7 @@ pr_turn_move pr_ai_get_next_move(pr_battle *bt, pr_ai *ai, pr_pokemon *p)
                 }
             }
             int k = sorted[chosen].idx, tl = of_move[k];
-            return turn_move(p->moves[pool[k]], targets[tl], n_targets[tl], MOVE_USE_MODE_NORMAL);
+            return turn_move(PR_MOVES(p)[pool[k]], targets[tl], n_targets[tl], MOVE_USE_MODE_NORMAL);
         }
         /* an AI type upstream's switch has no case for falls through to Struggle */
     }

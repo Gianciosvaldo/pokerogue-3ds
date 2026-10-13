@@ -28,6 +28,7 @@ const char *const pr_phase_name[PH_COUNT_] = {
     [PH_TOGGLE_DOUBLE_POSITION] = "ToggleDoublePositionPhase", [PH_SELECT_BIOME] = "SelectBiomePhase",
     [PH_SUMMON] = "SummonPhase", [PH_INIT_ENCOUNTER] = "InitEncounterPhase", [PH_CHECK_SWITCH] = "CheckSwitchPhase",
     [PH_NEW_BATTLE] = "NewBattlePhase",
+    [PH_TRANSFORM] = "PokemonTransformPhase",
 };
 
 const char *pr_phase_name_of(int t)
@@ -43,7 +44,7 @@ bool pr_phase_is_dynamic(pr_phase_type t)
     case PH_MOVE: case PH_COMMON_ANIM: case PH_STAT_STAGE_CHANGE: case PH_OBTAIN_STATUS_EFFECT:
     case PH_POST_TURN_STATUS_EFFECT: case PH_MOVE_CHARGE: case PH_MOVE_HEADER: case PH_SWITCH_SUMMON:
     case PH_POST_SUMMON: case PH_SHINY_SPARKLE:
-    case PH_MOVE_REFLECT: case PH_DANCER: case PH_TERA: case PH_ATTEMPT_CAPTURE:
+    case PH_MOVE_REFLECT: case PH_DANCER: case PH_TERA: case PH_ATTEMPT_CAPTURE: case PH_TRANSFORM:
         return true;
     default:
         /* not dynamic: MoveEffect, MoveEnd, Faint, DamageAnim, PokemonHeal, WeatherEffect,
@@ -420,7 +421,7 @@ static int check_dynamic(pr_battle *bt, pr_engine *e, int ph)
 static void note_unported_phase(pr_battle *bt, pr_engine *e, int ph)
 {
     int t = e->pool[ph].type;
-    if (t >= PH_FIRST_UNPORTED) pr_note_unported(bt, (uint16_t)(PR_FEAT_PHASE_0 + t));
+    if (t == PH_TERA) pr_note_unported(bt, (uint16_t)(PR_FEAT_PHASE_0 + t));
 }
 
 /* PhaseManager.pushPhase */
@@ -522,7 +523,7 @@ void pr_queue_ability_display(pr_battle *bt, pr_engine *e, const pr_pokemon *p, 
     if (ph >= 0 && show) {
         /* the constructor fixes the name shown: getPassiveAbility() or getAbility() */
         e->pool[ph].anim_result = passive;
-        e->pool[ph].anim = passive ? (uint16_t)(p->custom_passive >= 0 ? p->custom_passive : pr_pokemon_form(p)->passive)
+        e->pool[ph].anim = passive ? (uint16_t)(p->custom_passive >= 0 ? p->custom_passive : pr_pokemon_base_form(p)->passive)
                                    : p->ability;
     }
     pr_phase_unshift(bt, e, ph);
@@ -651,7 +652,7 @@ static void trace(pr_engine *e, int ph)
                          || p->type == PH_WEATHER_EFFECT || p->type == PH_SHOW_ABILITY
                          || p->type == PH_STAT_STAGE_CHANGE || p->type == PH_OBTAIN_STATUS_EFFECT
                          || p->type == PH_POKEMON_HEAL || p->type == PH_POST_TURN_STATUS_EFFECT
-                         || p->type == PH_MOVE_CHARGE;
+                         || p->type == PH_MOVE_CHARGE || p->type == PH_TRANSFORM;
     pokemon_phase = pokemon_phase || p->type == PH_MOVE_REFLECT || p->type == PH_POST_SUMMON || p->type == PH_SHINY_SPARKLE || p->type == PH_ATTEMPT_CAPTURE;
     /* SummonPhase (a PartyMemberPokemonPhase) has no battlerIndex upstream: its name alone */
     /* MoveEndPhase is given its user's getBattlerIndex(), which is -1 once it has been switched out */

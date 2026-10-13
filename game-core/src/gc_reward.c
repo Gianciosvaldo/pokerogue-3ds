@@ -187,13 +187,13 @@ static void fill_mon(gc_run *run, gc_mon *m, pr_reward_mon *r)
     int8_t ty[PR_MAX_TYPES];
     const int nt = pr_get_types(p, ty, PR_TYPES_NO_TERA | PR_TYPES_BYPASS_SUMMON | PR_TYPES_IGNORE_THIRD);
     for (int i = 0; i < nt && i < 2; i++) r->types[r->n_types++] = ty[i];
-    for (int i = 0; i < p->n_moves && i < 4; i++) {
-        if (!p->moves[i]) continue;
-        r->moves[r->n_moves].move = p->moves[i];
-        r->moves[r->n_moves].pp_used = p->pp_used[i];
-        r->moves[r->n_moves].pp_up = p->pp_up[i];
+    for (int i = 0; i < PR_N_MOVES(p) && i < 4; i++) {
+        if (!PR_MOVES(p)[i]) continue;
+        r->moves[r->n_moves].move = PR_MOVES(p)[i];
+        r->moves[r->n_moves].pp_used = PR_PP_USED(p)[i];
+        r->moves[r->n_moves].pp_up = PR_PP_UP(p)[i];
         r->moves[r->n_moves].max_pp = (uint8_t)gc_move_max_pp(p, i);
-        r->base_moves[r->n_moves] = p->moves[i];
+        r->base_moves[r->n_moves] = PR_MOVES(p)[i];
         r->n_moves++;
     }
     r->n_base_moves = r->n_moves;
@@ -523,9 +523,9 @@ static bool core_applies(int item)
 /* a move's index in reward-core's moveset (fill_mon leaves out an empty slot), -1 = no such move */
 static int core_move_index(const pr_pokemon *p, int slot)
 {
-    if (slot < 0 || slot >= p->n_moves || slot >= 4 || !p->moves[slot]) return -1;
+    if (slot < 0 || slot >= PR_N_MOVES(p) || slot >= 4 || !PR_MOVES(p)[slot]) return -1;
     int k = 0;
-    for (int i = 0; i < slot; i++) k += p->moves[i] != 0;
+    for (int i = 0; i < slot; i++) k += PR_MOVES(p)[i] != 0;
     return k;
 }
 
@@ -741,7 +741,7 @@ int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, co
             if (move < 0) { *why = "pick a move"; return GC_APPLY_REFUSED; }
             /* PokemonPpUpModifierType's moveSelectFilter: `pokemonMove.maxPpOverride` (reward-core's moves
              * don't carry it) */
-            if ((item == PR_ITEM_PP_UP || item == PR_ITEM_PP_MAX) && b->max_pp_override[move_slot] > 0) {
+            if ((item == PR_ITEM_PP_UP || item == PR_ITEM_PP_MAX) && PR_MAX_PP(b)[move_slot] > 0) {
                 *why = "partyUiHandler:anyEffect";
                 return GC_APPLY_REFUSED;
             }
@@ -773,10 +773,10 @@ int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, co
         if (!r->confused) drop_tag(b, BATTLER_TAG_TYPE_CONFUSED);
         if (!r->nightmare) drop_tag(b, BATTLER_TAG_TYPE_NIGHTMARE);
         b->hp = r->hp;
-        for (int s = 0, c = 0; s < b->n_moves && s < 4; s++) {
-            if (!b->moves[s]) continue;
-            b->pp_used[s] = r->moves[c].pp_used;
-            b->pp_up[s] = r->moves[c].pp_up;
+        for (int s = 0, c = 0; s < PR_N_MOVES(b) && s < 4; s++) {
+            if (!PR_MOVES(b)[s]) continue;
+            PR_PP_USED(b)[s] = r->moves[c].pp_used;
+            PR_PP_UP(b)[s] = r->moves[c].pp_up;
             c++;
         }
         if (b->level != r->level) {

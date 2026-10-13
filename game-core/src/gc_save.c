@@ -126,6 +126,12 @@ static const sfield pokemon_fields[] = {
     SF(pr_pokemon, n_move_history), SF(pr_pokemon, n_move_queue), SF(pr_pokemon, temp_turn_count),
     SF(pr_pokemon, temp_wave_turn_count), SF(pr_pokemon, ab_applied_summon), SF(pr_pokemon, ab_applied_wave),
     SF(pr_pokemon, n_ab_applied_summon), SF(pr_pokemon, n_ab_applied_wave), SF(pr_pokemon, has_eaten_berry),
+    SF(pr_pokemon, transformed), SF(pr_pokemon, transform_species), SF(pr_pokemon, transform_form),
+    SF(pr_pokemon, transform_gender), SF(pr_pokemon, transform_moves), SF(pr_pokemon, transform_pp_used),
+    SF(pr_pokemon, transform_pp_up), SF(pr_pokemon, transform_max_pp_override), SF(pr_pokemon, transform_n_moves),
+    SF(pr_pokemon, variant),
+    SF(pr_pokemon, battle_berries), SF(pr_pokemon, turn_berries), SF(pr_pokemon, last_berries),
+    SF(pr_pokemon, n_battle_berries), SF(pr_pokemon, n_turn_berries), SF(pr_pokemon, n_last_berries),
 };
 static const sfield tag_fields[] = {
     SF(pr_battler_tag, type), SF(pr_battler_tag, turn_count), SF(pr_battler_tag, source_move),
@@ -249,6 +255,45 @@ static int get_block(reader *r, const sfield *f, int nf, void *base, size_t stri
     if (count > max) (*dropped)++;
     r->pos += rec * (size_t)count;
     return keep;
+}
+
+/* New temporary state is optional for older, untransformed saves, but all of
+ * its fields are necessary to restore an actively transformed Pokemon. */
+static bool has_transform_schema(reader r)
+{
+    uint32_t names[128]; uint16_t sizes[128];
+    int n = take16(&r);
+    if (r.bad || n > 128) return false;
+    for (int i = 0; i < n; i++) { names[i] = take32(&r); sizes[i] = take16(&r); }
+    if (r.bad) return false;
+    for (int i = 0; i < NF(pokemon_fields); i++) {
+        const sfield *field = &pokemon_fields[i];
+        if (field->off < offsetof(pr_pokemon, transformed)
+            || field->off > offsetof(pr_pokemon, transform_max_pp_override)) continue;
+        bool found = false;
+        for (int k = 0; k < n; k++)
+            if (names[k] == hash(field->name) && sizes[k] == field->size) found = true;
+        if (!found) return false;
+    }
+    return true;
+}
+
+/* Historical saves have no berry schema. A new save must carry all six fields
+ * together, so a partial record cannot silently lose its consumption history. */
+static bool berry_schema_ok(reader r)
+{
+    const char *fields[]={"battle_berries","turn_berries","last_berries","n_battle_berries","n_turn_berries","n_last_berries"};
+    const uint16_t sizes[]={PR_MAX_BERRY_HISTORY,PR_MAX_BERRY_HISTORY,PR_MAX_BERRY_HISTORY,2,2,2};
+    bool present[6]={false}; int n=take16(&r), found=0;
+    if(r.bad || n>128)return false;
+    for(int i=0;i<n;i++){
+        uint32_t name=take32(&r);uint16_t size=take16(&r);
+        for(int k=0;k<6;k++)if(name==hash(fields[k])){
+            if(size!=sizes[k] || present[k])return false;
+            present[k]=true;found++;
+        }
+    }
+    return !r.bad && (found==0 || found==6);
 }
 
 /* ---------------------------------------------------------------- CRC-32 (IEEE) */
@@ -451,6 +496,15 @@ static void mon_defaults(gc_mon *m)
     m->met_biome = -1;
 }
 
+static bool berry_history_ok(const pr_pokemon *b)
+{
+    if (b->n_battle_berries > PR_MAX_BERRY_HISTORY || b->n_turn_berries > PR_MAX_BERRY_HISTORY || b->n_last_berries > PR_MAX_BERRY_HISTORY) return false;
+    for (int i = 0; i < b->n_battle_berries; i++) if (b->battle_berries[i] > BERRY_TYPE_LEPPA) return false;
+    for (int i = 0; i < b->n_turn_berries; i++) if (b->turn_berries[i] > BERRY_TYPE_LEPPA) return false;
+    for (int i = 0; i < b->n_last_berries; i++) if (b->last_berries[i] > BERRY_TYPE_LEPPA) return false;
+    return true;
+}
+
 /* A Pokemon that can't be played with (a species or move this build lacks, counts out of range) */
 static bool mon_ok(const gc_mon *m)
 {
@@ -466,6 +520,14 @@ static bool mon_ok(const gc_mon *m)
     if (b->n_moves > 4 || b->n_tags > PR_MAX_BATTLER_TAGS || b->n_move_queue > PR_MAX_MOVE_QUEUE) return false;
     for (int i = 0; i < b->n_moves; i++) if (b->moves[i] >= PR_MOVE_COUNT) return false;
     if (b->n_summon_types > PR_MAX_SUMMON_TYPES || b->n_ab_applied_summon > 4 || b->n_ab_applied_wave > 4) return false;
+    if (!berry_history_ok(b)) return false;
+    if (b->transformed) {
+        const pr_species *target = gc_species(b->transform_species);
+        if (!target || b->transform_form >= target->nforms || b->transform_gender < -1
+            || b->transform_gender > 1 || b->transform_n_moves > 4) return false;
+        for (int i = 0; i < 4; i++) if (b->transform_moves[i] >= PR_MOVE_COUNT || b->transform_pp_up[i] > 3
+            || b->transform_max_pp_override[i] < -1) return false;
+    }
     return true;
 }
 
@@ -475,6 +537,8 @@ static bool get_mons(const reader *body, const char *name, gc_mon *mons, int n, 
     for (int i = 0; i < 6; i++) mon_defaults(&mons[i]);
     if (r.bad) return false;
     if (get_block(&r, mon_fields, NF(mon_fields), mons, sizeof(gc_mon), n, dropped) != n) return false;
+    const bool transform_schema = has_transform_schema(r);
+    if (!berry_schema_ok(r)) return false;
     if (get_block(&r, pokemon_fields, NF(pokemon_fields), &mons[0].b, sizeof(gc_mon), n, dropped) != n) return false;
     for (int i = 0; i < n; i++) {
         pr_pokemon *b = &mons[i].b;
@@ -484,7 +548,14 @@ static bool get_mons(const reader *body, const char *name, gc_mon *mons, int n, 
         if (b->n_move_history < nh) b->n_move_history = (uint16_t)nh;
         b->n_move_queue = (uint8_t)get_block(&r, turn_move_fields, NF(turn_move_fields), b->move_queue,
                                              sizeof b->move_queue[0], PR_MAX_MOVE_QUEUE, dropped);
+        if (!berry_history_ok(b)) return false;
         pr_reset_turn_data(b);
+        if (b->transformed && !transform_schema) return false;
+        b->variant = mons[i].variant; /* also restores this bridge for older saves */
+        if (!b->transformed) {
+            if (b->transform_species) return false;
+            pr_restore_transform(b);
+        }
         if (r.bad || !mon_ok(&mons[i])) return false;
     }
     return !r.bad;

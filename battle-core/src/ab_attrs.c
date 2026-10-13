@@ -100,7 +100,10 @@ void pr_set_temp_ability(pr_battle *bt, pr_pokemon *p, uint16_t ability)
     pr_apply_ab_attrs(bt, PR_AC_PreLeaveFieldAbAttr, &lose);            /* applyOnLoseAbAttrs (no ability has an
                                                                          * IllusionBreakAbAttr in the dump) */
     p->ability_override = ability;
-    p->ability = ability;
+    /* getAbility ignores a zero summonData.ability in the pin. An ordinary
+     * actor therefore gains the permanent ability's effects again. */
+    p->ability = ability ? ability : p->base_ability;
+    if (!ability && p->transformed) pr_note_unported(bt, PR_FEAT_FORM_CHANGE);
     pr_ab_params gain = {.pokemon = p, .move = -1, .only = 1, .on_gain = true};
     pr_apply_ab_attrs(bt, PR_AC_PostSummonAbAttr, &gain);               /* applyOnGainAbAttrs */
 }
@@ -622,6 +625,25 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         pr_reset_status_phase(bt, c->e, (pr_pokemon *)p, false);
         return 1;
     }
+    case PR_AC_PostSummonTransformAbAttr: {                            /* Imposter */
+        const pr_pokemon *targets[2]; int n = 0;
+        for (int k = 0; k < 4; k++) {
+            const pr_pokemon *q = bt->field[k];
+            if (q && q->is_player != p->is_player && q->hp > 0 && q->on_field && !q->switch_out_status
+                && pr_can_transform_into(p, q)) targets[n++] = q;
+        }
+        if (!n) return 0;
+        /* canApply selects once; apply uses that target without another RNG draw. */
+        const pr_pokemon *target = targets[pr_battle_rand_seed_int(bt, n, 0)];
+        if (!c->e) return -1;
+        GATE(true);
+        int ph = pr_phase_new(c->e, PH_TRANSFORM, (int8_t)pr_battler_index(bt, p));
+        if (ph < 0) return -1;
+        c->e->pool[ph].transform_target = (int8_t)pr_battler_index(bt, target);
+        c->e->pool[ph].transform_sound = true;
+        pr_phase_unshift(bt, c->e, ph);
+        return 1;
+    }
     case PR_AC_PostVictoryStatStageChangeAbAttr: {
         /* Moxie/Neigh: fixed changes; Beast Boost/Eelevate: raw highest stat. */
         GATE(true);
@@ -656,6 +678,20 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         }
         return pr_unshift_stat_stage_change_ex(bt, c->e, pr_battler_index(bt, p), st, sg, n,
                                                (pr_pokemon *)p, 0) < 0 ? -1 : 1;
+    }
+    case PR_AC_CopyFaintedAllyAbilityAbAttr: {
+        const pr_pokemon *victim = pp->victim;
+        if (!victim || victim->ability >= PR_ABILITY_COUNT) return -1;
+        GATE(p->is_player == victim->is_player
+             && !(pr_abilities[victim->ability].flags & AB_FLAG_UNCOPIABLE));
+        if (pp->simulated) return 1;
+        if (!c->e) return -1;
+        pr_set_temp_ability(bt, (pr_pokemon *)p, victim->ability);
+        /* Source reads the victim again after the copied ability's gain effects. */
+        pr_queue_msg(bt, c->e, pr_msg2("abilityTriggers:copyFaintedAllyAbility",
+                                     pr_arg_pokemon(bt, "pokemonNameWithAffix", victim),
+                                     pr_arg_ability("abilityName", victim->ability)));
+        return 1;
     }
     case PR_AC_PostKnockOutStatStageChangeAbAttr: {                     /* Soul-Heart */
         const pr_attr_PostKnockOutStatStageChangeAbAttr *x = P(PostKnockOutStatStageChangeAbAttr, a);
@@ -848,7 +884,7 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
             const pr_pokemon *q = bt->field[k];
             if (!q || q->is_player == p->is_player || !(q->hp > 0 && q->on_field && !q->switch_out_status)) continue;
             opps[no++] = q;
-            any_moves |= q->n_moves > 0;
+            any_moves |= PR_N_MOVES(q) > 0;
         }
         if (!c->e) return -1;
         GATE(any_moves);
@@ -857,8 +893,8 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         int max_power = 0, n_at_max = 0;
         uint16_t at_max[4 * 4];                                         /* movesAtMaxPower's moves */
         for (int k = 0; k < no; k++)
-            for (int j = 0; j < opps[k]->n_moves; j++) {
-                int mv = opps[k]->moves[j];
+            for (int j = 0; j < PR_N_MOVES(opps[k]); j++) {
+                int mv = PR_MOVES(opps[k])[j];
                 if (!mv) continue;
                 int power = pr_moves[mv].category == MOVE_CATEGORY_STATUS ? 1
                             : pr_move_has_attr((uint16_t)mv, PR_AC_OneHitKOAttr) ? 150
@@ -1524,6 +1560,68 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         return 1;
 
     /* ---- berries ---- */
+    case PR_AC_CudChewRecordBerryAbAttr: {
+        if (p->n_turn_berries > PR_MAX_BERRY_HISTORY) {pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return -1;}
+        GATE(true);
+        /* Pinned apply intentionally also runs during simulated dispatch. */
+        pr_pokemon *q = (pr_pokemon *)p;
+        q->n_last_berries = q->n_turn_berries;
+        memcpy(q->last_berries, q->turn_berries, q->n_last_berries);
+        return 1;
+    }
+    case PR_AC_CudChewConsumeBerryAbAttr: {
+        if (p->n_last_berries > PR_MAX_BERRY_HISTORY) {pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return -1;}
+        GATE(p->n_last_berries > 0);
+        if (!c->e) return -1;
+        pr_unshift_common_anim(bt, c->e, pr_battler_index(bt, p), pr_battler_index(bt, p), COMMON_ANIM_USE_ITEM);
+        for (int i = 0; i < p->n_last_berries; i++)
+            pr_berry_effect(bt, c->e, (pr_pokemon *)p, p->last_berries[i], NULL, NULL, NULL);
+        return 1;
+    }
+    case PR_AC_PostTurnRestoreBerryAbAttr: {
+        if (p->n_battle_berries > PR_MAX_BERRY_HISTORY) {pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return -1;}
+        int side = p->is_player ? 0 : 1;
+        uint8_t eligible[PR_MAX_BERRY_HISTORY];
+        int n = 0;
+        for (int i = 0; i < p->n_battle_berries; i++) {
+            int berry = p->battle_berries[i];
+            int cap = (berry <= BERRY_TYPE_ENIGMA || berry == BERRY_TYPE_LEPPA) ? 2 : 3;
+            bool capped = false;
+            for (int j = 0; j < bt->n_mods[side]; j++) {
+                const pr_modifier *m = &bt->mods[side][j];
+                if (m->cls == PR_MOD_BERRY && m->pokemon_id == (int64_t)p->id && m->berry_type == berry
+                    && pr_mod_get_stack_count(m) >= cap) capped = true;
+            }
+            if (!capped) eligible[n++] = (uint8_t)berry;
+        }
+        if (!n) return 0;
+        double pass = pr_rng_seed_float(&bt->rng);
+        double chance = pr_closure_call(bt, P(PostTurnRestoreBerryAbAttr, a)->procChance, a->cls, 0, p, NULL, -1);
+        GATE(chance >= pass);
+        if (pp->simulated) return 1;
+        if (!c->e) return -1;
+        int idx = pr_rng_seed_int(&bt->rng, n, 0), berry = eligible[idx];
+        pr_pokemon *q = (pr_pokemon *)p;
+        /* Pin splices the FILTERED index in the original list. Preserve that quirk. */
+        memmove(q->battle_berries + idx, q->battle_berries + idx + 1, q->n_battle_berries - idx - 1);
+        q->n_battle_berries--;
+        pr_modifier *restored = NULL;
+        for (int j = 0; j < bt->n_mods[side]; j++) {
+            pr_modifier *m = &bt->mods[side][j];
+            if (m->cls == PR_MOD_BERRY && m->pokemon_id == (int64_t)p->id && m->berry_type == berry) {restored = m; break;}
+        }
+        if (restored) restored->stack_count++;
+        else {
+            if (bt->n_mods[side] >= PR_MAX_MODIFIERS) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return -1; }
+            restored = &bt->mods[side][bt->n_mods[side]++];
+            *restored = (pr_modifier){.cls = PR_MOD_BERRY, .pokemon_id = p->id, .stack_count = 1, .berry_type = berry, .is_transferable = true};
+        }
+        pr_refresh_berry_modifiers(bt, side);
+        static const char *keys[] = {"berry:sitrus.name", "berry:lum.name", "berry:enigma.name", "berry:liechi.name", "berry:ganlon.name", "berry:petaya.name", "berry:apicot.name", "berry:salac.name", "berry:lansat.name", "berry:starf.name", "berry:leppa.name"};
+        if (berry < 0 || berry >= (int)(sizeof keys / sizeof keys[0])) return -1;
+        pr_queue_msg(bt, c->e, pr_msg2("abilityTriggers:postTurnLootCreateEatenBerry", pr_arg_pokemon(bt, "pokemonNameWithAffix", p), pr_arg_key("berryName", keys[berry])));
+        return 1;
+    }
     case PR_AC_ReduceBerryUseThresholdAbAttr:
         GATE(pr_has_ability_with_attr(bt, p, PR_AC_ReduceBerryUseThresholdAbAttr));
         if (pp->value) {

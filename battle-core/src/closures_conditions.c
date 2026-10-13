@@ -623,9 +623,9 @@ static double spite(ARGS)
     const pr_turn_move *tm = last_non_virtual_move(bt, t, &unknown);
     if (unknown) return 1;
     if (!tm) return 0;                                         /* no moveset move has moveId undefined */
-    for (int s = 0; s < t->n_moves; s++)
-        if (t->moves[s] == tm->move) {
-            double r = 1.0 - (double)t->pp_used[s] / move_pp(t->moves[s], t->pp_up[s], t->max_pp_override[s]);
+    for (int s = 0; s < PR_N_MOVES(t); s++)
+        if (PR_MOVES(t)[s] == tm->move) {
+            double r = 1.0 - (double)PR_PP_USED(t)[s] / move_pp(PR_MOVES(t)[s], PR_PP_UP(t)[s], PR_MAX_PP(t)[s]);
             return r == r && r != 0;                           /* !!NaN is false */
         }
     return 0;
@@ -636,8 +636,8 @@ static double conversion(ARGS)
 {
     UNUSED;
     if (u->terastallized) return 0;
-    if (!u->n_moves) UNPORTED(PR_FEAT_MOVE_CONDITION);         /* getMoveset()[0] is undefined: upstream throws */
-    return !pr_is_of_type(u, pr_moves[u->moves[0]].type);
+    if (!PR_N_MOVES(u)) UNPORTED(PR_FEAT_MOVE_CONDITION);         /* getMoveset()[0] is undefined: upstream throws */
+    return !pr_is_of_type(u, pr_moves[PR_MOVES(u)[0]].type);
 }
 
 /* Conversion 2: !user.isTerastallized && target.getLastXMoves(-1).some(tm => tm.move !== NONE) */
@@ -661,11 +661,11 @@ static double last_resort(ARGS)
     UNUSED;
     bool has_self = false;
     int others[4], n_others = 0;
-    for (int s = 0; s < u->n_moves; s++) {
-        if (u->moves[s] == m) { has_self = true; continue; }
+    for (int s = 0; s < PR_N_MOVES(u); s++) {
+        if (PR_MOVES(u)[s] == m) { has_self = true; continue; }
         bool dup = false;
-        for (int j = 0; j < n_others; j++) dup |= others[j] == u->moves[s];
-        if (!dup) others[n_others++] = u->moves[s];
+        for (int j = 0; j < n_others; j++) dup |= others[j] == PR_MOVES(u)[s];
+        if (!dup) others[n_others++] = PR_MOVES(u)[s];
     }
     if (!has_self || !n_others) return 0;
     int kept = u->n_move_history < PR_MAX_MOVE_HISTORY ? u->n_move_history : PR_MAX_MOVE_HISTORY;
@@ -767,7 +767,7 @@ static double telekinesis(ARGS)
     for (unsigned i = 0; i < pr_set_invalid_telekinesis_species_n; i++)
         if (pr_set_invalid_telekinesis_species[i] == t->species) return 0;
     if (t->species != SPECIES_ID_GENGAR) return 1;
-    const char *fk = pr_pokemon_form(t)->form_key;
+    const char *fk = pr_pokemon_base_form(t)->form_key;
     return !(fk && (!strcmp(fk, "mega") || !strcmp(fk, "gigantamax")));
 }
 
@@ -905,19 +905,22 @@ static double instruct(ARGS)
     const pr_turn_move *tm = last_non_virtual_move(bt, t, &unknown);
     if (unknown) return 1;
     int slot = -1;
-    for (int s = 0; tm && s < t->n_moves; s++)
-        if (t->moves[s] == tm->move) { slot = s; break; }
+    for (int s = 0; tm && s < PR_N_MOVES(t); s++)
+        if (PR_MOVES(t)[s] == tm->move) { slot = s; break; }
     if (!tm || !tm->move || slot < 0) return 0;
-    int max = move_pp(t->moves[slot], t->pp_up[slot], t->max_pp_override[slot]);   /* isOutOfPp */
-    if (max > 0 && t->pp_used[slot] >= max) return 0;
+    int max = move_pp(PR_MOVES(t)[slot], PR_PP_UP(t)[slot], PR_MAX_PP(t)[slot]);   /* isOutOfPp */
+    if (max > 0 && PR_PP_USED(t)[slot] >= max) return 0;
     if (pr_instruct_invalid(tm->move)) return 0;
     pr_instruct_keep(t, slot);
     return 1;
 }
 
+static double transform(ARGS) { UNUSED; return pr_can_transform_into(u, t); }
+
 const pr_closure_reg pr_condition_closures[] = {
     /* attribute conditions, any owner */
     {NULL, "7680b4c661ce", tag_overlap},
+    {"move:144", "f816e677fa54", transform},
     {NULL, "e088dd3b9894", heal_full_hp},
     {NULL, "0f3b7651e995", heal_on_ally},
     {NULL, "3a65d0b2090a", rest},
