@@ -83,6 +83,10 @@ static void form_change(pr_battle *bt, const pr_pokemon *p, int trigger_class)
         }
     } else if (mon->species == SPECIES_ID_EISCUE && trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger) {
         target_form = mon->form == 0 ? 1 : 0;
+    } else if (mon->species == SPECIES_ID_BATTLE_BOND_GRENINJA && trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger) {
+        /* The attribute's formFunc decides whether this trigger is called.
+         * Both registered form changes have no additional conditions. */
+        target_form = mon->form == 0 ? 1 : 0;
     } else goto other_forms;
     if (target_form >= 0 && target_form != mon->form) {
         pr_engine *e = bt->engine;

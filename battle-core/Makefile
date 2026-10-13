@@ -281,3 +281,11 @@ $(BUILD)/ability-lookup-test: tests/ability-lookup-test.c $(BUILD)/libprcore.a
 all: $(BUILD)/form-lifecycle-test
 $(BUILD)/form-lifecycle-test: tests/form-lifecycle-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/battle-bond-test
+$(BUILD)/battle-bond-test: tests/battle-bond-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/battle-bond-turn-test
+$(BUILD)/battle-bond-turn-test: tests/battle-bond-turn-test.c $(BUILD)/fell-stinger-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -Itests -I$(BUILD) $(CFLAGS) tests/battle-bond-turn-test.c $(BUILD)/libprcore.a -lm -o $@

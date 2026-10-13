@@ -1098,12 +1098,18 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
     }
     case PR_AC_PostSummonFormChangeAbAttr:
     case PR_AC_PostTurnFormChangeAbAttr:
-    case PR_AC_PostBattleInitFormChangeAbAttr: {
+    case PR_AC_PostBattleInitFormChangeAbAttr:
+    case PR_AC_PostVictoryFormChangeAbAttr:
+    case PR_AC_PostFaintFormChangeAbAttr: {
         pr_fn_id fn = a->cls == PR_AC_PostSummonFormChangeAbAttr
             ? P(PostSummonFormChangeAbAttr, a)->formFunc
             : a->cls == PR_AC_PostTurnFormChangeAbAttr
                 ? P(PostTurnFormChangeAbAttr, a)->formFunc
-                : P(PostBattleInitFormChangeAbAttr, a)->formFunc;
+                : a->cls == PR_AC_PostVictoryFormChangeAbAttr
+                    ? P(PostVictoryFormChangeAbAttr, a)->formFunc
+                    : a->cls == PR_AC_PostFaintFormChangeAbAttr
+                        ? P(PostFaintFormChangeAbAttr, a)->formFunc
+                        : P(PostBattleInitFormChangeAbAttr, a)->formFunc;
         GATE(pr_closure_call(bt, fn, a->cls, p->form, p, NULL, -1) != p->form);
         if (a->cls == PR_AC_PostBattleInitFormChangeAbAttr) GATE(!pp->simulated);
         if (!pp->simulated) pr_form_change(bt, p, PR_FCT_SpeciesFormChangeAbilityTrigger);

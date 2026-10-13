@@ -331,6 +331,23 @@ static double opposite_gender(ARGS) { UNUSED; return b && a->gender != -1 && b->
 /* Disguise: () => true */
 static double always(ARGS) { UNUSED; return 1; }
 
+/* Battle Bond's pin distinguishes its separate Greninja species from ordinary
+ * users. hasSpecies is permanent base/fusion identity, not Transform's form. */
+static double battle_bond_greninja(ARGS)
+{
+    UNUSED;
+    return a->species == SPECIES_ID_BATTLE_BOND_GRENINJA && !a->fusion_species;
+}
+static double battle_bond_unused(ARGS)
+{
+    UNUSED;
+    if (a->species == SPECIES_ID_BATTLE_BOND_GRENINJA || a->fusion_species == SPECIES_ID_BATTLE_BOND_GRENINJA) return 0;
+    for (int i=0;i<a->n_ab_applied_summon;i++)
+        if (a->ab_applied_summon[i] == ABILITY_ID_BATTLE_BOND) return 0;
+    return 1;
+}
+static double battle_bond_base_form(ARGS) { UNUSED; return 0; }
+
 /* Hunger Switch: (pokemon) => !pokemon.isTerastallized */
 static double not_terastallized(ARGS) { UNUSED; return !a->terastallized; }
 
@@ -444,6 +461,10 @@ static double hunger_toggle(ARGS) { UNUSED; const pr_form *f = pr_pokemon_base_f
 static double hunger_stay(ARGS) { UNUSED; const pr_form *f = pr_pokemon_base_form(a); return f && f->form_key && f->form_key[0] ? 1 : 0; }
 
 const pr_closure_reg pr_ability_closures[] = {
+    {"ability:210", "2fd10e40aa3a", battle_bond_greninja},
+    {"ability:210", "10a1a4cf7c19", always},
+    {"ability:210", "5e264af5663d", battle_bond_base_form},
+    {"ability:210", "dac5ef5fb1db", battle_bond_unused},
     {"ability:139", "9f8f86d8acdc", harvest_chance}, /* closure 527 */
     {"ability:100", "93207d9890eb", stall_priority},
     {"ability:298", "74fa5cb6b41e", mycelium_status_move},
