@@ -489,3 +489,11 @@ stance-change-host-test: $(BUILD)/stance_change_host_test
 $(BUILD)/stance_change_host_test: tests/stance_change_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: stance-change-host-test
+
+all: $(BUILD)/transform_restriction_host_test
+test: transform-restriction-host-test
+transform-restriction-host-test: $(BUILD)/transform_restriction_host_test
+	$(BUILD)/transform_restriction_host_test
+$(BUILD)/transform_restriction_host_test: tests/transform_restriction_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: transform-restriction-host-test

@@ -188,11 +188,11 @@ bool pr_weather_effect_suppressed(pr_battle *bt)
     return false;
 }
 
-/* Pokemon.canApplyAbility(passive). Fusion, Transform, Mold Breaker (arena.ignoreAbilities) and
- * summonData.abilitySuppressed are not modelled; none can occur in the current state. */
+/* Pokemon.canApplyAbility(passive): form restrictions precede ordinary suppression. */
 bool pr_can_apply_ability(pr_battle *bt, const pr_pokemon *p, uint16_t ability)
 {
     if (p->fusion_species && pr_ability_first_attr(ability, PR_AC_NoFusionAbilityAbAttr)) return false;
+    if (p->transformed && pr_ability_first_attr(ability, PR_AC_NoTransformAbilityAbAttr)) return false;
     const pr_ability *ab = &pr_abilities[ability];
     /* Mold Breaker, Sunsteel Strike...: the move in progress ignores ignorable abilities
      * of every Pokemon but its user */

@@ -163,3 +163,9 @@ leave delays. Source API 16,384 cases and complete singles 8,000 turns match;
 rich seed777 reaches1,963/2,000 and summon1,919 with no retained loss/mismatch.
 See STANCE-CHANGE-VALIDATION.md. Next: form/fusion/Transform and suppression
 interactions, generic weather-form scheduling and remaining item/form registrations.
+
+Copied native-ability continuation: the missing NoTransformAbility gate is fixed.
+Actual Transform/native dispatch matches16,384 cases; complete following turns
+match8,000 cases. Retained coverage is unchanged with no mismatch. See
+TRANSFORM-RESTRICTION-VALIDATION.md. Generic weather-form queue placement and
+native fusion/Transform form registrations remain the next concrete boundaries.
