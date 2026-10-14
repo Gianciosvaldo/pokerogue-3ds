@@ -406,7 +406,10 @@ void pr_arena_lapse_tags(pr_battle *bt, pr_engine *e)
             ended[i]=!source||source->hp<=0||!source->on_field||source->switch_out_status;
             continue;
         }
-        if (t->type == ARENA_TAG_TYPE_PENDING_HEAL) note(bt);
+        if (t->type == ARENA_TAG_TYPE_PENDING_HEAL) {
+            ended[i] = t->n_pending_heals == 0;
+            continue;
+        }
         if (t->type == ARENA_TAG_TYPE_FIRE_GRASS_PLEDGE) sea_of_fire(bt, e, t->side);
         ended[i] = !(t->turn_count < 1 || --t->turn_count > 0);
     }
@@ -417,6 +420,59 @@ void pr_arena_lapse_tags(pr_battle *bt, pr_engine *e)
         splice(bt, i);
         memmove(&ended[i], &ended[i + 1], sizeof(bool) * (size_t)(bt->n_arena_tags - i));
     }
+}
+
+/* PendingHealTag.queueHeal/apply. Messages are the registered native move's
+ * template with its source identity frozen when the sacrifice is made. */
+bool pr_arena_queue_heal(pr_battle *bt, pr_engine *e, int target_index,
+                        int64_t source_id, int move_id, bool restore_pp, uint32_t pokemon_name)
+{
+    if (target_index < 0 || target_index >= 4 || move_id <= 0 || move_id >= PR_MOVE_COUNT
+        || !pr_move_has_attr(move_id, PR_AC_SacrificialFullRestoreAttr)) {
+        pr_note_unported(bt, PR_FEAT_ARENA_TAG_TURN);
+        return false;
+    }
+    pr_arena_add_tag(bt, e, ARENA_TAG_TYPE_PENDING_HEAL, 0, 0, -1, ARENA_TAG_SIDE_BOTH, false);
+    pr_arena_tag *t = (pr_arena_tag *)pr_arena_get_tag_on_side(bt, ARENA_TAG_TYPE_PENDING_HEAL, ARENA_TAG_SIDE_BOTH);
+    if (!t) return false;
+    for (int i = 0; i < t->n_pending_heals; i++)
+        if (t->pending_heals[i].target_index == target_index && t->pending_heals[i].move_id == move_id) return true;
+    if (t->n_pending_heals >= PR_MAX_PENDING_HEALS) {
+        pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT);
+        return false;
+    }
+    t->pending_heals[t->n_pending_heals++] = (pr_pending_heal){source_id,pokemon_name,(uint16_t)move_id,(uint8_t)target_index,restore_pp};
+    return true;
+}
+
+bool pr_arena_apply_pending_heal(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool simulated)
+{
+    pr_arena_tag *t = (pr_arena_tag *)pr_arena_get_tag_on_side(bt, ARENA_TAG_TYPE_PENDING_HEAL, ARENA_TAG_SIDE_BOTH);
+    if (!t || !p) return false;
+    int b = pr_battler_index(bt, p);
+    for (int i = 0; i < t->n_pending_heals;) {
+        pr_pending_heal h = t->pending_heals[i];
+        bool can_apply = p->hp < pr_get_stat(p, STAT_HP, false) || p->status;
+        for (int k = 0; !can_apply && h.restore_pp && k < PR_N_MOVES(p); k++) can_apply = PR_PP_USED(p)[k] > 0;
+        if (h.target_index != b || !can_apply) { i++; continue; }
+        if (simulated) return true;
+        bool valid_source = pr_pokemon_by_id(bt, h.source_id) != NULL;
+        memmove(&t->pending_heals[i], &t->pending_heals[i + 1],
+                sizeof t->pending_heals[0] * (size_t)(--t->n_pending_heals - i));
+        if (!valid_source) continue;
+        const pr_move *move = &pr_moves[h.move_id];
+        const char *key = NULL;
+        for (int k = 0; k < move->nattr; k++) {
+            const pr_attr *a = &pr_attrs[move->attr0 + k];
+            if (a->cls == PR_AC_SacrificialFullRestoreAttr) key = ((const pr_attr_SacrificialFullRestoreAttr *)a->p)->moveMessage;
+        }
+        pr_msg_arg name = {"pokemonName",PR_ARG_POKEMON,h.pokemon_name,NULL};
+        pr_unshift_heal_msg(bt, e, b, pr_get_stat(p, STAT_HP, false),
+            PR_HEAL_MESSAGE | PR_HEAL_NO_FULL_HP_MESSAGE | PR_HEAL_SKIP_ANIM | PR_HEAL_STATUS
+                | (h.restore_pp ? PR_HEAL_RESTORE_PP : 0), pr_msg1(key,name));
+        return true;
+    }
+    return false;
 }
 
 /* ConditionalProtectTag's condition functions */

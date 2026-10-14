@@ -1280,3 +1280,10 @@ the pinned unset-versus-NONE temporary-ability reversion rule. The shared ally
 getter also follows source party-slot lookup for reserves in singles. See
 [WEATHER-FORM-VALIDATION.md](WEATHER-FORM-VALIDATION.md) for the actual source
 scene/getter/full-turn captures, save checks, regression gates and boundaries.
+
+## Stored healing continuation
+
+Healing Wish and Lunar Dance now queue position-specific effects, apply them
+on entry and persist them through legal saves. See
+[PENDING-HEAL-VALIDATION.md](PENDING-HEAL-VALIDATION.md) for the actual source
+API/turn captures, native source quirks, validation gates and remaining contexts.

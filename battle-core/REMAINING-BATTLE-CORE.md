@@ -178,3 +178,9 @@ registrations, item/form eligibility, Pending Heal, wide levels and broader
 doubles remain open. Pending Heal specifically lacks stored target-position
 effects, duplicate-move handling, source validity, entry application and empty
 tag lapse; implementing only the entry caller would not close the feature.
+
+Stored-healing continuation: native Healing Wish/Lunar Dance now queue stored
+effects, deduplicate per position/move, honor simulation and source validity,
+apply on entry and expire when empty. Legal saves carry validated named records.
+See PENDING-HEAL-VALIDATION.md for proof status and boundaries. Two thousand actual following turns also match; complete doubles remain separate. Native
+fusion/Transform form registrations and item/form eligibility are next.

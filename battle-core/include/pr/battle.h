@@ -145,6 +145,17 @@ typedef struct pr_battler_tag {
 /* summonData.types: Roost gives Flying back on top of up to three others */
 #define PR_MAX_SUMMON_TYPES 4
 
+/* Stored Healing Wish/Lunar Dance effects, in queue order. Source deduplicates
+ * by position and move. Bounds are reported, never truncated silently. */
+#define PR_MAX_PENDING_HEALS 16
+typedef struct pr_pending_heal {
+    int64_t source_id;
+    uint32_t pokemon_name;         /* message identity frozen when queued */
+    uint16_t move_id;
+    uint8_t target_index;
+    uint8_t restore_pp;
+} pr_pending_heal;
+
 /* Arena tags: arena.tags, in upstream order */
 typedef struct pr_arena_tag {
     uint8_t type;                  /* ArenaTagType */
@@ -155,6 +166,8 @@ typedef struct pr_arena_tag {
     int8_t source_count;           /* SuppressAbilitiesTag.sourceCount */
     int8_t layers;                 /* EntryHazardTag.layers (1 for the other tags) */
     bool being_removed;            /* SuppressAbilitiesTag.beingRemoved */
+    uint8_t n_pending_heals;
+    pr_pending_heal pending_heals[PR_MAX_PENDING_HEALS];
 } pr_arena_tag;
 #define PR_MAX_ARENA_TAGS 24
 

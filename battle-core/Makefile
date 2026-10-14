@@ -361,3 +361,12 @@ $(BUILD)/weather-turn-test: tests/weather-turn-test.c $(BUILD)/weather-turn-repl
 all: $(BUILD)/ally-lookup-test
 $(BUILD)/ally-lookup-test: tests/ally-lookup-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/pending-heal-test $(BUILD)/pending-turn-test
+$(BUILD)/pending-heal-test: tests/pending-heal-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/pending-heal-test.c $(BUILD)/libprcore.a -lm -o $@
+$(BUILD)/pending-turn-replay.inc: tests/speed-boost-replay.inc tools/build-transform-turn-proof.py tools/build-pending-turn-proof.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-pending-turn-proof.py replay $@
+$(BUILD)/pending-turn-test: tests/pending-turn-test.c $(BUILD)/pending-turn-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/pending-turn-test.c $(BUILD)/libprcore.a -lm -o $@

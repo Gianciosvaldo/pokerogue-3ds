@@ -505,3 +505,11 @@ weather-form-host-test: $(BUILD)/weather_form_host_test
 $(BUILD)/weather_form_host_test: tests/weather_form_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: weather-form-host-test
+
+all: $(BUILD)/pending_heal_host_test
+test: pending-heal-host-test
+pending-heal-host-test: $(BUILD)/pending_heal_host_test
+	$(BUILD)/pending_heal_host_test
+$(BUILD)/pending_heal_host_test: tests/pending_heal_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: pending-heal-host-test

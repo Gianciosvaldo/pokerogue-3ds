@@ -635,8 +635,7 @@ void pr_post_summon_phase(pr_battle *bt, pr_engine *e, int ph)
         return;
     }
     if (p->status == STATUS_EFFECT_TOXIC) p->status_toxic_turns = 0;
-    if (pr_arena_get_tag_on_side(bt, ARENA_TAG_TYPE_PENDING_HEAL, ARENA_TAG_SIDE_BOTH))
-        pr_note_unported(bt, PR_FEAT_ARENA_TAG_TURN);
+    pr_arena_apply_pending_heal(bt, e, p, false);
     /* for (const tag of arena.tags): a tag removed on the way (Toxic Spikes absorbed) makes the
      * loop skip the one after it, as upstream's does */
     for (int i = 0; i < bt->n_arena_tags; i++)

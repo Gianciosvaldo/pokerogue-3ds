@@ -154,10 +154,15 @@ static const sfield arena_tag_fields[] = {
     SF(pr_arena_tag, type), SF(pr_arena_tag, side), SF(pr_arena_tag, turn_count), SF(pr_arena_tag, max_duration),
     SF(pr_arena_tag, source_move), SF(pr_arena_tag, source_id), SF(pr_arena_tag, source_count),
     SF(pr_arena_tag, layers), SF(pr_arena_tag, being_removed),
+    SF(pr_arena_tag, n_pending_heals),
 };
 static const sfield pos_tag_fields[] = {
     SF(pr_positional_tag, type), SF(pr_positional_tag, turn_count), SF(pr_positional_tag, target_index),
     SF(pr_positional_tag, source_id), SF(pr_positional_tag, source_move), SF(pr_positional_tag, heal_hp),
+};
+static const sfield pending_heal_fields[] = {
+    SF(pr_pending_heal, source_id), SF(pr_pending_heal, pokemon_name),
+    SF(pr_pending_heal, move_id), SF(pr_pending_heal, target_index), SF(pr_pending_heal, restore_pp),
 };
 /* the soak runs' counters travel with the run, so a reloaded run reports what the whole run hit */
 static const sfield stat_fields[] = {SF(gc_run, unported), SF(gc_run, stubs), SF(gc_run, run_core_unported)};
@@ -504,6 +509,18 @@ size_t gc_run_save(const gc_run *run, void *buf, size_t cap)
     put_block(&w, arena_tag_fields, NF(arena_tag_fields), bt->arena_tags, sizeof bt->arena_tags[0], bt->n_arena_tags);
     put_block(&w, pos_tag_fields, NF(pos_tag_fields), bt->pos_tags, sizeof bt->pos_tags[0], bt->n_pos_tags);
     section_end(&w, s);
+    /* Optional named section keeps effect records separate and avoids writing
+     * struct padding or ABI-dependent offsets to a PC/3DS save. */
+    s = section_start(&w, "pending-heals");
+    put16(&w, bt->n_arena_tags);
+    for (int i = 0; i < bt->n_arena_tags; i++) {
+        const pr_arena_tag *tag = &bt->arena_tags[i];
+        if (tag->n_pending_heals > PR_MAX_PENDING_HEALS
+            || (tag->n_pending_heals && tag->type != ARENA_TAG_TYPE_PENDING_HEAL)) { w.full = true; break; }
+        put_block(&w, pending_heal_fields, NF(pending_heal_fields), tag->pending_heals,
+                  sizeof tag->pending_heals[0], tag->n_pending_heals);
+    }
+    section_end(&w, s);
     s = section_start(&w, "stats");
     put_block(&w, stat_fields, NF(stat_fields), run, sizeof *run, 1);
     section_end(&w, s);
@@ -810,6 +827,34 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
                                             sizeof bt->pos_tags[0], PR_MAX_POSITIONAL_TAGS, &dropped);
     } else if (v.n_arena_tags || v.n_pos_tags) {
         dropped++;
+    }
+    r = section(&body, "pending-heals");
+    if (!r.bad) {
+        int np = take16(&r), lost = 0;
+        if (np != bt->n_arena_tags) { *why = "the stored healing effects are damaged"; return false; }
+        for (int i = 0; i < np; i++) {
+            pr_arena_tag *tag = &bt->arena_tags[i];
+            int expected = tag->n_pending_heals;
+            tag->n_pending_heals = (uint8_t)get_block(&r, pending_heal_fields, NF(pending_heal_fields),
+                tag->pending_heals, sizeof tag->pending_heals[0], PR_MAX_PENDING_HEALS, &lost);
+            if (tag->n_pending_heals != expected) r.bad = true;
+            if (tag->n_pending_heals && tag->type != ARENA_TAG_TYPE_PENDING_HEAL) r.bad = true;
+            for (int k = 0; k < tag->n_pending_heals; k++) {
+                const pr_pending_heal *h = &tag->pending_heals[k];
+                const pr_species *named = gc_species((uint16_t)(h->pokemon_name >> 16));
+                if (h->target_index >= 4 || h->restore_pp > 1 || h->move_id >= PR_MOVE_COUNT
+                    || !pr_move_has_attr(h->move_id, PR_AC_SacrificialFullRestoreAttr)
+                    || !named || ((h->pokemon_name >> 8) & 255) >= named->nforms
+                    || (h->pokemon_name & 255) > (PR_MSG_POKEMON_ENEMY | PR_MSG_POKEMON_FOE)) r.bad = true;
+                for (int j = 0; j < k; j++)
+                    if (tag->pending_heals[j].target_index == h->target_index
+                        && tag->pending_heals[j].move_id == h->move_id) r.bad = true;
+            }
+        }
+        if (r.bad || lost || r.pos != r.n) { *why = "the stored healing effects are damaged"; return false; }
+    } else {
+        for (int i = 0; i < bt->n_arena_tags; i++)
+            if (bt->arena_tags[i].n_pending_heals) { *why = "the stored healing effects are missing"; return false; }
     }
     if (terminal.terminal_result) {
         bool used[6]={0};
