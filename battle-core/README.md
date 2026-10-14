@@ -1264,3 +1264,7 @@ quiet-phase, complete-turn and save/controller checks and the remaining scope.
 Arena reset, Neutralizing Gas recovery and Imprison lifecycle now have actual
 source API/owning-turn proofs. See [ARENA-LIFECYCLE-VALIDATION.md](ARENA-LIFECYCLE-VALIDATION.md)
 for reproduction, source pins, save/cleanup coverage and remaining boundaries.
+
+Stance Change now follows registered quiet pre-move and leave-field transitions.
+See [STANCE-CHANGE-VALIDATION.md](STANCE-CHANGE-VALIDATION.md) for command-versus-phase,
+faint/recall ordering, source differentials, legal saves and remaining boundaries.

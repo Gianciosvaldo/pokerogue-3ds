@@ -328,3 +328,12 @@ $(BUILD)/gas-turn-replay.inc: tests/speed-boost-replay.inc tools/build-transform
 	python3 tools/build-gas-turn-proof.py replay $@
 $(BUILD)/gas-turn-test: tests/gas-turn-test.c $(BUILD)/gas-turn-replay.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/gas-turn-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/stance-change-test $(BUILD)/stance-turn-test
+$(BUILD)/stance-change-test: tests/stance-change-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/stance-change-test.c $(BUILD)/libprcore.a -lm -o $@
+$(BUILD)/stance-turn-replay.inc: tests/speed-boost-replay.inc tools/build-transform-turn-proof.py tools/build-stance-turn-proof.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-stance-turn-proof.py replay $@
+$(BUILD)/stance-turn-test: tests/stance-turn-test.c $(BUILD)/stance-turn-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/stance-turn-test.c $(BUILD)/libprcore.a -lm -o $@

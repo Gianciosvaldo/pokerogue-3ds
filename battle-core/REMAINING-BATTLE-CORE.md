@@ -156,3 +156,10 @@ of queuing registered quiet transitions. Its leave-field revert also incorrectly
 requires the ability and checks activity without field presence. Fix against
 source registrations before expanding native form/fusion/Transform suppression
 proofs. Pending Heal, Challenge eligibility and broader doubles remain separate.
+
+Stance Change continuation: registered quiet transitions now use the selected
+command, with field-aware ability-independent leave reversion and explicit faint/
+leave delays. Source API 16,384 cases and complete singles 8,000 turns match;
+rich seed777 reaches1,963/2,000 and summon1,919 with no retained loss/mismatch.
+See STANCE-CHANGE-VALIDATION.md. Next: form/fusion/Transform and suppression
+interactions, generic weather-form scheduling and remaining item/form registrations.
