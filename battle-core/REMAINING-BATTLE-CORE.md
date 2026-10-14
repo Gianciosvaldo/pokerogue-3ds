@@ -184,3 +184,10 @@ effects, deduplicate per position/move, honor simulation and source validity,
 apply on entry and expire when empty. Legal saves carry validated named records.
 See PENDING-HEAL-VALIDATION.md for proof status and boundaries. Two thousand actual following turns also match; complete doubles remain separate. Native
 fusion/Transform form registrations and item/form eligibility are next.
+
+Base-stat ordering continuation: total/flat effects now precede fusion averaging
+and Spliced Endless halving, with vitamins afterward. Actual form/fusion/Transform
+APIs and complete unfused native form turns match; explicit item arguments are
+bridged through legal saves. See STAT-ORDER-VALIDATION.md. Challenge FLIP_STAT,
+wide levels, fused move-turn/display-name coverage, native callback interactions
+and remaining item/form eligibility are still separate.

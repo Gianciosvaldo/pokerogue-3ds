@@ -624,6 +624,8 @@ int32_t pr_held_multi_lens_stacks(pr_battle *bt, const pr_pokemon *p);
 void pr_apply_field_effect_modifier(pr_battle *bt, const pr_pokemon *user, int32_t *duration);
 /* calculateBaseStats(): Shuckle Juice, Old Gateau, (fusion), vitamins */
 void pr_apply_base_stat_modifiers(pr_battle *bt, const pr_pokemon *p, double base[6]);
+void pr_apply_base_stat_before_fusion(pr_battle *bt, const pr_pokemon *p, double base[6]);
+void pr_apply_base_stat_after_fusion(pr_battle *bt, const pr_pokemon *p, double base[6]);
 void pr_apply_incrementing_stat_modifier(pr_battle *bt, const pr_pokemon *p, int stat, double *value);
 void pr_apply_nature_weight_modifier(pr_battle *bt, const pr_pokemon *p, double *mult);
 /* Raw projection APIs preserve pinned apply arithmetic outside acquisition caps.

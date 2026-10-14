@@ -179,8 +179,15 @@ static void to_modifier(const gc_item *it, pr_modifier *m, bool golden)
         m->cls = PR_MOD_TURN_STATUS_EFFECT;
         m->status_effect = !strcmp(it->key, "TOXIC_ORB") ? STATUS_EFFECT_TOXIC : STATUS_EFFECT_BURN;
         m->unknown_subclass = false;
-    } else if (!strcmp(it->key, "BASE_STAT_BOOSTER")) {          /* vitamins: BaseStatModifier(stat) */
-        m->cls = PR_MOD_BASE_STAT; m->stat = (int8_t)it->arg; m->unknown_subclass = false;
+    } else if (!strcmp(it->key, "BASE_STAT_BOOSTER") && it->arg >= STAT_HP && it->arg <= STAT_SPD) {
+        m->cls = PR_MOD_BASE_STAT; m->stat = (int8_t)it->arg; m->virtual_stack_count = it->virtual_stack;
+        m->is_transferable = false; m->unknown_subclass = false;
+    } else if (!strcmp(it->key, "MYSTERY_ENCOUNTER_SHUCKLE_JUICE") && (it->arg == 10 || it->arg == -15)) {
+        m->cls = PR_MOD_BASE_STAT_TOTAL; m->num = it->arg; m->virtual_stack_count = it->virtual_stack;
+        m->is_transferable = false; m->unknown_subclass = false;
+    } else if (!strcmp(it->key, "MYSTERY_ENCOUNTER_OLD_GATEAU") && it->arg == 0) {
+        m->cls = PR_MOD_BASE_STAT_FLAT; m->virtual_stack_count = it->virtual_stack;
+        m->is_transferable = false; m->unknown_subclass = false;
     } else if (!strcmp(it->key, "ATTACK_TYPE_BOOSTER")) { /* AttackTypeBoosterModifier(type, 20) */
         m->cls = PR_MOD_ATTACK_TYPE_BOOSTER; m->move_type = (int8_t)it->arg; m->mult = 0.2; m->unknown_subclass = false;
     } else if (!strcmp(it->key, "SCOPE_LENS")) {          /* CritBoosterModifier(1) */

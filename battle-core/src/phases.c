@@ -167,8 +167,11 @@ static void turn_modifiers(pr_battle *bt, bool player, const pr_pokemon *p)
         bool fused_item = p && p->fusion_species && (m->cls == PR_MOD_SPECIES_CRIT_BOOSTER || m->cls == PR_MOD_SPECIES_STAT_BOOSTER
                 || m->cls == PR_MOD_EVOLUTION_STAT_BOOSTER)
             && (m->pokemon_id == -1 || m->pokemon_id == (int64_t)p->id);
-        if (pr_mod_is_ported_item(m) && !fused_item) continue;
-        if (fused_item || !pr_mod_is(m, PR_MOD_HELD_ITEM) || !p || m->pokemon_id == (int64_t)p->id) {
+        bool vitamin_over_cap = p && m->cls == PR_MOD_BASE_STAT && m->stat >= STAT_HP && m->stat <= STAT_SPD
+            && m->pokemon_id == (int64_t)p->id
+            && (int64_t)m->stack_count + m->virtual_stack_count > p->ivs[m->stat];
+        if (pr_mod_is_ported_item(m) && !fused_item && !vitamin_over_cap) continue;
+        if (fused_item || vitamin_over_cap || !pr_mod_is(m, PR_MOD_HELD_ITEM) || !p || m->pokemon_id == (int64_t)p->id) {
             pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
             return;
         }

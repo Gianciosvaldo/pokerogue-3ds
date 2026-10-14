@@ -1287,3 +1287,11 @@ Healing Wish and Lunar Dance now queue position-specific effects, apply them
 on entry and persist them through legal saves. See
 [PENDING-HEAL-VALIDATION.md](PENDING-HEAL-VALIDATION.md) for the actual source
 API/turn captures, native source quirks, validation gates and remaining contexts.
+
+## Base-stat item ordering continuation
+
+Total/flat effects now precede fusion averaging and Spliced Endless halving;
+vitamins follow them. Native item records retain explicit arguments and their
+nontransferable metadata through the game-core bridge and legal saves. See
+[STAT-ORDER-VALIDATION.md](STAT-ORDER-VALIDATION.md) for source API/owning turns,
+input caps, consistency checks and remaining fusion/form contexts.

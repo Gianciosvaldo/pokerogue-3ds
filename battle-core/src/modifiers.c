@@ -115,6 +115,16 @@ bool pr_mod_is(const pr_modifier *m, int cls)
 bool pr_mod_is_ported_item(const pr_modifier *m)
 {
     if (!m) return false;
+    if (m->cls == PR_MOD_BASE_STAT_TOTAL)
+        return !m->unknown_subclass && m->pokemon_id >= 0 && m->stack_count >= 1 && m->stack_count <= 2
+            && m->virtual_stack_count == 0 && (m->num == 10 || m->num == -15);
+    if (m->cls == PR_MOD_BASE_STAT_FLAT)
+        return !m->unknown_subclass && m->pokemon_id >= 0 && m->stack_count == 1 && m->virtual_stack_count == 0;
+    if (m->cls == PR_MOD_BASE_STAT) {
+        int64_t stacks = (int64_t)m->stack_count + m->virtual_stack_count;
+        return !m->unknown_subclass && m->pokemon_id >= 0 && m->stack_count >= 1 && m->virtual_stack_count >= 0
+            && stacks <= 31 && m->stat >= STAT_HP && m->stat <= STAT_SPD;
+    }
     if (m->cls == PR_MOD_PRESERVE_BERRY) return !m->unknown_subclass && m->stack_count >= 0 && m->virtual_stack_count >= 0 && (int64_t)m->stack_count + m->virtual_stack_count >= 1 && (int64_t)m->stack_count + m->virtual_stack_count <= 3;
     if (m->cls == PR_MOD_BERRY) {
         return m->berry_type == BERRY_TYPE_SITRUS
@@ -278,7 +288,7 @@ static double clamp_stat(double v)
     return v < 1 ? 1 : v > 999999 ? 999999 : v; /* Math.min(Math.max(newVal, 1), 999999) */
 }
 
-void pr_apply_base_stat_modifiers(pr_battle *bt, const pr_pokemon *p, double base[6])
+void pr_apply_base_stat_before_fusion(pr_battle *bt, const pr_pokemon *p, double base[6])
 {
     pr_modifier *m;
     /* Shuckle Juice: every stat + statModifier (HP gets half) */
@@ -298,12 +308,23 @@ void pr_apply_base_stat_modifiers(pr_battle *bt, const pr_pokemon *p, double bas
         for (int i = 0; i < 6; i++)
             if (i == pick[0] || i == pick[1] || i == pick[2]) base[i] = clamp_stat(floor(base[i] + 20));
     }
-    /* (fusion averaging goes here once fusions are ported) */
+}
+
+void pr_apply_base_stat_after_fusion(pr_battle *bt, const pr_pokemon *p, double base[6])
+{
+    pr_modifier *m;
     /* Vitamins: floor(base * (1 + stacks * 0.1)) */
     EACH_MOD(m, bt, p->is_player, PR_MOD_BASE_STAT) {
         if (!held_applies(m, p)) continue;
         base[m->stat] = floor(base[m->stat] * (1 + pr_mod_get_stack_count(m) * 0.1));
     }
+}
+
+/* Retain the combined raw projection API for callers without a fusion step. */
+void pr_apply_base_stat_modifiers(pr_battle *bt, const pr_pokemon *p, double base[6])
+{
+    pr_apply_base_stat_before_fusion(bt, p, base);
+    pr_apply_base_stat_after_fusion(bt, p, base);
 }
 
 /* applyModifier(PokemonIncrementingStatModifier, ...): the first one applies (apply is always true).
