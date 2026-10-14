@@ -613,12 +613,18 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         return;
     }
     case PR_AC_SacrificialAttr:                          /* Explosion, Self-Destruct, Misty Explosion */
+    case PR_AC_SacrificialFullRestoreAttr:              /* Healing Wish, Lunar Dance */
     case PR_AC_SacrificialAttrOnHit: {                   /* Memento, Final Gambit: only if the move hit */
         if (a->cls == PR_AC_SacrificialAttrOnHit && !effect_can_apply(ef, user, target)) return;
         /* damageAndUpdate(user.hp, {result: INDIRECT, ignoreSegments: true}), then damageTaken +=
          * user.hp: the HP left afterwards, 0 unless the user got through */
         pr_damage_and_update(bt, e, user, user->hp, HIT_RESULT_INDIRECT, false, NULL);
         user->damage_taken += user->hp;
+        if (a->cls == PR_AC_SacrificialFullRestoreAttr) {
+            const pr_attr_SacrificialFullRestoreAttr *x = P(SacrificialFullRestoreAttr,a);
+            pr_arena_queue_heal(bt,e,pr_battler_index(bt,user),user->id,move,x->restorePP,
+                                pr_arg_pokemon(bt,"",user).v);
+        }
         return;
     }
     case PR_AC_HalfSacrificialAttr: {                    /* Mind Blown, Steel Beam */
