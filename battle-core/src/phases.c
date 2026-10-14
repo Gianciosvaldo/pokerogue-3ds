@@ -122,7 +122,7 @@ static void form_change_with_delay(pr_battle *bt, const pr_pokemon *p, int trigg
                 : bt->weather == WEATHER_TYPE_NONE || bt->weather == WEATHER_TYPE_SANDSTORM
                   || bt->weather == WEATHER_TYPE_STRONG_WINDS || bt->weather == WEATHER_TYPE_FOG;
             if (weather_reverts || suppressed || mon->ability_suppressed
-                || (mon->ability_override >= 0 && mon->ability_override != ability)) target_form = 0;
+                || (mon->ability_override != 0 && mon->ability_override != ability)) target_form = 0;
         }
     } else if (mon->species == SPECIES_ID_EISCUE && trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger) {
         target_form = mon->form == 0 ? 1 : 0;
@@ -138,7 +138,7 @@ static void form_change_with_delay(pr_battle *bt, const pr_pokemon *p, int trigg
         if (ph < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }
         e->pool[ph].pokemon = mon;
         e->pool[ph].move_id = (uint16_t)target_form;
-        if (delayed || (!stance && trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger && !is_active_on_field(mon))) pr_phase_push(bt, e, ph);
+        if (delayed) pr_phase_push(bt, e, ph);
         else pr_phase_unshift(bt, e, ph);
     }
     return;

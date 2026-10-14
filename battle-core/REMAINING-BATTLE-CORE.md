@@ -169,3 +169,12 @@ Actual Transform/native dispatch matches16,384 cases; complete following turns
 match8,000 cases. Retained coverage is unchanged with no mismatch. See
 TRANSFORM-RESTRICTION-VALIDATION.md. Generic weather-form queue placement and
 native fusion/Transform form registrations remain the next concrete boundaries.
+
+Weather-form continuation: default/explicit-delay queue placement and the
+source unset temporary-ability reversion predicate are repaired. Complete-turn
+comparison also repairs getAlly for reserve effective-stat queries in singles.
+See WEATHER-FORM-VALIDATION.md for validation and limits. Native fusion/Transform
+registrations, item/form eligibility, Pending Heal, wide levels and broader
+doubles remain open. Pending Heal specifically lacks stored target-position
+effects, duplicate-move handling, source validity, entry application and empty
+tag lapse; implementing only the entry caller would not close the feature.
