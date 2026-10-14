@@ -1268,3 +1268,7 @@ for reproduction, source pins, save/cleanup coverage and remaining boundaries.
 Stance Change now follows registered quiet pre-move and leave-field transitions.
 See [STANCE-CHANGE-VALIDATION.md](STANCE-CHANGE-VALIDATION.md) for command-versus-phase,
 faint/recall ordering, source differentials, legal saves and remaining boundaries.
+
+Copied native abilities now honor upstream's NoTransformAbility restriction.
+See [TRANSFORM-RESTRICTION-VALIDATION.md](TRANSFORM-RESTRICTION-VALIDATION.md)
+for actual Transform/damage-turn proofs, loaded-state checks and remaining form work.

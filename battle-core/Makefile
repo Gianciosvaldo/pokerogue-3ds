@@ -337,3 +337,12 @@ $(BUILD)/stance-turn-replay.inc: tests/speed-boost-replay.inc tools/build-transf
 	python3 tools/build-stance-turn-proof.py replay $@
 $(BUILD)/stance-turn-test: tests/stance-turn-test.c $(BUILD)/stance-turn-replay.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/stance-turn-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/form-interaction-test $(BUILD)/form-interaction-turn-test
+$(BUILD)/form-interaction-test: tests/form-interaction-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/form-interaction-test.c $(BUILD)/libprcore.a -lm -o $@
+$(BUILD)/form-interaction-turn-replay.inc: tests/speed-boost-replay.inc tools/build-transform-turn-proof.py tools/build-form-interaction-turn-proof.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-form-interaction-turn-proof.py replay $@
+$(BUILD)/form-interaction-turn-test: tests/form-interaction-turn-test.c $(BUILD)/form-interaction-turn-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/form-interaction-turn-test.c $(BUILD)/libprcore.a -lm -o $@
