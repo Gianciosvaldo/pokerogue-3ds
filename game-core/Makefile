@@ -481,3 +481,11 @@ arena-cleanup-host-test: $(BUILD)/arena_cleanup_host_test
 $(BUILD)/arena_cleanup_host_test: tests/arena_cleanup_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: arena-cleanup-host-test
+
+all: $(BUILD)/stance_change_host_test
+test: stance-change-host-test
+stance-change-host-test: $(BUILD)/stance_change_host_test
+	$(BUILD)/stance_change_host_test
+$(BUILD)/stance_change_host_test: tests/stance_change_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: stance-change-host-test

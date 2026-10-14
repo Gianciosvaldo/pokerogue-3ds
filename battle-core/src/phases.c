@@ -77,7 +77,7 @@ static bool native_ability_form_target(const pr_pokemon *p, int *target)
 }
 
 /* globalScene.triggerPokemonFormChange(pokemon, <trigger class>): mid-battle form changes */
-static void form_change(pr_battle *bt, const pr_pokemon *p, int trigger_class)
+static void form_change_with_delay(pr_battle *bt, const pr_pokemon *p, int trigger_class, bool delayed)
 {
     if (!p) return;
     const pr_species *sp = pr_pokemon_species(p);
@@ -86,8 +86,23 @@ static void form_change(pr_battle *bt, const pr_pokemon *p, int trigger_class)
     pr_pokemon *mon = (pr_pokemon *)p;
     int target_form = -1;
 
+    bool stance = mon->species == SPECIES_ID_AEGISLASH;
+    if (stance) {
+        if (trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger) {
+            if (mon->form == 1 && !is_active_on_field(mon)) target_form = 0;
+        } else if (trigger_class == PR_FCT_SpeciesFormChangePreMoveTrigger
+                   && pr_has_ability_active(bt, mon, ABILITY_ID_STANCE_CHANGE)) {
+            /* The registered trigger reads turnCommands, including for called moves. */
+            int b = pr_battler_index(bt, mon);
+            if (b >= 0 && b < 4 && bt->commands[b].command >= 0 && !bt->commands[b].no_move) {
+                int move = bt->commands[b].move;
+                if (mon->form == 1 && move == MOVE_ID_KINGS_SHIELD) target_form = 0;
+                else if (mon->form == 0 && move > 0 && move < PR_MOVE_COUNT
+                         && pr_moves[move].category != MOVE_CATEGORY_STATUS) target_form = 1;
+            }
+        }
     /* Weather form triggers are quiet phases upstream, queued before mutation. */
-    if (trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger && native_ability_form_target(mon,&target_form)) {
+    } else if (trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger && native_ability_form_target(mon,&target_form)) {
         /* Match source registrations; queue the mutation below. */
     } else if (mon->species == SPECIES_ID_CASTFORM || mon->species == SPECIES_ID_CHERRIM) {
         int ability = mon->species == SPECIES_ID_CASTFORM ? ABILITY_ID_FORECAST : ABILITY_ID_FLOWER_GIFT;
@@ -123,51 +138,21 @@ static void form_change(pr_battle *bt, const pr_pokemon *p, int trigger_class)
         if (ph < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }
         e->pool[ph].pokemon = mon;
         e->pool[ph].move_id = (uint16_t)target_form;
-        if (trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger && !is_active_on_field(mon)) pr_phase_push(bt, e, ph);
+        if (delayed || (!stance && trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger && !is_active_on_field(mon))) pr_phase_push(bt, e, ph);
         else pr_phase_unshift(bt, e, ph);
     }
     return;
 other_forms:
-    /* 1. Stance Change (Aegislash #681) */
-    if (mon->species == SPECIES_ID_AEGISLASH && pr_has_ability_active(bt, mon, ABILITY_ID_STANCE_CHANGE)) {
-        if (trigger_class == PR_FCT_SpeciesFormChangePreMoveTrigger) {
-            pr_engine *e = bt->engine;
-            if (e && e->current >= 0 && e->pool[e->current].type == PH_MOVE) {
-                uint16_t move_id = e->pool[e->current].move.id;
-                if (move_id == MOVE_ID_KINGS_SHIELD) {
-                    if (mon->form == 1) target_form = 0; /* Blade -> Shield */
-                } else if (pr_moves[move_id].category != MOVE_CATEGORY_STATUS) {
-                    if (mon->form == 0) target_form = 1; /* Shield -> Blade */
-                }
-            }
-        } else if (trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger) {
-            if (!is_active(mon) && mon->form == 1) {
-                target_form = 0; /* Revert to Shield when leaving field */
-            }
-        }
-    }
-
-    if (target_form >= 0 && target_form != mon->form) {
-        bool is_revert = (target_form == 0 || (mon->species == SPECIES_ID_MINIOR && target_form < 7));
-        pr_msg_arg pre_name_arg = pr_arg_pokemon(bt, "preName", mon);
-
-        pr_change_form_state(bt, mon, target_form);
-
-        if (bt->engine) {
-            pr_remove_tag(bt, bt->engine, mon, BATTLER_TAG_TYPE_AUTOTOMIZED);
-            if (is_revert) {
-                pr_queue_msg(bt, bt->engine, pr_msg1("battlePokemonForm:revertChange", pr_arg_pokemon(bt, "pokemonName", mon)));
-            } else {
-                pr_queue_msg(bt, bt->engine, pr_msg1("battlePokemonForm:formChange", pre_name_arg));
-            }
-        }
-        return;
-    }
 
     /* Report unported only for form change triggers on other species */
     if (target_form < 0 && (sp->form_change_triggers & (1u << trigger_class))) {
         pr_note_unported(bt, PR_FEAT_FORM_CHANGE);
     }
+}
+
+static void form_change(pr_battle *bt, const pr_pokemon *p, int trigger_class)
+{
+    form_change_with_delay(bt, p, trigger_class, false);
 }
 
 /* globalScene.applyModifiers(<a turn-path modifier class>, player, pokemon): held items and
@@ -2574,6 +2559,7 @@ static void reset_summon_data(pr_pokemon *p)
 void pr_reset_turn_data(pr_pokemon *p) { reset_turn_data(p); }
 void pr_reset_summon_data(pr_pokemon *p) { reset_summon_data(p); }
 void pr_form_change(pr_battle *bt, const pr_pokemon *p, int trigger_class) { form_change(bt, p, trigger_class); }
+void pr_form_change_delayed(pr_battle *bt, const pr_pokemon *p, int trigger_class) { form_change_with_delay(bt, p, trigger_class, true); }
 
 void pr_weather_form_changes(pr_battle *bt, bool revert, const pr_pokemon *source)
 {
@@ -2770,7 +2756,7 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
         bt->faint_history[1][k].turn = bt->turn;
     }
     pr_queue_msg(bt, e, pr_msg_p(bt, "battle:fainted", p));
-    form_change(bt, p, PR_FCT_SpeciesFormChangeActiveTrigger);
+    form_change_with_delay(bt, p, PR_FCT_SpeciesFormChangeActiveTrigger, true);
     /* resetTera */
     bool was_tera = p->terastallized;
     p->terastallized = false;
@@ -2894,7 +2880,7 @@ void pr_leave_field(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool clear_effec
     pr_ab_params params = {.pokemon = p, .move = -1};
     pr_apply_ab_attrs(bt, PR_AC_PreLeaveFieldAbAttr, &params);
     p->switch_out_status = true;
-    form_change(bt, p, PR_FCT_SpeciesFormChangeActiveTrigger);
+    form_change_with_delay(bt, p, PR_FCT_SpeciesFormChangeActiveTrigger, true);
     p->on_field = false;
 }
 
