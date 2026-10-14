@@ -154,6 +154,7 @@ typedef struct pr_pending_heal {
     uint16_t move_id;
     uint8_t target_index;
     uint8_t restore_pp;
+    uint32_t fusion_name;          /* frozen fusion half of the rendered name */
 } pr_pending_heal;
 
 /* Arena tags: arena.tags, in upstream order */
@@ -180,6 +181,7 @@ typedef struct pr_positional_tag {
     uint16_t source_move;          /* DelayedAttackTag.sourceMove */
     double heal_hp;                /* WishTag.healHp */
     uint32_t pokemon_name;         /* WishTag.pokemonName: its user as a message names it (pr_msg_pokemon) */
+    uint32_t fusion_name;
 } pr_positional_tag;
 #define PR_MAX_POSITIONAL_TAGS 8
 

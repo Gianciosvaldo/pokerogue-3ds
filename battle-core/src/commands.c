@@ -236,7 +236,7 @@ bool pr_is_trapped(pr_battle *bt, const pr_pokemon *p, pr_msg *ab_msg)
 static pr_msg no_escape_text(const pr_battle *bt, int64_t source_id, int source_move)
 {
     const pr_pokemon *src = source_id >= 0 ? pr_pokemon_by_id(bt, source_id) : NULL;
-    pr_msg_arg name = src ? pr_arg_pokemon(bt, "pokemonName", src) : (pr_msg_arg){"pokemonName", PR_ARG_STR, 0, ""};
+    pr_msg_arg name = src ? pr_arg_pokemon(bt, "pokemonName", src) : (pr_msg_arg){"pokemonName", PR_ARG_STR, 0, "", 0};
     return pr_msg3("battle:noEscapePokemon", name, pr_arg_move("moveName", source_move),
                    pr_arg_key("escapeVerb", "battle:escapeVerbFlee"));
 }

@@ -3026,7 +3026,7 @@ static void positional_tag_phase(pr_battle *bt, pr_engine *e)
             pr_phase_unshift(bt, e, fx);
         } else {
             if (!target || target->hp <= 0) continue;
-            pr_msg_arg name = {"pokemonNameWithAffix", PR_ARG_POKEMON, t->pokemon_name, NULL};
+            pr_msg_arg name = {"pokemonNameWithAffix", PR_ARG_POKEMON, t->pokemon_name, NULL, t->fusion_name};
             pr_unshift_heal_msg(bt, e, t->target_index, t->heal_hp, PR_HEAL_MESSAGE | PR_HEAL_NO_FULL_HP_MESSAGE,
                                 pr_msg1("arenaTag:wishTagOnAdd", name));
         }
@@ -3791,7 +3791,8 @@ static void transform_phase(pr_battle *bt, pr_engine *e, int ph)
     pr_set_summon_types(bt, user, types, n);
     /* The source names target.name, not its illusion's rendered name. */
     pr_msg_arg target_name = {"targetName", PR_ARG_POKEMON_NAME,
-        pr_msg_pokemon(target->species, target->form, 0), NULL};
+        pr_msg_pokemon(target->species, target->form, 0), NULL,
+        target->fusion_species ? pr_msg_pokemon(target->fusion_species, target->fusion_form, 0) : 0};
     pr_queue_msg(bt, e, pr_msg2("abilityTriggers:postSummonTransform",
         pr_arg_pokemon(bt, "pokemonNameWithAffix", user), target_name));
     pr_event_add(bt, e, PR_EV_TRANSFORM, phase->battler, phase->transform_target, 0, phase->transform_sound, NULL);

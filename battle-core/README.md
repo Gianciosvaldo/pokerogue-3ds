@@ -1295,3 +1295,6 @@ vitamins follow them. Native item records retain explicit arguments and their
 nontransferable metadata through the game-core bridge and legal saves. See
 [STAT-ORDER-VALIDATION.md](STAT-ORDER-VALIDATION.md) for source API/owning turns,
 input caps, consistency checks and remaining fusion/form contexts.
+
+Native fused names and frozen Wish/Healing Wish/Lunar Dance message identities
+are documented in [FUSION-NAME-VALIDATION.md](FUSION-NAME-VALIDATION.md).

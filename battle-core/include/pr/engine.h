@@ -466,6 +466,8 @@ void pr_switch_summon_phase(pr_battle *bt, pr_engine *e, int ph);
 void pr_post_summon_phase(pr_battle *bt, pr_engine *e, int ph);
 bool pr_arena_queue_heal(pr_battle *bt, pr_engine *e, int target_index,
                         int64_t source_id, int move_id, bool restore_pp, uint32_t pokemon_name);
+bool pr_arena_queue_heal_name(pr_battle *bt, pr_engine *e, int target_index,
+                        int64_t source_id, int move_id, bool restore_pp, pr_msg_arg name);
 bool pr_arena_apply_pending_heal(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool simulated);
 /* SummonPhase (a battle's first send-out), InitEncounterPhase and CheckSwitchPhase (src/switching.c) */
 void pr_summon_phase(pr_battle *bt, pr_engine *e, int ph);

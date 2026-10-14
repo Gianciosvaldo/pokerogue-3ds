@@ -391,7 +391,8 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         double hp = floor(pr_get_stat(user, STAT_HP, false) / 2.0);
         pr_positional_tag pt = {.type = POSITIONAL_TAG_TYPE_WISH, .turn_count = 2,
                                 .target_index = (int8_t)pr_battler_index(bt, target), .source_id = -1,
-                                .heal_hp = hp < 1 ? 1 : hp, .pokemon_name = pr_arg_pokemon(bt, "", user).v};
+                                .heal_hp = hp < 1 ? 1 : hp, .pokemon_name = pr_arg_pokemon(bt, "", user).v,
+                                .fusion_name = pr_arg_pokemon(bt, "", user).fusion_v};
         pr_pos_add(bt, e, &pt);
         return;
     }
@@ -622,8 +623,8 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         user->damage_taken += user->hp;
         if (a->cls == PR_AC_SacrificialFullRestoreAttr) {
             const pr_attr_SacrificialFullRestoreAttr *x = P(SacrificialFullRestoreAttr,a);
-            pr_arena_queue_heal(bt,e,pr_battler_index(bt,user),user->id,move,x->restorePP,
-                                pr_arg_pokemon(bt,"",user).v);
+            pr_arena_queue_heal_name(bt,e,pr_battler_index(bt,user),user->id,move,x->restorePP,
+                                pr_arg_pokemon(bt,"",user));
         }
         return;
     }
@@ -779,7 +780,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
                                         pr_arg_int("turnCount", 3)));
             break;
         case MOVE_ID_CELEBRATE: {
-            pr_msg_arg name = {"playerName", PR_ARG_STR, 0, bt->player_name ? bt->player_name : ""};
+            pr_msg_arg name = {"playerName", PR_ARG_STR, 0, bt->player_name ? bt->player_name : "", 0};
             pr_queue_msg(bt, e, pr_msg1("moveTriggers:celebrate", name));
             break;
         }

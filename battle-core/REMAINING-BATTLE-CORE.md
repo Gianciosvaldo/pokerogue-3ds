@@ -191,3 +191,9 @@ APIs and complete unfused native form turns match; explicit item arguments are
 bridged through legal saves. See STAT-ORDER-VALIDATION.md. Challenge FLIP_STAT,
 wide levels, fused move-turn/display-name coverage, native callback interactions
 and remaining item/form eligibility are still separate.
+
+Fusion-name continuation after #277 covers native English fragment generation,
+permanent/Illusion message snapshots and stored Wish/Healing Wish/Lunar Dance
+names, including named save fields. See FUSION-NAME-VALIDATION.md. This does not
+close full fused-turn admission or all native form callbacks under fusion and
+Transform; those are the next source comparisons.

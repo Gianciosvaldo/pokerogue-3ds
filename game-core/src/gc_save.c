@@ -69,6 +69,7 @@ typedef struct {
     uint8_t weather, terrain;
     int16_t weather_turns_left, weather_max_duration, terrain_turns_left, terrain_max_duration;
     int32_t player_faints, n_arena_tags, n_pos_tags;
+    bool frozen_names; /* new saves require both halves of stored names */
 } sv_run;
 typedef struct { uint8_t terminal_result; } sv_terminal;
 static const sfield terminal_fields[]={SF(sv_terminal,terminal_result)};
@@ -87,6 +88,7 @@ static const sfield run_fields[] = {
     SF(sv_run, terrain), SF(sv_run, weather_turns_left), SF(sv_run, weather_max_duration),
     SF(sv_run, terrain_turns_left), SF(sv_run, terrain_max_duration), SF(sv_run, player_faints),
     SF(sv_run, n_arena_tags), SF(sv_run, n_pos_tags),
+    SF(sv_run, frozen_names),
 };
 
 static const sfield depth_fields[] = {SF(pr_biome_depths, set), SF(pr_biome_depths, depth), SF(pr_biome_depths, chance)};
@@ -159,10 +161,12 @@ static const sfield arena_tag_fields[] = {
 static const sfield pos_tag_fields[] = {
     SF(pr_positional_tag, type), SF(pr_positional_tag, turn_count), SF(pr_positional_tag, target_index),
     SF(pr_positional_tag, source_id), SF(pr_positional_tag, source_move), SF(pr_positional_tag, heal_hp),
+    SF(pr_positional_tag, pokemon_name), SF(pr_positional_tag, fusion_name),
 };
 static const sfield pending_heal_fields[] = {
     SF(pr_pending_heal, source_id), SF(pr_pending_heal, pokemon_name),
     SF(pr_pending_heal, move_id), SF(pr_pending_heal, target_index), SF(pr_pending_heal, restore_pp),
+    SF(pr_pending_heal, fusion_name),
 };
 /* the soak runs' counters travel with the run, so a reloaded run reports what the whole run hit */
 static const sfield stat_fields[] = {SF(gc_run, unported), SF(gc_run, stubs), SF(gc_run, run_core_unported)};
@@ -483,6 +487,7 @@ size_t gc_run_save(const gc_run *run, void *buf, size_t cap)
     v.player_faints = bt->player_faints;
     v.n_arena_tags = bt->n_arena_tags;
     v.n_pos_tags = bt->n_pos_tags;
+    v.frozen_names = true;
 
     writer w = {(uint8_t *)buf, 0, cap, false};
     put(&w, magic, 8);
@@ -690,6 +695,8 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     int dropped = 0;
     reader r = section(&body, "run");
     if (r.bad || get_block(&r, run_fields, NF(run_fields), &v, sizeof v, 1, &dropped) != 1) { *why = "the save is damaged"; return false; }
+    uint8_t frozen_marker; memcpy(&frozen_marker, &v.frozen_names, 1);
+    if (frozen_marker > 1) { *why = "the stored names are damaged"; return false; }
     sv_terminal terminal={0};reader tr=section(&body,"terminal");
     if (!tr.bad) {
         reader scan=body;scan.pos=0;int terminal_sections=0;
@@ -823,9 +830,25 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     if (!r.bad) {
         bt->n_arena_tags = (uint8_t)get_block(&r, arena_tag_fields, NF(arena_tag_fields), bt->arena_tags,
                                               sizeof bt->arena_tags[0], PR_MAX_ARENA_TAGS, &dropped);
-        bt->n_pos_tags = (uint8_t)get_block(&r, pos_tag_fields, NF(pos_tag_fields), bt->pos_tags,
-                                            sizeof bt->pos_tags[0], PR_MAX_POSITIONAL_TAGS, &dropped);
+        int names_lost = 0;
+        bt->n_pos_tags = (uint8_t)get_block(&r, pos_tag_fields, v.frozen_names ? NF(pos_tag_fields) : NF(pos_tag_fields)-2, bt->pos_tags,
+                                            sizeof bt->pos_tags[0], PR_MAX_POSITIONAL_TAGS, &names_lost);
+        if (v.frozen_names && (r.bad || names_lost || bt->n_pos_tags != v.n_pos_tags)) {
+            *why = "the stored wish effects are damaged"; return false;
+        }
+        dropped += names_lost;
+        for (int i=0; i<bt->n_pos_tags; i++) {
+            const pr_positional_tag *t=&bt->pos_tags[i];
+            const pr_species *named=gc_species((uint16_t)(t->pokemon_name >> 16));
+            const pr_species *fused=t->fusion_name ? gc_species((uint16_t)(t->fusion_name >> 16)) : NULL;
+            if ((v.frozen_names && t->type==POSITIONAL_TAG_TYPE_WISH && !t->pokemon_name)
+                || (t->pokemon_name && (!named || ((t->pokemon_name >> 8)&255)>=named->nforms || (t->pokemon_name&255)>3))
+                || (t->fusion_name && (!fused || ((t->fusion_name >> 8)&255)>=fused->nforms || (t->fusion_name&255)))) {
+                *why="the stored wish effects are damaged"; return false;
+            }
+        }
     } else if (v.n_arena_tags || v.n_pos_tags) {
+        if (v.frozen_names) { *why="the stored arena effects are missing"; return false; }
         dropped++;
     }
     r = section(&body, "pending-heals");
@@ -835,16 +858,18 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
         for (int i = 0; i < np; i++) {
             pr_arena_tag *tag = &bt->arena_tags[i];
             int expected = tag->n_pending_heals;
-            tag->n_pending_heals = (uint8_t)get_block(&r, pending_heal_fields, NF(pending_heal_fields),
+            tag->n_pending_heals = (uint8_t)get_block(&r, pending_heal_fields, v.frozen_names ? NF(pending_heal_fields) : NF(pending_heal_fields)-1,
                 tag->pending_heals, sizeof tag->pending_heals[0], PR_MAX_PENDING_HEALS, &lost);
             if (tag->n_pending_heals != expected) r.bad = true;
             if (tag->n_pending_heals && tag->type != ARENA_TAG_TYPE_PENDING_HEAL) r.bad = true;
             for (int k = 0; k < tag->n_pending_heals; k++) {
                 const pr_pending_heal *h = &tag->pending_heals[k];
                 const pr_species *named = gc_species((uint16_t)(h->pokemon_name >> 16));
+                const pr_species *fused = h->fusion_name ? gc_species((uint16_t)(h->fusion_name >> 16)) : NULL;
                 if (h->target_index >= 4 || h->restore_pp > 1 || h->move_id >= PR_MOVE_COUNT
                     || !pr_move_has_attr(h->move_id, PR_AC_SacrificialFullRestoreAttr)
                     || !named || ((h->pokemon_name >> 8) & 255) >= named->nforms
+                    || (h->fusion_name && (!fused || ((h->fusion_name >> 8) & 255) >= fused->nforms || (h->fusion_name & 255)))
                     || (h->pokemon_name & 255) > (PR_MSG_POKEMON_ENEMY | PR_MSG_POKEMON_FOE)) r.bad = true;
                 for (int j = 0; j < k; j++)
                     if (tag->pending_heals[j].target_index == h->target_index

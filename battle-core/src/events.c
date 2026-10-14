@@ -31,7 +31,7 @@ pr_msg pr_msg4(const char *key, pr_msg_arg a, pr_msg_arg b, pr_msg_arg c, pr_msg
 
 static pr_msg_arg arg(const char *name, uint8_t kind, uint32_t v, const char *s)
 {
-    pr_msg_arg a = {name, kind, v, s};
+    pr_msg_arg a = {name, kind, v, s, 0};
     return a;
 }
 
@@ -55,11 +55,19 @@ static uint32_t pokemon_v(const pr_battle *bt, const pr_pokemon *p)
 
 pr_msg_arg pr_arg_pokemon(const pr_battle *bt, const char *name, const pr_pokemon *p)
 {
-    return arg(name, PR_ARG_POKEMON, pokemon_v(bt, p), NULL);
+    pr_msg_arg a = arg(name, PR_ARG_POKEMON, pokemon_v(bt, p), NULL);
+    if (p) {
+        uint16_t species = p->illusion.active ? p->illusion.fusion_species : p->fusion_species;
+        if (species) a.fusion_v = pr_msg_pokemon(species,
+                            p->illusion.active ? p->illusion.fusion_form : p->fusion_form, 0);
+    }
+    return a;
 }
 pr_msg_arg pr_arg_pokemon_name(const pr_battle *bt, const char *name, const pr_pokemon *p)
 {
-    return arg(name, PR_ARG_POKEMON_NAME, pokemon_v(bt, p), NULL);
+    pr_msg_arg a = pr_arg_pokemon(bt, name, p);
+    a.kind = PR_ARG_POKEMON_NAME;
+    return a;
 }
 pr_msg_arg pr_arg_int(const char *name, int32_t v) { return arg(name, PR_ARG_INT, (uint32_t)v, NULL); }
 pr_msg_arg pr_arg_move(const char *name, int move) { return arg(name, PR_ARG_MOVE, (uint32_t)move, NULL); }
