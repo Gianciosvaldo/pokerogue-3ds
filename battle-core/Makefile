@@ -346,3 +346,18 @@ $(BUILD)/form-interaction-turn-replay.inc: tests/speed-boost-replay.inc tools/bu
 	python3 tools/build-form-interaction-turn-proof.py replay $@
 $(BUILD)/form-interaction-turn-test: tests/form-interaction-turn-test.c $(BUILD)/form-interaction-turn-replay.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/form-interaction-turn-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/weather-form-test
+$(BUILD)/weather-form-test: tests/weather-form-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/weather-form-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/weather-turn-test
+$(BUILD)/weather-turn-replay.inc: tests/speed-boost-replay.inc tools/build-transform-turn-proof.py tools/build-weather-turn-proof.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-weather-turn-proof.py replay $@
+$(BUILD)/weather-turn-test: tests/weather-turn-test.c $(BUILD)/weather-turn-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/weather-turn-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/ally-lookup-test
+$(BUILD)/ally-lookup-test: tests/ally-lookup-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

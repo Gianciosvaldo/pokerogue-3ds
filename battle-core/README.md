@@ -1272,3 +1272,11 @@ faint/recall ordering, source differentials, legal saves and remaining boundarie
 Copied native abilities now honor upstream's NoTransformAbility restriction.
 See [TRANSFORM-RESTRICTION-VALIDATION.md](TRANSFORM-RESTRICTION-VALIDATION.md)
 for actual Transform/damage-turn proofs, loaded-state checks and remaining form work.
+
+## Weather forms and ally lookup continuation
+
+Registered Castform/Cherrim form changes now honor the scene queue mode and
+the pinned unset-versus-NONE temporary-ability reversion rule. The shared ally
+getter also follows source party-slot lookup for reserves in singles. See
+[WEATHER-FORM-VALIDATION.md](WEATHER-FORM-VALIDATION.md) for the actual source
+scene/getter/full-turn captures, save checks, regression gates and boundaries.

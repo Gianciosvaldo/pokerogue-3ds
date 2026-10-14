@@ -497,3 +497,11 @@ transform-restriction-host-test: $(BUILD)/transform_restriction_host_test
 $(BUILD)/transform_restriction_host_test: tests/transform_restriction_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: transform-restriction-host-test
+
+all: $(BUILD)/weather_form_host_test
+test: weather-form-host-test
+weather-form-host-test: $(BUILD)/weather_form_host_test
+	$(BUILD)/weather_form_host_test
+$(BUILD)/weather_form_host_test: tests/weather_form_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: weather-form-host-test

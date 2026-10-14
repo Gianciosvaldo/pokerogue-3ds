@@ -32,10 +32,15 @@ bool pr_is_opponent(const pr_battle *bt, const pr_pokemon *a, const pr_pokemon *
 
 const pr_pokemon *pr_get_ally(const pr_battle *bt, const pr_pokemon *p)
 {
-    if (!bt->double_battle) return NULL;
-    for (int i = 0; i < 4; i++)
-        if (bt->field[i] == p) return bt->field[i ^ 1];
-    return NULL;
+    /* Source getFieldIndex is indexOf in the side's first one/two party slots.
+     * A reserve has index -1 (truthy), so getAlly returns slot zero even in
+     * singles. Do not substitute physical presence or an active-only field. */
+    int side = p->is_player ? 0 : 1;
+    const pr_pokemon *first = bt->n_party[side] ? bt->party[side][0] : bt->field[side * 2];
+    if (p != first) return first;
+    return bt->double_battle
+        ? (bt->n_party[side] ? (bt->n_party[side] > 1 ? bt->party[side][1] : NULL) : bt->field[side * 2 + 1])
+        : NULL;
 }
 
 const pr_attr *pr_ability_first_attr(uint16_t ability, uint16_t cls)
