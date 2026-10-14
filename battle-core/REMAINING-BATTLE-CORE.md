@@ -145,3 +145,14 @@ comparisons plus legal command/save/controller checks. See
 NATIVE-FORMS-VALIDATION.md. Rich seed777 increases to 1,955 exact covered turns;
 this does not establish whole-core completion. Other forms, Stance Change's
 caller, fusion/Transform transitions and suppression/arena-tag removal remain.
+
+Arena lifecycle continuation: bulk reset callbacks now precede Return/init;
+Neutralizing Gas source-count/removal/recovery and Imprison's owning restrictions
+are implemented. See ARENA-LIFECYCLE-VALIDATION.md for source APIs, complete Gas
+singles turns, cleanup/save checks and limits. Retained summon seed777 reaches
+1,914/2,000 exact cases (previously1,897); rich remains1,955, with no coverage loss.
+Next concrete gap: Stance Change still mutates inline and emits form text instead
+of queuing registered quiet transitions. Its leave-field revert also incorrectly
+requires the ability and checks activity without field presence. Fix against
+source registrations before expanding native form/fusion/Transform suppression
+proofs. Pending Heal, Challenge eligibility and broader doubles remain separate.

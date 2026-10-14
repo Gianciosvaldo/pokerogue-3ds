@@ -382,7 +382,6 @@ void gc_new_battle(gc_run *run)
         bool reset, new_biome, roll;
         arena_flags(run,prev_wave,&reset,&new_biome,&roll);
         if (reset) {
-            gc_arena_reset_effects(run);
             gc_battle_cleanup_players(run);
         }
     }
@@ -406,7 +405,7 @@ void gc_new_battle(gc_run *run)
         /* resetArenaEffects, then the biome's weather and terrain, before the save */
         bool reset, new_biome, roll;
         arena_flags(run, prev_wave, &reset, &new_biome, &roll);
-        gc_arena_new_battle(run, reset, roll);
+        gc_arena_new_battle(run, reset && !prev_wave, roll);
 
         if (in->custom) {   /* custom content: the wave is reported (a mystery encounter is never offered a rematch) */
             gc_custom_encounter enc;
@@ -460,7 +459,9 @@ void gc_new_battle(gc_run *run)
      * resetSeed, so what they roll is only the arena, not the rolls after them */
     bool reset, new_biome, roll;
     arena_flags(run, prev_wave, &reset, &new_biome, &roll);
-    gc_arena_new_battle(run, reset, roll);
+    /* Cleanup already reset the outgoing arena. Its removal callbacks may
+     * have established new weather, which survives an ordinary trainer entry. */
+    gc_arena_new_battle(run, reset && !prev_wave, roll);
 
     gc_event *ev = gc_ev_new(run, GC_EV_WAVE);
     if (ev) { ev->a = wave; ev->b = run->biome; ev->c = run->battle_type; }

@@ -1260,3 +1260,7 @@ Zen Mode, Shields Down, Schooling, Hunger Switch, Ice Face, Disguise and Power
 Construct now use queued registered form changes. See
 [NATIVE-FORMS-VALIDATION.md](NATIVE-FORMS-VALIDATION.md) for actual source API,
 quiet-phase, complete-turn and save/controller checks and the remaining scope.
+
+Arena reset, Neutralizing Gas recovery and Imprison lifecycle now have actual
+source API/owning-turn proofs. See [ARENA-LIFECYCLE-VALIDATION.md](ARENA-LIFECYCLE-VALIDATION.md)
+for reproduction, source pins, save/cleanup coverage and remaining boundaries.

@@ -722,6 +722,14 @@ void pr_prepare_player_cleanup(pr_battle *bt, pr_engine *e, bool reset_arena)
 {
     engine_reset(bt, e);
     if (!reset_arena) return;
+    /* Arena.resetArenaEffects precedes Return and all party init callbacks.
+     * A duration of zero denotes permanent biome weather/terrain. */
+    if (bt->weather_turns_left != 0)
+        pr_try_set_weather(bt, e, WEATHER_TYPE_NONE, NULL);
+    if (bt->terrain_turns_left != 0)
+        pr_try_set_terrain(bt, e, TERRAIN_NONE, true, NULL);
+    bt->player_faints = 0;
+    pr_arena_remove_all_tags(bt, e);
     int field_count = bt->double_battle ? 2 : 1;
     for (int i=0;i<field_count && i<bt->n_party[0];i++) {
         pr_pokemon *p=bt->party[0][i];

@@ -155,7 +155,7 @@ static void emit(const pr_phase *p,char scope,int level,int j){
  if(nq>=128){bad();}snprintf(queue[nq++],sizeof queue[0],"Q %c %d %d %s %d %d %s %s\n",scope,level,j,name,p->type==PH_MARKER?-1:p->battler,p->type==PH_SHOW_ABILITY?p->anim_result:-1,text,stages);
 }
 int main(int argc,char **argv){
- if(argc!=2)return 2;
+ bool effects=argc==3&&!strcmp(argv[2],"--effects");if(argc!=2&&!effects)return 2;
  input=fopen(argv[1],"r");if(!input)return 2;
  pr_closures_init();
  if(!getenv("TURNTEST_LOCALES"))bad();
@@ -171,7 +171,9 @@ int main(int argc,char **argv){
   if(kind!=(c/32)%4||holder!=(c%2?2:0)||victim!=(holder<2?2:0))bad();
   bt.participants[0]=mons[0].id;bt.participants[1]=mons[1].id;bt.n_participants=2;
   bt.field[2]=bt.field[3]=NULL;bt.n_party[1]=0;bt.double_battle=c%4<2;
+  if(effects){double a[13];read_vector("AW ",a,13);bt.weather=integer(a[0],0,WEATHER_TYPE_STRONG_WINDS);bt.weather_turns_left=integer(a[1],0,100);bt.weather_max_duration=integer(a[2],0,100);bt.terrain=integer(a[3],0,TERRAIN_PSYCHIC);bt.terrain_turns_left=integer(a[4],0,100);bt.terrain_max_duration=integer(a[5],0,100);bt.player_faints=integer(a[6],0,100);bt.n_arena_tags=1;pr_arena_tag *t=&bt.arena_tags[0];t->type=integer(a[7],1,ARENA_TAG_TYPE_PENDING_HEAL);t->side=ARENA_TAG_SIDE_BOTH;t->turn_count=integer(a[8],0,100);t->max_duration=integer(a[9],0,100);t->source_move=integer(a[10],0,PR_MOVE_COUNT-1);if(a[11]<-1||a[11]>UINT32_MAX||a[11]!=floor(a[11]))bad();t->source_id=a[11];t->source_count=integer(a[12],0,4);t->layers=1;}
   pr_prepare_player_cleanup(&bt,&e,kind!=0);
+  if(effects){double a[1];read_vector("AT ",a,1);if(a[0]!=bt.n_arena_tags)ok=false;}
   double world[14];read_vector("WORLD ",world,14);uint32_t ids[2]={0,0};for(int k=0;k<bt.n_participants&&k<2;k++)ids[k]=bt.participants[k];if(bt.n_participants==2&&ids[0]>ids[1]){uint32_t id=ids[0];ids[0]=ids[1];ids[1]=id;}
   double actual_world[]={bt.weather,bt.weather_turns_left,bt.weather_max_duration,bt.terrain,bt.terrain_turns_left,bt.terrain_max_duration,bt.player_faints,bt.enemy_faints,bt.battle_score,bt.post_battle_loot,bt.ability_bar_visible,bt.n_participants,ids[0],ids[1]};for(int k=0;k<14;k++)if(actual_world[k]!=world[k]){if(c<100)fprintf(stderr,"case%d world%d C:%.17g JS:%.17g\n",c,k,actual_world[k],world[k]);ok=false;}
   read_vector("OW ",wave_flags,4);for(int b=0;b<4;b++){integer(wave_flags[b],0,1);if(mons[b].wave_endured!=wave_flags[b])ok=false;}
@@ -192,7 +194,7 @@ int main(int argc,char **argv){
    if(j>=nq||strcmp(line,queue[j])){if(c<100)fprintf(stderr,"case%d queue%d C:%sJS:%s",c,j,j<nq?queue[j]:"missing\n",line);ok=false;}}
   pr_run_player_cleanup(&bt,&e);
   double xc[1];read_vector("TRACE ",xc,1);int trace_count=integer(xc[0],0,64);if(trace_count!=e.n_trace)ok=false;
-  for(int j=0;j<trace_count;j++){char *x=line_read("X ");x[strcspn(x,"\n")]=0;bool known=false;for(int t=0;t<PH_COUNT_;t++)if(pr_phase_name[t]&&!strcmp(x,pr_phase_name[t]))known=true;if(!known)bad();if(j>=e.n_trace||strcmp(x,e.trace[j])){if(c<100)fprintf(stderr,"case%d phase%d C:%s JS:%s\n",c,j,j<e.n_trace?e.trace[j]:"missing",x);ok=false;}}
+  for(int j=0;j<trace_count;j++){char *x=line_read("X ");x[strcspn(x,"\n")]=0;bool known=false;for(int t=0;t<PH_COUNT_;t++)if(pr_phase_name[t]){size_t len=strlen(pr_phase_name[t]);if(!strcmp(x,pr_phase_name[t]))known=true;else if(!strncmp(x,pr_phase_name[t],len)&&x[len]==':'&&(t==PH_SHOW_ABILITY||t==PH_COMMON_ANIM||t==PH_STAT_STAGE_CHANGE)){char *end;long b=strtol(x+len+1,&end,10);if(end==x+len+1||*end||b<0||b>3)bad();known=true;}}if(!known)bad();if(j>=e.n_trace||strcmp(x,e.trace[j])){if(c<100)fprintf(stderr,"case%d phase%d C:%s JS:%s\n",c,j,j<e.n_trace?e.trace[j]:"missing",x);ok=false;}}
   double tc[1];read_vector("TEXT ",tc,1);int text_count=integer(tc[0],0,64),got_count=0;
   for(int j=0;j<e.n_events;j++)if(e.events[j].type==PR_EV_TEXT){
    if(got_count>=text_count){if(c<100)fprintf(stderr,"case%d extra text\n",c);ok=false;continue;}

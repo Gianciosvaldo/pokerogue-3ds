@@ -53,6 +53,7 @@ bool pr_tag_type_ported(int type)
     case BATTLER_TAG_TYPE_PSYCHO_SHIFT:     /* PsychoShiftTag: AFTER_MOVE, 1 turn */
     case BATTLER_TAG_TYPE_DISABLED:         /* DisabledTag (MoveRestrictionBattlerTag) */
     case BATTLER_TAG_TYPE_TAUNT:            /* TauntTag (MoveRestrictionBattlerTag) */
+    case BATTLER_TAG_TYPE_IMPRISON:         /* ImprisonTag (source moves and active field state) */
     case BATTLER_TAG_TYPE_TORMENT:          /* TormentTag (MoveRestrictionBattlerTag) */
     case BATTLER_TAG_TYPE_ENCORE:           /* EncoreTag (MoveRestrictionBattlerTag) */
     case BATTLER_TAG_TYPE_INFATUATED:       /* InfatuatedTag: Attract, Cute Charm */
@@ -368,6 +369,9 @@ static pr_battler_tag construct(int type, int turn_count, int source_move, int64
     case BATTLER_TAG_TYPE_TAUNT:                  /* TauntTag(): AFTER_MOVE, 4 turns, no source id */
         t.turn_count = 4;
         t.source_move = MOVE_ID_TAUNT;
+        break;
+    case BATTLER_TAG_TYPE_IMPRISON:
+        t.turn_count=1;t.source_move=MOVE_ID_IMPRISON;t.source_id=source_id;
         break;
     case BATTLER_TAG_TYPE_TORMENT:                /* TormentTag(sourceId): AFTER_MOVE, 1 turn */
         t.turn_count = 1;
@@ -1162,6 +1166,18 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
     case BATTLER_TAG_TYPE_DISABLED:
     case BATTLER_TAG_TYPE_TAUNT:
         return restriction_lapse(bt, e, p, t, lapse_type);
+    case BATTLER_TAG_TYPE_IMPRISON: {
+        const pr_pokemon *source=pr_pokemon_by_id(bt,t->source_id);
+        if(!source)return false;
+        if(lapse_type==BATTLER_TAG_LAPSE_TYPE_PRE_MOVE && e && e->current>=0 && e->pool[e->current].type==PH_MOVE){
+            int move=e->pool[e->current].move.id;
+            if(pr_tag_restricts_move(bt,p,t,move)){
+                pr_queue_msg(bt,e,pr_msg2("battle:moveDisabledImprison",pr_arg_pokemon(bt,"pokemonNameWithAffix",p),pr_arg_move("moveName",move)));
+                pr_cancel_current_move(e,NULL);
+            }
+        }
+        return active_on_field(source);
+    }
     case BATTLER_TAG_TYPE_TORMENT:                /* only leaving the field ends it */
         return active_on_field(p);
     case BATTLER_TAG_TYPE_ENCORE:

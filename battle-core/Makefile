@@ -313,3 +313,18 @@ $(BUILD)/native-form-turn-replay.inc: tests/speed-boost-replay.inc tools/build-t
 	python3 tools/build-native-form-turn-proof.py replay $@
 $(BUILD)/native-form-turn-test: tests/native-form-turn-test.c $(BUILD)/native-form-turn-replay.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/native-form-turn-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/gas-lifecycle-test $(BUILD)/arena-remove-all-test $(BUILD)/imprison-test
+$(BUILD)/gas-lifecycle-test: tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+$(BUILD)/arena-remove-all-test: tests/arena-remove-all-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/arena-remove-all-test.c $(BUILD)/libprcore.a -lm -o $@
+$(BUILD)/imprison-test: tests/imprison-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/imprison-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/gas-turn-test
+$(BUILD)/gas-turn-replay.inc: tests/speed-boost-replay.inc tools/build-transform-turn-proof.py tools/build-gas-turn-proof.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-gas-turn-proof.py replay $@
+$(BUILD)/gas-turn-test: tests/gas-turn-test.c $(BUILD)/gas-turn-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/gas-turn-test.c $(BUILD)/libprcore.a -lm -o $@
