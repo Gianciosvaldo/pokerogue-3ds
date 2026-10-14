@@ -28,7 +28,7 @@ static bool in_moveset(const pr_pokemon *p, int move)
 }
 
 /* MoveRestrictionBattlerTag.isMoveRestricted(move, user) for p's tag t; false for other tags */
-static bool tag_restricts(pr_battle *bt, const pr_pokemon *p, const pr_battler_tag *t, int move)
+bool pr_tag_restricts_move(pr_battle *bt, const pr_pokemon *p, const pr_battler_tag *t, int move)
 {
     switch (t->type) {
     case BATTLER_TAG_TYPE_THROAT_CHOPPED: return (pr_moves[move].flags & MOVE_FLAGS_SOUND_BASED) != 0;
@@ -115,7 +115,7 @@ bool pr_move_selectable(pr_battle *bt, const pr_pokemon *p, int move, pr_msg *wh
     pr_msg m = {0};
     bool ok = true;
     for (int i = 0; i < p->n_tags && ok; i++)
-        if (tag_restricts(bt, p, &p->tags[i], move)) {
+        if (pr_tag_restricts_move(bt, p, &p->tags[i], move)) {
             m = denied_text(bt, p, &p->tags[i], move);
             ok = false;
         }

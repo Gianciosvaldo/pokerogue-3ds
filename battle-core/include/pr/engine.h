@@ -372,6 +372,9 @@ bool pr_arena_add_tag(pr_battle *bt, pr_engine *e, int type, int turn_count, int
 int pr_arena_max_layers(int type);
 bool pr_arena_remove_tag_on_side(pr_battle *bt, pr_engine *e, int type, int side, bool quiet);
 void pr_arena_remove_tags_on_side(pr_battle *bt, pr_engine *e, const int32_t *types, int n_types, int side, bool quiet);
+void pr_arena_remove_all_tags(pr_battle *bt, pr_engine *e);
+void pr_arena_gas_source_leave(pr_battle *bt, pr_engine *e);
+bool pr_tag_restricts_move(pr_battle *bt, const pr_pokemon *p, const pr_battler_tag *t, int move);
 void pr_arena_lapse_tags(pr_battle *bt, pr_engine *e);
 /* arena.applyTagsForSide(ConditionalProtectTag, side, false, isProtected, attacker, defender, move,
  * ignoresProtectBypass) */

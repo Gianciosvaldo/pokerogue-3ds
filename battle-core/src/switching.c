@@ -611,7 +611,11 @@ static void entry_hazard_apply(pr_battle *bt, pr_engine *e, int i, pr_pokemon *p
             e->overflow = true;
         return;
     }
-    default:                                                               /* Imprison */
+    case ARENA_TAG_TYPE_IMPRISON:
+        if (is_active_on_field(pr_pokemon_by_id(bt, t.source_id)) && p->hp > 0)
+            pr_add_tag(bt, e, p, BATTLER_TAG_TYPE_IMPRISON, 1, MOVE_ID_IMPRISON, t.source_id);
+        return;
+    default:
         pr_note_unported(bt, PR_FEAT_ARENA_TAG_TURN);
         return;
     }

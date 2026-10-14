@@ -812,6 +812,11 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         if (!pp->simulated) pr_try_set_terrain(bt, c->e, t, false, p);
         return 1;
     }
+    case PR_AC_PreLeaveFieldRemoveSuppressAbilitiesSourceAbAttr:
+        GATE(pr_arena_get_tag_on_side(bt,ARENA_TAG_TYPE_NEUTRALIZING_GAS,ARENA_TAG_SIDE_BOTH)!=NULL);
+        if(!c->e)return -1;
+        pr_arena_gas_source_leave(bt,c->e);
+        return 1;
     case PR_AC_PostSummonAddArenaTagAbAttr: {                           /* Neutralizing Gas */
         const pr_attr_PostSummonAddArenaTagAbAttr *x = P(PostSummonAddArenaTagAbAttr, a);
         if (!c->e) return -1;
