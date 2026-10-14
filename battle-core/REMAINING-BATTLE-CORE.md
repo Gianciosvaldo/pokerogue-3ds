@@ -197,3 +197,11 @@ permanent/Illusion message snapshots and stored Wish/Healing Wish/Lunar Dance
 names, including named save fields. See FUSION-NAME-VALIDATION.md. This does not
 close full fused-turn admission or all native form callbacks under fusion and
 Transform; those are the next source comparisons.
+
+Callback-context continuation after #278 compares registered summon/turn/init/
+faint callbacks and quiet phases for eight native families under fusion and
+actual legal Transform, plus naturally indexed fused and owning Ditto turns.
+Existing runtime gates match Source; no runtime change is needed for these
+captures. See CALLBACK-CONTEXT-VALIDATION.md. Next concrete admission gap is
+fused species-stat/crit/evolution items, still explicitly marked unsupported in
+turn_modifiers. Broader weather registrations and partner/doubles remain.

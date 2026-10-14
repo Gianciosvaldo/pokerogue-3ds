@@ -391,3 +391,19 @@ $(BUILD)/fusion-message-test: tests/fusion-message-test.c $(BUILD)/libprcore.a
 all: $(BUILD)/fusion-wish-test
 $(BUILD)/fusion-wish-test: tests/fusion-wish-test.c tests/fusion-message-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/fusion-wish-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/fusion-callback-test $(BUILD)/transform-callback-test $(BUILD)/fusion-callback-turn-test $(BUILD)/transform-callback-turn-test
+$(BUILD)/fusion-callback-test: tests/fusion-callback-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+$(BUILD)/transform-callback-test: tests/transform-callback-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+$(BUILD)/fusion-callback-turn-replay.inc: tests/speed-boost-replay.inc tools/build-transform-turn-proof.py tools/build-native-form-turn-proof.py tools/build-fusion-callback-turn-proof.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-fusion-callback-turn-proof.py replay $@
+$(BUILD)/fusion-callback-turn-test: tests/fusion-callback-turn-test.c $(BUILD)/fusion-callback-turn-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/fusion-callback-turn-test.c $(BUILD)/libprcore.a -lm -o $@
+$(BUILD)/transform-callback-turn-replay.inc: tests/speed-boost-replay.inc tools/build-transform-turn-proof.py tools/build-transform-callback-turn-proof.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-transform-callback-turn-proof.py replay $@
+$(BUILD)/transform-callback-turn-test: tests/transform-callback-turn-test.c $(BUILD)/transform-callback-turn-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/transform-callback-turn-test.c $(BUILD)/libprcore.a -lm -o $@
