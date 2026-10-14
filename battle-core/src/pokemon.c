@@ -265,8 +265,8 @@ const pr_form *pr_pokemon_fusion_form(const pr_pokemon *p)
     return &pr_forms[fs->form0 + (p->fusion_form < fs->nforms ? p->fusion_form : 0)];
 }
 
-/* calculateStats() with calculateBaseStats(). Fusion and challenges (FLIP_STAT) are
- * not ported yet; the Wonder Guard check reads the permanent ability and the passive. */
+/* calculateStats() with calculateBaseStats(). Challenge FLIP_STAT remains
+ * separate; Wonder Guard reads the permanent ability and the passive. */
 void pr_recalculate_stats(pr_battle *bt, pr_pokemon *p)
 {
     int32_t hp = p->hp, last_max = p->stats[STAT_HP];
@@ -281,26 +281,19 @@ void pr_calculate_stats(pr_battle *bt, pr_pokemon *p)
     const pr_form *f = pr_pokemon_base_form(p);
     const pr_form *ff = pr_pokemon_fusion_form(p);
     double base[6];
+    for (int s = 0; s < 6; s++) base[s] = f->base_stats[s];
+    /* Source applies total/flat effects to the primary species before averaging
+     * with the fusion or halving an unfused Spliced Endless actor. */
+    pr_apply_base_stat_before_fusion(bt, p, base);
     for (int s = 0; s < 6; s++) {
         if (ff) {
-            base[s] = ceil((f->base_stats[s] + ff->base_stats[s]) / 2.0);
+            base[s] = ceil((base[s] + ff->base_stats[s]) / 2.0);
         } else if (bt->game_mode == GAME_MODES_SPLICED_ENDLESS) {
             /* calculateBaseStats: an unfused Pokemon has halved base stats in spliced-only mode. */
-            base[s] = ceil(f->base_stats[s] / 2.0);
-        } else {
-            base[s] = f->base_stats[s];
+            base[s] = ceil(base[s] / 2.0);
         }
     }
-    if (!ff && bt->game_mode == GAME_MODES_SPLICED_ENDLESS) {
-        /* These source modifiers precede halving; the combined modifier helper cannot yet
-         * express that ordering. Flee clears held items before recalculating. */
-        int side = p->is_player ? 0 : 1;
-        for (int i = 0; i < bt->n_mods[side]; i++)
-            if (bt->mods[side][i].pokemon_id == (int64_t)p->id
-                && (bt->mods[side][i].cls == PR_MOD_BASE_STAT_TOTAL || bt->mods[side][i].cls == PR_MOD_BASE_STAT_FLAT))
-                pr_note_unported(bt, PR_FEAT_MODIFIERS);
-    }
-    pr_apply_base_stat_modifiers(bt, p, base);
+    pr_apply_base_stat_after_fusion(bt, p, base);
     for (int s = 0; s < 6; s++) {
         double v = floor((2 * base[s] + p->ivs[s]) * p->level * 0.01);
         if (s == STAT_HP) {

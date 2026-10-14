@@ -370,3 +370,12 @@ $(BUILD)/pending-turn-replay.inc: tests/speed-boost-replay.inc tools/build-trans
 	python3 tools/build-pending-turn-proof.py replay $@
 $(BUILD)/pending-turn-test: tests/pending-turn-test.c $(BUILD)/pending-turn-replay.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/pending-turn-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/form-fusion-test $(BUILD)/stat-order-turn-test
+$(BUILD)/form-fusion-test: tests/form-fusion-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/form-fusion-test.c $(BUILD)/libprcore.a -lm -o $@
+$(BUILD)/stat-order-turn-replay.inc: tests/speed-boost-replay.inc tools/build-transform-turn-proof.py tools/build-native-form-turn-proof.py tools/build-stat-order-turn-proof.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-stat-order-turn-proof.py replay $@
+$(BUILD)/stat-order-turn-test: tests/stat-order-turn-test.c $(BUILD)/stat-order-turn-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/stat-order-turn-test.c $(BUILD)/libprcore.a -lm -o $@

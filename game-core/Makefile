@@ -513,3 +513,11 @@ pending-heal-host-test: $(BUILD)/pending_heal_host_test
 $(BUILD)/pending_heal_host_test: tests/pending_heal_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: pending-heal-host-test
+
+all: $(BUILD)/stat_order_host_test
+test: stat-order-host-test
+stat-order-host-test: $(BUILD)/stat_order_host_test
+	$(BUILD)/stat_order_host_test
+$(BUILD)/stat_order_host_test: tests/stat_order_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: stat-order-host-test
