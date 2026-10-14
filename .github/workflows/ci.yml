@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build battle-core differential runners
-        run: make -C battle-core build/turntest build/poltergeist-message-test build/optional-phase-test build/optional-phase-fixtures-test
+        run: make -C battle-core build/turntest build/poltergeist-message-test build/optional-phase-test build/optional-phase-fixtures-test build/fusion-callback-test build/transform-callback-test build/fusion-callback-turn-test build/transform-callback-turn-test
       - name: Run game-core tests
         run: make -C game-core test
 

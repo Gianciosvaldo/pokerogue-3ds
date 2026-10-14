@@ -1298,3 +1298,6 @@ input caps, consistency checks and remaining fusion/form contexts.
 
 Native fused names and frozen Wish/Healing Wish/Lunar Dance message identities
 are documented in [FUSION-NAME-VALIDATION.md](FUSION-NAME-VALIDATION.md).
+
+Registered native callbacks under fusion and legal Transform are covered in
+[CALLBACK-CONTEXT-VALIDATION.md](CALLBACK-CONTEXT-VALIDATION.md).
