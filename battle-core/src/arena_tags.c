@@ -427,6 +427,13 @@ void pr_arena_lapse_tags(pr_battle *bt, pr_engine *e)
 bool pr_arena_queue_heal(pr_battle *bt, pr_engine *e, int target_index,
                         int64_t source_id, int move_id, bool restore_pp, uint32_t pokemon_name)
 {
+    return pr_arena_queue_heal_name(bt, e, target_index, source_id, move_id, restore_pp,
+        (pr_msg_arg){"", PR_ARG_POKEMON, pokemon_name, NULL, 0});
+}
+
+bool pr_arena_queue_heal_name(pr_battle *bt, pr_engine *e, int target_index,
+                        int64_t source_id, int move_id, bool restore_pp, pr_msg_arg name)
+{
     if (target_index < 0 || target_index >= 4 || move_id <= 0 || move_id >= PR_MOVE_COUNT
         || !pr_move_has_attr(move_id, PR_AC_SacrificialFullRestoreAttr)) {
         pr_note_unported(bt, PR_FEAT_ARENA_TAG_TURN);
@@ -441,7 +448,7 @@ bool pr_arena_queue_heal(pr_battle *bt, pr_engine *e, int target_index,
         pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT);
         return false;
     }
-    t->pending_heals[t->n_pending_heals++] = (pr_pending_heal){source_id,pokemon_name,(uint16_t)move_id,(uint8_t)target_index,restore_pp};
+    t->pending_heals[t->n_pending_heals++] = (pr_pending_heal){source_id,name.v,(uint16_t)move_id,(uint8_t)target_index,restore_pp,name.fusion_v};
     return true;
 }
 
@@ -466,7 +473,7 @@ bool pr_arena_apply_pending_heal(pr_battle *bt, pr_engine *e, pr_pokemon *p, boo
             const pr_attr *a = &pr_attrs[move->attr0 + k];
             if (a->cls == PR_AC_SacrificialFullRestoreAttr) key = ((const pr_attr_SacrificialFullRestoreAttr *)a->p)->moveMessage;
         }
-        pr_msg_arg name = {"pokemonName",PR_ARG_POKEMON,h.pokemon_name,NULL};
+        pr_msg_arg name = {"pokemonName",PR_ARG_POKEMON,h.pokemon_name,NULL,h.fusion_name};
         pr_unshift_heal_msg(bt, e, b, pr_get_stat(p, STAT_HP, false),
             PR_HEAL_MESSAGE | PR_HEAL_NO_FULL_HP_MESSAGE | PR_HEAL_SKIP_ANIM | PR_HEAL_STATUS
                 | (h.restore_pp ? PR_HEAL_RESTORE_PP : 0), pr_msg1(key,name));

@@ -521,3 +521,11 @@ stat-order-host-test: $(BUILD)/stat_order_host_test
 $(BUILD)/stat_order_host_test: tests/stat_order_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: stat-order-host-test
+
+all: $(BUILD)/fusion_name_host_test
+test: fusion-name-host-test
+fusion-name-host-test: $(BUILD)/fusion_name_host_test
+	$(BUILD)/fusion_name_host_test
+$(BUILD)/fusion_name_host_test: tests/fusion_name_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: fusion-name-host-test

@@ -379,3 +379,15 @@ $(BUILD)/stat-order-turn-replay.inc: tests/speed-boost-replay.inc tools/build-tr
 	python3 tools/build-stat-order-turn-proof.py replay $@
 $(BUILD)/stat-order-turn-test: tests/stat-order-turn-test.c $(BUILD)/stat-order-turn-replay.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/stat-order-turn-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/fusion-name-test
+$(BUILD)/fusion-name-test: tests/fusion-name-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/fusion-message-test
+$(BUILD)/fusion-message-test: tests/fusion-message-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/fusion-wish-test
+$(BUILD)/fusion-wish-test: tests/fusion-wish-test.c tests/fusion-message-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/fusion-wish-test.c $(BUILD)/libprcore.a -lm -o $@
