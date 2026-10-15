@@ -1,3 +1,4 @@
+import { BattleScene } from "#app/battle-scene";
 /* Actual controller -> QuietFormChangePhase.start -> PokemonMove.usePp. */
 import { audioManager } from "#app/global-audio-manager";
 import { AbilityId } from "#enums/ability-id";
@@ -9,7 +10,8 @@ import { it,vi } from "vitest";
 it("actual Eternamax form and PP lifecycle",async()=>{
  const N=Number(process.env.FINAL_BOSS_N??2048),seed=Number(process.env.FINAL_BOSS_SEED??777);
  if(!process.versions.node.startsWith("22.")||!Number.isSafeInteger(N)||N<512)throw Error("Node22,N>=512");
- const g=new GameManager(new Phaser.Game({type:Phaser.HEADLESS}));g.override.ability(AbilityId.BALL_FETCH).enemyAbility(AbilityId.BALL_FETCH).enemySpecies(SpeciesId.ETERNATUS);await g.classicMode.startBattle(SpeciesId.BULBASAUR);
+ const realBattleRoll=BattleScene.prototype.randBattleSeedInt;
+ const g=new GameManager(new Phaser.Game({type:Phaser.HEADLESS}));g.override.ability(AbilityId.BALL_FETCH).enemyAbility(AbilityId.BALL_FETCH).enemySpecies(SpeciesId.ETERNATUS);await g.classicMode.startBattle(SpeciesId.BULBASAUR);BattleScene.prototype.randBattleSeedInt=realBattleRoll;
  g.override.ability(AbilityId.NONE).enemyAbility(AbilityId.NONE);
  const s:any=g.scene,pm:any=s.phaseManager,p:any=g.field.getEnemyPokemon();
  vi.spyOn(pm,"shiftPhase").mockImplementation(()=>{});vi.spyOn(audioManager,"fadeOutBgm").mockImplementation(()=>{});vi.spyOn(s,"setFieldScale").mockImplementation(()=>{});vi.spyOn(s,"updateFieldScale").mockImplementation(async()=>{});

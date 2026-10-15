@@ -1,3 +1,4 @@
+import { BattleScene } from "#app/battle-scene";
 /* Actual scene controller, moveset construction and phase queue; visual transport only. */
 import { getGameMode } from "#app/game-mode";
 import { audioManager } from "#app/global-audio-manager";
@@ -10,7 +11,8 @@ import { it,vi } from "vitest";
 it("actual final boss phase two controller",async()=>{
  const N=Number(process.env.FINAL_BOSS_N??16384);
  if(!process.versions.node.startsWith("22.")||!Number.isSafeInteger(N)||N<512)throw Error("Node22,N>=512");
- const g=new GameManager(new Phaser.Game({type:Phaser.HEADLESS}));g.override.ability(AbilityId.BALL_FETCH).enemyAbility(AbilityId.BALL_FETCH).enemySpecies(SpeciesId.ETERNATUS);await g.classicMode.startBattle(SpeciesId.BULBASAUR,SpeciesId.CHARMANDER,SpeciesId.SQUIRTLE);
+ const realBattleRoll=BattleScene.prototype.randBattleSeedInt;
+ const g=new GameManager(new Phaser.Game({type:Phaser.HEADLESS}));g.override.ability(AbilityId.BALL_FETCH).enemyAbility(AbilityId.BALL_FETCH).enemySpecies(SpeciesId.ETERNATUS);await g.classicMode.startBattle(SpeciesId.BULBASAUR,SpeciesId.CHARMANDER,SpeciesId.SQUIRTLE);BattleScene.prototype.randBattleSeedInt=realBattleRoll;
  const s:any=g.scene,pm:any=s.phaseManager,enemy:any=g.field.getEnemyPokemon(),party:any[]=s.getPlayerParty();
  vi.spyOn(pm,"shiftPhase").mockImplementation(()=>{});
  vi.spyOn(audioManager,"fadeOutBgm").mockImplementation(()=>{});
