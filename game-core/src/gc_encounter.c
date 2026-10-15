@@ -192,7 +192,7 @@ static void enemy_items(gc_run *run)
 static void refresh_enemy(gc_run *run, gc_mon *m, int species, int level, const pr_enemy_gen *g, int slot)
 {
     uint16_t mv[4];
-    uint8_t pp_up[4];
+    int8_t pp_up[4];
     int16_t max_pp[4];
     const int n = m->b.n_moves;
     memcpy(mv, m->b.moves, sizeof mv);

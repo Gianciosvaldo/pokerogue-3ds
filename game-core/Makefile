@@ -537,3 +537,11 @@ interlude-host-test: $(BUILD)/interlude_host_test
 $(BUILD)/interlude_host_test: tests/interlude_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: interlude-host-test
+
+all: $(BUILD)/boss_pp_host_test
+test: boss-pp-host-test
+boss-pp-host-test: $(BUILD)/boss_pp_host_test
+	$(BUILD)/boss_pp_host_test
+$(BUILD)/boss_pp_host_test: tests/boss_pp_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: boss-pp-host-test

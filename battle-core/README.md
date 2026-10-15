@@ -1304,3 +1304,6 @@ Registered native callbacks under fusion and legal Transform are covered in
 
 Interlude queue pruning and end-of-turn suppression are implemented and
 source-compared in [INTERLUDE-VALIDATION.md](INTERLUDE-VALIDATION.md).
+
+Final-boss transition and signed move PP: `FINAL-BOSS-VALIDATION.md` records the
+bounded Source comparison and remaining theft/doubles/integration requirements.

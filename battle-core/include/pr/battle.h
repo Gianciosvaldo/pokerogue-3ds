@@ -90,6 +90,7 @@ enum {
     PR_MOD_DAMAGE_MONEY_REWARD,    /* Golden Punch */
     PR_MOD_MONEY_MULTIPLIER,       /* Amulet Coin dependency of damage money */
     PR_MOD_PRESERVE_BERRY,          /* Berry Pouch; side-wide */
+    PR_MOD_TURN_HELD_TRANSFER,       /* Mini Black Hole; transfer execution tracked separately */
     PR_MOD_COUNT_
 };
 extern const uint8_t pr_mod_parent[PR_MOD_COUNT_];
@@ -259,7 +260,7 @@ typedef struct pr_pokemon {
     uint8_t n_summon_types;            /* its length; 0 = not set (getTypes uses the species') */
     uint16_t moves[4];                 /* moveset, 0 = empty slot */
     uint8_t pp_used[4];
-    uint8_t pp_up[4];
+    int8_t pp_up[4];
     int16_t max_pp_override[4];        /* -1 = undefined */
     uint8_t n_moves;
     int8_t gender;                     /* Gender: -1 genderless, 0 male, 1 female */
@@ -324,7 +325,9 @@ typedef struct pr_pokemon {
     uint8_t transform_form;
     int8_t transform_gender;
     uint16_t transform_moves[4];
-    uint8_t transform_pp_used[4], transform_pp_up[4], transform_n_moves;
+    uint8_t transform_pp_used[4];
+    int8_t transform_pp_up[4];
+    uint8_t transform_n_moves;
     int16_t transform_max_pp_override[4];
     bool summon_moves_active; /* Mimic can override moves without transforming identity. */
     uint8_t summon_moves_alias_mask; /* slots sharing their PokemonMove with permanent moves */
@@ -767,6 +770,7 @@ int pr_get_tera_type(const pr_pokemon *p);
 /* p->passive from hasPassive() and getPassiveAbility() */
 /* Enabled passives include Daily custom ability NONE, whose activation phase still queues. */
 bool pr_has_passive(pr_battle *bt, const pr_pokemon *p);
+uint16_t pr_get_passive_ability(const pr_pokemon *p);
 void pr_update_passive(pr_battle *bt, pr_pokemon *p);
 /* damageAndUpdate(damage, {result: INDIRECT, ignoreSegments: true, ignoreFaintPhase: true}) with no
  * source: the HP loss happens at once, as upstream does it in the middle of a damage calculation */

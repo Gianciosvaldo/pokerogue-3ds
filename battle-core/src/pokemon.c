@@ -142,7 +142,7 @@ void pr_set_original_move(pr_pokemon *p, int slot, uint16_t move)
     p->summon_moves_alias_mask &= (uint8_t)~(1u << slot);
     uint16_t *moves = p->moves;
     uint8_t *used = p->pp_used;
-    uint8_t *up = p->pp_up;
+    int8_t *up = p->pp_up;
     int16_t *max = p->max_pp_override;
     uint8_t *n = &p->n_moves;
     for(int i=*n;i<slot;i++){moves[i]=0;used[i]=up[i]=0;max[i]=-1;}
@@ -168,7 +168,7 @@ void pr_use_moveset_pp(pr_pokemon *p, int slot, bool temporary, int count)
     if(slot<0 || slot>=4)return;
     uint16_t *moves=temporary?p->transform_moves:p->moves;
     uint8_t *used=temporary?p->transform_pp_used:p->pp_used;
-    uint8_t *up=temporary?p->transform_pp_up:p->pp_up;
+    int8_t *up=temporary?p->transform_pp_up:p->pp_up;
     int16_t *override=temporary?p->transform_max_pp_override:p->max_pp_override;
     int step=(int)floor(pr_moves[moves[slot]].pp/5.0);if(step<1)step=1;
     int max=override[slot]>0?override[slot]:pr_moves[moves[slot]].pp+up[slot]*step;
@@ -229,7 +229,7 @@ bool pr_copy_last_move(pr_battle *bt, pr_engine *e, pr_pokemon *user,
     if (permanent)pr_set_move(bt,e,user,slot,(uint16_t)copied);
     else {
         if (PR_HAS_SUMMON_MOVES(user)) detach_move_refs(e,user,slot,false,true);
-        uint16_t moves[4];uint8_t used[4],up[4];int16_t max[4];
+        uint16_t moves[4];uint8_t used[4];int8_t up[4];int16_t max[4];
         int count=PR_N_MOVES(user);
         uint8_t aliases=PR_HAS_SUMMON_MOVES(user)?user->summon_moves_alias_mask:(uint8_t)((1u<<count)-1);
         memcpy(moves,PR_MOVES(user),sizeof moves);memcpy(used,PR_PP_USED(user),sizeof used);
@@ -615,11 +615,15 @@ bool pr_has_passive(pr_battle *bt, const pr_pokemon *p)
     return p->passive_flag || p->is_boss;
 }
 
+uint16_t pr_get_passive_ability(const pr_pokemon *p)
+{
+    return p->custom_passive >= 0 ? (uint16_t)p->custom_passive : pr_pokemon_base_form(p)->passive;
+}
+
 void pr_update_passive(pr_battle *bt, pr_pokemon *p)
 {
     if (!pr_has_passive(bt, p)) { p->passive = 0; return; }
-    if (p->custom_passive >= 0) p->passive = (uint16_t)p->custom_passive;
-    else p->passive = pr_pokemon_base_form(p)->passive;
+    p->passive = pr_get_passive_ability(p);
 }
 
 double pr_damage_indirect(pr_battle *bt, pr_pokemon *p, double damage)

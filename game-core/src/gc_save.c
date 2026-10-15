@@ -591,7 +591,7 @@ static bool mon_ok(const gc_mon *m)
         if (!b->fusion_species || !sp || b->temporary_fusion_form>=sp->nforms) return false;
     } else if (b->temporary_fusion_form) return false;
     if (b->n_moves > 4 || b->n_tags > PR_MAX_BATTLER_TAGS || b->n_move_queue > PR_MAX_MOVE_QUEUE) return false;
-    for (int i = 0; i < b->n_moves; i++) if (b->moves[i] >= PR_MOVE_COUNT) return false;
+    for (int i = 0; i < b->n_moves; i++) if (b->moves[i] >= PR_MOVE_COUNT || b->pp_up[i] > 3 || (b->pp_up[i] < 0 && b->pp_up[i] != -4)) return false;
     if (b->n_summon_types > PR_MAX_SUMMON_TYPES || b->n_ab_applied_summon > 4 || b->n_ab_applied_wave > 4) return false;
     if (!berry_history_ok(b)) return false;
     uint8_t active_byte;memcpy(&active_byte,&b->summon_moves_active,1);
@@ -604,7 +604,7 @@ static bool mon_ok(const gc_mon *m)
     }
     if (PR_HAS_SUMMON_MOVES(b)) {
         if(b->transform_n_moves>4)return false;
-        for (int i = 0; i < 4; i++) if (b->transform_moves[i] >= PR_MOVE_COUNT || b->transform_pp_up[i] > 3
+        for (int i = 0; i < 4; i++) if (b->transform_moves[i] >= PR_MOVE_COUNT || b->transform_pp_up[i] > 3 || (b->transform_pp_up[i] < 0 && b->transform_pp_up[i] != -4)
             || b->transform_max_pp_override[i] < -1) return false;
     }
     for(int i=0;i<4;i++)if(b->summon_moves_alias_mask & (1u<<i)) {
