@@ -1301,3 +1301,6 @@ are documented in [FUSION-NAME-VALIDATION.md](FUSION-NAME-VALIDATION.md).
 
 Registered native callbacks under fusion and legal Transform are covered in
 [CALLBACK-CONTEXT-VALIDATION.md](CALLBACK-CONTEXT-VALIDATION.md).
+
+Interlude queue pruning and end-of-turn suppression are implemented and
+source-compared in [INTERLUDE-VALIDATION.md](INTERLUDE-VALIDATION.md).

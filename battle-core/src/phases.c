@@ -2910,14 +2910,21 @@ static void return_phase(pr_battle *bt, pr_engine *e, int ph)
 
 static void check_interlude_phase(pr_battle *bt, pr_engine *e)
 {
-    (void)e;
     if (bt->wave_index % 10 != 0) return;
-    for (int i = 2; i < 4; i++)
-        if (bt->field[i] && bt->field[i]->hp > 0) return;
+    /* Source checks the complete enemy party, not a separate field scan.
+     * Array.every also succeeds for an empty party. */
     for (int k = 0; k < bt->n_party[1]; k++)
         if (party_hp(bt, 1, k) > 0) return;
-    if (bt->n_party[1] == 0) pr_note_unported(bt, PR_FEAT_PARTY);
-    pr_note_unported(bt, PR_FEAT_PHASE_0 + PH_CHECK_INTERLUDE);     /* onInterlude */
+    /* phaseManager.onInterlude removes every matching tree phase. */
+    const pr_phase_type removed[] = {PH_WEATHER_EFFECT, PH_BERRY, PH_CHECK_STATUS_EFFECT};
+    for (size_t i = 0; i < sizeof removed / sizeof removed[0]; i++)
+        while (pr_phase_try_remove(bt, e, removed[i], -1)) {}
+    /* PhaseTree.find visits the highest level first and marks only its first match. */
+    for (int l = e->n_levels - 1; l >= 0; l--)
+        for (int k = 0; k < e->level_len[l]; k++) {
+            pr_phase *p = &e->pool[e->levels[l][k]];
+            if (p->type == PH_TURN_END) { p->upcoming_interlude = true; return; }
+        }
 }
 
 /* Weather.isTypeDamageImmune(type) */
@@ -3237,7 +3244,7 @@ bool pr_try_set_terrain(pr_battle *bt, pr_engine *e, int terrain, bool ignore_an
     return true;
 }
 
-static void turn_end_phase(pr_battle *bt, pr_engine *e)
+static void turn_end_phase(pr_battle *bt, pr_engine *e, int ph)
 {
     /* currentBattle.incrementTurn() */
     bt->turn++;
@@ -3254,36 +3261,38 @@ static void turn_end_phase(pr_battle *bt, pr_engine *e)
     }
     pr_speed_iter it;
     pr_pokemon *p;
-    pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
-    while ((p = pr_speed_iter_next(bt, &it))) {
-        if (!p->switch_out_status) {
-            pr_lapse_tags(bt, e, p, BATTLER_TAG_LAPSE_TYPE_TURN_END);
-            pr_apply_turn_heal_modifiers(bt, e, p);       /* TurnHealModifier (Leftovers) */
-            turn_modifiers(bt, p->is_player, p);          /* TurnHealModifier (Leftovers) */
-            /* Grassy Terrain heals a grounded Pokemon by 1/16 of its max HP, with a message */
-            if (bt->terrain == TERRAIN_GRASSY && pr_is_grounded(bt, p, false))
-                pr_unshift_heal_msg(bt, e, pr_battler_index(bt, p), to_dmg_value(max_hp(p) / 16.0), PR_HEAL_MESSAGE,
-                                    pr_msg1("battle:turnEndHpRestore", pr_arg_pokemon(bt, "pokemonName", p)));
-            if (!p->is_player) {
-                pr_apply_enemy_turn_heal_modifiers(bt, e, p);
-                pr_apply_enemy_status_heal_modifiers(bt, e, p);
-                turn_modifiers(bt, false, p);
+    if (!PH(ph)->upcoming_interlude) {
+        pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
+        while ((p = pr_speed_iter_next(bt, &it))) {
+            if (!p->switch_out_status) {
+                pr_lapse_tags(bt, e, p, BATTLER_TAG_LAPSE_TYPE_TURN_END);
+                pr_apply_turn_heal_modifiers(bt, e, p);       /* TurnHealModifier (Leftovers) */
+                turn_modifiers(bt, p->is_player, p);          /* TurnHealModifier (Leftovers) */
+                /* Grassy Terrain heals a grounded Pokemon by 1/16 of its max HP, with a message */
+                if (bt->terrain == TERRAIN_GRASSY && pr_is_grounded(bt, p, false))
+                    pr_unshift_heal_msg(bt, e, pr_battler_index(bt, p), to_dmg_value(max_hp(p) / 16.0), PR_HEAL_MESSAGE,
+                                        pr_msg1("battle:turnEndHpRestore", pr_arg_pokemon(bt, "pokemonName", p)));
+                if (!p->is_player) {
+                    pr_apply_enemy_turn_heal_modifiers(bt, e, p);
+                    pr_apply_enemy_status_heal_modifiers(bt, e, p);
+                    turn_modifiers(bt, false, p);
+                }
+                pr_ab_params pt = {.pokemon = p, .move = -1};
+                pr_apply_ab_attrs(bt, PR_AC_PostTurnAbAttr, &pt);
             }
-            pr_ab_params pt = {.pokemon = p, .move = -1};
-            pr_apply_ab_attrs(bt, PR_AC_PostTurnAbAttr, &pt);
-        }
-        if (p->is_dynamaxed) {
-            if (p->dynamax_turns_left > 0) p->dynamax_turns_left--;
-            if (p->dynamax_turns_left == 0) {
-                revert_dynamax(p);
+            if (p->is_dynamaxed) {
+                if (p->dynamax_turns_left > 0) p->dynamax_turns_left--;
+                if (p->dynamax_turns_left == 0) {
+                    revert_dynamax(p);
+                }
             }
+            pr_apply_turn_status_modifiers(bt, e, p);        /* Toxic Orb / Flame Orb */
+            turn_modifiers(bt, p->is_player, p);              /* TurnHeldItemTransferModifier */
+            p->temp_turn_count++;
+            p->temp_wave_turn_count++;
         }
-        pr_apply_turn_status_modifiers(bt, e, p);        /* Toxic Orb / Flame Orb */
-        turn_modifiers(bt, p->is_player, p);              /* TurnHeldItemTransferModifier */
-        p->temp_turn_count++;
-        p->temp_wave_turn_count++;
+        pr_arena_lapse_tags(bt, e);
     }
-    pr_arena_lapse_tags(bt, e);
     if (bt->weather != WEATHER_TYPE_NONE && !weather_lapse(bt)) {
         pr_try_set_weather(bt, e, WEATHER_TYPE_NONE, NULL);
         /* triggerWeatherBasedFormChangesToNormal: Castform and Cherrim (form changes aren't ported) */
@@ -3823,7 +3832,7 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_BERRY: berry_phase(bt, e); break;
     case PH_CHECK_STATUS_EFFECT: check_status_effect_phase(bt, e); break;
     case PH_POST_TURN_STATUS_EFFECT: post_turn_status_effect_phase(bt, e, ph); break;
-    case PH_TURN_END: turn_end_phase(bt, e); break;
+    case PH_TURN_END: turn_end_phase(bt, e, ph); break;
     case PH_MESSAGE: pr_event_add(bt, e, PR_EV_TEXT, -1, -1, 0, 0, &PH(ph)->msg); break;
     case PH_DAMAGE_ANIM:
         pr_event_add(bt, e, PR_EV_DAMAGE, PH(ph)->battler, -1, PH(ph)->anim_result, PH(ph)->anim_amount, NULL);

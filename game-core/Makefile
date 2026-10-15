@@ -529,3 +529,11 @@ fusion-name-host-test: $(BUILD)/fusion_name_host_test
 $(BUILD)/fusion_name_host_test: tests/fusion_name_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: fusion-name-host-test
+
+all: $(BUILD)/interlude_host_test
+test: interlude-host-test
+interlude-host-test: $(BUILD)/interlude_host_test
+	$(BUILD)/interlude_host_test
+$(BUILD)/interlude_host_test: tests/interlude_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: interlude-host-test
