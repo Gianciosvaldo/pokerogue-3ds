@@ -1307,3 +1307,7 @@ source-compared in [INTERLUDE-VALIDATION.md](INTERLUDE-VALIDATION.md).
 
 Final-boss transition and signed move PP: `FINAL-BOSS-VALIDATION.md` records the
 bounded Source comparison and remaining theft/doubles/integration requirements.
+
+Mini Black Hole turn transfers and inventory/save persistence are described in
+[ITEM-TRANSFER-VALIDATION.md](ITEM-TRANSFER-VALIDATION.md); supported item families
+and remaining theft, doubles and Endless boundaries are listed explicitly.

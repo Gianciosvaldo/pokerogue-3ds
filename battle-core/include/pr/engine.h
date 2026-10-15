@@ -417,6 +417,8 @@ void pr_sync_queued_movers(pr_battle *bt, pr_engine *e);
 void pr_redirect_moves(pr_battle *bt, pr_engine *e, const pr_pokemon *removed, const pr_pokemon *ally);
 
 /* the phases' start() (src/phases.c) */
+bool pr_apply_turn_held_item_transfer(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_modifier *modifier);
+void pr_apply_turn_held_item_transfers(pr_battle *bt, pr_engine *e, pr_pokemon *p);
 void pr_init_final_boss_phase_two(pr_battle *bt, pr_engine *e, pr_pokemon *p);
 void pr_phase_run(pr_battle *bt, pr_engine *e, int ph);
 /* the running phase, when it is a MoveEffectPhase: its user (getUserPokemon) and move; else NULL */

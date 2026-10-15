@@ -634,3 +634,10 @@ are not card numbers: PR #149 is Wide Lens, while Card 149 is documentation.
 9. **Task 64 / merged [#145](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/145):** first clean wild adapter slice only. All 1000 soaks still use unsupported movesets somewhere. Trainer member RNG boundaries and broader Task 63 pools remain real gates to full Task 64 and Tasks 65/66. The app's 1000-run rare-evolution coverage failure and expanded 5000-run passing check are both retained in [the validation record](../game-core/TASK64-VALIDATION.md).
 
 Current priority after the eight-task stop is the actual final-boss transition and coordinated full enemy moveset/fixed-team prerequisites, retaining Lorenzo's reserved run-core scope and full 64/65/66 gates. Bounded Classic terminal awards #186, diagnostic #189 and egg gacha #191 are merged but do not produce a legal gameplay clear or finish egg 81. Lure/friendship, remaining 96/104, transfers/forms/fusion/doubles/weather and later mystery/modes/system work remain. Do not duplicate merged behavior or infer whole-run parity from source fixtures/host consistency. Node 22 and human hardware gates remain; Codex merge authorization in HANDOFF does not waive validation.
+
+### Mini Black Hole turn-transfer continuation
+
+Native end-of-turn transfer and game-core inventory/save projection are covered
+by [ITEM-TRANSFER-VALIDATION.md](../battle-core/ITEM-TRANSFER-VALIDATION.md).
+This bounded continuation does not promote general theft, final-boss run
+orchestration, playable doubles or wide-level Endless to complete.

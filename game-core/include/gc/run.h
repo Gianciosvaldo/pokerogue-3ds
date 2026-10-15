@@ -195,6 +195,7 @@ typedef struct {
     bool detached;             /* battle loot owner 0, distinct from wildcard -1 */
     int32_t virtual_stack;     /* transient battle state; excluded from saves */
     int32_t battle_count;      /* canonical temporary booster lifetime; old saves default 0 */
+    bool non_transferable;    /* explicit held-item lock, e.g. final-boss Mini Black Hole */
 } gc_item;
 #define GC_MAX_ITEMS 128
 

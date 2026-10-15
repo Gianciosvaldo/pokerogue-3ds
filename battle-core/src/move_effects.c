@@ -872,7 +872,24 @@ const char *pr_held_item_name_key(const pr_modifier *m)
     if (m->unknown_subclass) return NULL;
     if (m->cls == PR_MOD_BERRY)
         return m->berry_type >= 0 && m->berry_type < 11 ? berries[m->berry_type] : NULL;
+    if(m->cls==PR_MOD_ATTACK_TYPE_BOOSTER){
+        /* Static literal keys keep queued messages independent of later queries. */
+        static const char *const keys[]={
+#define TYPE_ITEM(x) "modifierType:AttackTypeBoosterItem." x
+            TYPE_ITEM("silk_scarf"),TYPE_ITEM("black_belt"),TYPE_ITEM("sharp_beak"),TYPE_ITEM("poison_barb"),TYPE_ITEM("soft_sand"),TYPE_ITEM("hard_stone"),TYPE_ITEM("silver_powder"),TYPE_ITEM("spell_tag"),TYPE_ITEM("metal_coat"),TYPE_ITEM("charcoal"),TYPE_ITEM("mystic_water"),TYPE_ITEM("miracle_seed"),TYPE_ITEM("magnet"),TYPE_ITEM("twisted_spoon"),TYPE_ITEM("never_melt_ice"),TYPE_ITEM("dragon_fang"),TYPE_ITEM("black_glasses"),TYPE_ITEM("fairy_feather")
+#undef TYPE_ITEM
+        };
+        return m->move_type>=0&&m->move_type<18?keys[m->move_type]:NULL;
+    }
     switch (m->cls) {
+    case PR_MOD_MOVE_ACCURACY_BOOSTER: return "modifierType:ModifierType.WIDE_LENS.name";
+    case PR_MOD_MULTI_HIT: return "modifierType:ModifierType.MULTI_LENS.name";
+    case PR_MOD_CRIT_BOOSTER: return "modifierType:ModifierType.SCOPE_LENS.name";
+    case PR_MOD_NATURE_WEIGHT: return "modifierType:ModifierType.SOUL_DEW.name";
+    case PR_MOD_DAMAGE_MONEY_REWARD: return "modifierType:ModifierType.GOLDEN_PUNCH.name";
+    case PR_MOD_INSTANT_REVIVE: return "modifierType:ModifierType.REVIVER_SEED.name";
+    case PR_MOD_TURN_STATUS_EFFECT: return m->status_effect==STATUS_EFFECT_TOXIC?"modifierType:ModifierType.TOXIC_ORB.name":m->status_effect==STATUS_EFFECT_BURN?"modifierType:ModifierType.FLAME_ORB.name":NULL;
+    case PR_MOD_TURN_HELD_TRANSFER: return "modifierType:ModifierType.MINI_BLACK_HOLE.name";
     case PR_MOD_TURN_HEAL: return "modifierType:ModifierType.LEFTOVERS.name";
     case PR_MOD_HIT_HEAL: return "modifierType:ModifierType.SHELL_BELL.name";
     case PR_MOD_SURVIVE_DAMAGE: return "modifierType:ModifierType.FOCUS_BAND.name";
