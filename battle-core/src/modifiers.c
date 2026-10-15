@@ -13,6 +13,7 @@
 #include <string.h>
 
 const uint8_t pr_mod_parent[PR_MOD_COUNT_] = {
+    [PR_MOD_TURN_HELD_TRANSFER] = PR_MOD_HELD_ITEM,
     [PR_MOD_NONE] = PR_MOD_NONE,
     [PR_MOD_PERSISTENT] = PR_MOD_NONE,
     [PR_MOD_HELD_ITEM] = PR_MOD_PERSISTENT,
@@ -56,6 +57,7 @@ const uint8_t pr_mod_parent[PR_MOD_COUNT_] = {
 };
 
 const char *const pr_mod_class_name[PR_MOD_COUNT_] = {
+    [PR_MOD_TURN_HELD_TRANSFER] = "TurnHeldItemTransferModifier",
     [PR_MOD_NONE] = "",
     [PR_MOD_PERSISTENT] = "PersistentModifier",
     [PR_MOD_HELD_ITEM] = "PokemonHeldItemModifier",

@@ -414,3 +414,11 @@ $(BUILD)/interlude-test: tests/interlude-test.c tests/gas-lifecycle-test.c $(BUI
 all: $(BUILD)/interlude-end-test
 $(BUILD)/interlude-end-test: tests/interlude-end-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/interlude-end-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/final-boss-test
+$(BUILD)/final-boss-test: tests/final-boss-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/final-boss-form-test
+$(BUILD)/final-boss-form-test: tests/final-boss-form-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

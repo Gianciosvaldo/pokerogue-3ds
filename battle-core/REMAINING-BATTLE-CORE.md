@@ -212,3 +212,10 @@ weather/terrain duration lapse. See INTERLUDE-VALIDATION.md. The product audit
 and latest user priority move final-boss/doubles, then wide-level/Endless battle
 behavior ahead of the paused fused-item slice. Product UI/progression remains
 separate, and run-core changes remain coordinated with its owner.
+
+Final-boss controller prerequisite: see `FINAL-BOSS-VALIDATION.md`. The core
+transition, native Eternamax form/HP/stats and signed Recover PP have bounded
+actual-source evidence. This does not close the final-boss/doubles gate:
+Mini Black Hole transfers/persistence, dual commands and natural double starts,
+phase-two recovery and legal Classic clears remain open. Wide levels/Endless
+remain next in the battle-core priority queue.

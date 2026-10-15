@@ -38,10 +38,8 @@ bool gc_enemy_moveset(gc_run *run, gc_mon *m, const pr_enemy_gen *g)
     for (int i = 0; i < 4; i++) m->b.max_pp_override[i] = -1;
     for (int i = 0; i < generated.count; i++) {
         gc_mon_set_move(m, i, generated.moves[i]);
-        /* Battle storage has unsigned PP Ups. Eternatus Recover uses -4 upstream;
-         * represent its actual maximum PP with the existing override, not 252 Ups. */
-        if (generated.pp_up[i] < 0) m->b.max_pp_override[i] = generated.pp[i];
-        else m->b.pp_up[i] = (uint8_t)generated.pp_up[i];
+        /* Keep the Source PokemonMove metadata, including final-boss Recover -4. */
+        m->b.pp_up[i] = (int8_t)generated.pp_up[i];
     }
     return true;
 }

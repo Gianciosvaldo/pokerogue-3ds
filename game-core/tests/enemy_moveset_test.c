@@ -31,7 +31,9 @@ static void check_moves(const gc_mon *m, const pr_generated_moveset *out)
         CHECK(m->b.moves[i] == out->moves[i]);
         CHECK(gc_move_max_pp(&m->b, i) == out->pp[i]);
         CHECK(m->b.pp_used[i] == 0);
-        CHECK(m->b.pp_up[i] == (out->pp_up[i] < 0 ? 0 : out->pp_up[i]));
+        /* Preserve actual Source PokemonMove.ppUp, including Recover -4. */
+        CHECK(m->b.pp_up[i] == out->pp_up[i]);
+        CHECK(m->b.max_pp_override[i] == -1);
     }
 }
 
@@ -160,7 +162,8 @@ static void saved_fixed_moves(void)
     gc_mon_new_enemy(&run, &run.enemy[0], SPECIES_ID_ETERNATUS, 100, &g, 0);
     CHECK(gc_enemy_moveset(&run, &run.enemy[0], &g));
     CHECK(run.enemy[0].b.moves[3] == MOVE_ID_RECOVER);
-    CHECK(run.enemy[0].b.pp_up[3] == 0);
+    CHECK(run.enemy[0].b.pp_up[3] == -4);
+    CHECK(run.enemy[0].b.max_pp_override[3] == -1);
     CHECK(gc_move_max_pp(&run.enemy[0].b, 3) == 1);
     size_t n = gc_run_save(&run, buf, sizeof buf);
     CHECK(n > 0);

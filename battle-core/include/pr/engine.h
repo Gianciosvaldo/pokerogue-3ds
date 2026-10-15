@@ -47,7 +47,8 @@ extern const char *const pr_phase_name[PH_COUNT_];
 typedef struct {
     uint16_t id;
     int8_t slot;               /* moveset index, -1 = detached */
-    uint8_t pp_used, pp_up;    /* detached only */
+    uint8_t pp_used;           /* detached only */
+    int8_t pp_up;              /* final boss Recover uses -4 */
     int16_t max_pp_override;   /* detached only */
     bool from_transform;      /* selected PokemonMove belonged to summonData.moveset */
 } pr_move_ref;
@@ -416,6 +417,7 @@ void pr_sync_queued_movers(pr_battle *bt, pr_engine *e);
 void pr_redirect_moves(pr_battle *bt, pr_engine *e, const pr_pokemon *removed, const pr_pokemon *ally);
 
 /* the phases' start() (src/phases.c) */
+void pr_init_final_boss_phase_two(pr_battle *bt, pr_engine *e, pr_pokemon *p);
 void pr_phase_run(pr_battle *bt, pr_engine *e, int ph);
 /* the running phase, when it is a MoveEffectPhase: its user (getUserPokemon) and move; else NULL */
 pr_pokemon *pr_move_effect_user(pr_battle *bt, pr_engine *e, int *move);

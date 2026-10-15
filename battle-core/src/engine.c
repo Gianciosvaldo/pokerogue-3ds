@@ -389,6 +389,9 @@ static void queue_ability_phases(pr_battle *bt, pr_engine *e, int ph)
 {
     int b = e->pool[ph].battler;
     const pr_pokemon *p = b >= 0 && b < 4 ? bt->field[b] : NULL;
+    /* Source getPlayerField/getEnemyField slices party slots even before the
+     * queued Summon places a sprite on the field. */
+    if (!p && b >= 0 && b < 4 && b % 2 < bt->n_party[b / 2]) p = bt->party[b / 2][b % 2];
     if (!p) { limit(bt, e); return; }
     uint16_t abs[2] = {p->ability, p->passive};
     for (int k = 0; k < 2; k++) {
