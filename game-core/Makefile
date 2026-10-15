@@ -545,3 +545,11 @@ boss-pp-host-test: $(BUILD)/boss_pp_host_test
 $(BUILD)/boss_pp_host_test: tests/boss_pp_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: boss-pp-host-test
+
+all: $(BUILD)/item_transfer_host_test
+test: item-transfer-host-test
+item-transfer-host-test: $(BUILD)/item_transfer_host_test
+	$(BUILD)/item_transfer_host_test
+$(BUILD)/item_transfer_host_test: tests/item_transfer_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: item-transfer-host-test
