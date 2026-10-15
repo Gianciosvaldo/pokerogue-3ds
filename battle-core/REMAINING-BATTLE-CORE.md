@@ -205,3 +205,10 @@ Existing runtime gates match Source; no runtime change is needed for these
 captures. See CALLBACK-CONTEXT-VALIDATION.md. Next concrete admission gap is
 fused species-stat/crit/evolution items, still explicitly marked unsupported in
 turn_modifiers. Broader weather registrations and partner/doubles remain.
+
+Interlude continuation implements Source's X0/all-enemy-party-fainted queue
+pruning and the selected TurnEndPhase's upcomingInterlude behavior, preserving
+weather/terrain duration lapse. See INTERLUDE-VALIDATION.md. The product audit
+and latest user priority move final-boss/doubles, then wide-level/Endless battle
+behavior ahead of the paused fused-item slice. Product UI/progression remains
+separate, and run-core changes remain coordinated with its owner.

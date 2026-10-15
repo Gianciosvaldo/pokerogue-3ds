@@ -407,3 +407,10 @@ $(BUILD)/transform-callback-turn-replay.inc: tests/speed-boost-replay.inc tools/
 	python3 tools/build-transform-callback-turn-proof.py replay $@
 $(BUILD)/transform-callback-turn-test: tests/transform-callback-turn-test.c $(BUILD)/transform-callback-turn-replay.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/transform-callback-turn-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/interlude-test
+$(BUILD)/interlude-test: tests/interlude-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/interlude-test.c $(BUILD)/libprcore.a -lm -o $@
+all: $(BUILD)/interlude-end-test
+$(BUILD)/interlude-end-test: tests/interlude-end-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/interlude-end-test.c $(BUILD)/libprcore.a -lm -o $@

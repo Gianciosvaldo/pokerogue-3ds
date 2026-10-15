@@ -72,6 +72,7 @@ typedef struct pr_phase {
     pr_pokemon *end_targets[4]; /* MoveEndPhase.targets */
     uint8_t n_end_targets;
     bool was_follow_up;        /* MoveEndPhase */
+    bool upcoming_interlude;   /* TurnEndPhase: skip Pokemon callbacks and arena tag lapse */
     pr_pokemon *source_p;      /* FaintPhase.source (undefined = NULL) */
     /* MovePhase / MoveEffectPhase.moveHistoryEntry: its targets are the shared list (targets),
      * or entry_targets once Encore gave the MovePhase new targets (the entry keeps the old array) */
