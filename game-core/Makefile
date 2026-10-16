@@ -641,3 +641,11 @@ $(BUILD)/move_theft_host_test: tests/move_theft_host_test.c $(BUILD)/libgc.a $(R
 all: $(BUILD)/move_theft_tier_diff_test
 $(BUILD)/move_theft_tier_diff_test: tests/move_theft_tier_diff_test.c tests/move_theft_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/move_theft_tier_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+
+all: $(BUILD)/berry_moves_host_test
+test: berry-moves-host-test
+berry-moves-host-test: $(BUILD)/berry_moves_host_test
+	$(BUILD)/berry_moves_host_test
+$(BUILD)/berry_moves_host_test: tests/berry_moves_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: berry-moves-host-test

@@ -582,9 +582,11 @@ static double psycho_shift(ARGS)
 }
 
 /* Belch: restriction(user => !user.battleData.hasEatenBerry, ..., alsoCondition = true) adds the
- * condition (user, _, move) => !restriction(user, move). Stuff Cheeks shares the closure with a
- * restriction on the side's BerryModifiers, which aren't a ported class */
+ * condition (user, _, move) => !restriction(user, move). */
 static double belch(ARGS) { UNUSED; return u->has_eaten_berry; }
+static double stuff_cheeks_has_berry(ARGS) { UNUSED; return pr_side_has_berry(bt,u->is_player); }
+static double stuff_cheeks_restricted(ARGS) { return !stuff_cheeks_has_berry(bt,self,u,t,m); }
+
 
 /* Encore: new EncoreTag(user.id).canAdd(target): the target's last non-virtual move, not one
  * Encore can't repeat, still in its moveset with PP left, and no Shell Trap set */
@@ -989,6 +991,8 @@ const pr_closure_reg pr_condition_closures[] = {
     {NULL, "8ff758b28223", yawn},
     {"move:375", "edb63cc0c6c1", psycho_shift},
     {"move:562", "3ba58287d0b2", belch},
+    {"move:747", "3ba58287d0b2", stuff_cheeks_has_berry},
+    {"move:747", "0de748961568", stuff_cheeks_restricted},
     {"move:227", "e0aa92d77dd2", encore},
     {NULL, "0a338d0d1122", disable},
     {NULL, "e781731f96ae", spite},

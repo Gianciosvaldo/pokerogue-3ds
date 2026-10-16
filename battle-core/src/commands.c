@@ -84,12 +84,7 @@ static bool move_restriction(pr_battle *bt, const pr_pokemon *p, int move, pr_ms
         return true;
     }
     if (move == MOVE_ID_STUFF_CHEEKS) {
-        int side = p->is_player ? 0 : 1;
-        bool berry = false;
-        for (int i = 0; i < bt->n_mods[side]; i++)
-            berry |= pr_mod_is(&bt->mods[side][i], PR_MOD_HELD_ITEM)
-                && (bt->mods[side][i].cls == PR_MOD_BERRY || bt->mods[side][i].unknown_subclass)
-                && bt->mods[side][i].pokemon_id == (int64_t)p->id;
+        const bool berry = pr_side_has_berry(bt,p->is_player);
         if (!berry) {
             *why = pr_msg2("battle:moveDisabledNoBerry", name, mv);
             return true;

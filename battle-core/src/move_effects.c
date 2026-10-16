@@ -137,6 +137,59 @@ static void parting_shot(pr_battle *bt, pr_engine *e, const pr_attr *a, const pr
         pr_force_switch_out(bt, e, true, SWITCH_TYPE_SWITCH, user, target, move);
 }
 
+/* EatBerryAttr/StealEatBerryAttr have different loss/refresh/history order
+ * from the ordinary BerryModifier caller. Keep their native callback chain. */
+bool pr_apply_eat_berry_move(pr_battle *bt,pr_engine *e,pr_pokemon *user,
+                            pr_pokemon *target,bool self_target,bool steal)
+{
+    if(!user||(!self_target&&!target)){pr_note_unported(bt,PR_FEAT_PARTY);return false;}
+    pr_pokemon *owner=self_target?user:target;
+    if(!steal&&owner->hp<=0)return false;
+    if(!target){pr_note_unported(bt,PR_FEAT_PARTY);return false;}
+    if(steal){
+        bool cancelled=false;pr_ab_params block={.pokemon=target,.move=-1,.flag=&cancelled};
+        pr_apply_ab_attrs(bt,PR_AC_BlockItemTheftAbAttr,&block);
+        if(cancelled)return false;
+    }
+    int side=owner->is_player?0:1,indices[PR_MAX_MODIFIERS],count=0;
+    for(int k=0;k<bt->n_mods[side];k++){
+        pr_modifier *m=&bt->mods[side][k];
+        if(pr_mod_is(m,PR_MOD_BERRY)&&m->pokemon_id==(int64_t)owner->id)indices[count++]=k;
+    }
+    if(!count)return false;
+    int index=indices[pr_battle_rand_seed_int(bt,count,0)];
+    pr_modifier chosen=bt->mods[side][index];
+    if(chosen.unknown_subclass||chosen.berry_type<0||chosen.berry_type>BERRY_TYPE_LEPPA){
+        pr_note_unported(bt,PR_FEAT_MODIFIERS);return false;
+    }
+    bool preserve=false;
+    if(steal){
+        pr_ab_params lost={.pokemon=target,.move=-1};
+        pr_apply_ab_attrs(bt,PR_AC_PostItemLostAbAttr,&lost);
+        const char *name=pr_held_item_name_key(&chosen);
+        if(!name){pr_note_unported(bt,PR_FEAT_MODIFIERS);return false;}
+        pr_queue_msg(bt,e,pr_msg3("battle:stealEatBerry",pr_arg_pokemon_name(bt,"pokemonName",user),
+            pr_arg_pokemon_name(bt,"targetName",target),pr_arg_key("berryName",name)));
+    }else{
+        for(int k=0;k<bt->n_mods[side];k++){
+            const pr_modifier *pouch=&bt->mods[side][k];
+            if(pouch->cls!=PR_MOD_PRESERVE_BERRY)continue;
+            if(!pr_mod_is_ported_item(pouch)){pr_note_unported(bt,PR_FEAT_TURN_MODIFIERS);continue;}
+            if(!preserve)preserve=pr_battle_rand_seed_int(bt,10,0)<pr_mod_get_stack_count(pouch)*3;
+        }
+    }
+    if(!preserve){pr_lose_held_item(bt,e,owner,&bt->mods[side][index]);pr_refresh_berry_modifiers(bt,side);}
+    pr_pokemon *consumer=steal?user:target;
+    if(chosen.berry_type==BERRY_TYPE_STARF&&!bt->rng_live){pr_note_unported(bt,PR_FEAT_GLOBAL_RNG);return false;}
+    pr_berry_effect(bt,e,consumer,chosen.berry_type,NULL,NULL,NULL);
+    pr_pokemon *callback_owner=steal?target:consumer;
+    pr_ab_params callback={.pokemon=callback_owner,.move=-1};
+    pr_apply_ab_attrs(bt,PR_AC_PostItemLostAbAttr,&callback);
+    callback.pokemon=consumer;pr_apply_ab_attrs(bt,PR_AC_HealFromBerryUseAbAttr,&callback);
+    pr_record_eaten_berry(bt,consumer,chosen.berry_type,steal?consumer==target:!preserve);
+    return true;
+}
+
 void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, pr_pokemon *user, pr_pokemon *target)
 {
     const pr_attr *a = &pr_attrs[attr_index];
@@ -519,32 +572,12 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
     case PR_AC_StealHeldItemChanceAttr:
         pr_steal_move_held_item(bt, e, user, target, P(StealHeldItemChanceAttr, a)->chance);
         return;
-    case PR_AC_EatBerryAttr: {                           /* Stuff Cheeks, Teatime */
-        pr_pokemon *target_p = P(EatBerryAttr, a)->selfTarget ? user : target;
-        if (!target_p) return;
-        int side = target_p->is_player ? 0 : 1;
-        int n_berries = 0;
-        pr_modifier *berries[PR_MAX_MODIFIERS];
-        for (int i = 0; i < bt->n_mods[side]; i++) {
-            pr_modifier *m = &bt->mods[side][i];
-            if (pr_mod_is(m, PR_MOD_BERRY) && m->pokemon_id == (int64_t)target_p->id) {
-                berries[n_berries++] = m;
-            }
-        }
-        if (n_berries > 0) {
-            int idx = pr_battle_rand_seed_int(bt, n_berries, 0);
-            pr_apply_berry(bt, e, target_p, berries[idx]);
-        }
+    case PR_AC_EatBerryAttr:
+        pr_apply_eat_berry_move(bt,e,user,target,P(EatBerryAttr,a)->selfTarget,false);
         return;
-    }
-    case PR_AC_StealEatBerryAttr: {                      /* Bug Bite, Pluck */
-        bool cancelled = false;
-        pr_ab_params cp = {.pokemon = target, .move = -1, .flag = &cancelled};
-        pr_apply_ab_attrs(bt, PR_AC_BlockItemTheftAbAttr, &cp);
-        /* any held item might be a berry: eating it isn't ported */
-        if (!cancelled && pr_held_item_count(bt, target, false)) pr_note_unported(bt, a->cls);
+    case PR_AC_StealEatBerryAttr:
+        pr_apply_eat_berry_move(bt,e,user,target,false,true);
         return;
-    }
     case PR_AC_WeatherChangeAttr:                        /* Rain Dance, Sunny Day, Sandstorm, Hail, Snowscape, */
         pr_try_set_weather(bt, e, P(WeatherChangeAttr, a)->weatherType, user);   /* Chilly Reception */
         return;
