@@ -609,3 +609,11 @@ attention-host-test: $(BUILD)/attention_host_test
 $(BUILD)/attention_host_test: tests/attention_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: attention-host-test
+
+all: $(BUILD)/commander_host_test
+test: commander-host-test
+commander-host-test: $(BUILD)/commander_host_test
+	$(BUILD)/commander_host_test
+$(BUILD)/commander_host_test: tests/commander_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: commander-host-test

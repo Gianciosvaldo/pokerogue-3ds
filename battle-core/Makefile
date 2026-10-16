@@ -477,3 +477,7 @@ $(BUILD)/partner-cures-test: tests/partner-cures-test.c tests/gas-lifecycle-test
 all: $(BUILD)/attention-test
 $(BUILD)/attention-test: tests/attention-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/attention-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/commander-test
+$(BUILD)/commander-test: tests/commander-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/commander-test.c $(BUILD)/libprcore.a -lm -o $@

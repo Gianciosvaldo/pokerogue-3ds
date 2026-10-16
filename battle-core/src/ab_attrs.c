@@ -341,6 +341,18 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
     const pr_pokemon *p = pp->pokemon, *o = pp->opponent;
     int move = pp->move;
     switch (a->cls) {
+    case PR_AC_CommanderAbAttr: {
+        const pr_pokemon *ally = pr_get_ally(bt, p);
+        GATE(bt->double_battle && ally && ally->hp > 0 && ally->on_field && !ally->switch_out_status
+             && ally->species == SPECIES_ID_DONDOZO && !pr_get_battler_tag(ally, BATTLER_TAG_TYPE_COMMANDED));
+        if (!pp->simulated) {
+            pr_lapse_tags(bt, c->e, (pr_pokemon *)p, BATTLER_TAG_LAPSE_TYPE_MOVE_EFFECT);
+            pr_unshift_pokemon_anim_for(bt, c->e, p, POKEMON_ANIM_TYPE_COMMANDER_APPLY);
+            pr_add_tag(bt, c->e, (pr_pokemon *)ally, BATTLER_TAG_TYPE_COMMANDED, 0, MOVE_ID_NONE, p->id);
+            pr_remove_move_phase(bt, c->e, p);
+        }
+        return 1;
+    }
     case PR_AC_PokemonTypeChangeAbAttr: {
         if (move <= MOVE_ID_NONE || move >= PR_MOVE_COUNT) return -1;
         if (p->terastallized || move == MOVE_ID_STRUGGLE

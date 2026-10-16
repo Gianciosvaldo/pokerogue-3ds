@@ -147,6 +147,7 @@ static const sfield tag_fields[] = {
     SF(pr_battler_tag, faint_count), SF(pr_battler_tag, stat), SF(pr_battler_tag, multiplier), SF(pr_battler_tag, hp),
     SF(pr_battler_tag, in_focus), SF(pr_battler_tag, source_index), SF(pr_battler_tag, activated),
     SF(pr_battler_tag, base_pure_flying), SF(pr_battler_tag, move_id), SF(pr_battler_tag, added_this_turn),
+    SF(pr_battler_tag, commanded_form_key),
 };
 static const sfield turn_move_fields[] = {
     SF(pr_turn_move, move), SF(pr_turn_move, use_mode), SF(pr_turn_move, result), SF(pr_turn_move, targets),
@@ -641,6 +642,8 @@ static bool get_mons(const reader *body, const char *name, gc_mon *mons, int n, 
     for (int i = 0; i < n; i++) {
         pr_pokemon *b = &mons[i].b;
         b->n_tags = (uint8_t)get_block(&r, tag_fields, NF(tag_fields), b->tags, sizeof b->tags[0], PR_MAX_BATTLER_TAGS, dropped);
+        for (int j = 0; j < b->n_tags; j++)
+            if (b->tags[j].commanded_form_key > PR_FORM_COUNT) return false;
         const int nh = get_block(&r, turn_move_fields, NF(turn_move_fields), b->move_history, sizeof b->move_history[0],
                                  PR_MAX_MOVE_HISTORY, dropped);
         if (b->n_move_history < nh) b->n_move_history = (uint16_t)nh;

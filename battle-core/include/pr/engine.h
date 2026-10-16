@@ -390,6 +390,7 @@ void pr_arena_conditional_protect(pr_battle *bt, pr_engine *e, int side, const p
 void pr_unshift_new(pr_battle *bt, pr_engine *e, pr_phase_type t, int battler);
 void pr_unshift_common_anim(pr_battle *bt, pr_engine *e, int battler, int target, int anim);   /* CommonAnimPhase */
 void pr_unshift_pokemon_anim(pr_battle *bt, pr_engine *e, int battler, int type);   /* PokemonAnimPhase */
+void pr_unshift_pokemon_anim_for(pr_battle *bt, pr_engine *e, const pr_pokemon *p, int type);
 /* the running phase, when it is a MovePhase (of Pokemon p, unless p is NULL): phase.cancel() */
 void pr_cancel_current_move(pr_engine *e, const pr_pokemon *p);
 /* MagicCoatTag.apply / ReflectStatusMoveAbAttr.apply: `pokemon` sends `move` back with a
@@ -400,6 +401,8 @@ void pr_reflect_move(pr_battle *bt, pr_engine *e, pr_pokemon *pokemon, const pr_
 void pr_fail_current_move(pr_engine *e);
 /* phaseManager.forceMoveNext(phase => phase.pokemon === p) (Shell Trap) */
 void pr_force_move_next(pr_engine *e, const pr_pokemon *p);
+bool pr_remove_move_phase(pr_battle *bt, pr_engine *e, const pr_pokemon *p);
+const char *pr_commanded_form_key(const pr_battler_tag *tag);
 /* getMovePhase(condition): the first queued MovePhase using `move` (-1: any) of a player's (1),
  * an enemy's (0) or anyone's (-1) Pokemon, in queue order */
 pr_phase *pr_find_move_phase(pr_engine *e, int move, int player);

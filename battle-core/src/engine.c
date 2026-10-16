@@ -174,6 +174,9 @@ void pr_sort_in_speed_order(pr_battle *bt, pr_pokemon **mons, int *payload, int 
     for (int i = 0; i < n; i++)
         if (i == 0 || mons[i] != mons[i - 1]) start[ng++] = i;
     start[ng] = n;
+    /* Native Array.sort never calls its Speed comparator for a single run.
+     * This also permits consecutive phases whose getPokemon() is undefined. */
+    if (ng == 1) return;
     int order[PR_DYN_CAP];
     for (int g = 0; g < ng; g++) order[g] = g;
 
@@ -288,11 +291,29 @@ static void dyn_reorder(pr_battle *bt, pr_engine *e, int type)
     if (n == 0) return;
     pr_pokemon *mons[PR_DYN_CAP];
     int pay[PR_DYN_CAP];
+    bool missing = false, present = false;
+    int missing_kind = -1;
     for (int i = 0; i < n; i++) {
         pay[i] = e->dyn[type][i];
         mons[i] = phase_pokemon(bt, e, pay[i]);
-        if (!mons[i]) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }   /* upstream would throw */
+        missing |= mons[i] == NULL;
+        present |= mons[i] != NULL;
+        if (!mons[i]) {
+            const pr_phase *p = &e->pool[pay[i]];
+            /* getField's empty slots are null; an invalid index (or absent
+             * party member) is undefined. Native grouping distinguishes them. */
+            int kind = p->type != PH_SWITCH_SUMMON && p->type != PH_RETURN
+                && p->battler >= 0 && p->battler < 4;
+            if (missing_kind >= 0 && missing_kind != kind) {
+                pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT);
+                return;
+            }
+            missing_kind = kind;
+        }
     }
+    /* A single undefined group sorts without a comparison. Mixing it with a
+     * real Pokemon would make the native Speed comparator throw. */
+    if (missing && present) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }
     pr_sort_in_speed_order(bt, mons, pay, n);
     if (type == PH_POST_SUMMON) {
         /* PostSummonPhasePriorityQueue.reorder: then by getPriority() descending (a stable sort):
@@ -359,6 +380,33 @@ void pr_force_move_next(pr_engine *e, const pr_pokemon *p)
             return;
         }
     }
+}
+
+/* tryRemovePhase("MovePhase", phase => phase.pokemon === p): reorder dynamic queue first,
+ * then the tree's first match. Removing a move leaves its dynamic marker in place. */
+bool pr_remove_move_phase(pr_battle *bt, pr_engine *e, const pr_pokemon *p)
+{
+    dyn_reorder(bt, e, PH_MOVE);
+    for (int i = 0; i < e->n_dyn[PH_MOVE]; i++) {
+        int ph = e->dyn[PH_MOVE][i];
+        if (e->pool[ph].pokemon != p) continue;
+        memmove(&e->dyn[PH_MOVE][i], &e->dyn[PH_MOVE][i + 1],
+                (size_t)(e->n_dyn[PH_MOVE] - i - 1));
+        e->n_dyn[PH_MOVE]--;
+        phase_free(e, ph);
+        pr_sync_queued_movers(bt, e);
+        return true;
+    }
+    for (int l = e->n_levels - 1; l >= 0; l--)
+        for (int i = 0; i < e->level_len[l]; i++) {
+            int ph = e->levels[l][i];
+            if (e->pool[ph].type != PH_MOVE || e->pool[ph].pokemon != p) continue;
+            memmove(&e->levels[l][i], &e->levels[l][i + 1], (size_t)(e->level_len[l] - i - 1));
+            e->level_len[l]--;
+            phase_free(e, ph);
+            return true;
+        }
+    return false;
 }
 
 pr_phase *pr_find_move_phase(pr_engine *e, int move, int player)

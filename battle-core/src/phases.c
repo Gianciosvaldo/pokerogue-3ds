@@ -298,6 +298,17 @@ void pr_unshift_pokemon_anim(pr_battle *bt, pr_engine *e, int battler, int type)
     pr_phase_unshift(bt, e, ph);
 }
 
+/* PokemonAnimPhase is a BattlePhase that caches its actual Pokemon object. */
+void pr_unshift_pokemon_anim_for(pr_battle *bt, pr_engine *e, const pr_pokemon *p, int type)
+{
+    int ph = new_pokemon_phase(e, PH_POKEMON_ANIM, pr_battler_index(bt, p));
+    if (ph >= 0) {
+        PH(ph)->anim = (uint16_t)type;
+        PH(ph)->pokemon = (pr_pokemon *)p;
+    }
+    pr_phase_unshift(bt, e, ph);
+}
+
 static void push_new(pr_battle *bt, pr_engine *e, pr_phase_type t, int battler)
 {
     pr_phase_push(bt, e, new_pokemon_phase(e, t, battler));
@@ -2699,7 +2710,10 @@ static bool instant_revive(pr_battle *bt, pr_engine *e, pr_pokemon *p)
         pr_speed_iter it;
         pr_pokemon *ally;
         pr_speed_iter_init(bt, &it, p->is_player ? ARENA_TAG_SIDE_PLAYER : ARENA_TAG_SIDE_ENEMY);
-        while ((ally = pr_speed_iter_next(bt, &it))) pr_hook_ab(bt, ally, PR_AC_CommanderAbAttr);
+        while ((ally = pr_speed_iter_next(bt, &it))) {
+            pr_ab_params pp = {.pokemon = ally, .move = -1};
+            pr_apply_ab_attrs(bt, PR_AC_CommanderAbAttr, &pp);
+        }
         pr_lose_held_item(bt, e, p, m);
         /* updateModifiers clears virtual stacks and orphaned held items. */
         int w = 0;
