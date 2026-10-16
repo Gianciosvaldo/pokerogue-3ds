@@ -451,6 +451,12 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         *pp->holder = x->newType;
         return 1;
     }
+    case PR_AC_MoveHealBoostAbAttr: {
+        const pr_attr_MoveHealBoostAbAttr *x = P(MoveHealBoostAbAttr, a);
+        GATE(call_bool(bt, x->boostCondition, a->cls, p, o, move));
+        *pp->value *= x->healMulti;
+        return 1;
+    }
     case PR_AC_MovePowerBoostAbAttr:
     case PR_AC_MoveTypePowerBoostAbAttr:
     case PR_AC_LowHpMoveTypePowerBoostAbAttr: {

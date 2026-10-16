@@ -469,3 +469,7 @@ $(BUILD)/wide-boss-score-test: tests/wide-boss-score-test.c $(BUILD)/libprcore.a
 all: $(BUILD)/flame-burst-test
 $(BUILD)/flame-burst-test: tests/flame-burst-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/flame-burst-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/partner-cures-test
+$(BUILD)/partner-cures-test: tests/partner-cures-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/partner-cures-test.c $(BUILD)/libprcore.a -lm -o $@
