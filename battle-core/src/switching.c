@@ -645,13 +645,14 @@ void pr_post_summon_phase(pr_battle *bt, pr_engine *e, int ph)
         if (pr_arena_tag_is(bt->arena_tags[i].type, PR_ARENACLASS_ENTRY_HAZARD)) entry_hazard_apply(bt, e, i, p);
     /* a mystery encounter's post-summon tag */
     if (bt->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) pr_note_unported(bt, PR_FEAT_TRAINER);
-    /* CommanderAbAttr over the Pokemon's side (getAlliesGenerator), which only applies in a double
-     * battle next to an active Dondozo with no Pokemon in its mouth yet: not ported */
-    for (int k = 0; bt->double_battle && k < 2; k++) {
-        const pr_pokemon *q = bt->field[(p->is_player ? 0 : 2) + k];
-        const pr_pokemon *a = q && q->hp > 0 ? pr_get_ally(bt, q) : NULL;
-        if (is_active_on_field(a) && a->species == SPECIES_ID_DONDOZO && !pr_get_battler_tag(a, BATTLER_TAG_TYPE_COMMANDED))
-            pr_hook_ab(bt, q, PR_AC_CommanderAbAttr);
+    /* getAlliesGenerator pops in speed order; each callback evaluates its own
+     * predicate after earlier callbacks have applied their tags. */
+    pr_speed_iter allies;
+    pr_pokemon *member;
+    pr_speed_iter_init(bt, &allies, p->is_player ? ARENA_TAG_SIDE_PLAYER : ARENA_TAG_SIDE_ENEMY);
+    while ((member = pr_speed_iter_next(bt, &allies))) {
+        pr_ab_params pp = {.pokemon = member, .move = -1};
+        pr_apply_ab_attrs(bt, PR_AC_CommanderAbAttr, &pp);
     }
 }
 

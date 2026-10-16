@@ -17,10 +17,10 @@ passing percentage in a bounded random sample does not close a whole category.
   boundary against that inventory. Distinguish an unreachable native branch,
   source exception, unsupported valid input and missing state. Keep real missing
   paths visible instead of replacing their flags with no-ops.
-- [ ] Close remaining doubles behavior: active-partner party cures, Pollen Puff,
-  attention/redirection, Commander/Order Up, and any additional enabled callbacks
-  found by the inventory. Complete Flame Burst's actual damage/ability/faint/
-  shield callers and then retain those proofs in later slices.
+- [ ] Reconcile all doubles paths and interactions against the source inventory.
+  Retain Helping Hand, Acupressure, After You, suppression, Flame Burst, partner
+  cures/healing, attention/redirection and Commander/Order Up proofs; close any
+  additional enabled callbacks and unresolved owning-caller interactions.
 - [ ] Close remaining identity/form/copy and phase-transition gaps identified by
   current source audit, including their gain/loss/reset and serialization paths.
   Historical inventory rows must be reconciled with later merged slices.
@@ -45,8 +45,8 @@ passing percentage in a bounded random sample does not close a whole category.
 
 1. Retain merged Flame Burst and partner cures/healing evidence, including their
    shared damage/shield/RNG and healing callbacks.
-2. Retain attention/redirection evidence; complete Commander/Order Up and other
-   party-cure callers.
+2. Retain attention/redirection and Commander/Order Up evidence; reconcile other
+   party-cure callers and the remaining interaction inventory.
 3. Wide-level progression and combat; preserve the wide save migration.
 4. Reconcile all remaining unsupported paths with the complete source inventory,
    implement them in reviewable slices and run the final interaction audit.

@@ -481,9 +481,15 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         pr_queue_msg(bt, e, pr_msg2("moveTriggers:addType", pr_arg_type("typeName", P(AddTypeAttr, a)->type),
                                     pr_arg_pokemon(bt, "pokemonName", target)));
         return;
-    case PR_AC_OrderUpStatBoostAttr:                     /* Order Up: only with a Tatsugiri commanding (doubles) */
-        if (pr_get_battler_tag(user, BATTLER_TAG_TYPE_COMMANDED)) pr_note_unported(bt, a->cls);
+    case PR_AC_OrderUpStatBoostAttr: {
+        /* This override deliberately omits the parent gates and reads the cached key. */
+        const pr_battler_tag *tag = pr_get_battler_tag(user, BATTLER_TAG_TYPE_COMMANDED);
+        if (!tag) return;
+        const char *key = pr_commanded_form_key(tag);
+        int32_t stat = !strcmp(key, "droopy") ? STAT_DEF : !strcmp(key, "stretchy") ? STAT_SPD : STAT_ATK;
+        pr_unshift_stat_stage_change(bt, e, pr_battler_index(bt, user), &stat, 1, 1, user);
         return;
+    }
     case PR_AC_StatusIfBoostedAttr:                      /* Burning Jealousy (self-targeted, reads the real target) */
         if (target->stat_stages_increased)
             pr_try_set_status(bt, e, target, P(StatusIfBoostedAttr, a)->effect, user, -1, false, true);

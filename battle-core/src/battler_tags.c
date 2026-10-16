@@ -14,6 +14,7 @@
 bool pr_tag_type_ported(int type)
 {
     switch (type) {
+    case BATTLER_TAG_TYPE_COMMANDED: /* CommandedTag */
     case BATTLER_TAG_TYPE_CENTER_OF_ATTENTION: /* CenterOfAttentionTag */
     case BATTLER_TAG_TYPE_HELPING_HAND: /* HelpingHandTag */
     case BATTLER_TAG_TYPE_CHARGING:     /* SerializableBattlerTag(CHARGING, CUSTOM, 1, sourceMove, sourceId) */
@@ -266,6 +267,11 @@ static pr_battler_tag construct(int type, int turn_count, int source_move, int64
     t.source_id = -1;
     t.source_index = -1;
     switch (type) {
+    case BATTLER_TAG_TYPE_COMMANDED:
+        t.turn_count = 0;
+        t.source_move = MOVE_ID_NONE;
+        t.source_id = source_id;
+        break;
     case BATTLER_TAG_TYPE_CENTER_OF_ATTENTION:
         t.turn_count = 1;
         break;
@@ -504,6 +510,12 @@ static pr_battler_tag construct(int type, int turn_count, int source_move, int64
 /* newTag.canAdd(pokemon) */
 static pr_pokemon *tag_source(pr_battle *bt, const pr_battler_tag *t);
 
+const char *pr_commanded_form_key(const pr_battler_tag *tag)
+{
+    return tag->commanded_form_key && tag->commanded_form_key <= PR_FORM_COUNT
+        ? pr_forms[tag->commanded_form_key - 1].form_key : "curly";
+}
+
 /* isOppositeGender: this.gender !== GENDERLESS && other.gender === (this.gender === MALE ? FEMALE : MALE)
  * (Gender: GENDERLESS -1, MALE 0, FEMALE 1) */
 static bool opposite_gender(const pr_pokemon *a, const pr_pokemon *b)
@@ -695,6 +707,13 @@ static pr_pokemon *tag_source(pr_battle *bt, const pr_battler_tag *t);
 static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t)
 {
     switch (t->type) {
+    case BATTLER_TAG_TYPE_COMMANDED: {
+        const pr_pokemon *source = tag_source(bt, t);
+        if (source) t->commanded_form_key = (uint16_t)(pr_pokemon_base_form(source) - pr_forms + 1);
+        const int32_t stats[] = {STAT_ATK, STAT_DEF, STAT_SPATK, STAT_SPDEF, STAT_SPD};
+        pr_unshift_stat_stage_change(bt, e, pr_battler_index(bt, p), stats, 5, 2, p);
+        return;
+    }
     case BATTLER_TAG_TYPE_CENTER_OF_ATTENTION:
         say(bt, e, "battlerTags:centerOfAttentionOnAdd", p);
         return;
@@ -1414,6 +1433,12 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
 static void on_remove(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_battler_tag *t)
 {
     switch (t->type) {
+    case BATTLER_TAG_TYPE_COMMANDED: {
+        const pr_pokemon *source = tag_source(bt, t);
+        if (source && active_on_field(source))
+            pr_unshift_pokemon_anim_for(bt, e, p, POKEMON_ANIM_TYPE_COMMANDER_REMOVE);
+        return;
+    }
     case BATTLER_TAG_TYPE_CONFUSED: say(bt, e, "battlerTags:confusedOnRemove", p); return;
     case BATTLER_TAG_TYPE_TRAPPED:
     case BATTLER_TAG_TYPE_NO_RETREAT:
