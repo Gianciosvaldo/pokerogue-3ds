@@ -124,7 +124,7 @@ static gc_mon before_exp(int idx) {
     const gc_event* e = &G.q[j];
     if (e->kind != GC_EV_EXP || e->a != idx) continue;
     m.exp -= e->b;
-    if (first) m.b.level = (uint8_t)e->c; /* the level before the first gain */
+    if (first) m.b.level = e->c; /* the level before the first gain */
     first = false;
   }
   return m;

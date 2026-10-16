@@ -577,3 +577,11 @@ suppression-host-test: $(BUILD)/suppression_host_test
 $(BUILD)/suppression_host_test: tests/suppression_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: suppression-host-test
+
+all: $(BUILD)/wide_level_host_test
+test: wide-level-host-test
+wide-level-host-test: $(BUILD)/wide_level_host_test
+	$(BUILD)/wide_level_host_test
+$(BUILD)/wide_level_host_test: tests/wide_level_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: wide-level-host-test

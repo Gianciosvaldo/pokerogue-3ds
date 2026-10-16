@@ -457,3 +457,11 @@ $(BUILD)/after-you-test: tests/after-you-test.c $(BUILD)/libprcore.a
 all: $(BUILD)/suppression-test
 $(BUILD)/suppression-test: tests/suppression-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/wide-level-test
+$(BUILD)/wide-level-test: tests/wide-level-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/wide-boss-score-test
+$(BUILD)/wide-boss-score-test: tests/wide-boss-score-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
