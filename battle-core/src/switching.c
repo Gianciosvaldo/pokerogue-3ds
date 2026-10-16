@@ -660,7 +660,7 @@ void pr_summon_phase(pr_battle *bt, pr_engine *e, int ph)
     pr_phase *s = &e->pool[ph];
     int side = s->sw_player ? 0 : 1, field = s->sw_field_index;
     bool player = s->sw_player;
-    if (bt->double_battle) pr_note_unported(bt, PR_FEAT_DOUBLES);
+
     if (!bt->n_party[side]) { pr_note_unported(bt, PR_FEAT_PARTY); return; }
     if (field < 0 || field >= bt->n_party[side]) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }
     pr_pokemon *p = bt->party[side][field];
@@ -675,6 +675,11 @@ void pr_summon_phase(pr_battle *bt, pr_engine *e, int ph)
         if (legal < 0) { pr_note_unported(bt, PR_FEAT_PARTY); return; }   /* clearPhaseQueue + GameOverPhase */
         bt->party[side][field] = bt->party[side][legal];
         bt->party[side][legal] = p;
+        /* Source getField derives its slots from party order on every read.
+         * Swapping an already-out ally into slot0 must also replace slot1's
+         * reference; otherwise both C fields can alias the same Pokemon. */
+        for (int k=0;k<(bt->double_battle?2:1);k++)
+            bt->field[side*2+k]=k<bt->n_party[side]?bt->party[side][k]:NULL;
         p = bt->party[side][field];
     }
     int tslot = field % 2 ? TRAINER_SLOT_TRAINER_PARTNER : TRAINER_SLOT_TRAINER;

@@ -648,3 +648,10 @@ orchestration, playable doubles or wide-level Endless to complete.
 records actual fresh/loaded end queues and the trainer summon prelude, including
 all dynamic payloads. This does not promote doubles summon execution, player
 commands, app integration or wide-level Endless to complete.
+
+### Owning doubles summon continuation
+
+[SUMMON-ENTRY-VALIDATION.md](../battle-core/SUMMON-ENTRY-VALIDATION.md) records
+actual SummonPhase execution and the fainted-slot field-reference fix. The
+summon's blanket doubles marker is removed; game-core/app doubles and remaining
+partner/command/save/Endless boundaries are not promoted by this bounded proof.

@@ -1315,3 +1315,7 @@ and remaining theft, doubles and Endless boundaries are listed explicitly.
 Fresh/loaded single and double encounter queues, including the trainer prelude,
 are documented in [DOUBLE-ENCOUNTER-VALIDATION.md](DOUBLE-ENCOUNTER-VALIDATION.md).
 Summon execution, command targeting and game-core/app doubles remain separate.
+
+Owning summon execution now preserves field references after fainted-slot party
+swaps; [SUMMON-ENTRY-VALIDATION.md](SUMMON-ENTRY-VALIDATION.md) records the real
+single/double source phase, controller tests and remaining contexts.
