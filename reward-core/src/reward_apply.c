@@ -351,7 +351,7 @@ bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_i
             *event = (pr_reward_evolution_event){
                 .pokemon_id = m->id, .primary_species = m->species, .target_species = matching->species,
                 .item = matching->item, .pre_form_key = matching->pre_form_key,
-                .evo_form_key = matching->evo_form_key, .last_level = (int16_t)(m->level - 1),
+                .evo_form_key = matching->evo_form_key, .last_level = m->level - 1,
                 .evolution_level = matching->level, .fusion = for_fusion,
             };
             if (msg) *msg = NULL;

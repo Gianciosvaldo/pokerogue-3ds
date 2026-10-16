@@ -229,6 +229,17 @@ int main(void) {
   slot_path(1, ".sav.bak", p2, sizeof p2);
   CHECK(!exists(p2), "a fresh run's slot has no old backup");
 
+  /* The slot summary is reconstructed from the full save: retain wide levels. */
+  const int wide_levels[] = {256, 65536, 1000000};
+  for (int w = 0; w < 3; w++) {
+    new_run(&A, "wide-summary", 1);
+    A.party[A.party_order[0]].b.level = wide_levels[w];
+    CHECK(rsv_save(0, &A) == RSV_SAVED, "wide summary save");
+    CHECK(rsv_inspect(0, &in) == RSV_OK && in.party[0].level == wide_levels[w], "wide summary %d got %d", wide_levels[w], in.party[0].level);
+    CHECK(rsv_load(0, &B, why) == RSV_OK && B.party[B.party_order[0]].b.level == wide_levels[w], "wide summary load");
+    CHECK(rsv_clear(0), "clear wide summary slot");
+  }
+
   printf("%d checks, %d failed\n", checks, failed);
   printf(failed ? "FAILED\n" : "OK\n");
   if (chdir("/") == 0) {

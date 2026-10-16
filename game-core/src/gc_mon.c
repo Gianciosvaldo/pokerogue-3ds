@@ -191,8 +191,10 @@ void gc_mon_add_exp(gc_run *run, gc_mon *m, double exp)
     double max_level = pr_run_get_max_exp_level(&run->run, run->wave, false);
     double initial = m->exp;
     m->exp += exp;
-    while (m->b.level < max_level && m->b.level < 200 && m->exp >= gc_level_total_exp(m->b.level + 1, rate))
+    while (m->b.level < max_level && m->b.level < INT32_MAX && m->exp >= gc_level_total_exp(m->b.level + 1, rate))
         m->b.level++;
+    if (m->b.level == INT32_MAX && m->b.level < max_level)
+        run->run.unported |= PR_REWARD_UNPORTED_LEVEL;
     if (m->b.level >= max_level) {
         double t = gc_level_total_exp(m->b.level, rate);
         m->exp = t > initial ? t : initial;
@@ -517,13 +519,14 @@ double gc_exp_to_next_level(const gc_mon *m)
 {
     const pr_species *sp = gc_species(m->b.species);
     int rate = sp ? sp->growth_rate : 0;
-    if (m->b.level >= 200) return 0;
+    if (m->b.level == INT32_MAX) return 0;
     double next = gc_level_total_exp(m->b.level + 1, rate);
     return next > m->exp ? next - m->exp : 0;
 }
 
 double gc_exp_level_fraction(const gc_mon *m)
 {
+    if (m->b.level == INT32_MAX) return 0;
     const pr_species *sp = gc_species(m->b.species);
     int rate = sp ? sp->growth_rate : 0;
     double rel = pr_run_get_level_rel_exp(m->b.level + 1, rate);
