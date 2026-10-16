@@ -484,3 +484,6 @@ $(BUILD)/commander-test: tests/commander-test.c tests/gas-lifecycle-test.c $(BUI
 
 $(BUILD)/move-theft-test: tests/move-theft-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+$(BUILD)/berry-moves-test: tests/berry-moves-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -Wl,--wrap=pr_apply_ab_attrs -lm -o $@

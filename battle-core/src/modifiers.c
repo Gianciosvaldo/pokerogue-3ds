@@ -594,6 +594,15 @@ void pr_reset_battle_data(pr_pokemon *p)
     p->n_battle_berries = 0;
 }
 
+/* Stuff Cheeks' native restriction scans all BerryModifiers on the side,
+ * including another holder's stock. It does not ask shouldApply or getStackCount. */
+bool pr_side_has_berry(const pr_battle *bt,bool player)
+{
+    int side=player?0:1;
+    for(int k=0;k<bt->n_mods[side];k++)if(pr_mod_is(&bt->mods[side][k],PR_MOD_BERRY))return true;
+    return false;
+}
+
 void pr_record_eaten_berry(pr_battle *bt, pr_pokemon *p, int berry, bool consumed)
 {
     p->has_eaten_berry = true;

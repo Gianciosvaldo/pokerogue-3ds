@@ -425,6 +425,7 @@ void pr_redirect_moves(pr_battle *bt, pr_engine *e, const pr_pokemon *removed, c
 
 /* the phases' start() (src/phases.c) */
 int pr_held_item_tier_for_pool(const pr_modifier *m, bool trainer);
+bool pr_apply_eat_berry_move(pr_battle *bt, pr_engine *e, pr_pokemon *user, pr_pokemon *target, bool self_target, bool steal);
 bool pr_steal_move_held_item(pr_battle *bt, pr_engine *e, pr_pokemon *user, pr_pokemon *target, double chance);
 bool pr_apply_turn_held_item_transfer(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_modifier *modifier);
 void pr_apply_turn_held_item_transfers(pr_battle *bt, pr_engine *e, pr_pokemon *p);

@@ -666,6 +666,7 @@ bool pr_berry_should_apply(pr_battle *bt, const pr_pokemon *p, const pr_modifier
 void pr_refresh_berry_modifiers(pr_battle *bt, int side);
 void pr_reset_wave_data(pr_pokemon *p);
 void pr_reset_battle_data(pr_pokemon *p);
+bool pr_side_has_berry(const pr_battle *bt, bool player);
 void pr_record_eaten_berry(pr_battle *bt, pr_pokemon *p, int berry, bool consumed);
 void pr_berry_effect(pr_battle *bt, struct pr_engine *e, pr_pokemon *p, int berry, int8_t *stats, int8_t *stages, int *n);
 void pr_apply_berry(pr_battle *bt, struct pr_engine *e, pr_pokemon *p, pr_modifier *m);
