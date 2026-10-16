@@ -655,3 +655,9 @@ commands, app integration or wide-level Endless to complete.
 actual SummonPhase execution and the fainted-slot field-reference fix. The
 summon's blanket doubles marker is removed; game-core/app doubles and remaining
 partner/command/save/Endless boundaries are not promoted by this bounded proof.
+
+### Helping Hand doubles continuation
+
+[HELPING-HAND-VALIDATION.md](../battle-core/HELPING-HAND-VALIDATION.md) records
+the complete native tag lifecycle, owning doubles turns and augmented command/
+save fixture. Other unsupported effects and app/run doubles remain explicit.
