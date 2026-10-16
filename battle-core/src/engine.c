@@ -763,43 +763,73 @@ void pr_run_player_cleanup(pr_battle *bt, pr_engine *e)
     run_phases(bt,e,e->overflow ? -1 : shift_phase(bt,e));
 }
 
-/* EncounterPhase.end, and doTrainerSummon before it: the phases it queues for a single battle */
+/* EncounterPhase.end. Trainer prelude and queue execution belong to the caller. */
+void pr_queue_encounter_end(pr_battle *bt, pr_engine *e, bool loaded)
+{
+    int count=bt->double_battle?2:1;
+    for(int k=0;k<count&&k<bt->n_party[1];k++)
+        if(bt->party[1][k]->shiny)pr_unshift_new(bt,e,PH_SHINY_SPARKLE,2+k);
+    if(!loaded){
+        const pr_pokemon *allowed[PR_MAX_PARTY];int n_allowed=0;
+        for(int k=0;k<bt->n_party[0];k++)if(bt->party[0][k]->hp>0)allowed[n_allowed++]=bt->party[0][k];
+        if(!n_allowed){pr_note_unported(bt,PR_FEAT_PARTY);return;}
+        if(!allowed[0]->on_field||allowed[0]->switch_out_status){
+            int s=pr_phase_new(e,PH_SUMMON,0);
+            if(s>=0){e->pool[s].sw_field_index=0;e->pool[s].sw_player=true;}
+            pr_phase_push(bt,e,s);
+        }
+        if(bt->double_battle){
+            if(n_allowed>1){
+                int t=pr_phase_new(e,PH_TOGGLE_DOUBLE_POSITION,-1);
+                if(t>=0)e->pool[t].position_double=true;
+                pr_phase_push(bt,e,t);
+                if(!allowed[1]->on_field||allowed[1]->switch_out_status){
+                    int s=pr_phase_new(e,PH_SUMMON,1);
+                    if(s>=0){e->pool[s].sw_field_index=1;e->pool[s].sw_player=true;}
+                    pr_phase_push(bt,e,s);
+                }
+            }
+        }else{
+            if(n_allowed>1&&allowed[1]->on_field&&!allowed[1]->switch_out_status){
+                int s=pr_phase_new(e,PH_RETURN,1);
+                if(s>=0){e->pool[s].sw_field_index=1;e->pool[s].sw_player=true;e->pool[s].sw_do_return=true;e->pool[s].sw_type=SWITCH_TYPE_SWITCH;e->pool[s].sw_slot=-1;}
+                pr_phase_push(bt,e,s);
+            }
+            pr_phase_push(bt,e,pr_phase_new(e,PH_TOGGLE_DOUBLE_POSITION,-1));
+        }
+        if(bt->battle_type!=BATTLE_TYPE_TRAINER&&(bt->wave_index>1||bt->game_mode!=GAME_MODES_DAILY)
+            &&n_allowed>(bt->double_battle?2:1)){
+            for(int k=0;k<(bt->double_battle?2:1);k++){
+                int s=pr_phase_new(e,PH_CHECK_SWITCH,-1);
+                if(s>=0){e->pool[s].sw_field_index=k;e->pool[s].sw_use_name=bt->double_battle;}
+                pr_phase_push(bt,e,s);
+            }
+        }
+    }
+    pr_phase_push(bt,e,pr_phase_new(e,PH_INIT_ENCOUNTER,-1));
+}
+
+/* doEncounterCommon's trainer prelude before EncounterPhase.end. */
+void pr_queue_trainer_summons(pr_battle *bt, pr_engine *e)
+{
+    if(bt->battle_type==BATTLE_TYPE_TRAINER){
+        int legal=0;for(int k=0;k<bt->n_party[1];k++)legal+=bt->party[1][k]->hp>0;
+        for(int k=0;k<(bt->double_battle&&legal>1?2:1);k++){
+            int s=pr_phase_new(e,PH_SUMMON,2+k);
+            if(s>=0){e->pool[s].sw_field_index=k;e->pool[s].sw_player=false;}
+            pr_phase_unshift(bt,e,s);
+        }
+    }
+}
+
+/* Fresh encounter trainer prelude, then its end queue. */
 void pr_start_battle(pr_battle *bt, pr_engine *e)
 {
-    engine_reset(bt, e);
-    if (bt->double_battle) pr_note_unported(bt, PR_FEAT_DOUBLES);
-    if (bt->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) pr_note_unported(bt, PR_FEAT_TRAINER);
-    if (bt->battle_type == BATTLE_TYPE_TRAINER) {
-        /* unshiftNew("SummonPhase", 0, false) */
-        int s = pr_phase_new(e, PH_SUMMON, 2);
-        if (s >= 0) { e->pool[s].sw_field_index = 0; e->pool[s].sw_player = false; }
-        pr_phase_unshift(bt, e, s);
-    }
-    /* the enemy field's shiny sparkles */
-    const pr_pokemon *en = bt->n_party[1] ? bt->party[1][0] : bt->field[2];   /* getEnemyField(): out or not */
-    if (en && en->shiny) pr_unshift_new(bt, e, PH_SHINY_SPARKLE, 2);
-    /* getPokemonAllowedInBattle(): the player's Pokemon that haven't fainted */
-    const pr_pokemon *allowed[PR_MAX_PARTY];
-    int n_allowed = 0;
-    for (int k = 0; k < bt->n_party[0]; k++)
-        if (bt->party[0][k]->hp > 0) allowed[n_allowed++] = bt->party[0][k];
-    if (!bt->n_party[0]) pr_note_unported(bt, PR_FEAT_PARTY);
-    else if (n_allowed && !(allowed[0]->on_field && !allowed[0]->switch_out_status)) {
-        int s = pr_phase_new(e, PH_SUMMON, 0);
-        if (s >= 0) { e->pool[s].sw_field_index = 0; e->pool[s].sw_player = true; }
-        pr_phase_push(bt, e, s);
-    }
-    /* singles: a second Pokemon on the field would go back (ReturnPhase, not ported) */
-    if (n_allowed > 1 && allowed[1]->on_field && !allowed[1]->switch_out_status) pr_note_unported(bt, PR_FEAT_DOUBLES);
-    pr_phase_push(bt, e, pr_phase_new(e, PH_TOGGLE_DOUBLE_POSITION, -1));
-    if (bt->battle_type != BATTLE_TYPE_TRAINER && (bt->wave_index > 1 || bt->game_mode != GAME_MODES_DAILY)
-        && n_allowed > 1) {
-        int s = pr_phase_new(e, PH_CHECK_SWITCH, -1);
-        if (s >= 0) e->pool[s].sw_field_index = 0;
-        pr_phase_push(bt, e, s);
-    }
-    pr_phase_push(bt, e, pr_phase_new(e, PH_INIT_ENCOUNTER, -1));
-    run_phases(bt, e, shift_phase(bt, e));
+    engine_reset(bt,e);
+    if(bt->battle_type==BATTLE_TYPE_MYSTERY_ENCOUNTER)pr_note_unported(bt,PR_FEAT_TRAINER);
+    pr_queue_trainer_summons(bt,e);
+    pr_queue_encounter_end(bt,e,false);
+    run_phases(bt,e,shift_phase(bt,e));
 }
 
 void pr_answer_check_switch(pr_battle *bt, pr_engine *e, bool yes)

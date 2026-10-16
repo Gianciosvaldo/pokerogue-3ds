@@ -641,3 +641,10 @@ Native end-of-turn transfer and game-core inventory/save projection are covered
 by [ITEM-TRANSFER-VALIDATION.md](../battle-core/ITEM-TRANSFER-VALIDATION.md).
 This bounded continuation does not promote general theft, final-boss run
 orchestration, playable doubles or wide-level Endless to complete.
+
+### Double encounter queue continuation
+
+[DOUBLE-ENCOUNTER-VALIDATION.md](../battle-core/DOUBLE-ENCOUNTER-VALIDATION.md)
+records actual fresh/loaded end queues and the trainer summon prelude, including
+all dynamic payloads. This does not promote doubles summon execution, player
+commands, app integration or wide-level Endless to complete.

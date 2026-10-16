@@ -426,3 +426,7 @@ $(BUILD)/final-boss-form-test: tests/final-boss-form-test.c $(BUILD)/libprcore.a
 all: $(BUILD)/item-transfer-test
 $(BUILD)/item-transfer-test: tests/item-transfer-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/encounter-end-test
+$(BUILD)/encounter-end-test: tests/encounter-end-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

@@ -103,6 +103,7 @@ typedef struct pr_phase {
      * doReturn, player) */
     int8_t sw_type, sw_field_index, sw_slot;
     bool sw_modal, sw_do_return, sw_player;
+    bool sw_use_name, position_double; /* encounter prompt/position constructor arguments */
     /* PostSummonPhase; PostSummonActivateAbilityPhase (the same phaseName) is one with
      * ps_activate set: getPriority() and which ability it applies */
     int8_t ps_priority;
@@ -188,6 +189,9 @@ void pr_run_turn(pr_battle *bt, pr_engine *e);
  * it, the "Set" battle style), or at a switch pick after a "yes". The game shows the encounter
  * text and the trainer's intro before calling this. Singles only. */
 void pr_start_battle(pr_battle *bt, pr_engine *e);
+/* EncounterPhase.end queue only; loaded sessions omit fresh player entry work. */
+void pr_queue_encounter_end(pr_battle *bt, pr_engine *e, bool loaded);
+void pr_queue_trainer_summons(pr_battle *bt, pr_engine *e);
 /* Scene.newBattle's player cleanup queue, before Encounter/Return clears summon
  * data. The caller resets the arena itself and removes the old enemy field. */
 void pr_prepare_player_cleanup(pr_battle *bt, pr_engine *e, bool reset_arena);
