@@ -528,6 +528,8 @@ void pr_queue_ability_display(pr_battle *bt, pr_engine *e, const pr_pokemon *p, 
         e->pool[ph].anim_result = passive;
         e->pool[ph].anim = passive ? (uint16_t)(p->custom_passive >= 0 ? p->custom_passive : pr_pokemon_base_form(p)->passive)
                                    : p->ability;
+        /* ShowAbilityPhase caches no name when its field lookup has no Pokemon. */
+        if (b < 0) e->pool[ph].anim = -1;
     }
     pr_phase_unshift(bt, e, ph);
 }

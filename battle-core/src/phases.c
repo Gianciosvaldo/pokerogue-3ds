@@ -1137,7 +1137,7 @@ static void resolve_counter_attack_target(pr_battle *bt, pr_engine *e, int ph)
     if (target == BATTLER_INDEX_ATTACKER) move_fail(m);
 }
 
-static void resolve_redirect_target(pr_battle *bt, pr_engine *e, int ph)
+void pr_resolve_redirect_target(pr_battle *bt, pr_engine *e, int ph)
 {
     pr_phase *m = PH(ph);
     pr_target_list *tl = tlist(e, m->targets);
@@ -1156,8 +1156,14 @@ static void resolve_redirect_target(pr_battle *bt, pr_engine *e, int ph)
     /* center-of-attention tags on the opponents (Follow Me, Rage Powder, Spotlight) */
     for (int i = 0; i < 4; i++) {
         pr_pokemon *o = bt->field[i];
-        if (is_active(o) && pr_is_opponent(bt, m->pokemon, o) && pr_get_battler_tag(o, BATTLER_TAG_TYPE_CENTER_OF_ATTENTION))
-            pr_note_unported(bt, PR_FEAT_TAG_LAPSE);
+        if (!is_active_on_field(o) || !pr_is_opponent(bt, m->pokemon, o)) continue;
+        const pr_battler_tag *tag = pr_get_battler_tag(o, BATTLER_TAG_TYPE_CENTER_OF_ATTENTION);
+        if (tag && (tag->source_move != MOVE_ID_RAGE_POWDER
+                    || (!pr_is_of_type(m->pokemon, POKEMON_TYPE_GRASS)
+                        && !pr_has_ability_active(bt, m->pokemon, ABILITY_ID_OVERCOAT)))) {
+            redirect = pr_battler_index(bt, o);
+            by_ability = false;
+        }
     }
     if (current == redirect) return;
     /* BypassRedirectAttr (Snipe Shot...: abilitiesOnly, only against an ability's redirect), then
@@ -1436,7 +1442,7 @@ static void move_phase(pr_battle *bt, pr_engine *e, int ph)
         bt->ignoring_effect_source = (int8_t)pr_battler_index(bt, user);
     }
 
-    resolve_redirect_target(bt, e, ph);
+    pr_resolve_redirect_target(bt, e, ph);
     resolve_counter_attack_target(bt, e, ph);
 
     bool charging_move = is_charging_move(move);

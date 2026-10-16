@@ -14,6 +14,7 @@
 bool pr_tag_type_ported(int type)
 {
     switch (type) {
+    case BATTLER_TAG_TYPE_CENTER_OF_ATTENTION: /* CenterOfAttentionTag */
     case BATTLER_TAG_TYPE_HELPING_HAND: /* HelpingHandTag */
     case BATTLER_TAG_TYPE_CHARGING:     /* SerializableBattlerTag(CHARGING, CUSTOM, 1, sourceMove, sourceId) */
     case BATTLER_TAG_TYPE_FLYING:       /* SemiInvulnerableTag: onAdd / onRemove only hide and show the sprite */
@@ -265,6 +266,9 @@ static pr_battler_tag construct(int type, int turn_count, int source_move, int64
     t.source_id = -1;
     t.source_index = -1;
     switch (type) {
+    case BATTLER_TAG_TYPE_CENTER_OF_ATTENTION:
+        t.turn_count = 1;
+        break;
     case BATTLER_TAG_TYPE_HELPING_HAND:
         t.turn_count=1;
         t.source_move=MOVE_ID_HELPING_HAND;
@@ -539,6 +543,13 @@ int pr_encore_try_override(pr_pokemon *p)
 static bool can_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t)
 {
     switch (t->type) {
+    case BATTLER_TAG_TYPE_CENTER_OF_ATTENTION: {
+        /* getPlayerField/getEnemyField include fainted and switching members. */
+        int first = p->is_player ? 0 : 2;
+        for (int k = first; k < first + (bt->double_battle ? 2 : 1); k++)
+            if (bt->field[k] && pr_get_battler_tag(bt->field[k], t->type)) return false;
+        return true;
+    }
     case BATTLER_TAG_TYPE_BYPASS_SPEED: {
         bool bypass = true;
         pr_ab_params params = {.pokemon = p, .move = -1, .flag = &bypass};
@@ -684,6 +695,9 @@ static pr_pokemon *tag_source(pr_battle *bt, const pr_battler_tag *t);
 static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t)
 {
     switch (t->type) {
+    case BATTLER_TAG_TYPE_CENTER_OF_ATTENTION:
+        say(bt, e, "battlerTags:centerOfAttentionOnAdd", p);
+        return;
     case BATTLER_TAG_TYPE_HELPING_HAND: {
         pr_pokemon *source=tag_source(bt,t);
         if(source)pr_queue_msg(bt,e,pr_msg2("battlerTags:helpingHandOnAdd",

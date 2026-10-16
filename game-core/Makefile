@@ -601,3 +601,11 @@ partner-cures-host-test: $(BUILD)/partner_cures_host_test
 $(BUILD)/partner_cures_host_test: tests/partner_cures_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: partner-cures-host-test
+
+all: $(BUILD)/attention_host_test
+test: attention-host-test
+attention-host-test: $(BUILD)/attention_host_test
+	$(BUILD)/attention_host_test
+$(BUILD)/attention_host_test: tests/attention_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: attention-host-test

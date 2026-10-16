@@ -473,3 +473,7 @@ $(BUILD)/flame-burst-test: tests/flame-burst-test.c tests/gas-lifecycle-test.c $
 all: $(BUILD)/partner-cures-test
 $(BUILD)/partner-cures-test: tests/partner-cures-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/partner-cures-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/attention-test
+$(BUILD)/attention-test: tests/attention-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/attention-test.c $(BUILD)/libprcore.a -lm -o $@
