@@ -175,7 +175,7 @@ typedef struct gc_mon {
     uint8_t pokeball;           /* PokeballType it was caught in */
     int16_t met_wave;           /* -1 for a starter */
     uint8_t trainer_slot;       /* enemies: TrainerSlot */
-    uint8_t met_level;          /* Pokemon.metLevel: its level when it joined (a catch sets it again) */
+    int32_t met_level;          /* Pokemon.metLevel: its level when it joined (a catch sets it again) */
     int8_t met_biome;           /* Pokemon.metBiome (BiomeId), -1 for a starter */
     uint16_t met_species;       /* Pokemon.metSpecies */
     uint16_t used_tms[64];      /* TMs used on this Pokemon (up to 64) */

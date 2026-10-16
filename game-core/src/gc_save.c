@@ -249,12 +249,20 @@ static int get_block(reader *r, const sfield *f, int nf, void *base, size_t stri
     if (r->bad || rec * (size_t)count > r->n - r->pos) { r->bad = true; *dropped += nf; return 0; }
     /* where each known field sits in a saved record, -1 = not there */
     long at[MAX_SAVED];
+    bool legacy_level[MAX_SAVED] = {false};
     for (int i = 0; i < nf && i < MAX_SAVED; i++) {
         at[i] = -1;
         const uint32_t h = hash(f[i].name);
         size_t off = 0;
         for (int k = 0; k < n; k++) {
-            if (sh[k] == h && ss[k] == f[i].size) { at[i] = (long)off; break; }
+            /* Only the two historical byte-sized Pokemon level fields may
+             * widen. All unrelated size mismatches retain normal drop behavior. */
+            bool byte_level = ss[k] == 1 && f[i].size == sizeof(int32_t)
+                && ((f == pokemon_fields && f[i].off == offsetof(pr_pokemon, level))
+                    || (f == mon_fields && f[i].off == offsetof(gc_mon, met_level)));
+            if (sh[k] == h && (ss[k] == f[i].size || byte_level)) {
+                at[i] = (long)off; legacy_level[i] = byte_level; break;
+            }
             off += ss[k];
         }
         if (at[i] < 0 && count > 0) (*dropped)++;
@@ -264,7 +272,12 @@ static int get_block(reader *r, const sfield *f, int nf, void *base, size_t stri
         const uint8_t *src = r->p + r->pos + rec * (size_t)k;
         uint8_t *dst = (uint8_t *)base + (size_t)k * stride;
         for (int i = 0; i < nf && i < MAX_SAVED; i++)
-            if (at[i] >= 0) memcpy(dst + f[i].off, src + at[i], f[i].size);
+            if (at[i] >= 0) {
+                if (legacy_level[i]) {
+                    int32_t level = src[at[i]];
+                    memcpy(dst + f[i].off, &level, sizeof level);
+                } else memcpy(dst + f[i].off, src + at[i], f[i].size);
+            }
     }
     if (count > max) (*dropped)++;
     r->pos += rec * (size_t)count;
@@ -575,7 +588,7 @@ static bool mon_ok(const gc_mon *m)
 {
     const pr_pokemon *b = &m->b;
     const pr_species *sp = gc_species(b->species);
-    if (!sp || b->form >= sp->nforms || b->level < 1) return false;
+    if (!sp || b->form >= sp->nforms || b->level < 1 || m->met_level < 0) return false;
     if (m->has_custom_nature && (m->base_nature > 24 || b->nature > 24)) return false;
     if (b->fusion_species != 0) {
         const pr_species *fsp = gc_species(b->fusion_species);

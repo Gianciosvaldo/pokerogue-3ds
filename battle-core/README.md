@@ -1334,3 +1334,7 @@ after field swaps, runtime faults and actual owning doubles turns.
 Gastro Acid/Core Enforcer suppression, loss-callback order and weather/gas
 recovery are covered in [SUPPRESSION-VALIDATION.md](SUPPRESSION-VALIDATION.md),
 including native condition queries, real owning turns and bounded save callers.
+
+Wide battle-level storage now preserves int32 levels and migrates historical
+byte-level saves. See [the bounded source validation](WIDE-LEVEL-VALIDATION.md).
+EXP/candy progression and high-wave Endless acceptance remain separate work.

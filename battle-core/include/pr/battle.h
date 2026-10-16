@@ -228,7 +228,7 @@ typedef struct pr_pokemon {
     uint8_t fusion_form;
     pr_illusion illusion;
     int8_t fusion_ability_index; /* 0, 1, 2 for ability1, ability2, ability_hidden; -1 = none */
-    uint8_t level;
+    int32_t level;
     uint8_t ivs[6];
     uint8_t nature;
     uint16_t ability;          /* active ability (getAbility()) */

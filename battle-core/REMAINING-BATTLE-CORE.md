@@ -241,3 +241,11 @@ repaired premature/duplicate weather ability displays. See
 SUPPRESSION-VALIDATION.md for source API/queue, owning-turn and save boundaries.
 Attention/redirection, Flame Burst, ally healing, app/run doubles and wide-level
 Endless remain separate source-backed work.
+
+## Wide level storage prerequisite (2026-10-16)
+
+Runtime level and met-level storage now use int32, with historical byte-save
+migration. [Validation](WIDE-LEVEL-VALIDATION.md) covers bounded actual source
+stats and score APIs plus augmented constructor/save/command continuity. Existing
+EXP200/candy255 and save-slot preview limits remain, along with high-level combat
+and natural Endless progression proofs. This is not whole-mode completion.
