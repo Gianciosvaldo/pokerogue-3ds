@@ -13,6 +13,10 @@ does not establish missing behavior. Rows marked "helper" remain conservatively
 unported in turns and need their own bounded turn fixtures before promotion.
 The bounded slices below add dispatch or prove existing helpers; Card 104 remains partial.
 
+[Thief/Covet](MOVE-THEFT-VALIDATION.md) now has bounded canonical-stock proofs,
+including tier cache/transfer and native load reset. Berry stealing/eating,
+Pickup, broader item identities and full interactions remain open.
+
 | Pinned class | C mapping / actual dispatch | Remaining scope |
 | --- | --- | --- |
 | `LapsingPokemonHeldItemModifier` (abstract) | No C class | Lapsing held-item lifecycle; no concrete subclass at this pin |

@@ -28,6 +28,7 @@ void gc_item_add(gc_run *run, const char *key, int16_t arg, uint32_t pokemon_id,
     it->virtual_stack = 0;
     it->battle_count = 0;
     it->non_transferable = false;
+    it->type_tier = 0;
     it->stack = stack;
 }
 
@@ -102,6 +103,7 @@ static void to_modifier(const gc_item *it, pr_modifier *m, bool golden)
     m->stack_count = it->stack;
     m->pokemon_id = it->detached ? 0 : it->pokemon_id ? (int64_t)it->pokemon_id : -1;
     m->is_transferable = !it->non_transferable;
+    m->type_tier = it->type_tier;
     m->unknown_subclass = true;
     m->cls = it->pokemon_id ? PR_MOD_HELD_ITEM : PR_MOD_PERSISTENT;
     if (!strcmp(it->key, "BERRY_POUCH")) {
@@ -245,6 +247,22 @@ void gc_items_to_battle(gc_run *run)
     gc_int(run)->battle_item_count[1] = bt->n_mods[1];
 }
 
+/* The supported canonical generated stocks each occupy one tier in their
+ * native generation pool. Capture it at creation, before a later transfer can
+ * change the holder's side or trainer context. Unknown classes stay opaque. */
+void gc_cache_generated_item_tiers(gc_run *run)
+{
+    for (int i=0;i<run->n_enemy_items;i++) {
+        gc_item *item=&run->enemy_items[i];
+        pr_modifier m;to_modifier(item,&m,golden_bridge(run));
+        /* Wave1000 Mini Black Holes are appended with getModifierType(),
+         * rather than a tiered pool option. Their fresh type has no tier. */
+        if(m.cls==PR_MOD_TURN_HELD_TRANSFER){item->type_tier=0;continue;}
+        int tier=pr_held_item_tier_for_pool(&m,run->battle_type==BATTLE_TYPE_TRAINER);
+        if(tier>=0)item->type_tier=(uint8_t)(tier+1);
+    }
+}
+
 /* Canonical fields of the native transfer families. Opaque/unsupported stock
  * remains owned by its existing entry and is never guessed from a class name. */
 static bool transfer_stock(const pr_modifier *m,gc_item *it)
@@ -277,7 +295,7 @@ static bool transfer_stock(const pr_modifier *m,gc_item *it)
     if(it)*it=(gc_item){.key=key,.arg=arg,.stack=m->stack_count,
         .pokemon_id=m->pokemon_id<0?0:(uint32_t)m->pokemon_id,
         .detached=m->pokemon_id==0,.virtual_stack=m->virtual_stack_count,
-        .non_transferable=!m->is_transferable};
+        .non_transferable=!m->is_transferable,.type_tier=m->type_tier};
     return true;
 }
 static bool same_transfer_stock(const pr_modifier *a,const pr_modifier *b)
@@ -319,7 +337,7 @@ void gc_items_from_battle(gc_run *run)
                 if(match<0||run->bt.mods[side][match].stack_count<=0){removed++;continue;}
                 const pr_modifier *m=&run->bt.mods[side][match];used[match]=true;
                 it.stack=m->stack_count;it.virtual_stack=m->virtual_stack_count;
-                it.detached=m->pokemon_id==0;it.non_transferable=!m->is_transferable;
+                it.detached=m->pokemon_id==0;it.non_transferable=!m->is_transferable;it.type_tier=m->type_tier;
                 items[w++]=it;continue;
             }
             if (i < tracked && !expected.unknown_subclass && (expected.cls == PR_MOD_INSTANT_REVIVE

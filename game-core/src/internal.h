@@ -220,6 +220,7 @@ void gc_items_drop_held_of(gc_run *run, uint32_t pokemon_id);   /* removePartyMe
 int gc_item_remove_stacks(gc_run *run, const char *key, int count);
 void gc_items_from_battle(gc_run *run); /* persist consumed berries/White Herb */
 void gc_items_to_battle(gc_run *run);                                  /* the player's and the enemy's lists into bt->mods */
+void gc_cache_generated_item_tiers(gc_run *run);
 double gc_apply_exp_boosters(const gc_run *run, double exp);          /* ExpBoosterModifier */
 
 /* ---- the encounter and the battle (src/gc_encounter.c, src/gc_battle.c) ---- */

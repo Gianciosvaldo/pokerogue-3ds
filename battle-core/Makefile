@@ -481,3 +481,6 @@ $(BUILD)/attention-test: tests/attention-test.c tests/gas-lifecycle-test.c $(BUI
 all: $(BUILD)/commander-test
 $(BUILD)/commander-test: tests/commander-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/commander-test.c $(BUILD)/libprcore.a -lm -o $@
+
+$(BUILD)/move-theft-test: tests/move-theft-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

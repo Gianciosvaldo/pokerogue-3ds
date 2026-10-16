@@ -516,12 +516,9 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
     case PR_AC_RemoveHeldItemAttr:
         pr_remove_move_held_item(bt, e, user, target, P(RemoveHeldItemAttr, a)->berriesOnly, NULL);
         return;
-    case PR_AC_StealHeldItemChanceAttr: {                /* Thief, Covet: randSeedFloat() > chance fails */
-        if (!bt->rng_live) { pr_note_unported(bt, PR_FEAT_GLOBAL_RNG); return; }
-        if (pr_rng_seed_float(&bt->rng) > P(StealHeldItemChanceAttr, a)->chance) return;
-        if (pr_held_item_count(bt, target, true)) pr_note_unported(bt, a->cls);   /* the transfer isn't ported */
+    case PR_AC_StealHeldItemChanceAttr:
+        pr_steal_move_held_item(bt, e, user, target, P(StealHeldItemChanceAttr, a)->chance);
         return;
-    }
     case PR_AC_EatBerryAttr: {                           /* Stuff Cheeks, Teatime */
         pr_pokemon *target_p = P(EatBerryAttr, a)->selfTarget ? user : target;
         if (!target_p) return;
