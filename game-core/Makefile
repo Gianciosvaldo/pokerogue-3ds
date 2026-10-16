@@ -617,3 +617,15 @@ commander-host-test: $(BUILD)/commander_host_test
 $(BUILD)/commander_host_test: tests/commander_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: commander-host-test
+
+all: $(BUILD)/wide_progression_diff_test
+$(BUILD)/wide_progression_diff_test: tests/wide_progression_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/wide_progression_host_test
+test: wide-progression-host-test
+wide-progression-host-test: $(BUILD)/wide_progression_host_test
+	$(BUILD)/wide_progression_host_test
+$(BUILD)/wide_progression_host_test: tests/wide_progression_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: wide-progression-host-test
