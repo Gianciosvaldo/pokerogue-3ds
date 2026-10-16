@@ -1322,3 +1322,7 @@ single/double source phase, controller tests and remaining contexts.
 
 Helping Hand tag lifetime, messages, save projection and actual doubles damage
 are covered in [HELPING-HAND-VALIDATION.md](HELPING-HAND-VALIDATION.md).
+
+Acupressure's native stat selection, RNG and phase ownership are covered in
+[ACUPRESSURE-VALIDATION.md](ACUPRESSURE-VALIDATION.md), with bounded owning-turn
+and command/save comparisons. Broader doubles and wide-level Endless remain open.

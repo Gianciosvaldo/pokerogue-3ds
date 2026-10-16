@@ -89,6 +89,14 @@ static void form_change_with_delay(pr_battle *bt, const pr_pokemon *p, int trigg
     const pr_species *sp = pr_pokemon_species(p);
     if (!sp || !(sp->form_change_triggers & (1u << trigger_class))) return;
 
+    /* Meloetta's registered post-move predicate cannot trigger without Relic
+     * Song as its newest history entry. Preserve explicit unsupported reporting
+     * for that positive path; ordinary reserve entrants need no form phase. */
+    if (p->species == SPECIES_ID_MELOETTA && trigger_class == PR_FCT_SpeciesFormChangePostMoveTrigger) {
+        const pr_turn_move *last = pr_last_move(bt, p, 0);
+        if (!last || last->move != MOVE_ID_RELIC_SONG) return;
+    }
+
     pr_pokemon *mon = (pr_pokemon *)p;
     int target_form = -1;
 

@@ -445,3 +445,7 @@ $(BUILD)/summon-entry-host-test: tests/summon-entry-host-test.c $(BUILD)/libprco
 all: $(BUILD)/helping-hand-test
 $(BUILD)/helping-hand-test: tests/helping-hand-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/acupressure-test
+$(BUILD)/acupressure-test: tests/acupressure-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

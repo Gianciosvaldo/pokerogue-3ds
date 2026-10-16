@@ -186,6 +186,20 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         }
         return;
     }
+    case PR_AC_AcupressureStatStageChangeAttr: {
+        /* This override omits MoveEffectAttr's HP/condition/chance gates.
+         * BATTLE_STATS is ordered ATK, DEF, SPATK, SPDEF, SPD, ACC, EVA. */
+        int32_t eligible[7];
+        int n = 0;
+        for (int stat = STAT_ATK; stat <= STAT_EVA; stat++)
+            if (target->stat_stages[stat - 1] < 6) eligible[n++] = stat;
+        if (n) {
+            int32_t stat = eligible[pr_battle_rand_seed_int(bt, n, 0)];
+            if (pr_unshift_stat_stage_change(bt, e, pr_battler_index(bt, target), &stat, 1, 2, user) < 0)
+                e->overflow = true;
+        }
+        return;
+    }
     case PR_AC_StatStageChangeAttr: {
         const pr_attr_StatStageChangeAttr *x = P(StatStageChangeAttr, a);
         stat_stage_change(bt, e, ef, a->cls, user, target, move, x->stats.v, x->stats.n, x->stages);

@@ -219,3 +219,10 @@ actual-source evidence. This does not close the final-boss/doubles gate:
 Mini Black Hole transfers/persistence, dual commands and natural double starts,
 phase-two recovery and legal Classic clears remain open. Wide levels/Endless
 remain next in the battle-core priority queue.
+
+Acupressure continuation from #285 implements the native override without
+parent gates, using ordered eligible stats, the user's battle RNG and a +2
+stat phase with the original source. See ACUPRESSURE-VALIDATION.md for the
+API, owning-turn and host/save proof boundaries. Leading fresh doubles gaps
+include Core Enforcer's acted/suppression path, After You and attention
+redirection. App/run doubles and wide-level Endless remain separate.
