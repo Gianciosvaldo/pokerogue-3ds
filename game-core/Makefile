@@ -569,3 +569,11 @@ acupressure-host-test: $(BUILD)/acupressure_host_test
 $(BUILD)/acupressure_host_test: tests/acupressure_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: acupressure-host-test
+
+all: $(BUILD)/suppression_host_test
+test: suppression-host-test
+suppression-host-test: $(BUILD)/suppression_host_test
+	$(BUILD)/suppression_host_test
+$(BUILD)/suppression_host_test: tests/suppression_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: suppression-host-test

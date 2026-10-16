@@ -1330,3 +1330,7 @@ and command/save comparisons. Broader doubles and wide-level Endless remain open
 After You's first-matching queued mover and exact message are covered in
 [AFTER-YOU-VALIDATION.md](AFTER-YOU-VALIDATION.md), including cached identity
 after field swaps, runtime faults and actual owning doubles turns.
+
+Gastro Acid/Core Enforcer suppression, loss-callback order and weather/gas
+recovery are covered in [SUPPRESSION-VALIDATION.md](SUPPRESSION-VALIDATION.md),
+including native condition queries, real owning turns and bounded save callers.
