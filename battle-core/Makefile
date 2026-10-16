@@ -453,3 +453,7 @@ $(BUILD)/acupressure-test: tests/acupressure-test.c $(BUILD)/libprcore.a
 all: $(BUILD)/after-you-test
 $(BUILD)/after-you-test: tests/after-you-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/suppression-test
+$(BUILD)/suppression-test: tests/suppression-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

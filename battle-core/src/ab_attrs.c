@@ -82,6 +82,12 @@ bool pr_has_ability_active(pr_battle *bt, const pr_pokemon *p, int ability)
     return p->passive && p->passive == ability && pr_can_apply_ability(bt, p, p->passive);
 }
 
+bool pr_can_suppress_ability(const pr_pokemon *p)
+{
+    return !p->ability_suppressed && (!(pr_abilities[p->ability].flags & AB_FLAG_UNSUPPRESSABLE)
+        || ((p->passive_flag || p->passive) && !(pr_abilities[p->passive].flags & AB_FLAG_UNSUPPRESSABLE)));
+}
+
 /* PostSummonAbAttr.shouldActivateOnGain(): activateOnGain, after the fields every attr starts with
  * (nulls, showAbility, extraCondition); extraCondition is a closure id where an instance has one */
 static bool activate_on_gain(const pr_attr *a)
@@ -1098,12 +1104,12 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
     case PR_AC_PostSummonFormChangeByWeatherAbAttr: {
         int wanted = p->species == SPECIES_ID_CASTFORM ? ABILITY_ID_FORECAST
                    : p->species == SPECIES_ID_CHERRIM ? ABILITY_ID_FLOWER_GIFT : -1;
-        GATE(wanted >= 0 && !p->ability_suppressed && !pr_weather_effect_suppressed(bt)
-             && pr_has_ability_active(bt, p, wanted));
         int form = bt->weather == WEATHER_TYPE_SUNNY || bt->weather == WEATHER_TYPE_HARSH_SUN ? 1
                  : p->species == SPECIES_ID_CASTFORM && (bt->weather == WEATHER_TYPE_RAIN || bt->weather == WEATHER_TYPE_HEAVY_RAIN) ? 2
                  : p->species == SPECIES_ID_CASTFORM && (bt->weather == WEATHER_TYPE_HAIL || bt->weather == WEATHER_TYPE_SNOW) ? 3 : -1;
-        GATE(form >= 0 && form != p->form);
+        /* canApply must finish before any ability display is queued. */
+        GATE(wanted >= 0 && !p->ability_suppressed && !pr_weather_effect_suppressed(bt)
+             && pr_has_ability_active(bt, p, wanted) && form >= 0 && form != p->form);
         if (!pp->simulated) pr_form_change(bt, p, PR_FCT_SpeciesFormChangeWeatherTrigger);
         return 1;
     }

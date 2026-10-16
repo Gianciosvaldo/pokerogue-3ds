@@ -233,3 +233,11 @@ API and complete doubles turns are documented in AFTER-YOU-VALIDATION.md.
 Suppression, attention redirection and the other sampled doubles callbacks
 remain unported; these bounded coverage gains do not close whole battle-core
 or wide-level Endless support.
+
+Suppression continuation from #287 implements Gastro Acid/Core Enforcer's
+distinct gates and shared condition, passive-before-primary loss callbacks,
+suppression timing and weather reversion. Native recovery also exposed and
+repaired premature/duplicate weather ability displays. See
+SUPPRESSION-VALIDATION.md for source API/queue, owning-turn and save boundaries.
+Attention/redirection, Flame Burst, ally healing, app/run doubles and wide-level
+Endless remain separate source-backed work.

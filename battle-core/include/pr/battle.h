@@ -561,6 +561,8 @@ int pr_status_healed_list(uint16_t *ability, uint8_t *effect, int max);   /* by 
 const pr_attr *pr_ability_first_attr(uint16_t ability, uint16_t cls);
 /* Pokemon.canApplyAbility for `ability` (the ability or the passive) */
 bool pr_can_apply_ability(pr_battle *bt, const pr_pokemon *p, uint16_t ability);
+/* SuppressAbilitiesAttr.getCondition: raw primary/passive flags, not activation. */
+bool pr_can_suppress_ability(const pr_pokemon *p);
 /* hasAbility(ability) / hasAbilityWithAttr(cls) with canApply = true */
 bool pr_has_ability_active(pr_battle *bt, const pr_pokemon *p, int ability);
 bool pr_has_ability_with_attr(pr_battle *bt, const pr_pokemon *p, uint16_t cls);

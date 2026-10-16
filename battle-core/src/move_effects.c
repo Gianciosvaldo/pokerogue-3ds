@@ -148,6 +148,24 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         return;
     }
     switch (a->cls) {
+    case PR_AC_SuppressAbilitiesAttr:
+    case PR_AC_SuppressAbilitiesIfActedAttr: {
+        if (!effect_can_apply(ef, user, target)) return;
+        /* The raw base effect does not call getCondition. Core Enforcer's
+         * override alone tests acted and a fresh base attribute's condition. */
+        if (a->cls == PR_AC_SuppressAbilitiesIfActedAttr
+            && (!target->acted || !pr_can_suppress_ability(target))) return;
+        pr_queue_msg(bt, e, pr_msg1("moveTriggers:suppressAbilities", pr_arg_pokemon(bt, "pokemonName", target)));
+        /* Pokemon.suppressAbility: lose passive first, then primary, then set
+         * suppression. IllusionBreak has no enabled registrations at the pin. */
+        pr_ab_params lose = {.pokemon=target, .move=-1, .only=2};
+        pr_apply_ab_attrs(bt, PR_AC_PreLeaveFieldAbAttr, &lose);
+        lose.only = 1;
+        pr_apply_ab_attrs(bt, PR_AC_PreLeaveFieldAbAttr, &lose);
+        target->ability_suppressed = true;
+        pr_weather_form_changes(bt, true, NULL);
+        return;
+    }
     case PR_AC_AfterYouAttr:
         /* This override always queues its message, then marks the first
          * queued MovePhase whose cached Pokemon is the target. */

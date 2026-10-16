@@ -29,7 +29,6 @@
 #define AB_FLAG_UNREPLACEABLE (1u << 4)
 static bool ab_replaceable(int ab) { return !(pr_abilities[ab].flags & AB_FLAG_UNREPLACEABLE); }
 static bool ab_copiable(int ab) { return !(pr_abilities[ab].flags & AB_FLAG_UNCOPIABLE); }
-static bool ab_suppressable(int ab) { return !(pr_abilities[ab].flags & AB_FLAG_UNSUPPRESSABLE); }
 /* AB_FLAG_UNSWAPPABLE = UNCOPIABLE | UNREPLACEABLE */
 static bool ab_swappable(int ab) { return !(pr_abilities[ab].flags & (AB_FLAG_UNCOPIABLE | AB_FLAG_UNREPLACEABLE)); }
 
@@ -712,8 +711,7 @@ static double gastro_acid(ARGS)
 {
     UNUSED;
     NEED_TARGET;
-    if (t->ability_suppressed) return 0;
-    return ab_suppressable(t->ability) || (t->passive && ab_suppressable(t->passive));
+    return pr_can_suppress_ability(t);
 }
 
 /* Reflect Type: !user.isTerastallized && (!target.isOfType(UNKNOWN, {returnOriginalTypesIfStellar})
