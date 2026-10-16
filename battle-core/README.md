@@ -1311,3 +1311,7 @@ bounded Source comparison and remaining theft/doubles/integration requirements.
 Mini Black Hole turn transfers and inventory/save persistence are described in
 [ITEM-TRANSFER-VALIDATION.md](ITEM-TRANSFER-VALIDATION.md); supported item families
 and remaining theft, doubles and Endless boundaries are listed explicitly.
+
+Fresh/loaded single and double encounter queues, including the trainer prelude,
+are documented in [DOUBLE-ENCOUNTER-VALIDATION.md](DOUBLE-ENCOUNTER-VALIDATION.md).
+Summon execution, command targeting and game-core/app doubles remain separate.
