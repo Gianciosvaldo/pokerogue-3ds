@@ -430,3 +430,14 @@ $(BUILD)/item-transfer-test: tests/item-transfer-test.c $(BUILD)/libprcore.a
 all: $(BUILD)/encounter-end-test
 $(BUILD)/encounter-end-test: tests/encounter-end-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/summon-entry-test
+$(BUILD)/summon-entry-test: tests/summon-entry-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/summon-entry-host-test
+summon-entry-host-test: $(BUILD)/summon-entry-host-test
+	$(BUILD)/summon-entry-host-test
+$(BUILD)/summon-entry-host-test: tests/summon-entry-host-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: summon-entry-host-test
