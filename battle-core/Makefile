@@ -441,3 +441,7 @@ summon-entry-host-test: $(BUILD)/summon-entry-host-test
 $(BUILD)/summon-entry-host-test: tests/summon-entry-host-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: summon-entry-host-test
+
+all: $(BUILD)/helping-hand-test
+$(BUILD)/helping-hand-test: tests/helping-hand-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

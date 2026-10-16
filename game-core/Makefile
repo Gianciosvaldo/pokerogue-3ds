@@ -553,3 +553,11 @@ item-transfer-host-test: $(BUILD)/item_transfer_host_test
 $(BUILD)/item_transfer_host_test: tests/item_transfer_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: item-transfer-host-test
+
+all: $(BUILD)/helping_hand_host_test
+test: helping-hand-host-test
+helping-hand-host-test: $(BUILD)/helping_hand_host_test
+	$(BUILD)/helping_hand_host_test
+$(BUILD)/helping_hand_host_test: tests/helping_hand_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: helping-hand-host-test

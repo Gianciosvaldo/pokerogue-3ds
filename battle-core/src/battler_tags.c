@@ -14,6 +14,7 @@
 bool pr_tag_type_ported(int type)
 {
     switch (type) {
+    case BATTLER_TAG_TYPE_HELPING_HAND: /* HelpingHandTag */
     case BATTLER_TAG_TYPE_CHARGING:     /* SerializableBattlerTag(CHARGING, CUSTOM, 1, sourceMove, sourceId) */
     case BATTLER_TAG_TYPE_FLYING:       /* SemiInvulnerableTag: onAdd / onRemove only hide and show the sprite */
     case BATTLER_TAG_TYPE_UNDERGROUND:
@@ -264,6 +265,11 @@ static pr_battler_tag construct(int type, int turn_count, int source_move, int64
     t.source_id = -1;
     t.source_index = -1;
     switch (type) {
+    case BATTLER_TAG_TYPE_HELPING_HAND:
+        t.turn_count=1;
+        t.source_move=MOVE_ID_HELPING_HAND;
+        t.source_id=source_id;
+        break;
     case BATTLER_TAG_TYPE_CHARGING:
         t.turn_count = 1;
         t.source_id = source_id;
@@ -673,9 +679,17 @@ static void stockpile_on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_batt
     if (ph >= 0) e->pool[ph].ssc_stockpile = true;
 }
 
+static pr_pokemon *tag_source(pr_battle *bt, const pr_battler_tag *t);
+
 static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t)
 {
     switch (t->type) {
+    case BATTLER_TAG_TYPE_HELPING_HAND: {
+        pr_pokemon *source=tag_source(bt,t);
+        if(source)pr_queue_msg(bt,e,pr_msg2("battlerTags:helpingHandOnAdd",
+            pr_arg_pokemon(bt,"pokemonNameWithAffix",source),pr_arg_pokemon(bt,"pokemonName",p)));
+        return;
+    }
     case BATTLER_TAG_TYPE_CONFUSED:
         pr_unshift_common_anim(bt, e, pr_battler_index(bt, p), -1, COMMON_ANIM_CONFUSION);
         say(bt, e, "battlerTags:confusedOnAdd", p);

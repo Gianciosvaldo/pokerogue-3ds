@@ -1319,3 +1319,6 @@ Summon execution, command targeting and game-core/app doubles remain separate.
 Owning summon execution now preserves field references after fainted-slot party
 swaps; [SUMMON-ENTRY-VALIDATION.md](SUMMON-ENTRY-VALIDATION.md) records the real
 single/double source phase, controller tests and remaining contexts.
+
+Helping Hand tag lifetime, messages, save projection and actual doubles damage
+are covered in [HELPING-HAND-VALIDATION.md](HELPING-HAND-VALIDATION.md).
