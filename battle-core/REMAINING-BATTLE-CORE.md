@@ -249,3 +249,17 @@ migration. [Validation](WIDE-LEVEL-VALIDATION.md) covers bounded actual source
 stats and score APIs plus augmented constructor/save/command continuity. Existing
 EXP200/candy255 and save-slot preview limits remain, along with high-level combat
 and natural Endless progression proofs. This is not whole-mode completion.
+
+## Completion target (2026-10-16)
+
+Upcoming work is organized around the [completion checklist](COMPLETION-CHECKLIST.md).
+The historical rows above are evidence for their stated slices and need
+reconciliation in the final full inventory. tools/audit-completion.py records
+current explicit candidate locations for that review; its line count is not a
+count of unsupported mechanics or a completion percentage.
+
+Flame Burst continuation: actual override and downstream shield/flee paths now
+match 16,384 source API cases; broad doubles gains 17 covered IDs without loss.
+See [validation](FLAME-BURST-VALIDATION.md). Partner cures/healing, attention,
+Commander/Order Up, wide progression/combat and the final inventory audit remain
+open. The shared corrections do not close all boss/switching combinations.

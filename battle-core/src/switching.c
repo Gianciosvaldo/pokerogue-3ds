@@ -360,6 +360,9 @@ void pr_wimp_out_apply(pr_battle *bt, pr_engine *e, pr_pokemon *p)
         /* clearEnemyHeldItemModifiers(): every enemy held item, then updateModifiers(false) */
         for (int i = 0; i < bt->n_mods[1]; i++)
             if (!pr_mod_is_ported_item(&bt->mods[1][i]) && pr_mod_is(&bt->mods[1][i], PR_MOD_HELD_ITEM)) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
+        pr_clear_enemy_held_item_modifiers(bt, NULL);
+        update_proven_held_items(bt, 1);
+        for (int k = 0; k < bt->n_party[1]; k++) pr_recalculate_stats(bt, bt->party[1][k]);
         if (p->hp) {
             push_boundary(bt, e, PH_BATTLE_END);
             if (pr_is_new_biome(bt)) push_boundary(bt, e, PH_SELECT_BIOME);

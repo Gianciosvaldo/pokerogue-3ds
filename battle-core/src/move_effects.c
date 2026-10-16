@@ -484,9 +484,18 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         if (target->stat_stages_increased)
             pr_try_set_status(bt, e, target, P(StatusIfBoostedAttr, a)->effect, user, -1, false, true);
         return;
-    case PR_AC_FlameBurstAttr:                           /* hits the target's ally: a single battle has none */
-        if (bt->double_battle) pr_note_unported(bt, a->cls);
+    case PR_AC_FlameBurstAttr: {                        /* raw override: no parent HP/condition gates */
+        pr_pokemon *ally = (pr_pokemon *)pr_get_ally(bt, target);
+        bool cancelled = false;
+        if (ally) {
+            pr_ab_params ap = {.pokemon = ally, .move = -1, .flag = &cancelled};
+            pr_apply_ab_attrs(bt, PR_AC_BlockNonDirectDamageAbAttr, &ap);
+        }
+        if (cancelled || !ally || ally->switch_out_status) return;
+        double damage = floor(pr_get_stat(ally, STAT_HP, false) / 16.0);
+        pr_damage_and_update(bt, e, ally, damage < 1 ? 1 : damage, HIT_RESULT_INDIRECT, false, NULL);
         return;
+    }
     case PR_AC_MoneyAttr: {                              /* Pay Day: moneyScattered += getWaveMoneyAmount(0.2) */
         int w = bt->wave_index, set = (int)ceil(w / 10.0) - 1;
         double v = js_pow((set + 1 + (0.75 + (((w - 1) % 10) + 1) / 10.0)) * 100, 1 + 0.005 * set) * 0.2;

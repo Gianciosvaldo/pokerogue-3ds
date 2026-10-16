@@ -1338,3 +1338,7 @@ including native condition queries, real owning turns and bounded save callers.
 Wide battle-level storage now preserves int32 levels and migrates historical
 byte-level saves. See [the bounded source validation](WIDE-LEVEL-VALIDATION.md).
 EXP/candy progression and high-wave Endless acceptance remain separate work.
+
+Flame Burst now uses the native indirect-damage path, with source-backed shield
+RNG/empty-queue and wild-flee refresh fixes. See [validation](FLAME-BURST-VALIDATION.md)
+and the [battle-core completion checklist](COMPLETION-CHECKLIST.md).
