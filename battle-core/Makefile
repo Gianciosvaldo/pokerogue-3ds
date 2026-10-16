@@ -487,3 +487,7 @@ $(BUILD)/move-theft-test: tests/move-theft-test.c $(BUILD)/libprcore.a
 
 $(BUILD)/berry-moves-test: tests/berry-moves-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -Wl,--wrap=pr_apply_ab_attrs -lm -o $@
+
+all: $(BUILD)/xerneas-active-test
+$(BUILD)/xerneas-active-test: tests/xerneas-active-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
