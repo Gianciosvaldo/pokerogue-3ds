@@ -449,3 +449,7 @@ $(BUILD)/helping-hand-test: tests/helping-hand-test.c $(BUILD)/libprcore.a
 all: $(BUILD)/acupressure-test
 $(BUILD)/acupressure-test: tests/acupressure-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/after-you-test
+$(BUILD)/after-you-test: tests/after-you-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
