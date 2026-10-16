@@ -593,3 +593,11 @@ flame-burst-host-test: $(BUILD)/flame_burst_host_test
 $(BUILD)/flame_burst_host_test: tests/flame_burst_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: flame-burst-host-test
+
+all: $(BUILD)/partner_cures_host_test
+test: partner-cures-host-test
+partner-cures-host-test: $(BUILD)/partner_cures_host_test
+	$(BUILD)/partner_cures_host_test
+$(BUILD)/partner_cures_host_test: tests/partner_cures_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: partner-cures-host-test

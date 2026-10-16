@@ -185,20 +185,27 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
     }
     case PR_AC_PartyStatusCureAttr: {
         const pr_attr_PartyStatusCureAttr *x = P(PartyStatusCureAttr, a);
-        /* This leaf proves singles, not the distinct active-partner display path. */
         int side = user->is_player ? 0 : 1;
-        if (bt->double_battle || bt->n_party[side] < 1) { pr_note_unported(bt, a->cls); return; }
+        if (bt->n_party[side] < 1) { pr_note_unported(bt, a->cls); return; }
         for (int k = 0; k < bt->n_party[side]; k++) {
             pr_pokemon *p = bt->party[side][k];
-            if (!p || (p != user && p->on_field && !p->switch_out_status)) { pr_note_unported(bt, a->cls); return; }
+            if (!p) { pr_note_unported(bt, a->cls); return; }
         }
         /* Custom canApply deliberately omits target HP. */
         if (ef->self_target) {
             if (user->hp <= 0 || pr_get_battler_tag(user, BATTLER_TAG_TYPE_FRENZY)) return;
         } else if (target && pr_get_battler_tag(target, BATTLER_TAG_TYPE_PROTECTED)
                    && !(pr_moves[move].flags & MOVE_FLAGS_IGNORE_PROTECT)) return;
-        for (int k = 0; k < bt->n_party[side]; k++)
-            pr_reset_status_phase(bt, e, bt->party[side][k], false);
+        for (int k = 0; k < bt->n_party[side]; k++) {
+            pr_pokemon *p = bt->party[side][k];
+            if (!p->on_field || p->switch_out_status || p->id == user->id) {
+                pr_reset_status_phase(bt, e, p, false);
+            } else if (pr_has_ability_active(bt, p, x->abilityCondition)) {
+                bool passive = pr_get_passive_ability(p) == x->abilityCondition;
+                pr_queue_ability_display(bt, e, p, passive, true);
+                pr_queue_ability_display(bt, e, p, passive, false);
+            } else pr_reset_status_phase(bt, e, p, true);
+        }
         if (x->message) {
             /* The pin's dumped payload is already rendered English. Use its
              * exact factory value to select the existing locale representation. */
@@ -476,9 +483,6 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         return;
     case PR_AC_OrderUpStatBoostAttr:                     /* Order Up: only with a Tatsugiri commanding (doubles) */
         if (pr_get_battler_tag(user, BATTLER_TAG_TYPE_COMMANDED)) pr_note_unported(bt, a->cls);
-        return;
-    case PR_AC_HealOnAllyAttr:                           /* Pollen Puff: heals only the user's ally (doubles) */
-        if (bt->double_battle) pr_note_unported(bt, a->cls);
         return;
     case PR_AC_StatusIfBoostedAttr:                      /* Burning Jealousy (self-targeted, reads the real target) */
         if (target->stat_stages_increased)
@@ -885,13 +889,24 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         if (user->status) pr_add_tag(bt, e, user, BATTLER_TAG_TYPE_PSYCHO_SHIFT, 0, move, -1);
         return;
     }
+    case PR_AC_HealOnAllyAttr:
     case PR_AC_HealAttr:                                 /* Recover, Soft-Boiled, Roost, Heal Pulse... */
     case PR_AC_VariableHealAttr: {                       /* Moonlight, Swallow, Shore Up...: healRatio = healFunc(user) first */
         bool variable = a->cls == PR_AC_VariableHealAttr;
-        const pr_attr_HealAttr *x = P(HealAttr, a);
-        const pr_attr_VariableHealAttr *v = P(VariableHealAttr, a);
-        double ratio = variable ? pr_closure_call(bt, v->healFunc, a->cls, 0, user, target, move) : x->healRatio;
-        bool self_target = variable ? v->selfTarget : x->selfTarget, show_anim = variable ? v->showAnim : x->showAnim;
+        double ratio;
+        bool self_target, show_anim;
+        if (a->cls == PR_AC_HealOnAllyAttr) {
+            const pr_attr_HealOnAllyAttr *x = P(HealOnAllyAttr, a);
+            if (pr_is_opponent(bt, user, target) || target != pr_get_ally(bt, user)) return;
+            ratio = x->healRatio; self_target = x->selfTarget; show_anim = x->showAnim;
+        } else if (variable) {
+            const pr_attr_VariableHealAttr *v = P(VariableHealAttr, a);
+            ratio = pr_closure_call(bt, v->healFunc, a->cls, 0, user, target, move);
+            self_target = v->selfTarget; show_anim = v->showAnim;
+        } else {
+            const pr_attr_HealAttr *x = P(HealAttr, a);
+            ratio = x->healRatio; self_target = x->selfTarget; show_anim = x->showAnim;
+        }
         if (!effect_can_apply(ef, user, target)) return;
         pr_ab_params hp = {.pokemon = user, .opponent = target, .move = move, .value = &ratio};
         pr_apply_ab_attrs(bt, PR_AC_MoveHealBoostAbAttr, &hp);   /* Mega Launcher's Heal Pulse */
