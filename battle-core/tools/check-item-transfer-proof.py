@@ -17,7 +17,7 @@ mutations={
  'skip-turn-end':('phases.c','pr_apply_turn_held_item_transfers(bt,e,p);','(void)p;'),
 }
 for name,(file,old,new) in mutations.items():
- s=(r/'battle-core/src'/file).read_text();assert s.count(old)==1,(name,s.count(old));src=out/(name+'.c');obj=out/(name+'.o');exe=out/name;src.write_text(s.replace(old,new))
+ s=(r/'battle-core/src'/file).read_text();scope=s.split('/* getOrInferTier caches positive tiers.')[0] if file=='item_transfer.c' else s;assert scope.count(old)==1,(name,scope.count(old));src=out/(name+'.c');obj=out/(name+'.o');exe=out/name;src.write_text(s.replace(old,new,1))
  flags=['-O2','-std=c99','-ffp-contract=off','-I'+str(r/'battle-core/include'),'-I'+str(r/'battle-core/gen/out')]
  subprocess.run(['gcc',*flags,'-c',str(src),'-o',str(obj)],check=True)
  subprocess.run(['gcc',*flags,str(r/'battle-core/tests/item-transfer-test.c'),str(obj),str(r/'battle-core/build/libprcore.a'),'-lm','-o',str(exe)],check=True)

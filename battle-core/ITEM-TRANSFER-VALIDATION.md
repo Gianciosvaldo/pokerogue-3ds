@@ -1,5 +1,9 @@
 # Mini Black Hole transfer continuation
 
+Later continuation: [Thief/Covet](MOVE-THEFT-VALIDATION.md) adds the move callback
+for these canonical families. The observations and boundaries below describe
+the original Mini Black Hole slice.
+
 Reference: upstream `8555c08c823b856cbec4eb99ca84ea52a955836d`, locales
 `270ed0a2938b2c3e2e34e7de940e84aecadf548b`, Node 22.23.3.
 

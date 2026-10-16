@@ -103,6 +103,7 @@ typedef struct pr_modifier {
      * is cls). Queries that would call its own shouldApply/apply report it unported. */
     bool unknown_subclass;
     bool is_transferable;          /* PokemonHeldItemModifier.isTransferable */
+    uint8_t type_tier;             /* ModifierType.tier + 1; 0 = absent, tier0 remains falsy */
     int64_t pokemon_id;            /* PokemonHeldItemModifier.pokemonId (ids are 32-bit unsigned); -1 = any Pokemon */
     int32_t stack_count, virtual_stack_count;
     int8_t stat;                   /* BaseStatModifier / TempStatStageBoosterModifier stat */

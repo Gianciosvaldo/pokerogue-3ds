@@ -115,3 +115,126 @@ void pr_apply_turn_held_item_transfers(pr_battle *bt,pr_engine *e,pr_pokemon *p)
         return;
     }
 }
+
+/* getOrInferTier caches positive tiers. A cached COMMON tier is falsy, so the
+ * pool is searched again. These canonical identities have pool-invariant tier0
+ * or positive tiers, avoiding shared-type alias ambiguity after cloning. */
+int pr_held_item_tier_for_pool(const pr_modifier *m, bool trainer)
+{
+    int tier = -1;
+    if (!m->unknown_subclass) switch (m->cls) {
+    case PR_MOD_TURN_HEAL: case PR_MOD_HIT_HEAL: case PR_MOD_FLINCH_CHANCE:
+    case PR_MOD_CRIT_BOOSTER: tier = trainer ? 4 : 3; break;
+    case PR_MOD_BYPASS_SPEED_CHANCE: case PR_MOD_MOVE_ACCURACY_BOOSTER:
+        tier = trainer ? 3 : 2; break;
+    case PR_MOD_SURVIVE_DAMAGE: case PR_MOD_NATURE_WEIGHT: tier = 3; break;
+    case PR_MOD_RESET_NEGATIVE_STAT_STAGE: case PR_MOD_TURN_STATUS_EFFECT:
+    case PR_MOD_DAMAGE_MONEY_REWARD: case PR_MOD_ATTACK_TYPE_BOOSTER:
+    case PR_MOD_INSTANT_REVIVE: tier = 2; break;
+    case PR_MOD_TURN_HELD_TRANSFER: case PR_MOD_MULTI_HIT: tier = 4; break;
+    case PR_MOD_BERRY: tier = 0; break;
+    default: break;
+    }
+    return tier;
+}
+
+static int infer_move_item_tier(pr_battle *bt, pr_modifier *m, bool trainer)
+{
+    if (m->type_tier > 1 && m->type_tier <= 6) return m->type_tier - 1;
+    int tier = m->type_tier <= 6 ? pr_held_item_tier_for_pool(m, trainer) : -1;
+    if (tier < 0) { pr_note_unported(bt, PR_FEAT_MODIFIERS); return -1; }
+    m->type_tier = (uint8_t)(tier + 1);
+    return tier;
+}
+
+/* Scene tryTransferHeldItemModifier, one stack. The caller has already selected
+ * an actual transferable stock. The native helper itself does not test HP or
+ * the transferable flag, and Sticky Hold is only queried across sides. */
+static bool transfer_move_stock(pr_battle *bt, pr_engine *e, int from_side,
+                                int index, pr_pokemon *receiver)
+{
+    pr_modifier copy = bt->mods[from_side][index];
+    pr_pokemon *source = copy.pokemon_id ? pr_pokemon_by_id(bt, copy.pokemon_id) : NULL;
+    int side = receiver->is_player ? 0 : 1;
+    bool cancelled = false;
+    if (source && source->is_player != receiver->is_player) {
+        pr_ab_params block = {.pokemon=source,.move=-1,.flag=&cancelled};
+        pr_apply_ab_attrs(bt, PR_AC_BlockItemTheftAbAttr, &block);
+    }
+    if (cancelled) return false;
+    int matching = -1, cap = transfer_cap(&copy);
+    if (cap < 0 || copy.stack_count < 0 || !pr_held_item_name_key(&copy)) {
+        pr_note_unported(bt, PR_FEAT_MODIFIERS); return false;
+    }
+    for (int k=0;k<bt->n_mods[side];k++) {
+        pr_modifier *m=&bt->mods[side][k];
+        if (pr_mod_is(m, PR_MOD_HELD_ITEM) && same_type(m,&copy)
+            && m->pokemon_id==(int64_t)receiver->id) { matching=k; break; }
+    }
+    /* Self-target attacks are not legal Thief/Covet targets. Preserve an
+     * explicit boundary for raw callbacks with that alias rather than corrupt
+     * the shared inventory while removing the same stock twice. */
+    if (from_side==side && matching==index) {
+        pr_note_unported(bt, PR_FEAT_MODIFIERS); return false;
+    }
+    if (matching>=0 && (transfer_cap(&bt->mods[side][matching])<0)) {
+        pr_note_unported(bt, PR_FEAT_MODIFIERS); return false;
+    }
+    if (matching>=0) cap=transfer_cap(&bt->mods[side][matching]);
+    int existing=matching>=0 ? bt->mods[side][matching].stack_count : 0;
+    if (matching>=0 && existing>=cap) return false;
+    bool removes=copy.stack_count<=1 && source;
+    if (matching<0 && bt->n_mods[side]>=PR_MAX_MODIFIERS && !(from_side==side && removes)) {
+        pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return false;
+    }
+    int taken=copy.stack_count>0 ? 1 : 0;
+    bt->mods[from_side][index].stack_count-=taken;
+    if (!bt->mods[from_side][index].stack_count && source) {
+        remove_at(bt,from_side,index);
+        if (from_side==side && matching>index) matching--;
+    }
+    if (matching>=0) remove_at(bt,side,matching);
+    copy.pokemon_id=receiver->id;
+    copy.stack_count=existing+taken;
+    copy.virtual_stack_count=0;
+    copy.is_transferable=true;
+    if (source && source->is_player != receiver->is_player)
+        pr_refresh_berry_modifiers(bt,source->is_player?0:1);
+    if (copy.stack_count>0) bt->mods[side][bt->n_mods[side]++]=copy;
+    pr_refresh_berry_modifiers(bt,side);
+    if (source) {
+        pr_ab_params lost={.pokemon=source,.move=-1};
+        pr_apply_ab_attrs(bt,PR_AC_PostItemLostAbAttr,&lost);
+    }
+    return true;
+}
+
+bool pr_steal_move_held_item(pr_battle *bt, pr_engine *e, pr_pokemon *user,
+                            pr_pokemon *target, double chance)
+{
+    if (!bt->rng_live) { pr_note_unported(bt,PR_FEAT_GLOBAL_RNG); return false; }
+    if (pr_rng_seed_float(&bt->rng)>chance) return false;
+    if (!user || !target) { pr_note_unported(bt,PR_FEAT_PARTY); return false; }
+    int side=target->is_player?0:1, indices[PR_MAX_MODIFIERS], count=0;
+    for (int k=0;k<bt->n_mods[side];k++) {
+        pr_modifier *m=&bt->mods[side][k];
+        if (pr_mod_is(m,PR_MOD_HELD_ITEM) && m->pokemon_id==(int64_t)target->id
+            && m->is_transferable) indices[count++]=k;
+    }
+    if (!count) return false;
+    int tiers[PR_MAX_MODIFIERS], highest=0, chosen[PR_MAX_MODIFIERS], n=0;
+    for (int k=0;k<count;k++) {
+        tiers[k]=infer_move_item_tier(bt,&bt->mods[side][indices[k]],!target->is_player&&target->has_trainer);
+        if (tiers[k]<0) return false;
+        if (tiers[k]>highest) highest=tiers[k];
+    }
+    for (int k=0;k<count;k++) if (tiers[k]==highest) chosen[n++]=indices[k];
+    if (!n) { pr_note_unported(bt,PR_FEAT_MODIFIERS); return false; }
+    int selected=chosen[pr_battle_rand_seed_int(bt,n,0)];
+    const char *name=pr_held_item_name_key(&bt->mods[side][selected]);
+    if (!transfer_move_stock(bt,e,side,selected,user)) return false;
+    pr_queue_msg(bt,e,pr_msg3("moveTriggers:stoleItem",
+        pr_arg_pokemon(bt,"pokemonName",user),pr_arg_pokemon(bt,"targetName",target),
+        pr_arg_key("itemName",name)));
+    return true;
+}

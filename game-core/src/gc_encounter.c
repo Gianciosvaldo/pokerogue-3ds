@@ -185,6 +185,7 @@ static void enemy_items(gc_run *run)
                 }
             }
         }
+    gc_cache_generated_item_tiers(run);
 }
 
 /* gc_mon_new_enemy again once pr_run_enemy_pokemon_finish has filled in the rest of the rolls, keeping

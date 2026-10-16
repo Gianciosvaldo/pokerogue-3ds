@@ -196,6 +196,7 @@ typedef struct {
     int32_t virtual_stack;     /* transient battle state; excluded from saves */
     int32_t battle_count;      /* canonical temporary booster lifetime; old saves default 0 */
     bool non_transferable;    /* explicit held-item lock, e.g. final-boss Mini Black Hole */
+    uint8_t type_tier;         /* cached ModifierType.tier + 1; 0 absent */
 } gc_item;
 #define GC_MAX_ITEMS 128
 

@@ -38,7 +38,31 @@ static bool give_voucher(gc_run *run, const char *key)
  * (gc_reward.c), and so is the application of Poke Balls, Full Heal, healing, revives, PP restores and PP Ups
  * (gc_reward_apply). What is left here is the rest: the items that are added to the player's items as they are,
  * each one that needs a real effect counted ---- */
-bool gc_port_apply_reward(gc_run *run, const gc_offer *o, int party, int move_slot, const char **why)
+static bool apply_reward(gc_run *run, const gc_offer *o, int party, int move_slot, const char **why);
+static bool offer_stock(const gc_item *item,const gc_offer *o,uint32_t owner)
+{
+    if(strcmp(item->key,o->key)||item->pokemon_id!=owner)return false;
+    return (strcmp(o->key,"BERRY")&&strcmp(o->key,"ATTACK_TYPE_BOOSTER"))||item->arg==o->arg;
+}
+bool gc_port_apply_reward(gc_run *run,const gc_offer *o,int party,int move_slot,const char **why)
+{
+    bool held=party>=0&&party<run->n_party&&o->target==GC_TARGET_POKEMON;
+    uint32_t owner=held?run->party[party].b.id:0;bool existing=false;
+    if(held)for(int i=0;i<run->n_items;i++)existing|=offer_stock(&run->items[i],o,owner);
+    bool ok=apply_reward(run,o,party,move_slot,why);
+    /* A reward option's type already carries its selected tier. Stacking keeps
+     * the existing modifier/type, while a fresh stock keeps the incoming type. */
+    if(ok&&held&&!existing&&o->tier>=0&&o->tier<=5){
+        bool changed=false;
+        for(int i=0;i<run->n_items;i++)if(offer_stock(&run->items[i],o,owner)){
+            run->items[i].type_tier=(uint8_t)(o->tier+1);changed=true;
+        }
+        if(changed)gc_items_to_battle(run);
+    }
+    return ok;
+}
+
+static bool apply_reward(gc_run *run, const gc_offer *o, int party, int move_slot, const char **why)
 {
     const char *k = o->key;
     switch (gc_reward_apply(run, o, party, move_slot, why)) {
