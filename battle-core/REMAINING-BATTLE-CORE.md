@@ -226,3 +226,10 @@ stat phase with the original source. See ACUPRESSURE-VALIDATION.md for the
 API, owning-turn and host/save proof boundaries. Leading fresh doubles gaps
 include Core Enforcer's acted/suppression path, After You and attention
 redirection. App/run doubles and wide-level Endless remain separate.
+
+After You continuation from #286 now queues its native message and selects the
+first cached queued mover through the existing timing helper. Actual source
+API and complete doubles turns are documented in AFTER-YOU-VALIDATION.md.
+Suppression, attention redirection and the other sampled doubles callbacks
+remain unported; these bounded coverage gains do not close whole battle-core
+or wide-level Endless support.

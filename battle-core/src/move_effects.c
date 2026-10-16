@@ -148,6 +148,12 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         return;
     }
     switch (a->cls) {
+    case PR_AC_AfterYouAttr:
+        /* This override always queues its message, then marks the first
+         * queued MovePhase whose cached Pokemon is the target. */
+        pr_queue_msg(bt, e, pr_msg1("moveTriggers:afterYou", pr_arg_pokemon(bt, "targetName", target)));
+        pr_force_move_next(e, target);
+        return;
     case PR_AC_SketchAttr:
         if (effect_can_apply(ef,user,target)) pr_copy_last_move(bt,e,user,target,move,true);
         return;

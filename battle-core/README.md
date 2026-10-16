@@ -1326,3 +1326,7 @@ are covered in [HELPING-HAND-VALIDATION.md](HELPING-HAND-VALIDATION.md).
 Acupressure's native stat selection, RNG and phase ownership are covered in
 [ACUPRESSURE-VALIDATION.md](ACUPRESSURE-VALIDATION.md), with bounded owning-turn
 and command/save comparisons. Broader doubles and wide-level Endless remain open.
+
+After You's first-matching queued mover and exact message are covered in
+[AFTER-YOU-VALIDATION.md](AFTER-YOU-VALIDATION.md), including cached identity
+after field swaps, runtime faults and actual owning doubles turns.

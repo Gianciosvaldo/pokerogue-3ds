@@ -68,7 +68,7 @@ species, including the original Meloetta case, remain in the owning matrix.
 
 Four retained mixed seed777 fixtures (plain/rich/summon/switch, 8,000 total)
 retain every covered ID; their covered counts are respectively 1,971→1,971,
-1,963→1,965, 1,987→1,991 and 1,989→1,989, with zero compared mismatches.
+1,963→1,965, 1,987→1,991 and 1,989→1,994, with zero compared mismatches.
 
 ## Host and merge gates
 
