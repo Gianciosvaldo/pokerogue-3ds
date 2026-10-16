@@ -1871,7 +1871,9 @@ static void boss_segments_cleared(pr_battle *bt, pr_engine *e, pr_pokemon *p, in
             continue;
         }
 
-        int roll = pr_battle_rand_seed_int(bt, total, 0);
+        /* weightedPick uses the global randSeedInt, not the battle stream. */
+        if (!bt->rng_live) { pr_note_unported(bt, PR_FEAT_GLOBAL_RNG); break; }
+        int roll = pr_rng_seed_int(&bt->rng, total, 0);
         int picked = eligible[0], upto = 0;
         for (int i = 0; i < n_eligible; i++) {
             upto += weights[i];
@@ -1890,10 +1892,9 @@ static void boss_segments_cleared(pr_battle *bt, pr_engine *e, pr_pokemon *p, in
         }
     }
 
-    if (n) {
-        int ph = pr_unshift_stat_stage_change_ex(bt, e, pr_battler_index(bt, p), stats, stages, n, p, 0);
-        if (ph >= 0) PH(ph)->ssc_ignore_abilities = true;
-    }
+    /* The source still queues an empty phase when every stat is capped. */
+    int ph = pr_unshift_stat_stage_change_ex(bt, e, pr_battler_index(bt, p), stats, stages, n, p, 0);
+    if (ph >= 0) PH(ph)->ssc_ignore_abilities = true;
 }
 
 /* Pokemon.damage(damage, ignoreSegments=false, preventEndure, ignoreFaintPhase) */

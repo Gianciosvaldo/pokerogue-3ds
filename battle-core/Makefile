@@ -465,3 +465,7 @@ $(BUILD)/wide-level-test: tests/wide-level-test.c $(BUILD)/libprcore.a
 all: $(BUILD)/wide-boss-score-test
 $(BUILD)/wide-boss-score-test: tests/wide-boss-score-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/flame-burst-test
+$(BUILD)/flame-burst-test: tests/flame-burst-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/flame-burst-test.c $(BUILD)/libprcore.a -lm -o $@

@@ -585,3 +585,11 @@ wide-level-host-test: $(BUILD)/wide_level_host_test
 $(BUILD)/wide_level_host_test: tests/wide_level_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: wide-level-host-test
+
+all: $(BUILD)/flame_burst_host_test
+test: flame-burst-host-test
+flame-burst-host-test: $(BUILD)/flame_burst_host_test
+	$(BUILD)/flame_burst_host_test
+$(BUILD)/flame_burst_host_test: tests/flame_burst_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: flame-burst-host-test
