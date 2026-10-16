@@ -45,7 +45,8 @@ passing percentage in a bounded random sample does not close a whole category.
 
 1. Retain merged Flame Burst and partner cures/healing evidence, including their
    shared damage/shield/RNG and healing callbacks.
-2. Attention/redirection and Commander/Order Up, plus other party-cure callers.
+2. Retain attention/redirection evidence; complete Commander/Order Up and other
+   party-cure callers.
 3. Wide-level progression and combat; preserve the wide save migration.
 4. Reconcile all remaining unsupported paths with the complete source inventory,
    implement them in reviewable slices and run the final interaction audit.
