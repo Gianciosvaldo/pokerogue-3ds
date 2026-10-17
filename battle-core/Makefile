@@ -493,7 +493,25 @@ $(BUILD)/xerneas-active-test: tests/xerneas-active-test.c tests/gas-lifecycle-te
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
 
 all: $(BUILD)/bad-dreams-doubles-test
-$(BUILD)/bad-dreams-doubles-replay.c: tests/doublestest.c tools/build-bad-dreams-doubles-replay.py | $(BUILD)
+$(BUILD)/bad-dreams-doubles-replay.c: tests/doublestest.c tools/build-bad-dreams-doubles-replay.py
+	mkdir -p $(@D)
 	python3 tools/build-bad-dreams-doubles-replay.py $< $@
 $(BUILD)/bad-dreams-doubles-test: $(BUILD)/bad-dreams-doubles-replay.c tests/turntest.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -Itests $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/wide-substitute-test
+$(BUILD)/wide-substitute-frame.inc: tests/gas-lifecycle-test.c tools/build-wide-substitute-frame.py
+	mkdir -p $(@D)
+	python3 tools/build-wide-substitute-frame.py $< $@
+WIDE_AI_LIB := $(BUILD)/wide-ai/libai.a
+$(WIDE_AI_LIB): $(wildcard ../ai-core/src/*.[ch] ../ai-core/include/pr/*.h include/pr/*.h) ../ai-core/gen/out/ai_data.c
+	$(MAKE) -s -C ../ai-core BUILD=$(abspath $(BUILD)/wide-ai) BATTLE_CORE=$(abspath .) $(abspath $(WIDE_AI_LIB))
+$(BUILD)/wide-substitute-test: tests/wide-substitute-test.c $(BUILD)/wide-substitute-frame.inc src/phases.c $(WIDE_AI_LIB) $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I../ai-core/include -Itests -I$(BUILD) $(CFLAGS) $< $(WIDE_AI_LIB) $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/wide-combat-test
+$(BUILD)/wide-combat-replay.c: tests/doublestest.c tools/build-wide-combat-replay.py
+	mkdir -p $(@D)
+	python3 tools/build-wide-combat-replay.py $< $@
+$(BUILD)/wide-combat-test: $(BUILD)/wide-combat-replay.c tests/turntest.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -Itests $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@

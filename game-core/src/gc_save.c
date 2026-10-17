@@ -251,6 +251,7 @@ static int get_block(reader *r, const sfield *f, int nf, void *base, size_t stri
     /* where each known field sits in a saved record, -1 = not there */
     long at[MAX_SAVED];
     bool legacy_level[MAX_SAVED] = {false};
+    bool legacy_sub_hp[MAX_SAVED] = {false};
     for (int i = 0; i < nf && i < MAX_SAVED; i++) {
         at[i] = -1;
         const uint32_t h = hash(f[i].name);
@@ -261,8 +262,10 @@ static int get_block(reader *r, const sfield *f, int nf, void *base, size_t stri
             bool byte_level = ss[k] == 1 && f[i].size == sizeof(int32_t)
                 && ((f == pokemon_fields && f[i].off == offsetof(pr_pokemon, level))
                     || (f == mon_fields && f[i].off == offsetof(gc_mon, met_level)));
-            if (sh[k] == h && (ss[k] == f[i].size || byte_level)) {
-                at[i] = (long)off; legacy_level[i] = byte_level; break;
+            bool sub_hp = ss[k] == sizeof(int32_t) && f[i].size == sizeof(double)
+                && f == tag_fields && f[i].off == offsetof(pr_battler_tag, hp);
+            if (sh[k] == h && (ss[k] == f[i].size || byte_level || sub_hp)) {
+                at[i] = (long)off; legacy_level[i] = byte_level; legacy_sub_hp[i] = sub_hp; break;
             }
             off += ss[k];
         }
@@ -277,6 +280,11 @@ static int get_block(reader *r, const sfield *f, int nf, void *base, size_t stri
                 if (legacy_level[i]) {
                     int32_t level = src[at[i]];
                     memcpy(dst + f[i].off, &level, sizeof level);
+                } else if (legacy_sub_hp[i]) {
+                    int32_t old_hp;
+                    memcpy(&old_hp, src + at[i], sizeof old_hp);
+                    double hp = old_hp;
+                    memcpy(dst + f[i].off, &hp, sizeof hp);
                 } else memcpy(dst + f[i].off, src + at[i], f[i].size);
             }
     }
@@ -643,7 +651,8 @@ static bool get_mons(const reader *body, const char *name, gc_mon *mons, int n, 
         pr_pokemon *b = &mons[i].b;
         b->n_tags = (uint8_t)get_block(&r, tag_fields, NF(tag_fields), b->tags, sizeof b->tags[0], PR_MAX_BATTLER_TAGS, dropped);
         for (int j = 0; j < b->n_tags; j++)
-            if (b->tags[j].commanded_form_key > PR_FORM_COUNT) return false;
+            if (b->tags[j].commanded_form_key > PR_FORM_COUNT || !isfinite(b->tags[j].hp)
+                || b->tags[j].hp != floor(b->tags[j].hp)) return false;
         const int nh = get_block(&r, turn_move_fields, NF(turn_move_fields), b->move_history, sizeof b->move_history[0],
                                  PR_MAX_MOVE_HISTORY, dropped);
         if (b->n_move_history < nh) b->n_move_history = (uint16_t)nh;

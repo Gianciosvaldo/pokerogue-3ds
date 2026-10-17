@@ -660,3 +660,11 @@ test: wide-exp-phase-host-test
 wide-exp-phase-host-test: $(BUILD)/wide_exp_phase_diff_test
 	$(BUILD)/wide_exp_phase_diff_test --selftest
 .PHONY: wide-exp-phase-host-test
+
+all: $(BUILD)/wide_combat_save_host_test
+test: wide-combat-save-host-test
+wide-combat-save-host-test: $(BUILD)/wide_combat_save_host_test
+	$(BUILD)/wide_combat_save_host_test
+$(BUILD)/wide_combat_save_host_test: tests/wide_combat_save_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: wide-combat-save-host-test
