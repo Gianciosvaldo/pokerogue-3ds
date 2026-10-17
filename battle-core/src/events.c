@@ -70,6 +70,13 @@ pr_msg_arg pr_arg_pokemon_name(const pr_battle *bt, const char *name, const pr_p
     return a;
 }
 pr_msg_arg pr_arg_int(const char *name, int32_t v) { return arg(name, PR_ARG_INT, (uint32_t)v, NULL); }
+pr_msg_arg pr_arg_int64(const char *name, int64_t v)
+{
+    uint64_t bits = (uint64_t)v;
+    pr_msg_arg a = arg(name, PR_ARG_INT64, (uint32_t)bits, NULL);
+    a.fusion_v = (uint32_t)(bits >> 32);
+    return a;
+}
 pr_msg_arg pr_arg_move(const char *name, int move) { return arg(name, PR_ARG_MOVE, (uint32_t)move, NULL); }
 pr_msg_arg pr_arg_ability(const char *name, int ability) { return arg(name, PR_ARG_ABILITY, (uint32_t)ability, NULL); }
 pr_msg_arg pr_arg_type(const char *name, int type) { return arg(name, PR_ARG_TYPE, (uint32_t)type, NULL); }

@@ -463,6 +463,13 @@ static void put_arg(obuf *o, const pr_msg_arg *a, const pr_msg *m, const pr_text
 {
     char key[96];
     switch (a->kind) {
+    case PR_ARG_INT64: {
+        char b[32];
+        int64_t value = (int64_t)(((uint64_t)a->fusion_v << 32) | a->v);
+        snprintf(b, sizeof b, "%lld", (long long)value);
+        puts_(o, b);
+        break;
+    }
     case PR_ARG_INT: {
         char b[16];
         snprintf(b, sizeof b, "%ld", (long)(int32_t)a->v);
@@ -532,7 +539,7 @@ static void format_key(obuf *o, const char *key, const pr_msg *m, const pr_text_
     const char *use = key;
     const pr_msg_arg *count = find_arg(m, "count", 5);
     if (count) {
-        long n = (long)(int32_t)count->v;
+        int64_t n = count->kind==PR_ARG_INT64 ? (int64_t)(((uint64_t)count->fusion_v<<32)|count->v) : (int32_t)count->v;
         if (n == 0) {
             snprintf(pk, sizeof pk, "%s_zero", key);
             if (key_exists(src, pk)) use = pk;
