@@ -192,13 +192,13 @@ void pr_sort_in_speed_order(pr_battle *bt, pr_pokemon **mons, int *payload, int 
     }
 
     /* sortBySpeed: (turnCommandManager.setOrder is a test hook, never set here) */
-    int32_t spd[PR_DYN_CAP];
+    double spd[PR_DYN_CAP];
     for (int g = 0; g < ng; g++) spd[g] = pr_get_effective_stat(bt, mons[start[order[g]]], STAT_SPD, NULL, -1, false, false);
     for (int i = 1; i < ng; i++) {           /* stable, like Array.prototype.sort */
         int ko = order[i];
-        int32_t ks = spd[i];
+        double ks = spd[i];
         int j = i - 1;
-        while (j >= 0 && ks - spd[j] > 0) {  /* comparator bSpeed - aSpeed > 0: key goes first */
+        while (j >= 0 && ks > spd[j]) {  /* comparator bSpeed - aSpeed > 0: key goes first */
             order[j + 1] = order[j];
             spd[j + 1] = spd[j];
             j--;

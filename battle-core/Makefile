@@ -515,3 +515,7 @@ $(BUILD)/wide-combat-replay.c: tests/doublestest.c tools/build-wide-combat-repla
 	python3 tools/build-wide-combat-replay.py $< $@
 $(BUILD)/wide-combat-test: $(BUILD)/wide-combat-replay.c tests/turntest.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -Itests $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/stat-rearrangement-test
+$(BUILD)/stat-rearrangement-test: tests/stat-rearrangement-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@

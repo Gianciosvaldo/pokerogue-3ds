@@ -263,3 +263,21 @@ match 16,384 source API cases; broad doubles gains 17 covered IDs without loss.
 See [validation](FLAME-BURST-VALIDATION.md). Partner cures/healing, attention,
 Commander/Order Up, wide progression/combat and the final inventory audit remain
 open. The shared corrections do not close all boss/switching combinations.
+
+## 2026-10-17 continuation reconciliation
+
+Merged #291–#300 now cover partner cures/healing, attention/redirection,
+Commander/Order Up, wide EXP/candy and summary storage, Thief/Covet, berry moves,
+Xerneas active forms, doubles Bad Dreams, wide EXP event/display fields, and raw
+wide combat/AI/Substitute/save migration. Each has a separate validation record;
+these updates supersede the corresponding historical gap descriptions above.
+Natural high-wave generation/progression callers and the final interaction and
+source inventory audit remain open. The next stat-rearrangement slice documents
+Speed Swap, Power Shift and Topsy-Turvy; HP splitting, pre-damage stat theft and
+ability-changing effects remain concrete enabled callback gaps.
+
+The user authorized cross-core fixes during unattended continuation on
+2026-10-17 and confirmed no other lanes are active. Normal app/custom/save tests
+remain required. Only the dedicated custom-only Task63 workflow is skipped;
+older broad statements excluding custom testing or separately owned run-core
+edits no longer describe the current instructions.

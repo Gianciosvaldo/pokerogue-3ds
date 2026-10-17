@@ -811,9 +811,9 @@ typedef struct {
     bool ignore_ability, ignore_opp_ability, ignore_ally_ability, is_critical, ignore_held_items, for_defend;
     bool simulated;
 } pr_stat_params;
-int32_t pr_get_effective_stat_p(pr_battle *bt, const pr_pokemon *p, int stat, const pr_stat_params *sp);
+double pr_get_effective_stat_p(pr_battle *bt, const pr_pokemon *p, int stat, const pr_stat_params *sp);
 /* Shorthand for the common case (no ignore flags, simulated). */
-int32_t pr_get_effective_stat(pr_battle *bt, const pr_pokemon *p, int stat,
+double pr_get_effective_stat(pr_battle *bt, const pr_pokemon *p, int stat,
                               const pr_pokemon *opponent, int move, bool is_critical, bool for_defend);
 /* isGrounded(ignoreSemiInvulnerable) and its two halves */
 bool pr_is_forcibly_grounded(pr_battle *bt, const pr_pokemon *p);
