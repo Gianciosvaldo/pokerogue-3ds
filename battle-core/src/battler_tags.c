@@ -816,9 +816,9 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
         const pr_stat_params sp = {.move = -1, .ignore_ability = true, .ignore_opp_ability = true,
                                    .ignore_ally_ability = true, .ignore_held_items = true, .simulated = true};
         int best = STAT_ATK;
-        int32_t best_value = 0;
+        double best_value = 0;
         for (int stat = STAT_ATK; stat <= STAT_SPD; stat++) {
-            int32_t v = pr_get_effective_stat_p(bt, p, stat, &sp);
+            double v = pr_get_effective_stat_p(bt, p, stat, &sp);
             if (v > best_value) best = stat, best_value = v;
         }
         t->stat = (int8_t)best;
