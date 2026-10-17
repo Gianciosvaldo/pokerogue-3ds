@@ -491,3 +491,9 @@ $(BUILD)/berry-moves-test: tests/berry-moves-test.c $(BUILD)/libprcore.a
 all: $(BUILD)/xerneas-active-test
 $(BUILD)/xerneas-active-test: tests/xerneas-active-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/bad-dreams-doubles-test
+$(BUILD)/bad-dreams-doubles-replay.c: tests/doublestest.c tools/build-bad-dreams-doubles-replay.py | $(BUILD)
+	python3 tools/build-bad-dreams-doubles-replay.py $< $@
+$(BUILD)/bad-dreams-doubles-test: $(BUILD)/bad-dreams-doubles-replay.c tests/turntest.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -Itests $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@

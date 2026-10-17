@@ -1695,7 +1695,6 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
 
     /* ---- end of turn ---- */
     case PR_AC_PostTurnHurtIfSleepingAbAttr: {
-        if(bt->double_battle)return -1;
         bool eligible=false;
         for(int j=0;j<4;j++){
             const pr_pokemon *v=bt->field[j];
@@ -1706,8 +1705,9 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         GATE(eligible);
         if(pp->simulated)return 1;
         if(!c->e)return -1;
-        for(int j=0;j<4;j++){
-            pr_pokemon *v=bt->field[j];
+        pr_speed_iter it;
+        pr_speed_iter_init(bt,&it,p->is_player?ARENA_TAG_SIDE_ENEMY:ARENA_TAG_SIDE_PLAYER);
+        for(pr_pokemon *v;(v=pr_speed_iter_next(bt,&it));){
             if(!v || !pr_is_opponent(bt,p,v) || v->hp<=0 || !v->on_field || v->switch_out_status
                 || (v->status!=STATUS_EFFECT_SLEEP && !pr_has_ability_active(bt,v,ABILITY_ID_COMATOSE)))continue;
             bool cancelled=false;
