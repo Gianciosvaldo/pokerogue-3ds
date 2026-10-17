@@ -782,6 +782,35 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
                                         pr_arg_stat("firstStat", st->v[0]), pr_arg_stat("secondStat", st->v[1])));
         return;
     }
+    case PR_AC_InvertStatsAttr:
+        if (!effect_can_apply(ef, user, target)) return;
+        for (int s = 0; s < 7; s++) target->stat_stages[s] = -target->stat_stages[s];
+        pr_queue_msg(bt, e, pr_msg1("moveTriggers:invertStats", pr_arg_pokemon(bt, "pokemonName", target)));
+        return;
+    case PR_AC_SwapStatAttr: {
+        if (!effect_can_apply(ef, user, target)) return;
+        int stat = P(SwapStatAttr, a)->stat;
+        double old_user = pr_get_stat(user, stat, false);
+        double old_target = pr_get_stat(target, stat, false);
+        /* Pokemon.setStat(..., false) ignores nonpositive values. */
+        if (old_target > 0) user->summon_stats[stat] = old_target;
+        if (old_user > 0) target->summon_stats[stat] = old_user;
+        pr_queue_msg(bt, e, pr_msg2("moveTriggers:switchedStat",
+            pr_arg_pokemon(bt, "pokemonName", user), pr_arg_stat("stat", stat)));
+        return;
+    }
+    case PR_AC_ShiftStatAttr: {
+        if (!effect_can_apply(ef, user, target)) return;
+        const pr_attr_ShiftStatAttr *x = P(ShiftStatAttr, a);
+        double first = pr_get_stat(user, x->statToSwitch, false);
+        double second = pr_get_stat(user, x->statToSwitchWith, false);
+        if (second > 0) user->summon_stats[x->statToSwitch] = second;
+        if (first > 0) user->summon_stats[x->statToSwitchWith] = first;
+        pr_queue_msg(bt, e, pr_msg3("moveTriggers:shiftedStats",
+            pr_arg_pokemon(bt, "pokemonName", user), pr_arg_stat("statToSwitch", x->statToSwitch),
+            pr_arg_stat("statToSwitchWith", x->statToSwitchWith)));
+        return;
+    }
     case PR_AC_CopyBiomeTypeAttr: {
         if (!effect_can_apply(ef, user, target)) return;
         int8_t one = POKEMON_TYPE_UNKNOWN;

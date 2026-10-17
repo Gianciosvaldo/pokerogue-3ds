@@ -1342,3 +1342,9 @@ EXP/candy progression and high-wave Endless acceptance remain separate work.
 Flame Burst now uses the native indirect-damage path, with source-backed shield
 RNG/empty-queue and wild-flee refresh fixes. See [validation](FLAME-BURST-VALIDATION.md)
 and the [battle-core completion checklist](COMPLETION-CHECKLIST.md).
+
+Wide raw damage, AI estimates, transient Substitute HP and historical save
+migration are documented in [WIDE-COMBAT-VALIDATION.md](WIDE-COMBAT-VALIDATION.md).
+Speed Swap, Power Shift and Topsy-Turvy now preserve native summon-stat/stage
+semantics; see [STAT-REARRANGEMENT-VALIDATION.md](STAT-REARRANGEMENT-VALIDATION.md).
+These bounded continuations do not close the remaining completion checklist.

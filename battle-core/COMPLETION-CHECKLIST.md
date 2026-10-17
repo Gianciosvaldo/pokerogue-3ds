@@ -56,6 +56,7 @@ Each slice retains its own reproducible validation and exact-head CI record.
 Source proofs must observe actual pinned methods, including native RNG captured
 before GameManager construction when the framework would replace it.
 
-Run-core remains owned separately. Read its contracts and use its APIs; do not
-silently change that owner's implementation while closing battle-core callers.
+The user authorized cross-core fixes during unattended continuation on
+2026-10-17; no other lanes are active. Follow existing contracts and validate
+any run/game/AI changes required to close battle-core callers.
 Hardware/emulator acceptance is separate from source parity and a passing build.
