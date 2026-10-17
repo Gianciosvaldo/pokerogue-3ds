@@ -486,7 +486,18 @@ double pr_get_stat_stage_multiplier(pr_battle *bt, const pr_pokemon *p, int stat
     return m < 4 ? m : 4;
 }
 
-int32_t pr_get_effective_stat_p(pr_battle *bt, const pr_pokemon *p, int stat, const pr_stat_params *sp)
+/* ECMAScript ToInt32 precedes the native signed shift modifiers. A C cast
+ * outside int32 is not the JavaScript modulo-2^32 conversion. */
+static int32_t effective_stat_int32(double value)
+{
+    if (!isfinite(value) || value == 0) return 0;
+    double bits = fmod(trunc(value), 4294967296.0);
+    if (bits < 0) bits += 4294967296.0;
+    if (bits >= 2147483648.0) bits -= 4294967296.0;
+    return (int32_t)bits;
+}
+
+double pr_get_effective_stat_p(pr_battle *bt, const pr_pokemon *p, int stat, const pr_stat_params *sp)
 {
     double v = pr_get_stat(p, stat, false);
     if (!sp->ignore_held_items) pr_apply_stat_booster_modifiers(bt, p, stat, &v);
@@ -523,7 +534,7 @@ int32_t pr_get_effective_stat_p(pr_battle *bt, const pr_pokemon *p, int stat, co
                                                   sp->is_critical, sp->simulated, sp->ignore_held_items);
     switch (stat) {
     case STAT_ATK:
-        if (pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_SLOW_START)) ret = (double)((int32_t)ret >> 1);
+        if (pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_SLOW_START)) ret = (double)(effective_stat_int32(ret) >> 1);
         break;
     case STAT_DEF:
         if (pr_is_of_type(p, POKEMON_TYPE_ICE) && weather == WEATHER_TYPE_SNOW) ret *= 1.5;
@@ -534,9 +545,9 @@ int32_t pr_get_effective_stat_p(pr_battle *bt, const pr_pokemon *p, int stat, co
     case STAT_SPD: {
         int side = p->is_player ? ARENA_TAG_SIDE_PLAYER : ARENA_TAG_SIDE_ENEMY;
         if (pr_arena_has_tag(bt, ARENA_TAG_TYPE_TAILWIND, side)) ret *= 2;
-        if (pr_arena_has_tag(bt, ARENA_TAG_TYPE_GRASS_WATER_PLEDGE, side)) ret = (double)((int32_t)ret >> 2);
-        if (pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_SLOW_START)) ret = (double)((int32_t)ret >> 1);
-        if (p->status == STATUS_EFFECT_PARALYSIS) ret = (double)((int32_t)ret >> 1);
+        if (pr_arena_has_tag(bt, ARENA_TAG_TYPE_GRASS_WATER_PLEDGE, side)) ret = (double)(effective_stat_int32(ret) >> 2);
+        if (pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_SLOW_START)) ret = (double)(effective_stat_int32(ret) >> 1);
+        if (p->status == STATUS_EFFECT_PARALYSIS) ret = (double)(effective_stat_int32(ret) >> 1);
         if (pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_UNBURDEN) && pr_has_ability_active(bt, p, ABILITY_ID_UNBURDEN)) ret *= 2;
         break;
     }
@@ -548,10 +559,10 @@ int32_t pr_get_effective_stat_p(pr_battle *bt, const pr_pokemon *p, int stat, co
             break;
         }
     ret = floor(ret);
-    return ret > 1 ? (int32_t)ret : 1;
+    return ret > 1 ? ret : 1;
 }
 
-int32_t pr_get_effective_stat(pr_battle *bt, const pr_pokemon *p, int stat,
+double pr_get_effective_stat(pr_battle *bt, const pr_pokemon *p, int stat,
                               const pr_pokemon *opponent, int move, bool is_critical, bool for_defend)
 {
     pr_stat_params sp = {.opponent = opponent, .move = move, .is_critical = is_critical, .for_defend = for_defend,

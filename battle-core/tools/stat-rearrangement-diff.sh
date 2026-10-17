@@ -13,8 +13,8 @@ cp "$HERE/tests/stat-rearrangement.producer.test.ts" "$UP/test/tests/zz-dump/"
 python3 "$HERE/tools/build-stat-rearrangement-turn-proof.py" "$UP/test/tests/zz-dump/stat-rearrangement-turns.producer.test.ts"
 LEAF="$HERE/build/stat-rearrangement-$SEED.txt"
 TURNS="$HERE/build/stat-rearrangement-turns-$SEED.txt"
-(cd "$UP" && STATREARRANGE_SEED="$SEED" STATREARRANGE_OUT="$LEAF" node node_modules/vitest/vitest.mjs run test/tests/zz-dump/stat-rearrangement.producer.test.ts --maxWorkers=1)
+(cd "$UP" && NODE_OPTIONS=--max-old-space-size=4096 STATREARRANGE_SEED="$SEED" STATREARRANGE_OUT="$LEAF" node node_modules/vitest/vitest.mjs run test/tests/zz-dump/stat-rearrangement.producer.test.ts --maxWorkers=1)
 (cd "$UP" && DOUBLES_N=8192 DOUBLES_SEED="$SEED" DOUBLES_OUT="$TURNS" node node_modules/vitest/vitest.mjs run test/tests/zz-dump/stat-rearrangement-turns.producer.test.ts --maxWorkers=1)
 TURNTEST_LOCALES="$UP/locales/en" "$HERE/build/stat-rearrangement-test" "$LEAF"
 TURNTEST_LOCALES="$UP/locales/en" "$HERE/build/wide-combat-test" "$TURNS"
-TURNTEST_LOCALES="$UP/locales/en" python3 "$HERE/tools/check-stat-rearrangement-proof.py" "$LEAF"
+TURNTEST_LOCALES="$UP/locales/en" python3 "$HERE/tools/check-stat-rearrangement-proof.py" "$LEAF" "$TURNS"
