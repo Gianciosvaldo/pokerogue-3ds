@@ -101,7 +101,20 @@ static void form_change_with_delay(pr_battle *bt, const pr_pokemon *p, int trigg
     int target_form = -1;
 
     bool stance = mon->species == SPECIES_ID_AEGISLASH;
-    if (stance) {
+    if (mon->species == SPECIES_ID_XERNEAS) {
+        /* Source registers quiet neutral<->active transitions, independent of
+         * abilities. Match raw form keys before considering field activity. */
+        if (trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger) {
+            const pr_form *from = pr_pokemon_base_form(mon);
+            const char *key = is_active_on_field(mon) ? "active" : "neutral";
+            if (from->form_key && strcmp(from->form_key,key)) {
+                const char *previous = is_active_on_field(mon) ? "neutral" : "active";
+                if (!strcmp(from->form_key,previous))
+                    for (int i=0;i<sp->nforms;i++)
+                        if (!strcmp(pr_forms[sp->form0+i].form_key,key)) target_form=i;
+            }
+        }
+    } else if (stance) {
         if (trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger) {
             if (mon->form == 1 && !is_active_on_field(mon)) target_form = 0;
         } else if (trigger_class == PR_FCT_SpeciesFormChangePreMoveTrigger

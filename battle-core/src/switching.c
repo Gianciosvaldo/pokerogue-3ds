@@ -529,7 +529,7 @@ void pr_switch_summon_phase(pr_battle *bt, pr_engine *e, int ph)
     int b = side * 2 + field;
     if (in->shiny) pr_unshift_new(bt, e, PH_SHINY_SPARKLE, b);
     pr_reset_turn_data(in);
-    pr_form_change(bt, in, PR_FCT_SpeciesFormChangeActiveTrigger);
+    pr_form_change_delayed(bt, in, PR_FCT_SpeciesFormChangeActiveTrigger);
     {
         int q = pr_phase_new(e, PH_POST_SUMMON, (int8_t)b);                /* SwitchSummonPhase.queuePostSummon */
         pr_phase_unshift(bt, e, q);
@@ -551,7 +551,7 @@ void pr_switch_summon_phase(pr_battle *bt, pr_engine *e, int ph)
         in->switched_in_this_turn = true;
     }
     pr_reset_summon_data(last);
-    pr_form_change(bt, in, PR_FCT_SpeciesFormChangeActiveTrigger);
+    pr_form_change_delayed(bt, in, PR_FCT_SpeciesFormChangeActiveTrigger);
     /* The newly summoned Pokemon is excluded upstream; restore the other holders. */
     pr_weather_form_changes(bt, false, in);
 }
@@ -713,7 +713,7 @@ void pr_summon_phase(pr_battle *bt, pr_engine *e, int ph)
     /* onEnd */
     if (p->shiny) pr_unshift_new(bt, e, PH_SHINY_SPARKLE, b);
     pr_reset_turn_data(p);
-    pr_form_change(bt, p, PR_FCT_SpeciesFormChangeActiveTrigger);
+    pr_form_change_delayed(bt, p, PR_FCT_SpeciesFormChangeActiveTrigger);
     p->summoned_this_turn = true;                                           /* queuePostSummon */
 }
 
