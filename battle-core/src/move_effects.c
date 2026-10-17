@@ -225,6 +225,11 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         pr_queue_msg(bt, e, pr_msg1("moveTriggers:afterYou", pr_arg_pokemon(bt, "targetName", target)));
         pr_force_move_next(e, target);
         return;
+    case PR_AC_ForceLastAttr:
+        /* Native override omits parent HP/condition/chance gates. */
+        pr_queue_msg(bt, e, pr_msg1("moveTriggers:forceLast", pr_arg_pokemon(bt, "targetPokemonName", target)));
+        pr_force_move_last(e, target);
+        return;
     case PR_AC_SketchAttr:
         if (effect_can_apply(ef,user,target)) pr_copy_last_move(bt,e,user,target,move,true);
         return;

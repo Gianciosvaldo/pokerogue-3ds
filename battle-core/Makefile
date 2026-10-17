@@ -519,3 +519,7 @@ $(BUILD)/wide-combat-test: $(BUILD)/wide-combat-replay.c tests/turntest.c $(BUIL
 all: $(BUILD)/stat-rearrangement-test
 $(BUILD)/stat-rearrangement-test: tests/stat-rearrangement-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/quash-test
+$(BUILD)/quash-test: tests/quash-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@

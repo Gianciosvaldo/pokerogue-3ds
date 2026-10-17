@@ -382,6 +382,18 @@ void pr_force_move_next(pr_engine *e, const pr_pokemon *p)
     }
 }
 
+/* forceMoveLast uses the first cached owner match in the same queue order. */
+void pr_force_move_last(pr_engine *e, const pr_pokemon *p)
+{
+    for (int i = 0; i < e->n_dyn[PH_MOVE]; i++) {
+        pr_phase *m = &e->pool[e->dyn[PH_MOVE][i]];
+        if (m->pokemon == p) {
+            m->timing = MOVE_PHASE_TIMING_MODIFIER_LAST;
+            return;
+        }
+    }
+}
+
 /* tryRemovePhase("MovePhase", phase => phase.pokemon === p): reorder dynamic queue first,
  * then the tree's first match. Removing a move leaves its dynamic marker in place. */
 bool pr_remove_move_phase(pr_battle *bt, pr_engine *e, const pr_pokemon *p)

@@ -402,6 +402,7 @@ void pr_reflect_move(pr_battle *bt, pr_engine *e, pr_pokemon *pokemon, const pr_
 void pr_fail_current_move(pr_engine *e);
 /* phaseManager.forceMoveNext(phase => phase.pokemon === p) (Shell Trap) */
 void pr_force_move_next(pr_engine *e, const pr_pokemon *p);
+void pr_force_move_last(pr_engine *e, const pr_pokemon *p);
 bool pr_remove_move_phase(pr_battle *bt, pr_engine *e, const pr_pokemon *p);
 const char *pr_commanded_form_key(const pr_battler_tag *tag);
 /* getMovePhase(condition): the first queued MovePhase using `move` (-1: any) of a player's (1),
