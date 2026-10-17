@@ -649,3 +649,14 @@ berry-moves-host-test: $(BUILD)/berry_moves_host_test
 $(BUILD)/berry_moves_host_test: tests/berry_moves_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: berry-moves-host-test
+
+all: $(BUILD)/wide_exp_phase_diff_test
+$(BUILD)/wide_exp_phase_diff_test: tests/wide_exp_phase_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/wide_exp_phase_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+
+$(BUILD)/wide_exp_phase_diff_test: ../game/source/run_exp.h
+
+test: wide-exp-phase-host-test
+wide-exp-phase-host-test: $(BUILD)/wide_exp_phase_diff_test
+	$(BUILD)/wide_exp_phase_diff_test --selftest
+.PHONY: wide-exp-phase-host-test

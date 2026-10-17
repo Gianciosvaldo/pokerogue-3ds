@@ -50,7 +50,7 @@ typedef enum {
                           * b = party index (party[] or enemy[]), c = field slot */
     GC_EV_RECALL,        /* outside a turn, a Pokemon goes back into its ball: a = side, b = party index */
     GC_EV_HP,            /* outside a turn (items, the party heal): a = side, b = party index, c = HP now */
-    GC_EV_EXP,           /* a = party index, b = exp gained, c = level before */
+    GC_EV_EXP,           /* a = party index, c = level before; see exp_amount/exp_before */
     GC_EV_LEVEL_UP,      /* a = party index, b = the new level (stats are already updated) */
     GC_EV_MOVE_LEARNED,  /* a = party index, b = move slot, c = MoveId */
     GC_EV_EVOLVED,       /* a = party index, b = species before, c = species after */
@@ -65,6 +65,10 @@ typedef struct {
     uint8_t kind;               /* gc_event_kind */
     int32_t a, b, c;
     pr_msg msg;                 /* GC_EV_MESSAGE */
+    /* GC_EV_EXP only: exact native award and the pre-award display state.
+     * b mirrors the amount only when it fits int32, otherwise zero. Runtime
+     * events are not part of the session save format. */
+    double exp_amount, exp_before;
 } gc_event;
 
 /* ---------------------------------------------------------------- screens and choices */

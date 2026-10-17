@@ -277,6 +277,7 @@ pr_msg pr_msg4(const char *key, pr_msg_arg a, pr_msg_arg b, pr_msg_arg c, pr_msg
 pr_msg_arg pr_arg_pokemon(const pr_battle *bt, const char *name, const pr_pokemon *p);   /* with affix */
 pr_msg_arg pr_arg_pokemon_name(const pr_battle *bt, const char *name, const pr_pokemon *p);
 pr_msg_arg pr_arg_int(const char *name, int32_t v);
+pr_msg_arg pr_arg_int64(const char *name, int64_t v);
 pr_msg_arg pr_arg_move(const char *name, int move);
 pr_msg_arg pr_arg_ability(const char *name, int ability);
 pr_msg_arg pr_arg_type(const char *name, int type);
