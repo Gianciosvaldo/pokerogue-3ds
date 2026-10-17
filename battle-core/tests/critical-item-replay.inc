@@ -591,7 +591,7 @@ static const char *boost_fields(const pr_battler_tag *t)
 {
     static char buf[64];
     if (t->type == BATTLER_TAG_TYPE_SUBSTITUTE) {             /* SubstituteTag.hp, sourceInFocus */
-        snprintf(buf, sizeof buf, " hp=%d focus=%d", t->hp, t->in_focus ? 1 : 0);
+        snprintf(buf, sizeof buf, " hp=%.17g focus=%d", t->hp, t->in_focus ? 1 : 0);
         return buf;
     }
     if (t->type == BATTLER_TAG_TYPE_SHELL_TRAP && t->activated) return " act=1";   /* ShellTrapTag.activated */

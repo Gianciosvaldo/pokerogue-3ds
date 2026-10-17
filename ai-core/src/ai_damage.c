@@ -6,10 +6,10 @@
 #include "ai_internal.h"
 #include <math.h>
 
-static int32_t to_dmg_value(double v)
+static double to_dmg_value(double v)
 {
     v = floor(v);
-    return v > 1 ? (int32_t)v : 1;
+    return v > 1 ? v : 1;
 }
 
 /* for (const ally of p.getAlliesGenerator()) applyAbAttrs(cls, {...params, pokemon: ally}):

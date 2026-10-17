@@ -10,6 +10,7 @@
 #include "pr/engine.h"
 #include "optional-phase-map.inc"
 #include <stdarg.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -284,7 +285,14 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             p->fusion_species = field(l, "fsp") ? (uint16_t)inum(l, "fsp") : 0;
             p->fusion_form = field(l, "fform") ? (uint8_t)inum(l, "fform") : 0;
             p->fusion_ability_index = field(l, "fabil") ? (int8_t)inum(l, "fabil") : -1;
-            p->level = (uint8_t)inum(l, "lv");
+            const char *raw_level = need(l, "lv");
+            char *level_end;
+            long long level = strtoll(raw_level, &level_end, 10);
+            if (level_end == raw_level || (*level_end && *level_end != ' ' && *level_end != '\n')
+                || level < 1 || level > INT32_MAX) {
+                fprintf(stderr, "invalid Pokemon level\n"); exit(2);
+            }
+            p->level = (int32_t)level;
             if (split(need(l, "ivs"), ',', it, 6) != 6) { fprintf(stderr, "bad ivs\n"); exit(2); }
             for (int j = 0; j < 6; j++) p->ivs[j] = (uint8_t)atoi(it[j]);
             p->nature = (uint8_t)inum(l, "nat");
@@ -417,7 +425,8 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             }
             t->source_index = -1;
             if (field(l, "hp")) {                      /* SubstituteTag */
-                t->hp = (int32_t)inum(l, "hp");
+                t->hp = dnum(l, "hp");
+                if (!isfinite(t->hp) || t->hp != floor(t->hp)) { fprintf(stderr,"invalid Substitute HP\n"); exit(2); }
                 t->in_focus = inum(l, "focus") != 0;
             }
             if (field(l, "sidx")) t->source_index = (int8_t)inum(l, "sidx");   /* SeedTag */
@@ -563,7 +572,7 @@ static const char *boost_fields(const pr_battler_tag *t)
 {
     static char buf[64];
     if (t->type == BATTLER_TAG_TYPE_SUBSTITUTE) {             /* SubstituteTag.hp, sourceInFocus */
-        snprintf(buf, sizeof buf, " hp=%d focus=%d", t->hp, t->in_focus ? 1 : 0);
+        snprintf(buf, sizeof buf, " hp=%.17g focus=%d", t->hp, t->in_focus ? 1 : 0);
         return buf;
     }
     if (t->type == BATTLER_TAG_TYPE_SHELL_TRAP && t->activated) return " act=1";   /* ShellTrapTag.activated */

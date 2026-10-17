@@ -2054,7 +2054,7 @@ static move_damage apply_move_damage(pr_battle *bt, pr_engine *e, int ph, pr_pok
     if (blocked) {
         /* the doll takes it: totalDamageDealt += min(damage, doll's HP) */
         user->total_damage_dealt += (int32_t)(d.damage < sub->hp ? d.damage : sub->hp);
-        sub->hp -= (int32_t)d.damage;
+        sub->hp -= d.damage;
     } else if (!target->is_player && d.damage >= target->hp) {
         pr_apply_enemy_endure_modifiers(bt, e, target);
         turn_modifiers(bt, false, target);                       /* EnemyEndureChanceModifier */
