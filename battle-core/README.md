@@ -1348,3 +1348,9 @@ migration are documented in [WIDE-COMBAT-VALIDATION.md](WIDE-COMBAT-VALIDATION.m
 Speed Swap, Power Shift and Topsy-Turvy now preserve native summon-stat/stage
 semantics; see [STAT-REARRANGEMENT-VALIDATION.md](STAT-REARRANGEMENT-VALIDATION.md).
 These bounded continuations do not close the remaining completion checklist.
+
+Quash's first matching cached move and native LAST timing are documented in
+[QUASH-VALIDATION.md](QUASH-VALIDATION.md). Wide Protosynthesis/Quark Drive
+selection now retains double candidates and running maxima; see
+[WIDE-HIGHEST-STAT-VALIDATION.md](WIDE-HIGHEST-STAT-VALIDATION.md) for the native
+tag add/overlap/remove proof and its boundaries.

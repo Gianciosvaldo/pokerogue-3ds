@@ -281,3 +281,11 @@ The user authorized cross-core fixes during unattended continuation on
 remain required. Only the dedicated custom-only Task63 workflow is skipped;
 older broad statements excluding custom testing or separately owned run-core
 edits no longer describe the current instructions.
+
+Merged #301 closes Speed Swap/Power Shift/Topsy-Turvy and effective-stat/speed-key
+narrowing, including native signed-shift conversion. Merged #302 closes Quash's
+raw callback and first queued owner timing. The wide highest-stat continuation
+addresses the remaining int32 candidate/maximum locals in Protosynthesis and
+Quark Drive. Spectral Thief's pre-damage stat theft, HP splitting and ability-
+changing callbacks remain concrete next slices; these updates do not close
+natural high-wave progression or the final full inventory audit.

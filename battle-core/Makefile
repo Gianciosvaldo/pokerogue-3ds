@@ -523,3 +523,7 @@ $(BUILD)/stat-rearrangement-test: tests/stat-rearrangement-test.c $(BUILD)/wide-
 all: $(BUILD)/quash-test
 $(BUILD)/quash-test: tests/quash-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/wide-highest-stat-test
+$(BUILD)/wide-highest-stat-test: tests/wide-highest-stat-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
