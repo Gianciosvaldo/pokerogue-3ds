@@ -169,8 +169,8 @@ void gv_draw_bottom(const gv_state* s) {
   /* the buttons, or why the chosen option cannot be bought */
   const float by = LIST_Y + ROW_H * GV_OPTIONS + 12;
   mui_window(0, by, W, H - by);
-  if (s->mode == GV_MENU && s->refusal[0]) text8_style(8, by + 6, s->refusal, TS_PARTY_RED);
-  else text8(8, by + 6, s->hint, quiet);
+  if (s->mode == GV_MENU && s->refusal[0]) text8_style(8, by + 4, s->refusal, TS_PARTY_RED);
+  else text8(8, by + 4, s->hint, quiet);
 
   if (s->mode == GV_MENU && s->n_lines == 0) return;
   /* a question, a message, or a locked machine's reason, over the list */
