@@ -831,7 +831,7 @@ static void finish_pick(int a) {
 
 static void on_send_pick(int slot, int option, void* arg) {
   (void)arg;
-  if (option != PS_SEND_OUT && option != PS_RELEASE_PICK && option != PS_CANCEL) return;
+  if (option != PS_SEND_OUT && option != PS_RELEASE_PICK && option != PS_REVIVE_PICK && option != PS_CANCEL) return;
   const gc_screen* s = gc_run_screen(&G.run);
   if (G.swap_prompt && option == PS_CANCEL) {
     /* backing out of the release list goes back to the question (upstream's promptRelease) */
@@ -840,7 +840,7 @@ static void on_send_pick(int slot, int option, void* arg) {
     return;
   }
   int a = -1;
-  if ((option == PS_SEND_OUT || option == PS_RELEASE_PICK) && slot >= 0 && slot < G.run.n_party) a = G.run.party_order[slot];
+  if ((option == PS_SEND_OUT || option == PS_RELEASE_PICK || option == PS_REVIVE_PICK) && slot >= 0 && slot < G.run.n_party) a = G.run.party_order[slot];
   else if (!s->can_skip) return; /* no cancelling a faint switch */
   ps_close();
   finish_pick(a);
@@ -863,7 +863,7 @@ static void open_switch(const gc_screen* s) {
   if (G.swap_prompt)
     ask_release();
   else
-    ps_open(&G.run.bt, s->can_skip ? PS_SWITCH : PS_FAINT_SWITCH, on_send_pick, NULL);
+    ps_open(&G.run.bt, s->revival_blessing ? PS_REVIVAL_BLESSING : s->can_skip ? PS_SWITCH : PS_FAINT_SWITCH, on_send_pick, NULL);
 }
 
 /* ---- learning a move: menus' own dialog, with the battle's message box and yes/no ---- */

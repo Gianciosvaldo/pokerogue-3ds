@@ -16,7 +16,8 @@ Secret Power is documented in [SECRET-POWER-VALIDATION.md](SECRET-POWER-VALIDATI
 Zero to Hero (Palafin) is documented in [ZERO-TO-HERO-VALIDATION.md](ZERO-TO-HERO-VALIDATION.md).
 Disguise/Ice Face callbacks are documented in [FORM-BLOCK-DAMAGE-VALIDATION.md](FORM-BLOCK-DAMAGE-VALIDATION.md).
 Meloetta/Relic Song is documented in [MELOETTA-FORMS-VALIDATION.md](MELOETTA-FORMS-VALIDATION.md).
-Next candidates include Revival Blessing and other remaining form transitions; delayed attacks
+Revival Blessing is documented in [REVIVAL-BLESSING-VALIDATION.md](REVIVAL-BLESSING-VALIDATION.md).
+Next candidates include Ball Fetch inventory integration and remaining form transitions; delayed attacks
 already have override handlers and need a boundary audit. A missing local class switch
 case is only a candidate: called-move and override dispatch may handle it
 elsewhere, and source-disabled registrations must be distinguished. The final

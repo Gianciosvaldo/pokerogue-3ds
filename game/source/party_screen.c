@@ -103,9 +103,16 @@ static const char* filter_non_fainted(void* ctx, int slot) {
   return i18n_t(buf, sizeof buf, "partyUiHandler:noEnergy", "pokemonName", S.party[slot].name, NULL);
 }
 
+static const char* filter_fainted(void* ctx, int slot) {
+  (void)ctx;
+  if(S.party[slot].hp<=0)return NULL;
+  static char buf[160];
+  return i18n_t(buf,sizeof buf,"partyUiHandler:hasEnergy","pokemonName",S.party[slot].name,NULL);
+}
+
 static void on_select(void* ctx, int slot, int option) {
   (void)ctx;
-  if (option == PO_CANCEL && S.mode == PARTY_FAINT_SWITCH) return;
+  if (option == PO_CANCEL && (S.mode == PARTY_FAINT_SWITCH || S.mode == PARTY_REVIVAL_BLESSING)) return;
   if (S.on_pick) S.on_pick(slot, option, S.arg);
 }
 
@@ -167,7 +174,8 @@ void ps_init(void) { mui_init(); }
 void ps_open(const pr_battle* bt, ps_mode pmode, void (*on_pick)(int, int, void*), void* arg) {
   _Static_assert((int)PS_SWITCH == (int)PARTY_SWITCH && (int)PS_FAINT_SWITCH == (int)PARTY_FAINT_SWITCH &&
                      (int)PS_RELEASE == (int)PARTY_RELEASE && (int)PS_RELEASE_PICK == (int)PO_RELEASE &&
-                     (int)PS_SEND_OUT == (int)PO_SEND_OUT && (int)PS_CANCEL == (int)PO_CANCEL,
+                     (int)PS_SEND_OUT == (int)PO_SEND_OUT && (int)PS_CANCEL == (int)PO_CANCEL &&
+                     (int)PS_REVIVAL_BLESSING == (int)PARTY_REVIVAL_BLESSING && (int)PS_REVIVE_PICK == (int)PO_REVIVE,
                  "party_screen.h values");
   party_mode mode = (party_mode)pmode;
   memset(&S, 0, sizeof S);
@@ -181,7 +189,7 @@ void ps_open(const pr_battle* bt, ps_mode pmode, void (*on_pick)(int, int, void*
   a.mode = mode;
   a.battler_count = 1;
   a.max_level = bt->max_exp_level;
-  a.filter = filter_non_fainted;
+  a.filter = mode == PARTY_REVIVAL_BLESSING ? filter_fainted : filter_non_fainted;
   static party_events ev;
   ev = (party_events){on_select, NULL, NULL, NULL, NULL, on_summary, NULL};
   party_open(&a, S.party, S.n, &ev);

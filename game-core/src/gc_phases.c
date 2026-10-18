@@ -63,6 +63,7 @@ static void after_stop(gc_run *run, int stop)
     case PH_TURN_INIT:
         break;   /* the queue is empty: the next turn */
     case PH_SWITCH:
+    case PH_REVIVAL_BLESSING:
         if (run->eng.awaiting_pick) gc_rq_unshift(run, gc_rp(RP_SWITCH, 0, 0, 0));
         break;
     case PH_VICTORY: {
@@ -691,7 +692,7 @@ bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char *
         if (c->kind != GC_CH_PICK) { *why = "pick a Pokemon"; return false; }
         const gc_screen *s = &run->screen;
         if (c->a == -1 ? !s->can_skip : (c->a < 0 || c->a >= run->n_party || !s->pick_ok[c->a])) {
-            *why = "partyUiHandler:noEnergy";
+            *why = s->revival_blessing ? "partyUiHandler:hasEnergy" : "partyUiHandler:noEnergy";
             return false;
         }
         *ok = true;
