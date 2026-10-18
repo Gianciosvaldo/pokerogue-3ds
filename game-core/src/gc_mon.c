@@ -65,7 +65,7 @@ void gc_mon_new_player(gc_run *run, gc_mon *m, const gc_starter *s, int level)
     p->id = (uint32_t)floor(pr_rng_real_in_range(&run->run.rng, 0, 4294967296.0));
     p->species = s->species;
     p->form = s->form;
-    p->level = (uint8_t)level;
+    p->level = level;
     memcpy(p->ivs, s->ivs, 6);
     p->nature = s->nature;
     m->ability_index = s->ability_index;
@@ -81,7 +81,7 @@ void gc_mon_new_player(gc_run *run, gc_mon *m, const gc_starter *s, int level)
     p->tera_type = (int8_t)(s->tera_type >= 0 ? s->tera_type : f->type1);
     m->pokerus = s->pokerus;
     m->met_wave = -1;
-    m->met_level = (uint8_t)level;   /* Pokemon's constructor: metLevel = level, metBiome = -1 before a battle, metSpecies */
+    m->met_level = level;   /* Pokemon's constructor: metLevel = level, metBiome = -1 before a battle, metSpecies */
     m->met_biome = -1;
     m->met_species = s->species;
     m->pokeball = POKEBALL_TYPE_POKEBALL;
@@ -104,7 +104,7 @@ void gc_mon_new_enemy(gc_run *run, gc_mon *m, int species, int level, const pr_e
     p->id = g->id;
     p->species = (uint16_t)species;
     p->form = (uint8_t)g->form;
-    p->level = (uint8_t)level;
+    p->level = level;
     for (int i = 0; i < 6; i++) p->ivs[i] = (uint8_t)g->ivs[i];
     p->nature = (uint8_t)g->nature;
     m->ability_index = (uint8_t)g->ability_index;
@@ -124,7 +124,7 @@ void gc_mon_new_enemy(gc_run *run, gc_mon *m, int species, int level, const pr_e
     p->boss_segment_index = (uint8_t)(g->boss_segments > 0 ? g->boss_segments - 1 : 0);
     m->trainer_slot = (uint8_t)trainer_slot;
     m->met_wave = (int16_t)run->wave;
-    m->met_level = (uint8_t)level;
+    m->met_level = level;
     m->met_biome = (int8_t)run->biome;
     m->met_species = (uint16_t)species;
     init_common(m);
@@ -191,8 +191,10 @@ void gc_mon_add_exp(gc_run *run, gc_mon *m, double exp)
     double max_level = pr_run_get_max_exp_level(&run->run, run->wave, false);
     double initial = m->exp;
     m->exp += exp;
-    while (m->b.level < max_level && m->b.level < 200 && m->exp >= gc_level_total_exp(m->b.level + 1, rate))
+    while (m->b.level < max_level && m->b.level < INT32_MAX && m->exp >= gc_level_total_exp(m->b.level + 1, rate))
         m->b.level++;
+    if (m->b.level == INT32_MAX && m->b.level < max_level)
+        run->run.unported |= PR_REWARD_UNPORTED_LEVEL;
     if (m->b.level >= max_level) {
         double t = gc_level_total_exp(m->b.level, rate);
         m->exp = t > initial ? t : initial;
@@ -517,13 +519,14 @@ double gc_exp_to_next_level(const gc_mon *m)
 {
     const pr_species *sp = gc_species(m->b.species);
     int rate = sp ? sp->growth_rate : 0;
-    if (m->b.level >= 200) return 0;
+    if (m->b.level == INT32_MAX) return 0;
     double next = gc_level_total_exp(m->b.level + 1, rate);
     return next > m->exp ? next - m->exp : 0;
 }
 
 double gc_exp_level_fraction(const gc_mon *m)
 {
+    if (m->b.level == INT32_MAX) return 0;
     const pr_species *sp = gc_species(m->b.species);
     int rate = sp ? sp->growth_rate : 0;
     double rel = pr_run_get_level_rel_exp(m->b.level + 1, rate);

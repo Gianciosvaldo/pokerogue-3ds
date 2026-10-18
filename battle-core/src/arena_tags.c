@@ -3,8 +3,7 @@
  * its constructor's fields, onAdd, onOverlap, lapse and onRemove; and ConditionalProtectTag.apply
  * (Quick Guard, Wide Guard, Mat Block, Crafty Shield), which MoveEffectPhase.protectedCheck runs.
  *
- * Imprison's and Neutralizing Gas's own onAdd, onOverlap, lapse and onRemove, and the pending heals'
- * lapse, aren't ported: reaching one reports PR_FEAT_ARENA_TAG_TURN. */
+ * Pending heals' lapse remains outside this dispatcher and reports PR_FEAT_ARENA_TAG_TURN. */
 #include "pr/engine.h"
 #include <math.h>
 #include <string.h>
@@ -57,7 +56,7 @@ static bool construct(int type, int turn_count, int source_move, int64_t source_
     case ARENA_TAG_TYPE_WATER_FIRE_PLEDGE: turn_count = 4; move = MOVE_ID_WATER_PLEDGE; break;
     case ARENA_TAG_TYPE_GRASS_WATER_PLEDGE: turn_count = 4; move = MOVE_ID_GRASS_PLEDGE; break;
     case ARENA_TAG_TYPE_FAIRY_LOCK: move = MOVE_ID_FAIRY_LOCK; t->side = ARENA_TAG_SIDE_BOTH; break;
-    case ARENA_TAG_TYPE_NEUTRALIZING_GAS: turn_count = 0; move = 0; t->side = ARENA_TAG_SIDE_BOTH; break;
+    case ARENA_TAG_TYPE_NEUTRALIZING_GAS: turn_count = 0; move = 0; t->side = ARENA_TAG_SIDE_BOTH; t->source_count=1; break;
     case ARENA_TAG_TYPE_PENDING_HEAL: turn_count = 0; move = 0; t->source_id = -1; t->side = ARENA_TAG_SIDE_BOTH; break;
     default: return false;
     }
@@ -186,13 +185,54 @@ static void tailwind_on_add(pr_battle *bt, pr_engine *e, const pr_arena_tag *t)
     }
 }
 
+static void imprison_callbacks(pr_battle *bt, pr_engine *e, const pr_arena_tag *tag, bool adding)
+{
+    for(int i=0;i<4;i++){
+        pr_pokemon *p=bt->field[i];
+        if(!p||!pr_arena_tag_on_side(tag,i<2?ARENA_TAG_SIDE_PLAYER:ARENA_TAG_SIDE_ENEMY))continue;
+        /* getField(true) filters BOTH; side-specific field lists keep their slots. */
+        if(tag->side==ARENA_TAG_SIDE_BOTH && p->hp<=0)continue;
+        if(adding){if(p->hp>0)pr_add_tag(bt,e,p,BATTLER_TAG_TYPE_IMPRISON,1,MOVE_ID_IMPRISON,tag->source_id);}
+        else pr_remove_tag(bt,e,p,BATTLER_TAG_TYPE_IMPRISON);
+    }
+}
+
+static bool has_gas_source_attr(const pr_pokemon *p)
+{
+    return pr_ability_first_attr(p->ability,PR_AC_PreLeaveFieldRemoveSuppressAbilitiesSourceAbAttr)
+        || (p->passive && pr_ability_first_attr(p->passive,PR_AC_PreLeaveFieldRemoveSuppressAbilitiesSourceAbAttr));
+}
+
+static void gas_activation_message(pr_battle *bt, pr_engine *e, const pr_pokemon *p)
+{
+    if(p)pr_queue_msg(bt,e,pr_msg_p(bt,"arenaTag:neutralizingGasOnAdd",p));
+}
+
+static void gas_callbacks(pr_battle *bt, pr_engine *e, const pr_pokemon *source, bool gaining)
+{
+    pr_speed_iter it;pr_speed_iter_init(bt,&it,ARENA_TAG_SIDE_BOTH);
+    for(pr_pokemon *p;(p=pr_speed_iter_next(bt,&it));){
+        if(gaining?has_gas_source_attr(p):(source && p->id==source->id))continue;
+        for(int passive=1;passive>=0;passive--){
+            pr_ab_params pp={.pokemon=p,.move=-1,.only=passive?2:1,.on_gain=gaining};
+            pr_apply_ab_attrs(bt,gaining?PR_AC_PostSummonAbAttr:PR_AC_PreLeaveFieldAbAttr,&pp);
+        }
+    }
+}
+
 /* ArenaTag.onAdd(quiet) and the subclasses' own */
 static void on_add(pr_battle *bt, pr_engine *e, const pr_arena_tag *t, bool quiet)
 {
     switch (t->type) {
-    case ARENA_TAG_TYPE_NEUTRALIZING_GAS:                /* its message and the abilities it ends */
-    case ARENA_TAG_TYPE_IMPRISON:                        /* the IMPRISON battler tags */
-        note(bt);
+    case ARENA_TAG_TYPE_NEUTRALIZING_GAS: {
+        const pr_pokemon *source=t->source_id<0?NULL:pr_pokemon_by_id(bt,t->source_id);
+        gas_activation_message(bt,e,source);
+        if(source)gas_callbacks(bt,e,source,false);
+        return;
+    }
+    case ARENA_TAG_TYPE_IMPRISON:
+        if(!quiet)queue_tag_message(bt,e,t,add_message_key(t));
+        imprison_callbacks(bt,e,t,true);
         return;
     }
     const char *key = add_message_key(t);
@@ -204,8 +244,15 @@ static void on_add(pr_battle *bt, pr_engine *e, const pr_arena_tag *t, bool quie
 /* ArenaTag.onRemove(quiet) */
 static void on_remove(pr_battle *bt, pr_engine *e, const pr_arena_tag *t, bool quiet)
 {
-    if (t->type == ARENA_TAG_TYPE_NEUTRALIZING_GAS || t->type == ARENA_TAG_TYPE_IMPRISON) {
-        note(bt);                                        /* abilities regained, IMPRISON tags removed */
+    if (t->type == ARENA_TAG_TYPE_NEUTRALIZING_GAS) {
+        pr_arena_tag *stored=(pr_arena_tag *)pr_arena_get_tag_on_side(bt,t->type,ARENA_TAG_SIDE_BOTH);
+        if(stored)stored->being_removed=true;
+        if(!quiet)queue_tag_message(bt,e,t,remove_message_key(t));
+        gas_callbacks(bt,e,NULL,true);
+        return;
+    }
+    if (t->type == ARENA_TAG_TYPE_IMPRISON) {
+        imprison_callbacks(bt,e,t,false);
         return;
     }
     const char *key = remove_message_key(t);
@@ -248,7 +295,7 @@ static void on_overlap(pr_battle *bt, pr_engine *e, int i)
     } else if (t->type == ARENA_TAG_TYPE_TRICK_ROOM) {
         pr_arena_remove_tag_on_side(bt, e, t->type, t->side, false);
     } else if (t->type == ARENA_TAG_TYPE_NEUTRALIZING_GAS) {
-        note(bt);
+        /* arena.addTag passes its source Pokémon to onOverlap. */
     }
 }
 
@@ -257,7 +304,18 @@ bool pr_arena_add_tag(pr_battle *bt, pr_engine *e, int type, int turn_count, int
 {
     int i = find_on_side(bt, type, side);
     if (i >= 0) {
-        on_overlap(bt, e, i);
+        if(type==ARENA_TAG_TYPE_NEUTRALIZING_GAS){
+            const pr_pokemon *source=source_id<0?NULL:pr_pokemon_by_id(bt,(uint32_t)source_id);
+            if (source) {
+                if (bt->arena_tags[i].source_count == INT8_MAX) {
+                    pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT);
+                    if (e) e->overflow = true;
+                    return false;
+                }
+                bt->arena_tags[i].source_count++;
+                gas_activation_message(bt, e, source);
+            }
+        }else on_overlap(bt,e,i);
         return false;
     }
     pr_arena_tag t;
@@ -292,6 +350,34 @@ void pr_arena_remove_tags_on_side(pr_battle *bt, pr_engine *e, const int32_t *ty
     bt->n_arena_tags = (uint8_t)k;
 }
 
+void pr_arena_remove_all_tags(pr_battle *bt, pr_engine *e)
+{
+    for(int i=0;i<bt->n_arena_tags;i++)on_remove(bt,e,&bt->arena_tags[i],false);
+    bt->n_arena_tags=0;
+}
+
+void pr_arena_gas_source_leave(pr_battle *bt, pr_engine *e)
+{
+    pr_arena_tag *gas=(pr_arena_tag *)pr_arena_get_tag_on_side(bt,ARENA_TAG_TYPE_NEUTRALIZING_GAS,ARENA_TAG_SIDE_BOTH);
+    if(!gas)return;
+    if (gas->source_count == INT8_MIN) {
+        pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT);
+        if (e) e->overflow = true;
+        return;
+    }
+    gas->source_count--;
+    if(gas->source_count<=0){pr_arena_remove_tag_on_side(bt,e,gas->type,ARENA_TAG_SIDE_BOTH,false);return;}
+    if(gas->source_count!=1)return;
+    for(int i=0;i<4;i++){
+        pr_pokemon *p=bt->field[i];
+        if(!p||p->hp<=0||!p->on_field||p->switch_out_status||!has_gas_source_attr(p))continue;
+        bool primary=pr_ability_first_attr(p->ability,PR_AC_PreLeaveFieldRemoveSuppressAbilitiesSourceAbAttr)!=NULL;
+        pr_ab_params pp={.pokemon=p,.move=-1,.only=primary?2:1,.on_gain=true};
+        pr_apply_ab_attrs(bt,PR_AC_PostSummonAbAttr,&pp);
+        break;
+    }
+}
+
 /* FireGrassPledgeTag.lapse before ArenaTag.lapse: the sea of fire hurts every active Pokemon on its
  * side, in speed order, that isn't Fire type or switching out */
 static void sea_of_fire(pr_battle *bt, pr_engine *e, int side)
@@ -315,7 +401,15 @@ void pr_arena_lapse_tags(pr_battle *bt, pr_engine *e)
     bool ended[PR_MAX_ARENA_TAGS];
     for (int i = 0; i < bt->n_arena_tags; i++) {
         pr_arena_tag *t = &bt->arena_tags[i];
-        if (t->type == ARENA_TAG_TYPE_IMPRISON || t->type == ARENA_TAG_TYPE_PENDING_HEAL) note(bt);
+        if(t->type==ARENA_TAG_TYPE_IMPRISON){
+            const pr_pokemon *source=pr_pokemon_by_id(bt,t->source_id);
+            ended[i]=!source||source->hp<=0||!source->on_field||source->switch_out_status;
+            continue;
+        }
+        if (t->type == ARENA_TAG_TYPE_PENDING_HEAL) {
+            ended[i] = t->n_pending_heals == 0;
+            continue;
+        }
         if (t->type == ARENA_TAG_TYPE_FIRE_GRASS_PLEDGE) sea_of_fire(bt, e, t->side);
         ended[i] = !(t->turn_count < 1 || --t->turn_count > 0);
     }
@@ -326,6 +420,66 @@ void pr_arena_lapse_tags(pr_battle *bt, pr_engine *e)
         splice(bt, i);
         memmove(&ended[i], &ended[i + 1], sizeof(bool) * (size_t)(bt->n_arena_tags - i));
     }
+}
+
+/* PendingHealTag.queueHeal/apply. Messages are the registered native move's
+ * template with its source identity frozen when the sacrifice is made. */
+bool pr_arena_queue_heal(pr_battle *bt, pr_engine *e, int target_index,
+                        int64_t source_id, int move_id, bool restore_pp, uint32_t pokemon_name)
+{
+    return pr_arena_queue_heal_name(bt, e, target_index, source_id, move_id, restore_pp,
+        (pr_msg_arg){"", PR_ARG_POKEMON, pokemon_name, NULL, 0});
+}
+
+bool pr_arena_queue_heal_name(pr_battle *bt, pr_engine *e, int target_index,
+                        int64_t source_id, int move_id, bool restore_pp, pr_msg_arg name)
+{
+    if (target_index < 0 || target_index >= 4 || move_id <= 0 || move_id >= PR_MOVE_COUNT
+        || !pr_move_has_attr(move_id, PR_AC_SacrificialFullRestoreAttr)) {
+        pr_note_unported(bt, PR_FEAT_ARENA_TAG_TURN);
+        return false;
+    }
+    pr_arena_add_tag(bt, e, ARENA_TAG_TYPE_PENDING_HEAL, 0, 0, -1, ARENA_TAG_SIDE_BOTH, false);
+    pr_arena_tag *t = (pr_arena_tag *)pr_arena_get_tag_on_side(bt, ARENA_TAG_TYPE_PENDING_HEAL, ARENA_TAG_SIDE_BOTH);
+    if (!t) return false;
+    for (int i = 0; i < t->n_pending_heals; i++)
+        if (t->pending_heals[i].target_index == target_index && t->pending_heals[i].move_id == move_id) return true;
+    if (t->n_pending_heals >= PR_MAX_PENDING_HEALS) {
+        pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT);
+        return false;
+    }
+    t->pending_heals[t->n_pending_heals++] = (pr_pending_heal){source_id,name.v,(uint16_t)move_id,(uint8_t)target_index,restore_pp,name.fusion_v};
+    return true;
+}
+
+bool pr_arena_apply_pending_heal(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool simulated)
+{
+    pr_arena_tag *t = (pr_arena_tag *)pr_arena_get_tag_on_side(bt, ARENA_TAG_TYPE_PENDING_HEAL, ARENA_TAG_SIDE_BOTH);
+    if (!t || !p) return false;
+    int b = pr_battler_index(bt, p);
+    for (int i = 0; i < t->n_pending_heals;) {
+        pr_pending_heal h = t->pending_heals[i];
+        bool can_apply = p->hp < pr_get_stat(p, STAT_HP, false) || p->status;
+        for (int k = 0; !can_apply && h.restore_pp && k < PR_N_MOVES(p); k++) can_apply = PR_PP_USED(p)[k] > 0;
+        if (h.target_index != b || !can_apply) { i++; continue; }
+        if (simulated) return true;
+        bool valid_source = pr_pokemon_by_id(bt, h.source_id) != NULL;
+        memmove(&t->pending_heals[i], &t->pending_heals[i + 1],
+                sizeof t->pending_heals[0] * (size_t)(--t->n_pending_heals - i));
+        if (!valid_source) continue;
+        const pr_move *move = &pr_moves[h.move_id];
+        const char *key = NULL;
+        for (int k = 0; k < move->nattr; k++) {
+            const pr_attr *a = &pr_attrs[move->attr0 + k];
+            if (a->cls == PR_AC_SacrificialFullRestoreAttr) key = ((const pr_attr_SacrificialFullRestoreAttr *)a->p)->moveMessage;
+        }
+        pr_msg_arg name = {"pokemonName",PR_ARG_POKEMON,h.pokemon_name,NULL,h.fusion_name};
+        pr_unshift_heal_msg(bt, e, b, pr_get_stat(p, STAT_HP, false),
+            PR_HEAL_MESSAGE | PR_HEAL_NO_FULL_HP_MESSAGE | PR_HEAL_SKIP_ANIM | PR_HEAL_STATUS
+                | (h.restore_pp ? PR_HEAL_RESTORE_PP : 0), pr_msg1(key,name));
+        return true;
+    }
+    return false;
 }
 
 /* ConditionalProtectTag's condition functions */

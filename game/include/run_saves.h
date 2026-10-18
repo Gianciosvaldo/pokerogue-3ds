@@ -43,7 +43,7 @@ typedef struct {
   int8_t gender;      /* -1 genderless, 0 male, 1 female */
   bool shiny;
   uint8_t variant;
-  uint8_t level;
+  int32_t level;
   bool fainted;
 } rsv_mon;
 

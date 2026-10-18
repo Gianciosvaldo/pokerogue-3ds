@@ -27,6 +27,8 @@ void gc_item_add(gc_run *run, const char *key, int16_t arg, uint32_t pokemon_id,
     it->detached = false;
     it->virtual_stack = 0;
     it->battle_count = 0;
+    it->non_transferable = false;
+    it->type_tier = 0;
     it->stack = stack;
 }
 
@@ -100,7 +102,8 @@ static void to_modifier(const gc_item *it, pr_modifier *m, bool golden)
     memset(m, 0, sizeof *m);
     m->stack_count = it->stack;
     m->pokemon_id = it->detached ? 0 : it->pokemon_id ? (int64_t)it->pokemon_id : -1;
-    m->is_transferable = true;
+    m->is_transferable = !it->non_transferable;
+    m->type_tier = it->type_tier;
     m->unknown_subclass = true;
     m->cls = it->pokemon_id ? PR_MOD_HELD_ITEM : PR_MOD_PERSISTENT;
     if (!strcmp(it->key, "BERRY_POUCH")) {
@@ -118,13 +121,14 @@ static void to_modifier(const gc_item *it, pr_modifier *m, bool golden)
         {"LEFTOVERS", PR_MOD_TURN_HEAL}, {"SHELL_BELL", PR_MOD_HIT_HEAL},
         {"FOCUS_BAND", PR_MOD_SURVIVE_DAMAGE}, {"QUICK_CLAW", PR_MOD_BYPASS_SPEED_CHANCE},
         {"KINGS_ROCK", PR_MOD_FLINCH_CHANCE}, {"WHITE_HERB", PR_MOD_RESET_NEGATIVE_STAT_STAGE},
-        {"BERRY", PR_MOD_BERRY}
+        {"BERRY", PR_MOD_BERRY}, {"MINI_BLACK_HOLE", PR_MOD_TURN_HELD_TRANSFER}
     };
     for (size_t i = 0; i < sizeof held / sizeof held[0]; i++) {
         if (strcmp(it->key, held[i].key)) continue;
         m->cls = held[i].cls;
         m->unknown_subclass = false;
         if (m->cls == PR_MOD_BERRY) m->berry_type = (int8_t)it->arg;
+        if (m->cls == PR_MOD_TURN_HELD_TRANSFER && (it->stack!=1 || it->virtual_stack || (it->arg!=-1&&it->arg!=0))) m->unknown_subclass=true;
         return;
     }
     if (!strcmp(it->key, "GOLDEN_PUNCH") || !strcmp(it->key, "AMULET_COIN")) {
@@ -179,10 +183,20 @@ static void to_modifier(const gc_item *it, pr_modifier *m, bool golden)
         m->cls = PR_MOD_TURN_STATUS_EFFECT;
         m->status_effect = !strcmp(it->key, "TOXIC_ORB") ? STATUS_EFFECT_TOXIC : STATUS_EFFECT_BURN;
         m->unknown_subclass = false;
-    } else if (!strcmp(it->key, "BASE_STAT_BOOSTER")) {          /* vitamins: BaseStatModifier(stat) */
-        m->cls = PR_MOD_BASE_STAT; m->stat = (int8_t)it->arg; m->unknown_subclass = false;
+    } else if (!strcmp(it->key, "BASE_STAT_BOOSTER") && it->arg >= STAT_HP && it->arg <= STAT_SPD) {
+        m->cls = PR_MOD_BASE_STAT; m->stat = (int8_t)it->arg; m->virtual_stack_count = it->virtual_stack;
+        m->is_transferable = false; m->unknown_subclass = false;
+    } else if (!strcmp(it->key, "MYSTERY_ENCOUNTER_SHUCKLE_JUICE") && (it->arg == 10 || it->arg == -15)) {
+        m->cls = PR_MOD_BASE_STAT_TOTAL; m->num = it->arg; m->virtual_stack_count = it->virtual_stack;
+        m->is_transferable = false; m->unknown_subclass = false;
+    } else if (!strcmp(it->key, "MYSTERY_ENCOUNTER_OLD_GATEAU") && it->arg == 0) {
+        m->cls = PR_MOD_BASE_STAT_FLAT; m->virtual_stack_count = it->virtual_stack;
+        m->is_transferable = false; m->unknown_subclass = false;
     } else if (!strcmp(it->key, "ATTACK_TYPE_BOOSTER")) { /* AttackTypeBoosterModifier(type, 20) */
         m->cls = PR_MOD_ATTACK_TYPE_BOOSTER; m->move_type = (int8_t)it->arg; m->mult = 0.2; m->unknown_subclass = false;
+    } else if (!strcmp(it->key, "SOUL_DEW")) {
+        m->cls=PR_MOD_NATURE_WEIGHT; m->virtual_stack_count=it->virtual_stack; m->unknown_subclass=false;
+        m->unknown_subclass=!pr_mod_is_ported_item(m);
     } else if (!strcmp(it->key, "SCOPE_LENS")) {          /* CritBoosterModifier(1) */
         m->cls = PR_MOD_CRIT_BOOSTER; m->num = 1; m->unknown_subclass = false;
     } else if (!strcmp(it->key, "ENEMY_DAMAGE_BOOSTER")) {
@@ -233,6 +247,63 @@ void gc_items_to_battle(gc_run *run)
     gc_int(run)->battle_item_count[1] = bt->n_mods[1];
 }
 
+/* The supported canonical generated stocks each occupy one tier in their
+ * native generation pool. Capture it at creation, before a later transfer can
+ * change the holder's side or trainer context. Unknown classes stay opaque. */
+void gc_cache_generated_item_tiers(gc_run *run)
+{
+    for (int i=0;i<run->n_enemy_items;i++) {
+        gc_item *item=&run->enemy_items[i];
+        pr_modifier m;to_modifier(item,&m,golden_bridge(run));
+        /* Wave1000 Mini Black Holes are appended with getModifierType(),
+         * rather than a tiered pool option. Their fresh type has no tier. */
+        if(m.cls==PR_MOD_TURN_HELD_TRANSFER){item->type_tier=0;continue;}
+        int tier=pr_held_item_tier_for_pool(&m,run->battle_type==BATTLE_TYPE_TRAINER);
+        if(tier>=0)item->type_tier=(uint8_t)(tier+1);
+    }
+}
+
+/* Canonical fields of the native transfer families. Opaque/unsupported stock
+ * remains owned by its existing entry and is never guessed from a class name. */
+static bool transfer_stock(const pr_modifier *m,gc_item *it)
+{
+    if(m->unknown_subclass)return false;
+    const char *key=NULL;int arg=-1;
+    switch(m->cls){
+    case PR_MOD_TURN_HEAL:key="LEFTOVERS";break;
+    case PR_MOD_HIT_HEAL:key="SHELL_BELL";break;
+    case PR_MOD_SURVIVE_DAMAGE:key="FOCUS_BAND";break;
+    case PR_MOD_BYPASS_SPEED_CHANCE:key="QUICK_CLAW";break;
+    case PR_MOD_FLINCH_CHANCE:key="KINGS_ROCK";break;
+    case PR_MOD_RESET_NEGATIVE_STAT_STAGE:key="WHITE_HERB";break;
+    case PR_MOD_TURN_HELD_TRANSFER:key="MINI_BLACK_HOLE";break;
+    case PR_MOD_BERRY:key="BERRY";arg=m->berry_type;break;
+    case PR_MOD_MOVE_ACCURACY_BOOSTER:key="WIDE_LENS";break;
+    case PR_MOD_MULTI_HIT:key="MULTI_LENS";break;
+    case PR_MOD_CRIT_BOOSTER:key="SCOPE_LENS";break;
+    case PR_MOD_NATURE_WEIGHT:key="SOUL_DEW";break;
+    case PR_MOD_DAMAGE_MONEY_REWARD:key="GOLDEN_PUNCH";break;
+    case PR_MOD_ATTACK_TYPE_BOOSTER:key="ATTACK_TYPE_BOOSTER";arg=m->move_type;break;
+    case PR_MOD_INSTANT_REVIVE:key="REVIVER_SEED";break;
+    case PR_MOD_TURN_STATUS_EFFECT:
+        if(m->status_effect==STATUS_EFFECT_TOXIC)key="TOXIC_ORB";
+        if(m->status_effect==STATUS_EFFECT_BURN)key="FLAME_ORB";
+        break;
+    default:break;
+    }
+    if(!key)return false;
+    if(it)*it=(gc_item){.key=key,.arg=arg,.stack=m->stack_count,
+        .pokemon_id=m->pokemon_id<0?0:(uint32_t)m->pokemon_id,
+        .detached=m->pokemon_id==0,.virtual_stack=m->virtual_stack_count,
+        .non_transferable=!m->is_transferable,.type_tier=m->type_tier};
+    return true;
+}
+static bool same_transfer_stock(const pr_modifier *a,const pr_modifier *b)
+{
+    gc_item x,y;
+    return transfer_stock(a,&x)&&transfer_stock(b,&y)&&!strcmp(x.key,y.key)&&x.arg==y.arg;
+}
+
 /* Persist the losses of mapped consumables before another encounter rebuilds bt->mods or
  * a save serializes the run inventory. Match owner AND berry kind: two party members' berries
  * are separate entries. Unsupported items and entries beyond battle-core's capacity stay intact.
@@ -253,6 +324,22 @@ void gc_items_from_battle(gc_run *run)
             gc_item it = items[i];
             pr_modifier expected;
             to_modifier(&it, &expected, golden);
+            if(i<tracked&&!duplicate[i]&&transfer_stock(&expected,NULL)){
+                int match=-1;bool opaque=false;
+                const pr_pokemon *holder=pr_pokemon_by_id(&run->bt,it.pokemon_id);
+                for(int j=0;j<run->bt.n_mods[side];j++){
+                    const pr_modifier *m=&run->bt.mods[side][j];
+                    bool detached=side&&m->pokemon_id==0&&holder&&holder->hp<=0;
+                    if(m->cls==expected.cls&&m->pokemon_id==expected.pokemon_id&&m->unknown_subclass)opaque=true;
+                    if(!used[j]&&(m->pokemon_id==expected.pokemon_id||detached)&&same_transfer_stock(m,&expected)){match=j;break;}
+                }
+                if(opaque){items[w++]=it;continue;}
+                if(match<0||run->bt.mods[side][match].stack_count<=0){removed++;continue;}
+                const pr_modifier *m=&run->bt.mods[side][match];used[match]=true;
+                it.stack=m->stack_count;it.virtual_stack=m->virtual_stack_count;
+                it.detached=m->pokemon_id==0;it.non_transferable=!m->is_transferable;it.type_tier=m->type_tier;
+                items[w++]=it;continue;
+            }
             if (i < tracked && !expected.unknown_subclass && (expected.cls == PR_MOD_INSTANT_REVIVE
                                 || expected.cls == PR_MOD_MOVE_ACCURACY_BOOSTER
                                 || expected.cls == PR_MOD_DAMAGE_MONEY_REWARD || expected.cls == PR_MOD_MULTI_HIT || expected.cls == PR_MOD_PRESERVE_BERRY)
@@ -299,6 +386,24 @@ void gc_items_from_battle(gc_run *run)
         memset(&items[w], 0, (size_t)(*n - w) * sizeof *items);
         *n = w;
         int prefix = tracked - removed;
+        for(int j=0;j<run->bt.n_mods[side];j++){
+            const pr_modifier *m=&run->bt.mods[side][j];gc_item added;
+            if(used[j]||m->stack_count<=0||!transfer_stock(m,&added))continue;
+            /* The legacy gc_item zero-ID sentinel cannot represent a live
+             * zero-ID holder; keep that limitation explicit at this adapter. */
+            if(m->pokemon_id==0&&pr_pokemon_by_id(&run->bt,0)){
+                pr_note_unported(&run->bt,PR_FEAT_MODIFIERS);continue;
+            }
+            bool found=false;
+            for(int i=0;i<*n;i++){
+                pr_modifier present;to_modifier(&items[i],&present,golden);
+                if(present.pokemon_id==m->pokemon_id&&same_transfer_stock(&present,m)){found=true;break;}
+            }
+            if(found)continue;
+            if(*n>=GC_MAX_ITEMS){pr_note_unported(&run->bt,PR_FEAT_ENGINE_LIMIT);continue;}
+            memmove(items+prefix+1,items+prefix,(size_t)(*n-prefix)*sizeof *items);
+            items[prefix++]=added;(*n)++;
+        }
         for (int j = 0; j < run->bt.n_mods[side]; j++) {
             const pr_modifier *m = &run->bt.mods[side][j];
             if (m->cls != PR_MOD_BERRY || m->unknown_subclass || m->stack_count <= 0) continue;
@@ -310,6 +415,26 @@ void gc_items_from_battle(gc_run *run)
             memmove(items + prefix + 1, items + prefix, (size_t)(*n - prefix) * sizeof *items);
             items[prefix] = (gc_item){.key="BERRY", .arg=m->berry_type, .pokemon_id=(uint32_t)m->pokemon_id, .stack=m->stack_count};
             prefix++; (*n)++;
+        }
+        /* addModifier removes and re-appends a receiving stack. Preserve that
+         * native order: subsequent theft RNG indexes the inventory list. */
+        int ranks[GC_MAX_ITEMS];
+        bool ranked[PR_MAX_MODIFIERS]={false};
+        for(int i=0;i<prefix;i++){
+            pr_modifier expected;to_modifier(&items[i],&expected,golden);
+            ranks[i]=PR_MAX_MODIFIERS+i;
+            for(int j=0;j<run->bt.n_mods[side];j++){
+                const pr_modifier *m=&run->bt.mods[side][j];
+                if(ranked[j]||m->cls!=expected.cls||m->pokemon_id!=expected.pokemon_id)continue;
+                if(transfer_stock(&expected,NULL)?!same_transfer_stock(m,&expected):
+                    (m->stat!=expected.stat||m->num!=expected.num||m->move_type!=expected.move_type))continue;
+                ranked[j]=true;ranks[i]=j;break;
+            }
+        }
+        for(int i=1;i<prefix;i++){
+            gc_item it=items[i];int rank=ranks[i],j=i;
+            while(j>0&&ranks[j-1]>rank){items[j]=items[j-1];ranks[j]=ranks[j-1];j--;}
+            items[j]=it;ranks[j]=rank;
         }
         gc_int(run)->battle_item_count[side] = prefix;
     }

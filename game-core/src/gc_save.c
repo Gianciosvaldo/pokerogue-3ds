@@ -69,6 +69,7 @@ typedef struct {
     uint8_t weather, terrain;
     int16_t weather_turns_left, weather_max_duration, terrain_turns_left, terrain_max_duration;
     int32_t player_faints, n_arena_tags, n_pos_tags;
+    bool frozen_names; /* new saves require both halves of stored names */
 } sv_run;
 typedef struct { uint8_t terminal_result; } sv_terminal;
 static const sfield terminal_fields[]={SF(sv_terminal,terminal_result)};
@@ -87,6 +88,7 @@ static const sfield run_fields[] = {
     SF(sv_run, terrain), SF(sv_run, weather_turns_left), SF(sv_run, weather_max_duration),
     SF(sv_run, terrain_turns_left), SF(sv_run, terrain_max_duration), SF(sv_run, player_faints),
     SF(sv_run, n_arena_tags), SF(sv_run, n_pos_tags),
+    SF(sv_run, frozen_names),
 };
 
 static const sfield depth_fields[] = {SF(pr_biome_depths, set), SF(pr_biome_depths, depth), SF(pr_biome_depths, chance)};
@@ -95,8 +97,8 @@ static const sfield mystery_history_fields[] = {
 };
 
 /* An item, its key as text (gc_item.key is a pointer) */
-typedef struct { char key[40]; int16_t arg; int32_t stack; uint32_t pokemon_id; bool detached; int32_t battle_count; } sv_item;
-static const sfield item_fields[] = {SF(sv_item, key), SF(sv_item, arg), SF(sv_item, stack), SF(sv_item, pokemon_id), SF(sv_item, detached), SF(sv_item, battle_count)};
+typedef struct { char key[40]; int16_t arg; int32_t stack; uint32_t pokemon_id; bool detached; int32_t battle_count; bool non_transferable; } sv_item;
+static const sfield item_fields[] = {SF(sv_item, key), SF(sv_item, arg), SF(sv_item, stack), SF(sv_item, pokemon_id), SF(sv_item, detached), SF(sv_item, battle_count), SF(sv_item, non_transferable)};
 
 /* What the run keeps of a Pokemon beside battle-core's part */
 static const sfield mon_fields[] = {
@@ -129,6 +131,7 @@ static const sfield pokemon_fields[] = {
     SF(pr_pokemon, transformed), SF(pr_pokemon, transform_species), SF(pr_pokemon, transform_form),
     SF(pr_pokemon, transform_gender), SF(pr_pokemon, transform_moves), SF(pr_pokemon, transform_pp_used),
     SF(pr_pokemon, transform_pp_up), SF(pr_pokemon, transform_max_pp_override), SF(pr_pokemon, transform_n_moves),
+    SF(pr_pokemon, summon_moves_active), SF(pr_pokemon, summon_moves_alias_mask),
     SF(pr_pokemon, variant),
     SF(pr_pokemon, ability_lookup_known), SF(pr_pokemon, ability_index),
     SF(pr_pokemon, custom_ability), SF(pr_pokemon, fusion_custom_ability),
@@ -144,6 +147,7 @@ static const sfield tag_fields[] = {
     SF(pr_battler_tag, faint_count), SF(pr_battler_tag, stat), SF(pr_battler_tag, multiplier), SF(pr_battler_tag, hp),
     SF(pr_battler_tag, in_focus), SF(pr_battler_tag, source_index), SF(pr_battler_tag, activated),
     SF(pr_battler_tag, base_pure_flying), SF(pr_battler_tag, move_id), SF(pr_battler_tag, added_this_turn),
+    SF(pr_battler_tag, commanded_form_key),
 };
 static const sfield turn_move_fields[] = {
     SF(pr_turn_move, move), SF(pr_turn_move, use_mode), SF(pr_turn_move, result), SF(pr_turn_move, targets),
@@ -153,10 +157,17 @@ static const sfield arena_tag_fields[] = {
     SF(pr_arena_tag, type), SF(pr_arena_tag, side), SF(pr_arena_tag, turn_count), SF(pr_arena_tag, max_duration),
     SF(pr_arena_tag, source_move), SF(pr_arena_tag, source_id), SF(pr_arena_tag, source_count),
     SF(pr_arena_tag, layers), SF(pr_arena_tag, being_removed),
+    SF(pr_arena_tag, n_pending_heals),
 };
 static const sfield pos_tag_fields[] = {
     SF(pr_positional_tag, type), SF(pr_positional_tag, turn_count), SF(pr_positional_tag, target_index),
     SF(pr_positional_tag, source_id), SF(pr_positional_tag, source_move), SF(pr_positional_tag, heal_hp),
+    SF(pr_positional_tag, pokemon_name), SF(pr_positional_tag, fusion_name),
+};
+static const sfield pending_heal_fields[] = {
+    SF(pr_pending_heal, source_id), SF(pr_pending_heal, pokemon_name),
+    SF(pr_pending_heal, move_id), SF(pr_pending_heal, target_index), SF(pr_pending_heal, restore_pp),
+    SF(pr_pending_heal, fusion_name),
 };
 /* the soak runs' counters travel with the run, so a reloaded run reports what the whole run hit */
 static const sfield stat_fields[] = {SF(gc_run, unported), SF(gc_run, stubs), SF(gc_run, run_core_unported)};
@@ -239,12 +250,23 @@ static int get_block(reader *r, const sfield *f, int nf, void *base, size_t stri
     if (r->bad || rec * (size_t)count > r->n - r->pos) { r->bad = true; *dropped += nf; return 0; }
     /* where each known field sits in a saved record, -1 = not there */
     long at[MAX_SAVED];
+    bool legacy_level[MAX_SAVED] = {false};
+    bool legacy_sub_hp[MAX_SAVED] = {false};
     for (int i = 0; i < nf && i < MAX_SAVED; i++) {
         at[i] = -1;
         const uint32_t h = hash(f[i].name);
         size_t off = 0;
         for (int k = 0; k < n; k++) {
-            if (sh[k] == h && ss[k] == f[i].size) { at[i] = (long)off; break; }
+            /* Only the two historical byte-sized Pokemon level fields may
+             * widen. All unrelated size mismatches retain normal drop behavior. */
+            bool byte_level = ss[k] == 1 && f[i].size == sizeof(int32_t)
+                && ((f == pokemon_fields && f[i].off == offsetof(pr_pokemon, level))
+                    || (f == mon_fields && f[i].off == offsetof(gc_mon, met_level)));
+            bool sub_hp = ss[k] == sizeof(int32_t) && f[i].size == sizeof(double)
+                && f == tag_fields && f[i].off == offsetof(pr_battler_tag, hp);
+            if (sh[k] == h && (ss[k] == f[i].size || byte_level || sub_hp)) {
+                at[i] = (long)off; legacy_level[i] = byte_level; legacy_sub_hp[i] = sub_hp; break;
+            }
             off += ss[k];
         }
         if (at[i] < 0 && count > 0) (*dropped)++;
@@ -254,7 +276,17 @@ static int get_block(reader *r, const sfield *f, int nf, void *base, size_t stri
         const uint8_t *src = r->p + r->pos + rec * (size_t)k;
         uint8_t *dst = (uint8_t *)base + (size_t)k * stride;
         for (int i = 0; i < nf && i < MAX_SAVED; i++)
-            if (at[i] >= 0) memcpy(dst + f[i].off, src + at[i], f[i].size);
+            if (at[i] >= 0) {
+                if (legacy_level[i]) {
+                    int32_t level = src[at[i]];
+                    memcpy(dst + f[i].off, &level, sizeof level);
+                } else if (legacy_sub_hp[i]) {
+                    int32_t old_hp;
+                    memcpy(&old_hp, src + at[i], sizeof old_hp);
+                    double hp = old_hp;
+                    memcpy(dst + f[i].off, &hp, sizeof hp);
+                } else memcpy(dst + f[i].off, src + at[i], f[i].size);
+            }
     }
     if (count > max) (*dropped)++;
     r->pos += rec * (size_t)count;
@@ -317,6 +349,22 @@ static bool ability_schema_ok(reader r)
         }
     }
     return !r.bad && (found==0 || found==8);
+}
+
+/* Old Transform-only saves have no alias metadata. New moveset identity is atomic. */
+static bool moveset_schema_ok(reader r)
+{
+    const char *fields[]={"summon_moves_active","summon_moves_alias_mask"};
+    bool present[2]={false};int count=0,n=take16(&r);
+    if(r.bad || n>128)return false;
+    for(int i=0;i<n;i++){
+        uint32_t name=take32(&r);uint16_t size=take16(&r);
+        for(int k=0;k<2;k++)if(name==hash(fields[k])){
+            if(size!=1 || present[k])return false;
+            present[k]=true;count++;
+        }
+    }
+    return !r.bad && (count==0 || count==2);
 }
 
 /* ---------------------------------------------------------------- CRC-32 (IEEE) */
@@ -396,6 +444,7 @@ static void put_items(writer *w, const char *name, const gc_item *items, int n)
         sv[i].pokemon_id = items[i].pokemon_id;
         sv[i].detached = items[i].detached;
         sv[i].battle_count = items[i].battle_count;
+        sv[i].non_transferable = items[i].non_transferable;
     }
     size_t s = section_start(w, name);
     put_block(w, item_fields, NF(item_fields), sv, sizeof sv[0], n);
@@ -461,6 +510,7 @@ size_t gc_run_save(const gc_run *run, void *buf, size_t cap)
     v.player_faints = bt->player_faints;
     v.n_arena_tags = bt->n_arena_tags;
     v.n_pos_tags = bt->n_pos_tags;
+    v.frozen_names = true;
 
     writer w = {(uint8_t *)buf, 0, cap, false};
     put(&w, magic, 8);
@@ -486,6 +536,18 @@ size_t gc_run_save(const gc_run *run, void *buf, size_t cap)
     s = section_start(&w, "arena");
     put_block(&w, arena_tag_fields, NF(arena_tag_fields), bt->arena_tags, sizeof bt->arena_tags[0], bt->n_arena_tags);
     put_block(&w, pos_tag_fields, NF(pos_tag_fields), bt->pos_tags, sizeof bt->pos_tags[0], bt->n_pos_tags);
+    section_end(&w, s);
+    /* Optional named section keeps effect records separate and avoids writing
+     * struct padding or ABI-dependent offsets to a PC/3DS save. */
+    s = section_start(&w, "pending-heals");
+    put16(&w, bt->n_arena_tags);
+    for (int i = 0; i < bt->n_arena_tags; i++) {
+        const pr_arena_tag *tag = &bt->arena_tags[i];
+        if (tag->n_pending_heals > PR_MAX_PENDING_HEALS
+            || (tag->n_pending_heals && tag->type != ARENA_TAG_TYPE_PENDING_HEAL)) { w.full = true; break; }
+        put_block(&w, pending_heal_fields, NF(pending_heal_fields), tag->pending_heals,
+                  sizeof tag->pending_heals[0], tag->n_pending_heals);
+    }
     section_end(&w, s);
     s = section_start(&w, "stats");
     put_block(&w, stat_fields, NF(stat_fields), run, sizeof *run, 1);
@@ -535,7 +597,7 @@ static bool mon_ok(const gc_mon *m)
 {
     const pr_pokemon *b = &m->b;
     const pr_species *sp = gc_species(b->species);
-    if (!sp || b->form >= sp->nforms || b->level < 1) return false;
+    if (!sp || b->form >= sp->nforms || b->level < 1 || m->met_level < 0) return false;
     if (m->has_custom_nature && (m->base_nature > 24 || b->nature > 24)) return false;
     if (b->fusion_species != 0) {
         const pr_species *fsp = gc_species(b->fusion_species);
@@ -552,15 +614,26 @@ static bool mon_ok(const gc_mon *m)
         if (!b->fusion_species || !sp || b->temporary_fusion_form>=sp->nforms) return false;
     } else if (b->temporary_fusion_form) return false;
     if (b->n_moves > 4 || b->n_tags > PR_MAX_BATTLER_TAGS || b->n_move_queue > PR_MAX_MOVE_QUEUE) return false;
-    for (int i = 0; i < b->n_moves; i++) if (b->moves[i] >= PR_MOVE_COUNT) return false;
+    for (int i = 0; i < b->n_moves; i++) if (b->moves[i] >= PR_MOVE_COUNT || b->pp_up[i] > 3 || (b->pp_up[i] < 0 && b->pp_up[i] != -4)) return false;
     if (b->n_summon_types > PR_MAX_SUMMON_TYPES || b->n_ab_applied_summon > 4 || b->n_ab_applied_wave > 4) return false;
     if (!berry_history_ok(b)) return false;
+    uint8_t active_byte;memcpy(&active_byte,&b->summon_moves_active,1);
+    if(active_byte>1 || b->summon_moves_alias_mask>15) return false;
+    if(!PR_HAS_SUMMON_MOVES(b) && b->summon_moves_alias_mask) return false;
     if (b->transformed) {
         const pr_species *target = gc_species(b->transform_species);
         if (!target || b->transform_form >= target->nforms || b->transform_gender < -1
-            || b->transform_gender > 1 || b->transform_n_moves > 4) return false;
-        for (int i = 0; i < 4; i++) if (b->transform_moves[i] >= PR_MOVE_COUNT || b->transform_pp_up[i] > 3
+            || b->transform_gender > 1) return false;
+    }
+    if (PR_HAS_SUMMON_MOVES(b)) {
+        if(b->transform_n_moves>4)return false;
+        for (int i = 0; i < 4; i++) if (b->transform_moves[i] >= PR_MOVE_COUNT || b->transform_pp_up[i] > 3 || (b->transform_pp_up[i] < 0 && b->transform_pp_up[i] != -4)
             || b->transform_max_pp_override[i] < -1) return false;
+    }
+    for(int i=0;i<4;i++)if(b->summon_moves_alias_mask & (1u<<i)) {
+        if(i>=b->n_moves || i>=b->transform_n_moves || b->moves[i]!=b->transform_moves[i]
+            || b->pp_used[i]!=b->transform_pp_used[i] || b->pp_up[i]!=b->transform_pp_up[i]
+            || b->max_pp_override[i]!=b->transform_max_pp_override[i])return false;
     }
     return true;
 }
@@ -572,11 +645,14 @@ static bool get_mons(const reader *body, const char *name, gc_mon *mons, int n, 
     if (r.bad) return false;
     if (get_block(&r, mon_fields, NF(mon_fields), mons, sizeof(gc_mon), n, dropped) != n) return false;
     const bool transform_schema = has_transform_schema(r);
-    if (!berry_schema_ok(r) || !ability_schema_ok(r)) return false;
+    if (!berry_schema_ok(r) || !ability_schema_ok(r) || !moveset_schema_ok(r)) return false;
     if (get_block(&r, pokemon_fields, NF(pokemon_fields), &mons[0].b, sizeof(gc_mon), n, dropped) != n) return false;
     for (int i = 0; i < n; i++) {
         pr_pokemon *b = &mons[i].b;
         b->n_tags = (uint8_t)get_block(&r, tag_fields, NF(tag_fields), b->tags, sizeof b->tags[0], PR_MAX_BATTLER_TAGS, dropped);
+        for (int j = 0; j < b->n_tags; j++)
+            if (b->tags[j].commanded_form_key > PR_FORM_COUNT || !isfinite(b->tags[j].hp)
+                || b->tags[j].hp != floor(b->tags[j].hp)) return false;
         const int nh = get_block(&r, turn_move_fields, NF(turn_move_fields), b->move_history, sizeof b->move_history[0],
                                  PR_MAX_MOVE_HISTORY, dropped);
         if (b->n_move_history < nh) b->n_move_history = (uint16_t)nh;
@@ -585,10 +661,14 @@ static bool get_mons(const reader *body, const char *name, gc_mon *mons, int n, 
         if (!berry_history_ok(b)) return false;
         pr_reset_turn_data(b);
         if (b->transformed && !transform_schema) return false;
+        uint8_t active_byte;memcpy(&active_byte,&b->summon_moves_active,1);if(active_byte>1)return false;
         b->variant = mons[i].variant; /* also restores this bridge for older saves */
         if (!b->transformed) {
-            if (b->transform_species) return false;
-            pr_restore_transform(b);
+            if (b->transform_species || b->transform_form || b->transform_gender) return false;
+            if (!b->summon_moves_active) {
+                if (b->transform_n_moves) return false;
+                pr_restore_transform(b);
+            }
         }
         if (r.bad || !mon_ok(&mons[i])) return false;
     }
@@ -611,6 +691,12 @@ static bool get_items(const reader *body, const char *name, gc_item *items, int 
         items[i].pokemon_id = sv[i].pokemon_id;
         items[i].detached = sv[i].detached;
         items[i].battle_count = sv[i].battle_count;
+        uint8_t lock;
+        memcpy(&lock, &sv[i].non_transferable, sizeof lock);
+        if (lock > 1) return false;
+        items[i].non_transferable = lock != 0;
+        /* ModifierData.toModifier reconstructs typeFunc(): cached tier is not saved. */
+        items[i].type_tier = 0;
         items[i].virtual_stack = 0; /* pinned ModifierData saves real stacks only */
     }
     return true;
@@ -641,6 +727,8 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     int dropped = 0;
     reader r = section(&body, "run");
     if (r.bad || get_block(&r, run_fields, NF(run_fields), &v, sizeof v, 1, &dropped) != 1) { *why = "the save is damaged"; return false; }
+    uint8_t frozen_marker; memcpy(&frozen_marker, &v.frozen_names, 1);
+    if (frozen_marker > 1) { *why = "the stored names are damaged"; return false; }
     sv_terminal terminal={0};reader tr=section(&body,"terminal");
     if (!tr.bad) {
         reader scan=body;scan.pos=0;int terminal_sections=0;
@@ -774,10 +862,56 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     if (!r.bad) {
         bt->n_arena_tags = (uint8_t)get_block(&r, arena_tag_fields, NF(arena_tag_fields), bt->arena_tags,
                                               sizeof bt->arena_tags[0], PR_MAX_ARENA_TAGS, &dropped);
-        bt->n_pos_tags = (uint8_t)get_block(&r, pos_tag_fields, NF(pos_tag_fields), bt->pos_tags,
-                                            sizeof bt->pos_tags[0], PR_MAX_POSITIONAL_TAGS, &dropped);
+        int names_lost = 0;
+        bt->n_pos_tags = (uint8_t)get_block(&r, pos_tag_fields, v.frozen_names ? NF(pos_tag_fields) : NF(pos_tag_fields)-2, bt->pos_tags,
+                                            sizeof bt->pos_tags[0], PR_MAX_POSITIONAL_TAGS, &names_lost);
+        if (v.frozen_names && (r.bad || names_lost || bt->n_pos_tags != v.n_pos_tags)) {
+            *why = "the stored wish effects are damaged"; return false;
+        }
+        dropped += names_lost;
+        for (int i=0; i<bt->n_pos_tags; i++) {
+            const pr_positional_tag *t=&bt->pos_tags[i];
+            const pr_species *named=gc_species((uint16_t)(t->pokemon_name >> 16));
+            const pr_species *fused=t->fusion_name ? gc_species((uint16_t)(t->fusion_name >> 16)) : NULL;
+            if ((v.frozen_names && t->type==POSITIONAL_TAG_TYPE_WISH && !t->pokemon_name)
+                || (t->pokemon_name && (!named || ((t->pokemon_name >> 8)&255)>=named->nforms || (t->pokemon_name&255)>3))
+                || (t->fusion_name && (!fused || ((t->fusion_name >> 8)&255)>=fused->nforms || (t->fusion_name&255)))) {
+                *why="the stored wish effects are damaged"; return false;
+            }
+        }
     } else if (v.n_arena_tags || v.n_pos_tags) {
+        if (v.frozen_names) { *why="the stored arena effects are missing"; return false; }
         dropped++;
+    }
+    r = section(&body, "pending-heals");
+    if (!r.bad) {
+        int np = take16(&r), lost = 0;
+        if (np != bt->n_arena_tags) { *why = "the stored healing effects are damaged"; return false; }
+        for (int i = 0; i < np; i++) {
+            pr_arena_tag *tag = &bt->arena_tags[i];
+            int expected = tag->n_pending_heals;
+            tag->n_pending_heals = (uint8_t)get_block(&r, pending_heal_fields, v.frozen_names ? NF(pending_heal_fields) : NF(pending_heal_fields)-1,
+                tag->pending_heals, sizeof tag->pending_heals[0], PR_MAX_PENDING_HEALS, &lost);
+            if (tag->n_pending_heals != expected) r.bad = true;
+            if (tag->n_pending_heals && tag->type != ARENA_TAG_TYPE_PENDING_HEAL) r.bad = true;
+            for (int k = 0; k < tag->n_pending_heals; k++) {
+                const pr_pending_heal *h = &tag->pending_heals[k];
+                const pr_species *named = gc_species((uint16_t)(h->pokemon_name >> 16));
+                const pr_species *fused = h->fusion_name ? gc_species((uint16_t)(h->fusion_name >> 16)) : NULL;
+                if (h->target_index >= 4 || h->restore_pp > 1 || h->move_id >= PR_MOVE_COUNT
+                    || !pr_move_has_attr(h->move_id, PR_AC_SacrificialFullRestoreAttr)
+                    || !named || ((h->pokemon_name >> 8) & 255) >= named->nforms
+                    || (h->fusion_name && (!fused || ((h->fusion_name >> 8) & 255) >= fused->nforms || (h->fusion_name & 255)))
+                    || (h->pokemon_name & 255) > (PR_MSG_POKEMON_ENEMY | PR_MSG_POKEMON_FOE)) r.bad = true;
+                for (int j = 0; j < k; j++)
+                    if (tag->pending_heals[j].target_index == h->target_index
+                        && tag->pending_heals[j].move_id == h->move_id) r.bad = true;
+            }
+        }
+        if (r.bad || lost || r.pos != r.n) { *why = "the stored healing effects are damaged"; return false; }
+    } else {
+        for (int i = 0; i < bt->n_arena_tags; i++)
+            if (bt->arena_tags[i].n_pending_heals) { *why = "the stored healing effects are missing"; return false; }
     }
     if (terminal.terminal_result) {
         bool used[6]={0};

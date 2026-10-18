@@ -119,7 +119,7 @@ static void print_event(const gc_run *run, const gc_event *e)
         printf("  %s %s HP %d/%d\n", e->a ? "foe" : "you", species_name(m->b.species), e->c, m->b.stats[0]);
         break;
     }
-    case GC_EV_EXP: printf("  exp +%d (party %d)\n", e->b, e->a); break;
+    case GC_EV_EXP: printf("  exp +%.0f (party %d)\n", e->exp_amount, e->a); break;
     case GC_EV_MONEY: printf("  money %+d -> %d\n", e->a, e->b); break;
     case GC_EV_TURN: printf("-- turn %d\n", e->a); break;
     default: break;

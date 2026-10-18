@@ -186,11 +186,25 @@ static void exp_phase(gc_run *run, gc_rphase *p)
 {
     gc_mon *m = pm(run, p->a);
     const double exp = floor(gc_apply_exp_boosters(run, p->d));
-    if (p->b) gc_ev_msg(run, "battle:expGain", 2, gc_m_mon(run, "pokemonName", 0, p->a), pr_arg_int("exp", (int)exp));
+    /* Decimal integer interpolation agrees with native Number for safe
+     * integers. Keep larger/invalid awards explicit rather than narrowing or
+     * inventing text for the unsupported Number-to-string domain. */
+    if (!isfinite(exp) || exp < 0 || exp > 9007199254740991.0) {
+        run->run.unported |= PR_REWARD_UNPORTED_LEVEL;
+        return;
+    }
+    if (p->b) gc_ev_msg(run, "battle:expGain", 2, gc_m_mon(run, "pokemonName", 0, p->a), pr_arg_int64("exp", (int64_t)exp));
     const int last = m->b.level;
+    const double before = m->exp;
     gc_mon_add_exp(run, m, exp);
     gc_event *ev = gc_ev_new(run, GC_EV_EXP);
-    if (ev) { ev->a = p->a; ev->b = (int32_t)exp; ev->c = last; }
+    if (ev) {
+        ev->a = p->a;
+        ev->b = exp <= INT32_MAX ? (int32_t)exp : 0;
+        ev->c = last;
+        ev->exp_amount = exp;
+        ev->exp_before = before;
+    }
     if (m->b.level > last) gc_rq_unshift(run, gc_rp(RP_LEVEL_UP, p->a, last, m->b.level));
 }
 
@@ -519,6 +533,7 @@ static void party_heal(gc_run *run)
         b->status_toxic_turns = 0;
         b->status_sleep_turns = b->status_freeze_turns = -1;
         for (int k = 0; k < 4; k++) PR_PP_USED(b)[k] = 0;
+        pr_sync_moveset_aliases(b);
         gc_event *ev = gc_ev_new(run, GC_EV_HP);
         if (ev) { ev->a = 0; ev->b = i; ev->c = b->hp; }
     }

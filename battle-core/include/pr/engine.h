@@ -36,6 +36,7 @@ typedef enum {
     PH_QUIET_FORM_CHANGE,
     PH_DANCER, PH_TERA,
     PH_TRANSFORM,              /* appended: keep existing phase identifiers stable */
+    PH_RETURN,                 /* Scene.newBattle reset-arena return, no replacement */
     PH_COUNT_
 } pr_phase_type;
 #define PH_FIRST_UNPORTED PH_TERA
@@ -47,6 +48,8 @@ typedef struct {
     uint16_t id;
     int8_t slot;               /* moveset index, -1 = detached */
     uint8_t pp_used;           /* detached only */
+    int8_t pp_up;              /* final boss Recover uses -4 */
+    int16_t max_pp_override;   /* detached only */
     bool from_transform;      /* selected PokemonMove belonged to summonData.moveset */
 } pr_move_ref;
 
@@ -70,6 +73,7 @@ typedef struct pr_phase {
     pr_pokemon *end_targets[4]; /* MoveEndPhase.targets */
     uint8_t n_end_targets;
     bool was_follow_up;        /* MoveEndPhase */
+    bool upcoming_interlude;   /* TurnEndPhase: skip Pokemon callbacks and arena tag lapse */
     pr_pokemon *source_p;      /* FaintPhase.source (undefined = NULL) */
     /* MovePhase / MoveEffectPhase.moveHistoryEntry: its targets are the shared list (targets),
      * or entry_targets once Encore gave the MovePhase new targets (the entry keeps the old array) */
@@ -99,6 +103,7 @@ typedef struct pr_phase {
      * doReturn, player) */
     int8_t sw_type, sw_field_index, sw_slot;
     bool sw_modal, sw_do_return, sw_player;
+    bool sw_use_name, position_double; /* encounter prompt/position constructor arguments */
     /* PostSummonPhase; PostSummonActivateAbilityPhase (the same phaseName) is one with
      * ps_activate set: getPriority() and which ability it applies */
     int8_t ps_priority;
@@ -184,6 +189,13 @@ void pr_run_turn(pr_battle *bt, pr_engine *e);
  * it, the "Set" battle style), or at a switch pick after a "yes". The game shows the encounter
  * text and the trainer's intro before calling this. Singles only. */
 void pr_start_battle(pr_battle *bt, pr_engine *e);
+/* EncounterPhase.end queue only; loaded sessions omit fresh player entry work. */
+void pr_queue_encounter_end(pr_battle *bt, pr_engine *e, bool loaded);
+void pr_queue_trainer_summons(pr_battle *bt, pr_engine *e);
+/* Scene.newBattle's player cleanup queue, before Encounter/Return clears summon
+ * data. The caller resets the arena itself and removes the old enemy field. */
+void pr_prepare_player_cleanup(pr_battle *bt, pr_engine *e, bool reset_arena);
+void pr_run_player_cleanup(pr_battle *bt, pr_engine *e);
 
 /* After a stop at PH_CHECK_SWITCH: the player's answer. Yes opens the party screen (a PH_SWITCH
  * stop, answered with pr_resume_switch); no goes on. Runs on to the next stop. */
@@ -265,6 +277,7 @@ pr_msg pr_msg4(const char *key, pr_msg_arg a, pr_msg_arg b, pr_msg_arg c, pr_msg
 pr_msg_arg pr_arg_pokemon(const pr_battle *bt, const char *name, const pr_pokemon *p);   /* with affix */
 pr_msg_arg pr_arg_pokemon_name(const pr_battle *bt, const char *name, const pr_pokemon *p);
 pr_msg_arg pr_arg_int(const char *name, int32_t v);
+pr_msg_arg pr_arg_int64(const char *name, int64_t v);
 pr_msg_arg pr_arg_move(const char *name, int move);
 pr_msg_arg pr_arg_ability(const char *name, int ability);
 pr_msg_arg pr_arg_type(const char *name, int type);
@@ -326,6 +339,12 @@ void pr_instruct_keep(const pr_pokemon *p, int slot);   /* RepeatMoveAttr.movese
 int pr_instruct_slot(const pr_pokemon *p);              /* that slot when it is p's, else -1 */
 int pr_unshift_move_phase(pr_battle *bt, pr_engine *e, pr_pokemon *p, int move, int slot, const int8_t *targets,
                           int n_targets, int use_mode, int timing);
+/* Pokemon.setMove replaces permanent and temporary slots with one new object. */
+void pr_set_move(pr_battle *bt, pr_engine *e, pr_pokemon *p, int slot, uint16_t move);
+void pr_detach_temporary_moves(pr_engine *e, pr_pokemon *p);
+bool pr_copy_last_move(pr_battle *bt, pr_engine *e, pr_pokemon *user,
+                       const pr_pokemon *target, int move, bool permanent);
+
 /* RandomMovesetMoveAttr.selectedMove, one per move (session state upstream keeps on the attribute) */
 void pr_called_selected_reset(void);
 void pr_called_selected_set(int move, int sel);
@@ -360,6 +379,9 @@ bool pr_arena_add_tag(pr_battle *bt, pr_engine *e, int type, int turn_count, int
 int pr_arena_max_layers(int type);
 bool pr_arena_remove_tag_on_side(pr_battle *bt, pr_engine *e, int type, int side, bool quiet);
 void pr_arena_remove_tags_on_side(pr_battle *bt, pr_engine *e, const int32_t *types, int n_types, int side, bool quiet);
+void pr_arena_remove_all_tags(pr_battle *bt, pr_engine *e);
+void pr_arena_gas_source_leave(pr_battle *bt, pr_engine *e);
+bool pr_tag_restricts_move(pr_battle *bt, const pr_pokemon *p, const pr_battler_tag *t, int move);
 void pr_arena_lapse_tags(pr_battle *bt, pr_engine *e);
 /* arena.applyTagsForSide(ConditionalProtectTag, side, false, isProtected, attacker, defender, move,
  * ignoresProtectBypass) */
@@ -369,6 +391,7 @@ void pr_arena_conditional_protect(pr_battle *bt, pr_engine *e, int side, const p
 void pr_unshift_new(pr_battle *bt, pr_engine *e, pr_phase_type t, int battler);
 void pr_unshift_common_anim(pr_battle *bt, pr_engine *e, int battler, int target, int anim);   /* CommonAnimPhase */
 void pr_unshift_pokemon_anim(pr_battle *bt, pr_engine *e, int battler, int type);   /* PokemonAnimPhase */
+void pr_unshift_pokemon_anim_for(pr_battle *bt, pr_engine *e, const pr_pokemon *p, int type);
 /* the running phase, when it is a MovePhase (of Pokemon p, unless p is NULL): phase.cancel() */
 void pr_cancel_current_move(pr_engine *e, const pr_pokemon *p);
 /* MagicCoatTag.apply / ReflectStatusMoveAbAttr.apply: `pokemon` sends `move` back with a
@@ -379,6 +402,9 @@ void pr_reflect_move(pr_battle *bt, pr_engine *e, pr_pokemon *pokemon, const pr_
 void pr_fail_current_move(pr_engine *e);
 /* phaseManager.forceMoveNext(phase => phase.pokemon === p) (Shell Trap) */
 void pr_force_move_next(pr_engine *e, const pr_pokemon *p);
+void pr_force_move_last(pr_engine *e, const pr_pokemon *p);
+bool pr_remove_move_phase(pr_battle *bt, pr_engine *e, const pr_pokemon *p);
+const char *pr_commanded_form_key(const pr_battler_tag *tag);
 /* getMovePhase(condition): the first queued MovePhase using `move` (-1: any) of a player's (1),
  * an enemy's (0) or anyone's (-1) Pokemon, in queue order */
 pr_phase *pr_find_move_phase(pr_engine *e, int move, int player);
@@ -400,6 +426,14 @@ void pr_sync_queued_movers(pr_battle *bt, pr_engine *e);
 void pr_redirect_moves(pr_battle *bt, pr_engine *e, const pr_pokemon *removed, const pr_pokemon *ally);
 
 /* the phases' start() (src/phases.c) */
+int pr_held_item_tier_for_pool(const pr_modifier *m, bool trainer);
+bool pr_apply_eat_berry_move(pr_battle *bt, pr_engine *e, pr_pokemon *user, pr_pokemon *target, bool self_target, bool steal);
+bool pr_steal_move_held_item(pr_battle *bt, pr_engine *e, pr_pokemon *user, pr_pokemon *target, double chance);
+bool pr_apply_turn_held_item_transfer(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_modifier *modifier);
+void pr_apply_turn_held_item_transfers(pr_battle *bt, pr_engine *e, pr_pokemon *p);
+void pr_init_final_boss_phase_two(pr_battle *bt, pr_engine *e, pr_pokemon *p);
+/* MovePhase.resolveRedirectTarget, also used by the native callback replay. */
+void pr_resolve_redirect_target(pr_battle *bt, pr_engine *e, int ph);
 void pr_phase_run(pr_battle *bt, pr_engine *e, int ph);
 /* the running phase, when it is a MoveEffectPhase: its user (getUserPokemon) and move; else NULL */
 pr_pokemon *pr_move_effect_user(pr_battle *bt, pr_engine *e, int *move);
@@ -414,12 +448,16 @@ bool pr_remove_move_held_item(pr_battle *bt, pr_engine *e, pr_pokemon *user,
                              pr_pokemon *target, bool berries_only, pr_modifier *removed);
 void pr_apply_post_victory_stat_change(pr_battle *bt, pr_engine *e, int attr, pr_pokemon *source, int move);
 void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, pr_pokemon *user, pr_pokemon *target);
+void pr_apply_pre_damage_stat_changes(pr_battle *bt, pr_engine *e, pr_pokemon *user, pr_pokemon *target, int move);
 /* unshiftNew("StatStageChangePhase", {battlerIndex, changes: groupStatChange(stats, stages),
  * sourcePokemon}) with no message and no other option; returns the phase (-1 when out of room) */
 int pr_unshift_stat_stage_change(pr_battle *bt, pr_engine *e, int battler, const int32_t *stats, int n_stats,
                                  int stages, pr_pokemon *source);
 /* Pokemon.damageAndUpdate(damage, {result, ignoreFaintPhase, source}): the DamageAnimPhase, the
  * damage, PostDamage abilities; returns the damage dealt */
+/* Pokemon.damage: direct HP changes without DamageAnim/PostDamage hooks. */
+double pr_pokemon_damage(pr_battle *bt, pr_engine *e, pr_pokemon *p, double damage,
+                         bool ignore_segments, bool prevent_endure, bool ignore_faint_phase);
 double pr_damage_and_update(pr_battle *bt, pr_engine *e, pr_pokemon *p, double damage, int result,
                             bool ignore_faint_phase, pr_pokemon *source);
 /* unshiftNew("PokemonHealPhase", battler, hpHealed, options): options as PR_HEAL_* flags, upstream's
@@ -444,10 +482,16 @@ void pr_leave_field(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool clear_effec
 void pr_reset_turn_data(pr_pokemon *p);
 void pr_reset_summon_data(pr_pokemon *p);
 void pr_form_change(pr_battle *bt, const pr_pokemon *p, int trigger_class);
+void pr_form_change_delayed(pr_battle *bt, const pr_pokemon *p, int trigger_class);
 void pr_weather_form_changes(pr_battle *bt, bool revert, const pr_pokemon *source);
 /* SwitchSummonPhase and PostSummonPhase / PostSummonActivateAbilityPhase (src/switching.c) */
 void pr_switch_summon_phase(pr_battle *bt, pr_engine *e, int ph);
 void pr_post_summon_phase(pr_battle *bt, pr_engine *e, int ph);
+bool pr_arena_queue_heal(pr_battle *bt, pr_engine *e, int target_index,
+                        int64_t source_id, int move_id, bool restore_pp, uint32_t pokemon_name);
+bool pr_arena_queue_heal_name(pr_battle *bt, pr_engine *e, int target_index,
+                        int64_t source_id, int move_id, bool restore_pp, pr_msg_arg name);
+bool pr_arena_apply_pending_heal(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool simulated);
 /* SummonPhase (a battle's first send-out), InitEncounterPhase and CheckSwitchPhase (src/switching.c) */
 void pr_summon_phase(pr_battle *bt, pr_engine *e, int ph);
 void pr_init_encounter_phase(pr_battle *bt, pr_engine *e, int ph);

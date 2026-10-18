@@ -29,7 +29,6 @@
 #define AB_FLAG_UNREPLACEABLE (1u << 4)
 static bool ab_replaceable(int ab) { return !(pr_abilities[ab].flags & AB_FLAG_UNREPLACEABLE); }
 static bool ab_copiable(int ab) { return !(pr_abilities[ab].flags & AB_FLAG_UNCOPIABLE); }
-static bool ab_suppressable(int ab) { return !(pr_abilities[ab].flags & AB_FLAG_UNSUPPRESSABLE); }
 /* AB_FLAG_UNSWAPPABLE = UNCOPIABLE | UNREPLACEABLE */
 static bool ab_swappable(int ab) { return !(pr_abilities[ab].flags & (AB_FLAG_UNCOPIABLE | AB_FLAG_UNREPLACEABLE)); }
 
@@ -583,9 +582,11 @@ static double psycho_shift(ARGS)
 }
 
 /* Belch: restriction(user => !user.battleData.hasEatenBerry, ..., alsoCondition = true) adds the
- * condition (user, _, move) => !restriction(user, move). Stuff Cheeks shares the closure with a
- * restriction on the side's BerryModifiers, which aren't a ported class */
+ * condition (user, _, move) => !restriction(user, move). */
 static double belch(ARGS) { UNUSED; return u->has_eaten_berry; }
+static double stuff_cheeks_has_berry(ARGS) { UNUSED; return pr_side_has_berry(bt,u->is_player); }
+static double stuff_cheeks_restricted(ARGS) { return !stuff_cheeks_has_berry(bt,self,u,t,m); }
+
 
 /* Encore: new EncoreTag(user.id).canAdd(target): the target's last non-virtual move, not one
  * Encore can't repeat, still in its moveset with PP left, and no Shell Trap set */
@@ -712,8 +713,7 @@ static double gastro_acid(ARGS)
 {
     UNUSED;
     NEED_TARGET;
-    if (t->ability_suppressed) return 0;
-    return ab_suppressable(t->ability) || (t->passive && ab_suppressable(t->passive));
+    return pr_can_suppress_ability(t);
 }
 
 /* Reflect Type: !user.isTerastallized && (!target.isOfType(UNKNOWN, {returnOriginalTypesIfStellar})
@@ -895,6 +895,18 @@ static double target_move_copiable(ARGS)
     return 1;
 }
 
+/* Sketch's target condition and banlist precede the effective-moveset duplicate check. */
+static double sketch_condition(ARGS)
+{
+    NEED_TARGET;
+    if (!target_move_copiable(bt,self,u,t,m)) return 0;
+    bool unknown=false;
+    const pr_turn_move *last=last_non_virtual_move(bt,t,&unknown);
+    if (unknown || !last || last->move==MOVE_ID_NONE || last->move==MOVE_ID_STRUGGLE || last->move==MOVE_ID_SKETCH) return 0;
+    for(int i=0;i<PR_N_MOVES(u);i++)if(PR_MOVES(u)[i]==last->move)return 0;
+    return 1;
+}
+
 /* Instruct (RepeatMoveAttr.getCondition): the target's last non-virtual move, still in its
  * moveset with PP left and not one Instruct can't repeat; that moveset move is kept for apply */
 static double instruct(ARGS)
@@ -979,6 +991,8 @@ const pr_closure_reg pr_condition_closures[] = {
     {NULL, "8ff758b28223", yawn},
     {"move:375", "edb63cc0c6c1", psycho_shift},
     {"move:562", "3ba58287d0b2", belch},
+    {"move:747", "3ba58287d0b2", stuff_cheeks_has_berry},
+    {"move:747", "0de748961568", stuff_cheeks_restricted},
     {"move:227", "e0aa92d77dd2", encore},
     {NULL, "0a338d0d1122", disable},
     {NULL, "e781731f96ae", spite},
@@ -1003,6 +1017,7 @@ const pr_closure_reg pr_condition_closures[] = {
     {NULL, "286341e0a59e", no_damp},
     {NULL, "9ff91522e088", call_move_possible},
     {NULL, "be284c144c45", target_move_copiable},
+    {"move:166", "a438c7083039", sketch_condition},
     {NULL, "f4ea51926183", instruct},
 };
 const int pr_condition_closures_n = sizeof pr_condition_closures / sizeof pr_condition_closures[0];

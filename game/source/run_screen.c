@@ -1,5 +1,6 @@
 /* The app's run driver (see run_screen.h). */
 #include "run_screen.h"
+#include "run_exp.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -118,16 +119,7 @@ static int slot_of(int party_index) {
 
 /* A party member as it was before the experience this drain still has to show (the run is ahead of the screen) */
 static gc_mon before_exp(int idx) {
-  gc_mon m = G.run.party[idx];
-  bool first = true;
-  for (int j = G.qi; j < G.nq; j++) {
-    const gc_event* e = &G.q[j];
-    if (e->kind != GC_EV_EXP || e->a != idx) continue;
-    m.exp -= e->b;
-    if (first) m.b.level = (uint8_t)e->c; /* the level before the first gain */
-    first = false;
-  }
-  return m;
+  return rs_exp_before_pending(&G.run.party[idx],idx,G.q+G.qi,G.nq-G.qi);
 }
 
 static float exp_ratio_cb(const pr_pokemon* p) {
@@ -699,6 +691,8 @@ static bool resync_field(void) {
       const bv_mon* sh = bv_mon_of(side ? BV_ENEMY : BV_PLAYER);
       if (!m || !G.present[side] || sh->species != pr_pokemon_form(&m->b)->species) continue;
       const int battler = side ? BV_ENEMY : BV_PLAYER;
+      if (m->b.stats[STAT_HP] > 0 && m->b.stats[STAT_HP] != sh->max_hp)
+        *ev_new() = (bv_event){.type = BEV_MAX_HP, .battler = battler, .a = m->b.stats[STAT_HP]};
       if (m->b.hp > sh->hp)
         *ev_new() = (bv_event){.type = BEV_HEAL, .battler = battler, .a = m->b.hp};
       else if (m->b.hp < sh->hp)

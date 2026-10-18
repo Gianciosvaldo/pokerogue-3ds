@@ -90,6 +90,7 @@ enum {
     PR_MOD_DAMAGE_MONEY_REWARD,    /* Golden Punch */
     PR_MOD_MONEY_MULTIPLIER,       /* Amulet Coin dependency of damage money */
     PR_MOD_PRESERVE_BERRY,          /* Berry Pouch; side-wide */
+    PR_MOD_TURN_HELD_TRANSFER,       /* Mini Black Hole; transfer execution tracked separately */
     PR_MOD_COUNT_
 };
 extern const uint8_t pr_mod_parent[PR_MOD_COUNT_];
@@ -102,6 +103,7 @@ typedef struct pr_modifier {
      * is cls). Queries that would call its own shouldApply/apply report it unported. */
     bool unknown_subclass;
     bool is_transferable;          /* PokemonHeldItemModifier.isTransferable */
+    uint8_t type_tier;             /* ModifierType.tier + 1; 0 = absent, tier0 remains falsy */
     int64_t pokemon_id;            /* PokemonHeldItemModifier.pokemonId (ids are 32-bit unsigned); -1 = any Pokemon */
     int32_t stack_count, virtual_stack_count;
     int8_t stat;                   /* BaseStatModifier / TempStatStageBoosterModifier stat */
@@ -133,17 +135,30 @@ typedef struct pr_battler_tag {
     int8_t faint_count;            /* SupremeOverlordTag.faintCount */
     int8_t stat;                   /* HighestStatBoostTag.stat */
     double multiplier;             /* HighestStatBoostTag.multiplier */
-    int32_t hp;                    /* SubstituteTag.hp */
+    double hp;                     /* SubstituteTag.hp can be negative before phase cleanup */
     bool in_focus;                 /* SubstituteTag.sourceInFocus */
     int8_t source_index;           /* SeedTag.sourceIndex (-1 = unset) */
     bool activated;                /* ShellTrapTag.activated */
     bool base_pure_flying;         /* RoostedTag.isBasePureFlying */
     uint16_t move_id;              /* DisabledTag.moveId, EncoreTag.moveId (0: NONE, or undefined) */
     bool added_this_turn;          /* EncoreTag.#addedThisTurn (private upstream, so not dumped) */
+    uint16_t commanded_form_key;   /* cached raw form table index + 1; 0 = default "curly" */
 } pr_battler_tag;
 #define PR_MAX_BATTLER_TAGS 24
 /* summonData.types: Roost gives Flying back on top of up to three others */
 #define PR_MAX_SUMMON_TYPES 4
+
+/* Stored Healing Wish/Lunar Dance effects, in queue order. Source deduplicates
+ * by position and move. Bounds are reported, never truncated silently. */
+#define PR_MAX_PENDING_HEALS 16
+typedef struct pr_pending_heal {
+    int64_t source_id;
+    uint32_t pokemon_name;         /* message identity frozen when queued */
+    uint16_t move_id;
+    uint8_t target_index;
+    uint8_t restore_pp;
+    uint32_t fusion_name;          /* frozen fusion half of the rendered name */
+} pr_pending_heal;
 
 /* Arena tags: arena.tags, in upstream order */
 typedef struct pr_arena_tag {
@@ -155,6 +170,8 @@ typedef struct pr_arena_tag {
     int8_t source_count;           /* SuppressAbilitiesTag.sourceCount */
     int8_t layers;                 /* EntryHazardTag.layers (1 for the other tags) */
     bool being_removed;            /* SuppressAbilitiesTag.beingRemoved */
+    uint8_t n_pending_heals;
+    pr_pending_heal pending_heals[PR_MAX_PENDING_HEALS];
 } pr_arena_tag;
 #define PR_MAX_ARENA_TAGS 24
 
@@ -167,6 +184,7 @@ typedef struct pr_positional_tag {
     uint16_t source_move;          /* DelayedAttackTag.sourceMove */
     double heal_hp;                /* WishTag.healHp */
     uint32_t pokemon_name;         /* WishTag.pokemonName: its user as a message names it (pr_msg_pokemon) */
+    uint32_t fusion_name;
 } pr_positional_tag;
 #define PR_MAX_POSITIONAL_TAGS 8
 
@@ -212,7 +230,7 @@ typedef struct pr_pokemon {
     uint8_t fusion_form;
     pr_illusion illusion;
     int8_t fusion_ability_index; /* 0, 1, 2 for ability1, ability2, ability_hidden; -1 = none */
-    uint8_t level;
+    int32_t level;
     uint8_t ivs[6];
     uint8_t nature;
     uint16_t ability;          /* active ability (getAbility()) */
@@ -244,7 +262,7 @@ typedef struct pr_pokemon {
     uint8_t n_summon_types;            /* its length; 0 = not set (getTypes uses the species') */
     uint16_t moves[4];                 /* moveset, 0 = empty slot */
     uint8_t pp_used[4];
-    uint8_t pp_up[4];
+    int8_t pp_up[4];
     int16_t max_pp_override[4];        /* -1 = undefined */
     uint8_t n_moves;
     int8_t gender;                     /* Gender: -1 genderless, 0 male, 1 female */
@@ -309,18 +327,23 @@ typedef struct pr_pokemon {
     uint8_t transform_form;
     int8_t transform_gender;
     uint16_t transform_moves[4];
-    uint8_t transform_pp_used[4], transform_pp_up[4], transform_n_moves;
+    uint8_t transform_pp_used[4];
+    int8_t transform_pp_up[4];
+    uint8_t transform_n_moves;
     int16_t transform_max_pp_override[4];
+    bool summon_moves_active; /* Mimic can override moves without transforming identity. */
+    uint8_t summon_moves_alias_mask; /* slots sharing their PokemonMove with permanent moves */
     uint8_t variant;           /* permanent shiny variant; Transform does not copy it */
 } pr_pokemon;
 
-/* getMoveset(): temporary collection while transformed; the fields above named
+/* getMoveset(): temporary collection from Transform or Mimic; the fields above named
  * moves/PP always represent the permanent Pokemon.moveset. These selectors also
  * preserve constness and allow PP updates; pass an expression without side effects. */
-#define PR_MOVES(p) ((p)->transformed ? (p)->transform_moves : (p)->moves)
-#define PR_PP_USED(p) ((p)->transformed ? (p)->transform_pp_used : (p)->pp_used)
-#define PR_PP_UP(p) ((p)->transformed ? (p)->transform_pp_up : (p)->pp_up)
-#define PR_MAX_PP(p) ((p)->transformed ? (p)->transform_max_pp_override : (p)->max_pp_override)
+#define PR_HAS_SUMMON_MOVES(p) ((p)->transformed || (p)->summon_moves_active)
+#define PR_MOVES(p) (PR_HAS_SUMMON_MOVES(p) ? (p)->transform_moves : (p)->moves)
+#define PR_PP_USED(p) (PR_HAS_SUMMON_MOVES(p) ? (p)->transform_pp_used : (p)->pp_used)
+#define PR_PP_UP(p) (PR_HAS_SUMMON_MOVES(p) ? (p)->transform_pp_up : (p)->pp_up)
+#define PR_MAX_PP(p) (PR_HAS_SUMMON_MOVES(p) ? (p)->transform_max_pp_override : (p)->max_pp_override)
 #define PR_N_MOVES(p) (*((p)->transformed ? &(p)->transform_n_moves : &(p)->n_moves))
 
 #define PR_MAX_PARTY 6
@@ -540,6 +563,8 @@ int pr_status_healed_list(uint16_t *ability, uint8_t *effect, int max);   /* by 
 const pr_attr *pr_ability_first_attr(uint16_t ability, uint16_t cls);
 /* Pokemon.canApplyAbility for `ability` (the ability or the passive) */
 bool pr_can_apply_ability(pr_battle *bt, const pr_pokemon *p, uint16_t ability);
+/* SuppressAbilitiesAttr.getCondition: raw primary/passive flags, not activation. */
+bool pr_can_suppress_ability(const pr_pokemon *p);
 /* hasAbility(ability) / hasAbilityWithAttr(cls) with canApply = true */
 bool pr_has_ability_active(pr_battle *bt, const pr_pokemon *p, int ability);
 bool pr_has_ability_with_attr(pr_battle *bt, const pr_pokemon *p, uint16_t cls);
@@ -608,6 +633,8 @@ int32_t pr_held_multi_lens_stacks(pr_battle *bt, const pr_pokemon *p);
 void pr_apply_field_effect_modifier(pr_battle *bt, const pr_pokemon *user, int32_t *duration);
 /* calculateBaseStats(): Shuckle Juice, Old Gateau, (fusion), vitamins */
 void pr_apply_base_stat_modifiers(pr_battle *bt, const pr_pokemon *p, double base[6]);
+void pr_apply_base_stat_before_fusion(pr_battle *bt, const pr_pokemon *p, double base[6]);
+void pr_apply_base_stat_after_fusion(pr_battle *bt, const pr_pokemon *p, double base[6]);
 void pr_apply_incrementing_stat_modifier(pr_battle *bt, const pr_pokemon *p, int stat, double *value);
 void pr_apply_nature_weight_modifier(pr_battle *bt, const pr_pokemon *p, double *mult);
 /* Raw projection APIs preserve pinned apply arithmetic outside acquisition caps.
@@ -637,7 +664,9 @@ extern int pr_liechi_berry_fired, pr_ganlon_berry_fired, pr_petaya_berry_fired, 
 extern int pr_enigma_berry_fired, pr_lansat_berry_fired, pr_starf_berry_fired;
 bool pr_berry_should_apply(pr_battle *bt, const pr_pokemon *p, const pr_modifier *m);
 void pr_refresh_berry_modifiers(pr_battle *bt, int side);
+void pr_reset_wave_data(pr_pokemon *p);
 void pr_reset_battle_data(pr_pokemon *p);
+bool pr_side_has_berry(const pr_battle *bt, bool player);
 void pr_record_eaten_berry(pr_battle *bt, pr_pokemon *p, int berry, bool consumed);
 void pr_berry_effect(pr_battle *bt, struct pr_engine *e, pr_pokemon *p, int berry, int8_t *stats, int8_t *stages, int *n);
 void pr_apply_berry(pr_battle *bt, struct pr_engine *e, pr_pokemon *p, pr_modifier *m);
@@ -724,6 +753,9 @@ double pr_get_sprite_scale(const pr_pokemon *p);
 bool pr_can_transform_into(const pr_pokemon *user, const pr_pokemon *target);
 void pr_restore_transform(pr_pokemon *p);
 void pr_set_original_move(pr_pokemon *p, int slot, uint16_t move);
+/* Synchronize the shared PokemonMove slots after modifying effective PP. */
+void pr_sync_moveset_aliases(pr_pokemon *p);
+void pr_use_moveset_pp(pr_pokemon *p, int slot, bool temporary, int count);
 const pr_species *pr_pokemon_fusion_species(const pr_pokemon *p);
 bool pr_is_mega(const pr_pokemon *p);
 uint16_t pr_get_ability(const pr_pokemon *p, bool ignore_override);
@@ -743,6 +775,7 @@ int pr_get_tera_type(const pr_pokemon *p);
 /* p->passive from hasPassive() and getPassiveAbility() */
 /* Enabled passives include Daily custom ability NONE, whose activation phase still queues. */
 bool pr_has_passive(pr_battle *bt, const pr_pokemon *p);
+uint16_t pr_get_passive_ability(const pr_pokemon *p);
 void pr_update_passive(pr_battle *bt, pr_pokemon *p);
 /* damageAndUpdate(damage, {result: INDIRECT, ignoreSegments: true, ignoreFaintPhase: true}) with no
  * source: the HP loss happens at once, as upstream does it in the middle of a damage calculation */
@@ -778,9 +811,9 @@ typedef struct {
     bool ignore_ability, ignore_opp_ability, ignore_ally_ability, is_critical, ignore_held_items, for_defend;
     bool simulated;
 } pr_stat_params;
-int32_t pr_get_effective_stat_p(pr_battle *bt, const pr_pokemon *p, int stat, const pr_stat_params *sp);
+double pr_get_effective_stat_p(pr_battle *bt, const pr_pokemon *p, int stat, const pr_stat_params *sp);
 /* Shorthand for the common case (no ignore flags, simulated). */
-int32_t pr_get_effective_stat(pr_battle *bt, const pr_pokemon *p, int stat,
+double pr_get_effective_stat(pr_battle *bt, const pr_pokemon *p, int stat,
                               const pr_pokemon *opponent, int move, bool is_critical, bool for_defend);
 /* isGrounded(ignoreSemiInvulnerable) and its two halves */
 bool pr_is_forcibly_grounded(pr_battle *bt, const pr_pokemon *p);

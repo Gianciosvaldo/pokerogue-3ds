@@ -28,7 +28,7 @@ const char *const pr_phase_name[PH_COUNT_] = {
     [PH_TOGGLE_DOUBLE_POSITION] = "ToggleDoublePositionPhase", [PH_SELECT_BIOME] = "SelectBiomePhase",
     [PH_SUMMON] = "SummonPhase", [PH_INIT_ENCOUNTER] = "InitEncounterPhase", [PH_CHECK_SWITCH] = "CheckSwitchPhase",
     [PH_NEW_BATTLE] = "NewBattlePhase",
-    [PH_TRANSFORM] = "PokemonTransformPhase",
+    [PH_TRANSFORM] = "PokemonTransformPhase", [PH_RETURN] = "ReturnPhase",
 };
 
 const char *pr_phase_name_of(int t)
@@ -42,7 +42,7 @@ bool pr_phase_is_dynamic(pr_phase_type t)
 {
     switch (t) {
     case PH_MOVE: case PH_COMMON_ANIM: case PH_STAT_STAGE_CHANGE: case PH_OBTAIN_STATUS_EFFECT:
-    case PH_POST_TURN_STATUS_EFFECT: case PH_MOVE_CHARGE: case PH_MOVE_HEADER: case PH_SWITCH_SUMMON:
+    case PH_POST_TURN_STATUS_EFFECT: case PH_MOVE_CHARGE: case PH_MOVE_HEADER: case PH_SWITCH_SUMMON: case PH_RETURN:
     case PH_POST_SUMMON: case PH_SHINY_SPARKLE:
     case PH_MOVE_REFLECT: case PH_DANCER: case PH_TERA: case PH_ATTEMPT_CAPTURE: case PH_TRANSFORM:
         return true;
@@ -174,6 +174,9 @@ void pr_sort_in_speed_order(pr_battle *bt, pr_pokemon **mons, int *payload, int 
     for (int i = 0; i < n; i++)
         if (i == 0 || mons[i] != mons[i - 1]) start[ng++] = i;
     start[ng] = n;
+    /* Native Array.sort never calls its Speed comparator for a single run.
+     * This also permits consecutive phases whose getPokemon() is undefined. */
+    if (ng == 1) return;
     int order[PR_DYN_CAP];
     for (int g = 0; g < ng; g++) order[g] = g;
 
@@ -189,13 +192,13 @@ void pr_sort_in_speed_order(pr_battle *bt, pr_pokemon **mons, int *payload, int 
     }
 
     /* sortBySpeed: (turnCommandManager.setOrder is a test hook, never set here) */
-    int32_t spd[PR_DYN_CAP];
+    double spd[PR_DYN_CAP];
     for (int g = 0; g < ng; g++) spd[g] = pr_get_effective_stat(bt, mons[start[order[g]]], STAT_SPD, NULL, -1, false, false);
     for (int i = 1; i < ng; i++) {           /* stable, like Array.prototype.sort */
         int ko = order[i];
-        int32_t ks = spd[i];
+        double ks = spd[i];
         int j = i - 1;
-        while (j >= 0 && ks - spd[j] > 0) {  /* comparator bSpeed - aSpeed > 0: key goes first */
+        while (j >= 0 && ks > spd[j]) {  /* comparator bSpeed - aSpeed > 0: key goes first */
             order[j + 1] = order[j];
             spd[j + 1] = spd[j];
             j--;
@@ -261,7 +264,7 @@ pr_pokemon *pr_speed_iter_next(pr_battle *bt, pr_speed_iter *it)
 static pr_pokemon *phase_pokemon(pr_battle *bt, pr_engine *e, int ph)
 {
     const pr_phase *p = &e->pool[ph];
-    if (p->type == PH_SWITCH_SUMMON) {
+    if (p->type == PH_SWITCH_SUMMON || p->type == PH_RETURN) {
         /* PartyMemberPokemonPhase.getPokemon(): the party member in slot fieldIndex */
         int side = p->sw_player ? 0 : 1;
         return p->sw_field_index >= 0 && p->sw_field_index < bt->n_party[side] ? bt->party[side][p->sw_field_index] : NULL;
@@ -288,11 +291,29 @@ static void dyn_reorder(pr_battle *bt, pr_engine *e, int type)
     if (n == 0) return;
     pr_pokemon *mons[PR_DYN_CAP];
     int pay[PR_DYN_CAP];
+    bool missing = false, present = false;
+    int missing_kind = -1;
     for (int i = 0; i < n; i++) {
         pay[i] = e->dyn[type][i];
         mons[i] = phase_pokemon(bt, e, pay[i]);
-        if (!mons[i]) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }   /* upstream would throw */
+        missing |= mons[i] == NULL;
+        present |= mons[i] != NULL;
+        if (!mons[i]) {
+            const pr_phase *p = &e->pool[pay[i]];
+            /* getField's empty slots are null; an invalid index (or absent
+             * party member) is undefined. Native grouping distinguishes them. */
+            int kind = p->type != PH_SWITCH_SUMMON && p->type != PH_RETURN
+                && p->battler >= 0 && p->battler < 4;
+            if (missing_kind >= 0 && missing_kind != kind) {
+                pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT);
+                return;
+            }
+            missing_kind = kind;
+        }
     }
+    /* A single undefined group sorts without a comparison. Mixing it with a
+     * real Pokemon would make the native Speed comparator throw. */
+    if (missing && present) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }
     pr_sort_in_speed_order(bt, mons, pay, n);
     if (type == PH_POST_SUMMON) {
         /* PostSummonPhasePriorityQueue.reorder: then by getPriority() descending (a stable sort):
@@ -361,6 +382,45 @@ void pr_force_move_next(pr_engine *e, const pr_pokemon *p)
     }
 }
 
+/* forceMoveLast uses the first cached owner match in the same queue order. */
+void pr_force_move_last(pr_engine *e, const pr_pokemon *p)
+{
+    for (int i = 0; i < e->n_dyn[PH_MOVE]; i++) {
+        pr_phase *m = &e->pool[e->dyn[PH_MOVE][i]];
+        if (m->pokemon == p) {
+            m->timing = MOVE_PHASE_TIMING_MODIFIER_LAST;
+            return;
+        }
+    }
+}
+
+/* tryRemovePhase("MovePhase", phase => phase.pokemon === p): reorder dynamic queue first,
+ * then the tree's first match. Removing a move leaves its dynamic marker in place. */
+bool pr_remove_move_phase(pr_battle *bt, pr_engine *e, const pr_pokemon *p)
+{
+    dyn_reorder(bt, e, PH_MOVE);
+    for (int i = 0; i < e->n_dyn[PH_MOVE]; i++) {
+        int ph = e->dyn[PH_MOVE][i];
+        if (e->pool[ph].pokemon != p) continue;
+        memmove(&e->dyn[PH_MOVE][i], &e->dyn[PH_MOVE][i + 1],
+                (size_t)(e->n_dyn[PH_MOVE] - i - 1));
+        e->n_dyn[PH_MOVE]--;
+        phase_free(e, ph);
+        pr_sync_queued_movers(bt, e);
+        return true;
+    }
+    for (int l = e->n_levels - 1; l >= 0; l--)
+        for (int i = 0; i < e->level_len[l]; i++) {
+            int ph = e->levels[l][i];
+            if (e->pool[ph].type != PH_MOVE || e->pool[ph].pokemon != p) continue;
+            memmove(&e->levels[l][i], &e->levels[l][i + 1], (size_t)(e->level_len[l] - i - 1));
+            e->level_len[l]--;
+            phase_free(e, ph);
+            return true;
+        }
+    return false;
+}
+
 pr_phase *pr_find_move_phase(pr_engine *e, int move, int player)
 {
     for (int i = 0; i < e->n_dyn[PH_MOVE]; i++) {
@@ -389,6 +449,9 @@ static void queue_ability_phases(pr_battle *bt, pr_engine *e, int ph)
 {
     int b = e->pool[ph].battler;
     const pr_pokemon *p = b >= 0 && b < 4 ? bt->field[b] : NULL;
+    /* Source getPlayerField/getEnemyField slices party slots even before the
+     * queued Summon places a sprite on the field. */
+    if (!p && b >= 0 && b < 4 && b % 2 < bt->n_party[b / 2]) p = bt->party[b / 2][b % 2];
     if (!p) { limit(bt, e); return; }
     uint16_t abs[2] = {p->ability, p->passive};
     for (int k = 0; k < 2; k++) {
@@ -525,6 +588,8 @@ void pr_queue_ability_display(pr_battle *bt, pr_engine *e, const pr_pokemon *p, 
         e->pool[ph].anim_result = passive;
         e->pool[ph].anim = passive ? (uint16_t)(p->custom_passive >= 0 ? p->custom_passive : pr_pokemon_base_form(p)->passive)
                                    : p->ability;
+        /* ShowAbilityPhase caches no name when its field lookup has no Pokemon. */
+        if (b < 0) e->pool[ph].anim = -1;
     }
     pr_phase_unshift(bt, e, ph);
 }
@@ -716,43 +781,117 @@ static void engine_reset(pr_battle *bt, pr_engine *e)
     bt->engine = e;
 }
 
-/* EncounterPhase.end, and doTrainerSummon before it: the phases it queues for a single battle */
-void pr_start_battle(pr_battle *bt, pr_engine *e)
+/* Source doPostBattleCleanup queues Return before the attribute callbacks;
+ * unshifted form phases therefore execute before returning the old field. */
+void pr_prepare_player_cleanup(pr_battle *bt, pr_engine *e, bool reset_arena)
 {
     engine_reset(bt, e);
-    if (bt->double_battle) pr_note_unported(bt, PR_FEAT_DOUBLES);
-    if (bt->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) pr_note_unported(bt, PR_FEAT_TRAINER);
-    if (bt->battle_type == BATTLE_TYPE_TRAINER) {
-        /* unshiftNew("SummonPhase", 0, false) */
-        int s = pr_phase_new(e, PH_SUMMON, 2);
-        if (s >= 0) { e->pool[s].sw_field_index = 0; e->pool[s].sw_player = false; }
-        pr_phase_unshift(bt, e, s);
+    if (!reset_arena) return;
+    /* Arena.resetArenaEffects precedes Return and all party init callbacks.
+     * A duration of zero denotes permanent biome weather/terrain. */
+    if (bt->weather_turns_left != 0)
+        pr_try_set_weather(bt, e, WEATHER_TYPE_NONE, NULL);
+    if (bt->terrain_turns_left != 0)
+        pr_try_set_terrain(bt, e, TERRAIN_NONE, true, NULL);
+    bt->player_faints = 0;
+    pr_arena_remove_all_tags(bt, e);
+    int field_count = bt->double_battle ? 2 : 1;
+    for (int i=0;i<field_count && i<bt->n_party[0];i++) {
+        pr_pokemon *p=bt->party[0][i];
+        pr_lapse_tag(bt,e,p,BATTLER_TAG_TYPE_COMMANDED,BATTLER_TAG_LAPSE_TYPE_CUSTOM);
+        if (p->on_field && !p->switch_out_status) {
+            int ph=pr_phase_new(e, PH_RETURN, i);
+            if (ph<0) { e->overflow=true; continue; }
+            e->pool[ph].sw_player=true;e->pool[ph].sw_field_index=i;
+            pr_phase_push(bt,e,ph);
+        }
     }
-    /* the enemy field's shiny sparkles */
-    const pr_pokemon *en = bt->n_party[1] ? bt->party[1][0] : bt->field[2];   /* getEnemyField(): out or not */
-    if (en && en->shiny) pr_unshift_new(bt, e, PH_SHINY_SPARKLE, 2);
-    /* getPokemonAllowedInBattle(): the player's Pokemon that haven't fainted */
-    const pr_pokemon *allowed[PR_MAX_PARTY];
-    int n_allowed = 0;
-    for (int k = 0; k < bt->n_party[0]; k++)
-        if (bt->party[0][k]->hp > 0) allowed[n_allowed++] = bt->party[0][k];
-    if (!bt->n_party[0]) pr_note_unported(bt, PR_FEAT_PARTY);
-    else if (n_allowed && !(allowed[0]->on_field && !allowed[0]->switch_out_status)) {
-        int s = pr_phase_new(e, PH_SUMMON, 0);
-        if (s >= 0) { e->pool[s].sw_field_index = 0; e->pool[s].sw_player = true; }
-        pr_phase_push(bt, e, s);
+    for (int i=0;i<bt->n_party[0];i++) {
+        pr_pokemon *p=bt->party[0][i];
+        pr_reset_battle_data(p);
+        bool was_tera=p->terastallized;
+        p->terastallized=false;p->stellar_types_boosted=0;
+        if (was_tera) pr_form_change(bt,p,PR_FCT_SpeciesFormChangeLapseTeraTrigger);
+        pr_ab_params pp={.pokemon=p,.move=-1};
+        pr_apply_ab_attrs(bt,PR_AC_PostBattleInitAbAttr,&pp);
     }
-    /* singles: a second Pokemon on the field would go back (ReturnPhase, not ported) */
-    if (n_allowed > 1 && allowed[1]->on_field && !allowed[1]->switch_out_status) pr_note_unported(bt, PR_FEAT_DOUBLES);
-    pr_phase_push(bt, e, pr_phase_new(e, PH_TOGGLE_DOUBLE_POSITION, -1));
-    if (bt->battle_type != BATTLE_TYPE_TRAINER && (bt->wave_index > 1 || bt->game_mode != GAME_MODES_DAILY)
-        && n_allowed > 1) {
-        int s = pr_phase_new(e, PH_CHECK_SWITCH, -1);
-        if (s >= 0) e->pool[s].sw_field_index = 0;
-        pr_phase_push(bt, e, s);
+}
+
+void pr_run_player_cleanup(pr_battle *bt, pr_engine *e)
+{
+    bt->engine=e;
+    /* The owning encounter follows this queue. A stop sentinel hands it back. */
+    pr_phase_push(bt,e,pr_phase_new(e,PH_TURN_INIT,-1));
+    run_phases(bt,e,e->overflow ? -1 : shift_phase(bt,e));
+}
+
+/* EncounterPhase.end. Trainer prelude and queue execution belong to the caller. */
+void pr_queue_encounter_end(pr_battle *bt, pr_engine *e, bool loaded)
+{
+    int count=bt->double_battle?2:1;
+    for(int k=0;k<count&&k<bt->n_party[1];k++)
+        if(bt->party[1][k]->shiny)pr_unshift_new(bt,e,PH_SHINY_SPARKLE,2+k);
+    if(!loaded){
+        const pr_pokemon *allowed[PR_MAX_PARTY];int n_allowed=0;
+        for(int k=0;k<bt->n_party[0];k++)if(bt->party[0][k]->hp>0)allowed[n_allowed++]=bt->party[0][k];
+        if(!n_allowed){pr_note_unported(bt,PR_FEAT_PARTY);return;}
+        if(!allowed[0]->on_field||allowed[0]->switch_out_status){
+            int s=pr_phase_new(e,PH_SUMMON,0);
+            if(s>=0){e->pool[s].sw_field_index=0;e->pool[s].sw_player=true;}
+            pr_phase_push(bt,e,s);
+        }
+        if(bt->double_battle){
+            if(n_allowed>1){
+                int t=pr_phase_new(e,PH_TOGGLE_DOUBLE_POSITION,-1);
+                if(t>=0)e->pool[t].position_double=true;
+                pr_phase_push(bt,e,t);
+                if(!allowed[1]->on_field||allowed[1]->switch_out_status){
+                    int s=pr_phase_new(e,PH_SUMMON,1);
+                    if(s>=0){e->pool[s].sw_field_index=1;e->pool[s].sw_player=true;}
+                    pr_phase_push(bt,e,s);
+                }
+            }
+        }else{
+            if(n_allowed>1&&allowed[1]->on_field&&!allowed[1]->switch_out_status){
+                int s=pr_phase_new(e,PH_RETURN,1);
+                if(s>=0){e->pool[s].sw_field_index=1;e->pool[s].sw_player=true;e->pool[s].sw_do_return=true;e->pool[s].sw_type=SWITCH_TYPE_SWITCH;e->pool[s].sw_slot=-1;}
+                pr_phase_push(bt,e,s);
+            }
+            pr_phase_push(bt,e,pr_phase_new(e,PH_TOGGLE_DOUBLE_POSITION,-1));
+        }
+        if(bt->battle_type!=BATTLE_TYPE_TRAINER&&(bt->wave_index>1||bt->game_mode!=GAME_MODES_DAILY)
+            &&n_allowed>(bt->double_battle?2:1)){
+            for(int k=0;k<(bt->double_battle?2:1);k++){
+                int s=pr_phase_new(e,PH_CHECK_SWITCH,-1);
+                if(s>=0){e->pool[s].sw_field_index=k;e->pool[s].sw_use_name=bt->double_battle;}
+                pr_phase_push(bt,e,s);
+            }
+        }
     }
-    pr_phase_push(bt, e, pr_phase_new(e, PH_INIT_ENCOUNTER, -1));
-    run_phases(bt, e, shift_phase(bt, e));
+    pr_phase_push(bt,e,pr_phase_new(e,PH_INIT_ENCOUNTER,-1));
+}
+
+/* doEncounterCommon's trainer prelude before EncounterPhase.end. */
+void pr_queue_trainer_summons(pr_battle *bt, pr_engine *e)
+{
+    if(bt->battle_type==BATTLE_TYPE_TRAINER){
+        int legal=0;for(int k=0;k<bt->n_party[1];k++)legal+=bt->party[1][k]->hp>0;
+        for(int k=0;k<(bt->double_battle&&legal>1?2:1);k++){
+            int s=pr_phase_new(e,PH_SUMMON,2+k);
+            if(s>=0){e->pool[s].sw_field_index=k;e->pool[s].sw_player=false;}
+            pr_phase_unshift(bt,e,s);
+        }
+    }
+}
+
+/* Fresh encounter trainer prelude, then its end queue. */
+void pr_start_battle(pr_battle *bt, pr_engine *e)
+{
+    engine_reset(bt,e);
+    if(bt->battle_type==BATTLE_TYPE_MYSTERY_ENCOUNTER)pr_note_unported(bt,PR_FEAT_TRAINER);
+    pr_queue_trainer_summons(bt,e);
+    pr_queue_encounter_end(bt,e,false);
+    run_phases(bt,e,shift_phase(bt,e));
 }
 
 void pr_answer_check_switch(pr_battle *bt, pr_engine *e, bool yes)

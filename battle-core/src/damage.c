@@ -307,10 +307,10 @@ double pr_calculate_stab_multiplier(pr_battle *bt, const pr_pokemon *src, int mo
     return stab < 2.25 ? stab : 2.25;
 }
 
-static int32_t to_dmg_value(double v)
+static double to_dmg_value(double v)
 {
     v = floor(v);
-    return v > 1 ? (int32_t)v : 1;
+    return v > 1 ? v : 1;
 }
 
 double pr_calculate_boss_segment_damage(double damage, double current_hp, double segment_hp,

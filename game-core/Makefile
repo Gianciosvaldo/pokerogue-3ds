@@ -449,3 +449,222 @@ form-lifecycle-host-test: $(BUILD)/form_lifecycle_host_test
 $(BUILD)/form_lifecycle_host_test: tests/form_lifecycle_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
 .PHONY: form-lifecycle-host-test
+
+all: $(BUILD)/battle_bond_host_test
+test: battle-bond-host-test
+battle-bond-host-test: $(BUILD)/battle_bond_host_test
+	$(BUILD)/battle_bond_host_test
+$(BUILD)/battle_bond_host_test: tests/battle_bond_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+.PHONY: battle-bond-host-test
+
+all: $(BUILD)/copying_host_test
+test: copying-host-test
+copying-host-test: $(BUILD)/copying_host_test
+	$(BUILD)/copying_host_test
+$(BUILD)/copying_host_test: tests/copying_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: copying-host-test
+
+all: $(BUILD)/native_form_host_test
+test: native-form-host-test
+native-form-host-test: $(BUILD)/native_form_host_test
+	$(BUILD)/native_form_host_test
+$(BUILD)/native_form_host_test: tests/native_form_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) -Isrc $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+.PHONY: native-form-host-test
+
+all: $(BUILD)/arena_cleanup_host_test
+test: arena-cleanup-host-test
+arena-cleanup-host-test: $(BUILD)/arena_cleanup_host_test
+	$(BUILD)/arena_cleanup_host_test
+$(BUILD)/arena_cleanup_host_test: tests/arena_cleanup_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: arena-cleanup-host-test
+
+all: $(BUILD)/stance_change_host_test
+test: stance-change-host-test
+stance-change-host-test: $(BUILD)/stance_change_host_test
+	$(BUILD)/stance_change_host_test
+$(BUILD)/stance_change_host_test: tests/stance_change_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: stance-change-host-test
+
+all: $(BUILD)/transform_restriction_host_test
+test: transform-restriction-host-test
+transform-restriction-host-test: $(BUILD)/transform_restriction_host_test
+	$(BUILD)/transform_restriction_host_test
+$(BUILD)/transform_restriction_host_test: tests/transform_restriction_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: transform-restriction-host-test
+
+all: $(BUILD)/weather_form_host_test
+test: weather-form-host-test
+weather-form-host-test: $(BUILD)/weather_form_host_test
+	$(BUILD)/weather_form_host_test
+$(BUILD)/weather_form_host_test: tests/weather_form_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: weather-form-host-test
+
+all: $(BUILD)/pending_heal_host_test
+test: pending-heal-host-test
+pending-heal-host-test: $(BUILD)/pending_heal_host_test
+	$(BUILD)/pending_heal_host_test
+$(BUILD)/pending_heal_host_test: tests/pending_heal_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: pending-heal-host-test
+
+all: $(BUILD)/stat_order_host_test
+test: stat-order-host-test
+stat-order-host-test: $(BUILD)/stat_order_host_test
+	$(BUILD)/stat_order_host_test
+$(BUILD)/stat_order_host_test: tests/stat_order_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: stat-order-host-test
+
+all: $(BUILD)/fusion_name_host_test
+test: fusion-name-host-test
+fusion-name-host-test: $(BUILD)/fusion_name_host_test
+	$(BUILD)/fusion_name_host_test
+$(BUILD)/fusion_name_host_test: tests/fusion_name_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: fusion-name-host-test
+
+all: $(BUILD)/interlude_host_test
+test: interlude-host-test
+interlude-host-test: $(BUILD)/interlude_host_test
+	$(BUILD)/interlude_host_test
+$(BUILD)/interlude_host_test: tests/interlude_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: interlude-host-test
+
+all: $(BUILD)/boss_pp_host_test
+test: boss-pp-host-test
+boss-pp-host-test: $(BUILD)/boss_pp_host_test
+	$(BUILD)/boss_pp_host_test
+$(BUILD)/boss_pp_host_test: tests/boss_pp_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: boss-pp-host-test
+
+all: $(BUILD)/item_transfer_host_test
+test: item-transfer-host-test
+item-transfer-host-test: $(BUILD)/item_transfer_host_test
+	$(BUILD)/item_transfer_host_test
+$(BUILD)/item_transfer_host_test: tests/item_transfer_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: item-transfer-host-test
+
+all: $(BUILD)/helping_hand_host_test
+test: helping-hand-host-test
+helping-hand-host-test: $(BUILD)/helping_hand_host_test
+	$(BUILD)/helping_hand_host_test
+$(BUILD)/helping_hand_host_test: tests/helping_hand_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: helping-hand-host-test
+
+all: $(BUILD)/acupressure_host_test
+test: acupressure-host-test
+acupressure-host-test: $(BUILD)/acupressure_host_test
+	$(BUILD)/acupressure_host_test
+$(BUILD)/acupressure_host_test: tests/acupressure_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: acupressure-host-test
+
+all: $(BUILD)/suppression_host_test
+test: suppression-host-test
+suppression-host-test: $(BUILD)/suppression_host_test
+	$(BUILD)/suppression_host_test
+$(BUILD)/suppression_host_test: tests/suppression_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: suppression-host-test
+
+all: $(BUILD)/wide_level_host_test
+test: wide-level-host-test
+wide-level-host-test: $(BUILD)/wide_level_host_test
+	$(BUILD)/wide_level_host_test
+$(BUILD)/wide_level_host_test: tests/wide_level_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: wide-level-host-test
+
+all: $(BUILD)/flame_burst_host_test
+test: flame-burst-host-test
+flame-burst-host-test: $(BUILD)/flame_burst_host_test
+	$(BUILD)/flame_burst_host_test
+$(BUILD)/flame_burst_host_test: tests/flame_burst_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: flame-burst-host-test
+
+all: $(BUILD)/partner_cures_host_test
+test: partner-cures-host-test
+partner-cures-host-test: $(BUILD)/partner_cures_host_test
+	$(BUILD)/partner_cures_host_test
+$(BUILD)/partner_cures_host_test: tests/partner_cures_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: partner-cures-host-test
+
+all: $(BUILD)/attention_host_test
+test: attention-host-test
+attention-host-test: $(BUILD)/attention_host_test
+	$(BUILD)/attention_host_test
+$(BUILD)/attention_host_test: tests/attention_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: attention-host-test
+
+all: $(BUILD)/commander_host_test
+test: commander-host-test
+commander-host-test: $(BUILD)/commander_host_test
+	$(BUILD)/commander_host_test
+$(BUILD)/commander_host_test: tests/commander_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: commander-host-test
+
+all: $(BUILD)/wide_progression_diff_test
+$(BUILD)/wide_progression_diff_test: tests/wide_progression_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/wide_progression_host_test
+test: wide-progression-host-test
+wide-progression-host-test: $(BUILD)/wide_progression_host_test
+	$(BUILD)/wide_progression_host_test
+$(BUILD)/wide_progression_host_test: tests/wide_progression_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: wide-progression-host-test
+
+all: $(BUILD)/move_theft_host_test
+test: move-theft-host-test
+move-theft-host-test: $(BUILD)/move_theft_host_test
+	$(BUILD)/move_theft_host_test
+$(BUILD)/move_theft_host_test: tests/move_theft_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: move-theft-host-test
+
+all: $(BUILD)/move_theft_tier_diff_test
+$(BUILD)/move_theft_tier_diff_test: tests/move_theft_tier_diff_test.c tests/move_theft_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/move_theft_tier_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+
+all: $(BUILD)/berry_moves_host_test
+test: berry-moves-host-test
+berry-moves-host-test: $(BUILD)/berry_moves_host_test
+	$(BUILD)/berry_moves_host_test
+$(BUILD)/berry_moves_host_test: tests/berry_moves_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: berry-moves-host-test
+
+all: $(BUILD)/wide_exp_phase_diff_test
+$(BUILD)/wide_exp_phase_diff_test: tests/wide_exp_phase_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/wide_exp_phase_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+
+$(BUILD)/wide_exp_phase_diff_test: ../game/source/run_exp.h
+
+test: wide-exp-phase-host-test
+wide-exp-phase-host-test: $(BUILD)/wide_exp_phase_diff_test
+	$(BUILD)/wide_exp_phase_diff_test --selftest
+.PHONY: wide-exp-phase-host-test
+
+all: $(BUILD)/wide_combat_save_host_test
+test: wide-combat-save-host-test
+wide-combat-save-host-test: $(BUILD)/wide_combat_save_host_test
+	$(BUILD)/wide_combat_save_host_test
+$(BUILD)/wide_combat_save_host_test: tests/wide_combat_save_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: wide-combat-save-host-test

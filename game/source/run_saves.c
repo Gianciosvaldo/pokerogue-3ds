@@ -38,7 +38,7 @@ void rsv_summarize(const gc_run* run, rsv_info* out) {
     o->gender = (int8_t)m->b.gender;
     o->shiny = m->b.shiny;
     o->variant = m->variant;
-    o->level = m->b.level > 255 ? 255 : (uint8_t)m->b.level;
+    o->level = m->b.level;
     o->fainted = m->b.hp <= 0;
   }
 }

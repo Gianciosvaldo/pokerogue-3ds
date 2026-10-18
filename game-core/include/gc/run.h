@@ -50,7 +50,7 @@ typedef enum {
                           * b = party index (party[] or enemy[]), c = field slot */
     GC_EV_RECALL,        /* outside a turn, a Pokemon goes back into its ball: a = side, b = party index */
     GC_EV_HP,            /* outside a turn (items, the party heal): a = side, b = party index, c = HP now */
-    GC_EV_EXP,           /* a = party index, b = exp gained, c = level before */
+    GC_EV_EXP,           /* a = party index, c = level before; see exp_amount/exp_before */
     GC_EV_LEVEL_UP,      /* a = party index, b = the new level (stats are already updated) */
     GC_EV_MOVE_LEARNED,  /* a = party index, b = move slot, c = MoveId */
     GC_EV_EVOLVED,       /* a = party index, b = species before, c = species after */
@@ -65,6 +65,10 @@ typedef struct {
     uint8_t kind;               /* gc_event_kind */
     int32_t a, b, c;
     pr_msg msg;                 /* GC_EV_MESSAGE */
+    /* GC_EV_EXP only: exact native award and the pre-award display state.
+     * b mirrors the amount only when it fits int32, otherwise zero. Runtime
+     * events are not part of the session save format. */
+    double exp_amount, exp_before;
 } gc_event;
 
 /* ---------------------------------------------------------------- screens and choices */
@@ -175,7 +179,7 @@ typedef struct gc_mon {
     uint8_t pokeball;           /* PokeballType it was caught in */
     int16_t met_wave;           /* -1 for a starter */
     uint8_t trainer_slot;       /* enemies: TrainerSlot */
-    uint8_t met_level;          /* Pokemon.metLevel: its level when it joined (a catch sets it again) */
+    int32_t met_level;          /* Pokemon.metLevel: its level when it joined (a catch sets it again) */
     int8_t met_biome;           /* Pokemon.metBiome (BiomeId), -1 for a starter */
     uint16_t met_species;       /* Pokemon.metSpecies */
     uint16_t used_tms[64];      /* TMs used on this Pokemon (up to 64) */
@@ -195,6 +199,8 @@ typedef struct {
     bool detached;             /* battle loot owner 0, distinct from wildcard -1 */
     int32_t virtual_stack;     /* transient battle state; excluded from saves */
     int32_t battle_count;      /* canonical temporary booster lifetime; old saves default 0 */
+    bool non_transferable;    /* explicit held-item lock, e.g. final-boss Mini Black Hole */
+    uint8_t type_tier;         /* cached ModifierType.tier + 1; 0 absent */
 } gc_item;
 #define GC_MAX_ITEMS 128
 

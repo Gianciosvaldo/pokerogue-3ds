@@ -13,10 +13,16 @@ static double to_dmg_value(double v) { double f = floor(v); return f < 1 ? 1 : f
 /* ---------------------------------------------------------------- Pokemon helpers */
 
 /* isActive(): isAllowedInBattle (not fainted; no challenges are modelled) */
+static bool is_classic_final_boss(const pr_battle *bt)
+{
+    return (bt->game_mode == GAME_MODES_CLASSIC || bt->game_mode == GAME_MODES_CHALLENGE)
+        && bt->wave_index == 200;
+}
+
 static bool is_active(const pr_pokemon *p) { return p && p->hp > 0; }
 static bool is_on_field(const pr_pokemon *p) { return p && p->on_field && !p->switch_out_status; }
 static bool is_active_on_field(const pr_pokemon *p) { return is_active(p) && is_on_field(p); }
-static int32_t max_hp(const pr_pokemon *p) { return pr_get_stat(p, STAT_HP, false); }
+static int32_t max_hp(const pr_pokemon *p) { return pr_get_stat(p, STAT_HP, true); }
 
 /* getPokemon() of a PokemonPhase: the Pokemon in that field slot */
 static pr_pokemon *slot(pr_battle *bt, int b) { return b >= 0 && b < 4 ? bt->field[b] : NULL; }
@@ -50,18 +56,82 @@ static int active_in_list(pr_battle *bt, const pr_target_list *t, pr_pokemon **o
 
 static pr_target_list *tlist(pr_engine *e, int list) { return list >= 0 ? &e->target_lists[list] : NULL; }
 
+/* Registered native ability-trigger transitions. Attribute predicates choose
+ * whether to call the scene trigger; the scene then matches the raw form key. */
+static bool native_ability_form_target(const pr_pokemon *p, int *target)
+{
+    switch(p->species) {
+    case SPECIES_ID_DARMANITAN: case SPECIES_ID_GALAR_DARMANITAN:
+    case SPECIES_ID_WISHIWASHI: case SPECIES_ID_MORPEKO:
+    case SPECIES_ID_EISCUE: case SPECIES_ID_MIMIKYU:
+        if(p->form<2)*target=1-p->form;
+        return true;
+    case SPECIES_ID_MINIOR:
+        if(p->form<14)*target=p->form<7?p->form+7:p->form-7;
+        return true;
+    case SPECIES_ID_ZYGARDE: {
+        const pr_form *from=pr_pokemon_base_form(p);
+        const char *keys[]={"50-pc","complete","10-pc","10-complete"};
+        const char *to=NULL;
+        for(int i=0;i<4;i++)if(from->form_key&&!strcmp(from->form_key,keys[i]))to=keys[i^1];
+        const pr_species *sp=pr_pokemon_species(p);
+        for(int i=0;to&&i<sp->nforms;i++)if(!strcmp(pr_forms[sp->form0+i].form_key,to))*target=i;
+        return true;
+    }
+    default:return false;
+    }
+}
+
 /* globalScene.triggerPokemonFormChange(pokemon, <trigger class>): mid-battle form changes */
-static void form_change(pr_battle *bt, const pr_pokemon *p, int trigger_class)
+static void form_change_with_delay(pr_battle *bt, const pr_pokemon *p, int trigger_class, bool delayed)
 {
     if (!p) return;
     const pr_species *sp = pr_pokemon_species(p);
     if (!sp || !(sp->form_change_triggers & (1u << trigger_class))) return;
 
+    /* Meloetta's registered post-move predicate cannot trigger without Relic
+     * Song as its newest history entry. Preserve explicit unsupported reporting
+     * for that positive path; ordinary reserve entrants need no form phase. */
+    if (p->species == SPECIES_ID_MELOETTA && trigger_class == PR_FCT_SpeciesFormChangePostMoveTrigger) {
+        const pr_turn_move *last = pr_last_move(bt, p, 0);
+        if (!last || last->move != MOVE_ID_RELIC_SONG) return;
+    }
+
     pr_pokemon *mon = (pr_pokemon *)p;
     int target_form = -1;
 
+    bool stance = mon->species == SPECIES_ID_AEGISLASH;
+    if (mon->species == SPECIES_ID_XERNEAS) {
+        /* Source registers quiet neutral<->active transitions, independent of
+         * abilities. Match raw form keys before considering field activity. */
+        if (trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger) {
+            const pr_form *from = pr_pokemon_base_form(mon);
+            const char *key = is_active_on_field(mon) ? "active" : "neutral";
+            if (from->form_key && strcmp(from->form_key,key)) {
+                const char *previous = is_active_on_field(mon) ? "neutral" : "active";
+                if (!strcmp(from->form_key,previous))
+                    for (int i=0;i<sp->nforms;i++)
+                        if (!strcmp(pr_forms[sp->form0+i].form_key,key)) target_form=i;
+            }
+        }
+    } else if (stance) {
+        if (trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger) {
+            if (mon->form == 1 && !is_active_on_field(mon)) target_form = 0;
+        } else if (trigger_class == PR_FCT_SpeciesFormChangePreMoveTrigger
+                   && pr_has_ability_active(bt, mon, ABILITY_ID_STANCE_CHANGE)) {
+            /* The registered trigger reads turnCommands, including for called moves. */
+            int b = pr_battler_index(bt, mon);
+            if (b >= 0 && b < 4 && bt->commands[b].command >= 0 && !bt->commands[b].no_move) {
+                int move = bt->commands[b].move;
+                if (mon->form == 1 && move == MOVE_ID_KINGS_SHIELD) target_form = 0;
+                else if (mon->form == 0 && move > 0 && move < PR_MOVE_COUNT
+                         && pr_moves[move].category != MOVE_CATEGORY_STATUS) target_form = 1;
+            }
+        }
     /* Weather form triggers are quiet phases upstream, queued before mutation. */
-    if (mon->species == SPECIES_ID_CASTFORM || mon->species == SPECIES_ID_CHERRIM) {
+    } else if (trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger && native_ability_form_target(mon,&target_form)) {
+        /* Match source registrations; queue the mutation below. */
+    } else if (mon->species == SPECIES_ID_CASTFORM || mon->species == SPECIES_ID_CHERRIM) {
         int ability = mon->species == SPECIES_ID_CASTFORM ? ABILITY_ID_FORECAST : ABILITY_ID_FLOWER_GIFT;
         bool raw = mon->base_ability == ability || mon->passive == ability;
         bool suppressed = pr_weather_effect_suppressed(bt);
@@ -79,10 +149,17 @@ static void form_change(pr_battle *bt, const pr_pokemon *p, int trigger_class)
                 : bt->weather == WEATHER_TYPE_NONE || bt->weather == WEATHER_TYPE_SANDSTORM
                   || bt->weather == WEATHER_TYPE_STRONG_WINDS || bt->weather == WEATHER_TYPE_FOG;
             if (weather_reverts || suppressed || mon->ability_suppressed
-                || (mon->ability_override >= 0 && mon->ability_override != ability)) target_form = 0;
+                || (mon->ability_override != 0 && mon->ability_override != ability)) target_form = 0;
         }
     } else if (mon->species == SPECIES_ID_EISCUE && trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger) {
         target_form = mon->form == 0 ? 1 : 0;
+    } else if (mon->species == SPECIES_ID_BATTLE_BOND_GRENINJA && trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger) {
+        /* The attribute's formFunc decides whether this trigger is called.
+         * Both registered form changes have no additional conditions. */
+        target_form = mon->form == 0 ? 1 : 0;
+    } else if (mon->species == SPECIES_ID_ETERNATUS && mon->form == 0
+        && trigger_class == PR_FCT_SpeciesFormChangeManualTrigger) {
+        target_form = 1;
     } else goto other_forms;
     if (target_form >= 0 && target_form != mon->form) {
         pr_engine *e = bt->engine;
@@ -91,84 +168,21 @@ static void form_change(pr_battle *bt, const pr_pokemon *p, int trigger_class)
         if (ph < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }
         e->pool[ph].pokemon = mon;
         e->pool[ph].move_id = (uint16_t)target_form;
-        if (trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger && !is_active_on_field(mon)) pr_phase_push(bt, e, ph);
+        if (delayed) pr_phase_push(bt, e, ph);
         else pr_phase_unshift(bt, e, ph);
     }
     return;
 other_forms:
-    /* 1. Stance Change (Aegislash #681) */
-    if (mon->species == SPECIES_ID_AEGISLASH && pr_has_ability_active(bt, mon, ABILITY_ID_STANCE_CHANGE)) {
-        if (trigger_class == PR_FCT_SpeciesFormChangePreMoveTrigger) {
-            pr_engine *e = bt->engine;
-            if (e && e->current >= 0 && e->pool[e->current].type == PH_MOVE) {
-                uint16_t move_id = e->pool[e->current].move.id;
-                if (move_id == MOVE_ID_KINGS_SHIELD) {
-                    if (mon->form == 1) target_form = 0; /* Blade -> Shield */
-                } else if (pr_moves[move_id].category != MOVE_CATEGORY_STATUS) {
-                    if (mon->form == 0) target_form = 1; /* Shield -> Blade */
-                }
-            }
-        } else if (trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger) {
-            if (!is_active(mon) && mon->form == 1) {
-                target_form = 0; /* Revert to Shield when leaving field */
-            }
-        }
-    }
-    /* 2. Zen Mode (Darmanitan #555, Galar Darmanitan #4555) */
-    else if ((mon->species == SPECIES_ID_DARMANITAN || mon->species == SPECIES_ID_GALAR_DARMANITAN) &&
-             pr_has_ability_active(bt, mon, ABILITY_ID_ZEN_MODE)) {
-        if (trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger) {
-            double hp_ratio = pr_get_hp_ratio(mon, false);
-            int base_form = (mon->form / 2) * 2;
-            if (hp_ratio <= 0.5) {
-                target_form = base_form + 1; /* Zen form */
-            } else {
-                target_form = base_form;     /* Standard form */
-            }
-        }
-    }
-    /* 3. Shields Down (Minior #774) */
-    else if (mon->species == SPECIES_ID_MINIOR && pr_has_ability_active(bt, mon, ABILITY_ID_SHIELDS_DOWN)) {
-        if (trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger) {
-            double hp_ratio = pr_get_hp_ratio(mon, false);
-            int color_offset = mon->form % 7;
-            if (hp_ratio <= 0.5) {
-                target_form = color_offset + 7; /* Core Form (7..13) */
-            } else {
-                target_form = color_offset;     /* Meteor Form (0..6) */
-            }
-        }
-    }
-    /* 4. Hunger Switch (Morpeko #877) */
-    else if (mon->species == SPECIES_ID_MORPEKO && pr_has_ability_active(bt, mon, ABILITY_ID_HUNGER_SWITCH)) {
-        if (trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger) {
-            if (!mon->terastallized) {
-                target_form = (mon->form == 0) ? 1 : 0; /* Full Belly (0) <-> Hangry (1) */
-            }
-        }
-    }
-
-    if (target_form >= 0 && target_form != mon->form) {
-        bool is_revert = (target_form == 0 || (mon->species == SPECIES_ID_MINIOR && target_form < 7));
-        pr_msg_arg pre_name_arg = pr_arg_pokemon(bt, "preName", mon);
-
-        pr_change_form_state(bt, mon, target_form);
-
-        if (bt->engine) {
-            pr_remove_tag(bt, bt->engine, mon, BATTLER_TAG_TYPE_AUTOTOMIZED);
-            if (is_revert) {
-                pr_queue_msg(bt, bt->engine, pr_msg1("battlePokemonForm:revertChange", pr_arg_pokemon(bt, "pokemonName", mon)));
-            } else {
-                pr_queue_msg(bt, bt->engine, pr_msg1("battlePokemonForm:formChange", pre_name_arg));
-            }
-        }
-        return;
-    }
 
     /* Report unported only for form change triggers on other species */
     if (target_form < 0 && (sp->form_change_triggers & (1u << trigger_class))) {
         pr_note_unported(bt, PR_FEAT_FORM_CHANGE);
     }
+}
+
+static void form_change(pr_battle *bt, const pr_pokemon *p, int trigger_class)
+{
+    form_change_with_delay(bt, p, trigger_class, false);
 }
 
 /* globalScene.applyModifiers(<a turn-path modifier class>, player, pokemon): held items and
@@ -183,8 +197,11 @@ static void turn_modifiers(pr_battle *bt, bool player, const pr_pokemon *p)
         bool fused_item = p && p->fusion_species && (m->cls == PR_MOD_SPECIES_CRIT_BOOSTER || m->cls == PR_MOD_SPECIES_STAT_BOOSTER
                 || m->cls == PR_MOD_EVOLUTION_STAT_BOOSTER)
             && (m->pokemon_id == -1 || m->pokemon_id == (int64_t)p->id);
-        if (pr_mod_is_ported_item(m) && !fused_item) continue;
-        if (fused_item || !pr_mod_is(m, PR_MOD_HELD_ITEM) || !p || m->pokemon_id == (int64_t)p->id) {
+        bool vitamin_over_cap = p && m->cls == PR_MOD_BASE_STAT && m->stat >= STAT_HP && m->stat <= STAT_SPD
+            && m->pokemon_id == (int64_t)p->id
+            && (int64_t)m->stack_count + m->virtual_stack_count > p->ivs[m->stat];
+        if (pr_mod_is_ported_item(m) && !fused_item && !vitamin_over_cap) continue;
+        if (fused_item || vitamin_over_cap || !pr_mod_is(m, PR_MOD_HELD_ITEM) || !p || m->pokemon_id == (int64_t)p->id) {
             pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
             return;
         }
@@ -206,7 +223,7 @@ static int ref_pp_used(const pr_phase *ph)
 static int ref_move_pp(const pr_phase *ph)
 {
     const pr_move *m = &pr_moves[ph->move.id];
-    if (ph->move.slot < 0) return move_pp(m, 0, 0);
+    if (ph->move.slot < 0) return move_pp(m, ph->move.pp_up, ph->move.max_pp_override);
     int s = ph->move.slot;
     return move_pp(m, ph->move.from_transform ? ph->pokemon->transform_pp_up[s] : ph->pokemon->pp_up[s],
                    ph->move.from_transform ? ph->pokemon->transform_max_pp_override[s] : ph->pokemon->max_pp_override[s]);
@@ -215,10 +232,9 @@ static int ref_move_pp(const pr_phase *ph)
 /* pokemonMove.usePp(count): ppUsed = min(ppUsed + count, getMovePp()) */
 static void ref_use_pp(pr_phase *ph, int count)
 {
-    int v = ref_pp_used(ph) + count, max = ref_move_pp(ph);
-    if (v > max) v = max;
-    if (ph->move.slot >= 0) (ph->move.from_transform ? ph->pokemon->transform_pp_used : ph->pokemon->pp_used)[ph->move.slot] = (uint8_t)v;
-    else ph->move.pp_used = (uint8_t)v;
+    if(ph->move.slot>=0){pr_use_moveset_pp(ph->pokemon,ph->move.slot,ph->move.from_transform,count);return;}
+    int next=ref_pp_used(ph)+count,max=ref_move_pp(ph);
+    ph->move.pp_used=(uint8_t)(next>max?max:next);
 }
 
 static bool is_charging_move(int move)
@@ -295,6 +311,17 @@ void pr_unshift_pokemon_anim(pr_battle *bt, pr_engine *e, int battler, int type)
     pr_phase_unshift(bt, e, ph);
 }
 
+/* PokemonAnimPhase is a BattlePhase that caches its actual Pokemon object. */
+void pr_unshift_pokemon_anim_for(pr_battle *bt, pr_engine *e, const pr_pokemon *p, int type)
+{
+    int ph = new_pokemon_phase(e, PH_POKEMON_ANIM, pr_battler_index(bt, p));
+    if (ph >= 0) {
+        PH(ph)->anim = (uint16_t)type;
+        PH(ph)->pokemon = (pr_pokemon *)p;
+    }
+    pr_phase_unshift(bt, e, ph);
+}
+
 static void push_new(pr_battle *bt, pr_engine *e, pr_phase_type t, int battler)
 {
     pr_phase_push(bt, e, new_pokemon_phase(e, t, battler));
@@ -311,7 +338,7 @@ int pr_unshift_move_phase(pr_battle *bt, pr_engine *e, pr_pokemon *p, int move, 
     m->pokemon = p;
     m->move.id = (uint16_t)move;
     m->move.slot = (int8_t)slot;
-    m->move.from_transform = p->transformed;
+    m->move.from_transform = PR_HAS_SUMMON_MOVES(p);
     m->move.pp_used = 0;
     m->use_mode = (uint8_t)use_mode;
     m->timing = (uint8_t)timing;
@@ -487,7 +514,7 @@ static void handle_fight_command(pr_battle *bt, pr_engine *e, pr_pokemon *p, int
             PH(h)->pokemon = p;
             PH(h)->move.id = c->move;
             PH(h)->move.slot = (int8_t)slot;
-            PH(h)->move.from_transform = p->transformed;
+            PH(h)->move.from_transform = PR_HAS_SUMMON_MOVES(p);
             PH(h)->move.pp_used = 0;
         }
         pr_phase_unshift(bt, e, h);
@@ -498,7 +525,7 @@ static void handle_fight_command(pr_battle *bt, pr_engine *e, pr_pokemon *p, int
     m->pokemon = p;
     m->move.id = c->move;
     m->move.slot = (int8_t)slot;
-    m->move.from_transform = p->transformed;
+    m->move.from_transform = PR_HAS_SUMMON_MOVES(p);
     m->move.pp_used = 0;
     m->use_mode = c->use_mode;
     /* turnCommand.targets ?? queuedMove.targets: the command's own array */
@@ -741,7 +768,7 @@ static void handle_pre_move_failures(pr_battle *bt, pr_engine *e, int ph)
     move_queue_shift(m->pokemon, NULL);
 }
 
-static double pokemon_damage(pr_battle *bt, pr_engine *e, pr_pokemon *p, double damage, bool prevent_endure,
+double pr_pokemon_damage(pr_battle *bt, pr_engine *e, pr_pokemon *p, double damage, bool ignore_segments, bool prevent_endure,
                              bool ignore_faint_phase);
 
 /* ---- status effects (Status, Pokemon.cureStatus / resetStatus) ---- */
@@ -1134,7 +1161,7 @@ static void resolve_counter_attack_target(pr_battle *bt, pr_engine *e, int ph)
     if (target == BATTLER_INDEX_ATTACKER) move_fail(m);
 }
 
-static void resolve_redirect_target(pr_battle *bt, pr_engine *e, int ph)
+void pr_resolve_redirect_target(pr_battle *bt, pr_engine *e, int ph)
 {
     pr_phase *m = PH(ph);
     pr_target_list *tl = tlist(e, m->targets);
@@ -1153,8 +1180,14 @@ static void resolve_redirect_target(pr_battle *bt, pr_engine *e, int ph)
     /* center-of-attention tags on the opponents (Follow Me, Rage Powder, Spotlight) */
     for (int i = 0; i < 4; i++) {
         pr_pokemon *o = bt->field[i];
-        if (is_active(o) && pr_is_opponent(bt, m->pokemon, o) && pr_get_battler_tag(o, BATTLER_TAG_TYPE_CENTER_OF_ATTENTION))
-            pr_note_unported(bt, PR_FEAT_TAG_LAPSE);
+        if (!is_active_on_field(o) || !pr_is_opponent(bt, m->pokemon, o)) continue;
+        const pr_battler_tag *tag = pr_get_battler_tag(o, BATTLER_TAG_TYPE_CENTER_OF_ATTENTION);
+        if (tag && (tag->source_move != MOVE_ID_RAGE_POWDER
+                    || (!pr_is_of_type(m->pokemon, POKEMON_TYPE_GRASS)
+                        && !pr_has_ability_active(bt, m->pokemon, ABILITY_ID_OVERCOAT)))) {
+            redirect = pr_battler_index(bt, o);
+            by_ability = false;
+        }
     }
     if (current == redirect) return;
     /* BypassRedirectAttr (Snipe Shot...: abilitiesOnly, only against an ability's redirect), then
@@ -1394,7 +1427,7 @@ static void move_phase(pr_battle *bt, pr_engine *e, int ph)
         if (m->entry_targets == -2) m->entry_targets = m->targets;
         m->move.id = (uint16_t)move;
         m->move.slot = (int8_t)encore_slot;
-        m->move.from_transform = user->transformed;
+        m->move.from_transform = PR_HAS_SUMMON_MOVES(user);
         m->move.pp_used = 0;
         m->targets = (int8_t)pr_targets_new(e, tg, n);
     }
@@ -1433,7 +1466,7 @@ static void move_phase(pr_battle *bt, pr_engine *e, int ph)
         bt->ignoring_effect_source = (int8_t)pr_battler_index(bt, user);
     }
 
-    resolve_redirect_target(bt, e, ph);
+    pr_resolve_redirect_target(bt, e, ph);
     resolve_counter_attack_target(bt, e, ph);
 
     bool charging_move = is_charging_move(move);
@@ -1868,7 +1901,9 @@ static void boss_segments_cleared(pr_battle *bt, pr_engine *e, pr_pokemon *p, in
             continue;
         }
 
-        int roll = pr_battle_rand_seed_int(bt, total, 0);
+        /* weightedPick uses the global randSeedInt, not the battle stream. */
+        if (!bt->rng_live) { pr_note_unported(bt, PR_FEAT_GLOBAL_RNG); break; }
+        int roll = pr_rng_seed_int(&bt->rng, total, 0);
         int picked = eligible[0], upto = 0;
         for (int i = 0; i < n_eligible; i++) {
             upto += weights[i];
@@ -1887,14 +1922,13 @@ static void boss_segments_cleared(pr_battle *bt, pr_engine *e, pr_pokemon *p, in
         }
     }
 
-    if (n) {
-        int ph = pr_unshift_stat_stage_change_ex(bt, e, pr_battler_index(bt, p), stats, stages, n, p, 0);
-        if (ph >= 0) PH(ph)->ssc_ignore_abilities = true;
-    }
+    /* The source still queues an empty phase when every stat is capped. */
+    int ph = pr_unshift_stat_stage_change_ex(bt, e, pr_battler_index(bt, p), stats, stages, n, p, 0);
+    if (ph >= 0) PH(ph)->ssc_ignore_abilities = true;
 }
 
-/* Pokemon.damage(damage, ignoreSegments=false, preventEndure, ignoreFaintPhase) */
-static double pokemon_damage(pr_battle *bt, pr_engine *e, pr_pokemon *p, double damage, bool prevent_endure,
+/* Pokemon.damage(damage, ignoreSegments, preventEndure, ignoreFaintPhase) */
+double pr_pokemon_damage(pr_battle *bt, pr_engine *e, pr_pokemon *p, double damage, bool ignore_segments, bool prevent_endure,
                              bool ignore_faint_phase)
 {
     if (p->hp <= 0) return 0;
@@ -1906,9 +1940,10 @@ static double pokemon_damage(pr_battle *bt, pr_engine *e, pr_pokemon *p, double 
         pr_note_unported(bt, PR_FEAT_BOSS_SEGMENTS);
     } else if (ported_boss) {
         double segment_hp = (double)max_hp(p) / p->boss_segments;
-        int min_segment = (bt->game_mode == GAME_MODES_CLASSIC && bt->wave_index == 200 && p->form == 0) ? 1 : 0;
-        damage = pr_calculate_boss_segment_damage(damage, p->hp, segment_hp, min_segment,
-                                                  p->boss_segment_index, &cleared_boss_segment_index);
+        int min_segment = (is_classic_final_boss(bt) && p->form == 0) ? 1 : 0;
+        if (!ignore_segments)
+            damage = pr_calculate_boss_segment_damage(damage, p->hp, segment_hp, min_segment,
+                                                      p->boss_segment_index, &cleared_boss_segment_index);
         if (min_segment == 1 && p->boss_segment_index < 1 && damage > p->hp - 1)
             damage = p->hp - 1;
     }
@@ -1928,8 +1963,11 @@ static double pokemon_damage(pr_battle *bt, pr_engine *e, pr_pokemon *p, double 
     if (damage > p->hp) damage = p->hp;
     p->hp -= (int32_t)damage;
 
-    if (ported_boss && cleared_boss_segment_index <= p->boss_segment_index)
-        boss_segments_cleared(bt, e, p, cleared_boss_segment_index);
+    if (ported_boss) {
+        if (ignore_segments) cleared_boss_segment_index = (int)ceil(p->hp / ((double)max_hp(p) / p->boss_segments));
+        if (cleared_boss_segment_index <= p->boss_segment_index)
+            boss_segments_cleared(bt, e, p, cleared_boss_segment_index);
+    }
 
     if (p->hp <= 0 && !ignore_faint_phase) {
         pr_queue_faint(bt, e, pr_battler_index(bt, p), prevent_endure, -1);
@@ -1950,7 +1988,7 @@ static double damage_and_update(pr_battle *bt, pr_engine *e, pr_pokemon *p, doub
     }
     pr_phase_unshift(bt, e, anim);
     if (p->switch_out_status && source) damage = 0;
-    damage = pokemon_damage(bt, e, p, damage, indirect, ignore_faint_phase);
+    damage = pr_pokemon_damage(bt, e, p, damage, false, indirect, ignore_faint_phase);
     if (anim >= 0) PH(anim)->anim_amount = (int32_t)damage;   /* damagePhase.updateAmount(damage) */
     if (!source || source->hit_count <= 1) pr_post_damage_ab(bt, p, damage, source);
     return damage;
@@ -1998,7 +2036,7 @@ static move_damage apply_move_damage(pr_battle *bt, pr_engine *e, int ph, pr_pok
         return r;
     }
     bool crit = pr_get_critical_hit_result(bt, target, user, move);
-    move_attrs_unported(bt, move, PR_AC_StatChangeBeforeDmgCalcAttr);
+    pr_apply_pre_damage_stat_changes(bt, e, user, target, move);
     pr_damage_result d = pr_get_attack_damage_ex(bt, target, user, move, crit, false, eff);
     /* the first TypeBoostTag boosting the move's type goes if it is one-use (Charge's) */
     for (int i = 0; i < user->n_tags; i++) {
@@ -2020,7 +2058,7 @@ static move_damage apply_move_damage(pr_battle *bt, pr_engine *e, int ph, pr_pok
     if (blocked) {
         /* the doll takes it: totalDamageDealt += min(damage, doll's HP) */
         user->total_damage_dealt += (int32_t)(d.damage < sub->hp ? d.damage : sub->hp);
-        sub->hp -= (int32_t)d.damage;
+        sub->hp -= d.damage;
     } else if (!target->is_player && d.damage >= target->hp) {
         pr_apply_enemy_endure_modifiers(bt, e, target);
         turn_modifiers(bt, false, target);                       /* EnemyEndureChanceModifier */
@@ -2251,6 +2289,25 @@ static void move_header_phase(pr_battle *bt, pr_engine *e, int ph)
     }
 }
 
+/* AwaitCombinedPledgeAttr.apply: no parent HP/condition/chance gate. The
+ * waiting move is overridden; the second move announces its combination. */
+static bool await_combined_pledge(pr_battle *bt, pr_engine *e, pr_pokemon *user, int move)
+{
+    if (user->combining_pledge) {
+        pr_queue_msg(bt, e, pr_msg0("moveTriggers:combiningPledge"));
+        return false;
+    }
+    pr_phase *next = pr_find_move_phase(e, -1, user->is_player ? 1 : 0);
+    if (!next || next->move.id == move || !pr_move_has_attr(next->move.id, PR_AC_AwaitCombinedPledgeAttr)) return false;
+    user->combining_pledge = (uint16_t)move;
+    next->pokemon->combining_pledge = (uint16_t)move;
+    pr_queue_msg(bt, e, pr_msg2("moveTriggers:awaitingPledge",
+        pr_arg_pokemon(bt, "userPokemonName", user),
+        pr_arg_pokemon(bt, "allyPokemonName", next->pokemon)));
+    pr_force_move_next(e, pr_get_ally(bt, user));
+    return true;
+}
+
 static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
 {
     pr_phase *fx = PH(ph);
@@ -2308,20 +2365,16 @@ static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
             call_move(bt, e, move, a, user, first0);
             break;
         }
-        case PR_AC_AwaitCombinedPledgeAttr: {
-            /* the combined move's message when this is the second pledge; else the first queued
-             * MovePhase of a Pokemon on the user's side (getMovePhase), when it holds a different
-             * pledge, makes this one wait for it: only with an ally, which a single battle lacks */
-            if (user->combining_pledge) {
-                pr_queue_msg(bt, e, pr_msg0("moveTriggers:combiningPledge"));
-                break;
-            }
-            const pr_phase *mine = pr_find_move_phase(e, -1, user->is_player ? 1 : 0);
-            if (mine && mine->move.id != move && pr_move_has_attr(mine->move.id, PR_AC_AwaitCombinedPledgeAttr))
-                pr_note_unported(bt, a->cls);
+        case PR_AC_AwaitCombinedPledgeAttr:
+            if (await_combined_pledge(bt, e, user, move)) overridden = true;
+            break;
+        case PR_AC_MovesetCopyMoveAttr: {
+            pr_pokemon *first;
+            me_first_target(bt,e,ph,&first);
+            pr_copy_last_move(bt,e,user,first,move,false);
             break;
         }
-        default:            /* MovesetCopyMoveAttr (Mimic) */
+        default:
             pr_note_unported(bt, a->cls);
         }
     }
@@ -2570,6 +2623,7 @@ static void reset_summon_data(pr_pokemon *p)
 void pr_reset_turn_data(pr_pokemon *p) { reset_turn_data(p); }
 void pr_reset_summon_data(pr_pokemon *p) { reset_summon_data(p); }
 void pr_form_change(pr_battle *bt, const pr_pokemon *p, int trigger_class) { form_change(bt, p, trigger_class); }
+void pr_form_change_delayed(pr_battle *bt, const pr_pokemon *p, int trigger_class) { form_change_with_delay(bt, p, trigger_class, true); }
 
 void pr_weather_form_changes(pr_battle *bt, bool revert, const pr_pokemon *source)
 {
@@ -2598,19 +2652,20 @@ static void quiet_form_change_phase(pr_battle *bt, pr_engine *e, int ph)
     pr_apply_ab_attrs(bt, PR_AC_PreLeaveFieldAbAttr, &pp);
     pr_change_form_state(bt, p, target);
     if (is_active_on_field(p)) {
+        uint16_t passive_ability = pr_get_passive_ability(p);
         bool active_seen = false, passive_seen = false;
         for (int i = 0; i < p->n_form_change_abilities; i++) {
             active_seen |= p->form_change_abilities[i] == p->ability;
-            passive_seen |= p->form_change_abilities[i] == p->passive;
+            passive_seen |= p->form_change_abilities[i] == passive_ability;
         }
         if (!active_seen || !passive_seen) {
             bool add_passive = !passive_seen;
-            bool add_active = !active_seen && (passive_seen || p->ability != p->passive);
+            bool add_active = !active_seen && (passive_seen || p->ability != passive_ability);
             int needed = add_passive + add_active;
             if (p->n_form_change_abilities + needed > 16) pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT);
             else {
                 /* Source Set insertion: passive first, then active, no duplicate NONE. */
-                if (add_passive) p->form_change_abilities[p->n_form_change_abilities++] = p->passive;
+                if (add_passive) p->form_change_abilities[p->n_form_change_abilities++] = passive_ability;
                 if (add_active) p->form_change_abilities[p->n_form_change_abilities++] = p->ability;
                 pp.only = active_seen ? 2 : passive_seen ? 1 : 0;
                 pp.after_form_change = true;
@@ -2681,7 +2736,10 @@ static bool instant_revive(pr_battle *bt, pr_engine *e, pr_pokemon *p)
         pr_speed_iter it;
         pr_pokemon *ally;
         pr_speed_iter_init(bt, &it, p->is_player ? ARENA_TAG_SIDE_PLAYER : ARENA_TAG_SIDE_ENEMY);
-        while ((ally = pr_speed_iter_next(bt, &it))) pr_hook_ab(bt, ally, PR_AC_CommanderAbAttr);
+        while ((ally = pr_speed_iter_next(bt, &it))) {
+            pr_ab_params pp = {.pokemon = ally, .move = -1};
+            pr_apply_ab_attrs(bt, PR_AC_CommanderAbAttr, &pp);
+        }
         pr_lose_held_item(bt, e, p, m);
         /* updateModifiers clears virtual stacks and orphaned held items. */
         int w = 0;
@@ -2766,7 +2824,7 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
         bt->faint_history[1][k].turn = bt->turn;
     }
     pr_queue_msg(bt, e, pr_msg_p(bt, "battle:fainted", p));
-    form_change(bt, p, PR_FCT_SpeciesFormChangeActiveTrigger);
+    form_change_with_delay(bt, p, PR_FCT_SpeciesFormChangeActiveTrigger, true);
     /* resetTera */
     bool was_tera = p->terastallized;
     p->terastallized = false;
@@ -2890,22 +2948,48 @@ void pr_leave_field(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool clear_effec
     pr_ab_params params = {.pokemon = p, .move = -1};
     pr_apply_ab_attrs(bt, PR_AC_PreLeaveFieldAbAttr, &params);
     p->switch_out_status = true;
-    form_change(bt, p, PR_FCT_SpeciesFormChangeActiveTrigger);
+    form_change_with_delay(bt, p, PR_FCT_SpeciesFormChangeActiveTrigger, true);
     p->on_field = false;
+}
+
+/* ReturnPhase inherits Summon.start/preSummon, then ends without a replacement.
+ * The timer executes switchAndSummon after leaveField in the tween callback. */
+static void return_phase(pr_battle *bt, pr_engine *e, int ph)
+{
+    int field=PH(ph)->sw_field_index;
+    pr_pokemon *p=field>=0 && field<bt->n_party[0] ? bt->party[0][field] : NULL;
+    if (!p) { pr_note_unported(bt,PR_FEAT_PARTY);return; }
+    pr_hook_ab(bt,p,PR_AC_PreSummonAbAttr);
+    pr_speed_iter it;pr_speed_iter_init(bt,&it,ARENA_TAG_SIDE_ENEMY);pr_pokemon *q;
+    while ((q=pr_speed_iter_next(bt,&it))) pr_remove_tags_by_source_id(bt,e,q,(int64_t)p->id);
+    pr_show_text(bt,e,pr_msg1("battle:playerComeBack",pr_arg_pokemon(bt,"pokemonName",p)));
+    pr_event_add(bt,e,PR_EV_SWITCH_OUT,field,-1,0,0,NULL);
+    pr_leave_field(bt,e,p,true);
+    /* ReturnPhase.onEnd */
+    pr_reset_turn_data(p);
+    pr_reset_summon_data(p);
+    pr_form_change(bt,p,PR_FCT_SpeciesFormChangeActiveTrigger);
 }
 
 /* ---------------------------------------------------------------- end of turn */
 
 static void check_interlude_phase(pr_battle *bt, pr_engine *e)
 {
-    (void)e;
     if (bt->wave_index % 10 != 0) return;
-    for (int i = 2; i < 4; i++)
-        if (bt->field[i] && bt->field[i]->hp > 0) return;
+    /* Source checks the complete enemy party, not a separate field scan.
+     * Array.every also succeeds for an empty party. */
     for (int k = 0; k < bt->n_party[1]; k++)
         if (party_hp(bt, 1, k) > 0) return;
-    if (bt->n_party[1] == 0) pr_note_unported(bt, PR_FEAT_PARTY);
-    pr_note_unported(bt, PR_FEAT_PHASE_0 + PH_CHECK_INTERLUDE);     /* onInterlude */
+    /* phaseManager.onInterlude removes every matching tree phase. */
+    const pr_phase_type removed[] = {PH_WEATHER_EFFECT, PH_BERRY, PH_CHECK_STATUS_EFFECT};
+    for (size_t i = 0; i < sizeof removed / sizeof removed[0]; i++)
+        while (pr_phase_try_remove(bt, e, removed[i], -1)) {}
+    /* PhaseTree.find visits the highest level first and marks only its first match. */
+    for (int l = e->n_levels - 1; l >= 0; l--)
+        for (int k = 0; k < e->level_len[l]; k++) {
+            pr_phase *p = &e->pool[e->levels[l][k]];
+            if (p->type == PH_TURN_END) { p->upcoming_interlude = true; return; }
+        }
 }
 
 /* Weather.isTypeDamageImmune(type) */
@@ -3014,7 +3098,7 @@ static void positional_tag_phase(pr_battle *bt, pr_engine *e)
             pr_phase_unshift(bt, e, fx);
         } else {
             if (!target || target->hp <= 0) continue;
-            pr_msg_arg name = {"pokemonNameWithAffix", PR_ARG_POKEMON, t->pokemon_name, NULL};
+            pr_msg_arg name = {"pokemonNameWithAffix", PR_ARG_POKEMON, t->pokemon_name, NULL, t->fusion_name};
             pr_unshift_heal_msg(bt, e, t->target_index, t->heal_hp, PR_HEAL_MESSAGE | PR_HEAL_NO_FULL_HP_MESSAGE,
                                 pr_msg1("arenaTag:wishTagOnAdd", name));
         }
@@ -3103,7 +3187,7 @@ static void post_turn_status_effect_phase(pr_battle *bt, pr_engine *e, int ph)
     pr_pokemon *p = slot(bt, PH(ph)->battler);
     if (!is_active_on_field(p) || !(p->status == STATUS_EFFECT_POISON || p->status == STATUS_EFFECT_TOXIC
                                      || p->status == STATUS_EFFECT_BURN) || p->switch_out_status) {
-        if (bt->wave_index == 200) pr_note_unported(bt, PR_FEAT_FINAL_BOSS);  /* end(): isClassicFinalBoss */
+        if (is_classic_final_boss(bt)) pr_init_final_boss_phase_two(bt,e,p);
         return;
     }
     status_increment_turn(p);
@@ -3127,14 +3211,14 @@ static void post_turn_status_effect_phase(pr_battle *bt, pr_engine *e, int ph)
         }
         if (damage) {
             int32_t before = p->hp;
-            pokemon_damage(bt, e, p, damage, true, false);       /* damage(damage, false, preventEndure) */
+            pr_pokemon_damage(bt, e, p, damage, false, true, false);       /* damage(damage, false, preventEndure) */
             pr_event_add(bt, e, PR_EV_HP, PH(ph)->battler, -1, 0, p->hp - before, NULL);   /* the damage number */
             pr_post_damage_ab(bt, p, damage, NULL);              /* the damage asked for, not the HP lost */
         }
         /* CommonAnim.POISON + (effect - 1), then end() */
         pr_event_add(bt, e, PR_EV_COMMON_ANIM, PH(ph)->battler, -1, COMMON_ANIM_POISON + (p->status - 1), 0, NULL);
     }
-    if (bt->wave_index == 200) pr_note_unported(bt, PR_FEAT_FINAL_BOSS);
+    if (is_classic_final_boss(bt)) pr_init_final_boss_phase_two(bt,e,p);
 }
 
 /* Weather.lapse(): the primal weathers last; otherwise a count left counts down and the weather
@@ -3225,7 +3309,7 @@ bool pr_try_set_terrain(pr_battle *bt, pr_engine *e, int terrain, bool ignore_an
     return true;
 }
 
-static void turn_end_phase(pr_battle *bt, pr_engine *e)
+static void turn_end_phase(pr_battle *bt, pr_engine *e, int ph)
 {
     /* currentBattle.incrementTurn() */
     bt->turn++;
@@ -3242,36 +3326,39 @@ static void turn_end_phase(pr_battle *bt, pr_engine *e)
     }
     pr_speed_iter it;
     pr_pokemon *p;
-    pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
-    while ((p = pr_speed_iter_next(bt, &it))) {
-        if (!p->switch_out_status) {
-            pr_lapse_tags(bt, e, p, BATTLER_TAG_LAPSE_TYPE_TURN_END);
-            pr_apply_turn_heal_modifiers(bt, e, p);       /* TurnHealModifier (Leftovers) */
-            turn_modifiers(bt, p->is_player, p);          /* TurnHealModifier (Leftovers) */
-            /* Grassy Terrain heals a grounded Pokemon by 1/16 of its max HP, with a message */
-            if (bt->terrain == TERRAIN_GRASSY && pr_is_grounded(bt, p, false))
-                pr_unshift_heal_msg(bt, e, pr_battler_index(bt, p), to_dmg_value(max_hp(p) / 16.0), PR_HEAL_MESSAGE,
-                                    pr_msg1("battle:turnEndHpRestore", pr_arg_pokemon(bt, "pokemonName", p)));
-            if (!p->is_player) {
-                pr_apply_enemy_turn_heal_modifiers(bt, e, p);
-                pr_apply_enemy_status_heal_modifiers(bt, e, p);
-                turn_modifiers(bt, false, p);
+    if (!PH(ph)->upcoming_interlude) {
+        pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
+        while ((p = pr_speed_iter_next(bt, &it))) {
+            if (!p->switch_out_status) {
+                pr_lapse_tags(bt, e, p, BATTLER_TAG_LAPSE_TYPE_TURN_END);
+                pr_apply_turn_heal_modifiers(bt, e, p);       /* TurnHealModifier (Leftovers) */
+                turn_modifiers(bt, p->is_player, p);          /* TurnHealModifier (Leftovers) */
+                /* Grassy Terrain heals a grounded Pokemon by 1/16 of its max HP, with a message */
+                if (bt->terrain == TERRAIN_GRASSY && pr_is_grounded(bt, p, false))
+                    pr_unshift_heal_msg(bt, e, pr_battler_index(bt, p), to_dmg_value(max_hp(p) / 16.0), PR_HEAL_MESSAGE,
+                                        pr_msg1("battle:turnEndHpRestore", pr_arg_pokemon(bt, "pokemonName", p)));
+                if (!p->is_player) {
+                    pr_apply_enemy_turn_heal_modifiers(bt, e, p);
+                    pr_apply_enemy_status_heal_modifiers(bt, e, p);
+                    turn_modifiers(bt, false, p);
+                }
+                pr_ab_params pt = {.pokemon = p, .move = -1};
+                pr_apply_ab_attrs(bt, PR_AC_PostTurnAbAttr, &pt);
             }
-            pr_ab_params pt = {.pokemon = p, .move = -1};
-            pr_apply_ab_attrs(bt, PR_AC_PostTurnAbAttr, &pt);
-        }
-        if (p->is_dynamaxed) {
-            if (p->dynamax_turns_left > 0) p->dynamax_turns_left--;
-            if (p->dynamax_turns_left == 0) {
-                revert_dynamax(p);
+            if (p->is_dynamaxed) {
+                if (p->dynamax_turns_left > 0) p->dynamax_turns_left--;
+                if (p->dynamax_turns_left == 0) {
+                    revert_dynamax(p);
+                }
             }
+            pr_apply_turn_status_modifiers(bt, e, p);        /* Toxic Orb / Flame Orb */
+            pr_apply_turn_held_item_transfers(bt,e,p);
+            turn_modifiers(bt, p->is_player, p);              /* TurnHeldItemTransferModifier */
+            p->temp_turn_count++;
+            p->temp_wave_turn_count++;
         }
-        pr_apply_turn_status_modifiers(bt, e, p);        /* Toxic Orb / Flame Orb */
-        turn_modifiers(bt, p->is_player, p);              /* TurnHeldItemTransferModifier */
-        p->temp_turn_count++;
-        p->temp_wave_turn_count++;
+        pr_arena_lapse_tags(bt, e);
     }
-    pr_arena_lapse_tags(bt, e);
     if (bt->weather != WEATHER_TYPE_NONE && !weather_lapse(bt)) {
         pr_try_set_weather(bt, e, WEATHER_TYPE_NONE, NULL);
         /* triggerWeatherBasedFormChangesToNormal: Castform and Cherrim (form changes aren't ported) */
@@ -3475,11 +3562,15 @@ static void stat_stage_change_phase(pr_battle *bt, pr_engine *e, int ph)
         if (applied[i]) moved |= 1 << q->ssc_stat[i];
     }
     if (moved) pr_event_add(bt, e, PR_EV_STAT_STAGES, q->battler, -1, increase, moved, NULL);
-    /* queueStatChangeMessages: the given message (no caller passes one), or one per group of
+    /* queueStatChangeMessages: the supplied callback message, or one per group of
      * equal applied stages (Map.groupBy: in first-seen order), getStatStageChangeDescriptionKey
      * with the stats joined as formatStatsFragment does */
-    if (q->ssc_message) pr_queue_message(bt, e);
-    else
+    if (q->ssc_message) {
+        if (q->move_id == MOVE_ID_BELLY_DRUM)
+            pr_queue_msg(bt, e, pr_msg2("moveTriggers:cutOwnHpAndMaximizedStat",
+                pr_arg_pokemon(bt, "pokemonName", p), pr_arg_stat("statName", STAT_ATK)));
+        else pr_queue_message(bt, e);
+    } else
         for (int i = 0; i < q->n_ssc; i++) {
             bool seen = false;
             for (int j = 0; j < i; j++) seen |= applied[j] == applied[i];
@@ -3607,8 +3698,10 @@ static void pokemon_heal_phase(pr_battle *bt, pr_engine *e, int ph)
         text = pr_status_msg(bt, p->status, PR_ST_HEAL, p);
         reset_status_as_phase(bt, e, p, true, false);
     }
-    if (f & PR_HEAL_RESTORE_PP)
+    if (f & PR_HEAL_RESTORE_PP) {
         for (int i = 0; i < PR_N_MOVES(p); i++) PR_PP_USED(p)[i] = 0;
+        pr_sync_moveset_aliases(p);
+    }
     if (message) pr_queue_msg(bt, e, text);
 }
 
@@ -3755,7 +3848,9 @@ static void transform_phase(pr_battle *bt, pr_engine *e, int ph)
     uint16_t copied_moves[4];
     memcpy(copied_moves, PR_MOVES(target), sizeof copied_moves);
     int target_gender = pr_get_gender(target);
+    pr_detach_temporary_moves(e,user);
     user->transformed = true;
+    user->summon_moves_active=true;user->summon_moves_alias_mask=0;
     user->transform_species = form->species;
     user->transform_form = form->form_index;
     user->ability_override = user->ability = target->ability;
@@ -3775,13 +3870,59 @@ static void transform_phase(pr_battle *bt, pr_engine *e, int ph)
     pr_set_summon_types(bt, user, types, n);
     /* The source names target.name, not its illusion's rendered name. */
     pr_msg_arg target_name = {"targetName", PR_ARG_POKEMON_NAME,
-        pr_msg_pokemon(target->species, target->form, 0), NULL};
+        pr_msg_pokemon(target->species, target->form, 0), NULL,
+        target->fusion_species ? pr_msg_pokemon(target->fusion_species, target->fusion_form, 0) : 0};
     pr_queue_msg(bt, e, pr_msg2("abilityTriggers:postSummonTransform",
         pr_arg_pokemon(bt, "pokemonNameWithAffix", user), target_name));
     pr_event_add(bt, e, PR_EV_TRANSFORM, phase->battler, phase->transform_target, 0, phase->transform_sound, NULL);
     /* Source assigns the copied ability first, then runs setTempAbility after
      * loadAssets resolves. In the headless engine the visual event is the boundary. */
     pr_set_temp_ability(bt, user, target->ability);
+}
+
+/* BattleScene.initFinalBossPhaseTwo: caller owns isClassicFinalBoss eligibility.
+ * Dialogue, BGM and field scale are presentation; queue order remains gameplay. */
+void pr_init_final_boss_phase_two(pr_battle *bt, pr_engine *e, pr_pokemon *p)
+{
+    if (!p || p->is_player || !p->boss_segments || p->form > 0 || p->boss_segment_index >= 1) return;
+    bool found = false;
+    for (int i = 0; i < bt->n_mods[1]; i++) {
+        pr_modifier *m = &bt->mods[1][i];
+        if (m->cls == PR_MOD_TURN_HELD_TRANSFER && m->pokemon_id == (int64_t)p->id) {
+            m->is_transferable = false;
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        if (bt->n_mods[1] >= PR_MAX_MODIFIERS) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }
+        bt->mods[1][bt->n_mods[1]++] = (pr_modifier){.cls=PR_MOD_TURN_HELD_TRANSFER,
+            .pokemon_id=p->id,.stack_count=1,.is_transferable=false};
+    }
+    /* The Source enemy constructor supplies these fixed moves, independent of
+     * generic trainer/run generation. Inverse challenge requires its own context. */
+    if (p->species == SPECIES_ID_ETERNATUS) {
+        const uint16_t moves[] = {MOVE_ID_DYNAMAX_CANNON, MOVE_ID_CROSS_POISON,
+            MOVE_ID_FLAMETHROWER, MOVE_ID_RECOVER};
+        for (int i=0; i<4; i++) pr_set_original_move(p,i,moves[i]);
+        p->pp_up[3] = -4;
+    } else pr_note_unported(bt, PR_FEAT_FINAL_BOSS);
+    form_change(bt,p,PR_FCT_SpeciesFormChangeManualTrigger);
+    bt->double_battle = true;
+    int count = 0;
+    pr_pokemon *second = NULL;
+    for (int i=0; i<bt->n_party[0]; i++) if (is_active(bt->party[0][i])) {
+        if (++count == 2) second = bt->party[0][i];
+    }
+    if (count > 1) {
+        push_new(bt,e,PH_TOGGLE_DOUBLE_POSITION,-1);
+        if (!is_on_field(second)) {
+            int summon = new_pokemon_phase(e,PH_SUMMON,1);
+            if (summon >= 0) { PH(summon)->sw_player=true; PH(summon)->sw_field_index=1; }
+            pr_phase_push(bt,e,summon);
+            push_new(bt,e,PH_POST_SUMMON,1);
+        }
+    }
 }
 
 void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
@@ -3806,10 +3947,11 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_BERRY: berry_phase(bt, e); break;
     case PH_CHECK_STATUS_EFFECT: check_status_effect_phase(bt, e); break;
     case PH_POST_TURN_STATUS_EFFECT: post_turn_status_effect_phase(bt, e, ph); break;
-    case PH_TURN_END: turn_end_phase(bt, e); break;
+    case PH_TURN_END: turn_end_phase(bt, e, ph); break;
     case PH_MESSAGE: pr_event_add(bt, e, PR_EV_TEXT, -1, -1, 0, 0, &PH(ph)->msg); break;
     case PH_DAMAGE_ANIM:
         pr_event_add(bt, e, PR_EV_DAMAGE, PH(ph)->battler, -1, PH(ph)->anim_result, PH(ph)->anim_amount, NULL);
+        if (is_classic_final_boss(bt)) pr_init_final_boss_phase_two(bt,e,slot(bt,PH(ph)->battler));
         break;
     case PH_COMMON_ANIM:
         pr_event_add(bt, e, PR_EV_COMMON_ANIM, PH(ph)->battler, PH(ph)->anim_target, PH(ph)->anim, 0, NULL);
@@ -3843,6 +3985,7 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_MOVE_REFLECT: move_reflect_phase(bt, e, ph); break;
     case PH_SHINY_SPARKLE: pr_event_add(bt, e, PR_EV_SHINY_SPARKLE, PH(ph)->battler, -1, 0, 0, NULL); break;
     case PH_QUIET_FORM_CHANGE: quiet_form_change_phase(bt, e, ph); break;
+    case PH_RETURN: return_phase(bt,e,ph); break;
     case PH_ATTEMPT_CAPTURE: attempt_capture_phase(bt, e, ph); break;
     default:
         /* a phase with no port: it was reported when it was queued */

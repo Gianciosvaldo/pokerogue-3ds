@@ -31,6 +31,7 @@ typedef enum {
     PR_ARG_STR,            /* text as it is (s): only for values upstream passes untranslated */
     PR_ARG_TEMPLATE,       /* text whose $t(key) segments are translated (s), as i18next nests a value
                             * after interpolating it: Trainer.getName()'s "$t(titles:gymLeader) $t(trainerNames:brock)" */
+    PR_ARG_INT64,          /* integer stored as low v / high fusion_v; no string lifetime */
 } pr_msg_arg_kind;
 
 typedef struct {
@@ -38,6 +39,7 @@ typedef struct {
     uint8_t kind;          /* pr_msg_arg_kind */
     uint32_t v;
     const char *s;         /* PR_ARG_KEY / PR_ARG_STR / PR_ARG_TEMPLATE: a string that outlives the message */
+    uint32_t fusion_v;     /* frozen fusion species/form; PR_ARG_INT64 uses the high word */
 } pr_msg_arg;
 
 #define PR_MSG_MAX_ARGS 5
@@ -89,5 +91,10 @@ size_t pr_text_lookup(const pr_text_source *src, const char *key, char *out, siz
 
 /* upstream's file name for a namespace ("abilityTriggers" -> "ability-trigger") */
 void pr_text_ns_file(const char *ns, char *out, size_t cap);
+
+/* Pinned getFusedSpeciesName for native English species/form names (UTF-8).
+ * Returns the required byte length, with the same truncation contract as lookup.
+ * Inputs are bounded to 255 UTF-16 units; oversized inputs return 0. */
+size_t pr_fused_species_name(const char *a, const char *b, char *out, size_t cap);
 
 #endif

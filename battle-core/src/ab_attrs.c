@@ -32,10 +32,15 @@ bool pr_is_opponent(const pr_battle *bt, const pr_pokemon *a, const pr_pokemon *
 
 const pr_pokemon *pr_get_ally(const pr_battle *bt, const pr_pokemon *p)
 {
-    if (!bt->double_battle) return NULL;
-    for (int i = 0; i < 4; i++)
-        if (bt->field[i] == p) return bt->field[i ^ 1];
-    return NULL;
+    /* Source getFieldIndex is indexOf in the side's first one/two party slots.
+     * A reserve has index -1 (truthy), so getAlly returns slot zero even in
+     * singles. Do not substitute physical presence or an active-only field. */
+    int side = p->is_player ? 0 : 1;
+    const pr_pokemon *first = bt->n_party[side] ? bt->party[side][0] : bt->field[side * 2];
+    if (p != first) return first;
+    return bt->double_battle
+        ? (bt->n_party[side] ? (bt->n_party[side] > 1 ? bt->party[side][1] : NULL) : bt->field[side * 2 + 1])
+        : NULL;
 }
 
 const pr_attr *pr_ability_first_attr(uint16_t ability, uint16_t cls)
@@ -75,6 +80,12 @@ bool pr_has_ability_active(pr_battle *bt, const pr_pokemon *p, int ability)
 {
     if (p->ability == ability && pr_can_apply_ability(bt, p, p->ability)) return true;
     return p->passive && p->passive == ability && pr_can_apply_ability(bt, p, p->passive);
+}
+
+bool pr_can_suppress_ability(const pr_pokemon *p)
+{
+    return !p->ability_suppressed && (!(pr_abilities[p->ability].flags & AB_FLAG_UNSUPPRESSABLE)
+        || ((p->passive_flag || p->passive) && !(pr_abilities[p->passive].flags & AB_FLAG_UNSUPPRESSABLE)));
 }
 
 /* PostSummonAbAttr.shouldActivateOnGain(): activateOnGain, after the fields every attr starts with
@@ -188,11 +199,11 @@ bool pr_weather_effect_suppressed(pr_battle *bt)
     return false;
 }
 
-/* Pokemon.canApplyAbility(passive). Fusion, Transform, Mold Breaker (arena.ignoreAbilities) and
- * summonData.abilitySuppressed are not modelled; none can occur in the current state. */
+/* Pokemon.canApplyAbility(passive): form restrictions precede ordinary suppression. */
 bool pr_can_apply_ability(pr_battle *bt, const pr_pokemon *p, uint16_t ability)
 {
     if (p->fusion_species && pr_ability_first_attr(ability, PR_AC_NoFusionAbilityAbAttr)) return false;
+    if (p->transformed && pr_ability_first_attr(ability, PR_AC_NoTransformAbilityAbAttr)) return false;
     const pr_ability *ab = &pr_abilities[ability];
     /* Mold Breaker, Sunsteel Strike...: the move in progress ignores ignorable abilities
      * of every Pokemon but its user */
@@ -330,6 +341,18 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
     const pr_pokemon *p = pp->pokemon, *o = pp->opponent;
     int move = pp->move;
     switch (a->cls) {
+    case PR_AC_CommanderAbAttr: {
+        const pr_pokemon *ally = pr_get_ally(bt, p);
+        GATE(bt->double_battle && ally && ally->hp > 0 && ally->on_field && !ally->switch_out_status
+             && ally->species == SPECIES_ID_DONDOZO && !pr_get_battler_tag(ally, BATTLER_TAG_TYPE_COMMANDED));
+        if (!pp->simulated) {
+            pr_lapse_tags(bt, c->e, (pr_pokemon *)p, BATTLER_TAG_LAPSE_TYPE_MOVE_EFFECT);
+            pr_unshift_pokemon_anim_for(bt, c->e, p, POKEMON_ANIM_TYPE_COMMANDER_APPLY);
+            pr_add_tag(bt, c->e, (pr_pokemon *)ally, BATTLER_TAG_TYPE_COMMANDED, 0, MOVE_ID_NONE, p->id);
+            pr_remove_move_phase(bt, c->e, p);
+        }
+        return 1;
+    }
     case PR_AC_PokemonTypeChangeAbAttr: {
         if (move <= MOVE_ID_NONE || move >= PR_MOVE_COUNT) return -1;
         if (p->terastallized || move == MOVE_ID_STRUGGLE
@@ -438,6 +461,12 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         const pr_attr_MoveTypeChangeAbAttr *x = P(MoveTypeChangeAbAttr, a);
         GATE(call_bool(bt, x->condition, a->cls, p, o, move));
         *pp->holder = x->newType;
+        return 1;
+    }
+    case PR_AC_MoveHealBoostAbAttr: {
+        const pr_attr_MoveHealBoostAbAttr *x = P(MoveHealBoostAbAttr, a);
+        GATE(call_bool(bt, x->boostCondition, a->cls, p, o, move));
+        *pp->value *= x->healMulti;
         return 1;
     }
     case PR_AC_MovePowerBoostAbAttr:
@@ -730,9 +759,10 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
     /* ---- coming in: PostSummonActivateAbilityPhase ---- */
     case PR_AC_PostSummonMessageAbAttr:                                 /* Pressure, Mold Breaker, Anticipation... */
     case PR_AC_PostSummonUnnamedMessageAbAttr:                          /* Air Lock, Cloud Nine */
-        if (!c->e) return -1;
         GATE(true);
-        if (!pp->simulated) pr_queue_msg(bt, c->e, post_summon_message(bt, a, c->ability, p));
+        if (pp->simulated) return 1;
+        if (!c->e) return -1;
+        pr_queue_msg(bt, c->e, post_summon_message(bt, a, c->ability, p));
         return 1;
     case PR_AC_PostSummonAddBattlerTagAbAttr: {                         /* Protosynthesis, Quark Drive... */
         const pr_attr_PostSummonAddBattlerTagAbAttr *x = P(PostSummonAddBattlerTagAbAttr, a);
@@ -811,6 +841,11 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         if (!pp->simulated) pr_try_set_terrain(bt, c->e, t, false, p);
         return 1;
     }
+    case PR_AC_PreLeaveFieldRemoveSuppressAbilitiesSourceAbAttr:
+        GATE(pr_arena_get_tag_on_side(bt,ARENA_TAG_TYPE_NEUTRALIZING_GAS,ARENA_TAG_SIDE_BOTH)!=NULL);
+        if(!c->e)return -1;
+        pr_arena_gas_source_leave(bt,c->e);
+        return 1;
     case PR_AC_PostSummonAddArenaTagAbAttr: {                           /* Neutralizing Gas */
         const pr_attr_PostSummonAddArenaTagAbAttr *x = P(PostSummonAddArenaTagAbAttr, a);
         if (!c->e) return -1;
@@ -1087,23 +1122,29 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
     case PR_AC_PostSummonFormChangeByWeatherAbAttr: {
         int wanted = p->species == SPECIES_ID_CASTFORM ? ABILITY_ID_FORECAST
                    : p->species == SPECIES_ID_CHERRIM ? ABILITY_ID_FLOWER_GIFT : -1;
-        GATE(wanted >= 0 && !p->ability_suppressed && !pr_weather_effect_suppressed(bt)
-             && pr_has_ability_active(bt, p, wanted));
         int form = bt->weather == WEATHER_TYPE_SUNNY || bt->weather == WEATHER_TYPE_HARSH_SUN ? 1
                  : p->species == SPECIES_ID_CASTFORM && (bt->weather == WEATHER_TYPE_RAIN || bt->weather == WEATHER_TYPE_HEAVY_RAIN) ? 2
                  : p->species == SPECIES_ID_CASTFORM && (bt->weather == WEATHER_TYPE_HAIL || bt->weather == WEATHER_TYPE_SNOW) ? 3 : -1;
-        GATE(form >= 0 && form != p->form);
+        /* canApply must finish before any ability display is queued. */
+        GATE(wanted >= 0 && !p->ability_suppressed && !pr_weather_effect_suppressed(bt)
+             && pr_has_ability_active(bt, p, wanted) && form >= 0 && form != p->form);
         if (!pp->simulated) pr_form_change(bt, p, PR_FCT_SpeciesFormChangeWeatherTrigger);
         return 1;
     }
     case PR_AC_PostSummonFormChangeAbAttr:
     case PR_AC_PostTurnFormChangeAbAttr:
-    case PR_AC_PostBattleInitFormChangeAbAttr: {
+    case PR_AC_PostBattleInitFormChangeAbAttr:
+    case PR_AC_PostVictoryFormChangeAbAttr:
+    case PR_AC_PostFaintFormChangeAbAttr: {
         pr_fn_id fn = a->cls == PR_AC_PostSummonFormChangeAbAttr
             ? P(PostSummonFormChangeAbAttr, a)->formFunc
             : a->cls == PR_AC_PostTurnFormChangeAbAttr
                 ? P(PostTurnFormChangeAbAttr, a)->formFunc
-                : P(PostBattleInitFormChangeAbAttr, a)->formFunc;
+                : a->cls == PR_AC_PostVictoryFormChangeAbAttr
+                    ? P(PostVictoryFormChangeAbAttr, a)->formFunc
+                    : a->cls == PR_AC_PostFaintFormChangeAbAttr
+                        ? P(PostFaintFormChangeAbAttr, a)->formFunc
+                        : P(PostBattleInitFormChangeAbAttr, a)->formFunc;
         GATE(pr_closure_call(bt, fn, a->cls, p->form, p, NULL, -1) != p->form);
         if (a->cls == PR_AC_PostBattleInitFormChangeAbAttr) GATE(!pp->simulated);
         if (!pp->simulated) pr_form_change(bt, p, PR_FCT_SpeciesFormChangeAbilityTrigger);
@@ -1654,7 +1695,6 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
 
     /* ---- end of turn ---- */
     case PR_AC_PostTurnHurtIfSleepingAbAttr: {
-        if(bt->double_battle)return -1;
         bool eligible=false;
         for(int j=0;j<4;j++){
             const pr_pokemon *v=bt->field[j];
@@ -1665,8 +1705,9 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         GATE(eligible);
         if(pp->simulated)return 1;
         if(!c->e)return -1;
-        for(int j=0;j<4;j++){
-            pr_pokemon *v=bt->field[j];
+        pr_speed_iter it;
+        pr_speed_iter_init(bt,&it,p->is_player?ARENA_TAG_SIDE_ENEMY:ARENA_TAG_SIDE_PLAYER);
+        for(pr_pokemon *v;(v=pr_speed_iter_next(bt,&it));){
             if(!v || !pr_is_opponent(bt,p,v) || v->hp<=0 || !v->on_field || v->switch_out_status
                 || (v->status!=STATUS_EFFECT_SLEEP && !pr_has_ability_active(bt,v,ABILITY_ID_COMATOSE)))continue;
             bool cancelled=false;

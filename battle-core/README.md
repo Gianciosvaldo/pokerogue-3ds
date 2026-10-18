@@ -1,9 +1,11 @@
 # battle-core: native C port of PokeRogue's battle logic
 
-Current continuation (2026-10-12): leave-field primal weather, Wonder Skin,
-priority brackets/Quick Draw, Protean/Libero and defending-field priority immunity
-have bounded source proofs. Retained rich seed777 covers 1,929/2,000 turns exactly;
-this is sample coverage, not a battle-core completion percentage. See the
+Current continuation (2026-10-13): Ditto/Transform, berry lifecycle,
+Receiver/Power of Alchemy, indexed ability lookup, form-state callbacks and
+Battle Bond have bounded source proofs. The player-cleanup/Return continuation
+is documented in [RESET-ARENA-VALIDATION.md](RESET-ARENA-VALIDATION.md).
+Retained rich seed777 covers 1,950/2,000 turns exactly; this is sample coverage,
+not a battle-core completion percentage. See the
 [remaining inventory](REMAINING-BATTLE-CORE.md) and the validation records below.
 
 Status 2026-09-28: **damage path with abilities and passives, move effects, held items, battler and arena tags, and the turn history verified against upstream** (singles); the turn engine has started and replays about 96% of the plain random test turns exactly, with stat changes, statuses, on-hit abilities, two-turn moves, 87 of the 95 battler tag types (all but Helping Hand, Follow Me's, Imprison, Quick Claw's, Commander's, Cramorant's two and the mystery encounters' one), recoil, drain, recharge, pre-move texts, the healing phase, weather and terrain over a turn, the damaging traps, Leech Seed, Substitute, the protections and Endure, arena tags being laid, stacked, cleared and swapped, the weather and terrain moves with about 25 smaller move effects, the moves that call other moves (Metronome, Mirror Move, Copycat, Sleep Talk, Assist, Nature Power, Instruct), Focus Punch-style header moves, Future Sight and Wish, and switching (the moves that switch a Pokemon out, the switch command, the party prompt as a pause the caller answers, and the switch itself with entry hazards, entry abilities, Baton Pass and Shed Tail passing their effects, Wimp Out and Emergency Exit) ported (see "Turn engine"). Every damaging move in the random test is now covered except 6 cases in about 110,000. Upstream is `pagefaultgames/pokerogue` @ `8555c08`.
@@ -1243,3 +1245,121 @@ Receiver and Power of Alchemy now receive the actual knockout victim and copy
 its current primary ability through the source gain/loss dispatcher. See
 [RECEIVER-VALIDATION.md](RECEIVER-VALIDATION.md) for the natural-double phase/API
 proof, simulation/reset behavior and separate whole-battle gates.
+
+### Sketch and Mimic
+
+Sketch updates permanent and temporary moves with source object-sharing
+semantics. Mimic changes the effective moveset without changing identity;
+shared PP survives save/load and summon cleanup. See
+[COPYING-VALIDATION.md](COPYING-VALIDATION.md) for the API, complete-turn and
+legal-save comparisons, reproduction commands and remaining boundaries.
+
+### Native ability form callbacks
+
+Zen Mode, Shields Down, Schooling, Hunger Switch, Ice Face, Disguise and Power
+Construct now use queued registered form changes. See
+[NATIVE-FORMS-VALIDATION.md](NATIVE-FORMS-VALIDATION.md) for actual source API,
+quiet-phase, complete-turn and save/controller checks and the remaining scope.
+
+Arena reset, Neutralizing Gas recovery and Imprison lifecycle now have actual
+source API/owning-turn proofs. See [ARENA-LIFECYCLE-VALIDATION.md](ARENA-LIFECYCLE-VALIDATION.md)
+for reproduction, source pins, save/cleanup coverage and remaining boundaries.
+
+Stance Change now follows registered quiet pre-move and leave-field transitions.
+See [STANCE-CHANGE-VALIDATION.md](STANCE-CHANGE-VALIDATION.md) for command-versus-phase,
+faint/recall ordering, source differentials, legal saves and remaining boundaries.
+
+Copied native abilities now honor upstream's NoTransformAbility restriction.
+See [TRANSFORM-RESTRICTION-VALIDATION.md](TRANSFORM-RESTRICTION-VALIDATION.md)
+for actual Transform/damage-turn proofs, loaded-state checks and remaining form work.
+
+## Weather forms and ally lookup continuation
+
+Registered Castform/Cherrim form changes now honor the scene queue mode and
+the pinned unset-versus-NONE temporary-ability reversion rule. The shared ally
+getter also follows source party-slot lookup for reserves in singles. See
+[WEATHER-FORM-VALIDATION.md](WEATHER-FORM-VALIDATION.md) for the actual source
+scene/getter/full-turn captures, save checks, regression gates and boundaries.
+
+## Stored healing continuation
+
+Healing Wish and Lunar Dance now queue position-specific effects, apply them
+on entry and persist them through legal saves. See
+[PENDING-HEAL-VALIDATION.md](PENDING-HEAL-VALIDATION.md) for the actual source
+API/turn captures, native source quirks, validation gates and remaining contexts.
+
+## Base-stat item ordering continuation
+
+Total/flat effects now precede fusion averaging and Spliced Endless halving;
+vitamins follow them. Native item records retain explicit arguments and their
+nontransferable metadata through the game-core bridge and legal saves. See
+[STAT-ORDER-VALIDATION.md](STAT-ORDER-VALIDATION.md) for source API/owning turns,
+input caps, consistency checks and remaining fusion/form contexts.
+
+Native fused names and frozen Wish/Healing Wish/Lunar Dance message identities
+are documented in [FUSION-NAME-VALIDATION.md](FUSION-NAME-VALIDATION.md).
+
+Registered native callbacks under fusion and legal Transform are covered in
+[CALLBACK-CONTEXT-VALIDATION.md](CALLBACK-CONTEXT-VALIDATION.md).
+
+Interlude queue pruning and end-of-turn suppression are implemented and
+source-compared in [INTERLUDE-VALIDATION.md](INTERLUDE-VALIDATION.md).
+
+Final-boss transition and signed move PP: `FINAL-BOSS-VALIDATION.md` records the
+bounded Source comparison and remaining theft/doubles/integration requirements.
+
+Mini Black Hole turn transfers and inventory/save persistence are described in
+[ITEM-TRANSFER-VALIDATION.md](ITEM-TRANSFER-VALIDATION.md); supported item families
+and remaining theft, doubles and Endless boundaries are listed explicitly.
+
+Fresh/loaded single and double encounter queues, including the trainer prelude,
+are documented in [DOUBLE-ENCOUNTER-VALIDATION.md](DOUBLE-ENCOUNTER-VALIDATION.md).
+Summon execution, command targeting and game-core/app doubles remain separate.
+
+Owning summon execution now preserves field references after fainted-slot party
+swaps; [SUMMON-ENTRY-VALIDATION.md](SUMMON-ENTRY-VALIDATION.md) records the real
+single/double source phase, controller tests and remaining contexts.
+
+Helping Hand tag lifetime, messages, save projection and actual doubles damage
+are covered in [HELPING-HAND-VALIDATION.md](HELPING-HAND-VALIDATION.md).
+
+Acupressure's native stat selection, RNG and phase ownership are covered in
+[ACUPRESSURE-VALIDATION.md](ACUPRESSURE-VALIDATION.md), with bounded owning-turn
+and command/save comparisons. Broader doubles and wide-level Endless remain open.
+
+After You's first-matching queued mover and exact message are covered in
+[AFTER-YOU-VALIDATION.md](AFTER-YOU-VALIDATION.md), including cached identity
+after field swaps, runtime faults and actual owning doubles turns.
+
+Gastro Acid/Core Enforcer suppression, loss-callback order and weather/gas
+recovery are covered in [SUPPRESSION-VALIDATION.md](SUPPRESSION-VALIDATION.md),
+including native condition queries, real owning turns and bounded save callers.
+
+Wide battle-level storage now preserves int32 levels and migrates historical
+byte-level saves. See [the bounded source validation](WIDE-LEVEL-VALIDATION.md).
+EXP/candy progression and high-wave Endless acceptance remain separate work.
+
+Flame Burst now uses the native indirect-damage path, with source-backed shield
+RNG/empty-queue and wild-flee refresh fixes. See [validation](FLAME-BURST-VALIDATION.md)
+and the [battle-core completion checklist](COMPLETION-CHECKLIST.md).
+
+Wide raw damage, AI estimates, transient Substitute HP and historical save
+migration are documented in [WIDE-COMBAT-VALIDATION.md](WIDE-COMBAT-VALIDATION.md).
+Speed Swap, Power Shift and Topsy-Turvy now preserve native summon-stat/stage
+semantics; see [STAT-REARRANGEMENT-VALIDATION.md](STAT-REARRANGEMENT-VALIDATION.md).
+These bounded continuations do not close the remaining completion checklist.
+
+Quash's first matching cached move and native LAST timing are documented in
+[QUASH-VALIDATION.md](QUASH-VALIDATION.md). Wide Protosynthesis/Quark Drive
+selection now retains double candidates and running maxima; see
+[WIDE-HIGHEST-STAT-VALIDATION.md](WIDE-HIGHEST-STAT-VALIDATION.md) for the native
+tag add/overlap/remove proof and its boundaries.
+
+Spectral Thief pre-damage theft and queued gain timing are documented in
+[SPECTRAL-THIEF-VALIDATION.md](SPECTRAL-THIEF-VALIDATION.md).
+
+Pain Split direct HP changes and boss-condition separation are documented in
+[HP-SPLIT-VALIDATION.md](HP-SPLIT-VALIDATION.md).
+
+The six ability-changing moves and their gain/loss/reset boundaries are documented
+in [ABILITY-MOVES-VALIDATION.md](ABILITY-MOVES-VALIDATION.md).

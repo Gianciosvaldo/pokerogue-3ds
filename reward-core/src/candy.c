@@ -16,71 +16,42 @@ static const pr_species *species_row(int id)
     return NULL;
 }
 
-static double canonical_exp(int level, int growth_rate)
-{
-    const double n = level;
-    switch (growth_rate) {
-    case 0: /* ERRATIC */
-        if (level < 50) return floor(n*n*n * (100.0 - n) / 50.0);
-        if (level < 68) return floor(n*n*n * (150.0 - n) / 100.0);
-        if (level < 98) return floor(n*n*n * floor((1911.0 - 10.0*n) / 3.0) / 500.0);
-        return floor(n*n*n * (160.0 - n) / 100.0);
-    case 1: return floor(n*n*n * 4.0 / 5.0); /* FAST */
-    case 2: return floor(n*n*n);             /* MEDIUM_FAST */
-    case 3: return floor(n*n*n * 6.0 / 5.0 - 15.0*n*n + 100.0*n - 140.0); /* MEDIUM_SLOW */
-    case 4: return floor(n*n*n * 5.0 / 4.0); /* SLOW */
-    case 5: /* FLUCTUATING */
-        if (level < 15) return floor(n*n*n * (floor((n + 1.0) / 3.0) + 24.0) / 50.0);
-        if (level < 36) return floor(n*n*n * (n + 14.0) / 50.0);
-        return floor(n*n*n * (floor(n / 2.0) + 32.0) / 50.0);
-    default:
-        return floor(n*n*n);
-    }
-}
-
 double pr_reward_level_total_exp(int level, int growth_rate)
 {
     if (level < 1) return 0.0;
-    double raw;
-    if (level < 100) {
-        raw = level == 1 ? 0.0 : canonical_exp(level, growth_rate);
-    } else {
-        const double n = level;
-        switch (growth_rate) {
-        case 0: raw = (pow(n, 4.0) + pow(n, 3.0) * 2000.0) / 3500.0; break;
-        case 1: raw = pow(n, 3.0) * 4.0 / 5.0; break;
-        case 2: raw = pow(n, 3.0); break;
-        case 3: raw = pow(n, 3.0) * 6.0 / 5.0 - 15.0 * pow(n, 2.0) + 100.0 * n - 140.0; break;
-        case 4: raw = pow(n, 3.0) * 5.0 / 4.0; break;
-        case 5: raw = pow(n, 3.0) * (n / 2.0 + 8.0) * 4.0 / (100.0 + n); break;
-        default: raw = pow(n, 3.0); break;
-        }
-    }
-
-    if (growth_rate != 2) {
-        const double medium_fast = floor(pow((double)level, 3.0));
-        return floor(raw * 0.325 + medium_fast * 0.675);
-    }
-    return floor(raw);
+    /* Consume the pinned table/formula implementation, including JS pow rounding. */
+    return pr_run_get_level_total_exp(level, growth_rate);
 }
 
 int pr_reward_candy_level_count(const pr_reward_ctx *ctx)
 {
-    int levels = 1;
+    int64_t levels = 1;
     if (!ctx) return levels;
     for (int i = 0; i < ctx->n_items; i++)
         if (ctx->items[i].item == PR_ITEM_CANDY_JAR && ctx->items[i].stack > 0)
             levels += ctx->items[i].stack;
-    return levels;
+    if (levels > INT32_MAX) {
+        if (ctx->run) ctx->run->unported |= PR_REWARD_UNPORTED_LEVEL;
+        return -1;
+    }
+    return (int)levels;
+}
+
+static bool can_increment(pr_reward_ctx *ctx, int party_idx, int count)
+{
+    int level = ctx->party[party_idx].level;
+    if (level < 1 || count < 1 || (int64_t)level + count > INT32_MAX) {
+        if (ctx->run) ctx->run->unported |= PR_REWARD_UNPORTED_LEVEL;
+        return false;
+    }
+    return true;
 }
 
 static void apply_one(pr_reward_ctx *ctx, int party_idx, int level_count)
 {
     pr_reward_mon *p = &ctx->party[party_idx];
-    const uint16_t old_level = p->level;
-    unsigned next = (unsigned)p->level + (unsigned)level_count;
-    if (next > 65535u) next = 65535u;
-    p->level = (uint16_t)next;
+    const int32_t old_level = p->level;
+    p->level += level_count;
 
     /* PokemonLevelIncrementModifier: only synchronize exp while at/below getMaxExpLevel(true).
      * Once a candy pushes past that absolute cap, upstream leaves exp untouched. */
@@ -111,14 +82,16 @@ bool pr_reward_apply_candy(pr_reward_ctx *ctx, uint16_t item, int party_idx)
     if (!ctx) return false;
     ctx->n_level_events = 0;
     const int count = pr_reward_candy_level_count(ctx);
+    if (count < 1) return false;
 
     if (item == PR_ITEM_RARE_CANDY) {
-        if (party_idx < 0 || party_idx >= ctx->n_party) return false;
+        if (party_idx < 0 || party_idx >= ctx->n_party || !can_increment(ctx, party_idx, count)) return false;
         apply_one(ctx, party_idx, count);
         return true;
     }
     if (item == PR_ITEM_RARER_CANDY) {
         if (ctx->n_party <= 0) return false;
+        for (int i = 0; i < ctx->n_party; i++) if (!can_increment(ctx, i, count)) return false;
         for (int i = 0; i < ctx->n_party; i++) apply_one(ctx, i, count);
         return true;
     }

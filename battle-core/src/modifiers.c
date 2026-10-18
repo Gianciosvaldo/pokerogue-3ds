@@ -13,6 +13,7 @@
 #include <string.h>
 
 const uint8_t pr_mod_parent[PR_MOD_COUNT_] = {
+    [PR_MOD_TURN_HELD_TRANSFER] = PR_MOD_HELD_ITEM,
     [PR_MOD_NONE] = PR_MOD_NONE,
     [PR_MOD_PERSISTENT] = PR_MOD_NONE,
     [PR_MOD_HELD_ITEM] = PR_MOD_PERSISTENT,
@@ -56,6 +57,7 @@ const uint8_t pr_mod_parent[PR_MOD_COUNT_] = {
 };
 
 const char *const pr_mod_class_name[PR_MOD_COUNT_] = {
+    [PR_MOD_TURN_HELD_TRANSFER] = "TurnHeldItemTransferModifier",
     [PR_MOD_NONE] = "",
     [PR_MOD_PERSISTENT] = "PersistentModifier",
     [PR_MOD_HELD_ITEM] = "PokemonHeldItemModifier",
@@ -115,6 +117,17 @@ bool pr_mod_is(const pr_modifier *m, int cls)
 bool pr_mod_is_ported_item(const pr_modifier *m)
 {
     if (!m) return false;
+    if (m->cls == PR_MOD_TURN_HELD_TRANSFER) return !m->unknown_subclass && m->stack_count==1 && m->virtual_stack_count==0;
+    if (m->cls == PR_MOD_BASE_STAT_TOTAL)
+        return !m->unknown_subclass && m->pokemon_id >= 0 && m->stack_count >= 1 && m->stack_count <= 2
+            && m->virtual_stack_count == 0 && (m->num == 10 || m->num == -15);
+    if (m->cls == PR_MOD_BASE_STAT_FLAT)
+        return !m->unknown_subclass && m->pokemon_id >= 0 && m->stack_count == 1 && m->virtual_stack_count == 0;
+    if (m->cls == PR_MOD_BASE_STAT) {
+        int64_t stacks = (int64_t)m->stack_count + m->virtual_stack_count;
+        return !m->unknown_subclass && m->pokemon_id >= 0 && m->stack_count >= 1 && m->virtual_stack_count >= 0
+            && stacks <= 31 && m->stat >= STAT_HP && m->stat <= STAT_SPD;
+    }
     if (m->cls == PR_MOD_PRESERVE_BERRY) return !m->unknown_subclass && m->stack_count >= 0 && m->virtual_stack_count >= 0 && (int64_t)m->stack_count + m->virtual_stack_count >= 1 && (int64_t)m->stack_count + m->virtual_stack_count <= 3;
     if (m->cls == PR_MOD_BERRY) {
         return m->berry_type == BERRY_TYPE_SITRUS
@@ -278,7 +291,7 @@ static double clamp_stat(double v)
     return v < 1 ? 1 : v > 999999 ? 999999 : v; /* Math.min(Math.max(newVal, 1), 999999) */
 }
 
-void pr_apply_base_stat_modifiers(pr_battle *bt, const pr_pokemon *p, double base[6])
+void pr_apply_base_stat_before_fusion(pr_battle *bt, const pr_pokemon *p, double base[6])
 {
     pr_modifier *m;
     /* Shuckle Juice: every stat + statModifier (HP gets half) */
@@ -298,12 +311,23 @@ void pr_apply_base_stat_modifiers(pr_battle *bt, const pr_pokemon *p, double bas
         for (int i = 0; i < 6; i++)
             if (i == pick[0] || i == pick[1] || i == pick[2]) base[i] = clamp_stat(floor(base[i] + 20));
     }
-    /* (fusion averaging goes here once fusions are ported) */
+}
+
+void pr_apply_base_stat_after_fusion(pr_battle *bt, const pr_pokemon *p, double base[6])
+{
+    pr_modifier *m;
     /* Vitamins: floor(base * (1 + stacks * 0.1)) */
     EACH_MOD(m, bt, p->is_player, PR_MOD_BASE_STAT) {
         if (!held_applies(m, p)) continue;
         base[m->stat] = floor(base[m->stat] * (1 + pr_mod_get_stack_count(m) * 0.1));
     }
+}
+
+/* Retain the combined raw projection API for callers without a fusion step. */
+void pr_apply_base_stat_modifiers(pr_battle *bt, const pr_pokemon *p, double base[6])
+{
+    pr_apply_base_stat_before_fusion(bt, p, base);
+    pr_apply_base_stat_after_fusion(bt, p, base);
 }
 
 /* applyModifier(PokemonIncrementingStatModifier, ...): the first one applies (apply is always true).
@@ -556,10 +580,27 @@ void pr_refresh_berry_modifiers(pr_battle *bt, int side)
         if (bt->party[side][k]) pr_recalculate_stats(bt, bt->party[side][k]);
 }
 
+void pr_reset_wave_data(pr_pokemon *p)
+{
+    p->n_ab_applied_wave=0;
+    p->temp_wave_turn_count=1;
+    p->wave_endured=false;
+}
+
 void pr_reset_battle_data(pr_pokemon *p)
 {
+    pr_reset_wave_data(p);
     p->has_eaten_berry = false;
     p->n_battle_berries = 0;
+}
+
+/* Stuff Cheeks' native restriction scans all BerryModifiers on the side,
+ * including another holder's stock. It does not ask shouldApply or getStackCount. */
+bool pr_side_has_berry(const pr_battle *bt,bool player)
+{
+    int side=player?0:1;
+    for(int k=0;k<bt->n_mods[side];k++)if(pr_mod_is(&bt->mods[side][k],PR_MOD_BERRY))return true;
+    return false;
 }
 
 void pr_record_eaten_berry(pr_battle *bt, pr_pokemon *p, int berry, bool consumed)
@@ -620,6 +661,7 @@ void pr_berry_effect(pr_battle *bt, pr_engine *e, pr_pokemon *p, int btype, int8
         }
         if (slot >= 0) {
             PR_PP_USED(p)[slot] = PR_PP_USED(p)[slot] > 10 ? PR_PP_USED(p)[slot] - 10 : 0;
+            pr_sync_moveset_aliases(p);
             pr_msg msg = pr_msg3("battle:ppHealBerry",
                                  pr_arg_pokemon(bt, "pokemonNameWithAffix", p),
                                  pr_arg_move("moveName", PR_MOVES(p)[slot]),

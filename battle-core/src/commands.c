@@ -28,7 +28,7 @@ static bool in_moveset(const pr_pokemon *p, int move)
 }
 
 /* MoveRestrictionBattlerTag.isMoveRestricted(move, user) for p's tag t; false for other tags */
-static bool tag_restricts(pr_battle *bt, const pr_pokemon *p, const pr_battler_tag *t, int move)
+bool pr_tag_restricts_move(pr_battle *bt, const pr_pokemon *p, const pr_battler_tag *t, int move)
 {
     switch (t->type) {
     case BATTLER_TAG_TYPE_THROAT_CHOPPED: return (pr_moves[move].flags & MOVE_FLAGS_SOUND_BASED) != 0;
@@ -84,12 +84,7 @@ static bool move_restriction(pr_battle *bt, const pr_pokemon *p, int move, pr_ms
         return true;
     }
     if (move == MOVE_ID_STUFF_CHEEKS) {
-        int side = p->is_player ? 0 : 1;
-        bool berry = false;
-        for (int i = 0; i < bt->n_mods[side]; i++)
-            berry |= pr_mod_is(&bt->mods[side][i], PR_MOD_HELD_ITEM)
-                && (bt->mods[side][i].cls == PR_MOD_BERRY || bt->mods[side][i].unknown_subclass)
-                && bt->mods[side][i].pokemon_id == (int64_t)p->id;
+        const bool berry = pr_side_has_berry(bt,p->is_player);
         if (!berry) {
             *why = pr_msg2("battle:moveDisabledNoBerry", name, mv);
             return true;
@@ -115,7 +110,7 @@ bool pr_move_selectable(pr_battle *bt, const pr_pokemon *p, int move, pr_msg *wh
     pr_msg m = {0};
     bool ok = true;
     for (int i = 0; i < p->n_tags && ok; i++)
-        if (tag_restricts(bt, p, &p->tags[i], move)) {
+        if (pr_tag_restricts_move(bt, p, &p->tags[i], move)) {
             m = denied_text(bt, p, &p->tags[i], move);
             ok = false;
         }
@@ -236,7 +231,7 @@ bool pr_is_trapped(pr_battle *bt, const pr_pokemon *p, pr_msg *ab_msg)
 static pr_msg no_escape_text(const pr_battle *bt, int64_t source_id, int source_move)
 {
     const pr_pokemon *src = source_id >= 0 ? pr_pokemon_by_id(bt, source_id) : NULL;
-    pr_msg_arg name = src ? pr_arg_pokemon(bt, "pokemonName", src) : (pr_msg_arg){"pokemonName", PR_ARG_STR, 0, ""};
+    pr_msg_arg name = src ? pr_arg_pokemon(bt, "pokemonName", src) : (pr_msg_arg){"pokemonName", PR_ARG_STR, 0, "", 0};
     return pr_msg3("battle:noEscapePokemon", name, pr_arg_move("moveName", source_move),
                    pr_arg_key("escapeVerb", "battle:escapeVerbFlee"));
 }

@@ -220,6 +220,7 @@ void gc_items_drop_held_of(gc_run *run, uint32_t pokemon_id);   /* removePartyMe
 int gc_item_remove_stacks(gc_run *run, const char *key, int count);
 void gc_items_from_battle(gc_run *run); /* persist consumed berries/White Herb */
 void gc_items_to_battle(gc_run *run);                                  /* the player's and the enemy's lists into bt->mods */
+void gc_cache_generated_item_tiers(gc_run *run);
 double gc_apply_exp_boosters(const gc_run *run, double exp);          /* ExpBoosterModifier */
 
 /* ---- the encounter and the battle (src/gc_encounter.c, src/gc_battle.c) ---- */
@@ -246,6 +247,7 @@ int gc_roll_biome_weather(gc_run *run);            /* Arena.setBiomeWeather's pi
 int gc_roll_biome_terrain(gc_run *run);            /* Arena.setBiomeTerrain's pick */
 void gc_arena_reset_effects(gc_run *run);          /* Arena.resetArenaEffects: weather and terrain */
 void gc_arena_new_battle(gc_run *run, bool reset, bool roll);   /* ...then the biome's rolls */
+void gc_battle_cleanup_players(gc_run *run);   /* outgoing field, before generating the encounter */
 bool gc_battle_setup_field(gc_run *run, bool reset_arena);   /* bt from the parties, before the first turn */
 void gc_battle_restore_field(gc_run *run); /* pointers only; summon effects already saved */
 void gc_ai_reset(gc_run *run);                    /* ai-core's state for a new battle */

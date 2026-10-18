@@ -136,7 +136,7 @@ typedef struct {
     int16_t fusion_species;       /* fusionSpecies.speciesId, -1 = not a fusion */
     int16_t fusion_form;          /* fusionFormIndex */
     int8_t gender, fusion_gender; /* Gender (-1 genderless) */
-    uint16_t level;
+    int32_t level;
     double exp;                    /* PlayerPokemon.exp; Task 44 Rare/Rarer Candy syncs this when <= absolute cap */
     int32_t hp, max_hp;           /* hp, getMaxHp() */
     uint8_t status;               /* status.effect (StatusEffect), 0 = none */
@@ -228,7 +228,7 @@ typedef struct {
     uint32_t pokemon_id;
     uint16_t primary_species, target_species, item;
     int16_t pre_form_key, evo_form_key;
-    int16_t last_level;
+    int32_t last_level;
     uint8_t evolution_level;
     bool fusion;
 } pr_reward_evolution_event;
@@ -251,7 +251,7 @@ typedef struct {
     bool (*caught)(void *user, int species);
     void *caught_user;
     /* Task 44: LevelUpPhase requests produced by Rare/Rarer Candy application. */
-    struct { int8_t party_idx; uint16_t old_level, new_level; } level_events[PR_REWARD_MAX_PARTY];
+    struct { int8_t party_idx; int32_t old_level, new_level; } level_events[PR_REWARD_MAX_PARTY];
     uint8_t n_level_events;
     /* The texts the last pr_reward_apply queued, in order (it resets the list): a status cure shows
      * "battlerTags:confusedOnRemove" when it ends a confusion. The caller shows them. */
@@ -305,6 +305,7 @@ enum {
     PR_REWARD_UNPORTED_CHALLENGE = 1u << 8,   /* a challenge hook (TM compatibility...) the port doesn't model */
     PR_REWARD_UNPORTED_OPTIONS = 1u << 9,     /* more options, owned items or moves than the fixed tables hold */
     PR_REWARD_UNPORTED_FUNC = 1u << 10,       /* a guaranteed item func the port doesn't make */
+    PR_REWARD_UNPORTED_LEVEL = 1u << 11,     /* a level/count outside the port's int32 representation */
 };
 
 /* generateModifierTypeOption(func, pregenArgs): the item and its tier from the PLAYER pool; pregen_arg is the one argument of a

@@ -14,6 +14,9 @@
 bool pr_tag_type_ported(int type)
 {
     switch (type) {
+    case BATTLER_TAG_TYPE_COMMANDED: /* CommandedTag */
+    case BATTLER_TAG_TYPE_CENTER_OF_ATTENTION: /* CenterOfAttentionTag */
+    case BATTLER_TAG_TYPE_HELPING_HAND: /* HelpingHandTag */
     case BATTLER_TAG_TYPE_CHARGING:     /* SerializableBattlerTag(CHARGING, CUSTOM, 1, sourceMove, sourceId) */
     case BATTLER_TAG_TYPE_FLYING:       /* SemiInvulnerableTag: onAdd / onRemove only hide and show the sprite */
     case BATTLER_TAG_TYPE_UNDERGROUND:
@@ -53,6 +56,7 @@ bool pr_tag_type_ported(int type)
     case BATTLER_TAG_TYPE_PSYCHO_SHIFT:     /* PsychoShiftTag: AFTER_MOVE, 1 turn */
     case BATTLER_TAG_TYPE_DISABLED:         /* DisabledTag (MoveRestrictionBattlerTag) */
     case BATTLER_TAG_TYPE_TAUNT:            /* TauntTag (MoveRestrictionBattlerTag) */
+    case BATTLER_TAG_TYPE_IMPRISON:         /* ImprisonTag (source moves and active field state) */
     case BATTLER_TAG_TYPE_TORMENT:          /* TormentTag (MoveRestrictionBattlerTag) */
     case BATTLER_TAG_TYPE_ENCORE:           /* EncoreTag (MoveRestrictionBattlerTag) */
     case BATTLER_TAG_TYPE_INFATUATED:       /* InfatuatedTag: Attract, Cute Charm */
@@ -263,6 +267,19 @@ static pr_battler_tag construct(int type, int turn_count, int source_move, int64
     t.source_id = -1;
     t.source_index = -1;
     switch (type) {
+    case BATTLER_TAG_TYPE_COMMANDED:
+        t.turn_count = 0;
+        t.source_move = MOVE_ID_NONE;
+        t.source_id = source_id;
+        break;
+    case BATTLER_TAG_TYPE_CENTER_OF_ATTENTION:
+        t.turn_count = 1;
+        break;
+    case BATTLER_TAG_TYPE_HELPING_HAND:
+        t.turn_count=1;
+        t.source_move=MOVE_ID_HELPING_HAND;
+        t.source_id=source_id;
+        break;
     case BATTLER_TAG_TYPE_CHARGING:
         t.turn_count = 1;
         t.source_id = source_id;
@@ -368,6 +385,9 @@ static pr_battler_tag construct(int type, int turn_count, int source_move, int64
     case BATTLER_TAG_TYPE_TAUNT:                  /* TauntTag(): AFTER_MOVE, 4 turns, no source id */
         t.turn_count = 4;
         t.source_move = MOVE_ID_TAUNT;
+        break;
+    case BATTLER_TAG_TYPE_IMPRISON:
+        t.turn_count=1;t.source_move=MOVE_ID_IMPRISON;t.source_id=source_id;
         break;
     case BATTLER_TAG_TYPE_TORMENT:                /* TormentTag(sourceId): AFTER_MOVE, 1 turn */
         t.turn_count = 1;
@@ -490,6 +510,12 @@ static pr_battler_tag construct(int type, int turn_count, int source_move, int64
 /* newTag.canAdd(pokemon) */
 static pr_pokemon *tag_source(pr_battle *bt, const pr_battler_tag *t);
 
+const char *pr_commanded_form_key(const pr_battler_tag *tag)
+{
+    return tag->commanded_form_key && tag->commanded_form_key <= PR_FORM_COUNT
+        ? pr_forms[tag->commanded_form_key - 1].form_key : "curly";
+}
+
 /* isOppositeGender: this.gender !== GENDERLESS && other.gender === (this.gender === MALE ? FEMALE : MALE)
  * (Gender: GENDERLESS -1, MALE 0, FEMALE 1) */
 static bool opposite_gender(const pr_pokemon *a, const pr_pokemon *b)
@@ -529,6 +555,13 @@ int pr_encore_try_override(pr_pokemon *p)
 static bool can_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t)
 {
     switch (t->type) {
+    case BATTLER_TAG_TYPE_CENTER_OF_ATTENTION: {
+        /* getPlayerField/getEnemyField include fainted and switching members. */
+        int first = p->is_player ? 0 : 2;
+        for (int k = first; k < first + (bt->double_battle ? 2 : 1); k++)
+            if (bt->field[k] && pr_get_battler_tag(bt->field[k], t->type)) return false;
+        return true;
+    }
     case BATTLER_TAG_TYPE_BYPASS_SPEED: {
         bool bypass = true;
         pr_ab_params params = {.pokemon = p, .move = -1, .flag = &bypass};
@@ -669,9 +702,27 @@ static void stockpile_on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_batt
     if (ph >= 0) e->pool[ph].ssc_stockpile = true;
 }
 
+static pr_pokemon *tag_source(pr_battle *bt, const pr_battler_tag *t);
+
 static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t)
 {
     switch (t->type) {
+    case BATTLER_TAG_TYPE_COMMANDED: {
+        const pr_pokemon *source = tag_source(bt, t);
+        if (source) t->commanded_form_key = (uint16_t)(pr_pokemon_base_form(source) - pr_forms + 1);
+        const int32_t stats[] = {STAT_ATK, STAT_DEF, STAT_SPATK, STAT_SPDEF, STAT_SPD};
+        pr_unshift_stat_stage_change(bt, e, pr_battler_index(bt, p), stats, 5, 2, p);
+        return;
+    }
+    case BATTLER_TAG_TYPE_CENTER_OF_ATTENTION:
+        say(bt, e, "battlerTags:centerOfAttentionOnAdd", p);
+        return;
+    case BATTLER_TAG_TYPE_HELPING_HAND: {
+        pr_pokemon *source=tag_source(bt,t);
+        if(source)pr_queue_msg(bt,e,pr_msg2("battlerTags:helpingHandOnAdd",
+            pr_arg_pokemon(bt,"pokemonNameWithAffix",source),pr_arg_pokemon(bt,"pokemonName",p)));
+        return;
+    }
     case BATTLER_TAG_TYPE_CONFUSED:
         pr_unshift_common_anim(bt, e, pr_battler_index(bt, p), -1, COMMON_ANIM_CONFUSION);
         say(bt, e, "battlerTags:confusedOnAdd", p);
@@ -765,9 +816,9 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
         const pr_stat_params sp = {.move = -1, .ignore_ability = true, .ignore_opp_ability = true,
                                    .ignore_ally_ability = true, .ignore_held_items = true, .simulated = true};
         int best = STAT_ATK;
-        int32_t best_value = 0;
+        double best_value = 0;
         for (int stat = STAT_ATK; stat <= STAT_SPD; stat++) {
-            int32_t v = pr_get_effective_stat_p(bt, p, stat, &sp);
+            double v = pr_get_effective_stat_p(bt, p, stat, &sp);
             if (v > best_value) best = stat, best_value = v;
         }
         t->stat = (int8_t)best;
@@ -1162,6 +1213,18 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
     case BATTLER_TAG_TYPE_DISABLED:
     case BATTLER_TAG_TYPE_TAUNT:
         return restriction_lapse(bt, e, p, t, lapse_type);
+    case BATTLER_TAG_TYPE_IMPRISON: {
+        const pr_pokemon *source=pr_pokemon_by_id(bt,t->source_id);
+        if(!source)return false;
+        if(lapse_type==BATTLER_TAG_LAPSE_TYPE_PRE_MOVE && e && e->current>=0 && e->pool[e->current].type==PH_MOVE){
+            int move=e->pool[e->current].move.id;
+            if(pr_tag_restricts_move(bt,p,t,move)){
+                pr_queue_msg(bt,e,pr_msg2("battle:moveDisabledImprison",pr_arg_pokemon(bt,"pokemonNameWithAffix",p),pr_arg_move("moveName",move)));
+                pr_cancel_current_move(e,NULL);
+            }
+        }
+        return active_on_field(source);
+    }
     case BATTLER_TAG_TYPE_TORMENT:                /* only leaving the field ends it */
         return active_on_field(p);
     case BATTLER_TAG_TYPE_ENCORE:
@@ -1370,6 +1433,12 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
 static void on_remove(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_battler_tag *t)
 {
     switch (t->type) {
+    case BATTLER_TAG_TYPE_COMMANDED: {
+        const pr_pokemon *source = tag_source(bt, t);
+        if (source && active_on_field(source))
+            pr_unshift_pokemon_anim_for(bt, e, p, POKEMON_ANIM_TYPE_COMMANDER_REMOVE);
+        return;
+    }
     case BATTLER_TAG_TYPE_CONFUSED: say(bt, e, "battlerTags:confusedOnRemove", p); return;
     case BATTLER_TAG_TYPE_TRAPPED:
     case BATTLER_TAG_TYPE_NO_RETREAT:
@@ -1465,6 +1534,7 @@ void pr_grudge_lapse(pr_battle *bt, pr_engine *e, pr_pokemon *fainted, pr_pokemo
                   : pr_moves[move].pp + PR_PP_UP(source)[s] * (int)(step < 1 ? 1 : step);
         int used = PR_PP_USED(source)[s] + (max - PR_PP_USED(source)[s]);   /* usePp(remaining) */
         PR_PP_USED(source)[s] = (uint8_t)(used > max ? max : used);
+        pr_sync_moveset_aliases(source);
         pr_queue_msg(bt, e, pr_msg2("battlerTags:grudgeLapse", pr_arg_pokemon(bt, "pokemonNameWithAffix", source),
                                     pr_arg_move("moveName", move)));   /* movesetMove.getName() */
         return;

@@ -4,7 +4,7 @@ CC ?= gcc
 CFLAGS ?= -O2 -g -std=c99 -Wall -Wextra -Wno-unused-parameter -ffp-contract=off
 CPPFLAGS += -Iinclude -Igen/out
 BUILD ?= build
-SRCS := src/rng.c src/hooks.c src/pokemon.c src/damage.c src/move_attrs.c src/closures.c src/closures_moves.c src/closures_conditions.c src/ab_attrs.c src/closures_abilities.c src/modifiers.c src/tags.c src/battler_tags.c src/arena_tags.c src/history.c src/engine.c src/phases.c src/move_effects.c src/called_moves.c src/switching.c src/commands.c src/js_math.c src/text.c src/events.c gen/out/pr_data.c
+SRCS := src/item_transfer.c src/rng.c src/hooks.c src/pokemon.c src/damage.c src/move_attrs.c src/closures.c src/closures_moves.c src/closures_conditions.c src/ab_attrs.c src/closures_abilities.c src/modifiers.c src/tags.c src/battler_tags.c src/arena_tags.c src/history.c src/engine.c src/phases.c src/move_effects.c src/called_moves.c src/switching.c src/commands.c src/js_math.c src/text.c src/events.c gen/out/pr_data.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
 all: $(BUILD)/transform-test
@@ -281,3 +281,277 @@ $(BUILD)/ability-lookup-test: tests/ability-lookup-test.c $(BUILD)/libprcore.a
 all: $(BUILD)/form-lifecycle-test
 $(BUILD)/form-lifecycle-test: tests/form-lifecycle-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/battle-bond-test
+$(BUILD)/battle-bond-test: tests/battle-bond-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/battle-bond-turn-test
+$(BUILD)/battle-bond-turn-test: tests/battle-bond-turn-test.c $(BUILD)/fell-stinger-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -Itests -I$(BUILD) $(CFLAGS) tests/battle-bond-turn-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/reset-arena-test
+$(BUILD)/reset-arena-test: tests/reset-arena-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/copying-test $(BUILD)/copying-turn-test
+$(BUILD)/copying-test: tests/copying-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+$(BUILD)/copying-turn-replay.inc: tests/speed-boost-replay.inc tools/build-transform-turn-proof.py tools/build-copying-turn-proof.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-copying-turn-proof.py replay $@
+$(BUILD)/copying-turn-test: tests/copying-turn-test.c $(BUILD)/copying-turn-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/copying-turn-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/native-form-test
+$(BUILD)/native-form-test: tests/native-form-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/native-form-turn-test
+$(BUILD)/native-form-turn-replay.inc: tests/speed-boost-replay.inc tools/build-transform-turn-proof.py tools/build-native-form-turn-proof.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-native-form-turn-proof.py replay $@
+$(BUILD)/native-form-turn-test: tests/native-form-turn-test.c $(BUILD)/native-form-turn-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/native-form-turn-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/gas-lifecycle-test $(BUILD)/arena-remove-all-test $(BUILD)/imprison-test
+$(BUILD)/gas-lifecycle-test: tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+$(BUILD)/arena-remove-all-test: tests/arena-remove-all-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/arena-remove-all-test.c $(BUILD)/libprcore.a -lm -o $@
+$(BUILD)/imprison-test: tests/imprison-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/imprison-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/gas-turn-test
+$(BUILD)/gas-turn-replay.inc: tests/speed-boost-replay.inc tools/build-transform-turn-proof.py tools/build-gas-turn-proof.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-gas-turn-proof.py replay $@
+$(BUILD)/gas-turn-test: tests/gas-turn-test.c $(BUILD)/gas-turn-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/gas-turn-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/stance-change-test $(BUILD)/stance-turn-test
+$(BUILD)/stance-change-test: tests/stance-change-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/stance-change-test.c $(BUILD)/libprcore.a -lm -o $@
+$(BUILD)/stance-turn-replay.inc: tests/speed-boost-replay.inc tools/build-transform-turn-proof.py tools/build-stance-turn-proof.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-stance-turn-proof.py replay $@
+$(BUILD)/stance-turn-test: tests/stance-turn-test.c $(BUILD)/stance-turn-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/stance-turn-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/form-interaction-test $(BUILD)/form-interaction-turn-test
+$(BUILD)/form-interaction-test: tests/form-interaction-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/form-interaction-test.c $(BUILD)/libprcore.a -lm -o $@
+$(BUILD)/form-interaction-turn-replay.inc: tests/speed-boost-replay.inc tools/build-transform-turn-proof.py tools/build-form-interaction-turn-proof.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-form-interaction-turn-proof.py replay $@
+$(BUILD)/form-interaction-turn-test: tests/form-interaction-turn-test.c $(BUILD)/form-interaction-turn-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/form-interaction-turn-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/weather-form-test
+$(BUILD)/weather-form-test: tests/weather-form-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/weather-form-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/weather-turn-test
+$(BUILD)/weather-turn-replay.inc: tests/speed-boost-replay.inc tools/build-transform-turn-proof.py tools/build-weather-turn-proof.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-weather-turn-proof.py replay $@
+$(BUILD)/weather-turn-test: tests/weather-turn-test.c $(BUILD)/weather-turn-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/weather-turn-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/ally-lookup-test
+$(BUILD)/ally-lookup-test: tests/ally-lookup-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/pending-heal-test $(BUILD)/pending-turn-test
+$(BUILD)/pending-heal-test: tests/pending-heal-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/pending-heal-test.c $(BUILD)/libprcore.a -lm -o $@
+$(BUILD)/pending-turn-replay.inc: tests/speed-boost-replay.inc tools/build-transform-turn-proof.py tools/build-pending-turn-proof.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-pending-turn-proof.py replay $@
+$(BUILD)/pending-turn-test: tests/pending-turn-test.c $(BUILD)/pending-turn-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/pending-turn-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/form-fusion-test $(BUILD)/stat-order-turn-test
+$(BUILD)/form-fusion-test: tests/form-fusion-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/form-fusion-test.c $(BUILD)/libprcore.a -lm -o $@
+$(BUILD)/stat-order-turn-replay.inc: tests/speed-boost-replay.inc tools/build-transform-turn-proof.py tools/build-native-form-turn-proof.py tools/build-stat-order-turn-proof.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-stat-order-turn-proof.py replay $@
+$(BUILD)/stat-order-turn-test: tests/stat-order-turn-test.c $(BUILD)/stat-order-turn-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/stat-order-turn-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/fusion-name-test
+$(BUILD)/fusion-name-test: tests/fusion-name-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/fusion-message-test
+$(BUILD)/fusion-message-test: tests/fusion-message-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/fusion-wish-test
+$(BUILD)/fusion-wish-test: tests/fusion-wish-test.c tests/fusion-message-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/fusion-wish-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/fusion-callback-test $(BUILD)/transform-callback-test $(BUILD)/fusion-callback-turn-test $(BUILD)/transform-callback-turn-test
+$(BUILD)/fusion-callback-test: tests/fusion-callback-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+$(BUILD)/transform-callback-test: tests/transform-callback-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+$(BUILD)/fusion-callback-turn-replay.inc: tests/speed-boost-replay.inc tools/build-transform-turn-proof.py tools/build-native-form-turn-proof.py tools/build-fusion-callback-turn-proof.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-fusion-callback-turn-proof.py replay $@
+$(BUILD)/fusion-callback-turn-test: tests/fusion-callback-turn-test.c $(BUILD)/fusion-callback-turn-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/fusion-callback-turn-test.c $(BUILD)/libprcore.a -lm -o $@
+$(BUILD)/transform-callback-turn-replay.inc: tests/speed-boost-replay.inc tools/build-transform-turn-proof.py tools/build-transform-callback-turn-proof.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-transform-callback-turn-proof.py replay $@
+$(BUILD)/transform-callback-turn-test: tests/transform-callback-turn-test.c $(BUILD)/transform-callback-turn-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/transform-callback-turn-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/interlude-test
+$(BUILD)/interlude-test: tests/interlude-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/interlude-test.c $(BUILD)/libprcore.a -lm -o $@
+all: $(BUILD)/interlude-end-test
+$(BUILD)/interlude-end-test: tests/interlude-end-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/interlude-end-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/final-boss-test
+$(BUILD)/final-boss-test: tests/final-boss-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/final-boss-form-test
+$(BUILD)/final-boss-form-test: tests/final-boss-form-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/item-transfer-test
+$(BUILD)/item-transfer-test: tests/item-transfer-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/encounter-end-test
+$(BUILD)/encounter-end-test: tests/encounter-end-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/summon-entry-test
+$(BUILD)/summon-entry-test: tests/summon-entry-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/summon-entry-host-test
+summon-entry-host-test: $(BUILD)/summon-entry-host-test
+	$(BUILD)/summon-entry-host-test
+$(BUILD)/summon-entry-host-test: tests/summon-entry-host-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: summon-entry-host-test
+
+all: $(BUILD)/helping-hand-test
+$(BUILD)/helping-hand-test: tests/helping-hand-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/acupressure-test
+$(BUILD)/acupressure-test: tests/acupressure-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/after-you-test
+$(BUILD)/after-you-test: tests/after-you-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/suppression-test
+$(BUILD)/suppression-test: tests/suppression-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/wide-level-test
+$(BUILD)/wide-level-test: tests/wide-level-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/wide-boss-score-test
+$(BUILD)/wide-boss-score-test: tests/wide-boss-score-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/flame-burst-test
+$(BUILD)/flame-burst-test: tests/flame-burst-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/flame-burst-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/partner-cures-test
+$(BUILD)/partner-cures-test: tests/partner-cures-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/partner-cures-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/attention-test
+$(BUILD)/attention-test: tests/attention-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/attention-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/commander-test
+$(BUILD)/commander-test: tests/commander-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/commander-test.c $(BUILD)/libprcore.a -lm -o $@
+
+$(BUILD)/move-theft-test: tests/move-theft-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+$(BUILD)/berry-moves-test: tests/berry-moves-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -Wl,--wrap=pr_apply_ab_attrs -lm -o $@
+
+all: $(BUILD)/xerneas-active-test
+$(BUILD)/xerneas-active-test: tests/xerneas-active-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/bad-dreams-doubles-test
+$(BUILD)/bad-dreams-doubles-replay.c: tests/doublestest.c tools/build-bad-dreams-doubles-replay.py
+	mkdir -p $(@D)
+	python3 tools/build-bad-dreams-doubles-replay.py $< $@
+$(BUILD)/bad-dreams-doubles-test: $(BUILD)/bad-dreams-doubles-replay.c tests/turntest.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -Itests $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/wide-substitute-test
+$(BUILD)/wide-substitute-frame.inc: tests/gas-lifecycle-test.c tools/build-wide-substitute-frame.py
+	mkdir -p $(@D)
+	python3 tools/build-wide-substitute-frame.py $< $@
+WIDE_AI_LIB := $(BUILD)/wide-ai/libai.a
+$(WIDE_AI_LIB): $(wildcard ../ai-core/src/*.[ch] ../ai-core/include/pr/*.h include/pr/*.h) ../ai-core/gen/out/ai_data.c
+	$(MAKE) -s -C ../ai-core BUILD=$(abspath $(BUILD)/wide-ai) BATTLE_CORE=$(abspath .) $(abspath $(WIDE_AI_LIB))
+$(BUILD)/wide-substitute-test: tests/wide-substitute-test.c $(BUILD)/wide-substitute-frame.inc src/phases.c $(WIDE_AI_LIB) $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I../ai-core/include -Itests -I$(BUILD) $(CFLAGS) $< $(WIDE_AI_LIB) $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/wide-combat-test
+$(BUILD)/wide-combat-replay.c: tests/doublestest.c tools/build-wide-combat-replay.py
+	mkdir -p $(@D)
+	python3 tools/build-wide-combat-replay.py $< $@
+$(BUILD)/wide-combat-test: $(BUILD)/wide-combat-replay.c tests/turntest.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -Itests $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/stat-rearrangement-test
+$(BUILD)/stat-rearrangement-test: tests/stat-rearrangement-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/quash-test
+$(BUILD)/quash-test: tests/quash-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/wide-highest-stat-test
+$(BUILD)/wide-highest-stat-test: tests/wide-highest-stat-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/spectral-thief-test
+$(BUILD)/spectral-thief-test: tests/spectral-thief-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/hp-split-test
+$(BUILD)/hp-split-test: tests/hp-split-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/ability-moves-test
+$(BUILD)/ability-moves-test: tests/ability-moves-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/hp-cost-boosts-test
+$(BUILD)/hp-cost-boosts-test: tests/hp-cost-boosts-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/pledge-test
+$(BUILD)/pledge-test: tests/pledge-test.c tests/gas-lifecycle-test.c src/phases.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/type-moves-test
+$(BUILD)/type-moves-test: tests/type-moves-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -Wl,--wrap=pr_battle_rand_seed_int -lm -o $@
+
+all: $(BUILD)/secret-power-test
+$(BUILD)/secret-power-test: tests/secret-power-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -Wl,--wrap=pr_battle_rand_seed_int -lm -o $@

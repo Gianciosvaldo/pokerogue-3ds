@@ -185,6 +185,7 @@ static void enemy_items(gc_run *run)
                 }
             }
         }
+    gc_cache_generated_item_tiers(run);
 }
 
 /* gc_mon_new_enemy again once pr_run_enemy_pokemon_finish has filled in the rest of the rolls, keeping
@@ -192,7 +193,7 @@ static void enemy_items(gc_run *run)
 static void refresh_enemy(gc_run *run, gc_mon *m, int species, int level, const pr_enemy_gen *g, int slot)
 {
     uint16_t mv[4];
-    uint8_t pp_up[4];
+    int8_t pp_up[4];
     int16_t max_pp[4];
     const int n = m->b.n_moves;
     memcpy(mv, m->b.moves, sizeof mv);
@@ -290,10 +291,10 @@ bool gc_is_new_biome(const gc_run *run, int wave)
  * EncounterPhase rolls the biome's weather and terrain for it (not NextEncounterPhase, a wave in the same biome) */
 static void arena_flags(const gc_run *run, int prev_wave, bool *reset, bool *new_biome, bool *roll)
 {
-    const gc_internal *in = gc_int((gc_run *)run);
     *new_biome = prev_wave && gc_is_new_biome(run, prev_wave);
-    *reset = !prev_wave || *new_biome || in->last_battle_type == BATTLE_TYPE_TRAINER
-             || in->last_battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER || in->last_final_boss;
+    *reset = !prev_wave || *new_biome || run->battle_type == BATTLE_TYPE_TRAINER
+             || run->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER
+             || (run->run.mode == GAME_MODES_CLASSIC && pr_run_is_wave_final(run->run.mode,run->wave));
     *roll = !prev_wave || *new_biome || run->run.mode == GAME_MODES_DAILY;
 }
 
@@ -376,6 +377,16 @@ void gc_new_battle(gc_run *run)
         for (int i = 0; i < run->n_party; i++) run->party[i].pokerus = pk[i];
     }
 
+    /* doPostBattleCleanup precedes the new encounter's generation and save point.
+     * The old double flag and player field still belong to the outgoing battle. */
+    if (prev_wave) {
+        bool reset, new_biome, roll;
+        arena_flags(run,prev_wave,&reset,&new_biome,&roll);
+        if (reset) {
+            gc_battle_cleanup_players(run);
+        }
+    }
+
     if (nb.battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) {
         int type = GC_ME_MYSTERIOUS_CHALLENGERS, tier = GC_ME_COMMON;
         run->battle_type = BATTLE_TYPE_MYSTERY_ENCOUNTER;
@@ -395,7 +406,7 @@ void gc_new_battle(gc_run *run)
         /* resetArenaEffects, then the biome's weather and terrain, before the save */
         bool reset, new_biome, roll;
         arena_flags(run, prev_wave, &reset, &new_biome, &roll);
-        gc_arena_new_battle(run, reset, roll);
+        gc_arena_new_battle(run, reset && !prev_wave, roll);
 
         if (in->custom) {   /* custom content: the wave is reported (a mystery encounter is never offered a rematch) */
             gc_custom_encounter enc;
@@ -449,7 +460,9 @@ void gc_new_battle(gc_run *run)
      * resetSeed, so what they roll is only the arena, not the rolls after them */
     bool reset, new_biome, roll;
     arena_flags(run, prev_wave, &reset, &new_biome, &roll);
-    gc_arena_new_battle(run, reset, roll);
+    /* Cleanup already reset the outgoing arena. Its removal callbacks may
+     * have established new weather, which survives an ordinary trainer entry. */
+    gc_arena_new_battle(run, reset && !prev_wave, roll);
 
     gc_event *ev = gc_ev_new(run, GC_EV_WAVE);
     if (ev) { ev->a = wave; ev->b = run->biome; ev->c = run->battle_type; }

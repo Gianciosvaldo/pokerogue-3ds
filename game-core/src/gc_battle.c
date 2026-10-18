@@ -134,6 +134,25 @@ void gc_arena_new_battle(gc_run *run, bool reset, bool roll)
     }
 }
 
+/* newBattle's player cleanup runs before EncounterPhase constructs its enemies.
+ * Keep the outgoing field's summon data until PostBattleInit and Return have run. */
+void gc_battle_cleanup_players(gc_run *run)
+{
+    pr_battle *bt=&run->bt;
+    bt->field[2]=bt->field[3]=NULL;
+    bt->n_party[1]=0;
+    bt->rng=run->run.rng;
+    bt->rng_live=true;
+    gc_items_to_battle(run);
+    pr_prepare_player_cleanup(bt,&run->eng,true);
+    pr_run_player_cleanup(bt,&run->eng);
+    sync_ability_indices(run);
+    note_unported(run);
+    gc_items_from_battle(run);
+    gc_ev_battle(run);
+    run->run.rng=bt->rng;
+}
+
 /* The scene for a new battle: battle-core's pr_battle built from the run. SummonPhase swaps a fainted
  * lead with the first Pokemon that can fight, as upstream reorders the party.
  *
@@ -144,6 +163,14 @@ void gc_arena_new_battle(gc_run *run, bool reset, bool roll)
 static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
 {
     pr_battle *bt = &run->bt;
+    /* Direct battle-setup callers (scripted encounters and host adapters) can
+     * still own an outgoing player field. Recall it before rebuilding pointers. */
+    if (reset_arena && !restoring) {
+        bool outgoing=false;
+        for (int i=0;i<bt->n_party[0];i++)
+            if (bt->party[0][i]->on_field && !bt->party[0][i]->switch_out_status) outgoing=true;
+        if (outgoing) gc_battle_cleanup_players(run);
+    }
     /* what the arena keeps */
     const int lead = run->party_order[0];
     const bool keep_lead = !reset_arena && lead >= 0 && lead < run->n_party && run->party[lead].b.on_field
@@ -189,8 +216,9 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
     gc_items_to_battle(run);
 
     if (!keep_lead && !restoring) {
-        /* ReturnPhase and resetBattleAndWaveData: everyone off the field, their summon data cleared */
-        for (int i = 0; i < run->n_party; i++) {
+        /* A reset arena has already executed its callbacks and Return phases.
+         * The fallback below handles a missing lead on an ordinary continuation. */
+        for (int i = 0; !reset_arena && i < run->n_party; i++) {
             if (run->party[i].b.on_field) {
                 gc_event *ev = gc_ev_new(run, GC_EV_RECALL);
                 if (ev) { ev->a = 0; ev->b = i; }
@@ -211,6 +239,7 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
     for (int k = 0; k < run->n_party; k++) {
         gc_mon *m = &run->party[run->party_order[k]];
         m->b.is_player = true;
+        if (!restoring) pr_reset_wave_data(&m->b);
         bt->party[0][k] = &m->b;
         pr_update_passive(bt, &m->b);
     }

@@ -779,16 +779,15 @@ int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, co
             PR_PP_UP(b)[s] = r->moves[c].pp_up;
             c++;
         }
+        pr_sync_moveset_aliases(b);
         if (b->level != r->level) {
             /* a candy: PokemonLevelIncrementModifier. Its addFriendship(FRIENDSHIP_GAIN_FROM_RARE_CANDY, true)
              * adds the candy's 6 to the starter's candy progress whether or not the Pokemon's own friendship rose
              * (at 199 it rises by 1, at 200 or more not at all), so the amount is the candy's, not the change in
              * friendship. The Pokemon's own friendship is reward-core's (the 200 cap keeps what is above it) */
             const int old_level = b->level;
-            const bool too_high = r->level > 255;   /* battle-core's level is a byte: stop at 255, not wrap to a low level */
-            b->level = too_high ? 255 : (uint8_t)r->level;
-            const pr_species *sp = gc_species(b->species);
-            m->exp = too_high && sp ? pr_reward_level_total_exp(255, sp->growth_rate) : r->exp;
+            b->level = r->level;
+            m->exp = r->exp;
             gc_system_add_friendship(run->sys, run, m, GC_FRIENDSHIP_GAIN_FROM_RARE_CANDY, true);
             b->friendship = r->friendship;
             gc_rq_unshift(run, gc_rp(RP_LEVEL_UP, storage, old_level, b->level));

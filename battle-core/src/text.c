@@ -100,6 +100,133 @@ static void put_utf8(obuf *o, unsigned c)
     }
 }
 
+
+/* getFusedSpeciesName uses JS UTF-16 slices, including its literal character
+ * class and match-array-length slice quirk. Work in code units, not UTF-8 bytes. */
+typedef struct { uint16_t c[256]; size_t n; } name_units;
+static int name_decode(const char *s, name_units *u)
+{
+    u->n = 0;
+    while (*s) {
+        unsigned c = (unsigned char)*s++, k = 0;
+        if (c >= 0xf0) { c &= 7; k = 3; }
+        else if (c >= 0xe0) { c &= 15; k = 2; }
+        else if (c >= 0xc0) { c &= 31; k = 1; }
+        else if (c >= 0x80) return 0;
+        while (k--) {
+            unsigned d = (unsigned char)*s++;
+            if ((d & 0xc0) != 0x80) return 0;
+            c = (c << 6) | (d & 63);
+        }
+        if (c > 0x10ffff || u->n + (c > 0xffff ? 2 : 1) > 255) return 0;
+        if (c > 0xffff) {
+            c -= 0x10000; u->c[u->n++] = (uint16_t)(0xd800 + (c >> 10));
+            c = 0xdc00 + (c & 1023);
+        }
+        u->c[u->n++] = (uint16_t)c;
+    }
+    return 1;
+}
+static name_units name_slice(const name_units *u, size_t start, size_t end)
+{
+    name_units v = {{0}, 0};
+    if (start > u->n) start = u->n;
+    if (end > u->n) end = u->n;
+    if (end > start) { v.n = end - start; memcpy(v.c, u->c + start, v.n * sizeof *v.c); }
+    return v;
+}
+static unsigned name_lower(unsigned c)
+{
+    if ((c >= 'A' && c <= 'Z') || (c >= 0xc0 && c <= 0xd6) || (c >= 0xd8 && c <= 0xde)) return c + 32;
+    return c;
+}
+static int name_letter(unsigned c) { c = name_lower(c); return c >= 'a' && c <= 'z'; }
+static int name_vowel(unsigned c)
+{
+    c = name_lower(c);
+    return c < 128 && strchr("aeiou(?:y$)-'", (int)c) != NULL;
+}
+/* Leftmost two ASCII letters; lazy middle; A's final class is greedy. */
+static int name_match(const name_units *u, int a, size_t *start, size_t *end)
+{
+    for (size_t i = 0; i + 2 < u->n; i++) {
+        if (!name_letter(u->c[i]) || !name_letter(u->c[i + 1])) continue;
+        for (size_t j = i + 2; j < u->n; j++) if (name_vowel(u->c[j])) {
+            *start = i; *end = j + 1;
+            if (a) while (*end < u->n && name_vowel(u->c[*end])) (*end)++;
+            return 1;
+        }
+    }
+    return 0;
+}
+static void name_affixes(name_units *u, name_units *prefix, name_units *suffix)
+{
+    prefix->n = suffix->n = 0;
+    for (size_t i = 1; i < u->n; i++) if (u->c[i] == ' ') {
+        /* ^[^ ]+ does not match a leading space. */
+        if (u->c[0] != ' ') { *prefix = name_slice(u, 0, i + 1); *u = name_slice(u, i + 1, u->n); }
+        break;
+    }
+    for (size_t i = u->n; i > 0; i--) if (u->c[i - 1] == ' ') {
+        if (i < u->n) { *suffix = name_slice(u, i - 1, u->n); u->n = i - 1; }
+        break;
+    }
+}
+static void name_put(obuf *o, const name_units *u)
+{
+    for (size_t i = 0; i < u->n; i++) {
+        unsigned c = u->c[i];
+        if (c >= 0xd800 && c <= 0xdbff && i + 1 < u->n && u->c[i+1] >= 0xdc00 && u->c[i+1] <= 0xdfff) {
+            c = 0x10000 + ((c - 0xd800) << 10) + u->c[++i] - 0xdc00;
+        } else if (c >= 0xd800 && c <= 0xdfff) c = 0xfffd;
+        put_utf8(o, c);
+    }
+}
+size_t pr_fused_species_name(const char *a, const char *b, char *out, size_t cap)
+{
+    obuf o = {out, cap, 0};
+    name_units A, B, ap, bp, as, bs, fa, fb;
+    if (!a || !b || !name_decode(a, &A) || !name_decode(b, &B)) { end(&o); return 0; }
+    name_affixes(&A, &ap, &as); name_affixes(&B, &bp, &bs);
+    size_t sa = 0, ea = 0, sb = 0, eb = 0;
+    int ma = name_match(&A, 1, &sa, &ea), mb = name_match(&B, 0, &sb, &eb);
+    int multi_a = 0, multi_b = 0;
+    for (size_t i = 0; i < A.n; i++) if (A.c[i] == ' ') multi_a = 1;
+    for (size_t i = 0; i < B.n; i++) if (B.c[i] == ' ') multi_b = 1;
+    fa = multi_a || !ma ? A : name_slice(&A, sa, ea);
+    if (multi_b) {
+        size_t i = B.n; while (i && B.c[i - 1] != ' ') i--;
+        fb = name_slice(&B, i, B.n);
+    } else if (mb) {
+        name_units prev = name_slice(&B, sb + 2, eb);
+        int hyphen = 0;
+        for (size_t i = 0; i < prev.n; i++) if (prev.c[i] == '-' || prev.c[i] == '\'') hyphen = 1;
+        fb = name_slice(&B, eb, B.n);
+        if (hyphen) {
+            memmove(fb.c + prev.n, fb.c, fb.n * sizeof *fb.c);
+            memcpy(fb.c, prev.c, prev.n * sizeof *fb.c); fb.n += prev.n;
+        }
+        if (!fb.n) fb = prev;
+        /* For multiword A, this comparison uses its final word, which has
+         * the same final code unit as the later reconstructed full name. */
+        if (fa.n && fb.n && fa.c[fa.n - 1] == fb.c[0]) {
+            unsigned last = fa.c[fa.n - 1];
+            if (last == 'a' || last == 'i' || last == 'u') fb = name_slice(&fb, 1, fb.n);
+            else {
+                size_t i = 0; while (i < fb.n && fb.c[i] == last) i++;
+                if (i && i < fb.n) fb = name_slice(&fb, i, fb.n);
+            }
+        }
+    } else fb = B;
+    if (fb.n) fb.c[0] = (uint16_t)name_lower(fb.c[0]);
+    if (fa.n == 4 && fa.c[0] == 'R' && fa.c[1] == 'a' && fa.c[2] == 'p' && fa.c[3] == 'i') {
+        fa.c[fa.n++] = 'd';
+        if (fb.n == 2 && fb.c[0] == 'n' && fb.c[1] == 'g') fb = name_slice(&B, B.n > 3 ? B.n - 3 : 0, B.n);
+    }
+    name_put(&o, ap.n ? &ap : &bp); name_put(&o, &fa); name_put(&o, &fb); name_put(&o, bs.n ? &bs : &as);
+    end(&o); return o.n;
+}
+
 static unsigned hex4(const char *p)
 {
     unsigned v = 0;
@@ -277,24 +404,32 @@ static void species_name(obuf *o, const pr_text_source *src, uint16_t id, uint8_
     if (!wrap) { puts_(o, name); return; }
     pr_msg m = {0};
     m.n_args = 1;
-    m.args[0] = (pr_msg_arg){"pokemonName", PR_ARG_STR, 0, name};
+    m.args[0] = (pr_msg_arg){"pokemonName", PR_ARG_STR, 0, name, 0};
     snprintf(key, sizeof key, "battlePokemonForm:%s", wrap);
     format_key(o, key, &m, src, 1);
 }
 
 /* getPokemonNameWithAffix */
-static void pokemon_name(obuf *o, const pr_text_source *src, uint32_t v, bool affix)
+static void pokemon_name(obuf *o, const pr_text_source *src, uint32_t v, uint32_t fusion_v, bool affix)
 {
     uint16_t species = (uint16_t)(v >> 16);
     uint8_t form = (uint8_t)(v >> 8), flags = (uint8_t)v;
-    if (!affix || !(flags & PR_MSG_POKEMON_ENEMY)) { species_name(o, src, species, form); return; }
-    char name[160];
+    if (!fusion_v && (!affix || !(flags & PR_MSG_POKEMON_ENEMY))) { species_name(o, src, species, form); return; }
+    char name[1024];
     obuf nb = {name, sizeof name, 0};
     species_name(&nb, src, species, form);
     end(&nb);
+    if (fusion_v >> 16) {
+        char second[512], fused[1024];
+        obuf fb = {second, sizeof second, 0};
+        species_name(&fb, src, (uint16_t)(fusion_v >> 16), (uint8_t)(fusion_v >> 8)); end(&fb);
+        pr_fused_species_name(name, second, fused, sizeof fused);
+        snprintf(name, sizeof name, "%s", fused);
+    }
+    if (!affix || !(flags & PR_MSG_POKEMON_ENEMY)) { puts_(o, name); return; }
     pr_msg m = {0};
     m.n_args = 1;
-    m.args[0] = (pr_msg_arg){"pokemonName", PR_ARG_STR, 0, name};
+    m.args[0] = (pr_msg_arg){"pokemonName", PR_ARG_STR, 0, name, 0};
     format_key(o, (flags & PR_MSG_POKEMON_FOE) ? "battle:foePokemonWithAffix" : "battle:wildPokemonWithAffix", &m, src, 1);
 }
 
@@ -328,14 +463,21 @@ static void put_arg(obuf *o, const pr_msg_arg *a, const pr_msg *m, const pr_text
 {
     char key[96];
     switch (a->kind) {
+    case PR_ARG_INT64: {
+        char b[32];
+        int64_t value = (int64_t)(((uint64_t)a->fusion_v << 32) | a->v);
+        snprintf(b, sizeof b, "%lld", (long long)value);
+        puts_(o, b);
+        break;
+    }
     case PR_ARG_INT: {
         char b[16];
         snprintf(b, sizeof b, "%ld", (long)(int32_t)a->v);
         puts_(o, b);
         break;
     }
-    case PR_ARG_POKEMON: pokemon_name(o, src, a->v, true); break;
-    case PR_ARG_POKEMON_NAME: pokemon_name(o, src, a->v, false); break;
+    case PR_ARG_POKEMON: pokemon_name(o, src, a->v, a->fusion_v, true); break;
+    case PR_ARG_POKEMON_NAME: pokemon_name(o, src, a->v, a->fusion_v, false); break;
     case PR_ARG_MOVE: {
         uint32_t id = a->v & ~PR_MSG_MOVE_BARE;
         if (!id || id >= PR_MOVE_COUNT) break;   /* MoveId.NONE's name is "" */
@@ -397,7 +539,7 @@ static void format_key(obuf *o, const char *key, const pr_msg *m, const pr_text_
     const char *use = key;
     const pr_msg_arg *count = find_arg(m, "count", 5);
     if (count) {
-        long n = (long)(int32_t)count->v;
+        int64_t n = count->kind==PR_ARG_INT64 ? (int64_t)(((uint64_t)count->fusion_v<<32)|count->v) : (int32_t)count->v;
         if (n == 0) {
             snprintf(pk, sizeof pk, "%s_zero", key);
             if (key_exists(src, pk)) use = pk;

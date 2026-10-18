@@ -360,6 +360,9 @@ void pr_wimp_out_apply(pr_battle *bt, pr_engine *e, pr_pokemon *p)
         /* clearEnemyHeldItemModifiers(): every enemy held item, then updateModifiers(false) */
         for (int i = 0; i < bt->n_mods[1]; i++)
             if (!pr_mod_is_ported_item(&bt->mods[1][i]) && pr_mod_is(&bt->mods[1][i], PR_MOD_HELD_ITEM)) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
+        pr_clear_enemy_held_item_modifiers(bt, NULL);
+        update_proven_held_items(bt, 1);
+        for (int k = 0; k < bt->n_party[1]; k++) pr_recalculate_stats(bt, bt->party[1][k]);
         if (p->hp) {
             push_boundary(bt, e, PH_BATTLE_END);
             if (pr_is_new_biome(bt)) push_boundary(bt, e, PH_SELECT_BIOME);
@@ -426,7 +429,7 @@ static void field_setup(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool reset)
 static pr_msg_arg trainer_name(const pr_battle *bt, int trainer_slot)
 {
     const char *n = bt->trainer_names[trainer_slot == TRAINER_SLOT_TRAINER_PARTNER ? 1 : 0];
-    return (pr_msg_arg){"trainerName", PR_ARG_TEMPLATE, 0, n ? n : ""};   /* getName() may nest keys */
+    return (pr_msg_arg){"trainerName", PR_ARG_TEMPLATE, 0, n ? n : "", 0};   /* getName() may nest keys */
 }
 
 /* SwitchSummonPhase: the party member in slotIndex comes in to the field slot (fieldIndex) and the
@@ -526,7 +529,7 @@ void pr_switch_summon_phase(pr_battle *bt, pr_engine *e, int ph)
     int b = side * 2 + field;
     if (in->shiny) pr_unshift_new(bt, e, PH_SHINY_SPARKLE, b);
     pr_reset_turn_data(in);
-    pr_form_change(bt, in, PR_FCT_SpeciesFormChangeActiveTrigger);
+    pr_form_change_delayed(bt, in, PR_FCT_SpeciesFormChangeActiveTrigger);
     {
         int q = pr_phase_new(e, PH_POST_SUMMON, (int8_t)b);                /* SwitchSummonPhase.queuePostSummon */
         pr_phase_unshift(bt, e, q);
@@ -548,7 +551,7 @@ void pr_switch_summon_phase(pr_battle *bt, pr_engine *e, int ph)
         in->switched_in_this_turn = true;
     }
     pr_reset_summon_data(last);
-    pr_form_change(bt, in, PR_FCT_SpeciesFormChangeActiveTrigger);
+    pr_form_change_delayed(bt, in, PR_FCT_SpeciesFormChangeActiveTrigger);
     /* The newly summoned Pokemon is excluded upstream; restore the other holders. */
     pr_weather_form_changes(bt, false, in);
 }
@@ -611,7 +614,11 @@ static void entry_hazard_apply(pr_battle *bt, pr_engine *e, int i, pr_pokemon *p
             e->overflow = true;
         return;
     }
-    default:                                                               /* Imprison */
+    case ARENA_TAG_TYPE_IMPRISON:
+        if (is_active_on_field(pr_pokemon_by_id(bt, t.source_id)) && p->hp > 0)
+            pr_add_tag(bt, e, p, BATTLER_TAG_TYPE_IMPRISON, 1, MOVE_ID_IMPRISON, t.source_id);
+        return;
+    default:
         pr_note_unported(bt, PR_FEAT_ARENA_TAG_TURN);
         return;
     }
@@ -631,21 +638,21 @@ void pr_post_summon_phase(pr_battle *bt, pr_engine *e, int ph)
         return;
     }
     if (p->status == STATUS_EFFECT_TOXIC) p->status_toxic_turns = 0;
-    if (pr_arena_get_tag_on_side(bt, ARENA_TAG_TYPE_PENDING_HEAL, ARENA_TAG_SIDE_BOTH))
-        pr_note_unported(bt, PR_FEAT_ARENA_TAG_TURN);
+    pr_arena_apply_pending_heal(bt, e, p, false);
     /* for (const tag of arena.tags): a tag removed on the way (Toxic Spikes absorbed) makes the
      * loop skip the one after it, as upstream's does */
     for (int i = 0; i < bt->n_arena_tags; i++)
         if (pr_arena_tag_is(bt->arena_tags[i].type, PR_ARENACLASS_ENTRY_HAZARD)) entry_hazard_apply(bt, e, i, p);
     /* a mystery encounter's post-summon tag */
     if (bt->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) pr_note_unported(bt, PR_FEAT_TRAINER);
-    /* CommanderAbAttr over the Pokemon's side (getAlliesGenerator), which only applies in a double
-     * battle next to an active Dondozo with no Pokemon in its mouth yet: not ported */
-    for (int k = 0; bt->double_battle && k < 2; k++) {
-        const pr_pokemon *q = bt->field[(p->is_player ? 0 : 2) + k];
-        const pr_pokemon *a = q && q->hp > 0 ? pr_get_ally(bt, q) : NULL;
-        if (is_active_on_field(a) && a->species == SPECIES_ID_DONDOZO && !pr_get_battler_tag(a, BATTLER_TAG_TYPE_COMMANDED))
-            pr_hook_ab(bt, q, PR_AC_CommanderAbAttr);
+    /* getAlliesGenerator pops in speed order; each callback evaluates its own
+     * predicate after earlier callbacks have applied their tags. */
+    pr_speed_iter allies;
+    pr_pokemon *member;
+    pr_speed_iter_init(bt, &allies, p->is_player ? ARENA_TAG_SIDE_PLAYER : ARENA_TAG_SIDE_ENEMY);
+    while ((member = pr_speed_iter_next(bt, &allies))) {
+        pr_ab_params pp = {.pokemon = member, .move = -1};
+        pr_apply_ab_attrs(bt, PR_AC_CommanderAbAttr, &pp);
     }
 }
 
@@ -657,7 +664,7 @@ void pr_summon_phase(pr_battle *bt, pr_engine *e, int ph)
     pr_phase *s = &e->pool[ph];
     int side = s->sw_player ? 0 : 1, field = s->sw_field_index;
     bool player = s->sw_player;
-    if (bt->double_battle) pr_note_unported(bt, PR_FEAT_DOUBLES);
+
     if (!bt->n_party[side]) { pr_note_unported(bt, PR_FEAT_PARTY); return; }
     if (field < 0 || field >= bt->n_party[side]) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }
     pr_pokemon *p = bt->party[side][field];
@@ -672,6 +679,11 @@ void pr_summon_phase(pr_battle *bt, pr_engine *e, int ph)
         if (legal < 0) { pr_note_unported(bt, PR_FEAT_PARTY); return; }   /* clearPhaseQueue + GameOverPhase */
         bt->party[side][field] = bt->party[side][legal];
         bt->party[side][legal] = p;
+        /* Source getField derives its slots from party order on every read.
+         * Swapping an already-out ally into slot0 must also replace slot1's
+         * reference; otherwise both C fields can alias the same Pokemon. */
+        for (int k=0;k<(bt->double_battle?2:1);k++)
+            bt->field[side*2+k]=k<bt->n_party[side]?bt->party[side][k]:NULL;
         p = bt->party[side][field];
     }
     int tslot = field % 2 ? TRAINER_SLOT_TRAINER_PARTNER : TRAINER_SLOT_TRAINER;
@@ -701,7 +713,7 @@ void pr_summon_phase(pr_battle *bt, pr_engine *e, int ph)
     /* onEnd */
     if (p->shiny) pr_unshift_new(bt, e, PH_SHINY_SPARKLE, b);
     pr_reset_turn_data(p);
-    pr_form_change(bt, p, PR_FCT_SpeciesFormChangeActiveTrigger);
+    pr_form_change_delayed(bt, p, PR_FCT_SpeciesFormChangeActiveTrigger);
     p->summoned_this_turn = true;                                           /* queuePostSummon */
 }
 

@@ -125,6 +125,8 @@ void pr_change_form_state(pr_battle *bt, pr_pokemon *p, int form)
 void pr_restore_transform(pr_pokemon *p)
 {
     p->transformed = false;
+    p->summon_moves_active=false;
+    p->summon_moves_alias_mask=0;
     p->transform_species = p->transform_form = p->transform_gender = 0;
     memset(p->transform_moves, 0, sizeof p->transform_moves);
     memset(p->transform_pp_used, 0, sizeof p->transform_pp_used);
@@ -137,13 +139,111 @@ void pr_restore_transform(pr_pokemon *p)
 void pr_set_original_move(pr_pokemon *p, int slot, uint16_t move)
 {
     if (slot < 0 || slot >= 4 || !move || move >= PR_MOVE_COUNT) return;
+    p->summon_moves_alias_mask &= (uint8_t)~(1u << slot);
     uint16_t *moves = p->moves;
     uint8_t *used = p->pp_used;
-    uint8_t *up = p->pp_up;
+    int8_t *up = p->pp_up;
     int16_t *max = p->max_pp_override;
     uint8_t *n = &p->n_moves;
+    for(int i=*n;i<slot;i++){moves[i]=0;used[i]=up[i]=0;max[i]=-1;}
     moves[slot] = move; used[slot] = up[slot] = 0; max[slot] = -1;
     if (slot >= *n) *n = (uint8_t)(slot + 1);
+}
+
+/* The C arrays represent object identity with a per-slot alias mask. */
+void pr_sync_moveset_aliases(pr_pokemon *p)
+{
+    if (!PR_HAS_SUMMON_MOVES(p)) return;
+    for (int i=0;i<4;i++) if (p->summon_moves_alias_mask & (1u<<i)) {
+        p->moves[i]=p->transform_moves[i];
+        p->pp_used[i]=p->transform_pp_used[i];
+        p->pp_up[i]=p->transform_pp_up[i];
+        p->max_pp_override[i]=p->transform_max_pp_override[i];
+    }
+}
+
+/* PokemonMove.usePp on a linked permanent or summon-data slot. */
+void pr_use_moveset_pp(pr_pokemon *p, int slot, bool temporary, int count)
+{
+    if(slot<0 || slot>=4)return;
+    uint16_t *moves=temporary?p->transform_moves:p->moves;
+    uint8_t *used=temporary?p->transform_pp_used:p->pp_used;
+    int8_t *up=temporary?p->transform_pp_up:p->pp_up;
+    int16_t *override=temporary?p->transform_max_pp_override:p->max_pp_override;
+    int step=(int)floor(pr_moves[moves[slot]].pp/5.0);if(step<1)step=1;
+    int max=override[slot]>0?override[slot]:pr_moves[moves[slot]].pp+up[slot]*step;
+    int next=used[slot]+count;used[slot]=(uint8_t)(next>max?max:next);
+    if(p->summon_moves_alias_mask & (1u<<slot)) {
+        if(temporary)p->pp_used[slot]=used[slot];
+        else p->transform_pp_used[slot]=used[slot];
+    }
+}
+
+static void detach_move_refs(pr_engine *e, pr_pokemon *p, int slot, bool original, bool temporary)
+{
+    /* A queued phase retains its old PokemonMove object after array replacement. */
+    if (!e) return;
+    for (int i=0;i<PR_MAX_PHASES;i++) if (e->used[i]) {
+        pr_phase *ph=&e->pool[i];
+        if ((ph->type!=PH_MOVE && ph->type!=PH_MOVE_HEADER) || ph->pokemon!=p || ph->move.slot!=slot) continue;
+        bool temp=ph->move.from_transform;
+        if ((temp && !temporary) || (!temp && !original)) continue;
+        ph->move.pp_used=(temp?p->transform_pp_used:p->pp_used)[slot];
+        ph->move.pp_up=(temp?p->transform_pp_up:p->pp_up)[slot];
+        ph->move.max_pp_override=(temp?p->transform_max_pp_override:p->max_pp_override)[slot];
+        ph->move.slot=-1;
+    }
+}
+
+void pr_detach_temporary_moves(pr_engine *e, pr_pokemon *p)
+{
+    for(int i=0;i<4;i++)detach_move_refs(e,p,i,false,true);
+}
+
+void pr_set_move(pr_battle *bt, pr_engine *e, pr_pokemon *p, int slot, uint16_t move)
+{
+    (void)bt;
+    if (slot<0 || slot>=4 || !move || move>=PR_MOVE_COUNT) return;
+    detach_move_refs(e,p,slot,true,true);
+    pr_set_original_move(p,slot,move);
+    if (PR_HAS_SUMMON_MOVES(p)) {
+        p->transform_moves[slot]=move;
+        p->transform_pp_used[slot]=p->transform_pp_up[slot]=0;
+        p->transform_max_pp_override[slot]=-1;
+        if (slot>=p->transform_n_moves)p->transform_n_moves=(uint8_t)(slot+1);
+        p->summon_moves_alias_mask|=(uint8_t)(1u<<slot);
+    }
+}
+
+bool pr_copy_last_move(pr_battle *bt, pr_engine *e, pr_pokemon *user,
+                       const pr_pokemon *target, int move, bool permanent)
+{
+    if (!target || (permanent && user->hp<=0)) return false;
+    bool unknown=false;
+    const pr_turn_move *last=pr_last_non_virtual_move(bt,target,false,true,&unknown);
+    if (unknown || !last || !last->move) return false;
+    int slot=-1;
+    for (int i=0;i<PR_N_MOVES(user);i++)if(PR_MOVES(user)[i]==move){slot=i;break;}
+    if (slot<0) return false;
+    int copied=last->move;
+    if (permanent)pr_set_move(bt,e,user,slot,(uint16_t)copied);
+    else {
+        if (PR_HAS_SUMMON_MOVES(user)) detach_move_refs(e,user,slot,false,true);
+        uint16_t moves[4];uint8_t used[4];int8_t up[4];int16_t max[4];
+        int count=PR_N_MOVES(user);
+        uint8_t aliases=PR_HAS_SUMMON_MOVES(user)?user->summon_moves_alias_mask:(uint8_t)((1u<<count)-1);
+        memcpy(moves,PR_MOVES(user),sizeof moves);memcpy(used,PR_PP_USED(user),sizeof used);
+        memcpy(up,PR_PP_UP(user),sizeof up);memcpy(max,PR_MAX_PP(user),sizeof max);
+        memcpy(user->transform_moves,moves,sizeof moves);memcpy(user->transform_pp_used,used,sizeof used);
+        memcpy(user->transform_pp_up,up,sizeof up);memcpy(user->transform_max_pp_override,max,sizeof max);
+        user->transform_n_moves=(uint8_t)count;user->summon_moves_active=true;
+        user->summon_moves_alias_mask=aliases & (uint8_t)~(1u<<slot);
+        user->transform_moves[slot]=(uint16_t)copied;user->transform_pp_used[slot]=user->transform_pp_up[slot]=0;
+        user->transform_max_pp_override[slot]=-1;
+    }
+    if(e)pr_queue_msg(bt,e,pr_msg2(permanent?"moveTriggers:sketchedMove":"moveTriggers:copiedMove",
+                                  pr_arg_pokemon(bt,"pokemonName",user),pr_arg_move("moveName",copied)));
+    return true;
 }
 
 const pr_species *pr_pokemon_fusion_species(const pr_pokemon *p)
@@ -165,8 +265,8 @@ const pr_form *pr_pokemon_fusion_form(const pr_pokemon *p)
     return &pr_forms[fs->form0 + (p->fusion_form < fs->nforms ? p->fusion_form : 0)];
 }
 
-/* calculateStats() with calculateBaseStats(). Fusion and challenges (FLIP_STAT) are
- * not ported yet; the Wonder Guard check reads the permanent ability and the passive. */
+/* calculateStats() with calculateBaseStats(). Challenge FLIP_STAT remains
+ * separate; Wonder Guard reads the permanent ability and the passive. */
 void pr_recalculate_stats(pr_battle *bt, pr_pokemon *p)
 {
     int32_t hp = p->hp, last_max = p->stats[STAT_HP];
@@ -181,26 +281,19 @@ void pr_calculate_stats(pr_battle *bt, pr_pokemon *p)
     const pr_form *f = pr_pokemon_base_form(p);
     const pr_form *ff = pr_pokemon_fusion_form(p);
     double base[6];
+    for (int s = 0; s < 6; s++) base[s] = f->base_stats[s];
+    /* Source applies total/flat effects to the primary species before averaging
+     * with the fusion or halving an unfused Spliced Endless actor. */
+    pr_apply_base_stat_before_fusion(bt, p, base);
     for (int s = 0; s < 6; s++) {
         if (ff) {
-            base[s] = ceil((f->base_stats[s] + ff->base_stats[s]) / 2.0);
+            base[s] = ceil((base[s] + ff->base_stats[s]) / 2.0);
         } else if (bt->game_mode == GAME_MODES_SPLICED_ENDLESS) {
             /* calculateBaseStats: an unfused Pokemon has halved base stats in spliced-only mode. */
-            base[s] = ceil(f->base_stats[s] / 2.0);
-        } else {
-            base[s] = f->base_stats[s];
+            base[s] = ceil(base[s] / 2.0);
         }
     }
-    if (!ff && bt->game_mode == GAME_MODES_SPLICED_ENDLESS) {
-        /* These source modifiers precede halving; the combined modifier helper cannot yet
-         * express that ordering. Flee clears held items before recalculating. */
-        int side = p->is_player ? 0 : 1;
-        for (int i = 0; i < bt->n_mods[side]; i++)
-            if (bt->mods[side][i].pokemon_id == (int64_t)p->id
-                && (bt->mods[side][i].cls == PR_MOD_BASE_STAT_TOTAL || bt->mods[side][i].cls == PR_MOD_BASE_STAT_FLAT))
-                pr_note_unported(bt, PR_FEAT_MODIFIERS);
-    }
-    pr_apply_base_stat_modifiers(bt, p, base);
+    pr_apply_base_stat_after_fusion(bt, p, base);
     for (int s = 0; s < 6; s++) {
         double v = floor((2 * base[s] + p->ivs[s]) * p->level * 0.01);
         if (s == STAT_HP) {
@@ -393,7 +486,18 @@ double pr_get_stat_stage_multiplier(pr_battle *bt, const pr_pokemon *p, int stat
     return m < 4 ? m : 4;
 }
 
-int32_t pr_get_effective_stat_p(pr_battle *bt, const pr_pokemon *p, int stat, const pr_stat_params *sp)
+/* ECMAScript ToInt32 precedes the native signed shift modifiers. A C cast
+ * outside int32 is not the JavaScript modulo-2^32 conversion. */
+static int32_t effective_stat_int32(double value)
+{
+    if (!isfinite(value) || value == 0) return 0;
+    double bits = fmod(trunc(value), 4294967296.0);
+    if (bits < 0) bits += 4294967296.0;
+    if (bits >= 2147483648.0) bits -= 4294967296.0;
+    return (int32_t)bits;
+}
+
+double pr_get_effective_stat_p(pr_battle *bt, const pr_pokemon *p, int stat, const pr_stat_params *sp)
 {
     double v = pr_get_stat(p, stat, false);
     if (!sp->ignore_held_items) pr_apply_stat_booster_modifiers(bt, p, stat, &v);
@@ -430,7 +534,7 @@ int32_t pr_get_effective_stat_p(pr_battle *bt, const pr_pokemon *p, int stat, co
                                                   sp->is_critical, sp->simulated, sp->ignore_held_items);
     switch (stat) {
     case STAT_ATK:
-        if (pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_SLOW_START)) ret = (double)((int32_t)ret >> 1);
+        if (pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_SLOW_START)) ret = (double)(effective_stat_int32(ret) >> 1);
         break;
     case STAT_DEF:
         if (pr_is_of_type(p, POKEMON_TYPE_ICE) && weather == WEATHER_TYPE_SNOW) ret *= 1.5;
@@ -441,9 +545,9 @@ int32_t pr_get_effective_stat_p(pr_battle *bt, const pr_pokemon *p, int stat, co
     case STAT_SPD: {
         int side = p->is_player ? ARENA_TAG_SIDE_PLAYER : ARENA_TAG_SIDE_ENEMY;
         if (pr_arena_has_tag(bt, ARENA_TAG_TYPE_TAILWIND, side)) ret *= 2;
-        if (pr_arena_has_tag(bt, ARENA_TAG_TYPE_GRASS_WATER_PLEDGE, side)) ret = (double)((int32_t)ret >> 2);
-        if (pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_SLOW_START)) ret = (double)((int32_t)ret >> 1);
-        if (p->status == STATUS_EFFECT_PARALYSIS) ret = (double)((int32_t)ret >> 1);
+        if (pr_arena_has_tag(bt, ARENA_TAG_TYPE_GRASS_WATER_PLEDGE, side)) ret = (double)(effective_stat_int32(ret) >> 2);
+        if (pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_SLOW_START)) ret = (double)(effective_stat_int32(ret) >> 1);
+        if (p->status == STATUS_EFFECT_PARALYSIS) ret = (double)(effective_stat_int32(ret) >> 1);
         if (pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_UNBURDEN) && pr_has_ability_active(bt, p, ABILITY_ID_UNBURDEN)) ret *= 2;
         break;
     }
@@ -455,10 +559,10 @@ int32_t pr_get_effective_stat_p(pr_battle *bt, const pr_pokemon *p, int stat, co
             break;
         }
     ret = floor(ret);
-    return ret > 1 ? (int32_t)ret : 1;
+    return ret > 1 ? ret : 1;
 }
 
-int32_t pr_get_effective_stat(pr_battle *bt, const pr_pokemon *p, int stat,
+double pr_get_effective_stat(pr_battle *bt, const pr_pokemon *p, int stat,
                               const pr_pokemon *opponent, int move, bool is_critical, bool for_defend)
 {
     pr_stat_params sp = {.opponent = opponent, .move = move, .is_critical = is_critical, .for_defend = for_defend,
@@ -522,11 +626,15 @@ bool pr_has_passive(pr_battle *bt, const pr_pokemon *p)
     return p->passive_flag || p->is_boss;
 }
 
+uint16_t pr_get_passive_ability(const pr_pokemon *p)
+{
+    return p->custom_passive >= 0 ? (uint16_t)p->custom_passive : pr_pokemon_base_form(p)->passive;
+}
+
 void pr_update_passive(pr_battle *bt, pr_pokemon *p)
 {
     if (!pr_has_passive(bt, p)) { p->passive = 0; return; }
-    if (p->custom_passive >= 0) p->passive = (uint16_t)p->custom_passive;
-    else p->passive = pr_pokemon_base_form(p)->passive;
+    p->passive = pr_get_passive_ability(p);
 }
 
 double pr_damage_indirect(pr_battle *bt, pr_pokemon *p, double damage)

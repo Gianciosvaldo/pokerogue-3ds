@@ -64,6 +64,7 @@ it("doubles turn producer", async () => {
   const OUT = process.env.DOUBLES_OUT ?? "/tmp/pr-doubles.txt";
   (Pokemon.prototype as any).hideInfo = async function() {};
   (Phaser.GameObjects.Sprite.prototype as any).setPosition = function() { return this; };
+  const nativeBattleRoll = BattleScene.prototype.randBattleSeedInt;
   const game = new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
   game.override
     .battleStyle("double")
@@ -74,10 +75,8 @@ it("doubles turn producer", async () => {
     .enemySpecies(SpeciesId.MAGIKARP);
   await game.classicMode.startBattle(SpeciesId.BULBASAUR, SpeciesId.CHARMANDER);
 
-  // GameManager pins battle rolls to their maximum; put upstream's real body back.
-  (BattleScene.prototype as any).randBattleSeedInt = function (this: any, range: number, min = 0) {
-    return this.currentBattle?.randSeedInt(range, min);
-  };
+  // Restore the original pinned implementation after GameManager's roll stub.
+  BattleScene.prototype.randBattleSeedInt = nativeBattleRoll;
   const scene = game.scene as any;
   const battle = scene.currentBattle as any;
   const pm = scene.phaseManager as any;
