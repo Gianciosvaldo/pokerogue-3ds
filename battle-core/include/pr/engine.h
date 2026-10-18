@@ -38,6 +38,7 @@ typedef enum {
     PH_TRANSFORM,              /* appended: keep existing phase identifiers stable */
     PH_RETURN,                 /* Scene.newBattle reset-arena return, no replacement */
     PH_ILLUSION_BREAK,         /* PR_DEV_ILLUSION only (no upstream phase): shows the disguise ending, queued after the hit's DamageAnimPhase */
+    PH_REVIVAL_BLESSING,       /* appended: player party selection, paused mid-phase */
     PH_COUNT_
 } pr_phase_type;
 #define PH_FIRST_UNPORTED PH_TERA
@@ -114,6 +115,7 @@ typedef struct pr_phase {
     uint8_t heal_flags;
     /* MessagePhase: its text (key == NULL: a message whose text isn't ported yet) */
     pr_msg msg;
+    bool message_prompt;     /* MessagePhase.prompt (explicit prompt request) */
     /* presentation phases: CommonAnimPhase's CommonAnim and target, PokemonAnimPhase's
      * PokemonAnimType, DamageAnimPhase's amount, result and critical flag, MoveAnimPhase's move */
     uint16_t anim;
@@ -205,6 +207,11 @@ void pr_answer_check_switch(pr_battle *bt, pr_engine *e, bool yes);
 /* After a turn stopped at PH_SWITCH (the party screen of a SwitchPhase), the player's pick: the
  * party slot to send in, or -1 for none. Runs on to the next stop, as pr_run_turn. */
 void pr_resume_switch(pr_battle *bt, pr_engine *e, int slot);
+/* Player party picks: ordinary switch or RevivalBlessingPhase. */
+void pr_resume_party_pick(pr_battle *bt, pr_engine *e, int slot);
+bool pr_revival_blessing(pr_battle *bt, pr_engine *e, pr_pokemon *user);
+void pr_finish_revival_choice(pr_battle *bt, pr_engine *e, pr_pokemon *user, int slot);
+bool pr_has_revivable_party(const pr_battle *bt, const pr_pokemon *user);
 
 /* After a turn stopped at PH_VICTORY (an enemy fainted): the game applies the experience
  * first (upstream's applyPartyExp unshifts the ExpPhases, which run next), then calls this.
@@ -257,6 +264,9 @@ bool pr_phase_is_dynamic(pr_phase_type t);
 /* phaseManager.hasPhaseOfType / tryRemovePhase for a type (optionally one battler) */
 bool pr_phase_exists(pr_engine *e, pr_phase_type t, int battler);
 bool pr_phase_try_remove(pr_battle *bt, pr_engine *e, pr_phase_type t, int battler);
+/* Revival Blessing uses field index == party slot, as at the pin. */
+bool pr_remove_switch_summon_field(pr_battle *bt, pr_engine *e, int field_index);
+void pr_cancel_queued_move(pr_engine *e, const pr_pokemon *pokemon);
 /* queueMessage(...), queueAbilityDisplay(...): presentation phases. pr_queue_message is a
  * message whose text isn't ported yet; pr_queue_msg carries it. */
 void pr_queue_message_at(pr_battle *bt, pr_engine *e, const char *site);
@@ -267,6 +277,7 @@ void pr_queue_message_deferred_at(pr_battle *bt, pr_engine *e, const char *site)
 #define pr_queue_message(bt, e) pr_queue_message_at((bt), (e), __FILE__ ":" PR_STR_(__LINE__))
 #define pr_queue_message_deferred(bt, e) pr_queue_message_deferred_at((bt), (e), __FILE__ ":" PR_STR_(__LINE__))
 void pr_queue_msg(pr_battle *bt, pr_engine *e, pr_msg m);
+void pr_queue_prompt_msg(pr_battle *bt, pr_engine *e, pr_msg msg);
 void pr_queue_msg_deferred(pr_battle *bt, pr_engine *e, pr_msg m);
 /* ---- messages and events (src/events.c) ---- */
 /* i18next.t(key, {args}) as a message; up to PR_MSG_MAX_ARGS arguments */

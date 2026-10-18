@@ -715,3 +715,11 @@ meloetta-forms-host-test: $(BUILD)/meloetta_forms_host_test
 $(BUILD)/meloetta_forms_host_test: tests/meloetta_forms_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: meloetta-forms-host-test
+
+all: $(BUILD)/revival_blessing_host_test
+test: revival-blessing-host-test
+revival-blessing-host-test: $(BUILD)/revival_blessing_host_test
+	$(BUILD)/revival_blessing_host_test
+$(BUILD)/revival_blessing_host_test: tests/revival_blessing_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: revival-blessing-host-test
