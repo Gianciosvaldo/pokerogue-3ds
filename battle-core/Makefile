@@ -563,3 +563,7 @@ $(BUILD)/zero-to-hero-test: tests/zero-to-hero-test.c $(BUILD)/libprcore.a
 all: $(BUILD)/form-block-damage-test
 $(BUILD)/form-block-damage-test: tests/form-block-damage-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/form-block-damage-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/meloetta-forms-test
+$(BUILD)/meloetta-forms-test: tests/meloetta-forms-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/meloetta-forms-test.c $(BUILD)/libprcore.a -lm -o $@

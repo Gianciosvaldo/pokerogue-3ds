@@ -684,3 +684,11 @@ enemy-zero-to-hero-host-test: $(BUILD)/enemy_zero_to_hero_host_test
 $(BUILD)/enemy_zero_to_hero_host_test: tests/enemy_zero_to_hero_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
 .PHONY: enemy-zero-to-hero-host-test
+
+all: $(BUILD)/meloetta_forms_host_test
+test: meloetta-forms-host-test
+meloetta-forms-host-test: $(BUILD)/meloetta_forms_host_test
+	$(BUILD)/meloetta_forms_host_test
+$(BUILD)/meloetta_forms_host_test: tests/meloetta_forms_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: meloetta-forms-host-test

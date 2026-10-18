@@ -206,6 +206,7 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
     bt->double_battle = false;
     bt->wave_index = run->wave;
     bt->game_mode = (int8_t)run->run.mode;
+    bt->challenge_flags = run->run.mode == GAME_MODES_CHALLENGE ? run->run.challenge_flags : 0;
     bt->battle_type = (uint8_t)run->battle_type;
     bt->biome = (int16_t)run->biome;
     bt->has_biome = true;
