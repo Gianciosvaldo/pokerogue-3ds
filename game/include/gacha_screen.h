@@ -1,9 +1,10 @@
 /*
  * gacha_screen: the capsule machine's menu (task C09; docs/CUSTOM-CONTENT-CONTRACTS.md, section 2.15), opened from the title.
  *
- * Top screen: the machine chosen. Bottom screen: the voucher balances, the egg count against the capacity, and the five options of the
- * machine, each as the source defines it (gacha_host.h reads the table from game-core: which voucher, how many, how many eggs). An
- * option that cannot be bought is greyed and says why with the source's own refusal. A asks to pull; the question defaults to NO. Yes
+ * Top screen (gacha_view.h, upstream's egg gacha screen): the three machines side by side, the chosen one centred and the strip sliding
+ * on LEFT / RIGHT, the voucher counters and the option list. Bottom screen: the egg count against the capacity and the five options of
+ * the machine in detail, each as the source defines it (gacha_host.h reads the table from game-core: which voucher, how many, how many
+ * eggs). An option that cannot be bought is greyed and says why with the source's own refusal. A asks to pull; the question defaults to NO. Yes
  * runs ONE purchase through profile_tx and opens the capsule screen (C07) on its committed result.
  *
  * Buttons: LEFT / RIGHT machine, UP / DOWN option, A pull (then Yes / No), B leave. A held button does its action once (the auto-repeat
