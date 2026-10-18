@@ -60,6 +60,46 @@ typedef struct {
 void gv_draw_top(const gv_state* s);
 void gv_draw_bottom(const gv_state* s);
 
+/* ---- the reveal after a pull (capsule_screen.c): the eggs drop, settle and open; the bottom screen lists what came out ---- */
+
+#define GV_CAP_MAX 25
+#define GV_LIST_ROWS 5
+#define GV_TIERS 4
+
+typedef enum { GV_REVEAL_IDLE, GV_REVEAL_RUNNING, GV_REVEAL_SETTLED } gv_reveal_stage;
+
+typedef struct {
+  float x, y;       /* centre in the field's pixels (320 x 180) */
+  float open;       /* 0 closed .. 1 open */
+  uint8_t phase;    /* 0 still in the chute (not drawn), 1 falling, 2 landed */
+  uint8_t tier;     /* 0 .. GV_TIERS - 1 */
+  bool picked;      /* the result the list points at */
+} gv_egg;
+
+typedef struct {
+  gv_reveal_stage stage;
+  int n;
+  gv_egg egg[GV_CAP_MAX];
+  float knob;                 /* turns of the knob */
+  char top_title[48];         /* the window at the top of the field */
+  char top_sub[72];
+  int n_rows;
+  struct {
+    char name[40];
+    char tier_name[16];
+    uint8_t tier;
+    bool selected;
+  } row[GV_LIST_ROWS];
+  char more_above[24], more_below[24];
+  char title[40];             /* the header of the bottom screen */
+  char big[64], small[72];    /* what the knob screen says */
+  char note[2][48];           /* under the list */
+  char hint[64];
+} gv_reveal;
+
+void gv_draw_reveal_top(const gv_reveal* s);
+void gv_draw_reveal_bottom(const gv_reveal* s);
+
 #ifdef __cplusplus
 }
 #endif

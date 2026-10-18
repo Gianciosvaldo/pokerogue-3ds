@@ -1,24 +1,17 @@
 /* The capsule-machine presentation prototype (see capsule_screen.h). */
 #include "capsule_screen.h"
 
-#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
+#include "gacha_view.h"
 #include "ui.h"
-#include "ui_text.h"
 #include "ui_widgets.h"
 
 #define DWELL_MS 300.0f       /* after the results are shown, how long before a button closes the screen */
 #define LIST_ROWS 5
-#define ROW_H 24
-#define LIST_Y 44
-#define KNOB_X 160.0f
-#define KNOB_Y 120.0f
 
 static const char* const TIER_NAME[CAP_TIERS] = {"Common", "Rare", "Epic", "Legendary"};
-static const uint8_t TIER_RGB[CAP_TIERS][3] = {{0xd8, 0xd8, 0xd0}, {0x58, 0x90, 0xf0}, {0xb0, 0x58, 0xe8}, {0xf0, 0xc0, 0x30}};
-
 static struct {
   cap_model m;
   caps_args a;
@@ -30,11 +23,6 @@ static struct {
   int sel;                   /* the result the list and the top screen point at */
   int scroll;
 } C;
-
-static rr_color tier_color(int tier, int alpha) {
-  if (tier < 0 || tier >= CAP_TIERS) tier = 0;
-  return RR_RGBA(TIER_RGB[tier][0], TIER_RGB[tier][1], TIER_RGB[tier][2], alpha);
-}
 
 bool capsule_debug_fixture(int n, cap_fixture* out) {
   if (!out || n < 1 || n > CAP_MAX) return false;
@@ -133,140 +121,59 @@ static void cs_leave(ui_screen* s) {
 
 /* ------------------------------------------------------------------ drawing */
 
-static void line(float x, float y, const char* s, text_style st, rr_color color) {
-  text_opts o = text_defaults();
-  if (color) o.color = color;
-  text_draw(st, x, y, s, &o);
-}
-
-static void centred(float x, float y, const char* s, text_style st, rr_color color) {
-  text_opts o = text_defaults();
-  o.origin_x = 0.5f;
-  if (color) o.color = color;
-  text_draw(st, x, y, s, &o);
-}
-
-/* A disc of radius 10 in seven strips (3 px tall each): `hw` is the half width at |dy| 0, 3, 6, 9. */
-static const int HALF_W[4] = {10, 9, 8, 4};
-
-static void draw_capsule(float x, float y, int tier, float open, bool picked) {
-  /* the lid half lifts and thins as the capsule opens; the base stays */
-  const float lift = open * 6.0f;
-  const int lid_alpha = (int)(255.0f * (1.0f - 0.65f * open));
-  for (int k = -3; k <= 3; k++) {
-    const int hw = HALF_W[k < 0 ? -k : k];
-    const bool lid = k < 0;
-    const float yy = y + (float)k * 3.0f - 1.5f - (lid ? lift : 0.0f);
-    if (lid)
-      rr_rect(x - (float)hw, yy, (float)(2 * hw), 3.0f, tier_color(tier, lid_alpha));
-    else
-      rr_rect(x - (float)hw, yy, (float)(2 * hw), 3.0f, RR_RGBA(0xf0, 0xf0, 0xf0, 255));
-  }
-  if (open < 1.0f) rr_rect(x - 6.0f, y - 7.0f, 3.0f, 3.0f, RR_RGBA(255, 255, 255, 140)); /* a shine on the closed lid */
-  if (open > 0.3f) {
-    /* what came out: a small egg-shaped mark in the result's colour, rising a little */
-    const float ey = y - 4.0f - open * 5.0f;
-    rr_rect(x - 3.0f, ey - 4.0f, 6.0f, 2.0f, tier_color(tier, 255));
-    rr_rect(x - 4.0f, ey - 2.0f, 8.0f, 5.0f, tier_color(tier, 255));
-    rr_rect(x - 3.0f, ey + 3.0f, 6.0f, 2.0f, tier_color(tier, 255));
-  }
-  if (picked) {
-    const rr_color w = RR_RGBA(255, 255, 255, 255);
-    rr_rect(x - 13.0f, y - 14.0f, 26.0f, 1.0f, w);
-    rr_rect(x - 13.0f, y + 13.0f, 26.0f, 1.0f, w);
-    rr_rect(x - 13.0f, y - 14.0f, 1.0f, 28.0f, w);
-    rr_rect(x + 12.0f, y - 14.0f, 1.0f, 28.0f, w);
-  }
-}
-
-static void draw_top(void) {
-  if (ui_space(UI_PHYS_TOP)) rr_rect(0, 0, 400, 240, RR_RGBA(0, 0, 0, 255));
-  if (!ui_space(UI_FIELD)) return;
-  rr_rect(0, 0, 320, 180, RR_RGBA(0x20, 0x24, 0x40, 255));
-  rr_rect(0, 0, 320, 4, RR_RGBA(0x38, 0x3c, 0x60, 255));
-  rr_rect(144, 0, 32, 10, RR_RGBA(0x50, 0x54, 0x78, 255)); /* the chute */
-  rr_rect(40, 176, 240, 4, RR_RGBA(0x38, 0x3c, 0x60, 255));
-  const int n = C.m.fx.n;
-  for (int i = 0; i < n; i++) {
+static void build_state(gv_reveal* v) {
+  memset(v, 0, sizeof *v);
+  v->stage = C.m.stage == CAP_SETTLED ? GV_REVEAL_SETTLED : (C.m.stage == CAP_IDLE ? GV_REVEAL_IDLE : GV_REVEAL_RUNNING);
+  v->n = C.m.fx.n;
+  for (int i = 0; i < C.m.fx.n; i++) {
     const cap_body* b = &C.m.body[i];
-    if (b->phase == 0) continue;
-    draw_capsule(b->x, b->y, C.m.fx.item[i].tier, b->open, C.m.stage == CAP_SETTLED && i == C.sel);
+    v->egg[i] = (gv_egg){b->x, b->y, b->open, b->phase, C.m.fx.item[i].tier, C.m.stage == CAP_SETTLED && i == C.sel};
   }
-  char t[64];
+  v->knob = C.m.knob;
+  snprintf(v->title, sizeof v->title, "%s", C.live ? "Capsule machine" : "Capsule machine (preview)");
+  const int n = C.m.fx.n;
   if (C.m.stage == CAP_SETTLED) {
-    snprintf(t, sizeof t, C.live ? "%d egg%s" : "%d result%s", n, n == 1 ? "" : "s");
-    centred(160, 8, t, TS_WINDOW, 0);
-  } else if (C.m.stage == CAP_IDLE) {
-    centred(160, 70, "Capsule machine", TS_SUMMARY, 0);
-    centred(160, 96, C.live ? "Your eggs are ready." : "A preview of the animation. Nothing is bought.", TS_INSTRUCTIONS_TEXT,
-            RR_RGBA(0xc8, 0xc8, 0xc8, 255));
-  }
-}
-
-static void draw_knob(float angle) {
-  rr_draw_opts o = RR_DEFAULT_OPTS;
-  o.origin_x = o.origin_y = 0.5f;
-  o.scale_x = o.scale_y = 3.0f;
-  o.angle = angle;
-  if (img_has("images/egg/gacha_knob")) {
-    img_draw_opts("images/egg/gacha_knob", NULL, KNOB_X, KNOB_Y, &o);
-    return;
-  }
-  /* no art in the packs: a disc and a slot */
-  static const int hw[4] = {20, 18, 16, 8};
-  for (int k = -3; k <= 3; k++) rr_rect(KNOB_X - (float)hw[k < 0 ? -k : k], KNOB_Y + (float)k * 6.0f - 3.0f, (float)(2 * hw[k < 0 ? -k : k]), 6.0f, RR_RGBA(0xe0, 0xe0, 0xe8, 255));
-  rr_rect(KNOB_X - 16.0f, KNOB_Y - 2.0f, 32.0f, 4.0f, RR_RGBA(0x40, 0x40, 0x50, 255));
-}
-
-static void draw_bottom(void) {
-  if (!ui_space(UI_PHYS_BOTTOM)) return;
-  rr_rect(0, 0, 320, 240, RR_RGBA(0x10, 0x10, 0x18, 255));
-  ui_window(1, 1, 318, 24, WIN_NORMAL);
-  line(10, 5, C.live ? "Capsule machine" : "Capsule machine (preview)", TS_WINDOW, 0);
-  char t[96];
-  if (C.m.stage == CAP_SETTLED) {
-    ui_window(1, LIST_Y - 6, 318, LIST_ROWS * ROW_H + 12, WIN_NORMAL);
-    for (int i = 0; i < LIST_ROWS && C.scroll + i < C.m.fx.n; i++) {
+    snprintf(v->top_title, sizeof v->top_title, C.live ? "%d egg%s" : "%d result%s", n, n == 1 ? "" : "s");
+    for (int i = 0; i < LIST_ROWS && C.scroll + i < n; i++) {
       const int k = C.scroll + i;
-      const float y = (float)(LIST_Y + i * ROW_H);
-      if (k == C.sel) rr_rect(4, y - 2, 312, ROW_H - 2, RR_RGBA(255, 255, 255, 30));
-      rr_rect(12, y + 3, 10, 10, tier_color(C.m.fx.item[k].tier, 255));
-      snprintf(t, sizeof t, "%d. %s", k + 1, C.m.fx.item[k].label);
-      line(30, y, t, TS_WINDOW, 0);
-      line(30, y + 12, TIER_NAME[C.m.fx.item[k].tier], TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa8, 0xa8, 0xa8, 255));
+      snprintf(v->row[v->n_rows].name, sizeof v->row[0].name, "%d. %s", k + 1, C.m.fx.item[k].label);
+      snprintf(v->row[v->n_rows].tier_name, sizeof v->row[0].tier_name, "%s", TIER_NAME[C.m.fx.item[k].tier]);
+      v->row[v->n_rows].tier = C.m.fx.item[k].tier;
+      v->row[v->n_rows].selected = k == C.sel;
+      v->n_rows++;
     }
-    if (C.scroll > 0) line(232, 28, "more above", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
-    if (C.scroll + LIST_ROWS < C.m.fx.n) {
-      snprintf(t, sizeof t, "%d more below", C.m.fx.n - C.scroll - LIST_ROWS);
-      line(232, LIST_Y + LIST_ROWS * ROW_H + 8, t, TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
-    }
+    if (C.scroll > 0) snprintf(v->more_above, sizeof v->more_above, "more above");
+    if (C.scroll + LIST_ROWS < n) snprintf(v->more_below, sizeof v->more_below, "%d more below", n - C.scroll - LIST_ROWS);
     if (C.live) {
-      line(10, 190, "These eggs were decided when you pulled.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xc8, 0xc8, 0xc8, 255));
-      line(10, 204, "They are stored with your other eggs.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xc8, 0xc8, 0xc8, 255));
+      snprintf(v->note[0], sizeof v->note[0], "These eggs were decided when you pulled.");
+      snprintf(v->note[1], sizeof v->note[1], "They are stored with your other eggs.");
     } else {
-      line(10, 190, "These results were fixed before the machine ran.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xc8, 0xc8, 0xc8, 255));
+      snprintf(v->note[0], sizeof v->note[0], "These results were fixed before it ran.");
     }
-    line(10, 224, "UP/DOWN: look   A: close", TS_INSTRUCTIONS_TEXT, 0);
-    return;
-  }
-  draw_knob(C.m.knob * 6.2831853f);
-  if (C.m.stage == CAP_IDLE) {
-    centred(160, 52, C.live ? "Pull the knob to see your eggs." : "Pull the knob to run the machine.", TS_WINDOW, 0);
-    centred(160, 76, C.live ? "They are paid for: nothing more is spent." : "A preview with fixed results.", TS_INSTRUCTIONS_TEXT,
-            RR_RGBA(0xc8, 0xc8, 0xc8, 255));
-    line(10, 224, "A: pull   B: back", TS_INSTRUCTIONS_TEXT, 0);
+    snprintf(v->hint, sizeof v->hint, "UP/DOWN: look   A: close");
+  } else if (C.m.stage == CAP_IDLE) {
+    snprintf(v->top_title, sizeof v->top_title, "Capsule machine");
+    snprintf(v->top_sub, sizeof v->top_sub, "%s", C.live ? "Your eggs are ready." : "A preview of the animation. Nothing is bought.");
+    snprintf(v->big, sizeof v->big, "%s", C.live ? "Pull the knob to see your eggs." : "Pull the knob to run the machine.");
+    snprintf(v->small, sizeof v->small, "%s", C.live ? "They are paid for: nothing more is spent." : "A preview with fixed results.");
+    snprintf(v->hint, sizeof v->hint, "A: pull   B: back");
   } else {
-    centred(160, 52, "Here they come...", TS_WINDOW, 0);
-    line(10, 224, "B or START: skip to the results", TS_INSTRUCTIONS_TEXT, 0);
+    snprintf(v->big, sizeof v->big, "Here they come...");
+    snprintf(v->hint, sizeof v->hint, "B or START: skip to the results");
   }
 }
 
 static void cs_draw(ui_screen* s, rr_screen which) {
   (void)s;
-  if (which == RR_TOP)
-    draw_top();
-  else
-    draw_bottom();
+  gv_reveal v;
+  build_state(&v);
+  if (which == RR_TOP) {
+    if (ui_space(UI_PHYS_TOP)) rr_rect(0, 0, 400, 240, RR_RGBA(0, 0, 0, 255));
+    gv_draw_reveal_top(&v);
+  } else {
+    if (ui_space(UI_PHYS_BOTTOM)) rr_rect(0, 0, 320, 240, RR_RGBA(0, 0, 0, 255));
+    gv_draw_reveal_bottom(&v);
+  }
 }
 
 static ui_screen g_screen = {"capsule-preview", UI_FADE, cs_enter, cs_leave, NULL, cs_input, cs_update, cs_draw, NULL};
