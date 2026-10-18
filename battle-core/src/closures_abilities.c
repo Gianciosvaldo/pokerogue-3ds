@@ -494,6 +494,7 @@ const pr_closure_reg pr_ability_closures[] = {
     {"ability:248", "ea591d93bc79", weather_in},
     {"ability:248", "5e264af5663d", form_zero},
     {"ability:258", "55c07decbbff", hunger_toggle},
+    {"ability:307", "55c07decbbff", hunger_toggle},                 /* Tera Shift: the same formFunc */
     {"ability:278", "5e264af5663d", form_zero},
     {"ability:278", "fe9ad8715c02", hero_on_switch_out},
     {"ability:278", "decfd6b31617", hero_message_due},

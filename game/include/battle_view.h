@@ -90,6 +90,8 @@ typedef struct {
   bev_type type;
   int8_t battler, target;
   int a, b;
+  int c;                     /* BEV_FORM_CHANGE: the gender + 2 when the change brings one (-1 genderless .. 1 female), 0 = as it was:
+                              * a Ditto whose transform ends takes its own gender back */
   const char* text;          /* BEV_MESSAGE, BEV_SUMMON: the text (already translated) */
   bool prompt;               /* BEV_MESSAGE: wait for a button */
   bool caught;               /* BEV_CATCH: the ball holds (b is then 3: a catch always passes the three shake checks) */

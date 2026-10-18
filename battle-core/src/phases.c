@@ -157,6 +157,20 @@ static void form_change_with_delay(pr_battle *bt, const pr_pokemon *p, int trigg
         /* The attribute's formFunc decides whether this trigger is called.
          * Both registered form changes have no additional conditions. */
         target_form = mon->form == 0 ? 1 : 0;
+    } else if (mon->species == SPECIES_ID_TERAPAGOS && (trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger
+                                                        || trigger_class == PR_FCT_SpeciesFormChangeLapseTeraTrigger)) {
+        /* quiet, no conditions: "" -> terastal on the ability trigger, stellar -> terastal on the
+         * lapse; any other form has no change for the trigger. (terastal -> stellar is TeraPhase's.) */
+        const pr_form *from = pr_pokemon_base_form(mon);
+        const char *key = from && from->form_key ? from->form_key : "";
+        bool to_terastal = trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger ? !key[0] : !strcmp(key, "stellar");
+        for (int i = 0; to_terastal && i < sp->nforms; i++)
+            if (pr_forms[sp->form0 + i].form_key && !strcmp(pr_forms[sp->form0 + i].form_key, "terastal")) target_form = i;
+        /* an ability taken from the old form's slots changes with the form, and without the ability
+         * index the new one can't be looked up */
+        if (target_form >= 0 && !mon->ability_lookup_known && mon->ability_override < 0 && from
+            && (mon->ability == from->ability1 || mon->ability == from->ability2 || mon->ability == from->ability_hidden))
+            pr_note_unported(bt, PR_FEAT_FORM_CHANGE);
     } else if (mon->species == SPECIES_ID_PALAFIN && trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger) {
         /* zero <-> hero, both quiet with no conditions; Zero to Hero's formFuncs decide the call */
         target_form = mon->form == 0 ? 1 : 0;

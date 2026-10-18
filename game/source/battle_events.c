@@ -205,7 +205,7 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
             seen[k].form = mon->form;
             current[k >= 2 ? 1 : 0] = *mon;
           } else if (!transforming && (ev->field[k].species != seen[k].species || ev->field[k].form != seen[k].form)) {
-            PUT(.type = BEV_FORM_CHANGE, .battler = k, .a = ev->field[k].species, .b = ev->field[k].form);
+            PUT(.type = BEV_FORM_CHANGE, .battler = k, .a = ev->field[k].species, .b = ev->field[k].form, .c = ev->field[k].gender + 2);
             seen[k].species = ev->field[k].species;
             seen[k].form = ev->field[k].form;
           }
@@ -411,7 +411,11 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
       seen[k].species = form->species;
       seen[k].form = form->form_index;
     } else if (p->hp > 0 && (form->species != seen[k].species || form->form_index != seen[k].form)) {
-      PUT(.type = BEV_FORM_CHANGE, .battler = k, .a = form->species, .b = form->form_index);
+      {
+        bv_mon live;
+        be_mon(bt, p, &live);
+        PUT(.type = BEV_FORM_CHANGE, .battler = k, .a = form->species, .b = form->form_index, .c = live.gender + 2);   /* the look it shows: a disguise's gender too */
+      }
       seen[k].species = form->species;
       seen[k].form = form->form_index;
     }
