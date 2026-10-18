@@ -1354,3 +1354,6 @@ Quash's first matching cached move and native LAST timing are documented in
 selection now retains double candidates and running maxima; see
 [WIDE-HIGHEST-STAT-VALIDATION.md](WIDE-HIGHEST-STAT-VALIDATION.md) for the native
 tag add/overlap/remove proof and its boundaries.
+
+Spectral Thief pre-damage theft and queued gain timing are documented in
+[SPECTRAL-THIEF-VALIDATION.md](SPECTRAL-THIEF-VALIDATION.md).

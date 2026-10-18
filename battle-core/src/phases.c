@@ -2032,7 +2032,7 @@ static move_damage apply_move_damage(pr_battle *bt, pr_engine *e, int ph, pr_pok
         return r;
     }
     bool crit = pr_get_critical_hit_result(bt, target, user, move);
-    move_attrs_unported(bt, move, PR_AC_StatChangeBeforeDmgCalcAttr);
+    pr_apply_pre_damage_stat_changes(bt, e, user, target, move);
     pr_damage_result d = pr_get_attack_damage_ex(bt, target, user, move, crit, false, eff);
     /* the first TypeBoostTag boosting the move's type goes if it is one-use (Charge's) */
     for (int i = 0; i < user->n_tags; i++) {

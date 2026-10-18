@@ -527,3 +527,7 @@ $(BUILD)/quash-test: tests/quash-test.c tests/gas-lifecycle-test.c $(BUILD)/libp
 all: $(BUILD)/wide-highest-stat-test
 $(BUILD)/wide-highest-stat-test: tests/wide-highest-stat-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/spectral-thief-test
+$(BUILD)/spectral-thief-test: tests/spectral-thief-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@

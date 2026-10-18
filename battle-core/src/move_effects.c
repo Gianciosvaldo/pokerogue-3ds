@@ -190,6 +190,31 @@ bool pr_apply_eat_berry_move(pr_battle *bt,pr_engine *e,pr_pokemon *user,
     return true;
 }
 
+/* applyMoveAttrs(StatChangeBeforeDmgCalcAttr): target stages change now; the
+ * user's requested gains remain queued until the current damage phase ends. */
+void pr_apply_pre_damage_stat_changes(pr_battle *bt, pr_engine *e, pr_pokemon *user, pr_pokemon *target, int move)
+{
+    const pr_move *mv = &pr_moves[move];
+    for (int i = 0; i < mv->nattr; i++) {
+        int cls = pr_attrs[mv->attr0 + i].cls;
+        if (!pr_attr_is(cls, PR_AC_StatChangeBeforeDmgCalcAttr)) continue;
+        if (cls != PR_AC_SpectralThiefAttr) { pr_note_unported(bt, cls); continue; }
+        /* The override has no parent HP, condition or chance gates. */
+        for (int stat = STAT_ATK; stat <= STAT_EVA; stat++) {
+            int target_value = target->stat_stages[stat - 1];
+            int user_value = user->stat_stages[stat - 1];
+            if (target_value > 0) {
+                int available = target_value < 6 - user_value ? target_value : 6 - user_value;
+                int32_t stats[] = {stat};
+                pr_unshift_stat_stage_change(bt, e, pr_battler_index(bt, user), stats, 1, available, user);
+                target->stat_stages[stat - 1] = (int8_t)(target_value - available);
+            }
+        }
+        pr_queue_msg(bt, e, pr_msg2("moveTriggers:stealPositiveStats",
+            pr_arg_pokemon(bt, "pokemonName", user), pr_arg_pokemon(bt, "targetName", target)));
+    }
+}
+
 void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, pr_pokemon *user, pr_pokemon *target)
 {
     const pr_attr *a = &pr_attrs[attr_index];
