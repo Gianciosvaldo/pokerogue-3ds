@@ -463,6 +463,13 @@ static double meteor_base(ARGS) { UNUSED; return a->form % 7; }
 static double shields_form(ARGS) { UNUSED; return a->form % 7 + (pr_get_hp_ratio(a, false) <= .5 ? 7 : 0); }
 static double schooling_form(ARGS) { UNUSED; return a->level < 20 || pr_get_hp_ratio(a, false) <= .25 ? 0 : 1; }
 static double hunger_toggle(ARGS) { UNUSED; const pr_form *f = pr_pokemon_base_form(a); return f && f->form_key && f->form_key[0] ? 0 : 1; }
+/* Zero to Hero: PreSwitchOutFormChangeAbAttr's formFunc and its summon message's conditionalAttr */
+static double hero_on_switch_out(ARGS) { UNUSED; return a->hp <= 0 ? a->form : 1; }
+static double hero_message_due(ARGS)
+{
+    UNUSED;
+    return a->form != 0 && a->on_field && !a->switch_out_status && !a->zero_to_hero_shown;
+}
 static double hunger_stay(ARGS) { UNUSED; const pr_form *f = pr_pokemon_base_form(a); return f && f->form_key && f->form_key[0] ? 1 : 0; }
 
 const pr_closure_reg pr_ability_closures[] = {
@@ -487,6 +494,9 @@ const pr_closure_reg pr_ability_closures[] = {
     {"ability:248", "ea591d93bc79", weather_in},
     {"ability:248", "5e264af5663d", form_zero},
     {"ability:258", "55c07decbbff", hunger_toggle},
+    {"ability:278", "5e264af5663d", form_zero},
+    {"ability:278", "fe9ad8715c02", hero_on_switch_out},
+    {"ability:278", "decfd6b31617", hero_message_due},
     {"ability:258", "0f9adfd526fb", hunger_stay},
     {"ability:293", "4d378ef18dde", side_has_fainted}, /* closure 675 */
     {"ability:8", "5d9de4139911", weather_in}, /* closure 460 */

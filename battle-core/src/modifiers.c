@@ -591,6 +591,7 @@ void pr_reset_battle_data(pr_pokemon *p)
 {
     pr_reset_wave_data(p);
     p->has_eaten_berry = false;
+    p->zero_to_hero_shown = false;
     p->n_battle_berries = 0;
 }
 

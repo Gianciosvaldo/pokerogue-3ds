@@ -555,3 +555,7 @@ $(BUILD)/type-moves-test: tests/type-moves-test.c $(BUILD)/wide-substitute-frame
 all: $(BUILD)/secret-power-test
 $(BUILD)/secret-power-test: tests/secret-power-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -Wl,--wrap=pr_battle_rand_seed_int -lm -o $@
+
+all: $(BUILD)/zero-to-hero-test
+$(BUILD)/zero-to-hero-test: tests/zero-to-hero-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

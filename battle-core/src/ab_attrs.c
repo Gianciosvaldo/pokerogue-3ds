@@ -323,7 +323,7 @@ static pr_msg post_summon_message(const pr_battle *bt, const pr_attr *a, uint16_
     case ABILITY_ID_AURA_BREAK: key = "abilityTriggers:postSummonAuraBreak"; break;
     case ABILITY_ID_AS_ONE_GLASTRIER: key = "abilityTriggers:postSummonAsOneGlastrier"; break;
     case ABILITY_ID_AS_ONE_SPECTRIER: key = "abilityTriggers:postSummonAsOneSpectrier"; break;
-    /* (its messageFunc also marks zeroToHeroFormChangeMessage, which its condition reads: not modelled) */
+    /* (its messageFunc also marks zeroToHeroFormChangeMessage: apply sets zero_to_hero_shown) */
     case ABILITY_ID_ZERO_TO_HERO: key = "abilityTriggers:postSummonZeroToHero"; break;
     case ABILITY_ID_VESSEL_OF_RUIN: key = "abilityTriggers:postSummonVesselOfRuin"; stat = STAT_SPATK; break;
     case ABILITY_ID_SWORD_OF_RUIN: key = "abilityTriggers:postSummonSwordOfRuin"; stat = STAT_DEF; break;
@@ -763,6 +763,8 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         if (pp->simulated) return 1;
         if (!c->e) return -1;
         pr_queue_msg(bt, c->e, post_summon_message(bt, a, c->ability, p));
+        if (a->cls == PR_AC_PostSummonMessageAbAttr && c->ability == ABILITY_ID_ZERO_TO_HERO)
+            ((pr_pokemon *)p)->zero_to_hero_shown = true;                /* zeroToHeroFormChangeMessage.set */
         return 1;
     case PR_AC_PostSummonAddBattlerTagAbAttr: {                         /* Protosynthesis, Quark Drive... */
         const pr_attr_PostSummonAddBattlerTagAbAttr *x = P(PostSummonAddBattlerTagAbAttr, a);
@@ -973,6 +975,10 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         if (!pp->simulated) ((pr_pokemon *)p)->hp += (int32_t)fmin(to_dmg_value(max * 0.33), max - p->hp);
         return 1;
     }
+    case PR_AC_PreSwitchOutFormChangeAbAttr:                            /* Zero to Hero */
+        GATE(pr_closure_call(bt, P(PreSwitchOutFormChangeAbAttr, a)->formFunc, a->cls, p->form, p, NULL, -1) != p->form);
+        if (!pp->simulated) pr_form_change(bt, p, PR_FCT_SpeciesFormChangeAbilityTrigger);
+        return 1;
     case PR_AC_IncreasePpUsedAbAttr:                                    /* Pressure (shows nothing) */
         GATE(p->is_player != o->is_player);                             /* isOpponent */
         *pp->value += P(IncreasePpUsedAbAttr, a)->ppIncrease;
