@@ -1980,8 +1980,8 @@ double pr_pokemon_damage(pr_battle *bt, pr_engine *e, pr_pokemon *p, double dama
 }
 
 /* Pokemon.damageAndUpdate(damage, {result, isCritical, ignoreSegments, ignoreFaintPhase, source}) */
-static double damage_and_update(pr_battle *bt, pr_engine *e, pr_pokemon *p, double damage, int result,
-                                bool ignore_faint_phase, pr_pokemon *source, bool critical)
+static double damage_and_update_options(pr_battle *bt, pr_engine *e, pr_pokemon *p, double damage, int result,
+                                bool ignore_faint_phase, pr_pokemon *source, bool critical, bool ignore_segments)
 {
     bool indirect = result == HIT_RESULT_INDIRECT || result == HIT_RESULT_INDIRECT_KO;
     int anim = new_pokemon_phase(e, PH_DAMAGE_ANIM, pr_battler_index(bt, p));
@@ -1991,10 +1991,22 @@ static double damage_and_update(pr_battle *bt, pr_engine *e, pr_pokemon *p, doub
     }
     pr_phase_unshift(bt, e, anim);
     if (p->switch_out_status && source) damage = 0;
-    damage = pr_pokemon_damage(bt, e, p, damage, false, indirect, ignore_faint_phase);
+    damage = pr_pokemon_damage(bt, e, p, damage, ignore_segments, indirect, ignore_faint_phase);
     if (anim >= 0) PH(anim)->anim_amount = (int32_t)damage;   /* damagePhase.updateAmount(damage) */
     if (!source || source->hit_count <= 1) pr_post_damage_ab(bt, p, damage, source);
     return damage;
+}
+
+static double damage_and_update(pr_battle *bt, pr_engine *e, pr_pokemon *p, double damage, int result,
+                                bool ignore_faint_phase, pr_pokemon *source, bool critical)
+{
+    return damage_and_update_options(bt, e, p, damage, result, ignore_faint_phase, source, critical, false);
+}
+
+double pr_damage_and_update_segments(pr_battle *bt, pr_engine *e, pr_pokemon *p, double damage, int result,
+                                     bool ignore_segments, bool ignore_faint_phase, pr_pokemon *source)
+{
+    return damage_and_update_options(bt, e, p, damage, result, ignore_faint_phase, source, false, ignore_segments);
 }
 
 double pr_damage_and_update(pr_battle *bt, pr_engine *e, pr_pokemon *p, double damage, int result,

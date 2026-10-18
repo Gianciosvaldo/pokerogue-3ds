@@ -14,7 +14,8 @@ combined Pledge waiting callback is merged in #308. Reflect Type/Conversion/
 Conversion 2 are documented in [TYPE-MOVES-VALIDATION.md](TYPE-MOVES-VALIDATION.md).
 Secret Power is documented in [SECRET-POWER-VALIDATION.md](SECRET-POWER-VALIDATION.md).
 Zero to Hero (Palafin) is documented in [ZERO-TO-HERO-VALIDATION.md](ZERO-TO-HERO-VALIDATION.md).
-Next candidates include Disguise/Ice Face form callbacks and Revival Blessing; delayed attacks
+Disguise/Ice Face callbacks are documented in [FORM-BLOCK-DAMAGE-VALIDATION.md](FORM-BLOCK-DAMAGE-VALIDATION.md).
+Next candidates include Revival Blessing and remaining form transitions; delayed attacks
 already have override handlers and need a boundary audit. A missing local class switch
 case is only a candidate: called-move and override dispatch may handle it
 elsewhere, and source-disabled registrations must be distinguished. The final

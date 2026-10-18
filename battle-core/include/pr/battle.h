@@ -211,7 +211,10 @@ typedef struct pr_attack_record {
     int64_t source_id;             /* Pokemon.id of the attacker */
     double damage;
 } pr_attack_record;
-#define PR_MAX_ATTACKS_RECEIVED 8  /* newest entries kept; older ones read as PR_FEAT_MOVE_HISTORY */
+/* Several battlers can each land a multi-strike move on one defender in the
+ * same turn. Keep 32 records rather than truncating ordinary nine/ten-hit
+ * turns. Reads beyond this capacity still report PR_FEAT_MOVE_HISTORY. */
+#define PR_MAX_ATTACKS_RECEIVED 32
 
 /* Battle identity subset of summonData.illusion. Presentation metadata (nickname,
  * sprite/ball/shiny variants) stays with the application, not these type reads. */

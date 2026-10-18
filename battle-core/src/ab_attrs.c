@@ -1544,9 +1544,18 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
              && !pr_move_hits_substitute(bt, move, o, p));
         if (pp->simulated) return 1;
         *pp->value = 0;
-        /* Disguise's recoil hits at once (a later passive then sees the lower HP); the form change is queued */
-        if (x->recoil > 0) pr_damage_indirect(bt, (pr_pokemon *)p, to_dmg_value(pr_get_stat(p, STAT_HP, true) * x->recoil));
-        pr_note_deferred(bt, a->cls);
+        /* damageAndUpdate runs PostDamage abilities before the scene queues
+         * the form change. Recoil bypasses boss segments and does not queue a
+         * faint phase, even when it consumes the final HP. */
+        if (!c->e) {
+            if (x->recoil > 0) pr_damage_indirect(bt, (pr_pokemon *)p, to_dmg_value(pr_get_stat(p, STAT_HP, true) * x->recoil));
+            pr_note_deferred(bt, a->cls);
+            return 1;
+        }
+        if (x->recoil > 0)
+            pr_damage_and_update_segments(bt, c->e, (pr_pokemon *)p,
+                to_dmg_value(pr_get_stat(p, STAT_HP, true) * x->recoil), HIT_RESULT_INDIRECT, true, true, NULL);
+        pr_form_change(bt, p, PR_FCT_SpeciesFormChangeAbilityTrigger);
         return 1;
     }
     case PR_AC_AlliedFieldDamageReductionAbAttr:
