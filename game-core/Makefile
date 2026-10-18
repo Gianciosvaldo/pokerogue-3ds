@@ -676,3 +676,11 @@ zero-to-hero-host-test: $(BUILD)/zero_to_hero_host_test
 $(BUILD)/zero_to_hero_host_test: tests/zero_to_hero_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
 .PHONY: zero-to-hero-host-test
+
+all: $(BUILD)/enemy_zero_to_hero_host_test
+test: enemy-zero-to-hero-host-test
+enemy-zero-to-hero-host-test: $(BUILD)/enemy_zero_to_hero_host_test
+	$(BUILD)/enemy_zero_to_hero_host_test
+$(BUILD)/enemy_zero_to_hero_host_test: tests/enemy_zero_to_hero_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+.PHONY: enemy-zero-to-hero-host-test
