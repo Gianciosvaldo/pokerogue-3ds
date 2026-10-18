@@ -34,6 +34,23 @@ only intercepted presentation operations in the raw proof.
   dispatcher is void, so no return-value parity claim is made.
 - The original 8,192 native owning turns (seed 777) are retained unchanged and
   replay exactly, including full states, queues, text, trace and both RNGs.
+- Final owning turns: 8,320 per seed, all 16,640 exact, with zero source
+  exceptions or unsupported cases. The original structural matrix is retained
+  and 128 controls per seed add real Multi Lens stacks 1/2. Every added control
+  runs the callback at least twice, with Ball Fetch/Simple/Contrary users and
+  Clear Body/Mirror Armor/Defiant targets. There are 11,852/11,834 successful
+  native callback applications. Ally/spread/faint/switch floors remain intact.
+- All 19 compiled implementation faults are caught: HP gates, stage selection,
+  cap budget, target subtraction, immediate user gain, omitted zero phases,
+  source/recipient/order/evasion/queue/message/affix/RNG faults and missing or
+  late owning dispatch. Seventeen malformed captures are rejected.
+- Retained suites add 20 exact cases and lose no covered IDs: doubles
+  1,975/1,971/1,980 and mixed 1,983/1,985/1,994/1,998. Normal game-core tests pass,
+  including matching saved/unsaved digests; normal app/custom/save sanitizer tests
+  pass. Exact-head CI remains the merge gate.
+- An initial expanded run failed at the first added control because its test
+  imported the modifier factory from the wrong module. It emitted no complete
+  capture and is excluded. Final captures use the actual data-list factory.
 
 The matrices are bounded evidence, not a complete interaction inventory or proof
 of natural high-wave progression. Normal game-core/app/custom/save tests and

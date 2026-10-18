@@ -19,7 +19,7 @@ put('''  const results=rawDamage.mock.results.filter(x=>x.type==="return").map(x
   console.log(`WIDE_COMBAT raw=${results.length} aboveInt32=${wide} max=${Math.max(...results)}`);''','''  const applied=observed.mock.results.filter(x=>x.type==="return"&&x.value===true).length;
   if(threwCount||applied<100)throw Error(`Spectral Thief turns missing: exceptions ${threwCount}, applied ${applied}`);
   console.log(`SPECTRAL_THIEF_TURNS applied=${applied}`);''')
-put('import { it,vi } from "vitest";', 'import { it,vi } from "vitest";\nimport { modifierTypes } from "#modifiers/modifier-type";')
+put('import { it,vi } from "vitest";', 'import { it,vi } from "vitest";\nimport { modifierTypes } from "#data/data-lists";')
 put('  let written = 0;', '  let multiLensControls=0;\n  let written = 0;')
 put('    // the parties in field order:', r'''    if(i>=8192){
       for(const p of actors){p.summonData.tags=[];p.level=50;p.calculateStats();p.hp=p.getMaxHp();p.summonData.statStages.fill(0);p.moveset=[new PokemonMove(MoveId.SPLASH)];p.summonData.statStages[Stat.SPD-1]=-6;}

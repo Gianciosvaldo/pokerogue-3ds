@@ -289,3 +289,8 @@ addresses the remaining int32 candidate/maximum locals in Protosynthesis and
 Quark Drive. Spectral Thief's pre-damage stat theft, HP splitting and ability-
 changing callbacks remain concrete next slices; these updates do not close
 natural high-wave progression or the final full inventory audit.
+
+Spectral Thief's enabled pre-damage callback and same-hit/queued-gain timing are
+now covered by [SPECTRAL-THIEF-VALIDATION.md](SPECTRAL-THIEF-VALIDATION.md), including
+native Multi Lens turns. HP splitting and ability-changing callbacks remain next;
+this does not close the full source inventory or natural high-wave progression.
