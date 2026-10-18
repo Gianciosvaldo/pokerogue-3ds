@@ -2289,6 +2289,25 @@ static void move_header_phase(pr_battle *bt, pr_engine *e, int ph)
     }
 }
 
+/* AwaitCombinedPledgeAttr.apply: no parent HP/condition/chance gate. The
+ * waiting move is overridden; the second move announces its combination. */
+static bool await_combined_pledge(pr_battle *bt, pr_engine *e, pr_pokemon *user, int move)
+{
+    if (user->combining_pledge) {
+        pr_queue_msg(bt, e, pr_msg0("moveTriggers:combiningPledge"));
+        return false;
+    }
+    pr_phase *next = pr_find_move_phase(e, -1, user->is_player ? 1 : 0);
+    if (!next || next->move.id == move || !pr_move_has_attr(next->move.id, PR_AC_AwaitCombinedPledgeAttr)) return false;
+    user->combining_pledge = (uint16_t)move;
+    next->pokemon->combining_pledge = (uint16_t)move;
+    pr_queue_msg(bt, e, pr_msg2("moveTriggers:awaitingPledge",
+        pr_arg_pokemon(bt, "userPokemonName", user),
+        pr_arg_pokemon(bt, "allyPokemonName", next->pokemon)));
+    pr_force_move_next(e, pr_get_ally(bt, user));
+    return true;
+}
+
 static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
 {
     pr_phase *fx = PH(ph);
@@ -2346,19 +2365,9 @@ static void move_effect_phase(pr_battle *bt, pr_engine *e, int ph)
             call_move(bt, e, move, a, user, first0);
             break;
         }
-        case PR_AC_AwaitCombinedPledgeAttr: {
-            /* the combined move's message when this is the second pledge; else the first queued
-             * MovePhase of a Pokemon on the user's side (getMovePhase), when it holds a different
-             * pledge, makes this one wait for it: only with an ally, which a single battle lacks */
-            if (user->combining_pledge) {
-                pr_queue_msg(bt, e, pr_msg0("moveTriggers:combiningPledge"));
-                break;
-            }
-            const pr_phase *mine = pr_find_move_phase(e, -1, user->is_player ? 1 : 0);
-            if (mine && mine->move.id != move && pr_move_has_attr(mine->move.id, PR_AC_AwaitCombinedPledgeAttr))
-                pr_note_unported(bt, a->cls);
+        case PR_AC_AwaitCombinedPledgeAttr:
+            if (await_combined_pledge(bt, e, user, move)) overridden = true;
             break;
-        }
         case PR_AC_MovesetCopyMoveAttr: {
             pr_pokemon *first;
             me_first_target(bt,e,ph,&first);
