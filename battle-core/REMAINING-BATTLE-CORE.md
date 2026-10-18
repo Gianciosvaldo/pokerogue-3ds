@@ -42,8 +42,8 @@ replays are required for each implementation.
 Each slice keeps its own branch/PR, actual unchanged source methods, strict
 complete-case guards and mutation checks. Source expectations, retained seeds,
 counts and tolerances remain unchanged. Host save/load consistency and 3DS CI
-are required separately. Custom-core CI is excluded from these battle tasks by
-the user's current instruction. No full battle-core, run or hardware parity is
+are required separately. The later user steering requires normal app/custom/save tests and skips only
+the dedicated custom-only Task63 workflow. No full battle-core, run or hardware parity is
 claimed until the remaining source paths and their prerequisites are proven.
 
 Priority continuation on base main `fa1cb29`: rich seed777 now has 1,896 exact
@@ -298,3 +298,11 @@ this does not close the full source inventory or natural high-wave progression.
 Pain Split is covered by [HP-SPLIT-VALIDATION.md](HP-SPLIT-VALIDATION.md): raw
 attribute HP changes, boss gating, direct shield bypass API and owning turns.
 Ability-changing callbacks and high-wave progression remain open.
+
+Ability-changing moves now have source-backed raw callback/condition/reset and
+owning-turn comparisons; see [ABILITY-MOVES-VALIDATION.md](ABILITY-MOVES-VALIDATION.md).
+A static candidate scan of MoveEffectAttr subclasses still needs semantic review:
+CutHpStatStageBoostAttr, CopyTypeAttr, FirstMoveTypeAttr, ResistLastMoveTypeAttr,
+SecretPowerAttr, RevivalBlessingAttr and delayed/called/combined move paths.
+Class names without a local switch case are candidates, not missing-mechanic counts;
+some are dispatched elsewhere or unavailable at the source pin.

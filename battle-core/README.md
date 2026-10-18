@@ -1360,3 +1360,6 @@ Spectral Thief pre-damage theft and queued gain timing are documented in
 
 Pain Split direct HP changes and boss-condition separation are documented in
 [HP-SPLIT-VALIDATION.md](HP-SPLIT-VALIDATION.md).
+
+The six ability-changing moves and their gain/loss/reset boundaries are documented
+in [ABILITY-MOVES-VALIDATION.md](ABILITY-MOVES-VALIDATION.md).

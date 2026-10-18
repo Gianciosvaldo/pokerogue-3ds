@@ -245,6 +245,49 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         }
         return;
     }
+    case PR_AC_AbilityChangeAttr: {
+        if (!effect_can_apply(ef, user, target)) return;
+        const pr_attr_AbilityChangeAttr *x = P(AbilityChangeAttr, a);
+        pr_pokemon *on = x->selfTarget ? user : target;
+        pr_form_change(bt, on, PR_FCT_SpeciesFormChangeRevertWeatherFormTrigger);
+        if (pr_break_illusion(on))
+            pr_queue_msg(bt, e, pr_msg1("abilityTriggers:illusionBreak", pr_arg_pokemon(bt, "pokemonName", on)));
+        pr_queue_msg(bt, e, pr_msg2("moveTriggers:acquiredAbility",
+            pr_arg_pokemon(bt, "pokemonName", on), pr_arg_ability("abilityName", x->ability)));
+        pr_set_temp_ability(bt, on, x->ability);
+        pr_form_change(bt, on, PR_FCT_SpeciesFormChangeRevertWeatherFormTrigger);
+        return;
+    }
+    case PR_AC_AbilityCopyAttr: {
+        if (!effect_can_apply(ef, user, target)) return;
+        pr_queue_msg(bt, e, pr_msg3("moveTriggers:copiedTargetAbility",
+            pr_arg_pokemon(bt, "pokemonName", user), pr_arg_pokemon(bt, "targetName", target),
+            pr_arg_ability("abilityName", target->ability)));
+        pr_set_temp_ability(bt, user, target->ability);
+        pr_pokemon *ally = (pr_pokemon *)pr_get_ally(bt, user);
+        if (P(AbilityCopyAttr, a)->copyToPartner && bt->double_battle && ally && ally->hp) {
+            pr_queue_msg(bt, e, pr_msg3("moveTriggers:copiedTargetAbility",
+                pr_arg_pokemon(bt, "pokemonName", ally), pr_arg_pokemon(bt, "targetName", target),
+                pr_arg_ability("abilityName", target->ability)));
+            pr_set_temp_ability(bt, ally, target->ability);
+        }
+        return;
+    }
+    case PR_AC_AbilityGiveAttr:
+        if (!effect_can_apply(ef, user, target)) return;
+        pr_queue_msg(bt, e, pr_msg2("moveTriggers:acquiredAbility",
+            pr_arg_pokemon(bt, "pokemonName", target), pr_arg_ability("abilityName", user->ability)));
+        pr_set_temp_ability(bt, target, user->ability);
+        return;
+    case PR_AC_SwitchAbilitiesAttr: {
+        if (!effect_can_apply(ef, user, target)) return;
+        uint16_t old_ability = user->ability;
+        pr_queue_msg(bt, e, pr_msg1("moveTriggers:swappedAbilitiesWithTarget", pr_arg_pokemon(bt, "pokemonName", user)));
+        pr_set_temp_ability(bt, user, target->ability);
+        pr_set_temp_ability(bt, target, old_ability);
+        pr_weather_form_changes(bt, true, NULL);
+        return;
+    }
     case PR_AC_SuppressAbilitiesAttr:
     case PR_AC_SuppressAbilitiesIfActedAttr: {
         if (!effect_can_apply(ef, user, target)) return;
