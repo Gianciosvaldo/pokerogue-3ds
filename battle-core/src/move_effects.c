@@ -919,6 +919,49 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
             pr_arg_stat("statToSwitchWith", x->statToSwitchWith)));
         return;
     }
+    case PR_AC_CopyTypeAttr: {
+        if (!effect_can_apply(ef, user, target)) return;
+        int8_t types[PR_MAX_TYPES];
+        int n = pr_get_types(target, types, PR_TYPES_ORIGINAL_IF_STELLAR);
+        for (int i = 0; i < n; i++) if (types[i] == POKEMON_TYPE_UNKNOWN) { types[i] = POKEMON_TYPE_NORMAL; break; }
+        if (!pr_set_summon_types(bt, user, types, n)) return;
+        pr_queue_msg(bt, e, pr_msg2("moveTriggers:copyType",
+            pr_arg_pokemon(bt, "pokemonName", user), pr_arg_pokemon(bt, "targetPokemonName", target)));
+        return;
+    }
+    case PR_AC_FirstMoveTypeAttr: {
+        if (!effect_can_apply(ef, user, target)) return;
+        if (!PR_N_MOVES(user)) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }
+        int8_t type = pr_moves[PR_MOVES(user)[0]].type;
+        pr_set_summon_types(bt, user, &type, 1);
+        pr_queue_msg(bt, e, pr_msg2("battle:transformedIntoType",
+            pr_arg_pokemon(bt, "pokemonName", user), pr_arg_type("type", type)));
+        return;
+    }
+    case PR_AC_ResistLastMoveTypeAttr: {
+        if (!effect_can_apply(ef, user, target)) return;
+        const pr_turn_move *last = pr_last_move(bt, target, 0);
+        if (!last) return;
+        int attack_type = pr_moves[last->move].type;
+        if (attack_type == POKEMON_TYPE_STELLAR || attack_type == POKEMON_TYPE_UNKNOWN) return;
+        int8_t current[PR_MAX_TYPES], choices[PR_TYPE_COUNT];
+        int n = pr_get_types(user, current, PR_TYPES_ORIGINAL_IF_STELLAR), count = 0;
+        /* UNKNOWN is neutral, and Stellar is neutral to these ordinary attacks.
+         * Preserve enum order before the user's battle RNG selects a resistance. */
+        for (int type = 0; type < PR_TYPE_COUNT; type++) {
+            bool have = false;
+            for (int i = 0; i < n; i++) have |= current[i] == type;
+            if (!have && pr_type_chart_x2[attack_type][type] < 2) choices[count++] = (int8_t)type;
+        }
+        if (!count) return;
+        int8_t type = choices[pr_battle_rand_seed_int(bt, count, 0)];
+        pr_set_summon_types(bt, user, &type, 1);
+        /* Unlike Conversion, the pin passes the enum's English title literally. */
+        static const char *const names[] = {"Normal", "Fighting", "Flying", "Poison", "Ground", "Rock", "Bug", "Ghost", "Steel", "Fire", "Water", "Grass", "Electric", "Psychic", "Ice", "Dragon", "Dark", "Fairy", "Stellar"};
+        pr_msg_arg name = {"type", PR_ARG_STR, 0, names[type], 0};
+        pr_queue_msg(bt, e, pr_msg2("battle:transformedIntoType", pr_arg_pokemon(bt, "pokemonName", user), name));
+        return;
+    }
     case PR_AC_CopyBiomeTypeAttr: {
         if (!effect_can_apply(ef, user, target)) return;
         int8_t one = POKEMON_TYPE_UNKNOWN;

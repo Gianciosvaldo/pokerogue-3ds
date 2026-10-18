@@ -9,11 +9,11 @@ Commander/Order Up (#293), wide EXP/combat (#299–#300), stat rearrangement (#3
 Quash (#302), highest-stat selection (#303), Spectral Thief (#304), Pain Split
 (#305) and ability changing/copying/giving/swapping (#306).
 
-HP-cost boosts and maximum-HP getter corrections are merged in #307. The
-combined Pledge waiting callback and its actual owning turns are documented in
-[PLEDGE-VALIDATION.md](PLEDGE-VALIDATION.md); the other combined Pledge effects
-already existed and were retained. Next candidates include Reflect Type/Conversion/Conversion 2,
-Secret Power, Revival Blessing and delayed attacks. A missing local class switch
+HP-cost boosts and maximum-HP getter corrections are merged in #307; the
+combined Pledge waiting callback is merged in #308. Reflect Type/Conversion/
+Conversion 2 are documented in [TYPE-MOVES-VALIDATION.md](TYPE-MOVES-VALIDATION.md).
+Next candidates include Secret Power and Revival Blessing; delayed attacks
+already have override handlers and need a boundary audit. A missing local class switch
 case is only a candidate: called-move and override dispatch may handle it
 elsewhere, and source-disabled registrations must be distinguished. The final
 full source inventory, natural wide progression, battle-boundary flags and
