@@ -815,6 +815,79 @@ void pr_reset_status_phase(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool revi
     reset_status_as_phase(bt, e, p, revive, false);
 }
 
+/* Revival Blessing's own condition, independently of its raw apply override. */
+bool pr_has_revivable_party(const pr_battle *bt, const pr_pokemon *user)
+{
+    if (!user || (!user->is_player && !user->has_trainer)) return false;
+    int side=user->is_player?0:1;
+    for(int i=0;i<bt->n_party[side];i++) {
+        const pr_pokemon *p=bt->party[side][i];
+        if(p && p->hp<=0 && !p->is_boss) return true;
+    }
+    return false;
+}
+
+static void revival_heal(pr_pokemon *p)
+{
+    double mh=pr_get_stat(p,STAT_HP,true);
+    double amount=fmin(to_dmg_value(0.5*mh),mh);
+    amount=fmin(amount,mh-p->hp);
+    p->hp+=(int32_t)amount;
+}
+
+static void revival_switch(pr_battle *bt, pr_engine *e, int field, int slot, bool player)
+{
+    int ph=pr_phase_new(e,PH_SWITCH_SUMMON,-1);
+    if(ph<0){pr_note_unported(bt,PR_FEAT_ENGINE_LIMIT);e->overflow=true;return;}
+    pr_phase *s=&e->pool[ph];s->sw_type=SWITCH_TYPE_SWITCH;s->sw_field_index=(int8_t)field;
+    s->sw_slot=(int8_t)slot;s->sw_do_return=false;s->sw_player=player;
+    pr_phase_unshift(bt,e,ph);
+}
+
+bool pr_revival_blessing(pr_battle *bt, pr_engine *e, pr_pokemon *user)
+{
+    /* The override deliberately omits MoveEffectAttr's HP/condition gates. */
+    if(user->is_player) {
+        int ph=pr_phase_new(e,PH_REVIVAL_BLESSING,-1);
+        if(ph<0){pr_note_unported(bt,PR_FEAT_ENGINE_LIMIT);e->overflow=true;return true;}
+        e->pool[ph].pokemon=user;pr_phase_unshift(bt,e,ph);return true;
+    }
+    if(!pr_has_revivable_party(bt,user)) return false;
+    pr_pokemon *fainted[PR_MAX_PARTY];int n=0;
+    for(int i=0;i<bt->n_party[1];i++) {
+        pr_pokemon *p=bt->party[1][i];if(p->hp<=0&&!p->is_boss)fainted[n++]=p;
+    }
+    pr_pokemon *p=fainted[pr_battle_rand_seed_int(bt,n,0)];int selected=-1;
+    for(int i=0;i<bt->n_party[1];i++)if(bt->party[1][i]->id==p->id){selected=i;break;}
+    pr_reset_status_phase(bt,e,p,true);revival_heal(p);
+    pr_queue_prompt_msg(bt,e,pr_msg1("moveTriggers:revivalBlessing",pr_arg_pokemon(bt,"pokemonName",p)));
+    const pr_pokemon *ally=pr_get_ally(bt,user);
+    if(bt->double_battle&&bt->n_party[1]>1&&ally&&(ally->hp<=0||ally==p)) {
+        pr_remove_switch_summon_field(bt,e,selected);
+        pr_cancel_queued_move(e,p);
+        /* Enemy field-position centering is presentation; the field index is unchanged. */
+        int field=pr_battler_index(bt,ally);revival_switch(bt,e,field<0?-1:field%2,selected,false);
+    }
+    return true;
+}
+
+void pr_finish_revival_choice(pr_battle *bt, pr_engine *e, pr_pokemon *user, int selected)
+{
+    if(selected<0||selected>=6) return;
+    pr_pokemon *p=selected<bt->n_party[0]?bt->party[0][selected]:NULL;
+    if(!p||p->hp>0) return;
+    pr_reset_turn_data(p);clear_status(bt,e,p,false);revival_heal(p);
+    pr_queue_prompt_msg(bt,e,pr_msg1("moveTriggers:revivalBlessing",pr_arg_pokemon_name(bt,"pokemonName",p)));
+    const pr_pokemon *ally=pr_get_ally(bt,user);
+    if(bt->double_battle&&bt->n_party[0]>1&&ally&&(selected<=1||ally->hp<=0)) {
+        int field=selected<=1?pr_battler_index(bt,p):pr_battler_index(bt,ally);
+        revival_switch(bt,e,field<0?-1:field%2,selected,true);
+        int ph=pr_phase_new(e,PH_TOGGLE_DOUBLE_POSITION,-1);
+        if(ph<0){pr_note_unported(bt,PR_FEAT_ENGINE_LIMIT);e->overflow=true;return;}
+        e->pool[ph].position_double=true;pr_phase_unshift(bt,e,ph);
+    }
+}
+
 /* Pokemon.cureStatus(effect, msg = getStatusEffectHealText(effect, name)): the cure message, then
  * the status is cleared at once */
 static void cure_status(pr_battle *bt, pr_engine *e, pr_pokemon *p, int effect, const pr_msg *msg)
@@ -3992,6 +4065,7 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
         pr_event_add(bt, e, PR_EV_ABILITY_HIDE, -1, -1, 0, 0, NULL);
         break;
     case PH_RESET_STATUS: reset_status_phase(bt, e, ph); break;
+    case PH_REVIVAL_BLESSING: e->awaiting_pick = true; break;
     case PH_STAT_STAGE_CHANGE: stat_stage_change_phase(bt, e, ph); break;
     case PH_OBTAIN_STATUS_EFFECT: obtain_status_effect_phase(bt, e, ph); break;
     case PH_MOVE_CHARGE: move_charge_phase(bt, e, ph); break;

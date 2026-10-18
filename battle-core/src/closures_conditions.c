@@ -929,7 +929,10 @@ static double instruct(ARGS)
 
 static double transform(ARGS) { UNUSED; return pr_can_transform_into(u, t); }
 
+static double revival_blessing(ARGS) { UNUSED; return pr_has_revivable_party(bt,u); }
+
 const pr_closure_reg pr_condition_closures[] = {
+    {"move:863", "fa3bc98b8dcd", revival_blessing},
     /* attribute conditions, any owner */
     {NULL, "7680b4c661ce", tag_overlap},
     {"move:144", "f816e677fa54", transform},

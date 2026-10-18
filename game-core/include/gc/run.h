@@ -149,6 +149,7 @@ typedef struct {
     /* SWITCH: which party members can be sent in; can_skip = GC_CH_PICK -1 is allowed */
     bool pick_ok[6];
     bool can_skip;
+    bool revival_blessing;     /* SWITCH picker selects fainted party members to revive */
     /* REWARD */
     gc_offer options[GC_MAX_OPTIONS];
     int n_options;

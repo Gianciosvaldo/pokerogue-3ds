@@ -1061,6 +1061,13 @@ static bool step(void) {
     const pr_battle* bt = W.party_bt;
     W.party_pick = NULL;
     int ok[6], n = 0;
+    if(W.party_mode==PS_REVIVAL_BLESSING) {
+      /* The real party screen filters for fainted members and exposes Revive, not Send Out. */
+      for(int i=0;i<bt->n_party[0];i++)if(bt->party[0][i]->hp<=0)ok[n++]=i;
+      if(!n){BAD("Revival Blessing picker has no fainted member");return true;}
+      f(ok[rnd((uint32_t)n)],PS_REVIVE_PICK,W.party_arg);
+      return true;
+    }
     for (int i = 0; i < bt->n_party[0]; i++)
       if (bt->party[0][i]->hp > 0 && !bt->party[0][i]->on_field) ok[n++] = i;
     if (W.party_mode == PS_SWITCH && rnd(6) == 0) f(6, PS_CANCEL, W.party_arg);

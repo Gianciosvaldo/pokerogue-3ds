@@ -1105,6 +1105,9 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         default: pr_queue_message(bt, e);
         }
         return;
+    case PR_AC_RevivalBlessingAttr:
+        pr_revival_blessing(bt,e,user);
+        return;
     case PR_AC_RestAttr: {                               /* Rest */
         /* user.trySetStatus(SLEEP, user, duration, null, overrideStatus, quiet) first; then
          * HealAttr.apply, whose addHealPhase Rest overrides: PokemonHealPhase(maxHp), no options */
