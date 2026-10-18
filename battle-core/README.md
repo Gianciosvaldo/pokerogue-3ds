@@ -1357,3 +1357,6 @@ tag add/overlap/remove proof and its boundaries.
 
 Spectral Thief pre-damage theft and queued gain timing are documented in
 [SPECTRAL-THIEF-VALIDATION.md](SPECTRAL-THIEF-VALIDATION.md).
+
+Pain Split direct HP changes and boss-condition separation are documented in
+[HP-SPLIT-VALIDATION.md](HP-SPLIT-VALIDATION.md).
