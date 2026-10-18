@@ -535,3 +535,7 @@ $(BUILD)/spectral-thief-test: tests/spectral-thief-test.c $(BUILD)/wide-substitu
 all: $(BUILD)/hp-split-test
 $(BUILD)/hp-split-test: tests/hp-split-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/ability-moves-test
+$(BUILD)/ability-moves-test: tests/ability-moves-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
