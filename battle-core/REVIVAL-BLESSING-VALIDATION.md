@@ -41,13 +41,20 @@ the source was rerun after correcting the harness.
 The game host test passes 17 checks through the actual command/party interfaces,
 including refusal, pause/resume and revived HP at legal save/load boundaries.
 Normal game-core tests pass with both saved/unsaved run digests `28fe3f71`.
-The first owning seed matches all 8,192 cases, with zero source exceptions and
-zero unsupported cases. It observes 8,192 successful native attribute callbacks,
-4,096 actual player party phases and 4,096 enemy status reset phases. Its wide
-controls include 1,331 damage results above INT32, maximum 345,003,225,010.
-The second owning seed, final fault guards, cross-slice replays, normal app /
-custom / save sanitizer tests are still being completed. The local 3DS build passes
-with the same devkitARM image and command as CI.
+Both owning seeds match all 16,384 cases, with zero source exceptions and
+zero unsupported cases. Each observes 8,192 successful native attribute callbacks,
+4,096 actual player party phases and 4,096 enemy status reset phases. Wide
+controls include 1,331 / 1,298 damage results above INT32, maximum
+345,003,225,010 / 386,403,612,011.
+All 31 compiled runtime faults and 20 malformed captures are caught, including
+owning move dispatch, party pause and resume-choice faults. The player name
+versus player affix mutation is equivalent for these native inputs; it is not
+counted as caught. A wrong message recipient is tested instead.
+All 32 cross-slice captures remain exact. Fresh normal app/custom/save
+AddressSanitizer, UndefinedBehaviorSanitizer and LeakSanitizer checks pass,
+including the unchanged 10,000-run and custom/save continuation floors.
+The local 3DS build passes with the same devkitARM image and command as CI.
+Both native suites and strict C replays complete successfully.
 Retained IDs lose none versus the Meloetta parent and gain two: doubles
 1,993/1,995/1,995; mixed 1,997/2,000/1,996/1,998.
 
