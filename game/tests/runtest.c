@@ -498,6 +498,19 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
           W.mon[s] = *e->mon;
         }
         break;
+      case BEV_ILLUSION:
+        /* PR_DEV_ILLUSION: a disguise starts or ends: the look, name and types change; HP, level and shininess stay */
+        if (side_ok(e->battler, "Illusion")) {
+          if (!e->mon || e->mon->species <= 0) {
+            BAD("Illusion without a valid display payload");
+            break;
+          }
+          if (e->mon->hp != W.mon[s].hp || e->mon->max_hp != W.mon[s].max_hp || e->mon->level != W.mon[s].level
+              || e->mon->shiny != W.mon[s].shiny || e->mon->variant != W.mon[s].variant)
+            BAD("Illusion changed permanent HP, level or shiny identity");
+          W.mon[s] = *e->mon;
+        }
+        break;
       case BEV_WAIT:
         break;
       default:
@@ -521,17 +534,18 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
   if (!me || !foe) {
     BAD("asked for a command with no Pokemon on the field in the run");
   } else {
-    /* the screen must show the battle game-core has */
+    /* the screen must show the battle game-core has: what it looks like, a disguise included (PR_DEV_ILLUSION) */
     const bv_mon* a = &W.mon[0];
     const bv_mon* b = &W.mon[1];
-    const pr_form* player_form = pr_pokemon_form(&me->b);
-    const pr_form* enemy_form = pr_pokemon_form(&foe->b);
+    const pr_form* player_form = pr_shown_form(&r->bt, &me->b);
+    const pr_form* enemy_form = pr_shown_form(&r->bt, &foe->b);
+    const int player_gender = pr_shows_illusion(&r->bt, &me->b) ? pr_apparent_gender(&me->b, true) : pr_get_gender(&me->b);
     if (a->species != player_form->species || a->level != me->b.level || a->hp != me->b.hp || a->max_hp != me->b.stats[STAT_HP])
       BAD("screen player %d L%d %d/%d, run %d L%d %d/%d", a->species, a->level, a->hp, a->max_hp, player_form->species, me->b.level,
           me->b.hp, me->b.stats[STAT_HP]);
     if (b->species != enemy_form->species || b->hp != foe->b.hp)
       BAD("screen enemy %d %d/%d, run %d %d/%d", b->species, b->hp, b->max_hp, enemy_form->species, foe->b.hp, foe->b.stats[STAT_HP]);
-    if (a->form != player_form->form_index || a->gender != pr_get_gender(&me->b) || a->shiny != me->b.shiny || a->variant != me->variant)
+    if (a->form != player_form->form_index || a->gender != player_gender || a->shiny != me->b.shiny || a->variant != me->variant)
       BAD("the displayed form, gender or shiny identity differs from the effective battle Pokemon");
     if (a->n_moves != PR_N_MOVES(&me->b)) BAD("fight menu has %d moves, the Pokemon %d", a->n_moves, PR_N_MOVES(&me->b));
     for (int i = 0; i < PR_N_MOVES(&me->b) && i < 4; i++) {

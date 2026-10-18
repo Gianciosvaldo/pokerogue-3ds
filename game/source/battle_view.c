@@ -1304,8 +1304,9 @@ static void run_event(float dt) {
 
     case BEV_FORM_CHANGE:
     case BEV_TRANSFORM:
+    case BEV_ILLUSION:
       if (B.step == 0) {
-        if (e->type == BEV_TRANSFORM && e->mon) sd->mon = *e->mon;
+        if ((e->type == BEV_TRANSFORM || e->type == BEV_ILLUSION) && e->mon) sd->mon = *e->mon;
         else update_mon_form(&sd->mon, e->a, e->b);
         if (e->type == BEV_FORM_CHANGE && e->c) {
           sd->mon.gender = e->c - 2;
@@ -1314,7 +1315,7 @@ static void run_event(float dt) {
         load_mon_sprite(sd, player);
         float target_scale = get_mon_scale(&sd->mon);
         update_field_scale(false);
-        if (e->type != BEV_TRANSFORM || e->a) ui_play_sound("battle_anims/PRSFX- Transform");
+        if ((e->type != BEV_TRANSFORM && e->type != BEV_ILLUSION) || e->a) ui_play_sound("battle_anims/PRSFX- Transform");
         if (fabsf(sd->scale - target_scale) > 0.01f) {
           tween_start(&B.tw, sd->scale, target_scale, 300, EASE_SINE_IN_OUT);
           B.step = 1;

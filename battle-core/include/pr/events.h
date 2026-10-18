@@ -61,6 +61,7 @@ typedef enum {
     PR_EV_TRAINER_SHOW,
     PR_EV_TRAINER_HIDE,
     PR_EV_TRANSFORM,           /* battler; value = play sound (Imposter only); transform = display state */
+    PR_EV_ILLUSION_BREAK,      /* PR_DEV_ILLUSION: battler's disguise ended; field[battler] already shows its real look */
     PR_EV_COUNT_
 } pr_event_type;
 

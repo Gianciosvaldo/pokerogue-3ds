@@ -505,6 +505,7 @@ void pr_switch_summon_phase(pr_battle *bt, pr_engine *e, int ph)
     bt->party[side][slot] = last;
     bt->party[side][field] = in;
     bt->field[side * 2 + field] = in;
+    pr_illusion_on_summon(bt, in);                                        /* PR_DEV_ILLUSION, before its send-out text */
     /* showTextAndSummon (for an enemy on a timer, once the trainer and its ball tray are hidden):
      * the send-out text (getSendOutText; not a phase); Baton Pass and Shed Tail only move the
      * sprite of a passed Substitute, the others set the Pokemon up and reset its summon data */
@@ -686,6 +687,7 @@ void pr_summon_phase(pr_battle *bt, pr_engine *e, int ph)
             bt->field[side*2+k]=k<bt->n_party[side]?bt->party[side][k]:NULL;
         p = bt->party[side][field];
     }
+    pr_illusion_on_summon(bt, p);                                         /* PR_DEV_ILLUSION, before its send-out text */
     int tslot = field % 2 ? TRAINER_SLOT_TRAINER_PARTNER : TRAINER_SLOT_TRAINER;
     if (player) {
         pr_show_text(bt, e, pr_msg1("battle:playerGo", pr_arg_pokemon(bt, "pokemonName", p)));

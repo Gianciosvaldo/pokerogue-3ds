@@ -485,10 +485,21 @@ typedef struct pr_battle {
     /* Deliberate departures from the source pin that lorenzo asked for (PR_DEV_*). 0, the default,
      * is the pin; differential harnesses never set them, game-core turns them on for real runs. */
     uint32_t deviations;
+    /* PR_DEV_ILLUSION: a wild Illusion user's disguise (arena.randomSpecies in the source's draft); NULL = none */
+    bool (*illusion_species)(struct pr_battle *bt, const pr_pokemon *p, void *ctx, uint16_t *species, uint8_t *form);
+    void *illusion_species_ctx;
 } pr_battle;
 
 /* pr_battle.deviations */
 #define PR_DEV_ENEMY_ZERO_TO_HERO 0x1u  /* an off-field enemy Palafin still takes its Hero form on switch-out */
+#define PR_DEV_ILLUSION           0x2u  /* Illusion works (the pin leaves it unimplemented): see DEVIATIONS.md */
+
+/* PR_DEV_ILLUSION: on entry, the disguise; after a damaging hit, its end (true when it broke) */
+void pr_illusion_on_summon(pr_battle *bt, pr_pokemon *p);
+bool pr_illusion_on_hit(pr_battle *bt, pr_pokemon *p, int hit_result);
+/* what the screen shows: the disguise while PR_DEV_ILLUSION and one is active, else the real form/gender */
+bool pr_shows_illusion(const pr_battle *bt, const pr_pokemon *p);
+const pr_form *pr_shown_form(const pr_battle *bt, const pr_pokemon *p);
 
 /* ---- hooks (src/hooks.c) ---- */
 /* Upstream applyAbAttrs("<Class>", ...) presence check: does this Pokemon's ability

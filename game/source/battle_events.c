@@ -65,21 +65,23 @@ const pr_text_source* be_text_source(void) {
 
 void be_mon(const pr_battle* bt, const pr_pokemon* p, bv_mon* m) {
   memset(m, 0, sizeof *m);
-  const pr_form* form = pr_pokemon_form(p);
+  /* PR_DEV_ILLUSION: a disguised Pokemon looks, is named and is typed as its disguise */
+  const bool look = pr_shows_illusion(bt, p);
+  const pr_form* form = pr_shown_form(bt, p);
   m->species = form->species;
   m->form = form->form_index;
-  m->gender = pr_get_gender(p);
+  m->gender = look ? pr_apparent_gender(p, true) : pr_get_gender(p);
   m->female = m->gender == 1;
   m->shiny = p->shiny;
   m->variant = p->variant;
   m->sprite_scale = (float)pr_get_sprite_scale(p);
-  snprintf(m->name, sizeof m->name, "%s", i18n_species_name(p->species));
+  snprintf(m->name, sizeof m->name, "%s", i18n_species_name(form->species));
   m->level = p->level;
   m->hp = p->hp;
   m->max_hp = p->stats[STAT_HP];
   m->status = p->status;
   int8_t types[PR_MAX_TYPES];
-  int n = pr_get_types(p, types, 0);
+  int n = pr_get_types(p, types, look ? PR_TYPES_USE_ILLUSION : 0);
   for (int i = 0; i < n && i < 3; i++) m->types[m->n_types++] = types[i];
   for (int i = 0; i < PR_N_MOVES(p) && i < 4; i++) {
     int base = pr_moves[PR_MOVES(p)[i]].pp;
@@ -92,7 +94,6 @@ void be_mon(const pr_battle* bt, const pr_pokemon* p, bv_mon* m) {
   m->n_moves = PR_N_MOVES(p);
   m->boss = p->is_boss;
   for (int i = 0; i < 7; i++) m->stat_stages[i] = p->stat_stages[i];
-  (void)bt;
 }
 
 /* ------------------------------------------------------------------ events */
@@ -115,6 +116,11 @@ static const pr_pokemon* be_switched_in(const pr_pokemon* const* party, int n, c
     const pr_pokemon* p = party[f->party_slot];
     if (p && p->species == f->species && p->form == f->form && (f->max_hp <= 0 || p->stats[STAT_HP] == f->max_hp))
       return p;
+    /* PR_DEV_ILLUSION: the snapshot showed its disguise, which looks like another party member; the slot is the one
+     * (the disguise may have ended later in the same events) */
+    if (p && (p->illusion.active || p->ability == ABILITY_ID_ILLUSION || p->passive == ABILITY_ID_ILLUSION)
+        && (f->max_hp <= 0 || p->stats[STAT_HP] == f->max_hp))
+      return p;
   }
   const pr_pokemon *same_hp = NULL, *same = NULL;
   for (int k = 0; k < n; k++) {
@@ -127,6 +133,19 @@ static const pr_pokemon* be_switched_in(const pr_pokemon* const* party, int n, c
   /* its species or form changed since (it evolved or changed form later in the same events): the slot */
   if (f->party_slot >= 0 && f->party_slot < n) return party[f->party_slot];
   return NULL;
+}
+
+/* PR_DEV_ILLUSION: the look a field snapshot shows (a disguise starting or ending), on the screen's copy */
+static void look_of(bv_mon* mon, const bv_mon* was, const pr_event_field* f) {
+  *mon = *was;
+  mon->species = f->species;
+  mon->form = f->form;
+  mon->gender = f->gender;
+  mon->female = mon->gender == 1;
+  mon->sprite_scale = f->sprite_scale;
+  mon->n_types = f->n_types;
+  for (int k = 0; k < 3; k++) mon->types[k] = f->types[k];
+  snprintf(mon->name, sizeof mon->name, "%s", i18n_species_name(mon->species));
 }
 
 int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events, bool settled, be_view* view,
@@ -172,10 +191,20 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
             PUT(.type = BEV_MAX_HP, .battler = k, .a = ev->field[k].max_hp);
             seen[k].max_hp = ev->field[k].max_hp;
           }
-            bool transforming = ev->type == PR_EV_TRANSFORM && b == k;
+            /* a Transform or a disguise ending (PR_DEV_ILLUSION) redraws the whole look below, not just the form */
+            bool transforming = (ev->type == PR_EV_TRANSFORM || ev->type == PR_EV_ILLUSION_BREAK) && b == k;
             for (int j = i + 1; j < n_events && !transforming; j++)
-              transforming = events[j].type == PR_EV_TRANSFORM && events[j].battler == k;
-            if (!transforming && (ev->field[k].species != seen[k].species || ev->field[k].form != seen[k].form)) {
+              transforming = (events[j].type == PR_EV_TRANSFORM || events[j].type == PR_EV_ILLUSION_BREAK) && events[j].battler == k;
+            if (!transforming && ev->field[k].species != seen[k].species && (bt->deviations & PR_DEV_ILLUSION) && n_sent < SENT_MAX) {
+            /* another species without a Transform: a disguise (it took one at the battle's start) */
+            bv_mon* mon = &sent[n_sent++];
+            look_of(mon, &current[k >= 2 ? 1 : 0], &ev->field[k]);
+            mon->hp = seen[k].hp; mon->max_hp = seen[k].max_hp; mon->status = seen[k].status;
+            PUT(.type = BEV_ILLUSION, .battler = k, .a = 0, .mon = mon);
+            seen[k].species = mon->species;
+            seen[k].form = mon->form;
+            current[k >= 2 ? 1 : 0] = *mon;
+          } else if (!transforming && (ev->field[k].species != seen[k].species || ev->field[k].form != seen[k].form)) {
             PUT(.type = BEV_FORM_CHANGE, .battler = k, .a = ev->field[k].species, .b = ev->field[k].form, .c = ev->field[k].gender + 2);
             seen[k].species = ev->field[k].species;
             seen[k].form = ev->field[k].form;
@@ -184,6 +213,18 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
       }
     }
     switch (ev->type) {
+      case PR_EV_ILLUSION_BREAK: {
+        /* the disguise ends: the real Pokemon's look, name and types, with the Transform sound as breakIllusion plays */
+        if (!single || !seen[b].present || n_sent >= SENT_MAX) break;
+        bv_mon* mon = &sent[n_sent++];
+        look_of(mon, &current[b >= 2 ? 1 : 0], &ev->field[b]);
+        mon->hp = seen[b].hp; mon->max_hp = seen[b].max_hp; mon->status = seen[b].status;   /* the bar as the screen has it */
+        PUT(.type = BEV_ILLUSION, .battler = b, .a = 1, .mon = mon);
+        seen[b].species = mon->species;
+        seen[b].form = mon->form;
+        current[b >= 2 ? 1 : 0] = *mon;
+        break;
+      }
       case PR_EV_TRANSFORM: {
         if (!single || !seen[b].present || n_sent >= SENT_MAX) break;
         bv_mon* mon = &sent[n_sent++];
@@ -354,9 +395,27 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
     /* a doll gone without its animation (SubstituteTag.onRemove while the Pokemon was in focus) */
     if (seen[k].substitute && !pr_get_battler_tag(p, BATTLER_TAG_TYPE_SUBSTITUTE))
       PUT(.type = BEV_POKEMON_ANIM, .battler = k, .a = -1);
-    const pr_form* form = pr_pokemon_form(p);
-    if (p->hp > 0 && (form->species != seen[k].species || form->form_index != seen[k].form)) {
-      PUT(.type = BEV_FORM_CHANGE, .battler = k, .a = form->species, .b = form->form_index, .c = pr_get_gender(p) + 2);
+    const pr_form* form = pr_shown_form(bt, p);
+    if (p->hp > 0 && form->species != seen[k].species && (bt->deviations & PR_DEV_ILLUSION) && n_sent < SENT_MAX) {
+      /* another species: a disguise started or ended (PR_DEV_ILLUSION), the whole look follows */
+      bv_mon* mon = &sent[n_sent++];
+      bv_mon live;
+      be_mon(bt, p, &live);
+      *mon = current[k >= 2 ? 1 : 0];
+      mon->species = live.species; mon->form = live.form; mon->gender = live.gender; mon->female = live.female;
+      mon->sprite_scale = live.sprite_scale; mon->n_types = live.n_types;
+      memcpy(mon->types, live.types, sizeof mon->types);
+      memcpy(mon->name, live.name, sizeof mon->name);
+      mon->hp = seen[k].hp; mon->max_hp = seen[k].max_hp; mon->status = seen[k].status;   /* the bar as the screen has it */
+      PUT(.type = BEV_ILLUSION, .battler = k, .a = 0, .mon = mon);
+      seen[k].species = form->species;
+      seen[k].form = form->form_index;
+    } else if (p->hp > 0 && (form->species != seen[k].species || form->form_index != seen[k].form)) {
+      {
+        bv_mon live;
+        be_mon(bt, p, &live);
+        PUT(.type = BEV_FORM_CHANGE, .battler = k, .a = form->species, .b = form->form_index, .c = live.gender + 2);   /* the look it shows: a disguise's gender too */
+      }
       seen[k].species = form->species;
       seen[k].form = form->form_index;
     }
