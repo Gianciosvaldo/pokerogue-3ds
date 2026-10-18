@@ -1307,6 +1307,10 @@ static void run_event(float dt) {
       if (B.step == 0) {
         if (e->type == BEV_TRANSFORM && e->mon) sd->mon = *e->mon;
         else update_mon_form(&sd->mon, e->a, e->b);
+        if (e->type == BEV_FORM_CHANGE && e->c) {
+          sd->mon.gender = e->c - 2;
+          sd->mon.female = sd->mon.gender == 1;
+        }
         load_mon_sprite(sd, player);
         float target_scale = get_mon_scale(&sd->mon);
         update_field_scale(false);
