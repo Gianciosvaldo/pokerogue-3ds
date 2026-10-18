@@ -455,6 +455,9 @@ int pr_unshift_stat_stage_change(pr_battle *bt, pr_engine *e, int battler, const
                                  int stages, pr_pokemon *source);
 /* Pokemon.damageAndUpdate(damage, {result, ignoreFaintPhase, source}): the DamageAnimPhase, the
  * damage, PostDamage abilities; returns the damage dealt */
+/* Pokemon.damage: direct HP changes without DamageAnim/PostDamage hooks. */
+double pr_pokemon_damage(pr_battle *bt, pr_engine *e, pr_pokemon *p, double damage,
+                         bool ignore_segments, bool prevent_endure, bool ignore_faint_phase);
 double pr_damage_and_update(pr_battle *bt, pr_engine *e, pr_pokemon *p, double damage, int result,
                             bool ignore_faint_phase, pr_pokemon *source);
 /* unshiftNew("PokemonHealPhase", battler, hpHealed, options): options as PR_HEAL_* flags, upstream's

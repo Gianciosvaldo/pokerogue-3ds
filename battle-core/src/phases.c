@@ -768,7 +768,7 @@ static void handle_pre_move_failures(pr_battle *bt, pr_engine *e, int ph)
     move_queue_shift(m->pokemon, NULL);
 }
 
-static double pokemon_damage(pr_battle *bt, pr_engine *e, pr_pokemon *p, double damage, bool prevent_endure,
+double pr_pokemon_damage(pr_battle *bt, pr_engine *e, pr_pokemon *p, double damage, bool ignore_segments, bool prevent_endure,
                              bool ignore_faint_phase);
 
 /* ---- status effects (Status, Pokemon.cureStatus / resetStatus) ---- */
@@ -1927,8 +1927,8 @@ static void boss_segments_cleared(pr_battle *bt, pr_engine *e, pr_pokemon *p, in
     if (ph >= 0) PH(ph)->ssc_ignore_abilities = true;
 }
 
-/* Pokemon.damage(damage, ignoreSegments=false, preventEndure, ignoreFaintPhase) */
-static double pokemon_damage(pr_battle *bt, pr_engine *e, pr_pokemon *p, double damage, bool prevent_endure,
+/* Pokemon.damage(damage, ignoreSegments, preventEndure, ignoreFaintPhase) */
+double pr_pokemon_damage(pr_battle *bt, pr_engine *e, pr_pokemon *p, double damage, bool ignore_segments, bool prevent_endure,
                              bool ignore_faint_phase)
 {
     if (p->hp <= 0) return 0;
@@ -1941,8 +1941,9 @@ static double pokemon_damage(pr_battle *bt, pr_engine *e, pr_pokemon *p, double 
     } else if (ported_boss) {
         double segment_hp = (double)max_hp(p) / p->boss_segments;
         int min_segment = (is_classic_final_boss(bt) && p->form == 0) ? 1 : 0;
-        damage = pr_calculate_boss_segment_damage(damage, p->hp, segment_hp, min_segment,
-                                                  p->boss_segment_index, &cleared_boss_segment_index);
+        if (!ignore_segments)
+            damage = pr_calculate_boss_segment_damage(damage, p->hp, segment_hp, min_segment,
+                                                      p->boss_segment_index, &cleared_boss_segment_index);
         if (min_segment == 1 && p->boss_segment_index < 1 && damage > p->hp - 1)
             damage = p->hp - 1;
     }
@@ -1962,8 +1963,11 @@ static double pokemon_damage(pr_battle *bt, pr_engine *e, pr_pokemon *p, double 
     if (damage > p->hp) damage = p->hp;
     p->hp -= (int32_t)damage;
 
-    if (ported_boss && cleared_boss_segment_index <= p->boss_segment_index)
-        boss_segments_cleared(bt, e, p, cleared_boss_segment_index);
+    if (ported_boss) {
+        if (ignore_segments) cleared_boss_segment_index = (int)ceil(p->hp / ((double)max_hp(p) / p->boss_segments));
+        if (cleared_boss_segment_index <= p->boss_segment_index)
+            boss_segments_cleared(bt, e, p, cleared_boss_segment_index);
+    }
 
     if (p->hp <= 0 && !ignore_faint_phase) {
         pr_queue_faint(bt, e, pr_battler_index(bt, p), prevent_endure, -1);
@@ -1984,7 +1988,7 @@ static double damage_and_update(pr_battle *bt, pr_engine *e, pr_pokemon *p, doub
     }
     pr_phase_unshift(bt, e, anim);
     if (p->switch_out_status && source) damage = 0;
-    damage = pokemon_damage(bt, e, p, damage, indirect, ignore_faint_phase);
+    damage = pr_pokemon_damage(bt, e, p, damage, false, indirect, ignore_faint_phase);
     if (anim >= 0) PH(anim)->anim_amount = (int32_t)damage;   /* damagePhase.updateAmount(damage) */
     if (!source || source->hit_count <= 1) pr_post_damage_ab(bt, p, damage, source);
     return damage;
@@ -3198,7 +3202,7 @@ static void post_turn_status_effect_phase(pr_battle *bt, pr_engine *e, int ph)
         }
         if (damage) {
             int32_t before = p->hp;
-            pokemon_damage(bt, e, p, damage, true, false);       /* damage(damage, false, preventEndure) */
+            pr_pokemon_damage(bt, e, p, damage, false, true, false);       /* damage(damage, false, preventEndure) */
             pr_event_add(bt, e, PR_EV_HP, PH(ph)->battler, -1, 0, p->hp - before, NULL);   /* the damage number */
             pr_post_damage_ab(bt, p, damage, NULL);              /* the damage asked for, not the HP lost */
         }

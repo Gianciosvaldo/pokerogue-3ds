@@ -226,6 +226,25 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         return;
     }
     switch (a->cls) {
+    case PR_AC_HpSplitAttr: {
+        if (!effect_can_apply(ef, user, target)) return;
+        double hp_value = floor(((double)target->hp + user->hp) / 2);
+        pr_pokemon *actors[] = {user, target};
+        for (int i = 0; i < 2; i++) {
+            pr_pokemon *p = actors[i];
+            if (p->hp < hp_value) {
+                double healing = hp_value - p->hp;
+                double room = pr_get_stat(p, STAT_HP, false) - p->hp;
+                healing = healing < room ? healing : room;
+                p->hp += (int32_t)healing;
+                if (healing) pr_event_add(bt, e, PR_EV_HP, pr_battler_index(bt, p), -1, 0, (int32_t)healing, NULL);
+            } else if (p->hp > hp_value) {
+                double damage = pr_pokemon_damage(bt, e, p, p->hp - hp_value, true, false, false);
+                if (damage) pr_event_add(bt, e, PR_EV_HP, pr_battler_index(bt, p), -1, 0, -(int32_t)damage, NULL);
+            }
+        }
+        return;
+    }
     case PR_AC_SuppressAbilitiesAttr:
     case PR_AC_SuppressAbilitiesIfActedAttr: {
         if (!effect_can_apply(ef, user, target)) return;
