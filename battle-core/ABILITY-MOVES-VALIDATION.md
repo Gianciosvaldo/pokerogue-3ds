@@ -42,6 +42,11 @@ callbacks, phase construction and RNG are observed.
   with full states, text, trace, queues and RNG, no source exceptions or unsupported
   cases. Actual gain callbacks include Intimidate, Download, Intrepid Sword and
   Drizzle. Original ally/spread/faint/switch coverage floors remain intact.
+- Expanded owning matrix: 8,320 per seed, all 16,640 exact. Each seed appends
+  128 real Role Play/Doodle/Skill Swap turns with a sole Primordial Sea source
+  under heavy rain; every added turn invokes its actual weather-loss callback.
+  This checks loss/clear and subsequent gain ordering through real phases, in
+  addition to the raw API proof. Original 8,192-turn captures remain exact.
 - All 24 compiled implementation/helper/caller faults are caught, including raw
   gates, source/recipient, both form triggers, Doodle's partner and HP gate,
   swap snapshot, messages, RNG, lose/gain helpers and owning dispatch. Twenty-four
