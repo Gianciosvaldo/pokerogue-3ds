@@ -294,3 +294,7 @@ Spectral Thief's enabled pre-damage callback and same-hit/queued-gain timing are
 now covered by [SPECTRAL-THIEF-VALIDATION.md](SPECTRAL-THIEF-VALIDATION.md), including
 native Multi Lens turns. HP splitting and ability-changing callbacks remain next;
 this does not close the full source inventory or natural high-wave progression.
+
+Pain Split is covered by [HP-SPLIT-VALIDATION.md](HP-SPLIT-VALIDATION.md): raw
+attribute HP changes, boss gating, direct shield bypass API and owning turns.
+Ability-changing callbacks and high-wave progression remain open.

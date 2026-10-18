@@ -25,7 +25,7 @@ p=(r/'battle-core/src/phases.c').read_text()
 def phase_fault(name,old,new,owning=False):
  assert p.count(old)==1,(name,p.count(old));faults.append((name,'phases.c',p.replace(old,new,1),owning))
 phase_fault('missing-faint','pr_queue_faint(bt, e, pr_battler_index(bt, p), prevent_endure, -1);','/* omit faint */')
-phase_fault('missing-boss-boosts','boss_segments_cleared(bt, e, p, cleared_boss_segment_index);','/* omit boss boosts */')
+phase_fault('missing-boss-boosts','boss_segments_cleared(bt, e, p, cleared_boss_segment_index);','(void)0; /* omit boss boosts */')
 phase_fault('wrong-cleared-shield','if (ignore_segments) cleared_boss_segment_index = (int)ceil','if (ignore_segments) cleared_boss_segment_index = (int)floor')
 phase_fault('missing-owning-effect','if (!pr_attr_is(pr_attrs[ai].cls, PR_AC_MoveEffectAttr)) continue;','if (!pr_attr_is(pr_attrs[ai].cls, PR_AC_MoveEffectAttr)||pr_attrs[ai].cls==PR_AC_HpSplitAttr) continue;',True)
 flags=['-O2','-g','-std=c99','-ffp-contract=off',*['-I'+str(r/x) for x in ['battle-core/include','battle-core/gen/out','battle-core/build','battle-core/tests']]]
