@@ -89,19 +89,26 @@ static void form_change_with_delay(pr_battle *bt, const pr_pokemon *p, int trigg
     const pr_species *sp = pr_pokemon_species(p);
     if (!sp || !(sp->form_change_triggers & (1u << trigger_class))) return;
 
-    /* Meloetta's registered post-move predicate cannot trigger without Relic
-     * Song as its newest history entry. Preserve explicit unsupported reporting
-     * for that positive path; ordinary reserve entrants need no form phase. */
+    /* The specialized Meloetta trigger inherits the newest-move predicate,
+     * and excludes Single Type challenges and active primary/passive Sheer Force. */
     if (p->species == SPECIES_ID_MELOETTA && trigger_class == PR_FCT_SpeciesFormChangePostMoveTrigger) {
         const pr_turn_move *last = pr_last_move(bt, p, 0);
-        if (!last || last->move != MOVE_ID_RELIC_SONG) return;
+        if (!last || last->move != MOVE_ID_RELIC_SONG
+            || (bt->challenge_flags & (1u << CHALLENGES_SINGLE_TYPE))
+            || pr_has_ability_active(bt, p, ABILITY_ID_SHEER_FORCE)) return;
     }
 
     pr_pokemon *mon = (pr_pokemon *)p;
     int target_form = -1;
 
     bool stance = mon->species == SPECIES_ID_AEGISLASH;
-    if (mon->species == SPECIES_ID_XERNEAS) {
+    if (mon->species == SPECIES_ID_MELOETTA && trigger_class == PR_FCT_SpeciesFormChangePostMoveTrigger) {
+        const pr_form *from = pr_pokemon_base_form(mon);
+        const char *to = !strcmp(from->form_key,"aria") ? "pirouette"
+            : !strcmp(from->form_key,"pirouette") ? "aria" : NULL;
+        for (int i=0;to&&i<sp->nforms;i++)
+            if (!strcmp(pr_forms[sp->form0+i].form_key,to)) target_form=i;
+    } else if (mon->species == SPECIES_ID_XERNEAS) {
         /* Source registers quiet neutral<->active transitions, independent of
          * abilities. Match raw form keys before considering field activity. */
         if (trigger_class == PR_FCT_SpeciesFormChangeActiveTrigger) {

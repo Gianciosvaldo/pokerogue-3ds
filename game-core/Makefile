@@ -708,3 +708,10 @@ tera-shift-host-test: $(BUILD)/tera_shift_host_test
 $(BUILD)/tera_shift_host_test: tests/tera_shift_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
 .PHONY: tera-shift-host-test
+all: $(BUILD)/meloetta_forms_host_test
+test: meloetta-forms-host-test
+meloetta-forms-host-test: $(BUILD)/meloetta_forms_host_test
+	$(BUILD)/meloetta_forms_host_test
+$(BUILD)/meloetta_forms_host_test: tests/meloetta_forms_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: meloetta-forms-host-test
