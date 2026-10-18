@@ -539,3 +539,7 @@ $(BUILD)/hp-split-test: tests/hp-split-test.c $(BUILD)/wide-substitute-frame.inc
 all: $(BUILD)/ability-moves-test
 $(BUILD)/ability-moves-test: tests/ability-moves-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/hp-cost-boosts-test
+$(BUILD)/hp-cost-boosts-test: tests/hp-cost-boosts-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@

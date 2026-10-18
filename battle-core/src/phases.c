@@ -22,7 +22,7 @@ static bool is_classic_final_boss(const pr_battle *bt)
 static bool is_active(const pr_pokemon *p) { return p && p->hp > 0; }
 static bool is_on_field(const pr_pokemon *p) { return p && p->on_field && !p->switch_out_status; }
 static bool is_active_on_field(const pr_pokemon *p) { return is_active(p) && is_on_field(p); }
-static int32_t max_hp(const pr_pokemon *p) { return pr_get_stat(p, STAT_HP, false); }
+static int32_t max_hp(const pr_pokemon *p) { return pr_get_stat(p, STAT_HP, true); }
 
 /* getPokemon() of a PokemonPhase: the Pokemon in that field slot */
 static pr_pokemon *slot(pr_battle *bt, int b) { return b >= 0 && b < 4 ? bt->field[b] : NULL; }
@@ -3553,11 +3553,15 @@ static void stat_stage_change_phase(pr_battle *bt, pr_engine *e, int ph)
         if (applied[i]) moved |= 1 << q->ssc_stat[i];
     }
     if (moved) pr_event_add(bt, e, PR_EV_STAT_STAGES, q->battler, -1, increase, moved, NULL);
-    /* queueStatChangeMessages: the given message (no caller passes one), or one per group of
+    /* queueStatChangeMessages: the supplied callback message, or one per group of
      * equal applied stages (Map.groupBy: in first-seen order), getStatStageChangeDescriptionKey
      * with the stats joined as formatStatsFragment does */
-    if (q->ssc_message) pr_queue_message(bt, e);
-    else
+    if (q->ssc_message) {
+        if (q->move_id == MOVE_ID_BELLY_DRUM)
+            pr_queue_msg(bt, e, pr_msg2("moveTriggers:cutOwnHpAndMaximizedStat",
+                pr_arg_pokemon(bt, "pokemonName", p), pr_arg_stat("statName", STAT_ATK)));
+        else pr_queue_message(bt, e);
+    } else
         for (int i = 0; i < q->n_ssc; i++) {
             bool seen = false;
             for (int j = 0; j < i; j++) seen |= applied[j] == applied[i];

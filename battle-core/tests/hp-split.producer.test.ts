@@ -47,7 +47,7 @@ function snapshot(p: any): number[] {
 import { HitResult } from "#enums/hit-result";
 
 it("actual Pain Split HP changes and shield bypass",async()=>{
- const N=8320,SEED=Number(process.env.HPSPLIT_SEED??777),native=BattleScene.prototype.randBattleSeedInt;
+ const N=8448,SEED=Number(process.env.HPSPLIT_SEED??777),native=BattleScene.prototype.randBattleSeedInt;
  if(!process.versions.node.startsWith("22."))throw Error("Node22 required");
  const g=new GameManager(new Phaser.Game({type:Phaser.HEADLESS}));g.override.battleStyle("double").ability(AbilityId.BALL_FETCH).enemyAbility(AbilityId.BALL_FETCH).passiveAbility(AbilityId.NONE).enemyPassiveAbility(AbilityId.NONE).enemySpecies(SpeciesId.RATTATA).moveset(MoveId.SPLASH).enemyMoveset(MoveId.SPLASH).disableTrainerWaves().mysteryEncounterChance(0);
  await g.classicMode.startBattle(SpeciesId.RATTATA,SpeciesId.RATTATA);BattleScene.prototype.randBattleSeedInt=native;
@@ -56,16 +56,17 @@ it("actual Pain Split HP changes and shield bypass",async()=>{
  vi.spyOn(pm,"shiftPhase").mockImplementation(()=>{});for(const p of actors){vi.spyOn(p,"updateInfo").mockImplementation(async()=>{});if(!p.isPlayer())vi.spyOn(p.battleInfo,"updateBossSegments").mockImplementation(()=>{});}
  let events:string[]=[];vi.spyOn(scene.damageNumberHandler,"add").mockImplementation((p:any,n:any,result:any)=>{events.push(`EV ${actors.indexOf(p)} ${result===HitResult.HEAL?n:-n} ${actors.map(a=>a.hp).join(" ")}`);});
  const attr=allMoves[MoveId.PAIN_SPLIT].getAttrs("HpSplitAttr")[0];if(!attr)throw Error("owning registered attribute required");
- const fd=fs.openSync(process.env.HPSPLIT_OUT??"/tmp/hp-split.txt","w"),write=(rows:string[])=>fs.writeSync(fd,rows.join("\n")+"\n");write([`HP_SPLIT 3 ${N} ${SEED}`]);let denied=0,heals=0,hits=0,shields=0,faints=0;
+ const fd=fs.openSync(process.env.HPSPLIT_OUT??"/tmp/hp-split.txt","w"),write=(rows:string[])=>fs.writeSync(fd,rows.join("\n")+"\n");write([`HP_SPLIT 4 ${N} ${SEED}`]);let denied=0,heals=0,hits=0,shields=0,faints=0;
  const boss=(p:any,k:number)=>`${k} ${+p.isBoss()} ${p.bossSegments??0} ${p.bossSegmentIndex??0} ${+p.hasTrainer()}`;
  for(let i=0;i<N;i++){
-  let u=i%4,t=Math.floor(i/4)%4;if(i>=8192){u=i%2;t=2+i%2;}
+  let u=i%4,t=Math.floor(i/4)%4;if(i>=8192&&i<8320){u=i%2;t=2+i%2;}
   scene.gameMode=getGameMode(GameModes.ENDLESS);battle.gameMode=scene.gameMode;battle.waveIndex=201;battle.turn=1;scene.modifiers=[];scene.enemyModifiers=[];scene.arena.tags=[];scene.arena.weather=null;scene.arena.terrain=null;
   for(let k=0;k<4;k++){
    const p=actors[k];p.resetSummonData();p.resetTurnData();p.resetBattleAndWaveData();p.species=speciesDataRegistry.getSpecies([SpeciesId.BULBASAUR,SpeciesId.CHARMANDER,SpeciesId.SQUIRTLE,SpeciesId.MAGIKARP][k]);p.formIndex=0;p.fusionSpecies=null;p.customPokemonData.ability=AbilityId.BALL_FETCH;p.customPokemonData.passive=AbilityId.NONE;p.passive=false;p.summonData.ability=p.customPokemonData.ability;p.nature=0;p.ivs=Array(6).fill(15);p.level=[1,50,256,1000000][(Math.floor(i/64)+k)%4];p.stats=Array(6).fill(0);p.hp=undefined;p.calculateStats();p.status=null;p.switchOutStatus=false;p.moveset=[new PokemonMove(MoveId.PAIN_SPLIT)];p.generateName();
    const mx=p.getMaxHp();p.hp=[0,1,mx,Math.max(1,Math.floor(mx/2)),Math.max(1,mx-1)][(Math.floor(i/16)+k)%5];if(k>=2){p.bossSegments=0;p.bossSegmentIndex=0;}
   }
-  if(i>=8192){for(const p of actors){p.level=50;p.calculateStats();p.hp=1;}const p=actors[t];p.bossSegments=[2,3,5,8][Math.floor(i/2)%4];p.hp=p.getMaxHp();p.bossSegmentIndex=p.getBossSegmentIndex();shields++;}
+  if(i>=8192&&i<8320){for(const p of actors){p.level=50;p.calculateStats();p.hp=1;}const p=actors[t];p.bossSegments=[2,3,5,8][Math.floor(i/2)%4];p.hp=p.getMaxHp();p.bossSegmentIndex=p.getBossSegmentIndex();shields++;}
+  if(i>=8320){u=i%2;t=2+i%2;for(let k=0;k<4;k++){const p=actors[k];p.level=k<2?50:1000000;p.calculateStats();p.hp=p.getMaxHp();p.setStat(Stat.HP,i%2?2*p.getMaxHp():1,false);}actors[u].hp=1;}
   pm.clearAllPhases();events=[];battle.battleSeed=`hp-split-${SEED}-${i}`;battle.battleSeedState=null;Phaser.Math.RND.sow([`hp-split-${SEED}-${i}`]);battle.randSeedInt(2);
   const rows=[`C ${i} ${u} ${t}`,`R ${rng(Phaser.Math.RND.state())}`,`B ${rng(battle.battleSeedState)}`,`QIN ${pm.phaseQueue.levels.length} ${+pm.phaseQueue.deferredActive} ${pm.phaseQueue.currentLevel}`,...actors.flatMap((p,k)=>[`I ${k} ${snapshot(p).join(" ")}`,`IB ${boss(p,k)}`])];
   rows.push(`COND ${+allMoves[MoveId.PAIN_SPLIT].applyConditions(actors[u],actors[t])}`);

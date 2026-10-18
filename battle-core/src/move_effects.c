@@ -80,7 +80,7 @@ static bool add_battler_tag(pr_battle *bt, pr_engine *e, const pr_attr *a, const
 
 /* StatStageChangeAttr.apply: canApply, the condition, the chance roll, then
  * StatStageChangePhase({battlerIndex, changes: groupStatChange(stats, getLevels(user)),
- * sourcePokemon: user, message: options.message}); no StatStageChangeAttr has a message.
+ * sourcePokemon: user, message: options.message}); Belly Drum supplies a message.
  * Whether the phase was queued. */
 static bool stat_stage_change(pr_battle *bt, pr_engine *e, const pr_effect_info *ef, uint16_t cls, pr_pokemon *user,
                               pr_pokemon *target, int move, const int32_t *stats, int n, int stages)
@@ -97,7 +97,14 @@ static bool stat_stage_change(pr_battle *bt, pr_engine *e, const pr_effect_info 
         if (weather == WEATHER_TYPE_SUNNY || weather == WEATHER_TYPE_HARSH_SUN) stages++;
     }
     pr_pokemon *on = ef->self_target ? user : target;
-    if (pr_unshift_stat_stage_change(bt, e, pr_battler_index(bt, on), stats, n, stages, user) < 0) e->overflow = true;
+    int ph = pr_unshift_stat_stage_change(bt, e, pr_battler_index(bt, on), stats, n, stages, user);
+    if (ph < 0) e->overflow = true;
+    else if (cls == PR_AC_CutHpStatStageBoostAttr && move == MOVE_ID_BELLY_DRUM) {
+        /* The pin's sole custom StatStageChangeAttr message is evaluated when
+         * the phase runs, using its current recipient rather than a frozen name. */
+        e->pool[ph].ssc_message = true;
+        e->pool[ph].move_id = MOVE_ID_BELLY_DRUM;
+    }
     return true;
 }
 
@@ -234,7 +241,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
             pr_pokemon *p = actors[i];
             if (p->hp < hp_value) {
                 double healing = hp_value - p->hp;
-                double room = pr_get_stat(p, STAT_HP, false) - p->hp;
+                double room = pr_get_stat(p, STAT_HP, true) - p->hp;
                 healing = healing < room ? healing : room;
                 p->hp += (int32_t)healing;
                 if (healing) pr_event_add(bt, e, PR_EV_HP, pr_battler_index(bt, p), -1, 0, (int32_t)healing, NULL);
@@ -374,6 +381,15 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
             if (pr_unshift_stat_stage_change(bt, e, pr_battler_index(bt, target), &stat, 1, 2, user) < 0)
                 e->overflow = true;
         }
+        return;
+    }
+    case PR_AC_CutHpStatStageBoostAttr: {
+        const pr_attr_CutHpStatStageBoostAttr *x = P(CutHpStatStageBoostAttr, a);
+        /* Its override pays the cost before the inherited HP/condition/chance
+         * gates, including on raw calls that fail the separate move condition. */
+        double cost = to_dmg_value(pr_get_stat(user, STAT_HP, true) / x->cutRatio);
+        pr_damage_and_update(bt, e, user, cost, HIT_RESULT_INDIRECT, false, NULL);
+        stat_stage_change(bt, e, ef, a->cls, user, target, move, x->stats.v, x->stats.n, x->stages);
         return;
     }
     case PR_AC_StatStageChangeAttr: {
