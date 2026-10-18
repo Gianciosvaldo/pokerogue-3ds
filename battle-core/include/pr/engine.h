@@ -448,6 +448,7 @@ bool pr_remove_move_held_item(pr_battle *bt, pr_engine *e, pr_pokemon *user,
                              pr_pokemon *target, bool berries_only, pr_modifier *removed);
 void pr_apply_post_victory_stat_change(pr_battle *bt, pr_engine *e, int attr, pr_pokemon *source, int move);
 void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, pr_pokemon *user, pr_pokemon *target);
+void pr_apply_pre_damage_stat_changes(pr_battle *bt, pr_engine *e, pr_pokemon *user, pr_pokemon *target, int move);
 /* unshiftNew("StatStageChangePhase", {battlerIndex, changes: groupStatChange(stats, stages),
  * sourcePokemon}) with no message and no other option; returns the phase (-1 when out of room) */
 int pr_unshift_stat_stage_change(pr_battle *bt, pr_engine *e, int battler, const int32_t *stats, int n_stats,
