@@ -692,3 +692,11 @@ illusion-host-test: $(BUILD)/illusion_host_test
 $(BUILD)/illusion_host_test: tests/illusion_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
 .PHONY: illusion-host-test
+
+all: $(BUILD)/aftermath_host_test
+test: aftermath-host-test
+aftermath-host-test: $(BUILD)/aftermath_host_test
+	$(BUILD)/aftermath_host_test
+$(BUILD)/aftermath_host_test: tests/aftermath_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+.PHONY: aftermath-host-test

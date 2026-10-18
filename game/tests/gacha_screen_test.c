@@ -161,6 +161,22 @@ void gv_draw_bottom(const gv_state* v) {
   if (v->mode == GV_CONFIRM) g_cursor_y = v->yes ? 140 : 158;
 }
 
+void gv_draw_reveal_top(const gv_reveal* v) {
+  rec(0, v->top_title, 0);
+  rec(0, v->top_sub, 0);
+}
+void gv_draw_reveal_bottom(const gv_reveal* v) {
+  rec(1, v->title, 0);
+  for (int i = 0; i < v->n_rows; i++) rec(1, v->row[i].name, 0);
+  rec(1, v->more_above, 0);
+  rec(1, v->more_below, 0);
+  rec(1, v->big, 0);
+  rec(1, v->small, 0);
+  rec(1, v->note[0], 0);
+  rec(1, v->note[1], 0);
+  rec(1, v->hint, 0);
+}
+
 static const drawn_t* find_text(const char* needle) {
   for (int i = 0; i < n_drawn; i++)
     if (strstr(g_drawn[i].text, needle)) return &g_drawn[i];

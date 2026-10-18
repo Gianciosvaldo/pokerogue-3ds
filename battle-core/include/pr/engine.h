@@ -460,6 +460,9 @@ double pr_pokemon_damage(pr_battle *bt, pr_engine *e, pr_pokemon *p, double dama
                          bool ignore_segments, bool prevent_endure, bool ignore_faint_phase);
 double pr_damage_and_update(pr_battle *bt, pr_engine *e, pr_pokemon *p, double damage, int result,
                             bool ignore_faint_phase, pr_pokemon *source);
+/* Same operation with the source's explicit ignoreSegments option. */
+double pr_damage_and_update_segments(pr_battle *bt, pr_engine *e, pr_pokemon *p, double damage, int result,
+                                     bool ignore_segments, bool ignore_faint_phase, pr_pokemon *source);
 /* unshiftNew("PokemonHealPhase", battler, hpHealed, options): options as PR_HEAL_* flags, upstream's
  * defaults being showFullHpMessage and nothing else */
 enum {

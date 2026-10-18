@@ -559,3 +559,7 @@ $(BUILD)/secret-power-test: tests/secret-power-test.c $(BUILD)/wide-substitute-f
 all: $(BUILD)/zero-to-hero-test
 $(BUILD)/zero-to-hero-test: tests/zero-to-hero-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/form-block-damage-test
+$(BUILD)/form-block-damage-test: tests/form-block-damage-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/form-block-damage-test.c $(BUILD)/libprcore.a -lm -o $@
