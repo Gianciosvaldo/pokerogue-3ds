@@ -342,6 +342,15 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             }
             p->trainer_slot = field(l, "tslot") ? (int8_t)inum(l, "tslot") : 0;
             p->has_trainer = p->trainer_slot != 0;             /* EnemyPokemon.hasTrainer() */
+            if (field(l, "aidx")) {                    /* abilityIndex and customPokemonData.ability, when given */
+                p->ability_index = (int8_t)inum(l, "aidx");
+                p->custom_ability = (int16_t)inum(l, "cab");
+                p->fusion_custom_ability = p->lookup_ability_override = p->daily_boss_ability = -1;
+                p->ability_lookup_known = true;
+                if (pr_get_ability(p, true) != p->base_ability || pr_get_ability(p, false) != p->ability) {
+                    fprintf(stderr, "ability lookup disagrees with abil/babil: id %u sp %d form %d aidx %d cab %d ab %d -> %d/%d vs %d/%d\n", p->id, p->species, p->form, p->ability_index, p->custom_ability, p->ability_override, pr_get_ability(p, true), pr_get_ability(p, false), p->base_ability, p->ability); exit(2);
+                }
+            }
             p->turn_move_effectiveness = -1;
             if (field(l, "qmega")) p->queued_mega = inum(l, "qmega") != 0;
             if (field(l, "qdmax")) p->queued_dynamax = inum(l, "qdmax") != 0;
@@ -639,6 +648,7 @@ static void dump_mon(lines_t *L, const pr_battle *bt, const pr_pokemon *p, const
         sb(&s, " ss=");
         LIST(&s, 6, ',', "%.17g", p->summon_stats[i]);
     }
+    if (p->ability_lookup_known) sb(&s, " aidx=%d cab=%d", p->ability_index, p->custom_ability);
     add_line(L, "%s", s.s);
 
     s.n = 0;

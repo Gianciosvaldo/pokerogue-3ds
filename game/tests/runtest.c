@@ -482,6 +482,7 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
         if (side_ok(e->battler, "form change")) {
           W.mon[s].species = e->a;
           W.mon[s].form = e->b;
+          if (e->c) W.mon[s].gender = e->c - 2;
         }
         break;
       case BEV_TRANSFORM:
