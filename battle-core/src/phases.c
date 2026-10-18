@@ -2835,7 +2835,13 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
     p->terastallized = false;
     p->stellar_types_boosted = 0;
     if (was_tera) form_change(bt, p, PR_FCT_SpeciesFormChangeLapseTeraTrigger);
+    /* the last attack received gives the attacker (getPokemonById, maybe undefined) and its move;
+     * a faint from indirect damage gives neither */
     pr_ab_params faint_params = {.pokemon = p, .move = -1};
+    if (p->n_attacks_received > 0) {
+        faint_params.opponent = pr_pokemon_by_id(bt, p->attacks_received[0].source_id);
+        faint_params.move = p->attacks_received[0].move;
+    }
     pr_apply_ab_attrs(bt, PR_AC_PostFaintAbAttr, &faint_params);
     pr_speed_iter it;
     pr_pokemon *q;
