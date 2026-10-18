@@ -864,6 +864,44 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         if (!pp->simulated) pr_arena_remove_tags_on_side(bt, c->e, x->arenaTags.v, x->arenaTags.n, ARENA_TAG_SIDE_BOTH, false);
         return 1;
     }
+    case PR_AC_PostFaintContactDamageAbAttr: {                          /* Aftermath */
+        const pr_attr_PostFaintContactDamageAbAttr *x = P(PostFaintContactDamageAbAttr, a);
+        if (!c->e) return -1;
+        if (move < 0 || !o || !pr_move_does_flag_effect_apply(bt, move, MOVE_FLAGS_MAKES_CONTACT, o, p)) return 0;
+        /* FieldPreventExplosiveMovesAbAttr (Damp) on every Pokemon inSpeedOrder(BOTH), then the
+         * attacker's BlockNonDirectDamageAbAttr (Magic Guard), both applied from canApply */
+        bool cancelled = false;
+        pr_speed_iter it;
+        pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
+        for (pr_pokemon *q; (q = pr_speed_iter_next(bt, &it));) {
+            pr_ab_params dp = {.pokemon = q, .move = -1, .flag = &cancelled, .simulated = pp->simulated};
+            pr_apply_ab_attrs(bt, PR_AC_FieldPreventExplosiveMovesAbAttr, &dp);
+        }
+        if (cancelled) return 0;
+        pr_ab_params bp = {.pokemon = o, .move = -1, .flag = &cancelled};
+        pr_apply_ab_attrs(bt, PR_AC_BlockNonDirectDamageAbAttr, &bp);
+        GATE(!cancelled);
+        if (pp->simulated) return 1;
+        pr_pokemon *w = (pr_pokemon *)o;
+        pr_damage_and_update(bt, c->e, w, to_dmg_value(pr_get_stat(w, STAT_HP, true) * (1.0 / x->damageRatio)),
+                             HIT_RESULT_INDIRECT, false, NULL);
+        w->damage_taken += (int32_t)to_dmg_value(pr_get_stat(w, STAT_HP, true) * (1.0 / x->damageRatio));
+        return 1;
+    }
+    case PR_AC_PostFaintHPDamageAbAttr: {                               /* Innards Out: canApply is true */
+        if (!c->e) return -1;
+        GATE(true);
+        if (move < 0 || !o || pp->simulated || pr_get_ally(bt, o) == p) return 1;
+        bool cancelled = false;
+        pr_ab_params bp = {.pokemon = o, .move = -1, .flag = &cancelled};
+        pr_apply_ab_attrs(bt, PR_AC_BlockNonDirectDamageAbAttr, &bp);
+        if (cancelled) return 1;
+        double damage = p->attacks_received[0].damage;                  /* turnData.attacksReceived[0].damage */
+        pr_pokemon *w = (pr_pokemon *)o;
+        pr_damage_and_update(bt, c->e, w, damage, HIT_RESULT_INDIRECT, false, NULL);
+        w->damage_taken += (int32_t)damage;
+        return 1;
+    }
     case PR_AC_PostFaintUnsuppressedWeatherFormChangeAbAttr: {
         bool any = false;
         for (int k = 0; k < 4; k++) {
