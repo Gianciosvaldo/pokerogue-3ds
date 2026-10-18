@@ -551,3 +551,7 @@ $(BUILD)/pledge-test: tests/pledge-test.c tests/gas-lifecycle-test.c src/phases.
 all: $(BUILD)/type-moves-test
 $(BUILD)/type-moves-test: tests/type-moves-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -Wl,--wrap=pr_battle_rand_seed_int -lm -o $@
+
+all: $(BUILD)/secret-power-test
+$(BUILD)/secret-power-test: tests/secret-power-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -Wl,--wrap=pr_battle_rand_seed_int -lm -o $@

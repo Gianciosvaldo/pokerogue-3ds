@@ -56,6 +56,17 @@ static bool chance_roll(pr_battle *bt, double chance)
     return chance < 0 || chance == 100 || pr_battle_rand_seed_int(bt, 100, 0) < chance;
 }
 
+/* StatusEffectAttr omits the parent gate: its chance rolls even on a fainted
+ * target. Secret Power supplies its own outer HP gate before using this child. */
+static bool status_effect_apply(pr_battle *bt, pr_engine *e, const pr_effect_info *ef,
+                                pr_pokemon *user, pr_pokemon *target, int move, int effect)
+{
+    double chance = get_move_chance(bt, ef, user, target, move, ef->self_target, true);
+    if (!chance_roll(bt, chance)) return false;
+    return pr_try_set_status(bt, e, target, effect, user, -1, false,
+                             pr_moves[move].category != MOVE_CATEGORY_STATUS);
+}
+
 static void unshift_pokemon_phase(pr_battle *bt, pr_engine *e, pr_phase_type type, const pr_pokemon *p)
 {
     int ph = pr_phase_new(e, type, (int8_t)pr_battler_index(bt, p));
@@ -392,6 +403,49 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         stat_stage_change(bt, e, ef, a->cls, user, target, move, x->stats.v, x->stats.n, x->stages);
         return;
     }
+    case PR_AC_SecretPowerAttr: {
+        if (!effect_can_apply(ef, user, target)) return;
+        int effect = STATUS_EFFECT_PARALYSIS;
+        int32_t stat = -1;
+        bool flinch = false;
+        if (bt->terrain != TERRAIN_NONE) {
+            switch (bt->terrain) {
+            case TERRAIN_MISTY: stat = STAT_SPATK; break;
+            case TERRAIN_GRASSY: effect = STATUS_EFFECT_SLEEP; break;
+            case TERRAIN_PSYCHIC: stat = STAT_SPD; break;
+            default: break;
+            }
+        } else if (bt->has_biome) {
+            switch (bt->biome) {
+            case BIOME_ID_PLAINS: case BIOME_ID_GRASS: case BIOME_ID_TALL_GRASS:
+            case BIOME_ID_FOREST: case BIOME_ID_JUNGLE: case BIOME_ID_MEADOW:
+                effect = STATUS_EFFECT_SLEEP; break;
+            case BIOME_ID_SWAMP: case BIOME_ID_MOUNTAIN: case BIOME_ID_TEMPLE: case BIOME_ID_RUINS:
+                stat = STAT_SPD; break;
+            case BIOME_ID_ICE_CAVE: case BIOME_ID_SNOWY_FOREST: effect = STATUS_EFFECT_FREEZE; break;
+            case BIOME_ID_VOLCANO: effect = STATUS_EFFECT_BURN; break;
+            case BIOME_ID_FAIRY_CAVE: stat = STAT_SPATK; break;
+            case BIOME_ID_DESERT: case BIOME_ID_CONSTRUCTION_SITE: case BIOME_ID_BEACH:
+            case BIOME_ID_ISLAND: case BIOME_ID_BADLANDS: stat = STAT_ACC; break;
+            case BIOME_ID_SEA: case BIOME_ID_LAKE: case BIOME_ID_SEABED: stat = STAT_ATK; break;
+            case BIOME_ID_CAVE: case BIOME_ID_WASTELAND: case BIOME_ID_GRAVEYARD:
+            case BIOME_ID_ABYSS: case BIOME_ID_SPACE: flinch = true; break;
+            case BIOME_ID_END: stat = STAT_DEF; break;
+            default: break;
+            }
+        }
+        /* The source constructs a fresh child with default options, rather than
+         * inheriting the outer attribute's gates or serializing a new attribute. */
+        const pr_effect_info child = {.chance_override = -1, .condition = PR_NO_FN};
+        if (stat >= 0) {
+            stat_stage_change(bt, e, &child, PR_AC_StatStageChangeAttr, user, target, move, &stat, 1, -1);
+        } else if (flinch) {
+            const pr_attr_AddBattlerTagAttr tag = {.tagType = BATTLER_TAG_TYPE_FLINCHED, .failOnOverlap = true};
+            const pr_attr attr = {PR_AC_AddBattlerTagAttr, PR_NO_FN, &tag};
+            add_battler_tag(bt, e, &attr, &child, user, target, move);
+        } else status_effect_apply(bt, e, &child, user, target, move, effect);
+        return;
+    }
     case PR_AC_StatStageChangeAttr: {
         const pr_attr_StatStageChangeAttr *x = P(StatStageChangeAttr, a);
         stat_stage_change(bt, e, ef, a->cls, user, target, move, x->stats.v, x->stats.n, x->stages);
@@ -454,11 +508,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         } else {
             effect = P(StatusEffectAttr, a)->effect;
         }
-        /* no canApply check: the chance is rolled even against a fainted target */
-        double chance = get_move_chance(bt, ef, user, target, move, ef->self_target, true);
-        if (!chance_roll(bt, chance)) return;
-        /* target.trySetStatus(effect, user, undefined, null, false, quiet): quiet unless a status move */
-        pr_try_set_status(bt, e, target, effect, user, -1, false, pr_moves[move].category != MOVE_CATEGORY_STATUS);
+        status_effect_apply(bt, e, ef, user, target, move, effect);
         return;
     }
     case PR_AC_HealStatusEffectAttr: {

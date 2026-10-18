@@ -12,7 +12,8 @@ Quash (#302), highest-stat selection (#303), Spectral Thief (#304), Pain Split
 HP-cost boosts and maximum-HP getter corrections are merged in #307; the
 combined Pledge waiting callback is merged in #308. Reflect Type/Conversion/
 Conversion 2 are documented in [TYPE-MOVES-VALIDATION.md](TYPE-MOVES-VALIDATION.md).
-Next candidates include Secret Power and Revival Blessing; delayed attacks
+Secret Power is documented in [SECRET-POWER-VALIDATION.md](SECRET-POWER-VALIDATION.md).
+Next candidates include Disguise/Ice Face form callbacks and Revival Blessing; delayed attacks
 already have override handlers and need a boundary audit. A missing local class switch
 case is only a candidate: called-move and override dispatch may handle it
 elsewhere, and source-disabled registrations must be distinguished. The final
