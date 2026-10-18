@@ -198,18 +198,15 @@ static rr_color tier_rgba(int tier, int alpha) {
 static void draw_egg(const gv_egg* e) {
   char frame[16];
   snprintf(frame, sizeof frame, "egg_%d", e->tier < GV_TIERS ? e->tier : 0);
-  if (e->open > 0.0f && e->tier > 0) { /* opened, and not a common one: a halo in the tier's colour behind the egg, which rises a little */
-    const int a = (int)(110.0f * e->open);
-    rr_rect(e->x - 17, e->y - 12, 34, 24, tier_rgba(e->tier, a));
-    rr_rect(e->x - 13, e->y - 17, 26, 34, tier_rgba(e->tier, a));
-  }
   if (!mui_image("egg/egg", frame, e->x, e->y - 4.0f * e->open, 0.5f, 0.5f)) rr_rect(e->x - 7, e->y - 9, 14, 18, tier_rgba(e->tier, 255));
-  if (e->picked) {
-    const rr_color w = RR_RGBA(255, 255, 255, 255);
-    rr_rect(e->x - 19, e->y - 19, 38, 1, w);
-    rr_rect(e->x - 19, e->y + 18, 38, 1, w);
-    rr_rect(e->x - 19, e->y - 19, 1, 38, w);
-    rr_rect(e->x + 18, e->y - 19, 1, 38, w);
+  if (e->picked) { /* corner marks, so the egg itself stays clear (dark: the field is pale) */
+    const rr_color w = RR_RGBA(0x18, 0x28, 0x48, 255);
+    for (int sx = -1; sx <= 1; sx += 2)
+      for (int sy = -1; sy <= 1; sy += 2) {
+        const float cx = e->x + (float)sx * 18.0f, cy = e->y + (float)sy * 18.0f;
+        rr_rect(sx < 0 ? cx : cx - 5, cy, 6, 1, w);
+        rr_rect(cx, sy < 0 ? cy : cy - 5, 1, 6, w);
+      }
   }
 }
 
@@ -221,8 +218,11 @@ void gv_draw_reveal_top(const gv_reveal* s) {
     text8_centred(160, 4, s->top_title, TS_WINDOW);
     if (s->top_sub[0]) text8(160 - (float)mui_text_width(FONT, s->top_sub) / 2.0f, 15, s->top_sub, MUI_RGB(0xa8a8a0));
   }
+  /* the chute is above the field's top edge: the eggs come in through it, so nothing is drawn outside the field */
+  mui_clip(0, 0, W, H);
   for (int i = 0; i < s->n && i < GV_CAP_MAX; i++)
     if (s->egg[i].phase != 0) draw_egg(&s->egg[i]);
+  mui_clip_off();
 }
 
 void gv_draw_reveal_bottom(const gv_reveal* s) {
