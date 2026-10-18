@@ -2126,7 +2126,7 @@ static void apply_on_target_effects(pr_battle *bt, pr_engine *e, int ph, pr_poke
     pr_ab_params dp = {.pokemon = target, .opponent = user, .move = move, .hit_result = d.result, .damage = d.damage};
     pr_apply_ab_attrs(bt, PR_AC_PostDefendAbAttr, &dp);                  /* Static, Rough Skin, Justified... */
     if (pr_illusion_on_hit(bt, target, d.result)) {                     /* PR_DEV_ILLUSION */
-        pr_event_add(bt, e, PR_EV_ILLUSION_BREAK, pr_battler_index(bt, target), -1, 0, 0, NULL);
+        pr_unshift_new(bt, e, PH_ILLUSION_BREAK, (int8_t)pr_battler_index(bt, target));   /* after the DamageAnimPhase, before the text */
         pr_queue_msg(bt, e, pr_msg1("abilityTriggers:illusionBreak", pr_arg_pokemon(bt, "pokemonName", target)));
     }
     if (d.critical) pr_apply_ab_attrs(bt, PR_AC_PostReceiveCritStatStageChangeAbAttr, &dp);   /* Anger Point */
@@ -4011,6 +4011,7 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_TOGGLE_DOUBLE_POSITION: toggle_double_position_phase(bt); break;
     case PH_MOVE_REFLECT: move_reflect_phase(bt, e, ph); break;
     case PH_SHINY_SPARKLE: pr_event_add(bt, e, PR_EV_SHINY_SPARKLE, PH(ph)->battler, -1, 0, 0, NULL); break;
+    case PH_ILLUSION_BREAK: pr_event_add(bt, e, PR_EV_ILLUSION_BREAK, PH(ph)->battler, -1, 0, 0, NULL); break;
     case PH_QUIET_FORM_CHANGE: quiet_form_change_phase(bt, e, ph); break;
     case PH_RETURN: return_phase(bt,e,ph); break;
     case PH_ATTEMPT_CAPTURE: attempt_capture_phase(bt, e, ph); break;

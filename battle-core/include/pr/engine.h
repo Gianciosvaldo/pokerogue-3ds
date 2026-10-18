@@ -37,6 +37,7 @@ typedef enum {
     PH_DANCER, PH_TERA,
     PH_TRANSFORM,              /* appended: keep existing phase identifiers stable */
     PH_RETURN,                 /* Scene.newBattle reset-arena return, no replacement */
+    PH_ILLUSION_BREAK,         /* PR_DEV_ILLUSION only (no upstream phase): shows the disguise ending, queued after the hit's DamageAnimPhase */
     PH_COUNT_
 } pr_phase_type;
 #define PH_FIRST_UNPORTED PH_TERA

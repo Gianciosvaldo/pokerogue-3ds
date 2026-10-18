@@ -28,7 +28,7 @@ const char *const pr_phase_name[PH_COUNT_] = {
     [PH_TOGGLE_DOUBLE_POSITION] = "ToggleDoublePositionPhase", [PH_SELECT_BIOME] = "SelectBiomePhase",
     [PH_SUMMON] = "SummonPhase", [PH_INIT_ENCOUNTER] = "InitEncounterPhase", [PH_CHECK_SWITCH] = "CheckSwitchPhase",
     [PH_NEW_BATTLE] = "NewBattlePhase",
-    [PH_TRANSFORM] = "PokemonTransformPhase", [PH_RETURN] = "ReturnPhase",
+    [PH_TRANSFORM] = "PokemonTransformPhase", [PH_RETURN] = "ReturnPhase", [PH_ILLUSION_BREAK] = "IllusionBreakPhase",
 };
 
 const char *pr_phase_name_of(int t)

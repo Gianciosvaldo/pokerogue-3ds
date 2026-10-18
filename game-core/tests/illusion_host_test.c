@@ -101,6 +101,15 @@ int main(void)
         const pr_event *e = &run.battle_events[i];
         if (e->type == PR_EV_ILLUSION_BREAK) CHECK(e->battler == 0 && e->field[0].species == SPECIES_ID_ZOROARK);
     }
+    /* the look comes back after the hit's damage animation and before the text, not ahead of the hit */
+    int hit_at = -1, break_at = -1, text_at = -1;
+    for (int i = 0; i < run.n_battle_events; i++) {
+        const pr_event *e = &run.battle_events[i];
+        if (e->type == PR_EV_DAMAGE && e->battler == 0) hit_at = i;
+        if (e->type == PR_EV_ILLUSION_BREAK) break_at = i;
+        if (e->type == PR_EV_TEXT && e->msg.key && !strcmp(e->msg.key, "abilityTriggers:illusionBreak")) text_at = i;
+    }
+    CHECK(hit_at >= 0 && hit_at < break_at && break_at < text_at);
 
     /* the rules on their own, on a battle of the test's */
     static pr_battle bt;
