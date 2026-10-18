@@ -479,7 +479,13 @@ typedef struct pr_battle {
     /* Optional (NULL = none, the default): told of every faint at doFaint. Never changes the battle, an RNG draw, an event or a phase. */
     pr_faint_observer_fn faint_observer;
     void *faint_observer_ctx;
+    /* Deliberate departures from the source pin that lorenzo asked for (PR_DEV_*). 0, the default,
+     * is the pin; differential harnesses never set them, game-core turns them on for real runs. */
+    uint32_t deviations;
 } pr_battle;
+
+/* pr_battle.deviations */
+#define PR_DEV_ENEMY_ZERO_TO_HERO 0x1u  /* an off-field enemy Palafin still takes its Hero form on switch-out */
 
 /* ---- hooks (src/hooks.c) ---- */
 /* Upstream applyAbAttrs("<Class>", ...) presence check: does this Pokemon's ability

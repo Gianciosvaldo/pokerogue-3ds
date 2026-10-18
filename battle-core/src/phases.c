@@ -2649,7 +2649,9 @@ static void quiet_form_change_phase(pr_battle *bt, pr_engine *e, int ph)
 {
     pr_pokemon *p = PH(ph)->pokemon;
     int target = PH(ph)->move_id;
-    if (!p || p->form == target || (!p->is_player && !is_active_on_field(p))) return;
+    /* the pin ends early for an off-field enemy without changing its form (source TODO) */
+    bool enemy_hero = (bt->deviations & PR_DEV_ENEMY_ZERO_TO_HERO) && p && p->species == SPECIES_ID_PALAFIN;
+    if (!p || p->form == target || (!p->is_player && !is_active_on_field(p) && !enemy_hero)) return;
     pr_msg_arg pre = pr_arg_pokemon(bt, "preName", p);
     pr_ab_params pp = {.pokemon = p, .move = -1};
     pr_apply_ab_attrs(bt, PR_AC_PreLeaveFieldAbAttr, &pp);

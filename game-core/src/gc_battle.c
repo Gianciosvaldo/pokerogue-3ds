@@ -186,6 +186,7 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
     const int player_faints = bt->player_faints;
 
     memset(bt, 0, sizeof *bt);
+    bt->deviations = PR_DEV_ENEMY_ZERO_TO_HERO;   /* lorenzo's departures from the pin */
     /* the weather and terrain: gc_arena_new_battle has already cleared or rolled them in the previous scene */
     bt->weather = weather; bt->terrain = terrain;
     bt->weather_turns_left = wt; bt->weather_max_duration = wm;
