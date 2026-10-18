@@ -160,6 +160,22 @@ void gc_battle_cleanup_players(gc_run *run)
  * upstream keeps the arena (weather, terrain, the arena tags) and leaves the player's lead on the field
  * with its summon data (stat stages, tags): doPostBattleCleanup only recalls and resets on
  * resetArenaState. reset_arena says which case this is. true when the player's lead was sent out. */
+/* PR_DEV_ILLUSION: a wild Illusion user looks like arena.randomSpecies(wave, level), as the source's draft
+ * has it, rolled on a copy of the run's RNG so that the rest of the run is the same with or without it */
+static bool wild_illusion_species(pr_battle *bt, const pr_pokemon *p, void *ctx, uint16_t *species, uint8_t *form)
+{
+    (void)bt;
+    const gc_run *run = ctx;
+    static pr_run copy;
+    copy = run->run;
+    bool evo_boss;
+    const int sp = pr_run_random_species(&copy, run->biome, run->wave, p->level, 0, -1, run->wave_cycle_offset, &evo_boss);
+    if (sp <= 0 || sp == p->species) return false;
+    *species = (uint16_t)sp;
+    *form = 0;
+    return true;
+}
+
 static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
 {
     pr_battle *bt = &run->bt;
@@ -186,7 +202,8 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
     const int player_faints = bt->player_faints;
 
     memset(bt, 0, sizeof *bt);
-    bt->deviations = PR_DEV_ENEMY_ZERO_TO_HERO;   /* lorenzo's departures from the pin */
+    bt->deviations = PR_DEV_ENEMY_ZERO_TO_HERO | PR_DEV_ILLUSION;   /* lorenzo's departures from the pin */
+    bt->illusion_species = wild_illusion_species; bt->illusion_species_ctx = run;
     /* the weather and terrain: gc_arena_new_battle has already cleared or rolled them in the previous scene */
     bt->weather = weather; bt->terrain = terrain;
     bt->weather_turns_left = wt; bt->weather_max_duration = wm;

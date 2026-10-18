@@ -71,8 +71,8 @@ static pr_pokemon *palafin_uturn(bool deviation)
     gc_mon *foe = &run.enemy[gc_enemy_active_index(&run)];
     pr_pokemon *p = &foe->b;
     CHECK(run.bt.field[2] == p);
-    CHECK(run.bt.deviations == PR_DEV_ENEMY_ZERO_TO_HERO);           /* game-core's real runs have it on */
-    if (!deviation) run.bt.deviations = 0;
+    CHECK(run.bt.deviations & PR_DEV_ENEMY_ZERO_TO_HERO);            /* game-core's real runs have it on */
+    if (!deviation) run.bt.deviations &= ~PR_DEV_ENEMY_ZERO_TO_HERO;
     p->species = SPECIES_ID_PALAFIN; p->form = 0; p->fusion_species = 0;
     p->base_ability = p->custom_ability = ABILITY_ID_ZERO_TO_HERO; p->ability_override = -1;
     gc_mon_recalc(&run, foe); pr_refresh_ability(p);

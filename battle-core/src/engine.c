@@ -889,6 +889,9 @@ void pr_start_battle(pr_battle *bt, pr_engine *e)
 {
     engine_reset(bt,e);
     if(bt->battle_type==BATTLE_TYPE_MYSTERY_ENCOUNTER)pr_note_unported(bt,PR_FEAT_TRAINER);
+    /* PR_DEV_ILLUSION: the Pokemon already on the field (the player's, a wild one) take their disguise
+     * here; a trainer's take it in their SummonPhase */
+    for(int b=0;b<4;b++){pr_pokemon *p=bt->field[b];if(p&&p->on_field&&(b<2||bt->battle_type!=BATTLE_TYPE_TRAINER))pr_illusion_on_summon(bt,p);}
     pr_queue_trainer_summons(bt,e);
     pr_queue_encounter_end(bt,e,false);
     run_phases(bt,e,shift_phase(bt,e));

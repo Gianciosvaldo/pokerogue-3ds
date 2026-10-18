@@ -2113,6 +2113,10 @@ static void apply_on_target_effects(pr_battle *bt, pr_engine *e, int ph, pr_poke
     /* applyOnGetHitAbEffects */
     pr_ab_params dp = {.pokemon = target, .opponent = user, .move = move, .hit_result = d.result, .damage = d.damage};
     pr_apply_ab_attrs(bt, PR_AC_PostDefendAbAttr, &dp);                  /* Static, Rough Skin, Justified... */
+    if (pr_illusion_on_hit(bt, target, d.result)) {                     /* PR_DEV_ILLUSION */
+        pr_event_add(bt, e, PR_EV_ILLUSION_BREAK, pr_battler_index(bt, target), -1, 0, 0, NULL);
+        pr_queue_msg(bt, e, pr_msg1("abilityTriggers:illusionBreak", pr_arg_pokemon(bt, "pokemonName", target)));
+    }
     if (d.critical) pr_apply_ab_attrs(bt, PR_AC_PostReceiveCritStatStageChangeAbAttr, &dp);   /* Anger Point */
     pr_lapse_tags(bt, e, target, BATTLER_TAG_LAPSE_TYPE_AFTER_HIT);
     pr_ab_params ap = {.pokemon = user, .opponent = target, .move = move, .hit_result = d.result, .damage = d.damage};

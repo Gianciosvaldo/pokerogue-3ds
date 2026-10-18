@@ -356,6 +356,55 @@ void pr_set_illusion_species(pr_pokemon *p, uint16_t species, uint8_t form)
     p->illusion = (pr_illusion){species, 0, form, 0, (int8_t)gender, true};
 }
 
+/* PR_DEV_ILLUSION, after the source's commented-out draft (IllusionPreSummonAbAttr): a Pokemon with a
+ * trainer (every player Pokemon too) takes the look of the last other party member allowed in battle; a
+ * wild one a species from the game's callback. None when there is no other member, when that member or the
+ * user is a Terastallized Ogerpon/Terapagos pairing, for a fusion (NoFusionAbilityAbAttr) or when one is
+ * already active. The draft's canApply returned true only with an illusion already set, so it never ran. */
+void pr_illusion_on_summon(pr_battle *bt, pr_pokemon *p)
+{
+    if (!(bt->deviations & PR_DEV_ILLUSION) || !p || p->illusion.active || p->fusion_species) return;
+    if (!pr_has_ability_active(bt, p, ABILITY_ID_ILLUSION)) return;
+    if (p->is_player || p->has_trainer) {
+        const int side = p->is_player ? 0 : 1;
+        const pr_pokemon *last = NULL;
+        for (int i = 0; i < bt->n_party[side]; i++) {
+            const pr_pokemon *q = bt->party[side][i];
+            if (q && q != p && q->hp > 0) last = q;
+        }
+        if (!last) return;
+        if ((last->species == SPECIES_ID_OGERPON || last->species == SPECIES_ID_TERAPAGOS) && (last->terastallized || p->terastallized))
+            return;
+        pr_set_illusion(p, last);
+        return;
+    }
+    uint16_t species;
+    uint8_t form;
+    if (bt->illusion_species && bt->illusion_species(bt, p, bt->illusion_species_ctx, &species, &form) && species)
+        pr_set_illusion_species(p, species, form);
+}
+
+/* PR_DEV_ILLUSION: PostDefendIllusionBreakAbAttr, a damaging hit ends it */
+bool pr_illusion_on_hit(pr_battle *bt, pr_pokemon *p, int hit_result)
+{
+    if (!(bt->deviations & PR_DEV_ILLUSION) || !p->illusion.active) return false;
+    bool damaging = hit_result == HIT_RESULT_EFFECTIVE || hit_result == HIT_RESULT_EXTREMELY_EFFECTIVE
+                 || hit_result == HIT_RESULT_SUPER_EFFECTIVE || hit_result == HIT_RESULT_NOT_VERY_EFFECTIVE
+                 || hit_result == HIT_RESULT_MOSTLY_INEFFECTIVE || hit_result == HIT_RESULT_ONE_HIT_KO;
+    if (!damaging || !pr_has_ability_active(bt, p, ABILITY_ID_ILLUSION)) return false;
+    return pr_break_illusion(p);
+}
+
+bool pr_shows_illusion(const pr_battle *bt, const pr_pokemon *p)
+{
+    return bt && (bt->deviations & PR_DEV_ILLUSION) && p->illusion.active;
+}
+
+const pr_form *pr_shown_form(const pr_battle *bt, const pr_pokemon *p)
+{
+    return pr_shows_illusion(bt, p) ? pr_apparent_form(p, true) : pr_pokemon_form(p);
+}
+
 bool pr_break_illusion(pr_pokemon *p)
 {
     bool active = p->illusion.active;

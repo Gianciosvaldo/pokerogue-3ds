@@ -82,6 +82,8 @@ typedef enum {
                     * inside, for the messages and the enemy's withdraw that follow (the ball fades at that withdraw). Not
                     * caught: the ball breaks free after the shakes, the Pokemon is back whole and the ball fades */
   BEV_TRANSFORM,   /* mon = temporary display; a = play Transform sound (Imposter) */
+  BEV_ILLUSION,    /* PR_DEV_ILLUSION: mon = the new look, name and types when a disguise starts or ends; a = play the
+                    * Transform sound (breakIllusion plays it, setIllusion doesn't) */
 } bev_type;
 
 typedef struct {

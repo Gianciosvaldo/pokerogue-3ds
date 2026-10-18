@@ -338,6 +338,9 @@ static void battle_end(gc_run *run, gc_rphase *p)
                 gc_stub(run, GC_STUB_POST_BATTLE);
                 break;
             }
+    /* PR_DEV_ILLUSION: IllusionPostBattleAbAttr, the disguise ends with the battle (the next one's start gives it again) */
+    if (bt->deviations & PR_DEV_ILLUSION)
+        for (int i = 0; i < run->n_party; i++) pr_break_illusion(&run->party[i].b);
     /* BattleEndPhase: currentBattle.pickUpScatteredMoney() (Pay Day) */
     if (bt->money_scattered) gc_pick_up_scattered_money(run);
     /* clearEnemyHeldItemModifiers; then the bounded temporary booster lapse. */

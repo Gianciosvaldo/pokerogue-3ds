@@ -112,7 +112,9 @@ void pr_event_add(pr_battle *bt, pr_engine *e, int type, int battler, int target
         pr_event_field *f = &ev->field[i];
         f->party_slot = -1;
         if (!p) continue;
-        const pr_form *form = pr_pokemon_form(p);
+        /* PR_DEV_ILLUSION: the field shows a disguise (getSpeciesForm(false, useIllusion)) */
+        const bool look = pr_shows_illusion(bt, p);
+        const pr_form *form = pr_shown_form(bt, p);
         f->species = form->species;
         f->form = form->form_index;
         int side = i < 2 ? 0 : 1;
@@ -125,10 +127,10 @@ void pr_event_add(pr_battle *bt, pr_engine *e, int type, int battler, int target
         f->substitute = pr_get_battler_tag(p, BATTLER_TAG_TYPE_SUBSTITUTE) != NULL;
         /* SemiInvulnerableTag.onAdd hides the sprite, onRemove shows it again; leaveField hides it */
         f->visible = p->on_field && !pr_find_battler_tag_class(p, PR_TAGCLASS_SEMI_INVULNERABLE);
-        f->gender = (int8_t)pr_get_gender(p);
+        f->gender = (int8_t)(look ? pr_apparent_gender(p, true) : pr_get_gender(p));
         f->variant = p->variant;
         f->sprite_scale = (float)pr_get_sprite_scale(p);
-        int8_t types[PR_MAX_TYPES]; int n = pr_get_types(p, types, 0);
+        int8_t types[PR_MAX_TYPES]; int n = pr_get_types(p, types, look ? PR_TYPES_USE_ILLUSION : 0);
         for (int j = 0; j < n && j < 3; j++) f->types[f->n_types++] = types[j];
     }
     if (type == PR_EV_TRANSFORM && battler >= 0 && battler < 4 && bt->field[battler]) {

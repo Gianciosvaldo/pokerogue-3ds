@@ -664,7 +664,7 @@ static bool send_out_foe(void) {
   sent = make_mon(foe, false);
   if (G.run.battle_type == BATTLE_TYPE_TRAINER) {
     char* t = txt_new();
-    trainer_line("battle:trainerSendOut", GC_TNAME_TRAINER, i18n_species_name(foe->b.species), t, TXT_LEN);
+    trainer_line("battle:trainerSendOut", GC_TNAME_TRAINER, sent.name, t, TXT_LEN);
     put_msg(t, false);
     bgm_on_foe_sent_out(&G.run);
   }
@@ -682,14 +682,32 @@ static bool resync_field(void) {
     if (send_out_foe()) return true;
   }
   const int idx = (int)(me - G.run.party);
-  if (G.present[0] && G.shown == idx && bv_mon_of(BV_PLAYER)->species == pr_pokemon_form(&me->b)->species) {
+  if ((G.run.bt.deviations & PR_DEV_ILLUSION) && G.present[0] && G.shown == idx) {
+    /* PR_DEV_ILLUSION: the same Pokemon showing its real look while it has a disguise, or the other way round (a
+     * disguise taken or lost with no battle event the screen saw, such as at a battle's start): the look catches up */
+    const int sp = bv_mon_of(BV_PLAYER)->species, shown = pr_shown_form(&G.run.bt, &me->b)->species;
+    if (sp != shown && (me->b.illusion.active || sp == pr_pokemon_form(&me->b)->species || sp == pr_apparent_form(&me->b, true)->species)) {
+      static bv_mon look;
+      const bv_mon live = make_mon(me, true);
+      look = *bv_mon_of(BV_PLAYER);                                   /* only the look changes; HP and status catch up after */
+      look.species = live.species; look.form = live.form; look.gender = live.gender; look.female = live.female;
+      look.sprite_scale = live.sprite_scale; look.n_types = live.n_types;
+      memcpy(look.types, live.types, sizeof look.types);
+      memcpy(look.name, live.name, sizeof look.name);
+      G.n_ev = G.ev_pos = G.n_txt = 0;
+      *ev_new() = (bv_event){.type = BEV_ILLUSION, .battler = BV_PLAYER, .a = 0, .mon = &look};
+      play_chunk();
+      return true;
+    }
+  }
+  if (G.present[0] && G.shown == idx && bv_mon_of(BV_PLAYER)->species == pr_shown_form(&G.run.bt, &me->b)->species) {
     /* the same Pokemon: its HP and status are what the run says (battle-core doesn't make an event for every change, e.g.
      * a Disguise that busts as the battle ends; the converter catches up only while the battle goes on) */
     G.n_ev = G.ev_pos = G.n_txt = 0;
     for (int side = 0; side < 2; side++) {
       const gc_mon* m = gc_field_mon(&G.run, side);
       const bv_mon* sh = bv_mon_of(side ? BV_ENEMY : BV_PLAYER);
-      if (!m || !G.present[side] || sh->species != pr_pokemon_form(&m->b)->species) continue;
+      if (!m || !G.present[side] || sh->species != pr_shown_form(&G.run.bt, &m->b)->species) continue;
       const int battler = side ? BV_ENEMY : BV_PLAYER;
       if (m->b.stats[STAT_HP] > 0 && m->b.stats[STAT_HP] != sh->max_hp)
         *ev_new() = (bv_event){.type = BEV_MAX_HP, .battler = battler, .a = m->b.stats[STAT_HP]};
