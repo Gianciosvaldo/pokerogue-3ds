@@ -55,3 +55,16 @@ fusion interaction, natural high-wave encounters or the full callback inventory.
 Keep normal app/custom/save tests and exact-head 3DS CI as merge gates; skip only
 the dedicated custom-only Task63 workflow. Ability-changing callbacks and the
 remaining completion checklist stay open.
+
+## Maximum-HP getter follow-up
+
+The HP-cost continuation found a concrete additional getter defect: the source's
+`getMaxHp()` bypasses temporary HP stat overrides, while the original Pain Split
+heal cap used `pr_get_stat(HP, false)`. Protocol 4 retains the original 8,320
+cases and appends 128 actual public `setStat(HP, ..., false)` controls per seed.
+All 16,896 cases match after using the default maximum-HP getter. The expanded
+guards catch 19 compiled faults, including reinstating the old temporary cap,
+and reject 21 malformed captures. Earlier protocol captures and the original
+owning turns remain required regression evidence. This follow-up refines the
+previous bounded claim; it does not retroactively turn that evidence into an
+exhaustive maximum-HP proof.

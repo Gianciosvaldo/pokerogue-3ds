@@ -4,7 +4,7 @@ from pathlib import Path
 import os,subprocess,tempfile,sys
 r=Path(__file__).resolve().parents[2];trace=Path(sys.argv[1]).resolve();turns=Path(sys.argv[2]).resolve();env=os.environ.copy();assert env.get('TURNTEST_LOCALES')
 runner=r/'battle-core/build/hp-split-test';subprocess.run([runner,trace],check=True,env=env);subprocess.run([r/'battle-core/build/wide-combat-test',turns],check=True,env=env)
-s=(r/'battle-core/src/move_effects.c').read_text();start=s.index('    case PR_AC_HpSplitAttr:');end=s.index('    case PR_AC_SuppressAbilitiesAttr:',start);leaf=s[start:end];faults=[]
+s=(r/'battle-core/src/move_effects.c').read_text();start=s.index('    case PR_AC_HpSplitAttr:');end=s.index('    case PR_AC_AbilityChangeAttr:',start);leaf=s[start:end];faults=[]
 def fault(name,old,new):
  assert leaf.count(old)==1,(name,leaf.count(old));faults.append((name,'move_effects.c',s[:start]+leaf.replace(old,new,1)+s[end:],False))
 fault('missing-parent-gate','if (!effect_can_apply(ef, user, target)) return;','/* missing gate */')
@@ -13,6 +13,7 @@ fault('ceil-average','floor(((double)target->hp + user->hp) / 2)','ceil(((double
 fault('recomputed-average','pr_pokemon *p = actors[i];','pr_pokemon *p = actors[i];\n            hp_value=floor(((double)target->hp+user->hp)/2);')
 fault('target-first','{user, target}','{target, user}')
 fault('unclamped-heal','healing = healing < room ? healing : room;','/* omit maximum HP clamp */')
+fault('temporary-hp-cap','pr_get_stat(p, STAT_HP, true)','pr_get_stat(p, STAT_HP, false)')
 fault('omit-heal','p->hp += (int32_t)healing;','/* omit healing */')
 fault('omit-damage','pr_pokemon_damage(bt, e, p, p->hp - hp_value, true, false, false)','0')
 fault('wrong-heal-sign','0, (int32_t)healing, NULL','0, -(int32_t)healing, NULL')
@@ -37,7 +38,7 @@ with tempfile.TemporaryDirectory(prefix='hp-split-guards-',dir=r/'work') as d:
   test=r/('battle-core/build/wide-combat-replay.c' if owning else 'battle-core/tests/hp-split-test.c')
   subprocess.run(['gcc',*flags,test,obj,r/'battle-core/build/libprcore.a','-lm','-o',exe],check=True,capture_output=True)
   result=subprocess.run([exe,turns if owning else trace],env=env,capture_output=True);assert result.returncode==1,(name,result.returncode,result.stdout[-400:],result.stderr[-400:]);print(name,'caught',flush=True)
- rows=trace.read_text().splitlines();bad={'footer':rows[:-1]+['HP_SPLIT_COMPLETE 1'],'missing-footer':rows[:-1],'tail':rows+['JUNK'],'version':['HP_SPLIT 4 8320 777']+rows[1:]}
+ rows=trace.read_text().splitlines();bad={'footer':rows[:-1]+['HP_SPLIT_COMPLETE 1'],'missing-footer':rows[:-1],'tail':rows+['JUNK'],'version':['HP_SPLIT 5 8448 777']+rows[1:]}
  for name,prefix,col,value in [('case','C ',1,'0.5'),('user','C ',2,'4'),('target','C ',3,'4'),('id','I ',5,'4294967296'),('level','I ',6,'2147483648'),('nan','I ',26,'NaN'),('context','QIN ',2,'2'),('queue','QCOUNT ',1,'33'),('boss','IB ',3,'9'),('return','RET ',1,'2'),('condition','COND ',1,'2'),('events','ECOUNT ',1,'3'),('event-actor','EV ',1,'4'),('dynamic','DCOUNT ',1,'3'),('source','D ',3,'4'),('change-count','D ',5,'8'),('stat','CHANGE ',1,'8')]:
   ix=next(i for i,row in enumerate(rows) if row.startswith(prefix));row=rows[ix].split();row[col]=value;changed=rows.copy();changed[ix]=' '.join(row);bad[name]=changed
  for name,changed in bad.items():

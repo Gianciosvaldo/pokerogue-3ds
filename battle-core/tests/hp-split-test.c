@@ -12,9 +12,9 @@ static bool boss(pr_pokemon *p,const char *prefix,int actor,bool set)
 int main(int argc,char **argv)
 {
     if(argc!=2||!getenv("TURNTEST_LOCALES")||!(input=fopen(argv[1],"r")))return 2;
-    pr_closures_init();double h[3];read_vector("HP_SPLIT ",h,3);if(h[0]!=1&&h[0]!=2&&h[0]!=3)bad();
+    pr_closures_init();double h[3];read_vector("HP_SPLIT ",h,3);if(h[0]!=1&&h[0]!=2&&h[0]!=3&&h[0]!=4)bad();
     bool deferred_context=false;
-    int n=integer(h[1],8320,100000),failures=0,denied=0,heals=0,hits=0,shields=0,faints=0;integer(h[2],0,INT32_MAX);
+    int n=integer(h[1],h[0]==4?8448:8320,100000),failures=0,denied=0,heals=0,hits=0,shields=0,faints=0;integer(h[2],0,INT32_MAX);
     for(int i=0;i<n;i++){
         static pr_battle bt;static pr_engine e;static pr_pokemon actors[4];
         memset(&bt,0,sizeof bt);memset(&e,0,sizeof e);bt.engine=&e;bt.double_battle=true;

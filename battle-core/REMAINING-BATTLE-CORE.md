@@ -1,5 +1,23 @@
 # Battle-core continuation audit
 
+Current continuation status (2026-10-18): this file retains historical notes
+below. Its old "remaining" rows are not a current unsupported-feature count.
+Check implementation, callers, merged history and dedicated validation records
+before selecting new work. Helping Hand through ability-changing moves are
+merged in #285–#306, including Acupressure (#286), attention/redirection (#292),
+Commander/Order Up (#293), wide EXP/combat (#299–#300), stat rearrangement (#301),
+Quash (#302), highest-stat selection (#303), Spectral Thief (#304), Pain Split
+(#305) and ability changing/copying/giving/swapping (#306).
+
+The active slice is HP-cost stat boosts with source-proven maximum-HP getter
+corrections. Next candidates include Reflect Type/Conversion/Conversion 2,
+Secret Power, Revival Blessing and delayed attacks. A missing local class switch
+case is only a candidate: called-move and override dispatch may handle it
+elsewhere, and source-disabled registrations must be distinguished. The final
+full source inventory, natural wide progression, battle-boundary flags and
+inventory lifecycle audit remain open. No completion percentage is inferred
+from sampled coverage.
+
 Starting point: main `efd64988c4a1ab3755f999b29c8eac0c48ad8d49`.
 Target remains source `8555c08c823b856cbec4eb99ca84ea52a955836d`, Node 22.
 This is a work inventory, not a completion percentage or a passing test record.
