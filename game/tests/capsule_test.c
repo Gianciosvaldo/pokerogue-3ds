@@ -20,6 +20,7 @@
 
 #include "capsule_model.h"
 #include "capsule_screen.h"
+#include "gacha_view.h"
 #include "ui.h"
 #include "ui_text.h"
 #include "ui_widgets.h"
@@ -99,6 +100,39 @@ float text_draw(text_style st, float x, float y, const char* s, const text_opts*
     snprintf(d->text, sizeof d->text, "%s", s);
   }
   return 6.0f * (float)strlen(s);
+}
+
+/* The view (menus/gacha_view.c) is the menus' layer and is not linked here: this stand-in records what the screen hands it. The words and the
+ * eggs' places are what the screen decides; how they look is checked on the emulator. One rectangle per egg that is on show stands for its art. */
+static void rec(const char* text) {
+  if (!text[0] || n_drawn >= DRAWN_MAX) return;
+  drawn_t* d = &g_drawn[n_drawn++];
+  d->style = TS_WINDOW;
+  d->x = d->x0 = 8;
+  d->y = 10;
+  d->ox = 0;
+  d->screen = g_which;
+  snprintf(d->text, sizeof d->text, "%s", text);
+}
+void gv_draw_reveal_top(const gv_reveal* v) {
+  rec(v->top_title);
+  rec(v->top_sub);
+  for (int i = 0; i < v->n; i++)
+    if (v->egg[i].phase && n_rects < RECT_MAX) g_rects[n_rects++] = (rect_t){v->egg[i].x - 10, v->egg[i].y - 10, 20, 20, g_which};
+}
+void gv_draw_reveal_bottom(const gv_reveal* v) {
+  rec(v->title);
+  for (int i = 0; i < v->n_rows; i++) {
+    rec(v->row[i].name);
+    rec(v->row[i].tier_name);
+  }
+  rec(v->more_above);
+  rec(v->more_below);
+  rec(v->big);
+  rec(v->small);
+  rec(v->note[0]);
+  rec(v->note[1]);
+  rec(v->hint);
 }
 
 static bool has_text(const char* needle) {

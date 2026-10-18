@@ -185,3 +185,81 @@ void gv_draw_bottom(const gv_state* s) {
     mui_image("ui/cursor", NULL, 30, yy + (s->yes ? 9 : 25), 0.5f, 0.5f);
   }
 }
+
+/* ------------------------------------------------------------------ the reveal */
+
+static const uint8_t TIER_RGB[GV_TIERS][3] = {{0xd8, 0xd8, 0xd0}, {0x58, 0x90, 0xf0}, {0xb0, 0x58, 0xe8}, {0xf0, 0xc0, 0x30}};
+
+static rr_color tier_rgba(int tier, int alpha) {
+  if (tier < 0 || tier >= GV_TIERS) tier = 0;
+  return RR_RGBA(TIER_RGB[tier][0], TIER_RGB[tier][1], TIER_RGB[tier][2], alpha);
+}
+
+static void draw_egg(const gv_egg* e) {
+  char frame[16];
+  snprintf(frame, sizeof frame, "egg_%d", e->tier < GV_TIERS ? e->tier : 0);
+  if (e->open > 0.0f && e->tier > 0) { /* opened, and not a common one: a halo in the tier's colour behind the egg, which rises a little */
+    const int a = (int)(110.0f * e->open);
+    rr_rect(e->x - 17, e->y - 12, 34, 24, tier_rgba(e->tier, a));
+    rr_rect(e->x - 13, e->y - 17, 26, 34, tier_rgba(e->tier, a));
+  }
+  if (!mui_image("egg/egg", frame, e->x, e->y - 4.0f * e->open, 0.5f, 0.5f)) rr_rect(e->x - 7, e->y - 9, 14, 18, tier_rgba(e->tier, 255));
+  if (e->picked) {
+    const rr_color w = RR_RGBA(255, 255, 255, 255);
+    rr_rect(e->x - 19, e->y - 19, 38, 1, w);
+    rr_rect(e->x - 19, e->y + 18, 38, 1, w);
+    rr_rect(e->x - 19, e->y - 19, 1, 38, w);
+    rr_rect(e->x + 18, e->y - 19, 1, 38, w);
+  }
+}
+
+void gv_draw_reveal_top(const gv_reveal* s) {
+  mui_set_origin(RR_TOP, 40, 30);
+  draw_background();
+  if (s->top_title[0]) {
+    mui_window(60, 0, 200, s->top_sub[0] ? 30 : 20);
+    text8_centred(160, 4, s->top_title, TS_WINDOW);
+    if (s->top_sub[0]) text8(160 - (float)mui_text_width(FONT, s->top_sub) / 2.0f, 15, s->top_sub, MUI_RGB(0xa8a8a0));
+  }
+  for (int i = 0; i < s->n && i < GV_CAP_MAX; i++)
+    if (s->egg[i].phase != 0) draw_egg(&s->egg[i]);
+}
+
+void gv_draw_reveal_bottom(const gv_reveal* s) {
+  mui_set_origin(RR_BOTTOM, 0, 30);
+  mui_window(0, 0, W, H);
+  const rr_color body = mui_style_color(TS_WINDOW, false);
+  const rr_color quiet = MUI_RGB(0xa8a8a0);
+  mui_window(0, 0, W, 24);
+  text8_style(8, 7, s->title, TS_WINDOW);
+  if (s->stage == GV_REVEAL_SETTLED) {
+    const float row_h = 18.0f;
+    mui_window(0, 26, W, row_h * GV_LIST_ROWS + 8);
+    for (int i = 0; i < s->n_rows && i < GV_LIST_ROWS; i++) {
+      const float y = 30.0f + row_h * (float)i;
+      if (s->row[i].selected) draw_focus(8, y - 1, W - 16, row_h - 1);
+      char frame[8];
+      snprintf(frame, sizeof frame, "%d", s->row[i].tier < GV_TIERS ? s->row[i].tier : 0);
+      /* the frames of egg_icons are padded: the egg sits about 21 px right of and 23 px below the frame's corner */
+      mui_image("egg/egg_icons", frame, -1, y - 15, 0, 0);
+      text8(34, y + 1, s->row[i].name, body);
+      text8_right(W - 12, y + 1, s->row[i].tier_name, tier_rgba(s->row[i].tier, 255));
+    }
+    if (s->more_above[0]) text8(10, 26.0f + row_h * GV_LIST_ROWS + 8 + 2, s->more_above, quiet);
+    if (s->more_below[0]) text8_right(W - 10, 26.0f + row_h * GV_LIST_ROWS + 8 + 2, s->more_below, quiet);
+    const float ny = 26.0f + row_h * GV_LIST_ROWS + 22;
+    for (int i = 0; i < 2; i++)
+      if (s->note[i][0]) text8(8, ny + 9.0f * (float)i, s->note[i], quiet);
+  } else {
+    /* the knob: upstream's gacha_knob at 3x, turning while the machine runs */
+    rr_draw_opts o = RR_DEFAULT_OPTS;
+    o.origin_x = o.origin_y = 0.5f;
+    o.scale_x = o.scale_y = 3.0f;
+    o.angle = s->knob * 6.2831853f;
+    if (!mui_image_ex("egg/gacha_knob", NULL, 160, 112, &o)) rr_rect(144, 96, 32, 32, RR_RGBA(0xe0, 0xe0, 0xe8, 255));
+    text8_centred(160, 40, s->big, TS_WINDOW);
+    if (s->small[0]) text8(160 - (float)mui_text_width(FONT, s->small) / 2.0f, 54, s->small, quiet);
+  }
+  mui_window(0, H - 20, W, 20);
+  text8(8, H - 18, s->hint, quiet);
+}
