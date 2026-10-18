@@ -22,7 +22,7 @@ static const pr_species* species_of(uint16_t id) {
 }
 
 static const char* form_key_of(const pr_species* sp, int form) {
-  if (!sp || sp->nforms <= 1) return "";
+  if (!sp || sp->nforms < 1) return ""; /* a single-form species can still have a form key: Koraidon's icon is "1007-apex-build" */
   if (form >= sp->nforms) form = sp->nforms - 1;
   const char* k = pr_forms[sp->form0 + form].form_key;
   return k ? k : "";

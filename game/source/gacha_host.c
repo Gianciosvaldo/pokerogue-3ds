@@ -154,6 +154,10 @@ static uint64_t env_now(void) {
   return (uint64_t)time(NULL) * 1000u;
 }
 
+uint64_t gh_clock_ms(void) { return env_now(); }
+
+uint16_t gh_featured_species(void) { return gc_gacha_featured_species(env_now()); }
+
 static void env_seed(char out[PTX_SEED_MAX + 1]) {
   if (H.have_env && H.env.seed_text) {
     H.env.seed_text(out);

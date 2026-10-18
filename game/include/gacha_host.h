@@ -119,6 +119,11 @@ typedef struct {
 } gh_env;
 void gh_set_env(const gh_env* env);
 
+/* The app's clock (Unix ms) and the legendary machine's featured species at that time (game-core's gc_gacha_featured_species), for the
+ * machine's display only: neither is part of a purchase's inputs (those are fixed at begin time). */
+uint64_t gh_clock_ms(void);
+uint16_t gh_featured_species(void);
+
 /* ---- for tests ---- */
 void gh_reset(void);   /* a restart: forget this session's state (the table read from the source is kept) */
 

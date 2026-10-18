@@ -6,12 +6,12 @@
 
 #include "capsule_screen.h"
 #include "gacha_host.h"
+#include "gacha_view.h"
 #include "ui.h"
 #include "ui_text.h"
 #include "ui_widgets.h"
 
-#define ROW_H 28
-#define LIST_Y 66
+#define SLIDE_MS 500.0f /* upstream: the machines move over 500 ms, Cubic.easeInOut */
 
 typedef enum {
   GS_MENU,     /* choosing */
@@ -30,6 +30,7 @@ static struct {
   bool left;               /* on_exit was called: no more input */
   gs_mode mode;
   int machine, sel;
+  float slide, slide_from, slide_t; /* the machine strip: where it is, where the move began, ms since */
   int yes;                 /* GS_CONFIRM: 1 = Yes; the question opens on No */
   gh_view view;
   char msg[PTX_WHY_LEN + 64];
@@ -128,6 +129,8 @@ static bool gs_input(ui_screen* s, ui_button b) {
     case GS_MENU:
       if (b == BTN_LEFT || b == BTN_RIGHT) {
         G.machine = (G.machine + (b == BTN_RIGHT ? 1 : GH_MACHINES - 1)) % GH_MACHINES;
+        G.slide_from = G.slide;
+        G.slide_t = 0;
         ui_play_select();
         return true;
       }
@@ -212,124 +215,113 @@ static void gs_leave(ui_screen* s) {
 
 /* ------------------------------------------------------------------ drawing */
 
-static void line(float x, float y, const char* s, text_style st, rr_color color) {
-  text_opts o = text_defaults();
-  if (color) o.color = color;
-  text_draw(st, x, y, s, &o);
+static void gs_update(ui_screen* s, float dt) {
+  (void)s;
+  if (!G.open || G.slide == (float)G.machine) return;
+  G.slide_t += dt;
+  float k = G.slide_t / SLIDE_MS;
+  if (k >= 1.0f) {
+    G.slide = (float)G.machine;
+    return;
+  }
+  k = k < 0.5f ? 4.0f * k * k * k : 1.0f - (-2.0f * k + 2.0f) * (-2.0f * k + 2.0f) * (-2.0f * k + 2.0f) / 2.0f;
+  G.slide = G.slide_from + ((float)G.machine - G.slide_from) * k;
 }
 
-static void centred(float x, float y, const char* s, text_style st, rr_color color) {
-  text_opts o = text_defaults();
-  o.origin_x = 0.5f;
-  if (color) o.color = color;
-  text_draw(st, x, y, s, &o);
-}
-
-/* text of any length in a window: broken at spaces into lines of at most `cols` characters, at most `max_lines` of them (the rest is cut) */
-static void wrapped(float x, float y, const char* text, int cols, int max_lines) {
-  char ln[96];
+/* text of any length in a window: broken at spaces into lines of at most `cols` characters, at most GV_MSG_LINES of them (the rest is cut) */
+static void wrap_lines(gv_state* v, const char* text, int cols) {
   const char* p = text;
-  for (int i = 0; i < max_lines && *p; i++) {
+  v->n_lines = 0;
+  while (*p && v->n_lines < GV_MSG_LINES) {
     while (*p == ' ') p++;
+    if (!*p) break;
     int len = (int)strlen(p);
     if (len > cols) {
       len = cols;
       while (len > 0 && p[len] != ' ') len--;
       if (len == 0) len = cols;   /* a word longer than the line */
     }
-    int n = len < (int)sizeof ln - 4 ? len : (int)sizeof ln - 4;
+    char* ln = v->lines[v->n_lines];
+    const int n = len < (int)sizeof v->lines[0] - 4 ? len : (int)sizeof v->lines[0] - 4;
     memcpy(ln, p, (size_t)n);
     ln[n] = 0;
     p += len;
     while (*p == ' ') p++;
-    if (i == max_lines - 1 && *p) snprintf(ln + (n > 3 ? n - 3 : 0), 4, "...");
-    line(x, y + (float)i * 13.0f, ln, TS_WINDOW, 0);
+    if (v->n_lines == GV_MSG_LINES - 1 && *p) snprintf(ln + (n > 3 ? n - 3 : 0), 4, "...");
+    v->n_lines++;
   }
 }
 
-static const uint8_t BODY_RGB[GH_MACHINES][3] = {{0x58, 0x90, 0xf0}, {0xf0, 0xc0, 0x30}, {0xb0, 0x58, 0xe8}};
-
-static void draw_top(void) {
-  if (ui_space(UI_PHYS_TOP)) rr_rect(0, 0, 400, 240, RR_RGBA(0, 0, 0, 255));
-  if (!ui_space(UI_FIELD)) return;
-  rr_rect(0, 0, 320, 180, RR_RGBA(0x20, 0x24, 0x40, 255));
-  rr_rect(0, 164, 320, 16, RR_RGBA(0x38, 0x3c, 0x60, 255));
-  const uint8_t* c = BODY_RGB[G.machine];
-  const rr_color body = RR_RGBA(c[0], c[1], c[2], 255);
-  rr_rect(100, 28, 120, 130, body);
-  rr_rect(108, 36, 104, 70, RR_RGBA(0x18, 0x1c, 0x30, 255));            /* the glass */
-  rr_rect(116, 100, 88, 4, RR_RGBA(c[0] / 2, c[1] / 2, c[2] / 2, 255));
-  rr_rect(146, 116, 28, 28, RR_RGBA(0xe0, 0xe0, 0xe8, 255));            /* the knob */
-  rr_rect(150, 128, 20, 4, RR_RGBA(0x40, 0x40, 0x50, 255));
-  centred(160, 6, gh_machine_name(G.machine), TS_WINDOW, 0);
-  line(14, 80, "<", TS_SUMMARY, 0);
-  line(298, 80, ">", TS_SUMMARY, 0);
-  centred(160, 164, gh_machine_note(G.machine), TS_INSTRUCTIONS_TEXT, RR_RGBA(0xc8, 0xc8, 0xc8, 255));
+static void countdown_text(char out[12]) { /* hh:mm: the plate's window is too narrow for the seconds at a readable size */
+  const uint64_t day = 86400000u;
+  const uint64_t left = day - gh_clock_ms() % day;
+  snprintf(out, 12, "%02u:%02u", (unsigned)(left / 3600000u), (unsigned)(left % 3600000u / 60000u));
 }
 
-static void draw_bottom(void) {
-  if (!ui_space(UI_PHYS_BOTTOM)) return;
-  rr_rect(0, 0, 320, 240, RR_RGBA(0x10, 0x10, 0x18, 255));
-  char t[160];
-  ui_window(1, 1, 318, 58, WIN_NORMAL);
-  line(10, 5, "Vouchers", TS_WINDOW, 0);
-  snprintf(t, sizeof t, "Regular %u   Plus %u", (unsigned)G.view.vouchers[0], (unsigned)G.view.vouchers[1]);
-  line(10, 19, t, TS_INSTRUCTIONS_TEXT, 0);
-  snprintf(t, sizeof t, "Premium %u   Golden %u", (unsigned)G.view.vouchers[2], (unsigned)G.view.vouchers[3]);
-  line(10, 31, t, TS_INSTRUCTIONS_TEXT, 0);
-  snprintf(t, sizeof t, "Eggs %d / %d", G.view.n_eggs, G.view.capacity);
-  line(220, 5, t, TS_WINDOW, 0);
-
-  ui_window(1, LIST_Y - 6, 318, GH_OPTIONS * ROW_H + 12, WIN_NORMAL);
+static void build_state(gv_state* v) {
+  memset(v, 0, sizeof *v);
+  v->slide = G.slide;
+  v->machine = G.machine;
+  v->sel = G.sel;
+  v->yes = G.yes;
+  v->mode = G.mode == GS_CONFIRM ? GV_CONFIRM : (G.mode == GS_MENU ? GV_MENU : GV_MESSAGE);
+  snprintf(v->machine_name, sizeof v->machine_name, "%s", gh_machine_name(G.machine));
+  snprintf(v->machine_note, sizeof v->machine_note, "%s", gh_machine_note(G.machine));
+  for (int i = 0; i < GV_VOUCHERS && i < GH_VOUCHER_TYPES; i++) snprintf(v->voucher_count[i], sizeof v->voucher_count[i], "%u", (unsigned)G.view.vouchers[i]);
+  snprintf(v->egg_count, sizeof v->egg_count, "Eggs %d / %d", G.view.n_eggs, G.view.capacity);
   for (int i = 0; i < GH_OPTIONS; i++) {
     const gh_option* o = &G.view.opt[i];
-    const float y = (float)(LIST_Y + i * ROW_H);
-    if (i == G.sel) rr_rect(4, y - 2, 312, ROW_H - 2, RR_RGBA(255, 255, 255, 30));
-    const rr_color col = o->can_buy ? 0 : RR_RGBA(0x80, 0x80, 0x80, 255);
-    snprintf(t, sizeof t, "%d egg%s", o->rule.pulls, o->rule.pulls == 1 ? "" : "s");
-    line(14, y, t, TS_WINDOW, col);
-    snprintf(t, sizeof t, "%d %s voucher%s", o->rule.cost, gh_voucher_name(o->rule.voucher), o->rule.cost == 1 ? "" : "s");
-    line(14, y + 12, t, TS_INSTRUCTIONS_TEXT, col ? col : RR_RGBA(0xc8, 0xc8, 0xc8, 255));
-    snprintf(t, sizeof t, "have %u", (unsigned)o->have);
-    line(250, y + 4, t, TS_INSTRUCTIONS_TEXT, col ? col : RR_RGBA(0xc8, 0xc8, 0xc8, 255));
+    gv_option* d = &v->opt[i];
+    snprintf(d->eggs, sizeof d->eggs, "%d egg%s", o->rule.pulls, o->rule.pulls == 1 ? "" : "s");
+    snprintf(d->price, sizeof d->price, "%d %s voucher%s", o->rule.cost, gh_voucher_name(o->rule.voucher), o->rule.cost == 1 ? "" : "s");
+    snprintf(d->have, sizeof d->have, "have %u", (unsigned)o->have);
+    snprintf(d->short_label, sizeof d->short_label, "x%d %d %s", o->rule.cost, o->rule.pulls, o->rule.pulls == 1 ? "Pull" : "Pulls");
+    d->voucher = o->rule.voucher;
+    d->can_buy = o->can_buy;
   }
+  snprintf(v->up_label[0], sizeof v->up_label[0], "Move UP!");
+  snprintf(v->up_label[1], sizeof v->up_label[1], "UP!");
+  snprintf(v->up_label[2], sizeof v->up_label[2], "Shiny UP!");
+  v->featured = gh_featured_species();
+  countdown_text(v->countdown);
 
   if (G.mode == GS_MENU && !G.view.locked) {
     const gh_option* o = &G.view.opt[G.sel];
-    if (o->refusal_key) line(10, 214, gh_refusal_text(o->refusal_key), TS_INSTRUCTIONS_TEXT, RR_RGBA(0xf0, 0x90, 0x90, 255));
-    line(10, 226, "L/R: machine  U/D: option  A: pull  B: back", TS_INSTRUCTIONS_TEXT, 0);
+    if (o->refusal_key) snprintf(v->refusal, sizeof v->refusal, "%s", gh_refusal_text(o->refusal_key));
+    snprintf(v->hint, sizeof v->hint, "L/R: machine  U/D: option  A: pull  B: back");
+    snprintf(v->top_message, sizeof v->top_message, "Select a machine.");
     return;
   }
-  /* a question or a message over the list (a locked machine says why, over the list too) */
-  ui_window(16, 78, 288, 104, WIN_NORMAL);
+  snprintf(v->top_message, sizeof v->top_message, "%s", gh_machine_note(G.machine));
   if (G.mode == GS_CONFIRM) {
     const gh_option* o = &G.view.opt[G.sel];
-    snprintf(t, sizeof t, "Pull %d egg%s from the %s", o->rule.pulls, o->rule.pulls == 1 ? "" : "s", gh_machine_name(G.machine));
-    line(28, 88, t, TS_WINDOW, 0);
-    snprintf(t, sizeof t, "for %d %s voucher%s?", o->rule.cost, gh_voucher_name(o->rule.voucher), o->rule.cost == 1 ? "" : "s");
-    line(28, 102, t, TS_WINDOW, 0);
-    line(40, 134, "Yes", TS_WINDOW, 0);
-    line(40, 152, "No", TS_WINDOW, 0);
-    ui_cursor(30, G.yes ? 140 : 158);
-    line(10, 226, "A: choose   B: back", TS_INSTRUCTIONS_TEXT, 0);
+    snprintf(v->lines[0], sizeof v->lines[0], "Pull %d egg%s from the %.20s", o->rule.pulls, o->rule.pulls == 1 ? "" : "s", gh_machine_name(G.machine));
+    snprintf(v->lines[1], sizeof v->lines[1], "for %d %.12s voucher%s?", o->rule.cost, gh_voucher_name(o->rule.voucher), o->rule.cost == 1 ? "" : "s");
+    v->n_lines = 2;
+    snprintf(v->hint, sizeof v->hint, "A: choose   B: back");
   } else if (G.mode == GS_MENU) {
-    wrapped(28, 88, G.view.lock_text, 42, 6);
-    line(10, 226, "L/R: machine   B: back", TS_INSTRUCTIONS_TEXT, 0);
+    wrap_lines(v, G.view.lock_text, 42);
+    snprintf(v->hint, sizeof v->hint, "L/R: machine   B: back");
   } else {
-    wrapped(28, 88, G.msg, 42, 6);
-    line(10, 226, G.mode == GS_RETRY ? "A: try again   B: leave" : "A: back", TS_INSTRUCTIONS_TEXT, 0);
+    wrap_lines(v, G.msg, 42);
+    snprintf(v->hint, sizeof v->hint, "%s", G.mode == GS_RETRY ? "A: try again   B: leave" : "A: back");
   }
 }
 
 static void gs_draw(ui_screen* s, rr_screen which) {
   (void)s;
-  if (which == RR_TOP)
-    draw_top();
-  else
-    draw_bottom();
+  gv_state v;
+  build_state(&v);
+  if (which == RR_TOP) {
+    if (ui_space(UI_PHYS_TOP)) rr_rect(0, 0, 400, 240, RR_RGBA(0, 0, 0, 255));
+    gv_draw_top(&v);
+  } else {
+    if (ui_space(UI_PHYS_BOTTOM)) rr_rect(0, 0, 320, 240, RR_RGBA(0, 0, 0, 255));
+    gv_draw_bottom(&v);
+  }
 }
 
-static ui_screen g_screen = {"capsule-machine", UI_FADE, gs_enter, gs_leave, NULL, gs_input, NULL, gs_draw, NULL};
+static ui_screen g_screen = {"capsule-machine", UI_FADE, gs_enter, gs_leave, NULL, gs_input, gs_update, gs_draw, NULL};
 
 bool gacha_screen_open(const gachas_args* a) {
   if (!a) return false;

@@ -30,6 +30,7 @@
 #include "custom_store.h"
 #include "gacha_host.h"
 #include "gacha_screen.h"
+#include "gacha_view.h"
 #include "gc/gacha.h"
 #include "pr/rng.h"
 #include "profile_tx.h"
@@ -122,6 +123,42 @@ float text_draw(text_style st, float x, float y, const char* s, const text_opts*
     snprintf(d->text, sizeof d->text, "%s", s);
   }
   return 6.0f * (float)strlen(s);
+}
+
+
+/* The view (menus/gacha_view.c) is the menus' layer and is not linked here: this stand-in records what the menu hands it, which is the whole
+ * of what the screen decides (the words, the greyed rows, the question's answer). Where things land is checked on the emulator. */
+static void rec(int screen, const char* text, rr_color color) {
+  if (!text[0] || n_drawn >= DRAWN_MAX) return;
+  drawn_t* d = &g_drawn[n_drawn++];
+  d->style = TS_WINDOW;
+  d->x = 8;
+  d->y = 10;
+  d->color = color;
+  d->screen = screen;
+  snprintf(d->text, sizeof d->text, "%s", text);
+}
+void gv_draw_top(const gv_state* v) {
+  char t[80];
+  snprintf(t, sizeof t, "vouchers %s %s %s %s", v->voucher_count[0], v->voucher_count[1], v->voucher_count[2], v->voucher_count[3]);
+  rec(0, t, 0);
+  rec(0, v->top_message, 0);
+  for (int i = 0; i < GV_OPTIONS; i++) rec(0, v->opt[i].short_label, v->opt[i].can_buy ? 0 : 1);
+}
+void gv_draw_bottom(const gv_state* v) {
+  rec(1, v->machine_name, 0);
+  rec(1, v->machine_note, 0);
+  rec(1, v->egg_count, 0);
+  for (int i = 0; i < GV_OPTIONS; i++) {
+    const rr_color c = v->opt[i].can_buy ? 0 : 1;
+    rec(1, v->opt[i].eggs, c);
+    rec(1, v->opt[i].price, c);
+    rec(1, v->opt[i].have, c);
+  }
+  rec(1, v->refusal, 2);
+  rec(1, v->hint, 0);
+  for (int i = 0; i < v->n_lines; i++) rec(1, v->lines[i], 0);
+  if (v->mode == GV_CONFIRM) g_cursor_y = v->yes ? 140 : 158;
 }
 
 static const drawn_t* find_text(const char* needle) {
@@ -219,7 +256,7 @@ static void test_menu_texts(void) {
   CHECK(on_screen("capsule-machine"), "the menu is the screen");
   draw_both();
   CHECK(has_text("Move Gacha") && has_text("Better odds of a rare egg move."), "machine 0 and what it does");
-  CHECK(has_text("Regular 12   Plus 3") && has_text("Premium 2   Golden 1"), "the real balances");
+  CHECK(has_text("vouchers 12 3 2 1"), "the real balances");
   CHECK(has_text("Eggs 7 / 99"), "the egg count against the source's capacity");
   static const char* const rows[5][2] = {{"1 egg", "1 Regular voucher"}, {"10 eggs", "10 Regular vouchers"}, {"5 eggs", "1 Plus voucher"},
                                          {"10 eggs", "1 Premium voucher"}, {"25 eggs", "1 Golden voucher"}};
