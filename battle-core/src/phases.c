@@ -157,6 +157,9 @@ static void form_change_with_delay(pr_battle *bt, const pr_pokemon *p, int trigg
         /* The attribute's formFunc decides whether this trigger is called.
          * Both registered form changes have no additional conditions. */
         target_form = mon->form == 0 ? 1 : 0;
+    } else if (mon->species == SPECIES_ID_PALAFIN && trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger) {
+        /* zero <-> hero, both quiet with no conditions; Zero to Hero's formFuncs decide the call */
+        target_form = mon->form == 0 ? 1 : 0;
     } else if (mon->species == SPECIES_ID_ETERNATUS && mon->form == 0
         && trigger_class == PR_FCT_SpeciesFormChangeManualTrigger) {
         target_form = 1;

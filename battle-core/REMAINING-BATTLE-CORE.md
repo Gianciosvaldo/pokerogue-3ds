@@ -13,6 +13,7 @@ HP-cost boosts and maximum-HP getter corrections are merged in #307; the
 combined Pledge waiting callback is merged in #308. Reflect Type/Conversion/
 Conversion 2 are documented in [TYPE-MOVES-VALIDATION.md](TYPE-MOVES-VALIDATION.md).
 Secret Power is documented in [SECRET-POWER-VALIDATION.md](SECRET-POWER-VALIDATION.md).
+Zero to Hero (Palafin) is documented in [ZERO-TO-HERO-VALIDATION.md](ZERO-TO-HERO-VALIDATION.md).
 Next candidates include Disguise/Ice Face form callbacks and Revival Blessing; delayed attacks
 already have override handlers and need a boundary audit. A missing local class switch
 case is only a candidate: called-move and override dispatch may handle it
@@ -45,6 +46,7 @@ Completed continuation slices and remaining source-backed work:
 | Beat Up (merged #246) | Party hit-count case now implemented; existing per-hit power verified | Pinned party/status ordering, self contribution, base species Attack, KO interruption and modifiers |
 | Cud Chew / Harvest (merged #262) | Source histories, repeat/restore callbacks, preservation, inventory and saves now implemented | Actual named held-item history and delays, ownership, duplication/refusal and RNG |
 | Ditto / Transform / Imposter (merged #261) | Shared move/ability phase, temporary identity/moves/stats, effective sprite and save/reset now implemented | 8,000 actual phase cases and 8,000 full turns; following-turn PP, switch-in visual regression and active saves; broader doubles remain |
+| Zero to Hero (this PR) | Switch-out Hero form, once-per-battleData entry message, PostBattleInit Zero form | 8,064 boundary cases and 8,000 switch-out turns; enemy trainer Palafin stays Zero at the pin (off-field quiet form change ends early) |
 | Sketch / other ability copying | Remaining move effects and identity overrides | Real source identity/stat/moveset copying, bounds, reset and state serialization |
 | Forms / Battle Bond | Remaining form callbacks and one-use battle flags | Actual conditions and new required state; do not invent absent lifecycle inputs |
 | Redirect / Commander / broader doubles | Singles proofs do not close all partner behavior | Natural field/partner state, target redirect and phase ordering with exact source fixtures |

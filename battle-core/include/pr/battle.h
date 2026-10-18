@@ -311,6 +311,8 @@ typedef struct pr_pokemon {
     bool wave_endured;                 /* waveData.endured (EnemyEndureChanceModifier) */
     /* battleData */
     bool has_eaten_berry;              /* battleData.hasEatenBerry (Belch) */
+    bool zero_to_hero_shown;           /* zeroToHeroFormChangeMessage.get(p) === p.battleData; never saved, as a
+                                        * loaded Pokemon gets a new battleData object */
     uint8_t battle_berries[PR_MAX_BERRY_HISTORY], turn_berries[PR_MAX_BERRY_HISTORY], last_berries[PR_MAX_BERRY_HISTORY];
     uint16_t n_battle_berries, n_turn_berries, n_last_berries;
     /* Task 53: Mega Evolution & Dynamax */
