@@ -462,6 +462,7 @@ typedef struct pr_battle {
     void *next_summon_ctx;
     int16_t biome;             /* arena.biomeId (BiomeId), read when has_biome */
     bool has_biome;
+    uint32_t challenge_flags;  /* active gameMode challenges, bit per Challenges enum id */
     int16_t weather_turns_left, weather_max_duration;
     int16_t terrain_turns_left, terrain_max_duration;
     bool ignore_abilities;     /* arena.ignoreAbilities */

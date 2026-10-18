@@ -29,6 +29,7 @@ const char *const pr_phase_name[PH_COUNT_] = {
     [PH_SUMMON] = "SummonPhase", [PH_INIT_ENCOUNTER] = "InitEncounterPhase", [PH_CHECK_SWITCH] = "CheckSwitchPhase",
     [PH_NEW_BATTLE] = "NewBattlePhase",
     [PH_TRANSFORM] = "PokemonTransformPhase", [PH_RETURN] = "ReturnPhase",
+    [PH_REVIVAL_BLESSING] = "RevivalBlessingPhase",
 };
 
 const char *pr_phase_name_of(int t)
@@ -744,7 +745,7 @@ static void run_phases(pr_battle *bt, pr_engine *e, int ph)
         e->current = -1;
         if (e->awaiting_pick) {
             /* the party screen is open: the phase stays in the pool until the pick */
-            e->stop = PH_SWITCH;
+            e->stop = e->pool[ph].type;
             e->stop_phase = e->pool[ph];
             e->pick_phase = ph;
             break;
@@ -958,7 +959,7 @@ void pr_continue(pr_battle *bt, pr_engine *e)
 /* The party screen's callback: a slot past the Pokemon on the field queues the SwitchSummonPhase
  * (Baton Pass's screen hands over PASS_BATON, which keeps the Baton Pass type), then the
  * SwitchPhase ends once the screen has gone back to the message mode. */
-void pr_resume_switch(pr_battle *bt, pr_engine *e, int slot)
+void pr_resume_party_pick(pr_battle *bt, pr_engine *e, int slot)
 {
     if (!e->awaiting_pick) return;
     bt->engine = e;
@@ -969,7 +970,9 @@ void pr_resume_switch(pr_battle *bt, pr_engine *e, int slot)
     e->stop = 0;
     e->current = ph;
     const pr_phase *s = &e->pool[ph];
-    if (slot >= (bt->double_battle ? 2 : 1) && slot < 6) {
+    if (s->type == PH_REVIVAL_BLESSING) {
+        pr_finish_revival_choice(bt, e, s->pokemon, slot);
+    } else if (slot >= (bt->double_battle ? 2 : 1) && slot < 6) {
         int q = pr_phase_new(e, PH_SWITCH_SUMMON, -1);
         if (q < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); e->overflow = true; }
         else {
@@ -988,3 +991,44 @@ void pr_resume_switch(pr_battle *bt, pr_engine *e, int slot)
     run_phases(bt, e, e->overflow ? -1 : shift_phase(bt, e));
 }
 
+
+/* Existing switch callers remain source compatible. */
+void pr_resume_switch(pr_battle *bt, pr_engine *e, int slot)
+{
+    pr_resume_party_pick(bt, e, slot);
+}
+
+void pr_cancel_queued_move(pr_engine *e, const pr_pokemon *pokemon)
+{
+    for (int i=0;i<e->n_dyn[PH_MOVE];i++) {
+        pr_phase *p=&e->pool[e->dyn[PH_MOVE][i]];
+        if (p->pokemon!=pokemon) continue;
+        p->cancelled=true;p->entry.result=MOVE_RESULT_FAIL;
+        return;
+    }
+}
+
+bool pr_remove_switch_summon_field(pr_battle *bt, pr_engine *e, int field_index)
+{
+    dyn_reorder(bt,e,PH_SWITCH_SUMMON);
+    for (int i=0;i<e->n_dyn[PH_SWITCH_SUMMON];i++) {
+        int ix=e->dyn[PH_SWITCH_SUMMON][i];
+        if (e->pool[ix].sw_field_index!=field_index) continue;
+        memmove(&e->dyn[PH_SWITCH_SUMMON][i],&e->dyn[PH_SWITCH_SUMMON][i+1],(size_t)(e->n_dyn[PH_SWITCH_SUMMON]-i-1));
+        e->n_dyn[PH_SWITCH_SUMMON]--;phase_free(e,ix);return true;
+    }
+    for (int l=e->n_levels-1;l>=0;l--) for (int i=0;i<e->level_len[l];i++) {
+        int ix=e->levels[l][i];
+        if (e->pool[ix].type!=PH_SWITCH_SUMMON||e->pool[ix].sw_field_index!=field_index) continue;
+        memmove(&e->levels[l][i],&e->levels[l][i+1],(size_t)(e->level_len[l]-i-1));
+        e->level_len[l]--;phase_free(e,ix);return true;
+    }
+    return false;
+}
+
+void pr_queue_prompt_msg(pr_battle *bt, pr_engine *e, pr_msg msg)
+{
+    int ph=message_phase(e,&msg);
+    if(ph>=0)e->pool[ph].message_prompt=true;
+    pr_phase_unshift(bt,e,ph);
+}

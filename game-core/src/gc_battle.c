@@ -206,6 +206,7 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
     bt->double_battle = false;
     bt->wave_index = run->wave;
     bt->game_mode = (int8_t)run->run.mode;
+    bt->challenge_flags = run->run.mode == GAME_MODES_CHALLENGE ? run->run.challenge_flags : 0;
     bt->battle_type = (uint8_t)run->battle_type;
     bt->biome = (int16_t)run->biome;
     bt->has_biome = true;
@@ -671,7 +672,7 @@ int gc_battle_run(gc_run *run, int pick)
         if (ev) ev->a = bt->turn;
         pr_run_turn(bt, &run->eng);
     } else {
-        pr_resume_switch(bt, &run->eng, pick >= 0 ? gc_battle_slot_of(run, pick) : -1);
+        pr_resume_party_pick(bt, &run->eng, pick >= 0 ? gc_battle_slot_of(run, pick) : -1);
     }
     return engine_returned(run);
 }
@@ -696,6 +697,11 @@ void gc_battle_switch_screen(gc_run *run)
     gc_screen *s = &run->screen;
     memset(s, 0, sizeof *s);
     s->kind = GC_SCREEN_SWITCH;
+    if(run->eng.stop==PH_REVIVAL_BLESSING) {
+        s->revival_blessing=true;int battler=pr_battler_index(&run->bt,run->eng.stop_phase.pokemon);s->slot=battler<0?-1:battler%2;
+        for(int i=0;i<run->n_party;i++)s->pick_ok[i]=run->party[i].b.hp<=0;
+        s->can_skip=false;return;
+    }
     s->slot = run->eng.stop_phase.sw_field_index;
     /* the Pokemon being switched out (a move's switch-out: Teleport, U-turn) is still in its party slot, and
      * upstream's party screen doesn't let a Pokemon be sent into the slot it already holds. It's off the
