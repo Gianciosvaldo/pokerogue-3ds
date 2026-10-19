@@ -210,6 +210,8 @@ void pr_resume_switch(pr_battle *bt, pr_engine *e, int slot);
 /* Player party picks: ordinary switch or RevivalBlessingPhase. */
 void pr_resume_party_pick(pr_battle *bt, pr_engine *e, int slot);
 bool pr_revival_blessing(pr_battle *bt, pr_engine *e, pr_pokemon *user);
+/* Registered GulpMissileTagAttr callback, including its parent gate and return. */
+bool pr_gulp_missile_tag(pr_battle *bt, pr_engine *e, pr_pokemon *user, int move);
 void pr_finish_revival_choice(pr_battle *bt, pr_engine *e, pr_pokemon *user, int slot);
 bool pr_has_revivable_party(const pr_battle *bt, const pr_pokemon *user);
 

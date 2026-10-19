@@ -580,3 +580,7 @@ $(BUILD)/revival-turn-test: $(BUILD)/wide-combat-replay.c tests/turntest.c $(BUI
 all: $(BUILD)/ball-fetch-test
 $(BUILD)/ball-fetch-test: tests/ball-fetch-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/gulp-missile-test
+$(BUILD)/gulp-missile-test: tests/gulp-missile-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) $< $(BUILD)/libprcore.a -Wl,--wrap=pr_gulp_missile_tag -lm -o $@
