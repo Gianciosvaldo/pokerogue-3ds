@@ -10,6 +10,8 @@
 
 #define DWELL_MS 300.0f       /* after the results are shown, how long before a button closes the screen */
 #define LIST_ROWS 5
+#define HATCH_FRAME_MS (1000.0f / 12.0f)  /* upstream's "open" and "close" animations of gacha_hatch: 4 frames at 12 a second */
+#define HATCH_HOLD_MS 100.0f              /* kept open this long after the last capsule leaves the chute */
 
 static const char* const TIER_NAME[CAP_TIERS] = {"Common", "Rare", "Epic", "Legendary"};
 static struct {
@@ -33,6 +35,21 @@ bool capsule_debug_fixture(int n, cap_fixture* out) {
     snprintf(out->item[i].label, CAP_LABEL, "Fixture result %d", i + 1);
   }
   return true;
+}
+
+int capsule_hatch_frame(const cap_model* m) {
+  if (!m || (m->stage != CAP_PULL && m->stage != CAP_DROP) || m->t < CAP_PULL_MS) return 1;
+  float last = CAP_PULL_MS;
+  for (int i = 0; i < m->fx.n; i++)
+    if (m->body[i].spawn_ms > last) last = m->body[i].spawn_ms;
+  const float full = CAP_PULL_MS + 3.0f * HATCH_FRAME_MS;   /* the fourth frame */
+  const float close_at = last + HATCH_HOLD_MS > full ? last + HATCH_HOLD_MS : full;
+  if (m->t < close_at) {
+    const int f = 1 + (int)((m->t - CAP_PULL_MS) / HATCH_FRAME_MS);
+    return f > 4 ? 4 : f;
+  }
+  const int f = 4 - (int)((m->t - close_at) / HATCH_FRAME_MS);
+  return f < 1 ? 1 : f;
 }
 
 /* ------------------------------------------------------------------ the callbacks */
@@ -130,6 +147,8 @@ static void build_state(gv_reveal* v) {
     v->egg[i] = (gv_egg){b->x, b->y, b->open, b->phase, C.m.fx.item[i].tier, C.m.stage == CAP_SETTLED && i == C.sel};
   }
   v->knob = C.m.knob;
+  v->machine = C.a.machine;
+  v->hatch = capsule_hatch_frame(&C.m);
   snprintf(v->title, sizeof v->title, "%s", C.live ? "Capsule machine" : "Capsule machine (preview)");
   const int n = C.m.fx.n;
   if (C.m.stage == CAP_SETTLED) {

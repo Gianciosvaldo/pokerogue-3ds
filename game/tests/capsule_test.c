@@ -114,7 +114,10 @@ static void rec(const char* text) {
   d->screen = g_which;
   snprintf(d->text, sizeof d->text, "%s", text);
 }
+static int g_hatch = -1, g_machine = -1; /* what the last top-screen draw was given */
 void gv_draw_reveal_top(const gv_reveal* v) {
+  g_hatch = v->hatch;
+  g_machine = v->machine;
   rec(v->top_title);
   rec(v->top_sub);
   for (int i = 0; i < v->n; i++)
@@ -282,6 +285,60 @@ static void test_timeline(void) {
     CHECK(!cap_skip(&m), "nothing to skip when settled");
     CHECK(!cap_pull(&m), "no second pull after the results");
   }
+}
+
+/* The machine's hatch: closed before the pull, opening from the first capsule leaving the chute at 12 frames a second, held open until
+ * the last one has left, closing, closed again before the results; never outside 1..4. */
+static void test_hatch(void) {
+  CHECK(capsule_hatch_frame(NULL) == 1, "no model: closed");
+  const int sizes[] = {1, 2, 10, 25};
+  for (int si = 0; si < 4; si++) {
+    const int n = sizes[si];
+    cap_fixture f = fx(n);
+    cap_model m;
+    cap_init(&m, &f);
+    CHECK(capsule_hatch_frame(&m) == 1, "closed before the pull (%d)", n);
+    cap_step(&m, 100);
+    CHECK(capsule_hatch_frame(&m) == 1, "and while time does nothing (%d)", n);
+    cap_pull(&m);
+    float last_spawn = 0;
+    for (int i = 0; i < n; i++)
+      if (m.body[i].spawn_ms > last_spawn) last_spawn = m.body[i].spawn_ms;
+    int prev = 1, peak_at = -1, closed_at = -1;
+    bool rising = true, saw[5] = {false};
+    for (int step = 0; m.stage != CAP_SETTLED && step < 400; step++) {
+      cap_step(&m, 8.0f);
+      if (m.stage == CAP_SETTLED) break;
+      const int h = capsule_hatch_frame(&m);
+      CHECK(h >= 1 && h <= 4, "the frame is 1..4 (%d at %.0f ms, %d)", h, m.t, n);
+      saw[h] = true;
+      if (m.t < CAP_PULL_MS) CHECK(h == 1, "closed until the first capsule leaves (%.0f ms, %d)", m.t, n);
+      if (m.t < CAP_PULL_MS + 83.0f) CHECK(h == 1, "the first frame lasts 1/12 s (%.0f ms, %d)", m.t, n);
+      if (m.t > CAP_PULL_MS + 3.0f * 83.4f && m.t < last_spawn + 100.0f - 8.0f) CHECK(h == 4, "open while capsules are still leaving (%.0f ms, %d)", m.t, n);
+      if (rising && peak_at >= 0 && h < 4) rising = false;
+      if (rising) {
+        CHECK(h >= prev, "it opens without going back (%d -> %d at %.0f ms, %d)", prev, h, m.t, n);
+        if (h == 4 && peak_at < 0) peak_at = (int)m.t;
+      }
+      if (!rising) CHECK(h <= prev, "it closes without reopening (%d -> %d at %.0f ms, %d)", prev, h, m.t, n);
+      if (h == 1 && !rising && closed_at < 0) closed_at = (int)m.t;
+      prev = h;
+    }
+    CHECK(saw[2] && saw[3] && saw[4], "it passes through every frame (%d)", n);
+    CHECK(peak_at >= (int)(CAP_PULL_MS + 3.0f * 83.3f) - 1, "fully open no sooner than 3/12 s after the first (%d at %d ms)", n, peak_at);
+    CHECK(closed_at > 0 && closed_at < (int)CAP_DEADLINE_MS, "closed again before the deadline (%d at %d ms)", n, closed_at);
+    CHECK(closed_at >= (int)last_spawn, "not closed before the last capsule has left (%d: %d ms, last %.0f)", n, closed_at, last_spawn);
+    while (m.stage != CAP_SETTLED) cap_step(&m, 16.0f);
+    CHECK(capsule_hatch_frame(&m) == 1, "closed once settled (%d)", n);
+  }
+  cap_fixture f = fx(10);
+  cap_model m;
+  cap_init(&m, &f);
+  cap_pull(&m);
+  for (int i = 0; i < 50; i++) cap_step(&m, 8.0f);   /* 400 ms */
+  CHECK(capsule_hatch_frame(&m) > 1, "open mid-drop");
+  cap_skip(&m);
+  CHECK(capsule_hatch_frame(&m) == 1, "a skip closes it");
 }
 
 static void test_units_and_frame_rate(void) {
@@ -512,6 +569,29 @@ static void test_screen_words_and_pull(void) {
   CHECK(c.settled == 0 && c.exits == 0, "no callback yet");
 }
 
+/* the screen hands the view the model's frame and the chosen machine */
+static void test_hatch_screen(void) {
+  reset_fakes();
+  counts c = {0};
+  cap_fixture f = fx(10);
+  caps_args a = args_for(&f, &c);
+  a.machine = 2;
+  CHECK(capsule_screen_open(&a), "opens with machine 2");
+  draw(0);
+  CHECK(g_machine == 2 && g_hatch == 1, "the view gets the machine %d and a closed hatch (%d) before the pull", g_machine, g_hatch);
+  press(BTN_ACTION);
+  int max_hatch = 0;
+  for (int i = 0; i < 80; i++) {
+    tick(16.0f);
+    draw(0);
+    if (g_hatch > max_hatch) max_hatch = g_hatch;
+  }
+  CHECK(max_hatch == 4, "the view sees the hatch open (%d)", max_hatch);
+  run_ms(2000, 16);
+  draw(0);
+  CHECK(g_hatch == 1 && g_machine == 2, "and closed with the results");
+}
+
 static void test_held_buttons(void) {
   reset_fakes();
   counts c = {0};
@@ -729,6 +809,7 @@ int main(int argc, char** argv) {
   test_fixture_validity();
   test_slots();
   test_timeline();
+  test_hatch();
   test_units_and_frame_rate();
   test_bad_dt();
   test_skip_at_each_stage();
@@ -737,6 +818,7 @@ int main(int argc, char** argv) {
   test_no_ambient_random();
   test_screen_refusals();
   test_screen_words_and_pull();
+  test_hatch_screen();
   test_held_buttons();
   test_skip_callbacks_and_dwell();
   test_exit_before_pull_and_leaving();

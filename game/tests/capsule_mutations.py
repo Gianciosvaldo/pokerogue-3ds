@@ -56,6 +56,15 @@ M = [
     (MD, "  if (!m || (m->stage != CAP_PULL && m->stage != CAP_DROP)) return false;\n  m->skipped = true;", "  if (!m || m->stage == CAP_SETTLED) return false;\n  m->skipped = true;", CT, "a skip before the pull is accepted"),
     (MD, "  if (!m || m->stage != CAP_SETTLED || m->settled_seen) return false;", "  if (!m || m->stage != CAP_SETTLED) return false;", CT, "the settle is reported every time it is asked"),
     (MD, "    if (b->phase == 2 && b->open < 1.0f) {", "    if (b->phase == 2 && b->open < 1.0f && 0) {", CT, "a capsule never opens by itself"),
+    # ---- the machine's hatch
+    (SC, "  if (!m || (m->stage != CAP_PULL && m->stage != CAP_DROP) || m->t < CAP_PULL_MS) return 1;", "  if (!m || m->t < CAP_PULL_MS) return 1;", CT, "the hatch stays open after the results are shown"),
+    (SC, "#define HATCH_FRAME_MS (1000.0f / 12.0f)", "#define HATCH_FRAME_MS (1000.0f / 120.0f)", CT, "the hatch moves ten times too fast"),
+    (SC, "  const float full = CAP_PULL_MS + 3.0f * HATCH_FRAME_MS;   /* the fourth frame */", "  const float full = CAP_PULL_MS;", CT, "the hatch may close before it has opened"),
+    (SC, "#define HATCH_HOLD_MS 100.0f ", "#define HATCH_HOLD_MS -300.0f ", CT, "the hatch closes before the last capsule has left"),
+    (SC, "    return f > 4 ? 4 : f;", "    return f;", CT, "the hatch frame runs past 4"),
+    (SC, "  const int f = 4 - (int)((m->t - close_at) / HATCH_FRAME_MS);", "  const int f = 4;", CT, "the hatch never closes"),
+    (SC, "  v->hatch = capsule_hatch_frame(&C.m);", "  v->hatch = 1;", CT, "the view is never told the hatch's frame"),
+    (SC, "  v->machine = C.a.machine;", "  v->machine = 0;", CT, "the view is always told machine 0"),
     # ---- the screen: input
     (SC, "  if (ui_input_repeating()) return true; /* a held button does its action once */\n", "", CT, "a held button repeats its action"),
     (SC, "        if (cap_pull(&C.m)) ui_play_select();", "        cap_pull(&C.m);", CT, "the pull makes no sound"),

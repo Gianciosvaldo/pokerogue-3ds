@@ -66,6 +66,7 @@ static bool reveal(const ptx_result* r) {
   c.on_exit = on_cap_exit;
   c.live = true;
   c.autoplay = true;
+  c.machine = r->n && r->eggs[0].source_type < GH_MACHINES ? r->eggs[0].source_type : 0; /* the pull's own machine (EggSourceType) */
   return capsule_screen_open(&c);
 }
 

@@ -161,7 +161,9 @@ void gv_draw_bottom(const gv_state* v) {
   if (v->mode == GV_CONFIRM) g_cursor_y = v->yes ? 140 : 158;
 }
 
+static int g_rev_machine = -1;
 void gv_draw_reveal_top(const gv_reveal* v) {
+  g_rev_machine = v->machine;
   rec(0, v->top_title, 0);
   rec(0, v->top_sub, 0);
 }
@@ -383,6 +385,7 @@ static void test_buy_through_screen(void) {
       draw_both();
       CHECK(has_text("Capsule machine") && !has_text("(preview)") && !has_text("preview"), "the words are the purchase's, not the preview's");
       CHECK(has_text("Here they come"), "it plays at once (the player already accepted)");
+      CHECK(g_rev_machine == m, "the reveal draws the machine the eggs came out of (%d, bought at %d)", g_rev_machine, m);
       /* the capsule screen's first frames: not settled, so not marked */
       run_ms(120, 16);
       CHECK(ptx_unrevealed(NULL) == txn, "not marked while the capsules fall");
