@@ -24,6 +24,16 @@ the first turn), through `save.c` (temporary file with a checksum, renamed into 
 It is never written during an animation: `run_screen.c` waits until the screen is idle and tries again at the next wave
 if the card refuses. Game over and a win clear the slot, as upstream's `tryClearSession` does.
 
+START opens the **in-run menu** ([`run_menu.c`](source/run_menu.c), upstream's `MenuUiHandler`) on the command menu and on the reward screen,
+over the bottom screen: the option window along the right edge and the message box at the bottom left, as upstream lays them out. It lists
+**Save and Quit** only: upstream's other entries (settings, achievements, stats, egg list, Pokedex, manage data, community, log out) have no screen
+here or are online features. Past the battle's first turn it asks the upstream warning ("You will lose any progress since the beginning of the
+battle. Proceed?") and Yes / No first; Yes fades to the title. Upstream's `saveAll(true, true, true, true)` writes the *cached* session and system
+data, which is what the battle's start wrote, so nothing new is written here either: the slot already holds the battle's start (Continue loads it),
+and what the battle changed in memory and never wrote (a catch, the dex) is dropped: the system data is read from the card again (`app_flow.c`,
+`on_run_quit`). If the last save of this battle was refused by the SD card the menu says so in its own words (not upstream's) and asks even in the
+first turn. A custom run quits the same way (`cr_end`; its slot keeps its overlay).
+
 New Game goes through the **starter select** (`menus/starter.c`, hosted by `starter_host.c`): the species the dex says are caught,
 a team of up to six within the Classic cost budget (10), Begin / Exit. What can be picked, what it costs and whether game-core
 takes the team is game-core's own (`gc_starter_is_available`, `gc_starter_value`, `gc_starter_budget`, `gc_run_set_starters`),
@@ -61,8 +71,8 @@ until C09. Put `capsule=<1..25>` in `rundriver.txt` to open it before the title 
 START skips to the results, UP/DOWN scroll the list, A / B / START close it; a held button acts once (`ui_input_repeating`). No touch
 (same reason as the Radar). Contracts section 2.13.
 
-There is a **Capsule Machine** on the title (custom content, task C09; upstream reaches its gacha from the in-run menu, which the app does not
-have yet): [`gacha_screen.c`](source/gacha_screen.c) shows the three machines (LEFT/RIGHT) and their five options (UP/DOWN) with the real voucher
+There is a **Capsule Machine** on the title (custom content, task C09; upstream reaches its gacha from the in-run menu, which only has Save and Quit so
+far): [`gacha_screen.c`](source/gacha_screen.c) shows the three machines (LEFT/RIGHT) and their five options (UP/DOWN) with the real voucher
 balances and egg count; an option the source refuses is greyed with the source's own words. A asks, the question opens on **No**, Yes buys. The
 cost, the eggs given and the capacity are read from game-core by [`gacha_host.c`](source/gacha_host.c) (it pulls once per option on a scratch
 profile), never from the labels. One accepted pull is one `profile_tx` transaction; the capsule screen (C07) then plays the committed result in

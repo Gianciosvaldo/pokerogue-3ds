@@ -1380,6 +1380,10 @@ static bool bv_input(ui_screen* s, ui_button b) {
           return true;
         }
         return true;
+      case BTN_MENU:
+        if (!B.opts.on_menu) return false;
+        B.opts.on_menu(B.command_arg);
+        return true;
       default:
         return false;
     }

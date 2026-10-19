@@ -120,6 +120,9 @@ typedef struct {
   const char* move_why[4];   /* the reason text for each move that is not ok (already translated), or NULL; the strings
                               * stay the caller's and must live until the command is answered */
   bool struggle;             /* every move is unusable: FIGHT goes straight to Struggle (move slot 0) */
+  /* START on the command menu (ui-inputs.ts buttonMenu: UiMode.COMMAND opens the menu overlay). Called with the argument of
+   * bv_ask_command; NULL = START does nothing. The fight menu is a mode of its own upstream and does not open it. */
+  void (*on_menu)(void* arg);
 } bv_command_opts;
 
 void bv_begin(const bv_setup* setup);

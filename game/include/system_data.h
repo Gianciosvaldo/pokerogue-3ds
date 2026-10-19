@@ -70,7 +70,8 @@ typedef struct {
 } sysd_io;
 void sysd_set_io(const sysd_io* io);   /* NULL: save_read / save_write. The next sysd_get reads again only after sysd_reset */
 
-/* For tests: forget what was read, so the next sysd_get reads the folder again. */
+/* Forget what was read, so the next sysd_get reads the folder again. For tests, and for Save and Quit (app_flow.c): what a battle changed
+ * in memory and never wrote goes with the battle. */
 void sysd_reset(void);
 
 #ifdef __cplusplus

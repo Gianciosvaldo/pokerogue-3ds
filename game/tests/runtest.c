@@ -15,6 +15,10 @@
  *   RUNTEST_SAVE=resume  the same, and every 4th save point the run is dropped and continued from its slot (rs_resume, as
  *                        the title's Continue does): the loaded run must be the one that was saved, and the fake screen must
  *                        then agree with it at the next command.
+ *   RUNTEST_SAVE=quit    the same, and at every 7th command (and every 7th reward screen) the player presses START: the in-run menu's
+ *                        Save and Quit is answered Yes (the run is dropped and continued from its slot, which must hold the save of
+ *                        the battle's start: the run that comes back is the slot's) or backed out of (the run goes on), alternately.
+ *                        Fails when the menu is not offered, is told another turn than the battle's, or the driver goes on after a quit.
  * The music is the app's own (bgm.c, bgm_choose.c, bgm_player.c) over a fake DSP (snd_fake.c). The runs fail when a track is started
  * while a battle animation plays (the SD card reads would stall it), when a scene starts with other music than upstream's
  * Battle.getBgmOverride gives (checked against bgm_choose, not the app's own scene code), when a command is asked with other music
@@ -56,6 +60,7 @@
 #include "pr_data.h"
 #include "pr_enums.h"
 #include "reward_host.h"
+#include "run_menu.h"
 #include "run_saves.h"
 #include "run_screen.h"
 #include "save.h"
@@ -109,6 +114,10 @@ static struct {
   bool resume_now;        /* drop the run and continue it from its slot (the main loop does it) */
   bool resumed;           /* the run was just loaded: its save point is the file it came from */
   bool sp_open;           /* this battle's first command was already asked (it is asked again after a refusal) */
+  /* the in-run menu (RUNTEST_SAVE=quit) */
+  int menu_asks;          /* commands and reward screens that could have opened it */
+  bool menu_try;          /* press START at the next step */
+  bool quit_now;          /* Save and Quit was answered Yes: the main loop drops the run and continues it from its slot */
 } W;
 
 /* the reward / shop screen, the biome map and the party screen in item mode (the app's own, on the stack, are not built here) */
@@ -122,9 +131,12 @@ static struct {
   void (*item_pick)(int slot, int move_slot, void* arg);
   void* item_arg;
   bool item_move;
+  void (*menu)(void* arg);   /* rh_set_menu: START on the reward screen */
+  void* menu_arg;
 } X;
 static int n_shops, n_maps, n_item_opens;
-static bool save_on, resume_on;
+static bool save_on, resume_on, quit_on;
+static int n_menu_opened, n_menu_yes, n_menu_no, n_quit_callbacks;
 /* RUNTEST_CUSTOM */
 static bool custom_on, custom_strong;
 static unsigned vouchers0;
@@ -591,6 +603,10 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
   W.on_command = on_command;
   W.command_arg = arg;
   W.asking = true;
+  if (quit_on) {
+    if (!opts->on_menu) BAD("a command was asked with no menu hook (START would do nothing) in a run that has an app around");
+    if (++W.menu_asks % 7 == 0) W.menu_try = true;
+  }
 }
 
 /* ---- menus ---- */
@@ -805,7 +821,37 @@ void rh_open_biome_map(const biome_map_args* args, const biome_map_events* ev) {
   X.biome_ev = *ev;
 }
 
-void rh_close(void) { X.shop = X.biome = false; }
+void rh_close(void) {
+  X.shop = X.biome = false;
+  X.menu = NULL;
+}
+void rh_set_menu(void (*fn)(void*), void* arg) {
+  X.menu = fn;
+  X.menu_arg = arg;
+}
+
+/* The in-run menu (run_menu.c has its own host test): answered here at once, Yes and No alternately. It checks what the driver tells it. */
+static bool g_menu_open;
+/* Yes is only answered at a wave other than the one the last Yes was at: a quit sends the run back to the start of its battle, so a
+ * Yes at every 14th prompt of a long battle would replay that battle forever. */
+static int g_last_quit_wave = -1;
+bool run_menu_is_open(void) { return g_menu_open; }
+bool run_menu_open(const runmenu_args* a) {
+  const gc_run* r = rs_run();
+  n_menu_opened++;
+  if (!quit_on) BAD("the in-run menu was opened in a run that is not testing it");
+  if (a->turn != r->bt.turn) BAD("the menu was told turn %d, the battle is at turn %d", a->turn, r->bt.turn);
+  if (a->unsaved) BAD("the menu was told the save failed, but every write went through");
+  if (!a->on_quit) BAD("the menu has no Save and Quit to call");
+  if (n_menu_opened % 2 == 0 || r->wave == g_last_quit_wave) {
+    n_menu_no++;
+    return true; /* backed out with B: the menu is gone and nothing else happens */
+  }
+  n_menu_yes++;
+  g_last_quit_wave = r->wave;
+  a->on_quit(a->arg);
+  return true;
+}
 
 void ps_open_item(const void* run, int pmode, bool target_move, void (*on_pick)(int slot, int move_slot, void* arg), void* arg) {
   (void)run, (void)pmode;
@@ -972,6 +1018,23 @@ static bool step(void) {
     T.fn = NULL;
     f(T.arg);
     return true;
+  }
+  if (quit_on && X.shop && !W.menu_try && ++W.menu_asks % 7 == 0) W.menu_try = true;
+  if (W.menu_try) {
+    /* START: on the command menu through the battle screen's hook, on the reward screen through the reward host's */
+    W.menu_try = false;
+    if (W.asking && W.opts.on_menu) {
+      W.opts.on_menu(W.command_arg);
+      return true;
+    }
+    if (X.shop) {
+      if (!X.menu) {
+        BAD("the reward screen has no menu hook (START would do nothing)");
+      } else {
+        X.menu(X.menu_arg);
+        return true;
+      }
+    }
   }
   if (X.shop) {
     const gc_screen* sc = &X.screen;
@@ -1201,6 +1264,13 @@ static void obs_check(const gc_run* r, bool cleared) {
 
 /* ------------------------------------------------------------------ main */
 
+/* app_flow.c's on_run_quit: the driver has stopped and faded; the app goes to the title (the main loop continues from the slot) */
+static void quit_cb(void* arg) {
+  (void)arg;
+  n_quit_callbacks++;
+  W.quit_now = true;
+}
+
 int main(int argc, char** argv) {
   int runs = argc > 1 ? atoi(argv[1]) : 20;
   int first = argc > 2 ? atoi(argv[2]) : 0;
@@ -1218,6 +1288,11 @@ int main(int argc, char** argv) {
   const char* save_mode = getenv("RUNTEST_SAVE");
   save_on = save_mode && *save_mode;
   resume_on = save_on && !strcmp(save_mode, "resume");
+  quit_on = save_on && !strcmp(save_mode, "quit");
+  if (quit_on) {
+    cfg.on_quit = quit_cb;
+    cfg.quit_arg = NULL;
+  }
   char save_dir[64] = "";
   if (save_on) {
     /* the saves go to a folder of their own (the SD card's path is relative here) */
@@ -1277,6 +1352,35 @@ int main(int argc, char** argv) {
   int wave_hist[21] = {0};
   int last_waves = 0, last_nf = 0;
   while (ended < runs) {
+    if (W.quit_now) {
+      /* Save and Quit, answered Yes: nothing may go on, and Continue must bring back what the slot holds (the save of the battle's start,
+       * not the battle in progress) */
+      W.quit_now = false;
+      const int quits_before = st->quits;
+      rsv_info slot;
+      memset(&slot, 0, sizeof slot);
+      if ((custom_on ? cr_inspect(0, &slot) : rsv_inspect(0, &slot)) != RSV_OK) BAD("Save and Quit with nothing in the slot: %s", slot.why);
+      if (!quits_before) BAD("the driver did not count the quit");
+      W.playing = W.asking = false;
+      W.play_done = NULL;
+      X.shop = X.biome = false;
+      if (T.fn) BAD("a postponed step was left after the quit");
+      char why[RSV_WHY_LEN] = "";
+      if (rs_resume(&cfg, why) != RSV_OK) {
+        BAD("could not continue from the slot after Save and Quit: %s", why);
+        break;
+      }
+      rsv_info back;
+      memset(&back, 0, sizeof back);
+      rsv_summarize(rs_run(), &back);
+      if (back.wave != slot.wave || back.score != slot.score || back.money != slot.money || back.n_party != slot.n_party ||
+          memcmp(back.party, slot.party, sizeof(rsv_mon) * (size_t)slot.n_party))
+        BAD("Continue after Save and Quit brought back wave %d, the slot held wave %d", back.wave, slot.wave);
+      W.resumed = true;
+      g_run_resumed = true;
+      n_resumes++;
+      continue;
+    }
     if (W.resume_now) {
       /* quit to the title and Continue: what the player gets back must be the run that was saved */
       rsv_info saved;
@@ -1394,7 +1498,7 @@ int main(int argc, char** argv) {
          OBS.ignored, OBS.evicted);
   /* every GC_EV_BATTLE the screen played the observer took in at its drain, once (a run dropped and continued from its slot leaves its first
    * part out of the reports, so this holds for runs played through) */
-  if (!resume_on && OBS.ranges != st->events[GC_EV_BATTLE])
+  if (!resume_on && !quit_on && OBS.ranges != st->events[GC_EV_BATTLE])
     BAD("the observer took in %ld battle ranges, the screen played %d", OBS.ranges, st->events[GC_EV_BATTLE]);
   if (OBS.runs != ended) BAD("%ld combat reports checked for %d runs", OBS.runs, ended);
   printf("reward screens: %d shops, %d item targets, %d biome maps\n", n_shops, n_item_opens, n_maps);
@@ -1416,6 +1520,13 @@ int main(int argc, char** argv) {
     if (st->saves != W.expected_saves) BAD("%d saves written for %d save points", st->saves, W.expected_saves);
     if (!W.expected_saves) BAD("no save points were reached");
     if (resume_on && !n_resumes) BAD("no run was resumed");
+    if (quit_on) {
+      printf("in-run menu: %d opened, %d Save and Quit answered Yes (%d continued from the slot), %d backed out of\n", n_menu_opened, n_menu_yes, n_resumes,
+             n_menu_no);
+      if (!n_menu_yes || !n_menu_no) BAD("the menu was not both quit and backed out of (%d / %d)", n_menu_yes, n_menu_no);
+      if (st->quits != n_menu_yes || n_quit_callbacks != n_menu_yes || n_resumes != n_menu_yes)
+        BAD("%d Yes answers, %d counted by the driver, %d app callbacks, %d resumes", n_menu_yes, st->quits, n_quit_callbacks, n_resumes);
+    }
   }
   if (custom_on) {
     const cr_stats* cs = cr_stats_get();
