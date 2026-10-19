@@ -18,8 +18,11 @@
  * first), then the post-mortem or the exit. The achievement and voucher bars slide in over the top screen one after the other from the
  * moment the screen opens (upstream's AchvBar: 0.5 s in, in place until 10 s after it began, 0.5 s out), whatever page the box is on.
  *
- * Stand-ins, not upstream's: the words "Game Over" and the lines at the bottom (the locales have none); the end dialogue with the
- * rival is not built.
+ * A Classic win starts with the rival's ending dialogue (upstream's GameOverPhase: the screen fades in on the arena, she slides in from the
+ * right of the field, one page of miscDialogue:ending per A with her expression changing as the text goes (@c{...}), a fade out, then the end
+ * card fades in over 1 s). The name box and the text are on the bottom screen, her portrait on the top one.
+ *
+ * Stand-ins, not upstream's: the words "Game Over" and the lines at the bottom (the locales have none).
  */
 #ifndef GM_RESULT_SCREEN_H
 #define GM_RESULT_SCREEN_H
@@ -40,6 +43,7 @@ typedef struct {
   const co_report* report; /* the combat history of the run, NULL = none (A leaves); owned by the observer, valid until the next run */
   const char* note;      /* one more line under the result (the report could not be stored...), NULL = none; copied */
   const wg_gains* gains; /* what the win gave (wg_collect), NULL = none; copied */
+  bool ending;           /* a Classic win: the rival's ending dialogue comes before the end card */
   void (*on_done)(void* arg);
   void* arg;
 } result_args;

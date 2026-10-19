@@ -76,12 +76,27 @@ for the first time ("X beat Classic Mode for the first time! You received 1x Egg
 the Premium voucher of a win that is not the first. Then the post-mortem or the title, as before. A game over is told none of it, and the
 post-mortem's B comes back to the line without telling it again. The words are upstream's locale strings (`achv`, `battle`, `modifierType`, `voucher`);
 the bar is at its art's own size with the 8 px pixel font (upstream draws it half size on a canvas six times larger than this screen).
-Not here yet: the rival's end dialogue before the end card, and the result screens' upstream strings (the line under the end card is still the
-stand-in). Sounds could not be checked in the emulator's screenshots: the code plays `se/achv` with each bar and `se/level_up_fanfare` with each
+Not here yet: the result screens' upstream strings (the line under the end card is still the stand-in). Sounds could not be checked in the emulator's screenshots: the code plays `se/achv` with each bar and `se/level_up_fanfare` with each
 message, as the phases do. `game/tests`: `win_gains_test` (the real game-core: first win, second win by the same and by another
 species, an evolved line, a fused Pikachu, duplicates, the ribbon milestones, an Endless or lost run, and invariants against the system data),
 `result_gains_test` (the pages, the bars' easing and timing, the sounds, the box, the post-mortem's B) and `flowtest` (the app hands the
 difference to the result screen).
+
+**The rival's ending** (upstream: `GameOverPhase.handleGameOver`, `CharSprite`, `MessageUiHandler.showText`, `BattleMessageUiHandler.showNameText`;
+[`char_sprite.c`](source/char_sprite.c), [`dialogue_view.c`](menus/dialogue_view.c), [`result_screen.c`](source/result_screen.c)). A Classic win
+(`result_args.ending`, set by `on_run_end`) opens on the arena the last wave was fought in, in the black: the screen fades in over 500 ms, the rival
+(images/character/rival_f, Ivy, as the player here is the male one, so `miscDialogue:ending`) slides in from the right edge of the field over 750 ms,
+and her seven pages come one per A in the bottom screen's message box under a name box ("Ivy", upstream's `namebox` art); her expression changes
+where the text says `@c{...}` (the new one fades in over the old in 250 ms); after the last A the screen fades out in 500 ms, she leaves under the
+black (750 ms) and the end card fades in over 1 s before its line, as in EndCardPhase. The message box now understands `@c{variant}` (handed over
+once with `msgbox_take_variant`), and a marker at the very start of a page fires on the timer's first tick, which shows no character, as upstream's
+does (this also moves the first character of every message 20 ms later, as upstream). Differences from upstream: the dialogue text and name box are
+on the bottom screen and the portrait on the top one (upstream has them in one field over the message window), the arena is drawn without its
+battle zoom, the 10 s fade of the previous scene and the music fade are not done, no "skip seen dialogue" setting, and a female player's rival
+(rival_m, `ending_female`) and the Endless ending ("Devs") are not built, as the app has no player gender and no Endless victory yet. `game/tests`:
+`char_sprite_test` (the slide in and out, the expression fade, a second change in the middle of one, a missing atlas), `msgbox_test` (the real message
+box: typing, pages, `@c` / `@d` / `@s` at the start and in the middle) and `result_gains_test` (the stages: fade, slide, pages, expressions, name box,
+fade out, hide, end card fade, the line; no dialogue without text or on a defeat; the post-mortem's B comes back without her).
 
 New Game goes through the **starter select** (`menus/starter.c`, hosted by `starter_host.c`): the species the dex says are caught,
 a team of up to six within the Classic cost budget (10), Begin / Exit. What can be picked, what it costs and whether game-core
@@ -213,6 +228,7 @@ that file to exist; any bytes will do for the emulator.
 | [`run_screen.h`](include/run_screen.h) | The run driver: owns the `gc_run`, turns its events into battle screen events and its screens (command, switch, learn a move, evolve, rewards, biome, game over) into the menus the game has, and gives each answer to `gc_run_choose`. `rs_start(&cfg)` boots a run. |
 | [`combat_observer.h`](include/combat_observer.h) | The custom content's view of a run: `co_observe` takes the raw WAVE / TURN / BATTLE events of one drain (once, from `run_screen.c`'s `drain()`), gives each battle range to the reducer as a batch, and `co_finish` captures a report that owns its data. Never changes the run. |
 | [`postmortem_screen.h`](include/postmortem_screen.h) | The post-mortem screen over that report, opened from the result screen. |
+| [`char_sprite.h`](include/char_sprite.h), [`dialogue_view.h`](include/dialogue_view.h) | The character portrait that slides in while someone talks (`chs_show` / `chs_set_variant` / `chs_hide`, upstream's `CharSprite`) and the dialogue's name box (`dv_namebox`); used by the rival's ending on the result screen. |
 | [`win_gains.h`](include/win_gains.h), [`toast_view.h`](include/toast_view.h) | What a Classic win gave (`wg_snapshot` at a run's start, `wg_collect` at its end, `wg_toast_of` / `wg_message_of` for the words) and upstream's achievement bar drawn on the top screen. |
 | [`radar_screen.h`](include/radar_screen.h) | The Nemesis Radar (C06): `radar_open` copies a roster and an optional schedule and shows the list and Scout pages. Read-only. `radar_assets.h` is its bridge to the menus layer (species types, icons, sprites, move and nature names). |
 | [`capsule_model.h`](include/capsule_model.h), [`capsule_screen.h`](include/capsule_screen.h) | The capsule machine preview (C07): `capsule_model` is the pure motion and timeline (fixed 8 ms steps, dt in ms, clamped; settled by 1.5 s at the latest); `capsule_screen_open` plays it over an immutable `cap_fixture` and calls `on_settled` once and `on_exit` once from the player's input. |
@@ -254,7 +270,9 @@ counted twice (its battle ranges must equal the ones the screen played). Their o
 make -C game/tests observer_test && game/tests/build/observer_test        # the observer + reducer: drains, switches, faints, overflow, replay/skip...
 make -C game/tests postmortem_test && game/tests/build/postmortem_test    # the screen's words, pages, buttons, and the result screen's flow into it
 make -C game/tests win_gains_test && game/tests/build/win_gains_test      # what a Classic win gave, over the real game-core
-make -C game/tests result_gains_test && game/tests/build/result_gains_test # the result screen's bars, messages and sounds
+make -C game/tests result_gains_test && game/tests/build/result_gains_test # the result screen's bars, messages, sounds and the rival's ending
+make -C game/tests char_sprite_test && game/tests/build/char_sprite_test    # the portrait's slide and expression fade
+make -C game/tests msgbox_test && game/tests/build/msgbox_test              # the message box: typing, pages, @c / @d / @s markers
 python3 game/tests/observer_mutations.py                                  # one-line mutations of the wiring and the screen; every one must make a test fail
 ```
 
@@ -368,7 +386,7 @@ make -C game/tests animtest && game/tests/build/animtest path/to/pokerogue-asset
   after a female Pyroar) is not listed; see `starter_data.h`. Not measured: what writing `system.sav` costs on a real SD card.
 - Runs started from the starter select now carry system data, so a run updates the dex, candy, friendship and Classic win records
   (game-core's `gc_system_*` calls in the run). Runs already saved are not back-filled into the dex.
-- Around the save slots (not part of card 113): the rival's end dialogue, timed events, and any online or cloud save. ("Save and Quit", "Rename Run", the run history and the unlocks, vouchers and ribbons of a win are done: see above.)
+- Around the save slots (not part of card 113): timed events, and any online or cloud save. ("Save and Quit", "Rename Run", the run history and the unlocks, vouchers and ribbons of a win are done: see above.)
 - Message timing per text (upstream's 500 ms for "X used Y!", prompts after faints): asked of
   battle-core; every text waits 1.5 s for now.
 - In move animations: the grey part of a sprite's tone (upstream's shader pushes it far past

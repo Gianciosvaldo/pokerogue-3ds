@@ -395,7 +395,7 @@ int main(void) {
   const int64_t before_end = (int64_t)time(NULL);
   driver_end(GC_SCREEN_GAME_OVER);
   CHECK(n_result == 1 && !R.victory && R.run.status == RSV_OK && R.run.wave == RUN.wave && R.run.n_party == 2, "game over screen");
-  CHECK(R.gains == NULL, "a game over is given no gains");
+  CHECK(R.gains == NULL && !R.ending, "a game over is given no gains and no ending");
   CHECK(R.report && R.report == co_report_get() && R.report->valid && R.report->outcome == CC_OUT_DEFEAT, "the result screen gets the run's combat report");
   CHECK(R.report && R.report->wave == RUN.wave && R.report->biome == RUN.biome && R.report->fallen_known && R.report->fallen_species == 25 &&
             R.report->history.n_turns == 1 && R.report->history.turns[0].wave == 4,
@@ -575,6 +575,7 @@ int main(void) {
   memcpy(&snap, sysd_get(), sizeof snap);
   driver_end(GC_SCREEN_CLEAR);
   CHECK(n_result == 2 && R.victory && status_of(0) == RSV_EMPTY, "clear screen, slot cleared");
+  CHECK(R.ending, "a Classic clear opens on the rival's ending");
   CHECK(R.gains && R.gains->n == 2 && R.gains->item[0].kind == WG_UNLOCK && R.gains->item[0].id == WG_U_EVIOLITE && R.gains->item[1].kind == WG_PREMIUM,
         "the clear's result screen is given what the win changed in the system data: %d items", R.gains ? R.gains->n : -1);
   CHECK(rhist_load() == RH_OK && rhist_count() == 2 && rhist_get(0) && rhist_get(0)->victory && rhist_get(0)->defeat == RH_DEFEAT_NONE && !rhist_get(0)->name[0] &&

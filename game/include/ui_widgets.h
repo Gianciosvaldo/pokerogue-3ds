@@ -82,8 +82,11 @@ typedef struct {
   short mark_at[8];
   short mark_val[8];
   char mark_kind[8];
-  char mark_sound[8][24];
+  char mark_sound[8][24]; /* the sound of @s, the variant of @c */
   int n_marks;
+  bool started;       /* the first tick of the page has passed (markers at character 0 fire on it) */
+  char variant[24];   /* the last @c{variant} the typing passed; msgbox_take_variant hands it over once */
+  bool variant_new;
 } msgbox;
 
 void msgbox_init(msgbox* m, text_style style, float wrap_w, int max_lines);
@@ -96,6 +99,9 @@ bool msgbox_input(msgbox* m, ui_button b);
 /* Draws the text at (x, y) and, while waiting, the prompt arrow after the last line. */
 void msgbox_draw(const msgbox* m, float x, float y);
 bool msgbox_done(const msgbox* m);
+/* The variant of the @c{...} marker the typing has passed since the last call (upstream: charSprite.setVariant), or NULL. Valid until the
+ * next call or the next page. */
+const char* msgbox_take_variant(msgbox* m);
 bool msgbox_typing(const msgbox* m);
 
 /* ---- option list (OptionSelectUiHandler) ----

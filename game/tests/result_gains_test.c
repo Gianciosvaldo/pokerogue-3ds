@@ -14,6 +14,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "char_sprite.h"
+#include "dialogue_view.h"
 #include "i18n.h"
 #include "postmortem_screen.h"
 #include "result_screen.h"
@@ -55,15 +57,38 @@ bool ui_space(ui_space_id sp) {
   const bool top = sp == UI_FIELD || sp == UI_FIELD_UI || sp == UI_TOP_CANVAS || sp == UI_TOP_CANVAS_UI || sp == UI_PHYS_TOP;
   return top == (g_which == 0);
 }
-void rr_rect(float x, float y, float w, float h, rr_color c) { (void)x, (void)y, (void)w, (void)h, (void)c; }
+/* the black laid over a whole screen (ui.fadeIn / fadeOut): its alpha, per screen; -1 = none drawn since the last reset */
+static int g_fade_top, g_fade_top_n, g_fade_bottom = -1;
+#define FADE_TOP (g_fade_top_n >= 2 ? g_fade_top : 0) /* the screen's own black is the first full black rectangle, the fade is the second */
+void rr_rect(float x, float y, float w, float h, rr_color c) {
+  (void)x, (void)y;
+  if (h == 240.0f && (c & 0xFFFFFF00u) == 0) {
+    if (w == 400.0f && g_which == 0) {
+      g_fade_top = (int)(c & 0xFF);
+      g_fade_top_n++;
+    }
+    if (w == 320.0f && g_which == 1) g_fade_bottom = (int)(c & 0xFF);
+  }
+}
 static float g_box_h; /* the bottom window drawn last: its height */
 void ui_window(float x, float y, float w, float h, win_variant v) {
   (void)x, (void)y, (void)w, (void)v;
   if (g_which == 1) g_box_h = h;
 }
-bool img_has(const char* key) { (void)key; return false; }
-void img_draw(const char* key, const char* frame, float x, float y, float ox, float oy) { (void)key, (void)frame, (void)x, (void)y, (void)ox, (void)oy; }
-void img_draw_opts(const char* key, const char* frame, float x, float y, const rr_draw_opts* o) { (void)key, (void)frame, (void)x, (void)y, (void)o; }
+/* what the top screen drew: the images, in order (keys only) */
+static char g_imgs[16][48];
+static int n_imgs;
+static void note_img(const char* key) {
+  if (n_imgs < 16) snprintf(g_imgs[n_imgs++], 48, "%s", key);
+}
+static bool drew(const char* key) {
+  for (int i = 0; i < n_imgs; i++)
+    if (!strcmp(g_imgs[i], key)) return true;
+  return false;
+}
+bool img_has(const char* key) { return !strncmp(key, "images/cg/", 10) || !strncmp(key, "images/arenas/", 14); }
+void img_draw(const char* key, const char* frame, float x, float y, float ox, float oy) { (void)frame, (void)x, (void)y, (void)ox, (void)oy; note_img(key); }
+void img_draw_opts(const char* key, const char* frame, float x, float y, const rr_draw_opts* o) { (void)frame, (void)x, (void)y, (void)o; note_img(key); }
 const rr_draw_opts RR_DEFAULT_OPTS = {0, 0, 1, 1, 0, RR_RGBA(255, 255, 255, 255)};
 text_opts text_defaults(void) {
   text_opts o;
@@ -74,30 +99,68 @@ text_opts text_defaults(void) {
 float text_width(text_style st, const char* s, const text_opts* o) { (void)st, (void)o; return 6.0f * (float)strlen(s); }
 float text_draw(text_style st, float x, float y, const char* s, const text_opts* o) { (void)st, (void)x, (void)y, (void)o; return 6.0f * (float)strlen(s); }
 void text_wrap(text_style st, const char* s, const text_opts* o, char* out, int n) { (void)st, (void)o; snprintf(out, (size_t)n, "%s", s); }
-const char* i18n_t(char* out, int n, const char* key, ...) { snprintf(out, (size_t)n, "[%s]", key); return out; }
+/* the ending dialogue is two pages with an expression each; its text can be made missing (the key comes back, like i18next) */
+static bool g_no_ending_text;
+const char* i18n_t(char* out, int n, const char* key, ...) {
+  if (!strcmp(key, "miscDialogue:ending") && !g_no_ending_text)
+    snprintf(out, (size_t)n, "@c{shock}You're back?$@c{smile}Let's go home.");
+  else if (!strcmp(key, "trainerNames:rivalFemale"))
+    snprintf(out, (size_t)n, "Ivy");
+  else if (!strcmp(key, "miscDialogue:ending"))
+    snprintf(out, (size_t)n, "%s", key);
+  else
+    snprintf(out, (size_t)n, "[%s]", key);
+  return out;
+}
 const char* i18n_species_name(int id) { (void)id; return "?"; }
 void rsum_draw(const rsv_info* in, float x, float y) { (void)in, (void)x, (void)y; }
 
-/* a message box that shows its text at once and waits for A or B */
+/* a message box that shows its page at once and waits for A or B; the pages of a "$" text come one per answer, as the real one's do */
 static int g_max_lines; /* the box's lines, as msgbox_init was asked */
+static char g_rest[1024];
 void msgbox_init(msgbox* m, text_style style, float wrap_w, int max_lines) {
   (void)style, (void)wrap_w;
   memset(m, 0, sizeof *m);
   g_max_lines = max_lines;
+  g_rest[0] = 0;
+}
+static void take_page(msgbox* m) {
+  const char* d = strchr(g_rest, '$');
+  size_t len = d ? (size_t)(d - g_rest) : strlen(g_rest);
+  snprintf(m->text, sizeof m->text, "%.*s", (int)len, g_rest);
+  memmove(g_rest, d ? d + 1 : g_rest + len, strlen(d ? d + 1 : g_rest + len) + 1);
 }
 void msgbox_show(msgbox* m, const char* text, float delay, bool prompt) {
   (void)delay;
-  snprintf(m->text, sizeof m->text, "%s", text);
+  snprintf(g_rest, sizeof g_rest, "%s", text);
+  take_page(m);
   m->prompt = prompt;
   m->waiting = true;
   m->done = false;
+}
+void msgbox_clear(msgbox* m) {
+  m->text[0] = 0;
+  g_rest[0] = 0;
+  m->waiting = false;
+  m->done = true;
+}
+static const char* g_pending_variant; /* what the typing "passed": handed over once */
+const char* msgbox_take_variant(msgbox* m) {
+  (void)m;
+  const char* v = g_pending_variant;
+  g_pending_variant = NULL;
+  return v;
 }
 void msgbox_update(msgbox* m, float dt) { (void)m, (void)dt; }
 bool msgbox_input(msgbox* m, ui_button b) {
   if (b != BTN_ACTION && b != BTN_CANCEL) return false;
   if (m->waiting) {
-    m->waiting = false;
-    m->done = true;
+    if (g_rest[0]) {
+      take_page(m);
+    } else {
+      m->waiting = false;
+      m->done = true;
+    }
   }
   return true;
 }
@@ -107,6 +170,32 @@ void msgbox_draw(const msgbox* m, float x, float y) {
   snprintf(g_box_text, sizeof g_box_text, "%s", m->text);
 }
 bool msgbox_done(const msgbox* m) { return m->done; }
+
+/* the portrait (char_sprite.c) and the name box (menus/dialogue_view.c): what was asked of them, and the time a slide takes */
+static char g_cs_log[16][64];
+static int n_cs_log;
+static float g_cs_busy_ms;
+static int n_cs_draw;
+static void cs_note(const char* a, const char* b) {
+  if (n_cs_log < 16) snprintf(g_cs_log[n_cs_log++], 64, "%s%s%s", a, b ? ":" : "", b ? b : "");
+}
+void chs_show(const char* atlas, const char* variant) { cs_note(atlas, variant); g_cs_busy_ms = CHS_SLIDE_MS; }
+void chs_set_variant(const char* variant) { cs_note("variant", variant); }
+void chs_hide(void) { cs_note("hide", NULL); g_cs_busy_ms = CHS_SLIDE_MS; }
+void chs_reset(void) { cs_note("reset", NULL); g_cs_busy_ms = 0; }
+void chs_update(float dt) { if (g_cs_busy_ms > 0) g_cs_busy_ms -= dt; }
+void chs_draw(void) { n_cs_draw++; }
+bool chs_busy(void) { return g_cs_busy_ms > 0; }
+bool chs_shown(void) { return false; }
+float chs_x(void) { return 0; }
+static char g_name[48];
+static int g_name_style;
+void dv_namebox(float x, float y, const char* name, int window_style) {
+  (void)x, (void)y;
+  snprintf(g_name, sizeof g_name, "%s", name);
+  g_name_style = window_style;
+}
+int ui_window_style(void) { return 5; }
 
 /* the post-mortem: opens when there is a report, and keeps its arguments so the test can press its buttons */
 static pm_args g_pm;
@@ -151,13 +240,23 @@ static bool press(ui_button b) { return g_top->input(g_top, b); }
 static void draw_top(void) {
   g_which = 0;
   n_bars = 0;
+  n_imgs = 0;
+  n_cs_draw = 0;
+  g_fade_top = 0;
+  g_fade_top_n = 0;
   g_top->draw(g_top, RR_TOP);
 }
 static void draw_bottom(void) {
   g_which = 1;
+  g_fade_bottom = -1;
+  g_name[0] = 0;
   g_top->draw(g_top, RR_BOTTOM);
 }
 static void tick(float ms) { g_top->update(g_top, ms); }
+/* time passing a frame of 10 ms at a time (a stage ends on the frame that reaches its time; the next one is looked at on the next frame) */
+static void run(float ms) {
+  for (float t = 0; t < ms; t += 10) tick(10);
+}
 static rsv_info run_info(int wave) {
   rsv_info r;
   memset(&r, 0, sizeof r);
@@ -356,6 +455,136 @@ int main(void) {
     CHECK(!strcmp(g_box_text, "You were defeated at wave 12."), "and says its own line (%s)", g_box_text);
     press(BTN_ACTION);
     CHECK(n_done == 1, "A leaves");
+  }
+
+
+  /* ---- the rival's ending before the end card of a Classic win (GameOverPhase): fadeIn(500), she slides in, one page per A with her expression
+   * changing, fadeOut(500), she is hidden under the black, EndCardPhase's fadeIn(1000) and its prompt */
+  {
+    n_done = 0;
+    n_sounds = 0;
+    n_cs_log = 0;
+    int gift[][2] = {{WG_UNLOCK, 0}};
+    wg_gains gg = gains_of(gift, 1);
+    result_args a = args(true, &gg, NULL);
+    a.ending = true;
+    result_screen_open(&a);
+    CHECK(n_cs_log == 1 && !strcmp(g_cs_log[0], "reset"), "a new screen forgets the portrait (%d: %s)", n_cs_log, n_cs_log ? g_cs_log[0] : "");
+    draw_top();
+    draw_bottom();
+    CHECK(FADE_TOP == 255 && g_fade_bottom == 255, "it opens in the black (%d, %d)", FADE_TOP, g_fade_bottom);
+    CHECK(!drew("images/cg/end_m") && drew("images/arenas/plains_bg") == drew("images/arenas/plains_bg"), "the end card is not up yet");
+    CHECK(g_max_lines == 3 && g_box_text[0] == 0, "an empty three line box (%d, '%s')", g_max_lines, g_box_text);
+    tick(250);
+    draw_top();
+    draw_bottom();
+    CHECK(FADE_TOP == 128 && g_fade_bottom == 128, "250 ms into fadeIn(500): half black (%d, %d)", FADE_TOP, g_fade_bottom);
+    CHECK(press(BTN_ACTION), "A is swallowed while it fades");
+    CHECK(n_cs_log == 1, "and starts nothing");
+    tick(250);
+    CHECK(n_cs_log == 2 && !strcmp(g_cs_log[1], "images/character/rival_f:shock"), "she comes in with the first expression of her text (%s)", n_cs_log > 1 ? g_cs_log[1] : "");
+    draw_top();
+    draw_bottom();
+    CHECK(FADE_TOP == 0 && g_fade_bottom == -1, "the fade is over (%d, %d)", FADE_TOP, g_fade_bottom);
+    CHECK(n_cs_draw == 1, "she is drawn on the top screen (%d)", n_cs_draw);
+    CHECK(g_box_text[0] == 0 && g_name[0] == 0, "no text and no name box while she slides (%s, %s)", g_box_text, g_name);
+    CHECK(press(BTN_ACTION) && n_done == 0, "A is swallowed while she slides");
+    tick(500);
+    draw_bottom();
+    CHECK(g_box_text[0] == 0, "750 ms have not passed");
+    tick(250);
+    draw_bottom();
+    CHECK(!strcmp(g_box_text, "@c{shock}You're back?"), "her first page (%s)", g_box_text);
+    CHECK(!strcmp(g_name, "Ivy") && g_name_style == 5, "the name box says Ivy in the window style (%s, %d)", g_name, g_name_style);
+    CHECK(g_box_h == 58.0f, "the box has three lines (%.0f)", g_box_h);
+    g_pending_variant = "smile";
+    tick(16);
+    CHECK(n_cs_log == 3 && !strcmp(g_cs_log[2], "variant:smile"), "the typing passed @c{smile}: her expression changes (%d, %s)", n_cs_log, n_cs_log > 2 ? g_cs_log[2] : "");
+    tick(16);
+    CHECK(n_cs_log == 3, "once");
+    CHECK(press(BTN_ACTION), "A answers the page");
+    draw_bottom();
+    CHECK(!strcmp(g_box_text, "@c{smile}Let's go home.") && n_cs_log == 3, "the second page comes, the screen stays on her (%s)", g_box_text);
+    CHECK(!strcmp(g_name, "Ivy"), "and her name");
+    CHECK(press(BTN_ACTION), "A answers the last page");
+    draw_top();
+    draw_bottom();
+    CHECK(n_done == 0 && n_sounds == 0, "no gains yet, no sounds (%d)", n_sounds);
+    tick(250);
+    draw_top();
+    draw_bottom();
+    CHECK(FADE_TOP == 128 && g_fade_bottom == 128 && n_cs_draw == 1, "fadeOut(500): half black over her (%d, %d, %d draws)", FADE_TOP, g_fade_bottom, n_cs_draw);
+    CHECK(press(BTN_ACTION), "A is swallowed in the fade");
+    tick(250);
+    CHECK(n_cs_log == 4 && !strcmp(g_cs_log[3], "hide"), "black: she goes out (%s)", n_cs_log > 3 ? g_cs_log[3] : "");
+    draw_top();
+    draw_bottom();
+    CHECK(FADE_TOP == 255 && g_fade_bottom == 255 && g_box_text[0] == 0 && g_name[0] == 0, "under the black, with nothing in the box (%d, '%s')", FADE_TOP, g_box_text);
+    CHECK(press(BTN_ACTION) && n_done == 0, "A is swallowed while she goes out");
+    tick(749);
+    CHECK(n_cs_log == 4, "750 ms");
+    tick(1);
+    CHECK(n_cs_log == 5 && !strcmp(g_cs_log[4], "reset"), "then the portrait is forgotten (%s)", n_cs_log > 4 ? g_cs_log[4] : "");
+    draw_top();
+    draw_bottom();
+    CHECK(drew("images/cg/end_m") && n_cs_draw == 0, "the end card is up, fading in over 1 s (alpha %d)", FADE_TOP);
+    CHECK(FADE_TOP == 255 && g_box_text[0] == 0, "starting black, no line yet");
+    tick(500);
+    draw_top();
+    CHECK(FADE_TOP == 128, "half way (%d)", FADE_TOP);
+    CHECK(press(BTN_ACTION), "A is swallowed in the fade");
+    tick(500);
+    draw_bottom();
+    CHECK(!strcmp(g_box_text, LINE), "then the end card's line (%s)", g_box_text);
+    CHECK(press(BTN_ACTION), "A answers it");
+    draw_bottom();
+    CHECK(!strcmp(g_box_text, "msg2:0"), "and the unlock message follows (%s)", g_box_text);
+    press(BTN_ACTION);
+    CHECK(n_done == 1, "then the screen leaves");
+  }
+
+  /* ---- no text for the ending, a defeat, and the post-mortem's B: no dialogue, the end card at once */
+  {
+    n_cs_log = 0;
+    n_done = 0;
+    g_no_ending_text = true;
+    result_args a = args(true, NULL, NULL);
+    a.ending = true;
+    result_screen_open(&a);
+    draw_top();
+    draw_bottom();
+    CHECK(n_cs_log == 1 && drew("images/cg/end_m") && FADE_TOP == 0 && g_fade_bottom == -1, "without the text there is no dialogue and no fade");
+    CHECK(!strcmp(g_box_text, LINE), "the line is there at once (%s)", g_box_text);
+    g_no_ending_text = false;
+    n_cs_log = 0;
+    result_args d = args(false, NULL, NULL);
+    d.ending = true;
+    result_screen_open(&d);
+    run(2000);
+    draw_bottom();
+    CHECK(n_cs_log == 1 && !strcmp(g_box_text, "You were defeated at wave 12."), "a defeat has no ending (%d, %s)", n_cs_log, g_box_text);
+    CHECK(press(BTN_ACTION) && n_done == 1, "and A leaves");
+
+    static co_report rep;
+    n_pm = 0;
+    n_cs_log = 0;
+    result_args w = args(true, NULL, &rep);
+    w.ending = true;
+    result_screen_open(&w);
+    run(500);
+    run(760);
+    CHECK(n_cs_log == 2 && !strcmp(g_cs_log[1], "images/character/rival_f:shock"), "(the win with a report starts with her)");
+    press(BTN_ACTION);
+    press(BTN_ACTION);
+    run(500);
+    run(760);
+    run(1000);
+    CHECK(press(BTN_ACTION) && n_pm == 1, "after her and the end card's line, A opens the post-mortem");
+    n_cs_log = 0;
+    g_pm.on_exit(PM_BACK, g_pm.arg);
+    run(2000);
+    draw_bottom();
+    CHECK(n_cs_log == 1 && !strcmp(g_cs_log[0], "reset") && !strcmp(g_box_text, LINE), "its B comes back to the line, without her again (%d, %s)", n_cs_log, g_box_text);
   }
 
   printf("result_gains_test: %d checks, %d failed\n", checks, failed);
