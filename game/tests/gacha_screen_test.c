@@ -167,7 +167,10 @@ void gv_draw_reveal_top(const gv_reveal* v) {
 }
 void gv_draw_reveal_bottom(const gv_reveal* v) {
   rec(1, v->title, 0);
-  for (int i = 0; i < v->n_rows; i++) rec(1, v->row[i].name, 0);
+  for (int i = 0; i < v->n_rows; i++) {
+    rec(1, v->row[i].name, 0);
+    rec(1, v->row[i].tier_name, 0);
+  }
   rec(1, v->more_above, 0);
   rec(1, v->more_below, 0);
   rec(1, v->big, 0);
@@ -410,6 +413,39 @@ static void test_buy_through_screen(void) {
     }
   }
   CHECK(bought == 15, "all fifteen machine / option pairs bought through the screen (%d)", bought);
+}
+
+/* The rows name the species that will hatch when the app gives the screen its namer (upstream's gacha shows only the tier; this is the
+ * custom reveal's choice), in the display order, and still carry the tier. */
+static const char* t_species_name(int species) {
+  static char b[40];
+  snprintf(b, sizeof b, "Species %d", species);
+  return b;
+}
+static void test_species_rows(void) {
+  fresh_all(30, 3);
+  const gachas_args a = {on_machine_exit, NULL, t_species_name};
+  CHECK(gacha_screen_open(&a), "the machine opens with a namer");
+  int o = 0;
+  while (o < GH_OPTIONS - 1 && pulls_of(o) < 5) o++;
+  buy_by_buttons(1, o);
+  CHECK(on_screen("capsule-preview"), "the reveal is up");
+  ptx_result r;
+  CHECK(ptx_unrevealed(&r) != 0, "the pull waits to be shown");
+  settle_capsule();
+  draw_both();
+  static const char* const tier_word[4] = {"Common", "Rare", "Epic", "Legendary"};
+  for (int k = 0; k < r.n && k < 5; k++) {
+    const gc_egg* e = &r.eggs[r.order[k]];
+    CHECK(e->species != 0, "the pull decided the species of egg %d", k);
+    char want[60];
+    snprintf(want, sizeof want, "%d. %s", k + 1, t_species_name(e->species));
+    CHECK(has_text(want), "row %d is \"%s\"", k, want);
+    CHECK(has_text(tier_word[e->tier]), "and the tier \"%s\" is on the list", tier_word[e->tier]);
+    snprintf(want, sizeof want, "Egg %06u", (unsigned)(e->id % 1000000u));
+    CHECK(!has_text(want), "no egg id is shown");
+  }
+  close_capsule();
 }
 
 /* ------------------------------------------------------------------ held buttons, repeats, stale input */
@@ -858,6 +894,7 @@ int main(int argc, char** argv) {
 
   test_menu_texts();
   test_buy_through_screen();
+  test_species_rows();
   test_no_second_purchase();
   test_refusal_rows();
   test_interrupted_purchase();

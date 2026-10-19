@@ -19,6 +19,7 @@ static struct {
   int capacity;
   gh_env env;
   bool have_env;
+  gh_species_name_fn species_name;
   uint32_t counter;
   bool in_call;        /* a purchase is being made: nothing else may start (the calls are not re-entrant) */
   uint32_t shown_txn;  /* the highest pull shown in this session, whether or not the card recorded it */
@@ -328,6 +329,8 @@ bool gh_reveal_done(uint32_t txn) {
 
 /* ------------------------------------------------------------------ the fixture */
 
+void gh_set_species_names(gh_species_name_fn fn) { H.species_name = fn; }
+
 bool gh_fixture(const ptx_result* r, cap_fixture* f) {
   if (!r || !f) return false;
   memset(f, 0, sizeof *f);
@@ -346,7 +349,9 @@ bool gh_fixture(const ptx_result* r, cap_fixture* f) {
       return false;
     }
     f->item[k].tier = e->tier;
-    snprintf(f->item[k].label, CAP_LABEL, "Egg %06u", (unsigned)(e->id % 1000000u));
+    const char* name = H.species_name && e->species ? H.species_name(e->species) : NULL;
+    if (name && *name) snprintf(f->item[k].label, CAP_LABEL, "%s", name);
+    else snprintf(f->item[k].label, CAP_LABEL, "Egg %06u", (unsigned)(e->id % 1000000u));
   }
   f->n = r->n;
   return cap_fixture_valid(f);

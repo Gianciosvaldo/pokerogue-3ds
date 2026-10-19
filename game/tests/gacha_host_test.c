@@ -595,6 +595,15 @@ static void test_locks(void) {
 
 /* ------------------------------------------------------------------ fixture */
 
+static const char* t_species_name(int species) {
+  static char b[96];
+  if (species == 999) return "";
+  if (species == 998) return NULL;
+  if (species == 997) return "A species name that is far too long for a label";
+  snprintf(b, sizeof b, "Species %d", species);
+  return b;
+}
+
 static void test_fixture(void) {
   ptx_result r;
   cap_fixture f;
@@ -611,6 +620,28 @@ static void test_fixture(void) {
   }
   CHECK(gh_fixture(&r, &f) && f.n == 3, "a valid result");
   CHECK(f.item[0].tier == 2 && !strcmp(f.item[0].label, "Egg 000102") && f.item[2].tier == 0 && !strcmp(f.item[2].label, "Egg 000100"), "reversed order is shown reversed");
+  /* with the app's species names: the species that will hatch, in the display order; no species, an empty or NULL name, a long name */
+  gh_set_species_names(t_species_name);
+  r.eggs[0].species = 150;
+  r.eggs[1].species = 0;
+  r.eggs[2].species = 999;
+  CHECK(gh_fixture(&r, &f) && f.n == 3, "a result with a namer");
+  CHECK(!strcmp(f.item[2].label, "Species 150") && f.item[2].tier == 0, "the display order is kept: item 2 is egg 0, named");
+  CHECK(!strcmp(f.item[1].label, "Egg 000101"), "no species: the egg's id");
+  CHECK(!strcmp(f.item[0].label, "Egg 000102"), "an empty name: the egg's id");
+  r.eggs[2].species = 998;
+  CHECK(gh_fixture(&r, &f) && !strcmp(f.item[0].label, "Egg 000102"), "a NULL name: the egg's id");
+  r.eggs[2].species = 997;
+  CHECK(gh_fixture(&r, &f) && strlen(f.item[0].label) == CAP_LABEL - 1 && !strncmp(f.item[0].label, "A species name that is far too ", CAP_LABEL - 1), "a long name is cut to the label");
+  CHECK(cap_fixture_valid(&f), "and the fixture stays valid");
+  gh_set_species_names(NULL);
+  r.eggs[0].species = 150;
+  CHECK(gh_fixture(&r, &f) && !strcmp(f.item[2].label, "Egg 000100"), "without a namer: ids again");
+  memset(r.eggs, 0, sizeof r.eggs);
+  for (int i = 0; i < 3; i++) {
+    r.eggs[i].tier = (uint8_t)i;
+    r.eggs[i].id = 100u + (uint32_t)i;
+  }
   r.order[1] = 2;   /* not a permutation */
   CHECK(!gh_fixture(&r, &f), "a repeated index is refused");
   r.order[1] = 1;
