@@ -112,12 +112,21 @@ static void test_mystery_actions_and_options(void)
     run.money = 1000000;
     gc_mystery_setup_screen(&run);
     assert(run.screen.option_ok[0]);
-    int n_party_before = run.n_party;
+    const int n_party_before = run.n_party;
+    gc_mon on_sale;
+    double price = 0;
+    assert(gc_salesman_offer(&run, &on_sale, &price));
+    const double money_before = run.money;
+    gc_rq_reset(&gc_int(&run)->rq);
     assert(gc_mystery_execute(&run, 0, 0, 0, &why, &ok));
     assert(ok);
+    assert(run.money == money_before - price);
+    /* the Pokemon arrives through the catch phase, ahead of the heal-only shop */
+    gc_run_until_screen(&run);
+    assert(run.screen.kind == GC_SCREEN_REWARD);
     assert(run.n_party == n_party_before + 1);
-    assert(run.party[n_party_before].b.species == SPECIES_ID_MAGIKARP);
-
+    assert(run.party[run.party_order[n_party_before]].b.species == on_sale.b.species);
+    assert(run.party[run.party_order[n_party_before]].b.id == on_sale.b.id);
     puts("ok");
 }
 

@@ -340,7 +340,9 @@ void gc_mystery_setup_screen(gc_run *run)
         s->option_ok[1] = any_pick_ok(run, type, 1);
         s->option_ok[2] = gc_mystery_primary_pokemon(run, type, 2) >= 0;
     } else if (type == GC_ME_THE_POKEMON_SALESMAN) {
-        s->option_ok[0] = run->money >= pr_run_get_wave_money_amount(run->wave, 4.0) && run->n_party < 6;
+        /* MoneyRequirement(0, 4): the wave's money times the most the Pokemon can cost. A full party is asked what to
+         * release when the Pokemon is bought, as when one is caught */
+        s->option_ok[0] = run->money >= pr_run_get_wave_money_amount(run->wave, 4.0);
     } else if (type == GC_ME_DELIBIRDY) {
         s->option_ok[0] = run->n_items > 0;
         s->option_ok[1] = run->n_items > 0;
@@ -847,6 +849,109 @@ static void shady_vitamin_dealer(gc_run *run, int option, int b)
     me_leave_with_heal_shop(run, true, GC_ME_SHADY_VITAMIN_DEALER, mon, option);
 }
 
+/* The Pokemon Salesman (src/data/mystery-encounters/encounters/the-pokemon-salesman-encounter.ts).
+ * onInit, in executeWithSeedOffset(.., wave) (the run's RNG is untouched, and what it rolls is the same every time it is
+ * worked out again): getSalesmanSpeciesOffer() = getRandomSpeciesByStarterCost([0, 5], the Paradox Pokemon, undefined,
+ * false, false, false), up to five more offers while the species has no hidden ability, randSeedInt(100); a 0, or no
+ * hidden ability and no event species (timed events are out), makes it a shiny Magikarp, else the species rolls its
+ * hidden ability. The price is the wave's money times 4 * max(starter cost, 2.5) / 5, always times 4 for a shiny, and a
+ * shiny that isn't an event species goes back to its first ability. The Pokemon is a PlayerPokemon of level 5.
+ * Buying: the price comes off (no message), catchPokemon(.., isObtain) takes the Pokemon (see gc_catch_start: RP_CATCH
+ * with c = 1), then leaveEncounterWithoutBattle(true): the heal-only shop. Leaving is the same without the Pokemon.
+ * The moveset (generateAndPopulateMoveset, the last thing onInit rolls) is the stand-in's, not upstream's. */
+static bool is_paradox(int id)
+{
+    switch (id) {
+    case SPECIES_ID_GREAT_TUSK: case SPECIES_ID_SCREAM_TAIL: case SPECIES_ID_BRUTE_BONNET: case SPECIES_ID_FLUTTER_MANE:
+    case SPECIES_ID_SLITHER_WING: case SPECIES_ID_SANDY_SHOCKS: case SPECIES_ID_ROARING_MOON: case SPECIES_ID_WALKING_WAKE:
+    case SPECIES_ID_GOUGING_FIRE: case SPECIES_ID_RAGING_BOLT: case SPECIES_ID_IRON_TREADS: case SPECIES_ID_IRON_BUNDLE:
+    case SPECIES_ID_IRON_HANDS: case SPECIES_ID_IRON_JUGULIS: case SPECIES_ID_IRON_MOTH: case SPECIES_ID_IRON_THORNS:
+    case SPECIES_ID_IRON_VALIANT: case SPECIES_ID_IRON_LEAVES: case SPECIES_ID_IRON_BOULDER: case SPECIES_ID_IRON_CROWN:
+        return true;
+    default:
+        return false;
+    }
+}
+
+/* getRandomSpeciesByStarterCost([0, 5], NON_LEGEND_PARADOX_POKEMON, undefined, false, false, false): the starters in id
+ * order (getAllStarters), the tier range widened while it holds none, randSeedInt(length) for the index, then
+ * Phaser.Math.RND.shuffle (frac() * (i + 1) from the end) and the species at that index */
+static int salesman_species_offer(pr_rng *r)
+{
+    uint16_t pool[GC_MAX_SPECIES_ID + 1], list[GC_MAX_SPECIES_ID + 1];
+    uint8_t cost[GC_MAX_SPECIES_ID + 1];
+    int n = 0, len = 0, min = 0, max = 5;
+    for (int i = 0; i < gc_starter_cost_count && n <= GC_MAX_SPECIES_ID; i++) {
+        const int id = gc_starter_costs[i].id;
+        const pr_species_gen *sg = gc_species_gen(id);
+        if (!sg || is_paradox(id) || sg->sub_legendary || sg->legendary || sg->mythical) continue;
+        pool[n] = (uint16_t)id;
+        cost[n++] = gc_starter_costs[i].cost;
+    }
+    for (;;) {
+        len = 0;
+        for (int k = 0; k < n; k++) if (cost[k] >= min && cost[k] <= max) list[len++] = pool[k];
+        if (len > 0 || (min == 0 && max == 10)) break;
+        if (min > 0) min--; else max++;
+    }
+    if (!len) return SPECIES_ID_BULBASAUR;
+    const int index = pr_rng_seed_int(r, len, 0);
+    for (int i = len - 1; i > 0; i--) {
+        const int j = (int)floor(pr_rng_frac(r) * (i + 1));
+        const uint16_t t = list[j];
+        list[j] = list[i];
+        list[i] = t;
+    }
+    return list[index];
+}
+
+bool gc_salesman_offer(gc_run *run, gc_mon *mon, double *price)
+{
+    pr_rng r = pr_run_seed_offset_rng(&run->run, run->wave, NULL);
+    int species = salesman_species_offer(&r);
+    const pr_species_gen *sg = gc_species_gen(species);
+    for (int tries = 0; sg && !sg->has_hidden && tries < 5; tries++) {
+        species = salesman_species_offer(&r);
+        sg = gc_species_gen(species);
+    }
+    const int roll = pr_rng_seed_int(&r, 100, 0);
+    int form = 0, shiny = -1;
+    if (roll == 0 || !sg || !sg->has_hidden) {
+        species = SPECIES_ID_MAGIKARP;
+        form = -1;
+        shiny = 1;
+    }
+    if (!gc_mon_roll_player(run, &r, mon, species, 5, 2, form, shiny)) return false;
+
+    const int tier = gc_starter_cost(species);
+    double multiplier = 4.0 * (fmax(tier, 2.5) / 5);
+    if (mon->b.shiny) {
+        multiplier = 4.0;
+        mon->ability_index = 0;
+        mon->b.base_ability = mon->b.ability = (uint16_t)gc_form_ability(species, gc_form(species, mon->b.form), 0);
+    }
+    *price = pr_run_get_wave_money_amount(run->wave, multiplier);
+    return true;
+}
+
+static void the_pokemon_salesman(gc_run *run, int option)
+{
+    gc_mon mon;
+    double price = 0;
+    if (option != 0 || !gc_salesman_offer(run, &mon, &price)) {
+        me_leave_with_heal_shop(run, false, GC_ME_THE_POKEMON_SALESMAN, 0, option);
+        return;
+    }
+    run->money = fmin(fmax(run->money - price, 0.0), 9007199254740991.0);
+    gc_port_enemy_moveset(run, &mon);
+    /* data.player = false; data.toPokemon(): the Pokemon as an enemy, which catchPokemon then adds to the party */
+    run->enemy[0] = mon;
+    run->n_enemy = 1;
+    gc_int(run)->thrown_ball = POKEBALL_TYPE_POKEBALL;
+    gc_rq_unshift(run, gc_rp(RP_CATCH, 0, 0, 1));
+    me_leave_with_heal_shop(run, false, GC_ME_THE_POKEMON_SALESMAN, 0, option);
+}
+
 /* PostMysteryEncounterPhase: the option's onPostOptionPhase in executeWithSeedOffset(.., getSeedOffset() * 2000). The
  * setEncounterExp(.., 100) both options end with only sets doEncounterExp; MysteryEncounterRewardsPhase has already
  * run by then and nothing calls it afterwards, so the experience is never given (traced in the producer) */
@@ -1047,18 +1152,7 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_THE_POKEMON_SALESMAN:
-        if (option == 0) {
-            double cost = pr_run_get_wave_money_amount(run->wave, 4.0);
-            if (run->money >= cost) run->money -= cost;
-            if (run->n_party < 6) {
-                init_player_mon(run, &run->party[run->n_party], SPECIES_ID_MAGIKARP, wave_level);
-                run->party_order[run->n_party] = (int8_t)run->n_party;
-                run->n_party++;
-            }
-            end_mystery_encounter_leave(run);
-            return true;
-        }
-        end_mystery_encounter_leave(run);
+        the_pokemon_salesman(run, option);
         return true;
 
     case GC_ME_AN_OFFER_YOU_CANT_REFUSE:

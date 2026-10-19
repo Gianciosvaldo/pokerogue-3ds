@@ -132,6 +132,13 @@ const pr_form *gc_form(int species, int form);
 int gc_form_ability(int species, const pr_form *f, int ability_index);
 void gc_mon_new_player(gc_run *run, gc_mon *m, const gc_starter *s, int level);
 void gc_mon_new_enemy(gc_run *run, gc_mon *m, int species, int level, const pr_enemy_gen *g, int trainer_slot);
+const pr_species_gen *gc_species_gen(int id);                          /* run-core's per-species facts (by SpeciesId), NULL = none */
+/* new PlayerPokemon(species, level, abilityIndex, formIndex, undefined, shiny, undefined) as PokemonData.toPokemon()
+ * makes an EnemyPokemon of it (is_player false, the stats of the player's constructor); the rolls are on `rng`.
+ * form < 0 = getSpeciesFormIndex() (only for a species without forms), shiny < 0 = trySetShiny(). The moveset is
+ * not rolled (Pokemon.generateAndPopulateMoveset isn't ported for a player's Pokemon: the stand-in is the caller's).
+ * false = a species the roll can't be made for; the mon is then unusable. */
+bool gc_mon_roll_player(gc_run *run, pr_rng *rng, gc_mon *m, int species, int level, int ability_index, int form, int shiny);
 /* Task 63's clean wild constructor slice; false leaves the RNG/mon untouched. */
 bool gc_enemy_moveset(gc_run *run, gc_mon *m, const pr_enemy_gen *g);
 void gc_mon_set_move(gc_mon *m, int slot, int move);                  /* setMove */
@@ -167,6 +174,7 @@ int gc_mystery_primary_pokemon(const gc_run *run, int type, int option);   /* th
 int gc_root_species(int species);   /* PokemonSpeciesForm.getRootSpeciesId(): the first stage of the species' evolution line */
 void gc_party_remove(gc_run *run, int idx);   /* removePokemonFromPlayerParty: storage index; the storage behind it moves down */
 int gc_offer_terms(const gc_run *run, double *price);   /* An Offer You Can't Refuse: the strongest Pokemon (storage index) and what it is worth */
+bool gc_salesman_offer(gc_run *run, gc_mon *mon, double *price);   /* The Pokemon Salesman: what he sells (an enemy-shaped level 5 Pokemon, no moveset) and its price; false = a species not ported */
 double gc_part_timer_multiplier(const gc_mon *m, int option);   /* Part Timer's money multiplier for a Pokemon: option 0 by Speed, 1 by HP/Attack/Defense, 2 fixed */
 bool gc_can_learn_move(const gc_mon *m, int move);   /* CanLearnMoveRequirement: level (now), TM or egg move */
 void gc_exp_party_build(gc_run *run, pr_exp_party *pp, const uint32_t *participants, int n_participants);

@@ -159,6 +159,11 @@ bool gc_catch_start(gc_run *run, gc_rphase *p)
     if (run->sys) {
         /* catch(): updateSpeciesDexIvs(species.getRootSpeciesId(true), ivs), then (after the text) setPokemonCaught */
         gc_system_update_species_dex_ivs(run->sys, gc_species_root_for_starter(e->b.species), e->b.ivs);
+    }
+    /* encounter-pokemon-utils catchPokemon(.., isObtain) (c = 1: a Mystery Encounter's Pokemon, e.g. the Salesman's) shows
+     * battle:pokemonObtained after the IVs and before the dex */
+    if (p->c == 1) gc_ev_msg(run, "battle:pokemonObtained", 1, gc_m_mon_name(run, "pokemonName", 1, p->a));
+    if (run->sys) {
         gc_caught_report rep;
         gc_system_set_pokemon_caught_ex(run->sys, e, true, false, true, run->run.mode == GAME_MODES_DAILY, &rep);
         for (int i = 0; i < rep.n_started; i++) {

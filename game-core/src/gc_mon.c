@@ -131,6 +131,95 @@ void gc_mon_new_enemy(gc_run *run, gc_mon *m, int species, int level, const pr_e
     m->exp = gc_level_total_exp(level, sp ? sp->growth_rate : 0);
 }
 
+const pr_species_gen *gc_species_gen(int id)
+{
+    int lo = 0, hi = pr_species_gen_count - 1;
+    while (lo <= hi) {
+        int mid = (lo + hi) / 2;
+        if (pr_species_gens[mid].id == id) return &pr_species_gens[mid];
+        if (pr_species_gens[mid].id < id) lo = mid + 1; else hi = mid - 1;
+    }
+    return NULL;
+}
+
+#define BASE_SHINY_CHANCE 64        /* src/data/balance/rates.ts */
+#define SHINY_VARIANT_CHANCE 4
+#define SHINY_EPIC_CHANCE 1
+
+/* The Pokemon constructor's rolls for a Pokemon without a data source, in upstream's order: the id (and the IVs it
+ * holds), the gender (a species with a male percentage rolls randSeedFloat() * 100 <= malePercent), the form (only a
+ * species without forms, which rolls nothing), trySetShiny() (no roll: the id against the player's trainer and secret
+ * ids, a Shiny Charm's 2^(1 + stacks) on the threshold), the shiny variant (randSeedInt(10) on the wave seed at offset
+ * id, not on `rng`), the nature (randSeedInt(25)) and the tera type (randSeedItem of its types: no roll with one). Then
+ * what the constructor sets without rolling: friendship, where it was met, the experience for the level, the luck. */
+bool gc_mon_roll_player(gc_run *run, pr_rng *rng, gc_mon *m, int species, int level, int ability_index, int form, int shiny)
+{
+    const pr_species_gen *sg = gc_species_gen(species);
+    const pr_species *sp = gc_species(species);
+    if (!sg || !sp || (form < 0 && sg->n_forms) || form >= (sg->n_forms ? sg->n_forms : 1)) return false;
+    memset(m, 0, sizeof *m);
+    pr_pokemon *p = &m->b;
+    p->id = (uint32_t)floor(pr_rng_real_in_range(rng, 0, 4294967296.0));
+    const uint32_t id = p->id;
+    p->ivs[0] = (id & 0x3e000000u) >> 25;
+    p->ivs[1] = (id & 0x01f00000u) >> 20;
+    p->ivs[2] = (id & 0x000f8000u) >> 15;
+    p->ivs[3] = (id & 0x00007c00u) >> 10;
+    p->ivs[4] = (id & 0x000003e0u) >> 5;
+    p->ivs[5] = id & 0x0000001fu;
+    if (sg->male_percent < 0) p->gender = -1;
+    else p->gender = pr_rng_frac(rng) * 100 <= sg->male_percent ? 0 : 1;
+    p->form = (uint8_t)(form < 0 ? 0 : form);
+
+    if (shiny < 0) {
+        const uint32_t e = (uint32_t)(run->trainer_id ^ run->secret_id), f = (id >> 16) ^ (id & 0xffffu);
+        double threshold = BASE_SHINY_CHANCE;
+        const int charms = gc_item_stack(run, "SHINY_CHARM");
+        if (charms > 0) threshold *= pow(2, 1 + charms);
+        shiny = (e ^ f) < threshold;
+    }
+    p->shiny = shiny != 0;
+    int variant = 0;
+    const pr_form_gen *fg = &pr_form_gens[sg->form_start + (sg->n_forms ? p->form : 0)];
+    if (p->shiny && fg->has_variants) {
+        pr_rng r = pr_run_seed_offset_rng(&run->run, (int)(id & 0xffffu), &run->run.wave_seed);
+        const int rand = pr_rng_seed_int(&r, 10, 0);
+        variant = rand >= SHINY_VARIANT_CHANCE ? 0 : rand >= SHINY_EPIC_CHANCE ? 1 : 2;
+    }
+    m->variant = (uint8_t)variant;
+    p->nature = (uint8_t)pr_rng_seed_int(rng, PR_NATURE_COUNT, 0);
+
+    p->species = (uint16_t)species;
+    p->level = level;
+    m->ability_index = (uint8_t)ability_index;
+    const pr_form *f = gc_form(species, p->form);
+    p->base_ability = p->ability = (uint16_t)gc_form_ability(species, f, ability_index);
+    p->friendship = sp->base_friendship;
+    m->luck = (int8_t)(p->shiny ? variant + 1 : 0);
+    m->met_wave = (int16_t)run->wave;
+    m->met_level = level;
+    m->met_biome = (int8_t)run->biome;
+    m->met_species = (uint16_t)species;
+    m->pokeball = POKEBALL_TYPE_POKEBALL;
+
+    pr_enemy_gen shape;
+    memset(&shape, 0, sizeof shape);
+    shape.fusion_species = -1;
+    shape.form = p->form;
+    int8_t types[2];
+    const int n_types = pr_run_enemy_types(&shape, species, types);
+    if (n_types < 1) return false;
+    p->tera_type = n_types == 1 ? types[0] : types[pr_rng_integer_in_range(rng, 0, n_types - 1)];
+
+    p->is_player = true;   /* the constructor's stats are a PlayerPokemon's */
+    init_common(m);
+    m->exp = gc_level_total_exp(level, sp->growth_rate);
+    pr_update_passive(&run->bt, p);
+    pr_calculate_stats(&run->bt, p);
+    p->is_player = false;
+    return true;
+}
+
 void gc_mon_set_move(gc_mon *m, int slot, int move)
 {
     pr_pokemon *p = &m->b;
