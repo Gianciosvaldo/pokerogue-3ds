@@ -19,6 +19,17 @@ import subprocess
 NONE = 0xFFFFFFFF
 ALIGN = 4  # mkromfs3ds aligns file data to 4 bytes
 COPY = 8 << 20
+FAT32_MAX = (1 << 32) - 1  # the biggest file the 3DS's SD card (FAT32; it can't read exFAT) can hold
+SLACK = 16 << 20  # the app, the title's headers and the RomFS tables, rounded up
+
+
+def check_fits(kind, packs_bytes):
+    """A .3dsx or a .cia is one file on the card, so both stop at the card's file-size limit; the .3dsx header's
+    RomFS offset is a 32-bit number too. Raises ValueError, saying what to do, when the packs are too big for one."""
+    if packs_bytes + SLACK >= FAT32_MAX:
+        raise ValueError(f"the packs are {packs_bytes / 1e9:.2f} GB and a .{kind} is one file, which can't be 4 GB or "
+                         "more on a 3DS card. Use the loose files instead (menu answer 3, or --format folder): "
+                         "each pack is its own file there")
 
 
 def _hash_count(entries):

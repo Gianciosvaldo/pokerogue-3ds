@@ -619,6 +619,10 @@ def bundle_game(kinds):
         if free < size + 100 * MB:
             raise Stop(f"This PC's drive needs {gb(size + 100 * MB)} free to make PokeRogue.{kind} and has "
                        f"{gb(free)}. Free some space, then run the builder again; nothing will be rebuilt.")
+        try:
+            bundle.check_fits(kind, size)
+        except ValueError as e:
+            raise Stop(f"PokeRogue.{kind} can't be made: {e}.")
         t0 = time.time()
         try:
             if kind == "3dsx":

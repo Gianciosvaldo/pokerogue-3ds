@@ -106,6 +106,14 @@ class RomfsTests(unittest.TestCase):
     def test_empty(self):
         self.check_romfs([])
 
+    def test_size_guard(self):
+        bundle.check_fits("3dsx", 850 << 20)
+        bundle.check_fits("cia", 3 << 30)
+        for kind in ("3dsx", "cia"):
+            with self.assertRaises(ValueError) as e:
+                bundle.check_fits(kind, (4 << 30) - (8 << 20))
+            self.assertIn("loose files", str(e.exception))
+
     def test_bad_names(self):
         for bad in ([("a", 1), ("a", 2)], [("", 1)], [("d/f", 1)], [("d\\f", 1)]):
             with self.assertRaises(ValueError):

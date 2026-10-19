@@ -34,10 +34,21 @@ Everything is logged to `build-log.txt` next to the .bat. It stops with a plain 
 The game finds its packs in `romfs:/` first and in `sdmc:/3ds/pokerogue/` second (`assets-pipeline/app-src/source/pak.c`), so one app build serves all three formats and an old card with loose packs keeps working. Inside a `.3dsx`, `romfs:/` exists only if the file has a RomFS; `pak_3dsx_has_romfs()` checks that first, because libctru's `romfsMountSelf` reads the header's RomFS offset without checking for zero.
 
 **3DS limits that apply here.**
-- A `.3dsx` stores its RomFS offset as a 32-bit number and lives on FAT32, so it must stay under 4 GB. `bundle.py` refuses to write one that wouldn't. The packs are 0.85 GB.
-- A CIA's NCCH and RomFS sizes are 32-bit counts of 0x200-byte units (up to 2 TB), so 0.85 GB is far inside them. The cost is the card: FBI needs room for the CIA and the installed copy at once, then deletes the CIA if asked to.
+- **Both one-file formats stop below 4 GB.** Each is one file on the card, and the 3DS reads only FAT32, where a file can't be 4 GiB or more (a `.3dsx` also keeps its RomFS offset in 32 bits). The packs are 0.85 GB now. `bundle.py` refuses a one-file build whose packs are within 16 MB of that, with a message pointing to the loose format; there each pack is its own file, so the total is limited only by the card. The CIA's own format would allow far more (NCCH sizes are 32-bit counts of 0x200-byte units, up to 2 TB), but the card and the installed title's content file don't. Installing also needs the CIA and the installed copy on the card at once: about 1 GB free now, 2x the packs later.
 - Memory is unchanged by bundling: both formats reserve the Old 3DS's 64 MB application memory (`SystemMode: 64MB` in the spec). Nothing is loaded into RAM because of the RomFS; the game still streams the packs from the card.
 - An installed CIA's service and kernel permission lists are fixed at install time (`cia/pokerogue.rsf`). A service the game starts using later and the spec lacks fails on the console without a clear message: the spec lists what the game uses today, and `ctrtool_check.sh` confirms the file's lists are well formed, not that they are enough.
+
+**How big it is, and how it grows.** The five packs from the pinned upstream (`pins.json`: assets `87426a7`) are 848 MB, measured from `build_sd.py`'s output by the asset-pipeline thread and the SD builder's reference build, not an estimate; I haven't rebuilt them since. Entry counts are the `expect` values in `pins.json`:
+
+| pack | size | entries | average entry |
+|---|---|---|---|
+| `bgm.pak` (music) | 649 MB (76%) | 178 | 3.6 MB per track |
+| `gfx.pak` | 126 MB | 19,483 | 6.5 KB |
+| `snd.pak` | 53 MB | 2,557 | 21 KB |
+| `font.pak` | 15 MB | 65 | |
+| `data.pak` | 5.6 MB | 2,765 | 2 KB |
+
+What the size depends on: music dominates, so new tracks are the only thing that can move the total quickly (20 more tracks is about 70 MB). Sprites and data are small (100 more sprite entries is under 1 MB). Upstream growth is not predictable from here: the pin stays at `87426a7` until the game is playable, then the pin is updated by hand. Room left before a one-file build stops: about 3.1 GB, roughly 3.7 times today's packs. RAM is not the limit: `pak.c` keeps a 24-byte record per entry in memory (about 600 KB for today's 25,048 entries, so 10,000 more entries cost about 240 KB); the data stays on the card and is read when a scene needs it. The limits that bite sooner are per scene (the textures a battle has loaded at once: measured with stand-in sheets on a console, and not yet with the real packs) and the work of adding the content to the game, not the storage.
 
 **What was checked, and what wasn't.**
 - `bundle_test.py --reference` (CI): `bundle.py`'s RomFS and `.3dsx` equal `mkromfs3ds`'s and `3dsxtool`'s output byte for byte, for 28 files including an accented name.
