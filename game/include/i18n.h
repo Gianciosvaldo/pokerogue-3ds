@@ -31,6 +31,9 @@ const char* i18n_t(char* out, int n, const char* key, ...);
 /* Returns a pointer to the raw string for a key (no interpolation), or NULL when missing in
  * every language. Valid until i18n_set_language. */
 const char* i18n_raw(const char* key);
+/* Resolves the $t(ns:key) nesting in a text that came from elsewhere ("$t(trainerClasses:aceTrainer) $t(trainersCommon:aceTrainer.male.3)",
+ * what game-core hands out as a trainer's name). No arguments; a key that is missing shows as itself. Writes into out and returns it. */
+const char* i18n_resolve(char* out, int n, const char* text);
 bool i18n_exists(const char* key);
 
 /* Convenience for the common names, into a static rotating buffer (8 slots, 96 bytes each):

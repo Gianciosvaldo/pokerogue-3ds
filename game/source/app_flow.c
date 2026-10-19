@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "capsule_screen.h"
 #include "gacha_screen.h"
@@ -11,9 +12,11 @@
 #include "custom_run.h"
 #include "custom_store.h"
 #include "gc/run.h"
+#include "history_screen.h"
 #include "name_entry.h"
 #include "radar_screen.h"
 #include "result_screen.h"
+#include "run_history.h"
 #include "run_saves.h"
 #include "slot_screen.h"
 #include "starter_host.h"
@@ -36,6 +39,7 @@ static struct {
 static void show_title(void);
 static void show_radar(void);
 static void show_gacha(void);
+static void show_history(void);
 static void show_capsule_preview(int n);
 static int g_capsule_preview; /* the debug preview's result count, 0 = none (survives app_start's reset) */
 static void show_slots(slots_mode mode, int cursor);
@@ -222,6 +226,21 @@ static void on_run_end(int kind, void* arg) {
       snprintf(A.note, sizeof A.note, "The enemy that beat you was remembered. It may challenge you again.");
     A.result.note = A.note[0] ? A.note : NULL;
   }
+  /* the run's line in the Run History (upstream's GameOverPhase: getRunHistoryEntry, saveRunHistory), with the name the player gave it. A
+   * history that can't be written (or read, which it is then never overwritten for) does not stop the result screen: it says so. */
+  {
+    static rh_entry entry; /* not on the stack: an entry is nearly a kilobyte */
+    char file[24], name[RSV_NAME_LEN];
+    name[0] = 0;
+    rsv_name_get(slot_file_of(A.slot, file), A.result.run.run_key, name);
+    rhist_record(rs_run(), A.result.victory, (int64_t)time(NULL), name, &entry);
+    if (!rhist_add(&entry, NULL)) {
+      const char* msg = "The run could not be added to the Run History.";
+      const size_t used = strlen(A.note);
+      snprintf(A.note + used, sizeof A.note - used, "%s%s", used ? " " : "", msg);
+      A.result.note = A.note;
+    }
+  }
   if (A.custom)
     cr_clear(A.slot);
   else
@@ -320,6 +339,9 @@ static void on_title(title_choice c, void* arg) {
       if (!cr_usable(why)) tell_custom_unusable(why);
       break;
     }
+    case TITLE_HISTORY:
+      show_history();
+      break;
     case TITLE_RADAR:
       show_radar();
       break;
@@ -327,6 +349,18 @@ static void on_title(title_choice c, void* arg) {
       show_gacha();
       break;
   }
+}
+
+/* ------------------------------------------------------------------ the Run History */
+
+static void on_history_exit(void* arg) {
+  (void)arg;
+  show_title();
+}
+
+static void show_history(void) {
+  const hist_args h = {rhist_load(), on_history_exit, NULL};
+  history_screen_open(&h);
 }
 
 /* ------------------------------------------------------------------ the Nemesis Radar */

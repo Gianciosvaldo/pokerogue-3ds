@@ -15,7 +15,7 @@ Pokemon, which steps aside and fades (PokemonAnimPhase's add, pre-move, post-mov
 a faint and a catch that needs a release open the menus thread's party screen (`menus/`) on the bottom screen;
 BALL opens the Poke Ball list; a new move with four known opens menus' learn-move dialog and summary page.
 
-The app opens on the **title screen** (Continue, New Game, Load Game) and a run is saved to the SD card between waves.
+The app opens on the **title screen** (Continue, New Game, Load Game, Run History) and a run is saved to the SD card between waves.
 The flow is in [`app_flow.c`](source/app_flow.c): title, the five save slots (`slot_screen.c`: a slot's lead Pokemon, wave,
 biome, score and money; a slot that can't be loaded says why and is never touched), the run (`run_screen.c`), and the
 game over and clear screens (`result_screen.c`). A run is written with game-core's own `gc_run_save` by
@@ -45,6 +45,23 @@ game-core's run save is not touched. A named run shows its name as the first lin
 top screen's backdrop shows the biome); a run nobody named shows the lines it always did. Differences from upstream: upstream gives every run a
 default name (the mode and the number of runs played), this app does not (it keeps no count of runs), and upstream's `renameSession` bumps the save's
 timestamp, which this app does not keep. A name file the card refused to remove is shown only for a run with the same seed (the case where it would be wrong: the same seed twice in one slot).
+
+**Run History** is the entry after Load Game on the title menu (upstream: the menu's "Run History", `RunHistoryUiHandler` and `RunInfoUiHandler`;
+[`history_screen.c`](source/history_screen.c)). A run that ends (a game over or a win; Save and Quit does not end one) adds an entry to
+[`run_history.c`](source/run_history.c), the file `run_history` on the card (the app's own byte format with a magic and a version, CRC and
+backup through `save.h`; 25 entries at most, adding to a full history drops the oldest, as upstream's `RUN_HISTORY_LIMIT`). An entry keeps what
+the two screens show and none of the run's state: result, mode, wave, biome, score, money, when it ended, the run's name (Rename Run), the party
+as it ended with what the Summary page needs (moves, ability, nature, stats, ivs, luck), and for a defeat what beat the run (the wild Pokemon, or
+the trainer's name as game-core hands it out, `history_record.c`). The list is on the bottom screen (four runs in view, newest first: result,
+mode and wave, the time, the party's icons with their levels) and the top screen shows the highlighted run in full (`run_summary.c`); A opens the
+run's **info page** (the result, the trainer that won, mode, money and luck, the six party rows on the top screen; the highlighted Pokemon's
+stats and moves on the bottom one, UP / DOWN picks the Pokemon), and A there opens the **Summary** page (the same `menus/summary.c` the party
+screen hosts), B goes back. An empty history says "Empty". A history file that does not decode is never overwritten: the screen says it can't be
+read and a run that ends meanwhile says it was not added (`on_run_end`). Differences from upstream: no browser session data (upstream keeps the
+whole session of every finished run and rebuilds the Pokemon from it), so the entry has no run length, no player and held items, no Hall of Fame or
+ending art, no trainer sprite on the info page and no personal-best tint; the time is UTC (the 3DS app keeps no time zone). Not covered by an
+upstream differential (the screens are 3DS-only); `game/tests` has `run_history_test` (the file: round trip, fuzz, limit, unreadable, refused write,
+the record built from a run) and `history_screen_test` (the screens, with the drawing replaced by fakes).
 
 New Game goes through the **starter select** (`menus/starter.c`, hosted by `starter_host.c`): the species the dex says are caught,
 a team of up to six within the Classic cost budget (10), Begin / Exit. What can be picked, what it costs and whether game-core
@@ -328,7 +345,7 @@ make -C game/tests animtest && game/tests/build/animtest path/to/pokerogue-asset
   after a female Pyroar) is not listed; see `starter_data.h`. Not measured: what writing `system.sav` costs on a real SD card.
 - Runs started from the starter select now carry system data, so a run updates the dex, candy, friendship and Classic win records
   (game-core's `gc_system_*` calls in the run). Runs already saved are not back-filled into the dex.
-- Around the save slots (not part of card 113): the run history, unlocks and vouchers on a win, the rival's end dialogue, timed events, and any online or cloud save. ("Save and Quit" and "Rename Run" are done: see above.)
+- Around the save slots (not part of card 113): unlocks and vouchers on a win, the rival's end dialogue, timed events, and any online or cloud save. ("Save and Quit", "Rename Run" and the run history are done: see above.)
 - Message timing per text (upstream's 500 ms for "X used Y!", prompts after faints): asked of
   battle-core; every text waits 1.5 s for now.
 - In move animations: the grey part of a sprite's tone (upstream's shader pushes it far past

@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "app_flow.h"
@@ -28,7 +29,9 @@
 #include "pr_data.h"
 #include "pr_enums.h"
 #include "radar_screen.h"
+#include "history_screen.h"
 #include "result_screen.h"
+#include "run_history.h"
 #include "run_saves.h"
 #include "save.h"
 #include "slot_screen.h"
@@ -133,6 +136,14 @@ static int n_name_entry;
 void name_entry_open(const name_entry_args* a) {
   NE = *a;
   n_name_entry++;
+}
+
+/* the Run History: records how it was opened */
+static hist_args HS;
+static int n_history;
+void history_screen_open(const hist_args* a) {
+  HS = *a;
+  n_history++;
 }
 
 static result_args R;
@@ -371,6 +382,12 @@ int main(void) {
 
   /* the run ends in a game over: the slot is cleared and the result screen shows the run */
   CHECK(co_report_get() == NULL, "the run is on: no report yet");
+  CHECK(rhist_load() == RH_OK && rhist_count() == 0, "nothing in the Run History yet");
+  {
+    rsv_info k;
+    CHECK(rsv_inspect(1, &k) == RSV_OK && rsv_name_set("session_1", k.run_key, "Named run"), "the run is given a name");
+  }
+  const int64_t before_end = (int64_t)time(NULL);
   driver_end(GC_SCREEN_GAME_OVER);
   CHECK(n_result == 1 && !R.victory && R.run.status == RSV_OK && R.run.wave == RUN.wave && R.run.n_party == 2, "game over screen");
   CHECK(R.report && R.report == co_report_get() && R.report->valid && R.report->outcome == CC_OUT_DEFEAT, "the result screen gets the run's combat report");
@@ -382,8 +399,24 @@ int main(void) {
   CHECK(R.report && R.report->uid_durable && cs_meta() && cs_meta()->has_report && cs_meta()->report.run_uid == R.report->run_uid &&
             ledger_has(R.report->run_uid) && cs_meta()->ledger.n == 1 && !R.note,
         "the run's end stored one report under its durable uid, and the result screen has nothing to apologise for");
+  /* the Run History has the run: its result, wave, party, time and the name it was given */
+  CHECK(rhist_load() == RH_OK && rhist_count() == 1, "the run ended: one entry in the Run History (%d)", rhist_count());
+  {
+    const rh_entry* h = rhist_get(0);
+    CHECK(h && !h->victory && h->wave == RUN.wave && h->biome == RUN.biome && h->score == RUN.score && h->mode == RUN.run.mode, "the entry has the run's result");
+    CHECK(h && h->n_party == 2 && h->party[0].species == R.run.party[0].species && h->party[0].level == (uint32_t)R.run.party[0].level, "and its party");
+    CHECK(h && h->time >= before_end && h->time <= (int64_t)time(NULL), "and when it ended");
+    CHECK(h && !strcmp(h->name, "Named run"), "and the name the player gave it: \"%s\"", h ? h->name : "(none)");
+  }
   R.on_done(R.arg);
   CHECK(n_title == 2 && !T.can_continue, "back to the title, nothing to continue");
+
+  /* the title's Run History opens the history, read from the card, and B comes back to the title */
+  T.on_choose(TITLE_HISTORY, T.arg);
+  CHECK(n_history == 1 && HS.status == RH_OK && HS.on_exit && rhist_count() == 1, "Run History opens the screen with the entries");
+  HS.on_exit(HS.arg);
+  CHECK(n_title == 3, "leaving it shows the title again");
+  n_title--; /* the counts below were written without this detour */
 
   /* ---- a second run: the debug config is not used again, and its randomness differs */
   frames += 357;
@@ -532,6 +565,9 @@ int main(void) {
   memcpy(&snap, sysd_get(), sizeof snap);
   driver_end(GC_SCREEN_CLEAR);
   CHECK(n_result == 2 && R.victory && status_of(0) == RSV_EMPTY, "clear screen, slot cleared");
+  CHECK(rhist_load() == RH_OK && rhist_count() == 2 && rhist_get(0) && rhist_get(0)->victory && rhist_get(0)->defeat == RH_DEFEAT_NONE && !rhist_get(0)->name[0] &&
+            rhist_get(1) && !rhist_get(1)->victory && !strcmp(rhist_get(1)->name, "Named run"),
+        "the clear is the newest entry, with no name; the first run's is behind it");
   CHECK(R.report && R.report->outcome == CC_OUT_CLEAR && !R.report->fallen_known, "a clear's report says clear and names nobody");
   sysd_reset(); /* quit and boot again */
   CHECK(sysd_state(NULL) == SYSD_LOADED && !memcmp(&snap, sysd_get(), sizeof snap), "the run's catch is in the system data on the SD card");
@@ -601,7 +637,12 @@ int main(void) {
   CHECK(n_start == 4 && CFG.sys == sysd_get() && sys_saved_ok, "the run starts; saving its system data reports no failure (it writes nothing)");
   CHECK(file_size(p) == sizeof junk, "the damaged system file is untouched");
   CHECK(co_report_get() == NULL, "the new run has no report of the one before");
+  /* the card refuses the Run History's write: the result screen says so, and the run still ends */
+  CHECK(mkdir(SAVE_DIR "/run_history.sav.tmp", 0777) == 0, "block the history's temp file with a folder");
   CFG.on_end(GC_SCREEN_GAME_OVER, CFG.end_arg); /* a driver that never finished the observer: nothing stale is passed on */
+  CHECK(R.note && strstr(R.note, "Run History"), "a Run History that can't be written is told: \"%s\"", R.note ? R.note : "(none)");
+  rmdir(SAVE_DIR "/run_history.sav.tmp");
+  CHECK(rhist_load() == RH_OK && rhist_count() == 2, "and the history is as it was (%d)", rhist_count());
   CHECK(R.report == NULL, "no report: the result screen gets none, not the old one");
   CHECK(file_size(p) == sizeof junk, "and still untouched when the run ends");
   R.on_done(R.arg);

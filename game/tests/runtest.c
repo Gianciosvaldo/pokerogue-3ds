@@ -60,6 +60,7 @@
 #include "pr_data.h"
 #include "pr_enums.h"
 #include "reward_host.h"
+#include "run_history.h"
 #include "run_menu.h"
 #include "run_saves.h"
 #include "run_screen.h"
@@ -1215,6 +1216,72 @@ static bool save_sys_check(void) {
   return n > 0;
 }
 
+/* ------------------------------------------------------------------ the Run History, over real runs */
+
+/* When a run has just ended the entry the app would write for it (rhist_record) must describe it: the result, the party as it ended, and for
+ * a defeat what beat the player in the way upstream tells battles apart (wild Pokemon with a species and a level, a trainer with its name,
+ * the rival). It must encode, decode and encode to the same bytes. */
+static struct {
+  long runs, wins, wild, wild_double, trainer, trainer_double, rival, none, mystery;
+} HIST;
+
+static void hist_check(const gc_run* r, bool cleared) {
+  static rh_entry e, back;
+  static uint8_t buf1[RH_ENTRY_MAX + 8], buf2[RH_ENTRY_MAX + 8];
+  rhist_record(r, cleared, 1760000000, NULL, &e);
+  HIST.runs++;
+  if (e.victory != cleared || e.wave != r->wave || e.biome != r->biome || e.score != r->score || e.mode != r->run.mode) BAD("the history entry has the wrong result");
+  if (e.n_party != (r->n_party < RH_PARTY ? r->n_party : RH_PARTY)) BAD("the history entry has %d party members, the run %d", e.n_party, r->n_party);
+  for (int i = 0; i < e.n_party; i++) {
+    const gc_mon* m = &r->party[r->party_order[i] >= 0 && r->party_order[i] < r->n_party ? r->party_order[i] : i];
+    if (e.party[i].species != m->b.species || e.party[i].level != (uint32_t)m->b.level || e.party[i].n_moves != m->b.n_moves ||
+        e.party[i].stats[0] != (uint32_t)m->b.stats[0] || e.party[i].fainted != (m->b.hp <= 0))
+      BAD("the history entry's party member %d is not the run's", i);
+    if (!e.party[i].species || e.party[i].level < 1) BAD("party member %d of the history entry has no species or level", i);
+  }
+  if (cleared) {
+    HIST.wins++;
+    if (e.defeat != RH_DEFEAT_NONE || e.n_enemy || e.trainer[0]) BAD("a win names what beat the player");
+  } else {
+    switch (e.defeat) {
+      case RH_DEFEAT_WILD:
+        HIST.wild++;
+        HIST.wild_double += e.n_enemy == 2;
+        HIST.mystery += r->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER;
+        if (e.n_enemy < 1 || e.n_enemy > RH_ENEMIES) BAD("a wild defeat with %d enemies", e.n_enemy);
+        for (int i = 0; i < e.n_enemy; i++)
+          if (!e.enemy[i].species || e.enemy[i].level < 1) BAD("wild enemy %d of the history entry has no species or level", i);
+        if (r->trainer_type >= 0 && r->battle_type == BATTLE_TYPE_TRAINER) BAD("a trainer battle recorded as wild");
+        break;
+      case RH_DEFEAT_TRAINER:
+      case RH_DEFEAT_RIVAL:
+        if (e.defeat == RH_DEFEAT_RIVAL) HIST.rival++;
+        else HIST.trainer++;
+        HIST.trainer_double += e.trainer_double;
+        if (r->trainer_type < 0) BAD("a trainer defeat with no trainer type");
+        if ((e.defeat == RH_DEFEAT_RIVAL) != (r->trainer_type >= TRAINER_TYPE_RIVAL)) BAD("rival or not: type %d", r->trainer_type);
+        if (e.defeat == RH_DEFEAT_TRAINER && !e.trainer[0]) BAD("a defeat by a trainer with no name (type %d)", r->trainer_type);
+        if (e.n_enemy) BAD("a trainer defeat keeps wild enemies");
+        break;
+      default:
+        HIST.none++;
+        BAD("a game over that names nothing (battle type %d, trainer %d, %d enemies)", r->battle_type, r->trainer_type, r->n_enemy);
+        break;
+    }
+  }
+  const size_t n1 = rhist_encode(&e, 1, buf1, sizeof buf1);
+  if (!n1) {
+    BAD("the history entry does not encode");
+    return;
+  }
+  if (rhist_decode(buf1, n1, &back, 1) != 1) {
+    BAD("the history entry does not decode");
+    return;
+  }
+  const size_t n2 = rhist_encode(&back, 1, buf2, sizeof buf2);
+  if (n2 != n1 || memcmp(buf1, buf2, n1)) BAD("the history entry changes when it is written and read");
+}
+
 /* ------------------------------------------------------------------ the combat observer, over real runs */
 
 /* The driver hands the observer every drain of every run. When a run has just ended its report must be there, describe that run, hold a
@@ -1435,6 +1502,7 @@ int main(int argc, char** argv) {
       wave_sum += r->wave;
       wave_hist[r->wave / 10 > 20 ? 20 : r->wave / 10]++;
       obs_check(r, st->clears != clears);
+      hist_check(r, st->clears != clears);
       if (custom_on) custom_commit();
       g_run_resumed = false;
       ended++;
@@ -1462,6 +1530,8 @@ int main(int argc, char** argv) {
          st->screens[GC_SCREEN_COMMAND], st->screens[GC_SCREEN_SWITCH], st->screens[GC_SCREEN_LEARN_MOVE],
          st->screens[GC_SCREEN_EVOLVE], st->screens[GC_SCREEN_REWARD], st->screens[GC_SCREEN_BIOME], st->screens[GC_SCREEN_MYSTERY],
          st->screens[GC_SCREEN_GAME_OVER], st->screens[GC_SCREEN_CLEAR]);
+  printf("run history: %ld entries recorded: %ld wins, %ld defeats by wild Pokemon (%ld doubles, %ld in a mystery encounter), %ld by a trainer (%ld pairs), %ld by the rival, %ld naming nothing\n",
+         HIST.runs, HIST.wins, HIST.wild, HIST.wild_double, HIST.mystery, HIST.trainer, HIST.trainer_double, HIST.rival, HIST.none);
   printf("fake screen: %d scenes, %d command prompts, %d option lists, %d party screens, %d ball lists, %d learn dialogs, %u screen events\n",
          n_scenes, n_ask, n_options, n_party_opens, n_balls, n_dialogs, st->bev);
   printf("catching: %d throws shown (%d held, %d broke free); full-party catches: %d release lists opened, %d members released through the party "

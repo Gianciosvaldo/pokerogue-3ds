@@ -104,7 +104,7 @@ RW := ../../reward-core
 CCORE := ../../custom-core
 OBS_SRCS := ../source/combat_observer.c ../source/custom_core_build.c
 RUN_CPPFLAGS := $(CPPFLAGS) -I$(CCORE)/include -I../menus -I../gen -I$(GC)/include -I$(GC)/gen/out -I$(RC)/include -I$(RC)/gen/out -I$(RW)/include -I$(RW)/gen/out -I$(APP)/include
-RUN_SRCS := runtest.c snd_fake.c ../source/bgm.c ../source/bgm_choose.c ../source/bgm_player.c ../gen/gm_bgm_data.c party_fake.c ../menus/party.c ../menus/menus_names.c ../menus/menus_data.c ../source/starter_data.c ../source/run_screen.c ../source/battle_events.c ../source/run_saves.c ../source/run_text.c ../source/custom_run.c ../source/custom_store.c ../source/profile_tx.c ../source/system_data.c $(OBS_SRCS) $(APP)/source/save.c ../gen/gm_enum_names.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+RUN_SRCS := runtest.c snd_fake.c ../source/bgm.c ../source/bgm_choose.c ../source/bgm_player.c ../gen/gm_bgm_data.c party_fake.c ../menus/party.c ../menus/menus_names.c ../menus/menus_data.c ../source/starter_data.c ../source/run_screen.c ../source/battle_events.c ../source/run_saves.c ../source/run_history.c ../source/history_record.c ../source/run_text.c ../source/custom_run.c ../source/custom_store.c ../source/profile_tx.c ../source/system_data.c $(OBS_SRCS) $(APP)/source/save.c ../gen/gm_enum_names.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/runtest: $(RUN_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) -I$(GC)/src $(CFLAGS) $(RUN_SRCS) -lm -o $@
@@ -119,6 +119,14 @@ build/saves_test: $(SAVES_SRCS)
 saves_test: build/saves_test
 .PHONY: saves_test
 
+# the run history (run_history.c + history_record.c + the app's save.c) over a real game-core run; make run_history_test && build/run_history_test
+HIST_SRCS := run_history_test.c ../source/run_history.c ../source/history_record.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+build/run_history_test: $(HIST_SRCS)
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(HIST_SRCS) -lm -o $@
+run_history_test: build/run_history_test
+.PHONY: run_history_test
+
 # the run driver with saving: every save point is written and the slot loads back as the run; with `resume` the run is also dropped and
 # continued from its slot at every 4th save point, and the same seed must end the same way (wave and score) with and without it
 runtest-save: build/runtest
@@ -128,7 +136,7 @@ runtest-save: build/runtest
 .PHONY: runtest-save
 
 # the app's screen flow (app_flow.c) with fake screens and a fake run driver, over the real save slots; make flowtest && build/flowtest
-FLOW_SRCS := flowtest.c ../source/app_flow.c ../source/custom_run.c ../source/profile_tx.c ../source/custom_store.c $(OBS_SRCS) ../source/run_saves.c ../source/system_data.c ../source/starter_data.c ../menus/menus_data.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+FLOW_SRCS := flowtest.c ../source/app_flow.c ../source/run_history.c ../source/history_record.c ../source/custom_run.c ../source/profile_tx.c ../source/custom_store.c $(OBS_SRCS) ../source/run_saves.c ../source/system_data.c ../source/starter_data.c ../menus/menus_data.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/flowtest: $(FLOW_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) $(FLOW_SRCS) -lm -o $@
@@ -137,7 +145,7 @@ flowtest: build/flowtest
 
 # a run save one turn away from game over or from clearing the run, for looking at those screens on a real build (see mkfixture.c);
 # make mkfixture && (cd /some/folder && /path/to/build/mkfixture clear)
-build/mkfixture: mkfixture.c ../source/run_saves.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+build/mkfixture: mkfixture.c ../source/run_saves.c ../source/run_history.c ../source/history_record.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 mkfixture: build/mkfixture
@@ -288,6 +296,14 @@ build/slot_screen_test: $(SLOT_SCREEN_SRCS)
 	$(CC) $(RUN_CPPFLAGS) -I../../assets-pipeline/app-src/include $(CFLAGS) -fsanitize=address,undefined $(SLOT_SCREEN_SRCS) -lm -o $@
 slot_screen_test: build/slot_screen_test
 .PHONY: slot_screen_test
+
+# the Run History (source/history_screen.c) with a fake UI stack, drawing layer and Summary screen; make history_screen_test && build/history_screen_test
+HIST_SCREEN_SRCS := history_screen_test.c ../source/history_screen.c ../menus/menus_names.c $(BC)/gen/out/pr_data.c
+build/history_screen_test: $(HIST_SCREEN_SRCS)
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(HIST_SCREEN_SRCS) -lm -o $@
+history_screen_test: build/history_screen_test
+.PHONY: history_screen_test
 
 # the text entry screen (source/name_entry.c) with a fake UI stack and drawing layer; make name_entry_test && build/name_entry_test
 NAME_ENTRY_SRCS := name_entry_test.c ../source/name_entry.c
