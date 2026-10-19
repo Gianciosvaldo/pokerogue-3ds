@@ -71,7 +71,7 @@ int main(void) {
   osSetSpeedupEnable(true); /* no-op on Old 3DS */
   if (!rr_init()) return 1;
   if (pak_mount_default() <= 0) {
-    fatal("PokeRogue 3DS\n\nNo asset packs found in\nsdmc:/3ds/pokerogue/\n\nSee assets-pipeline/README.md\nfor how to build them.\n\nSTART: quit");
+    fatal("PokeRogue 3DS\n\nNo asset packs found, inside\nthe app or in sdmc:/3ds/pokerogue/\n\nSee sd-builder/README.md\nfor how to build them.\n\nSTART: quit");
     rr_exit();
     return 0;
   }

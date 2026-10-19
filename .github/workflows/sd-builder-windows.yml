@@ -3,6 +3,11 @@
 # for the SD card. The same zip also runs on Linux, and the two sets of packs must be byte-identical,
 # so a Windows build matches the packs tested in Azahar. Only the logs, build reports and pack hashes
 # are kept; the packs never leave the runners.
+# The zip also carries the game app, so the builder can put the packs inside one file: PokeRogue.3dsx (the packs
+# as the app's RomFS) and PokeRogue.cia (an installable title). Those are checked on both runners: bundle.py's
+# output byte for byte against devkitPro's mkromfs3ds and 3dsxtool, the finished files against the packs by an
+# independent reader (tests/check_bundle.py) and, for the CIA on Linux, against 3DSGuy's ctrtool. None of that
+# proves the files run on a console: see sd-builder/README.md.
 # One run takes about 20 minutes on each runner; Windows minutes count double on a private repo.
 name: SD card builder on Windows
 
@@ -13,6 +18,7 @@ on:
       - "sd-builder/**"
       - "assets-pipeline/*.py"
       - "assets-pipeline/tools/dspadpcm.c"
+      - "assets-pipeline/app-src/**"
       - ".github/workflows/sd-builder-windows.yml"
 
 concurrency:
@@ -28,7 +34,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq mingw-w64 zip
-      - run: sd-builder/make-zip.sh dist && sha256sum dist/PokeRogue-SD-Builder.zip
+      - name: Build the game app (the zip carries it, so the builder can put the packs inside it)
+        run: |
+          mkdir -p dist/game && chmod 777 dist/game
+          docker run --rm -v "$PWD":/src -w /src/game devkitpro/devkitarm sh -c \
+            'make -j4 && cp pokerogue.3dsx pokerogue.smdh /src/dist/game/ &&
+             /opt/devkitpro/devkitARM/bin/arm-none-eabi-strip --strip-debug -o /src/dist/game/pokerogue.elf pokerogue.elf'
+          ls -l dist/game
+      - name: bundle.py writes what devkitPro's mkromfs3ds and 3dsxtool write, byte for byte
+        run: python3 sd-builder/tests/bundle_test.py --reference game/pokerogue.elf game/pokerogue.smdh
+      - name: The probe app (a small test of the packs inside an app) builds
+        run: docker run --rm -v "$PWD":/src -w /src/sd-builder/tests/probe devkitpro/devkitarm make
+      - run: GAME_DIR=dist/game sd-builder/make-zip.sh dist && sha256sum dist/PokeRogue-SD-Builder.zip
       - uses: actions/upload-artifact@v4
         with:
           name: PokeRogue-SD-Builder
@@ -41,6 +58,10 @@ jobs:
     outputs:
       hashes: ${{ steps.card.outputs.hashes }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          path: repo
+          sparse-checkout: sd-builder/tests
       - uses: actions/download-artifact@v4
         with:
           name: PokeRogue-SD-Builder
@@ -50,14 +71,16 @@ jobs:
           $dir = Join-Path $env:RUNNER_TEMP "Download folder à"
           Expand-Archive PokeRogue-SD-Builder.zip -DestinationPath $dir
           New-Item -ItemType Directory -Force -Path (Join-Path $env:RUNNER_TEMP "fake sd\3ds") | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $env:RUNNER_TEMP "fake sd 2\3ds") | Out-Null
           "BUILDER=$dir\PokeRogue-SD-Builder" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
           "SD=$env:RUNNER_TEMP\fake sd" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-      - name: First run (downloads and builds everything)
+          "SD2=$env:RUNNER_TEMP\fake sd 2" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+      - name: First run (downloads and builds everything, loose files)
         shell: cmd
-        run: call "%BUILDER%\BUILD-SD-CARD.bat" --sd "%SD%" --yes < nul
+        run: call "%BUILDER%\BUILD-SD-CARD.bat" --sd "%SD%" --yes --format folder < nul
       - name: Second run (should skip everything)
         shell: cmd
-        run: call "%BUILDER%\BUILD-SD-CARD.bat" --sd "%SD%" --yes < nul
+        run: call "%BUILDER%\BUILD-SD-CARD.bat" --sd "%SD%" --yes --format folder < nul
       - name: Check the card
         id: card
         shell: pwsh
@@ -74,6 +97,18 @@ jobs:
           if (-not (Test-Path (Join-Path $env:SD "3ds\DSP1.3dsx"))) { throw "DSP1.3dsx missing" }
           $log = Get-Content (Join-Path $env:BUILDER "build-log.txt") -Raw
           if (($log | Select-String -Pattern "=== done" -AllMatches).Matches.Count -ne 2) { throw "expected two finished runs" }
+          $app = (Get-FileHash (Join-Path $env:SD "3ds\PokeRogue.3dsx") -Algorithm SHA256).Hash
+          if ($app -ne (Get-FileHash (Join-Path $env:BUILDER "files\game\pokerogue.3dsx") -Algorithm SHA256).Hash) { throw "folder mode did not copy the plain app" }
+      - name: Third run, on a second card (one .3dsx and one .cia, the packs inside them)
+        shell: cmd
+        run: call "%BUILDER%\BUILD-SD-CARD.bat" --sd "%SD2%" --yes --format both < nul
+      - name: Check the one-file builds against the packs
+        shell: cmd
+        run: |
+          dir "%SD2%\3ds" "%SD2%\cias"
+          "%BUILDER%\files\runtime\python\python.exe" -I -X utf8 "%GITHUB_WORKSPACE%\repo\sd-builder\tests\check_bundle.py" "%BUILDER%\files\build\3ds\pokerogue" --3dsx "%SD2%\3ds\PokeRogue.3dsx" --cia "%SD2%\cias\PokeRogue.cia"
+          if errorlevel 1 exit /b 1
+          if exist "%SD2%\3ds\pokerogue\*.pak" (echo loose packs on the card of a one-file build & exit /b 1)
       - name: Keep the log and build report (no packs)
         if: always()
         uses: actions/upload-artifact@v4
@@ -90,6 +125,10 @@ jobs:
     outputs:
       hashes: ${{ steps.packs.outputs.hashes }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          path: repo
+          sparse-checkout: sd-builder/tests
       - uses: actions/download-artifact@v4
         with:
           name: PokeRogue-SD-Builder
@@ -100,8 +139,8 @@ jobs:
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
           python -m pip install -q numpy==1.26.4 pillow==12.3.0 lz4==4.4.5 fonttools==4.66.0
-      - name: Build without a card (SD-CARD-FILES)
-        run: unzip -q PokeRogue-SD-Builder.zip && python PokeRogue-SD-Builder/files/builder.py --no-sd --yes < /dev/null
+      - name: Build without a card (SD-CARD-FILES), loose files
+        run: unzip -q PokeRogue-SD-Builder.zip && python PokeRogue-SD-Builder/files/builder.py --no-sd --yes --format folder < /dev/null
       - name: Hashes
         id: packs
         run: |
@@ -109,6 +148,19 @@ jobs:
           h=$(for s in data font gfx snd bgm; do echo "$s.pak $(sha256sum $s.pak | cut -d' ' -f1)"; done)
           echo "$h"
           echo "hashes=$(echo "$h" | paste -sd';')" >> "$GITHUB_OUTPUT"
+      - name: One .3dsx and one .cia (stages are skipped, so this is the bundling alone)
+        run: python PokeRogue-SD-Builder/files/builder.py --no-sd --yes --format both < /dev/null
+      - name: Check them against the packs, and the .cia with ctrtool
+        run: |
+          B=PokeRogue-SD-Builder
+          python -I repo/sd-builder/tests/check_bundle.py $B/files/build/3ds/pokerogue \
+            --3dsx $B/SD-CARD-FILES/3ds/PokeRogue.3dsx --cia $B/SD-CARD-FILES/cias/PokeRogue.cia
+          test -z "$(find $B/SD-CARD-FILES -name '*.pak')"
+          curl -sSL --retry 4 --retry-all-errors -o ctrtool.zip \
+            https://github.com/3DSGuy/Project_CTR/releases/download/ctrtool-v1.2.0/ctrtool-v1.2.0-ubuntu_x86_64.zip
+          echo "d53f59baf5bad5339434af2bfc5bd2a9547978d6933e80eac5902f5a11b738b1  ctrtool.zip" | sha256sum -c -
+          unzip -q ctrtool.zip -d ctrtool && chmod +x ctrtool/ctrtool
+          sh repo/sd-builder/tests/ctrtool_check.sh ctrtool/ctrtool $B/SD-CARD-FILES/cias/PokeRogue.cia $B/files/build/3ds/pokerogue
       - name: Keep the log and build report (no packs)
         if: always()
         uses: actions/upload-artifact@v4

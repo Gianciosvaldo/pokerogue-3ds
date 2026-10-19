@@ -1,6 +1,7 @@
 /*
  * pak: reads the RPAK archives the asset pipeline writes to the SD card
- * (sdmc:/3ds/pokerogue/{gfx,snd,bgm,font,data}.pak). See assets-pipeline/rpak.py.
+ * (sdmc:/3ds/pokerogue/{gfx,snd,bgm,font,data}.pak), or that the single-file builds carry inside the app
+ * (romfs:/{gfx,snd,bgm,font,data}.pak). See assets-pipeline/rpak.py and sd-builder/.
  *
  * Keys are upstream paths: "images/pokemon/back/642-therian" (no extension) for
  * images, "audio/bgm/title" for audio, "battle-anims/absorb.json" for data.
@@ -19,6 +20,7 @@ extern "C" {
 #endif
 
 #define PAK_DIR "sdmc:/3ds/pokerogue/"
+#define PAK_ROMFS_DIR "romfs:/"
 
 enum { PAK_TEX = 1, PAK_SND = 2, PAK_JSON = 3, PAK_BIN = 4, PAK_FONT = 5, PAK_VARIANT = 6 };
 
@@ -37,9 +39,14 @@ void pak_close(rr_pak* p);
 int pak_count(const rr_pak* p);
 const char* pak_path(const rr_pak* p);
 
-/* Opens PAK_DIR{gfx,snd,bgm,font,data}.pak, whichever exist. Returns how many opened. */
+/* Opens {gfx,snd,bgm,font,data}.pak, whichever exist, each from the app's own RomFS (a .cia, or a .3dsx built
+ * with the packs inside) when it has it, else from PAK_DIR. Returns how many opened. The app's RomFS is mounted
+ * here, on the 3DS; elsewhere only the folders are tried. */
 int pak_mount_default(void);
 void pak_unmount_all(void);
+
+/* True when the .3dsx at path has a RomFS appended (the single-file build); false for any other file or none. */
+bool pak_3dsx_has_romfs(const char* path);
 
 /* Looks a key up in one pak, or in every mounted pak when p is NULL. */
 bool pak_find(rr_pak* p, const char* key, pak_entry* out);

@@ -8,12 +8,16 @@ DSP1 dumper on the card when it is missing. Every step is kept, so running it ag
 carries on where it stopped. Only the standard library is used here; the pipeline's
 libraries are unpacked for build_sd.py alone.
 
-    python builder.py [--sd PATH | --no-sd] [--yes] [--jobs N] [--mirror DIR]
+    python builder.py [--sd PATH | --no-sd] [--format 3dsx|cia|both|folder] [--yes] [--jobs N] [--mirror DIR]
 
 --sd PATH   use PATH as the SD card (any folder; tests use this) instead of asking
 --no-sd     build the files on this PC only (they go to SD-CARD-FILES, to copy by hand)
+--format    how the game goes on the card (it asks when this isn't given): 3dsx = one PokeRogue.3dsx with the packs
+            inside, cia = one installable PokeRogue.cia, both = those two, folder = the app plus the pack files in
+            3ds/pokerogue (the earlier way). With --yes and no --format, folder.
 --yes       answer yes to every question (tests)
 --mirror    fetch every download from DIR by file name instead of the internet (tests)
+--existing-packs  skip the downloads and the conversion and use the packs already in files/build (tests)
 
 The packs contain Pokemon and PokeRogue art and music: they are for your own console
 and must never be shared.
@@ -34,6 +38,8 @@ import urllib.error
 import urllib.request
 import zipfile
 
+import bundle
+
 FILES = os.path.dirname(os.path.abspath(__file__))  # the zip's files/ folder (sd-builder/ in the repo)
 ROOT = os.path.dirname(FILES)  # the folder lorenzo extracted
 PINS = json.load(open(os.path.join(FILES, "pins.json"), encoding="utf-8"))
@@ -42,6 +48,8 @@ RUNTIME = os.path.join(FILES, "runtime")
 DOWNLOADS = os.path.join(FILES, "downloads")
 BUILD = os.path.join(FILES, "build")  # build_sd.py's --out; its reports and our markers stay here
 PACK_DIR = os.path.join(BUILD, "3ds", "pokerogue")
+GAME = os.path.join(FILES, "game")  # the game app (pokerogue.3dsx, .elf, .smdh), its banner and makerom's spec
+BUNDLE = os.path.join(BUILD, "bundle")  # the finished PokeRogue.3dsx and PokeRogue.cia
 HAND_COPY = os.path.join(ROOT, "SD-CARD-FILES")  # only the files that go on the card, when copying by hand
 LOG_PATH = os.path.join(ROOT, "build-log.txt")
 WINDOWS = sys.platform == "win32"
@@ -218,6 +226,24 @@ def unpack_ffmpeg():
     open(marker, "w").write(pin["sha256"])
     os.remove(path)  # 110 MB we no longer need
     return bin_dir
+
+
+def fetch_makerom():
+    """makerom, which builds the installable .cia. Pinned per platform (the Windows build here; Linux in tests)."""
+    pin = PINS["makerom"]["windows" if WINDOWS else "linux"]
+    dest = os.path.join(RUNTIME, "makerom")
+    exe = os.path.join(dest, pin["file"])
+    marker = exe + ".ok"
+    if os.path.exists(exe) and os.path.exists(marker) and open(marker).read() == pin["sha256"]:
+        return exe
+    path = fetch(pin["url"], os.path.join(DOWNLOADS, os.path.basename(pin["url"])), "makerom, the maker of the "
+                 "installable file", pin["sha256"], pin["size"])
+    os.makedirs(dest, exist_ok=True)
+    with zipfile.ZipFile(path) as z, z.open(pin["file"]) as src, open(exe, "wb") as dst:
+        shutil.copyfileobj(src, dst)
+    os.chmod(exe, 0o755)
+    open(marker, "w").write(pin["sha256"])
+    return exe
 
 
 def work_dir():
@@ -512,12 +538,156 @@ def _run_quietly(cmd, env, stage, t0):
                    "same way, send build-log.txt in the project thread.")
 
 
+# ---------------------------------------------------------------- the single-file builds
+
+
+def have_game():
+    """True when this builder came with the game app (the zip does; builder.py run from the repo doesn't)."""
+    return os.path.exists(os.path.join(GAME, "pokerogue.3dsx"))
+
+
+FORMAT_MENU = (
+    ("3dsx", "One .3dsx file (PokeRogue.3dsx) with everything inside. You start it from the Homebrew Launcher, "
+             "like your other apps. Try this one first."),
+    ("cia", "One installable file (PokeRogue.cia). You install it once with FBI, then start it from the HOME menu."),
+    ("folder", "Loose files: the app plus the pack files in 3ds\\pokerogue, how the earlier builds worked."),
+)
+
+
+def choose_format():
+    """"3dsx", "cia", "both" or "folder": how the game goes on the card. Asked before the long build."""
+    if _args.format:
+        if _args.format != "folder" and not have_game():
+            raise Stop("This builder has no game app in it, so it can only make the loose files. Use the zip the "
+                       "project thread gave you.")
+        return _args.format
+    if not have_game() or _args.yes:
+        return "folder"
+    say("How do you want the game on your 3DS?")
+    for i, (_, text) in enumerate(FORMAT_MENU, 1):
+        say(f"   {i}  {text}")
+    while True:
+        a = input(" Type 1, 2 or 3 and press Enter [1]: ").strip()
+        log(f"format answer {a!r}")
+        if not a or a == "1":
+            return "3dsx"
+        if a in ("2", "3"):
+            return FORMAT_MENU[int(a) - 1][0]
+        say("Please type 1, 2 or 3.")
+
+
+def kinds_of(fmt):
+    return {"3dsx": ["3dsx"], "cia": ["cia"], "both": ["3dsx", "cia"], "folder": []}[fmt]
+
+
+def _packs():
+    return [(f"{s}.pak", os.path.join(PACK_DIR, f"{s}.pak")) for s in PINS["packs"]]
+
+
+def bundle_stamp(kind):
+    """What a finished PokeRogue.<kind> depends on: the packs as they are now, the app and this tool's code."""
+    h = hashlib.sha256(kind.encode())
+    for f in (["pokerogue.3dsx"] if kind == "3dsx" else ["pokerogue.elf", "pokerogue.smdh", "banner.bnr", "pokerogue.rsf"]):
+        h.update(f.encode() + sha256_of(os.path.join(GAME, f)).encode())
+    h.update(sha256_of(os.path.join(FILES, "bundle.py")).encode())
+    if kind == "cia":
+        h.update(json.dumps(PINS["makerom"], sort_keys=True).encode())
+    for name, path in _packs():
+        st = os.stat(path)
+        h.update(f"{name} {st.st_size} {st.st_mtime_ns}".encode())
+    return h.hexdigest()
+
+
+def bundle_game(kinds):
+    """Makes PokeRogue.3dsx and/or PokeRogue.cia in build/bundle from the packs and the game app. Returns
+    [(kind, path)]. A file whose inputs haven't changed is kept."""
+    os.makedirs(BUNDLE, exist_ok=True)
+    out = []
+    size = sum(os.path.getsize(p) for _, p in _packs())
+    for kind in kinds:
+        dest = os.path.join(BUNDLE, f"PokeRogue.{kind}")
+        marker = dest + ".stamp"
+        stamp = bundle_stamp(kind)
+        if os.path.exists(dest) and os.path.exists(marker) and open(marker).read() == stamp:
+            say(f"PokeRogue.{kind}: already made")
+            out.append((kind, dest))
+            continue
+        for f in (marker, dest):
+            if os.path.exists(f):
+                os.remove(f)
+        free = shutil.disk_usage(BUNDLE).free
+        if free < size + 100 * MB:
+            raise Stop(f"This PC's drive needs {gb(size + 100 * MB)} free to make PokeRogue.{kind} and has "
+                       f"{gb(free)}. Free some space, then run the builder again; nothing will be rebuilt.")
+        t0 = time.time()
+        try:
+            if kind == "3dsx":
+                say("Making PokeRogue.3dsx: the app with the pack files inside it...")
+                last = [0.0]
+
+                def progress(done, size=size, last=last):
+                    if time.time() - last[0] > 1:
+                        last[0] = time.time()
+                        print(f"\r   {100 * done // size}%", end="", flush=True)
+
+                bundle.make_3dsx(os.path.join(GAME, "pokerogue.3dsx"), _packs(), dest + ".part", progress)
+                print("\r   done" + " " * 10, flush=True)
+                os.replace(dest + ".part", dest)
+            else:
+                _make_cia(dest)
+        except OSError as e:
+            log(f"making PokeRogue.{kind} failed: {e!r}")
+            if getattr(e, "winerror", None) == 112 or getattr(e, "errno", None) == 28:
+                raise Stop("This PC's drive is full. Free some space, then run the builder again; nothing will be "
+                           "rebuilt.")
+            raise Stop(f"Making PokeRogue.{kind} failed ({e}). Run the builder again; if it fails the same way, "
+                       "send build-log.txt in the project thread.")
+        except (RuntimeError, ValueError) as e:
+            log(f"making PokeRogue.{kind} failed: {e}")
+            raise Stop(f"Making PokeRogue.{kind} failed: {e}. Run the builder again; if it fails the same way, send "
+                       "build-log.txt in the project thread.")
+        open(marker, "w").write(stamp)
+        log(f"PokeRogue.{kind}: {os.path.getsize(dest)} bytes in {time.time() - t0:.0f} s")
+        out.append((kind, dest))
+    return out
+
+
+def _make_cia(dest):
+    makerom = fetch_makerom()
+    say("Making PokeRogue.cia: the installable file...")
+    work = os.path.join(BUILD, "cia-work")
+    shutil.rmtree(work, ignore_errors=True)
+    os.makedirs(work)
+    for f in ("pokerogue.rsf", "pokerogue.elf", "pokerogue.smdh", "banner.bnr"):
+        shutil.copyfile(os.path.join(GAME, f), os.path.join(work, f))
+    bundle.stage_romfs_dir(os.path.join(work, "romfs"), _packs())
+    try:
+        made = bundle.make_cia(makerom, work, "PokeRogue.cia", log)
+        os.replace(made, dest)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)  # the pack links, and the 850 MB copies on a drive without links
+
+
 # ---------------------------------------------------------------- copying
 
 
-def copy_to_sd(sd):
+def sd_items(fmt, outputs):
+    """What goes on the card for this format: [(file on this PC, path inside the card, name to show)]."""
+    items = []
+    if fmt == "folder":
+        items += [(path, os.path.join("3ds", "pokerogue", name), name) for name, path in _packs()]
+        if have_game():
+            items.append((os.path.join(GAME, "pokerogue.3dsx"), os.path.join("3ds", "PokeRogue.3dsx"), "PokeRogue.3dsx"))
+    for kind, path in outputs:
+        items.append((path, os.path.join("3ds", "PokeRogue.3dsx") if kind == "3dsx" else os.path.join("cias", "PokeRogue.cia"),
+                      f"PokeRogue.{kind}"))
+    items += [(os.path.join(FILES, "apps", f), os.path.join("3ds", f), f) for f in _apps()]
+    return items
+
+
+def copy_to_sd(sd, items):
     try:
-        return _copy_to_sd(sd)
+        return _copy_to_sd(sd, items)
     except OSError as e:
         log(f"copy failed: {e!r}")
         if getattr(e, "winerror", None) == 19 or isinstance(e, PermissionError):
@@ -529,27 +699,25 @@ def copy_to_sd(sd):
                    "again; nothing will be rebuilt.")
 
 
-def _copy_to_sd(sd):
-    dest = os.path.join(sd, "3ds", "pokerogue")
-    paks = [f"{s}.pak" for s in PINS["packs"]]
-    need = sum(os.path.getsize(os.path.join(PACK_DIR, p)) for p in paks)
+def _copy_to_sd(sd, items):
+    need = sum(os.path.getsize(src) for src, _, _ in items)
     while not os.path.isdir(sd):
         say(f"The SD card ({sd}) isn't in the PC any more.")
         if _args.yes or not ask("Put it back in, wait a few seconds, then press Enter. (Type n to stop here "
                                 "and copy the files yourself.)"):
             return False
-    have = sum(os.path.getsize(os.path.join(dest, p)) for p in paks if os.path.exists(os.path.join(dest, p)))
+    have = sum(os.path.getsize(os.path.join(sd, rel)) for _, rel, _ in items if os.path.exists(os.path.join(sd, rel)))
     free = shutil.disk_usage(sd).free
     if free + have < need + 20 * MB:
         raise Stop(f"The SD card needs {gb(need - have + 20 * MB)} free and has {gb(free)}. Free some space on it "
                    "(for example old screenshots or videos), then run the builder again. Nothing will be rebuilt.")
-    os.makedirs(dest, exist_ok=True)
     say(f"Copying the files to the SD card ({need / MB:,.0f} MB)...")
-    for p in paks:
-        src, dst = os.path.join(PACK_DIR, p), os.path.join(dest, p)
+    for src, rel, name in items:
+        dst = os.path.join(sd, rel)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
         size = os.path.getsize(src)
         if os.path.exists(dst) and os.path.getsize(dst) == size and _same_file(src, dst):
-            say(f"   {p}: already on the card")
+            say(f"   {name}: already on the card")
             continue
         part = dst + ".part"
         with open(src, "rb") as a, open(part, "wb") as b:
@@ -562,17 +730,14 @@ def _copy_to_sd(sd):
                 done += len(chunk)
                 if time.time() - last > 1:
                     last = time.time()
-                    print(f"\r   {p}: {100 * done / size:3.0f}%", end="", flush=True)
+                    print(f"\r   {name}: {100 * done / size:3.0f}%", end="", flush=True)
             b.flush()
             os.fsync(b.fileno())
         if os.path.getsize(part) != size:
-            raise Stop(f"Copying {p} to the SD card went wrong. Check the card has space and run the builder again.")
+            raise Stop(f"Copying {name} to the SD card went wrong. Check the card has space and run the builder again.")
         os.replace(part, dst)
-        print(f"\r   {p}: copied" + " " * 10, flush=True)
-        log(f"copied {p} ({size} bytes) to {dst}")
-    for f in _apps():
-        shutil.copyfile(os.path.join(FILES, "apps", f), os.path.join(sd, "3ds", f))
-        say(f"   {f}: put in the 3ds folder")
+        print(f"\r   {name}: copied" + " " * 10, flush=True)
+        log(f"copied {name} ({size} bytes) to {dst}")
     return True
 
 
@@ -582,14 +747,11 @@ def _apps():
     return sorted(f for f in os.listdir(d) if f.endswith(".3dsx")) if os.path.isdir(d) else []
 
 
-def make_hand_copy():
-    """SD-CARD-FILES: exactly what goes on the card (the packs, the zip's apps and DSP1), for copying by hand.
-    Hard links where the drive allows them, so it takes no extra space."""
+def make_hand_copy(items):
+    """SD-CARD-FILES: exactly what goes on the card, for copying by hand. Hard links where the drive allows them,
+    so it takes no extra space."""
     shutil.rmtree(HAND_COPY, ignore_errors=True)
-    dest = os.path.join(HAND_COPY, "3ds", "pokerogue")
-    os.makedirs(dest)
-    files = [(os.path.join(PACK_DIR, f"{s}.pak"), os.path.join(dest, f"{s}.pak")) for s in PINS["packs"]]
-    files += [(os.path.join(FILES, "apps", f), os.path.join(HAND_COPY, "3ds", f)) for f in _apps()]
+    files = [(src, os.path.join(HAND_COPY, rel)) for src, rel, _ in items]
     try:
         pin = PINS["dsp1"]
         files.append((fetch(pin["url"], os.path.join(DOWNLOADS, "DSP1.3dsx"), "DSP1, the sound firmware dumper",
@@ -597,6 +759,7 @@ def make_hand_copy():
     except Stop as e:
         log(f"DSP1 download failed: {e}")
     for src, dst in files:
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
         try:
             os.link(src, dst)
         except OSError:
@@ -638,9 +801,11 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--sd")
     ap.add_argument("--no-sd", action="store_true")
+    ap.add_argument("--format", choices=["3dsx", "cia", "both", "folder"])
     ap.add_argument("--yes", action="store_true")
     ap.add_argument("--jobs", type=int)
     ap.add_argument("--mirror")
+    ap.add_argument("--existing-packs", action="store_true")
     _args = ap.parse_args()
     if WINDOWS:
         import ctypes
@@ -651,7 +816,7 @@ def main():
     say("PokeRogue SD card builder")
     say("=========================")
     say("This makes the game's pictures, sounds, music and text for your 3DS from PokeRogue's")
-    say("public files, and puts them on your SD card. It downloads about 700 MB and takes roughly")
+    say("public files, and puts the game on your SD card. It downloads about 700 MB and takes roughly")
     say("20 to 60 minutes. You can use the PC meanwhile. If it stops, just run it again.")
     say("The files it makes are for your own console only. Please don't share them.")
     say("")
@@ -664,31 +829,41 @@ def main():
                 "anyway?", default_yes=False):
             raise Stop("Move the PokeRogue-SD-Builder folder out of OneDrive (for example to Downloads), then "
                        "double-click BUILD-SD-CARD there.")
-        free = shutil.disk_usage(ROOT).free
-        if free < 3 * GB and not os.path.exists(os.path.join(PACK_DIR, ".bgm.done")):
-            raise Stop(f"This PC's drive needs about 3 GB free for the build and has {gb(free)}. Free some space "
-                       "(or move this folder to a drive with more), then run the builder again.")
         sd = choose_sd()
+        fmt = choose_format()
+        log(f"format {fmt}")
+        need = 3 * GB if fmt == "folder" else 4 * GB  # a single file is a second copy of the packs
+        free = shutil.disk_usage(ROOT).free
+        if free < need and not os.path.exists(os.path.join(PACK_DIR, ".bgm.done")):
+            raise Stop(f"This PC's drive needs about {gb(need)} free for the build and has {gb(free)}. Free some "
+                       "space (or move this folder to a drive with more), then run the builder again.")
         if sd:
             check_sd(sd)
             say(f"Using the SD card at {sd}. You can leave it in the PC while this runs.")
         else:
             say("The files will be made in this folder, in SD-CARD-FILES, for you to copy later.")
         say("")
-        lib = unpack_wheels()
-        install_fribidi()
-        ffmpeg = unpack_ffmpeg()
-        assets = fetch_upstream("assets", "PokeRogue's pictures and sounds (about 530 MB)")
-        locales = fetch_upstream("locales", "PokeRogue's text in every language (about 4 MB)")
-        game = fetch_game_files()
-        say("")
-        say("Converting everything for the 3DS. This is the long part.")
-        build(assets, locales, game, lib, ffmpeg)
-        say("")
-        copied = copy_to_sd(sd) if sd else False
+        if _args.existing_packs:
+            missing = [n for n, p in _packs() if not os.path.exists(p)]
+            if missing:
+                raise Stop(f"--existing-packs: {', '.join(missing)} not in {PACK_DIR}")
+        else:
+            lib = unpack_wheels()
+            install_fribidi()
+            ffmpeg = unpack_ffmpeg()
+            assets = fetch_upstream("assets", "PokeRogue's pictures and sounds (about 530 MB)")
+            locales = fetch_upstream("locales", "PokeRogue's text in every language (about 4 MB)")
+            game = fetch_game_files()
+            say("")
+            say("Converting everything for the 3DS. This is the long part.")
+            build(assets, locales, game, lib, ffmpeg)
+            say("")
+        outputs = bundle_game(kinds_of(fmt))
+        items = sd_items(fmt, outputs)
+        copied = copy_to_sd(sd, items) if sd else False
         sound = check_sound(sd) if copied else None
         if not copied:
-            make_hand_copy()
+            make_hand_copy(items)
     except Stop as e:
         say("")
         say(f"STOPPED: {e}")
@@ -709,7 +884,7 @@ def main():
     say("")
     say(f"Done in {(time.time() - t0) / 60:.0f} minutes.")
     if copied:
-        say(f"The game's files are on the SD card, in {os.path.join(sd, '3ds', 'pokerogue')}.")
+        _how_to_start(sd, fmt)
         if sound == "ready":
             say("Sound: ready (dspfirm.cdc is already on the card).")
         else:
@@ -727,13 +902,36 @@ def main():
         say("and choose Eject. Then put it back in your 3DS.")
     else:
         say(f"The files are in {HAND_COPY}.")
-        say("To put them on the SD card yourself: copy the 3ds folder from SD-CARD-FILES onto the SD card,")
-        say("and say yes if Windows asks to merge it with the card's own 3ds folder.")
+        say("To put them on the SD card yourself: copy the folders in SD-CARD-FILES (3ds, and cias if it has one)")
+        say("onto the SD card, and say yes if Windows asks to merge them with the card's own folders.")
+        _how_to_start(None, fmt)
         say("If the card has no 3ds\\dspfirm.cdc file, start DSP1 once from the Homebrew Launcher for sound.")
     say("")
     say("Keep these files to yourself: they're only for your own console.")
     log("=== done")
     return 0
+
+
+def _how_to_start(sd, fmt):
+    """What to do on the 3DS, for the format that was made."""
+    if fmt == "folder":
+        if sd:
+            say(f"The game's files are on the SD card, in {os.path.join(sd, '3ds', 'pokerogue')}.")
+        say("To play: open the Homebrew Launcher on the 3DS and start PokeRogue 3DS.")
+        return
+    if "3dsx" in kinds_of(fmt):
+        say("PokeRogue.3dsx is in the SD card's 3ds folder: one file, with everything inside.")
+        say("To play: put the card in the 3DS, open the Homebrew Launcher and start PokeRogue 3DS.")
+    if "cia" in kinds_of(fmt):
+        say("PokeRogue.cia is in the SD card's cias folder: one file, with everything inside.")
+        say("To install it: put the card in the 3DS, open FBI, choose SD, then the cias folder, then PokeRogue.cia,")
+        say("then \"Install and delete CIA\". The card needs about 1 GB free while it installs. After that,")
+        say("start PokeRogue 3DS from the HOME menu.")
+    if sd:
+        old = [p for p in PINS["packs"] if os.path.exists(os.path.join(sd, "3ds", "pokerogue", f"{p}.pak"))]
+        if len(old) == len(PINS["packs"]):
+            say("The five pack files already in the card's 3ds\\pokerogue folder (about 850 MB) aren't needed any more;")
+            say("you can delete them to get the space back. Your saves are in 3ds\\pokerogue\\save: keep that folder.")
 
 
 if __name__ == "__main__":
