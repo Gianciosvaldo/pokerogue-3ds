@@ -84,6 +84,7 @@ static struct {
   bool present[2];
   bool fainted_shown[2];  /* fainted and not replaced yet: its data is still on the screen (an ability bar can still name it) */
   bool begun;
+  int biome;
   /* pending continuations (each is one thing the real UI would be waiting on) */
   void (*play_done)(void*);
   void* play_arg;
@@ -135,7 +136,7 @@ static struct {
   void (*menu)(void* arg);   /* rh_set_menu: START on the reward screen */
   void* menu_arg;
 } X;
-static int n_shops, n_maps, n_item_opens;
+static int n_shops, n_maps, n_item_opens, n_seamless;
 static bool save_on, resume_on, quit_on;
 static int n_menu_opened, n_menu_yes, n_menu_no, n_quit_callbacks;
 /* RUNTEST_CUSTOM */
@@ -369,7 +370,14 @@ static bool side_ok(int battler, const char* what) {
 
 void bv_begin(const bv_setup* setup) {
   trail_add("--- bv_begin biome %d trainer %d present %d", setup->biome, setup->trainer, setup->player_present);
+  /* the next wave of the same biome with the lead out (no fade, the player's platform stays): only ever with the lead out and under
+   * the biome that was on screen */
+  if (setup->next_encounter) {
+    n_seamless++;
+    if (!W.begun || !setup->player_present || setup->biome != W.biome) BAD("a next-encounter scene with the lead %s, biome %d after %d", setup->player_present ? "out" : "away", setup->biome, W.biome);
+  }
   W.begun = true;
+  W.biome = setup->biome;
   n_scenes++;
   W.mon[0] = setup->player;
   W.mon[1] = setup->enemy;
@@ -382,6 +390,7 @@ void bv_begin(const bv_setup* setup) {
 }
 
 bv_mon* bv_mon_of(int battler) { return &W.mon[battler >= 2 ? 1 : 0]; }
+int bv_biome(void) { return W.begun ? W.biome : -1; }
 
 void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
   if (W.playing) BAD("bv_play while the last one is still playing");
@@ -793,6 +802,7 @@ void ps_open(const pr_battle* bt, ps_mode mode, void (*on_pick)(int slot, int op
   W.party_bt = bt;
   W.party_mode = mode;
 }
+void ps_set_run(const void* gc_run_ptr) { (void)gc_run_ptr; }
 void ps_close(void) {
   W.party_pick = NULL;
   if (W.rel_open) pf_close();
@@ -1572,6 +1582,8 @@ int main(int argc, char** argv) {
     BAD("the observer took in %ld battle ranges, the screen played %d", OBS.ranges, st->events[GC_EV_BATTLE]);
   if (OBS.runs != ended) BAD("%ld combat reports checked for %d runs", OBS.runs, ended);
   printf("reward screens: %d shops, %d item targets, %d biome maps\n", n_shops, n_item_opens, n_maps);
+  printf("scenes: %d, of them %d next waves of the same biome (no fade, the player's platform stays)\n", n_scenes, n_seamless);
+  if (!n_seamless && n_scenes > 50) BAD("no scene was a next wave of the same biome");
   printf("music: %d scenes under upstream's track (%d with encounter music before the trainer's first send-out), %d commands under the battle's "
          "music, %d trainer victories under their victory music, %d run ends faded; %d track starts, %d different tracks heard\n",
          M.scenes, M.encounter_scenes, M.commands, M.victories, M.run_end_fades, M.starts, M.n_seen);

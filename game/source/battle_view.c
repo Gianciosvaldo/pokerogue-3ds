@@ -78,6 +78,9 @@ static struct {
   char biome[32];
   side s[2]; /* 0 player, 1 enemy */
   float arena_player_x, arena_enemy_x, enemy_slide;
+  float arena_old_x;  /* the previous wave's enemy platform, sliding out (setup.next_encounter) */
+  bool arena_old_on;
+  bool begun;         /* bv_begin has run */
   float field_scale;  /* the field container's scale (updateFieldScale), tweened by field_tw */
   tween field_tw;
   msgbox msg;
@@ -112,6 +115,7 @@ static struct {
     int type;              /* PokeballType 0..4 */
     int look;              /* 0 closed, 1 opening, 2 open */
     float x, y, angle, alpha, flash;
+    float tx, top, end_dy;  /* the throw's target: x, y of the ball while it hangs, and how far the Pokemon moves up to meet it */
     bool behind;           /* moved below the Pokemon (upstream does that 300 ms into the throw) */
     bool fading;
     float fade_t;
@@ -121,6 +125,7 @@ static struct {
 
 static side* side_of(int battler) { return &B.s[battler >= 2 ? 1 : 0]; }
 bv_mon* bv_mon_of(int battler) { return &side_of(battler)->mon; }
+int bv_biome(void) { return B.begun ? B.setup.biome : -1; }
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -398,6 +403,7 @@ static void draw_field(void) {
     rr_rect(0, 0, 320, 180, RR_RGBA(0x88, 0xc8, 0xf0, 255));
   field_zoom(true);
   snprintf(k, sizeof k, "images/arenas/%s_b", B.biome);
+  if (B.arena_old_on) img_draw(k, NULL, B.arena_old_x, 0, 0, 0);
   img_draw(k, NULL, B.arena_enemy_x, 0, 0, 0);
   snprintf(k, sizeof k, "images/arenas/%s_a", B.biome);
   img_draw(k, NULL, B.arena_player_x, 0, 0, 0);
@@ -813,9 +819,10 @@ typedef struct {
   bool fall;
 } bounce_seg;
 
-/* doPokeballBounceAnim(ball, 16, 72, 350): falls to 72, rebounds to half the way up each time, until the power is gone */
-static int bounce_build(bounce_seg* sg, float* total) {
-  float power = 1, y = 16, t = 0;
+/* doPokeballBounceAnim(ball, 16, 72, 350): falls to 72, rebounds to half the way up each time, until the power is gone. The ball
+ * hangs at `top` (16 upstream; here the Pokemon's middle, see catch_anim) when it starts to fall. */
+static int bounce_build(bounce_seg* sg, float* total, float top) {
+  float power = 1, y = top, t = 0;
   int n = 0;
   for (;;) {
     sg[n++] = (bounce_seg){t, power * 350, y, 72, true};
@@ -861,13 +868,26 @@ static bool catch_anim(side* sd, const bv_event* e, float t) {
     B.ball.x = 16;
     B.ball.y = 80;
     B.ball.alpha = 1;
+    /* Upstream throws at (236, 16) whatever the Pokemon is, so a small one is hit well below the ball, which hangs above it. The ball
+     * is thrown at the middle of the Pokemon as it is drawn instead, and the Pokemon shrinks into it there. */
+    {
+      float mx, my;
+      mon_pos(sd, e->battler < 2, &mx, &my);
+      const float feet = my - foot_gap(sd) * sd->scale; /* the lowest drawn row: catch_dy moves it */
+      const rr_frame* f = sprite_frame(sd);
+      const float full = f ? f->h * get_mon_scale(&sd->mon) : 40;
+      B.ball.tx = mx;
+      B.ball.top = feet - full / 2;
+      if (B.ball.top < 16) B.ball.top = 16;
+      B.ball.end_dy = (B.ball.top + (f ? f->h * 0.25f : 10) / 2) - feet;
+    }
     B.ball.sub = sd->sub_on; /* substitute.sprite.setVisible(false) */
     sd->sub_on = false;
     for (int i = 0; i < 3; i++) sd->catch_rgb[i] = BALL_RGB[type][i];
   }
   bounce_seg sg[BOUNCE_MAX];
   float btotal;
-  const int nseg = bounce_build(sg, &btotal);
+  const int nseg = bounce_build(sg, &btotal, B.ball.top);
   const float S = CATCH_BOUNCE + btotal; /* the shake counter starts */
   const float t_fail = S + (w + 1) * 1000.0f;
   const float mon_scale = get_mon_scale(&sd->mon);
@@ -875,33 +895,33 @@ static bool catch_anim(side* sd, const bv_event* e, float t) {
   ONCE(CS_THROW, "se/pb_throw");
   if (t < CATCH_THROW) {
     const float u = t / CATCH_THROW;
-    B.ball.x = 16 + (236 - 16) * u;                          /* Linear */
-    B.ball.y = 80 + (16 - 80) * ease(EASE_CUBIC_OUT, u);
+    B.ball.x = 16 + (B.ball.tx - 16) * u;                    /* Linear */
+    B.ball.y = 80 + (B.ball.top - 80) * ease(EASE_CUBIC_OUT, u);
     B.ball.behind = t >= 300;                                 /* moveBelow(pokeball, pokemon) */
     return true;
   }
   B.ball.behind = true;
-  B.ball.x = 236;
+  B.ball.x = B.ball.tx;
   if (t < CATCH_IN) {
     ONCE(CS_OPEN, "se/pb_rel");
-    B.ball.y = 16;
+    B.ball.y = B.ball.top;
     B.ball.look = t < CATCH_THROW + 17 ? 1 : 2;
     sd->catch_on = true;
     sd->catch_untint = 0;
     const float u = ease(EASE_SINE_IN, (t - CATCH_THROW) / (CATCH_IN - CATCH_THROW));
     sd->scale = mon_scale + (0.25f - mon_scale) * u;
-    sd->catch_dy = -64 * u; /* y: 20, from the field position 84 */
+    sd->catch_dy = B.ball.end_dy * u; /* upstream: y 20, from the field position 84 */
     return true;
   }
   if (t < t_fail || caught) {
     sd->scale = 0.25f;
-    sd->catch_dy = -64;
+    sd->catch_dy = B.ball.end_dy;
     sd->sprite_on = false; /* it is inside */
     ONCE(CS_CLOSE, "se/pb_catch");
     B.ball.look = t < CATCH_IN + 17 ? 1 : 0;
     /* the bounce */
     const float tb = t - CATCH_BOUNCE;
-    B.ball.y = 16;
+    B.ball.y = B.ball.top;
     if (tb >= 0) {
       B.ball.y = 72;
       for (int i = 0; i < nseg; i++) {
@@ -927,7 +947,7 @@ static bool catch_anim(side* sd, const bv_event* e, float t) {
       if (local >= 500) continue;
       const float p = local < 250 ? local / 250 : 1 - (local - 250) / 250;
       const float v = ease(EASE_CUBIC_OUT, p) * (k % 2 ? 1 : -1);
-      B.ball.x = 236 + v * 4;
+      B.ball.x = B.ball.tx + v * 4;
       B.ball.angle = v * 27.5f;
     }
     if (caught) {
@@ -939,7 +959,7 @@ static bool catch_anim(side* sd, const bv_event* e, float t) {
       }
       if (ts < 4500) return true;
       B.ball.flash = 0;
-      B.ball.x = 236;
+      B.ball.x = B.ball.tx;
       B.ball.y = 72;
       B.ball.angle = 0;
       return false;
@@ -956,7 +976,7 @@ static bool catch_anim(side* sd, const bv_event* e, float t) {
     B.ball.fading = true;
     B.ball.fade_t = 0;
   }
-  B.ball.x = 236;
+  B.ball.x = B.ball.tx;
   B.ball.y = 72;
   B.ball.angle = 0;
   B.ball.look = tf < 17 ? 1 : 2;
@@ -999,10 +1019,12 @@ static void run_event(float dt) {
       }
       if (B.step == 1) {
         tween_update(&B.tw, dt);
-        B.arena_player_x = 300 - B.tw.value;
+        if (!B.setup.player_present) B.arena_player_x = 300 - B.tw.value; /* a run's first wave: the platform arrives under nobody yet */
         B.arena_enemy_x = -280 + B.tw.value;
+        if (B.arena_old_on) B.arena_old_x = 20 + B.tw.value;
         B.enemy_slide = -300 + B.tw.value;
         if (tween_done(&B.tw)) {
+          B.arena_old_on = false;
           side* en = &B.s[1];
           char s[256];
           if (trainer) {
@@ -1368,7 +1390,9 @@ static bool bv_input(ui_screen* s, ui_button b) {
           B.reason_ms = 0;
           return true;
         }
-        if ((c == 1 && !B.opts.can_ball) || (c == 2 && !B.opts.can_switch) || (c == 3 && !B.opts.can_run)) {
+        /* POKEMON always opens the party (upstream's CommandPhase does): with nobody to send in it is still the way to the summaries,
+         * and a trapped Pokemon is refused when a member is picked, with the reason. opts.can_switch only says a switch is possible. */
+        if ((c == 1 && !B.opts.can_ball) || (c == 3 && !B.opts.can_run)) {
           ui_play_error();
           return false;
         }
@@ -1530,9 +1554,12 @@ void bv_begin(const bv_setup* setup) {
   gm_enum_lower(GM_E_BIOME_ID, setup->biome, B.biome, sizeof B.biome);
   set_mon(&B.s[0], &setup->player, true);
   set_mon(&B.s[1], &setup->enemy, false);
-  B.arena_player_x = 300;
+  B.begun = true;
+  B.arena_player_x = setup->player_present ? 0 : 300;
   B.arena_enemy_x = -280;
   B.enemy_slide = -300;
+  B.arena_old_on = setup->next_encounter;
+  B.arena_old_x = 20;
   B.s[0].present = B.s[0].info_on = setup->player_present;
   B.s[1].present = B.s[1].info_on = false;
   B.field_scale = 1;
