@@ -69,6 +69,21 @@
     "sha256": "ce95f0db8fe4a6025be4de7e4ccdf5ea5974b87b316abf9363becec4f3bd01a7",
     "size": 446968
   },
+  "makerom": {
+    "_comment": "3DSGuy/Project_CTR makerom v0.18.4 (MIT). Builds the installable .cia. Windows on the user's PC; Linux for the tests.",
+    "windows": {
+      "url": "https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.18.4/makerom-v0.18.4-win_x86_64.zip",
+      "sha256": "d743507dc66d4c6f8efcce05ff8f5f47163a60e54e0e0c57fa12ec2f54acdf2f",
+      "size": 240069,
+      "file": "makerom.exe"
+    },
+    "linux": {
+      "url": "https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.18.4/makerom-v0.18.4-ubuntu_x86_64.zip",
+      "sha256": "dd596854718c195c6e3229286be485b122921715555af8ae5cf8e9a465d9f970",
+      "size": 240725,
+      "file": "makerom"
+    }
+  },
   "packs": ["data", "font", "gfx", "snd", "bgm"],
   "expect": {"data": 2765, "font": 65, "gfx": 19483, "snd": 2557, "bgm": 178}
 }

@@ -4,6 +4,9 @@
 #include <lz4.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef __3DS__
+#include <3ds.h>
+#endif
 
 #define MAX_MOUNTS 8
 
@@ -63,12 +66,43 @@ void pak_close(rr_pak* p) {
 int pak_count(const rr_pak* p) { return p ? (int)p->count : 0; }
 const char* pak_path(const rr_pak* p) { return p ? p->path : ""; }
 
+/* A .3dsx carries a RomFS when the last field of its extended header, the RomFS offset, is not zero. */
+bool pak_3dsx_has_romfs(const char* path) {
+  uint32_t h[11]; /* magic, header size (u16) + relocation header size (u16), ..., SMDH offset and size, RomFS offset */
+  FILE* f = path ? fopen(path, "rb") : NULL;
+  bool has = f && fread(h, 4, 11, f) == 11 && !memcmp(h, "3DSX", 4) && (h[1] & 0xFFFF) >= 44 && h[10] != 0;
+  if (f) fclose(f);
+  return has;
+}
+
+#ifdef __3DS__
+extern int __system_argc;
+extern char** __system_argv;
+
+/* Mounts the app's RomFS as "romfs:/" if it has one. A .cia has it as its own RomFS. A .3dsx only when its header
+ * says so: libctru's romfsInit() doesn't look, and would read the start of a .3dsx that has none as if it were one. */
+static void mount_app_romfs(void) {
+  static bool tried;
+  if (tried) return;
+  tried = true;
+  if (envIsHomebrew() && !(__system_argc > 0 && pak_3dsx_has_romfs(__system_argv[0]))) return;
+  romfsInit(); /* an installed app without a RomFS just fails here */
+}
+#endif
+
 int pak_mount_default(void) {
   static const char* names[] = {"gfx", "snd", "bgm", "font", "data"};
+#ifdef __3DS__
+  mount_app_romfs();
+#endif
   for (int i = 0; i < 5 && g_nmounts < MAX_MOUNTS; i++) {
     char path[128];
-    snprintf(path, sizeof path, PAK_DIR "%s.pak", names[i]);
+    snprintf(path, sizeof path, PAK_ROMFS_DIR "%s.pak", names[i]);
     rr_pak* p = pak_open(path);
+    if (!p) {
+      snprintf(path, sizeof path, PAK_DIR "%s.pak", names[i]);
+      p = pak_open(path);
+    }
     if (p) g_mounts[g_nmounts++] = p;
   }
   return g_nmounts;

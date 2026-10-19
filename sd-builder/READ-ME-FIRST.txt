@@ -4,13 +4,15 @@ PokeRogue SD card builder (Windows 10 or 11)
 What this does
   The 3DS game needs PokeRogue's pictures, sounds, music and text, converted for the 3DS
   (about 850 MB of files). Nobody is allowed to share those, so this tool makes them on
-  your own PC from PokeRogue's public files and puts them on your SD card.
+  your own PC from PokeRogue's public files and puts them on your SD card, inside the game
+  itself: you get ONE file, PokeRogue.3dsx (or PokeRogue.cia if you'd rather install it).
 
 What you need
   - This PC, connected to the internet.
   - Your 3DS's SD card, in the PC (card slot or card reader). You can also do without it
     and copy the files later.
-  - About 3 GB free on the PC, and about 1 GB free on the SD card.
+  - About 4 GB free on the PC (the one-file game is made on the PC first), and about 1 GB
+    free on the SD card (about 2 GB if you choose the installable .cia).
   - 20 to 60 minutes, mostly waiting. You can use the PC meanwhile.
 
 Steps
@@ -20,12 +22,24 @@ Steps
      These boxes appear because this tool isn't signed by a company.
   2. A black window opens. It looks for your SD card and shows its letter (for example E:).
      Press Enter to use it. If it can't find the card, type the card's letter and press Enter.
-  3. Wait. It downloads about 700 MB, converts everything, and copies it to the SD card.
+  3. It asks how you want the game on your 3DS. Press Enter for 1 (PokeRogue.3dsx) unless
+     you know you want the installable one:
+       1  PokeRogue.3dsx   one file in the 3ds folder; start it from the Homebrew Launcher
+                          like your other apps. Try this one first.
+       2  PokeRogue.cia    one file in the cias folder; install it once with FBI, then start
+                          it from the HOME menu. Needs custom firmware with signature
+                          patches (Luma3DS) and FBI, which you probably have already.
+       3  Loose files      the app plus the pack files in 3ds\pokerogue, how the earlier
+                          builds worked. Use this if 1 doesn't start.
+     (Want both 1 and 2? Run the builder twice, once with each answer. The second run
+     doesn't download or convert anything again.)
+  4. Wait. It downloads about 700 MB, converts everything, makes the game file, and copies it
+     to the SD card.
      It says "Done" at the end. If it stops or you close it, double-click BUILD-SD-CARD
      again: it carries on where it stopped.
-  4. If it says one more step is needed for sound, do the three short steps it shows
+  5. If it says one more step is needed for sound, do the three short steps it shows
      (they run a small tool called DSP1 once on the 3DS).
-  5. Eject the SD card before taking it out: in File Explorer, right-click the card's drive
+  6. Eject the SD card before taking it out: in File Explorer, right-click the card's drive
      and choose Eject. Put the card back in your 3DS.
 
 If something goes wrong
@@ -35,5 +49,15 @@ If something goes wrong
 When you're done
   You can delete this whole folder to get the space back. Keep it if you'd rather not
   download everything again next time the game needs new files.
+
+Saves
+  Your saves stay in the 3ds\pokerogue\save folder on the SD card, whichever of the three you
+  use. Don't delete that folder. After a one-file build, the five .pak files that the old
+  builds put in 3ds\pokerogue can be deleted to get 850 MB back.
+
+Not tried on a real 3DS yet
+  The one-file versions are checked on a PC and in an emulator, not on a real console.
+  If PokeRogue.3dsx doesn't start, tell the project thread what the 3DS screen says, and
+  use answer 3 meanwhile.
 
 Please keep the files it makes to yourself: they're only for your own console.

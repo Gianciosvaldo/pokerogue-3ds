@@ -5,8 +5,9 @@
 #
 #   sd-builder/tests/e2e.sh ZIP MIRROR_DIR [REFERENCE_PACK_DIR] [--wine]
 #
-# MIRROR_DIR holds each download under the name the builder saves it as: the files named in pins.json,
-# plus assets-87426a7.zip and locales-270ed0a.zip (git archive --prefix=REPO-COMMIT/ of the pinned commits,
+# MIRROR_DIR holds each download under the name the builder saves it as: the files named in pins.json
+# (makerom-v0.18.4-ubuntu_x86_64.zip too, for a zip that carries the game app: e2e_bundle.sh then runs the one-file
+# builds), plus assets-87426a7.zip and locales-270ed0a.zip (git archive --prefix=REPO-COMMIT/ of the pinned commits,
 # which is what codeload serves). REFERENCE_PACK_DIR: packs from build_sd.py on Linux; all five must be
 # byte-identical, natively and under Wine.
 # --wine runs the Windows Python, ffmpeg and encoder under Wine (needs wine64; the Python comes from
@@ -76,5 +77,10 @@ rm "$B/files/build/3ds/pokerogue/.data.done"
 run --sd "$SDARG" --yes --mirror "$MARG" > "$T/fourth.txt" 2>&1 || { cat "$T/fourth.txt"; fail "fourth run"; }
 grep -q "Converting the game's text" "$T/fourth.txt" || fail "data stage not redone"
 [ "$(grep -c 'already done' "$T/fourth.txt")" = 4 ] || fail "other stages redone"
+
+if [ -z "$WINE" ] && [ -e "$B/files/game/pokerogue.3dsx" ]; then
+  echo "== one-file builds"
+  sh "$(dirname "$0")/e2e_bundle.sh" "$B" "$MIRROR" || fail "one-file builds"
+fi
 
 echo "ALL OK ($T)"
