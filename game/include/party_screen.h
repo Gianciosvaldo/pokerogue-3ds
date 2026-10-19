@@ -17,6 +17,10 @@ enum { PS_CANCEL = -1, PS_SEND_OUT = 0, PS_REVIVE_PICK = 2, PS_RELEASE_PICK = 11
 
 void ps_init(void); /* once at boot, after ui_init */
 
+/* The run (a gc_run) the screens show: its trainer id is the summary's ID No., and its party members' met place, level and wave (where
+ * they were caught) are the summary's trainer memo. NULL = none known. The run must outlive the screens. */
+void ps_set_run(const void* gc_run_ptr);
+
 /* Opens the party screen for the player's party. on_pick gets the slot and the PartyOption
  * (PS_SEND_OUT), or slot 6 / PS_CANCEL when the player backs out (never in FAINT_SWITCH). The
  * screen stays open until ps_close. */
