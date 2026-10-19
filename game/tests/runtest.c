@@ -46,6 +46,7 @@
 #include "gc/data.h"
 #include "../../game-core/src/internal.h"   /* gc_mon_recalc, for the strong party of RUNTEST_CUSTOM=strong */
 #include "battle_view.h"
+#include "gm_item_ui.h"
 #include "ball_menu.h"
 #include "combat_observer.h"
 #include "custom_run.h"
@@ -136,7 +137,7 @@ static struct {
   void (*menu)(void* arg);   /* rh_set_menu: START on the reward screen */
   void* menu_arg;
 } X;
-static int n_shops, n_maps, n_item_opens, n_seamless, n_level_ups, n_level_windows;
+static int n_shops, n_maps, n_item_opens, n_seamless, n_level_ups, n_level_windows, n_foe_bars, n_foe_hidden;
 static bool save_on, resume_on, quit_on;
 static int n_menu_opened, n_menu_yes, n_menu_no, n_quit_callbacks;
 /* RUNTEST_CUSTOM */
@@ -561,6 +562,26 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
   n_ask++;
   music_command();
   const gc_run* r = rs_run();
+  /* the bottom screen's foe item bar: one icon per enemy item the item table can draw, each with its own stack */
+  {
+    int drawable = 0;
+    for (int i = 0; i < r->n_enemy_items; i++) {
+      const gc_item* it = &r->enemy_items[i];
+      if (!it->key || it->stack <= 0) continue;
+      if (gm_item_ui_find(it->key, it->arg) || gm_item_ui_find(it->key, -1)) drawable++;
+      else n_foe_hidden++;
+    }
+    const int want = drawable < BV_MAX_FOE_ITEMS ? drawable : BV_MAX_FOE_ITEMS;
+    if (!opts || opts->n_foe_items != want) BAD("foe item bar has %d items, the enemy %d", opts ? opts->n_foe_items : -1, want);
+    else if (want) {
+      n_foe_bars++;
+      for (int i = 0; i < want; i++) {
+        bool found = false;
+        for (int j = 0; j < r->n_enemy_items && !found; j++) found = r->enemy_items[j].stack == opts->foe_items[i].count;
+        if (!opts->foe_items[i].icon || !found) BAD("foe item %d: icon %s, stack %d", i, opts->foe_items[i].icon ? "set" : "missing", opts->foe_items[i].count);
+      }
+    }
+  }
   const gc_mon* me = gc_field_mon(r, 0);
   const gc_mon* foe = gc_field_mon(r, 1);
   if (!W.present[0] || !W.present[1]) BAD("asked for a command with %s out", !W.present[0] ? "no player" : "no enemy");
@@ -1596,6 +1617,8 @@ int main(int argc, char** argv) {
   printf("scenes: %d, of them %d next waves of the same biome (no fade, the player's platform stays)\n", n_scenes, n_seamless);
   if (!n_seamless && n_scenes > 50) BAD("no scene was a next wave of the same biome");
   printf("level ups: %d, of them %d with the stat window\n", n_level_ups, n_level_windows);
+  printf("commands with the foe's item bar: %d; enemy items with no icon row: %d\n", n_foe_bars, n_foe_hidden);
+  if (!n_foe_bars && n_scenes > 50) BAD("no command showed the foe's items");
   if (n_level_windows < n_level_ups) BAD("%d level ups without the stat window", n_level_ups - n_level_windows);
   if (!n_level_ups && n_scenes > 50) BAD("no level up was shown");
   printf("music: %d scenes under upstream's track (%d with encounter music before the trainer's first send-out), %d commands under the battle's "

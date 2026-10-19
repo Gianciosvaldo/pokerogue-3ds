@@ -122,6 +122,13 @@ typedef struct {
 /* The biome the screen shows now (the last bv_begin's), -1 before the first. */
 int bv_biome(void);
 
+/* One of the foe's items as the bottom screen's item bar shows it: a frame of the "items" atlas and the stack count. */
+typedef struct {
+  const char* icon;
+  int count;
+} bv_item;
+#define BV_MAX_FOE_ITEMS 36
+
 /* What the command menu allows (game-core's COMMAND screen). A command that is off, or a move that can't be
  * used, plays the error sound; an unusable move shows its reason (an upstream message) instead. */
 typedef struct {
@@ -133,6 +140,10 @@ typedef struct {
   /* START on the command menu (ui-inputs.ts buttonMenu: UiMode.COMMAND opens the menu overlay). Called with the argument of
    * bv_ask_command; NULL = START does nothing. The fight menu is a mode of its own upstream and does not open it. */
   void (*on_menu)(void* arg);
+  /* The enemy side's items (its Pokemon's held items and its tokens): shown on the bottom screen while the command and fight
+   * menus are up, where upstream's enemy ModifierBar would crowd the top screen. Copied. */
+  const bv_item* foe_items;
+  int n_foe_items;
 } bv_command_opts;
 
 void bv_begin(const bv_setup* setup);

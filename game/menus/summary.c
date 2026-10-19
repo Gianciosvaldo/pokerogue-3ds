@@ -409,11 +409,17 @@ static void draw_stats(float px, float py, bool main) {
     mui_text_o(TS_WINDOW_ALT, gx + 93 + 93 * col, gy + 16 * row, 1, 0, v);
   }
 
-  /* held items: getIcon(true), a container at scale 0.5 with the item at (0, 12) */
+  /* held items: upstream's getIcon(true) at scale 0.5, 17 a row. Up to 8 are drawn at full size in one row instead (lorenzo: the
+   * half-size icons are too small on the 3DS); more fall back to upstream's rows */
+  const bool big = m->nitems <= 8;
   for (int i = 0; i < m->nitems; i++) {
     if (!m->items[i].icon) continue;
     rr_draw_opts o = RR_DEFAULT_OPTS;
     o.origin_y = 0.5f;
+    if (big) {
+      mui_image_ex("items", m->items[i].icon, px + i * 26 + 1, py + 31, &o);
+      continue;
+    }
     o.scale_x = o.scale_y = 0.5f;
     mui_image_ex("items", m->items[i].icon, px + (i % 17) * 12 + 3, py + 14 * (i / 17) + 11 + 6, &o);
   }

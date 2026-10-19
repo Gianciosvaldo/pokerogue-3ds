@@ -14,6 +14,7 @@
 #include "battle_view.h"
 #include "combat_observer.h"
 #include "custom_run.h"
+#include "gm_item_ui.h"
 #include "i18n.h"
 #include "menus.h"
 #include "party_screen.h"
@@ -807,6 +808,36 @@ static void open_run_menu(void* arg) {
   run_menu_open(&a);
 }
 
+/* The enemy side's items for the bottom screen's bar, in modifierSortFunc's first key (the holder's id, tokens first), then by
+ * English name (the port has no class names for its second key) */
+static int foe_items(bv_item* out, int cap) {
+  static const gc_item* pick[BV_MAX_FOE_ITEMS];
+  static const gm_item_ui* ui[BV_MAX_FOE_ITEMS];
+  int n = 0;
+  for (int i = 0; i < G.run.n_enemy_items && i < GC_MAX_ITEMS && n < cap && n < BV_MAX_FOE_ITEMS; i++) {
+    const gc_item* it = &G.run.enemy_items[i];
+    if (!it->key || it->stack <= 0) continue;
+    const gm_item_ui* u = gm_item_ui_find(it->key, it->arg);
+    if (!u) u = gm_item_ui_find(it->key, -1);
+    if (!u) continue; /* nothing to draw it with */
+    int k = n++;
+    pick[k] = it;
+    ui[k] = u;
+    while (k > 0 && (pick[k - 1]->pokemon_id > pick[k]->pokemon_id ||
+                     (pick[k - 1]->pokemon_id == pick[k]->pokemon_id && strcmp(ui[k - 1]->name, ui[k]->name) > 0))) {
+      const gc_item* t = pick[k - 1];
+      pick[k - 1] = pick[k];
+      pick[k] = t;
+      const gm_item_ui* tu = ui[k - 1];
+      ui[k - 1] = ui[k];
+      ui[k] = tu;
+      k--;
+    }
+  }
+  for (int i = 0; i < n; i++) out[i] = (bv_item){ui[i]->icon, (int)pick[i]->stack};
+  return n;
+}
+
 static void ask(void) {
   const gc_screen* s = gc_run_screen(&G.run);
   G.ball = -1;
@@ -818,6 +849,9 @@ static void ask(void) {
   o.can_run = s->can_run;
   o.struggle = s->struggle;
   o.on_menu = G.cfg.on_quit ? open_run_menu : NULL;
+  static bv_item foe[BV_MAX_FOE_ITEMS];
+  o.n_foe_items = foe_items(foe, BV_MAX_FOE_ITEMS);
+  o.foe_items = foe;
   const gc_mon* me = gc_field_mon(&G.run, 0);
   for (int i = 0; i < 4; i++) {
     o.move_ok[i] = s->move_ok[i];
