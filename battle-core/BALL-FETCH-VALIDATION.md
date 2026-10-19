@@ -44,9 +44,14 @@ first return, second refusal, wave reset and legal inventory save/load.
 All 17 compiled faults and 19 malformed captures are detected. The simulation
 fault uses the live scene engine to test its wrong state/message outcome rather
 than crashing on a deliberately absent simulated display engine. Normal game-core
-tests pass with saved/unsaved digests both `e69b03a1` on the pre-integration base.
-Normal app/custom/save checks, retained/cross-slice replays and local 3DS build
-are still pending, as is integration onto the newer main changes.
+tests pass with saved/unsaved digests both `e69b03a1`, before and after integration
+with main's Aftermath, Tera Shift and explicit Illusion deviation. The 60-check
+host test and 30-check entry controller pass. All 40 cross-slice captures remain
+exact. All seven retained suites lose no covered IDs: doubles 1,993/1,995/1,995;
+mixed 1,997/2,000/1,996/1,998. Fresh normal app/custom/save sanitizer checks pass,
+including the 10,000-run and custom/save continuation floors. The local
+CI-equivalent devkitARM 3DS build passes. The combined-tree fault/malformed suite
+also passes all 17/19 checks.
 
 These bounded source callbacks/turns and the real game bridge do not establish
 full battle-core, arbitrary capture/run progression or hardware parity. Preserve
