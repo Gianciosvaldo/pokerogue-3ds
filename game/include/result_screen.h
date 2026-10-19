@@ -12,8 +12,14 @@
  * With a combat report (the combat observer's, taken as the run ended) A on the line opens the post-mortem (postmortem_screen.h)
  * instead of leaving; the post-mortem's B comes back here, its A leaves. Without a report A leaves, as before.
  *
+ * A Classic win with something to tell (win_gains.h: unlocks, vouchers, ribbons, achievements) goes on after the end card's line, as upstream's
+ * GameOverPhase queues it behind the EndCardPhase: one message after the other in the box, each waiting for A (the "<thing> has been
+ * unlocked." of an unlock, the first ribbon of a species line with its Egg Voucher Plus, the Egg Voucher Premium of a win that is not the
+ * first), then the post-mortem or the exit. The achievement and voucher bars slide in over the top screen one after the other from the
+ * moment the screen opens (upstream's AchvBar: 0.5 s in, in place until 10 s after it began, 0.5 s out), whatever page the box is on.
+ *
  * Stand-ins, not upstream's: the words "Game Over" and the lines at the bottom (the locales have none); the end dialogue with the
- * rival, the unlocks and vouchers, and the run history entry are not built.
+ * rival is not built.
  */
 #ifndef GM_RESULT_SCREEN_H
 #define GM_RESULT_SCREEN_H
@@ -22,6 +28,7 @@
 
 #include "combat_observer.h"
 #include "run_saves.h"
+#include "win_gains.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -32,6 +39,7 @@ typedef struct {
   rsv_info run;          /* the run as it ended (rsv_summarize) */
   const co_report* report; /* the combat history of the run, NULL = none (A leaves); owned by the observer, valid until the next run */
   const char* note;      /* one more line under the result (the report could not be stored...), NULL = none; copied */
+  const wg_gains* gains; /* what the win gave (wg_collect), NULL = none; copied */
   void (*on_done)(void* arg);
   void* arg;
 } result_args;

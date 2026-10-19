@@ -63,6 +63,26 @@ ending art, no trainer sprite on the info page and no personal-best tint; the ti
 upstream differential (the screens are 3DS-only); `game/tests` has `run_history_test` (the file: round trip, fuzz, limit, unreadable, refused write,
 the record built from a run) and `history_screen_test` (the screens, with the drawing replaced by fakes).
 
+**What a Classic win gives** (upstream: `GameOverPhase.handleGameOver`, `awardFirstClassicCompletion`, `AchvBar`; [`win_gains.c`](source/win_gains.c),
+[`toast_view.c`](menus/toast_view.c), [`result_screen.c`](source/result_screen.c)). game-core's `gc_classic_finish` already writes the win into the
+system data (the Classic win achievement and its Golden voucher, Undefeated's unlocks, the win counts, the Plus voucher of a first win by a species,
+the ribbon achievements, the Premium voucher of a later win); the app only did not tell the player. `run_config` takes a copy of the fields a win
+changes when a run starts (`wg_snapshot`), and when a Classic run is won `on_run_end` takes the difference (`wg_collect`) and hands it to the
+result screen. In upstream's order: the **achievement bars** on the top screen (the Classic win, the Golden voucher it unlocks, the unevolved-win
+achievement, the ribbon milestones; one at a time, 500 ms in from the right edge, in place until 10 s after they began, 500 ms out, the achievement
+sound at each; the art is upstream's `achv_bar` 9-slice, tier by score), the end card's line (A), then **one message per A** with the level-up
+fanfare: what was unlocked (Endless Mode, Spliced Endless Mode, Mini Black Hole, Eviolite: "... has been unlocked."), each species that won Classic
+for the first time ("X beat Classic Mode for the first time! You received 1x Egg Voucher Plus!"; the species and its starter's root, once each) and
+the Premium voucher of a win that is not the first. Then the post-mortem or the title, as before. A game over is told none of it, and the
+post-mortem's B comes back to the line without telling it again. The words are upstream's locale strings (`achv`, `battle`, `modifierType`, `voucher`);
+the bar is at its art's own size with the 8 px pixel font (upstream draws it half size on a canvas six times larger than this screen).
+Not here yet: the rival's end dialogue before the end card, and the result screens' upstream strings (the line under the end card is still the
+stand-in). Sounds could not be checked in the emulator's screenshots: the code plays `se/achv` with each bar and `se/level_up_fanfare` with each
+message, as the phases do. `game/tests`: `win_gains_test` (the real game-core: first win, second win by the same and by another
+species, an evolved line, a fused Pikachu, duplicates, the ribbon milestones, an Endless or lost run, and invariants against the system data),
+`result_gains_test` (the pages, the bars' easing and timing, the sounds, the box, the post-mortem's B) and `flowtest` (the app hands the
+difference to the result screen).
+
 New Game goes through the **starter select** (`menus/starter.c`, hosted by `starter_host.c`): the species the dex says are caught,
 a team of up to six within the Classic cost budget (10), Begin / Exit. What can be picked, what it costs and whether game-core
 takes the team is game-core's own (`gc_starter_is_available`, `gc_starter_value`, `gc_starter_budget`, `gc_run_set_starters`),
@@ -193,6 +213,7 @@ that file to exist; any bytes will do for the emulator.
 | [`run_screen.h`](include/run_screen.h) | The run driver: owns the `gc_run`, turns its events into battle screen events and its screens (command, switch, learn a move, evolve, rewards, biome, game over) into the menus the game has, and gives each answer to `gc_run_choose`. `rs_start(&cfg)` boots a run. |
 | [`combat_observer.h`](include/combat_observer.h) | The custom content's view of a run: `co_observe` takes the raw WAVE / TURN / BATTLE events of one drain (once, from `run_screen.c`'s `drain()`), gives each battle range to the reducer as a batch, and `co_finish` captures a report that owns its data. Never changes the run. |
 | [`postmortem_screen.h`](include/postmortem_screen.h) | The post-mortem screen over that report, opened from the result screen. |
+| [`win_gains.h`](include/win_gains.h), [`toast_view.h`](include/toast_view.h) | What a Classic win gave (`wg_snapshot` at a run's start, `wg_collect` at its end, `wg_toast_of` / `wg_message_of` for the words) and upstream's achievement bar drawn on the top screen. |
 | [`radar_screen.h`](include/radar_screen.h) | The Nemesis Radar (C06): `radar_open` copies a roster and an optional schedule and shows the list and Scout pages. Read-only. `radar_assets.h` is its bridge to the menus layer (species types, icons, sprites, move and nature names). |
 | [`capsule_model.h`](include/capsule_model.h), [`capsule_screen.h`](include/capsule_screen.h) | The capsule machine preview (C07): `capsule_model` is the pure motion and timeline (fixed 8 ms steps, dt in ms, clamped; settled by 1.5 s at the latest); `capsule_screen_open` plays it over an immutable `cap_fixture` and calls `on_settled` once and `on_exit` once from the player's input. |
 | [`gacha_host.h`](include/gacha_host.h), [`gacha_screen.h`](include/gacha_screen.h) | The capsule machine (C09): `gacha_host` reads the option table from game-core, decides what can be bought, runs ONE purchase through `profile_tx` (busy while another is unfinished or unshown), builds the capsule fixture in the source's display order and records eggs as shown; `gacha_screen_open` is the menu (machine, option, question defaulting to No) and opens the capsule screen on the committed result. |
@@ -232,6 +253,8 @@ counted twice (its battle ranges must equal the ones the screen played). Their o
 ```
 make -C game/tests observer_test && game/tests/build/observer_test        # the observer + reducer: drains, switches, faints, overflow, replay/skip...
 make -C game/tests postmortem_test && game/tests/build/postmortem_test    # the screen's words, pages, buttons, and the result screen's flow into it
+make -C game/tests win_gains_test && game/tests/build/win_gains_test      # what a Classic win gave, over the real game-core
+make -C game/tests result_gains_test && game/tests/build/result_gains_test # the result screen's bars, messages and sounds
 python3 game/tests/observer_mutations.py                                  # one-line mutations of the wiring and the screen; every one must make a test fail
 ```
 
@@ -345,7 +368,7 @@ make -C game/tests animtest && game/tests/build/animtest path/to/pokerogue-asset
   after a female Pyroar) is not listed; see `starter_data.h`. Not measured: what writing `system.sav` costs on a real SD card.
 - Runs started from the starter select now carry system data, so a run updates the dex, candy, friendship and Classic win records
   (game-core's `gc_system_*` calls in the run). Runs already saved are not back-filled into the dex.
-- Around the save slots (not part of card 113): unlocks and vouchers on a win, the rival's end dialogue, timed events, and any online or cloud save. ("Save and Quit", "Rename Run" and the run history are done: see above.)
+- Around the save slots (not part of card 113): the rival's end dialogue, timed events, and any online or cloud save. ("Save and Quit", "Rename Run", the run history and the unlocks, vouchers and ribbons of a win are done: see above.)
 - Message timing per text (upstream's 500 ms for "X used Y!", prompts after faints): asked of
   battle-core; every text waits 1.5 s for now.
 - In move animations: the grey part of a sprite's tone (upstream's shader pushes it far past

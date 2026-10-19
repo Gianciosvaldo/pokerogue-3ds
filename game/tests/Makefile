@@ -127,6 +127,14 @@ build/run_history_test: $(HIST_SRCS)
 run_history_test: build/run_history_test
 .PHONY: run_history_test
 
+# what a Classic win gave (win_gains.c) against the real game-core's system data changes; make win_gains_test && build/win_gains_test
+WG_SRCS := win_gains_test.c ../source/win_gains.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+build/win_gains_test: $(WG_SRCS)
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(WG_SRCS) -lm -o $@
+win_gains_test: build/win_gains_test
+.PHONY: win_gains_test
+
 # the run driver with saving: every save point is written and the slot loads back as the run; with `resume` the run is also dropped and
 # continued from its slot at every 4th save point, and the same seed must end the same way (wave and score) with and without it
 runtest-save: build/runtest
@@ -136,7 +144,7 @@ runtest-save: build/runtest
 .PHONY: runtest-save
 
 # the app's screen flow (app_flow.c) with fake screens and a fake run driver, over the real save slots; make flowtest && build/flowtest
-FLOW_SRCS := flowtest.c ../source/app_flow.c ../source/run_history.c ../source/history_record.c ../source/custom_run.c ../source/profile_tx.c ../source/custom_store.c $(OBS_SRCS) ../source/run_saves.c ../source/system_data.c ../source/starter_data.c ../menus/menus_data.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+FLOW_SRCS := flowtest.c ../source/app_flow.c ../source/win_gains.c ../source/run_history.c ../source/history_record.c ../source/custom_run.c ../source/profile_tx.c ../source/custom_store.c $(OBS_SRCS) ../source/run_saves.c ../source/system_data.c ../source/starter_data.c ../menus/menus_data.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/flowtest: $(FLOW_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) $(FLOW_SRCS) -lm -o $@
@@ -194,9 +202,17 @@ PM_CPPFLAGS := $(CPPFLAGS) -I$(CCORE)/include -I$(GC)/include -I$(RC)/include -I
 PM_SRCS := postmortem_test.c ../source/postmortem_screen.c ../source/result_screen.c ../gen/gm_enum_names.c $(OBS_SRCS)
 build/postmortem_test: $(PM_SRCS)
 	@mkdir -p build
-	$(CC) $(PM_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(PM_SRCS) -o $@
+	$(CC) $(PM_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(PM_SRCS) -lm -o $@
 postmortem_test: build/postmortem_test
 .PHONY: postmortem_test
+
+# the result screen's pages and bars for what a Classic win gave (source/result_screen.c with win_gains.h's items), with a fake UI stack and drawing layer
+RG_SRCS := result_gains_test.c ../source/result_screen.c ../gen/gm_enum_names.c
+build/result_gains_test: $(RG_SRCS)
+	@mkdir -p build
+	$(CC) $(PM_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(RG_SRCS) -lm -o $@
+result_gains_test: build/result_gains_test
+.PHONY: result_gains_test
 
 # the Nemesis Radar (source/radar_screen.c) over custom-core's real validators, with a fake drawing layer; make radar_test && build/radar_test [fuzz sessions]
 RADAR_CPPFLAGS := $(CPPFLAGS) -I$(CCORE)/include -I$(CCORE)/tests -I../gen -I$(APP)/include
