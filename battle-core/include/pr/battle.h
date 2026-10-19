@@ -377,6 +377,9 @@ typedef struct pr_faint_note {
 struct pr_battle;
 typedef void (*pr_faint_observer_fn)(const struct pr_battle *bt, const pr_faint_note *note, void *ctx);
 
+enum { PR_ACHV_CHECK_TERASTALLIZE, PR_ACHV_CHECK_STELLAR_TERASTALLIZE };
+typedef void (*pr_achievement_check_fn)(const struct pr_battle *bt, int check, void *ctx);
+
 typedef struct pr_battle {
     pr_rng rng;                /* Phaser.Math.RND (global) */
     bool rng_live;             /* false = the caller didn't provide its state */
@@ -465,6 +468,8 @@ typedef struct pr_battle {
     uint32_t challenge_flags;  /* active gameMode challenges, bit per Challenges enum id */
     int16_t weather_turns_left, weather_max_duration;
     int16_t terrain_turns_left, terrain_max_duration;
+    bool player_teras_used_known; /* explicit arena.playerTerasUsed input */
+    double player_teras_used;     /* native number, no cap in TeraPhase.end */
     bool ignore_abilities;     /* arena.ignoreAbilities */
     int8_t ignoring_effect_source; /* arena.ignoringEffectSource (BattlerIndex), -1 = undefined */
     bool ability_bar_visible;  /* globalScene.abilityBar.isVisible() */
@@ -483,6 +488,9 @@ typedef struct pr_battle {
     uint16_t deferred[PR_MAX_UNPORTED];
     uint8_t n_deferred;
     /* Optional (NULL = none, the default): told of every faint at doFaint. Never changes the battle, an RNG draw, an event or a phase. */
+    /* Profile validation requests emitted by battle phases; caller owns profile state. */
+    pr_achievement_check_fn achievement_check;
+    void *achievement_check_ctx;
     pr_faint_observer_fn faint_observer;
     void *faint_observer_ctx;
     /* Deliberate departures from the source pin that lorenzo asked for (PR_DEV_*). 0, the default,

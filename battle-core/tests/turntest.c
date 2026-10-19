@@ -246,6 +246,13 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             }
             bt->game_mode = field(l, "gm") ? (int8_t)inum(l, "gm") : -1;   /* older files have none */
         } else if (!strncmp(l, "ARENA ", 6)) {
+            const char *teras=field(l,"teras");
+            bt->player_teras_used_known=teras!=NULL;
+            if(teras){
+                char *end;double value=strtod(teras,&end);
+                if(*end||!isfinite(value)||value<0||value>9007199254740992.0||value!=floor(value))exit(2);
+                bt->player_teras_used=value;
+            }
             bt->weather = (uint8_t)inum(l, "weather");
             bt->weather_turns_left = (int16_t)inum(l, "wturns");
             bt->weather_max_duration = (int16_t)inum(l, "wmax");
@@ -767,6 +774,7 @@ static void dump_state(lines_t *L, const pr_battle *bt, const case_state *cs, bo
        bt->terrain ? bt->terrain_turns_left : 0, bt->terrain ? bt->terrain_max_duration : 0, bt->ignore_abilities);
     num_or_u(&s, bt->ignoring_effect_source, -1);
     if (has_biome) sb(&s, " biome=%d", bt->biome);
+    if(bt->player_teras_used_known)sb(&s," teras=%.17g",bt->player_teras_used);
     add_line(L, "%s", s.s);
     for (int i = 0; i < bt->n_arena_tags; i++) {
         const pr_arena_tag *t = &bt->arena_tags[i];

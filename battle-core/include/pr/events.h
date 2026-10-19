@@ -92,6 +92,8 @@ typedef struct {
     int8_t battler;            /* BattlerIndex 0-3 (player 0/1, enemy 2/3), -1 = none */
     int8_t target;             /* a second BattlerIndex, -1 = none */
     uint16_t id;               /* see the type */
+    bool actor_ids_known;      /* explicit animation constructor references, including benches */
+    uint32_t actor_id, target_id;
     int32_t value;             /* see the type */
     pr_msg msg;                /* PR_EV_TEXT */
     uint8_t weather, terrain;  /* WeatherType and TerrainType after the event */

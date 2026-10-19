@@ -69,6 +69,7 @@ typedef struct {
     uint8_t weather, terrain;
     int16_t weather_turns_left, weather_max_duration, terrain_turns_left, terrain_max_duration;
     int32_t player_faints, n_arena_tags, n_pos_tags;
+    double player_teras_used;
     bool frozen_names; /* new saves require both halves of stored names */
 } sv_run;
 typedef struct { uint8_t terminal_result; } sv_terminal;
@@ -88,7 +89,7 @@ static const sfield run_fields[] = {
     SF(sv_run, terrain), SF(sv_run, weather_turns_left), SF(sv_run, weather_max_duration),
     SF(sv_run, terrain_turns_left), SF(sv_run, terrain_max_duration), SF(sv_run, player_faints),
     SF(sv_run, n_arena_tags), SF(sv_run, n_pos_tags),
-    SF(sv_run, frozen_names),
+    SF(sv_run, frozen_names), SF(sv_run, player_teras_used),
 };
 
 static const sfield depth_fields[] = {SF(pr_biome_depths, set), SF(pr_biome_depths, depth), SF(pr_biome_depths, chance)};
@@ -508,6 +509,7 @@ size_t gc_run_save(const gc_run *run, void *buf, size_t cap)
     v.terrain_turns_left = bt->terrain_turns_left;
     v.terrain_max_duration = bt->terrain_max_duration;
     v.player_faints = bt->player_faints;
+    v.player_teras_used = bt->player_teras_used;
     v.n_arena_tags = bt->n_arena_tags;
     v.n_pos_tags = bt->n_pos_tags;
     v.frozen_names = true;
@@ -726,7 +728,19 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     v.mystery_type = v.mystery_tier = -1;
     int dropped = 0;
     reader r = section(&body, "run");
-    if (r.bad || get_block(&r, run_fields, NF(run_fields), &v, sizeof v, 1, &dropped) != 1) { *why = "the save is damaged"; return false; }
+    /* Historical runs could not use Tera: an absent counter is exactly zero,
+     * not lost saved state. A present field must have its unique native shape. */
+    reader counter_schema = r;
+    int run_nf = take16(&counter_schema), counter_fields = 0;
+    if (counter_schema.bad || run_nf > 128) { *why = "the save is damaged"; return false; }
+    for (int i = 0; i < run_nf; i++) {
+        uint32_t name = take32(&counter_schema); uint16_t size = take16(&counter_schema);
+        if (name == hash("player_teras_used") && (++counter_fields > 1 || size != sizeof(double))) {
+            *why = "the stored Tera counter is damaged"; return false;
+        }
+    }
+    if (counter_schema.bad) { *why = "the save is damaged"; return false; }
+    if (r.bad || get_block(&r, run_fields, NF(run_fields) - !counter_fields, &v, sizeof v, 1, &dropped) != 1) { *why = "the save is damaged"; return false; }
     uint8_t frozen_marker; memcpy(&frozen_marker, &v.frozen_names, 1);
     if (frozen_marker > 1) { *why = "the stored names are damaged"; return false; }
     sv_terminal terminal={0};reader tr=section(&body,"terminal");
@@ -745,6 +759,11 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
         || v.n_pos_tags < 0 || v.n_pos_tags > PR_MAX_POSITIONAL_TAGS || v.biome < 0 || v.biome >= PR_BIOME_ID_LIMIT) {
         *why = "the save is damaged";
         return false;
+    }
+
+    if (!isfinite(v.player_teras_used) || v.player_teras_used < 0
+        || v.player_teras_used != floor(v.player_teras_used) || v.player_teras_used > 9007199254740992.0) {
+        *why = "the stored Tera counter is damaged"; return false;
     }
 
     bool seen[6] = {false};
@@ -858,6 +877,8 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     bt->terrain_turns_left = v.terrain_turns_left;
     bt->terrain_max_duration = v.terrain_max_duration;
     bt->player_faints = v.player_faints;
+    bt->player_teras_used_known = true;
+    bt->player_teras_used = v.player_teras_used;
     r = section(&body, "arena");
     if (!r.bad) {
         bt->n_arena_tags = (uint8_t)get_block(&r, arena_tag_fields, NF(arena_tag_fields), bt->arena_tags,

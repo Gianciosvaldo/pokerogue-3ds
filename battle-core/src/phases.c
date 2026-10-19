@@ -173,15 +173,23 @@ static void form_change_with_delay(pr_battle *bt, const pr_pokemon *p, int trigg
         /* The attribute's formFunc decides whether this trigger is called.
          * Both registered form changes have no additional conditions. */
         target_form = mon->form == 0 ? 1 : 0;
+    } else if (mon->species == SPECIES_ID_OGERPON && (trigger_class == PR_FCT_SpeciesFormChangeTeraTrigger
+                                                   || trigger_class == PR_FCT_SpeciesFormChangeLapseTeraTrigger)) {
+        const char *keys[]={"teal-mask","wellspring-mask","hearthflame-mask","cornerstone-mask",
+                            "teal-mask-tera","wellspring-mask-tera","hearthflame-mask-tera","cornerstone-mask-tera"};
+        const char *key=pr_pokemon_base_form(mon)->form_key,*to=NULL;
+        bool tera=trigger_class==PR_FCT_SpeciesFormChangeTeraTrigger;
+        for(int j=0;j<4;j++)if(!strcmp(key,keys[j+(tera?0:4)]))to=keys[j+(tera?4:0)];
+        for(int j=0;to&&j<sp->nforms;j++)if(!strcmp(pr_forms[sp->form0+j].form_key,to))target_form=j;
     } else if (mon->species == SPECIES_ID_TERAPAGOS && (trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger
+                                                        || trigger_class == PR_FCT_SpeciesFormChangeTeraTrigger
                                                         || trigger_class == PR_FCT_SpeciesFormChangeLapseTeraTrigger)) {
-        /* quiet, no conditions: "" -> terastal on the ability trigger, stellar -> terastal on the
-         * lapse; any other form has no change for the trigger. (terastal -> stellar is TeraPhase's.) */
         const pr_form *from = pr_pokemon_base_form(mon);
-        const char *key = from && from->form_key ? from->form_key : "";
-        bool to_terastal = trigger_class == PR_FCT_SpeciesFormChangeAbilityTrigger ? !key[0] : !strcmp(key, "stellar");
-        for (int i = 0; to_terastal && i < sp->nforms; i++)
-            if (pr_forms[sp->form0 + i].form_key && !strcmp(pr_forms[sp->form0 + i].form_key, "terastal")) target_form = i;
+        const char *key = from && from->form_key ? from->form_key : "",*to=NULL;
+        if(trigger_class==PR_FCT_SpeciesFormChangeAbilityTrigger&&!key[0])to="terastal";
+        else if(trigger_class==PR_FCT_SpeciesFormChangeTeraTrigger&&!strcmp(key,"terastal"))to="stellar";
+        else if(trigger_class==PR_FCT_SpeciesFormChangeLapseTeraTrigger&&!strcmp(key,"stellar"))to="terastal";
+        for(int j=0;to&&j<sp->nforms;j++)if(!strcmp(pr_forms[sp->form0+j].form_key,to))target_form=j;
         /* an ability taken from the old form's slots changes with the form, and without the ability
          * index the new one can't be looked up */
         if (target_form >= 0 && !mon->ability_lookup_known && mon->ability_override < 0 && from
@@ -591,6 +599,7 @@ static void turn_start(pr_battle *bt, pr_engine *e)
         if (pre->command >= 0 && pre->skip) continue;
         if (pre->command == COMMAND_TERA) {
             int t = new_pokemon_phase(e, PH_TERA, b);
+            if (t >= 0) PH(t)->pokemon = p; /* native TeraPhase constructor takes Pokemon */
             pr_phase_push(bt, e, t);
         } else if (p->queued_mega || pre->command == COMMAND_MEGA) {
             pr_mega_evolve(bt, p);
@@ -2746,6 +2755,39 @@ static void reset_summon_data(pr_pokemon *p)
 
 void pr_reset_turn_data(pr_pokemon *p) { reset_turn_data(p); }
 void pr_reset_summon_data(pr_pokemon *p) { reset_summon_data(p); }
+/* TeraPhase.end: public because phase completion owns this state transition. */
+void pr_tera_end(pr_battle *bt, pr_pokemon *p)
+{
+    p->terastallized=true;
+    p->added_type=0; /* null added type, matching the existing C sentinel */
+    form_change(bt,p,PR_FCT_SpeciesFormChangeTeraTrigger);
+    if(p->is_player){
+        if(!bt->player_teras_used_known)pr_note_unported(bt,PR_FEAT_PHASE_0+PH_TERA);
+        else bt->player_teras_used+=1;
+        if(bt->achievement_check){
+            bt->achievement_check(bt,PR_ACHV_CHECK_TERASTALLIZE,bt->achievement_check_ctx);
+            if(pr_get_tera_type(p)==POKEMON_TYPE_STELLAR)
+                bt->achievement_check(bt,PR_ACHV_CHECK_STELLAR_TERASTALLIZE,bt->achievement_check_ctx);
+        }
+    }
+}
+
+static void tera_phase(pr_battle *bt, pr_engine *e, int ph)
+{
+    pr_pokemon *p=PH(ph)->pokemon;
+    if(!p){pr_note_unported(bt,PR_FEAT_PHASE_0+PH_TERA);return;}
+    pr_queue_msg(bt,e,pr_msg2("battle:pokemonTerastallized",
+        pr_arg_pokemon(bt,"pokemonNameWithAffix",p),pr_arg_type("type",pr_get_tera_type(p))));
+    int before=e->n_events,b=pr_battler_index(bt,p);
+    pr_event_add(bt,e,PR_EV_COMMON_ANIM,b,b,COMMON_ANIM_TERASTALLIZE,0,NULL);
+    if(e->n_events>before){
+        e->events[before].actor_ids_known=true;
+        e->events[before].actor_id=p->id;
+        e->events[before].target_id=p->id;
+    }
+    pr_tera_end(bt,p);
+}
+
 void pr_form_change(pr_battle *bt, const pr_pokemon *p, int trigger_class) { form_change(bt, p, trigger_class); }
 void pr_form_change_delayed(pr_battle *bt, const pr_pokemon *p, int trigger_class) { form_change_with_delay(bt, p, trigger_class, true); }
 
@@ -4068,6 +4110,7 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
         pr_apply_ab_attrs(bt, PR_AC_PostMoveUsedAbAttr, &pp);
         break;
     }
+    case PH_TERA: tera_phase(bt,e,ph); break;
     case PH_MOVE: move_phase(bt, e, ph); break;
     case PH_MOVE_EFFECT: move_effect_phase(bt, e, ph); break;
     case PH_MOVE_END: move_end_phase(bt, e, ph); break;

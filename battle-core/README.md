@@ -1363,3 +1363,7 @@ Pain Split direct HP changes and boss-condition separation are documented in
 
 The six ability-changing moves and their gain/loss/reset boundaries are documented
 in [ABILITY-MOVES-VALIDATION.md](ABILITY-MOVES-VALIDATION.md).
+
+Tera phase ownership, Ogerpon/Terapagos quiet triggers and arena counter saves
+are documented in [TERA-PHASE-VALIDATION.md](TERA-PHASE-VALIDATION.md), with
+bounded raw, complete-turn and cleanup evidence and explicit caller limits.

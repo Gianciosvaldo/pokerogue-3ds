@@ -529,6 +529,8 @@ static bool select_biome_start(gc_run *run, gc_rphase *p)
 
 static void party_heal(gc_run *run)
 {
+    run->bt.player_teras_used_known = true;
+    run->bt.player_teras_used = 0;
     for (int i = 0; i < run->n_party; i++) {
         pr_pokemon *b = &run->party[i].b;
         b->hp = b->stats[0];
@@ -640,6 +642,8 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         pr_run_reset_seed(&run->run, run->wave);
         return select_biome_start(run, p);
     case RP_SWITCH_BIOME: {
+        run->bt.player_teras_used_known = true;
+        run->bt.player_teras_used = 0;
         run->biome = p->a;
         gc_event *ev = gc_ev_new(run, GC_EV_BIOME);
         if (ev) ev->a = p->a;

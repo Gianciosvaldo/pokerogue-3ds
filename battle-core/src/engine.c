@@ -482,17 +482,10 @@ static int check_dynamic(pr_battle *bt, pr_engine *e, int ph)
     return m;
 }
 
-static void note_unported_phase(pr_battle *bt, pr_engine *e, int ph)
-{
-    int t = e->pool[ph].type;
-    if (t == PH_TERA) pr_note_unported(bt, (uint16_t)(PR_FEAT_PHASE_0 + t));
-}
-
 /* PhaseManager.pushPhase */
 void pr_phase_push(pr_battle *bt, pr_engine *e, int ph)
 {
     if (ph < 0) { limit(bt, e); return; }
-    note_unported_phase(bt, e, ph);
     tree_add(bt, e, check_dynamic(bt, e, ph), 0);
 }
 
@@ -500,7 +493,6 @@ void pr_phase_push(pr_battle *bt, pr_engine *e, int ph)
 void pr_phase_unshift(pr_battle *bt, pr_engine *e, int ph)
 {
     if (ph < 0) { limit(bt, e); return; }
-    note_unported_phase(bt, e, ph);
     int t = e->pool[ph].type;
     int add = check_dynamic(bt, e, ph);
     if (t == PH_MOVE || t == PH_DANCER) tree_add_after(bt, e, add, PH_MOVE_END);
@@ -511,7 +503,6 @@ void pr_phase_unshift(pr_battle *bt, pr_engine *e, int ph)
 void pr_phase_add_deferred(pr_battle *bt, pr_engine *e, int ph)
 {
     if (ph < 0) { limit(bt, e); return; }
-    note_unported_phase(bt, e, ph);
     tree_add_phase(bt, e, ph, true);
 }
 
@@ -816,6 +807,10 @@ void pr_prepare_player_cleanup(pr_battle *bt, pr_engine *e, bool reset_arena)
         if (was_tera) pr_form_change(bt,p,PR_FCT_SpeciesFormChangeLapseTeraTrigger);
         pr_ab_params pp={.pokemon=p,.move=-1};
         pr_apply_ab_attrs(bt,PR_AC_PostBattleInitAbAttr,&pp);
+        /* doPostBattleCleanup: either raw or fusion Terapagos refreshes the arena counter. */
+        if(p->species==SPECIES_ID_TERAPAGOS || p->fusion_species==SPECIES_ID_TERAPAGOS){
+            bt->player_teras_used_known=true;bt->player_teras_used=0;
+        }
     }
 }
 
