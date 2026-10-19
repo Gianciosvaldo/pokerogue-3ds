@@ -51,7 +51,7 @@ typedef enum {
     GC_EV_RECALL,        /* outside a turn, a Pokemon goes back into its ball: a = side, b = party index */
     GC_EV_HP,            /* outside a turn (items, the party heal): a = side, b = party index, c = HP now */
     GC_EV_EXP,           /* a = party index, c = level before; see exp_amount/exp_before */
-    GC_EV_LEVEL_UP,      /* a = party index, b = the new level (stats are already updated) */
+    GC_EV_LEVEL_UP,      /* a = party index, b = the new level (stats are already updated), c = the level before */
     GC_EV_MOVE_LEARNED,  /* a = party index, b = move slot, c = MoveId */
     GC_EV_EVOLVED,       /* a = party index, b = species before, c = species after */
     GC_EV_MONEY,         /* a = the change, b = money now */

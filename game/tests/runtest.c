@@ -136,7 +136,7 @@ static struct {
   void (*menu)(void* arg);   /* rh_set_menu: START on the reward screen */
   void* menu_arg;
 } X;
-static int n_shops, n_maps, n_item_opens, n_seamless;
+static int n_shops, n_maps, n_item_opens, n_seamless, n_level_ups, n_level_windows;
 static bool save_on, resume_on, quit_on;
 static int n_menu_opened, n_menu_yes, n_menu_no, n_quit_callbacks;
 /* RUNTEST_CUSTOM */
@@ -492,6 +492,17 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
               W.mon[s].hp = e->mon->hp;
             }
           }
+        }
+        break;
+      case BEV_LEVEL_UP:
+        /* "X grew to Lv. N!" and the stat window: the gains can't be negative at a higher level of the same species */
+        n_level_ups++;
+        if (!e->text || !e->text[0]) BAD("level up without its message");
+        if (e->stats) {
+          n_level_windows++;
+          for (int k = 0; k < 6; k++)
+            if (e->stats[k] <= 0 || e->stats[6 + k] < e->stats[k])
+              BAD("level up stat %d went from %d to %d", k, e->stats[k], e->stats[6 + k]);
         }
         break;
       case BEV_MAX_HP:
@@ -1584,6 +1595,9 @@ int main(int argc, char** argv) {
   printf("reward screens: %d shops, %d item targets, %d biome maps\n", n_shops, n_item_opens, n_maps);
   printf("scenes: %d, of them %d next waves of the same biome (no fade, the player's platform stays)\n", n_scenes, n_seamless);
   if (!n_seamless && n_scenes > 50) BAD("no scene was a next wave of the same biome");
+  printf("level ups: %d, of them %d with the stat window\n", n_level_ups, n_level_windows);
+  if (n_level_windows < n_level_ups) BAD("%d level ups without the stat window", n_level_ups - n_level_windows);
+  if (!n_level_ups && n_scenes > 50) BAD("no level up was shown");
   printf("music: %d scenes under upstream's track (%d with encounter music before the trainer's first send-out), %d commands under the battle's "
          "music, %d trainer victories under their victory music, %d run ends faded; %d track starts, %d different tracks heard\n",
          M.scenes, M.encounter_scenes, M.commands, M.victories, M.run_end_fades, M.starts, M.n_seen);

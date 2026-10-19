@@ -215,7 +215,7 @@ static void level_up(gc_run *run, gc_rphase *p)
     gc_mon *m = pm(run, p->a);
     gc_mon_recalc(run, m);
     gc_event *ev = gc_ev_new(run, GC_EV_LEVEL_UP);
-    if (ev) { ev->a = p->a; ev->b = p->c; }
+    if (ev) { ev->a = p->a; ev->b = p->c; ev->c = p->b; }
     gc_ev_msg(run, "battle:levelUp", 2, gc_m_mon(run, "pokemonName", 0, p->a), pr_arg_int("level", p->c));
     /* end(): the new level moves, then the evolution check */
     if (p->b < 100) {

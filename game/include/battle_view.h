@@ -84,6 +84,8 @@ typedef enum {
   BEV_TRANSFORM,   /* mon = temporary display; a = play Transform sound (Imposter) */
   BEV_ILLUSION,    /* PR_DEV_ILLUSION: mon = the new look, name and types when a disguise starts or ends; a = play the
                     * Transform sound (breakIllusion plays it, setIllusion doesn't) */
+  BEV_LEVEL_UP,    /* LevelUpPhase.showLevelUpMessages: the fanfare and `text` ("X grew to Lv. N!") with a prompt, then
+                    * promptLevelUpStats: the stat window with the gains (stats[6..11] - stats[0..5]), A, the totals, A */
 } bev_type;
 
 typedef struct {
@@ -96,6 +98,7 @@ typedef struct {
   bool prompt;               /* BEV_MESSAGE: wait for a button */
   bool caught;               /* BEV_CATCH: the ball holds (b is then 3: a catch always passes the three shake checks) */
   const bv_mon* mon;         /* BEV_SUMMON */
+  const int* stats;          /* BEV_LEVEL_UP: the six permanent stats before, then after */
 } bv_event;
 
 /* The player's command (upstream Command enum: FIGHT 0, BALL 1, POKEMON 2, RUN 3). */
