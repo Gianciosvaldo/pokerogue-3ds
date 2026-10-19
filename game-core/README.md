@@ -785,7 +785,7 @@ money, items owned, that the encounter left without a battle, the shop's `custom
 Pikachu, Eevee), the RNG after the shop, and that the next wave is queued. The old `gen/dump-mystery-actions.test.ts`
 and `tests/mystery_diff_test.c` are untouched and still only smoke coverage.
 
-Department Store Sale, Shady Vitamin Dealer, Lost at Sea, Field Trip, Part Timer and An Offer You Can't Refuse are ported and compared. Every other encounter's actions in
+Department Store Sale, Shady Vitamin Dealer, Lost at Sea, Field Trip, Part Timer, An Offer You Can't Refuse and The Pokemon Salesman are ported and compared. Every other encounter's actions in
 `gc_mystery.c` are still the Task 46 stand-ins; the encounter *selection* (`gc_mystery_select`) and the intro checks
 are not part of this comparison.
 
@@ -922,6 +922,40 @@ Upstream behaviours reproduced on purpose:
 - Leave pays nothing and opens the heal shop.
 - `gc_party_remove` compacts `party[]` and renumbers `party_order`. It is new: storage indices held by anything outside the run
   (the app's party screen) go stale after a sale. Nothing in game-core keeps one across the encounter.
+
+### The Pokemon Salesman
+
+`<trace>-salesman.txt` comes from its own producer, `tests/mystery-salesman.producer.test.ts` (`tools/mysterydiff.sh` runs both) and is
+replayed by `tests/mystery_salesman_diff_test.c` through the real screens (`gc_run_choose`, the party prompt, the heal-only shop).
+Five parties (one to six Pokemon, levels and fainted ones at random), a random wave and biome, Shiny Charm stacks on a third of the
+cases, random trainer and secret ids (a third forced so that the offer is shiny), the species chain's dex entries and candy shuffled,
+and a wallet around the requirement (`4 x` the wave's money: one under, exactly, the price, one over, five times, 12345). Upstream's
+`onInit` is rerun on the case's seeds (`executeWithSeedOffset(.., waveIndex)`), the option runs in `onOptionPhase` with a polling
+bot that answers the real party UI: room (nothing asked), "No" (a full party), or Release of each of the six slots. `VictoryPhase` of the
+bought Pokemon really runs. Compared: whether each option is enabled, the offer (every field of the Pokemon: id, stats, IVs, nature,
+gender, shiny and variant, tera type, ability index, ball, met-*, exp, friendship, luck) and its price, money (clamped), the run RNG
+(never moved by the option; the heal shop's draws are checked against a bare heal-only shop), the queued phases (no experience), the
+messages in order (obtained, addedAsAStarter, the release farewell), the party order and slots after a release, the bought Pokemon, and
+the dex entry, candy and ability attribute of every species in the chain.
+
+Upstream behaviours reproduced on purpose:
+- The offer is drawn from the wave seed, not the run RNG: `getRandomSpeciesByStarterCost([0,5], paradox list, ..)` (starter cost 0..5,
+  no sub-legendary / legendary / mythical / paradox, widening the tiers when none is left; the index from `randSeedInt(len)` and then
+  the Phaser shuffle, so the list is shuffled once more than a plain pick), up to five rerolls until a hidden ability exists, then
+  `randSeedInt(100)`: roll 0 or no hidden ability gives a shiny Magikarp, else a level 5 `PlayerPokemon` (ability index 2).
+- Shiny is the trainer id / secret id test (`< 64 x 2^(1 + Shiny Charm stacks)`), not a roll; the shiny Magikarp keeps ability index 0.
+- The price is the wave's money x `4 x max(starter cost, 2.5) / 5`, x4 when shiny. Option 1 needs `4 x` the wave's money in the wallet
+  and has no party-size condition; with a full party the same prompt as a catch (Summary / Pokedex / Yes / No) opens, "Yes" releases.
+- Option 1 pays first (clamped at 0, no message), then `catchPokemon(.., isObtain)`: dex IVs, `pokemonObtained`, the caught message
+  (`addedAsAStarter` when it unlocks a starter), then a free slot or the prompt. The `VictoryPhase` queued in front changes nothing
+  visible (no participants, no experience). Both options end in the heal-only shop.
+
+Not covered, on purpose: the bought Pokemon's moveset (upstream's `generateAndPopulateMoveset` is not ported for a player's Pokemon;
+`gc_port_enemy_moveset` stands in and the moves are left out of the comparison), the timed-event species branch (events are out and
+mocked off), achievements and `gameStats.pokemonDefeated` (not tracked in C), and the reroll count of the hidden-ability search (the five rerolls and the Magikarp that follows when all six draws lack one need
+about six species in a row without a hidden ability: never hit in 8000 offers, so a loop that stops one early is not caught; the
+shiny Magikarps compared all come from the roll of 0). `game/` has no mystery-encounter screen yet
+(`mystery_auto` picks), so the encounter is not reachable on the console.
 
 ## Fleeing: upstream differential (Task 77 / #125)
 

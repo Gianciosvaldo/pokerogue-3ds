@@ -119,6 +119,9 @@ $(BUILD)/mystery_timer_diff_test: tests/mystery_timer_diff_test.c $(BUILD)/libgc
 all: $(BUILD)/mystery_offer_diff_test
 $(BUILD)/mystery_offer_diff_test: tests/mystery_offer_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+all: $(BUILD)/mystery_salesman_diff_test
+$(BUILD)/mystery_salesman_diff_test: tests/mystery_salesman_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 all: $(BUILD)/mystery_shady_diff_test
 $(BUILD)/mystery_shady_diff_test: tests/mystery_shady_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
