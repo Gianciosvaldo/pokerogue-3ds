@@ -13,6 +13,7 @@
 #include "custom_store.h"
 #include "gc/run.h"
 #include "history_screen.h"
+#include "i18n.h"
 #include "name_entry.h"
 #include "radar_screen.h"
 #include "result_screen.h"
@@ -406,7 +407,7 @@ static void on_gacha_exit(void* arg) {
 /* The voucher-to-egg machines. Every purchase goes through profile_tx (one committed transaction, one immutable result); this screen
  * first finishes whatever a restart left unfinished or unshown (gacha_screen.h). */
 static void show_gacha(void) {
-  const gachas_args g = {on_gacha_exit, NULL};
+  const gachas_args g = {on_gacha_exit, NULL, i18n_species_name};
   gacha_screen_open(&g);
 }
 

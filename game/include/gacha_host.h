@@ -100,8 +100,12 @@ bool gh_unrevealed(ptx_result* out);
 bool gh_reveal_done(uint32_t txn);
 
 /* The capsule screen's fixture for a result: the eggs in the order the source gave for display (not the storage order), each with its
- * tier and a label that names the egg (its id), nothing about its species. False for a result that is not a committed pull. */
+ * tier and a label: the species that will hatch from it (the pull already decided it: gc_egg.species) when the app set a namer, else the
+ * egg's id ("Egg 000102"). False for a result that is not a committed pull. */
 bool gh_fixture(const ptx_result* r, cap_fixture* f);
+/* The app's species names (i18n_species_name). NULL: eggs are labelled by id. The returned text is copied at once. */
+typedef const char* (*gh_species_name_fn)(int species);
+void gh_set_species_names(gh_species_name_fn fn);
 
 /* Words for the player. */
 const char* gh_machine_name(int machine);

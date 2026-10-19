@@ -80,6 +80,12 @@ M = [
      "every egg is shown as common"),
     ([(GH, "    if (idx >= r->n || seen[idx]) {", "    if (idx >= r->n) {")],
      "a display order with a repeated egg is accepted"),
+    ([(GH, "    const char* name = H.species_name && e->species ? H.species_name(e->species) : NULL;", "    const char* name = NULL;")],
+     "the rows name no species (the egg's id again)"),
+    ([(GH, "    const char* name = H.species_name && e->species ? H.species_name(e->species) : NULL;", "    const char* name = H.species_name && e->species ? H.species_name(f->n ? f->item[0].tier : 1) : NULL;")],
+     "the row names the wrong egg's species"),
+    ([(GS, "  gh_set_species_names(a->species_name);\n", "")],
+     "the screen never hands the app's namer to the host"),
     # ---- the screen
     ([(GS, "          G.mode = GS_CONFIRM;\n          G.yes = 0;", "          G.mode = GS_CONFIRM;\n          G.yes = 1;")],
      "the question opens on Yes"),

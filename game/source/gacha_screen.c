@@ -326,6 +326,7 @@ static ui_screen g_screen = {"capsule-machine", UI_FADE, gs_enter, gs_leave, NUL
 bool gacha_screen_open(const gachas_args* a) {
   if (!a) return false;
   K.a = *a;
+  gh_set_species_names(a->species_name);
   memset(&G, 0, sizeof G);
   ptx_settle(); /* a committed purchase left half applied (the card refused a file) is finished before anything else */
   /* what a restart left behind comes first: a purchase begun and not finished is finished (the same transaction), then a committed pull

@@ -30,6 +30,7 @@ extern "C" {
 typedef struct {
   void (*on_exit)(void* arg);   /* B on the menu: called once, from the screen's input; the callee leaves the screen */
   void* arg;
+  const char* (*species_name)(int species);  /* the reveal's row names (i18n_species_name); NULL: rows say "Egg <id>" */
 } gachas_args;
 
 /* Makes the machine the screen (ui_set, with a fade): the menu, or, when a restart left a purchase unfinished or a result not shown, the
