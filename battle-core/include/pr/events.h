@@ -82,6 +82,9 @@ typedef struct {
     int8_t gender, types[3];
     uint8_t variant, n_types;
     float sprite_scale;
+    /* Stable identity survives later form changes and party reordering. */
+    bool pokemon_id_known;
+    uint32_t pokemon_id;
 } pr_event_field;
 
 typedef struct {

@@ -83,3 +83,15 @@ with DOUBLES_N=8192 and compare using build/wide-combat-test.
 These bounded comparisons do not establish full battle-core, arbitrary Endless
 progression or hardware parity. Preserve explicit deviations and all normal
 merge gates; skip only the dedicated Task63 check.
+
+The integrated app regression found two wrong party identities in the full
+10,000-run test: two Morpeko shared an appearance, and Hunger Switch changed the
+actual switch-in's form later in the event batch. Field event snapshots now
+carry explicit Pokemon IDs, including a known flag so ID zero remains valid.
+The converter resolves that identity across party reordering instead of choosing
+an appearance match. The focused 69-check visual suite passes; restoring the old
+lookup fails the new regression. The full 10,000-run test has zero screen/run
+mismatches with the unchanged gameplay digest 5a8c801e. Event metadata does not
+change the save format or the battle RNG. Normal game-core and 3DS checks pass
+after rebuilding for the snapshot ABI change; expanded sanitizer/save merge
+gates remain required.
