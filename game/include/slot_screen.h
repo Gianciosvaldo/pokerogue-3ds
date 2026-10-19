@@ -6,8 +6,9 @@
  * Top screen: the highlighted slot in full: mode and wave, biome, score, money, the party with levels, or why a slot
  * can't be loaded.
  *
- * LOAD: A on a slot with a run offers Load Game / Delete Run (upstream also offers Rename Run: it needs the keyboard, so it
- * is left out); a slot that can't be loaded offers Delete Run only, and says why. SAVE (a new run): A on an empty slot picks
+ * LOAD: A on a slot with a run offers Load Game / Rename Run / Delete Run (Rename Run only when the caller takes it, on_rename; the
+ * name is typed on name_entry.h's screen and shows as the first line of the slot's window); a slot that can't be loaded offers Delete Run
+ * only, and says why. SAVE (a new run): A on an empty slot picks
  * it; on a run it asks "Overwrite the data in the selected slot?"; a slot that can't be loaded is refused, it is never
  * overwritten (delete it from Load Game first).
  */
@@ -33,6 +34,9 @@ typedef struct {
   void (*on_pick)(int slot, void* arg);
   /* Delete Run confirmed: the caller removes the slot's files and refreshes the screen. */
   void (*on_delete)(int slot, void* arg);
+  /* Rename Run chosen for a slot that holds a run: the caller takes over the screen (name_entry_open) and, when done, shows the list again.
+   * NULL: the entry is not offered. */
+  void (*on_rename)(int slot, void* arg);
   /* B: back to the title. */
   void (*on_back)(void* arg);
   void* arg;

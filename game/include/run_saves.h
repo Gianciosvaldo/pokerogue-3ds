@@ -29,6 +29,8 @@ extern "C" {
 
 #define RSV_SLOTS 5     /* upstream's SESSION_SLOTS_COUNT */
 #define RSV_WHY_LEN 96
+#define RSV_NAME_MAX 20                   /* characters in a run's name: the maxLength of upstream's text input (form-modal-ui-handler.ts) */
+#define RSV_NAME_LEN (RSV_NAME_MAX * 4 + 1) /* bytes of one, UTF-8 and the NUL */
 
 typedef enum {
   RSV_EMPTY,          /* no save in the slot */
@@ -57,6 +59,8 @@ typedef struct {
   double money;
   int n_party;
   rsv_mon party[6];
+  uint64_t run_key;       /* OK: tells this run from another (a hash of its seed); a name belongs to it, see rsv_name_get */
+  char name[RSV_NAME_LEN]; /* the name the player gave the run (Rename Run), "" = none. Not set by rsv_inspect: the caller asks rsv_name_get */
 } rsv_info;
 
 /* The summary of a live run (party in the player's order). Leaves `status` and `why` alone. */
@@ -96,6 +100,21 @@ rsv_save_result rsv_save(int slot, const gc_run* run);
 /* Removes the slot's files (the save, its backup and a leftover temp file). The run in it is over, or the player
  * asked for it to go. */
 bool rsv_clear(int slot);
+
+/* ---- Rename Run (upstream's renameSession) ----
+ * Upstream keeps the name inside the session's data. Here it is a small file next to the slot's ("<slot_file>_name", save.h's files: CRC,
+ * backup, atomic replace), and not part of game-core's run save, so a name never changes what a save is. The file holds the run's key
+ * (rsv_info.run_key) with the name, and a name is only given back for the run it was given to: a slot that was cleared by hand, copied
+ * from another card or filled by a new run with another seed shows no name, never a stale one. `slot_file` is the slot's file name
+ * ("session_<n>", or the custom run's "csession_<n>"). */
+bool rsv_name_get(const char* slot_file, uint64_t run_key, char out[RSV_NAME_LEN]);
+/* Stores `name` (UTF-8, 1..RSV_NAME_MAX characters, no control characters) for the run. False: it is not a name this takes, or the SD card
+ * refused (the previous name, if any, is as it was). */
+bool rsv_name_set(const char* slot_file, uint64_t run_key, const char* name);
+/* Removes the name's files (rsv_clear and cr_clear do this with the slot's). False when one that exists would not go. */
+bool rsv_name_remove(const char* slot_file);
+/* Characters in a UTF-8 string, and whether it is valid UTF-8 (the name checks use them; the name entry screen uses them too). */
+int rsv_utf8_chars(const char* s);
 
 /* The slot the Continue entry loads (upstream's loggedInUser.lastSessionSlot): set by every save and load. -1 when
  * none is recorded. */

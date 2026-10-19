@@ -18,6 +18,7 @@
 #define PITCH 76.0f      /* a slot's height plus the gap (valueHeight) */
 #define SLOT_W 304
 #define SLOT_H 70
+#define MAX_LABELS 4     /* Load Game, Rename Run, Delete Run, Cancel */
 
 static struct {
   slots_args a;
@@ -28,13 +29,13 @@ static struct {
   msgbox msg;
   bool msg_on;
   /* the answers an overlay is about to give */
-  char labels[3][48];
-  const char* label_ptrs[3];
-  int label_action[3];
+  char labels[MAX_LABELS][48];
+  const char* label_ptrs[MAX_LABELS];
+  int label_action[MAX_LABELS];
   int n_labels;
 } S;
 
-enum { ACT_LOAD, ACT_DELETE, ACT_CANCEL };
+enum { ACT_LOAD, ACT_RENAME, ACT_DELETE, ACT_CANCEL };
 
 static const rsv_info* info_of(int slot) { return &S.a.info[slot]; }
 
@@ -88,6 +89,10 @@ static void on_slot_menu(int idx, void* arg) {
     case ACT_LOAD:
       finish_pick(slot);
       break;
+    case ACT_RENAME:
+      S.done = true; /* the caller has the screens now */
+      if (S.a.on_rename) S.a.on_rename(slot, S.a.arg);
+      break;
     case ACT_DELETE: {
       char t[96];
       i18n_t(t, sizeof t, "saveSlotSelectUiHandler:deleteData", NULL);
@@ -101,6 +106,7 @@ static void on_slot_menu(int idx, void* arg) {
 }
 
 static void add_label(const char* key, int action) {
+  if (S.n_labels >= MAX_LABELS) return;
   i18n_t(S.labels[S.n_labels], sizeof S.labels[0], key, NULL);
   S.label_ptrs[S.n_labels] = S.labels[S.n_labels];
   S.label_action[S.n_labels++] = action;
@@ -116,6 +122,7 @@ static void act(void) {
     }
     S.n_labels = 0;
     if (in->status == RSV_OK) add_label("menu:loadGame", ACT_LOAD);
+    if (in->status == RSV_OK && S.a.on_rename) add_label("saveSlotSelectUiHandler:renameRun", ACT_RENAME);
     add_label("saveSlotSelectUiHandler:deleteRun", ACT_DELETE);
     add_label("menu:cancel", ACT_CANCEL);
     ui_play_select();
@@ -241,8 +248,15 @@ static void draw_slot(float x, float y, const rsv_info* in, bool selected) {
   rt_mode_name(in->mode, a, sizeof a);
   i18n_t(lvl, sizeof lvl, "saveSlotSelectUiHandler:wave", NULL);
   snprintf(buf, sizeof buf, "%s - %s %d%s", a, lvl, in->wave, in->from_backup ? " (backup)" : "");
-  text_draw(TS_WINDOW, x + 8, y + 5, buf, NULL);
-  text_draw(TS_WINDOW, x + 8, y + 19, rt_biome_name(in->biome, a, sizeof a), NULL);
+  /* upstream's window: the run's name first, then mode and wave. The 4 lines the window has room for are then name, mode and wave, score,
+   * money: the biome (the top screen's background shows it) is the one that goes. A run nobody named keeps its four lines. */
+  if (in->name[0]) {
+    text_draw(TS_WINDOW, x + 8, y + 5, in->name, NULL);
+    text_draw(TS_WINDOW, x + 8, y + 19, buf, NULL);
+  } else {
+    text_draw(TS_WINDOW, x + 8, y + 5, buf, NULL);
+    text_draw(TS_WINDOW, x + 8, y + 19, rt_biome_name(in->biome, a, sizeof a), NULL);
+  }
   i18n_t(lvl, sizeof lvl, "menu:score", NULL);
   snprintf(buf, sizeof buf, "%s %s", lvl, rt_number(in->score, b, sizeof b));
   text_draw(TS_WINDOW, x + 8, y + 33, buf, NULL);

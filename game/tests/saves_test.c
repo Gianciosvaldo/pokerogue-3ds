@@ -240,6 +240,87 @@ int main(void) {
     CHECK(rsv_clear(0), "clear wide summary slot");
   }
 
+  /* ---- Rename Run: a name beside the slot, kept for the run it was given to */
+  {
+    new_run(&A, "name-test-run-one", 2);
+    CHECK(rsv_save(3, &A) == RSV_SAVED, "save for the name test");
+    CHECK(rsv_inspect(3, &in) == RSV_OK && in.run_key != 0, "a run has a key");
+    const uint64_t key = in.run_key;
+    new_run(&B, "name-test-run-two", 2);
+    rsv_info other;
+    rsv_summarize(&B, &other);
+    CHECK(other.run_key != key, "two seeds, two keys");
+    new_run(&B, "name-test-run-one", 2);
+    rsv_summarize(&B, &other);
+    CHECK(other.run_key == key, "the same seed, the same key");
+
+    char name[RSV_NAME_LEN];
+    CHECK(!rsv_name_get("session_3", key, name) && name[0] == '\0', "no name before one is given");
+    CHECK(rsv_name_set("session_3", key, "Jojo Run 1"), "give a name");
+    CHECK(rsv_name_get("session_3", key, name) && !strcmp(name, "Jojo Run 1"), "the name is \"%s\"", name);
+    CHECK(!rsv_name_get("session_3", key + 1, name) && name[0] == '\0', "another run's key does not get the name");
+    CHECK(!rsv_name_get("session_4", key, name), "another slot has no name");
+    /* naming does not touch the run's own save */
+    CHECK(rsv_inspect(3, &in) == RSV_OK && in.run_key == key, "the slot still loads after a name");
+    CHECK(rsv_name_set("session_3", key, "Second"), "rename");
+    CHECK(rsv_name_get("session_3", key, name) && !strcmp(name, "Second"), "the new name is \"%s\"", name);
+    /* what a name may be: 1..20 characters of valid UTF-8 with no control characters */
+    const char* twenty = "12345678901234567890";
+    const char* accents = "\xc3\xa0\xc3\xa8\xc3\xa9\xc3\xac\xc3\xb2\xc3\xb9\xc3\xa0\xc3\xa8\xc3\xa9\xc3\xac\xc3\xb2\xc3\xb9\xc3\xa0\xc3\xa8\xc3\xa9\xc3\xac\xc3\xb2\xc3\xb9\xc3\xa0\xc3\xa8"; /* 20 characters, 40 bytes */
+    CHECK(rsv_utf8_chars(twenty) == 20 && rsv_utf8_chars(accents) == 20 && rsv_utf8_chars("") == 0 && rsv_utf8_chars("\xc3") == -1 &&
+              rsv_utf8_chars("\xff") == -1 && rsv_utf8_chars("\xc3\x28") == -1 && rsv_utf8_chars("\xe2\x82") == -1,
+          "character counts");
+    CHECK(rsv_name_set("session_3", key, twenty) && rsv_name_get("session_3", key, name) && !strcmp(name, twenty), "20 characters fit");
+    CHECK(rsv_name_set("session_3", key, accents) && rsv_name_get("session_3", key, name) && !strcmp(name, accents), "20 accented characters (40 bytes) fit");
+    CHECK(!rsv_name_set("session_3", key, "123456789012345678901"), "21 characters do not");
+    CHECK(!rsv_name_set("session_3", key, "") && !rsv_name_set("session_3", key, NULL), "an empty name is not a name");
+    CHECK(!rsv_name_set("session_3", key, "a\nb") && !rsv_name_set("session_3", key, "a\tb") && !rsv_name_set("session_3", key, "a\x7f"), "control characters");
+    CHECK(!rsv_name_set("session_3", key, "\xc3\x28") && !rsv_name_set("session_3", key, "\xff\xfe"), "invalid UTF-8");
+    CHECK(rsv_name_get("session_3", key, name) && !strcmp(name, accents), "refused names changed nothing");
+    /* the card refusing the write leaves the name as it was */
+    char np[256];
+    snprintf(np, sizeof np, "%s/session_3_name.sav.tmp", SAVE_DIR);
+    CHECK(mkdir(np, 0777) == 0, "block the name's temp file");
+    CHECK(!rsv_name_set("session_3", key, "Blocked"), "a refused write is reported");
+    CHECK(rsv_name_get("session_3", key, name) && !strcmp(name, accents), "and the name is as it was");
+    rmdir(np);
+    /* a damaged file, one made by something else, and one for a longer text than a name can be: no name, no crash */
+    snprintf(np, sizeof np, "%s/session_3_name.sav", SAVE_DIR);
+    write_raw(np, "not a save file", 15);
+    CHECK(rsv_name_get("session_3", key, name) && !strcmp(name, twenty), "a damaged file reads the previous name (the backup): \"%s\"", name);
+    snprintf(np, sizeof np, "%s/session_3_name.sav.bak", SAVE_DIR);
+    remove(np);
+    CHECK(!rsv_name_get("session_3", key, name) && name[0] == '\0', "a file that fails its checksum, with no backup, gives no name");
+    CHECK(rsv_name_set("session_3", key, "Back"), "a good write over the damaged file");
+    CHECK(rsv_name_get("session_3", key, name) && !strcmp(name, "Back"), "reads again");
+    CHECK(save_write("session_3_name", "XYZ12345678abc", 14) == SAVE_OK && !rsv_name_get("session_3", key, name), "a wrong magic gives no name");
+    uint8_t forged[11 + 90];
+    memcpy(forged, "RN1", 3);
+    for (int i = 0; i < 8; i++) forged[3 + i] = (uint8_t)(key >> (8 * i));
+    memset(forged + 11, 'a', 90);
+    CHECK(save_write("session_3_name", forged, sizeof forged) == SAVE_OK && !rsv_name_get("session_3", key, name) && name[0] == '\0',
+          "a longer text than a name can be gives no name");
+    memcpy(forged + 11, "a\x01", 2);
+    CHECK(save_write("session_3_name", forged, 13) == SAVE_OK && !rsv_name_get("session_3", key, name), "a stored control character gives no name");
+    memcpy(forged + 11, "ok", 2);
+    CHECK(save_write("session_3_name", forged, 13) == SAVE_OK && rsv_name_get("session_3", key, name) && !strcmp(name, "ok"), "the forged file is otherwise a name");
+    /* a name goes with its slot */
+    CHECK(rsv_name_set("session_3", key, "Gone"), "name again");
+    CHECK(rsv_clear(3), "clear the named slot");
+    snprintf(np, sizeof np, "%s/session_3_name.sav", SAVE_DIR);
+    CHECK(!exists(np), "the name's file went with the slot");
+    snprintf(np, sizeof np, "%s/session_3_name.sav.bak", SAVE_DIR);
+    CHECK(!exists(np), "and its backup");
+    CHECK(!rsv_name_get("session_3", key, name), "no name for the cleared slot");
+    /* a new run in the slot does not inherit a name that was left behind */
+    CHECK(rsv_name_set("session_3", key, "Left behind"), "name a slot that is empty");
+    new_run(&A, "name-test-run-two", 2);
+    CHECK(rsv_save(3, &A) == RSV_SAVED && rsv_inspect(3, &in) == RSV_OK, "another run takes the slot");
+    CHECK(!rsv_name_get("session_3", in.run_key, name) && name[0] == '\0', "it does not show the old run's name");
+    CHECK(rsv_name_remove("session_3") && rsv_name_remove("session_3"), "removing a name is fine whether it is there or not");
+    CHECK(rsv_clear(3), "clear");
+  }
+
   printf("%d checks, %d failed\n", checks, failed);
   printf(failed ? "FAILED\n" : "OK\n");
   if (chdir("/") == 0) {

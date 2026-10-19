@@ -34,6 +34,18 @@ and what the battle changed in memory and never wrote (a catch, the dex) is drop
 `on_run_quit`). If the last save of this battle was refused by the SD card the menu says so in its own words (not upstream's) and asks even in the
 first turn. A custom run quits the same way (`cr_end`; its slot keeps its overlay).
 
+**Rename Run** is the second entry of the Load Game list's slot menu (Load Game / Rename Run / Delete Run / Cancel; the custom list has it
+too). Upstream types the name into a browser text input; here [`name_entry.c`](source/name_entry.c) is a keyboard of its own for the D-pad: the
+form on the top screen (title, "Run Name", the text in a box, a count) and the keys on the bottom one (digits, letters, a few marks, the accented
+vowels, Shift / Space / Delete, and the Rename and Cancel buttons). A types a key, B deletes (and cancels when nothing is typed), START renames, L/R is
+Shift (the next letter, or all), X is a space, Y deletes. 20 characters at most (upstream's `maxLength`), trimmed, and an empty name changes nothing,
+as upstream's `renameSession`. Upstream keeps the name in the session data; here it is a file of its own beside the slot's (`session_<n>_name`,
+`run_saves.c`), keyed by a hash of the run's seed so a name never shows for another run, and removed with the slot (`rsv_clear`, `cr_clear`).
+game-core's run save is not touched. A named run shows its name as the first line of its window on the list (the biome line makes room: the
+top screen's backdrop shows the biome); a run nobody named shows the lines it always did. Differences from upstream: upstream gives every run a
+default name (the mode and the number of runs played), this app does not (it keeps no count of runs), and upstream's `renameSession` bumps the save's
+timestamp, which this app does not keep. A name file the card refused to remove is shown only for a run with the same seed (the case where it would be wrong: the same seed twice in one slot).
+
 New Game goes through the **starter select** (`menus/starter.c`, hosted by `starter_host.c`): the species the dex says are caught,
 a team of up to six within the Classic cost budget (10), Begin / Exit. What can be picked, what it costs and whether game-core
 takes the team is game-core's own (`gc_starter_is_available`, `gc_starter_value`, `gc_starter_budget`, `gc_run_set_starters`),
@@ -316,7 +328,7 @@ make -C game/tests animtest && game/tests/build/animtest path/to/pokerogue-asset
   after a female Pyroar) is not listed; see `starter_data.h`. Not measured: what writing `system.sav` costs on a real SD card.
 - Runs started from the starter select now carry system data, so a run updates the dex, candy, friendship and Classic win records
   (game-core's `gc_system_*` calls in the run). Runs already saved are not back-filled into the dex.
-- Around the save slots (not part of card 113): "Save and Quit" and "Rename Run" in the menu, the run history, unlocks and vouchers on a win, the rival's end dialogue, timed events, and any online or cloud save.
+- Around the save slots (not part of card 113): the run history, unlocks and vouchers on a win, the rival's end dialogue, timed events, and any online or cloud save. ("Save and Quit" and "Rename Run" are done: see above.)
 - Message timing per text (upstream's 500 ms for "X used Y!", prompts after faints): asked of
   battle-core; every text waits 1.5 s for now.
 - In move animations: the grey part of a sprite's tone (upstream's shader pushes it far past
