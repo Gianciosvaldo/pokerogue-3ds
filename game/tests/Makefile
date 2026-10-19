@@ -280,3 +280,11 @@ build/store_test: $(STORE_SRCS)
 	$(CC) $(CPPFLAGS) -I$(CCORE)/include -I$(GC)/include -I$(GC)/gen/out -I$(RC)/include -I$(RC)/gen/out -I$(APP)/include $(CFLAGS) -fsanitize=address,undefined $(STORE_SRCS) -lm -o $@
 store_test: build/store_test
 .PHONY: store_test
+
+# the in-run menu (source/run_menu.c) with a fake UI stack and drawing layer; make run_menu_test && build/run_menu_test
+RUN_MENU_SRCS := run_menu_test.c ../source/run_menu.c
+build/run_menu_test: $(RUN_MENU_SRCS)
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) -I../include -I../../assets-pipeline/app-src/include $(CFLAGS) -fsanitize=address,undefined $(RUN_MENU_SRCS) -lm -o $@
+run_menu_test: build/run_menu_test
+.PHONY: run_menu_test

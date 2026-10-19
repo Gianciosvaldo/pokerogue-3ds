@@ -21,7 +21,8 @@
  *                 does not report them). A full party asks "release one?" (Yes / No) where upstream also offers Summary and Pokedex
  *   - custom rematch: a custom run (cfg.custom) asks "Fight it?" on game-core's GC_SCREEN_CUSTOM_OFFER; the intro of that wave is the
  *                 statement, the enemy appears after the answer
- * Saving and loading are wired (cfg.save, rs_resume). The music follows the scenes (bgm.h). Not wired yet: the Pokedex, eggs.
+ * Saving and loading are wired (cfg.save, rs_resume). START on the command menu or the reward screen opens the in-run menu (run_menu.h): Save
+ * and Quit calls cfg.on_quit. The music follows the scenes (bgm.h). Not wired yet: the Pokedex, eggs.
  */
 #ifndef GM_RUN_SCREEN_H
 #define GM_RUN_SCREEN_H
@@ -61,6 +62,11 @@ typedef struct {
    * run stays readable through rs_run() until the next rs_start / rs_resume. NULL = the stand-in: a message, then a new run. */
   void (*on_end)(int screen_kind, void* arg);
   void* end_arg;
+  /* Save and Quit (run_menu.h) was confirmed from the menu START opens. The driver has stopped, faded to black and dropped the run; the
+   * run stays readable through rs_run() until the next rs_start / rs_resume, and its slot holds the save of the battle's start. NULL =
+   * no app around: START does nothing. */
+  void (*on_quit)(void* arg);
+  void* quit_arg;
 } rs_config;
 
 /* What the driver has done, for the host test and the debug overlay. */
@@ -71,6 +77,7 @@ typedef struct {
   int waves;                  /* WAVE events shown */
   int fights, balls, switches, runs_tried;    /* commands answered (accepted by game-core) */
   int refused;                /* answers game-core refused (the player was told why) */
+  int quits;                  /* Save and Quit confirmed */
   int throws, catches;        /* balls thrown (the throw animation shown), and the ones that held */
   int releases, kept_out;     /* full-party catches: a member was released for the caught Pokemon / the caught Pokemon was let go */
   int evolves, cancels;       /* evolutions accepted / cancelled */

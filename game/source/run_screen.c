@@ -19,6 +19,7 @@
 #include "party_screen.h"
 #include "pr_enums.h"
 #include "reward_host.h"
+#include "run_menu.h"
 #include "run_saves.h"
 #include "run_text.h"
 #include "shop_ui.h"
@@ -737,6 +738,35 @@ static bool resync_field(void) {
   return true;
 }
 
+/* ---- the in-run menu: START on the command menu or the reward screen ---- */
+
+/* Save and Quit, confirmed. Upstream saves the cached session and system data (what the battle's start wrote) and resets to the title;
+ * this run was written at its save point (write_save), so nothing more is written: the run is dropped and the app takes over at black.
+ * The system data the battle changed in memory but did not write goes with the battle (the app reads it again). */
+static void quit_at_black(void* arg) {
+  (void)arg;
+  rh_close(); /* the reward screen may be open under the menu: the app's next screen replaces the battle, so nothing may stay above it */
+  if (G.cfg.custom) cr_end();
+  if (G.cfg.on_quit) G.cfg.on_quit(G.cfg.quit_arg);
+}
+
+static void on_menu_quit(void* arg) {
+  (void)arg;
+  if (G.step_timer) ui_timer_cancel(G.step_timer);
+  G.step_timer = 0;
+  G.save_due = false;
+  G.st.quits++;
+  ui_fade(250, 100, 250, quit_at_black, NULL);
+}
+
+static void open_run_menu(void* arg) {
+  (void)arg;
+  if (run_menu_is_open() || !G.cfg.on_quit) return;
+  /* a run that is not written anywhere (no save slot) would be lost by quitting: the menu says so as it does for a failed write */
+  const runmenu_args a = {.turn = G.run.bt.turn, .unsaved = !G.cfg.save || G.save_failed_told, .on_quit = on_menu_quit};
+  run_menu_open(&a);
+}
+
 static void ask(void) {
   const gc_screen* s = gc_run_screen(&G.run);
   G.ball = -1;
@@ -747,6 +777,7 @@ static void ask(void) {
   o.can_switch = s->can_switch;
   o.can_run = s->can_run;
   o.struggle = s->struggle;
+  o.on_menu = G.cfg.on_quit ? open_run_menu : NULL;
   const gc_mon* me = gc_field_mon(&G.run, 0);
   for (int i = 0; i < 4; i++) {
     o.move_ok[i] = s->move_ok[i];
@@ -1079,6 +1110,7 @@ static void open_shop_ui(void) {
     NULL
   };
 
+  rh_set_menu(G.cfg.on_quit ? open_run_menu : NULL, NULL);
   rh_open_shop(&args, &ev);
 }
 

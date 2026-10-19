@@ -4,8 +4,8 @@
  * Top screen: the biome background of the last save (or the plains) and the logo from gfx.pak at upstream's place (centred,
  * 8 px from the top). Bottom screen: the option list in its corner: Continue (only with a last save), New Game, Load Game and, last,
  * the custom content's own "Nemesis Radar" (radar_screen.h: a read-only look at the remembered enemies; upstream has no such entry)
- * and "Capsule Machine" (gacha_screen.h: the voucher-to-egg machines; upstream reaches them from the in-run menu, which this app does
- * not have yet), then "Custom Run" and "Custom Load" (custom_run.h: a Classic run with the optional Nemesis rematch, and its own five save
+ * and "Capsule Machine" (gacha_screen.h: the voucher-to-egg machines; upstream reaches them from the in-run menu, which this app has only
+ * with Save and Quit so far), then "Custom Run" and "Custom Load" (custom_run.h: a Classic run with the optional Nemesis rematch, and its own five save
  * slots; New Game and Load Game never see them).
  *
  * Not on it, on purpose: Daily Run, Run History and Settings (no such screens yet), the player count and the account line (the

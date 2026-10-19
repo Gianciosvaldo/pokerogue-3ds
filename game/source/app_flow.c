@@ -39,6 +39,7 @@ static void show_capsule_preview(int n);
 static int g_capsule_preview; /* the debug preview's result count, 0 = none (survives app_start's reset) */
 static void show_slots(slots_mode mode, int cursor);
 static void on_run_end(int kind, void* arg);
+static void on_run_quit(void* arg);
 
 /* ------------------------------------------------------------------ the run */
 
@@ -57,6 +58,7 @@ static rs_config run_config(int slot, bool fresh) {
   c.save = true;
   c.slot = slot;
   c.on_end = on_run_end;
+  c.on_quit = on_run_quit;
   /* the run reads and updates the system data (the dex, the starter unlocks), written with each save of the run. The species in
    * rundriver.txt are a developer's team and may not be unlocked: that run has none. */
   if (c.n_starters == 0) {
@@ -214,6 +216,15 @@ static void on_run_end(int kind, void* arg) {
    * lost: the next save point of the next run writes it again. */
   if (rs_run()->sys) sysd_save();
   result_screen_open(&A.result);
+}
+
+/* Save and Quit from the in-run menu (run_menu.h): the run's slot holds the save of the battle's start, which is where Continue picks
+ * it up again, and upstream's reset(true) brings the title. The cached system data upstream saves is what the battle's start wrote too,
+ * so what the battle changed in memory and never wrote (a catch, the dex) is dropped: the next look at the system data reads the card. */
+static void on_run_quit(void* arg) {
+  (void)arg;
+  sysd_reset();
+  show_title();
 }
 
 /* ------------------------------------------------------------------ the slot list */

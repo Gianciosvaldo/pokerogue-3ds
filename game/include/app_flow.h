@@ -6,7 +6,8 @@
  *   New Game   asks for a slot first (an empty one, or a run to overwrite after a yes/no); a slot whose file can't be loaded is
  *              never overwritten.
  *   Load Game  the slot list with Load Game / Delete Run on each.
- *   The run    is saved into its slot at every save point (run_screen.c).
+ *   The run    is saved into its slot at every save point (run_screen.c). START opens the in-run menu (run_menu.h): Save and Quit goes
+ *              back to the title with the slot as the battle's start left it, and Continue loads that.
  *   Game over / clear: the result screen, and the slot is cleared (upstream's tryClearSession in PostGameOverPhase).
  *
  * A slot that can't be loaded (damaged, made by a newer version) says so on the slot list and in the message after Continue; the

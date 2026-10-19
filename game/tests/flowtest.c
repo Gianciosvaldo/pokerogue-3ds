@@ -405,6 +405,29 @@ int main(void) {
   S.on_back(S.arg);
   CHECK(T.can_continue, "back to the title");
 
+  /* ---- Save and Quit (the in-run menu): the driver calls on_quit once it has faded to black; the app shows the title, the slot holds
+   * the save of the battle's start (Continue loads it), and what the battle changed in memory and never wrote is gone */
+  T.on_choose(TITLE_CONTINUE, T.arg);
+  CHECK(CFG.on_quit && n_resume == 3, "a loaded run has a Save and Quit to call");
+  {
+    gc_mon mewtwo;
+    memset(&mewtwo, 0, sizeof mewtwo);
+    mewtwo.b.species = 150;
+    mewtwo.b.nature = 3;
+    CHECK(sysd_get()->dex[150].caught_attr == 0, "no Mewtwo in the system data on the card");
+    gc_system_set_pokemon_caught(RUN.sys, &mewtwo, true, false);
+    CHECK(sysd_get()->dex[150].caught_attr != 0 && RUN.sys == sysd_get(), "the battle caught one, in memory only");
+    const int titles_q = n_title, results_q = n_result;
+    CFG.on_quit(CFG.quit_arg);
+    CHECK(n_title == titles_q + 1 && n_result == results_q, "Save and Quit shows the title and no result screen: %d titles, %d results", n_title - titles_q,
+          n_result - results_q);
+    CHECK(T.can_continue && status_of(0) == RSV_OK && rsv_last_slot() == 0, "the slot is still there and Continue offers it");
+    CHECK(sysd_state(NULL) == SYSD_LOADED && sysd_get()->dex[150].caught_attr == 0, "what the battle caught in memory went with the battle (the card's system data is read again)");
+    T.on_choose(TITLE_CONTINUE, T.arg);
+    CHECK(n_resume == 4 && RUN.sys == sysd_get(), "Continue loads the run again, with the card's system data");
+    CHECK(sysd_get()->dex[150].caught_attr == 0, "and the Mewtwo is still not caught");
+  }
+
   /* ---- New Game over a run: the old run goes (with its backup) before the new one starts */
   rsv_save(0, &RUN); /* a second save of slot 0: it now has a backup */
   slot_path(0, ".sav.bak", p, sizeof p);

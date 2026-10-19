@@ -17,6 +17,9 @@ extern "C" {
 
 void rh_open_shop(const shop_ui_args* args, const shop_ui_events* ev);
 void rh_open_biome_map(const biome_map_args* args, const biome_map_events* ev);
+/* START on the reward screen opens the in-run menu (ui-inputs.ts buttonMenu: UiMode.MODIFIER_SELECT), which only the driver knows how to
+ * build: `fn` is called with `arg` when START is pressed while the shop is open. NULL = START does nothing. Cleared by rh_close. */
+void rh_set_menu(void (*fn)(void* arg), void* arg);
 /* Closes whichever is open and takes it off the stack. */
 void rh_close(void);
 
