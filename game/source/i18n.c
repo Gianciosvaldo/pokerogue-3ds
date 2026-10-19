@@ -226,6 +226,13 @@ const char* i18n_t(char* out, int n, const char* key, ...) {
   return out;
 }
 
+const char* i18n_resolve(char* out, int n, const char* text) {
+  args_t a;
+  a.n = 0;
+  expand(text ? text : "", &a, out, n, 0);
+  return out;
+}
+
 /* ---- names ---- */
 static char g_rot[8][96];
 static int g_rot_i;

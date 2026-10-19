@@ -79,6 +79,8 @@ void title_screen_open(const title_args* a) {
   T.choice[n++] = TITLE_NEW_GAME;
   i18n_t(T.labels[n], sizeof T.labels[n], "menu:loadGame", NULL);
   T.choice[n++] = TITLE_LOAD_GAME;
+  i18n_t(T.labels[n], sizeof T.labels[n], "menu:runHistory", NULL);
+  T.choice[n++] = TITLE_HISTORY;
   snprintf(T.labels[n], sizeof T.labels[n], "Nemesis Radar"); /* the custom content's own entry: no upstream string */
   T.choice[n++] = TITLE_RADAR;
   snprintf(T.labels[n], sizeof T.labels[n], "Capsule Machine"); /* the custom content's own entry: no upstream string */
