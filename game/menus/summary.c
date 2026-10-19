@@ -358,33 +358,21 @@ static void draw_profile(float px, float py, bool main) {
 
   if (m->has_passive) mui_image("ui/summary_profile_prompt_a", NULL, px + 8, py + 43, 0, 0);
 
-  /* Primary Ability Slot */
-  mui_image("ui/text_images/en/summary/summary_profile_ability", NULL, px + 17, py + 47, 0, 0.5f);
-  mui_text_o(TS_SUMMARY_ALT, px + 7, py + 58, 0, 1, ability_text(m->ability, "name"));
-  int lines0 = S.abil_lines[0];
-  float dy0 = lines0 > 2 ? 59 : 61;
-  dy0 -= scroll_offset(S.now - S.abil_t0, lines0, 2);
-  mui_clip(110, (int)(px + 7), 206, m->has_passive ? 18 : 31);
-  mui_text(TS_WINDOW_ALT, px + 7, py + dy0, S.abil_desc[0]);
+  /* One ability block at a time (upstream toggles the ability and the passive in place with A): the label at (17, 47), the name's
+   * bottom edge at 68, the description from 71, behind a mask (110, 90, 206, 31 in the scene) that its scrolling slides under */
+  const bool passive = m->has_passive && S.show_passive;
+  mui_image(passive ? "ui/text_images/en/summary/summary_profile_passive" : "ui/text_images/en/summary/summary_profile_ability", NULL,
+            px + 17, py + 47, 0, 0.5f);
+  mui_text_o(TS_SUMMARY_ALT, px + 7, py + 68, 0, 1, ability_text(passive ? m->passive : m->ability, "name"));
+  const int lines = S.abil_lines[passive ? 1 : 0];
+  float dy = lines > 2 ? 69 : 71;
+  dy -= scroll_offset(S.now - S.abil_t0, lines, 2);
+  mui_clip(px, py + 71, 206, 31);
+  mui_text(TS_WINDOW_ALT, px + 7, py + dy, S.abil_desc[passive ? 1 : 0]);
   mui_clip_off();
 
-  if (m->has_passive) {
-    /* Passive Ability Slot rendered directly below Primary Ability */
-    mui_image("ui/text_images/en/summary/summary_profile_passive", NULL, px + 17, py + 78, 0, 0.5f);
-    mui_text_o(TS_SUMMARY_ALT, px + 7, py + 88, 0, 1, ability_text(m->passive, "name"));
-    int lines1 = S.abil_lines[1];
-    float dy1 = lines1 > 2 ? 89 : 91;
-    dy1 -= scroll_offset(S.now - S.abil_t0, lines1, 2);
-    mui_clip(110, (int)(px + 7), 206, 18);
-    mui_text(TS_WINDOW_ALT, px + 7, py + dy1, S.abil_desc[1]);
-    mui_clip_off();
-
-    mui_image("ui/text_images/en/summary/summary_profile_memo_title", NULL, px + 7, py + 115, 0, 0.5f);
-    mui_bbtext(TS_WINDOW_ALT, px + 7, py + 121, S.memo);
-  } else {
-    mui_image("ui/text_images/en/summary/summary_profile_memo_title", NULL, px + 7, py + 107, 0, 0.5f);
-    mui_bbtext(TS_WINDOW_ALT, px + 7, py + 113, S.memo);
-  }
+  mui_image("ui/text_images/en/summary/summary_profile_memo_title", NULL, px + 7, py + 107, 0, 0.5f);
+  mui_bbtext(TS_WINDOW_ALT, px + 7, py + 113, S.memo);
 }
 
 static void draw_stats(float px, float py, bool main) {
@@ -732,6 +720,7 @@ bool summary_input(mui_button b) {
       success = true;
     } else if (S.cursor == SUMMARY_PROFILE && S.mon.has_passive) {
       S.show_passive = !S.show_passive;
+      S.abil_t0 = S.now; /* the other description's scroll starts over */
     } else if (S.cursor == SUMMARY_STATS) {
       S.show_ivs = !S.show_ivs;
     }

@@ -84,6 +84,8 @@ typedef enum {
   BEV_TRANSFORM,   /* mon = temporary display; a = play Transform sound (Imposter) */
   BEV_ILLUSION,    /* PR_DEV_ILLUSION: mon = the new look, name and types when a disguise starts or ends; a = play the
                     * Transform sound (breakIllusion plays it, setIllusion doesn't) */
+  BEV_LEVEL_UP,    /* LevelUpPhase.showLevelUpMessages: the fanfare and `text` ("X grew to Lv. N!") with a prompt, then
+                    * promptLevelUpStats: the stat window with the gains (stats[6..11] - stats[0..5]), A, the totals, A */
 } bev_type;
 
 typedef struct {
@@ -96,6 +98,7 @@ typedef struct {
   bool prompt;               /* BEV_MESSAGE: wait for a button */
   bool caught;               /* BEV_CATCH: the ball holds (b is then 3: a catch always passes the three shake checks) */
   const bv_mon* mon;         /* BEV_SUMMON */
+  const int* stats;          /* BEV_LEVEL_UP: the six permanent stats before, then after */
 } bv_event;
 
 /* The player's command (upstream Command enum: FIGHT 0, BALL 1, POKEMON 2, RUN 3). */
@@ -109,8 +112,15 @@ typedef struct {
   bv_mon player, enemy;  /* the first Pokemon of each side (singles); enemy.species 0 = nobody */
   bool trainer;          /* a trainer battle (the trainer itself is not drawn yet) */
   bool player_present;   /* the player's lead is already out (it stays out between wild waves): its sprite
-                          * and info box are there from the start, with no summon */
+                          * and info box are there from the start, with no summon. Its platform stays too: only the enemy side
+                          * slides in (upstream's NextEncounterPhase / NewBiomeEncounterPhase; the player's platform slides in
+                          * only when a run begins, EncounterPhase) */
+  bool next_encounter;   /* the next wave of the same biome with the lead out, on the same screen with no fade: the old enemy
+                          * platform slides out to the right as the new one slides in from the left (NextEncounterPhase) */
 } bv_setup;
+
+/* The biome the screen shows now (the last bv_begin's), -1 before the first. */
+int bv_biome(void);
 
 /* What the command menu allows (game-core's COMMAND screen). A command that is off, or a move that can't be
  * used, plays the error sound; an unusable move shows its reason (an upstream message) instead. */

@@ -78,6 +78,9 @@ static struct {
   char biome[32];
   side s[2]; /* 0 player, 1 enemy */
   float arena_player_x, arena_enemy_x, enemy_slide;
+  float arena_old_x;  /* the previous wave's enemy platform, sliding out (setup.next_encounter) */
+  bool arena_old_on;
+  bool begun;         /* bv_begin has run */
   float field_scale;  /* the field container's scale (updateFieldScale), tweened by field_tw */
   tween field_tw;
   msgbox msg;
@@ -112,15 +115,24 @@ static struct {
     int type;              /* PokeballType 0..4 */
     int look;              /* 0 closed, 1 opening, 2 open */
     float x, y, angle, alpha, flash;
+    float star_dx[3];      /* addPokeballCaptureStars: how far each of the three stars drifts sideways (randGauss(25)) */
+    float stars_t;         /* ms since the stars came out, -1 = none */
+    float tx, top, end_dy;  /* the throw's target: x, y of the ball while it hangs, and how far the Pokemon moves up to meet it */
     bool behind;           /* moved below the Pokemon (upstream does that 300 ms into the throw) */
     bool fading;
     float fade_t;
     bool sub;              /* the enemy had a Substitute doll the throw put away */
   } ball;
+  /* promptLevelUpStats' window (BEV_LEVEL_UP) */
+  struct {
+    bool on, totals;
+    const int* stats;
+  } lvl;
 } B;
 
 static side* side_of(int battler) { return &B.s[battler >= 2 ? 1 : 0]; }
 bv_mon* bv_mon_of(int battler) { return &side_of(battler)->mon; }
+int bv_biome(void) { return B.begun ? B.setup.biome : -1; }
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -362,6 +374,26 @@ static void draw_ball(void) {
     return;
   }
   rr_draw(f, B.ball.x, B.ball.y, &o);
+  if (B.ball.stars_t >= 0 && B.ball.stars_t < 500) {
+    /* addPokeballCaptureStars: three stars (pb_particles 4) at half alpha rise 10 px (250 ms, Sine.easeOut) and fall back fading
+     * (250 ms, Sine.easeIn) while drifting sideways (500 ms, linear); gone after 500 ms (the last 75 ms fade out) */
+    const rr_frame* sf = img_frame("images/effects/pb_particles", "4.png");
+    if (!sf) sf = img_frame("images/effects/pb_particles", "4");
+    const float t = B.ball.stars_t;
+    if (sf) {
+      const float dy = t < 250 ? -10 * ease(EASE_SINE_OUT, t / 250) : -10 * (1 - ease(EASE_SINE_IN, (t - 250) / 250));
+      /* the 425 ms fade takes over the alpha from wherever the fall had brought it */
+      const float fall = 0.5f * (1 - ease(EASE_SINE_IN, ((t < 425 ? t : 425) - 250) / 250));
+      const float a = t < 250 ? 0.5f : t < 425 ? fall : fall * (1 - (t - 425) / 75);
+      for (int k = 0; k < 3; k++) {
+        rr_draw_opts so = RR_DEFAULT_OPTS;
+        so.origin_x = 0.5f;
+        so.origin_y = 0.625f;
+        so.tint = RR_RGBA(255, 255, 255, (int)(a * 255 + 0.5f));
+        rr_draw(sf, B.ball.x + B.ball.star_dx[k] * (t / 500), B.ball.y + dy, &so);
+      }
+    }
+  }
   if (B.ball.flash > 0) {
     o.tint = RR_RGBA(0, 0, 0, (int)(B.ball.flash * 255 * B.ball.alpha + 0.5f));
     rr_draw(f, B.ball.x, B.ball.y, &o);
@@ -398,6 +430,7 @@ static void draw_field(void) {
     rr_rect(0, 0, 320, 180, RR_RGBA(0x88, 0xc8, 0xf0, 255));
   field_zoom(true);
   snprintf(k, sizeof k, "images/arenas/%s_b", B.biome);
+  if (B.arena_old_on) img_draw(k, NULL, B.arena_old_x, 0, 0, 0);
   img_draw(k, NULL, B.arena_enemy_x, 0, 0, 0);
   snprintf(k, sizeof k, "images/arenas/%s_a", B.biome);
   img_draw(k, NULL, B.arena_player_x, 0, 0, 0);
@@ -660,6 +693,28 @@ static void draw_ability_bar(void) {
   text_draw(TS_WINDOW, 8, -48 - 30 + 5, B.ability_text, NULL);
 }
 
+/* promptLevelUpStats' window (BattleMessageUiHandler): ui (320, -100) origin (1, 0), 80 + the labels' width by 100; labels end at
+ * 320 - 73, the "+" column at 320 - 50 (gains only), the values end at 320 - 7; all from y -94, TextStyle.WINDOW */
+static void draw_level_stats(void) {
+  if (!B.lvl.on || !B.lvl.stats) return;
+  char labels[192] = "", vals[96] = "";
+  for (int s = 0; s < 6; s++) {
+    char v[16];
+    snprintf(v, sizeof v, "%d\n", B.lvl.totals ? B.lvl.stats[6 + s] : B.lvl.stats[6 + s] - B.lvl.stats[s]);
+    strncat(vals, v, sizeof vals - strlen(vals) - 1);
+    strncat(labels, i18n_stat_name(s), sizeof labels - strlen(labels) - 1);
+    strncat(labels, "\n", sizeof labels - strlen(labels) - 1);
+  }
+  const float lw = text_width(TS_WINDOW, labels, NULL), w = 80 + lw;
+  ui_window(320 - w, -100, w, 100, WIN_NORMAL);
+  text_draw(TS_WINDOW, 320 - 73 - lw, -94, labels, NULL);
+  if (!B.lvl.totals) text_draw(TS_WINDOW, 320 - 50, -94, "+\n+\n+\n+\n+\n+", NULL);
+  text_opts o = text_defaults();
+  o.origin_x = 1;
+  o.align = 2;
+  text_draw(TS_WINDOW, 320 - 7, -94, vals, &o);
+}
+
 /* Upstream's ui container strip (y -48..0): the message window's bg frame, the command window or the fight windows, and the text.
  * It is drawn twice: on the bottom screen, where the touch-free controls live, and on the top screen over the field's last 48 rows,
  * where upstream puts it (it covers the lower part of the player's Pokemon, as upstream's does). `top` leaves out what upstream
@@ -681,6 +736,7 @@ static void draw_bottom(bool top) {
   } else {
     msgbox_draw(&B.msg, 12, -39);
   }
+  draw_level_stats();
   if (!top) draw_ability_bar();
 }
 
@@ -813,9 +869,10 @@ typedef struct {
   bool fall;
 } bounce_seg;
 
-/* doPokeballBounceAnim(ball, 16, 72, 350): falls to 72, rebounds to half the way up each time, until the power is gone */
-static int bounce_build(bounce_seg* sg, float* total) {
-  float power = 1, y = 16, t = 0;
+/* doPokeballBounceAnim(ball, 16, 72, 350): falls to 72, rebounds to half the way up each time, until the power is gone. The ball
+ * hangs at `top` (16 upstream; here the Pokemon's middle, see catch_anim) when it starts to fall. */
+static int bounce_build(bounce_seg* sg, float* total, float top) {
+  float power = 1, y = top, t = 0;
   int n = 0;
   for (;;) {
     sg[n++] = (bounce_seg){t, power * 350, y, 72, true};
@@ -847,6 +904,12 @@ enum {
     }                           \
   } while (0)
 
+/* utils randGauss(stdev): a normal deviate (Box-Muller); only looks, never the battle's random numbers */
+static float rand_gauss(float stdev) {
+  const float u = (rand() + 1.0f) / ((float)RAND_MAX + 2.0f), v = (rand() + 1.0f) / ((float)RAND_MAX + 2.0f);
+  return stdev * sqrtf(-2 * logf(u)) * cosf(6.2831853f * v);
+}
+
 static bool catch_anim(side* sd, const bv_event* e, float t) {
   static const int BALL_RGB[5][3] = {{0xd5, 0x29, 0x29}, {0x94, 0xb4, 0xde}, {0xe6, 0xcd, 0x31}, {0xd5, 0x29, 0x29}, {0xa4, 0x41, 0xbd}};
   const int type = e->a >= 0 && e->a < 5 ? e->a : 0;
@@ -857,17 +920,31 @@ static bool catch_anim(side* sd, const bv_event* e, float t) {
     B.step |= CS_INIT;
     memset(&B.ball, 0, sizeof B.ball);
     B.ball.on = true;
+    B.ball.stars_t = -1;
     B.ball.type = type;
     B.ball.x = 16;
     B.ball.y = 80;
     B.ball.alpha = 1;
+    /* Upstream throws at (236, 16) whatever the Pokemon is, so a small one is hit well below the ball, which hangs above it. The ball
+     * is thrown at the middle of the Pokemon as it is drawn instead, and the Pokemon shrinks into it there. */
+    {
+      float mx, my;
+      mon_pos(sd, e->battler < 2, &mx, &my);
+      const float feet = my - foot_gap(sd) * sd->scale; /* the lowest drawn row: catch_dy moves it */
+      const rr_frame* f = sprite_frame(sd);
+      const float full = f ? f->h * get_mon_scale(&sd->mon) : 40;
+      B.ball.tx = mx;
+      B.ball.top = feet - full / 2;
+      if (B.ball.top < 16) B.ball.top = 16;
+      B.ball.end_dy = (B.ball.top + (f ? f->h * 0.25f : 10) / 2) - feet;
+    }
     B.ball.sub = sd->sub_on; /* substitute.sprite.setVisible(false) */
     sd->sub_on = false;
     for (int i = 0; i < 3; i++) sd->catch_rgb[i] = BALL_RGB[type][i];
   }
   bounce_seg sg[BOUNCE_MAX];
   float btotal;
-  const int nseg = bounce_build(sg, &btotal);
+  const int nseg = bounce_build(sg, &btotal, B.ball.top);
   const float S = CATCH_BOUNCE + btotal; /* the shake counter starts */
   const float t_fail = S + (w + 1) * 1000.0f;
   const float mon_scale = get_mon_scale(&sd->mon);
@@ -875,33 +952,33 @@ static bool catch_anim(side* sd, const bv_event* e, float t) {
   ONCE(CS_THROW, "se/pb_throw");
   if (t < CATCH_THROW) {
     const float u = t / CATCH_THROW;
-    B.ball.x = 16 + (236 - 16) * u;                          /* Linear */
-    B.ball.y = 80 + (16 - 80) * ease(EASE_CUBIC_OUT, u);
+    B.ball.x = 16 + (B.ball.tx - 16) * u;                    /* Linear */
+    B.ball.y = 80 + (B.ball.top - 80) * ease(EASE_CUBIC_OUT, u);
     B.ball.behind = t >= 300;                                 /* moveBelow(pokeball, pokemon) */
     return true;
   }
   B.ball.behind = true;
-  B.ball.x = 236;
+  B.ball.x = B.ball.tx;
   if (t < CATCH_IN) {
     ONCE(CS_OPEN, "se/pb_rel");
-    B.ball.y = 16;
+    B.ball.y = B.ball.top;
     B.ball.look = t < CATCH_THROW + 17 ? 1 : 2;
     sd->catch_on = true;
     sd->catch_untint = 0;
     const float u = ease(EASE_SINE_IN, (t - CATCH_THROW) / (CATCH_IN - CATCH_THROW));
     sd->scale = mon_scale + (0.25f - mon_scale) * u;
-    sd->catch_dy = -64 * u; /* y: 20, from the field position 84 */
+    sd->catch_dy = B.ball.end_dy * u; /* upstream: y 20, from the field position 84 */
     return true;
   }
   if (t < t_fail || caught) {
     sd->scale = 0.25f;
-    sd->catch_dy = -64;
+    sd->catch_dy = B.ball.end_dy;
     sd->sprite_on = false; /* it is inside */
     ONCE(CS_CLOSE, "se/pb_catch");
     B.ball.look = t < CATCH_IN + 17 ? 1 : 0;
     /* the bounce */
     const float tb = t - CATCH_BOUNCE;
-    B.ball.y = 16;
+    B.ball.y = B.ball.top;
     if (tb >= 0) {
       B.ball.y = 72;
       for (int i = 0; i < nseg; i++) {
@@ -927,19 +1004,23 @@ static bool catch_anim(side* sd, const bv_event* e, float t) {
       if (local >= 500) continue;
       const float p = local < 250 ? local / 250 : 1 - (local - 250) / 250;
       const float v = ease(EASE_CUBIC_OUT, p) * (k % 2 ? 1 : -1);
-      B.ball.x = 236 + v * 4;
+      B.ball.x = B.ball.tx + v * 4;
       B.ball.angle = v * 27.5f;
     }
     if (caught) {
       if (ts >= 4000) {
+        if (!(B.step & CS_LOCK))
+          for (int k = 0; k < 3; k++) B.ball.star_dx[k] = rand_gauss(25);
         ONCE(CS_LOCK, "se/pb_lock");
         /* pbTint: a black copy fades in to 0.375 and out again, 200 ms each */
         const float f = ts - 4000;
+        B.ball.stars_t = f;
         B.ball.flash = f < 200 ? 0.375f * ease(EASE_SINE_OUT, f / 200) : f < 400 ? 0.375f * (1 - ease(EASE_SINE_IN, (f - 200) / 200)) : 0;
       }
       if (ts < 4500) return true;
+      B.ball.stars_t = -1;
       B.ball.flash = 0;
-      B.ball.x = 236;
+      B.ball.x = B.ball.tx;
       B.ball.y = 72;
       B.ball.angle = 0;
       return false;
@@ -956,7 +1037,7 @@ static bool catch_anim(side* sd, const bv_event* e, float t) {
     B.ball.fading = true;
     B.ball.fade_t = 0;
   }
-  B.ball.x = 236;
+  B.ball.x = B.ball.tx;
   B.ball.y = 72;
   B.ball.angle = 0;
   B.ball.look = tf < 17 ? 1 : 2;
@@ -986,6 +1067,28 @@ static void run_event(float dt) {
       if (msgbox_done(&B.msg)) finish_event();
       break;
 
+    case BEV_LEVEL_UP:
+      /* showLevelUpMessages: the fanfare with the text; its prompt's A opens the stat window (gains); A shows the totals and A
+       * closes it (bv_input) */
+      if (B.step == 0) {
+        ui_play_sound("se/level_up_fanfare");
+        msgbox_show(&B.msg, e->text ? e->text : "", -1, true);
+        B.msg.wait_ms = 0;
+        B.step = 1;
+      }
+      if (B.step == 1 && msgbox_done(&B.msg)) {
+        if (!e->stats) {
+          finish_event();
+          break;
+        }
+        B.lvl.on = true;
+        B.lvl.totals = false;
+        B.lvl.stats = e->stats;
+        B.step = 2;
+      }
+      if (B.step == 2 && !B.lvl.on) finish_event();
+      break;
+
     case BEV_INTRO_WILD: {
       /* a = 1: a trainer battle, nobody on the enemy side yet and `text` is the message */
       const bool trainer = e->a == 1;
@@ -999,10 +1102,12 @@ static void run_event(float dt) {
       }
       if (B.step == 1) {
         tween_update(&B.tw, dt);
-        B.arena_player_x = 300 - B.tw.value;
+        if (!B.setup.player_present) B.arena_player_x = 300 - B.tw.value; /* a run's first wave: the platform arrives under nobody yet */
         B.arena_enemy_x = -280 + B.tw.value;
+        if (B.arena_old_on) B.arena_old_x = 20 + B.tw.value;
         B.enemy_slide = -300 + B.tw.value;
         if (tween_done(&B.tw)) {
+          B.arena_old_on = false;
           side* en = &B.s[1];
           char s[256];
           if (trainer) {
@@ -1338,6 +1443,13 @@ static void run_event(float dt) {
 
 static bool bv_input(ui_screen* s, ui_button b) {
   (void)s;
+  if (B.mode == M_EVENTS && B.lvl.on) {
+    /* promptLevelUpStats' onActionInput: the gains, then the totals, then the window closes */
+    if (b != BTN_ACTION) return false;
+    if (!B.lvl.totals) B.lvl.totals = true;
+    else B.lvl.on = false;
+    return true;
+  }
   if (B.mode == M_EVENTS) return msgbox_input(&B.msg, b);
   if (B.mode == M_COMMAND) {
     int c = B.cmd_cursor;
@@ -1368,7 +1480,9 @@ static bool bv_input(ui_screen* s, ui_button b) {
           B.reason_ms = 0;
           return true;
         }
-        if ((c == 1 && !B.opts.can_ball) || (c == 2 && !B.opts.can_switch) || (c == 3 && !B.opts.can_run)) {
+        /* POKEMON always opens the party (upstream's CommandPhase does): with nobody to send in it is still the way to the summaries,
+         * and a trapped Pokemon is refused when a member is picked, with the reason. opts.can_switch only says a switch is possible. */
+        if ((c == 1 && !B.opts.can_ball) || (c == 3 && !B.opts.can_run)) {
           ui_play_error();
           return false;
         }
@@ -1530,9 +1644,12 @@ void bv_begin(const bv_setup* setup) {
   gm_enum_lower(GM_E_BIOME_ID, setup->biome, B.biome, sizeof B.biome);
   set_mon(&B.s[0], &setup->player, true);
   set_mon(&B.s[1], &setup->enemy, false);
-  B.arena_player_x = 300;
+  B.begun = true;
+  B.arena_player_x = setup->player_present ? 0 : 300;
   B.arena_enemy_x = -280;
   B.enemy_slide = -300;
+  B.arena_old_on = setup->next_encounter;
+  B.arena_old_x = 20;
   B.s[0].present = B.s[0].info_on = setup->player_present;
   B.s[1].present = B.s[1].info_on = false;
   B.field_scale = 1;

@@ -10,6 +10,29 @@
 #include "pr_enums.h"
 #include "ui.h"
 
+static const gc_run* g_run;
+static char g_trainer_id[12];
+
+void ps_set_run(const void* gc_run_ptr) {
+  g_run = (const gc_run*)gc_run_ptr;
+  snprintf(g_trainer_id, sizeof g_trainer_id, "%d", g_run ? g_run->trainer_id : 0);
+}
+
+/* gameData.trainerId and the Pokemon's metBiome / metLevel / metWave: what the summary's profile page shows */
+static void fill_met(menu_mon* m, const gc_mon* g) {
+  m->met_biome = g->met_biome;
+  m->met_level = g->met_level > 0 ? (uint16_t)g->met_level : m->level;
+  m->met_wave = g->met_wave > 0 ? (uint16_t)g->met_wave : 0;
+}
+
+/* The run's own entry for a battle-core Pokemon (the party members of a run are `run->party[i].b`) */
+static const gc_mon* run_mon_of(const pr_pokemon* p) {
+  if (!g_run) return NULL;
+  for (int i = 0; i < g_run->n_party && i < PR_MAX_PARTY; i++)
+    if (&g_run->party[i].b == p) return &g_run->party[i];
+  return NULL;
+}
+
 static struct {
   menu_mon party[PR_MAX_PARTY];
   int n;
@@ -54,6 +77,7 @@ static void gc_to_menu_mon(const gc_mon* gm, menu_mon* m) {
   m->tera_type = p->tera_type;
   m->met_biome = -1;
   m->met_level = p->level;
+  fill_met(m, gm);
 }
 
 /* battle-core's Pokemon as the menus show it */
@@ -91,6 +115,8 @@ static void ps_menu_mon(const pr_battle* bt, const pr_pokemon* p, menu_mon* m) {
   m->tera_type = p->tera_type;
   m->met_biome = -1;
   m->met_level = p->level;
+  const gc_mon* g = run_mon_of(p);
+  if (g) fill_met(m, g);
 }
 
 /* ---- callbacks ---- */
@@ -136,6 +162,7 @@ static void on_summary(void* ctx, int slot) {
   a.index = slot;
   a.from_party = true;
   a.new_move_type = -1;
+  a.trainer_id = g_run ? g_trainer_id : NULL;
   static const summary_events ev = {sum_close, sum_swap, NULL, NULL};
   summary_open(&a, &ev);
 }
@@ -227,6 +254,7 @@ static void on_item_select(void* ctx, int slot, int option) {
 
 void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, void (*on_pick)(int slot, int move_slot, void* arg), void* arg) {
   const gc_run* run = (const gc_run*)gc_run_ptr;
+  ps_set_run(run);
   memset(&S, 0, sizeof S);
   memset(&ItemS, 0, sizeof ItemS);
   S.mode = (party_mode)pmode;
@@ -356,7 +384,7 @@ void ps_learn_move(const pr_battle* bt, int party_slot, int move, int trainer_id
   for (int i = 0; i < bt->n_party[0] && i < PR_MAX_PARTY; i++) ps_menu_mon(bt, bt->party[0][i], &L.party[i]);
   L.n = bt->n_party[0];
   snprintf(L.name, sizeof L.name, "%s", L.party[party_slot].name);
-  snprintf(L.trainer_id, sizeof L.trainer_id, "%05d", trainer_id);
+  snprintf(L.trainer_id, sizeof L.trainer_id, "%d", trainer_id); /* gameData.trainerId.toString(): not padded */
   learn_move_args a;
   memset(&a, 0, sizeof a);
   a.party = L.party;

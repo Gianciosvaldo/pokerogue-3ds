@@ -56,6 +56,7 @@ static struct {
   bool present[2];              /* a Pokemon of each side is out */
   int shown;                    /* party index of the player's Pokemon on screen, -1 none */
   bool fade_done;               /* a fade is already at black (a new run): the next wave doesn't fade again */
+  bool next_encounter;          /* this wave is the next one of the same biome: no fade, the enemy side slides in over the old one */
   int wave_ev;                  /* the WAVE event being shown */
   uint32_t drain_no;            /* drain() calls of this run, for the combat observer (one number per drain, never reused) */
   /* the screen events being played */
@@ -183,6 +184,28 @@ static const char* trainer_line(const char* key, int which, const char* mon, cha
 }
 
 /* ------------------------------------------------------------------ building screen events */
+
+/* LevelUpPhase's prevStats and the stats it shows, for the GC_EV_LEVEL_UP at q[i]. The run's party is already past the whole
+ * batch of events, so both are worked out again on a copy: at the level before (the event's c) and at the new level, and as the
+ * species before an evolution that comes later in the batch. Pure stat formula (pr_calculate_stats), nothing in the run moves. */
+static bool level_up_stats(int i, int out[12]) {
+  const gc_event* e = &G.q[i];
+  if (e->c < 1 || e->c >= e->b) return false;
+  static pr_pokemon p; /* a big struct: off the 3DS stack */
+  p = G.run.party[e->a].b;
+  for (int j = i + 1; j < G.nq; j++)
+    if (G.q[j].kind == GC_EV_EVOLVED && G.q[j].a == e->a) {
+      p.species = (uint16_t)G.q[j].b;
+      break;
+    }
+  p.level = e->c;
+  pr_calculate_stats(&G.run.bt, &p);
+  for (int s = 0; s < 6; s++) out[s] = p.stats[s];
+  p.level = e->b;
+  pr_calculate_stats(&G.run.bt, &p);
+  for (int s = 0; s < 6; s++) out[6 + s] = p.stats[s];
+  return true;
+}
 
 static bv_event* ev_new(void) { return G.n_ev < EV_CAP ? &G.ev[G.n_ev++] : NULL; }
 static char* txt_new(void) { return G.txt[G.n_txt < TXT_CAP ? G.n_txt++ : TXT_CAP - 1]; }
@@ -330,10 +353,11 @@ static void wave_black(void* arg) {
   const bool loaded = G.resume_wave;
   G.resume_wave = false;
   img_drop_prefix("images/pokemon/");
-  img_drop_prefix("images/arenas/");
+  if (!G.next_encounter) img_drop_prefix("images/arenas/"); /* the same biome's platforms are still on screen, sliding out */
   ba_drop_moves();
   preload_moves();
   bgm_on_wave(&G.run, (int)w->a, (int)w->b, (int)w->c); /* at black: the music starts here, never while something moves */
+  ps_set_run(&G.run); /* the summary's ID No. and where each Pokemon was met */
 
   bv_setup s;
   memset(&s, 0, sizeof s);
@@ -342,6 +366,7 @@ static void wave_black(void* arg) {
   if (G.present[0] && G.shown >= 0) {
     s.player = *bv_mon_of(BV_PLAYER);
     s.player_present = true;
+    s.next_encounter = G.next_encounter;
   } else if (G.run.n_party > 0) {
     s.player = make_mon(&G.run.party[G.run.party_order[0]], true);
   }
@@ -384,8 +409,11 @@ static void wave_black(void* arg) {
 static void begin_wave(int i) {
   G.wave_ev = i;
   G.st.waves++;
-  /* fade between scenes, as upstream does (a new run is already at black) */
-  if (G.fade_done || ui_depth() == 0) {
+  /* The next wave of the same biome with the lead on the field (upstream's NextEncounterPhase) doesn't fade: the enemy platform and
+   * the new enemy slide in over the old ones and the player's side stays. A new biome, a new run and a loaded one still go through
+   * black. */
+  G.next_encounter = !G.fade_done && ui_depth() > 0 && G.present[0] && G.shown >= 0 && bv_biome() == (int)G.q[i].b;
+  if (G.next_encounter || G.fade_done || ui_depth() == 0) {
     G.fade_done = false;
     wave_black(NULL);
   } else {
@@ -550,14 +578,26 @@ static bool handle_event(int i) {
     }
 
     case GC_EV_LEVEL_UP: {
-      if (e->a != G.shown || !G.present[0]) break;
-      bool last = true;
-      for (int j = i + 1; j < G.nq; j++)
-        if (G.q[j].kind == GC_EV_LEVEL_UP && G.q[j].a == e->a) last = false;
-      static bv_mon after;
-      after = make_mon(&G.run.party[e->a], true);
-      *ev_new() = (bv_event){.type = BEV_EXP, .battler = BV_PLAYER, .a = last ? (int)(after.exp_ratio * 1000) : 0,
-                             .b = e->b, .mon = &after};
+      if (e->a < 0 || e->a >= G.run.n_party) break;
+      if (e->a == G.shown && G.present[0]) {
+        bool last = true;
+        for (int j = i + 1; j < G.nq; j++)
+          if (G.q[j].kind == GC_EV_LEVEL_UP && G.q[j].a == e->a) last = false;
+        static bv_mon after;
+        after = make_mon(&G.run.party[e->a], true);
+        *ev_new() = (bv_event){.type = BEV_EXP, .battler = BV_PLAYER, .a = last ? (int)(after.exp_ratio * 1000) : 0,
+                               .b = e->b, .mon = &after};
+      }
+      /* LevelUpPhase: "X grew to Lv. N!" with the fanfare, then the stat window (prevStats against the new stats), for any
+       * party member */
+      if (i + 1 < G.nq && msg_is(&G.q[i + 1], "battle:levelUp")) {
+        static int stats[12];
+        char* t = txt_new();
+        pr_msg_format(&G.q[i + 1].msg, be_text_source(), t, TXT_LEN);
+        G.skip[i + 1] = true;
+        const bool ok = level_up_stats(i, stats);
+        *ev_new() = (bv_event){.type = BEV_LEVEL_UP, .battler = -1, .text = t, .stats = ok ? stats : NULL};
+      }
       break;
     }
 
