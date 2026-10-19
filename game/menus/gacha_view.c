@@ -55,15 +55,25 @@ static void draw_background(void) {
   rr_draw_cropped(f, 0, 0, 320, 16, &RR_DEFAULT_OPTS); /* the fixed rows over the stretched copy's first rows */
 }
 
-static void draw_machine(const gv_state* s, int i) {
-  const float cx = 180.0f * ((float)i - s->slide), cy = 18.0f;
-  if (cx > W || cx + 320.0f < 0) return;
+/* the machine's art at (cx, cy): the hatch's frame (1 closed .. 4 open, upstream's "open" / "close" animations) and the underlay that
+ * shows through it (upstream switches it to "open_hatch" on the hatch's fourth frame) */
+static void draw_machine_art(int i, float cx, float cy, int hatch) {
+  char frame[16];
+  if (hatch < 1) hatch = 1;
+  if (hatch > 4) hatch = 4;
+  snprintf(frame, sizeof frame, "%d.png", hatch);
   mui_image("egg/gacha_eggs", NULL, cx, cy, 0, 0);
-  mui_image(UNDERLAY[i], "default", cx + 115, cy + 80, 0, 0);
+  mui_image(UNDERLAY[i], hatch == 4 ? "open_hatch" : "default", cx + 115, cy + 80, 0, 0);
   mui_image(MACHINE_ART[i], NULL, cx, cy, 0, 0);
   alpha_image("egg/gacha_glass", NULL, cx, cy, 0, 0, 128);
   mui_image("egg/gacha_knob", NULL, cx + 191, cy + 89, 0.5f, 0.5f);
-  alpha_image("egg/gacha_hatch", "1.png", cx + 115, cy + 73, 0, 0, 230);
+  alpha_image("egg/gacha_hatch", frame, cx + 115, cy + 73, 0, 0, 230);
+}
+
+static void draw_machine(const gv_state* s, int i) {
+  const float cx = 180.0f * ((float)i - s->slide), cy = 18.0f;
+  if (cx > W || cx + 320.0f < 0) return;
+  draw_machine_art(i, cx, cy, 1);
   /* the plate */
   const float px = cx + 160, py = cy + 46;
   if (i == 1) {
@@ -213,6 +223,10 @@ static void draw_egg(const gv_egg* e) {
 void gv_draw_reveal_top(const gv_reveal* s) {
   mui_set_origin(RR_TOP, 40, 30);
   draw_background();
+  /* the machine the eggs came out of, its hatch opening while they leave (behind the eggs, inside the field) */
+  mui_clip(0, 0, W, H);
+  if (s->machine >= 0 && s->machine < GV_MACHINES) draw_machine_art(s->machine, 0.0f, 18.0f, s->hatch);
+  mui_clip_off();
   if (s->top_title[0]) {
     mui_window(60, 0, 200, s->top_sub[0] ? 30 : 20);
     text8_centred(160, 4, s->top_title, TS_WINDOW);

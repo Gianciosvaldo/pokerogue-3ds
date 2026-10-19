@@ -49,11 +49,18 @@ typedef struct {
    * decision to make. The motion, the skip and the callbacks are the preview's. */
   bool live;
   bool autoplay;
+  /* The machine whose art is drawn behind the eggs (0..2, gacha_view.h's machines); the preview and anything else draw machine 0. */
+  uint8_t machine;
 } caps_args;
 
 /* Makes the preview the screen (ui_set, with a fade). False (nothing opened) for NULL or an invalid fixture (none, more than 25, a bad
  * tier or label). */
 bool capsule_screen_open(const caps_args* a);
+
+/* Which frame of the machine's hatch (1 closed .. 4 open) the model's time calls for: closed before the pull and once settled, opening at
+ * 12 frames a second from the first capsule leaving the chute, held open until the last one has left, then closing. Pure: a function of
+ * the model's state only (upstream's "open" / "close" animations of gacha_hatch, one egg at a time there, one burst here). */
+int capsule_hatch_frame(const cap_model* m);
 
 /* The fixed fixture of the debug entry: n results (1..25), tiers and labels from the position only. False for n outside 1..25. */
 bool capsule_debug_fixture(int n, cap_fixture* out);

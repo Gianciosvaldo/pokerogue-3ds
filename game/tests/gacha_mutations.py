@@ -84,6 +84,8 @@ M = [
      "the rows name no species (the egg's id again)"),
     ([(GH, "    const char* name = H.species_name && e->species ? H.species_name(e->species) : NULL;", "    const char* name = H.species_name && e->species ? H.species_name(f->n ? f->item[0].tier : 1) : NULL;")],
      "the row names the wrong egg's species"),
+    ([(GS, "  c.machine = r->n && r->eggs[0].source_type < GH_MACHINES ? r->eggs[0].source_type : 0;", "  c.machine = 0;")],
+     "the reveal always draws machine 0"),
     ([(GS, "  gh_set_species_names(a->species_name);\n", "")],
      "the screen never hands the app's namer to the host"),
     # ---- the screen

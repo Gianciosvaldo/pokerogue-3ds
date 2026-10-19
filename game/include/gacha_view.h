@@ -81,6 +81,8 @@ typedef struct {
   int n;
   gv_egg egg[GV_CAP_MAX];
   float knob;                 /* turns of the knob */
+  int machine;                /* the machine the eggs came out of (0..GV_MACHINES - 1; anything else: none is drawn) */
+  int hatch;                  /* its hatch: 1 closed .. 4 open */
   char top_title[48];         /* the window at the top of the field */
   char top_sub[72];
   int n_rows;
