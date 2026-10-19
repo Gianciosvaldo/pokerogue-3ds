@@ -234,6 +234,16 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             bt->max_exp_level = (int)inum(l, "mel");
             bt->ability_bar_visible = inum(l, "bar") != 0;
             bt->last_used_pokeball = (int8_t)unum(l, "ball", -1);
+            const char *balls=field(l,"balls");
+            bt->pokeball_counts_known=balls!=NULL;
+            if(balls){
+                char values[8][64];if(split(balls,',',values,8)!=8)exit(2);
+                for(int j=0;j<8;j++){
+                    char *end;double n=strtod(values[j],&end);
+                    if(*end||!isfinite(n)||n<0||n>9007199254740992.0||n!=floor(n))exit(2);
+                    bt->pokeball_counts[j]=n;
+                }
+            }
             bt->game_mode = field(l, "gm") ? (int8_t)inum(l, "gm") : -1;   /* older files have none */
         } else if (!strncmp(l, "ARENA ", 6)) {
             bt->weather = (uint8_t)inum(l, "weather");
@@ -748,6 +758,7 @@ static void dump_state(lines_t *L, const pr_battle *bt, const case_state *cs, bo
        bt->ability_bar_visible);
     num_or_u(&s, bt->last_used_pokeball, -1);
     if (bt->game_mode >= 0) sb(&s, " gm=%d", bt->game_mode);
+    if(bt->pokeball_counts_known){sb(&s," balls=");LIST(&s,8,',',"%.17g",bt->pokeball_counts[i]);}
     add_line(L, "%s", s.s);
 
     s.n = 0;

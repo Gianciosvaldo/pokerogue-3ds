@@ -17,7 +17,8 @@ Zero to Hero (Palafin) is documented in [ZERO-TO-HERO-VALIDATION.md](ZERO-TO-HER
 Disguise/Ice Face callbacks are documented in [FORM-BLOCK-DAMAGE-VALIDATION.md](FORM-BLOCK-DAMAGE-VALIDATION.md).
 Meloetta/Relic Song is documented in [MELOETTA-FORMS-VALIDATION.md](MELOETTA-FORMS-VALIDATION.md).
 Revival Blessing is documented in [REVIVAL-BLESSING-VALIDATION.md](REVIVAL-BLESSING-VALIDATION.md).
-Next candidates include Ball Fetch inventory integration and remaining form transitions; delayed attacks
+Ball Fetch inventory and once-per-battle integration is documented in [BALL-FETCH-VALIDATION.md](BALL-FETCH-VALIDATION.md).
+Next candidates include remaining form transitions and high-wave progression; delayed attacks
 already have override handlers and need a boundary audit. A missing local class switch
 case is only a candidate: called-move and override dispatch may handle it
 elsewhere, and source-disabled registrations must be distinguished. The final

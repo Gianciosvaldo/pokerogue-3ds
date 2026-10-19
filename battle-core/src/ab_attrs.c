@@ -1774,11 +1774,18 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         }
         return 1;
     }
-    case PR_AC_FetchBallAbAttr:
+    case PR_AC_FetchBallAbAttr: {
         GATE(!pp->simulated && bt->last_used_pokeball >= 0 && p->is_player);
-        pr_note_unported(bt, a->cls); /* globalScene.pokeballCounts isn't modelled */
-        bt->last_used_pokeball = -1;
+        const char *names[]={"pokeball:pokeBall","pokeball:greatBall","pokeball:ultraBall",
+            "pokeball:rogueBall","pokeball:masterBall","pokeball:luxuryBall"};
+        int ball=bt->last_used_pokeball;
+        if(!bt->pokeball_counts_known || ball>=6) return -1;
+        bt->pokeball_counts[ball]++;
+        bt->last_used_pokeball=-1;
+        pr_queue_msg(bt,c->e,pr_msg2("abilityTriggers:fetchBall",
+            pr_arg_pokemon(bt,"pokemonNameWithAffix",p),pr_arg_key("pokeballName",names[ball])));
         return 1;
+    }
 
     /* ---- secondary effect chance (MoveEffectAttr.getMoveChance) ---- */
     /* ---- StatStageChangePhase: protection from drops, reactions ---- */

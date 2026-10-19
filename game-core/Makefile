@@ -723,3 +723,11 @@ revival-blessing-host-test: $(BUILD)/revival_blessing_host_test
 $(BUILD)/revival_blessing_host_test: tests/revival_blessing_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: revival-blessing-host-test
+
+all: $(BUILD)/ball_fetch_host_test
+test: ball-fetch-host-test
+ball-fetch-host-test: $(BUILD)/ball_fetch_host_test
+	$(BUILD)/ball_fetch_host_test
+$(BUILD)/ball_fetch_host_test: tests/ball_fetch_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: ball-fetch-host-test

@@ -576,3 +576,7 @@ $(BUILD)/revival-blessing-test: tests/revival-blessing-test.c $(BUILD)/wide-subs
 all: $(BUILD)/revival-turn-test
 $(BUILD)/revival-turn-test: $(BUILD)/wide-combat-replay.c tests/turntest.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -Itests $(CFLAGS) -DTURNTEST_REVIVAL_FAINTED_PICK $(BUILD)/wide-combat-replay.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/ball-fetch-test
+$(BUILD)/ball-fetch-test: tests/ball-fetch-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
