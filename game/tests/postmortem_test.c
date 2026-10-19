@@ -21,6 +21,7 @@
 #include "i18n.h"
 #include "postmortem_screen.h"
 #include "result_screen.h"
+#include "toast_view.h"
 #include "ui.h"
 #include "ui_text.h"
 #include "ui_widgets.h"
@@ -118,6 +119,13 @@ static const char* species_name(int id) {
   }
 }
 const char* i18n_species_name(int id) { return species_name(id); }
+
+/* what a win gave and the bars that show it (win_gains.c, menus/toast_view.c): this test has no gains */
+bool wg_is_toast(const wg_item* it) { (void)it; return false; }
+void wg_toast_of(const wg_item* it, wg_toast* o) { (void)it, (void)o; }
+void wg_message_of(const wg_item* it, char* out, int n) { (void)it, (void)n; out[0] = 0; }
+void tv_draw(const tv_info* t, float slide) { (void)t, (void)slide; }
+void ui_play_sound(const char* key) { (void)key; }
 
 /* run_summary / run_text, used by the result screen's drawing only */
 void rsum_draw(const rsv_info* in, float x, float y) { (void)in, (void)x, (void)y; }

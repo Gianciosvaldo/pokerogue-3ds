@@ -23,6 +23,7 @@
 #include "system_data.h"
 #include "title_screen.h"
 #include "ui.h"
+#include "win_gains.h"
 
 static struct {
   rs_config first;          /* the debug config, for the first New Game */
@@ -70,6 +71,8 @@ static rs_config run_config(int slot, bool fresh) {
     c.sys = sysd_get();
     c.save_sys = sysd_save;
   }
+  /* what a Classic win will give is the difference between the system data as it is now and as the win leaves it (win_gains.h) */
+  wg_snapshot(c.sys);
   A.slot = slot;
   return c;
 }
@@ -203,6 +206,9 @@ static void on_run_end(int kind, void* arg) {
   A.result.run.status = RSV_OK;
   A.result.report = co_report_get(); /* taken by the run driver as the run ended, before the slot is cleared below */
   A.result.on_done = on_result_done;
+  /* the win's unlocks, vouchers and ribbons: game-core has already changed the system data as the run was cleared */
+  static wg_gains gains;
+  A.result.gains = A.result.victory && wg_collect(rs_run()->sys, rs_run(), &gains) > 0 ? &gains : NULL;
   /* The custom store takes the report BEFORE the slot is cleared. If the app stops between the two, Continue reloads the save from the
    * start of the lost encounter and the player plays the wave again, with a stored report of the defeat they undid (and no Nemesis: the
    * app never inserts one). The other order would lose the report of a defeat that stood. A report is also only ever a post-mortem: the
