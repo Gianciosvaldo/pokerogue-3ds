@@ -3207,11 +3207,10 @@ static void positional_tag_phase(pr_battle *bt, pr_engine *e)
         }
         pr_pokemon *target = t->target_index >= 0 && t->target_index < 4 ? bt->field[t->target_index] : NULL;
         if (t->type == POSITIONAL_TAG_TYPE_DELAYED_ATTACK) {
-            pr_pokemon *source = pr_field_pokemon_by_id(bt, t->source_id);
+            /* Native shouldTrigger searches both parties, including the bench. */
+            pr_pokemon *source = pr_pokemon_by_id(bt, t->source_id);
             if (!source) {
-                for (int s = 0; s < 2; s++)
-                    for (int k = 0; k < bt->n_party[s]; k++)
-                        if (bt->party[s][k]->id == t->source_id) pr_note_unported(bt, PR_FEAT_PARTY);   /* off the field */
+                if (!bt->n_party[0] || !bt->n_party[1]) pr_note_unported(bt, PR_FEAT_PARTY);
                 continue;
             }
             if (!target || source == target || target->hp <= 0) continue;

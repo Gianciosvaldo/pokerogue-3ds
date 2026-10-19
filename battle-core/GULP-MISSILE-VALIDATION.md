@@ -47,7 +47,12 @@ charge phases, retaining 4,096 wide-level controls. Actual damage exceeds int32
 in 1,323 native calls, up to 386,403,612,011. The second seed also passes all 8,192 complete turns with zero source exceptions
 or unsupported cases. Its 2,761 quiet forms, 397 status phases and 506 stat phases
 are compared exactly. An additional matrix covers actual prior-turn Dive continuation and
-delayed bench-caster boundaries.
+delayed bench-caster boundaries. All 16,384 additional turns across both seeds
+match exactly with zero unsupported cases or source exceptions. The original
+field-only positional dispatcher rejected 2,048 cases per seed; after using both
+parties, the trace also had to preserve the actual StatStageChangePhase index -1.
+Both defects have dedicated compiled faults. The combined successful owning
+count is 32,768; native preparatory Dive turns are not added to that count.
 
 An unprotected bench-caster diagnostic attempted 8,192 turns and recorded 2,048
 native exceptions (DamageAnimPhase(-1)); only 6,144 records were written and no
@@ -58,7 +63,7 @@ faithful turn. A separate matrix with actual Magic Guard bench casters tests
 the defined path without a damage animation. Set GULP_UNPROTECTED_BENCH=1 to
 reproduce the failed diagnostic; its exception/coverage gate must fail.
 
-All 17 compiled production faults are caught and all 12 malformed captures
+All 19 compiled production faults are caught and all 12 malformed captures
 rejected, including the missing-recipient refusal. The real game host passes 72 checks for legal Surf/Dive commands,
 ingestion, form execution, retaliation and legal save/load continuation. The
 host automatically executes Dive's forced second turn. Normal game-core tests
@@ -66,8 +71,9 @@ pass with saved/unsaved digest e69b03a1. All battle runners build and the local
 CI-equivalent devkitARM 3DS build passes. Seven retained suites lose no previously
 covered IDs and gain eight exact cases. All 40 cross-slice captures also pass after the final exception-boundary guard.
 Fresh normal app/custom/save sanitizer tests passed with their 10,000/100/200/100
-run floors. The final incremental rebuild and all normal app/custom/save sanitizer checks
-also pass after that guard; normal game-core and local 3DS checks pass again.
+run floors. Normal game-core and local 3DS checks also pass after the positional dispatcher
+and trace fixes. Integration with main's newer app menu/naming changes retains
+the normal expanded app/custom/save sanitizer suite as a required merge gate.
 
 Reproduce raw and owning checks using `tools/gulp-missile-diff.sh UPSTREAM SEED`.
 The additional continuation builder is

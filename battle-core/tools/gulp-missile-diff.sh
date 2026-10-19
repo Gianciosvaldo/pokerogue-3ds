@@ -20,4 +20,4 @@ python3 "$HERE/tools/build-gulp-missile-continuation-proof.py" "$UP/test/tests/z
 TURNTEST_LOCALES="$UP/locales/en" "$HERE/build/wide-combat-test" "$CONT"
 TURNTEST_LOCALES="$UP/locales/en" "$HERE/build/gulp-missile-test" "$TRACE"
 TURNTEST_LOCALES="$UP/locales/en" "$HERE/build/wide-combat-test" "$TURNS"
-TURNTEST_LOCALES="$UP/locales/en" python3 "$HERE/tools/check-gulp-missile-proof.py" "$TRACE"
+TURNTEST_LOCALES="$UP/locales/en" python3 "$HERE/tools/check-gulp-missile-proof.py" "$TRACE" "$CONT"

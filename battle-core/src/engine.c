@@ -721,8 +721,9 @@ static void trace(pr_engine *e, int ph)
                          || p->type == PH_MOVE_CHARGE || p->type == PH_TRANSFORM;
     pokemon_phase = pokemon_phase || p->type == PH_MOVE_REFLECT || p->type == PH_POST_SUMMON || p->type == PH_SHINY_SPARKLE || p->type == PH_ATTEMPT_CAPTURE;
     /* SummonPhase (a PartyMemberPokemonPhase) has no battlerIndex upstream: its name alone */
-    /* MoveEndPhase is given its user's getBattlerIndex(), which is -1 once it has been switched out */
-    if (p->type == PH_MOVE_END) snprintf(out, 40, "%s:%d", pr_phase_name[p->type], p->battler);
+    /* These constructors carry a numeric field index even for a switched-out
+     * user/recipient (-1). Preserve that value instead of making it absent. */
+    if (p->type == PH_MOVE_END || p->type == PH_STAT_STAGE_CHANGE) snprintf(out, 40, "%s:%d", pr_phase_name[p->type], p->battler);
     else if (pokemon_phase && p->user_id >= 0) snprintf(out, 40, "%s:%lld", pr_phase_name[p->type], (long long)p->user_id);
     else if (pokemon_phase && p->battler >= 0) snprintf(out, 40, "%s:%d", pr_phase_name[p->type], p->battler);
     else snprintf(out, 40, "%s", pr_phase_name[p->type]);
