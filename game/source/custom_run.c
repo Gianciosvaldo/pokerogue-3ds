@@ -1048,7 +1048,9 @@ bool cr_clear(int slot) {
     }
   }
   char name[24];
-  return rsv_remove_files(slot_file(slot, name));
+  slot_file(slot, name);
+  rsv_name_remove(name);
+  return rsv_remove_files(name);
 }
 
 /* ------------------------------------------------------------------ tests */

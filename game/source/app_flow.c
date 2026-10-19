@@ -11,6 +11,7 @@
 #include "custom_run.h"
 #include "custom_store.h"
 #include "gc/run.h"
+#include "name_entry.h"
 #include "radar_screen.h"
 #include "result_screen.h"
 #include "run_saves.h"
@@ -69,12 +70,25 @@ static rs_config run_config(int slot, bool fresh) {
   return c;
 }
 
+/* the file name of a slot of the list on screen: the regular runs' or the custom runs' */
+static const char* slot_file_of(int slot, char out[24]) {
+  if (A.custom)
+    snprintf(out, 24, CR_FILE_PREFIX "%d", slot);
+  else
+    rsv_slot_name(slot, out);
+  return out;
+}
+
 /* A message on the slot list, with the slots as they are now (a load that did not work, a run that did not start) */
 static void look(void) {
   if (A.custom)
     cr_inspect_all(A.info);
   else
     rsv_inspect_all(A.info);
+  for (int i = 0; i < RSV_SLOTS; i++) {
+    char file[24];
+    if (A.info[i].status == RSV_OK) rsv_name_get(slot_file_of(i, file), A.info[i].run_key, A.info[i].name);
+  }
 }
 
 static void tell(const char* text) {
@@ -249,6 +263,25 @@ static void on_delete(int slot, void* arg) {
   slot_screen_refresh();
 }
 
+/* Rename Run (upstream's RENAME_RUN): the name is typed on name_entry.h's screen and kept beside the slot's file (run_saves.h). An empty
+ * name does nothing and counts as done, as upstream's renameSession does. */
+static void on_renamed(const char* text, void* arg) {
+  const int slot = (int)(long)arg;
+  bool failed = false;
+  if (text && text[0]) {
+    char file[24];
+    failed = !rsv_name_set(slot_file_of(slot, file), A.info[slot].run_key, text);
+  }
+  show_slots(SLOTS_LOAD, slot);
+  if (failed) tell("The name could not be written to the SD card.");
+}
+
+static void on_rename(int slot, void* arg) {
+  (void)arg;
+  const name_entry_args a = {"menu:renameRun", "menu:runName", "menu:rename", "menu:cancel", RSV_NAME_MAX, on_renamed, (void*)(long)slot};
+  name_entry_open(&a);
+}
+
 static void on_back(void* arg) {
   (void)arg;
   show_title();
@@ -257,7 +290,7 @@ static void on_back(void* arg) {
 static void show_slots(slots_mode mode, int cursor) {
   g_mode = mode;
   look();
-  slot_screen_open(&(slots_args){mode, A.info, cursor, on_pick, on_delete, on_back, NULL});
+  slot_screen_open(&(slots_args){mode, A.info, cursor, on_pick, on_delete, on_rename, on_back, NULL});
 }
 
 /* ------------------------------------------------------------------ the title */

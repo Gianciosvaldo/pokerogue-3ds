@@ -281,6 +281,22 @@ build/store_test: $(STORE_SRCS)
 store_test: build/store_test
 .PHONY: store_test
 
+# the save slot list (source/slot_screen.c) with a fake UI stack and drawing layer; make slot_screen_test && build/slot_screen_test
+SLOT_SCREEN_SRCS := slot_screen_test.c ../source/slot_screen.c
+build/slot_screen_test: $(SLOT_SCREEN_SRCS)
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) -I../../assets-pipeline/app-src/include $(CFLAGS) -fsanitize=address,undefined $(SLOT_SCREEN_SRCS) -lm -o $@
+slot_screen_test: build/slot_screen_test
+.PHONY: slot_screen_test
+
+# the text entry screen (source/name_entry.c) with a fake UI stack and drawing layer; make name_entry_test && build/name_entry_test
+NAME_ENTRY_SRCS := name_entry_test.c ../source/name_entry.c
+build/name_entry_test: $(NAME_ENTRY_SRCS)
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) -I../include -I../../assets-pipeline/app-src/include $(CFLAGS) -fsanitize=address,undefined $(NAME_ENTRY_SRCS) -lm -o $@
+name_entry_test: build/name_entry_test
+.PHONY: name_entry_test
+
 # the in-run menu (source/run_menu.c) with a fake UI stack and drawing layer; make run_menu_test && build/run_menu_test
 RUN_MENU_SRCS := run_menu_test.c ../source/run_menu.c
 build/run_menu_test: $(RUN_MENU_SRCS)

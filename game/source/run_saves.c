@@ -21,7 +21,20 @@ const char* rsv_slot_name(int slot, char out[16]) {
   return out;
 }
 
+/* FNV-1a over the run seed's UTF-16 units: the key a run's name is kept under */
+static uint64_t run_key_of(const gc_run* run) {
+  uint64_t h = 1469598103934665603ull;
+  for (size_t i = 0; i < run->run.seed.len && i < sizeof run->run.seed.u / sizeof run->run.seed.u[0]; i++) {
+    h ^= run->run.seed.u[i] & 0xffu;
+    h *= 1099511628211ull;
+    h ^= run->run.seed.u[i] >> 8;
+    h *= 1099511628211ull;
+  }
+  return h;
+}
+
 void rsv_summarize(const gc_run* run, rsv_info* out) {
+  out->run_key = run_key_of(run);
   out->mode = run->run.mode;
   out->wave = run->wave;
   out->biome = run->biome;
@@ -163,6 +176,7 @@ bool rsv_clear(int slot) {
   char name[16];
   const bool was_last = rsv_last_slot() == slot;
   if (!rsv_remove_files(rsv_slot_name(slot, name))) return false;
+  rsv_name_remove(name); /* the name goes with the run; one that is left behind is never shown for another run (rsv_name_get) */
   /* upstream's deleteSession: the slot is no longer the one Continue loads */
   if (was_last) rsv_remove_files(LAST_SLOT_FILE);
   return true;
@@ -183,4 +197,84 @@ void rsv_set_last_slot(int slot) {
   if (!rsv_slot_ok(slot) || rsv_last_slot() == slot) return;
   const char b = (char)slot;
   save_write(LAST_SLOT_FILE, &b, 1);
+}
+
+/* ------------------------------------------------------------------ run names */
+
+#define NAME_MAGIC "RN1"
+#define NAME_HEAD 11 /* the magic and the 8-byte run key */
+
+int rsv_utf8_chars(const char* s) {
+  int n = 0;
+  const unsigned char* p = (const unsigned char*)s;
+  while (*p) {
+    int len;
+    if (*p < 0x80)
+      len = 1;
+    else if ((*p & 0xe0) == 0xc0 && *p >= 0xc2)
+      len = 2;
+    else if ((*p & 0xf0) == 0xe0)
+      len = 3;
+    else if ((*p & 0xf8) == 0xf0 && *p <= 0xf4)
+      len = 4;
+    else
+      return -1;
+    for (int i = 1; i < len; i++)
+      if ((p[i] & 0xc0) != 0x80) return -1; /* also ends at the NUL */
+    p += len;
+    n++;
+  }
+  return n;
+}
+
+/* the name's file: "<slot_file>_name" (+ .sav and friends) */
+static const char* name_file(const char* slot_file, char out[40]) {
+  snprintf(out, 40, "%.30s_name", slot_file);
+  return out;
+}
+
+static bool name_ok(const char* s) {
+  const int n = rsv_utf8_chars(s);
+  if (n < 1 || n > RSV_NAME_MAX) return false;
+  for (const unsigned char* p = (const unsigned char*)s; *p; p++)
+    if (*p < 0x20 || *p == 0x7f) return false;
+  return true;
+}
+
+bool rsv_name_get(const char* slot_file, uint64_t run_key, char out[RSV_NAME_LEN]) {
+  out[0] = '\0';
+  char fn[40];
+  char* buf = NULL;
+  size_t len = 0;
+  if (save_read(name_file(slot_file, fn), &buf, &len, NULL) != SAVE_OK) return false;
+  bool ok = false;
+  if (len > NAME_HEAD && len - NAME_HEAD < RSV_NAME_LEN && !memcmp(buf, NAME_MAGIC, 3)) {
+    uint64_t key = 0;
+    for (int i = 0; i < 8; i++) key |= (uint64_t)(uint8_t)buf[3 + i] << (8 * i);
+    char text[RSV_NAME_LEN];
+    memcpy(text, buf + NAME_HEAD, len - NAME_HEAD);
+    text[len - NAME_HEAD] = '\0';
+    if (key == run_key && name_ok(text)) {
+      memcpy(out, text, len - NAME_HEAD + 1);
+      ok = true;
+    }
+  }
+  free(buf);
+  return ok;
+}
+
+bool rsv_name_set(const char* slot_file, uint64_t run_key, const char* name) {
+  if (!name || !name_ok(name)) return false;
+  char fn[40];
+  uint8_t buf[NAME_HEAD + RSV_NAME_LEN];
+  memcpy(buf, NAME_MAGIC, 3);
+  for (int i = 0; i < 8; i++) buf[3 + i] = (uint8_t)(run_key >> (8 * i));
+  const size_t n = strlen(name);
+  memcpy(buf + NAME_HEAD, name, n);
+  return save_write(name_file(slot_file, fn), buf, NAME_HEAD + n) == SAVE_OK;
+}
+
+bool rsv_name_remove(const char* slot_file) {
+  char fn[40];
+  return rsv_remove_files(name_file(slot_file, fn));
 }

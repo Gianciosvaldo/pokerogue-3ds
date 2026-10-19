@@ -17,6 +17,7 @@
 #include <unistd.h>
 
 #include "app_flow.h"
+#include "name_entry.h"
 #include "capsule_screen.h"
 #include "gacha_screen.h"
 #include "profile_tx.h"
@@ -124,6 +125,14 @@ bool gacha_screen_open(const gachas_args* a) {
   GS = *a;
   n_gacha++;
   return true;
+}
+
+/* the name entry (Rename Run): records how it was opened; the test types as the player would */
+static name_entry_args NE;
+static int n_name_entry;
+void name_entry_open(const name_entry_args* a) {
+  NE = *a;
+  n_name_entry++;
 }
 
 static result_args R;
@@ -428,6 +437,68 @@ int main(void) {
     CHECK(sysd_get()->dex[150].caught_attr == 0, "and the Mewtwo is still not caught");
   }
 
+  /* ---- Rename Run: the list offers it, the entry is given upstream's words and the 20 character limit, the name is kept beside the slot and
+   * shows on the list; cancelling or an empty name change nothing; a refusing card is said; the name goes with the run */
+  {
+    T.on_choose(TITLE_LOAD_GAME, T.arg);
+    CHECK(S.on_rename && S_info[0].status == RSV_OK && S_info[0].name[0] == '\0', "the list takes Rename Run, and the run has no name yet");
+    const int opens = n_name_entry, lists = n_slots;
+    S.on_rename(0, S.arg);
+    CHECK(n_name_entry == opens + 1 && !strcmp(NE.title_key, "menu:renameRun") && !strcmp(NE.label_key, "menu:runName") &&
+              !strcmp(NE.ok_key, "menu:rename") && !strcmp(NE.cancel_key, "menu:cancel") && NE.max_chars == 20 && NE.on_done,
+          "the entry opens with upstream's words and 20 characters");
+    char np[300], np2[300];
+    snprintf(np, sizeof np, "%s/session_0_name.sav", SAVE_DIR);
+    CHECK(!exists(np), "no name file yet");
+    NE.on_done("Jojo Run", NE.arg);
+    CHECK(n_slots == lists + 1 && S.mode == SLOTS_LOAD && S.cursor == 0, "the list is back on the slot");
+    CHECK(!strcmp(S_info[0].name, "Jojo Run") && exists(np), "the name shows on the list and is on the card: \"%s\"", S_info[0].name);
+    CHECK(status_of(0) == RSV_OK, "the run is still a run");
+    /* the next save of the run does not take the name away */
+    rsv_save(0, &RUN);
+    S.on_back(S.arg);
+    T.on_choose(TITLE_LOAD_GAME, T.arg);
+    CHECK(!strcmp(S_info[0].name, "Jojo Run"), "the name survives the run's next save: \"%s\"", S_info[0].name);
+    /* cancelled, and an empty name (upstream's renameSession does nothing for it) */
+    S.on_rename(0, S.arg);
+    NE.on_done(NULL, NE.arg);
+    CHECK(!strcmp(S_info[0].name, "Jojo Run") && n_slots > lists && !last_msg[0], "cancelled: the name is as it was, no message");
+    S.on_rename(0, S.arg);
+    NE.on_done("", NE.arg);
+    CHECK(!strcmp(S_info[0].name, "Jojo Run") && !last_msg[0], "an empty name changes nothing and says nothing");
+    /* a new name replaces it */
+    S.on_rename(0, S.arg);
+    NE.on_done("Second", NE.arg);
+    CHECK(!strcmp(S_info[0].name, "Second"), "a new name replaces the old one: \"%s\"", S_info[0].name);
+    /* the card refuses the write: told, the name is as it was */
+    snprintf(np2, sizeof np2, "%s.tmp", np);
+    CHECK(mkdir(np2, 0777) == 0, "block the name's temp file");
+    S.on_rename(0, S.arg);
+    NE.on_done("Blocked", NE.arg);
+    CHECK(last_msg[0] && strstr(last_msg, "name") && !strcmp(S_info[0].name, "Second"), "a refusing card is told and the name is as it was: \"%s\"", last_msg);
+    rmdir(np2);
+    /* a run in another slot does not take the name; a slot that holds a run with another seed does not show it */
+    new_run(&RUN, "flowtestseed00000000000N");
+    CHECK(rsv_save(4, &RUN) == RSV_SAVED, "another run in slot 4");
+    S.on_back(S.arg);
+    T.on_choose(TITLE_LOAD_GAME, T.arg);
+    CHECK(S_info[4].status == RSV_OK && S_info[4].name[0] == '\0', "another slot has no name");
+    snprintf(np2, sizeof np2, "%s/session_4_name.sav", SAVE_DIR);
+    CHECK(!exists(np2), "and no file");
+    CHECK(rsv_name_set("session_4", S_info[0].run_key, "Wrong run"), "a name file for another run's key is left in slot 4");
+    S.on_back(S.arg);
+    T.on_choose(TITLE_LOAD_GAME, T.arg);
+    CHECK(S_info[4].name[0] == '\0', "it is not shown for the run that is in slot 4: \"%s\"", S_info[4].name);
+    /* Delete Run takes the name with the run */
+    S.on_delete(4, S.arg);
+    CHECK(status_of(4) == RSV_EMPTY && !exists(np2), "Delete Run on slot 4 removed the run and the name file it had");
+    S.on_delete(0, S.arg);
+    CHECK(status_of(0) == RSV_EMPTY && !exists(np), "Delete Run on slot 0 removed the run and its name");
+    new_run(&RUN, "flowtestseed000000000001");
+    rsv_save(0, &RUN); /* slot 0 holds a run again, for what follows */
+    S.on_back(S.arg);
+  }
+
   /* ---- New Game over a run: the old run goes (with its backup) before the new one starts */
   rsv_save(0, &RUN); /* a second save of slot 0: it now has a backup */
   slot_path(0, ".sav.bak", p, sizeof p);
@@ -714,8 +785,21 @@ int main(void) {
     slot_path(2, ".sav", p, sizeof p);
     CHECK(!exists(p), "and there is no ordinary session_2");
 
+    /* Rename Run on a custom run: its own slot file's name, the ordinary slots are not touched */
+    S.on_back(S.arg);
+    T.on_choose(TITLE_CUSTOM_LOAD, T.arg);
+    CHECK(S.mode == SLOTS_LOAD && S.on_rename && S_info[2].status == RSV_OK && S_info[2].name[0] == '\0', "the custom list takes Rename Run");
+    S.on_rename(2, S.arg);
+    NE.on_done("Custom one", NE.arg);
+    char nc[300], no[300];
+    snprintf(nc, sizeof nc, "%s/csession_2_name.sav", SAVE_DIR);
+    snprintf(no, sizeof no, "%s/session_2_name.sav", SAVE_DIR);
+    CHECK(S.mode == SLOTS_LOAD && !strcmp(S_info[2].name, "Custom one") && exists(nc) && !exists(no), "the custom run's name is beside the custom slot: \"%s\"", S_info[2].name);
+    CHECK(cr_inspect(2, &inf) == RSV_OK && cr_active(), "the custom run is as it was");
+
     /* the run ends: the custom slot is cleared, the controller is off, the ordinary slot 0 is still there */
     driver_end(GC_SCREEN_GAME_OVER);
+    CHECK(!exists(nc), "the custom run's name went with its slot");
     CHECK(!cr_active() && cr_inspect(2, &inf) == RSV_EMPTY && !exists(cp), "the custom slot of a finished run is cleared");
     CHECK(status_of(0) == RSV_OK, "the ordinary run is untouched");
     R.on_done(R.arg);
