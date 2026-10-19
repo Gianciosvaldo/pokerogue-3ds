@@ -27,14 +27,15 @@ static int32_t max_hp(const pr_pokemon *p) { return pr_get_stat(p, STAT_HP, true
 /* getPokemon() of a PokemonPhase: the Pokemon in that field slot */
 static pr_pokemon *slot(pr_battle *bt, int b) { return b >= 0 && b < 4 ? bt->field[b] : NULL; }
 
-/* MoveEffectPhase.getUserPokemon(): a delayed attack's phase was given the source's Pokemon.id as
- * its battlerIndex (getPokemonById: both parties; only the field is modelled), the others their
- * user's field slot */
+/* PokemonPhase.getPokemon / MoveEffectPhase.getUserPokemon: indices above
+ * ENEMY_2 are Pokemon IDs searched across both parties; smaller indices are
+ * field slots. Delayed attacks retain their caster when it has switched out. */
 static pr_pokemon *me_user(pr_battle *bt, const pr_phase *fx)
 {
     if (fx->user_id < 0) return slot(bt, fx->battler);
-    pr_pokemon *p = pr_field_pokemon_by_id(bt, fx->user_id);
-    if (!p) pr_note_unported(bt, PR_FEAT_PARTY);
+    if (fx->user_id <= 3) return slot(bt, (int)fx->user_id);
+    pr_pokemon *p = pr_pokemon_by_id(bt, fx->user_id);
+    if (!p && (!bt->n_party[0] || !bt->n_party[1])) pr_note_unported(bt, PR_FEAT_PARTY);
     return p;
 }
 /* PokemonPhase.player and fieldIndex: battlerIndex < 2 and battlerIndex % 2, the Pokemon.id's for a
@@ -108,6 +109,14 @@ static void form_change_with_delay(pr_battle *bt, const pr_pokemon *p, int trigg
             : !strcmp(from->form_key,"pirouette") ? "aria" : NULL;
         for (int i=0;to&&i<sp->nforms;i++)
             if (!strcmp(pr_forms[sp->form0+i].form_key,to)) target_form=i;
+    } else if (mon->species == SPECIES_ID_CRAMORANT) {
+        const pr_form *from=pr_pokemon_base_form(mon);const char *to=NULL;
+        if(trigger_class==PR_FCT_SpeciesFormChangeAbilityTrigger){
+            if(!strcmp(from->form_key,""))to=pr_get_hp_ratio(mon,false)>=0.5?"gulping":"gorging";
+            else if(!strcmp(from->form_key,"gulping")||!strcmp(from->form_key,"gorging"))to="";
+        }else if(trigger_class==PR_FCT_SpeciesFormChangeActiveTrigger&&!is_active_on_field(mon)
+            &&(!strcmp(from->form_key,"gulping")||!strcmp(from->form_key,"gorging")))to="";
+        for(int i=0;to&&i<sp->nforms;i++)if(!strcmp(pr_forms[sp->form0+i].form_key,to))target_form=i;
     } else if (mon->species == SPECIES_ID_XERNEAS) {
         /* Source registers quiet neutral<->active transitions, independent of
          * abilities. Match raw form keys before considering field activity. */
@@ -1106,7 +1115,9 @@ bool pr_try_set_status_msg(pr_battle *bt, pr_engine *e, pr_pokemon *p, int effec
     q->ose_effect = (uint8_t)effect;
     q->ose_sleep_turns = (int8_t)sleep_turns;
     q->source_p = source;
-    q->msg = msg ? *msg : pr_status_msg(bt, effect, PR_ST_OBTAIN, p);   /* fixed by the constructor */
+    /* Native constructor reads PokemonPhase.getPokemon at the queued field
+     * index. A switched-out delayed attacker has index -1 and names MissingNo. */
+    q->msg = msg ? *msg : pr_status_msg(bt, effect, PR_ST_OBTAIN, slot(bt,q->battler));
     pr_phase_unshift(bt, e, ph);
     return true;
 }
@@ -3196,11 +3207,10 @@ static void positional_tag_phase(pr_battle *bt, pr_engine *e)
         }
         pr_pokemon *target = t->target_index >= 0 && t->target_index < 4 ? bt->field[t->target_index] : NULL;
         if (t->type == POSITIONAL_TAG_TYPE_DELAYED_ATTACK) {
-            pr_pokemon *source = pr_field_pokemon_by_id(bt, t->source_id);
+            /* Native shouldTrigger searches both parties, including the bench. */
+            pr_pokemon *source = pr_pokemon_by_id(bt, t->source_id);
             if (!source) {
-                for (int s = 0; s < 2; s++)
-                    for (int k = 0; k < bt->n_party[s]; k++)
-                        if (bt->party[s][k]->id == t->source_id) pr_note_unported(bt, PR_FEAT_PARTY);   /* off the field */
+                if (!bt->n_party[0] || !bt->n_party[1]) pr_note_unported(bt, PR_FEAT_PARTY);
                 continue;
             }
             if (!target || source == target || target->hp <= 0) continue;
@@ -4071,6 +4081,12 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_TURN_END: turn_end_phase(bt, e, ph); break;
     case PH_MESSAGE: pr_event_add(bt, e, PR_EV_TEXT, -1, -1, 0, 0, &PH(ph)->msg); break;
     case PH_DAMAGE_ANIM:
+        /* Native DamageAnimPhase dereferences its live field recipient. A
+         * delayed bench retaliation can queue -1; source execution throws. */
+        if (!slot(bt, PH(ph)->battler)) {
+            pr_note_unported(bt, PR_FEAT_PHASE_0 + PH_DAMAGE_ANIM);
+            break;
+        }
         pr_event_add(bt, e, PR_EV_DAMAGE, PH(ph)->battler, -1, PH(ph)->anim_result, PH(ph)->anim_amount, NULL);
         if (is_classic_final_boss(bt)) pr_init_final_boss_phase_two(bt,e,slot(bt,PH(ph)->battler));
         break;

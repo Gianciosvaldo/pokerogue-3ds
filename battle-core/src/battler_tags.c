@@ -14,6 +14,8 @@
 bool pr_tag_type_ported(int type)
 {
     switch (type) {
+    case BATTLER_TAG_TYPE_GULP_MISSILE_ARROKUDA:
+    case BATTLER_TAG_TYPE_GULP_MISSILE_PIKACHU:
     case BATTLER_TAG_TYPE_COMMANDED: /* CommandedTag */
     case BATTLER_TAG_TYPE_CENTER_OF_ATTENTION: /* CenterOfAttentionTag */
     case BATTLER_TAG_TYPE_HELPING_HAND: /* HelpingHandTag */
@@ -267,6 +269,10 @@ static pr_battler_tag construct(int type, int turn_count, int source_move, int64
     t.source_id = -1;
     t.source_index = -1;
     switch (type) {
+    case BATTLER_TAG_TYPE_GULP_MISSILE_ARROKUDA:
+    case BATTLER_TAG_TYPE_GULP_MISSILE_PIKACHU:
+        t.turn_count=0;
+        break;
     case BATTLER_TAG_TYPE_COMMANDED:
         t.turn_count = 0;
         t.source_move = MOVE_ID_NONE;
@@ -555,6 +561,12 @@ int pr_encore_try_override(pr_pokemon *p)
 static bool can_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t)
 {
     switch (t->type) {
+    case BATTLER_TAG_TYPE_GULP_MISSILE_ARROKUDA:
+    case BATTLER_TAG_TYPE_GULP_MISSILE_PIKACHU:
+        return (t->source_move==MOVE_ID_SURF||t->source_move==MOVE_ID_DIVE)
+            && p->species==SPECIES_ID_CRAMORANT && p->form==0
+            && !pr_get_battler_tag(p,BATTLER_TAG_TYPE_GULP_MISSILE_ARROKUDA)
+            && !pr_get_battler_tag(p,BATTLER_TAG_TYPE_GULP_MISSILE_PIKACHU);
     case BATTLER_TAG_TYPE_CENTER_OF_ATTENTION: {
         /* getPlayerField/getEnemyField include fainted and switching members. */
         int first = p->is_player ? 0 : 2;
@@ -707,6 +719,10 @@ static pr_pokemon *tag_source(pr_battle *bt, const pr_battler_tag *t);
 static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t)
 {
     switch (t->type) {
+    case BATTLER_TAG_TYPE_GULP_MISSILE_ARROKUDA:
+    case BATTLER_TAG_TYPE_GULP_MISSILE_PIKACHU:
+        pr_form_change(bt,p,PR_FCT_SpeciesFormChangeAbilityTrigger);
+        return;
     case BATTLER_TAG_TYPE_COMMANDED: {
         const pr_pokemon *source = tag_source(bt, t);
         if (source) t->commanded_form_key = (uint16_t)(pr_pokemon_base_form(source) - pr_forms + 1);
@@ -1103,6 +1119,25 @@ static bool restriction_lapse(pr_battle *bt, pr_engine *e, const pr_pokemon *p, 
 static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t, int lapse_type)
 {
     switch (t->type) {
+    case BATTLER_TAG_TYPE_GULP_MISSILE_ARROKUDA:
+    case BATTLER_TAG_TYPE_GULP_MISSILE_PIKACHU: {
+        if(pr_get_battler_tag(p,BATTLER_TAG_TYPE_UNDERWATER))return true;
+        int move=-1;pr_pokemon *attacker=pr_move_effect_user(bt,e,&move);
+        if(!attacker)return false;
+        if(pr_move_hits_substitute(bt,move,attacker,p))return true;
+        bool cancelled=false;
+        pr_ab_params ap={.pokemon=attacker,.move=-1,.flag=&cancelled};
+        pr_apply_ab_attrs(bt,PR_AC_BlockNonDirectDamageAbAttr,&ap);
+        if(!cancelled){
+            double damage=floor(pr_get_stat(attacker,STAT_HP,true)/4.0);
+            pr_damage_and_update(bt,e,attacker,damage<1?1:damage,HIT_RESULT_INDIRECT,false,NULL);
+        }
+        if(t->type==BATTLER_TAG_TYPE_GULP_MISSILE_ARROKUDA){
+            int32_t stat=STAT_DEF;
+            pr_unshift_stat_stage_change(bt,e,pr_battler_index(bt,attacker),&stat,1,-1,p);
+        }else pr_try_set_status(bt,e,attacker,STATUS_EFFECT_PARALYSIS,p,-1,false,true);
+        return false;
+    }
     case BATTLER_TAG_TYPE_FLINCHED:
         if (lapse_type == BATTLER_TAG_LAPSE_TYPE_PRE_MOVE) {
             pr_cancel_current_move(e, NULL);
@@ -1433,6 +1468,10 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
 static void on_remove(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_battler_tag *t)
 {
     switch (t->type) {
+    case BATTLER_TAG_TYPE_GULP_MISSILE_ARROKUDA:
+    case BATTLER_TAG_TYPE_GULP_MISSILE_PIKACHU:
+        pr_form_change(bt,p,PR_FCT_SpeciesFormChangeAbilityTrigger);
+        return;
     case BATTLER_TAG_TYPE_COMMANDED: {
         const pr_pokemon *source = tag_source(bt, t);
         if (source && active_on_field(source))
@@ -1581,6 +1620,17 @@ bool pr_add_tag(pr_battle *bt, pr_engine *e, pr_pokemon *p, int type, int turn_c
     }
     p->tags[p->n_tags++] = t;
     on_add(bt, e, p, &p->tags[p->n_tags - 1]);
+    return true;
+}
+
+/* GulpMissileTagAttr.apply: parent HP gate, active ability and raw species.
+ * The callback reports true even when addTag refuses an overlap/form/source move. */
+bool pr_gulp_missile_tag(pr_battle *bt, pr_engine *e, pr_pokemon *user, int move)
+{
+    if(user->hp<=0 || user->species!=SPECIES_ID_CRAMORANT
+        || !pr_has_ability_active(bt,user,ABILITY_ID_GULP_MISSILE))return false;
+    pr_add_tag(bt,e,user,pr_get_hp_ratio(user,false)>=0.5
+        ?BATTLER_TAG_TYPE_GULP_MISSILE_ARROKUDA:BATTLER_TAG_TYPE_GULP_MISSILE_PIKACHU,0,move,-1);
     return true;
 }
 

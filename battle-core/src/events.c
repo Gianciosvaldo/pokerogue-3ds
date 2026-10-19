@@ -112,6 +112,8 @@ void pr_event_add(pr_battle *bt, pr_engine *e, int type, int battler, int target
         pr_event_field *f = &ev->field[i];
         f->party_slot = -1;
         if (!p) continue;
+        f->pokemon_id_known = true;
+        f->pokemon_id = p->id;
         /* PR_DEV_ILLUSION: the field shows a disguise (getSpeciesForm(false, useIllusion)) */
         const bool look = pr_shows_illusion(bt, p);
         const pr_form *form = pr_shown_form(bt, p);

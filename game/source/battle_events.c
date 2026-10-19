@@ -108,10 +108,16 @@ typedef struct {
   int max_hp;
 } seen_t;
 
-/* The Pokemon a SWITCH_IN event sent out: the snapshot says its party slot when the event happened, its
- * species, form and max HP; later switches may have moved it, so look for it among the side's party. */
+/* Switch snapshots identify the actual Pokemon, even if its form and party
+ * position changed later in the batch. Older synthetic snapshots use the
+ * legacy appearance lookup below. */
 static const pr_pokemon* be_switched_in(const pr_pokemon* const* party, int n, const pr_pokemon* on_field, const pr_event_field* f) {
   if (!f->species) return NULL;
+  if (f->pokemon_id_known) {
+    for (int k = 0; k < n; k++)
+      if (party[k] && party[k]->id == f->pokemon_id) return party[k];
+    return on_field && on_field->id == f->pokemon_id ? on_field : NULL;
+  }
   if (f->party_slot >= 0 && f->party_slot < n) {
     const pr_pokemon* p = party[f->party_slot];
     if (p && p->species == f->species && p->form == f->form && (f->max_hp <= 0 || p->stats[STAT_HP] == f->max_hp))

@@ -66,4 +66,30 @@ static void switch_imposter(void)
     }
     CHECK(summoned==1&&copied==1);
 }
-int main(void){run_case(SPECIES_ID_PIKACHU,0,false);run_case(SPECIES_ID_CHARIZARD,1,true);run_case(SPECIES_ID_CHARIZARD,3,true);run_case(SPECIES_ID_DITTO,0,true);switch_imposter();printf("Transform visual adapter: %d checks passed\n",checks);return 0;}
+static void switch_identity_after_form_change(void)
+{
+    for(int zero_id=0;zero_id<2;zero_id++){
+        static bs_battle b;bs_begin(&b,BIOME_ID_GRASS,3,"same-species-form-switch");
+        int splash[]={MOVE_ID_SPLASH};
+        pr_pokemon *other=bs_add(&b,0,SPECIES_ID_MORPEKO,50,splash,1);
+        pr_pokemon *sent=bs_add(&b,0,SPECIES_ID_MORPEKO,50,splash,1);
+        pr_pokemon *enemy=bs_add(&b,1,SPECIES_ID_BULBASAUR,50,splash,1);
+        if(zero_id)sent->id=0;
+        other->form=0;sent->form=1;b.bt.field[0]=sent;b.bt.engine=&b.eng;
+        bv_mon shown,foe;be_mon(&b.bt,other,&shown);be_mon(&b.bt,enemy,&foe);
+        b.eng.n_events=0;pr_event_add(&b.bt,&b.eng,PR_EV_SWITCH_IN,0,-1,0,1,NULL);
+        CHECK(b.eng.n_events==1&&b.eng.events[0].field[0].pokemon_id_known);
+        CHECK(b.eng.events[0].field[0].pokemon_id==sent->id);
+        /* The next turn's Hunger Switch and a later party reorder leave the
+         * other member looking exactly like the earlier switch snapshot. */
+        sent->form=0;other->form=1;b.bt.party[0][0]=sent;b.bt.party[0][1]=other;
+        be_view view={0};view.mon[0]=shown;view.mon[1]=foe;view.present[0]=view.present[1]=true;
+        static bv_event events[32];int n=be_convert_events(&b.bt,b.eng.events,1,true,&view,events,32);
+        CHECK(n>0&&view.not_found==0&&view.sent[0]==sent);
+        int summons=0;for(int k=0;k<n;k++)if(events[k].type==BEV_SUMMON){
+            CHECK(events[k].mon&&events[k].mon->species==SPECIES_ID_MORPEKO&&events[k].mon->form==1);summons++;
+        }
+        CHECK(summons==1);
+    }
+}
+int main(void){run_case(SPECIES_ID_PIKACHU,0,false);run_case(SPECIES_ID_CHARIZARD,1,true);run_case(SPECIES_ID_CHARIZARD,3,true);run_case(SPECIES_ID_DITTO,0,true);switch_imposter();switch_identity_after_form_change();printf("Transform visual adapter: %d checks passed\n",checks);return 0;}

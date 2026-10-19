@@ -731,3 +731,11 @@ ball-fetch-host-test: $(BUILD)/ball_fetch_host_test
 $(BUILD)/ball_fetch_host_test: tests/ball_fetch_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: ball-fetch-host-test
+
+all: $(BUILD)/gulp_missile_host_test
+test: gulp-missile-host-test
+gulp-missile-host-test: $(BUILD)/gulp_missile_host_test
+	$(BUILD)/gulp_missile_host_test
+$(BUILD)/gulp_missile_host_test: tests/gulp_missile_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: gulp-missile-host-test
