@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "gm_item_ui.h"
 #include "i18n.h"
 #include "menus.h"
 #include "pr_data.h"
@@ -23,6 +24,32 @@ static void fill_met(menu_mon* m, const gc_mon* g) {
   m->met_biome = g->met_biome;
   m->met_level = g->met_level > 0 ? (uint16_t)g->met_level : m->level;
   m->met_wave = g->met_wave > 0 ? (uint16_t)g->met_wave : 0;
+}
+
+/* The run's items the Pokemon holds (PokemonHeldItemModifier.pokemonId == its id): the summary's held-items row. Upstream
+ * sorts them with modifierSortFunc (class name, then item name); with no class names here they go by English name. */
+static void fill_items(menu_mon* m, uint32_t id) {
+  m->nitems = 0;
+  if (!g_run || !id) return;
+  for (int i = 0; i < g_run->n_items && i < GC_MAX_ITEMS && m->nitems < MENU_MAX_ITEMS; i++) {
+    const gc_item* it = &g_run->items[i];
+    if (it->detached || it->pokemon_id != id || !it->key) continue;
+    const gm_item_ui* u = gm_item_ui_find(it->key, it->arg);
+    if (!u) u = gm_item_ui_find(it->key, -1);
+    menu_held_item* h = &m->items[m->nitems];
+    memset(h, 0, sizeof *h);
+    snprintf(h->name, sizeof h->name, "%s", u && u->name ? u->name : it->key);
+    h->icon = u ? u->icon : NULL;
+    h->count = (uint16_t)(it->stack > 0 ? it->stack : 0);
+    h->transferable = !it->non_transferable;
+    int k = m->nitems++;
+    while (k > 0 && strcmp(m->items[k - 1].name, m->items[k].name) > 0) {
+      const menu_held_item t = m->items[k - 1];
+      m->items[k - 1] = m->items[k];
+      m->items[k] = t;
+      k--;
+    }
+  }
 }
 
 /* The run's own entry for a battle-core Pokemon (the party members of a run are `run->party[i].b`) */
@@ -78,6 +105,7 @@ static void gc_to_menu_mon(const gc_mon* gm, menu_mon* m) {
   m->met_biome = -1;
   m->met_level = p->level;
   fill_met(m, gm);
+  fill_items(m, p->id);
 }
 
 /* battle-core's Pokemon as the menus show it */
@@ -117,6 +145,7 @@ static void ps_menu_mon(const pr_battle* bt, const pr_pokemon* p, menu_mon* m) {
   m->met_level = p->level;
   const gc_mon* g = run_mon_of(p);
   if (g) fill_met(m, g);
+  if (g) fill_items(m, p->id);
 }
 
 /* ---- callbacks ---- */
