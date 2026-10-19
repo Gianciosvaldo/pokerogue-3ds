@@ -221,9 +221,12 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
     memcpy(tags, bt->arena_tags, sizeof tags);
     memcpy(pos, bt->pos_tags, sizeof pos);
     const int player_faints = bt->player_faints;
+    const double player_teras_used = bt->player_teras_used;
 
     memset(bt, 0, sizeof *bt);
     bt->deviations = PR_DEV_ENEMY_ZERO_TO_HERO | PR_DEV_ILLUSION;   /* lorenzo's departures from the pin */
+    bt->player_teras_used_known = true;
+    bt->player_teras_used = player_teras_used;
     bt->illusion_species = wild_illusion_species; bt->illusion_species_ctx = run;
     /* the weather and terrain: gc_arena_new_battle has already cleared or rolled them in the previous scene */
     bt->weather = weather; bt->terrain = terrain;

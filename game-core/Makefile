@@ -739,3 +739,11 @@ gulp-missile-host-test: $(BUILD)/gulp_missile_host_test
 $(BUILD)/gulp_missile_host_test: tests/gulp_missile_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: gulp-missile-host-test
+
+all: $(BUILD)/tera_host_test
+test: tera-host-test
+tera-host-test: $(BUILD)/tera_host_test
+	$(BUILD)/tera_host_test
+$(BUILD)/tera_host_test: tests/tera_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+.PHONY: tera-host-test

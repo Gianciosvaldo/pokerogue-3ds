@@ -498,6 +498,7 @@ void pr_leave_field(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool clear_effec
 /* Pokemon.resetTurnData(), resetSummonData(); triggerPokemonFormChange(p, <trigger class>) */
 void pr_reset_turn_data(pr_pokemon *p);
 void pr_reset_summon_data(pr_pokemon *p);
+void pr_tera_end(pr_battle *bt, pr_pokemon *p);
 void pr_form_change(pr_battle *bt, const pr_pokemon *p, int trigger_class);
 void pr_form_change_delayed(pr_battle *bt, const pr_pokemon *p, int trigger_class);
 void pr_weather_form_changes(pr_battle *bt, bool revert, const pr_pokemon *source);

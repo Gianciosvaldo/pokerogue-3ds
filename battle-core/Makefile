@@ -584,3 +584,15 @@ $(BUILD)/ball-fetch-test: tests/ball-fetch-test.c $(BUILD)/wide-substitute-frame
 all: $(BUILD)/gulp-missile-test
 $(BUILD)/gulp-missile-test: tests/gulp-missile-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) $< $(BUILD)/libprcore.a -Wl,--wrap=pr_gulp_missile_tag -lm -o $@
+
+all: $(BUILD)/tera-phase-test
+$(BUILD)/tera-phase-test: tests/tera-phase-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/tera-cleanup-test
+$(BUILD)/tera-cleanup-test: tests/tera-cleanup-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+tera-phase-host-test: $(BUILD)/tera-phase-test
+	$(BUILD)/tera-phase-test --selftest
+.PHONY: tera-phase-host-test
