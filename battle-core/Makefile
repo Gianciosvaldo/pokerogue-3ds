@@ -563,3 +563,16 @@ $(BUILD)/zero-to-hero-test: tests/zero-to-hero-test.c $(BUILD)/libprcore.a
 all: $(BUILD)/form-block-damage-test
 $(BUILD)/form-block-damage-test: tests/form-block-damage-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/form-block-damage-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/meloetta-forms-test
+$(BUILD)/meloetta-forms-test: tests/meloetta-forms-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/meloetta-forms-test.c $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/revival-blessing-test
+$(BUILD)/revival-blessing-test: tests/revival-blessing-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) tests/revival-blessing-test.c $(BUILD)/libprcore.a -Wl,--wrap=pr_battle_rand_seed_int -Wl,--wrap=pr_revival_blessing -lm -o $@
+
+# Same strict full-turn comparator and coverage floors, with the new native UI fixture policy.
+all: $(BUILD)/revival-turn-test
+$(BUILD)/revival-turn-test: $(BUILD)/wide-combat-replay.c tests/turntest.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -Itests $(CFLAGS) -DTURNTEST_REVIVAL_FAINTED_PICK $(BUILD)/wide-combat-replay.c $(BUILD)/libprcore.a -lm -o $@

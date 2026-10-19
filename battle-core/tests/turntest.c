@@ -1381,8 +1381,16 @@ int main(int argc, char **argv)
          * can send in (the bench, not fainted), as the producer's stand-in for the screen does;
          * a victory goes on with no experience handed out, as the producer's stubbed applyPartyExp */
         for (int n = 0, guard = 0; guard < 32; guard++) {
-            if (eng.stop == PH_SWITCH && eng.awaiting_pick) {
+            if ((eng.stop == PH_SWITCH || eng.stop == PH_REVIVAL_BLESSING) && eng.awaiting_pick) {
                 int eligible[PR_MAX_PARTY], ne = 0;
+                /* The dedicated Revival producer selects with FilterFainted. Historical
+                 * producers select healthy bench members for every party screen; keep
+                 * those captured choices, including their no-op revival callbacks. */
+#ifdef TURNTEST_REVIVAL_FAINTED_PICK
+                if (eng.stop == PH_REVIVAL_BLESSING) {
+                    for (int k=0;k<bt->n_party[0];k++)if(bt->party[0][k]->hp<=0)eligible[ne++]=k;
+                } else
+#endif
                 for (int k = bt->double_battle ? 2 : 1; k < bt->n_party[0]; k++)
                     if (bt->party[0][k]->hp > 0) eligible[ne++] = k;
                 int r = cs.n_picks ? cs.picks[n++ % cs.n_picks] : 0;
