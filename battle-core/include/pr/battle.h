@@ -469,6 +469,8 @@ typedef struct pr_battle {
     int8_t ignoring_effect_source; /* arena.ignoringEffectSource (BattlerIndex), -1 = undefined */
     bool ability_bar_visible;  /* globalScene.abilityBar.isVisible() */
     int8_t last_used_pokeball; /* currentBattle.lastUsedPokeball (PokeballType), -1 = null */
+    bool pokeball_counts_known; /* explicit globalScene inventory input */
+    double pokeball_counts[8];  /* JavaScript numbers; Fetch has no reward cap */
     int escape_attempts;       /* currentBattle.escapeAttempts */
     bool successful_run;       /* currentBattle.successfulRun */
     struct pr_engine *engine;  /* the phase engine (src/engine.c); NULL outside a turn */

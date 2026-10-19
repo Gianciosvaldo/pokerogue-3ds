@@ -16,6 +16,27 @@ static int next_summon_cb(pr_battle *bt, int trainer_slot, void *ctx);
 void gc_wallet_to_battle(gc_run *run) { run->bt.money = run->money; }
 void gc_wallet_from_battle(gc_run *run) { run->money = run->bt.money; }
 
+static void balls_to_battle(gc_run *run)
+{
+    run->bt.pokeball_counts_known=true;
+    for(int i=0;i<8;i++)run->bt.pokeball_counts[i]=run->pokeballs[i];
+}
+
+static void balls_from_battle(gc_run *run)
+{
+    if(!run->bt.pokeball_counts_known)return;
+    for(int i=0;i<8;i++) {
+        double n=run->bt.pokeball_counts[i];
+        /* A real throw spends one before Fetch can return it. Preserve the run's
+         * byte inventory without silently truncating missing caller invariants. */
+        if(n<0 || n>255 || n!=floor(n)) {
+            pr_note_unported(&run->bt,PR_FEAT_TURN_MODIFIERS);continue;
+        }
+        run->pokeballs[i]=(uint8_t)n;
+    }
+}
+
+
 static int index_of(const gc_mon *arr, int n, const pr_pokemon *p)
 {
     for (int i = 0; i < n; i++) if (&arr[i].b == p) return i;
@@ -214,6 +235,7 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
         bt->player_faints = player_faints;
     }
     gc_wallet_to_battle(run);
+    balls_to_battle(run);
     bt->rng = run->run.rng;
     bt->rng_live = true;
     pr_seed_from_ascii(&bt->battle_seed, run->battle_seed);
@@ -669,6 +691,7 @@ static void sync_ability_indices(gc_run *run)
 static int engine_returned(gc_run *run)
 {
     gc_wallet_from_battle(run);
+    balls_from_battle(run);
     sync_ability_indices(run);
     note_unported(run);
     note_revealed(run);
@@ -683,6 +706,7 @@ int gc_battle_run(gc_run *run, int pick)
 {
     pr_battle *bt = &run->bt;
     gc_wallet_to_battle(run);
+    balls_to_battle(run);
     if (pick < -1) {
         gc_int(run)->at_save_point = false;
         gc_event *ev = gc_ev_new(run, GC_EV_TURN);
@@ -697,6 +721,7 @@ int gc_battle_run(gc_run *run, int pick)
 int gc_battle_continue(gc_run *run)
 {
     gc_wallet_to_battle(run);
+    balls_to_battle(run);
     gc_int(run)->at_save_point = false;
     pr_continue(&run->bt, &run->eng);
     return engine_returned(run);
@@ -705,6 +730,7 @@ int gc_battle_continue(gc_run *run)
 int gc_battle_answer_switch(gc_run *run, bool yes)
 {
     gc_wallet_to_battle(run);
+    balls_to_battle(run);
     pr_answer_check_switch(&run->bt, &run->eng, yes);
     return engine_returned(run);
 }

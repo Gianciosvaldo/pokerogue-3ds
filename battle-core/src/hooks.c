@@ -68,12 +68,12 @@ int32_t pr_battle_rand_seed_int(pr_battle *bt, int32_t range, int32_t min)
     return pr_rng_seed_int(&bt->battle_rng, range, min);
 }
 
-/* ---- state the port does not model yet ----
- * Wave data: the query answers for state the C port doesn't hold yet. This is the only
- * place to change when it is ported. */
+/* Wave ability history is maintained by the real ability dispatcher and cleared
+ * at the source-defined wave boundary. Ball Fetch reads this once-per-battle set. */
 bool pr_wave_ability_applied(const pr_pokemon *p, int ability)
 {
-    (void)p; (void)ability;
+    if(!p)return false;
+    for(int i=0;i<p->n_ab_applied_wave;i++)if(p->ab_applied_wave[i]==ability)return true;
     return false;
 }
 
