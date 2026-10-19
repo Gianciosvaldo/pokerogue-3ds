@@ -718,18 +718,19 @@ static void draw_level_stats(void) {
 }
 
 /* The foe's items on the bottom screen (a choice of this port, not upstream's layout: its enemy ModifierBar sits on the top
- * screen at half scale). Icons at full size, 9 a row, the stack count under each from 2 up; only while the command or a
+ * screen at half scale). Icons at 3/4 scale, 12 a row, the stack count under each from 2 up; only while the command or a
  * move is being picked. */
 static void draw_foe_items(void) {
   if (B.n_foe <= 0 || (B.mode != M_COMMAND && B.mode != M_FIGHT)) return;
-  const int per_row = 9, rows = (B.n_foe + per_row - 1) / per_row;
-  const float top = -226, cell = 34, h = 8 + rows * cell;
+  const int per_row = 12, rows = (B.n_foe + per_row - 1) / per_row;
+  const float top = -226, cell = 26, h = 8 + rows * cell;
   ui_window(4, top, 312, h, WIN_THIN);
   for (int i = 0; i < B.n_foe; i++) {
     const float x = 10 + (i % per_row) * cell, y = top + 4 + (i / per_row) * cell;
     const rr_frame* f = B.foe[i].icon ? mui_frame("items", B.foe[i].icon) : NULL; /* the menus' copy of the atlas (shop, summary) */
     if (f) {
       rr_draw_opts o = RR_DEFAULT_OPTS;
+      o.scale_x = o.scale_y = 0.75f;
       rr_draw(f, x, y, &o);
     }
     if (B.foe[i].count > 1) {
