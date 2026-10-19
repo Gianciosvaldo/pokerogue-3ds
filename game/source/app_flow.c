@@ -19,6 +19,7 @@
 #include "result_screen.h"
 #include "run_history.h"
 #include "run_saves.h"
+#include "run_settings.h"
 #include "slot_screen.h"
 #include "starter_host.h"
 #include "system_data.h"
@@ -34,7 +35,9 @@ static struct {
   int slot;                 /* the slot the run on screen is saved into */
   result_args result;
   const co_report* kept;    /* the report whose custom store write failed: tried once more when the result screen is left */
-  bool custom;              /* the slot list and the run on screen are the custom ones (csession_<n>, custom_run.h) */
+  bool custom;              /* the run on screen (or about to start) is a custom one (csession_<n>, custom_run.h) */
+  bool kind[RSV_SLOTS];     /* what each slot of the list holds: true = a custom run (csession_<n>), false = an ordinary one */
+  rset_values settings;     /* the run settings screen's last values */
   char note[CS_WHY_LEN + 64];
 } A;
 
@@ -78,22 +81,27 @@ static rs_config run_config(int slot, bool fresh) {
   return c;
 }
 
-/* the file name of a slot of the list on screen: the regular runs' or the custom runs' */
-static const char* slot_file_of(int slot, char out[24]) {
-  if (A.custom)
+/* the file name of a slot: the ordinary run's or the custom run's */
+static const char* slot_file(int slot, bool custom, char out[24]) {
+  if (custom)
     snprintf(out, 24, CR_FILE_PREFIX "%d", slot);
   else
     rsv_slot_name(slot, out);
   return out;
 }
+static const char* slot_file_of(int slot, char out[24]) { return slot_file(slot, A.kind[slot], out); }
 
-/* A message on the slot list, with the slots as they are now (a load that did not work, a run that did not start) */
+/* The five slots hold ordinary and custom runs alike (lorenzo, 2026-10-19: one Load Game, each run labelled Classic or Custom). A slot
+ * shows its ordinary run, else its custom one; both only exist from before the lists were one, and then the ordinary run shows and the
+ * custom one comes back once that is deleted. */
 static void look(void) {
-  if (A.custom)
-    cr_inspect_all(A.info);
-  else
-    rsv_inspect_all(A.info);
+  static rsv_info custom[RSV_SLOTS];
+  rsv_inspect_all(A.info);
+  cr_inspect_all(custom);
   for (int i = 0; i < RSV_SLOTS; i++) {
+    A.kind[i] = A.info[i].status == RSV_EMPTY && custom[i].status != RSV_EMPTY;
+    if (A.kind[i]) A.info[i] = custom[i];
+    A.info[i].custom = A.kind[i];
     char file[24];
     if (A.info[i].status == RSV_OK) rsv_name_get(slot_file_of(i, file), A.info[i].run_key, A.info[i].name);
   }
@@ -107,10 +115,15 @@ static void tell(const char* text) {
 
 /* Loads the run in `slot` and shows it. When it can't, the slot list says why: after a Continue the list opens on the slot. */
 static void load_slot(int slot, bool from_list) {
+  look();
+  A.custom = A.kind[slot];
   rs_config c = run_config(slot, false);
   char why[RSV_WHY_LEN];
   const rsv_status st = rs_resume(&c, why);
-  if (st == RSV_OK) return;
+  if (st == RSV_OK) {
+    if (A.custom) rsv_set_last_slot(slot); /* Continue's slot (an ordinary load sets it itself) */
+    return;
+  }
   if (!from_list) {
     look();
     show_slots(SLOTS_LOAD, slot);
@@ -121,7 +134,8 @@ static void load_slot(int slot, bool from_list) {
 /* The run starts with `team` (NULL: a developer's team from rundriver.txt, no starter select). The slot's old run goes only now,
  * once the player has confirmed a team: backing out of the starter select leaves it as it was. */
 static void start_new_run(int slot, const gc_starter* team, int n_team, bool from_starter_select) {
-  if (!(A.custom ? cr_clear(slot) : rsv_clear(slot))) {
+  /* the slot is one place for either kind of run: whatever it held goes */
+  if (!(cr_clear(slot) && rsv_clear(slot))) {
     if (from_starter_select) show_slots(SLOTS_NEW, slot);
     tell("The old run in that slot could not be removed from the SD card.");
     return;
@@ -134,7 +148,9 @@ static void start_new_run(int slot, const gc_starter* team, int n_team, bool fro
   if (!rs_start(&c)) {
     if (from_starter_select) show_slots(SLOTS_NEW, slot);
     tell(A.custom && cr_error()[0] ? cr_error() : "The run could not be started.");
+    return;
   }
+  if (A.custom) rsv_set_last_slot(slot);
 }
 
 static void on_starters_chosen(const gc_starter* team, int n, void* arg) { start_new_run((int)(long)arg, team, n, true); }
@@ -240,7 +256,7 @@ static void on_run_end(int kind, void* arg) {
     static rh_entry entry; /* not on the stack: an entry is nearly a kilobyte */
     char file[24], name[RSV_NAME_LEN];
     name[0] = 0;
-    rsv_name_get(slot_file_of(A.slot, file), A.result.run.run_key, name);
+    rsv_name_get(slot_file(A.slot, A.custom, file), A.result.run.run_key, name);
     rhist_record(rs_run(), A.result.victory, (int64_t)time(NULL), name, &entry);
     if (!rhist_add(&entry, NULL)) {
       const char* msg = "The run could not be added to the Run History.";
@@ -282,7 +298,7 @@ static void on_pick(int slot, void* arg) {
 
 static void on_delete(int slot, void* arg) {
   (void)arg;
-  if (!(A.custom ? cr_clear(slot) : rsv_clear(slot))) {
+  if (!(A.kind[slot] ? cr_clear(slot) : rsv_clear(slot))) {
     tell("The run could not be deleted from the SD card.");
     return;
   }
@@ -322,6 +338,17 @@ static void show_slots(slots_mode mode, int cursor) {
 
 /* ------------------------------------------------------------------ the title */
 
+/* The run settings' Start: Custom picks the kind of run the slot list starts; a custom file that cannot be used is said so, not guessed
+ * around (the list opens all the same, and no custom run starts from it) */
+static void on_settings_start(const rset_values* v, void* arg) {
+  (void)arg;
+  A.settings = *v;
+  A.custom = v->custom;
+  show_slots(SLOTS_NEW, 0);
+  char why[CR_WHY_LEN];
+  if (A.custom && !cr_usable(why)) tell_custom_unusable(why);
+}
+
 static void on_title(title_choice c, void* arg) {
   (void)arg;
   switch (c) {
@@ -330,23 +357,16 @@ static void on_title(title_choice c, void* arg) {
       if (last >= 0) load_slot(last, false);
       break;
     }
-    case TITLE_NEW_GAME:
-      A.custom = false;
-      show_slots(SLOTS_NEW, 0);
+    case TITLE_NEW_GAME: {
+      A.settings = rset_load(); /* as the screen last left them (B keeps a changed speed too) */
+      const rset_args a = {A.settings, on_settings_start, NULL, NULL};
+      rset_open(&a);
       break;
+    }
     case TITLE_LOAD_GAME:
       A.custom = false;
       show_slots(SLOTS_LOAD, 0);
       break;
-    case TITLE_CUSTOM_RUN:
-    case TITLE_CUSTOM_LOAD: {
-      /* the custom runs have a slot list of their own (custom_run.h); a custom file that cannot be used is said so, not guessed around */
-      char why[CR_WHY_LEN];
-      A.custom = true;
-      show_slots(c == TITLE_CUSTOM_RUN ? SLOTS_NEW : SLOTS_LOAD, 0);
-      if (!cr_usable(why)) tell_custom_unusable(why);
-      break;
-    }
     case TITLE_HISTORY:
       show_history();
       break;
@@ -437,7 +457,7 @@ void app_debug_capsule(int n) { g_capsule_preview = n >= 1 && n <= CAP_MAX ? n :
 
 static void show_title(void) {
   A.custom = false;
-  rsv_inspect_all(A.info);
+  look();
   int last = rsv_last_slot();
   /* Continue needs a file in the slot it would load; a slot that is gone (cleared, deleted by hand) is forgotten. An
    * unreadable file still counts: Continue then says why it can't load it. */
@@ -453,6 +473,8 @@ static void show_title(void) {
 void app_start(const rs_config* first_run) {
   memset(&A, 0, sizeof A);
   A.first = *first_run;
+  A.settings = rset_load();
+  ui_set_game_speed(rset_time_scale(A.settings.speed));
   cs_set_nonce(A.first.entropy); /* only used by a new custom file; an existing one keeps its own */
   co_set_uid_source(cs_begin_run);
   ptx_boot(); /* finishes a purchase or reward a crash left half applied, and stops the profile being saved over it (profile_tx.h) */

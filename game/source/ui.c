@@ -19,6 +19,8 @@ static ui_screen* g_stack[STACK_MAX];
 static int g_depth;
 static bool g_quit;
 static float g_now;
+static float g_real;          /* ms since boot at 1x: input repeat, music */
+static float g_speed = 3;     /* the screens' clock over real time (run_settings.h: upstream's gameSpeed, Normal 3) */
 static uint32_t g_frame;
 static u64 g_last_ms;
 static rr_screen g_drawing;
@@ -61,6 +63,9 @@ static void run_timers(void) {
 }
 
 float ui_now(void) { return g_now; }
+
+void ui_set_game_speed(float scale) { g_speed = scale > 0 ? scale : 1; }
+float ui_game_speed(void) { return g_speed; }
 uint32_t ui_frame(void) { return g_frame; }
 
 /* ---- fades ---- */
@@ -240,10 +245,10 @@ static void read_input(void) {
     u32 k = KEYMAP[i].key;
     bool repeats = KEYMAP[i].b != BTN_MENU && KEYMAP[i].b != BTN_STATS;
     if (down & k) {
-      g_held_since[i] = g_now;
-      g_next_repeat[i] = g_now + REPEAT_MS;
+      g_held_since[i] = g_real;
+      g_next_repeat[i] = g_real + REPEAT_MS;
       deliver(KEYMAP[i].b);
-    } else if ((held & k) && repeats && g_next_repeat[i] > 0 && g_now >= g_next_repeat[i]) {
+    } else if ((held & k) && repeats && g_next_repeat[i] > 0 && g_real >= g_next_repeat[i]) {
       g_next_repeat[i] += REPEAT_MS;
       g_repeating = true;
       deliver(KEYMAP[i].b);
@@ -326,6 +331,9 @@ bool ui_tick(void) {
   g_last_ms = now;
   if (dt > 50) dt = 50; /* a slow frame (SD load) doesn't skip animations */
   if (dt < 0) dt = 0;
+  const float real_dt = dt;
+  g_real += real_dt;
+  dt *= g_speed; /* upstream's applyGameSpeedMult: every tween, timer and text delay over gameSpeed */
   g_now += dt;
   g_frame++;
 
@@ -335,7 +343,7 @@ bool ui_tick(void) {
   int from = first_drawn();
   for (int i = from; i < g_depth; i++)
     if (g_stack[i]->update) g_stack[i]->update(g_stack[i], dt);
-  bgm_tick(dt);
+  bgm_tick(real_dt); /* music plays at its own pace (upstream scales only its fades) */
   snd_update();
 
   rr_frame_begin();

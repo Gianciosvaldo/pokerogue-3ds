@@ -245,7 +245,10 @@ static void draw_slot(float x, float y, const rsv_info* in, bool selected) {
       break;
   }
   char lvl[48];
-  rt_mode_name(in->mode, a, sizeof a);
+  if (in->custom)
+    snprintf(a, sizeof a, "Custom"); /* the custom content's runs: no upstream string */
+  else
+    rt_mode_name(in->mode, a, sizeof a);
   i18n_t(lvl, sizeof lvl, "saveSlotSelectUiHandler:wave", NULL);
   snprintf(buf, sizeof buf, "%s - %s %d%s", a, lvl, in->wave, in->from_backup ? " (backup)" : "");
   /* upstream's window: the run's name first, then mode and wave. The 4 lines the window has room for are then name, mode and wave, score,

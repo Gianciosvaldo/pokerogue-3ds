@@ -61,6 +61,7 @@ typedef struct {
   rsv_mon party[6];
   uint64_t run_key;       /* OK: tells this run from another (a hash of its seed); a name belongs to it, see rsv_name_get */
   char name[RSV_NAME_LEN]; /* the name the player gave the run (Rename Run), "" = none. Not set by rsv_inspect: the caller asks rsv_name_get */
+  bool custom;            /* a custom run (custom_run.h): the slot list labels it Custom instead of its mode. Set by the app's slot list */
 } rsv_info;
 
 /* The summary of a live run (party in the player's order). Leaves `status` and `why` alone. */

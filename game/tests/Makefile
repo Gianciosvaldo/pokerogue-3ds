@@ -144,7 +144,7 @@ runtest-save: build/runtest
 .PHONY: runtest-save
 
 # the app's screen flow (app_flow.c) with fake screens and a fake run driver, over the real save slots; make flowtest && build/flowtest
-FLOW_SRCS := flowtest.c ../source/app_flow.c ../source/win_gains.c ../source/run_history.c ../source/history_record.c ../source/custom_run.c ../source/profile_tx.c ../source/custom_store.c $(OBS_SRCS) ../source/run_saves.c ../source/system_data.c ../source/starter_data.c ../menus/menus_data.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+FLOW_SRCS := flowtest.c ../source/app_flow.c ../source/run_settings.c ../source/win_gains.c ../source/run_history.c ../source/history_record.c ../source/custom_run.c ../source/profile_tx.c ../source/custom_store.c $(OBS_SRCS) ../source/run_saves.c ../source/system_data.c ../source/starter_data.c ../menus/menus_data.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/flowtest: $(FLOW_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) $(FLOW_SRCS) -lm -o $@
