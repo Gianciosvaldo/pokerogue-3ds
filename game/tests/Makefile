@@ -214,6 +214,22 @@ build/result_gains_test: $(RG_SRCS)
 result_gains_test: build/result_gains_test
 .PHONY: result_gains_test
 
+# upstream's CharSprite (source/char_sprite.c) with a fake drawing layer
+CS_SRCS := char_sprite_test.c ../source/char_sprite.c
+build/char_sprite_test: $(CS_SRCS)
+	@mkdir -p build
+	$(CC) $(PM_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(CS_SRCS) -lm -o $@
+char_sprite_test: build/char_sprite_test
+.PHONY: char_sprite_test
+
+# the message box (source/ui_widgets.c): typing, pages and the @c / @d / @s markers, over a fake text and drawing layer
+MB_SRCS := msgbox_test.c ../source/ui_widgets.c
+build/msgbox_test: $(MB_SRCS)
+	@mkdir -p build
+	$(CC) $(PM_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(MB_SRCS) -lm -o $@
+msgbox_test: build/msgbox_test
+.PHONY: msgbox_test
+
 # the Nemesis Radar (source/radar_screen.c) over custom-core's real validators, with a fake drawing layer; make radar_test && build/radar_test [fuzz sessions]
 RADAR_CPPFLAGS := $(CPPFLAGS) -I$(CCORE)/include -I$(CCORE)/tests -I../gen -I$(APP)/include
 RADAR_SRCS := radar_test.c ../source/radar_screen.c ../source/custom_core_build.c ../gen/gm_enum_names.c

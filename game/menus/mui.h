@@ -90,6 +90,10 @@ void mui_set_origin(rr_screen s, int px, int py);
 void mui_clip(float x, float y, float w, float h);
 void mui_clip_off(void);
 
+/* Phaser's NineSlice with a different border on each side: `f` is an art of art_w x art_h px, drawn at (x, y) as w x h with the borders
+ * left / right / top / bottom (px of the art) kept at their size and the middle stretched. Clip-based (mui_clip), so no nesting. */
+void mui_nineslice(const rr_frame* f, float art_w, float art_h, float x, float y, float w, float h, float left, float right, float top, float bottom);
+
 /* upstream addWindow: 9-slice window_<uiWindowStyle> */
 void mui_window(float x, float y, float w, float h);
 /* uiWindowStyle 1..5 (default 1): which window_<n> mui_window draws; the app sets it once from ui_window_style() */

@@ -206,11 +206,13 @@ static void start_page(msgbox* m, const char* page) {
   char clean[512];
   int o = 0, chars = 0;
   m->n_marks = 0;
+  m->started = false;
+  m->variant_new = false;
   for (const char* p = page; *p && o < (int)sizeof clean - 1;) {
     if (p[0] == '@' && strchr("cdsf", p[1]) && p[2] == '{') {
       const char* end = strchr(p + 3, '}');
       if (end) {
-        if (m->n_marks < 8 && (p[1] == 'd' || p[1] == 's')) {
+        if (m->n_marks < 8 && (p[1] == 'd' || p[1] == 's' || p[1] == 'c')) {
           int k = m->n_marks++;
           m->mark_at[k] = (short)chars;
           m->mark_kind[k] = p[1];
@@ -276,6 +278,10 @@ static void hit_marks(msgbox* m, int at) {
     if (m->mark_at[i] != at) continue;
     if (m->mark_kind[i] == 'd') m->pause += m->mark_val[i] * (1000.0f / 60.0f); /* getFrameMs */
     if (m->mark_kind[i] == 's') ui_play_sound(m->mark_sound[i]);
+    if (m->mark_kind[i] == 'c') {
+      memcpy(m->variant, m->mark_sound[i], sizeof m->variant);
+      m->variant_new = true;
+    }
     m->mark_kind[i] = 0;
   }
 }
@@ -290,6 +296,13 @@ void msgbox_update(msgbox* m, float dt) {
     m->acc += dt;
     while (m->acc >= m->delay && m->shown < m->total && m->pause <= 0) {
       m->acc -= m->delay;
+      if (!m->started) {
+        /* upstream's timer runs text.length + 1 times, the first with no character on screen yet: a marker at the very start (a page that
+         * opens with @c{...}) fires on that tick */
+        m->started = true;
+        hit_marks(m, 0);
+        continue;
+      }
       m->shown++;
       hit_marks(m, m->shown);
     }
@@ -316,6 +329,12 @@ bool msgbox_input(msgbox* m, ui_button b) {
 }
 
 bool msgbox_done(const msgbox* m) { return m->done; }
+
+const char* msgbox_take_variant(msgbox* m) {
+  if (!m->variant_new) return NULL;
+  m->variant_new = false;
+  return m->variant;
+}
 bool msgbox_typing(const msgbox* m) { return !m->done && m->shown < m->total; }
 
 void msgbox_draw(const msgbox* m, float x, float y) {

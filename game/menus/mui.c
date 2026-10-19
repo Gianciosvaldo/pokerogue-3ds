@@ -123,6 +123,28 @@ static int g_window_style = 1;
 void mui_set_window_style(int style) { g_window_style = style < 1 || style > 5 ? 1 : style; }
 
 /* ui-theme.ts addWindow: window_<uiWindowStyle>, border 8 (6 in the legacy theme) */
+/* draws source rectangle (sx, sy, sw, sh) of the art into (dx, dy, dw, dh): the art scaled and clipped to the destination */
+static void slice(const rr_frame* f, float dx, float dy, float dw, float dh, float sx, float sy, float sw, float sh) {
+  if (dw <= 0 || dh <= 0 || sw <= 0 || sh <= 0) return;
+  mui_clip(dx, dy, dw, dh);
+  rr_draw_opts o = RR_DEFAULT_OPTS;
+  o.scale_x = dw / sw;
+  o.scale_y = dh / sh;
+  rr_draw(f, dx - sx * o.scale_x, dy - sy * o.scale_y, &o);
+  mui_clip_off();
+}
+
+void mui_nineslice(const rr_frame* f, float art_w, float art_h, float x, float y, float w, float h, float left, float right, float top, float bottom) {
+  const float mw = w - left - right, mh = h - top - bottom;
+  const float cw = art_w - left - right, ch = art_h - top - bottom;
+  const float xs[3] = {x, x + left, x + w - right}, ws[3] = {left, mw, right};
+  const float sxs[3] = {0, left, art_w - right}, sws[3] = {left, cw, right};
+  const float ys[3] = {y, y + top, y + h - bottom}, hs[3] = {top, mh, bottom};
+  const float sys_[3] = {0, top, art_h - bottom}, shs[3] = {top, ch, bottom};
+  for (int j = 0; j < 3; j++)
+    for (int i = 0; i < 3; i++) slice(f, xs[i], ys[j], ws[i], hs[j], sxs[i], sys_[j], sws[i], shs[j]);
+}
+
 void mui_window(float x, float y, float w, float h) {
   char key[40];
   snprintf(key, sizeof key, "ui/windows/window_%d", g_window_style);

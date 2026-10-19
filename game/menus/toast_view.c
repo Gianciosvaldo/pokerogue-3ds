@@ -20,28 +20,6 @@
 #define BAR_MIN_W 200.0f
 #define BAR_MIN_H 40.0f
 
-/* draws source rectangle (sx, sy, sw, sh) of the art into (dx, dy, dw, dh): the art scaled and clipped to the destination */
-static void slice(const rr_frame* f, float dx, float dy, float dw, float dh, float sx, float sy, float sw, float sh) {
-  if (dw <= 0 || dh <= 0) return;
-  mui_clip(dx, dy, dw, dh);
-  rr_draw_opts o = RR_DEFAULT_OPTS;
-  o.scale_x = dw / sw;
-  o.scale_y = dh / sh;
-  rr_draw(f, dx - sx * o.scale_x, dy - sy * o.scale_y, &o);
-  mui_clip_off();
-}
-
-static void nine_slice(const rr_frame* f, float x, float y, float w, float h) {
-  const float mw = w - B_LEFT - B_RIGHT, mh = h - B_TOP - B_BOTTOM;
-  const float cw = ART_W - B_LEFT - B_RIGHT, ch = ART_H - B_TOP - B_BOTTOM;
-  const float xs[3] = {x, x + B_LEFT, x + w - B_RIGHT}, ws[3] = {B_LEFT, mw, B_RIGHT};
-  const float sxs[3] = {0, B_LEFT, ART_W - B_RIGHT}, sws[3] = {B_LEFT, cw, B_RIGHT};
-  const float ys[3] = {y, y + B_TOP, y + h - B_BOTTOM}, hs[3] = {B_TOP, mh, B_BOTTOM};
-  const float sys_[3] = {0, B_TOP, ART_H - B_BOTTOM}, shs[3] = {B_TOP, ch, B_BOTTOM};
-  for (int j = 0; j < 3; j++)
-    for (int i = 0; i < 3; i++) slice(f, xs[i], ys[j], ws[i], hs[j], sxs[i], sys_[j], sws[i], shs[j]);
-}
-
 void tv_draw(const tv_info* t, float slide) {
   if (slide <= 0.0f) return;
   if (slide > 1.0f) slide = 1.0f;
@@ -62,7 +40,7 @@ void tv_draw(const tv_info* t, float slide) {
   snprintf(key, sizeof key, t->tier > 0 ? "ui/achv_bar_%d" : "ui/achv_bar", t->tier + 1);
   const rr_frame* f = mui_frame(key, NULL);
   if (f)
-    nine_slice(f, x, 0, w, h);
+    mui_nineslice(f, ART_W, ART_H, x, 0, w, h, B_LEFT, B_RIGHT, B_TOP, B_BOTTOM);
   else
     mui_window(x, 0, w, h);
   rr_draw_opts io = RR_DEFAULT_OPTS;

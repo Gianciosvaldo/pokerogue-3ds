@@ -207,6 +207,7 @@ static void on_run_end(int kind, void* arg) {
   A.result.report = co_report_get(); /* taken by the run driver as the run ended, before the slot is cleared below */
   A.result.on_done = on_result_done;
   /* the win's unlocks, vouchers and ribbons: game-core has already changed the system data as the run was cleared */
+  A.result.ending = A.result.victory && rs_run()->run.mode == GAME_MODES_CLASSIC;
   static wg_gains gains;
   A.result.gains = A.result.victory && wg_collect(rs_run()->sys, rs_run(), &gains) > 0 ? &gains : NULL;
   /* The custom store takes the report BEFORE the slot is cleared. If the app stops between the two, Continue reloads the save from the

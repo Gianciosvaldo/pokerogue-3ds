@@ -21,6 +21,8 @@
 #include "i18n.h"
 #include "postmortem_screen.h"
 #include "result_screen.h"
+#include "char_sprite.h"
+#include "dialogue_view.h"
 #include "toast_view.h"
 #include "ui.h"
 #include "ui_text.h"
@@ -127,6 +129,19 @@ void wg_message_of(const wg_item* it, char* out, int n) { (void)it, (void)n; out
 void tv_draw(const tv_info* t, float slide) { (void)t, (void)slide; }
 void ui_play_sound(const char* key) { (void)key; }
 
+/* the rival's ending (char_sprite.c, menus/dialogue_view.c, the msgbox's @c): this test has none */
+void chs_show(const char* atlas, const char* variant) { (void)atlas, (void)variant; }
+void chs_set_variant(const char* variant) { (void)variant; }
+void chs_hide(void) {}
+void chs_reset(void) {}
+void chs_update(float dt) { (void)dt; }
+void chs_draw(void) {}
+bool chs_busy(void) { return false; }
+bool chs_shown(void) { return false; }
+float chs_x(void) { return 0; }
+void dv_namebox(float x, float y, const char* name, int window_style) { (void)x, (void)y, (void)name, (void)window_style; }
+int ui_window_style(void) { return 5; }
+
 /* run_summary / run_text, used by the result screen's drawing only */
 void rsum_draw(const rsv_info* in, float x, float y) { (void)in, (void)x, (void)y; }
 
@@ -142,6 +157,8 @@ void msgbox_show(msgbox* m, const char* text, float delay, bool prompt) {
   m->waiting = true;
   m->done = false;
 }
+void msgbox_clear(msgbox* m) { m->text[0] = 0; m->waiting = false; m->done = true; }
+const char* msgbox_take_variant(msgbox* m) { (void)m; return NULL; }
 void msgbox_update(msgbox* m, float dt) { (void)m, (void)dt; }
 bool msgbox_input(msgbox* m, ui_button b) {
   if (b != BTN_ACTION && b != BTN_CANCEL) return false;
