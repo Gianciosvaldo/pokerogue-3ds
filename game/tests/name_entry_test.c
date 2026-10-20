@@ -137,6 +137,14 @@ static void open_entry(int max_chars) {
 }
 
 static bool press(ui_button b) { return g_screen->input(g_screen, b); }
+static bool tap(float x, float y) { return g_screen->touch(g_screen, x, y); }
+/* the centre of key column c / row r of the layout name_entry.c draws on the bottom screen, and of its wide keys */
+#define KX(c) (20.0f + 28.0f * (float)(c) + 13.0f)
+#define KY(r) (28.0f + 26.0f * (float)(r) + 12.0f)
+#define SPECIAL_Y (28.0f + 26.0f * 5 + 6.0f + 12.0f)
+#define BTN_Y (28.0f + 26.0f * 6 + 6.0f + 12.0f)
+#define OK_X 89.0f      /* the ok button, columns 0..4: x 20..158 */
+#define CANCEL_X 229.0f /* the cancel button, columns 5..9: x 160..298 */
 
 /* the keys as the test knows them (the layout name_entry.h describes) */
 static const char* const ROWS5[5][10] = {
@@ -488,6 +496,122 @@ int main(void) {
   press(BTN_ACTION);/* '?' */
   press(BTN_MENU);
   CHECK(!strcmp(result, "?"), "up from cancel keeps column 7 (Space) and then reaches '?': \"%s\"", result);
+
+  /* ---- taps on the bottom screen (physical px; the keys are drawn there: the first key's left at 20, top at 28, keys 26 x 24 on a pitch of
+   * 28 x 26, the Shift / Space / Delete row and the buttons under it 6 px lower). A tap on a key is the cursor on it and A. */
+  CHECK(g_screen->touch != NULL, "the screen takes taps");
+  for (int r = 0; r < 5; r++)
+    for (int c = 0; c < 10; c++) {
+      open_entry(20);
+      CHECK(tap(KX(c), KY(r)), "a tap on key %d,%d is taken", r, c);
+      CHECK(tap(OK_X, BTN_Y), "the ok button");
+      CHECK(n_done == 1 && !strcmp(result, ROWS5[r][c]), "a tap on key %d,%d types \"%s\": \"%s\"", r, c, ROWS5[r][c], result);
+    }
+  open_entry(20);
+  for (int r = 0; r < 2; r++)
+    for (int c = 0; c < 10; c++) tap(KX(c), KY(r));
+  tap(OK_X, BTN_Y);
+  CHECK(!strcmp(result, "1234567890qwertyuiop"), "taps in a row type in order: \"%s\"", result);
+
+  /* Shift from its key (x 20..74): the next letter, all letters, off */
+  open_entry(20);
+  tap(47, SPECIAL_Y);
+  tap(KX(0), KY(1));
+  tap(KX(1), KY(1));
+  tap(47, SPECIAL_Y);
+  tap(47, SPECIAL_Y);
+  tap(KX(2), KY(1));
+  tap(KX(3), KY(1));
+  tap(47, SPECIAL_Y);
+  tap(KX(4), KY(1));
+  tap(OK_X, BTN_Y);
+  CHECK(!strcmp(result, "QwERt"), "Shift once capitalizes one letter, twice all of them, a third tap ends them: \"%s\"", result);
+
+  /* Space and Delete, and the edges of the wide keys (Shift 20..74, Space 76..242, Delete 244..298, the gaps go to the nearer key) */
+  open_entry(20);
+  tap(KX(0), KY(1));
+  tap(75, SPECIAL_Y);       /* Space's left edge, with the half gap before it */
+  tap(241.5f, SPECIAL_Y);   /* its right edge */
+  tap(KX(1), KY(1));
+  tap(OK_X, BTN_Y);
+  CHECK(!strcmp(result, "q  w"), "Space's two edges type a space each: \"%s\"", result);
+  open_entry(20);
+  tap(KX(0), KY(1));
+  tap(KX(1), KY(1));
+  tap(KX(2), KY(1));
+  const int errd = n_error;
+  tap(271, SPECIAL_Y);
+  tap(244, SPECIAL_Y);
+  tap(298.5f, SPECIAL_Y);
+  CHECK(n_error == errd, "three taps on Delete delete three letters without an error");
+  tap(271, SPECIAL_Y);
+  CHECK(n_error == errd + 1, "Delete with nothing to delete gives the error sound");
+  tap(KX(3), KY(1));
+  tap(OK_X, BTN_Y);
+  CHECK(!strcmp(result, "r"), "Delete deleted: \"%s\"", result);
+
+  /* the buttons: ok x 20..158, cancel 160..298, y 190..214 as drawn */
+  open_entry(20);
+  tap(KX(5), KY(2));
+  tap(19, BTN_Y);
+  CHECK(n_done == 1 && got_text && !strcmp(result, "h"), "ok's left edge: \"%s\"", result);
+  open_entry(20);
+  tap(KX(5), KY(2));
+  tap(158.5f, BTN_Y);
+  CHECK(n_done == 1 && got_text, "ok's right edge, with the half gap");
+  open_entry(20);
+  tap(KX(5), KY(2));
+  tap(CANCEL_X, BTN_Y);
+  CHECK(n_done == 1 && !got_text, "a tap on cancel hands over NULL");
+  open_entry(20);
+  tap(159.5f, BTN_Y);
+  CHECK(n_done == 1 && !got_text, "cancel's left edge, with the half gap");
+  open_entry(20);
+  tap(298.5f, 214.5f);
+  CHECK(n_done == 1 && !got_text, "cancel's right and lower edges");
+  open_entry(20);
+  tap(KX(5), KY(2));
+  tap(OK_X, 189.5f);
+  CHECK(n_done == 1 && got_text, "the buttons' upper edge");
+
+  /* the gaps between keys go to a key, the margins and the gap above the Shift row to nothing */
+  open_entry(20);
+  CHECK(tap(46.5f, 40) && tap(47.5f, 40), "taps in the gap between two keys are taken");
+  CHECK(tap(KX(0), 52.5f) && tap(KX(0), 53.5f), "taps in the gap between two rows are taken");
+  tap(OK_X, BTN_Y);
+  CHECK(!strcmp(result, "12" "1" "q"), "the gaps go to the nearer key: \"%s\"", result);
+  open_entry(20);
+  const int sel_gap = n_select, err_gap = n_error;
+  CHECK(!tap(KX(0), 160) && !tap(5, 5) && !tap(310, 100) && !tap(18.5f, KY(1)) && !tap(KX(0), 26.5f) && !tap(OK_X, 232), "taps on nothing take nothing");
+  CHECK(n_select == sel_gap && n_error == err_gap, "(no sound)");
+  tap(OK_X, BTN_Y);
+  CHECK(!strcmp(result, ""), "nothing was typed: \"%s\"", result);
+
+  /* a tap moves the cursor: the highlight is on that key, and the D-pad goes on from it */
+  open_entry(20);
+  tap(KX(5), KY(3));
+  draw_bottom();
+  int on_key = 0;
+  for (int i = 0; i < n_rects; i++)
+    if (g_rects[i].c == RR_RGBA(0xf8, 0xe8, 0x58, 255) && g_rects[i].x == KX(5) - 13 - 1 && g_rects[i].y == KY(3) - 12 - 1) on_key++;
+  CHECK(on_key == 2, "the outline moved to the key that was tapped (its top and left sides start at its corner: %d)", on_key);
+  press(BTN_RIGHT);
+  press(BTN_ACTION);
+  tap(OK_X, BTN_Y);
+  CHECK(!strcmp(result, "n" "m"), "the D-pad goes on from the tapped key: \"%s\"", result);
+
+  /* the limit, and nothing after the answer */
+  open_entry(2);
+  const int err_lim = n_error;
+  tap(KX(0), KY(1));
+  tap(KX(1), KY(1));
+  tap(KX(2), KY(1));
+  CHECK(n_error == err_lim + 1, "a tap past the limit gives the error sound");
+  tap(OK_X, BTN_Y);
+  CHECK(!strcmp(result, "qw"), "the limit holds: \"%s\"", result);
+  const int sel_end = n_select;
+  CHECK(tap(KX(0), KY(1)) && tap(OK_X, BTN_Y) && tap(CANCEL_X, BTN_Y), "taps are taken (and ignored) after the answer");
+  CHECK(n_done == 1 && n_select == sel_end, "nothing happened after the answer: %d answers", n_done);
 
   /* ---- drawing */
   home();

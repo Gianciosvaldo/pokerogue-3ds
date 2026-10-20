@@ -262,6 +262,22 @@ static bool ne_input(ui_screen* s, ui_button b) {
   }
 }
 
+/* A tap on the bottom screen (physical px, which the keyboard is drawn in): the key under it is the cursor and A, a letter typed as it is
+ * with the buttons. A key takes the 1 px gaps around it too, so a finger between two keys still presses one. */
+static bool ne_touch(ui_screen* s, float x, float y) {
+  (void)s;
+  if (E.done) return true;
+  for (int i = 0; i < N_CELLS; i++) {
+    float cx, cy, w, h;
+    cell_rect(&E.cells[i], &cx, &cy, &w, &h);
+    if (x < cx - 1 || x >= cx + w + 1 || y < cy - 1 || y >= cy + h + 1) continue;
+    set_cursor(i);
+    press(&E.cells[i]);
+    return true;
+  }
+  return false;
+}
+
 static void ne_update(ui_screen* s, float dt) {
   (void)s;
   E.t += dt;
@@ -344,7 +360,7 @@ static void ne_draw(ui_screen* s, rr_screen which) {
   for (int i = 0; i < N_CELLS; i++) draw_cell(i);
 }
 
-static ui_screen g_screen = {"name-entry", UI_FADE, NULL, NULL, NULL, ne_input, ne_update, ne_draw, NULL};
+static ui_screen g_screen = {"name-entry", UI_FADE, NULL, NULL, NULL, ne_input, ne_update, ne_draw, NULL, ne_touch};
 
 void name_entry_open(const name_entry_args* a) {
   memset(&E, 0, sizeof E);
