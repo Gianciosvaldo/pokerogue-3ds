@@ -142,6 +142,8 @@ bool gc_mystery_pick_ok(const gc_run *run, int type, int option, int idx)
     }
     /* Part Timer's first two options: isPokemonValidForEncounterOptionSelection, any Pokemon that is not fainted */
     if (type == GC_ME_PART_TIMER && option < 2) return gc_mon_allowed(m);
+    /* Fun and Games!: isPokemonValidForEncounterOptionSelection, any Pokemon that is not fainted */
+    if (type == GC_ME_FUN_AND_GAMES && option == 0) return gc_fg_pick_ok(run, idx);
     return false;
 }
 
@@ -309,7 +311,7 @@ void gc_mystery_setup_screen(gc_run *run)
     case GC_ME_SHADY_VITAMIN_DEALER: case GC_ME_LOST_AT_SEA: case GC_ME_FIERY_FALLOUT:
     case GC_ME_ABSOLUTE_AVARICE: case GC_ME_CLOWNING_AROUND: case GC_ME_PART_TIMER:
     case GC_ME_DANCING_LESSONS: case GC_ME_WEIRD_DREAM: case GC_ME_TELEPORTING_HIJINKS:
-    case GC_ME_FUN_AND_GAMES: case GC_ME_UNCOMMON_BREED: case GC_ME_THE_EXPERT_POKEMON_BREEDER: case GC_ME_FIELD_TRIP:
+    case GC_ME_UNCOMMON_BREED: case GC_ME_THE_EXPERT_POKEMON_BREEDER: case GC_ME_FIELD_TRIP:
     case GC_ME_AN_OFFER_YOU_CANT_REFUSE:
         n = 3; break;
     case GC_ME_TRAINING_SESSION: case GC_ME_DEPARTMENT_STORE_SALE:
@@ -339,6 +341,9 @@ void gc_mystery_setup_screen(gc_run *run)
         s->option_ok[0] = any_pick_ok(run, type, 0);
         s->option_ok[1] = any_pick_ok(run, type, 1);
         s->option_ok[2] = gc_mystery_primary_pokemon(run, type, 2) >= 0;
+    } else if (type == GC_ME_FUN_AND_GAMES) {
+        /* MoneyRequirement(0, 1.5) on the option; leaving needs nothing. The party screen needs a Pokemon the filter passes */
+        s->option_ok[0] = run->money >= pr_run_get_wave_money_amount(run->wave, 1.5) && any_pick_ok(run, type, 0);
     } else if (type == GC_ME_THE_POKEMON_SALESMAN) {
         /* MoneyRequirement(0, 4): the wave's money times the most the Pokemon can cost. A full party is asked what to
          * release when the Pokemon is bought, as when one is caught */
@@ -547,6 +552,17 @@ static void me_leave_with_heal_shop(gc_run *run, bool post, int type, int mon, i
     gc_rq_push(run, gc_rp(RP_SELECT_MODIFIER, 1, 0, 0));
     if (post) gc_rq_push(run, gc_rp(RP_ME_POST, type, mon, option));
     end_mystery_encounter_leave(run);
+}
+
+/* for src/gc_fungames.c */
+void gc_me_leave_with_heal_shop(gc_run *run) { me_leave_with_heal_shop(run, false, GC_ME_FUN_AND_GAMES, 0, 0); }
+
+void gc_me_leave_with_shop(gc_run *run, const char *key)
+{
+    const char *keys[1] = {key};
+    const int which[1] = {0};
+    me_set_shop_funcs(run, keys, which, 1);
+    end_mystery_encounter_shop(run);
 }
 
 /* Lost at Sea (src/data/mystery-encounters/encounters/lost-at-sea-encounter.ts).
@@ -1286,12 +1302,9 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_FUN_AND_GAMES:
-        if (option == 0 || option == 1) {
-            run->money = pr_run_add_money(run->money, pr_run_get_wave_money_amount(run->wave, 1.5));
-            end_mystery_encounter_leave(run);
-            return true;
-        }
-        end_mystery_encounter_leave(run);
+        /* the minigame (src/gc_fungames.c), or "Leave": no rewards and no experience, but the heal-only shop */
+        if (option == 0) gc_fg_start(run, b);
+        else gc_me_leave_with_heal_shop(run);
         return true;
 
     case GC_ME_UNCOMMON_BREED:

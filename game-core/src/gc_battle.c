@@ -430,6 +430,11 @@ void gc_battle_command_screen(gc_run *run)
     s->can_switch = p && allowed_bench(run) > 0 && !trapped(run, p);
     s->can_ball = run->battle_type == BATTLE_TYPE_WILD && has_any_pokeball(run);
     s->can_run = p && pr_can_run(&run->bt, p, NULL);
+    if (gc_fg_active(run)) {
+        /* withSkipToFightInput and withFleeAllowed(false): the FIGHT menu straight away, nothing else to choose */
+        s->fight_only = true;
+        s->can_switch = s->can_ball = s->can_run = false;
+    }
 }
 
 /* CommandPhase.handleFightCommand / handleSwitchCommand for field slot 0 */
@@ -439,6 +444,7 @@ bool gc_battle_player_command(gc_run *run, const gc_choice *c, const char **why)
     pr_pokemon *p = bt->field[0];
     struct pr_turn_command *tc = &bt->commands[0], *pc = &bt->pre_commands[0];
     if (!p) { *why = "no Pokemon on the field"; return false; }
+    if (c->kind != GC_CH_FIGHT && gc_fg_active(run)) { *why = "not a command"; return false; }
     if (c->kind == GC_CH_FIGHT) {
         int slot = c->a;
         const char *reason = "";

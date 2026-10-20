@@ -117,7 +117,7 @@ static const pr_party_template *party_template(const pr_run *run, int trainer_ty
     return best ? &pr_party_templates[best->template] : NULL;
 }
 
-static void enemy_ctx(gc_run *run, pr_enemy_gen_ctx *ec)
+void gc_enemy_ctx(gc_run *run, pr_enemy_gen_ctx *ec)
 {
     memset(ec, 0, sizeof *ec);
     ec->wave = run->wave;
@@ -190,7 +190,7 @@ static void enemy_items(gc_run *run)
 
 /* gc_mon_new_enemy again once pr_run_enemy_pokemon_finish has filled in the rest of the rolls, keeping
  * the moveset made in between */
-static void refresh_enemy(gc_run *run, gc_mon *m, int species, int level, const pr_enemy_gen *g, int slot)
+void gc_refresh_enemy(gc_run *run, gc_mon *m, int species, int level, const pr_enemy_gen *g, int slot)
 {
     uint16_t mv[4];
     int8_t pp_up[4];
@@ -213,7 +213,7 @@ static bool gen_wild(gc_run *run, int level)
 {
     pr_wild_enemy_ctx wc;
     memset(&wc, 0, sizeof wc);
-    enemy_ctx(run, &wc.enemy);
+    gc_enemy_ctx(run, &wc.enemy);
     wc.level = level;
     wc.luck = gc_party_luck(run);
     wc.golden_bug_net = gc_item_stack(run, "GOLDEN_BUG_NET") > 0;
@@ -227,7 +227,7 @@ static bool gen_wild(gc_run *run, int level)
     wc.enemy.boss = w.boss;
     wc.enemy.shiny_lock = w.shiny_lock;
     if (pr_run_enemy_pokemon_finish(&run->run, &wc.enemy, &w.mon) < 0) return false;
-    refresh_enemy(run, m, w.species, level, &w.mon, 0);
+    gc_refresh_enemy(run, m, w.species, level, &w.mon, 0);
     /* the classic final boss gets perfect IVs */
     if (run->run.mode == GAME_MODES_CLASSIC && pr_run_is_wave_final(run->run.mode, run->wave))
         for (int i = 0; i < 6; i++) m->b.ivs[i] = 31;
@@ -246,7 +246,7 @@ static bool gen_trainer(gc_run *run, const pr_new_battle *nb, int prev_wave)
     if (!tpl) return false;
     pr_trainer_party_ctx tc;
     memset(&tc, 0, sizeof tc);
-    enemy_ctx(run, &tc.enemy);
+    gc_enemy_ctx(run, &tc.enemy);
     const pr_trainer_info *t = trainer_info(nb->trainer_type);
     tc.is_double = (t && t->double_only) || nb->variant == TRAINER_VARIANT_DOUBLE;
     tc.classic_wave20_trainer = run->wave == 20 && run->run.mode == GAME_MODES_CLASSIC;
@@ -265,7 +265,7 @@ static bool gen_trainer(gc_run *run, const pr_new_battle *nb, int prev_wave)
         gc_mon_new_enemy(run, m, party.species[e], nb->levels[e], &party.mons[e], TRAINER_SLOT_TRAINER);
         gc_port_enemy_moveset(run, m);
         if (pr_run_enemy_pokemon_finish(&run->run, &ec, &party.mons[e]) < 0) return false;
-        refresh_enemy(run, m, party.species[e], nb->levels[e], &party.mons[e], TRAINER_SLOT_TRAINER);
+        gc_refresh_enemy(run, m, party.species[e], nb->levels[e], &party.mons[e], TRAINER_SLOT_TRAINER);
         run->n_enemy++;
     }
     return run->n_enemy > 0;

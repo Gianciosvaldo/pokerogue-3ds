@@ -41,6 +41,7 @@ enum {
     RP_REWARD_FORM,      /* bounded FormChangePhase: a = storage party index, b = target form */
     RP_ME_POST,          /* PostMysteryEncounterPhase's onPostOptionPhase: a = encounter type, b = party index, c = option */
     RP_CUSTOM_OFFER,     /* custom content: the app's rematch offer, waits on CUSTOM_OFFER (gc/custom.h) */
+    RP_FG_KO,            /* Fun and Games!: MysteryEncounterRewardsPhase running doContinueEncounter (handleLoseMinigame) */
     RP_COUNT_
 };
 typedef struct { uint8_t type; int32_t a, b, c; double d; const char *key; } gc_rphase;
@@ -102,6 +103,9 @@ typedef struct {
     bool custom_offering, custom_offer_reset, custom_offer_new_biome;
     uint16_t enemy_start_species[6];   /* the enemy party's species and forms when the battle began (gc_custom_actor.start_*); not saved */
     uint8_t enemy_start_form[6];
+    /* Fun and Games!: the minigame is running (the encounter's misc.turnsRemaining and its handlers). Not saved: the only
+     * save point is the encounter's start, before the option is chosen */
+    struct { bool active; int8_t turns_remaining; } fg;
 } gc_internal;
 gc_internal *gc_int(gc_run *run);
 
@@ -240,6 +244,8 @@ bool gc_custom_report(gc_run *run, const gc_custom_encounter *enc);  /* encounte
 void gc_custom_answer(gc_run *run, bool accept);                     /* the player's answer: builds the enemy for an accept, then the battle starts */
 bool gc_custom_build_enemy(gc_run *run, const gc_custom_enemy *spec, const char **why);   /* the ordinary enemy replaced by spec's identity */
 void gc_enemy_finish_party(gc_run *run);                             /* passives, stats, seen flags, items, AI, trainer names of the enemy party */
+void gc_enemy_ctx(gc_run *run, pr_enemy_gen_ctx *ec);                /* the scene addEnemyPokemon sees (run-core's context) */
+void gc_refresh_enemy(gc_run *run, gc_mon *m, int species, int level, const pr_enemy_gen *g, int slot);   /* gc_mon_new_enemy again, keeping the moveset */
 /* Task 45: getMysteryEncounter() inside executeWithSeedOffset(wave * 16). */
 bool gc_mystery_select(gc_run *run, int *type, int *tier);
 void gc_mystery_record(gc_run *run, int type, int tier);
@@ -288,6 +294,18 @@ const char *gc_catch_ball_refusal(const gc_run *run, int ball);
 bool gc_catch_is_catch(const gc_run *run, int enemy_idx);   /* at a stop for a VictoryPhase: the enemy was caught, not fainted */
 bool gc_catch_start(gc_run *run, gc_rphase *p);
 bool gc_catch_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char **why, bool *ok);
+
+/* ---- Fun and Games! (src/gc_fungames.c) ---- */
+bool gc_fg_active(const gc_run *run);
+bool gc_fg_pick_ok(const gc_run *run, int idx);                 /* the party screen's filter: allowed in battle */
+void gc_fg_start(gc_run *run, int pick);                        /* the "Play the Game" option, with the party screen's pick (a storage index) */
+bool gc_fg_turn_init(gc_run *run);                              /* handleNextTurn from TurnInitPhase: true = skip the rest of the phase */
+void gc_fg_lose(gc_run *run);                                   /* handleLoseMinigame, in MysteryEncounterRewardsPhase (RP_FG_KO) */
+void gc_fg_battle_end(gc_run *run, bool victory);               /* handleMysteryEncounterVictory's phases, after the minigame's battle ended */
+bool gc_fg_wobbuffet_moveset(gc_run *run, gc_mon *m);           /* generateMoveset for a wild Wobbuffet, on the run's RNG */
+/* mystery-encounter exits for gc_fungames.c (src/gc_mystery.c) */
+void gc_me_leave_with_heal_shop(gc_run *run);                   /* leaveEncounterWithoutBattle(true) */
+void gc_me_leave_with_shop(gc_run *run, const char *key);       /* setEncounterRewards({guaranteedModifierTypeFuncs: [key], fillRemaining: false}), leaveEncounterWithoutBattle() */
 
 /* run-phase handlers (src/gc_phases.c): return true when the phase is done, false when it waits on a screen */
 bool gc_phase_start(gc_run *run, gc_rphase *p);
