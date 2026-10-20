@@ -145,6 +145,10 @@ const pr_species_gen *gc_species_gen(int id);                          /* run-co
 bool gc_mon_roll_player(gc_run *run, pr_rng *rng, gc_mon *m, int species, int level, int ability_index, int form, int shiny);
 /* Task 63's clean wild constructor slice; false leaves the RNG/mon untouched. */
 bool gc_enemy_moveset(gc_run *run, gc_mon *m, const pr_enemy_gen *g);
+/* generateMoveset for a wild, non-boss Pokemon on `rng` (src/gc_movegen.c); false = a Pokemon it does not cover, left untouched */
+bool gc_generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m);
+/* Move.calculateEffectivePower(pokemon) of each of `n` moves for a Pokemon (what the differential compares); false = a passive */
+bool gc_mg_effective_powers(gc_run *run, const gc_mon *m, const uint16_t *moves, int n, double *out);
 void gc_mon_set_move(gc_mon *m, int slot, int move);                  /* setMove */
 int gc_move_max_pp(const pr_pokemon *p, int slot);                     /* PokemonMove.getMovePp */
 bool gc_move_usable(const pr_pokemon *p, int slot, const char **why);  /* the PP and implementation checks */
