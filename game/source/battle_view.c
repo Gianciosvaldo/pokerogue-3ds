@@ -620,16 +620,21 @@ static void draw_party_tray(void) {
   }
 }
 
-static void draw_command_menu(void) {
-  ui_window(202, -48, 118, 48, WIN_NORMAL);
+/* On the top screen the strip runs the screen's whole width, 40 px past the canvas on each side: the outer windows are longer by that and
+ * their contents move 20 px towards the middle of the extra (TOP_PAD), so they keep their margins. */
+#define TOP_EXTRA 40
+#define TOP_PAD 20
+static void draw_command_menu(bool top) {
+  const float dx = top ? TOP_PAD : 0;
+  ui_window(202, -48, top ? 118 + TOP_EXTRA : 118, 48, WIN_NORMAL);
   static const char* const KEYS[4] = {"commandUiHandler:fight", "commandUiHandler:ball", "commandUiHandler:pokemon",
                                       "commandUiHandler:run"};
   for (int c = 0; c < 4; c++) {
     char s[32];
     i18n_t(s, sizeof s, KEYS[c], NULL);
-    text_draw(TS_WINDOW_BATTLE_COMMAND, 217 + (c % 2 ? 55.8f : 0), -38.7f + (c < 2 ? 0 : 16), s, NULL);
+    text_draw(TS_WINDOW_BATTLE_COMMAND, 217 + dx + (c % 2 ? 55.8f : 0), -38.7f + (c < 2 ? 0 : 16), s, NULL);
   }
-  if (B.bar_sel < 0) ui_cursor(217 - 5 + (B.cmd_cursor % 2 ? 56 : 0), -38.7f + 8 + (B.cmd_cursor >= 2 ? 16 : 0)); /* the bar has it otherwise */
+  if (B.bar_sel < 0) ui_cursor(217 - 5 + dx + (B.cmd_cursor % 2 ? 56 : 0), -38.7f + 8 + (B.cmd_cursor >= 2 ? 16 : 0)); /* the bar has it otherwise */
 }
 
 static text_style pp_style(int left, int max) {
@@ -640,15 +645,16 @@ static text_style pp_style(int left, int max) {
   return TS_MOVE_PP_FULL;
 }
 
-static void draw_fight_menu(void) {
+static void draw_fight_menu(bool top) {
   const bv_mon* m = &B.s[0].mon;
-  ui_window(0, -48, 243, 48, WIN_NORMAL);
-  ui_window(240, -48, 80, 48, WIN_NORMAL);
+  const float lx = top ? -TOP_PAD : 0, rx = top ? TOP_PAD : 0; /* the moves' window's contents and the move info's */
+  ui_window(top ? -TOP_EXTRA : 0, -48, top ? 243 + TOP_EXTRA : 243, 48, WIN_NORMAL);
+  ui_window(240, -48, top ? 80 + TOP_EXTRA : 80, 48, WIN_NORMAL);
   for (int i = 0; i < 4; i++) {
     const char* nm = i < m->n_moves ? i18n_move_name(m->moves[i]) : "-";
-    text_draw(TS_WINDOW, 18 + (i % 2 ? 114 : 0), -38.7f + (i < 2 ? 0 : 16), nm, NULL);
+    text_draw(TS_WINDOW, 18 + lx + (i % 2 ? 114 : 0), -38.7f + (i < 2 ? 0 : 16), nm, NULL);
   }
-  ui_cursor(13 + (B.move_cursor % 2 ? 114 : 0), -31 + (B.move_cursor >= 2 ? 15 : 0));
+  ui_cursor(13 + lx + (B.move_cursor % 2 ? 114 : 0), -31 + (B.move_cursor >= 2 ? 15 : 0));
   if (B.move_cursor >= m->n_moves) return;
   int mv = m->moves[B.move_cursor];
   const pr_move* pm = mv >= 0 && mv < PR_MOVE_COUNT ? &pr_moves[mv] : NULL;
@@ -657,8 +663,8 @@ static void draw_fight_menu(void) {
   /* upstream scales the type icon by 0.8; at 1:1 pixels that turns its 5 px lettering to mud ("NORMAL" cannot be read), so it is
    * drawn at full size, a little to the left of upstream's centre so it and the category icon (28 px) still fit the window */
   if (pm) {
-    img_draw("images/types", gm_enum_lower(GM_E_POKEMON_TYPE, pm->type, fr, sizeof fr), 1 + 320 - 56, -36, 0.5f, 0.5f);
-    img_draw("images/categories", gm_enum_lower(GM_E_MOVE_CATEGORY, pm->category, fr, sizeof fr), 1 + 320 - 24, -36,
+    img_draw("images/types", gm_enum_lower(GM_E_POKEMON_TYPE, pm->type, fr, sizeof fr), 1 + rx + 320 - 56, -36, 0.5f, 0.5f);
+    img_draw("images/categories", gm_enum_lower(GM_E_MOVE_CATEGORY, pm->category, fr, sizeof fr), 1 + rx + 320 - 24, -36,
              0.5f, 0.5f);
   }
   /* upstream draws these at 56 canvas px of the emerald font (about 9 px here), which is unreadable at 1:1 on the 3DS; the 8 px pixel
@@ -669,27 +675,27 @@ static void draw_fight_menu(void) {
   ro.origin_x = 1;
   ro.origin_y = 0.5f;
   char s[32];
-  text_draw(TS_MOVE_LABEL, 1 + 320 - 70, -26, i18n_t(s, sizeof s, "fightUiHandler:pp", NULL), &lo);
-  text_draw(TS_MOVE_LABEL, 1 + 320 - 70, -18, i18n_t(s, sizeof s, "fightUiHandler:power", NULL), &lo);
-  text_draw(TS_MOVE_LABEL, 1 + 320 - 70, -10, i18n_t(s, sizeof s, "fightUiHandler:accuracy", NULL), &lo);
+  text_draw(TS_MOVE_LABEL, 1 + rx + 320 - 70, -26, i18n_t(s, sizeof s, "fightUiHandler:pp", NULL), &lo);
+  text_draw(TS_MOVE_LABEL, 1 + rx + 320 - 70, -18, i18n_t(s, sizeof s, "fightUiHandler:power", NULL), &lo);
+  text_draw(TS_MOVE_LABEL, 1 + rx + 320 - 70, -10, i18n_t(s, sizeof s, "fightUiHandler:accuracy", NULL), &lo);
   int left = m->pp_left[B.move_cursor], max = m->pp_max[B.move_cursor];
   snprintf(s, sizeof s, "%2d/%2d", left, max);
   text_style ps = pp_style(left, max);
   text_opts po = ro;
   po.color = text_color(ps, false);
   po.shadow = text_color(ps, true);
-  text_draw(TS_MOVE_LABEL, 1 + 320 - 12, -26, s, &po);
+  text_draw(TS_MOVE_LABEL, 1 + rx + 320 - 12, -26, s, &po);
   if (pm) {
     if (pm->power >= 0)
       snprintf(s, sizeof s, "%d", pm->power);
     else
       snprintf(s, sizeof s, "---");
-    text_draw(TS_MOVE_LABEL, 1 + 320 - 12, -18, s, &ro);
+    text_draw(TS_MOVE_LABEL, 1 + rx + 320 - 12, -18, s, &ro);
     if (pm->accuracy >= 0)
       snprintf(s, sizeof s, "%d", pm->accuracy);
     else
       snprintf(s, sizeof s, "---");
-    text_draw(TS_MOVE_LABEL, 1 + 320 - 12, -10, s, &ro);
+    text_draw(TS_MOVE_LABEL, 1 + rx + 320 - 12, -10, s, &ro);
   }
 }
 
@@ -756,7 +762,7 @@ static void draw_bar_icon(const bv_item* it, float x, float y) {
     rr_draw(f, x, y, &o);
   }
   if (it->count > 1) {
-    char n[8];
+    char n[16];
     snprintf(n, sizeof n, "%d", it->count);
     text_opts t = text_defaults();
     t.origin_x = 1;
@@ -772,36 +778,39 @@ static void draw_cursor_frame(float x, float y, float w, float h) {
   rr_rect(x + w - 1, y, 1, h, c);
 }
 
-/* The bar on the top screen, in the 30 px under the command strip (physical coordinates): its title, then the icons, scrolled so the
- * cursor is always in view. */
-#define TBAR_X 40
-#define TBAR_Y 212
-#define TBAR_W 320
-#define TBAR_H 26
-#define TBAR_ICONS 9
+/* The bar on the top screen, the 30 px under the command strip (physical coordinates, the screen's whole width and height there): its
+ * title, then the icons (26 px cells, 2 px in from the bar's top and bottom), scrolled so the cursor is always in view. */
+#define TBAR_X 0
+#define TBAR_Y 210
+#define TBAR_W 400
+#define TBAR_H 30
+#define TBAR_TITLE_X 12
+#define TBAR_ICONS_X 76
+#define TBAR_ICONS 12
 static int tbar_first(void) { return B.bar_sel >= TBAR_ICONS ? B.bar_sel - TBAR_ICONS + 1 : 0; }
 static void draw_top_bar(void) {
   if (B.mode != M_COMMAND && B.mode != M_FIGHT) return;
   rr_rect(TBAR_X, TBAR_Y, TBAR_W, TBAR_H, RR_RGBA(0x40, 0x40, 0x48, 255));
   rr_rect(TBAR_X + 1, TBAR_Y + 1, TBAR_W - 2, TBAR_H - 2, RR_RGBA(0x28, 0x28, 0x30, 255));
-  text_draw(TS_MOVE_LABEL, TBAR_X + 8, TBAR_Y + 9, bar_title(), NULL);
+  text_draw(TS_MOVE_LABEL, TBAR_X + TBAR_TITLE_X, TBAR_Y + 11, bar_title(), NULL);
   const int n = bar_n(), first = tbar_first();
   for (int i = first; i < n && i < first + TBAR_ICONS; i++)
-    draw_bar_icon(bar_it(i), TBAR_X + 72 + (i - first) * 26 + 1, TBAR_Y + 1);
-  if (n == 0) text_draw(TS_MOVE_LABEL, TBAR_X + 72, TBAR_Y + 9, "none", NULL);
-  if (B.bar_sel >= 0 && B.bar_sel < n) draw_cursor_frame(TBAR_X + 72 + (B.bar_sel - first) * 26, TBAR_Y, 26, 26);
+    draw_bar_icon(bar_it(i), TBAR_X + TBAR_ICONS_X + (i - first) * 26 + 1, TBAR_Y + 3);
+  if (n == 0) text_draw(TS_MOVE_LABEL, TBAR_X + TBAR_ICONS_X, TBAR_Y + 11, "none", NULL);
+  if (B.bar_sel >= 0 && B.bar_sel < n) draw_cursor_frame(TBAR_X + TBAR_ICONS_X + (B.bar_sel - first) * 26, TBAR_Y + 2, 26, 26);
 }
 
 /* An item's name (with its stack) and effect, in the message window in place of its usual text: the bar's selected item ("What will X
  * do?" gives way, and so do the party tray and the command window, to give the text the strip's width), or the one the summary
  * screen asks for. */
-static void draw_item_text(const char* name, const char* desc) {
+static void draw_item_text(const char* name, const char* desc, bool top) {
   text_opts d = text_defaults();
-  d.wrap_w = 296;
-  text_draw(TS_WINDOW, 12, -42, name, NULL);
+  const float x = top ? 12 - TOP_PAD : 12;
+  d.wrap_w = top ? 296 + TOP_EXTRA : 296;
+  text_draw(TS_WINDOW, x, -42, name, NULL);
   /* the 8 px pixel font (the fight menu's labels): the longest description is 116 characters, two lines of it fit the window under
    * the name where the 12 px style wraps to three and runs out of it */
-  if (desc && *desc) text_draw(TS_MOVE_LABEL, 12, -28, desc, &d);
+  if (desc && *desc) text_draw(TS_MOVE_LABEL, x, -28, desc, &d);
 }
 
 static void bar_info_text(char* name, size_t n, const char** desc) {
@@ -828,25 +837,27 @@ static void draw_bottom(bool top) {
   char fr[4];
   snprintf(fr, sizeof fr, "%d", ui_window_style());
   if (B.mode != M_FIGHT) {
-    if (img_frame("images/ui/bg", fr))
+    if (top)
+      ui_window(-TOP_EXTRA, -48, 320 + 2 * TOP_EXTRA, 48, WIN_NORMAL); /* across the whole screen */
+    else if (img_frame("images/ui/bg", fr))
       img_draw("images/ui/bg", fr, 0, 0, 0, 1);
     else
       rr_rect(0, -48, 320, 48, RR_RGBA(0x30, 0x50, 0x68, 255));
   }
   const bool info = B.mode == M_COMMAND && B.bar_open && B.bar_sel >= 0 && B.bar_sel < bar_n();
-  if (B.mode == M_COMMAND && !info) draw_command_menu();
+  if (B.mode == M_COMMAND && !info) draw_command_menu(top);
   if (B.mode == M_FIGHT) {
-    draw_fight_menu();
+    draw_fight_menu(top);
     if (!top) draw_move_details();
   } else if (info) {
     char name[64];
     const char* desc;
     bar_info_text(name, sizeof name, &desc);
-    draw_item_text(name, desc);
+    draw_item_text(name, desc, top);
   } else if (B.info_on && B.mode == M_IDLE) {
-    draw_item_text(B.info_name, B.info_desc);
+    draw_item_text(B.info_name, B.info_desc, top);
   } else {
-    msgbox_draw(&B.msg, 12, -39);
+    msgbox_draw(&B.msg, top ? 12 - TOP_PAD : 12, -39);
   }
   if (B.mode == M_COMMAND && B.has_balls && !info) draw_party_tray();
   draw_level_stats();
@@ -1815,12 +1826,11 @@ static void bv_draw(ui_screen* s, rr_screen which) {
       draw_enemy_info(&B.s[1]);
       draw_player_info(&B.s[0]);
     }
-    if (ui_space(UI_TOP_CANVAS_UI)) draw_bottom(true);
     /* the field is 320x180 on a 400x240 screen: keep sprites that slide past it off the border */
-    if (ui_space(UI_PHYS_TOP)) {
-      draw_border();
-      draw_top_bar();
-    }
+    if (ui_space(UI_PHYS_TOP)) draw_border();
+    /* the strip and the item bar run across the border (the whole screen's width), so they come after it */
+    if (ui_space(UI_TOP_CANVAS_UI)) draw_bottom(true);
+    if (ui_space(UI_PHYS_TOP)) draw_top_bar();
   } else {
     if (ui_space(UI_PHYS_BOTTOM)) rr_rect(0, 0, 320, 240, RR_RGBA(0x10, 0x10, 0x18, 255));
     if (ui_space(UI_BOTTOM_UI)) draw_bottom(false);
