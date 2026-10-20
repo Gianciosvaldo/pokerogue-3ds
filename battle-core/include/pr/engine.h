@@ -193,6 +193,10 @@ void pr_run_turn(pr_battle *bt, pr_engine *e);
  * it, the "Set" battle style), or at a switch pick after a "yes". The game shows the encounter
  * text and the trainer's intro before calling this. Singles only. */
 void pr_start_battle(pr_battle *bt, pr_engine *e);
+/* NewBiomeEncounterPhase's gameplay prefix. Preserve the caller's engine/queues;
+ * resets every player's battle/wave data, then dispatches for each on-field
+ * player in party order. The caller owns the visual tween and encounter end. */
+void pr_new_biome_encounter_callbacks(pr_battle *bt);
 /* EncounterPhase.end queue only; loaded sessions omit fresh player entry work. */
 void pr_queue_encounter_end(pr_battle *bt, pr_engine *e, bool loaded);
 void pr_queue_trainer_summons(pr_battle *bt, pr_engine *e);

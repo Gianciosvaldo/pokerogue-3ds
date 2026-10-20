@@ -47,11 +47,13 @@ Merged evidence includes Helping Hand, Acupressure, the subsequent doubles and
 wide-level slices, Transform/form fixes, Keldeo/Mimicry (#342), Hospitality and
 Curious Medicine (#343), and Costar (#345). Preserve their proofs and retained
 covered IDs when changing shared callbacks; do not recreate already merged work.
-Poison Puppeteer's actual status callback and complete-turn proofs are the
-current slice, documented in [its validation record](POISON-PUPPETEER-VALIDATION.md).
+Poison Puppeteer (#353) adds the actual status callback and complete-turn proofs;
+see [its validation record](POISON-PUPPETEER-VALIDATION.md). Biome callbacks and
+their stock-mode reachability are the current slice, documented in
+[their validation record](BIOME-CALLBACK-VALIDATION.md).
 
-1. Close the remaining enabled callbacks against their actual owners: biome
-   weather/terrain, post-battle Honey Gather and Pickup, and encounter nature and
+1. Close the remaining enabled callbacks against their actual owners:
+   post-battle Honey Gather and Pickup, and encounter nature and
    double-battle chance integration. Existing helper arithmetic alone does not
    establish that a public owner invokes it.
 2. Finish the source inventory, including AI moveset attributes, constructor

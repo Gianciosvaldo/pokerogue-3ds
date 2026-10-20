@@ -844,20 +844,44 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         *pp->flag = x->overwrites;
         return 1;
     }
+    case PR_AC_PostBiomeChangeWeatherChangeAbAttr: {
+        int w = P(PostBiomeChangeWeatherChangeAbAttr, a)->weatherType;
+        /* This override requires old immutable weather. canSetWeather only
+         * tests inequality; the actual setter may then reject the change. */
+        GATE(pr_weather_immutable(bt->weather) && bt->weather != w);
+        if (!pp->simulated) {
+            if (!c->e) return -1;
+            pr_try_set_weather(bt, c->e, w, p);
+        }
+        return 1;
+    }
+    case PR_AC_PostBiomeChangeTerrainChangeAbAttr: {
+        int t = P(PostBiomeChangeTerrainChangeAbAttr, a)->terrainType;
+        GATE(bt->terrain != t);
+        if (!pp->simulated) {
+            if (!c->e) return -1;
+            pr_try_set_terrain(bt, c->e, t, false, p);
+        }
+        return 1;
+    }
     case PR_AC_PostSummonWeatherChangeAbAttr: {                         /* Drizzle, Drought, the primal weathers */
         int w = P(PostSummonWeatherChangeAbAttr, a)->weatherType;
-        if (!c->e) return -1;
         bool replaceable = w == WEATHER_TYPE_HEAVY_RAIN || w == WEATHER_TYPE_HARSH_SUN || w == WEATHER_TYPE_STRONG_WINDS
                            || w == WEATHER_TYPE_NONE || !pr_weather_immutable(bt->weather);
         GATE(replaceable && bt->weather != w);                          /* canSetWeather */
-        if (!pp->simulated) pr_try_set_weather(bt, c->e, w, p);
+        if (!pp->simulated) {
+            if (!c->e) return -1;
+            pr_try_set_weather(bt, c->e, w, p);
+        }
         return 1;
     }
     case PR_AC_PostSummonTerrainChangeAbAttr: {                         /* the Surges */
         int t = P(PostSummonTerrainChangeAbAttr, a)->terrainType;
-        if (!c->e) return -1;
         GATE(bt->terrain != t);                                         /* canSetTerrain */
-        if (!pp->simulated) pr_try_set_terrain(bt, c->e, t, false, p);
+        if (!pp->simulated) {
+            if (!c->e) return -1;
+            pr_try_set_terrain(bt, c->e, t, false, p);
+        }
         return 1;
     }
     case PR_AC_PreLeaveFieldRemoveSuppressAbilitiesSourceAbAttr:
