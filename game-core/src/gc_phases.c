@@ -248,6 +248,9 @@ static void learn(gc_run *run, int idx, int move, int slot)
     gc_event *ev = gc_ev_new(run, GC_EV_MOVE_LEARNED);
     if (ev) { ev->a = idx; ev->b = slot; ev->c = move; }
     gc_ev_msg(run, "battle:learnMove", 2, gc_m_mon(run, "pokemonName", 0, idx), pr_arg_move("moveName", move));
+    uint16_t form;
+    if (pr_learned_form_target(&run->bt, &m->b, &form))
+        gc_rq_push(run, gc_rp(RP_REWARD_FORM, idx, form, 0));
 }
 
 static bool learn_move_start(gc_run *run, gc_rphase *p)

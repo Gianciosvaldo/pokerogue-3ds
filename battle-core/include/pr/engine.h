@@ -39,6 +39,7 @@ typedef enum {
     PH_RETURN,                 /* Scene.newBattle reset-arena return, no replacement */
     PH_ILLUSION_BREAK,         /* PR_DEV_ILLUSION only (no upstream phase): shows the disguise ending, queued after the hit's DamageAnimPhase */
     PH_REVIVAL_BLESSING,       /* appended: player party selection, paused mid-phase */
+    PH_FORM_CHANGE, PH_END_EVOLUTION, /* appended: nonquiet scene form changes */
     PH_COUNT_
 } pr_phase_type;
 #define PH_FIRST_UNPORTED PH_TERA
@@ -499,6 +500,7 @@ void pr_leave_field(pr_battle *bt, pr_engine *e, pr_pokemon *p, bool clear_effec
 void pr_reset_turn_data(pr_pokemon *p);
 void pr_reset_summon_data(pr_pokemon *p);
 void pr_tera_end(pr_battle *bt, pr_pokemon *p);
+bool pr_learned_form_target(pr_battle *bt, const pr_pokemon *p, uint16_t *target);
 void pr_form_change(pr_battle *bt, const pr_pokemon *p, int trigger_class);
 void pr_form_change_delayed(pr_battle *bt, const pr_pokemon *p, int trigger_class);
 void pr_weather_form_changes(pr_battle *bt, bool revert, const pr_pokemon *source);

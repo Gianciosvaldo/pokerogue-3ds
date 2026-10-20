@@ -466,6 +466,7 @@ typedef struct pr_battle {
     int16_t biome;             /* arena.biomeId (BiomeId), read when has_biome */
     bool has_biome;
     uint32_t challenge_flags;  /* active gameMode challenges, bit per Challenges enum id */
+    bool challenge_flags_known; /* distinguishes an explicit empty set from missing mode context */
     int16_t weather_turns_left, weather_max_duration;
     int16_t terrain_turns_left, terrain_max_duration;
     bool player_teras_used_known; /* explicit arena.playerTerasUsed input */

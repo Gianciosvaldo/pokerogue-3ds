@@ -100,7 +100,10 @@ void gc_reward_change_form(gc_run *run, int party, int form)
     }
     pr_change_form_state(&run->bt, &m->b, form);
     if (m->b.ability_lookup_known) m->ability_index = (uint8_t)m->b.ability_index;
-    gc_ev_msg(run,"battlePokemonForm:formChange",1,pre_name);
+    if (form == 0) gc_ev_msg(run,"battlePokemonForm:revertChange",1,gc_m_mon(run,"pokemonName",0,party));
+    else if (m->b.ability == ABILITY_ID_DISGUISE) gc_ev_msg(run,"battlePokemonForm:disguiseChange",0);
+    else gc_ev_msg(run,"battlePokemonForm:formChange",1,pre_name);
+    pr_remove_tag(&run->bt, &run->eng, &m->b, BATTLER_TAG_TYPE_AUTOTOMIZED);
     gc_event *ev = gc_ev_new(run, GC_EV_EVOLVED);
     if (ev) { ev->a = party; ev->b = m->b.species; ev->c = m->b.species; }
 }

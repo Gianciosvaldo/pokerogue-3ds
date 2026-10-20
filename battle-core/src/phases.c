@@ -83,6 +83,28 @@ static bool native_ability_form_target(const pr_pokemon *p, int *target)
     }
 }
 
+/* The only enabled MoveLearned form registrations are Keldeo's raw moveset
+ * checks. Exposed so the external LearnMove owner can queue the cached target. */
+bool pr_learned_form_target(pr_battle *bt, const pr_pokemon *p, uint16_t *target)
+{
+    if (!p || p->species != SPECIES_ID_KELDEO) return false;
+    bool known = false;
+    for (int i = 0; i < p->n_moves; i++) known |= p->moves[i] == MOVE_ID_SECRET_SWORD;
+    const char *key = pr_pokemon_base_form(p)->form_key, *to = NULL;
+    if (!strcmp(key, "ordinary") && known) to = "resolute";
+    else if (!strcmp(key, "resolute") && !known) to = "ordinary";
+    if (!to) return false;
+    if (bt->game_mode < GAME_MODES_CLASSIC || bt->game_mode > GAME_MODES_CHALLENGE) {
+        pr_note_unported(bt, PR_FEAT_WAVE); return false;
+    }
+    if (bt->game_mode == GAME_MODES_DAILY) return false;
+    const pr_species *sp = pr_pokemon_species(p);
+    for (int i = 0; i < sp->nforms; i++) if (!strcmp(pr_forms[sp->form0 + i].form_key, to)) {
+        *target = (uint16_t)i; return true;
+    }
+    return false;
+}
+
 /* globalScene.triggerPokemonFormChange(pokemon, <trigger class>): mid-battle form changes */
 static void form_change_with_delay(pr_battle *bt, const pr_pokemon *p, int trigger_class, bool delayed)
 {
@@ -103,7 +125,11 @@ static void form_change_with_delay(pr_battle *bt, const pr_pokemon *p, int trigg
     int target_form = -1;
 
     bool stance = mon->species == SPECIES_ID_AEGISLASH;
-    if (mon->species == SPECIES_ID_MELOETTA && trigger_class == PR_FCT_SpeciesFormChangePostMoveTrigger) {
+    if (mon->species == SPECIES_ID_KELDEO && trigger_class == PR_FCT_SpeciesFormChangeMoveLearnedTrigger) {
+        uint16_t target;
+        if (!pr_learned_form_target(bt, mon, &target)) return;
+        target_form = target;
+    } else if (mon->species == SPECIES_ID_MELOETTA && trigger_class == PR_FCT_SpeciesFormChangePostMoveTrigger) {
         const pr_form *from = pr_pokemon_base_form(mon);
         const char *to = !strcmp(from->form_key,"aria") ? "pirouette"
             : !strcmp(from->form_key,"pirouette") ? "aria" : NULL;
@@ -205,7 +231,9 @@ static void form_change_with_delay(pr_battle *bt, const pr_pokemon *p, int trigg
     if (target_form >= 0 && target_form != mon->form) {
         pr_engine *e = bt->engine;
         if (!e) { pr_note_unported(bt, PR_FEAT_FORM_CHANGE); return; }
-        int ph = pr_phase_new(e, PH_QUIET_FORM_CHANGE, (int8_t)pr_battler_index(bt, mon));
+        bool nonquiet = mon->species == SPECIES_ID_KELDEO && mon->is_player;
+        int ph = pr_phase_new(e, nonquiet ? PH_FORM_CHANGE : PH_QUIET_FORM_CHANGE,
+                              (int8_t)pr_battler_index(bt, mon));
         if (ph < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return; }
         e->pool[ph].pokemon = mon;
         e->pool[ph].move_id = (uint16_t)target_form;
@@ -2808,6 +2836,24 @@ void pr_weather_form_changes(pr_battle *bt, bool revert, const pr_pokemon *sourc
     }
 }
 
+/* FormChangePhase: animation completion owns changeForm, then the form text
+ * and Autotomized removal. It does not run QuietFormChange's ability wrapper. */
+static void form_change_phase(pr_battle *bt, pr_engine *e, int ph)
+{
+    pr_pokemon *p = PH(ph)->pokemon;
+    if (!p) { pr_note_unported(bt, PR_FEAT_PHASE_0 + PH_FORM_CHANGE); return; }
+    pr_msg_arg pre = pr_arg_pokemon(bt, "preName", p);
+    pr_change_form_state(bt, p, PH(ph)->move_id);
+    if (!PH(ph)->sw_modal)
+        pr_phase_unshift(bt, e, pr_phase_new(e, PH_END_EVOLUTION, -1));
+    if (PH(ph)->move_id == 0)
+        pr_show_text(bt, e, pr_msg1("battlePokemonForm:revertChange", pr_arg_pokemon(bt, "pokemonName", p)));
+    else if (p->ability == ABILITY_ID_DISGUISE)
+        pr_show_text(bt, e, pr_msg0("battlePokemonForm:disguiseChange"));
+    else pr_show_text(bt, e, pr_msg1("battlePokemonForm:formChange", pre));
+    pr_remove_tag(bt, e, p, BATTLER_TAG_TYPE_AUTOTOMIZED);
+}
+
 static void quiet_form_change_phase(pr_battle *bt, pr_engine *e, int ph)
 {
     pr_pokemon *p = PH(ph)->pokemon;
@@ -4166,6 +4212,8 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_MOVE_REFLECT: move_reflect_phase(bt, e, ph); break;
     case PH_SHINY_SPARKLE: pr_event_add(bt, e, PR_EV_SHINY_SPARKLE, PH(ph)->battler, -1, 0, 0, NULL); break;
     case PH_ILLUSION_BREAK: pr_event_add(bt, e, PR_EV_ILLUSION_BREAK, PH(ph)->battler, -1, 0, 0, NULL); break;
+    case PH_FORM_CHANGE: form_change_phase(bt, e, ph); break;
+    case PH_END_EVOLUTION: break; /* UI force-message transition, no battle state */
     case PH_QUIET_FORM_CHANGE: quiet_form_change_phase(bt, e, ph); break;
     case PH_RETURN: return_phase(bt,e,ph); break;
     case PH_ATTEMPT_CAPTURE: attempt_capture_phase(bt, e, ph); break;

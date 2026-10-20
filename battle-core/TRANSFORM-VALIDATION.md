@@ -121,3 +121,13 @@ unported ability/form/partner lifecycles and final-boss/run prerequisites remain
 separate gates. Local sanitizer runs disable LeakSanitizer because of ptrace;
 normal CI remains required. No hardware/emulator rendering validation is
 claimed by these host and source checks.
+
+## Mainline rules and the pinned target
+
+The pinned copy phase stores `target.getSpeciesForm()`, preserving the current
+form rather than looking up the target's original base form. Its acquisition
+code has no G-Max-to-base exception. `SpeciesFormChange.canChange` and the scene
+form dispatcher also have no blanket `isTransformed()` rejection; each registered
+trigger supplies its own conditions. These are PokéRogue pin semantics, not a
+claim of exact mainline Pokémon mechanics. A mainline restriction would be an
+explicit custom deviation from the current parity target.
