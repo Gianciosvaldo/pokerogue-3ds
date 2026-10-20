@@ -43,13 +43,24 @@ passing percentage in a bounded random sample does not close a whole category.
 
 ## Current sequence
 
-1. Retain merged Flame Burst and partner cures/healing evidence, including their
-   shared damage/shield/RNG and healing callbacks.
-2. Retain attention/redirection and Commander/Order Up evidence; reconcile other
-   party-cure callers and the remaining interaction inventory.
-3. Wide-level progression and combat; preserve the wide save migration.
-4. Reconcile all remaining unsupported paths with the complete source inventory,
-   implement them in reviewable slices and run the final interaction audit.
+Merged evidence includes Helping Hand, Acupressure, the subsequent doubles and
+wide-level slices, Transform/form fixes, Keldeo/Mimicry (#342), Hospitality and
+Curious Medicine (#343), and Costar (#345). Preserve their proofs and retained
+covered IDs when changing shared callbacks; do not recreate already merged work.
+Poison Puppeteer's actual status callback and complete-turn proofs are the
+current slice, documented in [its validation record](POISON-PUPPETEER-VALIDATION.md).
+
+1. Close the remaining enabled callbacks against their actual owners: biome
+   weather/terrain, post-battle Honey Gather and Pickup, and encounter nature and
+   double-battle chance integration. Existing helper arithmetic alone does not
+   establish that a public owner invokes it.
+2. Finish the source inventory, including AI moveset attributes, constructor
+   closures/conditions, tags, modifiers, phases and unsupported/capacity paths.
+3. Reconcile identity/form/copy and persistent interaction evidence with later
+   merged slices; retain exact state, queues, text, RNG and all prior covered IDs.
+4. Finish wide-level Endless acceptance across generation, arithmetic,
+   progression, display and compatible saves, then publish the final evidence
+   audit and explicitly list any remaining external prerequisites.
 
 The order can change when an actual source mismatch reveals a prerequisite.
 Each slice retains its own reproducible validation and exact-head CI record.

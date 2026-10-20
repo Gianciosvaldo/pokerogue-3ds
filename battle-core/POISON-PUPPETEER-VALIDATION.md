@@ -41,9 +41,38 @@ Misty Terrain, Flying/Ground Tera, phase context, and levels through 1,000,000.
 Each seed records 9,856 applies, 3,376 added tags and 1,552 duration draws without
 a resulting tag. All four durations occur.
 
-Full-turn validation and final integration gates are in progress. These raw
-matrices alone do not establish completion of the status lifecycle or battle
-core. The complete source inventory and wide-level Endless acceptance remain open.
+Fourteen compiled production faults are caught and fifteen malformed captures
+are rejected. The actual pre-port dispatcher fails 54,784 of the first raw
+matrix's 65,536 cases.
+
+Both complete-turn matrices run real Toxic, status receipt, ability dispatch,
+confusion checks/lapse and poison damage through the native battle phases.
+Each contains 4,096 controlled callback cases and 4,096 unchanged wide combat
+controls. All 16,384 turns compare exactly, with no unsupported cases or source
+exceptions. Both native runs record 1,024 actual primary and 1,024 actual passive
+applications; reproduction enforces those floors. Controlled Endless encounters
+use a non-boss wave, because the source disables enemy passives at certain bosses.
+All four source and target field roles, ally/opponent targeting, Own Tempo,
+passive immunity, Levitate, Misty Terrain, Flying/Ground Tera and levels up to
+1,000,000 are covered. Both wide control sets retain over 1,200 raw damage
+results above INT32_MAX.
+
+Compiling the actual pre-port ObtainStatusEffectPhase against the new attribute
+still leaves 3,072 turns unsupported. The complete-turn wrapper rejects it;
+all 8,192 turns are exact with the actual caller port. Thus the owning proof
+cannot succeed merely by covering the unrelated wide controls.
+
+Retained regression checks include 42 cross matrices, 26 additional raw/turn
+and learn-form matrices, entry/context checks, and seven historical corpora
+with no previously covered IDs lost. Normal game-core tests pass, including
+identical saved and unsaved run digests. The clean 3DS rebuild passes after
+integrating UI PRs #346–#352. The full integrated app/custom/save suite passes with sanitizers enabled,
+including 10,000 normal runs and the normal save, quit/resume and custom modes.
+
+These fixtures do not close every held-item, fusion/Transform, challenge or
+persistent multi-turn interaction. Post-battle abilities, biome callbacks,
+encounter integration, the complete source inventory and wide-level Endless
+acceptance remain open. Bounded tests do not establish full battle-core completion.
 
 ## Reproduction
 

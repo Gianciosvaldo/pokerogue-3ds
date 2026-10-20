@@ -34,7 +34,7 @@ put('  const out: string[] = [`# DOUBLES_CONTRACT 1 ${N}`];','''  const fd=fs.op
   const out={push:(...rows:string[])=>fs.writeSync(fd,rows.join("\\n")+"\\n")};
   out.push(`# DOUBLES_CONTRACT 1 ${N}`);''')
 put('  fs.writeFileSync(OUT, out.join("\\n") + "\\n");','  fs.closeSync(fd);')
-put('  out.push(`# DOUBLES_COMPLETE ${written} ${threwCount}`);','''  if(puppetCounts.some(n=>n<700))throw Error(`Puppeteer ownership coverage ${puppetCounts}`);
+put('  out.push(`# DOUBLES_COMPLETE ${written} ${threwCount}`);','''  if(puppetCounts.some(n=>n<1024))throw Error(`Puppeteer ownership coverage ${puppetCounts}`);
   console.log(`PUPPETEER_TURNS primaryPassive=${puppetCounts}`);
   out.push(`# DOUBLES_COMPLETE ${written} ${threwCount}`);''')
 put('it("wide native combat doubles turns"','it("native Toxic owns Poison Puppeteer confusion"')
