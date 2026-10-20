@@ -81,7 +81,7 @@ splicer_ui_test: build/splicer_ui_test
 
 # unit test for shop UI and Lock Capsule visuals
 SHOP_CPPFLAGS := $(CPPFLAGS) -I../menus -I../include -I$(GC)/include -I$(GC)/src -I$(GC)/gen/out -I$(RC)/include -I$(RC)/gen/out -I$(RW)/include -I$(RW)/gen/out -I$(APP)/include
-SHOP_SRCS := shop_ui_test.c ../menus/shop_ui.c ../menus/item_ui.c ../gen/gm_item_ui.c ../menus/menus_names.c ../menus/menus_data.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+SHOP_SRCS := shop_ui_test.c ../menus/shop_ui.c ../source/reward_host.c ../menus/item_ui.c ../gen/gm_item_ui.c ../menus/menus_names.c ../menus/menus_data.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/shop_ui_test: $(SHOP_SRCS)
 	@mkdir -p build
 	$(CC) $(SHOP_CPPFLAGS) $(CFLAGS) $(SHOP_SRCS) -lm -o $@
