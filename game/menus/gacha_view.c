@@ -81,7 +81,7 @@ static void draw_machine_art(int i, float cx, float cy, int hatch) {
 }
 
 static void draw_machine(const gv_state* s, int i) {
-  const float cx = 180.0f * ((float)i - s->slide), cy = 18.0f;
+  const float cx = 180.0f * ((float)i - s->slide), cy = GV_MACHINE_Y;
   if (cx > W + GV_SIDE || cx + 320.0f < -GV_SIDE) return;
   draw_machine_art(i, cx, cy, 1);
   /* the plate */
@@ -249,7 +249,7 @@ void gv_draw_reveal_top(const gv_reveal* s) {
   draw_background();
   /* the machine the eggs came out of, its hatch opening while they leave (behind the eggs) */
   mui_clip(-GV_SIDE, -GV_BAND, W + 2.0f * GV_SIDE, H + 2.0f * GV_BAND);
-  if (s->machine >= 0 && s->machine < GV_MACHINES) draw_machine_art(s->machine, 0.0f, 18.0f, s->hatch);
+  if (s->machine >= 0 && s->machine < GV_MACHINES) draw_machine_art(s->machine, 0.0f, GV_MACHINE_Y, s->hatch);
   mui_clip_off();
   if (s->top_title[0]) {
     mui_window(60, -GV_BAND, 200, s->top_sub[0] ? 30 : 20);

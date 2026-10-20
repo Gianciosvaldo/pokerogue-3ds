@@ -38,9 +38,12 @@ extern "C" {
 #define CAP_OPEN_MS 120.0f
 #define CAP_DEADLINE_MS 1500.0f
 
-/* The field the capsules move in is the top screen's 320 x 180 canvas (ui.h, UI_FIELD). */
+/* The field the capsules move in is the top screen's 320 x 180 canvas (ui.h, UI_FIELD), and the screen around it reaches 30 px above
+ * and below it (the capsule screens fill the whole 400 x 240 top screen, gacha_view.h GV_BAND): the capsules rest in the bottom band. */
 #define CAP_FIELD_W 320
 #define CAP_FIELD_H 180
+#define CAP_SCREEN_TOP (-30)
+#define CAP_SCREEN_BOTTOM 210
 #define CAP_RADIUS 10
 
 typedef struct {
@@ -89,6 +92,14 @@ bool cap_init(cap_model* m, const cap_fixture* f);
 
 /* The slot of item i of n: where its capsule ends up, in field pixels. */
 void cap_slot(int n, int i, float* x, float* y);
+/* Where a capsule at height y (resting at slot height sy) is drawn on the whole 400 x 240 top screen (field coordinates; the screen
+ * reaches 30 px above and below the field, gacha_view.h GV_BAND). The motion and its timeline stay the field's; only the drawing is
+ * stretched: the chute moves from 14 px above the field's top edge to 14 px above the screen's (CAP_SCREEN_CHUTE_Y), a slot down by the
+ * bottom band, so the capsules come in from off the screen and rest under the machine, which stands on the message window. A bounce
+ * above the slot is stretched by the same factor. */
+#define CAP_SCREEN_BAND 30.0f
+#define CAP_SCREEN_CHUTE_Y (-14.0f - CAP_SCREEN_BAND)
+float cap_screen_y(float y, float sy);
 
 /* Accepts the pull: only from CAP_IDLE (true once, false for every later call). */
 bool cap_pull(cap_model* m);

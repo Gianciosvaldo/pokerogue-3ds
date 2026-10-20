@@ -33,6 +33,11 @@ void cap_slot(int n, int i, float* x, float* y) {
   *y = FLOOR_Y - (float)(rows - 1 - row) * SLOT_DY;
 }
 
+float cap_screen_y(float y, float sy) {
+  const float to = sy + CAP_SCREEN_BAND, k = (to - CAP_SCREEN_CHUTE_Y) / (sy - CHUTE_Y);
+  return to - (sy - y) * k;
+}
+
 bool cap_init(cap_model* m, const cap_fixture* f) {
   if (!m) return false;
   memset(m, 0, sizeof *m);

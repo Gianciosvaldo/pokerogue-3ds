@@ -187,11 +187,11 @@ static void check_screen(int which) {
     static const char* const banned[] = {"Buy", "buy ", "Purchase", "purchase", "Price", "price", "oucher", "oin", "urrency", "nlock", "caught", "atch"};
     for (size_t k = 0; k < sizeof banned / sizeof banned[0]; k++) CHECK(!strstr(d->text, banned[k]), "\"%s\" offers or implies \"%s\"", d->text, banned[k]);
   }
-  /* the capsules stay near the field (the chute is above its top edge) */
+  /* the capsules stay near the screen (the chute is above its top edge, cap_screen_y) */
   if (which == 0)
     for (int i = 0; i < n_rects; i++)
       if (g_rects[i].w <= 60) /* the capsules' parts; the backdrop panels are bigger */
-        CHECK(g_rects[i].x >= -30 && g_rects[i].x + g_rects[i].w <= 350 && g_rects[i].y >= -40 && g_rects[i].y <= 200, "a rectangle at (%.0f, %.0f) is off the field", g_rects[i].x, g_rects[i].y);
+        CHECK(g_rects[i].x >= -30 && g_rects[i].x + g_rects[i].w <= 350 && g_rects[i].y >= -70 && g_rects[i].y <= 230, "a rectangle at (%.0f, %.0f) is off the screen", g_rects[i].x, g_rects[i].y);
 }
 
 static cap_fixture fx(int n) {
@@ -234,6 +234,24 @@ static void test_fixture_validity(void) {
     (void)t;
   }
   CHECK(!capsule_debug_fixture(0, &f) && !capsule_debug_fixture(26, &f) && !capsule_debug_fixture(5, NULL), "the debug fixture refuses 0, 26 and NULL");
+}
+
+/* cap_screen_y: the capsules come in from above the top screen and rest in its bottom band, under the machine */
+static void test_screen_y(void) {
+  for (int n = 1; n <= CAP_MAX; n++) {
+    cap_model m;
+    cap_fixture f = fx(n);
+    CHECK(cap_init(&m, &f), "init %d", n);
+    for (int i = 0; i < n; i++) {
+      const cap_body* b = &m.body[i];
+      const float chute = cap_screen_y(b->y, b->sy), rest = cap_screen_y(b->sy, b->sy);
+      CHECK(chute + CAP_RADIUS < CAP_SCREEN_TOP, "capsule %d of %d leaves the chute off the screen (%.1f)", i, n, chute);
+      CHECK(fabsf(rest - (b->sy + CAP_SCREEN_BAND)) < 0.01f && rest + CAP_RADIUS <= CAP_SCREEN_BOTTOM, "capsule %d of %d rests one band lower (%.1f)", i, n, rest);
+      if (i / CAP_COLS == (n - 1) / CAP_COLS) CHECK(rest + CAP_RADIUS > CAP_FIELD_H, "capsule %d of %d (the bottom row) rests in the bottom band (%.1f)", i, n, rest);
+      CHECK(cap_screen_y((b->y + b->sy) / 2, b->sy) > chute && cap_screen_y((b->y + b->sy) / 2, b->sy) < rest, "and falls in between");
+      CHECK(cap_screen_y(b->sy - 5, b->sy) < rest, "a bounce stays above its slot");
+    }
+  }
 }
 
 static void test_slots(void) {
@@ -646,6 +664,10 @@ static void test_skip_callbacks_and_dwell(void) {
     CHECK(c.settled == 1, "a skip shows the supplied results at once: on_settled once");
     draw(0);
     check_screen(0);
+    float low = -1000;
+    for (int i = 0; i < n_rects; i++)
+      if (g_rects[i].w == 20 && g_rects[i].y + 20 > low) low = g_rects[i].y + 20;
+    CHECK(low > CAP_FIELD_H && low <= CAP_SCREEN_BOTTOM, "the settled capsules are drawn resting in the screen's bottom band (lowest edge %.0f)", low);
     draw(1);
     check_screen(1);
     CHECK(has_text("1. Fixture result 1"), "the list shows the fixture in its order");
@@ -975,6 +997,7 @@ static void fuzz(int sessions) {
 int main(int argc, char** argv) {
   test_fixture_validity();
   test_slots();
+  test_screen_y();
   test_timeline();
   test_hatch();
   test_units_and_frame_rate();

@@ -202,7 +202,7 @@ static void build_state(gv_reveal* v) {
   v->n = C.m.fx.n;
   for (int i = 0; i < C.m.fx.n; i++) {
     const cap_body* b = &C.m.body[i];
-    v->egg[i] = (gv_egg){b->x, b->y, b->open, b->phase, C.m.fx.item[i].tier, C.m.stage == CAP_SETTLED && i == C.sel};
+    v->egg[i] = (gv_egg){b->x, cap_screen_y(b->y, b->sy), b->open, b->phase, C.m.fx.item[i].tier, C.m.stage == CAP_SETTLED && i == C.sel};
   }
   v->knob = C.m.knob;
   v->machine = C.a.machine;
