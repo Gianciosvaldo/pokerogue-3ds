@@ -328,7 +328,24 @@ static void sl_draw(ui_screen* s, rr_screen which) {
   }
 }
 
-static ui_screen g_screen = {"save-slots", UI_FADE, NULL, NULL, NULL, sl_input, sl_update, sl_draw, NULL};
+/* A tap (physical px): on a slot other than the cursor's it moves the cursor there; on the cursor's own slot it is A. With the message
+ * box up it is a button press as well (the text first, as with the buttons). */
+static bool sl_touch(ui_screen* s, float x, float y) {
+  if (S.done) return true;
+  if (S.msg_on) return sl_input(s, BTN_ACTION);
+  for (int i = 0; i < RSV_SLOTS; i++) {
+    const float top = 8 + i * PITCH - S.scroll;
+    if (x < 2 || x >= 2 + SLOT_W || y < top || y >= top + SLOT_H || y >= 240) continue;
+    if (i == S.cursor) return sl_input(s, BTN_ACTION);
+    S.cursor = i;
+    keep_cursor_in_view();
+    ui_play_select();
+    return true;
+  }
+  return false;
+}
+
+static ui_screen g_screen = {"save-slots", UI_FADE, NULL, NULL, NULL, sl_input, sl_update, sl_draw, NULL, sl_touch};
 
 void slot_screen_open(const slots_args* a) {
   memset(&S, 0, sizeof S);

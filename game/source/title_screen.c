@@ -31,6 +31,17 @@ static bool ts_input(ui_screen* s, ui_button b) {
   return true;
 }
 
+static bool ts_touch(ui_screen* s, float x, float y) {
+  (void)s;
+  if (!optlist_touch(&T.list, x, ui_bottom_ui_y(y))) return false;
+  if (T.list.chosen >= 0) {
+    const title_choice c = T.choice[T.list.chosen];
+    T.list.chosen = -1;
+    if (T.args.on_choose) T.args.on_choose(c, T.args.arg);
+  }
+  return true;
+}
+
 static void ts_draw(ui_screen* s, rr_screen which) {
   (void)s;
   if (which == RR_TOP) {
@@ -65,7 +76,7 @@ static void ts_enter(ui_screen* s) {
   bgm_on_title();
 }
 
-static ui_screen g_screen = {"title", UI_FADE, ts_enter, NULL, NULL, ts_input, NULL, ts_draw, NULL};
+static ui_screen g_screen = {"title", UI_FADE, ts_enter, NULL, NULL, ts_input, NULL, ts_draw, NULL, ts_touch};
 
 void title_screen_open(const title_args* a) {
   memset(&T, 0, sizeof T);

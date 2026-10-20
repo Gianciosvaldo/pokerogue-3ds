@@ -197,6 +197,12 @@ bool optlist_input(optlist* l, ui_button b) {
 static int n_yn_draws;
 static float g_yn_x, g_yn_y;
 static char g_yn_labels[2][16];
+bool optlist_touch(optlist* l, float x, float y) { /* ui_widgets.c's: a row picks itself (rows of 16 px from 7 px under the window's top) */
+  const float h = (l->n + 1) * 16.0f - 2, left = l->x - l->w, top = l->y - h;
+  if (x < left || x >= l->x || y < top + 7 || y >= top + 7 + l->n * 16.0f) return false;
+  l->cursor = (int)((y - top - 7) / 16);
+  return optlist_input(l, BTN_ACTION);
+}
 void optlist_draw(const optlist* l) {
   n_yn_draws++;
   g_yn_x = l->x;
@@ -232,6 +238,8 @@ static bool open_menu(int turn, bool unsaved) {
 
 static ui_screen* top(void) { return g_depth ? g_stack[g_depth - 1] : NULL; }
 static bool press(ui_button b) { return top() && top()->input(top(), b); }
+/* a tap on the bottom screen at physical (x, y) */
+static bool tap(float x, float y) { return top() && top()->touch && top()->touch(top(), x, y); }
 static void tick(float ms) {
   if (top() && top()->update) top()->update(top(), ms);
 }
@@ -388,6 +396,26 @@ int main(void) {
   CHECK(n_quit == 1 && depth_at_quit == 0, "on_quit saw the stack without the menu (depth %d)", depth_at_quit);
   CHECK(open_menu(1, false) && press(BTN_CANCEL), "opens and closes");
   CHECK(n_close == 1 && depth_at_close == 0, "on_close saw the stack without the menu (depth %d)", depth_at_close);
+
+  /* ---- taps: the window is x 218..319 and physical y 61..92 (the one row, 7 px of padding above it and 8 below) */
+  CHECK(open_menu(1, false), "opens for taps");
+  CHECK(!tap(100, 70) && !tap(250, 40) && !tap(250, 100), "a tap beside, above or below the entry is not taken");
+  CHECK(n_quit == 0 && g_depth == 1, "and nothing happens");
+  CHECK(tap(250, 70), "a tap on the entry is taken");
+  CHECK(n_quit == 1 && g_depth == 0, "Save and Quit in the first turn quits, as A does: quit %d depth %d", n_quit, g_depth);
+  CHECK(open_menu(2, false) && tap(250, 70), "turn 2: the tap starts the warning");
+  CHECK(n_quit == 0 && g_depth == 1, "which asks before quitting");
+  CHECK(!tap(250, 70), "a second tap on the entry while it types is not taken");
+  type_out();
+  CHECK(n_yn_draws > 0, "the Yes / No box is up");
+  CHECK(!tap(100, 160) && !tap(200, 150) && !tap(300, 160), "taps beside and above the Yes / No box (x 177..218) are not taken");
+  CHECK(tap(200, 178) && n_quit == 0 && run_menu_is_open(), "a tap on No (physical y 169..185) goes back to the menu");
+  draw(1);
+  CHECK(n_wins == 1 && n_yn_draws == 0, "box and message gone");
+  CHECK(tap(250, 70), "the entry again");
+  type_out();
+  CHECK(tap(200, 160), "a tap on Yes (physical y 153..169)");
+  CHECK(n_quit == 1 && g_depth == 0 && !run_menu_is_open(), "quits: quit %d depth %d", n_quit, g_depth);
 
   printf("%d checks, %d failed\n", checks, failed);
   return failed ? 1 : 0;

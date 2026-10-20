@@ -198,6 +198,30 @@ int main(void) {
   type(5000);
   CHECK(n_vars == 8 && !strcmp(shown(), "1234567890"), "eight markers, all the text (%d, '%s')", n_vars, shown());
 
+  /* option list taps (optlist_touch): a tap on a row is the cursor on it and A; the window's padding, outside it and a disabled row take nothing */
+  {
+    const char* labels[5] = {"One", "Two", "Three", "Four", "Five"};
+    optlist l;
+    optlist_init(&l, labels, 3);
+    const float top = l.y - ((3 + 1) * 16.0f - 2), rx = l.x - 5; /* the window's top, a column inside it */
+    CHECK(optlist_touch(&l, rx, top + 7 + 3) && l.cursor == 0 && l.chosen == 0, "a tap on the first row picks it (%d, %d)", l.cursor, l.chosen);
+    l.chosen = -1;
+    CHECK(optlist_touch(&l, rx, top + 7 + 2 * 16 + 15) && l.cursor == 2 && l.chosen == 2, "on the last row's bottom pixel: it (%d, %d)", l.cursor, l.chosen);
+    l.chosen = -1;
+    CHECK(!optlist_touch(&l, rx, top + 6) && l.chosen == -1, "the padding above the first row is not a row");
+    CHECK(!optlist_touch(&l, rx, top + 7 + 3 * 16) && l.chosen == -1, "nor the padding below the last");
+    CHECK(!optlist_touch(&l, l.x - l.w - 1, top + 20) && !optlist_touch(&l, l.x, top + 20) && l.chosen == -1, "nor the sides of the window");
+    l.disabled[1] = true;
+    CHECK(!optlist_touch(&l, rx, top + 7 + 16 + 3) && l.chosen == -1, "a disabled row picks nothing");
+    /* a long list scrolls: the rows on screen are scroll + 0..2 */
+    optlist_init(&l, labels, 5);
+    l.max_rows = 3;
+    for (int i = 0; i < 3; i++) optlist_input(&l, BTN_DOWN);
+    CHECK(l.scroll == 1 && l.cursor == 2, "(down three times scrolls once: %d, %d)", l.scroll, l.cursor);
+    const float top3 = l.y - ((3 + 1) * 16.0f - 2);
+    CHECK(optlist_touch(&l, rx, top3 + 7 + 3) && l.chosen == 1 && l.cursor == 0, "the first visible row is item scroll + 0 (%d, %d)", l.chosen, l.cursor);
+  }
+
   printf("msgbox_test: %d checks, %d failed\n", checks, failed);
   return failed ? 1 : 0;
 }

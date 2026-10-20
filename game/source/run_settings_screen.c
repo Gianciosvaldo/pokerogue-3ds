@@ -107,7 +107,15 @@ static void rs_draw(ui_screen* s, rr_screen which) {
   text_draw(TS_WINDOW, 12, -39, HELP[R.cursor], &help);
 }
 
-static ui_screen g_screen = {"run-settings", UI_OVERLAY, NULL, NULL, NULL, rs_input, NULL, rs_draw, NULL};
+/* A tap on a row is the cursor on it and A: the toggles change, the last row starts the run */
+static bool rs_touch(ui_screen* s, float x, float y) {
+  const float w = 200, h = 16 + ROWS * ROW_H, left = 160 - w / 2, top = -48 - h - 8, uy = ui_bottom_ui_y(y);
+  if (x < left || x >= left + w || uy < top + 8 || uy >= top + 8 + ROWS * ROW_H) return false;
+  R.cursor = (int)((uy - top - 8) / ROW_H);
+  return rs_input(s, BTN_ACTION);
+}
+
+static ui_screen g_screen = {"run-settings", UI_OVERLAY, NULL, NULL, NULL, rs_input, NULL, rs_draw, NULL, rs_touch};
 
 void rset_open(const rset_args* a) {
   memset(&R, 0, sizeof R);

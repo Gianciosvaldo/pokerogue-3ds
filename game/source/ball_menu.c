@@ -77,7 +77,17 @@ static void bm_draw(ui_screen* s, rr_screen which) {
   ui_cursor(B.x + 12, top + 15 + (6 + B.cursor * 96) / 6.f);
 }
 
-static ui_screen g_screen = {"ball", UI_OVERLAY, NULL, NULL, NULL, bm_input, NULL, bm_draw, NULL};
+/* A tap on a row of the window picks it, as the cursor on it and A do (the last row, Cancel, closes) */
+static bool bm_touch(ui_screen* s, float x, float y) {
+  const float uy = ui_bottom_ui_y(y), h = 32 + 480 / 6.f, top = B.y - h;
+  if (x < B.x || x >= B.x + B.w || uy < top || uy >= B.y) return false;
+  const int row = (int)((uy - top - 8) / 16);
+  if (row < 0 || row > BALL_TYPES) return false;
+  B.cursor = row;
+  return bm_input(s, BTN_ACTION);
+}
+
+static ui_screen g_screen = {"ball", UI_OVERLAY, NULL, NULL, NULL, bm_input, NULL, bm_draw, NULL, bm_touch};
 
 void ball_menu_open(const int counts[BALL_TYPES], void (*on_pick)(int, void*), void* arg) {
   memcpy(B.counts, counts, sizeof B.counts);
