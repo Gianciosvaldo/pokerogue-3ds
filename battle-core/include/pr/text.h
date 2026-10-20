@@ -32,6 +32,7 @@ typedef enum {
     PR_ARG_TEMPLATE,       /* text whose $t(key) segments are translated (s), as i18next nests a value
                             * after interpolating it: Trainer.getName()'s "$t(titles:gymLeader) $t(trainerNames:brock)" */
     PR_ARG_INT64,          /* integer stored as low v / high fusion_v; no string lifetime */
+    PR_ARG_MONEY_EN_US,    /* integer Number.toLocaleString("en-US"); binary64 in low/high words */
 } pr_msg_arg_kind;
 
 typedef struct {
@@ -84,6 +85,10 @@ typedef struct {
 /* The message as text, NUL-terminated in out (cut to cap - 1 bytes). Returns the length it
  * needed. A key the locale lacks comes out as the key without its namespace, as i18next does. */
 size_t pr_msg_format(const pr_msg *m, const pr_text_source *src, char *out, size_t cap);
+
+/* Integer Number.toLocaleString("en-US"), independent of translation language.
+ * Integral doubles/non-finite values only; returns required bytes (0 for a fraction). */
+size_t pr_money_en_us(double value, char *out, size_t cap);
 
 /* The raw string at key ("battle:useMove", "move:tackle.name") with no interpolation, unescaped
  * into out. Returns its length, or 0 when missing. */

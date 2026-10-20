@@ -241,7 +241,7 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             bt->post_battle_loot = (int)inum(l, "loot");
             bt->battle_score = dnum(l, "score");
             has_money = field(l, "money") != NULL;
-            bt->money_scattered = has_money ? (int32_t)inum(l, "money") : 0;
+            bt->money_scattered = has_money ? dnum(l, "money") : 0;
             bt->battle_type = (uint8_t)inum(l, "type");
             bt->double_battle = inum(l, "double") != 0;
             bt->max_exp_level = (int)inum(l, "mel");
@@ -747,7 +747,7 @@ static void dump_state(lines_t *L, const pr_battle *bt, const case_state *cs, bo
     }
     LIST(&s, np, ',', "%u", part[i]);
     sb(&s, " loot=%d score=%.17g", bt->post_battle_loot, bt->battle_score);
-    if (has_money) sb(&s, " money=%d", bt->money_scattered);
+    if (has_money) sb(&s, " money=%.0f", bt->money_scattered);
     sb(&s, " type=%d double=%d mel=%d bar=%d ball=", bt->battle_type, bt->double_battle, bt->max_exp_level,
        bt->ability_bar_visible);
     num_or_u(&s, bt->last_used_pokeball, -1);

@@ -463,6 +463,15 @@ static void put_arg(obuf *o, const pr_msg_arg *a, const pr_msg *m, const pr_text
 {
     char key[96];
     switch (a->kind) {
+    case PR_ARG_MONEY_EN_US: {
+        uint64_t bits = ((uint64_t)a->fusion_v << 32) | a->v;
+        double value;
+        char b[416];
+        memcpy(&value, &bits, sizeof value);
+        pr_money_en_us(value, b, sizeof b);
+        puts_(o, b);
+        break;
+    }
     case PR_ARG_INT64: {
         char b[32];
         int64_t value = (int64_t)(((uint64_t)a->fusion_v << 32) | a->v);

@@ -459,7 +459,7 @@ static bool handle_event(int i) {
   switch (e->kind) {
     case GC_EV_MESSAGE:
       if (msg_is(e, "battle:trainerDefeated")) bgm_on_trainer_defeated(&G.run); /* TrainerVictoryPhase.start */
-      put_gc_msg(&e->msg);
+      if (put_gc_msg(&e->msg) && e->prompt) G.ev[G.n_ev - 1].prompt = true;
       break;
 
     case GC_EV_WAVE:

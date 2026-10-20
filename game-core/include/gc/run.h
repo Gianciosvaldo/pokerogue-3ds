@@ -54,7 +54,7 @@ typedef enum {
     GC_EV_LEVEL_UP,      /* a = party index, b = the new level (stats are already updated), c = the level before */
     GC_EV_MOVE_LEARNED,  /* a = party index, b = move slot, c = MoveId */
     GC_EV_EVOLVED,       /* a = party index, b = species before, c = species after */
-    GC_EV_MONEY,         /* a = the change, b = money now */
+    GC_EV_MONEY,         /* money_change / money_after; a/b truncate in-range values, otherwise zero */
     GC_EV_TURN,          /* a turn is about to run: a = turn number (its events follow as GC_EV_BATTLE) */
     GC_EV_MYSTERY,       /* MysteryEncounterSelectPhase: a = MysteryEncounterType, b = tier, c = wave */
     GC_EV_SAVE_POINT,    /* the run has reached upstream's save point (the start of an encounter): a good
@@ -69,6 +69,8 @@ typedef struct {
      * b mirrors the amount only when it fits int32, otherwise zero. Runtime
      * events are not part of the session save format. */
     double exp_amount, exp_before;
+    double money_change, money_after; /* GC_EV_MONEY only: native Numbers, never narrowed */
+    bool prompt;               /* GC_EV_MESSAGE: require confirmation */
 } gc_event;
 
 /* ---------------------------------------------------------------- screens and choices */

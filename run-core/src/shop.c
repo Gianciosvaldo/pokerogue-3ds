@@ -4,6 +4,7 @@
  * src/phases/money-reward-phase.ts). The random reward options (the modifier pools and their
  * weights) aren't ported yet. The JS each function replaces is quoted above it. */
 #include "pr/run.h"
+#include "pr/battle.h"
 #include <math.h>
 
 #define MAX_SAFE_INTEGER 9007199254740991.0
@@ -20,9 +21,7 @@ const char *const pr_shop_item_name[PR_SHOP_ITEM_COUNT_] = {
  *   return Math.floor(moneyValue / 10) * 10; */
 double pr_run_get_wave_money_amount(int wave, double money_multiplier)
 {
-    double set = ceil(wave / 10.0) - 1;
-    double value = js_pow((set + 1 + (0.75 + (fmod(wave - 1, 10) + 1) / 10)) * 100, 1 + 0.005 * set) * money_multiplier;
-    return floor(value / 10) * 10;
+    return pr_wave_money_amount(wave, money_multiplier);
 }
 
 /* new ModifierTypeOption(type, upgradeCount, cost): this.cost = Math.min(Math.round(cost), Number.MAX_SAFE_INTEGER) */

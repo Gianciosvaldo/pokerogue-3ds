@@ -802,3 +802,16 @@ test: sync-nature-host-test
 sync-nature-host-test: $(BUILD)/sync_nature_host_test
 	$(BUILD)/sync_nature_host_test
 .PHONY: sync-nature-host-test
+
+all: $(BUILD)/wide_money_test
+$(BUILD)/wide_money_test: tests/wide_money_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(MAKE) -s -C $(BATTLE_CORE) build/wide-substitute-frame.inc
+	$(CC) $(CPPFLAGS) -I$(BATTLE_CORE)/build $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+
+all: $(BUILD)/honey_money_host_test
+test: honey-money-host-test
+honey-money-host-test: $(BUILD)/honey_money_host_test
+	$(BUILD)/honey_money_host_test
+$(BUILD)/honey_money_host_test: tests/honey_money_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: honey-money-host-test

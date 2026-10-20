@@ -122,7 +122,8 @@ static inline gc_rphase gc_rp(int type, int a, int b, int c) { gc_rphase p = {(u
 
 /* ---- events (src/gc_run.c) ---- */
 gc_event *gc_ev_new(gc_run *run, int kind);
-void gc_ev_msg(gc_run *run, const char *key, int n, ...);   /* n pr_msg_arg values follow */
+void gc_ev_money(gc_run *run, double change);
+gc_event *gc_ev_msg(gc_run *run, const char *key, int n, ...);   /* n pr_msg_arg values follow */
 pr_msg_arg gc_m_mon(gc_run *run, const char *name, int side, int idx);   /* getPokemonNameWithAffix */
 pr_msg_arg gc_m_mon_name(gc_run *run, const char *name, int side, int idx);   /* getNameToRender */
 pr_msg_arg gc_m_trainer(gc_run *run, const char *name, int which);       /* trainer.getName (GC_TNAME_*) */

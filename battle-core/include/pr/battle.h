@@ -447,7 +447,7 @@ typedef struct pr_battle {
     int post_battle_loot;      /* currentBattle.postBattleLoot.length */
     double battle_score;       /* currentBattle.battleScore */
     double money;             /* globalScene.money; independent of Pay Day */
-    int32_t money_scattered;   /* currentBattle.moneyScattered (Pay Day) */
+    double money_scattered;    /* currentBattle.moneyScattered: native Number (Pay Day, Honey Gather) */
     const char *player_name;   /* loggedInUser.username for Celebrate's text; NULL: none (upstream shows "") */
     /* A trainer battle's trainer (currentBattle.trainer). trainer_names: getName(TRAINER) and
      * getName(TRAINER_PARTNER), for "{{trainerName}} sent out..."; NULL shows "" (upstream's
@@ -585,6 +585,7 @@ typedef struct pr_ab_params {
     const int8_t *move_targets; /* PostDancingMoveAbAttr: original targets */
     int n_move_targets;
     bool on_gain;                  /* applyOnGainAbAttrs: only attrs that shouldActivateOnGain() */
+    bool victory;                  /* PostBattleAbAttr */
     pr_nature_setter set_nature;    /* SyncEncounterNature: scene-owned raw/custom nature, optional */
     void *nature_ctx;
 } pr_ab_params;
@@ -732,6 +733,8 @@ bool pr_move_can_be_multi_strike_enhanced_ex(pr_battle *bt, int move, const pr_p
 bool pr_is_new_biome(pr_battle *bt);
 /* Math.pow as the reference JS engine computes it (src/js_math.c) */
 double js_pow(double x, double y);
+/* BattleScene.getWaveMoneyAmount, shared by battle effects and run economy. */
+double pr_wave_money_amount(int wave, double multiplier);
 
 /* ---- move attributes (src/move_attrs.c) ---- */
 /* randSeedInt(range) inside executeWithSeedOffset(fn, turn << 6, waveSeed) (Magnitude, Fickle Beam);

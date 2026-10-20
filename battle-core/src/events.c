@@ -77,6 +77,14 @@ pr_msg_arg pr_arg_int64(const char *name, int64_t v)
     a.fusion_v = (uint32_t)(bits >> 32);
     return a;
 }
+pr_msg_arg pr_arg_money_en_us(const char *name, double v)
+{
+    uint64_t bits;
+    memcpy(&bits, &v, sizeof bits);
+    pr_msg_arg a = arg(name, PR_ARG_MONEY_EN_US, (uint32_t)bits, NULL);
+    a.fusion_v = (uint32_t)(bits >> 32);
+    return a;
+}
 pr_msg_arg pr_arg_move(const char *name, int move) { return arg(name, PR_ARG_MOVE, (uint32_t)move, NULL); }
 pr_msg_arg pr_arg_ability(const char *name, int ability) { return arg(name, PR_ARG_ABILITY, (uint32_t)ability, NULL); }
 pr_msg_arg pr_arg_type(const char *name, int type) { return arg(name, PR_ARG_TYPE, (uint32_t)type, NULL); }

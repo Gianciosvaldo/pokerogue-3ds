@@ -715,9 +715,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         return;
     }
     case PR_AC_MoneyAttr: {                              /* Pay Day: moneyScattered += getWaveMoneyAmount(0.2) */
-        int w = bt->wave_index, set = (int)ceil(w / 10.0) - 1;
-        double v = js_pow((set + 1 + (0.75 + (((w - 1) % 10) + 1) / 10.0)) * 100, 1 + 0.005 * set) * 0.2;
-        bt->money_scattered += (int32_t)(floor(v / 10) * 10);
+        bt->money_scattered += pr_wave_money_amount(bt->wave_index, 0.2);
         pr_queue_msg(bt, e, pr_msg0("moveTriggers:coinsScatteredEverywhere"));
         return;
     }

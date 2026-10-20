@@ -53,11 +53,12 @@ their stock-mode reachability merged in #354; see
 [their validation record](BIOME-CALLBACK-VALIDATION.md). Double-battle encounter
 chance and its actual wild/trainer owners merged in #355; see
 [its validation record](DOUBLE-CHANCE-VALIDATION.md). Synchronize encounter
-nature and its raw/custom nature setter are the current slice; see
-[its validation record](SYNC-NATURE-VALIDATION.md).
+nature and its raw/custom nature setter merged in #356; see
+[its validation record](SYNC-NATURE-VALIDATION.md). Honey Gather and shared wide
+money handling are the current slice; see [their validation record](HONEY-MONEY-VALIDATION.md).
 
 1. Close the remaining enabled callbacks against their actual owners:
-   Synchronize encounter nature, then post-battle Honey Gather and Pickup.
+   Synchronize encounter nature merged in #356. Honey Gather and shared wide-money validation are active; Pickup remains next.
    Existing helper arithmetic alone does not
    establish that a public owner invokes it.
 2. Finish the source inventory, including AI moveset attributes, constructor
