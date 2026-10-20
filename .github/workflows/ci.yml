@@ -26,6 +26,8 @@ jobs:
         run: make -C battle-core summon-entry-host-test tera-phase-host-test
       - name: Run game-core tests
         run: make -C game-core test
+      - name: Build Synchronize native comparison runner
+        run: make -C game-core build/sync_nature_test
 
   game-tests:
     runs-on: ubuntu-24.04

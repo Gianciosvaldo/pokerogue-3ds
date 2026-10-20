@@ -553,6 +553,9 @@ int pr_closures_ported(void);
 /* ---- ability attributes (src/ab_attrs.c) ----
  * One params struct for every applyAbAttrs call site; each site fills what its
  * attribute family reads. Pointers are upstream's NumberHolder/BooleanHolder. */
+/* A scene can keep the underlying/custom nature outside pr_pokemon, whose
+ * nature is the effective getNature() used by battle/stat callers. */
+typedef bool (*pr_nature_setter)(pr_battle *, pr_pokemon *, int nature, void *ctx);
 typedef struct pr_ab_params {
     const pr_pokemon *pokemon;     /* the ability's owner */
     const pr_pokemon *opponent;    /* attacker/defender, or FieldMultiplyStat's target */
@@ -582,6 +585,8 @@ typedef struct pr_ab_params {
     const int8_t *move_targets; /* PostDancingMoveAbAttr: original targets */
     int n_move_targets;
     bool on_gain;                  /* applyOnGainAbAttrs: only attrs that shouldActivateOnGain() */
+    pr_nature_setter set_nature;    /* SyncEncounterNature: scene-owned raw/custom nature, optional */
+    void *nature_ctx;
 } pr_ab_params;
 /* applyAbAttrs("<cls>", params): ability then passive, conditions, canApply, apply. */
 void pr_apply_ab_attrs(pr_battle *bt, uint16_t cls, pr_ab_params *pp);

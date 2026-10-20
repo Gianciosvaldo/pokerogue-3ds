@@ -51,12 +51,14 @@ Poison Puppeteer (#353) adds the actual status callback and complete-turn proofs
 see [its validation record](POISON-PUPPETEER-VALIDATION.md). Biome callbacks and
 their stock-mode reachability merged in #354; see
 [their validation record](BIOME-CALLBACK-VALIDATION.md). Double-battle encounter
-chance and its actual wild/trainer owners are the current slice; see
-[its validation record](DOUBLE-CHANCE-VALIDATION.md).
+chance and its actual wild/trainer owners merged in #355; see
+[its validation record](DOUBLE-CHANCE-VALIDATION.md). Synchronize encounter
+nature and its raw/custom nature setter are the current slice; see
+[its validation record](SYNC-NATURE-VALIDATION.md).
 
 1. Close the remaining enabled callbacks against their actual owners:
-   post-battle Honey Gather and Pickup, and encounter nature and
-   double-battle chance integration. Existing helper arithmetic alone does not
+   Synchronize encounter nature, then post-battle Honey Gather and Pickup.
+   Existing helper arithmetic alone does not
    establish that a public owner invokes it.
 2. Finish the source inventory, including AI moveset attributes, constructor
    closures/conditions, tags, modifiers, phases and unsupported/capacity paths.

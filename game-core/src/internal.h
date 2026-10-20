@@ -262,6 +262,7 @@ int gc_roll_biome_terrain(gc_run *run);            /* Arena.setBiomeTerrain's pi
 void gc_arena_reset_effects(gc_run *run);          /* Arena.resetArenaEffects: weather and terrain */
 void gc_arena_new_battle(gc_run *run, bool reset, bool roll);   /* ...then the biome's rolls */
 void gc_battle_note_unported(gc_run *run); /* drain battle diagnostics into persistent counters */
+bool gc_set_encounter_nature(pr_battle *bt, pr_pokemon *p, int nature, void *data);
 void gc_battle_cleanup_players(gc_run *run);   /* outgoing field, before generating the encounter */
 bool gc_battle_setup_field(gc_run *run, bool reset_arena);   /* bt from the parties, before the first turn */
 void gc_battle_restore_field(gc_run *run); /* pointers only; summon effects already saved */
