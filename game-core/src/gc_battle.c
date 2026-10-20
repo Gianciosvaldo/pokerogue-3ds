@@ -10,7 +10,6 @@
 
 static void sync_ability_indices(gc_run *run);
 
-static void note_unported(gc_run *run);
 static int next_summon_cb(pr_battle *bt, int trainer_slot, void *ctx);
 
 void gc_wallet_to_battle(gc_run *run) { run->bt.money = run->money; }
@@ -168,7 +167,7 @@ void gc_battle_cleanup_players(gc_run *run)
     pr_prepare_player_cleanup(bt,&run->eng,true);
     pr_run_player_cleanup(bt,&run->eng);
     sync_ability_indices(run);
-    note_unported(run);
+    gc_battle_note_unported(run);
     gc_items_from_battle(run);
     gc_ev_battle(run);
     run->run.rng=bt->rng;
@@ -319,7 +318,7 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
     if (!restoring) {
         pr_start_battle(bt, &run->eng);
         sync_ability_indices(run);
-        note_unported(run);
+        gc_battle_note_unported(run);
         gc_items_from_battle(run);
         gc_ev_battle(run);
     }
@@ -565,7 +564,7 @@ bool gc_battle_queued_command(gc_run *run)
     return true;
 }
 
-static void note_unported(gc_run *run)
+void gc_battle_note_unported(gc_run *run)
 {
     pr_battle *bt = &run->bt;
     for (int i = 0; i < bt->n_unported; i++) if (bt->unported[i] < GC_MAX_UNPORTED) run->unported[bt->unported[i]]++;
@@ -703,7 +702,7 @@ static int engine_returned(gc_run *run)
     gc_wallet_from_battle(run);
     balls_from_battle(run);
     sync_ability_indices(run);
-    note_unported(run);
+    gc_battle_note_unported(run);
     note_revealed(run);
     gc_items_from_battle(run);
     gc_ev_battle(run);

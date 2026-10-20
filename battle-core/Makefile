@@ -620,3 +620,14 @@ $(BUILD)/poison-puppeteer-test: tests/poison-puppeteer-test.c $(BUILD)/wide-subs
 all: $(BUILD)/biome-callback-test
 $(BUILD)/biome-callback-test: tests/biome-callback-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/double-chance-test
+$(BUILD)/double-chance-test: tests/double-chance-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/double-generation-test
+$(BUILD)/double-generation-test: tests/double-generation-test.c tests/double-chance-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a $(BUILD)/double-chance-run/librun.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -I../run-core/include $(CFLAGS) $< $(BUILD)/double-chance-run/librun.a $(BUILD)/libprcore.a -lm -o $@
+
+$(BUILD)/double-chance-run/librun.a: $(wildcard ../run-core/src/*.c ../run-core/include/pr/*.h ../run-core/gen/out/*.[ch])
+	$(MAKE) -s -C ../run-core BUILD=$(abspath $(BUILD))/double-chance-run $(abspath $@)

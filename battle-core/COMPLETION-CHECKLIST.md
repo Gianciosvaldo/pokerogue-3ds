@@ -49,8 +49,10 @@ Curious Medicine (#343), and Costar (#345). Preserve their proofs and retained
 covered IDs when changing shared callbacks; do not recreate already merged work.
 Poison Puppeteer (#353) adds the actual status callback and complete-turn proofs;
 see [its validation record](POISON-PUPPETEER-VALIDATION.md). Biome callbacks and
-their stock-mode reachability are the current slice, documented in
-[their validation record](BIOME-CALLBACK-VALIDATION.md).
+their stock-mode reachability merged in #354; see
+[their validation record](BIOME-CALLBACK-VALIDATION.md). Double-battle encounter
+chance and its actual wild/trainer owners are the current slice; see
+[its validation record](DOUBLE-CHANCE-VALIDATION.md).
 
 1. Close the remaining enabled callbacks against their actual owners:
    post-battle Honey Gather and Pickup, and encounter nature and

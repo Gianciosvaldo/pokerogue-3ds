@@ -433,6 +433,11 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
              && pr_moves[move].category == MOVE_CATEGORY_STATUS && *pp->value >= 50);
         *pp->value = 50; /* Source also modifies the holder during simulation. */
         return 1;
+    case PR_AC_DoubleBattleChanceAbAttr:
+        GATE(true);
+        if (!pp->value) return -1;
+        *pp->value /= 4; /* Includes simulated calls; the holder is the output. */
+        return 1;
     case PR_AC_StatMultiplierAbAttr: {
         const pr_attr_StatMultiplierAbAttr *x = P(StatMultiplierAbAttr, a);
         GATE(pp->stat == x->stat

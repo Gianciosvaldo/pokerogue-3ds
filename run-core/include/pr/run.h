@@ -307,6 +307,11 @@ typedef struct {
     bool enable_fixed_rivals;            /* Task 48: caller opts into the six ported Classic rival closures */
     bool enable_gym_e4;                   /* Task 49: caller opts into Gym/E4 fixed trainer closures */
     pr_me_save me;                       /* mysteryEncounterSaveData */
+    bool player_female;                  /* settings.isPlayerFemale: fixed rival variant */
+    /* Optional scene callback, evaluated only when a trainer/wild double roll
+     * actually needs it. NULL retains the arithmetic-only count projection. */
+    double (*double_chance)(void *ctx, int wave);
+    void *double_chance_ctx;
 } pr_new_battle_ctx;
 typedef struct {
     int battle_type;                     /* BattleType */
