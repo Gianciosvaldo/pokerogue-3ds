@@ -795,6 +795,16 @@ bool mui_confirm_input(mui_confirm* c, mui_button b) {
   }
 }
 
+bool mui_confirm_touch(mui_confirm* c, float x, float y) {
+  if (!c->active) return false;
+  int w = mui_text_width(TS_WINDOW, mui_t("menu:yes")), w2 = mui_text_width(TS_WINDOW, mui_t("menu:no"));
+  if (w2 > w) w = w2;
+  const float bw = w + 23, bh = 3 * 16 - 2, left = c->x - bw, top = c->y - bh;
+  if (x < left || x >= c->x || y < top + 7 || y >= top + 7 + 2 * 16) return false;
+  c->cursor = (int)((y - top - 7) / 16);
+  return mui_confirm_input(c, MB_ACTION);
+}
+
 void mui_confirm_draw(const mui_confirm* c) {
   if (!c->active) return;
   const char* yes = mui_t("menu:yes");

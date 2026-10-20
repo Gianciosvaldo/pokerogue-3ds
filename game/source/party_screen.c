@@ -241,7 +241,9 @@ static void ps_draw(ui_screen* s, rr_screen which) {
 
 static bool ps_touch(ui_screen* s, float x, float y) {
   (void)s;
-  return summary_active() && summary_touch(x, y - 30); /* UI_BOTTOM_CANVAS */
+  /* UI_BOTTOM_CANVAS: the canvas starts 30 px down */
+  if (summary_active()) return summary_touch(x, y - 30);
+  return party_touch(x, y - 30);
 }
 
 static ui_screen g_screen = {"party", UI_OVERLAY, NULL, NULL, NULL, ps_input, ps_update, ps_draw, NULL, ps_touch};

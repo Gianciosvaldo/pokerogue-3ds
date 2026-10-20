@@ -391,6 +391,31 @@ sm_result sm_input(sm_model* m, mui_button b) {
   return r;
 }
 
+bool sm_point(sm_model* m, sm_focus focus, int i) {
+  if (focus == SM_GRID) {
+    if (!sm_cell(m, i)) return false;
+    m->cursor = i;
+  } else if (focus == SM_PARTY) {
+    if (i < 0 || i >= m->n_party) return false;
+    m->party_cursor = i;
+  }
+  m->focus = focus;
+  m->shown = 0;
+  return true;
+}
+
+bool sm_scroll(sm_model* m, int rows) {
+  const int total = (m->n + SM_COLS - 1) / SM_COLS, max = total > SM_ROWS ? total - SM_ROWS : 0;
+  int s = m->scroll + rows;
+  if (s < 0) s = 0;
+  if (s > max) s = max;
+  if (s == m->scroll) return false;
+  m->scroll = s;
+  set_cursor(m, m->cursor); /* the species under the cursor may be gone from the last row */
+  m->shown = 0;
+  return true;
+}
+
 /* ---------------------------------------------------------------- text */
 
 /* JavaScript's text for a number that is a sum of halves and quarters, and tryUpdateValue's "0." -> "." */

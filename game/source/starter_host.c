@@ -62,6 +62,12 @@ static bool sh_input(ui_screen* s, ui_button b) {
   return starter_input((mui_button)b); /* both are upstream's Button enum, in order */
 }
 
+/* A tap on the bottom screen (physical px): the screen's canvas starts 30 px down */
+static bool sh_touch(ui_screen* s, float x, float y) {
+  (void)s;
+  return starter_touch(x, y - 30);
+}
+
 static void sh_update(ui_screen* s, float dt) {
   (void)s;
   mui_tick(dt);
@@ -92,7 +98,7 @@ static void sh_enter(ui_screen* s) {
   bgm_on_starter_select();
 }
 
-static ui_screen g_screen = {"starter-select", UI_FADE, sh_enter, sh_leave, NULL, sh_input, sh_update, sh_draw, NULL};
+static ui_screen g_screen = {"starter-select", UI_FADE, sh_enter, sh_leave, NULL, sh_input, sh_update, sh_draw, NULL, sh_touch};
 
 bool sh_open(const gc_system* sys, const char* notice, const sh_events* ev) {
   H.sys = sys;

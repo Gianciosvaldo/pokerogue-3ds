@@ -179,6 +179,10 @@ void party_resume(void);   /* back from a screen opened on top (summary) */
 void party_close(void);
 bool party_active(void);
 bool party_input(mui_button b);
+/* A tap at canvas (x, y) (the bottom screen's canvas: its physical y less 30): a slot is selected and opened as ACTION does, a row of the
+ * options window picks it, the Cancel and Transfer / Discard buttons act at once, a tap outside the options window is CANCEL, and a message
+ * waiting for a button takes it as ACTION. Not for the quantity of a transferred item (LEFT / RIGHT). True when it did something. */
+bool party_touch(float x, float y);
 void party_update(float dt_ms);
 void party_draw(void);
 

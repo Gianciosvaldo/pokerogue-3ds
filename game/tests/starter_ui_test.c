@@ -258,6 +258,15 @@ bool mui_confirm_input(mui_confirm* c, mui_button b) {
       return true;
   }
 }
+/* mui.c's: the box at the canvas' right with its bottom edge at c->y, rows of 16 px from 7 px under its top (the widest label and 23 px wide) */
+bool mui_confirm_touch(mui_confirm* c, float x, float y) {
+  if (!c->active) return false;
+  const int w = (int)strlen("menu:yes") * 6 > (int)strlen("menu:no") * 6 ? (int)strlen("menu:yes") * 6 : (int)strlen("menu:no") * 6;
+  const float bw = w + 23, bh = 3 * 16 - 2, left = 319 - bw, top = c->y - bh;
+  if (x < left || x >= 319 || y < top + 7 || y >= top + 7 + 2 * 16) return false;
+  c->cursor = (int)((y - top - 7) / 16);
+  return mui_confirm_input(c, MB_ACTION);
+}
 void mui_confirm_draw(const mui_confirm* c) {
   if (c->active) log_add(g_drawn, "confirm box");
 }
@@ -446,6 +455,87 @@ static void test_happy_path(void) {
   tick(2500);
   press(MB_ACTION);
   CHECK(R.started == 1 && R.exited == 0, "the screen is finished: %d starts, %d exits", R.started, R.exited);
+}
+
+/* a tap at canvas (x, y): the bottom screen's physical y is 30 more */
+static void tap(float x, float y) { g_screen->touch(g_screen, x, y + 30); }
+
+/* taps: the grid cells are 26 x 30 from (115, 22), the team column's icons are x 285.., Randomize is (285, 18, 34, 20) and Start (285, 158, 34, 20) */
+static void test_touch(void) {
+  gc_system_init_defaults(&SYS);
+  CHECK(open_screen(NULL), "open for taps");
+  CHECK(g_screen->touch != NULL, "the screen takes taps");
+  static sm_entry list[SS_MAX_ENTRIES];
+  ss_list(&SYS, list, SS_MAX_ENTRIES, NULL);
+  char num[16], want[32];
+
+  /* a tap on cell 1 points at it, the panel follows; a second tap is A: its options menu */
+  tap(115 + 26 + 13, 22 + 15);
+  draw();
+  snprintf(num, sizeof num, "%04u", list[1].species);
+  CHECK(drawn(num) && !drawn("starterSelectUiHandler:addToParty"), "one tap points at the second species (%s) and opens nothing", num);
+  tap(115 + 26 + 13, 22 + 15);
+  draw();
+  CHECK(drawn("starterSelectUiHandler:addToParty") && drawn("menu:cancel"), "a second tap on it opens the options menu");
+  /* the menu: bottom right, rows of 16 px from 7 px under its top (141..157 Add to Party, 157..173 Cancel) */
+  tap(300, 148);
+  draw();
+  snprintf(want, sizeof want, "%g/10", list[1].cost);
+  CHECK(!drawn("starterSelectUiHandler:addToParty") && drawn(want), "a tap on Add to Party adds it: %s", want);
+
+  /* a tap outside the menu is B */
+  tap(115 + 13, 22 + 15);
+  tap(115 + 13, 22 + 15);
+  draw();
+  CHECK(drawn("starterSelectUiHandler:addToParty"), "the first species' menu is open");
+  tap(20, 100);
+  draw();
+  CHECK(!drawn("starterSelectUiHandler:addToParty") && !drawn("menu:cancel"), "a tap outside it closes it");
+  snprintf(want, sizeof want, "%g/10", list[1].cost);
+  CHECK(drawn(want), "without adding anything");
+
+  /* a team member is pointed at (the first icon is at y 46) */
+  tap(300, 50);
+  draw();
+  snprintf(num, sizeof num, "%04u", list[1].species);
+  CHECK(drawn(num), "a tap on the team's first icon shows that species (%s)", num);
+  CHECK(!drawn("confirm box"), "(no question)");
+
+  /* a tap on nothing takes nothing */
+  CHECK(!g_screen->touch(g_screen, 5, 5), "the corner takes nothing");
+
+  /* Randomize adds a species at once; Start asks, and the box's rows answer */
+  tap(300, 28);
+  tap(300, 168);
+  tick(2500);
+  draw();
+  CHECK(drawn("starterSelectUiHandler:confirmStartTeam") && drawn("confirm box"), "Start asks \"Begin with these Pokemon?\"");
+  tap(300, 136); /* No (y 128..144) */
+  draw();
+  CHECK(!drawn("confirm box") && R.started == 0, "a tap on No closes the question");
+  tap(300, 168);
+  tick(2500);
+  tap(300, 120); /* Yes (y 112..128) */
+  CHECK(R.started == 1 && R.n_team == 2 && R.team[0].species == list[1].species, "a tap on Yes hands over the team of %d (first %u)", R.n_team, R.n_team ? R.team[0].species : 0);
+  const char* why = NULL;
+  CHECK(core_takes(R.team, R.n_team, &why), "game-core takes it: %s", why ? why : "");
+
+  /* a long list scrolls a page at a time by the strip beside the grid (x 272..284), up in its upper half, down in its lower half */
+  random_system(400);
+  CHECK(open_screen(NULL), "open with many species");
+  static sm_entry big[SS_MAX_ENTRIES];
+  const int n = ss_list(&SYS, big, SS_MAX_ENTRIES, NULL);
+  CHECK(n > 3 * SM_COLS * SM_ROWS / 2, "the list is long enough to scroll (%d species)", n);
+  draw();
+  snprintf(num, sizeof num, "icon %u", big[SM_PAGE].species);
+  CHECK(!drawn(num), "the species one page down is not on screen yet");
+  tap(278, 140);
+  draw();
+  CHECK(drawn(num), "a tap in the lower half of the strip scrolls a page down (%s)", num);
+  tap(278, 40);
+  draw();
+  CHECK(!drawn(num), "a tap in the upper half scrolls back");
+  CHECK(!g_screen->touch(g_screen, 278, 40 + 30), "(and there is no page above the first)");
 }
 
 static void test_exit(void) {
@@ -641,6 +731,7 @@ static void test_fuzz(int sessions) {
 int main(int argc, char** argv) {
   const int sessions = argc > 1 ? atoi(argv[1]) : 200;
   test_happy_path();
+  test_touch();
   test_exit();
   test_remove();
   test_refused();

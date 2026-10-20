@@ -142,6 +142,17 @@ bool mui_confirm_input(mui_confirm* c, mui_button b) {
   return false;
 }
 
+/* mui.c's: the box at the canvas' bottom-right, rows of 16 px from 7 px under its top (the widest of the two labels and 23 px wide) */
+bool mui_confirm_touch(mui_confirm* c, float x, float y) {
+  if (!c->active) return false;
+  int w = mui_text_width(TS_WINDOW, mui_t("menu:yes")), w2 = mui_text_width(TS_WINDOW, mui_t("menu:no"));
+  if (w2 > w) w = w2;
+  const float bw = w + 23, bh = 3 * 16 - 2, left = 319 - bw, top = (180 - 48) - bh;
+  if (x < left || x >= 319 || y < top + 7 || y >= top + 7 + 2 * 16) return false;
+  c->cursor = (int)((y - top - 7) / 16);
+  return mui_confirm_input(c, c->cursor ? MB_CANCEL : MB_ACTION); /* the fake's input: ACTION answers yes, CANCEL no */
+}
+
 void mui_confirm_draw(const mui_confirm* c) {
   (void)c;
 }
@@ -307,6 +318,51 @@ int main(void) {
   assert(ev_ctx.select_option == PO_CANCEL);
   printf("  -> Cancelled secondary target selection and exited party screen.\n");
 
+  party_close();
+
+  /* ------------------------------------------------------------------------
+   * Test 4: taps (party_touch, canvas coordinates). Slot 0 is the main slot (x 9..119, y 31..80), the benched ones are x 143..318, y 12..36 and
+   * y 40..64; with no summary callback the options window (bottom right, rows of 16 px from 6 px under its top) holds the entry and Cancel
+   * ------------------------------------------------------------------------ */
+  printf("Test 4: Taps...\n");
+  memset(&ev_ctx, 0, sizeof ev_ctx);
+  party_open(&args, party, 3, &ev);
+  assert(!party_touch(2.0f, 2.0f) && !ev_ctx.select_called); /* nothing there */
+  assert(party_touch(60.0f, 50.0f) && !ev_ctx.select_called); /* slot 0: its options open */
+  /* the window's padding takes nothing; the last pixel row of the Cancel row (y 156..172) closes the options without a callback */
+  assert(party_touch(310.0f, 173.5f) && !ev_ctx.select_called);
+  assert(party_touch(310.0f, 171.5f) && !ev_ctx.select_called);
+  assert(party_touch(60.0f, 50.0f)); /* open again */
+  /* a tap outside the options window is B: they close (a tap on the Cancel button then is not a row of the window) */
+  assert(party_touch(30.0f, 100.0f) && !ev_ctx.select_called);
+  assert(party_touch(291.0f, 164.0f));
+  assert(ev_ctx.select_called && ev_ctx.select_slot == 6 && ev_ctx.select_option == PO_CANCEL);
+  printf("  -> A tap outside the options closed them, and the Cancel button answered at once.\n");
+  party_close();
+
+  memset(&ev_ctx, 0, sizeof ev_ctx);
+  party_open(&args, party, 3, &ev);
+  assert(party_touch(60.0f, 50.0f)); /* slot 0 */
+  assert(party_touch(310.0f, 155.5f)); /* the last pixel row of its first row, Apply: the secondary selection starts */
+  assert(!ev_ctx.select_called);
+  assert(!party_touch(142.0f, 20.0f)); /* just left of the benched slots */
+  assert(party_touch(317.0f, 35.0f)); /* slot 1's bottom right corner: its options open (Splice) */
+  assert(party_touch(310.0f, 140.5f)); /* the first pixel row of Splice */
+  assert(ev_ctx.select_called && ev_ctx.select_slot == 0 && ev_ctx.select_option == 1);
+  printf("  -> Taps on slot 0, Apply, slot 1 and Splice reached on_select(0, 1).\n");
+  party_close();
+
+  memset(&ev_ctx, 0, sizeof ev_ctx);
+  party_open(&args, party, 3, &ev);
+  assert(party_touch(200.0f, 50.0f)); /* slot 2, the fused one: Apply, Unsplice, Cancel */
+  assert(party_touch(310.0f, 148.0f)); /* Unsplice */
+  assert(!ev_ctx.select_called);
+  assert(party_touch(300.0f, 115.0f)); /* the confirm box's No (y 109..125) answers it */
+  assert(!ev_ctx.select_called);
+  assert(party_touch(200.0f, 50.0f) && party_touch(310.0f, 148.0f));
+  assert(party_touch(300.0f, 100.0f)); /* and Yes (y 93..109) */
+  assert(ev_ctx.select_called && ev_ctx.select_slot == 2 && ev_ctx.select_option == PO_UNSPLICE);
+  printf("  -> The unsplice question answers to taps on No and Yes.\n");
   party_close();
 
   printf("splicer_ui_test PASSED!\n");
