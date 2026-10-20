@@ -30,8 +30,13 @@ int mui_text_width(mui_style s, const char* utf8) {
   return (int)strlen(utf8) * 8;
 }
 
+/* the last window drawn, to see where the list is */
+static float g_wx, g_wy, g_ww, g_wh;
 void mui_window(float x, float y, float w, float h) {
-  (void)x; (void)y; (void)w; (void)h;
+  g_wx = x;
+  g_wy = y;
+  g_ww = w;
+  g_wh = h;
 }
 
 int mui_text(mui_style s, float x, float y, const char* utf8) {
@@ -138,6 +143,55 @@ int main(void) {
     }
   }
   assert(got_ev_biome);
+
+
+  /* ---- taps on the bottom screen's copy of the list (canvas coordinates: the bottom canvas starts 30 px down the screen) */
+  int taps = 0;
+  {
+    const uint8_t three[3] = {BIOME_ID_PLAINS, BIOME_ID_FOREST, BIOME_ID_CAVE};
+    test_ctx t2 = {-1, false};
+    biome_map_args ba2 = {three, 3};
+    biome_map_events be2 = {on_biome_chosen, &t2};
+    assert(!biome_map_touch(100, 100)); /* nothing is open */
+    taps++;
+    biome_map_open(&ba2, &be2);
+    /* the top screen's list is where it was, and the bottom screen's sits on the screen's bottom edge, both as wide as their labels */
+    biome_map_draw();
+    assert(g_wy + g_wh == 180 - 48 && g_wx + g_ww == 319);
+    biome_map_draw_bottom();
+    const float left = g_wx, top = g_wy, w = g_ww, h = g_wh;
+    assert(top + h == 208 && left + w == 319 && h == 4 * 16 - 2);
+    const float cx = left + w / 2;
+    /* a tap on each row is that row */
+    for (int row = 2; row >= 0; row--) {
+      t2.called = false;
+      biome_map_open(&ba2, &be2);
+      assert(biome_map_touch(cx, top + 7 + 16 * row + 8) && t2.called && t2.selected_option == row && !biome_map_active());
+      taps++;
+    }
+    /* the rows' edges: 7 px under the window's top to 16 px per row */
+    const struct { float y; int row; } edges[] = {{top + 7, 0}, {top + 7 + 15.5f, 0}, {top + 7 + 16, 1}, {top + 7 + 47.5f, 2}};
+    for (size_t i = 0; i < sizeof edges / sizeof *edges; i++) {
+      t2.called = false;
+      biome_map_open(&ba2, &be2);
+      assert(biome_map_touch(cx, edges[i].y) && t2.selected_option == edges[i].row);
+      taps++;
+    }
+    /* the padding, outside the window and the sides take nothing, and the list stays open */
+    t2.called = false;
+    biome_map_open(&ba2, &be2);
+    const struct { float x, y; } misses[] = {{cx, top + 6.5f}, {cx, top + 7 + 48}, {cx, top + h}, {left - 1, top + 20}, {319, top + 20}, {cx, top - 1}, {cx, 100}, {5, 5}};
+    for (size_t i = 0; i < sizeof misses / sizeof *misses; i++) {
+      assert(!biome_map_touch(misses[i].x, misses[i].y) && !t2.called && biome_map_active());
+      taps++;
+    }
+    /* a tap moves the cursor like the D-pad does, and A after it picks that row */
+    assert(biome_map_touch(left, top + 7 + 16 + 8) == true && t2.selected_option == 1);
+    taps++;
+    assert(!biome_map_touch(cx, top + 20)); /* closed again: nothing */
+    taps++;
+  }
+  printf("%d taps on the bottom list checked.\n", taps);
 
   printf("map_ui_test PASSED: Biome selection UI correctly drove game-core biome transition!\n");
   return 0;

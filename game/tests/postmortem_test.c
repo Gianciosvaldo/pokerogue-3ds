@@ -556,12 +556,115 @@ static void test_result_flow(void) {
   CHECK(g_done_calls == 1, "an invalid report leaves at once");
 }
 
+/* Taps on the bottom screen (physical px). The hints are drawn from x 10 in a 6 px/char font here: "A: continue" 10..76, "B: back" 94..136, the
+ * D-pad hints from 154; a tap takes the hint it is on and the 9 px of gap on each side. The header (y < 26) turns the page, the list (y 70..218)
+ * scrolls half a page. */
+static bool tap(float x, float y) { return g_top->touch(g_top, x, y); }
+
+static void test_touch(void) {
+  const co_report* r = make_defeat();
+  g_exit_calls = 0;
+  const pm_args a = {r, on_exit_cb, NULL};
+  postmortem_open(&a);
+  CHECK(g_top->touch != NULL, "the screen takes taps");
+
+  /* the header: left half back a turn, right half on */
+  draw(1);
+  CHECK(has_text("3/3"), "starts on the newest turn");
+  CHECK(tap(250, 10), "a tap on the right of the header is taken");
+  draw(1);
+  CHECK(has_text("3/3"), "and goes nowhere past the newest turn");
+  tap(40, 10);
+  draw(1);
+  CHECK(has_text("2/3"), "the left half goes back a turn");
+  tap(159, 25);
+  draw(1);
+  CHECK(has_text("1/3"), "(its lower edge, and x 159 is still the left half)");
+  const int sel = n_select;
+  tap(10, 1);
+  CHECK(n_select == sel, "nothing before the oldest turn");
+  tap(160, 1);
+  draw(1);
+  CHECK(has_text("2/3"), "x 160 is the right half: on a turn");
+  CHECK(!tap(160, 26), "just under the header is nothing");
+  draw(1);
+  CHECK(has_text("2/3"), "(still turn 2)");
+
+  /* the hints under the list */
+  g_exit_calls = 0;
+  CHECK(tap(20, 230) && g_exit_calls == 1 && g_exit_how == PM_CONTINUE, "a tap on \"A: continue\" continues");
+  CHECK(tap(84, 230) && g_exit_calls == 2 && g_exit_how == PM_CONTINUE, "its gap up to x 85 is still A");
+  CHECK(tap(86, 230) && g_exit_calls == 3 && g_exit_how == PM_BACK, "from x 85 on it is B");
+  CHECK(tap(144, 218) && g_exit_calls == 4 && g_exit_how == PM_BACK, "B up to x 145, from the list's lower edge down");
+  CHECK(!tap(146, 230) && !tap(300, 230) && g_exit_calls == 4, "the D-pad hints are no button");
+
+  /* a long turn scrolls by half a page */
+  const co_report* big = make_report_with_n_events(64);
+  const pm_args b = {big, on_exit_cb, NULL};
+  postmortem_open(&b);
+  draw(1);
+  CHECK(has_text("54 more below") && !has_text("more above"), "64 events, ten visible");
+  CHECK(tap(160, 200), "a tap in the list is taken");
+  draw(1);
+  CHECK(has_text("5 more above") && has_text("49 more below"), "the lower half scrolls down five rows");
+  tap(160, 144);
+  draw(1);
+  CHECK(has_text("10 more above") && has_text("44 more below"), "y 144 is the lower half");
+  tap(160, 143.5f);
+  draw(1);
+  CHECK(has_text("5 more above"), "y 143.5 is the upper half: back five rows");
+  tap(160, 70);
+  tap(160, 70);
+  draw(1);
+  CHECK(!has_text("more above") && has_text("54 more below"), "the upper half stops at the top");
+  for (int i = 0; i < 15; i++) tap(160, 217);
+  draw(1);
+  CHECK(has_text("54 more above") && !has_text("more below"), "the lower half stops at the end");
+  CHECK(!tap(160, 69), "above the list and under the header is nothing");
+
+  /* an empty history: no pager, the hints still leave */
+  begin(false);
+  co_finish(false, 3, 5);
+  const co_report* empty = co_report_get();
+  const pm_args e = {empty, on_exit_cb, NULL};
+  postmortem_open(&e);
+  g_exit_calls = 0;
+  CHECK(!tap(40, 10) && !tap(250, 10) && !tap(160, 100), "an empty history has nothing to turn or scroll");
+  CHECK(tap(20, 230) && g_exit_calls == 1 && g_exit_how == PM_CONTINUE, "A leaves");
+  CHECK(tap(100, 230) && g_exit_calls == 2 && g_exit_how == PM_BACK, "B goes back");
+}
+
+/* the result screen: a tap is A */
+static void test_result_touch(void) {
+  const co_report* r = make_defeat();
+  result_args a;
+  memset(&a, 0, sizeof a);
+  a.victory = false;
+  a.report = r;
+  a.run.status = RSV_OK;
+  a.run.wave = 12;
+  a.on_done = on_done_cb;
+  g_done_calls = 0;
+  result_screen_open(&a);
+  CHECK(g_top->touch != NULL && !strcmp(g_top->name, "run-result"), "the result screen takes taps");
+  CHECK(tap(160, 120) && !strcmp(g_top->name, "postmortem") && g_done_calls == 0, "a tap on the line opens the post-mortem");
+  press(BTN_CANCEL);
+  CHECK(!strcmp(g_top->name, "run-result"), "B comes back");
+  a.report = NULL;
+  g_done_calls = 0;
+  result_screen_open(&a);
+  CHECK(tap(5, 5) && g_done_calls == 1, "without a report a tap leaves");
+  CHECK(tap(5, 5) && g_done_calls == 1, "and only once");
+}
+
 int main(void) {
   test_describe();
   test_screen();
   test_clear_and_unknown();
   test_scroll_and_fit();
   test_result_flow();
+  test_touch();
+  test_result_touch();
   printf("postmortem_test: %d checks, %d failed\n", checks, failed);
   return failed ? 1 : 0;
 }

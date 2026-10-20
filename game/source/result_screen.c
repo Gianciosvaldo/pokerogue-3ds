@@ -142,6 +142,12 @@ static bool rs_input(ui_screen* s, ui_button b) {
   return false;
 }
 
+/* A tap on the bottom screen is A: the next page of the line, the rival's dialogue, and the way on to the post-mortem. */
+static bool rs_touch(ui_screen* s, float x, float y) {
+  (void)x, (void)y;
+  return rs_input(s, BTN_ACTION);
+}
+
 static void rs_update(ui_screen* s, float dt) {
   (void)s;
   msgbox_update(&R.msg, dt);
@@ -299,7 +305,7 @@ static void rs_draw(ui_screen* s, rr_screen which) {
     draw_bottom();
 }
 
-static ui_screen g_screen = {"run-result", UI_FADE, NULL, NULL, NULL, rs_input, rs_update, rs_draw, NULL};
+static ui_screen g_screen = {"run-result", UI_FADE, NULL, NULL, NULL, rs_input, rs_update, rs_draw, NULL, rs_touch};
 
 void result_screen_open(const result_args* a) {
   /* a->note may point into R itself (the post-mortem's B comes back here with R.a): take it out before R is cleared */

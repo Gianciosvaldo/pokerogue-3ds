@@ -158,7 +158,7 @@ bool ui_input_repeating(void);
 /* Feed a button as if pressed (demo scripts, tests). */
 void ui_inject(ui_button b);
 /* Feed a tap as if the touch screen was pressed at physical (x, y) (tests); and the debug file's "touch=<frame>:<x>,<y>" lines: a tap
- * delivered at that frame, up to 8 (for emulator runs, which have no touch input). */
+ * delivered at that frame, up to 64 (for emulator runs, which have no touch input). */
 void ui_inject_touch(float x, float y);
 void ui_debug_touch(uint32_t frame, float x, float y);
 /* UI_BOTTOM_UI's y (the command strip's, -48..0) of a physical bottom-screen y */

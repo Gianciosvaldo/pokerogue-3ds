@@ -233,7 +233,7 @@ static void deliver(ui_button b) {
   if (s && s->input) s->input(s, b);
 }
 
-#define TOUCH_MAX 8
+#define TOUCH_MAX 64
 static struct {
   uint32_t frame;
   float x, y;

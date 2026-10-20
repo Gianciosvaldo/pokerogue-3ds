@@ -22,6 +22,7 @@ static bool rh_input(ui_screen* s, ui_button b) {
 /* A tap on the bottom screen (physical px): the shop's own touch slots, in canvas coordinates (the canvas starts 30 px down) */
 static bool rh_touch(ui_screen* s, float x, float y) {
   (void)s;
+  if (biome_map_active()) return biome_map_touch(x, y - 30);
   return shop_ui_active() && shop_ui_touch(x, y - 30);
 }
 
@@ -41,6 +42,10 @@ static void rh_draw(ui_screen* s, rr_screen which) {
   } else if (biome_map_active() && which == RR_TOP) {
     mui_set_origin(RR_TOP, 40, 30); /* UI_TOP_CANVAS */
     biome_map_draw();
+  } else if (biome_map_active() && which == RR_BOTTOM) {
+    if (ui_space(UI_PHYS_BOTTOM)) rr_rect(0, 0, 320, 240, RR_RGBA(0, 0, 0, 255));
+    mui_set_origin(RR_BOTTOM, 0, 30); /* UI_BOTTOM_CANVAS */
+    biome_map_draw_bottom();
   }
 }
 

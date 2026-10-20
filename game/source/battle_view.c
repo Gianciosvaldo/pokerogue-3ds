@@ -131,6 +131,7 @@ static struct {
   int bar;       /* which item bar is showing: 0 the foe's, 1 the player's (L and R) */
   int bar_sel;   /* the item the cursor is on (Up from the top row or Down from the bottom row of the command menu), -1 = none */
   bool bar_open; /* A opened its description (in the message window) */
+  bool hold_cmd; /* BALL or POKEMON was chosen and its screen is open: the command strip, the item bar and the tray stay as they were */
   /* an item's description the summary screen asks for (bv_set_info), shown in the message window while no command is asked */
   bool info_on;
   char info_name[64], info_desc[512];
@@ -142,6 +143,9 @@ static struct {
     const int* stats;
   } lvl;
 } B;
+
+/* the command menu is on screen: asked, or answered with BALL / POKEMON and waiting for that screen */
+static bool cmd_shown(void) { return B.mode == M_COMMAND || (B.mode == M_IDLE && B.hold_cmd); }
 
 static side* side_of(int battler) { return &B.s[battler >= 2 ? 1 : 0]; }
 bv_mon* bv_mon_of(int battler) { return &side_of(battler)->mon; }
@@ -789,7 +793,7 @@ static void draw_cursor_frame(float x, float y, float w, float h) {
 #define TBAR_ICONS 12
 static int tbar_first(void) { return B.bar_sel >= TBAR_ICONS ? B.bar_sel - TBAR_ICONS + 1 : 0; }
 static void draw_top_bar(void) {
-  if (B.mode != M_COMMAND && B.mode != M_FIGHT) return;
+  if (B.mode != M_COMMAND && B.mode != M_FIGHT && !cmd_shown()) return;
   rr_rect(TBAR_X, TBAR_Y, TBAR_W, TBAR_H, RR_RGBA(0x40, 0x40, 0x48, 255));
   rr_rect(TBAR_X + 1, TBAR_Y + 1, TBAR_W - 2, TBAR_H - 2, RR_RGBA(0x28, 0x28, 0x30, 255));
   text_draw(TS_MOVE_LABEL, TBAR_X + TBAR_TITLE_X, TBAR_Y + 11, bar_title(), NULL);
@@ -845,7 +849,7 @@ static void draw_bottom(bool top) {
       rr_rect(0, -48, 320, 48, RR_RGBA(0x30, 0x50, 0x68, 255));
   }
   const bool info = B.mode == M_COMMAND && B.bar_open && B.bar_sel >= 0 && B.bar_sel < bar_n();
-  if (B.mode == M_COMMAND && !info) draw_command_menu(top);
+  if (cmd_shown() && !info) draw_command_menu(top);
   if (B.mode == M_FIGHT) {
     draw_fight_menu(top);
     if (!top) draw_move_details();
@@ -859,7 +863,7 @@ static void draw_bottom(bool top) {
   } else {
     msgbox_draw(&B.msg, top ? 12 - TOP_PAD : 12, -39);
   }
-  if (B.mode == M_COMMAND && B.has_balls && !info) draw_party_tray();
+  if (cmd_shown() && B.has_balls && !info) draw_party_tray();
   draw_level_stats();
   if (!top) draw_ability_bar();
 }
@@ -1662,7 +1666,8 @@ static bool bv_input(ui_screen* s, ui_button b) {
         if (c == 3 || c == 1 || c == 2) {
           /* BALL and POKEMON open the ball and party screens (the menus thread); RUN answers */
           B.mode = M_IDLE;
-          msgbox_clear(&B.msg);
+          B.hold_cmd = c == 1 || c == 2; /* the screens that open over the battle (and come back to the menu) keep the strip up */
+          if (!B.hold_cmd) msgbox_clear(&B.msg);
           if (B.on_command) B.on_command((bv_command){c, 0}, B.command_arg);
           return true;
         }
@@ -1843,8 +1848,13 @@ static void bv_draw(ui_screen* s, rr_screen which) {
 static bool bv_touch(ui_screen* s, float px, float py) {
   (void)s;
   const float x = px, y = ui_bottom_ui_y(py);
+  /* the events play: a tap anywhere is A, for a message that waits for a button and for the level-up window (msgbox_input does
+   * nothing while a message is still typing or not waiting) */
+  if (B.mode == M_EVENTS) return bv_input(NULL, BTN_ACTION);
   if (B.mode == M_COMMAND) {
-    if (B.bar_sel < 0 && x >= 202 && y >= -48) {
+    if (x >= 202 && y >= -48) {
+      B.bar_sel = -1; /* a tap on a command leaves the item bar (and closes its description) */
+      B.bar_open = false;
       B.cmd_cursor = (x < 261 ? 0 : 1) + (y < -24 ? 0 : 2);
       return bv_input(NULL, BTN_ACTION);
     }
@@ -1907,6 +1917,7 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
   B.on_done = on_done;
   B.done_arg = arg;
   B.mode = M_EVENTS;
+  B.hold_cmd = false;
   B.msg.opts.wrap_w = 1780 / 6.0f;
 }
 
@@ -1935,6 +1946,7 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
   if (B.has_balls) memcpy(B.balls, opts->party_balls, sizeof B.balls);
   B.reason_ms = 0;
   B.mode = M_COMMAND;
+  B.hold_cmd = false;
   if (B.cmd_cursor == 2) B.cmd_cursor = 0; /* upstream resets POKEMON to FIGHT */
   /* "What will X do?", wrapped to the space left of the command window (1110 / 6) */
   B.msg.opts.wrap_w = B.has_balls ? 128 : 1110 / 6.0f; /* narrower beside the party tray */

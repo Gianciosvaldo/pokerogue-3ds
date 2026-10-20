@@ -109,13 +109,16 @@ void biome_map_update(float dt_ms) {
   (void)dt_ms;
 }
 
-void biome_map_draw(void) {
-  if (!g_map.active) return;
+/* The list as a window with its cursor, bottom edge at `bottom` in the canvas being drawn on */
+static void list_rect(float bottom, float* left, float* top, float* h) {
+  *h = (g_map.n_options + 1) * 16.0f - 2.0f;
+  *left = g_map.x - g_map.w;
+  *top = bottom - *h;
+}
 
-  float row_h = 16.0f;
-  float h = (g_map.n_options + 1) * row_h - 2.0f;
-  float left = g_map.x - g_map.w;
-  float top = g_map.y - h;
+static void draw_list(float bottom) {
+  float row_h = 16.0f, left, top, h;
+  list_rect(bottom, &left, &top, &h);
 
   mui_window(left, top, g_map.w, h);
 
@@ -124,4 +127,28 @@ void biome_map_draw(void) {
   }
 
   mui_image("ui/cursor", NULL, left + 10.0f, top + 15.0f + g_map.cursor * row_h, 0.5f, 0.5f);
+}
+
+void biome_map_draw(void) {
+  if (!g_map.active) return;
+  draw_list(g_map.y);
+}
+
+/* The bottom screen's copy of the list, where taps land: against the right edge and the bottom of the screen like the other lists there
+ * (the canvas starts 30 px down the 240 px screen, so its y 208 is the screen's 238). */
+#define BOTTOM_LIST_EDGE 208.0f
+
+void biome_map_draw_bottom(void) {
+  if (!g_map.active) return;
+  draw_list(BOTTOM_LIST_EDGE);
+}
+
+/* A tap at (x, y) in the bottom canvas: a row is the cursor on it and A. */
+bool biome_map_touch(float x, float y) {
+  if (!g_map.active) return false;
+  float left, top, h;
+  list_rect(BOTTOM_LIST_EDGE, &left, &top, &h);
+  if (x < left || x >= g_map.x || y < top + 7.0f || y >= top + 7.0f + g_map.n_options * 16.0f) return false;
+  g_map.cursor = (int)((y - top - 7.0f) / 16.0f);
+  return biome_map_input(MB_ACTION);
 }
