@@ -1191,7 +1191,10 @@ static void obtain_status_effect_phase(pr_battle *bt, pr_engine *e, int ph)
         pr_ab_params pp = {.pokemon = p, .opponent = q->source_p, .move = -1, .effect = effect};
         pr_apply_ab_attrs(bt, PR_AC_PostSetStatusAbAttr, &pp);                   /* Synchronize */
         q = PH(ph);
-        if (q->source_p) pr_hook_ab(bt, q->source_p, PR_AC_ConfusionOnStatusEffectAbAttr); /* Poison Puppeteer */
+        if (q->source_p) {
+            pr_ab_params confusion = {.pokemon = q->source_p, .opponent = p, .move = -1, .effect = effect};
+            pr_apply_ab_attrs(bt, PR_AC_ConfusionOnStatusEffectAbAttr, &confusion);
+        }
     }
 }
 

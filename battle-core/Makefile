@@ -612,3 +612,7 @@ $(BUILD)/entry-allies-test: tests/entry-allies-test.c $(BUILD)/wide-substitute-f
 all: $(BUILD)/costar-test
 $(BUILD)/costar-test: tests/costar-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/poison-puppeteer-test
+$(BUILD)/poison-puppeteer-test: tests/poison-puppeteer-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
