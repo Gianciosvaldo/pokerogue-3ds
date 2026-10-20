@@ -823,6 +823,23 @@ void pr_run_player_cleanup(pr_battle *bt, pr_engine *e)
     run_phases(bt,e,e->overflow ? -1 : shift_phase(bt,e));
 }
 
+void pr_prepare_post_battle_money(pr_battle *bt, pr_engine *e, bool victory)
+{
+    engine_reset(bt, e);
+    for (int k = 0; k < bt->n_party[0]; k++) {
+        pr_pokemon *p = bt->party[0][k];
+        if (!p || p->hp <= 0) continue;
+        pr_ab_params pp = {.pokemon = p, .move = -1, .victory = victory};
+        pr_apply_ab_attrs(bt, PR_AC_MoneyAbAttr, &pp);
+    }
+}
+
+void pr_run_post_battle_money(pr_battle *bt, pr_engine *e)
+{
+    pr_phase_push(bt, e, pr_phase_new(e, PH_TURN_INIT, -1));
+    run_phases(bt, e, e->overflow ? -1 : shift_phase(bt, e));
+}
+
 /* EncounterPhase.end. Trainer prelude and queue execution belong to the caller. */
 void pr_queue_encounter_end(pr_battle *bt, pr_engine *e, bool loaded)
 {

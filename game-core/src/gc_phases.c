@@ -311,10 +311,34 @@ void gc_pick_up_scattered_money(gc_run *run)
         if (!strcmp(run->items[i].key, "AMULET_COIN")) amount += floor(amount * 0.2 * run->items[i].stack);
     if (pr_arena_has_tag(bt, ARENA_TAG_TYPE_HAPPY_HOUR, ARENA_TAG_SIDE_BOTH)) amount *= 2;
     run->money = pr_run_add_money(run->money, amount);
-    gc_event *ev = gc_ev_new(run, GC_EV_MONEY);
-    if (ev) { ev->a = (int32_t)amount; ev->b = (int32_t)run->money; }
-    gc_ev_msg(run, "battle:moneyPickedUp", 1, pr_arg_int("moneyAmount", (int)amount));
+    gc_ev_money(run, amount);
+    gc_event *message = gc_ev_msg(run, "battle:moneyPickedUp", 1, pr_arg_money_en_us("moneyAmount", amount));
+    if (message) message->prompt = true;
     bt->money_scattered = 0;
+}
+
+/* BattleEndPhase's Honey Gather callbacks, before pickup and enemy-item cleanup. */
+static void post_battle_money(gc_run *run, bool victory)
+{
+    pr_battle *bt = &run->bt;
+    bt->game_mode = run->run.mode;
+    bt->wave_index = run->wave;
+    bt->challenge_flags = run->run.mode == GAME_MODES_CHALLENGE ? run->run.challenge_flags : 0;
+    bt->challenge_flags_known = !run->run.has_challenges || run->run.challenge_flags != 0;
+    bt->n_party[0] = run->n_party;
+    for (int k = 0; k < run->n_party; k++) {
+        pr_pokemon *p = &run->party[run->party_order[k]].b;
+        bt->party[0][k] = p;
+        pr_update_passive(bt, p);
+    }
+    gc_items_to_battle(run);
+    bt->rng = run->run.rng;
+    bt->rng_live = true;
+    pr_prepare_post_battle_money(bt, &run->eng, victory);
+    pr_run_post_battle_money(bt, &run->eng);
+    run->run.rng = bt->rng;
+    gc_battle_note_unported(run);
+    gc_ev_battle(run);
 }
 
 static void battle_end(gc_run *run, gc_rphase *p)
@@ -342,6 +366,7 @@ static void battle_end(gc_run *run, gc_rphase *p)
         double ease = v == 0 ? 0 : v == 1 ? 1 : 1 - cos(v * 3.141592653589793 / 2);   /* Phaser's Sine.In */
         run->score += (int)ceil(bt->battle_score * ease);
     }
+    post_battle_money(run, victory);
     /* PostBattleAbAttr: Pickup (PostBattleLootAbAttr) takes an item from the enemies' loot after a victory. battle-core keeps
      * only the loot's count and game-core drops the enemy items at the battle's end, so the transfer is not ported:
      * counted when it would have happened. */
@@ -415,11 +440,12 @@ static void money_reward(gc_run *run, double mult)
     int stacks[8], n = 0;
     for (int i = 0; i < run->n_items && n < 8; i++)
         if (!strcmp(run->items[i].key, "AMULET_COIN")) stacks[n++] = run->items[i].stack;
-    const double amount = pr_run_get_money_reward(run->wave, mult, stacks, n, false);
+    const double amount = pr_run_get_money_reward(run->wave, mult, stacks, n,
+        pr_arena_has_tag(&run->bt, ARENA_TAG_TYPE_HAPPY_HOUR, ARENA_TAG_SIDE_BOTH));
     run->money = pr_run_add_money(run->money, amount);
-    gc_event *ev = gc_ev_new(run, GC_EV_MONEY);
-    if (ev) { ev->a = (int32_t)amount; ev->b = (int32_t)run->money; }
-    gc_ev_msg(run, "battle:moneyWon", 1, pr_arg_int("moneyAmount", (int)amount));
+    gc_ev_money(run, amount);
+    gc_event *message = gc_ev_msg(run, "battle:moneyWon", 1, pr_arg_money_en_us("moneyAmount", amount));
+    if (message) message->prompt = true;
 }
 
 /* ---- SelectModifierPhase ---- */
@@ -474,8 +500,7 @@ static bool select_modifier_choose(gc_run *run, gc_rphase *p, const gc_choice *c
         if (run->money < o.cost) { *why = "modifierSelectUiHandler:notEnoughMoney"; return false; }
         if (!gc_port_apply_reward(run, &o, c->b, c->c, why)) return false;
         run->money -= o.cost;
-        gc_event *ev = gc_ev_new(run, GC_EV_MONEY);
-        if (ev) { ev->a = -(int32_t)o.cost; ev->b = (int32_t)run->money; }
+        gc_ev_money(run, -o.cost);
         *ok = true;
         /* a purchase keeps the screen open (applyModifier with a cost doesn't end the phase) */
         return false;
@@ -484,8 +509,7 @@ static bool select_modifier_choose(gc_run *run, gc_rphase *p, const gc_choice *c
         if (s->reroll_cost < 0) { *why = "no reroll here"; return false; }
         if (!pr_reward_try_deduct_money(&run->money, s->reroll_cost)) { *why = "modifierSelectUiHandler:notEnoughMoney"; return false; }
         {
-            gc_event *ev = gc_ev_new(run, GC_EV_MONEY);
-            if (ev) { ev->a = -(int32_t)s->reroll_cost; ev->b = (int32_t)run->money; }
+            gc_ev_money(run, -s->reroll_cost);
         }
         reward_screen(run, GC_REWARD_REROLL);
         *ok = true;
@@ -524,8 +548,7 @@ static void set_next_biome(gc_run *run, int biome)
         if (n) {
             const double before = run->money;
             run->money = pr_run_apply_money_interest(run->money, stacks, n);
-            gc_event *ev = gc_ev_new(run, GC_EV_MONEY);
-            if (ev) { ev->a = (int32_t)(run->money - before); ev->b = (int32_t)run->money; }
+            gc_ev_money(run, run->money - before);
         }
         gc_rq_unshift(run, gc_rp(RP_PARTY_HEAL, 0, 0, 0));
     }

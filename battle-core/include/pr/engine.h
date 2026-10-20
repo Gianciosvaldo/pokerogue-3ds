@@ -204,6 +204,11 @@ double pr_get_double_battle_chance(pr_battle *bt, int wave, int n_lures);
  * Supply the scene setter when raw/custom nature is owned outside the core. */
 void pr_sync_encounter_nature(pr_battle *bt, pr_pokemon *target,
                               pr_nature_setter setter, void *ctx);
+/* Honey Gather subset of BattleEndPhase's allowed-player-party callback loop.
+ * The caller supplies canonical party order; Pickup/other post-battle attrs remain separate.
+ * Prepare starts a fresh callback queue; run emits its presentation events. */
+void pr_prepare_post_battle_money(pr_battle *bt, pr_engine *e, bool victory);
+void pr_run_post_battle_money(pr_battle *bt, pr_engine *e);
 /* EncounterPhase.end queue only; loaded sessions omit fresh player entry work. */
 void pr_queue_encounter_end(pr_battle *bt, pr_engine *e, bool loaded);
 void pr_queue_trainer_summons(pr_battle *bt, pr_engine *e);
@@ -304,6 +309,7 @@ pr_msg_arg pr_arg_pokemon(const pr_battle *bt, const char *name, const pr_pokemo
 pr_msg_arg pr_arg_pokemon_name(const pr_battle *bt, const char *name, const pr_pokemon *p);
 pr_msg_arg pr_arg_int(const char *name, int32_t v);
 pr_msg_arg pr_arg_int64(const char *name, int64_t v);
+pr_msg_arg pr_arg_money_en_us(const char *name, double v);
 pr_msg_arg pr_arg_move(const char *name, int move);
 pr_msg_arg pr_arg_ability(const char *name, int ability);
 pr_msg_arg pr_arg_type(const char *name, int type);

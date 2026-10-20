@@ -120,7 +120,7 @@ static void print_event(const gc_run *run, const gc_event *e)
         break;
     }
     case GC_EV_EXP: printf("  exp +%.0f (party %d)\n", e->exp_amount, e->a); break;
-    case GC_EV_MONEY: printf("  money %+d -> %d\n", e->a, e->b); break;
+    case GC_EV_MONEY: printf("  money %+.17g -> %.17g\n", e->money_change, e->money_after); break;
     case GC_EV_TURN: printf("-- turn %d\n", e->a); break;
     default: break;
     }

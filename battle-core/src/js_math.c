@@ -240,3 +240,12 @@ double js_pow(double x, double y)
     }
     return s * z;
 }
+
+/* Preserve the exact operation order of BattleScene.getWaveMoneyAmount. */
+double pr_wave_money_amount(int wave, double multiplier)
+{
+    double set = ceil(wave / 10.0) - 1;
+    double value = js_pow((set + 1 + (0.75 + (fmod(wave - 1, 10) + 1) / 10)) * 100,
+                          1 + 0.005 * set) * multiplier;
+    return floor(value / 10) * 10;
+}

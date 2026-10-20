@@ -433,6 +433,10 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
              && pr_moves[move].category == MOVE_CATEGORY_STATUS && *pp->value >= 50);
         *pp->value = 50; /* Source also modifies the holder during simulation. */
         return 1;
+    case PR_AC_MoneyAbAttr:
+        GATE(!pp->simulated && pp->victory);
+        bt->money_scattered += pr_wave_money_amount(bt->wave_index, 0.2);
+        return 1;
     case PR_AC_SyncEncounterNatureAbAttr: {
         GATE(true);
         if (!pp->target) return -1;

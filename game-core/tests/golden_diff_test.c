@@ -100,7 +100,7 @@ int main(int argc, char **argv)
 
 static void inventory_golden_turn(pr_battle *bt,pr_engine *e)
 {
- static gc_run run;memset(&run,0,sizeof run);run.bt=*bt;run.money=bt->money;double before=run.money;int payday=bt->money_scattered;
+ static gc_run run;memset(&run,0,sizeof run);run.bt=*bt;run.money=bt->money;double before=run.money;double payday=bt->money_scattered;
  for(int side=0;side<2;side++) {
   gc_item *items=side?run.enemy_items:run.items;int *n=side?&run.n_enemy_items:&run.n_items;
   for(int j=0;j<bt->n_mods[side];j++){
@@ -113,7 +113,7 @@ static void inventory_golden_turn(pr_battle *bt,pr_engine *e)
  }
  gc_items_to_battle(&run);gc_wallet_to_battle(&run);memcpy(bt->mods,run.bt.mods,sizeof bt->mods);memcpy(bt->n_mods,run.bt.n_mods,sizeof bt->n_mods);bt->money=run.bt.money;
  pr_run_turn(bt,e);run.bt=*bt;gc_wallet_from_battle(&run);gc_items_from_battle(&run);gc_items_to_battle(&run);
- if(run.money!=bt->money||bt->money_scattered!=payday){fprintf(stderr,"wallet/payday turn%d wallet%.17g/%.17g payday%d/%d\n",inventory_turns,run.money,bt->money,bt->money_scattered,payday);exit(1);}
+ if(run.money!=bt->money||bt->money_scattered!=payday){fprintf(stderr,"wallet/payday turn%d wallet%.17g/%.17g payday%.17g/%.17g\n",inventory_turns,run.money,bt->money,bt->money_scattered,payday);exit(1);}
  gains+=run.money>before;
  for(int side=0;side<2;side++) {
   if(run.bt.n_mods[side]!=bt->n_mods[side]){fprintf(stderr,"Golden rebuild count turn%d side%d %d/%d\n",inventory_turns,side,run.bt.n_mods[side],bt->n_mods[side]);exit(1);}

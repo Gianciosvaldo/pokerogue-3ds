@@ -4,7 +4,7 @@ CC ?= gcc
 CFLAGS ?= -O2 -g -std=c99 -Wall -Wextra -Wno-unused-parameter -ffp-contract=off
 CPPFLAGS += -Iinclude -Igen/out
 BUILD ?= build
-SRCS := src/item_transfer.c src/rng.c src/hooks.c src/pokemon.c src/damage.c src/move_attrs.c src/closures.c src/closures_moves.c src/closures_conditions.c src/ab_attrs.c src/closures_abilities.c src/modifiers.c src/tags.c src/battler_tags.c src/arena_tags.c src/history.c src/engine.c src/phases.c src/move_effects.c src/called_moves.c src/switching.c src/commands.c src/js_math.c src/text.c src/events.c gen/out/pr_data.c
+SRCS := src/item_transfer.c src/rng.c src/hooks.c src/pokemon.c src/damage.c src/move_attrs.c src/closures.c src/closures_moves.c src/closures_conditions.c src/ab_attrs.c src/closures_abilities.c src/modifiers.c src/tags.c src/battler_tags.c src/arena_tags.c src/history.c src/engine.c src/phases.c src/move_effects.c src/called_moves.c src/switching.c src/commands.c src/js_math.c src/js_number.c src/text.c src/events.c gen/out/pr_data.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
 all: $(BUILD)/transform-test
@@ -631,3 +631,17 @@ $(BUILD)/double-generation-test: tests/double-generation-test.c tests/double-cha
 
 $(BUILD)/double-chance-run/librun.a: $(wildcard include/pr/*.h gen/out/*.h ../run-core/src/*.c ../run-core/include/pr/*.h ../run-core/gen/out/*.[ch])
 	$(MAKE) -s -C ../run-core BUILD=$(abspath $(BUILD))/double-chance-run $(abspath $@)
+
+$(BUILD)/src/js_number.o: $(wildcard vendor/ryu/*)
+
+all: $(BUILD)/honey-money-test
+$(BUILD)/honey-money-test: tests/honey-money-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/money-number-test
+$(BUILD)/money-number-test: tests/money-number-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/honey-owner-test
+$(BUILD)/honey-owner-test: tests/honey-owner-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
