@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "bgm.h"
+#include "field_border.h"
 #include "gm_enum_names.h"
 #include "i18n.h"
 #include "ui.h"
@@ -63,6 +64,12 @@ static void ts_draw(ui_screen* s, rr_screen which) {
         o.font_px = 192;
         text_draw(TS_SUMMARY, 160, 24, "PokeRogue", &o);
       }
+    }
+    /* the field is 320x180 on a 400x240 screen: the biome's background widened over the bands around it */
+    if (ui_space(UI_PHYS_TOP)) {
+      char k[96];
+      snprintf(k, sizeof k, "images/arenas/%s_bg", T.biome);
+      if (img_has(k)) field_border_draw(k);
     }
   } else {
     if (ui_space(UI_PHYS_BOTTOM)) rr_rect(0, 0, 320, 240, RR_RGBA(0x10, 0x10, 0x18, 255));

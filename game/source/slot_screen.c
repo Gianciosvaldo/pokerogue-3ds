@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "field_border.h"
 #include "gm_enum_names.h"
 #include "i18n.h"
 #include "party_icon.h"
@@ -280,7 +281,11 @@ static void draw_preview(const rsv_info* in) {
   gm_enum_lower(GM_E_BIOME_ID, in->biome, a, sizeof a);
   if (in->status == RSV_OK && a[0]) {
     snprintf(key, sizeof key, "images/arenas/%s_bg", a);
-    if (img_has(key)) img_draw(key, NULL, 0, 0, 0, 0);
+    if (img_has(key)) {
+      img_draw(key, NULL, 0, 0, 0, 0);
+      if (ui_space(UI_PHYS_TOP)) field_border_draw(key); /* the background widened over the bands around the field */
+      ui_space(UI_FIELD);
+    }
   }
   ui_window(12, 10, 296, 160, WIN_NORMAL);
   text_opts mid = text_defaults();

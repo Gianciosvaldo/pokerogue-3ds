@@ -49,17 +49,32 @@ void ui_play_select(void) { n_select++; }
 void ui_play_error(void) { n_error++; }
 
 static int g_which; /* 0 top, 1 bottom */
+static ui_space_id g_space; /* the space the last ui_space call set */
 bool ui_space(ui_space_id sp) {
   const bool top = sp == UI_FIELD || sp == UI_FIELD_UI || sp == UI_TOP_CANVAS || sp == UI_TOP_CANVAS_UI || sp == UI_PHYS_TOP;
+  if (top == (g_which == 0)) g_space = sp;
   return top == (g_which == 0);
 }
-void ui_window(float x, float y, float w, float h, win_variant v) { (void)x, (void)y, (void)w, (void)h, (void)v; }
+static ui_space_id g_preview_space; /* the space the top screen's preview window was drawn in */
+void ui_window(float x, float y, float w, float h, win_variant v) {
+  (void)w, (void)h, (void)v;
+  if (x == 12 && y == 10) g_preview_space = g_space;
+}
 void rr_rect(float x, float y, float w, float h, rr_color c) { (void)x, (void)y, (void)w, (void)h, (void)c; }
 void clip_to_screen(void) {}
 void clip_off(void) {}
+static bool g_has_img;
+static int n_borders;
+static char g_border_key[96];
 bool img_has(const char* key) {
   (void)key;
-  return false;
+  return g_has_img;
+}
+static ui_space_id g_border_space;
+void field_border_draw(const char* key) {
+  n_borders++;
+  g_border_space = g_space;
+  snprintf(g_border_key, sizeof g_border_key, "%s", key);
 }
 void img_draw(const char* key, const char* frame, float x, float y, float ox, float oy) { (void)key, (void)frame, (void)x, (void)y, (void)ox, (void)oy; }
 const char* gm_enum_lower(gm_enum e, int value, char* out, int n) {
@@ -370,6 +385,28 @@ int main(void) {
     monies += !strcmp(g_drawn[i].text, "P1000");
   }
   CHECK(scores == 2 && monies == 2, "score and money are drawn for both runs (%d, %d)", scores, monies);
+
+  /* ---- the top screen: the highlighted slot's biome background is widened over the bands around the field, once, and only when it exists */
+  open_list(SLOTS_LOAD, true, 0);
+  g_which = 0;
+  n_borders = 0;
+  g_screen->draw(g_screen, RR_TOP);
+  CHECK(n_borders == 0, "no background in the packs: no border (%d)", n_borders);
+  g_has_img = true;
+  g_screen->draw(g_screen, RR_TOP);
+  CHECK(n_borders == 1 && !strcmp(g_border_key, "images/arenas/town_bg"), "a run's biome background is widened once (%d, %s)", n_borders, g_border_key);
+  CHECK(g_border_space == UI_PHYS_TOP, "the border is drawn in the whole top screen's coordinates (space %d)", (int)g_border_space);
+  CHECK(g_preview_space == UI_FIELD, "and the preview window after it in the field's again (space %d)", (int)g_preview_space);
+  g_screen->draw(g_screen, RR_BOTTOM);
+  CHECK(n_borders == 1, "the bottom screen draws no border (%d)", n_borders);
+  open_list(SLOTS_LOAD, true, 1);
+  n_borders = 0;
+  g_screen->draw(g_screen, RR_TOP);
+  CHECK(n_borders == 0, "an empty slot has no biome, so no border (%d)", n_borders);
+  open_list(SLOTS_LOAD, true, 2);
+  g_screen->draw(g_screen, RR_TOP);
+  CHECK(n_borders == 0, "nor a slot that can not be loaded (%d)", n_borders);
+  g_has_img = false;
 
   printf("%d checks, %d failed\n", checks, failed);
   printf(failed ? "FAILED\n" : "OK\n");

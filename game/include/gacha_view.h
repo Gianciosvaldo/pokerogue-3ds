@@ -75,6 +75,10 @@ typedef struct {
 #define GV_CANVAS_Y 30.0f
 #define GV_W 320.0f
 #define GV_H 180.0f
+/* the top screen is 400 x 240: the 320 x 180 canvas has a band of this many px at each side and above and below it, which the machine's
+ * screens draw on too (the background, the machines, the windows at the screen's edges) */
+#define GV_SIDE 40.0f
+#define GV_BAND 30.0f
 
 /* the machine menu: the option list, the buttons under it, the question over it */
 #define GV_OPT_Y 30.0f    /* the list's window */
