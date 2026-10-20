@@ -100,6 +100,10 @@ static struct {
   float abil_t0;
   /* STATS */
   bool show_ivs;
+  int item_sel; /* the held item the cursor is on, -1 = none (Start on the Stats page) */
+  bool item_open; /* A (or a tap) opened its window */
+  char item_desc[512];
+  int item_desc_lines;
   /* MOVES */
   bool move_select;
   int move_cursor, selected_move;
@@ -375,6 +379,34 @@ static void draw_profile(float px, float py, bool main) {
   mui_bbtext(TS_WINDOW_ALT, px + 7, py + 113, S.memo);
 }
 
+/* The item window: the highlighted held item's name and a brief description (lorenzo's design; transfers stay on the reward screen). */
+static void draw_item_window(const menu_mon* m, float px, float py) {
+  const int i = S.item_sel;
+  if (i < 0 || i >= m->nitems) return;
+  const bool big = m->nitems <= 8;
+  /* the icon's centre: the full-size icons are 32 wide, drawn from px + i * 26 + 1 (origin x 0); the half-size ones 16 wide */
+  const float cx = big ? px + i * 26 + 1 + 16 : px + (i % 17) * 12 + 3 + 8, cy = big ? py + 31 : py + 14 * (i / 17) + 17;
+  const float sz = big ? 26 : 13, left = cx - sz / 2;
+  const rr_color c = RR_RGBA(0xf8, 0xe0, 0x58, 255);
+  rr_rect(left, cy - sz / 2, sz, 1, c);
+  rr_rect(left, cy + sz / 2 - 1, sz, 1, c);
+  rr_rect(left, cy - sz / 2, 1, sz, c);
+  rr_rect(left + sz - 1, cy - sz / 2, 1, sz, c);
+  if (!S.item_open) return;
+  const menu_held_item* it = &m->items[i];
+  char name[64];
+  if (it->count > 1)
+    snprintf(name, sizeof name, "%s x%u", it->name, it->count);
+  else
+    snprintf(name, sizeof name, "%s", it->name);
+  const float lh = (float)mui_line_height(TS_WINDOW_ALT);
+  const int lines = S.item_desc_lines > 0 ? S.item_desc_lines : 1;
+  const float w = 204, h = 14 + lh * (1 + lines), x = px + 4, y = py + 46;
+  mui_window(x, y, w, h);
+  mui_text(TS_WINDOW, x + 8, y + 7, name);
+  mui_text(TS_WINDOW_ALT, x + 8, y + 7 + lh, S.item_desc);
+}
+
 static void draw_stats(float px, float py, bool main) {
   const menu_mon* m = &S.mon;
   bool ivs = main && S.show_ivs;
@@ -435,6 +467,7 @@ static void draw_stats(float px, float py, bool main) {
   int w = (int)floorf(m->exp_ratio * 64);
   if (ov && w > 0) rr_draw_cropped(ov, px + 140, py + 153, w, ov->src_h, &RR_DEFAULT_OPTS);
   mui_image("ui/summary_profile_prompt_a", NULL, px + 8, py + 55, 0, 0);
+  if (main) draw_item_window(m, px, py);
 }
 
 static void pp_text(char* out, size_t n, int pp, int max) {
@@ -523,6 +556,7 @@ static const menu_move* selected_move(menu_move* scratch) {
 }
 
 static void show_move_select(void);
+static void set_item_sel(int i);
 
 static bool set_cursor(int c) {
   bool changed = S.move_cursor != c;
@@ -574,6 +608,19 @@ static bool set_cursor(int c) {
     }
   }
   return changed;
+}
+
+static void set_item_sel(int i) {
+  S.item_sel = i;
+  S.item_open = false;
+  S.item_desc[0] = 0;
+  S.item_desc_lines = 0;
+  if (i < 0 || i >= S.mon.nitems) {
+    S.item_sel = -1;
+    return;
+  }
+  const char* d = S.mon.items[i].desc;
+  S.item_desc_lines = mui_wrap(TS_WINDOW_ALT, d ? d : "", 190, S.item_desc, sizeof S.item_desc);
 }
 
 static void transition_done(void) {
@@ -628,6 +675,7 @@ static void show(int index, summary_page page, bool instant) {
   S.selected_move = -1;
   S.cursor_obj = false;
   S.extra_row = false;
+  S.item_sel = -1;
   menu_sprite_free(&S.sprite);
   menu_sprite_load(&S.sprite, &S.mon, false);
   S.sprite_t0 = S.now;
@@ -720,6 +768,28 @@ bool summary_input(mui_button b) {
         default: break;
       }
     }
+  } else if (S.item_sel >= 0) {
+    /* the cursor is on the held items: Left/Right move it, A opens the item's window (or closes it), B closes the window and then
+     * leaves the row, Up/Down/Start leave it */
+    if (b == MB_LEFT || b == MB_RIGHT) {
+      const int n = S.mon.nitems, i = S.item_sel + (b == MB_RIGHT ? 1 : -1);
+      if (i >= 0 && i < n) set_item_sel(i);
+      success = i >= 0 && i < n;
+      error = !success;
+    } else if (b == MB_ACTION) {
+      S.item_open = !S.item_open;
+      success = true;
+    } else if (b == MB_CANCEL && S.item_open) {
+      S.item_open = false;
+      success = true;
+    } else {
+      set_item_sel(-1);
+      mui_sfx("ui/select");
+      return true;
+    }
+  } else if (b == MB_MENU && S.cursor == SUMMARY_STATS && S.mon.nitems > 0 && !learn) {
+    set_item_sel(0);
+    success = true;
   } else if (b == MB_ACTION) {
     if (S.cursor == SUMMARY_MOVES) {
       show_move_select();
@@ -768,6 +838,31 @@ bool summary_input(mui_button b) {
   else if (error)
     mui_sfx("ui/error");
   return success || error;
+}
+
+bool summary_touch(float x, float y) {
+  if (!S.active || S.transitioning || S.move_select || S.cursor != SUMMARY_STATS) return false;
+  const menu_mon* m = &S.mon;
+  const float py = MUI_H - frame_h(page_key(SUMMARY_STATS)), px = PAGE_X;
+  const bool big = m->nitems <= 8;
+  int hit = -1;
+  for (int i = 0; i < m->nitems; i++) {
+    const float cx = big ? px + i * 26 + 1 + 16 : px + (i % 17) * 12 + 3 + 8, cy = big ? py + 31 : py + 14 * (i / 17) + 17;
+    const float w = big ? 26 : 12, h = big ? 26 : 12;
+    if (x >= cx - w / 2 && x < cx + w / 2 && y >= cy - h / 2 && y < cy + h / 2) hit = i;
+  }
+  if (hit >= 0 && (hit != S.item_sel || !S.item_open)) { /* a tap is the cursor and A in one */
+    set_item_sel(hit);
+    S.item_open = true;
+    mui_sfx("ui/select");
+    return true;
+  }
+  if (S.item_sel >= 0) {
+    set_item_sel(-1);
+    mui_sfx("ui/select");
+    return true;
+  }
+  return false;
 }
 
 /* ------------------------------------------------------------ update / draw */

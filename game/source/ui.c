@@ -233,8 +233,44 @@ static void deliver(ui_button b) {
   if (s && s->input) s->input(s, b);
 }
 
+#define TOUCH_MAX 8
+static struct {
+  uint32_t frame;
+  float x, y;
+} g_dbg_touch[TOUCH_MAX];
+static int g_n_dbg_touch;
+void ui_debug_touch(uint32_t frame, float x, float y) {
+  if (g_n_dbg_touch >= TOUCH_MAX) return;
+  g_dbg_touch[g_n_dbg_touch].frame = frame;
+  g_dbg_touch[g_n_dbg_touch].x = x;
+  g_dbg_touch[g_n_dbg_touch++].y = y;
+}
+static float g_inj_touch[INJECT_MAX][2];
+static int g_n_inj_touch;
+void ui_inject_touch(float x, float y) {
+  if (g_n_inj_touch < INJECT_MAX) {
+    g_inj_touch[g_n_inj_touch][0] = x;
+    g_inj_touch[g_n_inj_touch++][1] = y;
+  }
+}
+
+static void deliver_touch(float x, float y) {
+  if (ui_busy()) return;
+  ui_screen* s = ui_top();
+  if (s && s->touch) s->touch(s, x, y);
+}
+
 static void read_input(void) {
   hidScanInput();
+  if (hidKeysDown() & KEY_TOUCH) {
+    touchPosition t;
+    hidTouchRead(&t);
+    deliver_touch((float)t.px, (float)t.py);
+  }
+  for (int i = 0; i < g_n_dbg_touch; i++)
+    if (g_dbg_touch[i].frame == ui_frame()) deliver_touch(g_dbg_touch[i].x, g_dbg_touch[i].y);
+  for (int i = 0; i < g_n_inj_touch; i++) deliver_touch(g_inj_touch[i][0], g_inj_touch[i][1]);
+  g_n_inj_touch = 0;
   u32 down = hidKeysDown(), held = hidKeysHeld();
   /* START + SELECT together quits (the app's own exit; HOME still works as usual) */
   if ((held & (KEY_START | KEY_SELECT)) == (KEY_START | KEY_SELECT) && (down & (KEY_START | KEY_SELECT))) {

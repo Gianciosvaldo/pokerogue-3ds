@@ -834,7 +834,7 @@ static int foe_items(bv_item* out, int cap) {
       k--;
     }
   }
-  for (int i = 0; i < n; i++) out[i] = (bv_item){ui[i]->icon, (int)pick[i]->stack};
+  for (int i = 0; i < n; i++) out[i] = (bv_item){ui[i]->icon, (int)pick[i]->stack, ui[i]->name, ui[i]->dynamic ? NULL : ui[i]->desc};
   return n;
 }
 

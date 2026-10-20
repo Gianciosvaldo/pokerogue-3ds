@@ -45,6 +45,10 @@ static void read_driver_file(rs_config* cfg) {
       cfg->seed = seed;
     } else if (!strncmp(line, "capsule=", 8)) {
       app_debug_capsule(atoi(line + 8)); /* anything outside 1..25 is ignored there */
+    } else if (!strncmp(line, "touch=", 6)) { /* "touch=<frame>:<x>,<y>": a tap at that frame (emulator runs have no touch) */
+      unsigned fr = 0;
+      int tx = 0, ty = 0;
+      if (sscanf(line + 6, "%u:%d,%d", &fr, &tx, &ty) == 3) ui_debug_touch(fr, (float)tx, (float)ty);
     } else if (!strncmp(line, "starters=", 9)) {
       cfg->n_starters = 0;
       for (char* t = strtok(line + 9, ", "); t && cfg->n_starters < 6; t = strtok(NULL, ", "))

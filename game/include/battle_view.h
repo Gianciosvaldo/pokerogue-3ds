@@ -126,6 +126,8 @@ int bv_biome(void);
 typedef struct {
   const char* icon;
   int count;
+  const char* name; /* English name and brief effect text for the item window (static storage; desc may be NULL) */
+  const char* desc;
 } bv_item;
 #define BV_MAX_FOE_ITEMS 36
 

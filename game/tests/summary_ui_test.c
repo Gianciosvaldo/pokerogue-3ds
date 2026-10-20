@@ -75,7 +75,17 @@ float mui_text_height(mui_style s, const char* utf8) {
 }
 
 void mui_window(float x, float y, float w, float h) {
-  (void)x; (void)y; (void)w; (void)h;
+  rec('w', "window", x, y, w, h, 0, 0);
+}
+
+int mui_line_height(mui_style s) {
+  (void)s;
+  return 12;
+}
+
+void rr_rect(float x, float y, float w, float h, rr_color c) {
+  (void)c;
+  rec('r', "rect", x, y, w, h, 0, 0);
 }
 
 int mui_text(mui_style s, float x, float y, const char* utf8) {
@@ -394,6 +404,100 @@ int main(void) {
   assert(ev_data.closed);
   assert(!summary_active());
   printf("Summary screen closed successfully.\n");
+
+  /* 3. The held items: Start on the Stats page puts the cursor on the first one, A opens its window, Left/Right move the cursor
+   * (closing the window), B closes the window and then leaves the row */
+  memset(party, 0, sizeof party);
+  party[0].species = 6;
+  party[1].species = 257;
+  snprintf(party[0].name, sizeof party[0].name, "Charizard");
+  snprintf(party[1].name, sizeof party[1].name, "Blaziken");
+  party[0].nitems = 3;
+  snprintf(party[0].items[0].name, sizeof party[0].items[0].name, "Leftovers");
+  party[0].items[0].count = 2;
+  party[0].items[0].desc = "Heals 1/16 of its max HP every turn.";
+  snprintf(party[0].items[1].name, sizeof party[0].items[1].name, "Focus Band");
+  party[0].items[1].count = 1;
+  party[0].items[1].desc = "Sometimes survives a hit with 1 HP.";
+  snprintf(party[0].items[2].name, sizeof party[0].items[2].name, "Mystery");
+  party[0].items[2].count = 1; /* no description */
+  memset(&ev_data, 0, sizeof ev_data);
+  args.page = SUMMARY_STATS;
+  args.index = 0;
+  summary_open(&args, &ev);
+  summary_update(300.0f);
+  g_ndr = 0;
+  summary_draw();
+  assert(!find('w', "window", 0) && !find('r', "rect", 0)); /* nothing is picked on opening */
+  assert(summary_input(MB_MENU));
+  g_ndr = 0;
+  summary_draw();
+  assert(find('r', "rect", 3)); /* the cursor frame round the first icon: four sides */
+  assert(!find('w', "window", 0) && !find('t', "Leftovers", 0)); /* ... and no window until A */
+  assert(summary_input(MB_ACTION));
+  g_ndr = 0;
+  summary_draw();
+  assert(find('w', "window", 0));
+  assert(find('t', "Leftovers x2", 0));
+  assert(find('t', "Heals 1/16", 0));
+  assert(!find('t', "Focus Band", 0));
+  assert(summary_input(MB_RIGHT)); /* the cursor moves on and the window closes */
+  g_ndr = 0;
+  summary_draw();
+  assert(!find('w', "window", 0) && find('r', "rect", 3));
+  assert(summary_input(MB_ACTION));
+  g_ndr = 0;
+  summary_draw();
+  assert(find('t', "Focus Band", 0) && find('t', "Sometimes survives", 0) && !find('t', "Leftovers", 0));
+  assert(summary_input(MB_RIGHT) && summary_input(MB_ACTION)); /* the last: no description, the name alone */
+  g_ndr = 0;
+  summary_draw();
+  assert(find('t', "Mystery", 0));
+  assert(summary_input(MB_RIGHT)); /* past the end: refused (an error sound), the cursor stays */
+  assert(summary_input(MB_CANCEL)); /* B closes the window, the cursor stays on the item */
+  g_ndr = 0;
+  summary_draw();
+  assert(!find('w', "window", 0) && find('r', "rect", 3));
+  assert(summary_input(MB_CANCEL)); /* B again leaves the row (not the summary) */
+  assert(summary_active() && !ev_data.closed);
+  g_ndr = 0;
+  summary_draw();
+  assert(!find('r', "rect", 0));
+  /* a Pokemon with no items, and the other pages, never pick one */
+  assert(summary_input(MB_DOWN));
+  assert(!summary_input(MB_MENU));
+  assert(summary_input(MB_LEFT));
+  summary_update(300.0f);
+  assert(!summary_input(MB_MENU));
+  assert(summary_input(MB_CANCEL));
+  assert(ev_data.closed);
+  printf("Item window PASSED.\n");
+
+  /* 4. Touch: a tap on an item opens its window, another item switches, the same item or anywhere else closes it */
+  memset(&ev_data, 0, sizeof ev_data);
+  summary_open(&args, &ev);
+  summary_update(300.0f);
+  const float ty = 180 - (float)mui_frame("ui/summary_stats", NULL)->src_h + 31; /* the item row's centre */
+  assert(!summary_touch(300, 20)); /* nothing open: a tap off the items does nothing */
+  assert(summary_touch(122, ty));
+  g_ndr = 0;
+  summary_draw();
+  assert(find('t', "Leftovers x2", 0));
+  assert(summary_touch(106 + 26 + 17, ty));
+  g_ndr = 0;
+  summary_draw();
+  assert(find('t', "Focus Band", 0) && !find('t', "Leftovers", 0));
+  assert(summary_touch(106 + 26 + 17, ty)); /* the same item: closes */
+  g_ndr = 0;
+  summary_draw();
+  assert(!find('w', "window", 0) && !find('r', "rect", 0));
+  assert(summary_touch(122, ty) && summary_touch(300, 20)); /* a tap elsewhere closes it */
+  g_ndr = 0;
+  summary_draw();
+  assert(!find('w', "window", 0));
+  assert(!summary_touch(106 + 3 * 26 + 17, ty)); /* past the last item (3 held) */
+  summary_close();
+  printf("Item window touch PASSED.\n");
 
   printf("summary_ui_test PASSED ALL CHECKS!\n");
   return 0;

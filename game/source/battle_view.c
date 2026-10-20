@@ -126,6 +126,8 @@ static struct {
   } ball;
   bv_item foe[BV_MAX_FOE_ITEMS]; /* the foe's items while the command is asked */
   int n_foe;
+  int foe_sel; /* the foe item the cursor is on (Up from the command menu's top row), -1 = none */
+  bool foe_open; /* A (or a tap) opened its window */
   /* promptLevelUpStats' window (BEV_LEVEL_UP) */
   struct {
     bool on, totals;
@@ -741,6 +743,30 @@ static void draw_foe_items(void) {
       t.origin_x = 1;
       text_draw(TS_INSTRUCTIONS_TEXT, x + cell - 2, y + cell - 12, n, &t);
     }
+  }
+  if (B.mode == M_COMMAND && B.foe_sel >= 0 && B.foe_sel < B.n_foe) {
+    const bv_item* it = &B.foe[B.foe_sel];
+    const float x = 10 + (B.foe_sel % per_row) * cell - 1, y = top + 4 + (B.foe_sel / per_row) * cell; /* the icons' art sits a pixel low in their cell */
+    const rr_color c = RR_RGBA(0xf8, 0xe0, 0x58, 255);
+    rr_rect(x, y, cell, 1, c);
+    rr_rect(x, y + cell - 1, cell, 1, c);
+    rr_rect(x, y, 1, cell, c);
+    rr_rect(x + cell - 1, y, 1, cell, c);
+    if (!B.foe_open) return;
+    /* the item window under the bar: name (with the stack) and a brief effect text */
+    char name[64];
+    if (it->count > 1)
+      snprintf(name, sizeof name, "%s x%d", it->name ? it->name : "?", it->count);
+    else
+      snprintf(name, sizeof name, "%s", it->name ? it->name : "?");
+    text_opts d = text_defaults();
+    d.wrap_w = 288;
+    const char* desc = it->desc ? it->desc : "";
+    const float th = text_height(TS_WINDOW, name, NULL), dh = *desc ? text_height(TS_WINDOW_ALT, desc, &d) : 0;
+    const float wy = top + h + 4;
+    ui_window(4, wy, 312, th + dh + 18, WIN_NORMAL);
+    text_draw(TS_WINDOW, 14, wy + 8, name, NULL);
+    if (*desc) text_draw(TS_WINDOW_ALT, 14, wy + 11 + th, desc, &d);
   }
 }
 
@@ -1483,11 +1509,45 @@ static bool bv_input(ui_screen* s, ui_button b) {
     return true;
   }
   if (B.mode == M_EVENTS) return msgbox_input(&B.msg, b);
+  if (B.mode == M_COMMAND && B.foe_sel >= 0) {
+    /* the cursor is on the foe's items: Left/Right move it, A opens the item's window (or closes it), B closes the window and then
+     * leaves the bar, Down leaves it */
+    if (b == BTN_LEFT || b == BTN_RIGHT) {
+      const int i = B.foe_sel + (b == BTN_RIGHT ? 1 : -1);
+      if (i < 0 || i >= B.n_foe) return false;
+      B.foe_sel = i;
+      B.foe_open = false;
+      ui_play_select();
+      return true;
+    }
+    if (b == BTN_ACTION) {
+      B.foe_open = !B.foe_open;
+      ui_play_select();
+      return true;
+    }
+    if (b == BTN_CANCEL && B.foe_open) {
+      B.foe_open = false;
+      ui_play_select();
+      return true;
+    }
+    if (b == BTN_DOWN || b == BTN_CANCEL) {
+      B.foe_sel = -1;
+      ui_play_select();
+      return true;
+    }
+    return false;
+  }
   if (B.mode == M_COMMAND) {
     int c = B.cmd_cursor;
     switch (b) {
       case BTN_UP:
-        if (c >= 2) B.cmd_cursor -= 2;
+        if (c >= 2) {
+          B.cmd_cursor -= 2;
+        } else if (B.n_foe > 0) {
+          B.foe_sel = 0;
+          ui_play_select();
+          return true;
+        }
         break;
       case BTN_DOWN:
         if (c < 2) B.cmd_cursor += 2;
@@ -1695,7 +1755,57 @@ static void bv_draw(ui_screen* s, rr_screen which) {
   }
 }
 
-static ui_screen g_battle = {"battle", 0, NULL, NULL, NULL, bv_input, bv_update, bv_draw, NULL};
+/* The foe item bar's geometry (draw_foe_items): where its icons are, in UI_BOTTOM_UI */
+#define FOE_PER_ROW 12
+#define FOE_CELL 26
+#define FOE_TOP (-226)
+static float foe_bar_h(void) { return 8 + ((B.n_foe + FOE_PER_ROW - 1) / FOE_PER_ROW) * FOE_CELL; }
+/* the foe item under (x, y) in UI_BOTTOM_UI, or -1 */
+static int foe_item_at(float x, float y) {
+  if (B.n_foe <= 0 || y < FOE_TOP || y >= FOE_TOP + foe_bar_h()) return -1;
+  const int col = (int)((x - 10) / FOE_CELL), row = (int)((y - FOE_TOP - 4) / FOE_CELL);
+  if (x < 10 || col >= FOE_PER_ROW || y < FOE_TOP + 4 || row < 0) return -1;
+  const int i = row * FOE_PER_ROW + col;
+  return i < B.n_foe ? i : -1;
+}
+
+/* A tap on the bottom screen (physical px). The command and fight menus' cells act as their button does with the cursor on them; a
+ * tap on a foe item opens its window (a tap anywhere else, or on the same item, closes it); in the fight menu a tap above the strip
+ * goes back, like B. */
+static bool bv_touch(ui_screen* s, float px, float py) {
+  (void)s;
+  const float x = px, y = ui_bottom_ui_y(py);
+  if (B.mode == M_COMMAND) {
+    const int i = foe_item_at(x, y);
+    if (i >= 0 && (i != B.foe_sel || !B.foe_open)) { /* a tap is the cursor and A in one */
+      B.foe_sel = i;
+      B.foe_open = true;
+      ui_play_select();
+      return true;
+    }
+    if (B.foe_sel >= 0) { /* the same item again, or anywhere else: closes */
+      B.foe_sel = -1;
+      B.foe_open = false;
+      ui_play_select();
+      return true;
+    }
+    if (x >= 202 && y >= -48) {
+      B.cmd_cursor = (x < 261 ? 0 : 1) + (y < -24 ? 0 : 2);
+      return bv_input(NULL, BTN_ACTION);
+    }
+    return false;
+  }
+  if (B.mode == M_FIGHT) {
+    if (x < 240 && y >= -48) {
+      B.move_cursor = (x < 125 ? 0 : 1) + (y < -24 ? 0 : 2);
+      return bv_input(NULL, BTN_ACTION);
+    }
+    if (y < -48) return bv_input(NULL, BTN_CANCEL);
+  }
+  return false;
+}
+
+static ui_screen g_battle = {"battle", 0, NULL, NULL, NULL, bv_input, bv_update, bv_draw, NULL, bv_touch};
 
 void bv_begin(const bv_setup* setup) {
   menu_sprite_free(&B.s[0].sprite);
@@ -1758,6 +1868,8 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
     for (int i = 0; i < 4; i++) B.opts.move_ok[i] = true;
   }
   B.n_foe = 0;
+  B.foe_sel = -1;
+  B.foe_open = false;
   if (opts && opts->foe_items)
     for (int i = 0; i < opts->n_foe_items && B.n_foe < BV_MAX_FOE_ITEMS; i++) B.foe[B.n_foe++] = opts->foe_items[i];
   B.opts.foe_items = NULL;
