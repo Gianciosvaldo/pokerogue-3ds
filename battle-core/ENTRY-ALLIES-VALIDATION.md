@@ -27,10 +27,19 @@ original 32,768-case floor. The old core fails 22,528 of the original cases.
 
 The complete-turn proof uses actual Baton Pass switches into Hospitality and
 Curious Medicine, including passives. Each 8,192-turn matrix retains 4,096 wide
-combat controls and requires at least 1,000 native applications of each new
-callback. Existing wide damage, ally/spread, faint and switch coverage floors
+combat controls and requires at least 1,024 native applications of each new
+callback in each ability slot (primary and passive). Passthrough observers count
+these during the native apply, before the dispatcher clears its reused params.
+Existing wide damage, ally/spread, faint and switch coverage floors
 remain active. Full source comparisons and normal integration gates must pass
 before merge; raw callback samples alone do not establish owning-turn parity.
+
+An initial switch fixture retained the framework's Ball Fetch override, so its
+primary cases did not activate the intended ability. Those captures remain
+supplemental passive evidence. The corrected fixture disables that override for
+the entry cases, verifies each incoming ability, restores it for the unchanged
+wide controls and regenerates both entire matrices. No expected source state
+is rewritten and no required cases are dropped.
 
 ```sh
 . /workspace/shared/activate-parity.sh
