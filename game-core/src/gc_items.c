@@ -477,3 +477,96 @@ void gc_items_drop_held_of(gc_run *run, uint32_t pokemon_id)
     drop_held(run, 0, pokemon_id, false);
     gc_items_to_battle(run);
 }
+
+/* PokemonHeldItemModifier.getMaxStackCount() for `mon` holding `key`/`arg`: getMaxHeldItemCount(), which is the holder's IV for a
+ * vitamin (BaseStatBoosterModifier) and per generated type for a generator's items (berries) */
+int gc_item_max_held(const gc_run *run, const char *key, int16_t arg, const gc_mon *mon)
+{
+    (void)run;
+    const int idx = gc_reward_item_index(key);
+    if (idx < 0) return 1;
+    int max = pr_items[idx].max_held;
+    if (max == -3)
+        for (int i = 0; i < pr_gen_type_count; i++)
+            if (pr_gen_types[i].item == idx && pr_gen_types[i].arg == arg) { max = pr_gen_types[i].max_held; break; }
+    if (max == -2) return mon && arg >= 0 && arg < 6 ? mon->b.ivs[arg] : 0;
+    return max < 0 ? 0 : max;
+}
+
+/* addModifier / removeModifier end in updateModifiers: virtual stacks reset, every party member's stats calculated again */
+static void held_items_changed(gc_run *run)
+{
+    for (int i = 0; i < run->n_items; i++) run->items[i].virtual_stack = 0;
+    gc_items_to_battle(run);
+    for (int i = 0; i < run->n_party; i++) {
+        pr_pokemon *b = &run->party[i].b;
+        const int max = b->stats[STAT_HP], hp = b->hp;
+        pr_recalculate_stats(&run->bt, b);
+        /* a vitamin that moved changes the maximum HP: the screen hears it as an HP event, as an item used on the Pokemon */
+        if (b->stats[STAT_HP] != max || b->hp != hp) {
+            gc_event *ev = gc_ev_new(run, GC_EV_HP);
+            if (ev) { ev->a = 0; ev->b = i; ev->c = b->hp; }
+        }
+    }
+}
+
+/* The party screen's MODIFIER_TRANSFER callback from the reward screen (SelectModifierPhase.openModifierTransferScreen):
+ * tryTransferHeldItemModifier(item, party[to], true, qty, undefined, undefined, itemLost false). The target's matching stack
+ * is capped at its getMaxStackCount(); with no matching stack nothing caps it. The taken copies go in a new entry at the end
+ * of the list (the old matching entry is removed and re-added, as removeModifier + addModifier do), and an emptied source is
+ * removed. Returns how many copies moved; 0 = refused (upstream returns false and nothing changes). */
+int gc_item_transfer(gc_run *run, int item_idx, int to, int qty)
+{
+    if (!run || item_idx < 0 || item_idx >= run->n_items || to < 0 || to >= run->n_party || qty <= 0) return 0;
+    gc_item src = run->items[item_idx];
+    const uint32_t to_id = run->party[to].b.id;
+    if (!src.pokemon_id || src.pokemon_id == to_id || src.non_transferable || src.stack <= 0) return 0;
+    int match = -1;
+    for (int i = 0; i < run->n_items; i++)
+        if (i != item_idx && run->items[i].pokemon_id == to_id && !strcmp(run->items[i].key, src.key) && run->items[i].arg == src.arg) {
+            match = i;
+            break;
+        }
+    int taken, total;
+    if (match >= 0) {
+        const int max = gc_item_max_held(run, src.key, src.arg, &run->party[to]);
+        const int have = run->items[match].stack;
+        if (have >= max) return 0;
+        taken = qty < src.stack ? qty : src.stack;
+        if (taken > max - have) taken = max - have;
+        total = have + taken;
+    } else {
+        taken = qty < src.stack ? qty : src.stack;
+        total = taken;
+    }
+    /* newItemModifier = itemModifier.clone(): the source's fields, on the target */
+    gc_item moved = src;
+    moved.pokemon_id = to_id;
+    moved.stack = total;
+    if (match < 0 && src.stack > taken && run->n_items >= GC_MAX_ITEMS) return 0; /* no room for the new entry */
+    run->items[item_idx].stack -= taken;
+    /* remove the higher index first so the lower one stays valid */
+    const int empty = run->items[item_idx].stack == 0 ? item_idx : -1;
+    const int hi = empty > match ? empty : match, lo = empty > match ? match : empty;
+    if (hi >= 0) gc_item_remove_at(run, hi);
+    if (lo >= 0) gc_item_remove_at(run, lo);
+    run->items[run->n_items++] = moved;
+    held_items_changed(run);
+    return taken;
+}
+
+/* The party screen's DISCARD (tryDiscardHeldItemModifier): `count` copies of a transferable held item go, the entry with
+ * them when none is left. Returns the copies thrown away. */
+int gc_item_discard(gc_run *run, int item_idx, int count)
+{
+    if (!run || item_idx < 0 || item_idx >= run->n_items || count <= 0) return 0;
+    gc_item *it = &run->items[item_idx];
+    if (!it->pokemon_id || it->non_transferable || it->stack <= 0) return 0;
+    const int taken = count < it->stack ? count : it->stack;
+    it->stack -= taken;
+    if (!it->stack) gc_item_remove_at(run, item_idx);
+    /* upstream calls removeModifier alone and the stats wait for the next updateModifiers (the next encounter's). Here they
+     * follow at once: a discarded vitamin otherwise left a Pokemon above its own maximum HP until then */
+    held_items_changed(run);
+    return taken;
+}

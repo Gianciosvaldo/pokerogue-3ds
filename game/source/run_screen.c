@@ -1148,6 +1148,43 @@ static void on_shop_skip(void* ctx) {
   answer(&rc);
 }
 
+/* Manage Items: each transfer or discard goes to game-core at once and the party screen shows the run again; backing out shows the
+ * same reward screen again (resetModifierSelect). A refused transfer (the target's stack is full) changes nothing, as upstream. */
+static void on_manage_move(int item_src, int count, int to, void* arg) {
+  (void)arg;
+  gc_choice c = {0};
+  c.kind = to < 0 ? GC_CH_DISCARD : GC_CH_TRANSFER;
+  c.a = (int16_t)to;
+  c.b = (int16_t)item_src;
+  c.c = (int16_t)count;
+  const char* why = NULL;
+  /* its events (a moved vitamin's new maximum HP) wait in game-core's queue until the screen closes */
+  gc_run_choose(&G.run, &c, &why);
+}
+
+static void on_manage_done(void* arg) {
+  (void)arg;
+  ps_close();
+  drain();
+  pump(NULL); /* the events, then the same reward screen again */
+}
+
+static void on_shop_manage_items(void* ctx) {
+  (void)ctx;
+  rh_close();
+  ps_open_transfer(&G.run, on_manage_move, on_manage_done, NULL);
+}
+
+static bool party_has_held_item(void) {
+  for (int i = 0; i < G.run.n_items; i++) {
+    const gc_item* it = &G.run.items[i];
+    if (it->detached || it->non_transferable || it->stack <= 0) continue;
+    for (int p = 0; p < G.run.n_party; p++)
+      if (it->pokemon_id && it->pokemon_id == G.run.party[p].b.id) return true;
+  }
+  return false;
+}
+
 static int calc_party_luck(void) {
   int total = 0;
   for (int i = 0; i < G.run.n_party; i++) {
@@ -1164,6 +1201,7 @@ static void open_shop_ui(void) {
   args.player_money = G.run.money;
   args.has_lock_capsule = gc_item_stack(&G.run, "LOCK_CAPSULE") > 0;
   args.party_luck = calc_party_luck();
+  args.party_has_held_item = party_has_held_item();
   args.wave = G.run.wave;
   rt_biome_name(G.run.biome, args.location, sizeof args.location);
   /* what the money items grant now: MoneyRewardPhase's amount at their multipliers (Nugget 1, Big Nugget 2.5, Relic Gold 10)
@@ -1181,6 +1219,7 @@ static void open_shop_ui(void) {
     on_shop_select_shop,
     on_shop_reroll,
     on_shop_skip,
+    on_shop_manage_items,
     NULL
   };
 

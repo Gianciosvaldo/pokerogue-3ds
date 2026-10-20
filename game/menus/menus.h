@@ -37,6 +37,7 @@ typedef struct {
   const char* icon;       /* frame in the "items" atlas, e.g. "leftovers" (may be NULL) */
   uint16_t count, max;    /* stack count and its maximum */
   bool transferable;
+  int16_t src;            /* the caller's own index for the item (the run's item list), -1 = none */
 } menu_held_item;
 
 typedef struct {

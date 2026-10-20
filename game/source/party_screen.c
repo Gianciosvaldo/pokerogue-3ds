@@ -31,6 +31,9 @@ static void fill_met(menu_mon* m, const gc_mon* g) {
 static void fill_items(menu_mon* m, uint32_t id) {
   m->nitems = 0;
   if (!g_run || !id) return;
+  const gc_mon* holder = NULL;
+  for (int i = 0; i < g_run->n_party && i < PR_MAX_PARTY; i++)
+    if (g_run->party[i].b.id == id) holder = &g_run->party[i];
   for (int i = 0; i < g_run->n_items && i < GC_MAX_ITEMS && m->nitems < MENU_MAX_ITEMS; i++) {
     const gc_item* it = &g_run->items[i];
     if (it->detached || it->pokemon_id != id || !it->key) continue;
@@ -42,6 +45,11 @@ static void fill_items(menu_mon* m, uint32_t id) {
     h->icon = u ? u->icon : NULL;
     h->count = (uint16_t)(it->stack > 0 ? it->stack : 0);
     h->transferable = !it->non_transferable;
+    h->src = (int16_t)i;
+    if (holder) {
+      const int max = gc_item_max_held(g_run, it->key, it->arg, holder);
+      h->max = (uint16_t)(max > 0 ? max : 0);
+    }
     int k = m->nitems++;
     while (k > 0 && strcmp(m->items[k - 1].name, m->items[k].name) > 0) {
       const menu_held_item t = m->items[k - 1];
@@ -307,6 +315,64 @@ void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, void (*on
 
   static party_events ev;
   ev = (party_events){on_item_select, NULL, NULL, NULL, NULL, on_summary, NULL};
+  party_open(&a, S.party, S.n, &ev);
+  S.open = true;
+  ui_push(&g_screen);
+}
+
+/* ---- Manage Items: the reward screen's transfer (SelectModifierPhase.openModifierTransferScreen) ---- */
+
+static struct {
+  void (*on_move)(int item_src, int count, int to, void* arg);
+  void (*on_done)(void* arg);
+  void* arg;
+} TrS;
+
+static void transfer_fill(void) {
+  for (int i = 0; i < g_run->n_party && i < PR_MAX_PARTY; i++) gc_to_menu_mon(&g_run->party[i], &S.party[i]);
+  S.n = g_run->n_party;
+}
+
+/* `item` counts the transferable items of `from` in the order the menu lists them; `to` -1 = discard them */
+static void on_transfer_pick(void* ctx, int from, int item, int count, int to) {
+  (void)ctx;
+  if (!g_run || from < 0 || from >= S.n || to < -1 || to >= S.n) return;
+  const menu_mon* m = &S.party[from];
+  int src = -1;
+  for (int i = 0, k = 0; i < m->nitems; i++)
+    if (m->items[i].transferable && k++ == item) src = m->items[i].src;
+  if (src < 0) return;
+  if (TrS.on_move) TrS.on_move(src, count, to, TrS.arg);
+  /* the run's list changed (and with it each item's index): the menu is rebuilt from it */
+  transfer_fill();
+  party_refresh(S.party, S.n);
+}
+
+static void on_discard_pick(void* ctx, int slot, int item, int count) { on_transfer_pick(ctx, slot, item, count, -1); }
+
+static void on_transfer_select(void* ctx, int slot, int option) {
+  (void)ctx, (void)slot;
+  if (option == PO_CANCEL && TrS.on_done) TrS.on_done(TrS.arg);
+}
+
+void ps_open_transfer(const void* gc_run_ptr, void (*on_move)(int item_src, int count, int to, void* arg), void (*on_done)(void* arg),
+                      void* arg) {
+  const gc_run* run = (const gc_run*)gc_run_ptr;
+  if (!run) return;
+  ps_set_run(run);
+  memset(&S, 0, sizeof S);
+  TrS.on_move = on_move;
+  TrS.on_done = on_done;
+  TrS.arg = arg;
+  S.mode = PARTY_MODIFIER_TRANSFER;
+  transfer_fill();
+  party_args a;
+  memset(&a, 0, sizeof a);
+  a.mode = PARTY_MODIFIER_TRANSFER;
+  a.battler_count = 1;
+  a.in_reward_phase = true;
+  static party_events ev;
+  ev = (party_events){on_transfer_select, on_transfer_pick, on_discard_pick, NULL, NULL, on_summary, NULL};
   party_open(&a, S.party, S.n, &ev);
   S.open = true;
   ui_push(&g_screen);
