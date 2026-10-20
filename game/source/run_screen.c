@@ -838,6 +838,28 @@ static int foe_items(bv_item* out, int cap) {
   return n;
 }
 
+/* The player's own items that no Pokemon holds (Mega Bracelet, Dynamax Band, Tera Orb, Exp. Share, Amulet Coin...), by English name:
+ * the second item bar */
+static int key_items(bv_item* out, int cap) {
+  int n = 0;
+  for (int i = 0; i < G.run.n_items && i < GC_MAX_ITEMS && n < cap; i++) {
+    const gc_item* it = &G.run.items[i];
+    if (!it->key || it->stack <= 0 || it->pokemon_id || it->detached) continue;
+    const gm_item_ui* u = gm_item_ui_find(it->key, it->arg);
+    if (!u) u = gm_item_ui_find(it->key, -1);
+    if (!u) continue;
+    int k = n++;
+    out[k] = (bv_item){u->icon, (int)it->stack, u->name, u->dynamic ? NULL : u->desc};
+    while (k > 0 && strcmp(out[k - 1].name, out[k].name) > 0) {
+      const bv_item t = out[k - 1];
+      out[k - 1] = out[k];
+      out[k] = t;
+      k--;
+    }
+  }
+  return n;
+}
+
 static void ask(void) {
   const gc_screen* s = gc_run_screen(&G.run);
   G.ball = -1;
@@ -852,6 +874,12 @@ static void ask(void) {
   static bv_item foe[BV_MAX_FOE_ITEMS];
   o.n_foe_items = foe_items(foe, BV_MAX_FOE_ITEMS);
   o.foe_items = foe;
+  static bv_item keys[BV_MAX_FOE_ITEMS];
+  o.n_key_items = key_items(keys, BV_MAX_FOE_ITEMS);
+  o.key_items = keys;
+  o.has_party_balls = true;
+  for (int i = 0; i < 6; i++)
+    o.party_balls[i] = i >= G.run.n_party ? BV_BALL_EMPTY : G.run.party[i].b.hp > 0 ? BV_BALL_ALIVE : BV_BALL_FAINTED;
   const gc_mon* me = gc_field_mon(&G.run, 0);
   for (int i = 0; i < 4; i++) {
     o.move_ok[i] = s->move_ok[i];

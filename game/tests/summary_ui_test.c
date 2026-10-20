@@ -196,6 +196,15 @@ typedef struct {
   int swap_slot, swap_a, swap_b;
 } test_events;
 
+static char g_info_name[80], g_info_desc[160];
+static bool g_info_on;
+static void on_test_info(void* ctx, const char* name, const char* desc) {
+  (void)ctx;
+  g_info_on = name != NULL;
+  snprintf(g_info_name, sizeof g_info_name, "%s", name ? name : "");
+  snprintf(g_info_desc, sizeof g_info_desc, "%s", desc ? desc : "");
+}
+
 static void on_test_close(void* ctx) {
   test_events* e = (test_events*)ctx;
   e->closed = true;
@@ -405,8 +414,8 @@ int main(void) {
   assert(!summary_active());
   printf("Summary screen closed successfully.\n");
 
-  /* 3. The held items: Start on the Stats page puts the cursor on the first one, A opens its window, Left/Right move the cursor
-   * (closing the window), B closes the window and then leaves the row */
+  /* 3. The held items: Start on the Stats page puts the cursor on the first one, A opens its description (on_item_info: the caller
+   * shows it), Left/Right move the cursor (an open description follows), B closes the description and then leaves the row */
   memset(party, 0, sizeof party);
   party[0].species = 6;
   party[1].species = 257;
@@ -422,81 +431,73 @@ int main(void) {
   snprintf(party[0].items[2].name, sizeof party[0].items[2].name, "Mystery");
   party[0].items[2].count = 1; /* no description */
   memset(&ev_data, 0, sizeof ev_data);
+  ev.on_item_info = on_test_info;
+  g_info_on = false;
   args.page = SUMMARY_STATS;
   args.index = 0;
   summary_open(&args, &ev);
   summary_update(300.0f);
   g_ndr = 0;
   summary_draw();
-  assert(!find('w', "window", 0) && !find('r', "rect", 0)); /* nothing is picked on opening */
+  assert(!g_info_on && !find('r', "rect", 0)); /* nothing is picked on opening */
   assert(summary_input(MB_MENU));
   g_ndr = 0;
   summary_draw();
   assert(find('r', "rect", 3)); /* the cursor frame round the first icon: four sides */
-  assert(!find('w', "window", 0) && !find('t', "Leftovers", 0)); /* ... and no window until A */
+  assert(!g_info_on); /* ... and no description until A */
   assert(summary_input(MB_ACTION));
+  assert(g_info_on && !strcmp(g_info_name, "Leftovers x2") && strstr(g_info_desc, "Heals 1/16"));
+  assert(summary_input(MB_RIGHT)); /* the cursor moves on and the open description follows */
   g_ndr = 0;
   summary_draw();
-  assert(find('w', "window", 0));
-  assert(find('t', "Leftovers x2", 0));
-  assert(find('t', "Heals 1/16", 0));
-  assert(!find('t', "Focus Band", 0));
-  assert(summary_input(MB_RIGHT)); /* the cursor moves on and the window closes */
-  g_ndr = 0;
-  summary_draw();
-  assert(!find('w', "window", 0) && find('r', "rect", 3));
-  assert(summary_input(MB_ACTION));
-  g_ndr = 0;
-  summary_draw();
-  assert(find('t', "Focus Band", 0) && find('t', "Sometimes survives", 0) && !find('t', "Leftovers", 0));
-  assert(summary_input(MB_RIGHT) && summary_input(MB_ACTION)); /* the last: no description, the name alone */
-  g_ndr = 0;
-  summary_draw();
-  assert(find('t', "Mystery", 0));
+  assert(g_info_on && !strcmp(g_info_name, "Focus Band") && strstr(g_info_desc, "Sometimes survives") && find('r', "rect", 3));
+  assert(summary_input(MB_RIGHT)); /* the last: no description, the name alone */
+  assert(g_info_on && !strcmp(g_info_name, "Mystery") && !g_info_desc[0]);
   assert(summary_input(MB_RIGHT)); /* past the end: refused (an error sound), the cursor stays */
-  assert(summary_input(MB_CANCEL)); /* B closes the window, the cursor stays on the item */
+  assert(g_info_on && !strcmp(g_info_name, "Mystery"));
+  assert(summary_input(MB_CANCEL)); /* B closes the description, the cursor stays on the item */
+  assert(!g_info_on);
   g_ndr = 0;
   summary_draw();
-  assert(!find('w', "window", 0) && find('r', "rect", 3));
+  assert(find('r', "rect", 3));
+  assert(summary_input(MB_ACTION) && g_info_on); /* A opens it again */
+  assert(summary_input(MB_CANCEL) && !g_info_on);
   assert(summary_input(MB_CANCEL)); /* B again leaves the row (not the summary) */
   assert(summary_active() && !ev_data.closed);
   g_ndr = 0;
   summary_draw();
   assert(!find('r', "rect", 0));
-  /* a Pokemon with no items, and the other pages, never pick one */
-  assert(summary_input(MB_DOWN));
-  assert(!summary_input(MB_MENU));
+  /* an open description closes with the row (Down) and with the screen */
+  assert(summary_input(MB_MENU) && summary_input(MB_ACTION) && g_info_on);
+  assert(summary_input(MB_DOWN) && !g_info_on); /* Down only leaves the row */
+  assert(summary_input(MB_DOWN)); /* the next Pokemon, which holds nothing */
   assert(summary_input(MB_LEFT));
   summary_update(300.0f);
-  assert(!summary_input(MB_MENU));
+  assert(!summary_input(MB_MENU)); /* a Pokemon with no items, and the other pages, never pick one */
   assert(summary_input(MB_CANCEL));
   assert(ev_data.closed);
   printf("Item window PASSED.\n");
 
-  /* 4. Touch: a tap on an item opens its window, another item switches, the same item or anywhere else closes it */
+  /* 4. Touch: a tap on an item puts the cursor there and opens its description; the same item or anywhere else closes it */
   memset(&ev_data, 0, sizeof ev_data);
   summary_open(&args, &ev);
   summary_update(300.0f);
   const float ty = 180 - (float)mui_frame("ui/summary_stats", NULL)->src_h + 31; /* the item row's centre */
   assert(!summary_touch(300, 20)); /* nothing open: a tap off the items does nothing */
   assert(summary_touch(122, ty));
-  g_ndr = 0;
-  summary_draw();
-  assert(find('t', "Leftovers x2", 0));
+  assert(g_info_on && !strcmp(g_info_name, "Leftovers x2"));
   assert(summary_touch(106 + 26 + 17, ty));
-  g_ndr = 0;
-  summary_draw();
-  assert(find('t', "Focus Band", 0) && !find('t', "Leftovers", 0));
+  assert(g_info_on && !strcmp(g_info_name, "Focus Band"));
   assert(summary_touch(106 + 26 + 17, ty)); /* the same item: closes */
   g_ndr = 0;
   summary_draw();
-  assert(!find('w', "window", 0) && !find('r', "rect", 0));
-  assert(summary_touch(122, ty) && summary_touch(300, 20)); /* a tap elsewhere closes it */
-  g_ndr = 0;
-  summary_draw();
-  assert(!find('w', "window", 0));
+  assert(!g_info_on && !find('r', "rect", 0));
+  assert(summary_touch(122, ty) && g_info_on && summary_touch(300, 20)); /* a tap elsewhere closes it */
+  assert(!g_info_on);
   assert(!summary_touch(106 + 3 * 26 + 17, ty)); /* past the last item (3 held) */
-  summary_close();
+  assert(summary_touch(122, ty) && g_info_on);
+  summary_close(); /* closing the screen takes the description down */
+  assert(!g_info_on);
   printf("Item window touch PASSED.\n");
 
   printf("summary_ui_test PASSED ALL CHECKS!\n");

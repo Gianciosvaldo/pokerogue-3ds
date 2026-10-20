@@ -144,7 +144,7 @@ static struct {
   void* arg;
 } MI;
 static int n_manage, n_transfers, n_transfer_copies, n_transfer_refused, n_discards;
-static int n_shops, n_maps, n_item_opens, n_seamless, n_level_ups, n_level_windows, n_foe_bars, n_foe_hidden;
+static int n_shops, n_maps, n_item_opens, n_seamless, n_level_ups, n_level_windows, n_foe_bars, n_foe_hidden, n_key_bars, n_trays, n_fainted_balls;
 static bool save_on, resume_on, quit_on;
 static int n_menu_opened, n_menu_yes, n_menu_no, n_quit_callbacks;
 /* RUNTEST_CUSTOM */
@@ -592,6 +592,32 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
         bool found = false;
         for (int j = 0; j < r->n_enemy_items && !found; j++) found = r->enemy_items[j].stack == opts->foe_items[i].count;
         if (!opts->foe_items[i].icon || !found) BAD("foe item %d: icon %s, stack %d", i, opts->foe_items[i].icon ? "set" : "missing", opts->foe_items[i].count);
+      }
+    }
+  }
+  /* the top screen's second bar: the player's own items no Pokemon holds; and the party tray: one ball per slot */
+  {
+    int key = 0;
+    for (int i = 0; i < r->n_items; i++) {
+      const gc_item* it = &r->items[i];
+      if (!it->key || it->stack <= 0 || it->pokemon_id || it->detached) continue;
+      if (gm_item_ui_find(it->key, it->arg) || gm_item_ui_find(it->key, -1)) key++;
+    }
+    const int want = key < BV_MAX_FOE_ITEMS ? key : BV_MAX_FOE_ITEMS;
+    if (!opts || opts->n_key_items != want) BAD("key item bar has %d items, the player %d", opts ? opts->n_key_items : -1, want);
+    else if (want) {
+      n_key_bars++;
+      for (int i = 0; i < want; i++)
+        if (!opts->key_items[i].icon || !opts->key_items[i].name || opts->key_items[i].count <= 0) BAD("key item %d has no icon, name or stack", i);
+    }
+    if (!opts || !opts->has_party_balls) {
+      BAD("no party tray");
+    } else {
+      n_trays++;
+      for (int i = 0; i < 6; i++) {
+        const int exp = i >= r->n_party ? BV_BALL_EMPTY : r->party[i].b.hp > 0 ? BV_BALL_ALIVE : BV_BALL_FAINTED;
+        if (opts->party_balls[i] != exp) BAD("party tray slot %d shows %d, the party has %d", i, opts->party_balls[i], exp);
+        if (opts->party_balls[i] == BV_BALL_FAINTED) n_fainted_balls++;
       }
     }
   }
@@ -1718,9 +1744,12 @@ int main(int argc, char** argv) {
   if (!n_seamless && n_scenes > 50) BAD("no scene was a next wave of the same biome");
   printf("level ups: %d, of them %d with the stat window\n", n_level_ups, n_level_windows);
   printf("commands with the foe's item bar: %d; enemy items with no icon row: %d\n", n_foe_bars, n_foe_hidden);
+  printf("commands with the key item bar: %d; party trays: %d (%d fainted balls)\n", n_key_bars, n_trays, n_fainted_balls);
   printf("Manage Items: opened %d, transfers %d (%d copies), refused %d, discards %d\n", n_manage, n_transfers,
          n_transfer_copies, n_transfer_refused, n_discards);
   if (!n_foe_bars && n_scenes > 50) BAD("no command showed the foe's items");
+  if (!n_key_bars && n_scenes > 50) BAD("no command showed key items");
+  if (!n_fainted_balls && n_scenes > 50) BAD("no party tray showed a fainted member");
   if ((!n_manage || !n_transfers || !n_discards) && n_scenes > 50) BAD("Manage Items was never used (opened %d, transfers %d, discards %d)", n_manage, n_transfers, n_discards);
   if (n_level_windows < n_level_ups) BAD("%d level ups without the stat window", n_level_ups - n_level_windows);
   if (!n_level_ups && n_scenes > 50) BAD("no level up was shown");

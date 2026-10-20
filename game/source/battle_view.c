@@ -126,8 +126,16 @@ static struct {
   } ball;
   bv_item foe[BV_MAX_FOE_ITEMS]; /* the foe's items while the command is asked */
   int n_foe;
-  int foe_sel; /* the foe item the cursor is on (Up from the command menu's top row), -1 = none */
-  bool foe_open; /* A (or a tap) opened its window */
+  bv_item key[BV_MAX_FOE_ITEMS]; /* the player's own items that no Pokemon holds (Mega Bracelet, Dynamax Band...) */
+  int n_key;
+  int bar;       /* which item bar is showing: 0 the foe's, 1 the player's (L and R) */
+  int bar_sel;   /* the item the cursor is on (Up from the top row or Down from the bottom row of the command menu), -1 = none */
+  bool bar_open; /* A opened its description (in the message window) */
+  /* an item's description the summary screen asks for (bv_set_info), shown in the message window while no command is asked */
+  bool info_on;
+  char info_name[64], info_desc[512];
+  bool has_balls;
+  uint8_t balls[6]; /* the party tray: BV_BALL_* of each slot */
   /* promptLevelUpStats' window (BEV_LEVEL_UP) */
   struct {
     bool on, totals;
@@ -598,6 +606,20 @@ static void draw_enemy_info(side* sd) {
 
 /* ------------------------------------------------------------------ drawing: bottom strip */
 
+/* The party tray between the message and the command window: a Poke Ball for each slot (the tray's own art, doubled), a dark one for a
+ * fainted member and an empty socket for a free slot. */
+static void draw_party_tray(void) {
+  static const char* const FRAMES[3] = {"empty", "ball", "faint"};
+  ui_window(150, -48, 52, 48, WIN_NORMAL);
+  for (int i = 0; i < 6; i++) {
+    const rr_frame* f = mui_frame("ui/pb_tray_ball", FRAMES[B.balls[i] <= BV_BALL_FAINTED ? B.balls[i] : 0]);
+    if (!f) continue;
+    rr_draw_opts o = RR_DEFAULT_OPTS;
+    o.scale_x = o.scale_y = 2;
+    rr_draw(f, 155 + (i % 3) * 14, -38 + (i / 3) * 14, &o);
+  }
+}
+
 static void draw_command_menu(void) {
   ui_window(202, -48, 118, 48, WIN_NORMAL);
   static const char* const KEYS[4] = {"commandUiHandler:fight", "commandUiHandler:ball", "commandUiHandler:pokemon",
@@ -607,7 +629,7 @@ static void draw_command_menu(void) {
     i18n_t(s, sizeof s, KEYS[c], NULL);
     text_draw(TS_WINDOW_BATTLE_COMMAND, 217 + (c % 2 ? 55.8f : 0), -38.7f + (c < 2 ? 0 : 16), s, NULL);
   }
-  ui_cursor(217 - 5 + (B.cmd_cursor % 2 ? 56 : 0), -38.7f + 8 + (B.cmd_cursor >= 2 ? 16 : 0));
+  if (B.bar_sel < 0) ui_cursor(217 - 5 + (B.cmd_cursor % 2 ? 56 : 0), -38.7f + 8 + (B.cmd_cursor >= 2 ? 16 : 0)); /* the bar has it otherwise */
 }
 
 static text_style pp_style(int left, int max) {
@@ -720,54 +742,81 @@ static void draw_level_stats(void) {
   text_draw(TS_WINDOW, 320 - 7, -94, vals, &o);
 }
 
-/* The foe's items on the bottom screen (a choice of this port, not upstream's layout: its enemy ModifierBar sits on the top
- * screen at half scale). Icons at 3/4 scale, 12 a row, the stack count under each from 2 up; only while the command or a
- * move is being picked. */
-static void draw_foe_items(void) {
-  if (B.n_foe <= 0 || (B.mode != M_COMMAND && B.mode != M_FIGHT)) return;
-  const int per_row = 12, rows = (B.n_foe + per_row - 1) / per_row;
-  const float top = -226, cell = 26, h = 8 + rows * cell;
-  ui_window(4, top, 312, h, WIN_THIN);
-  for (int i = 0; i < B.n_foe; i++) {
-    const float x = 10 + (i % per_row) * cell, y = top + 4 + (i / per_row) * cell;
-    const rr_frame* f = B.foe[i].icon ? mui_frame("items", B.foe[i].icon) : NULL; /* the menus' copy of the atlas (shop, summary) */
-    if (f) {
-      rr_draw_opts o = RR_DEFAULT_OPTS;
-      o.scale_x = o.scale_y = 0.75f;
-      rr_draw(f, x, y, &o);
-    }
-    if (B.foe[i].count > 1) {
-      char n[8];
-      snprintf(n, sizeof n, "%d", B.foe[i].count);
-      text_opts t = text_defaults();
-      t.origin_x = 1;
-      text_draw(TS_INSTRUCTIONS_TEXT, x + cell - 2, y + cell - 12, n, &t);
-    }
+/* The two item bars (a choice of this port: upstream's ModifierBars are on the top screen at half scale). Bar 0 is the foe's items,
+ * bar 1 the player's own items that no Pokemon holds. L and R switch between them. */
+static int bar_n(void) { return B.bar ? B.n_key : B.n_foe; }
+static const bv_item* bar_it(int i) { return B.bar ? &B.key[i] : &B.foe[i]; }
+static const char* bar_title(void) { return B.bar ? "Key items" : "Foe items"; }
+
+static void draw_bar_icon(const bv_item* it, float x, float y) {
+  const rr_frame* f = it->icon ? mui_frame("items", it->icon) : NULL; /* the menus' copy of the atlas (shop, summary) */
+  if (f) {
+    rr_draw_opts o = RR_DEFAULT_OPTS;
+    o.scale_x = o.scale_y = 0.75f;
+    rr_draw(f, x, y, &o);
   }
-  if (B.mode == M_COMMAND && B.foe_sel >= 0 && B.foe_sel < B.n_foe) {
-    const bv_item* it = &B.foe[B.foe_sel];
-    const float x = 10 + (B.foe_sel % per_row) * cell - 1, y = top + 4 + (B.foe_sel / per_row) * cell; /* the icons' art sits a pixel low in their cell */
-    const rr_color c = RR_RGBA(0xf8, 0xe0, 0x58, 255);
-    rr_rect(x, y, cell, 1, c);
-    rr_rect(x, y + cell - 1, cell, 1, c);
-    rr_rect(x, y, 1, cell, c);
-    rr_rect(x + cell - 1, y, 1, cell, c);
-    if (!B.foe_open) return;
-    /* the item window under the bar: name (with the stack) and a brief effect text */
-    char name[64];
-    if (it->count > 1)
-      snprintf(name, sizeof name, "%s x%d", it->name ? it->name : "?", it->count);
-    else
-      snprintf(name, sizeof name, "%s", it->name ? it->name : "?");
-    text_opts d = text_defaults();
-    d.wrap_w = 288;
-    const char* desc = it->desc ? it->desc : "";
-    const float th = text_height(TS_WINDOW, name, NULL), dh = *desc ? text_height(TS_WINDOW_ALT, desc, &d) : 0;
-    const float wy = top + h + 4;
-    ui_window(4, wy, 312, th + dh + 18, WIN_NORMAL);
-    text_draw(TS_WINDOW, 14, wy + 8, name, NULL);
-    if (*desc) text_draw(TS_WINDOW_ALT, 14, wy + 11 + th, desc, &d);
+  if (it->count > 1) {
+    char n[8];
+    snprintf(n, sizeof n, "%d", it->count);
+    text_opts t = text_defaults();
+    t.origin_x = 1;
+    text_draw(TS_INSTRUCTIONS_TEXT, x + 24, y + 14, n, &t);
   }
+}
+
+static void draw_cursor_frame(float x, float y, float w, float h) {
+  const rr_color c = RR_RGBA(0xf8, 0xe0, 0x58, 255);
+  rr_rect(x, y, w, 1, c);
+  rr_rect(x, y + h - 1, w, 1, c);
+  rr_rect(x, y, 1, h, c);
+  rr_rect(x + w - 1, y, 1, h, c);
+}
+
+/* The bar on the top screen, in the 30 px under the command strip (physical coordinates): its title, then the icons, scrolled so the
+ * cursor is always in view. */
+#define TBAR_X 40
+#define TBAR_Y 212
+#define TBAR_W 320
+#define TBAR_H 26
+#define TBAR_ICONS 9
+static int tbar_first(void) { return B.bar_sel >= TBAR_ICONS ? B.bar_sel - TBAR_ICONS + 1 : 0; }
+static void draw_top_bar(void) {
+  if (B.mode != M_COMMAND && B.mode != M_FIGHT) return;
+  rr_rect(TBAR_X, TBAR_Y, TBAR_W, TBAR_H, RR_RGBA(0x40, 0x40, 0x48, 255));
+  rr_rect(TBAR_X + 1, TBAR_Y + 1, TBAR_W - 2, TBAR_H - 2, RR_RGBA(0x28, 0x28, 0x30, 255));
+  text_draw(TS_MOVE_LABEL, TBAR_X + 8, TBAR_Y + 9, bar_title(), NULL);
+  const int n = bar_n(), first = tbar_first();
+  for (int i = first; i < n && i < first + TBAR_ICONS; i++)
+    draw_bar_icon(bar_it(i), TBAR_X + 72 + (i - first) * 26 + 1, TBAR_Y + 1);
+  if (n == 0) text_draw(TS_MOVE_LABEL, TBAR_X + 72, TBAR_Y + 9, "none", NULL);
+  if (B.bar_sel >= 0 && B.bar_sel < n) draw_cursor_frame(TBAR_X + 72 + (B.bar_sel - first) * 26, TBAR_Y, 26, 26);
+}
+
+/* An item's name (with its stack) and effect, in the message window in place of its usual text: the bar's selected item ("What will X
+ * do?" gives way, and so do the party tray and the command window, to give the text the strip's width), or the one the summary
+ * screen asks for. */
+static void draw_item_text(const char* name, const char* desc) {
+  text_opts d = text_defaults();
+  d.wrap_w = 296;
+  text_draw(TS_WINDOW, 12, -42, name, NULL);
+  /* the 8 px pixel font (the fight menu's labels): the longest description is 116 characters, two lines of it fit the window under
+   * the name where the 12 px style wraps to three and runs out of it */
+  if (desc && *desc) text_draw(TS_MOVE_LABEL, 12, -28, desc, &d);
+}
+
+static void bar_info_text(char* name, size_t n, const char** desc) {
+  const bv_item* it = bar_it(B.bar_sel);
+  if (it->count > 1)
+    snprintf(name, n, "%s x%d", it->name ? it->name : "?", it->count);
+  else
+    snprintf(name, n, "%s", it->name ? it->name : "?");
+  *desc = it->desc;
+}
+
+void bv_set_info(const char* name, const char* desc) {
+  B.info_on = name != NULL;
+  snprintf(B.info_name, sizeof B.info_name, "%s", name ? name : "");
+  snprintf(B.info_desc, sizeof B.info_desc, "%s", desc ? desc : "");
 }
 
 /* Upstream's ui container strip (y -48..0): the message window's bg frame, the command window or the fight windows, and the text.
@@ -784,18 +833,24 @@ static void draw_bottom(bool top) {
     else
       rr_rect(0, -48, 320, 48, RR_RGBA(0x30, 0x50, 0x68, 255));
   }
-  if (B.mode == M_COMMAND) draw_command_menu();
+  const bool info = B.mode == M_COMMAND && B.bar_open && B.bar_sel >= 0 && B.bar_sel < bar_n();
+  if (B.mode == M_COMMAND && !info) draw_command_menu();
   if (B.mode == M_FIGHT) {
     draw_fight_menu();
     if (!top) draw_move_details();
+  } else if (info) {
+    char name[64];
+    const char* desc;
+    bar_info_text(name, sizeof name, &desc);
+    draw_item_text(name, desc);
+  } else if (B.info_on && B.mode == M_IDLE) {
+    draw_item_text(B.info_name, B.info_desc);
   } else {
     msgbox_draw(&B.msg, 12, -39);
   }
+  if (B.mode == M_COMMAND && B.has_balls && !info) draw_party_tray();
   draw_level_stats();
-  if (!top) {
-    draw_ability_bar();
-    draw_foe_items();
-  }
+  if (!top) draw_ability_bar();
 }
 
 static void draw_debug(void) {
@@ -1509,29 +1564,38 @@ static bool bv_input(ui_screen* s, ui_button b) {
     return true;
   }
   if (B.mode == M_EVENTS) return msgbox_input(&B.msg, b);
-  if (B.mode == M_COMMAND && B.foe_sel >= 0) {
-    /* the cursor is on the foe's items: Left/Right move it, A opens the item's window (or closes it), B closes the window and then
-     * leaves the bar, Down leaves it */
+  if ((B.mode == M_COMMAND || B.mode == M_FIGHT) && (b == BTN_CYCLE_FORM || b == BTN_CYCLE_SHINY)) {
+    /* L and R switch the item bar; a cursor on the bar goes to the first item of the other one (or off, when that is empty) */
+    const bool focused = B.bar_sel >= 0;
+    B.bar ^= 1;
+    B.bar_sel = focused && bar_n() > 0 ? 0 : -1;
+    B.bar_open = false;
+    ui_play_select();
+    return true;
+  }
+  if (B.mode == M_COMMAND && B.bar_sel >= 0) {
+    /* the cursor is on the item bar: Left/Right move it (an open description follows), A opens its description in the message window
+     * (or closes it), B closes the description and then leaves the bar, Up/Down leave it */
     if (b == BTN_LEFT || b == BTN_RIGHT) {
-      const int i = B.foe_sel + (b == BTN_RIGHT ? 1 : -1);
-      if (i < 0 || i >= B.n_foe) return false;
-      B.foe_sel = i;
-      B.foe_open = false;
+      const int i = B.bar_sel + (b == BTN_RIGHT ? 1 : -1);
+      if (i < 0 || i >= bar_n()) return false;
+      B.bar_sel = i;
       ui_play_select();
       return true;
     }
     if (b == BTN_ACTION) {
-      B.foe_open = !B.foe_open;
+      B.bar_open = !B.bar_open;
       ui_play_select();
       return true;
     }
-    if (b == BTN_CANCEL && B.foe_open) {
-      B.foe_open = false;
+    if (b == BTN_CANCEL && B.bar_open) {
+      B.bar_open = false;
       ui_play_select();
       return true;
     }
-    if (b == BTN_DOWN || b == BTN_CANCEL) {
-      B.foe_sel = -1;
+    if (b == BTN_UP || b == BTN_DOWN || b == BTN_CANCEL) {
+      B.bar_sel = -1;
+      B.bar_open = false;
       ui_play_select();
       return true;
     }
@@ -1543,14 +1607,20 @@ static bool bv_input(ui_screen* s, ui_button b) {
       case BTN_UP:
         if (c >= 2) {
           B.cmd_cursor -= 2;
-        } else if (B.n_foe > 0) {
-          B.foe_sel = 0;
+        } else if (bar_n() > 0) {
+          B.bar_sel = 0;
           ui_play_select();
           return true;
         }
         break;
       case BTN_DOWN:
-        if (c < 2) B.cmd_cursor += 2;
+        if (c < 2) {
+          B.cmd_cursor += 2;
+        } else if (bar_n() > 0) { /* the bar under the command window on the top screen */
+          B.bar_sel = 0;
+          ui_play_select();
+          return true;
+        }
         break;
       case BTN_LEFT:
         if (c % 2) B.cmd_cursor--;
@@ -1747,7 +1817,10 @@ static void bv_draw(ui_screen* s, rr_screen which) {
     }
     if (ui_space(UI_TOP_CANVAS_UI)) draw_bottom(true);
     /* the field is 320x180 on a 400x240 screen: keep sprites that slide past it off the border */
-    if (ui_space(UI_PHYS_TOP)) draw_border();
+    if (ui_space(UI_PHYS_TOP)) {
+      draw_border();
+      draw_top_bar();
+    }
   } else {
     if (ui_space(UI_PHYS_BOTTOM)) rr_rect(0, 0, 320, 240, RR_RGBA(0x10, 0x10, 0x18, 255));
     if (ui_space(UI_BOTTOM_UI)) draw_bottom(false);
@@ -1755,41 +1828,13 @@ static void bv_draw(ui_screen* s, rr_screen which) {
   }
 }
 
-/* The foe item bar's geometry (draw_foe_items): where its icons are, in UI_BOTTOM_UI */
-#define FOE_PER_ROW 12
-#define FOE_CELL 26
-#define FOE_TOP (-226)
-static float foe_bar_h(void) { return 8 + ((B.n_foe + FOE_PER_ROW - 1) / FOE_PER_ROW) * FOE_CELL; }
-/* the foe item under (x, y) in UI_BOTTOM_UI, or -1 */
-static int foe_item_at(float x, float y) {
-  if (B.n_foe <= 0 || y < FOE_TOP || y >= FOE_TOP + foe_bar_h()) return -1;
-  const int col = (int)((x - 10) / FOE_CELL), row = (int)((y - FOE_TOP - 4) / FOE_CELL);
-  if (x < 10 || col >= FOE_PER_ROW || y < FOE_TOP + 4 || row < 0) return -1;
-  const int i = row * FOE_PER_ROW + col;
-  return i < B.n_foe ? i : -1;
-}
-
-/* A tap on the bottom screen (physical px). The command and fight menus' cells act as their button does with the cursor on them; a
- * tap on a foe item opens its window (a tap anywhere else, or on the same item, closes it); in the fight menu a tap above the strip
- * goes back, like B. */
+/* A tap on the bottom screen (physical px). The command and fight menus' cells act as their button does with the cursor on them; in
+ * the fight menu a tap above the strip goes back, like B. The item bars are on the top screen: no touch there. */
 static bool bv_touch(ui_screen* s, float px, float py) {
   (void)s;
   const float x = px, y = ui_bottom_ui_y(py);
   if (B.mode == M_COMMAND) {
-    const int i = foe_item_at(x, y);
-    if (i >= 0 && (i != B.foe_sel || !B.foe_open)) { /* a tap is the cursor and A in one */
-      B.foe_sel = i;
-      B.foe_open = true;
-      ui_play_select();
-      return true;
-    }
-    if (B.foe_sel >= 0) { /* the same item again, or anywhere else: closes */
-      B.foe_sel = -1;
-      B.foe_open = false;
-      ui_play_select();
-      return true;
-    }
-    if (x >= 202 && y >= -48) {
+    if (B.bar_sel < 0 && x >= 202 && y >= -48) {
       B.cmd_cursor = (x < 261 ? 0 : 1) + (y < -24 ? 0 : 2);
       return bv_input(NULL, BTN_ACTION);
     }
@@ -1868,16 +1913,21 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
     for (int i = 0; i < 4; i++) B.opts.move_ok[i] = true;
   }
   B.n_foe = 0;
-  B.foe_sel = -1;
-  B.foe_open = false;
+  B.n_key = 0;
+  B.bar_sel = -1;
+  B.bar_open = false;
   if (opts && opts->foe_items)
     for (int i = 0; i < opts->n_foe_items && B.n_foe < BV_MAX_FOE_ITEMS; i++) B.foe[B.n_foe++] = opts->foe_items[i];
-  B.opts.foe_items = NULL;
+  if (opts && opts->key_items)
+    for (int i = 0; i < opts->n_key_items && B.n_key < BV_MAX_FOE_ITEMS; i++) B.key[B.n_key++] = opts->key_items[i];
+  B.opts.foe_items = B.opts.key_items = NULL;
+  B.has_balls = opts && opts->has_party_balls;
+  if (B.has_balls) memcpy(B.balls, opts->party_balls, sizeof B.balls);
   B.reason_ms = 0;
   B.mode = M_COMMAND;
   if (B.cmd_cursor == 2) B.cmd_cursor = 0; /* upstream resets POKEMON to FIGHT */
   /* "What will X do?", wrapped to the space left of the command window (1110 / 6) */
-  B.msg.opts.wrap_w = 1110 / 6.0f;
+  B.msg.opts.wrap_w = B.has_balls ? 128 : 1110 / 6.0f; /* narrower beside the party tray */
   char s[128];
   i18n_t(s, sizeof s, "commandUiHandler:actionMessage", "pokemonName", B.s[0].mon.name, NULL);
   msgbox_show(&B.msg, s, 0, false);

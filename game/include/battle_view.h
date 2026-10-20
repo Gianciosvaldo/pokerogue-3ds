@@ -146,7 +146,19 @@ typedef struct {
    * menus are up, where upstream's enemy ModifierBar would crowd the top screen. Copied. */
   const bv_item* foe_items;
   int n_foe_items;
+  /* The player's own items that no Pokemon holds (Mega Bracelet, Dynamax Band, Tera Orb...): the other item bar (L and R switch).
+   * Copied. */
+  const bv_item* key_items;
+  int n_key_items;
+  /* The party tray beside the command window: one Poke Ball per party slot, 6 slots. */
+  bool has_party_balls;
+  uint8_t party_balls[6]; /* BV_BALL_* */
 } bv_command_opts;
+enum { BV_BALL_EMPTY, BV_BALL_ALIVE, BV_BALL_FAINTED };
+
+/* The summary screen over the battle asks for an item's description in the message window (name with its stack, effect text); NULL
+ * clears it. Shown only while no command is being asked. */
+void bv_set_info(const char* name, const char* desc);
 
 void bv_begin(const bv_setup* setup);
 /* Queues events (copied; text is copied too) and plays them; on_done runs after the last one. */
