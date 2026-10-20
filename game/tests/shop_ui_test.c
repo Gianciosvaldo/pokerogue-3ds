@@ -14,6 +14,8 @@
 #include "menus.h"
 #include "pr/reward.h"
 #include "shop_ui.h"
+#include "reward_host.h"
+#include "ui.h"
 
 /* Stub functions required by mui when building on PC without 3DS libraries */
 void mui_sfx(const char* key) {
@@ -67,6 +69,21 @@ int mui_text_o(mui_style s, float x, float y, float ox, float oy, const char* ut
   (void)s; (void)x; (void)y; (void)ox; (void)oy; (void)utf8;
   return 0;
 }
+
+/* the UI stack and the biome map, for the reward screen's host (source/reward_host.c): the host pushes its screen, and the test taps it */
+static ui_screen* g_pushed;
+void ui_push(ui_screen* s) { g_pushed = s; }
+void ui_pop(void) { g_pushed = NULL; }
+ui_screen* ui_top(void) { return g_pushed; }
+bool ui_space(ui_space_id sp) { (void)sp; return true; }
+void mui_set_origin(rr_screen s, int px, int py) { (void)s; (void)px; (void)py; }
+void mui_tick(float dt_ms) { (void)dt_ms; }
+void biome_map_open(const biome_map_args* args, const biome_map_events* ev) { (void)args; (void)ev; }
+void biome_map_close(void) {}
+bool biome_map_active(void) { return false; }
+bool biome_map_input(mui_button b) { (void)b; return false; }
+void biome_map_update(float dt_ms) { (void)dt_ms; }
+void biome_map_draw(void) {}
 
 typedef struct {
   int reward_selected;
@@ -278,6 +295,23 @@ int main(void) {
 
   /* Touching nothing selects nothing */
   assert(!shop_ui_touch(2.0f, 2.0f));
+
+  /* The reward screen's host (rh_touch): a tap at physical bottom-screen (x, y) is the canvas' (x, y - 30) */
+  rh_open_shop(&args, &ev);
+  assert(g_pushed && g_pushed->touch);
+  res.reward_selected = -1;
+  assert(g_pushed->touch(g_pushed, 264.0f, 85.0f + 30.0f));
+  assert(res.reward_selected == 2);
+  res.skip_called = false;
+  assert(g_pushed->touch(g_pushed, 280.0f, 128.0f + 30.0f));
+  assert(res.skip_called);
+  res.reward_selected = -1;
+  assert(!g_pushed->touch(g_pushed, 2.0f, 2.0f + 30.0f)); /* nothing there */
+  assert(res.reward_selected == -1);
+  rh_close();
+  assert(g_pushed == NULL);
+  printf("The reward screen takes taps through its host PASSED.\n");
+  rh_open_shop(&args, &ev); /* the checks below go on with the shop open */
 
   /* Drawing every state must not crash (the stubs draw nothing) */
   shop_ui_draw();

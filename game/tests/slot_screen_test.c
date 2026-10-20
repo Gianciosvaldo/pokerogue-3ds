@@ -349,6 +349,20 @@ int main(void) {
   for (int i = 0; i < n_drawn; i++)
     if (!strcmp(g_drawn[i].text, "Town")) biome_lines++;
   CHECK(biome_lines == 1, "only the unnamed run draws a biome line (%d)", biome_lines);
+  /* ---- touch: a tap on another slot moves the cursor there, a second tap on it is A; the gaps and the margins take nothing */
+  open_list(SLOTS_LOAD, true, 1);
+  CHECK(g_screen->touch != NULL, "the list takes taps");
+  const int selects = n_select;
+  CHECK(!g_screen->touch(g_screen, 150, 8 + 70 + 3) && !g_screen->touch(g_screen, 150, 4) && !g_screen->touch(g_screen, 316, 40),
+        "the gap between two slots, the top margin and the right margin take nothing");
+  CHECK(g_screen->touch(g_screen, 150, 40) && n_options == 0 && n_select == selects + 1, "a tap on slot 0 moves the cursor only (%d menus)", n_options);
+  CHECK(g_screen->touch(g_screen, 150, 40) && n_options == 1, "a second tap on it is A: its menu");
+  g_on_options(0, g_options_arg);
+  CHECK(n_pick == 1 && picked == 0, "Load Game picks the slot the cursor was moved to by touch (%d picks, slot %d)", n_pick, picked);
+  open_list(SLOTS_LOAD, true, 0);
+  CHECK(g_screen->touch(g_screen, 150, 8 + 76 + 5) && g_screen->touch(g_screen, 150, 8 + 76 + 5) && n_options == 0,
+        "an empty slot is selected by a tap but its second tap does not open a run's menu (%d menus)", n_options);
+
   /* score and money keep their lines in both */
   int scores = 0, monies = 0;
   for (int i = 0; i < n_drawn; i++) {

@@ -108,6 +108,30 @@ static bool rm_input(ui_screen* s, ui_button b) {
   return false; /* one entry: the cursor has nowhere to go */
 }
 
+/* A tap: the one entry of the menu starts Save and Quit; in the Yes / No box a row answers it */
+static bool rm_touch(ui_screen* s, float x, float y) {
+  (void)s;
+  if (!M.open || M.state == MS_WARNING) return false;
+  const float uy = ui_bottom_ui_y(y);
+  if (M.state == MS_CONFIRM) {
+    if (!optlist_touch(&M.yn, x, uy)) return false;
+    if (M.yn.chosen != -1) {
+      if (M.yn.chosen == 0) {
+        close_menu(true);
+      } else {
+        M.state = MS_MAIN;
+        msgbox_clear(&M.msg);
+      }
+    }
+    return true;
+  }
+  const float h = CANVAS_H - 2, left = 319 - M.w, top = -1 - h;
+  if (x < left || uy < top || uy >= top + 7 + OPT_ROW + 8) return false; /* the one row, with its padding */
+  ui_play_select();
+  start_save_quit();
+  return true;
+}
+
 static void rm_update(ui_screen* s, float dt) {
   (void)s;
   if (!M.open) return;
@@ -134,7 +158,7 @@ static void rm_draw(ui_screen* s, rr_screen which) {
   if (M.state == MS_CONFIRM) optlist_draw(&M.yn);
 }
 
-static ui_screen g_screen = {"run-menu", UI_OVERLAY, NULL, NULL, NULL, rm_input, rm_update, rm_draw, NULL};
+static ui_screen g_screen = {"run-menu", UI_OVERLAY, NULL, NULL, NULL, rm_input, rm_update, rm_draw, NULL, rm_touch};
 
 bool run_menu_is_open(void) { return M.open; }
 

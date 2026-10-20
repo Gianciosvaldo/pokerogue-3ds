@@ -122,6 +122,9 @@ typedef struct {
 void optlist_init(optlist* l, const char* const* labels, int n);
 bool optlist_input(optlist* l, ui_button b);
 void optlist_draw(const optlist* l);
+/* A tap at (x, y) in the list's own ui container coordinates (UI_BOTTOM_UI: physical y - 240): on a row it puts the cursor there and picks it
+ * as ACTION does (chosen is then set, unless the row is disabled). True when the tap hit a row. */
+bool optlist_touch(optlist* l, float x, float y);
 
 /* A ready-made overlay screen around an optlist: push it, and on_done gets the index (or -2
  * when cancelled) after it pops itself. */

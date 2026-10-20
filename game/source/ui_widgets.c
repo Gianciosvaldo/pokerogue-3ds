@@ -425,6 +425,14 @@ bool optlist_input(optlist* l, ui_button b) {
   return false;
 }
 
+bool optlist_touch(optlist* l, float x, float y) {
+  const int vis = rows(l);
+  const float h = (vis + 1) * OPT_ROW - 2, left = l->x - l->w, top = l->y - h;
+  if (x < left || x >= l->x || y < top + 7 || y >= top + 7 + vis * OPT_ROW) return false;
+  l->cursor = (int)((y - top - 7) / OPT_ROW);
+  return optlist_input(l, BTN_ACTION);
+}
+
 void optlist_draw(const optlist* l) {
   int vis = rows(l);
   float h = (vis + 1) * OPT_ROW - 2;
@@ -479,7 +487,20 @@ static void opt_draw(ui_screen* s, rr_screen which) {
   optlist_draw(&d->list);
 }
 
-static ui_screen g_opt_screen = {"option-select", UI_OVERLAY, NULL, NULL, NULL, opt_input, NULL, opt_draw, &g_opt_data};
+static bool opt_touch(ui_screen* s, float x, float y) {
+  opt_screen_data* d = s->data;
+  if (!optlist_touch(&d->list, x, ui_bottom_ui_y(y))) return false;
+  if (d->list.chosen != -1) {
+    int idx = d->list.chosen;
+    void (*fn)(int, void*) = d->on_done;
+    void* arg = d->arg;
+    ui_pop();
+    if (fn) fn(idx, arg);
+  }
+  return true;
+}
+
+static ui_screen g_opt_screen = {"option-select", UI_OVERLAY, NULL, NULL, NULL, opt_input, NULL, opt_draw, &g_opt_data, opt_touch};
 
 void ui_push_options(const char* const* labels, int n, bool can_cancel, void (*on_done)(int, void*), void* arg) {
   optlist_init(&g_opt_data.list, labels, n);

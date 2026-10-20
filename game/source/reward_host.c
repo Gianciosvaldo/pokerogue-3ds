@@ -19,6 +19,12 @@ static bool rh_input(ui_screen* s, ui_button b) {
   return false;
 }
 
+/* A tap on the bottom screen (physical px): the shop's own touch slots, in canvas coordinates (the canvas starts 30 px down) */
+static bool rh_touch(ui_screen* s, float x, float y) {
+  (void)s;
+  return shop_ui_active() && shop_ui_touch(x, y - 30);
+}
+
 static void rh_update(ui_screen* s, float dt) {
   (void)s;
   mui_tick(dt);
@@ -38,7 +44,7 @@ static void rh_draw(ui_screen* s, rr_screen which) {
   }
 }
 
-static ui_screen g_screen = {"rewards", UI_OVERLAY, NULL, NULL, NULL, rh_input, rh_update, rh_draw, NULL};
+static ui_screen g_screen = {"rewards", UI_OVERLAY, NULL, NULL, NULL, rh_input, rh_update, rh_draw, NULL, rh_touch};
 
 static void put_on_stack(void) {
   if (g_open) return;
