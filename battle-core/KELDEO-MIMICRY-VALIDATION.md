@@ -54,10 +54,13 @@ Seeds 777 and 2034:
   challenge/mode context. Compiled faults catch 21 production regressions;
   malformed transport checks reject 19 altered captures.
 
-Complete Mimicry terrain-turn matrices and current-main integration gates are
-recorded before merge. Each matrix requires 8,192 complete turns, including
-4,096 retained wide-combat controls, with no exclusions and unchanged coverage
-floors for wide damage, ally/spread targets, faints and switches.
+Both complete Mimicry terrain-turn matrices match all 8,192 turns per seed,
+including 4,096 retained wide-combat controls each. There are no exclusions or
+source exceptions. Each seed executes 4,620 native Mimicry callbacks; the wide
+controls retain damage above Int32, ally/spread targets, multiple faints and
+switches. The comparison includes exact state, queue, translated text and RNG.
+Normal app/custom/save, game-core and 3DS integration gates remain required
+on the final PR head.
 
 ## Reproduction and limits
 
