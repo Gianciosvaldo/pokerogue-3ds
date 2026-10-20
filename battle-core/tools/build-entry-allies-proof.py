@@ -7,7 +7,7 @@ s=(r/'tests/keldeo-forms.producer.test.ts').read_text().split('// Only scene ass
 s+='''
 import { applyAbAttrs, applyOnGainAbAttrs } from "#abilities/apply-ab-attrs";
 it("native ally entry callbacks and gain filtering",async()=>{
- const N=32768,seed=Number(process.env.ENTRY_ALLIES_SEED??777),native=BattleScene.prototype.randBattleSeedInt;
+ const N=49152,seed=Number(process.env.ENTRY_ALLIES_SEED??777),native=BattleScene.prototype.randBattleSeedInt;
  if(!process.versions.node.startsWith("22."))throw Error("Node22 required");
  const g=new GameManager(new Phaser.Game({type:Phaser.HEADLESS}));g.override.battleStyle("double").ability(AbilityId.BALL_FETCH).enemyAbility(AbilityId.BALL_FETCH).enemySpecies(SpeciesId.RATTATA).moveset(MoveId.SPLASH).enemyMoveset(MoveId.SPLASH).disableTrainerWaves().mysteryEncounterChance(0);
  await g.classicMode.startBattle(SpeciesId.BULBASAUR,SpeciesId.CHARMANDER);BattleScene.prototype.randBattleSeedInt=native;
@@ -26,7 +26,7 @@ it("native ally entry callbacks and gain filtering",async()=>{
   const text=heal?hex(p.message??""):name==="MessagePhase"?hex(p.text):show?hex(p.pokemonName??"")+"."+hex(p.abilityName??""):"-";
   rows.push(`P ${l} ${j} ${name} ${heal||show?p.battlerIndex:-1} ${show?+p.passive:-1} ${name==="MessagePhase"?+!!p.prompt:-1} ${text} ${heal?p.hpHealed:0} ${flags}`);
  }));return [`Q ${rows.length} ${pm.phaseQueue.levels.length} ${pm.phaseQueue.currentLevel} ${+pm.phaseQueue.deferredActive}`,...rows];};
- write([`ENTRY_ALLIES 1 ${N} ${seed}`]);let changed=0,heals=0;
+ write([`ENTRY_ALLIES 2 ${N} ${seed}`]);let changed=0,heals=0;
  for(let i=0;i<N;i++){
   const u=i%8,kind=Math.floor(i/8)%2,simulated=!!(Math.floor(i/16)%2),shape=Math.floor(i/32)%8,gain=!!(Math.floor(i/256)%2),single=!!(Math.floor(i/512)%2);
   battle.double=!single;scene.gameMode=getGameMode(GameModes.CLASSIC);
@@ -35,7 +35,7 @@ it("native ally entry callbacks and gain filtering",async()=>{
    if(k===u&&shape===4)p.hp=0;
    p.summonData.statStages=[1,-2,3,-4,5,-6,6].map((v,j)=>(i+k+j)%3? v:0);p.generateName();
   }
-  const ally=actors[u].getAlly();if(ally){if(shape===5)ally.hp=0;else if(shape===6)ally.hp=Math.max(1,Math.floor(ally.hp/2));if(shape===7)ally.summonData.statStages.fill(0);}
+  const ally=actors[u].getAlly();if(ally){if(shape===5)ally.hp=0;else if(shape===6)ally.hp=Math.max(1,Math.floor(ally.hp/2));if(shape===7)ally.summonData.statStages.fill(0);if(i>=32768&&Math.floor(i/32)%2)ally.switchOutStatus=true;}if(i>=32768&&Math.floor(i/64)%2)actors[u].switchOutStatus=true;
   pm.clearAllPhases();pm.pushNew("MessagePhase","anchor");pm.currentPhase=pm.create("MovePhase",actors[0],[2],new PokemonMove(MoveId.SPLASH),MoveUseMode.NORMAL);
   battle.battleSeed=`entry-allies-${seed}-${i}`;battle.battleSeedState=null;Phaser.Math.RND.sow([`entry-allies-${seed}-${i}`]);battle.randSeedInt(2);
   const before=actors.map(p=>snapshot(p).join(" ")).join(";");

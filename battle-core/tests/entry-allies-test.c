@@ -38,7 +38,7 @@ static bool queues(void){
 }
 int main(int argc,char **argv){
  if(argc!=2||!getenv("TURNTEST_LOCALES")||!(input=fopen(argv[1],"r")))return 2;
- pr_closures_init();double h[3];read_vector("ENTRY_ALLIES ",h,3);if(h[0]!=1)bad();int n=integer(h[1],32768,100000),failed=0;integer(h[2],0,INT32_MAX);
+ pr_closures_init();double h[3];read_vector("ENTRY_ALLIES ",h,3);int version=integer(h[0],1,2);int n=integer(h[1],version==2?49152:32768,100000),failed=0;integer(h[2],0,INT32_MAX);
  for(int i=0;i<n;i++){
   memset(&bt,0,sizeof bt);memset(&e,0,sizeof e);bt.engine=&e;e.n_levels=1;e.current=-1;bt.wave_index=1;bt.game_mode=GAME_MODES_CLASSIC;bt.turn=1;bt.ignoring_effect_source=-1;bt.last_used_pokeball=-1;
   double c[5];read_vector("C ",c,5);if(c[0]!=i)bad();int u=integer(c[1],0,7);bool simulated=integer(c[2],0,1),gain=integer(c[3],0,1);bt.double_battle=!integer(c[4],0,1);
