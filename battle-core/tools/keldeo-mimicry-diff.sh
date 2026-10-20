@@ -22,5 +22,5 @@ LEARN="$HERE/build/keldeo-learn-$SEED.txt"; TURNS="$HERE/build/mimicry-turns-$SE
 (cd "$UP" && NODE_OPTIONS=--max-old-space-size=6144 KELDEO_LEARN_SEED="$SEED" KELDEO_LEARN_OUT="$LEARN" node node_modules/vitest/vitest.mjs run test/tests/zz-dump/keldeo-learn.producer.test.ts --maxWorkers=1)
 (cd "$UP" && NODE_OPTIONS=--max-old-space-size=6144 DOUBLES_N=8192 DOUBLES_SEED="$SEED" DOUBLES_OUT="$TURNS" node node_modules/vitest/vitest.mjs run test/tests/zz-dump/mimicry-turns.producer.test.ts --maxWorkers=1)
 export TURNTEST_LOCALES="$UP/locales/en"
-"$HERE/build/wide-combat-test" "$TURNS"
+python3 "$HERE/tools/check-complete-turns.py" "$HERE/build/wide-combat-test" "$TURNS"
 python3 "$HERE/tools/check-keldeo-proof.py" "$RAW" "$MIMICRY" "$LEARN"

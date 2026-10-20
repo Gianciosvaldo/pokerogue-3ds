@@ -17,7 +17,7 @@ python3 "$HERE/tools/build-gulp-missile-continuation-proof.py" "$UP/test/tests/z
 (cd "$UP" && NODE_OPTIONS=--max-old-space-size=4096 GULP_SEED="$SEED" GULP_OUT="$TRACE" node node_modules/vitest/vitest.mjs run test/tests/zz-dump/gulp-missile.producer.test.ts --maxWorkers=1)
 (cd "$UP" && NODE_OPTIONS=--max-old-space-size=4096 DOUBLES_N=8192 DOUBLES_SEED="$SEED" DOUBLES_OUT="$TURNS" node node_modules/vitest/vitest.mjs run test/tests/zz-dump/gulp-missile-turns.producer.test.ts --maxWorkers=1)
 (cd "$UP" && NODE_OPTIONS=--max-old-space-size=4096 DOUBLES_N=8192 DOUBLES_SEED="$SEED" DOUBLES_OUT="$CONT" node node_modules/vitest/vitest.mjs run test/tests/zz-dump/gulp-missile-continuation.producer.test.ts --maxWorkers=1)
-TURNTEST_LOCALES="$UP/locales/en" "$HERE/build/wide-combat-test" "$CONT"
+TURNTEST_LOCALES="$UP/locales/en" python3 "$HERE/tools/check-complete-turns.py" "$HERE/build/wide-combat-test" "$CONT"
 TURNTEST_LOCALES="$UP/locales/en" "$HERE/build/gulp-missile-test" "$TRACE"
-TURNTEST_LOCALES="$UP/locales/en" "$HERE/build/wide-combat-test" "$TURNS"
+TURNTEST_LOCALES="$UP/locales/en" python3 "$HERE/tools/check-complete-turns.py" "$HERE/build/wide-combat-test" "$TURNS"
 TURNTEST_LOCALES="$UP/locales/en" python3 "$HERE/tools/check-gulp-missile-proof.py" "$TRACE" "$CONT"
