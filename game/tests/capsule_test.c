@@ -123,9 +123,14 @@ void gv_draw_reveal_top(const gv_reveal* v) {
   for (int i = 0; i < v->n; i++)
     if (v->egg[i].phase && n_rects < RECT_MAX) g_rects[n_rects++] = (rect_t){v->egg[i].x - 10, v->egg[i].y - 10, 20, 20, g_which};
 }
+static char g_sel_name[64];
+static int g_n_rows;
 void gv_draw_reveal_bottom(const gv_reveal* v) {
+  g_sel_name[0] = 0;
+  g_n_rows = v->n_rows;
   rec(v->title);
   for (int i = 0; i < v->n_rows; i++) {
+    if (v->row[i].selected) snprintf(g_sel_name, sizeof g_sel_name, "%s", v->row[i].name);
     rec(v->row[i].name);
     rec(v->row[i].tier_name);
   }
@@ -135,7 +140,17 @@ void gv_draw_reveal_bottom(const gv_reveal* v) {
   rec(v->small);
   rec(v->note[0]);
   rec(v->note[1]);
-  rec(v->hint);
+  for (int i = 0; i < v->hints.n; i++) rec(v->hints.text[i]);
+}
+/* The hint a tap is on (menus/gacha_view.c measures the 8 px pixel font; here a character is 6 px): the same walk */
+int gv_hint_at(const gv_hints* h, float x) {
+  float end = GV_HINT_X;
+  for (int i = 0; i < h->n; i++) {
+    end += 6.0f * (float)strlen(h->text[i]);
+    if (x < end + GV_HINT_GAP / 2.0f) return i;
+    end += GV_HINT_GAP;
+  }
+  return -1;
 }
 
 static bool has_text(const char* needle) {
@@ -666,6 +681,158 @@ static void test_skip_callbacks_and_dwell(void) {
   }
 }
 
+/* A tap (physical bottom-screen px; the canvas starts 30 px down). The knob is the canvas square x 120..200, y 72..152; the buttons at the foot
+ * start at canvas y 160; with 6 px a character the foot's texts are at x 8..50 (A: pull) and 64..106 (B: back) before the pull, 8..86
+ * (UP/DOWN: look) and 100..148 (A: close) once the results show, and 8..194 while it runs; each takes the half gap (7) after it. The list's
+ * rows are canvas y 29 + 18 i (18 high, x 4..316), and the notes of more results are canvas y 124..136 (more above x < 160, more below right). */
+static bool tap(float x, float y) { return g_top->touch(g_top, x, y); }
+#define FOOT 200.0f
+#define LIST(i, dy) (30.0f + 29.0f + 18.0f * (float)(i) + (dy))
+#define NOTE 160.0f
+
+static void test_touch(void) {
+  /* before the pull: the knob and the two buttons */
+  reset_fakes();
+  counts c = {0};
+  cap_fixture f = fx(25);
+  caps_args a = args_for(&f, &c);
+  CHECK(capsule_screen_open(&a) && g_top->touch != NULL, "opens, and takes taps");
+  draw(1);
+  CHECK(has_text("Pull the knob") && has_text("A: pull") && has_text("B: back"), "the two buttons are two texts");
+  CHECK(!tap(119, 130) && !tap(200, 130) && !tap(160, 30 + 71) && !tap(160, 30 + 152), "a tap just outside the knob's square takes nothing");
+  CHECK(!tap(30, 189) && !tap(150, FOOT) && !tap(319, FOOT), "nor above the foot, nor right of B: back");
+  CHECK(n_select == 0, "(nothing was pulled)");
+  CHECK(tap(160, 130) && n_select == 1, "a tap on the knob pulls");
+  CHECK(!tap(160, 130) && !tap(20, FOOT - 100) && n_select == 1, "and is not a second pull: the knob is gone");
+  draw(1);
+  CHECK(has_text("B or START: skip to the results") && !has_text("A: pull"), "while it runs the foot offers the skip, as one text");
+  CHECK(!tap(100, 130) && !tap(250, FOOT) && c.settled == 0, "a tap on the screen's body, or beyond the skip, does not skip");
+  CHECK(tap(200, FOOT) && c.settled == 1, "a tap on the skip (x 194 is the half gap after it) shows the results");
+  draw(1);
+  CHECK(has_text("1. Fixture result 1"), "the results");
+  CHECK(!strcmp(g_sel_name, "1. Fixture result 1") && g_n_rows == 5, "the first of five rows is pointed at");
+
+  /* the results: rows, the second tap, the pause */
+  n_select = 0;
+  CHECK(!tap(3, LIST(0, 5)) && !tap(316, LIST(0, 5)) && !tap(100, LIST(0, -1)) && !tap(100, LIST(5, 0)), "a tap beside the rows takes nothing");
+  CHECK(n_select == 0, "(no sound)");
+  CHECK(tap(100, LIST(2, 5)) && n_select == 1, "a tap on the third row points at it");
+  draw(1);
+  CHECK(!strcmp(g_sel_name, "3. Fixture result 3"), "(%s)", g_sel_name);
+  CHECK(tap(4, LIST(4, 17)), "the last pixel of the fifth row, its left edge");
+  draw(1);
+  CHECK(!strcmp(g_sel_name, "5. Fixture result 5"), "(%s)", g_sel_name);
+  CHECK(tap(100, LIST(0, 0)), "the first pixel of the first");
+  draw(1);
+  CHECK(!strcmp(g_sel_name, "1. Fixture result 1"), "(%s)", g_sel_name);
+  CHECK(tap(100, LIST(2, 0)) && tap(100, LIST(2, 5)) && c.exits == 0, "a second tap on the pointed row is A: the pause is not over yet, so it does not close");
+  run_ms(400, 16.7f);
+  CHECK(tap(100, LIST(2, 9)) && c.exits == 1 && c.after == 1, "after the pause it closes");
+  CHECK(tap(100, LIST(2, 5)) && tap(20, FOOT) && c.exits == 1, "and a screen that was left takes taps and does nothing");
+
+  /* the notes page the list by five */
+  reset_fakes();
+  counts d = {0};
+  a = args_for(&f, &d);
+  capsule_screen_open(&a);
+  tap(160, 130);
+  tap(100, FOOT);
+  draw(1);
+  CHECK(d.settled == 1 && has_text("20 more below") && !has_text("more above"), "25 results: five shown, 20 below, none above");
+  CHECK(!tap(30, NOTE), "no note above, so a tap there takes nothing");
+  CHECK(!tap(200, 30 + 123) && !tap(200, 30 + 136), "nor just above or below the notes' band (canvas y 124..136)");
+  CHECK(tap(200, NOTE), "the note below pages down");
+  draw(1);
+  CHECK(!strcmp(g_sel_name, "6. Fixture result 6") && has_text("19 more below") && has_text("more above"), "the pointer moved five on (%s)", g_sel_name);
+  CHECK(tap(100, LIST(2, 5)), "the list now shows results 2..6: its third row is result 4");
+  draw(1);
+  CHECK(!strcmp(g_sel_name, "4. Fixture result 4"), "a scrolled list's rows are the results they show (%s)", g_sel_name);
+  CHECK(tap(100, LIST(0, 0)), "and its first row result 2");
+  draw(1);
+  CHECK(!strcmp(g_sel_name, "2. Fixture result 2"), "(%s)", g_sel_name);
+  CHECK(tap(159, NOTE), "x 159 is the note above's half");
+  draw(1);
+  CHECK(!strcmp(g_sel_name, "1. Fixture result 1") && !has_text("more above"), "and pages up (%s)", g_sel_name);
+  CHECK(tap(160, NOTE), "x 160 is the note below's");
+  draw(1);
+  CHECK(!strcmp(g_sel_name, "6. Fixture result 6"), "(%s)", g_sel_name);
+  static const char* const down[4] = {"11.", "16.", "21.", "25."};
+  for (int k = 0; k < 4; k++) {
+    CHECK(tap(200, NOTE), "page down");
+    draw(1);
+    CHECK(!strncmp(g_sel_name, down[k], 3), "to %s (%s)", down[k], g_sel_name);
+  }
+  CHECK(!has_text("more below") && has_text("more above") && !tap(200, NOTE), "at the end there is no note below, and a tap there takes nothing");
+  static const char* const up[5] = {"20.", "15.", "10.", "5.", "1."};
+  for (int k = 0; k < 5; k++) {
+    CHECK(tap(30, NOTE), "page up");
+    draw(1);
+    CHECK(!strncmp(g_sel_name, up[k], 2), "to %s (%s)", up[k], g_sel_name);
+  }
+  CHECK(!has_text("more above") && !tap(30, NOTE), "back at the top: no note above");
+
+  /* the foot: UP/DOWN is only said, A: close is A (after the pause) */
+  draw(1);
+  CHECK(has_text("UP/DOWN: look") && has_text("A: close"), "the foot's two texts");
+  CHECK(!tap(50, FOOT) && !tap(200, FOOT) && !tap(30, 30 + 159), "UP/DOWN: look, beyond A: close and the row above the foot take nothing");
+  CHECK(tap(120, FOOT) && d.exits == 0, "A: close in the pause after the results does not close them yet");
+  run_ms(400, 16.7f);
+  CHECK(tap(120, FOOT) && d.exits == 1 && d.after == 1, "after it, it closes");
+
+  /* a short list: no notes, and no row below the last result */
+  reset_fakes();
+  counts e = {0};
+  cap_fixture g = fx(3);
+  a = args_for(&g, &e);
+  capsule_screen_open(&a);
+  tap(160, 130);
+  tap(100, FOOT);
+  draw(1);
+  CHECK(g_n_rows == 3 && !has_text("more"), "three results, three rows, no notes");
+  CHECK(!tap(100, LIST(3, 5)) && !tap(200, NOTE) && !tap(30, NOTE), "no fourth row and no notes to tap");
+  CHECK(tap(100, LIST(2, 5)), "the third row");
+  draw(1);
+  CHECK(!strcmp(g_sel_name, "3. Fixture result 3"), "(%s)", g_sel_name);
+  CHECK(tap(315, LIST(1, 5)), "the right edge of a row (x 315 is its last pixel)");
+  draw(1);
+  CHECK(!strcmp(g_sel_name, "2. Fixture result 2"), "(%s)", g_sel_name);
+
+  /* the knob's four corner pixels pull, and the foot's first row of pixels is the foot */
+  static const float corner[4][2] = {{120, 102}, {199, 102}, {120, 181}, {199, 181}};
+  for (int k = 0; k < 4; k++) {
+    reset_fakes();
+    counts m = {0};
+    a = args_for(&f, &m);
+    capsule_screen_open(&a);
+    n_select = 0;
+    CHECK(tap(corner[k][0], corner[k][1]) && n_select == 1, "the knob's corner %d pulls", k);
+  }
+  reset_fakes();
+  counts n = {0};
+  a = args_for(&f, &n);
+  capsule_screen_open(&a);
+  n_select = 0;
+  CHECK(tap(20, 190) && n_select == 1, "the foot's first pixel row (canvas y 160) is A: pull");
+
+  /* B before the pull, by its button */
+  reset_fakes();
+  counts h = {0};
+  a = args_for(&f, &h);
+  capsule_screen_open(&a);
+  CHECK(tap(80, FOOT) && h.exits == 1 && h.before == 1, "B: back before the pull leaves, before the reveal");
+  CHECK(tap(20, FOOT) && tap(160, 130) && h.exits == 1, "and the screen that was left takes taps and does nothing");
+
+  /* the pull by its button */
+  reset_fakes();
+  counts k = {0};
+  a = args_for(&f, &k);
+  capsule_screen_open(&a);
+  n_select = 0;
+  CHECK(tap(20, FOOT) && n_select == 1, "A: pull pulls");
+  draw(1);
+  CHECK(has_text("Here they come"), "(it runs)");
+}
+
 static void test_exit_before_pull_and_leaving(void) {
   reset_fakes();
   counts c = {0};
@@ -818,6 +985,7 @@ int main(int argc, char** argv) {
   test_no_ambient_random();
   test_screen_refusals();
   test_screen_words_and_pull();
+  test_touch();
   test_hatch_screen();
   test_held_buttons();
   test_skip_callbacks_and_dwell();

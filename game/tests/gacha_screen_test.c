@@ -145,7 +145,9 @@ void gv_draw_top(const gv_state* v) {
   rec(0, v->top_message, 0);
   for (int i = 0; i < GV_OPTIONS; i++) rec(0, v->opt[i].short_label, v->opt[i].can_buy ? 0 : 1);
 }
+static int g_v_sel = -1, g_v_machine = -1, g_v_yes = -1, g_v_mode = -1, g_v_lines;
 void gv_draw_bottom(const gv_state* v) {
+  g_v_sel = v->sel, g_v_machine = v->machine, g_v_yes = v->yes, g_v_mode = (int)v->mode, g_v_lines = v->n_lines;
   rec(1, v->machine_name, 0);
   rec(1, v->machine_note, 0);
   rec(1, v->egg_count, 0);
@@ -156,7 +158,7 @@ void gv_draw_bottom(const gv_state* v) {
     rec(1, v->opt[i].have, c);
   }
   rec(1, v->refusal, 2);
-  rec(1, v->hint, 0);
+  for (int i = 0; i < v->hints.n; i++) rec(1, v->hints.text[i], 0);
   for (int i = 0; i < v->n_lines; i++) rec(1, v->lines[i], 0);
   if (v->mode == GV_CONFIRM) g_cursor_y = v->yes ? 140 : 158;
 }
@@ -179,7 +181,17 @@ void gv_draw_reveal_bottom(const gv_reveal* v) {
   rec(1, v->small, 0);
   rec(1, v->note[0], 0);
   rec(1, v->note[1], 0);
-  rec(1, v->hint, 0);
+  for (int i = 0; i < v->hints.n; i++) rec(1, v->hints.text[i], 0);
+}
+/* The hint a tap is on (menus/gacha_view.c measures the 8 px pixel font; here a character is 6 px): the same walk */
+int gv_hint_at(const gv_hints* h, float x) {
+  float end = GV_HINT_X;
+  for (int i = 0; i < h->n; i++) {
+    end += 6.0f * (float)strlen(h->text[i]);
+    if (x < end + GV_HINT_GAP / 2.0f) return i;
+    end += GV_HINT_GAP;
+  }
+  return -1;
 }
 
 static const drawn_t* find_text(const char* needle) {
@@ -752,6 +764,203 @@ static void test_locked(void) {
   g_top = NULL;
 }
 
+/* ------------------------------------------------------------------ taps */
+
+/* A tap (physical bottom-screen px; the menu's canvas starts 30 px down). The option rows are at canvas y 33 + 24 i (24 high, x 8..312), the
+ * buttons at the foot from canvas y 162, and, with a two line question, Yes is canvas y 61..77 and No 77..93 (x 12..308). With 6 px a
+ * character (the fake view) the buttons of the menu are at x 8..80 (L/R: machine), 94..160 (U/D: option), 174..216 (A: pull) and 230..272
+ * (B: back), each taking the half gap after it too. */
+static bool tap(float x, float y) { return g_top->touch(g_top, x, y); }
+#define ROW_Y(i, dy) (30.0f + 33.0f + 24.0f * (float)(i) + (dy))
+#define FOOT_Y 200.0f
+#define YES_Y(dy) (30.0f + 61.0f + (dy))
+#define NO_Y(dy) (30.0f + 77.0f + (dy))
+
+/* the menu on machine m with option o pointed at, by taps */
+static void point_by_taps(int o) {
+  CHECK(on_screen("capsule-machine"), "(the menu)");
+  draw_both();
+  if (g_v_sel != o) tap(100, ROW_Y(o, 5));
+  draw_both();
+  CHECK(g_v_sel == o, "option %d is pointed at (%d)", o, g_v_sel);
+}
+static void ask_by_taps(int o) {
+  point_by_taps(o);
+  CHECK(tap(100, ROW_Y(o, 5)), "a tap on the pointed row");
+  draw_both();
+  CHECK(g_v_mode == (int)GV_CONFIRM, "asks");
+}
+
+/* one purchase by taps: to machine m with the foot's L/R, the option asked, Yes */
+static void buy_by_taps(int m, int o) {
+  draw_both();
+  for (int k = 0; k < 3 && g_v_machine != m; k++) {
+    tap(50, FOOT_Y);
+    draw_both();
+  }
+  CHECK(g_v_machine == m, "machine %d (%d)", m, g_v_machine);
+  ask_by_taps(o);
+  tap(100, YES_Y(5));
+}
+
+static void test_touch(void) {
+  const uint32_t v[4] = {12, 3, 2, 1};
+  fresh(v, 7);
+  open_machine();
+  CHECK(g_top->touch != NULL, "the machine takes taps");
+  draw_both();
+  CHECK(g_v_sel == 0 && g_v_machine == 0 && g_v_mode == (int)GV_MENU, "it starts on the first option of the first machine");
+
+  /* the option rows */
+  int n0 = n_select;
+  CHECK(!tap(7, ROW_Y(2, 5)) && !tap(312, ROW_Y(2, 5)), "a tap beside the rows takes nothing");
+  CHECK(!tap(100, ROW_Y(0, -1)) && !tap(100, ROW_Y(4, 24)), "nor above the first row or below the fifth");
+  CHECK(n_select == n0, "(no sound for those)");
+  CHECK(tap(8, ROW_Y(2, 5)) && n_select == n0 + 1, "a tap on the third row points at it (the row's left edge is on it)");
+  draw_both();
+  CHECK(g_v_sel == 2 && g_v_mode == (int)GV_MENU, "it is the chosen option and nothing is asked yet (%d)", g_v_sel);
+  CHECK(tap(311, ROW_Y(4, 23)), "the last pixel of the fifth row");
+  draw_both();
+  CHECK(g_v_sel == 4, "is on it (%d)", g_v_sel);
+  CHECK(tap(100, ROW_Y(2, 0)), "the first pixel of the third");
+  draw_both();
+  CHECK(g_v_sel == 2, "(%d)", g_v_sel);
+  CHECK(tap(100, ROW_Y(4, -1)), "the last pixel of the fourth row");
+  draw_both();
+  CHECK(g_v_sel == 3, "is on it (%d)", g_v_sel);
+  CHECK(tap(100, ROW_Y(4, 0)), "and the next pixel down is the fifth row's first");
+  draw_both();
+  CHECK(g_v_sel == 4, "(%d)", g_v_sel);
+
+  /* the question: opens on No; a tap beside the answers takes nothing (it is modal) */
+  ask_by_taps(2);
+  CHECK(has_text("Pull 5 eggs from the Move Gacha") && has_text("for 1 Plus voucher?") && g_v_yes == 0 && g_cursor_y == 158, "\"Pull 5 eggs...\" with the cursor on No (%.0f)", g_cursor_y);
+  g_before = *sysd_get();
+  faults(0, 0);
+  CHECK(tap(11, NO_Y(0)) && tap(308, NO_Y(0)) && tap(100, YES_Y(-1)) && tap(100, NO_Y(16)), "taps beside the answers are taken");
+  draw_both();
+  CHECK(g_v_mode == (int)GV_CONFIRM && g_v_yes == 0 && g_w == 0, "and do nothing: still asking, nothing written");
+  CHECK(tap(100, NO_Y(15)), "the last pixel of No");
+  draw_both();
+  CHECK(g_v_mode == (int)GV_MENU && g_w == 0 && live_digest() == sys_digest(&g_before), "No: back to the options, nothing bought");
+  ask_by_taps(2);
+  CHECK(tap(12, NO_Y(0)), "the first pixel of No, its left edge");
+  draw_both();
+  CHECK(g_v_mode == (int)GV_MENU && g_w == 0 && live_digest() == sys_digest(&g_before), "No again");
+  ask_by_taps(2);
+  CHECK(tap(307, YES_Y(0)), "Yes (its first pixel, the right edge)");
+  CHECK(on_screen("capsule-preview"), "buys: the capsule screen shows the committed result (%s)", g_top ? g_top->name : "-");
+  CHECK(sysd_get()->n_eggs == 12 && sysd_get()->voucher_counts[1] == 2 && sysd_get()->stats.eggs_pulled == g_before.stats.eggs_pulled + 5, "one pull of 5 eggs for one Plus voucher");
+  CHECK(!tap(100, YES_Y(5)) && !tap(100, NO_Y(5)), "a tap where Yes was now reaches the capsule screen, which has nothing there");
+  CHECK(sysd_get()->n_eggs == 12 && sysd_get()->stats.eggs_pulled == g_before.stats.eggs_pulled + 5, "so it never buys twice");
+  settle_capsule();
+  close_capsule();
+  CHECK(on_screen("capsule-machine"), "(back at the menu)");
+
+  /* the buttons at the foot */
+  draw_both();
+  CHECK(has_text("L/R: machine") && has_text("U/D: option") && has_text("A: pull") && has_text("B: back"), "the four buttons are four texts");
+  n_exit = 0;
+  CHECK(!tap(100, FOOT_Y) && !tap(280, FOOT_Y) && !tap(319, FOOT_Y), "U/D: option is only said, and nothing is right of B: back");
+  CHECK(!tap(50, 30 + 161), "above the foot's window nothing is a button");
+  CHECK(tap(50, 30 + 162), "the first row of the window: L/R: machine");
+  draw_both();
+  CHECK(g_v_machine == 1 && has_text("Legendary Gacha"), "goes to the next machine (%d)", g_v_machine);
+  static const int next[3] = {2, 0, 1};
+  for (int k = 0; k < 3; k++) {
+    CHECK(tap(86, FOOT_Y), "the gap after L/R: machine is on it too");
+    draw_both();
+    CHECK(g_v_machine == next[k], "the three machines go round (%d, wanted %d)", g_v_machine, next[k]);
+  }
+  point_by_taps(0);
+  CHECK(tap(190, FOOT_Y), "A: pull");
+  draw_both();
+  CHECK(g_v_mode == (int)GV_CONFIRM, "asks about the pointed option");
+  CHECK(has_text("A: choose") && has_text("B: back") && !has_text("U/D: option"), "the question's buttons are two");
+  CHECK(tap(20, FOOT_Y), "A: choose, the cursor being on No");
+  draw_both();
+  CHECK(g_v_mode == (int)GV_MENU, "is No: the options again");
+  ask_by_taps(0);
+  CHECK(tap(100, FOOT_Y), "B: back (x 76..)");
+  draw_both();
+  CHECK(g_v_mode == (int)GV_MENU && n_exit == 0, "closes the question and does not leave");
+  CHECK(tap(240, FOOT_Y) && n_exit == 1, "B: back leaves");
+  CHECK(tap(240, FOOT_Y) && tap(100, ROW_Y(0, 5)) && n_exit == 1, "a screen that was left takes taps and does nothing");
+  g_top = NULL;
+
+  /* an option that cannot be bought: A is the error sound, and the line at the foot says why instead of naming the buttons */
+  const uint32_t w[4] = {5, 0, 0, 1};
+  fresh(w, 80);
+  open_machine();
+  point_by_taps(1);
+  draw_both();
+  CHECK(has_text("You don't have enough vouchers."), "10 Regular vouchers with 5: the source's words are at the foot");
+  const int e0 = n_error;
+  CHECK(tap(100, ROW_Y(1, 5)) && n_error == e0 + 1 && g_v_mode == (int)GV_MENU, "a tap on the pointed row is A: the error sound, nothing asked");
+  CHECK(!tap(190, FOOT_Y) && !tap(50, FOOT_Y), "the foot names no buttons then: its taps take nothing");
+  g_top = NULL;
+
+  /* a machine that cannot be used: only L/R and B */
+  fresh_all(30, 3);
+  FILE* fp = fopen(SAVE_DIR "/system.sav", "wb");
+  fwrite("junk", 1, 4, fp);
+  fclose(fp);
+  remove(SAVE_DIR "/system.sav.bak");
+  restart_and_open();
+  draw_both();
+  CHECK(has_text("Nothing can be bought") && has_text("L/R: machine") && has_text("B: back") && !has_text("A: pull"), "a locked machine: two buttons");
+  CHECK(!tap(100, ROW_Y(0, 5)) && !tap(100, ROW_Y(2, 5)), "its option rows take no tap");
+  CHECK(tap(50, FOOT_Y), "L/R: machine");
+  draw_both();
+  CHECK(g_v_machine == 1, "goes on (%d)", g_v_machine);
+  CHECK(!tap(150, FOOT_Y), "(right of B: back there is nothing)");
+  const int exits = n_exit;
+  CHECK(tap(95, FOOT_Y) && n_exit == exits + 1, "B: back leaves");
+  g_top = NULL;
+
+  /* a refusal is read and put away with a tap anywhere; a purchase left unfinished is finished, or left, by a tap on its buttons */
+  start_case();
+  open_machine();
+  faults(1, 0);
+  buy_by_taps(MACH, OPT);
+  draw_both();
+  CHECK(has_text("was spent") && has_text("A: back"), "a refused begin: told, with one button");
+  CHECK(tap(300, 30 + 20) , "a tap anywhere");
+  draw_both();
+  CHECK(g_v_mode == (int)GV_MENU && ptx_pending() == 0, "puts the message away: the options, nothing begun");
+  no_faults();
+  buy_by_taps(MACH, OPT);
+  CHECK(on_screen("capsule-preview") && sysd_get()->stats.eggs_pulled == 10, "and the next try buys (10 eggs pulled)");
+  settle_capsule();
+  close_capsule();
+
+  start_case();
+  open_machine();
+  faults(2, 0);
+  buy_by_taps(MACH, OPT);
+  draw_both();
+  CHECK(has_text("was spent") && has_text("A: try again") && has_text("B: leave"), "a refused commit: two buttons");
+  const uint32_t pend = ptx_pending();
+  CHECK(pend != 0 && !tap(300, 30 + 20) && !tap(100, ROW_Y(0, 5)), "only the buttons take taps then (nothing else retries a purchase)");
+  CHECK(!tap(280, FOOT_Y), "(right of B: leave: nothing)");
+  no_faults();
+  CHECK(tap(50, FOOT_Y), "A: try again");
+  CHECK(on_screen("capsule-preview"), "finishes it");
+  ptx_result r;
+  CHECK(ptx_unrevealed(&r) == pend, "the same transaction");
+  settle_capsule();
+  close_capsule();
+
+  start_case();
+  open_machine();
+  n_exit = 0;
+  faults(2, 0);
+  buy_by_taps(MACH, OPT);
+  no_faults();
+  CHECK(tap(100, FOOT_Y) && n_exit == 1, "B: leave leaves");
+  g_top = NULL;
+}
+
 /* ------------------------------------------------------------------ fuzz */
 
 static uint32_t rnd_state = 0x9e3779b9u;
@@ -903,6 +1112,7 @@ int main(int argc, char** argv) {
   test_interrupted_purchase();
   test_failed_writes_through_screen();
   test_locked();
+  test_touch();
   test_fuzz(fuzz);
 
   wipe();

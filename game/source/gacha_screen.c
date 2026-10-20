@@ -259,6 +259,40 @@ static void countdown_text(char out[12]) { /* hh:mm: the plate's window is too n
   snprintf(out, 12, "%02u:%02u", (unsigned)(left / 3600000u), (unsigned)(left % 3600000u / 60000u));
 }
 
+/* The buttons at the foot of the screen, and the button each one is when it is tapped (BTN_COUNT_: a hint that only says what the buttons do) */
+static void hints_for(gv_hints* h, ui_button btn[GV_HINT_MAX]) {
+  static const char* const MENU[GV_HINT_MAX] = {"L/R: machine", "U/D: option", "A: pull", "B: back"};
+  static const ui_button MENU_BTN[GV_HINT_MAX] = {BTN_RIGHT, BTN_COUNT_, BTN_ACTION, BTN_CANCEL};
+  const char* const* text = NULL;
+  const ui_button* b = NULL;
+  int n = 0;
+  memset(h, 0, sizeof *h);
+  if (G.mode == GS_MENU && !G.view.locked) {
+    text = MENU, b = MENU_BTN, n = 4;
+  } else if (G.mode == GS_CONFIRM) {
+    static const char* const T[2] = {"A: choose", "B: back"};
+    static const ui_button B[2] = {BTN_ACTION, BTN_CANCEL};
+    text = T, b = B, n = 2;
+  } else if (G.mode == GS_MENU) { /* a machine that is locked */
+    static const char* const T[2] = {"L/R: machine", "B: back"};
+    static const ui_button B[2] = {BTN_RIGHT, BTN_CANCEL};
+    text = T, b = B, n = 2;
+  } else if (G.mode == GS_RETRY) {
+    static const char* const T[2] = {"A: try again", "B: leave"};
+    static const ui_button B[2] = {BTN_ACTION, BTN_CANCEL};
+    text = T, b = B, n = 2;
+  } else {
+    static const char* const T[1] = {"A: back"};
+    static const ui_button B[1] = {BTN_ACTION};
+    text = T, b = B, n = 1;
+  }
+  h->n = n;
+  for (int i = 0; i < n; i++) {
+    snprintf(h->text[i], sizeof h->text[i], "%s", text[i]);
+    if (btn) btn[i] = b[i];
+  }
+}
+
 static void build_state(gv_state* v) {
   memset(v, 0, sizeof *v);
   v->slide = G.slide;
@@ -285,11 +319,11 @@ static void build_state(gv_state* v) {
   snprintf(v->up_label[2], sizeof v->up_label[2], "Shiny UP!");
   v->featured = gh_featured_species();
   countdown_text(v->countdown);
+  hints_for(&v->hints, NULL);
 
   if (G.mode == GS_MENU && !G.view.locked) {
     const gh_option* o = &G.view.opt[G.sel];
     if (o->refusal_key) snprintf(v->refusal, sizeof v->refusal, "%s", gh_refusal_text(o->refusal_key));
-    snprintf(v->hint, sizeof v->hint, "L/R: machine  U/D: option  A: pull  B: back");
     snprintf(v->top_message, sizeof v->top_message, "Select a machine.");
     return;
   }
@@ -299,14 +333,42 @@ static void build_state(gv_state* v) {
     snprintf(v->lines[0], sizeof v->lines[0], "Pull %d egg%s from the %.20s", o->rule.pulls, o->rule.pulls == 1 ? "" : "s", gh_machine_name(G.machine));
     snprintf(v->lines[1], sizeof v->lines[1], "for %d %.12s voucher%s?", o->rule.cost, gh_voucher_name(o->rule.voucher), o->rule.cost == 1 ? "" : "s");
     v->n_lines = 2;
-    snprintf(v->hint, sizeof v->hint, "A: choose   B: back");
   } else if (G.mode == GS_MENU) {
     wrap_lines(v, G.view.lock_text, 42);
-    snprintf(v->hint, sizeof v->hint, "L/R: machine   B: back");
   } else {
     wrap_lines(v, G.msg, 42);
-    snprintf(v->hint, sizeof v->hint, "%s", G.mode == GS_RETRY ? "A: try again   B: leave" : "A: back");
   }
+}
+
+/* A tap on the bottom screen (physical px). The buttons at the foot that name a button press it; the option rows point at an option and a
+ * second tap on the pointed one is A (the question); the question's Yes and No answer it; a message goes on with a tap anywhere. */
+static bool gs_touch(ui_screen* s, float x, float y) {
+  if (!G.open || G.left) return true;
+  if (G.mode == GS_MESSAGE) return gs_input(s, BTN_ACTION);
+  const float cy = y - GV_CANVAS_Y;
+  gv_state v;
+  build_state(&v);
+  if (cy >= gv_menu_hints_y()) {
+    if (v.refusal[0] && G.mode == GS_MENU) return false; /* the line says why the option can not be bought instead of naming the buttons */
+    ui_button btn[GV_HINT_MAX];
+    gv_hints h;
+    hints_for(&h, btn);
+    const int k = gv_hint_at(&h, x);
+    return k >= 0 && btn[k] != BTN_COUNT_ ? gs_input(s, btn[k]) : false;
+  }
+  if (G.mode == GS_CONFIRM) {
+    const int a = gv_confirm_at(v.n_lines, x, cy);
+    if (a < 0) return true; /* modal: a tap beside the question takes nothing, as the other questions */
+    G.yes = a;
+    return gs_input(s, BTN_ACTION);
+  }
+  if (G.mode != GS_MENU || G.view.locked) return false;
+  const int i = gv_option_at(x, cy);
+  if (i < 0) return false;
+  if (i == G.sel) return gs_input(s, BTN_ACTION);
+  G.sel = i;
+  ui_play_select();
+  return true;
 }
 
 static void gs_draw(ui_screen* s, rr_screen which) {
@@ -322,7 +384,7 @@ static void gs_draw(ui_screen* s, rr_screen which) {
   }
 }
 
-static ui_screen g_screen = {"capsule-machine", UI_FADE, gs_enter, gs_leave, NULL, gs_input, gs_update, gs_draw, NULL};
+static ui_screen g_screen = {"capsule-machine", UI_FADE, gs_enter, gs_leave, NULL, gs_input, gs_update, gs_draw, NULL, gs_touch};
 
 bool gacha_screen_open(const gachas_args* a) {
   if (!a) return false;
