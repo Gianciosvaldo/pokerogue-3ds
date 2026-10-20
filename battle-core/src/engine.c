@@ -882,6 +882,21 @@ void pr_queue_trainer_summons(pr_battle *bt, pr_engine *e)
     }
 }
 
+/* NewBiomeEncounterPhase.doEncounter's gameplay prefix, before its visual tween.
+ * Normal stock biome transitions have already recalled the outgoing field. */
+void pr_new_biome_encounter_callbacks(pr_battle *bt)
+{
+    for (int k = 0; k < bt->n_party[0]; k++) {
+        pr_pokemon *p = bt->party[0][k];
+        if (!p) continue;
+        pr_reset_battle_data(p);
+        if (p->on_field) {
+            pr_ab_params pp = {.pokemon = p, .move = -1};
+            pr_apply_ab_attrs(bt, PR_AC_PostBiomeChangeAbAttr, &pp);
+        }
+    }
+}
+
 /* Fresh encounter trainer prelude, then its end queue. */
 void pr_start_battle(pr_battle *bt, pr_engine *e)
 {

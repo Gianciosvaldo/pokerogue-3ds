@@ -616,3 +616,7 @@ $(BUILD)/costar-test: tests/costar-test.c $(BUILD)/wide-substitute-frame.inc $(B
 all: $(BUILD)/poison-puppeteer-test
 $(BUILD)/poison-puppeteer-test: tests/poison-puppeteer-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/biome-callback-test
+$(BUILD)/biome-callback-test: tests/biome-callback-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
