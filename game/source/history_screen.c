@@ -336,6 +336,11 @@ static void draw_stat(int i, float x, float y, const rh_mon* m) {
   text_draw(TS_WINDOW_ALT, x + 100, y, buf, &o);
 }
 
+/* The hints on the info page's bottom line: also what a tap on them presses */
+static const char* const INFO_HINTS[2] = {"A: Summary", "B: Back"};
+#define INFO_HINT_X 16
+#define INFO_HINT_Y 224
+
 /* the highlighted Pokemon's stats and moves, on the bottom screen */
 static void draw_info_bottom(const rh_entry* e) {
   if (!ui_space(UI_PHYS_BOTTOM)) return;
@@ -381,7 +386,7 @@ static void draw_info_bottom(const rh_entry* e) {
     o.max_lines = 1;
     text_draw(TS_WINDOW, x, y, i18n_move_name(m->moves[i]), &o);
   }
-  text_draw(TS_INSTRUCTIONS_TEXT, 16, 224, "A: Summary    B: Back", NULL);
+  for (int i = 0; i < 2; i++) text_draw(TS_INSTRUCTIONS_TEXT, hint_x(TS_INSTRUCTIONS_TEXT, INFO_HINT_X, INFO_HINTS, i), INFO_HINT_Y, INFO_HINTS[i], NULL);
 }
 
 /* ------------------------------------------------------------------ the Summary screen over the info page */
@@ -459,7 +464,12 @@ static void hsum_draw(ui_screen* s, rr_screen which) {
   summary_draw();
 }
 
-static ui_screen g_sum_screen = {"history-summary", UI_OVERLAY, NULL, NULL, NULL, hsum_input, hsum_update, hsum_draw, NULL};
+static bool hsum_touch(ui_screen* s, float x, float y) {
+  (void)s;
+  return summary_active() && summary_touch(x, y - 30); /* UI_BOTTOM_CANVAS: the canvas starts 30 px down */
+}
+
+static ui_screen g_sum_screen = {"history-summary", UI_OVERLAY, NULL, NULL, NULL, hsum_input, hsum_update, hsum_draw, NULL, hsum_touch};
 
 /* ------------------------------------------------------------------ the screen */
 
@@ -522,6 +532,29 @@ static bool hs_input(ui_screen* s, ui_button b) {
   }
 }
 
+/* A tap on the bottom screen (physical px). The list: a tap on a run points at it (the pointed run is drawn at x 4, the others at x 8: either
+ * way x 4..312), a second tap on the pointed run is A (its info page), like the save slots. The info page: the hints on the bottom line are A
+ * and B, and a tap on the Pokemon's name block above (y < 60) goes on to the next one of the party, which the top screen's rows show. */
+static bool hs_touch(ui_screen* s, float x, float y) {
+  if (H.info) {
+    if (y >= INFO_HINT_Y - 8) {
+      const int h = hint_at(TS_INSTRUCTIONS_TEXT, INFO_HINT_X, INFO_HINTS, 2, x);
+      return h < 0 ? false : hs_input(s, h == 0 ? BTN_ACTION : BTN_CANCEL);
+    }
+    return y < 60 ? hs_input(s, BTN_DOWN) : false;
+  }
+  for (int i = 0; i < H.n; i++) {
+    const float top = 8 + i * PITCH - H.scroll;
+    if (x < 4 || x >= 8 + ROW_W || y < top || y >= top + ROW_H) continue;
+    if (i == H.cursor) return hs_input(s, BTN_ACTION);
+    H.cursor = i;
+    keep_cursor_in_view();
+    ui_play_select();
+    return true;
+  }
+  return false;
+}
+
 static void hs_update(ui_screen* s, float dt) {
   (void)s;
   const float target = H.top * PITCH;
@@ -544,7 +577,7 @@ static void hs_draw(ui_screen* s, rr_screen which) {
   list_draw(which);
 }
 
-static ui_screen g_screen = {"run-history", UI_FADE, NULL, NULL, NULL, hs_input, hs_update, hs_draw, NULL};
+static ui_screen g_screen = {"run-history", UI_FADE, NULL, NULL, NULL, hs_input, hs_update, hs_draw, NULL, hs_touch};
 
 void history_screen_open(const hist_args* a) {
   memset(&H, 0, sizeof H);

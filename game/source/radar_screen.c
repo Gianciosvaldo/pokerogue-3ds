@@ -21,7 +21,20 @@
 #define DETAIL_Y 34
 #define DETAIL_H 14
 #define TEXT_W 296           /* the width small text is cut or wrapped to */
+#define MORE_X 200           /* the "N more above" / "N more below" notes (drawn at x 232) and the y bands a tap on them takes */
+#define MORE_UP_Y0 24
+#define MORE_UP_Y1 42
+#define MORE_DOWN_Y0 186
+#define MORE_DOWN_Y1 208
 #define SPRITE_DELAY_MS 140.0f   /* the cursor has to rest this long before a sprite is read from the SD card */
+
+/* The hints on the bottom line, one text each so a tap on one is the button it names (the first of the list's, "A: scout" and "B: back", and
+ * the Scout page's "B: back to the list"; the direction hints are only said). */
+static const char* const LIST_HINTS[4] = {"A: scout", "B: back", "^/v: choose", "</>: page"};
+static const char* const BACK_HINTS[1] = {"B: back"};
+static const char* const DETAIL_HINTS[2] = {"B: back to the list", "^/v: scroll"};
+#define HINT_X 10
+#define HINT_Y 224
 
 typedef enum { MODE_LIST, MODE_DETAIL } rd_mode;
 enum { TONE_NORMAL, TONE_HEAD, TONE_NOTE, TONE_DIM };
@@ -357,6 +370,40 @@ static bool rd_input(ui_screen* s, ui_button b) {
   }
 }
 
+/* A tap on the bottom screen (physical px). The hints on the bottom line that name a button press it. The list: a tap on a record points at it
+ * and a second tap on the pointed one scouts it, like the save slots; the "more above" and "more below" notes page the list as </> do. The Scout
+ * page: the upper half of the text scrolls it up by half a page, the lower half down. */
+static bool rd_touch(ui_screen* s, float x, float y) {
+  if (R.left) return true;
+  if (y >= HINT_Y - 8) {
+    if (R.mode == MODE_DETAIL) return hint_at(TS_INSTRUCTIONS_TEXT, HINT_X, DETAIL_HINTS, 2, x) == 0 ? rd_input(s, BTN_CANCEL) : false;
+    if (!R.usable || R.roster.count == 0) return hint_at(TS_INSTRUCTIONS_TEXT, HINT_X, BACK_HINTS, 1, x) == 0 ? rd_input(s, BTN_CANCEL) : false;
+    const int h = hint_at(TS_INSTRUCTIONS_TEXT, HINT_X, LIST_HINTS, 4, x);
+    return h == 0 ? rd_input(s, BTN_ACTION) : (h == 1 ? rd_input(s, BTN_CANCEL) : false); /* the direction hints are only said */
+  }
+  if (R.mode == MODE_DETAIL) {
+    const float top = DETAIL_Y - 4, bottom = DETAIL_Y - 4 + DETAIL_VISIBLE * DETAIL_H + 8;
+    if (x < 1 || x >= 319 || y < top || y >= bottom) return false;
+    const int max = R.n_detail > DETAIL_VISIBLE ? R.n_detail - DETAIL_VISIBLE : 0;
+    R.dscroll += y < (top + bottom) / 2 ? -DETAIL_VISIBLE / 2 : DETAIL_VISIBLE / 2;
+    if (R.dscroll > max) R.dscroll = max;
+    if (R.dscroll < 0) R.dscroll = 0;
+    return true;
+  }
+  for (int i = 0; i < VISIBLE && R.scroll + i < R.roster.count; i++) {
+    const float top = LIST_Y + 6 + i * ROW_H - 2;
+    if (x < 4 || x >= 316 || y < top || y >= top + ROW_H) continue;
+    if (R.scroll + i == R.sel) return rd_input(s, BTN_ACTION);
+    select_to(R.scroll + i);
+    return true;
+  }
+  if (x >= MORE_X) {
+    if (R.scroll > 0 && y >= MORE_UP_Y0 && y < MORE_UP_Y1) return rd_input(s, BTN_LEFT);
+    if (R.scroll + VISIBLE < R.roster.count && y >= MORE_DOWN_Y0 && y < MORE_DOWN_Y1) return rd_input(s, BTN_RIGHT);
+  }
+  return false;
+}
+
 static void rd_update(ui_screen* s, float dt) {
   (void)s;
   const cc_nemesis* n = sel_rec();
@@ -495,6 +542,10 @@ static void draw_row(int list_index, float y) {
   text_draw(TS_INSTRUCTIONS_TEXT, 308, y + 7, life_tag(n->life), &o);
 }
 
+static void draw_hints(const char* const* texts, int n) {
+  for (int i = 0; i < n; i++) line(hint_x(TS_INSTRUCTIONS_TEXT, HINT_X, texts, i), HINT_Y, texts[i], TS_INSTRUCTIONS_TEXT, 0);
+}
+
 static void draw_bottom_list(void) {
   char t[LINE_LEN];
   ui_window(1, 1, 318, 24, WIN_NORMAL);
@@ -544,7 +595,10 @@ static void draw_bottom_list(void) {
     line(12, 197, R.sched.state == CC_SCHED_NO_CANDIDATE ? "This run has no rematch planned." : "This run's plan names no record here.",
          TS_INSTRUCTIONS_TEXT, 0);
   }
-  line(10, 224, R.usable && R.roster.count ? "A: scout   B: back   ^/v: choose   </>: page" : "B: back", TS_INSTRUCTIONS_TEXT, 0);
+  if (R.usable && R.roster.count)
+    draw_hints(LIST_HINTS, 4);
+  else
+    draw_hints(BACK_HINTS, 1);
 }
 
 static void draw_bottom_detail(void) {
@@ -576,7 +630,7 @@ static void draw_bottom_detail(void) {
     snprintf(t, sizeof t, "%d more below", R.n_detail - R.dscroll - DETAIL_VISIBLE);
     line(232, DETAIL_Y + DETAIL_VISIBLE * DETAIL_H + 8, t, TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
   }
-  line(10, 224, "B: back to the list   ^/v: scroll", TS_INSTRUCTIONS_TEXT, 0);
+  draw_hints(DETAIL_HINTS, 2);
 }
 
 static void rd_draw(ui_screen* s, rr_screen which) {
@@ -593,7 +647,7 @@ static void rd_draw(ui_screen* s, rr_screen which) {
     draw_bottom_list();
 }
 
-static ui_screen g_screen = {"radar", UI_FADE, NULL, rd_leave, NULL, rd_input, rd_update, rd_draw, NULL};
+static ui_screen g_screen = {"radar", UI_FADE, NULL, rd_leave, NULL, rd_input, rd_update, rd_draw, NULL, rd_touch};
 
 bool radar_open(const radar_args* a) {
   if (!a) return false;

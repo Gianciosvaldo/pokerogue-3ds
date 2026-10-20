@@ -222,6 +222,18 @@ int main(void) {
     CHECK(optlist_touch(&l, rx, top3 + 7 + 3) && l.chosen == 1 && l.cursor == 0, "the first visible row is item scroll + 0 (%d, %d)", l.chosen, l.cursor);
   }
 
+  /* hints along the bottom line (hint_x, hint_at): 6 px per character here, 18 px between hints; a hint takes half the gap on each side */
+  {
+    const char* const hints[3] = {"A: go", "B: back", "L/R: page"}; /* 5, 7 and 9 characters: 30, 42 and 54 px */
+    CHECK(hint_x(TS_WINDOW, 10, hints, 0) == 10 && hint_x(TS_WINDOW, 10, hints, 1) == 10 + 30 + 18 && hint_x(TS_WINDOW, 10, hints, 2) == 10 + 30 + 18 + 42 + 18,
+          "the hints follow one another with a gap (%.0f, %.0f, %.0f)", hint_x(TS_WINDOW, 10, hints, 0), hint_x(TS_WINDOW, 10, hints, 1), hint_x(TS_WINDOW, 10, hints, 2));
+    CHECK(hint_at(TS_WINDOW, 10, hints, 3, 0) == 0 && hint_at(TS_WINDOW, 10, hints, 3, 10) == 0 && hint_at(TS_WINDOW, 10, hints, 3, 48.5f) == 0, "the first hint, and half the gap after it");
+    CHECK(hint_at(TS_WINDOW, 10, hints, 3, 49) == 1 && hint_at(TS_WINDOW, 10, hints, 3, 58) == 1 && hint_at(TS_WINDOW, 10, hints, 3, 108.5f) == 1, "the second hint from half the gap before it to half the gap after it");
+    CHECK(hint_at(TS_WINDOW, 10, hints, 3, 109) == 2 && hint_at(TS_WINDOW, 10, hints, 3, 160) == 2 && hint_at(TS_WINDOW, 10, hints, 3, 180.5f) == 2, "the third");
+    CHECK(hint_at(TS_WINDOW, 10, hints, 3, 181) == -1 && hint_at(TS_WINDOW, 10, hints, 3, 319) == -1, "past the last one nothing");
+    CHECK(hint_at(TS_WINDOW, 10, hints, 2, 109) == -1 && hint_at(TS_WINDOW, 10, hints, 0, 10) == -1, "only the hints given count");
+  }
+
   printf("msgbox_test: %d checks, %d failed\n", checks, failed);
   return failed ? 1 : 0;
 }

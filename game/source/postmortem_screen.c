@@ -18,7 +18,6 @@
 #define LIST_Y 74
 #define LIST_W 296       /* the list's text is cut to this many px */
 #define HINT_Y 222       /* the button hints under the list */
-#define HINT_GAP 18      /* between two hints */
 #define LIST_BOTTOM (LIST_Y - 4 + VISIBLE * ROW_H + 8) /* the list window's lower edge */
 
 enum { TONE_NORMAL, TONE_FAINT, TONE_NOTE };
@@ -200,24 +199,16 @@ static bool pm_input(ui_screen* s, ui_button b) {
   }
 }
 
-/* The hints on the bottom line are also what a tap on them presses: A: continue, B: back (hint_x says where each begins) */
-static const char HINT_A[] = "A: continue", HINT_B[] = "B: back", HINT_PAGES[] = "</>: turn   ^/v: scroll";
-
-static void hint_x(float* a, float* b, float* pages) {
-  *a = 10;
-  *b = *a + text_width(TS_INSTRUCTIONS_TEXT, HINT_A, NULL) + HINT_GAP;
-  *pages = *b + text_width(TS_INSTRUCTIONS_TEXT, HINT_B, NULL) + HINT_GAP;
-}
+/* The hints on the bottom line are also what a tap on the first two presses: A: continue, B: back */
+static const char* const HINTS[3] = {"A: continue", "B: back", "</>: turn   ^/v: scroll"};
+#define HINT_X0 10
 
 /* A tap on the bottom screen (physical px, which this screen draws in): the header turns the page (its left half back, its right half on),
  * the list scrolls half a page (its upper half up, its lower half down), and the hints under it are the A and B they name. */
 static bool pm_touch(ui_screen* s, float x, float y) {
   if (y >= LIST_BOTTOM) {
-    float a, b, p;
-    hint_x(&a, &b, &p);
-    if (x < b - HINT_GAP / 2) return pm_input(s, BTN_ACTION);
-    if (x < p - HINT_GAP / 2) return pm_input(s, BTN_CANCEL);
-    return false;
+    const int h = hint_at(TS_INSTRUCTIONS_TEXT, HINT_X0, HINTS, 2, x);
+    return h < 0 ? false : pm_input(s, h == 0 ? BTN_ACTION : BTN_CANCEL);
   }
   if (P.rep->history.n_turns == 0) return false;
   if (y < LIST_Y - 4) {
@@ -241,11 +232,7 @@ static void line(float x, float y, const char* s, text_style st, rr_color color)
 }
 
 static void draw_hints(bool pages) {
-  float a, b, p;
-  hint_x(&a, &b, &p);
-  line(a, HINT_Y, HINT_A, TS_INSTRUCTIONS_TEXT, 0);
-  line(b, HINT_Y, HINT_B, TS_INSTRUCTIONS_TEXT, 0);
-  if (pages) line(p, HINT_Y, HINT_PAGES, TS_INSTRUCTIONS_TEXT, 0);
+  for (int i = 0; i < (pages ? 3 : 2); i++) line(hint_x(TS_INSTRUCTIONS_TEXT, HINT_X0, HINTS, i), HINT_Y, HINTS[i], TS_INSTRUCTIONS_TEXT, 0);
 }
 
 static void draw_top(void) {

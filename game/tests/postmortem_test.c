@@ -145,6 +145,18 @@ int ui_window_style(void) { return 5; }
 /* run_summary / run_text, used by the result screen's drawing only */
 void rsum_draw(const rsv_info* in, float x, float y) { (void)in, (void)x, (void)y; }
 
+/* the hints (ui_widgets.c, tested by msgbox_test): the same two functions */
+float hint_x(text_style st, float x0, const char* const* texts, int i) {
+  float x = x0;
+  for (int k = 0; k < i; k++) x += text_width(st, texts[k], NULL) + HINT_GAP;
+  return x;
+}
+int hint_at(text_style st, float x0, const char* const* texts, int n, float x) {
+  for (int i = 0; i < n; i++)
+    if (x < hint_x(st, x0, texts, i + 1) - HINT_GAP / 2.0f) return i;
+  return -1;
+}
+
 /* a message box that shows its text at once and waits for A or B */
 void msgbox_init(msgbox* m, text_style style, float wrap_w, int max_lines) {
   (void)style, (void)wrap_w, (void)max_lines;

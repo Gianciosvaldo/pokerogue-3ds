@@ -141,6 +141,23 @@ float text_draw(text_style st, float x, float y, const char* s, const text_opts*
   return 6.0f * (float)strlen(s);
 }
 
+float text_width(text_style st, const char* s, const text_opts* o) {
+  (void)st, (void)o;
+  return 6.0f * (float)strlen(s);
+}
+
+/* the hints (ui_widgets.c, tested by msgbox_test): the same two functions */
+float hint_x(text_style st, float x0, const char* const* texts, int i) {
+  float x = x0;
+  for (int k = 0; k < i; k++) x += text_width(st, texts[k], NULL) + HINT_GAP;
+  return x;
+}
+int hint_at(text_style st, float x0, const char* const* texts, int n, float x) {
+  for (int i = 0; i < n; i++)
+    if (x < hint_x(st, x0, texts, i + 1) - HINT_GAP / 2.0f) return i;
+  return -1;
+}
+
 const char* i18n_t(char* out, int n, const char* key, ...) {
   const char* t = key;
   const char* who = "";
@@ -224,6 +241,14 @@ bool summary_active(void) { return g_summary_active; }
 bool summary_input(mui_button b) {
   n_summary_input++;
   (void)b;
+  return true;
+}
+static int n_summary_touch;
+static float g_sum_touch_x, g_sum_touch_y;
+bool summary_touch(float x, float y) {
+  n_summary_touch++;
+  g_sum_touch_x = x;
+  g_sum_touch_y = y;
   return true;
 }
 void summary_update(float dt) { (void)dt, n_summary_update++; }
@@ -527,6 +552,74 @@ int main(void) {
   press(BTN_DOWN);
   press(BTN_UP);
   CHECK(n_summary_open == opened && ui_top() == g_screen, "no Pokemon, no Summary screen");
+
+  /* ---- taps (physical bottom-screen pixels): the list's rows are at y = 8 + 56 i, 52 high, x 4..312 */
+  n_entries = 0;
+  open_screen(RH_OK);
+  {
+    ui_screen* sc = ui_top();
+    CHECK(sc->touch != NULL, "the history screen takes taps");
+    n_select = 0;
+    CHECK(!sc->touch(sc, 100, 30) && n_select == 0 && g_depth == 1, "an empty history takes no tap");
+  }
+  make_history();
+  open_screen(RH_OK);
+  settle();
+  draw(RR_BOTTOM);
+  {
+    ui_screen* sc = ui_top();
+    n_select = 0;
+    CHECK(!sc->touch(sc, 2, 30) && !sc->touch(sc, 312, 30), "a tap beside the rows takes nothing");
+    CHECK(!sc->touch(sc, 100, 5) && !sc->touch(sc, 100, 62), "... nor above the first row or in the gap between two");
+    CHECK(n_select == 0, "(no sound for those)");
+    CHECK(sc->touch(sc, 100, 70) && n_select == 1, "a tap on the second run points at it");
+    draw(RR_TOP);
+    CHECK(g_summary_info.wave == 30, "the top screen shows it (wave %d)", g_summary_info.wave);
+    draw(RR_BOTTOM);
+    CHECK(!find("A: Summary"), "it is still the list");
+    CHECK(sc->touch(sc, 308, 130) && n_select == 2, "a tap on a run that is not pointed points at that one (x 308 is inside the rows)");
+    draw(RR_TOP);
+    CHECK(g_summary_info.wave == 50, "... the third (wave %d)", g_summary_info.wave);
+    CHECK(sc->touch(sc, 100, 236), "the fifth run shows 8 px above the screen's edge and can be pointed at");
+    draw(RR_TOP);
+    CHECK(g_summary_info.wave == 90, "wave %d", g_summary_info.wave);
+    settle();
+    CHECK(sc->touch(sc, 100, 10), "once the list has scrolled the rows are where they are drawn: the top one is the second run now");
+    draw(RR_TOP);
+    CHECK(g_summary_info.wave == 30, "wave %d", g_summary_info.wave);
+    n_select = 0;
+    const int base = n_summary_open;
+    n_summary_touch = 0;
+    CHECK(sc->touch(sc, 100, 20) && n_select == 1, "a tap on the pointed run opens its info page");
+    draw(RR_BOTTOM);
+    CHECK(find("A: Summary") && find("B: Back"), "the info page's bottom screen has the hints");
+    CHECK(find("A: Summary")->x == 16 && find("B: Back")->x == 16 + 60 + 18, "(each one after the last: x %.0f and %.0f)", find("A: Summary")->x, find("B: Back")->x);
+    CHECK(!sc->touch(sc, 100, 100) && !sc->touch(sc, 100, 60) && !sc->touch(sc, 300, 230) && n_summary_open == base && ui_top() == sc, "between the name and the hints, and beyond the hints, a tap takes nothing");
+    CHECK(sc->touch(sc, 30, 30), "a tap on the Pokemon's name goes on to the next one of the run");
+    CHECK(sc->touch(sc, 20, 230) && n_summary_open == base + 1 && g_sum_args.index == 1 && g_sum_args.n == 2, "a tap on A: Summary opens the Summary screen at it (index %d)", g_sum_args.index);
+    CHECK(!strcmp(ui_top()->name, "history-summary"), "over the info page");
+    CHECK(ui_top()->touch(ui_top(), 50, 100) && n_summary_touch == 1 && g_sum_touch_x == 50 && g_sum_touch_y == 70, "taps go to the Summary screen on its canvas (y 100 is 70)");
+    g_summary_active = false;
+    CHECK(!ui_top()->touch(ui_top(), 50, 100) && n_summary_touch == 1, "... only while it is up");
+    g_sum_ev.on_close(g_sum_ev.ctx);
+    CHECK(sc->touch(sc, 30, 30), "the name again wraps to the first");
+    CHECK(sc->touch(sc, 20, 230) && g_sum_args.index == 0, "(index %d)", g_sum_args.index);
+    g_sum_ev.on_close(g_sum_ev.ctx);
+    CHECK(sc->touch(sc, 100, 230) && ui_top() == sc, "a tap on B: Back goes back to the list");
+    draw(RR_BOTTOM);
+    CHECK(!find("A: Summary"), "(the list again)");
+    CHECK(n_exit == 0, "without leaving the history");
+
+    /* the name's tap goes DOWN the party, wrapping: four Pokemon in the run that is the fourth row now (the list has scrolled by one) */
+    CHECK(sc->touch(sc, 100, 130) && sc->touch(sc, 100, 130), "(the info page of the run at y 130)");
+    for (int k = 1; k <= 4; k++) {
+      CHECK(sc->touch(sc, 30, 59), "a tap on the name at its lowest pixel counts");
+      sc->touch(sc, 20, 230);
+      const int want = k % 4;
+      CHECK(g_sum_args.n == 4 && g_sum_args.index == want, "tap %d: Pokemon %d of 4 (index %d)", k, want, g_sum_args.index);
+      g_sum_ev.on_close(g_sum_ev.ctx);
+    }
+  }
 
   printf("history_screen_test: %d checks, %d failed\n", checks, failed);
   return failed ? 1 : 0;
