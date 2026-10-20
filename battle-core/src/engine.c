@@ -897,6 +897,20 @@ double pr_get_double_battle_chance(pr_battle *bt, int wave, int n_lures)
     return chance < 1 ? 1 : chance;
 }
 
+/* EncounterPhase: after EACH wild constructor, the new field's party slice
+ * dispatches in reverse order. Recalled players remain eligible. */
+void pr_sync_encounter_nature(pr_battle *bt, pr_pokemon *target,
+                              pr_nature_setter setter, void *ctx)
+{
+    int n = bt->double_battle ? 2 : 1;
+    if (n > bt->n_party[0]) n = bt->n_party[0];
+    for (int k = n - 1; k >= 0; k--) {
+        pr_ab_params pp = {.pokemon = bt->party[0][k], .target = target,
+            .move = -1, .set_nature = setter, .nature_ctx = ctx};
+        pr_apply_ab_attrs(bt, PR_AC_SyncEncounterNatureAbAttr, &pp);
+    }
+}
+
 /* NewBiomeEncounterPhase.doEncounter's gameplay prefix, before its visual tween.
  * Normal stock biome transitions have already recalled the outgoing field. */
 void pr_new_biome_encounter_callbacks(pr_battle *bt)

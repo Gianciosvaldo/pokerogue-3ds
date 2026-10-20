@@ -629,5 +629,5 @@ all: $(BUILD)/double-generation-test
 $(BUILD)/double-generation-test: tests/double-generation-test.c tests/double-chance-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a $(BUILD)/double-chance-run/librun.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) -I../run-core/include $(CFLAGS) $< $(BUILD)/double-chance-run/librun.a $(BUILD)/libprcore.a -lm -o $@
 
-$(BUILD)/double-chance-run/librun.a: $(wildcard ../run-core/src/*.c ../run-core/include/pr/*.h ../run-core/gen/out/*.[ch])
+$(BUILD)/double-chance-run/librun.a: $(wildcard include/pr/*.h gen/out/*.h ../run-core/src/*.c ../run-core/include/pr/*.h ../run-core/gen/out/*.[ch])
 	$(MAKE) -s -C ../run-core BUILD=$(abspath $(BUILD))/double-chance-run $(abspath $@)

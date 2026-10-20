@@ -433,6 +433,18 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
              && pr_moves[move].category == MOVE_CATEGORY_STATUS && *pp->value >= 50);
         *pp->value = 50; /* Source also modifies the holder during simulation. */
         return 1;
+    case PR_AC_SyncEncounterNatureAbAttr: {
+        GATE(true);
+        if (!pp->target) return -1;
+        pr_pokemon *target = (pr_pokemon *)pp->target;
+        /* Source setNature runs even in simulation. A scene setter preserves
+         * its raw/custom nature split; the core default has no custom override. */
+        if (pp->set_nature)
+            return pp->set_nature(bt, target, p->nature, pp->nature_ctx) ? 1 : -1;
+        target->nature = p->nature;
+        pr_recalculate_stats(bt, target);
+        return 1;
+    }
     case PR_AC_DoubleBattleChanceAbAttr:
         GATE(true);
         if (!pp->value) return -1;

@@ -318,6 +318,48 @@ void gc_enemy_finish_party(gc_run *run)
     gc_trainer_names(run);
 }
 
+/* setNature changes the underlying nature even if a Mint/custom nature keeps
+ * getNature (b.nature) unchanged. The scene owns that split and saves both. */
+bool gc_set_encounter_nature(pr_battle *bt, pr_pokemon *p, int nature, void *data)
+{
+    gc_run *run = data;
+    gc_mon *m = NULL;
+    for (int k = 0; k < run->n_party; k++) if (&run->party[k].b == p) m = &run->party[k];
+    for (int k = 0; k < run->n_enemy; k++) if (&run->enemy[k].b == p) m = &run->enemy[k];
+    if (!m || nature < 0 || nature >= PR_NATURE_COUNT) return false;
+    m->base_nature = (uint8_t)nature;
+    if (!m->has_custom_nature) p->nature = (uint8_t)nature;
+    pr_update_passive(bt, p);
+    pr_recalculate_stats(bt, p);
+    return true;
+}
+
+static void sync_wild_nature(gc_run *run, bool new_double)
+{
+    pr_battle *bt = &run->bt;
+    bool outgoing_double = bt->double_battle;
+    bt->engine = &run->eng;
+    bt->game_mode = run->run.mode;
+    bt->challenge_flags = run->run.mode == GAME_MODES_CHALLENGE ? run->run.challenge_flags : 0;
+    bt->challenge_flags_known = !run->run.has_challenges || run->run.challenge_flags != 0;
+    bt->wave_index = run->wave;
+    bt->double_battle = new_double;
+    bt->n_party[0] = run->n_party;
+    for (int k = 0; k < run->n_party; k++) {
+        pr_pokemon *p = &run->party[run->party_order[k]].b;
+        bt->party[0][k] = p;
+        pr_update_passive(bt, p);
+    }
+    gc_items_to_battle(run);
+    bt->rng = run->run.rng;
+    bt->rng_live = true;
+    for (int k = 0; k < run->n_enemy; k++)
+        pr_sync_encounter_nature(bt, &run->enemy[k].b, gc_set_encounter_nature, run);
+    run->run.rng = bt->rng;
+    gc_battle_note_unported(run);
+    bt->double_battle = outgoing_double;
+}
+
 /* newBattle() + EncounterPhase.start() for the next wave */
 typedef struct { gc_run *run; int n_lures; } double_chance_context;
 
@@ -330,6 +372,8 @@ static double scene_double_chance(void *data, int wave)
      * not been constructed. Later calls retain the outgoing double/arena state. */
     bt->engine = &run->eng;
     bt->game_mode = run->run.mode;
+    bt->challenge_flags = run->run.mode == GAME_MODES_CHALLENGE ? run->run.challenge_flags : 0;
+    bt->challenge_flags_known = !run->run.has_challenges || run->run.challenge_flags != 0;
     bt->n_party[0] = run->n_party;
     for (int k = 0; k < run->n_party; k++) {
         pr_pokemon *p = &run->party[run->party_order[k]].b;
@@ -482,6 +526,8 @@ void gc_new_battle(gc_run *run)
             run->run.unported = before;
         }
     }
+    if (ok && nb.battle_type == BATTLE_TYPE_WILD && !stand_in)
+        sync_wild_nature(run, nb.double_battle);
     gc_enemy_finish_party(run);
     run->run.unported = before;
     /* newBattle's resetArenaEffects, then arena.setBiomeWeather / setBiomeTerrain: before the save point and

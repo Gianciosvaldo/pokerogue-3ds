@@ -789,3 +789,16 @@ test: double-chance-host-test
 double-chance-host-test: $(BUILD)/double_chance_host_test
 	$(BUILD)/double_chance_host_test
 .PHONY: double-chance-host-test
+
+all: $(BUILD)/sync_nature_test
+$(BUILD)/sync_nature_test: tests/sync_nature_test.c $(BATTLE_CORE)/tests/double-chance-test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(MAKE) -s -C $(BATTLE_CORE) build/wide-substitute-frame.inc
+	$(CC) $(CPPFLAGS) -I$(BATTLE_CORE)/build $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+
+all: $(BUILD)/sync_nature_host_test
+$(BUILD)/sync_nature_host_test: tests/sync_nature_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -Wl,--wrap=pr_run_new_battle -Wl,--wrap=gc_mon_new_enemy -lm -o $@
+test: sync-nature-host-test
+sync-nature-host-test: $(BUILD)/sync_nature_host_test
+	$(BUILD)/sync_nature_host_test
+.PHONY: sync-nature-host-test

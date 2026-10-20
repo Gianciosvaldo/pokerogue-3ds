@@ -9,7 +9,7 @@ git -C "$UP" diff --quiet
 git -C "$UP/locales" diff --quiet
 test "$(node -p 'process.versions.node.split(".")[0]')" = 22
 make -s -C "$HERE" build/double-chance-test build/double-generation-test
-mkdir -p "$UP/test/tests/zz-dump"
+mkdir -p "$UP/test/tests/zz-dump" "$HERE/../work"
 export TURNTEST_LOCALES="$UP/locales/en"
 for KIND in raw generation trainer fixed; do
  case "$KIND" in
