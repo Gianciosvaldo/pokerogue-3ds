@@ -46,13 +46,17 @@ requires at least 2,048 actual primary and 2,048 passive applications, plus
 existing-first-class coverage. It retains 4,096 wide combat controls and the
 existing damage/ally/spread/faint/switch floors. Incoming species, Tera and tag
 order vary. Bench level/Tera fixture changes are reset before later controls.
-The full matrices and normal integration gates must pass before merge.
+Both matrices match all 16,384 complete turns, with no uncovered cases or source
+exceptions. Each seed records 2,048 primary and 2,048 passive applications and
+768 existing-first-class cases. Normal integration gates remain required on the
+final PR head.
 
-Complete-turn reproduction now refuses missing/duplicate/reordered source IDs,
-nonzero source exceptions, incomplete parsing, uncovered cases and text/state
-mismatches. This strict wrapper is also used by the recent Gulp, Tera, Keldeo/
-Mimicry and ally-entry scripts. A real compiled missing-Costar counterfactual
-checks that a partially covered general-runner result cannot pass this wrapper.
+Complete-turn reproduction now adds checks for missing/duplicate/reordered
+source IDs and source metadata alongside the existing wide runner's full-coverage
+requirement. The wrapper also checks parsing, text and exact state coverage. It
+is used by the recent Gulp, Tera, Keldeo/Mimicry and ally-entry scripts. A real
+compiled missing-Costar counterfactual verifies both the existing wide guard and
+this wrapper's refusal of a partially covered general-runner result.
 
 ## Reproduction and limits
 
