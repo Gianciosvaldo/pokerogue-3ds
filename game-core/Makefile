@@ -760,3 +760,11 @@ tera-host-test: $(BUILD)/tera_host_test
 $(BUILD)/tera_host_test: tests/tera_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
 .PHONY: tera-host-test
+
+all: $(BUILD)/manage_items_host_test
+test: manage-items-host-test
+manage-items-host-test: $(BUILD)/manage_items_host_test
+	$(BUILD)/manage_items_host_test
+$(BUILD)/manage_items_host_test: tests/manage_items_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: manage-items-host-test

@@ -169,8 +169,11 @@ static int n_buttons(void) {
   int n = 1; /* Continue */
   if (S.screen_copy.reroll_cost >= 0) n++;
   if (S.has_lock_capsule) n++;
+  if (S.party_has_held_item) n++;
   return n;
 }
+
+static void button_label(shop_target_type type, char* buf, size_t n, rr_color* c);
 
 static void shop_ui_recalc_layout(void) {
   S.n_touch_slots = 0;
@@ -221,23 +224,37 @@ static void shop_ui_recalc_layout(void) {
       y += opt_h + 1;
     }
   }
-  /* the buttons: Reroll and Lock Rarities on the left, Continue on the right */
+  /* the buttons: Reroll, Lock Rarities and Manage Items from the left, Continue on the right; each as wide as its label */
   desc_h = d_h;
   desc_y = MUI_H - 3 - d_h;
   const float by = desc_y - 2 - BTN_H;
   if (S.n_rows < MAX_ROWS) {
     shop_row* row = &rows[S.n_rows++];
     *row = (shop_row){ROW_BUTTONS, 0, n_buttons(), S.n_touch_slots, by, BTN_H};
+    shop_target_type order[4];
+    int nb = 0;
+    if (S.screen_copy.reroll_cost >= 0) order[nb++] = SHOP_TARGET_REROLL;
+    if (S.has_lock_capsule) order[nb++] = SHOP_TARGET_LOCK;
+    if (S.party_has_held_item) order[nb++] = SHOP_TARGET_TRANSFER;
+    order[nb++] = SHOP_TARGET_SKIP;
+    float w[4], sum = 0;
+    for (int i = 0; i < nb; i++) {
+      char label[96];
+      button_label(order[i], label, sizeof label, NULL);
+      w[i] = (float)mui_text_width(FONT, label) + 12;
+      if (w[i] < 54) w[i] = 54;
+      sum += w[i];
+    }
+    /* what doesn't fit is taken evenly from each button */
+    const float room = MUI_W - 2 * MARGIN - 4 * (nb - 1);
+    if (sum > room)
+      for (int i = 0; i < nb; i++) w[i] -= (sum - room) / nb;
     float x = MARGIN;
-    if (S.screen_copy.reroll_cost >= 0) {
-      add_slot(SHOP_TARGET_REROLL, 0, x, by, 84, BTN_H);
-      x += 88;
+    for (int i = 0; i < nb; i++) {
+      const float bx = order[i] == SHOP_TARGET_SKIP ? MUI_W - MARGIN - w[i] : x;
+      add_slot(order[i], 0, bx, by, w[i], BTN_H);
+      x += w[i] + 4;
     }
-    if (S.has_lock_capsule) {
-      add_slot(SHOP_TARGET_LOCK, 0, x, by, 112, BTN_H);
-      x += 116;
-    }
-    add_slot(SHOP_TARGET_SKIP, 0, MUI_W - MARGIN - 70, by, 70, BTN_H);
   }
 }
 
@@ -277,6 +294,7 @@ void shop_ui_open(const shop_ui_args* args, const shop_ui_events* ev) {
     S.lock_capsule_active = args->lock_capsule_active;
     S.n_locked_tiers = args->n_locked_tiers;
     S.party_luck = args->party_luck;
+    S.party_has_held_item = args->party_has_held_item;
     S.wave = args->wave;
     snprintf(S.location, sizeof S.location, "%s", args->location);
     memcpy(S.money_item_amount, args->money_item_amount, sizeof S.money_item_amount);
@@ -324,6 +342,9 @@ static void trigger_slot(const shop_touch_slot* slot) {
       break;
     case SHOP_TARGET_SKIP:
       if (S.events.on_skip) S.events.on_skip(S.events.ctx);
+      break;
+    case SHOP_TARGET_TRANSFER:
+      if (S.events.on_manage_items) S.events.on_manage_items(S.events.ctx);
       break;
     default:
       break;
@@ -484,30 +505,39 @@ static void draw_reward_option(const shop_touch_slot* slot, bool focus) {
   }
 }
 
-static void draw_button(const shop_touch_slot* slot, bool focus) {
-  const shop_ui_rect* b = &slot->bounds;
-  mui_window(b->x, b->y, b->w, b->h);
-  if (focus) draw_focus(b);
-  char label[64], buf[96];
-  rr_color c = MUI_RGB(0xf8f8f8);
-  switch (slot->type) {
+static void button_label(shop_target_type type, char* buf, size_t n, rr_color* c) {
+  char label[64];
+  if (c) *c = MUI_RGB(0xf8f8f8);
+  switch (type) {
     case SHOP_TARGET_REROLL: {
       char amount[32];
       locale_label("modifierSelectUiHandler:reroll", label, sizeof label, "Reroll");
       fmt_money(amount, sizeof amount, S.screen_copy.reroll_cost);
-      snprintf(buf, sizeof buf, "%s \xe2\x82\xbd%s", label, amount);
-      c = S.player_money >= S.screen_copy.reroll_cost ? mui_style_color(TS_MONEY, false) : mui_style_color(TS_PARTY_RED, false);
+      snprintf(buf, n, "%s \xe2\x82\xbd%s", label, amount);
+      if (c) *c = S.player_money >= S.screen_copy.reroll_cost ? mui_style_color(TS_MONEY, false) : mui_style_color(TS_PARTY_RED, false);
       break;
     }
     case SHOP_TARGET_LOCK:
       locale_label("modifierSelectUiHandler:lockRarities", label, sizeof label, "Lock Rarities");
-      snprintf(buf, sizeof buf, "%s: %s", label, S.lock_capsule_active ? "ON" : "OFF");
-      if (S.lock_capsule_active) c = mui_style_color(TS_SUMMARY_GOLD, false);
+      snprintf(buf, n, "%s: %s", label, S.lock_capsule_active ? "ON" : "OFF");
+      if (c && S.lock_capsule_active) *c = mui_style_color(TS_SUMMARY_GOLD, false);
+      break;
+    case SHOP_TARGET_TRANSFER:
+      locale_label("modifierSelectUiHandler:manageItems", buf, n, "Manage Items");
       break;
     default:
-      locale_label("modifierSelectUiHandler:continueNextWaveButton", buf, sizeof buf, "Continue");
+      locale_label("modifierSelectUiHandler:continueNextWaveButton", buf, n, "Continue");
       break;
   }
+}
+
+static void draw_button(const shop_touch_slot* slot, bool focus) {
+  const shop_ui_rect* b = &slot->bounds;
+  mui_window(b->x, b->y, b->w, b->h);
+  if (focus) draw_focus(b);
+  char buf[96];
+  rr_color c;
+  button_label(slot->type, buf, sizeof buf, &c);
   const int w = mui_text_width(FONT, buf);
   text8(b->x + (b->w - w) / 2.0f, b->y + (b->h - 12) / 2.0f - 1.0f, buf, c); /* the 8 px font's text box is 12 high */
 }
@@ -537,6 +567,10 @@ static void draw_description(void) {
     case SHOP_TARGET_LOCK:
       locale_label("modifierSelectUiHandler:lockRarities", name, sizeof name, "Lock Rarities");
       locale_label("modifierSelectUiHandler:lockRaritiesDesc", desc, sizeof desc, "Lock item rarities on reroll (affects reroll cost).");
+      break;
+    case SHOP_TARGET_TRANSFER:
+      locale_label("modifierSelectUiHandler:manageItems", name, sizeof name, "Manage Items");
+      locale_label("modifierSelectUiHandler:manageItemsDesc", desc, sizeof desc, "Manage items.");
       break;
     default:
       locale_label("modifierSelectUiHandler:continueNextWaveButton", name, sizeof name, "Continue");

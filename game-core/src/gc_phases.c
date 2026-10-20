@@ -495,6 +495,15 @@ static bool select_modifier_choose(gc_run *run, gc_rphase *p, const gc_choice *c
         s->reroll_cost = gc_reward_reroll_cost(run);
         *ok = true;
         return false;
+    case GC_CH_TRANSFER:
+        /* the transfer callback; leaving the party screen is resetModifierSelect, which shows this same screen again */
+        if (!gc_item_transfer(run, c->b, c->a, c->c)) { *why = "the item can't go to that Pokemon"; return false; }
+        *ok = true;
+        return false;
+    case GC_CH_DISCARD:
+        if (!gc_item_discard(run, c->b, c->c)) { *why = "no such held item"; return false; }
+        *ok = true;
+        return false;
     default:
         *why = "not a reward choice";
         return false;

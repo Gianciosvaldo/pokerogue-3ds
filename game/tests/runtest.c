@@ -137,6 +137,13 @@ static struct {
   void (*menu)(void* arg);   /* rh_set_menu: START on the reward screen */
   void* menu_arg;
 } X;
+/* Manage Items: the transfer screen's callbacks while it is open, and what went through */
+static struct {
+  void (*move)(int, int, int, void*);
+  void (*done)(void*);
+  void* arg;
+} MI;
+static int n_manage, n_transfers, n_transfer_copies, n_transfer_refused, n_discards;
 static int n_shops, n_maps, n_item_opens, n_seamless, n_level_ups, n_level_windows, n_foe_bars, n_foe_hidden;
 static bool save_on, resume_on, quit_on;
 static int n_menu_opened, n_menu_yes, n_menu_no, n_quit_callbacks;
@@ -214,6 +221,12 @@ static void bad(const char* fmt, ...) {
     printf("VIOLATION %s\n", full);
     for (int i = trail_n > 120 ? trail_n - 120 : 0; i < trail_n; i++) printf("    %s\n", trail[i % 120]);
     const gc_run* r = rs_run();
+    for (int p = 0; p < r->n_party; p++) {
+      printf("  party %d id %u species %d hp %d/%d:", p, (unsigned)r->party[p].b.id, r->party[p].b.species, r->party[p].b.hp, r->party[p].b.stats[0]);
+      for (int i = 0; i < r->n_items; i++)
+        if (r->items[i].pokemon_id == r->party[p].b.id) printf(" %s/%d x%d", r->items[i].key, r->items[i].arg, r->items[i].stack);
+      printf("\n");
+    }
     printf("  battle-core events of this drain (%d):\n", r->n_battle_events);
     for (int i = 0; i < r->n_battle_events; i++) {
       const pr_event* e = &r->battle_events[i];
@@ -904,6 +917,73 @@ void ps_open_item(const void* run, int pmode, bool target_move, void (*on_pick)(
   X.item_move = target_move;
 }
 
+void ps_open_transfer(const void* run, void (*on_move)(int, int, int, void*), void (*on_done)(void*), void* arg) {
+  (void)run;
+  n_manage++;
+  MI.move = on_move;
+  MI.done = on_done;
+  MI.arg = arg;
+}
+
+static int held_copies(const gc_run* r, const char* key, int16_t arg, uint32_t id) {
+  int n = 0;
+  for (int i = 0; i < r->n_items; i++)
+    if (r->items[i].pokemon_id == id && !strcmp(r->items[i].key, key) && r->items[i].arg == arg) n += r->items[i].stack;
+  return n;
+}
+
+/* one transfer (or discard) through the screen's callback, checked against tryTransferHeldItemModifier's rules, then out */
+static void drive_manage_items(void) {
+  const gc_run* r = rs_run();
+  int cand[GC_MAX_ITEMS], nc = 0;
+  for (int i = 0; i < r->n_items; i++) {
+    const gc_item* it = &r->items[i];
+    if (!it->pokemon_id || it->non_transferable || it->stack <= 0) continue;
+    for (int p = 0; p < r->n_party; p++)
+      if (r->party[p].b.id == it->pokemon_id) cand[nc++] = i;
+  }
+  if (!nc) BAD("Manage Items was offered with no transferable held item in the party");
+  if (nc && r->n_party > 1) {
+    const int src = cand[rnd((uint32_t)nc)];
+    const gc_item it = r->items[src];
+    int to = (int)rnd((uint32_t)r->n_party);
+    if (r->party[to].b.id == it.pokemon_id) to = (to + 1) % r->n_party;
+    const int qty = 1 + (int)rnd((uint32_t)it.stack);
+    const uint32_t to_id = r->party[to].b.id;
+    const int had_from = held_copies(r, it.key, it.arg, it.pokemon_id), had_to = held_copies(r, it.key, it.arg, to_id);
+    const int max = gc_item_max_held(r, it.key, it.arg, &r->party[to]);
+    const int n_before = r->n_items;
+    if (rnd(100) < 15) {
+      MI.move(src, 1, -1, MI.arg);
+      n_discards++;
+      if (held_copies(r, it.key, it.arg, it.pokemon_id) != had_from - 1) BAD("a discard of 1 %s left the wrong count", it.key);
+    } else {
+      MI.move(src, qty, to, MI.arg);
+      trail_add("manage: %d %s/%d from id %u to party %d (had %d)", qty, it.key, it.arg, (unsigned)it.pokemon_id, to, had_to);
+      const int now_from = held_copies(r, it.key, it.arg, it.pokemon_id), now_to = held_copies(r, it.key, it.arg, to_id);
+      const int moved = had_from - now_from;
+      if (now_to - had_to != moved) BAD("a transfer of %s lost or made copies (%d left, %d arrived)", it.key, moved, now_to - had_to);
+      if (had_to > 0 && had_to < max && moved != (qty < max - had_to ? qty : max - had_to))
+        BAD("a transfer of %d %s onto a stack of %d (max %d) moved %d", qty, it.key, had_to, max, moved);
+      if (had_to > 0 && had_to >= max && moved) BAD("a transfer onto a full stack of %s moved %d", it.key, moved);
+      if (!had_to && moved != qty) BAD("a transfer of %d %s to a Pokemon without it moved %d", qty, it.key, moved);
+      if (moved) {
+        n_transfers++;
+        n_transfer_copies += moved;
+        if (r->items[r->n_items - 1].pokemon_id != to_id || strcmp(r->items[r->n_items - 1].key, it.key))
+          BAD("the transferred %s is not at the end of the list (addModifier)", it.key);
+      } else {
+        n_transfer_refused++;
+        if (r->n_items != n_before) BAD("a refused transfer changed the item list");
+      }
+    }
+  }
+  void (*d)(void*) = MI.done;
+  MI.move = NULL;
+  MI.done = NULL;
+  d(MI.arg);
+}
+
 void ball_menu_open(const int counts[BALL_TYPES], void (*on_pick)(int ball, void* arg), void* arg) {
   n_balls++;
   memcpy(W.ball_counts_copy, counts, sizeof W.ball_counts_copy);
@@ -1079,9 +1159,29 @@ static bool step(void) {
       }
     }
   }
+  if (MI.done) {
+    drive_manage_items();
+    return true;
+  }
   if (X.shop) {
     const gc_screen* sc = &X.screen;
     const shop_ui_events* ev = &X.shop_ev;
+    {
+      bool any = false;
+      const gc_run* r = rs_run();
+      for (int i = 0; i < r->n_items; i++)
+        for (int p = 0; p < r->n_party; p++)
+          if (r->items[i].pokemon_id && r->items[i].pokemon_id == r->party[p].b.id && !r->items[i].non_transferable &&
+              !r->items[i].detached && r->items[i].stack > 0)
+            any = true;
+      if (any != X.shop_args.party_has_held_item) BAD("Manage Items shows %s, the party %s a transferable held item",
+                                                      X.shop_args.party_has_held_item ? "up" : "not", any ? "has" : "has no");
+    }
+    if (X.shop_args.party_has_held_item && ev->on_manage_items && rnd(100) < 12) {
+      X.shop = false;
+      ev->on_manage_items(ev->ctx);
+      return true;
+    }
     const int k = (int)rnd(100);
     X.shop = false; /* the driver closes it before it answers, as the real screen does */
     if (W.refused_streak >= 3 || (!sc->n_options && !sc->n_shop)) {
@@ -1618,7 +1718,10 @@ int main(int argc, char** argv) {
   if (!n_seamless && n_scenes > 50) BAD("no scene was a next wave of the same biome");
   printf("level ups: %d, of them %d with the stat window\n", n_level_ups, n_level_windows);
   printf("commands with the foe's item bar: %d; enemy items with no icon row: %d\n", n_foe_bars, n_foe_hidden);
+  printf("Manage Items: opened %d, transfers %d (%d copies), refused %d, discards %d\n", n_manage, n_transfers,
+         n_transfer_copies, n_transfer_refused, n_discards);
   if (!n_foe_bars && n_scenes > 50) BAD("no command showed the foe's items");
+  if ((!n_manage || !n_transfers || !n_discards) && n_scenes > 50) BAD("Manage Items was never used (opened %d, transfers %d, discards %d)", n_manage, n_transfers, n_discards);
   if (n_level_windows < n_level_ups) BAD("%d level ups without the stat window", n_level_ups - n_level_windows);
   if (!n_level_ups && n_scenes > 50) BAD("no level up was shown");
   printf("music: %d scenes under upstream's track (%d with encounter music before the trainer's first send-out), %d commands under the battle's "

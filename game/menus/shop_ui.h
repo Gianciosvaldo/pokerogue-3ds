@@ -22,6 +22,7 @@ typedef struct shop_ui_events {
   void (*on_select_shop)(void* ctx, int shop_idx);
   void (*on_reroll)(void* ctx, bool lock_capsule);
   void (*on_skip)(void* ctx);
+  void (*on_manage_items)(void* ctx); /* Manage Items: the party screen in MODIFIER_TRANSFER mode */
   void* ctx;
 } shop_ui_events;
 
@@ -33,6 +34,7 @@ typedef struct {
   int8_t locked_tiers[GC_MAX_OPTIONS]; /* tiers locked by Lock Capsule */
   int n_locked_tiers;
   int party_luck;           /* total party luck value */
+  bool party_has_held_item; /* a transferable held item in the party: the Manage Items button shows */
   int wave;                 /* the wave and the biome's name, for the top line ("Plains - 147") */
   char location[48];
   /* what the money items grant now (getWaveMoneyAmount with the Amulet Coin's multiplier): NUGGET, BIG_NUGGET, RELIC_GOLD */
@@ -50,6 +52,7 @@ typedef enum {
   SHOP_TARGET_REROLL,
   SHOP_TARGET_LOCK,
   SHOP_TARGET_SKIP,
+  SHOP_TARGET_TRANSFER,
 } shop_target_type;
 
 typedef struct {
@@ -69,6 +72,7 @@ typedef struct {
   int8_t locked_tiers[GC_MAX_OPTIONS];
   int n_locked_tiers;
   int party_luck;
+  bool party_has_held_item;
   int wave;
   char location[48];
   double money_item_amount[3];

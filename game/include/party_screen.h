@@ -31,6 +31,12 @@ void ps_close(void);
  * on_pick gets slot (0..5), move_slot (-1 or 0..3), or slot 6 / cancel when backed out. */
 void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, void (*on_pick)(int slot, int move_slot, void* arg), void* arg);
 
+/* Opens the party screen in MODIFIER_TRANSFER mode over a gc_run party (the reward screen's Manage Items). on_move gets the item's
+ * index in the run's item list, how many copies and the party index that gets them (-1 = discard them), and must apply the transfer to the run before
+ * it returns (the screen then shows the run again). on_done runs when the player backs out; the screen stays open until ps_close. */
+void ps_open_transfer(const void* gc_run_ptr, void (*on_move)(int item_src, int count, int to, void* arg), void (*on_done)(void* arg),
+                      void* arg);
+
 /* ---- the learn-move dialog (menus' learn_move_start) over the battle ----
  * The dialog's messages and yes/no box belong to the caller's screen (the battle's message box); the
  * summary page that picks the move to forget is menus' own, and this puts a screen over the battle

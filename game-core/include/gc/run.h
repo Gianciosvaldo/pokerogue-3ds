@@ -113,6 +113,9 @@ typedef enum {
     GC_CH_CONTINUE,         /* GAME_OVER / CLEAR */
     GC_CH_LOCK_RARITIES,    /* REWARD: switch the Lock Capsule's lock on or off (toggleRerollLock; needs the capsule) */
     GC_CH_CONFIRM,          /* CHECK_SWITCH: a = 1 yes (the party screen follows), 0 no; CUSTOM_OFFER: a = 1 accept, 0 decline */
+    GC_CH_TRANSFER,         /* REWARD: Manage Items (openModifierTransferScreen): a = the party index that gets the item,
+                             * b = the held item's index in run->items, c = how many copies; the screen stays open */
+    GC_CH_DISCARD,          /* REWARD: Manage Items' discard: b = the held item's index in run->items, c = how many copies */
 } gc_choice_kind;
 
 typedef struct {
@@ -372,6 +375,12 @@ size_t gc_run_save(const gc_run *run, void *buf, size_t cap);
 bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why);
 
 /* ---- starters (upstream's starter select rules) ---- */
+/* held items: getMaxStackCount() of `key`/`arg` held by `mon`, and the reward screen's transfer (GC_CH_TRANSFER does it;
+ * returns the copies moved, 0 = refused) */
+int gc_item_max_held(const gc_run *run, const char *key, int16_t arg, const gc_mon *mon);
+int gc_item_transfer(gc_run *run, int item_idx, int to, int qty);
+int gc_item_discard(gc_run *run, int item_idx, int count);
+
 int gc_starter_budget(int mode);                       /* the cost limit: 10 in classic */
 int gc_starter_cost(int species);                      /* base speciesStarterCosts, -1 = not a starter */
 double gc_starter_value(const gc_system *sys, int species); /* cost with value reduction (game-data.ts:2018) */
