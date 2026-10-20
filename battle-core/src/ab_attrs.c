@@ -5,6 +5,7 @@
 #include "pr/engine.h"
 #include <math.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define AB_FLAG_BYPASS_FAINT (1u << 0)
@@ -270,6 +271,22 @@ static bool type_in(const pr_intlist *l, int t)
 {
     for (unsigned i = 0; i < l->n; i++)
         if (l->v[i] == t) return true;
+    return false;
+}
+
+/* Integer Sets in the pinned generated table are encoded as {"$set": [ids]}.
+ * Read the constructor's actual members rather than special-casing an ability. */
+static bool int_set_has(const char *json, int value)
+{
+    const char *s = json ? strchr(json, '[') : NULL;
+    if (!s) return false;
+    for (++s; *s && *s != ']';) {
+        char *end;
+        long item = strtol(s, &end, 10);
+        if (end == s) { s++; continue; }
+        if (item == value) return true;
+        s = end;
+    }
     return false;
 }
 
@@ -1277,6 +1294,19 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         GATE(pr_can_add_tag(bt, (pr_pokemon *)p, x->tagType));
         if (!pp->simulated) pr_add_tag(bt, c->e, (pr_pokemon *)p, x->tagType, x->turnCount, 0, -1);
         return 1;
+    }
+    case PR_AC_ConfusionOnStatusEffectAbAttr: {                        /* Poison Puppeteer */
+        bool effect = int_set_has(P(ConfusionOnStatusEffectAbAttr, a)->effects, pp->effect);
+        if (effect && !o) return -1; /* Native would dereference a missing required opponent. */
+        GATE(effect && o->hp > 0 && pr_can_add_tag(bt, (pr_pokemon *)o, BATTLER_TAG_TYPE_CONFUSED));
+        if (!pp->simulated) {
+            if (!c->e) return -1;
+            /* canAddTag only checks existing tags and ability immunity. Misty
+             * Terrain can reject the actual add after this native RNG draw. */
+            int turns = pr_battle_rand_seed_int(bt, 4, 2);
+            pr_add_tag(bt, c->e, (pr_pokemon *)o, BATTLER_TAG_TYPE_CONFUSED, turns, 0, (int64_t)o->id);
+        }
+        return 1; /* Native apply ignores addTag's result. */
     }
     case PR_AC_TerrainEventTypeChangeAbAttr: {                          /* Mimicry */
         GATE(!p->terastallized);
