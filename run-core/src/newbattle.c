@@ -5,6 +5,12 @@
 #include "pr/run.h"
 #include <string.h>
 
+static double get_double_chance(int wave, const pr_new_battle_ctx *ctx)
+{
+    return ctx->double_chance ? ctx->double_chance(ctx->double_chance_ctx, wave)
+        : pr_run_get_double_battle_chance(wave, ctx->n_lures, ctx->n_double_chance_abilities);
+}
+
 static const pr_trainer_info *trainer_info(int type)
 {
     int lo = 0, hi = pr_trainer_count - 1;
@@ -24,7 +30,7 @@ static int seed_item(pr_rng *rng, int n)
 
 static int classic_rival_type(int mode, int wave)
 {
-    if (mode != GAME_MODES_CLASSIC) return -1;
+    if (mode != GAME_MODES_CLASSIC && mode != GAME_MODES_CHALLENGE) return -1;
     switch (wave) {
     case CLASSIC_FIXED_BOSS_WAVES_RIVAL_1: return TRAINER_TYPE_RIVAL;
     case CLASSIC_FIXED_BOSS_WAVES_RIVAL_2: return TRAINER_TYPE_RIVAL_2;
@@ -84,15 +90,14 @@ int pr_run_new_battle(pr_run *run, int wave, const pr_new_battle_ctx *ctx, pr_ne
         out->me_spawn_chance_reset = true;
     }
     const pr_trainer_info *t = NULL;
-    double chance = pr_run_get_double_battle_chance(wave, ctx->n_lures, ctx->n_double_chance_abilities);
     if (out->battle_type == BATTLE_TYPE_TRAINER) {
         if (fixed_rival >= 0 || fixed_e4 >= 0) {
             /* Fixed BattleConfig constructs the chosen trainer under its own seed-offset RNG.  The
-             * resulting Trainer is DEFAULT variant and these static classes have one party template. */
+             * rival variant follows the player gender; these static classes have one party template. */
             out->trainer_type = fixed_rival >= 0 ? fixed_rival : fixed_e4;
             t = trainer_info(out->trainer_type);
             if (!t || !t->n_templates) { run->unported |= PR_RUN_UNPORTED_TRAINER; return -1; }
-            out->variant = TRAINER_VARIANT_DEFAULT;
+            out->variant = fixed_rival >= 0 && !ctx->player_female ? TRAINER_VARIANT_FEMALE : TRAINER_VARIANT_DEFAULT;
             out->template_index = 0;
         } else {
             /* generateNewBattleTrainer */
@@ -104,7 +109,7 @@ int pr_run_new_battle(pr_run *run, int wave, const pr_new_battle_ctx *ctx, pr_ne
             else if (!t->has_double || (t->has_type_double && out->trainer_type != TRAINER_TYPE_TATE
                                         && out->trainer_type != TRAINER_TYPE_LIZA))
                 dbl = false;
-            else dbl = pr_rng_seed_int(&run->rng, (int32_t)chance, 0) == 0;
+            else dbl = pr_rng_seed_int(&run->rng, (int32_t)get_double_chance(wave, ctx), 0) == 0;
             out->variant = dbl ? TRAINER_VARIANT_DOUBLE : pr_rng_seed_int(&run->rng, 2, 0) ? TRAINER_VARIANT_FEMALE
                                                                                          : TRAINER_VARIANT_DEFAULT;
             out->template_index = seed_item(&run->rng, t->n_templates);
@@ -123,7 +128,7 @@ int pr_run_new_battle(pr_run *run, int wave, const pr_new_battle_ctx *ctx, pr_ne
         || out->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER)
         out->double_battle = false;
     else if (out->battle_type == BATTLE_TYPE_WILD)
-        out->double_battle = pr_rng_seed_int(&run->rng, (int32_t)chance, 0) == 0;
+        out->double_battle = pr_rng_seed_int(&run->rng, (int32_t)get_double_chance(wave, ctx), 0) == 0;
     else
         out->double_battle = out->variant == TRAINER_VARIANT_DOUBLE;
     /* new Battle(...) inside executeWithSeedOffset(waveIndex << 3, waveSeed): enemyLevels =

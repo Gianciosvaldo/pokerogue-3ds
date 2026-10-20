@@ -882,6 +882,21 @@ void pr_queue_trainer_summons(pr_battle *bt, pr_engine *e)
     }
 }
 
+/* BattleScene.getDoubleBattleChance. getPlayerField(false) selects the first
+ * party slots even when they are not physically on the field. */
+double pr_get_double_battle_chance(pr_battle *bt, int wave, int n_lures)
+{
+    double chance = wave % 10 == 0 ? 32 : 8;
+    for (int i = 0; i < n_lures; i++) chance /= 4;
+    int n = bt->double_battle ? 2 : 1;
+    if (n > bt->n_party[0]) n = bt->n_party[0];
+    for (int i = 0; i < n; i++) {
+        pr_ab_params pp = {.pokemon = bt->party[0][i], .move = -1, .value = &chance};
+        pr_apply_ab_attrs(bt, PR_AC_DoubleBattleChanceAbAttr, &pp);
+    }
+    return chance < 1 ? 1 : chance;
+}
+
 /* NewBiomeEncounterPhase.doEncounter's gameplay prefix, before its visual tween.
  * Normal stock biome transitions have already recalled the outgoing field. */
 void pr_new_biome_encounter_callbacks(pr_battle *bt)

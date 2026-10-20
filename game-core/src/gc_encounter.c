@@ -319,6 +319,31 @@ void gc_enemy_finish_party(gc_run *run)
 }
 
 /* newBattle() + EncounterPhase.start() for the next wave */
+typedef struct { gc_run *run; int n_lures; } double_chance_context;
+
+static double scene_double_chance(void *data, int wave)
+{
+    double_chance_context *ctx = data;
+    gc_run *run = ctx->run;
+    pr_battle *bt = &run->bt;
+    /* Before the first encounter, party objects exist but the battle field has
+     * not been constructed. Later calls retain the outgoing double/arena state. */
+    bt->engine = &run->eng;
+    bt->game_mode = run->run.mode;
+    bt->n_party[0] = run->n_party;
+    for (int k = 0; k < run->n_party; k++) {
+        pr_pokemon *p = &run->party[run->party_order[k]].b;
+        bt->party[0][k] = p;
+        pr_update_passive(bt, p);
+    }
+    bt->rng = run->run.rng;
+    bt->rng_live = true;
+    double chance = pr_get_double_battle_chance(bt, wave, ctx->n_lures);
+    run->run.rng = bt->rng;
+    gc_battle_note_unported(run);
+    return chance;
+}
+
 void gc_new_battle(gc_run *run)
 {
     gc_internal *in = gc_int(run);
@@ -341,6 +366,9 @@ void gc_new_battle(gc_run *run)
     ctx.trainer_chance = run->biome >= 0 && run->biome < PR_BIOME_ID_LIMIT ? pr_biomes[run->biome].trainer_chance : 0;
     ctx.prev_wave = prev_wave;
     if (!gc_lure_count(run, &ctx.n_lures)) gc_stub(run, GC_STUB_REWARD_INPUT);
+    double_chance_context chance_ctx = {run, ctx.n_lures};
+    ctx.double_chance = scene_double_chance;
+    ctx.double_chance_ctx = &chance_ctx;
     ctx.me = run->me;
     pr_new_battle nb;
     unsigned before = run->run.unported;

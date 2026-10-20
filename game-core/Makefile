@@ -781,3 +781,11 @@ $(BUILD)/keldeo_learn_test: tests/keldeo_learn_test.c $(BATTLE_CORE)/build/wide-
 	$(CC) $(CPPFLAGS) -I$(BATTLE_CORE)/build $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
 $(BATTLE_CORE)/build/wide-substitute-frame.inc:
 	$(MAKE) -C $(BATTLE_CORE) build/wide-substitute-frame.inc
+
+all: $(BUILD)/double_chance_host_test
+$(BUILD)/double_chance_host_test: tests/double_chance_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -Wl,--wrap=pr_run_new_battle -lm -o $@
+test: double-chance-host-test
+double-chance-host-test: $(BUILD)/double_chance_host_test
+	$(BUILD)/double_chance_host_test
+.PHONY: double-chance-host-test

@@ -197,6 +197,9 @@ void pr_start_battle(pr_battle *bt, pr_engine *e);
  * resets every player's battle/wave data, then dispatches for each on-field
  * player in party order. The caller owns the visual tween and encounter end. */
 void pr_new_biome_encounter_callbacks(pr_battle *bt);
+/* Scene.getDoubleBattleChance, including canonical global Lure record count,
+ * current player party slots, ability history and the final minimum of one. */
+double pr_get_double_battle_chance(pr_battle *bt, int wave, int n_lures);
 /* EncounterPhase.end queue only; loaded sessions omit fresh player entry work. */
 void pr_queue_encounter_end(pr_battle *bt, pr_engine *e, bool loaded);
 void pr_queue_trainer_summons(pr_battle *bt, pr_engine *e);
