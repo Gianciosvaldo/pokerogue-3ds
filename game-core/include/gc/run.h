@@ -143,6 +143,7 @@ typedef struct {
      * upstream i18n key, e.g. "battle:moveNoPp"; {{moveName}} is the slot's move and
      * {{pokemonNameWithAffix}} the Pokemon) in move_why */
     bool can_ball, can_switch, can_run;
+    bool fight_only;        /* a mystery encounter skips to the FIGHT menu (skipToFightInput): the menu cannot be backed out of */
     bool move_ok[4];
     const char *move_why[4];
     bool struggle;          /* every move is unusable: FIGHT with any slot uses Struggle */

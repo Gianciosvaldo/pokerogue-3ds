@@ -957,6 +957,44 @@ about six species in a row without a hidden ability: never hit in 8000 offers, s
 shiny Magikarps compared all come from the roll of 0). `game/` has no mystery-encounter screen yet
 (`mystery_auto` picks), so the encounter is not reachable on the console.
 
+### Fun and Games!
+
+The first encounter whose differential plays upstream's real phases instead of calling the option's function. `src/gc_fungames.c` is the
+port, `tests/mystery-fungames.producer.test.ts` the producer and `tests/mystery_fungames_diff_test.c` the comparator
+(`GC_MYS_ONLY=fungames GC_FG_N=400 tools/mysterydiff.sh <upstream 8555c08> 2000 <seed>` runs this family alone; the host checks are
+`tests/mystery_fungames_test.c`, part of `make test`). Per case the game manager starts the encounter, the party is rebuilt (species,
+level, IVs, nature, ability, one to three moves), the wave, seeds and wallet are set, the option is picked through the real party screen
+and the three turns are played with the player's own FIGHT commands until the phase queue reaches the shop. Compared: which options are
+enabled, the Wobbuffet (level, HP, stats, IVs, nature, ability, shininess, the four moves in order) and the run RNG right after it was
+made, per turn both HPs and the run RNG, the encounter's messages in order, the money, the party after (order, level, experience,
+friendship, HP, moves), Wobbuffet's dex entry, and the shop it ends on (options, tiers, upgrade counts, RNG after it was rolled). About a
+third of the cases set the Wobbuffet's HP before the last turn (a Splash) to `floor(maxHP x 0.03|0.15|0.33) - 1..+2`, and half of those also
+set the maximum HP to a value where the ratio lands exactly on the threshold, so `<` written as `<=` is caught; another third knock the
+Wobbuffet out at a random turn, half of them with the lead a few experience points short of a level.
+
+Upstream behaviours reproduced on purpose:
+- `onOptionPhase` is async: only what comes before its first `await` (3 turns, the price, the paid message) runs inside the
+  `executeWithSeedOffset(.., getSeedOffset() * 500)`; the Wobbuffet is made after it, on the run's own RNG (`addEnemyPokemon(.., shinyLock)`:
+  the constructor's rolls, then its moveset, then IVs 0 and a Mild nature, `calculateStats`, `setPokemonSeen`).
+- The price is `getWaveMoneyAmount(1.5)`, read when the option was last checked (`MoneyRequirement.meetsRequirement`), paid again when the
+  Wobbuffet is knocked out (the "revive").
+- The Wobbuffet's moveset is `generateMoveset` for a wild, non-boss Pokemon (`gc_fg_wobbuffet_moveset`), the one place game-core ports it:
+  the AI's choice among those moves draws on the battle RNG and moves the player's damage rolls. Its pool is the learnset by level
+  (weight level + 20), Counter and Mirror Coat are scaled by the lower attacking stat, every weight becomes `ceil(w^1.6 x 100)`, a 60% coin
+  flip adds one of the two as the forced signature move, and the rest is `rand > weight` walks. Anything that changes the species, its
+  learnset or the generator needs this function checked again.
+- `TurnInitPhase` asks `handleNextTurn` before queueing commands: three turns, then the prize by the Wobbuffet's HP ratio (`< 0.03` Multi
+  Lens, `< 0.15` Scope Lens, `< 0.33` Wide Lens, else only the heal shop). `EnemyCommandPhase` still asks the AI for a move (battle RNG) but
+  the command is skipped; the menu is FIGHT only and fleeing is not allowed.
+- A knock-out goes through the usual `VictoryPhase` (experience, level-ups), `BattleEndPhase(true)` and `MysteryEncounterRewardsPhase`,
+  which finds `doContinueEncounter` and loses the game.
+
+Not covered, on purpose: cases in which a Pokemon of the party faints (the Wobbuffet's Counter or Destiny Bond; upstream then asks for a
+switch, another card's screen), a Wobbuffet that leaves the field by a move (Roar, Whirlwind: modelled as the knock-out path, unverified), move
+learning with four moves known (the producer keeps each Pokemon to three moves, two in the knock-out cases) and evolutions (paused on both
+sides), the summon and Wobbuffet health-bar animations, and a player's self-KO moves. The producer puts back the real body of
+`randBattleSeedInt` that the game manager pins to the maximum; without it the AI's choice and every damage roll would be fixed.
+
 ## Fleeing: upstream differential (Task 77 / #125)
 
 `tools/fleediff.sh <upstream 8555c08> [N=600] [seed]` runs the real `AttemptRunPhase.start()` on a live battle in

@@ -12,6 +12,10 @@ static void queue_battle_end(gc_run *run)
 {
     gc_internal *in = gc_int(run);
     if (gc_rq_has(run, RP_TRAINER_VICTORY)) return;   /* upstream's "temporary hotfix": hasPhaseOfType("TrainerVictoryPhase") */
+    if (in->fg.active) {   /* Fun and Games!: handleMysteryEncounterVictory, the Wobbuffet was KOed */
+        gc_fg_battle_end(run, true);
+        return;
+    }
     gc_rq_push(run, gc_rp(RP_BATTLE_END, 1, 0, 0));
     if (run->battle_type == BATTLE_TYPE_TRAINER) gc_rq_push(run, gc_rp(RP_TRAINER_VICTORY, 0, 0, 0));
     const int mode = run->run.mode, wave = run->wave;
@@ -94,6 +98,10 @@ static void after_stop(gc_run *run, int stop)
         }
         /* else the wild Pokemon left the field (Roar, Whirlwind, Emergency Exit...): BattleEndPhase(false),
          * then the next wave */
+        if (in->fg.active) {   /* Fun and Games!: the Wobbuffet left, which loses the game (handleLoseMinigame) */
+            gc_fg_battle_end(run, false);
+            break;
+        }
         /* fall through */
     case PH_SELECT_MODIFIER: case PH_SELECT_BIOME: case PH_NEW_BATTLE:
         gc_rq_push(run, gc_rp(RP_BATTLE_END, 0, 0, 0));
@@ -167,6 +175,7 @@ static void victory(gc_run *run, int enemy_idx)
         /* applyPartyExp(expValue, pokemonDefeated = true) */
         pr_exp_party pp;
         gc_exp_party_build(run, &pp, bt->participants, bt->n_participants);
+        if (gc_int(run)->fg.active) pp.me_exp_multiplier = 1.0;   /* isBattleMysteryEncounter(): the encounter's expMultiplier, 1 */
         /* Participating survivors gain friendship through the bounded Bell
          * projection. Unrepresented stock retains the counted legacy gain. */
         if (bt->n_participants > 0)
@@ -558,6 +567,7 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         return true;
     }
     case RP_TURN_INIT:
+        if (gc_fg_turn_init(run)) return true;   /* handleMysteryEncounterTurnStartEffects: the minigame decides before the commands */
         gc_battle_turn_init(run);
         if (!run->bt.field[0] || run->bt.field[0]->hp <= 0) {
             /* a fainted lead left on the field (a faint in the turn's lost tail): SwitchPhase */
@@ -576,6 +586,8 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         return false;
     case RP_TURN: {
         gc_port_enemy_command(run, 2);
+        /* withSkipEnemyBattleTurns: EnemyCommandPhase still chose (and drew for) the move, but the command is skipped */
+        if (gc_int(run)->fg.active) run->bt.commands[2].skip = true;
         after_stop(run, gc_battle_run(run, -2));
         return true;
     }
@@ -676,6 +688,9 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         return gc_catch_start(run, p);
     case RP_ME_POST:
         gc_mystery_post(run, p);
+        return true;
+    case RP_FG_KO:
+        gc_fg_lose(run);
         return true;
     default:
         (void)in;
