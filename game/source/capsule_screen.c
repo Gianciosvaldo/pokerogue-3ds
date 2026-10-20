@@ -69,6 +69,15 @@ static void leave_screen(caps_exit how) {
 
 /* ------------------------------------------------------------------ input and time */
 
+/* The result the list points at, kept in view; a move that leaves the list does nothing. */
+static void point_at(int to) {
+  if (to < 0 || to >= C.m.fx.n) return;
+  C.sel = to;
+  if (C.sel < C.scroll) C.scroll = C.sel;
+  if (C.sel >= C.scroll + LIST_ROWS) C.scroll = C.sel - LIST_ROWS + 1;
+  ui_play_select();
+}
+
 static bool cs_input(ui_screen* s, ui_button b) {
   (void)s;
   if (!C.open || C.exited) return true;
@@ -96,14 +105,7 @@ static bool cs_input(ui_screen* s, ui_button b) {
       return false;
     case CAP_SETTLED:
       if (b == BTN_UP || b == BTN_DOWN) {
-        const int n = C.m.fx.n;
-        const int to = C.sel + (b == BTN_DOWN ? 1 : -1);
-        if (to >= 0 && to < n) {
-          C.sel = to;
-          if (C.sel < C.scroll) C.scroll = C.sel;
-          if (C.sel >= C.scroll + LIST_ROWS) C.scroll = C.sel - LIST_ROWS + 1;
-          ui_play_select();
-        }
+        point_at(C.sel + (b == BTN_DOWN ? 1 : -1));
         return true;
       }
       if (b == BTN_ACTION || b == BTN_CANCEL || b == BTN_MENU) {
@@ -114,6 +116,62 @@ static bool cs_input(ui_screen* s, ui_button b) {
         return true;
       }
       return false;
+  }
+  return false;
+}
+
+/* The buttons at the foot of the screen, and the button each is when tapped. */
+static void hints_for(gv_hints* h, ui_button btn[GV_HINT_MAX]) {
+  static const char* const SETTLED[2] = {"UP/DOWN: look", "A: close"};
+  static const ui_button SETTLED_BTN[2] = {BTN_COUNT_, BTN_ACTION};
+  static const char* const IDLE[2] = {"A: pull", "B: back"};
+  static const ui_button IDLE_BTN[2] = {BTN_ACTION, BTN_CANCEL};
+  static const char* const RUNNING[1] = {"B or START: skip to the results"};
+  static const ui_button RUNNING_BTN[1] = {BTN_CANCEL};
+  const char* const* text = RUNNING;
+  const ui_button* b = RUNNING_BTN;
+  int n = 1;
+  if (C.m.stage == CAP_SETTLED) text = SETTLED, b = SETTLED_BTN, n = 2;
+  if (C.m.stage == CAP_IDLE) text = IDLE, b = IDLE_BTN, n = 2;
+  memset(h, 0, sizeof *h);
+  h->n = n;
+  for (int i = 0; i < n; i++) {
+    snprintf(h->text[i], sizeof h->text[i], "%s", text[i]);
+    if (btn) btn[i] = b[i];
+  }
+}
+
+/* A tap on the bottom screen (physical px). The buttons at the foot that name a button press it. Waiting for the pull: the knob is A. Once
+ * the results are shown: a tap on a result points at it and a second tap on the pointed one is A (close); the notes of more results above
+ * and below the list step the pointer by a page. While it runs only the skip at the foot takes a tap. */
+static bool cs_touch(ui_screen* s, float x, float y) {
+  if (!C.open || C.exited) return true;
+  const float cy = y - GV_CANVAS_Y;
+  if (cy >= GV_REV_HINTS_Y) {
+    ui_button btn[GV_HINT_MAX];
+    gv_hints h;
+    hints_for(&h, btn);
+    const int k = gv_hint_at(&h, x);
+    return k >= 0 && btn[k] != BTN_COUNT_ ? cs_input(s, btn[k]) : false;
+  }
+  if (C.m.stage == CAP_IDLE) return gv_knob_at(x, cy) ? cs_input(s, BTN_ACTION) : false;
+  if (C.m.stage != CAP_SETTLED) return false;
+  const int n_rows = C.m.fx.n - C.scroll < LIST_ROWS ? C.m.fx.n - C.scroll : LIST_ROWS;
+  const int i = gv_rev_row_at(n_rows, x, cy);
+  if (i >= 0) {
+    if (C.scroll + i == C.sel) return cs_input(s, BTN_ACTION);
+    point_at(C.scroll + i);
+    return true;
+  }
+  if (cy >= gv_rev_note_y() - 2.0f && cy < gv_rev_note_y() + 10.0f) {
+    if (x < GV_W / 2.0f && C.scroll > 0) {
+      point_at(C.sel - LIST_ROWS < 0 ? 0 : C.sel - LIST_ROWS);
+      return true;
+    }
+    if (x >= GV_W / 2.0f && C.scroll + LIST_ROWS < C.m.fx.n) {
+      point_at(C.sel + LIST_ROWS >= C.m.fx.n ? C.m.fx.n - 1 : C.sel + LIST_ROWS);
+      return true;
+    }
   }
   return false;
 }
@@ -169,17 +227,15 @@ static void build_state(gv_reveal* v) {
     } else {
       snprintf(v->note[0], sizeof v->note[0], "These results were fixed before it ran.");
     }
-    snprintf(v->hint, sizeof v->hint, "UP/DOWN: look   A: close");
   } else if (C.m.stage == CAP_IDLE) {
     snprintf(v->top_title, sizeof v->top_title, "Capsule machine");
     snprintf(v->top_sub, sizeof v->top_sub, "%s", C.live ? "Your eggs are ready." : "A preview of the animation. Nothing is bought.");
     snprintf(v->big, sizeof v->big, "%s", C.live ? "Pull the knob to see your eggs." : "Pull the knob to run the machine.");
     snprintf(v->small, sizeof v->small, "%s", C.live ? "They are paid for: nothing more is spent." : "A preview with fixed results.");
-    snprintf(v->hint, sizeof v->hint, "A: pull   B: back");
   } else {
     snprintf(v->big, sizeof v->big, "Here they come...");
-    snprintf(v->hint, sizeof v->hint, "B or START: skip to the results");
   }
+  hints_for(&v->hints, NULL);
 }
 
 static void cs_draw(ui_screen* s, rr_screen which) {
@@ -195,7 +251,7 @@ static void cs_draw(ui_screen* s, rr_screen which) {
   }
 }
 
-static ui_screen g_screen = {"capsule-preview", UI_FADE, cs_enter, cs_leave, NULL, cs_input, cs_update, cs_draw, NULL};
+static ui_screen g_screen = {"capsule-preview", UI_FADE, cs_enter, cs_leave, NULL, cs_input, cs_update, cs_draw, NULL, cs_touch};
 
 bool capsule_screen_open(const caps_args* a) {
   if (!a || !cap_fixture_valid(a->fixture)) return false;

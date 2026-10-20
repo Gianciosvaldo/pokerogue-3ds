@@ -10,8 +10,8 @@
 #include "mui.h"
 
 #define FONT TSX_PIXEL_8
-#define W 320.0f
-#define H 180.0f
+#define W GV_W
+#define H GV_H
 
 static const char* const MACHINE_ART[GV_MACHINES] = {"egg/gacha_move", "egg/gacha_legendary", "egg/gacha_shiny"};
 static const char* const UNDERLAY[GV_MACHINES] = {"egg/gacha_underlay_move", "egg/gacha_underlay_legendary", "egg/gacha_underlay_shiny"};
@@ -145,11 +145,25 @@ static void draw_focus(float x, float y, float w, float h) {
   rr_rect(x + 1, y + 1, w - 2, h - 2, RR_RGBA(0xf8, 0xf8, 0xf8, 36));
 }
 
-#define ROW_H 24.0f
-#define LIST_Y 30.0f
+/* the buttons at the foot of a bottom screen, one after the other: the x a text starts at, and the text a tap is on */
+static float seg_x(const gv_hints* h, int i) {
+  float x = GV_HINT_X;
+  for (int k = 0; k < i; k++) x += (float)mui_text_width(FONT, h->text[k]) + GV_HINT_GAP;
+  return x;
+}
+
+int gv_hint_at(const gv_hints* h, float x) {
+  for (int i = 0; i < h->n; i++)
+    if (x < seg_x(h, i + 1) - GV_HINT_GAP / 2.0f) return i;
+  return -1;
+}
+
+static void draw_hints(const gv_hints* h, float y, rr_color c) {
+  for (int i = 0; i < h->n; i++) text8(seg_x(h, i), y, h->text[i], c);
+}
 
 void gv_draw_bottom(const gv_state* s) {
-  mui_set_origin(RR_BOTTOM, 0, 30);
+  mui_set_origin(RR_BOTTOM, 0, GV_CANVAS_Y);
   mui_window(0, 0, W, H);
   const rr_color body = mui_style_color(TS_WINDOW, false);
   const rr_color quiet = MUI_RGB(0xa8a8a0);
@@ -160,12 +174,12 @@ void gv_draw_bottom(const gv_state* s) {
   text8_right(W - 8, 5, s->egg_count, body);
 
   /* the options */
-  mui_window(0, LIST_Y - 2, W, ROW_H * GV_OPTIONS + 12);
+  mui_window(0, GV_OPT_Y - 2, W, GV_OPT_ROW * GV_OPTIONS + 12);
   for (int i = 0; i < GV_OPTIONS; i++) {
     const gv_option* o = &s->opt[i];
-    const float y = LIST_Y + 4 + ROW_H * (float)i;
+    const float y = gv_opt_row_y(i);
     const rr_color c = o->can_buy ? body : MUI_RGB(0x908e88);
-    if (i == s->sel && s->mode == GV_MENU) draw_focus(8, y - 1, W - 16, ROW_H - 1);
+    if (i == s->sel && s->mode == GV_MENU) draw_focus(8, y - 1, W - 16, GV_OPT_ROW - 1);
     if (o->voucher < GV_VOUCHERS) {
       rr_draw_opts t = RR_DEFAULT_OPTS;
       t.tint = o->can_buy ? RR_RGBA(255, 255, 255, 255) : RR_RGBA(255, 255, 255, 120);
@@ -177,19 +191,19 @@ void gv_draw_bottom(const gv_state* s) {
   }
 
   /* the buttons, or why the chosen option cannot be bought */
-  const float by = LIST_Y + ROW_H * GV_OPTIONS + 12;
+  const float by = gv_menu_hints_y();
   mui_window(0, by, W, H - by);
   if (s->mode == GV_MENU && s->refusal[0]) text8_style(8, by + 4, s->refusal, TS_PARTY_RED);
-  else text8(8, by + 4, s->hint, quiet);
+  else draw_hints(&s->hints, by + 4, quiet);
 
   if (s->mode == GV_MENU && s->n_lines == 0) return;
   /* a question, a message, or a locked machine's reason, over the list */
-  const float dh = 20.0f + 11.0f * (float)s->n_lines + (s->mode == GV_CONFIRM ? 40.0f : 0.0f);
-  const float dy = 24.0f;
+  const float dh = gv_dlg_h(s->n_lines, s->mode == GV_CONFIRM);
+  const float dy = GV_DLG_Y;
   mui_window(12, dy, W - 24, dh);
   for (int i = 0; i < s->n_lines; i++) text8_style(24, dy + 10 + 11.0f * (float)i, s->lines[i], TS_WINDOW);
   if (s->mode == GV_CONFIRM) {
-    const float yy = dy + 14 + 11.0f * (float)s->n_lines;
+    const float yy = gv_yes_y(s->n_lines);
     text8_style(40, yy + 4, "Yes", TS_WINDOW);
     text8_style(40, yy + 20, "No", TS_WINDOW);
     mui_image("ui/cursor", NULL, 30, yy + (s->yes ? 9 : 25), 0.5f, 0.5f);
@@ -240,17 +254,17 @@ void gv_draw_reveal_top(const gv_reveal* s) {
 }
 
 void gv_draw_reveal_bottom(const gv_reveal* s) {
-  mui_set_origin(RR_BOTTOM, 0, 30);
+  mui_set_origin(RR_BOTTOM, 0, GV_CANVAS_Y);
   mui_window(0, 0, W, H);
   const rr_color body = mui_style_color(TS_WINDOW, false);
   const rr_color quiet = MUI_RGB(0xa8a8a0);
   mui_window(0, 0, W, 24);
   text8_style(8, 7, s->title, TS_WINDOW);
   if (s->stage == GV_REVEAL_SETTLED) {
-    const float row_h = 18.0f;
-    mui_window(0, 26, W, row_h * GV_LIST_ROWS + 8);
+    const float row_h = GV_REV_ROW;
+    mui_window(0, GV_REV_LIST_Y, W, row_h * GV_LIST_ROWS + 8);
     for (int i = 0; i < s->n_rows && i < GV_LIST_ROWS; i++) {
-      const float y = 30.0f + row_h * (float)i;
+      const float y = gv_rev_row_y(i);
       if (s->row[i].selected) draw_focus(8, y - 1, W - 16, row_h - 1);
       char frame[8];
       snprintf(frame, sizeof frame, "%d", s->row[i].tier < GV_TIERS ? s->row[i].tier : 0);
@@ -259,9 +273,9 @@ void gv_draw_reveal_bottom(const gv_reveal* s) {
       text8(34, y + 1, s->row[i].name, body);
       text8_right(W - 12, y + 1, s->row[i].tier_name, tier_rgba(s->row[i].tier, 255));
     }
-    if (s->more_above[0]) text8(10, 26.0f + row_h * GV_LIST_ROWS + 8 + 2, s->more_above, quiet);
-    if (s->more_below[0]) text8_right(W - 10, 26.0f + row_h * GV_LIST_ROWS + 8 + 2, s->more_below, quiet);
-    const float ny = 26.0f + row_h * GV_LIST_ROWS + 22;
+    if (s->more_above[0]) text8(10, gv_rev_note_y(), s->more_above, quiet);
+    if (s->more_below[0]) text8_right(W - 10, gv_rev_note_y(), s->more_below, quiet);
+    const float ny = GV_REV_LIST_Y + row_h * GV_LIST_ROWS + 22;
     for (int i = 0; i < 2; i++)
       if (s->note[i][0]) text8(8, ny + 9.0f * (float)i, s->note[i], quiet);
   } else {
@@ -270,10 +284,10 @@ void gv_draw_reveal_bottom(const gv_reveal* s) {
     o.origin_x = o.origin_y = 0.5f;
     o.scale_x = o.scale_y = 3.0f;
     o.angle = s->knob * 6.2831853f;
-    if (!mui_image_ex("egg/gacha_knob", NULL, 160, 112, &o)) rr_rect(144, 96, 32, 32, RR_RGBA(0xe0, 0xe0, 0xe8, 255));
+    if (!mui_image_ex("egg/gacha_knob", NULL, GV_KNOB_X, GV_KNOB_Y, &o)) rr_rect(GV_KNOB_X - 16, GV_KNOB_Y - 16, 32, 32, RR_RGBA(0xe0, 0xe0, 0xe8, 255));
     text8_centred(160, 40, s->big, TS_WINDOW);
     if (s->small[0]) text8(160 - (float)mui_text_width(FONT, s->small) / 2.0f, 54, s->small, quiet);
   }
-  mui_window(0, H - 20, W, 20);
-  text8(8, H - 18, s->hint, quiet);
+  mui_window(0, GV_REV_HINTS_Y, W, H - GV_REV_HINTS_Y);
+  draw_hints(&s->hints, GV_REV_HINTS_Y + 2, quiet);
 }
