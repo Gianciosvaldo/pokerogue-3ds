@@ -35,8 +35,8 @@ Cases cover singles/doubles, primary/passive/duplicate abilities, simulation,
 gain filtering, suppression, fainting, switched actors and real reserves;
 all three critical tag combinations/order; Dragon and other types; Stellar and
 Dragon Tera states; levels 1, 50, 256 and 1,000,000. Each seed records 12,288
-primary and 2,048 passive applications, including 1,344 mutations with an existing
-Focus Energy tag selected by the class lookup. The old core fails 45,056 cases.
+primary and 2,048 passive applications, including 1,344 applications that select
+an existing Focus Energy tag through the class lookup. The old core fails 45,056 cases.
 Eighteen compiled production faults are caught and fourteen malformed raw
 captures are rejected.
 
