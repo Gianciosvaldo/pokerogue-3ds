@@ -1045,6 +1045,37 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
             }
         return 1;
     }
+    case PR_AC_PostSummonAllyHealAbAttr: {                             /* Hospitality */
+        const pr_pokemon *ally = pr_get_ally(bt, p);
+        /* The override checks ally.isActive(true), even at full HP. */
+        GATE(ally && ally->hp > 0 && ally->on_field && !ally->switch_out_status);
+        if (!pp->simulated) {
+            if (!c->e) return -1;
+            const pr_attr_PostSummonAllyHealAbAttr *x = P(PostSummonAllyHealAbAttr, a);
+            double ratio = x->healRatio ? x->healRatio : 4;
+            /* The source uses user.name, without Illusion or an enemy affix. */
+            pr_pokemon identity = {.species = p->species, .form = p->form,
+                .fusion_species = p->fusion_species, .fusion_form = p->fusion_form};
+            pr_unshift_heal_msg(bt, c->e, pr_battler_index(bt, ally),
+                to_dmg_value(pr_get_stat(p, STAT_HP, true) / ratio),
+                PR_HEAL_MESSAGE | (x->showAnim ? 0 : PR_HEAL_SKIP_ANIM),
+                pr_msg2("abilityTriggers:postSummonAllyHeal",
+                    pr_arg_pokemon(bt, "pokemonNameWithAffix", ally),
+                    pr_arg_pokemon_name(bt, "pokemonName", &identity)));
+        }
+        return 1;
+    }
+    case PR_AC_PostSummonClearAllyStatStagesAbAttr: {                   /* Curious Medicine */
+        const pr_pokemon *ally = pr_get_ally(bt, p);
+        GATE(ally && ally->hp > 0 && ally->on_field && !ally->switch_out_status);
+        if (!pp->simulated) {
+            if (!c->e) return -1;
+            memset(((pr_pokemon *)ally)->stat_stages, 0, sizeof ally->stat_stages);
+            pr_queue_msg(bt, c->e, pr_msg1("abilityTriggers:postSummonClearAllyStats",
+                pr_arg_pokemon(bt, "pokemonNameWithAffix", ally)));
+        }
+        return 1;
+    }
     case PR_AC_PostSummonCopyAbilityAbAttr: {                           /* Trace */
         /* getOpponents().filter(t => t.getAbility().copiable || t.getAbility().id === WONDER_GUARD) */
         const pr_pokemon *tg[2];
