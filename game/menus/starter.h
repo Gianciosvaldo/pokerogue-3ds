@@ -58,6 +58,11 @@ void starter_open(const starter_args* args, const starter_events* ev);
 void starter_close(void);
 bool starter_active(void);
 bool starter_input(mui_button b);
+/* A tap at canvas (x, y) (the bottom screen's canvas: its physical y less 30): a species is pointed at, and a second tap on it is A (its
+ * options menu); a team member is pointed at; Randomize and Start act at once; the strip beside the grid scrolls it a page up or down; a row
+ * of the options menu picks it and a tap outside the menu is B; the Yes / No box takes its rows; a message waiting for a button takes the
+ * tap as A. Leaving the screen (B with an empty team) has no tap. True when it did something. */
+bool starter_touch(float x, float y);
 void starter_update(float dt_ms);
 /* The bottom screen: upstream's 320 x 180 canvas (set the origin first, as shop_ui_draw is called) */
 void starter_draw(void);

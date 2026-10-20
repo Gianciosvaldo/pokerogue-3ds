@@ -926,6 +926,88 @@ bool party_input(mui_button b) {
   return false;
 }
 
+/* The Transfer / Discard button's centre; it is 25 high and (label length * 9 + 3) wide (PartyDiscardModeButton) */
+static void mode_button(float* cx, float* cy, float* w) {
+  *cx = P.a.double_battle ? 64 : 60;
+  *cy = Y(P.a.double_battle ? -58 : -73);
+  const char* label = mui_t(P.a.mode == PARTY_MODIFIER_TRANSFER ? "partyUiHandler:transfer" : "partyUiHandler:discard");
+  int len = 0;
+  for (const char* p = label; *p; p++) len += ((unsigned char)*p & 0xC0) != 0x80;
+  *w = (float)(len * 9 + 3);
+}
+
+/* Where slot i's background is (its top left) and how big the art is (party_slot_main 110 x 49, party_slot_main_short 110 x 41, party_slot
+ * 175 x 24: the pack's frames) */
+static void slot_rect(int i, float* x, float* y, float* w, float* h) {
+  const bool benched = i >= P.a.battler_count, dbl = P.a.double_battle, manage = item_manage_mode();
+  float sx, sy;
+  if (benched) {
+    sx = 143;
+    sy = -196 + (dbl ? -40 : 0) + (28 + (dbl ? 8 : 0)) * i;
+  } else {
+    sx = 9;
+    sy = -148.5f + (dbl ? (manage ? -20 : -8) : 0) + (manage ? (dbl ? 47 : 55) : 64) * i;
+  }
+  *x = floorf(sx);
+  *y = floorf(Y(sy));
+  *w = benched ? 175 : 110;
+  *h = benched ? 24 : (manage && dbl) ? 41 : 49;
+}
+
+static bool inside(float x, float y, float rx, float ry, float rw, float rh) { return x >= rx && x < rx + rw && y >= ry && y < ry + rh; }
+
+bool party_touch(float x, float y) {
+  if (!P.active || P.suspended) return false;
+  if (P.confirm.active) {
+    mui_confirm_touch(&P.confirm, x, y);
+    return true; /* modal: a tap beside the box takes nothing, as other buttons take nothing there */
+  }
+  if (mui_msg_input(&P.msg, MB_ACTION)) return true;
+  if (P.block_input) return false;
+  if (P.options_mode) {
+    /* the options window, as draw_options places it: rows of 16 px from 6 px under its top */
+    const float right = MUI_W - 1, bottom = Y(-1), bh = 16.0f * P.nopt + 13, left = right - P.options_w, top = bottom - bh;
+    if (!inside(x, y, left, top, P.options_w, bh)) {
+      const bool ok = option_menu_input(MB_CANCEL); /* a tap outside is B */
+      if (ok) play_select();
+      return ok;
+    }
+    if (y < top + 6 || y >= top + 6 + 16.0f * P.nopt) return true; /* the window's padding */
+    const int k = (int)((y - top - 6) / 16);
+    const int o = P.options[k];
+    if (o == PO_SCROLL_UP || o == PO_SCROLL_DOWN) { /* one step of scrolling, as the cursor pressed on the arrow does */
+      P.options_cursor = o == PO_SCROLL_UP ? k + 1 : k - 1;
+      const bool ok = option_menu_input(o == PO_SCROLL_UP ? MB_UP : MB_DOWN);
+      if (ok) play_select();
+      return ok;
+    }
+    P.options_cursor = k;
+    const bool ok = option_menu_input(MB_ACTION);
+    if (ok) play_select();
+    return ok;
+  }
+  for (int i = 0; i < P.n && i < 6; i++) {
+    float sx, sy, sw, sh;
+    slot_rect(i, &sx, &sy, &sw, &sh);
+    if (!inside(x, y, sx, sy, sw, sh)) continue;
+    set_cursor(i);
+    return party_action();
+  }
+  if (inside(x, y, 291 - 26, Y(-16) - 8, 52, 16)) { /* the Cancel button, centred at (291, -16) */
+    set_cursor(6);
+    return party_action();
+  }
+  if (item_manage_mode() && !P.transfer_mode) {
+    float cx, cy, w;
+    mode_button(&cx, &cy, &w);
+    if (inside(x, y, cx - w / 2, cy - 12.5f, w, 25)) {
+      set_cursor(7);
+      return party_action();
+    }
+  }
+  return false;
+}
+
 void party_update(float dt_ms) {
   if (!P.active) return;
   P.anim_ms += dt_ms;
@@ -953,16 +1035,8 @@ static void draw_slot(int i) {
   bool dbl = P.a.double_battle, manage = item_manage_mode();
   bool selected = P.cursor == i;
   bool transfer = P.transfer_mode && P.transfer_cursor == i;
-  float sx, sy;
-  if (benched) {
-    sx = 143;
-    sy = -196 + (dbl ? -40 : 0) + (28 + (dbl ? 8 : 0)) * i;
-  } else {
-    sx = 9;
-    sy = -148.5f + (dbl ? (manage ? -20 : -8) : 0) + (manage ? (dbl ? 47 : 55) : 64) * i;
-  }
-  sx = floorf(sx);
-  sy = floorf(Y(sy));
+  float sx, sy, sw, sh;
+  slot_rect(i, &sx, &sy, &sw, &sh);
 
   const char* bgkey = benched ? "party_slot" : (manage && dbl) ? "party_slot_main_short" : "party_slot_main";
   char key[48], frame[64];
@@ -1102,7 +1176,8 @@ void party_draw(void) {
   if (item_manage_mode()) {
     /* PartyDiscardModeButton */
     bool dsel = P.cursor == 7;
-    float bx = P.a.double_battle ? 64 : 60, by = Y(P.a.double_battle ? -58 : -73);
+    float bx, by, bw;
+    mode_button(&bx, &by, &bw);
     bool transfer = P.a.mode == PARTY_MODIFIER_TRANSFER;
     const char* label = mui_t(transfer ? "partyUiHandler:transfer" : "partyUiHandler:discard");
     const rr_frame* f = mui_frame(transfer ? "ui/party_transfer" : "ui/party_discard", dsel ? "selected" : "normal");
@@ -1110,9 +1185,7 @@ void party_draw(void) {
       /* displayWidth = label length * 9 + 3 (upstream stretches the icon) */
       rr_draw_opts o = RR_DEFAULT_OPTS;
       o.origin_x = o.origin_y = 0.5f;
-      int len = 0;
-      for (const char* p = label; *p; p++) len += ((unsigned char)*p & 0xC0) != 0x80;
-      o.scale_x = (len * 9 + 3) / (float)f->src_w;
+      o.scale_x = bw / (float)f->src_w;
       rr_draw(f, bx, by, &o);
     }
     mui_text(TS_PARTY, bx - 8, by - 7, label);

@@ -170,6 +170,8 @@ typedef struct {
 } mui_confirm;
 void mui_confirm_show(mui_confirm* c, mui_cb yes, mui_cb no, void* ctx);
 bool mui_confirm_input(mui_confirm* c, mui_button b);
+/* A tap at canvas (x, y) on a row: the cursor goes there and ACTION is pressed (Yes picks yes, No picks no). False when it hit neither row. */
+bool mui_confirm_touch(mui_confirm* c, float x, float y);
 void mui_confirm_draw(const mui_confirm* c);
 
 /* ---- small helpers ---- */

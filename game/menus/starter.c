@@ -612,6 +612,61 @@ void starter_draw(void) {
   draw_options_menu();
 }
 
+static bool inside(float x, float y, float rx, float ry, float rw, float rh) { return x >= rx && x < rx + rw && y >= ry && y < ry + rh; }
+
+bool starter_touch(float x, float y) {
+  if (!S.active || S.done) return S.active;
+  if (S.conf.active) {
+    mui_confirm_touch(&S.conf, x, y);
+    return true; /* modal */
+  }
+  if (S.msg_on) return starter_input(MB_ACTION); /* A: closes a message that waits for it, the typing question takes nothing */
+  if (S.menu.open) {
+    /* the options menu as draw_options_menu places it: rows of 16 px from 7 px under its top */
+    int w = 0;
+    for (int i = 0; i < S.menu.n; i++) {
+      const int tw = mui_text_width(TS_WINDOW, menu_label(i));
+      if (tw > w) w = tw;
+    }
+    const float bw = w + 23, bh = (S.menu.n + 1) * 16 - 2, left = MUI_W - 1 - bw, top = MUI_H - bh;
+    if (!inside(x, y, left, top, bw, bh)) return menu_input(MB_CANCEL); /* a tap outside is B */
+    if (y < top + 7 || y >= top + 7 + 16.0f * S.menu.n) return true;
+    S.menu.cursor = (int)((y - top - 7) / 16);
+    return menu_input(MB_ACTION);
+  }
+  for (int i = 0; i < SM_PAGE; i++) {
+    if (!sm_cell(&S.m, i) || !inside(x, y, cell_x(i), cell_y(i), SM_CELL_W, SM_CELL_H)) continue;
+    if (S.m.focus == SM_GRID && S.m.cursor == i) return starter_input(MB_ACTION);
+    sm_point(&S.m, SM_GRID, i);
+    mui_sfx("ui/select");
+    follow_cursor();
+    return true;
+  }
+  if (inside(x, y, BOX_X + SM_COLS * SM_CELL_W + 1, BOX_Y + 12, 12, 155)) { /* beside the grid, where the scroll bar is: a page */
+    const bool down = y >= BOX_Y + 12 + 155 / 2.0f;
+    if (!sm_scroll(&S.m, down ? SM_ROWS : -SM_ROWS)) return false;
+    mui_sfx("ui/select");
+    follow_cursor();
+    return true;
+  }
+  for (int i = 0; i < S.m.n_party; i++) {
+    if (!inside(x, y, TEAM_X, (float)sm_party_icon_y(i), 34, 15)) continue;
+    sm_point(&S.m, SM_PARTY, i);
+    mui_sfx("ui/select");
+    follow_cursor();
+    return true;
+  }
+  if (inside(x, y, TEAM_X, 38 - 20, 34, 20)) { /* the Randomize label's window */
+    sm_point(&S.m, SM_RANDOM, 0);
+    return starter_input(MB_ACTION);
+  }
+  if (inside(x, y, TEAM_X, 158, 34, 20)) { /* Start */
+    sm_point(&S.m, SM_START, 0);
+    return starter_input(MB_ACTION);
+  }
+  return false;
+}
+
 /* The top screen (upstream has none): the species on upstream's summary background, and beside it the summary's profile panel
  * with what the bottom panel can only show in 6 px text (types, ability, passive, nature, growth rate) in the 16 px summary text,
  * then the moves. */

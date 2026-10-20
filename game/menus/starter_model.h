@@ -96,6 +96,14 @@ void sm_init(sm_model* m, const sm_entry* entries, int n, int budget, int (*rnd)
 /* A button press (SM_* above). SUBMIT and MENU both mean Start (the 3DS's START button is MENU). */
 sm_result sm_input(sm_model* m, mui_button b);
 
+/* The touch screen's cursor move (upstream has none): put the cursor on the grid cell i on screen (SM_GRID: only a cell with a species in it),
+ * on team member i (SM_PARTY: only a member the team has), or on Start or Randomize (SM_START, SM_RANDOM: i is ignored). False when
+ * nothing is there. The panel then shows what the cursor is on. */
+bool sm_point(sm_model* m, sm_focus focus, int i);
+/* Scrolls the grid by `rows` (negative: up), clamped to the list; the cursor keeps its place on screen unless the species there is gone.
+ * False when it did not move. */
+bool sm_scroll(sm_model* m, int rows);
+
 /* The species the info panel shows (the grid cursor's, or the team member's), 0 when the cursor is on a button. */
 uint16_t sm_species(const sm_model* m);
 /* The species in the grid cell at on-screen index i (0..SM_PAGE-1), or NULL when the list ends before it. */

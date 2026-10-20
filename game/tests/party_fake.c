@@ -159,6 +159,17 @@ bool mui_confirm_input(mui_confirm* c, mui_button b) {
   return false;
 }
 
+/* mui.c's: the box at the canvas' bottom-right, rows of 16 px from 7 px under its top (the widest of the two labels and 23 px wide) */
+bool mui_confirm_touch(mui_confirm* c, float x, float y) {
+  if (!c->active) return false;
+  int w = mui_text_width(TS_WINDOW, mui_t("menu:yes")), w2 = mui_text_width(TS_WINDOW, mui_t("menu:no"));
+  if (w2 > w) w = w2;
+  const float bw = w + 23, bh = 3 * 16 - 2, left = 319 - bw, top = (180 - 48) - bh;
+  if (x < left || x >= 319 || y < top + 7 || y >= top + 7 + 2 * 16) return false;
+  c->cursor = (int)((y - top - 7) / 16);
+  return mui_confirm_input(c, c->cursor ? MB_CANCEL : MB_ACTION); /* the fake's input: ACTION answers yes, CANCEL no */
+}
+
 void mui_confirm_draw(const mui_confirm* c) {
   (void)c;
 }
