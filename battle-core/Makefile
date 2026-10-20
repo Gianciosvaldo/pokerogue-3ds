@@ -608,3 +608,7 @@ $(BUILD)/mimicry-test: tests/mimicry-test.c tests/keldeo-forms-test.c $(BUILD)/w
 all: $(BUILD)/entry-allies-test
 $(BUILD)/entry-allies-test: tests/entry-allies-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/costar-test
+$(BUILD)/costar-test: tests/costar-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@

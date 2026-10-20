@@ -1045,6 +1045,28 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
             }
         return 1;
     }
+    case PR_AC_PostSummonCopyAllyStatsAbAttr: {                        /* Costar */
+        const pr_pokemon *ally = pr_get_ally(bt, p);
+        GATE(bt->double_battle && ally && ally->hp > 0 && ally->on_field && !ally->switch_out_status);
+        if (pp->simulated) return 1;
+        if (!c->e) return -1;
+        pr_pokemon *user = (pr_pokemon *)p;
+        memcpy(user->stat_stages, ally->stat_stages, sizeof user->stat_stages);
+        const pr_battler_tag *cheer = pr_get_battler_tag(ally, BATTLER_TAG_TYPE_DRAGON_CHEER);
+        if (cheer) {
+            pr_add_tag(bt, c->e, user, BATTLER_TAG_TYPE_DRAGON_CHEER, 0, 0, -1);
+            /* Native getTag(CritBoostTag) selects the first class match. An
+             * existing Focus Energy tag can precede the newly added Cheer. */
+            pr_battler_tag *first = (pr_battler_tag *)pr_find_battler_tag_class(user, PR_TAGCLASS_CRIT_BOOST);
+            if (!first) { pr_note_unported(bt, PR_FEAT_TAG_0 + BATTLER_TAG_TYPE_DRAGON_CHEER); return -1; }
+            first->crit_stages = cheer->crit_stages;
+        }
+        if (pr_get_battler_tag(ally, BATTLER_TAG_TYPE_CRIT_BOOST))
+            pr_add_tag(bt, c->e, user, BATTLER_TAG_TYPE_CRIT_BOOST, 0, 0, -1);
+        if (pr_get_battler_tag(ally, BATTLER_TAG_TYPE_ALWAYS_CRIT))
+            pr_add_tag(bt, c->e, user, BATTLER_TAG_TYPE_ALWAYS_CRIT, 0, 0, -1);
+        return 1;
+    }
     case PR_AC_PostSummonAllyHealAbAttr: {                             /* Hospitality */
         const pr_pokemon *ally = pr_get_ally(bt, p);
         /* The override checks ally.isActive(true), even at full HP. */
