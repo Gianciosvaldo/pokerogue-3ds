@@ -200,6 +200,9 @@ typedef struct {
    * when the learn-move phase moves on, like upstream. */
   void (*on_move_select)(void* ctx, int cursor);
   void* ctx;
+  /* DEFAULT, Stats page: the held item the cursor is on has its description open (name with stack, effect text), or NULL, NULL: it
+   * closed. The caller shows it where it has room (the message window on the other screen). Optional. */
+  void (*on_item_info)(void* ctx, const char* name, const char* desc);
 } summary_events;
 
 typedef struct {

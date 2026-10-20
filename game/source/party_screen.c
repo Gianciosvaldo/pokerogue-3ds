@@ -1,5 +1,6 @@
 /* The party and summary screens over the battle (see party_screen.h). */
 #include "party_screen.h"
+#include "battle_view.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -189,6 +190,12 @@ static void sum_swap(void* ctx, int slot, int a, int b) {
   (void)ctx, (void)slot, (void)a, (void)b;
 }
 
+/* the held item's description goes to the battle screen's message window, empty under the summary */
+static void sum_item_info(void* ctx, const char* name, const char* desc) {
+  (void)ctx;
+  bv_set_info(name, desc);
+}
+
 static void on_summary(void* ctx, int slot) {
   (void)ctx;
   summary_args a;
@@ -201,7 +208,7 @@ static void on_summary(void* ctx, int slot) {
   a.from_party = true;
   a.new_move_type = -1;
   a.trainer_id = g_run ? g_trainer_id : NULL;
-  static const summary_events ev = {sum_close, sum_swap, NULL, NULL};
+  static const summary_events ev = {sum_close, sum_swap, NULL, NULL, sum_item_info};
   summary_open(&a, &ev);
 }
 
