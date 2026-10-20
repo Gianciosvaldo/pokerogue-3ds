@@ -38,6 +38,7 @@ typedef struct {
   uint16_t count, max;    /* stack count and its maximum */
   bool transferable;
   int16_t src;            /* the caller's own index for the item (the run's item list), -1 = none */
+  const char* desc;       /* its effect text for the item window (static storage, may be NULL) */
 } menu_held_item;
 
 typedef struct {

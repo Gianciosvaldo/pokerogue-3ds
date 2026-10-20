@@ -126,6 +126,7 @@ static struct {
   } ball;
   bv_item foe[BV_MAX_FOE_ITEMS]; /* the foe's items while the command is asked */
   int n_foe;
+  int foe_sel; /* the foe item the item window shows (Up from the command menu's top row), -1 = none */
   /* promptLevelUpStats' window (BEV_LEVEL_UP) */
   struct {
     bool on, totals;
@@ -741,6 +742,29 @@ static void draw_foe_items(void) {
       t.origin_x = 1;
       text_draw(TS_INSTRUCTIONS_TEXT, x + cell - 2, y + cell - 12, n, &t);
     }
+  }
+  if (B.mode == M_COMMAND && B.foe_sel >= 0 && B.foe_sel < B.n_foe) {
+    const bv_item* it = &B.foe[B.foe_sel];
+    const float x = 10 + (B.foe_sel % per_row) * cell - 1, y = top + 4 + (B.foe_sel / per_row) * cell - 1;
+    const rr_color c = RR_RGBA(0xf8, 0xe0, 0x58, 255);
+    rr_rect(x, y, cell, 1, c);
+    rr_rect(x, y + cell - 1, cell, 1, c);
+    rr_rect(x, y, 1, cell, c);
+    rr_rect(x + cell - 1, y, 1, cell, c);
+    /* the item window under the bar: name (with the stack) and a brief effect text */
+    char name[64];
+    if (it->count > 1)
+      snprintf(name, sizeof name, "%s x%d", it->name ? it->name : "?", it->count);
+    else
+      snprintf(name, sizeof name, "%s", it->name ? it->name : "?");
+    text_opts d = text_defaults();
+    d.wrap_w = 288;
+    const char* desc = it->desc ? it->desc : "";
+    const float th = text_height(TS_WINDOW, name, NULL), dh = *desc ? text_height(TS_WINDOW_ALT, desc, &d) : 0;
+    const float wy = top + h + 4;
+    ui_window(4, wy, 312, th + dh + 18, WIN_NORMAL);
+    text_draw(TS_WINDOW, 14, wy + 8, name, NULL);
+    if (*desc) text_draw(TS_WINDOW_ALT, 14, wy + 11 + th, desc, &d);
   }
 }
 
@@ -1483,11 +1507,33 @@ static bool bv_input(ui_screen* s, ui_button b) {
     return true;
   }
   if (B.mode == M_EVENTS) return msgbox_input(&B.msg, b);
+  if (B.mode == M_COMMAND && B.foe_sel >= 0) {
+    /* the foe's item window is up: Left/Right pick another item, Down or B closes it */
+    if (b == BTN_LEFT || b == BTN_RIGHT) {
+      const int i = B.foe_sel + (b == BTN_RIGHT ? 1 : -1);
+      if (i < 0 || i >= B.n_foe) return false;
+      B.foe_sel = i;
+      ui_play_select();
+      return true;
+    }
+    if (b == BTN_DOWN || b == BTN_CANCEL) {
+      B.foe_sel = -1;
+      ui_play_select();
+      return true;
+    }
+    return false;
+  }
   if (B.mode == M_COMMAND) {
     int c = B.cmd_cursor;
     switch (b) {
       case BTN_UP:
-        if (c >= 2) B.cmd_cursor -= 2;
+        if (c >= 2) {
+          B.cmd_cursor -= 2;
+        } else if (B.n_foe > 0) {
+          B.foe_sel = 0;
+          ui_play_select();
+          return true;
+        }
         break;
       case BTN_DOWN:
         if (c < 2) B.cmd_cursor += 2;
@@ -1758,6 +1804,7 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
     for (int i = 0; i < 4; i++) B.opts.move_ok[i] = true;
   }
   B.n_foe = 0;
+  B.foe_sel = -1;
   if (opts && opts->foe_items)
     for (int i = 0; i < opts->n_foe_items && B.n_foe < BV_MAX_FOE_ITEMS; i++) B.foe[B.n_foe++] = opts->foe_items[i];
   B.opts.foe_items = NULL;

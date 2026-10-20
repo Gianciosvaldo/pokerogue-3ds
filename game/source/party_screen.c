@@ -46,6 +46,7 @@ static void fill_items(menu_mon* m, uint32_t id) {
     h->count = (uint16_t)(it->stack > 0 ? it->stack : 0);
     h->transferable = !it->non_transferable;
     h->src = (int16_t)i;
+    h->desc = u && u->desc && !u->dynamic ? u->desc : NULL;
     if (holder) {
       const int max = gc_item_max_held(g_run, it->key, it->arg, holder);
       h->max = (uint16_t)(max > 0 ? max : 0);
