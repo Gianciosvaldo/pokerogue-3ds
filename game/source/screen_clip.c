@@ -10,4 +10,9 @@ void clip_to_screen(void) {
   mui_clip(0, 0, s == RR_TOP ? 400 : 320, 240);
 }
 
+void clip_rect(float x, float y, float w, float h) {
+  mui_set_origin(ui_drawing(), 0, 0);
+  mui_clip(x, y, w, h);
+}
+
 void clip_off(void) { mui_clip_off(); }

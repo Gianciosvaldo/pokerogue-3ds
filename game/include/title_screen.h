@@ -6,8 +6,8 @@
  * (history_screen.h) and, last,
  * the custom content's own "Nemesis Radar" (radar_screen.h: a read-only look at the remembered enemies; upstream has no such entry)
  * and "Capsule Machine" (gacha_screen.h: the voucher-to-egg machines; upstream reaches them from the in-run menu, which this app has only
- * with Save and Quit so far), then "Custom Run" and "Custom Load" (custom_run.h: a Classic run with the optional Nemesis rematch, and its own five save
- * slots; New Game and Load Game never see them).
+ * with Save and Quit so far). A custom run (custom_run.h) is started from New Game's run settings (run_settings.h) and loaded from Load
+ * Game, where it is labelled Custom.
  *
  * Not on it, on purpose: Daily Run and Settings (no such screens yet), the player count and the account line (the
  * game is fully offline), the splash message and the version text.
@@ -21,7 +21,7 @@
 extern "C" {
 #endif
 
-typedef enum { TITLE_CONTINUE, TITLE_NEW_GAME, TITLE_LOAD_GAME, TITLE_HISTORY, TITLE_RADAR, TITLE_CAPSULE, TITLE_CUSTOM_RUN, TITLE_CUSTOM_LOAD } title_choice;
+typedef enum { TITLE_CONTINUE, TITLE_NEW_GAME, TITLE_LOAD_GAME, TITLE_HISTORY, TITLE_RADAR, TITLE_CAPSULE } title_choice;
 
 typedef struct {
   bool can_continue;   /* shows the Continue entry */

@@ -590,6 +590,16 @@ static void draw_sub_k(rr_tex* t, int sx, int sy, int sw, int sh, float px, floa
   Tex3DS_SubTexture sub = {
       (u16)sw, (u16)sh, sx / tw, 1.0f - sy / th, (sx + sw) / tw, 1.0f - (sy + sh) / th,
   };
+  /* a negative scale flips. The GPU culls a quad drawn with a negative width, so a horizontal flip swaps the texture's left and right
+   * instead and moves the pivot so the quad stays where the negative width put it. citro2d reads a swapped top and bottom as a
+   * rotated sub-texture, so a vertical flip is drawn as a horizontal one turned 180 degrees about the pivot. */
+  const bool upright = angle == 0.0f;
+  if (scale_y < 0) scale_y = -scale_y, scale_x = -scale_x, cx = -cx, cy = -cy, angle += (float)M_PI;
+  if (scale_x < 0) {
+    const float l = sub.left;
+    sub.left = sub.right, sub.right = l;
+    scale_x = -scale_x, cx += sw * scale_x;
+  }
   C2D_Image img = {&t->tex, &sub};
   if (g_zoom != 1) {
     px = g_zoom_x + (px - g_zoom_x) * g_zoom;
@@ -598,7 +608,7 @@ static void draw_sub_k(rr_tex* t, int sx, int sy, int sw, int sh, float px, floa
   }
   C2D_DrawParams p = {{px + g_origin[g_cur][0], py + g_origin[g_cur][1], sw * scale_x, sh * scale_y},
                       {cx, cy}, 0.0f, angle};
-  if (angle == 0.0f && fabsf(scale_x) == 1.0f && fabsf(scale_y) == 1.0f) {
+  if (upright && fabsf(scale_x) == 1.0f && fabsf(scale_y) == 1.0f) {
     /* keep pixel art on the pixel grid */
     p.pos.x = floorf(p.pos.x + 0.5f);
     p.pos.y = floorf(p.pos.y + 0.5f);

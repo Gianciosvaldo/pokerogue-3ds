@@ -14,6 +14,8 @@ extern "C" {
 
 /* Nothing is drawn outside the physical screen being drawn, from here until clip_off. Call it in a draw callback. */
 void clip_to_screen(void);
+/* Nothing is drawn outside (x, y, w, h) of the physical screen being drawn, until clip_off. */
+void clip_rect(float x, float y, float w, float h);
 void clip_off(void);
 
 #ifdef __cplusplus

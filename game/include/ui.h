@@ -96,6 +96,10 @@ void ui_fade(float out_ms, float hold_ms, float in_ms, void (*at_black)(void* ar
 
 /* ---- time ---- */
 float ui_now(void);     /* ms since boot, game time */
+/* How much faster than real time the screens' clock runs (dt, ui_now, timers, fades): upstream's gameSpeed (run_settings.h). Input
+ * repeat and the music keep real time. */
+void ui_set_game_speed(float scale);
+float ui_game_speed(void);
 uint32_t ui_frame(void);/* frames since boot */
 
 /* One-shot timers (upstream globalScene.time.delayedCall). They fire during ui_tick, before the

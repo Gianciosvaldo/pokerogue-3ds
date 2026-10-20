@@ -85,10 +85,6 @@ void title_screen_open(const title_args* a) {
   T.choice[n++] = TITLE_RADAR;
   snprintf(T.labels[n], sizeof T.labels[n], "Capsule Machine"); /* the custom content's own entry: no upstream string */
   T.choice[n++] = TITLE_CAPSULE;
-  snprintf(T.labels[n], sizeof T.labels[n], "Custom Run"); /* the custom content's own entries: no upstream string */
-  T.choice[n++] = TITLE_CUSTOM_RUN;
-  snprintf(T.labels[n], sizeof T.labels[n], "Custom Load");
-  T.choice[n++] = TITLE_CUSTOM_LOAD;
   for (int i = 0; i < n; i++) T.label_ptrs[i] = T.labels[i];
   optlist_init(&T.list, T.label_ptrs, n);
   T.list.no_cancel = true; /* blockCancelButton: true */
