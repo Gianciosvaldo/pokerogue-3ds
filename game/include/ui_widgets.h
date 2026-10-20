@@ -126,6 +126,13 @@ void optlist_draw(const optlist* l);
  * as ACTION does (chosen is then set, unless the row is disabled). True when the tap hit a row. */
 bool optlist_touch(optlist* l, float x, float y);
 
+/* The button hints along the bottom of a screen ("A: scout   B: back"): hint i is drawn after hint i - 1 with HINT_GAP px between them, from x0,
+ * and a tap on it or on half the gap beside it is the button it names. hint_x gives where hint i starts; hint_at the index of the hint a tap at
+ * x is on (-1 when it is past the last one). */
+#define HINT_GAP 18
+float hint_x(text_style st, float x0, const char* const* texts, int i);
+int hint_at(text_style st, float x0, const char* const* texts, int n, float x);
+
 /* A ready-made overlay screen around an optlist: push it, and on_done gets the index (or -2
  * when cancelled) after it pops itself. */
 void ui_push_options(const char* const* labels, int n, bool can_cancel, void (*on_done)(int idx, void* arg),

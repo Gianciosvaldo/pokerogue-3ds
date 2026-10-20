@@ -102,6 +102,17 @@ float text_width(text_style st, const char* s, const text_opts* o) {
   (void)st, (void)o;
   return 6.0f * (float)strlen(s);
 }
+/* the hints (ui_widgets.c, tested by msgbox_test): the same two functions */
+float hint_x(text_style st, float x0, const char* const* texts, int i) {
+  float x = x0;
+  for (int k = 0; k < i; k++) x += text_width(st, texts[k], NULL) + HINT_GAP;
+  return x;
+}
+int hint_at(text_style st, float x0, const char* const* texts, int n, float x) {
+  for (int i = 0; i < n; i++)
+    if (x < hint_x(st, x0, texts, i + 1) - HINT_GAP / 2.0f) return i;
+  return -1;
+}
 float text_draw(text_style st, float x, float y, const char* s, const text_opts* o) {
   if (n_drawn < DRAWN_MAX) {
     drawn_t* d = &g_drawn[n_drawn++];
@@ -1134,7 +1145,176 @@ static void test_rest_restarts(void) {
   CHECK(n_sprite_load == 1, "160 ms after the move: read once");
 }
 
+/* A tap (physical bottom-screen px). The list's rows are at y = 44 + 28 i (28 high, x 4..316), the hints at y 224 from x 10 (6 px a
+ * character, 18 between), the notes of more records at x >= 200 (y 24..42 above, 186..208 below). */
+static bool tap(float x, float y) { return g_top->touch(g_top, x, y); }
+static int wave_on_top(void) {
+  draw(0);
+  for (int w = 20; w < 60; w++) {
+    char b[64];
+    snprintf(b, sizeof b, "Ended a run at wave %d", w);
+    if (has_text(b)) return w;
+  }
+  return -1;
+}
+
+static void test_touch(void) {
+  /* a roster of 16: the newest (wave 42) is the first row, the oldest (wave 27) the last */
+  reset_fakes();
+  fresh_meta();
+  for (int i = 0; i < 16; i++) {
+    cc_nemesis n = rec((cc_record_id)(3 + 2 * i), 25, 27 + i, i % 4);
+    add(&n);
+  }
+  radar_args a = args_for(&g_meta, NULL);
+  CHECK(radar_open(&a) && g_top->touch != NULL, "opens, and takes taps");
+  draw(1);
+  CHECK(has_text("A: scout") && has_text("B: back") && has_text("^/v: choose") && has_text("</>: page"), "the four hints are all there");
+  CHECK(find_text("A: scout")->x == 10 && find_text("B: back")->x == 10 + 48 + 18 && find_text("^/v: choose")->x == 10 + 48 + 18 + 42 + 18, "each after the last (x %.0f, %.0f, %.0f)",
+        find_text("A: scout")->x, find_text("B: back")->x, find_text("^/v: choose")->x);
+  CHECK(wave_on_top() == 42, "the newest is pointed at (wave %d)", wave_on_top());
+
+  /* rows */
+  n_select = 0;
+  CHECK(!tap(2, 60) && !tap(316, 60) && !tap(100, 43) && !tap(100, 44 + 5 * 28), "a tap beside the rows, above the first or below the fifth takes nothing");
+  CHECK(n_select == 0, "(and makes no sound)");
+  CHECK(tap(100, 44 + 2 * 28 + 5) && n_select == 1 && wave_on_top() == 40, "a tap on the third row points at it (wave %d)", wave_on_top());
+  draw(1);
+  CHECK(has_text("A: scout") && !has_text("Scout: "), "it is still the list");
+  CHECK(tap(4, 44 + 4 * 28 + 27) && wave_on_top() == 38, "the last pixel of the fifth row, its left edge included (wave %d)", wave_on_top());
+  CHECK(tap(315, 44 + 28) && wave_on_top() == 41, "the right edge of the second row (wave %d)", wave_on_top());
+  n_select = 0;
+  CHECK(tap(100, 44 + 28 + 27) && n_select == 1, "a tap on the pointed row (its last pixel) scouts it");
+  draw(1);
+  CHECK(has_text("Scout: Mon25") && has_text("B: back to the list") && has_text("^/v: scroll") && !has_text("A: scout"), "the Scout page and its hints");
+  CHECK(find_text("^/v: scroll")->x == 10 + 19 * 6 + 18, "(the second hint after the first: x %.0f)", find_text("^/v: scroll")->x);
+
+  /* the Scout page: the hints, and the text scrolled by halves */
+  CHECK(!tap(300, 230) && !tap(10 + 19 * 6 + 18 + 5, 230) && !tap(100, 215), "beyond B, on the scroll hint and above the hint line: nothing");
+  CHECK(tap(20, 230), "B: back to the list");
+  draw(1);
+  CHECK(has_text("A: scout") && !has_text("Scout: ") && n_exit == 0, "the list again, nothing left");
+
+  /* a long page */
+  reset_fakes();
+  fresh_meta();
+  cc_nemesis big = rec(3, 25, 27, 3);
+  big.n_items = CC_MAX_LOADOUT_ITEMS;
+  big.known |= CC_NK_LOADOUT | CC_NK_LOADOUT_TRUNCATED;
+  const char* const keys[CC_MAX_LOADOUT_ITEMS] = {"LEFTOVERS", "SOUL_DEW", "FOCUS_BAND", "KINGS_ROCK", "QUICK_CLAW", "LUCKY_EGG", "SCOPE_LENS", "WIDE_LENS"};
+  for (int i = 0; i < CC_MAX_LOADOUT_ITEMS; i++) {
+    memset(&big.items[i], 0, sizeof big.items[i]);
+    strcpy(big.items[i].key, keys[i]);
+    big.items[i].arg = -1;
+    big.items[i].stack = (uint16_t)(1 + i);
+  }
+  big.n_moves = CC_MAX_MOVES;
+  for (int i = 0; i < CC_MAX_MOVES; i++) big.moves[i] = (uint16_t)(100 + i);
+  big.life = CC_LIFE_SCHEDULED; /* with the run's four windows: the longest page there is */
+  big.sched_run_uid = 0x0000000500000003ull;
+  add(&big);
+  memset(&g_sched, 0, sizeof g_sched);
+  g_sched.state = CC_SCHED_ACTIVE;
+  g_sched.run_uid = 0x0000000500000003ull;
+  g_sched.rng_algo = CC_RNG_ALGO_V1;
+  g_sched.n_frozen = 1;
+  g_sched.frozen_ids[0] = 3;
+  g_sched.chosen_id = 3;
+  g_sched.n_windows = CC_NUM_WINDOWS;
+  for (int i = 0; i < CC_NUM_WINDOWS; i++) g_sched.windows[i].wave = cc_window_waves[i];
+  CHECK(cc_meta_validate(&g_meta) == CC_OK, "valid fixture (%d)", (int)cc_meta_validate(&g_meta));
+  radar_args b = args_for(&g_meta, &g_sched);
+  CHECK(radar_open(&b), "opens");
+  CHECK(tap(100, 60), "(one record, pointed at from the start: a tap scouts it)");
+  draw(1);
+  CHECK(has_text("Scout: Mon25") && has_text("more below") && !has_text("more above"), "a page longer than 12 lines");
+  int lines_below = 0;
+  for (int i = 0; i < n_drawn; i++) {
+    int k;
+    if (sscanf(g_drawn[i].text, "%d more below", &k) == 1) lines_below = k;
+  }
+  CHECK(lines_below > 6, "(%d lines below: more than half a page, so the step shows)", lines_below);
+  CHECK(tap(160, 130), "a tap on the lower half of the text scrolls it down");
+  draw(1);
+  const int half = lines_below < 6 ? lines_below : 6;
+  char want[32];
+  snprintf(want, sizeof want, "%d more above", half);
+  CHECK(has_text(want), "by half a page, as far as there is text (%s)", want);
+  for (int i = 0; i < 10; i++) tap(160, 130);
+  draw(1);
+  CHECK(!has_text("more below") && has_text("more above"), "to its end and no further");
+  CHECK(tap(160, 40), "a tap on the upper half scrolls up");
+  draw(1);
+  CHECK(has_text("more below"), "(one half page back)");
+  for (int i = 0; i < 10; i++) tap(160, 40);
+  draw(1);
+  CHECK(!has_text("more above"), "to the top and no further");
+  CHECK(!tap(0, 100) && !tap(319, 100) && !tap(160, 29) && !tap(160, 30 + 12 * 14 + 8), "the text window's edges: nothing outside it");
+  CHECK(tap(5, 230) && n_exit == 0, "B: back to the list");
+
+  /* a long list: the notes of more records page it */
+  reset_fakes();
+  fresh_meta();
+  for (int i = 0; i < 16; i++) {
+    cc_nemesis n = rec((cc_record_id)(3 + 2 * i), 25, 27 + i, i % 4);
+    add(&n);
+  }
+  radar_args c = args_for(&g_meta, NULL);
+  CHECK(radar_open(&c), "opens");
+  draw(1);
+  CHECK(has_text("11 more below") && !has_text("more above"), "the first page");
+  CHECK(!tap(230, 30), "no note above, so a tap there takes nothing");
+  CHECK(!tap(199, 195), "x 199 is left of the note");
+  CHECK(tap(230, 195), "a tap on the note below pages down");
+  draw(1);
+  CHECK(has_text("more above") && wave_on_top() == 37, "the pointed record moved five on (wave %d)", wave_on_top());
+  CHECK(tap(44, 44 + 5) && wave_on_top() == 41, "the rows are the ones drawn now: the first of the new page is the second record (wave %d)", wave_on_top());
+  CHECK(tap(230, 30), "a tap on the note above pages up");
+  draw(1);
+  CHECK(wave_on_top() == 42 && !has_text("more above"), "back at the top (wave %d)", wave_on_top());
+
+  /* the hints of the list: A, B, and the directions that are only said */
+  reset_fakes();
+  fresh_meta();
+  for (int i = 0; i < 3; i++) {
+    cc_nemesis n = rec((cc_record_id)(3 + 2 * i), 25, 27 + i, i % 4);
+    add(&n);
+  }
+  radar_args d = args_for(&g_meta, NULL);
+  CHECK(radar_open(&d), "opens");
+  draw(1);
+  CHECK(!tap(200, 230) && !tap(250, 230) && !tap(319, 230) && !tap(100, 214), "the direction hints, beyond them and above the line: nothing");
+  CHECK(!tap(230, 195) && !tap(230, 30), "three records fit: no note of more, so nothing there either");
+  CHECK(!tap(20, 215) && tap(20, 216), "the hint line takes taps from y 216 (the text is at 224)");
+  draw(1);
+  CHECK(has_text("Scout: "), "(A: scout)");
+  CHECK(tap(20, 230), "(back)");
+  CHECK(tap(66, 230), "A: scout takes the gap after it too (up to x 67)");
+  draw(1);
+  CHECK(has_text("Scout: "), "it scouts");
+  CHECK(tap(20, 230), "B");
+  CHECK(tap(67, 224) && n_exit == 1, "B: back leaves, once");
+  CHECK(tap(20, 230) && tap(100, 100) && tap(250, 30) && n_exit == 1, "a screen that was left swallows taps");
+
+  /* nothing to scout: one hint */
+  reset_fakes();
+  fresh_meta();
+  radar_args e = args_for(&g_meta, NULL);
+  CHECK(radar_open(&e), "opens");
+  draw(1);
+  CHECK(has_text("B: back") && !has_text("A: scout"), "an empty roster has only B");
+  CHECK(!tap(100, 60) && !tap(230, 195) && !tap(100, 230) && n_exit == 0, "no rows, no notes, and nothing beyond B: back");
+  CHECK(tap(20, 230) && n_exit == 1, "B leaves");
+  reset_fakes();
+  e.meta = NULL;
+  e.why = "The custom content file failed its checksum.";
+  CHECK(radar_open(&e), "an unusable file opens too");
+  CHECK(!tap(100, 60) && n_exit == 0, "no rows");
+  CHECK(tap(20, 230) && n_exit == 1, "and B leaves");
+}
+
 int main(int argc, char** argv) {
+  test_touch();
   test_empty_and_unusable();
   test_open_refusals();
   test_roster_of_16();

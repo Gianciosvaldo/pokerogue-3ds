@@ -425,6 +425,18 @@ bool optlist_input(optlist* l, ui_button b) {
   return false;
 }
 
+float hint_x(text_style st, float x0, const char* const* texts, int i) {
+  float x = x0;
+  for (int k = 0; k < i; k++) x += text_width(st, texts[k], NULL) + HINT_GAP;
+  return x;
+}
+
+int hint_at(text_style st, float x0, const char* const* texts, int n, float x) {
+  for (int i = 0; i < n; i++)
+    if (x < hint_x(st, x0, texts, i + 1) - HINT_GAP / 2.0f) return i;
+  return -1;
+}
+
 bool optlist_touch(optlist* l, float x, float y) {
   const int vis = rows(l);
   const float h = (vis + 1) * OPT_ROW - 2, left = l->x - l->w, top = l->y - h;
