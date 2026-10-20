@@ -346,16 +346,12 @@ static void battle_end(gc_run *run, gc_rphase *p)
     gc_internal *in = gc_int(run);
     pr_battle *bt = &run->bt;
     bool victory = p->a;
-    /* cull any other BattleEndPhase */
-    for (;;) {
-        gc_rqueue *q = &in->rq;
-        bool found = false;
-        for (int l = 0; l < q->n_levels && !found; l++)
-            for (int k = 0; k < q->n[l]; k++)
-                if (q->q[l][k].type == RP_BATTLE_END) { victory |= q->q[l][k].a; found = true; break; }
-        if (!found) break;
-        gc_rq_remove(run, RP_BATTLE_END);
-    }
+    /* hasPhaseOfType with the victory predicate observes every level before removal. */
+    gc_rqueue *q = &in->rq;
+    for (int l = 0; l < q->n_levels; l++)
+        for (int k = 0; k < q->n[l]; k++)
+            if (q->q[l][k].type == RP_BATTLE_END) victory |= q->q[l][k].a;
+    gc_rq_remove_all(run, RP_BATTLE_END);
     if (victory) {
         /* currentBattle.addBattleScore(): Sine.easeIn over the turns taken */
         double mult = run->n_enemy / 2.0 + 0.5;
@@ -365,6 +361,12 @@ static void battle_end(gc_run *run, gc_rphase *p)
         double v = 1 - t / (10 * mult);
         double ease = v == 0 ? 0 : v == 1 ? 1 : 1 - cos(v * 3.141592653589793 / 2);   /* Phaser's Sine.In */
         run->score += (int)ceil(bt->battle_score * ease);
+    }
+    /* Endless graceful end runs before callbacks and cancels queued rewards/new battle. */
+    if ((run->run.mode == GAME_MODES_ENDLESS || run->run.mode == GAME_MODES_SPLICED_ENDLESS)
+        && run->wave >= 5850) {
+        gc_rq_clear(run);
+        gc_rq_unshift(run, gc_rp(RP_GAME_OVER, 1, 0, 0));
     }
     post_battle_money(run, victory);
     /* PostBattleAbAttr: Pickup (PostBattleLootAbAttr) takes an item from the enemies' loot after a victory. battle-core keeps
@@ -385,9 +387,9 @@ static void battle_end(gc_run *run, gc_rphase *p)
     run->n_enemy_items = 0;
     if (!gc_temp_lapse(run, NULL)) gc_stub(run, GC_STUB_POST_BATTLE);
     if (!gc_lure_lapse(run, NULL)) gc_stub(run, GC_STUB_POST_BATTLE);
-    if (!victory && !bt->successful_run && !gc_rq_has(run, RP_SELECT_MODIFIER)) {
+    if (!victory && !gc_rq_has(run, RP_SELECT_MODIFIER)) {
         if (bt->enemy_faints > 0) gc_rq_unshift(run, gc_rp(RP_SELECT_MODIFIER, 0, 0, 0));
-        else gc_rq_unshift(run, gc_rp(RP_SELECT_MODIFIER, 1, 0, 0));   /* no reroll, no fill: rewards stub */
+        else if (!bt->successful_run) gc_rq_unshift(run, gc_rp(RP_SELECT_MODIFIER, 1, 0, 0));   /* no reroll, no fill: rewards stub */
     }
     in->last_battle_type = run->battle_type;
     in->last_final_boss = run->run.mode == GAME_MODES_CLASSIC && pr_run_is_wave_final(run->run.mode, run->wave);

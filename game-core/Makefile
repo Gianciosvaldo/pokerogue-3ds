@@ -815,3 +815,16 @@ honey-money-host-test: $(BUILD)/honey_money_host_test
 $(BUILD)/honey_money_host_test: tests/honey_money_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: honey-money-host-test
+
+all: $(BUILD)/endless_terminal_test
+$(BUILD)/endless_terminal_test: tests/endless_terminal_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(MAKE) -s -C $(BATTLE_CORE) build/wide-substitute-frame.inc
+	$(CC) $(CPPFLAGS) -I$(BATTLE_CORE)/build $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -Wl,--wrap=pr_prepare_post_battle_money -lm -o $@
+
+all: $(BUILD)/endless_terminal_host_test
+test: endless-terminal-host-test
+endless-terminal-host-test: $(BUILD)/endless_terminal_host_test
+	$(BUILD)/endless_terminal_host_test
+$(BUILD)/endless_terminal_host_test: tests/endless_terminal_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: endless-terminal-host-test
