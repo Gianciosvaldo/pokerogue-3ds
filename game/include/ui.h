@@ -80,6 +80,9 @@ struct ui_screen {
   void (*update)(ui_screen* s, float dt);
   void (*draw)(ui_screen* s, rr_screen which);
   void* data; /* the screen's own state */
+  /* Optional: a tap on the bottom screen (a touch that began now), for the top screen. (x, y) are physical pixels of the bottom screen,
+   * 0..320 by 0..240; the screen turns them into its own space (ui_bottom_ui_y: UI_BOTTOM_UI's y). Return true when it did something. */
+  bool (*touch)(ui_screen* s, float x, float y);
 };
 
 void ui_set(ui_screen* s);   /* replace the top screen */
@@ -154,6 +157,12 @@ void ui_request_quit(void);
 bool ui_input_repeating(void);
 /* Feed a button as if pressed (demo scripts, tests). */
 void ui_inject(ui_button b);
+/* Feed a tap as if the touch screen was pressed at physical (x, y) (tests); and the debug file's "touch=<frame>:<x>,<y>" lines: a tap
+ * delivered at that frame, up to 8 (for emulator runs, which have no touch input). */
+void ui_inject_touch(float x, float y);
+void ui_debug_touch(uint32_t frame, float x, float y);
+/* UI_BOTTOM_UI's y (the command strip's, -48..0) of a physical bottom-screen y */
+static inline float ui_bottom_ui_y(float py) { return py - 240.0f; }
 
 #ifdef __cplusplus
 }

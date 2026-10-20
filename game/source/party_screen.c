@@ -232,7 +232,12 @@ static void ps_draw(ui_screen* s, rr_screen which) {
     party_draw();
 }
 
-static ui_screen g_screen = {"party", UI_OVERLAY, NULL, NULL, NULL, ps_input, ps_update, ps_draw, NULL};
+static bool ps_touch(ui_screen* s, float x, float y) {
+  (void)s;
+  return summary_active() && summary_touch(x, y - 30); /* UI_BOTTOM_CANVAS */
+}
+
+static ui_screen g_screen = {"party", UI_OVERLAY, NULL, NULL, NULL, ps_input, ps_update, ps_draw, NULL, ps_touch};
 
 void ps_init(void) { mui_init(); }
 
@@ -413,7 +418,12 @@ static void sum_draw(ui_screen* s, rr_screen which) {
   summary_draw();
 }
 
-static ui_screen g_sum_screen = {"learn-summary", UI_OVERLAY, NULL, NULL, NULL, sum_input, sum_update, sum_draw, NULL};
+static bool sum_touch(ui_screen* s, float x, float y) {
+  (void)s;
+  return summary_active() && summary_touch(x, y - 30); /* UI_BOTTOM_CANVAS: the canvas starts 30 px down */
+}
+
+static ui_screen g_sum_screen = {"learn-summary", UI_OVERLAY, NULL, NULL, NULL, sum_input, sum_update, sum_draw, NULL, sum_touch};
 
 /* the summary screen is on top exactly while it is open */
 static void lm_sync(void) {

@@ -219,6 +219,9 @@ void summary_open(const summary_args* args, const summary_events* ev);
 void summary_close(void);
 bool summary_active(void);
 bool summary_input(mui_button b);
+/* A tap at (x, y) in the screen's canvas coordinates: on a held item (Stats page) it opens the item window (a second tap on the same item,
+ * or a tap anywhere else, closes it). True when it did something. */
+bool summary_touch(float x, float y);
 void summary_update(float dt_ms);
 void summary_draw(void);
 

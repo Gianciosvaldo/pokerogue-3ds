@@ -100,7 +100,8 @@ static struct {
   float abil_t0;
   /* STATS */
   bool show_ivs;
-  int item_sel; /* the held item the item window shows, -1 = none (X on the Stats page) */
+  int item_sel; /* the held item the cursor is on, -1 = none (Start on the Stats page) */
+  bool item_open; /* A (or a tap) opened its window */
   char item_desc[512];
   int item_desc_lines;
   /* MOVES */
@@ -383,13 +384,15 @@ static void draw_item_window(const menu_mon* m, float px, float py) {
   const int i = S.item_sel;
   if (i < 0 || i >= m->nitems) return;
   const bool big = m->nitems <= 8;
-  const float cx = big ? px + i * 26 + 1 : px + (i % 17) * 12 + 3, cy = big ? py + 31 : py + 14 * (i / 17) + 17;
-  const float sz = big ? 26 : 13;
+  /* the icon's centre: the full-size icons are 32 wide, drawn from px + i * 26 + 1 (origin x 0); the half-size ones 16 wide */
+  const float cx = big ? px + i * 26 + 1 + 16 : px + (i % 17) * 12 + 3 + 8, cy = big ? py + 31 : py + 14 * (i / 17) + 17;
+  const float sz = big ? 26 : 13, left = cx - sz / 2;
   const rr_color c = RR_RGBA(0xf8, 0xe0, 0x58, 255);
-  rr_rect(cx - 1, cy - sz / 2, sz, 1, c);
-  rr_rect(cx - 1, cy + sz / 2 - 1, sz, 1, c);
-  rr_rect(cx - 1, cy - sz / 2, 1, sz, c);
-  rr_rect(cx + sz - 2, cy - sz / 2, 1, sz, c);
+  rr_rect(left, cy - sz / 2, sz, 1, c);
+  rr_rect(left, cy + sz / 2 - 1, sz, 1, c);
+  rr_rect(left, cy - sz / 2, 1, sz, c);
+  rr_rect(left + sz - 1, cy - sz / 2, 1, sz, c);
+  if (!S.item_open) return;
   const menu_held_item* it = &m->items[i];
   char name[64];
   if (it->count > 1)
@@ -609,6 +612,7 @@ static bool set_cursor(int c) {
 
 static void set_item_sel(int i) {
   S.item_sel = i;
+  S.item_open = false;
   S.item_desc[0] = 0;
   S.item_desc_lines = 0;
   if (i < 0 || i >= S.mon.nitems) {
@@ -765,12 +769,19 @@ bool summary_input(mui_button b) {
       }
     }
   } else if (S.item_sel >= 0) {
-    /* the item window is up: Left/Right pick another item, anything else closes it (B only closes it) */
+    /* the cursor is on the held items: Left/Right move it, A opens the item's window (or closes it), B closes the window and then
+     * leaves the row, Up/Down/Start leave it */
     if (b == MB_LEFT || b == MB_RIGHT) {
       const int n = S.mon.nitems, i = S.item_sel + (b == MB_RIGHT ? 1 : -1);
       if (i >= 0 && i < n) set_item_sel(i);
       success = i >= 0 && i < n;
       error = !success;
+    } else if (b == MB_ACTION) {
+      S.item_open = !S.item_open;
+      success = true;
+    } else if (b == MB_CANCEL && S.item_open) {
+      S.item_open = false;
+      success = true;
     } else {
       set_item_sel(-1);
       mui_sfx("ui/select");
@@ -827,6 +838,31 @@ bool summary_input(mui_button b) {
   else if (error)
     mui_sfx("ui/error");
   return success || error;
+}
+
+bool summary_touch(float x, float y) {
+  if (!S.active || S.transitioning || S.move_select || S.cursor != SUMMARY_STATS) return false;
+  const menu_mon* m = &S.mon;
+  const float py = MUI_H - frame_h(page_key(SUMMARY_STATS)), px = PAGE_X;
+  const bool big = m->nitems <= 8;
+  int hit = -1;
+  for (int i = 0; i < m->nitems; i++) {
+    const float cx = big ? px + i * 26 + 1 + 16 : px + (i % 17) * 12 + 3 + 8, cy = big ? py + 31 : py + 14 * (i / 17) + 17;
+    const float w = big ? 26 : 12, h = big ? 26 : 12;
+    if (x >= cx - w / 2 && x < cx + w / 2 && y >= cy - h / 2 && y < cy + h / 2) hit = i;
+  }
+  if (hit >= 0 && (hit != S.item_sel || !S.item_open)) { /* a tap is the cursor and A in one */
+    set_item_sel(hit);
+    S.item_open = true;
+    mui_sfx("ui/select");
+    return true;
+  }
+  if (S.item_sel >= 0) {
+    set_item_sel(-1);
+    mui_sfx("ui/select");
+    return true;
+  }
+  return false;
 }
 
 /* ------------------------------------------------------------ update / draw */
