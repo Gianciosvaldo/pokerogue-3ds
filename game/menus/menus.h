@@ -323,6 +323,9 @@ bool biome_map_active(void);
 bool biome_map_input(mui_button b);
 void biome_map_update(float dt_ms);
 void biome_map_draw(void);
+/* The same list on the bottom screen (canvas origin (0, 30)), and a tap there: (x, y) in that canvas; true when it chose a row */
+void biome_map_draw_bottom(void);
+bool biome_map_touch(float x, float y);
 
 /* ------------------------------------------------------------ shop & reward select UI */
 

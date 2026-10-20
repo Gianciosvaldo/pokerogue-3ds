@@ -17,6 +17,9 @@
 #define ROW_H 14
 #define LIST_Y 74
 #define LIST_W 296       /* the list's text is cut to this many px */
+#define HINT_Y 222       /* the button hints under the list */
+#define HINT_GAP 18      /* between two hints */
+#define LIST_BOTTOM (LIST_Y - 4 + VISIBLE * ROW_H + 8) /* the list window's lower edge */
 
 enum { TONE_NORMAL, TONE_FAINT, TONE_NOTE };
 
@@ -197,12 +200,52 @@ static bool pm_input(ui_screen* s, ui_button b) {
   }
 }
 
+/* The hints on the bottom line are also what a tap on them presses: A: continue, B: back (hint_x says where each begins) */
+static const char HINT_A[] = "A: continue", HINT_B[] = "B: back", HINT_PAGES[] = "</>: turn   ^/v: scroll";
+
+static void hint_x(float* a, float* b, float* pages) {
+  *a = 10;
+  *b = *a + text_width(TS_INSTRUCTIONS_TEXT, HINT_A, NULL) + HINT_GAP;
+  *pages = *b + text_width(TS_INSTRUCTIONS_TEXT, HINT_B, NULL) + HINT_GAP;
+}
+
+/* A tap on the bottom screen (physical px, which this screen draws in): the header turns the page (its left half back, its right half on),
+ * the list scrolls half a page (its upper half up, its lower half down), and the hints under it are the A and B they name. */
+static bool pm_touch(ui_screen* s, float x, float y) {
+  if (y >= LIST_BOTTOM) {
+    float a, b, p;
+    hint_x(&a, &b, &p);
+    if (x < b - HINT_GAP / 2) return pm_input(s, BTN_ACTION);
+    if (x < p - HINT_GAP / 2) return pm_input(s, BTN_CANCEL);
+    return false;
+  }
+  if (P.rep->history.n_turns == 0) return false;
+  if (y < LIST_Y - 4) {
+    if (y >= 26) return false;
+    return pm_input(s, x < 160 ? BTN_LEFT : BTN_RIGHT);
+  }
+  const int max = P.n_rows - VISIBLE > 0 ? P.n_rows - VISIBLE : 0;
+  const bool up = y < LIST_Y - 4 + (LIST_BOTTOM - (LIST_Y - 4)) / 2;
+  P.scroll += up ? -VISIBLE / 2 : VISIBLE / 2;
+  if (P.scroll > max) P.scroll = max;
+  if (P.scroll < 0) P.scroll = 0;
+  return true;
+}
+
 /* ------------------------------------------------------------------ drawing */
 
 static void line(float x, float y, const char* s, text_style st, rr_color color) {
   text_opts o = text_defaults();
   if (color) o.color = color;
   text_draw(st, x, y, s, &o);
+}
+
+static void draw_hints(bool pages) {
+  float a, b, p;
+  hint_x(&a, &b, &p);
+  line(a, HINT_Y, HINT_A, TS_INSTRUCTIONS_TEXT, 0);
+  line(b, HINT_Y, HINT_B, TS_INSTRUCTIONS_TEXT, 0);
+  if (pages) line(p, HINT_Y, HINT_PAGES, TS_INSTRUCTIONS_TEXT, 0);
 }
 
 static void draw_top(void) {
@@ -262,7 +305,7 @@ static void draw_bottom(void) {
     line(10, 5, "Last turns", TS_WINDOW, 0);
     line(10, 40, "No battle events were recorded for this run.", TS_WINDOW, 0);
     if (r->began_mid) line(10, 62, "The run was continued from a save.", TS_INSTRUCTIONS_TEXT, 0);
-    line(10, 222, "A: continue    B: back", TS_INSTRUCTIONS_TEXT, 0);
+    draw_hints(false);
     return;
   }
   line(10, 5, P.head, TS_WINDOW, 0);
@@ -292,7 +335,7 @@ static void draw_bottom(void) {
     snprintf(more, sizeof more, "%d more below", P.n_rows - P.scroll - VISIBLE);
     line(236, LIST_Y + VISIBLE * ROW_H + 6, more, TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
   }
-  line(10, 222, "A: continue   B: back   </>: turn   ^/v: scroll", TS_INSTRUCTIONS_TEXT, 0);
+  draw_hints(true);
 }
 
 static void pm_draw(ui_screen* s, rr_screen which) {
@@ -303,7 +346,7 @@ static void pm_draw(ui_screen* s, rr_screen which) {
     draw_bottom();
 }
 
-static ui_screen g_screen = {"postmortem", UI_FADE, NULL, NULL, NULL, pm_input, NULL, pm_draw, NULL};
+static ui_screen g_screen = {"postmortem", UI_FADE, NULL, NULL, NULL, pm_input, NULL, pm_draw, NULL, pm_touch};
 
 bool postmortem_open(const pm_args* a) {
   if (!a || !a->report || !a->report->valid) return false;

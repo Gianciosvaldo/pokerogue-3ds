@@ -80,10 +80,20 @@ void mui_set_origin(rr_screen s, int px, int py) { (void)s; (void)px; (void)py; 
 void mui_tick(float dt_ms) { (void)dt_ms; }
 void biome_map_open(const biome_map_args* args, const biome_map_events* ev) { (void)args; (void)ev; }
 void biome_map_close(void) {}
-bool biome_map_active(void) { return false; }
+static bool g_map_on, g_map_hit;
+static int g_map_touches, g_map_top_draws, g_map_bottom_draws;
+static float g_map_tx, g_map_ty;
+bool biome_map_active(void) { return g_map_on; }
 bool biome_map_input(mui_button b) { (void)b; return false; }
 void biome_map_update(float dt_ms) { (void)dt_ms; }
-void biome_map_draw(void) {}
+void biome_map_draw(void) { g_map_top_draws++; }
+void biome_map_draw_bottom(void) { g_map_bottom_draws++; }
+bool biome_map_touch(float x, float y) {
+  g_map_touches++;
+  g_map_tx = x;
+  g_map_ty = y;
+  return g_map_hit;
+}
 
 typedef struct {
   int reward_selected;
@@ -311,6 +321,26 @@ int main(void) {
   rh_close();
   assert(g_pushed == NULL);
   printf("The reward screen takes taps through its host PASSED.\n");
+
+  /* With the biome map up the host hands a tap to its list (canvas y = physical y - 30) and the shop gets none; the list is drawn on
+   * the top screen and, for the taps, on the bottom one */
+  g_map_on = true;
+  g_map_hit = true;
+  rh_open_biome_map(&(biome_map_args){0}, &(biome_map_events){0});
+  assert(g_pushed && g_pushed->touch);
+  res.reward_selected = -1;
+  assert(g_pushed->touch(g_pushed, 200.0f, 150.0f));
+  assert(g_map_touches == 1 && g_map_tx == 200.0f && g_map_ty == 120.0f && res.reward_selected == -1);
+  g_map_hit = false;
+  assert(!g_pushed->touch(g_pushed, 10.0f, 30.0f) && g_map_touches == 2 && g_map_ty == 0.0f);
+  g_pushed->draw(g_pushed, RR_TOP);
+  assert(g_map_top_draws == 1 && g_map_bottom_draws == 0);
+  g_pushed->draw(g_pushed, RR_BOTTOM);
+  assert(g_map_top_draws == 1 && g_map_bottom_draws == 1);
+  g_map_on = false;
+  rh_close();
+  assert(g_pushed == NULL);
+  printf("The biome map takes taps through the reward host PASSED.\n");
   rh_open_shop(&args, &ev); /* the checks below go on with the shop open */
 
   /* Drawing every state must not crash (the stubs draw nothing) */
