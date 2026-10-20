@@ -8,12 +8,12 @@
 #include <string.h>
 
 #include "battle_anim.h"
+#include "field_border.h"
 #include "gm_enum_names.h"
 #include "i18n.h"
 #include "menus.h"
 #include "pr_data.h"
 #include "pr_enums.h"
-#include "screen_clip.h"
 #include "tween.h"
 #include "ui.h"
 #include "ui_text.h"
@@ -1789,38 +1789,11 @@ static void bv_update(ui_screen* s, float dt) {
   }
 }
 
-/* The 40 px side bands and 30 px top and bottom bands of the 400x240 top screen around upstream's 320x180 field (lorenzo,
- * 2026-10-19: widen the background, never scale the field). The biome's background is mirrored out from each edge, so it meets the
- * field's own copy seamlessly; drawn after the field, it also hides what slides past the field's edge as the black bands did. */
+/* The 40 px side bands and 30 px top and bottom bands of the 400x240 top screen around upstream's 320x180 field (field_border.h). */
 static void draw_border(void) {
   char k[64];
   snprintf(k, sizeof k, "images/arenas/%s_bg", B.biome);
-  const rr_frame* f = img_frame(k, NULL);
-  if (!f) {
-    rr_rect(0, 0, 40, 240, RR_RGBA(0, 0, 0, 255));
-    rr_rect(360, 0, 40, 240, RR_RGBA(0, 0, 0, 255));
-    rr_rect(0, 0, 400, 30, RR_RGBA(0, 0, 0, 255));
-    rr_rect(0, 210, 400, 30, RR_RGBA(0, 0, 0, 255));
-    return;
-  }
-  const float fw = f->src_w, fh = f->src_h;
-  /* the bands: left, right, top, bottom (the corners go with the top and bottom ones) */
-  static const float BAND[4][4] = {{0, 30, 40, 180}, {360, 30, 40, 180}, {0, 0, 400, 30}, {0, 210, 400, 30}};
-  for (int b = 0; b < 4; b++) {
-    clip_rect(BAND[b][0], BAND[b][1], BAND[b][2], BAND[b][3]);
-    for (int tx = -1; tx <= 1; tx++)
-      for (int ty = -1; ty <= 1; ty++) {
-        if (!tx && !ty) continue;
-        rr_draw_opts o = RR_DEFAULT_OPTS;
-        o.scale_x = tx ? -1 : 1;
-        o.scale_y = ty ? -1 : 1;
-        /* a mirrored copy is drawn with its edge on the field's edge: x 40 for the left one (it runs leftwards), 40 + 2 * 320 for the
-         * right one; the same with 30 and 30 + 2 * 180 vertically */
-        const float x = tx < 0 ? 40 : tx > 0 ? 40 + 2 * fw : 40, y = ty < 0 ? 30 : ty > 0 ? 30 + 2 * fh : 30;
-        rr_draw(f, x, y, &o);
-      }
-    clip_off();
-  }
+  field_border_draw(k);
 }
 
 static void bv_draw(ui_screen* s, rr_screen which) {

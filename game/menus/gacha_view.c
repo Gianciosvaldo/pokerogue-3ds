@@ -43,16 +43,26 @@ static void alpha_image(const char* key, const char* frame, float x, float y, fl
 /* ------------------------------------------------------------------ top screen */
 
 static void draw_background(void) {
-  /* upstream's nine-slice of default_bg: its first 16 rows as they are, the rest stretched down to the bottom of the canvas */
+  /* upstream's nine-slice of default_bg: its first 16 rows as they are, the rest stretched down to the bottom of the screen; the canvas'
+   * copy is the middle one and a mirrored copy fills each side band (the art is the same all along its width) */
+  const float sw = W + 2.0f * GV_SIDE, sh = H + 2.0f * GV_BAND;
   const rr_frame* f = mui_frame("arenas/default_bg", NULL);
   if (!f) {
-    rr_rect(0, 0, W, H, RR_RGBA(0xd8, 0xf0, 0xc8, 255));
+    rr_rect(-GV_SIDE, -GV_BAND, sw, sh, RR_RGBA(0xd8, 0xf0, 0xc8, 255));
     return;
   }
-  rr_draw_opts o = RR_DEFAULT_OPTS;
-  o.scale_y = (H - 16.0f) / (float)(f->src_h - 16);
-  rr_draw(f, 0, 16.0f - 16.0f * o.scale_y, &o);
-  rr_draw_cropped(f, 0, 0, 320, 16, &RR_DEFAULT_OPTS); /* the fixed rows over the stretched copy's first rows */
+  const float sy = (sh - 16.0f) / (float)(f->src_h - 16);
+  for (int c = -1; c <= 1; c++) {
+    mui_clip(c < 0 ? -GV_SIDE : c > 0 ? W : 0.0f, -GV_BAND, c ? GV_SIDE : W, sh);
+    rr_draw_opts o = RR_DEFAULT_OPTS;
+    o.scale_x = c ? -1.0f : 1.0f; /* a mirrored copy is drawn from its edge on the canvas' edge, running outwards */
+    o.scale_y = sy;
+    const float x = c > 0 ? 2.0f * (float)f->src_w : 0.0f;
+    rr_draw(f, x, -GV_BAND + 16.0f - 16.0f * sy, &o);
+    o.scale_y = 1.0f;
+    rr_draw_cropped(f, x, -GV_BAND, f->src_w, 16, &o); /* the fixed rows over the stretched copy's first rows */
+    mui_clip_off();
+  }
 }
 
 /* the machine's art at (cx, cy): the hatch's frame (1 closed .. 4 open, upstream's "open" / "close" animations) and the underlay that
@@ -72,7 +82,7 @@ static void draw_machine_art(int i, float cx, float cy, int hatch) {
 
 static void draw_machine(const gv_state* s, int i) {
   const float cx = 180.0f * ((float)i - s->slide), cy = 18.0f;
-  if (cx > W || cx + 320.0f < 0) return;
+  if (cx > W + GV_SIDE || cx + 320.0f < -GV_SIDE) return;
   draw_machine_art(i, cx, cy, 1);
   /* the plate */
   const float px = cx + 160, py = cy + 46;
@@ -89,7 +99,7 @@ static void draw_machine(const gv_state* s, int i) {
 void gv_draw_top(const gv_state* s) {
   mui_set_origin(RR_TOP, 40, 30); /* the field canvas centred on the 400 x 240 screen */
   draw_background();
-  mui_clip(0, 0, W, H);
+  mui_clip(-GV_SIDE, -GV_BAND, W + 2.0f * GV_SIDE, H + 2.0f * GV_BAND);
   for (int i = 0; i < GV_MACHINES; i++) draw_machine(s, i);
   mui_clip_off();
   /* the species of the day on the legendary machine's plate (after the clip: it would otherwise not show) */
@@ -103,18 +113,19 @@ void gv_draw_top(const gv_state* s) {
     }
   }
 
-  /* the voucher counters, top right: each a 56 x 22 window, regular nearest the corner */
+  /* the voucher counters, in the screen's top right corner: each a 56 x 22 window, regular nearest the corner */
   for (int k = 0; k < GV_VOUCHERS; k++) {
-    const float wx = W - 56.0f * (float)(k + 1);
-    mui_window(wx, 0, 56, 22);
-    text8_style(wx + 8, 7, s->voucher_count[k], TS_WINDOW);
+    const float wx = W + GV_SIDE - 56.0f * (float)(k + 1), wy = -GV_BAND;
+    mui_window(wx, wy, 56, 22);
+    text8_style(wx + 8, wy + 7, s->voucher_count[k], TS_WINDOW);
     rr_draw_opts ic = RR_DEFAULT_OPTS;
     ic.scale_x = ic.scale_y = 0.5f; /* upstream: 32 px icons at 0.5 */
-    mui_image_ex("items", VOUCHER_ICON[k], wx + 37, 2, &ic);
+    mui_image_ex("items", VOUCHER_ICON[k], wx + 37, wy + 2, &ic);
   }
 
-  /* the options, right: a window above the message box with a row per option */
-  const float row = 16.0f, oh = 16.0f + row * GV_OPTIONS - 4.0f, ox = W - 96.0f, oy = 148.0f - oh;
+  /* the message box runs along the screen's foot, edge to edge; the options sit above it, at the screen's right edge */
+  const float my = H + GV_BAND - 32.0f;
+  const float row = 16.0f, oh = 16.0f + row * GV_OPTIONS - 4.0f, ox = W + GV_SIDE - 96.0f, oy = my - oh;
   mui_window(ox, oy, 96, oh);
   for (int i = 0; i < GV_OPTIONS; i++) {
     const rr_color c = s->opt[i].can_buy ? mui_style_color(TS_WINDOW, false) : MUI_RGB(0x908e88);
@@ -129,9 +140,8 @@ void gv_draw_top(const gv_state* s) {
   }
   if (s->mode == GV_MENU && s->sel >= 0 && s->sel < GV_OPTIONS) mui_image("ui/cursor", NULL, ox + 6, oy + 8 + row * (float)s->sel + 8, 0.5f, 0.5f);
 
-  /* the message box */
-  mui_window(0, 148, W, 32);
-  text8_style(8, 154, s->top_message, TS_WINDOW);
+  mui_window(-GV_SIDE, my, W + 2.0f * GV_SIDE, 32);
+  text8_style(8 - GV_SIDE, my + 6, s->top_message, TS_WINDOW);
 }
 
 /* ------------------------------------------------------------------ bottom screen */
@@ -237,17 +247,17 @@ static void draw_egg(const gv_egg* e) {
 void gv_draw_reveal_top(const gv_reveal* s) {
   mui_set_origin(RR_TOP, 40, 30);
   draw_background();
-  /* the machine the eggs came out of, its hatch opening while they leave (behind the eggs, inside the field) */
-  mui_clip(0, 0, W, H);
+  /* the machine the eggs came out of, its hatch opening while they leave (behind the eggs) */
+  mui_clip(-GV_SIDE, -GV_BAND, W + 2.0f * GV_SIDE, H + 2.0f * GV_BAND);
   if (s->machine >= 0 && s->machine < GV_MACHINES) draw_machine_art(s->machine, 0.0f, 18.0f, s->hatch);
   mui_clip_off();
   if (s->top_title[0]) {
-    mui_window(60, 0, 200, s->top_sub[0] ? 30 : 20);
-    text8_centred(160, 4, s->top_title, TS_WINDOW);
-    if (s->top_sub[0]) text8(160 - (float)mui_text_width(FONT, s->top_sub) / 2.0f, 15, s->top_sub, MUI_RGB(0xa8a8a0));
+    mui_window(60, -GV_BAND, 200, s->top_sub[0] ? 30 : 20);
+    text8_centred(160, 4 - GV_BAND, s->top_title, TS_WINDOW);
+    if (s->top_sub[0]) text8(160 - (float)mui_text_width(FONT, s->top_sub) / 2.0f, 15 - GV_BAND, s->top_sub, MUI_RGB(0xa8a8a0));
   }
-  /* the chute is above the field's top edge: the eggs come in through it, so nothing is drawn outside the field */
-  mui_clip(0, 0, W, H);
+  /* the chute is above the screen's top edge: the eggs come in through it, so nothing is drawn outside the screen */
+  mui_clip(-GV_SIDE, -GV_BAND, W + 2.0f * GV_SIDE, H + 2.0f * GV_BAND);
   for (int i = 0; i < s->n && i < GV_CAP_MAX; i++)
     if (s->egg[i].phase != 0) draw_egg(&s->egg[i]);
   mui_clip_off();
