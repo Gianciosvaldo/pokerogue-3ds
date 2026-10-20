@@ -15,5 +15,5 @@ RAW="$HERE/build/entry-allies-$SEED.txt"; TURNS="$HERE/build/entry-allies-turns-
 (cd "$UP" && NODE_OPTIONS=--max-old-space-size=4096 ENTRY_ALLIES_SEED="$SEED" ENTRY_ALLIES_OUT="$RAW" node node_modules/vitest/vitest.mjs run test/tests/zz-dump/entry-allies.producer.test.ts --maxWorkers=1)
 (cd "$UP" && NODE_OPTIONS=--max-old-space-size=6144 DOUBLES_N=8192 DOUBLES_SEED="$SEED" DOUBLES_OUT="$TURNS" node node_modules/vitest/vitest.mjs run test/tests/zz-dump/entry-allies-turns.producer.test.ts --maxWorkers=1)
 export TURNTEST_LOCALES="$UP/locales/en"
-"$HERE/build/wide-combat-test" "$TURNS"
+python3 "$HERE/tools/check-complete-turns.py" "$HERE/build/wide-combat-test" "$TURNS"
 python3 "$HERE/tools/check-entry-allies-proof.py" "$RAW"

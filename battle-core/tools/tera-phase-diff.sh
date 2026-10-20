@@ -15,7 +15,7 @@ TRACE="$HERE/build/tera-phase-$SEED.txt"; TURNS="$HERE/build/tera-phase-turns-$S
 (cd "$UP" && NODE_OPTIONS=--max-old-space-size=6144 TERA_SEED="$SEED" TERA_OUT="$TRACE" node node_modules/vitest/vitest.mjs run test/tests/zz-dump/tera-phase.producer.test.ts --maxWorkers=1)
 (cd "$UP" && NODE_OPTIONS=--max-old-space-size=6144 DOUBLES_N=8192 DOUBLES_SEED="$SEED" DOUBLES_OUT="$TURNS" node node_modules/vitest/vitest.mjs run test/tests/zz-dump/tera-phase-turns.producer.test.ts --maxWorkers=1)
 TURNTEST_LOCALES="$UP/locales/en" "$HERE/build/tera-phase-test" "$TRACE"
-TURNTEST_LOCALES="$UP/locales/en" "$HERE/build/wide-combat-test" "$TURNS"
+TURNTEST_LOCALES="$UP/locales/en" python3 "$HERE/tools/check-complete-turns.py" "$HERE/build/wide-combat-test" "$TURNS"
 TURNTEST_LOCALES="$UP/locales/en" python3 "$HERE/tools/check-tera-phase-proof.py" "$TRACE" "$TURNS"
 python3 "$HERE/tools/build-tera-cleanup-proof.py" "$UP/test/tests/zz-dump/tera-cleanup.producer.test.ts"
 CLEANUP="$HERE/build/tera-cleanup-$SEED.txt"
