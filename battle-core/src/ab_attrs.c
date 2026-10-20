@@ -1225,8 +1225,25 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         if (!pp->simulated) pr_add_tag(bt, c->e, (pr_pokemon *)p, x->tagType, x->turnCount, 0, -1);
         return 1;
     }
-    case PR_AC_TerrainEventTypeChangeAbAttr:                            /* Mimicry: its type change isn't ported */
-        return p->terastallized ? 0 : -1;
+    case PR_AC_TerrainEventTypeChangeAbAttr: {                          /* Mimicry */
+        GATE(!p->terastallized);
+        int8_t types[PR_MAX_TYPES];
+        int type = bt->terrain == TERRAIN_ELECTRIC ? POKEMON_TYPE_ELECTRIC
+                 : bt->terrain == TERRAIN_MISTY ? POKEMON_TYPE_FAIRY
+                 : bt->terrain == TERRAIN_GRASSY ? POKEMON_TYPE_GRASS
+                 : bt->terrain == TERRAIN_PSYCHIC ? POKEMON_TYPE_PSYCHIC : -1;
+        int n;
+        if (type >= 0) { types[0] = (int8_t)type; n = 1; }
+        else n = pr_get_types(p, types, PR_TYPES_NO_TERA | PR_TYPES_BYPASS_SUMMON | PR_TYPES_IGNORE_THIRD);
+        if (n > 0) {
+            pr_pokemon *w = (pr_pokemon *)p;
+            for (int i = 0; w->added_type && i < n; i++)
+                if (types[i] == w->added_type) { w->added_type = 0; break; }
+            /* This override mutates types even for a simulated apply. */
+            pr_set_summon_types(bt, w, types, n);
+        }
+        return 1;
+    }
     /* ---- on-hit abilities: PostDefend (the Pokemon hit), PostReceiveCrit, PostAttack (the attacker).
      * The ones whose effect adds a tag, weather, terrain, an ability or an item run their canApply
      * (random rolls included, so the RNG stays in step) and report themselves when it holds. */

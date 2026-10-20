@@ -278,6 +278,9 @@ void pr_recalculate_stats(pr_battle *bt, pr_pokemon *p)
 
 void pr_calculate_stats(pr_battle *bt, pr_pokemon *p)
 {
+    if (bt->game_mode == GAME_MODES_CHALLENGE && (!bt->challenge_flags_known
+        || (bt->challenge_flags & (1u << CHALLENGES_FLIP_STAT))))
+        pr_note_unported(bt, PR_FEAT_WAVE);
     const pr_form *f = pr_pokemon_base_form(p);
     const pr_form *ff = pr_pokemon_fusion_form(p);
     double base[6];
@@ -453,6 +456,15 @@ int pr_get_types(const pr_pokemon *p, int8_t out[PR_MAX_TYPES], unsigned flags)
         memcpy(base, p->summon_types, (size_t)nb);
     } else {
         const pr_form *f = pr_apparent_form(p, illusion);
+        if ((flags & PR_TYPES_BYPASS_SUMMON) && p->transformed) {
+            /* getSpeciesForm(bypassSummonData, useIllusion) bypasses the
+             * copied form as well as summonData.types. */
+            if (illusion) {
+                pr_pokemon identity = {0};
+                identity.species = p->illusion.species; identity.form = p->illusion.form;
+                f = pr_pokemon_base_form(&identity);
+            } else f = pr_pokemon_base_form(p);
+        }
         const pr_form *ff = pr_apparent_fusion_form(p, illusion);
         int8_t type1 = f->type1;
         int8_t second_type = f->type2 < 0 ? POKEMON_TYPE_UNKNOWN : f->type2;
@@ -667,7 +679,9 @@ double js_round(double x)
 bool pr_has_passive(pr_battle *bt, const pr_pokemon *p)
 {
     int gm = bt->game_mode, w = bt->wave_index;
-    if (gm == GAME_MODES_CHALLENGE) pr_note_unported(bt, PR_FEAT_WAVE);
+    if (gm == GAME_MODES_CHALLENGE && (!bt->challenge_flags_known
+        || (bt->challenge_flags & (1u << CHALLENGES_PASSIVES))))
+        pr_note_unported(bt, PR_FEAT_WAVE);
     bool endless = gm == GAME_MODES_ENDLESS || gm == GAME_MODES_SPLICED_ENDLESS;
     if (!p->is_player && ((gm == GAME_MODES_CLASSIC && w == 200) || (endless && (w % 250 == 0 || w % 1000 == 0))))
         return false;
@@ -712,7 +726,8 @@ double pr_get_weight(pr_battle *bt, const pr_pokemon *p)
 {
     const pr_battler_tag *at = pr_find_battler_tag_class(p, PR_TAGCLASS_AUTOTOMIZED);
     double removed = at ? 100.0 * at->autotomize_count : 0;
-    const pr_form *f = pr_pokemon_form(p);
+    /* Native getWeight reads raw species/form, including while transformed. */
+    const pr_form *f = pr_pokemon_base_form(p);
     double w = f->weight_x10 / 10.0 - removed; /* weight_x10 / 10.0 is the same double as upstream's decimal literal */
     pr_ab_params pp = {.pokemon = p, .move = -1, .simulated = false, .value = &w}; /* not simulated upstream */
     pr_apply_ab_attrs(bt, PR_AC_WeightMultiplierAbAttr, &pp);

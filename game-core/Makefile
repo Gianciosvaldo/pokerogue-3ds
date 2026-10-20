@@ -768,3 +768,16 @@ manage-items-host-test: $(BUILD)/manage_items_host_test
 $(BUILD)/manage_items_host_test: tests/manage_items_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: manage-items-host-test
+all: $(BUILD)/keldeo_host_test
+test: keldeo-host-test
+keldeo-host-test: $(BUILD)/keldeo_host_test
+	$(BUILD)/keldeo_host_test
+$(BUILD)/keldeo_host_test: tests/keldeo_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+.PHONY: keldeo-host-test
+
+all: $(BUILD)/keldeo_learn_test
+$(BUILD)/keldeo_learn_test: tests/keldeo_learn_test.c $(BATTLE_CORE)/build/wide-substitute-frame.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) -I$(BATTLE_CORE)/build $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+$(BATTLE_CORE)/build/wide-substitute-frame.inc:
+	$(MAKE) -C $(BATTLE_CORE) build/wide-substitute-frame.inc

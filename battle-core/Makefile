@@ -596,3 +596,11 @@ $(BUILD)/tera-cleanup-test: tests/tera-cleanup-test.c $(BUILD)/libprcore.a
 tera-phase-host-test: $(BUILD)/tera-phase-test
 	$(BUILD)/tera-phase-test --selftest
 .PHONY: tera-phase-host-test
+
+all: $(BUILD)/keldeo-forms-test
+$(BUILD)/keldeo-forms-test: tests/keldeo-forms-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/mimicry-test
+$(BUILD)/mimicry-test: tests/mimicry-test.c tests/keldeo-forms-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
