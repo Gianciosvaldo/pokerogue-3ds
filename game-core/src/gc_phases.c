@@ -22,10 +22,7 @@ static void queue_battle_end(gc_run *run)
     const bool endless = mode == GAME_MODES_ENDLESS || mode == GAME_MODES_SPLICED_ENDLESS;
     const bool classic = mode == GAME_MODES_CLASSIC;
     if (endless || !pr_run_is_wave_final(mode, wave)) {
-        /* EggLapsePhase: increment egg hatch step counters */
-        if (run->sys) {
-            gc_system_increment_egg_steps(run->sys);
-        }
+        gc_rq_push(run, gc_rp(RP_EGG_LAPSE, 0, 0, 0));
         if (classic && wave == 165) {
             gc_rphase p = gc_rp(RP_MODIFIER_REWARD, 0, 0, 0); p.key = "LOCK_CAPSULE"; gc_rq_push(run, p);
         }
@@ -672,6 +669,12 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         return evolution_start(run, p);
     case RP_REWARD_FORM:
         gc_reward_change_form(run, p->a, p->b);
+        return true;
+    case RP_EGG_LAPSE:
+        if (run->sys) {
+            gc_system_increment_egg_steps(run->sys);
+            gc_system_hatch_ready_eggs(run);
+        }
         return true;
     case RP_BATTLE_END:
         battle_end(run, p);

@@ -27,7 +27,7 @@ jobs:
       - name: Run game-core tests
         run: make -C game-core test
       - name: Build encounter and money native comparison runners
-        run: make -C game-core build/sync_nature_test build/wide_money_test build/endless_terminal_test build/tm_compat_diff_test
+        run: make -C game-core build/sync_nature_test build/wide_money_test build/endless_terminal_test build/tm_compat_diff_test build/egg_hatch_diff_test
 
   game-tests:
     runs-on: ubuntu-24.04
