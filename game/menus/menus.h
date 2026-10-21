@@ -88,6 +88,8 @@ typedef struct {
   uint8_t nature;         /* Nature */
   uint32_t stats[6];      /* getStat, in PERMANENT_STATS order (stats[0] unused: hp/max_hp) */
   uint8_t ivs[6];
+  bool show_battle_stages; /* active party member: show current stages beside base stats */
+  int8_t stat_stages[7]; /* ATK DEF SPATK SPDEF SPD ACC EVA */
   uint32_t exp, next_lv_exp; /* exp and getLevelTotalExp(level + 1) - exp (0 at the level cap) */
   float exp_ratio;        /* levelExp / getLevelRelExp(level + 1), 0 at the level cap */
   uint8_t pokeball;       /* PokeballType */

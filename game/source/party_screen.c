@@ -110,6 +110,8 @@ static void gc_to_menu_mon(const gc_mon* gm, menu_mon* m) {
     m->stats[i] = (uint32_t)p->stats[i];
     m->ivs[i] = p->ivs[i];
   }
+  m->show_battle_stages = p->on_field;
+  memcpy(m->stat_stages, p->stat_stages, sizeof m->stat_stages);
   m->friendship = p->friendship;
   m->tera_type = p->tera_type;
   m->met_biome = -1;
@@ -149,6 +151,8 @@ static void ps_menu_mon(const pr_battle* bt, const pr_pokemon* p, menu_mon* m) {
     m->stats[i] = (uint32_t)p->stats[i];
     m->ivs[i] = p->ivs[i];
   }
+  m->show_battle_stages = p->on_field;
+  memcpy(m->stat_stages, p->stat_stages, sizeof m->stat_stages);
   m->friendship = p->friendship;
   m->tera_type = p->tera_type;
   m->met_biome = -1;

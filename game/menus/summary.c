@@ -421,9 +421,17 @@ static void draw_stats(float px, float py, bool main) {
       format_stat(b, sizeof b, m->max_hp, true);
       snprintf(v, sizeof v, "%s/%s", a, b);
     } else {
-      format_stat(v, sizeof v, m->stats[s], false);
+      format_stat(a, sizeof a, m->stats[s], false);
+      if (m->show_battle_stages) snprintf(v, sizeof v, "%s (%+d)", a, m->stat_stages[s-1]);
+      else snprintf(v, sizeof v, "%s", a);
     }
     mui_text_o(TS_WINDOW_ALT, gx + 93 + 93 * col, gy + 16 * row, 1, 0, v);
+  }
+
+  if (!ivs && m->show_battle_stages) {
+    char stages[96];
+    snprintf(stages, sizeof stages, "ACC %+d   EVA %+d", m->stat_stages[5], m->stat_stages[6]);
+    mui_text_o(TS_SUMMARY_STATS, px + 107, py + 48, 0.5f, 0, stages);
   }
 
   /* held items: upstream's getIcon(true) at scale 0.5, 17 a row. Up to 8 are drawn at full size in one row instead (lorenzo: the
