@@ -493,14 +493,14 @@ void pr_switch_summon_phase(pr_battle *bt, pr_engine *e, int ph)
     if (type == SWITCH_TYPE_BATON_PASS) {
         /* the other side's tags from the Pokemon leaving now come from the one coming in, on
          * getEnemyField() / getPlayerField(): the first one or two of that party, on the field
-         * or not. The Baton held item (SwitchEffectTransferModifier) moving over is a modifier,
-         * which summon() below reports. */
+         * or not. */
         int other = 1 - side, n = bt->double_battle ? 2 : 1;
         for (int k = 0; k < n; k++) {
             pr_pokemon *q = bt->n_party[other] ? (k < bt->n_party[other] ? bt->party[other][k] : NULL)
                                                : bt->field[other * 2 + k];
             if (q) pr_transfer_tags_by_source_id(q, (int64_t)last->id, (int64_t)in->id);
         }
+        pr_transfer_baton_on_switch(bt,e,last,in);
     }
     bt->party[side][slot] = last;
     bt->party[side][field] = in;

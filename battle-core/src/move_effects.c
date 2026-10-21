@@ -1215,6 +1215,7 @@ const char *pr_held_item_name_key(const pr_modifier *m)
     case PR_MOD_DAMAGE_MONEY_REWARD: return "modifierType:ModifierType.GOLDEN_PUNCH.name";
     case PR_MOD_INSTANT_REVIVE: return "modifierType:ModifierType.REVIVER_SEED.name";
     case PR_MOD_TURN_STATUS_EFFECT: return m->status_effect==STATUS_EFFECT_TOXIC?"modifierType:ModifierType.TOXIC_ORB.name":m->status_effect==STATUS_EFFECT_BURN?"modifierType:ModifierType.FLAME_ORB.name":NULL;
+    case PR_MOD_SWITCH_EFFECT_TRANSFER: return "modifierType:ModifierType.BATON.name";
     case PR_MOD_CONTACT_HELD_TRANSFER: return "modifierType:ModifierType.GRIP_CLAW.name";
     case PR_MOD_TURN_HELD_TRANSFER: return "modifierType:ModifierType.MINI_BLACK_HOLE.name";
     case PR_MOD_TURN_HEAL: return "modifierType:ModifierType.LEFTOVERS.name";

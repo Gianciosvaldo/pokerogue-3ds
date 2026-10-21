@@ -847,3 +847,11 @@ grip-claw-host-test: $(BUILD)/grip_claw_host_test
 $(BUILD)/grip_claw_host_test: tests/grip_claw_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: grip-claw-host-test
+
+all: $(BUILD)/baton_host_test
+test: baton-host-test
+baton-host-test: $(BUILD)/baton_host_test
+	$(BUILD)/baton_host_test
+$(BUILD)/baton_host_test: tests/baton_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: baton-host-test
