@@ -112,6 +112,14 @@ static void to_modifier(const gc_item *it, pr_modifier *m, bool golden)
         m->unknown_subclass=it->pokemon_id || it->detached || !pr_mod_is_ported_item(m);
         return;
     }
+    if (!strcmp(it->key,"GRIP_CLAW")) {
+        m->cls=PR_MOD_CONTACT_HELD_TRANSFER;
+        m->mult=0.1;
+        m->virtual_stack_count=it->virtual_stack;
+        m->unknown_subclass=false;
+        m->unknown_subclass=(it->arg!=-1&&it->arg!=0)||!pr_mod_is_ported_item(m);
+        return;
+    }
     /* Transient Amulet Coin is a bounded Golden Punch dependency. */
     if (it->virtual_stack && strcmp(it->key, "WIDE_LENS")
         && strcmp(it->key, "GOLDEN_PUNCH") && strcmp(it->key, "AMULET_COIN") && strcmp(it->key, "MULTI_LENS")) return;
@@ -276,6 +284,7 @@ static bool transfer_stock(const pr_modifier *m,gc_item *it)
     case PR_MOD_BYPASS_SPEED_CHANCE:key="QUICK_CLAW";break;
     case PR_MOD_FLINCH_CHANCE:key="KINGS_ROCK";break;
     case PR_MOD_RESET_NEGATIVE_STAT_STAGE:key="WHITE_HERB";break;
+    case PR_MOD_CONTACT_HELD_TRANSFER:key="GRIP_CLAW";break;
     case PR_MOD_TURN_HELD_TRANSFER:key="MINI_BLACK_HOLE";break;
     case PR_MOD_BERRY:key="BERRY";arg=m->berry_type;break;
     case PR_MOD_MOVE_ACCURACY_BOOSTER:key="WIDE_LENS";break;

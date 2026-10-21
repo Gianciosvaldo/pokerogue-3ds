@@ -1371,3 +1371,6 @@ bounded raw, complete-turn and cleanup evidence and explicit caller limits.
 Shared held-stock transfer and preflight, the retained native corpora, and the
 remaining Pickup prerequisites are documented in
 [SCENE-TRANSFER-VALIDATION.md](SCENE-TRANSFER-VALIDATION.md).
+
+Grip Claw's attack callback, native source comparisons and inventory/save bridge
+are documented in [GRIP-CLAW-VALIDATION.md](GRIP-CLAW-VALIDATION.md).

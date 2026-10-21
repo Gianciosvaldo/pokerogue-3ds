@@ -839,3 +839,11 @@ $(BUILD)/command_stack_host_test: tests/command_stack_host_test.c ../game/includ
 
 $(BUILD)/tm_compat_diff_test: tests/tm_compat_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/grip_claw_host_test
+test: grip-claw-host-test
+grip-claw-host-test: $(BUILD)/grip_claw_host_test
+	$(BUILD)/grip_claw_host_test
+$(BUILD)/grip_claw_host_test: tests/grip_claw_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: grip-claw-host-test

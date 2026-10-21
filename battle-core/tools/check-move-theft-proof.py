@@ -31,10 +31,10 @@ with tempfile.TemporaryDirectory(prefix='theft-guards-',dir=r/'work')as tmp:
  for name,file,old,new in faults:
   s=(r/'battle-core/src'/file).read_text()
   if file=='item_transfer.c':
-   cut=s.index('bool pr_try_transfer_held_item(') if name in {'cross-side','sticky','cap','donor-stack','same-side-index','receiver-stack','stat-refresh','unburden'} else s.index('/* getOrInferTier caches positive tiers.');prefix=s[:cut];scope=s[cut:]
-  else:prefix='';scope=s
+   cut=s.index('bool pr_try_transfer_held_item(') if name in {'cross-side','sticky','cap','donor-stack','same-side-index','receiver-stack','stat-refresh','unburden'} else s.index('/* getOrInferTier caches positive tiers.');end=s.find('/* HeldItemTransferModifier.apply, specialized');end=len(s) if end<0 else end;prefix=s[:cut];scope=s[cut:end];suffix=s[end:]
+  else:prefix='';scope=s;suffix=''
   assert scope.count(old)==1,(name,scope.count(old))
-  source=tmp/(name+'.c');obj=tmp/(name+'.o');binary=tmp/name;source.write_text(prefix+scope.replace(old,new))
+  source=tmp/(name+'.c');obj=tmp/(name+'.o');binary=tmp/name;source.write_text(prefix+scope.replace(old,new)+suffix)
   subprocess.run(['gcc',*flags,'-c',source,'-o',obj],check=True,capture_output=True)
   subprocess.run(['gcc',*flags,r/'battle-core/tests/move-theft-test.c',obj,r/'battle-core/build/libprcore.a','-lm','-o',binary],check=True,capture_output=True)
   x=subprocess.run([binary,a.trace],env=env,capture_output=True);assert x.returncode==1,(name,x.returncode,x.stdout,x.stderr)
