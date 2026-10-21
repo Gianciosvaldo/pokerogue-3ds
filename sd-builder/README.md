@@ -4,6 +4,22 @@ One download and one double-click that put the game on a 3DS SD card, with nothi
 
 **The zip holds no Pokémon or PokeRogue content**, only the tool: the launcher, this folder's Python, the pipeline scripts, the Windows build of the audio encoder (183 KB) and the game app (`game/`: the 2.7 MB `.3dsx`, its stripped ELF, icon and HOME-menu banner, which is drawn by `tools/make_banner_art.py` from plain colours and a pixel font). The user's steps are in [`READ-ME-FIRST.txt`](READ-ME-FIRST.txt), which is also in the zip.
 
+## October 21 test build
+
+This refresh packages the app fixes through PRs #359 and #363–#367: battle-menu
+stack protection and TM shop flow, localized move names and own stat stages,
+egg hatching, ordinary-wild IV Scanner prompts, rival/player trainer visibility
+and the opening throw, and engine-confirmed final-blow reporting. Existing game
+speed settings remain available. `files/VERSION.txt` in the generated ZIP names
+the packaged app revision. Replace the old game file with the newly built one.
+
+The Windows and Linux builder workflows must finish successfully for this exact
+revision before calling the builder tested. The normal app/custom/save, core and
+3DS checks remain required; only the separate custom-only Task63 job is skipped.
+Physical-console checks remain necessary, especially repeated Fight/Ball menu
+entry, TM cancel/compatibility labels, and visible opening/rival trainers. Eggs
+unlock starter data after victories rather than adding Pokémon to the run party.
+
 ## What it does
 1. `BUILD-SD-CARD.bat` runs `setup.ps1`, which downloads a portable Python (python-build-standalone, 45 MB) with `curl.exe`, checks its SHA-256 and unpacks it with `tar.exe`. Both ship with Windows 10 1803 and later.
 2. `builder.py` does the rest, using only the standard library:
