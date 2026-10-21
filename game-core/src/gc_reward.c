@@ -691,6 +691,10 @@ int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, co
             return GC_APPLY_REFUSED;
         }
         gc_mon *m = &run->party[party];
+        if (!gc_mon_can_learn_tm(m, o->arg)) {
+            *why = "partyUiHandler:anyEffect";
+            return GC_APPLY_REFUSED;
+        }
         bool dup = false;
         for (int i = 0; i < m->n_used_tms; i++) if (m->used_tms[i] == (uint16_t)o->arg) dup = true;
         if (!dup && m->n_used_tms < 64) m->used_tms[m->n_used_tms++] = (uint16_t)o->arg;

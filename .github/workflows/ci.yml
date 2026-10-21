@@ -27,7 +27,7 @@ jobs:
       - name: Run game-core tests
         run: make -C game-core test
       - name: Build encounter and money native comparison runners
-        run: make -C game-core build/sync_nature_test build/wide_money_test build/endless_terminal_test
+        run: make -C game-core build/sync_nature_test build/wide_money_test build/endless_terminal_test build/tm_compat_diff_test
 
   game-tests:
     runs-on: ubuntu-24.04
@@ -42,3 +42,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build 3DS app
         run: docker run --rm -v "$PWD":/src -w /src/game devkitpro/devkitarm make
+      - name: Check the actual ARM startup stack and compiler frame reports
+        run: python3 game/tests/check_stack_size.py game/pokerogue.elf --usage-dir game/build

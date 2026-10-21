@@ -63,19 +63,29 @@ void mui_window(float x, float y, float w, float h) {
   (void)x; (void)y; (void)w; (void)h;
 }
 
+static char observed_text[128][192];
+static int observed_count;
+void pf_clear_text(void) { observed_count = 0; }
+int pf_text_count(const char* text) {
+  int n = 0;
+  for (int i = 0; i < observed_count; i++) n += !strcmp(observed_text[i], text);
+  return n;
+}
+
 int mui_text(mui_style s, float x, float y, const char* utf8) {
-  (void)s; (void)x; (void)y; (void)utf8;
+  (void)s; (void)x; (void)y;
+  if (observed_count < 128) snprintf(observed_text[observed_count++], 192, "%s", utf8);
   return 0;
 }
 
 int mui_text_o(mui_style s, float x, float y, float ox, float oy, const char* utf8) {
-  (void)s; (void)x; (void)y; (void)ox; (void)oy; (void)utf8;
-  return 0;
+  (void)ox; (void)oy;
+  return mui_text(s, x, y, utf8);
 }
 
 int mui_text_c(mui_style s, float x, float y, const char* utf8, rr_color col, rr_color sh) {
-  (void)s; (void)x; (void)y; (void)utf8; (void)col; (void)sh;
-  return 0;
+  (void)col; (void)sh;
+  return mui_text(s, x, y, utf8);
 }
 
 bool mui_image(const char* key, const char* frame, float x, float y, float ox, float oy) {

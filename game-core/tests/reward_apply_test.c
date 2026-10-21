@@ -1162,6 +1162,12 @@ static void test_tm_and_memory_mushroom(void)
     m->b.level = 50;
     gc_mon_recalc(&run, m);
 
+    /* TmModifierType.selectFilter uses current species/form, not the generic item filter. */
+    m->b.species = SPECIES_ID_CHARIZARD;
+    m->b.form = 0;
+    m->b.n_moves = 1;
+    m->b.moves[0] = MOVE_ID_TACKLE;
+
     /* TM application */
     const char *why = NULL;
     gc_offer tm_offer = offer("TM_COMMON", 0);
@@ -1182,6 +1188,50 @@ static void test_tm_and_memory_mushroom(void)
     CHECK(res == GC_APPLY_DONE);
     CHECK(m->n_used_tms == 1);
     gc_rq_clear(&run);
+
+    /* Already known and incompatible targets cannot consume an offer or queue a phase. */
+    gc_mon_set_move(m, 0, MOVE_ID_FLAMETHROWER);
+    CHECK(gc_mon_tm_state(m, MOVE_ID_FLAMETHROWER) == 2);
+    res = gc_reward_apply(&run, &tm_offer, 0, -1, &why);
+    CHECK(res == GC_APPLY_REFUSED && !strcmp(why, NO_EFFECT));
+    CHECK(!gc_rq_next(&in->rq, &queued_p));
+    m->b.species = SPECIES_ID_MAGIKARP;
+    gc_mon_set_move(m, 0, MOVE_ID_SPLASH);
+    CHECK(gc_mon_tm_state(m, MOVE_ID_FLAMETHROWER) == 0);
+    static const char *const tiers[] = {"TM_COMMON", "TM_GREAT", "TM_ULTRA"};
+    for (int t = 0; t < 3; t++) {
+        tm_offer.key = tiers[t];
+        res = gc_reward_apply(&run, &tm_offer, 0, -1, &why);
+        CHECK(res == GC_APPLY_REFUSED && !strcmp(why, NO_EFFECT));
+        CHECK(m->n_used_tms == 1 && !gc_rq_next(&in->rq, &queued_p));
+    }
+    /* Fusion compatibility is a union; fainting and used-TM history do not block teaching. */
+    m->b.fusion_species = SPECIES_ID_CHARIZARD;
+    m->b.fusion_form = 0;
+    m->b.hp = 0;
+    CHECK(gc_mon_tm_state(m, MOVE_ID_FLAMETHROWER) == 1);
+    res = gc_reward_apply(&run, &tm_offer, 0, -1, &why);
+    CHECK(res == GC_APPLY_DONE && m->n_used_tms == 1);
+    gc_rq_clear(&run);
+    m->b.fusion_species = 0;
+    m->b.species = SPECIES_ID_CHARIZARD;
+    m->b.hp = 300;
+    CHECK(gc_mon_tm_state(m, -1) == 0 && gc_mon_tm_state(m, PR_MOVE_COUNT) == 0);
+
+    /* Native labels use getMoveset(), while the TM filter excludes permanent moves. */
+    m->b.summon_moves_active = true;
+    m->b.transform_n_moves = m->b.n_moves;
+    m->b.transform_moves[0] = MOVE_ID_FLAMETHROWER;
+    CHECK(gc_mon_tm_state(m, MOVE_ID_FLAMETHROWER) == 2);
+    CHECK(gc_mon_can_learn_tm(m, MOVE_ID_FLAMETHROWER));
+    gc_mon_set_move(m, 0, MOVE_ID_FLAMETHROWER);
+    m->b.transform_moves[0] = MOVE_ID_SURF;
+    CHECK(gc_mon_tm_state(m, MOVE_ID_FLAMETHROWER) == 1);
+    CHECK(!gc_mon_can_learn_tm(m, MOVE_ID_FLAMETHROWER));
+    CHECK(gc_mon_tm_state(m, MOVE_ID_SURF) == 2);
+    CHECK(!gc_mon_can_learn_tm(m, MOVE_ID_SURF));
+    m->b.summon_moves_active = false;
+    gc_mon_set_move(m, 0, MOVE_ID_SPLASH);
 
     /* Memory Mushroom application on mon level 50 with relearnable moves */
     pr_reward_ctx *ctx = gc_reward_ctx(&run);
