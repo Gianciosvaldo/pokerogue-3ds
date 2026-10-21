@@ -828,3 +828,14 @@ endless-terminal-host-test: $(BUILD)/endless_terminal_host_test
 $(BUILD)/endless_terminal_host_test: tests/endless_terminal_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: endless-terminal-host-test
+
+all: $(BUILD)/command_stack_host_test
+test: command-stack-host-test
+command-stack-host-test: $(BUILD)/command_stack_host_test
+	$(BUILD)/command_stack_host_test
+$(BUILD)/command_stack_host_test: tests/command_stack_host_test.c ../game/include/runtime_limits.h $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -pthread -lm -o $@
+.PHONY: command-stack-host-test
+
+$(BUILD)/tm_compat_diff_test: tests/tm_compat_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

@@ -255,6 +255,17 @@ static bool form_tms_have(int species, int form, int move)
     return false;
 }
 
+/* PartySlot TM labels check known moves first; teaching excludes those same moves.
+ * getCompatibleTms(false, false, false) includes the fusion, including fainted members.
+ * PLAYER_TM_COMPATIBILITY's Moveset Randomizer hook remains unported (as in reward generation). */
+int gc_mon_tm_state(const gc_mon *m, int move)
+{
+    if (!m || move <= 0 || move >= PR_MOVE_COUNT) return 0;
+    for (int i = 0; i < m->b.n_moves; i++) if (m->b.moves[i] == move) return 2;
+    return form_tms_have(m->b.species, m->b.form, move)
+        || (m->b.fusion_species && form_tms_have(m->b.fusion_species, m->b.fusion_form, move));
+}
+
 /* CanLearnMoveRequirement.getAllPokemonMoves(pkm) includes the move: getLevelMoves() with its defaults (startingLevel =
  * the level, nothing extra: the move learned at exactly this level), getCompatibleTms() (the species' TMs for its form
  * and the fusion's) and getEggMoves() */

@@ -398,3 +398,8 @@ make -C game/tests animtest && game/tests/build/animtest path/to/pokerogue-asset
 - Sound without snd.pak is silent (the packs in the test rig have no sound yet).
 - Forms, variants and gender sprite differences in sprite keys.
 - Every other screen in the beta plan that is not listed above as done.
+
+The ARM main thread reserves 512 KiB explicitly through libctru's startup stack
+override. The real-command guard-page regression and built-ELF checks are described
+in [STACK-CRASH-VALIDATION.md](STACK-CRASH-VALIDATION.md). Keep these checks when
+changing startup or the Windows builder payload.

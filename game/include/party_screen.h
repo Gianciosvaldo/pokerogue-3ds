@@ -28,8 +28,9 @@ void ps_open(const pr_battle* bt, ps_mode mode, void (*on_pick)(int slot, int op
 void ps_close(void);
 
 /* Opens the party screen in item mode (e.g. PARTY_MODIFIER, PARTY_MOVE_MODIFIER) over a gc_run party.
+ * tm_move is the TM move ID for PARTY_TM_MODIFIER (0 for other modes).
  * on_pick gets slot (0..5), move_slot (-1 or 0..3), or slot 6 / cancel when backed out. */
-void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, void (*on_pick)(int slot, int move_slot, void* arg), void* arg);
+void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, int tm_move, void (*on_pick)(int slot, int move_slot, void* arg), void* arg);
 
 /* Opens the party screen in MODIFIER_TRANSFER mode over a gc_run party (the reward screen's Manage Items). on_move gets the item's
  * index in the run's item list, how many copies and the party index that gets them (-1 = discard them), and must apply the transfer to the run before

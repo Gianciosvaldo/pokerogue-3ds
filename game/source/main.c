@@ -28,6 +28,10 @@
 #include "ui.h"
 #include "ui_widgets.h"
 #include "party_screen.h"
+#include "runtime_limits.h"
+
+/* Strong override of libctru's weak startup default, used by 3DSX and CIA. */
+u32 __stacksize__ = POKEROGUE_MAIN_STACK_BYTES;
 
 /* ------------------------------------------------------------------ boot */
 

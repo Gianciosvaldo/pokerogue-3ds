@@ -935,8 +935,8 @@ bool run_menu_open(const runmenu_args* a) {
   return true;
 }
 
-void ps_open_item(const void* run, int pmode, bool target_move, void (*on_pick)(int slot, int move_slot, void* arg), void* arg) {
-  (void)run, (void)pmode;
+void ps_open_item(const void* run, int pmode, bool target_move, int tm_move, void (*on_pick)(int slot, int move_slot, void* arg), void* arg) {
+  (void)run, (void)pmode, (void)tm_move;
   n_item_opens++;
   X.item_pick = on_pick;
   X.item_arg = arg;

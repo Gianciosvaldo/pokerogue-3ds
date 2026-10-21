@@ -352,3 +352,11 @@ build/run_menu_test: $(RUN_MENU_SRCS)
 	$(CC) $(CPPFLAGS) -I../include -I../../assets-pipeline/app-src/include $(CFLAGS) -fsanitize=address,undefined $(RUN_MENU_SRCS) -lm -o $@
 run_menu_test: build/run_menu_test
 .PHONY: run_menu_test
+
+# Real item-party adapter + real menus: TM labels, filtering and both ways to back out.
+PARTY_ITEM_SRCS := party_item_test.c party_fake.c ../menus/item_ui.c ../source/party_screen.c ../menus/party.c ../menus/menus_names.c ../menus/menus_data.c ../gen/gm_item_ui.c $(CORE_SRCS)
+build/party_item_test: $(PARTY_ITEM_SRCS)
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(PARTY_ITEM_SRCS) -lm -o $@
+party_item_test: build/party_item_test
+.PHONY: party_item_test

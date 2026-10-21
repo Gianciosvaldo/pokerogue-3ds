@@ -379,6 +379,10 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why);
 /* ---- starters (upstream's starter select rules) ---- */
 /* held items: getMaxStackCount() of `key`/`arg` held by `mon`, and the reward screen's transfer (GC_CH_TRANSFER does it;
  * returns the copies moved, 0 = refused) */
+/* TM party labels / TmModifierType.selectFilter: 0 not able, 1 able, 2 already known.
+ * Uses the current species/form and fusion TM tables; no RNG or level-up/history exclusions. */
+int gc_mon_tm_state(const gc_mon *mon, int move);
+
 int gc_item_max_held(const gc_run *run, const char *key, int16_t arg, const gc_mon *mon);
 int gc_item_transfer(gc_run *run, int item_idx, int to, int qty);
 int gc_item_discard(gc_run *run, int item_idx, int count);

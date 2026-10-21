@@ -304,7 +304,12 @@ static void on_item_select(void* ctx, int slot, int option) {
   if (ItemS.on_item_pick) ItemS.on_item_pick(slot, -1, ItemS.item_arg);
 }
 
-void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, void (*on_pick)(int slot, int move_slot, void* arg), void* arg) {
+static const char* filter_tm(void* ctx, int slot) {
+  (void)ctx;
+  return S.party[slot].tm_state == 1 ? NULL : mui_t("partyUiHandler:anyEffect");
+}
+
+void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, int tm_move, void (*on_pick)(int slot, int move_slot, void* arg), void* arg) {
   const gc_run* run = (const gc_run*)gc_run_ptr;
   ps_set_run(run);
   memset(&S, 0, sizeof S);
@@ -317,6 +322,7 @@ void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, void (*on
   if (run) {
     for (int i = 0; i < run->n_party && i < PR_MAX_PARTY; i++) {
       gc_to_menu_mon(&run->party[i], &S.party[i]);
+      if (S.mode == PARTY_TM_MODIFIER) S.party[i].tm_state = (uint8_t)gc_mon_tm_state(&run->party[i], tm_move);
     }
     S.n = run->n_party;
   }
@@ -327,6 +333,7 @@ void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, void (*on
   a.battler_count = 1;
   a.in_reward_phase = true;
   a.show_move_pp = target_move;
+  if (S.mode == PARTY_TM_MODIFIER) a.filter = filter_tm;
 
   static party_events ev;
   ev = (party_events){on_item_select, NULL, NULL, NULL, NULL, on_summary, NULL};

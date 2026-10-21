@@ -48,7 +48,7 @@ CFLAGS	:=	-g -Wall -O2 -mword-relocations -ffp-contract=off \
 			-ffunction-sections \
 			$(ARCH)
 
-CFLAGS	+=	$(INCLUDE) -I$(PORTLIBS)/include/freetype2 -D__3DS__ -std=gnu11 -Wno-unused-parameter
+CFLAGS	+=	-fstack-usage $(INCLUDE) -I$(PORTLIBS)/include/freetype2 -D__3DS__ -std=gnu11 -Wno-unused-parameter
 
 CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions -std=gnu++11
 
