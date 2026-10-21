@@ -84,6 +84,7 @@ typedef enum {
   BEV_TRANSFORM,   /* mon = temporary display; a = play Transform sound (Imposter) */
   BEV_ILLUSION,    /* PR_DEV_ILLUSION: mon = the new look, name and types when a disguise starts or ends; a = play the
                     * Transform sound (breakIllusion plays it, setIllusion doesn't) */
+  BEV_IVS,        /* ScanIvsPhase: stats[0..5] IVs, stats[6..11] starter IVs; A/B closes */
   BEV_LEVEL_UP,    /* LevelUpPhase.showLevelUpMessages: the fanfare and `text` ("X grew to Lv. N!") with a prompt, then
                     * promptLevelUpStats: the stat window with the gains (stats[6..11] - stats[0..5]), A, the totals, A */
 } bev_type;

@@ -42,6 +42,9 @@ static struct {
   gc_run run;
   rs_config cfg;
   rs_stats st;
+  int scan_wave, scan_next, scan_target;
+  bool scan_enabled;
+  int scan_stats[12];
   uint64_t rng;                 /* the stand-in team's */
   /* the events of the current drain, handled one by one (lazily: the screen must have played the
    * earlier ones before a later one is converted) */
@@ -1405,6 +1408,53 @@ static bool save_point(void) {
 
 static void open_custom_offer(void);
 
+/* ScanIvsPhase is presentation only: do not answer or advance the battle command. */
+static void scan_done(void* arg) {
+  (void)arg;
+  G.n_ev = G.ev_pos = G.n_txt = 0;
+  pump(NULL);
+}
+
+static void scan_answered(int yes, void* arg) {
+  (void)arg;
+  if (!yes) { scan_done(NULL); return; }
+  const pr_pokemon* p = G.run.bt.field[G.scan_target];
+  if (!p) { scan_done(NULL); return; }
+  uint16_t root = gc_species_root_id(p->species);
+  for (int s = 0; s < 6; s++) {
+    G.scan_stats[s] = p->ivs[s];
+    G.scan_stats[6+s] = G.run.sys && root <= GC_MAX_SPECIES_ID ? G.run.sys->dex[root].ivs[s] : 0;
+  }
+  G.n_ev = G.ev_pos = G.n_txt = 0;
+  *ev_new() = (bv_event){.type=BEV_IVS,.battler=G.scan_target,.stats=G.scan_stats};
+  G.st.bev++;
+  bv_play(G.ev,G.n_ev,scan_done,NULL);
+}
+
+static void scan_confirm(void* arg) { (void)arg; ui_push_confirm(scan_answered,NULL); }
+
+static bool scan_wild_ivs(void) {
+  if (G.scan_wave != G.run.wave) {
+    G.scan_wave = G.run.wave;
+    G.scan_next = 0;
+    G.scan_enabled = G.run.battle_type == BATTLE_TYPE_WILD && gc_item_stack(&G.run,"IV_SCANNER") > 0;
+  }
+  if (!G.scan_enabled) return false;
+  while (G.scan_next < 2) {
+    const int target = 2 + G.scan_next++;
+    const pr_pokemon* p = G.run.bt.field[target];
+    if (!p || p->hp <= 0 || !p->on_field) continue;
+    G.scan_target = target;
+    G.n_ev = G.ev_pos = G.n_txt = 0;
+    pr_msg question = pr_msg1("battle:ivScannerUseQuestion",pr_arg_pokemon(&G.run.bt,"pokemonName",p));
+    put_gc_msg(&question);
+    G.st.bev++;
+    bv_play(G.ev,G.n_ev,scan_confirm,NULL);
+    return true;
+  }
+  return false;
+}
+
 static void screen_step(void) {
   const gc_screen* s = gc_run_screen(&G.run);
   if (G.cfg.custom) {
@@ -1420,6 +1470,7 @@ static void screen_step(void) {
   G.st.screens[s->kind & 15]++;
   switch (s->kind) {
     case GC_SCREEN_COMMAND:
+      if (scan_wild_ivs()) break;
       if (!save_point()) break;
       if (!resync_field()) ask();
       break;

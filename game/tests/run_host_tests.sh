@@ -19,6 +19,8 @@ for t in $TESTS; do
     echo "== $t"
     "build/$t" || failed="$failed $t"
 done
+echo "== runtest (IV Scanner encounter prompt and assessment) 100"
+RUNTEST_SCANNER=1 build/runtest 100 0 || failed="$failed runtest-scanner"
 echo "== runtest 10000"
 build/runtest 10000 || failed="$failed runtest"
 echo "== runtest (system data, saves) 100"
