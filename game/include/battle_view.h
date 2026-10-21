@@ -139,6 +139,7 @@ typedef struct {
  * used, plays the error sound; an unusable move shows its reason (an upstream message) instead. */
 typedef struct {
   bool can_ball, can_switch, can_run;
+  int party_luck; /* actual allowed party luck, 0..14 */
   bool move_ok[4];
   const char* move_why[4];   /* the reason text for each move that is not ok (already translated), or NULL; the strings
                               * stay the caller's and must live until the command is answered */

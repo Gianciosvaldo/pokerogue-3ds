@@ -46,6 +46,7 @@ typedef struct {
   /* Math.floor(Math.random() * n), for Randomize */
   int (*rnd)(void* ctx, int n);
   void* ctx;
+  void (*configure)(void* ctx, uint16_t species);
 } starter_events;
 
 typedef struct {
@@ -70,6 +71,7 @@ void starter_draw(void);
 void starter_draw_top(void);
 /* A message in the box at the bottom that waits for A (the caller's reasons: "that team is not allowed"). */
 void starter_message(const char* text);
+void starter_refresh(void);
 
 #ifdef __cplusplus
 }

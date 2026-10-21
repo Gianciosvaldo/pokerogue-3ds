@@ -4,6 +4,32 @@
 #include "gc/data.h"
 #include "gc/run.h"
 #include "internal.h"
+
+int gc_system_starter_unlock_cost(uint16_t species) {
+    static const uint8_t costs[10]={40,40,35,30,25,20,15,10,10,10};
+    int cost=gc_starter_cost(species);
+    return cost>=1 && cost<=10 ? costs[cost-1] : -1;
+}
+
+bool gc_system_buy_starter_unlock(gc_system *sys, uint16_t species, bool hidden) {
+    int cost=gc_system_starter_unlock_cost(species);
+    if (!sys || species>GC_MAX_SPECIES_ID || cost<0 || !sys->dex[species].caught_attr) return false;
+    const pr_species *sp=gc_species(species);
+    if (!sp || !sp->nforms) return false;
+    const pr_form *form=&pr_forms[sp->form0];
+    gc_starter_entry *s=&sys->starters[species];
+    if (s->candy_count<cost) return false;
+    if (hidden) {
+        if (!form->ability_hidden || (s->ability_attr&4)) return false;
+        s->ability_attr|=4;
+        s->ability_preference=2;s->preference_flags|=4;
+    } else {
+        if (!form->passive || (s->passive_attr&1)) return false;
+        s->passive_attr|=3;
+    }
+    s->candy_count-=cost;
+    return true;
+}
 #include <string.h>
 
 void gc_system_init_defaults(gc_system *sys) {

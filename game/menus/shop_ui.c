@@ -12,6 +12,7 @@
  * Not here: Manage Items and Check Team (the held-item transfer and the party view from the shop are not ported).
  */
 
+#include "luck_meter.h"
 #include "shop_ui.h"
 
 #include <math.h>
@@ -52,15 +53,7 @@ bool shop_ui_hit_test(const shop_ui_rect* rect, float x, float y) {
           y >= rect->y && y <= (rect->y + rect->h));
 }
 
-const char* shop_ui_luck_grade(int luck) {
-  if (luck <= 0) return "D";
-  if (luck <= 2) return "C";
-  if (luck <= 4) return "B";
-  if (luck <= 6) return "A";
-  if (luck <= 9) return "S";
-  if (luck <= 13) return "SS";
-  return "SSS";
-}
+const char* shop_ui_luck_grade(int luck) { return luck_grade(luck); }
 
 /* ---------------------------------------------------------------- what an offer shows */
 

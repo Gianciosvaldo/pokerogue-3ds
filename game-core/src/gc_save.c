@@ -999,6 +999,8 @@ static const sfield starter_fields[] = {
     SF(sv_starter_entry, species), SF(sv_starter_entry, entry.ability_attr), SF(sv_starter_entry, entry.passive_attr),
     SF(sv_starter_entry, entry.value_reduction), SF(sv_starter_entry, entry.candy_count), SF(sv_starter_entry, entry.friendship),
     SF(sv_starter_entry, entry.egg_moves), SF(sv_starter_entry, entry.moveset), SF(sv_starter_entry, entry.classic_win_count),
+    SF(sv_starter_entry, entry.preference_flags), SF(sv_starter_entry, entry.nature_preference),
+    SF(sv_starter_entry, entry.appearance_preference), SF(sv_starter_entry, entry.ability_preference),
 };
 
 static const sfield unlock_fields[] = {
@@ -1101,7 +1103,7 @@ size_t gc_system_save(const gc_system *sys, void *buf, size_t cap)
     for (int i = 1; i <= GC_MAX_SPECIES_ID; i++) {
         const gc_starter_entry *st = &sys->starters[i];
         if (st->ability_attr || st->passive_attr || st->value_reduction || st->candy_count ||
-            st->friendship || st->egg_moves || st->classic_win_count ||
+            st->friendship || st->egg_moves || st->classic_win_count || st->preference_flags ||
             st->moveset[0] || st->moveset[1] || st->moveset[2] || st->moveset[3]) {
             n_starters++;
         }
@@ -1113,7 +1115,7 @@ size_t gc_system_save(const gc_system *sys, void *buf, size_t cap)
             for (int i = 1; i <= GC_MAX_SPECIES_ID; i++) {
                 const gc_starter_entry *st = &sys->starters[i];
                 if (st->ability_attr || st->passive_attr || st->value_reduction || st->candy_count ||
-                    st->friendship || st->egg_moves || st->classic_win_count ||
+                    st->friendship || st->egg_moves || st->classic_win_count || st->preference_flags ||
                     st->moveset[0] || st->moveset[1] || st->moveset[2] || st->moveset[3]) {
                     st_buf[k].species = (uint16_t)i;
                     st_buf[k].entry = *st;
@@ -1217,6 +1219,10 @@ bool gc_system_load(gc_system *sys, const void *buf, size_t len, const char **wh
             for (int i = 0; i < count; i++) {
                 uint16_t sp = st_buf[i].species;
                 if (sp > 0 && sp <= GC_MAX_SPECIES_ID) {
+                    const gc_starter_entry *p=&st_buf[i].entry;
+                    if (p->preference_flags>7 || p->nature_preference>24 || p->appearance_preference>3 || p->ability_preference>2) {
+                        free(st_buf); *why="invalid starter preferences"; return false;
+                    }
                     sys->starters[sp] = st_buf[i].entry;
                 }
             }

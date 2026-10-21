@@ -45,6 +45,31 @@ static int species_level_moves(int species, int form, row *out, int cap)
     return n;
 }
 
+int gc_starter_moves(const gc_system *sys, int species, int form, uint16_t *out, int cap)
+{
+    const pr_species *sp=gc_species(species);
+    if (!sp || gc_starter_cost(species)<0 || form<0 || form>=sp->nforms || !out || cap<0) return -1;
+    static row rows[ROWS_MAX];
+    int n=species_level_moves(species,form,rows,ROWS_MAX),w=0;
+    if (n<0) return -1;
+    uint16_t eggs[4]={0};
+    if (sys && species<=GC_MAX_SPECIES_ID) for(int i=0;i<gc_starter_egg_moves_count;i++)
+        if(gc_starter_egg_moves_data[i].species==species) {
+            for(int k=0;k<4;k++) if(sys->starters[species].egg_moves&(1<<k))
+                eggs[k]=gc_starter_egg_moves_data[i].egg_moves[k];
+            break;
+        }
+    for(int i=0;i<n+4;i++) {
+        int move=i<n ? (rows[i].level>0 && rows[i].level<=5 ? rows[i].move : 0) : eggs[i-n];
+        if(!move) continue;
+        bool duplicate=false;for(int k=0;k<w;k++) if(out[k]==move) duplicate=true;
+        if(duplicate) continue;
+        if(w>=cap) return -1;
+        out[w++]=(uint16_t)move;
+    }
+    return w;
+}
+
 /* getRegularLevelMoves(context, includeEvolutionMoves, includeRelearnerMoves, fromFusion) */
 static int regular_level_moves(const gc_mon *m, bool evo, bool relearn, bool from_fusion, row *out, int cap)
 {
