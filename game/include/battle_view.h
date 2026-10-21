@@ -29,6 +29,7 @@ typedef struct {
   int species, form;         /* SpeciesId, form index */
   bool female, shiny;
   int variant;               /* 0..2 */
+  int pokeball;              /* stored ball, supplied by the run for the opening throw */
   char name[40];             /* the name to render (nickname or species name) */
   int level;
   int hp, max_hp;
@@ -112,6 +113,7 @@ typedef struct {
   int biome;             /* BiomeId (arena images) */
   bv_mon player, enemy;  /* the first Pokemon of each side (singles); enemy.species 0 = nobody */
   bool trainer;          /* trainer sprites appear during the encounter intro */
+  bool player_female;    /* avatar; defaults to the current app's male player */
   char trainer_keys[2][64]; /* gfx.pak atlas keys, optional partner */
   bool player_present;   /* the player's lead is already out (it stays out between wild waves): its sprite
                           * and info box are there from the start, with no summon. Its platform stays too: only the enemy side

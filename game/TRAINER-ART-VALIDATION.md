@@ -1,4 +1,4 @@
-# Trainer and rival visibility
+# Trainer, rival and player visibility
 
 The battle view had no trainer drawing path. It now draws the trainer on the
 enemy platform during the encounter intro, including all six rival encounters,
@@ -19,10 +19,23 @@ replacements. Source: 8555c08c823b856cbec4eb99ca84ea52a955836d.
   rival atlases and their visible first-frame sprites; the actual files were
   fetched and inspected. Atlas frames use the existing renderer and animation
   ordering, with native trainer coordinates, origins and pair offsets.
+- The player back sprite slides from (406,186) to (106,186) with the first
+  arena. The opening SummonPhase uses the native back_pb poses at 0/562/626 ms,
+  moves the player to x=-36 over 1,000 ms and hides it. The stored ball launches
+  at 750 ms, flies for 650 ms through the native cubic y arc and four turns,
+  then releases the Pokémon. Capture animations use separate state.
+- Player timing/coordinates come directly from EncounterPhase, SummonPhase and
+  BattleScene at the pinned source. Both back/back_pb asset atlases exist for
+  each gender at the pinned asset commit; frame names and visible art were
+  inspected. The app currently defaults to the male avatar; the renderer accepts
+  either. Ordinary switch summons retain their existing presentation.
+- trainer_render_test exercises actual drawing paths with captured GPU calls:
+  intro coordinates, pose boundaries, both avatars, all five stored ball types,
+  flight arc/rotation, visibility and trainer pairs. It is in the normal suite.
 - Real app encounters require trainer keys, check rival variant keys and exclude
   trainer art on wild encounters. The full normal app/scanner/custom/save suite
   passes without lowering coverage floors.
-- The actual 3DS app builds with its strong 512 KiB stack override. All 2,260
+- The actual 3DS app builds with its strong 512 KiB stack override. All 2,261
   compiler frame reports pass; the largest frame remains 45,056 bytes.
 
 To regenerate the table, copy tests/trainer-art.producer.test.ts into the pinned
@@ -35,6 +48,6 @@ JOBS=2 game/tests/run_host_tests.sh
 ```
 
 This restores battlefield visibility. Larger dialogue portraits, expressions,
-seasonal replacements and the full trainer throw/return animation remain separate
-presentation work. No battle logic or save schema changes, and no full
+seasonal replacements, enemy throw/return animations, ball-open particles and
+ordinary switch ball flights remain separate presentation work. No battle logic or save schema changes, and no full
 battle-core completion claim.

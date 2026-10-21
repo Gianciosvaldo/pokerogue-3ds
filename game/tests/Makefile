@@ -360,3 +360,10 @@ build/party_item_test: $(PARTY_ITEM_SRCS)
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(PARTY_ITEM_SRCS) -lm -o $@
 party_item_test: build/party_item_test
 .PHONY: party_item_test
+
+# Actual battle-view draw paths with captured GPU calls; discard unrelated UI.
+build/trainer_render_test: trainer_render_test.c ../source/battle_view.c ../source/tween.c
+	@mkdir -p build
+	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections trainer_render_test.c ../source/tween.c -Wl,--gc-sections -lm -o $@
+trainer_render_test: build/trainer_render_test
+.PHONY: trainer_render_test

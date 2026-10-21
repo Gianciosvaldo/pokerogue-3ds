@@ -335,6 +335,7 @@ static bool settled_after(int i) {
 static bv_mon make_mon(const gc_mon* m, bool player) {
   bv_mon out;
   be_mon(&G.run.bt, &m->b, &out);
+  out.pokeball = m->pokeball;
   if (player) out.exp_ratio = (float)gc_exp_level_fraction(m);
   return out;
 }
