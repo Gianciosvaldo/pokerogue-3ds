@@ -139,7 +139,7 @@ static struct {
   uint8_t balls[6]; /* the party tray: BV_BALL_* of each slot */
   /* promptLevelUpStats' window (BEV_LEVEL_UP) */
   struct {
-    bool on, totals;
+    bool on, totals, ivs;
     const int* stats;
   } lvl;
 } B;
@@ -734,6 +734,23 @@ static void draw_ability_bar(void) {
  * 320 - 73, the "+" column at 320 - 50 (gains only), the values end at 320 - 7; all from y -94, TextStyle.WINDOW */
 static void draw_level_stats(void) {
   if (!B.lvl.on || !B.lvl.stats) return;
+  if (B.lvl.ivs) {
+    const float width = 200;
+    ui_window(320 - width, -100, width, 100, WIN_NORMAL);
+    for (int s = 0; s < 6; s++) {
+      const int iv = B.lvl.stats[s];
+      const char* key = iv == 31 ? "ivBest" : iv == 30 ? "ivFantastic" : iv > 20 ? "ivVeryGood" :
+                        iv > 10 ? "ivPrettyGood" : iv > 0 ? "ivDecent" : "ivNoGood";
+      char locale[80], value[96];
+      snprintf(locale, sizeof locale, "battleMessageUiHandler:%s", key);
+      i18n_t(value, sizeof value, locale, NULL);
+      text_draw(TS_WINDOW, 320 - width + 6, -94 + s * 14, i18n_stat_name(s), NULL);
+      text_opts o = text_defaults(); o.origin_x = 1;
+      text_style style = iv > B.lvl.stats[6+s] ? (iv == 31 ? TS_PERFECT_IV : TS_SUMMARY_GREEN) : TS_WINDOW;
+      text_draw(style, 313, -94 + s * 14, value, &o);
+    }
+    return;
+  }
   char labels[192] = "", vals[96] = "";
   for (int s = 0; s < 6; s++) {
     char v[16];
@@ -1195,6 +1212,17 @@ static void run_event(float dt) {
       if (msgbox_done(&B.msg)) finish_event();
       break;
 
+    case BEV_IVS:
+      if (B.step == 0) {
+        msgbox_clear(&B.msg);
+        B.lvl.on = e->stats != NULL;
+        B.lvl.ivs = true;
+        B.lvl.stats = e->stats;
+        B.step = 1;
+      }
+      if (!B.lvl.on) finish_event();
+      break;
+
     case BEV_LEVEL_UP:
       /* showLevelUpMessages: the fanfare with the text; its prompt's A opens the stat window (gains); A shows the totals and A
        * closes it (bv_input) */
@@ -1210,6 +1238,7 @@ static void run_event(float dt) {
           break;
         }
         B.lvl.on = true;
+        B.lvl.ivs = false;
         B.lvl.totals = false;
         B.lvl.stats = e->stats;
         B.step = 2;
@@ -1573,6 +1602,11 @@ static bool bv_input(ui_screen* s, ui_button b) {
   (void)s;
   if (B.mode == M_EVENTS && B.lvl.on) {
     /* promptLevelUpStats' onActionInput: the gains, then the totals, then the window closes */
+    if (B.lvl.ivs) {
+      if (b != BTN_ACTION && b != BTN_CANCEL) return false;
+      B.lvl.on = false;
+      return true;
+    }
     if (b != BTN_ACTION) return false;
     if (!B.lvl.totals) B.lvl.totals = true;
     else B.lvl.on = false;

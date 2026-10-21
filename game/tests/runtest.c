@@ -144,6 +144,8 @@ static struct {
   void* arg;
 } MI;
 static int n_manage, n_transfers, n_transfer_copies, n_transfer_refused, n_discards;
+static bool scanner_fixture;
+static int n_scanner_yes, n_scanner_no, n_scanner_windows;
 static int n_shops, n_maps, n_item_opens, n_seamless, n_level_ups, n_level_windows, n_foe_bars, n_foe_hidden, n_key_bars, n_trays, n_fainted_balls;
 static bool save_on, resume_on, quit_on;
 static int n_menu_opened, n_menu_yes, n_menu_no, n_quit_callbacks;
@@ -383,6 +385,13 @@ static bool side_ok(int battler, const char* what) {
 }
 
 void bv_begin(const bv_setup* setup) {
+  if (scanner_fixture) {
+    gc_run* r = (gc_run*)rs_run();
+    bool found = false;
+    for (int i=0;i<r->n_items;i++) if (!strcmp(r->items[i].key,"IV_SCANNER") && r->items[i].stack>0) found=true;
+    if (!found && r->n_items<GC_MAX_ITEMS) r->items[r->n_items++]=(gc_item){.key="IV_SCANNER",.arg=-1,.stack=1};
+  }
+
   trail_add("--- bv_begin biome %d trainer %d present %d", setup->biome, setup->trainer, setup->player_present);
   /* the next wave of the same biome with the lead out (no fade, the player's platform stays): only ever with the lead out and under
    * the biome that was on screen */
@@ -507,6 +516,11 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
             }
           }
         }
+        break;
+      case BEV_IVS:
+        n_scanner_windows++;
+        if (!e->stats || e->battler < 2 || e->battler > 3) BAD("invalid IV scanner window");
+        else for (int k = 0; k < 12; k++) if (e->stats[k] < 0 || e->stats[k] > 31) BAD("invalid scanner IV");
         break;
       case BEV_LEVEL_UP:
         /* "X grew to Lv. N!" and the stat window: the gains can't be negative at a higher level of the same species */
@@ -1266,7 +1280,17 @@ static bool step(void) {
       if (learn_forget_ally_only >= 0) yes = 1;
       if (learn_decline_ally_only) yes = 0;
     }
+    const gc_run* scan_run = rs_run();
+    bool scan = scanner_fixture && scan_run->screen.kind == GC_SCREEN_COMMAND;
+    pr_rng scan_rng = scan_run->run.rng, scan_battle_rng = scan_run->bt.battle_rng;
+    if (scan) {
+      if (scan_run->battle_type != BATTLE_TYPE_WILD) BAD("IV scanner prompted in a trainer/mystery battle");
+      if (yes) n_scanner_yes++; else n_scanner_no++;
+    }
     f(yes, W.confirm_arg);
+    if (scan && (memcmp(&scan_rng,&scan_run->run.rng,sizeof scan_rng) ||
+                 memcmp(&scan_battle_rng,&scan_run->bt.battle_rng,sizeof scan_battle_rng)))
+      BAD("IV scanner advanced a battle RNG stream");
     return true;
   }
   if (W.opt_done) {
@@ -1510,6 +1534,7 @@ int main(int argc, char** argv) {
   int runs = argc > 1 ? atoi(argv[1]) : 20;
   int first = argc > 2 ? atoi(argv[2]) : 0;
   if (runs < 1) runs = 1;
+  scanner_fixture = getenv("RUNTEST_SCANNER") != NULL;
   verbose_bad = getenv("RUNTEST_VERBOSE") != NULL;
   rs32 = 2463534242u ^ (uint32_t)first * 2654435761u;
   rnd(1);
@@ -1740,6 +1765,11 @@ int main(int argc, char** argv) {
     BAD("the observer took in %ld battle ranges, the screen played %d", OBS.ranges, st->events[GC_EV_BATTLE]);
   if (OBS.runs != ended) BAD("%ld combat reports checked for %d runs", OBS.runs, ended);
   printf("reward screens: %d shops, %d item targets, %d biome maps\n", n_shops, n_item_opens, n_maps);
+  if (scanner_fixture) {
+    printf("IV scanner: %d accepted, %d declined, %d windows\n",n_scanner_yes,n_scanner_no,n_scanner_windows);
+    if (!n_scanner_yes || !n_scanner_no || n_scanner_windows!=n_scanner_yes)
+      BAD("IV scanner missing confirmation or window coverage");
+  }
   printf("scenes: %d, of them %d next waves of the same biome (no fade, the player's platform stays)\n", n_scenes, n_seamless);
   if (!n_seamless && n_scenes > 50) BAD("no scene was a next wave of the same biome");
   printf("level ups: %d, of them %d with the stat window\n", n_level_ups, n_level_windows);
