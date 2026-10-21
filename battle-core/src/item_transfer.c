@@ -9,7 +9,7 @@ static int transfer_cap(const pr_modifier *m)
     if (m->unknown_subclass) return -1;
     switch (m->cls) {
     case PR_MOD_TURN_HEAL: case PR_MOD_HIT_HEAL: return 4;
-    case PR_MOD_SURVIVE_DAMAGE: return 5;
+    case PR_MOD_SURVIVE_DAMAGE: case PR_MOD_CONTACT_HELD_TRANSFER: return 5;
     case PR_MOD_BYPASS_SPEED_CHANCE: case PR_MOD_FLINCH_CHANCE: return 3;
     case PR_MOD_RESET_NEGATIVE_STAT_STAGE: return 2;
     case PR_MOD_TURN_HELD_TRANSFER: case PR_MOD_INSTANT_REVIVE:
@@ -98,6 +98,7 @@ int pr_held_item_tier_for_pool(const pr_modifier *m, bool trainer)
     case PR_MOD_CRIT_BOOSTER: tier = trainer ? 4 : 3; break;
     case PR_MOD_BYPASS_SPEED_CHANCE: case PR_MOD_MOVE_ACCURACY_BOOSTER:
         tier = trainer ? 3 : 2; break;
+    case PR_MOD_CONTACT_HELD_TRANSFER:
     case PR_MOD_SURVIVE_DAMAGE: case PR_MOD_NATURE_WEIGHT: tier = 3; break;
     case PR_MOD_RESET_NEGATIVE_STAT_STAGE: case PR_MOD_TURN_STATUS_EFFECT:
     case PR_MOD_DAMAGE_MONEY_REWARD: case PR_MOD_ATTACK_TYPE_BOOSTER:
@@ -253,4 +254,54 @@ bool pr_steal_move_held_item(pr_battle *bt, pr_engine *e, pr_pokemon *user,
         pr_arg_pokemon(bt,"pokemonName",user),pr_arg_pokemon(bt,"targetName",target),
         pr_arg_key("itemName",name)));
     return true;
+}
+
+/* HeldItemTransferModifier.apply, specialized to Grip Claw's one possible
+ * transfer. Its name does not impose a contact flag: the owning MoveEffectPhase
+ * calls it for attacks. The raw override does not invoke shouldApply. */
+bool pr_apply_contact_held_item_transfer(pr_battle *bt,pr_engine *e,
+    pr_pokemon *user,pr_pokemon *target,const pr_modifier *modifier)
+{
+    if (!target) return false;
+    if (!user || !modifier || modifier->cls!=PR_MOD_CONTACT_HELD_TRANSFER
+        || !pr_mod_is_ported_item(modifier)) {
+        pr_note_unported(bt,PR_FEAT_MODIFIERS); return false;
+    }
+    (void)pr_battle_rand_seed_int(bt,1,0); /* choose the singleton target first */
+    if (!bt->rng_live) { pr_note_unported(bt,PR_FEAT_GLOBAL_RNG); return false; }
+    if (pr_rng_seed_float(&bt->rng)>modifier->mult*pr_mod_get_stack_count(modifier)) return false;
+    int side=target->is_player?0:1,indices[PR_MAX_MODIFIERS],count=0;
+    for (int k=0;k<bt->n_mods[side];k++) {
+        const pr_modifier *m=&bt->mods[side][k];
+        if (pr_mod_is(m,PR_MOD_HELD_ITEM) && m->pokemon_id==(int64_t)target->id
+            && m->is_transferable) indices[count++]=k;
+    }
+    if (!count) return false;
+    int index=indices[pr_battle_rand_seed_int(bt,count,0)];
+    const char *name=pr_held_item_name_key(&bt->mods[side][index]);
+    if (!pr_try_transfer_held_item(bt,e,side,index,user,1,false,true)) return false;
+    pr_queue_msg(bt,e,pr_msg4("modifier:contactHeldItemTransferApply",
+        pr_arg_pokemon(bt,"pokemonNameWithAffix",target),pr_arg_key("itemName",name),
+        pr_arg_pokemon(bt,"pokemonName",user),pr_arg_key("typeName","modifierType:ModifierType.GRIP_CLAW.name")));
+    return true;
+}
+
+void pr_apply_contact_held_item_transfers(pr_battle *bt,pr_engine *e,
+                                         pr_pokemon *user,pr_pokemon *target)
+{
+    if (!user || user->hp<=0) return;
+    int side=user->is_player?0:1;
+    bool found=false;
+    /* Canonical matching inventory holds one Grip Claw stack per owner.
+     * Refuse raw duplicate aliases until object identity is represented. */
+    pr_modifier selected;
+    for (int k=0;k<bt->n_mods[side];k++) {
+        const pr_modifier *m=&bt->mods[side][k];
+        if (pr_mod_is(m,PR_MOD_CONTACT_HELD_TRANSFER)
+            && (m->pokemon_id==-1 || m->pokemon_id==(int64_t)user->id)) {
+            if (found) { pr_note_unported(bt,PR_FEAT_MODIFIERS); return; }
+            selected=*m;found=true;
+        }
+    }
+    if (found) pr_apply_contact_held_item_transfer(bt,e,user,target,&selected);
 }

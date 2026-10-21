@@ -2282,7 +2282,10 @@ static void apply_on_target_effects(pr_battle *bt, pr_engine *e, int ph, pr_poke
         pr_apply_enemy_attack_status_modifiers(bt, e, user, target);
         turn_modifiers(bt, false, target);   /* EnemyAttackStatusEffectChanceModifier */
     }
-    if (pr_move_is_attack(move)) turn_modifiers(bt, user->is_player, user);                /* ContactHeldItemTransferChanceModifier */
+    if (pr_move_is_attack(move)) {
+        pr_apply_contact_held_item_transfers(bt,e,user,target);
+        turn_modifiers(bt,user->is_player,user);
+    }
 }
 
 static void apply_move_effects(pr_battle *bt, pr_engine *e, int ph, pr_pokemon *target, double eff, bool first_target)

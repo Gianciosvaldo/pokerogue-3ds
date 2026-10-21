@@ -649,3 +649,7 @@ $(BUILD)/honey-owner-test: tests/honey-owner-test.c $(BUILD)/wide-substitute-fra
 all: $(BUILD)/scene-transfer-test
 $(BUILD)/scene-transfer-test: tests/scene-transfer-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/grip-claw-test
+$(BUILD)/grip-claw-test: tests/grip-claw-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
