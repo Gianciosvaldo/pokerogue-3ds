@@ -645,3 +645,7 @@ $(BUILD)/money-number-test: tests/money-number-test.c $(BUILD)/libprcore.a
 all: $(BUILD)/honey-owner-test
 $(BUILD)/honey-owner-test: tests/honey-owner-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/scene-transfer-test
+$(BUILD)/scene-transfer-test: tests/scene-transfer-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

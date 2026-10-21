@@ -1,5 +1,8 @@
 # Mini Black Hole transfer continuation
 
+The shared scene helper continuation is documented in
+[SCENE-TRANSFER-VALIDATION.md](SCENE-TRANSFER-VALIDATION.md).
+
 Later continuation: [Thief/Covet](MOVE-THEFT-VALIDATION.md) adds the move callback
 for these canonical families. The observations and boundaries below describe
 the original Mini Black Hole slice.

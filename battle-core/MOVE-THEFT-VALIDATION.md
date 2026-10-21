@@ -1,5 +1,8 @@
 # Thief and Covet
 
+The shared scene helper continuation is documented in
+[SCENE-TRANSFER-VALIDATION.md](SCENE-TRANSFER-VALIDATION.md).
+
 Pinned upstream `8555c08c823b856cbec4eb99ca84ea52a955836d`, locales
 `270ed0a2938b2c3e2e34e7de940e84aecadf548b`, Node22.23.3.
 
