@@ -412,6 +412,8 @@ int pr_run_enemy_pokemon_finish(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_ene
 int pr_run_enemy_types(const pr_enemy_gen *mon, int species, int8_t types[2]);
 /* battleScene.getSpeciesFormIndex(species, gender, undefined, false) for an enemy, on run->rng */
 int pr_run_get_species_form_index(pr_run *run, const pr_enemy_gen_ctx *ctx, int gender);
+/* Player form selection during EggLapsePhase/EggHatchPhase; uses the isolated egg RNG. */
+int pr_run_get_egg_form_index(pr_rng *rng, pr_run *run, const pr_enemy_gen_ctx *ctx, int gender);
 
 /* ---- a trainer's party member species (src/trainerspecies.c; data in gen/out/run_trainerspecies.c) ---- */
 typedef struct {

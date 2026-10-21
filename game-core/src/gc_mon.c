@@ -156,7 +156,7 @@ bool gc_mon_roll_player(gc_run *run, pr_rng *rng, gc_mon *m, int species, int le
 {
     const pr_species_gen *sg = gc_species_gen(species);
     const pr_species *sp = gc_species(species);
-    if (!sg || !sp || (form < 0 && sg->n_forms) || form >= (sg->n_forms ? sg->n_forms : 1)) return false;
+    if (!sg || !sp || (form < 0 && form != -2 && sg->n_forms) || form >= (sg->n_forms ? sg->n_forms : 1)) return false;
     memset(m, 0, sizeof *m);
     pr_pokemon *p = &m->b;
     p->id = (uint32_t)floor(pr_rng_real_in_range(rng, 0, 4294967296.0));
@@ -169,6 +169,11 @@ bool gc_mon_roll_player(gc_run *run, pr_rng *rng, gc_mon *m, int species, int le
     p->ivs[5] = id & 0x0000001fu;
     if (sg->male_percent < 0) p->gender = -1;
     else p->gender = pr_rng_frac(rng) * 100 <= sg->male_percent ? 0 : 1;
+    if (form == -2) {
+        const pr_enemy_gen_ctx ctx = {.species=species,.wave=run->wave,.biome=run->biome,
+            .battle_type=run->battle_type,.trainer_type=run->trainer_type};
+        form = pr_run_get_egg_form_index(rng,&run->run,&ctx,p->gender);
+    }
     p->form = (uint8_t)(form < 0 ? 0 : form);
 
     if (shiny < 0) {

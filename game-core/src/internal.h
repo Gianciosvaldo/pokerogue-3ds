@@ -42,6 +42,7 @@ enum {
     RP_ME_POST,          /* PostMysteryEncounterPhase's onPostOptionPhase: a = encounter type, b = party index, c = option */
     RP_CUSTOM_OFFER,     /* custom content: the app's rematch offer, waits on CUSTOM_OFFER (gc/custom.h) */
     RP_FG_KO,            /* Fun and Games!: MysteryEncounterRewardsPhase running doContinueEncounter (handleLoseMinigame) */
+    RP_EGG_LAPSE,        /* EggLapsePhase: wave progress and ready hatch/profile rewards */
     RP_COUNT_
 };
 typedef struct { uint8_t type; int32_t a, b, c; double d; const char *key; } gc_rphase;
@@ -143,6 +144,8 @@ const pr_species_gen *gc_species_gen(int id);                          /* run-co
  * form < 0 = getSpeciesFormIndex() (only for a species without forms), shiny < 0 = trySetShiny(). The moveset is
  * not rolled (Pokemon.generateAndPopulateMoveset isn't ported for a player's Pokemon: the stand-in is the caller's).
  * false = a species the roll can't be made for; the mon is then unusable. */
+bool gc_egg_generate(gc_run *run, const gc_egg *egg, gc_mon *out);
+int gc_system_hatch_ready_eggs(gc_run *run);
 bool gc_mon_roll_player(gc_run *run, pr_rng *rng, gc_mon *m, int species, int level, int ability_index, int form, int shiny);
 /* Task 63's clean wild constructor slice; false leaves the RNG/mon untouched. */
 bool gc_enemy_moveset(gc_run *run, gc_mon *m, const pr_enemy_gen *g);
