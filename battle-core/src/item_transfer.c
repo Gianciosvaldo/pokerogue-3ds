@@ -89,8 +89,7 @@ void pr_apply_turn_held_item_transfers(pr_battle *bt,pr_engine *e,pr_pokemon *p)
 }
 
 /* getOrInferTier caches positive tiers. A cached COMMON tier is falsy, so the
- * pool is searched again. These canonical identities have pool-invariant tier0
- * or positive tiers, avoiding shared-type alias ambiguity after cloning. */
+ * pool is searched again. Clones share their mutable ModifierType reference. */
 int pr_held_item_tier_for_pool(const pr_modifier *m, bool trainer)
 {
     int tier = -1;
@@ -117,6 +116,10 @@ static int infer_move_item_tier(pr_battle *bt, pr_modifier *m, bool trainer)
     int tier = m->type_tier <= 6 ? pr_held_item_tier_for_pool(m, trainer) : -1;
     if (tier < 0) { pr_note_unported(bt, PR_FEAT_MODIFIERS); return -1; }
     m->type_tier = (uint8_t)(tier + 1);
+    if (m->type_ref) for (int side=0;side<2;side++)
+        for (int k=0;k<bt->n_mods[side];k++)
+            if (bt->mods[side][k].type_ref==m->type_ref)
+                bt->mods[side][k].type_tier=m->type_tier;
     return tier;
 }
 
@@ -203,6 +206,17 @@ bool pr_try_transfer_held_item(pr_battle *bt, pr_engine *e, int from_side,
     bool removes=copy.stack_count<=quantity && source;
     if (matching<0 && bt->n_mods[side]>=PR_MAX_MODIFIERS && !(from_side==side && removes)) {
         pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return false;
+    }
+    /* clone() copies the type object reference. Allocate only after preflight;
+     * independent factory instances with equal keys must stay independent. */
+    if (!copy.type_ref) {
+        uint32_t largest=bt->modifier_type_ref_max;
+        for (int s=0;s<2;s++) for (int k=0;k<bt->n_mods[s];k++)
+            if (bt->mods[s][k].type_ref>largest) largest=bt->mods[s][k].type_ref;
+        if (largest==UINT32_MAX) { pr_note_unported(bt,PR_FEAT_ENGINE_LIMIT); return false; }
+        copy.type_ref=largest+1;
+        bt->modifier_type_ref_max=copy.type_ref;
+        bt->mods[from_side][index].type_ref=copy.type_ref;
     }
     int taken=copy.stack_count<quantity ? copy.stack_count : quantity;
     if (matching>=0 && taken>cap-existing) taken=cap-existing;

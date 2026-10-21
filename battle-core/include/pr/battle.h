@@ -106,6 +106,7 @@ typedef struct pr_modifier {
     bool unknown_subclass;
     bool is_transferable;          /* PokemonHeldItemModifier.isTransferable */
     uint8_t type_tier;             /* ModifierType.tier + 1; 0 = absent, tier0 remains falsy */
+    uint32_t type_ref;             /* transient shared ModifierType identity; 0 = independent */
     int64_t pokemon_id;            /* PokemonHeldItemModifier.pokemonId (ids are 32-bit unsigned); -1 = any Pokemon */
     int32_t stack_count, virtual_stack_count;
     int8_t stat;                   /* BaseStatModifier / TempStatStageBoosterModifier stat */
@@ -399,6 +400,7 @@ typedef struct pr_battle {
     /* globalScene.modifiers (player, [0]) and enemyModifiers ([1]), in upstream list order */
     pr_modifier mods[2][PR_MAX_MODIFIERS];
     uint8_t n_mods[2];
+    uint32_t modifier_type_ref_max; /* transient allocator, including bridged overflow stock */
     pr_seedstr wave_seed;      /* globalScene.waveSeed; len 0 = unknown */
     int max_exp_level;         /* globalScene.getMaxExpLevel(); 0 = unknown */
     /* turnCommand.cursor left undefined (a recharge turn's FIGHT command has -1) */

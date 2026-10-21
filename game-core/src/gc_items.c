@@ -104,6 +104,7 @@ static void to_modifier(const gc_item *it, pr_modifier *m, bool golden)
     m->pokemon_id = it->detached ? 0 : it->pokemon_id ? (int64_t)it->pokemon_id : -1;
     m->is_transferable = !it->non_transferable;
     m->type_tier = it->type_tier;
+    m->type_ref = it->type_ref;
     m->unknown_subclass = true;
     m->cls = it->pokemon_id ? PR_MOD_HELD_ITEM : PR_MOD_PERSISTENT;
     if (!strcmp(it->key, "BERRY_POUCH")) {
@@ -237,6 +238,12 @@ void gc_items_to_battle(gc_run *run)
 {
     pr_battle *bt = &run->bt;
     const bool golden = golden_bridge(run);
+    for (int side=0;side<2;side++) {
+        const gc_item *items=side?run->enemy_items:run->items;
+        int n=side?run->n_enemy_items:run->n_items;
+        for (int i=0;i<n && i<GC_MAX_ITEMS;i++)
+            if (items[i].type_ref>bt->modifier_type_ref_max) bt->modifier_type_ref_max=items[i].type_ref;
+    }
     bt->n_mods[0] = bt->n_mods[1] = 0;
     for (int i = 0; i < run->n_items && bt->n_mods[0] < PR_MAX_MODIFIERS; i++)
         to_modifier(&run->items[i], &bt->mods[0][bt->n_mods[0]++], golden);
@@ -312,7 +319,7 @@ static bool transfer_stock(const pr_modifier *m,gc_item *it)
     if(it)*it=(gc_item){.key=key,.arg=arg,.stack=m->stack_count,
         .pokemon_id=m->pokemon_id<0?0:(uint32_t)m->pokemon_id,
         .detached=m->pokemon_id==0,.virtual_stack=m->virtual_stack_count,
-        .non_transferable=!m->is_transferable,.type_tier=m->type_tier};
+        .non_transferable=!m->is_transferable,.type_tier=m->type_tier,.type_ref=m->type_ref};
     return true;
 }
 static bool same_transfer_stock(const pr_modifier *a,const pr_modifier *b)
@@ -355,6 +362,7 @@ void gc_items_from_battle(gc_run *run)
                 const pr_modifier *m=&run->bt.mods[side][match];used[match]=true;
                 it.stack=m->stack_count;it.virtual_stack=m->virtual_stack_count;
                 it.detached=m->pokemon_id==0;it.non_transferable=!m->is_transferable;it.type_tier=m->type_tier;
+                it.type_ref=m->type_ref;
                 items[w++]=it;continue;
             }
             if (i < tracked && !expected.unknown_subclass && (expected.cls == PR_MOD_INSTANT_REVIVE
