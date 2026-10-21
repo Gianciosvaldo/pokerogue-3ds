@@ -135,6 +135,9 @@ static struct {
   /* an item's description the summary screen asks for (bv_set_info), shown in the message window while no command is asked */
   bool info_on;
   char info_name[64], info_desc[512];
+  bool trainer_visible;
+  bool player_trainer_visible, opening_summon;
+  float player_throw_ms; /* -1 before the opening SummonPhase */
   bool has_balls;
   uint8_t balls[6]; /* the party tray: BV_BALL_* of each slot */
   /* promptLevelUpStats' window (BEV_LEVEL_UP) */
@@ -438,6 +441,50 @@ static void update_field_scale(bool instant) {
 
 static void field_zoom(bool on) { rr_set_zoom(on ? B.field_scale : 1, 160, 132); }
 
+/* Trainer starts at (-72,80) and slides +300 with the enemy platform. Paired
+ * trainers use the native -4/+28 offsets; double-only art is one sprite. */
+static void draw_trainers(void) {
+  if (!B.trainer_visible) return;
+  bool pair=B.setup.trainer_keys[1][0]!=0;
+  for (int k=0;k<2;k++) {
+    if (!B.setup.trainer_keys[k][0]) continue;
+    const rr_frame* frame=img_anim_frame(B.setup.trainer_keys[k],0);
+    if (!frame) continue;
+    rr_draw_opts o=RR_DEFAULT_OPTS;o.origin_x=0.5f;o.origin_y=1;
+    float x=228+B.enemy_slide+(pair?(k?28:-4):0);
+    rr_draw(frame,x,80,&o);
+  }
+}
+
+/* EncounterPhase's player back sprite, then SummonPhase's three throw poses.
+ * Keep this separate from the capture ball and ordinary switch summons. */
+static void draw_player_trainer(void) {
+  if (!B.player_trainer_visible) return;
+  char key[64];
+  bool throwing=B.player_throw_ms>=0;
+  snprintf(key,sizeof key,"images/trainer/trainer_%c_back%s",
+           B.setup.player_female?'f':'m',throwing?"_pb":"");
+  int frame=throwing?(B.player_throw_ms>=626?2:B.player_throw_ms>=562?1:0):0;
+  const rr_frame* f=img_anim_frame(key,frame);
+  if (!f) return;
+  rr_draw_opts o=RR_DEFAULT_OPTS;o.origin_x=0.5f;o.origin_y=1;
+  float x=throwing?106-142*ease(EASE_LINEAR,B.player_throw_ms/1000):106+B.arena_player_x;
+  rr_draw(f,x,186,&o);
+}
+
+static void draw_opening_ball(void) {
+  const float t=B.player_throw_ms-750;
+  if (!B.opening_summon || t<0 || t>=650) return;
+  static const char* const names[]={"pb","gb","ub","rb","mb"};
+  int type=B.setup.player.pokeball;
+  const rr_frame* f=img_frame("images/pb",names[type>=0 && type<5?type:0]);
+  if (!f) return;
+  rr_draw_opts o=RR_DEFAULT_OPTS;o.origin_x=0.5f;o.origin_y=0.625f;
+  o.angle=t<150?0:8*3.14159265f*ease(EASE_LINEAR,(t-150)/500);
+  float y=t<150?80-10*ease(EASE_CUBIC_OUT,t/150):70+62*ease(EASE_CUBIC_IN,(t-150)/500);
+  rr_draw(f,36+64*t/650,y,&o);
+}
+
 static void draw_field(void) {
   char k[64];
   snprintf(k, sizeof k, "images/arenas/%s_bg", B.biome);
@@ -459,16 +506,19 @@ static void draw_field(void) {
   /* the enemy's doll is added over it; the player's Pokemon is brought over its doll */
   side *en = &B.s[1], *pl = &B.s[0];
   if (B.ball.behind) draw_ball();
+  draw_trainers();
   draw_sprite(en, false);
   if (en->present && en->sub_on) draw_sub(en, false, false);
   if (en->present && en->tint_on) draw_sub(en, false, true);
   ba_draw(BA_LAYER_MID, field);
+  draw_player_trainer();
   if (pl->present && pl->sub_on) draw_sub(pl, true, false);
   if (pl->present && pl->tint_on && !pl->tint_above) draw_sub(pl, true, true);
   draw_sprite(pl, true);
   if (pl->present && pl->tint_on && pl->tint_above) draw_sub(pl, true, true);
   ba_draw(BA_LAYER_TOP, field);
   if (!B.ball.behind) draw_ball();
+  draw_opening_ball();
   field_zoom(false);
 }
 
@@ -1294,6 +1344,9 @@ static void run_event(float dt) {
 
     case BEV_SUMMON:
       if (B.step == 0) {
+        B.opening_summon=player && B.player_trainer_visible;
+        if (B.opening_summon) B.player_throw_ms=0;
+        if (!player) B.trainer_visible=false;
         if (e->mon) set_mon(sd, e->mon, player);
         sd->present = true;
         sd->scale = 0;
@@ -1310,7 +1363,7 @@ static void run_event(float dt) {
         B.step = 1;
         B.t = 0;
       }
-      if (B.step == 1 && B.t >= (player ? 750 : 250)) {
+      if (B.step == 1 && B.t >= (B.opening_summon ? 1400 : player ? 750 : 250)) {
         /* the ball opens: the Pokemon grows in, cries, and its info box slides in */
         ui_play_sound("se/pb_rel");
         update_field_scale(false);
@@ -1765,6 +1818,10 @@ static bool bv_input(ui_screen* s, ui_button b) {
 static void bv_update(ui_screen* s, float dt) {
   (void)s;
   float frame_dt = dt;
+  if (B.player_throw_ms>=0 && B.player_throw_ms<1400) {
+    B.player_throw_ms=fminf(1400,B.player_throw_ms+dt);
+    if (B.player_throw_ms>=1000) B.player_trainer_visible=false;
+  }
   msgbox_update(&B.msg, dt);
   if (B.ability_t > 0) B.ability_t -= dt;
   if (B.reason_ms > 0) B.reason_ms -= dt;
@@ -1893,6 +1950,9 @@ void bv_begin(const bv_setup* setup) {
   B.enemy_slide = -300;
   B.arena_old_on = setup->next_encounter;
   B.arena_old_x = 20;
+  B.trainer_visible=setup->trainer;
+  B.player_trainer_visible=!setup->player_present;
+  B.player_throw_ms=-1;
   B.s[0].present = B.s[0].info_on = setup->player_present;
   B.s[1].present = B.s[1].info_on = false;
   B.field_scale = 1;

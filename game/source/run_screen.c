@@ -8,6 +8,7 @@
 #include "ball_menu.h"
 #include "bgm.h"
 #include "gm_enum_names.h"
+#include "trainer_art.h"
 #include "pr_data.h"
 #include "battle_anim.h"
 #include "battle_events.h"
@@ -334,6 +335,7 @@ static bool settled_after(int i) {
 static bv_mon make_mon(const gc_mon* m, bool player) {
   bv_mon out;
   be_mon(&G.run.bt, &m->b, &out);
+  out.pokeball = m->pokeball;
   if (player) out.exp_ratio = (float)gc_exp_level_fraction(m);
   return out;
 }
@@ -357,6 +359,7 @@ static void wave_black(void* arg) {
   const bool loaded = G.resume_wave;
   G.resume_wave = false;
   img_drop_prefix("images/pokemon/");
+  img_drop_prefix("images/trainer/");
   if (!G.next_encounter) img_drop_prefix("images/arenas/"); /* the same biome's platforms are still on screen, sliding out */
   ba_drop_moves();
   preload_moves();
@@ -367,6 +370,10 @@ static void wave_black(void* arg) {
   memset(&s, 0, sizeof s);
   s.biome = w->b;
   s.trainer = trainer;
+  if (trainer) for (int k=0;k<2;k++) {
+    const char* key=gm_trainer_sprite_key(G.run.trainer_type,G.run.trainer_variant,k);
+    if (key && *key) snprintf(s.trainer_keys[k],sizeof s.trainer_keys[k],"images/trainer/%s",key);
+  }
   if (G.present[0] && G.shown >= 0) {
     s.player = *bv_mon_of(BV_PLAYER);
     s.player_present = true;
