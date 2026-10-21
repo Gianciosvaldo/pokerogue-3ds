@@ -135,6 +135,7 @@ static struct {
   /* an item's description the summary screen asks for (bv_set_info), shown in the message window while no command is asked */
   bool info_on;
   char info_name[64], info_desc[512];
+  bool trainer_visible;
   bool has_balls;
   uint8_t balls[6]; /* the party tray: BV_BALL_* of each slot */
   /* promptLevelUpStats' window (BEV_LEVEL_UP) */
@@ -438,6 +439,21 @@ static void update_field_scale(bool instant) {
 
 static void field_zoom(bool on) { rr_set_zoom(on ? B.field_scale : 1, 160, 132); }
 
+/* Trainer starts at (-72,80) and slides +300 with the enemy platform. Paired
+ * trainers use the native -4/+28 offsets; double-only art is one sprite. */
+static void draw_trainers(void) {
+  if (!B.trainer_visible) return;
+  bool pair=B.setup.trainer_keys[1][0]!=0;
+  for (int k=0;k<2;k++) {
+    if (!B.setup.trainer_keys[k][0]) continue;
+    const rr_frame* frame=img_anim_frame(B.setup.trainer_keys[k],0);
+    if (!frame) continue;
+    rr_draw_opts o=RR_DEFAULT_OPTS;o.origin_x=0.5f;o.origin_y=1;
+    float x=228+B.enemy_slide+(pair?(k?28:-4):0);
+    rr_draw(frame,x,80,&o);
+  }
+}
+
 static void draw_field(void) {
   char k[64];
   snprintf(k, sizeof k, "images/arenas/%s_bg", B.biome);
@@ -459,6 +475,7 @@ static void draw_field(void) {
   /* the enemy's doll is added over it; the player's Pokemon is brought over its doll */
   side *en = &B.s[1], *pl = &B.s[0];
   if (B.ball.behind) draw_ball();
+  draw_trainers();
   draw_sprite(en, false);
   if (en->present && en->sub_on) draw_sub(en, false, false);
   if (en->present && en->tint_on) draw_sub(en, false, true);
@@ -1294,6 +1311,7 @@ static void run_event(float dt) {
 
     case BEV_SUMMON:
       if (B.step == 0) {
+        if (!player) B.trainer_visible=false;
         if (e->mon) set_mon(sd, e->mon, player);
         sd->present = true;
         sd->scale = 0;
@@ -1893,6 +1911,7 @@ void bv_begin(const bv_setup* setup) {
   B.enemy_slide = -300;
   B.arena_old_on = setup->next_encounter;
   B.arena_old_x = 20;
+  B.trainer_visible=setup->trainer;
   B.s[0].present = B.s[0].info_on = setup->player_present;
   B.s[1].present = B.s[1].info_on = false;
   B.field_scale = 1;

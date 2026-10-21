@@ -385,6 +385,15 @@ static bool side_ok(int battler, const char* what) {
 }
 
 void bv_begin(const bv_setup* setup) {
+  if (setup->trainer) {
+    const gc_run* r=rs_run();
+    if (!setup->trainer_keys[0][0]) BAD("trainer %d variant%d has no sprite key",r->trainer_type,r->trainer_variant);
+    if (r->trainer_type>=TRAINER_TYPE_RIVAL && r->trainer_type<=TRAINER_TYPE_RIVAL_6) {
+      const char* expected=r->trainer_variant==TRAINER_VARIANT_FEMALE?"images/trainer/rival_f":"images/trainer/rival_m";
+      if (strcmp(setup->trainer_keys[0],expected)) BAD("wrong rival sprite %s",setup->trainer_keys[0]);
+    }
+  } else if (setup->trainer_keys[0][0] || setup->trainer_keys[1][0]) BAD("wild battle has a trainer sprite");
+
   if (scanner_fixture) {
     gc_run* r = (gc_run*)rs_run();
     bool found = false;
