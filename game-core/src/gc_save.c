@@ -699,6 +699,7 @@ static bool get_items(const reader *body, const char *name, gc_item *items, int 
         items[i].non_transferable = lock != 0;
         /* ModifierData.toModifier reconstructs typeFunc(): cached tier is not saved. */
         items[i].type_tier = 0;
+        items[i].type_ref = 0;
         items[i].virtual_stack = 0; /* pinned ModifierData saves real stacks only */
     }
     return true;

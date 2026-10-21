@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "source": "8555c08c823b856cbec4eb99ca84ea52a955836d",
+  "rows": [
+    {
+      "key": "SCOPE_LENS",
+      "enemy": false,
+      "owner": 0,
+      "recipient": 2,
+      "thief": 1,
+      "before": null,
+      "sharedAfterPartial": true,
+      "beforeSecond": 4,
+      "afterSecond": 4
+    },
+    {
+      "key": "SCOPE_LENS",
+      "enemy": true,
+      "owner": 2,
+      "recipient": 0,
+      "thief": 3,
+      "before": null,
+      "sharedAfterPartial": true,
+      "beforeSecond": 3,
+      "afterSecond": 3
+    },
+    {
+      "key": "LEFTOVERS",
+      "enemy": false,
+      "owner": 0,
+      "recipient": 2,
+      "thief": 1,
+      "before": null,
+      "sharedAfterPartial": true,
+      "beforeSecond": 4,
+      "afterSecond": 4
+    },
+    {
+      "key": "LEFTOVERS",
+      "enemy": true,
+      "owner": 2,
+      "recipient": 0,
+      "thief": 3,
+      "before": null,
+      "sharedAfterPartial": true,
+      "beforeSecond": 3,
+      "afterSecond": 3
+    },
+    {
+      "key": "SHELL_BELL",
+      "enemy": false,
+      "owner": 0,
+      "recipient": 2,
+      "thief": 1,
+      "before": null,
+      "sharedAfterPartial": true,
+      "beforeSecond": 4,
+      "afterSecond": 4
+    },
+    {
+      "key": "SHELL_BELL",
+      "enemy": true,
+      "owner": 2,
+      "recipient": 0,
+      "thief": 3,
+      "before": null,
+      "sharedAfterPartial": true,
+      "beforeSecond": 3,
+      "afterSecond": 3
+    },
+    {
+      "key": "KINGS_ROCK",
+      "enemy": false,
+      "owner": 0,
+      "recipient": 2,
+      "thief": 1,
+      "before": null,
+      "sharedAfterPartial": true,
+      "beforeSecond": 4,
+      "afterSecond": 4
+    },
+    {
+      "key": "KINGS_ROCK",
+      "enemy": true,
+      "owner": 2,
+      "recipient": 0,
+      "thief": 3,
+      "before": null,
+      "sharedAfterPartial": true,
+      "beforeSecond": 3,
+      "afterSecond": 3
+    }
+  ]
+}
