@@ -1218,6 +1218,21 @@ static void test_tm_and_memory_mushroom(void)
     m->b.hp = 300;
     CHECK(gc_mon_tm_state(m, -1) == 0 && gc_mon_tm_state(m, PR_MOVE_COUNT) == 0);
 
+    /* Native labels use getMoveset(), while the TM filter excludes permanent moves. */
+    m->b.summon_moves_active = true;
+    m->b.transform_n_moves = m->b.n_moves;
+    m->b.transform_moves[0] = MOVE_ID_FLAMETHROWER;
+    CHECK(gc_mon_tm_state(m, MOVE_ID_FLAMETHROWER) == 2);
+    CHECK(gc_mon_can_learn_tm(m, MOVE_ID_FLAMETHROWER));
+    gc_mon_set_move(m, 0, MOVE_ID_FLAMETHROWER);
+    m->b.transform_moves[0] = MOVE_ID_SURF;
+    CHECK(gc_mon_tm_state(m, MOVE_ID_FLAMETHROWER) == 1);
+    CHECK(!gc_mon_can_learn_tm(m, MOVE_ID_FLAMETHROWER));
+    CHECK(gc_mon_tm_state(m, MOVE_ID_SURF) == 2);
+    CHECK(!gc_mon_can_learn_tm(m, MOVE_ID_SURF));
+    m->b.summon_moves_active = false;
+    gc_mon_set_move(m, 0, MOVE_ID_SPLASH);
+
     /* Memory Mushroom application on mon level 50 with relearnable moves */
     pr_reward_ctx *ctx = gc_reward_ctx(&run);
     static pr_reward_memory_move moves[PR_REWARD_MAX_LEVEL_MOVES + 4 + PR_REWARD_MAX_USED_TMS];

@@ -255,15 +255,31 @@ static bool form_tms_have(int species, int form, int move)
     return false;
 }
 
-/* PartySlot TM labels check known moves first; teaching excludes those same moves.
- * getCompatibleTms(false, false, false) includes the fusion, including fainted members.
- * PLAYER_TM_COMPATIBILITY's Moveset Randomizer hook remains unported (as in reward generation). */
+/* getCompatibleTms(false, false, false): raw species/form plus fusion TMs,
+ * even while transformed. PLAYER_TM_COMPATIBILITY's randomizer remains unported. */
+static bool tm_compatible(const gc_mon *m, int move)
+{
+    return m && move > 0 && move < PR_MOVE_COUNT
+        && (form_tms_have(m->b.species, m->b.form, move)
+            || (m->b.fusion_species && form_tms_have(m->b.fusion_species, m->b.fusion_form, move)));
+}
+
+/* TmModifierType.selectFilter calls isTmCompatible(move, true), which excludes
+ * Pokemon.moveset (permanent moves), not getMoveset()'s temporary override. */
+bool gc_mon_can_learn_tm(const gc_mon *m, int move)
+{
+    if (!tm_compatible(m, move)) return false;
+    for (int i = 0; i < m->b.n_moves; i++) if (m->b.moves[i] == move) return false;
+    return true;
+}
+
+/* PartySlot displays getMoveset()'s effective moves first, then compatibility.
+ * A displayed Learned/Able label is therefore not itself the teaching filter. */
 int gc_mon_tm_state(const gc_mon *m, int move)
 {
     if (!m || move <= 0 || move >= PR_MOVE_COUNT) return 0;
-    for (int i = 0; i < m->b.n_moves; i++) if (m->b.moves[i] == move) return 2;
-    return form_tms_have(m->b.species, m->b.form, move)
-        || (m->b.fusion_species && form_tms_have(m->b.fusion_species, m->b.fusion_form, move));
+    for (int i = 0; i < PR_N_MOVES(&m->b); i++) if (PR_MOVES(&m->b)[i] == move) return 2;
+    return tm_compatible(m, move);
 }
 
 /* CanLearnMoveRequirement.getAllPokemonMoves(pkm) includes the move: getLevelMoves() with its defaults (startingLevel =

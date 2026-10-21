@@ -41,7 +41,7 @@ are not ARM runtime measurements.
 
 `check_stack_size.py` inspects the actual built ARM ELF, requires the app's strong
 startup override with at least 512 KiB, and checks compiler frame reports. The
-fixed build passes with **524,288 bytes**, **2,245 ARM function reports**, and
+fixed build passes with **524,288 bytes**, **2,247 ARM function reports**, and
 largest individual frame **45,056 bytes**. The original builder is rejected.
 An independent counterfactual ELF retaining a strong symbol but restoring its
 value to 32 KiB is also rejected.

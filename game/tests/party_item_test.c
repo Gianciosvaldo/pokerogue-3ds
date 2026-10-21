@@ -97,6 +97,24 @@ int main(void) {
   assert(!pf_text_count("partyUiHandler:able"));
   input(BTN_ACTION); input(BTN_ACTION);
   assert(picked == 0 && move_slot == 0 && calls == 5 && depth == 1);
+  /* A temporary known move can say Learned while the permanent TM filter permits it. */
+  pr_pokemon* p = &run.party[0].b;
+  p->summon_moves_active = true;
+  p->transform_moves[0] = MOVE_ID_FLAMETHROWER;
+  open(); pf_clear_text(); s = ui_top(); s->draw(s, RR_BOTTOM);
+  assert(pf_text_count("partyUiHandler:learned") == 2);
+  input(BTN_ACTION); input(BTN_ACTION);
+  assert(picked == 0 && calls == 6 && depth == 1);
+  /* Conversely, raw-known TM is refused even when the effective moves make it say Able. */
+  p->moves[0] = MOVE_ID_FLAMETHROWER;
+  p->transformed = true; p->transform_n_moves = 1;
+  p->transform_moves[0] = MOVE_ID_SURF;
+  open(); pf_clear_text(); s = ui_top(); s->draw(s, RR_BOTTOM);
+  assert(pf_text_count("partyUiHandler:able") == 1);
+  input(BTN_ACTION); input(BTN_ACTION);
+  assert(picked == -1 && calls == 6 && depth == 2);
+  input(BTN_CANCEL);
+  assert(picked == 6 && calls == 7 && depth == 1);
   puts("party_item_test: TM labels, Teach/filter, B/touch cancellation and move-item reset passed");
   return 0;
 }

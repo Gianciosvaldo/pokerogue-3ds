@@ -691,7 +691,7 @@ int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, co
             return GC_APPLY_REFUSED;
         }
         gc_mon *m = &run->party[party];
-        if (gc_mon_tm_state(m, o->arg) != 1) {
+        if (!gc_mon_can_learn_tm(m, o->arg)) {
             *why = "partyUiHandler:anyEffect";
             return GC_APPLY_REFUSED;
         }

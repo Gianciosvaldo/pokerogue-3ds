@@ -288,6 +288,7 @@ static struct {
   void (*on_item_pick)(int slot, int move_slot, void* arg);
   void* item_arg;
   bool target_move;
+  int tm_move;
 } ItemS;
 
 static void on_item_select(void* ctx, int slot, int option) {
@@ -306,7 +307,7 @@ static void on_item_select(void* ctx, int slot, int option) {
 
 static const char* filter_tm(void* ctx, int slot) {
   (void)ctx;
-  return S.party[slot].tm_state == 1 ? NULL : mui_t("partyUiHandler:anyEffect");
+  return gc_mon_can_learn_tm(&g_run->party[slot], ItemS.tm_move) ? NULL : mui_t("partyUiHandler:anyEffect");
 }
 
 void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, int tm_move, void (*on_pick)(int slot, int move_slot, void* arg), void* arg) {
@@ -318,6 +319,7 @@ void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, int tm_mo
   ItemS.on_item_pick = on_pick;
   ItemS.item_arg = arg;
   ItemS.target_move = target_move;
+  ItemS.tm_move = tm_move;
 
   if (run) {
     for (int i = 0; i < run->n_party && i < PR_MAX_PARTY; i++) {
