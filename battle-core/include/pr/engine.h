@@ -474,6 +474,8 @@ void pr_apply_turn_held_item_transfers(pr_battle *bt, pr_engine *e, pr_pokemon *
 bool pr_apply_contact_held_item_transfer(pr_battle *bt, pr_engine *e, pr_pokemon *user,
     pr_pokemon *target, const pr_modifier *modifier);
 void pr_apply_contact_held_item_transfers(pr_battle *bt, pr_engine *e, pr_pokemon *user, pr_pokemon *target);
+/* SwitchSummonPhase's BATON_PASS branch, after tags and before party swapping. */
+void pr_transfer_baton_on_switch(pr_battle *bt, pr_engine *e, pr_pokemon *last, pr_pokemon *incoming);
 void pr_init_final_boss_phase_two(pr_battle *bt, pr_engine *e, pr_pokemon *p);
 /* MovePhase.resolveRedirectTarget, also used by the native callback replay. */
 void pr_resolve_redirect_target(pr_battle *bt, pr_engine *e, int ph);

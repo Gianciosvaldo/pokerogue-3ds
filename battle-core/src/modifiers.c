@@ -13,6 +13,7 @@
 #include <string.h>
 
 const uint8_t pr_mod_parent[PR_MOD_COUNT_] = {
+    [PR_MOD_SWITCH_EFFECT_TRANSFER] = PR_MOD_HELD_ITEM,
     [PR_MOD_CONTACT_HELD_TRANSFER] = PR_MOD_HELD_ITEM,
     [PR_MOD_TURN_HELD_TRANSFER] = PR_MOD_HELD_ITEM,
     [PR_MOD_NONE] = PR_MOD_NONE,
@@ -58,6 +59,7 @@ const uint8_t pr_mod_parent[PR_MOD_COUNT_] = {
 };
 
 const char *const pr_mod_class_name[PR_MOD_COUNT_] = {
+    [PR_MOD_SWITCH_EFFECT_TRANSFER] = "SwitchEffectTransferModifier",
     [PR_MOD_CONTACT_HELD_TRANSFER] = "ContactHeldItemTransferChanceModifier",
     [PR_MOD_TURN_HELD_TRANSFER] = "TurnHeldItemTransferModifier",
     [PR_MOD_NONE] = "",
@@ -122,6 +124,7 @@ bool pr_mod_is_ported_item(const pr_modifier *m)
     if (m->cls == PR_MOD_CONTACT_HELD_TRANSFER)
         return !m->unknown_subclass && m->mult==0.1 && m->stack_count>=1
             && m->virtual_stack_count>=0 && (int64_t)m->stack_count+m->virtual_stack_count<=5;
+    if (m->cls == PR_MOD_SWITCH_EFFECT_TRANSFER) return !m->unknown_subclass && m->stack_count==1 && m->virtual_stack_count==0;
     if (m->cls == PR_MOD_TURN_HELD_TRANSFER) return !m->unknown_subclass && m->stack_count==1 && m->virtual_stack_count==0;
     if (m->cls == PR_MOD_BASE_STAT_TOTAL)
         return !m->unknown_subclass && m->pokemon_id >= 0 && m->stack_count >= 1 && m->stack_count <= 2

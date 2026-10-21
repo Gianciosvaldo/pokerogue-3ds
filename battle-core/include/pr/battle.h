@@ -92,6 +92,7 @@ enum {
     PR_MOD_PRESERVE_BERRY,          /* Berry Pouch; side-wide */
     PR_MOD_TURN_HELD_TRANSFER,       /* Mini Black Hole; transfer execution tracked separately */
     PR_MOD_CONTACT_HELD_TRANSFER,    /* Grip Claw: mult=chance (0.1) */
+    PR_MOD_SWITCH_EFFECT_TRANSFER, /* Baton */
     PR_MOD_COUNT_
 };
 extern const uint8_t pr_mod_parent[PR_MOD_COUNT_];

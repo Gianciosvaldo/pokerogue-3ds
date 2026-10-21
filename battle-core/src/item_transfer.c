@@ -12,6 +12,7 @@ static int transfer_cap(const pr_modifier *m)
     case PR_MOD_SURVIVE_DAMAGE: case PR_MOD_CONTACT_HELD_TRANSFER: return 5;
     case PR_MOD_BYPASS_SPEED_CHANCE: case PR_MOD_FLINCH_CHANCE: return 3;
     case PR_MOD_RESET_NEGATIVE_STAT_STAGE: return 2;
+    case PR_MOD_SWITCH_EFFECT_TRANSFER:
     case PR_MOD_TURN_HELD_TRANSFER: case PR_MOD_INSTANT_REVIVE:
     case PR_MOD_CRIT_BOOSTER: case PR_MOD_TURN_STATUS_EFFECT: return 1;
     case PR_MOD_MOVE_ACCURACY_BOOSTER: return 3;
@@ -98,7 +99,7 @@ int pr_held_item_tier_for_pool(const pr_modifier *m, bool trainer)
     case PR_MOD_CRIT_BOOSTER: tier = trainer ? 4 : 3; break;
     case PR_MOD_BYPASS_SPEED_CHANCE: case PR_MOD_MOVE_ACCURACY_BOOSTER:
         tier = trainer ? 3 : 2; break;
-    case PR_MOD_CONTACT_HELD_TRANSFER:
+    case PR_MOD_SWITCH_EFFECT_TRANSFER: case PR_MOD_CONTACT_HELD_TRANSFER:
     case PR_MOD_SURVIVE_DAMAGE: case PR_MOD_NATURE_WEIGHT: tier = 3; break;
     case PR_MOD_RESET_NEGATIVE_STAT_STAGE: case PR_MOD_TURN_STATUS_EFFECT:
     case PR_MOD_DAMAGE_MONEY_REWARD: case PR_MOD_ATTACK_TYPE_BOOSTER:
@@ -304,4 +305,22 @@ void pr_apply_contact_held_item_transfers(pr_battle *bt,pr_engine *e,
         }
     }
     if (found) pr_apply_contact_held_item_transfer(bt,e,user,target,&selected);
+}
+
+void pr_transfer_baton_on_switch(pr_battle *bt,pr_engine *e,
+                                 pr_pokemon *last,pr_pokemon *incoming)
+{
+    if (!last || !incoming) { pr_note_unported(bt,PR_FEAT_PARTY); return; }
+    /* Both pinned findModifier calls omit player, hence always scan player
+     * stock, including when the phase is switching an enemy. */
+    bool recipient_has_baton=false;
+    int baton=-1;
+    for (int k=0;k<bt->n_mods[0];k++) {
+        const pr_modifier *m=&bt->mods[0][k];
+        if (!pr_mod_is(m,PR_MOD_SWITCH_EFFECT_TRANSFER)) continue;
+        if (m->pokemon_id==(int64_t)incoming->id) recipient_has_baton=true;
+        if (baton<0 && m->pokemon_id==(int64_t)last->id) baton=k;
+    }
+    if (!recipient_has_baton && baton>=0)
+        pr_try_transfer_held_item(bt,e,0,baton,incoming,1,false,false);
 }

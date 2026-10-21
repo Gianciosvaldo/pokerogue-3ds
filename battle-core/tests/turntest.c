@@ -481,6 +481,10 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             m->pokemon_id = inum(l, "pid");
             m->stack_count = (int32_t)inum(l, "stack");
             m->is_transferable = true;
+            if(field(l,"lock")){
+                if(m->cls!=PR_MOD_SWITCH_EFFECT_TRANSFER || inum(l,"lock")!=1){fprintf(stderr,"invalid Baton transfer lock\n");exit(2);}
+                m->is_transferable=false;
+            }
             if (m->cls == PR_MOD_CONTACT_HELD_TRANSFER) {
                 if (!field(l,"chance")) { fprintf(stderr,"missing Grip Claw chance\n"); exit(2); }
                 m->mult=dnum(l,"chance");
@@ -813,6 +817,9 @@ static void dump_state(lines_t *L, const pr_battle *bt, const case_state *cs, bo
             if (m->cls == PR_MOD_BERRY)
                 add_line(L, "MOD side=%d cls=%s pid=%lld stack=%d btype=%d", side,
                          pr_mod_class_name[m->cls], (long long)m->pokemon_id, m->stack_count, m->berry_type);
+            else if (m->cls == PR_MOD_SWITCH_EFFECT_TRANSFER)
+                add_line(L,"MOD side=%d cls=%s pid=%lld stack=%d%s",side,
+                    pr_mod_class_name[m->cls],(long long)m->pokemon_id,m->stack_count,m->is_transferable?"":" lock=1");
             else if (m->cls == PR_MOD_CONTACT_HELD_TRANSFER)
                 add_line(L,"MOD side=%d cls=%s pid=%lld stack=%d chance=%g",side,
                     pr_mod_class_name[m->cls],(long long)m->pokemon_id,m->stack_count,m->mult);

@@ -653,3 +653,7 @@ $(BUILD)/scene-transfer-test: tests/scene-transfer-test.c $(BUILD)/libprcore.a
 all: $(BUILD)/grip-claw-test
 $(BUILD)/grip-claw-test: tests/grip-claw-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/baton-switch-test
+$(BUILD)/baton-switch-test: tests/baton-switch-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
