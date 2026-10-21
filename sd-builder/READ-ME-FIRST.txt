@@ -1,6 +1,18 @@
 PokeRogue SD card builder (Windows 10 or 11)
 =============================================
 
+October 21 test build
+  Includes the battle-menu crash/TM shop fixes, corrected move names, battle stat
+  stage display, egg hatching, IV Scanner prompts, visible rivals and your trainer's
+  opening Poke Ball throw. The run report can name an engine-recorded final blow.
+  Existing game speed settings are included.
+  Build a fresh game file and replace the older PokeRogue.3dsx on your card. The
+  builder's files\VERSION.txt identifies the app revision for a bug report.
+  Please check the opening throw and rivals, TM compatibility/cancel, and Fight/Ball
+  menus. Eggs unlock starters after enough victories; they do not join your party.
+  IV Scanner questions appear when entering an ordinary wild battle with the item.
+  Automated checks cannot replace testing on your physical 3DS.
+
 What this does
   The 3DS game needs PokeRogue's pictures, sounds, music and text, converted for the 3DS
   (about 850 MB of files). Nobody is allowed to share those, so this tool makes them on
