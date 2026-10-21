@@ -72,7 +72,7 @@ map_ui_test: build/map_ui_test
 
 # unit test for DNA Splicers target selection UI
 SPLICER_CPPFLAGS := $(CPPFLAGS) -I../menus -I$(GC)/include -I$(GC)/gen/out -I$(RC)/include -I$(RC)/gen/out -I$(APP)/include
-SPLICER_SRCS := splicer_ui_test.c ../menus/party.c ../menus/menus_names.c ../menus/menus_data.c $(BC)/gen/out/pr_data.c
+SPLICER_SRCS := splicer_ui_test.c ../menus/party.c ../menus/menus_names.c ../menus/move_names.c ../menus/menus_data.c $(BC)/gen/out/pr_data.c
 build/splicer_ui_test: $(SPLICER_SRCS)
 	@mkdir -p build
 	$(CC) $(SPLICER_CPPFLAGS) $(CFLAGS) $(SPLICER_SRCS) -lm -o $@
@@ -81,7 +81,7 @@ splicer_ui_test: build/splicer_ui_test
 
 # unit test for shop UI and Lock Capsule visuals
 SHOP_CPPFLAGS := $(CPPFLAGS) -I../menus -I../include -I$(GC)/include -I$(GC)/src -I$(GC)/gen/out -I$(RC)/include -I$(RC)/gen/out -I$(RW)/include -I$(RW)/gen/out -I$(APP)/include
-SHOP_SRCS := shop_ui_test.c ../menus/shop_ui.c ../source/reward_host.c ../menus/item_ui.c ../gen/gm_item_ui.c ../menus/menus_names.c ../menus/menus_data.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+SHOP_SRCS := shop_ui_test.c ../menus/shop_ui.c ../source/reward_host.c ../menus/item_ui.c ../gen/gm_item_ui.c ../menus/menus_names.c ../menus/move_names.c ../menus/menus_data.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/shop_ui_test: $(SHOP_SRCS)
 	@mkdir -p build
 	$(CC) $(SHOP_CPPFLAGS) $(CFLAGS) $(SHOP_SRCS) -lm -o $@
@@ -90,7 +90,7 @@ shop_ui_test: build/shop_ui_test
 
 # unit test for summary UI, shiny tier parsing and passive ability slot
 SUMMARY_CPPFLAGS := $(CPPFLAGS) -I../menus -I$(GC)/include -I$(GC)/src -I$(GC)/gen/out -I$(RC)/include -I$(RC)/gen/out -I$(APP)/include
-SUMMARY_SRCS := summary_ui_test.c ../menus/summary.c ../menus/menus_names.c ../menus/menus_data.c $(BC)/gen/out/pr_data.c
+SUMMARY_SRCS := summary_ui_test.c ../menus/summary.c ../menus/menus_names.c ../menus/move_names.c ../menus/menus_data.c $(BC)/gen/out/pr_data.c
 build/summary_ui_test: $(SUMMARY_SRCS)
 	@mkdir -p build
 	$(CC) $(SUMMARY_CPPFLAGS) $(CFLAGS) $(SUMMARY_SRCS) -lm -o $@
@@ -104,7 +104,7 @@ RW := ../../reward-core
 CCORE := ../../custom-core
 OBS_SRCS := ../source/combat_observer.c ../source/custom_core_build.c
 RUN_CPPFLAGS := $(CPPFLAGS) -I$(CCORE)/include -I../menus -I../gen -I$(GC)/include -I$(GC)/gen/out -I$(RC)/include -I$(RC)/gen/out -I$(RW)/include -I$(RW)/gen/out -I$(APP)/include
-RUN_SRCS := runtest.c snd_fake.c ../menus/item_ui.c ../gen/gm_item_ui.c ../source/bgm.c ../source/bgm_choose.c ../source/bgm_player.c ../gen/gm_bgm_data.c party_fake.c ../menus/party.c ../menus/menus_names.c ../menus/menus_data.c ../source/starter_data.c ../source/run_screen.c ../source/battle_events.c ../source/run_saves.c ../source/run_history.c ../source/history_record.c ../source/run_text.c ../source/custom_run.c ../source/custom_store.c ../source/profile_tx.c ../source/system_data.c $(OBS_SRCS) $(APP)/source/save.c ../gen/gm_enum_names.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+RUN_SRCS := runtest.c snd_fake.c ../menus/item_ui.c ../gen/gm_item_ui.c ../source/bgm.c ../source/bgm_choose.c ../source/bgm_player.c ../gen/gm_bgm_data.c party_fake.c ../menus/party.c ../menus/menus_names.c ../menus/move_names.c ../menus/menus_data.c ../source/starter_data.c ../source/run_screen.c ../source/battle_events.c ../source/run_saves.c ../source/run_history.c ../source/history_record.c ../source/run_text.c ../source/custom_run.c ../source/custom_store.c ../source/profile_tx.c ../source/system_data.c $(OBS_SRCS) $(APP)/source/save.c ../gen/gm_enum_names.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/runtest: $(RUN_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) -I$(GC)/src $(CFLAGS) $(RUN_SRCS) -lm -o $@
@@ -182,7 +182,7 @@ starter_data_test: build/starter_data_test
 
 # the starter select screen itself (menus/starter.c, the host and the data) with a fake drawing layer, over real game-core;
 # make starter_ui_test && build/starter_ui_test [fuzz sessions]
-SUI_SRCS := starter_ui_test.c ../menus/starter.c ../menus/starter_model.c ../menus/menus_data.c ../menus/menus_names.c ../source/starter_host.c ../source/starter_data.c $(CORE_SRCS)
+SUI_SRCS := starter_ui_test.c ../menus/starter.c ../menus/starter_model.c ../menus/menus_data.c ../menus/menus_names.c ../menus/move_names.c ../source/starter_host.c ../source/starter_data.c $(CORE_SRCS)
 build/starter_ui_test: $(SUI_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(SUI_SRCS) -lm -o $@
@@ -354,7 +354,7 @@ run_menu_test: build/run_menu_test
 .PHONY: run_menu_test
 
 # Real item-party adapter + real menus: TM labels, filtering and both ways to back out.
-PARTY_ITEM_SRCS := party_item_test.c party_fake.c ../menus/item_ui.c ../source/party_screen.c ../menus/party.c ../menus/menus_names.c ../menus/menus_data.c ../gen/gm_item_ui.c $(CORE_SRCS)
+PARTY_ITEM_SRCS := party_item_test.c party_fake.c ../menus/item_ui.c ../source/party_screen.c ../menus/party.c ../menus/menus_names.c ../menus/move_names.c ../menus/menus_data.c ../gen/gm_item_ui.c $(CORE_SRCS)
 build/party_item_test: $(PARTY_ITEM_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(PARTY_ITEM_SRCS) -lm -o $@
