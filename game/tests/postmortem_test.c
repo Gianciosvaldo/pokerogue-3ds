@@ -121,6 +121,7 @@ static const char* species_name(int id) {
   }
 }
 const char* i18n_species_name(int id) { return species_name(id); }
+const char* i18n_move_name(int id) { return id == 33 ? "Tackle" : "?"; }
 
 /* what a win gave and the bars that show it (win_gains.c, menus/toast_view.c): this test has no gains */
 bool wg_is_toast(const wg_item* it) { (void)it; return false; }
@@ -340,6 +341,16 @@ static void test_screen(void) {
   CHECK(has_text("It names no cause"), "top: the footnote");
   check_on_screen(0);
   check_no_cause();
+
+  static co_report attributed;
+  attributed=*r;
+  attributed.final_blow=(gc_faint_record){.observed=true,.direct=true,.species=16,.move=33};
+  const pm_args known={&attributed,on_exit_cb,NULL};
+  CHECK(postmortem_open(&known),"open report with engine source");draw(0);
+  CHECK(has_text("Final blow: Pidgey / Tackle"),"show actual finisher and move");
+  CHECK(!has_text("source not recorded") && has_text("recorded by the battle engine"),"label provenance accurately");
+  check_on_screen(0);
+  CHECK(postmortem_open(&a),"restore original report");
 
   /* bottom: the newest turn first */
   draw(1);

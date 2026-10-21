@@ -1341,7 +1341,7 @@ static void end_run(int kind) {
   G.step_timer = 0;
   G.save_due = false;
   /* the combat history's report is taken now, while the run is whole and before the app clears the slot or starts another */
-  co_finish(kind == GC_SCREEN_CLEAR, G.run.biome, G.run.wave);
+  co_finish_run(kind == GC_SCREEN_CLEAR, &G.run);
   /* a custom run settles its rematch and names the enemy that finished the party, from the same moment: the run is whole */
   G.have_defeat = G.cfg.custom && cr_on_run_end(&G.run, kind, &G.defeat);
   if (G.cfg.custom) cr_end();

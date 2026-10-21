@@ -507,7 +507,30 @@ static void test_outcomes(void) {
   CHECK(r && r->fallen_known && r->fallen_species == RATTATA, "the last one");
 }
 
+static void test_final_blow(void) {
+  static gc_run run;
+  memset(&run, 0, sizeof run);run.wave=7;run.biome=1;
+  gc_faint_record *f=&run.last_faint[0];
+  *f=(gc_faint_record){.observed=true,.direct=true,.source_side=1,.species=25,.move=33,.wave=7,.turn=3};
+  begin(false);CHECK(co_finish_run(false,&run),"finish actual run");
+  const co_report *r=co_report_get();
+  CHECK(r->final_blow.observed && r->final_blow.direct && r->final_blow.species==25 && r->final_blow.move==33,"copy engine provenance");
+  f->species=16;CHECK(r->final_blow.species==25,"report owns source data");
+  CHECK(co_finish_run(false,&run) && r->final_blow.species==25,"finish is idempotent");
+  f->direct=false;f->species=0;f->move=0;
+  begin(false);CHECK(co_finish_run(false,&run),"finish residual faint");
+  CHECK(co_report_get()->final_blow.observed && !co_report_get()->final_blow.direct && !co_report_get()->final_blow.move,"never reuse earlier attack for residual faint");
+  f->wave=6;begin(false);co_finish_run(false,&run);
+  CHECK(!co_report_get()->final_blow.observed,"reject previous wave");
+  f->wave=7;f->remaining=1;begin(false);co_finish_run(false,&run);
+  CHECK(!co_report_get()->final_blow.observed,"reject nonterminal party faint");
+  run.last_faint[1]=(gc_faint_record){.observed=true,.direct=true,.species=19,.move=33,.wave=7};
+  begin(false);co_finish_run(true,&run);
+  CHECK(co_report_get()->final_blow.species==19,"clear reads the enemy's terminal faint");
+}
+
 int main(void) {
+  test_final_blow();
   test_battle_in_drains();
   test_switch_and_reused_position();
   test_unknown_source();

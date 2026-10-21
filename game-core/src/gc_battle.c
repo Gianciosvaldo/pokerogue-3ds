@@ -312,7 +312,8 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
     bt->battle_style_set = !run->ask_switch;
     bt->next_summon_index = next_summon_cb;
     bt->next_summon_ctx = run;
-    gc_custom_install_observer(run);   /* the faint observer, when the app's custom hooks want one (gc/custom.h) */
+    memset(run->last_faint, 0, sizeof run->last_faint);
+    gc_custom_install_observer(run);   /* final-blow provenance and optional custom callbacks */
     bt->trainer_names[0] = run->trainer_names[GC_TNAME_TRAINER];
     bt->trainer_names[1] = run->trainer_names[GC_TNAME_PARTNER];
     if (!restoring) {

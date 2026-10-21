@@ -1,7 +1,7 @@
 /* The optional hooks of the custom content (gc/custom.h, task C10): what game-core tells the app about a wave and a faint, and the one
  * thing it lets the app decide, the identity of the enemy of an ordinary wild encounter the player agreed to fight.
- * Nothing here runs unless the app installed hooks (gc_run_set_custom): the paths it touches in gc_encounter.c / gc_phases.c / gc_battle.c
- * are all behind `in->custom`. */
+ * Custom callbacks run only with installed hooks. The faint observer also keeps
+ * the run's read-only final-blow provenance for ordinary run reports. */
 #include "internal.h"
 
 static void actor_of(const gc_run *run, const pr_pokemon *p, bool enemy, gc_custom_actor *a)
@@ -46,13 +46,27 @@ static bool is_enemy_of(const gc_run *run, const pr_pokemon *p)
     return false;
 }
 
-/* battle-core's faint observer: converts the note and tells the app. It reads, it never writes. */
+/* Copy provenance before the note expires, then notify optional custom hooks. */
 static void faint_cb(const pr_battle *bt, const pr_faint_note *n, void *ctx)
 {
     gc_run *run = (gc_run *)ctx;
     (void)bt;
     const gc_custom_hooks *h = gc_int(run)->custom;
-    if (!h || !h->faint || !n->fainted) return;
+    if (!n->fainted || n->side > 1) return;
+    gc_faint_record *last = &run->last_faint[n->side];
+    memset(last, 0, sizeof *last);
+    last->observed = true;
+    last->remaining = n->remaining;
+    last->wave = n->wave;
+    last->turn = n->turn;
+    if (n->direct && n->source && n->move) {
+        last->direct = true;
+        last->source_side = n->source->is_player ? 0 : 1;
+        last->species = n->source->transformed ? n->source->transform_species : n->source->species;
+        last->form = n->source->transformed ? n->source->transform_form : n->source->form;
+        last->move = n->move;
+    }
+    if (!h || !h->faint) return;
     gc_custom_faint f;
     memset(&f, 0, sizeof f);
     f.wave = n->wave;
@@ -72,14 +86,8 @@ static void faint_cb(const pr_battle *bt, const pr_faint_note *n, void *ctx)
 
 void gc_custom_install_observer(gc_run *run)
 {
-    const gc_custom_hooks *h = gc_int(run)->custom;
-    if (h && h->faint) {
-        run->bt.faint_observer = faint_cb;
-        run->bt.faint_observer_ctx = run;
-    } else if (run->bt.faint_observer == faint_cb) {
-        run->bt.faint_observer = NULL;
-        run->bt.faint_observer_ctx = NULL;
-    }
+    run->bt.faint_observer = faint_cb;
+    run->bt.faint_observer_ctx = run;
 }
 
 void gc_run_set_custom(gc_run *run, const gc_custom_hooks *hooks)

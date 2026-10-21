@@ -1490,6 +1490,7 @@ static void hist_check(const gc_run* r, bool cleared) {
 static bool g_run_resumed;   /* the run on screen was continued from its slot at some point */
 static struct {
   long runs, ranges, batches, events, turns, faint_known, defeats, clears, resumed, empty_ranges, ignored, evicted, full_turns;
+  long final_direct, final_unknown;
 } OBS;
 
 static void obs_check(const gc_run* r, bool cleared) {
@@ -1497,6 +1498,15 @@ static void obs_check(const gc_run* r, bool cleared) {
   if (!rep) {
     BAD("no combat report when the run ended");
     return;
+  }
+  const gc_faint_record* f=&r->last_faint[cleared?1:0];
+  const bool terminal=f->observed && f->remaining==0 && f->wave==r->wave;
+  if (rep->final_blow.observed != terminal) BAD("final-blow snapshot missing or stale");
+  if (terminal) {
+    const gc_faint_record* got=&rep->final_blow;
+    if (got->direct!=f->direct || got->species!=f->species || got->form!=f->form || got->move!=f->move || got->source_side!=f->source_side || got->turn!=f->turn)
+      BAD("report changed the engine's final-blow provenance");
+    if (got->direct) OBS.final_direct++; else OBS.final_unknown++;
   }
   const co_stats* o = &rep->stats;
   if (rep->outcome != (cleared ? CC_OUT_CLEAR : CC_OUT_DEFEAT)) BAD("the combat report says outcome %d for a %s", rep->outcome, cleared ? "clear" : "game over");
@@ -1764,6 +1774,7 @@ int main(int argc, char** argv) {
   } else {
     printf("evolution coverage floor (5 evolved, 5 cancelled, 3 moves) NOT checked: it needs 1000+ runs, this one has %d\n", runs);
   }
+  printf("final blows: %ld direct, %ld unattributed terminal faints\n",OBS.final_direct,OBS.final_unknown);
   printf("combat observer: %ld reports checked (%ld defeats, %ld clears, %ld from a resumed run), %ld batches, %ld observed events, %ld turns kept "
          "(%ld complete), %ld last-fallen named, %ld empty ranges, %ld HP-0 events ignored, %ld events evicted\n",
          OBS.runs, OBS.defeats, OBS.clears, OBS.resumed, OBS.batches, OBS.events, OBS.turns, OBS.full_turns, OBS.faint_known, OBS.empty_ranges,

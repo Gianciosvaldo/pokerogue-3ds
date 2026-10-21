@@ -358,6 +358,8 @@ static void test_faint_notes(void)
         fight_in(&run);
         CHECK(n_faint_notes == 1);
         CHECK(last_faint.side == 1 && !last_faint.direct && !last_faint.has_source && last_faint.move == 0);
+        CHECK(run.last_faint[1].observed && !run.last_faint[1].direct);
+        CHECK(run.last_faint[1].species == 0 && run.last_faint[1].move == 0);
     }
     /* Explosion: the target falls to the hit (direct), the user to its own move (not direct) */
     new_wild("faint-explosion", &hooks_faint_only);
@@ -375,6 +377,19 @@ static void test_faint_notes(void)
         CHECK(n_direct == 1);   /* only the enemy's: Explosion's own faint has no attacker */
         (void)my_id;
     }
+    /* Ordinary runs retain the exact engine note without enabling custom callbacks. */
+    new_wild("faint-ordinary", NULL);
+    {
+        gc_mon *me = &run.party[run.party_order[0]], *foe = &run.enemy[0];
+        set_moves(me, MOVE_ID_TACKLE); set_moves(foe, MOVE_ID_SPLASH); foe->b.hp = 1;
+        n_faint_notes = 0;
+        fight_in(&run);
+        CHECK(n_faint_notes == 0);
+        const gc_faint_record *f = &run.last_faint[1];
+        CHECK(f->observed && f->direct && f->remaining == 0 && f->source_side == 0);
+        CHECK(f->species == me->b.species && f->form == me->b.form && f->move == MOVE_ID_TACKLE);
+        CHECK(f->wave == run.wave && f->turn > 0);
+    }
     /* a faint seen after the app installed the hooks into a running battle (after a load) */
     new_wild("faint-install-late", NULL);
     {
@@ -388,7 +403,7 @@ static void test_faint_notes(void)
         fight_in(&run);
         CHECK(n_faint_notes == 1 && last_faint.direct);
         gc_run_set_custom(&run, NULL);
-        CHECK(run.bt.faint_observer == NULL);
+        CHECK(run.bt.faint_observer != NULL); /* report provenance remains with custom callbacks detached */
     }
 }
 

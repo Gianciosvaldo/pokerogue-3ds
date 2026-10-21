@@ -292,5 +292,17 @@ bool co_finish(bool victory, int biome, int wave) {
   return true;
 }
 
+bool co_finish_run(bool victory, const gc_run* run) {
+  if (!run) return false;
+  const bool already_finished = C.finished;
+  if (!co_finish(victory, run->biome, run->wave)) return false;
+  if (!already_finished) {
+    const gc_faint_record* f = &run->last_faint[victory ? 1 : 0];
+    if (f->observed && f->remaining == 0 && f->wave == run->wave)
+      C.report.final_blow = *f;
+  }
+  return true;
+}
+
 const co_report* co_report_get(void) { return C.finished && C.report.valid ? &C.report : NULL; }
 const co_stats* co_stats_get(void) { return &C.st; }
