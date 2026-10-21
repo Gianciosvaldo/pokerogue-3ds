@@ -20,7 +20,7 @@ faults=[
  ('donor-stack','item_transfer.c','bt->mods[from_side][index].stack_count-=taken;','bt->mods[from_side][index].stack_count-=0;'),
  ('same-side-index','item_transfer.c','if (from_side==side && matching>index) matching--;','if (false) matching--;'),
  ('receiver-stack','item_transfer.c','copy.stack_count=existing+taken;','copy.stack_count=taken;'),
- ('stat-refresh','item_transfer.c','    pr_refresh_berry_modifiers(bt,side);\n    if (source) {','    /* missing refresh */\n    if (source) {'),
+ ('stat-refresh','item_transfer.c','    if (!ignore_update) pr_refresh_berry_modifiers(bt,side);\n    if (source && item_lost) {','    /* missing refresh */\n    if (source && item_lost) {'),
  ('unburden','item_transfer.c','pr_apply_ab_attrs(bt,PR_AC_PostItemLostAbAttr,&lost);','(void)lost;'),
  ('user-hp','item_transfer.c','if (pr_rng_seed_float(&bt->rng)>chance) return false;','if (pr_rng_seed_float(&bt->rng)>chance || user->hp<=0) return false;'),
  ('dispatch','move_effects.c','pr_steal_move_held_item(bt, e, user, target, P(StealHeldItemChanceAttr, a)->chance);','(void)target;'),
@@ -31,7 +31,7 @@ with tempfile.TemporaryDirectory(prefix='theft-guards-',dir=r/'work')as tmp:
  for name,file,old,new in faults:
   s=(r/'battle-core/src'/file).read_text()
   if file=='item_transfer.c':
-   cut=s.index('/* getOrInferTier caches positive tiers.');prefix=s[:cut];scope=s[cut:]
+   cut=s.index('bool pr_try_transfer_held_item(') if name in {'cross-side','sticky','cap','donor-stack','same-side-index','receiver-stack','stat-refresh','unburden'} else s.index('/* getOrInferTier caches positive tiers.');prefix=s[:cut];scope=s[cut:]
   else:prefix='';scope=s
   assert scope.count(old)==1,(name,scope.count(old))
   source=tmp/(name+'.c');obj=tmp/(name+'.o');binary=tmp/name;source.write_text(prefix+scope.replace(old,new))

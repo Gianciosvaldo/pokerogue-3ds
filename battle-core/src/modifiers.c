@@ -569,9 +569,9 @@ void pr_refresh_berry_modifiers(pr_battle *bt, int side)
     for (int i = 0; i < bt->n_mods[side]; i++) {
         pr_modifier m = bt->mods[side][i];
         if (pr_mod_is(&m, PR_MOD_HELD_ITEM) && !pr_pokemon_by_id(bt, m.pokemon_id)) continue;
-        if (!pr_mod_is_ported_item(&m)) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
         m.virtual_stack_count = 0;
         if (m.stack_count == 0) continue;
+        if (!pr_mod_is_ported_item(&m)) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
         bt->mods[side][w++] = m;
     }
     bt->n_mods[side] = w;

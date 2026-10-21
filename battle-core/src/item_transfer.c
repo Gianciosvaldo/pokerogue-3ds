@@ -66,37 +66,8 @@ bool pr_apply_turn_held_item_transfer(pr_battle *bt,pr_engine *e,pr_pokemon *p,c
     if (!count) return false;
     int index=indices[pr_battle_rand_seed_int(bt,count,0)];
     pr_modifier copy=bt->mods[other][index];
-    bool cancelled=false;
-    /* Source treats a zero holder ID as absent at this scene helper boundary. */
-    if (copy.pokemon_id) {
-        pr_ab_params block={.pokemon=victim,.move=-1,.flag=&cancelled};
-        pr_apply_ab_attrs(bt,PR_AC_BlockItemTheftAbAttr,&block);
-    }
-    if(cancelled)return false;
-    int cap=transfer_cap(&copy),matching=-1;
     const char *name=pr_held_item_name_key(&copy);
-    if(cap<0||!name||copy.stack_count<0){pr_note_unported(bt,PR_FEAT_MODIFIERS);return false;}
-    for(int k=0;k<bt->n_mods[side];k++){
-        const pr_modifier *m=&bt->mods[side][k];
-        if(same_type(m,&copy)&&m->pokemon_id==(int64_t)p->id){
-            if(transfer_cap(m)<0){pr_note_unported(bt,PR_FEAT_MODIFIERS);return false;}
-            matching=k;break;
-        }
-    }
-    if(matching>=0&&bt->mods[side][matching].stack_count>=cap)return false;
-    if(matching<0&&bt->n_mods[side]>=PR_MAX_MODIFIERS){pr_note_unported(bt,PR_FEAT_ENGINE_LIMIT);return false;}
-    int existing=matching>=0?bt->mods[side][matching].stack_count:0;
-    int taken=copy.stack_count>0?1:0;
-    bt->mods[other][index].stack_count-=taken;
-    if(!bt->mods[other][index].stack_count&&victim->id)remove_at(bt,other,index);
-    if(matching>=0)remove_at(bt,side,matching);
-    copy.pokemon_id=p->id;copy.stack_count=existing+taken;copy.virtual_stack_count=0;
-    /* The common native clone constructors restore their transferable default. */
-    copy.is_transferable=true;
-    if(copy.stack_count>0)bt->mods[side][bt->n_mods[side]++]=copy;
-    if(victim->id)pr_refresh_berry_modifiers(bt,other);
-    pr_refresh_berry_modifiers(bt,side);
-    if(victim->id){pr_ab_params lost={.pokemon=victim,.move=-1};pr_apply_ab_attrs(bt,PR_AC_PostItemLostAbAttr,&lost);}
+    if (!pr_try_transfer_held_item(bt,e,other,index,p,1,false,true)) return false;
     pr_queue_msg(bt,e,pr_msg4("modifier:turnHeldItemTransferApply",
         pr_arg_pokemon(bt,"pokemonNameWithAffix",victim),pr_arg_key("itemName",name),
         pr_arg_pokemon_name(bt,"pokemonName",p),pr_arg_key("typeName","modifierType:ModifierType.MINI_BLACK_HOLE.name")));
@@ -147,12 +118,56 @@ static int infer_move_item_tier(pr_battle *bt, pr_modifier *m, bool trainer)
     return tier;
 }
 
-/* Scene tryTransferHeldItemModifier, one stack. The caller has already selected
+/* Native canTransferHeldItemModifier clones before matching. The currently
+ * supported stock families preserve their class through clone(). The broader
+ * clone-family cases must be added here before enabling them for Pickup. */
+bool pr_can_transfer_held_item(pr_battle *bt, const pr_modifier *stock,
+                              pr_pokemon *receiver, int quantity)
+{
+    if (!stock || !receiver || quantity<0 || stock->stack_count<0
+        || transfer_cap(stock)<0) {
+        pr_note_unported(bt,PR_FEAT_MODIFIERS); return false;
+    }
+    pr_modifier copy=*stock;
+    copy.virtual_stack_count=0;
+    copy.is_transferable=true;
+    pr_pokemon *source=copy.pokemon_id ? pr_pokemon_by_id(bt,copy.pokemon_id) : NULL;
+    bool cancelled=false;
+    if (source && source->is_player!=receiver->is_player) {
+        pr_ab_params block={.pokemon=source,.move=-1,.flag=&cancelled};
+        pr_apply_ab_attrs(bt,PR_AC_BlockItemTheftAbAttr,&block);
+    }
+    if (cancelled) return false;
+    int side=receiver->is_player?0:1;
+    for (int k=0;k<bt->n_mods[side];k++) {
+        const pr_modifier *m=&bt->mods[side][k];
+        if (!pr_mod_is(m,PR_MOD_HELD_ITEM) || !same_type(m,&copy)
+            || m->pokemon_id!=(int64_t)receiver->id) continue;
+        int cap=transfer_cap(m);
+        if (cap<0) { pr_note_unported(bt,PR_FEAT_MODIFIERS); return false; }
+        if (m->stack_count>=cap) return false;
+        if (quantity>cap-m->stack_count) quantity=cap-m->stack_count;
+        break;
+    }
+    int taken=copy.stack_count<quantity ? copy.stack_count : quantity;
+    if (copy.stack_count!=taken || !source) return true;
+    int from_side=source->is_player?0:1;
+    for (int k=0;k<bt->n_mods[from_side];k++)
+        if (stock==&bt->mods[from_side][k]) return true;
+    return false;
+}
+
+/* Scene tryTransferHeldItemModifier. The caller has already selected
  * an actual transferable stock. The native helper itself does not test HP or
  * the transferable flag, and Sticky Hold is only queried across sides. */
-static bool transfer_move_stock(pr_battle *bt, pr_engine *e, int from_side,
-                                int index, pr_pokemon *receiver)
+bool pr_try_transfer_held_item(pr_battle *bt, pr_engine *e, int from_side,
+                              int index, pr_pokemon *receiver, int quantity,
+                              bool ignore_update, bool item_lost)
 {
+    if (!receiver || from_side<0 || from_side>1 || index<0
+        || index>=bt->n_mods[from_side] || quantity<0) {
+        pr_note_unported(bt,PR_FEAT_MODIFIERS); return false;
+    }
     pr_modifier copy = bt->mods[from_side][index];
     pr_pokemon *source = copy.pokemon_id ? pr_pokemon_by_id(bt, copy.pokemon_id) : NULL;
     int side = receiver->is_player ? 0 : 1;
@@ -183,11 +198,12 @@ static bool transfer_move_stock(pr_battle *bt, pr_engine *e, int from_side,
     if (matching>=0) cap=transfer_cap(&bt->mods[side][matching]);
     int existing=matching>=0 ? bt->mods[side][matching].stack_count : 0;
     if (matching>=0 && existing>=cap) return false;
-    bool removes=copy.stack_count<=1 && source;
+    bool removes=copy.stack_count<=quantity && source;
     if (matching<0 && bt->n_mods[side]>=PR_MAX_MODIFIERS && !(from_side==side && removes)) {
         pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); return false;
     }
-    int taken=copy.stack_count>0 ? 1 : 0;
+    int taken=copy.stack_count<quantity ? copy.stack_count : quantity;
+    if (matching>=0 && taken>cap-existing) taken=cap-existing;
     bt->mods[from_side][index].stack_count-=taken;
     if (!bt->mods[from_side][index].stack_count && source) {
         remove_at(bt,from_side,index);
@@ -198,11 +214,11 @@ static bool transfer_move_stock(pr_battle *bt, pr_engine *e, int from_side,
     copy.stack_count=existing+taken;
     copy.virtual_stack_count=0;
     copy.is_transferable=true;
-    if (source && source->is_player != receiver->is_player)
+    if (!ignore_update && source && source->is_player != receiver->is_player)
         pr_refresh_berry_modifiers(bt,source->is_player?0:1);
-    if (copy.stack_count>0) bt->mods[side][bt->n_mods[side]++]=copy;
-    pr_refresh_berry_modifiers(bt,side);
-    if (source) {
+    bt->mods[side][bt->n_mods[side]++]=copy;
+    if (!ignore_update) pr_refresh_berry_modifiers(bt,side);
+    if (source && item_lost) {
         pr_ab_params lost={.pokemon=source,.move=-1};
         pr_apply_ab_attrs(bt,PR_AC_PostItemLostAbAttr,&lost);
     }
@@ -232,7 +248,7 @@ bool pr_steal_move_held_item(pr_battle *bt, pr_engine *e, pr_pokemon *user,
     if (!n) { pr_note_unported(bt,PR_FEAT_MODIFIERS); return false; }
     int selected=chosen[pr_battle_rand_seed_int(bt,n,0)];
     const char *name=pr_held_item_name_key(&bt->mods[side][selected]);
-    if (!transfer_move_stock(bt,e,side,selected,user)) return false;
+    if (!pr_try_transfer_held_item(bt,e,side,selected,user,1,false,true)) return false;
     pr_queue_msg(bt,e,pr_msg3("moveTriggers:stoleItem",
         pr_arg_pokemon(bt,"pokemonName",user),pr_arg_pokemon(bt,"targetName",target),
         pr_arg_key("itemName",name)));

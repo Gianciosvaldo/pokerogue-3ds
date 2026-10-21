@@ -459,6 +459,14 @@ void pr_redirect_moves(pr_battle *bt, pr_engine *e, const pr_pokemon *removed, c
 
 /* the phases' start() (src/phases.c) */
 int pr_held_item_tier_for_pool(const pr_modifier *m, bool trainer);
+/* Scene held-item transfer boundary. Inventory indices refer to actual stock,
+ * not a copied descriptor. Unsupported families remain explicit refusals.
+ * Preflight may display Sticky Hold; it does not consume stock or RNG. */
+bool pr_can_transfer_held_item(pr_battle *bt, const pr_modifier *stock,
+                              pr_pokemon *receiver, int quantity);
+bool pr_try_transfer_held_item(pr_battle *bt, pr_engine *e, int from_side,
+                              int index, pr_pokemon *receiver, int quantity,
+                              bool ignore_update, bool item_lost);
 bool pr_apply_eat_berry_move(pr_battle *bt, pr_engine *e, pr_pokemon *user, pr_pokemon *target, bool self_target, bool steal);
 bool pr_steal_move_held_item(pr_battle *bt, pr_engine *e, pr_pokemon *user, pr_pokemon *target, double chance);
 bool pr_apply_turn_held_item_transfer(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_modifier *modifier);
