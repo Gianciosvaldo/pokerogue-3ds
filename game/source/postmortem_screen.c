@@ -266,7 +266,14 @@ static void draw_top(void) {
     fit(t, TS_WINDOW, 300);
     text_draw(TS_WINDOW, 160, y, t, &o);
     y += 20;
-    text_draw(TS_WINDOW, 160, y, "Final blow: source not recorded", &o);
+    const gc_faint_record* f = &r->final_blow;
+    if (f->observed && f->direct && f->species && f->move) {
+      char who[64];
+      snprintf(who, sizeof who, "%s", i18n_species_name(f->species));
+      snprintf(t, sizeof t, "Final blow: %s / %s", who, i18n_move_name(f->move));
+      fit(t, TS_WINDOW, 300);
+    } else snprintf(t, sizeof t, "Final blow: source not recorded");
+    text_draw(TS_WINDOW, 160, y, t, &o);
     y += 20;
   }
   const bool complete = !r->untracked_loss && !r->began_mid && r->history.n_turns > 0;
@@ -280,7 +287,8 @@ static void draw_top(void) {
     snprintf(t, sizeof t, "Last %d turns, history incomplete", r->history.n_turns);
   text_draw(TS_WINDOW, 160, y, t, &o);
   o.color = RR_RGBA(0xa0, 0xa0, 0xa0, 255);
-  text_draw(TS_INSTRUCTIONS_TEXT, 160, 156, "Read from the battle log. It names no cause.", &o);
+  text_draw(TS_INSTRUCTIONS_TEXT, 160, 156,
+            r->final_blow.direct ? "Final blow recorded by the battle engine." : "Read from the battle log. It names no cause.", &o);
 }
 
 static void draw_bottom(void) {

@@ -14,6 +14,8 @@
  *
  * What is NOT established, on purpose: who dealt a hit, with which move, and what caused a loss. Nothing in a raw event says so, and
  * this module never infers it from event order, a move animation or an amount. Every stored event has its source bits clear.
+ * Separately, co_finish_run copies the engine's final FaintPhase provenance for
+ * the report header. This does not attribute any raw history event.
  * Stable Pokemon identities are not derived either (a snapshot's party_slot is an index into a party that can be re-ordered
  * between the event and the drain): species and form come from the snapshot, ids stay unknown.
  *
@@ -70,6 +72,7 @@ typedef struct {
   bool fallen_known;
   uint16_t fallen_species;
   uint8_t fallen_form;
+  gc_faint_record final_blow; /* current-wave terminal faint; never inferred from retained events */
   cc_history history;         /* the last turns, oldest first */
   co_stats stats;
 } co_report;
@@ -109,6 +112,7 @@ void co_observe(uint32_t drain_no, const gc_event* q, int nq, const pr_event* be
 /* The run has ended: closes the reducer and captures the report from what it holds. Call once the run object is still valid and
  * before its slot is cleared. A second call changes nothing. False when no run was observed. */
 bool co_finish(bool victory, int biome, int wave);
+bool co_finish_run(bool victory, const gc_run* run);
 
 /* The report of the run that just ended; NULL when there is none (no run, or it has not ended). */
 const co_report* co_report_get(void);

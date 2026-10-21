@@ -256,8 +256,18 @@ enum {
     GC_TNAME_COUNT_
 };
 
+/* Read-only FaintPhase provenance for the current battle, copied before the
+ * observer's pointers expire. Residual damage never inherits an earlier hit. */
+typedef struct {
+    bool observed, direct;
+    uint8_t remaining, source_side, form;
+    uint16_t species, move;
+    int wave, turn;
+} gc_faint_record;
+
 typedef struct gc_run {
     int api_version;
+    gc_faint_record last_faint[2]; /* most recent actual faint per side; not saved mid-battle */
     gc_system *sys;             /* overall system data across runs (NULL = no system updates) */
     pr_run run;                 /* run-core: mode, seed, wave seed, Phaser.Math.RND */
     pr_biome_depths depths;
