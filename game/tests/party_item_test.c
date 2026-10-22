@@ -17,6 +17,7 @@ void ui_pop(void) { assert(depth > 1); depth--; }
 ui_screen* ui_top(void) { return stack[depth - 1]; }
 bool ui_space(ui_space_id s) { (void)s; return true; }
 void mui_set_origin(rr_screen s, int x, int y) { (void)s; (void)x; (void)y; }
+float ui_game_speed(void){return 3;}
 void mui_tick(float dt) { (void)dt; }
 void mui_init(void) {}
 void rr_rect(float x, float y, float w, float h, rr_color c) { (void)x; (void)y; (void)w; (void)h; (void)c; }
@@ -28,7 +29,8 @@ void summary_close(void) {}
 bool summary_active(void) { return false; }
 bool summary_input(mui_button b) { (void)b; return false; }
 bool summary_touch(float x, float y) { (void)x; (void)y; return false; }
-void summary_update(float dt) { (void)dt; }
+static float summary_ms;
+void summary_update(float dt) { summary_ms=dt; }
 void summary_draw(void) {}
 void learn_move_start(const learn_move_args* a, const learn_move_host* h) { (void)a; (void)h; assert(0); }
 
@@ -91,11 +93,15 @@ int main(void) {
   open();
   input(BTN_ACTION); input(BTN_ACTION); /* eligible Charizard -> Teach */
   assert(picked == 0 && move_slot == -1 && calls == 4 && depth == 1);
+  run.party[0].b.pp_up[0]=2;run.party[0].b.pp_used[0]=4;
   /* A fresh opening must clear the old TM filter/labels for other item types. */
   ps_open_item(&run, PARTY_MOVE_MODIFIER, true, 0, on_pick, NULL);
   pf_clear_text(); s = ui_top(); s->draw(s, RR_BOTTOM);
   assert(!pf_text_count("partyUiHandler:able"));
-  input(BTN_ACTION); input(BTN_ACTION);
+  s->update(s,6000);assert(summary_ms==2000); /* summary reading clock ignores 3x game speed */
+  input(BTN_ACTION);pf_clear_text();s->draw(s,RR_BOTTOM);
+  assert(pf_text_count("Tackle 45/49")==1);
+  input(BTN_ACTION);
   assert(picked == 0 && move_slot == 0 && calls == 5 && depth == 1);
   /* A temporary known move can say Learned while the permanent TM filter permits it. */
   pr_pokemon* p = &run.party[0].b;

@@ -859,7 +859,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         if (a->cls == PR_AC_SacrificialAttrOnHit && !effect_can_apply(ef, user, target)) return;
         /* damageAndUpdate(user.hp, {result: INDIRECT, ignoreSegments: true}), then damageTaken +=
          * user.hp: the HP left afterwards, 0 unless the user got through */
-        pr_damage_and_update(bt, e, user, user->hp, HIT_RESULT_INDIRECT, false, NULL);
+        pr_damage_and_update_segments(bt, e, user, user->hp, HIT_RESULT_INDIRECT, true, false, NULL);
         user->damage_taken += user->hp;
         if (a->cls == PR_AC_SacrificialFullRestoreAttr) {
             const pr_attr_SacrificialFullRestoreAttr *x = P(SacrificialFullRestoreAttr,a);

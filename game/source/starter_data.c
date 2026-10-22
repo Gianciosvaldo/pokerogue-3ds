@@ -2,6 +2,7 @@
 #include "starter_data.h"
 
 #include <stdio.h>
+#include <time.h>
 #include <string.h>
 
 #include "gc/data.h"
@@ -24,6 +25,13 @@ const pr_species* menu_species(uint16_t id);
 #define ABILITY_HIDDEN 4u
 #define PASSIVE_UNLOCKED 1u
 #define PASSIVE_ENABLED 2u
+
+static bool has_pokerus(uint16_t species){
+  static uint64_t last=UINT64_MAX;static uint16_t ids[3];
+  time_t now=time(NULL);uint64_t ms=now>0?(uint64_t)now*1000:0;
+  if(ms/10800000!=last){last=ms/10800000;gc_pokerus_starters(ms,ids);}
+  return species==ids[0]||species==ids[1]||species==ids[2];
+}
 
 /* how a species is picked with no stored preference */
 typedef struct {
@@ -124,6 +132,7 @@ int ss_list(const gc_system* sys, sm_entry* out, int cap, int* refused) {
     sm_entry* e = &out[n++];
     memset(e, 0, sizeof *e);
     e->species = id;
+    e->pokerus=has_pokerus(id);
     e->cost = gc_starter_value(sys, id);
     e->base_cost = gc_starter_cost(id);
     e->form = p.form_index;
@@ -176,7 +185,7 @@ bool ss_starter(const gc_system* sys, uint16_t species, gc_starter* out) {
   out->shiny = p.shiny;
   out->variant = p.variant;
   out->passive = p.passive;
-  out->pokerus = false;
+  out->pokerus = has_pokerus(species);
   out->tera_type = -1; /* the species' first type */
   if (sys && species <= GC_MAX_SPECIES_ID) memcpy(out->ivs, sys->dex[species].ivs, sizeof out->ivs);
   uint16_t pool[64];int n=gc_starter_moves(sys,species,p.form_index,pool,64),w=0;

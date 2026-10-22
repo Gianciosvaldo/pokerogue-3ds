@@ -479,12 +479,12 @@ static void test_roster_of_16(void) {
   CHECK(radar_open(&a), "opens");
   draw_both();
   draw(1);
-  CHECK(has_text("16/16"), "16 of 16");
+  CHECK(has_text("15/16"), "15 unclaimed of 16 retained");
   /* newest first: the last record (id 33, wave 42, species 25 -> i = 15, 15 % 3 = 0) is at the top of the list */
   CHECK(y_of("Mon25  Lv. 35") >= 0 && y_of("Wave 42") >= 0, "the newest record is the first row");
   CHECK(y_of("Wave 42") < y_of("Wave 41"), "newest above older");
   CHECK(!has_text("Wave 37"), "only five rows are visible");
-  CHECK(has_text("11 more below"), "the rest is said to be below: %d", 0);
+  CHECK(has_text("10 more below"), "the unclaimed rest is said to be below: %d", 0);
   CHECK(!has_text("more above"), "nothing above the first row");
   CHECK(has_text("Remembered"), "tag for a stored record");
 
@@ -500,14 +500,14 @@ static void test_roster_of_16(void) {
   CHECK(!has_text("more above"), "five rows still fit with the cursor on the fifth");
   press(BTN_DOWN);
   draw(1);
-  CHECK(has_text("1 more above") && has_text("10 more below"), "the sixth row scrolls the list by one");
+  CHECK(has_text("1 more above") && has_text("9 more below"), "the sixth row scrolls the list by one");
   for (int i = 0; i < 40; i++) press(BTN_DOWN);
   draw(1);
-  CHECK(has_text("11 more above") && !has_text("more below"), "the end of the list");
+  CHECK(has_text("10 more above") && !has_text("more below"), "the end of the list");
   CHECK(has_text("Wave 27"), "the oldest record is the last row");
   press(BTN_RIGHT);
   draw(1);
-  CHECK(has_text("11 more above"), "RIGHT at the end stays");
+  CHECK(has_text("10 more above"), "RIGHT at the end stays");
   for (int i = 0; i < 6; i++) press(BTN_LEFT);
   draw(1);
   CHECK(!has_text("more above"), "LEFT pages back to the top");

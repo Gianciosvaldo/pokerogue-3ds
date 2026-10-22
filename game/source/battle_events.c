@@ -61,12 +61,20 @@ const pr_text_source* be_text_source(void) {
   return &src;
 }
 
+void be_format_message(const pr_msg *msg,char *out,size_t size){
+  pr_msg display=*msg;
+  for(int i=0;i<display.n_args;i++)if(display.args[i].kind==PR_ARG_MOVE)display.args[i].v|=PR_MSG_MOVE_BARE;
+  pr_msg_format(&display,be_text_source(),out,size);
+}
+
+
 /* ------------------------------------------------------------------ Pokemon */
 
 void be_mon(const pr_battle* bt, const pr_pokemon* p, bv_mon* m) {
   memset(m, 0, sizeof *m);
   /* PR_DEV_ILLUSION: a disguised Pokemon looks, is named and is typed as its disguise */
   const bool look = pr_shows_illusion(bt, p);
+  m->pokemon_id=p->id;m->identity_known=true;
   m->illusion=look;
   const pr_form* form = pr_shown_form(bt, p);
   m->species = form->species;
@@ -89,6 +97,17 @@ void be_mon(const pr_battle* bt, const pr_pokemon* p, bv_mon* m) {
     int step = base / 5 < 1 ? 1 : base / 5;
     int max = PR_MAX_PP(p)[i] > 0 ? PR_MAX_PP(p)[i] : base + PR_PP_UP(p)[i] * step;
     m->moves[i] = PR_MOVES(p)[i];
+    const int move=m->moves[i];m->move_power[i]=pr_moves[move].power;
+    if(bt&&(move==MOVE_ID_ROLLOUT||move==MOVE_ID_ICE_BALL||move==MOVE_ID_FURY_CUTTER||move==MOVE_ID_ECHOED_VOICE)){
+      /* The native multiplier skips the in-flight entry. Add that entry on
+       * copies to preview the next use, without touching gameplay state/RNG. */
+      static pr_battle preview;static pr_pokemon candidate;
+      preview=*bt;candidate=*p;
+      pr_push_move_history(&candidate,(pr_turn_move){.move=move,.result=MOVE_RESULT_SUCCESS});
+      double power=pr_moves[move].power;
+      pr_apply_variable_power(&preview,&candidate,NULL,move,&power);
+      m->move_power[i]=(int)power;
+    }
     m->pp_max[i] = max;
     m->pp_left[i] = max - PR_PP_USED(p)[i];
   }
@@ -103,6 +122,7 @@ static int view_slot(int battler){return (battler%2)*2+(battler>=2);}
 
 #define TXT_MAX 64
 static char g_txt[TXT_MAX][256];
+static char ability_actor_names[PR_MAX_EVENTS][64];
 
 typedef struct {
   int species, form;
@@ -180,10 +200,13 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
     const pr_event* ev = &events[i];
     int b = ev->battler;
     if(ev->type==PR_EV_FIELD_SWAP){
+      bool already=current[0].identity_known&&ev->field[0].pokemon_id_known&&current[0].pokemon_id==ev->field[0].pokemon_id;
+      if(!already){
       seen_t seen_tmp=seen[0];seen[0]=seen[1];seen[1]=seen_tmp;
       bv_mon tmp=current[0];current[0]=current[2];current[2]=tmp;
-      for(int k=0;k<2;k++)view->sent[view_slot(k)]=be_switched_in((const pr_pokemon*const*)bt->party[0],bt->n_party[0],bt->field[k],&ev->field[k]);
       PUT(.type=BEV_FIELD_SWAP,.battler=1,.target=0);
+      }
+      for(int k=0;k<2;k++)view->sent[view_slot(k)]=be_switched_in((const pr_pokemon*const*)bt->party[0],bt->n_party[0],bt->field[k],&ev->field[k]);
     }
     bool single = b>=0&&b<4; /* all four native battler slots */
     /* In the air or underground: the snapshot after this event says whether the Pokemon is still in
@@ -214,6 +237,7 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
             /* another species without a Transform: a disguise (it took one at the battle's start) */
             bv_mon* mon = &sent[n_sent++];
             look_of(mon, &current[view_slot(k)], &ev->field[k]);
+            mon->illusion=true;
             mon->hp = seen[k].hp; mon->max_hp = seen[k].max_hp; mon->status = seen[k].status;
             PUT(.type = BEV_ILLUSION, .battler = k, .a = 0, .mon = mon);
             seen[k].species = mon->species;
@@ -233,6 +257,7 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
         if (!single || !seen[b].present || n_sent >= SENT_MAX) break;
         bv_mon* mon = &sent[n_sent++];
         look_of(mon, &current[view_slot(b)], &ev->field[b]);
+        mon->illusion=false;
         mon->hp = seen[b].hp; mon->max_hp = seen[b].max_hp; mon->status = seen[b].status;   /* the bar as the screen has it */
         PUT(.type = BEV_ILLUSION, .battler = b, .a = 1, .mon = mon);
         seen[b].species = mon->species;
@@ -274,7 +299,7 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
         /* "Will you switch Pokemon?" is asked as a prompt in upstream (SET battle style only); the run doesn't
          * ask it, and the question alone would be a dead end on screen */
         if (!strcmp(ev->msg.key, "battle:switchQuestion")) break;
-        pr_msg_format(&ev->msg, be_text_source(), g_txt[nt], sizeof g_txt[nt]);
+        be_format_message(&ev->msg,g_txt[nt],sizeof g_txt[nt]);
         if (i + 1 < n_events && events[i + 1].type == PR_EV_SWITCH_IN && events[i + 1].battler >= 0 &&
             events[i + 1].battler < 2) {
           /* "Go! X!": SwitchSummonPhase shows it while the ball is thrown, so the summon shows it */
@@ -309,7 +334,16 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
           if (ev->value & (1 << s)) PUT(.type = BEV_STAT_STAGES, .battler = b, .a = s, .b = ev->id ? 1 : -1);
         break;
       case PR_EV_ABILITY_SHOW:
-        if (single) PUT(.type = BEV_ABILITY, .battler = b, .a = ev->id, .b = ev->value);
+        if(single){
+          const char *name=current[view_slot(b)].name;
+          if(!*name||current[view_slot(b)].species!=ev->field[b].species)name=i18n_species_name(ev->field[b].species);
+          /* An ability can react after its owner fled or was recalled. Capture
+           * the actor now; showing this overlay must not put its sprite back. */
+          if(i<PR_MAX_EVENTS&&ev->field[b].species>0){
+            snprintf(ability_actor_names[i],sizeof ability_actor_names[i],"%s",name);
+            PUT(.type=BEV_ABILITY,.battler=b,.a=ev->id,.b=ev->value,.text=ability_actor_names[i]);
+          }else PUT(.type=BEV_ABILITY,.battler=b,.a=ev->id,.b=ev->value);
+        }
         break;
       case PR_EV_FAINT:
         if (!single || seen[b].fainted) break;
@@ -352,12 +386,14 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
           if (!side && view->level_of) (*sm).level = view->level_of(p);
           if ((*sm).species != ev->field[b].species || (*sm).form != ev->field[b].form) {
             /* it changed after being sent out (the events that follow show that): send it out as it was */
-            (*sm).species = ev->field[b].species;
+            (*sm).pokemon_id=ev->field[b].pokemon_id;(*sm).identity_known=ev->field[b].pokemon_id_known;
+          (*sm).species = ev->field[b].species;
             (*sm).form = ev->field[b].form;
             snprintf((*sm).name, sizeof (*sm).name, "%s", i18n_species_name(ev->field[b].species));
           }
         } else {
           memset(&(*sm), 0, sizeof (*sm));
+          (*sm).pokemon_id=ev->field[b].pokemon_id;(*sm).identity_known=ev->field[b].pokemon_id_known;
           (*sm).species = ev->field[b].species;
           (*sm).form = ev->field[b].form;
           snprintf((*sm).name, sizeof (*sm).name, "%s", i18n_species_name(ev->field[b].species));

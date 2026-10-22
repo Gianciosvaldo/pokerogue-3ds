@@ -74,7 +74,9 @@ typedef struct {
     double money_change, money_after; /* GC_EV_MONEY only: native Numbers, never narrowed */
     bool prompt;               /* GC_EV_MESSAGE: require confirmation */
     uint8_t egg_tier, egg_variant;
-    bool egg_shiny;
+    bool egg_shiny, egg_move_rare;
+    uint8_t egg_nature, egg_ivs[6], egg_previous_ivs[6];
+    uint16_t egg_move;
 } gc_event;
 
 /* ---------------------------------------------------------------- screens and choices */
@@ -153,7 +155,7 @@ typedef struct {
     /* COMMAND: which commands are allowed now; a move slot that can't be picked has its reason (an
      * upstream i18n key, e.g. "battle:moveNoPp"; {{moveName}} is the slot's move and
      * {{pokemonNameWithAffix}} the Pokemon) in move_why */
-    bool can_ball, can_switch, can_run;
+    bool can_ball, can_switch, can_run, can_undo;
     bool fight_only;        /* a mystery encounter skips to the FIGHT menu (skipToFightInput): the menu cannot be backed out of */
     bool target_ok[4];       /* TARGET: legal single-target choices */
     bool move_ok[4];
@@ -411,6 +413,7 @@ int gc_item_discard(gc_run *run, int item_idx, int count);
 int gc_party_luck(gc_run *run); /* actual allowed living party, clamped by native rules */
 int gc_starter_budget(int mode);                       /* the cost limit: 10 in classic */
 int gc_starter_cost(int species);                      /* base speciesStarterCosts, -1 = not a starter */
+void gc_pokerus_starters(uint64_t unix_ms,uint16_t out[3]);
 double gc_starter_value(const gc_system *sys, int species); /* cost with value reduction (game-data.ts:2018) */
 bool gc_starter_is_available(const gc_system *sys, const gc_starter *starter, double *cost_out, const char **why);
 /* The default moveset: the first four level 1-5 moves (getStarterMoves). Returns how many. */

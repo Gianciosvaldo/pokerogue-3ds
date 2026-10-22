@@ -236,7 +236,7 @@ static void put_msg(const char* text, bool prompt) {
 static bool put_gc_msg(const pr_msg* m) {
   if (!m->key) return false; /* text not ported in battle-core: nothing to show */
   char* t = txt_new();
-  pr_msg_format(m, be_text_source(), t, TXT_LEN);
+  be_format_message(m,t,TXT_LEN);
   if (!t[0]) return false;
   bv_event* e = ev_new();
   if (!e) return false;
@@ -400,7 +400,7 @@ static void wave_black(void* arg) {
   }
   if (!trainer && !mystery && !offer && G.run.n_enemy > 0 && (!loaded||(G.run.bt.field[2]&&G.run.bt.field[2]->on_field&&G.run.bt.field[2]->hp>0))) s.enemy = make_mon(&G.run.enemy[0], false);
   s.doubles=G.run.double_battle;
-  if(G.present[2]&&G.shown_ally>=0){s.player_ally=*bv_mon_of(1);s.player_ally_present=true;}
+  if(G.run.double_battle&&G.present[2]&&G.shown_ally>=0){s.player_ally=*bv_mon_of(1);s.player_ally_present=true;}
   if(!trainer&&!mystery&&!offer&&G.run.double_battle&&G.run.n_enemy>1&&(!loaded||(G.run.bt.field[3]&&G.run.bt.field[3]->on_field&&G.run.bt.field[3]->hp>0)))s.enemy_ally=make_mon(&G.run.enemy[1],false);
   bv_begin(&s);
   refresh_item_bars();
@@ -421,7 +421,7 @@ static void wave_black(void* arg) {
     /* the first game-core message after the wave is the encounter text ("X would like to battle!") */
     for (int j = G.wave_ev + 1; j < G.nq && j <= G.wave_ev + 5; j++) {
       if (G.q[j].kind == GC_EV_MESSAGE && !G.skip[j]) {
-        if (G.q[j].msg.key) pr_msg_format(&G.q[j].msg, be_text_source(), t, TXT_LEN);
+        if (G.q[j].msg.key) be_format_message(&G.q[j].msg,t,TXT_LEN);
         G.skip[j] = true;
         break;
       }
@@ -477,6 +477,7 @@ static void sync_primary_shown(void) {
     shown->moves[i] = m.moves[i];
     shown->pp_left[i] = m.pp_left[i];
     shown->pp_max[i] = m.pp_max[i];
+    shown->move_power[i]=m.move_power[i];
   }
   snprintf(shown->name, sizeof shown->name, "%s", m.name);
   shown->n_types = m.n_types;
@@ -489,7 +490,7 @@ static void sync_shown(void){
     memcpy(bv_mon_of(k)->stat_stages,G.run.bt.field[k]->stat_stages,sizeof bv_mon_of(k)->stat_stages);
   const gc_mon *m=NULL;for(int i=0;i<G.run.n_party;i++)if(&G.run.party[i].b==G.run.bt.field[1])m=&G.run.party[i];
   if(m&&G.present[2]){bv_mon live=make_mon(m,true),*shown=bv_mon_of(1);shown->level=live.level;shown->n_moves=live.n_moves;
-    memcpy(shown->moves,live.moves,sizeof shown->moves);memcpy(shown->pp_left,live.pp_left,sizeof shown->pp_left);memcpy(shown->pp_max,live.pp_max,sizeof shown->pp_max);
+    memcpy(shown->moves,live.moves,sizeof shown->moves);memcpy(shown->pp_left,live.pp_left,sizeof shown->pp_left);memcpy(shown->pp_max,live.pp_max,sizeof shown->pp_max);memcpy(shown->move_power,live.move_power,sizeof shown->move_power);
     memcpy(shown->stat_stages,live.stat_stages,sizeof shown->stat_stages);shown->n_types=live.n_types;memcpy(shown->types,live.types,sizeof shown->types);}
 }
 
@@ -579,7 +580,7 @@ static bool handle_event(int i) {
       char* text = NULL;
       if (i + 1 < G.nq && (msg_is(&G.q[i + 1], "battle:playerGo") || msg_is(&G.q[i + 1], "battle:trainerSendOut"))) {
         text = txt_new();
-        pr_msg_format(&G.q[i + 1].msg, be_text_source(), text, TXT_LEN);
+        be_format_message(&G.q[i+1].msg,text,TXT_LEN);
         G.skip[i + 1] = true;
       }
       if (side == 1 && text) put_msg(text, false);
@@ -630,7 +631,7 @@ static bool handle_event(int i) {
       if (i + 1 < G.nq && msg_is(&G.q[i + 1], "battle:levelUp")) {
         static int stats[12];
         char* t = txt_new();
-        pr_msg_format(&G.q[i + 1].msg, be_text_source(), t, TXT_LEN);
+        be_format_message(&G.q[i+1].msg,t,TXT_LEN);
         G.skip[i + 1] = true;
         const bool ok = level_up_stats(i, stats);
         *ev_new() = (bv_event){.type = BEV_LEVEL_UP, .battler = -1, .text = t, .stats = ok ? stats : NULL};
@@ -919,6 +920,7 @@ static void ask(void) {
   bv_command_opts o;
   memset(&o, 0, sizeof o);
   o.command_slot=s->slot;
+  o.can_undo=s->can_undo;
   o.party_luck = gc_party_luck(&G.run);
   o.can_ball = s->can_ball;
   o.can_switch = s->can_switch;
@@ -985,6 +987,8 @@ static void on_command(bv_command c, void* arg) {
   gc_choice ch;
   memset(&ch, 0, sizeof ch);
   switch (c.command) {
+    case 4:
+      ch.kind=GC_CH_CANCEL;answer(&ch);break;
     case 0:
       ch.kind = GC_CH_FIGHT;
       ch.a = (int16_t)c.move_slot;
@@ -1342,6 +1346,7 @@ static void mystery_auto(void) {
 
 static void on_offer_answer(int yes, void* arg) {
   (void)arg;
+  G.resume_foe=true; /* The offer intentionally hid the enemy during the wave intro. */
   gc_choice c = {.kind = GC_CH_CONFIRM, .a = yes == 1 ? 1 : 0};   /* No and B decline */
   answer(&c);
 }

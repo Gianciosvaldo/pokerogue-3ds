@@ -12,7 +12,7 @@
 static struct {
   menu_mon mon;
   menu_sprite sprite;
-  int tier;
+  int tier;uint8_t previous_ivs[6];uint16_t egg_move;bool rare;
   float time;
   bool revealed,closed;
   void (*done)(void *);
@@ -40,14 +40,55 @@ static void update(ui_screen *s,float dt){
   }
 }
 static void leave(ui_screen *s){(void)s;menu_sprite_free(&E.sprite);}
+/* Pinned StatsContainer uses this axis order and the 0.825 horizontal factor. */
+static const int chart_order[6]={0,1,2,5,4,3};
+static const float chart_axis[6][2]={{0,-1},{.825f,-.5f},{.825f,.5f},{-.825f,-.5f},{-.825f,.5f},{0,1}};
+static void polygon(const float pts[6][2],rr_color color){
+  for(int y=-36;y<=36;y++){
+    float cuts[6];int n=0;
+    for(int i=0;i<6;i++){
+      int j=(i+1)%6;float a=pts[i][1],b=pts[j][1];
+      if((a<=y&&b>y)||(b<=y&&a>y))cuts[n++]=pts[i][0]+(y-a)*(pts[j][0]-pts[i][0])/(b-a);
+    }
+    if(n==2){float left=fminf(cuts[0],cuts[1]),right=fmaxf(cuts[0],cuts[1]);
+      rr_rect(160+left,80+y,right-left,1,color);}
+  }
+}
+static void hatch_info(void){
+  extern const char* const menu_nature_keys[25];
+  mui_window(8,2,304,176);
+  char key[96],text[120];
+  snprintf(key,sizeof key,"nature:%s",menu_nature_keys[E.mon.nature<25?E.mon.nature:0]);
+  snprintf(text,sizeof text,"Nature: %s",mui_t(key));mui_text(TS_WINDOW,18,10,text);
+  float outer[6][2],inner[6][2];
+  for(int i=0;i<6;i++){int st=chart_order[i];for(int c=0;c<2;c++){
+    outer[i][c]=36*chart_axis[st][c];inner[i][c]=outer[i][c]*E.mon.ivs[st]/31.0f;
+  }}
+  polygon(outer,RR_RGBA(0xd8,0xe0,0xf0,200));polygon(inner,RR_RGBA(0x98,0xd8,0xa0,240));
+  static const char* const names[]={"HP","ATK","DEF","SP.ATK","SP.DEF","SPEED"};
+  for(int st=0;st<6;st++){
+    float x=160+36*1.5f*chart_axis[st][0],y=80+36*1.5f*chart_axis[st][1]-5;
+    mui_text_o(TS_STATS_HEXAGON,x,y,.5f,0,names[st]);
+    int value=E.mon.ivs[st],diff=value-E.previous_ivs[st];
+    if(diff>0)snprintf(text,sizeof text,"%d (+%d)",value,diff);else snprintf(text,sizeof text,"%d",value);
+    mui_text_o(value==31?TS_SUMMARY_GOLD:TS_STATS_HEXAGON,x,y+10,.5f,0,text);
+  }
+  if(E.egg_move){snprintf(text,sizeof text,"%s egg move: %s",E.rare?"Rare":"New",i18n_move_name(E.egg_move));
+    mui_text_o(TS_WINDOW,160,146,.5f,0,text);}
+  mui_text(TS_INSTRUCTIONS_TEXT,18,165,"IVs / improvement    A / B: Continue");
+}
+
 static void draw(ui_screen *s,rr_screen which){
   (void)s;mui_set_origin(which,which==RR_TOP?40:0,30);
-  rr_rect(which==RR_TOP?-40:0,-30,which==RR_TOP?400:320,240,RR_RGBA(0xe8,0xf0,0xe0,255));
+  rr_rect(which==RR_TOP?-40:0,-30,which==RR_TOP?400:320,240,RR_RGBA(0x60,0x6c,0x78,255));
   if(which==RR_BOTTOM){
-    mui_window(12,44,296,88);
-    mui_text(TS_WINDOW,24,56,E.revealed?"A Pokemon hatched!":"Something is moving inside!");
-    mui_text(TS_WINDOW,24,82,E.revealed?i18n_species_name(E.mon.species):"Your egg is hatching...");
-    mui_text(TS_WINDOW,24,108,E.revealed?"A / B: Continue":"A / B: Reveal");
+    if(E.revealed)hatch_info();
+    else {
+      mui_window(12,44,296,88);
+      mui_text(TS_WINDOW,24,56,"Something is moving inside!");
+      mui_text(TS_WINDOW,24,82,"Your egg is hatching...");
+      mui_text(TS_WINDOW,24,108,"A / B: Reveal");
+    }
     return;
   }
   if(!E.revealed){
@@ -66,6 +107,8 @@ static void draw(ui_screen *s,rr_screen which){
 static ui_screen screen={.name="egg-hatch",.input=input,.update=update,.draw=draw,.leave=leave};
 void egg_hatch_open(const gc_event *e,void (*done)(void *),void *arg){
   memset(&E,0,sizeof E);E.mon.species=e->a;E.mon.form=e->b;E.mon.gender=e->c;
+  E.mon.nature=e->egg_nature;memcpy(E.mon.ivs,e->egg_ivs,6);memcpy(E.previous_ivs,e->egg_previous_ivs,6);
+  E.egg_move=e->egg_move;E.rare=e->egg_move_rare;
   E.mon.shiny=e->egg_shiny;E.mon.variant=e->egg_variant;E.tier=e->egg_tier;
   E.done=done;E.arg=arg;menu_sprite_load(&E.sprite,&E.mon,false);ui_push(&screen);
 }

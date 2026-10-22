@@ -658,7 +658,11 @@ bool radar_open(const radar_args* a) {
   R.exit_arg = a->arg;
   R.usable = a->meta != NULL;
   if (a->why) snprintf(R.why, sizeof R.why, "%s", a->why);
-  if (R.usable) R.roster = a->meta->roster;
+  if(R.usable){
+    /* Claimed records remain in the archive, outside the available rematch list. */
+    for(int i=0;i<a->meta->roster.count;i++)if(a->meta->roster.rec[i].life!=CC_LIFE_REWARD_CLAIMED)
+      R.roster.rec[R.roster.count++]=a->meta->roster.rec[i];
+  }
   if (a->schedule) {
     R.sched = *a->schedule;
     R.has_sched = true;

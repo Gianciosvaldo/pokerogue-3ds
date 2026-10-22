@@ -527,7 +527,10 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
       case BEV_ABILITY:
         /* an ability bar names the Pokemon that has it, and one can trigger as it faints (Air Lock ending,
          * Aftermath); the bar is an overlay, the screen still has the fainted Pokemon's data */
-        if (!W.fainted_shown[s]) side_ok(e->battler, "ability bar");
+        /* A captured actor label permits a source ability after flee/recall,
+         * without asserting that its sprite remains on the field. Unlabelled
+         * ability events still require a present or just-fainted owner. */
+        if(!W.fainted_shown[s]&&!(e->text&&*e->text))side_ok(e->battler,"ability bar");
         break;
       case BEV_STAT_STAGES:
       case BEV_POKEMON_ANIM:
@@ -1654,7 +1657,7 @@ int main(int argc, char** argv) {
   int ended = 0, clears = 0, last_ended = 0, idle = 0, deadlock = 0, no_progress = 0;
   long steps = 0, wave_sum = 0;
   int wave_hist[21] = {0};
-  int last_waves = 0, last_nf = 0;
+  int last_waves = 0, last_nf = 0,last_shown=0;
   while (ended < runs) {
     if (W.quit_now) {
       /* Save and Quit, answered Yes: nothing may go on, and Continue must bring back what the slot holds (the save of the battle's start,
@@ -1718,6 +1721,9 @@ int main(int argc, char** argv) {
     rel_check();
     evo_check();
     evo_move_check();
+    if(st->shown_mismatch!=last_shown){
+      last_shown=st->shown_mismatch;BAD("primary display identity needed an unrecorded replacement");
+    }
     if (st->not_found != last_nf) {
       last_nf = st->not_found;
       BAD("a switch-in Pokemon was not found in the party");

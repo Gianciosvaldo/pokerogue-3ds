@@ -49,7 +49,9 @@ static void rh_draw(ui_screen* s, rr_screen which) {
   }
 }
 
-static ui_screen g_screen = {"rewards", UI_OVERLAY, NULL, NULL, NULL, rh_input, rh_update, rh_draw, NULL, rh_touch};
+static void rh_release(ui_screen *s,ui_button b){(void)s;shop_ui_release((mui_button)b);}
+
+static ui_screen g_screen = {"rewards", UI_OVERLAY, NULL, NULL, NULL, rh_input, rh_update, rh_draw, NULL, rh_touch, rh_release};
 
 static void put_on_stack(void) {
   if (g_open) return;
