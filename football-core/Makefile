@@ -45,3 +45,17 @@ $(BUILD)/evolution_ui_test: tests/evolution_ui_test.c src/evolution_ui.c include
 	mkdir -p $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/evolution_ui_test.c src/evolution_ui.c -o $@
 test: evolution-ui-test
+
+.PHONY: shop-ui-test
+shop-ui-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/shop_ui_test.c src/football_stats.c src/playoff_season.c src/football_shop_ui.c $(CORE_LIBS) -lm -o $(BUILD)/shop_ui_test
+	./$(BUILD)/shop_ui_test
+test: shop-ui-test
+
+.PHONY: shop-render-test
+shop-render-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -D__3DS__ -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include tests/shop_render_test.c ../game/source/football_shop_render.c ../game/menus/item_ui.c ../game/gen/gm_item_ui.c src/football_stats.c src/playoff_season.c src/playcall_ui.c src/football_shop_ui.c $(CORE_LIBS) -lm -o $(BUILD)/shop_render_test
+	./$(BUILD)/shop_render_test
+test: shop-render-test
