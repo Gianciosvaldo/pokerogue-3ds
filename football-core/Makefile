@@ -21,3 +21,27 @@ season-test: core-libs
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/season_test.c src/football_stats.c src/playoff_season.c $(CORE_LIBS) -lm -o $(BUILD)/season_test
 	./$(BUILD)/season_test
 test: season-test
+
+.PHONY: playcall-test
+playcall-test: $(BUILD)/playcall_test
+	./$(BUILD)/playcall_test
+$(BUILD)/playcall_test: tests/playcall_test.c src/playcall_ui.c include/playcall_ui.h
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/playcall_test.c src/playcall_ui.c -o $@
+test: playcall-test
+
+.PHONY: render-test
+render-test: $(BUILD)/render_test
+	./$(BUILD)/render_test
+$(BUILD)/render_test: tests/render_test.c ../game/source/football_render.c ../game/include/football_render.h tests/stubs/citro2d.h src/playcall_ui.c src/evolution_ui.c
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -D__3DS__ -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include tests/render_test.c ../game/source/football_render.c src/playcall_ui.c src/evolution_ui.c ../battle-core/gen/out/pr_data.c -lm -o $@
+test: render-test
+
+.PHONY: evolution-ui-test
+evolution-ui-test: $(BUILD)/evolution_ui_test
+	./$(BUILD)/evolution_ui_test
+$(BUILD)/evolution_ui_test: tests/evolution_ui_test.c src/evolution_ui.c include/evolution_ui.h
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/evolution_ui_test.c src/evolution_ui.c -o $@
+test: evolution-ui-test

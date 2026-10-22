@@ -1,8 +1,11 @@
-# Football mode: attribute foundation
+# Football mode systems
 
-First module of the football playoff mode. The season state machine, playcalling,
-rendering, and mode entry point are subsequent work; this PR does not expose a
-playable mode yet.
+The football architecture is split into attribute generation, playoff progression,
+playcalling, and a dual-screen renderer. See [SEASON.md](SEASON.md) for the real
+classic EXP/evolution adapter and [UI_RENDER.md](UI_RENDER.md) for input, front
+sprite reuse, GPU flipping and render-loop integration. These systems provide the
+requested engine-facing interfaces; match simulation and a main-menu entry are
+still engine integration work.
 
 `include/football_stats.h` consumes battle-core's generated `pr_form` directly.
 Initialize one `FootballDexMaxima` with
@@ -28,10 +31,10 @@ accepted as a species base type.
 The module uses no allocations, I/O, graphics resources or platform-specific
 APIs. Working storage is constant and small; logarithms run only during stat
 generation. Build it with the 3DS sources and link libm when integrating the mode.
-The application build is deliberately unchanged until that integration exists.
+The application build compiles the football sources; existing classic entry points
+remain unchanged.
 
 Validation: `make -C football-core test` checks formula expectations, kg unit
 conversion, saturation, failure atomicity, dual-type scoring, and all 1,500
-existing form records. Host C99 build uses warnings as errors. A 3DS compiler is
-not installed in this environment, so device compilation/performance remains
-unverified.
+existing form records. Host C99 build uses warnings as errors. GitHub CI also compiles the 3DS app and checks compiler stack reports. Device
+visuals and runtime performance still require hardware or emulator validation.

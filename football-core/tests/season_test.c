@@ -7,7 +7,7 @@
 static gc_run roster;
 static FootballSeason season;
 static void drain(void) { gc_event ev; while (gc_run_next_event(&roster,&ev)) {} }
-static bool finish_exp(bool shedinja)
+static bool finish_exp(int wanted_species)
 {
     bool selected=false;
     for (unsigned guard=0;guard<10000;++guard) {
@@ -23,11 +23,12 @@ static bool finish_exp(bool shedinja)
             uint16_t options[GC_FOOTBALL_MAX_EVOLUTIONS];
             int n=gc_football_evolution_choices(&roster,options);
             assert(n>0);
-            for (int i=0;i<n;++i) if (shedinja && options[i]==SPECIES_ID_SHEDINJA) {
+            for (int i=0;i<n;++i) if (wanted_species>0 && options[i]==wanted_species) {
                 choice=(unsigned)i; selected=true;
             }
             c.kind=GC_CH_EVOLVE;
             assert(!football_season_choose(&season,&c,GC_FOOTBALL_MAX_EVOLUTIONS,NULL));
+            if (wanted_species<0) c.kind=GC_CH_CANCEL;
         }
         assert(football_season_choose(&season,&c,choice,NULL));
     }
@@ -66,7 +67,7 @@ int main(void)
         assert(football_season_finish_match(&season,true,&why));
         assert(!football_season_finish_match(&season,true,&why));
         assert(!football_season_leave_shop(&season));
-        got_shedinja|=finish_exp(true);
+        got_shedinja|=finish_exp(SPECIES_ID_SHEDINJA);
         assert(roster.party[0].b.level>=old_level);
         assert(season.phase==FB_SEASON_SHOP && season.shop_count>=2);
         assert(!football_season_start_match(&season,&match));
@@ -87,6 +88,21 @@ int main(void)
     assert(season.phase==FB_SEASON_CLEAR && season.wins==7);
     assert(!football_season_start_match(&season,&match));
     assert(!football_season_leave_shop(&season));
+    /* Both alternatives are player choices, with cancellation preserving Nincada. */
+    for (unsigned scenario=0;scenario<2;++scenario) {
+        assert(football_season_new(&season,&roster,NULL,"football",123));
+        assert(football_season_draft(&season,team,2,&why));
+        bool chose_ninjask=false;
+        for (unsigned round=1;round<=7;++round) {
+            assert(football_season_start_match(&season,&match));
+            assert(football_season_finish_match(&season,true,&why));
+            chose_ninjask|=finish_exp(scenario==0 ? SPECIES_ID_NINJASK : -1);
+            assert(football_season_leave_shop(&season));
+        }
+        assert(roster.party[0].b.species==(scenario==0 ? SPECIES_ID_NINJASK : SPECIES_ID_NINCADA));
+        assert(scenario!=0 || chose_ninjask);
+        assert(roster.n_party==2);
+    }
     assert(football_season_new(&season,&roster,NULL,"football",123));
     assert(football_season_draft(&season,team,2,&why));
     assert(football_season_start_match(&season,&match));
