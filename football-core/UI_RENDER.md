@@ -68,10 +68,20 @@ engine_update_scene(&scene); /* score, down, clock, positions and front frames *
 football_render_frame(&renderer, &scene, &playcall);
 ```
 
-Classic shop artwork remains identified by `football_shop_asset_key(offer)` and
-`offer->classic_arg`. Pass those through the existing `gm_item_ui_find` lookup and
-its icon into the `items` atlas, just as `game/menus/shop_ui.c` does; retain loaded
-icons outside the frame loop. The season's purchase API owns currency/effects.
+The post-match shop uses `football_shop_ui.c` for touch/D-pad purchases, roster
+target switching and leaving the shop. It calls the season purchase API, so
+wallet, stock, compatibility and attribute caps stay authoritative. A target-row
+tap or Left/Right changes the selected teammate; tapping an item or pressing A
+attempts a purchase. B or the next-match button leaves the shop.
+
+On shop entry, call `football_shop_prepare` from
+`game/source/football_shop_render.c` once, after `mui_init`. It resolves each
+offer's classic key/argument through the actual `gm_item_ui_find` table and loads
+the matching icon from the existing `items` atlas via `mui_frame`. Draw with
+`football_shop_draw` on the bottom rr target. The view shows names, prices, sold
+stock, target stats, currency and purchase feedback; it performs no asset loads
+inside the draw loop. Do not retain the borrowed view across `mui_unload_all`.
+The rare-stone row identifies its compatible player slot.
 
 `make -C football-core test` includes all play paths, touch boundaries, back
 navigation, single delivery, the libctru polling adapter, GPU submission recording
