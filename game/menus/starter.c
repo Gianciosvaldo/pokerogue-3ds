@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "menus.h"
+#include "luck_meter.h"
 #include "pr_data.h"
 
 extern const char* const menu_type_frames[];
@@ -43,7 +44,7 @@ static struct {
   struct {
     bool open;
     int cursor, n;
-    int act[2];           /* 0 add, 1 remove, per row (the last row is Cancel) */
+    int act[3];           /* 0 add, 1 remove, 2 customize; last row is Cancel */
     uint16_t species;
   } menu;
   bool done;              /* the team was confirmed: the screen takes no more buttons until the caller replaces it */
@@ -193,6 +194,7 @@ static void open_menu(uint16_t species) {
     S.menu.act[S.menu.n++] = 0;
   else if (sm_in_party(&S.m, species, NULL))
     S.menu.act[S.menu.n++] = 1;
+  if (S.ev.configure) S.menu.act[S.menu.n++] = 2;
   S.menu.act[S.menu.n++] = -1; /* Cancel */
 }
 
@@ -200,6 +202,7 @@ static const char* menu_label(int row) {
   switch (S.menu.act[row]) {
     case 0: return mui_t("starterSelectUiHandler:addToParty");
     case 1: return mui_t("starterSelectUiHandler:removeFromParty");
+    case 2: return "Customize";
     default: return mui_t("menu:cancel");
   }
 }
@@ -223,6 +226,12 @@ static void menu_choose(int row) {
       mui_sfx("ui/select");
     }
   }
+  follow_cursor();
+  if (S.menu.act[row] == 2 && S.ev.configure) S.ev.configure(S.ev.ctx,sp);
+}
+
+void starter_refresh(void) {
+  S.info_species=0;
   follow_cursor();
 }
 
@@ -675,6 +684,15 @@ void starter_draw_top(void) {
   rr_rect(0, 0, MUI_W, MUI_H, RR_RGBA(0x00, 0x68, 0x60, 255));
   mui_image("ui/summary_bg", NULL, 0, MUI_H, 0, 1);
   mui_image("ui/summary_profile", NULL, 106, MUI_H, 0, 1);
+  if (S.ev.describe) {
+    int luck=0;for(int i=0;i<S.m.n_party;i++) {
+      starter_info info;memset(&info,0,sizeof info);S.ev.describe(S.ev.ctx,S.m.party[i],&info);
+      if(info.mon.shiny)luck+=info.mon.variant+1;
+    }
+    if(luck>14)luck=14;
+    char meter[48];snprintf(meter,sizeof meter,"Luck: %s (%d/14)",luck_grade(luck),luck);
+    mui_text(TS_WINDOW,110,3,meter);
+  }
   if (!S.info_species) return;
   const menu_mon* m = &S.info.mon;
   const float px = 106, py = MUI_H - 159; /* the profile panel is 214 x 159 */

@@ -283,7 +283,8 @@ static void test_new_save(void) {
     CHECK(team[i].species == pick[i] && team[i].form == 0 && team[i].ability_index == 0, "member %d", i);
     CHECK(team[i].tera_type == -1 && !team[i].passive && !team[i].shiny && !team[i].pokerus, "member %d defaults", i);
     for (int j = 0; j < 6; j++) CHECK(team[i].ivs[j] == 15, "member %d iv %d = %d", i, j, team[i].ivs[j]);
-    for (int j = 0; j < 4; j++) CHECK(team[i].moves[j] == 0, "member %d moves are the default moveset", i);
+    uint16_t expected[4]={0};gc_starter_default_moves(pick[i],expected);
+    for(int j=0;j<4;j++)CHECK(team[i].moves[j]==expected[j],"member %d explicit default move %d",i,j);
   }
   CHECK(core_takes(&S1, team, k, &why), "game-core takes the team: %s", why ? why : "");
   CHECK(RUN.n_party == k && RUN.party[0].b.species == pick[0], "the party is the team");

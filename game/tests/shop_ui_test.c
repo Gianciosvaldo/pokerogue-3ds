@@ -128,19 +128,10 @@ int main(void) {
   printf("Running shop_ui_test...\n");
 
   /* Test Party Luck Grade calculations */
-  assert(!strcmp(shop_ui_luck_grade(0), "D"));
-  assert(!strcmp(shop_ui_luck_grade(1), "C"));
-  assert(!strcmp(shop_ui_luck_grade(2), "C"));
-  assert(!strcmp(shop_ui_luck_grade(3), "B"));
-  assert(!strcmp(shop_ui_luck_grade(4), "B"));
-  assert(!strcmp(shop_ui_luck_grade(5), "A"));
-  assert(!strcmp(shop_ui_luck_grade(6), "A"));
-  assert(!strcmp(shop_ui_luck_grade(7), "S"));
-  assert(!strcmp(shop_ui_luck_grade(9), "S"));
-  assert(!strcmp(shop_ui_luck_grade(10), "SS"));
-  assert(!strcmp(shop_ui_luck_grade(13), "SS"));
-  assert(!strcmp(shop_ui_luck_grade(14), "SSS"));
-  assert(!strcmp(shop_ui_luck_grade(18), "SSS"));
+  static const char* grades[]={"D","C","C+","B-","B","B+","A-","A","A+","A++","S","S+","SS","SS+","SSS"};
+  for(int i=0;i<15;i++)assert(!strcmp(shop_ui_luck_grade(i),grades[i]));
+  assert(!strcmp(shop_ui_luck_grade(-1),"D"));
+  assert(!strcmp(shop_ui_luck_grade(18),"SSS"));
   printf("Party Luck Grade mapping (D through SSS) PASSED.\n");
 
   /* 1. Setup mock gc_screen for REWARD phase */

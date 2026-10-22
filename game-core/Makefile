@@ -868,6 +868,13 @@ $(BUILD)/egg_hatch_host_test: tests/egg_hatch_host_test.c $(BUILD)/libgc.a $(REW
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: egg-hatch-host-test
 
+test: starter-options-test
+starter-options-test: $(BUILD)/starter_options_test
+	$(BUILD)/starter_options_test tests/fixtures/starter-options.native.txt
+$(BUILD)/starter_options_test: tests/starter_options_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: starter-options-test
+
 test: shared-type-host-test
 shared-type-host-test: $(BUILD)/shared_type_host_test
 	$(BUILD)/shared_type_host_test

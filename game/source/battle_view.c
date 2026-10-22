@@ -1,6 +1,7 @@
 /* The battle screen (see battle_view.h). Positions are upstream's: the field container for the
  * arena and sprites, fieldUI for the info boxes, the ui container for the bottom strip. */
 #include "battle_view.h"
+#include "luck_meter.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -861,6 +862,10 @@ static void draw_cursor_frame(float x, float y, float w, float h) {
 static int tbar_first(void) { return B.bar_sel >= TBAR_ICONS ? B.bar_sel - TBAR_ICONS + 1 : 0; }
 static void draw_top_bar(void) {
   if (B.mode != M_COMMAND && B.mode != M_FIGHT && !cmd_shown()) return;
+  char meter[48];int luck=B.opts.party_luck<0?0:B.opts.party_luck>14?14:B.opts.party_luck;
+  snprintf(meter,sizeof meter,"Luck: %s (%d/14)",luck_grade(luck),luck);
+  text_opts label=text_defaults();label.origin_x=1;
+  text_draw(TS_MOVE_LABEL,390,10,meter,&label);
   rr_rect(TBAR_X, TBAR_Y, TBAR_W, TBAR_H, RR_RGBA(0x40, 0x40, 0x48, 255));
   rr_rect(TBAR_X + 1, TBAR_Y + 1, TBAR_W - 2, TBAR_H - 2, RR_RGBA(0x28, 0x28, 0x30, 255));
   text_draw(TS_MOVE_LABEL, TBAR_X + TBAR_TITLE_X, TBAR_Y + 11, bar_title(), NULL);

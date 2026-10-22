@@ -876,6 +876,7 @@ static void ask(void) {
   sync_shown();
   bv_command_opts o;
   memset(&o, 0, sizeof o);
+  o.party_luck = gc_party_luck(&G.run);
   o.can_ball = s->can_ball;
   o.can_switch = s->can_switch;
   o.can_run = s->can_run;
@@ -1225,13 +1226,7 @@ static bool party_has_held_item(void) {
   return false;
 }
 
-static int calc_party_luck(void) {
-  int total = 0;
-  for (int i = 0; i < G.run.n_party; i++) {
-    total += G.run.party[i].luck;
-  }
-  return total;
-}
+static int calc_party_luck(void) { return gc_party_luck(&G.run); }
 
 static void open_shop_ui(void) {
   const gc_screen* s = gc_run_screen(&G.run);

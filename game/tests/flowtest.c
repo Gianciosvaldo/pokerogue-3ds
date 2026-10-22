@@ -173,7 +173,7 @@ static sh_events SH;
 static char sh_notice[200];
 static int n_sh;
 static bool sh_has_species = true;
-bool sh_open(const gc_system* sys, const char* notice, const sh_events* ev) {
+bool sh_open(gc_system* sys, const char* notice, const sh_events* ev) {
   (void)sys;
   if (!sh_has_species) return false;
   SH = *ev;

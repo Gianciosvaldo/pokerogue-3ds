@@ -400,12 +400,16 @@ int gc_item_max_held(const gc_run *run, const char *key, int16_t arg, const gc_m
 int gc_item_transfer(gc_run *run, int item_idx, int to, int qty);
 int gc_item_discard(gc_run *run, int item_idx, int count);
 
+int gc_party_luck(gc_run *run); /* actual allowed living party, clamped by native rules */
 int gc_starter_budget(int mode);                       /* the cost limit: 10 in classic */
 int gc_starter_cost(int species);                      /* base speciesStarterCosts, -1 = not a starter */
 double gc_starter_value(const gc_system *sys, int species); /* cost with value reduction (game-data.ts:2018) */
 bool gc_starter_is_available(const gc_system *sys, const gc_starter *starter, double *cost_out, const char **why);
 /* The default moveset: the first four level 1-5 moves (getStarterMoves). Returns how many. */
 int gc_starter_default_moves(int species, uint16_t out[4]);
+/* Unique native starting-level moves for this form, then unlocked egg moves.
+ * Returns -1 if invalid or the caller's buffer is too small; never truncates. */
+int gc_starter_moves(const gc_system *sys, int species, int form, uint16_t *out, int cap);
 extern const uint16_t gc_default_starters[];           /* defaultStarterSpecies (unlocked in a new save) */
 extern const int gc_default_starter_count;
 

@@ -22,6 +22,7 @@
 #include "starter_data.h"
 #include "starter_host.h"
 #include "ui.h"
+#include "ui_widgets.h"
 
 static int checks, failed;
 #define CHECK(cond, ...)                                  \
@@ -274,6 +275,25 @@ void mui_confirm_draw(const mui_confirm* c) {
 /* ------------------------------------------------------------------ fakes: the UI stack and strings */
 
 static ui_screen* g_screen;
+static void (*g_option_cb)(int,void*);
+static void* g_option_arg;
+static int g_option_count,g_option_cursor,save_calls,fail_save_call;
+static char g_option_labels[32][128];
+void ui_push_options(const char* const* labels,int n,bool cancel,void(*done)(int,void*),void* arg) {
+  CHECK(!g_option_cb && n>0 && n<=32,"valid independent options overlay");
+  (void)cancel;g_option_cb=done;g_option_arg=arg;g_option_count=n;g_option_cursor=0;
+  for(int i=0;i<n;i++)snprintf(g_option_labels[i],128,"%s",labels[i]);
+}
+static void option_answer(int value) {
+  void (*cb)(int,void*)=g_option_cb;void* arg=g_option_arg;g_option_cb=NULL;
+  if(cb)cb(value,arg);
+}
+bool sysd_save(void) {save_calls++;return !fail_save_call || save_calls!=fail_save_call;}
+void ui_play_select(void) {log_add(g_sfx,"ui/select");}
+void ui_play_error(void) {log_add(g_sfx,"ui/error");}
+const char* i18n_ability_name(int id) {static char b[40];snprintf(b,sizeof b,"Ability%d",id);return b;}
+const char* i18n_move_name(int id) {return id>0 && id<PR_MOVE_COUNT?pr_moves[id].name:"?";}
+
 void ui_set(ui_screen* s) {
   if (g_screen && g_screen->leave) g_screen->leave(g_screen);
   g_screen = s;
@@ -333,12 +353,20 @@ static void on_exit_cb(void* arg) {
 
 static bool open_screen(const char* notice) {
   memset(&R, 0, sizeof R);
-  g_screen = NULL;
+  g_screen = NULL;g_option_cb=NULL;
   reset_logs();
   const sh_events ev = {on_start, on_exit_cb, NULL};
   return sh_open(&SYS, notice, &ev);
 }
-static void press(mui_button b) { g_screen->input(g_screen, (ui_button)b); }
+static void press(mui_button b) {
+  if(g_option_cb) {
+    if(b==MB_UP||b==MB_DOWN)g_option_cursor=(g_option_cursor+(b==MB_UP?g_option_count-1:1))%g_option_count;
+    else if(b==MB_ACTION)option_answer(g_option_cursor);
+    else if(b==MB_CANCEL)option_answer(-2);
+    return;
+  }
+  g_screen->input(g_screen,(ui_button)b);
+}
 static void tick(float ms) {
   for (float t = 0; t < ms; t += 16.7f) g_screen->update(g_screen, 16.7f);
 }
@@ -346,6 +374,7 @@ static void draw(void) {
   g_drawn[0] = 0;
   g_screen->draw(g_screen, RR_BOTTOM);
   g_screen->draw(g_screen, RR_TOP);
+  if(g_option_cb)for(int i=0;i<g_option_count;i++)log_add(g_drawn,g_option_labels[i]);
 }
 
 static bool core_takes(const gc_starter* team, int n, const char** why) {
@@ -477,8 +506,8 @@ static void test_touch(void) {
   tap(115 + 26 + 13, 22 + 15);
   draw();
   CHECK(drawn("starterSelectUiHandler:addToParty") && drawn("menu:cancel"), "a second tap on it opens the options menu");
-  /* the menu: bottom right, rows of 16 px from 7 px under its top (141..157 Add to Party, 157..173 Cancel) */
-  tap(300, 148);
+  /* the menu: bottom right, rows of 16 px from 7 px under its top (125..141 Add to Party, 141..157 Customize, 157..173 Cancel) */
+  tap(300, 132);
   draw();
   snprintf(want, sizeof want, "%g/10", list[1].cost);
   CHECK(!drawn("starterSelectUiHandler:addToParty") && drawn(want), "a tap on Add to Party adds it: %s", want);
@@ -728,8 +757,58 @@ static void test_fuzz(int sessions) {
   CHECK(teams > 0, "the fuzz must reach Start sometimes");
 }
 
+static void choose_option(const char* text) {
+  CHECK(g_option_cb!=NULL,"options open for %s",text);
+  for(int i=0;i<g_option_count;i++)if(strstr(g_option_labels[i],text)) {option_answer(i);return;}
+  CHECK(false,"missing option %s",text);
+}
+static void test_customization(void) {
+  gc_system_init_defaults(&SYS);
+  SYS.starters[1].candy_count=100;SYS.starters[1].egg_moves=15;
+  gc_system_unlock_species_nature(&SYS,1,3);
+  gc_mon caught={0};caught.b.species=1;caught.b.shiny=true;caught.b.gender=0;caught.variant=2;caught.b.nature=7;
+  CHECK(gc_system_set_pokemon_caught(&SYS,&caught,true,false),"catch shiny and its nature");
+  CHECK(open_screen(NULL),"open customization");
+  press(MB_ACTION);press(MB_DOWN);press(MB_ACTION);
+  choose_option("Nature");choose_option("adamant");
+  gc_starter selected;CHECK(ss_starter(&SYS,1,&selected)&&selected.nature==3,"chosen unlocked nature");
+  choose_option("Shiny tier");choose_option("Epic shiny");
+  CHECK(ss_starter(&SYS,1,&selected)&&selected.shiny&&selected.variant==2,"chosen unlocked epic shiny");
+  choose_option("Moves");option_answer(0);
+  uint16_t pool[64];int n=gc_starter_moves(&SYS,1,0,pool,64);
+  CHECK(n>4,"unlocked egg move choices available");
+  const int chosen=pool[n-1];choose_option(i18n_move_name(chosen));
+  CHECK(ss_starter(&SYS,1,&selected)&&selected.moves[0]==chosen,"chosen egg move reaches actual starter");
+  option_answer(-2); /* slots -> categories */
+  int cost=gc_system_starter_unlock_cost(1),before=SYS.starters[1].candy_count;
+  choose_option("Use candies");choose_option("Unlock passive");
+  CHECK(SYS.starters[1].passive_attr==3&&SYS.starters[1].candy_count==before-cost,"passive debit and enable");
+  choose_option("Use candies");choose_option("Unlock hidden ability");
+  CHECK((SYS.starters[1].ability_attr&4)&&SYS.starters[1].candy_count==before-2*cost,"hidden ability at approved passive cost");
+  CHECK(ss_starter(&SYS,1,&selected)&&selected.ability_index==2,"purchased hidden ability selected");
+  choose_option("Ability");option_answer(0); /* choose regular ability */
+  CHECK(ss_starter(&SYS,1,&selected)&&selected.ability_index==0,"regular ability still selectable");
+  gc_starter_entry old=SYS.starters[1];fail_save_call=save_calls+2;
+  choose_option("Shiny tier");choose_option("Normal");fail_save_call=0;
+  CHECK(!memcmp(&old,&SYS.starters[1],sizeof old),"failed profile write rolls back choice");
+  tick(4000);press(MB_ACTION); /* dismiss failure message */
+  draw();CHECK(drawn("Luck: D (0/14)"),"empty team luck shown");
+  /* Confirmed team and preview both read the stored choices. */
+  uint16_t id=1;gc_starter team[6];const char* why=NULL;
+  CHECK(ss_team(&SYS,&id,1,team,&why)&&team[0].moves[0]==chosen&&team[0].nature==3&&team[0].variant==2,"actual starting team retains choices");
+  CHECK(core_takes(team,1,&why),"customized team accepted by real game-core");
+  static unsigned char profile[1024*1024];static gc_system restored;
+  size_t bytes=gc_system_save(&SYS,profile,sizeof profile);
+  CHECK(bytes&&gc_system_load(&restored,profile,bytes,&why),"save customized profile");
+  gc_starter again;CHECK(ss_starter(&restored,1,&again)&&again.nature==3&&again.variant==2&&again.moves[0]==chosen,"choices survive profile reload");
+  CHECK(restored.starters[1].candy_count==before-2*cost&&(restored.starters[1].ability_attr&4),"purchases survive reload");
+  open_screen(NULL);press(MB_ACTION);press(MB_ACTION);draw();
+  CHECK(drawn("Luck: B- (3/14)"),"selected epic shiny contributes three pre-run luck");
+}
+
 int main(int argc, char** argv) {
   const int sessions = argc > 1 ? atoi(argv[1]) : 200;
+  test_customization();
   test_happy_path();
   test_touch();
   test_exit();

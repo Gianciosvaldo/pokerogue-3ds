@@ -84,6 +84,23 @@ static bool defaults(const gc_system* sys, uint16_t species, props* p) {
   }
   /* PassiveAttr.UNLOCKED | ENABLED */
   p->passive = sys->starters[species].passive_attr == (PASSIVE_UNLOCKED | PASSIVE_ENABLED);
+  const gc_starter_entry* pref=&sys->starters[species];
+  if ((pref->preference_flags&1) && pref->nature_preference<25 &&
+      (natures&(1u<<(pref->nature_preference+1)))) p->nature=pref->nature_preference;
+  if ((pref->preference_flags&2) && pref->appearance_preference<=3) {
+    int a=pref->appearance_preference;
+    if (!a && (attr&DEX_NON_SHINY)) {p->shiny=false;p->variant=0;}
+    else if (a && (attr&DEX_SHINY) && (attr&(DEX_VARIANT_1<<(a-1)))) {
+      p->shiny=true;p->variant=(uint8_t)(a-1);
+    }
+  }
+  if ((pref->preference_flags&4) && pref->ability_preference<3) {
+    int a=pref->ability_preference;
+    bool unlocked=a==0 ? (abilities&ABILITY_1)!=0 : a==1 ? (abilities&ABILITY_2)!=0 : (abilities&ABILITY_HIDDEN)!=0;
+    int ability=a==0?p->form->ability1:a==1?p->form->ability2:p->form->ability_hidden;
+    if (unlocked && ability && !(a==1 && p->form->ability1==p->form->ability2 && (abilities&ABILITY_1)))
+      p->ability_index=(uint8_t)a;
+  }
   return true;
 }
 
@@ -143,7 +160,8 @@ void ss_describe(const gc_system* sys, uint16_t species, starter_info* out) {
     out->passive_unlocked = (pa & PASSIVE_UNLOCKED) != 0;
     out->passive_enabled = (pa & PASSIVE_ENABLED) != 0;
   }
-  gc_starter_default_moves(species, out->moves);
+  gc_starter selected;
+  if(ss_starter(sys,species,&selected)) memcpy(out->moves,selected.moves,sizeof out->moves);
 }
 
 bool ss_starter(const gc_system* sys, uint16_t species, gc_starter* out) {
@@ -161,7 +179,18 @@ bool ss_starter(const gc_system* sys, uint16_t species, gc_starter* out) {
   out->pokerus = false;
   out->tera_type = -1; /* the species' first type */
   if (sys && species <= GC_MAX_SPECIES_ID) memcpy(out->ivs, sys->dex[species].ivs, sizeof out->ivs);
-  /* moves stay empty: the default moveset */
+  uint16_t pool[64];int n=gc_starter_moves(sys,species,p.form_index,pool,64),w=0;
+  if(n<0) return false;
+  if(sys) for(int i=0;i<4;i++) {
+    uint16_t move=sys->starters[species].moveset[i];bool legal=false,duplicate=false;
+    for(int k=0;k<n;k++) if(pool[k]==move) legal=true;
+    for(int k=0;k<w;k++) if(out->moves[k]==move) duplicate=true;
+    if(legal && !duplicate) out->moves[w++]=move;
+  }
+  for(int i=0;i<n && w<4;i++) {
+    bool duplicate=false;for(int k=0;k<w;k++) if(out->moves[k]==pool[i]) duplicate=true;
+    if(!duplicate) out->moves[w++]=pool[i];
+  }
   return true;
 }
 

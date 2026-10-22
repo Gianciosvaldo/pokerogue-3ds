@@ -10,7 +10,7 @@
  * pinned commit, src/ui/utils/starter-select-ui-utils.ts): shiny when a shiny is caught (the highest variant caught), female only
  * for a species that is always female, form 0, the first ability unlocked, the lowest nature caught, the passive when it is
  * unlocked and on, the species' first type as the tera type, the IVs the dex holds, and the default moveset. The cycle buttons that
- * change them are not on the screen yet.
+ * change them are available through Customize. Stored unlocked preferences override these defaults; invalid or stale choices fall back safely.
  */
 #ifndef GM_STARTER_DATA_H
 #define GM_STARTER_DATA_H
