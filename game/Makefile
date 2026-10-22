@@ -26,14 +26,14 @@ APPSRC		:=	../assets-pipeline/app-src
 # Source folders that exist (a core that isn't there yet is skipped).
 CORES		:=	$(wildcard ../battle-core/src ../battle-core/gen/out ../run-core/src ../run-core/gen/out \
 			../ai-core/src ../ai-core/gen/out ../reward-core/src ../reward-core/gen/out \
-			../game-core/src ../game-core/gen/out)
+			../game-core/src ../game-core/gen/out ../football-core/src)
 SOURCES		:=	source gen $(wildcard menus) $(CORES)
 APPSRC_C	:=	pak.c rr.c save.c snd.c
 DATA		:=	data
 INCLUDES	:=	include gen $(wildcard menus) $(APPSRC)/include \
 			$(wildcard ../battle-core/include ../battle-core/gen/out ../run-core/include \
 			../ai-core/include ../ai-core/gen/out ../reward-core/include ../reward-core/gen/out \
-			../game-core/include ../game-core/gen/out ../custom-core/include)
+			../game-core/include ../game-core/gen/out ../football-core/include ../custom-core/include)
 GRAPHICS	:=	gfx
 GFXBUILD	:=	$(BUILD)
 ROMFS		:=

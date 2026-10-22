@@ -331,7 +331,7 @@ static bool pre_form_ok(const gc_mon *m, const gc_evo *e)
 }
 
 /* SpeciesEvolutionCondition.conditionsFulfilled (not a fusion) */
-static bool conditions_fulfilled(gc_run *run, const gc_mon *m, const gc_evo *e)
+static bool conditions_fulfilled(gc_run *run, const gc_mon *m, const gc_evo *e, bool football_choice)
 {
     const pr_pokemon *p = &m->b;
     for (int i = 0; i < e->n_cond; i++) {
@@ -353,7 +353,7 @@ static bool conditions_fulfilled(gc_run *run, const gc_mon *m, const gc_evo *e)
             }
             break;
         case GC_EVO_GENDER: ok = p->gender == c->v[0]; break;
-        case GC_EVO_SHEDINJA: ok = false; break;
+        case GC_EVO_SHEDINJA: ok = football_choice; break;
         case GC_EVO_BIOME: ok = has_value(c, run->biome); break;
         case GC_EVO_WEATHER: ok = has_value(c, run->bt.weather); break;
         case GC_EVO_TYROGUE: {
@@ -413,10 +413,27 @@ int gc_mon_get_evolution(gc_run *run, const gc_mon *m)
         if (e->item) continue;                                   /* item === this.item: NONE only */
         if (m->b.level < e->level) continue;
         if (!pre_form_ok(m, e)) continue;                         /* getFormKey() === preFormKey */
-        if (!conditions_fulfilled(run, m, e)) continue;
+        if (!conditions_fulfilled(run, m, e, false)) continue;
         return se->start + i;
     }
     return -1;
+}
+
+/* Football offers validated split outcomes instead of silently taking the first.
+ * The Shedinja rule is a choice of replacement, rather than an extra spawn. */
+int gc_mon_football_evolutions(gc_run *run, const gc_mon *m, int *out, int cap)
+{
+    const gc_species_evo *se = species_evo(m->b.species);
+    if (!se || m->pause_evolutions) return 0;
+    int n = 0;
+    for (int i = 0; i < se->n; ++i) {
+        const gc_evo *e = &gc_evo_data[se->start + i];
+        if (e->item || m->b.level < e->level || !pre_form_ok(m,e)
+            || !conditions_fulfilled(run,m,e,true)) continue;
+        if (n == cap) return -1;
+        out[n++] = se->start + i;
+    }
+    return n;
 }
 
 /* EvolutionItemModifier.apply, not a fusion: the first of the species' evolutions whose item matches and validates
@@ -428,7 +445,7 @@ int gc_mon_item_evolution(gc_run *run, const gc_mon *m, int item)
     for (int i = 0; i < se->n; i++) {
         const gc_evo *e = &gc_evo_data[se->start + i];
         if (e->item != item || m->b.level < e->level || !pre_form_ok(m, e)) continue;
-        if (!conditions_fulfilled(run, m, e)) continue;
+        if (!conditions_fulfilled(run, m, e, false)) continue;
         return se->start + i;
     }
     return -1;
