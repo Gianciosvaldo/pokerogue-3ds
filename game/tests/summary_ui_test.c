@@ -59,7 +59,8 @@ void mui_sfx(const char* key) {
 const char* mui_t(const char* key) {
   /* Actual pinned English locale labels, rather than generated Move.name debug text. */
   if (!strcmp(key, "move:return.name")) return "Return";
-  if (!strcmp(key, "move:pursuit.name")) return "Pursuit";
+  if (!strcmp(key, "move:pursuit.name")) return "Pursuit (P)";
+  if (!strcmp(key, "move:uproar.name")) return "Uproar (P)";
   static char buf[16][160];
   static int next;
   char* b = buf[next++ & 15];
@@ -528,6 +529,7 @@ int main(void) {
 
   assert(!strcmp(menu_move_name(216), "Return"));
   assert(!strcmp(menu_move_name(228), "Pursuit"));
+  assert(!strcmp(menu_move_name(253), "Uproar"));
 
   printf("summary_ui_test PASSED ALL CHECKS!\n");
   return 0;

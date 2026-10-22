@@ -345,6 +345,7 @@ static void draw_cell(int i, const sm_entry* e) {
     mui_image_ex("ui/passive_bg", NULL, x + SM_CELL_W / 2, y + SM_CELL_H / 2 + 1, &o);
   }
   draw_icon(e, x + SM_CELL_W / 2, y, 0.5f, 1.0f, sm_lit(&S.m, e) ? RR_RGBA(255, 255, 255, 255) : RR_RGBA(255, 255, 255, 96)); /* alpha 1 / 0.375 */
+  if(e->pokerus)mui_image("ui/select_cursor_pokerus",NULL,x-1,y+1,0,0);
   char t[16];
   sm_cost_text(t, sizeof t, e->cost);
   static const mui_style styles[3] = {TS_WINDOW, TS_SUMMARY_BLUE, TS_SUMMARY_GOLD};

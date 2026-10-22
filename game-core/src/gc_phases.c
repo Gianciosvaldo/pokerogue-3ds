@@ -250,13 +250,22 @@ static void learn(gc_run *run, int idx, int move, int slot)
         gc_rq_push(run, gc_rp(RP_REWARD_FORM, idx, form, 0));
 }
 
+static void learned_tm(gc_run *run,const gc_rphase *p){
+    if(p->c!=1)return;
+    gc_mon *m=pm(run,p->a);bool found=false;
+    for(int i=0;i<m->n_used_tms;i++)found|=m->used_tms[i]==p->b;
+    if(!found&&m->n_used_tms<64)m->used_tms[m->n_used_tms++]=(uint16_t)p->b;
+    gc_rq_remove(run,RP_SELECT_MODIFIER);
+    gc_int(run)->reward.copy_pending=false;
+}
+
 static bool learn_move_start(gc_run *run, gc_rphase *p)
 {
     gc_mon *m = pm(run, p->a);
     const int move = p->b;
     if (pr_moves[move].unimplemented) return true;
     for (int i = 0; i < PR_N_MOVES(&m->b); i++) if (PR_MOVES(&m->b)[i] == move && move != MOVE_ID_SKETCH) return true;
-    if (PR_N_MOVES(&m->b) < 4) { learn(run, p->a, move, PR_N_MOVES(&m->b)); return true; }
+    if (PR_N_MOVES(&m->b) < 4) { learned_tm(run,p);learn(run, p->a, move, PR_N_MOVES(&m->b)); return true; }
     gc_ev_msg(run, "battle:learnMovePrompt", 2, gc_m_mon(run, "pokemonName", 0, p->a), pr_arg_move("moveName", move));
     gc_ev_msg(run, "battle:learnMoveLimitReached", 1, gc_m_mon(run, "pokemonName", 0, p->a));
     gc_screen *s = &run->screen;
@@ -758,11 +767,31 @@ bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char *
             struct pr_turn_command *tc=&run->bt.commands[p->a];
             tc->targets[0]=c->a;tc->n_targets=1;*ok=true;return true;
         }
+        if(c->kind==GC_CH_CANCEL && p->a==1 && gc_int(run)->undo_first){
+            gc_internal *in=gc_int(run);
+            memcpy(run->bt.commands,in->undo_commands,sizeof in->undo_commands);
+            memcpy(run->bt.pre_commands,in->undo_pre_commands,sizeof in->undo_pre_commands);
+            run->bt.rng=in->undo_rng;run->bt.battle_rng=in->undo_battle_rng;
+            run->bt.rng_live=in->undo_rng_live;run->bt.battle_rng_live=in->undo_battle_rng_live;
+            in->at_save_point=in->undo_save_point;in->undo_first=false;
+            p->a=0;run->screen.slot=0;
+            gc_rq_unshift(run,gc_rp(RP_COMMAND,1,0,0));
+            gc_battle_command_screen(run);*ok=true;return false;
+        }
         if (c->kind != GC_CH_FIGHT && c->kind != GC_CH_POKEMON && c->kind != GC_CH_BALL && c->kind != GC_CH_RUN) {
             *why = "not a command";
             return false;
         }
+        if(p->a==0){
+            gc_internal *in=gc_int(run);in->undo_first=false;
+            in->undo_rng=run->bt.rng;in->undo_battle_rng=run->bt.battle_rng;
+            in->undo_rng_live=run->bt.rng_live;in->undo_battle_rng_live=run->bt.battle_rng_live;
+            in->undo_save_point=in->at_save_point;
+            memcpy(in->undo_commands,run->bt.commands,sizeof in->undo_commands);
+            memcpy(in->undo_pre_commands,run->bt.pre_commands,sizeof in->undo_pre_commands);
+        }
         if (!gc_battle_player_command(run, c, why)) return false;
+        if(p->a==0)gc_int(run)->undo_first=true;
         gc_int(run)->at_save_point=false;
         if(run->screen.kind==GC_SCREEN_TARGET){*ok=true;return false;}
         if(c->kind==GC_CH_BALL||c->kind==GC_CH_RUN)for(int i=0;i<2;i++)if(i!=p->a){
@@ -813,6 +842,7 @@ bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char *
         gc_ev_msg(run, "battle:countdownPoof", 0);
         gc_ev_msg(run, "battle:learnMoveForgetSuccess", 2, gc_m_mon(run, "pokemonName", 0, p->a), pr_arg_move("moveName", m->b.moves[c->a]));
         gc_ev_msg(run, "battle:learnMoveAnd", 0);
+        learned_tm(run,p);
         learn(run, p->a, p->b, c->a);
         return true;
     }

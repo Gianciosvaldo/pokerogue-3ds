@@ -53,21 +53,21 @@ int gc_system_hatch_ready_eggs(gc_run *run)
          * versions hatch here too. The profile and run share the normal save. */
         memmove(&sys->eggs[i],&sys->eggs[i+1],(sys->n_eggs-i-1)*sizeof sys->eggs[0]);
         sys->n_eggs--;
+        uint8_t previous[6];memcpy(previous,sys->dex[mon.b.species].ivs,6);
         gc_system_set_pokemon_caught_ex(sys,&mon,true,true,false,false,NULL);
         gc_system_update_species_dex_ivs(sys,mon.b.species,mon.b.ivs);
         sys->stats.total_hatches++;
         gc_event *reveal=gc_ev_new(run,GC_EV_EGG_HATCH);
         if(reveal){reveal->a=mon.b.species;reveal->b=mon.b.form;reveal->c=mon.b.gender;
-            reveal->egg_tier=egg.tier;reveal->egg_shiny=mon.b.shiny;reveal->egg_variant=mon.variant;}
-        gc_ev_msg(run,"egg:hatchFromTheEgg",1,pr_arg_pokemon_name(&run->bt,"pokemonName",&mon.b));
+            reveal->egg_tier=egg.tier;reveal->egg_shiny=mon.b.shiny;reveal->egg_variant=mon.variant;
+            reveal->egg_nature=mon.b.nature;memcpy(reveal->egg_ivs,mon.b.ivs,6);memcpy(reveal->egg_previous_ivs,previous,6);}
         for (int k=0;k<gc_starter_egg_moves_count;k++) {
             const gc_starter_egg_moves *moves=&gc_starter_egg_moves_data[k];
             if (moves->species!=mon.b.species || !moves->egg_moves[egg.egg_move_index]) continue;
             unsigned bit=1u<<egg.egg_move_index;
             if (!(sys->starters[mon.b.species].egg_moves&bit)) {
                 sys->starters[mon.b.species].egg_moves|=bit;
-                gc_ev_msg(run,egg.egg_move_index==3?"egg:rareEggMoveUnlock":"egg:eggMoveUnlock",1,
-                    pr_arg_move("moveName",moves->egg_moves[egg.egg_move_index]));
+                if(reveal){reveal->egg_move=moves->egg_moves[egg.egg_move_index];reveal->egg_move_rare=egg.egg_move_index==3;}
             }
             break;
         }

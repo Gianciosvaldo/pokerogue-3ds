@@ -21,6 +21,8 @@
 #include <string.h>
 
 #include "gm_item_ui.h"
+#include "pr_data.h"
+#include "menus.h"
 #include "mui.h"
 
 #define FONT TSX_PIXEL_8
@@ -111,6 +113,12 @@ static void offer_info(const gc_offer* o, offer_view* v) {
   }
   v->icon = r->icon;
   snprintf(v->name, sizeof v->name, "%s", r->name);
+  if(!strncmp(key,"TM_",3)){
+    const char *dash=strstr(r->name," - ");
+    snprintf(v->name,sizeof v->name,"%.*s - %s",dash?(int)(dash-r->name):2,r->name,menu_move_name(o->arg));
+    snprintf(v->desc,sizeof v->desc,"Teach %s to a Pokemon. Hold SELECT: move details.",menu_move_name(o->arg));
+    return;
+  }
   if (r->dynamic) {
     /* the money items: {money} is what the item grants now */
     int mi;
@@ -348,6 +356,7 @@ bool shop_ui_input(mui_button b) {
   if (!S.active || S.n_rows == 0) return false;
 
   switch (b) {
+    case MB_STATS:S.move_details=true;return true;
     case MB_LEFT:
       if (S.col > 0) {
         S.col--;
@@ -550,6 +559,11 @@ static void draw_description(void) {
       offer_info(o, &v);
       snprintf(name, sizeof name, "%s", v.name);
       snprintf(desc, sizeof desc, "%s", v.desc);
+      if(S.move_details&&o->key&&!strncmp(o->key,"TM_",3)&&o->arg>0&&o->arg<PR_MOVE_COUNT){
+        extern const char* const menu_move_keys[];char key[96];
+        snprintf(key,sizeof key,"move:%s.effect",menu_move_keys[o->arg]);
+        snprintf(desc,sizeof desc,"%s",mui_t(key));
+      }
       if (slot->type == SHOP_TARGET_REWARD) nc = tier_color(o->tier);
       break;
     }
@@ -637,3 +651,5 @@ int shop_ui_slot_count(void) {
 const shop_touch_slot* shop_ui_slot(int i) {
   return i >= 0 && i < S.n_touch_slots ? &S.touch_slots[i] : NULL;
 }
+
+void shop_ui_release(mui_button b){if(b==MB_STATS)S.move_details=false;}

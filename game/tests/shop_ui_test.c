@@ -17,6 +17,7 @@
 #include "reward_host.h"
 #include "ui.h"
 
+static char last_wrapped[512];
 /* Stub functions required by mui when building on PC without 3DS libraries */
 void mui_sfx(const char* key) {
   (void)key;
@@ -57,6 +58,7 @@ bool mui_image(const char* key, const char* frame, float x, float y, float ox, f
 
 int mui_wrap(mui_style s, const char* in, float width, char* out, size_t n) {
   (void)s; (void)width;
+  snprintf(last_wrapped,sizeof last_wrapped,"%s",in);
   snprintf(out, n, "%s", in);
   return 1;
 }
@@ -312,6 +314,16 @@ int main(void) {
   rh_close();
   assert(g_pushed == NULL);
   printf("The reward screen takes taps through its host PASSED.\n");
+
+  gc_screen tm_screen={.kind=GC_SCREEN_REWARD,.n_options=1,.reroll_cost=-1};
+  tm_screen.options[0]=(gc_offer){.key="TM_GREAT",.arg=MOVE_ID_UPROAR};
+  shop_ui_args tm_args={.screen=&tm_screen};rh_open_shop(&tm_args,&ev);
+  shop_ui_draw();assert(strstr(last_wrapped,"Teach Uproar")&&!strstr(last_wrapped,"(P)"));
+  res.reward_selected=-1;assert(g_pushed->input(g_pushed,BTN_STATS));shop_ui_draw();
+  assert(!strcmp(last_wrapped,"move:uproar.effect")&&res.reward_selected==-1);
+  assert(g_pushed->release);g_pushed->release(g_pushed,BTN_STATS);shop_ui_draw();assert(strstr(last_wrapped,"Teach Uproar"));
+  tm_screen.options[0].key="TM_ULTRA";tm_screen.options[0].arg=MOVE_ID_RETURN;rh_open_shop(&tm_args,&ev);shop_ui_draw();
+  assert(strstr(last_wrapped,"Teach Return")&&!strstr(last_wrapped,"return.name"));rh_close();
 
   /* With the biome map up the host hands a tap to its list (canvas y = physical y - 30) and the shop gets none; the list is drawn on
    * the top screen and, for the taps, on the bottom one */

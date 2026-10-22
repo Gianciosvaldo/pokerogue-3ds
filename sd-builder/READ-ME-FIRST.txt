@@ -1,7 +1,7 @@
 PokeRogue SD card builder (Windows 10 or 11)
 =============================================
 
-October 22 eggs, doubles and upstream stat panels build
+October 22 hardware feedback fixes build
   Includes the battle-menu crash/TM shop fixes, corrected move names, battle stat
   stage display, egg hatching, IV Scanner prompts, visible rivals and your trainer's
   opening Poke Ball throw. The run report can name an engine-recorded final blow.
@@ -17,6 +17,16 @@ October 22 eggs, doubles and upstream stat panels build
   for each active ally and choose a target when prompted (B goes back).
   Eggs now show a cracking/reveal animation with the hatched Pokemon's sprite.
   Customize > Use candies > Buy species egg buys an egg of that Pokemon.
+  B on the second ally's command menu now undoes the first ally's selection.
+  Hold SELECT while hovering over a shop TM to read the move's effect.
+  Existing PP Ups appear in item menus. Successful free TM teaching consumes
+  that reward; cancelling lets you choose again. Level-up stats use the bottom
+  screen, and ability descriptions scroll independently of battle speed.
+  Hatch results show a neutral background, IV radar, nature and new egg moves.
+  Claimed Nemeses leave the available list. Doubles bars sit further outward,
+  sprite loading avoids duplicate atlases, and returning to singles clears allies.
+  Three starters receive Pokerus every three hours. Customize > Use candies also
+  offers two starter cost reductions. Consecutive-move power is shown in Fight.
   Automated checks cannot replace testing on your physical 3DS.
 
 Before starting a run

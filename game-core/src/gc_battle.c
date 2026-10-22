@@ -367,6 +367,7 @@ int gc_battle_slot_of(const gc_run *run, int party_index)
 /* TurnInitPhase: each active Pokemon's turn data is reset, and the player's join the participants */
 void gc_battle_turn_init(gc_run *run)
 {
+    gc_int(run)->undo_first=false;
     pr_battle *bt = &run->bt;
     for (int k = 0; k < 4; k++) {
         bt->commands[k].command = bt->pre_commands[k].command = -1;
@@ -431,6 +432,7 @@ void gc_battle_command_screen(gc_run *run)
     memset(s, 0, sizeof *s);
     s->kind = GC_SCREEN_COMMAND;
     s->slot = field;
+    s->can_undo=field==1 && gc_int(run)->undo_first;
     pr_pokemon *p = run->bt.field[field];
     bool any = false;
     for (int i = 0; i < 4; i++) {

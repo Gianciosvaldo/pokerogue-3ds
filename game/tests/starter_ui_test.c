@@ -834,8 +834,22 @@ static void test_no_hidden_ability_purchase(void){
   CHECK(!gc_system_buy_starter_unlock(&SYS,SPECIES_ID_MEW,true)&&!memcmp(&before,&SYS.starters[SPECIES_ID_MEW],sizeof before),"stale hidden ability purchase cannot spend candy");
 }
 
+static void test_candy_cost_reductions(void){
+  gc_system_init_defaults(&SYS);SYS.starters[1].candy_count=200;
+  CHECK(open_screen(NULL),"open cost customization");press(MB_ACTION);press(MB_DOWN);press(MB_ACTION);
+  choose_option("Use candies");choose_option("Reduce cost");
+  CHECK(SYS.starters[1].value_reduction==1&&SYS.starters[1].candy_count==180&&gc_starter_value(&SYS,1)==2,"first reduction at native cost");
+  gc_starter_entry old=SYS.starters[1];fail_save_call=save_calls+2;
+  choose_option("Use candies");choose_option("Reduce cost");fail_save_call=0;
+  CHECK(!memcmp(&old,&SYS.starters[1],sizeof old),"failed reduction profile save rolls back debit and cost");
+  tick(4000);press(MB_ACTION);press(MB_ACTION);press(MB_DOWN);press(MB_ACTION);choose_option("Use candies");choose_option("Reduce cost");
+  CHECK(SYS.starters[1].value_reduction==2&&SYS.starters[1].candy_count==130&&gc_starter_value(&SYS,1)==1,"second reduction at native cost");
+  choose_option("Use candies");for(int i=0;i<g_option_count;i++)CHECK(!strstr(g_option_labels[i],"Reduce cost"),"no third purchase");
+}
+
 int main(int argc, char** argv) {
   const int sessions = argc > 1 ? atoi(argv[1]) : 200;
+  test_candy_cost_reductions();
   test_customization();
   test_no_hidden_ability_purchase();
   test_happy_path();

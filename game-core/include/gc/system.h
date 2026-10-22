@@ -151,6 +151,8 @@ uint16_t gc_system_get_ribbons(const gc_system *sys, uint16_t species_id);
 /* Direct hidden-ability purchases are a user-requested extension at the same
  * base-species candy cost as the pinned native passive unlock. */
 int gc_system_starter_unlock_cost(uint16_t species);
+int gc_system_starter_reduction_cost(const gc_system *sys,uint16_t species);
+bool gc_system_buy_starter_reduction(gc_system *sys,uint16_t species);
 bool gc_system_buy_starter_unlock(gc_system *sys, uint16_t species, bool hidden_ability);
 size_t gc_system_save(const gc_system *sys, void *buf, size_t cap);
 bool gc_system_load(gc_system *sys, const void *buf, size_t len, const char **why);

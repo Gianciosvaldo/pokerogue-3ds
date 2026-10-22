@@ -236,8 +236,11 @@ static void load_mon_sprite(side* sd, bool player) {
   menu_sprite_free(&sd->sprite);
   menu_mon visual = {.species = m->species, .form = m->form, .gender = m->gender,
                      .shiny = m->shiny, .variant = m->variant};
-  menu_sprite_load(&sd->sprite, &visual, player);
-  sprite_key(m, player, sd->sprite_key, sizeof sd->sprite_key);
+  sd->sprite_key[0]=0;
+  if(!m->species)return;
+  /* The shared loader owns the atlas. Do not load a second copy into img's cache. */
+  if(!menu_sprite_load(&sd->sprite,&visual,player))
+    sprite_key(m,player,sd->sprite_key,sizeof sd->sprite_key);
 }
 
 static void set_mon(side* sd, const bv_mon* m, bool player) {
@@ -281,6 +284,7 @@ static const char* name_with_affix(int battler) {
 
 static const rr_frame* sprite_frame(side* sd) {
   if (sd->sprite.n) return menu_sprite_frame(&sd->sprite, ui_now());
+  if(!sd->sprite_key[0])return NULL;
   int frame = (int)(ui_now() * 10 / 1000); /* upstream anims run at 10 fps */
   return img_anim_frame(sd->sprite_key, frame);
 }
@@ -668,10 +672,15 @@ static float player_info_y(const side *sd){
   return B.setup.doubles?(field_of(sd)==1?-72:-116):-72;
 }
 
+static float info_base_x(const side *sd,bool player){
+  if(!B.setup.doubles)return player?310:140;
+  return player?348:sd->mon.boss?150:102;
+}
+
 static void draw_player_info(side* sd) {
   if (!sd->present || !sd->info_on) return;
   const bv_mon* m = &sd->mon;
-  float bx = 310 + sd->info_dx, by = player_info_y(sd); /* PlayerBattleInfo container */
+  float bx = info_base_x(sd,true) + sd->info_dx, by = player_info_y(sd); /* PlayerBattleInfo container */
   img_draw("images/ui/pbinfo_player", NULL, bx, by, 1, 0.5f);
   draw_types(m, true, bx, by);
   draw_name(m, true, bx - 115, by - 15.2f);
@@ -698,7 +707,7 @@ static void draw_player_info(side* sd) {
 static void draw_enemy_info(side* sd) {
   if (!sd->present || !sd->info_on) return;
   const bv_mon* m = &sd->mon;
-  float bx = 140 + sd->info_dx, by = B.setup.doubles?(field_of(sd)==3?-103:-141):-141; /* EnemyBattleInfo container */
+  float bx = info_base_x(sd,false) + sd->info_dx, by = B.setup.doubles?(field_of(sd)==3?-103:-141):-141; /* EnemyBattleInfo container */
   img_draw("images/ui/pbinfo_enemy_mini", NULL, bx, by, 1, 0.5f);
   draw_types(m, false, bx, by);
   draw_name(m, false, bx - 124, by - 11.2f);
@@ -797,7 +806,7 @@ static void draw_fight_menu(bool top) {
   text_draw(TS_MOVE_LABEL, 1 + rx + 320 - 12, -26, s, &po);
   if (pm) {
     if (pm->power >= 0)
-      snprintf(s, sizeof s, "%d", pm->power);
+      snprintf(s, sizeof s, "%d", m->move_power[B.move_cursor]>0?m->move_power[B.move_cursor]:pm->power);
     else
       snprintf(s, sizeof s, "---");
     text_draw(TS_MOVE_LABEL, 1 + rx + 320 - 12, -18, s, &ro);
@@ -991,7 +1000,7 @@ static void draw_bottom(bool top) {
     msgbox_draw(&B.msg, top ? 12 - TOP_PAD : 12, -39);
   }
   if (cmd_shown() && B.has_balls && !info) draw_party_tray();
-  draw_level_stats();
+  if(!top)draw_level_stats();
   if (!top) draw_ability_bar();
 }
 
@@ -1582,7 +1591,7 @@ static void run_event(float dt) {
         char s[64];
         snprintf(s, sizeof s, "%s", i18n_ability_name(e->a));
         i18n_t(B.ability_text, sizeof B.ability_text, "fightUiHandler:abilityFlyInText", "pokemonName",
-               sd->mon.name, "passive", "", "abilityName", s, NULL);
+               e->text&&*e->text?e->text:sd->mon.name, "passive", "", "abilityName", s, NULL);
         for (char* p = B.ability_text; *p; p++)
           if (*p == '\n') *p = ' ';
         B.ability_t = 1500;
@@ -1722,6 +1731,13 @@ static bool stats_input(ui_button b){
   if(b!=BTN_STATS)return false;
   B.stats_shown=true;tween_start(&B.stats_tw,B.stats_alpha,1,125,EASE_SINE_IN_OUT);return true;
 }
+static bool undo_command(ui_button b){
+  if(b!=BTN_CANCEL||B.mode!=M_COMMAND||!B.opts.can_undo)return false;
+  B.mode=M_IDLE;ui_play_select();
+  if(B.on_command)B.on_command((bv_command){4,0},B.command_arg);
+  return true;
+}
+
 static bool bv_input(ui_screen* s, ui_button b) {
   (void)s;
   if(stats_input(b))return true;
@@ -1776,6 +1792,7 @@ static bool bv_input(ui_screen* s, ui_button b) {
     return false;
   }
   if (B.mode == M_COMMAND) {
+    if(undo_command(b))return true;
     int c = B.cmd_cursor;
     switch (b) {
       case BTN_UP:
@@ -1968,6 +1985,7 @@ static void bv_draw(ui_screen* s, rr_screen which) {
   (void)s;
   if (which == RR_TOP) {
     if (ui_space(UI_FIELD)) draw_field();
+    if (ui_space(UI_PHYS_TOP)) draw_border();
     if (ui_space(UI_FIELD_UI)) {
       draw_enemy_info(&B.s[1]);
       draw_player_info(&B.s[0]);
@@ -1975,7 +1993,6 @@ static void bv_draw(ui_screen* s, rr_screen which) {
       draw_player_info(&B.s[2]);
     }
     /* the field is 320x180 on a 400x240 screen: keep sprites that slide past it off the border */
-    if (ui_space(UI_PHYS_TOP)) draw_border();
     /* the strip and the item bar run across the border (the whole screen's width), so they come after it */
     if (ui_space(UI_TOP_CANVAS_UI)) draw_bottom(true);
     if (ui_space(UI_PHYS_TOP)) draw_top_bar();

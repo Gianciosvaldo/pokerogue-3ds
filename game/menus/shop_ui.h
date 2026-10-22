@@ -64,7 +64,7 @@ typedef struct {
 #define SHOP_MAX_TOUCH_SLOTS 32
 
 typedef struct {
-  bool active;
+  bool active, move_details;
   gc_screen screen_copy;
   double player_money;
   bool has_lock_capsule;
@@ -93,6 +93,7 @@ void shop_ui_open(const shop_ui_args* args, const shop_ui_events* ev);
 void shop_ui_close(void);
 bool shop_ui_active(void);
 bool shop_ui_input(mui_button b);
+void shop_ui_release(mui_button b);
 bool shop_ui_touch(float touch_x, float touch_y);
 void shop_ui_update(float dt_ms);
 void shop_ui_draw(void);

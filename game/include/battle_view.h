@@ -28,6 +28,7 @@ extern "C" {
 
 /* One Pokemon as the screen shows it. */
 typedef struct {
+  uint32_t pokemon_id;bool identity_known;
   int species, form;         /* SpeciesId, form index */
   bool female, shiny;
   int variant;               /* 0..2 */
@@ -39,7 +40,7 @@ typedef struct {
   int gender;                /* Gender: -1 genderless, 0 male, 1 female */
   int types[3], n_types;     /* PokemonType */
   float exp_ratio;           /* 0..1 of the level's EXP bar */
-  int moves[4], pp_left[4], pp_max[4], n_moves;
+  int moves[4], pp_left[4], pp_max[4], move_power[4], n_moves;
   bool boss;
   int boss_segments;
   int8_t stat_stages[7];     /* ATK DEF SPATK SPDEF SPD ACC EVA */
@@ -145,7 +146,7 @@ typedef struct {
 /* What the command menu allows (game-core's COMMAND screen). A command that is off, or a move that can't be
  * used, plays the error sound; an unusable move shows its reason (an upstream message) instead. */
 typedef struct {
-  bool can_ball, can_switch, can_run;
+  bool can_ball, can_switch, can_run, can_undo;
   int command_slot; /* native player field index 0 or 1 */
   int party_luck; /* actual allowed party luck, 0..14 */
   bool move_ok[4];

@@ -20,7 +20,7 @@ static struct {
   sh_events ev;
   sm_entry entries[SS_MAX_ENTRIES];
   int n;
-  uint32_t rng;
+  uint32_t rng;uint64_t pokerus_bucket;
   uint16_t editing;
   int mode, slot, page, count;
   char labels[32][128];
@@ -120,7 +120,8 @@ static void editor_done(int row,void* arg) {
     if(!ok && why && !strcmp(why,"egg:tooManyEggs")) {
       H.rng=rng_before;starter_message("Your egg storage is full (99 eggs).");return;
     }
-  } else if(mode==EDIT_CANDY) ok=gc_system_buy_starter_unlock(H.sys,H.editing,value==1);
+  } else if(mode==EDIT_CANDY && value==3) ok=gc_system_buy_starter_reduction(H.sys,H.editing);
+  else if(mode==EDIT_CANDY) ok=gc_system_buy_starter_unlock(H.sys,H.editing,value==1);
   else if(mode==EDIT_TOP && value==-3) {p->passive_attr^=2;selected.passive=(p->passive_attr&2)!=0;}
   if(mode!=EDIT_CANDY) ok=ok && gc_starter_is_available(H.sys,&selected,NULL,NULL);
   if(!ok) {*p=before;H.rng=rng_before;ui_play_error();editor_show(mode);return;}
@@ -171,6 +172,12 @@ static void editor_show(int mode) {
     if((H.page+1)*28<n)editor_add(-10,"Next page");
     if(H.page>0)editor_add(-11,"Previous page");
   } else if(mode==EDIT_CANDY) {
+    int reduction=gc_system_starter_reduction_cost(H.sys,H.editing);
+    if(reduction>=0){
+      gc_system *sys=H.sys;gc_starter_entry old=sys->starters[H.editing];
+      sys->starters[H.editing].value_reduction++;double value=gc_starter_value(sys,H.editing);sys->starters[H.editing]=old;
+      snprintf(label,sizeof label,"Reduce cost to %.2g (%d candies)",value,reduction);editor_add(3,label);
+    }
     int cost=gc_system_starter_unlock_cost(H.editing);
     if(p->passive_attr&1)snprintf(label,sizeof label,"Passive unlocked");
     else snprintf(label,sizeof label,"Unlock passive (%d)",cost);
@@ -205,6 +212,8 @@ static bool sh_touch(ui_screen* s, float x, float y) {
 
 static void sh_update(ui_screen* s, float dt) {
   (void)s;
+  time_t now=time(NULL);uint64_t bucket=now>0?(uint64_t)now/10800:0;
+  if(bucket!=H.pokerus_bucket){H.pokerus_bucket=bucket;editor_refresh();}
   mui_tick(dt);
   starter_update(dt);
 }
@@ -237,6 +246,7 @@ static ui_screen g_screen = {"starter-select", UI_FADE, sh_enter, sh_leave, NULL
 
 bool sh_open(gc_system* sys, const char* notice, const sh_events* ev) {
   H.sys = sys;
+  time_t now=time(NULL);H.pokerus_bucket=now>0?(uint64_t)now/10800:0;
   H.ev = *ev;
   H.n = ss_list(sys, H.entries, SS_MAX_ENTRIES, NULL);
   if (H.n == 0) return false;

@@ -1175,20 +1175,35 @@ static void test_tm_and_memory_mushroom(void)
     tm_offer.arg = MOVE_ID_FLAMETHROWER;
     int res = gc_reward_apply(&run, &tm_offer, 0, 0, &why);
     CHECK(res == GC_APPLY_DONE);
-    CHECK(m->n_used_tms == 1);
-    CHECK(m->used_tms[0] == MOVE_ID_FLAMETHROWER);
+    CHECK(m->n_used_tms == 0); /* record only after actual successful learning */
 
     gc_internal *in = gc_int(&run);
     gc_rphase queued_p;
-    CHECK(gc_rq_next(&in->rq, &queued_p) && queued_p.type == RP_SELECT_MODIFIER);
     CHECK(gc_rq_next(&in->rq, &queued_p) && queued_p.type == RP_LEARN_MOVE && queued_p.b == MOVE_ID_FLAMETHROWER);
+    CHECK(gc_phase_start(&run,&queued_p)); /* free slot: actual LearnMovePhase learns immediately */
+    CHECK(m->n_used_tms==1 && m->used_tms[0]==MOVE_ID_FLAMETHROWER);
+    CHECK(!gc_rq_has(&run,RP_SELECT_MODIFIER)&&!in->reward.copy_pending); /* success removes only its reward copy; unrelated run phases remain */
     gc_rq_clear(&run);
 
+    gc_mon_set_move(m,1,MOVE_ID_SCRATCH);
     /* duplicate TM application doesn't duplicate in used_tms */
     res = gc_reward_apply(&run, &tm_offer, 0, 0, &why);
     CHECK(res == GC_APPLY_DONE);
     CHECK(m->n_used_tms == 1);
     gc_rq_clear(&run);
+
+    /* Cancelling a full-moveset TM preserves the copied screen and history;
+     * committing the replacement consumes it. */
+    m->b.n_moves=4;m->b.moves[0]=MOVE_ID_TACKLE;m->b.moves[1]=MOVE_ID_SCRATCH;m->b.moves[2]=MOVE_ID_GROWL;m->b.moves[3]=MOVE_ID_LEER;
+    res=gc_reward_apply(&run,&tm_offer,0,-1,&why);CHECK(res==GC_APPLY_DONE);
+    CHECK(gc_rq_next(&in->rq,&queued_p)&&queued_p.type==RP_LEARN_MOVE&&!gc_phase_start(&run,&queued_p));
+    bool chosen=false;gc_choice choice={GC_CH_FORGET,-1,0,0};
+    CHECK(gc_phase_choose(&run,&queued_p,&choice,&why,&chosen)&&chosen);
+    CHECK(gc_rq_has(&run,RP_SELECT_MODIFIER)&&m->n_used_tms==1&&m->b.moves[0]==MOVE_ID_TACKLE);gc_rq_clear(&run);
+    res=gc_reward_apply(&run,&tm_offer,0,-1,&why);CHECK(res==GC_APPLY_DONE);
+    CHECK(gc_rq_next(&in->rq,&queued_p)&&queued_p.type==RP_LEARN_MOVE&&!gc_phase_start(&run,&queued_p));
+    chosen=false;choice.a=0;CHECK(gc_phase_choose(&run,&queued_p,&choice,&why,&chosen)&&chosen);
+    CHECK(!gc_rq_has(&run,RP_SELECT_MODIFIER)&&!in->reward.copy_pending&&m->n_used_tms==1&&m->b.moves[0]==MOVE_ID_FLAMETHROWER);gc_rq_clear(&run);
 
     /* Already known and incompatible targets cannot consume an offer or queue a phase. */
     gc_mon_set_move(m, 0, MOVE_ID_FLAMETHROWER);

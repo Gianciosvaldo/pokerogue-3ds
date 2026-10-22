@@ -7,7 +7,7 @@ static unsigned char saved[524288];
 static int checks;
 #define CHECK(x) do{checks++;if(!(x)){fprintf(stderr,"hatch host line%d: %s\n",__LINE__,#x);exit(1);}}while(0)
 static int messages,reveals;
-static void drain(void){gc_event ev;while(gc_run_next_event(&run,&ev)){if(ev.kind==GC_EV_EGG_HATCH){reveals++;CHECK(ev.a==SPECIES_ID_BULBASAUR&&ev.b==0&&ev.egg_variant==0&&!ev.egg_shiny);}if(ev.kind==GC_EV_MESSAGE&&ev.msg.key&&!strcmp(ev.msg.key,"egg:hatchFromTheEgg"))messages++;}}
+static void drain(void){gc_event ev;while(gc_run_next_event(&run,&ev)){if(ev.kind==GC_EV_EGG_HATCH){reveals++;CHECK(ev.egg_nature<25);for(int k=0;k<6;k++)CHECK(ev.egg_ivs[k]<=31);CHECK(ev.a==SPECIES_ID_BULBASAUR&&ev.b==0&&ev.egg_variant==0&&!ev.egg_shiny);}if(ev.kind==GC_EV_MESSAGE&&ev.msg.key&&!strcmp(ev.msg.key,"egg:hatchFromTheEgg"))messages++;}}
 int main(void){
  const char *why=NULL;
  for(int n=2;n<=99;n+=97){
@@ -24,7 +24,7 @@ int main(void){
   for(int i=0;i<n;i++)sys.eggs[i]=(gc_egg){.id=2654435761u+i,.hatch_waves=i==0?0:1,.species=SPECIES_ID_BULBASAUR,.egg_move_index=i%4,.source_type=i%3};
   uint32_t old_hatches=sys.dex[SPECIES_ID_BULBASAUR].hatched_count;
   gc_choice choice={GC_CH_FIGHT,0,-1,0};CHECK(gc_run_choose(&run,&choice,&why));drain();
-  CHECK(sys.n_eggs==0&&messages==n&&reveals==n&&!run.ev_overflow);
+  CHECK(sys.n_eggs==0&&messages==0&&reveals==n&&!run.ev_overflow);
   CHECK(sys.dex[SPECIES_ID_BULBASAUR].hatched_count==old_hatches+n);
   CHECK(sys.starters[SPECIES_ID_BULBASAUR].candy_count>=2*n);
   CHECK(sys.starters[SPECIES_ID_BULBASAUR].egg_moves==(n==2?3:15));

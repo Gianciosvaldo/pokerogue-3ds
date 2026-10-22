@@ -55,7 +55,7 @@ typedef struct {
   double base_cost;  /* speciesStarterCosts: the cost label is blue or gold when the cost is reduced */
   uint8_t form;      /* the default dex props (getSpeciesDefaultDexAttrProps): the icon */
   uint8_t variant;
-  bool female, shiny;
+  bool female, shiny, pokerus;
   bool passive;      /* passiveAttr != 0: the passive background */
   bool hidden_ability; /* the hidden ability is unlocked: the capsule */
   bool won;          /* classicWinCount > 0: the champion ribbon */

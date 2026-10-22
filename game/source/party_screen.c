@@ -93,7 +93,8 @@ static void gc_to_menu_mon(const gc_mon* gm, menu_mon* m) {
   m->max_hp = (uint32_t)p->stats[STAT_HP];
   m->status = p->status;
   for (int i = 0; i < p->n_moves && i < 4; i++) {
-    int max = p->max_pp_override[i] >= 0 ? p->max_pp_override[i] : pr_moves[p->moves[i]].pp;
+    int base=pr_moves[p->moves[i]].pp;
+    int max=p->max_pp_override[i]>0?p->max_pp_override[i]:base+p->pp_up[i]*(base/5>0?base/5:1);
     m->moves[i] = (menu_move){p->moves[i], p->pp_used[i], (uint8_t)max, false, 0};
   }
   m->nmoves = p->n_moves;
@@ -134,7 +135,8 @@ static void ps_menu_mon(const pr_battle* bt, const pr_pokemon* p, menu_mon* m) {
   m->max_hp = (uint32_t)p->stats[STAT_HP];
   m->status = p->status;
   for (int i = 0; i < p->n_moves && i < 4; i++) {
-    int max = p->max_pp_override[i] >= 0 ? p->max_pp_override[i] : pr_moves[p->moves[i]].pp;
+    int base=pr_moves[p->moves[i]].pp;
+    int max=p->max_pp_override[i]>0?p->max_pp_override[i]:base+p->pp_up[i]*(base/5>0?base/5:1);
     m->moves[i] = (menu_move){p->moves[i], p->pp_used[i], (uint8_t)max, false, 0};
   }
   m->nmoves = p->n_moves;
@@ -229,7 +231,7 @@ static void ps_update(ui_screen* s, float dt) {
   (void)s;
   mui_tick(dt);
   party_update(dt);
-  summary_update(dt);
+  summary_update(dt / ui_game_speed());
 }
 
 static void ps_draw(ui_screen* s, rr_screen which) {
@@ -429,7 +431,7 @@ static bool sum_input(ui_screen* s, ui_button b) {
 static void sum_update(ui_screen* s, float dt) {
   (void)s;
   mui_tick(dt);
-  summary_update(dt);
+  summary_update(dt / ui_game_speed());
 }
 
 static void sum_draw(ui_screen* s, rr_screen which) {

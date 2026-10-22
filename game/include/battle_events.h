@@ -24,6 +24,7 @@
 /* The text source for pr_msg_format: locales/<language>/<file>.json from data.pak, falling back
  * to English as upstream's i18next does. */
 const pr_text_source* be_text_source(void);
+void be_format_message(const pr_msg *msg,char *out,size_t size);
 
 /* A battle-core Pokemon as the screen shows it. */
 void be_mon(const pr_battle* bt, const pr_pokemon* p, bv_mon* out);
