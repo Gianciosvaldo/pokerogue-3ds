@@ -70,6 +70,12 @@
 #include "ui.h"
 #include "ui_widgets.h"
 
+/* The render-specific hatch test checks animation; this driver resumes after it. */
+void egg_hatch_open(const gc_event *e,void (*done)(void *),void *arg) {
+  if(e->a<=0||e->a>GC_MAX_SPECIES_ID)abort();
+  if(done)done(arg);
+}
+
 /* ------------------------------------------------------------------ the fake world */
 
 static uint32_t rs32 = 1;
