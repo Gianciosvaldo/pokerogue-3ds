@@ -74,6 +74,8 @@ typedef struct {
 } sv_run;
 typedef struct { uint8_t double_battle; } sv_encounter;
 static const sfield encounter_fields[]={SF(sv_encounter,double_battle)};
+static const sfield illusion_fields[]={SF(pr_illusion,species),SF(pr_illusion,fusion_species),
+    SF(pr_illusion,form),SF(pr_illusion,fusion_form),SF(pr_illusion,gender),SF(pr_illusion,active)};
 typedef struct { uint8_t terminal_result; } sv_terminal;
 static const sfield terminal_fields[]={SF(sv_terminal,terminal_result)};
 static const sfield run_fields[] = {
@@ -142,9 +144,6 @@ static const sfield pokemon_fields[] = {
     SF(pr_pokemon, temporary_fusion_species), SF(pr_pokemon, temporary_fusion_form),
     SF(pr_pokemon, battle_berries), SF(pr_pokemon, turn_berries), SF(pr_pokemon, last_berries),
     SF(pr_pokemon, n_battle_berries), SF(pr_pokemon, n_turn_berries), SF(pr_pokemon, n_last_berries),
-    SF(pr_pokemon, illusion.species), SF(pr_pokemon, illusion.fusion_species),
-    SF(pr_pokemon, illusion.form), SF(pr_pokemon, illusion.fusion_form),
-    SF(pr_pokemon, illusion.gender), SF(pr_pokemon, illusion.active),
 };
 static const sfield tag_fields[] = {
     SF(pr_battler_tag, type), SF(pr_battler_tag, turn_count), SF(pr_battler_tag, source_move),
@@ -534,6 +533,10 @@ size_t gc_run_save(const gc_run *run, void *buf, size_t cap)
     sv_encounter encounter={run->double_battle};
     put_block(&w,encounter_fields,NF(encounter_fields),&encounter,sizeof encounter,1);
     section_end(&w,s);
+    s=section_start(&w,"illusions");
+    put_block(&w,illusion_fields,NF(illusion_fields),&run->party[0].b.illusion,sizeof(gc_mon),run->n_party);
+    put_block(&w,illusion_fields,NF(illusion_fields),&run->enemy[0].b.illusion,sizeof(gc_mon),run->n_enemy);
+    section_end(&w,s);
     s = section_start(&w, "depths");
     put_block(&w, depth_fields, NF(depth_fields), &run->depths, sizeof run->depths, 1);
     section_end(&w, s);
@@ -650,6 +653,25 @@ static bool mon_ok(const gc_mon *m)
     return true;
 }
 
+static bool illusion_schema_ok(reader r){
+    int n=take16(&r);unsigned seen=0;if(r.bad||n!=NF(illusion_fields))return false;
+    for(int i=0;i<n;i++){
+        uint32_t name=take32(&r);uint16_t size=take16(&r);int found=-1;
+        for(int k=0;k<NF(illusion_fields);k++)if(name==hash(illusion_fields[k].name)&&size==illusion_fields[k].size)found=k;
+        if(found<0||(seen&(1u<<found)))return false;seen|=1u<<found;
+    }
+    return !r.bad;
+}
+
+static bool illusion_ok(const pr_illusion *v){
+    uint8_t active;memcpy(&active,&v->active,1);if(active>1)return false;
+    if(!active)return true;
+    const pr_species *sp=gc_species(v->species);
+    if(!sp||v->form>=sp->nforms||v->gender < -1||v->gender>1)return false;
+    const pr_species *fusion=v->fusion_species?gc_species(v->fusion_species):NULL;
+    return v->fusion_species?(fusion&&v->fusion_form<fusion->nforms):v->fusion_form==0;
+}
+
 static bool get_mons(const reader *body, const char *name, gc_mon *mons, int n, int *dropped)
 {
     reader r = section(body, name);
@@ -670,13 +692,6 @@ static bool get_mons(const reader *body, const char *name, gc_mon *mons, int n, 
         if (b->n_move_history < nh) b->n_move_history = (uint16_t)nh;
         b->n_move_queue = (uint8_t)get_block(&r, turn_move_fields, NF(turn_move_fields), b->move_queue,
                                              sizeof b->move_queue[0], PR_MAX_MOVE_QUEUE, dropped);
-        uint8_t illusion_active;memcpy(&illusion_active,&b->illusion.active,1);if(illusion_active>1)return false;
-        if(illusion_active){
-            const pr_species *sp=gc_species(b->illusion.species);
-            if(!sp||b->illusion.form>=sp->nforms||b->illusion.gender < -1||b->illusion.gender>1)return false;
-            const pr_species *fusion=b->illusion.fusion_species?gc_species(b->illusion.fusion_species):NULL;
-            if(b->illusion.fusion_species?(!fusion||b->illusion.fusion_form>=fusion->nforms):b->illusion.fusion_form!=0)return false;
-        }
         if (!berry_history_ok(b)) return false;
         pr_reset_turn_data(b);
         if (b->transformed && !transform_schema) return false;
@@ -890,6 +905,17 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
             run->enemy[i].n_used_tms = 0;
             memset(run->enemy[i].used_tms, 0, sizeof run->enemy[i].used_tms);
         }
+    }
+
+    /* Older saves have no disguise section; retain their empty default without
+     * counting an optional extension as dropped legacy data. */
+    reader illusions=section(&body,"illusions");
+    if(!illusions.bad){
+        if(!illusion_schema_ok(illusions)||get_block(&illusions,illusion_fields,NF(illusion_fields),&run->party[0].b.illusion,sizeof(gc_mon),run->n_party,&dropped)!=run->n_party
+            ||!illusion_schema_ok(illusions)||get_block(&illusions,illusion_fields,NF(illusion_fields),&run->enemy[0].b.illusion,sizeof(gc_mon),run->n_enemy,&dropped)!=run->n_enemy
+            ||illusions.bad||illusions.pos!=illusions.n){*why="the stored disguises are damaged";return false;}
+        for(int side=0;side<2;side++)for(int k=0;k<(side?run->n_enemy:run->n_party);k++)
+            if(!illusion_ok(&(side?run->enemy:run->party)[k].b.illusion)){*why="the stored disguise is damaged";return false;}
     }
 
     /* the arena the battle keeps, then the battle as gc_battle_setup_field builds it with the lead
