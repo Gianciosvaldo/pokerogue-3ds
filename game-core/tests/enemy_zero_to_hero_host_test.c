@@ -42,6 +42,7 @@ static bool trainer_battle(const char *seed)
             c.kind = GC_CH_FIGHT; c.b = -1;
             for (int i = 0; i < 4; i++) if (s->move_ok[i]) { c.a = (int16_t)i; break; }
             break;
+        case GC_SCREEN_TARGET: c.kind=GC_CH_TARGET;c.a=-1;for(int k=2;k<4;k++)if(s->target_ok[k]){c.a=k;break;}if(c.a<0)for(int k=0;k<2;k++)if(s->target_ok[k]){c.a=k;break;}break;
         case GC_SCREEN_SWITCH: c.kind = GC_CH_PICK; c.a = -1; for (int i = 0; i < run.n_party; i++) if (s->pick_ok[i]) { c.a = (int16_t)i; break; } break;
         case GC_SCREEN_LEARN_MOVE: c.kind = GC_CH_FORGET; c.a = -1; break;
         case GC_SCREEN_EVOLVE: c.kind = GC_CH_CANCEL; c.a = 1; break;

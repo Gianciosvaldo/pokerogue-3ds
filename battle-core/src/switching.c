@@ -243,6 +243,7 @@ void pr_force_switch_out(pr_battle *bt, pr_engine *e, bool self_switch, int swit
     if (emergency_exit) return;
     const pr_pokemon *ally = pr_get_ally(bt, out);
     if (out->hp > 0) {
+        pr_event_add(bt,e,PR_EV_SWITCH_OUT,pr_battler_index(bt,out),-1,0,0,NULL);
         pr_leave_field(bt, e, out, false);
         pr_queue_msg(bt, e, pr_msg1("moveTriggers:fled", pr_arg_pokemon(bt, "pokemonName", out)));
         if (bt->double_battle && ally) pr_redirect_moves(bt, e, out, ally);
@@ -352,6 +353,7 @@ void pr_wimp_out_apply(pr_battle *bt, pr_engine *e, pr_pokemon *p)
     const pr_pokemon *ally = pr_get_ally(bt, p);
     if (!bt->wave_index || bt->wave_index % 10 == 0) return;
     if (p->hp > 0) {
+        pr_event_add(bt,e,PR_EV_SWITCH_OUT,pr_battler_index(bt,p),-1,0,0,NULL);
         pr_leave_field(bt, e, p, false);
         pr_queue_msg(bt, e, pr_msg1("moveTriggers:fled", pr_arg_pokemon(bt, "pokemonName", p)));
         if (bt->double_battle && ally) pr_redirect_moves(bt, e, p, ally);
@@ -505,6 +507,9 @@ void pr_switch_summon_phase(pr_battle *bt, pr_engine *e, int ph)
     bt->party[side][slot] = last;
     bt->party[side][field] = in;
     bt->field[side * 2 + field] = in;
+    /* Native field getters read the reordered first two party slots. A revived
+     * or healed off-field member in the other slot must not leave an alias. */
+    if(bt->double_battle&&slot<2)bt->field[side*2+slot]=last;
     pr_illusion_on_summon(bt, in);                                        /* PR_DEV_ILLUSION, before its send-out text */
     /* showTextAndSummon (for an enemy on a timer, once the trainer and its ball tray are hidden):
      * the send-out text (getSendOutText; not a phase); Baton Pass and Shed Tail only move the

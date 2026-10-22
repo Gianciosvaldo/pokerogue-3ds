@@ -97,6 +97,7 @@ typedef enum {
                              * only when run->ask_switch is set: GC_CH_CONFIRM */
     GC_SCREEN_CUSTOM_OFFER, /* custom content (gc/custom.h): the app's hook offered a rematch before the battle's save point:
                              * GC_CH_CONFIRM, a = 1 accept, 0 decline. Only with hooks installed; never saved (no save point yet) */
+    GC_SCREEN_TARGET,       /* choose one of target_ok; GC_CH_TARGET or GC_CH_CANCEL */
 } gc_screen_kind;
 
 typedef enum {
@@ -122,6 +123,7 @@ typedef enum {
     GC_CH_TRANSFER,         /* REWARD: Manage Items (openModifierTransferScreen): a = the party index that gets the item,
                              * b = the held item's index in run->items, c = how many copies; the screen stays open */
     GC_CH_DISCARD,          /* REWARD: Manage Items' discard: b = the held item's index in run->items, c = how many copies */
+    GC_CH_TARGET,           /* TARGET: a = target BattlerIndex 0..3 */
 } gc_choice_kind;
 
 typedef struct {
@@ -153,6 +155,7 @@ typedef struct {
      * {{pokemonNameWithAffix}} the Pokemon) in move_why */
     bool can_ball, can_switch, can_run;
     bool fight_only;        /* a mystery encounter skips to the FIGHT menu (skipToFightInput): the menu cannot be backed out of */
+    bool target_ok[4];       /* TARGET: legal single-target choices */
     bool move_ok[4];
     const char *move_why[4];
     bool struggle;          /* every move is unusable: FIGHT with any slot uses Struggle */
@@ -297,6 +300,7 @@ typedef struct gc_run {
     /* the current battle */
     bool in_battle;
     int battle_type;            /* BattleType */
+    bool double_battle;         /* current encounter width, retained across save/load */
     /* the wild battle a mystery encounter starts (battle_type stays WILD here): MysteryEncounter.catchAllowed
      * decides whether a ball may be thrown at it */
     bool me_battle, me_catch_allowed;

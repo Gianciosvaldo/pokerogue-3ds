@@ -36,7 +36,7 @@ int main(void)
         add(donor,type,run.bt.field[donor*2]->id);if(mode==1)add(1-donor,type,run.bt.field[(1-donor)*2]->id);
         if(pouch)for(int k=0;k<2;k++){gc_item item={.key="BERRY_POUCH",.arg=-1,.stack=3};if(k)run.enemy_items[run.n_enemy_items++]=item;else run.items[run.n_items++]=item;}
         gc_items_to_battle(&run);CHECK(gc_run_can_save(&run));size_t n=gc_run_save(&run,saved,sizeof saved);CHECK(n>0);CHECK(gc_run_load(&loaded,saved,n,&why));CHECK(!loaded.load_dropped);
-        gc_choice fight={GC_CH_FIGHT,0,-1,0};CHECK(gc_run_choose(&run,&fight,&why));CHECK(gc_run_choose(&loaded,&fight,&why));drain(&run);drain(&loaded);
+        gc_choice fight={GC_CH_FIGHT,0,mode>=2&&!side?2:-1,0};CHECK(gc_run_choose(&run,&fight,&why));CHECK(gc_run_choose(&loaded,&fight,&why));drain(&run);drain(&loaded);
         CHECK(actor->has_eaten_berry);if(mode==1)CHECK(other->has_eaten_berry);
         if(mode==0)CHECK(actor->stat_stages[STAT_DEF-1]>=2);
         if(mode>=2){CHECK(berries(&run,1-side,other->id)==0);CHECK(actor->n_battle_berries==0);}

@@ -72,6 +72,10 @@ typedef struct {
     double player_teras_used;
     bool frozen_names; /* new saves require both halves of stored names */
 } sv_run;
+typedef struct { uint8_t double_battle; } sv_encounter;
+static const sfield encounter_fields[]={SF(sv_encounter,double_battle)};
+static const sfield illusion_fields[]={SF(pr_illusion,species),SF(pr_illusion,fusion_species),
+    SF(pr_illusion,form),SF(pr_illusion,fusion_form),SF(pr_illusion,gender),SF(pr_illusion,active)};
 typedef struct { uint8_t terminal_result; } sv_terminal;
 static const sfield terminal_fields[]={SF(sv_terminal,terminal_result)};
 static const sfield run_fields[] = {
@@ -415,7 +419,8 @@ bool gc_run_can_save(const gc_run *run)
     const gc_rqueue *q = &in->rq;
     if (q->current.type != RP_COMMAND) return false;
     for (int l = 0; l < q->n_levels; l++)
-        for (int k = 0; k < q->n[l]; k++) if (q->q[l][k].type != RP_TURN) return false;
+        for (int k = 0; k < q->n[l]; k++) if (q->q[l][k].type != RP_TURN
+            && !(run->double_battle&&q->q[l][k].type==RP_COMMAND&&q->q[l][k].a==1)) return false;
     return true;
 }
 
@@ -524,6 +529,14 @@ size_t gc_run_save(const gc_run *run, void *buf, size_t cap)
     size_t s = section_start(&w, "run");
     put_block(&w, run_fields, NF(run_fields), &v, sizeof v, 1);
     section_end(&w, s);
+    s = section_start(&w,"encounter");
+    sv_encounter encounter={run->double_battle};
+    put_block(&w,encounter_fields,NF(encounter_fields),&encounter,sizeof encounter,1);
+    section_end(&w,s);
+    s=section_start(&w,"illusions");
+    put_block(&w,illusion_fields,NF(illusion_fields),&run->party[0].b.illusion,sizeof(gc_mon),run->n_party);
+    put_block(&w,illusion_fields,NF(illusion_fields),&run->enemy[0].b.illusion,sizeof(gc_mon),run->n_enemy);
+    section_end(&w,s);
     s = section_start(&w, "depths");
     put_block(&w, depth_fields, NF(depth_fields), &run->depths, sizeof run->depths, 1);
     section_end(&w, s);
@@ -638,6 +651,25 @@ static bool mon_ok(const gc_mon *m)
             || b->max_pp_override[i]!=b->transform_max_pp_override[i])return false;
     }
     return true;
+}
+
+static bool illusion_schema_ok(reader r){
+    int n=take16(&r);unsigned seen=0;if(r.bad||n!=NF(illusion_fields))return false;
+    for(int i=0;i<n;i++){
+        uint32_t name=take32(&r);uint16_t size=take16(&r);int found=-1;
+        for(int k=0;k<NF(illusion_fields);k++)if(name==hash(illusion_fields[k].name)&&size==illusion_fields[k].size)found=k;
+        if(found<0||(seen&(1u<<found)))return false;seen|=1u<<found;
+    }
+    return !r.bad;
+}
+
+static bool illusion_ok(const pr_illusion *v){
+    uint8_t active;memcpy(&active,&v->active,1);if(active>1)return false;
+    if(!active)return true;
+    const pr_species *sp=gc_species(v->species);
+    if(!sp||v->form>=sp->nforms||v->gender < -1||v->gender>1)return false;
+    const pr_species *fusion=v->fusion_species?gc_species(v->fusion_species):NULL;
+    return v->fusion_species?(fusion&&v->fusion_form<fusion->nforms):v->fusion_form==0;
 }
 
 static bool get_mons(const reader *body, const char *name, gc_mon *mons, int n, int *dropped)
@@ -805,6 +837,13 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     run->in_battle = true;
     run->me_battle = v.me_battle;
     run->me_catch_allowed = v.me_catch_allowed;
+    sv_encounter encounter={0};reader encounter_reader=section(&body,"encounter");
+    if(!encounter_reader.bad){
+        if(get_block(&encounter_reader,encounter_fields,NF(encounter_fields),&encounter,sizeof encounter,1,&dropped)!=1||encounter.double_battle>1){
+            *why="the stored encounter width is damaged";return false;
+        }
+    }
+    run->double_battle=encounter.double_battle!=0;
     run->battle_type = v.battle_type;
     run->trainer_type = v.trainer_type;
     run->trainer_variant = v.trainer_variant;
@@ -866,6 +905,17 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
             run->enemy[i].n_used_tms = 0;
             memset(run->enemy[i].used_tms, 0, sizeof run->enemy[i].used_tms);
         }
+    }
+
+    /* Older saves have no disguise section; retain their empty default without
+     * counting an optional extension as dropped legacy data. */
+    reader illusions=section(&body,"illusions");
+    if(!illusions.bad){
+        if(!illusion_schema_ok(illusions)||get_block(&illusions,illusion_fields,NF(illusion_fields),&run->party[0].b.illusion,sizeof(gc_mon),run->n_party,&dropped)!=run->n_party
+            ||!illusion_schema_ok(illusions)||get_block(&illusions,illusion_fields,NF(illusion_fields),&run->enemy[0].b.illusion,sizeof(gc_mon),run->n_enemy,&dropped)!=run->n_enemy
+            ||illusions.bad||illusions.pos!=illusions.n){*why="the stored disguises are damaged";return false;}
+        for(int side=0;side<2;side++)for(int k=0;k<(side?run->n_enemy:run->n_party);k++)
+            if(!illusion_ok(&(side?run->enemy:run->party)[k].b.illusion)){*why="the stored disguise is damaged";return false;}
     }
 
     /* the arena the battle keeps, then the battle as gc_battle_setup_field builds it with the lead
@@ -958,14 +1008,14 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
         ev = gc_ev_new(run, GC_EV_TRAINER);
         if (ev) { ev->a = run->trainer_type; ev->b = run->trainer_variant; }
     }
-    const int lead = run->party_order[0];
-    const bool lead_out = run->party[lead].b.on_field && run->party[lead].b.hp > 0;
     gc_battle_restore_field(run);
     bt->battle_rng = v.battle_rng;
     bt->battle_rng_live = v.battle_rng_live;
-    if (lead_out) {
-        ev = gc_ev_new(run, GC_EV_SUMMON);
-        if (ev) { ev->a = 0; ev->b = lead; ev->c = 0; }
+    for(int k=0;k<(run->double_battle?2:1)&&k<run->n_party;k++){
+        int idx=run->party_order[k];
+        if(run->party[idx].b.on_field&&run->party[idx].b.hp>0){
+            ev=gc_ev_new(run,GC_EV_SUMMON);if(ev){ev->a=0;ev->b=idx;ev->c=k;}
+        }
     }
     gc_ai_reset(run);
     gc_ai_enemy_party(run);

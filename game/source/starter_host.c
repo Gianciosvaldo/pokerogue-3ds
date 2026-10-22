@@ -175,9 +175,12 @@ static void editor_show(int mode) {
     if(p->passive_attr&1)snprintf(label,sizeof label,"Passive unlocked");
     else snprintf(label,sizeof label,"Unlock passive (%d)",cost);
     editor_add(0,label);
-    if(p->ability_attr&4)snprintf(label,sizeof label,"Hidden ability unlocked");
-    else snprintf(label,sizeof label,"Unlock hidden ability (%d)",cost);
-    editor_add(1,label);
+    const pr_species *species=menu_species(H.editing);
+    if(species&&species->nforms&&pr_forms[species->form0].ability_hidden){
+      if(p->ability_attr&4)snprintf(label,sizeof label,"Hidden ability unlocked");
+      else snprintf(label,sizeof label,"Unlock hidden ability (%d)",cost);
+      editor_add(1,label);
+    }
     snprintf(label,sizeof label,"Buy species egg (%d)",gc_system_species_egg_cost(H.sys,H.editing));editor_add(2,label);
   }
   if(!H.count)editor_add(-1,"No unlocked choices");

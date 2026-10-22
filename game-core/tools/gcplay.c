@@ -136,12 +136,23 @@ static void print_mon(const gc_mon *m)
     printf("]");
 }
 
+static const gc_mon *command_actor(const gc_run *run){
+ const pr_pokemon *p=run->bt.field[run->screen.slot==1?1:0];
+ for(int i=0;i<run->n_party;i++)if(&run->party[i].b==p)return &run->party[i];return NULL;
+}
+static const gc_mon *command_foe(const gc_run *run){
+ for(int k=2;k<4;k++){const pr_pokemon *p=run->bt.field[k];if(p&&p->hp>0&&p->on_field)
+  for(int i=0;i<run->n_enemy;i++)if(&run->enemy[i].b==p)return &run->enemy[i];}return NULL;
+}
 static void print_screen(const gc_run *run)
 {
     const gc_screen *s = gc_run_screen(run);
     switch (s->kind) {
+    case GC_SCREEN_TARGET:
+        printf("TARGET (BattlerIndex, c cancels):");
+        for(int i=0;i<4;i++)if(s->target_ok[i])printf(" %d",i);printf("\n");break;
     case GC_SCREEN_COMMAND: {
-        const gc_mon *me = gc_field_mon(run, 0), *foe = gc_field_mon(run, 1);
+        const gc_mon *me = command_actor(run), *foe = command_foe(run);
         printf("\nwave %d  money %.0f\n  foe: ", run->wave, run->money);
         if (foe) print_mon(foe);
         printf("\n  you: ");
@@ -248,8 +259,11 @@ static bool plain_choice(const gc_run *run, gc_choice *c)
     const gc_screen *s = gc_run_screen(run);
     memset(c, 0, sizeof *c);
     switch (s->kind) {
+    case GC_SCREEN_TARGET:
+        c->kind=GC_CH_TARGET;
+        for(int i=2;i<6;i++)if(s->target_ok[i%4]){c->a=i%4;return true;}return false;
     case GC_SCREEN_COMMAND: {
-        const gc_mon *me = gc_field_mon(run, 0), *foe = gc_field_mon(run, 1);
+        const gc_mon *me = command_actor(run), *foe = command_foe(run);
         if (!me || !foe) return false;
         if (s->can_ball) {
             for (int i = 7; i >= 0; i--) {
@@ -362,6 +376,8 @@ static bool auto_choose(gc_run *run)
     for (int tries = 0; tries < 64; tries++) {
         memset(&c, 0, sizeof c);
         switch (s->kind) {
+        case GC_SCREEN_TARGET:
+            c.kind=GC_CH_TARGET;for(int i=0;i<4;i++)if(s->target_ok[i]){c.a=i;break;}break;
         case GC_SCREEN_COMMAND: {
             if (s->can_ball && rnd(100) < 15) {
                 int avail[8], n_avail = 0;
@@ -645,6 +661,7 @@ static int soak(int n, int first, int jobs, int verbose, int timeout)
             for (int i = 0; i < 5; i++) { h ^= v[i]; h *= 16777619u; }
             for (int i = 0; i < 16; i++) { h ^= r->stubs[i]; h *= 16777619u; }
             for (int i = 0; i < GC_MAX_UNPORTED; i++) if (r->unported[i]) { h ^= (uint32_t)i << 20 ^ r->unported[i]; h *= 16777619u; }
+            if(getenv("GCPLAY_RUN_OUTCOMES")){printf("OUTCOME %d %08x wave%d turns%d score%d",index,h,r->wave,r->turns,r->score);for(int i=0;i<16;i++)if(r->stubs[i])printf(" stub%d=%u",i,r->stubs[i]);for(int i=0;i<GC_MAX_UNPORTED;i++)if(r->unported[i])printf(" unp%d=%u",i,r->unported[i]);printf("\n");fflush(stdout);}
             digest ^= h;
         }
         wave_hist[r->wave / 10 > 20 ? 20 : r->wave / 10]++;
@@ -739,6 +756,7 @@ static int play(const char *seed, const char *starters)
         int k = sscanf(line, "%7s %d %d %d", cmd, &a, &b, &d);
         if (k <= 0) continue;
         switch (s->kind) {
+        case GC_SCREEN_TARGET:c.kind=cmd[0]=='c'?GC_CH_CANCEL:GC_CH_TARGET;c.a=atoi(cmd);break;
         case GC_SCREEN_COMMAND:
             c.kind = cmd[0] == 'p' ? GC_CH_POKEMON : cmd[0] == 'b' ? GC_CH_BALL : cmd[0] == 'r' ? GC_CH_RUN : GC_CH_FIGHT;
             c.a = (int16_t)a; c.b = -1;

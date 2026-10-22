@@ -24,6 +24,7 @@ static void setup(int actor,int guard,int seed,int attack)
         p->pp_used[0]=p->pp_up[0]=0;p->max_pp_override[0]=-1;
         p->stats[STAT_HP]=p->hp=500;
     }
+    if(run.bt.field[3]){pr_pokemon *ally=run.bt.field[3];ally->custom_ability=ABILITY_ID_NONE;ally->ability_override=-1;pr_refresh_ability(ally);ally->n_moves=1;ally->moves[0]=MOVE_ID_SPLASH;ally->pp_used[0]=0;}
     pr_pokemon *donor=run.bt.field[2*(1-actor)];
     gc_item stock={.key="WHITE_HERB",.arg=-1,.stack=2,.pokemon_id=donor->id,.non_transferable=guard==2};
     if(actor){run.items[0]=stock;run.n_items=1;}else{run.enemy_items[0]=stock;run.n_enemy_items=1;}
@@ -46,7 +47,7 @@ int main(void)
         setup(side,guard,seed,attack);uint32_t owner=run.bt.field[2*side]->id,donor=run.bt.field[2*(1-side)]->id;
         size_t size=gc_run_save(&run,saved,sizeof saved);CHECK(size>0);
         CHECK(gc_run_load(&loaded,saved,size,&why));CHECK(!loaded.load_dropped);
-        gc_choice fight={GC_CH_FIGHT,0,-1,0};CHECK(gc_run_choose(&run,&fight,&why));CHECK(gc_run_choose(&loaded,&fight,&why));drain(&run);drain(&loaded);
+        gc_choice fight={GC_CH_FIGHT,0,!side&&attack<2?2:-1,0};CHECK(gc_run_choose(&run,&fight,&why));CHECK(gc_run_choose(&loaded,&fight,&why));drain(&run);drain(&loaded);
         int got=held(&run,side,owner),left=held(&run,1-side,donor);
         if(guard||attack==2)CHECK(got==(guard==3?2:0)&&left==2);
         else{CHECK((got==0&&left==2)||(got==1&&left==1));successes[side][attack]+=got==1;}

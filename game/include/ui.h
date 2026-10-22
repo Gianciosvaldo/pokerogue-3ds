@@ -83,6 +83,7 @@ struct ui_screen {
   /* Optional: a tap on the bottom screen (a touch that began now), for the top screen. (x, y) are physical pixels of the bottom screen,
    * 0..320 by 0..240; the screen turns them into its own space (ui_bottom_ui_y: UI_BOTTOM_UI's y). Return true when it did something. */
   bool (*touch)(ui_screen* s, float x, float y);
+  void (*release)(ui_screen* s, ui_button b); /* button release, also through overlays */
 };
 
 void ui_set(ui_screen* s);   /* replace the top screen */

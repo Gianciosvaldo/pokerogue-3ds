@@ -889,3 +889,17 @@ species-egg-test: $(BUILD)/species_egg_test
 test: species-egg-test
 .PHONY: species-egg-test
 $(BUILD)/src/gc_gacha.o: gen/out/gc_species_egg_info.inc
+
+$(BUILD)/doubles_host_test: tests/doubles_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+doubles-host-test: $(BUILD)/doubles_host_test
+	$(BUILD)/doubles_host_test
+test: doubles-host-test
+.PHONY: doubles-host-test
+
+$(BUILD)/doubles_encounter_test: tests/doubles_encounter_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -Wl,--wrap=pr_run_new_battle -Wl,--wrap=pr_run_generate_enemy_items -Wl,--wrap=gc_enemy_moveset -lm -o $@
+doubles-encounter-test: $(BUILD)/doubles_encounter_test
+	$< tests/fixtures/doubles-encounter.native.txt
+test: doubles-encounter-test
+.PHONY: doubles-encounter-test

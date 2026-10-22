@@ -117,6 +117,7 @@ void gc_mon_new_enemy(gc_run *run, gc_mon *m, int species, int level, const pr_e
     p->friendship = g->friendship >= 0 ? (uint8_t)g->friendship : (sp ? sp->base_friendship : 0);
     p->tera_type = (int8_t)g->tera_type;
     p->has_trainer = trainer_slot != 0;
+    p->trainer_slot = (uint8_t)trainer_slot;
     /* EnemyPokemon.setBoss: bossSegments from run-core's getEncounterBossSegments, one shield fewer than
      * segments to start with (battle-core clears them as the damage breaks them; 0 = not a boss) */
     p->is_boss = g->boss_segments > 0;

@@ -23,6 +23,8 @@ extern "C" {
 
 #define BV_PLAYER 0 /* battler index 0 = player's first, 2 = enemy's first (upstream BattlerIndex) */
 #define BV_ENEMY 2
+#define BV_PLAYER_ALLY 1
+#define BV_ENEMY_ALLY 3
 
 /* One Pokemon as the screen shows it. */
 typedef struct {
@@ -45,6 +47,7 @@ typedef struct {
   bool substitute;           /* a Substitute doll stands in front of it (set by the screen as the
                               * doll's animations play; battle_events.c compares it with
                               * battle-core's) */
+  bool illusion; /* displayed disguise, retained until its ending is presented */
   bool hidden;               /* out of sight in the air, underground or underwater (upstream's
                               * pokemon.setVisible(false) from a SemiInvulnerableTag); the info
                               * box stays */
@@ -88,6 +91,7 @@ typedef enum {
   BEV_IVS,        /* ScanIvsPhase: stats[0..5] IVs, stats[6..11] starter IVs; A/B closes */
   BEV_LEVEL_UP,    /* LevelUpPhase.showLevelUpMessages: the fanfare and `text` ("X grew to Lv. N!") with a prompt, then
                     * promptLevelUpStats: the stat window with the gains (stats[6..11] - stats[0..5]), A, the totals, A */
+  BEV_FIELD_SWAP, /* ToggleDoublePosition: player slots 0 and 1 exchange places */
 } bev_type;
 
 typedef struct {
@@ -111,6 +115,9 @@ typedef struct {
 
 typedef struct {
   int biome;             /* BiomeId (arena images) */
+  bool doubles;
+  bv_mon player_ally,enemy_ally;
+  bool player_ally_present;
   bv_mon player, enemy;  /* the first Pokemon of each side (singles); enemy.species 0 = nobody */
   bool trainer;          /* trainer sprites appear during the encounter intro */
   bool player_female;    /* avatar; defaults to the current app's male player */
@@ -139,6 +146,7 @@ typedef struct {
  * used, plays the error sound; an unusable move shows its reason (an upstream message) instead. */
 typedef struct {
   bool can_ball, can_switch, can_run;
+  int command_slot; /* native player field index 0 or 1 */
   int party_luck; /* actual allowed party luck, 0..14 */
   bool move_ok[4];
   const char* move_why[4];   /* the reason text for each move that is not ok (already translated), or NULL; the strings
@@ -170,6 +178,7 @@ void bv_begin(const bv_setup* setup);
 void bv_play(const bv_event* ev, int n, void (*on_done)(void* arg), void* arg);
 bool bv_playing(void);
 /* opts NULL = everything allowed. */
+void bv_set_item_bars(const bv_item *foe,int n_foe,const bv_item *keys,int n_keys,int luck);
 void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command c, void* arg), void* arg);
 /* The screen's current view of a side's Pokemon (after the events played so far). */
 bv_mon* bv_mon_of(int battler);

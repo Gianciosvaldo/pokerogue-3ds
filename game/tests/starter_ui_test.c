@@ -821,9 +821,23 @@ static void test_customization(void) {
   CHECK(drawn("Luck: B- (3/14)"),"selected epic shiny contributes three pre-run luck");
 }
 
+static void test_no_hidden_ability_purchase(void){
+  gc_system_init_defaults(&SYS);
+  SYS.dex[1].caught_attr=SYS.dex[4].caught_attr=SYS.dex[7].caught_attr=0;
+  gc_mon mew={0};mew.b.species=SPECIES_ID_MEW;mew.b.gender=-1;
+  CHECK(gc_system_set_pokemon_caught(&SYS,&mew,true,false),"unlock Mew");
+  const pr_species *sp=menu_species(SPECIES_ID_MEW);CHECK(sp&&!pr_forms[sp->form0].ability_hidden,"Mew has no hidden ability");
+  SYS.starters[SPECIES_ID_MEW].candy_count=100;
+  CHECK(open_screen(NULL),"open Mew customization");press(MB_ACTION);press(MB_DOWN);press(MB_ACTION);choose_option("Use candies");
+  for(int i=0;i<g_option_count;i++)CHECK(!strstr(g_option_labels[i],"hidden ability"),"no unavailable hidden ability offer: %s",g_option_labels[i]);
+  gc_starter_entry before=SYS.starters[SPECIES_ID_MEW];
+  CHECK(!gc_system_buy_starter_unlock(&SYS,SPECIES_ID_MEW,true)&&!memcmp(&before,&SYS.starters[SPECIES_ID_MEW],sizeof before),"stale hidden ability purchase cannot spend candy");
+}
+
 int main(int argc, char** argv) {
   const int sessions = argc > 1 ? atoi(argv[1]) : 200;
   test_customization();
+  test_no_hidden_ability_purchase();
   test_happy_path();
   test_touch();
   test_exit();

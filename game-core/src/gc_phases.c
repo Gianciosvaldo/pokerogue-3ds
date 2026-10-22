@@ -603,23 +603,26 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
     case RP_TURN_INIT:
         if (gc_fg_turn_init(run)) return true;   /* handleMysteryEncounterTurnStartEffects: the minigame decides before the commands */
         gc_battle_turn_init(run);
-        if (!run->bt.field[0] || run->bt.field[0]->hp <= 0) {
-            /* a fainted lead left on the field (a faint in the turn's lost tail): SwitchPhase */
-            bool bench = false;
-            for (int i = 0; i < run->n_party; i++) bench |= gc_mon_allowed(&run->party[i]) && !run->party[i].b.on_field;
-            if (!bench) { gc_rq_unshift(run, gc_rp(RP_GAME_OVER, 0, 0, 0)); return true; }
-            gc_rq_unshift(run, gc_rp(RP_SWITCH, 1, 0, 0));
-            return true;
+        for(int field=0;field<(run->bt.double_battle?2:1);field++) {
+            if(run->bt.field[field]&&run->bt.field[field]->hp>0)continue;
+            bool bench=false,alive=false;
+            for(int i=0;i<run->n_party;i++){bool allowed=gc_mon_allowed(&run->party[i]);alive|=allowed;bench|=allowed&&!run->party[i].b.on_field;}
+            if(!alive){gc_rq_unshift(run,gc_rp(RP_GAME_OVER,0,0,0));return true;}
+            if(bench){gc_rq_unshift(run,gc_rp(RP_SWITCH,1,field,0));return true;}
         }
         gc_rq_unshift(run, gc_rp(RP_COMMAND, 0, 0, 0));
+        if(run->bt.double_battle)gc_rq_unshift(run,gc_rp(RP_COMMAND,1,0,0));
         gc_rq_unshift(run, gc_rp(RP_TURN, 0, 0, 0));
         return true;
     case RP_COMMAND:
+        run->screen.slot=p->a;
+        if(!run->bt.field[p->a]||run->bt.field[p->a]->hp<=0||run->bt.commands[p->a].skip)return true;
         if (gc_battle_queued_command(run)) return true;
         gc_battle_command_screen(run);
         return false;
     case RP_TURN: {
         gc_port_enemy_command(run, 2);
+        if(run->bt.double_battle)gc_port_enemy_command(run,3);
         /* withSkipEnemyBattleTurns: EnemyCommandPhase still chose (and drew for) the move, but the command is skipped */
         if (gc_int(run)->fg.active) run->bt.commands[2].skip = true;
         after_stop(run, gc_battle_run(run, -2));
@@ -631,6 +634,7 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
             gc_screen *s = &run->screen;
             memset(s, 0, sizeof *s);
             s->kind = GC_SCREEN_SWITCH;
+            s->slot=p->b;
             for (int i = 0; i < run->n_party; i++) s->pick_ok[i] = gc_mon_allowed(&run->party[i]) && !run->party[i].b.on_field;
             return false;
         }
@@ -743,11 +747,27 @@ bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char *
     *ok = false;
     switch (p->type) {
     case RP_COMMAND:
+        if(run->screen.kind==GC_SCREEN_TARGET){
+            if(c->kind==GC_CH_CANCEL){
+                run->bt.commands[p->a].command=-1;run->bt.pre_commands[p->a].command=-1;
+                gc_battle_command_screen(run);*ok=true;return false;
+            }
+            if(c->kind!=GC_CH_TARGET||c->a<0||c->a>=4||!run->screen.target_ok[c->a]){
+                *why="invalid move target";return false;
+            }
+            struct pr_turn_command *tc=&run->bt.commands[p->a];
+            tc->targets[0]=c->a;tc->n_targets=1;*ok=true;return true;
+        }
         if (c->kind != GC_CH_FIGHT && c->kind != GC_CH_POKEMON && c->kind != GC_CH_BALL && c->kind != GC_CH_RUN) {
             *why = "not a command";
             return false;
         }
         if (!gc_battle_player_command(run, c, why)) return false;
+        gc_int(run)->at_save_point=false;
+        if(run->screen.kind==GC_SCREEN_TARGET){*ok=true;return false;}
+        if(c->kind==GC_CH_BALL||c->kind==GC_CH_RUN)for(int i=0;i<2;i++)if(i!=p->a){
+            run->bt.commands[i].skip=true;run->bt.pre_commands[i].skip=true;
+        }
         *ok = true;
         return true;
     case RP_SWITCH: {
@@ -760,20 +780,21 @@ bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char *
         *ok = true;
         if (p->a) {
             /* game-core's own prompt: straight onto the field, then the turn goes on as usual */
-            pr_pokemon *old = run->bt.field[0];
+            int field=p->b;
+            pr_pokemon *old = run->bt.field[field];
             if (old) old->on_field = false;
             gc_mon *m = &run->party[c->a];
             pr_reset_summon_data(&m->b);
             pr_reset_turn_data(&m->b);
             m->b.on_field = true;
             m->b.switch_out_status = false;
-            run->bt.field[0] = &m->b;
+            run->bt.field[field] = &m->b;
             /* the party order: the new lead takes the old one's slot */
-            int k_new = gc_battle_slot_of(run, c->a), k_old = 0;
+            int k_new = gc_battle_slot_of(run, c->a), k_old = field;
             int8_t t = run->party_order[k_old]; run->party_order[k_old] = run->party_order[k_new]; run->party_order[k_new] = t;
             for (int k = 0; k < run->n_party; k++) run->bt.party[0][k] = &run->party[run->party_order[k]].b;
             gc_event *ev = gc_ev_new(run, GC_EV_SUMMON);
-            if (ev) { ev->a = 0; ev->b = c->a; }
+            if (ev) { ev->a = 0; ev->b = c->a; ev->c=field; }
             gc_ev_msg(run, "battle:playerGo", 1, gc_m_mon(run, "pokemonName", 0, c->a));
             return true;
         }

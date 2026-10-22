@@ -67,6 +67,7 @@ void be_mon(const pr_battle* bt, const pr_pokemon* p, bv_mon* m) {
   memset(m, 0, sizeof *m);
   /* PR_DEV_ILLUSION: a disguised Pokemon looks, is named and is typed as its disguise */
   const bool look = pr_shows_illusion(bt, p);
+  m->illusion=look;
   const pr_form* form = pr_shown_form(bt, p);
   m->species = form->species;
   m->form = form->form_index;
@@ -97,6 +98,8 @@ void be_mon(const pr_battle* bt, const pr_pokemon* p, bv_mon* m) {
 }
 
 /* ------------------------------------------------------------------ events */
+
+static int view_slot(int battler){return (battler%2)*2+(battler>=2);}
 
 #define TXT_MAX 64
 static char g_txt[TXT_MAX][256];
@@ -158,13 +161,13 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
                       bv_event* out, int max) {
   int n = 0, nt = 0;
   const char* go_text = NULL;
-  view->sent[0] = view->sent[1] = NULL;
   seen_t seen[4] = {{0}};
-  const bv_mon* shown_player = &view->mon[0];
-  const bv_mon* shown_enemy = &view->mon[1];
-  seen[0] = (seen_t){shown_player->species, shown_player->form, shown_player->hp, shown_player->status, shown_player->hp <= 0, view->present[0], !shown_player->hidden, shown_player->substitute, shown_player->max_hp};
-  seen[2] = (seen_t){shown_enemy->species, shown_enemy->form, shown_enemy->hp, shown_enemy->status, shown_enemy->hp <= 0, view->present[1], !shown_enemy->hidden, shown_enemy->substitute, shown_enemy->max_hp};
-  bv_mon current[2] = {*shown_player, *shown_enemy};
+  bv_mon current[4];
+  for(int k=0;k<4;k++){
+    int i=view_slot(k);view->sent[i]=NULL;current[i]=view->mon[i];
+    const bv_mon *m=&view->mon[i];
+    seen[k]=(seen_t){m->species,m->form,m->hp,m->status,!view->present[i],view->present[i],!m->hidden,m->substitute,m->max_hp};
+  }
   enum { SENT_MAX = 16 };
   static bv_mon sent[SENT_MAX];
   int n_sent = 0;
@@ -176,12 +179,18 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
   for (int i = 0; i < n_events; i++) {
     const pr_event* ev = &events[i];
     int b = ev->battler;
-    bool single = b == 0 || b == 2; /* singles: the screen shows battlers 0 and 2 */
+    if(ev->type==PR_EV_FIELD_SWAP){
+      seen_t seen_tmp=seen[0];seen[0]=seen[1];seen[1]=seen_tmp;
+      bv_mon tmp=current[0];current[0]=current[2];current[2]=tmp;
+      for(int k=0;k<2;k++)view->sent[view_slot(k)]=be_switched_in((const pr_pokemon*const*)bt->party[0],bt->n_party[0],bt->field[k],&ev->field[k]);
+      PUT(.type=BEV_FIELD_SWAP,.battler=1,.target=0);
+    }
+    bool single = b>=0&&b<4; /* all four native battler slots */
     /* In the air or underground: the snapshot after this event says whether the Pokemon is still in
      * sight, and the change came before the event (the tag goes at MOVE_EFFECT, before the hit's
      * animation; "X flew up high!" follows the hiding). A switch or a faint changes it their own way. */
     if (ev->type != PR_EV_SWITCH_OUT && ev->type != PR_EV_SWITCH_IN && ev->type != PR_EV_FAINT) {
-      for (int k = 0; k < 4; k += 2) {
+      for (int k = 0; k < 4; k++) {
         /* a Pokemon sent out later in these events (dragged out by Roar, Whirlwind...) already shows in the
          * snapshots: that is a replacement, not a form change */
         bool replaced = false;
@@ -204,12 +213,12 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
             if (!transforming && ev->field[k].species != seen[k].species && (bt->deviations & PR_DEV_ILLUSION) && n_sent < SENT_MAX) {
             /* another species without a Transform: a disguise (it took one at the battle's start) */
             bv_mon* mon = &sent[n_sent++];
-            look_of(mon, &current[k >= 2 ? 1 : 0], &ev->field[k]);
+            look_of(mon, &current[view_slot(k)], &ev->field[k]);
             mon->hp = seen[k].hp; mon->max_hp = seen[k].max_hp; mon->status = seen[k].status;
             PUT(.type = BEV_ILLUSION, .battler = k, .a = 0, .mon = mon);
             seen[k].species = mon->species;
             seen[k].form = mon->form;
-            current[k >= 2 ? 1 : 0] = *mon;
+            current[view_slot(k)] = *mon;
           } else if (!transforming && (ev->field[k].species != seen[k].species || ev->field[k].form != seen[k].form)) {
             PUT(.type = BEV_FORM_CHANGE, .battler = k, .a = ev->field[k].species, .b = ev->field[k].form, .c = ev->field[k].gender + 2);
             seen[k].species = ev->field[k].species;
@@ -223,18 +232,18 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
         /* the disguise ends: the real Pokemon's look, name and types, with the Transform sound as breakIllusion plays */
         if (!single || !seen[b].present || n_sent >= SENT_MAX) break;
         bv_mon* mon = &sent[n_sent++];
-        look_of(mon, &current[b >= 2 ? 1 : 0], &ev->field[b]);
+        look_of(mon, &current[view_slot(b)], &ev->field[b]);
         mon->hp = seen[b].hp; mon->max_hp = seen[b].max_hp; mon->status = seen[b].status;   /* the bar as the screen has it */
         PUT(.type = BEV_ILLUSION, .battler = b, .a = 1, .mon = mon);
         seen[b].species = mon->species;
         seen[b].form = mon->form;
-        current[b >= 2 ? 1 : 0] = *mon;
+        current[view_slot(b)] = *mon;
         break;
       }
       case PR_EV_TRANSFORM: {
         if (!single || !seen[b].present || n_sent >= SENT_MAX) break;
         bv_mon* mon = &sent[n_sent++];
-        *mon = current[b >= 2 ? 1 : 0];
+        *mon = current[view_slot(b)];
         mon->species = ev->field[b].species;
         mon->form = ev->field[b].form;
         mon->gender = ev->transform.gender;
@@ -257,7 +266,7 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
         PUT(.type = BEV_TRANSFORM, .battler = b, .a = ev->value, .mon = mon);
         seen[b].species = mon->species;
         seen[b].form = mon->form;
-        current[b >= 2 ? 1 : 0] = *mon;
+        current[view_slot(b)] = *mon;
         break;
       }
       case PR_EV_TEXT:
@@ -285,7 +294,7 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
               .b = ev->type == PR_EV_MOVE_ANIM ? BA_MOVE : ev->type == PR_EV_CHARGE_ANIM ? BA_CHARGE : BA_COMMON);
         break;
       case PR_EV_DAMAGE:
-        if (!single) break;
+        if (!single || !seen[b].present) break;
         PUT(.type = BEV_DAMAGE, .battler = b, .a = ev->field[b].hp, .b = ev->id);
         seen[b].hp = ev->field[b].hp;
         break;
@@ -315,6 +324,9 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
         break;
       case PR_EV_SWITCH_OUT:
         if (!single || !seen[b].present) break;
+        /* A damaging forced exit applies leaveField before the move's DAMAGE
+         * event. Drain its already-updated HP before withdrawing the sprite. */
+        if(ev->field[b].hp<seen[b].hp){PUT(.type=BEV_DAMAGE,.battler=b,.a=ev->field[b].hp,.b=HIT_RESULT_INDIRECT);seen[b].hp=ev->field[b].hp;}
         PUT(.type = BEV_WITHDRAW, .battler = b);
         seen[b].present = false;
         break;
@@ -333,7 +345,7 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
         /* (a turn can send out two Pokemon on one side: a switch and then a drag-out; each keeps its own data) */
         bv_mon* sm = &sent[n_sent++ % SENT_MAX];
         const pr_pokemon* p = be_switched_in(party, n_party, bt->field[b], &ev->field[b]);
-        view->sent[side] = p;
+        view->sent[view_slot(b)] = p;
         if (p) {
           be_mon(bt, p, &(*sm));
           if (!side && view->exp_ratio) (*sm).exp_ratio = view->exp_ratio(p);
@@ -362,7 +374,7 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
         (*sm).sprite_scale = ev->field[b].sprite_scale;
         (*sm).n_types = ev->field[b].n_types;
         for (int k = 0; k < 3; k++) (*sm).types[k] = ev->field[b].types[k];
-        current[b >= 2 ? 1 : 0] = *sm;
+        current[view_slot(b)] = *sm;
         /* a Pokemon dragged out (Roar, Whirlwind, Dragon Tail) has no SWITCH_OUT: the one on the field leaves */
         if (seen[b].present) PUT(.type = BEV_WITHDRAW, .battler = b);
         PUT(.type = BEV_SUMMON, .battler = b, .mon = &(*sm), .text = go_text);
@@ -381,7 +393,7 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
         break;
     }
     /* status icons follow the snapshot */
-    for (int k = 0; k < 4; k += 2)
+    for (int k = 0; k < 4; k++)
       if (seen[k].present && ev->field[k].species && ev->field[k].status != seen[k].status) {
         PUT(.type = BEV_STATUS, .battler = k, .a = ev->field[k].status);
         seen[k].status = ev->field[k].status;
@@ -390,7 +402,7 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
 
   /* catch up on what the events didn't show, from the battle as it stands once the events have
    * happened (not when the run went on after them: a victory, the experience, the next wave) */
-  for (int k = 0; k < 4 && settled; k += 2) {
+  for (int k = 0; k < 4 && settled; k++) {
     const pr_pokemon* p = bt->field[k];
     if (!p || !seen[k].present) continue;
     if (p->hp > 0 && p->stats[STAT_HP] > 0 && p->stats[STAT_HP] != seen[k].max_hp) PUT(.type = BEV_MAX_HP, .battler = k, .a = p->stats[STAT_HP]);
@@ -407,7 +419,7 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
       bv_mon* mon = &sent[n_sent++];
       bv_mon live;
       be_mon(bt, p, &live);
-      *mon = current[k >= 2 ? 1 : 0];
+      *mon = current[view_slot(k)];
       mon->species = live.species; mon->form = live.form; mon->gender = live.gender; mon->female = live.female;
       mon->sprite_scale = live.sprite_scale; mon->n_types = live.n_types;
       memcpy(mon->types, live.types, sizeof mon->types);
@@ -427,8 +439,7 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
     }
   }
 #undef PUT
-  view->present[0] = seen[0].present;
-  view->present[1] = seen[2].present;
+  for(int k=0;k<4;k++)view->present[view_slot(k)]=seen[k].present;
   return n;
 }
 

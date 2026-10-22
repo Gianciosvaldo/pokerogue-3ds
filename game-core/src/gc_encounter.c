@@ -1,8 +1,7 @@
 /* A new wave: upstream's NewBattlePhase (battleScene.newBattle and its post-battle cleanup) and the
  * EncounterPhase's generation of the enemy side (src/battle-scene.ts, src/phases/encounter-phase.ts),
  * through run-core. What run-core can't generate yet gets a stand-in that is counted in run->stubs:
- * fixed classic battles and mystery encounters become wild battles, a double battle is played as a
- * single one (the M1 rule), and a wild double's second enemy isn't made. */
+ * unsupported fixed classic battles and mystery encounters become counted wild stand-ins. */
 #include "internal.h"
 #include <stdio.h>
 
@@ -16,6 +15,12 @@ static const pr_trainer_info *trainer_info(int type)
         if (pr_trainers[mid].type < type) lo = mid + 1; else hi = mid - 1;
     }
     return NULL;
+}
+
+bool gc_trainer_is_double(const gc_run *run)
+{
+    const pr_trainer_info *t = trainer_info(run->trainer_type);
+    return run->trainer_variant == TRAINER_VARIANT_DOUBLE || (t && t->double_only);
 }
 
 const gc_trainer_config *gc_trainer_config_of(int type)
@@ -152,7 +157,7 @@ static void enemy_items(gc_run *run)
     memset(&ic, 0, sizeof ic);
     ic.wave = run->wave;
     ic.trainer_battle = run->battle_type == BATTLE_TYPE_TRAINER;
-    ic.double_battle = false;
+    ic.double_battle = run->double_battle;
     ic.trainer_type = run->trainer_type;
     ic.n_party = run->n_enemy;
     for (int i = 0; i < run->n_enemy; i++) {
@@ -209,7 +214,7 @@ void gc_refresh_enemy(gc_run *run, gc_mon *m, int species, int level, const pr_e
 
 /* A wild battle's enemy: the species and addEnemyPokemon's rolls (run-core), the moveset, then the rest
  * of the constructor (run-core) */
-static bool gen_wild(gc_run *run, int level)
+static bool gen_wild_slot(gc_run *run, int level,int idx)
 {
     pr_wild_enemy_ctx wc;
     memset(&wc, 0, sizeof wc);
@@ -219,7 +224,7 @@ static bool gen_wild(gc_run *run, int level)
     wc.golden_bug_net = gc_item_stack(run, "GOLDEN_BUG_NET") > 0;
     pr_wild_enemy w;
     if (pr_run_gen_wild_enemy(&run->run, &wc, &w) < 0) return false;
-    gc_mon *m = &run->enemy[0];
+    gc_mon *m = &run->enemy[idx];
     gc_mon_new_enemy(run, m, w.species, level, &w.mon, 0);
     if (!gc_enemy_moveset(run, m, &w.mon)) gc_port_enemy_moveset(run, m);
     wc.enemy.species = w.species;
@@ -231,9 +236,11 @@ static bool gen_wild(gc_run *run, int level)
     /* the classic final boss gets perfect IVs */
     if (run->run.mode == GAME_MODES_CLASSIC && pr_run_is_wave_final(run->run.mode, run->wave))
         for (int i = 0; i < 6; i++) m->b.ivs[i] = 31;
-    run->n_enemy = 1;
+    run->n_enemy = idx+1;
     return true;
 }
+
+static bool gen_wild(gc_run *run,int level) { return gen_wild_slot(run,level,0); }
 
 bool gc_gen_wild(gc_run *run, int level)
 {
@@ -260,12 +267,12 @@ static bool gen_trainer(gc_run *run, const pr_new_battle *nb, int prev_wave)
         pr_enemy_gen_ctx ec = tc.enemy;
         ec.species = party.species[e];
         ec.level = nb->levels[e];
-        ec.trainer_slot = TRAINER_SLOT_TRAINER;
+        ec.trainer_slot = tc.is_double && e % 2 ? TRAINER_SLOT_TRAINER_PARTNER : TRAINER_SLOT_TRAINER;
         gc_mon *m = &run->enemy[run->n_enemy];
-        gc_mon_new_enemy(run, m, party.species[e], nb->levels[e], &party.mons[e], TRAINER_SLOT_TRAINER);
+        gc_mon_new_enemy(run, m, party.species[e], nb->levels[e], &party.mons[e], ec.trainer_slot);
         gc_port_enemy_moveset(run, m);
         if (pr_run_enemy_pokemon_finish(&run->run, &ec, &party.mons[e]) < 0) return false;
-        gc_refresh_enemy(run, m, party.species[e], nb->levels[e], &party.mons[e], TRAINER_SLOT_TRAINER);
+        gc_refresh_enemy(run, m, party.species[e], nb->levels[e], &party.mons[e], ec.trainer_slot);
         run->n_enemy++;
     }
     return run->n_enemy > 0;
@@ -334,7 +341,7 @@ bool gc_set_encounter_nature(pr_battle *bt, pr_pokemon *p, int nature, void *dat
     return true;
 }
 
-static void sync_wild_nature(gc_run *run, bool new_double)
+static void sync_wild_nature(gc_run *run, bool new_double,int idx)
 {
     pr_battle *bt = &run->bt;
     bool outgoing_double = bt->double_battle;
@@ -353,8 +360,7 @@ static void sync_wild_nature(gc_run *run, bool new_double)
     gc_items_to_battle(run);
     bt->rng = run->run.rng;
     bt->rng_live = true;
-    for (int k = 0; k < run->n_enemy; k++)
-        pr_sync_encounter_nature(bt, &run->enemy[k].b, gc_set_encounter_nature, run);
+    pr_sync_encounter_nature(bt, &run->enemy[idx].b, gc_set_encounter_nature, run);
     run->run.rng = bt->rng;
     gc_battle_note_unported(run);
     bt->double_battle = outgoing_double;
@@ -430,10 +436,11 @@ void gc_new_battle(gc_run *run)
         nb.battle_type = BATTLE_TYPE_WILD;
         nb.trainer_type = nb.variant = nb.template_index = -1;
         pr_run_random_seed_string(&br, nb.battle_seed, 16);
+        nb.double_battle=false;
         nb.n_levels = 1;
         nb.levels[0] = pr_run_get_level_for_wave(&run->run, &br, wave);
     }
-    if (nb.double_battle) gc_stub(run, GC_STUB_DOUBLE_AS_SINGLE);
+    run->double_battle=nb.double_battle;
     run->battle_type = nb.battle_type;
     run->trainer_type = nb.trainer_type;
     run->trainer_variant = nb.variant;
@@ -501,7 +508,15 @@ void gc_new_battle(gc_run *run)
         &run->run, nb.battle_type == BATTLE_TYPE_WILD, wave);
 
     /* EncounterPhase: the enemy party */
-    bool ok = nb.battle_type == BATTLE_TYPE_TRAINER ? gen_trainer(run, &nb, prev_wave) : gen_wild(run, nb.levels[0]);
+    bool ok;
+    if(nb.battle_type==BATTLE_TYPE_TRAINER)ok=gen_trainer(run,&nb,prev_wave);
+    else {
+        ok=true;
+        for(int i=0;i<(nb.double_battle?2:1)&&ok;i++) {
+            ok=gen_wild_slot(run,nb.levels[i],i);
+            if(ok&&!stand_in)sync_wild_nature(run,nb.double_battle,i);
+        }
+    }
     note_run_core(run, before);
     if (!ok) {
         /* run-core couldn't make it (a trainer's config closure, an unported species pool...): a wild
@@ -510,6 +525,7 @@ void gc_new_battle(gc_run *run)
         gc_stub(run, GC_STUB_UNPORTED_ENEMY);
         run->run.unported = before;
         run->battle_type = BATTLE_TYPE_WILD;
+        run->double_battle=false;
         run->trainer_type = run->trainer_variant = -1;
         run->trainer_name = run->trainer_partner_name = -1;
         pr_run_reset_seed(&run->run, wave);
@@ -526,8 +542,17 @@ void gc_new_battle(gc_run *run)
             run->run.unported = before;
         }
     }
-    if (ok && nb.battle_type == BATTLE_TYPE_WILD && !stand_in)
-        sync_wild_nature(run, nb.double_battle);
+
+    /* EncounterPhase distributes shields by primary-form BST when both wild
+     * opponents are bosses; the denominator includes the whole enemy party. */
+    if(run->battle_type==BATTLE_TYPE_WILD&&run->double_battle){
+        int bosses=0,total=0;
+        for(int k=0;k<run->n_enemy;k++){pr_pokemon *p=&run->enemy[k].b;bosses+=p->is_boss;const pr_form *f=gc_form(p->species,p->form);for(int j=0;j<6;j++)total+=f->base_stats[j];}
+        if(bosses>1&&total>0)for(int k=0;k<run->n_enemy;k++){
+            pr_pokemon *p=&run->enemy[k].b;if(!p->is_boss)continue;const pr_form *f=gc_form(p->species,p->form);int bst=0;for(int j=0;j<6;j++)bst+=f->base_stats[j];
+            p->boss_segments=(uint8_t)ceil((double)p->boss_segments*bst/total);p->boss_segment_index=p->boss_segments-1;
+        }
+    }
     gc_enemy_finish_party(run);
     run->run.unported = before;
     /* newBattle's resetArenaEffects, then arena.setBiomeWeather / setBiomeTerrain: before the save point and
@@ -592,7 +617,9 @@ void gc_new_battle_start(gc_run *run, bool reset, bool new_biome)
     if (run->battle_type == BATTLE_TYPE_TRAINER) {
         gc_ev_msg(run, "battle:trainerAppeared", 1, gc_m_trainer(run, "trainerName", GC_TNAME_TITLED));
     } else {
-        gc_ev_msg(run, "battle:singleWildAppeared", 1, gc_m_mon_name(run, "pokemonName", 1, 0));
+        if(run->double_battle&&run->n_enemy>1)
+            gc_ev_msg(run,"battle:doubleWildAppeared",2,gc_m_mon_name(run,"pokemonName1",1,0),gc_m_mon_name(run,"pokemonName2",1,1));
+        else gc_ev_msg(run, "battle:singleWildAppeared", 1, gc_m_mon_name(run, "pokemonName", 1, 0));
     }
     /* doPostBattleCleanup's resetArenaState */
     const bool sent_out = gc_battle_setup_field(run, reset);

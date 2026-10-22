@@ -509,6 +509,7 @@ static const gc_screen *flow_fight(gc_run *r)
     const char *why;
     gc_choice c = {GC_CH_FIGHT, 0, -1, 0};
     CHECK(gc_run_choose(r, &c, &why));
+    if(r->screen.kind==GC_SCREEN_TARGET){int target=2;while(target<4&&!r->screen.target_ok[target])target++;CHECK(target<4);c=(gc_choice){GC_CH_TARGET,target,0,0};CHECK(gc_run_choose(r,&c,&why));}
     return gc_run_screen(r);
 }
 

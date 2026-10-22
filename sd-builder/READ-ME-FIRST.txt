@@ -1,7 +1,7 @@
 PokeRogue SD card builder (Windows 10 or 11)
 =============================================
 
-October 22 starter customization build
+October 22 eggs, doubles and upstream stat panels build
   Includes the battle-menu crash/TM shop fixes, corrected move names, battle stat
   stage display, egg hatching, IV Scanner prompts, visible rivals and your trainer's
   opening Poke Ball throw. The run report can name an engine-recorded final blow.
@@ -11,12 +11,19 @@ October 22 starter customization build
   Please check the opening throw and rivals, TM compatibility/cancel, and Fight/Ball
   menus. Eggs unlock starters after enough victories; they do not join your party.
   IV Scanner questions appear when entering an ordinary wild battle with the item.
+  Hold SELECT during battle to see upstream's stat-change panels over all active
+  Pokemon's health boxes, including both opponents in a double battle. Release
+  SELECT to hide them. Lures now lead to playable double battles: choose a move
+  for each active ally and choose a target when prompted (B goes back).
+  Eggs now show a cracking/reveal animation with the hatched Pokemon's sprite.
+  Customize > Use candies > Buy species egg buys an egg of that Pokemon.
   Automated checks cannot replace testing on your physical 3DS.
 
 Before starting a run
   Select a Pokemon, then Customize: choose moves, an unlocked nature, shiny tier
   or ability. Use candies buys its passive or hidden ability at the species passive
   price. You can toggle an unlocked passive. Choices are saved in your profile.
+  Species with no hidden ability have no hidden-ability purchase option.
   Mints and caught natures stay unlocked. Catching, hatching and friendship earn
   species candy. Team luck is shown before the run and in battle commands.
 

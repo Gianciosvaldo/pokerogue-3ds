@@ -30,7 +30,7 @@ int main(void)
 {
     for (int mode = 0; mode < 2; mode++) {
         pr_pokemon *enemy = setup(mode);
-        gc_choice fight = {GC_CH_FIGHT, 0, -1, 0};
+        gc_choice fight = {GC_CH_FIGHT, 0, 2, 0};
         CHECK(gc_run_choose(&run, &fight, &why));
         CHECK(enemy->hp > 0 && enemy->ability_suppressed);
         /* The next command boundary has reset acted. Observe actual event order. */
