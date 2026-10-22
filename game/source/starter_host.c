@@ -3,6 +3,8 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
+#include "gc/gacha.h"
 
 #include "bgm.h"
 #include "i18n.h"
@@ -96,6 +98,10 @@ static void editor_done(int row,void* arg) {
   if(!editor_save()) {starter_message("The profile could not be saved. Nothing was changed.");return;}
   gc_starter_entry* p=&H.sys->starters[H.editing];
   gc_starter_entry before=*p;
+  int eggs_before=H.sys->n_eggs;
+  gc_egg egg_before={0};
+  if(eggs_before>=0 && eggs_before<GC_MAX_EGGS)egg_before=H.sys->eggs[eggs_before];
+  uint32_t rng_before=H.rng;
   gc_starter selected;bool ok=ss_starter(H.sys,H.editing,&selected);
   if(mode==EDIT_NATURE) {selected.nature=value;p->nature_preference=value;p->preference_flags|=1;}
   else if(mode==EDIT_SHINY) {selected.shiny=value>0;selected.variant=value?value-1:0;p->appearance_preference=value;p->preference_flags|=2;}
@@ -105,11 +111,24 @@ static void editor_done(int row,void* arg) {
     if(old>=0)selected.moves[old]=selected.moves[H.slot];
     selected.moves[H.slot]=value;
     memcpy(p->moveset,selected.moves,sizeof p->moveset);
+  } else if(mode==EDIT_CANDY && value==2) {
+    gc_gacha_ctx ctx={0};pr_seedstr seed;char key[80];
+    snprintf(key,sizeof key,"species-egg-%u-%u-%u",rng_before,ui_frame(),(unsigned)rnd(NULL,0x7fffffff));
+    pr_seed_from_ascii(&seed,key);pr_rng_sow(&ctx.entropy,&seed);
+    time_t now=time(NULL);ctx.timestamp_ms=now>0?(uint64_t)now*1000:0;
+    const char* why=NULL;ok=gc_system_buy_species_egg(H.sys,H.editing,&ctx,&why);
+    if(!ok && why && !strcmp(why,"egg:tooManyEggs")) {
+      H.rng=rng_before;starter_message("Your egg storage is full (99 eggs).");return;
+    }
   } else if(mode==EDIT_CANDY) ok=gc_system_buy_starter_unlock(H.sys,H.editing,value==1);
   else if(mode==EDIT_TOP && value==-3) {p->passive_attr^=2;selected.passive=(p->passive_attr&2)!=0;}
   if(mode!=EDIT_CANDY) ok=ok && gc_starter_is_available(H.sys,&selected,NULL,NULL);
-  if(!ok) {*p=before;ui_play_error();editor_show(mode);return;}
-  if(!editor_save()) {*p=before;editor_refresh();starter_message("The profile could not be saved. Nothing was changed.");return;}
+  if(!ok) {*p=before;H.rng=rng_before;ui_play_error();editor_show(mode);return;}
+  if(!editor_save()) {
+    *p=before;H.rng=rng_before;H.sys->n_eggs=eggs_before;
+    if(eggs_before>=0 && eggs_before<GC_MAX_EGGS)H.sys->eggs[eggs_before]=egg_before;
+    editor_refresh();starter_message("The profile could not be saved. Nothing was changed.");return;
+  }
   ui_play_select();editor_refresh();
   editor_show(mode==EDIT_MOVES?EDIT_SLOTS:EDIT_TOP);
 }
@@ -159,6 +178,7 @@ static void editor_show(int mode) {
     if(p->ability_attr&4)snprintf(label,sizeof label,"Hidden ability unlocked");
     else snprintf(label,sizeof label,"Unlock hidden ability (%d)",cost);
     editor_add(1,label);
+    snprintf(label,sizeof label,"Buy species egg (%d)",gc_system_species_egg_cost(H.sys,H.editing));editor_add(2,label);
   }
   if(!H.count)editor_add(-1,"No unlocked choices");
   ui_push_options(H.options,H.count,true,editor_done,NULL);

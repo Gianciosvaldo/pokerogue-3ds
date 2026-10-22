@@ -56,6 +56,9 @@ int gc_system_hatch_ready_eggs(gc_run *run)
         gc_system_set_pokemon_caught_ex(sys,&mon,true,true,false,false,NULL);
         gc_system_update_species_dex_ivs(sys,mon.b.species,mon.b.ivs);
         sys->stats.total_hatches++;
+        gc_event *reveal=gc_ev_new(run,GC_EV_EGG_HATCH);
+        if(reveal){reveal->a=mon.b.species;reveal->b=mon.b.form;reveal->c=mon.b.gender;
+            reveal->egg_tier=egg.tier;reveal->egg_shiny=mon.b.shiny;reveal->egg_variant=mon.variant;}
         gc_ev_msg(run,"egg:hatchFromTheEgg",1,pr_arg_pokemon_name(&run->bt,"pokemonName",&mon.b));
         for (int k=0;k<gc_starter_egg_moves_count;k++) {
             const gc_starter_egg_moves *moves=&gc_starter_egg_moves_data[k];

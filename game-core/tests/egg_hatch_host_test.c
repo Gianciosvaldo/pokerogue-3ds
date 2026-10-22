@@ -6,8 +6,8 @@ static gc_run run,resumed;static gc_system sys,loaded;
 static unsigned char saved[524288];
 static int checks;
 #define CHECK(x) do{checks++;if(!(x)){fprintf(stderr,"hatch host line%d: %s\n",__LINE__,#x);exit(1);}}while(0)
-static int messages;
-static void drain(void){gc_event ev;while(gc_run_next_event(&run,&ev))if(ev.kind==GC_EV_MESSAGE&&ev.msg.key&&!strcmp(ev.msg.key,"egg:hatchFromTheEgg"))messages++;}
+static int messages,reveals;
+static void drain(void){gc_event ev;while(gc_run_next_event(&run,&ev)){if(ev.kind==GC_EV_EGG_HATCH){reveals++;CHECK(ev.a==SPECIES_ID_BULBASAUR&&ev.b==0&&ev.egg_variant==0&&!ev.egg_shiny);}if(ev.kind==GC_EV_MESSAGE&&ev.msg.key&&!strcmp(ev.msg.key,"egg:hatchFromTheEgg"))messages++;}}
 int main(void){
  const char *why=NULL;
  for(int n=2;n<=99;n+=97){
@@ -20,11 +20,11 @@ int main(void){
   run.bt.field[0]->max_pp_override[0]=-1;run.bt.field[0]->pp_used[0]=0;
   pr_pokemon *enemy=run.bt.field[2];CHECK(enemy);enemy->hp=1;enemy->moves[0]=MOVE_ID_SPLASH;enemy->n_moves=1;
   enemy->pp_used[0]=0;enemy->max_pp_override[0]=-1;
-  sys.n_eggs=n;messages=0;
+  sys.n_eggs=n;messages=reveals=0;
   for(int i=0;i<n;i++)sys.eggs[i]=(gc_egg){.id=2654435761u+i,.hatch_waves=i==0?0:1,.species=SPECIES_ID_BULBASAUR,.egg_move_index=i%4,.source_type=i%3};
   uint32_t old_hatches=sys.dex[SPECIES_ID_BULBASAUR].hatched_count;
   gc_choice choice={GC_CH_FIGHT,0,-1,0};CHECK(gc_run_choose(&run,&choice,&why));drain();
-  CHECK(sys.n_eggs==0&&messages==n&&!run.ev_overflow);
+  CHECK(sys.n_eggs==0&&messages==n&&reveals==n&&!run.ev_overflow);
   CHECK(sys.dex[SPECIES_ID_BULBASAUR].hatched_count==old_hatches+n);
   CHECK(sys.starters[SPECIES_ID_BULBASAUR].candy_count>=2*n);
   CHECK(sys.starters[SPECIES_ID_BULBASAUR].egg_moves==(n==2?3:15));

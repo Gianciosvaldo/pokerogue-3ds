@@ -881,3 +881,11 @@ shared-type-host-test: $(BUILD)/shared_type_host_test
 $(BUILD)/shared_type_host_test: tests/shared_type_host_test.c tests/item_transfer_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/shared_type_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
 .PHONY: shared-type-host-test
+
+$(BUILD)/species_egg_test: tests/species_egg_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+species-egg-test: $(BUILD)/species_egg_test
+	$(BUILD)/species_egg_test tests/fixtures/species-eggs.native.txt
+test: species-egg-test
+.PHONY: species-egg-test
+$(BUILD)/src/gc_gacha.o: gen/out/gc_species_egg_info.inc

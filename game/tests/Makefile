@@ -367,3 +367,9 @@ build/trainer_render_test: trainer_render_test.c ../source/battle_view.c ../sour
 	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections trainer_render_test.c ../source/tween.c -Wl,--gc-sections -lm -o $@
 trainer_render_test: build/trainer_render_test
 .PHONY: trainer_render_test
+
+build/egg_hatch_ui_test: egg_hatch_ui_test.c ../source/egg_hatch_screen.c
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) egg_hatch_ui_test.c -lm -o $@
+egg_hatch_ui_test: build/egg_hatch_ui_test
+.PHONY: egg_hatch_ui_test

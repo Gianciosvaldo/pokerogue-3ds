@@ -1,6 +1,7 @@
 /* The app's run driver (see run_screen.h). */
 #include "run_screen.h"
 #include "run_exp.h"
+#include "egg_hatch_screen.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -464,9 +465,12 @@ static void sync_shown(void) {
  * goes on when it ends), false to go straight on to the next event. */
 static bool handle_event(int i) {
   const gc_event* e = &G.q[i];
-  G.st.events[e->kind & 15]++;
+  if(e->kind<GC_EV_COUNT)G.st.events[e->kind]++;
   G.n_ev = G.ev_pos = G.n_txt = 0;
   switch (e->kind) {
+    case GC_EV_EGG_HATCH:
+      egg_hatch_open(e,pump,NULL);
+      return true;
     case GC_EV_MESSAGE:
       if (msg_is(e, "battle:trainerDefeated")) bgm_on_trainer_defeated(&G.run); /* TrainerVictoryPhase.start */
       if (put_gc_msg(&e->msg) && e->prompt) G.ev[G.n_ev - 1].prompt = true;

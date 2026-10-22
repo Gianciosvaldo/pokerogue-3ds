@@ -59,6 +59,8 @@ typedef enum {
     GC_EV_MYSTERY,       /* MysteryEncounterSelectPhase: a = MysteryEncounterType, b = tier, c = wave */
     GC_EV_SAVE_POINT,    /* the run has reached upstream's save point (the start of an encounter): a good
                           * moment for the app to call gc_run_save and write the buffer */
+    GC_EV_EGG_HATCH,     /* presentation only: a species, b form, c gender; appearance below */
+    GC_EV_COUNT,
 } gc_event_kind;
 
 typedef struct {
@@ -71,6 +73,8 @@ typedef struct {
     double exp_amount, exp_before;
     double money_change, money_after; /* GC_EV_MONEY only: native Numbers, never narrowed */
     bool prompt;               /* GC_EV_MESSAGE: require confirmation */
+    uint8_t egg_tier, egg_variant;
+    bool egg_shiny;
 } gc_event;
 
 /* ---------------------------------------------------------------- screens and choices */

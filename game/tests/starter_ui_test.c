@@ -21,6 +21,7 @@
 #include "pr_enums.h"
 #include "starter_data.h"
 #include "starter_host.h"
+#include "gc/gacha.h"
 #include "ui.h"
 #include "ui_widgets.h"
 
@@ -802,6 +803,20 @@ static void test_customization(void) {
   CHECK(bytes&&gc_system_load(&restored,profile,bytes,&why),"save customized profile");
   gc_starter again;CHECK(ss_starter(&restored,1,&again)&&again.nature==3&&again.variant==2&&again.moves[0]==chosen,"choices survive profile reload");
   CHECK(restored.starters[1].candy_count==before-2*cost&&(restored.starters[1].ability_attr&4),"purchases survive reload");
+  SYS.starters[1].candy_count=100;
+  open_screen(NULL);press(MB_ACTION);press(MB_DOWN);press(MB_ACTION);
+  gc_starter_entry egg_old=SYS.starters[1];int old_eggs=SYS.n_eggs;
+  fail_save_call=save_calls+2;
+  choose_option("Use candies");choose_option("Buy species egg");fail_save_call=0;
+  CHECK(SYS.n_eggs==old_eggs&&!memcmp(&egg_old,&SYS.starters[1],sizeof egg_old),"failed egg save rolls back egg and candy");
+  tick(4000);press(MB_ACTION);
+  open_screen(NULL);press(MB_ACTION);press(MB_DOWN);press(MB_ACTION);
+  choose_option("Use candies");choose_option("Buy species egg");
+  CHECK(SYS.n_eggs==old_eggs+1&&SYS.eggs[old_eggs].species==1&&SYS.eggs[old_eggs].source_type==3,"species egg appended");
+  CHECK(SYS.starters[1].candy_count==100-gc_system_species_egg_cost(&SYS,1),"species egg candy debited");
+  bytes=gc_system_save(&SYS,profile,sizeof profile);
+  CHECK(bytes&&gc_system_load(&restored,profile,bytes,&why)&&restored.n_eggs==SYS.n_eggs,"purchased egg saved");
+  CHECK(!memcmp(&restored.eggs[old_eggs],&SYS.eggs[old_eggs],sizeof(gc_egg)),"purchased egg properties retained");
   open_screen(NULL);press(MB_ACTION);press(MB_ACTION);draw();
   CHECK(drawn("Luck: B- (3/14)"),"selected epic shiny contributes three pre-run luck");
 }
