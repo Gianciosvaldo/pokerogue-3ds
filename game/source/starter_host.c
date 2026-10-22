@@ -153,8 +153,12 @@ static void editor_show(int mode) {
     if(H.page>0)editor_add(-11,"Previous page");
   } else if(mode==EDIT_CANDY) {
     int cost=gc_system_starter_unlock_cost(H.editing);
-    snprintf(label,sizeof label,"Unlock passive (%d candies)%s",cost,p->passive_attr&1?" - owned":"");editor_add(0,label);
-    snprintf(label,sizeof label,"Unlock hidden ability (%d candies)%s",cost,p->ability_attr&4?" - owned":"");editor_add(1,label);
+    if(p->passive_attr&1)snprintf(label,sizeof label,"Passive unlocked");
+    else snprintf(label,sizeof label,"Unlock passive (%d)",cost);
+    editor_add(0,label);
+    if(p->ability_attr&4)snprintf(label,sizeof label,"Hidden ability unlocked");
+    else snprintf(label,sizeof label,"Unlock hidden ability (%d)",cost);
+    editor_add(1,label);
   }
   if(!H.count)editor_add(-1,"No unlocked choices");
   ui_push_options(H.options,H.count,true,editor_done,NULL);

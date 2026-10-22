@@ -50,8 +50,18 @@ int gc_starter_moves(const gc_system *sys, int species, int form, uint16_t *out,
     const pr_species *sp=gc_species(species);
     if (!sp || gc_starter_cost(species)<0 || form<0 || form>=sp->nforms || !out || cap<0) return -1;
     static row rows[ROWS_MAX];
-    int n=species_level_moves(species,form,rows,ROWS_MAX),w=0;
-    if (n<0) return -1;
+    /* StarterSelect reads the registry's concatenation order, unlike battle
+     * learnsets which sort by level. Form moves follow all base moves. */
+    int n=0,w=0;
+    if(sp->level_moves.n>ROWS_MAX)return -1;
+    for(int i=0;i<sp->level_moves.n;i++)rows[n++]=(row){sp->level_moves.v[i].level,sp->level_moves.v[i].move,0};
+    const char *key=form_key(sp,form);
+    for(int i=0;i<gc_form_level_moves_count;i++) {
+        const gc_form_level_moves *f=&gc_form_level_moves_data[i];
+        if(f->species!=species || strcmp(f->form_key,key))continue;
+        if(n+f->n>ROWS_MAX)return -1;
+        for(int k=0;k<f->n;k++)rows[n++]=(row){f->v[k].level,f->v[k].move,0};
+    }
     uint16_t eggs[4]={0};
     if (sys && species<=GC_MAX_SPECIES_ID) for(int i=0;i<gc_starter_egg_moves_count;i++)
         if(gc_starter_egg_moves_data[i].species==species) {

@@ -59,7 +59,7 @@ static void native(const char* path) {
    CHECK(id==species&&form==next_form&&mask==next_mask&&n>=0&&n<=64);
    uint16_t actual[64];sys.starters[id].egg_moves=mask;
    CHECK(gc_starter_moves(&sys,id,form,actual,64)==n);
-   for(int k=0;k<n;k++){int move;CHECK(fscanf(f,"%d",&move)==1);CHECK(actual[k]==move);}
+   for(int k=0;k<n;k++){int move;CHECK(fscanf(f,"%d",&move)==1);if(actual[k]!=move)fprintf(stderr,"pool mismatch species%d form%d mask%d slot%d C%d native%d\n",id,form,mask,k,actual[k],move);CHECK(actual[k]==move);}
    pools++;if(++next_mask==16){next_mask=0;next_form++;}
   } else if(!strcmp(word,"L")) {
    int luck;char grade[8];CHECK(fscanf(f,"%d%7s",&luck,grade)==2&&luck==grades);
