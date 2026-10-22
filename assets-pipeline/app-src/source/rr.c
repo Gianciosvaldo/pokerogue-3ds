@@ -578,6 +578,15 @@ void rr_frame_end(void) {
   g_gpu_ms = C3D_GetDrawingTime();
 }
 
+bool rr_frame_c2d_image(const rr_frame *f, C2D_Image *image, Tex3DS_SubTexture *sub) {
+  if (!f || !f->tex || !image || !sub || f->w <= 0 || f->h <= 0) return false;
+  const float tw = f->tex->tex.width, th = f->tex->tex.height;
+  *sub = (Tex3DS_SubTexture){(u16)f->w, (u16)f->h,
+      f->x / tw, 1.0f - f->y / th, (f->x + f->w) / tw, 1.0f - (f->y + f->h) / th};
+  *image = (C2D_Image){&f->tex->tex, sub};
+  return true;
+}
+
 static inline u32 to_c2d(rr_color c) { return __builtin_bswap32(c); }
 
 typedef enum { TINT_MULT, TINT_SOLID } tint_kind;
