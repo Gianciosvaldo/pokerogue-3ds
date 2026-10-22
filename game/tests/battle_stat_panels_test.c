@@ -32,6 +32,7 @@ int main(int argc,char **argv){
   for(int k=0;k<7;k++)assert(fscanf(fp,"%29s%19s%19s%f%f%f%f",tag,labels[k],values[k],&lx[k],&ly[k],&nx[k],&ny[k])==7&&!strcmp(tag,"L"));
   for(int field=mode==0?0:2;field<(mode==0?2:4);field++){
    memset(&B,0,sizeof B);side *sd=side_of(field);sd->mon.boss=mode==2;
+   if(mode==0){B.setup.doubles=true;float y=player_info_y(sd);assert(y+42/2.0f<=-48);assert(y-42/2.0f>=-180);if(field==1)near(y-player_info_y(side_of(0)),44);}
    const int8_t stages[]={-6,-4,-2,0,2,4,6};memcpy(sd->mon.stat_stages,stages,sizeof stages);
    nd=0;draw_stat_panel(sd,field<2,0,0);assert(nd==0);
    assert(stats_input(BTN_STATS)&&B.stats_shown);tween_update(&B.stats_tw,125);B.stats_alpha=B.stats_tw.value;

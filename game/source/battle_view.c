@@ -660,10 +660,15 @@ static void draw_stat_panel(side *sd,bool player,float bx,float by){
   }
 }
 
+static float player_info_y(const side *sd){
+  /* Keep both full-sized player boxes above the command strip at y=-48. */
+  return B.setup.doubles?(field_of(sd)==1?-72:-116):-72;
+}
+
 static void draw_player_info(side* sd) {
   if (!sd->present || !sd->info_on) return;
   const bv_mon* m = &sd->mon;
-  float bx = 310 + sd->info_dx, by = B.setup.doubles?(field_of(sd)==1?-30:-78):-72; /* PlayerBattleInfo container */
+  float bx = 310 + sd->info_dx, by = player_info_y(sd); /* PlayerBattleInfo container */
   img_draw("images/ui/pbinfo_player", NULL, bx, by, 1, 0.5f);
   draw_types(m, true, bx, by);
   draw_name(m, true, bx - 115, by - 15.2f);
