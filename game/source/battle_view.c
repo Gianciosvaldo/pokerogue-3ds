@@ -656,7 +656,10 @@ static void draw_stat_panel(side *sd,bool player,float bx,float by){
     number_x[i]=x+(label?label->src_w:12);number_w[i]=initial?initial->src_w:6;
     if(!stat)continue;
     o.origin_x=o.origin_y=0;
-    if(label)rr_draw(label,x,y,&o);if(number)rr_draw(number,number_x[i],y,&o);
+    /* PlayerBattleInfo.initInfo positions the full-size values container at (8,7). */
+    float parent_x=player?8:0,parent_y=player?7:0;
+    if(label)rr_draw(label,x+parent_x,y+parent_y,&o);
+    if(number)rr_draw(number,number_x[i]+parent_x,y+parent_y,&o);
   }
 }
 
