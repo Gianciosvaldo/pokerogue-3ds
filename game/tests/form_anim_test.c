@@ -99,6 +99,22 @@ int main(int argc, char** argv) {
   assert(gmax_mon.species == SPECIES_ID_CHARIZARD);
   assert(gmax_mon.form == 3);
 
+  /* A damage drain can reach zero before the separate FaintPhase arrives. */
+  for(int field=0;field<4;field++){
+    be_view view={0};int slot=(field%2)*2+(field>=2);view.mon[slot].species=SPECIES_ID_CHARIZARD;view.mon[slot].hp=0;view.present[slot]=true;
+    pr_event event={.type=PR_EV_FAINT,.battler=field};
+    int n=be_convert_events(&b.bt,&event,1,false,&view,out_events,128);bool faint=false;
+    for(int k=0;k<n;k++)if(out_events[k].type==BEV_FAINT&&out_events[k].battler==field)faint=true;
+    assert(faint&&!view.present[slot]);
+  }
+  /* A damaging wild exit drains HP before withdrawal and ignores the later
+   * redundant damage event after the sprite has gone. */
+  be_view exit_view={0};exit_view.mon[3]=(bv_mon){.species=SPECIES_ID_CHARIZARD,.hp=20};exit_view.present[3]=true;
+  pr_event exiting[2]={{.type=PR_EV_SWITCH_OUT,.battler=3},{.type=PR_EV_DAMAGE,.battler=3}};
+  exiting[0].field[3].hp=exiting[1].field[3].hp=5;
+  int exit_n=be_convert_events(&b.bt,exiting,2,false,&exit_view,out_events,128);
+  assert(exit_n==2&&out_events[0].type==BEV_DAMAGE&&out_events[0].a==5&&out_events[1].type==BEV_WITHDRAW&&!exit_view.present[3]);
+
   printf("form_anim_test PASSED: Mega Evolution (form %d, Fire/Dragon) and Gigantamax (form %d, scale 1.5x) verified.\n", mega_mon.form, gmax_mon.form);
   return 0;
 }

@@ -271,7 +271,9 @@ static void read_input(void) {
     if (g_dbg_touch[i].frame == ui_frame()) deliver_touch(g_dbg_touch[i].x, g_dbg_touch[i].y);
   for (int i = 0; i < g_n_inj_touch; i++) deliver_touch(g_inj_touch[i][0], g_inj_touch[i][1]);
   g_n_inj_touch = 0;
-  u32 down = hidKeysDown(), held = hidKeysHeld();
+  u32 down = hidKeysDown(), held = hidKeysHeld(),up=hidKeysUp();
+  for(int key=0;key<NKEYS;key++)if(up&KEYMAP[key].key)
+    for(int i=0;i<g_depth;i++)if(g_stack[i]->release)g_stack[i]->release(g_stack[i],KEYMAP[key].b);
   /* START + SELECT together quits (the app's own exit; HOME still works as usual) */
   if ((held & (KEY_START | KEY_SELECT)) == (KEY_START | KEY_SELECT) && (down & (KEY_START | KEY_SELECT))) {
     g_quit = true;

@@ -14,7 +14,7 @@ int main(void){
  }
  setup();run.items[0]=(gc_item){.key="UNKNOWN",.stack=1,.battle_count=13};before=run;int count=-1;CHECK(gc_lure_count(&run,&count)&&count==0&&!memcmp(&run,&before,sizeof run));
  setup();run.n_items=3;run.items[1]=(gc_item){.key="SUPER_LURE",.arg=0,.stack=1,.battle_count=14};run.items[2]=(gc_item){.key="MAX_LURE",.arg=-1,.stack=2,.battle_count=1};before=run;CHECK(gc_lure_count(&run,&count)&&count==3&&!memcmp(&run,&before,sizeof run));
- /* The real uninstrumented game caller still counts the double execution gap. */
- gc_new_battle(&run);CHECK(run.stubs[GC_STUB_DOUBLE_AS_SINGLE]==1&&run.n_enemy==1);
+ /* The real uninstrumented caller executes the forced wild double. */
+ gc_new_battle(&run);CHECK(run.stubs[GC_STUB_DOUBLE_AS_SINGLE]==0&&run.n_enemy==2&&run.double_battle&&run.bt.double_battle);
  printf("Lure encounter host %d checks passed\n",checks);return 0;
 }

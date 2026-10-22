@@ -1,0 +1,120 @@
+{
+  "source": "87426a79611f9d212c4dc8af58e2834a05b93725",
+  "hashes": {
+    "images/ui/pbinfo_stat_numbers.json": "0d92eb7210b21e2aa479ad77f66c217245033deacc7211744c5fbc84a9c133d9",
+    "images/ui/pbinfo_enemy_boss_stats.png": "450335bb8652d5e8ac86fbf1683abb4db6f3e8bba84b6b107257d46912b963cd",
+    "images/ui/pbinfo_enemy_mini_stats.png": "548c673e4b33b57ee536b1f84b2cd2bbc7205f245511a212796e22ec58398d04",
+    "images/ui/pbinfo_player_stats.png": "b2d0c3eeef3ade43408ab0a1b5691fe7886bd9e623d72dd492a4270d01520b04",
+    "images/ui/text_images/en/battle_ui/pbinfo_stat.json": "0d3b0dd1383b2a74cb0b627ac365ddae7d5042066daaaf81bb78a2cf56018a96"
+  },
+  "boxes": {
+    "pbinfo_enemy_boss_stats": [
+      178,
+      31
+    ],
+    "pbinfo_enemy_mini_stats": [
+      130,
+      31
+    ],
+    "pbinfo_player_stats": [
+      130,
+      42
+    ]
+  },
+  "labels": {
+    "SPATK": [
+      19,
+      8
+    ],
+    "SPDEF": [
+      19,
+      8
+    ],
+    "CRIT": [
+      17,
+      8
+    ],
+    "ACC": [
+      13,
+      8
+    ],
+    "ATK": [
+      13,
+      8
+    ],
+    "DEF": [
+      13,
+      8
+    ],
+    "EVA": [
+      13,
+      8
+    ],
+    "SPD": [
+      13,
+      8
+    ],
+    "HP": [
+      9,
+      8
+    ]
+  },
+  "numbers": {
+    "1": [
+      9,
+      8
+    ],
+    "2": [
+      9,
+      8
+    ],
+    "3": [
+      9,
+      8
+    ],
+    "4": [
+      9,
+      8
+    ],
+    "5": [
+      9,
+      8
+    ],
+    "6": [
+      9,
+      8
+    ],
+    "-1": [
+      9,
+      8
+    ],
+    "-2": [
+      9,
+      8
+    ],
+    "-3": [
+      9,
+      8
+    ],
+    "-4": [
+      9,
+      8
+    ],
+    "-5": [
+      9,
+      8
+    ],
+    "-6": [
+      9,
+      8
+    ],
+    "0": [
+      9,
+      8
+    ],
+    "empty": [
+      1,
+      8
+    ]
+  }
+}

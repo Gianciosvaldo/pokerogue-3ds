@@ -373,3 +373,14 @@ build/egg_hatch_ui_test: egg_hatch_ui_test.c ../source/egg_hatch_screen.c
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) egg_hatch_ui_test.c -lm -o $@
 egg_hatch_ui_test: build/egg_hatch_ui_test
 .PHONY: egg_hatch_ui_test
+
+build/battle_stat_panels_test: battle_stat_panels_test.c ../source/battle_view.c ../source/tween.c
+	@mkdir -p build
+	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections battle_stat_panels_test.c ../source/tween.c -Wl,--gc-sections -lm -o $@
+battle_stat_panels_test: build/battle_stat_panels_test
+.PHONY: battle_stat_panels_test
+
+persistent_item_bar_test: build/persistent_item_bar_test
+build/persistent_item_bar_test: persistent_item_bar_test.c ../source/battle_view.c
+	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections $< -Wl,--gc-sections -lm -o $@
+.PHONY: persistent_item_bar_test

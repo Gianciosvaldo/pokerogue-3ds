@@ -72,6 +72,8 @@ typedef struct {
     double player_teras_used;
     bool frozen_names; /* new saves require both halves of stored names */
 } sv_run;
+typedef struct { uint8_t double_battle; } sv_encounter;
+static const sfield encounter_fields[]={SF(sv_encounter,double_battle)};
 typedef struct { uint8_t terminal_result; } sv_terminal;
 static const sfield terminal_fields[]={SF(sv_terminal,terminal_result)};
 static const sfield run_fields[] = {
@@ -140,6 +142,9 @@ static const sfield pokemon_fields[] = {
     SF(pr_pokemon, temporary_fusion_species), SF(pr_pokemon, temporary_fusion_form),
     SF(pr_pokemon, battle_berries), SF(pr_pokemon, turn_berries), SF(pr_pokemon, last_berries),
     SF(pr_pokemon, n_battle_berries), SF(pr_pokemon, n_turn_berries), SF(pr_pokemon, n_last_berries),
+    SF(pr_pokemon, illusion.species), SF(pr_pokemon, illusion.fusion_species),
+    SF(pr_pokemon, illusion.form), SF(pr_pokemon, illusion.fusion_form),
+    SF(pr_pokemon, illusion.gender), SF(pr_pokemon, illusion.active),
 };
 static const sfield tag_fields[] = {
     SF(pr_battler_tag, type), SF(pr_battler_tag, turn_count), SF(pr_battler_tag, source_move),
@@ -415,7 +420,8 @@ bool gc_run_can_save(const gc_run *run)
     const gc_rqueue *q = &in->rq;
     if (q->current.type != RP_COMMAND) return false;
     for (int l = 0; l < q->n_levels; l++)
-        for (int k = 0; k < q->n[l]; k++) if (q->q[l][k].type != RP_TURN) return false;
+        for (int k = 0; k < q->n[l]; k++) if (q->q[l][k].type != RP_TURN
+            && !(run->double_battle&&q->q[l][k].type==RP_COMMAND&&q->q[l][k].a==1)) return false;
     return true;
 }
 
@@ -524,6 +530,10 @@ size_t gc_run_save(const gc_run *run, void *buf, size_t cap)
     size_t s = section_start(&w, "run");
     put_block(&w, run_fields, NF(run_fields), &v, sizeof v, 1);
     section_end(&w, s);
+    s = section_start(&w,"encounter");
+    sv_encounter encounter={run->double_battle};
+    put_block(&w,encounter_fields,NF(encounter_fields),&encounter,sizeof encounter,1);
+    section_end(&w,s);
     s = section_start(&w, "depths");
     put_block(&w, depth_fields, NF(depth_fields), &run->depths, sizeof run->depths, 1);
     section_end(&w, s);
@@ -660,6 +670,13 @@ static bool get_mons(const reader *body, const char *name, gc_mon *mons, int n, 
         if (b->n_move_history < nh) b->n_move_history = (uint16_t)nh;
         b->n_move_queue = (uint8_t)get_block(&r, turn_move_fields, NF(turn_move_fields), b->move_queue,
                                              sizeof b->move_queue[0], PR_MAX_MOVE_QUEUE, dropped);
+        uint8_t illusion_active;memcpy(&illusion_active,&b->illusion.active,1);if(illusion_active>1)return false;
+        if(illusion_active){
+            const pr_species *sp=gc_species(b->illusion.species);
+            if(!sp||b->illusion.form>=sp->nforms||b->illusion.gender < -1||b->illusion.gender>1)return false;
+            const pr_species *fusion=b->illusion.fusion_species?gc_species(b->illusion.fusion_species):NULL;
+            if(b->illusion.fusion_species?(!fusion||b->illusion.fusion_form>=fusion->nforms):b->illusion.fusion_form!=0)return false;
+        }
         if (!berry_history_ok(b)) return false;
         pr_reset_turn_data(b);
         if (b->transformed && !transform_schema) return false;
@@ -805,6 +822,13 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     run->in_battle = true;
     run->me_battle = v.me_battle;
     run->me_catch_allowed = v.me_catch_allowed;
+    sv_encounter encounter={0};reader encounter_reader=section(&body,"encounter");
+    if(!encounter_reader.bad){
+        if(get_block(&encounter_reader,encounter_fields,NF(encounter_fields),&encounter,sizeof encounter,1,&dropped)!=1||encounter.double_battle>1){
+            *why="the stored encounter width is damaged";return false;
+        }
+    }
+    run->double_battle=encounter.double_battle!=0;
     run->battle_type = v.battle_type;
     run->trainer_type = v.trainer_type;
     run->trainer_variant = v.trainer_variant;
@@ -958,14 +982,14 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
         ev = gc_ev_new(run, GC_EV_TRAINER);
         if (ev) { ev->a = run->trainer_type; ev->b = run->trainer_variant; }
     }
-    const int lead = run->party_order[0];
-    const bool lead_out = run->party[lead].b.on_field && run->party[lead].b.hp > 0;
     gc_battle_restore_field(run);
     bt->battle_rng = v.battle_rng;
     bt->battle_rng_live = v.battle_rng_live;
-    if (lead_out) {
-        ev = gc_ev_new(run, GC_EV_SUMMON);
-        if (ev) { ev->a = 0; ev->b = lead; ev->c = 0; }
+    for(int k=0;k<(run->double_battle?2:1)&&k<run->n_party;k++){
+        int idx=run->party_order[k];
+        if(run->party[idx].b.on_field&&run->party[idx].b.hp>0){
+            ev=gc_ev_new(run,GC_EV_SUMMON);if(ev){ev->a=0;ev->b=idx;ev->c=k;}
+        }
     }
     gc_ai_reset(run);
     gc_ai_enemy_party(run);

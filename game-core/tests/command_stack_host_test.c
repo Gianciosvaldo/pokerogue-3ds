@@ -20,6 +20,9 @@ static void setup(int seed){
  gc_starter starter={.species=SPECIES_ID_BULBASAUR,.tera_type=-1,.moves={MOVE_ID_TACKLE}};memset(starter.ivs,15,6);CHECK(gc_run_set_starters(&run,&starter,1,&reason));gc_event event;while(gc_run_next_event(&run,&event)){}
  CHECK(run.screen.kind==GC_SCREEN_COMMAND);
  pr_pokemon *p=run.bt.field[0],*enemy=run.bt.field[2];CHECK(p&&enemy);
+ /* Fight/Ball must execute through Taunt on the guarded stack; a double
+  * encounter has already lost its other opponent before these throws. */
+ if(run.bt.field[3]){run.bt.field[3]->hp=0;run.bt.field[3]->on_field=false;run.bt.field[3]->status=STATUS_EFFECT_FAINT;}
  enemy->species=SPECIES_ID_MEWTWO;enemy->form=0;enemy->level=100;enemy->custom_ability=ABILITY_ID_NONE;pr_refresh_ability(enemy);pr_calculate_stats(&run.bt,enemy);enemy->hp=enemy->stats[STAT_HP];enemy->n_moves=1;enemy->moves[0]=MOVE_ID_TAUNT;enemy->pp_used[0]=0;enemy->pp_up[0]=0;enemy->max_pp_override[0]=-1;
  p->custom_ability=ABILITY_ID_NONE;pr_refresh_ability(p);p->n_moves=1;p->moves[0]=MOVE_ID_TACKLE;p->pp_used[0]=0;
  run.pokeballs[POKEBALL_TYPE_POKEBALL]=5;gc_ai_enemy_party(&run);gc_battle_command_screen(&run);

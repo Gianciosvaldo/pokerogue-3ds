@@ -87,9 +87,9 @@ static uint32_t rnd(uint32_t n) {
 }
 
 static struct {
-  bv_mon mon[2];
-  bool present[2];
-  bool fainted_shown[2];  /* fainted and not replaced yet: its data is still on the screen (an ability bar can still name it) */
+  bv_mon mon[4];
+  bool present[4];
+  bool fainted_shown[4];  /* fainted and not replaced yet: its data is still on the screen (an ability bar can still name it) */
   bool begun;
   int biome;
   /* pending continuations (each is one thing the real UI would be waiting on) */
@@ -229,6 +229,10 @@ static void bad(const char* fmt, ...) {
     printf("VIOLATION %s\n", full);
     for (int i = trail_n > 120 ? trail_n - 120 : 0; i < trail_n; i++) printf("    %s\n", trail[i % 120]);
     const gc_run* r = rs_run();
+    printf("  encounter double%d battle double%d order:",r->double_battle,r->bt.double_battle);
+    for(int k=0;k<r->n_party;k++)printf(" %d",r->party_order[k]);printf("\n");
+    for(int k=0;k<4;k++){const pr_pokemon *p=r->bt.field[k];if(p)printf("  field%d id%u hp%d on%d\n",k,p->id,p->hp,p->on_field);}
+    for(int k=0;k<r->bt.n_party[1];k++){const pr_pokemon *p=r->bt.party[1][k];if(p)printf("  enemy%d id%u hp%d on%d slot%d\n",k,p->id,p->hp,p->on_field,p->trainer_slot);}
     for (int p = 0; p < r->n_party; p++) {
       printf("  party %d id %u species %d hp %d/%d:", p, (unsigned)r->party[p].b.id, r->party[p].b.species, r->party[p].b.hp, r->party[p].b.stats[0]);
       for (int i = 0; i < r->n_items; i++)
@@ -243,6 +247,7 @@ static void bad(const char* fmt, ...) {
       printf("\n");
     }
   }
+  if(getenv("RUNTEST_FAILFAST"))exit(1);
 }
 
 /* ---- stubs for the app's other modules ---- */
@@ -381,8 +386,11 @@ static void music_reward(void) {
 }
 
 /* ---- the battle screen ---- */
+static int screen_slot(int field){return field<0||field>3?0:(field%2)*2+(field>=2);}
+static const gc_mon *acting_mon(const gc_run *run){int field=run->screen.slot==1?1:0;
+ for(int i=0;i<run->n_party;i++)if(&run->party[i].b==run->bt.field[field])return &run->party[i];return NULL;}
 static bool side_ok(int battler, const char* what) {
-  const int s = battler >= 2 ? 1 : 0;
+  const int s = screen_slot(battler);
   if (!W.present[s]) {
     BAD("%s on side %d with nobody out", what, s);
     return false;
@@ -419,25 +427,34 @@ void bv_begin(const bv_setup* setup) {
   n_scenes++;
   W.mon[0] = setup->player;
   W.mon[1] = setup->enemy;
+  W.mon[2]=setup->player_ally;W.mon[3]=setup->enemy_ally;
+  W.present[2]=setup->player_ally_present;W.present[3]=false;
   W.present[0] = setup->player_present;
   W.present[1] = false;
-  W.fainted_shown[0] = W.fainted_shown[1] = false;
+  memset(W.fainted_shown,0,sizeof W.fainted_shown);
   W.playing = W.asking = false;
   W.sp_open = false;
   music_scene();
 }
 
-bv_mon* bv_mon_of(int battler) { return &W.mon[battler >= 2 ? 1 : 0]; }
+bv_mon* bv_mon_of(int battler) { return &W.mon[screen_slot(battler)]; }
 int bv_biome(void) { return W.begun ? W.biome : -1; }
 
 void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
   if (W.playing) BAD("bv_play while the last one is still playing");
   for (int i = 0; i < n; i++) {
     const bv_event* e = &ev[i];
-    const int s = e->battler >= 2 ? 1 : 0;
+    const int s = screen_slot(e->battler);
     if (!(e->type == BEV_MESSAGE && e->text && !strncmp(e->text, "modifierSelectUiHandler", 23)))
       trail_add("bev %d b=%d a=%d b=%d%s%s", e->type, e->battler, e->a, e->b, e->text ? " t=" : "", e->text ? e->text : "");
     switch (e->type) {
+      case BEV_FIELD_SWAP: {
+        bv_mon m=W.mon[0];W.mon[0]=W.mon[2];W.mon[2]=m;
+        bool p=W.present[0];W.present[0]=W.present[2];W.present[2]=p;
+        p=W.fainted_shown[0];W.fainted_shown[0]=W.fainted_shown[2];W.fainted_shown[2]=p;
+        break;
+      }
+
       case BEV_MESSAGE:
         if (!e->text) BAD("a message with no text");
         else {
@@ -450,7 +467,7 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
         break;
       case BEV_CATCH: {
         n_throw_ev++;
-        if (e->battler != BV_ENEMY || !W.present[1]) BAD("a ball thrown at nobody (battler %d, enemy out %d)", e->battler, W.present[1]);
+        if (e->battler < 2 || e->battler > 3 || !W.present[s]) BAD("a ball thrown at nobody (battler %d, enemy out %d)", e->battler, W.present[1]);
         if (e->a < 0 || e->a >= BALL_TYPES) BAD("a ball of type %d", e->a);
         if (e->caught ? e->b != 3 : (e->b < 0 || e->b > 2)) BAD("a ball that %s shows %d shakes", e->caught ? "holds" : "breaks free", e->b);
         /* the throw says what the run decided: "Gotcha!" (battle:pokemonCaught) comes with it when it held, and only then */
@@ -460,13 +477,14 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
         if (gotcha != e->caught) BAD("the ball %s but the messages %s Gotcha!", e->caught ? "held" : "broke free", gotcha ? "have" : "have no");
         if (e->caught) n_caught_ev++;
         else n_broke_ev++;
-        if (W.mon[1].hp <= 0) BAD("a ball thrown at a Pokemon with no HP");
+        if (W.mon[s].hp <= 0) BAD("a ball thrown at a Pokemon with no HP");
         break;
       }
       case BEV_INTRO_WILD:
         if (e->a == 0) {
           if (W.mon[1].species <= 0) BAD("wild intro with no enemy");
           W.present[1] = true;
+          W.present[3]=W.mon[3].species>0;
         }
         break;
       case BEV_SUMMON:
@@ -600,6 +618,7 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
 
 bool bv_playing(void) { return W.playing; }
 
+void bv_set_item_bars(const bv_item *foe,int nf,const bv_item *keys,int nk,int luck){(void)foe;(void)nf;(void)keys;(void)nk;(void)luck;}
 void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, void*), void* arg) {
   n_ask++;
   music_command();
@@ -650,32 +669,31 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
       }
     }
   }
-  const gc_mon* me = gc_field_mon(r, 0);
-  const gc_mon* foe = gc_field_mon(r, 1);
-  if (!W.present[0] || !W.present[1]) BAD("asked for a command with %s out", !W.present[0] ? "no player" : "no enemy");
-  if (!me || !foe) {
-    BAD("asked for a command with no Pokemon on the field in the run");
-  } else {
-    /* the screen must show the battle game-core has: what it looks like, a disguise included (PR_DEV_ILLUSION) */
-    const bv_mon* a = &W.mon[0];
-    const bv_mon* b = &W.mon[1];
-    const pr_form* player_form = pr_shown_form(&r->bt, &me->b);
-    const pr_form* enemy_form = pr_shown_form(&r->bt, &foe->b);
-    const int player_gender = pr_shows_illusion(&r->bt, &me->b) ? pr_apparent_gender(&me->b, true) : pr_get_gender(&me->b);
-    if (a->species != player_form->species || a->level != me->b.level || a->hp != me->b.hp || a->max_hp != me->b.stats[STAT_HP])
-      BAD("screen player %d L%d %d/%d, run %d L%d %d/%d", a->species, a->level, a->hp, a->max_hp, player_form->species, me->b.level,
-          me->b.hp, me->b.stats[STAT_HP]);
-    if (b->species != enemy_form->species || b->hp != foe->b.hp)
-      BAD("screen enemy %d %d/%d, run %d %d/%d", b->species, b->hp, b->max_hp, enemy_form->species, foe->b.hp, foe->b.stats[STAT_HP]);
-    if (a->form != player_form->form_index || a->gender != player_gender || a->shiny != me->b.shiny || a->variant != me->variant)
-      BAD("the displayed form, gender or shiny identity differs from the effective battle Pokemon");
-    if (a->n_moves != PR_N_MOVES(&me->b)) BAD("fight menu has %d moves, the Pokemon %d", a->n_moves, PR_N_MOVES(&me->b));
-    for (int i = 0; i < PR_N_MOVES(&me->b) && i < 4; i++) {
-      int base = pr_moves[PR_MOVES(&me->b)[i]].pp;
-      int step = base / 5 < 1 ? 1 : base / 5;
-      int max = PR_MAX_PP(&me->b)[i] > 0 ? PR_MAX_PP(&me->b)[i] : base + PR_PP_UP(&me->b)[i] * step;
-      if (a->moves[i] != PR_MOVES(&me->b)[i] || a->pp_left[i] != max - PR_PP_USED(&me->b)[i])
-        BAD("fight menu move %d is %d PP %d, the Pokemon's %d PP %d", i, a->moves[i], a->pp_left[i], PR_MOVES(&me->b)[i], max - PR_PP_USED(&me->b)[i]);
+  const gc_mon* me=acting_mon(r);
+  if(!opts||opts->command_slot!=r->screen.slot||!me)BAD("command actor differs from run");
+  bool enemy=false;
+  for(int field=0;field<4;field++){
+    const pr_pokemon *p=r->bt.field[field];int index=screen_slot(field);
+    bool active=p&&p->on_field&&p->hp>0;
+    if(!active){if(W.present[index])BAD("field%d still displayed without an active Pokemon",field);continue;}
+    if(field>=2)enemy=true;
+    if(!W.present[index]){BAD("field%d active but absent from screen",field);continue;}
+    const bv_mon *a=&W.mon[index];const pr_form *form=pr_shown_form(&r->bt,p);
+    int gender=pr_shows_illusion(&r->bt,p)?pr_apparent_gender(p,true):pr_get_gender(p);
+    if(a->species!=form->species||a->level!=p->level||a->hp!=p->hp||a->max_hp!=p->stats[STAT_HP])
+      BAD("field%d screen %d L%d %d/%d, run %d L%d %d/%d",field,a->species,a->level,a->hp,a->max_hp,form->species,p->level,p->hp,p->stats[STAT_HP]);
+    if(a->form!=form->form_index||a->gender!=gender||a->shiny!=p->shiny||a->variant!=p->variant)
+      BAD("field%d displayed form/gender/shiny identity differs",field);
+    for(int stat=0;stat<7;stat++)if(a->stat_stages[stat]!=p->stat_stages[stat])BAD("field%d stage%d differs",field,stat);
+  }
+  if(!enemy)BAD("asked command with no enemy");
+  if(me){
+    const bv_mon *a=&W.mon[screen_slot(r->screen.slot)];
+    if(a->n_moves!=PR_N_MOVES(&me->b))BAD("fight menu move count differs for actor%d",r->screen.slot);
+    for(int i=0;i<PR_N_MOVES(&me->b)&&i<4;i++){
+      int base=pr_moves[PR_MOVES(&me->b)[i]].pp,step=base/5<1?1:base/5;
+      int max=PR_MAX_PP(&me->b)[i]>0?PR_MAX_PP(&me->b)[i]:base+PR_PP_UP(&me->b)[i]*step;
+      if(a->moves[i]!=PR_MOVES(&me->b)[i]||a->pp_left[i]!=max-PR_PP_USED(&me->b)[i])BAD("fight menu move/PP differs for actor%d slot%d",r->screen.slot,i);
     }
   }
   if (save_on && gc_run_can_save(r)) {
@@ -1140,22 +1158,23 @@ static void strong_cheat(void) {
   if (r->wave > 36) {
     for (int i = 0; i < r->n_party; i++) r->party[i].b.hp = r->party[i].b.hp > 1 ? 1 : r->party[i].b.hp;
     const gc_mon* f = gc_field_mon(r, 0);
-    if (f && W.present[0] && W.mon[0].species == f->b.species) W.mon[0].hp = f->b.hp;
+    for(int field=0;field<2;field++){const pr_pokemon *p=r->bt.field[field];if(p&&W.present[screen_slot(field)])W.mon[screen_slot(field)].hp=p->hp;}
     return;
   }
   for (int i = 0; i < r->n_party; i++) {
+    /* Healing a fainted off-field slot without a revival/summon phase creates
+     * an impossible presentation state. Keep this strength fixture legal. */
+    if(r->party[i].b.hp<=0)continue;
     if (r->party[i].b.level < 100) {
       r->party[i].b.level = 100;
       gc_mon_recalc(r, &r->party[i]);
     }
     r->party[i].b.hp = r->party[i].b.stats[0];
   }
-  /* the fake screen's model of the Pokemon on the field follows (it is built from events, and this edit has none) */
-  const gc_mon* f = gc_field_mon(r, 0);
-  if (f && W.present[0] && W.mon[0].species == f->b.species) {
-    W.mon[0].level = f->b.level;
-    W.mon[0].max_hp = f->b.stats[0];
-    W.mon[0].hp = f->b.hp;
+  /* Fixture-only stat changes have no gameplay event: update both displayed allies. */
+  for(int field=0;field<2;field++){
+    const pr_pokemon *p=r->bt.field[field];int i=screen_slot(field);
+    if(p&&W.present[i]){W.mon[i].level=p->level;W.mon[i].max_hp=p->stats[0];W.mon[i].hp=p->hp;}
   }
 }
 
@@ -1367,7 +1386,7 @@ static bool step(void) {
     bv_command c = {0, 0};
     const uint32_t x = rnd(100);
     const bv_command_opts* o = &W.opts;
-    const gc_mon* cur = gc_field_mon(rs_run(), 0);
+    const gc_mon* cur = acting_mon(rs_run());
     if (cur && o->can_switch && cur->b.hp * 4 < cur->b.stats[STAT_HP] && rnd(100) < 60) c.command = 2;
     else if (x < 6 && o->can_ball) c.command = 1;
     else if (x < 14 && o->can_switch) c.command = 2;
@@ -1378,7 +1397,7 @@ static bool step(void) {
         if (o->move_ok[i]) ok[n++] = i;
       c.move_slot = o->struggle || !n ? 0 : ok[rnd((uint32_t)n)];
       if (n && !o->struggle && rnd(100) < 80) {
-        const gc_mon* me = gc_field_mon(rs_run(), 0);
+        const gc_mon* me = acting_mon(rs_run());
         int best = -1;
         for (int k = 0; me && k < n; k++) {
           int pw = pr_moves[PR_MOVES(&me->b)[ok[k]]].power;

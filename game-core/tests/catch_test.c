@@ -69,7 +69,14 @@ static void new_run(const char *seed, bool with_sys)
         for (int k = 0; k < 6; k++) team[i].ivs[k] = 15;
     }
     const char *why;
-    CHECK(gc_run_set_starters(&run, team, 3, &why));
+    /* These literal capture fixtures require a natural single encounter. The
+     * separate doubles controller suite verifies the multi-opponent refusal. */
+    for(int attempt=0;;attempt++){
+        CHECK(attempt<64);
+        if(attempt){char single_seed[128];snprintf(single_seed,sizeof single_seed,"%s-single-%d",seed,attempt);gc_run_new(&run,GAME_MODES_CLASSIC,single_seed,7);}
+        CHECK(gc_run_set_starters(&run, team, 3, &why));
+        if(run.battle_type==BATTLE_TYPE_WILD&&run.n_enemy==1)break;
+    }
     if (with_sys) run.sys = &sys;
     drain();
     CHECK(run.screen.kind == GC_SCREEN_COMMAND);

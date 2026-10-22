@@ -47,7 +47,8 @@ const char *gc_catch_ball_refusal(const gc_run *run, int ball)
                             && rr->challenge_fresh_start == 1;
     /* isDailyFinalBoss() && getDailyEventSeedBoss()?.catchable: an event seed's boss is a timed event's, not ported */
     const bool catchable_daily_boss = false;
-    const pr_pokemon *foe = run->bt.field[BATTLER_INDEX_ENEMY];
+    int active=0;const pr_pokemon *foe=NULL;
+    for(int k=2;k<4;k++)if(run->bt.field[k]&&run->bt.field[k]->on_field&&run->bt.field[k]->hp>0&&!run->bt.field[k]->switch_out_status){foe=run->bt.field[k];active++;}
 
     if (run->biome == BIOME_ID_END && wild) {
         bool uncaught_on_field = false;
@@ -64,6 +65,7 @@ const char *gc_catch_ball_refusal(const gc_run *run, int ball)
         return "battle:noPokeballMysteryEncounter";
     }
 
+    if(active>1)return "battle:noPokeballMulti";
     /* targetPokemon = getEnemyPokemon(false): an active one (not fainted) that isn't switching out */
     if (ball >= 0 && ball < 5 && foe && foe->hp > 0 && !foe->switch_out_status && foe->is_boss
         && foe->boss_segment_index >= 1 && !has_wonder_guard(foe)) {
@@ -132,9 +134,11 @@ static void add_to_party(gc_run *run, int enemy_idx, int ball, int released)
          * so the new Pokemon goes in front of the member that was there */
         int pos = -1;
         for (int k = 0; k < run->n_party; k++) if (run->party_order[k] == released) pos = k;
-        const bool on_field = bt->field[0] == &run->party[released].b;
+        for(int field=0;field<2;field++)if(bt->field[field]==&run->party[released].b){
+            if(bt->field[field]->on_field){gc_event *ev=gc_ev_new(run,GC_EV_RECALL);if(ev){ev->a=0;ev->b=released;ev->c=field;}}
+            bt->field[field]=NULL;
+        }
         run->party[released] = caught;
-        if (on_field) bt->field[0] = NULL;
         if (pos == run->n_party - 1 && pos > 0) {
             const int8_t t = run->party_order[pos - 1];
             run->party_order[pos - 1] = run->party_order[pos];

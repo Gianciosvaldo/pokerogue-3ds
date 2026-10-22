@@ -4041,7 +4041,7 @@ static void attempt_run_phase(pr_battle *bt, pr_engine *e, int ph)
 /* ToggleDoublePositionPhase: the first of getPlayerField() active on the field moves (its sprite;
  * to the centre after a faint left it alone); once there, one in field slot 1 swaps party slots
  * with the Pokemon in slot 0, and so takes field index 0 */
-static void toggle_double_position_phase(pr_battle *bt)
+static void toggle_double_position_phase(pr_battle *bt,pr_engine *e)
 {
     if (!bt->double_battle) return;                       /* singles: the one on the field is at index 0 */
     if (!bt->n_party[0]) { pr_note_unported(bt, PR_FEAT_PARTY); return; }
@@ -4054,6 +4054,7 @@ static void toggle_double_position_phase(pr_battle *bt)
             bt->party[0][0] = p;
             bt->field[0] = bt->party[0][0];
             bt->field[1] = bt->party[0][1];
+            pr_event_add(bt,e,PR_EV_FIELD_SWAP,1,0,0,0,NULL);
         }
         return;
     }
@@ -4214,7 +4215,7 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_SUMMON: pr_summon_phase(bt, e, ph); break;
     case PH_INIT_ENCOUNTER: pr_init_encounter_phase(bt, e, ph); break;
     case PH_CHECK_SWITCH: pr_check_switch_phase(bt, e, ph); break;
-    case PH_TOGGLE_DOUBLE_POSITION: toggle_double_position_phase(bt); break;
+    case PH_TOGGLE_DOUBLE_POSITION: toggle_double_position_phase(bt,e); break;
     case PH_MOVE_REFLECT: move_reflect_phase(bt, e, ph); break;
     case PH_SHINY_SPARKLE: pr_event_add(bt, e, PR_EV_SHINY_SPARKLE, PH(ph)->battler, -1, 0, 0, NULL); break;
     case PH_ILLUSION_BREAK: pr_event_add(bt, e, PR_EV_ILLUSION_BREAK, PH(ph)->battler, -1, 0, 0, NULL); break;

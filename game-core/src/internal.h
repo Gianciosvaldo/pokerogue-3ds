@@ -259,6 +259,7 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
 bool gc_mystery_pick_ok(const gc_run *run, int type, int option, int idx);   /* the option's party screen filter accepts the Pokemon */
 void gc_mystery_post(gc_run *run, const gc_rphase *p);
 bool gc_gen_wild(gc_run *run, int level);
+bool gc_trainer_is_double(const gc_run *run);
 void gc_trainer_names(gc_run *run);               /* run->trainer_names for the current trainer */
 bool gc_is_new_biome(const gc_run *run, int wave);   /* isNewBiome for the battle of `wave` */
 int gc_roll_biome_weather(gc_run *run);            /* Arena.setBiomeWeather's pick (consumes the run RNG) */

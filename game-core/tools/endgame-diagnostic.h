@@ -29,8 +29,12 @@ static bool diag_choice(const gc_run *run,gc_choice *c){
  if(run->n_party<1||run->n_party>6||s->n_options<0||s->n_options>GC_MAX_OPTIONS||s->n_shop<0||s->n_shop>16)return false;
  for(int i=0;i<run->n_party;i++)if(run->party[i].b.n_moves>4)return false;
  switch(s->kind){
+ case GC_SCREEN_TARGET:c->kind=GC_CH_TARGET;for(int i=2;i<6;i++)if(s->target_ok[i%4]){c->a=i%4;return true;}return false;
  case GC_SCREEN_COMMAND:{
-  const gc_mon *me=gc_field_mon(run,0),*foe=gc_field_mon(run,1);if(!me||!foe)return false;
+  const gc_mon *me=NULL,*foe=NULL;
+  for(int i=0;i<run->n_party;i++)if(&run->party[i].b==run->bt.field[s->slot==1?1:0])me=&run->party[i];
+  for(int k=2;k<4;k++)for(int i=0;i<run->n_enemy;i++)if(&run->enemy[i].b==run->bt.field[k]&&run->enemy[i].b.hp>0)foe=&run->enemy[i];
+  if(!me||!foe)return false;
   const pr_pokemon *p=&me->b;double best=-1;int move=-1;
   for(int j=0;j<4;j++)if(s->move_ok[j]){double score=diag_move_score(p,&foe->b,p->moves[j]);if(score>best){best=score;move=j;}}
   if(s->can_switch&&(best<=0||p->hp*5<p->stats[0])){int pick=-1;double score=0;for(int i=0;i<run->n_party;i++){const pr_pokemon *q=&run->party[i].b;if(q->on_field||q->hp<=0)continue;for(int j=0;j<q->n_moves;j++)if(q->pp_used[j]<gc_move_max_pp(q,j)){double value=diag_move_score(q,&foe->b,q->moves[j])*(double)q->hp/(q->stats[0]?q->stats[0]:1);if(value>score){score=value;pick=i;}}}if(pick>=0){c->kind=GC_CH_POKEMON;c->a=pick;return true;}}
