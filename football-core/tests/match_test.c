@@ -1,4 +1,5 @@
 #include "football_match.h"
+#include "football_playbook.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -10,7 +11,8 @@ static FootballTeam team(unsigned count,unsigned rating)
 }
 static PlayInfo call(unsigned play)
 {
-    return (PlayInfo){(FootballFormation)(play/2),(FootballPlayType)(play%2),(FootballPlayId)play,255};
+    const FootballPlayDefinition *p=football_playbook_get((FootballPlayId)play);
+    assert(p);return (PlayInfo){p->formation,p->type,p->id,255};
 }
 static void invariant(const FootballMatch *m)
 {
@@ -25,7 +27,7 @@ static void game(FootballMatch *m,unsigned dt)
 {
     unsigned guard=0;
     while (m->phase!=FB_MATCH_FINISHED && ++guard<20000) {
-        if (football_match_waiting_for_home(m)) assert(football_match_call(m,call(m->plays%4)));
+        if (football_match_waiting_for_home(m)) assert(football_match_call(m,call(m->plays%FB_PLAY_COUNT)));
         football_match_tick(m,dt); invariant(m);
     }
     assert(m->phase==FB_MATCH_FINISHED && m->rules.score[0]!=m->rules.score[1]);
@@ -62,6 +64,24 @@ int main(void)
         assert(m.rules.winner==replay.rules.winner);
         assert(!football_match_call(&m,call(0)) && !football_match_tick(&m,250));
     }
+    /* Named calls must be legal, and invalid calls cannot consume RNG. */
+    for (unsigned i=0;i<FB_PLAY_COUNT;++i) {
+        assert(football_match_begin(&m,&home,&away,123,256));
+        saved=m;PlayInfo wrong=call(i);wrong.formation=(FootballFormation)(1-wrong.formation);
+        assert(!football_match_call(&m,wrong) && !memcmp(&m,&saved,sizeof m));
+        assert(football_match_call(&m,call(i)) && m.play.id==(FootballPlayId)i);
+    }
+    unsigned short_complete=0,deep_complete=0;int short_yards=0,deep_yards=0;
+    for (unsigned seed=1;seed<=2000;++seed) {
+        assert(football_match_begin(&m,&home,&away,seed,256));
+        assert(football_match_call(&m,call(FB_PASS_SLANTS)));
+        if (m.resolved.kind==FB_RESULT_COMPLETE) { ++short_complete;short_yards+=m.resolved.yards; }
+        assert(football_match_begin(&m,&home,&away,seed,256));
+        assert(football_match_call(&m,call(FB_PASS_VERTICALS)));
+        if (m.resolved.kind==FB_RESULT_COMPLETE) { ++deep_complete;deep_yards+=m.resolved.yards; }
+    }
+    assert(short_complete>deep_complete && deep_complete>0);
+    assert(deep_yards/(int)deep_complete>short_yards/(int)short_complete);
     /* A sack animates the QB rather than the intended receiver. */
     bool saw_sack=false;
     home=team(6,60);

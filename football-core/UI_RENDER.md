@@ -1,12 +1,15 @@
 # Playcalling and dual-screen rendering
 
 `football-core/src/playcall_ui.c` owns a portable, testable menu state machine:
-Main (Offense) -> Formation (Shotgun / Under Center) -> Play Type (Run / Pass).
+Main (Offense) -> Formation (Shotgun / Under Center) -> Play Type (Run / Pass)
+-> Named play.
 Touch buttons use physical bottom-screen coordinates, with matching draw/hit
 rectangles. D-pad and A select; B goes back. Only KEY_TOUCH down edges activate,
 so holding or dragging the stylus cannot accidentally select successive menus.
 `football_playcall_take` delivers one tagged `struct PlayInfo`, then resets the
-menu. The four initial play IDs are Inside Zone, Slants, Dive and Play Action.
+menu. The four initial IDs remain stable; four appended IDs provide two named plays
+per formation/type. The immutable catalog and route presentation are documented
+in `PLAYBOOK.md`.
 They describe engine requests, not simulated results. Target slots 1/2 are hints;
 the engine must resolve an eligible player for a short drafted roster.
 

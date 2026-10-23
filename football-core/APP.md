@@ -10,8 +10,9 @@ the app, with a startup notice that profile changes cannot be saved.
 
 After drafting, the round screen shows the roster, automatic positions and SPD /
 STR. Press A or the Continue button to load the match. The field/score/down/clock
-are on top; Offense -> Formation -> Run/Pass is on the touch screen. D-pad/A/B also
-navigate. Only new action presses are used, so holding A does not accidentally
+are on top; Offense -> Formation -> Run/Pass -> Named play is on the touch screen. D-pad/A/B also
+navigate; B returns one menu level. Each formation/type offers two plays, with a
+short risk/gain description before selection (see `PLAYBOOK.md`). Only new action presses are used, so holding A does not accidentally
 call a play. The opponent calls its own plays. Input to playcalling is disabled
 while a snap is running or the opponent has possession. The match-result screen
 requires acknowledgement before team progression begins.
