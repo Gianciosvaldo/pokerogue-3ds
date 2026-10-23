@@ -45,8 +45,8 @@ receiver and tackler selection also use the existing primary/secondary type
 positional-affinity matrix, with no extra attribute inflation.
 
 Run outcomes use speed/agility/strength, blocking strength and opposing tackling;
-pass outcomes use throwing power/accuracy, catching, receiver speed, protection
-and opposing tackling. Under Center adds run push and longer play-action gains
+pass outcomes use throwing power/accuracy, catching, route depth/read time,
+receiver separation, a dedicated coverer and protection (`PASSING.md`). Under Center adds run push and longer play-action gains
 with extra sack exposure; Shotgun improves passing completion probability.
 Blocking matchups and carrier contacts are resolved by `football_contact.c`
 (see `CONTACT.md`). Broken tackles can add bounded yards, and fumbles can occur

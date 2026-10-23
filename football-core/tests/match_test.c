@@ -92,6 +92,8 @@ int main(void)
         unsigned qb=football_match_quarterback(&m,FB_HOME);
         assert(m.blocker<home.count && m.rusher<away.count && m.tackler<away.count);
         assert(m.blocker!=qb && m.blocker!=m.play.target_slot);
+        assert(m.pass_report.attempted==(m.play.type==FB_PLAY_PASS));
+        if(m.play.type==FB_PLAY_PASS && away.count>1)assert(m.coverer!=m.rusher);
         if (m.contact.attempted) {
             saw_broken|=m.contact.broken;saw_fumble|=m.contact.fumble;
             assert(!m.contact.broken || (m.contact.extra_yards>0 && !m.contact.fumble));

@@ -70,6 +70,16 @@ static unsigned lineman(const FootballMatch *m,unsigned side,unsigned exclude_a,
     }
     return result;
 }
+static unsigned coverer(const FootballMatch *m,unsigned side,unsigned rusher)
+{
+    unsigned result=0;float highest=-1;
+    for(unsigned i=0;i<m->teams[side].count;++i) {
+        if(i==rusher && m->teams[side].count>1)continue;
+        float score=(attribute(m,side,i,0)+attribute(m,side,i,1)+attribute(m,side,i,7))*role_affinity(&m->teams[side].players[i],FB_TE_S);
+        if(score>highest){highest=score;result=i;}
+    }
+    return result;
+}
 static void snap(FootballMatch *m,PlayInfo play,FootballDefenseId defense_call)
 {
     const FootballPlayDefinition *definition=football_playbook_get(play.id);
@@ -97,6 +107,8 @@ static void snap(FootballMatch *m,PlayInfo play,FootballDefenseId defense_call)
     m->tackler=(uint8_t)tackler;
     memset(&m->blocking,0,sizeof m->blocking);
     memset(&m->contact,0,sizeof m->contact);
+    memset(&m->pass_report,0,sizeof m->pass_report);
+    m->coverer=(uint8_t)coverer(m,defense,m->rusher);
     if (m->blocker!=255) {
         FootballAttributes b=effective(m,side,m->blocker),d=effective(m,defense,m->rusher);
         football_contact_block(&m->blocking,&b,&d,random_next(&m->rng)%100);
@@ -112,28 +124,20 @@ static void snap(FootballMatch *m,PlayInfo play,FootballDefenseId defense_call)
         if (roll>94 && edge>0) result.yards=(int16_t)(result.yards+15);
         result.seconds=(uint8_t)clamp(12+(result.yards>0 ? result.yards/3 : 0),8,25);
     } else {
-        int power=attribute(m,side,qb,5), accuracy=attribute(m,side,qb,6);
-        int catching=attribute(m,side,target,7);
-        int pressure=average(m,defense,2)-average(m,side,2)-m->blocking.edge;
-        int sack=clamp(7+coverage->sack+definition->sack+pressure/10+(play.formation==FB_FORM_UNDER_CENTER ? 3 : 0),2,20);
-        int intercept=clamp(7+coverage->interception+definition->interception+(tackling-accuracy)/12,2,18);
-        int completion=clamp(55+coverage->completion+definition->completion+(accuracy+catching-2*tackling)/5+(play.formation==FB_FORM_SHOTGUN ? 5 : 0),20,90);
-        result.seconds=5;
-        if (roll<sack) { result.kind=FB_RESULT_SACK; result.yards=-5; result.seconds=14; }
-        else if (roll<sack+intercept) { result.kind=FB_RESULT_INTERCEPTION; result.yards=8; }
-        else if ((int)(random_next(&m->rng)%100)<completion) {
-            result.kind=FB_RESULT_COMPLETE;
-            result.yards=(int16_t)clamp(5+definition->gain+power/10+(speed-tackling)/15+(play.formation==FB_FORM_UNDER_CENTER ? 5 : 0)+
-                                     (int)(random_next(&m->rng)%13),1,40);
-            result.seconds=12;
-        } else result.kind=FB_RESULT_INCOMPLETE;
+        FootballPassInput input={effective(m,side,qb),effective(m,side,target),
+            effective(m,defense,m->coverer),effective(m,defense,m->rusher),play.id,defense_call,m->blocking.edge};
+        unsigned catch_roll=random_next(&m->rng)%100;
+        unsigned gain_roll=random_next(&m->rng)%100;
+        football_pass_resolve(&m->pass_report,&input,(unsigned)roll,catch_roll,gain_roll);
+        result=m->pass_report.resolved;
     }
     /* Resolve at most one carrier contact per snap. A completed pass can be
      * fumbled after the catch; an incompletion/interception has no carrier hit. */
     if (result.kind==FB_RESULT_RUN || result.kind==FB_RESULT_COMPLETE) {
         unsigned carrier=target;
-        FootballAttributes c=effective(m,side,carrier),d=effective(m,defense,tackler);
         bool caught=result.kind==FB_RESULT_COMPLETE;
+        unsigned contact_slot=caught ? m->coverer : tackler;m->tackler=(uint8_t)contact_slot;
+        FootballAttributes c=effective(m,side,carrier),d=effective(m,defense,contact_slot);
         unsigned tackle_roll=random_next(&m->rng)%100;
         unsigned fumble_roll=random_next(&m->rng)%100;
         football_contact_tackle(&m->contact,&c,&d,caught,tackle_roll,fumble_roll);
