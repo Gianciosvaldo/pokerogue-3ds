@@ -27,7 +27,7 @@ void gc_item_add(gc_run *run, const char *key, int16_t arg, uint32_t pokemon_id,
     it->detached = false;
     it->virtual_stack = 0;
     it->battle_count = 0;
-    it->non_transferable = false;
+    it->non_transferable = !strcmp(key, "EVOLUTION_TRACKER_GIMMIGHOUL");
     it->type_tier = 0;
     it->type_ref = 0;
     it->loot_ref = 0;
@@ -111,6 +111,15 @@ static void to_modifier(const gc_item *it, pr_modifier *m, bool golden)
     m->loot_ref = it->loot_ref;
     m->unknown_subclass = true;
     m->cls = it->pokemon_id ? PR_MOD_HELD_ITEM : PR_MOD_PERSISTENT;
+    if (!strcmp(it->key, "EVOLUTION_TRACKER_GIMMIGHOUL")) {
+        m->cls = PR_MOD_EVO_TRACKER; m->num = 10; m->n_species = 1;
+        m->species[0] = SPECIES_ID_GIMMIGHOUL; m->is_transferable = false;
+        m->virtual_stack_count = it->virtual_stack;
+        m->unknown_subclass = !it->pokemon_id || (it->arg != -1 && it->arg != 0)
+            || it->stack < 1 || it->virtual_stack < 0
+            || (int64_t)it->stack + it->virtual_stack > 999;
+        return;
+    }
     if(!strcmp(it->key,"EVIOLITE")||!strcmp(it->key,"SPECIES_STAT_BOOSTER")||!strcmp(it->key,"RARE_SPECIES_STAT_BOOSTER")){
         m->virtual_stack_count=it->virtual_stack;
         if(!strcmp(it->key,"EVIOLITE")){
@@ -598,7 +607,8 @@ int gc_item_transfer(gc_run *run, int item_idx, int to, int qty)
     if (!run || item_idx < 0 || item_idx >= run->n_items || to < 0 || to >= run->n_party || qty <= 0) return 0;
     gc_item src = run->items[item_idx];
     const uint32_t to_id = run->party[to].b.id;
-    if (!src.pokemon_id || src.pokemon_id == to_id || src.non_transferable || src.stack <= 0) return 0;
+    if (!src.pokemon_id || src.pokemon_id == to_id || src.non_transferable
+        || !strcmp(src.key, "EVOLUTION_TRACKER_GIMMIGHOUL") || src.stack <= 0) return 0;
     int match = -1;
     for (int i = 0; i < run->n_items; i++)
         if (i != item_idx && run->items[i].pokemon_id == to_id && !strcmp(run->items[i].key, src.key) && run->items[i].arg == src.arg) {
@@ -639,7 +649,7 @@ int gc_item_discard(gc_run *run, int item_idx, int count)
 {
     if (!run || item_idx < 0 || item_idx >= run->n_items || count <= 0) return 0;
     gc_item *it = &run->items[item_idx];
-    if (!it->pokemon_id || it->non_transferable || it->stack <= 0) return 0;
+    if (!it->pokemon_id || it->non_transferable || !strcmp(it->key, "EVOLUTION_TRACKER_GIMMIGHOUL") || it->stack <= 0) return 0;
     const int taken = count < it->stack ? count : it->stack;
     it->stack -= taken;
     if (!it->stack) gc_item_remove_at(run, item_idx);

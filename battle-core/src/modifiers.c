@@ -13,6 +13,7 @@
 #include <string.h>
 
 const uint8_t pr_mod_parent[PR_MOD_COUNT_] = {
+    [PR_MOD_EVO_TRACKER] = PR_MOD_HELD_ITEM,
     [PR_MOD_EXP_BOOSTER] = PR_MOD_HELD_ITEM,
     [PR_MOD_FRIENDSHIP_BOOSTER] = PR_MOD_HELD_ITEM,
     [PR_MOD_SWITCH_EFFECT_TRANSFER] = PR_MOD_HELD_ITEM,
@@ -61,6 +62,7 @@ const uint8_t pr_mod_parent[PR_MOD_COUNT_] = {
 };
 
 const char *const pr_mod_class_name[PR_MOD_COUNT_] = {
+    [PR_MOD_EVO_TRACKER] = "EvoTrackerModifier",
     [PR_MOD_EXP_BOOSTER] = "PokemonExpBoosterModifier",
     [PR_MOD_FRIENDSHIP_BOOSTER] = "PokemonFriendshipBoosterModifier",
     [PR_MOD_SWITCH_EFFECT_TRANSFER] = "SwitchEffectTransferModifier",
@@ -130,6 +132,11 @@ bool pr_mod_is_ported_item(const pr_modifier *m)
             && m->virtual_stack_count>=0 && (int64_t)m->stack_count+m->virtual_stack_count<=5;
     if (m->cls == PR_MOD_SWITCH_EFFECT_TRANSFER) return !m->unknown_subclass && m->stack_count==1 && m->virtual_stack_count==0;
     if (m->cls == PR_MOD_TURN_HELD_TRANSFER) return !m->unknown_subclass && m->stack_count==1 && m->virtual_stack_count==0;
+    if (m->cls == PR_MOD_EVO_TRACKER)
+        return !m->unknown_subclass && !m->is_transferable && m->n_species == 1
+            && m->species[0] == SPECIES_ID_GIMMIGHOUL && m->num == 10
+            && m->stack_count >= 1 && m->virtual_stack_count >= 0
+            && (int64_t)m->stack_count + m->virtual_stack_count <= 999;
     if (m->cls == PR_MOD_BASE_STAT_TOTAL)
         return !m->unknown_subclass && m->pokemon_id >= 0 && m->stack_count >= 1 && m->stack_count <= 2
             && m->virtual_stack_count == 0 && (m->num == 10 || m->num == -15);

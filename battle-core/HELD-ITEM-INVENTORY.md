@@ -21,7 +21,7 @@ Pickup, broader item identities and full interactions remain open.
 | --- | --- | --- |
 | `LapsingPokemonHeldItemModifier` (abstract) | No C class | Lapsing held-item lifecycle; no concrete subclass at this pin |
 | `BaseStatModifier` | `PR_MOD_BASE_STAT`; `pr_apply_base_stat_modifiers` helper | Full-turn fixtures/whitelist; vitamin stats themselves already implemented |
-| `EvoTrackerModifier` | No C class | Evolution tracker/persistent treasure lifecycle; upstream apply itself is a no-op returning true |
+| `EvoTrackerModifier` | `PR_MOD_EVO_TRACKER`; canonical nontransferable Gimmighoul coins, money acquisition, primary evolution and saves | [Native acquisition/primary evolution evidence](../game-core/EVO-TRACKER-VALIDATION.md); fusion evolution selection remains open |
 | `PokemonBaseStatTotalModifier` | `PR_MOD_BASE_STAT_TOTAL`; base-stat helper | Full-turn fixtures/whitelist |
 | `PokemonBaseStatFlatModifier` | `PR_MOD_BASE_STAT_FLAT`; base-stat helper | Full-turn fixtures/whitelist |
 | `PokemonIncrementingStatModifier` | `PR_MOD_INCREMENTING_STAT`; `pr_apply_incrementing_stat_modifier` helper | Full-turn fixtures/whitelist |

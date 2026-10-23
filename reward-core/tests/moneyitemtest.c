@@ -95,10 +95,19 @@ static void selftest(void)
     GUARD(n_items, -1); GUARD(n_items, PR_REWARD_MAX_OWNED + 1);
     GUARD(party[0].species, 0); GUARD(party[0].species, PR_SPECIES_COUNT);
     GUARD(party[0].fusion_species, 0); GUARD(party[0].fusion_species, -2); GUARD(party[0].fusion_species, PR_SPECIES_COUNT);
-    GUARD(party[0].species, SPECIES_ID_GIMMIGHOUL); GUARD(party[0].fusion_species, SPECIES_ID_GIMMIGHOUL);
 #undef GUARD
-    c = fixture(); c.n_party = 2; c.party[1] = c.party[0]; c.party[1].fusion_species = SPECIES_ID_GIMMIGHOUL; refusal(c, PR_ITEM_BIG_NUGGET, 10);
-    c = fixture(); c.n_party = 2; c.party[1] = c.party[0]; c.party[1].species = SPECIES_ID_GIMMIGHOUL; refusal(c, PR_ITEM_RELIC_GOLD, 10);
+    /* Retain all four former Gimmighoul guard inputs as admitted additions. */
+    for (int variant = 0; variant < 4; variant++) {
+        c = fixture(); int owner = variant < 2 ? 0 : 1;
+        if (owner) {c.n_party = 2; c.party[1] = c.party[0];}
+        if (variant == 0 || variant == 3) c.party[owner].species = SPECIES_ID_GIMMIGHOUL;
+        else c.party[owner].fusion_species = SPECIES_ID_GIMMIGHOUL;
+        double balance = 10; pr_reward_money_item_result added;
+        const int item = variant < 2 ? PR_ITEM_NUGGET : variant == 2 ? PR_ITEM_BIG_NUGGET : PR_ITEM_RELIC_GOLD;
+        if (!pr_reward_apply_money_item(&c,item,&balance,&added) || balance <= 10
+            || added.tracker_stacks[owner] != (variant < 2 ? 1 : variant == 2 ? 2 : 3)) die("Gimmighoul addition");
+        guards++;
+    }
 #define ITEM_GUARD(field, value) do { c = fixture(); c.n_items = 1; c.items[0] = (pr_owned_item){.item = PR_ITEM_AMULET_COIN, .owner = -1, .stack = 1}; c.items[0].field = value; refusal(c, PR_ITEM_NUGGET, 10); } while (0)
     ITEM_GUARD(item, PR_ITEM_COUNT_); ITEM_GUARD(owner, 0); ITEM_GUARD(owner, -2); ITEM_GUARD(arg, 1);
     ITEM_GUARD(battle_count, 1); ITEM_GUARD(stack, 0); ITEM_GUARD(stack, -1); ITEM_GUARD(stack, 6);

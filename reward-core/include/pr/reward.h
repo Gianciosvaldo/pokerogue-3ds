@@ -565,14 +565,14 @@ bool pr_reward_lapse_temp_boosters(pr_reward_ctx *ctx, int *expired);
 
 /* Task 96 bounded Nugget/Big Nugget/Relic Gold monetary application.
  * Caller guarantees ordinary nonvirtual inventories and owns UI/MoneyAchv,
- * phase purchases, and persistence. Primary/fused Gimmighoul is unsupported:
- * its real apply additionally creates an EvoTracker and refreshes modifiers.
+ * phase purchases, and persistence. Primary/fused Gimmighoul additions are reported in tracker_stacks:
+ * the caller must add those trackers, handle full stacks and refresh modifiers.
  * Waves1..10000, finite balance0..MAX_SAFE_INTEGER, Amulet stacks1..5/global.
  * Applies each Amulet object in list order; no Happy Hour. Successful calls
  * leave ctx unchanged, cap balance and report nominal amount/actual credit.
  * True includes zero credit at cap. Refusals leave all arguments unchanged.
  * Generic pr_reward_apply has no money transport and remains separate. */
-typedef struct { double amount, credited; } pr_reward_money_item_result;
+typedef struct { double amount, credited; uint8_t tracker_stacks[PR_REWARD_MAX_PARTY]; } pr_reward_money_item_result;
 bool pr_reward_apply_money_item(const pr_reward_ctx *ctx, int item, double *money,
                                pr_reward_money_item_result *result);
 

@@ -34,8 +34,9 @@ int main(void){const char *why;const char *keys[]={"NUGGET","BIG_NUGGET","RELIC_
  }
  setup();run.money=1000;screen(offer("RELIC_GOLD",0));gc_choice pick={GC_CH_REWARD,0,-1,-1};CHECK(gc_run_choose(&run,&pick,&why));CHECK(run.screen.kind==GC_SCREEN_COMMAND&&run.n_items==0);
  for(int fused=0;fused<2;fused++){setup();if(fused)run.party[0].b.fusion_species=SPECIES_ID_GIMMIGHOUL;else run.party[0].b.species=SPECIES_ID_GIMMIGHOUL;
-  gc_offer o=offer("NUGGET",0);double before=run.money;CHECK(gc_reward_apply(&run,&o,-1,-1,&why)==GC_APPLY_UNHANDLED);CHECK(run.money==before);
-  CHECK(gc_port_apply_reward(&run,&o,-1,-1,&why));CHECK(run.stubs[GC_STUB_REWARD_APPLY]==1&&run.money==before&&run.n_items==1);
+  gc_offer o=offer("NUGGET",0);double before=run.money;CHECK(gc_reward_apply(&run,&o,-1,-1,&why)==GC_APPLY_DONE);CHECK(run.money>before);
+  CHECK(run.n_items==1&&!strcmp(run.items[0].key,"EVOLUTION_TRACKER_GIMMIGHOUL")&&run.items[0].stack==1);
+  CHECK(gc_port_apply_reward(&run,&o,-1,-1,&why));CHECK(run.stubs[GC_STUB_REWARD_APPLY]==0&&run.money>before&&run.n_items==1&&run.items[0].stack==2);
  }
  setup();run.party[0].b.species=SPECIES_ID_GHOLDENGO;gc_offer o=offer("NUGGET",0);CHECK(gc_port_apply_reward(&run,&o,-1,-1,&why)&&run.n_items==0);
  for(int guard=0;guard<11;guard++){setup();double before=run.money;
