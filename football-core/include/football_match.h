@@ -4,6 +4,7 @@
 #include "football_stats.h"
 #include "football_contact.h"
 #include "football_defense.h"
+#include "football_pass.h"
 #include "playcall_ui.h"
 #define FB_MATCH_TEAM_CAP 6
 #define FB_PLAY_ANIMATION_MS 700
@@ -22,6 +23,8 @@ typedef struct {
     uint8_t carrier, blocker, rusher, tackler; /* 255: no separate blocker. */
     FootballBlockResult blocking;
     FootballContactResult contact;
+    FootballPassReport pass_report;
+    uint8_t coverer;
     FootballDefenseId defense;
     bool manual_defense; /* Mode UI opts in; headless engines can retain automatic defense. */
 } FootballMatch;

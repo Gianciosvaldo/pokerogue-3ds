@@ -302,6 +302,8 @@ static void draw(ui_screen *s,rr_screen which)
             else if (m->contact.broken) text(12,148,"Broken tackle: extra yards",.42f);
             else if (m->contact.attempted) text(12,148,m->contact.big_hit ? "Big hit" : "Tackled",.42f);
             if (m->blocking.pancake) text(12,172,"Pancake block",.42f);
+            else if(m->pass_report.attempted)text(12,172,m->pass_report.pressure>=65 ? "QB under pressure" :
+                m->pass_report.separation>=65 ? "Receiver found space" : "Contested passing lane",.4f);
         }
     } else {
         const char *title=F.mode.phase==FB_MODE_ROUND ? "Ready for the next match" :

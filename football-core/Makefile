@@ -60,7 +60,7 @@ shop-render-test: core-libs
 	$(BUILD)/shop_render_test
 test: shop-render-test
 
-MATCH_SRCS = src/football_rules.c src/football_match.c src/football_playbook.c src/football_contact.c src/football_defense.c
+MATCH_SRCS = src/football_rules.c src/football_match.c src/football_playbook.c src/football_contact.c src/football_defense.c src/football_pass.c
 .PHONY: rules-test match-test
 rules-test: $(BUILD)/rules_test
 	$(BUILD)/rules_test
@@ -140,3 +140,11 @@ $(BUILD)/defense_test: tests/defense_test.c $(MATCH_SRCS) src/football_stats.c i
 	mkdir -p $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/defense_test.c $(MATCH_SRCS) src/football_stats.c ../battle-core/gen/out/pr_data.c -lm -o $@
 test: defense-test
+
+.PHONY: pass-test
+pass-test: $(BUILD)/pass_test
+	$(BUILD)/pass_test
+$(BUILD)/pass_test: tests/pass_test.c src/football_pass.c src/football_playbook.c src/football_defense.c include/football_pass.h
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/pass_test.c src/football_pass.c src/football_playbook.c src/football_defense.c -o $@
+test: pass-test

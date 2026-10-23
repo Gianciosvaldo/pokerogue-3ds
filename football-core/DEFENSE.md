@@ -11,7 +11,7 @@ arcade squads. Man provides balanced run support and coverage; Zone lowers
 completion odds and improves interceptions at the expense of run space and rush;
 Blitz raises sack pressure but exposes passing gaps. These are initial bounded
 probability/gain modifiers, not a simulation of eleven-player coverage zones.
-More detailed route/coverage/separation resolution is subsequent work.
+Route/coverage/separation resolution is documented in `PASSING.md`.
 
 When the player calls offense, the away defense is selected using down/distance
 and seeded variation. It does not inspect the named offensive play. When the
