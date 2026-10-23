@@ -32,6 +32,7 @@ typedef struct {
     unsigned shop_count;
     uint32_t wallet, rng;
     unsigned round, wins;
+    int8_t mega_slot; /* -1: none; selected afresh before each match. */
     FootballSeasonPhase phase;
 } FootballSeason;
 
@@ -39,6 +40,8 @@ bool football_season_new(FootballSeason *s, gc_run *roster, gc_system *profile,
                          const char *seed, uint32_t entropy);
 bool football_season_draft(FootballSeason *s, const gc_starter *team, int count,
                            const char **why);
+bool football_season_select_mega(FootballSeason *s, int slot);
+bool football_season_match_player(const FootballSeason *s, unsigned slot, FootballPlayer *out);
 bool football_season_start_match(FootballSeason *s, FootballMatchSpec *out);
 bool football_season_finish_match(FootballSeason *s, bool won, const char **why);
 /* Drain roster events before calling each frame. WAIT uses the existing gc_screen. */

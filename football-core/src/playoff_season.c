@@ -52,7 +52,7 @@ bool football_season_new(FootballSeason *s, gc_run *roster, gc_system *profile,
     if (!s || !roster) return false;
     memset(s,0,sizeof *s);
     s->roster=roster; s->rng=entropy ? entropy : 0x6d2b79f5u;
-    s->round=1; s->phase=FB_SEASON_DRAFT;
+    s->round=1; s->mega_slot=-1; s->phase=FB_SEASON_DRAFT;
     if (!football_stats_build_maxima(&s->maxima,pr_forms,PR_FORM_COUNT)) {
         s->phase=FB_SEASON_ERROR; return false;
     }
@@ -68,6 +68,25 @@ bool football_season_draft(FootballSeason *s, const gc_starter *team, int count,
     s->phase=FB_SEASON_READY;
     return true;
 }
+bool football_season_select_mega(FootballSeason *s,int slot)
+{
+    if (!s || !s->roster || s->phase!=FB_SEASON_READY || slot< -1 ||
+        slot>=s->roster->n_party || (slot>=0 && !gc_football_owned_mega(s->roster,(unsigned)slot))) return false;
+    s->mega_slot=(int8_t)slot;return true;
+}
+bool football_season_match_player(const FootballSeason *s,unsigned slot,FootballPlayer *out)
+{
+    if (!s || !s->roster || !out || slot>=(unsigned)s->roster->n_party || slot>=FB_TEAM_CAP) return false;
+    FootballPlayer player=s->players[slot];
+    if ((int)slot==s->mega_slot) {
+        const pr_form *form=gc_football_owned_mega(s->roster,slot);
+        if (!form || !football_stats_generate(&player,player.roster_id,form,&s->maxima)) return false;
+        player.attributes.spd=boost(player.attributes.spd,s->speed_boost[slot]);
+        player.attributes.str=boost(player.attributes.str,s->strength_boost[slot]);
+        player.position=football_stats_best_position(&player);
+    }
+    *out=player;return true;
+}
 bool football_season_start_match(FootballSeason *s, FootballMatchSpec *out)
 {
     if (!s || !out || s->phase!=FB_SEASON_READY) return false;
@@ -78,6 +97,7 @@ bool football_season_start_match(FootballSeason *s, FootballMatchSpec *out)
 bool football_season_finish_match(FootballSeason *s, bool won, const char **why)
 {
     if (!s || s->phase!=FB_SEASON_MATCH) return false;
+    s->mega_slot=-1; /* Match-only copy expires before EXP/evolution. */
     if (!won) { s->phase=FB_SEASON_ELIMINATED; return true; }
     if (!gc_football_award_exp(s->roster,s->round,why)) {
         s->phase=FB_SEASON_ERROR; return false;

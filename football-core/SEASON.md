@@ -37,9 +37,9 @@ Every shop offers Carbos and Protein, each sold once, adding two SPD or STR
 (up to +20 per attribute and the overall cap 99). These are football-mode effects;
 they do not invoke the classic vitamin purchase path, whose pinned behavior has
 separate semantics. The wallet is football-only. A deterministic 10% roll can add
-a compatible mega/primal item from the existing form-change item catalog. Purchase
-installs it in the existing held-item inventory; activation belongs to the engine's
-form-change handling and is not implemented as an automatic evolution here.
+a compatible mega item from the existing form-change item catalog. Purchase
+installs it in the existing held-item inventory; explicit match-only activation
+is documented in `MEGA.md`. This does not trigger a permanent evolution.
 An owned form-change item cannot be bought twice for that holder.
 
 `football_shop_asset_key` and each offer's `classic_arg` identify the existing
