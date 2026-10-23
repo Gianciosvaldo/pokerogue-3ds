@@ -973,3 +973,10 @@ evo-tracker-turn-host-test: $(BUILD)/evo_tracker_turn_host_test
 	$<
 test: evo-tracker-turn-host-test
 .PHONY: evo-tracker-turn-host-test
+
+$(BUILD)/held_lock_host_test: tests/held_lock_host_test.c tests/doubles_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+held-lock-host-test: $(BUILD)/held_lock_host_test
+	$< tests/fixtures/held-lock.native.txt
+test: held-lock-host-test
+.PHONY: held-lock-host-test

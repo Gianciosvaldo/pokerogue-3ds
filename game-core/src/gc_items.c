@@ -4,6 +4,17 @@
  * as a plain held item or persistent modifier, which battle-core reports where it would matter. */
 #include "internal.h"
 
+/* Constructor properties survive native ModifierData reconstruction even when
+ * a legacy save did not record them. This does not admit the item's effects. */
+bool gc_item_key_locked(const char *key)
+{
+    return !strcmp(key, "FORM_CHANGE_ITEM") || !strcmp(key, "RARE_FORM_CHANGE_ITEM")
+        || !strcmp(key, "BASE_STAT_BOOSTER") || !strcmp(key, "EVOLUTION_TRACKER_GIMMIGHOUL")
+        || !strcmp(key, "MYSTERY_ENCOUNTER_SHUCKLE_JUICE")
+        || !strcmp(key, "MYSTERY_ENCOUNTER_OLD_GATEAU")
+        || !strcmp(key, "MYSTERY_ENCOUNTER_MACHO_BRACE");
+}
+
 int gc_item_stack(const gc_run *run, const char *key)
 {
     int n = 0;
@@ -17,7 +28,7 @@ void gc_item_add(gc_run *run, const char *key, int16_t arg, uint32_t pokemon_id,
 {
     for (int i = 0; i < run->n_items; i++) {
         gc_item *it = &run->items[i];
-        if (!strcmp(it->key, key) && it->arg == arg && it->pokemon_id == pokemon_id && !it->eviolite_base) { it->stack += stack; return; }
+        if (!strcmp(it->key, key) && it->arg == arg && it->pokemon_id == pokemon_id && !it->eviolite_base) { it->stack += stack; it->non_transferable |= gc_item_key_locked(key); return; }
     }
     if (run->n_items >= PR_MAX_MODIFIERS) {pr_note_unported(&run->bt,PR_FEAT_ENGINE_LIMIT);return;}
     gc_item *it = &run->items[run->n_items++];
@@ -27,7 +38,7 @@ void gc_item_add(gc_run *run, const char *key, int16_t arg, uint32_t pokemon_id,
     it->detached = false;
     it->virtual_stack = 0;
     it->battle_count = 0;
-    it->non_transferable = !strcmp(key, "EVOLUTION_TRACKER_GIMMIGHOUL");
+    it->non_transferable = gc_item_key_locked(key);
     it->type_tier = 0;
     it->type_ref = 0;
     it->loot_ref = 0;
@@ -105,7 +116,7 @@ static void to_modifier(const gc_item *it, pr_modifier *m, bool golden)
     memset(m, 0, sizeof *m);
     m->stack_count = it->stack;
     m->pokemon_id = it->detached ? 0 : it->pokemon_id ? (int64_t)it->pokemon_id : -1;
-    m->is_transferable = !it->non_transferable;
+    m->is_transferable = !it->non_transferable && !gc_item_key_locked(it->key);
     m->type_tier = it->type_tier;
     m->type_ref = it->type_ref;
     m->loot_ref = it->loot_ref;
@@ -608,7 +619,7 @@ int gc_item_transfer(gc_run *run, int item_idx, int to, int qty)
     gc_item src = run->items[item_idx];
     const uint32_t to_id = run->party[to].b.id;
     if (!src.pokemon_id || src.pokemon_id == to_id || src.non_transferable
-        || !strcmp(src.key, "EVOLUTION_TRACKER_GIMMIGHOUL") || src.stack <= 0) return 0;
+        || gc_item_key_locked(src.key) || src.stack <= 0) return 0;
     int match = -1;
     for (int i = 0; i < run->n_items; i++)
         if (i != item_idx && run->items[i].pokemon_id == to_id && !strcmp(run->items[i].key, src.key) && run->items[i].arg == src.arg) {
@@ -649,7 +660,7 @@ int gc_item_discard(gc_run *run, int item_idx, int count)
 {
     if (!run || item_idx < 0 || item_idx >= run->n_items || count <= 0) return 0;
     gc_item *it = &run->items[item_idx];
-    if (!it->pokemon_id || it->non_transferable || !strcmp(it->key, "EVOLUTION_TRACKER_GIMMIGHOUL") || it->stack <= 0) return 0;
+    if (!it->pokemon_id || it->non_transferable || gc_item_key_locked(it->key) || it->stack <= 0) return 0;
     const int taken = count < it->stack ? count : it->stack;
     it->stack -= taken;
     if (!it->stack) gc_item_remove_at(run, item_idx);

@@ -93,3 +93,7 @@ Hardware/emulator acceptance is separate from source parity and a passing build.
 Gimmighoul canonical EvoTracker acquisition, class admission, primary evolution
 and persistence now have [native owner evidence](../game-core/EVO-TRACKER-VALIDATION.md).
 General fusion evolution selection remains an explicitly open caller prerequisite.
+
+[Constructor-lock transport](../game-core/HELD-LOCK-VALIDATION.md) now preserves
+source locks in acquisition, projection and save reconstruction. This does not
+close the remaining held-form activation or incrementing-stat owners.

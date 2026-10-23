@@ -774,7 +774,7 @@ static bool get_items(const reader *body, const char *name, gc_item *items, int 
         uint8_t lock;
         memcpy(&lock, &sv[i].non_transferable, sizeof lock);
         if (lock > 1) return false;
-        items[i].non_transferable = lock != 0;
+        items[i].non_transferable = lock != 0 || gc_item_key_locked(items[i].key);
         uint8_t base_class;memcpy(&base_class,&sv[i].eviolite_base,sizeof base_class);
         if(base_class>1||(base_class&&strcmp(items[i].key,"EVIOLITE")))return false;
         items[i].eviolite_base=base_class!=0;
