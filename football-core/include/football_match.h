@@ -23,6 +23,10 @@ typedef struct {
     uint8_t carrier, blocker, rusher, tackler; /* 255: no separate blocker. */
     FootballBlockResult blocking;
     FootballContactResult contact;
+    FootballRecoveryResult recovery;
+    FootballContactTactic home_tactic,used_tactic;
+    bool home_dive,used_dive;
+    uint8_t recoverer;
     FootballPassReport pass_report;
     uint8_t coverer;
     FootballDefenseId defense;
@@ -36,6 +40,7 @@ unsigned football_match_quarterback(const FootballMatch *match, FootballSide sid
 bool football_match_waiting_for_home(const FootballMatch *match);
 bool football_match_waiting_for_defense(const FootballMatch *match);
 bool football_match_defend(FootballMatch *match, FootballDefenseId defense);
+bool football_match_contact_choice(FootballMatch *match, FootballContactTactic tactic, bool dive);
 /* Accepts validated home calls only; missing target slots fall back to the best
  * receiver/runner, supporting every currently permitted draft size (1..6). */
 bool football_match_call(FootballMatch *match, PlayInfo play);

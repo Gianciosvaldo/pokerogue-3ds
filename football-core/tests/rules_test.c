@@ -64,5 +64,18 @@ int main(void)
         assert(r.finished==(drive+1==2*FB_OVERTIME_PAIRS));
     }
     assert(r.last.tiebreak && r.winner==FB_AWAY && r.score[1]==2 && r.down<=4);
+    assert(football_rules_begin(&r,FB_HOME));r.ball=40;r.first_down_at=50;
+    assert(football_rules_advance(&r,(FootballResolvedPlay){FB_RESULT_FUMBLE_RECOVERED,3,5}));
+    assert(r.offense==FB_HOME && r.down==2 && r.ball==43 && !r.last.turnover);
+    assert(football_rules_advance(&r,(FootballResolvedPlay){FB_RESULT_FUMBLE_RECOVERED,10,5}));
+    assert(r.down==1 && r.ball==53 && r.last.first_down);
+    r.ball=1;r.first_down_at=11;
+    assert(football_rules_advance(&r,(FootballResolvedPlay){FB_RESULT_FUMBLE_RECOVERED,-2,5}));
+    assert(r.last.safety && r.score[FB_AWAY]==2);
+    assert(football_rules_begin(&r,FB_HOME));r.ball=95;r.first_down_at=100;
+    assert(football_rules_advance(&r,(FootballResolvedPlay){FB_RESULT_FUMBLE_RECOVERED,5,5}));assert(r.last.touchdown && r.score[FB_HOME]==7);
+    assert(football_rules_begin(&r,FB_HOME));r.down=4;
+    assert(football_rules_advance(&r,(FootballResolvedPlay){FB_RESULT_FUMBLE_RECOVERED,1,5}));assert(r.last.turnover && r.offense==FB_AWAY);
+
     puts("football rules: downs, spots, turnovers, scoring, halftime, final-play scoring and bounded overtime passed");
 }

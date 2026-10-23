@@ -36,7 +36,8 @@ The outer football format has its own magic, strict version, explicit little
 endian integers, bounded counts, and CRC. It writes fields rather than pointers,
 enum representations or C struct padding. The roster payload independently has
 its own magic, version/API identity, CRC and named fields. Unknown/newer schema
-versions are rejected. Home identity/form/attributes must agree with the roster,
+versions are rejected. Outer version 2 adds runner/dive choices; version 1 match
+checkpoints migrate to Balanced / Standard without changing their saved RNG. Home identity/form/attributes must agree with the roster,
 mega choice and vitamin bonuses after load. All inputs are bounded before loops.
 
 The existing `save_write` provides checksum-protected temp/backup replacement.

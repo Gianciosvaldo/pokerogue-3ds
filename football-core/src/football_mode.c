@@ -138,10 +138,18 @@ void football_mode_input(FootballMode *m,FootballCallInput in,int target_step)
         } break;
     case FB_MODE_PLAY:
         if (football_match_waiting_for_home(&m->session.match)) {
+            if(target_step || hit((FootballTouchRect){20,188,280,20},in)) {
+                int step=target_step<0 ? -1 : 1;
+                FootballContactTactic choice=(FootballContactTactic)((m->session.match.home_tactic+FB_CONTACT_COUNT+step)%FB_CONTACT_COUNT);
+                football_match_contact_choice(&m->session.match,choice,m->session.match.home_dive);break;
+            }
             football_playcall_update(&m->playcall,in);
             PlayInfo play;
             if (football_playcall_take(&m->playcall,&play) && !football_match_call(&m->session.match,play)) error(m,"Playcall refused.");
         } else if(football_match_waiting_for_defense(&m->session.match)) {
+            if(target_step || hit((FootballTouchRect){20,204,280,20},in)) {
+                football_match_contact_choice(&m->session.match,m->session.match.home_tactic,!m->session.match.home_dive);break;
+            }
             football_defense_update(&m->defense,in);FootballDefenseId call;
             if(football_defense_take(&m->defense,&call) && !football_match_defend(&m->session.match,call))error(m,"Defense call refused.");
         } break;

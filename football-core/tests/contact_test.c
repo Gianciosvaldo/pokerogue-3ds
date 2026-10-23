@@ -46,5 +46,20 @@ int main(void)
         assert(hit.impact>=1 && hit.impact<=99 && hit.extra_yards<=7);
         assert(!hit.broken || (!hit.fumble && hit.extra_yards>0));
     }
+    FootballContactResult standard,juke,dive;
+    assert(football_contact_tactical(&standard,&equal,&equal,false,FB_CONTACT_BALANCED,false,99,99));
+    assert(football_contact_tactical(&juke,&equal,&equal,false,FB_CONTACT_JUKE,false,99,99));
+    assert(juke.tackle_chance<standard.tackle_chance);
+    assert(football_contact_tactical(&dive,&equal,&equal,false,FB_CONTACT_BALANCED,true,99,99));
+    assert(dive.tackle_chance>standard.tackle_chance && dive.extra_yards>standard.extra_yards && dive.impact>standard.impact);
+    saved_hit=hit;assert(!football_contact_tactical(&hit,&equal,&equal,false,FB_CONTACT_COUNT,false,0,0));assert(!memcmp(&hit,&saved_hit,sizeof hit));
+    FootballRecoveryResult recovery={0},saved_recovery=recovery;
+    assert(!football_contact_recover(&recovery,&equal,&equal,100) && !memcmp(&recovery,&saved_recovery,sizeof recovery));
+    unsigned strong_recoveries=0,weak_recoveries=0;
+    for(unsigned roll=0;roll<100;++roll) {
+        assert(football_contact_recover(&recovery,&strong,&weak,roll));strong_recoveries+=recovery.offense_keeps;
+        assert(football_contact_recover(&recovery,&weak,&strong,roll));weak_recoveries+=recovery.offense_keeps;
+    }
+    assert(strong_recoveries>weak_recoveries && weak_recoveries>0 && strong_recoveries<100);
     puts("football contact: atomic guards, engagement/pancake, catch vulnerability, broken tackles, fumbles and all rating pairs passed");
 }

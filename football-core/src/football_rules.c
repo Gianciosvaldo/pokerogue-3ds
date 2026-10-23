@@ -37,7 +37,7 @@ unsigned football_rules_distance(const FootballRules *r)
 }
 bool football_rules_advance(FootballRules *out, FootballResolvedPlay p)
 {
-    if (!out || out->finished || (unsigned)p.kind>FB_RESULT_SACK || p.yards< -20 || p.yards>100 ||
+    if (!out || out->finished || (unsigned)p.kind>FB_RESULT_FUMBLE_RECOVERED || p.yards< -20 || p.yards>100 ||
         !p.seconds || p.seconds>30 || out->offense>FB_AWAY || out->down<1 || out->down>4 ||
         !out->ball || out->ball>=100 || out->first_down_at<=out->ball || out->first_down_at>100 ||
         out->quarter<1 || out->quarter>5 || out->tiebreak_side>FB_AWAY ||

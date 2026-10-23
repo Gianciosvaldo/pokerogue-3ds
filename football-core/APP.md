@@ -15,7 +15,8 @@ navigate; B returns one menu level. Each formation/type offers two plays, with a
 short risk/gain description before selection (see `PLAYBOOK.md`). Only new action presses are used, so holding A does not accidentally
 call a play. When the opponent has possession, choose Man Coverage, Zone Coverage or Blitz
 on the bottom screen before its snap. The opponent calls its own offensive plays
-and defense. Playcalling is disabled while a snap is running. See `DEFENSE.md`. The match-result screen
+and defense. Playcalling is disabled while a snap is running. See `DEFENSE.md`. Use Left/Right or the contact/tackle row to select runner tactics or defensive
+dives before a snap (`TACTICS.md`). The match-result screen
 requires acknowledgement before team progression begins.
 
 EXP and level-up messages are acknowledged with A (or the Continue button).
