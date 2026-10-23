@@ -22,9 +22,11 @@
 #include "run_settings.h"
 #include "slot_screen.h"
 #include "starter_host.h"
+#include "football_screen.h"
 #include "system_data.h"
 #include "title_screen.h"
 #include "ui.h"
+#include "ui_widgets.h"
 #include "win_gains.h"
 
 static struct {
@@ -349,6 +351,20 @@ static void on_settings_start(const rset_values* v, void* arg) {
   if (A.custom && !cr_usable(why)) tell_custom_unusable(why);
 }
 
+static void on_football_exit(void *arg) { (void)arg;show_title(); }
+static bool football_profile_save(void *arg) { (void)arg;return sysd_save(); }
+static void show_football(void) {
+  football_screen_args cfg={.profile=sysd_get(),
+    .entropy=A.first.entropy ^ (++A.runs_started*0x9e3779b1u) ^ ui_frame(),
+    .on_exit=on_football_exit,.save_profile=football_profile_save,
+    .profile_notice=sysd_state(NULL)==SYSD_UNREADABLE ?
+      "The profile cannot be read. Default starters are used and profile changes will not be saved." : NULL};
+  if (!football_screen_open(&cfg)) {
+    static const char *const failed[]={"Football could not start. Check memory and starter unlocks."};
+    ui_push_options(failed,1,true,NULL,NULL);
+  }
+}
+
 static void on_title(title_choice c, void* arg) {
   (void)arg;
   switch (c) {
@@ -375,6 +391,9 @@ static void on_title(title_choice c, void* arg) {
       break;
     case TITLE_CAPSULE:
       show_gacha();
+      break;
+    case TITLE_FOOTBALL:
+      show_football();
       break;
   }
 }

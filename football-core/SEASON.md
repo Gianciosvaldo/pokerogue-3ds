@@ -14,8 +14,8 @@ The six-slot roster matches the current port's party capacity; eleven-player
 rosters would require a separate roster/evolution extension. Costs, profile
 unlocks, discounts and budget use the same classic starter functions. This run
 must not also be passed to classic battle setup, `gc_run_set_starters`,
-`gc_run_choose`, or classic save/load. Football save serialization and a main-menu
-entry are not implemented by this module.
+`gc_run_choose`, or classic save/load. The main-menu entry and app screen are described in `APP.md`; football save
+serialization is not implemented.
 
 The narrow `game-core/src/gc_football.c` adapter reuses the existing EXP, level-up,
 move-learning and evolution phases without starting a classic battle. Drain

@@ -57,6 +57,10 @@ static bool on_start(void* ctx, const uint16_t* species, int n) {
     starter_message(text);
     return false;
   }
+  if (H.ev.validate_team && !H.ev.validate_team(team,n,H.ev.arg,&why)) {
+    starter_message(why && *why ? why : "This team cannot enter this mode.");
+    return false;
+  }
   if (H.ev.on_start) H.ev.on_start(team, n, H.ev.arg);
   return true;
 }

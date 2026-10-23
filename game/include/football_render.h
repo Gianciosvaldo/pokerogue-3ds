@@ -29,6 +29,8 @@ typedef struct {
 /* After rr_init; renderer should be static/heap, zero initialized.
  * Caller frees it before rr_exit. Loading happens only between matches. */
 bool football_render_init(FootballRenderer *renderer);
+/* Synchronize GPU work before clearing/reloading borrowed sprite textures. */
+void football_render_clear_sprites(FootballRenderer *renderer);
 void football_render_free(FootballRenderer *renderer);
 bool football_render_load_front(FootballRenderer *renderer, unsigned slot,
                                 const menu_mon *mon);

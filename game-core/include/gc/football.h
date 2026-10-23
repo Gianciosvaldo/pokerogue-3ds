@@ -8,6 +8,7 @@ typedef enum { GC_FB_BUSY, GC_FB_WAIT, GC_FB_DONE, GC_FB_ERROR } gc_football_pro
 /* Caller owns a dedicated gc_run, kept static or on the heap, not the stack.
  * Do not pass a classic run or use gc_run_choose on this isolated queue. */
 void gc_football_new(gc_run *run, gc_system *profile, const char *seed, uint32_t entropy);
+bool gc_football_validate_draft(const gc_system *profile, const gc_starter *team, int count, const char **why);
 bool gc_football_draft(gc_run *run, const gc_starter *team, int count, const char **why);
 bool gc_football_award_exp(gc_run *run, unsigned round, const char **why);
 /* Drain gc_run_next_event between ticks. Work is bounded to 8 phases/tick. */

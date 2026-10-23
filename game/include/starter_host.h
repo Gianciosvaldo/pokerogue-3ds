@@ -26,6 +26,8 @@ typedef struct {
   void (*on_exit)(void* arg);
   void* arg;
   bool (*save_profile)(void* arg); /* NULL: sysd_save; injectable for host tests */
+  /* Optional mode-specific validator, before accepting or leaving the selector. */
+  bool (*validate_team)(const gc_starter* team, int n, void* arg, const char** why);
 } sh_events;
 
 /* Shows the screen (the UI fades to it, replacing the one on top) with the species `sys` has caught. `notice` (may be NULL) is a

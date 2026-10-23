@@ -21,10 +21,16 @@ bool football_render_init(FootballRenderer *r)
     r->text=C2D_TextBufNew(512);
     return r->text!=NULL;
 }
-void football_render_free(FootballRenderer *r)
+void football_render_clear_sprites(FootballRenderer *r)
 {
     if (!r) return;
     for (unsigned i=0;i<FB_RENDER_ACTOR_CAP;++i) menu_sprite_free(&r->sprites[i]);
+    memset(r->sprite_bytes,0,sizeof r->sprite_bytes);r->total_sprite_bytes=0;
+}
+void football_render_free(FootballRenderer *r)
+{
+    if (!r) return;
+    football_render_clear_sprites(r);
     if (r->text) C2D_TextBufDelete(r->text);
     memset(r,0,sizeof *r);
 }
