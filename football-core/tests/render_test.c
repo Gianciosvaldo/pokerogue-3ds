@@ -98,6 +98,8 @@ int main(void)
     scene.actors[0].movement_x=1;
     football_render_frame(&renderer,&scene,&ui);
     assert(uv.left==0); /* Movement overrides away-team default. */
+    FootballDefenseMenu defense={.selected=FB_DEF_BLITZ};
+    football_render_defense_bottom(&renderer,&defense);
     FootballEvolutionMenu evolution;
     const uint16_t options[]={SPECIES_ID_NINJASK,SPECIES_ID_SHEDINJA};
     assert(football_evolution_open(&evolution,options,2));

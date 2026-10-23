@@ -16,6 +16,7 @@
  *   body:    sections: u32 name hash | u32 length | its blocks
  *   block:   u16 n | n x (u32 field name hash, u16 size) | u16 count | count x the fields' bytes in order */
 #include "internal.h"
+#include "gc/football.h"
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1051,6 +1052,63 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     gc_rq_push(run, gc_rp(RP_TURN_INIT, 0, 0, 0));
     gc_run_until_screen(run);
     return true;
+}
+
+/* Football checkpoints reuse named Pokemon/item fields, without relaxing the
+ * classic battle save gate or reconstructing a Pokemon battle on load. */
+typedef struct { int32_t wave,trainer,secret,n_party,n_items; pr_rng rng; uint16_t seed[64],wave_seed[64],seed_len,wave_seed_len; } sv_football;
+static const sfield football_fields[]={SF(sv_football,wave),SF(sv_football,trainer),SF(sv_football,secret),
+    SF(sv_football,n_party),SF(sv_football,n_items),SF(sv_football,rng),SF(sv_football,seed),SF(sv_football,wave_seed),SF(sv_football,seed_len),SF(sv_football,wave_seed_len)};
+size_t gc_football_roster_save(const gc_run *run,void *buf,size_t cap)
+{
+    if (!run || !buf || cap<20 || !little_endian() || run->in_battle || run->n_party<1 || run->n_party>6 ||
+        run->n_items<0 || run->n_items>GC_MAX_ITEMS || run->screen.kind!=GC_SCREEN_NONE) return 0;
+    const gc_rqueue *q=&gc_int((gc_run *)run)->rq;
+    if (q->waiting || q->current.type!=RP_NONE || run->ev_count || run->ev_overflow) return 0;
+    for (int i=0;i<q->n_levels;++i) if (q->n[i]) return 0;
+    sv_football v={0};v.wave=run->wave;v.trainer=run->trainer_id;v.secret=run->secret_id;
+    v.n_party=run->n_party;v.n_items=run->n_items;v.rng=run->run.rng;
+    memcpy(v.seed,run->run.seed.u,sizeof v.seed);memcpy(v.wave_seed,run->run.wave_seed.u,sizeof v.wave_seed);
+    v.seed_len=(uint16_t)run->run.seed.len;v.wave_seed_len=(uint16_t)run->run.wave_seed.len;
+    writer w={(uint8_t *)buf,0,cap,false};
+    put(&w,"PRFBROST",8);put16(&w,1);put16(&w,GC_API_VERSION);put32(&w,0);put32(&w,0);
+    size_t section=section_start(&w,"football");
+    put_block(&w,football_fields,NF(football_fields),&v,sizeof v,1);section_end(&w,section);
+    put_mons(&w,"party",run->party,run->n_party);put_items(&w,"items",run->items,run->n_items);
+    if (w.full) return 0;
+    uint32_t length=(uint32_t)(w.n-20),crc=crc32(w.p+20,length);
+    memcpy(w.p+12,&length,4);memcpy(w.p+16,&crc,4);return w.n;
+}
+bool gc_football_roster_load(gc_run *run,gc_system *profile,const void *buf,size_t len)
+{
+    if (!run || !buf || !little_endian() || len<20 || len>GC_SAVE_MAX) return false;
+    const uint8_t *p=buf;uint16_t version,api;uint32_t length,crc;
+    memcpy(&version,p+8,2);memcpy(&api,p+10,2);memcpy(&length,p+12,4);memcpy(&crc,p+16,4);
+    if (memcmp(p,"PRFBROST",8) || version!=1 || api!=GC_API_VERSION || length!=len-20 || crc32(p+20,length)!=crc) return false;
+    reader body={p+20,length,0,false},r=section(&body,"football");sv_football v={0};int dropped=0;
+    if (r.bad || get_block(&r,football_fields,NF(football_fields),&v,sizeof v,1,&dropped)!=1 ||
+        r.bad || r.pos!=r.n || dropped || v.n_party<1 || v.n_party>6 || v.n_items<0 || v.n_items>GC_MAX_ITEMS ||
+        v.seed_len>64 || v.wave_seed_len>64 || v.wave<0 || v.wave>140 || !isfinite(v.rng.c) || !isfinite(v.rng.s0) || !isfinite(v.rng.s1) ||
+        !isfinite(v.rng.s2) || !isfinite(v.rng.n)) return false;
+    gc_football_new(run,profile,"football-resume",1);
+    run->wave=v.wave;run->trainer_id=v.trainer;run->secret_id=v.secret;run->run.rng=v.rng;
+    memcpy(run->run.seed.u,v.seed,sizeof v.seed);memcpy(run->run.wave_seed.u,v.wave_seed,sizeof v.wave_seed);
+    run->run.seed.len=v.seed_len;run->run.wave_seed.len=v.wave_seed_len;
+    run->n_party=v.n_party;run->n_items=v.n_items;
+    if (!get_mons(&body,"party",run->party,run->n_party,&dropped) ||
+        !get_items(&body,"items",run->items,run->n_items,&dropped) || dropped) return false;
+    for (int i=0;i<run->n_party;++i) {
+        if (!run->party[i].b.id) return false;
+        for (int j=0;j<i;++j) if (run->party[i].b.id==run->party[j].b.id) return false;
+        run->party_order[i]=(int8_t)i;run->bt.party[0][i]=&run->party[i].b;
+    }
+    for (int i=0;i<run->n_items;++i) {
+        const gc_item *it=&run->items[i];int slot=-1;
+        for(int j=0;j<run->n_party;++j)if(it->pokemon_id==run->party[j].b.id)slot=j;
+        if (slot<0 || it->stack!=1 || it->detached || strcmp(it->key,"FORM_CHANGE_ITEM") ||
+            !gc_football_mega_form(run,(unsigned)slot,it->arg)) return false;
+    }
+    run->bt.n_party[0]=run->n_party;run->screen.kind=GC_SCREEN_NONE;gc_items_to_battle(run);return true;
 }
 
 /* ---------------------------------------------------------------- system save/load */

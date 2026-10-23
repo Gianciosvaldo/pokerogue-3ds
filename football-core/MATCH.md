@@ -45,10 +45,13 @@ receiver and tackler selection also use the existing primary/secondary type
 positional-affinity matrix, with no extra attribute inflation.
 
 Run outcomes use speed/agility/strength, blocking strength and opposing tackling;
-pass outcomes use throwing power/accuracy, catching, receiver speed, protection
-and opposing tackling. Under Center adds run push and longer play-action gains
+pass outcomes use throwing power/accuracy, catching, route depth/read time,
+receiver separation, a dedicated coverer and protection (`PASSING.md`). Under Center adds run push and longer play-action gains
 with extra sack exposure; Shotgun improves passing completion probability.
-Fumbles, sacks, interceptions and incompletions are explicit outcomes. Balance
+Blocking matchups and carrier contacts are resolved by `football_contact.c`
+(see `CONTACT.md`). Broken tackles can add bounded yards, and fumbles can occur
+on runs or after a completed catch. Sacks, interceptions and incompletions remain
+explicit outcomes. Balance
 coefficients and probabilities are initial defaults, not a calibrated competitive
 model. Stamina controls fatigue; energy remains within 0–100, affects subsequent
 ratings, and partially recovers at possession breaks/halftime.
@@ -115,6 +118,6 @@ Rules and full-match replay also pass AddressSanitizer/UndefinedBehaviorSanitize
 The managed local debugger prevents LeakSanitizer, so leak detection was disabled
 only for the local run; these modules allocate no memory. CI runs both sanitizers
 with default leak settings and also runs the real 3DS build and stack checks.
-Football save serialization remains subsequent work. Match-only mega activation is documented in `MEGA.md`. The
+Dedicated football checkpoint serialization is documented in `SAVE.md`. Match-only mega activation is documented in `MEGA.md`. The
 app screen and its controls are documented in `APP.md`. Device visuals and performance still need
 hardware or emulator validation.

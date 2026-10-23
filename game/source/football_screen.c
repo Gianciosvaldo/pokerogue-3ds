@@ -1,5 +1,6 @@
 #include "football_screen.h"
 #include "football_mode.h"
+#include "football_saves.h"
 #include "football_playbook.h"
 #include "football_match_view.h"
 #include "football_shop_render.h"
@@ -18,7 +19,8 @@ static struct {
     FootballShopView shop_view;
     FootballRenderScene scene;
     gc_run *roster; /* Allocated once per entry; never on the main-thread stack. */
-    bool leaving, save_failed, exit_requested, defer_save;
+    bool leaving, save_failed, exit_requested, defer_save, save_blocked, defer_checkpoint;
+    uint64_t saved_token, attempted_token;
     unsigned assets_round;
     FootballModePhase previous;
     uint32_t input_frame, animation_ms;
@@ -26,7 +28,9 @@ static struct {
 } F;
 static ui_screen screen;
 static const char *const quit_options[]={"Keep playing","End playoff and return to title"};
-static const char *const unsaved_options[]={"Keep playing","Return without saving profile"};
+static const char *const saved_quit_options[]={"Keep playing","Save and return to title","Delete football save and return"};
+static const char *const delete_options[]={"Keep playoff","Delete football save"};
+static const char *const unsaved_options[]={"Keep playing","Return without saving latest changes"};
 
 static void dispose(void)
 {
@@ -46,20 +50,58 @@ static bool save_profile(void)
     if (F.args.save_profile && !F.args.save_profile(F.args.arg)) return false;
     F.mode.profile_dirty=false;return true;
 }
+static uint64_t checkpoint_token(void)
+{
+    const FootballSeason *s=&F.mode.season;
+    uint64_t token=1+(unsigned)F.mode.phase+32*s->round+512*(unsigned)(s->mega_slot+1);
+    token+=4096ull*F.mode.session.match.plays+4194304ull*s->wallet;
+    for(unsigned i=0;i<s->shop_count && i<FB_SHOP_CAP;++i)if(s->shop[i].sold)token^=1ull<<(56+i);
+    return token;
+}
+static bool save_all(void)
+{
+    if(!save_profile())return false;
+    if(F.args.persistence && !F.save_blocked) {
+        if(!football_save_ready(&F.mode) || !football_saves_write(&F.mode))return false;
+        F.saved_token=checkpoint_token();F.defer_checkpoint=false;
+    }
+    return true;
+}
+static void delete_answer(int option,void *arg)
+{
+    (void)arg;
+    if(option!=1)return;
+    if(!football_saves_clear()) {
+        static const char *const failed[]={"Football save could not be deleted. Try again."};
+        ui_push_options(failed,1,true,NULL,NULL);return;
+    }
+    depart();
+}
+static void not_ready(void)
+{
+    static const char *const wait[]={"Finish this play or team progression before saving."};
+    ui_push_options(wait,1,true,NULL,NULL);
+}
 static void attempt_exit(void)
 {
-    if (!save_profile()) { F.save_failed=true;F.exit_requested=true;return; }
+    if(F.mode.phase==FB_MODE_ERROR){depart();return;}
+    if(F.args.persistence && !F.save_blocked && !football_save_ready(&F.mode)) { not_ready();return; }
+    if (!save_all()) { F.save_failed=true;F.exit_requested=true;return; }
     depart();
 }
 static void quit_answer(int option,void *arg)
 {
     (void)arg;
     if (option==1) attempt_exit();
+    else if(option==2 && F.args.persistence) {
+        if(!F.save_blocked && !football_save_ready(&F.mode)){not_ready();return;}
+        ui_push_options(delete_options,2,true,delete_answer,NULL);
+    }
 }
 static void unsaved_answer(int option,void *arg)
 {
     (void)arg;
-    F.save_failed=false;F.exit_requested=false;F.defer_save=true;
+    F.save_failed=false;F.exit_requested=false;F.defer_save=true;F.defer_checkpoint=true;
     if (option==1) depart();
 }
 static bool validate_team(const gc_starter *team,int count,void *arg,const char **why)
@@ -90,6 +132,7 @@ static void draft_exit(void *arg)
 static void entered(ui_screen *s)
 {
     (void)s;
+    if(F.mode.phase==FB_MODE_SHOP)football_shop_prepare(&F.shop_view,&F.mode.season);
     if (!football_render_init(&F.renderer)) {
         F.mode.phase=FB_MODE_ERROR;
         snprintf(F.mode.message,sizeof F.mode.message,"Not enough graphics memory to start football.");
@@ -132,7 +175,12 @@ static void update(ui_screen *s,float dt)
         if (F.mode.phase!=FB_MODE_SHOP) F.defer_save=false;
         F.previous=F.mode.phase;
     }
-    if (F.mode.phase==FB_MODE_SHOP && !F.defer_save && !save_profile()) F.save_failed=true;
+    if(F.args.persistence && !F.save_blocked && football_save_ready(&F.mode)) {
+        uint64_t token=checkpoint_token();
+        if(token!=F.saved_token && (!F.defer_checkpoint || token!=F.attempted_token)) {
+            F.attempted_token=token;if(!save_all())F.save_failed=true;
+        }
+    } else if (!F.args.persistence && F.mode.phase==FB_MODE_SHOP && !F.defer_save && !save_profile()) F.save_failed=true;
     if (F.mode.session.match.teams[0].count)
         football_match_scene(&F.scene,&F.mode.session.match,&F.renderer,F.animation_ms);
 }
@@ -143,18 +191,18 @@ static bool dispatch(FootballCallInput input,int target_step,bool menu)
     F.input_frame=frame;
     if (F.save_failed) {
         if (input.pressed&FB_INPUT_ACCEPT) {
-            if (save_profile()) {
+            if (save_all()) {
                 F.save_failed=false;
                 if (F.exit_requested) depart();
             }
         } else if (input.pressed&FB_INPUT_BACK) {
             if (F.exit_requested) ui_push_options(unsaved_options,2,true,unsaved_answer,NULL);
-            else { F.save_failed=false;F.defer_save=true; }
+            else { F.save_failed=false;F.defer_save=true;F.defer_checkpoint=true; }
         }
         return true;
     }
     if (menu || ((input.pressed&FB_INPUT_BACK) && F.mode.phase==FB_MODE_ROUND)) {
-        ui_push_options(quit_options,2,true,quit_answer,NULL);return true;
+        ui_push_options(F.args.persistence ? saved_quit_options : quit_options,F.args.persistence ? 3 : 2,true,quit_answer,NULL);return true;
     }
     football_mode_input(&F.mode,input,target_step);
     if (F.mode.done) attempt_exit();
@@ -219,13 +267,15 @@ static void draw(ui_screen *s,rr_screen which)
     }
     rr_rect(0,0,320,240,RR_RGBA(12,22,30,255));
     if (F.save_failed) {
-        text(12,20,"Profile save failed",.6f);
-        paragraph(F.exit_requested ? "A: retry saving. B: choose whether to return without saving the profile." :
-            "A: retry saving. B: keep playing and retry at the next round.",64);
+        text(12,20,"Save failed",.6f);
+        paragraph(F.exit_requested ? "A: retry saving. B: choose whether to return without saving latest changes." :
+            "A: retry saving. B: keep playing; the next checkpoint will retry.",64);
         return;
     }
     if (F.mode.phase==FB_MODE_PLAY && football_match_waiting_for_home(&F.mode.session.match))
         football_render_bottom(&F.renderer,&F.mode.playcall);
+    else if (F.mode.phase==FB_MODE_PLAY && football_match_waiting_for_defense(&F.mode.session.match))
+        football_render_defense_bottom(&F.renderer,&F.mode.defense);
     else if (F.mode.phase==FB_MODE_EVOLVE) football_render_evolution_bottom(&F.renderer,&F.mode.evolution);
     else if (F.mode.phase==FB_MODE_SHOP) football_shop_draw(&F.renderer,&F.shop_view,&F.mode.season,&F.mode.shop);
     else if (F.mode.phase==FB_MODE_LEARN) {
@@ -242,9 +292,18 @@ static void draw(ui_screen *s,rr_screen which)
         if (F.mode.session.match.phase==FB_MATCH_ANIMATION) {
             const FootballPlayDefinition *play=football_playbook_get(F.mode.session.match.play.id);
             if (play) text(12,52,play->name,.5f);
+            const FootballDefenseDefinition *def=football_defense_get(F.mode.session.match.defense);
+            if(def)text(12,193,def->name,.4f);
             paragraph(football_match_result_name(F.mode.session.match.resolved.kind),82);
             char yards[40];snprintf(yards,sizeof yards,"%+d yards",F.mode.session.match.resolved.yards);
             text(12,118,yards,.6f);
+            const FootballMatch *m=&F.mode.session.match;
+            if (m->contact.fumble) text(12,148,"Contact: fumble lost",.42f);
+            else if (m->contact.broken) text(12,148,"Broken tackle: extra yards",.42f);
+            else if (m->contact.attempted) text(12,148,m->contact.big_hit ? "Big hit" : "Tackled",.42f);
+            if (m->blocking.pancake) text(12,172,"Pancake block",.42f);
+            else if(m->pass_report.attempted)text(12,172,m->pass_report.pressure>=65 ? "QB under pressure" :
+                m->pass_report.separation>=65 ? "Receiver found space" : "Contested passing lane",.4f);
         }
     } else {
         const char *title=F.mode.phase==FB_MODE_ROUND ? "Ready for the next match" :
@@ -267,7 +326,7 @@ static void draw(ui_screen *s,rr_screen which)
         else paragraph(F.mode.message,64);
         if (F.mode.phase!=FB_MODE_EVENTS) button();
     }
-    if (F.mode.phase!=FB_MODE_LEARN && F.mode.phase!=FB_MODE_SHOP && F.mode.phase!=FB_MODE_EVOLVE) text(12,226,"START: leave playoff (not saved)",.32f);
+    if (F.mode.phase!=FB_MODE_LEARN && F.mode.phase!=FB_MODE_SHOP && F.mode.phase!=FB_MODE_EVOLVE) text(12,226,F.args.persistence ? "START: save / return / delete playoff" : "START: leave playoff (not saved)",.32f);
 }
 static ui_screen screen={.name="football-playoff",.flags=UI_FADE,.enter=entered,.leave=left,
     .input=input,.update=update,.draw=draw,.touch=touch};
@@ -280,9 +339,27 @@ bool football_screen_open(const football_screen_args *args)
     if (!football_mode_new(&F.mode,F.roster,args->profile,args->entropy)) { free(F.roster);F.roster=NULL;return false; }
     F.scene=(FootballRenderScene){.quarter=1,.down=1,.distance=10,.seconds_left=FB_QUARTER_SECONDS,.ball_x_yards=35};
     F.previous=FB_MODE_DRAFT;ui_set_game_speed(1);
+    if(args->persistence) {
+        bool backup=false;
+        FootballFileStatus status=football_saves_load(&F.mode,F.roster,args->profile,&backup);
+        if(status==FB_FILE_OK) {
+            F.saved_token=checkpoint_token();F.previous=FB_MODE_DRAFT;
+            ui_set(&screen);
+            static const char *const resume[]={"Resume saved football playoff"};
+            static const char *const recovered[]={"Resume football playoff recovered from backup"};
+            ui_push_options(backup ? recovered : resume,1,true,NULL,NULL);return true;
+        }
+        if(status==FB_FILE_BAD) {
+            football_mode_new(&F.mode,F.roster,args->profile,args->entropy);
+            F.save_blocked=true;F.mode.phase=FB_MODE_ERROR;
+            snprintf(F.mode.message,sizeof F.mode.message,"Football save cannot be read. It has been preserved. START offers explicit deletion.");
+            ui_set(&screen);return true;
+        }
+    }
     const sh_events events={.on_start=drafted,.on_exit=draft_exit,.save_profile=starter_save,.validate_team=validate_team};
     char notice[400];
-    snprintf(notice,sizeof notice,"Football Playoff: draft base-form Pokemon. This playoff cannot be saved or resumed.%s%s",
+    snprintf(notice,sizeof notice,"Football Playoff: draft base-form Pokemon. %s%s%s",
+        args->persistence ? "Checkpoints save before snaps, between rounds and in the shop." : "This playoff cannot be saved or resumed.",
         args->profile_notice ? " " : "",args->profile_notice ? args->profile_notice : "");
     if (!sh_open(args->profile,notice,&events)) {
         dispose();return false;

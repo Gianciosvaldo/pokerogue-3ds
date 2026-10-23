@@ -13,8 +13,9 @@ STR. Press A or the Continue button to load the match. The field/score/down/cloc
 are on top; Offense -> Formation -> Run/Pass -> Named play is on the touch screen. D-pad/A/B also
 navigate; B returns one menu level. Each formation/type offers two plays, with a
 short risk/gain description before selection (see `PLAYBOOK.md`). Only new action presses are used, so holding A does not accidentally
-call a play. The opponent calls its own plays. Input to playcalling is disabled
-while a snap is running or the opponent has possession. The match-result screen
+call a play. When the opponent has possession, choose Man Coverage, Zone Coverage or Blitz
+on the bottom screen before its snap. The opponent calls its own offensive plays
+and defense. Playcalling is disabled while a snap is running. See `DEFENSE.md`. The match-result screen
 requires acknowledgement before team progression begins.
 
 EXP and level-up messages are acknowledged with A (or the Continue button).
@@ -33,12 +34,13 @@ ownership. Before the next match, use Left/Right or tap the Mega row to select
 one compatible holder, or None. The transformation lasts for that match only;
 see `MEGA.md`.
 
-START opens Keep playing / End playoff and return to title. The match and EXP
-pump pause while an overlay is open, during a fade, or while a profile save error
-is being answered. The player is told at entry and in the screen footer that this
-playoff is **session-only**: it cannot be saved or resumed, and no Classic/Custom
-session file is created, cleared or overwritten. Football persistence is a future
-module rather than a compatibility change to the existing save format.
+START opens Keep playing / Save and return / Delete football save and return.
+Checkpoints are written before snaps, between rounds and in the shop. Selecting
+Football Playoff again resumes that file; the app reports backup recovery. Finish
+an active snap or EXP/evolution/move prompts before manually saving. An unexpected
+close during those phases resumes the last checkpoint. Deletion needs a second
+confirmation. Damaged/newer files are preserved until explicit deletion. No
+Classic/Custom session file or Continue selection is changed. See `SAVE.md`.
 
 Shared profile changes from evolution are saved through the app's existing
 `sysd_save` gate after progression and before exit. An actual failed write offers

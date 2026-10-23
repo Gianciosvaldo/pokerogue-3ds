@@ -25,4 +25,7 @@ int gc_football_mega_item(const gc_run *run, unsigned party);
 const pr_form *gc_football_mega_form(const gc_run *run, unsigned party, int item);
 const pr_form *gc_football_owned_mega(const gc_run *run, unsigned party);
 bool gc_football_give_mega(gc_run *run, unsigned party, int item);
+/* Dedicated non-battle roster codec; never accepted by gc_run_load. */
+size_t gc_football_roster_save(const gc_run *run, void *buf, size_t cap);
+bool gc_football_roster_load(gc_run *run, gc_system *profile, const void *buf, size_t len);
 #endif

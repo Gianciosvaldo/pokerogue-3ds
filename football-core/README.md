@@ -6,10 +6,11 @@ classic EXP/evolution adapter and [UI_RENDER.md](UI_RENDER.md) for input, front
 sprite reuse, GPU flipping and render-loop integration. These systems provide the
 requested engine-facing interfaces. [MATCH.md](MATCH.md) documents the match
 resolver, AI, rules and score-to-season bridge. [APP.md](APP.md) covers the
-Football Playoff title entry, complete screen flow, controls and session-only
-lifetime. [PLAYBOOK.md](PLAYBOOK.md) covers named calls, balance modifiers and bounded route
-presentation adapted from the supplied browser references. Mega selection is documented in [MEGA.md](MEGA.md). Football save/resume
-remains separate work.
+Football Playoff title entry, complete screen flow and controls. [PLAYBOOK.md](PLAYBOOK.md) covers named calls, balance modifiers and bounded route
+presentation adapted from the supplied browser references. Mega selection is documented in [MEGA.md](MEGA.md). [SAVE.md](SAVE.md) documents dedicated football checkpoints and recovery. [CONTACT.md](CONTACT.md) documents bounded blocking,
+tackle and post-catch fumble contests adapted from `physics.js`.
+[DEFENSE.md](DEFENSE.md) covers player and opponent defensive playcalling;
+[PASSING.md](PASSING.md) explains route depth, separation, pressure and arm limits.
 
 `include/football_stats.h` consumes battle-core's generated `pr_form` directly.
 Initialize one `FootballDexMaxima` with

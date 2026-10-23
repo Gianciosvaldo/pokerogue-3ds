@@ -154,6 +154,19 @@ void football_render_bottom(FootballRenderer *r, const FootballPlaycall *ui)
     }
     label(r,"Touch or D-pad + A     B: Back",20,208,.45f);
 }
+void football_render_defense_bottom(FootballRenderer *r,const FootballDefenseMenu *menu)
+{
+    if(!r || !r->text || !menu)return;
+    C2D_TextBufClear(r->text);label(r,"Choose defense",20,16,.6f);
+    for(unsigned i=0;i<FB_DEF_COUNT;++i) {
+        FootballTouchRect rect=football_defense_rect(i);
+        C2D_DrawRectSolid(rect.x,rect.y,0,rect.w,rect.h,i==menu->selected ? C2D_Color32(40,100,170,255) : C2D_Color32(35,48,65,255));
+        label(r,football_defense_get((FootballDefenseId)i)->name,rect.x+12,rect.y+10,.55f);
+    }
+    const FootballDefenseDefinition *d=football_defense_get((FootballDefenseId)menu->selected);
+    if(d)label(r,d->description,20,199,.34f);
+    label(r,"Touch or D-pad + A",20,216,.38f);
+}
 static const char *species_name(uint16_t id)
 {
     int low=0,high=PR_SPECIES_COUNT-1;

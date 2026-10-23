@@ -354,7 +354,7 @@ static void on_settings_start(const rset_values* v, void* arg) {
 static void on_football_exit(void *arg) { (void)arg;show_title(); }
 static bool football_profile_save(void *arg) { (void)arg;return sysd_save(); }
 static void show_football(void) {
-  football_screen_args cfg={.profile=sysd_get(),
+  football_screen_args cfg={.profile=sysd_get(),.persistence=true,
     .entropy=A.first.entropy ^ (++A.runs_started*0x9e3779b1u) ^ ui_frame(),
     .on_exit=on_football_exit,.save_profile=football_profile_save,
     .profile_notice=sysd_state(NULL)==SYSD_UNREADABLE ?

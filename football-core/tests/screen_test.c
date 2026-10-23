@@ -1,4 +1,5 @@
 #include "football_screen.h"
+#include "football_saves.h"
 #include "football_match_view.h"
 #include "football_shop_render.h"
 #include "starter_host.h"
@@ -8,6 +9,13 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+static FootballFileStatus file_status=FB_FILE_EMPTY;
+static bool file_write_ok=true;
+static unsigned file_writes,file_clears;
+static unsigned char file_bytes[FB_SAVE_MAX];static size_t file_length;
+FootballFileStatus football_saves_load(FootballMode *m,gc_run *r,gc_system *p,bool *b){*b=false;if(file_status==FB_FILE_OK)return football_save_decode(m,r,p,file_bytes,file_length)?FB_FILE_OK:FB_FILE_BAD;return file_status;}
+bool football_saves_write(const FootballMode *m){++file_writes;if(!file_write_ok)return false;file_length=football_save_encode(m,file_bytes,sizeof file_bytes);assert(file_length);file_status=FB_FILE_OK;return true;}
+bool football_saves_clear(void){++file_clears;file_status=FB_FILE_EMPTY;return true;}
 static ui_screen *top,*playoff;
 static ui_screen starter={.name="fake-starter"},title={.name="fake-title"},overlay={.name="options"};
 static sh_events draft;
@@ -44,6 +52,7 @@ bool football_render_load_front(FootballRenderer *r,unsigned slot,const menu_mon
 {assert(r->text&&slot<12&&mon->species);++loads;return true;}
 void football_render_top(FootballRenderer *r,const FootballRenderScene *s){(void)r;assert(s);++top_draws;}
 void football_render_bottom(FootballRenderer *r,const FootballPlaycall *ui){(void)r;assert(ui);++bottom_draws;}
+void football_render_defense_bottom(FootballRenderer *r,const FootballDefenseMenu *m){(void)r;assert(m);++bottom_draws;}
 void football_render_evolution_bottom(FootballRenderer *r,const FootballEvolutionMenu *m){(void)r;assert(m->active);++bottom_draws;}
 bool football_shop_prepare(FootballShopView *v,const FootballSeason *s){(void)v;assert(s->phase==FB_SEASON_SHOP);++prepared;return true;}
 void football_shop_draw(FootballRenderer *r,const FootballShopView *v,const FootballSeason *s,const FootballShopMenu *m)
@@ -75,7 +84,7 @@ static void win(void)
     unsigned guard=0;
     while(mode()->phase!=FB_MODE_SHOP && ++guard<10000){
         FootballModePhase phase=mode()->phase;
-        if(phase==FB_MODE_PLAY&&football_match_waiting_for_home(m))press(BTN_ACTION);
+        if(phase==FB_MODE_PLAY&&m->phase==FB_MATCH_CALL)press(BTN_ACTION);
         else if(phase==FB_MODE_RESULT||phase==FB_MODE_MESSAGE)press(BTN_ACTION);
         else if(phase==FB_MODE_EVOLVE||phase==FB_MODE_LEARN)press(BTN_CANCEL);
         tick();assert(mode()->phase!=FB_MODE_ERROR);
@@ -108,5 +117,20 @@ int main(void)
     /* Cancelling the draft also releases the once-per-entry allocation. */
     assert(football_screen_open(&config));assert(top==&starter);draft.on_exit(draft.arg);
     assert(top==&title&&exits==4&&speed==2&&!football_screen_test_mode());
+    /* Production persistence path: autosave, exact resume, retry and explicit deletion. */
+    config.persistence=true;assert(football_screen_open(&config));assert(top==&starter);
+    gc_starter team={.species=SPECIES_ID_MAWILE,.tera_type=-1};draft.on_start(&team,1,draft.arg);playoff=top;
+    tick();assert(file_writes==1 && file_status==FB_FILE_OK);
+    uint32_t id=mode()->season.roster->party[0].b.id;
+    press(BTN_MENU);answer(1);assert(top==&title && exits==5);
+    assert(football_screen_open(&config));assert(top==&overlay);answer(0);
+    assert(mode()->phase==FB_MODE_ROUND && mode()->season.roster->party[0].b.id==id);
+    unsigned writes=file_writes;tick();assert(file_writes==writes); /* Resume alone does not rewrite the file. */
+    file_write_ok=false;press(BTN_MENU);answer(1);assert(top==playoff);
+    file_write_ok=true;press(BTN_ACTION);assert(top==&title && exits==6);
+    file_status=FB_FILE_BAD;writes=file_writes;
+    assert(football_screen_open(&config));assert(mode()->phase==FB_MODE_ERROR);tick();assert(file_writes==writes);
+    press(BTN_MENU);answer(2);assert(top==&overlay);answer(1);
+    assert(top==&title && file_clears==1 && exits==7);
     puts("football screen: draft routing, one-action input, overlay pause, sprite lifecycle, save failure/retry and exit passed");
 }

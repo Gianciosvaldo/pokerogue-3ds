@@ -2,6 +2,9 @@
 #define FOOTBALL_MATCH_H
 #include "football_rules.h"
 #include "football_stats.h"
+#include "football_contact.h"
+#include "football_defense.h"
+#include "football_pass.h"
 #include "playcall_ui.h"
 #define FB_MATCH_TEAM_CAP 6
 #define FB_PLAY_ANIMATION_MS 700
@@ -17,7 +20,13 @@ typedef struct {
     uint16_t difficulty_q8, animation_ms, plays;
     PlayInfo play;
     FootballResolvedPlay resolved;
-    uint8_t carrier;
+    uint8_t carrier, blocker, rusher, tackler; /* 255: no separate blocker. */
+    FootballBlockResult blocking;
+    FootballContactResult contact;
+    FootballPassReport pass_report;
+    uint8_t coverer;
+    FootballDefenseId defense;
+    bool manual_defense; /* Mode UI opts in; headless engines can retain automatic defense. */
 } FootballMatch;
 /* Fixed-size, allocation-free state. Only match initialization rolls a tiebreak
  * side; play RNG is consumed once per accepted snap, never by rendering. */
@@ -25,6 +34,8 @@ bool football_match_begin(FootballMatch *out, const FootballTeam *home,
                            const FootballTeam *away, uint32_t seed, uint16_t difficulty_q8);
 unsigned football_match_quarterback(const FootballMatch *match, FootballSide side);
 bool football_match_waiting_for_home(const FootballMatch *match);
+bool football_match_waiting_for_defense(const FootballMatch *match);
+bool football_match_defend(FootballMatch *match, FootballDefenseId defense);
 /* Accepts validated home calls only; missing target slots fall back to the best
  * receiver/runner, supporting every currently permitted draft size (1..6). */
 bool football_match_call(FootballMatch *match, PlayInfo play);

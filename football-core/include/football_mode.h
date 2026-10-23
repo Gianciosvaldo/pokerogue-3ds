@@ -11,6 +11,7 @@ typedef struct {
     FootballSeason season;
     FootballPlayoffMatch session;
     FootballPlaycall playcall;
+    FootballDefenseMenu defense;
     FootballEvolutionMenu evolution;
     FootballShopMenu shop;
     FootballModePhase phase;

@@ -33,9 +33,9 @@ test: playcall-test
 .PHONY: render-test
 render-test: $(BUILD)/render_test
 	$(BUILD)/render_test
-$(BUILD)/render_test: tests/render_test.c ../game/source/football_render.c ../game/include/football_render.h tests/stubs/citro2d.h src/playcall_ui.c src/football_playbook.c src/evolution_ui.c include/football_playbook.h
+$(BUILD)/render_test: tests/render_test.c ../game/source/football_render.c ../game/include/football_render.h tests/stubs/citro2d.h src/football_defense.c src/playcall_ui.c src/football_playbook.c src/evolution_ui.c include/football_playbook.h
 	mkdir -p $(BUILD)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -D__3DS__ -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include tests/render_test.c ../game/source/football_render.c src/playcall_ui.c src/football_playbook.c src/evolution_ui.c ../battle-core/gen/out/pr_data.c -lm -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) -D__3DS__ -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include tests/render_test.c ../game/source/football_render.c src/football_defense.c src/playcall_ui.c src/football_playbook.c src/evolution_ui.c ../battle-core/gen/out/pr_data.c -lm -o $@
 test: render-test
 
 .PHONY: evolution-ui-test
@@ -60,7 +60,7 @@ shop-render-test: core-libs
 	$(BUILD)/shop_render_test
 test: shop-render-test
 
-MATCH_SRCS = src/football_rules.c src/football_match.c src/football_playbook.c
+MATCH_SRCS = src/football_rules.c src/football_match.c src/football_playbook.c src/football_contact.c src/football_defense.c src/football_pass.c
 .PHONY: rules-test match-test
 rules-test: $(BUILD)/rules_test
 	$(BUILD)/rules_test
@@ -89,7 +89,7 @@ $(BUILD)/match_view_test: tests/match_view_test.c ../game/source/football_match_
 	$(CC) $(CPPFLAGS) $(CFLAGS) -D__3DS__ -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include tests/match_view_test.c ../game/source/football_match_view.c $(MATCH_SRCS) src/football_stats.c ../battle-core/gen/out/pr_data.c -lm -o $@
 test: match-view-test
 
-MODE_SRCS = src/football_mode.c src/football_playoff_match.c src/playoff_season.c src/football_stats.c $(MATCH_SRCS) src/playcall_ui.c src/evolution_ui.c src/football_shop_ui.c
+MODE_SRCS = src/football_save.c src/football_mode.c src/football_playoff_match.c src/playoff_season.c src/football_stats.c $(MATCH_SRCS) src/playcall_ui.c src/evolution_ui.c src/football_shop_ui.c
 .PHONY: mode-test
 mode-test: core-libs
 	mkdir -p $(BUILD)
@@ -110,3 +110,41 @@ mega-test: core-libs
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/mega_test.c $(MODE_SRCS) $(CORE_LIBS) -lm -o $(BUILD)/mega_test
 	$(BUILD)/mega_test
 test: mega-test
+
+.PHONY: contact-test
+contact-test: $(BUILD)/contact_test
+	$(BUILD)/contact_test
+$(BUILD)/contact_test: tests/contact_test.c src/football_contact.c include/football_contact.h include/football_stats.h
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/contact_test.c src/football_contact.c -o $@
+test: contact-test
+
+.PHONY: save-test
+save-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/save_test.c $(MODE_SRCS) $(CORE_LIBS) -lm -o $(BUILD)/save_test
+	$(BUILD)/save_test
+test: save-test
+
+.PHONY: save-file-test
+save-file-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -I../game/include -I../assets-pipeline/app-src/include tests/save_file_test.c ../game/source/football_saves.c ../assets-pipeline/app-src/source/save.c $(MODE_SRCS) $(CORE_LIBS) -lm -o $(BUILD)/save_file_test
+	$(BUILD)/save_file_test
+test: save-file-test
+
+.PHONY: defense-test
+defense-test: $(BUILD)/defense_test
+	$(BUILD)/defense_test
+$(BUILD)/defense_test: tests/defense_test.c $(MATCH_SRCS) src/football_stats.c include/football_defense.h
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/defense_test.c $(MATCH_SRCS) src/football_stats.c ../battle-core/gen/out/pr_data.c -lm -o $@
+test: defense-test
+
+.PHONY: pass-test
+pass-test: $(BUILD)/pass_test
+	$(BUILD)/pass_test
+$(BUILD)/pass_test: tests/pass_test.c src/football_pass.c src/football_playbook.c src/football_defense.c include/football_pass.h
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/pass_test.c src/football_pass.c src/football_playbook.c src/football_defense.c -o $@
+test: pass-test
