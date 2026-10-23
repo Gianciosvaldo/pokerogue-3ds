@@ -274,6 +274,8 @@ static void draw(ui_screen *s,rr_screen which)
     }
     if (F.mode.phase==FB_MODE_PLAY && football_match_waiting_for_home(&F.mode.session.match))
         football_render_bottom(&F.renderer,&F.mode.playcall);
+    else if (F.mode.phase==FB_MODE_PLAY && football_match_waiting_for_defense(&F.mode.session.match))
+        football_render_defense_bottom(&F.renderer,&F.mode.defense);
     else if (F.mode.phase==FB_MODE_EVOLVE) football_render_evolution_bottom(&F.renderer,&F.mode.evolution);
     else if (F.mode.phase==FB_MODE_SHOP) football_shop_draw(&F.renderer,&F.shop_view,&F.mode.season,&F.mode.shop);
     else if (F.mode.phase==FB_MODE_LEARN) {
@@ -290,6 +292,8 @@ static void draw(ui_screen *s,rr_screen which)
         if (F.mode.session.match.phase==FB_MATCH_ANIMATION) {
             const FootballPlayDefinition *play=football_playbook_get(F.mode.session.match.play.id);
             if (play) text(12,52,play->name,.5f);
+            const FootballDefenseDefinition *def=football_defense_get(F.mode.session.match.defense);
+            if(def)text(12,193,def->name,.4f);
             paragraph(football_match_result_name(F.mode.session.match.resolved.kind),82);
             char yards[40];snprintf(yards,sizeof yards,"%+d yards",F.mode.session.match.resolved.yards);
             text(12,118,yards,.6f);

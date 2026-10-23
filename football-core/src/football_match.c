@@ -70,9 +70,11 @@ static unsigned lineman(const FootballMatch *m,unsigned side,unsigned exclude_a,
     }
     return result;
 }
-static void snap(FootballMatch *m,PlayInfo play)
+static void snap(FootballMatch *m,PlayInfo play,FootballDefenseId defense_call)
 {
     const FootballPlayDefinition *definition=football_playbook_get(play.id);
+    const FootballDefenseDefinition *coverage=football_defense_get(defense_call);
+    m->defense=defense_call;
     unsigned side=m->rules.offense,defense=1-side;
     unsigned qb=best(m,side,5,6);
     FootballPosition wanted=play.type==FB_PLAY_PASS ? FB_WR : FB_RB;
@@ -106,16 +108,16 @@ static void snap(FootballMatch *m,PlayInfo play)
                  (tackling+average(m,defense,2))/2;
         edge+=m->blocking.edge;
         edge+=definition->speed_weight*((speed+agility)/2-strength)/2;
-        result.yards=(int16_t)clamp(3+definition->gain+edge/10+(play.formation==FB_FORM_UNDER_CENTER ? 1 : 0)+(int)(random_next(&m->rng)%11)-5,-8,30);
+        result.yards=(int16_t)clamp(3+coverage->run_gain+definition->gain+edge/10+(play.formation==FB_FORM_UNDER_CENTER ? 1 : 0)+(int)(random_next(&m->rng)%11)-5,-8,30);
         if (roll>94 && edge>0) result.yards=(int16_t)(result.yards+15);
         result.seconds=(uint8_t)clamp(12+(result.yards>0 ? result.yards/3 : 0),8,25);
     } else {
         int power=attribute(m,side,qb,5), accuracy=attribute(m,side,qb,6);
         int catching=attribute(m,side,target,7);
         int pressure=average(m,defense,2)-average(m,side,2)-m->blocking.edge;
-        int sack=clamp(7+definition->sack+pressure/10+(play.formation==FB_FORM_UNDER_CENTER ? 3 : 0),2,20);
-        int intercept=clamp(7+definition->interception+(tackling-accuracy)/12,2,18);
-        int completion=clamp(55+definition->completion+(accuracy+catching-2*tackling)/5+(play.formation==FB_FORM_SHOTGUN ? 5 : 0),20,90);
+        int sack=clamp(7+coverage->sack+definition->sack+pressure/10+(play.formation==FB_FORM_UNDER_CENTER ? 3 : 0),2,20);
+        int intercept=clamp(7+coverage->interception+definition->interception+(tackling-accuracy)/12,2,18);
+        int completion=clamp(55+coverage->completion+definition->completion+(accuracy+catching-2*tackling)/5+(play.formation==FB_FORM_SHOTGUN ? 5 : 0),20,90);
         result.seconds=5;
         if (roll<sack) { result.kind=FB_RESULT_SACK; result.yards=-5; result.seconds=14; }
         else if (roll<sack+intercept) { result.kind=FB_RESULT_INTERCEPTION; result.yards=8; }
@@ -160,24 +162,45 @@ bool football_match_waiting_for_home(const FootballMatch *m)
 {
     return m && m->phase==FB_MATCH_CALL && m->rules.offense==FB_HOME && !m->rules.finished;
 }
+bool football_match_waiting_for_defense(const FootballMatch *m)
+{
+    return m && m->manual_defense && m->phase==FB_MATCH_CALL && m->rules.offense==FB_AWAY && !m->rules.finished;
+}
+static PlayInfo opponent_call(FootballMatch *m)
+{
+    int pass_bias=football_rules_distance(&m->rules)>6 || m->rules.down>=3 ? 70 : 35;
+    bool pass=(int)(random_next(&m->rng)%100)<pass_bias;
+    FootballFormation formation=(FootballFormation)(random_next(&m->rng)%2);
+    FootballPlayType type=pass ? FB_PLAY_PASS : FB_PLAY_RUN;
+    unsigned count=football_playbook_count(formation,type);
+    const FootballPlayDefinition *choice=football_playbook_option(formation,type,random_next(&m->rng)%count);
+    return (PlayInfo){formation,type,choice->id,255};
+}
+static FootballDefenseId opponent_defense(FootballMatch *m)
+{
+    unsigned roll=random_next(&m->rng)%100;
+    if(football_rules_distance(&m->rules)>6 && roll<55)return FB_DEF_ZONE;
+    return roll>=75 ? FB_DEF_BLITZ : FB_DEF_MAN;
+}
+bool football_match_defend(FootballMatch *m,FootballDefenseId defense)
+{
+    if(!football_match_waiting_for_defense(m) || !football_defense_get(defense))return false;
+    PlayInfo play=opponent_call(m);snap(m,play,defense);return true;
+}
 bool football_match_call(FootballMatch *m,PlayInfo play)
 {
     if (!football_match_waiting_for_home(m) || !football_playbook_valid(play)) return false;
-    snap(m,play); return true;
+    FootballDefenseId defense=opponent_defense(m);
+    snap(m,play,defense); return true;
 }
 bool football_match_tick(FootballMatch *m,uint32_t elapsed_ms)
 {
     if (!m || !elapsed_ms || m->phase==FB_MATCH_FINISHED || m->phase==FB_MATCH_ERROR) return false;
     if (m->phase==FB_MATCH_CALL) {
         if (m->rules.offense==FB_HOME) return false;
-        int pass_bias=football_rules_distance(&m->rules)>6 || m->rules.down>=3 ? 70 : 35;
-        bool pass=(int)(random_next(&m->rng)%100)<pass_bias;
-        FootballFormation formation=(FootballFormation)(random_next(&m->rng)%2);
-        FootballPlayType type=pass ? FB_PLAY_PASS : FB_PLAY_RUN;
-        unsigned count=football_playbook_count(formation,type);
-        const FootballPlayDefinition *choice=football_playbook_option(formation,type,random_next(&m->rng)%count);
-        PlayInfo play={formation,type,choice->id,255};
-        snap(m,play); return true;
+        if(m->manual_defense)return false;
+        PlayInfo play=opponent_call(m);
+        snap(m,play,opponent_defense(m));return true;
     }
     m->animation_ms=(uint16_t)(m->animation_ms+(elapsed_ms>250 ? 250 : elapsed_ms));
     if (m->animation_ms<FB_PLAY_ANIMATION_MS) return true;

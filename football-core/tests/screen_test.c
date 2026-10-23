@@ -52,6 +52,7 @@ bool football_render_load_front(FootballRenderer *r,unsigned slot,const menu_mon
 {assert(r->text&&slot<12&&mon->species);++loads;return true;}
 void football_render_top(FootballRenderer *r,const FootballRenderScene *s){(void)r;assert(s);++top_draws;}
 void football_render_bottom(FootballRenderer *r,const FootballPlaycall *ui){(void)r;assert(ui);++bottom_draws;}
+void football_render_defense_bottom(FootballRenderer *r,const FootballDefenseMenu *m){(void)r;assert(m);++bottom_draws;}
 void football_render_evolution_bottom(FootballRenderer *r,const FootballEvolutionMenu *m){(void)r;assert(m->active);++bottom_draws;}
 bool football_shop_prepare(FootballShopView *v,const FootballSeason *s){(void)v;assert(s->phase==FB_SEASON_SHOP);++prepared;return true;}
 void football_shop_draw(FootballRenderer *r,const FootballShopView *v,const FootballSeason *s,const FootballShopMenu *m)
@@ -83,7 +84,7 @@ static void win(void)
     unsigned guard=0;
     while(mode()->phase!=FB_MODE_SHOP && ++guard<10000){
         FootballModePhase phase=mode()->phase;
-        if(phase==FB_MODE_PLAY&&football_match_waiting_for_home(m))press(BTN_ACTION);
+        if(phase==FB_MODE_PLAY&&m->phase==FB_MATCH_CALL)press(BTN_ACTION);
         else if(phase==FB_MODE_RESULT||phase==FB_MODE_MESSAGE)press(BTN_ACTION);
         else if(phase==FB_MODE_EVOLVE||phase==FB_MODE_LEARN)press(BTN_CANCEL);
         tick();assert(mode()->phase!=FB_MODE_ERROR);

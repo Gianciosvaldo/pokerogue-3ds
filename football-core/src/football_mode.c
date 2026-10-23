@@ -134,13 +134,16 @@ void football_mode_input(FootballMode *m,FootballCallInput in,int target_step)
         }
         if (accept) {
             if (!football_playoff_match_begin(&m->session,&m->season)) error(m,"The next match could not be loaded.");
-            else { football_playcall_reset(&m->playcall);m->phase=FB_MODE_PLAY; }
+            else { m->session.match.manual_defense=true;football_playcall_reset(&m->playcall);m->phase=FB_MODE_PLAY; }
         } break;
     case FB_MODE_PLAY:
         if (football_match_waiting_for_home(&m->session.match)) {
             football_playcall_update(&m->playcall,in);
             PlayInfo play;
             if (football_playcall_take(&m->playcall,&play) && !football_match_call(&m->session.match,play)) error(m,"Playcall refused.");
+        } else if(football_match_waiting_for_defense(&m->session.match)) {
+            football_defense_update(&m->defense,in);FootballDefenseId call;
+            if(football_defense_take(&m->defense,&call) && !football_match_defend(&m->session.match,call))error(m,"Defense call refused.");
         } break;
     case FB_MODE_RESULT:
         if (accept) m->phase=m->season.phase==FB_SEASON_ELIMINATED ? FB_MODE_END : FB_MODE_EVENTS;

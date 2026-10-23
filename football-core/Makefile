@@ -33,9 +33,9 @@ test: playcall-test
 .PHONY: render-test
 render-test: $(BUILD)/render_test
 	$(BUILD)/render_test
-$(BUILD)/render_test: tests/render_test.c ../game/source/football_render.c ../game/include/football_render.h tests/stubs/citro2d.h src/playcall_ui.c src/football_playbook.c src/evolution_ui.c include/football_playbook.h
+$(BUILD)/render_test: tests/render_test.c ../game/source/football_render.c ../game/include/football_render.h tests/stubs/citro2d.h src/football_defense.c src/playcall_ui.c src/football_playbook.c src/evolution_ui.c include/football_playbook.h
 	mkdir -p $(BUILD)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -D__3DS__ -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include tests/render_test.c ../game/source/football_render.c src/playcall_ui.c src/football_playbook.c src/evolution_ui.c ../battle-core/gen/out/pr_data.c -lm -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) -D__3DS__ -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include tests/render_test.c ../game/source/football_render.c src/football_defense.c src/playcall_ui.c src/football_playbook.c src/evolution_ui.c ../battle-core/gen/out/pr_data.c -lm -o $@
 test: render-test
 
 .PHONY: evolution-ui-test
@@ -60,7 +60,7 @@ shop-render-test: core-libs
 	$(BUILD)/shop_render_test
 test: shop-render-test
 
-MATCH_SRCS = src/football_rules.c src/football_match.c src/football_playbook.c src/football_contact.c
+MATCH_SRCS = src/football_rules.c src/football_match.c src/football_playbook.c src/football_contact.c src/football_defense.c
 .PHONY: rules-test match-test
 rules-test: $(BUILD)/rules_test
 	$(BUILD)/rules_test
@@ -132,3 +132,11 @@ save-file-test: core-libs
 	$(CC) $(CPPFLAGS) $(CFLAGS) -I../game/include -I../assets-pipeline/app-src/include tests/save_file_test.c ../game/source/football_saves.c ../assets-pipeline/app-src/source/save.c $(MODE_SRCS) $(CORE_LIBS) -lm -o $(BUILD)/save_file_test
 	$(BUILD)/save_file_test
 test: save-file-test
+
+.PHONY: defense-test
+defense-test: $(BUILD)/defense_test
+	$(BUILD)/defense_test
+$(BUILD)/defense_test: tests/defense_test.c $(MATCH_SRCS) src/football_stats.c include/football_defense.h
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/defense_test.c $(MATCH_SRCS) src/football_stats.c ../battle-core/gen/out/pr_data.c -lm -o $@
+test: defense-test

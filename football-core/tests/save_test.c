@@ -29,7 +29,7 @@ int main(void)
         if(football_match_waiting_for_home(&mode.session.match)) {
             PlayInfo p={FB_FORM_UNDER_CENTER,FB_PLAY_RUN,FB_RUN_DIVE,255};
             assert(football_match_call(&mode.session.match,p));assert(football_match_call(&restored.session.match,p));
-        } else { football_match_tick(&mode.session.match,1);football_match_tick(&restored.session.match,1); }
+        } else { assert(football_match_defend(&mode.session.match,FB_DEF_MAN));assert(football_match_defend(&restored.session.match,FB_DEF_MAN)); }
         assert(!football_save_encode(&mode,again,sizeof again));
         for(unsigned tick=0;tick<7;++tick) { football_match_tick(&mode.session.match,100);football_match_tick(&restored.session.match,100); }
         assert(mode.session.match.rng==restored.session.match.rng);
