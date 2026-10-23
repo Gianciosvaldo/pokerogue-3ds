@@ -4,7 +4,7 @@ import { modifierTypes,allMoves } from "#data/data-lists";
 import { AbilityId } from "#enums/ability-id";
 import { MoveId } from "#enums/move-id";
 import { SpeciesId } from "#enums/species-id";
-import { UiMode } from "#enums/ui-mode";
+import { PartyUiHandler } from "#ui/party-ui-handler";
 import { FormChangeItem } from "#enums/form-change-item";
 import { ModifierData } from "#system/modifier-data";
 import { GameManager } from "#test/framework/game-manager";
@@ -21,8 +21,14 @@ it("native canonical held constructor locks",async()=>{
  for(const id of Object.values(FormChangeItem).filter((n:any)=>typeof n==="number"&&n>=0) as number[])for(const key of ["FORM_CHANGE_ITEM","RARE_FORM_CHANGE_ITEM"])cases.push([key,id]);
  for(let stat=0;stat<6;stat++)cases.push(["BASE_STAT_BOOSTER",stat]);
  cases.push(["EVOLUTION_TRACKER_GIMMIGHOUL",0],["MYSTERY_ENCOUNTER_SHUCKLE_JUICE",10],["MYSTERY_ENCOUNTER_SHUCKLE_JUICE",-15],["MYSTERY_ENCOUNTER_OLD_GATEAU",0],["MYSTERY_ENCOUNTER_MACHO_BRACE",0]);
- const attr=allMoves[MoveId.KNOCK_OFF].getAttrs("RemoveHeldItemAttr")[0],partyUI:any=s.ui.getHandler(UiMode.PARTY);
+ const attr=allMoves[MoveId.KNOCK_OFF].getAttrs("RemoveHeldItemAttr")[0],partyUI:any=Object.create(PartyUiHandler.prototype);
  expect(typeof partyUI.getItemModifiers).toBe("function");
+ // Positive controls distinguish the real menu query from an empty UI stub.
+ for(let owner=0;owner<2;owner++){
+  const f=modifierTypes.LEFTOVERS,m=f().withIdFromFunc(f).newModifier(actors[owner]);
+  s.modifiers=[m];expect(partyUI.getItemModifiers(actors[owner])).toEqual([m]);
+ }
+ s.modifiers=[];
  for(const [key,arg] of cases)for(let owner=0;owner<4;owner++)for(let active=0;active<2;active++){
   s.modifiers=[];s.enemyModifiers=[];const p=actors[owner],user=actors[owner<2?2:0];
   const f=(modifierTypes as any)[key];let t:any=f().withIdFromFunc(f);
