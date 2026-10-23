@@ -323,7 +323,7 @@ void gc_pick_up_scattered_money(gc_run *run)
     bt->money_scattered = 0;
 }
 
-/* BattleEndPhase's Honey Gather callbacks, before pickup and enemy-item cleanup. */
+/* BattleEndPhase callbacks in party order, before money and enemy-item cleanup. */
 static void post_battle_money(gc_run *run, bool victory)
 {
     pr_battle *bt = &run->bt;
@@ -342,6 +342,7 @@ static void post_battle_money(gc_run *run, bool victory)
     bt->rng_live = true;
     pr_prepare_post_battle_money(bt, &run->eng, victory);
     pr_run_post_battle_money(bt, &run->eng);
+    gc_items_from_battle(run);
     run->run.rng = bt->rng;
     gc_battle_note_unported(run);
     gc_ev_battle(run);
@@ -375,15 +376,6 @@ static void battle_end(gc_run *run, gc_rphase *p)
         gc_rq_unshift(run, gc_rp(RP_GAME_OVER, 1, 0, 0));
     }
     post_battle_money(run, victory);
-    /* PostBattleAbAttr: Pickup (PostBattleLootAbAttr) takes an item from the enemies' loot after a victory. battle-core keeps
-     * only the loot's count and game-core drops the enemy items at the battle's end, so the transfer is not ported:
-     * counted when it would have happened. */
-    if (victory && bt->post_battle_loot > 0)
-        for (int i = 0; i < run->n_party; i++)
-            if (gc_mon_allowed(&run->party[i]) && pr_has_ability_active(bt, &run->party[i].b, ABILITY_ID_PICKUP)) {
-                gc_stub(run, GC_STUB_POST_BATTLE);
-                break;
-            }
     /* PR_DEV_ILLUSION: IllusionPostBattleAbAttr, the disguise ends with the battle (the next one's start gives it again) */
     if (bt->deviations & PR_DEV_ILLUSION)
         for (int i = 0; i < run->n_party; i++) pr_break_illusion(&run->party[i].b);

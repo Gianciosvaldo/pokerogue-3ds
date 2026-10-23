@@ -204,10 +204,15 @@ double pr_get_double_battle_chance(pr_battle *bt, int wave, int n_lures);
  * Supply the scene setter when raw/custom nature is owned outside the core. */
 void pr_sync_encounter_nature(pr_battle *bt, pr_pokemon *target,
                               pr_nature_setter setter, void *ctx);
-/* Honey Gather subset of BattleEndPhase's allowed-player-party callback loop.
- * The caller supplies canonical party order; Pickup/other post-battle attrs remain separate.
+/* BattleEndPhase's allowed-player-party PostBattleAbAttr callback loop.
+ * The caller supplies canonical party order, including eligible bench holders.
+ * The historical money API name is retained for existing callers.
  * Prepare starts a fresh callback queue; run emits its presentation events. */
 void pr_prepare_post_battle_money(pr_battle *bt, pr_engine *e, bool victory);
+/* PostBattleLootAbAttr: original detached stocks remain in enemy inventory. */
+bool pr_add_post_battle_loot(pr_battle *bt, pr_modifier *stock);
+bool pr_pickup_can_apply(pr_battle *bt, pr_pokemon *p, bool simulated, bool victory);
+bool pr_pickup_apply(pr_battle *bt, pr_engine *e, pr_pokemon *p);
 void pr_run_post_battle_money(pr_battle *bt, pr_engine *e);
 /* EncounterPhase.end queue only; loaded sessions omit fresh player entry work. */
 void pr_queue_encounter_end(pr_battle *bt, pr_engine *e, bool loaded);
