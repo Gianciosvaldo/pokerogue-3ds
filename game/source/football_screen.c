@@ -1,5 +1,6 @@
 #include "football_screen.h"
 #include "football_mode.h"
+#include "football_playbook.h"
 #include "football_match_view.h"
 #include "football_shop_render.h"
 #include "starter_host.h"
@@ -239,7 +240,9 @@ static void draw(ui_screen *s,rr_screen which)
     } else if (F.mode.phase==FB_MODE_PLAY) {
         text(12,20,F.mode.session.match.phase==FB_MATCH_CALL ? "Opponent playcall" : "Play in progress",.6f);
         if (F.mode.session.match.phase==FB_MATCH_ANIMATION) {
-            paragraph(football_match_result_name(F.mode.session.match.resolved.kind),75);
+            const FootballPlayDefinition *play=football_playbook_get(F.mode.session.match.play.id);
+            if (play) text(12,52,play->name,.5f);
+            paragraph(football_match_result_name(F.mode.session.match.resolved.kind),82);
             char yards[40];snprintf(yards,sizeof yards,"%+d yards",F.mode.session.match.resolved.yards);
             text(12,118,yards,.6f);
         }

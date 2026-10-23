@@ -25,17 +25,17 @@ test: season-test
 .PHONY: playcall-test
 playcall-test: $(BUILD)/playcall_test
 	$(BUILD)/playcall_test
-$(BUILD)/playcall_test: tests/playcall_test.c src/playcall_ui.c include/playcall_ui.h
+$(BUILD)/playcall_test: tests/playcall_test.c src/playcall_ui.c src/football_playbook.c include/playcall_ui.h include/football_playbook.h
 	mkdir -p $(BUILD)
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/playcall_test.c src/playcall_ui.c -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/playcall_test.c src/playcall_ui.c src/football_playbook.c -o $@
 test: playcall-test
 
 .PHONY: render-test
 render-test: $(BUILD)/render_test
 	$(BUILD)/render_test
-$(BUILD)/render_test: tests/render_test.c ../game/source/football_render.c ../game/include/football_render.h tests/stubs/citro2d.h src/playcall_ui.c src/evolution_ui.c
+$(BUILD)/render_test: tests/render_test.c ../game/source/football_render.c ../game/include/football_render.h tests/stubs/citro2d.h src/playcall_ui.c src/football_playbook.c src/evolution_ui.c include/football_playbook.h
 	mkdir -p $(BUILD)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -D__3DS__ -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include tests/render_test.c ../game/source/football_render.c src/playcall_ui.c src/evolution_ui.c ../battle-core/gen/out/pr_data.c -lm -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) -D__3DS__ -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include tests/render_test.c ../game/source/football_render.c src/playcall_ui.c src/football_playbook.c src/evolution_ui.c ../battle-core/gen/out/pr_data.c -lm -o $@
 test: render-test
 
 .PHONY: evolution-ui-test
@@ -56,11 +56,11 @@ test: shop-ui-test
 .PHONY: shop-render-test
 shop-render-test: core-libs
 	mkdir -p $(BUILD)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -D__3DS__ -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include tests/shop_render_test.c ../game/source/football_shop_render.c ../game/menus/item_ui.c ../game/gen/gm_item_ui.c src/football_stats.c src/playoff_season.c src/playcall_ui.c src/football_shop_ui.c $(CORE_LIBS) -lm -o $(BUILD)/shop_render_test
+	$(CC) $(CPPFLAGS) $(CFLAGS) -D__3DS__ -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include tests/shop_render_test.c ../game/source/football_shop_render.c ../game/menus/item_ui.c ../game/gen/gm_item_ui.c src/football_stats.c src/playoff_season.c src/playcall_ui.c src/football_playbook.c src/football_shop_ui.c $(CORE_LIBS) -lm -o $(BUILD)/shop_render_test
 	$(BUILD)/shop_render_test
 test: shop-render-test
 
-MATCH_SRCS = src/football_rules.c src/football_match.c
+MATCH_SRCS = src/football_rules.c src/football_match.c src/football_playbook.c
 .PHONY: rules-test match-test
 rules-test: $(BUILD)/rules_test
 	$(BUILD)/rules_test
@@ -69,7 +69,7 @@ $(BUILD)/rules_test: tests/rules_test.c src/football_rules.c include/football_ru
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/rules_test.c src/football_rules.c -o $@
 match-test: $(BUILD)/match_test
 	$(BUILD)/match_test
-$(BUILD)/match_test: tests/match_test.c $(MATCH_SRCS) src/football_stats.c include/football_match.h include/football_rules.h
+$(BUILD)/match_test: tests/match_test.c $(MATCH_SRCS) src/football_stats.c include/football_match.h include/football_rules.h include/football_playbook.h
 	mkdir -p $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/match_test.c $(MATCH_SRCS) src/football_stats.c ../battle-core/gen/out/pr_data.c -lm -o $@
 test: rules-test match-test
@@ -84,7 +84,7 @@ test: playoff-match-test
 .PHONY: match-view-test
 match-view-test: $(BUILD)/match_view_test
 	$(BUILD)/match_view_test
-$(BUILD)/match_view_test: tests/match_view_test.c ../game/source/football_match_view.c ../game/include/football_match_view.h $(MATCH_SRCS) include/football_match.h
+$(BUILD)/match_view_test: tests/match_view_test.c ../game/source/football_match_view.c ../game/include/football_match_view.h $(MATCH_SRCS) include/football_match.h include/football_playbook.h
 	mkdir -p $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -D__3DS__ -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include tests/match_view_test.c ../game/source/football_match_view.c $(MATCH_SRCS) src/football_stats.c ../battle-core/gen/out/pr_data.c -lm -o $@
 test: match-view-test

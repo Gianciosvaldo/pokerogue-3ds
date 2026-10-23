@@ -85,8 +85,12 @@ int main(void)
     assert(ui.state==FB_CALL_TYPE);
     keys_down=KEY_TOUCH; touch.py=60;
     football_playcall_poll(&ui);
+    assert(ui.state==FB_CALL_PLAY);
+    football_render_bottom(&renderer,&ui);
+    football_playcall_poll(&ui);
     PlayInfo play;
     assert(football_playcall_take(&ui,&play) && play.id==FB_RUN_DIVE);
+    scene.football_visible=true;scene.football_x_yards=60;scene.football_y_yards=20;scene.football_height=.5f;
     unsigned prior_images=images;
     football_render_frame(&renderer,&scene,&ui);
     assert(begins==1 && ends==1 && targets==2 && rectangles>30);

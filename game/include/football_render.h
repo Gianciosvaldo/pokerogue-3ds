@@ -16,7 +16,9 @@ typedef struct {
 typedef struct {
     uint16_t home_score, away_score, seconds_left;
     uint8_t down, distance, quarter;
-    float ball_x_yards;
+    float ball_x_yards; /* Line of scrimmage; does not move during the snap. */
+    bool football_visible;
+    float football_x_yards, football_y_yards, football_height;
     FootballRenderActor actors[FB_RENDER_ACTOR_CAP];
     unsigned actor_count;
 } FootballRenderScene;

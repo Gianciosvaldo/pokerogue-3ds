@@ -36,7 +36,8 @@ The renderer labels overtime OT1–OT4. All rules can be tested independently of
 ## Resolving a snap
 
 `football_match_call` accepts a validated home-team `PlayInfo` only when waiting
-for a home call. Formation/type/play ID must agree. Default target hints are used
+for a home call. Formation/type/play ID must agree with the immutable `football_playbook.c`
+catalog, including its legacy IDs. See `PLAYBOOK.md` for the eight named calls. Default target hints are used
 when they refer to an appropriate position; otherwise the resolver selects a
 runner or receiver from the actual roster. A multi-player team cannot throw to
 its quarterback. Solo rosters use a single-slot squad abstraction. QB, runner,
@@ -52,7 +53,8 @@ coefficients and probabilities are initial defaults, not a calibrated competitiv
 model. Stamina controls fatigue; energy remains within 0–100, affects subsequent
 ratings, and partially recovers at possession breaks/halftime.
 
-Away AI selects legal run/pass calls based on distance, down and seeded variation.
+Away AI selects legal run/pass calls based on distance, down and seeded variation,
+then chooses a formation and one of its matching named plays.
 The round difficulty scales its effective ratings by Q8, capped at 99, before
 fatigue. Opponent generation chooses six distinct supported, obtainable base-form
 species. Their eligible base-stat total ceiling increases from 350 in round one
