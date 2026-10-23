@@ -917,3 +917,10 @@ chain-waves-test: $(BUILD)/chain_waves_test
 	$(BUILD)/chain_waves_test tests/fixtures/chain-power.native.txt
 test: chain-waves-test
 .PHONY: chain-waves-test
+
+$(BUILD)/pokerus_trap_test: tests/pokerus_trap_test.c tests/doubles_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+pokerus-trap-test: $(BUILD)/pokerus_trap_test
+	$< tests/fixtures/pokerus-trap.native.txt
+test: pokerus-trap-test
+.PHONY: pokerus-trap-test

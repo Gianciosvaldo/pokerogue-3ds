@@ -451,9 +451,9 @@ void gc_new_battle(gc_run *run)
     /* doPostBattleCleanup (not for the first battle): Pokerus spreads */
     if (prev_wave) {
         bool pk[6];
-        for (int i = 0; i < run->n_party; i++) pk[i] = run->party[i].pokerus;
+        for (int i = 0; i < run->n_party; i++) pk[i] = run->party[run->party_order[i]].pokerus;
         pr_run_try_spread_pokerus(&run->run, wave, pk, run->n_party);
-        for (int i = 0; i < run->n_party; i++) run->party[i].pokerus = pk[i];
+        for (int i = 0; i < run->n_party; i++) run->party[run->party_order[i]].pokerus = pk[i];
     }
 
     /* doPostBattleCleanup precedes the new encounter's generation and save point.

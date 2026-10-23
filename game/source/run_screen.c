@@ -179,6 +179,8 @@ static const char* pretty_key(const char* key, char* out, int n) {
 /* game-core's reason for a refusal: an i18n key ("partyUiHandler:noEnergy") or a plain sentence */
 static const char* why_text(const char* why, char* out, int n) {
   if (!why) why = "";
+  const pr_msg *message=gc_run_refusal_message(&G.run);
+  if(message && !strcmp(message->key,why)){be_format_message(message,out,(size_t)n);return out;}
   if (strchr(why, ':') && !strchr(why, ' ')) {
     char name[48] = "";
     if (G.run.n_party > 0) snprintf(name, sizeof name, "%s", i18n_species_name(G.run.party[0].b.species));

@@ -507,7 +507,12 @@ bool gc_battle_player_command(gc_run *run, const gc_choice *c, const char **why)
             *why = "partyUiHandler:noEnergy";
             return false;
         }
-        if (trapped(run, p)) { *why = "battle:noEscapePokemon"; return false; }
+        pr_msg refusal={0};
+        if (!pr_can_switch(bt,p,false,&refusal)) {
+            gc_int(run)->refusal_message=refusal;
+            *why=refusal.key?refusal.key:"battle:noEscapeForce";
+            return false;
+        }
         for(int i=0;i<2;i++)if(i!=field&&bt->commands[i].command==COMMAND_POKEMON&&bt->commands[i].cursor==gc_battle_slot_of(run,k)){
             *why="that Pokemon is already selected";return false;}
         memset(tc, 0, sizeof *tc);
@@ -545,7 +550,8 @@ bool gc_battle_player_command(gc_run *run, const gc_choice *c, const char **why)
     if (c->kind == GC_CH_RUN) {
         pr_msg run_why = {0};
         if (!p || !pr_can_run(bt, p, &run_why)) {
-            *why = run_why.key ? run_why.key : "battle:noEscapePokemon";
+            gc_int(run)->refusal_message=run_why;
+            *why = run_why.key ? run_why.key : "battle:noEscapeForce";
             return false;
         }
         memset(tc, 0, sizeof *tc);

@@ -384,6 +384,9 @@ const gc_screen *gc_run_screen(const gc_run *run);
  * pinned upstream may add the item/update stats, then report an error with an
  * empty reason and no payment. That applied purchase also returns false. */
 bool gc_run_choose(gc_run *run, const gc_choice *c, const char **why);
+/* Full localized arguments, when available, for the last refused choice.
+ * Cleared on the next choice; NULL when the reason is plain text/key only. */
+const pr_msg *gc_run_refusal_message(const gc_run *run);
 
 /* Saving, at upstream's save point: from GC_EV_SAVE_POINT (the start of an encounter) until the battle's
  * first turn runs, while its first COMMAND screen waits (gc_run_can_save). The buffer holds everything
