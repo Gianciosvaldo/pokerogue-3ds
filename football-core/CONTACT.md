@@ -38,8 +38,9 @@ existing resolver and QB-carrier behavior; sack fumbles are outside this change.
 The bottom screen reports broken tackle, tackle/big hit, contact fumble and
 pancake outcomes during the snap presentation. The existing route view still
 presents the resolved yardage; contact reports never drive render-time RNG.
-No juke/dive controls, loose-ball recovery, multi-defender gang tackles, collision
-integration or persistent individual player statistics are claimed here.
+Tactical juke/power/dive choices and loose-ball recovery are documented in
+`TACTICS.md`. Multi-defender gang tackles, real-time collision integration and
+persistent individual player statistics remain outside this resolver.
 
 ## Determinism, limits and validation
 

@@ -11,6 +11,7 @@ presentation adapted from the supplied browser references. Mega selection is doc
 tackle and post-catch fumble contests adapted from `physics.js`.
 [DEFENSE.md](DEFENSE.md) covers player and opponent defensive playcalling;
 [PASSING.md](PASSING.md) explains route depth, separation, pressure and arm limits.
+[TACTICS.md](TACTICS.md) covers juke/power/dive choices and loose-ball recoveries.
 
 `include/football_stats.h` consumes battle-core's generated `pr_form` directly.
 Initialize one `FootballDexMaxima` with

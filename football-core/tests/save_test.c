@@ -5,6 +5,10 @@
 static gc_run run,loaded;
 static FootballMode mode,restored;
 static unsigned char bytes[FB_SAVE_MAX],again[FB_SAVE_MAX];
+static uint32_t crc32(const unsigned char *p,size_t n)
+{
+    uint32_t crc=UINT32_MAX;for(size_t i=0;i<n;++i){crc^=p[i];for(unsigned bit=0;bit<8;++bit)crc=(crc>>1)^(0xedb88320u & (0u-(crc&1)));}return ~crc;
+}
 int main(void)
 {
     assert(football_mode_new(&mode,&run,NULL,123));
@@ -22,9 +26,19 @@ int main(void)
     }
     for(size_t i=0;i<n;i+=17)assert(!football_save_decode(&restored,&loaded,NULL,bytes,i));
     football_mode_input(&mode,(FootballCallInput){.pressed=FB_INPUT_ACCEPT},0);
+    assert(football_match_contact_choice(&mode.session.match,FB_CONTACT_JUKE,true));
     n=football_save_encode(&mode,bytes,sizeof bytes);assert(n);
     assert(football_save_decode(&restored,&loaded,NULL,bytes,n));
+    assert(restored.session.match.home_tactic==FB_CONTACT_JUKE && restored.session.match.home_dive);
     assert(restored.session.owner==&restored.season && restored.session.active);
+    /* Version 1 active-match checkpoint migrates to balanced/standard tactics. */
+    memcpy(again,bytes,n);uint32_t offset=0;memcpy(&offset,again+12,4);
+    memmove(again+offset-8,again+offset,n-offset);offset-=8;
+    uint32_t version=1,crc=crc32(again+20,n-8-20);
+    memcpy(again+8,&version,4);memcpy(again+12,&offset,4);memcpy(again+16,&crc,4);
+    assert(football_save_decode(&restored,&loaded,NULL,again,n-8));
+    assert(restored.session.match.home_tactic==FB_CONTACT_BALANCED && !restored.session.match.home_dive);
+    assert(football_save_decode(&restored,&loaded,NULL,bytes,n));
     for(unsigned plays=0;plays<12;++plays) {
         if(football_match_waiting_for_home(&mode.session.match)) {
             PlayInfo p={FB_FORM_UNDER_CENTER,FB_PLAY_RUN,FB_RUN_DIVE,255};

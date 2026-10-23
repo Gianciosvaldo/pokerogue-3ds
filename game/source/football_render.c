@@ -150,7 +150,7 @@ void football_render_bottom(FootballRenderer *r, const FootballPlaycall *ui)
     }
     if (ui->state==FB_CALL_PLAY) {
         const FootballPlayDefinition *p=football_playbook_option(ui->formation,ui->type,ui->highlighted);
-        if (p) label(r,p->description,20,186,.36f);
+        if (p) label(r,p->description,20,177,.32f);
     }
     label(r,"Touch or D-pad + A     B: Back",20,208,.45f);
 }
@@ -164,8 +164,8 @@ void football_render_defense_bottom(FootballRenderer *r,const FootballDefenseMen
         label(r,football_defense_get((FootballDefenseId)i)->name,rect.x+12,rect.y+10,.55f);
     }
     const FootballDefenseDefinition *d=football_defense_get((FootballDefenseId)menu->selected);
-    if(d)label(r,d->description,20,199,.34f);
-    label(r,"Touch or D-pad + A",20,216,.38f);
+    if(d)label(r,d->description,20,191,.30f);
+
 }
 static const char *species_name(uint16_t id)
 {

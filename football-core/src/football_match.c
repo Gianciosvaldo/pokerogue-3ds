@@ -108,6 +108,8 @@ static void snap(FootballMatch *m,PlayInfo play,FootballDefenseId defense_call)
     memset(&m->blocking,0,sizeof m->blocking);
     memset(&m->contact,0,sizeof m->contact);
     memset(&m->pass_report,0,sizeof m->pass_report);
+    memset(&m->recovery,0,sizeof m->recovery);
+    m->used_tactic=FB_CONTACT_BALANCED;m->used_dive=false;
     m->coverer=(uint8_t)coverer(m,defense,m->rusher);
     if (m->blocker!=255) {
         FootballAttributes b=effective(m,side,m->blocker),d=effective(m,defense,m->rusher);
@@ -140,9 +142,17 @@ static void snap(FootballMatch *m,PlayInfo play,FootballDefenseId defense_call)
         FootballAttributes c=effective(m,side,carrier),d=effective(m,defense,contact_slot);
         unsigned tackle_roll=random_next(&m->rng)%100;
         unsigned fumble_roll=random_next(&m->rng)%100;
-        football_contact_tackle(&m->contact,&c,&d,caught,tackle_roll,fumble_roll);
+        m->used_tactic=side==FB_HOME ? m->home_tactic : (FootballContactTactic)(random_next(&m->rng)%FB_CONTACT_COUNT);
+        m->used_dive=side==FB_AWAY && m->manual_defense ? m->home_dive : random_next(&m->rng)%100<30;
+        football_contact_tactical(&m->contact,&c,&d,caught,m->used_tactic,m->used_dive,tackle_roll,fumble_roll);
         if (m->contact.broken) result.yards=(int16_t)clamp(result.yards+m->contact.extra_yards,-8,45);
-        if (m->contact.fumble) result.kind=FB_RESULT_FUMBLE;
+        if (m->contact.fumble) {
+            unsigned off=best(m,side,0,7),def=best(m,defense,0,7);
+            FootballAttributes a=effective(m,side,off),b=effective(m,defense,def);
+            football_contact_recover(&m->recovery,&a,&b,random_next(&m->rng)%100);
+            result.kind=m->recovery.offense_keeps ? FB_RESULT_FUMBLE_RECOVERED : FB_RESULT_FUMBLE;
+            m->recoverer=(uint8_t)(m->recovery.offense_keeps ? off : def);
+        }
     }
     m->play=play; m->play.target_slot=(uint8_t)target; m->carrier=(uint8_t)(result.kind==FB_RESULT_SACK ? qb : target);
     m->resolved=result; m->animation_ms=0; m->phase=FB_MATCH_ANIMATION;
@@ -191,6 +201,11 @@ bool football_match_defend(FootballMatch *m,FootballDefenseId defense)
     if(!football_match_waiting_for_defense(m) || !football_defense_get(defense))return false;
     PlayInfo play=opponent_call(m);snap(m,play,defense);return true;
 }
+bool football_match_contact_choice(FootballMatch *m,FootballContactTactic tactic,bool dive)
+{
+    if(!m || m->phase!=FB_MATCH_CALL || m->rules.finished || (unsigned)tactic>=FB_CONTACT_COUNT)return false;
+    m->home_tactic=tactic;m->home_dive=dive;return true;
+}
 bool football_match_call(FootballMatch *m,PlayInfo play)
 {
     if (!football_match_waiting_for_home(m) || !football_playbook_valid(play)) return false;
@@ -209,11 +224,15 @@ bool football_match_tick(FootballMatch *m,uint32_t elapsed_ms)
     m->animation_ms=(uint16_t)(m->animation_ms+(elapsed_ms>250 ? 250 : elapsed_ms));
     if (m->animation_ms<FB_PLAY_ANIMATION_MS) return true;
     m->animation_ms=FB_PLAY_ANIMATION_MS;
+    unsigned snap_offense=m->rules.offense;
     if (!football_rules_advance(&m->rules,m->resolved)) { m->phase=FB_MATCH_ERROR; return false; }
     ++m->plays;
     for (unsigned side=0;side<2;++side) for (unsigned i=0;i<m->teams[side].count;++i) {
         unsigned stamina=m->teams[side].players[i].attributes.sta;
-        int energy=m->energy[side][i]-(int)(2+(99-stamina)/20);
+        int effort=0;
+        if(m->contact.attempted && side==snap_offense && i==m->carrier && m->used_tactic!=FB_CONTACT_BALANCED)effort++;
+        if(m->contact.attempted && side!=snap_offense && i==m->tackler && m->used_dive)effort+=2;
+        int energy=m->energy[side][i]-(int)(2+(99-stamina)/20)-effort;
         if (m->rules.last.turnover || m->rules.last.touchdown || m->rules.last.safety || m->rules.last.halftime)
             energy+=8;
         m->energy[side][i]=(uint8_t)clamp(energy,0,100);
@@ -252,6 +271,7 @@ const char *football_match_result_name(FootballResultKind result)
     case FB_RESULT_INTERCEPTION: return "Interception";
     case FB_RESULT_FUMBLE: return "Fumble lost";
     case FB_RESULT_SACK: return "Sack";
+    case FB_RESULT_FUMBLE_RECOVERED: return "Fumble recovered by offense";
     }
     return "";
 }

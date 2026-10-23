@@ -97,10 +97,10 @@ int main(void)
         if (m.contact.attempted) {
             saw_broken|=m.contact.broken;saw_fumble|=m.contact.fumble;
             assert(!m.contact.broken || (m.contact.extra_yards>0 && !m.contact.fumble));
-            assert(m.resolved.kind==FB_RESULT_RUN || m.resolved.kind==FB_RESULT_COMPLETE || m.resolved.kind==FB_RESULT_FUMBLE);
+            assert(m.resolved.kind==FB_RESULT_RUN || m.resolved.kind==FB_RESULT_COMPLETE || m.resolved.kind==FB_RESULT_FUMBLE || m.resolved.kind==FB_RESULT_FUMBLE_RECOVERED);
         } else saw_no_contact=true;
         if (m.contact.fumble) {
-            assert(m.resolved.kind==FB_RESULT_FUMBLE);
+            assert(m.resolved.kind==FB_RESULT_FUMBLE || m.resolved.kind==FB_RESULT_FUMBLE_RECOVERED);
             saw_catch_fumble|=m.play.type==FB_PLAY_PASS;
         }
         saw_pancake|=m.blocking.pancake;

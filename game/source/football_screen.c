@@ -56,6 +56,8 @@ static uint64_t checkpoint_token(void)
     uint64_t token=1+(unsigned)F.mode.phase+32*s->round+512*(unsigned)(s->mega_slot+1);
     token+=4096ull*F.mode.session.match.plays+4194304ull*s->wallet;
     for(unsigned i=0;i<s->shop_count && i<FB_SHOP_CAP;++i)if(s->shop[i].sold)token^=1ull<<(56+i);
+    token^=(uint64_t)F.mode.session.match.home_tactic<<60;
+    if(F.mode.session.match.home_dive)token^=1ull<<62;
     return token;
 }
 static bool save_all(void)
@@ -272,10 +274,18 @@ static void draw(ui_screen *s,rr_screen which)
             "A: retry saving. B: keep playing; the next checkpoint will retry.",64);
         return;
     }
-    if (F.mode.phase==FB_MODE_PLAY && football_match_waiting_for_home(&F.mode.session.match))
+    if (F.mode.phase==FB_MODE_PLAY && football_match_waiting_for_home(&F.mode.session.match)) {
         football_render_bottom(&F.renderer,&F.mode.playcall);
-    else if (F.mode.phase==FB_MODE_PLAY && football_match_waiting_for_defense(&F.mode.session.match))
+        char tactic[64];const char *hint=F.mode.session.match.home_tactic==FB_CONTACT_BALANCED ? "conserve energy" :
+            F.mode.session.match.home_tactic==FB_CONTACT_JUKE ? "agility / fatigue" : "stiff-arm / fatigue";
+        snprintf(tactic,sizeof tactic,"%s: %s (Left/Right)",football_contact_tactic_name(F.mode.session.match.home_tactic),hint);
+        rr_rect(20,188,280,20,RR_RGBA(35,48,65,255));text(26,191,tactic,.34f);
+    }
+    else if (F.mode.phase==FB_MODE_PLAY && football_match_waiting_for_defense(&F.mode.session.match)) {
         football_render_defense_bottom(&F.renderer,&F.mode.defense);
+        rr_rect(20,204,280,20,RR_RGBA(35,48,65,255));
+        text(26,207,F.mode.session.match.home_dive ? "Dive: more hits / costly misses (Left/Right)" : "Standard tackle: conserve energy (Left/Right)",.34f);
+    }
     else if (F.mode.phase==FB_MODE_EVOLVE) football_render_evolution_bottom(&F.renderer,&F.mode.evolution);
     else if (F.mode.phase==FB_MODE_SHOP) football_shop_draw(&F.renderer,&F.shop_view,&F.mode.season,&F.mode.shop);
     else if (F.mode.phase==FB_MODE_LEARN) {
@@ -298,7 +308,7 @@ static void draw(ui_screen *s,rr_screen which)
             char yards[40];snprintf(yards,sizeof yards,"%+d yards",F.mode.session.match.resolved.yards);
             text(12,118,yards,.6f);
             const FootballMatch *m=&F.mode.session.match;
-            if (m->contact.fumble) text(12,148,"Contact: fumble lost",.42f);
+            if (m->contact.fumble) text(12,148,m->recovery.offense_keeps ? "Fumble: offense recovered" : "Fumble: defense recovered",.42f);
             else if (m->contact.broken) text(12,148,"Broken tackle: extra yards",.42f);
             else if (m->contact.attempted) text(12,148,m->contact.big_hit ? "Big hit" : "Tackled",.42f);
             if (m->blocking.pancake) text(12,172,"Pancake block",.42f);

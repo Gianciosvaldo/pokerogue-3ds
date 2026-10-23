@@ -148,3 +148,11 @@ $(BUILD)/pass_test: tests/pass_test.c src/football_pass.c src/football_playbook.
 	mkdir -p $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/pass_test.c src/football_pass.c src/football_playbook.c src/football_defense.c -o $@
 test: pass-test
+
+.PHONY: tactics-test
+tactics-test: $(BUILD)/tactics_test
+	$(BUILD)/tactics_test
+$(BUILD)/tactics_test: tests/tactics_test.c $(MATCH_SRCS) src/football_stats.c include/football_contact.h
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/tactics_test.c $(MATCH_SRCS) src/football_stats.c ../battle-core/gen/out/pr_data.c -lm -o $@
+test: tactics-test

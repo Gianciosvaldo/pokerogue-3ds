@@ -1,6 +1,6 @@
 #include "football_save.h"
 #include <string.h>
-typedef struct { unsigned char *bytes; size_t pos,cap; bool read,ok; } Codec;
+typedef struct { unsigned char *bytes; size_t pos,cap; bool read,ok; unsigned version; } Codec;
 static uint32_t checksum(const unsigned char *p,size_t n)
 {
     uint32_t crc=UINT32_MAX;
@@ -56,6 +56,7 @@ static void match(Codec *c,FootballMatch *m)
     V(m->rules.tiebreak_side,1);
     if(m->difficulty_q8<256 || !m->rules.quarter || !m->rules.down || !m->rules.ball ||
         m->rules.first_down_at<=m->rules.ball || !m->rng)c->ok=false;
+    if(c->version>=2){V(m->home_tactic,FB_CONTACT_COUNT-1);V(m->home_dive,1);}
     m->phase=FB_MATCH_CALL;m->manual_defense=true;
 }
 static void state(Codec *c,FootballMode *m)
@@ -86,20 +87,20 @@ size_t football_save_encode(const FootballMode *m,void *buffer,size_t capacity)
 {
     if(!buffer || capacity<4096 || !football_save_ready(m))return 0;
     FootballMode copy=*m;
-    Codec c={(unsigned char *)buffer,20,capacity,false,true};state(&c,&copy);
+    Codec c={(unsigned char *)buffer,20,capacity,false,true,2};state(&c,&copy);
     if(!c.ok || c.pos>=capacity)return 0;
     size_t roster=gc_football_roster_save(m->season.roster,c.bytes+c.pos,capacity-c.pos);
     if(!roster)return 0;
-    Codec header={buffer,8,20,false,true};value(&header,1,1);value(&header,(uint32_t)c.pos,4096);value(&header,checksum(c.bytes+20,c.pos+roster-20),UINT32_MAX);
+    Codec header={buffer,8,20,false,true,2};value(&header,2,2);value(&header,(uint32_t)c.pos,4096);value(&header,checksum(c.bytes+20,c.pos+roster-20),UINT32_MAX);
     memcpy(buffer,"PRFBMODE",8);return c.pos+roster;
 }
 bool football_save_decode(FootballMode *m,gc_run *roster,gc_system *profile,const void *buffer,size_t length)
 {
     if(!m || !roster || !buffer || length<20 || length>FB_SAVE_MAX || memcmp(buffer,"PRFBMODE",8))return false;
-    Codec header={(unsigned char *)buffer,8,length,true,true};uint32_t version=value(&header,0,UINT32_MAX),offset=value(&header,0,4096),crc=value(&header,0,UINT32_MAX);
-    if(version!=1 || offset<20 || offset>=length || checksum((const unsigned char *)buffer+20,length-20)!=crc)return false;
+    Codec header={(unsigned char *)buffer,8,length,true,true,0};uint32_t version=value(&header,0,UINT32_MAX),offset=value(&header,0,4096),crc=value(&header,0,UINT32_MAX);
+    if((version!=1 && version!=2) || offset<20 || offset>=length || checksum((const unsigned char *)buffer+20,length-20)!=crc)return false;
     memset(m,0,sizeof *m);m->season.mega_slot=-1;
-    Codec c={(unsigned char *)buffer,20,offset,true,true};state(&c,m);
+    Codec c={(unsigned char *)buffer,20,offset,true,true,version};state(&c,m);
     if(!c.ok || c.pos!=offset || !m->season.round || !m->season.rng ||
        !gc_football_roster_load(roster,profile,(const unsigned char *)buffer+offset,length-offset))return false;
     m->season.roster=roster;

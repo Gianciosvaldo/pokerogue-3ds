@@ -98,6 +98,9 @@ int main(void)
     press(BTN_ACTION);assert(mode()->phase==FB_MODE_PLAY);
     top->input(top,BTN_ACTION);assert(mode()->playcall.state==FB_CALL_MAIN);
     unsigned before=loads;tick();assert(loads==before+7&&clears==1);
+    uint32_t tactic_rng=mode()->session.match.rng;
+    tap(25,196);assert(mode()->session.match.home_tactic==FB_CONTACT_JUKE && mode()->playcall.state==FB_CALL_MAIN);
+    press(BTN_LEFT);assert(mode()->session.match.home_tactic==FB_CONTACT_BALANCED && mode()->session.match.rng==tactic_rng);
     repeating=true;press(BTN_ACTION);assert(mode()->playcall.state==FB_CALL_MAIN);repeating=false;
     busy=true;uint16_t plays=mode()->session.match.plays;tick();assert(mode()->session.match.plays==plays);busy=false;
     press(BTN_MENU);assert(top==&overlay);tick();assert(mode()->session.match.plays==plays);answer(0);
