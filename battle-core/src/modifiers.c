@@ -174,9 +174,9 @@ bool pr_mod_is_ported_item(const pr_modifier *m)
         int64_t stacks=(int64_t)m->stack_count+m->virtual_stack_count;
         return !m->unknown_subclass && m->stack_count>=1 && m->virtual_stack_count>=0 && stacks<=2;
     }
-    if (m->cls == PR_MOD_EVOLUTION_STAT_BOOSTER || m->cls == PR_MOD_SPECIES_STAT_BOOSTER) {
+    if (m->cls == PR_MOD_STAT_BOOSTER || m->cls == PR_MOD_EVOLUTION_STAT_BOOSTER || m->cls == PR_MOD_SPECIES_STAT_BOOSTER) {
         if (m->unknown_subclass || m->stack_count != 1 || m->virtual_stack_count != 0) return false;
-        if (m->cls == PR_MOD_EVOLUTION_STAT_BOOSTER)
+        if (m->cls == PR_MOD_STAT_BOOSTER || m->cls == PR_MOD_EVOLUTION_STAT_BOOSTER)
             return m->mult == 1.5 && m->stats_mask == ((1u << STAT_DEF) | (1u << STAT_SPDEF)) && m->n_species == 0;
         if (m->mult != 2) return false;
         if (m->n_species == 1 && m->species[0] == SPECIES_ID_PIKACHU)

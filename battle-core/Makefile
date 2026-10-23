@@ -661,3 +661,7 @@ $(BUILD)/baton-switch-test: tests/baton-switch-test.c $(BUILD)/libprcore.a
 all: $(BUILD)/pickup-test
 $(BUILD)/pickup-test: tests/pickup-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/stat-loot-test
+$(BUILD)/stat-loot-test: tests/stat-loot-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
