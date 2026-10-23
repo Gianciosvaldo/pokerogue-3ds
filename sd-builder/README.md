@@ -4,6 +4,17 @@ One download and one double-click that put the game on a 3DS SD card, with nothi
 
 **The zip holds no Pokémon or PokeRogue content**, only the tool: the launcher, this folder's Python, the pipeline scripts, the Windows build of the audio encoder (183 KB) and the game app (`game/`: the 2.7 MB `.3dsx`, its stripped ELF, icon and HOME-menu banner, which is drawn by `tools/make_banner_art.py` from plain colours and a pixel font). The user's steps are in [`READ-ME-FIRST.txt`](READ-ME-FIRST.txt), which is also in the zip.
 
+## October 24 battle fixes and football build
+
+This refresh includes the merged battle fixes through PR #396 and the custom
+**Football Playoff** title-menu mode, including its dedicated save/resume,
+playcalling, progression, shops and short-season balance changes through PR #395.
+The full battle-core parity effort is still in progress. The ARM check now also
+rejects reward dispatcher/helper frame pairs that together exceed the startup
+stack; fusion-only temporary storage no longer inflates that dispatcher frame.
+`files/VERSION.txt` identifies the packaged revision. Windows/Linux builder and
+normal app/custom/save/core/3DS checks must pass for the release revision.
+
 ## October 22 starter customization build
 
 This refresh packages the app fixes through PRs #359 and #363–#367: battle-menu
