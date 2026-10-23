@@ -1,4 +1,4 @@
-/* Canonical Scope Lens/Leek identities; unproved species fusion eligibility refuses. */
+/* Canonical identities; fused eligibility is covered by the native fused-held proof. */
 static int crititem_guard_checks(void)
 {
     int checks=0;
@@ -32,13 +32,13 @@ static int crititem_guard_checks(void)
         if (mode==21) m->stack_count=0;
         if (mode==22) m->n_species=4;
         if (mode==23) {bt.n_mods[side]=2;bt.mods[side][1]=(pr_modifier){.cls=PR_MOD_CRIT_BOOSTER,.pokemon_id=p.id,.stack_count=1,.num=1};}
-        int stage=0,want=(mode==9 || mode==10 || mode==19)?1:mode>=11&&mode<=13?2:mode==23?3:0;
+        int stage=0,want=(mode==9 || mode==10 || mode==19)?1:(mode>=11&&mode<=13)||mode==17||mode==18?2:mode==23?3:0;
         pr_modifier original[2][PR_MAX_MODIFIERS];memcpy(original,bt.mods,sizeof original);
         pr_rng g=bt.rng,b=bt.battle_rng;
         pr_apply_crit_booster_modifiers(&bt,mode==8?NULL:&p,mode==7?NULL:&stage);
         if (stage!=want || memcmp(original,bt.mods,sizeof original)
             || memcmp(&g,&bt.rng,sizeof g) || memcmp(&b,&bt.battle_rng,sizeof b)) return 1;
-        if ((mode>=2&&mode<=6 || mode>=15&&mode<=18 || mode>=20&&mode<=22) && !bt.n_unported) return 1;
+        if ((mode>=2&&mode<=6 || mode>=15&&mode<=16 || mode>=20&&mode<=22) && !bt.n_unported) return 1;
         checks++;
     }
     printf("Critical item guards: %d checks pass\n",checks);return 0;

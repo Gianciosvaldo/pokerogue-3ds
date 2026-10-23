@@ -665,3 +665,10 @@ $(BUILD)/pickup-test: tests/pickup-test.c tests/gas-lifecycle-test.c $(BUILD)/li
 all: $(BUILD)/stat-loot-test
 $(BUILD)/stat-loot-test: tests/stat-loot-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+$(BUILD)/fused-held-replay.inc: tests/effective-stat-item-replay.inc tests/critical-item-replay.inc tools/build-fused-held-replay.py
+	@mkdir -p $(@D)
+	python3 tools/build-fused-held-replay.py $@
+all: $(BUILD)/fused-held-test
+$(BUILD)/fused-held-test: tests/fused-held-test.c tests/statitem-guards.inc tests/crititem-guards.inc $(BUILD)/fused-held-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@

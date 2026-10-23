@@ -114,3 +114,17 @@ separate VariableMoveTypeAttr result: Hidden Power can have a different damage
 type while only its Normal-type booster matches the power caller. The focused
 suite records this behavior. Unsupported type/multiplier/stack identities remain
 unported; this promotion does not establish acquisition, transfer or a save bridge.
+
+## Fusion follow-up (2026-10-23)
+
+The historical helper-only rows for EvolutionStatBoosterModifier,
+SpeciesStatBoosterModifier and SpeciesCritBoosterModifier above are superseded
+by [the fused held-item validation](FUSED-HELD-VALIDATION.md). Original Eviolite
+checks evolution in both components, with a half boost for exactly one
+unevolved component, and checks Max forms in either component. The six species
+boosters and Leek accept either original component species. Canonical full-turn
+admission and raw projection are both covered. Generic raw constructor
+parameters, inventory capacity and all other historical lifecycle exclusions
+still require their own reconciliation; this update does not close the full
+inventory. [Transferred stat-item class identity](STAT-LOOT-VALIDATION.md) and
+[Pickup ownership](PICKUP-VALIDATION.md) remain independently required.
