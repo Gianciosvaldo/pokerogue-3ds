@@ -16,7 +16,7 @@ fusion producer's independent-case loot leakage.
 
 Battle and reward stock share a 2,048-entry per-side limit; battle counts are
 16-bit. Game storage keeps the existing 32-entry validation headroom, while its
-battle bridge rejects out-of-range counts before reading any items. A full
+battle bridge rejects out-of-range counts before reading any items. Both bridge directions reject invalid counts while preserving stored entries. A full
 unmatched add reports ENGINE_LIMIT instead of silently discarding stock. Run
 save/load rejects counts outside the supported battle limit. Save buffers grow
 from 128 to 512 KiB and remain outside the app's stack. The save format and field
@@ -64,8 +64,10 @@ Both logs are retained.
 Historical fixed-count guard cases at 257 are retained as admitted inputs;
 additional no-mutation guards now use the expanded limit plus one. Full-capacity
 stack checks still require the exact inventory count. Raw bridge harnesses check
-both game and reward storage bounds before copying. No native case, comparison
-floor or guard count is removed.
+both game and reward storage bounds before copying. The earlier oversized-inventory inputs are also retained: they now require explicit
+refusal and preserve all stored entries rather than projecting a partial prefix. A
+new maximum-size consumption check verifies the final entry survives. No native
+case, comparison floor or guard count is removed.
 
 The retained 5,120 fused turns, 2,000 ordinary stat turns, 2,000 critical-item
 turns, Pickup 4,400, transferred-stat-item 960, theft 32,768, Grip Claw 32,768,

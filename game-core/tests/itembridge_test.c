@@ -115,16 +115,27 @@ static int lifecycle(void)
         }
     }
 
-    /* Overflow entries were never represented and therefore were never consumed. */
+    /* Preserve the former overflow input, now explicitly reject its partial
+     * projection and keep every entry intact during repeated synchronization. */
     memset(&run, 0, sizeof run);
     for (int i = 0; i < GC_MAX_ITEMS; i++)
-        gc_item_add(&run, "BERRY", BERRY_TYPE_LEPPA, (uint32_t)(i + 1), 1);
-    gc_items_to_battle(&run);
-    run.party[0].b.id = 1; run.party[0].b.is_player = true;
-    pr_lose_held_item(&run.bt, &run.eng, &run.party[0].b, &run.bt.mods[0][0]);
-    gc_items_from_battle(&run); gc_items_from_battle(&run);
-    CHECK(run.n_items == GC_MAX_ITEMS - 1);
-    CHECK(run.items[PR_MAX_MODIFIERS - 1].pokemon_id == PR_MAX_MODIFIERS + 1);
+        run.items[i]=(gc_item){.key="BERRY",.arg=BERRY_TYPE_LEPPA,.pokemon_id=(uint32_t)(i+1),.stack=1};
+    run.n_items=GC_MAX_ITEMS;
+    gc_items_to_battle(&run);CHECK(run.bt.n_mods[0]==0&&run.bt.n_unported);
+    gc_items_from_battle(&run);gc_items_from_battle(&run);
+    CHECK(run.n_items==GC_MAX_ITEMS&&run.items[GC_MAX_ITEMS-1].pokemon_id==GC_MAX_ITEMS);
+
+    /* Every entry of the supported maximum is represented; consuming the
+     * first does not discard or consume the final inventory entry. */
+    memset(&run, 0, sizeof run);
+    for (int i = 0; i < PR_MAX_MODIFIERS; i++)
+        gc_item_add(&run, "BERRY", BERRY_TYPE_LEPPA, (uint32_t)(i+1), 1);
+    gc_items_to_battle(&run);CHECK(run.bt.n_mods[0]==PR_MAX_MODIFIERS&&!run.bt.n_unported);
+    run.party[0].b.id=1;run.party[0].b.is_player=true;
+    pr_lose_held_item(&run.bt,&run.eng,&run.party[0].b,&run.bt.mods[0][0]);
+    gc_items_from_battle(&run);gc_items_from_battle(&run);
+    CHECK(run.n_items==PR_MAX_MODIFIERS-1);
+    CHECK(run.items[PR_MAX_MODIFIERS-2].pokemon_id==PR_MAX_MODIFIERS);
 
     /* A legal encounter save serializes the reconciled inventory and rebuilds it on load. */
     gc_run_new(&run, GAME_MODES_CLASSIC, "itembridge-save", 777);

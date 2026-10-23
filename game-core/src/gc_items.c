@@ -384,6 +384,9 @@ static bool same_transfer_stock(const pr_modifier *a,const pr_modifier *b)
  * an unrepresented overflow item for a consumed one. Restored berries are inserted into that represented prefix; other additions remain separate. */
 void gc_items_from_battle(gc_run *run)
 {
+    if(run->n_items<0||run->n_enemy_items<0||run->n_items>PR_MAX_MODIFIERS||run->n_enemy_items>PR_MAX_MODIFIERS){
+        pr_note_unported(&run->bt,PR_FEAT_ENGINE_LIMIT);return;
+    }
     const bool golden = golden_bridge(run);
     for (int side = 0; side < 2; side++) {
         gc_item *items = side ? run->enemy_items : run->items;
