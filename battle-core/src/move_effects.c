@@ -1208,6 +1208,15 @@ const char *pr_held_item_name_key(const pr_modifier *m)
         return m->move_type>=0&&m->move_type<18?keys[m->move_type]:NULL;
     }
     switch (m->cls) {
+    case PR_MOD_STAT_BOOSTER: case PR_MOD_EVOLUTION_STAT_BOOSTER:
+        return m->mult==1.5&&m->stats_mask==((1u<<STAT_DEF)|(1u<<STAT_SPDEF))?"modifierType:ModifierType.EVIOLITE.name":NULL;
+    case PR_MOD_SPECIES_STAT_BOOSTER:
+        if(m->mult!=2)return NULL;
+        if(m->n_species==1&&m->species[0]==SPECIES_ID_PIKACHU&&m->stats_mask==((1u<<STAT_ATK)|(1u<<STAT_SPATK)))return "modifierType:SpeciesBoosterItem.LIGHT_BALL.name";
+        if(m->n_species==3&&m->species[0]==SPECIES_ID_CUBONE&&m->species[1]==SPECIES_ID_MAROWAK&&m->species[2]==SPECIES_ID_ALOLA_MAROWAK&&m->stats_mask==(1u<<STAT_ATK))return "modifierType:SpeciesBoosterItem.THICK_CLUB.name";
+        if(m->n_species==1&&m->species[0]==SPECIES_ID_DITTO){if(m->stats_mask==(1u<<STAT_DEF))return "modifierType:SpeciesBoosterItem.METAL_POWDER.name";if(m->stats_mask==(1u<<STAT_SPD))return "modifierType:SpeciesBoosterItem.QUICK_POWDER.name";}
+        if(m->n_species==1&&m->species[0]==SPECIES_ID_CLAMPERL){if(m->stats_mask==(1u<<STAT_SPDEF))return "modifierType:SpeciesBoosterItem.DEEP_SEA_SCALE.name";if(m->stats_mask==(1u<<STAT_SPATK))return "modifierType:SpeciesBoosterItem.DEEP_SEA_TOOTH.name";}
+        return NULL;
     case PR_MOD_FIELD_EFFECT: return "modifierType:ModifierType.MYSTICAL_ROCK.name";
     case PR_MOD_SPECIES_CRIT_BOOSTER: return "modifierType:ModifierType.LEEK.name";
     case PR_MOD_EXP_BOOSTER: return m->mult==0.4?"modifierType:ModifierType.LUCKY_EGG.name":m->mult==1.0?"modifierType:ModifierType.GOLDEN_EGG.name":NULL;

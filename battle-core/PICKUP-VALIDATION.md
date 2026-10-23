@@ -28,6 +28,10 @@ are not applied again by turn callbacks.
 
 ## Transferable-family source inventory
 
+Follow-up: [stat-booster clone/save validation](STAT-LOOT-VALIDATION.md) supplies
+the three stat-booster classes identified below. The original 4,400 observations
+and their limits remain retained. Fusion eligibility still needs its own proof.
+
 Following inheritance in pinned `src/modifier/modifier.ts` gives 33 held-item
 classes: two abstract classes and 31 concrete classes. Six concrete classes
 are nontransferable, leaving 25 transferable classes. The native flag excludes
