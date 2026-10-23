@@ -21,7 +21,9 @@ static int transfer_cap(const pr_modifier *m)
     case PR_MOD_DAMAGE_MONEY_REWARD: return 5;
     case PR_MOD_ATTACK_TYPE_BOOSTER: return 99;
     case PR_MOD_FIELD_EFFECT: return 2;
-    case PR_MOD_SPECIES_CRIT_BOOSTER: return 1;
+    case PR_MOD_SPECIES_CRIT_BOOSTER: case PR_MOD_STAT_BOOSTER:
+    case PR_MOD_EVOLUTION_STAT_BOOSTER: case PR_MOD_SPECIES_STAT_BOOSTER:
+        return m->n_species<=4?1:-1;
     case PR_MOD_EXP_BOOSTER: return 99;
     case PR_MOD_FRIENDSHIP_BOOSTER: return 3;
     case PR_MOD_BERRY:
@@ -33,6 +35,13 @@ static int transfer_cap(const pr_modifier *m)
 
 static bool same_type(const pr_modifier *m,const pr_modifier *other)
 {
+    /* Native matchType is called on the existing recipient object. Eviolite
+     * inherits the base clone but overrides matching, making this asymmetric. */
+    if(pr_mod_is(m,PR_MOD_STAT_BOOSTER)){
+        if(m->cls==PR_MOD_EVOLUTION_STAT_BOOSTER)return other->cls==PR_MOD_EVOLUTION_STAT_BOOSTER;
+        if(!pr_mod_is(other,PR_MOD_STAT_BOOSTER)||m->mult!=other->mult||m->stats_mask!=other->stats_mask)return false;
+        return m->cls!=PR_MOD_SPECIES_STAT_BOOSTER||(other->cls==m->cls&&m->n_species==other->n_species&&!memcmp(m->species,other->species,m->n_species*sizeof *m->species));
+    }
     if(m->cls!=other->cls)return false;
     if(m->cls==PR_MOD_EXP_BOOSTER)return m->mult==other->mult;
     if(m->cls==PR_MOD_BERRY)return m->berry_type==other->berry_type;
@@ -109,7 +118,12 @@ int pr_held_item_tier_for_pool(const pr_modifier *m, bool trainer)
     case PR_MOD_DAMAGE_MONEY_REWARD: case PR_MOD_ATTACK_TYPE_BOOSTER:
     case PR_MOD_INSTANT_REVIVE: tier = 2; break;
     case PR_MOD_TURN_HELD_TRANSFER: case PR_MOD_MULTI_HIT: tier = 4; break;
-    case PR_MOD_FIELD_EFFECT: case PR_MOD_SPECIES_CRIT_BOOSTER: tier = 2; break;
+    case PR_MOD_FIELD_EFFECT: case PR_MOD_SPECIES_CRIT_BOOSTER:
+    case PR_MOD_STAT_BOOSTER: case PR_MOD_EVOLUTION_STAT_BOOSTER: tier = 2; break;
+    case PR_MOD_SPECIES_STAT_BOOSTER:
+        if(m->n_species&&m->species[0]==SPECIES_ID_CLAMPERL)tier=1;
+        else if(m->n_species&&(m->species[0]==SPECIES_ID_PIKACHU||m->species[0]==SPECIES_ID_CUBONE||m->species[0]==SPECIES_ID_DITTO))tier=2;
+        break;
     case PR_MOD_EXP_BOOSTER: if(m->mult==0.4)tier=3;else if(m->mult==1.0)tier=4;break;
     case PR_MOD_FRIENDSHIP_BOOSTER: tier = 1; break;
     case PR_MOD_BERRY: tier = 0; break;
@@ -133,7 +147,7 @@ static int infer_move_item_tier(pr_battle *bt, pr_modifier *m, bool trainer)
 
 /* Native canTransferHeldItemModifier clones before matching. The currently
  * supported transferable stock families preserve their class through clone().
- * Transferable stat-booster clone families remain explicit unsupported paths. */
+ * Eviolite inherits StatBoosterModifier.clone and loses its evolution guard. */
 bool pr_can_transfer_held_item(pr_battle *bt, const pr_modifier *stock,
                               pr_pokemon *receiver, int quantity)
 {
@@ -142,6 +156,7 @@ bool pr_can_transfer_held_item(pr_battle *bt, const pr_modifier *stock,
         pr_note_unported(bt,PR_FEAT_MODIFIERS); return false;
     }
     pr_modifier copy=*stock;
+    if(copy.cls==PR_MOD_EVOLUTION_STAT_BOOSTER)copy.cls=PR_MOD_STAT_BOOSTER;
     copy.virtual_stack_count=0;
     copy.is_transferable=true;
     pr_pokemon *source=copy.pokemon_id ? pr_pokemon_by_id(bt,copy.pokemon_id) : NULL;
@@ -190,13 +205,14 @@ bool pr_try_transfer_held_item(pr_battle *bt, pr_engine *e, int from_side,
         pr_apply_ab_attrs(bt, PR_AC_BlockItemTheftAbAttr, &block);
     }
     if (cancelled) return false;
+    if(copy.cls==PR_MOD_EVOLUTION_STAT_BOOSTER)copy.cls=PR_MOD_STAT_BOOSTER;
     int matching = -1, cap = transfer_cap(&copy);
     if (cap < 0 || copy.stack_count < 0 || !pr_held_item_name_key(&copy)) {
         pr_note_unported(bt, PR_FEAT_MODIFIERS); return false;
     }
     for (int k=0;k<bt->n_mods[side];k++) {
         pr_modifier *m=&bt->mods[side][k];
-        if (pr_mod_is(m, PR_MOD_HELD_ITEM) && same_type(m,&copy)
+        if (pr_mod_is(m, PR_MOD_HELD_ITEM) && same_type(m,&bt->mods[from_side][index])
             && m->pokemon_id==(int64_t)receiver->id) { matching=k; break; }
     }
     /* Self-target attacks are not legal Thief/Covet targets. Preserve an

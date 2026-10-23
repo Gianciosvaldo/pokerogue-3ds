@@ -931,3 +931,10 @@ pickup-host-test: $(BUILD)/pickup_host_test
 	$<
 .PHONY: pickup-host-test
 test: pickup-host-test
+
+$(BUILD)/stat_loot_host_test: tests/stat_loot_host_test.c tests/doubles_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+stat-loot-host-test: $(BUILD)/stat_loot_host_test
+	$< tests/fixtures/stat-loot-save.native.txt
+test: stat-loot-host-test
+.PHONY: stat-loot-host-test

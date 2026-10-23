@@ -219,6 +219,7 @@ typedef struct {
     uint8_t type_tier;         /* cached ModifierType.tier + 1; 0 absent */
     uint32_t type_ref;         /* transient shared ModifierType reference, excluded from saves */
     uint16_t loot_ref;         /* transient detached-stock identity, excluded from saves */
+    bool eviolite_base;        /* transferred Eviolite inherits the base stat-booster clone */
 } gc_item;
 #define GC_MAX_ITEMS 128
 

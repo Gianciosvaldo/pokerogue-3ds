@@ -58,7 +58,10 @@ nature and its raw/custom nature setter merged in #356; see
 money handling merged in #357; see [their validation record](HONEY-MONEY-VALIDATION.md).
 
 1. Close the remaining enabled callbacks against their actual owners:
-   Synchronize encounter nature merged in #356. Honey Gather and shared wide-money handling merged in #357. Terminal Endless, canonical transfer stock and the Mini Black Hole/Grip Claw/Baton transfer prerequisites are merged. Pickup's callback owner and 50 item identities now have source comparisons; see [the Pickup record](PICKUP-VALIDATION.md). Eviolite/species stat-booster clone and save paths remain open and are next.
+   Synchronize encounter nature merged in #356. Honey Gather and shared wide-money handling merged in #357. Terminal Endless, canonical transfer stock and the Mini Black Hole/Grip Claw/Baton transfer prerequisites are merged. Pickup's callback owner and 50 item identities now have source comparisons; see [the Pickup record](PICKUP-VALIDATION.md).
+   The [stat-booster follow-up](STAT-LOOT-VALIDATION.md) adds their canonical
+   clone/save paths. Original Eviolite/species-booster/Leek fusion eligibility
+   remains an explicit full-turn gap and is next in the held-item audit.
    Existing helper arithmetic alone does not
    establish that a public owner invokes it.
    The Pokérus/trapping owning-caller audit is recorded in [the validation record](../game-core/POKERUS-TRAP-VALIDATION.md). It does not close all switch interactions.
