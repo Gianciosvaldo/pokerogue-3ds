@@ -82,6 +82,32 @@ int main(void)
     }
     assert(short_complete>deep_complete && deep_complete>0);
     assert(deep_yards/(int)deep_complete>short_yards/(int)short_complete);
+    /* Integration: roles never double-book the QB/carrier as a blocker, and
+     * contact only applies after a run/catch, not an airborne failed pass. */
+    bool saw_broken=false,saw_fumble=false,saw_pancake=false,saw_no_contact=false,saw_catch_fumble=false;
+    home=team(6,80);away=team(6,30);
+    for (unsigned seed=1;seed<2500;++seed) {
+        assert(football_match_begin(&m,&home,&away,seed,256));
+        assert(football_match_call(&m,call(seed%FB_PLAY_COUNT)));
+        unsigned qb=football_match_quarterback(&m,FB_HOME);
+        assert(m.blocker<home.count && m.rusher<away.count && m.tackler<away.count);
+        assert(m.blocker!=qb && m.blocker!=m.play.target_slot);
+        if (m.contact.attempted) {
+            saw_broken|=m.contact.broken;saw_fumble|=m.contact.fumble;
+            assert(!m.contact.broken || (m.contact.extra_yards>0 && !m.contact.fumble));
+            assert(m.resolved.kind==FB_RESULT_RUN || m.resolved.kind==FB_RESULT_COMPLETE || m.resolved.kind==FB_RESULT_FUMBLE);
+        } else saw_no_contact=true;
+        if (m.contact.fumble) {
+            assert(m.resolved.kind==FB_RESULT_FUMBLE);
+            saw_catch_fumble|=m.play.type==FB_PLAY_PASS;
+        }
+        saw_pancake|=m.blocking.pancake;
+    }
+    assert(saw_broken && saw_fumble && saw_pancake && saw_no_contact && saw_catch_fumble);
+    home=team(1,60);
+    assert(football_match_begin(&m,&home,&away,123,256));
+    assert(football_match_call(&m,call(FB_RUN_DIVE)));
+    assert(m.blocker==255 && !m.blocking.pancake && m.blocking.edge==0);
     /* A sack animates the QB rather than the intended receiver. */
     bool saw_sack=false;
     home=team(6,60);

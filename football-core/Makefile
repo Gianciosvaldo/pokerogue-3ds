@@ -60,7 +60,7 @@ shop-render-test: core-libs
 	$(BUILD)/shop_render_test
 test: shop-render-test
 
-MATCH_SRCS = src/football_rules.c src/football_match.c src/football_playbook.c
+MATCH_SRCS = src/football_rules.c src/football_match.c src/football_playbook.c src/football_contact.c
 .PHONY: rules-test match-test
 rules-test: $(BUILD)/rules_test
 	$(BUILD)/rules_test
@@ -110,3 +110,11 @@ mega-test: core-libs
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/mega_test.c $(MODE_SRCS) $(CORE_LIBS) -lm -o $(BUILD)/mega_test
 	$(BUILD)/mega_test
 test: mega-test
+
+.PHONY: contact-test
+contact-test: $(BUILD)/contact_test
+	$(BUILD)/contact_test
+$(BUILD)/contact_test: tests/contact_test.c src/football_contact.c include/football_contact.h include/football_stats.h
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/contact_test.c src/football_contact.c -o $@
+test: contact-test

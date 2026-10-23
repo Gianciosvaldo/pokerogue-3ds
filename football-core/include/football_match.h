@@ -2,6 +2,7 @@
 #define FOOTBALL_MATCH_H
 #include "football_rules.h"
 #include "football_stats.h"
+#include "football_contact.h"
 #include "playcall_ui.h"
 #define FB_MATCH_TEAM_CAP 6
 #define FB_PLAY_ANIMATION_MS 700
@@ -17,7 +18,9 @@ typedef struct {
     uint16_t difficulty_q8, animation_ms, plays;
     PlayInfo play;
     FootballResolvedPlay resolved;
-    uint8_t carrier;
+    uint8_t carrier, blocker, rusher, tackler; /* 255: no separate blocker. */
+    FootballBlockResult blocking;
+    FootballContactResult contact;
 } FootballMatch;
 /* Fixed-size, allocation-free state. Only match initialization rolls a tiebreak
  * side; play RNG is consumed once per accepted snap, never by rendering. */
