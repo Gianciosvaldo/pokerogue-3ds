@@ -103,3 +103,10 @@ screen-test: core-libs
 	$(CC) $(CPPFLAGS) $(CFLAGS) -D__3DS__ -DFOOTBALL_SCREEN_TEST -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include tests/screen_test.c ../game/source/football_screen.c $(MODE_SRCS) $(CORE_LIBS) -lm -o $(BUILD)/screen_test
 	$(BUILD)/screen_test
 test: screen-test
+
+.PHONY: mega-test
+mega-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/mega_test.c $(MODE_SRCS) $(CORE_LIBS) -lm -o $(BUILD)/mega_test
+	$(BUILD)/mega_test
+test: mega-test

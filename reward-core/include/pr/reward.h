@@ -92,6 +92,8 @@ extern const pr_item_fc pr_item_fcs[];
 extern const pr_fc_cond pr_fc_conds[];
 extern const pr_species_slice pr_item_fc_species[];
 extern const int pr_item_fc_species_count;
+/* Generated form-key identity, shared with native form-change adapters. */
+int pr_reward_form_key(int species, int form);
 /* By TrainerType (card 97): whether trainerConfigs has it, config.isBoss, the voucher TrainerVictoryPhase validates
  * (vouchers[TrainerType[t]].voucherType, a VoucherType; -1 = none), config.moneyMultiplier, the
  * modifierRewardFuncs' items (-1 pads) and whether it has a genModifiersFunc */

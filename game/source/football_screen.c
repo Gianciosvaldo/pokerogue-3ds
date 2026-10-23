@@ -252,7 +252,17 @@ static void draw(ui_screen *s,rr_screen which)
             (F.mode.season.phase==FB_SEASON_CLEAR ? "Playoff champions!" : "Playoff run ended") :
             F.mode.phase==FB_MODE_ERROR ? "Unable to continue" : "Team progress";
         text(12,20,title,.55f);
-        if(F.mode.phase==FB_MODE_ROUND) paragraph("Seven wins to become champion. Choose formations and plays on this screen.",64);
+        if(F.mode.phase==FB_MODE_ROUND) {
+            paragraph("Choose plays to win seven matches. Select one owned mega stone holder, or none.",64);
+            char mega[96];int slot=F.mode.season.mega_slot;
+            const pr_form *form=slot<0 ? NULL : gc_football_owned_mega(F.roster,(unsigned)slot);
+            const char *name="None";
+            if (form) for (unsigned i=0;i<PR_SPECIES_COUNT;++i)
+                if (pr_species_table[i].id==form->species) { name=pr_species_table[i].name;break; }
+            snprintf(mega,sizeof mega,"Mega: %s%s%s",name,form ? " " : "",form ? form->form_name : "");
+            rr_rect(12,132,296,26,RR_RGBA(35,48,65,255));text(20,136,mega,.42f);
+            text(12,116,"Left/Right or tap to choose",.35f);
+        }
         else if(F.mode.phase==FB_MODE_END){char note[128];snprintf(note,sizeof note,"Won %u of 7 matches. Continue to return to the title.",F.mode.season.wins);paragraph(note,64);}
         else paragraph(F.mode.message,64);
         if (F.mode.phase!=FB_MODE_EVENTS) button();

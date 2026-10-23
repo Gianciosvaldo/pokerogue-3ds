@@ -123,6 +123,15 @@ void football_mode_input(FootballMode *m,FootballCallInput in,int target_step)
     bool accept=(in.pressed&FB_INPUT_ACCEPT)!=0 || hit((FootballTouchRect){12,164,296,52},in);
     switch (m->phase) {
     case FB_MODE_ROUND:
+        if (target_step || hit((FootballTouchRect){12,132,296,26},in)) {
+            int step=target_step<0 ? -1 : 1,slot=m->season.mega_slot;
+            int count=m->season.roster->n_party+1;
+            for (int tries=0;tries<count;++tries) {
+                slot=(slot+1+step+count)%count-1;
+                if (football_season_select_mega(&m->season,slot)) break;
+            }
+            break;
+        }
         if (accept) {
             if (!football_playoff_match_begin(&m->session,&m->season)) error(m,"The next match could not be loaded.");
             else { football_playcall_reset(&m->playcall);m->phase=FB_MODE_PLAY; }

@@ -7,7 +7,8 @@ bool football_playoff_match_begin(FootballPlayoffMatch *session,FootballSeason *
     FootballMatchSpec spec;
     FootballTeam home={0},away;
     home.count=(uint8_t)season->roster->n_party;
-    memcpy(home.players,season->players,home.count*sizeof home.players[0]);
+    for (unsigned i=0;i<home.count;++i)
+        if (!football_season_match_player(season,i,&home.players[i])) return false;
     if (!football_season_start_match(season,&spec)) return false;
     if (!football_match_opponent(&away,&season->maxima,spec.seed,spec.round) ||
         !football_match_begin(&session->match,&home,&away,spec.seed,spec.difficulty_q8)) {
