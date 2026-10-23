@@ -53,9 +53,15 @@ static void inventory(void) {
  for(int side=0;side<2;side++) {
   memset(&run,0,sizeof run);gc_item *items=side?run.enemy_items:run.items;int *n=side?&run.n_enemy_items:&run.n_items;
   *n=GC_MAX_ITEMS;for(int i=0;i<*n;i++)items[i]=(gc_item){"REVIVER_SEED",-1,1,100+i};
-  gc_items_to_battle(&run);CHECK(run.bt.n_mods[side]==PR_MAX_MODIFIERS);run.bt.n_mods[side]=0;gc_items_from_battle(&run);
-  CHECK(*n==GC_MAX_ITEMS-PR_MAX_MODIFIERS);CHECK(items[0].pokemon_id==100+PR_MAX_MODIFIERS);
-  gc_items_from_battle(&run);CHECK(*n==GC_MAX_ITEMS-PR_MAX_MODIFIERS);gc_items_to_battle(&run);CHECK(run.bt.n_mods[side]==*n);
+  gc_items_to_battle(&run);CHECK(run.bt.n_mods[side]==0&&run.bt.n_unported);gc_items_from_battle(&run);
+  CHECK(*n==GC_MAX_ITEMS&&items[0].pokemon_id==100&&items[GC_MAX_ITEMS-1].pokemon_id==100+GC_MAX_ITEMS-1);
+  gc_items_from_battle(&run);CHECK(*n==GC_MAX_ITEMS);
+  /* All supported entries can be consumed, with no unrepresented tail. */
+  memset(&run,0,sizeof run);*n=PR_MAX_MODIFIERS;
+  for(int i=0;i<*n;i++)items[i]=(gc_item){"REVIVER_SEED",-1,1,100+i};
+  gc_items_to_battle(&run);CHECK(run.bt.n_mods[side]==PR_MAX_MODIFIERS&&!run.bt.n_unported);
+  run.bt.n_mods[side]=0;gc_items_from_battle(&run);CHECK(*n==0);
+  gc_items_from_battle(&run);CHECK(*n==0);gc_items_to_battle(&run);CHECK(run.bt.n_mods[side]==0);
   memset(&run,0,sizeof run);*n=3;items[0]=(gc_item){"REVIVER_SEED",-1,1,10};items[1]=(gc_item){"REVIVER_SEED",-1,1,20};items[2]=(gc_item){"REVIVER_SEED",0,1,20};
   gc_items_to_battle(&run);CHECK(!run.bt.mods[side][0].unknown_subclass);CHECK(run.bt.mods[side][1].unknown_subclass&&run.bt.mods[side][2].unknown_subclass);
   run.bt.n_mods[side]=0;gc_items_from_battle(&run);CHECK(*n==2&&items[0].pokemon_id==20&&items[1].pokemon_id==20);gc_items_from_battle(&run);CHECK(*n==2);
