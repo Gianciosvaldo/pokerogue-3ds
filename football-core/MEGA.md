@@ -38,4 +38,4 @@ Per the requested release workflow, visual testing is deferred to the next
 Windows builder. That pass should check the selector text, transformed front
 sprites, regular-form restoration on the next round, missing-art fallback and
 play animations. No device visual/performance validation is claimed here.
-Football sessions remain session-only; save/resume is separate work.
+Football checkpoints preserve stone ownership and mega selection; see `SAVE.md`.

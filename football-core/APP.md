@@ -33,12 +33,13 @@ ownership. Before the next match, use Left/Right or tap the Mega row to select
 one compatible holder, or None. The transformation lasts for that match only;
 see `MEGA.md`.
 
-START opens Keep playing / End playoff and return to title. The match and EXP
-pump pause while an overlay is open, during a fade, or while a profile save error
-is being answered. The player is told at entry and in the screen footer that this
-playoff is **session-only**: it cannot be saved or resumed, and no Classic/Custom
-session file is created, cleared or overwritten. Football persistence is a future
-module rather than a compatibility change to the existing save format.
+START opens Keep playing / Save and return / Delete football save and return.
+Checkpoints are written before snaps, between rounds and in the shop. Selecting
+Football Playoff again resumes that file; the app reports backup recovery. Finish
+an active snap or EXP/evolution/move prompts before manually saving. An unexpected
+close during those phases resumes the last checkpoint. Deletion needs a second
+confirmation. Damaged/newer files are preserved until explicit deletion. No
+Classic/Custom session file or Continue selection is changed. See `SAVE.md`.
 
 Shared profile changes from evolution are saved through the app's existing
 `sysd_save` gate after progression and before exit. An actual failed write offers

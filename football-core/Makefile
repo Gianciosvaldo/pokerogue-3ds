@@ -89,7 +89,7 @@ $(BUILD)/match_view_test: tests/match_view_test.c ../game/source/football_match_
 	$(CC) $(CPPFLAGS) $(CFLAGS) -D__3DS__ -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include tests/match_view_test.c ../game/source/football_match_view.c $(MATCH_SRCS) src/football_stats.c ../battle-core/gen/out/pr_data.c -lm -o $@
 test: match-view-test
 
-MODE_SRCS = src/football_mode.c src/football_playoff_match.c src/playoff_season.c src/football_stats.c $(MATCH_SRCS) src/playcall_ui.c src/evolution_ui.c src/football_shop_ui.c
+MODE_SRCS = src/football_save.c src/football_mode.c src/football_playoff_match.c src/playoff_season.c src/football_stats.c $(MATCH_SRCS) src/playcall_ui.c src/evolution_ui.c src/football_shop_ui.c
 .PHONY: mode-test
 mode-test: core-libs
 	mkdir -p $(BUILD)
@@ -118,3 +118,17 @@ $(BUILD)/contact_test: tests/contact_test.c src/football_contact.c include/footb
 	mkdir -p $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/contact_test.c src/football_contact.c -o $@
 test: contact-test
+
+.PHONY: save-test
+save-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/save_test.c $(MODE_SRCS) $(CORE_LIBS) -lm -o $(BUILD)/save_test
+	$(BUILD)/save_test
+test: save-test
+
+.PHONY: save-file-test
+save-file-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -I../game/include -I../assets-pipeline/app-src/include tests/save_file_test.c ../game/source/football_saves.c ../assets-pipeline/app-src/source/save.c $(MODE_SRCS) $(CORE_LIBS) -lm -o $(BUILD)/save_file_test
+	$(BUILD)/save_file_test
+test: save-file-test

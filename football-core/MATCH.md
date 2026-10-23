@@ -118,6 +118,6 @@ Rules and full-match replay also pass AddressSanitizer/UndefinedBehaviorSanitize
 The managed local debugger prevents LeakSanitizer, so leak detection was disabled
 only for the local run; these modules allocate no memory. CI runs both sanitizers
 with default leak settings and also runs the real 3DS build and stack checks.
-Football save serialization remains subsequent work. Match-only mega activation is documented in `MEGA.md`. The
+Dedicated football checkpoint serialization is documented in `SAVE.md`. Match-only mega activation is documented in `MEGA.md`. The
 app screen and its controls are documented in `APP.md`. Device visuals and performance still need
 hardware or emulator validation.
