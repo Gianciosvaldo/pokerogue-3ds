@@ -55,7 +55,7 @@ The other supplied files suggest later work: `camera.js` for a readable tracking
 view, `art-stadium.js` for cached stadium decoration, and `audio-crowd.js` for
 event-driven excitement. `audio-unlock.js` deals with browser autoplay policies
 and does not apply to libctru audio. None of those browser APIs are linked into
-this native change. Mega selection is documented in `MEGA.md`. Football save/resume is still pending.
+this native change. Mega selection is documented in `MEGA.md`. Dedicated checkpoint persistence is documented in `SAVE.md`.
 
 ## Validation
 
