@@ -1,12 +1,39 @@
 /* Turn history: summonData.moveHistory, turnData.attacksReceived and the last turn order
  * (src/field/pokemon.ts, src/queues/move-phase-priority-queue.ts). Each list keeps its true
- * length and its newest entries; a read that reaches past the kept entries reports itself
- * unported instead of guessing. */
+ * tracked length and newest entries; a read that reaches past the kept entries reports itself
+ * unported instead of guessing. Last Resort membership is recorded separately. */
 #include "pr/battle.h"
 #include <string.h>
 
+static void remember_used_move(pr_pokemon *p,const pr_turn_move *tm)
+{
+    if(tm->move<PR_MOVE_COUNT&&tm->use_mode<MOVE_USE_MODE_INDIRECT)
+        p->history_used_moves[tm->move/8]|=(uint8_t)(1u<<(tm->move%8));
+}
+void pr_rebuild_history_used_moves(pr_pokemon *p)
+{
+    memset(p->history_used_moves,0,sizeof p->history_used_moves);
+    p->history_used_complete=p->n_move_history<=PR_MAX_MOVE_HISTORY;
+    int kept=p->n_move_history<PR_MAX_MOVE_HISTORY?p->n_move_history:PR_MAX_MOVE_HISTORY;
+    for(int i=0;i<kept;i++)remember_used_move(p,&p->move_history[i]);
+}
+bool pr_history_used_move(const pr_pokemon *p,int move)
+{
+    if(move<0||move>=PR_MOVE_COUNT)return false;
+    if(p->history_used_moves[move/8]&(1u<<(move%8)))return true;
+    /* Raw callers can supply the existing tail without a summary. */
+    int kept=p->n_move_history<PR_MAX_MOVE_HISTORY?p->n_move_history:PR_MAX_MOVE_HISTORY;
+    for(int i=0;i<kept;i++)if(p->move_history[i].move==move&&p->move_history[i].use_mode<MOVE_USE_MODE_INDIRECT)return true;
+    return false;
+}
+
 void pr_push_move_history(pr_pokemon *p, pr_turn_move tm)
 {
+    if(!p->n_move_history||(!p->history_used_complete&&p->n_move_history<=PR_MAX_MOVE_HISTORY))
+        pr_rebuild_history_used_moves(p);
+    else if(!p->history_used_complete)
+        for(int i=0;i<PR_MAX_MOVE_HISTORY;i++)remember_used_move(p,&p->move_history[i]);
+    remember_used_move(p,&tm);
     if (p->n_move_history >= PR_MAX_MOVE_HISTORY)
         memmove(p->move_history, p->move_history + 1, (PR_MAX_MOVE_HISTORY - 1) * sizeof *p->move_history);
     int kept = p->n_move_history < PR_MAX_MOVE_HISTORY ? p->n_move_history : PR_MAX_MOVE_HISTORY - 1;

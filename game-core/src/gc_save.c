@@ -146,6 +146,7 @@ static const sfield pokemon_fields[] = {
     SF(pr_pokemon, battle_berries), SF(pr_pokemon, turn_berries), SF(pr_pokemon, last_berries),
     SF(pr_pokemon, n_battle_berries), SF(pr_pokemon, n_turn_berries), SF(pr_pokemon, n_last_berries),
 };
+static const sfield history_used_fields[]={SF(pr_pokemon,history_used_moves),SF(pr_pokemon,history_used_complete)};
 static const sfield tag_fields[] = {
     SF(pr_battler_tag, type), SF(pr_battler_tag, turn_count), SF(pr_battler_tag, source_move),
     SF(pr_battler_tag, source_id), SF(pr_battler_tag, crit_stages), SF(pr_battler_tag, stockpiled_count),
@@ -439,6 +440,10 @@ static void put_mons(writer *w, const char *name, const gc_mon *mons, int n)
         put_block(w, turn_move_fields, NF(turn_move_fields), b->move_queue, sizeof b->move_queue[0], b->n_move_queue);
     }
     section_end(w, s);
+    char key[48];snprintf(key,sizeof key,"%s_move_uses",name);
+    s=section_start(w,key);
+    put_block(w,history_used_fields,NF(history_used_fields),&mons[0].b,sizeof(gc_mon),n);
+    section_end(w,s);
 }
 
 static void put_items(writer *w, const char *name, const gc_item *items, int n)
@@ -675,6 +680,32 @@ static bool illusion_ok(const pr_illusion *v){
     return v->fusion_species?(fusion&&v->fusion_form<fusion->nforms):v->fusion_form==0;
 }
 
+/* Optional new section: legacy saves reconstruct known membership from their tail.
+ * Missing old entries remain explicitly unknown rather than inventing a complete set. */
+static bool get_history_used(const reader *body,const char *name,gc_mon *mons,int n,int *dropped)
+{
+    char key[48];snprintf(key,sizeof key,"%s_move_uses",name);
+    reader scan=*body;int sections=0;
+    while(scan.pos+8<=scan.n){uint32_t kind=take32(&scan),len=take32(&scan);if(len>scan.n-scan.pos)return false;if(kind==hash(key))sections++;scan.pos+=len;}
+    if(scan.bad||scan.pos!=scan.n||sections>1)return false;
+    if(!sections){for(int i=0;i<n;i++)pr_rebuild_history_used_moves(&mons[i].b);return true;}
+    reader r=section(body,key),schema=r;int count=take16(&schema);unsigned seen=0;
+    if(schema.bad||count!=NF(history_used_fields))return false;
+    for(int i=0;i<count;i++){
+        uint32_t field=take32(&schema);uint16_t size=take16(&schema);int found=-1;
+        for(int j=0;j<NF(history_used_fields);j++)if(field==hash(history_used_fields[j].name)&&size==history_used_fields[j].size)found=j;
+        if(found<0||(seen&(1u<<found)))return false;
+        seen|=1u<<found;
+    }
+    if(schema.bad||get_block(&r,history_used_fields,NF(history_used_fields),&mons[0].b,sizeof(gc_mon),n,dropped)!=n||r.bad||r.pos!=r.n)return false;
+    for(int i=0;i<n;i++){
+        pr_pokemon *p=&mons[i].b;uint8_t complete;memcpy(&complete,&p->history_used_complete,1);
+        if(complete>1)return false;
+        for(int m=PR_MOVE_COUNT;m<(int)sizeof p->history_used_moves*8;m++)if(p->history_used_moves[m/8]&(1u<<(m%8)))return false;
+    }
+    return true;
+}
+
 static bool get_mons(const reader *body, const char *name, gc_mon *mons, int n, int *dropped)
 {
     reader r = section(body, name);
@@ -709,7 +740,7 @@ static bool get_mons(const reader *body, const char *name, gc_mon *mons, int n, 
         }
         if (r.bad || !mon_ok(&mons[i])) return false;
     }
-    return !r.bad;
+    return !r.bad&&get_history_used(body,name,mons,n,dropped);
 }
 
 static bool get_items(const reader *body, const char *name, gc_item *items, int n, int *dropped)
