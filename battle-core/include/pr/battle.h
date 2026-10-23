@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "pr/rng.h"
+#include "pr/inventory_limits.h"
 #include "pr_data.h"
 
 #define PR_MAX_UNPORTED 16
@@ -124,7 +125,6 @@ typedef struct pr_modifier {
     int8_t berry_type;             /* BerryModifier.berryType */
     int8_t status_effect;          /* TurnStatusEffectModifier.getStatusEffect(): TOXIC or BURN */
 } pr_modifier;
-#define PR_MAX_MODIFIERS 96        /* per side */
 
 /* Battler tags (src/tags.c): summonData.tags, in upstream order. A tag's class and the
  * parameters getBattlerTag() gives it (Flash Fire's type and boost...) follow from its
@@ -402,7 +402,7 @@ typedef struct pr_battle {
     uint8_t n_pos_tags;
     /* globalScene.modifiers (player, [0]) and enemyModifiers ([1]), in upstream list order */
     pr_modifier mods[2][PR_MAX_MODIFIERS];
-    uint8_t n_mods[2];
+    uint16_t n_mods[2];
     uint32_t modifier_type_ref_max; /* transient allocator, including bridged overflow stock */
     pr_seedstr wave_seed;      /* globalScene.waveSeed; len 0 = unknown */
     int max_exp_level;         /* globalScene.getMaxExpLevel(); 0 = unknown */

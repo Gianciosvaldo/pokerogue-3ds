@@ -9,7 +9,7 @@
 
 #define LAST_SLOT_FILE "last_slot"
 
-/* Not on the stack (GC_SAVE_MAX is 128 KB, the 3DS stack 32 KB). One buffer for writing, and one run to load a slot into when
+/* Not on the stack (GC_SAVE_MAX is 512 KB; retain this buffer outside the stack). One buffer for writing, and one run to load a slot into when
  * all that is wanted is what it holds. */
 static uint8_t g_wbuf[GC_SAVE_MAX];
 static gc_run g_scratch;

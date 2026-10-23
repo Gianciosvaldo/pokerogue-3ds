@@ -12,6 +12,7 @@
 #define PR_REWARD_H
 #include <stdbool.h>
 #include <stdint.h>
+#include "pr/inventory_limits.h"
 #include "pr/run.h"          /* pr_run: game mode, seeds, Phaser.Math.RND */
 #include "reward_items.h"    /* enum pr_item: modifierTypes keys (generated) */
 
@@ -220,7 +221,7 @@ typedef struct {
 } pr_owned_item;
 
 #define PR_REWARD_MAX_PARTY 6
-#define PR_REWARD_MAX_OWNED 256
+#define PR_REWARD_MAX_OWNED PR_MAX_MODIFIERS
 #define PR_REWARD_MAX_EVOLUTION_EVENTS 8
 #define PR_REWARD_MAX_NATURE_EVENTS 8
 /* In enqueue (unshiftNew call) order; the phase runner consumes in reverse order.

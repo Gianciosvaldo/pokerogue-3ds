@@ -407,6 +407,7 @@ static const char *intern(const char *key)
 /* ---------------------------------------------------------------- the calls */
 bool gc_run_can_save(const gc_run *run)
 {
+    if(!run||run->n_items<0||run->n_enemy_items<0||run->n_items>PR_MAX_MODIFIERS||run->n_enemy_items>PR_MAX_MODIFIERS)return false;
     if (run->terminal_result) return run->finished && run->terminal_result >= 1 && run->terminal_result <= 2
         && !run->in_battle && run->run.mode == GAME_MODES_CLASSIC
         && run->n_party >= 1 && run->n_party <= 6 && run->n_enemy >= 1 && run->n_enemy <= 6
@@ -804,7 +805,7 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
         || tr.bad || tr.pos!=tr.n || terminal.terminal_result<1 || terminal.terminal_result>2)) { *why="the terminal save is damaged";return false; }
     if (terminal.terminal_result && (v.in_battle || v.mode!=GAME_MODES_CLASSIC || (terminal.terminal_result==2&&(v.wave<200||v.has_challenges))||(terminal.terminal_result==1&&v.wave>200))) { *why="the terminal save is damaged";return false; }
     if ((!v.in_battle && !terminal.terminal_result) || v.wave < 1 || v.n_party < 1 || v.n_party > 6 || v.n_enemy < 1 || v.n_enemy > 6
-        || v.n_items < 0 || v.n_items > GC_MAX_ITEMS || v.n_enemy_items < 0 || v.n_enemy_items > GC_MAX_ITEMS
+        || v.n_items < 0 || v.n_items > PR_MAX_MODIFIERS || v.n_enemy_items < 0 || v.n_enemy_items > PR_MAX_MODIFIERS
         || v.n_mystery_history > GC_MAX_MYSTERY_HISTORY
         || v.seed_len > 64 || v.wave_seed_len > 64 || v.n_arena_tags < 0 || v.n_arena_tags > PR_MAX_ARENA_TAGS
         || v.n_pos_tags < 0 || v.n_pos_tags > PR_MAX_POSITIONAL_TAGS || v.biome < 0 || v.biome >= PR_BIOME_ID_LIMIT) {

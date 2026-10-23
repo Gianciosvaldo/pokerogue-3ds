@@ -221,7 +221,7 @@ typedef struct {
     uint16_t loot_ref;         /* transient detached-stock identity, excluded from saves */
     bool eviolite_base;        /* transferred Eviolite inherits the base stat-booster clone */
 } gc_item;
-#define GC_MAX_ITEMS 128
+#define GC_MAX_ITEMS (PR_MAX_MODIFIERS + 32) /* staging/validation headroom; battle/reward limit remains explicit */
 
 enum gc_mystery_type {
     GC_ME_MYSTERIOUS_CHALLENGERS = 0, GC_ME_MYSTERIOUS_CHEST, GC_ME_DARK_DEAL, GC_ME_FIGHT_OR_FLIGHT,
@@ -397,7 +397,7 @@ const pr_msg *gc_run_refusal_message(const gc_run *run);
  * run and queues the scene's events (WAVE, TRAINER, SUMMON) before the COMMAND screen; false (and *why)
  * for a damaged save or one from a newer format, and the run is left empty then. A save made by another
  * build loads as far as its fields still match (see load_dropped). */
-#define GC_SAVE_MAX (128 * 1024)
+#define GC_SAVE_MAX (512 * 1024)
 bool gc_run_can_save(const gc_run *run);
 size_t gc_run_save(const gc_run *run, void *buf, size_t cap);
 bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why);

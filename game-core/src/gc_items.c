@@ -19,7 +19,7 @@ void gc_item_add(gc_run *run, const char *key, int16_t arg, uint32_t pokemon_id,
         gc_item *it = &run->items[i];
         if (!strcmp(it->key, key) && it->arg == arg && it->pokemon_id == pokemon_id && !it->eviolite_base) { it->stack += stack; return; }
     }
-    if (run->n_items >= GC_MAX_ITEMS) return;
+    if (run->n_items >= PR_MAX_MODIFIERS) {pr_note_unported(&run->bt,PR_FEAT_ENGINE_LIMIT);return;}
     gc_item *it = &run->items[run->n_items++];
     it->key = key;
     it->arg = arg;
@@ -267,6 +267,11 @@ static bool duplicate_seed(const gc_item *items, int n, int index)
 void gc_items_to_battle(gc_run *run)
 {
     pr_battle *bt = &run->bt;
+    bt->n_mods[0] = bt->n_mods[1] = 0;
+    /* Do not quietly run with the first part of an invalid inventory. */
+    if(run->n_items<0||run->n_enemy_items<0||run->n_items>PR_MAX_MODIFIERS||run->n_enemy_items>PR_MAX_MODIFIERS){
+        pr_note_unported(bt,PR_FEAT_ENGINE_LIMIT);return;
+    }
     const bool golden = golden_bridge(run);
     for (int side=0;side<2;side++) {
         const gc_item *items=side?run->enemy_items:run->items;
@@ -274,7 +279,6 @@ void gc_items_to_battle(gc_run *run)
         for (int i=0;i<n && i<GC_MAX_ITEMS;i++)
             if (items[i].type_ref>bt->modifier_type_ref_max) bt->modifier_type_ref_max=items[i].type_ref;
     }
-    bt->n_mods[0] = bt->n_mods[1] = 0;
     for (int i = 0; i < run->n_items && bt->n_mods[0] < PR_MAX_MODIFIERS; i++)
         to_modifier(&run->items[i], &bt->mods[0][bt->n_mods[0]++], golden);
     for (int i = 0; i < run->n_enemy_items && bt->n_mods[1] < PR_MAX_MODIFIERS; i++)

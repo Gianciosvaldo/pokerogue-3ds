@@ -62,7 +62,9 @@ money handling merged in #357; see [their validation record](HONEY-MONEY-VALIDAT
    The [stat-booster follow-up](STAT-LOOT-VALIDATION.md) adds their canonical
    clone/save paths. The [fused held-item follow-up](FUSED-HELD-VALIDATION.md)
    adds original Eviolite/species-booster/Leek fusion eligibility through native
-   full turns and the doubles command/save owner. Inventory capacity and the
+   full turns and the doubles command/save owner. The [inventory-capacity
+   follow-up](INVENTORY-CAPACITY-VALIDATION.md) fixes canonical stock truncation
+   and expands battle/reward/save storage. Transient inventory history and the
    remaining source paths still need review.
    Existing helper arithmetic alone does not
    establish that a public owner invokes it.
