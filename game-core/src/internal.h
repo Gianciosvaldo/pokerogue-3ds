@@ -231,6 +231,7 @@ void gc_reward_change_form(gc_run *run, int party, int form);
 
 /* ---- items (src/gc_items.c) ---- */
 int gc_item_stack(const gc_run *run, const char *key);                 /* stack count of a player item, 0 = none */
+bool gc_item_key_locked(const char *key); /* intrinsic pinned constructor property */
 void gc_item_add(gc_run *run, const char *key, int16_t arg, uint32_t pokemon_id, int stack);
 void gc_item_remove_at(gc_run *run, int idx);
 /* The enemy's held items (the modifiers with a Pokemon) and the player's, as catching moves them. Each rebuilds
