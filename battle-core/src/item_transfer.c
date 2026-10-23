@@ -20,6 +20,10 @@ static int transfer_cap(const pr_modifier *m)
     case PR_MOD_NATURE_WEIGHT: return 10;
     case PR_MOD_DAMAGE_MONEY_REWARD: return 5;
     case PR_MOD_ATTACK_TYPE_BOOSTER: return 99;
+    case PR_MOD_FIELD_EFFECT: return 2;
+    case PR_MOD_SPECIES_CRIT_BOOSTER: return 1;
+    case PR_MOD_EXP_BOOSTER: return 99;
+    case PR_MOD_FRIENDSHIP_BOOSTER: return 3;
     case PR_MOD_BERRY:
         return m->berry_type==BERRY_TYPE_LUM||m->berry_type==BERRY_TYPE_LEPPA
             ||m->berry_type==BERRY_TYPE_SITRUS||m->berry_type==BERRY_TYPE_ENIGMA?2:3;
@@ -30,6 +34,7 @@ static int transfer_cap(const pr_modifier *m)
 static bool same_type(const pr_modifier *m,const pr_modifier *other)
 {
     if(m->cls!=other->cls)return false;
+    if(m->cls==PR_MOD_EXP_BOOSTER)return m->mult==other->mult;
     if(m->cls==PR_MOD_BERRY)return m->berry_type==other->berry_type;
     if(m->cls==PR_MOD_ATTACK_TYPE_BOOSTER)return m->move_type==other->move_type&&m->mult==other->mult;
     if(m->cls==PR_MOD_CRIT_BOOSTER||m->cls==PR_MOD_MOVE_ACCURACY_BOOSTER)return m->num==other->num;
@@ -104,6 +109,9 @@ int pr_held_item_tier_for_pool(const pr_modifier *m, bool trainer)
     case PR_MOD_DAMAGE_MONEY_REWARD: case PR_MOD_ATTACK_TYPE_BOOSTER:
     case PR_MOD_INSTANT_REVIVE: tier = 2; break;
     case PR_MOD_TURN_HELD_TRANSFER: case PR_MOD_MULTI_HIT: tier = 4; break;
+    case PR_MOD_FIELD_EFFECT: case PR_MOD_SPECIES_CRIT_BOOSTER: tier = 2; break;
+    case PR_MOD_EXP_BOOSTER: if(m->mult==0.4)tier=3;else if(m->mult==1.0)tier=4;break;
+    case PR_MOD_FRIENDSHIP_BOOSTER: tier = 1; break;
     case PR_MOD_BERRY: tier = 0; break;
     default: break;
     }
@@ -124,8 +132,8 @@ static int infer_move_item_tier(pr_battle *bt, pr_modifier *m, bool trainer)
 }
 
 /* Native canTransferHeldItemModifier clones before matching. The currently
- * supported stock families preserve their class through clone(). The broader
- * clone-family cases must be added here before enabling them for Pickup. */
+ * supported transferable stock families preserve their class through clone().
+ * Transferable stat-booster clone families remain explicit unsupported paths. */
 bool pr_can_transfer_held_item(pr_battle *bt, const pr_modifier *stock,
                               pr_pokemon *receiver, int quantity)
 {
@@ -226,6 +234,7 @@ bool pr_try_transfer_held_item(pr_battle *bt, pr_engine *e, int from_side,
         if (from_side==side && matching>index) matching--;
     }
     if (matching>=0) remove_at(bt,side,matching);
+    copy.loot_ref=0; /* clone is a distinct object, outside the original loot list */
     copy.pokemon_id=receiver->id;
     copy.stack_count=existing+taken;
     copy.virtual_stack_count=0;

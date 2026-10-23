@@ -13,6 +13,8 @@
 #include <string.h>
 
 const uint8_t pr_mod_parent[PR_MOD_COUNT_] = {
+    [PR_MOD_EXP_BOOSTER] = PR_MOD_HELD_ITEM,
+    [PR_MOD_FRIENDSHIP_BOOSTER] = PR_MOD_HELD_ITEM,
     [PR_MOD_SWITCH_EFFECT_TRANSFER] = PR_MOD_HELD_ITEM,
     [PR_MOD_CONTACT_HELD_TRANSFER] = PR_MOD_HELD_ITEM,
     [PR_MOD_TURN_HELD_TRANSFER] = PR_MOD_HELD_ITEM,
@@ -59,6 +61,8 @@ const uint8_t pr_mod_parent[PR_MOD_COUNT_] = {
 };
 
 const char *const pr_mod_class_name[PR_MOD_COUNT_] = {
+    [PR_MOD_EXP_BOOSTER] = "PokemonExpBoosterModifier",
+    [PR_MOD_FRIENDSHIP_BOOSTER] = "PokemonFriendshipBoosterModifier",
     [PR_MOD_SWITCH_EFFECT_TRANSFER] = "SwitchEffectTransferModifier",
     [PR_MOD_CONTACT_HELD_TRANSFER] = "ContactHeldItemTransferChanceModifier",
     [PR_MOD_TURN_HELD_TRANSFER] = "TurnHeldItemTransferModifier",
@@ -159,6 +163,12 @@ bool pr_mod_is_ported_item(const pr_modifier *m)
             || m->virtual_stack_count!=0 || m->pokemon_id!=0) return false;
         if (m->cls == PR_MOD_TEMP_CRIT_BOOSTER) return m->stat==0;
         return m->stat>=STAT_ATK && m->stat<=STAT_ACC && m->mult==(m->stat==STAT_ACC?1.0:0.2);
+    }
+    if(m->cls==PR_MOD_EXP_BOOSTER||m->cls==PR_MOD_FRIENDSHIP_BOOSTER){
+        int64_t stacks=(int64_t)m->stack_count+m->virtual_stack_count;
+        return !m->unknown_subclass && m->stack_count>=1 && m->virtual_stack_count>=0
+            && stacks<=(m->cls==PR_MOD_EXP_BOOSTER?99:3)
+            && (m->cls==PR_MOD_FRIENDSHIP_BOOSTER || m->mult==0.4 || m->mult==1.0);
     }
     if (m->cls == PR_MOD_FIELD_EFFECT) {
         int64_t stacks=(int64_t)m->stack_count+m->virtual_stack_count;

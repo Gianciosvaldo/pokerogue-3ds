@@ -830,7 +830,7 @@ void pr_prepare_post_battle_money(pr_battle *bt, pr_engine *e, bool victory)
         pr_pokemon *p = bt->party[0][k];
         if (!p || p->hp <= 0) continue;
         pr_ab_params pp = {.pokemon = p, .move = -1, .victory = victory};
-        pr_apply_ab_attrs(bt, PR_AC_MoneyAbAttr, &pp);
+        pr_apply_ab_attrs(bt, PR_AC_PostBattleAbAttr, &pp);
     }
 }
 

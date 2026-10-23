@@ -3148,8 +3148,7 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
             pr_modifier *m = &bt->mods[1][i];
             if (pr_mod_is(m, PR_MOD_HELD_ITEM) && m->pokemon_id == (int64_t)p->id) {
                 if (m->is_transferable) {
-                    bt->post_battle_loot++;
-                    m->pokemon_id = 0;
+                    pr_add_post_battle_loot(bt,m);
                 }
                 if (!pr_mod_is_ported_item(m)) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
             }

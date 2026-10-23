@@ -1208,6 +1208,10 @@ const char *pr_held_item_name_key(const pr_modifier *m)
         return m->move_type>=0&&m->move_type<18?keys[m->move_type]:NULL;
     }
     switch (m->cls) {
+    case PR_MOD_FIELD_EFFECT: return "modifierType:ModifierType.MYSTICAL_ROCK.name";
+    case PR_MOD_SPECIES_CRIT_BOOSTER: return "modifierType:ModifierType.LEEK.name";
+    case PR_MOD_EXP_BOOSTER: return m->mult==0.4?"modifierType:ModifierType.LUCKY_EGG.name":m->mult==1.0?"modifierType:ModifierType.GOLDEN_EGG.name":NULL;
+    case PR_MOD_FRIENDSHIP_BOOSTER: return "modifierType:ModifierType.SOOTHE_BELL.name";
     case PR_MOD_MOVE_ACCURACY_BOOSTER: return "modifierType:ModifierType.WIDE_LENS.name";
     case PR_MOD_MULTI_HIT: return "modifierType:ModifierType.MULTI_LENS.name";
     case PR_MOD_CRIT_BOOSTER: return "modifierType:ModifierType.SCOPE_LENS.name";

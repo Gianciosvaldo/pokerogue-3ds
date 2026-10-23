@@ -93,6 +93,8 @@ enum {
     PR_MOD_TURN_HELD_TRANSFER,       /* Mini Black Hole; transfer execution tracked separately */
     PR_MOD_CONTACT_HELD_TRANSFER,    /* Grip Claw: mult=chance (0.1) */
     PR_MOD_SWITCH_EFFECT_TRANSFER, /* Baton */
+    PR_MOD_EXP_BOOSTER,           /* held Lucky/Golden Egg; mult=boost fraction */
+    PR_MOD_FRIENDSHIP_BOOSTER,    /* Soothe Bell */
     PR_MOD_COUNT_
 };
 extern const uint8_t pr_mod_parent[PR_MOD_COUNT_];
@@ -107,6 +109,7 @@ typedef struct pr_modifier {
     bool is_transferable;          /* PokemonHeldItemModifier.isTransferable */
     uint8_t type_tier;             /* ModifierType.tier + 1; 0 = absent, tier0 remains falsy */
     uint32_t type_ref;             /* transient shared ModifierType identity; 0 = independent */
+    uint16_t loot_ref;             /* transient object reference in this battle's loot list */
     int64_t pokemon_id;            /* PokemonHeldItemModifier.pokemonId (ids are 32-bit unsigned); -1 = any Pokemon */
     int32_t stack_count, virtual_stack_count;
     int8_t stat;                   /* BaseStatModifier / TempStatStageBoosterModifier stat */
@@ -449,6 +452,8 @@ typedef struct pr_battle {
     uint32_t participants[PR_MAX_PARTY];               /* playerParticipantIds, sorted */
     uint8_t n_participants;
     int post_battle_loot;      /* currentBattle.postBattleLoot.length */
+    uint16_t post_battle_loot_refs[PR_MAX_MODIFIERS]; /* ordered object references */
+    uint16_t loot_ref_max, pickup_cached_ref; /* the pin has one shared PostBattleLootAbAttr instance */
     double battle_score;       /* currentBattle.battleScore */
     double money;             /* globalScene.money; independent of Pay Day */
     double money_scattered;    /* currentBattle.moneyScattered: native Number (Pay Day, Honey Gather) */
