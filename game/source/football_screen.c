@@ -245,6 +245,11 @@ static void draw(ui_screen *s,rr_screen which)
             paragraph(football_match_result_name(F.mode.session.match.resolved.kind),82);
             char yards[40];snprintf(yards,sizeof yards,"%+d yards",F.mode.session.match.resolved.yards);
             text(12,118,yards,.6f);
+            const FootballMatch *m=&F.mode.session.match;
+            if (m->contact.fumble) text(12,148,"Contact: fumble lost",.42f);
+            else if (m->contact.broken) text(12,148,"Broken tackle: extra yards",.42f);
+            else if (m->contact.attempted) text(12,148,m->contact.big_hit ? "Big hit" : "Tackled",.42f);
+            if (m->blocking.pancake) text(12,172,"Pancake block",.42f);
         }
     } else {
         const char *title=F.mode.phase==FB_MODE_ROUND ? "Ready for the next match" :

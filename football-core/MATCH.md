@@ -48,7 +48,10 @@ Run outcomes use speed/agility/strength, blocking strength and opposing tackling
 pass outcomes use throwing power/accuracy, catching, receiver speed, protection
 and opposing tackling. Under Center adds run push and longer play-action gains
 with extra sack exposure; Shotgun improves passing completion probability.
-Fumbles, sacks, interceptions and incompletions are explicit outcomes. Balance
+Blocking matchups and carrier contacts are resolved by `football_contact.c`
+(see `CONTACT.md`). Broken tackles can add bounded yards, and fumbles can occur
+on runs or after a completed catch. Sacks, interceptions and incompletions remain
+explicit outcomes. Balance
 coefficients and probabilities are initial defaults, not a calibrated competitive
 model. Stamina controls fatigue; energy remains within 0–100, affects subsequent
 ratings, and partially recovers at possession breaks/halftime.
