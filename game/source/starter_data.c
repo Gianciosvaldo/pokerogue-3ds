@@ -152,6 +152,7 @@ void ss_describe(const gc_system* sys, uint16_t species, starter_info* out) {
   if (!defaults(sys, species, &p)) return;
   menu_mon* m = &out->mon;
   m->species = species;
+  m->pokerus=has_pokerus(species);
   m->form = p.form_index;
   m->gender = p.sp->male_permille < 0 ? MG_GENDERLESS : (p.female ? MG_FEMALE : MG_MALE);
   m->shiny = p.shiny;

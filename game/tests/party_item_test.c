@@ -24,7 +24,8 @@ void rr_rect(float x, float y, float w, float h, rr_color c) { (void)x; (void)y;
 const char* i18n_species_name(int id) { (void)id; return "Pokemon"; }
 const char* i18n_t(char* out, int n, const char* key, ...) { snprintf(out, n, "%s", key); return out; }
 void bv_set_info(const char* name, const char* desc) { (void)name; (void)desc; }
-void summary_open(const summary_args* a, const summary_events* e) { (void)a; (void)e; assert(0); }
+static menu_mon summary_mon;static int summary_calls;
+void summary_open(const summary_args* a, const summary_events* e) { (void)e;summary_mon=a->party[a->index];summary_calls++; }
 void summary_close(void) {}
 bool summary_active(void) { return false; }
 bool summary_input(mui_button b) { (void)b; return false; }
@@ -60,6 +61,12 @@ int main(void) {
     p->moves[0] = i == 2 ? MOVE_ID_FLAMETHROWER : MOVE_ID_TACKLE;
     for (int j = 0; j < 4; j++) p->max_pp_override[j] = -1;
   }
+  run.party[0].pokerus=true;ps_set_run(&run);
+  open();input(BTN_ACTION);input(BTN_DOWN);input(BTN_ACTION);
+  assert(summary_calls==1&&summary_mon.pokerus);ps_close();
+  run.bt.n_party[0]=3;for(int i=0;i<3;i++)run.bt.party[0][i]=&run.party[i].b;
+  ps_open(&run.bt,PS_SWITCH,on_pick,NULL);input(BTN_ACTION);input(BTN_ACTION);
+  assert(summary_calls==2&&summary_mon.pokerus);ps_close();
   open();
   pf_clear_text();
   ui_screen* s = ui_top();

@@ -474,6 +474,7 @@ static void draw_panel(void) {
     if (shiny) mui_image("ui/text_images/en/summary/summary_dexnb_label_overlay_shiny", NULL, 6, 111, 0, 1);
   }
   if (!S.info_species) return;
+  if(m->pokerus)mui_text_c(TSX_PIXEL_8,65,1,"PKRS",MUI_RGB(0xb868d8),MUI_RGB(0x302838));
 
   /* the sprite, once the cursor has rested on the species */
   const rr_frame* sf = menu_sprite_frame(&S.sprite, (uint32_t)(S.now - S.sprite_t0));

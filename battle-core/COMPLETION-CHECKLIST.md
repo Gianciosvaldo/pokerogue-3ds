@@ -58,9 +58,10 @@ nature and its raw/custom nature setter merged in #356; see
 money handling merged in #357; see [their validation record](HONEY-MONEY-VALIDATION.md).
 
 1. Close the remaining enabled callbacks against their actual owners:
-   Synchronize encounter nature merged in #356. Honey Gather and shared wide-money handling merged in #357. Terminal Endless and BattleEnd queue validation are active; Pickup remains next.
+   Synchronize encounter nature merged in #356. Honey Gather and shared wide-money handling merged in #357. Terminal Endless, canonical transfer stock and the Mini Black Hole/Grip Claw/Baton transfer prerequisites are merged; Pickup remains next.
    Existing helper arithmetic alone does not
    establish that a public owner invokes it.
+   The Pokérus/trapping owning-caller audit is recorded in [the validation record](../game-core/POKERUS-TRAP-VALIDATION.md). It does not close all switch interactions.
 2. Finish the source inventory, including AI moveset attributes, constructor
    closures/conditions, tags, modifiers, phases and unsupported/capacity paths.
 3. Reconcile identity/form/copy and persistent interaction evidence with later

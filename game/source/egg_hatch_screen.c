@@ -44,38 +44,47 @@ static void leave(ui_screen *s){(void)s;menu_sprite_free(&E.sprite);}
 static const int chart_order[6]={0,1,2,5,4,3};
 static const float chart_axis[6][2]={{0,-1},{.825f,-.5f},{.825f,.5f},{-.825f,-.5f},{-.825f,.5f},{0,1}};
 static void polygon(const float pts[6][2],rr_color color){
-  for(int y=-36;y<=36;y++){
+  for(int y=-40;y<=40;y++){
     float cuts[6];int n=0;
     for(int i=0;i<6;i++){
       int j=(i+1)%6;float a=pts[i][1],b=pts[j][1];
       if((a<=y&&b>y)||(b<=y&&a>y))cuts[n++]=pts[i][0]+(y-a)*(pts[j][0]-pts[i][0])/(b-a);
     }
     if(n==2){float left=fminf(cuts[0],cuts[1]),right=fmaxf(cuts[0],cuts[1]);
-      rr_rect(160+left,80+y,right-left,1,color);}
+      rr_rect(160+left,85+y,right-left,1,color);}
   }
+}
+/* Fixed label columns leave room for the longer special-stat names and IV gains.
+ * Use a dark opaque panel so every window theme has the same readable contrast. */
+static void hatch_text(float x,float y,const char *text,bool gold){
+  int w=mui_text_width(TS_WINDOW,text);
+  mui_text_c(TS_WINDOW,x-w*.5f,y,text,gold?RR_RGBA(255,216,112,255):RR_RGBA(248,248,248,255),RR_RGBA(16,24,32,255));
 }
 static void hatch_info(void){
   extern const char* const menu_nature_keys[25];
-  mui_window(8,2,304,176);
+  mui_window(8,-20,304,228);
+  rr_rect(16,-12,288,212,RR_RGBA(32,43,56,255));
   char key[96],text[120];
   snprintf(key,sizeof key,"nature:%s",menu_nature_keys[E.mon.nature<25?E.mon.nature:0]);
-  snprintf(text,sizeof text,"Nature: %s",mui_t(key));mui_text(TS_WINDOW,18,10,text);
+  snprintf(text,sizeof text,"Nature: %s",mui_t(key));hatch_text(160,-10,text,false);
   float outer[6][2],inner[6][2];
   for(int i=0;i<6;i++){int st=chart_order[i];for(int c=0;c<2;c++){
-    outer[i][c]=36*chart_axis[st][c];inner[i][c]=outer[i][c]*E.mon.ivs[st]/31.0f;
+    outer[i][c]=40*chart_axis[st][c];inner[i][c]=outer[i][c]*E.mon.ivs[st]/31.0f;
   }}
-  polygon(outer,RR_RGBA(0xd8,0xe0,0xf0,200));polygon(inner,RR_RGBA(0x98,0xd8,0xa0,240));
+  polygon(outer,RR_RGBA(22,38,55,255));
+  polygon(inner,RR_RGBA(62,155,114,255));
   static const char* const names[]={"HP","ATK","DEF","SP.ATK","SP.DEF","SPEED"};
+  static const float label_xy[6][2]={{160,12},{258,52},{258,102},{62,52},{62,102},{160,130}};
   for(int st=0;st<6;st++){
-    float x=160+36*1.5f*chart_axis[st][0],y=80+36*1.5f*chart_axis[st][1]-5;
-    mui_text_o(TS_STATS_HEXAGON,x,y,.5f,0,names[st]);
+    float x=label_xy[st][0],y=label_xy[st][1];
+    hatch_text(x,y,names[st],false);
     int value=E.mon.ivs[st],diff=value-E.previous_ivs[st];
     if(diff>0)snprintf(text,sizeof text,"%d (+%d)",value,diff);else snprintf(text,sizeof text,"%d",value);
-    mui_text_o(value==31?TS_SUMMARY_GOLD:TS_STATS_HEXAGON,x,y+10,.5f,0,text);
+    hatch_text(x,y+16,text,value==31);
   }
   if(E.egg_move){snprintf(text,sizeof text,"%s egg move: %s",E.rare?"Rare":"New",i18n_move_name(E.egg_move));
-    mui_text_o(TS_WINDOW,160,146,.5f,0,text);}
-  mui_text(TS_INSTRUCTIONS_TEXT,18,165,"IVs / improvement    A / B: Continue");
+    hatch_text(160,174,text,false);}
+  mui_text_c(TS_INSTRUCTIONS_TEXT,18,197,"IVs / improvement    A / B: Continue",RR_RGBA(248,248,248,255),RR_RGBA(16,24,32,255));
 }
 
 static void draw(ui_screen *s,rr_screen which){

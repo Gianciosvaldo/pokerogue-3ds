@@ -117,6 +117,7 @@ static void gc_to_menu_mon(const gc_mon* gm, menu_mon* m) {
   m->tera_type = p->tera_type;
   m->met_biome = -1;
   m->met_level = p->level;
+  if(gm)m->pokerus=gm->pokerus;
   fill_met(m, gm);
   fill_items(m, p->id);
 }
@@ -160,7 +161,7 @@ static void ps_menu_mon(const pr_battle* bt, const pr_pokemon* p, menu_mon* m) {
   m->met_biome = -1;
   m->met_level = p->level;
   const gc_mon* g = run_mon_of(p);
-  if (g) fill_met(m, g);
+  if (g) {m->pokerus=g->pokerus;fill_met(m, g);}
   if (g) fill_items(m, p->id);
 }
 

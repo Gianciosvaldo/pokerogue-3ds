@@ -5,17 +5,30 @@
 #include "../source/egg_hatch_screen.c"
 const rr_draw_opts RR_DEFAULT_OPTS={0,0,1,1,0,0xffffffff};
 static ui_screen *top;static menu_mon loaded;static rr_frame frame;
-static int eggs,cracks,mons,pops,frees,done_count,neutral;static char labels[2048];static bool repeating;
+static int eggs,cracks,mons,pops,frees,done_count,neutral;
+static int panel,chart,fill;static float atk_x,spatk_x,atk_y,value_y;static char labels[2048];static bool repeating;
 void ui_push(ui_screen *s){assert(!top);top=s;}
 void ui_pop(void){ui_screen *s=top;assert(s);top=NULL;pops++;s->leave(s);}
 bool ui_input_repeating(void){return repeating;}
 void ui_play_sound(const char *s){assert(s);}
 void mui_set_origin(rr_screen s,int x,int y){(void)s;(void)x;(void)y;}
-void rr_rect(float x,float y,float w,float h,rr_color c){if(c==RR_RGBA(0x60,0x6c,0x78,255))neutral++;(void)x;(void)y;(void)w;(void)h;(void)c;}
+void rr_rect(float x,float y,float w,float h,rr_color c){if(c==RR_RGBA(0x60,0x6c,0x78,255))neutral++;if(c==RR_RGBA(32,43,56,255))panel++;
+ if(c==RR_RGBA(22,38,55,255))chart++;
+ if(c==RR_RGBA(62,155,114,255))fill++;
+ (void)x;(void)y;(void)w;(void)h;(void)c;}
 const char* const menu_nature_keys[25]={"hardy","lonely","brave","adamant"};
 const char* mui_t(const char *s){return s;}
 const char* i18n_move_name(int id){assert(id==33);return "Tackle";}
 int mui_text_o(mui_style s,float x,float y,float ox,float oy,const char *text){assert(text);strncat(labels,text,sizeof labels-strlen(labels)-1);strncat(labels,";",sizeof labels-strlen(labels)-1);return 0;}
+int mui_text_width(mui_style s,const char *text){return (int)strlen(text)*8;}
+int mui_text_c(mui_style s,float x,float y,const char *text,rr_color color,rr_color shadow){
+ if(!strcmp(text,"ATK")){atk_x=x;atk_y=y;}
+ if(!strcmp(text,"SP.ATK"))spatk_x=x;
+ if(!strcmp(text,"25 (+25)"))value_y=y;
+ assert(color==RR_RGBA(248,248,248,255)||color==RR_RGBA(255,216,112,255));
+ assert(shadow==RR_RGBA(16,24,32,255));
+ return mui_text_o(s,x,y,0,0,text);
+}
 void mui_window(float x,float y,float w,float h){(void)x;(void)y;(void)w;(void)h;}
 int mui_text(mui_style s,float x,float y,const char *text){assert(text);strncat(labels,text,sizeof labels-strlen(labels)-1);strncat(labels,";",sizeof labels-strlen(labels)-1);(void)s;(void)x;(void)y;return 0;}
 bool mui_image(const char *key,const char *f,float x,float y,float ox,float oy){
@@ -41,6 +54,7 @@ int main(void){
   if(variant==0)top->input(top,BTN_CANCEL);else top->update(top,3000);
   assert(E.revealed);labels[0]=0;draw_top();assert(mons==before+1);
   assert(strstr(labels,"Nature: nature:adamant")&&strstr(labels,"Rare egg move: Tackle")&&strstr(labels,"31 (+31)")&&strstr(labels,"SP.ATK")&&neutral>0);
+  assert(panel>0&&chart>0&&fill>0&&spatk_x+48<atk_x&&value_y-atk_y>=16);
   top->input(top,BTN_ACTION);assert(top); /* reveal must remain visible */
   top->update(top,500);top->input(top,BTN_ACTION);assert(!top);
  }

@@ -304,8 +304,15 @@ bool gc_run_set_starters(gc_run *run, const gc_starter *starters, int n, const c
 
 const gc_screen *gc_run_screen(const gc_run *run) { return &run->screen; }
 
+const pr_msg *gc_run_refusal_message(const gc_run *run)
+{
+    const pr_msg *m=&gc_int((gc_run *)run)->refusal_message;
+    return m->key ? m : NULL;
+}
+
 bool gc_run_choose(gc_run *run, const gc_choice *c, const char **why)
 {
+    gc_int(run)->refusal_message=(pr_msg){0};
     const char *dummy;
     if (!why) why = &dummy;
     *why = "";

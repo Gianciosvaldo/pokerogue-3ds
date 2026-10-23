@@ -93,6 +93,7 @@ typedef struct {
     bool battle_won;            /* a VictoryPhase has run in this battle: its BattleEndPhase is the victory's */
     uint8_t thrown_ball;        /* the PokeballType of the last ball command: the one a catch is made with */
     bool pending_me_miss;       /* EncounterPhase increments spawn chance after the save point */
+    pr_msg refusal_message;     /* structured reason for the last refused choice; never saved */
     bool undo_first, undo_save_point, undo_rng_live, undo_battle_rng_live;
     pr_rng undo_rng, undo_battle_rng;
     struct pr_turn_command undo_commands[2], undo_pre_commands[2];

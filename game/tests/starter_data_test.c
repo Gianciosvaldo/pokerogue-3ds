@@ -17,9 +17,14 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <time.h>
+static time_t starter_clock=1792627200;
+time_t time(time_t *out){if(out)*out=starter_clock;return starter_clock;}
+
 
 #include "gc/data.h"
 #include "gc/run.h"
+static bool rotating_carrier(uint16_t species){uint16_t ids[3];gc_pokerus_starters((uint64_t)starter_clock*1000,ids);return species==ids[0]||species==ids[1]||species==ids[2];}
 #include "pr_data.h"
 #include "pr_enums.h"
 #include "save.h"
@@ -281,7 +286,7 @@ static void test_new_save(void) {
   CHECK(ss_team(&S1, pick, k, team, &why), "a legal team: %s", why ? why : "");
   for (int i = 0; i < k; i++) {
     CHECK(team[i].species == pick[i] && team[i].form == 0 && team[i].ability_index == 0, "member %d", i);
-    CHECK(team[i].tera_type == -1 && !team[i].passive && !team[i].shiny && !team[i].pokerus, "member %d defaults", i);
+    CHECK(team[i].tera_type == -1 && !team[i].passive && !team[i].shiny && team[i].pokerus==rotating_carrier(pick[i]), "member %d defaults", i);
     for (int j = 0; j < 6; j++) CHECK(team[i].ivs[j] == 15, "member %d iv %d = %d", i, j, team[i].ivs[j]);
     uint16_t expected[4]={0};gc_starter_default_moves(pick[i],expected);
     for(int j=0;j<4;j++)CHECK(team[i].moves[j]==expected[j],"member %d explicit default move %d",i,j);
@@ -441,6 +446,24 @@ static void test_random_systems(int systems) {
   CHECK(refused == 0, "%d teams the screen would offer were refused", refused);
 }
 
+static void test_pokerus_rotation(void){
+ unlock_all(&S1);
+ for(int epoch=0;epoch<64;epoch++){
+  starter_clock=1792627200+epoch*10800;
+  sm_entry entries[SS_MAX_ENTRIES];int n=ss_list(&S1,entries,SS_MAX_ENTRIES,NULL),count=0;
+  CHECK(n==572,"all starters listed");
+  for(int i=0;i<n;i++){
+   uint16_t species=entries[i].species;bool expected=rotating_carrier(species);
+   gc_starter starter;starter_info info;ss_describe(&S1,species,&info);
+   CHECK(ss_starter(&S1,species,&starter),"starter %u available",species);
+   CHECK(entries[i].pokerus==expected&&starter.pokerus==expected&&info.mon.pokerus==expected,"rotation reaches grid, description and chosen starter %u",species);
+   if(expected){count++;gc_run_new(&RUN,GAME_MODES_CLASSIC,"pokerus-visible",1);const char *why=NULL;
+    CHECK(gc_run_set_starters(&RUN,&starter,1,&why)&&RUN.party[0].pokerus,"infection reaches real run %u",species);}
+  }
+  CHECK(count==3,"three infected starters each three-hour epoch");
+ }
+ starter_clock=1792627200;
+}
 int main(int argc, char** argv) {
   const int systems = argc > 1 ? atoi(argv[1]) : 300;
   char dir[64] = "/tmp/starter-data-test-XXXXXX";
@@ -448,6 +471,7 @@ int main(int argc, char** argv) {
     printf("FAILED: no folder for the saves\n");
     return 1;
   }
+  test_pokerus_rotation();
   test_system_data();
   test_new_save();
   test_everything_unlocked();
