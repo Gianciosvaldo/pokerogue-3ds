@@ -7,7 +7,9 @@ sprite reuse, GPU flipping and render-loop integration. These systems provide th
 requested engine-facing interfaces. [MATCH.md](MATCH.md) documents the match
 resolver, AI, rules and score-to-season bridge. [APP.md](APP.md) covers the
 Football Playoff title entry, complete screen flow, controls and session-only
-lifetime. Football save/resume and mega activation remain separate work.
+lifetime. [PLAYBOOK.md](PLAYBOOK.md) covers named calls, balance modifiers and bounded route
+presentation adapted from the supplied browser references. Mega selection is documented in [MEGA.md](MEGA.md). Football save/resume
+remains separate work.
 
 `include/football_stats.h` consumes battle-core's generated `pr_form` directly.
 Initialize one `FootballDexMaxima` with

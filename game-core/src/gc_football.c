@@ -120,27 +120,66 @@ bool gc_football_choose(gc_run *r, const gc_choice *c, unsigned pick, const char
     }
     return true;
 }
-int gc_football_mega_item(const gc_run *r, unsigned party)
+const pr_form *gc_football_mega_form(const gc_run *r,unsigned party,int item)
 {
-    if (!r || party>=(unsigned)r->n_party) return -1;
+    if (!r || party>=(unsigned)r->n_party || r->n_party>6 || item<0) return NULL;
+    const gc_mon *m=&r->party[party];
+    int key=pr_reward_form_key(m->b.species,m->b.form);
+    for (int i=0;i<pr_item_fc_species_count;++i) {
+        const pr_species_slice *s=&pr_item_fc_species[i];
+        if (s->species!=m->b.species) continue;
+        bool applicable=false;
+        for (unsigned k=0;k<s->n;++k) {
+            const pr_item_fc *f=&pr_item_fcs[s->start+k];
+            if (f->item==item && (f->flags&5)==5 && !f->n_cond && f->pre_form_key==key) applicable=true;
+        }
+        if (!applicable) return NULL;
+        /* The generated inactive transition identifies the held item's mega
+         * target by its pre-form key. Do not assume form 1 or mega-X. */
+        for (unsigned k=0;k<s->n;++k) {
+            const pr_item_fc *f=&pr_item_fcs[s->start+k];
+            if (f->item!=item || (f->flags&4)) continue;
+            for (unsigned j=0;j<PR_FORM_COUNT;++j) {
+                const pr_form *form=&pr_forms[j];
+                if (form->species==m->b.species && !strncmp(form->form_key,"mega",4) &&
+                    pr_reward_form_key(form->species,form->form_index)==f->pre_form_key) return form;
+            }
+        }
+    }
+    return NULL;
+}
+const pr_form *gc_football_owned_mega(const gc_run *r,unsigned party)
+{
+    if (!r || party>=(unsigned)r->n_party || r->n_party>6) return NULL;
+    for (int i=0;i<r->n_items;++i) {
+        const gc_item *item=&r->items[i];
+        if (item->pokemon_id==r->party[party].b.id && item->stack>0 && !item->detached && item->key &&
+            !strcmp(item->key,"FORM_CHANGE_ITEM")) {
+            const pr_form *form=gc_football_mega_form(r,party,item->arg);
+            if (form) return form;
+        }
+    }
+    return NULL;
+}
+int gc_football_mega_item(const gc_run *r,unsigned party)
+{
+    if (!r || r->n_party<1 || r->n_party>6 || party>=(unsigned)r->n_party || gc_football_owned_mega(r,party)) return -1;
     for (int i=0;i<pr_item_fc_species_count;++i) {
         const pr_species_slice *s=&pr_item_fc_species[i];
         if (s->species!=r->party[party].b.species) continue;
         for (unsigned k=0;k<s->n;++k) {
             const pr_item_fc *f=&pr_item_fcs[s->start+k];
-            if ((f->flags&5)==5) return f->item;
+            if (gc_football_mega_form(r,party,f->item)) return f->item;
         }
     }
     return -1;
 }
-bool gc_football_give_mega(gc_run *r, unsigned party, int item)
+bool gc_football_give_mega(gc_run *r,unsigned party,int item)
 {
-    if (!r || party>=(unsigned)r->n_party || item<0 ||
-        item!=gc_football_mega_item(r,party) || r->n_items>=GC_MAX_ITEMS) return false;
+    if (!gc_football_mega_form(r,party,item) || r->n_items>=GC_MAX_ITEMS) return false;
     uint32_t id=r->party[party].b.id;
     for (int i=0;i<r->n_items;++i)
-        if (r->items[i].pokemon_id==id && !strcmp(r->items[i].key,"FORM_CHANGE_ITEM"))
-            return false;
+        if (r->items[i].pokemon_id==id && !strcmp(r->items[i].key,"FORM_CHANGE_ITEM")) return false;
     gc_item_add(r,"FORM_CHANGE_ITEM",(int16_t)item,id,1);
     gc_items_to_battle(r);
     return true;

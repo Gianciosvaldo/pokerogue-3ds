@@ -1,4 +1,5 @@
 #include "football_render.h"
+#include "football_playbook.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -113,6 +114,15 @@ void football_render_top(FootballRenderer *r, const FootballRenderScene *scene)
             C2D_DrawRectSolid(px-3,py-3,.2f,6,6,a->away ?
                              C2D_Color32(230,75,75,255) : C2D_Color32(75,145,255,255));
     }
+    if (scene->football_visible && isfinite(scene->football_x_yards) &&
+        isfinite(scene->football_y_yards) && isfinite(scene->football_height)) {
+        float bx=x+bounded(scene->football_x_yards,0,120)*3;
+        float by=y+bounded(scene->football_y_yards,0,53.333333f)*(h/53.333333f);
+        float lift=bounded(scene->football_height,0,1)*12;
+        C2D_DrawRectSolid(bx-3,by-1,.3f,6,2,C2D_Color32(16,40,20,255));
+        C2D_DrawRectSolid(bx-3,by-2-lift,.31f,6,4,C2D_Color32(180,95,35,255));
+        C2D_DrawRectSolid(bx-1,by-1-lift,.32f,2,1,white);
+    }
     char score[64],situation[64];
     unsigned seconds=scene->seconds_left>3599 ? 3599 : scene->seconds_left;
     if (scene->quarter>4)
@@ -137,6 +147,10 @@ void football_render_bottom(FootballRenderer *r, const FootballPlaycall *ui)
         u32 color=i==ui->highlighted ? C2D_Color32(40,100,170,255) : C2D_Color32(35,48,65,255);
         C2D_DrawRectSolid(rect.x,rect.y,0,rect.w,rect.h,color);
         label(r,football_playcall_label(ui,i),rect.x+12,rect.y+14,.6f);
+    }
+    if (ui->state==FB_CALL_PLAY) {
+        const FootballPlayDefinition *p=football_playbook_option(ui->formation,ui->type,ui->highlighted);
+        if (p) label(r,p->description,20,186,.36f);
     }
     label(r,"Touch or D-pad + A     B: Back",20,208,.45f);
 }

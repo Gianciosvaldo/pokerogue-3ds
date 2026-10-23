@@ -2,6 +2,7 @@
 #ifndef GC_FOOTBALL_H
 #define GC_FOOTBALL_H
 #include "gc/run.h"
+#include "pr_data.h"
 #define GC_FOOTBALL_MAX_EVOLUTIONS 16
 
 typedef enum { GC_FB_BUSY, GC_FB_WAIT, GC_FB_DONE, GC_FB_ERROR } gc_football_progress;
@@ -20,5 +21,8 @@ bool gc_football_choose(gc_run *run, const gc_choice *choice, unsigned evolution
                         const char **why);
 /* Read classic form-change item catalog for a compatible rare shop offer. */
 int gc_football_mega_item(const gc_run *run, unsigned party);
+/* Returns a supported mega form only for a matching, applicable item. */
+const pr_form *gc_football_mega_form(const gc_run *run, unsigned party, int item);
+const pr_form *gc_football_owned_mega(const gc_run *run, unsigned party);
 bool gc_football_give_mega(gc_run *run, unsigned party, int item);
 #endif

@@ -4,8 +4,9 @@
 #include <stdint.h>
 typedef enum { FB_FORM_SHOTGUN, FB_FORM_UNDER_CENTER } FootballFormation;
 typedef enum { FB_PLAY_RUN, FB_PLAY_PASS } FootballPlayType;
-typedef enum { FB_CALL_MAIN, FB_CALL_FORMATION, FB_CALL_TYPE, FB_CALL_READY } FootballCallState;
-typedef enum { FB_RUN_INSIDE_ZONE, FB_PASS_SLANTS, FB_RUN_DIVE, FB_PASS_PLAY_ACTION } FootballPlayId;
+typedef enum { FB_CALL_MAIN, FB_CALL_FORMATION, FB_CALL_TYPE, FB_CALL_PLAY, FB_CALL_READY } FootballCallState;
+typedef enum { FB_RUN_INSIDE_ZONE, FB_PASS_SLANTS, FB_RUN_DIVE, FB_PASS_PLAY_ACTION,
+    FB_RUN_DRAW, FB_PASS_VERTICALS, FB_RUN_TOSS, FB_PASS_POST, FB_PLAY_COUNT } FootballPlayId;
 typedef struct PlayInfo {
     FootballFormation formation;
     FootballPlayType type;
@@ -23,6 +24,7 @@ typedef struct {
     FootballCallState state;
     unsigned highlighted;
     FootballFormation formation;
+    FootballPlayType type;
     PlayInfo pending;
 } FootballPlaycall;
 void football_playcall_reset(FootballPlaycall *ui);

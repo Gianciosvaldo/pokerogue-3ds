@@ -10,8 +10,9 @@ the app, with a startup notice that profile changes cannot be saved.
 
 After drafting, the round screen shows the roster, automatic positions and SPD /
 STR. Press A or the Continue button to load the match. The field/score/down/clock
-are on top; Offense -> Formation -> Run/Pass is on the touch screen. D-pad/A/B also
-navigate. Only new action presses are used, so holding A does not accidentally
+are on top; Offense -> Formation -> Run/Pass -> Named play is on the touch screen. D-pad/A/B also
+navigate; B returns one menu level. Each formation/type offers two plays, with a
+short risk/gain description before selection (see `PLAYBOOK.md`). Only new action presses are used, so holding A does not accidentally
 call a play. The opponent calls its own plays. Input to playcalling is disabled
 while a snap is running or the opponent has possession. The match-result screen
 requires acknowledgement before team progression begins.
@@ -28,7 +29,9 @@ teammate's stats. Tap the target row or use Left/Right to choose a teammate. Tap
 an offer or use D-pad/A to buy. B or Next match leaves the shop. After the seventh
 shop, the champion screen returns to the regular title; losing a match shows its
 score, then elimination and the title. Rare stones use existing held-item
-ownership; activation is still separate work, as documented in `SEASON.md`.
+ownership. Before the next match, use Left/Right or tap the Mega row to select
+one compatible holder, or None. The transformation lasts for that match only;
+see `MEGA.md`.
 
 START opens Keep playing / End playoff and return to title. The match and EXP
 pump pause while an overlay is open, during a fade, or while a profile save error
