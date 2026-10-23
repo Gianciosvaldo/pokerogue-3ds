@@ -13,7 +13,7 @@ Automatic checkpoints occur between rounds, before snaps, in the shop, and at
 the completed/eliminated screen. Active snaps finish before manual save; EXP,
 evolution and move-learning choices finish before the next shop checkpoint.
 Those transient phases cannot be manually suspended. Closing unexpectedly there
-returns to the last checkpoint. Playcalling menus reset to their main menu on
+returns to the last checkpoint. Offensive and defensive playcalling menus reset on
 resume. This is checkpoint persistence, not an exact animation-frame snapshot.
 
 The file preserves regular roster identities, levels, EXP, moves, variants and

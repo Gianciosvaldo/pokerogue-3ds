@@ -56,7 +56,7 @@ static void match(Codec *c,FootballMatch *m)
     V(m->rules.tiebreak_side,1);
     if(m->difficulty_q8<256 || !m->rules.quarter || !m->rules.down || !m->rules.ball ||
         m->rules.first_down_at<=m->rules.ball || !m->rng)c->ok=false;
-    m->phase=FB_MATCH_CALL;
+    m->phase=FB_MATCH_CALL;m->manual_defense=true;
 }
 static void state(Codec *c,FootballMode *m)
 {

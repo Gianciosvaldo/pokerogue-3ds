@@ -3,6 +3,7 @@
 #include <citro2d.h>
 #include "menus.h"
 #include "playcall_ui.h"
+#include "football_defense.h"
 #include "evolution_ui.h"
 #define FB_RENDER_ACTOR_CAP 12
 #define FB_RENDER_TEXTURE_BUDGET (4u * 1024u * 1024u)
@@ -43,6 +44,7 @@ bool football_render_draw_sprite(const rr_frame *front, float x, float y,
                                  float scale, bool faces_left);
 void football_render_top(FootballRenderer *renderer, const FootballRenderScene *scene);
 void football_render_bottom(FootballRenderer *renderer, const FootballPlaycall *ui);
+void football_render_defense_bottom(FootballRenderer *renderer, const FootballDefenseMenu *menu);
 void football_render_evolution_bottom(FootballRenderer *renderer,
                                        const FootballEvolutionMenu *menu);
 void football_render_frame(FootballRenderer *renderer, const FootballRenderScene *scene,

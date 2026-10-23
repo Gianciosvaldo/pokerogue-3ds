@@ -27,7 +27,7 @@ int main(void)
             case FB_MODE_ROUND:
                 press(FB_INPUT_ACCEPT);assert(mode.phase==FB_MODE_PLAY);strengthen(true);++rounds;break;
             case FB_MODE_PLAY:
-                if(football_match_waiting_for_home(&mode.session.match)) press(FB_INPUT_ACCEPT);
+                if((mode.session.match.phase==FB_MATCH_CALL)) press(FB_INPUT_ACCEPT);
                 break;
             case FB_MODE_RESULT:
                 assert(mode.session.match.rules.winner==FB_HOME);
@@ -69,7 +69,7 @@ int main(void)
     assert(football_mode_draft(&mode,&team,1,NULL));press(FB_INPUT_ACCEPT);strengthen(false);
     unsigned guard=0;
     while(mode.phase==FB_MODE_PLAY && ++guard<10000){
-        if(football_match_waiting_for_home(&mode.session.match))press(FB_INPUT_ACCEPT);
+        if((mode.session.match.phase==FB_MATCH_CALL))press(FB_INPUT_ACCEPT);
         football_mode_tick(&mode,250);
     }
     assert(mode.phase==FB_MODE_RESULT && mode.season.phase==FB_SEASON_ELIMINATED);
