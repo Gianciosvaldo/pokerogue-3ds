@@ -645,8 +645,8 @@ static int apply_vitamin(gc_run *run, const gc_offer *o, int party, const char *
     return GC_APPLY_DONE;
 }
 
-/* Monetary consumables have no persistent inventory. UI animation and money
- * achievement validation remain caller-owned; Gimmighoul's EvoTracker is guarded. */
+/* MoneyRewardModifier: money first, then one tracker addition per eligible
+ * Pokemon in party order. Presentation/achievement validation stay caller-owned. */
 static int apply_money_item(gc_run *run, int item)
 {
     if (run->run.has_challenges || run->n_items < 0 || run->n_items > PR_REWARD_MAX_OWNED
@@ -659,7 +659,59 @@ static int apply_money_item(gc_run *run, int item)
             return GC_APPLY_UNHANDLED;
     pr_reward_ctx *c = ctx_base(run, false);
     pr_reward_money_item_result result;
-    if (!pr_reward_apply_money_item(c, item, &run->money, &result)) return GC_APPLY_UNHANDLED;
+    double balance = run->money;
+    if (!pr_reward_apply_money_item(c, item, &balance, &result)) return GC_APPLY_UNHANDLED;
+    int needed = 0; bool refresh = false;
+    for (int k = 0; k < c->n_party; k++) if (result.tracker_stacks[k]) {
+        refresh = true;
+        const uint32_t id = run->party[run->party_order[k]].b.id;
+        bool found = false;
+        for (int j = 0; j < run->n_items; j++) {
+            const gc_item *it = &run->items[j];
+            if (strcmp(it->key, "EVOLUTION_TRACKER_GIMMIGHOUL") || it->pokemon_id != id) continue;
+            if ((it->arg != -1 && it->arg != 0) || it->stack < 1 || it->stack > 999)
+                return GC_APPLY_UNHANDLED;
+            found = true;
+        }
+        needed += !found;
+    }
+    if (run->n_items + needed > PR_MAX_MODIFIERS) {
+        pr_note_unported(&run->bt, PR_FEAT_ENGINE_LIMIT);
+        return GC_APPLY_UNHANDLED;
+    }
+    run->money = balance;
+    for (int k = 0; k < c->n_party; k++) if (result.tracker_stacks[k]) {
+        const uint32_t id = run->party[run->party_order[k]].b.id;
+        int found = -1;
+        for (int j = 0; j < run->n_items; j++)
+            if (!strcmp(run->items[j].key, "EVOLUTION_TRACKER_GIMMIGHOUL") && run->items[j].pokemon_id == id) {found = j; break;}
+        if (found >= 0 && run->items[found].stack + result.tracker_stacks[k] > 999) {
+            /* The factory has no tier, so the scene uses COMMON's first reward. */
+            const int fallback = pr_player_pool_entries[pr_player_pool[0].start].item;
+            gc_ev_msg(run, "battle:itemStackFull", 2,
+                pr_arg_key("fullItemName", "modifierType:ModifierType.EVOLUTION_TRACKER_GIMMIGHOUL.name"),
+                (pr_msg_arg){"itemName", PR_ARG_STR, 0, pr_reward_strings[pr_items[fallback].name]});
+            gc_reward_add_pokeballs(run, pr_item_keys[fallback]);
+        } else if (found >= 0) {
+            run->items[found].stack += result.tracker_stacks[k];
+            run->items[found].non_transferable = true;
+        } else gc_item_add(run, "EVOLUTION_TRACKER_GIMMIGHOUL", 0, id, result.tracker_stacks[k]);
+    }
+    if (refresh) {
+        /* updateModifiers removes species-bound trackers after a species change. */
+        for (int j = 0; j < run->n_items;) {
+            const gc_item *it = &run->items[j]; bool eligible = false;
+            if (strcmp(it->key, "EVOLUTION_TRACKER_GIMMIGHOUL")) {j++; continue;}
+            for (int k = 0; k < run->n_party; k++) {
+                const pr_pokemon *p = &run->party[k].b;
+                eligible |= it->pokemon_id == p->id
+                    && (p->species == SPECIES_ID_GIMMIGHOUL || p->fusion_species == SPECIES_ID_GIMMIGHOUL);
+            }
+            if (!eligible) gc_item_remove_at(run, j); else j++;
+        }
+        gc_items_to_battle(run);
+        for (int k = 0; k < run->n_party; k++) gc_mon_recalc(run, &run->party[k]);
+    }
     return GC_APPLY_DONE;
 }
 

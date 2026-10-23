@@ -959,3 +959,17 @@ last-resort-history-host-test: $(BUILD)/last_resort_history_host_test
 	$< tests/fixtures/last-resort-history.native.txt
 test: last-resort-history-host-test
 .PHONY: last-resort-history-host-test
+
+$(BUILD)/evo_tracker_host_test: tests/evo_tracker_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+evo-tracker-host-test: $(BUILD)/evo_tracker_host_test
+	$< tests/fixtures/evo-tracker.native.txt
+test: evo-tracker-host-test
+.PHONY: evo-tracker-host-test
+
+$(BUILD)/evo_tracker_turn_host_test: tests/evo_tracker_turn_host_test.c tests/doubles_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+evo-tracker-turn-host-test: $(BUILD)/evo_tracker_turn_host_test
+	$<
+test: evo-tracker-turn-host-test
+.PHONY: evo-tracker-turn-host-test

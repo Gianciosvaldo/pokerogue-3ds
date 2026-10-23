@@ -96,6 +96,7 @@ enum {
     PR_MOD_SWITCH_EFFECT_TRANSFER, /* Baton */
     PR_MOD_EXP_BOOSTER,           /* held Lucky/Golden Egg; mult=boost fraction */
     PR_MOD_FRIENDSHIP_BOOSTER,    /* Soothe Bell */
+    PR_MOD_EVO_TRACKER,           /* canonical Gimmighoul coins: species[0], num=required */
     PR_MOD_COUNT_
 };
 extern const uint8_t pr_mod_parent[PR_MOD_COUNT_];
