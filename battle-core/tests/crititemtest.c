@@ -71,7 +71,7 @@ static int fusion_admission_checks(const char *path)
         pr_run_turn(bt,&engine);
         bool flagged=false;
         for (int i=0;i<bt->n_unported;i++) if (bt->unported[i]==PR_FEAT_TURN_MODIFIERS) flagged=true;
-        if (flagged != (mode!=0)) return 1;
+        if (flagged) return 1;
     }
     printf("Critical full-turn fusion admission: 3 checks pass\n");
     return 0;

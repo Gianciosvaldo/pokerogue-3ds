@@ -42,6 +42,7 @@ it("bounded critical item turn producer", async () => {
     const OUT = process.env.CRITITEM_OUT ?? "/tmp/pr-critical-item.txt";
     (Pokemon.prototype as any).hideInfo = async function () { };
     (Phaser.GameObjects.Sprite.prototype as any).setPosition = function () { return this; };
+    const nativeBattleRng=BattleScene.prototype.randBattleSeedInt;
     const game = new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
     game.override
         .battleStyle("single")
@@ -51,9 +52,7 @@ it("bounded critical item turn producer", async () => {
         .startingWave(3)
         .enemySpecies(SpeciesId.MAGIKARP);
     await game.classicMode.startBattle(SpeciesId.BULBASAUR);
-    (BattleScene.prototype as any).randBattleSeedInt = function (this: any, range: number, min = 0) {
-        return this.currentBattle?.randSeedInt(range, min);
-    };
+    BattleScene.prototype.randBattleSeedInt=nativeBattleRng;
     const scene = game.scene as any;
     const battle = scene.currentBattle as any;
     const pm = scene.phaseManager as any;

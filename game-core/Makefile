@@ -938,3 +938,10 @@ stat-loot-host-test: $(BUILD)/stat_loot_host_test
 	$< tests/fixtures/stat-loot-save.native.txt
 test: stat-loot-host-test
 .PHONY: stat-loot-host-test
+
+$(BUILD)/fused_held_host_test: tests/fused_held_host_test.c tests/doubles_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+fused-held-host-test: $(BUILD)/fused_held_host_test
+	$<
+test: fused-held-host-test
+.PHONY: fused-held-host-test

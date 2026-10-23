@@ -81,9 +81,9 @@ TURNTEST_LOCALES=/path/to/pinned-upstream/locales/en \
 
 ## Remaining scope
 
-Fusion eligibility for original Eviolite, species boosters and Leek remains an
-explicit full-turn refusal. Its existing four admission guards are retained;
-they must be replaced only after native callback/turn proofs. Generic constructor
+The subsequent [fused held-item proof](FUSED-HELD-VALIDATION.md) closes the
+original Eviolite, species-booster and Leek fusion refusal through native full
+turns. The four admission checks remain required and now expect admission. Generic constructor
 parameter arrays outside the represented canonical factories, orphan cached
 stock and the other inventory/capacity boundaries remain separately reported.
 Normal app/custom/save and the actual ARM build/stack CI checks remain merge

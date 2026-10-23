@@ -453,12 +453,22 @@ void pr_apply_enemy_endure_modifiers(pr_battle *bt, pr_engine *e, pr_pokemon *ta
     }
 }
 
-/* Pokemon.isMax(): Gigantamax / Eternamax forms (fusion form keys not ported) */
+static const pr_species *held_species(int id)
+{
+    int lo=0,hi=PR_SPECIES_COUNT-1;
+    while(lo<=hi){int mid=(lo+hi)/2;if(pr_species_table[mid].id==id)return &pr_species_table[mid];if(pr_species_table[mid].id<id)lo=mid+1;else hi=mid-1;}
+    return NULL;
+}
+static bool max_key(const char *k)
+{
+    return !strcmp(k,"gigantamax")||!strcmp(k,"gigantamax-rapid")||!strcmp(k,"gigantamax-single")||!strcmp(k,"eternamax");
+}
+/* Pokemon.isMax(): either component's original form key. */
 static bool is_max(const pr_pokemon *p)
 {
-    const char *k = pr_pokemon_base_form(p)->form_key;
-    return !strcmp(k, "gigantamax") || !strcmp(k, "gigantamax-rapid") || !strcmp(k, "gigantamax-single")
-           || !strcmp(k, "eternamax");
+    if(max_key(pr_pokemon_base_form(p)->form_key))return true;
+    const pr_species *fusion=p->fusion_species?held_species(p->fusion_species):NULL;
+    return fusion&&p->fusion_form<fusion->nforms&&max_key(pr_forms[fusion->form0+p->fusion_form].form_key);
 }
 
 static bool species_listed(const pr_modifier *m, int species)
@@ -773,15 +783,17 @@ void pr_apply_stat_booster_modifiers(pr_battle *bt, const pr_pokemon *p, int sta
     EACH_MOD(m, bt, p->is_player, PR_MOD_STAT_BOOSTER) {
         if (!held_applies(m, p) || !((m->stats_mask >> stat) & 1)) continue;
         switch (m->cls) {
-        case PR_MOD_EVOLUTION_STAT_BOOSTER:
-            /* Eviolite: not on a Max form, and only while the species can still evolve
-             * (the half boost for fusions comes with fusions) */
+        case PR_MOD_EVOLUTION_STAT_BOOSTER: {
             if (is_max(p)) continue;
-            if (pr_pokemon_species(p)->has_evolutions) *value *= m->mult;
+            bool unevolved=pr_pokemon_species(p)->has_evolutions;
+            const pr_species *fusion=p->fusion_species?held_species(p->fusion_species):NULL;
+            if(p->fusion_species&&!fusion){pr_note_unported(bt,PR_FEAT_MODIFIERS);continue;}
+            if(fusion&&fusion->has_evolutions!=unevolved)*value*=1+(m->mult-1)/2;
+            else if(unevolved)*value*=m->mult;
             break;
+        }
         case PR_MOD_SPECIES_STAT_BOOSTER:
-            /* getSpeciesForm(true).speciesId, or the fusion's (not ported) */
-            if (!species_listed(m, p->species)) continue;
+            if (!species_listed(m,p->species)&&!(p->fusion_species&&species_listed(m,p->fusion_species)))continue;
             *value *= m->mult;
             break;
         default:
@@ -807,10 +819,11 @@ static void apply_crit_booster_modifiers(pr_battle *bt, const pr_pokemon *src, i
     pr_modifier *m;
     EACH_MOD(m, bt, src->is_player, PR_MOD_CRIT_BOOSTER) {
         if (!held_applies(m, src)) continue;
-        if (bounded && (!pr_mod_is_ported_item(m) || (m->cls == PR_MOD_SPECIES_CRIT_BOOSTER && src->fusion_species))) {
+        if (bounded && !pr_mod_is_ported_item(m)) {
             pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS); continue;
         }
-        if (m->cls == PR_MOD_SPECIES_CRIT_BOOSTER && !species_listed(m, src->species)) continue;
+        if (m->cls==PR_MOD_SPECIES_CRIT_BOOSTER&&!species_listed(m,src->species)
+            &&!(src->fusion_species&&species_listed(m,src->fusion_species)))continue;
         *stage += m->num;
     }
 }

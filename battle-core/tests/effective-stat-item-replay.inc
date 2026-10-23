@@ -713,7 +713,7 @@ static void dump_mon(lines_t *L, const pr_battle *bt, const pr_pokemon *p, const
     add_line(L, "%s", s.s);
     s.n=0; sb(&s,"EFFECTIVE b=%s stats=",b);
     for(int stat=STAT_ATK;stat<=STAT_SPD;stat++)
-        sb(&s,"%s%d",stat==STAT_ATK?"":",",pr_get_effective_stat((pr_battle *)bt,p,stat,NULL,-1,false,false));
+        sb(&s,"%s%.17g",stat==STAT_ATK?"":",",pr_get_effective_stat((pr_battle *)bt,p,stat,NULL,-1,false,false));
     add_line(L,"%s",s.s);
 
     for (int i = 0; i < p->n_tags; i++)
