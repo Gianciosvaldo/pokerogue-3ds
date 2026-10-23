@@ -16,6 +16,7 @@ typedef struct { unsigned placeholder; } C2D_Text;
 #define C2D_WithColor 1
 static inline u32 C2D_Color32(unsigned r,unsigned g,unsigned b,unsigned a)
 { return r|(g<<8)|(b<<16)|(a<<24); }
+void C3D_FrameSync(void);
 C2D_TextBuf C2D_TextBufNew(size_t size);
 void C2D_TextBufDelete(C2D_TextBuf buffer);
 void C2D_TextBufClear(C2D_TextBuf buffer);

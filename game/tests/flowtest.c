@@ -40,6 +40,7 @@
 #include "starter_host.h"
 #include "system_data.h"
 #include "title_screen.h"
+#include "football_screen.h"
 
 static int checks, failed;
 #define CHECK(cond, ...)                                  \
@@ -60,6 +61,18 @@ static int n_title;
 void title_screen_open(const title_args* a) {
   T = *a;
   n_title++;
+}
+
+static football_screen_args FOOT;
+static int n_football, n_football_notice;
+static bool football_available=true;
+bool football_screen_open(const football_screen_args* cfg) {
+  FOOT=*cfg; ++n_football; return football_available;
+}
+void ui_push_options(const char* const* labels,int n,bool cancel,void (*done)(int,void*),void* arg) {
+  (void)done;(void)arg;
+  CHECK(n==1 && cancel && strstr(labels[0],"Football"),"football startup failure is explained on the title");
+  ++n_football_notice;
 }
 
 /* the run settings before New Game's slot list: started at once with what the test picks (the real screen: run_settings_screen.c) */
@@ -1052,6 +1065,20 @@ int main(void) {
     CHECK(!ptx_apply_pending() && ptx_pending() == 0, "app_start finished it");
     CHECK(sysd_get()->n_eggs == res.n && sysd_get()->voucher_counts[GC_VOUCHER_REGULAR] < 10, "the pulled egg is in the profile and the voucher is spent");
     CHECK(ptx_result_of(txn, NULL), "and the result is kept");
+  }
+
+  /* Football has a separate entry: no classic/custom save slot or run is started. */
+  {
+    int slots=n_slots, starts=n_start, starters=n_sh, titles=n_title;
+    T.on_choose(TITLE_FOOTBALL,T.arg);
+    CHECK(n_football==1 && FOOT.profile==sysd_get() && FOOT.on_exit && FOOT.save_profile,
+      "football receives the shared starter profile and its save gate");
+    CHECK(n_slots==slots && n_start==starts && n_sh==starters,"football does not invoke classic slot/start routing");
+    FOOT.on_exit(FOOT.arg);
+    CHECK(n_title==titles+1,"football returns to the regular title");
+    football_available=false;
+    T.on_choose(TITLE_FOOTBALL,T.arg);
+    CHECK(n_football==2 && n_football_notice==1,"football startup refusal stays reviewable on the title");
   }
 
   printf("%d checks, %d failed\n", checks, failed);

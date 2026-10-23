@@ -5,8 +5,8 @@ stat-driven match resolver. `football_rules.c` owns football rules;
 `football_match.c` resolves selected plays and opponent calls;
 `football_playoff_match.c` feeds the real result into the season; and
 `game/source/football_match_view.c` converts state into the existing renderer's
-scene. These modules compile in the normal 3DS build. They do not yet install a
-new main-menu entry or an application screen that owns the entire mode.
+scene. These modules compile in the normal 3DS build. The main-menu entry and
+application screen that drives them are documented in `APP.md`.
 
 ## Rules and initial scope
 
@@ -113,6 +113,6 @@ Rules and full-match replay also pass AddressSanitizer/UndefinedBehaviorSanitize
 The managed local debugger prevents LeakSanitizer, so leak detection was disabled
 only for the local run; these modules allocate no memory. CI runs both sanitizers
 with default leak settings and also runs the real 3DS build and stack checks.
-Main-menu/screen orchestration, football save serialization and mega activation
-remain subsequent integration work. Device visuals and performance still need
+Football save serialization and mega activation remain subsequent work. The
+app screen and its controls are documented in `APP.md`. Device visuals and performance still need
 hardware or emulator validation.

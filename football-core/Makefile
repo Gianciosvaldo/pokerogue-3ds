@@ -88,3 +88,18 @@ $(BUILD)/match_view_test: tests/match_view_test.c ../game/source/football_match_
 	mkdir -p $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -D__3DS__ -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include tests/match_view_test.c ../game/source/football_match_view.c $(MATCH_SRCS) src/football_stats.c ../battle-core/gen/out/pr_data.c -lm -o $@
 test: match-view-test
+
+MODE_SRCS = src/football_mode.c src/football_playoff_match.c src/playoff_season.c src/football_stats.c $(MATCH_SRCS) src/playcall_ui.c src/evolution_ui.c src/football_shop_ui.c
+.PHONY: mode-test
+mode-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/mode_test.c $(MODE_SRCS) $(CORE_LIBS) -lm -o $(BUILD)/mode_test
+	$(BUILD)/mode_test
+test: mode-test
+
+.PHONY: screen-test
+screen-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -D__3DS__ -DFOOTBALL_SCREEN_TEST -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include tests/screen_test.c ../game/source/football_screen.c $(MODE_SRCS) $(CORE_LIBS) -lm -o $(BUILD)/screen_test
+	$(BUILD)/screen_test
+test: screen-test

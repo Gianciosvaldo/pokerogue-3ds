@@ -5,8 +5,9 @@ playcalling, and a dual-screen renderer. See [SEASON.md](SEASON.md) for the real
 classic EXP/evolution adapter and [UI_RENDER.md](UI_RENDER.md) for input, front
 sprite reuse, GPU flipping and render-loop integration. These systems provide the
 requested engine-facing interfaces. [MATCH.md](MATCH.md) documents the match
-resolver, AI, rules and score-to-season bridge. Main-menu/screen orchestration is
-still integration work.
+resolver, AI, rules and score-to-season bridge. [APP.md](APP.md) covers the
+Football Playoff title entry, complete screen flow, controls and session-only
+lifetime. Football save/resume and mega activation remain separate work.
 
 `include/football_stats.h` consumes battle-core's generated `pr_form` directly.
 Initialize one `FootballDexMaxima` with

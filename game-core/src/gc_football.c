@@ -15,9 +15,9 @@ void gc_football_new(gc_run *r, gc_system *profile, const char *seed, uint32_t e
     r->bt.game_mode=GAME_MODES_CLASSIC;
     r->bt.challenge_flags_known=true;
 }
-bool gc_football_draft(gc_run *r, const gc_starter *team, int count, const char **why)
+bool gc_football_validate_draft(const gc_system *profile, const gc_starter *team, int count, const char **why)
 {
-    if (!r || !team || r->screen.kind!=GC_SCREEN_STARTERS || count<1 || count>6)
+    if (!team || count<1 || count>6)
         return fail(why,"invalid football draft");
     double cost=0;
     for (int i=0;i<count;++i) {
@@ -25,13 +25,19 @@ bool gc_football_draft(gc_run *r, const gc_starter *team, int count, const char 
         const pr_species *sp=gc_species(team[i].species);
         if (!sp || sp->prevolution>0 || team[i].form!=0)
             return fail(why,"draft base-form Pokemon only");
-        if (!gc_starter_is_available(r->sys,&team[i],&value,why)) return false;
+        if (!gc_starter_is_available(profile,&team[i],&value,why)) return false;
         for (int j=0;j<i;++j) if (team[i].species==team[j].species)
             return fail(why,"duplicate species");
         cost+=value;
     }
     if (cost>gc_starter_budget(GAME_MODES_CLASSIC)+1e-9)
         return fail(why,"starterSelectUiHandler:cost");
+    return true;
+}
+bool gc_football_draft(gc_run *r, const gc_starter *team, int count, const char **why)
+{
+    if (!r || r->screen.kind!=GC_SCREEN_STARTERS) return fail(why,"invalid football draft");
+    if (!gc_football_validate_draft(r->sys,team,count,why)) return false;
     for (int i=0;i<count;++i) {
         gc_mon_new_player(r,&r->party[i],&team[i],5);
         r->party_order[i]=(int8_t)i;
