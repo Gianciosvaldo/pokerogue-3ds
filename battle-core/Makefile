@@ -672,3 +672,7 @@ $(BUILD)/fused-held-replay.inc: tests/effective-stat-item-replay.inc tests/criti
 all: $(BUILD)/fused-held-test
 $(BUILD)/fused-held-test: tests/fused-held-test.c tests/statitem-guards.inc tests/crititem-guards.inc $(BUILD)/fused-held-replay.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/last-resort-history-test
+$(BUILD)/last-resort-history-test: tests/last-resort-history-test.c tests/last-resort-history-fixture.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@

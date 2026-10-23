@@ -669,17 +669,9 @@ static double last_resort(ARGS)
         if (!dup) others[n_others++] = PR_MOVES(u)[s];
     }
     if (!has_self || !n_others) return 0;
-    int kept = u->n_move_history < PR_MAX_MOVE_HISTORY ? u->n_move_history : PR_MAX_MOVE_HISTORY;
-    for (int j = 0; j < n_others; j++) {
-        bool seen = false;
-        for (int k = 0; k < kept && !seen; k++) {
-            const pr_turn_move *tm = &u->move_history[k];
-            seen = tm->move == others[j] && tm->use_mode < MOVE_USE_MODE_INDIRECT;
-        }
-        if (!seen) {
-            if (u->n_move_history > kept) UNPORTED(PR_FEAT_MOVE_HISTORY);
-            return 0;
-        }
+    for(int j=0;j<n_others;j++)if(!pr_history_used_move(u,others[j])){
+        if(!u->history_used_complete&&u->n_move_history>PR_MAX_MOVE_HISTORY)UNPORTED(PR_FEAT_MOVE_HISTORY);
+        return 0;
     }
     return 1;
 }

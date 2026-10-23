@@ -952,3 +952,10 @@ inventory-capacity-host-test: $(BUILD)/inventory_capacity_host_test
 	$< tests/fixtures/inventory-capacity.native.txt
 test: inventory-capacity-host-test
 .PHONY: inventory-capacity-host-test
+
+$(BUILD)/last_resort_history_host_test: tests/last_resort_history_host_test.c tests/doubles_host_test.c ../battle-core/tests/last-resort-history-fixture.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+last-resort-history-host-test: $(BUILD)/last_resort_history_host_test
+	$< tests/fixtures/last-resort-history.native.txt
+test: last-resort-history-host-test
+.PHONY: last-resort-history-host-test
