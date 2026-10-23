@@ -128,3 +128,8 @@ parameters, inventory capacity and all other historical lifecycle exclusions
 still require their own reconciliation; this update does not close the full
 inventory. [Transferred stat-item class identity](STAT-LOOT-VALIDATION.md) and
 [Pickup ownership](PICKUP-VALIDATION.md) remain independently required.
+
+[Inventory capacity](INVENTORY-CAPACITY-VALIDATION.md) now has a pinned catalogue
+audit and native large-stock owner/save proof. The shared battle/reward limit is
+2,048 with a wide count. Detached transient histories and the other exclusions
+above remain separate; increasing storage does not implement unknown item classes.

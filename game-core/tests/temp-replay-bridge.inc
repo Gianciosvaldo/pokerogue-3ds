@@ -2,7 +2,7 @@
 static gc_run bridge_run;
 static bool transport(const pr_reward_ctx *c) {
  memset(&bridge_run,0,sizeof bridge_run);
- if(!c||c->n_items<0||c->n_items>GC_MAX_ITEMS)return false;
+ if(!c||c->n_items<0||c->n_items>GC_MAX_ITEMS||c->n_items>PR_REWARD_MAX_OWNED)return false;
  if(c->run)bridge_run.run=*c->run;
  bridge_run.n_items=c->n_items;
  for(int j=0;j<c->n_items;j++) {

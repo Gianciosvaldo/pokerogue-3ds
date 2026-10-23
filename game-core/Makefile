@@ -945,3 +945,10 @@ fused-held-host-test: $(BUILD)/fused_held_host_test
 	$<
 test: fused-held-host-test
 .PHONY: fused-held-host-test
+
+$(BUILD)/inventory_capacity_host_test: tests/inventory_capacity_host_test.c tests/doubles_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+inventory-capacity-host-test: $(BUILD)/inventory_capacity_host_test
+	$< tests/fixtures/inventory-capacity.native.txt
+test: inventory-capacity-host-test
+.PHONY: inventory-capacity-host-test
