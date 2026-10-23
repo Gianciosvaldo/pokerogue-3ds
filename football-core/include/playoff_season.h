@@ -4,6 +4,9 @@
 #include "gc/football.h"
 #define FB_TEAM_CAP 6
 #define FB_PLAYOFF_ROUNDS 7
+#ifndef FB_DIFFICULTY_STEP_Q8
+#define FB_DIFFICULTY_STEP_Q8 16
+#endif
 #define FB_SHOP_CAP 3
 
 typedef enum {
@@ -20,7 +23,7 @@ typedef struct {
 } FootballShopOffer;
 typedef struct {
     unsigned round; /* 1..7 */
-    uint16_t difficulty_q8; /* 256 = 1x; final = 640 = 2.5x */
+    uint16_t difficulty_q8; /* 256 = 1x; final = 352 = 1.375x */
     uint32_t seed;
 } FootballMatchSpec;
 typedef struct {

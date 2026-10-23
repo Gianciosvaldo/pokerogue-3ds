@@ -1,9 +1,11 @@
 #include "football_save.h"
+#include "gc/system.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
 static gc_run run,loaded;
 static FootballMode mode,restored;
+static gc_system profile,profile_before;
 static unsigned char bytes[FB_SAVE_MAX],again[FB_SAVE_MAX];
 static uint32_t crc32(const unsigned char *p,size_t n)
 {
@@ -31,6 +33,15 @@ int main(void)
     assert(football_save_decode(&restored,&loaded,NULL,bytes,n));
     assert(restored.session.match.home_tactic==FB_CONTACT_JUKE && restored.session.match.home_dive);
     assert(restored.session.owner==&restored.season && restored.session.active);
+    gc_system_init_defaults(&profile);profile_before=profile;
+    const uint32_t corrupt_fields[][2]={{20,99},{28,0},{32,8},{36,1000001},{40,0},{44,7},{48,21},{96,4}};
+    for(unsigned i=0;i<sizeof corrupt_fields/sizeof corrupt_fields[0];++i) {
+        memcpy(again,bytes,n);memcpy(again+corrupt_fields[i][0],&corrupt_fields[i][1],4);
+        uint32_t corrupt_crc=crc32(again+20,n-20);memcpy(again+16,&corrupt_crc,4);
+        assert(!football_save_decode(&restored,&loaded,&profile,again,n));
+        assert(!memcmp(&profile,&profile_before,sizeof profile));
+    }
+    assert(football_save_decode(&restored,&loaded,NULL,bytes,n));
     /* Version 1 active-match checkpoint migrates to balanced/standard tactics. */
     memcpy(again,bytes,n);uint32_t offset=0;memcpy(&offset,again+12,4);
     memmove(again+offset-8,again+offset,n-offset);offset-=8;

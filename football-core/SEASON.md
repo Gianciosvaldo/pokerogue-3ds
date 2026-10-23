@@ -3,7 +3,7 @@
 `playoff_season.c` owns DRAFT -> READY -> MATCH -> EXP -> SHOP transitions.
 Seven consecutive wins clear the run; a loss eliminates it. A match starts only
 when the previous EXP prompts and shop are complete. `FootballMatchSpec` supplies
-the engine with a deterministic seed and difficulty from 1x to 2.5x. The football
+the engine with a deterministic seed and difficulty from 1x to 1.375x. The football
 match engine and exactly-once result bridge are documented in `MATCH.md`; use
 `football_playoff_match_begin/tick` for real games rather than supplying a
 win/loss flag from the screen.
@@ -27,7 +27,7 @@ and pass the selected index. Split evolutions preserve existing validation rules
 Nincada explicitly chooses Ninjask OR Shedinja, replacing one slot; it never adds
 a second Pokemon. Classic evolution behavior is unchanged.
 
-A winning match awards increasing EXP (500 * round squared per teammate) and
+A winning match awards increasing EXP (2000 * round squared per teammate) and
 currency (400 + 100 * round). Classic level caps advance on synthetic waves
 20, 40, ..., 140. Base football attributes follow the requested base-stat formulas;
 level-ups enable evolution rather than adding unspecified football multipliers.

@@ -61,7 +61,7 @@ int main(void)
     bool got_shedinja=false;
     for (unsigned round=1;round<=7;++round) {
         assert(football_season_start_match(&season,&match));
-        assert(match.round==round && match.difficulty_q8==256+64*(round-1));
+        assert(match.round==round && match.difficulty_q8==256+16*(round-1));
         assert(!football_season_start_match(&season,&match));
         int old_level=roster.party[0].b.level;
         assert(football_season_finish_match(&season,true,&why));
