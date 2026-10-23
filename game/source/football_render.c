@@ -109,8 +109,12 @@ void football_render_top(FootballRenderer *r, const FootballRenderScene *scene)
     }
     char score[64],situation[64];
     unsigned seconds=scene->seconds_left>3599 ? 3599 : scene->seconds_left;
-    snprintf(score,sizeof score,"HOME %u   AWAY %u   Q%u",(unsigned)scene->home_score,
-             (unsigned)scene->away_score,(unsigned)scene->quarter);
+    if (scene->quarter>4)
+        snprintf(score,sizeof score,"HOME %u   AWAY %u   OT%u",(unsigned)scene->home_score,
+                 (unsigned)scene->away_score,(unsigned)(scene->quarter-4));
+    else
+        snprintf(score,sizeof score,"HOME %u   AWAY %u   Q%u",(unsigned)scene->home_score,
+                 (unsigned)scene->away_score,(unsigned)scene->quarter);
     snprintf(situation,sizeof situation,"Down %u  To go %u   %u:%02u",(unsigned)scene->down,
              (unsigned)scene->distance,seconds/60,seconds%60);
     label(r,score,12,4,.5f); label(r,situation,12,25,.45f);

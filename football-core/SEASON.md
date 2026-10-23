@@ -4,8 +4,9 @@
 Seven consecutive wins clear the run; a loss eliminates it. A match starts only
 when the previous EXP prompts and shop are complete. `FootballMatchSpec` supplies
 the engine with a deterministic seed and difficulty from 1x to 2.5x. The football
-match simulation remains the engine's responsibility; report its result once via
-`football_season_finish_match`.
+match engine and exactly-once result bridge are documented in `MATCH.md`; use
+`football_playoff_match_begin/tick` for real games rather than supplying a
+win/loss flag from the screen.
 
 Use one dedicated `gc_run` kept static or allocated once outside the frame loop.
 Call `football_season_new`, then draft 1–6 distinct base-form, first-stage species.
