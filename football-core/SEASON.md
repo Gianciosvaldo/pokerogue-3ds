@@ -43,7 +43,8 @@ An owned form-change item cannot be bought twice for that holder.
 
 `football_shop_asset_key` and each offer's `classic_arg` identify the existing
 BASE_STAT_BOOSTER / FORM_CHANGE_ITEM assets for the classic menu asset adapter;
-no new item artwork is required. Rendering and touch menus are separate systems.
+no new item artwork is required. Rendering and touch menus are separate systems: see `UI_RENDER.md` for the
+implemented shop controller and classic item-atlas view.
 
 `make -C football-core test` exercises all seven rounds, repeated result rejection,
 draft restrictions and costs, EXP and Shedinja choice through the real shared
