@@ -60,3 +60,13 @@ lock after restore. No fixture case or expected source field is removed.
 
 Full local game-core tests pass with saved/unsaved digest `5073f991`.
 The four retained money seeds still pass all 16,000 direct/public comparisons.
+
+The original app CI retained all normal/custom/save cases but its 300-run
+Save-and-Quit stream reached no trainer victory after the corrected item locks
+changed legal menu choices. No music check or coverage threshold is relaxed.
+The harness now appends one directed strong-party run after every qualifying
+noncustom seeded stream; all requested random inputs finish first, unchanged.
+It requires that additional run itself to reach an actual trainer victory
+reward screen through the controller and verifies its music. The existing
+custom fixture and all coverage floors remain intact. The local 300+1 replay
+passes with two real trainer victory screens and zero model violations.
