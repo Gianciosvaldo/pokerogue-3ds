@@ -44,3 +44,6 @@ Validation: `make -C football-core test` checks formula expectations, kg unit
 conversion, saturation, failure atomicity, dual-type scoring, and all 1,500
 existing form records. Host C99 build uses warnings as errors. GitHub CI also compiles the 3DS app and checks compiler stack reports. Device
 visuals and runtime performance still require hardware or emulator validation.
+
+See [BALANCE.md](BALANCE.md) for the reproducible playoff pacing audit and its
+limits, including the automated economy and termination checks.

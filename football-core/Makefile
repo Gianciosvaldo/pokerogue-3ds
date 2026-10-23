@@ -156,3 +156,17 @@ $(BUILD)/tactics_test: tests/tactics_test.c $(MATCH_SRCS) src/football_stats.c i
 	mkdir -p $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/tactics_test.c $(MATCH_SRCS) src/football_stats.c ../battle-core/gen/out/pr_data.c -lm -o $@
 test: tactics-test
+
+.PHONY: balance-report
+balance-report: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tools/balance_report.c $(MODE_SRCS) $(CORE_LIBS) -lm -o $(BUILD)/balance_report
+
+.PHONY: balance-baseline-report balance-test
+balance-baseline-report: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -I../reward-core/include -I../reward-core/gen/out -I../ai-core/include -DFB_DIFFICULTY_STEP_Q8=64 -DGC_FOOTBALL_EXP_FACTOR=500 tools/balance_report.c ../game-core/src/gc_football.c $(MODE_SRCS) $(CORE_LIBS) -lm -o $(BUILD)/balance_baseline
+balance-test: balance-report
+	$(BUILD)/balance_report 512 > $(BUILD)/balance-report.json
+	python3 tools/check_balance_report.py $(BUILD)/balance-report.json
+test: balance-test

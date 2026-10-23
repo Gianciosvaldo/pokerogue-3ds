@@ -4,6 +4,9 @@
 #include "gc/run.h"
 #include "pr_data.h"
 #define GC_FOOTBALL_MAX_EVOLUTIONS 16
+#ifndef GC_FOOTBALL_EXP_FACTOR
+#define GC_FOOTBALL_EXP_FACTOR 2000
+#endif
 
 typedef enum { GC_FB_BUSY, GC_FB_WAIT, GC_FB_DONE, GC_FB_ERROR } gc_football_progress;
 /* Caller owns a dedicated gc_run, kept static or on the heap, not the stack.

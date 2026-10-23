@@ -30,6 +30,10 @@ int main(void)
     assert(football_saves_load(&restored,&loaded,NULL,&backup)==FB_FILE_BAD);
     struct stat st;assert(!stat(SAVE_DIR "/football.sav",&st) && st.st_size==6); /* Unreadable bytes are preserved. */
     assert(football_saves_clear());assert(football_saves_load(&restored,&loaded,NULL,&backup)==FB_FILE_EMPTY);
+    FILE *large=fopen(SAVE_DIR "/football.sav","wb");assert(large);
+    assert(!ftruncate(fileno(large),FB_SAVE_MAX+13u));fclose(large);
+    assert(football_saves_load(&restored,&loaded,NULL,&backup)==FB_FILE_BAD);
+    assert(football_saves_clear());
     char *classic=NULL;size_t len=0;assert(save_read("session_0",&classic,&len,&backup)==SAVE_OK && len==7 && !memcmp(classic,"classic",7));free(classic);
     assert(!unlink(SAVE_DIR "/session_0.sav"));
     puts("football save files: dedicated path, atomic write failure, backup recovery, corruption preservation and explicit clear passed");

@@ -1,0 +1,6 @@
+{"seeds_per_squad":512,"difficulty_step_q8":64,"exp_factor":500,"policy":"short_yardage_dive_otherwise_slants_with_quarterly_verticals_zone_on_long_distance","squads":[
+{"name":"starter_trio","seasons":512,"clears":0,"matches":769,"plays":47043,"max_match_plays":100,"earned":133300,"spent":66650,"remaining":66650,"vitamins":514,"stones":0,"rare_offers":0,"affordable_rare_offers":0,"reached":[512,211,44,2,0,0,0],"wins":[211,44,2,0,0,0,0]},
+{"name":"evolution_trio","seasons":512,"clears":0,"matches":828,"plays":50192,"max_match_plays":102,"earned":166400,"spent":83200,"remaining":83200,"vitamins":632,"stones":0,"rare_offers":0,"affordable_rare_offers":0,"reached":[512,237,74,5,0,0,0],"wins":[237,74,5,0,0,0,0]},
+{"name":"legend_duo","seasons":512,"clears":0,"matches":1359,"plays":79134,"max_match_plays":98,"earned":478100,"spent":249950,"remaining":228150,"vitamins":1682,"stones":13,"rare_offers":75,"affordable_rare_offers":13,"reached":[512,443,287,96,18,2,1],"wins":[443,287,96,18,2,1,0]},
+{"name":"mega_duo","seasons":512,"clears":0,"matches":802,"plays":49730,"max_match_plays":102,"earned":151700,"spent":75850,"remaining":75850,"vitamins":580,"stones":0,"rare_offers":26,"affordable_rare_offers":0,"reached":[512,227,59,4,0,0,0],"wins":[227,59,4,0,0,0,0]}
+]}

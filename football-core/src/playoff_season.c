@@ -90,7 +90,7 @@ bool football_season_match_player(const FootballSeason *s,unsigned slot,Football
 bool football_season_start_match(FootballSeason *s, FootballMatchSpec *out)
 {
     if (!s || !out || s->phase!=FB_SEASON_READY) return false;
-    *out=(FootballMatchSpec){s->round,(uint16_t)(256+64*(s->round-1)),random_next(s)};
+    *out=(FootballMatchSpec){s->round,(uint16_t)(256+FB_DIFFICULTY_STEP_Q8*(s->round-1)),random_next(s)};
     s->phase=FB_SEASON_MATCH;
     return true;
 }

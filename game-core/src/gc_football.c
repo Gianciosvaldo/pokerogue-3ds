@@ -59,7 +59,7 @@ bool gc_football_award_exp(gc_run *r, unsigned round, const char **why)
     r->bt.wave_index=r->wave;
     for (int i=0;i<r->n_party;++i) {
         gc_rphase p=gc_rp(RP_EXP,i,0,0);
-        p.d=500.0*round*round;
+        p.d=(double)GC_FOOTBALL_EXP_FACTOR*round*round;
         gc_rq_push(r,p);
     }
     return true;
