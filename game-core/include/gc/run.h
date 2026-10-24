@@ -413,6 +413,11 @@ bool gc_mon_can_learn_tm(const gc_mon *mon, int move);
 /* held items: getMaxStackCount() of `key`/`arg` held by `mon`, and the reward screen's transfer (GC_CH_TRANSFER does it;
  * returns the copies moved, 0 = refused) */
 int gc_item_max_held(const gc_run *run, const char *key, int16_t arg, const gc_mon *mon);
+/* Source party form-item list, as global inventory indices in source order.
+ * Returns the total eligible count, writing at most capacity entries. */
+int gc_form_item_options(const gc_run *run, int party, int *indices, int capacity);
+/* Toggle one offered global inventory index while SelectModifierPhase waits. */
+bool gc_form_item_toggle(gc_run *run, int party, int item, const char **why);
 int gc_item_transfer(gc_run *run, int item_idx, int to, int qty);
 int gc_item_discard(gc_run *run, int item_idx, int count);
 

@@ -1,13 +1,14 @@
-/* Caller lifecycle at upstream 8555c08: evolution items (EvolutionItemModifier.apply, every species) and Giratina's
- * Griseous Core. A fusion keeps its counted stand-in. */
+/* Caller lifecycle at upstream 8555c08: evolution items and held form items.
+ * Fusion evolution keeps its counted stand-in; form items use scene selection. */
 #include "internal.h"
+#include "pr_item_forms.h"
 
 int gc_reward_lifecycle_apply(gc_run *run, const gc_offer *o, int party, const char **why)
 {
     const int item = gc_reward_item_index(o->key);
     const bool evolution = (item == PR_ITEM_EVOLUTION_ITEM || item == PR_ITEM_RARE_EVOLUTION_ITEM);
     const bool form = (item == PR_ITEM_FORM_CHANGE_ITEM || item == PR_ITEM_RARE_FORM_CHANGE_ITEM)
-                      && o->arg == FORM_CHANGE_ITEM_GRISEOUS_CORE;
+                      && pr_form_item_known(o->arg);
     if (!evolution && !form) return GC_APPLY_UNHANDLED;
     int k;
     if (party < 0 || party >= run->n_party || (k = gc_battle_slot_of(run, party)) < 0) {
@@ -15,36 +16,44 @@ int gc_reward_lifecycle_apply(gc_run *run, const gc_offer *o, int party, const c
         return GC_APPLY_REFUSED;
     }
     gc_mon *m = &run->party[party];
-    if (m->b.fusion_species) return GC_APPLY_UNHANDLED;
-    int target_form = -1;
+    if (evolution && m->b.fusion_species) return GC_APPLY_UNHANDLED;
     if (!evolution) {
-        const pr_species *s = gc_species(SPECIES_ID_GIRATINA);
-        if (s) for (int i = 0; i < s->nforms; i++)
-            if (!strcmp(gc_form(s->id, i)->form_key, "origin")) target_form = i;
-        if (target_form < 0) {
-            *why = "unavailable form or item storage";
+        if (run->n_items < 0 || run->n_items > PR_MAX_MODIFIERS || run->n_enemy_items < 0 || run->n_enemy_items > PR_MAX_MODIFIERS) {
+            pr_note_unported(&run->bt, PR_FEAT_ENGINE_LIMIT);
+            *why = "unavailable item storage";
             return GC_APPLY_REFUSED;
         }
-        /* PersistentModifier.add cannot stack a second Core. addModifier replaces
+        /* PersistentModifier.add cannot stack a second matching form item. addModifier replaces
          * the full stack with the PLAYER pool's default item for the offer tier.
          * The five pinned pool defaults are the five ball rewards, already handled
          * by the caller. This is distinct from reward-core's held-item filter. */
-        if (m->b.species == SPECIES_ID_GIRATINA) {
+        {
             for (int i = 0; i < run->n_items; i++) {
                 const gc_item *it = &run->items[i];
                 if (it->pokemon_id != m->b.id || it->arg != o->arg
                     || (strcmp(it->key,"FORM_CHANGE_ITEM") && strcmp(it->key,"RARE_FORM_CHANGE_ITEM"))) continue;
+                if (it->stack != 1 || it->virtual_stack || it->detached || it->eviolite_base) {
+                    pr_note_unported(&run->bt, PR_FEAT_MODIFIERS);
+                    *why = "unavailable form item";
+                    return GC_APPLY_REFUSED;
+                }
                 const int tier = o->tier < 5 ? o->tier : 0;
                 const int fallback = pr_player_pool_entries[pr_player_pool[tier].start].item;
                 gc_ev_msg(run,"battle:itemStackFull",2,
-                    pr_arg_key("fullItemName","modifierType:FormChangeItem.GRISEOUS_CORE"),
+                    pr_arg_key("fullItemName",pr_form_item_name_keys[o->arg]),
                     (pr_msg_arg){"itemName",PR_ARG_STR,0,pr_reward_strings[pr_items[fallback].name]});
                 gc_offer replacement = {.key=pr_item_keys[fallback], .arg=-1, .target=GC_TARGET_NONE};
                 return gc_port_apply_reward(run,&replacement,-1,-1,why) ? GC_APPLY_DONE : GC_APPLY_REFUSED;
             }
         }
-        if (run->n_items >= GC_MAX_ITEMS) {
+        if (run->n_items < 0 || run->n_items >= PR_MAX_MODIFIERS) {
+            pr_note_unported(&run->bt, PR_FEAT_ENGINE_LIMIT);
             *why = "unavailable item storage";
+            return GC_APPLY_REFUSED;
+        }
+        if (!gc_form_items_context_known(run, &m->b, o->arg)) {
+            pr_note_unported(&run->bt, PR_FEAT_FORM_CHANGE);
+            *why = "Pokédex data unavailable";
             return GC_APPLY_REFUSED;
         }
     }
@@ -71,11 +80,11 @@ int gc_reward_lifecycle_apply(gc_run *run, const gc_offer *o, int party, const c
         /* addModifier installs the held item before triggering FormChangePhase.
          * Ownership follows the stable Pokemon ID, not the party position. */
         gc_item_add(run, pr_item_keys[item], o->arg, m->b.id, 1);
-        /* Registry also has the automatic origin->altered reverse rule. A new
-         * active Core cannot fire that inactive-item trigger. addModifier still
-         * retains the item, and a free SelectModifierPhase still completes. */
-        if (!strcmp(gc_form(m->b.species, m->b.form)->form_key, "altered"))
-            gc_rq_unshift(run, gc_rp(RP_REWARD_FORM, party, target_form, 0));
+        gc_items_to_battle(run);
+        const int rule = pr_item_form_rule_index(&run->bt, &m->b);
+        /* A failed activation still retains the new held item and finishes a
+         * free reward selection. Conditions are not reward selection gates. */
+        if (rule >= 0) gc_rq_unshift(run, gc_rp(RP_REWARD_FORM, party, pr_item_form_rules[rule].to, 0));
     }
     return GC_APPLY_DONE;
 }
@@ -100,7 +109,13 @@ void gc_reward_change_form(gc_run *run, int party, int form)
     }
     pr_change_form_state(&run->bt, &m->b, form);
     if (m->b.ability_lookup_known) m->ability_index = (uint8_t)m->b.ability_index;
-    if (form == 0) gc_ev_msg(run,"battlePokemonForm:revertChange",1,gc_m_mon(run,"pokemonName",0,party));
+    if (strstr(f->form_key, "mega"))
+        gc_ev_msg(run,"battlePokemonForm:megaChange",2,pre_name,gc_m_mon(run,"pokemonName",0,party));
+    else if (strstr(f->form_key, "gigantamax"))
+        gc_ev_msg(run,"battlePokemonForm:gigantamaxChange",2,pre_name,gc_m_mon(run,"pokemonName",0,party));
+    else if (strstr(f->form_key, "eternamax"))
+        gc_ev_msg(run,"battlePokemonForm:eternamaxChange",2,pre_name,gc_m_mon(run,"pokemonName",0,party));
+    else if (form == 0) gc_ev_msg(run,"battlePokemonForm:revertChange",1,gc_m_mon(run,"pokemonName",0,party));
     else if (m->b.ability == ABILITY_ID_DISGUISE) gc_ev_msg(run,"battlePokemonForm:disguiseChange",0);
     else gc_ev_msg(run,"battlePokemonForm:formChange",1,pre_name);
     pr_remove_tag(&run->bt, &run->eng, &m->b, BATTLER_TAG_TYPE_AUTOTOMIZED);
