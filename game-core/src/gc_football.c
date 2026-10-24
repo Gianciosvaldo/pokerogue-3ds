@@ -15,6 +15,15 @@ void gc_football_new(gc_run *r, gc_system *profile, const char *seed, uint32_t e
     r->bt.game_mode=GAME_MODES_CLASSIC;
     r->bt.challenge_flags_known=true;
 }
+bool gc_football_create_member(gc_run *r,const gc_starter *s,const char **why)
+{
+    if(!r || !gc_starter_is_available(NULL,s,NULL,why))return false;
+    const pr_species *sp=gc_species(s->species);
+    if(!sp || sp->prevolution>0 || s->form)return fail(why,"base forms only");
+    gc_mon_new_player(r,&r->party[0],s,5);
+    r->n_party=1;r->party_order[0]=0;r->bt.party[0][0]=&r->party[0].b;r->bt.n_party[0]=1;
+    r->screen.kind=GC_SCREEN_NONE;return true;
+}
 bool gc_football_validate_draft(const gc_system *profile, const gc_starter *team, int count, const char **why)
 {
     if (!team || count<1 || count>6)
