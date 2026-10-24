@@ -157,7 +157,7 @@ static void cycle_mega(int direction)
     for(unsigned n=0;n<23;++n){L.career.mega+=direction;if(L.career.mega>21)L.career.mega=-1;if(L.career.mega< -1)L.career.mega=21;
         if(L.career.mega==-1 || L.career.roster.mega_item[L.career.mega])break;}
 }
-static void accept(void)
+static void choose_current(void)
 {
     FootballCareer *c=&L.career;
     switch(c->phase){
@@ -194,7 +194,7 @@ static bool input(ui_screen *s,ui_button button)
         else if(c->phase==FB_CAREER_READY)cycle_mega(delta);
         else if(c->phase==FB_CAREER_SHOP)L.member=(L.member+22+delta)%22;
         else if(c->phase==FB_CAREER_MATCH)L.play_page=1-L.play_page;
-    }else if(button==BTN_ACTION || button==BTN_SUBMIT)accept();
+    }else if(button==BTN_ACTION || button==BTN_SUBMIT)choose_current();
     else if(button==BTN_CANCEL){
         if(c->phase==FB_CAREER_DRAFT && c->roster.count){unsigned i=--c->roster.count;c->roster.cost-=gc_starter_value(L.args.profile,c->roster.mon[i].b.species);}
         else if(c->phase==FB_CAREER_LINEUP){if(L.editing)L.editing=false;else {c->phase=FB_CAREER_READY;L.cursor=0;}}
@@ -207,7 +207,7 @@ static bool input(ui_screen *s,ui_button button)
 static bool touch(ui_screen *s,float x,float y)
 {
     (void)s;FootballCareer *c=&L.career;
-    if(c->phase==FB_CAREER_RESULT || c->phase==FB_CAREER_END){accept();return true;}
+    if(c->phase==FB_CAREER_RESULT || c->phase==FB_CAREER_END){choose_current();return true;}
     if(c->phase==FB_CAREER_MATCH && c->live.phase!=FB_LIVE_CALL){
         if(c->live.rules.offense==FB_AWAY && y>=70 && y<180){
             unsigned nearest=0;float best=100000;
@@ -218,11 +218,11 @@ static bool touch(ui_screen *s,float x,float y)
         else if(y>=186 && y<224){if(x<160)L.pending|=FB_LIVE_JUKE|FB_LIVE_SWITCH;else L.pending|=FB_LIVE_ACTION;}
         return true;
     }
-    if(c->phase==FB_CAREER_MATCH){if(y>=40 && y<214){L.cursor=(x>=160?1:0)+(y>=127?2:0);if(L.cursor<option_count())accept();}else if(y>=216)L.play_page=1-L.play_page;return true;}
-    if(c->phase==FB_CAREER_READY){if(y>140 && y<180)cycle_mega(1);else if(y>=184){if(x<160){c->phase=FB_CAREER_LINEUP;L.cursor=0;}else accept();}return true;}
+    if(c->phase==FB_CAREER_MATCH){if(y>=40 && y<214){L.cursor=(x>=160?1:0)+(y>=127?2:0);if(L.cursor<option_count())choose_current();}else if(y>=216)L.play_page=1-L.play_page;return true;}
+    if(c->phase==FB_CAREER_READY){if(y>140 && y<180)cycle_mega(1);else if(y>=184){if(x<160){c->phase=FB_CAREER_LINEUP;L.cursor=0;}else choose_current();}return true;}
     if(c->phase==FB_CAREER_LINEUP && y>=214){if(L.editing){unsigned member=c->roster.lineup[L.cursor];football_roster_assign(&c->roster,L.cursor,(member+(x<160?21:1))%22);return true;}if(x<160)football_roster_autofill(&c->roster);else {c->phase=FB_CAREER_READY;L.editing=false;L.cursor=0;}return true;}
     if(c->phase==FB_CAREER_SHOP && y>=30 && y<65){L.member=(L.member+1)%22;return true;}
-    if(y>=42 && y<210){unsigned row=(unsigned)((y-42)/28),page=L.cursor/6;unsigned option=page*6+row;if(option<option_count()){L.cursor=option;accept();}}
+    if(y>=42 && y<210){unsigned row=(unsigned)((y-42)/28),page=L.cursor/6;unsigned option=page*6+row;if(option<option_count()){L.cursor=option;choose_current();}}
     return true;
 }
 static void update(ui_screen *s,float dt)
@@ -255,7 +255,7 @@ static void update(ui_screen *s,float dt)
     football_career_tick(c,framing?0:ms,controls);
     if(c->phase!=L.old_phase){L.cursor=0;L.editing=false;if(c->phase==FB_CAREER_SHOP)shop_assets();L.old_phase=c->phase;}
     if(c->phase==FB_CAREER_MATCH || c->phase==FB_CAREER_RESULT){
-        assets();
+        if(c->live.phase!=FB_LIVE_DEAD && c->live.phase!=FB_LIVE_END)assets();
         const FootballLive *m=&c->live;unsigned actor=m->controlled;float tx=m->flying?m->ball_x:m->actors[actor].x,ty=m->flying?m->ball_y:m->actors[actor].y;
         football_camera_follow(&L.camera,tx,ty,m->actors[actor].vx,(float)ms);
     }else preview();

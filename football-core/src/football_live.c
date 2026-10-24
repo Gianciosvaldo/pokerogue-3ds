@@ -21,7 +21,7 @@ static void arrange(FootballLive *m)
         *a=(FootballLiveActor){.attributes=m->units[m->rules.offense][os],.x=m->los+dir*ox[i],.y=oy[i],.roster=(uint8_t)os,.home=off==0};
         *b=(FootballLiveActor){.attributes=m->units[1-m->rules.offense][ds],.x=m->los+dir*dx[i],.y=dy[i],.roster=(uint8_t)ds,.home=def==0};
     }
-    m->carrier=(uint8_t)off;m->controlled=m->rules.offense==FB_HOME?0:16;
+    m->carrier=(uint8_t)off;m->controlled=m->rules.offense==FB_HOME?0:5;
     m->ball_x=m->actors[off].x;m->ball_y=m->actors[off].y;m->ball_z=0;
     m->flying=m->thrown=m->caught=m->loose=false;m->elapsed=m->juke=m->cooldown=0;
 }
@@ -67,7 +67,7 @@ static void finish(FootballLive *m,FootballResultKind kind,float x)
     int yards=(int)roundf((x-m->los)*direction(m));
     if(kind==FB_RESULT_INCOMPLETE)yards=0;
     if(kind==FB_RESULT_INTERCEPTION && yards<0)yards=0;
-    m->result=(FootballResolvedPlay){kind,(int16_t)limit((float)yards,-20,100),(uint8_t)limit(ceilf(m->elapsed)+4,1,30)};
+    m->result=(FootballResolvedPlay){kind,(int16_t)limit((float)yards,-100,100),(uint8_t)limit(ceilf(m->elapsed)+4,1,30)};
     if(!football_rules_advance(&m->rules,m->result)){m->rules.finished=true;m->rules.winner=FB_AWAY;}
     ++m->snaps;m->phase=m->rules.finished?FB_LIVE_END:FB_LIVE_DEAD;m->dead_time=0;
 }
@@ -175,7 +175,7 @@ static void step(FootballLive *m,FootballLiveInput input)
     ball_step(m);if(m->phase!=FB_LIVE_PLAY)return;
     carrier=&m->actors[m->carrier];
     if(!m->flying){
-        if(carrier->y<=0 || carrier->y>=53.333f || (carrier->x>=110 && dir>0) || (carrier->x<=10 && dir<0)){
+        if(carrier->x<=0 || carrier->x>=120 || carrier->y<=0 || carrier->y>=53.333f || (carrier->x>=110 && dir>0) || (carrier->x<=10 && dir<0)){
             finish(m,m->caught?FB_RESULT_COMPLETE:FB_RESULT_RUN,carrier->x);return;}
         for(unsigned d=def;d<def+11;++d){FootballLiveActor *a=&m->actors[d];bool dive=d==m->controlled && (input.pressed&FB_LIVE_ACTION);
             if(a->contact>0 || distance(a->x,a->y,carrier->x,carrier->y)>(dive?2.6f:1.2f))continue;

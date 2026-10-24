@@ -35,9 +35,18 @@ int main(void)
     assert(game.actors[0].y<before);
     football_live_tick(&game,17,(FootballLiveInput){.receiver=2});assert(game.thrown);
     copy=game;for(unsigned i=0;i<50;++i){FootballLiveInput in={.x=.3f,.y=.4f,.receiver=-1};football_live_tick(&game,17,in);football_live_tick(&copy,17,in);}assert(!memcmp(&game,&copy,sizeof game));
+    /* A real away formation must initially control a HOME linebacker. */
+    game.phase=FB_LIVE_CALL;game.rules.offense=FB_AWAY;
+    assert(football_live_defend(&game,FB_DEF_ZONE));assert(game.controlled<11 && game.actors[game.controlled].home);
     /* Defense cycles all eleven controlled actors. */
     game.phase=FB_LIVE_PLAY;game.rules.offense=FB_AWAY;game.controlled=0;
     for(unsigned i=1;i<=11;++i){football_live_switch(&game);assert(game.controlled==i%11);}
+    /* A carrier can retreat farther than the old snap model's 20-yard cap. */
+    assert(football_live_begin(&game,&roster,99,1));assert(football_live_call(&game,FB_RUN_DIVE));
+    football_live_tick(&game,17,(FootballLiveInput){.pressed=FB_LIVE_ACTION,.receiver=-1});
+    game.actors[game.carrier].x=0;
+    football_live_tick(&game,17,(FootballLiveInput){.x=-1,.receiver=-1});
+    assert(game.phase==FB_LIVE_DEAD && game.rules.last.safety && game.rules.score[FB_AWAY]==2);
     /* Full real-time matches must terminate without fabricated results. */
     for(unsigned seed=1;seed<=20;++seed){
         assert(football_live_begin(&game,&roster,seed,1));
