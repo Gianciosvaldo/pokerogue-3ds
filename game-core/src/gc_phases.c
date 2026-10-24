@@ -178,10 +178,25 @@ static void victory(gc_run *run, int enemy_idx)
         if (bt->n_participants > 0)
             for (int k = 0; k < run->n_party; k++) {
                 gc_mon *m = pm(run, run->party_order[k]);
-                if (m->b.hp > 0 && pp.party[k].participated
-                    && !gc_soothe_battle_gain(run,run->party_order[k])) {
-                    gc_stub(run,GC_STUB_REWARD_APPLY);
-                    gc_system_add_friendship(run->sys, run, m, 3, false);
+                if (m->b.hp > 0 && pp.party[k].participated) {
+                    if (!gc_soothe_battle_gain(run,run->party_order[k])) {
+                        gc_stub(run,GC_STUB_REWARD_APPLY);
+                        gc_system_add_friendship(run->sys, run, m, 3, false);
+                    }
+                    /* applyPartyExp: first held Brace before the EXP-level cap
+                     * gate. Pinned capture also queues VictoryPhase, hence true. */
+                    for (int j = 0; j < run->n_items; j++) {
+                        gc_item *it = &run->items[j];
+                        if (it->detached || it->pokemon_id != m->b.id
+                            || strcmp(it->key, "MYSTERY_ENCOUNTER_MACHO_BRACE")) continue;
+                        if (it->stack < 50) {
+                            it->stack++;
+                            for (int q = 0; q < run->n_items; q++) run->items[q].virtual_stack = 0;
+                            gc_items_to_battle(run);
+                            for (int q = 0; q < run->n_party; q++) gc_mon_recalc(run, &run->party[q]);
+                        }
+                        break;
+                    }
                 }
             }
         gc_exp_party_queue(run, &pp, exp_value, false);

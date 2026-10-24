@@ -24,7 +24,7 @@ Pickup, broader item identities and full interactions remain open.
 | `EvoTrackerModifier` | `PR_MOD_EVO_TRACKER`; canonical nontransferable Gimmighoul coins, money acquisition, primary evolution and saves | [Native acquisition/primary evolution evidence](../game-core/EVO-TRACKER-VALIDATION.md); fusion evolution selection remains open |
 | `PokemonBaseStatTotalModifier` | `PR_MOD_BASE_STAT_TOTAL`; base-stat helper | Full-turn fixtures/whitelist |
 | `PokemonBaseStatFlatModifier` | `PR_MOD_BASE_STAT_FLAT`; base-stat helper | Full-turn fixtures/whitelist |
-| `PokemonIncrementingStatModifier` | `PR_MOD_INCREMENTING_STAT`; `pr_apply_incrementing_stat_modifier` helper | Full-turn fixtures/whitelist |
+| `PokemonIncrementingStatModifier` | `PR_MOD_INCREMENTING_STAT`; canonical Brace bridge, real-stock stats, Victory/capture owner and saves | [Native stat/owner/capture proof](../game-core/MACHO-BRACE-VALIDATION.md); Winstrate reward chain and raw scene-cleanup histories remain separate |
 | `StatBoosterModifier` | `PR_MOD_STAT_BOOSTER`; `pr_apply_stat_booster_modifiers` helper | Full-turn fixtures/whitelist |
 | `EvolutionStatBoosterModifier` | `PR_MOD_EVOLUTION_STAT_BOOSTER`; stat helper includes evolution check | Full-turn fixtures/whitelist |
 | `SpeciesStatBoosterModifier` | `PR_MOD_SPECIES_STAT_BOOSTER`; stat helper includes species check | Full-turn fixtures/whitelist |

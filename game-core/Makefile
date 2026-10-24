@@ -980,3 +980,10 @@ held-lock-host-test: $(BUILD)/held_lock_host_test
 	$< tests/fixtures/held-lock.native.txt
 test: held-lock-host-test
 .PHONY: held-lock-host-test
+
+all: $(BUILD)/macho_brace_host_test
+$(BUILD)/macho_brace_host_test: tests/macho_brace_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: macho-brace-host-test
+macho-brace-host-test: $(BUILD)/macho_brace_host_test
+	$(BUILD)/macho_brace_host_test tests/fixtures/macho-brace.native.txt
