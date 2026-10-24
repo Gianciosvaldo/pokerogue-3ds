@@ -97,6 +97,7 @@ enum {
     PR_MOD_EXP_BOOSTER,           /* held Lucky/Golden Egg; mult=boost fraction */
     PR_MOD_FRIENDSHIP_BOOSTER,    /* Soothe Bell */
     PR_MOD_EVO_TRACKER,           /* canonical Gimmighoul coins: species[0], num=required */
+    PR_MOD_FORM_CHANGE_ITEM,       /* form item identity in num; form_item_active */
     PR_MOD_COUNT_
 };
 extern const uint8_t pr_mod_parent[PR_MOD_COUNT_];
@@ -125,6 +126,7 @@ typedef struct pr_modifier {
     uint8_t n_species;
     int8_t berry_type;             /* BerryModifier.berryType */
     int8_t status_effect;          /* TurnStatusEffectModifier.getStatusEffect(): TOXIC or BURN */
+    bool form_item_active;         /* PokemonFormChangeItemModifier.active */
 } pr_modifier;
 
 /* Battler tags (src/tags.c): summonData.tags, in upstream order. A tag's class and the
@@ -410,6 +412,8 @@ typedef struct pr_battle {
     uint32_t modifier_type_ref_max; /* transient allocator, including bridged overflow stock */
     pr_seedstr wave_seed;      /* globalScene.waveSeed; len 0 = unknown */
     int max_exp_level;         /* globalScene.getMaxExpLevel(); 0 = unknown */
+    bool form_item_dex_known;  /* explicit caught facts needed by six item-form conditions */
+    uint8_t form_item_dex_mask; /* bit index in pr_form_item_caught_species */
     /* turnCommand.cursor left undefined (a recharge turn's FIGHT command has -1) */
 #define PR_CURSOR_UNDEFINED INT8_MIN
     /* currentBattle.turnCommands / preTurnCommands per BattlerIndex */
@@ -675,6 +679,13 @@ bool pr_move_is_attack(int move);
  * findModifier / getHeldItems call, named after the modifier class it applies. */
 bool pr_mod_is(const pr_modifier *m, int cls);
 bool pr_mod_is_ported_item(const pr_modifier *m);
+/* Pinned PokemonFormChangeItemModifier and item-trigger SpeciesFormChange. */
+bool pr_form_item_known(int item);
+bool pr_item_form_rule_eligible(pr_battle *bt, const pr_pokemon *p, int rule);
+int pr_item_form_rule_index(pr_battle *bt, const pr_pokemon *p);
+bool pr_trigger_item_form_change(pr_battle *bt, pr_pokemon *p, bool delayed, int *selected_rule);
+bool pr_apply_form_change_item(pr_battle *bt, pr_pokemon *p, pr_modifier *modifier,
+                               bool active, int *selected_rule);
 int32_t pr_mod_get_stack_count(const pr_modifier *m);        /* stackCount + virtualStackCount */
 /* pokemon.getHeldItems() (pokemonId === id exactly), filtered to isTransferable when asked:
  * the number of items, and the sum of their stackCount fields (not getStackCount()) */

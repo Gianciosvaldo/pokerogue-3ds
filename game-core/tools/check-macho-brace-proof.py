@@ -23,6 +23,7 @@ def fault(path, name, old, new, count=1):
 
 fault('battle-core/src/modifiers.c', 'lose-max-stack-bonus', 'if (m->stack_count == 50)', 'if (false)', 2)
 fault('battle-core/src/modifiers.c', 'count-virtual-as-real', '*value += 2 * m->stack_count;', '*value += 2 * (m->stack_count + m->virtual_stack_count);')
+fault('game-core/src/gc_phases.c', 'consume-battle-rng', 'if (it->stack < 50) {', 'pr_battle_rand_seed_int(&run->bt, 2, 0); if (it->stack < 50) {')
 fault('game-core/src/gc_phases.c', 'cap-blocks-growth', 'if (it->stack < 50) {', 'if (it->stack < 50 && m->b.level < pp.max_exp_level) {')
 fault('game-core/src/gc_phases.c', 'grow-fainted-holder', 'm->b.hp > 0 && pp.party[k].participated', 'pp.party[k].participated')
 fault('game-core/src/gc_phases.c', 'grow-bench-nonparticipant', 'm->b.hp > 0 && pp.party[k].participated', 'm->b.hp > 0')

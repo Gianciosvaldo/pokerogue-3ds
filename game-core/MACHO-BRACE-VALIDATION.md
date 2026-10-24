@@ -79,12 +79,14 @@ before merge; the dedicated custom-only Task63 check stays excluded.
 
 Local validation passes: the reproduction script regenerates and compares the
 same full matrix (native party IDs may differ between runs). Native replay checks
-1,097,365 assertions; all 12 compiled faults and 10 malformed inputs reject.
+1,097,365 assertions; all 13 compiled faults and 10 malformed inputs reject.
 Full game-core tests pass with identical saved/unsaved digest `5073f991`.
 Retained proofs pass: Thief/Covet 32,768; generic held transfer 32,768; Grip Claw
 32,768; Baton 256; Scene/Mini Black Hole 3,608; Grip/Baton full doubles turns
-2,114 + 2,050 with zero skipped or uncovered turns. Normal app/custom/save and
-actual 3DS gates still need exact-head CI acceptance.
+2,114 + 2,050 with zero skipped or uncovered turns. Normal app/custom/save and actual 3DS gates passed for PR #398
+(CI run `40085338940`). Later changes require their own exact-head CI.
+The retained C replay now checks the distinct battle RNG as well as both global
+RNG copies, with an extra compiled fault proving that consumption is caught.
 
 This validates the stated battle/stat/capture/save boundaries. It does not
 validate the Winstrate encounter's multi-trainer reward-generation chain, raw
