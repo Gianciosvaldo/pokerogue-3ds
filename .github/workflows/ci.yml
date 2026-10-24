@@ -54,3 +54,12 @@ jobs:
         run: docker run --rm -v "$PWD":/src -w /src/game devkitpro/devkitarm make
       - name: Check the actual ARM startup stack and compiler frame reports
         run: python3 game/tests/check_stack_size.py game/pokerogue.elf --usage-dir game/build
+      - name: Upload playable 3DSX app
+        uses: actions/upload-artifact@v4
+        with:
+          name: PokeRogue-3DSX
+          if-no-files-found: error
+          path: |
+            game/pokerogue.3dsx
+            game/pokerogue.smdh
+            game/3DSX-ARTIFACT.md
