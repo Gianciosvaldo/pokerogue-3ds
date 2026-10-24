@@ -109,6 +109,10 @@ bool pr_learned_form_target(pr_battle *bt, const pr_pokemon *p, uint16_t *target
 static void form_change_with_delay(pr_battle *bt, const pr_pokemon *p, int trigger_class, bool delayed)
 {
     if (!p) return;
+    if (trigger_class == PR_FCT_SpeciesFormChangeItemTrigger) {
+        pr_trigger_item_form_change(bt, (pr_pokemon *)p, delayed, NULL);
+        return;
+    }
     const pr_species *sp = pr_pokemon_species(p);
     if (!sp || !(sp->form_change_triggers & (1u << trigger_class))) return;
 

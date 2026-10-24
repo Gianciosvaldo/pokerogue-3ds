@@ -102,10 +102,10 @@ int main(int argc,char **argv) {
         int key=i%576;CHECK(fused==i/576&&scenario==key/96&&mask==(key/12)%8&&stock==owner_stacks[(key/4)%3]&&defeated==(key/2)%2&&level==(key%2?1000:5)&&cap==10);
         setup(i%3);mons('B',false,scenario,fused);inventory('J',false);gc_items_to_battle(&r);r.n_enemy=1;r.enemy[0].b.species=enemy;r.enemy[0].b.form=form;r.enemy[0].b.level=enemyLevel;
         r.bt.n_participants=0;for(int j=0;j<3;j++)if(mask&(1<<j))r.bt.participants[r.bt.n_participants++]=r.party[r.party_order[j]].b.id;
-        pr_rng rng=r.run.rng,brng=r.bt.rng;
+        pr_rng rng=r.run.rng,grng=r.bt.rng,brng=r.bt.battle_rng;
         if(defeated){gc_rphase phase=gc_rp(RP_VICTORY,0,0,0);CHECK(gc_phase_start(&r,&phase));}
         else{pr_exp_party pp;gc_exp_party_build(&r,&pp,r.bt.participants,r.bt.n_participants);gc_exp_party_queue(&r,&pp,exp,false);}
-        CHECK(!memcmp(&rng,&r.run.rng,sizeof rng)&&!memcmp(&brng,&r.bt.rng,sizeof brng));mons('E',true,scenario,fused);inventory('K',true);
+        CHECK(!memcmp(&rng,&r.run.rng,sizeof rng)&&!memcmp(&grng,&r.bt.rng,sizeof grng)&&!memcmp(&brng,&r.bt.battle_rng,sizeof brng));mons('E',true,scenario,fused);inventory('K',true);
         record('Q');int n=bounded(0,3);finish();gc_rphase phase;
         for(int j=0;j<n;j++){record('P');int party=bounded(0,2),active=bounded(0,1),amount=bounded(0,INT32_MAX);finish();CHECK(gc_rq_next(&gc_int(&r)->rq,&phase));CHECK(phase.type==RP_EXP&&phase.a==r.party_order[party]&&phase.b==active&&phase.d==amount);}
         if(defeated){CHECK(gc_rq_next(&gc_int(&r)->rq,&phase)&&phase.type==RP_CONTINUE);}
@@ -117,7 +117,7 @@ int main(int argc,char **argv) {
         capture_setup(stock,level);pr_pokemon *p=&r.party[0].b;
         record('B');CHECK(bounded(1,50)==stock);p->hp=bounded(0,INT32_MAX);p->friendship=bounded(0,255);for(int k=0;k<6;k++)p->stats[k]=bounded(1,INT32_MAX);finish();
         pr_pokemon before=*p;r.bt.n_participants=part;r.bt.participants[0]=p->id;
-        pr_rng rng=r.run.rng,brng=r.bt.rng;
+        pr_rng rng=r.run.rng,grng=r.bt.rng,brng=r.bt.battle_rng;
         gc_rphase phase=gc_rp(RP_CATCH,0,POKEBALL_TYPE_MASTER_BALL,0);
         CHECK(!gc_phase_start(&r,&phase));bool ok=false;const char *why=NULL;
         CHECK(gc_catch_choose(&r,&phase,&(gc_choice){GC_CH_PICK,-1,0,0},&why,&ok)&&ok);
@@ -125,7 +125,7 @@ int main(int argc,char **argv) {
         phase=gc_rp(RP_VICTORY,0,0,0);CHECK(gc_phase_start(&r,&phase));
         record('E');int want=bounded(1,50);CHECK(r.items[0].stack==want);CHECK(p->hp==bounded(0,INT32_MAX));CHECK(p->friendship==bounded(0,255));for(int k=0;k<6;k++)CHECK(p->stats[k]==bounded(1,INT32_MAX));finish();
         pr_pokemon after=*p;pr_exp_party pp;gc_exp_party_build(&r,&pp,r.bt.participants,r.bt.n_participants);gc_exp_party_queue(&r,&pp,17,false);
-        CHECK(r.items[0].stack==want&&!memcmp(p,&after,sizeof after)&&!memcmp(&rng,&r.run.rng,sizeof rng)&&!memcmp(&brng,&r.bt.rng,sizeof brng));
+        CHECK(r.items[0].stack==want&&!memcmp(p,&after,sizeof after)&&!memcmp(&rng,&r.run.rng,sizeof rng)&&!memcmp(&grng,&r.bt.rng,sizeof grng)&&!memcmp(&brng,&r.bt.battle_rng,sizeof brng));
         CHECK(!gc_run_can_save(&r)&&!gc_run_save(&r,save,sizeof save));
         if(part){
             /* Retain a complete real command/ball/catch-answer route as well as
