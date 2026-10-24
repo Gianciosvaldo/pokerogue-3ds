@@ -170,3 +170,26 @@ balance-test: balance-report
 	$(BUILD)/balance_report 512 > $(BUILD)/balance-report.json
 	python3 tools/check_balance_report.py $(BUILD)/balance-report.json
 test: balance-test
+
+.PHONY: live-test
+live-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/live_test.c src/football_camera.c src/football_roster.c src/football_live.c src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/live_test
+	$(BUILD)/live_test
+test: live-test
+
+.PHONY: career-test live-screen-check
+career-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/career_test.c src/football_career.c src/football_career_save.c src/football_roster.c src/football_live.c src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/career_test
+	$(BUILD)/career_test
+live-screen-check:
+	$(CC) $(CPPFLAGS) $(CFLAGS) -fsyntax-only -D__3DS__ -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include ../game/source/football_live_screen.c ../game/source/football_live_art.c
+test: career-test live-screen-check
+
+.PHONY: live-screen-test
+live-screen-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -D__3DS__ -DFOOTBALL_LIVE_SCREEN_TEST -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include tests/live_screen_test.c ../game/source/football_live_screen.c src/football_career.c src/football_career_save.c src/football_camera.c src/football_roster.c src/football_live.c src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/live_screen_test
+	$(BUILD)/live_screen_test
+test: live-screen-test
