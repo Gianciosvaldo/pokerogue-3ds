@@ -615,10 +615,10 @@ void gc_new_battle_start(gc_run *run, bool reset, bool new_biome)
     pr_run_reset_seed(&run->run, wave);
 
     if (run->battle_type == BATTLE_TYPE_TRAINER) {
-        gc_ev_msg(run, "battle:trainerAppeared", 1, gc_m_trainer(run, "trainerName", GC_TNAME_TITLED));
+        gc_ev_msg(run, run->double_battle ? "battle:trainerAppearedDouble" : "battle:trainerAppeared", 1, gc_m_trainer(run, "trainerName", GC_TNAME_TITLED));
     } else {
         if(run->double_battle&&run->n_enemy>1)
-            gc_ev_msg(run,"battle:doubleWildAppeared",2,gc_m_mon_name(run,"pokemonName1",1,0),gc_m_mon_name(run,"pokemonName2",1,1));
+            gc_ev_msg(run,"battle:multiWildAppeared",2,gc_m_mon_name(run,"pokemonName1",1,0),gc_m_mon_name(run,"pokemonName2",1,1));
         else gc_ev_msg(run, "battle:singleWildAppeared", 1, gc_m_mon_name(run, "pokemonName", 1, 0));
     }
     /* doPostBattleCleanup's resetArenaState */

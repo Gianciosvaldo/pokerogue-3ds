@@ -1014,3 +1014,10 @@ $(BUILD)/form_item_owner_guards_test: tests/form_item_owner_guards_test.c $(BUIL
 form-item-owner-host-test: $(BUILD)/form_item_menu_host_test $(BUILD)/form_item_phase_host_test $(BUILD)/form_item_acquisition_host_test $(BUILD)/form_item_owner_guards_test
 	python3 tools/check-form-item-owner-proof.py
 test: form-item-owner-host-test
+
+$(BUILD)/encounter_intro_test: tests/encounter_intro_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -Wl,--wrap=gc_battle_setup_field -lm -o $@
+.PHONY: encounter-intro-test
+encounter-intro-test: $(BUILD)/encounter_intro_test
+	$(BUILD)/encounter_intro_test
+test: encounter-intro-test

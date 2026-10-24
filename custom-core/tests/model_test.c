@@ -668,7 +668,7 @@ static void test_support_and_gate(void)
     /* each trait is refused for its own reason */
     const struct { uint8_t bit; int want; } traits[] = {
         {CC_TR_BOSS, CC_REFUSE_BOSS}, {CC_TR_FUSED, CC_REFUSE_FUSED}, {CC_TR_TERA, CC_REFUSE_TERA},
-        {CC_TR_DOUBLES, CC_REFUSE_DOUBLES}, {CC_TR_TRAINER_OWNED, CC_REFUSE_TRAINER_OWNED},
+        {CC_TR_TRAINER_OWNED, CC_REFUSE_TRAINER_OWNED},
         {CC_TR_MYSTERY, CC_REFUSE_MYSTERY}, {CC_TR_FIXED_SCRIPTED, CC_REFUSE_FIXED_SCRIPTED},
         {CC_TR_REMATCH, CC_REFUSE_REMATCH},
     };
@@ -678,6 +678,15 @@ static void test_support_and_gate(void)
         CHECK_EQ(cc_nemesis_support(&n), traits[i].want);              /* ...but refused */
         CHECK_STATUS(cc_nemesis_validate_stored(&n), CC_E_CONSISTENCY);/* and so never a stored record */
     }
+    /* Doubles describes the source encounter; it does not make an exact killer
+     * unsuitable for a later single rematch. Attribution requirements remain. */
+    n = mk_nem(1, 10, 900); n.traits = CC_TR_DOUBLES;
+    CHECK_EQ(cc_nemesis_support(&n), CC_SUPPORT_OK);
+    CHECK_STATUS(cc_nemesis_validate_stored(&n), CC_OK);
+    n.known &= (uint16_t)~CC_NK_FINISHER_VERIFIED;
+    CHECK_EQ(cc_nemesis_support(&n), CC_REFUSE_NOT_ATTRIBUTED);
+    n = mk_nem(1, 10, 900); n.traits = CC_TR_DOUBLES | CC_TR_BOSS;
+    CHECK_EQ(cc_nemesis_support(&n), CC_REFUSE_BOSS);
     /* several traits: the first listed wins */
     n = mk_nem(1, 10, 900); n.traits = CC_TR_TERA | CC_TR_BOSS;
     CHECK_EQ(cc_nemesis_support(&n), CC_REFUSE_BOSS);

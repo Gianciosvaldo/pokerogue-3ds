@@ -891,6 +891,10 @@ wave 27 / 77 / 127 / 177: encounter hook -> scheduler (C05) -> OFFER (accept / d
   that battle with a known id, the wave matched, the species/form did not change, and the encounter kind was not unsupported. Otherwise nothing is
   handed to the store (`candidates_none`) and the report says the finisher is unknown. Boss / trainer / mystery / fixed finishers are handed to the
   store, which refuses them with the contract's reasons (`CC_REFUSE_*`); over 200 real runs of `RUNTEST_CUSTOM=strong` the store refused 67 boss, 45 double, 18 trainer-owned and 6 fixed or scripted finishers.
+  That count is historical: verified wild finishers from doubles are now accepted, with `CC_TR_DOUBLES` retained as provenance.
+  The record names exactly the attacker identified by the faint hook, not both opponents or the first slot by default.
+  Its eventual rematch still requires an eligible single wild encounter; no doubles rematch is introduced.
+  Other insertion restrictions and attribution requirements remain.
   Nemeses are created **only** in custom runs.
 - **The overlay and the slot.** Sticky flag (the slot's own file), run uid, the frozen schedule, whether the enemy on the field is a rematch
   enemy and its id, the encounter's wave / kind / flags, the reward ids, and the observation's retained turns are in ONE `save_write` with the
