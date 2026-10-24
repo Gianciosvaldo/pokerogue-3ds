@@ -7,7 +7,9 @@ Target: upstream `8555c08c823b856cbec4eb99ca84ea52a955836d`, locales
 PR #399 supplied the [native callback and scene selector](../battle-core/HELD-FORM-VALIDATION.md).
 This follow-up projects canonical normal/rare form items from game inventory into
 that class and preserves the native active state through saves. It does not yet
-add the party-menu toggle or general reward/phase execution owner.
+add the party-menu toggle or general reward/phase execution owner. Those core
+owners are supplied by the [subsequent native owner proof](FORM-ITEM-OWNER-VALIDATION.md);
+the app menu wiring remains separate.
 
 The native constructor's active flag is true by default. Game inventory uses
 `form_inactive`, whose zero default keeps existing items active. It occupies

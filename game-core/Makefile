@@ -12,7 +12,7 @@ RUN_LIB := $(BUILD)/run-core/librun.a
 CORE_LIB := $(BUILD)/run-core/battle-core/libprcore.a
 AI_LIB := $(BUILD)/ai-core/libai.a
 REWARD_LIB := $(BUILD)/reward-core/libreward.a
-SRCS := src/gc_football.c src/gc_egg_hatch.c src/gc_custom.c src/gc_gacha.c gen/out/gc_egg_pool.c src/gc_classic.c src/gc_multi.c src/gc_wide.c src/gc_orb_add.c src/gc_soothe.c src/gc_lure.c src/gc_temp.c src/gc_moveset.c src/gc_fungames.c src/gc_run.c src/gc_phases.c src/gc_mon.c src/gc_items.c src/gc_encounter.c src/gc_battle.c src/gc_save.c src/gc_stubs.c src/gc_system.c src/gc_mystery.c src/gc_reward.c src/gc_reward_lifecycle.c src/gc_learnset.c src/gc_catch.c gen/out/gc_evolutions.c gen/out/gc_biome_fields.c gen/out/gc_starters.c gen/out/gc_trainers.c gen/out/gc_dex.c gen/out/gc_learnsets.c
+SRCS := src/gc_form_items.c src/gc_football.c src/gc_egg_hatch.c src/gc_custom.c src/gc_gacha.c gen/out/gc_egg_pool.c src/gc_classic.c src/gc_multi.c src/gc_wide.c src/gc_orb_add.c src/gc_soothe.c src/gc_lure.c src/gc_temp.c src/gc_moveset.c src/gc_fungames.c src/gc_run.c src/gc_phases.c src/gc_mon.c src/gc_items.c src/gc_encounter.c src/gc_battle.c src/gc_save.c src/gc_stubs.c src/gc_system.c src/gc_mystery.c src/gc_reward.c src/gc_reward_lifecycle.c src/gc_learnset.c src/gc_catch.c gen/out/gc_evolutions.c gen/out/gc_biome_fields.c gen/out/gc_starters.c gen/out/gc_trainers.c gen/out/gc_dex.c gen/out/gc_learnsets.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
 all: $(BUILD)/transform_host_test
@@ -997,3 +997,20 @@ held-form-items-host-test: $(BUILD)/held_form_items_host_test
 	python3 tools/check-held-form-state-proof.py
 
 test: held-form-items-host-test
+
+$(BUILD)/form_item_menu_host_test: tests/form_item_menu_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+$(BUILD)/form_item_phase_host_test: tests/form_item_phase_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+$(BUILD)/form_item_acquisition_host_test: tests/form_item_acquisition_host_test.c tests/form_item_phase_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/form_item_acquisition_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+
+$(BUILD)/form_item_owner_guards_test: tests/form_item_owner_guards_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+.PHONY: form-item-owner-host-test
+form-item-owner-host-test: $(BUILD)/form_item_menu_host_test $(BUILD)/form_item_phase_host_test $(BUILD)/form_item_acquisition_host_test $(BUILD)/form_item_owner_guards_test
+	python3 tools/check-form-item-owner-proof.py
+test: form-item-owner-host-test
