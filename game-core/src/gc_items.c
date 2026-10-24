@@ -178,9 +178,10 @@ static void to_modifier(const gc_item *it, pr_modifier *m, bool golden)
         else {m->cls=PR_MOD_EXP_BOOSTER;m->mult=!strcmp(it->key,"LUCKY_EGG")?0.4:1.0;}
         m->unknown_subclass=(it->arg!=-1&&it->arg!=0)||!pr_mod_is_ported_item(m);return;
     }
-    /* Transient Amulet Coin is a bounded Golden Punch dependency. */
+    /* Virtual stock is admitted only for the specifically validated classes below. */
     if (it->virtual_stack && strcmp(it->key, "WIDE_LENS")
-        && strcmp(it->key, "GOLDEN_PUNCH") && strcmp(it->key, "AMULET_COIN") && strcmp(it->key, "MULTI_LENS")) return;
+        && strcmp(it->key, "GOLDEN_PUNCH") && strcmp(it->key, "AMULET_COIN") && strcmp(it->key, "MULTI_LENS")
+        && strcmp(it->key, "MYSTERY_ENCOUNTER_MACHO_BRACE")) return;
     /* These classes now have turn-path implementations in battle-core.  Parameters and
      * transferability come from upstream modifierTypes, not an inferred item name. */
     static const struct { const char *key; uint8_t cls; } held[] = {
@@ -258,6 +259,12 @@ static void to_modifier(const gc_item *it, pr_modifier *m, bool golden)
     } else if (!strcmp(it->key, "MYSTERY_ENCOUNTER_OLD_GATEAU") && it->arg == 0) {
         m->cls = PR_MOD_BASE_STAT_FLAT; m->virtual_stack_count = it->virtual_stack;
         m->is_transferable = false; m->unknown_subclass = false;
+    } else if (!strcmp(it->key, "MYSTERY_ENCOUNTER_MACHO_BRACE")) {
+        m->cls = PR_MOD_INCREMENTING_STAT; m->virtual_stack_count = it->virtual_stack;
+        m->is_transferable = false;
+        m->unknown_subclass = !it->pokemon_id || it->detached
+            || (it->arg != -1 && it->arg != 0) || it->stack < 1
+            || it->virtual_stack < 0 || (int64_t)it->stack + it->virtual_stack > 50;
     } else if (!strcmp(it->key, "ATTACK_TYPE_BOOSTER")) { /* AttackTypeBoosterModifier(type, 20) */
         m->cls = PR_MOD_ATTACK_TYPE_BOOSTER; m->move_type = (int8_t)it->arg; m->mult = 0.2; m->unknown_subclass = false;
     } else if (!strcmp(it->key, "SOUL_DEW")) {

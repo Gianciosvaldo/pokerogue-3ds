@@ -1,7 +1,7 @@
 /* Canonical Soothe Bell acquisition only. Preserve source inventory identity/order
  * in game storage; normalize constructor-only args in the shadow reward context. */
 #include "internal.h"
-static bool context(gc_run *run,pr_reward_ctx *c,int storage,int *target) {
+static bool context(gc_run *run,pr_reward_ctx *c,int storage,int *target,bool battle_gain) {
  memset(c,0,sizeof *c);c->run=&run->run;
  if(run->run.has_challenges||run->n_party<1||run->n_party>PR_REWARD_MAX_PARTY
     ||storage<0||storage>=run->n_party||run->n_items<0||run->n_items>GC_MAX_ITEMS
@@ -16,7 +16,13 @@ static bool context(gc_run *run,pr_reward_ctx *c,int storage,int *target) {
  c->n_party=run->n_party;
  for(int j=0;j<run->n_items;j++) {
   const gc_item *it=&run->items[j];int item=gc_reward_item_index(it->key);
-  if(item<0||it->virtual_stack||it->detached)return false;
+  if(item<0||it->detached)return false;
+  /* Battle friendship reads only the first Bell. A canonical Brace's virtual
+   * stock affects neither that lookup nor its multiplier; growth clears it later. */
+  const bool brace=battle_gain&&item==PR_ITEM_MYSTERY_ENCOUNTER_MACHO_BRACE
+      &&(it->arg==-1||it->arg==0)&&it->stack>=1&&it->virtual_stack>=0
+      &&(int64_t)it->stack+it->virtual_stack<=50;
+  if(it->virtual_stack&&!brace)return false;
   int owner=-1;if(it->pokemon_id){for(int k=0;k<c->n_party;k++)if(c->party[k].id==it->pokemon_id)owner=k;if(owner<0)return false;}
   int arg=it->arg;
   if(item==PR_ITEM_SOOTHE_BELL){if(arg!=-1&&arg!=0)return false;arg=0;}
@@ -26,7 +32,7 @@ static bool context(gc_run *run,pr_reward_ctx *c,int storage,int *target) {
 }
 int gc_soothe_add(gc_run *run,int storage) {
  static pr_reward_ctx c;int target;
- if(!context(run,&c,storage,&target))return PR_REWARD_SOOTHE_UNSUPPORTED;
+ if(!context(run,&c,storage,&target,false))return PR_REWARD_SOOTHE_UNSUPPORTED;
  int status=pr_reward_add_soothe_bell(&c,target);
  if(status!=PR_REWARD_SOOTHE_ADDED&&status!=PR_REWARD_SOOTHE_STACKED)return status;
  if(c.n_items>PR_MAX_MODIFIERS)return PR_REWARD_SOOTHE_UNSUPPORTED;
@@ -78,9 +84,9 @@ bool gc_soothe_battle_gain(gc_run *run,int storage) {
  for(int j=0;j<run->n_items;j++)any|=!strcmp(run->items[j].key,"SOOTHE_BELL");
  if(!any){gc_system_add_friendship(run->sys,run,&run->party[storage],3,false);return true;}
  if(run->run.mode!=GAME_MODES_CLASSIC&&run->run.mode!=GAME_MODES_ENDLESS)return false;
- for(int j=0;j<run->n_party;j++)if(run->party[j].b.fusion_species)return false;
+ /* Friendship selects by stable holder ID; fusion does not alter the Bell gain. */
  static pr_reward_ctx c;int target;double amount;
- if(!context(run,&c,storage,&target)||!pr_reward_soothe_bell_gain(&c,target,3,&amount,NULL))return false;
+ if(!context(run,&c,storage,&target,true)||!pr_reward_soothe_bell_gain(&c,target,3,&amount,NULL))return false;
  gc_system_add_friendship(run->sys,run,&run->party[storage],(int)amount,false);
  return true;
 }
