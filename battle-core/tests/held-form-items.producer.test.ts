@@ -38,7 +38,7 @@ it("pinned held form constructors and complete item-trigger rule matrix", async 
   const constructors: any[] = [];
   for (const { id } of enums) for (const key of ["FORM_CHANGE_ITEM", "RARE_FORM_CHANGE_ITEM"])
     for (let owner = 0; owner < 4; owner++) for (const active of [false, true]) {
-      const m: any = make(key, id, actors[owner]); m.active = active;
+      const m: any = make(key, id, actors[owner]); expect(m.active).toBe(true); m.active = active;
       const clone = m.clone(), data = new ModifierData(m, owner < 2);
       const restored: any = new ModifierData(JSON.parse(JSON.stringify(data)), owner < 2).toModifier(m.constructor);
       expect(restored).not.toBeNull();

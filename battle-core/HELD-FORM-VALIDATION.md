@@ -101,3 +101,9 @@ each PR. Only the dedicated custom Task63 job remains excluded.
 Local full game-core tests pass with identical saved/unsaved digest `5073f991`.
 The complete native regeneration script passes, including immutable generated
 registration-table comparison. Exact-head normal CI acceptance is still required.
+
+The subsequent [inventory/save projection](../game-core/HELD-FORM-STATE-VALIDATION.md)
+adds canonical game-inventory bridging and active-state persistence. The
+callback-only exclusions above describe this original proof; the follow-up has
+its own native constructor/DTO and compatibility evidence. General reward/menu
+activation and phase execution still require their owning-caller proofs.

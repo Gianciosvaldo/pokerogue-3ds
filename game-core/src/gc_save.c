@@ -103,8 +103,8 @@ static const sfield mystery_history_fields[] = {
 };
 
 /* An item, its key as text (gc_item.key is a pointer) */
-typedef struct { char key[40]; int16_t arg; int32_t stack; uint32_t pokemon_id; bool detached; int32_t battle_count; bool non_transferable; bool eviolite_base; } sv_item;
-static const sfield item_fields[] = {SF(sv_item, key), SF(sv_item, arg), SF(sv_item, stack), SF(sv_item, pokemon_id), SF(sv_item, detached), SF(sv_item, battle_count), SF(sv_item, non_transferable), SF(sv_item, eviolite_base)};
+typedef struct { char key[40]; int16_t arg; int32_t stack; uint32_t pokemon_id; bool detached; int32_t battle_count; bool non_transferable; bool eviolite_base; bool form_inactive; } sv_item;
+static const sfield item_fields[] = {SF(sv_item, key), SF(sv_item, arg), SF(sv_item, stack), SF(sv_item, pokemon_id), SF(sv_item, detached), SF(sv_item, battle_count), SF(sv_item, non_transferable), SF(sv_item, eviolite_base), SF(sv_item, form_inactive)};
 
 /* What the run keeps of a Pokemon beside battle-core's part */
 static const sfield mon_fields[] = {
@@ -459,6 +459,11 @@ static void put_items(writer *w, const char *name, const gc_item *items, int n)
         sv[i].battle_count = items[i].battle_count;
         sv[i].non_transferable = items[i].non_transferable;
         sv[i].eviolite_base = items[i].eviolite_base;
+        if (items[i].form_inactive && (!gc_item_key_form_change(items[i].key) || !pr_form_item_known(items[i].arg))) {
+            w->full = true;
+            return;
+        }
+        sv[i].form_inactive = items[i].form_inactive;
     }
     size_t s = section_start(w, name);
     put_block(w, item_fields, NF(item_fields), sv, sizeof sv[0], n);
@@ -749,10 +754,10 @@ static bool get_items(const reader *body, const char *name, gc_item *items, int 
     memset(sv, 0, sizeof sv);
     reader r = section(body, name);
     if (r.bad) return n == 0;
-    /* Older port saves could only contain factory Eviolite. Absence of this
-     * new marker is a supported schema, not lost state. A present marker must
-     * still have its exact size and may occur only once. */
-    reader schema=r;int fields=take16(&schema);bool class_marker=false;
+    /* Optional named fields are independent: older saves imply factory
+     * Eviolite and active form items. Missing markers are supported schemas,
+     * not lost state; present markers require exact widths and uniqueness. */
+    reader schema=r;int fields=take16(&schema);bool class_marker=false, form_marker=false;
     if(schema.bad||fields>128)return false;
     for(int k=0;k<fields;k++){
         uint32_t name_hash=take32(&schema);uint16_t size=take16(&schema);
@@ -760,8 +765,18 @@ static bool get_items(const reader *body, const char *name, gc_item *items, int 
             if(class_marker||size!=sizeof sv[0].eviolite_base)return false;
             class_marker=true;
         }
+        if(name_hash==hash("form_inactive")){
+            if(form_marker||size!=sizeof sv[0].form_inactive)return false;
+            form_marker=true;
+        }
     }
-    if(schema.bad||get_block(&r, item_fields, NF(item_fields)-!class_marker, sv, sizeof sv[0], n, dropped) != n)return false;
+    sfield expected[NF(item_fields)];int required=0;
+    for(int k=0;k<NF(item_fields);k++){
+        if(!strcmp(item_fields[k].name,"eviolite_base")&&!class_marker)continue;
+        if(!strcmp(item_fields[k].name,"form_inactive")&&!form_marker)continue;
+        expected[required++]=item_fields[k];
+    }
+    if(schema.bad||get_block(&r, expected, required, sv, sizeof sv[0], n, dropped) != n)return false;
     for (int i = 0; i < n; i++) {
         sv[i].key[sizeof sv[i].key - 1] = 0;
         items[i].key = intern(sv[i].key);
@@ -778,6 +793,9 @@ static bool get_items(const reader *body, const char *name, gc_item *items, int 
         uint8_t base_class;memcpy(&base_class,&sv[i].eviolite_base,sizeof base_class);
         if(base_class>1||(base_class&&strcmp(items[i].key,"EVIOLITE")))return false;
         items[i].eviolite_base=base_class!=0;
+        uint8_t inactive;memcpy(&inactive,&sv[i].form_inactive,sizeof inactive);
+        if(inactive>1||(inactive&&(!gc_item_key_form_change(items[i].key)||!pr_form_item_known(items[i].arg))))return false;
+        items[i].form_inactive=inactive!=0;
         /* ModifierData.toModifier reconstructs typeFunc(): cached tier is not saved. */
         items[i].type_tier = 0;
         items[i].type_ref = 0;

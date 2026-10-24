@@ -987,3 +987,13 @@ $(BUILD)/macho_brace_host_test: tests/macho_brace_host_test.c $(BUILD)/libgc.a $
 test: macho-brace-host-test
 macho-brace-host-test: $(BUILD)/macho_brace_host_test
 	$(BUILD)/macho_brace_host_test tests/fixtures/macho-brace.native.txt
+
+all: $(BUILD)/held_form_items_host_test
+$(BUILD)/held_form_items_host_test: tests/held_form_items_host_test.c tests/doubles_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/held_form_items_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+
+.PHONY: held-form-items-host-test
+held-form-items-host-test: $(BUILD)/held_form_items_host_test
+	python3 tools/check-held-form-state-proof.py
+
+test: held-form-items-host-test
