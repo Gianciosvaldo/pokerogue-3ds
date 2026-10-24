@@ -20,5 +20,5 @@ trap 'rm -rf "$TABLES"' EXIT HUP INT TERM
 python3 "$ROOT/tools/build-held-form-item-tables.py" "$BUILD/held-form-items.native.json" "$TABLES"
 cmp "$TABLES/pr_item_forms.c" "$ROOT/gen/out/pr_item_forms.c"
 cmp "$TABLES/pr_item_forms.h" "$ROOT/gen/out/pr_item_forms.h"
-make -C "$ROOT" build/held-form-items-test
+make -C "$ROOT" BUILD=build build/held-form-items-test
 "$ROOT/build/held-form-items-test" "$BUILD/held-form-items.native.txt"

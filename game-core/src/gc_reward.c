@@ -255,7 +255,7 @@ static pr_reward_ctx *ctx_base(gc_run *run, bool count)
         if (it->pokemon_id)
             for (int k = 0; k < c->n_party; k++)
                 if (c->party[k].id == it->pokemon_id) { o->owner = (int8_t)k; break; }
-        o->active = true;   /* the modifier's own default; lures' and the Silver Poke Ball's battle counts aren't kept yet */
+        o->active = !gc_item_key_form_change(it->key) || !it->form_inactive;
     }
     for (int i = 0; i < 5; i++) c->pokeball_counts[i] = run->pokeballs[i];
     c->biome = run->biome;

@@ -3,12 +3,17 @@
  * modifier entries (bt->mods) covers the classes battle-core knows, and an item it doesn't know goes in
  * as a plain held item or persistent modifier, which battle-core reports where it would matter. */
 #include "internal.h"
+#include "pr_item_forms.h"
 
 /* Constructor properties survive native ModifierData reconstruction even when
  * a legacy save did not record them. This does not admit the item's effects. */
+bool gc_item_key_form_change(const char *key)
+{
+    return key && (!strcmp(key, "FORM_CHANGE_ITEM") || !strcmp(key, "RARE_FORM_CHANGE_ITEM"));
+}
 bool gc_item_key_locked(const char *key)
 {
-    return !strcmp(key, "FORM_CHANGE_ITEM") || !strcmp(key, "RARE_FORM_CHANGE_ITEM")
+    return gc_item_key_form_change(key)
         || !strcmp(key, "BASE_STAT_BOOSTER") || !strcmp(key, "EVOLUTION_TRACKER_GIMMIGHOUL")
         || !strcmp(key, "MYSTERY_ENCOUNTER_SHUCKLE_JUICE")
         || !strcmp(key, "MYSTERY_ENCOUNTER_OLD_GATEAU")
@@ -43,6 +48,7 @@ void gc_item_add(gc_run *run, const char *key, int16_t arg, uint32_t pokemon_id,
     it->type_ref = 0;
     it->loot_ref = 0;
     it->eviolite_base = false;
+    it->form_inactive = false;
     it->stack = stack;
 }
 
@@ -122,6 +128,15 @@ static void to_modifier(const gc_item *it, pr_modifier *m, bool golden)
     m->loot_ref = it->loot_ref;
     m->unknown_subclass = true;
     m->cls = it->pokemon_id ? PR_MOD_HELD_ITEM : PR_MOD_PERSISTENT;
+    if (it->form_inactive && !gc_item_key_form_change(it->key)) return;
+    if (gc_item_key_form_change(it->key)) {
+        m->cls = PR_MOD_FORM_CHANGE_ITEM; m->num = it->arg;
+        m->form_item_active = !it->form_inactive; m->is_transferable = false;
+        m->virtual_stack_count = it->virtual_stack;
+        m->unknown_subclass = false;
+        m->unknown_subclass = it->eviolite_base || it->detached || !it->pokemon_id || !pr_mod_is_ported_item(m);
+        return;
+    }
     if (!strcmp(it->key, "EVOLUTION_TRACKER_GIMMIGHOUL")) {
         m->cls = PR_MOD_EVO_TRACKER; m->num = 10; m->n_species = 1;
         m->species[0] = SPECIES_ID_GIMMIGHOUL; m->is_transferable = false;
@@ -295,8 +310,16 @@ void gc_items_to_battle(gc_run *run)
 {
     pr_battle *bt = &run->bt;
     bt->n_mods[0] = bt->n_mods[1] = 0;
+    bt->form_item_dex_known = run->sys != NULL;
+    bt->form_item_dex_mask = 0;
+    if (run->sys) for (int i = 0; i < PR_ITEM_FORM_CAUGHT_COUNT; i++) {
+        const int species = pr_form_item_caught_species[i];
+        if (species < 1 || species > GC_MAX_SPECIES_ID) bt->form_item_dex_known = false;
+        else if (run->sys->dex[species].caught_attr) bt->form_item_dex_mask |= 1u << i;
+    }
     /* Do not quietly run with the first part of an invalid inventory. */
-    if(run->n_items<0||run->n_enemy_items<0||run->n_items>PR_MAX_MODIFIERS||run->n_enemy_items>PR_MAX_MODIFIERS){
+    if(run->n_items<0||run->n_enemy_items<0||run->n_items>PR_MAX_MODIFIERS||run->n_enemy_items>PR_MAX_MODIFIERS
+        ||run->n_party<0||run->n_party>6||run->n_enemy<0||run->n_enemy>6){
         pr_note_unported(bt,PR_FEAT_ENGINE_LIMIT);return;
     }
     const bool golden = golden_bridge(run);
@@ -314,7 +337,13 @@ void gc_items_to_battle(gc_run *run)
         const gc_item *items = side ? run->enemy_items : run->items;
         int n = side ? run->n_enemy_items : run->n_items;
         for (int i = 0; i < bt->n_mods[side]; i++)
-            if (duplicate_seed(items, n, i)) {
+            if (bt->mods[side][i].cls == PR_MOD_FORM_CHANGE_ITEM) {
+                bool attached = false;
+                const gc_mon *party = side ? run->enemy : run->party;
+                const int count = side ? run->n_enemy : run->n_party;
+                for (int k = 0; k < count; k++) if (party[k].b.id == items[i].pokemon_id) attached = true;
+                if (!attached) bt->mods[side][i].unknown_subclass = true;
+            } else if (duplicate_seed(items, n, i)) {
                 bt->mods[side][i].cls = items[i].pokemon_id ? PR_MOD_HELD_ITEM : PR_MOD_PERSISTENT;
                 bt->mods[side][i].unknown_subclass = true;
             }

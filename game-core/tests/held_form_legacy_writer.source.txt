@@ -1,0 +1,10 @@
+/* Compile against PR399's actual pre-active-field writer and structs. */
+#define main retained_doubles_main
+#include "../game-core/tests/doubles_host_test.c"
+#undef main
+int main(int argc,char **argv){CHECK(argc==2);setup(1);r.n_items=3;r.n_enemy_items=1;
+r.items[0]=(gc_item){.key="FORM_CHANGE_ITEM",.arg=FORM_CHANGE_ITEM_GRISEOUS_CORE,.stack=1,.pokemon_id=r.bt.field[0]->id};
+r.items[1]=(gc_item){.key="RARE_FORM_CHANGE_ITEM",.arg=FORM_CHANGE_ITEM_GRISEOUS_CORE,.stack=1,.pokemon_id=r.bt.field[1]->id};
+r.items[2]=(gc_item){.key="EVIOLITE",.arg=0,.stack=1,.pokemon_id=r.bt.field[0]->id,.eviolite_base=true};
+r.enemy_items[0]=(gc_item){.key="FORM_CHANGE_ITEM",.arg=FORM_CHANGE_ITEM_GRISEOUS_CORE,.stack=1,.pokemon_id=r.bt.field[2]->id};
+size_t n=gc_run_save(&r,save,sizeof save);CHECK(n);FILE *f=fopen(argv[1],"wb");CHECK(f&&fwrite(save,1,n,f)==n&&!fclose(f));printf("prior writer save: %zu bytes\n",n);return 0;}

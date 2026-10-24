@@ -220,6 +220,7 @@ typedef struct {
     uint32_t type_ref;         /* transient shared ModifierType reference, excluded from saves */
     uint16_t loot_ref;         /* transient detached-stock identity, excluded from saves */
     bool eviolite_base;        /* transferred Eviolite inherits the base stat-booster clone */
+    bool form_inactive;        /* form items default active; legacy saves therefore default false */
 } gc_item;
 #define GC_MAX_ITEMS (PR_MAX_MODIFIERS + 32) /* staging/validation headroom; battle/reward limit remains explicit */
 
