@@ -87,6 +87,12 @@ and actual ARM/stack CI remain required; only dedicated custom Task63 is skipped
 The final native reproduction passes the entire 124,416-callback/1,664-route
 matrix and the new 508,345-assertion inventory/save replay. Frozen and fresh
 constructor transports agree after normalizing only actor IDs; no other inputs
-or observations are normalized. A preceding local full core run passed with
-saved/unsaved digest `5073f991`; the final slot-reuse fix is rechecked separately
-and still requires final full-suite/CI acceptance.
+or observations are normalized. The final local full game-core suite passes, including all twelve compiled
+faults and five malformed transports, with matching saved/unsaved digest
+`5073f991`. Exact-head normal CI acceptance remains required.
+
+The normal system/save app corpus is extended from 100 to 300 seeded runs,
+retaining the original deterministic prefix and all coverage floors. The smaller
+corpus can choose Release at every full-party prompt and miss cancellation.
+The extension also invokes the existing directed trainer-music fixture. Its local
+run covers cancellation and passes all model checks.

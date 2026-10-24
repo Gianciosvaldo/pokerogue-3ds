@@ -27,8 +27,10 @@ echo "== runtest (IV Scanner encounter prompt and assessment) 100"
 RUNTEST_SCANNER=1 build/runtest 100 0 || failed="$failed runtest-scanner"
 echo "== runtest 10000"
 build/runtest 10000 || failed="$failed runtest"
-echo "== runtest (system data, saves) 100"
-RUNTEST_SYS=1 RUNTEST_SAVE=1 build/runtest 100 0 || failed="$failed runtest-sys-save"
+# Keep the original first 100 cases and extend their deterministic sequence:
+# the smaller corpus can make every full-party choice Release, missing Cancel.
+echo "== runtest (system data, saves) 300"
+RUNTEST_SYS=1 RUNTEST_SAVE=1 build/runtest 300 0 || failed="$failed runtest-sys-save"
 echo "== runtest (Save and Quit from the in-run menu, continued from the slot) 300"
 RUNTEST_SYS=1 RUNTEST_SAVE=quit build/runtest 300 0 || failed="$failed runtest-quit"
 echo "== runtest (custom runs: the rematch offers, wins and vouchers through run_screen) 200"
