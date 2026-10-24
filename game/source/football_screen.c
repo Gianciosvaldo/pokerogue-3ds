@@ -340,7 +340,7 @@ static void draw(ui_screen *s,rr_screen which)
 }
 static ui_screen screen={.name="football-playoff",.flags=UI_FADE,.enter=entered,.leave=left,
     .input=input,.update=update,.draw=draw,.touch=touch};
-bool football_screen_open(const football_screen_args *args)
+bool football_legacy_screen_open(const football_screen_args *args)
 {
     if (!args || !args->on_exit || F.roster) return false;
     memset(&F,0,sizeof F);F.args=*args;F.old_speed=ui_game_speed();F.input_frame=UINT32_MAX;

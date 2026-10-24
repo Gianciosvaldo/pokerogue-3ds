@@ -51,6 +51,9 @@ const rr_frame *menu_sprite_frame(const menu_sprite *s,uint32_t ms)
 int rr_atlas_pages(const rr_atlas *a) { assert(a);return 1; }
 rr_tex *rr_atlas_page(const rr_atlas *a,int p) { assert(p==0);return (rr_tex*)a; }
 size_t rr_tex_bytes(const rr_tex *t) { assert(t);return atlas_bytes; }
+rr_tex *rr_tex_thumbnail(const rr_frame *f,unsigned edge){assert(edge==64);return f?(rr_tex*)&renderer:NULL;}
+void rr_tex_free(rr_tex *t){(void)t;}
+rr_frame rr_tex_frame(rr_tex *t){return (rr_frame){.tex=t,.w=64,.h=64,.src_w=64,.src_h=64};}
 int main(void)
 {
     assert(football_render_init(&renderer));

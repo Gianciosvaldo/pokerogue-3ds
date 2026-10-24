@@ -5,7 +5,7 @@
 #include "playcall_ui.h"
 #include "football_defense.h"
 #include "evolution_ui.h"
-#define FB_RENDER_ACTOR_CAP 12
+#define FB_RENDER_ACTOR_CAP 22
 #define FB_RENDER_TEXTURE_BUDGET (4u * 1024u * 1024u)
 
 typedef struct {
@@ -26,6 +26,8 @@ typedef struct {
 typedef struct {
     C2D_TextBuf text;
     menu_sprite sprites[FB_RENDER_ACTOR_CAP];
+    rr_tex *compact[FB_RENDER_ACTOR_CAP];
+    rr_frame compact_frame[FB_RENDER_ACTOR_CAP];
     size_t sprite_bytes[FB_RENDER_ACTOR_CAP], total_sprite_bytes;
 } FootballRenderer;
 
@@ -37,6 +39,8 @@ void football_render_clear_sprites(FootballRenderer *renderer);
 void football_render_free(FootballRenderer *renderer);
 bool football_render_load_front(FootballRenderer *renderer, unsigned slot,
                                 const menu_mon *mon);
+/* Live mode snapshots one existing front frame into <=64x64 texture storage. */
+bool football_render_load_compact(FootballRenderer *renderer,unsigned slot,const menu_mon *mon);
 const rr_frame *football_render_front_frame(const FootballRenderer *renderer,
                                             unsigned slot, uint32_t animation_ms);
 /* Caller can draw inside its rr frame or use the complete dual-screen wrapper. */

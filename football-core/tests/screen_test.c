@@ -68,7 +68,7 @@ static void tick(void){++frame;if(playoff&&playoff->update)playoff->update(playo
 static void begin(void)
 {
     config=(football_screen_args){.entropy=123,.on_exit=exit_mode,.arg=&config,.save_profile=save};
-    top=&title;assert(football_screen_open(&config));assert(top==&starter&&speed==1);
+    top=&title;assert(football_legacy_screen_open(&config));assert(top==&starter&&speed==1);
     assert(strstr(notice,"cannot be saved"));
     gc_starter bad={.species=SPECIES_ID_IVYSAUR,.tera_type=-1};const char *why=NULL;
     assert(draft.validate_team&&!draft.validate_team(&bad,1,draft.arg,&why)&&why);
@@ -91,6 +91,7 @@ static void win(void)
     }
     assert(guard<10000&&mode()->phase==FB_MODE_SHOP);
 }
+bool football_legacy_screen_open(const football_screen_args *args);
 int main(void)
 {
     begin();assert(mode()->phase==FB_MODE_ROUND);
@@ -118,21 +119,21 @@ int main(void)
 
     render_ok=false;begin();assert(mode()->phase==FB_MODE_ERROR);press(BTN_ACTION);assert(top==&title&&exits==3);render_ok=true;
     /* Cancelling the draft also releases the once-per-entry allocation. */
-    assert(football_screen_open(&config));assert(top==&starter);draft.on_exit(draft.arg);
+    assert(football_legacy_screen_open(&config));assert(top==&starter);draft.on_exit(draft.arg);
     assert(top==&title&&exits==4&&speed==2&&!football_screen_test_mode());
     /* Production persistence path: autosave, exact resume, retry and explicit deletion. */
-    config.persistence=true;assert(football_screen_open(&config));assert(top==&starter);
+    config.persistence=true;assert(football_legacy_screen_open(&config));assert(top==&starter);
     gc_starter team={.species=SPECIES_ID_MAWILE,.tera_type=-1};draft.on_start(&team,1,draft.arg);playoff=top;
     tick();assert(file_writes==1 && file_status==FB_FILE_OK);
     uint32_t id=mode()->season.roster->party[0].b.id;
     press(BTN_MENU);answer(1);assert(top==&title && exits==5);
-    assert(football_screen_open(&config));assert(top==&overlay);answer(0);
+    assert(football_legacy_screen_open(&config));assert(top==&overlay);answer(0);
     assert(mode()->phase==FB_MODE_ROUND && mode()->season.roster->party[0].b.id==id);
     unsigned writes=file_writes;tick();assert(file_writes==writes); /* Resume alone does not rewrite the file. */
     file_write_ok=false;press(BTN_MENU);answer(1);assert(top==playoff);
     file_write_ok=true;press(BTN_ACTION);assert(top==&title && exits==6);
     file_status=FB_FILE_BAD;writes=file_writes;
-    assert(football_screen_open(&config));assert(mode()->phase==FB_MODE_ERROR);tick();assert(file_writes==writes);
+    assert(football_legacy_screen_open(&config));assert(mode()->phase==FB_MODE_ERROR);tick();assert(file_writes==writes);
     press(BTN_MENU);answer(2);assert(top==&overlay);answer(1);
     assert(top==&title && file_clears==1 && exits==7);
     puts("football screen: draft routing, one-action input, overlay pause, sprite lifecycle, save failure/retry and exit passed");

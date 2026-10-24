@@ -25,7 +25,7 @@ bool football_render_init(FootballRenderer *r)
 void football_render_clear_sprites(FootballRenderer *r)
 {
     if (!r) return;
-    for (unsigned i=0;i<FB_RENDER_ACTOR_CAP;++i) menu_sprite_free(&r->sprites[i]);
+    for (unsigned i=0;i<FB_RENDER_ACTOR_CAP;++i) { menu_sprite_free(&r->sprites[i]);rr_tex_free(r->compact[i]);r->compact[i]=NULL; }
     memset(r->sprite_bytes,0,sizeof r->sprite_bytes);r->total_sprite_bytes=0;
 }
 void football_render_free(FootballRenderer *r)
@@ -40,7 +40,7 @@ bool football_render_load_front(FootballRenderer *r, unsigned slot, const menu_m
     if (!r || !r->text || !mon || slot>=FB_RENDER_ACTOR_CAP) return false;
     /* Unload before loading to keep transition memory bounded. A failed load
      * leaves this slot empty; render a marker until a suitable asset is chosen. */
-    menu_sprite_free(&r->sprites[slot]);
+    menu_sprite_free(&r->sprites[slot]);rr_tex_free(r->compact[slot]);r->compact[slot]=NULL;
     r->total_sprite_bytes-=r->sprite_bytes[slot]; r->sprite_bytes[slot]=0;
     if (!menu_sprite_load(&r->sprites[slot],mon,false)) return false; /* FRONT only */
     size_t bytes=0;
@@ -52,10 +52,24 @@ bool football_render_load_front(FootballRenderer *r, unsigned slot, const menu_m
     r->sprite_bytes[slot]=bytes; r->total_sprite_bytes+=bytes;
     return true;
 }
+bool football_render_load_compact(FootballRenderer *r,unsigned slot,const menu_mon *mon)
+{
+    if(!r || !r->text || !mon || slot>=FB_RENDER_ACTOR_CAP)return false;
+    menu_sprite_free(&r->sprites[slot]);rr_tex_free(r->compact[slot]);r->compact[slot]=NULL;
+    r->total_sprite_bytes-=r->sprite_bytes[slot];r->sprite_bytes[slot]=0;
+    menu_sprite original={0};if(!menu_sprite_load(&original,mon,false))return false;
+    const rr_frame *frame=menu_sprite_frame(&original,0);rr_tex *thumbnail=rr_tex_thumbnail(frame,64);
+    menu_sprite_free(&original);if(!thumbnail)return false;
+    size_t bytes=rr_tex_bytes(thumbnail);
+    if(bytes>FB_RENDER_TEXTURE_BUDGET-r->total_sprite_bytes){rr_tex_free(thumbnail);return false;}
+    r->compact[slot]=thumbnail;r->compact_frame[slot]=rr_tex_frame(thumbnail);
+    r->sprite_bytes[slot]=bytes;r->total_sprite_bytes+=bytes;return true;
+}
 const rr_frame *football_render_front_frame(const FootballRenderer *r,
                                             unsigned slot, uint32_t animation_ms)
 {
-    return r && slot<FB_RENDER_ACTOR_CAP ? menu_sprite_frame(&r->sprites[slot],animation_ms) : NULL;
+    if(!r || slot>=FB_RENDER_ACTOR_CAP)return NULL;
+    return r->compact[slot]?&r->compact_frame[slot]:menu_sprite_frame(&r->sprites[slot],animation_ms);
 }
 bool football_render_draw_sprite(const rr_frame *front, float x, float y,
                                  float scale, bool faces_left)

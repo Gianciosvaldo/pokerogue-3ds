@@ -1,0 +1,55 @@
+#include "football_live.h"
+#include "football_camera.h"
+#include "gc/data.h"
+#include <assert.h>
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+static FootballRoster roster;
+static gc_run scratch;
+static FootballLive game,copy;
+int main(void)
+{
+    assert(football_roster_init(&roster));gc_football_new(&scratch,NULL,"live",42);
+    /* Draft real cheap base species; neither 10-point nor six-member limits apply. */
+    for(int i=0;i<gc_starter_cost_count && roster.count<22;++i){
+        if(gc_starter_costs[i].cost>1)continue;
+        gc_starter s={.species=gc_starter_costs[i].id,.tera_type=-1};
+        football_roster_add(&roster,&scratch,&s,NULL,NULL);
+    }
+    assert(roster.count==22 && roster.cost<=40);
+    football_roster_autofill(&roster);assert(football_roster_assign(&roster,0,21));assert(roster.lineup[0]==21);
+    unsigned mask=0;for(unsigned i=0;i<22;++i)mask|=1u<<roster.lineup[i];assert(mask==(1u<<22)-1);
+    FootballRoster partial=roster;partial.count=21;partial.cost=38;
+    gc_starter boundary={.species=SPECIES_ID_BULBASAUR,.tera_type=-1};
+    assert(!football_roster_add(&partial,&scratch,&boundary,NULL,NULL));
+    partial.cost=37;assert(football_roster_add(&partial,&scratch,&boundary,NULL,NULL));assert(partial.cost==40);
+    gc_starter extra={.species=SPECIES_ID_BULBASAUR,.tera_type=-1};assert(!football_roster_add(&roster,&scratch,&extra,NULL,NULL));
+    assert(football_live_begin(&game,&roster,42,1));assert(football_live_call(&game,FB_PASS_SLANTS));
+    for(unsigned i=0;i<300;++i)football_live_tick(&game,16,(FootballLiveInput){.receiver=-1});
+    assert(game.phase==FB_LIVE_SET && game.snaps==0); /* Never auto-snap human offense. */
+    football_live_tick(&game,1,(FootballLiveInput){.pressed=FB_LIVE_ACTION,.receiver=-1});
+    football_live_tick(&game,16,(FootballLiveInput){.receiver=-1});assert(game.phase==FB_LIVE_PLAY);
+    float before=game.actors[0].y;
+    for(unsigned i=0;i<20 && game.phase==FB_LIVE_PLAY;++i)football_live_tick(&game,17,(FootballLiveInput){.y=-1,.receiver=-1});
+    assert(game.actors[0].y<before);
+    football_live_tick(&game,17,(FootballLiveInput){.receiver=2});assert(game.thrown);
+    copy=game;for(unsigned i=0;i<50;++i){FootballLiveInput in={.x=.3f,.y=.4f,.receiver=-1};football_live_tick(&game,17,in);football_live_tick(&copy,17,in);}assert(!memcmp(&game,&copy,sizeof game));
+    /* Defense cycles all eleven controlled actors. */
+    game.phase=FB_LIVE_PLAY;game.rules.offense=FB_AWAY;game.controlled=0;
+    for(unsigned i=1;i<=11;++i){football_live_switch(&game);assert(game.controlled==i%11);}
+    /* Full real-time matches must terminate without fabricated results. */
+    for(unsigned seed=1;seed<=20;++seed){
+        assert(football_live_begin(&game,&roster,seed,1));
+        unsigned steps=0;
+        while(game.phase!=FB_LIVE_END && ++steps<30000){
+            if(game.phase==FB_LIVE_CALL)assert(football_live_call(&game,FB_RUN_DIVE));
+            football_live_tick(&game,100,(FootballLiveInput){.x=game.rules.offense==FB_HOME?1:-1,.pressed=FB_LIVE_ACTION,.receiver=-1});
+        }
+        assert(game.phase==FB_LIVE_END && game.snaps>0 && steps<30000);
+    }
+    FootballCamera camera={0};football_camera_follow(&camera,35,26,0,16);float old=camera.x;
+    football_camera_follow(&camera,95,26,0,100);assert(camera.x>old && camera.x-old<=1.801f);
+    assert(fabsf(football_camera_x(&camera,camera.x)-200)<.001f);
+    puts("football live: 22-member draft, lineup permutation, manual snap, movement, target throw, replay, defender switching, 20 full matches and bounded camera passed");
+}
