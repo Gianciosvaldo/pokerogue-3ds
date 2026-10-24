@@ -164,6 +164,7 @@ static struct {
 } CU;
 static int n_resumes;
 
+static int check_form_events;
 static int violations, n_scenes, n_ask, n_dialogs, n_options, n_party_opens, n_balls, n_party_full_swaps;
 static int n_throw_ev, n_caught_ev, n_broke_ev, n_bv_farewell, n_real_releases, n_list_backs, n_rel_checked, n_decl_checked;
 
@@ -576,6 +577,7 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
         }
         break;
       case BEV_FORM_CHANGE:
+        check_form_events++;
         if (side_ok(e->battler, "form change")) {
           W.mon[s].species = e->a;
           W.mon[s].form = e->b;
@@ -1001,6 +1003,24 @@ void ps_open_transfer(const void* run, void (*on_move)(int, int, int, void*), vo
   MI.arg = arg;
 }
 
+/* The focused party harness exercises real Check Team widgets; the run driver
+ * harness can also open/back out without inventing a reward choice. */
+static void (*check_done)(void*);
+static void* check_arg;
+static void (*check_form)(int,int,void*);
+static const gc_run* check_run;
+static int check_cursor;
+static struct {
+  bool enabled,active;int stage,item,opens,form_events;
+  gc_screen screen;gc_rqueue queue;
+  pr_rng global,battle,run_rng;double money;
+  int species,form,hp,count;
+} FORM;
+void ps_open_check(const void* run,int cursor,void (*form)(int,int,void*),
+                   void (*pause)(int,bool,void*),void (*done)(void*),void* arg) {
+  (void)pause;check_run=run;check_cursor=cursor;check_form=form;check_done=done;check_arg=arg;FORM.opens++;
+}
+
 static int held_copies(const gc_run* r, const char* key, int16_t arg, uint32_t id) {
   int n = 0;
   for (int i = 0; i < r->n_items; i++)
@@ -1243,6 +1263,28 @@ static bool step(void) {
       }
     }
   }
+  if (check_done) {
+    const gc_run* r=rs_run();
+    if(FORM.enabled && FORM.stage==1) {
+      if(check_run!=r || check_cursor!=0 || !check_form)BAD("Check Team opened with wrong run or cursor");
+      FORM.stage=2;check_done=NULL;
+      check_form(0,FORM.item,check_arg);
+      return true;
+    }
+    if(FORM.enabled && FORM.stage==2) {
+      if(check_run!=r || check_cursor!=0 || r->items[FORM.item].form_inactive==FORM.active
+         || r->n_items!=FORM.count || r->money!=FORM.money
+         || r->party[0].b.species!=FORM.species || r->party[0].b.form!=(FORM.active?1:FORM.form)
+         || (!FORM.active && r->party[0].b.hp!=FORM.hp) || (FORM.active && check_form_events!=FORM.form_events+1)
+         || memcmp(&r->screen,&FORM.screen,sizeof FORM.screen)
+         || memcmp(&gc_int((gc_run*)r)->rq,&FORM.queue,sizeof FORM.queue)
+         || memcmp(&r->bt.rng,&FORM.global,sizeof FORM.global)
+         || memcmp(&r->bt.battle_rng,&FORM.battle,sizeof FORM.battle)
+         || memcmp(&r->run.rng,&FORM.run_rng,sizeof FORM.run_rng))BAD("form action consumed reward or changed unrelated state");
+      FORM.stage=3;
+    }
+    void (*done)(void*)=check_done;check_done=NULL;done(check_arg);return true;
+  }
   if (MI.done) {
     drive_manage_items();
     return true;
@@ -1260,6 +1302,24 @@ static bool step(void) {
             any = true;
       if (any != X.shop_args.party_has_held_item) BAD("Manage Items shows %s, the party %s a transferable held item",
                                                       X.shop_args.party_has_held_item ? "up" : "not", any ? "has" : "has no");
+    }
+    if(FORM.enabled && FORM.stage==0) {
+      gc_run* r=(gc_run*)rs_run();
+      int item=FORM.active?FORM_CHANGE_ITEM_MEWTWONITE_X:r->party[0].b.species==SPECIES_ID_VENUSAUR?FORM_CHANGE_ITEM_CHARIZARDITE_X:FORM_CHANGE_ITEM_VENUSAURITE;
+      if(FORM.active && (r->party[0].b.species!=SPECIES_ID_MEWTWO || r->party[0].b.form))BAD("active form fixture needs original starter");
+      /* Canonical constructor stock can exist on an ineligible species: the
+       * native party-list proof retains Mew with every item. This fixture tests
+       * the party action, independently of the reward's recipient filter. */
+      FORM.item=r->n_items;gc_item_add(r,"FORM_CHANGE_ITEM",item,r->party[0].b.id,1);
+      if(r->n_items!=FORM.item+1 || r->items[FORM.item].form_inactive)BAD("directed canonical form stock setup failed");
+      r->items[FORM.item].form_inactive=FORM.active;FORM.form_events=check_form_events;
+      FORM.screen=r->screen;FORM.queue=gc_int(r)->rq;FORM.money=r->money;FORM.count=r->n_items;
+      FORM.species=r->party[0].b.species;FORM.form=r->party[0].b.form;FORM.hp=r->party[0].b.hp;
+      FORM.global=r->bt.rng;FORM.battle=r->bt.battle_rng;FORM.run_rng=r->run.rng;
+      FORM.stage=1;X.shop=false;
+      if(!ev->on_check_team)BAD("reward screen has no Check Team callback");
+      else ev->on_check_team(ev->ctx);
+      return true;
     }
     if (X.shop_args.party_has_held_item && ev->on_manage_items && rnd(100) < 12) {
       X.shop = false;
@@ -1590,6 +1650,8 @@ int main(int argc, char** argv) {
   if (runs < 1) runs = 1;
   const int seeded_runs = runs;
   scanner_fixture = getenv("RUNTEST_SCANNER") != NULL;
+  FORM.enabled = getenv("RUNTEST_FORM") != NULL;
+  FORM.active = FORM.enabled && !strcmp(getenv("RUNTEST_FORM"),"active");
   verbose_bad = getenv("RUNTEST_VERBOSE") != NULL;
   rs32 = 2463534242u ^ (uint32_t)first * 2654435761u;
   rnd(1);
@@ -1619,7 +1681,8 @@ int main(int argc, char** argv) {
     cfg.save = true;
     cfg.slot = 0;
   }
-  cfg.n_starters = 0;
+  cfg.n_starters = FORM.active?1:0;
+  if(FORM.active)cfg.starters[0]=SPECIES_ID_MEWTWO;
   const char* sys_mode = getenv("RUNTEST_SYS");
   const bool sys_on = sys_mode && *sys_mode;
   if (sys_on) {
@@ -1840,6 +1903,10 @@ int main(int argc, char** argv) {
   printf("level ups: %d, of them %d with the stat window\n", n_level_ups, n_level_windows);
   printf("commands with the foe's item bar: %d; enemy items with no icon row: %d\n", n_foe_bars, n_foe_hidden);
   printf("commands with the key item bar: %d; party trays: %d (%d fainted balls)\n", n_key_bars, n_trays, n_fainted_balls);
+  if(FORM.enabled) {
+    printf("Check Team: %d opens, directed form action stage %d\n",FORM.opens,FORM.stage);
+    if(FORM.opens!=2 || FORM.stage!=3)BAD("Check Team form action/return was not exercised");
+  }
   printf("Manage Items: opened %d, transfers %d (%d copies), refused %d, discards %d\n", n_manage, n_transfers,
          n_transfer_copies, n_transfer_refused, n_discards);
   if (!n_foe_bars && n_scenes > 50) BAD("no command showed the foe's items");

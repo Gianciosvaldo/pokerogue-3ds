@@ -25,6 +25,10 @@ for t in $TESTS; do
 done
 echo "== runtest (IV Scanner encounter prompt and assessment) 100"
 RUNTEST_SCANNER=1 build/runtest 100 0 || failed="$failed runtest-scanner"
+echo "== runtest (Check Team form toggle and reward return) 300"
+RUNTEST_FORM=1 build/runtest 300 0 || failed="$failed runtest-form"
+echo "== runtest (Check Team form change, animation and reward return) 300"
+RUNTEST_FORM=active build/runtest 300 0 || failed="$failed runtest-form-active"
 echo "== runtest 10000"
 build/runtest 10000 || failed="$failed runtest"
 # Keep the original first 100 cases and extend their deterministic sequence:

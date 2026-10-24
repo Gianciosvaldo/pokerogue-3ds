@@ -50,6 +50,48 @@ static void open(void) {
   ps_open_item(&run, PARTY_TM_MODIFIER, false, MOVE_ID_FLAMETHROWER, on_pick, NULL);
   assert(depth == 2 && party_active());
 }
+static int form_party=-1,form_index=-1,check_back;
+static void form_pick(int party,int item,void* arg) {
+  (void)arg;form_party=party;form_index=item;ps_close();assert(depth==1);
+}
+static void check_done(void* arg) {(void)arg;check_back++;ps_close();}
+static void check_team_cases(void) {
+  memset(&run,0,sizeof run);run.n_party=3;
+  for(int k=0;k<3;k++) {
+    run.party[k].b.species=SPECIES_ID_VENUSAUR;run.party[k].b.id=100+k;
+    run.party[k].b.hp=k?10:0;run.party[k].b.stats[0]=10;run.party[k].b.level=5;
+  }
+  run.party_order[0]=2;run.party_order[1]=1;run.party_order[2]=0;
+  run.screen.kind=GC_SCREEN_REWARD;
+  /* Both factories use the same display name, even though the catalogue lists
+   * this stone under rare only. The sorted 24-item summary must not cap actions. */
+  for(int count=30;count<=PR_MAX_MODIFIERS;count=PR_MAX_MODIFIERS) {
+    run.n_items=count;
+    for(int k=0;k<count;k++)run.items[k]=(gc_item){.key=k%2?"FORM_CHANGE_ITEM":"RARE_FORM_CHANGE_ITEM",.arg=FORM_CHANGE_ITEM_VENUSAURITE,.stack=1,.pokemon_id=100,.form_inactive=true,.non_transferable=true};
+    form_party=form_index=-1;
+    ps_open_check(&run,0,form_pick,NULL,check_done,NULL);
+    input(BTN_ACTION);pf_clear_text();ui_top()->draw(ui_top(),RR_BOTTOM);
+    assert(pf_text_count("partyUiHandler:activate Venusaurite")>0);
+    /* Up wraps to Cancel on the final page; the previous row is the last item.
+     * Its option ordinal passes the MOVE and ALL code ranges at full capacity. */
+    input(BTN_UP);input(BTN_UP);input(BTN_ACTION);
+    assert(form_party==0&&form_index==count-1&&depth==1);
+    if(count==PR_MAX_MODIFIERS)break;
+  }
+  run.party[0].b.level=65536;run.party[0].met_level=65536;
+  run.party[0].b.base_ability=ABILITY_ID_OVERGROW;run.party[0].b.ability=ABILITY_ID_LEVITATE;
+  run.party[0].b.shiny=true;run.party[0].b.variant=2;
+  ps_open_check(&run,0,form_pick,NULL,check_done,NULL);
+  input(BTN_ACTION);input(BTN_ACTION); /* Summary uses raw base ability, per pinned source. */
+  assert(summary_mon.level==65536&&summary_mon.met_level==65536&&summary_mon.ability==ABILITY_ID_OVERGROW&&summary_mon.variant==2);
+  ps_close();
+  /* The same menu outside rewards is read-only; no form action is exposed. */
+  run.screen.kind=GC_SCREEN_COMMAND;form_party=-1;
+  ps_open_check(&run,0,form_pick,NULL,check_done,NULL);
+  input(BTN_ACTION);pf_clear_text();ui_top()->draw(ui_top(),RR_BOTTOM);
+  assert(!pf_text_count("partyUiHandler:activate Venusaurite"));
+  input(BTN_CANCEL);input(BTN_CANCEL);assert(check_back==1&&form_party==-1&&depth==1);
+}
 int main(void) {
   run.n_party = 3;
   for (int i = 0; i < 3; i++) {
@@ -128,6 +170,7 @@ int main(void) {
   assert(picked == -1 && calls == 6 && depth == 2);
   input(BTN_CANCEL);
   assert(picked == 6 && calls == 7 && depth == 1);
+  check_team_cases();
   puts("party_item_test: TM labels, Teach/filter, B/touch cancellation and move-item reset passed");
   return 0;
 }

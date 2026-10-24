@@ -54,6 +54,8 @@ static struct {
   bool skip[GC_MAX_EVENTS];
   int nq, qi;
   bool swap_prompt;             /* the drain has "swap or release" for a caught Pokemon */
+  bool return_to_check;
+  int check_cursor;
   bool release_drop;            /* the next drain follows a release picked on the party screen, which said goodbye itself */
   int ball;                     /* PokeballType of the ball the player just threw (the turn's first events start with its throw), -1 none */
   bool learn_drop;              /* the next drain starts with the learn dialog's own messages */
@@ -110,6 +112,7 @@ static void reset_driver(void) {
   G.nq = G.qi = 0;
   G.n_ev = G.ev_pos = G.n_txt = 0;
   G.swap_prompt = G.learn_drop = G.swap_replaced = G.release_drop = false;
+  G.return_to_check = false;
   G.ball = -1;
   G.refused_in_row = 0;
   G.save_due = G.save_failed_told = false;
@@ -1264,6 +1267,31 @@ static void on_shop_manage_items(void* ctx) {
   ps_open_transfer(&G.run, on_manage_move, on_manage_done, NULL);
 }
 
+/* Check Team remains in the same reward selection after mechanical form events. */
+static void open_check_team(void);
+static void on_check_form(int party, int item, void* arg) {
+  (void)arg;
+  ps_close();G.check_cursor=party;G.return_to_check=true;
+  const char* why=NULL;
+  if (!gc_form_item_toggle(&G.run,party,item,&why)) {
+    char reason[192];say(why_text(why,reason,sizeof reason));return;
+  }
+  drain();pump(NULL);
+}
+static void on_check_pause(int party, bool paused, void* arg) {
+  (void)arg;
+  if (party>=0 && party<G.run.n_party) G.run.party[party].pause_evolutions=paused;
+}
+static void on_check_done(void* arg) {
+  (void)arg;ps_close();G.return_to_check=false;open_shop_ui();
+}
+static void open_check_team(void) {
+  ps_open_check(&G.run,G.check_cursor,on_check_form,on_check_pause,on_check_done,NULL);
+}
+static void on_shop_check_team(void* ctx) {
+  (void)ctx;rh_close();G.check_cursor=0;open_check_team();
+}
+
 static bool party_has_held_item(void) {
   for (int i = 0; i < G.run.n_items; i++) {
     const gc_item* it = &G.run.items[i];
@@ -1303,7 +1331,8 @@ static void open_shop_ui(void) {
     on_shop_reroll,
     on_shop_skip,
     on_shop_manage_items,
-    NULL
+    NULL,
+    on_shop_check_team
   };
 
   rh_set_menu(G.cfg.on_quit ? open_run_menu : NULL, NULL);
@@ -1550,7 +1579,8 @@ static void screen_step(void) {
       open_evolve(s);
       break;
     case GC_SCREEN_REWARD:
-      open_shop_ui();
+      if (G.return_to_check) { G.return_to_check=false;open_check_team(); }
+      else open_shop_ui();
       break;
     case GC_SCREEN_BIOME:
       open_biome_map();

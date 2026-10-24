@@ -18,6 +18,8 @@
 #include "ui.h"
 
 static char last_wrapped[512];
+const rr_draw_opts RR_DEFAULT_OPTS={0};
+bool mui_image_ex(const char* key,const char* frame,float x,float y,const rr_draw_opts* o) { (void)o;return mui_image(key,frame,x,y,0,0); }
 /* Stub functions required by mui when building on PC without 3DS libraries */
 void mui_sfx(const char* key) {
   (void)key;
@@ -126,6 +128,8 @@ static void on_test_skip(void* ctx) {
   res->skip_called = true;
 }
 
+static int checks_opened;
+static void check_team(void* ctx) {(void)ctx;checks_opened++;}
 int main(void) {
   printf("Running shop_ui_test...\n");
 
@@ -359,7 +363,7 @@ int main(void) {
   {
     static const int shapes[][2] = {{0, 3}, {0, 1}, {1, 3}, {5, 3}, {7, 4}, {7, 5}, {8, 4}, {14, 3}, {14, 4}, {14, 5}, {14, 8}, {3, 8}, {0, 0}};
     for (size_t k = 0; k < sizeof shapes / sizeof shapes[0]; k++) {
-      for (int caps = 0; caps < 2; caps++) {
+      for (int controls = 0; controls < 2; controls++) for (int caps = 0; caps < (controls ? 3 : 2); caps++) {
         gc_screen sc;
         memset(&sc, 0, sizeof sc);
         sc.kind = GC_SCREEN_REWARD;
@@ -370,16 +374,18 @@ int main(void) {
           sc.shop[i].cost = 100.0 * (i + 1);
         }
         for (int i = 0; i < sc.n_options; i++) sc.options[i].key = "TM_COMMON", sc.options[i].arg = 201, sc.options[i].is_purchase = true;
-        sc.reroll_cost = caps ? -1.0 : 250.0;
+        sc.reroll_cost = caps == 1 ? -1.0 : 250.0;
         shop_ui_args a2;
         memset(&a2, 0, sizeof a2);
         a2.screen = &sc;
-        a2.has_lock_capsule = caps;
+        a2.has_lock_capsule = caps != 0;
+        a2.party_has_held_item=controls;
         shop_ui_events e2;
         memset(&e2, 0, sizeof e2);
+        if(controls)e2.on_check_team=check_team;
         shop_ui_open(&a2, &e2);
         const int n = shop_ui_slot_count();
-        assert(n == sc.n_shop + sc.n_options + 2); /* Continue, and Reroll or Lock Rarities */
+        assert(n == sc.n_shop + sc.n_options + 2 + 2*controls + (caps == 2)); /* Continue, and Reroll or Lock Rarities */
         for (int i = 0; i < n; i++) {
           const shop_ui_rect r = shop_ui_slot(i)->bounds;
           if (r.x < 0 || r.y < 0 || r.x + r.w > 320 || r.y + r.h > 180) {
@@ -399,7 +405,7 @@ int main(void) {
         shop_ui_close();
       }
     }
-    printf("Layout of 13 shapes x 2 button sets: inside the screen, no overlaps PASSED.\n");
+    printf("Layout of 13 shapes x 5 control combinations: inside the screen, no overlaps PASSED.\n");
   }
 
   /* 4. gen/gm_item_ui.c: every item the rolls can make has an icon, a name and a description */
@@ -436,5 +442,19 @@ int main(void) {
   }
 
   printf("shop_ui_test PASSED ALL CHECKS!\n");
+  {
+    gc_screen sc={0};sc.kind=GC_SCREEN_REWARD;sc.reroll_cost=100;
+    shop_ui_args a={0};a.screen=&sc;a.has_lock_capsule=true;a.party_has_held_item=true;
+    shop_ui_events ev={0};ev.on_check_team=check_team;
+    shop_ui_open(&a,&ev);bool found=false;
+    for(int k=0;k<shop_ui_slot_count();k++) {
+      const shop_touch_slot* slot=shop_ui_slot(k);
+      if(slot->type==SHOP_TARGET_CHECK) {
+        shop_ui_rect b=slot->bounds;found=true;
+        assert(shop_ui_touch(b.x+b.w/2,b.y+b.h/2));
+      }
+    }
+    assert(found&&checks_opened==1);shop_ui_close();
+  }
   return 0;
 }

@@ -9,7 +9,7 @@
  * the shop is in the description window while the cursor is on it. All text is the 8 px pixel font.
  * The icons, names and descriptions are upstream's (gen/gm_item_ui.c, dumped from its modifier types).
  *
- * Not here: Manage Items and Check Team (the held-item transfer and the party view from the shop are not ported).
+ * Manage Items and Check Team are hosted by the run screen.
  */
 
 #include "luck_meter.h"
@@ -43,7 +43,7 @@ typedef struct {
   float y, h;
 } shop_row;
 
-#define MAX_ROWS 6
+#define MAX_ROWS 7
 
 static shop_ui_state S;
 static shop_row rows[MAX_ROWS];
@@ -171,6 +171,7 @@ static int n_buttons(void) {
   if (S.screen_copy.reroll_cost >= 0) n++;
   if (S.has_lock_capsule) n++;
   if (S.party_has_held_item) n++;
+  if (S.events.on_check_team) n++;
   return n;
 }
 
@@ -187,15 +188,19 @@ static void shop_ui_recalc_layout(void) {
   /* the heights, best first: the description window sits at the bottom with the buttons above it, and the rows share what is
    * left; they shrink before the description window does */
   static const float fit[][2] = {{40, 38}, {36, 38}, {34, 38}, {34, 34}, {32, 34}, {30, 32}, {28, 30}, {28, 26}};
+  const int button_rows = n_buttons() > 3 ? 2 : 1;
+  const float buttons_height = button_rows * (BTN_H + 4) - 4;
   float row_h = 28, d_h = 26;
   const float top = HEADER_H + 2;
   float region = 0;
   for (size_t i = 0; i < sizeof fit / sizeof fit[0]; i++) {
     row_h = fit[i][0];
     d_h = fit[i][1];
-    region = MUI_H - 3 - d_h - 2 - BTN_H - 2 - top;
+    region = MUI_H - 3 - d_h - 2 - buttons_height - 2 - top;
     if ((shop_rows + opt_rows) * (row_h + 1) <= region) break;
   }
+  if (shop_rows + opt_rows && (shop_rows + opt_rows) * (row_h + 1) > region)
+    row_h = region / (shop_rows + opt_rows) - 1;
   const float shop_h = row_h, opt_h = row_h;
   const float extra = region - (shop_rows + opt_rows) * (row_h + 1);
 
@@ -225,37 +230,38 @@ static void shop_ui_recalc_layout(void) {
       y += opt_h + 1;
     }
   }
-  /* the buttons: Reroll, Lock Rarities and Manage Items from the left, Continue on the right; each as wide as its label */
+  /* Two rows keep Check Team and the other controls readable when all appear. */
   desc_h = d_h;
   desc_y = MUI_H - 3 - d_h;
-  const float by = desc_y - 2 - BTN_H;
-  if (S.n_rows < MAX_ROWS) {
+  shop_target_type order[5];
+  int nb = 0;
+  if (S.screen_copy.reroll_cost >= 0) order[nb++] = SHOP_TARGET_REROLL;
+  if (S.has_lock_capsule) order[nb++] = SHOP_TARGET_LOCK;
+  if (S.events.on_check_team) order[nb++] = SHOP_TARGET_CHECK;
+  if (S.party_has_held_item) order[nb++] = SHOP_TARGET_TRANSFER;
+  order[nb++] = SHOP_TARGET_SKIP;
+  int first = 0;
+  for (int r = 0; r < button_rows && S.n_rows < MAX_ROWS; r++) {
+    int count = button_rows == 1 ? nb : r == 0 ? nb - 3 : 3;
+    float by = desc_y - 2 - buttons_height + r * (BTN_H + 4);
     shop_row* row = &rows[S.n_rows++];
-    *row = (shop_row){ROW_BUTTONS, 0, n_buttons(), S.n_touch_slots, by, BTN_H};
-    shop_target_type order[4];
-    int nb = 0;
-    if (S.screen_copy.reroll_cost >= 0) order[nb++] = SHOP_TARGET_REROLL;
-    if (S.has_lock_capsule) order[nb++] = SHOP_TARGET_LOCK;
-    if (S.party_has_held_item) order[nb++] = SHOP_TARGET_TRANSFER;
-    order[nb++] = SHOP_TARGET_SKIP;
-    float w[4], sum = 0;
-    for (int i = 0; i < nb; i++) {
-      char label[96];
-      button_label(order[i], label, sizeof label, NULL);
-      w[i] = (float)mui_text_width(FONT, label) + 12;
-      if (w[i] < 54) w[i] = 54;
-      sum += w[i];
+    *row = (shop_row){ROW_BUTTONS, 0, count, S.n_touch_slots, by, BTN_H};
+    float widths[5], sum = 0;
+    for (int i = 0; i < count; i++) {
+      char label[96];button_label(order[first+i],label,sizeof label,NULL);
+      widths[i] = (float)mui_text_width(FONT,label) + 12;
+      if (widths[i] < 54) widths[i] = 54;
+      sum += widths[i];
     }
-    /* what doesn't fit is taken evenly from each button */
-    const float room = MUI_W - 2 * MARGIN - 4 * (nb - 1);
-    if (sum > room)
-      for (int i = 0; i < nb; i++) w[i] -= (sum - room) / nb;
+    float room = MUI_W - 2 * MARGIN - 4 * (count - 1);
+    if (sum > room) for (int i = 0; i < count; i++) widths[i] -= (sum-room)/count;
     float x = MARGIN;
-    for (int i = 0; i < nb; i++) {
-      const float bx = order[i] == SHOP_TARGET_SKIP ? MUI_W - MARGIN - w[i] : x;
-      add_slot(order[i], 0, bx, by, w[i], BTN_H);
-      x += w[i] + 4;
+    for (int i = 0; i < count; i++) {
+      float bx = order[first+i] == SHOP_TARGET_SKIP ? MUI_W-MARGIN-widths[i] : x;
+      add_slot(order[first+i],0,bx,by,widths[i],BTN_H);
+      x += widths[i]+4;
     }
+    first += count;
   }
 }
 
@@ -343,6 +349,9 @@ static void trigger_slot(const shop_touch_slot* slot) {
       break;
     case SHOP_TARGET_SKIP:
       if (S.events.on_skip) S.events.on_skip(S.events.ctx);
+      break;
+    case SHOP_TARGET_CHECK:
+      if (S.events.on_check_team) S.events.on_check_team(S.events.ctx);
       break;
     case SHOP_TARGET_TRANSFER:
       if (S.events.on_manage_items) S.events.on_manage_items(S.events.ctx);
@@ -446,8 +455,10 @@ static void draw_focus(const shop_ui_rect* r) {
   rr_rect(r->x + 1, r->y + 1, r->w - 2, r->h - 2, RR_RGBA(0xf8, 0xf8, 0xf8, 36));
 }
 
-static void draw_icon(const char* icon, float x, float y) {
-  if (icon) mui_image("items", icon, x, y, 0, 0);
+static void draw_icon(const char* icon, float x, float y, float size) {
+  if (!icon) return;
+  if (size >= 32) mui_image("items",icon,x,y,0,0);
+  else { rr_draw_opts o = RR_DEFAULT_OPTS; o.scale_x=o.scale_y=size/32; mui_image_ex("items",icon,x,y,&o); }
 }
 
 /* a name wrapped into the width, drawn from y; returns the lines drawn */
@@ -474,7 +485,8 @@ static void draw_shop_item(const shop_touch_slot* slot, bool focus) {
   const float cx = slot->bounds.x + slot->bounds.w / 2;
   const float y = slot->bounds.y;
   if (focus) draw_focus(&slot->bounds);
-  draw_icon(v.icon, cx - 16, y - 2);
+  float size = slot->bounds.h < 40 ? slot->bounds.h - 10 : 32;
+  draw_icon(v.icon,cx-size/2,y,size);
   char amount[32], price[40];
   fmt_money(amount, sizeof amount, o->cost);
   snprintf(price, sizeof price, "\xe2\x82\xbd%s", amount);
@@ -488,10 +500,11 @@ static void draw_reward_option(const shop_touch_slot* slot, bool focus) {
   offer_info(o, &v);
   const shop_ui_rect* b = &slot->bounds;
   if (focus) draw_focus(b);
-  draw_icon(v.icon, b->x + 1, b->y + (b->h - 32) / 2);
+  float size = b->h < 32 ? b->h : 32;
+  draw_icon(v.icon,b->x+1,b->y+(b->h-size)/2,size);
   const float tx = b->x + 33, tw = b->w - 33 - 2;
   const bool priced = o->is_purchase || o->cost > 0;
-  const int max_lines = priced ? 2 : 3;
+  const int max_lines = b->h < 28 ? 1 : priced ? 2 : 3;
   /* the name in its tier's colour, vertically centred with the price under it */
   char wrapped[256];
   const int want = mui_wrap(FONT, v.name, tw, wrapped, sizeof wrapped);
@@ -523,6 +536,9 @@ static void button_label(shop_target_type type, char* buf, size_t n, rr_color* c
       locale_label("modifierSelectUiHandler:lockRarities", label, sizeof label, "Lock Rarities");
       snprintf(buf, n, "%s: %s", label, S.lock_capsule_active ? "ON" : "OFF");
       if (c && S.lock_capsule_active) *c = mui_style_color(TS_SUMMARY_GOLD, false);
+      break;
+    case SHOP_TARGET_CHECK:
+      locale_label("modifierSelectUiHandler:checkTeam", buf, n, "Check Team");
       break;
     case SHOP_TARGET_TRANSFER:
       locale_label("modifierSelectUiHandler:manageItems", buf, n, "Manage Items");
@@ -574,6 +590,10 @@ static void draw_description(void) {
     case SHOP_TARGET_LOCK:
       locale_label("modifierSelectUiHandler:lockRarities", name, sizeof name, "Lock Rarities");
       locale_label("modifierSelectUiHandler:lockRaritiesDesc", desc, sizeof desc, "Lock item rarities on reroll (affects reroll cost).");
+      break;
+    case SHOP_TARGET_CHECK:
+      locale_label("modifierSelectUiHandler:checkTeam", name, sizeof name, "Check Team");
+      locale_label("modifierSelectUiHandler:checkTeamDesc", desc, sizeof desc, "Check your team or use a form changing item.");
       break;
     case SHOP_TARGET_TRANSFER:
       locale_label("modifierSelectUiHandler:manageItems", name, sizeof name, "Manage Items");

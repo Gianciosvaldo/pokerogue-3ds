@@ -4,8 +4,7 @@
  * bottom (y 180), so every upstream y here is written as Y(upstream y).
  *
  * Not ported yet (hidden, not faked): the Pokedex option (no Pokedex screen
- * yet), Rename (needs a keyboard), form-change item toggles in the reward
- * phase (Mega/Tera items are M2), and the move info overlay beside the
+ * yet), Rename (needs a keyboard), and the move info overlay beside the
  * Memory Mushroom move list.
  */
 #include <math.h>
@@ -16,7 +15,7 @@
 #include "menus.h"
 
 #define Y(y) (180.0f + (y))
-#define MAX_OPTS 48
+#define MAX_OPTS (MENU_MAX_FORM_ITEMS + 8)
 
 static struct {
   bool active, suspended;
@@ -121,7 +120,7 @@ void party_open(const party_args* args, const menu_mon* party, int n, const part
   if (ev) P.ev = *ev;
   P.n = n > 6 ? 6 : n;
   memcpy(P.party, party, sizeof(menu_mon) * P.n);
-  P.cursor = 0;
+  P.cursor = args->initial_cursor >= 0 && args->initial_cursor < P.n ? args->initial_cursor : 0;
   reset_transfer_labels();
   show_party_text();
 }
@@ -191,6 +190,9 @@ static void option_label(int opt, char* out, size_t n, rr_color* col, rr_color* 
     snprintf(out, n, "\xE2\x86\x91");
   } else if (opt == PO_SCROLL_DOWN) {
     snprintf(out, n, "\xE2\x86\x93");
+  } else if (P.a.mode == PARTY_CHECK && opt >= PO_FORM_CHANGE_ITEM && opt - PO_FORM_CHANGE_ITEM < m->nform_items) {
+    const menu_form_item* item = &m->form_items[opt - PO_FORM_CHANGE_ITEM];
+    snprintf(out, n, "%s %s", mui_t(item->active ? "partyUiHandler:deactivate" : "partyUiHandler:activate"), item->name);
   } else if ((P.a.mode != PARTY_REMEMBER_MOVE_MODIFIER && (P.a.mode != PARTY_MODIFIER_TRANSFER || P.transfer_mode) &&
               P.a.mode != PARTY_DISCARD) ||
              opt == PO_CANCEL) {
@@ -243,7 +245,7 @@ static void add_cancel_and_scroll(void) {
   if (start + take < end) end = start + take;
   P.options_scroll = P.options_scroll_total > 9;
   if (P.options_scroll) {
-    int tmp[MAX_OPTS], k = 0;
+    int tmp[9], k = 0;
     if (start) tmp[k++] = PO_SCROLL_UP;
     for (int i = start; i < end; i++) tmp[k++] = P.options[i];
     if (end < P.options_scroll_total) tmp[k++] = PO_SCROLL_DOWN;
@@ -362,8 +364,12 @@ static void update_options(void) {
     case PARTY_CHECK:
       add_common_options(m);
       if (P.a.in_reward_phase) {
-        if (m->fusion) P.options[P.nopt++] = PO_UNSPLICE;
-        P.options[P.nopt++] = PO_RELEASE;
+        if (!P.a.preserve_roster) {
+          if (m->fusion) P.options[P.nopt++] = PO_UNSPLICE;
+          P.options[P.nopt++] = PO_RELEASE;
+        }
+        if (P.ev.on_form_item && m->form_items && m->nform_items > 0 && m->nform_items <= MENU_MAX_FORM_ITEMS)
+          for (int i = 0; i < m->nform_items; i++) P.options[P.nopt++] = PO_FORM_CHANGE_ITEM + i;
       }
       break;
     case PARTY_SELECT:
@@ -737,6 +743,17 @@ static bool action_for_option(int option) {
   if (option == PO_CANCEL) return option_menu_input(MB_CANCEL);
   if (option == PO_SCROLL_UP || option == PO_SCROLL_DOWN) return false;
 
+  /* Form options use their own list ordinal, so large global inventory indices
+   * cannot collide with move/All option codes. Route before those code ranges. */
+  const menu_mon* current = mon(P.cursor);
+  if (P.a.mode == PARTY_CHECK && P.a.in_reward_phase && P.ev.on_form_item && current
+      && current->form_items && option >= PO_FORM_CHANGE_ITEM && option - PO_FORM_CHANGE_ITEM < current->nform_items) {
+    int slot = P.cursor, item = current->form_items[option - PO_FORM_CHANGE_ITEM].inventory_index;
+    clear_options();
+    P.ev.on_form_item(P.ev.ctx, slot, item);
+    return true;
+  }
+
   if (P.a.mode == PARTY_MODIFIER_TRANSFER) return modifier_transfer_input();
   if (P.a.mode == PARTY_DISCARD) return discard_input();
   if (P.a.mode == PARTY_REMEMBER_MOVE_MODIFIER) return remember_move_input();
@@ -1073,9 +1090,9 @@ static void draw_slot(int i) {
 
   float lx = sx + lvx, ly = sy + lvy;
   mui_image("ui/text_images/en/party_ui/party_slot_overlay_lv", NULL, lx, ly, 0, 0);
-  char lv[8];
-  snprintf(lv, sizeof lv, "%u", m->level);
-  mui_text_o(m->level < P.a.max_level ? TS_PARTY : TS_PARTY_RED, lx + 9, ly, 0, 0.25f, lv);
+  char lv[16];
+  snprintf(lv, sizeof lv, "%u", (unsigned)m->level);
+  mui_text_o(m->level < (uint32_t)P.a.max_level ? TS_PARTY : TS_PARTY_RED, lx + 9, ly, 0, 0.25f, lv);
 
   if (m->gender != MG_GENDERLESS) {
     bool f = m->gender == MG_FEMALE;
