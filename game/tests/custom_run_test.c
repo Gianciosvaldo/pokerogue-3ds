@@ -50,7 +50,7 @@ static int checks, failed;
   } while (0)
 
 #define SEED "scene-seed-c10"
-#define NSEEDS_DEFAULT 24
+#define NSEEDS_DEFAULT 96
 
 /* ------------------------------------------------------------------ the SD card */
 
@@ -552,11 +552,11 @@ typedef struct {
   int wave;
 } enemy_snap;
 
-static enemy_snap snap_enemy(const gc_run* r) {
+static enemy_snap snap_enemy_at(const gc_run* r,int index) {
   enemy_snap e;
   memset(&e, 0, sizeof e);
-  if (r->n_enemy < 1) return e;
-  const pr_pokemon* p = &r->enemy[0].b;
+  if (index<0 || index>=r->n_enemy) return e;
+  const pr_pokemon* p = &r->enemy[index].b;
   e.have = true;
   e.id = p->id;
   e.species = p->species;
@@ -581,7 +581,8 @@ static enemy_snap snap_enemy(const gc_run* r) {
   return e;
 }
 
-static int n_created, n_unattributed, n_refused_store;
+static enemy_snap snap_enemy(const gc_run* r) {return snap_enemy_at(r,0);}
+static int n_created, n_unattributed, n_refused_store,n_double_killers[2];
 static void test_defeat_creates(int nseeds) {
   for (int s = 0; s < nseeds; s++) {
     sd_new();
@@ -589,7 +590,8 @@ static void test_defeat_creates(int nseeds) {
     snprintf(seed, sizeof seed, "c10-defeat-%d", s);
     CHECK(new_run(seed, true, 0), "start a custom run");
     bot.wipe = true;
-    enemy_snap first = snap_enemy(R);
+    enemy_snap first = snap_enemy(R), pair[2]={snap_enemy_at(R,0),snap_enemy_at(R,1)};
+    const bool was_double=R->double_battle;
     bool over = false;
     for (int i = 0; i < 400 && !over; i++) {
       const step_t st = step();
@@ -602,10 +604,10 @@ static void test_defeat_creates(int nseeds) {
     CHECK(g_commit.outcome == CS_STORED, "the report is stored (%d)", (int)g_commit.outcome);
     const cc_meta* m = cs_meta();
     if (g_have_defeat && g_commit.commit.refusal != CC_SUPPORT_OK) {
-      /* a finisher named, but the encounter was one the store does not keep (a double roll, a fusion, a Tera...): no record */
+      /* A finisher named, but its other traits are not supported: no record. */
       n_refused_store++;
       CHECK(m->roster.count == 0, "refused (%s): no record", cc_refusal_str(g_commit.commit.refusal));
-      CHECK(g_commit.commit.refusal == CC_REFUSE_DOUBLES || g_commit.commit.refusal == CC_REFUSE_FUSED ||
+      CHECK(g_commit.commit.refusal == CC_REFUSE_FUSED ||
                 g_commit.commit.refusal == CC_REFUSE_TERA || g_commit.commit.refusal == CC_REFUSE_BOSS ||
                 g_commit.commit.refusal == CC_REFUSE_TRAINER_OWNED || g_commit.commit.refusal == CC_REFUSE_ROSTER_FULL,
             "the refusal is one the encounter explains (%s)", cc_refusal_str(g_commit.commit.refusal));
@@ -613,7 +615,12 @@ static void test_defeat_creates(int nseeds) {
       n_created++;
       CHECK(m->roster.count == 1 && g_commit.commit.record_id == m->roster.rec[0].record_id, "one record, the one the commit named (count %u, status %d, refusal %d)", m->roster.count, (int)g_commit.status, (int)g_commit.commit.refusal);
       const cc_nemesis* n = &m->roster.rec[0];
-      CHECK(n->life == CC_LIFE_STORED && n->traits == 0, "stored, no traits");
+      if(was_double) {
+        int killer=pair[0].id==n->source_pokemon_id?0:pair[1].id==n->source_pokemon_id?1:-1;
+        CHECK(killer>=0,"doubles record names one actual enemy ID");
+        if(killer>=0){first=pair[killer];n_double_killers[killer]++;}
+      }
+      CHECK(n->life == CC_LIFE_STORED && n->traits == (was_double?CC_TR_DOUBLES:0), "stored, source encounter traits preserved");
       CHECK(n->species == first.species && n->form == first.form && n->gender == first.gender && n->shiny == (first.shiny ? 1 : 0),
             "the identity is the enemy's");
       CHECK(n->orig_level == first.level, "its level as it was (%d, %d)", n->orig_level, first.level);
@@ -1054,7 +1061,7 @@ static void test_gate(void) {
       {"unsupported kind",   GC_ENC_UNSUPPORTED, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 62, 2, 0, 0, 0, -1},
       {"fused wild",         GC_ENC_ORDINARY_WILD, GC_ENF_FUSED, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 62, 2, 0, 0, 1, CC_REFUSE_FUSED},
       {"terastallized wild", GC_ENC_ORDINARY_WILD, GC_ENF_TERA, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 62, 2, 0, 0, 1, CC_REFUSE_TERA},
-      {"double roll",        GC_ENC_ORDINARY_WILD, GC_ENF_DOUBLES, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 62, 2, 0, 0, 1, CC_REFUSE_DOUBLES},
+      {"double roll",        GC_ENC_ORDINARY_WILD, GC_ENF_DOUBLES, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 62, 2, 0, 0, 1, CC_SUPPORT_OK},
       {"boss actor",         GC_ENC_ORDINARY_WILD, 0, 1, 1, 1, 0, 0, 1, 0, 0, 0, 0, 62, 2, 0, 0, 1, CC_REFUSE_BOSS},
       {"fused actor",        GC_ENC_ORDINARY_WILD, 0, 1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 62, 2, 0, 0, 1, CC_REFUSE_FUSED},
       {"tera actor",         GC_ENC_ORDINARY_WILD, 0, 1, 1, 1, 0, 0, 0, 0, 1, 0, 0, 62, 2, 0, 0, 1, CC_REFUSE_TERA},
@@ -1945,6 +1952,8 @@ int main(int argc, char** argv) {
   test_defeat_creates(nseeds);
   CHECK(n_created >= 6, "real defeats made %d Nemeses (>= 6 expected over %d seeds)", n_created, nseeds);
   printf("1  real defeats: %d made a Nemesis, %d refused by the store, %d had no reliable finisher\n", n_created, n_refused_store, n_unattributed);
+  CHECK(n_double_killers[0]>0 && n_double_killers[1]>0,"both doubles enemy positions must create precise records (%d/%d)",n_double_killers[0],n_double_killers[1]);
+  printf("   real doubles finishers: left %d, right %d\n",n_double_killers[0],n_double_killers[1]);
   test_ordinary_creates_none();
   test_gate();
   test_report(nseeds);

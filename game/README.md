@@ -149,7 +149,7 @@ There are **Custom Run** and **Custom Load** on the title (custom content, task 
 (`csession_<n>.sav`: the run bytes and the run's custom state in one file, never readable as an ordinary session). At the windows of the frozen
 schedule (waves 27, 77, 127 and 177) it may ask, before any combat, whether to fight a remembered Nemesis; Yes builds that enemy through game-core's
 own enemy construction at the wave's ordinary level (no scaling, boosts, boss segments or change to what the player carries), No gives the ordinary
-encounter. A win pays one regular voucher, once. Only an ordinary single wild encounter can be offered; the defeat that makes a Nemesis is named only
+encounter. A win pays one regular voucher, once. A verified wild finisher from a double battle can be remembered on its own; only an ordinary single wild encounter can be offered; the defeat that makes a Nemesis is named only
 when battle-core's own state names the attacker. An ordinary run never installs a hook. If `custom.sav` cannot be used the custom entries say so and start
 nothing. Contracts section 2.16.
 

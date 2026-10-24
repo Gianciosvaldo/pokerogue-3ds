@@ -219,7 +219,7 @@ static void test_refusal_table(void)
 {
     static const struct { uint8_t trait; int refusal; } traits[] = {
         {CC_TR_BOSS, CC_REFUSE_BOSS}, {CC_TR_FUSED, CC_REFUSE_FUSED}, {CC_TR_TERA, CC_REFUSE_TERA},
-        {CC_TR_DOUBLES, CC_REFUSE_DOUBLES}, {CC_TR_TRAINER_OWNED, CC_REFUSE_TRAINER_OWNED},
+        {CC_TR_TRAINER_OWNED, CC_REFUSE_TRAINER_OWNED},
         {CC_TR_MYSTERY, CC_REFUSE_MYSTERY}, {CC_TR_FIXED_SCRIPTED, CC_REFUSE_FIXED_SCRIPTED}, {CC_TR_REMATCH, CC_REFUSE_REMATCH},
     };
     for (unsigned i = 0; i < sizeof traits / sizeof traits[0]; i++) {
@@ -235,6 +235,15 @@ static void test_refusal_table(void)
         CHECK_EQ(g_meta.counters.next_record_id, 1);
         check_state("trait");
     }
+    /* A precise doubles killer inserts and survives the real codec. */
+    fresh();
+    cc_terminal double_term = term_for(UID(1), 900);
+    cc_nemesis double_cand = cand_for(UID(1), 900);double_cand.traits=CC_TR_DOUBLES;
+    cc_commit_result double_result;
+    CHECK_STATUS(cc_commit_terminal(&g_meta,&double_term,&g_hist,&double_cand,&double_result),CC_OK);
+    CHECK_EQ(double_result.refusal,CC_SUPPORT_OK);CHECK_EQ(double_result.outcome,CC_TXO_INSERTED);
+    CHECK_EQ(g_meta.roster.count,1);CHECK_EQ(g_meta.roster.rec[0].traits,CC_TR_DOUBLES);
+    check_state("attributed doubles killer");
     /* unverified finisher, unknown ability, unknown moves */
     static const struct { uint16_t drop; int refusal; } known[] = {
         {CC_NK_FINISHER_VERIFIED, CC_REFUSE_NOT_ATTRIBUTED}, {CC_NK_ABILITY, CC_REFUSE_ABILITY_UNKNOWN},
