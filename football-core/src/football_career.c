@@ -84,6 +84,6 @@ bool football_career_buy(FootballCareer *c,unsigned offer,unsigned member)
 {
     if(!c || c->phase!=FB_CAREER_SHOP || offer>2 || member>=22 || c->sold[offer] || c->wallet<c->prices[offer])return false;
     if(offer==2){if(c->stone_target<0)return false;c->roster.mega_item[c->stone_target]=(int16_t)c->stone_item;}
-    else {uint8_t *boost=offer==0?&c->roster.speed[member]:&c->roster.strength[member];if(*boost>=20)return false;*boost=(uint8_t)(*boost+2);football_roster_refresh(&c->roster,member);}
+    else {uint8_t *boost=offer==0?&c->roster.speed[member]:&c->roster.strength[member];if(*boost>=20)return false;*boost=(uint8_t)(*boost+2>20?20:*boost+2);football_roster_refresh(&c->roster,member);}
     c->wallet-=c->prices[offer];c->sold[offer]=true;return true;
 }

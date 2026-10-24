@@ -19,7 +19,7 @@ bool football_roster_init(FootballRoster *r)
 }
 bool football_roster_refresh(FootballRoster *r,unsigned i)
 {
-    if(!r || i>=r->count)return false;
+    if(!r || r->count>22 || i>=22 || i>=r->count)return false;
     const pr_form *f=NULL;
     for(unsigned j=0;j<PR_FORM_COUNT;++j)if(pr_forms[j].species==r->mon[i].b.species && pr_forms[j].form_index==r->mon[i].b.form){f=&pr_forms[j];break;}
     if(!f || !football_stats_generate(&r->player[i],r->mon[i].b.id,f,&r->maxima))return false;
@@ -48,19 +48,21 @@ bad: if(why)*why=error;return false;
 }
 bool football_roster_assign(FootballRoster *r,unsigned slot,unsigned member)
 {
-    if(!r || slot>=r->count || member>=r->count)return false;
+    if(!r || r->count>22 || slot>=r->count || member>=r->count)return false;
     for(unsigned i=0;i<r->count;++i)if(r->lineup[i]==member){uint8_t old=r->lineup[slot];r->lineup[slot]=(uint8_t)member;r->lineup[i]=old;return true;}
     return false;
 }
 void football_roster_autofill(FootballRoster *r)
 {
-    if(!r)return;
+    if(!r || r->count>22)return;
     for(unsigned s=0;s<r->count;++s){
         unsigned best=s;float rating=-1;
         for(unsigned i=s;i<r->count;++i){const FootballPlayer *p=&r->player[r->lineup[i]];const FootballAttributes *a=&p->attributes;
             FootballPosition pos=football_slot_position(s);float value=0;
             switch(pos){case FB_QB:value=a->tha*.55f+a->thp*.45f;break;case FB_WR:value=a->cth*.6f+a->spd*.4f;break;case FB_RB:value=a->agi*.5f+a->spd*.3f+a->str*.2f;break;case FB_OL_DL:value=a->str*.6f+a->tak*.4f;break;case FB_LB:value=a->tak*.6f+a->agi*.4f;break;default:value=a->cth*.4f+a->tak*.3f+a->spd*.3f;break;}
-            value*=football_stats_type_affinity(p->primary_type,pos);
+            float affinity=football_stats_type_affinity(p->primary_type,pos);
+            if(p->secondary_type>=0 && p->secondary_type!=p->primary_type)affinity=(affinity+football_stats_type_affinity(p->secondary_type,pos))*.5f;
+            value*=affinity;
             if(value>rating){rating=value;best=i;}
         }
         uint8_t t=r->lineup[s];r->lineup[s]=r->lineup[best];r->lineup[best]=t;

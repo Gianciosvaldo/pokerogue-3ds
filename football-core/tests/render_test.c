@@ -15,6 +15,8 @@ static Tex3DS_SubTexture uv;
 static unsigned images, rectangles, begins,ends,targets,loads;
 static bool saw_ninjask,saw_shedinja,saw_cancel;
 static size_t atlas_bytes=1024*1024;
+static bool compact_mode;static unsigned freed_compact;
+static rr_frame compact_source={.tex=(rr_tex*)&renderer,.w=64,.h=64,.src_w=64,.src_h=64};
 C2D_TextBuf C2D_TextBufNew(size_t n) { assert(n==512); return &renderer; }
 void C2D_TextBufDelete(C2D_TextBuf b) { (void)b; }
 void C2D_TextBufClear(C2D_TextBuf b) { (void)b; }
@@ -47,12 +49,12 @@ bool menu_sprite_load(menu_sprite *s,const menu_mon *mon,bool back)
 { assert(!back && mon); ++loads; s->atlas=(rr_atlas*)s; return true; }
 void menu_sprite_free(menu_sprite *s) { memset(s,0,sizeof *s); }
 const rr_frame *menu_sprite_frame(const menu_sprite *s,uint32_t ms)
-{ (void)s;(void)ms;return NULL; }
+{ (void)s;(void)ms;return compact_mode?&compact_source:NULL; }
 int rr_atlas_pages(const rr_atlas *a) { assert(a);return 1; }
 rr_tex *rr_atlas_page(const rr_atlas *a,int p) { assert(p==0);return (rr_tex*)a; }
 size_t rr_tex_bytes(const rr_tex *t) { assert(t);return atlas_bytes; }
 rr_tex *rr_tex_thumbnail(const rr_frame *f,unsigned edge){assert(edge==64);return f?(rr_tex*)&renderer:NULL;}
-void rr_tex_free(rr_tex *t){(void)t;}
+void rr_tex_free(rr_tex *t){if(t)++freed_compact;}
 rr_frame rr_tex_frame(rr_tex *t){return (rr_frame){.tex=t,.w=64,.h=64,.src_w=64,.src_h=64};}
 int main(void)
 {
@@ -108,6 +110,10 @@ int main(void)
     assert(football_evolution_open(&evolution,options,2));
     football_render_evolution_bottom(&renderer,&evolution);
     assert(saw_ninjask && saw_shedinja && saw_cancel && !evolution.ready);
+    football_render_clear_sprites(&renderer);compact_mode=true;atlas_bytes=8192;
+    for(unsigned i=0;i<22;++i){assert(football_render_load_compact(&renderer,i,&mon));assert(football_render_front_frame(&renderer,i,0));}
+    assert(renderer.total_sprite_bytes==22*8192 && freed_compact==0);
+    football_render_clear_sprites(&renderer);assert(freed_compact==22 && renderer.total_sprite_bytes==0);
     football_render_free(&renderer);
     assert(renderer.total_sprite_bytes==0 && !renderer.text);
     football_render_free(&renderer);

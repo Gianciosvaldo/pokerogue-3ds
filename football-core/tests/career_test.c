@@ -6,6 +6,8 @@
 static FootballCareer career,loaded;
 static gc_run scratch,other;
 static unsigned char bytes[FB_CAREER_SAVE_MAX];
+static uint32_t crc(const unsigned char *p,size_t n){uint32_t v=~0u;while(n--){v^=*p++;for(unsigned i=0;i<8;++i)v=(v>>1)^(0xedb88320u & (0u-(v&1)));}return ~v;}
+static void put32(unsigned offset,uint32_t value){for(unsigned i=0;i<4;++i)bytes[offset+i]=(unsigned char)(value>>(8*i));}
 int main(void)
 {
     assert(football_career_new(&career,&scratch,NULL,7));
@@ -14,6 +16,11 @@ int main(void)
     size_t n=football_career_save(&career,bytes,sizeof bytes);assert(n);
     assert(football_career_load(&loaded,&other,NULL,bytes,n));assert(loaded.roster.count==22 && loaded.seed==career.seed);
     assert(!memcmp(career.roster.lineup,loaded.roster.lineup,22));
+    /* Valid-CRC out-of-range count/index values must fail before indexing. */
+    put32(44,255);put32(16,crc(bytes+20,n-20));assert(!football_career_load(&loaded,&other,NULL,bytes,n));
+    n=football_career_save(&career,bytes,sizeof bytes);assert(n);
+    put32(52,255);put32(16,crc(bytes+20,n-20));assert(!football_career_load(&loaded,&other,NULL,bytes,n));
+    n=football_career_save(&career,bytes,sizeof bytes);assert(n);
     bytes[n-1]^=1;assert(!football_career_load(&loaded,&other,NULL,bytes,n));bytes[n-1]^=1;
     assert(!football_career_load(&loaded,&other,NULL,bytes,n-1));
     assert(football_career_start(&career));n=football_career_save(&career,bytes,sizeof bytes);assert(n && football_career_load(&loaded,&other,NULL,bytes,n));

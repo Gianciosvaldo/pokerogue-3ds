@@ -35,6 +35,18 @@ int main(void)
     assert(game.actors[0].y<before);
     football_live_tick(&game,17,(FootballLiveInput){.receiver=2});assert(game.thrown);
     copy=game;for(unsigned i=0;i<50;++i){FootballLiveInput in={.x=.3f,.y=.4f,.receiver=-1};football_live_tick(&game,17,in);football_live_tick(&copy,17,in);}assert(!memcmp(&game,&copy,sizeof game));
+    static const unsigned target_slots[5]={2,3,4,5,1};
+    for(unsigned target=0;target<5;++target){
+        assert(football_live_begin(&game,&roster,77,1));assert(football_live_call(&game,FB_PASS_SLANTS));
+        football_live_tick(&game,17,(FootballLiveInput){.pressed=FB_LIVE_ACTION,.receiver=-1});
+        football_live_tick(&game,17,(FootballLiveInput){.receiver=(int)target});
+        assert(game.flying && game.target==target_slots[target]);
+    }
+    assert(football_live_begin(&game,&roster,77,1));assert(football_live_call(&game,FB_RUN_DIVE));
+    football_live_tick(&game,17,(FootballLiveInput){.pressed=FB_LIVE_ACTION,.receiver=-1});copy=game;
+    for(unsigned i=0;i<20;++i)football_live_tick(&game,20,(FootballLiveInput){.x=1,.receiver=-1});
+    for(unsigned i=0;i<40;++i)football_live_tick(&copy,10,(FootballLiveInput){.x=1,.receiver=-1});
+    assert(game.steps==copy.steps && game.rng==copy.rng && !memcmp(game.actors,copy.actors,sizeof game.actors));
     /* A real away formation must initially control a HOME linebacker. */
     game.phase=FB_LIVE_CALL;game.rules.offense=FB_AWAY;
     assert(football_live_defend(&game,FB_DEF_ZONE));assert(game.controlled<11 && game.actors[game.controlled].home);

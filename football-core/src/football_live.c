@@ -28,6 +28,8 @@ static void arrange(FootballLive *m)
 bool football_live_begin(FootballLive *m,const FootballRoster *r,uint32_t seed,unsigned round)
 {
     if(!m || !r || r->count!=22 || round<1 || round>7)return false;
+    unsigned seen=0;
+    for(unsigned i=0;i<22;++i){unsigned member=r->lineup[i];if(member>=22 || (seen&(1u<<member)))return false;seen|=1u<<member;}
     memset(m,0,sizeof *m);m->rng=seed?seed:1;
     if(!football_rules_begin(&m->rules,(FootballSide)(random32(m)%2)))return false;
     for(unsigned s=0;s<2;++s)for(unsigned i=0;i<22;++i){

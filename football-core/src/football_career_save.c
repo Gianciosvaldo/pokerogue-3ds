@@ -7,12 +7,12 @@ static uint32_t number(Stream *s,uint32_t v,uint32_t max)
 {
     if(!s->ok || s->n>s->cap || s->cap-s->n<4){s->ok=false;return 0;}
     if(s->read){v=0;for(unsigned i=0;i<4;++i)v|=(uint32_t)s->p[s->n+i]<<(8*i);}else for(unsigned i=0;i<4;++i)s->p[s->n+i]=(unsigned char)(v>>(8*i));
-    s->n+=4;if(v>max)s->ok=false;return v;
+    s->n+=4;if(v>max){s->ok=false;return 0;}return v;
 }
 #define N(x,max) do{(x)=number(s,(uint32_t)(x),max);}while(0)
 static void state(Stream *s,FootballCareer *c)
 {
-    N(c->phase,FB_CAREER_END);N(c->round,7);N(c->wins,7);N(c->wallet,1000000);N(c->seed,UINT32_MAX);
+    N(c->phase,FB_CAREER_END);N(c->round,7);N(c->wins,7);N(c->wallet,5600);N(c->seed,UINT32_MAX);
     unsigned mega=(unsigned)(c->mega+1);N(mega,22);c->mega=(int)mega-1;
     N(c->roster.count,22);unsigned cost=(unsigned)(c->roster.cost*1000+.5);N(cost,40000);c->roster.cost=cost/1000.0;
     unsigned seen=0;
@@ -72,6 +72,11 @@ bool football_career_load(FootballCareer *c,gc_run *scratch,gc_system *profile,c
     for(unsigned i=0;valid && i<22;++i){
         if(!football_roster_refresh(&copy->roster,i))valid=false;
         if(copy->roster.mega_item[i]){gc_football_new(scratch,NULL,"check-mega",1);scratch->party[0]=copy->roster.mon[i];scratch->n_party=1;if(!gc_football_mega_form(scratch,0,copy->roster.mega_item[i]))valid=false;}
+    }
+    if(valid && copy->mega>=0 && !copy->roster.mega_item[copy->mega])valid=false;
+    if(valid && copy->stone_target>=0){
+        gc_football_new(scratch,NULL,"check-offer",1);scratch->party[0]=copy->roster.mon[copy->stone_target];scratch->n_party=1;
+        if(!gc_football_mega_form(scratch,0,copy->stone_item))valid=false;
     }
     if(valid){copy->profile=profile;*c=*copy;scratch->sys=profile;}
     free(copy);return valid;
