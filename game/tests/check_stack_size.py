@@ -6,6 +6,28 @@ from pathlib import Path
 
 MINIMUM = 512 * 1024
 
+# Known nested reward calls. These are lower bounds, not a whole-program
+# maximum: rejecting a sum over the startup stack catches a definite overflow.
+REWARD_CALL_PATHS = (
+    ('pr_reward_apply', 'pr_reward_apply_vitamin'),
+    ('pr_reward_apply', 'pr_reward_apply_mint'),
+    ('pr_reward_apply', 'fusion_calculate_stats'),
+)
+
+def check_reward_paths(frames, size):
+    by_name = {}
+    for amount, name in frames:
+        # GCC may emit .constprop/.isra clones of a non-inlined helper.
+        logical_name = name.rsplit(':', 1)[-1].split('.', 1)[0]
+        by_name[logical_name] = max(amount, by_name.get(logical_name, 0))
+    for path in REWARD_CALL_PATHS:
+        if not all(name in by_name for name in path):
+            raise ValueError(f'missing ARM reward stack record: {" -> ".join(path)}')
+        amount = sum(by_name[name] for name in path)
+        if amount >= size:
+            raise ValueError(f'nested reward frames {" -> ".join(path)} require {amount} bytes')
+        print(f'ARM reward frames: {" -> ".join(path)}: {amount} bytes')
+
 def stack_size(path):
     data = path.read_bytes()
     if data[:6] != b'\x7fELF\x01\x01' or struct.unpack_from('<H', data, 18)[0] != 40:
@@ -54,6 +76,7 @@ def main():
             if amount >= size:
                 raise ValueError(f'single frame {function} requires {amount} bytes')
             print(f'ARM frames checked: {len(frames)}; largest {amount} bytes ({function})')
+            check_reward_paths(frames, size)
     except (ValueError, IndexError, struct.error, OSError) as error:
         parser.exit(1, f'3DS stack check failed: {error}\n')
 

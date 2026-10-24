@@ -56,6 +56,15 @@ static void reset_status(pr_reward_ctx *ctx, int party_idx) {
     }
 }
 
+/* Keep the fusion-only battle scratch out of the public dispatcher frame.
+ * Otherwise ARM reserves it even when dispatching into vitamin/mint helpers,
+ * whose own battle scratch would exceed the 512 KiB main-thread stack. */
+static __attribute__((noinline)) void fusion_calculate_stats(pr_pokemon *pokemon)
+{
+    pr_battle battle = {0};
+    pr_calculate_stats(&battle, pokemon);
+}
+
 bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_idx, int move_idx, const char **msg) {
     if (!ctx) {
         if (msg) *msg = NO_EFFECT_MSG;
@@ -483,7 +492,6 @@ bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_i
 
             /* Sparse form lookup, fusion ceil-average, IVs/nature and Wonder Guard
              * use the already ported battle stat calculator read-only. */
-            pr_battle stat_bt = {0};
             pr_pokemon stat_mon = {0};
             stat_mon.species=p1->species;stat_mon.form=p1->form;
             stat_mon.fusion_species=p2->species;stat_mon.fusion_form=p2->form;
@@ -491,7 +499,7 @@ bool pr_reward_apply(pr_reward_ctx *ctx, uint16_t item, int16_t arg, int party_i
             stat_mon.base_ability=p2->ability;stat_mon.passive=p1->passive;
             stat_mon.is_player=true;stat_mon.id=p1->id;
             memcpy(stat_mon.ivs,p1->ivs,sizeof stat_mon.ivs);
-            pr_calculate_stats(&stat_bt,&stat_mon);
+            fusion_calculate_stats(&stat_mon);
             p1->max_hp=stat_mon.stats[STAT_HP];
             memcpy(p1->stats,stat_mon.stats,sizeof p1->stats);
             p1->fusion_ability_index=p2->ability_index;

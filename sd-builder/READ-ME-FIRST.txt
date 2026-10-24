@@ -1,7 +1,13 @@
 PokeRogue SD card builder (Windows 10 or 11)
 =============================================
 
-October 22 hardware feedback fixes build
+October 24 battle fixes and football build
+  Includes merged battle fixes through PR #396 and Football Playoff on the title
+  menu, with its own save/resume file, playcalling, progression and shops.
+  Battle-core completion is still in progress. This refresh also reduces reward
+  dispatcher stack use on the 3DS. The app revision is in files\VERSION.txt.
+
+Earlier hardware and starter changes included in this build
   Includes the battle-menu crash/TM shop fixes, corrected move names, battle stat
   stage display, egg hatching, IV Scanner prompts, visible rivals and your trainer's
   opening Poke Ball throw. The run report can name an engine-recorded final blow.
