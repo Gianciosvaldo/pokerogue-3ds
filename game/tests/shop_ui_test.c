@@ -183,7 +183,7 @@ int main(void) {
   args.locked_tiers[2] = 1;
   args.party_luck = 14; /* SSS Grade */
 
-  shop_ui_events ev;
+  shop_ui_events ev = {0};
   ev.on_select_reward = on_test_select_reward;
   ev.on_select_shop = on_test_select_shop;
   ev.on_reroll = on_test_reroll;
