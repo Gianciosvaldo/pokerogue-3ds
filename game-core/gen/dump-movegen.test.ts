@@ -5,7 +5,7 @@
  * contact and poison attributes the generator asks for) and, per ability that has an AiMovegenMoveStatsAbAttr or a
  * VariableMovePowerAbAttr, what Move.effectivePowerAbilityCheck gives for each damaging move: the neutral result
  * (no weather, genderless, not Flying, the move's own type) plus the rows where one of those four things changes it.
- * Run with tools/redump.sh <upstream dir>; writes gen/out/gc_movegen.c. The output is generated: don't edit it.
+ * Run with tools/redump.sh <upstream dir>; writes gen/out/gc_movegen_data.c. The output is generated: don't edit it.
  */
 import { speciesDataRegistry } from "#app/global-species-data-registry";
 import { globalScene } from "#app/global-scene";

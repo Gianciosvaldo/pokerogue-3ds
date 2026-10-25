@@ -1,0 +1,1 @@
+doubles host line95: r.n_battle_events==(charge?1:0)&&rngsame(global,r.bt.rng)&&rngsame(battle,r.bt.battle_rng)&&rngsame(local,r.run.rng)

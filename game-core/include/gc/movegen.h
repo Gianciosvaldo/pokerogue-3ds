@@ -1,4 +1,4 @@
-/* The tables behind game-core's port of src/ai/ai-moveset-gen.ts (gen/out/gc_movegen.c, dumped by gen/dump-movegen.test.ts). */
+/* The tables behind game-core's port of src/ai/ai-moveset-gen.ts (gen/out/gc_movegen_data.c, dumped by gen/dump-movegen.test.ts). */
 #ifndef GC_MOVEGEN_H
 #define GC_MOVEGEN_H
 #include <stdbool.h>

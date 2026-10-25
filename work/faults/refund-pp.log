@@ -1,0 +1,1 @@
+doubles host line94: p->tags[p->n_tags-1].type==BATTLER_TAG_TYPE_INGRAIN&&p->stat_stages[0]==2&&p->pp_used[0]==3&&p->n_move_history==1&&p->move_history[0].move==MOVE_ID_FURY_CUTTER

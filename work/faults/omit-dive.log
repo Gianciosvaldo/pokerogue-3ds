@@ -1,0 +1,1 @@
+doubles host line13: p->n_move_queue==f->nq&&p->n_tags==f->nt&&p->pp_used[0]==f->pp&&p->n_move_history==f->nh
