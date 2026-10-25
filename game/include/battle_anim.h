@@ -11,6 +11,10 @@
  * Moves missing a file fall back as upstream does (TACKLE for attacks, FOCUS_ENERGY for
  * self-status moves, TAIL_WHIP otherwise). Not done yet: the tone's grey part (tone[3]),
  * Substitute, and the frames' color/flash fields (upstream ignores them too).
+ *
+ * The 400x240 top screen shows 40 px more on each side and 30 px more above and below upstream's
+ * 320x180 field: the background tiles over all of it, and battle_view draws the border under the
+ * field while an animation plays, so the graphics run across it.
  */
 #ifndef GM_BATTLE_ANIM_H
 #define GM_BATTLE_ANIM_H
