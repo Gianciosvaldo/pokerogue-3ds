@@ -74,8 +74,11 @@ money handling merged in #357; see [their validation record](HONEY-MONEY-VALIDAT
 3. Reconcile identity/form/copy and persistent interaction evidence with later
    merged slices; retain exact state, queues, text, RNG and all prior covered IDs.
    [Last Resort history](LAST-RESORT-HISTORY-VALIDATION.md) adds full non-virtual
-   membership, summon reset and compatible saves. Other long-history queries
-   and faint-history capacity remain separate audit items.
+   membership, summon reset and compatible saves. The [nonvirtual query
+   follow-up](NONVIRTUAL-HISTORY-VALIDATION.md) adds all four last-real-move
+   selectors, their shared-target identities and optional save state. Protect
+   streaks, other all-history queries and faint-history capacity remain separate
+   audit items.
 4. Finish wide-level Endless acceptance across generation, arithmetic,
    progression, display and compatible saves, then publish the final evidence
    audit and explicitly list any remaining external prerequisites.

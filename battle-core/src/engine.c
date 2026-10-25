@@ -608,8 +608,15 @@ void pr_targets_changed(pr_battle *bt, pr_engine *e, int list)
     for (int k = 0; k < e->n_hist_alias; k++) {
         if (e->hist_alias[k].list != list) continue;
         pr_pokemon *p = e->hist_alias[k].p;
+        if(e->hist_alias[k].epoch!=p->history_epoch)continue;
         int kept = p->n_move_history < PR_MAX_MOVE_HISTORY ? p->n_move_history : PR_MAX_MOVE_HISTORY;
-        int at = (int)e->hist_alias[k].abs - (p->n_move_history - kept);
+        /* Shared target arrays remain shared even after the entry leaves the
+         * retained tail, and the old 16-bit count may already be saturated. */
+        for(int q=0;q<4;q++)if((p->history_last_present&(1u<<q))&&p->history_last_serial[q]==e->hist_alias[k].abs){
+            memcpy(p->history_last[q].targets,t->v,4);
+            p->history_last[q].n_targets=t->n;
+        }
+        int64_t at = (int64_t)e->hist_alias[k].abs - ((int64_t)p->history_serial - kept) - 1;
         if (at < 0 || at >= kept) continue;     /* fell out of the kept entries */
         memcpy(p->move_history[at].targets, t->v, 4);
         p->move_history[at].n_targets = t->n;
@@ -625,7 +632,8 @@ void pr_push_history_shared(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_turn_
         tm.n_targets = e->target_lists[list].n;
         if (e->n_hist_alias < (int)(sizeof e->hist_alias / sizeof e->hist_alias[0])) {
             e->hist_alias[e->n_hist_alias].p = p;
-            e->hist_alias[e->n_hist_alias].abs = p->n_move_history;
+            e->hist_alias[e->n_hist_alias].epoch = p->history_epoch;
+            e->hist_alias[e->n_hist_alias].abs = (p->history_serial<p->n_move_history?p->n_move_history:p->history_serial)+1;
             e->hist_alias[e->n_hist_alias].list = (int8_t)list;
             e->n_hist_alias++;
         } else {

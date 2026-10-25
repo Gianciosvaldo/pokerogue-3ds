@@ -1021,3 +1021,10 @@ $(BUILD)/encounter_intro_test: tests/encounter_intro_test.c $(BUILD)/libgc.a $(R
 encounter-intro-test: $(BUILD)/encounter_intro_test
 	$(BUILD)/encounter_intro_test
 test: encounter-intro-test
+
+$(BUILD)/nonvirtual_history_host_test: tests/nonvirtual_history_host_test.c tests/doubles_host_test.c ../battle-core/tests/nonvirtual-history-fixture.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+nonvirtual-history-host-test: $(BUILD)/nonvirtual_history_host_test
+	$< tests/fixtures/nonvirtual-history.native.txt
+test: nonvirtual-history-host-test
+.PHONY: nonvirtual-history-host-test
