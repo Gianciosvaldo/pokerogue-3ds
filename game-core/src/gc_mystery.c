@@ -6,7 +6,9 @@
 #include <string.h>
 
 typedef struct {
-    int8_t tier, min_wave, max_wave, max_seen, min_party;
+    int8_t tier;
+    int16_t min_wave, max_wave;   /* 180 does not fit an int8_t */
+    int8_t max_seen, min_party;
     uint16_t disallowed_challenges;
     double money_mult;
     uint8_t wave_mod_mask; /* bit r means wave % 10 == r is legal; 0 = no modulus gate */
@@ -431,9 +433,12 @@ static void start_mystery_wild_battle(gc_run *run, int species, int level, bool 
     run->battle_type = BATTLE_TYPE_WILD;
     int lvl = level > 0 ? level : (int)pr_run_get_max_exp_level(&run->run, run->wave, false);
 
-    if (species <= 0) {
-        gc_gen_wild(run, lvl);
-    } else {
+    if (species <= 0 && !gc_gen_wild(run, lvl)) {
+        /* run-core cannot roll a species for this biome and wave: a Rattata of the level stands in, counted, as in newBattle's last resort */
+        gc_stub(run, GC_STUB_UNPORTED_ENEMY);
+        species = SPECIES_ID_RATTATA;
+    }
+    if (species > 0) {
         pr_enemy_gen g;
         memset(&g, 0, sizeof g);
         g.id = (uint32_t)floor(pr_rng_real_in_range(&run->run.rng, 0, 4294967296.0));
@@ -456,6 +461,9 @@ static void start_mystery_wild_battle(gc_run *run, int species, int level, bool 
             for (int k = 1; k <= 6; k++) m->b.stat_stages[k] = (int8_t)omni_boost;
         }
     }
+    /* what EncounterPhase does to the enemy party of any battle: passive, stats (a species rolled by gc_gen_wild has none yet), seen flags,
+     * its held items and the AI */
+    gc_enemy_finish_party(run);
     gc_battle_setup_field(run, true);
     gc_rq_push(run, gc_rp(RP_TURN_INIT, 0, 0, 0));
 }
