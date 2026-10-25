@@ -46,7 +46,7 @@ typedef struct {
     const char *name;           /* "Yoshikage Kira" */
     const char *line;           /* the iconic line */
     int16_t biome;              /* BiomeId, -1 = none (the Pillar Men) */
-    const char *passive;        /* an ability key the whole team has as its passive, or NULL */
+    int16_t passive;            /* an AbilityId the whole team has as its passive, -1 = none */
     uint8_t n_members;          /* 1..CC_JOJO_MAX_MEMBERS */
     cc_jojo_member member[CC_JOJO_MAX_MEMBERS];
 } cc_jojo_char;

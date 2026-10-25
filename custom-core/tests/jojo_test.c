@@ -57,7 +57,7 @@ static void test_table(void)
         CHECK_EQ(c->biome, BIOME_OF[i]);
         CHECK(c->n_members >= 1 && c->n_members <= CC_JOJO_MAX_MEMBERS);
         if (c->biome >= 0) pool++;
-        if (c->passive) passive++;
+        if (c->passive >= 0) passive++;
         for (unsigned j = 0; j < i; j++) CHECK(strcmp(c->id, cc_jojo_chars[j].id) != 0);
         for (unsigned j = 0; j < i; j++)
             if (c->biome >= 0) CHECK(c->biome != cc_jojo_chars[j].biome);   /* one character per biome */
@@ -89,7 +89,7 @@ static void test_table(void)
     CHECK_EQ(cc_jojo_find("kir"), CC_JOJO_NONE);
     CHECK_EQ(cc_jojo_find("kiraa"), CC_JOJO_NONE);
     CHECK_EQ(cc_jojo_find(NULL), CC_JOJO_NONE);
-    CHECK(cc_jojo_chars[4].passive && cc_jojo_chars[4].passive[0] == 's');   /* Pucci: speedBoost */
+    CHECK_EQ(cc_jojo_chars[4].passive, 3);   /* Pucci: Speed Boost */
     /* a Ditto has only Transform */
     CHECK_EQ(cc_jojo_chars[0].member[1].species, 132);
     CHECK_EQ(cc_jojo_chars[0].member[1].moves[1], 0);

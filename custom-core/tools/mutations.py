@@ -1132,7 +1132,7 @@ mut(J, "for (; v; v &= v - 1) n++;", "for (; v; v >>= 1) n += 0;", "popcount")
 mut(J, "if (!s || !chars || count > 32 || cc_jojo_validate_in(s, count) != CC_OK) return CC_JOJO_NONE;", "if (!s || !chars || count > 32) return CC_JOJO_NONE;", "roll: an invalid state is used")
 mut(J, "while (*a && *a == *b) { a++; b++; }\n        if (*a == *b) return (int)i;", "while (*a && *a == *b) { a++; b++; }\n        if (!*a) return (int)i;", "find: a longer id matches its prefix")
 mut(JT, '{"kira", "Yoshikage Kira", "My name is Yoshikage Kira. I\'m 33 years old.", 9 /* Lake */', '{"kira", "Yoshikage Kira", "My name is Yoshikage Kira. I\'m 33 years old.", 0 /* Town */', "Kira back in Town (no trainers there)")
-mut(JT, '"Do you believe in \'gravity\'?", 29 /* Temple */, "speedBoost"', '"Do you believe in \'gravity\'?", 29 /* Temple */, NULL', "Pucci loses the passive")
+mut(JT, '29 /* Temple */, 3 /* Speed Boost */, 6', '29 /* Temple */, -1, 6', "Pucci loses the passive")
 mut(JT, '"I shall become the ultimate lifeform!", -1,', '"I shall become the ultimate lifeform!", 25,', "Kars in a biome pool")
 mut(JT, '"Nyo-ho!", 14 /* Desert */, NULL, 6,', '"Nyo-ho!", 14 /* Desert */, NULL, 5,', "Gyro loses a member")
 
