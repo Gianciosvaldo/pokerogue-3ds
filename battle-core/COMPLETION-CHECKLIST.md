@@ -69,6 +69,10 @@ money handling merged in #357; see [their validation record](HONEY-MONEY-VALIDAT
    Existing helper arithmetic alone does not
    establish that a public owner invokes it.
    The Pokérus/trapping owning-caller audit is recorded in [the validation record](../game-core/POKERUS-TRAP-VALIDATION.md). It does not close all switch interactions.
+   The [received-hit history proof](RECEIVED-HISTORY-VALIDATION.md) covers the
+   enabled whole-list Counter/Revenge/Focus Punch/Enigma/Rage queries, a naturally
+   ordered forty-hit turn and actual turn/save boundaries. Unknown imported
+   prefixes and identities outside the two-party budget remain explicit.
 2. Finish the source inventory, including AI moveset attributes, constructor
    closures/conditions, tags, modifiers, phases and unsupported/capacity paths.
 3. Reconcile identity/form/copy and persistent interaction evidence with later

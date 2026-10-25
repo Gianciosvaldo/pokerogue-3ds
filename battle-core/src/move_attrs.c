@@ -131,13 +131,7 @@ void pr_apply_variable_power(pr_battle *bt, const pr_pokemon *user, const pr_pok
             break;
         case PR_AC_TurnDamagedDoublePowerAttr: {
             /* Revenge, Avalanche: user.turnData.attacksReceived.find(r => r.damage && r.sourceId === target.id) */
-            int kept = pr_attacks_received_kept(user), k = 0;
-            for (; k < kept; k++) {
-                const pr_attack_record *r = &user->attacks_received[k];
-                if (r->damage != 0 && r->damage == r->damage && r->source_id == target->id) break;
-            }
-            if (k < kept) *power *= 2;
-            else pr_attacks_received_exhausted(bt, user);
+            if (pr_received_damage_from(bt, user, target->id)) *power *= 2;
             break;
         }
         case PR_AC_LastMoveDoublePowerAttr: {
@@ -542,17 +536,9 @@ double pr_apply_fixed_damage(pr_battle *bt, const pr_pokemon *user, const pr_pok
              * where category is allMoves[ar.move].category; then toDmgValue(damage * multiplier) */
             const pr_attr_CounterDamageAttr *c = P(CounterDamageAttr, a);
             bool any_category = c->nulls & (1u << 2);
-            int kept = pr_attacks_received_kept(user), k = 0, self = pr_battler_index(bt, user);
-            for (; k < kept; k++) {
-                const pr_attack_record *r = &user->attacks_received[k];
-                int cat = pr_moves[r->move].category;
-                if (cat != MOVE_CATEGORY_STATUS && !pr_are_allies(self, r->source_battler_index)
-                    && (any_category || cat == c->moveFilter))
-                    break;
-            }
-            double damage = 0;
-            if (k < kept) damage = user->attacks_received[k].damage;
-            else pr_attacks_received_exhausted(bt, user);
+            pr_attack_record record;
+            double damage = pr_received_counter(bt, user, any_category ? -1 : c->moveFilter, &record)
+                ? record.damage : 0;
             dmg = to_dmg_value(damage * c->multiplier);
             break;
         }

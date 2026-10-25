@@ -1086,3 +1086,11 @@ faint-history-host-test: $(BUILD)/faint_history_host_test
 	$(BUILD)/faint_history_host_test
 test: faint-history-host-test
 .PHONY: faint-history-host-test
+
+$(BUILD)/received_history_host_test: tests/received_history_host_test.c tests/doubles_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/received_history_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+received-history-host-test: $(BUILD)/received_history_host_test
+	$(BUILD)/received_history_host_test
+
+test: received-history-host-test
+.PHONY: received-history-host-test

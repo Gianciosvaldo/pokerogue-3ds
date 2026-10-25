@@ -1374,3 +1374,7 @@ remaining Pickup prerequisites are documented in
 
 Grip Claw's attack callback, native source comparisons and inventory/save bridge
 are documented in [GRIP-CLAW-VALIDATION.md](GRIP-CLAW-VALIDATION.md).
+
+Received-hit searches beyond the retained tail, their actual Counter/Focus Punch/
+Rage/berry owners, a forty-hit command turn and turn/save boundaries are documented
+in [RECEIVED-HISTORY-VALIDATION.md](RECEIVED-HISTORY-VALIDATION.md).

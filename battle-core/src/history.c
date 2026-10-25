@@ -1,7 +1,7 @@
 /* Turn history: summonData.moveHistory, turnData.attacksReceived and the last turn order
  * (src/field/pokemon.ts, src/queues/move-phase-priority-queue.ts). Each list keeps its true
- * tracked length and newest entries; a read that reaches past the kept entries reports itself
- * unported instead of guessing. Last Resort membership is recorded separately. */
+ * tracked length and newest entries. Whole-history queries retain exact sufficient
+ * summaries; unavailable raw prefixes are reported instead of guessed. */
 #include "pr/battle.h"
 #include <string.h>
 
@@ -180,13 +180,148 @@ const pr_turn_move *pr_last_non_virtual_move(pr_battle *bt, const pr_pokemon *p,
     return NULL;
 }
 
+enum { RECEIVED_POSITIVE = 1, RECEIVED_SUPER = 2, RECEIVED_OLDEST = 4 };
+
+static void received_remember(pr_received_history *h, const pr_attack_record *r, bool first)
+{
+    if (r->damage > 0) {
+        h->any_known |= RECEIVED_POSITIVE;
+        h->any_present |= RECEIVED_POSITIVE;
+    }
+    if (r->result == HIT_RESULT_SUPER_EFFECTIVE || r->result == HIT_RESULT_EXTREMELY_EFFECTIVE) {
+        h->any_known |= RECEIVED_SUPER;
+        h->any_present |= RECEIVED_SUPER;
+    }
+    if (first) {
+        h->any_known |= RECEIVED_OLDEST;
+        h->any_present &= ~RECEIVED_OLDEST;
+        if (r->damage > 0) h->any_present |= RECEIVED_OLDEST;
+    }
+    /* JS truthiness: negative damage counts for Revenge; NaN and zero do not. */
+    if (r->damage != 0 && r->damage == r->damage) {
+        int k = 0;
+        while (k < h->n_sources && h->damage_sources[k] != r->source_id) k++;
+        if (k == h->n_sources) {
+            if (k < 2 * PR_MAX_PARTY) h->damage_sources[h->n_sources++] = r->source_id;
+            else h->sources_complete = false;
+        }
+    }
+    if (r->move >= PR_MOVE_COUNT) {
+        /* An invalid raw record cannot establish a Counter predicate. */
+        h->counter_known = h->counter_present = 0;
+        return;
+    }
+    int category = pr_moves[r->move].category;
+    if (category == MOVE_CATEGORY_STATUS) return;
+    static const int readers[] = {0, 2, -1};
+    for (int context = 0; context < 3; context++) {
+        if (pr_are_allies(readers[context], r->source_battler_index)) continue;
+        for (int filter = 0; filter < 3; filter++) {
+            if (filter && category != (filter == 1 ? MOVE_CATEGORY_PHYSICAL : MOVE_CATEGORY_SPECIAL)) continue;
+            int q = context * 3 + filter;
+            h->counter[q] = *r;
+            h->counter_known |= 1u << q;
+            h->counter_present |= 1u << q;
+        }
+    }
+}
+
+static void received_snapshot(const pr_pokemon *p, pr_received_history *h)
+{
+    const pr_received_history *saved = &p->received_history;
+    if (p->n_attacks_received > PR_MAX_ATTACKS_RECEIVED && saved->valid && saved->count == p->n_attacks_received && saved->n_sources <= 2 * PR_MAX_PARTY
+        && !(saved->counter_known & ~511u) && !(saved->counter_present & ~saved->counter_known)
+        && !(saved->any_known & ~7u) && !(saved->any_present & ~saved->any_known)) {
+        *h = *saved;
+        return;
+    }
+    memset(h, 0, sizeof *h);
+    h->valid = true;
+    h->count = p->n_attacks_received;
+    bool complete = p->n_attacks_received <= PR_MAX_ATTACKS_RECEIVED;
+    h->sources_complete = complete;
+    h->counter_known = complete ? 511 : 0;
+    h->any_known = complete ? 7 : 0;
+    int kept = pr_attacks_received_kept(p);
+    for (int i = kept - 1; i >= 0; i--)
+        received_remember(h, &p->attacks_received[i], complete && i == kept - 1);
+}
+
 void pr_unshift_attack_received(pr_pokemon *p, const pr_attack_record *r)
 {
+    pr_attack_record record = *r; /* the caller may refer to the retained tail */
+    pr_received_history h;
+    received_snapshot(p, &h);
+    received_remember(&h, &record, p->n_attacks_received == 0);
     int kept = pr_attacks_received_kept(p);
     if (kept == PR_MAX_ATTACKS_RECEIVED) kept--;
     memmove(p->attacks_received + 1, p->attacks_received, (size_t)kept * sizeof *p->attacks_received);
-    p->attacks_received[0] = *r;
+    p->attacks_received[0] = record;
     if (p->n_attacks_received < UINT16_MAX) p->n_attacks_received++;
+    h.count = p->n_attacks_received;
+    p->received_history = h;
+}
+
+void pr_reset_received_history(pr_pokemon *p)
+{
+    p->n_attacks_received = 0;
+    memset(&p->received_history, 0, sizeof p->received_history);
+}
+
+bool pr_received_counter(pr_battle *bt, const pr_pokemon *p, int category, pr_attack_record *out)
+{
+    if (category >= 0 && category != MOVE_CATEGORY_PHYSICAL && category != MOVE_CATEGORY_SPECIAL) return false;
+    pr_received_history h;
+    received_snapshot(p, &h);
+    int self = pr_battler_index(bt, p);
+    int context = self < 0 ? 2 : self < 2 ? 0 : 1;
+    int filter = category < 0 ? 0 : category == MOVE_CATEGORY_PHYSICAL ? 1 : 2;
+    int q = context * 3 + filter;
+    if (!(h.counter_known & (1u << q))) {
+        pr_note_unported(bt, PR_FEAT_MOVE_HISTORY);
+        return false;
+    }
+    if (!(h.counter_present & (1u << q))) return false;
+    *out = h.counter[q];
+    return true;
+}
+
+bool pr_received_damage_from(pr_battle *bt, const pr_pokemon *p, int64_t source_id)
+{
+    /* A retained witness remains useful even if a raw input exceeded the ID budget. */
+    int kept = pr_attacks_received_kept(p);
+    for (int i = 0; i < kept; i++) {
+        const pr_attack_record *r = &p->attacks_received[i];
+        if (r->source_id == source_id && r->damage != 0 && r->damage == r->damage) return true;
+    }
+    pr_received_history h;
+    received_snapshot(p, &h);
+    for (int i = 0; i < h.n_sources; i++) if (h.damage_sources[i] == source_id) return true;
+    if (!h.sources_complete) pr_note_unported(bt, PR_FEAT_MOVE_HISTORY);
+    return false;
+}
+
+static bool received_any(pr_battle *bt, const pr_pokemon *p, unsigned query)
+{
+    pr_received_history h;
+    received_snapshot(p, &h);
+    if (!(h.any_known & query)) pr_note_unported(bt, PR_FEAT_MOVE_HISTORY);
+    return (h.any_known & h.any_present & query) != 0;
+}
+
+bool pr_received_positive(pr_battle *bt, const pr_pokemon *p)
+{
+    return received_any(bt, p, RECEIVED_POSITIVE);
+}
+
+bool pr_received_super_effective(pr_battle *bt, const pr_pokemon *p)
+{
+    return received_any(bt, p, RECEIVED_SUPER);
+}
+
+bool pr_received_oldest_positive(pr_battle *bt, const pr_pokemon *p)
+{
+    return received_any(bt, p, RECEIVED_OLDEST);
 }
 
 int pr_attacks_received_kept(const pr_pokemon *p)
