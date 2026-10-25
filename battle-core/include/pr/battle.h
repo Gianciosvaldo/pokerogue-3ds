@@ -444,7 +444,11 @@ typedef struct pr_battle {
      * (playerFaintsHistory / enemyFaintsHistory: which Pokemon, on which turn) */
     int player_faints, enemy_faints;
     struct { uint32_t id; int turn; } faint_history[2][12];
-    uint8_t n_faint_history[2];        /* [0] player, [1] enemy */
+    uint8_t n_faint_history[2];        /* [0] player, [1] enemy; newest 12 */
+    uint32_t faint_history_total[2];
+    uint32_t fainted_ids[2][PR_MAX_PARTY]; /* distinct identities from this encounter */
+    uint8_t n_fainted_ids[2];
+    bool faint_ids_complete[2];
     /* dynamicQueueManager.getLastTurnOrder(): the Pokemon.id of each Pokemon whose MovePhase
      * started this turn, in order (its length, and its first PR_MAX_TURN_ORDER entries) */
     uint8_t n_last_turn_order;
@@ -805,6 +809,8 @@ double pr_battle_rand_seed_number(pr_battle *bt, double range, double min);
 /* ---- turn history (src/history.c) ---- */
 /* pushMoveHistory(turnMove) (the caller checks isOnField, as upstream does) */
 void pr_push_move_history(pr_pokemon *p, pr_turn_move tm);
+void pr_record_faint(pr_battle *bt,int side,uint32_t id,int turn);
+bool pr_faint_history_contains(pr_battle *bt,int side,uint32_t id,bool *unknown);
 void pr_rebuild_history_used_moves(pr_pokemon *p);
 void pr_rebuild_nonvirtual_history(pr_pokemon *p);
 void pr_rebuild_protect_history(pr_pokemon *p);

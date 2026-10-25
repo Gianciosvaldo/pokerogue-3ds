@@ -720,9 +720,9 @@ static bool should_tera(pr_battle *bt, pr_ai *ai, const pr_pokemon *p)
     bool listed = false;
     for (int i = 0; i < tr->n_instant_teras; i++) listed |= tr->instant_teras[i] == index;
     if (!listed) return false;
-    for (int i = 0; i < bt->n_faint_history[1]; i++)
-        if (bt->faint_history[1][i].id == p->id) return false;
-    return true;
+    bool unknown=false;
+    bool fainted=pr_faint_history_contains(bt,1,p->id,&unknown);
+    return !fainted&&!unknown;
 }
 
 static struct pr_turn_command empty_command(int command)

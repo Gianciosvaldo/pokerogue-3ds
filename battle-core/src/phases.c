@@ -3033,15 +3033,13 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
     /* doFaint */
     if (bt->faint_observer) faint_notify(bt, f, p, player);
     if (player) {
-        bt->player_faints++;
-        int k = bt->n_faint_history[0] < 12 ? bt->n_faint_history[0]++ : (pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT), 11);
-        bt->faint_history[0][k].id = p->id;
-        bt->faint_history[0][k].turn = bt->turn;
+        if(bt->player_faints<INT32_MAX)bt->player_faints++;
+        else pr_note_unported(bt,PR_FEAT_ENGINE_LIMIT);
+        pr_record_faint(bt,0,p->id,bt->turn);
     } else {
-        bt->enemy_faints++;
-        int k = bt->n_faint_history[1] < 12 ? bt->n_faint_history[1]++ : (pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT), 11);
-        bt->faint_history[1][k].id = p->id;
-        bt->faint_history[1][k].turn = bt->turn;
+        if(bt->enemy_faints<INT32_MAX)bt->enemy_faints++;
+        else pr_note_unported(bt,PR_FEAT_ENGINE_LIMIT);
+        pr_record_faint(bt,1,p->id,bt->turn);
     }
     pr_queue_msg(bt, e, pr_msg_p(bt, "battle:fainted", p));
     form_change_with_delay(bt, p, PR_FCT_SpeciesFormChangeActiveTrigger, true);
