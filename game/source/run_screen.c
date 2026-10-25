@@ -18,6 +18,7 @@
 #include "combat_observer.h"
 #include "custom_run.h"
 #include "achv_hooks.h"
+#include "me_flow.h"
 #include "gm_item_ui.h"
 #include "i18n.h"
 #include "menus.h"
@@ -83,6 +84,8 @@ static struct {
   bool save_failed_now;         /* the write that just ran failed */
   bool save_failed_told;        /* the player was told the SD card refused a write (told again after one succeeds) */
   int step_timer;               /* a postponed screen_step (ui_after id), 0 = none */
+  int me_stage;                 /* the mystery encounter on screen: 0 not started, 1 intro said, 2 the choice's text is being said, 3 the question is up */
+  gc_choice me_choice;          /* the choice waiting for that text to finish */
   /* a loaded run (rs_resume): game-core's load makes the wave and the player's summon but not the trainer's intro or the
    * foe's send-out (they were shown when the battle began, before the save) */
   bool resume_wave;             /* the next WAVE event is the loaded battle's */
@@ -118,6 +121,7 @@ static void reset_driver(void) {
   G.ball = -1;
   G.refused_in_row = 0;
   G.save_due = G.save_failed_told = false;
+  G.me_stage = 0;
   G.resume_wave = G.resume_foe = false;
 }
 
@@ -727,12 +731,8 @@ static bool handle_event(int i) {
       break;
     }
 
-    case GC_EV_MYSTERY: {
-      char* t = txt_new();
-      snprintf(t, TXT_LEN, "A Mystery Encounter (%d) happens! It is not built yet; the first option is taken.", (int)e->a);
-      put_msg(t, false);
+    case GC_EV_MYSTERY: /* the encounter's own intro is said when its screen comes (mystery_screen) */
       break;
-    }
 
     case GC_EV_SAVE_POINT:
       /* nothing to show; the run is written when the scene is up and the command is about to be asked (save_point) */
@@ -1418,13 +1418,14 @@ static void open_biome_map(void) {
   rh_open_biome_map(&ba, &be);
 }
 
-/* ---- a mystery encounter, stand-in: the first option that can be taken, with the first healthy Pokemon ---- */
+/* ---- a mystery encounter: its intro, the question (me_flow), the "selected" text, then the choice ---- */
 
+/* the stand-in for an encounter the question cannot be built for: the first option that can be taken, with the first healthy Pokemon */
 static void mystery_auto(void) {
   const gc_screen* s = gc_run_screen(&G.run);
   gc_choice c = {.kind = GC_CH_MYSTERY};
   for (int i = 0; i < s->n_options && i < 8; i++)
-    if (s->option_ok[i] && !(s->mystery_type == GC_ME_GLOBAL_TRADE_SYSTEM && i == 2)) { /* the item trade needs a held item chosen, which this stand-in cannot do; Leave is the last option */
+    if (s->option_ok[i]) {
       c.a = (int16_t)i;
       break;
     }
@@ -1434,6 +1435,41 @@ static void mystery_auto(void) {
       break;
     }
   answer(&c);
+}
+
+static void on_mystery_choice(const me_choice* ch, void* arg) {
+  (void)arg;
+  G.me_choice = (gc_choice){.kind = GC_CH_MYSTERY, .a = (int16_t)ch->option, .b = (int16_t)ch->b, .c = (int16_t)ch->c};
+  if (ch->selected[0]) {
+    G.me_stage = 2;
+    say(ch->selected); /* the driver goes on (screen_step) when it has been read */
+    return;
+  }
+  G.me_stage = 0;
+  answer(&G.me_choice);
+}
+
+static void mystery_screen(void) {
+  if (G.me_stage == 3) return; /* the question is up */
+  if (G.me_stage == 2) {
+    G.me_stage = 0;
+    answer(&G.me_choice);
+    return;
+  }
+  if (G.me_stage == 0) {
+    static char intro[2 * 1200];
+    me_flow_intro(&G.run, intro, sizeof intro);
+    G.me_stage = 1;
+    if (intro[0]) {
+      say(intro);
+      return;
+    }
+  }
+  G.me_stage = 3;
+  if (!me_flow_open(&G.run, on_mystery_choice, NULL)) {
+    G.me_stage = 0;
+    mystery_auto();
+  }
 }
 
 /* ---- a custom rematch: the offer (the intro of the wave already said who wants it) ---- */
@@ -1659,7 +1695,7 @@ static void screen_step(void) {
       open_biome_map();
       break;
     case GC_SCREEN_MYSTERY:
-      mystery_auto();
+      mystery_screen();
       break;
     case GC_SCREEN_CUSTOM_OFFER:
       open_custom_offer();

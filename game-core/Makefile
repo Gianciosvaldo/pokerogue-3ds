@@ -167,6 +167,13 @@ test: fungames-host-test
 fungames-host-test: $(BUILD)/mystery_fungames_test
 	$(BUILD)/mystery_fungames_test
 .PHONY: fungames-host-test
+all: $(BUILD)/mystery_texts_test
+$(BUILD)/mystery_texts_test: tests/mystery_texts_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: texts-host-test
+texts-host-test: $(BUILD)/mystery_texts_test
+	$(BUILD)/mystery_texts_test
+.PHONY: texts-host-test
 all: $(BUILD)/mystery_fungames_diff_test
 $(BUILD)/mystery_fungames_diff_test: tests/mystery_fungames_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
