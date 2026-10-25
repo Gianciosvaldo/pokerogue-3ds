@@ -52,6 +52,11 @@ int main(void) {
   B.enemy_slide=0;draw_trainers();near(px,228);near(py,80);
   strcpy(B.setup.trainer_keys[1],"images/trainer/rival_f");before=draws;draw_trainers();
   assert(draws==before+2);near(px,256);
+  /* BEV_TRAINER_SHOW: the defeated trainer comes back from 16 px up and right, and sits on the platform once it is over */
+  B.setup.trainer_keys[1][0]=0;
+  B.trainer_show_ms=1;draw_trainers();assert(fabsf(px-244)<.1f&&fabsf(py-64)<.1f);
+  B.trainer_show_ms=375;draw_trainers();near(px,228+16*(1-ease(EASE_CUBIC_OUT,.5f)));near(py,80-16*(1-ease(EASE_CUBIC_OUT,.5f)));
+  B.trainer_show_ms=0;draw_trainers();near(px,228);near(py,80);
   B.trainer_visible=false;before=draws;draw_trainers();assert(draws==before);
   puts("trainer render: player poses, opening ball flight and trainer visibility passed");
   return 0;

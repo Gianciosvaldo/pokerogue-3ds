@@ -9,6 +9,8 @@
 #include <string.h>
 
 #include "battle_anim.h"
+#include "char_sprite.h"
+#include "dialogue_view.h"
 #include "field_border.h"
 #include "gm_enum_names.h"
 #include "i18n.h"
@@ -22,6 +24,7 @@
 
 #define EV_MAX 160
 #define EV_TEXT 256
+#define BV_DLG_MAX 2 /* dialogues one chunk of events can hold */
 
 /* ------------------------------------------------------------------ state */
 
@@ -140,7 +143,17 @@ static struct {
   bool info_on;
   char info_name[64], info_desc[512];
   bool trainer_visible;
+  float trainer_show_ms; /* BEV_TRAINER_SHOW: ms into the defeated trainer's slide back in, 0 = not sliding */
   bool player_trainer_visible, opening_summon;
+  /* BEV_DIALOGUE: the talk's copies of its strings (one per event of a chunk), the darkening of the field behind the portrait
+   * (upstream's fieldOverlay) and the name box that sits on the message window while someone talks */
+  char dlg_text[BV_DLG_MAX][BV_DIALOGUE_TEXT];
+  char dlg_name[BV_DLG_MAX][48];
+  char dlg_atlas[BV_DLG_MAX][64];
+  int n_dlg;
+  float overlay;
+  tween overlay_tw;
+  const char* speaker;   /* the name box's text while someone talks, NULL = hidden */
   float player_throw_ms; /* -1 before the opening SummonPhase */
   bool has_balls;
   uint8_t balls[6]; /* the party tray: BV_BALL_* of each slot */
@@ -463,7 +476,12 @@ static void draw_trainers(void) {
     if (!frame) continue;
     rr_draw_opts o=RR_DEFAULT_OPTS;o.origin_x=0.5f;o.origin_y=1;
     float x=228+B.enemy_slide+(pair?(k?28:-4):0);
-    rr_draw(frame,x,80,&o);
+    float y=80;
+    if (B.trainer_show_ms>0) { /* BEV_TRAINER_SHOW: in from 16 px up and right */
+      float k=1-ease(EASE_CUBIC_OUT,B.trainer_show_ms/750);
+      x+=16*k;y-=16*k;
+    }
+    rr_draw(frame,x,y,&o);
   }
 }
 
@@ -1000,6 +1018,10 @@ static void draw_bottom(bool top) {
     draw_item_text(B.info_name, B.info_desc, top);
   } else {
     msgbox_draw(&B.msg, top ? 12 - TOP_PAD : 12, -39);
+    if (B.speaker && B.mode == M_EVENTS) { /* showNameText: (12, -55) over the message window */
+      if (top) dv_namebox_at(RR_TOP, 40, 210, 12 - TOP_PAD, -55, B.speaker, ui_window_style());
+      else dv_namebox_at(RR_BOTTOM, 0, 240, 12, -55, B.speaker, ui_window_style());
+    }
   }
   if (cmd_shown() && B.has_balls && !info) draw_party_tray();
   if(!top)draw_level_stats();
@@ -1318,6 +1340,13 @@ static bool catch_anim(side* sd, const bv_event* e, float t) {
   return false;
 }
 
+/* getCharVariantFromDialogue: the first @c{expression} of a dialogue, "neutral" without one */
+static void first_variant(const char* text, char* out, size_t n) {
+  const char* c = text ? strstr(text, "@c{") : NULL;
+  const char* end = c ? strchr(c + 3, '}') : NULL;
+  snprintf(out, n, "%.*s", end ? (int)(end - (c + 3)) : 7, end ? c + 3 : "neutral");
+}
+
 static void run_event(float dt) {
   bv_event* e = &B.ev[B.cur];
   side* sd = side_of(e->battler);
@@ -1334,6 +1363,76 @@ static void run_event(float dt) {
         B.step = 1;
       }
       if (msgbox_done(&B.msg)) finish_event();
+      break;
+
+    case BEV_DIALOGUE: {
+      /* EncounterPhase / TrainerVictoryPhase: with a portrait, showFieldOverlay(500), the portrait slides in (750), the dialogue is read
+       * a page at a time, the portrait goes out (750) and hideFieldOverlay(250); without one, the dialogue alone */
+      const bool portrait = e->atlas != NULL;
+      if (B.step == 0) {
+        B.speaker = NULL;
+        if (portrait) {
+          tween_start(&B.overlay_tw, B.overlay, 0.5f, 500, EASE_SINE_OUT);
+          B.step = 1;
+        } else {
+          B.step = 3;
+        }
+      }
+      if (B.step == 1) {
+        tween_update(&B.overlay_tw, dt);
+        B.overlay = B.overlay_tw.value;
+        if (tween_done(&B.overlay_tw)) {
+          char variant[32];
+          first_variant(e->text, variant, sizeof variant);
+          chs_show(e->atlas, variant); /* showCharacter(...).then(showDialogue) */
+          B.step = 2;
+        }
+      }
+      if (B.step == 2 && !chs_busy()) B.step = 3;
+      if (B.step == 3) {
+        B.speaker = e->name && *e->name ? e->name : NULL;
+        msgbox_show(&B.msg, e->text ? e->text : "", -1, true);
+        B.msg.wait_ms = 0;
+        B.step = 4;
+      }
+      if (B.step == 4) {
+        const char* v = msgbox_take_variant(&B.msg); /* MessageUiHandler: charSprite.setVariant when the typing passes @c{} */
+        if (v && portrait) chs_set_variant(v);
+        if (msgbox_done(&B.msg)) {
+          B.speaker = NULL; /* hideNameText */
+          if (!portrait) {
+            finish_event();
+            break;
+          }
+          chs_hide();
+          B.step = 5;
+        }
+      }
+      if (B.step == 5 && !chs_busy()) {
+        chs_reset();
+        tween_start(&B.overlay_tw, B.overlay, 0, 250, EASE_CUBIC_IN);
+        B.step = 6;
+      }
+      if (B.step == 6) {
+        tween_update(&B.overlay_tw, dt);
+        B.overlay = B.overlay_tw.value;
+        if (tween_done(&B.overlay_tw)) finish_event();
+      }
+      break;
+    }
+
+    case BEV_TRAINER_SHOW:
+      /* showEnemyTrainer: the sprite is back on the platform and moves in from 16 px up and right, fading in, over 750 ms */
+      if (B.step == 0) {
+        B.trainer_visible = B.setup.trainer;
+        B.trainer_show_ms = 1;
+        B.step = 1;
+      }
+      B.trainer_show_ms += dt;
+      if (B.trainer_show_ms >= 750) {
+        B.trainer_show_ms = 0;
+        finish_event();
+      }
       break;
 
     case BEV_IVS:
@@ -1389,6 +1488,11 @@ static void run_event(float dt) {
         B.arena_enemy_x = -280 + B.tw.value;
         if (B.arena_old_on) B.arena_old_x = 20 + B.tw.value;
         B.enemy_slide = -300 + B.tw.value;
+        if (tween_done(&B.tw) && trainer && e->b == 1) {
+          B.arena_old_on = false; /* the dialogue and the message are events of their own */
+          finish_event();
+          break;
+        }
         if (tween_done(&B.tw)) {
           B.arena_old_on = false;
           side* en = &B.s[1];
@@ -1915,6 +2019,7 @@ static void bv_update(ui_screen* s, float dt) {
     if (B.player_throw_ms>=1000) B.player_trainer_visible=false;
   }
   msgbox_update(&B.msg, dt);
+  chs_update(dt);
   if (B.ability_t > 0) B.ability_t -= dt;
   if (B.reason_ms > 0) B.reason_ms -= dt;
   if (!tween_done(&B.field_tw)) {
@@ -1986,7 +2091,11 @@ static void bv_release(ui_screen *s,ui_button b){
 static void bv_draw(ui_screen* s, rr_screen which) {
   (void)s;
   if (which == RR_TOP) {
-    if (ui_space(UI_FIELD)) draw_field();
+    if (ui_space(UI_FIELD)) {
+      draw_field();
+      if (B.overlay > 0) rr_rect(0, 0, 320, 132, RR_RGBA(0x42, 0x42, 0x42, (int)(B.overlay * 255)));
+      chs_draw();
+    }
     if (ui_space(UI_PHYS_TOP)) draw_border();
     if (ui_space(UI_FIELD_UI)) {
       draw_enemy_info(&B.s[1]);
@@ -2041,6 +2150,7 @@ void bv_begin(const bv_setup* setup) {
   int selected_bar=B.bar;
   memset(&B, 0, sizeof B);
   B.bar=selected_bar;B.bar_sel=-1;
+  chs_reset();
   B.setup = *setup;
   gm_enum_lower(GM_E_BIOME_ID, setup->biome, B.biome, sizeof B.biome);
   set_mon(&B.s[0], &setup->player, true);
@@ -2073,8 +2183,26 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
   B.cur = 0;
   B.step = 0;
   B.t = 0;
+  B.n_dlg = 0;
   for (int i = 0; i < n && i < EV_MAX; i++) {
     B.ev[i] = ev[i];
+    if (ev[i].type == BEV_DIALOGUE) {
+      /* a talk is longer than a message: its own, bigger buffers */
+      if (B.n_dlg >= BV_DLG_MAX) { /* more talks than one chunk keeps: this one is skipped, the queue keeps its places */
+        B.ev[i] = (bv_event){.type = BEV_WAIT, .battler = -1};
+        B.n_ev++;
+        continue;
+      }
+      const int d = B.n_dlg++;
+      snprintf(B.dlg_text[d], sizeof B.dlg_text[d], "%s", ev[i].text ? ev[i].text : "");
+      snprintf(B.dlg_name[d], sizeof B.dlg_name[d], "%s", ev[i].name ? ev[i].name : "");
+      snprintf(B.dlg_atlas[d], sizeof B.dlg_atlas[d], "%s", ev[i].atlas ? ev[i].atlas : "");
+      B.ev[i].text = B.dlg_text[d];
+      B.ev[i].name = B.dlg_name[d];
+      B.ev[i].atlas = B.dlg_atlas[d][0] ? B.dlg_atlas[d] : NULL;
+      B.n_ev++;
+      continue;
+    }
     if (ev[i].text) {
       snprintf(B.ev_text[i], EV_TEXT, "%s", ev[i].text);
       B.ev[i].text = B.ev_text[i];

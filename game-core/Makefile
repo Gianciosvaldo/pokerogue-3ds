@@ -59,6 +59,13 @@ $(BUILD)/multi_diff_test: tests/multi_diff_test.c $(BATTLE_CORE)/tests/multi-len
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/multi_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -Wl,--wrap=pr_apply_multi_hit_count_modifiers -Wl,--wrap=pr_apply_multi_hit_damage_modifiers -lm -o $@
 $(BUILD)/multi_host_test: tests/multi_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -Wl,--wrap=pr_apply_multi_hit_count_modifiers -lm -o $@
+test: rival-dialogue-host-test
+rival-dialogue-host-test: $(BUILD)/rival_dialogue_host_test
+	$(BUILD)/rival_dialogue_host_test
+$(BUILD)/rival_dialogue_host_test: tests/rival_dialogue_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: rival-dialogue-host-test
+
 test: multi-host-test
 multi-host-test: $(BUILD)/multi_host_test
 	$(BUILD)/multi_host_test

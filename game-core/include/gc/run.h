@@ -60,6 +60,11 @@ typedef enum {
     GC_EV_SAVE_POINT,    /* the run has reached upstream's save point (the start of an encounter): a good
                           * moment for the app to call gc_run_save and write the buffer */
     GC_EV_EGG_HATCH,     /* presentation only: a species, b form, c gender; appearance below */
+    GC_EV_DIALOGUE,      /* a trainer speaks (TrainerConfig dialogue): a = TrainerType, b = TrainerVariant, c = 0 before the fight
+                          * (EncounterPhase, after the trainer slides in and before "X would like to battle!"), 1 after it is won
+                          * (TrainerVictoryPhase, after "X was defeated!"). msg.key is the line's locale key; the text keeps its
+                          * @c{expression} markers, @d{delay} and "$" page breaks. The app shows it with the trainer's name and,
+                          * where gc_trainer_config.has_char_sprite, the trainer's portrait */
     GC_EV_COUNT,
 } gc_event_kind;
 
@@ -436,6 +441,10 @@ extern const uint16_t gc_default_starters[];           /* defaultStarterSpecies 
 extern const int gc_default_starter_count;
 
 /* ---- helpers the app may use ---- */
+/* The line the trainer of this battle says (TrainerConfig dialogue): `kind` 0 = getEncounterMessages, 1 = getVictoryMessages. Upstream picks
+ * randSeedItem(messages) under executeWithSeedOffset(wave), so the choice is the wave's and costs the run no roll. The locale key (static
+ * storage), or NULL when the trainer says nothing */
+const char *gc_trainer_dialogue_key(const gc_run *run, int kind);
 const gc_mon *gc_field_mon(const gc_run *run, int side);   /* the Pokemon on the field (singles), or NULL */
 double gc_exp_to_next_level(const gc_mon *m);             /* for the EXP bar: exp still needed, 0 at the cap */
 double gc_exp_level_fraction(const gc_mon *m);            /* 0..1 of the way through the current level */
