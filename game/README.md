@@ -411,3 +411,5 @@ The ARM main thread reserves 512 KiB explicitly through libctru's startup stack
 override. The real-command guard-page regression and built-ELF checks are described
 in [STACK-CRASH-VALIDATION.md](STACK-CRASH-VALIDATION.md). Keep these checks when
 changing startup or the Windows builder payload.
+
+- **Field zoom**: the top screen is 400x240 around upstream's 320x180 field, so `battle_view.c` draws the field container (platforms, Pokemon, trainers, animations) `FIELD_ZOOM` = 1.2 times bigger about the arena's bottom centre (1.1 in doubles), under which the border is drawn first so it reaches the screen's edges. In doubles the foes stand 36 and 44 px higher so the player's two 42 px boxes no longer cover them (`battle_stat_panels_test` checks it). Both constants were chosen without a screenshot: tune them on the console.

@@ -345,7 +345,7 @@ static int foot_gap(const side* sd) {
 static void mon_pos(const side* sd, bool player, float* x, float* y) {
   *x = (player ? 106 : 236 + B.enemy_slide) + sd->sub_off * (player ? -30 : 30);
   *y = (player ? PLAYER_Y : 84) + sd->sub_off * (player ? 10 : -10) + sd->catch_dy + foot_gap(sd) * sd->scale;
-  if(B.setup.doubles){bool right=field_of(sd)%2!=0;*x+=right?32:-32;*y+=right?0:-8;}
+  if(B.setup.doubles){bool right=field_of(sd)%2!=0;*x+=right?32:-32;*y+=player?(right?0:-8):(right?-36:-44);} /* doubles: the foes stand above the player's boxes (field y 43 and up), which are 42 px tall */
 }
 
 /* The doll ("pkmn__sub" / "pkmn__back__sub", origin (0.5, 1), half size on the player's side) at
@@ -463,7 +463,12 @@ static void update_field_scale(bool instant) {
   if (instant) B.field_scale = target;
 }
 
-static void field_zoom(bool on) { rr_set_zoom(on ? B.field_scale : 1, 160, 132); }
+/* The top screen is 400x240 around upstream's 320x180 field, so the field container (platforms, Pokemon, animations) is drawn FIELD_ZOOM times
+ * bigger about the arena's bottom centre: at 1.25 the ground reaches the screen's side edges. 1.2 keeps a tall front sprite (96 px cells) in
+ * the screen. The G-Max zoom-out (field_scale) comes on top of it. */
+#define FIELD_ZOOM 1.2f
+#define FIELD_ZOOM_DOUBLES 1.1f /* two foes and two boxes share the screen, so less */
+static void field_zoom(bool on) { rr_set_zoom(on ? B.field_scale * (B.setup.doubles ? FIELD_ZOOM_DOUBLES : FIELD_ZOOM) : 1, 160, 132); }
 
 /* Trainer starts at (-72,80) and slides +300 with the enemy platform. Paired
  * trainers use the native -4/+28 offsets; double-only art is one sprite. */
@@ -2091,15 +2096,14 @@ static void bv_release(ui_screen *s,ui_button b){
 static void bv_draw(ui_screen* s, rr_screen which) {
   (void)s;
   if (which == RR_TOP) {
-    /* while an animation plays, its background and graphics run across the border: the border goes under the field */
-    const bool wide = ba_active();
-    if (wide && ui_space(UI_PHYS_TOP)) draw_border();
+    /* the field's Pokemon, platforms and animations are drawn bigger than upstream's 320x180 field (FIELD_ZOOM) and run across the
+     * border, so the border goes under the field */
+    if (ui_space(UI_PHYS_TOP)) draw_border();
     if (ui_space(UI_FIELD)) {
       draw_field();
       if (B.overlay > 0) rr_rect(0, 0, 320, 132, RR_RGBA(0x42, 0x42, 0x42, (int)(B.overlay * 255)));
       chs_draw();
     }
-    if (!wide && ui_space(UI_PHYS_TOP)) draw_border();
     if (ui_space(UI_FIELD_UI)) {
       draw_enemy_info(&B.s[1]);
       draw_player_info(&B.s[0]);
