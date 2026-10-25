@@ -4,6 +4,7 @@
  * unported so a differential test never silently passes on missing logic. */
 #include "pr/battle.h"
 #include <stdio.h>
+#include <math.h>
 
 void pr_note_unported(pr_battle *bt, uint16_t cls)
 {
@@ -66,6 +67,19 @@ int32_t pr_battle_rand_seed_int(pr_battle *bt, int32_t range, int32_t min)
         bt->battle_rng_live = true;
     }
     return pr_rng_seed_int(&bt->battle_rng, range, min);
+}
+
+/* Same source owner for Number-sized ranges. In particular, Infinity still
+ * consumes a frac; zero * Infinity becomes NaN, just as in Phaser's arithmetic. */
+double pr_battle_rand_seed_number(pr_battle *bt,double range,double min)
+{
+    if(range<=1)return min;
+    if(!bt->battle_rng_live){
+        pr_seedstr seed;pr_seed_shift(&seed,&bt->battle_seed,bt->turn<<6);
+        pr_rng_sow(&bt->battle_rng,&seed);bt->battle_rng_live=true;
+    }
+    double max=range-1+min;
+    return floor(pr_rng_real_in_range(&bt->battle_rng,0,max-min+1)+min);
 }
 
 /* Wave ability history is maintained by the real ability dispatcher and cleared

@@ -148,6 +148,7 @@ static const sfield pokemon_fields[] = {
 };
 static const sfield history_used_fields[]={SF(pr_pokemon,history_used_moves),SF(pr_pokemon,history_used_complete)};
 static const sfield history_last_fields[]={SF(pr_pokemon,history_last_known),SF(pr_pokemon,history_last_present),SF(pr_pokemon,history_serial),SF(pr_pokemon,history_last_serial)};
+static const sfield protect_history_fields[]={SF(pr_pokemon,history_protect_count),SF(pr_pokemon,history_protect_complete)};
 static const sfield tag_fields[] = {
     SF(pr_battler_tag, type), SF(pr_battler_tag, turn_count), SF(pr_battler_tag, source_move),
     SF(pr_battler_tag, source_id), SF(pr_battler_tag, crit_stages), SF(pr_battler_tag, stockpiled_count),
@@ -449,6 +450,10 @@ static void put_mons(writer *w, const char *name, const gc_mon *mons, int n)
     s=section_start(w,key);
     put_block(w,history_last_fields,NF(history_last_fields),&mons[0].b,sizeof(gc_mon),n);
     for(int i=0;i<n;i++)put_block(w,turn_move_fields,NF(turn_move_fields),mons[i].b.history_last,sizeof(pr_turn_move),4);
+    section_end(w,s);
+    snprintf(key,sizeof key,"%s_protect",name);
+    s=section_start(w,key);
+    put_block(w,protect_history_fields,NF(protect_history_fields),&mons[0].b,sizeof(gc_mon),n);
     section_end(w,s);
 }
 
@@ -760,6 +765,26 @@ static bool get_nonvirtual_history(const reader *body,const char *name,gc_mon *m
     return !r.bad&&r.pos==r.n;
 }
 
+static bool get_protect_history(const reader *body,const char *name,gc_mon *mons,int n,int *dropped)
+{
+    char key[48];snprintf(key,sizeof key,"%s_protect",name);
+    reader scan=*body;int sections=0;
+    while(scan.pos+8<=scan.n){uint32_t kind=take32(&scan),len=take32(&scan);if(len>scan.n-scan.pos)return false;if(kind==hash(key))sections++;scan.pos+=len;}
+    if(scan.bad||scan.pos!=scan.n||sections>1)return false;
+    if(!sections){for(int i=0;i<n;i++)pr_rebuild_protect_history(&mons[i].b);return true;}
+    reader r=section(body,key),schema=r;int count=take16(&schema);unsigned seen=0;
+    if(schema.bad||count!=NF(protect_history_fields))return false;
+    for(int i=0;i<count;i++){
+        uint32_t field=take32(&schema);uint16_t size=take16(&schema);int found=-1;
+        for(int j=0;j<NF(protect_history_fields);j++)if(field==hash(protect_history_fields[j].name)&&size==protect_history_fields[j].size)found=j;
+        if(found<0||(seen&(1u<<found)))return false;
+        seen|=1u<<found;
+    }
+    if(schema.bad||get_block(&r,protect_history_fields,NF(protect_history_fields),&mons[0].b,sizeof(gc_mon),n,dropped)!=n||r.bad||r.pos!=r.n)return false;
+    for(int i=0;i<n;i++){uint8_t complete;memcpy(&complete,&mons[i].b.history_protect_complete,1);if(complete>1)return false;}
+    return true;
+}
+
 static bool get_mons(const reader *body, const char *name, gc_mon *mons, int n, int *dropped)
 {
     reader r = section(body, name);
@@ -794,7 +819,7 @@ static bool get_mons(const reader *body, const char *name, gc_mon *mons, int n, 
         }
         if (r.bad || !mon_ok(&mons[i])) return false;
     }
-    return !r.bad&&get_history_used(body,name,mons,n,dropped)&&get_nonvirtual_history(body,name,mons,n,dropped);
+    return !r.bad&&get_history_used(body,name,mons,n,dropped)&&get_nonvirtual_history(body,name,mons,n,dropped)&&get_protect_history(body,name,mons,n,dropped);
 }
 
 static bool get_items(const reader *body, const char *name, gc_item *items, int n, int *dropped)
