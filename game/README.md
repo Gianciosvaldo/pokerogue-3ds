@@ -386,11 +386,12 @@ make -C game/tests animtest && game/tests/build/animtest path/to/pokerogue-asset
   egg and heal fanfares (upstream plays them over the music; `snd.c` has one music stream), the Classic final boss's second stage (not in
   game-core), Daily / Endless / Challenge music, and a volume or music-preference setting (the app plays at full volume and follows
   upstream's default preference, all generations). What starting a track costs on a real console (the SD reads) is not measured.
-- The starter select is the basic legal team only. Missing from it (each a task of its own, none faked): the filter bar and sort, the
+- The starter select is the basic legal team only. Missing from it (each a task of its own, none faked): the
   cycle buttons (shiny, form, gender, ability, nature, tera), IVs, moves, nature management, candy purchases, favourites, rename,
   the Pokedex page, egg moves, Pokerus, the tutorial, challenges, Daily and Endless. UP from the first row wraps (upstream goes to the
-  filter bar). A caught species that game-core refuses with its defaults (a prevolution reached through a form it can't have: Litleo
+  filter bar, which is a menu here: SELECT or the Filter button). A caught species that game-core refuses with its defaults (a prevolution reached through a form it can't have: Litleo
   after a female Pyroar) is not listed; see `starter_data.h`. Not measured: what writing `system.sav` costs on a real SD card.
+- **Starter filter and sort** (`starter_filter.c`, upstream's `filterStarters` / `sortStarterSpecies`): SELECT or the Filter button above the list opens a menu with generation, type (a species fits on either type), caught (shiny tiers, normal), passive, cost reduction, won, hidden ability, egg affordable, Pokerus, the seven sorts and their order, Reset. Added beyond upstream at lorenzo's request: a rarity filter (ordinary, sub-legendary, legendary, mythical). Not built: Uncaught (the list is caught species only) and Favourite (no favourites). A change applies at once, puts the cursor on the first species and keeps the team (a hidden member keeps its cost and icon). A column cannot be emptied. The rules are tested in `starter_data_test`, the menu in `starter_ui_test`, the model's list swap in `startertest`. Not drawn like upstream's bar (drop-downs): a plain options list.
 - Runs started from the starter select now carry system data, so a run updates the dex, candy, friendship and Classic win records
   (game-core's `gc_system_*` calls in the run). Runs already saved are not back-filled into the dex.
 - Around the save slots (not part of card 113): timed events, and any online or cloud save. ("Save and Quit", "Rename Run", the run history and the unlocks, vouchers and ribbons of a win are done: see above.)

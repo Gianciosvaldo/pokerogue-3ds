@@ -52,17 +52,23 @@ const sm_entry* sm_cell(const sm_model* m, int i) {
   return i >= 0 && i < SM_PAGE && k < m->n ? &m->entries[k] : NULL;
 }
 
-const sm_entry* sm_find(const sm_model* m, uint16_t species) {
-  int lo = 0, hi = m->n - 1;
+/* a list in species order */
+static const sm_entry* find_in(const sm_entry* list, int n, uint16_t species) {
+  int lo = 0, hi = n - 1;
   while (lo <= hi) {
     const int mid = (lo + hi) / 2;
-    if (m->entries[mid].species == species) return &m->entries[mid];
-    if (m->entries[mid].species < species)
+    if (list[mid].species == species) return &list[mid];
+    if (list[mid].species < species)
       lo = mid + 1;
     else
       hi = mid - 1;
   }
   return NULL;
+}
+
+const sm_entry* sm_find(const sm_model* m, uint16_t species) {
+  /* with a pool the list may be filtered and sorted (not in species order): the pool holds every species, in order */
+  return m->pool ? find_in(m->pool, m->n_pool, species) : find_in(m->entries, m->n, species);
 }
 
 /* setCursor (:2621) for the grid: clamped to the containers (and, as upstream's containers hide, to the species there are).
@@ -358,6 +364,20 @@ void sm_init(sm_model* m, const sm_entry* entries, int n, int budget, int (*rnd)
   m->focus = n > 0 ? SM_GRID : SM_RANDOM;
 }
 
+void sm_set_pool(sm_model* m, const sm_entry* pool, int n) {
+  m->pool = pool;
+  m->n_pool = n;
+}
+
+void sm_set_entries(sm_model* m, const sm_entry* entries, int n) {
+  m->entries = entries;
+  m->n = n;
+  m->scroll = 0;
+  m->cursor = 0;
+  m->shown = 0;
+  if (m->focus == SM_GRID && n == 0) m->focus = SM_RANDOM;
+}
+
 /* :2088 processInput */
 sm_result sm_input(sm_model* m, mui_button b) {
   sm_result r = SM_IGNORED;
@@ -372,6 +392,8 @@ sm_result sm_input(sm_model* m, mui_button b) {
     } else {
       r = SM_ASK_EXIT;
     }
+  } else if (b == MB_STATS) {
+    r = SM_FILTER;
   } else if (m->focus == SM_PARTY) {
     r = party_input(m, b);
   } else if (m->focus == SM_START) {

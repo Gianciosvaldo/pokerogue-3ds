@@ -122,6 +122,7 @@ void starter_open(const starter_args* args, const starter_events* ev) {
   S.ev = *ev;
   S.active = true;
   sm_init(&S.m, args->entries, args->n, args->budget, ev->rnd ? ev->rnd : default_rnd, ev->ctx);
+  if (args->pool) sm_set_pool(&S.m, args->pool, args->n_pool);
   S.sprite_wait = SPRITE_DELAY_MS;
   follow_cursor();
 }
@@ -230,6 +231,17 @@ static void menu_choose(int row) {
   if (S.menu.act[row] == 2 && S.ev.configure) S.ev.configure(S.ev.ctx,sp);
 }
 
+void starter_set_entries(const sm_entry* entries, int n) {
+  if (!S.active) return;
+  S.a.entries = entries;
+  S.a.n = n;
+  sm_set_entries(&S.m, entries, n);
+  S.info_species = 0;
+  follow_cursor();
+}
+
+const sm_model* starter_model(void) { return &S.m; }
+
 void starter_refresh(void) {
   S.info_species=0;
   follow_cursor();
@@ -279,6 +291,12 @@ bool starter_input(mui_button b) {
     case SM_ASK_EXIT:
       mui_sfx("ui/select");
       ask(ASK_EXIT, "starterSelectUiHandler:confirmExit");
+      break;
+    case SM_FILTER:
+      if (S.ev.filter) {
+        mui_sfx("ui/select");
+        S.ev.filter(S.ev.ctx);
+      }
       break;
     case SM_OK:
       if (b == MB_ACTION && S.m.focus == SM_RANDOM) {
@@ -345,7 +363,8 @@ static void draw_cell(int i, const sm_entry* e) {
     mui_image_ex("ui/passive_bg", NULL, x + SM_CELL_W / 2, y + SM_CELL_H / 2 + 1, &o);
   }
   draw_icon(e, x + SM_CELL_W / 2, y, 0.5f, 1.0f, sm_lit(&S.m, e) ? RR_RGBA(255, 255, 255, 255) : RR_RGBA(255, 255, 255, 96)); /* alpha 1 / 0.375 */
-  if(e->pokerus)mui_image("ui/select_cursor_pokerus",NULL,x-1,y+1,0,0);
+  /* upstream's 18 x 17 frame at (-1, +1) of the container; stretched (nine-slice) over the larger cell like the cursor */
+  if(e->pokerus)draw_nine("ui/select_cursor_pokerus",x-1,y+1,SM_CELL_W+1,SM_CELL_H,6);
   char t[16];
   sm_cost_text(t, sizeof t, e->cost);
   static const mui_style styles[3] = {TS_WINDOW, TS_SUMMARY_BLUE, TS_SUMMARY_GOLD};
@@ -610,11 +629,24 @@ static void draw_options_menu(void) {
   mui_image("ui/cursor", NULL, left + 10, top + 15 + S.menu.cursor * 16, 0.5f, 0.5f);
 }
 
+/* the filter bar's place (the strip above the list): one button that opens the filter and sort menu */
+#define FILTER_X 115
+#define FILTER_Y 2
+#define FILTER_W 80
+#define FILTER_H 16
+static void draw_filter_button(void) {
+  if (!S.ev.filter) return;
+  mui_window(FILTER_X, FILTER_Y, FILTER_W, FILTER_H);
+  const char* label = S.ev.filter_label ? S.ev.filter_label(S.ev.ctx) : NULL;
+  mui_text(TS_WINDOW, FILTER_X + 6, FILTER_Y + 2, label && *label ? label : "Filter");
+}
+
 void starter_draw(void) {
   if (!S.active) return;
   rr_rect(0, 0, MUI_W, MUI_H, RR_RGBA(0x00, 0x68, 0x60, 255)); /* bgColor 0x006860 */
   mui_image("ui/starter_select_bg", NULL, 0, 0, 0, 0);
   mui_image("ui/starter_container_bg", NULL, 110, 19, 0, 0);
+  draw_filter_button();
   draw_team_column();
   draw_grid();
   draw_panel();
@@ -667,6 +699,7 @@ bool starter_touch(float x, float y) {
     follow_cursor();
     return true;
   }
+  if (S.ev.filter && inside(x, y, FILTER_X, FILTER_Y, FILTER_W, FILTER_H)) return starter_input(MB_STATS);
   if (inside(x, y, TEAM_X, 38 - 20, 34, 20)) { /* the Randomize label's window */
     sm_point(&S.m, SM_RANDOM, 0);
     return starter_input(MB_ACTION);

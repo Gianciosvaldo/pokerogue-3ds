@@ -292,6 +292,7 @@ static void option_answer(int value) {
 bool sysd_save(void) {save_calls++;return !fail_save_call || save_calls!=fail_save_call;}
 void ui_play_select(void) {log_add(g_sfx,"ui/select");}
 void ui_play_error(void) {log_add(g_sfx,"ui/error");}
+const char* i18n_type_name(int t) {static char b[24];snprintf(b,sizeof b,"Type%d",t);return b;}
 const char* i18n_ability_name(int id) {static char b[40];snprintf(b,sizeof b,"Ability%d",id);return b;}
 const char* i18n_move_name(int id) {return id>0 && id<PR_MOVE_COUNT?pr_moves[id].name:"?";}
 
@@ -847,9 +848,64 @@ static void test_candy_cost_reductions(void){
   choose_option("Use candies");for(int i=0;i<g_option_count;i++)CHECK(!strstr(g_option_labels[i],"Reduce cost"),"no third purchase");
 }
 
+
+static void test_filter_menu(void) {
+  gc_system_init_defaults(&SYS);
+  CHECK(open_screen(NULL),"open the filter test");
+  const int all=starter_model()->n;
+  CHECK(all>=3,"a new save lists its starters (%d)",all);
+  draw();
+  CHECK(drawn("Filter"),"the Filter button is drawn");
+  CHECK(!g_option_cb,"no menu yet");
+  press(MB_STATS);
+  CHECK(g_option_cb!=NULL,"SELECT opens the filter menu");
+  choose_option("Type");
+  CHECK(g_option_cb!=NULL,"the type list");
+  for(int t=0;t<18;t++)if(t!=POKEMON_TYPE_FIRE) {
+    char name[24];snprintf(name,sizeof name,"] Type%d",t);
+    choose_option(name);
+  }
+  choose_option("Back");
+  CHECK(starter_model()->n>0&&starter_model()->n<all,"fire only: %d of %d",starter_model()->n,all);
+  for(int i=0;i<starter_model()->n;i++){
+    const pr_form* f=&pr_forms[menu_species(starter_model()->entries[i].species)->form0];
+    CHECK(f->type1==POKEMON_TYPE_FIRE||f->type2==POKEMON_TYPE_FIRE,"%d is fire",starter_model()->entries[i].species);
+  }
+  draw();
+  CHECK(drawn("Filter (1)"),"the button counts the active column");
+  press(MB_CANCEL);
+  CHECK(g_option_cb==NULL,"B closes the menu");
+  /* a team member the filter hides keeps its cost */
+  press(MB_STATS);choose_option("Reset");press(MB_CANCEL);
+  CHECK(starter_model()->n==all,"reset lists everything again");
+  press(MB_ACTION);press(MB_ACTION); /* the options menu, then Add to Party */
+  const double cost=sm_value(starter_model());
+  CHECK(cost>0&&starter_model()->n_party==1,"one on the team");
+  const uint16_t member=starter_model()->party[0];
+  press(MB_STATS);choose_option("Type");
+  {const pr_form* mf=&pr_forms[menu_species(member)->form0];
+   CHECK(mf->type1!=POKEMON_TYPE_FIRE&&mf->type2!=POKEMON_TYPE_FIRE,"the first starter is not fire");}
+  for(int t=0;t<18;t++)if(t!=POKEMON_TYPE_FIRE){char name[24];snprintf(name,sizeof name,"] Type%d",t);choose_option(name);}
+  choose_option("Back");
+  bool listed=false;
+  for(int i=0;i<starter_model()->n;i++)if(starter_model()->entries[i].species==member)listed=true;
+  CHECK(!listed,"the filter hides the team member from the list");
+  CHECK(starter_model()->n_party==1&&sm_value(starter_model())==cost&&sm_find(starter_model(),member),"but the team and its cost stay");
+  press(MB_STATS);choose_option("Sort by");choose_option("Sort by");
+  CHECK(starter_model()->n_party==1,"a sort keeps the team");
+  choose_option("Done");
+  CHECK(g_option_cb==NULL,"Done closes the menu");
+  /* a filter that would show nothing cannot be set: the last option of a column stays on */
+  press(MB_STATS);choose_option("Generation");
+  for(int g=1;g<=9;g++){char name[24];snprintf(name,sizeof name,"] Gen %d",g);choose_option(name);}
+  CHECK(starter_model()->n>0,"an empty column keeps its last option, the list is not empty");
+  choose_option("Back");choose_option("Done");
+}
+
 int main(int argc, char** argv) {
   const int sessions = argc > 1 ? atoi(argv[1]) : 200;
   test_candy_cost_reductions();
+  test_filter_menu();
   test_customization();
   test_no_hidden_ability_purchase();
   test_happy_path();

@@ -39,6 +39,9 @@ extern "C" {
  * game-core decides which of the two is right, such a species is not listed. */
 int ss_list(const gc_system* sys, sm_entry* out, int cap, int* refused);
 
+/* The species has Pokerus now (three are picked every three hours). */
+bool ss_has_pokerus(uint16_t species);
+
 /* The panel's data for `species`: how it would be picked. */
 void ss_describe(const gc_system* sys, uint16_t species, starter_info* out);
 

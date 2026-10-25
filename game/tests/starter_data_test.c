@@ -29,6 +29,7 @@ static bool rotating_carrier(uint16_t species){uint16_t ids[3];gc_pokerus_starte
 #include "pr_enums.h"
 #include "save.h"
 #include "starter_data.h"
+#include "starter_filter.h"
 #include "system_data.h"
 
 static int checks, failed;
@@ -464,6 +465,199 @@ static void test_pokerus_rotation(void){
  }
  starter_clock=1792627200;
 }
+
+/* ------------------------------------------------------------------ the filter and sort (source/starter_filter.c) */
+
+static gc_system FS;
+static sm_entry g_all[SS_MAX_ENTRIES], g_out[SS_MAX_ENTRIES];
+
+static int apply(const ssf* f) {
+  const int n_all = ss_list(&FS, g_all, SS_MAX_ENTRIES, NULL);
+  return ssf_apply(&FS, f, g_all, n_all, g_out);
+}
+static bool in_out(int n, uint16_t species) {
+  for (int i = 0; i < n; i++)
+    if (g_out[i].species == species) return true;
+  return false;
+}
+static int type_has(uint16_t species, int t) {
+  const pr_species* sp = menu_species(species);
+  const pr_form* f = &pr_forms[sp->form0];
+  return f->type1 == t || f->type2 == t;
+}
+
+static void test_filter(void) {
+  unlock_all(&FS);
+  ssf f;
+  ssf_reset(&f);
+  const int n_all = ss_list(&FS, g_all, SS_MAX_ENTRIES, NULL);
+  CHECK(n_all > 100 && ssf_active(&f) == 0, "a full dex lists %d species and the default filter is no filter", n_all);
+  CHECK(apply(&f) == n_all, "the default filter keeps every species");
+
+  /* generation */
+  f.gens = 1u << 0;
+  int n = apply(&f);
+  bool all_gen1 = n > 0 && n < n_all, none_missed = true;
+  for (int i = 0; i < n; i++) all_gen1 = all_gen1 && menu_species(g_out[i].species)->generation == 1;
+  for (int i = 0; i < n_all; i++)
+    if (menu_species(g_all[i].species)->generation == 1 && !in_out(n, g_all[i].species)) none_missed = false;
+  CHECK(all_gen1 && none_missed && in_out(n, 1) && !in_out(n, 152), "generation 1 only: %d species, Bulbasaur in, Chikorita out", n);
+  CHECK(ssf_active(&f) == 1, "one column changed");
+  f.gens = (1u << 0) | (1u << 1);
+  CHECK(in_out(apply(&f), 152), "generations 1 and 2 keep Chikorita");
+  f.gens = SSF_GENS_ALL;
+
+  /* type: either slot counts */
+  f.types = 1u << POKEMON_TYPE_FIRE;
+  n = apply(&f);
+  bool fire = n > 0;
+  for (int i = 0; i < n; i++) fire = fire && type_has(g_out[i].species, POKEMON_TYPE_FIRE);
+  for (int i = 0; i < n_all; i++)
+    if (type_has(g_all[i].species, POKEMON_TYPE_FIRE) && !in_out(n, g_all[i].species)) fire = false;
+  CHECK(fire && in_out(n, 4) && !in_out(n, 1), "fire only: %d species, Charmander in, Bulbasaur out", n);
+  f.types = (1u << POKEMON_TYPE_GRASS);
+  CHECK(in_out(apply(&f), 1), "Bulbasaur is grass (its first type)");
+  f.types = (1u << POKEMON_TYPE_POISON);
+  CHECK(in_out(apply(&f), 1), "and poison (its second)");
+  f.types = SSF_TYPES_ALL;
+
+  /* rarity (beyond upstream) */
+  f.rarity = SSF_R_LEGENDARY;
+  n = apply(&f);
+  bool leg = n > 0;
+  for (int i = 0; i < n; i++) leg = leg && menu_species(g_out[i].species)->rarity == 2;
+  CHECK(leg && in_out(n, 150), "legendary only: %d species, Mewtwo in", n);
+  f.rarity = SSF_R_MYTHICAL;
+  CHECK(in_out(apply(&f), 251) && !in_out(n, 1), "mythical only has Celebi");
+  f.rarity = SSF_R_ORDINARY;
+  n = apply(&f);
+  CHECK(in_out(n, 1) && !in_out(n, 150) && !in_out(n, 251), "ordinary only has Bulbasaur, not Mewtwo or Celebi");
+  f.rarity = SSF_R_ALL;
+
+  /* caught: the highest tier caught decides */
+  const uint64_t base = 128ull; /* form 0 */
+  FS.dex[4].caught_attr = base | 1ull;                          /* normal only */
+  FS.dex[7].caught_attr = base | 1ull | 2ull | 16ull;           /* normal + shiny tier 1 */
+  FS.dex[25].caught_attr = base | 2ull | 16ull | 32ull;         /* shiny tiers 1 and 2 */
+  FS.dex[1].caught_attr = base | 2ull | 16ull | 32ull | 64ull;  /* all three tiers */
+  f.caught = SSF_C_NORMAL;
+  CHECK(ssf_fits(&FS, &f, 4) && !ssf_fits(&FS, &f, 7) && !ssf_fits(&FS, &f, 25) && !ssf_fits(&FS, &f, 1), "Normal: only a plain catch");
+  f.caught = SSF_C_SHINY1;
+  CHECK(!ssf_fits(&FS, &f, 4) && ssf_fits(&FS, &f, 7) && !ssf_fits(&FS, &f, 25) && !ssf_fits(&FS, &f, 1), "Shiny: tier 1 as the best");
+  f.caught = SSF_C_SHINY2;
+  CHECK(ssf_fits(&FS, &f, 25) && !ssf_fits(&FS, &f, 7) && !ssf_fits(&FS, &f, 1), "Rare shiny: tier 2 as the best");
+  f.caught = SSF_C_SHINY3;
+  CHECK(ssf_fits(&FS, &f, 1) && !ssf_fits(&FS, &f, 25), "Epic shiny: tier 3");
+  f.caught = SSF_C_SHINY3 | SSF_C_NORMAL;
+  CHECK(ssf_fits(&FS, &f, 1) && ssf_fits(&FS, &f, 4) && !ssf_fits(&FS, &f, 7), "two tiers together");
+  f.caught = SSF_C_ALL;
+
+  /* unlocks and misc, on species with known data */
+  unlock_all(&FS);
+  for (int i = 0; i < gc_starter_cost_count; i++) {
+    const uint16_t id = gc_starter_costs[i].id;
+    FS.starters[id].passive_attr = 0;
+    FS.starters[id].value_reduction = 0;
+    FS.starters[id].candy_count = 0;
+    FS.starters[id].classic_win_count = 0;
+    FS.starters[id].ability_attr = 3;
+  }
+  FS.starters[4].passive_attr = 3;
+  FS.starters[7].value_reduction = 1;
+  FS.starters[25].value_reduction = 2;
+  FS.starters[1].classic_win_count = 2;
+  FS.starters[1].ability_attr = 7;
+  f.passive = SSF_ON;
+  CHECK(ssf_fits(&FS, &f, 4) && !ssf_fits(&FS, &f, 7), "passive unlocked");
+  f.passive = SSF_UNLOCKABLE;
+  CHECK(!ssf_fits(&FS, &f, 7), "no candies: the passive is not unlockable");
+  FS.starters[7].candy_count = 1000;
+  CHECK(ssf_fits(&FS, &f, 7) && !ssf_fits(&FS, &f, 4), "with candies it is, unless it is already unlocked");
+  f.passive = SSF_OFF;
+  f.reduction = SSF_ONE;
+  CHECK(ssf_fits(&FS, &f, 7) && !ssf_fits(&FS, &f, 25) && !ssf_fits(&FS, &f, 4), "bought once");
+  f.reduction = SSF_TWO;
+  CHECK(ssf_fits(&FS, &f, 25) && !ssf_fits(&FS, &f, 7), "bought twice");
+  f.reduction = SSF_ON;
+  CHECK(ssf_fits(&FS, &f, 25) && ssf_fits(&FS, &f, 7) && !ssf_fits(&FS, &f, 4), "bought at all");
+  f.reduction = SSF_UNLOCKABLE;
+  CHECK(ssf_fits(&FS, &f, 7) == (gc_system_starter_reduction_cost(&FS, 7) >= 0 && 1000 >= gc_system_starter_reduction_cost(&FS, 7)), "reduction unlockable follows game-core's price");
+  CHECK(!ssf_fits(&FS, &f, 25), "nothing left to buy after two");
+  f.reduction = SSF_OFF;
+  f.win = SSF_ON;
+  CHECK(ssf_fits(&FS, &f, 1) && !ssf_fits(&FS, &f, 4), "has won");
+  f.win = SSF_EXCLUDE;
+  CHECK(!ssf_fits(&FS, &f, 1) && ssf_fits(&FS, &f, 4), "has not won");
+  f.win = SSF_OFF;
+  f.hidden_ability = SSF_ON;
+  CHECK(ssf_fits(&FS, &f, 1) && !ssf_fits(&FS, &f, 4), "hidden ability unlocked");
+  f.hidden_ability = SSF_EXCLUDE;
+  CHECK(!ssf_fits(&FS, &f, 1) && ssf_fits(&FS, &f, 4), "hidden ability available but not unlocked");
+  f.hidden_ability = SSF_OFF;
+  f.egg = SSF_ON;
+  CHECK(ssf_fits(&FS, &f, 7) && !ssf_fits(&FS, &f, 4), "an egg of its own species can be bought (1000 candies against none)");
+  f.egg = SSF_OFF;
+  starter_clock += 0;
+  uint16_t carriers[3];
+  gc_pokerus_starters((uint64_t)starter_clock * 1000, carriers);
+  f.pokerus = SSF_ON;
+  CHECK(ssf_fits(&FS, &f, carriers[0]) && !ssf_fits(&FS, &f, carriers[0] == 4 ? 7 : 4), "Pokerus carriers");
+  f.pokerus = SSF_EXCLUDE;
+  CHECK(!ssf_fits(&FS, &f, carriers[0]), "and without it");
+
+  /* sort */
+  unlock_all(&FS);
+  for (int i = 0; i < gc_starter_cost_count; i++) {
+    const uint16_t id = gc_starter_costs[i].id;
+    FS.starters[id].candy_count = (int32_t)rnd(500);
+    FS.dex[id].caught_count = rnd(300);
+    FS.dex[id].hatched_count = rnd(300);
+  }
+  ssf_reset(&f);
+  const int total = ss_list(&FS, g_all, SS_MAX_ENTRIES, NULL);
+  for (int dir = 0; dir < 2; dir++) {
+    f.descending = dir;
+    for (int sort = 0; sort < SSF_SORT_COUNT; sort++) {
+      f.sort = (uint8_t)sort;
+      n = apply(&f);
+      bool ordered = n == total;
+      for (int i = 1; i < n && ordered; i++) {
+        const uint16_t a = g_out[i - 1].species, b = g_out[i].species;
+        double ka = 0, kb = 0;
+        switch (sort) {
+          case SSF_SORT_NUMBER: ka = a; kb = b; break;
+          case SSF_SORT_COST: ka = g_out[i - 1].cost; kb = g_out[i].cost; break;
+          case SSF_SORT_CANDY: ka = FS.starters[a].candy_count; kb = FS.starters[b].candy_count; break;
+          case SSF_SORT_IV: {
+            for (int k = 0; k < 6; k++) { ka += FS.dex[a].ivs[k]; kb += FS.dex[b].ivs[k]; }
+            break;
+          }
+          case SSF_SORT_NAME: {
+            char na[64];
+            snprintf(na, sizeof na, "%s", i18n_species_name(a));
+            ka = strcmp(na, i18n_species_name(b)) < 0 ? 0 : strcmp(na, i18n_species_name(b)) > 0 ? 1 : 0.5;
+            kb = 0.5; /* 0 = a before b, 1 = after */
+            ordered = ordered && (dir ? ka >= 0.5 : ka <= 0.5);
+            continue;
+          }
+          case SSF_SORT_CAUGHT: ka = FS.dex[a].caught_count; kb = FS.dex[b].caught_count; break;
+          case SSF_SORT_HATCHED: ka = FS.dex[a].hatched_count; kb = FS.dex[b].hatched_count; break;
+        }
+        if (dir ? ka < kb : ka > kb) ordered = false;
+        if (ka == kb && a > b) ordered = false; /* ties: species number, ascending */
+      }
+      CHECK(ordered, "sort %d, %s: %d species in order", sort, dir ? "descending" : "ascending", n);
+    }
+  }
+  f.sort = SSF_SORT_NUMBER;
+  f.descending = true;
+  apply(&f);
+  CHECK(g_out[0].species > g_out[1].species, "number, descending: the last species first");
+  CHECK(ssf_active(&f) == 1, "the order counts as one column");
+  ssf_reset(&f);
+  CHECK(ssf_active(&f) == 0, "reset");
+}
+
 int main(int argc, char** argv) {
   const int systems = argc > 1 ? atoi(argv[1]) : 300;
   char dir[64] = "/tmp/starter-data-test-XXXXXX";
@@ -477,6 +671,7 @@ int main(int argc, char** argv) {
   test_everything_unlocked();
   test_prevolution_without_form_bit();
   test_random_systems(systems);
+  test_filter();
 
   printf("%d checks, %d failed\n", checks, failed);
   printf(failed ? "FAILED\n" : "OK\n");

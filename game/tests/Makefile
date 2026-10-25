@@ -173,7 +173,7 @@ startertest: build/startertest build/startertest_upstream
 # the starter select's data (starter_data.c) and the system data on the SD card (system_data.c) over real game-core and the real
 # save.c; make starter_data_test && build/starter_data_test [random systems]
 CORE_SRCS := $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
-SDATA_SRCS := starter_data_test.c ../source/starter_data.c ../source/system_data.c ../menus/menus_data.c $(APP)/source/save.c $(CORE_SRCS)
+SDATA_SRCS := starter_data_test.c ../source/starter_data.c ../source/starter_filter.c ../source/system_data.c ../menus/menus_data.c $(APP)/source/save.c $(CORE_SRCS)
 build/starter_data_test: $(SDATA_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(SDATA_SRCS) -lm -o $@
@@ -182,7 +182,7 @@ starter_data_test: build/starter_data_test
 
 # the starter select screen itself (menus/starter.c, the host and the data) with a fake drawing layer, over real game-core;
 # make starter_ui_test && build/starter_ui_test [fuzz sessions]
-SUI_SRCS := starter_ui_test.c ../menus/starter.c ../menus/starter_model.c ../menus/menus_data.c ../menus/menus_names.c ../menus/move_names.c ../source/starter_host.c ../source/starter_data.c $(CORE_SRCS)
+SUI_SRCS := starter_ui_test.c ../menus/starter.c ../menus/starter_model.c ../menus/menus_data.c ../menus/menus_names.c ../menus/move_names.c ../source/starter_host.c ../source/starter_filter.c ../source/starter_data.c $(CORE_SRCS)
 build/starter_ui_test: $(SUI_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(SUI_SRCS) -lm -o $@
