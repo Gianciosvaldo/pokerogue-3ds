@@ -229,3 +229,45 @@ bool pr_are_allies(int a, int b)
     if (a == -1 || b == -1) return false;
     return (a == 0 || a == 1) == (b == 0 || b == 1);
 }
+
+/* FaintPhase's ordered logs have two consumers: newest turn (Retaliate),
+ * and encounter membership (trainer instant Tera). Repeated revivals do not
+ * consume new identities within the current six-member party contract. */
+static void remember_fainted_id(pr_battle *bt,int side,uint32_t id)
+{
+    for(int i=0;i<bt->n_fainted_ids[side]&&i<PR_MAX_PARTY;i++)if(bt->fainted_ids[side][i]==id)return;
+    if(bt->n_fainted_ids[side]>=PR_MAX_PARTY){
+        bt->faint_ids_complete[side]=false;pr_note_unported(bt,PR_FEAT_ENGINE_LIMIT);return;
+    }
+    bt->fainted_ids[side][bt->n_fainted_ids[side]++]=id;
+}
+void pr_record_faint(pr_battle *bt,int side,uint32_t id,int turn)
+{
+    if(side<0||side>1){pr_note_unported(bt,PR_FEAT_FAINT_HISTORY);return;}
+    int kept=bt->n_faint_history[side];
+    if(kept>12){pr_note_unported(bt,PR_FEAT_ENGINE_LIMIT);kept=12;}
+    if(!bt->faint_history_total[side]){
+        bt->faint_history_total[side]=(uint32_t)kept;
+        bt->faint_ids_complete[side]=true;
+    }
+    // Raw callers may supply a full tail with no membership summary.
+    for(int i=0;i<kept;i++)remember_fainted_id(bt,side,bt->faint_history[side][i].id);
+    remember_fainted_id(bt,side,id);
+    if(kept==12){memmove(bt->faint_history[side],bt->faint_history[side]+1,11*sizeof bt->faint_history[side][0]);kept--;}
+    bt->faint_history[side][kept].id=id;bt->faint_history[side][kept].turn=turn;
+    bt->n_faint_history[side]=(uint8_t)(kept+1);
+    if(bt->faint_history_total[side]<UINT32_MAX)bt->faint_history_total[side]++;
+    else pr_note_unported(bt,PR_FEAT_ENGINE_LIMIT);
+}
+bool pr_faint_history_contains(pr_battle *bt,int side,uint32_t id,bool *unknown)
+{
+    *unknown=false;
+    if(side<0||side>1){*unknown=true;pr_note_unported(bt,PR_FEAT_FAINT_HISTORY);return false;}
+    int kept=bt->n_faint_history[side];
+    if(kept>12){*unknown=true;pr_note_unported(bt,PR_FEAT_FAINT_HISTORY);return false;}
+    for(int i=0;i<kept;i++)if(bt->faint_history[side][i].id==id)return true;
+    if(bt->n_fainted_ids[side]>PR_MAX_PARTY){*unknown=true;pr_note_unported(bt,PR_FEAT_FAINT_HISTORY);return false;}
+    for(int i=0;i<bt->n_fainted_ids[side]&&i<PR_MAX_PARTY;i++)if(bt->fainted_ids[side][i]==id)return true;
+    if(bt->faint_history_total[side]<=(uint32_t)kept||bt->faint_ids_complete[side])return false;
+    *unknown=true;pr_note_unported(bt,PR_FEAT_FAINT_HISTORY);return false;
+}

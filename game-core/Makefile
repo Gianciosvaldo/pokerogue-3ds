@@ -1055,3 +1055,10 @@ remaining-history-host-test: $(BUILD)/remaining_history_host_test
 	$(BUILD)/remaining_history_host_test
 test: remaining-history-host-test
 .PHONY: remaining-history-host-test
+
+$(BUILD)/faint_history_host_test: tests/faint_history_host_test.c tests/doubles_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/faint_history_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+faint-history-host-test: $(BUILD)/faint_history_host_test
+	$(BUILD)/faint_history_host_test
+test: faint-history-host-test
+.PHONY: faint-history-host-test

@@ -41,6 +41,11 @@ jobs:
           make -C battle-core build/remaining-history-test build/remaining-history-guards-test
           make -C game-core build/remaining_history_host_test
           python3 battle-core/tools/check-remaining-history-proof.py
+      - name: Compare repeated faint history and actual phase/AI/command owners
+        run: |
+          make -C battle-core build/faint-history-test build/faint-history-guards-test
+          make -C game-core build/faint_history_host_test
+          python3 battle-core/tools/check-faint-history-proof.py
       - name: Audit pinned inventory catalogue capacity
         run: python3 battle-core/tools/audit-inventory-catalogue.py
       - name: Run battle entry controller tests
