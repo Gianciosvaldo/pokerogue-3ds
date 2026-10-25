@@ -427,6 +427,7 @@ static void start_mystery_wild_battle(gc_run *run, int species, int level, bool 
     /* the encounter's battle is a BattleType.MYSTERY_ENCOUNTER upstream; here it runs as a wild one, and what a
      * ball may do in it is the encounter's own rule */
     run->me_battle = true;
+    gc_int(run)->at_save_point = false;   /* the encounter's one save is the one at its start */
     run->me_catch_allowed = me_catch_allowed(run->mystery_type >= 0 ? run->mystery_type : run->screen.mystery_type);
     run->mystery_type = run->mystery_tier = -1;
     run->in_battle = true;

@@ -88,6 +88,7 @@ static void test_battle_encounter_has_an_enemy(void)
             bool ok = false;
             assert(gc_mystery_execute(&run, cases[c][1], 0, 0, &why, &ok) && ok);
             assert(run.n_enemy == 1 && run.me_battle);
+            assert(!gc_int(&run)->at_save_point);   /* no second save in the encounter's battle */
             assert(run.enemy[0].b.stats[0] > 0 && run.enemy[0].b.hp == run.enemy[0].b.stats[0]);
             assert(run.bt.field[2] == &run.enemy[0].b && run.enemy[0].b.on_field);
         }
