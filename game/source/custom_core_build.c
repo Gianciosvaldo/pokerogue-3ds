@@ -13,3 +13,5 @@
 #include "../../custom-core/src/codec.c"
 #include "../../custom-core/src/commit.c"
 #include "../../custom-core/src/scheduler.c"
+#include "../../custom-core/src/jojo.c"
+#include "../../custom-core/src/jojo_table.c"

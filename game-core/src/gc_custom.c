@@ -206,14 +206,6 @@ void gc_custom_answer(gc_run *run, bool accept)
 }
 
 /* ---------------------------------------------------------------- a trainer's team in place of the ordinary party */
-/* The canonical pr_item_names entry for `key`, or NULL when game-core has no such item key. */
-static const char *item_key_of(const char *key)
-{
-    if (!key) return NULL;
-    for (int i = 0; i < pr_item_count; i++) if (pr_item_names[i] && !strcmp(pr_item_names[i], key)) return pr_item_names[i];
-    return NULL;
-}
-
 bool gc_custom_team_check(const gc_custom_team *team, const char **why)
 {
     const char *dummy;
@@ -242,8 +234,8 @@ bool gc_custom_team_check(const gc_custom_team *team, const char **why)
         if (!n) { *why = "no move"; return false; }
         if (t->n_items > GC_CUSTOM_MAX_TEAM_ITEMS) { *why = "too many items"; return false; }
         for (int i = 0; i < t->n_items; i++) {
-            if (!item_key_of(t->items[i].key)) { *why = "unknown item key"; return false; }
             if (t->items[i].stack < 1 || t->items[i].stack > 99) { *why = "item stack"; return false; }
+            if (!gc_item_stock_ported(t->items[i].key, t->items[i].arg, t->items[i].stack)) { *why = "item the battle layer does not know"; return false; }
         }
     }
     return true;
@@ -329,12 +321,11 @@ void gc_custom_team_items(gc_run *run)
     for (int e = 0; e < run->n_enemy && e < in->custom_team.n; e++) {
         const gc_custom_team_member *t = &in->custom_team.member[e];
         for (int i = 0; i < t->n_items && run->n_enemy_items < GC_MAX_ITEMS; i++) {
-            const char *key = item_key_of(t->items[i].key);
-            if (!key) continue;
+            const char *key = t->items[i].key;
             bool stacked = false;
             for (int j = 0; j < run->n_enemy_items && !stacked; j++) {
                 gc_item *o = &run->enemy_items[j];
-                if (o->key == key && o->arg == t->items[i].arg && o->pokemon_id == run->enemy[e].b.id) { o->stack += t->items[i].stack; stacked = true; }
+                if (!strcmp(o->key, key) && o->arg == t->items[i].arg && o->pokemon_id == run->enemy[e].b.id) { o->stack += t->items[i].stack; stacked = true; }
             }
             if (stacked) continue;
             gc_item *it = &run->enemy_items[run->n_enemy_items++];
