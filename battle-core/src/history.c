@@ -52,9 +52,45 @@ void pr_rebuild_nonvirtual_history(pr_pokemon *p)
     for(int i=0;i<kept;i++)remember_nonvirtual(p,&p->move_history[i],p->history_serial-kept+i+1);
 }
 
+static bool protection_entry(const pr_turn_move *tm)
+{
+    return tm->result==MOVE_RESULT_SUCCESS && (pr_move_has_attr(tm->move,PR_AC_ProtectAttr)
+        || tm->move==MOVE_ID_QUICK_GUARD || tm->move==MOVE_ID_WIDE_GUARD);
+}
+static uint32_t protect_tail(const pr_pokemon *p,bool *complete)
+{
+    *complete=p->n_move_history<=PR_MAX_MOVE_HISTORY;
+    int kept=p->n_move_history<PR_MAX_MOVE_HISTORY?p->n_move_history:PR_MAX_MOVE_HISTORY;
+    uint32_t count=0;
+    for(int i=kept-1;i>=0;i--){
+        if(!protection_entry(&p->move_history[i])){*complete=true;break;}
+        count++;
+    }
+    return count;
+}
+void pr_rebuild_protect_history(pr_pokemon *p)
+{
+    p->history_protect_count=protect_tail(p,&p->history_protect_complete);
+}
+uint32_t pr_protect_streak(pr_battle *bt,const pr_pokemon *p,bool *unknown)
+{
+    bool complete=p->history_protect_complete;
+    uint32_t count=p->history_protect_count;
+    if(p->n_move_history<=PR_MAX_MOVE_HISTORY||!complete||p->history_serial<p->n_move_history)
+        count=protect_tail(p,&complete);
+    *unknown=!complete;
+    if(!complete)pr_note_unported(bt,PR_FEAT_MOVE_HISTORY);
+    return count;
+}
+
 void pr_push_move_history(pr_pokemon *p, pr_turn_move tm)
 {
-    if(p->history_serial<p->n_move_history)p->history_serial=p->n_move_history;
+    if(p->n_move_history<=PR_MAX_MOVE_HISTORY||!p->history_protect_complete||p->history_serial<p->n_move_history)
+        pr_rebuild_protect_history(p);
+    if(protection_entry(&tm)){
+        if(p->history_protect_count<UINT32_MAX)p->history_protect_count++;
+    }else{p->history_protect_count=0;p->history_protect_complete=true;}
+    if(p->history_serial<p->n_move_history)pr_rebuild_nonvirtual_history(p);
     if(p->n_move_history<=PR_MAX_MOVE_HISTORY)pr_rebuild_nonvirtual_history(p);
     else if(p->history_last_known!=15)
         for(int i=0;i<PR_MAX_MOVE_HISTORY;i++)remember_nonvirtual(p,&p->move_history[i],p->history_serial-PR_MAX_MOVE_HISTORY+i+1);
@@ -97,7 +133,7 @@ const pr_turn_move *pr_last_non_virtual_move(pr_battle *bt, const pr_pokemon *p,
     }
     if(p->n_move_history<=PR_MAX_MOVE_HISTORY)return NULL;
     int q=2*ignore_struggle+ignore_follow_up;
-    if(p->history_last_known&(1u<<q))
+    if(p->history_serial>=p->n_move_history && (p->history_last_known&(1u<<q)))
         return p->history_last_present&(1u<<q)?&p->history_last[q]:NULL;
     pr_note_unported(bt,PR_FEAT_MOVE_HISTORY);
     *unknown=true;

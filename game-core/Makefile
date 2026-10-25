@@ -1028,3 +1028,11 @@ nonvirtual-history-host-test: $(BUILD)/nonvirtual_history_host_test
 	$< tests/fixtures/nonvirtual-history.native.txt
 test: nonvirtual-history-host-test
 .PHONY: nonvirtual-history-host-test
+
+$(BUILD)/protect_history_host_test: tests/protect_history_host_test.c tests/doubles_host_test.c ../battle-core/tests/protect-history-fixture.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+protect-history-host-test: $(BUILD)/protect_history_host_test
+	$(MAKE) -C $(BATTLE_CORE) build/protect-history-test build/protect-history-guards-test
+	python3 ../battle-core/tools/check-protect-history-proof.py --run-only
+test: protect-history-host-test
+.PHONY: protect-history-host-test

@@ -688,3 +688,8 @@ $(BUILD)/nonvirtual-history-test: tests/nonvirtual-history-test.c tests/nonvirtu
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/nonvirtual-history-test.c $(BUILD)/libprcore.a -lm -o $@
 $(BUILD)/nonvirtual-history-guards-test: tests/nonvirtual-history-guards-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+$(BUILD)/protect-history-test: tests/protect-history-test.c tests/protect-history-fixture.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/protect-history-test.c $(BUILD)/libprcore.a -lm -o $@
+$(BUILD)/protect-history-guards-test: tests/protect-history-guards-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

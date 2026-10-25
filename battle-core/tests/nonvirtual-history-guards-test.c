@@ -5,7 +5,7 @@
 static pr_battle bt;static pr_pokemon p;static int checks;
 #define CHECK(x) do{checks++;if(!(x)){fprintf(stderr,"nonvirtual guard line%d: %s\n",__LINE__,#x);exit(1);}}while(0)
 static const pr_turn_move*query(int q,bool want_unknown){bool unknown=false;bt.n_unported=0;const pr_turn_move*m=pr_last_non_virtual_move(&bt,&p,q/2,q%2,&unknown);CHECK(unknown==want_unknown);CHECK((bt.n_unported!=0)==want_unknown);return m;}
-int main(void){pr_closures_init();p.n_move_history=9;
+int main(void){pr_closures_init();p.n_move_history=9;p.history_last_known=15;
  for(int i=0;i<8;i++)p.move_history[i]=(pr_turn_move){.move=MOVE_ID_SPLASH,.use_mode=MOVE_USE_MODE_INDIRECT};
  for(int q=0;q<4;q++)CHECK(!query(q,true));
  pr_rebuild_nonvirtual_history(&p);CHECK(!p.history_last_known&&!p.history_last_present);
