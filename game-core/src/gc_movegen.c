@@ -446,7 +446,7 @@ bool gc_mg_effective_powers(gc_run *run, const gc_mon *m, const uint16_t *moves,
 bool gc_generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m)
 {
     if (m->b.has_trainer || m->trainer_slot || m->b.is_boss || m->b.fusion_species || run->run.has_challenges) return false;
-    if (m->b.species >= PR_SPECIES_COUNT) return false;
+    if (!gc_species(m->b.species)) return false;
 
     static mg_ctx c;   /* ~the stack of a 3DS thread is 32 KB: the pools are too big for it */
     if (!ctx_init(&c, run, m)) return false;
