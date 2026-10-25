@@ -104,7 +104,7 @@ RW := ../../reward-core
 CCORE := ../../custom-core
 OBS_SRCS := ../source/combat_observer.c ../source/custom_core_build.c
 RUN_CPPFLAGS := $(CPPFLAGS) -I$(CCORE)/include -I../menus -I../gen -I$(GC)/include -I$(GC)/gen/out -I$(RC)/include -I$(RC)/gen/out -I$(RW)/include -I$(RW)/gen/out -I$(APP)/include
-RUN_SRCS := ../gen/gm_trainer_art.c runtest.c snd_fake.c ../menus/item_ui.c ../gen/gm_item_ui.c ../source/bgm.c ../source/bgm_choose.c ../source/bgm_player.c ../gen/gm_bgm_data.c party_fake.c ../menus/party.c ../menus/menus_names.c ../menus/move_names.c ../menus/menus_data.c ../source/starter_data.c ../source/run_screen.c ../source/battle_events.c ../source/run_saves.c ../source/run_history.c ../source/history_record.c ../source/run_text.c ../source/custom_run.c ../source/custom_store.c ../source/profile_tx.c ../source/system_data.c $(OBS_SRCS) $(APP)/source/save.c ../gen/gm_enum_names.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+RUN_SRCS := ../source/achv_hooks.c ../gen/gm_trainer_art.c runtest.c snd_fake.c ../menus/item_ui.c ../gen/gm_item_ui.c ../source/bgm.c ../source/bgm_choose.c ../source/bgm_player.c ../gen/gm_bgm_data.c party_fake.c ../menus/party.c ../menus/menus_names.c ../menus/move_names.c ../menus/menus_data.c ../source/starter_data.c ../source/run_screen.c ../source/battle_events.c ../source/run_saves.c ../source/run_history.c ../source/history_record.c ../source/run_text.c ../source/custom_run.c ../source/custom_store.c ../source/profile_tx.c ../source/system_data.c $(OBS_SRCS) $(APP)/source/save.c ../gen/gm_enum_names.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/runtest: $(RUN_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) -I$(GC)/src $(CFLAGS) $(RUN_SRCS) -lm -o $@
@@ -238,6 +238,22 @@ build/radar_test: $(RADAR_SRCS)
 	$(CC) $(RADAR_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(RADAR_SRCS) -o $@
 radar_test: build/radar_test
 .PHONY: radar_test
+
+# the Achievements list (source/achv_screen.c) over game-core's real achievement table, with a fake drawing layer; make achv_screen_test && build/achv_screen_test
+ACHV_SRCS := achv_screen_test.c ../source/achv_screen.c $(CORE_SRCS)
+build/achv_screen_test: $(ACHV_SRCS)
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(ACHV_SRCS) -lm -o $@
+achv_screen_test: build/achv_screen_test
+.PHONY: achv_screen_test
+
+# the achievement hooks of the run driver (source/achv_hooks.c) over real game-core system data; make achv_hooks_test && build/achv_hooks_test
+HOOK_SRCS := achv_hooks_test.c ../source/achv_hooks.c $(CORE_SRCS)
+build/achv_hooks_test: $(HOOK_SRCS)
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(HOOK_SRCS) -lm -o $@
+achv_hooks_test: build/achv_hooks_test
+.PHONY: achv_hooks_test
 
 # the capsule-machine presentation (source/capsule_model.c + capsule_screen.c) with a fake drawing layer; make capsule_test && build/capsule_test [fuzz sessions]
 CAPSULE_SRCS := capsule_test.c ../source/capsule_model.c ../source/capsule_screen.c

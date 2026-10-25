@@ -30,6 +30,7 @@
 #include "pr_enums.h"
 #include "radar_screen.h"
 #include "history_screen.h"
+#include "achv_screen.h"
 #include "result_screen.h"
 #include "run_history.h"
 #include "run_saves.h"
@@ -172,6 +173,14 @@ static int n_history;
 void history_screen_open(const hist_args* a) {
   HS = *a;
   n_history++;
+}
+
+/* the Achievements list: records how it was opened */
+static achv_args AV;
+static int n_achv;
+void achv_screen_open(const achv_args* a) {
+  AV = *a;
+  n_achv++;
 }
 
 static result_args R;
@@ -451,6 +460,13 @@ int main(void) {
   HS.on_exit(HS.arg);
   CHECK(n_title == 3, "leaving it shows the title again");
   n_title--; /* the counts below were written without this detour */
+
+  /* the title's Achievements opens the list over the player's profile, and B comes back to the title */
+  T.on_choose(TITLE_ACHIEVEMENTS, T.arg);
+  CHECK(n_achv == 1 && AV.sys == sysd_get() && AV.on_exit, "Achievements opens the list over the profile");
+  AV.on_exit(AV.arg);
+  CHECK(n_title == 3, "leaving it shows the title again");
+  n_title--;
 
   /* ---- a second run: the debug config is not used again, and its randomness differs */
   frames += 357;
