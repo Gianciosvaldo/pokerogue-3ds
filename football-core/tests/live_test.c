@@ -25,7 +25,10 @@ int main(void)
     assert(!football_roster_add(&partial,&scratch,&boundary,NULL,NULL));
     partial.cost=37;assert(football_roster_add(&partial,&scratch,&boundary,NULL,NULL));assert(partial.cost==40);
     gc_starter extra={.species=SPECIES_ID_BULBASAUR,.tera_type=-1};assert(!football_roster_add(&roster,&scratch,&extra,NULL,NULL));
-    assert(football_live_begin(&game,&roster,42,1));assert(football_live_call(&game,FB_PASS_SLANTS));
+    assert(football_live_begin(&game,&roster,42,1));assert(football_live_call(&game,FB_RUN_DIVE));
+    assert(fabsf(game.actors[0].x-(game.los-1.5f))<.001f); /* Under Center */
+    game.phase=FB_LIVE_CALL;assert(football_live_call(&game,FB_PASS_SLANTS));
+    assert(fabsf(game.actors[0].x-(game.los-5))<.001f); /* Shotgun */
     for(unsigned i=0;i<300;++i)football_live_tick(&game,16,(FootballLiveInput){.receiver=-1});
     assert(game.phase==FB_LIVE_SET && game.snaps==0); /* Never auto-snap human offense. */
     football_live_tick(&game,1,(FootballLiveInput){.pressed=FB_LIVE_ACTION,.receiver=-1});

@@ -385,6 +385,12 @@ build/persistent_item_bar_test: persistent_item_bar_test.c ../source/battle_view
 	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections $< -Wl,--gc-sections -lm -o $@
 .PHONY: persistent_item_bar_test
 
+item_description_test: build/item_description_test
+build/item_description_test: item_description_test.c ../source/battle_view.c
+	@mkdir -p build
+	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections $< -Wl,--gc-sections -lm -o $@
+.PHONY: item_description_test
+
 build/battle_feedback_test: battle_feedback_test.c ../source/battle_view.c $(BC)/gen/out/pr_data.c
 	@mkdir -p build
 	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections battle_feedback_test.c $(BC)/gen/out/pr_data.c -Wl,--gc-sections -lm -o $@

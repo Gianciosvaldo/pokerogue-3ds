@@ -15,10 +15,13 @@ static void arrange(FootballLive *m)
     static const float dy[11]={20,24,29,33,15,26.67f,38,5,48,18,36};
     float dir=direction(m);m->los=m->rules.offense==FB_HOME?10+m->rules.ball:110-m->rules.ball;
     unsigned off=offense_base(m),def=defense_base(m);
+    const FootballPlayDefinition *play=football_playbook_get(m->play);
     for(unsigned i=0;i<11;++i){
         FootballLiveActor *a=&m->actors[off+i],*b=&m->actors[def+i];
         unsigned os=m->lineup[m->rules.offense][i],ds=m->lineup[1-m->rules.offense][i+11];
-        *a=(FootballLiveActor){.attributes=m->units[m->rules.offense][os],.x=m->los+dir*ox[i],.y=oy[i],.roster=(uint8_t)os,.home=off==0};
+        float depth=ox[i];
+        if(play && play->formation==FB_FORM_UNDER_CENTER){if(i==0)depth=-1.5f;else if(i==1)depth=-5;}
+        *a=(FootballLiveActor){.attributes=m->units[m->rules.offense][os],.x=m->los+dir*depth,.y=oy[i],.roster=(uint8_t)os,.home=off==0};
         *b=(FootballLiveActor){.attributes=m->units[1-m->rules.offense][ds],.x=m->los+dir*dx[i],.y=dy[i],.roster=(uint8_t)ds,.home=def==0};
     }
     m->carrier=(uint8_t)off;m->controlled=m->rules.offense==FB_HOME?0:5;

@@ -145,7 +145,7 @@ int cc_nemesis_support(const cc_nemesis *n)
     if (n->traits & CC_TR_BOSS) return CC_REFUSE_BOSS;
     if (n->traits & CC_TR_FUSED) return CC_REFUSE_FUSED;
     if (n->traits & CC_TR_TERA) return CC_REFUSE_TERA;
-    if (n->traits & CC_TR_DOUBLES) return CC_REFUSE_DOUBLES;
+    /* Doubles is provenance: an attributed enemy can return alone in a rematch. */
     if (n->traits & CC_TR_TRAINER_OWNED) return CC_REFUSE_TRAINER_OWNED;
     if (n->traits & CC_TR_MYSTERY) return CC_REFUSE_MYSTERY;
     if (n->traits & CC_TR_FIXED_SCRIPTED) return CC_REFUSE_FIXED_SCRIPTED;

@@ -32,6 +32,10 @@ jobs:
         run: make -C battle-core summon-entry-host-test tera-phase-host-test
       - name: Run game-core tests
         run: make -C game-core test
+      - name: Check custom record policy and sanitized module tests
+        run: |
+          make -C custom-core unit-test san-test
+          python3 custom-core/tools/mutations.py -j 2 -k "reject attributed doubles killer"
       - name: Run football module tests
         run: make -C football-core test
       - name: Sanitize football match rules and replay tests
@@ -54,3 +58,12 @@ jobs:
         run: docker run --rm -v "$PWD":/src -w /src/game devkitpro/devkitarm make
       - name: Check the actual ARM startup stack and compiler frame reports
         run: python3 game/tests/check_stack_size.py game/pokerogue.elf --usage-dir game/build
+      - name: Upload playable 3DSX app
+        uses: actions/upload-artifact@v4
+        with:
+          name: PokeRogue-3DSX
+          if-no-files-found: error
+          path: |
+            game/pokerogue.3dsx
+            game/pokerogue.smdh
+            game/3DSX-ARTIFACT.md

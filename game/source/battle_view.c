@@ -984,17 +984,19 @@ static void draw_bottom(bool top) {
     else
       rr_rect(0, -48, 320, 48, RR_RGBA(0x30, 0x50, 0x68, 255));
   }
-  const bool info = B.mode == M_COMMAND && B.bar_open && B.bar_sel >= 0 && B.bar_sel < bar_n();
+  const bool bar_info = B.mode == M_COMMAND && B.bar_open && B.bar_sel >= 0 && B.bar_sel < bar_n();
+  const bool summary_info = B.info_on && (B.mode == M_IDLE || B.mode == M_COMMAND);
+  const bool info = bar_info || summary_info;
   if (cmd_shown() && !info) draw_command_menu(top);
   if (B.mode == M_FIGHT) {
     draw_fight_menu(top);
     if (!top) draw_move_details();
-  } else if (info) {
+  } else if (bar_info) {
     char name[64];
     const char* desc;
     bar_info_text(name, sizeof name, &desc);
     draw_item_text(name, desc, top);
-  } else if (B.info_on && B.mode == M_IDLE) {
+  } else if (summary_info) {
     draw_item_text(B.info_name, B.info_desc, top);
   } else {
     msgbox_draw(&B.msg, top ? 12 - TOP_PAD : 12, -39);
