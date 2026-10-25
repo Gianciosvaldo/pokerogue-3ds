@@ -448,6 +448,7 @@ static void trainer_victory(gc_run *run)
         }
     }
     gc_ev_msg(run, "battle:trainerDefeated", 1, gc_m_trainer(run, "trainerName", GC_TNAME_TITLED));
+    gc_ev_trainer_dialogue(run, 1);   /* then the trainer's victory line, before the money and the rewards */
 }
 
 static void money_reward(gc_run *run, double mult)

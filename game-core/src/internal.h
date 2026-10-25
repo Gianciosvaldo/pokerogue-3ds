@@ -269,6 +269,7 @@ void gc_mystery_post(gc_run *run, const gc_rphase *p);
 bool gc_gen_wild(gc_run *run, int level);
 bool gc_trainer_is_double(const gc_run *run);
 void gc_trainer_names(gc_run *run);               /* run->trainer_names for the current trainer */
+void gc_ev_trainer_dialogue(gc_run *run, int kind);   /* GC_EV_DIALOGUE for the current trainer (0 before the fight, 1 after it is won) */
 bool gc_is_new_biome(const gc_run *run, int wave);   /* isNewBiome for the battle of `wave` */
 int gc_roll_biome_weather(gc_run *run);            /* Arena.setBiomeWeather's pick (consumes the run RNG) */
 int gc_roll_biome_terrain(gc_run *run);            /* Arena.setBiomeTerrain's pick */

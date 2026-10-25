@@ -93,8 +93,7 @@ converts; game-core keeps no copy of them. They are saved with the rest of `pr_p
 never a boss: its shields are cleared and it loses the passive a boss has by being one.
 
 Only wild bosses and mystery encounters' bosses happen in a run today: run-core gives segments to a trainer's
-Pokémon only in the classic rival's fights 5 and 6, and those waves are still wild stand-ins (fixed battles,
-below). `tests/boss_segments_test.c` runs the rival's party through `gc_mon_new_enemy` for that reason.
+Pokémon only in the classic rival's fights 5 and 6, which the run reaches since the rivals are on (below, "Trainer dialogue"). `tests/boss_segments_test.c` runs the rival's party through `gc_mon_new_enemy` for that reason.
 
 ### Catching
 
@@ -184,7 +183,7 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 | Enemy moveset: the last four level moves for unsupported constructors. Task 64's first slice calls Task 63 for supported clean wild enemies; trainer streams and broader pools still use the counted fallback | run-core |
 | A reward taken that isn't a ball, Full Heal, Rare Candy, Rarer Candy (Task 96 / PR #136), held item or one of the healing, revive and PP items Task 60/96 ported (TMs, Memory Mushroom, Mints, money, evolution items, DNA Splicers) is added to the items and counted (`reward taken without its own effect`) | later reward tasks |
 | Double battles are played as singles (M1 rule) | doubles in battle-core |
-| Mystery encounters and fixed classic battles (rival, evil team, gyms run-core can't make) become wild battles of the wave's level | run-core, later the encounters |
+| Mystery encounters and the fixed classic battles run-core can't make (evil team, gyms) become wild battles of the wave's level; the six classic rivals and the Classic/Challenge E4 are real since `gc_new_battle` sets `enable_fixed_rivals` | run-core, later the encounters |
 | A boss's battle score: `addFaintedEnemyScore` (and the catch's own copy of it) multiplies it by `sqrt(bossSegments)`; Task 93 sets `boss_segments` on Pokemon encounters and `gc_phases.c` calculates score using `boss_segments` | Task 93 (PR #122) |
 | In a wave whose number is a multiple of 10, once every enemy has fainted, upstream's CheckInterludePhase (`onInterlude`) drops the rest of that turn's weather, berry and status-effect phases and flags the TurnEndPhase; battle-core has it unported (`(phase CheckInterludePhase)` in the soak's unported list: 218 of 1000 runs), so those effects run | battle-core: CheckInterludePhase |
 | The biome's weather and terrain are set on the arena without the engine's phases: no start animation, and no PostWeatherChange abilities for a Daily Run's per-wave roll with a Pokémon already out; the weather text comes out as game-core's own messages before "A wild ... appeared"; timed-event pools are left out | `gc_arena_new_battle` |
@@ -755,8 +754,17 @@ Mystery encounter rewards (`gc_mystery.c`) call the same function and ignore the
 Timed events are not ported on purpose (lorenzo, 2026-10-12): no event calendar and no event
 rule, such as the Plus voucher for later wins or the wave-115 Mega Bracelet and Dynamax Band.
 `GC_STUB_TRAINER_REWARDS` is counted only if reward-core has no row for a reward the config
-lists (none does today). The rivals themselves are still wild stand-ins in run-core's
-encounters, so these rewards are only reachable once run-core produces the fixed battles.
+lists (none does today). The six classic rivals are real fights (`enable_fixed_rivals`), so their rewards are reachable.
+
+### Trainer dialogue (`GC_EV_DIALOGUE`)
+Upstream gives every trainer class an encounter and a victory line (`initTrainerTypeDialogue`, the `dialogue` namespace), picked with
+`randSeedItem` under the wave's seed offset; the six rivals also have a portrait (`hasCharSprite`). `gen/dump-trainers.test.ts` dumps
+both lists per variant and `hasCharSprite` into `gc_trainers.c` (`gc_trainer_config.dialogue[variant][0 encounter / 1 victory]`,
+`has_char_sprite`, the key pool `gc_trainer_dialogue_keys`). `gc_trainer_dialogue_key(run, kind)` picks the line, and the run queues
+`GC_EV_DIALOGUE` (a = trainer type, b = variant, c = kind, `msg.key` = the locale key) right after `GC_EV_TRAINER` and before
+"X would like to battle!" (also when a saved battle loads, as upstream shows it again), and after "X was defeated!". The pick uses
+a separate seed-offset RNG, so no other roll moves. The rival's variant follows the player (a male player meets the female Ivy).
+`tests/rival_dialogue_host_test.c` plays a run to wave 8 and checks the order, the keys and the loaded battle.
 
 Replay of upstream's own phase: `tools/trainervictorydiff.sh <upstream dir> [N] [seed]`
 runs `trainer-victory.producer.test.ts` in the pinned checkout (Node 22) and replays it

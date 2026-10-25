@@ -23,12 +23,14 @@ for t in $TESTS; do
         "build/$t" || failed="$failed $t"
     fi
 done
-echo "== runtest (IV Scanner encounter prompt and assessment) 100"
-RUNTEST_SCANNER=1 build/runtest 100 0 || failed="$failed runtest-scanner"
-echo "== runtest (Check Team form toggle and reward return) 300"
-RUNTEST_FORM=1 build/runtest 300 0 || failed="$failed runtest-form"
-echo "== runtest (Check Team form change, animation and reward return) 300"
-RUNTEST_FORM=active build/runtest 300 0 || failed="$failed runtest-form-active"
+# The rival now fights at wave 8 and later, so the random player dies sooner and these three need more runs to reach the same
+# full-party catch and release-list coverage (floors unchanged).
+echo "== runtest (IV Scanner encounter prompt and assessment) 150"
+RUNTEST_SCANNER=1 build/runtest 150 0 || failed="$failed runtest-scanner"
+echo "== runtest (Check Team form toggle and reward return) 350"
+RUNTEST_FORM=1 build/runtest 350 0 || failed="$failed runtest-form"
+echo "== runtest (Check Team form change, animation and reward return) 350"
+RUNTEST_FORM=active build/runtest 350 0 || failed="$failed runtest-form-active"
 echo "== runtest 10000"
 build/runtest 10000 || failed="$failed runtest"
 # Keep the original first 100 cases and extend their deterministic sequence:

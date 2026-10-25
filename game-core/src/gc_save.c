@@ -1149,6 +1149,7 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     if (run->battle_type == BATTLE_TYPE_TRAINER) {
         ev = gc_ev_new(run, GC_EV_TRAINER);
         if (ev) { ev->a = run->trainer_type; ev->b = run->trainer_variant; }
+        gc_ev_trainer_dialogue(run, 0);   /* EncounterPhase shows the trainer's line again on a loaded battle */
     }
     gc_battle_restore_field(run);
     bt->battle_rng = v.battle_rng;

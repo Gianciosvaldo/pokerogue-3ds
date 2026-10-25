@@ -61,7 +61,8 @@ typedef enum {
   BEV_INTRO_WILD,  /* the encounter: arenas slide in, then the message. Wild (a = 0, the enemy battler's
                     * Pokemon is on the field): the enemy untints, cries, its info box slides in, and the
                     * message is "a wild X appeared". Trainer (a = 1): nobody on the enemy side yet, and the
-                    * message is `text` ("X would like to battle!") */
+                    * message is `text` ("X would like to battle!"); with b = 1 it ends with the slide and shows
+                    * no message (the trainer's dialogue and then the message follow as events of their own) */
   BEV_SUMMON,      /* battler sent out (mon = its data); player: text, or "Go! X!" when NULL */
   BEV_WITHDRAW,    /* battler returns to its ball */
   BEV_MOVE_ANIM,   /* an animation (battle_anim.h): b = ba_kind (move, common, charge), a = its id
@@ -93,7 +94,14 @@ typedef enum {
   BEV_LEVEL_UP,    /* LevelUpPhase.showLevelUpMessages: the fanfare and `text` ("X grew to Lv. N!") with a prompt, then
                     * promptLevelUpStats: the stat window with the gains (stats[6..11] - stats[0..5]), A, the totals, A */
   BEV_FIELD_SWAP, /* ToggleDoublePosition: player slots 0 and 1 exchange places */
+  BEV_DIALOGUE,    /* a trainer speaks (ui.showDialogue): `text` is the line with its "$" pages and @c{expression} markers (up to
+                    * BV_DIALOGUE_TEXT bytes), `name` the speaker's name for the name box, `atlas` the gfx.pak key of the portrait
+                    * that slides in beside it (upstream's CharSprite, with the field darkened for the talk) or NULL for a
+                    * dialogue with the name box alone. A button for each page; the portrait goes out and the field clears when
+                    * the last page is read */
+  BEV_TRAINER_SHOW,/* TrainerVictoryPhase's showEnemyTrainer: the defeated trainer slides back onto the enemy platform (750 ms) */
 } bev_type;
+#define BV_DIALOGUE_TEXT 2048
 
 typedef struct {
   bev_type type;
@@ -102,6 +110,8 @@ typedef struct {
   int c;                     /* BEV_FORM_CHANGE: the gender + 2 when the change brings one (-1 genderless .. 1 female), 0 = as it was:
                               * a Ditto whose transform ends takes its own gender back */
   const char* text;          /* BEV_MESSAGE, BEV_SUMMON: the text (already translated) */
+  const char* name;          /* BEV_DIALOGUE: the speaker's name (already translated) */
+  const char* atlas;         /* BEV_DIALOGUE: the portrait's gfx.pak key ("images/character/rival_f"), NULL = none */
   bool prompt;               /* BEV_MESSAGE: wait for a button */
   bool caught;               /* BEV_CATCH: the ball holds (b is then 3: a catch always passes the three shake checks) */
   const bv_mon* mon;         /* BEV_SUMMON */

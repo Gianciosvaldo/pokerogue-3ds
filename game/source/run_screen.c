@@ -9,6 +9,7 @@
 #include "ball_menu.h"
 #include "bgm.h"
 #include "gm_enum_names.h"
+#include "gc/data.h"
 #include "trainer_art.h"
 #include "pr_data.h"
 #include "battle_anim.h"
@@ -238,6 +239,26 @@ static void put_msg(const char* text, bool prompt) {
   *e = (bv_event){.type = BEV_MESSAGE, .battler = -1, .text = t, .prompt = prompt};
 }
 
+/* GC_EV_DIALOGUE as a BEV_DIALOGUE: the trainer's line (kind 0 before the fight, 1 after it), its speaker and, for a class with a
+ * portrait (the rivals), the character atlas. The text is in its own buffer: a talk is longer than a message. */
+static bool put_dialogue(const gc_event* d) {
+  static char text[BV_DIALOGUE_TEXT], name[96], atlas[64];
+  if (!d->msg.key) return false;
+  i18n_t(text, sizeof text, d->msg.key, NULL);
+  if (!text[0]) return false;
+  const int which = d->c == 0 ? GC_TNAME_TITLED : GC_TNAME_SPEAKER;
+  name[0] = 0;
+  if (G.run.trainer_names[which]) i18n_resolve(name, sizeof name, G.run.trainer_names[which]);
+  atlas[0] = 0;
+  const gc_trainer_config* c = gc_trainer_config_of((int)d->a);
+  const char* key = c && c->has_char_sprite ? gm_trainer_sprite_key((int)d->a, (int)d->b, 0) : NULL;
+  if (key && *key) snprintf(atlas, sizeof atlas, "images/character/%s", key);
+  bv_event* e = ev_new();
+  if (!e) return false;
+  *e = (bv_event){.type = BEV_DIALOGUE, .battler = -1, .text = text, .name = name, .atlas = atlas[0] ? atlas : NULL};
+  return true;
+}
+
 static bool put_gc_msg(const pr_msg* m) {
   if (!m->key) return false; /* text not ported in battle-core: nothing to show */
   char* t = txt_new();
@@ -420,9 +441,18 @@ static void wave_black(void* arg) {
   bv_event* e = ev_new();
   char* t = txt_new();
   t[0] = 0;
+  const gc_event* dialogue = NULL;
   if (offer) {
     snprintf(t, TXT_LEN, "The %s that beat you wants a rematch!", i18n_species_name(cr_offer_species()));
   } else if (trainer || mystery) {
+    /* the trainer's own line comes before the encounter text: the intro slides in with no message, the talk plays, and then
+     * "X would like to battle!" */
+    for (int j = G.wave_ev + 1; trainer && !dialogue && j < G.nq && j <= G.wave_ev + 5; j++) {
+      if (G.q[j].kind == GC_EV_DIALOGUE && G.q[j].c == 0 && !G.skip[j]) {
+        dialogue = &G.q[j];
+        G.skip[j] = true;
+      }
+    }
     /* the first game-core message after the wave is the encounter text ("X would like to battle!") */
     for (int j = G.wave_ev + 1; j < G.nq && j <= G.wave_ev + 5; j++) {
       if (G.q[j].kind == GC_EV_MESSAGE && !G.skip[j]) {
@@ -441,7 +471,16 @@ static void wave_black(void* arg) {
         break;
       }
   }
-  *e = (bv_event){.type = BEV_INTRO_WILD, .battler = BV_ENEMY, .a = trainer || mystery || offer ? 1 : 0, .text = t};
+  if (dialogue && put_dialogue(dialogue)) {
+    /* INTRO b=1: the slide only; the message follows the talk */
+    *e = (bv_event){.type = BEV_INTRO_WILD, .battler = BV_ENEMY, .a = 1, .b = 1};
+    if (t[0]) {
+      bv_event* m = ev_new();
+      if (m) *m = (bv_event){.type = BEV_MESSAGE, .battler = -1, .text = t};
+    }
+  } else {
+    *e = (bv_event){.type = BEV_INTRO_WILD, .battler = BV_ENEMY, .a = trainer || mystery || offer ? 1 : 0, .text = t};
+  }
   play_chunk();
 }
 
@@ -512,6 +551,14 @@ static bool handle_event(int i) {
     case GC_EV_MESSAGE:
       if (msg_is(e, "battle:trainerDefeated")) bgm_on_trainer_defeated(&G.run); /* TrainerVictoryPhase.start */
       if (put_gc_msg(&e->msg) && e->prompt) G.ev[G.n_ev - 1].prompt = true;
+      break;
+
+    case GC_EV_DIALOGUE:
+      /* the encounter line is played by wave_black (it skips it); this is the victory one: showEnemyTrainer, then the talk */
+      if (e->c == 1) {
+        *ev_new() = (bv_event){.type = BEV_TRAINER_SHOW, .battler = -1};
+        put_dialogue(e);
+      }
       break;
 
     case GC_EV_WAVE:
