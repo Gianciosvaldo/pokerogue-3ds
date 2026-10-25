@@ -247,6 +247,14 @@ build/achv_screen_test: $(ACHV_SRCS)
 achv_screen_test: build/achv_screen_test
 .PHONY: achv_screen_test
 
+# a Mystery Encounter's question and picks (source/me_screen.c, source/me_flow.c) over game-core's real option checks and battle-core's formatter, with a fake drawing layer; make me_screen_test && build/me_screen_test
+ME_SRCS := me_screen_test.c ../source/me_screen.c ../source/me_flow.c $(CORE_SRCS)
+build/me_screen_test: $(ME_SRCS)
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(ME_SRCS) -lm -o $@
+me_screen_test: build/me_screen_test
+.PHONY: me_screen_test
+
 # the achievement hooks of the run driver (source/achv_hooks.c) over real game-core system data; make achv_hooks_test && build/achv_hooks_test
 HOOK_SRCS := achv_hooks_test.c ../source/achv_hooks.c $(CORE_SRCS)
 build/achv_hooks_test: $(HOOK_SRCS)

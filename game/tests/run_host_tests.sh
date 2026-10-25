@@ -12,7 +12,7 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$HERE"
 JOBS=${JOBS:-$(nproc 2>/dev/null || echo 2)}
 TESTS="charge_visibility_test battle_feedback_test persistent_item_bar_test item_description_test battle_stat_panels_test egg_hatch_ui_test trainer_render_test party_item_test stat_banner_test form_anim_test transform_visual_test map_ui_test splicer_ui_test shop_ui_test summary_ui_test saves_test
-       starter_data_test starter_ui_test observer_test postmortem_test result_gains_test win_gains_test char_sprite_test msgbox_test store_test custom_run_test profile_tx_test gacha_host_test gacha_screen_test flowtest radar_test achv_screen_test achv_hooks_test capsule_test run_menu_test name_entry_test slot_screen_test run_history_test history_screen_test bgmtest"
+       starter_data_test starter_ui_test observer_test postmortem_test result_gains_test win_gains_test char_sprite_test msgbox_test store_test custom_run_test profile_tx_test gacha_host_test gacha_screen_test flowtest radar_test achv_screen_test achv_hooks_test me_screen_test capsule_test run_menu_test name_entry_test slot_screen_test run_history_test history_screen_test bgmtest"
 make -j"$JOBS" $TESTS runtest || { echo "game/tests: build failed" >&2; exit 1; }
 failed=""
 for t in $TESTS; do

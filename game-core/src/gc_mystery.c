@@ -304,6 +304,74 @@ static bool has_charming_move(const gc_mon *m)
     return false;
 }
 
+/* The first move of the Pokemon that CHARMING_MOVES names, for Part Timer's third option text */
+static int charming_move_of(const gc_mon *m)
+{
+    for (int k = 0; k < m->b.n_moves; k++) if (m->b.moves[k] > 0 && is_charming_move(m->b.moves[k])) return m->b.moves[k];
+    return 0;
+}
+
+static void screen_arg(gc_screen *s, pr_msg_arg a)
+{
+    if (s->n_me_args < (int)(sizeof s->me_args / sizeof *s->me_args)) s->me_args[s->n_me_args++] = a;
+}
+
+/* what the screen needs to word the encounter and to ask for the picks (see gc_screen.me_args): only for the encounters whose texts are
+ * ported; the others leave the tokens out and the app words what it can */
+static void setup_texts(gc_run *run)
+{
+    gc_screen *s = &run->screen;
+    const int type = s->mystery_type;
+    s->n_me_args = 0;
+    memset(s->option_pick, 0, sizeof s->option_pick);
+    switch (type) {
+    case GC_ME_SHADY_VITAMIN_DEALER:
+        s->option_pick[0] = s->option_pick[1] = GC_PICK_MEMBER;
+        screen_arg(s, pr_arg_money_en_us("option1Money", pr_run_get_wave_money_amount(run->wave, 1.5)));
+        screen_arg(s, pr_arg_money_en_us("option2Money", pr_run_get_wave_money_amount(run->wave, 5.0)));
+        break;
+    case GC_ME_PART_TIMER: {
+        s->option_pick[0] = s->option_pick[1] = GC_PICK_MEMBER;
+        const int p = gc_mystery_primary_pokemon(run, type, 2);
+        if (p >= 0) {
+            screen_arg(s, pr_arg_pokemon_name(NULL, "option3PrimaryName", &run->party[p].b));
+            screen_arg(s, pr_arg_move("option3PrimaryMove", charming_move_of(&run->party[p])));
+        }
+        break;
+    }
+    case GC_ME_LOST_AT_SEA:
+        for (int o = 0; o < 2; o++) {
+            const int p = gc_mystery_primary_pokemon(run, type, o);
+            const char *pn = o == 0 ? "option1PrimaryName" : "option2PrimaryName";
+            const char *mv = o == 0 ? "option1RequiredMove" : "option2RequiredMove";
+            if (p >= 0) screen_arg(s, pr_arg_pokemon_name(NULL, pn, &run->party[p].b));
+            screen_arg(s, pr_arg_move(mv, o == 0 ? MOVE_ID_SURF : MOVE_ID_FLY));
+        }
+        screen_arg(s, pr_arg_int("damagePercentage", 25));
+        break;
+    case GC_ME_FIELD_TRIP:
+        s->option_pick[0] = s->option_pick[1] = s->option_pick[2] = GC_PICK_MEMBER_MOVE;
+        break;
+    case GC_ME_FUN_AND_GAMES:
+        s->option_pick[0] = GC_PICK_MEMBER;
+        screen_arg(s, pr_arg_money_en_us("option1Money", pr_run_get_wave_money_amount(run->wave, 1.5)));
+        break;
+    case GC_ME_GLOBAL_TRADE_SYSTEM:
+        s->option_pick[0] = s->option_pick[1] = s->option_pick[2] = GC_PICK_MEMBER;
+        break;
+    default:
+        break;
+    }
+}
+
+bool gc_mystery_member_ok(const gc_run *run, int option, int idx)
+{
+    const int type = run->screen.mystery_type;
+    if (option < 0 || option >= run->screen.n_options || !run->screen.option_pick[option]) return false;
+    if (type == GC_ME_FIELD_TRIP) return idx >= 0 && idx < run->n_party;   /* the party screen has no filter */
+    return gc_mystery_pick_ok(run, type, option, idx);
+}
+
 void gc_mystery_setup_screen(gc_run *run)
 {
     gc_screen *s = &run->screen;
@@ -369,6 +437,7 @@ void gc_mystery_setup_screen(gc_run *run)
         s->option_ok[0] = run->n_party >= 1;
         s->option_ok[1] = run->n_party >= 1;
     }
+    setup_texts(run);
 }
 
 static void end_mystery_encounter_leave(gc_run *run)

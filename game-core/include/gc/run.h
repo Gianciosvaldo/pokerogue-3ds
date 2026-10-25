@@ -183,7 +183,15 @@ typedef struct {
     int8_t mystery_type;         /* MysteryEncounterType 0..30 */
     int8_t mystery_tier;         /* 0 COMMON, 1 GREAT, 2 ULTRA, 3 ROGUE */
     bool option_ok[8];
+    /* what the encounter's screen needs to word its texts and ask for its picks (gc_mystery_setup_screen): the {{tokens}} the intro, option
+     * labels and tooltips use (only the encounters ported with their texts fill them), and for each option what the player picks first:
+     * GC_PICK_NONE, a party member (GC_CH_MYSTERY.b) or a party member and then one of its moves (b and c) */
+    pr_msg_arg me_args[8];
+    int n_me_args;
+    uint8_t option_pick[8];
 } gc_screen;
+enum { GC_PICK_NONE = 0, GC_PICK_MEMBER = 1, GC_PICK_MEMBER_MOVE = 2 };
+
 
 /* ---------------------------------------------------------------- the run's state */
 /* A Pokemon of the run: battle-core's Pokemon (species, form, level, stats, HP, status, moves and PP,
@@ -352,6 +360,9 @@ typedef struct gc_run {
      * app has the screen */
     bool ask_switch;
 } gc_run;
+
+/* Whether the encounter's party screen accepts the member for the option (a member that cannot be picked is shown but not selectable). */
+bool gc_mystery_member_ok(const gc_run *run, int option, int idx);
 
 /* game-core's own stand-ins, counted in run->stubs */
 enum {
