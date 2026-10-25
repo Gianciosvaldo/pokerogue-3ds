@@ -46,6 +46,7 @@ static const me_rule me_rules[GC_ME_COUNT] = {
     [GC_ME_UNCOMMON_BREED]          = {GC_ME_COMMON,10,180,0,0,0,0,0},
     [GC_ME_GLOBAL_TRADE_SYSTEM]     = {GC_ME_COMMON,10,180,0,0,0,0,0},
     [GC_ME_THE_EXPERT_POKEMON_BREEDER]={GC_ME_ULTRA,25,180,0,4,(1u<<9),0,0},
+    [GC_ME_PILLAR_MEN]              = {GC_ME_GREAT, 10,180,0,0,0,0,0},   /* Mysterious Challengers' rule, beside it (custom runs) */
 };
 
 static bool biome_has(const gc_run *r, int type)
@@ -62,7 +63,7 @@ static bool biome_has(const gc_run *r, int type)
         || b == BIOME_ID_CONSTRUCTION_SITE || b == BIOME_ID_SLUM || b == BIOME_ID_ISLAND;
 
     if (type == GC_ME_BUG_TYPE_SUPERFAN && non_extreme) return true;
-    if ((type == GC_ME_MYSTERIOUS_CHALLENGERS || type == GC_ME_SHADY_VITAMIN_DEALER
+    if ((type == GC_ME_MYSTERIOUS_CHALLENGERS || type == GC_ME_PILLAR_MEN || type == GC_ME_SHADY_VITAMIN_DEALER
          || type == GC_ME_THE_POKEMON_SALESMAN || type == GC_ME_THE_WINSTRATE_CHALLENGE
          || type == GC_ME_THE_EXPERT_POKEMON_BREEDER) && human) return true;
     if ((type == GC_ME_DEPARTMENT_STORE_SALE || type == GC_ME_PART_TIMER
@@ -169,6 +170,7 @@ static bool available(const gc_run *r, int type, int tier)
     if (q->money_mult > 0 && r->money < pr_run_get_wave_money_amount(r->wave, q->money_mult)) return false;
 
     /* Encounter-level requirements whose state already exists in game-core. */
+    if (type == GC_ME_PILLAR_MEN && !gc_pillar_offered(r)) return false;
     if (type == GC_ME_ABSOLUTE_AVARICE && berry_stacks(r) < 6) return false;
     if (type == GC_ME_SHADY_VITAMIN_DEALER && !any_over_half_hp(r)) return false;
 
@@ -315,7 +317,7 @@ void gc_mystery_setup_screen(gc_run *run)
     case GC_ME_ABSOLUTE_AVARICE: case GC_ME_CLOWNING_AROUND: case GC_ME_PART_TIMER:
     case GC_ME_DANCING_LESSONS: case GC_ME_WEIRD_DREAM: case GC_ME_TELEPORTING_HIJINKS:
     case GC_ME_UNCOMMON_BREED: case GC_ME_THE_EXPERT_POKEMON_BREEDER: case GC_ME_FIELD_TRIP:
-    case GC_ME_AN_OFFER_YOU_CANT_REFUSE:
+    case GC_ME_AN_OFFER_YOU_CANT_REFUSE: case GC_ME_PILLAR_MEN:
         n = 3; break;
     case GC_ME_TRAINING_SESSION: case GC_ME_DEPARTMENT_STORE_SALE:
     case GC_ME_SAFARI_ZONE: case GC_ME_DELIBIRDY: case GC_ME_GLOBAL_TRADE_SYSTEM:
@@ -563,6 +565,9 @@ static void me_leave_with_heal_shop(gc_run *run, bool post, int type, int mon, i
     if (post) gc_rq_push(run, gc_rp(RP_ME_POST, type, mon, option));
     end_mystery_encounter_leave(run);
 }
+
+/* for src/gc_pillar.c */
+void gc_me_end_with_shop(gc_run *run) { end_mystery_encounter_shop(run); }
 
 /* for src/gc_fungames.c */
 void gc_me_leave_with_heal_shop(gc_run *run) { me_leave_with_heal_shop(run, false, GC_ME_FUN_AND_GAMES, 0, 0); }
@@ -1020,6 +1025,10 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
     const int wave_level = (int)pr_run_get_max_exp_level(&run->run, run->wave, false);
 
     switch (type) {
+    case GC_ME_PILLAR_MEN:
+        gc_pillar_execute(run, option);
+        return true;
+
     case GC_ME_MYSTERIOUS_CHALLENGERS:
         if (option == 0) {
             gc_port_give_reward(run, "MEMORY_MUSHROOM");

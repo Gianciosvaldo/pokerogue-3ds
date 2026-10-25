@@ -16,6 +16,10 @@ static void queue_battle_end(gc_run *run)
         gc_fg_battle_end(run, true);
         return;
     }
+    if (in->pillar.active) {   /* the Pillar Men: handleMysteryEncounterVictory, no TrainerVictoryPhase */
+        gc_pillar_victory(run);
+        return;
+    }
     gc_rq_push(run, gc_rp(RP_BATTLE_END, 1, 0, 0));
     if (run->battle_type == BATTLE_TYPE_TRAINER) gc_rq_push(run, gc_rp(RP_TRAINER_VICTORY, 0, 0, 0));
     const int mode = run->run.mode, wave = run->wave;

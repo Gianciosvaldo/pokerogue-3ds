@@ -150,6 +150,10 @@ typedef struct gc_custom_hooks {
     /* An eligible trainer wave (see above): true = `team` (zeroed by the caller) is filled and replaces the ordinary party. A team that fails
      * gc_custom_team_check leaves the ordinary party. */
     bool (*trainer)(void *user, const struct gc_run *run, const gc_custom_encounter *enc, gc_custom_team *team);
+    /* The Pillar Men encounter (GC_ME_PILLAR_MEN, custom runs only). which = -1: is the encounter on offer in this run (true = yes; `team` is NULL).
+     * which = 0, 1, 2: the option the player chose (easy, hard, brutal): true = `team` (zeroed by the caller) is that foe's team, which
+     * fights as a trainer battle of the encounter. NULL = the encounter is never offered. */
+    bool (*pillar)(void *user, const struct gc_run *run, int which, gc_custom_team *team);
 } gc_custom_hooks;
 
 /* Installs (or, with NULL, removes) the hooks. The pointer is kept: it must outlive the run. Safe at any time, also in the middle of a battle
