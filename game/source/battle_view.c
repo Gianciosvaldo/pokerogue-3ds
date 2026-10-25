@@ -2091,12 +2091,15 @@ static void bv_release(ui_screen *s,ui_button b){
 static void bv_draw(ui_screen* s, rr_screen which) {
   (void)s;
   if (which == RR_TOP) {
+    /* while an animation plays, its background and graphics run across the border: the border goes under the field */
+    const bool wide = ba_active();
+    if (wide && ui_space(UI_PHYS_TOP)) draw_border();
     if (ui_space(UI_FIELD)) {
       draw_field();
       if (B.overlay > 0) rr_rect(0, 0, 320, 132, RR_RGBA(0x42, 0x42, 0x42, (int)(B.overlay * 255)));
       chs_draw();
     }
-    if (ui_space(UI_PHYS_TOP)) draw_border();
+    if (!wide && ui_space(UI_PHYS_TOP)) draw_border();
     if (ui_space(UI_FIELD_UI)) {
       draw_enemy_info(&B.s[1]);
       draw_player_info(&B.s[0]);

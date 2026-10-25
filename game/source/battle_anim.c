@@ -688,10 +688,11 @@ static void draw_bg(void) {
   rr_draw_opts o = RR_DEFAULT_OPTS;
   o.scale_x = o.scale_y = 1.25f;
   o.tint = tint;
-  int i0 = A.bg_x < 0 ? (int)floorf(-A.bg_x / tw) : 0;
-  int j0 = A.bg_y < 0 ? (int)floorf(-A.bg_y / th) : 0;
-  for (int j = j0; (float)j * th < 576 * 1.25f && A.bg_y + (float)j * th < 180; j++)
-    for (int i = i0; (float)i * tw < 896 * 1.25f && A.bg_x + (float)i * tw < 320; i++)
+  /* the 400x240 top screen shows 40 px more on each side and 30 px above and below the 320x180 field (field coordinates -40..360, -30..210) */
+  int i0 = A.bg_x < -40 ? (int)floorf((-40 - A.bg_x) / tw) : 0;
+  int j0 = A.bg_y < -30 ? (int)floorf((-30 - A.bg_y) / th) : 0;
+  for (int j = j0; (float)j * th < 576 * 1.25f && A.bg_y + (float)j * th < 210; j++)
+    for (int i = i0; (float)i * tw < 896 * 1.25f && A.bg_x + (float)i * tw < 360; i++)
       rr_draw(f, A.bg_x + (float)i * tw, A.bg_y + (float)j * th, &o);
 }
 
