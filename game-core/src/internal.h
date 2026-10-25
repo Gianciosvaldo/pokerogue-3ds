@@ -105,6 +105,9 @@ typedef struct {
     char name_arg[3][GC_TNAME_COUNT_][72];
     /* custom content (gc/custom.h): the app's hooks (not saved, the app installs them again after a load) and the offer a wave is waiting on */
     const gc_custom_hooks *custom;
+    char custom_trainer_name[48];      /* a team's plain-text trainer name (not saved: gc_custom_set_trainer_name after a load) */
+    bool custom_team_on;               /* the battle's party came from a team: enemy_items gives its members the team's items */
+    gc_custom_team custom_team;
     bool custom_offering, custom_offer_reset, custom_offer_new_biome;
     uint16_t enemy_start_species[6];   /* the enemy party's species and forms when the battle began (gc_custom_actor.start_*); not saved */
     uint8_t enemy_start_form[6];
@@ -255,6 +258,10 @@ void gc_custom_install_observer(gc_run *run);                        /* puts the
 bool gc_custom_report(gc_run *run, const gc_custom_encounter *enc);  /* encounter(): true = the player is asked */
 void gc_custom_answer(gc_run *run, bool accept);                     /* the player's answer: builds the enemy for an accept, then the battle starts */
 bool gc_custom_build_enemy(gc_run *run, const gc_custom_enemy *spec, const char **why);   /* the ordinary enemy replaced by spec's identity */
+bool gc_custom_build_trainer(gc_run *run, const gc_custom_team *team);                    /* the ordinary trainer party replaced by the team (unfinished: gc_enemy_finish_party follows) */
+bool gc_custom_trainer_wave(gc_run *run, int wave);                                      /* the wave just generated may become a team's */
+bool gc_custom_trainer(gc_run *run, const gc_custom_encounter *enc);                      /* trainer(): an eligible wave asks the app for a team and builds it */
+void gc_custom_team_items(gc_run *run);                                                   /* the team's items instead of the generated ones (enemy_items) */
 void gc_enemy_finish_party(gc_run *run);                             /* passives, stats, seen flags, items, AI, trainer names of the enemy party */
 void gc_enemy_ctx(gc_run *run, pr_enemy_gen_ctx *ec);                /* the scene addEnemyPokemon sees (run-core's context) */
 void gc_refresh_enemy(gc_run *run, gc_mon *m, int species, int level, const pr_enemy_gen *g, int slot);   /* gc_mon_new_enemy again, keeping the moveset */

@@ -61,6 +61,17 @@ void gc_trainer_names(gc_run *run)
 {
     gc_internal *in = gc_int(run);
     for (int i = 0; i < GC_TNAME_COUNT_; i++) run->trainer_names[i] = NULL;
+    if (run->battle_type == BATTLE_TYPE_TRAINER && in->custom_trainer_name[0]) {
+        /* a custom team's trainer: one plain text for every message (no title, no locale key) */
+        in->name_ring = (uint8_t)((in->name_ring + 1) % 3);
+        for (int i = 0; i < GC_TNAME_COUNT_; i++) {
+            snprintf(in->name_text[in->name_ring][i], sizeof in->name_text[0][0], "%s", in->custom_trainer_name);
+            in->name_arg[in->name_ring][i][0] = 0;
+            in->name_exact[in->name_ring] &= (uint8_t)~(1u << i);
+            run->trainer_names[i] = in->name_text[in->name_ring][i];
+        }
+        return;
+    }
     const gc_trainer_config *c = run->battle_type == BATTLE_TYPE_TRAINER ? gc_trainer_config_of(run->trainer_type) : NULL;
     const int v = run->trainer_variant;
     if (!c || v < 0 || v > 2) return;
@@ -170,7 +181,7 @@ static void enemy_items(gc_run *run)
     }
     static pr_enemy_items out;
     run->n_enemy_items = 0;
-    if (pr_run_generate_enemy_items(&run->run, &ic, &out) < 0) { gc_stub(run, GC_STUB_UNPORTED_ENEMY); return; }
+    if (pr_run_generate_enemy_items(&run->run, &ic, &out) < 0) { gc_stub(run, GC_STUB_UNPORTED_ENEMY); gc_custom_team_items(run); return; }
     for (int i = 0; i < run->n_enemy; i++)
         for (int k = 0; k < out.n[i] && run->n_enemy_items < GC_MAX_ITEMS; k++) {
             gc_item *it = &run->enemy_items[run->n_enemy_items++];
@@ -190,6 +201,7 @@ static void enemy_items(gc_run *run)
                 }
             }
         }
+    gc_custom_team_items(run);
     gc_cache_generated_item_tiers(run);
 }
 
@@ -409,6 +421,8 @@ void gc_new_battle(gc_run *run)
     in->reroll_count = 0;
     in->battle_won = false;
     run->me_battle = run->me_catch_allowed = false;
+    in->custom_trainer_name[0] = 0;
+    in->custom_team_on = false;
 
     pr_new_battle_ctx ctx;
     memset(&ctx, 0, sizeof ctx);
@@ -552,6 +566,18 @@ void gc_new_battle(gc_run *run)
             pr_pokemon *p=&run->enemy[k].b;if(!p->is_boss)continue;const pr_form *f=gc_form(p->species,p->form);int bst=0;for(int j=0;j<6;j++)bst+=f->base_stats[j];
             p->boss_segments=(uint8_t)ceil((double)p->boss_segments*bst/total);p->boss_segment_index=p->boss_segments-1;
         }
+    }
+    /* custom content: an eligible ordinary trainer wave may become a custom team's (gc/custom.h, trainer()); before the party is finished,
+     * so the dex, the items and the AI see only the party that fights */
+    if (in->custom && !stand_in && gc_custom_trainer_wave(run, wave)) {
+        gc_custom_encounter enc;
+        memset(&enc, 0, sizeof enc);
+        enc.wave = wave;
+        enc.biome = run->biome;
+        enc.kind = GC_ENC_TRAINER;
+        enc.level = run->enemy[0].b.level;
+        enc.species = run->enemy[0].b.species;
+        gc_custom_trainer(run, &enc);
     }
     gc_enemy_finish_party(run);
     run->run.unported = before;

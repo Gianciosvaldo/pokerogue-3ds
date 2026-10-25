@@ -17,6 +17,9 @@
  *   answer()      the player's answer. For an accept it fills `spec`; game-core builds that enemy in place of the ordinary one (through its
  *                 own construction, stat, item and AI paths, at the ordinary wave level) and then calls built(). A decline changes nothing.
  *   faint()       every faint of the battle, with the attacker when battle-core's own state names it (pr_faint_note).
+ *   trainer()     before the wave's encounter is final, on an ordinary random single trainer wave (not a double, a boss, the final wave, a
+ *                 fixed rival, Gym or Elite Four battle, nor Classic's wave 20): the app may hand over a team that replaces the ordinary
+ *                 party (see gc_custom_team). The ordinary trainer type stays (money, AI, rewards); the name is the team's own plain text.
  */
 #ifndef GC_CUSTOM_H
 #define GC_CUSTOM_H
@@ -71,6 +74,37 @@ typedef struct {
     uint16_t moves[GC_CUSTOM_MAX_MOVES];
 } gc_custom_enemy;
 
+#define GC_CUSTOM_MAX_TEAM 6
+#define GC_CUSTOM_MAX_TEAM_ITEMS 5
+
+typedef struct {
+    const char *key;             /* a modifierTypes key as game-core's item tables spell it; static storage (pr_item_names entry or equal text) */
+    int16_t arg;                 /* -1 when the item has none */
+    uint8_t stack;               /* 1..99 */
+} gc_custom_team_item;
+
+typedef struct {
+    uint16_t species;
+    uint8_t form;
+    uint8_t ability_slot;        /* 0, 1: the form's abilities; 2: the hidden one */
+    bool shiny;
+    uint8_t variant;             /* shiny tier 0..2 */
+    uint16_t moves[GC_CUSTOM_MAX_MOVES];   /* a valid move id each, 0 = empty slot (at least one) */
+    uint8_t n_items;
+    gc_custom_team_item items[GC_CUSTOM_MAX_TEAM_ITEMS];
+} gc_custom_team_member;
+
+/* A trainer's team in place of the ordinary party. Built through game-core's own construction, stat, passive, item and AI paths: the levels
+ * are the ordinary party's (the team's last members take the highest ones), the IVs, nature and ids come from the ordinary party's members,
+ * so a team draws nothing from the run's random numbers; the gender follows the id; the held items are the team's own, the wave-scaled
+ * ones are not given to its members. */
+typedef struct {
+    const char *name;            /* the trainer's name as plain text, at most 47 characters; copied */
+    int16_t passive;             /* an AbilityId every member has as its passive, -1 = none */
+    uint8_t n;                   /* 1..GC_CUSTOM_MAX_TEAM */
+    gc_custom_team_member member[GC_CUSTOM_MAX_TEAM];
+} gc_custom_team;
+
 /* A Pokemon of a faint, by value (nothing points into the run). */
 typedef struct {
     uint32_t id;                 /* Pokemon.id */
@@ -113,6 +147,9 @@ typedef struct gc_custom_hooks {
     /* After an accepted answer: the enemy was built (ok) or game-core refused the spec (why, and the ordinary enemy stays). */
     void (*built)(void *user, const struct gc_run *run, bool ok, const char *why);
     void (*faint)(void *user, const struct gc_run *run, const gc_custom_faint *note);
+    /* An eligible trainer wave (see above): true = `team` (zeroed by the caller) is filled and replaces the ordinary party. A team that fails
+     * gc_custom_team_check leaves the ordinary party. */
+    bool (*trainer)(void *user, const struct gc_run *run, const gc_custom_encounter *enc, gc_custom_team *team);
 } gc_custom_hooks;
 
 /* Installs (or, with NULL, removes) the hooks. The pointer is kept: it must outlive the run. Safe at any time, also in the middle of a battle
@@ -122,6 +159,13 @@ void gc_run_set_custom(struct gc_run *run, const gc_custom_hooks *hooks);
 /* Whether game-core can build this enemy, without building it: species, form, gender, ability (one of the form's three), nature, moves.
  * *why (may be NULL) says what is wrong. Pure. */
 bool gc_custom_enemy_check(const gc_custom_enemy *spec, const char **why);
+
+/* Whether game-core can build this team: sizes, species, form, ability slot, shiny tier, moves, item keys and stacks. Pure. */
+bool gc_custom_team_check(const gc_custom_team *team, const char **why);
+
+/* Gives the current trainer battle a plain-text name (all of the trainer's message names), or, with NULL or "", takes it away. A battle
+ * built from a team has it from the start; the app calls this after gc_run_load for a saved battle of a team. No effect outside a trainer battle. */
+void gc_custom_set_trainer_name(struct gc_run *run, const char *name);
 
 #ifdef __cplusplus
 }

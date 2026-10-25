@@ -3,6 +3,7 @@
  * Custom callbacks run only with installed hooks. The faint observer also keeps
  * the run's read-only final-blow provenance for ordinary run reports. */
 #include "internal.h"
+#include <stdio.h>
 
 static void actor_of(const gc_run *run, const pr_pokemon *p, bool enemy, gc_custom_actor *a)
 {
@@ -202,4 +203,169 @@ void gc_custom_answer(gc_run *run, bool accept)
         }
     }
     gc_new_battle_start(run, reset, new_biome);
+}
+
+/* ---------------------------------------------------------------- a trainer's team in place of the ordinary party */
+/* The canonical pr_item_names entry for `key`, or NULL when game-core has no such item key. */
+static const char *item_key_of(const char *key)
+{
+    if (!key) return NULL;
+    for (int i = 0; i < pr_item_count; i++) if (pr_item_names[i] && !strcmp(pr_item_names[i], key)) return pr_item_names[i];
+    return NULL;
+}
+
+bool gc_custom_team_check(const gc_custom_team *team, const char **why)
+{
+    const char *dummy;
+    if (!why) why = &dummy;
+    *why = "";
+    if (!team) { *why = "no team"; return false; }
+    if (!team->name || !team->name[0] || strlen(team->name) >= sizeof((gc_internal *)0)->custom_trainer_name) { *why = "trainer name"; return false; }
+    if (team->n < 1 || team->n > GC_CUSTOM_MAX_TEAM) { *why = "team size"; return false; }
+    if (team->passive < -1 || team->passive >= PR_ABILITY_COUNT) { *why = "unknown passive"; return false; }
+    for (int e = 0; e < team->n; e++) {
+        const gc_custom_team_member *t = &team->member[e];
+        const pr_species *sp = gc_species(t->species);
+        if (!sp) { *why = "unknown species"; return false; }
+        if (t->form >= sp->nforms) { *why = "unknown form"; return false; }
+        if (pr_forms[sp->form0 + t->form].unobtainable) { *why = "form not available"; return false; }
+        if (t->ability_slot > 2) { *why = "ability slot"; return false; }
+        if (t->variant > 2 || (!t->shiny && t->variant)) { *why = "shiny tier"; return false; }
+        int n = 0;
+        for (int i = 0; i < GC_CUSTOM_MAX_MOVES; i++) {
+            const int m = t->moves[i];
+            if (!m) continue;
+            if (m < 0 || m >= PR_MOVE_COUNT || pr_moves[m].unimplemented) { *why = "unknown or unimplemented move"; return false; }
+            for (int j = 0; j < i; j++) if (t->moves[j] == m) { *why = "repeated move"; return false; }
+            n++;
+        }
+        if (!n) { *why = "no move"; return false; }
+        if (t->n_items > GC_CUSTOM_MAX_TEAM_ITEMS) { *why = "too many items"; return false; }
+        for (int i = 0; i < t->n_items; i++) {
+            if (!item_key_of(t->items[i].key)) { *why = "unknown item key"; return false; }
+            if (t->items[i].stack < 1 || t->items[i].stack > 99) { *why = "item stack"; return false; }
+        }
+    }
+    return true;
+}
+
+void gc_custom_set_trainer_name(gc_run *run, const char *name)
+{
+    gc_internal *in = gc_int(run);
+    snprintf(in->custom_trainer_name, sizeof in->custom_trainer_name, "%s", name ? name : "");
+    if (run->battle_type == BATTLE_TYPE_TRAINER) gc_trainer_names(run);
+}
+
+/* The ordinary trainer party (generated, not finished) becomes the team. Levels: the ordinary party's, a team with fewer members takes its
+ * highest ones, one with more repeats the highest; ids, IVs and natures are the ordinary members' (the last one's for the extra members, with
+ * the id moved so the ids stay apart), so nothing is drawn. */
+bool gc_custom_build_trainer(gc_run *run, const gc_custom_team *team)
+{
+    gc_internal *in = gc_int(run);
+    if (!gc_custom_team_check(team, NULL)) return false;
+    const int n0 = run->n_enemy;
+    if (run->battle_type != BATTLE_TYPE_TRAINER || run->double_battle || n0 < 1 || n0 > 6) return false;
+    static gc_mon built[GC_CUSTOM_MAX_TEAM];
+    uint32_t used_ids[6];
+    int levels[6], ivs[6][6], nature[6];
+    for (int i = 0; i < n0; i++) {
+        levels[i] = run->enemy[i].b.level;
+        used_ids[i] = run->enemy[i].b.id;
+        nature[i] = run->enemy[i].b.nature;
+        for (int k = 0; k < 6; k++) ivs[i][k] = run->enemy[i].b.ivs[k];
+    }
+    for (int e = 0; e < team->n; e++) {
+        const gc_custom_team_member *t = &team->member[e];
+        const int src = e < n0 ? e : n0 - 1;
+        const int lvl = team->n < n0 ? levels[n0 - team->n + e] : levels[src];
+        const pr_species *sp = gc_species(t->species);
+        const pr_form *f = &pr_forms[sp->form0 + t->form];
+        pr_enemy_gen g;
+        memset(&g, 0, sizeof g);
+        g.id = e < n0 ? used_ids[e] : used_ids[n0 - 1] + 0x9E3779B1u * (uint32_t)(e - n0 + 1);
+        for (int k = 0; k < 6; k++) g.ivs[k] = ivs[src][k];
+        g.ability_index = t->ability_slot;
+        g.fusion_species = -1;
+        if (sp->male_permille < 0) g.gender = -1;
+        else if (sp->male_permille == 0) g.gender = 1;
+        else if (sp->male_permille == 1000) g.gender = 0;
+        else g.gender = (int)(((g.id * 2654435761u) >> 8) % 1000u) < sp->male_permille ? 0 : 1;
+        g.form = t->form;
+        g.nature = nature[src];
+        g.tera_type = f->type1;
+        g.shiny = t->shiny;
+        g.variant = t->variant;
+        g.luck = t->shiny ? t->variant + 1 : 0;
+        g.friendship = -1;
+        gc_mon *m = &built[e];
+        gc_mon_new_enemy(run, m, t->species, lvl, &g, TRAINER_SLOT_TRAINER);
+        m->b.n_moves = 0;
+        for (int k = 0; k < 4; k++) m->b.moves[k] = 0;
+        int slot = 0;
+        for (int k = 0; k < GC_CUSTOM_MAX_MOVES; k++) if (t->moves[k]) gc_mon_set_move(m, slot++, t->moves[k]);
+        if (team->passive >= 0) { m->b.custom_passive = team->passive; m->b.passive_flag = true; }
+    }
+    for (int e = 0; e < team->n; e++) run->enemy[e] = built[e];
+    run->n_enemy = team->n;
+    in->custom_team = *team;
+    in->custom_team_on = true;
+    snprintf(in->custom_trainer_name, sizeof in->custom_trainer_name, "%s", team->name);
+    return true;
+}
+
+/* enemy_items for a team's battle: its members hold what the team lists (stacking equal items) instead of the wave's generated ones; the
+ * tokens (no holder) stay. */
+void gc_custom_team_items(gc_run *run)
+{
+    gc_internal *in = gc_int(run);
+    if (!in->custom_team_on) return;
+    int w = 0;
+    for (int i = 0; i < run->n_enemy_items; i++) {
+        bool member = false;
+        for (int e = 0; e < run->n_enemy; e++) member |= run->enemy_items[i].pokemon_id && run->enemy_items[i].pokemon_id == run->enemy[e].b.id;
+        if (!member) run->enemy_items[w++] = run->enemy_items[i];
+    }
+    run->n_enemy_items = w;
+    for (int e = 0; e < run->n_enemy && e < in->custom_team.n; e++) {
+        const gc_custom_team_member *t = &in->custom_team.member[e];
+        for (int i = 0; i < t->n_items && run->n_enemy_items < GC_MAX_ITEMS; i++) {
+            const char *key = item_key_of(t->items[i].key);
+            if (!key) continue;
+            bool stacked = false;
+            for (int j = 0; j < run->n_enemy_items && !stacked; j++) {
+                gc_item *o = &run->enemy_items[j];
+                if (o->key == key && o->arg == t->items[i].arg && o->pokemon_id == run->enemy[e].b.id) { o->stack += t->items[i].stack; stacked = true; }
+            }
+            if (stacked) continue;
+            gc_item *it = &run->enemy_items[run->n_enemy_items++];
+            memset(it, 0, sizeof *it);
+            it->key = key;
+            it->arg = t->items[i].arg;
+            it->stack = t->items[i].stack;
+            it->pokemon_id = run->enemy[e].b.id;
+        }
+    }
+}
+
+/* Whether the wave just generated is one where a team may replace the party: an ordinary random single trainer wave. Not a double, a boss, the
+ * final wave, a fixed battle (rival, Gym, Elite Four) nor Classic's wave 20. `run` holds the generated, unfinished enemy party. */
+bool gc_custom_trainer_wave(gc_run *run, int wave)
+{
+    if (run->battle_type != BATTLE_TYPE_TRAINER || run->double_battle || run->n_enemy < 1) return false;
+    if (pr_run_is_wave_final(run->run.mode, wave) || pr_run_is_fixed_battle(&run->run, wave)) return false;
+    if (run->run.mode == GAME_MODES_CLASSIC && wave == 20) return false;
+    for (int i = 0; i < run->n_enemy; i++) if (run->enemy[i].b.is_boss) return false;
+    return true;
+}
+
+/* The hook of an eligible trainer wave: asks the app for a team and builds it. True when the party became the team. */
+bool gc_custom_trainer(gc_run *run, const gc_custom_encounter *enc)
+{
+    const gc_custom_hooks *h = gc_int(run)->custom;
+    if (!h || !h->trainer) return false;
+    static gc_custom_team team;
+    memset(&team, 0, sizeof team);
+    team.passive = -1;
+    if (!h->trainer(h->user, run, enc, &team)) return false;
+    return gc_custom_build_trainer(run, &team);
 }
