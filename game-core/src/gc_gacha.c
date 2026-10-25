@@ -47,7 +47,7 @@ bool gc_system_buy_species_egg(gc_system *sys,uint16_t species,gc_gacha_ctx *ctx
  if(why)*why=NULL;
  return true;
 }
-static bool egg_new(gc_system *s,gc_gacha_ctx *ctx,gc_egg *e,int forced){
+static bool egg_new_ex(gc_system *s,gc_gacha_ctx *ctx,gc_egg *e,int forced,bool tier3_shiny){
  char seed[25];for(int i=0;i<24;i++)seed[i]=chars[entropy_int(ctx,62)];seed[24]=0;pr_seedstr key;pr_seed_from_ascii(&key,seed);pr_rng r;pr_rng_sow(&r,&key);
  int offset=ctx->machine==1,tier=forced;
  if(tier<0){int value=entropy_int(ctx,256);tier=value>=52+offset?0:value>=8+offset?1:value>=1+offset?2:3;}
@@ -56,6 +56,7 @@ static bool egg_new(gc_system *s,gc_gacha_ctx *ctx,gc_egg *e,int forced){
  memset(e,0,sizeof *e);e->tier=tier;e->id=(uint32_t)entropy_int(ctx,1073741824)+(uint32_t)tier*1073741824u;e->source_type=ctx->machine;e->timestamp_ms=ctx->timestamp_ms;
  static const int waves[]={10,25,50,100};e->hatch_waves=waves[tier];e->is_shiny=!pr_rng_seed_int(&r,ctx->machine==2?64:128,0);
  if(e->is_shiny){int v=pr_rng_seed_int(&r,10,0);e->variant_tier=v>=4?0:v>=1?1:2;}
+ if(tier3_shiny){e->is_shiny=true;e->variant_tier=2;}
  if(tier==0&&e->id%204==0)e->species=pr_rng_seed_int(&r,8,0)!=1?SPECIES_ID_PHIONE:SPECIES_ID_MANAPHY;
  else if(tier==3&&ctx->machine==1&&!pr_rng_seed_int(&r,2,0))e->species=gc_gacha_featured_species(ctx->timestamp_ms);
  else{
@@ -71,6 +72,19 @@ static bool egg_new(gc_system *s,gc_gacha_ctx *ctx,gc_egg *e,int forced){
  if(!has_variants(e->species))e->variant_tier=0;
  bool manaphy=e->species==SPECIES_ID_MANAPHY||e->species==SPECIES_ID_PHIONE;int mt=manaphy?2:tier;static const int normal[]={48,24,12,6},boosted[]={16,12,6,3};e->egg_move_index=pr_rng_seed_int(&r,ctx->machine==0?boosted[mt]:normal[mt],0)?pr_rng_seed_int(&r,3,0):3;
  s->stats.eggs_pulled++;if(manaphy){s->stats.manaphy_eggs_pulled++;e->hatch_waves=50;}else if(tier==1)s->stats.rare_eggs_pulled++;else if(tier==2)s->stats.epic_eggs_pulled++;else if(tier==3)s->stats.legendary_eggs_pulled++;
+ return true;
+}
+static bool egg_new(gc_system *s,gc_gacha_ctx *ctx,gc_egg *e,int forced){return egg_new_ex(s,ctx,e,forced,false);}
+bool gc_system_gift_egg(gc_system *sys,int tier,bool tier3_shiny,const char *seed_text,uint64_t timestamp_ms){
+ if(!sys||tier<0||tier>3||!seed_text||sys->n_eggs<0||sys->n_eggs>=99||timestamp_ms>UINT64_C(8640000000000000))return false;
+ gc_gacha_ctx c;memset(&c,0,sizeof c);c.machine=0;c.timestamp_ms=timestamp_ms;
+ pr_seedstr key;pr_seed_from_ascii(&key,seed_text);pr_rng_sow(&c.entropy,&key);
+ /* a gift moves neither the pity counters nor the pull statistics */
+ uint32_t pity[4],unlock[4];memcpy(pity,sys->egg_pity,sizeof pity);memcpy(unlock,sys->unlock_pity,sizeof unlock);gc_stat_milestones st=sys->stats;
+ gc_egg e;bool ok=egg_new_ex(sys,&c,&e,tier,tier3_shiny);
+ memcpy(sys->egg_pity,pity,sizeof pity);memcpy(sys->unlock_pity,unlock,sizeof unlock);sys->stats=st;
+ if(!ok)return false;
+ sys->eggs[sys->n_eggs++]=e;
  return true;
 }
 bool gc_system_gacha_pull(gc_system *sys,gc_gacha_ctx *ctx,gc_gacha_result *out,const char **why){

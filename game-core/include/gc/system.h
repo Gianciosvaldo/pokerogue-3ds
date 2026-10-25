@@ -82,6 +82,16 @@ typedef struct {
     uint64_t total_money_earned;
 } gc_stat_milestones;
 
+/* What the custom achievements count (gc_achv.c; no upstream equivalent). Only ever grows. */
+typedef struct {
+    uint32_t jojo_beaten;   /* bit i: the JoJo challenger i (the table's order in custom-core) has been beaten */
+    uint32_t jojo_battles;  /* JoJo battles won */
+    uint32_t jojo_clean;    /* ... of them with none of the party fainted */
+    uint32_t run_tag;       /* the run run_jojo counts in (a hash of its seed) */
+    uint8_t run_jojo;       /* challengers beaten in that run */
+    uint8_t best_run_jojo;  /* the most in one run */
+} gc_achv_progress;
+
 /* Overall system data (upstream GameData) */
 typedef struct {
     gc_dex_entry dex[GC_MAX_SPECIES_ID + 1];           /* 1-indexed by SpeciesId */
@@ -95,6 +105,7 @@ typedef struct {
     bool classic_voucher_unlocked; /* achievement voucher, separate from trainer unlocks */
     uint32_t egg_pity[4],unlock_pity[4];
     gc_stat_milestones stats;                          /* profile stat milestones */
+    gc_achv_progress achv;                             /* custom achievements (gc_achv.c) */
 } gc_system;
 
 /* Initialize system data with new-save defaults (upstream initDexData + initStarterData) */

@@ -17,6 +17,7 @@
 #include "battle_view.h"
 #include "combat_observer.h"
 #include "custom_run.h"
+#include "achv_hooks.h"
 #include "gm_item_ui.h"
 #include "i18n.h"
 #include "menus.h"
@@ -1423,7 +1424,7 @@ static void mystery_auto(void) {
   const gc_screen* s = gc_run_screen(&G.run);
   gc_choice c = {.kind = GC_CH_MYSTERY};
   for (int i = 0; i < s->n_options && i < 8; i++)
-    if (s->option_ok[i]) {
+    if (s->option_ok[i] && !(s->mystery_type == GC_ME_GLOBAL_TRADE_SYSTEM && i == 2)) { /* the item trade needs a held item chosen, which this stand-in cannot do; Leave is the last option */
       c.a = (int16_t)i;
       break;
     }
@@ -1622,6 +1623,16 @@ static void screen_step(void) {
       say(note);
       return;
     }
+    /* a JoJo challenger beaten counts for the achievements: what it unlocks is told before the reward screen */
+    {
+      const cc_jojo_char* foe = cr_jojo_foe(&G.run);
+      if (ach_on_screen(&G.run, s->kind, foe ? (int)(foe - cc_jojo_chars) : -1) && G.cfg.save_sys) G.cfg.save_sys();
+      const char* ach = ach_take_message();
+      if (ach) {
+        say(ach);
+        return;
+      }
+    }
   }
   G.st.screens[s->kind & 15]++;
   switch (s->kind) {
@@ -1713,6 +1724,7 @@ static bool new_run(bool from_black) {
   rnd(1);
   gc_run_new(&G.run, GAME_MODES_CLASSIC, G.st.runs == 1 ? G.cfg.seed : NULL, G.cfg.entropy + (uint32_t)G.st.runs);
   G.run.sys = G.cfg.sys;
+  ach_reset();
   G.have_defeat = false;
   if (G.cfg.custom) {
     /* the run's identity, its schedule and the hooks, before the starters (the first wave is reported to them) */
@@ -1761,6 +1773,7 @@ rsv_status rs_resume(const rs_config* cfg, char why[RSV_WHY_LEN]) {
   const rsv_status st = cfg->custom ? cr_load(cfg->slot, &G.run, why) : rsv_load(cfg->slot, &G.run, why);
   if (st != RSV_OK) return st; /* G.run is not usable: the caller must not drive it */
   G.run.sys = cfg->sys; /* a saved run holds no system data: it takes the player's */
+  ach_reset();
   /* observation starts here: the battles before the save were not seen (a custom run's save carries the turns it had kept) */
   if (cfg->custom)
     cr_begin_observer();
