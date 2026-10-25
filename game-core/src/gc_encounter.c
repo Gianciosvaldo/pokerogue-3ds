@@ -289,35 +289,52 @@ bool gc_gen_wild(gc_run *run, int level)
     return gen_wild(run, level);
 }
 
-static bool gen_trainer(gc_run *run, const pr_new_battle *nb, int prev_wave)
+/* the ordinary party of a trainer: `tpl`'s members at `levels`, as EncounterPhase generates them (unfinished: gc_enemy_finish_party follows) */
+static bool gen_trainer_party(gc_run *run, const pr_party_template *tpl, int trainer_type, int variant, const int *levels, int n_levels)
 {
-    const pr_party_template *tpl = party_template(&run->run, nb->trainer_type, nb->template_index, prev_wave);
     if (!tpl) return false;
     pr_trainer_party_ctx tc;
     memset(&tc, 0, sizeof tc);
     gc_enemy_ctx(run, &tc.enemy);
-    const pr_trainer_info *t = trainer_info(nb->trainer_type);
-    tc.is_double = (t && t->double_only) || nb->variant == TRAINER_VARIANT_DOUBLE;
+    const pr_trainer_info *t = trainer_info(trainer_type);
+    tc.is_double = (t && t->double_only) || variant == TRAINER_VARIANT_DOUBLE;
     tc.classic_wave20_trainer = run->wave == 20 && run->run.mode == GAME_MODES_CLASSIC;
     tc.template_ = tpl;
-    tc.n_levels = nb->n_levels;
-    memcpy(tc.levels, nb->levels, sizeof tc.levels);
+    tc.n_levels = n_levels;
+    memcpy(tc.levels, levels, sizeof(int) * (size_t)n_levels);
     static pr_trainer_party party;
     if (pr_run_gen_trainer_party(&run->run, &tc, &party) < 0) return false;
     run->n_enemy = 0;
     for (int e = 0; e < party.n && e < 6; e++) {
         pr_enemy_gen_ctx ec = tc.enemy;
         ec.species = party.species[e];
-        ec.level = nb->levels[e];
+        ec.level = levels[e];
         ec.trainer_slot = tc.is_double && e % 2 ? TRAINER_SLOT_TRAINER_PARTNER : TRAINER_SLOT_TRAINER;
         gc_mon *m = &run->enemy[run->n_enemy];
-        gc_mon_new_enemy(run, m, party.species[e], nb->levels[e], &party.mons[e], ec.trainer_slot);
+        gc_mon_new_enemy(run, m, party.species[e], levels[e], &party.mons[e], ec.trainer_slot);
         gc_port_enemy_moveset(run, m);
         if (pr_run_enemy_pokemon_finish(&run->run, &ec, &party.mons[e]) < 0) return false;
-        gc_refresh_enemy(run, m, party.species[e], nb->levels[e], &party.mons[e], ec.trainer_slot);
+        gc_refresh_enemy(run, m, party.species[e], levels[e], &party.mons[e], ec.trainer_slot);
         run->n_enemy++;
     }
     return run->n_enemy > 0;
+}
+
+static bool gen_trainer(gc_run *run, const pr_new_battle *nb, int prev_wave)
+{
+    return gen_trainer_party(run, party_template(&run->run, nb->trainer_type, nb->template_index, prev_wave), nb->trainer_type, nb->variant,
+                             nb->levels, nb->n_levels);
+}
+
+/* for src/gc_pillar.c */
+const pr_trainer_info *gc_trainer_info_of(int type) { return trainer_info(type); }
+const pr_party_template *gc_party_template_of(const gc_run *run, int trainer_type, int index, int prev_wave)
+{
+    return party_template(&run->run, trainer_type, index, prev_wave);
+}
+bool gc_gen_trainer_party(gc_run *run, const pr_party_template *tpl, int trainer_type, int variant, const int *levels, int n_levels)
+{
+    return gen_trainer_party(run, tpl, trainer_type, variant, levels, n_levels);
 }
 
 /* the run-core stand-ins a call just reported (bits set since `before`), for the soak runs */
@@ -453,6 +470,7 @@ void gc_new_battle(gc_run *run)
     run->me_battle = run->me_catch_allowed = false;
     in->custom_trainer_name[0] = 0;
     in->custom_team_on = false;
+    in->pillar.active = false;
 
     pr_new_battle_ctx ctx;
     memset(&ctx, 0, sizeof ctx);

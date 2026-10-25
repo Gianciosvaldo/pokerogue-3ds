@@ -114,6 +114,8 @@ typedef struct {
     /* Fun and Games!: the minigame is running (the encounter's misc.turnsRemaining and its handlers). Not saved: the only
      * save point is the encounter's start, before the option is chosen */
     struct { bool active; int8_t turns_remaining; } fg;
+    /* the Pillar Men's fight is running (option 0..2): its victory is the encounter's rewards. Not saved, for the same reason as fg */
+    struct { bool active; int8_t option; } pillar;
 } gc_internal;
 gc_internal *gc_int(gc_run *run);
 
@@ -345,6 +347,14 @@ int gc_gts_held_items(const gc_run *run, int idx, int out[GC_MAX_ITEMS]);
 bool gc_gts_pick_ok(const gc_run *run, int option, int idx);
 int gc_gts_allowed(const gc_run *run);
 bool gc_gts_execute(gc_run *run, int option, int b, int c, const char **why);
+/* the Pillar Men (src/gc_pillar.c, custom runs) */
+bool gc_pillar_offered(const gc_run *run);                  /* the hook says the encounter is on offer */
+void gc_pillar_execute(gc_run *run, int option);            /* the option chosen: the fight starts (or the encounter leaves with the heal shop) */
+void gc_pillar_victory(gc_run *run);                        /* the fight is won: the encounter's rewards, then the next wave */
+void gc_me_end_with_shop(gc_run *run);                      /* the shop in me_custom, then on to the next wave (end_mystery_encounter_shop) */
+const pr_trainer_info *gc_trainer_info_of(int type);
+const pr_party_template *gc_party_template_of(const gc_run *run, int trainer_type, int index, int prev_wave);
+bool gc_gen_trainer_party(gc_run *run, const pr_party_template *tpl, int trainer_type, int variant, const int *levels, int n_levels);
 /* mystery-encounter internals for gc_gts.c (src/gc_mystery.c) */
 pr_rng gc_me_option_rng(const gc_run *run);
 void gc_me_prune_items(gc_run *run);
