@@ -140,6 +140,13 @@ test: gts-host-test
 gts-host-test: $(BUILD)/mystery_gts_test
 	$(BUILD)/mystery_gts_test
 .PHONY: gts-host-test
+all: $(BUILD)/mystery_reach_test
+$(BUILD)/mystery_reach_test: tests/mystery_reach_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: reach-host-test
+reach-host-test: $(BUILD)/mystery_reach_test
+	$(BUILD)/mystery_reach_test
+.PHONY: reach-host-test
 all: $(BUILD)/mystery_gts_diff_test
 $(BUILD)/mystery_gts_diff_test: tests/mystery_gts_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

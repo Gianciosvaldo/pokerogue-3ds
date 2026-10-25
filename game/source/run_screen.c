@@ -1424,7 +1424,7 @@ static void mystery_auto(void) {
   const gc_screen* s = gc_run_screen(&G.run);
   gc_choice c = {.kind = GC_CH_MYSTERY};
   for (int i = 0; i < s->n_options && i < 8; i++)
-    if (s->option_ok[i]) {
+    if (s->option_ok[i] && !(s->mystery_type == GC_ME_GLOBAL_TRADE_SYSTEM && i == 2)) { /* the item trade needs a held item chosen, which this stand-in cannot do; Leave is the last option */
       c.a = (int16_t)i;
       break;
     }
