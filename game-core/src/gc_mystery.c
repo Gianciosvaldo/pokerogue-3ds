@@ -42,7 +42,7 @@ static const me_rule me_rules[GC_ME_COUNT] = {
     [GC_ME_BUG_TYPE_SUPERFAN]       = {GC_ME_GREAT, 30,180,1,3,0,0,0},
     [GC_ME_FUN_AND_GAMES]           = {GC_ME_GREAT, 10,180,0,0,0,1.5,0},
     [GC_ME_UNCOMMON_BREED]          = {GC_ME_COMMON,10,180,0,0,0,0,0},
-    [GC_ME_GLOBAL_TRADE_SYSTEM]     = {GC_ME_COMMON,10,180,0,2,0,0,0},
+    [GC_ME_GLOBAL_TRADE_SYSTEM]     = {GC_ME_COMMON,10,180,0,0,0,0,0},
     [GC_ME_THE_EXPERT_POKEMON_BREEDER]={GC_ME_ULTRA,25,180,0,4,(1u<<9),0,0},
 };
 
@@ -144,6 +144,7 @@ bool gc_mystery_pick_ok(const gc_run *run, int type, int option, int idx)
     if (type == GC_ME_PART_TIMER && option < 2) return gc_mon_allowed(m);
     /* Fun and Games!: isPokemonValidForEncounterOptionSelection, any Pokemon that is not fainted */
     if (type == GC_ME_FUN_AND_GAMES && option == 0) return gc_fg_pick_ok(run, idx);
+    if (type == GC_ME_GLOBAL_TRADE_SYSTEM) return gc_gts_pick_ok(run, option, idx);
     return false;
 }
 
@@ -359,9 +360,9 @@ void gc_mystery_setup_screen(gc_run *run)
     } else if (type == GC_ME_BUG_TYPE_SUPERFAN) {
         s->option_ok[0] = bug_in_party(run);
     } else if (type == GC_ME_GLOBAL_TRADE_SYSTEM) {
-        s->option_ok[0] = run->n_party >= 2;
-        s->option_ok[1] = run->n_items > 0;
-        s->option_ok[2] = berry_stacks(run) > 0;
+        /* Check Trade Offers and Wonder Trade need two Pokemon allowed in battle; the item trade and Leave are always on
+         * (the item trade's party screen filters on a transferable held item) */
+        s->option_ok[0] = s->option_ok[1] = gc_gts_allowed(run) >= 2;
     } else if (type == GC_ME_THE_EXPERT_POKEMON_BREEDER) {
         s->option_ok[0] = run->n_party >= 1;
         s->option_ok[1] = run->n_party >= 1;
@@ -1324,24 +1325,8 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_GLOBAL_TRADE_SYSTEM:
-        if (option == 0) {
-            int target = (b >= 0 && b < run->n_party) ? b : 0;
-            init_player_mon(run, &run->party[target], SPECIES_ID_PIKACHU, wave_level);
-            end_mystery_encounter_leave(run);
-            return true;
-        } else if (option == 1) {
-            int item_idx = (b >= 0 && b < run->n_items) ? b : 0;
-            if (run->n_items > 0) gc_item_remove_at(run, item_idx);
-            gc_port_give_reward(run, "EXP_CHARM");
-            end_mystery_encounter_leave(run);
-            return true;
-        } else if (option == 2) {
-            gc_item_remove_stacks(run, "BERRY", 1);
-            gc_port_give_reward(run, "SITRUS_BERRY");
-            end_mystery_encounter_leave(run);
-            return true;
-        }
-        end_mystery_encounter_leave(run);
+        /* the Global Trade System (src/gc_gts.c); a rejected pick leaves the screen as it was */
+        if (!gc_gts_execute(run, option, b, c, why)) { *ok = false; return false; }
         return true;
 
     case GC_ME_THE_EXPERT_POKEMON_BREEDER:
@@ -1364,3 +1349,9 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
     }
 }
+
+/* the mystery-encounter internals the Global Trade System (src/gc_gts.c) shares */
+pr_rng gc_me_option_rng(const gc_run *run) { return me_option_rng(run); }
+void gc_me_prune_items(gc_run *run) { me_prune_items(run); }
+void gc_me_update_modifiers(gc_run *run) { me_update_modifiers(run); }
+void gc_me_end_shop(gc_run *run) { end_mystery_encounter_shop(run); }

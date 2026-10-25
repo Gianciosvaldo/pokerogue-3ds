@@ -995,6 +995,55 @@ learning with four moves known (the producer keeps each Pokemon to three moves, 
 sides), the summon and Wobbuffet health-bar animations, and a player's self-KO moves. The producer puts back the real body of
 `randBattleSeedInt` that the game manager pins to the maximum; without it the AI's choice and every damage roll would be fixed.
 
+### Global Trade System
+
+`src/gc_gts.c` is the port, `tests/mystery-gts.producer.test.ts` the producer, `tests/mystery_gts_diff_test.c` the comparator
+(`tools/gtsdiff.sh <upstream 8555c08> [N=600] [seed]`, ~0.13 s per case; `tools/gtsplant.sh <trace>` plants one-line bugs in a copy of the
+port and each must make the comparator exit 1; the host checks are `tests/mystery_gts_test.c`, part of `make test`). Per case the game manager
+starts the real encounter and a random party of 1 to 6 is set (a sixth legendary, mythical or sub-legendary, a tenth regional, BST extremes,
+random forms, levels 1 to 100, natures, passives, one to four random moves, fainted members, about 30 kinds of held items with arguments,
+Shiny and Ability Charms, Amulet Coin, Exp Share, wallet, trainer/secret ids, wave cycle offset, biome and weather); the encounter's own
+`onInit` runs again as `EncounterPhase` runs it, then the chosen option's own code runs for real (the pre-option phase with
+`selectPokemonForOption` answered, the option phase in `executeWithSeedOffset(.., * 500)`; only `leaveEncounterWithoutBattle`,
+`setEncounterRewards`, the Poke Ball's unseeded `Math.random` and the timed events are mocked). Compared: which options are enabled and each
+party member's select filter; each held item's `isTransferable`; the three trade options of every party member (every number of the
+Pokemon: IVs, nature, ability index, gender, shininess, variant, friendship, luck, experience, Tera type, met-fields, stats, HP, and its
+moves); the run RNG before and after (Check Trade Offers and Leave draw nothing; Wonder Trade draws its Pokemon in the pre-phase on the run's
+own RNG; the item trade draws the trader's name there too); the received Pokemon; the party order; the whole item list entry by entry; the
+dex chain; the reward the item trade sets (item, argument, tier, luck upgrades); the messages and the trader's name entry; the shop; money.
+
+Upstream behaviours reproduced on purpose:
+
+- `onInit` runs in `executeWithSeedOffset(.., waveIndex)`: for each member in party order, a legendary/mythical/sub-legendary gets its
+  generation's three level 5 species; anyone else gets three `generateTradeOption` picks (form 0 BST within +-100 of the member's form,
+  widened by 10 until more than 20 candidates, Paradox species out, shuffled and popped, `alreadyUsed` growing) and the three
+  `new EnemyPokemon`s are made after the picks. Offers are recomputed on demand (a pure function of the state), never cached.
+- Check Trade Offers and Wonder Trade need two Pokemon allowed in battle; the item trade is always on (its party screen filters on a
+  transferable held item); Leave opens the heal-only shop. `me_rules[GC_ME_GLOBAL_TRADE_SYSTEM].min_party` is now 0 because upstream's
+  `PartySizeRequirement([2, 6], true)` is on those two options, not on the encounter.
+- Wonder Trade's Pokemon is made in the pre-option phase on the **ambient** run RNG: species, constructor, one `trySetShinySeed(512, true, 4096)`
+  (doubled per Shiny Charm stack), one hidden-ability reroll (1 in 64, halved per Ability Charm stack), and a common egg move when it is not
+  shiny and has no hidden ability. The option phase then removes the traded Pokemon (its items pruned by `updateModifiers`), adds the
+  received one at the end of the party with the traded one's passive flag, carries the held items over (not form-change items or species stat
+  boosters, appended at the end of the list), updates the dex and says three lines.
+- The item trade takes a tier from the item (`withTierFromPool`; White Herb great, Lucky Egg ultra, Golden Egg rogue), +1 below master,
+  regenerates the thresholds on the offset stream, rerolls until the item is not a TM, sets it as the encounter's only reward, loses one
+  stack of the chosen item and draws the trader's name on the run's RNG (after an `await`, outside the offset scope), then opens the plain shop.
+- Mystical Rock's and the orbs' weights only count a passive ability when the Pokemon has its passive enabled (`hasPassive()`): the
+  game-core reward context passed the passive of every Pokemon (found by this differential, fixed in `gc_reward.c`).
+
+Gaps, on purpose or by necessity:
+
+- A pair trainer name ("A & B") shows the whole entry (`$t(trainersCommon:<class>[.male|.female].<k>)`); which half upstream shows is drawn
+  from the right stream (checked through the RNG) but not shown. The text itself comes from the locale at display time.
+- The Poke Ball of the received Pokemon is unseeded upstream (`randInt(4)`): drawn with the stand-in, never compared. The chosen item's name
+  loses its argument (a Berry type, a stat) in the message.
+- Achievements (`addPokemonDataToDexAndValidateAchievements`) are not tracked in C. Macho Brace's stat bonus is not ported (kept off the
+  producer's held-item list). Timed events are off.
+- Upstream loops forever when every candidate species is used (`generateTradeOption`); the port gives up and the trade is refused.
+- `game/` has no mystery-encounter screen (`mystery_auto` picks the first option with the first healthy Pokemon and the first offer).
+- Offers use the generic wild moveset generator (`gc_movegen.c`); a Pokemon it does not cover falls back to `gc_port_enemy_moveset`.
+
 ## Fleeing: upstream differential (Task 77 / #125)
 
 `tools/fleediff.sh <upstream 8555c08> [N=600] [seed]` runs the real `AttemptRunPhase.start()` on a live battle in
