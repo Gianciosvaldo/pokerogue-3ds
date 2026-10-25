@@ -702,3 +702,14 @@ remaining-history-host-test: build/remaining-history-test build/remaining-histor
 	build/remaining-history-test
 	build/remaining-history-guards-test
 .PHONY: remaining-history-host-test
+
+build/faint-history-guards-test: tests/faint-history-guards-test.c build/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/faint-history-guards-test.c build/libprcore.a -lm -o $@
+
+build/faint-history-test: tests/faint-history-test.c tests/faint-history.native.inc ../ai-core/src/ai.c build/libprcore.a
+	$(MAKE) -C ../ai-core build/libai.a
+	$(CC) $(CPPFLAGS) -I../ai-core/include -I../ai-core/gen/out $(CFLAGS) tests/faint-history-test.c ../ai-core/build/libai.a build/libprcore.a -lm -o $@
+faint-history-host-test: build/faint-history-test build/faint-history-guards-test
+	build/faint-history-test
+	build/faint-history-guards-test
+.PHONY: faint-history-host-test
