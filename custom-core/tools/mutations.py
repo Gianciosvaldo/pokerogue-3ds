@@ -1134,7 +1134,7 @@ mut(J, "while (*a && *a == *b) { a++; b++; }\n        if (*a == *b) return (int)
 mut(JT, '{"kira", "Yoshikage Kira", "My name is Yoshikage Kira. I\'m 33 years old.", 9 /* Lake */', '{"kira", "Yoshikage Kira", "My name is Yoshikage Kira. I\'m 33 years old.", 0 /* Town */', "Kira back in Town (no trainers there)")
 mut(JT, '29 /* Temple */, 3 /* Speed Boost */, 6', '29 /* Temple */, -1, 6', "Pucci loses the passive")
 mut(JT, '"I shall become the ultimate lifeform!", -1,', '"I shall become the ultimate lifeform!", 25,', "Kars in a biome pool")
-mut(JT, '"Nyo-ho!", 14 /* Desert */, NULL, 6,', '"Nyo-ho!", 14 /* Desert */, NULL, 5,', "Gyro loses a member")
+mut(JT, '"Nyo-ho!", 14 /* Desert */, -1, 6,', '"Nyo-ho!", 14 /* Desert */, -1, 5,', "Gyro loses a member")
 
 
 def build_and_run(workdir: Path):
