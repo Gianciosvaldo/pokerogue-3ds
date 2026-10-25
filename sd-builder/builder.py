@@ -46,6 +46,7 @@ PINS = json.load(open(os.path.join(FILES, "pins.json"), encoding="utf-8"))
 PIPELINE = os.path.join(FILES, "pipeline")
 RUNTIME = os.path.join(FILES, "runtime")
 DOWNLOADS = os.path.join(FILES, "downloads")
+EXTRA_IMAGES = os.path.join(FILES, "extra-images")  # optional: PNGs laid out like images/ (trainer/custom/kira.png), packed into gfx.pak
 BUILD = os.path.join(FILES, "build")  # build_sd.py's --out; its reports and our markers stay here
 PACK_DIR = os.path.join(BUILD, "3ds", "pokerogue")
 GAME = os.path.join(FILES, "game")  # the game app (pokerogue.3dsx, .elf, .smdh), its banner and makerom's spec
@@ -433,6 +434,12 @@ def recipe():
         for f in sorted(os.listdir(d)):
             if f.endswith((".py", ".exe", ".c")):
                 h.update(f.encode() + open(os.path.join(d, f), "rb").read())
+    if os.path.isdir(EXTRA_IMAGES):
+        for dirpath, dirs, files in os.walk(EXTRA_IMAGES):
+            dirs.sort()
+            for f in sorted(files):
+                if f.endswith(".png"):
+                    h.update(f.encode() + open(os.path.join(dirpath, f), "rb").read())
     return h.hexdigest()
 
 
@@ -467,6 +474,8 @@ def build(assets, locales, game, lib, ffmpeg):
         cmd = [sys.executable, "-X", "utf8", os.path.join(PIPELINE, "build_sd.py"), "--assets", assets,
                "--game", game, "--locales", locales, "--out", BUILD, "--only", stage, "--jobs", str(jobs),
                "--encoder", encoder]
+        if stage == "gfx" and os.path.isdir(EXTRA_IMAGES):
+            cmd += ["--extra-images", EXTRA_IMAGES]
         log("run " + " ".join(cmd))
         t0 = time.time()
         _run_quietly(cmd, env, stage, t0)

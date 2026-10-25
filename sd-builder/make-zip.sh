@@ -29,6 +29,8 @@ cp "$REPO/assets-pipeline/tools/dspadpcm.c" "$D/files/pipeline/tools/"
 x86_64-w64-mingw32-gcc -O2 -static -s -Wl,--no-insert-timestamp -o "$D/files/pipeline/tools/dspadpcm.exe" \
   "$REPO/assets-pipeline/tools/dspadpcm.c" -lm
 for app in "$@"; do cp "$app" "$D/files/apps/"; done
+# The project's own pictures (the JoJo trainers' sprites): the builder packs them into gfx.pak (see README.md)
+cp -R "$HERE/extra-images" "$D/files/extra-images"
 
 BANNERTOOL_URL=https://github.com/carstene1ns/3ds-bannertool/releases/download/1.2.3/bannertool-1.2.3-linux.tar.gz
 BANNERTOOL_SHA256=748519d200519db18e9fd00c332ac32f5411e41230258291e89953a76c1f7155
@@ -61,7 +63,7 @@ for f in "$D/BUILD-SD-CARD.bat" "$D/READ-ME-FIRST.txt" "$D/files/setup.ps1" "$D/
 done
 
 # Nothing from upstream may ever be in the zip
-if find "$D" -type f \( -name '*.png' -o -name '*.pak' -o -name '*.ogg' -o -name '*.mp3' -o -name '*.m4a' \
+if find "$D" -type f -not -path "$D/files/extra-images/*" \( -name '*.png' -o -name '*.pak' -o -name '*.ogg' -o -name '*.mp3' -o -name '*.m4a' \
      -o -name '*.wav' -o -name '*.ttf' -o -name '*.json' ! -name 'pins.json' \) | grep -q .; then
   echo "refusing: upstream content in the zip" >&2; exit 1
 fi
