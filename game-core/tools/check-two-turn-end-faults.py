@@ -3,7 +3,7 @@ import subprocess
 root=Path(__file__).resolve().parents[2];
 import os
 os.chdir(root)
- src=(root/'game-core/src/gc_battle.c').read_text();out=root/'work/faults';out.mkdir(parents=True,exist_ok=True)
+src=(root/'game-core/src/gc_battle.c').read_text();out=root/'work/faults';out.mkdir(parents=True,exist_ok=True)
 faults={
 'no-cleanup':('if(cancel_encounter_charges(run))charge_cleanup_snapshot(run);','if(false)charge_cleanup_snapshot(run);'),
 'clear-all-queues':('if(!unfinished_charge_move(p->move_queue[q].move))','if(false)'),
