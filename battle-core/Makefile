@@ -713,3 +713,16 @@ faint-history-host-test: build/faint-history-test build/faint-history-guards-tes
 	build/faint-history-test
 	build/faint-history-guards-test
 .PHONY: faint-history-host-test
+
+$(BUILD)/received-history-test: tests/received-history-test.c tests/received-history.native.inc src/phases.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+$(BUILD)/received-history-guards-test: tests/received-history-guards-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+$(BUILD)/received-command-test: tests/received-command-test.c tests/received-command.native.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+received-history-host-test: $(BUILD)/received-history-test $(BUILD)/received-history-guards-test $(BUILD)/received-command-test
+	$(BUILD)/received-history-test
+	$(BUILD)/received-history-guards-test
+	$(BUILD)/received-command-test
+
+.PHONY: received-history-host-test

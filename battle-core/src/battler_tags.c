@@ -1398,12 +1398,7 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
          * dealt damage, Attack rises a stage (the Pokemon as its own source); the tag stays.
          * PRE_MOVE: BattlerTag.lapse */
         if (lapse_type != BATTLER_TAG_LAPSE_TYPE_AFTER_HIT) return --t->turn_count > 0;
-        if (!p->n_attacks_received) return true;
-        if (p->n_attacks_received > pr_attacks_received_kept(p)) {
-            pr_attacks_received_exhausted(bt, p);
-            return true;
-        }
-        if (p->attacks_received[p->n_attacks_received - 1].damage > 0) {
+        if (pr_received_oldest_positive(bt, p)) {
             int32_t atk = STAT_ATK;
             if (pr_unshift_stat_stage_change(bt, e, pr_battler_index(bt, p), &atk, 1, 1, p) < 0 && e) e->overflow = true;
         }

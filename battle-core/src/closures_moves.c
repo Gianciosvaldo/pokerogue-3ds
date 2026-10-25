@@ -126,11 +126,8 @@ static double tera_starstorm_target(ARGS)
 static double focus_punch_hit(ARGS)
 {
     (void)t; (void)self; (void)m;
-    int kept = pr_attacks_received_kept(u);
-    for (int k = 0; k < kept; k++)
-        if (u->attacks_received[k].damage > 0) return 1;
-    pr_attacks_received_exhausted(bt, u);
-    return 0;
+    return pr_received_positive(bt, u);
+
 }
 
 /* Misty Explosion: arena.terrainType === MISTY && user.isGrounded() ? 1.5 : 1 */

@@ -1264,17 +1264,9 @@ static bool first_failure_check(pr_battle *bt, pr_engine *e, int ph)
  * status move nor from an ally (and of the category, when given) */
 int pr_counter_attack_target(pr_battle *bt, const pr_pokemon *user, int category /* -1 = any */)
 {
-    int ub = pr_battler_index(bt, user);
-    int kept = pr_attacks_received_kept(user);
-    for (int i = 0; i < kept; i++) {
-        const pr_attack_record *r = &user->attacks_received[i];
-        int cat = pr_moves[r->move].category;
-        if (cat != MOVE_CATEGORY_STATUS && !pr_are_allies(r->source_battler_index, ub)
-            && (category < 0 || cat == category))
-            return r->source_battler_index;
-    }
-    pr_attacks_received_exhausted(bt, user);
-    return -2;                                           /* null */
+    pr_attack_record record;
+    return pr_received_counter(bt, user, category, &record) ? record.source_battler_index : -2;
+
 }
 
 static void resolve_counter_attack_target(pr_battle *bt, pr_engine *e, int ph)
@@ -2731,7 +2723,7 @@ static void reset_turn_data(pr_pokemon *p)
     p->hit_count = 0;
     p->hits_left = -1;
     p->total_damage_dealt = p->single_hit_damage_dealt = p->damage_taken = 0;
-    p->n_attacks_received = 0;
+    pr_reset_received_history(p);
     p->stat_stages_increased = p->stat_stages_decreased = false;
     p->turn_move_effectiveness = -1;
     p->combining_pledge = 0;

@@ -211,6 +211,8 @@ typedef struct pr_turn_move {
 #define PR_MAX_MOVE_HISTORY 8
 #define PR_MAX_MOVE_QUEUE 4
 
+#define PR_MAX_PARTY 6
+
 /* A turnData.attacksReceived entry (AttackMoveResult) */
 typedef struct pr_attack_record {
     uint16_t move;                 /* MoveId */
@@ -220,10 +222,20 @@ typedef struct pr_attack_record {
     int64_t source_id;             /* Pokemon.id of the attacker */
     double damage;
 } pr_attack_record;
-/* Several battlers can each land a multi-strike move on one defender in the
- * same turn. Keep 32 records rather than truncating ordinary nine/ten-hit
- * turns. Reads beyond this capacity still report PR_FEAT_MOVE_HISTORY. */
+/* Newest received-hit records for last-hit callers. Full-search and oldest-hit
+ * callers use the exact summaries below; unknown raw prefixes remain explicit. */
 #define PR_MAX_ATTACKS_RECEIVED 32
+
+/* Exact query answers beyond the retained tail. Counter queries depend on the
+ * reader's current side (player, enemy or off-field), and on three categories.
+ * Known-but-absent answers differ from a raw tail with a missing prefix. */
+typedef struct pr_received_history {
+    pr_attack_record counter[9];
+    int64_t damage_sources[2 * PR_MAX_PARTY];
+    uint16_t count, counter_known, counter_present;
+    uint8_t n_sources, any_known, any_present;
+    bool valid, sources_complete;
+} pr_received_history;
 
 /* Battle identity subset of summonData.illusion. Presentation metadata (nickname,
  * sprite/ball/shiny variants) stays with the application, not these type reads. */
@@ -320,6 +332,7 @@ typedef struct pr_pokemon {
      * unshifts them (pr_unshift_attack_received keeps both) */
     uint16_t n_attacks_received;
     pr_attack_record attacks_received[PR_MAX_ATTACKS_RECEIVED];
+    pr_received_history received_history;
     bool switched_in_this_turn, summoned_this_turn, failed_run_away;
     bool acted, stat_stages_increased, stat_stages_decreased, joined_round;
     int32_t damage_taken, total_damage_dealt, single_hit_damage_dealt;
@@ -375,7 +388,6 @@ typedef struct pr_pokemon {
 #define PR_MAX_PP(p) (PR_HAS_SUMMON_MOVES(p) ? (p)->transform_max_pp_override : (p)->max_pp_override)
 #define PR_N_MOVES(p) (*((p)->transformed ? &(p)->transform_n_moves : &(p)->n_moves))
 
-#define PR_MAX_PARTY 6
 #define PR_MAX_QUEUED_MOVERS 8
 #define PR_MAX_TURN_ORDER 8
 
@@ -827,6 +839,12 @@ const pr_turn_move *pr_last_non_virtual_move(pr_battle *bt, const pr_pokemon *p,
                                              bool ignore_follow_up, bool *unknown);
 /* turnData.attacksReceived.unshift(record) */
 void pr_unshift_attack_received(pr_pokemon *p, const pr_attack_record *r);
+bool pr_received_counter(pr_battle *bt, const pr_pokemon *p, int category, pr_attack_record *out);
+bool pr_received_damage_from(pr_battle *bt, const pr_pokemon *p, int64_t source_id);
+bool pr_received_positive(pr_battle *bt, const pr_pokemon *p);
+bool pr_received_super_effective(pr_battle *bt, const pr_pokemon *p);
+bool pr_received_oldest_positive(pr_battle *bt, const pr_pokemon *p);
+void pr_reset_received_history(pr_pokemon *p);
 /* The kept attacksReceived entries, newest first: their count. A reader that scans them all
  * without an answer calls pr_attacks_received_exhausted, which reports the older entries. */
 int pr_attacks_received_kept(const pr_pokemon *p);

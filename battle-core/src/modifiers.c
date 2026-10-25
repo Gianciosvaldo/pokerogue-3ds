@@ -528,13 +528,7 @@ bool pr_berry_should_apply(pr_battle *bt, const pr_pokemon *p, const pr_modifier
     case BERRY_TYPE_LUM:
         return p->status != STATUS_EFFECT_NONE || pr_has_battler_tag(bt, p, BATTLER_TAG_TYPE_CONFUSED);
     case BERRY_TYPE_ENIGMA: {
-        int kept = pr_attacks_received_kept(p);
-        for (int i = 0; i < kept; i++) {
-            int res = p->attacks_received[i].result;
-            if (res == HIT_RESULT_SUPER_EFFECTIVE || res == HIT_RESULT_EXTREMELY_EFFECTIVE)
-                return true;
-        }
-        return false;
+        return pr_received_super_effective(bt, p);
     }
     case BERRY_TYPE_LEPPA: {
         double hp_ratio_req = 0.25;
