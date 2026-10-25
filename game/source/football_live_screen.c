@@ -110,7 +110,8 @@ static void catalog(void)
 {
     for(int i=0;i<gc_starter_cost_count && L.catalog_count<PR_SPECIES_COUNT;++i){
         unsigned id=gc_starter_costs[i].id;const pr_species *sp=NULL;for(unsigned j=0;j<PR_SPECIES_COUNT;++j)if(pr_species_table[j].id==id)sp=&pr_species_table[j];
-        if(!sp || sp->prevolution>0)continue;
+        gc_starter starter;
+        if(!sp || sp->prevolution>0 || !football_roster_starter(L.args.profile,id,&starter))continue;
         unsigned n=L.catalog_count++;L.catalog[n]=(uint16_t)id;
         while(n>0 && gc_starter_value(L.args.profile,L.catalog[n])<gc_starter_value(L.args.profile,L.catalog[n-1])){uint16_t t=L.catalog[n];L.catalog[n]=L.catalog[n-1];L.catalog[n-1]=t;--n;}
     }
@@ -161,7 +162,8 @@ static void choose_current(void)
 {
     FootballCareer *c=&L.career;
     switch(c->phase){
-    case FB_CAREER_DRAFT:{gc_starter s={.species=L.catalog[L.cursor],.tera_type=-1};const char *why=NULL;
+    case FB_CAREER_DRAFT:{gc_starter s;const char *why=NULL;
+        if(!L.catalog_count || !football_roster_starter(L.args.profile,L.catalog[L.cursor],&s))return;
         if(!football_roster_add(&c->roster,L.scratch,&s,L.args.profile,&why))snprintf(c->message,sizeof c->message,"%s",why?why:"Cannot draft this Pokemon.");
         else {c->message[0]=0;if(c->roster.count==22){football_roster_autofill(&c->roster);c->phase=FB_CAREER_LINEUP;L.cursor=0;}}break;}
     case FB_CAREER_LINEUP:L.editing=!L.editing;break;
@@ -288,11 +290,12 @@ static void draw(ui_screen *s,rr_screen which)
     C2D_TextBufClear(L.renderer.text);float width=which==RR_TOP?400:320;
     C2D_DrawRectSolid(0,0,0,width,240,C2D_Color32(11,13,20,255));
     if(which==RR_TOP){
-        text("POKEMON PLAYOFF",22,14,.8f,gold());text("22 PLAYERS  /  40 POINT DRAFT",24,47,.46f,ink());
+        if(c->phase==FB_CAREER_DRAFT && !L.catalog_count){text("NO UNLOCKED BASE-FORM STARTERS",18,35,.52f,gold());text("Unlock Pokemon in Classic / Endless first.",18,90,.43f,ink());return;}
+        text("POKEMON PLAYOFF",22,14,.8f,gold());text("22 PLAYERS  /  55 POINT DRAFT",24,47,.46f,ink());
         const rr_frame *f=football_render_front_frame(&L.renderer,0,L.ms);if(f && f->src_w && f->src_h)football_render_draw_sprite(f,85,139,fminf(90.0f/f->src_w,90.0f/f->src_h),false);
         unsigned i=c->roster.count?c->roster.lineup[L.cursor%c->roster.count]:0;unsigned id=c->phase==FB_CAREER_DRAFT?L.catalog[L.cursor]:c->roster.mon[i].b.species;
         text(name(id),154,85,.65f,ink());char info[96];
-        if(c->phase==FB_CAREER_DRAFT)snprintf(info,sizeof info,"COST %.2f / 40",gc_starter_value(L.args.profile,id));
+        if(c->phase==FB_CAREER_DRAFT)snprintf(info,sizeof info,"COST %.2f / 55",gc_starter_value(L.args.profile,id));
         else {const FootballAttributes *a=&c->roster.player[i].attributes;snprintf(info,sizeof info,"SPD %u  AGI %u  STR %u",a->spd,a->agi,a->str);}
         text(info,154,120,.43f,gold());
         if(c->roster.count){const FootballAttributes *a=&c->roster.player[i].attributes;snprintf(info,sizeof info,"TAK %u  CTH %u  THA %u",a->tak,a->cth,a->tha);text(info,154,147,.43f,ink());}
@@ -300,7 +303,7 @@ static void draw(ui_screen *s,rr_screen which)
     }
     char title[100];
     switch(c->phase){
-    case FB_CAREER_DRAFT:snprintf(title,sizeof title,"DRAFT %u/22   %.2f/40 PT",c->roster.count,c->roster.cost);text(title,12,10,.55f,gold());rows(L.catalog_count);text(c->message[0]?c->message:"A: draft  B: undo  Left/Right: page",12,214,.32f,ink());break;
+    case FB_CAREER_DRAFT:snprintf(title,sizeof title,"DRAFT %u/22   %.2f/55 PT",c->roster.count,c->roster.cost);text(title,12,10,.55f,gold());rows(L.catalog_count);text(L.catalog_count<22?"Unlock 22 base forms in Classic / Endless":c->message[0]?c->message:"A: draft  B: undo  Left/Right: page",12,214,.32f,ink());break;
     case FB_CAREER_LINEUP:text(L.editing?"ASSIGN: LEFT/RIGHT SWAPS MEMBER":"LINEUP: A TO EDIT SLOT",12,10,.49f,gold());rows(22);panel(10,214,145,24,false);panel(165,214,145,24,true);text(L.editing?"PREV MEMBER":"AUTO-ASSIGN",18,218,.36f,ink());text(L.editing?"NEXT MEMBER":"B / TAP: READY",173,218,.36f,gold());break;
     case FB_CAREER_READY:
         snprintf(title,sizeof title,"PLAYOFF ROUND %u / 7",c->round);text(title,16,15,.65f,gold());text("11 OFFENSE + 11 DEFENSE",16,55,.48f,ink());
@@ -345,12 +348,15 @@ static void draw(ui_screen *s,rr_screen which)
 static ui_screen live_screen={.name="football-live",.flags=UI_FADE,.leave=leave,.input=input,.touch=touch,.update=update,.draw=draw};
 bool football_screen_open(const football_screen_args *args)
 {
-    if(!args || !args->on_exit || L.scratch)return false;
+    if(!args || !args->profile || !args->on_exit || L.scratch)return false;
     memset(&L,0,sizeof L);L.args=*args;L.old_speed=ui_game_speed();L.asset_offense=-1;L.receiver=-1;L.old_phase=FB_CAREER_ERROR;
     L.scratch=calloc(1,sizeof *L.scratch);if(!L.scratch)return false;
     if(!football_render_init(&L.renderer) || !football_career_new(&L.career,L.scratch,args->profile,args->entropy)){football_render_free(&L.renderer);free(L.scratch);L.scratch=NULL;return false;}
-    catalog();if(!L.catalog_count){leave(NULL);return false;}
-    if(args->persistence){int loaded=load_checkpoint();if(loaded<0){L.save_bad=true;L.career.phase=FB_CAREER_ERROR;snprintf(L.career.message,sizeof L.career.message,"Live save unreadable. START offers explicit deletion.");}else if(loaded>0)L.checkpoint=token();}
+    catalog();
+    if(L.catalog_count>=22){double cheapest=0;for(unsigned i=0;i<22;++i)cheapest+=gc_starter_value(args->profile,L.catalog[i]);
+        if(cheapest>FB_ROSTER_BUDGET)snprintf(L.career.message,sizeof L.career.message,"Unlock cheaper starters or reduce Classic costs to fit 55 points.");
+    }
+    if(args->persistence){int loaded=load_checkpoint();if(loaded<0){L.save_bad=true;L.career.phase=FB_CAREER_ERROR;snprintf(L.career.message,sizeof L.career.message,"Live save unavailable for this profile or unreadable. START offers deletion.");}else if(loaded>0)L.checkpoint=token();}
     ui_set_game_speed(1);ui_set(&live_screen);return true;
 }
 

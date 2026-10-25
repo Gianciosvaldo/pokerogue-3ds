@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include "gc/system.h"
 typedef struct {
-    gc_system *profile;
+    gc_system *profile; /* Required for live draft/resume: shared Classic/Endless unlocks. */
     uint32_t entropy;
     void (*on_exit)(void *arg);
     void *arg;
@@ -12,7 +12,7 @@ typedef struct {
     bool persistence; /* App enables the dedicated football checkpoint file. */
     const char *profile_notice; /* Optional startup-only notice for an unreadable profile. */
 } football_screen_args;
-/* Live 22-player football, with its own 40-point draft and lineup screen.
+/* Live 22-player football, with its own 55-point draft and lineup screen.
  * Optional dedicated football checkpoints; no classic/custom save slot is touched. */
 bool football_screen_open(const football_screen_args *args);
 /* Explicit compatibility path for original six-player playoff saves. */

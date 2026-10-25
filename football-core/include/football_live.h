@@ -9,7 +9,8 @@
 typedef enum { FB_LIVE_CALL,FB_LIVE_SET,FB_LIVE_PLAY,FB_LIVE_DEAD,FB_LIVE_END } FootballLivePhase;
 enum { FB_LIVE_ACTION=1,FB_LIVE_JUKE=2,FB_LIVE_SWITCH=4 };
 typedef struct { float x,y;unsigned pressed;int receiver; } FootballLiveInput;
-typedef struct { FootballAttributes attributes;float x,y,vx,vy,stun,contact;uint8_t roster;bool home; } FootballLiveActor;
+typedef struct { FootballAttributes attributes;float x,y,vx,vy,stun,contact,block_time,block_cooldown;
+    uint8_t roster,block_peer;int8_t facing;bool home; } FootballLiveActor;
 typedef struct {
     FootballRules rules;
     FootballLiveActor actors[22];
@@ -19,11 +20,13 @@ typedef struct {
     FootballLivePhase phase;
     FootballPlayId play;
     FootballDefenseId defense;
+    uint8_t coverage[11];
+    float zone_x[11],zone_y[11];
     uint32_t rng,steps,pending;
     int pending_receiver;
     float accumulator,elapsed,dead_time,juke,cooldown;
     float ball_x,ball_y,ball_z,from_x,from_y,to_x,to_y,flight,flight_time,los;
-    uint8_t controlled,carrier,target;
+    uint8_t controlled,carrier,target,snap_offense;
     bool flying,thrown,caught,loose;
     FootballResolvedPlay result;
     unsigned snaps;

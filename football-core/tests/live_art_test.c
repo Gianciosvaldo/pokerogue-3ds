@@ -1,0 +1,31 @@
+#include "football_live_art.h"
+#include "football_live_systems.h"
+#include <assert.h>
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+static FootballCareer career;
+static FootballRenderer renderer;
+static rr_frame frame={.src_w=64,.src_h=64,.w=64,.h=64};
+static unsigned drawn;
+static bool mirror[22];
+void C2D_TextBufClear(C2D_TextBuf b){assert(b);}
+void C2D_TextParse(C2D_Text *t,C2D_TextBuf b,const char *s){(void)t;assert(b && s);}
+void C2D_TextOptimize(C2D_Text *t){(void)t;}
+void C2D_DrawText(const C2D_Text *t,unsigned flags,float x,float y,float z,float sx,float sy,u32 color){(void)t;(void)flags;(void)x;(void)y;(void)z;(void)sx;(void)sy;(void)color;}
+bool C2D_DrawRectSolid(float x,float y,float z,float w,float h,u32 color){(void)x;(void)y;(void)z;(void)color;assert(isfinite(w) && w>0 && isfinite(h) && h>0);return true;}
+const rr_frame *football_render_front_frame(const FootballRenderer *r,unsigned slot,uint32_t ms){(void)r;(void)ms;assert(slot<22);return &frame;}
+bool football_render_draw_sprite(const rr_frame *f,float x,float y,float scale,bool flip){(void)x;(void)y;assert(f && scale>0 && drawn<22);mirror[drawn++]=flip;return true;}
+int main(void)
+{
+    renderer.text=&renderer;FootballCamera camera={.x=60,.y=26,.ready=true};
+    FootballLive *m=&career.live;m->snap_offense=FB_HOME;m->rules.offense=FB_HOME;m->rules.first_down_at=50;
+    /* Same y fixes painter order so the submission index is the actor index. */
+    for(unsigned i=0;i<22;++i){m->actors[i].x=60;m->actors[i].y=26;m->actors[i].facing=1;}
+    m->actors[2].x=65;m->actors[2].facing=-1;m->actors[0].vx=-4;m->carrier=0;
+    football_live_art_top(&renderer,&career,&camera,0);
+    assert(drawn==22 && mirror[0] && !mirror[2] && mirror[3]); /* left-native sheet mirrors ONLY to look right */
+    drawn=0;m->actors[2].facing=1;m->actors[3].facing=-1;
+    football_live_art_top(&renderer,&career,&camera,0);assert(mirror[0] && mirror[2] && !mirror[3]);
+    puts("football live art: native-left front sprites, running directions and retreating QB receiver-facing submission passed");
+}
