@@ -166,6 +166,7 @@ static int n_resumes;
 
 static int check_form_events;
 static int violations, n_scenes, n_ask, n_dialogs, n_options, n_party_opens, n_balls, n_party_full_swaps;
+static int n_talk_enc, n_talk_win, n_talk_portrait, n_trainer_show;
 static int n_throw_ev, n_caught_ev, n_broke_ev, n_bv_farewell, n_real_releases, n_list_backs, n_rel_checked, n_decl_checked;
 
 /* A full-party catch: the party as the question "release one?" found it, and the Pokemon about to be caught */
@@ -269,6 +270,10 @@ const char* i18n_move_name(int id) {
 }
 const char* i18n_t(char* out, int n, const char* key, ...) {
   snprintf(out, (size_t)n, "%s", key);
+  return out;
+}
+const char* i18n_resolve(char* out, int n, const char* text) {
+  snprintf(out, (size_t)n, "%s", text);
   return out;
 }
 void* pak_read(const char* key, size_t* len) {
@@ -481,7 +486,23 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
         if (W.mon[s].hp <= 0) BAD("a ball thrown at a Pokemon with no HP");
         break;
       }
+      case BEV_DIALOGUE:
+        /* a trainer's line: text, a speaker for the name box and, with a portrait, a character atlas */
+        if (!e->text || !*e->text) BAD("a dialogue with no text");
+        if (!e->name || !*e->name) BAD("a dialogue with no speaker");
+        if (e->atlas && strncmp(e->atlas, "images/character/", 17)) BAD("a dialogue portrait outside images/character: %s", e->atlas);
+        if (i > 0 && ev[i - 1].type == BEV_INTRO_WILD && ev[i - 1].b == 1) {
+          n_talk_enc++;
+          if (i + 1 >= n || ev[i + 1].type != BEV_MESSAGE) BAD("the encounter talk is not followed by the battle message");
+        } else if (i > 0 && ev[i - 1].type == BEV_TRAINER_SHOW) n_talk_win++;
+        else BAD("a dialogue that follows neither the trainer's intro nor its slide back");
+        if (e->atlas) n_talk_portrait++;
+        break;
+      case BEV_TRAINER_SHOW:
+        n_trainer_show++;
+        break;
       case BEV_INTRO_WILD:
+        if (e->b == 1 && (e->a != 1 || e->text || i + 1 >= n || ev[i + 1].type != BEV_DIALOGUE)) BAD("a held-back intro message with no talk after it");
         if (e->a == 0) {
           if (W.mon[1].species <= 0) BAD("wild intro with no enemy");
           W.present[1] = true;
@@ -1859,6 +1880,9 @@ int main(int argc, char** argv) {
          "releases and %d let go\n",
          n_throw_ev, n_caught_ev, n_broke_ev, n_party_full_swaps, n_real_releases, pf_farewells(), n_bv_farewell, st->kept_out, n_list_backs,
          n_rel_checked, n_decl_checked);
+  printf("trainer talks: %d before a fight (%d with a portrait in all), %d after a win, %d trainers slid back\n", n_talk_enc, n_talk_portrait,
+         n_talk_win, n_trainer_show);
+  if (n_talk_win != n_trainer_show) BAD("%d victory talks but %d trainers slid back", n_talk_win, n_trainer_show);
   if (!n_caught_ev || !n_broke_ev) BAD("a throw outcome never came up (held %d, broke free %d)", n_caught_ev, n_broke_ev);
   if (n_throw_ev != st->throws || n_caught_ev != st->catches) BAD("the driver counted %d throws (%d held), the screen saw %d (%d)", st->throws, st->catches, n_throw_ev, n_caught_ev);
   if (!n_rel_checked) BAD("no full-party release reached");

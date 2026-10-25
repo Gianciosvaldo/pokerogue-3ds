@@ -805,11 +805,59 @@ void gc_battle_switch_screen(gc_run *run)
 
 /* BattleEndPhase's part: the battle is over. The player's Pokemon stay where they are: the next
  * battle's setup recalls them or keeps the lead out (see gc_battle_setup_field). */
+static bool unfinished_charge_move(int move)
+{
+    if(move<=MOVE_ID_NONE||move>=PR_MOVE_COUNT)return false;
+    const char *kind=pr_moves[move].kind;
+    return !strcmp(kind,"ChargingAttackMove")||!strcmp(kind,"ChargingSelfStatusMove");
+}
+
+/* User-requested encounter policy: unfinished two-turn moves end with the
+ * encounter. The pinned source preserves them across ordinary waves; retain
+ * unrelated queues, stat boosts and history while preventing stale hidden state. */
+static bool cancel_encounter_charges(gc_run *run)
+{
+    bool reveal=false;
+    for(int i=0;i<run->n_party;i++){
+        pr_pokemon *p=&run->party[i].b;
+        bool hidden=pr_find_battler_tag_class(p,PR_TAGCLASS_SEMI_INVULNERABLE)!=NULL;
+        int keep=0;
+        for(int q=0;q<p->n_move_queue;q++)
+            if(!unfinished_charge_move(p->move_queue[q].move))p->move_queue[keep++]=p->move_queue[q];
+        p->n_move_queue=(uint8_t)keep;
+        for(int k=p->n_tags-1;k>=0;k--){
+            const pr_battler_tag *t=&p->tags[k];
+            bool charge=t->type==BATTLER_TAG_TYPE_CHARGING||t->type==BATTLER_TAG_TYPE_FLYING
+                ||t->type==BATTLER_TAG_TYPE_UNDERGROUND||t->type==BATTLER_TAG_TYPE_UNDERWATER||t->type==BATTLER_TAG_TYPE_HIDDEN;
+            if(charge&&unfinished_charge_move(t->source_move))pr_remove_tag(&run->bt,&run->eng,p,t->type);
+        }
+        if(hidden&&p->hp>0&&p->on_field&&!p->switch_out_status&&pr_battler_index(&run->bt,p)>=0
+           &&!pr_find_battler_tag_class(p,PR_TAGCLASS_SEMI_INVULNERABLE))reveal=true;
+    }
+    return reveal;
+}
+
+/* A state-only field snapshot lets the ordinary visibility bridge reveal both
+ * combatants before the reward screen. Publish only the appended event, since
+ * the preceding post-battle callback events have already been handed over. */
+static void charge_cleanup_snapshot(gc_run *run)
+{
+    if(run->n_battle_events>=GC_MAX_BATTLE_EVENTS){run->battle_events_overflow=true;return;}
+    int old=run->eng.n_events;
+    pr_event_add(&run->bt,&run->eng,PR_EV_NONE,-1,-1,0,0,NULL);
+    if(run->eng.n_events==old){run->battle_events_overflow=true;return;}
+    int first=run->n_battle_events++;
+    run->battle_events[first]=run->eng.events[old];
+    gc_event *event=gc_ev_new(run,GC_EV_BATTLE);
+    if(event){event->a=first;event->b=1;}
+}
+
 void gc_battle_end_cleanup(gc_run *run)
 {
     gc_int(run)->at_save_point = false;
     run->run.rng = run->bt.rng;
     gc_sync_party_order(run);
+    if(cancel_encounter_charges(run))charge_cleanup_snapshot(run);
     for (int i = 0; i < run->n_party; i++) pr_reset_turn_data(&run->party[i].b);
     run->bt.field[2] = run->bt.field[3] = NULL;
     run->bt.n_party[1] = 0;

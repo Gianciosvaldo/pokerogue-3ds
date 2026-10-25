@@ -36,6 +36,11 @@ jobs:
           make -C battle-core build/protect-history-test build/protect-history-guards-test
           make -C game-core build/protect_history_host_test
           python3 battle-core/tools/check-protect-history-proof.py
+      - name: Compare remaining all-history callers, saves and failure controls
+        run: |
+          make -C battle-core build/remaining-history-test build/remaining-history-guards-test
+          make -C game-core build/remaining_history_host_test
+          python3 battle-core/tools/check-remaining-history-proof.py
       - name: Audit pinned inventory catalogue capacity
         run: python3 battle-core/tools/audit-inventory-catalogue.py
       - name: Run battle entry controller tests

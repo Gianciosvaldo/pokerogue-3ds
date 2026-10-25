@@ -1896,14 +1896,10 @@ static bool check_bypass_acc_and_invuln(pr_battle *bt, pr_pokemon *user, pr_poke
     if (pr_get_battler_tag(user, BATTLER_TAG_TYPE_IGNORE_ACCURACY)) {
         /* getLastXMoves(-1).find(m => m.move === LOCK_ON || m.move === MIND_READER)?.targets
          * includes the target */
-        for (int k = 0; k < user->n_move_history; k++) {
-            const pr_turn_move *tm = pr_last_move(bt, user, k);
-            if (!tm) break;                                        /* older than the kept ones: reported */
-            if (tm->move != MOVE_ID_LOCK_ON && tm->move != MOVE_ID_MIND_READER) continue;
-            for (int i = 0; i < tm->n_targets; i++)
-                if (tm->targets[i] == pr_battler_index(bt, target)) return true;
-            break;
-        }
+        bool unknown=false;
+        const pr_turn_move *tm=pr_last_aim_move(bt,user,&unknown);
+        if(tm)for(int i=0;i<tm->n_targets;i++)
+            if(tm->targets[i]==pr_battler_index(bt,target))return true;
     }
     return is_field_targeted(move);
 }
@@ -2786,6 +2782,7 @@ static void reset_summon_data(pr_pokemon *p)
     pr_rebuild_history_used_moves(p);
     pr_rebuild_nonvirtual_history(p);
     pr_rebuild_protect_history(p);
+    pr_rebuild_all_history(p);
     p->temp_turn_count = p->temp_wave_turn_count = 1;
     p->n_ab_applied_summon = 0;
 }

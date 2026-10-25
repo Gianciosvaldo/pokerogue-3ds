@@ -148,6 +148,7 @@ static const sfield pokemon_fields[] = {
 };
 static const sfield history_used_fields[]={SF(pr_pokemon,history_used_moves),SF(pr_pokemon,history_used_complete)};
 static const sfield history_last_fields[]={SF(pr_pokemon,history_last_known),SF(pr_pokemon,history_last_present),SF(pr_pokemon,history_serial),SF(pr_pokemon,history_last_serial)};
+static const sfield history_all_fields[]={SF(pr_pokemon,history_all_known),SF(pr_pokemon,history_all_present),SF(pr_pokemon,history_aim_serial)};
 static const sfield protect_history_fields[]={SF(pr_pokemon,history_protect_count),SF(pr_pokemon,history_protect_complete)};
 static const sfield tag_fields[] = {
     SF(pr_battler_tag, type), SF(pr_battler_tag, turn_count), SF(pr_battler_tag, source_move),
@@ -450,6 +451,11 @@ static void put_mons(writer *w, const char *name, const gc_mon *mons, int n)
     s=section_start(w,key);
     put_block(w,history_last_fields,NF(history_last_fields),&mons[0].b,sizeof(gc_mon),n);
     for(int i=0;i<n;i++)put_block(w,turn_move_fields,NF(turn_move_fields),mons[i].b.history_last,sizeof(pr_turn_move),4);
+    section_end(w,s);
+    snprintf(key,sizeof key,"%s_all_moves",name);
+    s=section_start(w,key);
+    put_block(w,history_all_fields,NF(history_all_fields),&mons[0].b,sizeof(gc_mon),n);
+    for(int i=0;i<n;i++)put_block(w,turn_move_fields,NF(turn_move_fields),&mons[i].b.history_aim,sizeof(pr_turn_move),1);
     section_end(w,s);
     snprintf(key,sizeof key,"%s_protect",name);
     s=section_start(w,key);
@@ -765,6 +771,47 @@ static bool get_nonvirtual_history(const reader *body,const char *name,gc_mon *m
     return !r.bad&&r.pos==r.n;
 }
 
+static bool get_all_history(const reader *body,const char *name,gc_mon *mons,int n,int *dropped)
+{
+    char key[48];snprintf(key,sizeof key,"%s_all_moves",name);
+    reader scan=*body;int sections=0;
+    while(scan.pos+8<=scan.n){uint32_t kind=take32(&scan),len=take32(&scan);if(len>scan.n-scan.pos)return false;if(kind==hash(key))sections++;scan.pos+=len;}
+    if(scan.bad||scan.pos!=scan.n||sections>1)return false;
+    if(!sections){for(int i=0;i<n;i++)pr_rebuild_all_history(&mons[i].b);return true;}
+    reader r=section(body,key),schema=r;int count=take16(&schema);unsigned seen=0;
+    if(schema.bad||count!=NF(history_all_fields))return false;
+    for(int i=0;i<count;i++){
+        uint32_t field=take32(&schema);uint16_t size=take16(&schema);int found=-1;
+        for(int j=0;j<NF(history_all_fields);j++)if(field==hash(history_all_fields[j].name)&&size==history_all_fields[j].size)found=j;
+        if(found<0||(seen&(1u<<found)))return false;
+        seen|=1u<<found;
+    }
+    if(schema.bad||get_block(&r,history_all_fields,NF(history_all_fields),&mons[0].b,sizeof(gc_mon),n,dropped)!=n)return false;
+    for(int i=0;i<n;i++){
+        pr_pokemon *p=&mons[i].b;
+        if(p->history_all_known>3||(p->history_all_present&~p->history_all_known)||((p->history_all_present&2)&&!(p->history_all_present&1)))return false;
+        /* Every cached TurnMove uses the same named schema as normal history. */
+        reader entries=r;int fields=take16(&entries);unsigned fields_seen=0;
+        if(fields!=NF(turn_move_fields))return false;
+        for(int k=0;k<fields;k++){
+            uint32_t field=take32(&entries);uint16_t size=take16(&entries);int found=-1;
+            for(int j=0;j<NF(turn_move_fields);j++)if(field==hash(turn_move_fields[j].name)&&size==turn_move_fields[j].size)found=j;
+            if(found<0||(fields_seen&(1u<<found)))return false;
+            fields_seen|=1u<<found;
+        }
+        if(entries.bad||get_block(&r,turn_move_fields,NF(turn_move_fields),&p->history_aim,sizeof(pr_turn_move),1,dropped)!=1)return false;
+        if(p->history_all_present&2){
+            const pr_turn_move *m=&p->history_aim;
+            if((m->move!=MOVE_ID_LOCK_ON&&m->move!=MOVE_ID_MIND_READER)
+               ||m->use_mode<1||m->use_mode>6||m->n_targets>4
+               ||(m->result>MOVE_RESULT_OTHER&&m->result!=PR_MOVE_RESULT_UNDEFINED)
+               ||!p->history_aim_serial||p->history_aim_serial>p->history_serial)return false;
+            for(int k=0;k<m->n_targets;k++)if(m->targets[k]<0||m->targets[k]>3)return false;
+        }
+    }
+    return !r.bad&&r.pos==r.n;
+}
+
 static bool get_protect_history(const reader *body,const char *name,gc_mon *mons,int n,int *dropped)
 {
     char key[48];snprintf(key,sizeof key,"%s_protect",name);
@@ -819,7 +866,7 @@ static bool get_mons(const reader *body, const char *name, gc_mon *mons, int n, 
         }
         if (r.bad || !mon_ok(&mons[i])) return false;
     }
-    return !r.bad&&get_history_used(body,name,mons,n,dropped)&&get_nonvirtual_history(body,name,mons,n,dropped)&&get_protect_history(body,name,mons,n,dropped);
+    return !r.bad&&get_history_used(body,name,mons,n,dropped)&&get_nonvirtual_history(body,name,mons,n,dropped)&&get_protect_history(body,name,mons,n,dropped)&&get_all_history(body,name,mons,n,dropped);
 }
 
 static bool get_items(const reader *body, const char *name, gc_item *items, int n, int *dropped)
@@ -1149,6 +1196,7 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     if (run->battle_type == BATTLE_TYPE_TRAINER) {
         ev = gc_ev_new(run, GC_EV_TRAINER);
         if (ev) { ev->a = run->trainer_type; ev->b = run->trainer_variant; }
+        gc_ev_trainer_dialogue(run, 0);   /* EncounterPhase shows the trainer's line again on a loaded battle */
     }
     gc_battle_restore_field(run);
     bt->battle_rng = v.battle_rng;

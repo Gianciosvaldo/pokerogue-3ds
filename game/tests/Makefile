@@ -396,3 +396,8 @@ build/battle_feedback_test: battle_feedback_test.c ../source/battle_view.c $(BC)
 	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections battle_feedback_test.c $(BC)/gen/out/pr_data.c -Wl,--gc-sections -lm -o $@
 battle_feedback_test: build/battle_feedback_test
 .PHONY: battle_feedback_test
+
+build/charge_visibility_test: charge_visibility_test.c ../source/battle_events.c build/ptx_core.a
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined charge_visibility_test.c ../source/battle_events.c build/ptx_core.a -lm -o $@
+charge_visibility_test: build/charge_visibility_test
+.PHONY: charge_visibility_test

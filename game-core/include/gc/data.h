@@ -76,6 +76,9 @@ typedef struct { uint16_t species; const char *form_key; const gc_level_move *v;
 extern const gc_form_level_moves gc_form_level_moves_data[];
 extern const int gc_form_level_moves_count;
 
+/* A run of locale keys in gc_trainer_dialogue_keys (gen/out/gc_trainers.c) */
+typedef struct { uint16_t first; uint8_t n; } gc_dialogue_list;
+
 /* A trainer config, as Trainer.getName and the money reward read it (gen/out/gc_trainers.c) */
 typedef struct {
     uint16_t type;              /* TrainerType */
@@ -87,7 +90,13 @@ typedef struct {
      * template is text with $t(key) where upstream translates; @N and @P stand for the trainer's and the
      * partner's personal names */
     uint16_t names[3][4];
+    /* Trainer.config.hasCharSprite: the dialogue shows the trainer's portrait (the rivals) */
+    bool has_char_sprite;
+    /* getEncounterMessages / getVictoryMessages by TrainerVariant (DEFAULT, FEMALE, DOUBLE), then 0 = encounter, 1 = victory:
+     * the dialogue's locale keys (a Trainer's variant falls back to the default lists where upstream's `||` does). n = 0: none */
+    gc_dialogue_list dialogue[3][2];
 } gc_trainer_config;
+extern const char *const gc_trainer_dialogue_keys[];
 extern const gc_trainer_config gc_trainer_configs[];   /* ascending TrainerType */
 extern const int gc_trainer_config_count;
 extern const char *const gc_trainer_name_templates[];

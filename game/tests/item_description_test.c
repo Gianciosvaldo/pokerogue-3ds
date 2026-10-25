@@ -21,6 +21,7 @@ float text_draw(text_style style,float x,float y,const char* text,const text_opt
     names+=!strcmp(text,"Held item");descriptions+=!strcmp(text,"Item effect");return 0;
 }
 void msgbox_draw(const msgbox* box,float x,float y){messages++;}
+void dv_namebox_at(rr_screen s,int ox,int oy,float x,float y,const char* name,int style){}
 const char* i18n_t(char* out,int n,const char* key,...){snprintf(out,n,"%s",key);return out;}
 const char* i18n_move_name(int move){return "Move";}
 const char* i18n_stat_name(int stat){return "Stat";}
