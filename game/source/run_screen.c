@@ -410,6 +410,16 @@ static void wave_black(void* arg) {
     const char* key=gm_trainer_sprite_key(G.run.trainer_type,G.run.trainer_variant,k);
     if (key && *key) snprintf(s.trainer_keys[k],sizeof s.trainer_keys[k],"images/trainer/%s",key);
   }
+  /* a JoJo trainer of a custom run (custom_run.h): his own sprite, a single one. Without the file in the SD pack the ordinary trainer's
+   * sprite stays, so the fight still shows somebody. */
+  const cc_jojo_char* jojo = trainer && G.cfg.custom ? cr_jojo_foe(&G.run) : NULL;
+  if (jojo) {
+    char key[64];
+    snprintf(key, sizeof key, "images/trainer/custom/%s", jojo->id);
+    if (img_has(key)) {
+      snprintf(s.trainer_keys[0], sizeof s.trainer_keys[0], "%s", key);   /* (a JoJo battle is a single one: no partner key) */
+    }
+  }
   /* When only the old right ally survives, the next encounter promotes it to
    * the lead. Carry its already-visible sprite into slot 0 rather than duplicating
    * it or waiting for a SummonPhase that native correctly does not run. */
@@ -449,7 +459,7 @@ static void wave_black(void* arg) {
      * "X would like to battle!" */
     for (int j = G.wave_ev + 1; trainer && !dialogue && j < G.nq && j <= G.wave_ev + 5; j++) {
       if (G.q[j].kind == GC_EV_DIALOGUE && G.q[j].c == 0 && !G.skip[j]) {
-        dialogue = &G.q[j];
+        if (!jojo) dialogue = &G.q[j];   /* a JoJo trainer speaks his own line below, not his class's */
         G.skip[j] = true;
       }
     }
@@ -464,6 +474,7 @@ static void wave_black(void* arg) {
     /* a loaded battle has no encounter message in the run's events: it is made here */
     if (trainer && loaded && !t[0]) trainer_line("battle:trainerAppeared", GC_TNAME_TITLED, NULL, t, TXT_LEN);
     if (mystery && !t[0]) snprintf(t, TXT_LEN, "A strange encounter!");
+    if (jojo) snprintf(t, TXT_LEN, "A Bizarre Foe appears!");   /* lorenzo's intro for the JoJo trainers, also when the battle was loaded */
   } else {
     for (int j = G.wave_ev + 1; j < G.nq && j <= G.wave_ev + 5; j++)
       if (G.q[j].kind == GC_EV_MESSAGE && (msg_is(&G.q[j], "battle:singleWildAppeared")||msg_is(&G.q[j],"battle:doubleWildAppeared"))) {
@@ -480,6 +491,10 @@ static void wave_black(void* arg) {
     }
   } else {
     *e = (bv_event){.type = BEV_INTRO_WILD, .battler = BV_ENEMY, .a = trainer || mystery || offer ? 1 : 0, .text = t};
+    if (jojo) { /* then his iconic line, in the name box (BEV_DIALOGUE, no portrait) */
+      bv_event* d = ev_new();
+      if (d) *d = (bv_event){.type = BEV_DIALOGUE, .battler = -1, .text = jojo->line, .name = jojo->name};
+    }
   }
   play_chunk();
 }
@@ -555,7 +570,7 @@ static bool handle_event(int i) {
 
     case GC_EV_DIALOGUE:
       /* the encounter line is played by wave_black (it skips it); this is the victory one: showEnemyTrainer, then the talk */
-      if (e->c == 1) {
+      if (e->c == 1 && !(G.cfg.custom && cr_jojo_foe(&G.run))) {   /* a JoJo trainer has no class talk */
         *ev_new() = (bv_event){.type = BEV_TRAINER_SHOW, .battler = -1};
         put_dialogue(e);
       }

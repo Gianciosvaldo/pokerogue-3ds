@@ -29,6 +29,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "cc/jojo.h"
 #include "combat_observer.h"
 #include "custom_store.h"
 #include "gc/custom.h"
@@ -57,6 +58,8 @@ typedef struct {
   uint32_t degraded;              /* runs whose rematch stopped because the roster could not be written */
   uint32_t reconciled;            /* resumes whose roster and overlay were brought back in line */
   uint32_t resume_refused;        /* resumes refused for an overlay/roster mismatch */
+  uint32_t jojo_waves;            /* eligible trainer waves the JoJo roll was asked about */
+  uint32_t jojo_fights;           /* ... of which a JoJo trainer took the wave */
 } cr_stats;
 
 const cr_stats* cr_stats_get(void);
@@ -114,6 +117,17 @@ bool cr_on_run_end(const gc_run* run, int screen_kind, cs_defeat* out);
 /* Boot: finishes the vouchers owed to won rematches a crash left unclaimed. Call after ptx_boot. Returns how many it claimed. */
 unsigned cr_settle_owed(void);
 
+/* ---- the JoJo trainers (custom-core's cc/jojo.h) ----
+ * Only a custom run has them: the hook that asks is installed by cr_begin / cr_load, so an ordinary run's trainers are the ordinary ones.
+ * An eligible trainer wave (gc/custom.h: an ordinary random single trainer wave) rolls a chance of the wave becoming one of the characters
+ * of its biome; the roll state is saved in the run's overlay with the character of the battle at the save point, so the same wave rolled
+ * again after a load gives the same trainer. */
+
+/* The JoJo character the current battle is fought against, or NULL (not a custom run, no JoJo wave, a wave that is not a trainer's). */
+const cc_jojo_char* cr_jojo_foe(const gc_run* run);
+/* A character's team as game-core takes it (also what the hook hands over). False when game-core cannot build it. */
+bool cr_jojo_team(int idx, gc_custom_team* team);
+
 /* ---- for tests ---- */
 const gc_custom_hooks* cr_hooks(void);
 typedef struct {
@@ -126,6 +140,9 @@ typedef struct {
   uint8_t enc_kind, enc_flags;
   cc_record_id reward_record;
   bool have_candidate;
+  cc_jojo_state jojo;
+  uint8_t jojo_live;      /* the character of the battle + 1, 0 = none */
+  uint16_t jojo_wave;
 } cr_view;
 void cr_view_get(cr_view* out);
 

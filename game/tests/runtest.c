@@ -167,6 +167,7 @@ static int n_resumes;
 static int check_form_events;
 static int violations, n_scenes, n_ask, n_dialogs, n_options, n_party_opens, n_balls, n_party_full_swaps;
 static int n_talk_enc, n_talk_win, n_talk_portrait, n_trainer_show;
+static int n_jojo_intro, n_jojo_talk;   /* RUNTEST_CUSTOM: JoJo trainers' intros and iconic lines */
 static int n_throw_ev, n_caught_ev, n_broke_ev, n_bv_farewell, n_real_releases, n_list_backs, n_rel_checked, n_decl_checked;
 
 /* A full-party catch: the party as the question "release one?" found it, and the Pokemon about to be caught */
@@ -284,6 +285,7 @@ void* pak_read(const char* key, size_t* len) {
 void ba_preload_move(int move) { (void)move; }
 void ba_drop_moves(void) {}
 void img_drop_prefix(const char* prefix) { (void)prefix; }
+bool img_has(const char* key) { return !strncmp(key, "images/trainer/custom/", 22); }   /* the host has only the JoJo sprites: the pack of the SD card holds them */
 int ui_depth(void) { return W.begun ? 1 : 0; }
 bool ui_busy(void) { return false; }
 /* one postponed step at most (run_screen.c keeps one): it runs when the fake player next steps */
@@ -408,6 +410,11 @@ void bv_begin(const bv_setup* setup) {
   if (setup->trainer) {
     const gc_run* r=rs_run();
     if (!setup->trainer_keys[0][0]) BAD("trainer %d variant%d has no sprite key",r->trainer_type,r->trainer_variant);
+    const cc_jojo_char* foe = custom_on ? cr_jojo_foe(r) : NULL;
+    char custom_key[64] = "";
+    if (foe) snprintf(custom_key, sizeof custom_key, "images/trainer/custom/%s", foe->id);
+    if (foe && (strcmp(setup->trainer_keys[0], custom_key) || setup->trainer_keys[1][0])) BAD("%s is drawn as \"%s\" / \"%s\"", foe->id, setup->trainer_keys[0], setup->trainer_keys[1]);
+    if (!foe && !strncmp(setup->trainer_keys[0], "images/trainer/custom/", 22)) BAD("an ordinary trainer drawn as a JoJo one: %s", setup->trainer_keys[0]);
     if (r->trainer_type>=TRAINER_TYPE_RIVAL && r->trainer_type<=TRAINER_TYPE_RIVAL_6) {
       const char* expected=r->trainer_variant==TRAINER_VARIANT_FEMALE?"images/trainer/rival_f":"images/trainer/rival_m";
       if (strcmp(setup->trainer_keys[0],expected)) BAD("wrong rival sprite %s",setup->trainer_keys[0]);
@@ -491,10 +498,21 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
         if (!e->text || !*e->text) BAD("a dialogue with no text");
         if (!e->name || !*e->name) BAD("a dialogue with no speaker");
         if (e->atlas && strncmp(e->atlas, "images/character/", 17)) BAD("a dialogue portrait outside images/character: %s", e->atlas);
-        if (i > 0 && ev[i - 1].type == BEV_INTRO_WILD && ev[i - 1].b == 1) {
+        if (custom_on && i > 0 && ev[i - 1].type == BEV_INTRO_WILD && ev[i - 1].a == 1 && ev[i - 1].b == 0 && ev[i - 1].text && !strcmp(ev[i - 1].text, "A Bizarre Foe appears!")) {
+          /* a JoJo trainer of a custom run: his intro, then his iconic line in his name box, no portrait */
+          const cc_jojo_char* foe = cr_jojo_foe(rs_run());
+          if (!foe) BAD("a Bizarre Foe with no JoJo trainer in the run");
+          else if (strcmp(e->text, foe->line) || strcmp(e->name, foe->name)) BAD("the line of %s is \"%s\" by %s", foe->id, e->text, e->name);
+          if (e->atlas) BAD("a JoJo trainer with a portrait");
+          n_jojo_talk++;
+        } else if (i > 0 && ev[i - 1].type == BEV_INTRO_WILD && ev[i - 1].b == 1) {
           n_talk_enc++;
+          if (custom_on && cr_jojo_foe(rs_run())) BAD("a JoJo trainer speaks his class's line before the fight");
           if (i + 1 >= n || ev[i + 1].type != BEV_MESSAGE) BAD("the encounter talk is not followed by the battle message");
-        } else if (i > 0 && ev[i - 1].type == BEV_TRAINER_SHOW) n_talk_win++;
+        } else if (i > 0 && ev[i - 1].type == BEV_TRAINER_SHOW) {
+          n_talk_win++;
+          if (custom_on && cr_jojo_foe(rs_run())) BAD("a JoJo trainer gives his class's victory talk");
+        }
         else BAD("a dialogue that follows neither the trainer's intro nor its slide back");
         if (e->atlas) n_talk_portrait++;
         break;
@@ -502,6 +520,10 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
         n_trainer_show++;
         break;
       case BEV_INTRO_WILD:
+        if (custom_on && e->a == 1 && e->text && !strcmp(e->text, "A Bizarre Foe appears!")) {
+          n_jojo_intro++;
+          if (i + 1 >= n || ev[i + 1].type != BEV_DIALOGUE) BAD("a Bizarre Foe intro with no iconic line after it");
+        }
         if (e->b == 1 && (e->a != 1 || e->text || i + 1 >= n || ev[i + 1].type != BEV_DIALOGUE)) BAD("a held-back intro message with no talk after it");
         if (e->a == 0) {
           if (W.mon[1].species <= 0) BAD("wild intro with no enemy");
@@ -1982,6 +2004,9 @@ int main(int argc, char** argv) {
            "%u runs resumed, %u candidates handed over, %u without; %u stopped for the card\n",
            CU.commits, CU.nemeses, CU.store_refused, CU.no_finisher, cs->waves, cs->windows, cs->offers, cs->accepts, cs->declines, cs->built, cs->refused, cs->wins,
            cs->losses, cs->claims, regular, m ? m->roster.count : 0, claimed, stored, cs->runs_resumed, cs->candidates, cs->candidates_none, cs->degraded);
+    printf("custom: %u eligible trainer waves, %u JoJo trainers (%d intros, %d iconic lines played)\n", cs->jojo_waves, cs->jojo_fights, n_jojo_intro, n_jojo_talk);
+    if (n_jojo_intro != n_jojo_talk) BAD("%d Bizarre Foe intros but %d iconic lines", n_jojo_intro, n_jojo_talk);
+    if (runs >= 200 && !n_jojo_talk) BAD("no JoJo trainer came up in %d custom runs", runs);
     printf("custom: finishers the store refused, by reason:");
     for (int k = 1; k < CC_REFUSE_COUNT_; k++)
       if (CU.refusal[k]) printf(" %s %d,", cc_refusal_str(k), CU.refusal[k]);

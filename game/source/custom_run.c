@@ -48,6 +48,9 @@ static struct {
   co_carry carry;            /* what cr_load found, until cr_begin_observer takes it */
   bool have_carry;
   char error[CR_WHY_LEN];
+  cc_jojo_state jojo;        /* the JoJo trainers' roll state (saved in the overlay) */
+  uint8_t jojo_live;         /* the character of the battle on the field + 1 (0 = none), valid for jojo_wave */
+  uint16_t jojo_wave;
   cr_stats st;
 } R;
 
@@ -395,7 +398,54 @@ static void hk_faint(void* user, const struct gc_run* run, const gc_custom_faint
   c->valid = true;
 }
 
-static const gc_custom_hooks HOOKS = {NULL, hk_encounter, hk_answer, hk_built, hk_faint};
+/* The character's team in game-core's terms. False when game-core cannot build it. */
+bool cr_jojo_team(int idx, gc_custom_team* team) {
+  if (idx < 0 || (unsigned)idx >= cc_jojo_count) return false;
+  const cc_jojo_char* c = &cc_jojo_chars[idx];
+  memset(team, 0, sizeof *team);
+  team->name = c->name;
+  team->passive = c->passive;
+  team->n = c->n_members;
+  for (int i = 0; i < c->n_members && i < GC_CUSTOM_MAX_TEAM; i++) {
+    const cc_jojo_member* m = &c->member[i];
+    gc_custom_team_member* t = &team->member[i];
+    t->species = m->species;
+    t->form = m->form;
+    t->ability_slot = m->ability_slot;
+    t->shiny = m->shiny != 0;
+    t->variant = m->variant;
+    for (int k = 0; k < GC_CUSTOM_MAX_MOVES && k < 4; k++) t->moves[k] = m->moves[k];
+    t->n_items = m->n_items;
+    for (int k = 0; k < m->n_items && k < GC_CUSTOM_MAX_TEAM_ITEMS; k++) {
+      t->items[k].key = m->items[k].key;
+      t->items[k].arg = m->items[k].arg;
+      t->items[k].stack = m->items[k].stack;
+    }
+  }
+  return gc_custom_team_check(team, NULL);
+}
+
+/* An eligible trainer wave (game-core decides which: gc/custom.h): the JoJo roll. A hit fills the character's team; game-core builds it. */
+static bool hk_trainer(void* user, const struct gc_run* run, const gc_custom_encounter* e, gc_custom_team* team) {
+  (void)user;
+  (void)run;
+  if (!R.active) return false;
+  R.st.jojo_waves++;
+  const int idx = cc_jojo_roll(&R.jojo, e->biome);
+  if (idx == CC_JOJO_NONE) return false;
+  if (!cr_jojo_team(idx, team)) return false;   /* a table game-core cannot build: the wave stays ordinary (the host test checks the table) */
+  R.jojo_live = (uint8_t)(idx + 1);   /* valid for jojo_wave only: a later wave's battle is never taken for it */
+  R.jojo_wave = (uint16_t)e->wave;
+  R.st.jojo_fights++;
+  return true;
+}
+
+const cc_jojo_char* cr_jojo_foe(const gc_run* run) {
+  if (!R.active || !R.jojo_live || R.jojo_live > cc_jojo_count || R.jojo_wave != run->wave || run->battle_type != BATTLE_TYPE_TRAINER) return NULL;
+  return &cc_jojo_chars[R.jojo_live - 1];
+}
+
+static const gc_custom_hooks HOOKS = {NULL, hk_encounter, hk_answer, hk_built, hk_faint, hk_trainer};
 const gc_custom_hooks* cr_hooks(void) { return &HOOKS; }
 
 int cr_offer_species(void) { return R.offering ? R.offer_rec.species : 0; }
@@ -539,6 +589,7 @@ bool cr_begin(gc_run* run, uint32_t entropy) {
   }
   R.active = true;
   R.run_uid = uid;
+  cc_jojo_start(&R.jojo, mix_seed(entropy, uid));
   R.st.runs_started++;
   gc_run_set_custom(run, &HOOKS);
   return true;
@@ -573,7 +624,7 @@ static uint16_t r16(rd* r) { const uint16_t a = r8(r); return (uint16_t)(a | (ui
 static uint32_t r32(rd* r) { const uint32_t a = r16(r); return a | (uint32_t)r16(r) << 16; }
 static uint64_t r64(rd* r) { const uint64_t a = r32(r); return a | (uint64_t)r32(r) << 32; }
 
-#define OV_VERSION 1u
+#define OV_VERSION 2u   /* 2 adds the JoJo block; version 1 files (from before) still load, with a fresh JoJo state */
 #define OV_MAX 16384u
 
 static void w_sched(wr* w, const cc_schedule* s) {
@@ -703,6 +754,11 @@ static size_t overlay_encode(uint8_t* buf, size_t cap) {
   w32(&w, R.reward_record);
   w32(&w, R.reward_txn);
   w_sched(&w, &R.sched);
+  w64(&w, R.jojo.rng_state);
+  w32(&w, R.jojo.used);
+  w8(&w, R.jojo.fights);
+  w8(&w, R.jojo_live);
+  w16(&w, R.jojo_wave);
   static co_carry carry_out;   /* not on the stack */
   co_carry* carry = &carry_out;
   const bool have = co_carry_get(carry);
@@ -719,13 +775,18 @@ typedef struct {
   uint8_t enc_kind, enc_flags;
   uint32_t reward_record, reward_txn;
   cc_schedule sched;
+  bool has_jojo;             /* version 2: the JoJo block follows */
+  cc_jojo_state jojo;
+  uint8_t jojo_live;
+  uint16_t jojo_wave;
   bool has_carry;
 } overlay;
 
 static bool overlay_decode(const uint8_t* buf, size_t len, overlay* o, co_carry* carry) {
   rd r = {buf, len, 0, false};
   memset(o, 0, sizeof *o);
-  if (r8(&r) != OV_VERSION) return false;
+  const uint8_t version = r8(&r);
+  if (version != OV_VERSION && version != 1u) return false;
   o->run_uid = r64(&r);
   o->flags = r8(&r);
   o->rematch_enemy_id = r32(&r);
@@ -736,6 +797,16 @@ static bool overlay_decode(const uint8_t* buf, size_t len, overlay* o, co_carry*
   o->reward_txn = r32(&r);
   if (r.bad || (o->flags & ~OF_ALL) || o->run_uid == 0 || o->enc_kind > GC_ENC_UNSUPPORTED || (o->enc_flags & ~7u)) return false;
   if (!r_sched(&r, &o->sched) || o->sched.run_uid != o->run_uid) return false;
+  if (version >= 2u) {
+    o->has_jojo = true;
+    o->jojo.rng_state = r64(&r);
+    o->jojo.used = r32(&r);
+    o->jojo.fights = r8(&r);
+    o->jojo_live = r8(&r);
+    o->jojo_wave = r16(&r);
+    if (r.bad || cc_jojo_validate(&o->jojo) != CC_OK) return false;
+    if (o->jojo_live > cc_jojo_count || (o->jojo_live && !(o->jojo.used >> (o->jojo_live - 1) & 1u))) return false;
+  }
   const uint8_t has = r8(&r);
   if (has > 1) return false;
   o->has_carry = has == 1;
@@ -1008,10 +1079,18 @@ rsv_status cr_load(int slot, gc_run* run, char why[RSV_WHY_LEN]) {
   R.enc_flags = x.o.enc_flags;
   R.reward_record = x.o.reward_record;
   R.reward_txn = x.o.reward_txn;
+  if (x.o.has_jojo) {
+    R.jojo = x.o.jojo;
+    R.jojo_live = x.o.jojo_live;
+    R.jojo_wave = x.o.jojo_wave;
+  } else {
+    cc_jojo_start(&R.jojo, mix_seed(0, x.o.run_uid));   /* a run saved before the JoJo trainers: they start now */
+  }
   R.st.runs_resumed++;
   if (x.reconciled) R.st.reconciled++;
   if (x.lost_written) R.st.losses++;
   gc_run_set_custom(run, &HOOKS);
+  if (cr_jojo_foe(run)) gc_custom_set_trainer_name(run, cr_jojo_foe(run)->name);   /* the saved battle is a JoJo trainer's */
   cr_settle_owed();   /* a win whose voucher a crash left unclaimed */
   return RSV_OK;
 }
@@ -1071,4 +1150,7 @@ void cr_view_get(cr_view* v) {
   v->enc_flags = R.enc_flags;
   v->reward_record = R.reward_record;
   v->have_candidate = R.cand.valid;
+  v->jojo = R.jojo;
+  v->jojo_live = R.jojo_live;
+  v->jojo_wave = R.jojo_wave;
 }

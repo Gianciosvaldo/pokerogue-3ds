@@ -133,6 +133,27 @@ M = [
     (CR, "  if (!cr_usable(fw)) {", "  if (false) {", T, "a custom run is resumed with an unusable custom file"),
     (CR, "  if (kind == GC_SCREEN_GAME_OVER) {\n    have = build_defeat(run, out);", "  if (true) {\n    have = build_defeat(run, out);", T, "a Classic clear can name a finisher"),
     (CR, "  gc_run_set_custom(run, &HOOKS);\n  return true;\n}\n\n/* ----", "  return true;\n}\n\n/* ----", T, "a new custom run installs no hooks"),
+    # ---- the JoJo trainers
+    (CR, "  R.jojo_live = (uint8_t)(idx + 1);   /* valid for jojo_wave only: a later wave's battle is never taken for it */\n  R.jojo_wave = (uint16_t)e->wave;", "  R.jojo_live = 0;\n  R.jojo_wave = (uint16_t)e->wave;", T, "a JoJo battle is not remembered as one"),
+    (CR, "  if (!cr_jojo_team(idx, team)) return false;", "", T, "the hook takes a roll that dealt nobody for a character"),
+    (CR, "  if (!R.active || !R.jojo_live || R.jojo_live > cc_jojo_count || R.jojo_wave != run->wave || run->battle_type != BATTLE_TYPE_TRAINER) return NULL;",
+         "  if (!R.active || !R.jojo_live || R.jojo_live > cc_jojo_count || run->battle_type != BATTLE_TYPE_TRAINER) return NULL;", T,
+     "a JoJo foe lingers into the next trainer battle"),
+    (CR, "  cc_jojo_start(&R.jojo, mix_seed(entropy, uid));", "  cc_jojo_start(&R.jojo, 0);", T, "every run has the same JoJo stream"),
+    (CR, "  cc_jojo_start(&R.jojo, mix_seed(entropy, uid));", "", T, "a new run's JoJo state is never started"),
+    (CR, "    cc_jojo_start(&R.jojo, mix_seed(0, x.o.run_uid));", "", T, "a run saved before the JoJo trainers never starts them"),
+    (CR, "  w64(&w, R.jojo.rng_state);", "  w64(&w, 0);", T, "the JoJo stream is not saved"),
+    (CR, "  w32(&w, R.jojo.used);", "  w32(&w, 0);", T, "the dealt characters are not saved"),
+    (CR, "  w8(&w, R.jojo.fights);", "  w8(&w, 0);", T, "the number of JoJo fights is not saved"),
+    (CR, "  w8(&w, R.jojo_live);", "  w8(&w, 0);", T, "the JoJo battle on the field is not saved"),
+    (CR, "  w16(&w, R.jojo_wave);", "  w16(&w, 0);", T, "the wave of the JoJo battle is not saved"),
+    (CR, "    if (r.bad || cc_jojo_validate(&o->jojo) != CC_OK) return false;", "    if (r.bad) return false;", T, "a damaged JoJo state is loaded"),
+    (CR, "    if (o->jojo_live > cc_jojo_count || (o->jojo_live && !(o->jojo.used >> (o->jojo_live - 1) & 1u))) return false;", "    if (o->jojo_live > cc_jojo_count) return false;", T,
+     "a JoJo battle against a character never dealt is loaded"),
+    (CR, "    if (o->jojo_live > cc_jojo_count || (o->jojo_live && !(o->jojo.used >> (o->jojo_live - 1) & 1u))) return false;", "    if ((o->jojo_live && !(o->jojo.used >> (o->jojo_live - 1) & 1u))) return false;", T,
+     "a JoJo battle against a character the table does not have is loaded"),
+    (CR, "  if (version != OV_VERSION && version != 1u) return false;", "  if (version != OV_VERSION) return false;", T, "a custom save from before the JoJo trainers no longer loads"),
+    (CR, "  if (cr_jojo_foe(run)) gc_custom_set_trainer_name(run, cr_jojo_foe(run)->name);", "", T, "a loaded JoJo battle names its trainer as an ordinary one"),
 ]
 
 # Mutations that survive and are expected to, and why (listed, run, and not counted as failures)

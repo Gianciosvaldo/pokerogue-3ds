@@ -78,7 +78,7 @@ typedef struct {
 #define GC_CUSTOM_MAX_TEAM_ITEMS 5
 
 typedef struct {
-    const char *key;             /* a modifierTypes key as game-core's item tables spell it; static storage (pr_item_names entry or equal text) */
+    const char *key;             /* a modifierTypes key as game-core's item tables spell it; static storage; the battle layer must know the item */
     int16_t arg;                 /* -1 when the item has none */
     uint8_t stack;               /* 1..99 */
 } gc_custom_team_item;
@@ -160,7 +160,7 @@ void gc_run_set_custom(struct gc_run *run, const gc_custom_hooks *hooks);
  * *why (may be NULL) says what is wrong. Pure. */
 bool gc_custom_enemy_check(const gc_custom_enemy *spec, const char **why);
 
-/* Whether game-core can build this team: sizes, species, form, ability slot, shiny tier, moves, item keys and stacks. Pure. */
+/* Whether game-core can build this team: sizes, species, form, ability slot, shiny tier, moves, items the battle layer knows. Pure. */
 bool gc_custom_team_check(const gc_custom_team *team, const char **why);
 
 /* Gives the current trainer battle a plain-text name (all of the trainer's message names), or, with NULL or "", takes it away. A battle

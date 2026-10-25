@@ -294,6 +294,22 @@ static void to_modifier(const gc_item *it, pr_modifier *m, bool golden)
     }
 }
 
+/* Whether the battle layer knows an enemy's held item of this key, argument and stack (to_modifier gives it a class); an item it does not
+ * know would be carried but have no effect. */
+bool gc_item_stock_ported(const char *key, int arg, int stack)
+{
+    if (!key || stack < 1) return false;
+    gc_item it;
+    memset(&it, 0, sizeof it);
+    it.key = key;
+    it.arg = (int16_t)arg;
+    it.stack = stack;
+    it.pokemon_id = 1;
+    pr_modifier m;
+    to_modifier(&it, &m, false);
+    return !m.unknown_subclass;
+}
+
 /* A canonical held Seed is unique per owner. Duplicate generic entries have
  * no validated replacement policy, so all of them stay opaque. */
 static bool duplicate_seed(const gc_item *items, int n, int index)

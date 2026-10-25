@@ -248,6 +248,7 @@ int gc_item_remove_stacks(gc_run *run, const char *key, int count);
 void gc_items_from_battle(gc_run *run); /* persist consumed berries/White Herb */
 void gc_items_to_battle(gc_run *run);                                  /* the player's and the enemy's lists into bt->mods */
 void gc_cache_generated_item_tiers(gc_run *run);
+bool gc_item_stock_ported(const char *key, int arg, int stack);   /* the battle layer knows this held item (gc_custom_team_check) */
 double gc_apply_exp_boosters(const gc_run *run, double exp);          /* ExpBoosterModifier */
 
 /* ---- the encounter and the battle (src/gc_encounter.c, src/gc_battle.c) ---- */

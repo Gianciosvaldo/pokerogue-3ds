@@ -363,6 +363,8 @@ typedef struct {
   bool stop_after_enemy;   /* stop at the first COMMAND screen of the wave with a rematch enemy built */
   bool stop_at_save;       /* with stop_wave: only once the wave's save point has been written */
   int max_steps;
+  bool stop_at_jojo;       /* stop at the first COMMAND screen of a JoJo trainer's battle (not of jojo_done_wave) */
+  int jojo_done_wave;
 } bot_t;
 static bot_t bot;
 static int saves_written, save_points;
@@ -377,6 +379,10 @@ static void set_one_move(gc_mon* m, int move) {
   m->b.n_moves = 1;
   m->b.pp_used[0] = 0;
 }
+
+/* what the JoJo test records of each JoJo battle it meets (filled by jojo_seen at the battle's first COMMAND screen) */
+static struct { bool on; int n, last, wave[64], idx[64]; int bad; } J;
+static void jojo_seen(void);
 
 static step_t step(void) {
   const gc_screen* s = gc_run_screen(R);
@@ -399,7 +405,9 @@ static step_t step(void) {
           saves_written++;
         }
       }
+      jojo_seen();
       if (bot.stop_wave && R->wave == bot.stop_wave) return STEP_STOPPED;
+      if (bot.stop_at_jojo && cr_jojo_foe(R) && R->wave != bot.jojo_done_wave) return STEP_STOPPED;
       if (bot.stop_after_enemy) {
         cr_view v;
         cr_view_get(&v);
@@ -1942,6 +1950,206 @@ static void test_reward_crash(void) {
   printf("6  reward under a crash at each of %d writes: done\n", survived);
 }
 
+
+/* ------------------------------------------------------------------ 8. the JoJo trainers of a custom run */
+
+/* At a JoJo battle's first COMMAND screen: the party on the field is the character's, as the table lists it. */
+static void jojo_seen(void) {
+  const cc_jojo_char* foe = cr_jojo_foe(R);
+  if (!J.on || !foe || R->wave == J.last) return;
+  J.last = R->wave;
+  if (J.n >= 64) return;
+  J.wave[J.n] = R->wave;
+  J.idx[J.n++] = (int)(foe - cc_jojo_chars);
+  if (R->battle_type != BATTLE_TYPE_TRAINER || R->double_battle || R->n_enemy != foe->n_members || R->biome != foe->biome) J.bad++;
+  if (!R->trainer_names[0] || strcmp(R->trainer_names[0], foe->name) || !R->trainer_names[1] || strcmp(R->trainer_names[1], foe->name)) J.bad++;
+  for (int i = 0; i < R->n_enemy && i < foe->n_members; i++) {
+    const cc_jojo_member* m = &foe->member[i];
+    const gc_mon* e = &R->enemy[i];
+    if (e->b.species != m->species || e->b.form != m->form || e->ability_index != m->ability_slot || e->b.shiny != (m->shiny != 0)) J.bad++;
+    int nm = 0;
+    for (int k = 0; k < 4; k++)
+      if (m->moves[k]) {
+        if (e->b.moves[nm] != m->moves[k]) J.bad++;
+        nm++;
+      }
+    if (e->b.n_moves != nm) J.bad++;
+    if (foe->passive >= 0 && (e->b.passive != foe->passive || e->b.custom_passive != foe->passive)) J.bad++;
+    if (foe->passive < 0 && e->b.custom_passive != -1) J.bad++;
+    if (!e->b.has_trainer) J.bad++;
+  }
+}
+
+static void jojo_play(const char* seed, int salt, bool interrupt, bool custom, int until_wave) {
+  sd_new();
+  cs_set_nonce(0x5A5A0001u + 0x9E3779B1u * (uint32_t)salt);   /* the same card, so the same run uid and the same JoJo stream for the same seed */
+  memset(&J, 0, sizeof J);
+  J.on = true;
+  CHECK(new_run(seed, custom, 100), "the run starts");
+  bot.heal = true;
+  bot.save_every = interrupt ? 1 : 0;
+  bot.stop_wave = until_wave;
+  bot.stop_at_jojo = interrupt;
+  for (int guard = 0; guard < 400; guard++) {
+    const step_t st = run_until(60000);
+    if (st == STEP_STOPPED && R->wave == until_wave) break;
+    if (st == STEP_STOPPED) {
+      /* a JoJo battle: the slot holds this wave's save; the run continues from the file */
+      const cc_jojo_char* before = cr_jojo_foe(R);
+      CHECK(before != NULL, "stopped at a JoJo battle");
+      uint32_t ids[6];
+      const int n = R->n_enemy;
+      for (int i = 0; i < n && i < 6; i++) ids[i] = R->enemy[i].b.id;
+      char why[RSV_WHY_LEN];
+      CHECK(resume_run(slot_used, why) == RSV_OK, "resume at a JoJo battle: %s", why);
+      const cc_jojo_char* after = cr_jojo_foe(R);
+      CHECK(after == before, "the same trainer after the load");
+      CHECK(R->n_enemy == n, "the same party after the load");
+      for (int i = 0; i < n && i < 6 && i < R->n_enemy; i++) CHECK(R->enemy[i].b.id == ids[i], "the same member %d", i);
+      if (before) CHECK(R->trainer_names[0] && !strcmp(R->trainer_names[0], before->name), "the name after the load");
+      bot.jojo_done_wave = R->wave;
+      bot.save_every = 1;
+      bot.stop_wave = until_wave;
+      bot.stop_at_jojo = true;
+      bot.heal = true;
+      continue;
+    }
+    CHECK(false, "the run stopped early (step %d) at wave %d", (int)st, R->wave);
+    break;
+  }
+  J.on = false;
+}
+
+#define JOJO_WAVES 100
+#define JOJO_SEEDS 30
+/* a character's team as game-core takes it, and the live roll over a real run */
+static void test_jojo(void) {
+  /* 1. every character of the table is a team game-core can build, and the items exist */
+  CHECK(cc_jojo_count == 17, "17 characters");
+  for (unsigned i = 0; i < cc_jojo_count; i++) {
+    gc_custom_team t;
+    const char* why = "";
+    CHECK(cr_jojo_team((int)i, &t), "character %s builds", cc_jojo_chars[i].id);
+    CHECK(gc_custom_team_check(&t, &why), "character %s: %s", cc_jojo_chars[i].id, why);
+  }
+  /* 2. only a custom run has them: the same seeds as an ordinary run never meet one */
+  cr_stats_reset();
+  int ordinary_foes = 0;
+  for (int s = 0; s < 4; s++) {
+    char seed[24];
+    snprintf(seed, sizeof seed, "jojo-ordinary-%d", s);
+    jojo_play(seed, s, false, false, 25);
+    ordinary_foes += J.n;
+    CHECK(cr_stats_get()->jojo_waves == 0, "an ordinary run never asked the roll");
+    CHECK(!cr_jojo_foe(R), "no foe in an ordinary run");
+    CHECK(R->trainer_names[0] == NULL || R->battle_type != BATTLE_TYPE_TRAINER || strstr(R->trainer_names[0], "Zeppeli") == NULL, "ordinary names");
+    end_run(GC_SCREEN_GAME_OVER, true);
+  }
+  CHECK(ordinary_foes == 0, "ordinary runs met %d JoJo trainers", ordinary_foes);
+  /* 3. custom runs: uninterrupted, then the same seeds saved and loaded at every JoJo battle: the same trainers on the same waves */
+  int total = 0, asked = 0;
+  for (int s = 0; s < JOJO_SEEDS; s++) {
+    char seed[24];
+    snprintf(seed, sizeof seed, "jojo-run-%d", s);
+    jojo_play(seed, s, false, true, JOJO_WAVES);
+    CHECK(J.bad == 0, "seed %d: %d wrong JoJo battle details", s, J.bad);
+    const int n = J.n, wave[64] = {0}, idx0 = 0;
+    (void)wave; (void)idx0;
+    int w[64], ix[64];
+    memcpy(w, J.wave, sizeof w);
+    memcpy(ix, J.idx, sizeof ix);
+    end_run(GC_SCREEN_GAME_OVER, true);
+    total += n;
+    asked += (int)cr_stats_get()->jojo_waves;
+    jojo_play(seed, s, true, true, JOJO_WAVES);
+    CHECK(J.bad == 0, "seed %d (interrupted): %d wrong JoJo battle details", s, J.bad);
+    CHECK(J.n == n, "seed %d: %d JoJo battles, %d with a load at each", s, n, J.n);
+    for (int i = 0; i < n && i < J.n; i++) CHECK(J.wave[i] == w[i] && J.idx[i] == ix[i], "seed %d: battle %d differs after the loads", s, i);
+    end_run(GC_SCREEN_GAME_OVER, true);
+  }
+  {
+    uint64_t seen[8];
+    int n_seen = 0;
+    for (int s = 0; s < 8; s++) {
+      sd_new();
+      cs_set_nonce(0x5A5A0001u + 0x9E3779B1u * (uint32_t)s);
+      CHECK(new_run("jojo-stream", true, 0), "the run starts");
+      cr_view v;
+      cr_view_get(&v);
+      CHECK(v.jojo.used == 0 && v.jojo.fights == 0 && v.jojo_live == 0, "a new run has dealt nobody");
+      for (int k = 0; k < n_seen; k++) CHECK(seen[k] != v.jojo.rng_state, "two runs share a JoJo stream");
+      seen[n_seen++] = v.jojo.rng_state;
+      cr_end();
+    }
+  }
+  CHECK(total >= 6, "the roll dealt %d JoJo battles over %d seeds (>= 6 expected)", total, JOJO_SEEDS);
+  printf("8  JoJo trainers: %d eligible trainer waves, ", asked);
+  printf("%d battles over %d custom runs, each the table's team, identical across loads\n", total, JOJO_SEEDS);
+}
+
+/* the overlay's JoJo block: a file made before it (version 1) still loads, a damaged block refuses */
+static void jojo_edit_slot(int mode) {
+  char name[24];
+  snprintf(name, sizeof name, CR_FILE_PREFIX "%d", slot_used);
+  char* raw = NULL;
+  size_t len = 0;
+  bool bak = false;
+  CHECK(save_read(name, &raw, &len, &bak) == SAVE_OK, "the slot file reads");
+  if (!raw) return;
+  uint8_t* f = (uint8_t*)raw;
+  const uint32_t ov_len = (uint32_t)f[8] | (uint32_t)f[9] << 8 | (uint32_t)f[10] << 16 | (uint32_t)f[11] << 24;
+  uint8_t* ov = f + 16;
+  const size_t at = 26 + 32 + 4u * ov[26 + 2] + 4u * ov[26 + 3];   /* after the schedule: n_frozen and n_windows are its 3rd and 4th bytes */
+  if (mode == 1) {
+    /* version 1: no JoJo block */
+    memmove(ov + at, ov + at + 16, len - 16 - at - 16);
+    ov[0] = 1;
+    const uint32_t n = ov_len - 16;
+    f[8] = (uint8_t)n; f[9] = (uint8_t)(n >> 8); f[10] = (uint8_t)(n >> 16); f[11] = (uint8_t)(n >> 24);
+    CHECK(save_write(name, raw, len - 16) == SAVE_OK, "the version 1 file is written");
+  } else {
+    if (mode == 2) ov[at + 8 + 2] = 0x20;   /* a character the table does not have is marked dealt: used bit 21 */
+    if (mode == 3) ov[at + 8 + 4 + 1] = 5;  /* a battle against character 5 that was never dealt */
+    if (mode == 4) ov[at + 8 + 4 + 1] = 200; /* a battle against a character the table does not have */
+    CHECK(save_write(name, raw, len) == SAVE_OK, "the damaged file is written");
+  }
+  free(raw);
+}
+
+static void test_jojo_overlay(void) {
+  sd_new();
+  CHECK(new_run("jojo-overlay", true, 100), "the run starts");
+  bot.heal = true;
+  bot.save_every = 1;
+  bot.stop_wave = 3;
+  CHECK(run_until(20000) == STEP_STOPPED, "wave 3");
+  jojo_edit_slot(1);
+  char why[RSV_WHY_LEN];
+  CHECK(resume_run(slot_used, why) == RSV_OK, "a version 1 file loads: %s", why);
+  CHECK(cr_active() && !cr_jojo_foe(R), "and starts the JoJo trainers fresh");
+  {
+    cr_view v;
+    cr_view_get(&v);
+    CHECK(v.jojo.rng_state != 0 && v.jojo.used == 0 && v.jojo.fights == 0 && v.jojo_live == 0, "a fresh JoJo state");
+  }
+  bot.heal = true;
+  bot.stop_wave = 12;
+  bot.save_every = 1;
+  CHECK(run_until(20000) == STEP_STOPPED, "the resumed run goes on");
+  end_run(GC_SCREEN_GAME_OVER, true);
+  for (int mode = 2; mode <= 4; mode++) {
+    sd_new();
+    CHECK(new_run("jojo-overlay", true, 100), "the run starts");
+    bot.heal = true;
+    bot.save_every = 1;
+    bot.stop_wave = 3;
+    CHECK(run_until(20000) == STEP_STOPPED, "wave 3");
+    jojo_edit_slot(mode);
+    CHECK(resume_run(slot_used, why) == RSV_INCOMPATIBLE, "a damaged JoJo block (kind %d) refuses the file", mode);
+    end_run(GC_SCREEN_GAME_OVER, true);
+  }
+}
+
 int main(int argc, char** argv) {
   int nseeds = NSEEDS_DEFAULT + (argc > 1 ? atoi(argv[1]) : 0);
   char dir[64] = "/tmp/custom-run-test-XXXXXX";
@@ -1962,6 +2170,8 @@ int main(int argc, char** argv) {
   test_saves();
   test_identity();
   test_reward_crash();
+  test_jojo();
+  test_jojo_overlay();
   printf("custom_run_test: %d checks, %d failed\n", checks, failed);
   if (chdir("/") == 0) {
     char cmd[128];
