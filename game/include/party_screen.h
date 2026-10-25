@@ -38,6 +38,13 @@ void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, int tm_mo
 void ps_open_transfer(const void* gc_run_ptr, void (*on_move)(int item_src, int count, int to, void* arg), void (*on_done)(void* arg),
                       void* arg);
 
+/* Reward Check Team: summaries and native eligible form-item actions, including
+ * fainted and benched owners. The host applies changes; form uses a global index. */
+void ps_open_check(const void* gc_run_ptr, int cursor,
+                   void (*on_form)(int party, int item, void* arg),
+                   void (*on_pause)(int party, bool paused, void* arg),
+                   void (*on_done)(void* arg), void* arg);
+
 /* ---- the learn-move dialog (menus' learn_move_start) over the battle ----
  * The dialog's messages and yes/no box belong to the caller's screen (the battle's message box); the
  * summary page that picks the move to forget is menus' own, and this puts a screen over the battle

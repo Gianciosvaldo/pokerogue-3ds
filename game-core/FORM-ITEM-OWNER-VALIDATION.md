@@ -87,3 +87,5 @@ Transform interactions, quiet/enemy phases, removal histories or full battle-cor
 completion. The app's Check Team/form-toggle wiring is a follow-up. Normal
 app/custom/save, core/football and actual ARM build/stack checks remain required;
 only the dedicated custom Task63 check is skipped.
+
+The subsequent [app menu bridge](../FORM-ITEM-MENU-2026-10-24.md) supplies Check Team and form-toggle navigation.

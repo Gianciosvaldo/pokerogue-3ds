@@ -993,7 +993,7 @@ void summary_draw(void) {
   }
 
   char lv[24];
-  snprintf(lv, sizeof lv, "%s%u", mui_t("pokemonSummary:lv"), m->level);
+  snprintf(lv, sizeof lv, "%s%u", mui_t("pokemonSummary:lv"), (unsigned)m->level);
   mui_text_o(TS_SUMMARY_ALT, 24, Y(-17), 0, 1, lv);
   if (m->gender != MG_GENDERLESS) {
     const char* sym = m->gender == MG_FEMALE ? "\xe2\x99\x80" : "\xe2\x99\x82";

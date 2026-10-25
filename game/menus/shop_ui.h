@@ -24,6 +24,7 @@ typedef struct shop_ui_events {
   void (*on_skip)(void* ctx);
   void (*on_manage_items)(void* ctx); /* Manage Items: the party screen in MODIFIER_TRANSFER mode */
   void* ctx;
+  void (*on_check_team)(void* ctx);
 } shop_ui_events;
 
 typedef struct {
@@ -53,6 +54,7 @@ typedef enum {
   SHOP_TARGET_LOCK,
   SHOP_TARGET_SKIP,
   SHOP_TARGET_TRANSFER,
+  SHOP_TARGET_CHECK,
 } shop_target_type;
 
 typedef struct {
