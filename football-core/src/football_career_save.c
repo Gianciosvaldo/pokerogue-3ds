@@ -14,7 +14,7 @@ static void state(Stream *s,FootballCareer *c)
 {
     N(c->phase,FB_CAREER_END);N(c->round,7);N(c->wins,7);N(c->wallet,5600);N(c->seed,UINT32_MAX);
     unsigned mega=(unsigned)(c->mega+1);N(mega,22);c->mega=(int)mega-1;
-    N(c->roster.count,22);unsigned cost=(unsigned)(c->roster.cost*1000+.5);N(cost,40000);c->roster.cost=cost/1000.0;
+    N(c->roster.count,22);unsigned cost=(unsigned)(c->roster.cost*1000+.5);N(cost,FB_ROSTER_BUDGET*1000);c->roster.cost=cost/1000.0;
     unsigned seen=0;
     for(unsigned i=0;i<c->roster.count;++i){
         N(c->roster.lineup[i],21);N(c->roster.speed[i],20);N(c->roster.strength[i],20);N(c->roster.mega_item[i],INT16_MAX);
@@ -61,7 +61,7 @@ size_t football_career_save(FootballCareer *c,void *buffer,size_t capacity)
 }
 bool football_career_load(FootballCareer *c,gc_run *scratch,gc_system *profile,const void *buffer,size_t length)
 {
-    if(!c || !scratch || !buffer || length<20 || length>FB_CAREER_SAVE_MAX || memcmp(buffer,"PRFBLIVE",8))return false;
+    if(!c || !scratch || !profile || !buffer || length<20 || length>FB_CAREER_SAVE_MAX || memcmp(buffer,"PRFBLIVE",8))return false;
     Stream s={(unsigned char *)buffer,8,length,true,true};unsigned version=number(&s,0,1),size=number(&s,0,FB_CAREER_SAVE_MAX),sum=number(&s,0,UINT32_MAX);
     if(!s.ok || version!=1 || size!=length || sum!=crc((const unsigned char *)buffer+20,length-20))return false;
     FootballCareer *copy=calloc(1,sizeof *copy);if(!copy)return false;
@@ -71,6 +71,8 @@ bool football_career_load(FootballCareer *c,gc_run *scratch,gc_system *profile,c
     if(copy->phase==FB_CAREER_SHOP && copy->wins!=copy->round)valid=false;
     for(unsigned i=0;valid && i<22;++i){
         if(!football_roster_refresh(&copy->roster,i))valid=false;
+        gc_starter original;
+        if(profile && !football_roster_starter(profile,copy->roster.mon[i].met_species,&original))valid=false;
         if(copy->roster.mega_item[i]){gc_football_new(scratch,NULL,"check-mega",1);scratch->party[0]=copy->roster.mon[i];scratch->n_party=1;if(!gc_football_mega_form(scratch,0,copy->roster.mega_item[i]))valid=false;}
     }
     if(valid && copy->mega>=0 && !copy->roster.mega_item[copy->mega])valid=false;

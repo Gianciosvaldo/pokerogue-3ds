@@ -1,4 +1,5 @@
 #include "football_live.h"
+#include "football_live_systems.h"
 #include <math.h>
 #include <string.h>
 static float limit(float v,float a,float b){return v<a?a:v>b?b:v;}
@@ -13,6 +14,7 @@ static void arrange(FootballLive *m)
     static const float oy[11]={26.67f,28,4,49,13,39,21,24,26.67f,29,32};
     static const float dx[11]={2,2,2,2,7,7,7,2,2,15,15};
     static const float dy[11]={20,24,29,33,15,26.67f,38,5,48,18,36};
+    m->snap_offense=m->rules.offense;
     float dir=direction(m);m->los=m->rules.offense==FB_HOME?10+m->rules.ball:110-m->rules.ball;
     unsigned off=offense_base(m),def=defense_base(m);
     const FootballPlayDefinition *play=football_playbook_get(m->play);
@@ -21,9 +23,11 @@ static void arrange(FootballLive *m)
         unsigned os=m->lineup[m->rules.offense][i],ds=m->lineup[1-m->rules.offense][i+11];
         float depth=ox[i];
         if(play && play->formation==FB_FORM_UNDER_CENTER){if(i==0)depth=-1.5f;else if(i==1)depth=-5;}
-        *a=(FootballLiveActor){.attributes=m->units[m->rules.offense][os],.x=m->los+dir*depth,.y=oy[i],.roster=(uint8_t)os,.home=off==0};
-        *b=(FootballLiveActor){.attributes=m->units[1-m->rules.offense][ds],.x=m->los+dir*dx[i],.y=dy[i],.roster=(uint8_t)ds,.home=def==0};
+        *a=(FootballLiveActor){.attributes=m->units[m->rules.offense][os],.x=m->los+dir*depth,.y=oy[i],.roster=(uint8_t)os,.block_peer=255,.facing=(int8_t)dir,.home=off==0};
+        *b=(FootballLiveActor){.attributes=m->units[1-m->rules.offense][ds],.x=m->los+dir*dx[i],.y=dy[i],.roster=(uint8_t)ds,.block_peer=255,.facing=(int8_t)-dir,.home=def==0};
     }
+    football_live_defense_setup(m);
+    m->target=(uint8_t)(off+2);
     m->carrier=(uint8_t)off;m->controlled=m->rules.offense==FB_HOME?0:5;
     m->ball_x=m->actors[off].x;m->ball_y=m->actors[off].y;m->ball_z=0;
     m->flying=m->thrown=m->caught=m->loose=false;m->elapsed=m->juke=m->cooldown=0;
@@ -51,6 +55,11 @@ bool football_live_begin(FootballLive *m,const FootballRoster *r,uint32_t seed,u
 bool football_live_call(FootballLive *m,FootballPlayId play)
 {
     if(!m || m->phase!=FB_LIVE_CALL || !football_playbook_get(play))return false;
+    if(m->rules.offense==FB_HOME){
+        /* Scheme depends on situation/seed, never the selected offensive play. */
+        m->defense=m->rules.down>=3 && football_rules_distance(&m->rules)>=5?FB_DEF_BLITZ:
+            (m->rng+m->snaps)%3==0?FB_DEF_ZONE:FB_DEF_MAN;
+    }
     m->play=play;m->phase=FB_LIVE_SET;arrange(m);return true;
 }
 bool football_live_defend(FootballLive *m,FootballDefenseId defense)
@@ -58,8 +67,8 @@ bool football_live_defend(FootballLive *m,FootballDefenseId defense)
     if(!m || m->phase!=FB_LIVE_CALL || m->rules.offense!=FB_AWAY || (unsigned)defense>=FB_DEF_COUNT)return false;
     /* CPU call never reads the human scheme. */
     FootballPlayId play=(FootballPlayId)(random32(m)%FB_PLAY_COUNT);
-    if(!football_live_call(m,play))return false;
-    m->defense=defense;return true;
+    m->defense=defense;
+    return football_live_call(m,play);
 }
 void football_live_switch(FootballLive *m)
 {
@@ -137,6 +146,7 @@ static void step(FootballLive *m,FootballLiveInput input)
     if(m->juke>0)m->juke-=FB_LIVE_STEP;
     if(m->rules.offense==FB_HOME && (input.pressed&FB_LIVE_JUKE) && m->cooldown<=0){m->juke=.35f;m->cooldown=1.6f;}
     FootballLiveActor *carrier=&m->actors[m->carrier];
+    float intent[22][2];
     for(unsigned i=0;i<22;++i){
         FootballLiveActor *a=&m->actors[i];float tx=0,ty=0;
         bool attack=i>=off && i<off+11;
@@ -147,7 +157,8 @@ static void step(FootballLive *m,FootballLiveInput input)
                 if(rank==0 && p->type==FB_PLAY_PASS && !m->caught){tx=0;ty=(26.67f-a->y)*.2f;}
             }
             else if(rank>=6){
-                unsigned mark=def+(rank-6)%4;tx=m->actors[mark].x-a->x;ty=m->actors[mark].y-a->y;
+                unsigned mark=football_live_block_target(m,i);
+                if(mark<22){tx=m->actors[mark].x-a->x;ty=m->actors[mark].y-a->y;}
             }else if(rank>=1){
                 FootballRoutePoint route=football_playbook_route(p,limit(m->elapsed/3,0,1));
                 float target_x=m->los+dir*(route.x+rank*2),target_y=rank==1?30:rank==2?6:rank==3?47:rank==4?16:37;
@@ -155,19 +166,12 @@ static void step(FootballLive *m,FootballLiveInput input)
                 tx=target_x-a->x;ty=limit(target_y,2,51)-a->y;
                 if(m->caught){tx=dir;ty=(carrier->y-a->y)*.1f;}
             }
-        }else{
-            unsigned rank=i-def;
-            if(m->flying){tx=m->to_x-a->x;ty=m->to_y-a->y;}
-            else if(!m->thrown && p->type==FB_PLAY_PASS && rank>=4 && m->elapsed<3 && !(m->rules.offense==FB_AWAY && m->defense==FB_DEF_BLITZ)){
-                unsigned mark=off+1+(rank-4)%5;tx=m->actors[mark].x+dir-a->x;ty=m->actors[mark].y-a->y;
-                if(m->rules.offense==FB_AWAY && m->defense==FB_DEF_ZONE){tx=m->los+dir*(rank>8?15:8)-a->x;ty=6+(rank-4)*6.8f-a->y;}
-            }else {tx=carrier->x+carrier->vx*.15f-a->x;ty=carrier->y+carrier->vy*.15f-a->y;}
-            /* Five line blockers engage nearby rushers; strength sets hold time. */
-            if(rank<4)for(unsigned b=off+6;b<off+11;++b)if(distance(a->x,a->y,m->actors[b].x,m->actors[b].y)<1.5f && m->elapsed<.6f+m->actors[b].attributes.str*.018f){a->stun=.02f;tx=ty=0;}
-        }
-        move(a,tx,ty,i==m->controlled);
-        a->y=limit(a->y,-1,54.333f);
+        }else football_live_defense_intent(m,i,&tx,&ty);
+        intent[i][0]=tx;intent[i][1]=ty;
     }
+    for(unsigned i=0;i<22;++i)move(&m->actors[i],intent[i][0],intent[i][1],i==m->controlled);
+    football_live_physics(m);
+    football_live_update_facing(m);
     if(m->rules.offense==FB_AWAY && p->type==FB_PLAY_PASS && !m->thrown && m->elapsed>=1.7f){
         unsigned best=0;float separation=-1;
         static const unsigned targets[5]={2,3,4,5,1};
@@ -183,7 +187,7 @@ static void step(FootballLive *m,FootballLiveInput input)
         if(carrier->x<=0 || carrier->x>=120 || carrier->y<=0 || carrier->y>=53.333f || (carrier->x>=110 && dir>0) || (carrier->x<=10 && dir<0)){
             finish(m,m->caught?FB_RESULT_COMPLETE:FB_RESULT_RUN,carrier->x);return;}
         for(unsigned d=def;d<def+11;++d){FootballLiveActor *a=&m->actors[d];bool dive=d==m->controlled && (input.pressed&FB_LIVE_ACTION);
-            if(a->contact>0 || distance(a->x,a->y,carrier->x,carrier->y)>(dive?2.6f:1.2f))continue;
+            if(a->contact>0 || distance(a->x,a->y,carrier->x,carrier->y)>(dive?2.6f:1.7f))continue;
             a->contact=.35f;float chance=limit(53+(a->attributes.tak-carrier->attributes.agi)*.35f+(dive?15:0)-(m->juke>0?35:0),15,95);
             if(random32(m)%100<chance){
                 if(random32(m)%1000<8){

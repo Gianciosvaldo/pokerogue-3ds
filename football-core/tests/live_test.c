@@ -2,29 +2,46 @@
 #include "football_camera.h"
 #include "gc/data.h"
 #include <assert.h>
+#include "football_profile_fixture.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
 static FootballRoster roster;
 static gc_run scratch;
 static FootballLive game,copy;
+static gc_system profile,locked_profile;
 int main(void)
 {
+    football_test_unlock_all(&profile);
     assert(football_roster_init(&roster));gc_football_new(&scratch,NULL,"live",42);
+    gc_system_init_defaults(&locked_profile);
+    gc_starter candidate={.species=SPECIES_ID_RATTATA,.tera_type=-1};
+    assert(!football_roster_starter(&locked_profile,candidate.species,&candidate));
+    assert(!football_roster_add(&roster,&scratch,&candidate,&locked_profile,NULL) && roster.count==0);
+    locked_profile.dex[SPECIES_ID_RATTATA].caught_attr=(UINT64_C(1)<<1)|(UINT64_C(1)<<6)|(UINT64_C(1)<<7)|4;
+    locked_profile.dex[SPECIES_ID_RATTATA].nature_attr=1u<<18;
+    locked_profile.starters[SPECIES_ID_RATTATA].ability_attr=4;
+    assert(football_roster_starter(&locked_profile,SPECIES_ID_RATTATA,&candidate));
+    assert(candidate.nature==17 && candidate.ability_index==2 && candidate.shiny && candidate.variant==2);
     /* Draft real cheap base species; neither 10-point nor six-member limits apply. */
     for(int i=0;i<gc_starter_cost_count && roster.count<22;++i){
         if(gc_starter_costs[i].cost>1)continue;
         gc_starter s={.species=gc_starter_costs[i].id,.tera_type=-1};
-        football_roster_add(&roster,&scratch,&s,NULL,NULL);
+        football_roster_add(&roster,&scratch,&s,&profile,NULL);
     }
-    assert(roster.count==22 && roster.cost<=40);
+    assert(roster.count==22 && roster.cost<=55);
     football_roster_autofill(&roster);assert(football_roster_assign(&roster,0,21));assert(roster.lineup[0]==21);
     unsigned mask=0;for(unsigned i=0;i<22;++i)mask|=1u<<roster.lineup[i];assert(mask==(1u<<22)-1);
-    FootballRoster partial=roster;partial.count=21;partial.cost=38;
+    FootballRoster partial=roster;partial.count=21;partial.cost=53;
     gc_starter boundary={.species=SPECIES_ID_BULBASAUR,.tera_type=-1};
-    assert(!football_roster_add(&partial,&scratch,&boundary,NULL,NULL));
-    partial.cost=37;assert(football_roster_add(&partial,&scratch,&boundary,NULL,NULL));assert(partial.cost==40);
-    gc_starter extra={.species=SPECIES_ID_BULBASAUR,.tera_type=-1};assert(!football_roster_add(&roster,&scratch,&extra,NULL,NULL));
+    assert(!football_roster_add(&partial,&scratch,&boundary,&profile,NULL));
+    partial.cost=52.1;
+    assert(!football_roster_add(&partial,&scratch,&boundary,&profile,NULL));
+    profile.starters[SPECIES_ID_BULBASAUR].value_reduction=1;
+    assert(football_roster_add(&partial,&scratch,&boundary,&profile,NULL)); /* Classic cost reduction applies. */
+    profile.starters[SPECIES_ID_BULBASAUR].value_reduction=0;partial=roster;partial.count=21;
+    partial.cost=52;assert(football_roster_add(&partial,&scratch,&boundary,&profile,NULL));assert(partial.cost==55);
+    gc_starter extra={.species=SPECIES_ID_BULBASAUR,.tera_type=-1};assert(!football_roster_add(&roster,&scratch,&extra,&profile,NULL));
     assert(football_live_begin(&game,&roster,42,1));assert(football_live_call(&game,FB_RUN_DIVE));
     assert(fabsf(game.actors[0].x-(game.los-1.5f))<.001f); /* Under Center */
     game.phase=FB_LIVE_CALL;assert(football_live_call(&game,FB_PASS_SLANTS));
