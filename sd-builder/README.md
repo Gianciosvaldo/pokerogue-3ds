@@ -6,7 +6,8 @@ One download and one double-click that put the game on a 3DS SD card, with nothi
 
 ## The project's own pictures (JoJo trainers)
 
-The JoJo challengers' sprites are not PokeRogue files and are not in Git. The builder packs any PNG it finds under
+The JoJo challengers' sprites (17 PNGs, third-party art of unclear licence, committed at lorenzo's decision of 2026-10-25) live in
+`sd-builder/extra-images/` and `make-zip.sh` copies them into the zip. The builder packs any PNG it finds under
 `files/extra-images/` (next to `builder.py`) into `gfx.pak`, laid out like upstream's `images/` folder, so
 `files/extra-images/trainer/custom/kira.png` becomes the picture `images/trainer/custom/kira` that the game asks for. A file of
 the same name as an upstream picture replaces it. The folder's files are part of the packs' recipe, so adding or changing one
