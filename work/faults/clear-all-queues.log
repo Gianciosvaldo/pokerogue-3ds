@@ -1,0 +1,1 @@
+doubles host line91: p->n_move_queue==(charge?3:4)&&p->n_tags==(charge?1:3)

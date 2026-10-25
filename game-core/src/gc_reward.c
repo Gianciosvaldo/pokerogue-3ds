@@ -180,9 +180,10 @@ static void fill_mon(gc_run *run, gc_mon *m, pr_reward_mon *r)
     r->friendship = p->friendship;
     r->ability = p->base_ability;
     r->cur_ability = p->ability;
-    r->passive = p->passive;
+    /* hasAbility()/canApplyAbility(true) only see the passive of a Pokemon that has one (hasPassive()) */
+    r->passive = p->passive_flag ? p->passive : 0;
     r->can_apply_ability = pr_can_apply_ability(&run->bt, p, p->ability);
-    r->can_apply_passive = p->passive && pr_can_apply_ability(&run->bt, p, p->passive);
+    r->can_apply_passive = r->passive && pr_can_apply_ability(&run->bt, p, p->passive);
     /* getTypes({includeTeraType: false, bypassSummonData: true, ignoreThirdType: true}), what PARTY_TYPE reads */
     int8_t ty[PR_MAX_TYPES];
     const int nt = pr_get_types(p, ty, PR_TYPES_NO_TERA | PR_TYPES_BYPASS_SUMMON | PR_TYPES_IGNORE_THIRD);

@@ -156,6 +156,10 @@ int gc_system_hatch_ready_eggs(gc_run *run);
 bool gc_mon_roll_player(gc_run *run, pr_rng *rng, gc_mon *m, int species, int level, int ability_index, int form, int shiny);
 /* Task 63's clean wild constructor slice; false leaves the RNG/mon untouched. */
 bool gc_enemy_moveset(gc_run *run, gc_mon *m, const pr_enemy_gen *g);
+/* generateMoveset for a wild, non-boss Pokemon on `rng` (src/gc_movegen.c); false = a Pokemon it does not cover, left untouched */
+bool gc_generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m);
+/* Move.calculateEffectivePower(pokemon) of each of `n` moves for a Pokemon (what the differential compares); false = a passive */
+bool gc_mg_effective_powers(gc_run *run, const gc_mon *m, const uint16_t *moves, int n, double *out);
 void gc_mon_set_move(gc_mon *m, int slot, int move);                  /* setMove */
 int gc_move_max_pp(const pr_pokemon *p, int slot);                     /* PokemonMove.getMovePp */
 bool gc_move_usable(const pr_pokemon *p, int slot, const char **why);  /* the PP and implementation checks */
@@ -330,6 +334,22 @@ bool gc_fg_wobbuffet_moveset(gc_run *run, gc_mon *m);           /* generateMoves
 /* mystery-encounter exits for gc_fungames.c (src/gc_mystery.c) */
 void gc_me_leave_with_heal_shop(gc_run *run);                   /* leaveEncounterWithoutBattle(true) */
 void gc_me_leave_with_shop(gc_run *run, const char *key);       /* setEncounterRewards({guaranteedModifierTypeFuncs: [key], fillRemaining: false}), leaveEncounterWithoutBattle() */
+
+/* ---- Global Trade System (src/gc_gts.c) ---- */
+typedef struct { const char *key; bool gendered; struct { int n; const char *parts; } list[3]; } gc_trader_class;
+extern const gc_trader_class gc_trader_classes[];
+extern const int gc_trader_class_count;
+bool gc_gts_trade_options(gc_run *run, int party_idx, gc_mon out[3]);    /* the 3 offers of a party member (generateTradeOption x3, then the 3 EnemyPokemon) */
+bool gc_gts_item_transferable(const gc_item *it);
+int gc_gts_held_items(const gc_run *run, int idx, int out[GC_MAX_ITEMS]);
+bool gc_gts_pick_ok(const gc_run *run, int option, int idx);
+int gc_gts_allowed(const gc_run *run);
+bool gc_gts_execute(gc_run *run, int option, int b, int c, const char **why);
+/* mystery-encounter internals for gc_gts.c (src/gc_mystery.c) */
+pr_rng gc_me_option_rng(const gc_run *run);
+void gc_me_prune_items(gc_run *run);
+void gc_me_update_modifiers(gc_run *run);
+void gc_me_end_shop(gc_run *run);
 
 /* run-phase handlers (src/gc_phases.c): return true when the phase is done, false when it waits on a screen */
 bool gc_phase_start(gc_run *run, gc_rphase *p);

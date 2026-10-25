@@ -39,6 +39,16 @@ int main(void)
             run.screen.kind = GC_SCREEN_MYSTERY;
             run.screen.mystery_type = (int8_t)type;
             run.mystery_type = (int8_t)type;
+            if (type == GC_ME_GLOBAL_TRADE_SYSTEM) {
+                /* the item trade's party screen only takes a Pokemon with a transferable held item: give the first one Leftovers */
+                for (int i = 0; i < run.n_party; i++) run.party[i].b.id = 100u + (uint32_t)i;
+                run.n_items = 1;
+                memset(&run.items[0], 0, sizeof run.items[0]);
+                run.items[0].key = pr_item_keys[gc_reward_item_index("LEFTOVERS")];
+                run.items[0].arg = -1;
+                run.items[0].pokemon_id = run.party[0].b.id;
+                run.items[0].stack = 1;
+            }
             gc_mystery_setup_screen(&run);
 
             const char *why;
