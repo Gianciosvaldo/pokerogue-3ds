@@ -8,6 +8,9 @@ const rr_draw_opts RR_DEFAULT_OPTS={0,0,1,1,0,0xffffffff};
 static rr_frame frames[100];static char keys[100][140],names[100][20];static int nf;
 static struct{int frame;float x,y;rr_draw_opts opts;} draws[100];static int nd;
 const char *i18n_language(void){return "en";}
+rr_atlas *img_get(const char *k){(void)k;return NULL;}
+int rr_atlas_count(const rr_atlas *a){(void)a;return 0;}
+const rr_frame *rr_atlas_frame(const rr_atlas *a,int i){(void)a;(void)i;return NULL;}
 const rr_frame *img_frame(const char *key,const char *name){
  for(int i=0;i<nf;i++)if(!strcmp(keys[i],key)&&!strcmp(names[i],name?name:""))return &frames[i];
  int i=nf++;assert(i<100);snprintf(keys[i],sizeof keys[i],"%s",key);snprintf(names[i],sizeof names[i],"%s",name?name:"");
@@ -26,6 +29,11 @@ static void near(float a,float b){assert(fabsf(a-b)<.001f);}
 int main(int argc,char **argv){
  assert(argc==2);FILE *fp=fopen(argv[1],"r");assert(fp);char tag[30];int version,total;
  assert(fscanf(fp,"%29s%d%d",tag,&version,&total)==3&&!strcmp(tag,"BATTLE_STATS")&&version==1&&total==3);
+ {/* doubles: the foes' feet, as the field zoom puts them on the screen, are above the player's boxes (centred at -116 and -72, 42 tall, 210 up from the field's top) */
+  memset(&B,0,sizeof B);B.setup.doubles=true;B.field_scale=1;
+  float top=210-116-21-30;
+  for(int f=1;f<4;f+=2){float x,y;mon_pos(side_of(f),false,&x,&y);assert(132-(132-y)*1.1f<=top);}
+ }
  for(int mode=0;mode<3;mode++){
   int m,w,h;assert(fscanf(fp,"%29s%d%d%d",tag,&m,&w,&h)==4&&!strcmp(tag,"B")&&m==mode);
   char labels[7][20],values[7][20];float lx[7],ly[7],nx[7],ny[7];
