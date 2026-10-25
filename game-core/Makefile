@@ -1036,3 +1036,15 @@ protect-history-host-test: $(BUILD)/protect_history_host_test
 	python3 ../battle-core/tools/check-protect-history-proof.py --run-only
 test: protect-history-host-test
 .PHONY: protect-history-host-test
+
+$(BUILD)/two_turn_end_host_test: tests/two_turn_end_host_test.c tests/doubles_host_test.c tests/fixtures/two-turn-end.native.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -Wl,--wrap=gc_battle_end_cleanup -lm -o $@
+two-turn-end-host-test: $(BUILD)/two_turn_end_host_test
+	$<
+test: two-turn-end-host-test
+.PHONY: two-turn-end-host-test
+
+two-turn-end-faults: $(BUILD)/two_turn_end_host_test
+	python3 tools/check-two-turn-end-faults.py
+test: two-turn-end-faults
+.PHONY: two-turn-end-faults
