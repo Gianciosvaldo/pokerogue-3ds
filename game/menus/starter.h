@@ -9,7 +9,7 @@
  *   - there: the grid with its scrolling and cost labels, the team column with the cost budget, Randomize and Start, the info
  *     panel (sprite, dex number, name, types, growth rate, ability, passive, nature), the options menu with Add to Party and
  *     Remove from Party, Customize, and the Begin / Exit questions. The host provides unlocked move/nature/shiny/ability selections and candy purchases. The top screen shows the species' sprite, moves and team luck.
- *   - not there: the filter bar and sort, the cycle buttons (shiny, form, gender, ability, nature, tera), IVs, favourites, rename, the Pokedex page and the tutorial. The options menu lists only
+ *   - the filter and sort are a menu the caller shows (SELECT, or the Filter button), not upstream's bar. Not there: the cycle buttons (shiny, form, gender, ability, nature, tera), IVs, favourites, rename, the Pokedex page and the tutorial. The options menu lists only
  *     what works. See starter_model.h for how the cursor moves without the filter bar.
  */
 #ifndef GAME_MENUS_STARTER_H
@@ -46,12 +46,19 @@ typedef struct {
   int (*rnd)(void* ctx, int n);
   void* ctx;
   void (*configure)(void* ctx, uint16_t species);
+  /* SELECT or a tap on the Filter button: the caller shows its filter and sort menu (it may be NULL: nothing happens). It answers with
+   * starter_set_entries. */
+  void (*filter)(void* ctx);
+  /* The label on the Filter button ("Filter", "Filter (3)"), NULL for the plain one. */
+  const char* (*filter_label)(void* ctx);
 } starter_events;
 
 typedef struct {
   const sm_entry* entries; /* the species, ascending; kept by the caller while the screen is open */
   int n;
   int budget;              /* getRunValueLimit: 10 in Classic */
+  const sm_entry* pool;    /* every species, ascending, when `entries` is filtered or sorted (team costs and icons); NULL = entries */
+  int n_pool;
 } starter_args;
 
 void starter_open(const starter_args* args, const starter_events* ev);
@@ -71,6 +78,10 @@ void starter_draw_top(void);
 /* A message in the box at the bottom that waits for A (the caller's reasons: "that team is not allowed"). */
 void starter_message(const char* text);
 void starter_refresh(void);
+/* The screen's model, for tests. */
+const sm_model* starter_model(void);
+/* The list after a filter or sort (see sm_set_entries): the cursor starts again at the first species, the team stays. */
+void starter_set_entries(const sm_entry* entries, int n);
 
 #ifdef __cplusplus
 }

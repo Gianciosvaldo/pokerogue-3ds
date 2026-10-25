@@ -72,11 +72,14 @@ typedef enum {
   SM_MENU,      /* A on a species: open the options menu (sm_menu_*) */
   SM_ASK_START, /* "Begin with these Pokemon?" Yes / No */
   SM_ASK_EXIT,  /* "Do you want to exit?" Yes / No */
+  SM_FILTER,    /* the filter and sort menu (upstream's filter bar) */
 } sm_result;
 
 typedef struct {
   const sm_entry* entries;
   int n;
+  const sm_entry* pool;       /* every species the list can hold, ascending: a team member the filter hides still has its cost and icon (NULL = entries) */
+  int n_pool;
   int budget;                 /* getRunValueLimit: 10 in Classic */
   int (*rnd)(void* ctx, int n); /* Math.floor(Math.random() * n) for the Randomize button */
   void* rnd_ctx;
@@ -92,6 +95,12 @@ typedef struct {
 
 /* `entries` must outlive the model. The cursor starts on the first species (show(): setCursor(0)). */
 void sm_init(sm_model* m, const sm_entry* entries, int n, int budget, int (*rnd)(void*, int), void* rnd_ctx);
+
+/* The list after a filter or sort: the cursor goes back to the first species and the scroll to the top (updateStarters: scrollCursor = 0),
+ * the team stays. `entries` must outlive the model. */
+void sm_set_entries(sm_model* m, const sm_entry* entries, int n);
+/* Every species the list may hold, for the team's costs and icons while the filter hides some (sm_find falls back to it). */
+void sm_set_pool(sm_model* m, const sm_entry* pool, int n);
 
 /* A button press (SM_* above). SUBMIT and MENU both mean Start (the 3DS's START button is MENU). */
 sm_result sm_input(sm_model* m, mui_button b);

@@ -493,6 +493,32 @@ static void test_fuzz(void) {
   printf("fuzz: %ld button presses over 300 lists\n", presses_done);
 }
 
+/* a filtered or sorted list: SELECT asks for the filter, the list is replaced, the team keeps costs through the pool */
+static void test_filtered_list(void) {
+  const double costs[] = {1, 2, 3};
+  start(60, costs, 3, 10);
+  static sm_entry all[60], shown[60];
+  memcpy(all, g_list, sizeof all);
+  sm_set_pool(&M, all, 60);
+  CHECK(press(MB_STATS) == SM_FILTER, "SELECT asks for the filter");
+  presses(MB_RIGHT, 2);
+  CHECK(sm_add(&M, 3) && sm_value(&M) == 3, "species 3 (cost 3) joins the team");
+  /* the new list: every fifth species, in reverse order, without species 3 */
+  int n = 0;
+  for (int i = 59; i >= 0; i--)
+    if (all[i].species % 5 == 0) shown[n++] = all[i];
+  M.cursor = 4;
+  M.scroll = 1;
+  sm_set_entries(&M, shown, n);
+  CHECK(M.n == n && M.scroll == 0 && M.cursor == 0 && M.focus == SM_GRID, "the new list starts at its first species");
+  CHECK(sm_species(&M) == 60, "the cursor is on the list's first species (%d)", sm_species(&M));
+  CHECK(sm_cell(&M, 1) && sm_cell(&M, 1)->species == 55, "in the sort's order");
+  CHECK(sm_find(&M, 3) && sm_find(&M, 3)->cost == 3 && sm_value(&M) == 3, "a team member outside the list keeps its cost");
+  CHECK(sm_in_party(&M, 3, NULL) && !sm_can_add(&M, 7) == !(sm_value(&M) + all[6].cost <= 10), "adding checks the budget against the pool");
+  sm_set_entries(&M, shown, 0);
+  CHECK(M.focus == SM_RANDOM && sm_species(&M) == 0, "an empty list leaves the cursor on a button");
+}
+
 int main(void) {
   test_icon_positions();
   test_closest_party_member();
@@ -511,6 +537,7 @@ int main(void) {
   test_remove_moves_the_cursor();
   test_randomize();
   test_empty_list();
+  test_filtered_list();
   test_fuzz();
   printf("startertest: %d checks, %d failed\n", g_checks, g_fail);
   return g_fail ? 1 : 0;

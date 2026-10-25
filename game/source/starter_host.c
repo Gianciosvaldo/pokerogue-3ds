@@ -9,6 +9,7 @@
 #include "bgm.h"
 #include "i18n.h"
 #include "starter_data.h"
+#include "starter_filter.h"
 #include "system_data.h"
 #include "ui_widgets.h"
 #include "pr_data.h"
@@ -18,8 +19,11 @@ const pr_species* menu_species(uint16_t id);
 static struct {
   gc_system* sys;
   sh_events ev;
-  sm_entry entries[SS_MAX_ENTRIES];
-  int n;
+  sm_entry all[SS_MAX_ENTRIES];     /* every species the dex lists, in species order */
+  sm_entry entries[SS_MAX_ENTRIES]; /* what the screen shows: `all` less the filter, in the sort's order */
+  int n, n_all;
+  ssf filter;
+  int fmode, fpage;
   uint32_t rng;uint64_t pokerus_bucket;
   uint16_t editing;
   int mode, slot, page, count;
@@ -82,9 +86,16 @@ static void editor_add(int value,const char* label) {
 static bool editor_save(void) {
   return H.ev.save_profile ? H.ev.save_profile(H.ev.arg) : sysd_save();
 }
+/* the list again from the system data (after a purchase or a change of filter) */
+static void rebuild(void) {
+  H.n_all=ss_list(H.sys,H.all,SS_MAX_ENTRIES,NULL);
+  H.n=ssf_apply(H.sys,&H.filter,H.all,H.n_all,H.entries);
+}
 static void editor_refresh(void) {
-  H.n=ss_list(H.sys,H.entries,SS_MAX_ENTRIES,NULL);
-  starter_refresh();
+  const int before=H.n;
+  rebuild();
+  if(H.n!=before)starter_set_entries(H.entries,H.n);
+  else starter_refresh();
 }
 static void editor_done(int row,void* arg) {
   (void)arg;
@@ -201,6 +212,130 @@ static void configure(void* ctx,uint16_t species) {
   (void)ctx;H.editing=species;H.page=0;editor_show(EDIT_TOP);
 }
 
+/* ---- the filter and sort menu (upstream's filter bar, as a list) ---- */
+
+enum { FM_TOP, FM_GEN, FM_TYPE, FM_CAUGHT, FM_RARITY };
+enum { FR_GEN, FR_TYPE, FR_CAUGHT, FR_RARITY, FR_PASSIVE, FR_REDUCTION, FR_WIN, FR_HA, FR_EGG, FR_POKERUS, FR_SORT, FR_ORDER, FR_RESET, FR_DONE };
+static void filter_show(int mode);
+
+static const char* const state_names[SSF_STATES] = {"Any", "Yes", "No", "Bought once", "Bought twice", "Can unlock now"};
+static const char* const sort_names[SSF_SORT_COUNT] = {"Number", "Cost", "Candies", "IVs", "Name", "Times caught", "Times hatched"};
+
+static const char* filter_label(void* ctx) {
+  (void)ctx;
+  static char label[24];
+  const int n=ssf_active(&H.filter);
+  if(n)snprintf(label,sizeof label,"Filter (%d)",n);else snprintf(label,sizeof label,"Filter");
+  return label;
+}
+
+static void filter_apply(void) {
+  H.n=ssf_apply(H.sys,&H.filter,H.all,H.n_all,H.entries);
+  starter_set_entries(H.entries,H.n);
+}
+
+/* a tri-state column: the states it offers, in the order a press steps through them */
+static uint8_t step_state(uint8_t cur, const uint8_t* offered, int n) {
+  for(int i=0;i<n;i++)if(offered[i]==cur)return offered[(i+1)%n];
+  return offered[0];
+}
+
+static void filter_add(int value,const char* label) {
+  if(H.count>=32)return;
+  int i=H.count++;snprintf(H.labels[i],sizeof H.labels[i],"%s",label);
+  H.options[i]=H.labels[i];H.values[i]=value;
+}
+
+static void filter_done(int row,void* arg) {
+  (void)arg;
+  const int mode=H.fmode;
+  if(row<0||row>=H.count){if(mode==FM_TOP)return;filter_show(FM_TOP);return;}
+  const int v=H.values[row];
+  static const uint8_t yes_no[]={SSF_OFF,SSF_ON,SSF_EXCLUDE};
+  static const uint8_t passive[]={SSF_OFF,SSF_ON,SSF_UNLOCKABLE,SSF_EXCLUDE};
+  static const uint8_t reduction[]={SSF_OFF,SSF_ON,SSF_ONE,SSF_TWO,SSF_UNLOCKABLE,SSF_EXCLUDE};
+  if(mode==FM_TOP) {
+    switch(v) {
+      case FR_GEN: filter_show(FM_GEN);return;
+      case FR_TYPE: filter_show(FM_TYPE);return;
+      case FR_CAUGHT: filter_show(FM_CAUGHT);return;
+      case FR_RARITY: filter_show(FM_RARITY);return;
+      case FR_PASSIVE: H.filter.passive=step_state(H.filter.passive,passive,4);break;
+      case FR_REDUCTION: H.filter.reduction=step_state(H.filter.reduction,reduction,6);break;
+      case FR_WIN: H.filter.win=step_state(H.filter.win,yes_no,3);break;
+      case FR_HA: H.filter.hidden_ability=step_state(H.filter.hidden_ability,yes_no,3);break;
+      case FR_EGG: H.filter.egg=step_state(H.filter.egg,yes_no,3);break;
+      case FR_POKERUS: H.filter.pokerus=step_state(H.filter.pokerus,yes_no,3);break;
+      case FR_SORT: H.filter.sort=(uint8_t)((H.filter.sort+1)%SSF_SORT_COUNT);break;
+      case FR_ORDER: H.filter.descending=!H.filter.descending;break;
+      case FR_RESET: ssf_reset(&H.filter);break;
+      default: return; /* Done */
+    }
+    ui_play_select();
+    filter_apply();
+    filter_show(FM_TOP);
+    return;
+  }
+  if(v<0) {filter_show(FM_TOP);return;} /* Back */
+  /* a toggle in a multiple-choice column; an empty column would hide everything, so the last one stays on */
+  if(mode==FM_GEN){uint16_t m=(uint16_t)(H.filter.gens^(1u<<v));if(m)H.filter.gens=m;}
+  else if(mode==FM_TYPE){uint32_t m=H.filter.types^(1u<<v);if(m)H.filter.types=m;}
+  else if(mode==FM_CAUGHT){uint8_t m=(uint8_t)(H.filter.caught^v);if(m)H.filter.caught=m;}
+  else if(mode==FM_RARITY){uint8_t m=(uint8_t)(H.filter.rarity^v);if(m)H.filter.rarity=m;}
+  ui_play_select();
+  filter_apply();
+  filter_show(mode);
+}
+
+static void filter_show(int mode) {
+  H.fmode=mode;H.count=0;
+  char label[128];
+  if(mode==FM_TOP) {
+    const ssf* f=&H.filter;
+    const struct {int row;const char* name;int on,all;} multi[]={
+      {FR_GEN,"Generation",__builtin_popcount(f->gens),9},{FR_TYPE,"Type",__builtin_popcount(f->types),18},
+      {FR_CAUGHT,"Caught",__builtin_popcount(f->caught),4},{FR_RARITY,"Rarity",__builtin_popcount(f->rarity),4}};
+    for(int i=0;i<4;i++){
+      if(multi[i].on==multi[i].all)snprintf(label,sizeof label,"%s: all",multi[i].name);
+      else snprintf(label,sizeof label,"%s: %d of %d",multi[i].name,multi[i].on,multi[i].all);
+      filter_add(multi[i].row,label);
+    }
+    const struct {int row;const char* name;uint8_t state;} tri[]={
+      {FR_PASSIVE,"Passive",f->passive},{FR_REDUCTION,"Cost reduction",f->reduction},{FR_WIN,"Has won",f->win},
+      {FR_HA,"Hidden ability",f->hidden_ability},{FR_EGG,"Egg affordable",f->egg},{FR_POKERUS,"Pokerus",f->pokerus}};
+    for(int i=0;i<6;i++) {
+      /* the Exclude state reads as "locked" for the unlocks and "No" elsewhere */
+      const char* st=state_names[tri[i].state];
+      if(tri[i].state==SSF_EXCLUDE&&(tri[i].row==FR_PASSIVE||tri[i].row==FR_REDUCTION))st="Locked";
+      if(tri[i].state==SSF_ON&&(tri[i].row==FR_PASSIVE))st="Unlocked";
+      snprintf(label,sizeof label,"%s: %s",tri[i].name,st);filter_add(tri[i].row,label);
+    }
+    snprintf(label,sizeof label,"Sort by: %s",sort_names[f->sort]);filter_add(FR_SORT,label);
+    snprintf(label,sizeof label,"Order: %s",f->descending?"Descending":"Ascending");filter_add(FR_ORDER,label);
+    filter_add(FR_RESET,"Reset");filter_add(FR_DONE,"Done");
+  } else if(mode==FM_GEN) {
+    for(int g=0;g<9;g++){snprintf(label,sizeof label,"%s Gen %d",(H.filter.gens>>g)&1?"[x]":"[ ]",g+1);filter_add(g,label);}
+    filter_add(-1,"Back");
+  } else if(mode==FM_TYPE) {
+    for(int t=0;t<18;t++){snprintf(label,sizeof label,"%s %s",(H.filter.types>>t)&1?"[x]":"[ ]",i18n_type_name(t));filter_add(t,label);}
+    filter_add(-1,"Back");
+  } else if(mode==FM_CAUGHT) {
+    static const struct {int bit;const char* name;} c[]={{SSF_C_SHINY3,"Epic shiny"},{SSF_C_SHINY2,"Rare shiny"},{SSF_C_SHINY1,"Shiny"},{SSF_C_NORMAL,"Normal"}};
+    for(int i=0;i<4;i++){snprintf(label,sizeof label,"%s %s",H.filter.caught&c[i].bit?"[x]":"[ ]",c[i].name);filter_add(c[i].bit,label);}
+    filter_add(-1,"Back");
+  } else if(mode==FM_RARITY) {
+    static const struct {int bit;const char* name;} r[]={{SSF_R_ORDINARY,"Ordinary"},{SSF_R_SUB_LEGENDARY,"Sub-legendary"},{SSF_R_LEGENDARY,"Legendary"},{SSF_R_MYTHICAL,"Mythical"}};
+    for(int i=0;i<4;i++){snprintf(label,sizeof label,"%s %s",H.filter.rarity&r[i].bit?"[x]":"[ ]",r[i].name);filter_add(r[i].bit,label);}
+    filter_add(-1,"Back");
+  }
+  ui_push_options(H.options,H.count,true,filter_done,NULL);
+}
+
+static void open_filter(void* ctx) {
+  (void)ctx;
+  filter_show(FM_TOP);
+}
+
 /* ---- the screen ---- */
 
 static bool sh_input(ui_screen* s, ui_button b) {
@@ -252,12 +387,13 @@ bool sh_open(gc_system* sys, const char* notice, const sh_events* ev) {
   H.sys = sys;
   time_t now=time(NULL);H.pokerus_bucket=now>0?(uint64_t)now/10800:0;
   H.ev = *ev;
-  H.n = ss_list(sys, H.entries, SS_MAX_ENTRIES, NULL);
+  ssf_reset(&H.filter);
+  rebuild();
   if (H.n == 0) return false;
   H.rng = 0x9E3779B9u ^ (uint32_t)(ui_now() * 1000.0f) ^ (ui_frame() * 2654435761u);
   if (!H.rng) H.rng = 1;
-  const starter_args args = {H.entries, H.n, gc_starter_budget(GAME_MODES_CLASSIC)};
-  const starter_events events = {describe, on_start, on_exit, rnd, NULL, configure};
+  const starter_args args = {H.entries, H.n, gc_starter_budget(GAME_MODES_CLASSIC), H.all, H.n_all};
+  const starter_events events = {describe, on_start, on_exit, rnd, NULL, configure, open_filter, filter_label};
   starter_open(&args, &events);
   ui_set(&g_screen);
   if (notice && *notice) starter_message(notice);
