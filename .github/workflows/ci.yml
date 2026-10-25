@@ -26,6 +26,11 @@ jobs:
         run: make -C battle-core held-form-items-host-test
       - name: Compare retained Last Resort history observations
         run: battle-core/build/last-resort-history-test game-core/tests/fixtures/last-resort-history.native.txt
+      - name: Compare complete nonvirtual history queries, saves and compiled failure controls
+        run: |
+          make -C battle-core build/nonvirtual-history-test build/nonvirtual-history-guards-test
+          make -C game-core build/nonvirtual_history_host_test
+          python3 battle-core/tools/check-nonvirtual-history-proof.py
       - name: Audit pinned inventory catalogue capacity
         run: python3 battle-core/tools/audit-inventory-catalogue.py
       - name: Run battle entry controller tests

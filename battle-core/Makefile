@@ -683,3 +683,8 @@ $(BUILD)/held-form-items-test: tests/held-form-items-test.c $(BUILD)/libprcore.a
 .PHONY: held-form-items-host-test
 held-form-items-host-test: $(BUILD)/held-form-items-test
 	python3 tools/check-held-form-items-proof.py
+
+$(BUILD)/nonvirtual-history-test: tests/nonvirtual-history-test.c tests/nonvirtual-history-fixture.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/nonvirtual-history-test.c $(BUILD)/libprcore.a -lm -o $@
+$(BUILD)/nonvirtual-history-guards-test: tests/nonvirtual-history-guards-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

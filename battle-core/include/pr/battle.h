@@ -298,6 +298,13 @@ typedef struct pr_pokemon {
     /* Membership of non-virtual moves since summon; independent of the retained tail. */
     uint8_t history_used_moves[(PR_MOVE_COUNT+7)/8];
     bool history_used_complete; /* false for legacy/raw inputs whose older history is unknown */
+    /* Four getLastNonVirtualMove query results: index = 2*ignoreStruggle +
+     * ignoreFollowUp. Known-but-absent distinguishes a complete empty search
+     * from a legacy tail whose missing prefix may contain a qualifying move. */
+    uint8_t history_last_known, history_last_present;
+    uint32_t history_serial, history_last_serial[4]; /* shared target-list identity; not the retained-tail count */
+    uint32_t history_epoch; /* old summon target aliases cannot bind to new entries */
+    pr_turn_move history_last[4];
     pr_turn_move move_history[PR_MAX_MOVE_HISTORY];
     pr_turn_move move_queue[PR_MAX_MOVE_QUEUE];  /* summonData.moveQueue */
     uint8_t n_move_queue;
@@ -793,6 +800,7 @@ int32_t pr_battle_rand_seed_int(pr_battle *bt, int32_t range, int32_t min);
 /* pushMoveHistory(turnMove) (the caller checks isOnField, as upstream does) */
 void pr_push_move_history(pr_pokemon *p, pr_turn_move tm);
 void pr_rebuild_history_used_moves(pr_pokemon *p);
+void pr_rebuild_nonvirtual_history(pr_pokemon *p);
 bool pr_history_used_move(const pr_pokemon *p, int move);
 /* getLastXMoves(k + 1)[k]: the k-th newest history entry (0 = newest), NULL when the history is
  * shorter. An entry older than the kept ones reports PR_FEAT_MOVE_HISTORY and gives NULL. */

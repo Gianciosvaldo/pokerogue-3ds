@@ -2781,8 +2781,10 @@ static void reset_summon_data(pr_pokemon *p)
     memset(p->summon_stats, 0, sizeof p->summon_stats);
     p->n_summon_types = 0;
     p->added_type = 0;
+    p->history_epoch++;
     p->n_move_history = 0;
     pr_rebuild_history_used_moves(p);
+    pr_rebuild_nonvirtual_history(p);
     p->temp_turn_count = p->temp_wave_turn_count = 1;
     p->n_ab_applied_summon = 0;
 }

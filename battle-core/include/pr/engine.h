@@ -157,7 +157,7 @@ typedef struct pr_engine {
     int n_target_lists;
     int8_t command_targets[4];         /* turn command i's list, -1 = none */
     /* move history entries pushed this turn with a shared list: a change to the list shows in them */
-    struct { pr_pokemon *p; uint16_t abs; int8_t list; } hist_alias[16];
+    struct { pr_pokemon *p; uint32_t abs, epoch; int8_t list; } hist_alias[16];
     int n_hist_alias;
     /* the phases that ran (upstream's phaseName, ":battler" for PokemonPhases) */
     char trace[PR_MAX_TRACE][40];
