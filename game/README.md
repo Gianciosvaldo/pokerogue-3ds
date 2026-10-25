@@ -2,10 +2,10 @@
 
 The game itself: the screens, their input and drawing, built on the renderer, packs, sound and
 saves from [`assets-pipeline/app-src/`](../assets-pipeline/app-src/), and linking the logic cores
-([`battle-core/`](../battle-core/), [`run-core/`](../run-core/), and `ai-core/`, `reward-core/`,
-`game-core/` once they exist). The cores are read-only here.
+([`battle-core/`](../battle-core/), [`run-core/`](../run-core/), [`ai-core/`](../ai-core/),
+[`reward-core/`](../reward-core/) and [`game-core/`](../game-core/)).
 
-Status: the app boots into a run. **game-core's run loop** (`game-core/include/gc/run.h`) plays the waves, the
+Status: the app opens on the title screen and starts or resumes a run. **game-core's run loop** (`game-core/include/gc/run.h`) plays the waves, the
 experience, level ups, new moves, evolution, rewards, biome changes and game over, and `run_screen.c` shows them
 with the battle screen: each turn is **run by battle-core** and shown from its events
 (`battle-core/include/pr/events.h`): the texts upstream shows, move animations, hits and HP bars, stat changes,
@@ -375,37 +375,26 @@ make -C game/tests animtest && game/tests/build/animtest path/to/pokerogue-asset
   wait, fades 250 / 100 / 250 ms.
 - Checked by eye in Azahar screenshots, not pixel-diffed against upstream yet.
 
-## Not done yet
-- The post-mortem (C03) does not know who finished the run: no event names an attacker or a move, and battle-core is not changed to say so. Its
-  report is stored (C04) but no Nemesis is ever created: that needs the finishing enemy's identity (C10). Its layout was seen in Azahar (Old 3DS mode), including a real faint and the "Last to fall" line (a scratch
-  build only lowered the first Pokemon's HP); a clear and a list longer than ten rows were seen on screen only with scratch builds
-  (a forced clear; a report of invented events). Pokemon are named by species and form only
-  (stable ids are not derived).
-- The real evolution screen (evolution is automatic), the Pokedex, eggs; mystery encounter screens.
-- Music not done: the timed events' music replacements, the mystery encounters' own tracks (their encounters are stand-ins), the evolution,
-  egg and heal fanfares (upstream plays them over the music; `snd.c` has one music stream), the Classic final boss's second stage (not in
-  game-core), Daily / Endless / Challenge music, and a volume or music-preference setting (the app plays at full volume and follows
-  upstream's default preference, all generations). What starting a track costs on a real console (the SD reads) is not measured.
-- The starter select is the basic legal team only. Missing from it (each a task of its own, none faked): the
-  cycle buttons (shiny, form, gender, ability, nature, tera), IVs, moves, nature management, candy purchases, favourites, rename,
-  the Pokedex page, egg moves, Pokerus, the tutorial, challenges, Daily and Endless. UP from the first row wraps (upstream goes to the
-  filter bar, which is a menu here: SELECT or the Filter button). A caught species that game-core refuses with its defaults (a prevolution reached through a form it can't have: Litleo
-  after a female Pyroar) is not listed; see `starter_data.h`. Not measured: what writing `system.sav` costs on a real SD card.
-- **Starter filter and sort** (`starter_filter.c`, upstream's `filterStarters` / `sortStarterSpecies`): SELECT or the Filter button above the list opens a menu with generation, type (a species fits on either type), caught (shiny tiers, normal), passive, cost reduction, won, hidden ability, egg affordable, Pokerus, the seven sorts and their order, Reset. Added beyond upstream at lorenzo's request: a rarity filter (ordinary, sub-legendary, legendary, mythical). Not built: Uncaught (the list is caught species only) and Favourite (no favourites). A change applies at once, puts the cursor on the first species and keeps the team (a hidden member keeps its cost and icon). A column cannot be emptied. The rules are tested in `starter_data_test`, the menu in `starter_ui_test`, the model's list swap in `startertest`. Not drawn like upstream's bar (drop-downs): a plain options list.
-- Runs started from the starter select now carry system data, so a run updates the dex, candy, friendship and Classic win records
-  (game-core's `gc_system_*` calls in the run). Runs already saved are not back-filled into the dex.
-- Around the save slots (not part of card 113): timed events, and any online or cloud save. ("Save and Quit", "Rename Run", the run history and the unlocks, vouchers and ribbons of a win are done: see above.)
-- Message timing per text (upstream's 500 ms for "X used Y!", prompts after faints): asked of
-  battle-core; every text waits 1.5 s for now.
-- In move animations: the grey part of a sprite's tone (upstream's shader pushes it far past
-  grey; not reproduced), hitting a Substitute doll (animations aimed at the doll, `onSubstitute`),
-  and the KO colour inversion.
-- Catching and fleeing are ported in battle-core (Task 5 / Task 6) and wired in game-core's run loop (`GC_CH_BALL` in PR #55, Task 94 / PR #124 catch audit, `GC_CH_RUN` in Task 77); catching animation and full-party release flow in the app are ported (Card 114 / PR #135); reward, shop, and biome map screens are driven by the run (Card 112 / PR #129); the app's `run_screen.c` handles ball choices and run commands.
-- Trainer battles, doubles, stat stage and shiny effects, boss HP
-  segments, weather and field effects on the field.
-- Sound without snd.pak is silent (the packs in the test rig have no sound yet).
-- Forms, variants and gender sprite differences in sprite keys.
-- Every other screen in the beta plan that is not listed above as done.
+## Current scope and remaining work
+
+The [root README](../README.md) summarizes additions through 2026-10-25 and links
+all changes since its previous update. Starter moves/natures/shiny tiers, candy
+purchases, Pokérus, eggs and hatch presentation, evolution choices, doubles, stat
+inspection, final-blow reports and Nemesis integration have landed; the former
+"Not done yet" list described an older app and is superseded.
+
+Starter filtering/sorting and JoJo Custom Run integration have also landed.
+Remaining work includes the full Pokédex interface,
+complete Daily/Endless/Challenge entry flows, online/cloud features, broader
+mystery-encounter presentation and full music/animation acceptance. Core support
+for a mechanic does not establish complete app presentation. Real-console pack
+loading, audio and save-write costs need their own measurements. Existing saves
+are not retrospectively back-filled into profile records.
+
+Battle mechanics and wide-level completion are tracked in the
+[battle-core checklist](../battle-core/COMPLETION-CHECKLIST.md). Historical
+screenshots and bounded source comparisons above retain their original scope;
+they do not certify every current screen or full-game parity.
 
 The ARM main thread reserves 512 KiB explicitly through libctru's startup stack
 override. The real-command guard-page regression and built-ELF checks are described
@@ -413,3 +402,11 @@ in [STACK-CRASH-VALIDATION.md](STACK-CRASH-VALIDATION.md). Keep these checks whe
 changing startup or the Windows builder payload.
 
 - **Field zoom**: the top screen is 400x240 around upstream's 320x180 field, so `battle_view.c` draws the field container (platforms, Pokemon, trainers, animations) `FIELD_ZOOM` = 1.2 times bigger about the arena's bottom centre (1.1 in doubles), under which the border is drawn first so it reaches the screen's edges. In doubles the foes stand 36 and 44 px higher so the player's two 42 px boxes no longer cover them (`battle_stat_panels_test` checks it). Both constants were chosen without a screenshot: tune them on the console.
+
+## Achievements (custom content)
+
+A list of custom achievements with rewards, from one Egg Voucher up to a legendary egg or an egg with a guaranteed tier-3 shiny (lorenzo, 2026-10-25; the full proposal of 100 is built in groups, one PR each). Group A, the 30 about the JoJo challengers (one for each of the 17, the Part sets, 5/10/17 different ones, 3 in one run, 100 battles, a clean win), is in. Custom runs only: the challengers appear in no other run.
+- [`gc/achv.h`](../game-core/include/gc/achv.h): the table (name, what it asks, reward), the counters in `gc_system.achv` (saved in a new `achv` section, written only once there is progress, so an untouched profile saves as before), `gc_achv_jojo_won` and `gc_achv_evaluate`, which unlocks what is met and gives the reward in the same call. An egg reward that finds the egg list full waits, still locked, until there is room. Reward eggs come from the pull's own generator (`gc_system_gift_egg`: no pity or statistics change). Tested by `game-core/tests/achv_test.c`.
+- [`achv_hooks.c`](source/achv_hooks.c): the run driver reports each screen; the first COMMAND of a wave notes the challenger and the fainted count, the reward screen after it is the win. Two lines are said for each unlock ("Achievement unlocked: X!", "You received Y!") before the reward screen, and the profile is written. Tested by `tests/achv_hooks_test.c`. Not done: the upstream-style bar sliding in (the lines are plain messages).
+- [`achv_screen.c`](source/achv_screen.c): the list from the title ("Achievements"): seven rows at a time on the bottom screen with the reward and "Done" or the count, the highlighted one in full on the top screen; UP/DOWN/LEFT/RIGHT, taps, B. Tested by `tests/achv_screen_test.c`.
+- Approximations: a Pokemon revived and another that fainted in its battle hide each other in "clean" and the run tag is a hash of the run's seed.

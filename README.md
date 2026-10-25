@@ -1,84 +1,99 @@
 # PokeRogue for the Old 3DS
 
-A native C port of [PokeRogue](https://github.com/pagefaultgames/pokerogue) for the original (Old) 3DS, plus custom content. Offline, homebrew (.3dsx), saves to the SD card.
-Upstream pins: game `8555c08`, with its submodule pins assets `87426a7` and locales `270ed0a`.
+A native C port of [PokeRogue](https://github.com/pagefaultgames/pokerogue) for the original Nintendo 3DS, with offline SD-card saves and optional custom content. The app runs real battles and run progression, and includes a separate Pokémon football mode.
 
-**This repo holds code only.** Pokémon and PokeRogue art, music, fonts, logos and generated `.pak` files are built locally from upstream onto your own SD card and must never be committed or shared. `.gitignore` enforces this, along with built binaries (`.3dsx`, `.elf`) and the prebuilt emulator core.
+**Battle-core is still being completed.** This overview describes merged code through `414fde5` (2026-10-25), not exhaustive upstream parity or acceptance on every console. An older Windows builder contains the revision recorded in its `files/VERSION.txt`, not necessarily everything below.
 
-## Parity target and verified scope
+**Code only:** Pokémon and PokeRogue art, music, fonts, logos and generated `.pak` files are built locally from pinned upstream sources for your own SD card. Do not commit or redistribute those assets. CI can provide the bare homebrew application; it still needs locally generated packs.
 
-The replication target is upstream game `8555c08`, not an unspecified current release. The public upstream beta was inspected separately at `4f0969875845fb412c5b0af8ed4bc006484a8f2a` and changes independently; changes after this pin require a separate source audit and deliberately reviewed target update. Generated data and assets must stay aligned with the documented pins.
+## Additions since October 4
 
-See [the remaining parity tasks](docs/PARITY-TASKS.md) for the original 33 task cards (57–89), coordinator follow-ups 90–91, dependencies, folder ownership and validation gates. [HANDOFF](docs/HANDOFF.md) remains the contribution contract. Run-core belongs to its existing outside-session owner, and full run-driven presentation remains deferred until an explicitly authorized console/emulator task. Host soaks establish internal consistency; only recorded upstream comparisons establish parity for the compared scope. None of the planned checks in that roadmap should be read as completed results.
+The demo has become an integrated run app. The [complete change index](docs/CHANGES-SINCE-2026-10-04.md) records all 301 intervening first-parent commits, including individual mechanics and fixes. The [previous README](docs/history/README-2026-10-04.md) is preserved as historical evidence.
 
-The source audit still finds a last-four-level-moves enemy fallback and a fixed reward option pool in `game-core/src/gc_stubs.c`. Upstream reward options and portions of battle/run generation being implemented in their own cores do not automatically remove these run integration gaps. Fixed-team generation also needs separate checks of its actual run lifecycle. Doubles, form/fusion/reward lifecycle, progression/eggs/modes, presentation and hardware acceptance require further bounded work; the roadmap does not claim an exhaustive audit of every move and ability.
+### Runs and presentation
 
-The existing `game-core/tests/mystery_diff_test.c` reads TYPE/OPTION while ignoring RESULT_MONEY, and its producer catches UI errors. Its mystery encounter traces do not establish action or money parity. A correction to an established check must be reported under HANDOFF; an additive, separately reviewed harness is proposed in Task 82. No unavailable upstream differential is counted as passing.
+- Title screen, Continue/New Game/Load Game, five save slots, run renaming, Save and Quit, run history, game-over and Classic-clear results, unlocks, vouchers and ribbons. Saves retain backups and reject invalid data; saving is restricted to supported run boundaries.
+- Run-driven encounters, trainer battles, Classic rival fights and trainer dialogue, catching and full-party release, fleeing, experience, move learning, evolution choices, reward selection, shop rerolls and biome selection. Reward options use reward-core rather than the old fixed demonstration pool.
+- Doubles encounters and lure-driven encounter chances, separate commands and target selection, and undoing the first Pokémon’s selection. Doubles layout, sprite transitions and menu responsiveness have received fixes.
+- Battle music and animations, player/trainer presentation, boss HP segments, stat-stage inspection for your team and opponents, persistent key/foe item displays, held-item inspection, transfer and discard.
+- TM compatibility labels, cancellation and descriptions; PP Up display corrections; localized move-name and trapping-message fixes; slower ability-description scrolling; bottom-screen level-up stat changes; and fixes for menu/command stack crashes.
 
-## Coordinator validation status (2026-10-04)
+The app’s entry flow remains focused on ordinary Classic and Custom Runs. Core support for other modes and high-wave generation does not establish a complete selectable Daily/Endless/Challenge interface. See the [app README](game/README.md) for controls and implementation details.
 
-Checked main `6ffee812dc89d1b0664521208b3157edd210aecf`; the following repair results belong to the unmerged PR branches. Task numbers differ from PR numbers. The original 33 cards and new coordinator prerequisites are in [docs/PARITY-TASKS.md](docs/PARITY-TASKS.md); assignment remains **Hard/coordinator** or **Lower compute**.
+### Starters, eggs and persistent progression
 
-| Task | PR | State and evidence |
-| --- | --- | --- |
-| 87: save/resume | [#101](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/101) | Merged. Four production resume bugs fixed, including seed 849's retained switch-out flag. 36,471 checks; all 1000 normal + 1000 saved strict runs reach terminal screens within budget |
-| 90: battle regressions | [#106](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/106) | Merged. Seed 777 / N=2000: plain 1940, rich 1826, switch 1885, summon 1856 covered and identical; 0 mismatches, coverage retained. Host and 3DS CI #102 pass |
-| 67: Illusion helpers | [#103](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/103), [#108](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/108) | #108 merged directly into main at `cae69338`; bounded loaded/manual helpers are present. CI #104/#105 pass. 8000/8000 manual identity/type helper comparisons; natural activation remains disabled, 9 TODO / 0 executed |
-| 88: AI matchup | [#102](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/102) | Merged diagnosis. Node 22: 19,762 covered/identical, 0 mismatches, 238 uncovered. Node 24 reference migration remains unresolved |
-| 89: evolution application | [#104](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/104) | Regression repair validated locally: evolution queue8000/8000; established apply12000/12000 and Memory4000/4000. Complete fusion/phase lifecycle remains unvalidated; updated-head CI required |
-| 91: reward caller inputs | [#107](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/107) | ValueHolder import repaired: established Memory4000/4000; dual inputs8000/8000 plus24,000 TM/RNG results. Existing apply135fail unchanged on this branch, addressed separately in #104; updated-head CI required |
-| 59: reward integration | Audit only | Fixed option pool remains. Integration needs Task 91's API and its repaired established check; no adapter parity or zero-fallback claim |
+- Starter filtering and sorting, plus pre-run customization of known moves, unlocked natures, shiny tiers and abilities, plus passive selection. Caught natures and natures obtained through mints persist in the profile.
+- Species candy from the implemented upstream catch, hatch and friendship owners. Candy can unlock a passive, purchase same-species eggs and reduce a starter’s cost twice. A custom direct hidden-ability purchase uses that species’ passive-unlock cost; species without a hidden ability do not offer it.
+- A luck display, profile unlock persistence and three scheduled Pokérus starters per three-hour period.
+- Voucher-based egg acquisition and victory-driven hatch progression, hatched Pokémon sprites and animation, egg-move information, and a nature/stat/IV radar display. Hatching updates the starter profile rather than adding the Pokémon directly to the active party.
+- IV Scanner prompts and persistent starter, candy, friendship and Classic-win records.
 
-Task 87's merged head recorded 1000-run paired digests `0cba4e49`/`0cba4e49`. With Task 90 and the tested Task 67 helper head, fresh 1000-run checks print **1000 ended, 0 cleared/stuck/crashed/timed out, 57,502 turns** on each path and `fea61f28`/`fea61f28`; the 200-run pair is `e59cb7ec`/`e59cb7ec`. The additive strict terminal-screen check independently observes completion and preserves the original chooser/check. These are host consistency results, not upstream run parity.
+### Battle mechanics and fixes
 
-Task 67 covers loaded/manual identity/type helpers; natural Illusion remains disabled upstream. The user authorized established test input repairs on2026-10-04. Task91's repaired legacy Memory check passes4000/4000; its options/victory/application baselines retain coverage (3950/0/50unported;4000/0;3865/135). Task89's own repaired application check passes4000 seed99 plus four seeds×2000; no failed or unavailable check is credited.
+Merged work includes doubles callbacks such as Helping Hand, Acupressure, After You, partner cures/healing, redirection, Commander/Order Up and pledges; additional abilities, forms, Transform/copy behavior, suppression and switching interactions; and held-item acquisition, theft, loss and transfer owners, including Grip Claw, Baton, Mini Black Hole and Pickup.
 
-**Jules scheduling:** Task 68's loaded-state AI scope is delegated to Jules after #108 merged into main; Task 60 needs completed 59; Task 71 needs 69 then 70. No new batch of three independent lower-compute tasks is currently unlocked. Merge-triggered notifications are configured to report actual newly available tasks. Task 63 remains run-core owner work; Task 85 remains console gated. The previously reported defects were repaired with explicit user authorization, preserving comparisons and coverage. Reward PR readiness still requires updated-head CI.
+Further additions include Macho Brace growth and its 50-stack bonuses, Gimmighoul coin/evolution tracking, held form-item activation, Revival Blessing, Terastallization phases, and wider level/stat/damage/experience and save handling. Fury Cutter, Rollout and Echoed Voice retain their source-defined chains across waves when appropriate. Self-Destruct/Explosion user fainting and interrupted Dig/Fly/Dive/Phantom Force-style charge cleanup have regression coverage.
 
-## Layout
-| Folder | What it is | Status |
-|---|---|---|
-| [`docs/feasibility.md`](docs/feasibility.md) | Feasibility audit of the port | Done |
-| [`docs/beta-plan.md`](docs/beta-plan.md) | Plan to the 10 October 2026 beta: milestones, one workstream per folder, what battle-core does next, the one-click SD card builder | Written 2026-09-28 |
-| [`benchmark/`](benchmark/) | Upstream game logic run headless in QuickJS, on PC and 3DS | Done. Old 3DS median turn 2.98 s, so the JS route was dropped for a native port ([RESULTS](benchmark/RESULTS.md)) |
-| [`skeleton/`](skeleton/) | First app: `rr` renderer over citro2d, SD saves, battle demo scene | Done, tested in Azahar |
-| [`assets-pipeline/`](assets-pipeline/) | Builds the 5 SD packs (gfx, snd, bgm, font, data) from upstream, and `app-src/`: the skeleton extended with pack, sound and font loaders | Done, tested in Azahar |
-| [`battle-core/`](battle-core/) | Native battle logic | Source includes singles damage/turns, capture/flee rolls, trainer switch support, held-item slices and selected form triggers. Doubles, remaining forms/item effects and scripted phases remain incomplete; historical differential scopes are in its README |
-| [`run-core/`](run-core/) | Waves, encounters, trainers and enemy generation | Source includes fixed rivals and Gym/Elite Four/Champion closures as well as wild/generic trainer and Eternatus/Paradox generation (Task 50). Their producers bypass moveset generation; enemy movesets, scripted boss lifecycle and remaining configurations still need parity work. Owner lane reserved |
-| [`reward-core/`](reward-core/) | Reward selection and application | Options/victory APIs plus healing/revive/PP and other application slices exist. Form/evolution/fusion lifecycle needs full-state verification; game-core still uses a placeholder pool |
-| [`sd-builder/`](sd-builder/) | One-click Windows builder: downloads PokeRogue's public files at the pins and writes the packs to the SD card, with nothing to install | Built and tested (see its README) |
-| [`bench-native/`](bench-native/) | Console speed test of the C battle engine: replays upstream-recorded turns through battle-core on the 3DS, times each one and checks it still matches upstream | Real Old 3DS: 1.51 ms median per singles turn (4.03 ms worst), about 800x faster than the QuickJS route; all covered turns identical on the console ([README](bench-native/README.md)) |
-| [`bench-gfx/`](bench-gfx/) | Console test of drawing, texture memory, SD card loading and audio: battle scenes laid out like upstream's (singles, doubles, move animations, the largest sprites), load times from the packs, memory limits, and where the screen edges land | Run on a real Old 3DS without the packs: a battle takes 8.8 ms of the 16.7 ms frame; loading from the packs and audio still to measure on the console ([README](bench-gfx/README.md)) |
-| [`ai-core/`](ai-core/) | Enemy command/scoring logic | Task 88 records 19,762 covered/identical cases out of 20,000 under Node 22, zero mismatches; 238 uncovered. Node 24's 2/9/9/12 failures and the runtime-contract conflict remain. Task 58 is merged; Illusion integration remains blocked |
-| [`game-core/`](game-core/) | Headless run orchestration, progression and save/resume | Host save/soak tests; enemy movesets and reward options still use stand-ins. See its README and the parity roadmap for lifecycle integration gaps |
-| [`game/`](game/) | The game app: screen stack, input, text with upstream's fonts and metrics, strings from the locale files, windows, message box, menus, and the battle screen | In progress: the framework, and the battle screen showing real battle-core turns (texts, hits, HP bars, faints) in a demo battle in Azahar; driving it from game-core's run next ([README](game/README.md)) |
-| [`tools/azahar-libretro/`](tools/azahar-libretro/) | Headless emulator test rig (binaries not in git) | See its README |
+Long-history work now preserves Last Resort, nonvirtual move queries, Protect streaks, Conversion 2/Lock-On searches and repeated-faint/Retaliate/trainer-Tera callers beyond earlier history-window limits. These proofs cover their documented boundaries; other finite histories and wide-level callers remain under audit.
 
-`game/` is the game app. It takes the renderer, packs, sound and saves from `assets-pipeline/app-src/` (whose own `main.c` is the older demo); `skeleton/src/` is kept as the earlier baseline.
+See the [battle-core README](battle-core/README.md), [completion checklist](battle-core/COMPLETION-CHECKLIST.md) and [deviation register](battle-core/DEVIATIONS.md). Encounter-end charge cancellation deliberately fixes user-reported behavior retained by the pinned upstream; its validation is recorded in [PR #409](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/409).
 
-## Building
-- Game: `docker run --rm -v "$PWD":/src -w /src/game devkitpro/devkitarm make` from the repo root (the whole repo is mounted because the game links battle-core and run-core).
-- Older demo app: `docker run --rm -v "$PWD/assets-pipeline/app-src":/src -w /src devkitpro/devkitarm make` (details in [`skeleton/README.md`](skeleton/README.md)).
-- SD card packs: on Windows, the one-click [`sd-builder`](sd-builder/); elsewhere `python3 assets-pipeline/build_sd.py ...` (details in [`assets-pipeline/README.md`](assets-pipeline/README.md)).
+### Custom Runs and football
 
-The READMEs mention screenshots and pixel-test images. Those contain Pokémon art, so they are not in this repo.
+- Custom Run Legacy reports record the final blow and support persistent Nemeses, radar, rematch scheduling, optional encounters and claims. Nemeses originate from Custom Runs. Report, roster and transaction persistence are integrated with the app.
+- The capsule machine supports voucher-to-egg transactions, reveal presentation and touch interaction, with durable transaction handling. Additional mystery encounter ports include Department Store Sale, Shady Vitamin Dealer, Lost at Sea, Field Trip, Part Timer, An Offer You Can’t Refuse, the Pokémon Salesman and Fun and Games.
+- JoJo challengers in Custom Runs: character/team tables, biome-based spawn policy, run-screen introductions and dialogue, sprite keys, and persisted encounter state.
+- The title’s Football entry opens a separate live 22-player mode: a 55-point profile-based draft, editable offense/defense lineups, movement, manual snaps, passing, running, tackling, coverage, playcalling, a seven-round playoff, experience, evolution/move choices, shops and compatible Mega forms. It uses `football_live.sav`; START retains access to the older six-player mode and its `football.sav`. Ordinary run saves remain separate. See [live football controls and limits](football-core/LIVE.md).
 
-## Audit and change record
+## Validation and remaining work
 
-- Audit baseline: port main `2a740ab66bce22dd94aa34c6cbf2c8e665ad6a79`, pinned upstream `8555c08`.
-- Documentation: added `docs/PARITY-TASKS.md`, identified separate core/run/presentation validation, and listed bounded delegation and hardware gates. Folder README coverage tables are historical measured scopes; read their tested commits and current source before extending a claim.
-- [Task 57 merged #97](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/97): seven held-item keys mapped and consumed berry/White Herb stacks reconciled on both sides; recorded 648 upstream adapter/item-loss comparisons and 39 lifecycle checks pass. Task 87 is now merged and its strict completion/equality gate passes; current evidence is above.
-- [Task 58 merged #98](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/98): actual BerryModifier recognition for Stuff Cheeks; recorded 268 upstream comparisons and 404 host checks pass. [Task 88 merged #102](https://github.com/Gianciosvaldo/pokerogue-3ds/pull/102) diagnoses the 2/9/9/12 failures as a reference-runtime difference: the unchanged four-seed AI suite passes under HANDOFF's Node 22, with no reduced coverage or relaxed comparisons. Upstream's declared Node 24 environment remains a gap.
-- Public-beta drift: 42 commits after the pin (merge commits included), changing moveset weighting/fixed moves, passive Trace, trapping/DoT, No Retreat, Revival Blessing, Uncommon Breed, summary move deletion and UI/assets. Latest-beta parity remains a separately scoped migration.
-- PR #86 audit: run #63 failed save equality (`71f2f276`/`e95ed218`) while its 3DS build passed. Temporary `R48W` output is absent from the merged final patch and current main; final-head run #80 passed host/3DS. Four rival comparisons were later actually logged in run #75 (12,000 fights, zero mismatches), on an earlier head; see the [audit details](docs/PARITY-TASKS.md#pr-86-ci-and-diagnostic-audit) for exact commits and the remaining final-head/lifecycle gap.
-- Remaining verification: final changed heads require their own recorded checks. Previously tested commits and host builds cannot establish differential results for a later head.
+The replication target is upstream game `8555c08c823b856cbec4eb99ca84ea52a955836d`, locales `270ed0a2938b2c3e2e34e7de940e84aecadf548b` and assets `87426a79611f9d212c4dc8af58e2834a05b93725`. This is not a claim of parity with today’s upstream beta. Recorded reference proofs use Node 22 where specified.
+
+[CI run 40207779956](https://github.com/Gianciosvaldo/pokerogue-3ds/actions/runs/40207779956) passed on main `9c9f6e0`: core/custom/save/football checks, app host tests, the actual ARM build and startup-stack checks. Normal tests remain required; only the dedicated custom-only Task63 check is skipped in the current work. Native upstream comparisons are separately recorded in feature validation reports and are not implied by a host test pass.
+
+Battle-core still needs its complete enabled-source inventory reconciled with implementation and proof references, remaining fixed-size/overflow and received-hit histories audited, unresolved identity/form/fusion and phase callers closed, and wide-level Endless behavior validated across its owning callers. Full-run upstream comparisons and hardware acceptance remain separate from bounded source proofs. Read the [completion checklist](battle-core/COMPLETION-CHECKLIST.md) before describing battle-core as finished; older task tables and benchmark results are historical scopes, not a completion percentage.
+
+## Repository layout
+
+| Folder | Purpose |
+| --- | --- |
+| [game](game/README.md) | Native dual-screen app, menus, animation, audio and run presentation |
+| [battle-core](battle-core/README.md) | Battle state, mechanics, phases and source-comparison evidence |
+| [run-core](run-core/README.md) | Encounter, trainer, wave and enemy generation |
+| [ai-core](ai-core/README.md) | Enemy command selection and scoring |
+| [reward-core](reward-core/README.md) | Reward generation and application |
+| [game-core](game-core/README.md) | Integrated run orchestration, progression, profile data and saves |
+| [custom-core](custom-core/README.md) | Legacy/Nemesis data, reducer, codec, scheduling and custom trainer policy |
+| [football-core](football-core/LIVE.md) | Separate live football engine and career integration |
+| [assets-pipeline](assets-pipeline/README.md) | Local upstream asset/data pack generation and shared renderer/loaders |
+| [sd-builder](sd-builder/README.md) | Windows builder, local asset setup and SD-card installation |
+| [bench-native](bench-native/README.md), [bench-gfx](bench-gfx/README.md) | Historical real-console timing and rendering measurements |
+| [benchmark](benchmark/RESULTS.md), [skeleton](skeleton/README.md) | Earlier QuickJS feasibility work and native demo baseline |
+| [tools/azahar-libretro](tools/azahar-libretro/README.md) | Headless emulator test tooling |
+
+## Building and testing
+
+From the repository root, build the homebrew app with devkitPro:
+
+```sh
+docker run --rm -v "$PWD":/src -w /src/game devkitpro/devkitarm make
+```
+
+The whole repository is mounted because the app links its logic cores. `game/` is the current app; `assets-pipeline/app-src/` supplies shared renderer, pack, audio and save support, while its own entry point is an older demo.
+
+On Windows, follow the [SD builder instructions](sd-builder/README.md) to generate assets and prepare a local installation. Elsewhere, use `assets-pipeline/build_sd.py` as described in the [asset pipeline](assets-pipeline/README.md). This documentation update does not publish a new builder or bundle copyrighted packs.
+
+Representative host checks are:
+
+```sh
+make -C game-core test
+game/tests/run_host_tests.sh
+make -C custom-core unit-test san-test
+make -C football-core test
+```
+
+The [CI workflow](.github/workflows/ci.yml) lists the retained battle regression runners, failure controls and ARM checks. Reproducing native upstream comparisons also needs the pinned upstream checkout and each report’s producer instructions. Screenshots and pixel-test captures containing Pokémon art are not included in this repository.
 
 ## License
-PokeRogue's code is AGPL-3.0, and this port derives from it. Pokémon is © Nintendo, Game Freak and The Pokémon Company; nothing of theirs is included here.
 
-
-Task 69 implements weather-driven quiet form dispatch for Forecast, Flower Gift and Ice Face, including suppression, loaded/natural passives, summon, replacement and leaving-field resets. See [battle-core validation and reproduction](battle-core/README.md#task-69-weather-driven-quiet-form-changes-2026-10-04). Task 68 is delegated to Jules in lane F; Task69 is merged; Task70/#111 is ready for review after CI#110 passed both jobs, and Task71 remains behind its merge into main.
-
-## Authorized draft-blocker repairs (2026-10-04)
-
-Results describe the respective unmerged PR branches, not code already on main. Task70/#111: status-token effect is now recorded and required; 8000 focused comparisons and7722 covered item turns pass, B/condition coverage retained; CI#110 host/3DS pass. Task91/#107: correct ValueHolder import restores4000 legacy Memory cases with zero mismatches;8000 dual-input cases and24,000 TM/RNG results pass. Its unchanged135 existing application failures are fixed separately in Task89/#104. Task89: real unseeded status draw is recorded, old-max fusion HP and actual form/IV stat calculation repaired, form selection/hardcore gates corrected, duplicate TM history preserved;12000 established applications and8000 bounded evolution-state comparisons pass. Established options3950pass/0fail/50unported and victory4000pass/0fail. Missing inputs/footer are rejected and planted mutations fail. Latest-head CI is required before marking reward PRs ready. Complete fusion/form/evolution execution, broader held-stat inventories, whole-run upstream and hardware parity remain unvalidated. No unavailable comparison is called a pass.
+PokeRogue’s code is AGPL-3.0, and this port derives from it. Pokémon is © Nintendo, Game Freak and The Pokémon Company; their assets are not included here.

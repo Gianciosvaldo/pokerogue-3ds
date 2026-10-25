@@ -16,4 +16,8 @@ uint16_t gc_gacha_featured_species(uint64_t timestamp_ms);
  * gacha-pity or pull-stat changes. Refusal preserves profile and entropy. */
 int gc_system_species_egg_cost(const gc_system *sys, uint16_t species);
 bool gc_system_buy_species_egg(gc_system *sys, uint16_t species, gc_gacha_ctx *ctx, const char **why);
+/* An egg for free (an achievement's reward): the pull's own egg generator for `tier` (0 common .. 3 legendary), drawing from `seed_text`
+ * (any text; the same one gives the same egg), with a guaranteed tier-3 shiny when asked. Pity counters and pull statistics stay as they
+ * were. False when the egg list is full or nothing could be generated; the profile is then unchanged. */
+bool gc_system_gift_egg(gc_system *sys,int tier,bool tier3_shiny,const char *seed_text,uint64_t timestamp_ms);
 #endif

@@ -46,3 +46,4 @@ build/
 tools/azahar-libretro/*
 !tools/azahar-libretro/README.md
 __pycache__/
+!sd-builder/extra-images/**/*.png
