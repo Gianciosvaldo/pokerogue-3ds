@@ -1048,3 +1048,10 @@ two-turn-end-faults: $(BUILD)/two_turn_end_host_test
 	python3 tools/check-two-turn-end-faults.py
 test: two-turn-end-faults
 .PHONY: two-turn-end-faults
+
+$(BUILD)/remaining_history_host_test: tests/remaining_history_host_test.c tests/doubles_host_test.c ../battle-core/tests/remaining-history-test.c ../battle-core/tests/remaining-history.native.inc ../battle-core/src/phases.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/remaining_history_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+remaining-history-host-test: $(BUILD)/remaining_history_host_test
+	$(BUILD)/remaining_history_host_test
+test: remaining-history-host-test
+.PHONY: remaining-history-host-test

@@ -307,6 +307,9 @@ typedef struct pr_pokemon {
     uint32_t history_serial, history_last_serial[4]; /* shared target-list identity; not the retained-tail count */
     uint32_t history_epoch; /* old summon target aliases cannot bind to new entries */
     pr_turn_move history_last[4];
+    uint8_t history_all_known, history_all_present; /* any non-NONE / last Lock-On or Mind Reader */
+    uint32_t history_aim_serial;
+    pr_turn_move history_aim;
     pr_turn_move move_history[PR_MAX_MOVE_HISTORY];
     pr_turn_move move_queue[PR_MAX_MOVE_QUEUE];  /* summonData.moveQueue */
     uint8_t n_move_queue;
@@ -805,6 +808,9 @@ void pr_push_move_history(pr_pokemon *p, pr_turn_move tm);
 void pr_rebuild_history_used_moves(pr_pokemon *p);
 void pr_rebuild_nonvirtual_history(pr_pokemon *p);
 void pr_rebuild_protect_history(pr_pokemon *p);
+void pr_rebuild_all_history(pr_pokemon *p);
+bool pr_history_any_move(pr_battle *bt,const pr_pokemon *p,bool *unknown);
+const pr_turn_move *pr_last_aim_move(pr_battle *bt,const pr_pokemon *p,bool *unknown);
 uint32_t pr_protect_streak(pr_battle *bt,const pr_pokemon *p,bool *unknown);
 bool pr_history_used_move(const pr_pokemon *p, int move);
 /* getLastXMoves(k + 1)[k]: the k-th newest history entry (0 = newest), NULL when the history is
