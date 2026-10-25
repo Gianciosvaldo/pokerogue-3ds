@@ -2,7 +2,7 @@
 """Mutation check for custom-core: the unit tests must be able to fail.
 
 Each mutation is a single textual change to one source or header file. For every mutation this script copies
-include/, src/ and tests/ to a scratch directory, applies the change, builds model_test, reducer_test, layout_test, codec_test, commit_test and scheduler_test
+include/, src/ and tests/ to a scratch directory, applies the change, builds model_test, reducer_test, layout_test, codec_test, commit_test, scheduler_test and jojo_test
 from that copy and runs them. A mutation is KILLED when a test fails (a nonzero exit, a sanitizer abort or a timeout) and SURVIVES
 when both tests still pass. The script exits nonzero if
 
@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parent.parent
 ENUMS = ROOT.parent / "battle-core" / "gen" / "out" / "pr_enums.h"
 CFLAGS = ["-O0", "-g", "-w", "-std=c99", "-fsanitize=address,undefined", "-fno-sanitize-recover=undefined"]
 SOURCES = ["src/status.c", "src/history.c", "src/nemesis.c", "src/schedule.c", "src/ids.c", "src/meta.c", "src/reducer.c",
-           "src/codec.c", "src/commit.c", "src/scheduler.c"]
+           "src/codec.c", "src/commit.c", "src/scheduler.c", "src/jojo.c", "src/jojo_table.c"]
 BUILD_TIMEOUT = 120
 RUN_TIMEOUT = 30
 
@@ -1108,12 +1108,40 @@ equiv(Q, "    if (run_uid == 0) return CC_E_RANGE;\n    cc_status st = cc_roster
 equiv(Q, "    if (n->life != CC_LIFE_DEFEATED) return CC_E_LIFECYCLE;", "    if (n->life != CC_LIFE_DEFEATED && n->life != CC_LIFE_CHALLENGED) return CC_E_LIFECYCLE;",
       "cc_nemesis_transition has no CHALLENGED -> REWARD_CLAIMED edge and refuses with the same status, CC_E_LIFECYCLE, on the staged copy (nothing is committed)")
 
+# ---------------------------------------------------------------- jojo.c and jojo_table.c (the JoJo trainers)
+J, JH, JT = "src/jojo.c", "include/cc/jojo.h", "src/jojo_table.c"
+mut(JH, "#define CC_JOJO_P_PERCENT 25u", "#define CC_JOJO_P_PERCENT 26u")
+mut(JH, "#define CC_JOJO_P_PERCENT 25u", "#define CC_JOJO_P_PERCENT 24u")
+mut(J, "0x4A4F4A4F424F5A41ull", "0x4A4F4A4F424F5A40ull", "the salt changes")
+mut(J, "    s->rng_state = seed ^ CC_JOJO_SALT;", "    s->rng_state = seed;", "the stream is the plain seed")
+mut(J, "    s->used = 0;\n    s->fights = 0;\n}", "    s->fights = 0;\n}", "start leaves used as it was")
+mut(J, "if (biome < 0) return CC_JOJO_NONE;", "", "a negative biome deals a Pillar Man")
+mut(J, "if (biome < 0) return CC_JOJO_NONE;", "if (biome < 0 || s->fights >= 2) return CC_JOJO_NONE;", "a cap of two creeps back")
+mut(J, "if (chars[i].biome == biome && !(s->used >> i & 1u)) n++;", "if (chars[i].biome == biome) n++;", "a dealt character counts as a candidate")
+mut(J, "if (cc_rng_v1_pick(&s->rng_state, 100) >= CC_JOJO_P_PERCENT) return CC_JOJO_NONE;", "if (cc_rng_v1_pick(&s->rng_state, 100) > CC_JOJO_P_PERCENT) return CC_JOJO_NONE;", "chance off by one")
+mut(J, "    if (!n) return CC_JOJO_NONE;\n", "    if (!n && 0) return CC_JOJO_NONE;\n", "draws with nobody to deal")
+mut(J, "unsigned pick = cc_rng_v1_pick(&s->rng_state, n);", "unsigned pick = 0;", "no pick draw")
+mut(J, "if (pick-- == 0) {", "if (--pick == 0) {", "the pick is off by one")
+mut(J, "            s->used |= 1u << i;\n", "", "the dealt character is not marked")
+mut(J, "            s->fights++;\n", "", "the fight is not counted")
+mut(J, "if (chars[i].biome != biome || (s->used >> i & 1u)) continue;", "if (chars[i].biome != biome) continue;", "the pick walks over dealt characters")
+mut(J, "if (count < 32 && (s->used >> count) != 0) return CC_E_RANGE;", "", "validate: unknown bits")
+mut(J, "if (popcount32(s->used) != s->fights) return CC_E_CONSISTENCY;", "if (popcount32(s->used) != s->fights || s->fights > 2) return CC_E_CONSISTENCY;", "validate: a cap of two creeps back")
+mut(J, "if (popcount32(s->used) != s->fights) return CC_E_CONSISTENCY;", "", "validate: count versus mask")
+mut(J, "for (; v; v &= v - 1) n++;", "for (; v; v >>= 1) n += 0;", "popcount")
+mut(J, "if (!s || !chars || count > 32 || cc_jojo_validate_in(s, count) != CC_OK) return CC_JOJO_NONE;", "if (!s || !chars || count > 32) return CC_JOJO_NONE;", "roll: an invalid state is used")
+mut(J, "while (*a && *a == *b) { a++; b++; }\n        if (*a == *b) return (int)i;", "while (*a && *a == *b) { a++; b++; }\n        if (!*a) return (int)i;", "find: a longer id matches its prefix")
+mut(JT, '{"kira", "Yoshikage Kira", "My name is Yoshikage Kira. I\'m 33 years old.", 9 /* Lake */', '{"kira", "Yoshikage Kira", "My name is Yoshikage Kira. I\'m 33 years old.", 0 /* Town */', "Kira back in Town (no trainers there)")
+mut(JT, '"Do you believe in \'gravity\'?", 29 /* Temple */, "speedBoost"', '"Do you believe in \'gravity\'?", 29 /* Temple */, NULL', "Pucci loses the passive")
+mut(JT, '"I shall become the ultimate lifeform!", -1,', '"I shall become the ultimate lifeform!", 25,', "Kars in a biome pool")
+mut(JT, '"Nyo-ho!", 14 /* Desert */, NULL, 6,', '"Nyo-ho!", 14 /* Desert */, NULL, 5,', "Gyro loses a member")
+
 
 def build_and_run(workdir: Path):
     """Returns (stage, detail): stage is 'ok' when all tests pass, else where it failed."""
     exes = {"model_test": "tests/model_test.c", "reducer_test": "tests/reducer_test.c", "layout_test": "tests/layout_test.c",
             "codec_test": "tests/codec_test.c", "commit_test": "tests/commit_test.c",
-            "scheduler_test": "tests/scheduler_test.c"}
+            "scheduler_test": "tests/scheduler_test.c", "jojo_test": "tests/jojo_test.c"}
     objs = []
     for src in SOURCES:
         obj = src.replace("/", "_")[:-2] + ".o"
