@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "gc/data.h"
+#include "gc/gacha.h"
 #include "i18n.h"
 #include "pr_data.h"
 #include "starter_data.h"
