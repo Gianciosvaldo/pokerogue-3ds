@@ -1326,6 +1326,11 @@ static const sfield stat_milestone_fields[] = {
     SF(gc_stat_milestones, epic_eggs_pulled), SF(gc_stat_milestones, legendary_eggs_pulled), SF(gc_stat_milestones, manaphy_eggs_pulled),
 };
 
+static const sfield achv_progress_fields[] = {
+    SF(gc_achv_progress, jojo_beaten), SF(gc_achv_progress, jojo_battles), SF(gc_achv_progress, jojo_clean),
+    SF(gc_achv_progress, run_tag), SF(gc_achv_progress, run_jojo), SF(gc_achv_progress, best_run_jojo),
+};
+
 static const sfield pity_fields[]={SF(gc_system, egg_pity),SF(gc_system, unlock_pity)};
 static const sfield egg_fields[] = {
     SF(gc_egg, id), SF(gc_egg, hatch_waves), SF(gc_egg, tier), SF(gc_egg, species), SF(gc_egg, source_type), SF(gc_egg, variant_tier), SF(gc_egg, egg_move_index),
@@ -1364,6 +1369,16 @@ size_t gc_system_save(const gc_system *sys, void *buf, size_t cap)
     s = section_start(&w, "stats");
     put_block(&w, stat_milestone_fields, NF(stat_milestone_fields), &sys->stats, sizeof sys->stats, 1);
     section_end(&w, s);
+
+    /* only once there is progress, so a profile without any is saved as it always was */
+    {
+        static const gc_achv_progress none;
+        if (memcmp(&sys->achv, &none, sizeof none)) {
+            s = section_start(&w, "achv");
+            put_block(&w, achv_progress_fields, NF(achv_progress_fields), &sys->achv, sizeof sys->achv, 1);
+            section_end(&w, s);
+        }
+    }
 
     if (sys->n_eggs > 0) {
         s = section_start(&w, "eggs");
@@ -1479,6 +1494,9 @@ bool gc_system_load(gc_system *sys, const void *buf, size_t len, const char **wh
     if (!r.bad) {
         get_block(&r, stat_milestone_fields, NF(stat_milestone_fields), &sys->stats, sizeof sys->stats, 1, &dropped);
     }
+
+    r = section(&body, "achv");
+    if (!r.bad) get_block(&r, achv_progress_fields, NF(achv_progress_fields), &sys->achv, sizeof sys->achv, 1, &dropped);
 
     r = section(&body, "eggs");
     if (!r.bad) {
