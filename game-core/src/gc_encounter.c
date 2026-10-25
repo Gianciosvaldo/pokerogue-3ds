@@ -17,6 +17,36 @@ static const pr_trainer_info *trainer_info(int type)
     return NULL;
 }
 
+const char *gc_trainer_dialogue_key(const gc_run *run, int kind)
+{
+    if (run->battle_type != BATTLE_TYPE_TRAINER || (kind != 0 && kind != 1)) return NULL;
+    const gc_trainer_config *c = gc_trainer_config_of(run->trainer_type);
+    const int v = run->trainer_variant;
+    if (!c || v < 0 || v > 2) return NULL;
+    const gc_dialogue_list l = c->dialogue[v][kind];
+    if (!l.n) return NULL;
+    int pick = 0;
+    if (l.n > 1) {
+        /* randSeedItem: Phaser's RND.pick on the sown RNG; one message needs no roll */
+        pr_rng rng = pr_run_seed_offset_rng(&run->run, run->wave, NULL);
+        pick = pr_rng_integer_in_range(&rng, 0, l.n - 1);
+    }
+    return gc_trainer_dialogue_keys[l.first + pick];
+}
+
+/* The trainer's line, as an event (EncounterPhase before the fight, TrainerVictoryPhase after it) */
+void gc_ev_trainer_dialogue(gc_run *run, int kind)
+{
+    const char *key = gc_trainer_dialogue_key(run, kind);
+    if (!key) return;
+    gc_event *ev = gc_ev_new(run, GC_EV_DIALOGUE);
+    if (!ev) return;
+    ev->a = run->trainer_type;
+    ev->b = run->trainer_variant;
+    ev->c = kind;
+    ev->msg.key = key;
+}
+
 bool gc_trainer_is_double(const gc_run *run)
 {
     const pr_trainer_info *t = trainer_info(run->trainer_type);
@@ -420,6 +450,9 @@ void gc_new_battle(gc_run *run)
     ctx.double_chance = scene_double_chance;
     ctx.double_chance_ctx = &chance_ctx;
     ctx.me = run->me;
+    /* the six Classic rival fights (waves 8, 25, 55, 95, 145, 195) are run-core's fixed battles. The app's player is the male one, so the rival
+     * is the female variant, Ivy (ctx.player_female stays false) */
+    ctx.enable_fixed_rivals = true;
     pr_new_battle nb;
     unsigned before = run->run.unported;
     int rc = pr_run_new_battle(&run->run, wave, &ctx, &nb);
@@ -615,6 +648,7 @@ void gc_new_battle_start(gc_run *run, bool reset, bool new_biome)
     pr_run_reset_seed(&run->run, wave);
 
     if (run->battle_type == BATTLE_TYPE_TRAINER) {
+        gc_ev_trainer_dialogue(run, 0);   /* the trainer's line comes before "X would like to battle!" */
         gc_ev_msg(run, run->double_battle ? "battle:trainerAppearedDouble" : "battle:trainerAppeared", 1, gc_m_trainer(run, "trainerName", GC_TNAME_TITLED));
     } else {
         if(run->double_battle&&run->n_enemy>1)

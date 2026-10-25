@@ -1,7 +1,9 @@
 /*
  * Dumps what game-core reads from upstream's trainer configs, as C: for every TrainerType in
- * trainerConfigs, config.moneyMultiplier, isBoss, doubleOnly, how many modifierRewardFuncs it has, the
- * trainersCommon class its personal names come from, and the names Trainer.getName gives it.
+ * trainerConfigs, config.moneyMultiplier, isBoss, doubleOnly, hasCharSprite, how many modifierRewardFuncs it has,
+ * the trainersCommon class its personal names come from, the names Trainer.getName gives it, and the
+ * dialogue keys Trainer.getEncounterMessages / getVictoryMessages give each variant (initTrainerTypeDialogue
+ * has run, as it does when upstream's scene starts).
  *
  * The names are upstream's own getName, run on each variant for the slot / title pairs the game asks
  * for, with i18next.t swapped for one that returns $t(key) (trainerConfigs and the Trainer class are
@@ -31,6 +33,8 @@ it("dump trainers", async () => {
   const { trainerConfigs } = await import("#trainers/trainer-config");
   const { TrainerType } = await import("#enums/trainer-type");
   const { Trainer } = await import("#field/trainer");
+  const { initTrainerTypeDialogue } = await import("#data/dialogue");
+  initTrainerTypeDialogue();
 
   const common = JSON.parse(fs.readFileSync("locales/en/trainers-common.json", "utf8"));
   /* the names in the order gc_trainer_config.names has them, for each variant */
@@ -53,6 +57,18 @@ it("dump trainers", async () => {
       .map(b => (b === 0x22 || b === 0x5c ? `\\${String.fromCharCode(b)}` : b >= 0x20 && b < 0x7f ? String.fromCharCode(b) : `\\${b.toString(8).padStart(3, "0")}`))
       .join("")}"`;
 
+  /* the dialogue keys, one run per distinct list: a list is {first, n} into gc_trainer_dialogue_keys */
+  const dialogueKeys: string[] = [];
+  const dialogueRuns = new Map<string, string>();
+  const dialogueList = (messages: string[] | undefined) => {
+    const list = messages ?? [];
+    const id = JSON.stringify(list);
+    if (!dialogueRuns.has(id)) {
+      dialogueRuns.set(id, `{${dialogueKeys.length}, ${list.length}}`);
+      dialogueKeys.push(...list);
+    }
+    return dialogueRuns.get(id)!;
+  };
   const types = Object.keys(trainerConfigs).map(Number).sort((a, b) => a - b);
   const rows: string[] = [];
   for (const t of types) {
@@ -76,9 +92,16 @@ it("dump trainers", async () => {
         names.push(intern(s));
       }
     }
+    const dialogue = variants.map(variant => {
+      const fake = { config: c, variant };
+      const encounter = (Trainer.prototype.getEncounterMessages as () => string[]).call(fake);
+      const victory = (Trainer.prototype.getVictoryMessages as () => string[]).call(fake);
+      return `{${dialogueList(encounter)}, ${dialogueList(victory)}}`;
+    });
     rows.push(
       `{${t}, ${hasNames ? cstr(classKey) : "NULL"}, ${c.moneyMultiplier}, ${c.isBoss}, ${c.doubleOnly}, `
-        + `${c.modifierRewardFuncs.length}, {${[0, 4, 8].map(i => `{${names.slice(i, i + 4).join(", ")}}`).join(", ")}}}`,
+        + `${c.modifierRewardFuncs.length}, {${[0, 4, 8].map(i => `{${names.slice(i, i + 4).join(", ")}}`).join(", ")}}, `
+        + `${c.hasCharSprite}, {${dialogue.join(", ")}}}`,
     );
   }
   vi.doUnmock("i18next");
@@ -88,6 +111,9 @@ it("dump trainers", async () => {
     "",
     `const char *const gc_trainer_name_templates[${pool.length}] = {`,
     ...pool.map(s => `    ${cstr(s)},`),
+    "};",
+    `const char *const gc_trainer_dialogue_keys[${Math.max(dialogueKeys.length, 1)}] = {`,
+    ...dialogueKeys.map(k => `    ${cstr(k)},`),
     "};",
     `const int gc_trainer_config_count = ${rows.length};`,
     `const gc_trainer_config gc_trainer_configs[${rows.length}] = {`,

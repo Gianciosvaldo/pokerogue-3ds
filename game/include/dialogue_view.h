@@ -6,12 +6,16 @@
 #ifndef GM_DIALOGUE_VIEW_H
 #define GM_DIALOGUE_VIEW_H
 
+#include "rr.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* Draws the name box with its top-left at (x, y) of the bottom screen (320 x 240); `window_style` is upstream's uiWindowStyle (1..5). */
 void dv_namebox(float x, float y, const char* name, int window_style);
+/* The same on either screen: (x, y) is relative to that screen's canvas, whose top-left sits at (origin_x, origin_y) of the screen. */
+void dv_namebox_at(rr_screen screen, int origin_x, int origin_y, float x, float y, const char* name, int window_style);
 
 #ifdef __cplusplus
 }
