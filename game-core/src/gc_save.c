@@ -16,6 +16,7 @@
  *   body:    sections: u32 name hash | u32 length | its blocks
  *   block:   u16 n | n x (u32 field name hash, u16 size) | u16 count | count x the fields' bytes in order */
 #include "internal.h"
+#include "gc/football.h"
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -72,6 +73,10 @@ typedef struct {
     double player_teras_used;
     bool frozen_names; /* new saves require both halves of stored names */
 } sv_run;
+typedef struct { uint8_t double_battle; } sv_encounter;
+static const sfield encounter_fields[]={SF(sv_encounter,double_battle)};
+static const sfield illusion_fields[]={SF(pr_illusion,species),SF(pr_illusion,fusion_species),
+    SF(pr_illusion,form),SF(pr_illusion,fusion_form),SF(pr_illusion,gender),SF(pr_illusion,active)};
 typedef struct { uint8_t terminal_result; } sv_terminal;
 static const sfield terminal_fields[]={SF(sv_terminal,terminal_result)};
 static const sfield run_fields[] = {
@@ -98,8 +103,8 @@ static const sfield mystery_history_fields[] = {
 };
 
 /* An item, its key as text (gc_item.key is a pointer) */
-typedef struct { char key[40]; int16_t arg; int32_t stack; uint32_t pokemon_id; bool detached; int32_t battle_count; bool non_transferable; } sv_item;
-static const sfield item_fields[] = {SF(sv_item, key), SF(sv_item, arg), SF(sv_item, stack), SF(sv_item, pokemon_id), SF(sv_item, detached), SF(sv_item, battle_count), SF(sv_item, non_transferable)};
+typedef struct { char key[40]; int16_t arg; int32_t stack; uint32_t pokemon_id; bool detached; int32_t battle_count; bool non_transferable; bool eviolite_base; bool form_inactive; } sv_item;
+static const sfield item_fields[] = {SF(sv_item, key), SF(sv_item, arg), SF(sv_item, stack), SF(sv_item, pokemon_id), SF(sv_item, detached), SF(sv_item, battle_count), SF(sv_item, non_transferable), SF(sv_item, eviolite_base), SF(sv_item, form_inactive)};
 
 /* What the run keeps of a Pokemon beside battle-core's part */
 static const sfield mon_fields[] = {
@@ -141,6 +146,10 @@ static const sfield pokemon_fields[] = {
     SF(pr_pokemon, battle_berries), SF(pr_pokemon, turn_berries), SF(pr_pokemon, last_berries),
     SF(pr_pokemon, n_battle_berries), SF(pr_pokemon, n_turn_berries), SF(pr_pokemon, n_last_berries),
 };
+static const sfield history_used_fields[]={SF(pr_pokemon,history_used_moves),SF(pr_pokemon,history_used_complete)};
+static const sfield history_last_fields[]={SF(pr_pokemon,history_last_known),SF(pr_pokemon,history_last_present),SF(pr_pokemon,history_serial),SF(pr_pokemon,history_last_serial)};
+static const sfield history_all_fields[]={SF(pr_pokemon,history_all_known),SF(pr_pokemon,history_all_present),SF(pr_pokemon,history_aim_serial)};
+static const sfield protect_history_fields[]={SF(pr_pokemon,history_protect_count),SF(pr_pokemon,history_protect_complete)};
 static const sfield tag_fields[] = {
     SF(pr_battler_tag, type), SF(pr_battler_tag, turn_count), SF(pr_battler_tag, source_move),
     SF(pr_battler_tag, source_id), SF(pr_battler_tag, crit_stages), SF(pr_battler_tag, stockpiled_count),
@@ -402,6 +411,7 @@ static const char *intern(const char *key)
 /* ---------------------------------------------------------------- the calls */
 bool gc_run_can_save(const gc_run *run)
 {
+    if(!run||run->n_items<0||run->n_enemy_items<0||run->n_items>PR_MAX_MODIFIERS||run->n_enemy_items>PR_MAX_MODIFIERS)return false;
     if (run->terminal_result) return run->finished && run->terminal_result >= 1 && run->terminal_result <= 2
         && !run->in_battle && run->run.mode == GAME_MODES_CLASSIC
         && run->n_party >= 1 && run->n_party <= 6 && run->n_enemy >= 1 && run->n_enemy <= 6
@@ -415,7 +425,8 @@ bool gc_run_can_save(const gc_run *run)
     const gc_rqueue *q = &in->rq;
     if (q->current.type != RP_COMMAND) return false;
     for (int l = 0; l < q->n_levels; l++)
-        for (int k = 0; k < q->n[l]; k++) if (q->q[l][k].type != RP_TURN) return false;
+        for (int k = 0; k < q->n[l]; k++) if (q->q[l][k].type != RP_TURN
+            && !(run->double_battle&&q->q[l][k].type==RP_COMMAND&&q->q[l][k].a==1)) return false;
     return true;
 }
 
@@ -432,6 +443,24 @@ static void put_mons(writer *w, const char *name, const gc_mon *mons, int n)
         put_block(w, turn_move_fields, NF(turn_move_fields), b->move_queue, sizeof b->move_queue[0], b->n_move_queue);
     }
     section_end(w, s);
+    char key[48];snprintf(key,sizeof key,"%s_move_uses",name);
+    s=section_start(w,key);
+    put_block(w,history_used_fields,NF(history_used_fields),&mons[0].b,sizeof(gc_mon),n);
+    section_end(w,s);
+    snprintf(key,sizeof key,"%s_last_moves",name);
+    s=section_start(w,key);
+    put_block(w,history_last_fields,NF(history_last_fields),&mons[0].b,sizeof(gc_mon),n);
+    for(int i=0;i<n;i++)put_block(w,turn_move_fields,NF(turn_move_fields),mons[i].b.history_last,sizeof(pr_turn_move),4);
+    section_end(w,s);
+    snprintf(key,sizeof key,"%s_all_moves",name);
+    s=section_start(w,key);
+    put_block(w,history_all_fields,NF(history_all_fields),&mons[0].b,sizeof(gc_mon),n);
+    for(int i=0;i<n;i++)put_block(w,turn_move_fields,NF(turn_move_fields),&mons[i].b.history_aim,sizeof(pr_turn_move),1);
+    section_end(w,s);
+    snprintf(key,sizeof key,"%s_protect",name);
+    s=section_start(w,key);
+    put_block(w,protect_history_fields,NF(protect_history_fields),&mons[0].b,sizeof(gc_mon),n);
+    section_end(w,s);
 }
 
 static void put_items(writer *w, const char *name, const gc_item *items, int n)
@@ -446,6 +475,12 @@ static void put_items(writer *w, const char *name, const gc_item *items, int n)
         sv[i].detached = items[i].detached;
         sv[i].battle_count = items[i].battle_count;
         sv[i].non_transferable = items[i].non_transferable;
+        sv[i].eviolite_base = items[i].eviolite_base;
+        if (items[i].form_inactive && (!gc_item_key_form_change(items[i].key) || !pr_form_item_known(items[i].arg))) {
+            w->full = true;
+            return;
+        }
+        sv[i].form_inactive = items[i].form_inactive;
     }
     size_t s = section_start(w, name);
     put_block(w, item_fields, NF(item_fields), sv, sizeof sv[0], n);
@@ -524,6 +559,14 @@ size_t gc_run_save(const gc_run *run, void *buf, size_t cap)
     size_t s = section_start(&w, "run");
     put_block(&w, run_fields, NF(run_fields), &v, sizeof v, 1);
     section_end(&w, s);
+    s = section_start(&w,"encounter");
+    sv_encounter encounter={run->double_battle};
+    put_block(&w,encounter_fields,NF(encounter_fields),&encounter,sizeof encounter,1);
+    section_end(&w,s);
+    s=section_start(&w,"illusions");
+    put_block(&w,illusion_fields,NF(illusion_fields),&run->party[0].b.illusion,sizeof(gc_mon),run->n_party);
+    put_block(&w,illusion_fields,NF(illusion_fields),&run->enemy[0].b.illusion,sizeof(gc_mon),run->n_enemy);
+    section_end(&w,s);
     s = section_start(&w, "depths");
     put_block(&w, depth_fields, NF(depth_fields), &run->depths, sizeof run->depths, 1);
     section_end(&w, s);
@@ -640,6 +683,155 @@ static bool mon_ok(const gc_mon *m)
     return true;
 }
 
+static bool illusion_schema_ok(reader r){
+    int n=take16(&r);unsigned seen=0;if(r.bad||n!=NF(illusion_fields))return false;
+    for(int i=0;i<n;i++){
+        uint32_t name=take32(&r);uint16_t size=take16(&r);int found=-1;
+        for(int k=0;k<NF(illusion_fields);k++)if(name==hash(illusion_fields[k].name)&&size==illusion_fields[k].size)found=k;
+        if(found<0||(seen&(1u<<found)))return false;seen|=1u<<found;
+    }
+    return !r.bad;
+}
+
+static bool illusion_ok(const pr_illusion *v){
+    uint8_t active;memcpy(&active,&v->active,1);if(active>1)return false;
+    if(!active)return true;
+    const pr_species *sp=gc_species(v->species);
+    if(!sp||v->form>=sp->nforms||v->gender < -1||v->gender>1)return false;
+    const pr_species *fusion=v->fusion_species?gc_species(v->fusion_species):NULL;
+    return v->fusion_species?(fusion&&v->fusion_form<fusion->nforms):v->fusion_form==0;
+}
+
+/* Optional new section: legacy saves reconstruct known membership from their tail.
+ * Missing old entries remain explicitly unknown rather than inventing a complete set. */
+static bool get_history_used(const reader *body,const char *name,gc_mon *mons,int n,int *dropped)
+{
+    char key[48];snprintf(key,sizeof key,"%s_move_uses",name);
+    reader scan=*body;int sections=0;
+    while(scan.pos+8<=scan.n){uint32_t kind=take32(&scan),len=take32(&scan);if(len>scan.n-scan.pos)return false;if(kind==hash(key))sections++;scan.pos+=len;}
+    if(scan.bad||scan.pos!=scan.n||sections>1)return false;
+    if(!sections){for(int i=0;i<n;i++)pr_rebuild_history_used_moves(&mons[i].b);return true;}
+    reader r=section(body,key),schema=r;int count=take16(&schema);unsigned seen=0;
+    if(schema.bad||count!=NF(history_used_fields))return false;
+    for(int i=0;i<count;i++){
+        uint32_t field=take32(&schema);uint16_t size=take16(&schema);int found=-1;
+        for(int j=0;j<NF(history_used_fields);j++)if(field==hash(history_used_fields[j].name)&&size==history_used_fields[j].size)found=j;
+        if(found<0||(seen&(1u<<found)))return false;
+        seen|=1u<<found;
+    }
+    if(schema.bad||get_block(&r,history_used_fields,NF(history_used_fields),&mons[0].b,sizeof(gc_mon),n,dropped)!=n||r.bad||r.pos!=r.n)return false;
+    for(int i=0;i<n;i++){
+        pr_pokemon *p=&mons[i].b;uint8_t complete;memcpy(&complete,&p->history_used_complete,1);
+        if(complete>1)return false;
+        for(int m=PR_MOVE_COUNT;m<(int)sizeof p->history_used_moves*8;m++)if(p->history_used_moves[m/8]&(1u<<(m%8)))return false;
+    }
+    return true;
+}
+
+/* Optional semantic query state. Old saves retain the exact answers visible in
+ * their tail; a missing older prefix remains unknown until a new matching move. */
+static bool get_nonvirtual_history(const reader *body,const char *name,gc_mon *mons,int n,int *dropped)
+{
+    char key[48];snprintf(key,sizeof key,"%s_last_moves",name);
+    reader scan=*body;int sections=0;
+    while(scan.pos+8<=scan.n){uint32_t kind=take32(&scan),len=take32(&scan);if(len>scan.n-scan.pos)return false;if(kind==hash(key))sections++;scan.pos+=len;}
+    if(scan.bad||scan.pos!=scan.n||sections>1)return false;
+    if(!sections){for(int i=0;i<n;i++)pr_rebuild_nonvirtual_history(&mons[i].b);return true;}
+    reader r=section(body,key),schema=r;int count=take16(&schema);unsigned seen=0;
+    if(schema.bad||count!=NF(history_last_fields))return false;
+    for(int i=0;i<count;i++){
+        uint32_t field=take32(&schema);uint16_t size=take16(&schema);int found=-1;
+        for(int j=0;j<NF(history_last_fields);j++)if(field==hash(history_last_fields[j].name)&&size==history_last_fields[j].size)found=j;
+        if(found<0||(seen&(1u<<found)))return false;
+        seen|=1u<<found;
+    }
+    if(schema.bad||get_block(&r,history_last_fields,NF(history_last_fields),&mons[0].b,sizeof(gc_mon),n,dropped)!=n)return false;
+    for(int i=0;i<n;i++){
+        pr_pokemon *p=&mons[i].b;
+        if(p->history_last_known>15||(p->history_last_present&~p->history_last_known))return false;
+        /* Every cached TurnMove uses the same named schema as normal history. */
+        reader entries=r;int fields=take16(&entries);unsigned fields_seen=0;
+        if(fields!=NF(turn_move_fields))return false;
+        for(int k=0;k<fields;k++){
+            uint32_t field=take32(&entries);uint16_t size=take16(&entries);int found=-1;
+            for(int j=0;j<NF(turn_move_fields);j++)if(field==hash(turn_move_fields[j].name)&&size==turn_move_fields[j].size)found=j;
+            if(found<0||(fields_seen&(1u<<found)))return false;
+            fields_seen|=1u<<found;
+        }
+        if(entries.bad||get_block(&r,turn_move_fields,NF(turn_move_fields),p->history_last,sizeof(pr_turn_move),4,dropped)!=4)return false;
+        for(int q=0;q<4;q++)if(p->history_last_present&(1u<<q)){
+            const pr_turn_move *m=&p->history_last[q];
+            if(!m->move||m->move>=PR_MOVE_COUNT||m->use_mode<1||m->use_mode>6||m->n_targets>4
+               ||(m->result>MOVE_RESULT_OTHER&&m->result!=PR_MOVE_RESULT_UNDEFINED)
+               ||(q/2&&m->move==MOVE_ID_STRUGGLE)
+               ||!(m->use_mode<MOVE_USE_MODE_INDIRECT||(!(q%2)&&m->use_mode==MOVE_USE_MODE_FOLLOW_UP)))return false;
+            for(int k=0;k<m->n_targets;k++)if(m->targets[k]<0||m->targets[k]>3)return false;
+        }
+    }
+    return !r.bad&&r.pos==r.n;
+}
+
+static bool get_all_history(const reader *body,const char *name,gc_mon *mons,int n,int *dropped)
+{
+    char key[48];snprintf(key,sizeof key,"%s_all_moves",name);
+    reader scan=*body;int sections=0;
+    while(scan.pos+8<=scan.n){uint32_t kind=take32(&scan),len=take32(&scan);if(len>scan.n-scan.pos)return false;if(kind==hash(key))sections++;scan.pos+=len;}
+    if(scan.bad||scan.pos!=scan.n||sections>1)return false;
+    if(!sections){for(int i=0;i<n;i++)pr_rebuild_all_history(&mons[i].b);return true;}
+    reader r=section(body,key),schema=r;int count=take16(&schema);unsigned seen=0;
+    if(schema.bad||count!=NF(history_all_fields))return false;
+    for(int i=0;i<count;i++){
+        uint32_t field=take32(&schema);uint16_t size=take16(&schema);int found=-1;
+        for(int j=0;j<NF(history_all_fields);j++)if(field==hash(history_all_fields[j].name)&&size==history_all_fields[j].size)found=j;
+        if(found<0||(seen&(1u<<found)))return false;
+        seen|=1u<<found;
+    }
+    if(schema.bad||get_block(&r,history_all_fields,NF(history_all_fields),&mons[0].b,sizeof(gc_mon),n,dropped)!=n)return false;
+    for(int i=0;i<n;i++){
+        pr_pokemon *p=&mons[i].b;
+        if(p->history_all_known>3||(p->history_all_present&~p->history_all_known)||((p->history_all_present&2)&&!(p->history_all_present&1)))return false;
+        /* Every cached TurnMove uses the same named schema as normal history. */
+        reader entries=r;int fields=take16(&entries);unsigned fields_seen=0;
+        if(fields!=NF(turn_move_fields))return false;
+        for(int k=0;k<fields;k++){
+            uint32_t field=take32(&entries);uint16_t size=take16(&entries);int found=-1;
+            for(int j=0;j<NF(turn_move_fields);j++)if(field==hash(turn_move_fields[j].name)&&size==turn_move_fields[j].size)found=j;
+            if(found<0||(fields_seen&(1u<<found)))return false;
+            fields_seen|=1u<<found;
+        }
+        if(entries.bad||get_block(&r,turn_move_fields,NF(turn_move_fields),&p->history_aim,sizeof(pr_turn_move),1,dropped)!=1)return false;
+        if(p->history_all_present&2){
+            const pr_turn_move *m=&p->history_aim;
+            if((m->move!=MOVE_ID_LOCK_ON&&m->move!=MOVE_ID_MIND_READER)
+               ||m->use_mode<1||m->use_mode>6||m->n_targets>4
+               ||(m->result>MOVE_RESULT_OTHER&&m->result!=PR_MOVE_RESULT_UNDEFINED)
+               ||!p->history_aim_serial||p->history_aim_serial>p->history_serial)return false;
+            for(int k=0;k<m->n_targets;k++)if(m->targets[k]<0||m->targets[k]>3)return false;
+        }
+    }
+    return !r.bad&&r.pos==r.n;
+}
+
+static bool get_protect_history(const reader *body,const char *name,gc_mon *mons,int n,int *dropped)
+{
+    char key[48];snprintf(key,sizeof key,"%s_protect",name);
+    reader scan=*body;int sections=0;
+    while(scan.pos+8<=scan.n){uint32_t kind=take32(&scan),len=take32(&scan);if(len>scan.n-scan.pos)return false;if(kind==hash(key))sections++;scan.pos+=len;}
+    if(scan.bad||scan.pos!=scan.n||sections>1)return false;
+    if(!sections){for(int i=0;i<n;i++)pr_rebuild_protect_history(&mons[i].b);return true;}
+    reader r=section(body,key),schema=r;int count=take16(&schema);unsigned seen=0;
+    if(schema.bad||count!=NF(protect_history_fields))return false;
+    for(int i=0;i<count;i++){
+        uint32_t field=take32(&schema);uint16_t size=take16(&schema);int found=-1;
+        for(int j=0;j<NF(protect_history_fields);j++)if(field==hash(protect_history_fields[j].name)&&size==protect_history_fields[j].size)found=j;
+        if(found<0||(seen&(1u<<found)))return false;
+        seen|=1u<<found;
+    }
+    if(schema.bad||get_block(&r,protect_history_fields,NF(protect_history_fields),&mons[0].b,sizeof(gc_mon),n,dropped)!=n||r.bad||r.pos!=r.n)return false;
+    for(int i=0;i<n;i++){uint8_t complete;memcpy(&complete,&mons[i].b.history_protect_complete,1);if(complete>1)return false;}
+    return true;
+}
+
 static bool get_mons(const reader *body, const char *name, gc_mon *mons, int n, int *dropped)
 {
     reader r = section(body, name);
@@ -674,7 +866,7 @@ static bool get_mons(const reader *body, const char *name, gc_mon *mons, int n, 
         }
         if (r.bad || !mon_ok(&mons[i])) return false;
     }
-    return !r.bad;
+    return !r.bad&&get_history_used(body,name,mons,n,dropped)&&get_nonvirtual_history(body,name,mons,n,dropped)&&get_protect_history(body,name,mons,n,dropped)&&get_all_history(body,name,mons,n,dropped);
 }
 
 static bool get_items(const reader *body, const char *name, gc_item *items, int n, int *dropped)
@@ -683,7 +875,29 @@ static bool get_items(const reader *body, const char *name, gc_item *items, int 
     memset(sv, 0, sizeof sv);
     reader r = section(body, name);
     if (r.bad) return n == 0;
-    if (get_block(&r, item_fields, NF(item_fields), sv, sizeof sv[0], n, dropped) != n) return false;
+    /* Optional named fields are independent: older saves imply factory
+     * Eviolite and active form items. Missing markers are supported schemas,
+     * not lost state; present markers require exact widths and uniqueness. */
+    reader schema=r;int fields=take16(&schema);bool class_marker=false, form_marker=false;
+    if(schema.bad||fields>128)return false;
+    for(int k=0;k<fields;k++){
+        uint32_t name_hash=take32(&schema);uint16_t size=take16(&schema);
+        if(name_hash==hash("eviolite_base")){
+            if(class_marker||size!=sizeof sv[0].eviolite_base)return false;
+            class_marker=true;
+        }
+        if(name_hash==hash("form_inactive")){
+            if(form_marker||size!=sizeof sv[0].form_inactive)return false;
+            form_marker=true;
+        }
+    }
+    sfield expected[NF(item_fields)];int required=0;
+    for(int k=0;k<NF(item_fields);k++){
+        if(!strcmp(item_fields[k].name,"eviolite_base")&&!class_marker)continue;
+        if(!strcmp(item_fields[k].name,"form_inactive")&&!form_marker)continue;
+        expected[required++]=item_fields[k];
+    }
+    if(schema.bad||get_block(&r, expected, required, sv, sizeof sv[0], n, dropped) != n)return false;
     for (int i = 0; i < n; i++) {
         sv[i].key[sizeof sv[i].key - 1] = 0;
         items[i].key = intern(sv[i].key);
@@ -696,9 +910,17 @@ static bool get_items(const reader *body, const char *name, gc_item *items, int 
         uint8_t lock;
         memcpy(&lock, &sv[i].non_transferable, sizeof lock);
         if (lock > 1) return false;
-        items[i].non_transferable = lock != 0;
+        items[i].non_transferable = lock != 0 || gc_item_key_locked(items[i].key);
+        uint8_t base_class;memcpy(&base_class,&sv[i].eviolite_base,sizeof base_class);
+        if(base_class>1||(base_class&&strcmp(items[i].key,"EVIOLITE")))return false;
+        items[i].eviolite_base=base_class!=0;
+        uint8_t inactive;memcpy(&inactive,&sv[i].form_inactive,sizeof inactive);
+        if(inactive>1||(inactive&&(!gc_item_key_form_change(items[i].key)||!pr_form_item_known(items[i].arg))))return false;
+        items[i].form_inactive=inactive!=0;
         /* ModifierData.toModifier reconstructs typeFunc(): cached tier is not saved. */
         items[i].type_tier = 0;
+        items[i].type_ref = 0;
+        items[i].loot_ref = 0;
         items[i].virtual_stack = 0; /* pinned ModifierData saves real stacks only */
     }
     return true;
@@ -753,7 +975,7 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
         || tr.bad || tr.pos!=tr.n || terminal.terminal_result<1 || terminal.terminal_result>2)) { *why="the terminal save is damaged";return false; }
     if (terminal.terminal_result && (v.in_battle || v.mode!=GAME_MODES_CLASSIC || (terminal.terminal_result==2&&(v.wave<200||v.has_challenges))||(terminal.terminal_result==1&&v.wave>200))) { *why="the terminal save is damaged";return false; }
     if ((!v.in_battle && !terminal.terminal_result) || v.wave < 1 || v.n_party < 1 || v.n_party > 6 || v.n_enemy < 1 || v.n_enemy > 6
-        || v.n_items < 0 || v.n_items > GC_MAX_ITEMS || v.n_enemy_items < 0 || v.n_enemy_items > GC_MAX_ITEMS
+        || v.n_items < 0 || v.n_items > PR_MAX_MODIFIERS || v.n_enemy_items < 0 || v.n_enemy_items > PR_MAX_MODIFIERS
         || v.n_mystery_history > GC_MAX_MYSTERY_HISTORY
         || v.seed_len > 64 || v.wave_seed_len > 64 || v.n_arena_tags < 0 || v.n_arena_tags > PR_MAX_ARENA_TAGS
         || v.n_pos_tags < 0 || v.n_pos_tags > PR_MAX_POSITIONAL_TAGS || v.biome < 0 || v.biome >= PR_BIOME_ID_LIMIT) {
@@ -804,6 +1026,13 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     run->in_battle = true;
     run->me_battle = v.me_battle;
     run->me_catch_allowed = v.me_catch_allowed;
+    sv_encounter encounter={0};reader encounter_reader=section(&body,"encounter");
+    if(!encounter_reader.bad){
+        if(get_block(&encounter_reader,encounter_fields,NF(encounter_fields),&encounter,sizeof encounter,1,&dropped)!=1||encounter.double_battle>1){
+            *why="the stored encounter width is damaged";return false;
+        }
+    }
+    run->double_battle=encounter.double_battle!=0;
     run->battle_type = v.battle_type;
     run->trainer_type = v.trainer_type;
     run->trainer_variant = v.trainer_variant;
@@ -865,6 +1094,17 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
             run->enemy[i].n_used_tms = 0;
             memset(run->enemy[i].used_tms, 0, sizeof run->enemy[i].used_tms);
         }
+    }
+
+    /* Older saves have no disguise section; retain their empty default without
+     * counting an optional extension as dropped legacy data. */
+    reader illusions=section(&body,"illusions");
+    if(!illusions.bad){
+        if(!illusion_schema_ok(illusions)||get_block(&illusions,illusion_fields,NF(illusion_fields),&run->party[0].b.illusion,sizeof(gc_mon),run->n_party,&dropped)!=run->n_party
+            ||!illusion_schema_ok(illusions)||get_block(&illusions,illusion_fields,NF(illusion_fields),&run->enemy[0].b.illusion,sizeof(gc_mon),run->n_enemy,&dropped)!=run->n_enemy
+            ||illusions.bad||illusions.pos!=illusions.n){*why="the stored disguises are damaged";return false;}
+        for(int side=0;side<2;side++)for(int k=0;k<(side?run->n_enemy:run->n_party);k++)
+            if(!illusion_ok(&(side?run->enemy:run->party)[k].b.illusion)){*why="the stored disguise is damaged";return false;}
     }
 
     /* the arena the battle keeps, then the battle as gc_battle_setup_field builds it with the lead
@@ -957,14 +1197,14 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
         ev = gc_ev_new(run, GC_EV_TRAINER);
         if (ev) { ev->a = run->trainer_type; ev->b = run->trainer_variant; }
     }
-    const int lead = run->party_order[0];
-    const bool lead_out = run->party[lead].b.on_field && run->party[lead].b.hp > 0;
     gc_battle_restore_field(run);
     bt->battle_rng = v.battle_rng;
     bt->battle_rng_live = v.battle_rng_live;
-    if (lead_out) {
-        ev = gc_ev_new(run, GC_EV_SUMMON);
-        if (ev) { ev->a = 0; ev->b = lead; ev->c = 0; }
+    for(int k=0;k<(run->double_battle?2:1)&&k<run->n_party;k++){
+        int idx=run->party_order[k];
+        if(run->party[idx].b.on_field&&run->party[idx].b.hp>0){
+            ev=gc_ev_new(run,GC_EV_SUMMON);if(ev){ev->a=0;ev->b=idx;ev->c=k;}
+        }
     }
     gc_ai_reset(run);
     gc_ai_enemy_party(run);
@@ -985,6 +1225,63 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     return true;
 }
 
+/* Football checkpoints reuse named Pokemon/item fields, without relaxing the
+ * classic battle save gate or reconstructing a Pokemon battle on load. */
+typedef struct { int32_t wave,trainer,secret,n_party,n_items; pr_rng rng; uint16_t seed[64],wave_seed[64],seed_len,wave_seed_len; } sv_football;
+static const sfield football_fields[]={SF(sv_football,wave),SF(sv_football,trainer),SF(sv_football,secret),
+    SF(sv_football,n_party),SF(sv_football,n_items),SF(sv_football,rng),SF(sv_football,seed),SF(sv_football,wave_seed),SF(sv_football,seed_len),SF(sv_football,wave_seed_len)};
+size_t gc_football_roster_save(const gc_run *run,void *buf,size_t cap)
+{
+    if (!run || !buf || cap<20 || !little_endian() || run->in_battle || run->n_party<1 || run->n_party>6 ||
+        run->n_items<0 || run->n_items>GC_MAX_ITEMS || run->screen.kind!=GC_SCREEN_NONE) return 0;
+    const gc_rqueue *q=&gc_int((gc_run *)run)->rq;
+    if (q->waiting || q->current.type!=RP_NONE || run->ev_count || run->ev_overflow) return 0;
+    for (int i=0;i<q->n_levels;++i) if (q->n[i]) return 0;
+    sv_football v={0};v.wave=run->wave;v.trainer=run->trainer_id;v.secret=run->secret_id;
+    v.n_party=run->n_party;v.n_items=run->n_items;v.rng=run->run.rng;
+    memcpy(v.seed,run->run.seed.u,sizeof v.seed);memcpy(v.wave_seed,run->run.wave_seed.u,sizeof v.wave_seed);
+    v.seed_len=(uint16_t)run->run.seed.len;v.wave_seed_len=(uint16_t)run->run.wave_seed.len;
+    writer w={(uint8_t *)buf,0,cap,false};
+    put(&w,"PRFBROST",8);put16(&w,1);put16(&w,GC_API_VERSION);put32(&w,0);put32(&w,0);
+    size_t section=section_start(&w,"football");
+    put_block(&w,football_fields,NF(football_fields),&v,sizeof v,1);section_end(&w,section);
+    put_mons(&w,"party",run->party,run->n_party);put_items(&w,"items",run->items,run->n_items);
+    if (w.full) return 0;
+    uint32_t length=(uint32_t)(w.n-20),crc=crc32(w.p+20,length);
+    memcpy(w.p+12,&length,4);memcpy(w.p+16,&crc,4);return w.n;
+}
+bool gc_football_roster_load(gc_run *run,gc_system *profile,const void *buf,size_t len)
+{
+    if (!run || !buf || !little_endian() || len<20 || len>GC_SAVE_MAX) return false;
+    const uint8_t *p=buf;uint16_t version,api;uint32_t length,crc;
+    memcpy(&version,p+8,2);memcpy(&api,p+10,2);memcpy(&length,p+12,4);memcpy(&crc,p+16,4);
+    if (memcmp(p,"PRFBROST",8) || version!=1 || api!=GC_API_VERSION || length!=len-20 || crc32(p+20,length)!=crc) return false;
+    reader body={p+20,length,0,false},r=section(&body,"football");sv_football v={0};int dropped=0;
+    if (r.bad || get_block(&r,football_fields,NF(football_fields),&v,sizeof v,1,&dropped)!=1 ||
+        r.bad || r.pos!=r.n || dropped || v.n_party<1 || v.n_party>6 || v.n_items<0 || v.n_items>GC_MAX_ITEMS ||
+        v.seed_len>64 || v.wave_seed_len>64 || v.wave<0 || v.wave>140 || !isfinite(v.rng.c) || !isfinite(v.rng.s0) || !isfinite(v.rng.s1) ||
+        !isfinite(v.rng.s2) || !isfinite(v.rng.n)) return false;
+    gc_football_new(run,profile,"football-resume",1);
+    run->wave=v.wave;run->trainer_id=v.trainer;run->secret_id=v.secret;run->run.rng=v.rng;
+    memcpy(run->run.seed.u,v.seed,sizeof v.seed);memcpy(run->run.wave_seed.u,v.wave_seed,sizeof v.wave_seed);
+    run->run.seed.len=v.seed_len;run->run.wave_seed.len=v.wave_seed_len;
+    run->n_party=v.n_party;run->n_items=v.n_items;
+    if (!get_mons(&body,"party",run->party,run->n_party,&dropped) ||
+        !get_items(&body,"items",run->items,run->n_items,&dropped) || dropped) return false;
+    for (int i=0;i<run->n_party;++i) {
+        if (!run->party[i].b.id) return false;
+        for (int j=0;j<i;++j) if (run->party[i].b.id==run->party[j].b.id) return false;
+        run->party_order[i]=(int8_t)i;run->bt.party[0][i]=&run->party[i].b;
+    }
+    for (int i=0;i<run->n_items;++i) {
+        const gc_item *it=&run->items[i];int slot=-1;
+        for(int j=0;j<run->n_party;++j)if(it->pokemon_id==run->party[j].b.id)slot=j;
+        if (slot<0 || it->stack!=1 || it->detached || strcmp(it->key,"FORM_CHANGE_ITEM") ||
+            !gc_football_mega_form(run,(unsigned)slot,it->arg)) return false;
+    }
+    run->bt.n_party[0]=run->n_party;run->screen.kind=GC_SCREEN_NONE;gc_items_to_battle(run);return true;
+}
+
 /* ---------------------------------------------------------------- system save/load */
 
 typedef struct { uint16_t species; gc_dex_entry entry; } sv_dex_entry;
@@ -999,6 +1296,8 @@ static const sfield starter_fields[] = {
     SF(sv_starter_entry, species), SF(sv_starter_entry, entry.ability_attr), SF(sv_starter_entry, entry.passive_attr),
     SF(sv_starter_entry, entry.value_reduction), SF(sv_starter_entry, entry.candy_count), SF(sv_starter_entry, entry.friendship),
     SF(sv_starter_entry, entry.egg_moves), SF(sv_starter_entry, entry.moveset), SF(sv_starter_entry, entry.classic_win_count),
+    SF(sv_starter_entry, entry.preference_flags), SF(sv_starter_entry, entry.nature_preference),
+    SF(sv_starter_entry, entry.appearance_preference), SF(sv_starter_entry, entry.ability_preference),
 };
 
 static const sfield unlock_fields[] = {
@@ -1101,7 +1400,7 @@ size_t gc_system_save(const gc_system *sys, void *buf, size_t cap)
     for (int i = 1; i <= GC_MAX_SPECIES_ID; i++) {
         const gc_starter_entry *st = &sys->starters[i];
         if (st->ability_attr || st->passive_attr || st->value_reduction || st->candy_count ||
-            st->friendship || st->egg_moves || st->classic_win_count ||
+            st->friendship || st->egg_moves || st->classic_win_count || st->preference_flags ||
             st->moveset[0] || st->moveset[1] || st->moveset[2] || st->moveset[3]) {
             n_starters++;
         }
@@ -1113,7 +1412,7 @@ size_t gc_system_save(const gc_system *sys, void *buf, size_t cap)
             for (int i = 1; i <= GC_MAX_SPECIES_ID; i++) {
                 const gc_starter_entry *st = &sys->starters[i];
                 if (st->ability_attr || st->passive_attr || st->value_reduction || st->candy_count ||
-                    st->friendship || st->egg_moves || st->classic_win_count ||
+                    st->friendship || st->egg_moves || st->classic_win_count || st->preference_flags ||
                     st->moveset[0] || st->moveset[1] || st->moveset[2] || st->moveset[3]) {
                     st_buf[k].species = (uint16_t)i;
                     st_buf[k].entry = *st;
@@ -1217,6 +1516,10 @@ bool gc_system_load(gc_system *sys, const void *buf, size_t len, const char **wh
             for (int i = 0; i < count; i++) {
                 uint16_t sp = st_buf[i].species;
                 if (sp > 0 && sp <= GC_MAX_SPECIES_ID) {
+                    const gc_starter_entry *p=&st_buf[i].entry;
+                    if (p->preference_flags>7 || p->nature_preference>24 || p->appearance_preference>3 || p->ability_preference>2) {
+                        free(st_buf); *why="invalid starter preferences"; return false;
+                    }
                     sys->starters[sp] = st_buf[i].entry;
                 }
             }

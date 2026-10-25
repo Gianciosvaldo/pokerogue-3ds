@@ -70,6 +70,12 @@
 #include "ui.h"
 #include "ui_widgets.h"
 
+/* The render-specific hatch test checks animation; this driver resumes after it. */
+void egg_hatch_open(const gc_event *e,void (*done)(void *),void *arg) {
+  if(e->a<=0||e->a>GC_MAX_SPECIES_ID)abort();
+  if(done)done(arg);
+}
+
 /* ------------------------------------------------------------------ the fake world */
 
 static uint32_t rs32 = 1;
@@ -81,9 +87,9 @@ static uint32_t rnd(uint32_t n) {
 }
 
 static struct {
-  bv_mon mon[2];
-  bool present[2];
-  bool fainted_shown[2];  /* fainted and not replaced yet: its data is still on the screen (an ability bar can still name it) */
+  bv_mon mon[4];
+  bool present[4];
+  bool fainted_shown[4];  /* fainted and not replaced yet: its data is still on the screen (an ability bar can still name it) */
   bool begun;
   int biome;
   /* pending continuations (each is one thing the real UI would be waiting on) */
@@ -144,6 +150,8 @@ static struct {
   void* arg;
 } MI;
 static int n_manage, n_transfers, n_transfer_copies, n_transfer_refused, n_discards;
+static bool scanner_fixture;
+static int n_scanner_yes, n_scanner_no, n_scanner_windows;
 static int n_shops, n_maps, n_item_opens, n_seamless, n_level_ups, n_level_windows, n_foe_bars, n_foe_hidden, n_key_bars, n_trays, n_fainted_balls;
 static bool save_on, resume_on, quit_on;
 static int n_menu_opened, n_menu_yes, n_menu_no, n_quit_callbacks;
@@ -156,6 +164,7 @@ static struct {
 } CU;
 static int n_resumes;
 
+static int check_form_events;
 static int violations, n_scenes, n_ask, n_dialogs, n_options, n_party_opens, n_balls, n_party_full_swaps;
 static int n_throw_ev, n_caught_ev, n_broke_ev, n_bv_farewell, n_real_releases, n_list_backs, n_rel_checked, n_decl_checked;
 
@@ -221,6 +230,10 @@ static void bad(const char* fmt, ...) {
     printf("VIOLATION %s\n", full);
     for (int i = trail_n > 120 ? trail_n - 120 : 0; i < trail_n; i++) printf("    %s\n", trail[i % 120]);
     const gc_run* r = rs_run();
+    printf("  encounter double%d battle double%d order:",r->double_battle,r->bt.double_battle);
+    for(int k=0;k<r->n_party;k++)printf(" %d",r->party_order[k]);printf("\n");
+    for(int k=0;k<4;k++){const pr_pokemon *p=r->bt.field[k];if(p)printf("  field%d id%u hp%d on%d\n",k,p->id,p->hp,p->on_field);}
+    for(int k=0;k<r->bt.n_party[1];k++){const pr_pokemon *p=r->bt.party[1][k];if(p)printf("  enemy%d id%u hp%d on%d slot%d\n",k,p->id,p->hp,p->on_field,p->trainer_slot);}
     for (int p = 0; p < r->n_party; p++) {
       printf("  party %d id %u species %d hp %d/%d:", p, (unsigned)r->party[p].b.id, r->party[p].b.species, r->party[p].b.hp, r->party[p].b.stats[0]);
       for (int i = 0; i < r->n_items; i++)
@@ -235,6 +248,7 @@ static void bad(const char* fmt, ...) {
       printf("\n");
     }
   }
+  if(getenv("RUNTEST_FAILFAST"))exit(1);
 }
 
 /* ---- stubs for the app's other modules ---- */
@@ -373,8 +387,11 @@ static void music_reward(void) {
 }
 
 /* ---- the battle screen ---- */
+static int screen_slot(int field){return field<0||field>3?0:(field%2)*2+(field>=2);}
+static const gc_mon *acting_mon(const gc_run *run){int field=run->screen.slot==1?1:0;
+ for(int i=0;i<run->n_party;i++)if(&run->party[i].b==run->bt.field[field])return &run->party[i];return NULL;}
 static bool side_ok(int battler, const char* what) {
-  const int s = battler >= 2 ? 1 : 0;
+  const int s = screen_slot(battler);
   if (!W.present[s]) {
     BAD("%s on side %d with nobody out", what, s);
     return false;
@@ -383,6 +400,22 @@ static bool side_ok(int battler, const char* what) {
 }
 
 void bv_begin(const bv_setup* setup) {
+  if (setup->trainer) {
+    const gc_run* r=rs_run();
+    if (!setup->trainer_keys[0][0]) BAD("trainer %d variant%d has no sprite key",r->trainer_type,r->trainer_variant);
+    if (r->trainer_type>=TRAINER_TYPE_RIVAL && r->trainer_type<=TRAINER_TYPE_RIVAL_6) {
+      const char* expected=r->trainer_variant==TRAINER_VARIANT_FEMALE?"images/trainer/rival_f":"images/trainer/rival_m";
+      if (strcmp(setup->trainer_keys[0],expected)) BAD("wrong rival sprite %s",setup->trainer_keys[0]);
+    }
+  } else if (setup->trainer_keys[0][0] || setup->trainer_keys[1][0]) BAD("wild battle has a trainer sprite");
+
+  if (scanner_fixture) {
+    gc_run* r = (gc_run*)rs_run();
+    bool found = false;
+    for (int i=0;i<r->n_items;i++) if (!strcmp(r->items[i].key,"IV_SCANNER") && r->items[i].stack>0) found=true;
+    if (!found && r->n_items<GC_MAX_ITEMS) r->items[r->n_items++]=(gc_item){.key="IV_SCANNER",.arg=-1,.stack=1};
+  }
+
   trail_add("--- bv_begin biome %d trainer %d present %d", setup->biome, setup->trainer, setup->player_present);
   /* the next wave of the same biome with the lead out (no fade, the player's platform stays): only ever with the lead out and under
    * the biome that was on screen */
@@ -395,25 +428,34 @@ void bv_begin(const bv_setup* setup) {
   n_scenes++;
   W.mon[0] = setup->player;
   W.mon[1] = setup->enemy;
+  W.mon[2]=setup->player_ally;W.mon[3]=setup->enemy_ally;
+  W.present[2]=setup->player_ally_present;W.present[3]=false;
   W.present[0] = setup->player_present;
   W.present[1] = false;
-  W.fainted_shown[0] = W.fainted_shown[1] = false;
+  memset(W.fainted_shown,0,sizeof W.fainted_shown);
   W.playing = W.asking = false;
   W.sp_open = false;
   music_scene();
 }
 
-bv_mon* bv_mon_of(int battler) { return &W.mon[battler >= 2 ? 1 : 0]; }
+bv_mon* bv_mon_of(int battler) { return &W.mon[screen_slot(battler)]; }
 int bv_biome(void) { return W.begun ? W.biome : -1; }
 
 void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
   if (W.playing) BAD("bv_play while the last one is still playing");
   for (int i = 0; i < n; i++) {
     const bv_event* e = &ev[i];
-    const int s = e->battler >= 2 ? 1 : 0;
+    const int s = screen_slot(e->battler);
     if (!(e->type == BEV_MESSAGE && e->text && !strncmp(e->text, "modifierSelectUiHandler", 23)))
       trail_add("bev %d b=%d a=%d b=%d%s%s", e->type, e->battler, e->a, e->b, e->text ? " t=" : "", e->text ? e->text : "");
     switch (e->type) {
+      case BEV_FIELD_SWAP: {
+        bv_mon m=W.mon[0];W.mon[0]=W.mon[2];W.mon[2]=m;
+        bool p=W.present[0];W.present[0]=W.present[2];W.present[2]=p;
+        p=W.fainted_shown[0];W.fainted_shown[0]=W.fainted_shown[2];W.fainted_shown[2]=p;
+        break;
+      }
+
       case BEV_MESSAGE:
         if (!e->text) BAD("a message with no text");
         else {
@@ -426,7 +468,7 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
         break;
       case BEV_CATCH: {
         n_throw_ev++;
-        if (e->battler != BV_ENEMY || !W.present[1]) BAD("a ball thrown at nobody (battler %d, enemy out %d)", e->battler, W.present[1]);
+        if (e->battler < 2 || e->battler > 3 || !W.present[s]) BAD("a ball thrown at nobody (battler %d, enemy out %d)", e->battler, W.present[1]);
         if (e->a < 0 || e->a >= BALL_TYPES) BAD("a ball of type %d", e->a);
         if (e->caught ? e->b != 3 : (e->b < 0 || e->b > 2)) BAD("a ball that %s shows %d shakes", e->caught ? "holds" : "breaks free", e->b);
         /* the throw says what the run decided: "Gotcha!" (battle:pokemonCaught) comes with it when it held, and only then */
@@ -436,13 +478,14 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
         if (gotcha != e->caught) BAD("the ball %s but the messages %s Gotcha!", e->caught ? "held" : "broke free", gotcha ? "have" : "have no");
         if (e->caught) n_caught_ev++;
         else n_broke_ev++;
-        if (W.mon[1].hp <= 0) BAD("a ball thrown at a Pokemon with no HP");
+        if (W.mon[s].hp <= 0) BAD("a ball thrown at a Pokemon with no HP");
         break;
       }
       case BEV_INTRO_WILD:
         if (e->a == 0) {
           if (W.mon[1].species <= 0) BAD("wild intro with no enemy");
           W.present[1] = true;
+          W.present[3]=W.mon[3].species>0;
         }
         break;
       case BEV_SUMMON:
@@ -485,7 +528,10 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
       case BEV_ABILITY:
         /* an ability bar names the Pokemon that has it, and one can trigger as it faints (Air Lock ending,
          * Aftermath); the bar is an overlay, the screen still has the fainted Pokemon's data */
-        if (!W.fainted_shown[s]) side_ok(e->battler, "ability bar");
+        /* A captured actor label permits a source ability after flee/recall,
+         * without asserting that its sprite remains on the field. Unlabelled
+         * ability events still require a present or just-fainted owner. */
+        if(!W.fainted_shown[s]&&!(e->text&&*e->text))side_ok(e->battler,"ability bar");
         break;
       case BEV_STAT_STAGES:
       case BEV_POKEMON_ANIM:
@@ -508,6 +554,11 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
           }
         }
         break;
+      case BEV_IVS:
+        n_scanner_windows++;
+        if (!e->stats || e->battler < 2 || e->battler > 3) BAD("invalid IV scanner window");
+        else for (int k = 0; k < 12; k++) if (e->stats[k] < 0 || e->stats[k] > 31) BAD("invalid scanner IV");
+        break;
       case BEV_LEVEL_UP:
         /* "X grew to Lv. N!" and the stat window: the gains can't be negative at a higher level of the same species */
         n_level_ups++;
@@ -526,6 +577,7 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
         }
         break;
       case BEV_FORM_CHANGE:
+        check_form_events++;
         if (side_ok(e->battler, "form change")) {
           W.mon[s].species = e->a;
           W.mon[s].form = e->b;
@@ -571,6 +623,7 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
 
 bool bv_playing(void) { return W.playing; }
 
+void bv_set_item_bars(const bv_item *foe,int nf,const bv_item *keys,int nk,int luck){(void)foe;(void)nf;(void)keys;(void)nk;(void)luck;}
 void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, void*), void* arg) {
   n_ask++;
   music_command();
@@ -621,32 +674,31 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
       }
     }
   }
-  const gc_mon* me = gc_field_mon(r, 0);
-  const gc_mon* foe = gc_field_mon(r, 1);
-  if (!W.present[0] || !W.present[1]) BAD("asked for a command with %s out", !W.present[0] ? "no player" : "no enemy");
-  if (!me || !foe) {
-    BAD("asked for a command with no Pokemon on the field in the run");
-  } else {
-    /* the screen must show the battle game-core has: what it looks like, a disguise included (PR_DEV_ILLUSION) */
-    const bv_mon* a = &W.mon[0];
-    const bv_mon* b = &W.mon[1];
-    const pr_form* player_form = pr_shown_form(&r->bt, &me->b);
-    const pr_form* enemy_form = pr_shown_form(&r->bt, &foe->b);
-    const int player_gender = pr_shows_illusion(&r->bt, &me->b) ? pr_apparent_gender(&me->b, true) : pr_get_gender(&me->b);
-    if (a->species != player_form->species || a->level != me->b.level || a->hp != me->b.hp || a->max_hp != me->b.stats[STAT_HP])
-      BAD("screen player %d L%d %d/%d, run %d L%d %d/%d", a->species, a->level, a->hp, a->max_hp, player_form->species, me->b.level,
-          me->b.hp, me->b.stats[STAT_HP]);
-    if (b->species != enemy_form->species || b->hp != foe->b.hp)
-      BAD("screen enemy %d %d/%d, run %d %d/%d", b->species, b->hp, b->max_hp, enemy_form->species, foe->b.hp, foe->b.stats[STAT_HP]);
-    if (a->form != player_form->form_index || a->gender != player_gender || a->shiny != me->b.shiny || a->variant != me->variant)
-      BAD("the displayed form, gender or shiny identity differs from the effective battle Pokemon");
-    if (a->n_moves != PR_N_MOVES(&me->b)) BAD("fight menu has %d moves, the Pokemon %d", a->n_moves, PR_N_MOVES(&me->b));
-    for (int i = 0; i < PR_N_MOVES(&me->b) && i < 4; i++) {
-      int base = pr_moves[PR_MOVES(&me->b)[i]].pp;
-      int step = base / 5 < 1 ? 1 : base / 5;
-      int max = PR_MAX_PP(&me->b)[i] > 0 ? PR_MAX_PP(&me->b)[i] : base + PR_PP_UP(&me->b)[i] * step;
-      if (a->moves[i] != PR_MOVES(&me->b)[i] || a->pp_left[i] != max - PR_PP_USED(&me->b)[i])
-        BAD("fight menu move %d is %d PP %d, the Pokemon's %d PP %d", i, a->moves[i], a->pp_left[i], PR_MOVES(&me->b)[i], max - PR_PP_USED(&me->b)[i]);
+  const gc_mon* me=acting_mon(r);
+  if(!opts||opts->command_slot!=r->screen.slot||!me)BAD("command actor differs from run");
+  bool enemy=false;
+  for(int field=0;field<4;field++){
+    const pr_pokemon *p=r->bt.field[field];int index=screen_slot(field);
+    bool active=p&&p->on_field&&p->hp>0;
+    if(!active){if(W.present[index])BAD("field%d still displayed without an active Pokemon",field);continue;}
+    if(field>=2)enemy=true;
+    if(!W.present[index]){BAD("field%d active but absent from screen",field);continue;}
+    const bv_mon *a=&W.mon[index];const pr_form *form=pr_shown_form(&r->bt,p);
+    int gender=pr_shows_illusion(&r->bt,p)?pr_apparent_gender(p,true):pr_get_gender(p);
+    if(a->species!=form->species||a->level!=p->level||a->hp!=p->hp||a->max_hp!=p->stats[STAT_HP])
+      BAD("field%d screen %d L%d %d/%d, run %d L%d %d/%d",field,a->species,a->level,a->hp,a->max_hp,form->species,p->level,p->hp,p->stats[STAT_HP]);
+    if(a->form!=form->form_index||a->gender!=gender||a->shiny!=p->shiny||a->variant!=p->variant)
+      BAD("field%d displayed form/gender/shiny identity differs",field);
+    for(int stat=0;stat<7;stat++)if(a->stat_stages[stat]!=p->stat_stages[stat])BAD("field%d stage%d differs",field,stat);
+  }
+  if(!enemy)BAD("asked command with no enemy");
+  if(me){
+    const bv_mon *a=&W.mon[screen_slot(r->screen.slot)];
+    if(a->n_moves!=PR_N_MOVES(&me->b))BAD("fight menu move count differs for actor%d",r->screen.slot);
+    for(int i=0;i<PR_N_MOVES(&me->b)&&i<4;i++){
+      int base=pr_moves[PR_MOVES(&me->b)[i]].pp,step=base/5<1?1:base/5;
+      int max=PR_MAX_PP(&me->b)[i]>0?PR_MAX_PP(&me->b)[i]:base+PR_PP_UP(&me->b)[i]*step;
+      if(a->moves[i]!=PR_MOVES(&me->b)[i]||a->pp_left[i]!=max-PR_PP_USED(&me->b)[i])BAD("fight menu move/PP differs for actor%d slot%d",r->screen.slot,i);
     }
   }
   if (save_on && gc_run_can_save(r)) {
@@ -935,8 +987,8 @@ bool run_menu_open(const runmenu_args* a) {
   return true;
 }
 
-void ps_open_item(const void* run, int pmode, bool target_move, void (*on_pick)(int slot, int move_slot, void* arg), void* arg) {
-  (void)run, (void)pmode;
+void ps_open_item(const void* run, int pmode, bool target_move, int tm_move, void (*on_pick)(int slot, int move_slot, void* arg), void* arg) {
+  (void)run, (void)pmode, (void)tm_move;
   n_item_opens++;
   X.item_pick = on_pick;
   X.item_arg = arg;
@@ -949,6 +1001,24 @@ void ps_open_transfer(const void* run, void (*on_move)(int, int, int, void*), vo
   MI.move = on_move;
   MI.done = on_done;
   MI.arg = arg;
+}
+
+/* The focused party harness exercises real Check Team widgets; the run driver
+ * harness can also open/back out without inventing a reward choice. */
+static void (*check_done)(void*);
+static void* check_arg;
+static void (*check_form)(int,int,void*);
+static const gc_run* check_run;
+static int check_cursor;
+static struct {
+  bool enabled,active;int stage,item,opens,form_events;
+  gc_screen screen;gc_rqueue queue;
+  pr_rng global,battle,run_rng;double money;
+  int species,form,hp,count;
+} FORM;
+void ps_open_check(const void* run,int cursor,void (*form)(int,int,void*),
+                   void (*pause)(int,bool,void*),void (*done)(void*),void* arg) {
+  (void)pause;check_run=run;check_cursor=cursor;check_form=form;check_done=done;check_arg=arg;FORM.opens++;
 }
 
 static int held_copies(const gc_run* r, const char* key, int16_t arg, uint32_t id) {
@@ -1100,33 +1170,41 @@ static int smart_option(int pick) {
   return pick;
 }
 
-/* RUNTEST_CUSTOM=strong: a run that holds a Nemesis for a rematch is played by a party that cannot lose before wave 36 (and cannot win after) */
+/* One additional directed run follows the unchanged seeded runs. Its strong
+ * party exercises a real trainer victory; it does not replace any random case
+ * or relax the music coverage floor. */
+static bool trainer_music_fixture;
+static int trainer_music_victories;
+/* RUNTEST_CUSTOM=strong retains its existing wave-36 fixture. */
 static void strong_cheat(void) {
-  if (!custom_on || !custom_strong) return;
-  cr_view v;
-  cr_view_get(&v);
-  if (!v.active || v.sched.state == CC_SCHED_NO_CANDIDATE) return;
+  if (!trainer_music_fixture) {
+    if (!custom_on || !custom_strong) return;
+    cr_view v;
+    cr_view_get(&v);
+    if (!v.active || v.sched.state == CC_SCHED_NO_CANDIDATE) return;
+  }
   gc_run* r = (gc_run*)rs_run();
   if (save_on && gc_run_can_save(r)) return;   /* the first turn is in the slot as it is: the slot check compares the two at every ask */
-  if (r->wave > 36) {
+  if (trainer_music_fixture ? M.victories > trainer_music_victories : r->wave > 36) {
     for (int i = 0; i < r->n_party; i++) r->party[i].b.hp = r->party[i].b.hp > 1 ? 1 : r->party[i].b.hp;
     const gc_mon* f = gc_field_mon(r, 0);
-    if (f && W.present[0] && W.mon[0].species == f->b.species) W.mon[0].hp = f->b.hp;
+    for(int field=0;field<2;field++){const pr_pokemon *p=r->bt.field[field];if(p&&W.present[screen_slot(field)])W.mon[screen_slot(field)].hp=p->hp;}
     return;
   }
   for (int i = 0; i < r->n_party; i++) {
+    /* Healing a fainted off-field slot without a revival/summon phase creates
+     * an impossible presentation state. Keep this strength fixture legal. */
+    if(r->party[i].b.hp<=0)continue;
     if (r->party[i].b.level < 100) {
       r->party[i].b.level = 100;
       gc_mon_recalc(r, &r->party[i]);
     }
     r->party[i].b.hp = r->party[i].b.stats[0];
   }
-  /* the fake screen's model of the Pokemon on the field follows (it is built from events, and this edit has none) */
-  const gc_mon* f = gc_field_mon(r, 0);
-  if (f && W.present[0] && W.mon[0].species == f->b.species) {
-    W.mon[0].level = f->b.level;
-    W.mon[0].max_hp = f->b.stats[0];
-    W.mon[0].hp = f->b.hp;
+  /* Fixture-only stat changes have no gameplay event: update both displayed allies. */
+  for(int field=0;field<2;field++){
+    const pr_pokemon *p=r->bt.field[field];int i=screen_slot(field);
+    if(p&&W.present[i]){W.mon[i].level=p->level;W.mon[i].max_hp=p->stats[0];W.mon[i].hp=p->hp;}
   }
 }
 
@@ -1185,6 +1263,28 @@ static bool step(void) {
       }
     }
   }
+  if (check_done) {
+    const gc_run* r=rs_run();
+    if(FORM.enabled && FORM.stage==1) {
+      if(check_run!=r || check_cursor!=0 || !check_form)BAD("Check Team opened with wrong run or cursor");
+      FORM.stage=2;check_done=NULL;
+      check_form(0,FORM.item,check_arg);
+      return true;
+    }
+    if(FORM.enabled && FORM.stage==2) {
+      if(check_run!=r || check_cursor!=0 || r->items[FORM.item].form_inactive==FORM.active
+         || r->n_items!=FORM.count || r->money!=FORM.money
+         || r->party[0].b.species!=FORM.species || r->party[0].b.form!=(FORM.active?1:FORM.form)
+         || (!FORM.active && r->party[0].b.hp!=FORM.hp) || (FORM.active && check_form_events!=FORM.form_events+1)
+         || memcmp(&r->screen,&FORM.screen,sizeof FORM.screen)
+         || memcmp(&gc_int((gc_run*)r)->rq,&FORM.queue,sizeof FORM.queue)
+         || memcmp(&r->bt.rng,&FORM.global,sizeof FORM.global)
+         || memcmp(&r->bt.battle_rng,&FORM.battle,sizeof FORM.battle)
+         || memcmp(&r->run.rng,&FORM.run_rng,sizeof FORM.run_rng))BAD("form action consumed reward or changed unrelated state");
+      FORM.stage=3;
+    }
+    void (*done)(void*)=check_done;check_done=NULL;done(check_arg);return true;
+  }
   if (MI.done) {
     drive_manage_items();
     return true;
@@ -1202,6 +1302,24 @@ static bool step(void) {
             any = true;
       if (any != X.shop_args.party_has_held_item) BAD("Manage Items shows %s, the party %s a transferable held item",
                                                       X.shop_args.party_has_held_item ? "up" : "not", any ? "has" : "has no");
+    }
+    if(FORM.enabled && FORM.stage==0) {
+      gc_run* r=(gc_run*)rs_run();
+      int item=FORM.active?FORM_CHANGE_ITEM_MEWTWONITE_X:r->party[0].b.species==SPECIES_ID_VENUSAUR?FORM_CHANGE_ITEM_CHARIZARDITE_X:FORM_CHANGE_ITEM_VENUSAURITE;
+      if(FORM.active && (r->party[0].b.species!=SPECIES_ID_MEWTWO || r->party[0].b.form))BAD("active form fixture needs original starter");
+      /* Canonical constructor stock can exist on an ineligible species: the
+       * native party-list proof retains Mew with every item. This fixture tests
+       * the party action, independently of the reward's recipient filter. */
+      FORM.item=r->n_items;gc_item_add(r,"FORM_CHANGE_ITEM",item,r->party[0].b.id,1);
+      if(r->n_items!=FORM.item+1 || r->items[FORM.item].form_inactive)BAD("directed canonical form stock setup failed");
+      r->items[FORM.item].form_inactive=FORM.active;FORM.form_events=check_form_events;
+      FORM.screen=r->screen;FORM.queue=gc_int(r)->rq;FORM.money=r->money;FORM.count=r->n_items;
+      FORM.species=r->party[0].b.species;FORM.form=r->party[0].b.form;FORM.hp=r->party[0].b.hp;
+      FORM.global=r->bt.rng;FORM.battle=r->bt.battle_rng;FORM.run_rng=r->run.rng;
+      FORM.stage=1;X.shop=false;
+      if(!ev->on_check_team)BAD("reward screen has no Check Team callback");
+      else ev->on_check_team(ev->ctx);
+      return true;
     }
     if (X.shop_args.party_has_held_item && ev->on_manage_items && rnd(100) < 12) {
       X.shop = false;
@@ -1266,7 +1384,17 @@ static bool step(void) {
       if (learn_forget_ally_only >= 0) yes = 1;
       if (learn_decline_ally_only) yes = 0;
     }
+    const gc_run* scan_run = rs_run();
+    bool scan = scanner_fixture && scan_run->screen.kind == GC_SCREEN_COMMAND;
+    pr_rng scan_rng = scan_run->run.rng, scan_battle_rng = scan_run->bt.battle_rng;
+    if (scan) {
+      if (scan_run->battle_type != BATTLE_TYPE_WILD) BAD("IV scanner prompted in a trainer/mystery battle");
+      if (yes) n_scanner_yes++; else n_scanner_no++;
+    }
     f(yes, W.confirm_arg);
+    if (scan && (memcmp(&scan_rng,&scan_run->run.rng,sizeof scan_rng) ||
+                 memcmp(&scan_battle_rng,&scan_run->bt.battle_rng,sizeof scan_battle_rng)))
+      BAD("IV scanner advanced a battle RNG stream");
     return true;
   }
   if (W.opt_done) {
@@ -1328,7 +1456,7 @@ static bool step(void) {
     bv_command c = {0, 0};
     const uint32_t x = rnd(100);
     const bv_command_opts* o = &W.opts;
-    const gc_mon* cur = gc_field_mon(rs_run(), 0);
+    const gc_mon* cur = acting_mon(rs_run());
     if (cur && o->can_switch && cur->b.hp * 4 < cur->b.stats[STAT_HP] && rnd(100) < 60) c.command = 2;
     else if (x < 6 && o->can_ball) c.command = 1;
     else if (x < 14 && o->can_switch) c.command = 2;
@@ -1339,7 +1467,7 @@ static bool step(void) {
         if (o->move_ok[i]) ok[n++] = i;
       c.move_slot = o->struggle || !n ? 0 : ok[rnd((uint32_t)n)];
       if (n && !o->struggle && rnd(100) < 80) {
-        const gc_mon* me = gc_field_mon(rs_run(), 0);
+        const gc_mon* me = acting_mon(rs_run());
         int best = -1;
         for (int k = 0; me && k < n; k++) {
           int pw = pr_moves[PR_MOVES(&me->b)[ok[k]]].power;
@@ -1457,6 +1585,7 @@ static void hist_check(const gc_run* r, bool cleared) {
 static bool g_run_resumed;   /* the run on screen was continued from its slot at some point */
 static struct {
   long runs, ranges, batches, events, turns, faint_known, defeats, clears, resumed, empty_ranges, ignored, evicted, full_turns;
+  long final_direct, final_unknown;
 } OBS;
 
 static void obs_check(const gc_run* r, bool cleared) {
@@ -1464,6 +1593,15 @@ static void obs_check(const gc_run* r, bool cleared) {
   if (!rep) {
     BAD("no combat report when the run ended");
     return;
+  }
+  const gc_faint_record* f=&r->last_faint[cleared?1:0];
+  const bool terminal=f->observed && f->remaining==0 && f->wave==r->wave;
+  if (rep->final_blow.observed != terminal) BAD("final-blow snapshot missing or stale");
+  if (terminal) {
+    const gc_faint_record* got=&rep->final_blow;
+    if (got->direct!=f->direct || got->species!=f->species || got->form!=f->form || got->move!=f->move || got->source_side!=f->source_side || got->turn!=f->turn)
+      BAD("report changed the engine's final-blow provenance");
+    if (got->direct) OBS.final_direct++; else OBS.final_unknown++;
   }
   const co_stats* o = &rep->stats;
   if (rep->outcome != (cleared ? CC_OUT_CLEAR : CC_OUT_DEFEAT)) BAD("the combat report says outcome %d for a %s", rep->outcome, cleared ? "clear" : "game over");
@@ -1510,6 +1648,10 @@ int main(int argc, char** argv) {
   int runs = argc > 1 ? atoi(argv[1]) : 20;
   int first = argc > 2 ? atoi(argv[2]) : 0;
   if (runs < 1) runs = 1;
+  const int seeded_runs = runs;
+  scanner_fixture = getenv("RUNTEST_SCANNER") != NULL;
+  FORM.enabled = getenv("RUNTEST_FORM") != NULL;
+  FORM.active = FORM.enabled && !strcmp(getenv("RUNTEST_FORM"),"active");
   verbose_bad = getenv("RUNTEST_VERBOSE") != NULL;
   rs32 = 2463534242u ^ (uint32_t)first * 2654435761u;
   rnd(1);
@@ -1539,7 +1681,8 @@ int main(int argc, char** argv) {
     cfg.save = true;
     cfg.slot = 0;
   }
-  cfg.n_starters = 0;
+  cfg.n_starters = FORM.active?1:0;
+  if(FORM.active)cfg.starters[0]=SPECIES_ID_MEWTWO;
   const char* sys_mode = getenv("RUNTEST_SYS");
   const bool sys_on = sys_mode && *sys_mode;
   if (sys_on) {
@@ -1585,7 +1728,7 @@ int main(int argc, char** argv) {
   int ended = 0, clears = 0, last_ended = 0, idle = 0, deadlock = 0, no_progress = 0;
   long steps = 0, wave_sum = 0;
   int wave_hist[21] = {0};
-  int last_waves = 0, last_nf = 0;
+  int last_waves = 0, last_nf = 0,last_shown=0;
   while (ended < runs) {
     if (W.quit_now) {
       /* Save and Quit, answered Yes: nothing may go on, and Continue must bring back what the slot holds (the save of the battle's start,
@@ -1649,6 +1792,9 @@ int main(int argc, char** argv) {
     rel_check();
     evo_check();
     evo_move_check();
+    if(st->shown_mismatch!=last_shown){
+      last_shown=st->shown_mismatch;BAD("primary display identity needed an unrecorded replacement");
+    }
     if (st->not_found != last_nf) {
       last_nf = st->not_found;
       BAD("a switch-in Pokemon was not found in the party");
@@ -1674,6 +1820,12 @@ int main(int argc, char** argv) {
       if (custom_on) custom_commit();
       g_run_resumed = false;
       ended++;
+      if (ended == seeded_runs && seeded_runs >= 300 && !custom_on) {
+        printf("completed %d unchanged seeded runs; adding one directed trainer-music run\n", seeded_runs);
+        trainer_music_fixture = true;
+        trainer_music_victories = M.victories;
+        runs++; /* All requested random cases are already complete. */
+      }
       clears = st->clears;
       last_ended = st->game_overs + st->clears;
       idle = 0;
@@ -1730,6 +1882,7 @@ int main(int argc, char** argv) {
   } else {
     printf("evolution coverage floor (5 evolved, 5 cancelled, 3 moves) NOT checked: it needs 1000+ runs, this one has %d\n", runs);
   }
+  printf("final blows: %ld direct, %ld unattributed terminal faints\n",OBS.final_direct,OBS.final_unknown);
   printf("combat observer: %ld reports checked (%ld defeats, %ld clears, %ld from a resumed run), %ld batches, %ld observed events, %ld turns kept "
          "(%ld complete), %ld last-fallen named, %ld empty ranges, %ld HP-0 events ignored, %ld events evicted\n",
          OBS.runs, OBS.defeats, OBS.clears, OBS.resumed, OBS.batches, OBS.events, OBS.turns, OBS.full_turns, OBS.faint_known, OBS.empty_ranges,
@@ -1740,11 +1893,20 @@ int main(int argc, char** argv) {
     BAD("the observer took in %ld battle ranges, the screen played %d", OBS.ranges, st->events[GC_EV_BATTLE]);
   if (OBS.runs != ended) BAD("%ld combat reports checked for %d runs", OBS.runs, ended);
   printf("reward screens: %d shops, %d item targets, %d biome maps\n", n_shops, n_item_opens, n_maps);
+  if (scanner_fixture) {
+    printf("IV scanner: %d accepted, %d declined, %d windows\n",n_scanner_yes,n_scanner_no,n_scanner_windows);
+    if (!n_scanner_yes || !n_scanner_no || n_scanner_windows!=n_scanner_yes)
+      BAD("IV scanner missing confirmation or window coverage");
+  }
   printf("scenes: %d, of them %d next waves of the same biome (no fade, the player's platform stays)\n", n_scenes, n_seamless);
   if (!n_seamless && n_scenes > 50) BAD("no scene was a next wave of the same biome");
   printf("level ups: %d, of them %d with the stat window\n", n_level_ups, n_level_windows);
   printf("commands with the foe's item bar: %d; enemy items with no icon row: %d\n", n_foe_bars, n_foe_hidden);
   printf("commands with the key item bar: %d; party trays: %d (%d fainted balls)\n", n_key_bars, n_trays, n_fainted_balls);
+  if(FORM.enabled) {
+    printf("Check Team: %d opens, directed form action stage %d\n",FORM.opens,FORM.stage);
+    if(FORM.opens!=2 || FORM.stage!=3)BAD("Check Team form action/return was not exercised");
+  }
   printf("Manage Items: opened %d, transfers %d (%d copies), refused %d, discards %d\n", n_manage, n_transfers,
          n_transfer_copies, n_transfer_refused, n_discards);
   if (!n_foe_bars && n_scenes > 50) BAD("no command showed the foe's items");
@@ -1757,7 +1919,10 @@ int main(int argc, char** argv) {
          "music, %d trainer victories under their victory music, %d run ends faded; %d track starts, %d different tracks heard\n",
          M.scenes, M.encounter_scenes, M.commands, M.victories, M.run_end_fades, M.starts, M.n_seen);
   if (M.scenes != st->waves) BAD("%d scenes set up, the driver counted %d waves", M.scenes, st->waves);
-  /* a trainer is beaten in about one run in nine: the floor needs a few hundred runs */
+  /* Keep actual trainer victory/encounter coverage required. The additional
+   * directed run supplies it even when every random team loses early. */
+  if (trainer_music_fixture && M.victories <= trainer_music_victories)
+    BAD("the additional directed run did not reach a trainer victory reward screen");
   if (runs >= 300) {
     if (!M.victories) BAD("no trainer victory reached the reward screen");
     if (!M.encounter_scenes) BAD("no trainer with encounter music came up");

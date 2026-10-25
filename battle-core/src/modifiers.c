@@ -13,6 +13,12 @@
 #include <string.h>
 
 const uint8_t pr_mod_parent[PR_MOD_COUNT_] = {
+    [PR_MOD_EVO_TRACKER] = PR_MOD_HELD_ITEM,
+    [PR_MOD_FORM_CHANGE_ITEM] = PR_MOD_HELD_ITEM,
+    [PR_MOD_EXP_BOOSTER] = PR_MOD_HELD_ITEM,
+    [PR_MOD_FRIENDSHIP_BOOSTER] = PR_MOD_HELD_ITEM,
+    [PR_MOD_SWITCH_EFFECT_TRANSFER] = PR_MOD_HELD_ITEM,
+    [PR_MOD_CONTACT_HELD_TRANSFER] = PR_MOD_HELD_ITEM,
     [PR_MOD_TURN_HELD_TRANSFER] = PR_MOD_HELD_ITEM,
     [PR_MOD_NONE] = PR_MOD_NONE,
     [PR_MOD_PERSISTENT] = PR_MOD_NONE,
@@ -57,6 +63,12 @@ const uint8_t pr_mod_parent[PR_MOD_COUNT_] = {
 };
 
 const char *const pr_mod_class_name[PR_MOD_COUNT_] = {
+    [PR_MOD_EVO_TRACKER] = "EvoTrackerModifier",
+    [PR_MOD_FORM_CHANGE_ITEM] = "PokemonFormChangeItemModifier",
+    [PR_MOD_EXP_BOOSTER] = "PokemonExpBoosterModifier",
+    [PR_MOD_FRIENDSHIP_BOOSTER] = "PokemonFriendshipBoosterModifier",
+    [PR_MOD_SWITCH_EFFECT_TRANSFER] = "SwitchEffectTransferModifier",
+    [PR_MOD_CONTACT_HELD_TRANSFER] = "ContactHeldItemTransferChanceModifier",
     [PR_MOD_TURN_HELD_TRANSFER] = "TurnHeldItemTransferModifier",
     [PR_MOD_NONE] = "",
     [PR_MOD_PERSISTENT] = "PersistentModifier",
@@ -117,7 +129,22 @@ bool pr_mod_is(const pr_modifier *m, int cls)
 bool pr_mod_is_ported_item(const pr_modifier *m)
 {
     if (!m) return false;
+    if (m->cls == PR_MOD_CONTACT_HELD_TRANSFER)
+        return !m->unknown_subclass && m->mult==0.1 && m->stack_count>=1
+            && m->virtual_stack_count>=0 && (int64_t)m->stack_count+m->virtual_stack_count<=5;
+    if (m->cls == PR_MOD_SWITCH_EFFECT_TRANSFER) return !m->unknown_subclass && m->stack_count==1 && m->virtual_stack_count==0;
     if (m->cls == PR_MOD_TURN_HELD_TRANSFER) return !m->unknown_subclass && m->stack_count==1 && m->virtual_stack_count==0;
+    if (m->cls == PR_MOD_FORM_CHANGE_ITEM)
+        return !m->unknown_subclass && !m->is_transferable && m->pokemon_id >= 0
+            && m->stack_count == 1 && m->virtual_stack_count == 0 && pr_form_item_known(m->num);
+    if (m->cls == PR_MOD_EVO_TRACKER)
+        return !m->unknown_subclass && !m->is_transferable && m->n_species == 1
+            && m->species[0] == SPECIES_ID_GIMMIGHOUL && m->num == 10
+            && m->stack_count >= 1 && m->virtual_stack_count >= 0
+            && (int64_t)m->stack_count + m->virtual_stack_count <= 999;
+    if (m->cls == PR_MOD_INCREMENTING_STAT)
+        return !m->unknown_subclass && !m->is_transferable && m->pokemon_id >= 0 && m->stack_count >= 1
+            && m->virtual_stack_count >= 0 && (int64_t)m->stack_count + m->virtual_stack_count <= 50;
     if (m->cls == PR_MOD_BASE_STAT_TOTAL)
         return !m->unknown_subclass && m->pokemon_id >= 0 && m->stack_count >= 1 && m->stack_count <= 2
             && m->virtual_stack_count == 0 && (m->num == 10 || m->num == -15);
@@ -152,13 +179,19 @@ bool pr_mod_is_ported_item(const pr_modifier *m)
         if (m->cls == PR_MOD_TEMP_CRIT_BOOSTER) return m->stat==0;
         return m->stat>=STAT_ATK && m->stat<=STAT_ACC && m->mult==(m->stat==STAT_ACC?1.0:0.2);
     }
+    if(m->cls==PR_MOD_EXP_BOOSTER||m->cls==PR_MOD_FRIENDSHIP_BOOSTER){
+        int64_t stacks=(int64_t)m->stack_count+m->virtual_stack_count;
+        return !m->unknown_subclass && m->stack_count>=1 && m->virtual_stack_count>=0
+            && stacks<=(m->cls==PR_MOD_EXP_BOOSTER?99:3)
+            && (m->cls==PR_MOD_FRIENDSHIP_BOOSTER || m->mult==0.4 || m->mult==1.0);
+    }
     if (m->cls == PR_MOD_FIELD_EFFECT) {
         int64_t stacks=(int64_t)m->stack_count+m->virtual_stack_count;
         return !m->unknown_subclass && m->stack_count>=1 && m->virtual_stack_count>=0 && stacks<=2;
     }
-    if (m->cls == PR_MOD_EVOLUTION_STAT_BOOSTER || m->cls == PR_MOD_SPECIES_STAT_BOOSTER) {
+    if (m->cls == PR_MOD_STAT_BOOSTER || m->cls == PR_MOD_EVOLUTION_STAT_BOOSTER || m->cls == PR_MOD_SPECIES_STAT_BOOSTER) {
         if (m->unknown_subclass || m->stack_count != 1 || m->virtual_stack_count != 0) return false;
-        if (m->cls == PR_MOD_EVOLUTION_STAT_BOOSTER)
+        if (m->cls == PR_MOD_STAT_BOOSTER || m->cls == PR_MOD_EVOLUTION_STAT_BOOSTER)
             return m->mult == 1.5 && m->stats_mask == ((1u << STAT_DEF) | (1u << STAT_SPDEF)) && m->n_species == 0;
         if (m->mult != 2) return false;
         if (m->n_species == 1 && m->species[0] == SPECIES_ID_PIKACHU)
@@ -435,12 +468,22 @@ void pr_apply_enemy_endure_modifiers(pr_battle *bt, pr_engine *e, pr_pokemon *ta
     }
 }
 
-/* Pokemon.isMax(): Gigantamax / Eternamax forms (fusion form keys not ported) */
+static const pr_species *held_species(int id)
+{
+    int lo=0,hi=PR_SPECIES_COUNT-1;
+    while(lo<=hi){int mid=(lo+hi)/2;if(pr_species_table[mid].id==id)return &pr_species_table[mid];if(pr_species_table[mid].id<id)lo=mid+1;else hi=mid-1;}
+    return NULL;
+}
+static bool max_key(const char *k)
+{
+    return !strcmp(k,"gigantamax")||!strcmp(k,"gigantamax-rapid")||!strcmp(k,"gigantamax-single")||!strcmp(k,"eternamax");
+}
+/* Pokemon.isMax(): either component's original form key. */
 static bool is_max(const pr_pokemon *p)
 {
-    const char *k = pr_pokemon_base_form(p)->form_key;
-    return !strcmp(k, "gigantamax") || !strcmp(k, "gigantamax-rapid") || !strcmp(k, "gigantamax-single")
-           || !strcmp(k, "eternamax");
+    if(max_key(pr_pokemon_base_form(p)->form_key))return true;
+    const pr_species *fusion=p->fusion_species?held_species(p->fusion_species):NULL;
+    return fusion&&p->fusion_form<fusion->nforms&&max_key(pr_forms[fusion->form0+p->fusion_form].form_key);
 }
 
 static bool species_listed(const pr_modifier *m, int species)
@@ -569,9 +612,9 @@ void pr_refresh_berry_modifiers(pr_battle *bt, int side)
     for (int i = 0; i < bt->n_mods[side]; i++) {
         pr_modifier m = bt->mods[side][i];
         if (pr_mod_is(&m, PR_MOD_HELD_ITEM) && !pr_pokemon_by_id(bt, m.pokemon_id)) continue;
-        if (!pr_mod_is_ported_item(&m)) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
         m.virtual_stack_count = 0;
         if (m.stack_count == 0) continue;
+        if (!pr_mod_is_ported_item(&m)) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
         bt->mods[side][w++] = m;
     }
     bt->n_mods[side] = w;
@@ -755,15 +798,17 @@ void pr_apply_stat_booster_modifiers(pr_battle *bt, const pr_pokemon *p, int sta
     EACH_MOD(m, bt, p->is_player, PR_MOD_STAT_BOOSTER) {
         if (!held_applies(m, p) || !((m->stats_mask >> stat) & 1)) continue;
         switch (m->cls) {
-        case PR_MOD_EVOLUTION_STAT_BOOSTER:
-            /* Eviolite: not on a Max form, and only while the species can still evolve
-             * (the half boost for fusions comes with fusions) */
+        case PR_MOD_EVOLUTION_STAT_BOOSTER: {
             if (is_max(p)) continue;
-            if (pr_pokemon_species(p)->has_evolutions) *value *= m->mult;
+            bool unevolved=pr_pokemon_species(p)->has_evolutions;
+            const pr_species *fusion=p->fusion_species?held_species(p->fusion_species):NULL;
+            if(p->fusion_species&&!fusion){pr_note_unported(bt,PR_FEAT_MODIFIERS);continue;}
+            if(fusion&&fusion->has_evolutions!=unevolved)*value*=1+(m->mult-1)/2;
+            else if(unevolved)*value*=m->mult;
             break;
+        }
         case PR_MOD_SPECIES_STAT_BOOSTER:
-            /* getSpeciesForm(true).speciesId, or the fusion's (not ported) */
-            if (!species_listed(m, p->species)) continue;
+            if (!species_listed(m,p->species)&&!(p->fusion_species&&species_listed(m,p->fusion_species)))continue;
             *value *= m->mult;
             break;
         default:
@@ -789,10 +834,11 @@ static void apply_crit_booster_modifiers(pr_battle *bt, const pr_pokemon *src, i
     pr_modifier *m;
     EACH_MOD(m, bt, src->is_player, PR_MOD_CRIT_BOOSTER) {
         if (!held_applies(m, src)) continue;
-        if (bounded && (!pr_mod_is_ported_item(m) || (m->cls == PR_MOD_SPECIES_CRIT_BOOSTER && src->fusion_species))) {
+        if (bounded && !pr_mod_is_ported_item(m)) {
             pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS); continue;
         }
-        if (m->cls == PR_MOD_SPECIES_CRIT_BOOSTER && !species_listed(m, src->species)) continue;
+        if (m->cls==PR_MOD_SPECIES_CRIT_BOOSTER&&!species_listed(m,src->species)
+            &&!(src->fusion_species&&species_listed(m,src->fusion_species)))continue;
         *stage += m->num;
     }
 }

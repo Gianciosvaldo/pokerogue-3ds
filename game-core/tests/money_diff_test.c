@@ -10,6 +10,7 @@
 static FILE *fp;
 static int lineno, failures;
 static gc_run run;
+static pr_pokemon command_sentinel;
 static gc_system sys, before_sys;
 static char line[4096];
 static void bad(const char *s) { fprintf(stderr,"invalid money trace line %d: %s\n",lineno,s); exit(2); }
@@ -87,7 +88,16 @@ int main(int argc,char **argv) {
    gc_offer offer={.key=names[which],.arg=0,.target=GC_TARGET_NONE,.cost=cost,.is_purchase=cost>=0};const char *why=NULL;
    bool got;
    if(path==0)got=gc_port_apply_reward(&run,&offer,-1,-1,&why);
-   else {reward_screen(offer);gc_choice pick={cost<0?GC_CH_REWARD:GC_CH_SHOP,0,-1,-1};got=gc_run_choose(&run,&pick,&why);}
+   else {
+    /* Native SelectModifierPhase.shiftPhase is intercepted by the producer.
+     * Our synthetic RP_COMMAND only stops the controller at that boundary.
+     * A separate living sentinel keeps a fainted source party member intact:
+     * all 54 captured fields, including HP zero, are still compared below.
+     * This does not claim a native battle-command continuation comparison. */
+    command_sentinel=*run.bt.field[0];if(command_sentinel.hp<=0)command_sentinel.hp=1;
+    run.bt.field[0]=&command_sentinel;
+    reward_screen(offer);gc_choice pick={cost<0?GC_CH_REWARD:GC_CH_SHOP,0,-1,-1};got=gc_run_choose(&run,&pick,&why);
+   }
    double balance=path==0?money+a[2]:a[5];
    bool same=got&&run.n_items==no&&run.stubs[GC_STUB_REWARD_APPLY]==0&&run.money==balance;
    if(path==1&&run.screen.kind!=(cost<0?GC_SCREEN_COMMAND:GC_SCREEN_REWARD))same=false;

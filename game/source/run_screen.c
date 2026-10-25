@@ -1,6 +1,7 @@
 /* The app's run driver (see run_screen.h). */
 #include "run_screen.h"
 #include "run_exp.h"
+#include "egg_hatch_screen.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -8,6 +9,7 @@
 #include "ball_menu.h"
 #include "bgm.h"
 #include "gm_enum_names.h"
+#include "trainer_art.h"
 #include "pr_data.h"
 #include "battle_anim.h"
 #include "battle_events.h"
@@ -42,6 +44,9 @@ static struct {
   gc_run run;
   rs_config cfg;
   rs_stats st;
+  int scan_wave, scan_next, scan_target;
+  bool scan_enabled;
+  int scan_stats[12];
   uint64_t rng;                 /* the stand-in team's */
   /* the events of the current drain, handled one by one (lazily: the screen must have played the
    * earlier ones before a later one is converted) */
@@ -49,12 +54,18 @@ static struct {
   bool skip[GC_MAX_EVENTS];
   int nq, qi;
   bool swap_prompt;             /* the drain has "swap or release" for a caught Pokemon */
+  bool return_to_check;
+  int check_cursor;
   bool release_drop;            /* the next drain follows a release picked on the party screen, which said goodbye itself */
   int ball;                     /* PokeballType of the ball the player just threw (the turn's first events start with its throw), -1 none */
   bool learn_drop;              /* the next drain starts with the learn dialog's own messages */
   bool swap_replaced;           /* a caught Pokemon replaced the one on the field: the screen must show the new one */
   /* what the battle screen shows */
-  bool present[2];              /* a Pokemon of each side is out */
+  bool present[4];              /* a Pokemon of each side is out */
+  int shown_ally;
+  int target_values[4],target_count,ball_target;
+  char target_labels[4][96];
+  const char *target_options[4];
   int shown;                    /* party index of the player's Pokemon on screen, -1 none */
   bool fade_done;               /* a fade is already at black (a new run): the next wave doesn't fade again */
   bool next_encounter;          /* this wave is the next one of the same biome: no fade, the enemy side slides in over the old one */
@@ -78,8 +89,13 @@ static struct {
   bool have_defeat;
 } G = {.shown = -1, .ball = -1};
 
+static int displayed_slot(int field){return (field%2)*2+(field>=2);}
+static int shown_battler(int party){if(G.shown==party&&G.present[0])return 0;if(G.shown_ally==party&&G.present[2])return 1;return -1;}
+static const gc_mon* command_mon(void){int field=G.run.screen.slot==1?1:0;const pr_pokemon *p=G.run.bt.field[field];
+  for(int i=0;i<G.run.n_party;i++)if(&G.run.party[i].b==p)return &G.run.party[i];return NULL;}
 static void pump(void* arg);
 static void screen_step(void);
+static void refresh_item_bars(void);
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -88,14 +104,15 @@ static void screen_step(void);
 static void reset_driver(void) {
   if (G.step_timer) ui_timer_cancel(G.step_timer);
   G.step_timer = 0;
-  G.present[0] = G.present[1] = false;
-  G.shown = -1;
+  memset(G.present,0,sizeof G.present);
+  G.shown = G.shown_ally = -1;
   G.fade_done = false;
   G.wave_ev = 0;
   G.drain_no = 0;
   G.nq = G.qi = 0;
   G.n_ev = G.ev_pos = G.n_txt = 0;
   G.swap_prompt = G.learn_drop = G.swap_replaced = G.release_drop = false;
+  G.return_to_check = false;
   G.ball = -1;
   G.refused_in_row = 0;
   G.save_due = G.save_failed_told = false;
@@ -165,6 +182,8 @@ static const char* pretty_key(const char* key, char* out, int n) {
 /* game-core's reason for a refusal: an i18n key ("partyUiHandler:noEnergy") or a plain sentence */
 static const char* why_text(const char* why, char* out, int n) {
   if (!why) why = "";
+  const pr_msg *message=gc_run_refusal_message(&G.run);
+  if(message && !strcmp(message->key,why)){be_format_message(message,out,(size_t)n);return out;}
   if (strchr(why, ':') && !strchr(why, ' ')) {
     char name[48] = "";
     if (G.run.n_party > 0) snprintf(name, sizeof name, "%s", i18n_species_name(G.run.party[0].b.species));
@@ -222,7 +241,7 @@ static void put_msg(const char* text, bool prompt) {
 static bool put_gc_msg(const pr_msg* m) {
   if (!m->key) return false; /* text not ported in battle-core: nothing to show */
   char* t = txt_new();
-  pr_msg_format(m, be_text_source(), t, TXT_LEN);
+  be_format_message(m,t,TXT_LEN);
   if (!t[0]) return false;
   bv_event* e = ev_new();
   if (!e) return false;
@@ -331,6 +350,7 @@ static bool settled_after(int i) {
 static bv_mon make_mon(const gc_mon* m, bool player) {
   bv_mon out;
   be_mon(&G.run.bt, &m->b, &out);
+  out.pokeball = m->pokeball;
   if (player) out.exp_ratio = (float)gc_exp_level_fraction(m);
   return out;
 }
@@ -354,6 +374,7 @@ static void wave_black(void* arg) {
   const bool loaded = G.resume_wave;
   G.resume_wave = false;
   img_drop_prefix("images/pokemon/");
+  img_drop_prefix("images/trainer/");
   if (!G.next_encounter) img_drop_prefix("images/arenas/"); /* the same biome's platforms are still on screen, sliding out */
   ba_drop_moves();
   preload_moves();
@@ -364,17 +385,34 @@ static void wave_black(void* arg) {
   memset(&s, 0, sizeof s);
   s.biome = w->b;
   s.trainer = trainer;
-  if (G.present[0] && G.shown >= 0) {
+  if (trainer) for (int k=0;k<2;k++) {
+    const char* key=gm_trainer_sprite_key(G.run.trainer_type,G.run.trainer_variant,k);
+    if (key && *key) snprintf(s.trainer_keys[k],sizeof s.trainer_keys[k],"images/trainer/%s",key);
+  }
+  /* When only the old right ally survives, the next encounter promotes it to
+   * the lead. Carry its already-visible sprite into slot 0 rather than duplicating
+   * it or waiting for a SummonPhase that native correctly does not run. */
+  int primary=pidx_of(G.run.bt.field[0]);
+  if(G.present[2]&&G.shown_ally>=0&&G.shown_ally==primary&&(!G.present[0]||G.shown!=primary)){
+    s.player=*bv_mon_of(1);s.player_present=true;s.next_encounter=G.next_encounter;
+    G.shown=G.shown_ally;G.present[0]=true;G.present[2]=false;G.shown_ally=-1;
+  }else if (G.present[0] && G.shown >= 0) {
     s.player = *bv_mon_of(BV_PLAYER);
     s.player_present = true;
     s.next_encounter = G.next_encounter;
   } else if (G.run.n_party > 0) {
     s.player = make_mon(&G.run.party[G.run.party_order[0]], true);
   }
-  if (!trainer && !mystery && !offer && G.run.n_enemy > 0) s.enemy = make_mon(&G.run.enemy[0], false);
+  if (!trainer && !mystery && !offer && G.run.n_enemy > 0 && (!loaded||(G.run.bt.field[2]&&G.run.bt.field[2]->on_field&&G.run.bt.field[2]->hp>0))) s.enemy = make_mon(&G.run.enemy[0], false);
+  s.doubles=G.run.double_battle;
+  if(G.run.double_battle&&G.present[2]&&G.shown_ally>=0){s.player_ally=*bv_mon_of(1);s.player_ally_present=true;}
+  if(!trainer&&!mystery&&!offer&&G.run.double_battle&&G.run.n_enemy>1&&(!loaded||(G.run.bt.field[3]&&G.run.bt.field[3]->on_field&&G.run.bt.field[3]->hp>0)))s.enemy_ally=make_mon(&G.run.enemy[1],false);
   bv_begin(&s);
+  refresh_item_bars();
   G.present[0] = s.player_present;
   G.present[1] = !trainer && !mystery && !offer && s.enemy.species > 0;
+  G.present[2]=s.player_ally_present;G.present[3]=s.enemy_ally.species>0;
+  if(!G.present[2])G.shown_ally=-1;
   if (!G.present[0]) G.shown = -1;
 
   /* the intro: arenas slide in, then the encounter's message */
@@ -388,7 +426,7 @@ static void wave_black(void* arg) {
     /* the first game-core message after the wave is the encounter text ("X would like to battle!") */
     for (int j = G.wave_ev + 1; j < G.nq && j <= G.wave_ev + 5; j++) {
       if (G.q[j].kind == GC_EV_MESSAGE && !G.skip[j]) {
-        if (G.q[j].msg.key) pr_msg_format(&G.q[j].msg, be_text_source(), t, TXT_LEN);
+        if (G.q[j].msg.key) be_format_message(&G.q[j].msg,t,TXT_LEN);
         G.skip[j] = true;
         break;
       }
@@ -398,7 +436,7 @@ static void wave_black(void* arg) {
     if (mystery && !t[0]) snprintf(t, TXT_LEN, "A strange encounter!");
   } else {
     for (int j = G.wave_ev + 1; j < G.nq && j <= G.wave_ev + 5; j++)
-      if (G.q[j].kind == GC_EV_MESSAGE && msg_is(&G.q[j], "battle:singleWildAppeared")) {
+      if (G.q[j].kind == GC_EV_MESSAGE && (msg_is(&G.q[j], "battle:singleWildAppeared")||msg_is(&G.q[j],"battle:doubleWildAppeared"))) {
         G.skip[j] = true; /* the intro shows it */
         break;
       }
@@ -426,7 +464,7 @@ static void begin_wave(int i) {
 
 /* The Pokemon on the field, synced into the screen's copy: moves and PP (the fight menu reads them there),
  * name and level */
-static void sync_shown(void) {
+static void sync_primary_shown(void) {
   const gc_mon* me = gc_field_mon(&G.run, 0);
   bv_mon* shown = bv_mon_of(BV_PLAYER);
   if (!me || !G.present[0]) return;
@@ -444,22 +482,36 @@ static void sync_shown(void) {
     shown->moves[i] = m.moves[i];
     shown->pp_left[i] = m.pp_left[i];
     shown->pp_max[i] = m.pp_max[i];
+    shown->move_power[i]=m.move_power[i];
   }
   snprintf(shown->name, sizeof shown->name, "%s", m.name);
   shown->n_types = m.n_types;
   for (int i = 0; i < 3; i++) shown->types[i] = m.types[i];
 }
 
+static void sync_shown(void){
+  sync_primary_shown();
+  for(int k=0;k<4;k++)if(G.run.bt.field[k]&&G.present[displayed_slot(k)])
+    memcpy(bv_mon_of(k)->stat_stages,G.run.bt.field[k]->stat_stages,sizeof bv_mon_of(k)->stat_stages);
+  const gc_mon *m=NULL;for(int i=0;i<G.run.n_party;i++)if(&G.run.party[i].b==G.run.bt.field[1])m=&G.run.party[i];
+  if(m&&G.present[2]){bv_mon live=make_mon(m,true),*shown=bv_mon_of(1);shown->level=live.level;shown->n_moves=live.n_moves;
+    memcpy(shown->moves,live.moves,sizeof shown->moves);memcpy(shown->pp_left,live.pp_left,sizeof shown->pp_left);memcpy(shown->pp_max,live.pp_max,sizeof shown->pp_max);memcpy(shown->move_power,live.move_power,sizeof shown->move_power);
+    memcpy(shown->stat_stages,live.stat_stages,sizeof shown->stat_stages);shown->n_types=live.n_types;memcpy(shown->types,live.types,sizeof shown->types);}
+}
+
 /* Converts and starts the events of one game-core event. True when something is playing (the driver
  * goes on when it ends), false to go straight on to the next event. */
 static bool handle_event(int i) {
   const gc_event* e = &G.q[i];
-  G.st.events[e->kind & 15]++;
+  if(e->kind<GC_EV_COUNT)G.st.events[e->kind]++;
   G.n_ev = G.ev_pos = G.n_txt = 0;
   switch (e->kind) {
+    case GC_EV_EGG_HATCH:
+      egg_hatch_open(e,pump,NULL);
+      return true;
     case GC_EV_MESSAGE:
       if (msg_is(e, "battle:trainerDefeated")) bgm_on_trainer_defeated(&G.run); /* TrainerVictoryPhase.start */
-      put_gc_msg(&e->msg);
+      if (put_gc_msg(&e->msg) && e->prompt) G.ev[G.n_ev - 1].prompt = true;
       break;
 
     case GC_EV_WAVE:
@@ -473,13 +525,15 @@ static bool handle_event(int i) {
       v.mon[1] = *bv_mon_of(BV_ENEMY);
       v.present[0] = G.present[0];
       v.present[1] = G.present[1];
+      v.mon[2]=*bv_mon_of(1);v.mon[3]=*bv_mon_of(3);
+      v.present[2]=G.present[2];v.present[3]=G.present[3];
       v.exp_ratio = exp_ratio_cb;
       v.level_of = level_of_cb;
       const pr_pokemon* enemy_ptr[6];
       for (int k = 0; k < G.run.n_enemy && k < 6; k++) enemy_ptr[k] = &G.run.enemy[k].b;
       v.enemy_party = enemy_ptr;
       v.n_enemy_party = G.run.n_enemy < 6 ? G.run.n_enemy : 6;
-      if (G.ball >= 0 && G.present[1]) {
+      if (G.ball >= 0 && (G.present[1]||G.present[3])) {
         /* the ball is thrown first in the turn (commands other than FIGHT go first). Whether it holds is the run's: battle-core
          * shows "Gotcha!" only for a catch. How many shakes a ball that breaks free made is not in the events (see
          * BREAK_FREE_SHAKES) */
@@ -489,7 +543,7 @@ static bool handle_event(int i) {
           if (be->type == PR_EV_TEXT && be->msg.key && !strcmp(be->msg.key, "battle:pokemonCaught")) caught = true;
         }
         bv_event* t = ev_new();
-        *t = (bv_event){.type = BEV_CATCH, .battler = BV_ENEMY, .a = G.ball, .b = caught ? 3 : BREAK_FREE_SHAKES, .caught = caught};
+        *t = (bv_event){.type = BEV_CATCH, .battler = G.ball_target, .a = G.ball, .b = caught ? 3 : BREAK_FREE_SHAKES, .caught = caught};
         G.st.throws++;
         if (caught) G.st.catches++;
       }
@@ -497,6 +551,7 @@ static bool handle_event(int i) {
       G.n_ev += be_convert_events(&G.run.bt, &G.run.battle_events[e->a], e->b, settled_after(i), &v, G.ev + G.n_ev, EV_CAP - G.n_ev);
       G.present[0] = v.present[0];
       G.present[1] = v.present[1];
+      G.present[2]=v.present[2];G.present[3]=v.present[3];
       /* a trainer sends out its first Pokemon (battle-core's start of the battle): Battle.started, and the encounter music gives way to the
        * battle music. Here, before the events play: upstream's doSummon plays the music, then the send-out. */
       for (int k = 0; k < G.n_ev; k++)
@@ -505,37 +560,23 @@ static bool handle_event(int i) {
           break;
         }
       if (v.sent[0]) G.shown = pidx_of(v.sent[0]);
+      if(v.sent[2])G.shown_ally=pidx_of(v.sent[2]);
       G.st.not_found += v.not_found;
       break;
     }
 
     case GC_EV_SUMMON:
     case GC_EV_RECALL: {
-      const int side = e->a;
-      const bool recall = e->kind == GC_EV_RECALL;
-      if (side == 0) {
-        if (recall) {
-          if (G.present[0]) {
-            *ev_new() = (bv_event){.type = BEV_WITHDRAW, .battler = BV_PLAYER};
-            G.present[0] = false;
-            G.shown = -1;
-          }
-          break;
-        }
-        if (G.present[0] && G.shown == e->b) break;
-        if (G.present[0]) {
-          *ev_new() = (bv_event){.type = BEV_WITHDRAW, .battler = BV_PLAYER};
-          G.present[0] = false;
-        }
-      } else {
-        if (recall) {
-          if (G.present[1]) {
-            *ev_new() = (bv_event){.type = BEV_WITHDRAW, .battler = BV_ENEMY};
-            G.present[1] = false;
-          }
-          break;
-        }
-        if (G.present[1]) break; /* the wild encounter's intro already has it out */
+      const int side=e->a,field=side*2+(e->c==1?1:0),index=displayed_slot(field);
+      int *shown=field==1?&G.shown_ally:&G.shown;
+      const bool recall=e->kind==GC_EV_RECALL;
+      if(recall){
+        if(G.present[index]){*ev_new()=(bv_event){.type=BEV_WITHDRAW,.battler=field};G.present[index]=false;if(!side)*shown=-1;}
+        break;
+      }
+      if(G.present[index]){
+        if(side||*shown==e->b)break;
+        *ev_new()=(bv_event){.type=BEV_WITHDRAW,.battler=field};G.present[index]=false;
       }
       static bv_mon sent;
       const gc_mon* m = side == 0 ? &G.run.party[e->b] : &G.run.enemy[e->b];
@@ -544,49 +585,50 @@ static bool handle_event(int i) {
       char* text = NULL;
       if (i + 1 < G.nq && (msg_is(&G.q[i + 1], "battle:playerGo") || msg_is(&G.q[i + 1], "battle:trainerSendOut"))) {
         text = txt_new();
-        pr_msg_format(&G.q[i + 1].msg, be_text_source(), text, TXT_LEN);
+        be_format_message(&G.q[i+1].msg,text,TXT_LEN);
         G.skip[i + 1] = true;
       }
       if (side == 1 && text) put_msg(text, false);
-      *ev_new() = (bv_event){.type = BEV_SUMMON, .battler = side ? BV_ENEMY : BV_PLAYER, .mon = &sent, .text = side ? NULL : text};
-      G.present[side] = true;
-      if (side == 0) G.shown = e->b;
+      *ev_new() = (bv_event){.type = BEV_SUMMON, .battler = field, .mon = &sent, .text = side ? NULL : text};
+      G.present[index] = true;
+      if (side == 0) *shown = e->b;
       break;
     }
 
     case GC_EV_HP: {
-      if (e->a != 0 || e->b != G.shown || !G.present[0]) break;
-      bv_mon* sh = bv_mon_of(BV_PLAYER);
+      int field=shown_battler(e->b);if(e->a!=0||field<0)break;
+      bv_mon* sh = bv_mon_of(field);
       /* a Vitamin or a Mint changes the maximum HP and game-core only says the new HP: the bar's maximum follows the Pokemon */
       const int max_hp = G.run.party[e->b].b.stats[STAT_HP];
       if (max_hp > 0 && max_hp != sh->max_hp) {
-        *ev_new() = (bv_event){.type = BEV_MAX_HP, .battler = BV_PLAYER, .a = max_hp};
+        *ev_new() = (bv_event){.type = BEV_MAX_HP, .battler = field, .a = max_hp};
         sh->max_hp = max_hp;
       }
       if (e->c > sh->hp)
-        *ev_new() = (bv_event){.type = BEV_HEAL, .battler = BV_PLAYER, .a = e->c};
+        *ev_new() = (bv_event){.type = BEV_HEAL, .battler = field, .a = e->c};
       else if (e->c < sh->hp)
-        *ev_new() = (bv_event){.type = BEV_DAMAGE, .battler = BV_PLAYER, .a = e->c, .b = HIT_RESULT_INDIRECT};
+        *ev_new() = (bv_event){.type = BEV_DAMAGE, .battler = field, .a = e->c, .b = HIT_RESULT_INDIRECT};
       break;
     }
 
     case GC_EV_EXP: {
-      if (e->a != G.shown || !G.present[0]) break;
+      int field=shown_battler(e->a);if(field<0)break;
       /* a level up follows: its event runs the bar to full and starts the next level */
       if (i + 1 < G.nq && G.q[i + 1].kind == GC_EV_LEVEL_UP && G.q[i + 1].a == e->a) break;
-      *ev_new() = (bv_event){.type = BEV_EXP, .battler = BV_PLAYER, .a = (int)(gc_exp_level_fraction(&G.run.party[e->a]) * 1000)};
+      *ev_new() = (bv_event){.type = BEV_EXP, .battler = field, .a = (int)(gc_exp_level_fraction(&G.run.party[e->a]) * 1000)};
       break;
     }
 
     case GC_EV_LEVEL_UP: {
       if (e->a < 0 || e->a >= G.run.n_party) break;
-      if (e->a == G.shown && G.present[0]) {
+      int field=shown_battler(e->a);
+      if(field>=0) {
         bool last = true;
         for (int j = i + 1; j < G.nq; j++)
           if (G.q[j].kind == GC_EV_LEVEL_UP && G.q[j].a == e->a) last = false;
         static bv_mon after;
         after = make_mon(&G.run.party[e->a], true);
-        *ev_new() = (bv_event){.type = BEV_EXP, .battler = BV_PLAYER, .a = last ? (int)(after.exp_ratio * 1000) : 0,
+        *ev_new() = (bv_event){.type = BEV_EXP, .battler = field, .a = last ? (int)(after.exp_ratio * 1000) : 0,
                                .b = e->b, .mon = &after};
       }
       /* LevelUpPhase: "X grew to Lv. N!" with the fanfare, then the stat window (prevStats against the new stats), for any
@@ -594,7 +636,7 @@ static bool handle_event(int i) {
       if (i + 1 < G.nq && msg_is(&G.q[i + 1], "battle:levelUp")) {
         static int stats[12];
         char* t = txt_new();
-        pr_msg_format(&G.q[i + 1].msg, be_text_source(), t, TXT_LEN);
+        be_format_message(&G.q[i+1].msg,t,TXT_LEN);
         G.skip[i + 1] = true;
         const bool ok = level_up_stats(i, stats);
         *ev_new() = (bv_event){.type = BEV_LEVEL_UP, .battler = -1, .text = t, .stats = ok ? stats : NULL};
@@ -602,23 +644,25 @@ static bool handle_event(int i) {
       break;
     }
 
-    case GC_EV_EVOLVED:
-      if (e->a == G.shown && G.present[0]) {
+    case GC_EV_EVOLVED: {
+      int field=shown_battler(e->a);
+      if(field>=0) {
         const pr_pokemon* p = &G.run.party[e->a].b;
-        *ev_new() = (bv_event){.type = BEV_FORM_CHANGE, .battler = BV_PLAYER, .a = p->species, .b = p->form};
+        *ev_new() = (bv_event){.type = BEV_FORM_CHANGE, .battler = field, .a = p->species, .b = p->form};
         bv_mon m;
         be_mon(&G.run.bt, p, &m);
-        bv_mon* sh = bv_mon_of(BV_PLAYER);
+        bv_mon* sh = bv_mon_of(field);
         snprintf(sh->name, sizeof sh->name, "%s", m.name);
         sh->max_hp = m.max_hp;
         sh->level = m.level;
         /* the new species' stats move the HP with the maximum */
         if (m.hp > sh->hp)
-          *ev_new() = (bv_event){.type = BEV_HEAL, .battler = BV_PLAYER, .a = m.hp};
+          *ev_new() = (bv_event){.type = BEV_HEAL, .battler = field, .a = m.hp};
         else if (m.hp < sh->hp)
-          *ev_new() = (bv_event){.type = BEV_DAMAGE, .battler = BV_PLAYER, .a = m.hp, .b = HIT_RESULT_INDIRECT};
+          *ev_new() = (bv_event){.type = BEV_DAMAGE, .battler = field, .a = m.hp, .b = HIT_RESULT_INDIRECT};
       }
       break;
+    }
 
     case GC_EV_MYSTERY: {
       char* t = txt_new();
@@ -699,26 +743,34 @@ static void on_command(bv_command c, void* arg);
 /* A loaded battle's foe: a trainer's or an encounter's Pokemon is on the field in the run and was never sent out on the
  * screen (a wild one is there from the intro). True when events are playing. */
 static bool send_out_foe(void) {
-  const gc_mon* foe = gc_field_mon(&G.run, 1);
-  if (!foe || G.present[1]) return false;
   G.n_ev = G.ev_pos = G.n_txt = 0;
-  static bv_mon sent;
-  sent = make_mon(foe, false);
-  if (G.run.battle_type == BATTLE_TYPE_TRAINER) {
-    char* t = txt_new();
-    trainer_line("battle:trainerSendOut", GC_TNAME_TRAINER, sent.name, t, TXT_LEN);
-    put_msg(t, false);
-    bgm_on_foe_sent_out(&G.run);
+  static bv_mon sent[2];
+  for(int field=2;field<4;field++){
+    const pr_pokemon *p=G.run.bt.field[field];int index=displayed_slot(field);
+    if(!p||!p->on_field||p->hp<=0||G.present[index])continue;
+    be_mon(&G.run.bt,p,&sent[field-2]);
+    if(G.run.battle_type==BATTLE_TYPE_TRAINER){char *t=txt_new();trainer_line("battle:trainerSendOut",field==3?GC_TNAME_PARTNER:GC_TNAME_TRAINER,sent[field-2].name,t,TXT_LEN);put_msg(t,false);bgm_on_foe_sent_out(&G.run);}
+    *ev_new()=(bv_event){.type=BEV_SUMMON,.battler=field,.mon=&sent[field-2]};G.present[index]=true;
   }
-  *ev_new() = (bv_event){.type = BEV_SUMMON, .battler = BV_ENEMY, .mon = &sent};
-  G.present[1] = true;
-  play_chunk();
-  return true;
+  if(!G.n_ev)return false;play_chunk();return true;
 }
 
 static bool resync_field(void) {
+  /* Illusion can begin/end between waves without a move event, on either
+   * secondary slot as well as on the lead. Preserve bars while replacing the look. */
+  for(int field=1;field<4;field++){
+    pr_pokemon *p=G.run.bt.field[field];bv_mon *shown=bv_mon_of(field);
+    if(!p||!p->on_field||p->hp<=0||!G.present[displayed_slot(field)]||!(G.run.bt.deviations&PR_DEV_ILLUSION))continue;
+    const int species=shown->species,target=pr_shown_form(&G.run.bt,p)->species;
+    if(species!=target&&(p->illusion.active||shown->illusion||species==pr_pokemon_form(p)->species||species==pr_apparent_form(p,true)->species)){
+      static bv_mon look;bv_mon live;be_mon(&G.run.bt,p,&live);look=*shown;
+      look.illusion=live.illusion;look.species=live.species;look.form=live.form;look.gender=live.gender;look.female=live.female;look.sprite_scale=live.sprite_scale;
+      look.n_types=live.n_types;memcpy(look.types,live.types,sizeof look.types);memcpy(look.name,live.name,sizeof look.name);
+      G.n_ev=G.ev_pos=G.n_txt=0;*ev_new()=(bv_event){.type=BEV_ILLUSION,.battler=field,.mon=&look};play_chunk();return true;
+    }
+  }
   const gc_mon* me = gc_field_mon(&G.run, 0);
-  if (!me) return false;
+  if (!me||me->b.hp<=0||!me->b.on_field) return false;
   if (G.resume_foe) {
     G.resume_foe = false;
     if (send_out_foe()) return true;
@@ -728,11 +780,11 @@ static bool resync_field(void) {
     /* PR_DEV_ILLUSION: the same Pokemon showing its real look while it has a disguise, or the other way round (a
      * disguise taken or lost with no battle event the screen saw, such as at a battle's start): the look catches up */
     const int sp = bv_mon_of(BV_PLAYER)->species, shown = pr_shown_form(&G.run.bt, &me->b)->species;
-    if (sp != shown && (me->b.illusion.active || sp == pr_pokemon_form(&me->b)->species || sp == pr_apparent_form(&me->b, true)->species)) {
+    if (sp != shown && (me->b.illusion.active || bv_mon_of(BV_PLAYER)->illusion || sp == pr_pokemon_form(&me->b)->species || sp == pr_apparent_form(&me->b, true)->species)) {
       static bv_mon look;
       const bv_mon live = make_mon(me, true);
       look = *bv_mon_of(BV_PLAYER);                                   /* only the look changes; HP and status catch up after */
-      look.species = live.species; look.form = live.form; look.gender = live.gender; look.female = live.female;
+      look.illusion=live.illusion;look.species = live.species; look.form = live.form; look.gender = live.gender; look.female = live.female;
       look.sprite_scale = live.sprite_scale; look.n_types = live.n_types;
       memcpy(look.types, live.types, sizeof look.types);
       memcpy(look.name, live.name, sizeof look.name);
@@ -860,12 +912,21 @@ static int key_items(bv_item* out, int cap) {
   return n;
 }
 
+static void refresh_item_bars(void){
+  static bv_item foes[BV_MAX_FOE_ITEMS],keys[BV_MAX_FOE_ITEMS];
+  int nf=foe_items(foes,BV_MAX_FOE_ITEMS),nk=key_items(keys,BV_MAX_FOE_ITEMS);
+  bv_set_item_bars(foes,nf,keys,nk,gc_party_luck(&G.run));
+}
+
 static void ask(void) {
   const gc_screen* s = gc_run_screen(&G.run);
   G.ball = -1;
   sync_shown();
   bv_command_opts o;
   memset(&o, 0, sizeof o);
+  o.command_slot=s->slot;
+  o.can_undo=s->can_undo;
+  o.party_luck = gc_party_luck(&G.run);
   o.can_ball = s->can_ball;
   o.can_switch = s->can_switch;
   o.can_run = s->can_run;
@@ -880,7 +941,7 @@ static void ask(void) {
   o.has_party_balls = true;
   for (int i = 0; i < 6; i++)
     o.party_balls[i] = i >= G.run.n_party ? BV_BALL_EMPTY : G.run.party[i].b.hp > 0 ? BV_BALL_ALIVE : BV_BALL_FAINTED;
-  const gc_mon* me = gc_field_mon(&G.run, 0);
+  const gc_mon* me = command_mon();
   for (int i = 0; i < 4; i++) {
     o.move_ok[i] = s->move_ok[i];
     if (!s->move_ok[i] && s->move_why[i] && me && i < PR_N_MOVES(&me->b)) {
@@ -919,6 +980,7 @@ static void on_ball_pick(int ball, void* arg) {
   }
   gc_choice c = {.kind = GC_CH_BALL, .a = (int16_t)ball};
   G.ball = ball;
+  G.ball_target=G.run.bt.field[2]&&G.run.bt.field[2]->hp>0&&G.run.bt.field[2]->on_field&&!G.run.bt.field[2]->switch_out_status?2:3;
   if (answer(&c))
     G.st.balls++;
   else
@@ -930,6 +992,8 @@ static void on_command(bv_command c, void* arg) {
   gc_choice ch;
   memset(&ch, 0, sizeof ch);
   switch (c.command) {
+    case 4:
+      ch.kind=GC_CH_CANCEL;answer(&ch);break;
     case 0:
       ch.kind = GC_CH_FIGHT;
       ch.a = (int16_t)c.move_slot;
@@ -973,8 +1037,6 @@ static void finish_pick(int a) {
   }
   if (swap && a >= 0 && a == G.shown) {
     /* the caught Pokemon took the place of the one on the field: the screen's copy is gone */
-    G.present[0] = false;
-    G.shown = -1;
     G.swap_replaced = true;
   }
   pump(NULL);
@@ -1119,7 +1181,9 @@ static void on_item_target_picked(int slot, int move_slot, void* arg) {
 
 static void prompt_item_target(const gc_offer* offer) {
   bool move_target = (offer->target == GC_TARGET_MOVE);
-  ps_open_item(&G.run, PARTY_MODIFIER, move_target, on_item_target_picked, NULL);
+  const bool tm = !strcmp(offer->key, "TM_COMMON") || !strcmp(offer->key, "TM_GREAT") || !strcmp(offer->key, "TM_ULTRA");
+  ps_open_item(&G.run, tm ? PARTY_TM_MODIFIER : move_target ? PARTY_MOVE_MODIFIER : PARTY_MODIFIER,
+               move_target, tm ? offer->arg : 0, on_item_target_picked, NULL);
 }
 
 static void on_shop_select_reward(void* ctx, int option_idx) {
@@ -1203,6 +1267,31 @@ static void on_shop_manage_items(void* ctx) {
   ps_open_transfer(&G.run, on_manage_move, on_manage_done, NULL);
 }
 
+/* Check Team remains in the same reward selection after mechanical form events. */
+static void open_check_team(void);
+static void on_check_form(int party, int item, void* arg) {
+  (void)arg;
+  ps_close();G.check_cursor=party;G.return_to_check=true;
+  const char* why=NULL;
+  if (!gc_form_item_toggle(&G.run,party,item,&why)) {
+    char reason[192];say(why_text(why,reason,sizeof reason));return;
+  }
+  drain();pump(NULL);
+}
+static void on_check_pause(int party, bool paused, void* arg) {
+  (void)arg;
+  if (party>=0 && party<G.run.n_party) G.run.party[party].pause_evolutions=paused;
+}
+static void on_check_done(void* arg) {
+  (void)arg;ps_close();G.return_to_check=false;open_shop_ui();
+}
+static void open_check_team(void) {
+  ps_open_check(&G.run,G.check_cursor,on_check_form,on_check_pause,on_check_done,NULL);
+}
+static void on_shop_check_team(void* ctx) {
+  (void)ctx;rh_close();G.check_cursor=0;open_check_team();
+}
+
 static bool party_has_held_item(void) {
   for (int i = 0; i < G.run.n_items; i++) {
     const gc_item* it = &G.run.items[i];
@@ -1213,13 +1302,7 @@ static bool party_has_held_item(void) {
   return false;
 }
 
-static int calc_party_luck(void) {
-  int total = 0;
-  for (int i = 0; i < G.run.n_party; i++) {
-    total += G.run.party[i].luck;
-  }
-  return total;
-}
+static int calc_party_luck(void) { return gc_party_luck(&G.run); }
 
 static void open_shop_ui(void) {
   const gc_screen* s = gc_run_screen(&G.run);
@@ -1248,7 +1331,8 @@ static void open_shop_ui(void) {
     on_shop_reroll,
     on_shop_skip,
     on_shop_manage_items,
-    NULL
+    NULL,
+    on_shop_check_team
   };
 
   rh_set_menu(G.cfg.on_quit ? open_run_menu : NULL, NULL);
@@ -1293,6 +1377,7 @@ static void mystery_auto(void) {
 
 static void on_offer_answer(int yes, void* arg) {
   (void)arg;
+  G.resume_foe=true; /* The offer intentionally hid the enemy during the wave intro. */
   gc_choice c = {.kind = GC_CH_CONFIRM, .a = yes == 1 ? 1 : 0};   /* No and B decline */
   answer(&c);
 }
@@ -1329,7 +1414,7 @@ static void end_run(int kind) {
   G.step_timer = 0;
   G.save_due = false;
   /* the combat history's report is taken now, while the run is whole and before the app clears the slot or starts another */
-  co_finish(kind == GC_SCREEN_CLEAR, G.run.biome, G.run.wave);
+  co_finish_run(kind == GC_SCREEN_CLEAR, &G.run);
   /* a custom run settles its rematch and names the enemy that finished the party, from the same moment: the run is whole */
   G.have_defeat = G.cfg.custom && cr_on_run_end(&G.run, kind, &G.defeat);
   if (G.cfg.custom) cr_end();
@@ -1403,7 +1488,68 @@ static bool save_point(void) {
 
 static void open_custom_offer(void);
 
+/* ScanIvsPhase is presentation only: do not answer or advance the battle command. */
+static void scan_done(void* arg) {
+  (void)arg;
+  G.n_ev = G.ev_pos = G.n_txt = 0;
+  pump(NULL);
+}
+
+static void scan_answered(int yes, void* arg) {
+  (void)arg;
+  if (!yes) { scan_done(NULL); return; }
+  const pr_pokemon* p = G.run.bt.field[G.scan_target];
+  if (!p) { scan_done(NULL); return; }
+  uint16_t root = gc_species_root_id(p->species);
+  for (int s = 0; s < 6; s++) {
+    G.scan_stats[s] = p->ivs[s];
+    G.scan_stats[6+s] = G.run.sys && root <= GC_MAX_SPECIES_ID ? G.run.sys->dex[root].ivs[s] : 0;
+  }
+  G.n_ev = G.ev_pos = G.n_txt = 0;
+  *ev_new() = (bv_event){.type=BEV_IVS,.battler=G.scan_target,.stats=G.scan_stats};
+  G.st.bev++;
+  bv_play(G.ev,G.n_ev,scan_done,NULL);
+}
+
+static void scan_confirm(void* arg) { (void)arg; ui_push_confirm(scan_answered,NULL); }
+
+static bool scan_wild_ivs(void) {
+  if (G.scan_wave != G.run.wave) {
+    G.scan_wave = G.run.wave;
+    G.scan_next = 0;
+    G.scan_enabled = G.run.battle_type == BATTLE_TYPE_WILD && gc_item_stack(&G.run,"IV_SCANNER") > 0;
+  }
+  if (!G.scan_enabled) return false;
+  while (G.scan_next < 2) {
+    const int target = 2 + G.scan_next++;
+    const pr_pokemon* p = G.run.bt.field[target];
+    if (!p || p->hp <= 0 || !p->on_field) continue;
+    G.scan_target = target;
+    G.n_ev = G.ev_pos = G.n_txt = 0;
+    pr_msg question = pr_msg1("battle:ivScannerUseQuestion",pr_arg_pokemon(&G.run.bt,"pokemonName",p));
+    put_gc_msg(&question);
+    G.st.bev++;
+    bv_play(G.ev,G.n_ev,scan_confirm,NULL);
+    return true;
+  }
+  return false;
+}
+
+static void target_done(int row,void *arg){
+  (void)arg;gc_choice c={.kind=row<0?GC_CH_CANCEL:GC_CH_TARGET,.a=row>=0&&row<G.target_count?G.target_values[row]:-1};answer(&c);
+}
+static void ask_target(void){
+  G.target_count=0;
+  for(int field=0;field<4;field++)if(G.run.screen.target_ok[field]){
+    int i=G.target_count++;G.target_values[i]=field;const pr_pokemon *p=G.run.bt.field[field];
+    snprintf(G.target_labels[i],sizeof G.target_labels[i],"%s %s: %s",field<2?"Ally":"Foe",field%2?"right":"left",p?i18n_species_name(pr_shown_form(&G.run.bt,p)->species):"?");
+    G.target_options[i]=G.target_labels[i];
+  }
+  ui_push_options(G.target_options,G.target_count,true,target_done,NULL);
+}
+
 static void screen_step(void) {
+  refresh_item_bars();
   const gc_screen* s = gc_run_screen(&G.run);
   if (G.cfg.custom) {
     /* a rematch won with this screen's events behind it is written first (custom_run.c), and anything it has to tell the player is told
@@ -1417,7 +1563,9 @@ static void screen_step(void) {
   }
   G.st.screens[s->kind & 15]++;
   switch (s->kind) {
+    case GC_SCREEN_TARGET:ask_target();break;
     case GC_SCREEN_COMMAND:
+      if (scan_wild_ivs()) break;
       if (!save_point()) break;
       if (!resync_field()) ask();
       break;
@@ -1431,7 +1579,8 @@ static void screen_step(void) {
       open_evolve(s);
       break;
     case GC_SCREEN_REWARD:
-      open_shop_ui();
+      if (G.return_to_check) { G.return_to_check=false;open_check_team(); }
+      else open_shop_ui();
       break;
     case GC_SCREEN_BIOME:
       open_biome_map();

@@ -50,7 +50,7 @@ static int checks, failed;
   } while (0)
 
 #define SEED "scene-seed-c10"
-#define NSEEDS_DEFAULT 24
+#define NSEEDS_DEFAULT 96
 
 /* ------------------------------------------------------------------ the SD card */
 
@@ -407,7 +407,7 @@ static step_t step(void) {
       }
       if (bot.heal) heal(R);
       if (bot.wipe) {
-        gc_mon* me = &R->party[R->party_order[0]];
+        gc_mon* me = &R->party[R->party_order[s->slot==1?1:0]];
         set_one_move(me, MOVE_ID_SPLASH);
         me->b.hp = 1;
       }
@@ -423,6 +423,11 @@ static step_t step(void) {
         cr_view_get(&v);
         if (v.rematch_enemy) c.kind = GC_CH_RUN;
       }
+      break;
+    case GC_SCREEN_TARGET:
+      c.kind=GC_CH_TARGET;c.a=-1;
+      for(int i=2;i<4;i++)if(s->target_ok[i]){c.a=i;break;}
+      if(c.a<0)for(int i=0;i<2;i++)if(s->target_ok[i]){c.a=i;break;}
       break;
     case GC_SCREEN_SWITCH:
       c.kind = GC_CH_PICK;
@@ -547,11 +552,11 @@ typedef struct {
   int wave;
 } enemy_snap;
 
-static enemy_snap snap_enemy(const gc_run* r) {
+static enemy_snap snap_enemy_at(const gc_run* r,int index) {
   enemy_snap e;
   memset(&e, 0, sizeof e);
-  if (r->n_enemy < 1) return e;
-  const pr_pokemon* p = &r->enemy[0].b;
+  if (index<0 || index>=r->n_enemy) return e;
+  const pr_pokemon* p = &r->enemy[index].b;
   e.have = true;
   e.id = p->id;
   e.species = p->species;
@@ -576,7 +581,8 @@ static enemy_snap snap_enemy(const gc_run* r) {
   return e;
 }
 
-static int n_created, n_unattributed, n_refused_store;
+static enemy_snap snap_enemy(const gc_run* r) {return snap_enemy_at(r,0);}
+static int n_created, n_unattributed, n_refused_store,n_double_killers[2];
 static void test_defeat_creates(int nseeds) {
   for (int s = 0; s < nseeds; s++) {
     sd_new();
@@ -584,7 +590,8 @@ static void test_defeat_creates(int nseeds) {
     snprintf(seed, sizeof seed, "c10-defeat-%d", s);
     CHECK(new_run(seed, true, 0), "start a custom run");
     bot.wipe = true;
-    enemy_snap first = snap_enemy(R);
+    enemy_snap first = snap_enemy(R), pair[2]={snap_enemy_at(R,0),snap_enemy_at(R,1)};
+    const bool was_double=R->double_battle;
     bool over = false;
     for (int i = 0; i < 400 && !over; i++) {
       const step_t st = step();
@@ -597,10 +604,10 @@ static void test_defeat_creates(int nseeds) {
     CHECK(g_commit.outcome == CS_STORED, "the report is stored (%d)", (int)g_commit.outcome);
     const cc_meta* m = cs_meta();
     if (g_have_defeat && g_commit.commit.refusal != CC_SUPPORT_OK) {
-      /* a finisher named, but the encounter was one the store does not keep (a double roll, a fusion, a Tera...): no record */
+      /* A finisher named, but its other traits are not supported: no record. */
       n_refused_store++;
       CHECK(m->roster.count == 0, "refused (%s): no record", cc_refusal_str(g_commit.commit.refusal));
-      CHECK(g_commit.commit.refusal == CC_REFUSE_DOUBLES || g_commit.commit.refusal == CC_REFUSE_FUSED ||
+      CHECK(g_commit.commit.refusal == CC_REFUSE_FUSED ||
                 g_commit.commit.refusal == CC_REFUSE_TERA || g_commit.commit.refusal == CC_REFUSE_BOSS ||
                 g_commit.commit.refusal == CC_REFUSE_TRAINER_OWNED || g_commit.commit.refusal == CC_REFUSE_ROSTER_FULL,
             "the refusal is one the encounter explains (%s)", cc_refusal_str(g_commit.commit.refusal));
@@ -608,7 +615,12 @@ static void test_defeat_creates(int nseeds) {
       n_created++;
       CHECK(m->roster.count == 1 && g_commit.commit.record_id == m->roster.rec[0].record_id, "one record, the one the commit named (count %u, status %d, refusal %d)", m->roster.count, (int)g_commit.status, (int)g_commit.commit.refusal);
       const cc_nemesis* n = &m->roster.rec[0];
-      CHECK(n->life == CC_LIFE_STORED && n->traits == 0, "stored, no traits");
+      if(was_double) {
+        int killer=pair[0].id==n->source_pokemon_id?0:pair[1].id==n->source_pokemon_id?1:-1;
+        CHECK(killer>=0,"doubles record names one actual enemy ID");
+        if(killer>=0){first=pair[killer];n_double_killers[killer]++;}
+      }
+      CHECK(n->life == CC_LIFE_STORED && n->traits == (was_double?CC_TR_DOUBLES:0), "stored, source encounter traits preserved");
       CHECK(n->species == first.species && n->form == first.form && n->gender == first.gender && n->shiny == (first.shiny ? 1 : 0),
             "the identity is the enemy's");
       CHECK(n->orig_level == first.level, "its level as it was (%d, %d)", n->orig_level, first.level);
@@ -1049,7 +1061,7 @@ static void test_gate(void) {
       {"unsupported kind",   GC_ENC_UNSUPPORTED, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 62, 2, 0, 0, 0, -1},
       {"fused wild",         GC_ENC_ORDINARY_WILD, GC_ENF_FUSED, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 62, 2, 0, 0, 1, CC_REFUSE_FUSED},
       {"terastallized wild", GC_ENC_ORDINARY_WILD, GC_ENF_TERA, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 62, 2, 0, 0, 1, CC_REFUSE_TERA},
-      {"double roll",        GC_ENC_ORDINARY_WILD, GC_ENF_DOUBLES, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 62, 2, 0, 0, 1, CC_REFUSE_DOUBLES},
+      {"double roll",        GC_ENC_ORDINARY_WILD, GC_ENF_DOUBLES, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 62, 2, 0, 0, 1, CC_SUPPORT_OK},
       {"boss actor",         GC_ENC_ORDINARY_WILD, 0, 1, 1, 1, 0, 0, 1, 0, 0, 0, 0, 62, 2, 0, 0, 1, CC_REFUSE_BOSS},
       {"fused actor",        GC_ENC_ORDINARY_WILD, 0, 1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 62, 2, 0, 0, 1, CC_REFUSE_FUSED},
       {"tera actor",         GC_ENC_ORDINARY_WILD, 0, 1, 1, 1, 0, 0, 0, 0, 1, 0, 0, 62, 2, 0, 0, 1, CC_REFUSE_TERA},
@@ -1753,7 +1765,7 @@ static void test_report(int nseeds) {
     bot.heal = true;
     bot.save_every = 0;
     uint16_t last_wave = 0;
-    uint32_t dbl = 0, unp = 0;   /* wave 1 was generated by new_run */
+    uint32_t unp = 0;   /* wave 1 was generated by new_run */
     for (int i = 0; i < 30000; i++) {
       const step_t st = step();
       if (st != STEP_OK) break;
@@ -1761,8 +1773,7 @@ static void test_report(int nseeds) {
       if (v.enc_wave != last_wave) {
         last_wave = v.enc_wave;
         n_waves++;
-        const bool d_dbl = R->stubs[GC_STUB_DOUBLE_AS_SINGLE] > dbl, d_unp = R->stubs[GC_STUB_UNPORTED_ENEMY] > unp;
-        dbl = R->stubs[GC_STUB_DOUBLE_AS_SINGLE];
+        const bool d_dbl = R->double_battle, d_unp = R->stubs[GC_STUB_UNPORTED_ENEMY] > unp;
         unp = R->stubs[GC_STUB_UNPORTED_ENEMY];
         bool boss = false, fused = false, tera = false;
         for (int k = 0; k < R->n_enemy; k++) {
@@ -1788,7 +1799,7 @@ static void test_report(int nseeds) {
         } else {
           CHECK(v.enc_kind == GC_ENC_ORDINARY_WILD, "wave %u is an ordinary wild encounter (kind %d)", v.enc_wave, v.enc_kind);
           n_wild++;
-          CHECK(!!(v.enc_flags & GC_ENF_DOUBLES) == d_dbl, "wave %u: the double roll is reported iff game-core played it as a single (%d, %d)", v.enc_wave,
+          CHECK(!!(v.enc_flags & GC_ENF_DOUBLES) == d_dbl, "wave %u: the double flag matches the executed encounter (%d, %d)", v.enc_wave,
                 !!(v.enc_flags & GC_ENF_DOUBLES), d_dbl);
           CHECK(!!(v.enc_flags & GC_ENF_FUSED) == fused, "wave %u: a fusion is reported iff the enemy is one", v.enc_wave);
           CHECK(!!(v.enc_flags & GC_ENF_TERA) == tera, "wave %u: Tera is reported iff the enemy is terastallized", v.enc_wave);
@@ -1941,6 +1952,8 @@ int main(int argc, char** argv) {
   test_defeat_creates(nseeds);
   CHECK(n_created >= 6, "real defeats made %d Nemeses (>= 6 expected over %d seeds)", n_created, nseeds);
   printf("1  real defeats: %d made a Nemesis, %d refused by the store, %d had no reliable finisher\n", n_created, n_refused_store, n_unattributed);
+  CHECK(n_double_killers[0]>0 && n_double_killers[1]>0,"both doubles enemy positions must create precise records (%d/%d)",n_double_killers[0],n_double_killers[1]);
+  printf("   real doubles finishers: left %d, right %d\n",n_double_killers[0],n_double_killers[1]);
   test_ordinary_creates_none();
   test_gate();
   test_report(nseeds);

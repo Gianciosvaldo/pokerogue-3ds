@@ -2,6 +2,7 @@
 #include "starter_data.h"
 
 #include <stdio.h>
+#include <time.h>
 #include <string.h>
 
 #include "gc/data.h"
@@ -24,6 +25,13 @@ const pr_species* menu_species(uint16_t id);
 #define ABILITY_HIDDEN 4u
 #define PASSIVE_UNLOCKED 1u
 #define PASSIVE_ENABLED 2u
+
+static bool has_pokerus(uint16_t species){
+  static uint64_t last=UINT64_MAX;static uint16_t ids[3];
+  time_t now=time(NULL);uint64_t ms=now>0?(uint64_t)now*1000:0;
+  if(ms/10800000!=last){last=ms/10800000;gc_pokerus_starters(ms,ids);}
+  return species==ids[0]||species==ids[1]||species==ids[2];
+}
 
 /* how a species is picked with no stored preference */
 typedef struct {
@@ -84,6 +92,23 @@ static bool defaults(const gc_system* sys, uint16_t species, props* p) {
   }
   /* PassiveAttr.UNLOCKED | ENABLED */
   p->passive = sys->starters[species].passive_attr == (PASSIVE_UNLOCKED | PASSIVE_ENABLED);
+  const gc_starter_entry* pref=&sys->starters[species];
+  if ((pref->preference_flags&1) && pref->nature_preference<25 &&
+      (natures&(1u<<(pref->nature_preference+1)))) p->nature=pref->nature_preference;
+  if ((pref->preference_flags&2) && pref->appearance_preference<=3) {
+    int a=pref->appearance_preference;
+    if (!a && (attr&DEX_NON_SHINY)) {p->shiny=false;p->variant=0;}
+    else if (a && (attr&DEX_SHINY) && (attr&(DEX_VARIANT_1<<(a-1)))) {
+      p->shiny=true;p->variant=(uint8_t)(a-1);
+    }
+  }
+  if ((pref->preference_flags&4) && pref->ability_preference<3) {
+    int a=pref->ability_preference;
+    bool unlocked=a==0 ? (abilities&ABILITY_1)!=0 : a==1 ? (abilities&ABILITY_2)!=0 : (abilities&ABILITY_HIDDEN)!=0;
+    int ability=a==0?p->form->ability1:a==1?p->form->ability2:p->form->ability_hidden;
+    if (unlocked && ability && !(a==1 && p->form->ability1==p->form->ability2 && (abilities&ABILITY_1)))
+      p->ability_index=(uint8_t)a;
+  }
   return true;
 }
 
@@ -107,6 +132,7 @@ int ss_list(const gc_system* sys, sm_entry* out, int cap, int* refused) {
     sm_entry* e = &out[n++];
     memset(e, 0, sizeof *e);
     e->species = id;
+    e->pokerus=has_pokerus(id);
     e->cost = gc_starter_value(sys, id);
     e->base_cost = gc_starter_cost(id);
     e->form = p.form_index;
@@ -126,6 +152,7 @@ void ss_describe(const gc_system* sys, uint16_t species, starter_info* out) {
   if (!defaults(sys, species, &p)) return;
   menu_mon* m = &out->mon;
   m->species = species;
+  m->pokerus=has_pokerus(species);
   m->form = p.form_index;
   m->gender = p.sp->male_permille < 0 ? MG_GENDERLESS : (p.female ? MG_FEMALE : MG_MALE);
   m->shiny = p.shiny;
@@ -143,7 +170,8 @@ void ss_describe(const gc_system* sys, uint16_t species, starter_info* out) {
     out->passive_unlocked = (pa & PASSIVE_UNLOCKED) != 0;
     out->passive_enabled = (pa & PASSIVE_ENABLED) != 0;
   }
-  gc_starter_default_moves(species, out->moves);
+  gc_starter selected;
+  if(ss_starter(sys,species,&selected)) memcpy(out->moves,selected.moves,sizeof out->moves);
 }
 
 bool ss_starter(const gc_system* sys, uint16_t species, gc_starter* out) {
@@ -158,10 +186,21 @@ bool ss_starter(const gc_system* sys, uint16_t species, gc_starter* out) {
   out->shiny = p.shiny;
   out->variant = p.variant;
   out->passive = p.passive;
-  out->pokerus = false;
+  out->pokerus = has_pokerus(species);
   out->tera_type = -1; /* the species' first type */
   if (sys && species <= GC_MAX_SPECIES_ID) memcpy(out->ivs, sys->dex[species].ivs, sizeof out->ivs);
-  /* moves stay empty: the default moveset */
+  uint16_t pool[64];int n=gc_starter_moves(sys,species,p.form_index,pool,64),w=0;
+  if(n<0) return false;
+  if(sys) for(int i=0;i<4;i++) {
+    uint16_t move=sys->starters[species].moveset[i];bool legal=false,duplicate=false;
+    for(int k=0;k<n;k++) if(pool[k]==move) legal=true;
+    for(int k=0;k<w;k++) if(out->moves[k]==move) duplicate=true;
+    if(legal && !duplicate) out->moves[w++]=move;
+  }
+  for(int i=0;i<n && w<4;i++) {
+    bool duplicate=false;for(int k=0;k<w;k++) if(out->moves[k]==pool[i]) duplicate=true;
+    if(!duplicate) out->moves[w++]=pool[i];
+  }
   return true;
 }
 

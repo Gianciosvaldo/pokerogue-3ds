@@ -10,7 +10,6 @@
 
 static void sync_ability_indices(gc_run *run);
 
-static void note_unported(gc_run *run);
 static int next_summon_cb(pr_battle *bt, int trainer_slot, void *ctx);
 
 void gc_wallet_to_battle(gc_run *run) { run->bt.money = run->money; }
@@ -50,16 +49,16 @@ const gc_mon *gc_field_mon(const gc_run *run, int side)
     return i < 0 ? NULL : side ? &run->enemy[i] : &run->party[i];
 }
 
-static void summon(gc_run *run, int side, int idx)
+static void summon(gc_run *run, int side, int idx,int field)
 {
     gc_mon *m = side ? &run->enemy[idx] : &run->party[idx];
     pr_reset_summon_data(&m->b);
     pr_reset_turn_data(&m->b);
     m->b.on_field = true;
     m->b.switch_out_status = false;
-    run->bt.field[side ? 2 : 0] = &m->b;
+    run->bt.field[side*2+field] = &m->b;
     gc_event *ev = gc_ev_new(run, GC_EV_SUMMON);
-    if (ev) { ev->a = side; ev->b = idx; ev->c = 0; }
+    if (ev) { ev->a = side; ev->b = idx; ev->c = field; }
 }
 
 /* ---- the arena's weather and terrain at a new battle ---- */
@@ -168,7 +167,7 @@ void gc_battle_cleanup_players(gc_run *run)
     pr_prepare_player_cleanup(bt,&run->eng,true);
     pr_run_player_cleanup(bt,&run->eng);
     sync_ability_indices(run);
-    note_unported(run);
+    gc_battle_note_unported(run);
     gc_items_from_battle(run);
     gc_ev_battle(run);
     run->run.rng=bt->rng;
@@ -245,7 +244,8 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
     bt->battle_rng_live = false;
     bt->wave_seed = run->run.wave_seed;
     bt->turn = 1;
-    bt->double_battle = false;
+    bt->double_battle = run->double_battle;
+    bt->trainer_partner = gc_trainer_is_double(run);
     bt->wave_index = run->wave;
     bt->game_mode = (int8_t)run->run.mode;
     bt->challenge_flags = run->run.mode == GAME_MODES_CHALLENGE ? run->run.challenge_flags : 0;
@@ -266,7 +266,7 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
         for (int i = 0; !reset_arena && i < run->n_party; i++) {
             if (run->party[i].b.on_field) {
                 gc_event *ev = gc_ev_new(run, GC_EV_RECALL);
-                if (ev) { ev->a = 0; ev->b = i; }
+                if (ev) { ev->a = 0; ev->b = i; ev->c=run->n_party>1&&run->party_order[1]==i?1:0; }
             }
             run->party[i].b.on_field = false;
             pr_reset_battle_data(&run->party[i].b);
@@ -292,6 +292,7 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
     for (int i = 0; i < run->n_enemy; i++) {
         if (!restoring) run->enemy[i].b.on_field = false;
         run->enemy[i].b.is_player = false;
+        run->enemy[i].b.trainer_slot = run->enemy[i].trainer_slot;
         bt->party[1][i] = &run->enemy[i].b;
         pr_update_passive(bt, &run->enemy[i].b);
     }
@@ -299,27 +300,35 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
     if (restoring) {
         /* The legal save point is after summon effects. Rebuild pointers without
          * summoning again: otherwise Intimidate/hazards/item effects run twice. */
-        bt->field[0] = &run->party[lead].b;
-        for (int i = 0; i < run->n_enemy; i++)
-            if (run->enemy[i].b.on_field) { bt->field[2] = &run->enemy[i].b; break; }
+        for(int k=0;k<(bt->double_battle?2:1)&&k<bt->n_party[0];k++)
+            bt->field[k]=bt->party[0][k];
+        for(int k=0;k<(bt->double_battle?2:1)&&k<bt->n_party[1];k++)
+            bt->field[2+k]=bt->party[1][k];
     } else if (run->battle_type != BATTLE_TYPE_TRAINER && run->n_enemy) {
-        summon(run, 1, 0);
+        for(int k=0;k<(bt->double_battle?2:1)&&k<run->n_enemy;k++)summon(run,1,k,k);
     }
     if (keep_lead) {
         bt->field[0] = &run->party[lead].b;
         pr_reset_turn_data(&run->party[lead].b);
     }
+    if(!restoring)for(int k=0;k<2&&k<run->n_party;k++)
+        if(bt->party[0][k]->on_field&&bt->party[0][k]->hp>0)bt->field[k]=bt->party[0][k];
     /* CheckSwitchPhase asks "Will you switch?" only in the SWITCH battle style (run->ask_switch) */
     bt->battle_style_set = !run->ask_switch;
     bt->next_summon_index = next_summon_cb;
     bt->next_summon_ctx = run;
-    gc_custom_install_observer(run);   /* the faint observer, when the app's custom hooks want one (gc/custom.h) */
+    memset(run->last_faint, 0, sizeof run->last_faint);
+    gc_custom_install_observer(run);   /* final-blow provenance and optional custom callbacks */
     bt->trainer_names[0] = run->trainer_names[GC_TNAME_TRAINER];
     bt->trainer_names[1] = run->trainer_names[GC_TNAME_PARTNER];
     if (!restoring) {
         pr_start_battle(bt, &run->eng);
+        /* Return keeps its old pointer for phase snapshots. Outside the start
+         * phases a single battle has no second slot, even if that mon is later
+         * switched into the lead position. */
+        if(!bt->double_battle)bt->field[1]=bt->field[3]=NULL;
         sync_ability_indices(run);
-        note_unported(run);
+        gc_battle_note_unported(run);
         gc_items_from_battle(run);
         gc_ev_battle(run);
     }
@@ -358,15 +367,16 @@ int gc_battle_slot_of(const gc_run *run, int party_index)
 /* TurnInitPhase: each active Pokemon's turn data is reset, and the player's join the participants */
 void gc_battle_turn_init(gc_run *run)
 {
+    gc_int(run)->undo_first=false;
     pr_battle *bt = &run->bt;
     for (int k = 0; k < 4; k++) {
         bt->commands[k].command = bt->pre_commands[k].command = -1;
         bt->commands[k].skip = bt->pre_commands[k].skip = false;
     }
-    for (int s = 0; s < 4; s += 2) {
+    for (int s = 0; s < 4; s++) {
         pr_pokemon *p = bt->field[s];
         if (!p || !p->on_field || p->hp <= 0) continue;
-        if (s == 0) {
+        if (s < 2) {
             bool have = false;
             for (int i = 0; i < bt->n_participants; i++) have |= bt->participants[i] == p->id;
             if (!have && bt->n_participants < PR_MAX_PARTY) {
@@ -418,10 +428,12 @@ static bool has_any_pokeball(const gc_run *run)
 void gc_battle_command_screen(gc_run *run)
 {
     gc_screen *s = &run->screen;
+    int field=s->slot==1?1:0;
     memset(s, 0, sizeof *s);
     s->kind = GC_SCREEN_COMMAND;
-    s->slot = 0;
-    pr_pokemon *p = run->bt.field[0];
+    s->slot = field;
+    s->can_undo=field==1 && gc_int(run)->undo_first;
+    pr_pokemon *p = run->bt.field[field];
     bool any = false;
     for (int i = 0; i < 4; i++) {
         s->move_ok[i] = p && player_move_usable(run, p, i, &s->move_why[i]);
@@ -442,8 +454,9 @@ void gc_battle_command_screen(gc_run *run)
 bool gc_battle_player_command(gc_run *run, const gc_choice *c, const char **why)
 {
     pr_battle *bt = &run->bt;
-    pr_pokemon *p = bt->field[0];
-    struct pr_turn_command *tc = &bt->commands[0], *pc = &bt->pre_commands[0];
+    int field=run->screen.slot==1?1:0;
+    pr_pokemon *p = bt->field[field];
+    struct pr_turn_command *tc = &bt->commands[field], *pc = &bt->pre_commands[field];
     if (!p) { *why = "no Pokemon on the field"; return false; }
     if (c->kind != GC_CH_FIGHT && gc_fg_active(run)) { *why = "not a command"; return false; }
     if (c->kind == GC_CH_FIGHT) {
@@ -467,15 +480,25 @@ bool gc_battle_player_command(gc_run *run, const gc_choice *c, const char **why)
         bool multiple = false;
         int n = pr_get_move_targets(bt, p, move, -1, tg, &multiple);
         if (n > 4) n = 4;
-        /* singles: a move with one target, or a spread move, takes them as they are */
+        bool select_target=!multiple&&n>1&&c->b<0;
+        if(!multiple&&n>0&&c->b>=0) {
+            bool found=false;for(int i=0;i<n;i++)if(tg[i]==c->b)found=true;
+            if(!found){*why="invalid move target";return false;}
+            tg[0]=c->b;n=1;
+        }
         tc->n_targets = (uint8_t)n;
         memcpy(tc->targets, tg, (size_t)n);
         memset(pc, 0, sizeof *pc);
         pc->command = COMMAND_FIGHT;
-        pc->targets[0] = 0;
+        pc->targets[0] = field;
         pc->n_targets = 1;
         pc->skip = true;
         pc->cursor = PR_CURSOR_UNDEFINED;
+        if(select_target){
+            gc_screen *screen=&run->screen;memset(screen,0,sizeof *screen);
+            screen->kind=GC_SCREEN_TARGET;screen->slot=field;
+            for(int i=0;i<n;i++)if(tg[i]>=0&&tg[i]<4)screen->target_ok[tg[i]]=true;
+        }
         return true;
     }
     if (c->kind == GC_CH_POKEMON) {
@@ -484,7 +507,14 @@ bool gc_battle_player_command(gc_run *run, const gc_choice *c, const char **why)
             *why = "partyUiHandler:noEnergy";
             return false;
         }
-        if (trapped(run, p)) { *why = "battle:noEscapePokemon"; return false; }
+        pr_msg refusal={0};
+        if (!pr_can_switch(bt,p,false,&refusal)) {
+            gc_int(run)->refusal_message=refusal;
+            *why=refusal.key?refusal.key:"battle:noEscapeForce";
+            return false;
+        }
+        for(int i=0;i<2;i++)if(i!=field&&bt->commands[i].command==COMMAND_POKEMON&&bt->commands[i].cursor==gc_battle_slot_of(run,k)){
+            *why="that Pokemon is already selected";return false;}
         memset(tc, 0, sizeof *tc);
         tc->command = COMMAND_POKEMON;
         tc->cursor = (int8_t)gc_battle_slot_of(run, k);
@@ -508,10 +538,10 @@ bool gc_battle_player_command(gc_run *run, const gc_choice *c, const char **why)
         tc->command = COMMAND_BALL;
         tc->cursor = (int8_t)ball;
         tc->n_targets = 1;
-        tc->targets[0] = 2;
+        tc->targets[0] = bt->field[2]&&bt->field[2]->hp>0&&bt->field[2]->on_field&&!bt->field[2]->switch_out_status?2:3;
         memset(pc, 0, sizeof *pc);
         pc->command = COMMAND_BALL;
-        pc->targets[0] = 0;
+        pc->targets[0] = field;
         pc->n_targets = 1;
         pc->skip = true;
         pc->cursor = PR_CURSOR_UNDEFINED;
@@ -520,7 +550,8 @@ bool gc_battle_player_command(gc_run *run, const gc_choice *c, const char **why)
     if (c->kind == GC_CH_RUN) {
         pr_msg run_why = {0};
         if (!p || !pr_can_run(bt, p, &run_why)) {
-            *why = run_why.key ? run_why.key : "battle:noEscapePokemon";
+            gc_int(run)->refusal_message=run_why;
+            *why = run_why.key ? run_why.key : "battle:noEscapeForce";
             return false;
         }
         memset(tc, 0, sizeof *tc);
@@ -528,7 +559,7 @@ bool gc_battle_player_command(gc_run *run, const gc_choice *c, const char **why)
         tc->cursor = PR_CURSOR_UNDEFINED;
         memset(pc, 0, sizeof *pc);
         pc->command = COMMAND_RUN;
-        pc->targets[0] = 0;
+        pc->targets[0] = field;
         pc->n_targets = 1;
         pc->skip = true;
         pc->cursor = PR_CURSOR_UNDEFINED;
@@ -543,10 +574,11 @@ bool gc_battle_player_command(gc_run *run, const gc_choice *c, const char **why)
 bool gc_battle_queued_command(gc_run *run)
 {
     pr_battle *bt = &run->bt;
-    pr_pokemon *p = bt->field[0];
+    int field=run->screen.slot==1?1:0;
+    pr_pokemon *p = bt->field[field];
     if (!p || !p->n_move_queue) return false;
     const pr_turn_move *q = &p->move_queue[0];
-    struct pr_turn_command *tc = &bt->commands[0], *pc = &bt->pre_commands[0];
+    struct pr_turn_command *tc = &bt->commands[field], *pc = &bt->pre_commands[field];
     memset(tc, 0, sizeof *tc);
     tc->command = COMMAND_FIGHT;
     tc->move = q->move;
@@ -558,14 +590,14 @@ bool gc_battle_queued_command(gc_run *run)
     tc->cursor = (int8_t)(q->move == 0 ? -1 : slot);
     memset(pc, 0, sizeof *pc);
     pc->command = COMMAND_FIGHT;
-    pc->targets[0] = 0;
+    pc->targets[0] = field;
     pc->n_targets = 1;
     pc->skip = true;
     pc->cursor = PR_CURSOR_UNDEFINED;
     return true;
 }
 
-static void note_unported(gc_run *run)
+void gc_battle_note_unported(gc_run *run)
 {
     pr_battle *bt = &run->bt;
     for (int i = 0; i < bt->n_unported; i++) if (bt->unported[i] < GC_MAX_UNPORTED) run->unported[bt->unported[i]]++;
@@ -592,19 +624,20 @@ void gc_ai_enemy_party(gc_run *run)
     gc_internal *in = gc_int(run);
     for (int i = 0; i < run->n_enemy; i++) {
         pr_ai_mon *m = pr_ai_mon_of(&in->ai, &run->enemy[i].b);
-        if (m) { m->initial_team_index = (int8_t)i; m->trainer_slot = TRAINER_SLOT_NONE; }
+        if (m) { m->initial_team_index = (int8_t)i; m->trainer_slot = run->enemy[i].trainer_slot; }
     }
 }
 
 /* currentBattle.trainer for the AI's calls (NULL in a wild battle); ai.trainer goes back to NULL after
  * each call. Only the random trainers' classes are met for now (the fixed battles, where gym leaders,
  * the Elite Four, champions and evil team bosses are, fall back to wild ones): none is a boss and none
- * terastallizes, which is what these defaults say. Doubles are played as singles. */
+ * terastallizes, which is what these defaults say. Trainer pairs retain separate reserve ownership. */
 static void ai_trainer_on(gc_run *run)
 {
     gc_internal *in = gc_int(run);
     in->ai_trainer.is_boss = false;
-    in->ai_trainer.is_double = false;
+    in->ai_trainer.is_double = gc_trainer_is_double(run);
+    run->bt.trainer_partner = in->ai_trainer.is_double;
     in->ai_trainer.tera_mode = PR_TERA_AI_NO_TERA;
     in->ai_trainer.n_instant_teras = 0;
     in->ai.trainer = run->battle_type == BATTLE_TYPE_TRAINER ? &in->ai_trainer : NULL;
@@ -703,7 +736,7 @@ static int engine_returned(gc_run *run)
     gc_wallet_from_battle(run);
     balls_from_battle(run);
     sync_ability_indices(run);
-    note_unported(run);
+    gc_battle_note_unported(run);
     note_revealed(run);
     gc_items_from_battle(run);
     gc_ev_battle(run);
@@ -772,11 +805,59 @@ void gc_battle_switch_screen(gc_run *run)
 
 /* BattleEndPhase's part: the battle is over. The player's Pokemon stay where they are: the next
  * battle's setup recalls them or keeps the lead out (see gc_battle_setup_field). */
+static bool unfinished_charge_move(int move)
+{
+    if(move<=MOVE_ID_NONE||move>=PR_MOVE_COUNT)return false;
+    const char *kind=pr_moves[move].kind;
+    return !strcmp(kind,"ChargingAttackMove")||!strcmp(kind,"ChargingSelfStatusMove");
+}
+
+/* User-requested encounter policy: unfinished two-turn moves end with the
+ * encounter. The pinned source preserves them across ordinary waves; retain
+ * unrelated queues, stat boosts and history while preventing stale hidden state. */
+static bool cancel_encounter_charges(gc_run *run)
+{
+    bool reveal=false;
+    for(int i=0;i<run->n_party;i++){
+        pr_pokemon *p=&run->party[i].b;
+        bool hidden=pr_find_battler_tag_class(p,PR_TAGCLASS_SEMI_INVULNERABLE)!=NULL;
+        int keep=0;
+        for(int q=0;q<p->n_move_queue;q++)
+            if(!unfinished_charge_move(p->move_queue[q].move))p->move_queue[keep++]=p->move_queue[q];
+        p->n_move_queue=(uint8_t)keep;
+        for(int k=p->n_tags-1;k>=0;k--){
+            const pr_battler_tag *t=&p->tags[k];
+            bool charge=t->type==BATTLER_TAG_TYPE_CHARGING||t->type==BATTLER_TAG_TYPE_FLYING
+                ||t->type==BATTLER_TAG_TYPE_UNDERGROUND||t->type==BATTLER_TAG_TYPE_UNDERWATER||t->type==BATTLER_TAG_TYPE_HIDDEN;
+            if(charge&&unfinished_charge_move(t->source_move))pr_remove_tag(&run->bt,&run->eng,p,t->type);
+        }
+        if(hidden&&p->hp>0&&p->on_field&&!p->switch_out_status&&pr_battler_index(&run->bt,p)>=0
+           &&!pr_find_battler_tag_class(p,PR_TAGCLASS_SEMI_INVULNERABLE))reveal=true;
+    }
+    return reveal;
+}
+
+/* A state-only field snapshot lets the ordinary visibility bridge reveal both
+ * combatants before the reward screen. Publish only the appended event, since
+ * the preceding post-battle callback events have already been handed over. */
+static void charge_cleanup_snapshot(gc_run *run)
+{
+    if(run->n_battle_events>=GC_MAX_BATTLE_EVENTS){run->battle_events_overflow=true;return;}
+    int old=run->eng.n_events;
+    pr_event_add(&run->bt,&run->eng,PR_EV_NONE,-1,-1,0,0,NULL);
+    if(run->eng.n_events==old){run->battle_events_overflow=true;return;}
+    int first=run->n_battle_events++;
+    run->battle_events[first]=run->eng.events[old];
+    gc_event *event=gc_ev_new(run,GC_EV_BATTLE);
+    if(event){event->a=first;event->b=1;}
+}
+
 void gc_battle_end_cleanup(gc_run *run)
 {
     gc_int(run)->at_save_point = false;
     run->run.rng = run->bt.rng;
     gc_sync_party_order(run);
+    if(cancel_encounter_charges(run))charge_cleanup_snapshot(run);
     for (int i = 0; i < run->n_party; i++) pr_reset_turn_data(&run->party[i].b);
     run->bt.field[2] = run->bt.field[3] = NULL;
     run->bt.n_party[1] = 0;

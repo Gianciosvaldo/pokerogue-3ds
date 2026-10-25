@@ -77,13 +77,14 @@ static int play_to_trainer(const char *seed, int min_enemy, int max_wave)
         memset(&c, 0, sizeof c);
         switch (s->kind) {
         case GC_SCREEN_COMMAND:
-            if (run.battle_type == BATTLE_TYPE_TRAINER && run.n_enemy >= min_enemy) return run.wave;
+            if (run.battle_type == BATTLE_TYPE_TRAINER && run.n_enemy >= min_enemy && !run.bt.double_battle) return run.wave;
             if (run.wave > max_wave) return -1;
             heal_party();
             c.kind = GC_CH_FIGHT;
             c.b = -1;
             for (int i = 0; i < 4; i++) if (s->move_ok[i]) { c.a = (int16_t)i; break; }
             break;
+        case GC_SCREEN_TARGET: c.kind=GC_CH_TARGET;c.a=-1;for(int k=2;k<4;k++)if(s->target_ok[k]){c.a=k;break;}if(c.a<0)for(int k=0;k<2;k++)if(s->target_ok[k]){c.a=k;break;}break;
         case GC_SCREEN_SWITCH:
             c.kind = GC_CH_PICK;
             c.a = -1;
@@ -406,7 +407,7 @@ static void wild_start_with_question(void)
 
 int main(void)
 {
-    SCAN(victory_tail_trainer, "tail-trainer-", 16, 3);
+    SCAN(victory_tail_trainer, "tail-trainer-", 64, 3);
     victory_tail_last_enemy();
     SCAN(trainer_switch_out, "tail-switch-", 40, 2);
     SCAN(double_faint, "tail-faint-", 16, 3);

@@ -1,5 +1,5 @@
 /* Pinned 8555c08 MoneyRewardModifier.apply + Scene.addMoney monetary state.
- * Gimmighoul tracker and presentation/achievement lifecycle are caller gates. */
+ * Gimmighoul tracker additions and presentation/achievement lifecycle are caller-owned. */
 #include "pr/reward.h"
 #include "pr_data.h"
 #include <math.h>
@@ -23,9 +23,8 @@ bool pr_reward_apply_money_item(const pr_reward_ctx *ctx, int item, double *mone
         if (!p->species || p->species >= PR_SPECIES_COUNT || !pr_species_table[p->species].nforms
             || p->fusion_species < -1
             || p->fusion_species == 0 || p->fusion_species >= PR_SPECIES_COUNT
-            || (p->fusion_species > 0 && !pr_species_table[p->fusion_species].nforms)
-            || p->species == SPECIES_ID_GIMMIGHOUL || p->fusion_species == SPECIES_ID_GIMMIGHOUL)
-            return false; /* Gimmighoul would add EvoTracker and refresh party. */
+            || (p->fusion_species > 0 && !pr_species_table[p->fusion_species].nforms))
+            return false;
     }
     int stacks[PR_REWARD_MAX_OWNED], count = 0;
     for (int j = 0; j < ctx->n_items; j++) {
@@ -41,6 +40,11 @@ bool pr_reward_apply_money_item(const pr_reward_ctx *ctx, int item, double *mone
     if (!isfinite(amount)) return false;
     double before = *money, balance = fmin(before + amount, MAX_SAFE_INTEGER);
     *money = balance;
-    if (result) *result = (pr_reward_money_item_result){.amount = amount, .credited = balance - before};
+    if (result) {
+        *result = (pr_reward_money_item_result){.amount = amount, .credited = balance - before};
+        for (int j = 0; j < ctx->n_party; j++)
+            if (ctx->party[j].species == SPECIES_ID_GIMMIGHOUL || ctx->party[j].fusion_species == SPECIES_ID_GIMMIGHOUL)
+                result->tracker_stacks[j] = (uint8_t)fmin(floor(multiplier), 3);
+    }
     return true; /* upstream applies successfully even if the capped balance cannot rise */
 }

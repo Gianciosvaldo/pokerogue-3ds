@@ -16,5 +16,7 @@ bool pf_active(void);
 void pf_release(int slot);
 /* Farewell messages ("Goodbye, X!" and its nine siblings) the party screen has shown so far */
 int pf_farewells(void);
+void pf_clear_text(void);
+int pf_text_count(const char* text);
 
 #endif

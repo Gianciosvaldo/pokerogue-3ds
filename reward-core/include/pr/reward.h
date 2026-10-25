@@ -12,6 +12,7 @@
 #define PR_REWARD_H
 #include <stdbool.h>
 #include <stdint.h>
+#include "pr/inventory_limits.h"
 #include "pr/run.h"          /* pr_run: game mode, seeds, Phaser.Math.RND */
 #include "reward_items.h"    /* enum pr_item: modifierTypes keys (generated) */
 
@@ -92,6 +93,8 @@ extern const pr_item_fc pr_item_fcs[];
 extern const pr_fc_cond pr_fc_conds[];
 extern const pr_species_slice pr_item_fc_species[];
 extern const int pr_item_fc_species_count;
+/* Generated form-key identity, shared with native form-change adapters. */
+int pr_reward_form_key(int species, int form);
 /* By TrainerType (card 97): whether trainerConfigs has it, config.isBoss, the voucher TrainerVictoryPhase validates
  * (vouchers[TrainerType[t]].voucherType, a VoucherType; -1 = none), config.moneyMultiplier, the
  * modifierRewardFuncs' items (-1 pads) and whether it has a genModifiersFunc */
@@ -218,7 +221,7 @@ typedef struct {
 } pr_owned_item;
 
 #define PR_REWARD_MAX_PARTY 6
-#define PR_REWARD_MAX_OWNED 256
+#define PR_REWARD_MAX_OWNED PR_MAX_MODIFIERS
 #define PR_REWARD_MAX_EVOLUTION_EVENTS 8
 #define PR_REWARD_MAX_NATURE_EVENTS 8
 /* In enqueue (unshiftNew call) order; the phase runner consumes in reverse order.
@@ -562,14 +565,14 @@ bool pr_reward_lapse_temp_boosters(pr_reward_ctx *ctx, int *expired);
 
 /* Task 96 bounded Nugget/Big Nugget/Relic Gold monetary application.
  * Caller guarantees ordinary nonvirtual inventories and owns UI/MoneyAchv,
- * phase purchases, and persistence. Primary/fused Gimmighoul is unsupported:
- * its real apply additionally creates an EvoTracker and refreshes modifiers.
+ * phase purchases, and persistence. Primary/fused Gimmighoul additions are reported in tracker_stacks:
+ * the caller must add those trackers, handle full stacks and refresh modifiers.
  * Waves1..10000, finite balance0..MAX_SAFE_INTEGER, Amulet stacks1..5/global.
  * Applies each Amulet object in list order; no Happy Hour. Successful calls
  * leave ctx unchanged, cap balance and report nominal amount/actual credit.
  * True includes zero credit at cap. Refusals leave all arguments unchanged.
  * Generic pr_reward_apply has no money transport and remains separate. */
-typedef struct { double amount, credited; } pr_reward_money_item_result;
+typedef struct { double amount, credited; uint8_t tracker_stacks[PR_REWARD_MAX_PARTY]; } pr_reward_money_item_result;
 bool pr_reward_apply_money_item(const pr_reward_ctx *ctx, int item, double *money,
                                pr_reward_money_item_result *result);
 

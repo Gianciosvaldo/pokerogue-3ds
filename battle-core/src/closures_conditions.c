@@ -318,20 +318,11 @@ static double chilly_reception(ARGS)
 static double protect_streak(ARGS)
 {
     UNUSED;
-    int times = 0;
-    for (int k = 0; k < u->n_move_history; k++) {
-        const pr_turn_move *tm = pr_last_move(bt, u, k);
-        if (!tm) return 1;                                   /* older than the kept entries (reported) */
-        bool counts = pr_move_has_attr(tm->move, PR_AC_ProtectAttr) || tm->move == MOVE_ID_QUICK_GUARD
-                      || tm->move == MOVE_ID_WIDE_GUARD;
-        if (!counts || tm->result != MOVE_RESULT_SUCCESS) break;
-        times++;
-    }
+    bool unknown=false;
+    uint32_t times=pr_protect_streak(bt,u,&unknown);
+    if(unknown)return 1;
     if (times == 0) return 1;
-    if (times > 19) UNPORTED(PR_FEAT_MOVE_CONDITION);         /* 3^20 leaves int32 */
-    int32_t range = 1;
-    for (int i = 0; i < times; i++) range *= 3;
-    return pr_battle_rand_seed_int(bt, range, 0) == 0;
+    return pr_battle_rand_seed_number(bt,pow(3,(double)times),0)==0;
 }
 
 /* OneHitKOAttr moves: BlockOneHitKOAbAttr (Sturdy) on the target, not simulated, then
@@ -647,12 +638,8 @@ static double conversion_2(ARGS)
     UNUSED;
     NEED_TARGET;
     if (u->terastallized) return 0;
-    for (int k = 0; k < t->n_move_history; k++) {
-        const pr_turn_move *tm = pr_last_move(bt, t, k);
-        if (!tm) return 1;                                     /* older than the kept entries (reported) */
-        if (tm->move != MOVE_ID_NONE) return 1;
-    }
-    return 0;
+    bool unknown=false;
+    return pr_history_any_move(bt,t,&unknown);
 }
 
 /* Last Resort: the moveset has the move and another one, and every other move is in the
@@ -669,17 +656,9 @@ static double last_resort(ARGS)
         if (!dup) others[n_others++] = PR_MOVES(u)[s];
     }
     if (!has_self || !n_others) return 0;
-    int kept = u->n_move_history < PR_MAX_MOVE_HISTORY ? u->n_move_history : PR_MAX_MOVE_HISTORY;
-    for (int j = 0; j < n_others; j++) {
-        bool seen = false;
-        for (int k = 0; k < kept && !seen; k++) {
-            const pr_turn_move *tm = &u->move_history[k];
-            seen = tm->move == others[j] && tm->use_mode < MOVE_USE_MODE_INDIRECT;
-        }
-        if (!seen) {
-            if (u->n_move_history > kept) UNPORTED(PR_FEAT_MOVE_HISTORY);
-            return 0;
-        }
+    for(int j=0;j<n_others;j++)if(!pr_history_used_move(u,others[j])){
+        if(!u->history_used_complete&&u->n_move_history>PR_MAX_MOVE_HISTORY)UNPORTED(PR_FEAT_MOVE_HISTORY);
+        return 0;
     }
     return 1;
 }

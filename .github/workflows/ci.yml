@@ -21,11 +21,42 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build battle-core differential runners
-        run: make -C battle-core build/turntest build/poltergeist-message-test build/optional-phase-test build/optional-phase-fixtures-test build/fusion-callback-test build/transform-callback-test build/fusion-callback-turn-test build/transform-callback-turn-test build/interlude-test build/interlude-end-test build/final-boss-test build/final-boss-form-test build/item-transfer-test build/encounter-end-test build/summon-entry-test build/helping-hand-test build/acupressure-test build/after-you-test build/suppression-test build/wide-level-test build/wide-boss-score-test build/flame-burst-test build/partner-cures-test build/attention-test build/commander-test build/move-theft-test build/berry-moves-test build/xerneas-active-test build/bad-dreams-doubles-test build/wide-substitute-test build/wide-combat-test build/stat-rearrangement-test build/quash-test build/wide-highest-stat-test build/spectral-thief-test build/hp-split-test build/ability-moves-test build/hp-cost-boosts-test build/pledge-test build/type-moves-test build/secret-power-test build/zero-to-hero-test build/form-block-damage-test build/meloetta-forms-test build/revival-blessing-test build/revival-turn-test build/ball-fetch-test build/gulp-missile-test build/tera-phase-test build/tera-cleanup-test build/keldeo-forms-test build/mimicry-test build/entry-allies-test build/costar-test
+        run: make -C battle-core build/turntest build/poltergeist-message-test build/optional-phase-test build/optional-phase-fixtures-test build/fusion-callback-test build/transform-callback-test build/fusion-callback-turn-test build/transform-callback-turn-test build/interlude-test build/interlude-end-test build/final-boss-test build/final-boss-form-test build/item-transfer-test build/scene-transfer-test build/grip-claw-test build/baton-switch-test build/encounter-end-test build/summon-entry-test build/helping-hand-test build/acupressure-test build/after-you-test build/suppression-test build/wide-level-test build/wide-boss-score-test build/flame-burst-test build/partner-cures-test build/attention-test build/commander-test build/move-theft-test build/berry-moves-test build/xerneas-active-test build/bad-dreams-doubles-test build/wide-substitute-test build/wide-combat-test build/stat-rearrangement-test build/quash-test build/wide-highest-stat-test build/spectral-thief-test build/hp-split-test build/ability-moves-test build/hp-cost-boosts-test build/pledge-test build/type-moves-test build/secret-power-test build/zero-to-hero-test build/form-block-damage-test build/meloetta-forms-test build/revival-blessing-test build/revival-turn-test build/ball-fetch-test build/gulp-missile-test build/tera-phase-test build/tera-cleanup-test build/keldeo-forms-test build/mimicry-test build/entry-allies-test build/costar-test build/poison-puppeteer-test build/biome-callback-test build/double-chance-test build/double-generation-test build/honey-money-test build/honey-owner-test build/money-number-test build/pickup-test build/stat-loot-test build/fused-held-test build/last-resort-history-test
+      - name: Compare retained held form callbacks and compiled failure controls
+        run: make -C battle-core held-form-items-host-test
+      - name: Compare retained Last Resort history observations
+        run: battle-core/build/last-resort-history-test game-core/tests/fixtures/last-resort-history.native.txt
+      - name: Compare complete nonvirtual history queries, saves and compiled failure controls
+        run: |
+          make -C battle-core build/nonvirtual-history-test build/nonvirtual-history-guards-test
+          make -C game-core build/nonvirtual_history_host_test
+          python3 battle-core/tools/check-nonvirtual-history-proof.py
+      - name: Compare complete Protect streaks, RNG, saves and failure controls
+        run: |
+          make -C battle-core build/protect-history-test build/protect-history-guards-test
+          make -C game-core build/protect_history_host_test
+          python3 battle-core/tools/check-protect-history-proof.py
+      - name: Compare remaining all-history callers, saves and failure controls
+        run: |
+          make -C battle-core build/remaining-history-test build/remaining-history-guards-test
+          make -C game-core build/remaining_history_host_test
+          python3 battle-core/tools/check-remaining-history-proof.py
+      - name: Audit pinned inventory catalogue capacity
+        run: python3 battle-core/tools/audit-inventory-catalogue.py
       - name: Run battle entry controller tests
         run: make -C battle-core summon-entry-host-test tera-phase-host-test
       - name: Run game-core tests
         run: make -C game-core test
+      - name: Check custom record policy and sanitized module tests
+        run: |
+          make -C custom-core unit-test san-test
+          python3 custom-core/tools/mutations.py -j 2 -k "reject attributed doubles killer"
+      - name: Run football module tests
+        run: make -C football-core test
+      - name: Sanitize football match rules and replay tests
+        run: make -C football-core BUILD="$RUNNER_TEMP/football-sanitize" CFLAGS="-O1 -g -std=c99 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer" rules-test match-test contact-test defense-test pass-test tactics-test live-test career-test live-screen-test live-systems-test live-art-test
+      - name: Build encounter and money native comparison runners
+        run: make -C game-core build/sync_nature_test build/wide_money_test build/endless_terminal_test build/tm_compat_diff_test build/egg_hatch_diff_test
 
   game-tests:
     runs-on: ubuntu-24.04
@@ -40,3 +71,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build 3DS app
         run: docker run --rm -v "$PWD":/src -w /src/game devkitpro/devkitarm make
+      - name: Check the actual ARM startup stack and compiler frame reports
+        run: python3 game/tests/check_stack_size.py game/pokerogue.elf --usage-dir game/build
+      - name: Upload playable 3DSX app
+        uses: actions/upload-artifact@v4
+        with:
+          name: PokeRogue-3DSX
+          if-no-files-found: error
+          path: |
+            game/pokerogue.3dsx
+            game/pokerogue.smdh
+            game/3DSX-ARTIFACT.md

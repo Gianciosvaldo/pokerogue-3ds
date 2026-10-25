@@ -54,11 +54,13 @@ typedef enum {
     GC_EV_LEVEL_UP,      /* a = party index, b = the new level (stats are already updated), c = the level before */
     GC_EV_MOVE_LEARNED,  /* a = party index, b = move slot, c = MoveId */
     GC_EV_EVOLVED,       /* a = party index, b = species before, c = species after */
-    GC_EV_MONEY,         /* a = the change, b = money now */
+    GC_EV_MONEY,         /* money_change / money_after; a/b truncate in-range values, otherwise zero */
     GC_EV_TURN,          /* a turn is about to run: a = turn number (its events follow as GC_EV_BATTLE) */
     GC_EV_MYSTERY,       /* MysteryEncounterSelectPhase: a = MysteryEncounterType, b = tier, c = wave */
     GC_EV_SAVE_POINT,    /* the run has reached upstream's save point (the start of an encounter): a good
                           * moment for the app to call gc_run_save and write the buffer */
+    GC_EV_EGG_HATCH,     /* presentation only: a species, b form, c gender; appearance below */
+    GC_EV_COUNT,
 } gc_event_kind;
 
 typedef struct {
@@ -69,6 +71,12 @@ typedef struct {
      * b mirrors the amount only when it fits int32, otherwise zero. Runtime
      * events are not part of the session save format. */
     double exp_amount, exp_before;
+    double money_change, money_after; /* GC_EV_MONEY only: native Numbers, never narrowed */
+    bool prompt;               /* GC_EV_MESSAGE: require confirmation */
+    uint8_t egg_tier, egg_variant;
+    bool egg_shiny, egg_move_rare;
+    uint8_t egg_nature, egg_ivs[6], egg_previous_ivs[6];
+    uint16_t egg_move;
 } gc_event;
 
 /* ---------------------------------------------------------------- screens and choices */
@@ -91,6 +99,7 @@ typedef enum {
                              * only when run->ask_switch is set: GC_CH_CONFIRM */
     GC_SCREEN_CUSTOM_OFFER, /* custom content (gc/custom.h): the app's hook offered a rematch before the battle's save point:
                              * GC_CH_CONFIRM, a = 1 accept, 0 decline. Only with hooks installed; never saved (no save point yet) */
+    GC_SCREEN_TARGET,       /* choose one of target_ok; GC_CH_TARGET or GC_CH_CANCEL */
 } gc_screen_kind;
 
 typedef enum {
@@ -116,6 +125,7 @@ typedef enum {
     GC_CH_TRANSFER,         /* REWARD: Manage Items (openModifierTransferScreen): a = the party index that gets the item,
                              * b = the held item's index in run->items, c = how many copies; the screen stays open */
     GC_CH_DISCARD,          /* REWARD: Manage Items' discard: b = the held item's index in run->items, c = how many copies */
+    GC_CH_TARGET,           /* TARGET: a = target BattlerIndex 0..3 */
 } gc_choice_kind;
 
 typedef struct {
@@ -145,8 +155,9 @@ typedef struct {
     /* COMMAND: which commands are allowed now; a move slot that can't be picked has its reason (an
      * upstream i18n key, e.g. "battle:moveNoPp"; {{moveName}} is the slot's move and
      * {{pokemonNameWithAffix}} the Pokemon) in move_why */
-    bool can_ball, can_switch, can_run;
+    bool can_ball, can_switch, can_run, can_undo;
     bool fight_only;        /* a mystery encounter skips to the FIGHT menu (skipToFightInput): the menu cannot be backed out of */
+    bool target_ok[4];       /* TARGET: legal single-target choices */
     bool move_ok[4];
     const char *move_why[4];
     bool struggle;          /* every move is unusable: FIGHT with any slot uses Struggle */
@@ -206,8 +217,12 @@ typedef struct {
     int32_t battle_count;      /* canonical temporary booster lifetime; old saves default 0 */
     bool non_transferable;    /* explicit held-item lock, e.g. final-boss Mini Black Hole */
     uint8_t type_tier;         /* cached ModifierType.tier + 1; 0 absent */
+    uint32_t type_ref;         /* transient shared ModifierType reference, excluded from saves */
+    uint16_t loot_ref;         /* transient detached-stock identity, excluded from saves */
+    bool eviolite_base;        /* transferred Eviolite inherits the base stat-booster clone */
+    bool form_inactive;        /* form items default active; legacy saves therefore default false */
 } gc_item;
-#define GC_MAX_ITEMS 128
+#define GC_MAX_ITEMS (PR_MAX_MODIFIERS + 32) /* staging/validation headroom; battle/reward limit remains explicit */
 
 enum gc_mystery_type {
     GC_ME_MYSTERIOUS_CHALLENGERS = 0, GC_ME_MYSTERIOUS_CHEST, GC_ME_DARK_DEAL, GC_ME_FIGHT_OR_FLIGHT,
@@ -254,8 +269,18 @@ enum {
     GC_TNAME_COUNT_
 };
 
+/* Read-only FaintPhase provenance for the current battle, copied before the
+ * observer's pointers expire. Residual damage never inherits an earlier hit. */
+typedef struct {
+    bool observed, direct;
+    uint8_t remaining, source_side, form;
+    uint16_t species, move;
+    int wave, turn;
+} gc_faint_record;
+
 typedef struct gc_run {
     int api_version;
+    gc_faint_record last_faint[2]; /* most recent actual faint per side; not saved mid-battle */
     gc_system *sys;             /* overall system data across runs (NULL = no system updates) */
     pr_run run;                 /* run-core: mode, seed, wave seed, Phaser.Math.RND */
     pr_biome_depths depths;
@@ -280,6 +305,7 @@ typedef struct gc_run {
     /* the current battle */
     bool in_battle;
     int battle_type;            /* BattleType */
+    bool double_battle;         /* current encounter width, retained across save/load */
     /* the wild battle a mystery encounter starts (battle_type stays WILD here): MysteryEncounter.catchAllowed
      * decides whether a ball may be thrown at it */
     bool me_battle, me_catch_allowed;
@@ -361,6 +387,9 @@ const gc_screen *gc_run_screen(const gc_run *run);
  * pinned upstream may add the item/update stats, then report an error with an
  * empty reason and no payment. That applied purchase also returns false. */
 bool gc_run_choose(gc_run *run, const gc_choice *c, const char **why);
+/* Full localized arguments, when available, for the last refused choice.
+ * Cleared on the next choice; NULL when the reason is plain text/key only. */
+const pr_msg *gc_run_refusal_message(const gc_run *run);
 
 /* Saving, at upstream's save point: from GC_EV_SAVE_POINT (the start of an encounter) until the battle's
  * first turn runs, while its first COMMAND screen waits (gc_run_can_save). The buffer holds everything
@@ -369,24 +398,40 @@ bool gc_run_choose(gc_run *run, const gc_choice *c, const char **why);
  * run and queues the scene's events (WAVE, TRAINER, SUMMON) before the COMMAND screen; false (and *why)
  * for a damaged save or one from a newer format, and the run is left empty then. A save made by another
  * build loads as far as its fields still match (see load_dropped). */
-#define GC_SAVE_MAX (128 * 1024)
+#define GC_SAVE_MAX (512 * 1024)
 bool gc_run_can_save(const gc_run *run);
 size_t gc_run_save(const gc_run *run, void *buf, size_t cap);
 bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why);
 
 /* ---- starters (upstream's starter select rules) ---- */
+/* TM party labels: 0 not able, 1 able, 2 known in the effective moveset.
+ * Compatibility uses raw species/form plus fusion, including while transformed. */
+int gc_mon_tm_state(const gc_mon *mon, int move);
+/* TmModifierType.selectFilter separately excludes permanent known moves. */
+bool gc_mon_can_learn_tm(const gc_mon *mon, int move);
+
 /* held items: getMaxStackCount() of `key`/`arg` held by `mon`, and the reward screen's transfer (GC_CH_TRANSFER does it;
  * returns the copies moved, 0 = refused) */
 int gc_item_max_held(const gc_run *run, const char *key, int16_t arg, const gc_mon *mon);
+/* Source party form-item list, as global inventory indices in source order.
+ * Returns the total eligible count, writing at most capacity entries. */
+int gc_form_item_options(const gc_run *run, int party, int *indices, int capacity);
+/* Toggle one offered global inventory index while SelectModifierPhase waits. */
+bool gc_form_item_toggle(gc_run *run, int party, int item, const char **why);
 int gc_item_transfer(gc_run *run, int item_idx, int to, int qty);
 int gc_item_discard(gc_run *run, int item_idx, int count);
 
+int gc_party_luck(gc_run *run); /* actual allowed living party, clamped by native rules */
 int gc_starter_budget(int mode);                       /* the cost limit: 10 in classic */
 int gc_starter_cost(int species);                      /* base speciesStarterCosts, -1 = not a starter */
+void gc_pokerus_starters(uint64_t unix_ms,uint16_t out[3]);
 double gc_starter_value(const gc_system *sys, int species); /* cost with value reduction (game-data.ts:2018) */
 bool gc_starter_is_available(const gc_system *sys, const gc_starter *starter, double *cost_out, const char **why);
 /* The default moveset: the first four level 1-5 moves (getStarterMoves). Returns how many. */
 int gc_starter_default_moves(int species, uint16_t out[4]);
+/* Unique native starting-level moves for this form, then unlocked egg moves.
+ * Returns -1 if invalid or the caller's buffer is too small; never truncates. */
+int gc_starter_moves(const gc_system *sys, int species, int form, uint16_t *out, int cap);
 extern const uint16_t gc_default_starters[];           /* defaultStarterSpecies (unlocked in a new save) */
 extern const int gc_default_starter_count;
 

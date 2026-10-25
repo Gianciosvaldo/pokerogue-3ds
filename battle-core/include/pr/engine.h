@@ -157,7 +157,7 @@ typedef struct pr_engine {
     int n_target_lists;
     int8_t command_targets[4];         /* turn command i's list, -1 = none */
     /* move history entries pushed this turn with a shared list: a change to the list shows in them */
-    struct { pr_pokemon *p; uint16_t abs; int8_t list; } hist_alias[16];
+    struct { pr_pokemon *p; uint32_t abs, epoch; int8_t list; } hist_alias[16];
     int n_hist_alias;
     /* the phases that ran (upstream's phaseName, ":battler" for PokemonPhases) */
     char trace[PR_MAX_TRACE][40];
@@ -193,6 +193,27 @@ void pr_run_turn(pr_battle *bt, pr_engine *e);
  * it, the "Set" battle style), or at a switch pick after a "yes". The game shows the encounter
  * text and the trainer's intro before calling this. Singles only. */
 void pr_start_battle(pr_battle *bt, pr_engine *e);
+/* NewBiomeEncounterPhase's gameplay prefix. Preserve the caller's engine/queues;
+ * resets every player's battle/wave data, then dispatches for each on-field
+ * player in party order. The caller owns the visual tween and encounter end. */
+void pr_new_biome_encounter_callbacks(pr_battle *bt);
+/* Scene.getDoubleBattleChance, including canonical global Lure record count,
+ * current player party slots, ability history and the final minimum of one. */
+double pr_get_double_battle_chance(pr_battle *bt, int wave, int n_lures);
+/* New encounter, after a wild constructor; bt.double_battle is the NEW field.
+ * Supply the scene setter when raw/custom nature is owned outside the core. */
+void pr_sync_encounter_nature(pr_battle *bt, pr_pokemon *target,
+                              pr_nature_setter setter, void *ctx);
+/* BattleEndPhase's allowed-player-party PostBattleAbAttr callback loop.
+ * The caller supplies canonical party order, including eligible bench holders.
+ * The historical money API name is retained for existing callers.
+ * Prepare starts a fresh callback queue; run emits its presentation events. */
+void pr_prepare_post_battle_money(pr_battle *bt, pr_engine *e, bool victory);
+/* PostBattleLootAbAttr: original detached stocks remain in enemy inventory. */
+bool pr_add_post_battle_loot(pr_battle *bt, pr_modifier *stock);
+bool pr_pickup_can_apply(pr_battle *bt, pr_pokemon *p, bool simulated, bool victory);
+bool pr_pickup_apply(pr_battle *bt, pr_engine *e, pr_pokemon *p);
+void pr_run_post_battle_money(pr_battle *bt, pr_engine *e);
 /* EncounterPhase.end queue only; loaded sessions omit fresh player entry work. */
 void pr_queue_encounter_end(pr_battle *bt, pr_engine *e, bool loaded);
 void pr_queue_trainer_summons(pr_battle *bt, pr_engine *e);
@@ -293,6 +314,7 @@ pr_msg_arg pr_arg_pokemon(const pr_battle *bt, const char *name, const pr_pokemo
 pr_msg_arg pr_arg_pokemon_name(const pr_battle *bt, const char *name, const pr_pokemon *p);
 pr_msg_arg pr_arg_int(const char *name, int32_t v);
 pr_msg_arg pr_arg_int64(const char *name, int64_t v);
+pr_msg_arg pr_arg_money_en_us(const char *name, double v);
 pr_msg_arg pr_arg_move(const char *name, int move);
 pr_msg_arg pr_arg_ability(const char *name, int ability);
 pr_msg_arg pr_arg_type(const char *name, int type);
@@ -442,10 +464,23 @@ void pr_redirect_moves(pr_battle *bt, pr_engine *e, const pr_pokemon *removed, c
 
 /* the phases' start() (src/phases.c) */
 int pr_held_item_tier_for_pool(const pr_modifier *m, bool trainer);
+/* Scene held-item transfer boundary. Inventory indices refer to actual stock,
+ * not a copied descriptor. Unsupported families remain explicit refusals.
+ * Preflight may display Sticky Hold; it does not consume stock or RNG. */
+bool pr_can_transfer_held_item(pr_battle *bt, const pr_modifier *stock,
+                              pr_pokemon *receiver, int quantity);
+bool pr_try_transfer_held_item(pr_battle *bt, pr_engine *e, int from_side,
+                              int index, pr_pokemon *receiver, int quantity,
+                              bool ignore_update, bool item_lost);
 bool pr_apply_eat_berry_move(pr_battle *bt, pr_engine *e, pr_pokemon *user, pr_pokemon *target, bool self_target, bool steal);
 bool pr_steal_move_held_item(pr_battle *bt, pr_engine *e, pr_pokemon *user, pr_pokemon *target, double chance);
 bool pr_apply_turn_held_item_transfer(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_modifier *modifier);
 void pr_apply_turn_held_item_transfers(pr_battle *bt, pr_engine *e, pr_pokemon *p);
+bool pr_apply_contact_held_item_transfer(pr_battle *bt, pr_engine *e, pr_pokemon *user,
+    pr_pokemon *target, const pr_modifier *modifier);
+void pr_apply_contact_held_item_transfers(pr_battle *bt, pr_engine *e, pr_pokemon *user, pr_pokemon *target);
+/* SwitchSummonPhase's BATON_PASS branch, after tags and before party swapping. */
+void pr_transfer_baton_on_switch(pr_battle *bt, pr_engine *e, pr_pokemon *last, pr_pokemon *incoming);
 void pr_init_final_boss_phase_two(pr_battle *bt, pr_engine *e, pr_pokemon *p);
 /* MovePhase.resolveRedirectTarget, also used by the native callback replay. */
 void pr_resolve_redirect_target(pr_battle *bt, pr_engine *e, int ph);

@@ -43,13 +43,46 @@ passing percentage in a bounded random sample does not close a whole category.
 
 ## Current sequence
 
-1. Retain merged Flame Burst and partner cures/healing evidence, including their
-   shared damage/shield/RNG and healing callbacks.
-2. Retain attention/redirection and Commander/Order Up evidence; reconcile other
-   party-cure callers and the remaining interaction inventory.
-3. Wide-level progression and combat; preserve the wide save migration.
-4. Reconcile all remaining unsupported paths with the complete source inventory,
-   implement them in reviewable slices and run the final interaction audit.
+Merged evidence includes Helping Hand, Acupressure, the subsequent doubles and
+wide-level slices, Transform/form fixes, Keldeo/Mimicry (#342), Hospitality and
+Curious Medicine (#343), and Costar (#345). Preserve their proofs and retained
+covered IDs when changing shared callbacks; do not recreate already merged work.
+Poison Puppeteer (#353) adds the actual status callback and complete-turn proofs;
+see [its validation record](POISON-PUPPETEER-VALIDATION.md). Biome callbacks and
+their stock-mode reachability merged in #354; see
+[their validation record](BIOME-CALLBACK-VALIDATION.md). Double-battle encounter
+chance and its actual wild/trainer owners merged in #355; see
+[its validation record](DOUBLE-CHANCE-VALIDATION.md). Synchronize encounter
+nature and its raw/custom nature setter merged in #356; see
+[its validation record](SYNC-NATURE-VALIDATION.md). Honey Gather and shared wide
+money handling merged in #357; see [their validation record](HONEY-MONEY-VALIDATION.md).
+
+1. Close the remaining enabled callbacks against their actual owners:
+   Synchronize encounter nature merged in #356. Honey Gather and shared wide-money handling merged in #357. Terminal Endless, canonical transfer stock and the Mini Black Hole/Grip Claw/Baton transfer prerequisites are merged. Pickup's callback owner and 50 item identities now have source comparisons; see [the Pickup record](PICKUP-VALIDATION.md).
+   The [stat-booster follow-up](STAT-LOOT-VALIDATION.md) adds their canonical
+   clone/save paths. The [fused held-item follow-up](FUSED-HELD-VALIDATION.md)
+   adds original Eviolite/species-booster/Leek fusion eligibility through native
+   full turns and the doubles command/save owner. The [inventory-capacity
+   follow-up](INVENTORY-CAPACITY-VALIDATION.md) fixes canonical stock truncation
+   and expands battle/reward/save storage. Transient inventory history and the
+   remaining source paths still need review.
+   Existing helper arithmetic alone does not
+   establish that a public owner invokes it.
+   The Pokérus/trapping owning-caller audit is recorded in [the validation record](../game-core/POKERUS-TRAP-VALIDATION.md). It does not close all switch interactions.
+2. Finish the source inventory, including AI moveset attributes, constructor
+   closures/conditions, tags, modifiers, phases and unsupported/capacity paths.
+3. Reconcile identity/form/copy and persistent interaction evidence with later
+   merged slices; retain exact state, queues, text, RNG and all prior covered IDs.
+   [Last Resort history](LAST-RESORT-HISTORY-VALIDATION.md) adds full non-virtual
+   membership, summon reset and compatible saves. The [nonvirtual query
+   follow-up](NONVIRTUAL-HISTORY-VALIDATION.md) adds all four last-real-move
+   selectors, their shared-target identities and optional save state. The
+   [Protect follow-up](PROTECT-HISTORY-VALIDATION.md) adds complete protection
+   streaks, Number-sized seeded ranges and compatible saves. Other all-history
+   queries now have [Conversion 2 and Lock-On/Mind Reader evidence](REMAINING-HISTORY-VALIDATION.md). Faint-history capacity remains a separate audit item.
+4. Finish wide-level Endless acceptance across generation, arithmetic,
+   progression, display and compatible saves, then publish the final evidence
+   audit and explicitly list any remaining external prerequisites.
 
 The order can change when an actual source mismatch reveals a prerequisite.
 Each slice retains its own reproducible validation and exact-head CI record.
@@ -60,3 +93,11 @@ The user authorized cross-core fixes during unattended continuation on
 2026-10-17; no other lanes are active. Follow existing contracts and validate
 any run/game/AI changes required to close battle-core callers.
 Hardware/emulator acceptance is separate from source parity and a passing build.
+
+Gimmighoul canonical EvoTracker acquisition, class admission, primary evolution
+and persistence now have [native owner evidence](../game-core/EVO-TRACKER-VALIDATION.md).
+General fusion evolution selection remains an explicitly open caller prerequisite.
+
+[Constructor-lock transport](../game-core/HELD-LOCK-VALIDATION.md) now preserves
+source locks in acquisition, projection and save reconstruction. This does not
+close the remaining held-form activation or incrementing-stat owners.

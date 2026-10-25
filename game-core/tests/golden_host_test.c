@@ -79,7 +79,10 @@ static void mapping(void) {
  gc_items_to_battle(&run);CHECK(!run.bt.mods[0][0].unknown_subclass&&run.bt.mods[0][0].virtual_stack_count==1);
  /* An unrepresented Golden must not unlock a represented virtual Coin. */
  run.items[GC_MAX_ITEMS-1]=run.items[1];for(int i=1;i<GC_MAX_ITEMS-1;i++)run.items[i]=(gc_item){.key="UNPORTED",.stack=1};run.n_items=GC_MAX_ITEMS;
- gc_items_to_battle(&run);CHECK(run.bt.mods[0][0].unknown_subclass);gc_items_from_battle(&run);CHECK(run.n_items==GC_MAX_ITEMS&&!strcmp(run.items[GC_MAX_ITEMS-1].key,"GOLDEN_PUNCH"));
+ gc_items_to_battle(&run);CHECK(run.bt.n_mods[0]==0&&run.bt.n_unported);gc_items_from_battle(&run);CHECK(run.n_items==GC_MAX_ITEMS&&!strcmp(run.items[GC_MAX_ITEMS-1].key,"GOLDEN_PUNCH"));
+ /* At the supported maximum the final Golden is represented and unlocks Coin. */
+ run.n_items=PR_MAX_MODIFIERS;run.items[PR_MAX_MODIFIERS-1]=run.items[GC_MAX_ITEMS-1];run.bt.n_unported=0;
+ gc_items_to_battle(&run);CHECK(run.bt.n_mods[0]==PR_MAX_MODIFIERS&&!run.bt.mods[0][0].unknown_subclass);
 }
 static void yielded_wallet(void) {
  setup();

@@ -48,6 +48,13 @@ typedef struct {
   int8_t type;            /* PokemonType when has_type */
 } menu_move;
 
+#define MENU_MAX_FORM_ITEMS 2048
+typedef struct {
+  const char* name;
+  int inventory_index;
+  bool active;
+} menu_form_item;
+
 /* One party member, as the menus show it. */
 typedef struct {
   uint16_t species;       /* SpeciesId */
@@ -63,7 +70,7 @@ typedef struct {
   uint8_t fusion_variant;
 
   char name[40];          /* getNameToRender(): nickname or species name */
-  uint16_t level;
+  uint32_t level;
   uint32_t hp, max_hp;
   uint8_t status;         /* MS_* (the non-volatile status; 0 = none) */
 
@@ -71,6 +78,9 @@ typedef struct {
   uint8_t nmoves;
   menu_held_item items[MENU_MAX_ITEMS];
   uint8_t nitems;
+  /* Separate from the sorted/truncated summary held-items row. */
+  const menu_form_item* form_items;
+  int nform_items;
 
   bool has_evolutions;    /* shows "Pause Evolution" (either fused species evolving counts) */
   bool pause_evolutions;
@@ -88,6 +98,8 @@ typedef struct {
   uint8_t nature;         /* Nature */
   uint32_t stats[6];      /* getStat, in PERMANENT_STATS order (stats[0] unused: hp/max_hp) */
   uint8_t ivs[6];
+  bool show_battle_stages; /* active party member: show current stages beside base stats */
+  int8_t stat_stages[7]; /* ATK DEF SPATK SPDEF SPD ACC EVA */
   uint32_t exp, next_lv_exp; /* exp and getLevelTotalExp(level + 1) - exp (0 at the level cap) */
   float exp_ratio;        /* levelExp / getLevelRelExp(level + 1), 0 at the level cap */
   uint8_t pokeball;       /* PokeballType */
@@ -98,7 +110,8 @@ typedef struct {
   int8_t tera_type;       /* shown when show_tera (the Terastallize achievement is unlocked) */
   bool show_tera;
   int16_t met_biome;      /* BiomeId, -1 = unknown ("apparently met") */
-  uint16_t met_level, met_wave; /* met_wave 0 = unknown */
+  uint32_t met_level;
+  uint16_t met_wave; /* met_wave 0 = unknown */
   /* starter data of the root species */
   uint16_t candy_count;
   uint16_t starter_friendship, friendship_cap; /* getStarterValueFriendshipCap */
@@ -150,6 +163,7 @@ typedef struct party_events {
    * option is hidden. */
   void (*on_summary)(void* ctx, int slot);
   void* ctx;
+  void (*on_form_item)(void* ctx, int slot, int inventory_index);
 } party_events;
 
 typedef struct {
@@ -167,6 +181,8 @@ typedef struct {
   bool prefer_baton_pass;   /* settings.general.preferBatonPass */
   bool hardcore;            /* HARDCORE challenge: fainted members only offer release */
   bool in_reward_phase;     /* CHECK opened from the reward screen: offers Release (and Unsplice) */
+  int initial_cursor;
+  bool preserve_roster;     /* host does not implement releasing/unsplicing here */
 } party_args;
 
 void party_open(const party_args* args, const menu_mon* party, int n, const party_events* ev);

@@ -28,14 +28,22 @@ void ps_open(const pr_battle* bt, ps_mode mode, void (*on_pick)(int slot, int op
 void ps_close(void);
 
 /* Opens the party screen in item mode (e.g. PARTY_MODIFIER, PARTY_MOVE_MODIFIER) over a gc_run party.
+ * tm_move is the TM move ID for PARTY_TM_MODIFIER (0 for other modes).
  * on_pick gets slot (0..5), move_slot (-1 or 0..3), or slot 6 / cancel when backed out. */
-void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, void (*on_pick)(int slot, int move_slot, void* arg), void* arg);
+void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, int tm_move, void (*on_pick)(int slot, int move_slot, void* arg), void* arg);
 
 /* Opens the party screen in MODIFIER_TRANSFER mode over a gc_run party (the reward screen's Manage Items). on_move gets the item's
  * index in the run's item list, how many copies and the party index that gets them (-1 = discard them), and must apply the transfer to the run before
  * it returns (the screen then shows the run again). on_done runs when the player backs out; the screen stays open until ps_close. */
 void ps_open_transfer(const void* gc_run_ptr, void (*on_move)(int item_src, int count, int to, void* arg), void (*on_done)(void* arg),
                       void* arg);
+
+/* Reward Check Team: summaries and native eligible form-item actions, including
+ * fainted and benched owners. The host applies changes; form uses a global index. */
+void ps_open_check(const void* gc_run_ptr, int cursor,
+                   void (*on_form)(int party, int item, void* arg),
+                   void (*on_pause)(int party, bool paused, void* arg),
+                   void (*on_done)(void* arg), void* arg);
 
 /* ---- the learn-move dialog (menus' learn_move_start) over the battle ----
  * The dialog's messages and yes/no box belong to the caller's screen (the battle's message box); the

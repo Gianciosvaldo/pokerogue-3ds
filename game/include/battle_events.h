@@ -24,6 +24,7 @@
 /* The text source for pr_msg_format: locales/<language>/<file>.json from data.pak, falling back
  * to English as upstream's i18next does. */
 const pr_text_source* be_text_source(void);
+void be_format_message(const pr_msg *msg,char *out,size_t size);
 
 /* A battle-core Pokemon as the screen shows it. */
 void be_mon(const pr_battle* bt, const pr_pokemon* p, bv_mon* out);
@@ -31,8 +32,8 @@ void be_mon(const pr_battle* bt, const pr_pokemon* p, bv_mon* out);
 /* What the screen shows of both sides before some events: the Pokemon as bv_mon_of gives them, and
  * whether each is on the field. be_convert_events leaves the presence as the events made it. */
 typedef struct {
-  bv_mon mon[2];                              /* [0] the player's, [1] the enemy's */
-  bool present[2];
+  bv_mon mon[4];                              /* primary player/enemy, then secondary player/enemy */
+  bool present[4];
   float (*exp_ratio)(const pr_pokemon* p);    /* the EXP bar of a player's Pokemon being sent out (NULL = empty) */
   int (*level_of)(const pr_pokemon* p);       /* its level when it is sent out (NULL = its level now; the run may have gone on
                                                * past the events: experience, level ups) */
@@ -40,7 +41,7 @@ typedef struct {
   const pr_pokemon* const* enemy_party;       /* the enemy's party for a switch-in when bt no longer has it (the battle ended
                                                * in the same events): NULL = none */
   int n_enemy_party;
-  const pr_pokemon* sent[2];                  /* out: the last Pokemon sent out on each side (NULL: none, or not found) */
+  const pr_pokemon* sent[4];                  /* out: the last Pokemon sent out on each side (NULL: none, or not found) */
 } be_view;
 
 /* Converts battle-core events (a turn's, or the rest of one after a switch) into screen events, at most

@@ -109,6 +109,10 @@ bool pr_learned_form_target(pr_battle *bt, const pr_pokemon *p, uint16_t *target
 static void form_change_with_delay(pr_battle *bt, const pr_pokemon *p, int trigger_class, bool delayed)
 {
     if (!p) return;
+    if (trigger_class == PR_FCT_SpeciesFormChangeItemTrigger) {
+        pr_trigger_item_form_change(bt, (pr_pokemon *)p, delayed, NULL);
+        return;
+    }
     const pr_species *sp = pr_pokemon_species(p);
     if (!sp || !(sp->form_change_triggers & (1u << trigger_class))) return;
 
@@ -261,16 +265,11 @@ static void turn_modifiers(pr_battle *bt, bool player, const pr_pokemon *p)
     int side = player ? 0 : 1;
     for (int i = 0; i < bt->n_mods[side]; i++) {
         const pr_modifier *m = &bt->mods[side][i];
-        /* Fusion-specific Leek/stat-item eligibility remains outside the full-turn proof.
-         * Do not contaminate the raw damage API's source-proven projection. */
-        bool fused_item = p && p->fusion_species && (m->cls == PR_MOD_SPECIES_CRIT_BOOSTER || m->cls == PR_MOD_SPECIES_STAT_BOOSTER
-                || m->cls == PR_MOD_EVOLUTION_STAT_BOOSTER)
-            && (m->pokemon_id == -1 || m->pokemon_id == (int64_t)p->id);
         bool vitamin_over_cap = p && m->cls == PR_MOD_BASE_STAT && m->stat >= STAT_HP && m->stat <= STAT_SPD
             && m->pokemon_id == (int64_t)p->id
             && (int64_t)m->stack_count + m->virtual_stack_count > p->ivs[m->stat];
-        if (pr_mod_is_ported_item(m) && !fused_item && !vitamin_over_cap) continue;
-        if (fused_item || vitamin_over_cap || !pr_mod_is(m, PR_MOD_HELD_ITEM) || !p || m->pokemon_id == (int64_t)p->id) {
+        if (pr_mod_is_ported_item(m) && !vitamin_over_cap) continue;
+        if (vitamin_over_cap || !pr_mod_is(m, PR_MOD_HELD_ITEM) || !p || m->pokemon_id == (int64_t)p->id) {
             pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
             return;
         }
@@ -1191,7 +1190,10 @@ static void obtain_status_effect_phase(pr_battle *bt, pr_engine *e, int ph)
         pr_ab_params pp = {.pokemon = p, .opponent = q->source_p, .move = -1, .effect = effect};
         pr_apply_ab_attrs(bt, PR_AC_PostSetStatusAbAttr, &pp);                   /* Synchronize */
         q = PH(ph);
-        if (q->source_p) pr_hook_ab(bt, q->source_p, PR_AC_ConfusionOnStatusEffectAbAttr); /* Poison Puppeteer */
+        if (q->source_p) {
+            pr_ab_params confusion = {.pokemon = q->source_p, .opponent = p, .move = -1, .effect = effect};
+            pr_apply_ab_attrs(bt, PR_AC_ConfusionOnStatusEffectAbAttr, &confusion);
+        }
     }
 }
 
@@ -1894,14 +1896,10 @@ static bool check_bypass_acc_and_invuln(pr_battle *bt, pr_pokemon *user, pr_poke
     if (pr_get_battler_tag(user, BATTLER_TAG_TYPE_IGNORE_ACCURACY)) {
         /* getLastXMoves(-1).find(m => m.move === LOCK_ON || m.move === MIND_READER)?.targets
          * includes the target */
-        for (int k = 0; k < user->n_move_history; k++) {
-            const pr_turn_move *tm = pr_last_move(bt, user, k);
-            if (!tm) break;                                        /* older than the kept ones: reported */
-            if (tm->move != MOVE_ID_LOCK_ON && tm->move != MOVE_ID_MIND_READER) continue;
-            for (int i = 0; i < tm->n_targets; i++)
-                if (tm->targets[i] == pr_battler_index(bt, target)) return true;
-            break;
-        }
+        bool unknown=false;
+        const pr_turn_move *tm=pr_last_aim_move(bt,user,&unknown);
+        if(tm)for(int i=0;i<tm->n_targets;i++)
+            if(tm->targets[i]==pr_battler_index(bt,target))return true;
     }
     return is_field_targeted(move);
 }
@@ -2279,7 +2277,10 @@ static void apply_on_target_effects(pr_battle *bt, pr_engine *e, int ph, pr_poke
         pr_apply_enemy_attack_status_modifiers(bt, e, user, target);
         turn_modifiers(bt, false, target);   /* EnemyAttackStatusEffectChanceModifier */
     }
-    if (pr_move_is_attack(move)) turn_modifiers(bt, user->is_player, user);                /* ContactHeldItemTransferChanceModifier */
+    if (pr_move_is_attack(move)) {
+        pr_apply_contact_held_item_transfers(bt,e,user,target);
+        turn_modifiers(bt,user->is_player,user);
+    }
 }
 
 static void apply_move_effects(pr_battle *bt, pr_engine *e, int ph, pr_pokemon *target, double eff, bool first_target)
@@ -2776,7 +2777,12 @@ static void reset_summon_data(pr_pokemon *p)
     memset(p->summon_stats, 0, sizeof p->summon_stats);
     p->n_summon_types = 0;
     p->added_type = 0;
+    p->history_epoch++;
     p->n_move_history = 0;
+    pr_rebuild_history_used_moves(p);
+    pr_rebuild_nonvirtual_history(p);
+    pr_rebuild_protect_history(p);
+    pr_rebuild_all_history(p);
     p->temp_turn_count = p->temp_wave_turn_count = 1;
     p->n_ab_applied_summon = 0;
 }
@@ -3142,8 +3148,7 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
             pr_modifier *m = &bt->mods[1][i];
             if (pr_mod_is(m, PR_MOD_HELD_ITEM) && m->pokemon_id == (int64_t)p->id) {
                 if (m->is_transferable) {
-                    bt->post_battle_loot++;
-                    m->pokemon_id = 0;
+                    pr_add_post_battle_loot(bt,m);
                 }
                 if (!pr_mod_is_ported_item(m)) pr_note_unported(bt, PR_FEAT_TURN_MODIFIERS);
             }
@@ -4035,7 +4040,7 @@ static void attempt_run_phase(pr_battle *bt, pr_engine *e, int ph)
 /* ToggleDoublePositionPhase: the first of getPlayerField() active on the field moves (its sprite;
  * to the centre after a faint left it alone); once there, one in field slot 1 swaps party slots
  * with the Pokemon in slot 0, and so takes field index 0 */
-static void toggle_double_position_phase(pr_battle *bt)
+static void toggle_double_position_phase(pr_battle *bt,pr_engine *e)
 {
     if (!bt->double_battle) return;                       /* singles: the one on the field is at index 0 */
     if (!bt->n_party[0]) { pr_note_unported(bt, PR_FEAT_PARTY); return; }
@@ -4048,6 +4053,7 @@ static void toggle_double_position_phase(pr_battle *bt)
             bt->party[0][0] = p;
             bt->field[0] = bt->party[0][0];
             bt->field[1] = bt->party[0][1];
+            pr_event_add(bt,e,PR_EV_FIELD_SWAP,1,0,0,0,NULL);
         }
         return;
     }
@@ -4208,7 +4214,7 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_SUMMON: pr_summon_phase(bt, e, ph); break;
     case PH_INIT_ENCOUNTER: pr_init_encounter_phase(bt, e, ph); break;
     case PH_CHECK_SWITCH: pr_check_switch_phase(bt, e, ph); break;
-    case PH_TOGGLE_DOUBLE_POSITION: toggle_double_position_phase(bt); break;
+    case PH_TOGGLE_DOUBLE_POSITION: toggle_double_position_phase(bt,e); break;
     case PH_MOVE_REFLECT: move_reflect_phase(bt, e, ph); break;
     case PH_SHINY_SPARKLE: pr_event_add(bt, e, PR_EV_SHINY_SPARKLE, PH(ph)->battler, -1, 0, 0, NULL); break;
     case PH_ILLUSION_BREAK: pr_event_add(bt, e, PR_EV_ILLUSION_BREAK, PH(ph)->battler, -1, 0, 0, NULL); break;

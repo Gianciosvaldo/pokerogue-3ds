@@ -47,6 +47,14 @@ typedef struct {
 
 extern const rr_draw_opts RR_DEFAULT_OPTS; /* origin 0,0, scale 1, no tint */
 
+#ifdef __3DS__
+#include <citro2d.h>
+/* Borrow an atlas frame for a direct citro2d draw. Caller owns sub storage;
+ * image/UV storage is valid until the draw and texture until atlas release. */
+bool rr_frame_c2d_image(const rr_frame *frame, C2D_Image *image,
+                        Tex3DS_SubTexture *sub);
+#endif
+
 /* ---- lifecycle ---- */
 bool rr_init(void);
 void rr_exit(void);
@@ -68,6 +76,9 @@ void rr_tex_free(rr_tex* t);
 int rr_tex_width(const rr_tex* t);   /* image size, not padded size */
 int rr_tex_height(const rr_tex* t);
 size_t rr_tex_bytes(const rr_tex* t); /* GPU memory used */
+/* Snapshot one trimmed atlas frame into an independent, aspect-preserving
+ * nearest-neighbor texture (max_edge 8..128). Load-time work only. */
+rr_tex* rr_tex_thumbnail(const rr_frame* frame, unsigned max_edge);
 rr_frame rr_tex_frame(rr_tex* t);     /* whole image as one frame */
 
 /* ---- atlases (TexturePacker JSON, the format every upstream sprite sheet uses) ---- */

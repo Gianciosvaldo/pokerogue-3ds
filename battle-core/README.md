@@ -1367,3 +1367,10 @@ in [ABILITY-MOVES-VALIDATION.md](ABILITY-MOVES-VALIDATION.md).
 Tera phase ownership, Ogerpon/Terapagos quiet triggers and arena counter saves
 are documented in [TERA-PHASE-VALIDATION.md](TERA-PHASE-VALIDATION.md), with
 bounded raw, complete-turn and cleanup evidence and explicit caller limits.
+
+Shared held-stock transfer and preflight, the retained native corpora, and the
+remaining Pickup prerequisites are documented in
+[SCENE-TRANSFER-VALIDATION.md](SCENE-TRANSFER-VALIDATION.md).
+
+Grip Claw's attack callback, native source comparisons and inventory/save bridge
+are documented in [GRIP-CLAW-VALIDATION.md](GRIP-CLAW-VALIDATION.md).

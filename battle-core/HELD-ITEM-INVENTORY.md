@@ -21,10 +21,10 @@ Pickup, broader item identities and full interactions remain open.
 | --- | --- | --- |
 | `LapsingPokemonHeldItemModifier` (abstract) | No C class | Lapsing held-item lifecycle; no concrete subclass at this pin |
 | `BaseStatModifier` | `PR_MOD_BASE_STAT`; `pr_apply_base_stat_modifiers` helper | Full-turn fixtures/whitelist; vitamin stats themselves already implemented |
-| `EvoTrackerModifier` | No C class | Evolution tracker/persistent treasure lifecycle; upstream apply itself is a no-op returning true |
+| `EvoTrackerModifier` | `PR_MOD_EVO_TRACKER`; canonical nontransferable Gimmighoul coins, money acquisition, primary evolution and saves | [Native acquisition/primary evolution evidence](../game-core/EVO-TRACKER-VALIDATION.md); fusion evolution selection remains open |
 | `PokemonBaseStatTotalModifier` | `PR_MOD_BASE_STAT_TOTAL`; base-stat helper | Full-turn fixtures/whitelist |
 | `PokemonBaseStatFlatModifier` | `PR_MOD_BASE_STAT_FLAT`; base-stat helper | Full-turn fixtures/whitelist |
-| `PokemonIncrementingStatModifier` | `PR_MOD_INCREMENTING_STAT`; `pr_apply_incrementing_stat_modifier` helper | Full-turn fixtures/whitelist |
+| `PokemonIncrementingStatModifier` | `PR_MOD_INCREMENTING_STAT`; canonical Brace bridge, real-stock stats, Victory/capture owner and saves | [Native stat/owner/capture proof](../game-core/MACHO-BRACE-VALIDATION.md); Winstrate reward chain and raw scene-cleanup histories remain separate |
 | `StatBoosterModifier` | `PR_MOD_STAT_BOOSTER`; `pr_apply_stat_booster_modifiers` helper | Full-turn fixtures/whitelist |
 | `EvolutionStatBoosterModifier` | `PR_MOD_EVOLUTION_STAT_BOOSTER`; stat helper includes evolution check | Full-turn fixtures/whitelist |
 | `SpeciesStatBoosterModifier` | `PR_MOD_SPECIES_STAT_BOOSTER`; stat helper includes species check | Full-turn fixtures/whitelist |
@@ -46,7 +46,7 @@ Pickup, broader item identities and full interactions remain open.
 | `PokemonNatureWeightModifier` | Existing `PR_MOD_NATURE_WEIGHT` nature-stat calculation; bounded Soul Dew class promoted | Proven singles stats/full-turn scope; acquisition/save/transfer excluded |
 | `PokemonMoveAccuracyBoosterModifier` | `PR_MOD_MOVE_ACCURACY_BOOSTER`; battle-accuracy dispatch | Added bounded Wide Lens amount=5, stacks 1–3 including virtual stacks; other identities remain unported |
 | `PokemonMultiHitModifier` | `PR_MOD_MULTI_HIT`; hit-count dispatch plus existing damage scaling/held-stack helpers | Added bounded singles Multi Lens (effective stacks1–2); Parental Bond/doubles and acquisition/save integration remain outside this slice |
-| `PokemonFormChangeItemModifier` | No C class | Held form-change activation/lifecycle; supported species form changes are separate |
+| `PokemonFormChangeItemModifier` | `PR_MOD_FORM_CHANGE_ITEM`; canonical identity, native callback and ordered item-trigger selection/queue dispatch | [Native callback proof](HELD-FORM-VALIDATION.md), [inventory/save projection](../game-core/HELD-FORM-STATE-VALIDATION.md), [acquisition and party action owner](../game-core/FORM-ITEM-OWNER-VALIDATION.md); [app menu wiring](../FORM-ITEM-MENU-2026-10-24.md) is merged; Transform and arbitrary mixed histories remain open |
 | `DamageMoneyRewardModifier` | `PR_MOD_DAMAGE_MONEY_REWARD`; player-to-enemy final-damage money dispatch | Golden Punch bounded singles proof; wallet bridge/acquisition/UI/achievement lifecycle excluded |
 | `SwitchEffectTransferModifier` | No C class; switching explicitly leaves held Baton transfer unported | Held Baton ownership transfer; Baton Pass move/tag transfer is already implemented separately |
 | `HeldItemTransferModifier` (abstract) | No C class | General stealing base; bounded Knock Off/Incinerate removal is a separate move attribute |
@@ -114,3 +114,22 @@ separate VariableMoveTypeAttr result: Hidden Power can have a different damage
 type while only its Normal-type booster matches the power caller. The focused
 suite records this behavior. Unsupported type/multiplier/stack identities remain
 unported; this promotion does not establish acquisition, transfer or a save bridge.
+
+## Fusion follow-up (2026-10-23)
+
+The historical helper-only rows for EvolutionStatBoosterModifier,
+SpeciesStatBoosterModifier and SpeciesCritBoosterModifier above are superseded
+by [the fused held-item validation](FUSED-HELD-VALIDATION.md). Original Eviolite
+checks evolution in both components, with a half boost for exactly one
+unevolved component, and checks Max forms in either component. The six species
+boosters and Leek accept either original component species. Canonical full-turn
+admission and raw projection are both covered. Generic raw constructor
+parameters, inventory capacity and all other historical lifecycle exclusions
+still require their own reconciliation; this update does not close the full
+inventory. [Transferred stat-item class identity](STAT-LOOT-VALIDATION.md) and
+[Pickup ownership](PICKUP-VALIDATION.md) remain independently required.
+
+[Inventory capacity](INVENTORY-CAPACITY-VALIDATION.md) now has a pinned catalogue
+audit and native large-stock owner/save proof. The shared battle/reward limit is
+2,048 with a wide count. Detached transient histories and the other exclusions
+above remain separate; increasing storage does not implement unknown item classes.

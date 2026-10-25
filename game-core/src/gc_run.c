@@ -49,10 +49,21 @@ gc_event *gc_ev_new(gc_run *run, int kind)
     return ev;
 }
 
-void gc_ev_msg(gc_run *run, const char *key, int n, ...)
+/* Wallet and rewards can exceed int32 well before the Endless cap. */
+void gc_ev_money(gc_run *run, double change)
+{
+    gc_event *ev = gc_ev_new(run, GC_EV_MONEY);
+    if (!ev) return;
+    ev->money_change = change;
+    ev->money_after = run->money;
+    ev->a = change >= INT32_MIN && change <= INT32_MAX ? (int32_t)change : 0;
+    ev->b = run->money >= INT32_MIN && run->money <= INT32_MAX ? (int32_t)run->money : 0;
+}
+
+gc_event *gc_ev_msg(gc_run *run, const char *key, int n, ...)
 {
     gc_event *ev = gc_ev_new(run, GC_EV_MESSAGE);
-    if (!ev) return;
+    if (!ev) return NULL;
     ev->msg.key = key;
     va_list ap;
     va_start(ap, n);
@@ -61,6 +72,7 @@ void gc_ev_msg(gc_run *run, const char *key, int n, ...)
         if (i < PR_MSG_MAX_ARGS) ev->msg.args[ev->msg.n_args++] = a;
     }
     va_end(ap);
+    return ev;
 }
 
 pr_msg_arg gc_m_mon(gc_run *run, const char *name, int side, int idx)
@@ -292,8 +304,15 @@ bool gc_run_set_starters(gc_run *run, const gc_starter *starters, int n, const c
 
 const gc_screen *gc_run_screen(const gc_run *run) { return &run->screen; }
 
+const pr_msg *gc_run_refusal_message(const gc_run *run)
+{
+    const pr_msg *m=&gc_int((gc_run *)run)->refusal_message;
+    return m->key ? m : NULL;
+}
+
 bool gc_run_choose(gc_run *run, const gc_choice *c, const char **why)
 {
+    gc_int(run)->refusal_message=(pr_msg){0};
     const char *dummy;
     if (!why) why = &dummy;
     *why = "";

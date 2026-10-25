@@ -11,8 +11,42 @@ uint16_t gc_gacha_featured_species(uint64_t timestamp){
  uint64_t day=timestamp/86400000;pr_seedstr base,shift;pr_seed_from_ascii(&base,"1073741824");pr_seed_shift(&shift,&base,(int)(day/n));pr_rng r;pr_rng_sow(&r,&shift);
  for(int i=n-1;i>0;i--){int j=(int)floor(pr_rng_frac(&r)*(i+1));uint16_t t=ids[i];ids[i]=ids[j];ids[j]=t;}return ids[day%n];
 }
+#include "../gen/out/gc_species_egg_info.inc"
 static bool has_species(const gc_system *s,int id){if(s->dex[id].caught_attr)return true;for(int i=0;i<s->n_eggs;i++)if(s->eggs[i].species==id)return true;return false;}
 static bool has_variants(int id){for(int i=0;i<gc_egg_pool_count;i++)if(gc_egg_pool[i].species==id)return gc_egg_pool[i].variants;return false;}
+int gc_system_species_egg_cost(const gc_system *sys,uint16_t species){
+ static const uint8_t prices[10][4]={{30,27,22,15},{30,27,22,15},{25,22,18,12},{20,18,15,10},{18,16,13,9},{15,13,11,7},{12,10,9,6},{10,9,7,5},{10,9,7,5},{10,9,7,5}};
+ static const uint8_t thresholds[10][3]={{20,40,80},{20,40,80},{20,40,80},{15,30,60},{15,30,60},{15,30,60},{10,20,40},{10,20,40},{10,20,40},{8,16,32}};
+ int cost=gc_starter_cost(species);
+ if(!sys||species>GC_MAX_SPECIES_ID||cost<1||cost>10)return -1;
+ int i=0;while(i<3&&sys->dex[species].hatched_count>=thresholds[cost-1][i])i++;
+ return prices[cost-1][i];
+}
+bool gc_system_buy_species_egg(gc_system *sys,uint16_t species,gc_gacha_ctx *ctx,const char **why){
+ if(why)*why="invalid species egg purchase";
+ int cost=gc_system_species_egg_cost(sys,species),tier=-1;bool variants=false;
+ if(!sys||!ctx||cost<0||!sys->dex[species].caught_attr||!rng_ok(&ctx->entropy)||ctx->entropy_draws>UINT32_MAX-26||ctx->timestamp_ms>UINT64_C(8640000000000000)||sys->n_eggs<0)return false;
+ if(sys->n_eggs>=99){if(why)*why="egg:tooManyEggs";return false;}
+ if(sys->starters[species].candy_count<cost){if(why)*why="not enough species candies";return false;}
+ for(unsigned i=0;i<sizeof species_egg_info/sizeof *species_egg_info;i++)if(species_egg_info[i].species==species){tier=species_egg_info[i].tier;variants=species_egg_info[i].variants;break;}
+ if(tier<0)return false;
+ gc_gacha_ctx c=*ctx;char seed[25];for(int i=0;i<24;i++)seed[i]=chars[entropy_int(&c,62)];seed[24]=0;
+ pr_seedstr key;pr_seed_from_ascii(&key,seed);pr_rng r;pr_rng_sow(&r,&key);
+ /* The native constructor rolls an initial tier and ID before species overrides
+  * its tier. Preserve that ID and all entropy draws, including discarded tier. */
+ int value=entropy_int(&c,256),initial=value>=52?0:value>=8?1:value>=1?2:3;
+ gc_egg e={0};e.id=(uint32_t)entropy_int(&c,1073741824)+(uint32_t)initial*1073741824u;
+ e.species=species;e.source_type=3;e.tier=tier;e.timestamp_ms=c.timestamp_ms;
+ static const int waves[]={10,25,50,100},rare[]={16,12,6,3};
+ bool manaphy=species==SPECIES_ID_PHIONE||species==SPECIES_ID_MANAPHY;
+ e.hatch_waves=manaphy?50:waves[tier];e.is_shiny=!pr_rng_seed_int(&r,12,0);
+ if(e.is_shiny){int v=pr_rng_seed_int(&r,10,0);e.variant_tier=v>=4?0:v>=1?1:2;}
+ if(!variants)e.variant_tier=0;
+ e.egg_move_index=pr_rng_seed_int(&r,rare[manaphy?2:tier],0)?pr_rng_seed_int(&r,3,0):3;
+ sys->starters[species].candy_count-=cost;sys->eggs[sys->n_eggs++]=e;*ctx=c;
+ if(why)*why=NULL;
+ return true;
+}
 static bool egg_new(gc_system *s,gc_gacha_ctx *ctx,gc_egg *e,int forced){
  char seed[25];for(int i=0;i<24;i++)seed[i]=chars[entropy_int(ctx,62)];seed[24]=0;pr_seedstr key;pr_seed_from_ascii(&key,seed);pr_rng r;pr_rng_sow(&r,&key);
  int offset=ctx->machine==1,tier=forced;

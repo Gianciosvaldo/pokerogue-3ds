@@ -24,6 +24,7 @@ typedef struct shop_ui_events {
   void (*on_skip)(void* ctx);
   void (*on_manage_items)(void* ctx); /* Manage Items: the party screen in MODIFIER_TRANSFER mode */
   void* ctx;
+  void (*on_check_team)(void* ctx);
 } shop_ui_events;
 
 typedef struct {
@@ -53,6 +54,7 @@ typedef enum {
   SHOP_TARGET_LOCK,
   SHOP_TARGET_SKIP,
   SHOP_TARGET_TRANSFER,
+  SHOP_TARGET_CHECK,
 } shop_target_type;
 
 typedef struct {
@@ -64,7 +66,7 @@ typedef struct {
 #define SHOP_MAX_TOUCH_SLOTS 32
 
 typedef struct {
-  bool active;
+  bool active, move_details;
   gc_screen screen_copy;
   double player_money;
   bool has_lock_capsule;
@@ -93,6 +95,7 @@ void shop_ui_open(const shop_ui_args* args, const shop_ui_events* ev);
 void shop_ui_close(void);
 bool shop_ui_active(void);
 bool shop_ui_input(mui_button b);
+void shop_ui_release(mui_button b);
 bool shop_ui_touch(float touch_x, float touch_y);
 void shop_ui_update(float dt_ms);
 void shop_ui_draw(void);

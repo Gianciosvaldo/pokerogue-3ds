@@ -74,3 +74,9 @@ Base main `1c984b7`. Evidence is outside the repository under
 
 Required host/3DS CI must pass on the actual PR head. No console, whole-run
 upstream, full Task 96 or full achievement/presentation parity is claimed.
+
+## Gimmighoul follow-up
+
+The historic Gimmighoul refusal above is superseded by the
+[EvoTracker owner implementation and proof](EVO-TRACKER-VALIDATION.md).
+Other stated limitations remain scoped to their individual evidence.

@@ -75,6 +75,12 @@ typedef struct {
 #define GV_CANVAS_Y 30.0f
 #define GV_W 320.0f
 #define GV_H 180.0f
+/* the top screen is 400 x 240: the 320 x 180 canvas has a band of this many px at each side and above and below it, which the machine's
+ * screens draw on too (the background, the machines, the windows at the screen's edges) */
+#define GV_SIDE 40.0f
+#define GV_BAND 30.0f
+/* the machines' top edge: upstream's 18 in the field, moved down with the bottom band so they still stand on the message window */
+#define GV_MACHINE_Y (18.0f + GV_BAND)
 
 /* the machine menu: the option list, the buttons under it, the question over it */
 #define GV_OPT_Y 30.0f    /* the list's window */
@@ -135,7 +141,7 @@ void gv_draw_bottom(const gv_state* s);
 typedef enum { GV_REVEAL_IDLE, GV_REVEAL_RUNNING, GV_REVEAL_SETTLED } gv_reveal_stage;
 
 typedef struct {
-  float x, y;       /* centre in the field's pixels (320 x 180) */
+  float x, y;       /* centre in the field's pixels (cap_screen_y: y runs over the whole top screen, -30 .. 210) */
   float open;       /* 0 closed .. 1 open */
   uint8_t phase;    /* 0 still in the chute (not drawn), 1 falling, 2 landed */
   uint8_t tier;     /* 0 .. GV_TIERS - 1 */

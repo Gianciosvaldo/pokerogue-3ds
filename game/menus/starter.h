@@ -8,9 +8,8 @@
  * What is on the screen, and what is not yet (each is a separate task, none is faked):
  *   - there: the grid with its scrolling and cost labels, the team column with the cost budget, Randomize and Start, the info
  *     panel (sprite, dex number, name, types, growth rate, ability, passive, nature), the options menu with Add to Party and
- *     Remove from Party, and the Begin / Exit questions. The top screen shows the species' sprite and moves.
- *   - not there: the filter bar and sort, the cycle buttons (shiny, form, gender, ability, nature, tera), IVs, moves and nature
- *     management, candy purchases, favourites, rename, the Pokedex page, egg moves, the tutorial. The options menu lists only
+ *     Remove from Party, Customize, and the Begin / Exit questions. The host provides unlocked move/nature/shiny/ability selections and candy purchases. The top screen shows the species' sprite, moves and team luck.
+ *   - not there: the filter bar and sort, the cycle buttons (shiny, form, gender, ability, nature, tera), IVs, favourites, rename, the Pokedex page and the tutorial. The options menu lists only
  *     what works. See starter_model.h for how the cursor moves without the filter bar.
  */
 #ifndef GAME_MENUS_STARTER_H
@@ -46,6 +45,7 @@ typedef struct {
   /* Math.floor(Math.random() * n), for Randomize */
   int (*rnd)(void* ctx, int n);
   void* ctx;
+  void (*configure)(void* ctx, uint16_t species);
 } starter_events;
 
 typedef struct {
@@ -70,6 +70,7 @@ void starter_draw(void);
 void starter_draw_top(void);
 /* A message in the box at the bottom that waits for A (the caller's reasons: "that team is not allowed"). */
 void starter_message(const char* text);
+void starter_refresh(void);
 
 #ifdef __cplusplus
 }

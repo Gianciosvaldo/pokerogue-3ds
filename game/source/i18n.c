@@ -10,6 +10,7 @@
 
 #include "gm_enum_names.h"
 #include "pak.h"
+#include "menus.h"
 
 static char g_lang[16] = "en";
 
@@ -249,10 +250,7 @@ const char* i18n_species_name(int id) {
 }
 
 const char* i18n_move_name(int id) {
-  char k[96], c[64];
-  snprintf(k, sizeof k, "move:%s.name", gm_enum_camel(GM_E_MOVE_ID, id, c, sizeof c));
-  char* out = rot();
-  return i18n_t(out, 96, k, NULL);
+  return menu_move_name((uint16_t)id);
 }
 
 const char* i18n_ability_name(int id) {

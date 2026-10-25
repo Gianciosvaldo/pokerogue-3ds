@@ -108,7 +108,7 @@ static void ownership_and_capacity(void) {
   CHECK(loaded.bt.mods[0][0].pokemon_id==(owner==3?INT64_C(0):owner==0?INT64_C(-1):(int64_t)run.items[0].pokemon_id));
  }
  setup();for(int i=0;i<GC_MAX_ITEMS;i++)run.items[i]=(gc_item){.key="MULTI_LENS",.arg=-1,.stack=1,.pokemon_id=(uint32_t)(1000+i)};run.n_items=GC_MAX_ITEMS;
- gc_items_to_battle(&run);CHECK(run.bt.n_mods[0]==PR_MAX_MODIFIERS);gc_items_from_battle(&run);gc_items_from_battle(&run);CHECK(run.n_items==GC_MAX_ITEMS&&run.items[GC_MAX_ITEMS-1].pokemon_id==1000+GC_MAX_ITEMS-1);
+ gc_items_to_battle(&run);CHECK(run.bt.n_mods[0]==0&&run.bt.n_unported);gc_items_from_battle(&run);gc_items_from_battle(&run);CHECK(run.n_items==GC_MAX_ITEMS&&run.items[GC_MAX_ITEMS-1].pokemon_id==1000+GC_MAX_ITEMS-1);
  setup();run.enemy_items[0]=(gc_item){.key="MULTI_LENS",.arg=-1,.stack=1,.pokemon_id=run.bt.field[2]->id};run.n_enemy_items=1;gc_items_to_battle(&run);
  run.enemy[0].b.hp=0;run.bt.mods[1][0].pokemon_id=0;gc_items_from_battle(&run);gc_items_from_battle(&run);
  CHECK(run.n_enemy_items==1&&run.enemy_items[0].detached&&run.enemy_items[0].pokemon_id==run.enemy[0].b.id);gc_items_to_battle(&run);CHECK(run.bt.mods[1][0].pokemon_id==0);

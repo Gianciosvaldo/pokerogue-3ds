@@ -23,7 +23,7 @@ void ps_set_run(const void* gc_run_ptr) {
 /* gameData.trainerId and the Pokemon's metBiome / metLevel / metWave: what the summary's profile page shows */
 static void fill_met(menu_mon* m, const gc_mon* g) {
   m->met_biome = g->met_biome;
-  m->met_level = g->met_level > 0 ? (uint16_t)g->met_level : m->level;
+  m->met_level = g->met_level > 0 ? (uint32_t)g->met_level : m->level;
   m->met_wave = g->met_wave > 0 ? (uint16_t)g->met_wave : 0;
 }
 
@@ -87,13 +87,15 @@ static void gc_to_menu_mon(const gc_mon* gm, menu_mon* m) {
   m->form = p->form;
   m->gender = p->gender;
   m->shiny = p->shiny;
+  m->variant = p->variant;
   snprintf(m->name, sizeof m->name, "%s", i18n_species_name(p->species));
   m->level = p->level;
   m->hp = p->hp > 0 ? (uint32_t)p->hp : 0;
   m->max_hp = (uint32_t)p->stats[STAT_HP];
   m->status = p->status;
   for (int i = 0; i < p->n_moves && i < 4; i++) {
-    int max = p->max_pp_override[i] >= 0 ? p->max_pp_override[i] : pr_moves[p->moves[i]].pp;
+    int base=pr_moves[p->moves[i]].pp;
+    int max=p->max_pp_override[i]>0?p->max_pp_override[i]:base+p->pp_up[i]*(base/5>0?base/5:1);
     m->moves[i] = (menu_move){p->moves[i], p->pp_used[i], (uint8_t)max, false, 0};
   }
   m->nmoves = p->n_moves;
@@ -102,7 +104,7 @@ static void gc_to_menu_mon(const gc_mon* gm, menu_mon* m) {
   int nt = pr_get_types(p, types, 0);
   m->types[0] = nt > 0 ? types[0] : 0;
   m->types[1] = nt > 1 ? types[1] : -1;
-  m->ability = p->ability;
+  m->ability = p->base_ability;
   m->passive = p->passive;
   m->has_passive = p->passive_flag;
   m->nature = p->nature;
@@ -110,10 +112,13 @@ static void gc_to_menu_mon(const gc_mon* gm, menu_mon* m) {
     m->stats[i] = (uint32_t)p->stats[i];
     m->ivs[i] = p->ivs[i];
   }
+  m->show_battle_stages = p->on_field;
+  memcpy(m->stat_stages, p->stat_stages, sizeof m->stat_stages);
   m->friendship = p->friendship;
   m->tera_type = p->tera_type;
   m->met_biome = -1;
   m->met_level = p->level;
+  if(gm)m->pokerus=gm->pokerus;
   fill_met(m, gm);
   fill_items(m, p->id);
 }
@@ -126,13 +131,15 @@ static void ps_menu_mon(const pr_battle* bt, const pr_pokemon* p, menu_mon* m) {
   m->form = p->form;
   m->gender = p->gender;
   m->shiny = p->shiny;
+  m->variant = p->variant;
   snprintf(m->name, sizeof m->name, "%s", i18n_species_name(p->species));
   m->level = p->level;
   m->hp = p->hp > 0 ? (uint32_t)p->hp : 0;
   m->max_hp = (uint32_t)p->stats[STAT_HP];
   m->status = p->status;
   for (int i = 0; i < p->n_moves && i < 4; i++) {
-    int max = p->max_pp_override[i] >= 0 ? p->max_pp_override[i] : pr_moves[p->moves[i]].pp;
+    int base=pr_moves[p->moves[i]].pp;
+    int max=p->max_pp_override[i]>0?p->max_pp_override[i]:base+p->pp_up[i]*(base/5>0?base/5:1);
     m->moves[i] = (menu_move){p->moves[i], p->pp_used[i], (uint8_t)max, false, 0};
   }
   m->nmoves = p->n_moves;
@@ -141,7 +148,7 @@ static void ps_menu_mon(const pr_battle* bt, const pr_pokemon* p, menu_mon* m) {
   int nt = pr_get_types(p, types, 0);
   m->types[0] = nt > 0 ? types[0] : 0;
   m->types[1] = nt > 1 ? types[1] : -1;
-  m->ability = p->ability;
+  m->ability = p->base_ability;
   m->passive = p->passive;
   m->has_passive = p->passive_flag;
   m->nature = p->nature;
@@ -149,12 +156,14 @@ static void ps_menu_mon(const pr_battle* bt, const pr_pokemon* p, menu_mon* m) {
     m->stats[i] = (uint32_t)p->stats[i];
     m->ivs[i] = p->ivs[i];
   }
+  m->show_battle_stages = p->on_field;
+  memcpy(m->stat_stages, p->stat_stages, sizeof m->stat_stages);
   m->friendship = p->friendship;
   m->tera_type = p->tera_type;
   m->met_biome = -1;
   m->met_level = p->level;
   const gc_mon* g = run_mon_of(p);
-  if (g) fill_met(m, g);
+  if (g) {m->pokerus=g->pokerus;fill_met(m, g);}
   if (g) fill_items(m, p->id);
 }
 
@@ -225,7 +234,7 @@ static void ps_update(ui_screen* s, float dt) {
   (void)s;
   mui_tick(dt);
   party_update(dt);
-  summary_update(dt);
+  summary_update(dt / ui_game_speed());
 }
 
 static void ps_draw(ui_screen* s, rr_screen which) {
@@ -288,6 +297,7 @@ static struct {
   void (*on_item_pick)(int slot, int move_slot, void* arg);
   void* item_arg;
   bool target_move;
+  int tm_move;
 } ItemS;
 
 static void on_item_select(void* ctx, int slot, int option) {
@@ -304,7 +314,12 @@ static void on_item_select(void* ctx, int slot, int option) {
   if (ItemS.on_item_pick) ItemS.on_item_pick(slot, -1, ItemS.item_arg);
 }
 
-void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, void (*on_pick)(int slot, int move_slot, void* arg), void* arg) {
+static const char* filter_tm(void* ctx, int slot) {
+  (void)ctx;
+  return gc_mon_can_learn_tm(&g_run->party[slot], ItemS.tm_move) ? NULL : mui_t("partyUiHandler:anyEffect");
+}
+
+void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, int tm_move, void (*on_pick)(int slot, int move_slot, void* arg), void* arg) {
   const gc_run* run = (const gc_run*)gc_run_ptr;
   ps_set_run(run);
   memset(&S, 0, sizeof S);
@@ -313,10 +328,12 @@ void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, void (*on
   ItemS.on_item_pick = on_pick;
   ItemS.item_arg = arg;
   ItemS.target_move = target_move;
+  ItemS.tm_move = tm_move;
 
   if (run) {
     for (int i = 0; i < run->n_party && i < PR_MAX_PARTY; i++) {
       gc_to_menu_mon(&run->party[i], &S.party[i]);
+      if (S.mode == PARTY_TM_MODIFIER) S.party[i].tm_state = (uint8_t)gc_mon_tm_state(&run->party[i], tm_move);
     }
     S.n = run->n_party;
   }
@@ -327,6 +344,7 @@ void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, void (*on
   a.battler_count = 1;
   a.in_reward_phase = true;
   a.show_move_pp = target_move;
+  if (S.mode == PARTY_TM_MODIFIER) a.filter = filter_tm;
 
   static party_events ev;
   ev = (party_events){on_item_select, NULL, NULL, NULL, NULL, on_summary, NULL};
@@ -393,6 +411,71 @@ void ps_open_transfer(const void* gc_run_ptr, void (*on_move)(int item_src, int 
   ui_push(&g_screen);
 }
 
+static struct {
+  void (*on_form)(int, int, void*);
+  void (*on_pause)(int, bool, void*);
+  void (*on_done)(void*);
+  void* arg;
+  int storage[PR_MAX_PARTY];
+} Check;
+/* One item belongs to one member; total storage follows the full inventory,
+ * independently of the summary's 24 displayed items. No large stack arrays. */
+static menu_form_item form_items[PR_MAX_MODIFIERS];
+static int form_indices[PR_MAX_MODIFIERS];
+static void check_form(void* ctx, int slot, int item) {
+  (void)ctx;
+  if (Check.on_form && slot>=0 && slot<S.n) Check.on_form(Check.storage[slot],item,Check.arg);
+}
+static void check_pause(void* ctx, int slot, bool paused) {
+  (void)ctx;
+  if (Check.on_pause && slot>=0 && slot<S.n) Check.on_pause(Check.storage[slot],paused,Check.arg);
+}
+static void check_select(void* ctx, int slot, int option) {
+  (void)ctx;(void)slot;
+  if (option == PO_CANCEL && Check.on_done) Check.on_done(Check.arg);
+}
+void ps_open_check(const void* gc_run_ptr, int cursor, void (*on_form)(int,int,void*),
+                   void (*on_pause)(int,bool,void*), void (*on_done)(void*), void* arg) {
+  const gc_run* run=gc_run_ptr;
+  if (!run || run->n_party<1 || run->n_party>PR_MAX_PARTY) return;
+  _Static_assert(MENU_MAX_FORM_ITEMS >= PR_MAX_MODIFIERS,"full form inventory fits menu");
+  ps_set_run(run);memset(&S,0,sizeof S);S.mode=PARTY_CHECK;S.n=run->n_party;
+  Check.on_form=on_form;Check.on_pause=on_pause;Check.on_done=on_done;Check.arg=arg;
+  int used=0;bool ordered=true;
+  for(int slot=0;slot<S.n;slot++) {
+    int storage=run->party_order[slot];
+    if(storage<0 || storage>=S.n || (used&(1<<storage))) { ordered=false;break; }
+    used|=1<<storage;Check.storage[slot]=storage;
+  }
+  if(!ordered)for(int slot=0;slot<S.n;slot++)Check.storage[slot]=slot;
+  for(int slot=0;slot<S.n;slot++)gc_to_menu_mon(&run->party[Check.storage[slot]],&S.party[slot]);
+  int count=0,initial=0;
+  for(int slot=0;slot<S.n;slot++) {
+    int storage=Check.storage[slot];if(storage==cursor)initial=slot;
+    const int n=gc_form_item_options(run,storage,form_indices,PR_MAX_MODIFIERS);
+    if(n<0 || n>PR_MAX_MODIFIERS-count) {
+      /* Invalid aliased party identities cannot expose a partial action list. */
+      for(int k=0;k<S.n;k++)S.party[k].nform_items=0;
+      break;
+    }
+    S.party[slot].form_items=form_items+count;S.party[slot].nform_items=n;
+    for(int k=0;k<n;k++) {
+      const int index=form_indices[k];const gc_item* item=&run->items[index];
+      const gm_item_ui* label=gm_item_ui_find(item->key,item->arg);
+      if(!label)label=gm_item_ui_find("FORM_CHANGE_ITEM",item->arg);
+      if(!label)label=gm_item_ui_find("RARE_FORM_CHANGE_ITEM",item->arg);
+      form_items[count++]=(menu_form_item){label?label->name:item->arg==0?"None":item->key,index,!item->form_inactive};
+    }
+  }
+  party_args a={0};a.mode=PARTY_CHECK;a.initial_cursor=initial;
+  a.battler_count=run->double_battle?2:1;a.double_battle=run->double_battle;
+  a.max_level=run->bt.max_exp_level;a.in_reward_phase=run->screen.kind==GC_SCREEN_REWARD;
+  a.preserve_roster=true;
+  party_events ev={0};ev.on_select=check_select;ev.on_pause_evolution=check_pause;
+  ev.on_summary=on_summary;ev.on_form_item=check_form;
+  party_open(&a,S.party,S.n,&ev);S.open=true;ui_push(&g_screen);
+}
+
 /* ---- the learn-move dialog ---- */
 
 static struct {
@@ -416,7 +499,7 @@ static bool sum_input(ui_screen* s, ui_button b) {
 static void sum_update(ui_screen* s, float dt) {
   (void)s;
   mui_tick(dt);
-  summary_update(dt);
+  summary_update(dt / ui_game_speed());
 }
 
 static void sum_draw(ui_screen* s, rr_screen which) {

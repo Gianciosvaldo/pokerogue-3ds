@@ -1038,8 +1038,7 @@ Gaps, on purpose or by necessity:
   from the right stream (checked through the RNG) but not shown. The text itself comes from the locale at display time.
 - The Poke Ball of the received Pokemon is unseeded upstream (`randInt(4)`): drawn with the stand-in, never compared. The chosen item's name
   loses its argument (a Berry type, a stat) in the message.
-- Achievements (`addPokemonDataToDexAndValidateAchievements`) are not tracked in C. Macho Brace's stat bonus is not ported (kept off the
-  producer's held-item list). Timed events are off.
+- Achievements (`addPokemonDataToDexAndValidateAchievements`) are not tracked in C. Timed events are off.
 - Upstream loops forever when every candidate species is used (`generateTradeOption`); the port gives up and the trade is refused.
 - `game/` has no mystery-encounter screen (`mystery_auto` picks the first option with the first healthy Pokemon and the first offer).
 - Offers use the generic wild moveset generator (`gc_movegen.c`); a Pokemon it does not cover falls back to `gc_port_enemy_moveset`.

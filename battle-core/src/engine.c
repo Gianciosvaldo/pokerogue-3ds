@@ -608,8 +608,18 @@ void pr_targets_changed(pr_battle *bt, pr_engine *e, int list)
     for (int k = 0; k < e->n_hist_alias; k++) {
         if (e->hist_alias[k].list != list) continue;
         pr_pokemon *p = e->hist_alias[k].p;
+        if(e->hist_alias[k].epoch!=p->history_epoch)continue;
         int kept = p->n_move_history < PR_MAX_MOVE_HISTORY ? p->n_move_history : PR_MAX_MOVE_HISTORY;
-        int at = (int)e->hist_alias[k].abs - (p->n_move_history - kept);
+        /* Shared target arrays remain shared even after the entry leaves the
+         * retained tail, and the old 16-bit count may already be saturated. */
+        for(int q=0;q<4;q++)if((p->history_last_present&(1u<<q))&&p->history_last_serial[q]==e->hist_alias[k].abs){
+            memcpy(p->history_last[q].targets,t->v,4);
+            p->history_last[q].n_targets=t->n;
+        }
+        if((p->history_all_present&2)&&p->history_aim_serial==e->hist_alias[k].abs){
+            memcpy(p->history_aim.targets,t->v,4);p->history_aim.n_targets=t->n;
+        }
+        int64_t at = (int64_t)e->hist_alias[k].abs - ((int64_t)p->history_serial - kept) - 1;
         if (at < 0 || at >= kept) continue;     /* fell out of the kept entries */
         memcpy(p->move_history[at].targets, t->v, 4);
         p->move_history[at].n_targets = t->n;
@@ -625,7 +635,8 @@ void pr_push_history_shared(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_turn_
         tm.n_targets = e->target_lists[list].n;
         if (e->n_hist_alias < (int)(sizeof e->hist_alias / sizeof e->hist_alias[0])) {
             e->hist_alias[e->n_hist_alias].p = p;
-            e->hist_alias[e->n_hist_alias].abs = p->n_move_history;
+            e->hist_alias[e->n_hist_alias].epoch = p->history_epoch;
+            e->hist_alias[e->n_hist_alias].abs = (p->history_serial<p->n_move_history?p->n_move_history:p->history_serial)+1;
             e->hist_alias[e->n_hist_alias].list = (int8_t)list;
             e->n_hist_alias++;
         } else {
@@ -823,6 +834,23 @@ void pr_run_player_cleanup(pr_battle *bt, pr_engine *e)
     run_phases(bt,e,e->overflow ? -1 : shift_phase(bt,e));
 }
 
+void pr_prepare_post_battle_money(pr_battle *bt, pr_engine *e, bool victory)
+{
+    engine_reset(bt, e);
+    for (int k = 0; k < bt->n_party[0]; k++) {
+        pr_pokemon *p = bt->party[0][k];
+        if (!p || p->hp <= 0) continue;
+        pr_ab_params pp = {.pokemon = p, .move = -1, .victory = victory};
+        pr_apply_ab_attrs(bt, PR_AC_PostBattleAbAttr, &pp);
+    }
+}
+
+void pr_run_post_battle_money(pr_battle *bt, pr_engine *e)
+{
+    pr_phase_push(bt, e, pr_phase_new(e, PH_TURN_INIT, -1));
+    run_phases(bt, e, e->overflow ? -1 : shift_phase(bt, e));
+}
+
 /* EncounterPhase.end. Trainer prelude and queue execution belong to the caller. */
 void pr_queue_encounter_end(pr_battle *bt, pr_engine *e, bool loaded)
 {
@@ -878,6 +906,50 @@ void pr_queue_trainer_summons(pr_battle *bt, pr_engine *e)
             int s=pr_phase_new(e,PH_SUMMON,2+k);
             if(s>=0){e->pool[s].sw_field_index=k;e->pool[s].sw_player=false;}
             pr_phase_unshift(bt,e,s);
+        }
+    }
+}
+
+/* BattleScene.getDoubleBattleChance. getPlayerField(false) selects the first
+ * party slots even when they are not physically on the field. */
+double pr_get_double_battle_chance(pr_battle *bt, int wave, int n_lures)
+{
+    double chance = wave % 10 == 0 ? 32 : 8;
+    for (int i = 0; i < n_lures; i++) chance /= 4;
+    int n = bt->double_battle ? 2 : 1;
+    if (n > bt->n_party[0]) n = bt->n_party[0];
+    for (int i = 0; i < n; i++) {
+        pr_ab_params pp = {.pokemon = bt->party[0][i], .move = -1, .value = &chance};
+        pr_apply_ab_attrs(bt, PR_AC_DoubleBattleChanceAbAttr, &pp);
+    }
+    return chance < 1 ? 1 : chance;
+}
+
+/* EncounterPhase: after EACH wild constructor, the new field's party slice
+ * dispatches in reverse order. Recalled players remain eligible. */
+void pr_sync_encounter_nature(pr_battle *bt, pr_pokemon *target,
+                              pr_nature_setter setter, void *ctx)
+{
+    int n = bt->double_battle ? 2 : 1;
+    if (n > bt->n_party[0]) n = bt->n_party[0];
+    for (int k = n - 1; k >= 0; k--) {
+        pr_ab_params pp = {.pokemon = bt->party[0][k], .target = target,
+            .move = -1, .set_nature = setter, .nature_ctx = ctx};
+        pr_apply_ab_attrs(bt, PR_AC_SyncEncounterNatureAbAttr, &pp);
+    }
+}
+
+/* NewBiomeEncounterPhase.doEncounter's gameplay prefix, before its visual tween.
+ * Normal stock biome transitions have already recalled the outgoing field. */
+void pr_new_biome_encounter_callbacks(pr_battle *bt)
+{
+    for (int k = 0; k < bt->n_party[0]; k++) {
+        pr_pokemon *p = bt->party[0][k];
+        if (!p) continue;
+        pr_reset_battle_data(p);
+        if (p->on_field) {
+            pr_ab_params pp = {.pokemon = p, .move = -1};
+            pr_apply_ab_attrs(bt, PR_AC_PostBiomeChangeAbAttr, &pp);
         }
     }
 }

@@ -3,6 +3,22 @@
  * modifier entries (bt->mods) covers the classes battle-core knows, and an item it doesn't know goes in
  * as a plain held item or persistent modifier, which battle-core reports where it would matter. */
 #include "internal.h"
+#include "pr_item_forms.h"
+
+/* Constructor properties survive native ModifierData reconstruction even when
+ * a legacy save did not record them. This does not admit the item's effects. */
+bool gc_item_key_form_change(const char *key)
+{
+    return key && (!strcmp(key, "FORM_CHANGE_ITEM") || !strcmp(key, "RARE_FORM_CHANGE_ITEM"));
+}
+bool gc_item_key_locked(const char *key)
+{
+    return gc_item_key_form_change(key)
+        || !strcmp(key, "BASE_STAT_BOOSTER") || !strcmp(key, "EVOLUTION_TRACKER_GIMMIGHOUL")
+        || !strcmp(key, "MYSTERY_ENCOUNTER_SHUCKLE_JUICE")
+        || !strcmp(key, "MYSTERY_ENCOUNTER_OLD_GATEAU")
+        || !strcmp(key, "MYSTERY_ENCOUNTER_MACHO_BRACE");
+}
 
 int gc_item_stack(const gc_run *run, const char *key)
 {
@@ -17,9 +33,9 @@ void gc_item_add(gc_run *run, const char *key, int16_t arg, uint32_t pokemon_id,
 {
     for (int i = 0; i < run->n_items; i++) {
         gc_item *it = &run->items[i];
-        if (!strcmp(it->key, key) && it->arg == arg && it->pokemon_id == pokemon_id) { it->stack += stack; return; }
+        if (!strcmp(it->key, key) && it->arg == arg && it->pokemon_id == pokemon_id && !it->eviolite_base) { it->stack += stack; it->non_transferable |= gc_item_key_locked(key); return; }
     }
-    if (run->n_items >= GC_MAX_ITEMS) return;
+    if (run->n_items >= PR_MAX_MODIFIERS) {pr_note_unported(&run->bt,PR_FEAT_ENGINE_LIMIT);return;}
     gc_item *it = &run->items[run->n_items++];
     it->key = key;
     it->arg = arg;
@@ -27,8 +43,12 @@ void gc_item_add(gc_run *run, const char *key, int16_t arg, uint32_t pokemon_id,
     it->detached = false;
     it->virtual_stack = 0;
     it->battle_count = 0;
-    it->non_transferable = false;
+    it->non_transferable = gc_item_key_locked(key);
     it->type_tier = 0;
+    it->type_ref = 0;
+    it->loot_ref = 0;
+    it->eviolite_base = false;
+    it->form_inactive = false;
     it->stack = stack;
 }
 
@@ -102,19 +122,81 @@ static void to_modifier(const gc_item *it, pr_modifier *m, bool golden)
     memset(m, 0, sizeof *m);
     m->stack_count = it->stack;
     m->pokemon_id = it->detached ? 0 : it->pokemon_id ? (int64_t)it->pokemon_id : -1;
-    m->is_transferable = !it->non_transferable;
+    m->is_transferable = !it->non_transferable && !gc_item_key_locked(it->key);
     m->type_tier = it->type_tier;
+    m->type_ref = it->type_ref;
+    m->loot_ref = it->loot_ref;
     m->unknown_subclass = true;
     m->cls = it->pokemon_id ? PR_MOD_HELD_ITEM : PR_MOD_PERSISTENT;
+    if (it->form_inactive && !gc_item_key_form_change(it->key)) return;
+    if (gc_item_key_form_change(it->key)) {
+        m->cls = PR_MOD_FORM_CHANGE_ITEM; m->num = it->arg;
+        m->form_item_active = !it->form_inactive; m->is_transferable = false;
+        m->virtual_stack_count = it->virtual_stack;
+        m->unknown_subclass = false;
+        m->unknown_subclass = it->eviolite_base || it->detached || !it->pokemon_id || !pr_mod_is_ported_item(m);
+        return;
+    }
+    if (!strcmp(it->key, "EVOLUTION_TRACKER_GIMMIGHOUL")) {
+        m->cls = PR_MOD_EVO_TRACKER; m->num = 10; m->n_species = 1;
+        m->species[0] = SPECIES_ID_GIMMIGHOUL; m->is_transferable = false;
+        m->virtual_stack_count = it->virtual_stack;
+        m->unknown_subclass = !it->pokemon_id || (it->arg != -1 && it->arg != 0)
+            || it->stack < 1 || it->virtual_stack < 0
+            || (int64_t)it->stack + it->virtual_stack > 999;
+        return;
+    }
+    if(!strcmp(it->key,"EVIOLITE")||!strcmp(it->key,"SPECIES_STAT_BOOSTER")||!strcmp(it->key,"RARE_SPECIES_STAT_BOOSTER")){
+        m->virtual_stack_count=it->virtual_stack;
+        if(!strcmp(it->key,"EVIOLITE")){
+            m->cls=it->eviolite_base?PR_MOD_STAT_BOOSTER:PR_MOD_EVOLUTION_STAT_BOOSTER;
+            m->mult=1.5;m->stats_mask=(1u<<STAT_DEF)|(1u<<STAT_SPDEF);
+            m->unknown_subclass=(it->arg!=-1&&it->arg!=0);
+        }else if(it->arg>=0&&it->arg<6&&!it->eviolite_base){
+            static const uint8_t masks[]={ (1u<<STAT_ATK)|(1u<<STAT_SPATK),1u<<STAT_ATK,1u<<STAT_DEF,1u<<STAT_SPD,1u<<STAT_SPDEF,1u<<STAT_SPATK };
+            static const uint16_t species[]={SPECIES_ID_PIKACHU,SPECIES_ID_CUBONE,SPECIES_ID_DITTO,SPECIES_ID_DITTO,SPECIES_ID_CLAMPERL,SPECIES_ID_CLAMPERL};
+            m->cls=PR_MOD_SPECIES_STAT_BOOSTER;m->mult=2;m->stats_mask=masks[it->arg];m->species[0]=species[it->arg];m->n_species=1;
+            if(it->arg==1){m->species[1]=SPECIES_ID_MAROWAK;m->species[2]=SPECIES_ID_ALOLA_MAROWAK;m->n_species=3;}
+            m->unknown_subclass=(!strcmp(it->key,"RARE_SPECIES_STAT_BOOSTER")!=(it->arg<4));
+        }
+        m->unknown_subclass=m->unknown_subclass||!pr_mod_is_ported_item(m);return;
+    }
+    if(it->eviolite_base)return; /* saved class marker is meaningful only for Eviolite */
     if (!strcmp(it->key, "BERRY_POUCH")) {
         m->cls=PR_MOD_PRESERVE_BERRY; m->virtual_stack_count=it->virtual_stack;
         m->pokemon_id=0; m->is_transferable=false; m->unknown_subclass=false;
         m->unknown_subclass=it->pokemon_id || it->detached || !pr_mod_is_ported_item(m);
         return;
     }
-    /* Transient Amulet Coin is a bounded Golden Punch dependency. */
+    if (!strcmp(it->key,"BATON")) {
+        m->cls=PR_MOD_SWITCH_EFFECT_TRANSFER;
+        m->virtual_stack_count=it->virtual_stack;
+        m->unknown_subclass=false;
+        m->unknown_subclass=(it->arg!=-1&&it->arg!=0)||!pr_mod_is_ported_item(m);
+        return;
+    }
+    if (!strcmp(it->key,"GRIP_CLAW")) {
+        m->cls=PR_MOD_CONTACT_HELD_TRANSFER;
+        m->mult=0.1;
+        m->virtual_stack_count=it->virtual_stack;
+        m->unknown_subclass=false;
+        m->unknown_subclass=(it->arg!=-1&&it->arg!=0)||!pr_mod_is_ported_item(m);
+        return;
+    }
+    if(!strcmp(it->key,"MYSTICAL_ROCK")||!strcmp(it->key,"LEEK")||!strcmp(it->key,"LUCKY_EGG")||!strcmp(it->key,"GOLDEN_EGG")||!strcmp(it->key,"SOOTHE_BELL")){
+        m->virtual_stack_count=it->virtual_stack;m->unknown_subclass=false;
+        if(!strcmp(it->key,"MYSTICAL_ROCK"))m->cls=PR_MOD_FIELD_EFFECT;
+        else if(!strcmp(it->key,"LEEK")){
+            m->cls=PR_MOD_SPECIES_CRIT_BOOSTER;m->num=2;m->n_species=3;
+            m->species[0]=SPECIES_ID_FARFETCHD;m->species[1]=SPECIES_ID_GALAR_FARFETCHD;m->species[2]=SPECIES_ID_SIRFETCHD;
+        }else if(!strcmp(it->key,"SOOTHE_BELL"))m->cls=PR_MOD_FRIENDSHIP_BOOSTER;
+        else {m->cls=PR_MOD_EXP_BOOSTER;m->mult=!strcmp(it->key,"LUCKY_EGG")?0.4:1.0;}
+        m->unknown_subclass=(it->arg!=-1&&it->arg!=0)||!pr_mod_is_ported_item(m);return;
+    }
+    /* Virtual stock is admitted only for the specifically validated classes below. */
     if (it->virtual_stack && strcmp(it->key, "WIDE_LENS")
-        && strcmp(it->key, "GOLDEN_PUNCH") && strcmp(it->key, "AMULET_COIN") && strcmp(it->key, "MULTI_LENS")) return;
+        && strcmp(it->key, "GOLDEN_PUNCH") && strcmp(it->key, "AMULET_COIN") && strcmp(it->key, "MULTI_LENS")
+        && strcmp(it->key, "MYSTERY_ENCOUNTER_MACHO_BRACE")) return;
     /* These classes now have turn-path implementations in battle-core.  Parameters and
      * transferability come from upstream modifierTypes, not an inferred item name. */
     static const struct { const char *key; uint8_t cls; } held[] = {
@@ -192,6 +274,12 @@ static void to_modifier(const gc_item *it, pr_modifier *m, bool golden)
     } else if (!strcmp(it->key, "MYSTERY_ENCOUNTER_OLD_GATEAU") && it->arg == 0) {
         m->cls = PR_MOD_BASE_STAT_FLAT; m->virtual_stack_count = it->virtual_stack;
         m->is_transferable = false; m->unknown_subclass = false;
+    } else if (!strcmp(it->key, "MYSTERY_ENCOUNTER_MACHO_BRACE")) {
+        m->cls = PR_MOD_INCREMENTING_STAT; m->virtual_stack_count = it->virtual_stack;
+        m->is_transferable = false;
+        m->unknown_subclass = !it->pokemon_id || it->detached
+            || (it->arg != -1 && it->arg != 0) || it->stack < 1
+            || it->virtual_stack < 0 || (int64_t)it->stack + it->virtual_stack > 50;
     } else if (!strcmp(it->key, "ATTACK_TYPE_BOOSTER")) { /* AttackTypeBoosterModifier(type, 20) */
         m->cls = PR_MOD_ATTACK_TYPE_BOOSTER; m->move_type = (int8_t)it->arg; m->mult = 0.2; m->unknown_subclass = false;
     } else if (!strcmp(it->key, "SOUL_DEW")) {
@@ -221,8 +309,26 @@ static bool duplicate_seed(const gc_item *items, int n, int index)
 void gc_items_to_battle(gc_run *run)
 {
     pr_battle *bt = &run->bt;
-    const bool golden = golden_bridge(run);
     bt->n_mods[0] = bt->n_mods[1] = 0;
+    bt->form_item_dex_known = run->sys != NULL;
+    bt->form_item_dex_mask = 0;
+    if (run->sys) for (int i = 0; i < PR_ITEM_FORM_CAUGHT_COUNT; i++) {
+        const int species = pr_form_item_caught_species[i];
+        if (species < 1 || species > GC_MAX_SPECIES_ID) bt->form_item_dex_known = false;
+        else if (run->sys->dex[species].caught_attr) bt->form_item_dex_mask |= 1u << i;
+    }
+    /* Do not quietly run with the first part of an invalid inventory. */
+    if(run->n_items<0||run->n_enemy_items<0||run->n_items>PR_MAX_MODIFIERS||run->n_enemy_items>PR_MAX_MODIFIERS
+        ||run->n_party<0||run->n_party>6||run->n_enemy<0||run->n_enemy>6){
+        pr_note_unported(bt,PR_FEAT_ENGINE_LIMIT);return;
+    }
+    const bool golden = golden_bridge(run);
+    for (int side=0;side<2;side++) {
+        const gc_item *items=side?run->enemy_items:run->items;
+        int n=side?run->n_enemy_items:run->n_items;
+        for (int i=0;i<n && i<GC_MAX_ITEMS;i++)
+            if (items[i].type_ref>bt->modifier_type_ref_max) bt->modifier_type_ref_max=items[i].type_ref;
+    }
     for (int i = 0; i < run->n_items && bt->n_mods[0] < PR_MAX_MODIFIERS; i++)
         to_modifier(&run->items[i], &bt->mods[0][bt->n_mods[0]++], golden);
     for (int i = 0; i < run->n_enemy_items && bt->n_mods[1] < PR_MAX_MODIFIERS; i++)
@@ -231,7 +337,13 @@ void gc_items_to_battle(gc_run *run)
         const gc_item *items = side ? run->enemy_items : run->items;
         int n = side ? run->n_enemy_items : run->n_items;
         for (int i = 0; i < bt->n_mods[side]; i++)
-            if (duplicate_seed(items, n, i)) {
+            if (bt->mods[side][i].cls == PR_MOD_FORM_CHANGE_ITEM) {
+                bool attached = false;
+                const gc_mon *party = side ? run->enemy : run->party;
+                const int count = side ? run->n_enemy : run->n_party;
+                for (int k = 0; k < count; k++) if (party[k].b.id == items[i].pokemon_id) attached = true;
+                if (!attached) bt->mods[side][i].unknown_subclass = true;
+            } else if (duplicate_seed(items, n, i)) {
                 bt->mods[side][i].cls = items[i].pokemon_id ? PR_MOD_HELD_ITEM : PR_MOD_PERSISTENT;
                 bt->mods[side][i].unknown_subclass = true;
             }
@@ -270,17 +382,34 @@ static bool transfer_stock(const pr_modifier *m,gc_item *it)
     if(m->unknown_subclass)return false;
     const char *key=NULL;int arg=-1;
     switch(m->cls){
+    case PR_MOD_STAT_BOOSTER: case PR_MOD_EVOLUTION_STAT_BOOSTER:
+        if(m->mult==1.5&&m->stats_mask==((1u<<STAT_DEF)|(1u<<STAT_SPDEF)))key="EVIOLITE";
+        break;
+    case PR_MOD_SPECIES_STAT_BOOSTER:
+        if(m->mult!=2)break;
+        if(m->n_species==1&&m->species[0]==SPECIES_ID_PIKACHU&&m->stats_mask==((1u<<STAT_ATK)|(1u<<STAT_SPATK)))arg=0;
+        else if(m->n_species==3&&m->species[0]==SPECIES_ID_CUBONE&&m->species[1]==SPECIES_ID_MAROWAK&&m->species[2]==SPECIES_ID_ALOLA_MAROWAK&&m->stats_mask==(1u<<STAT_ATK))arg=1;
+        else if(m->n_species==1&&m->species[0]==SPECIES_ID_DITTO){if(m->stats_mask==(1u<<STAT_DEF))arg=2;else if(m->stats_mask==(1u<<STAT_SPD))arg=3;}
+        else if(m->n_species==1&&m->species[0]==SPECIES_ID_CLAMPERL){if(m->stats_mask==(1u<<STAT_SPDEF))arg=4;else if(m->stats_mask==(1u<<STAT_SPATK))arg=5;}
+        if(arg>=0)key=arg<4?"RARE_SPECIES_STAT_BOOSTER":"SPECIES_STAT_BOOSTER";
+        break;
     case PR_MOD_TURN_HEAL:key="LEFTOVERS";break;
     case PR_MOD_HIT_HEAL:key="SHELL_BELL";break;
     case PR_MOD_SURVIVE_DAMAGE:key="FOCUS_BAND";break;
     case PR_MOD_BYPASS_SPEED_CHANCE:key="QUICK_CLAW";break;
     case PR_MOD_FLINCH_CHANCE:key="KINGS_ROCK";break;
     case PR_MOD_RESET_NEGATIVE_STAT_STAGE:key="WHITE_HERB";break;
+    case PR_MOD_SWITCH_EFFECT_TRANSFER:key="BATON";break;
+    case PR_MOD_CONTACT_HELD_TRANSFER:key="GRIP_CLAW";break;
     case PR_MOD_TURN_HELD_TRANSFER:key="MINI_BLACK_HOLE";break;
     case PR_MOD_BERRY:key="BERRY";arg=m->berry_type;break;
     case PR_MOD_MOVE_ACCURACY_BOOSTER:key="WIDE_LENS";break;
     case PR_MOD_MULTI_HIT:key="MULTI_LENS";break;
     case PR_MOD_CRIT_BOOSTER:key="SCOPE_LENS";break;
+    case PR_MOD_SPECIES_CRIT_BOOSTER:key="LEEK";break;
+    case PR_MOD_FIELD_EFFECT:key="MYSTICAL_ROCK";break;
+    case PR_MOD_EXP_BOOSTER:if(m->mult==0.4)key="LUCKY_EGG";else if(m->mult==1.0)key="GOLDEN_EGG";break;
+    case PR_MOD_FRIENDSHIP_BOOSTER:key="SOOTHE_BELL";break;
     case PR_MOD_NATURE_WEIGHT:key="SOUL_DEW";break;
     case PR_MOD_DAMAGE_MONEY_REWARD:key="GOLDEN_PUNCH";break;
     case PR_MOD_ATTACK_TYPE_BOOSTER:key="ATTACK_TYPE_BOOSTER";arg=m->move_type;break;
@@ -295,13 +424,13 @@ static bool transfer_stock(const pr_modifier *m,gc_item *it)
     if(it)*it=(gc_item){.key=key,.arg=arg,.stack=m->stack_count,
         .pokemon_id=m->pokemon_id<0?0:(uint32_t)m->pokemon_id,
         .detached=m->pokemon_id==0,.virtual_stack=m->virtual_stack_count,
-        .non_transferable=!m->is_transferable,.type_tier=m->type_tier};
+        .non_transferable=!m->is_transferable,.type_tier=m->type_tier,.type_ref=m->type_ref,.loot_ref=m->loot_ref,.eviolite_base=m->cls==PR_MOD_STAT_BOOSTER};
     return true;
 }
 static bool same_transfer_stock(const pr_modifier *a,const pr_modifier *b)
 {
     gc_item x,y;
-    return transfer_stock(a,&x)&&transfer_stock(b,&y)&&!strcmp(x.key,y.key)&&x.arg==y.arg;
+    return transfer_stock(a,&x)&&transfer_stock(b,&y)&&!strcmp(x.key,y.key)&&x.arg==y.arg&&x.eviolite_base==y.eviolite_base;
 }
 
 /* Persist the losses of mapped consumables before another encounter rebuilds bt->mods or
@@ -311,6 +440,9 @@ static bool same_transfer_stock(const pr_modifier *a,const pr_modifier *b)
  * an unrepresented overflow item for a consumed one. Restored berries are inserted into that represented prefix; other additions remain separate. */
 void gc_items_from_battle(gc_run *run)
 {
+    if(run->n_items<0||run->n_enemy_items<0||run->n_items>PR_MAX_MODIFIERS||run->n_enemy_items>PR_MAX_MODIFIERS){
+        pr_note_unported(&run->bt,PR_FEAT_ENGINE_LIMIT);return;
+    }
     const bool golden = golden_bridge(run);
     for (int side = 0; side < 2; side++) {
         gc_item *items = side ? run->enemy_items : run->items;
@@ -331,13 +463,15 @@ void gc_items_from_battle(gc_run *run)
                     const pr_modifier *m=&run->bt.mods[side][j];
                     bool detached=side&&m->pokemon_id==0&&holder&&holder->hp<=0;
                     if(m->cls==expected.cls&&m->pokemon_id==expected.pokemon_id&&m->unknown_subclass)opaque=true;
-                    if(!used[j]&&(m->pokemon_id==expected.pokemon_id||detached)&&same_transfer_stock(m,&expected)){match=j;break;}
+                    if(!used[j]&&(!it.loot_ref||m->loot_ref==it.loot_ref)
+                        &&(m->pokemon_id==expected.pokemon_id||detached)&&same_transfer_stock(m,&expected)){match=j;break;}
                 }
                 if(opaque){items[w++]=it;continue;}
                 if(match<0||run->bt.mods[side][match].stack_count<=0){removed++;continue;}
                 const pr_modifier *m=&run->bt.mods[side][match];used[match]=true;
                 it.stack=m->stack_count;it.virtual_stack=m->virtual_stack_count;
                 it.detached=m->pokemon_id==0;it.non_transferable=!m->is_transferable;it.type_tier=m->type_tier;
+                it.type_ref=m->type_ref;it.loot_ref=m->loot_ref;
                 items[w++]=it;continue;
             }
             if (i < tracked && !expected.unknown_subclass && (expected.cls == PR_MOD_INSTANT_REVIVE
@@ -520,7 +654,8 @@ int gc_item_transfer(gc_run *run, int item_idx, int to, int qty)
     if (!run || item_idx < 0 || item_idx >= run->n_items || to < 0 || to >= run->n_party || qty <= 0) return 0;
     gc_item src = run->items[item_idx];
     const uint32_t to_id = run->party[to].b.id;
-    if (!src.pokemon_id || src.pokemon_id == to_id || src.non_transferable || src.stack <= 0) return 0;
+    if (!src.pokemon_id || src.pokemon_id == to_id || src.non_transferable
+        || gc_item_key_locked(src.key) || src.stack <= 0) return 0;
     int match = -1;
     for (int i = 0; i < run->n_items; i++)
         if (i != item_idx && run->items[i].pokemon_id == to_id && !strcmp(run->items[i].key, src.key) && run->items[i].arg == src.arg) {
@@ -561,7 +696,7 @@ int gc_item_discard(gc_run *run, int item_idx, int count)
 {
     if (!run || item_idx < 0 || item_idx >= run->n_items || count <= 0) return 0;
     gc_item *it = &run->items[item_idx];
-    if (!it->pokemon_id || it->non_transferable || it->stack <= 0) return 0;
+    if (!it->pokemon_id || it->non_transferable || gc_item_key_locked(it->key) || it->stack <= 0) return 0;
     const int taken = count < it->stack ? count : it->stack;
     it->stack -= taken;
     if (!it->stack) gc_item_remove_at(run, item_idx);

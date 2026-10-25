@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "pr/rng.h"
+#include "pr/inventory_limits.h"
 #include "pr_data.h"
 
 #define PR_MAX_UNPORTED 16
@@ -91,6 +92,12 @@ enum {
     PR_MOD_MONEY_MULTIPLIER,       /* Amulet Coin dependency of damage money */
     PR_MOD_PRESERVE_BERRY,          /* Berry Pouch; side-wide */
     PR_MOD_TURN_HELD_TRANSFER,       /* Mini Black Hole; transfer execution tracked separately */
+    PR_MOD_CONTACT_HELD_TRANSFER,    /* Grip Claw: mult=chance (0.1) */
+    PR_MOD_SWITCH_EFFECT_TRANSFER, /* Baton */
+    PR_MOD_EXP_BOOSTER,           /* held Lucky/Golden Egg; mult=boost fraction */
+    PR_MOD_FRIENDSHIP_BOOSTER,    /* Soothe Bell */
+    PR_MOD_EVO_TRACKER,           /* canonical Gimmighoul coins: species[0], num=required */
+    PR_MOD_FORM_CHANGE_ITEM,       /* form item identity in num; form_item_active */
     PR_MOD_COUNT_
 };
 extern const uint8_t pr_mod_parent[PR_MOD_COUNT_];
@@ -104,6 +111,8 @@ typedef struct pr_modifier {
     bool unknown_subclass;
     bool is_transferable;          /* PokemonHeldItemModifier.isTransferable */
     uint8_t type_tier;             /* ModifierType.tier + 1; 0 = absent, tier0 remains falsy */
+    uint32_t type_ref;             /* transient shared ModifierType identity; 0 = independent */
+    uint16_t loot_ref;             /* transient object reference in this battle's loot list */
     int64_t pokemon_id;            /* PokemonHeldItemModifier.pokemonId (ids are 32-bit unsigned); -1 = any Pokemon */
     int32_t stack_count, virtual_stack_count;
     int8_t stat;                   /* BaseStatModifier / TempStatStageBoosterModifier stat */
@@ -117,8 +126,8 @@ typedef struct pr_modifier {
     uint8_t n_species;
     int8_t berry_type;             /* BerryModifier.berryType */
     int8_t status_effect;          /* TurnStatusEffectModifier.getStatusEffect(): TOXIC or BURN */
+    bool form_item_active;         /* PokemonFormChangeItemModifier.active */
 } pr_modifier;
-#define PR_MAX_MODIFIERS 96        /* per side */
 
 /* Battler tags (src/tags.c): summonData.tags, in upstream order. A tag's class and the
  * parameters getBattlerTag() gives it (Flash Fire's type and boost...) follow from its
@@ -286,6 +295,21 @@ typedef struct pr_pokemon {
     /* summonData.moveHistory: its length, and its newest min(length, PR_MAX_MOVE_HISTORY)
      * entries, oldest first (pr_push_move_history keeps both; pr_last_move reads them) */
     uint16_t n_move_history;
+    /* Membership of non-virtual moves since summon; independent of the retained tail. */
+    uint8_t history_used_moves[(PR_MOVE_COUNT+7)/8];
+    bool history_used_complete; /* false for legacy/raw inputs whose older history is unknown */
+    uint32_t history_protect_count;
+    bool history_protect_complete; /* consecutive successful protection entries since summon */
+    /* Four getLastNonVirtualMove query results: index = 2*ignoreStruggle +
+     * ignoreFollowUp. Known-but-absent distinguishes a complete empty search
+     * from a legacy tail whose missing prefix may contain a qualifying move. */
+    uint8_t history_last_known, history_last_present;
+    uint32_t history_serial, history_last_serial[4]; /* shared target-list identity; not the retained-tail count */
+    uint32_t history_epoch; /* old summon target aliases cannot bind to new entries */
+    pr_turn_move history_last[4];
+    uint8_t history_all_known, history_all_present; /* any non-NONE / last Lock-On or Mind Reader */
+    uint32_t history_aim_serial;
+    pr_turn_move history_aim;
     pr_turn_move move_history[PR_MAX_MOVE_HISTORY];
     pr_turn_move move_queue[PR_MAX_MOVE_QUEUE];  /* summonData.moveQueue */
     uint8_t n_move_queue;
@@ -396,9 +420,12 @@ typedef struct pr_battle {
     uint8_t n_pos_tags;
     /* globalScene.modifiers (player, [0]) and enemyModifiers ([1]), in upstream list order */
     pr_modifier mods[2][PR_MAX_MODIFIERS];
-    uint8_t n_mods[2];
+    uint16_t n_mods[2];
+    uint32_t modifier_type_ref_max; /* transient allocator, including bridged overflow stock */
     pr_seedstr wave_seed;      /* globalScene.waveSeed; len 0 = unknown */
     int max_exp_level;         /* globalScene.getMaxExpLevel(); 0 = unknown */
+    bool form_item_dex_known;  /* explicit caught facts needed by six item-form conditions */
+    uint8_t form_item_dex_mask; /* bit index in pr_form_item_caught_species */
     /* turnCommand.cursor left undefined (a recharge turn's FIGHT command has -1) */
 #define PR_CURSOR_UNDEFINED INT8_MIN
     /* currentBattle.turnCommands / preTurnCommands per BattlerIndex */
@@ -445,9 +472,11 @@ typedef struct pr_battle {
     uint32_t participants[PR_MAX_PARTY];               /* playerParticipantIds, sorted */
     uint8_t n_participants;
     int post_battle_loot;      /* currentBattle.postBattleLoot.length */
+    uint16_t post_battle_loot_refs[PR_MAX_MODIFIERS]; /* ordered object references */
+    uint16_t loot_ref_max, pickup_cached_ref; /* the pin has one shared PostBattleLootAbAttr instance */
     double battle_score;       /* currentBattle.battleScore */
     double money;             /* globalScene.money; independent of Pay Day */
-    int32_t money_scattered;   /* currentBattle.moneyScattered (Pay Day) */
+    double money_scattered;    /* currentBattle.moneyScattered: native Number (Pay Day, Honey Gather) */
     const char *player_name;   /* loggedInUser.username for Celebrate's text; NULL: none (upstream shows "") */
     /* A trainer battle's trainer (currentBattle.trainer). trainer_names: getName(TRAINER) and
      * getName(TRAINER_PARTNER), for "{{trainerName}} sent out..."; NULL shows "" (upstream's
@@ -553,6 +582,9 @@ int pr_closures_ported(void);
 /* ---- ability attributes (src/ab_attrs.c) ----
  * One params struct for every applyAbAttrs call site; each site fills what its
  * attribute family reads. Pointers are upstream's NumberHolder/BooleanHolder. */
+/* A scene can keep the underlying/custom nature outside pr_pokemon, whose
+ * nature is the effective getNature() used by battle/stat callers. */
+typedef bool (*pr_nature_setter)(pr_battle *, pr_pokemon *, int nature, void *ctx);
 typedef struct pr_ab_params {
     const pr_pokemon *pokemon;     /* the ability's owner */
     const pr_pokemon *opponent;    /* attacker/defender, or FieldMultiplyStat's target */
@@ -582,6 +614,9 @@ typedef struct pr_ab_params {
     const int8_t *move_targets; /* PostDancingMoveAbAttr: original targets */
     int n_move_targets;
     bool on_gain;                  /* applyOnGainAbAttrs: only attrs that shouldActivateOnGain() */
+    bool victory;                  /* PostBattleAbAttr */
+    pr_nature_setter set_nature;    /* SyncEncounterNature: scene-owned raw/custom nature, optional */
+    void *nature_ctx;
 } pr_ab_params;
 /* applyAbAttrs("<cls>", params): ability then passive, conditions, canApply, apply. */
 void pr_apply_ab_attrs(pr_battle *bt, uint16_t cls, pr_ab_params *pp);
@@ -656,6 +691,13 @@ bool pr_move_is_attack(int move);
  * findModifier / getHeldItems call, named after the modifier class it applies. */
 bool pr_mod_is(const pr_modifier *m, int cls);
 bool pr_mod_is_ported_item(const pr_modifier *m);
+/* Pinned PokemonFormChangeItemModifier and item-trigger SpeciesFormChange. */
+bool pr_form_item_known(int item);
+bool pr_item_form_rule_eligible(pr_battle *bt, const pr_pokemon *p, int rule);
+int pr_item_form_rule_index(pr_battle *bt, const pr_pokemon *p);
+bool pr_trigger_item_form_change(pr_battle *bt, pr_pokemon *p, bool delayed, int *selected_rule);
+bool pr_apply_form_change_item(pr_battle *bt, pr_pokemon *p, pr_modifier *modifier,
+                               bool active, int *selected_rule);
 int32_t pr_mod_get_stack_count(const pr_modifier *m);        /* stackCount + virtualStackCount */
 /* pokemon.getHeldItems() (pokemonId === id exactly), filtered to isTransferable when asked:
  * the number of items, and the sum of their stackCount fields (not getStackCount()) */
@@ -727,6 +769,8 @@ bool pr_move_can_be_multi_strike_enhanced_ex(pr_battle *bt, int move, const pr_p
 bool pr_is_new_biome(pr_battle *bt);
 /* Math.pow as the reference JS engine computes it (src/js_math.c) */
 double js_pow(double x, double y);
+/* BattleScene.getWaveMoneyAmount, shared by battle effects and run economy. */
+double pr_wave_money_amount(int wave, double multiplier);
 
 /* ---- move attributes (src/move_attrs.c) ---- */
 /* randSeedInt(range) inside executeWithSeedOffset(fn, turn << 6, waveSeed) (Magnitude, Fickle Beam);
@@ -756,10 +800,19 @@ double pr_calculate_escape_chance(pr_battle *bt, int current_attempts);
 
 /* ---- rng (battle.ts randSeedInt) ---- */
 int32_t pr_battle_rand_seed_int(pr_battle *bt, int32_t range, int32_t min);
+double pr_battle_rand_seed_number(pr_battle *bt, double range, double min);
 
 /* ---- turn history (src/history.c) ---- */
 /* pushMoveHistory(turnMove) (the caller checks isOnField, as upstream does) */
 void pr_push_move_history(pr_pokemon *p, pr_turn_move tm);
+void pr_rebuild_history_used_moves(pr_pokemon *p);
+void pr_rebuild_nonvirtual_history(pr_pokemon *p);
+void pr_rebuild_protect_history(pr_pokemon *p);
+void pr_rebuild_all_history(pr_pokemon *p);
+bool pr_history_any_move(pr_battle *bt,const pr_pokemon *p,bool *unknown);
+const pr_turn_move *pr_last_aim_move(pr_battle *bt,const pr_pokemon *p,bool *unknown);
+uint32_t pr_protect_streak(pr_battle *bt,const pr_pokemon *p,bool *unknown);
+bool pr_history_used_move(const pr_pokemon *p, int move);
 /* getLastXMoves(k + 1)[k]: the k-th newest history entry (0 = newest), NULL when the history is
  * shorter. An entry older than the kept ones reports PR_FEAT_MOVE_HISTORY and gives NULL. */
 const pr_turn_move *pr_last_move(pr_battle *bt, const pr_pokemon *p, int k);

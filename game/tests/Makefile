@@ -5,7 +5,7 @@ BC := ../../battle-core
 CPPFLAGS += -I. -I../include -I$(BC)/include -I$(BC)/gen/out
 AI := ../../ai-core
 CPPFLAGS += -I$(AI)/include -I$(AI)/gen/out
-SRCS := evtest.c battle_setup.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+SRCS := evtest.c battle_setup.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/evtest: $(SRCS)
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SRCS) -lm -o $@
@@ -30,13 +30,13 @@ anim_details_test: build/anim_details_test
 .PHONY: anim_details_test
 
 # switching through the stand-in battle (a switch turn, a faint switch)
-SW_SRCS := switchtest.c battle_setup.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+SW_SRCS := switchtest.c battle_setup.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/switchtest: $(SW_SRCS)
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SW_SRCS) -lm -o $@
 
 # unit test for stat stage modifier indicators, status visual banners, and text banner queuing
-BANNER_SRCS := stat_banner_test.c battle_setup.c ../source/battle_events.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+BANNER_SRCS := stat_banner_test.c battle_setup.c ../source/battle_events.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/stat_banner_test: $(BANNER_SRCS)
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) -I../gen -I../../assets-pipeline/app-src/include $(CFLAGS) $(BANNER_SRCS) -lm -o $@
@@ -44,8 +44,8 @@ stat_banner_test: build/stat_banner_test
 .PHONY: stat_banner_test
 
 # unit test for Mega/Dynamax/Gigantamax form animation states, event conversion, sprite keys, and scaling
-FORM_ANIM_SRCS := form_anim_test.c battle_setup.c ../source/battle_events.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
-TRANSFORM_VISUAL_SRCS := transform_visual_test.c battle_setup.c ../source/battle_events.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+FORM_ANIM_SRCS := form_anim_test.c battle_setup.c ../source/battle_events.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+TRANSFORM_VISUAL_SRCS := transform_visual_test.c battle_setup.c ../source/battle_events.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/transform_visual_test: $(TRANSFORM_VISUAL_SRCS)
 	@mkdir -p build
 	$(CC) $(CPPFLAGS) -I../gen -I../../assets-pipeline/app-src/include $(CFLAGS) $(TRANSFORM_VISUAL_SRCS) -lm -o $@
@@ -63,7 +63,7 @@ RC := ../../run-core
 APP := ../../assets-pipeline/app-src
 RW := ../../reward-core
 MAP_CPPFLAGS := $(CPPFLAGS) -I../menus -I$(GC)/include -I$(GC)/src -I$(GC)/gen/out -I$(RC)/include -I$(RC)/gen/out -I$(RW)/include -I$(RW)/gen/out -I$(APP)/include
-MAP_SRCS := map_ui_test.c ../menus/biome_map.c ../menus/menus_names.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+MAP_SRCS := map_ui_test.c ../menus/biome_map.c ../menus/menus_names.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/map_ui_test: $(MAP_SRCS)
 	@mkdir -p build
 	$(CC) $(MAP_CPPFLAGS) $(CFLAGS) $(MAP_SRCS) -lm -o $@
@@ -72,7 +72,7 @@ map_ui_test: build/map_ui_test
 
 # unit test for DNA Splicers target selection UI
 SPLICER_CPPFLAGS := $(CPPFLAGS) -I../menus -I$(GC)/include -I$(GC)/gen/out -I$(RC)/include -I$(RC)/gen/out -I$(APP)/include
-SPLICER_SRCS := splicer_ui_test.c ../menus/party.c ../menus/menus_names.c ../menus/menus_data.c $(BC)/gen/out/pr_data.c
+SPLICER_SRCS := splicer_ui_test.c ../menus/party.c ../menus/menus_names.c ../menus/move_names.c ../menus/menus_data.c $(BC)/gen/out/pr_data.c
 build/splicer_ui_test: $(SPLICER_SRCS)
 	@mkdir -p build
 	$(CC) $(SPLICER_CPPFLAGS) $(CFLAGS) $(SPLICER_SRCS) -lm -o $@
@@ -81,7 +81,7 @@ splicer_ui_test: build/splicer_ui_test
 
 # unit test for shop UI and Lock Capsule visuals
 SHOP_CPPFLAGS := $(CPPFLAGS) -I../menus -I../include -I$(GC)/include -I$(GC)/src -I$(GC)/gen/out -I$(RC)/include -I$(RC)/gen/out -I$(RW)/include -I$(RW)/gen/out -I$(APP)/include
-SHOP_SRCS := shop_ui_test.c ../menus/shop_ui.c ../source/reward_host.c ../menus/item_ui.c ../gen/gm_item_ui.c ../menus/menus_names.c ../menus/menus_data.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+SHOP_SRCS := shop_ui_test.c ../menus/shop_ui.c ../source/reward_host.c ../menus/item_ui.c ../gen/gm_item_ui.c ../menus/menus_names.c ../menus/move_names.c ../menus/menus_data.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/shop_ui_test: $(SHOP_SRCS)
 	@mkdir -p build
 	$(CC) $(SHOP_CPPFLAGS) $(CFLAGS) $(SHOP_SRCS) -lm -o $@
@@ -90,7 +90,7 @@ shop_ui_test: build/shop_ui_test
 
 # unit test for summary UI, shiny tier parsing and passive ability slot
 SUMMARY_CPPFLAGS := $(CPPFLAGS) -I../menus -I$(GC)/include -I$(GC)/src -I$(GC)/gen/out -I$(RC)/include -I$(RC)/gen/out -I$(APP)/include
-SUMMARY_SRCS := summary_ui_test.c ../menus/summary.c ../menus/menus_names.c ../menus/menus_data.c $(BC)/gen/out/pr_data.c
+SUMMARY_SRCS := summary_ui_test.c ../menus/summary.c ../menus/menus_names.c ../menus/move_names.c ../menus/menus_data.c $(BC)/gen/out/pr_data.c
 build/summary_ui_test: $(SUMMARY_SRCS)
 	@mkdir -p build
 	$(CC) $(SUMMARY_CPPFLAGS) $(CFLAGS) $(SUMMARY_SRCS) -lm -o $@
@@ -104,7 +104,7 @@ RW := ../../reward-core
 CCORE := ../../custom-core
 OBS_SRCS := ../source/combat_observer.c ../source/custom_core_build.c
 RUN_CPPFLAGS := $(CPPFLAGS) -I$(CCORE)/include -I../menus -I../gen -I$(GC)/include -I$(GC)/gen/out -I$(RC)/include -I$(RC)/gen/out -I$(RW)/include -I$(RW)/gen/out -I$(APP)/include
-RUN_SRCS := runtest.c snd_fake.c ../menus/item_ui.c ../gen/gm_item_ui.c ../source/bgm.c ../source/bgm_choose.c ../source/bgm_player.c ../gen/gm_bgm_data.c party_fake.c ../menus/party.c ../menus/menus_names.c ../menus/menus_data.c ../source/starter_data.c ../source/run_screen.c ../source/battle_events.c ../source/run_saves.c ../source/run_history.c ../source/history_record.c ../source/run_text.c ../source/custom_run.c ../source/custom_store.c ../source/profile_tx.c ../source/system_data.c $(OBS_SRCS) $(APP)/source/save.c ../gen/gm_enum_names.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+RUN_SRCS := ../gen/gm_trainer_art.c runtest.c snd_fake.c ../menus/item_ui.c ../gen/gm_item_ui.c ../source/bgm.c ../source/bgm_choose.c ../source/bgm_player.c ../gen/gm_bgm_data.c party_fake.c ../menus/party.c ../menus/menus_names.c ../menus/move_names.c ../menus/menus_data.c ../source/starter_data.c ../source/run_screen.c ../source/battle_events.c ../source/run_saves.c ../source/run_history.c ../source/history_record.c ../source/run_text.c ../source/custom_run.c ../source/custom_store.c ../source/profile_tx.c ../source/system_data.c $(OBS_SRCS) $(APP)/source/save.c ../gen/gm_enum_names.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/runtest: $(RUN_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) -I$(GC)/src $(CFLAGS) $(RUN_SRCS) -lm -o $@
@@ -112,7 +112,7 @@ runtest: build/runtest
 .PHONY: runtest
 
 # the run's save slots (run_saves.c + the app's save.c) over real game-core runs; make saves_test && build/saves_test
-SAVES_SRCS := saves_test.c ../source/run_saves.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+SAVES_SRCS := saves_test.c ../source/run_saves.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/saves_test: $(SAVES_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) $(SAVES_SRCS) -lm -o $@
@@ -120,7 +120,7 @@ saves_test: build/saves_test
 .PHONY: saves_test
 
 # the run history (run_history.c + history_record.c + the app's save.c) over a real game-core run; make run_history_test && build/run_history_test
-HIST_SRCS := run_history_test.c ../source/run_history.c ../source/history_record.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+HIST_SRCS := run_history_test.c ../source/run_history.c ../source/history_record.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/run_history_test: $(HIST_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(HIST_SRCS) -lm -o $@
@@ -128,7 +128,7 @@ run_history_test: build/run_history_test
 .PHONY: run_history_test
 
 # what a Classic win gave (win_gains.c) against the real game-core's system data changes; make win_gains_test && build/win_gains_test
-WG_SRCS := win_gains_test.c ../source/win_gains.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+WG_SRCS := win_gains_test.c ../source/win_gains.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/win_gains_test: $(WG_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(WG_SRCS) -lm -o $@
@@ -144,7 +144,7 @@ runtest-save: build/runtest
 .PHONY: runtest-save
 
 # the app's screen flow (app_flow.c) with fake screens and a fake run driver, over the real save slots; make flowtest && build/flowtest
-FLOW_SRCS := flowtest.c ../source/app_flow.c ../source/run_settings.c ../source/win_gains.c ../source/run_history.c ../source/history_record.c ../source/custom_run.c ../source/profile_tx.c ../source/custom_store.c $(OBS_SRCS) ../source/run_saves.c ../source/system_data.c ../source/starter_data.c ../menus/menus_data.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+FLOW_SRCS := flowtest.c ../source/app_flow.c ../source/run_settings.c ../source/win_gains.c ../source/run_history.c ../source/history_record.c ../source/custom_run.c ../source/profile_tx.c ../source/custom_store.c $(OBS_SRCS) ../source/run_saves.c ../source/system_data.c ../source/starter_data.c ../menus/menus_data.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/flowtest: $(FLOW_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) $(FLOW_SRCS) -lm -o $@
@@ -153,7 +153,7 @@ flowtest: build/flowtest
 
 # a run save one turn away from game over or from clearing the run, for looking at those screens on a real build (see mkfixture.c);
 # make mkfixture && (cd /some/folder && /path/to/build/mkfixture clear)
-build/mkfixture: mkfixture.c ../source/run_saves.c ../source/run_history.c ../source/history_record.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+build/mkfixture: mkfixture.c ../source/run_saves.c ../source/run_history.c ../source/history_record.c $(APP)/source/save.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 mkfixture: build/mkfixture
@@ -172,7 +172,7 @@ startertest: build/startertest build/startertest_upstream
 
 # the starter select's data (starter_data.c) and the system data on the SD card (system_data.c) over real game-core and the real
 # save.c; make starter_data_test && build/starter_data_test [random systems]
-CORE_SRCS := $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+CORE_SRCS := $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 SDATA_SRCS := starter_data_test.c ../source/starter_data.c ../source/system_data.c ../menus/menus_data.c $(APP)/source/save.c $(CORE_SRCS)
 build/starter_data_test: $(SDATA_SRCS)
 	@mkdir -p build
@@ -182,7 +182,7 @@ starter_data_test: build/starter_data_test
 
 # the starter select screen itself (menus/starter.c, the host and the data) with a fake drawing layer, over real game-core;
 # make starter_ui_test && build/starter_ui_test [fuzz sessions]
-SUI_SRCS := starter_ui_test.c ../menus/starter.c ../menus/starter_model.c ../menus/menus_data.c ../menus/menus_names.c ../source/starter_host.c ../source/starter_data.c $(CORE_SRCS)
+SUI_SRCS := starter_ui_test.c ../menus/starter.c ../menus/starter_model.c ../menus/menus_data.c ../menus/menus_names.c ../menus/move_names.c ../source/starter_host.c ../source/starter_data.c $(CORE_SRCS)
 build/starter_ui_test: $(SUI_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(SUI_SRCS) -lm -o $@
@@ -264,7 +264,7 @@ mksystem: build/mksystem
 # the music: the chooser (source/bgm_choose.c) against upstream's own Battle.getBgmOverride (bgm_expected.c, dumped by tools/dump-bgm.test.ts:
 # every wave, every species and form, every trainer), then the player (bgm_player.c) and the scene calls (bgm.c) over a fake DSP (snd_fake.c);
 # make bgmtest && build/bgmtest [BGM_TRACKS=<one track name per line>]
-BGM_SRCS := bgmtest.c snd_fake.c bgm_expected.c ../source/bgm_choose.c ../source/bgm.c ../source/bgm_player.c ../gen/gm_bgm_data.c ../gen/gm_enum_names.c $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(BC)/src/*.c) $(BC)/gen/out/pr_data.c
+BGM_SRCS := bgmtest.c snd_fake.c bgm_expected.c ../source/bgm_choose.c ../source/bgm.c ../source/bgm_player.c ../gen/gm_bgm_data.c ../gen/gm_enum_names.c $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c)
 build/bgmtest: $(BGM_SRCS)
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(BGM_SRCS) -lm -o $@
@@ -352,3 +352,52 @@ build/run_menu_test: $(RUN_MENU_SRCS)
 	$(CC) $(CPPFLAGS) -I../include -I../../assets-pipeline/app-src/include $(CFLAGS) -fsanitize=address,undefined $(RUN_MENU_SRCS) -lm -o $@
 run_menu_test: build/run_menu_test
 .PHONY: run_menu_test
+
+# Real item-party adapter + real menus: TM labels, filtering and both ways to back out.
+PARTY_ITEM_SRCS := party_item_test.c party_fake.c ../menus/item_ui.c ../source/party_screen.c ../menus/party.c ../menus/menus_names.c ../menus/move_names.c ../menus/menus_data.c ../gen/gm_item_ui.c $(CORE_SRCS)
+build/party_item_test: $(PARTY_ITEM_SRCS)
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined $(PARTY_ITEM_SRCS) -lm -o $@
+party_item_test: build/party_item_test
+.PHONY: party_item_test
+
+# Actual battle-view draw paths with captured GPU calls; discard unrelated UI.
+build/trainer_render_test: trainer_render_test.c ../source/battle_view.c ../source/tween.c
+	@mkdir -p build
+	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections trainer_render_test.c ../source/tween.c -Wl,--gc-sections -lm -o $@
+trainer_render_test: build/trainer_render_test
+.PHONY: trainer_render_test
+
+build/egg_hatch_ui_test: egg_hatch_ui_test.c ../source/egg_hatch_screen.c
+	@mkdir -p build
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) egg_hatch_ui_test.c -lm -o $@
+egg_hatch_ui_test: build/egg_hatch_ui_test
+.PHONY: egg_hatch_ui_test
+
+build/battle_stat_panels_test: battle_stat_panels_test.c ../source/battle_view.c ../source/tween.c
+	@mkdir -p build
+	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections battle_stat_panels_test.c ../source/tween.c -Wl,--gc-sections -lm -o $@
+battle_stat_panels_test: build/battle_stat_panels_test
+.PHONY: battle_stat_panels_test
+
+persistent_item_bar_test: build/persistent_item_bar_test
+build/persistent_item_bar_test: persistent_item_bar_test.c ../source/battle_view.c
+	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections $< -Wl,--gc-sections -lm -o $@
+.PHONY: persistent_item_bar_test
+
+item_description_test: build/item_description_test
+build/item_description_test: item_description_test.c ../source/battle_view.c
+	@mkdir -p build
+	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections $< -Wl,--gc-sections -lm -o $@
+.PHONY: item_description_test
+
+build/battle_feedback_test: battle_feedback_test.c ../source/battle_view.c $(BC)/gen/out/pr_data.c
+	@mkdir -p build
+	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections battle_feedback_test.c $(BC)/gen/out/pr_data.c -Wl,--gc-sections -lm -o $@
+battle_feedback_test: build/battle_feedback_test
+.PHONY: battle_feedback_test
+
+build/charge_visibility_test: charge_visibility_test.c ../source/battle_events.c build/ptx_core.a
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined charge_visibility_test.c ../source/battle_events.c build/ptx_core.a -lm -o $@
+charge_visibility_test: build/charge_visibility_test
+.PHONY: charge_visibility_test

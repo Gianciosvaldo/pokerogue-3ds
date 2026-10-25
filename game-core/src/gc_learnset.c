@@ -45,6 +45,41 @@ static int species_level_moves(int species, int form, row *out, int cap)
     return n;
 }
 
+int gc_starter_moves(const gc_system *sys, int species, int form, uint16_t *out, int cap)
+{
+    const pr_species *sp=gc_species(species);
+    if (!sp || gc_starter_cost(species)<0 || form<0 || form>=sp->nforms || !out || cap<0) return -1;
+    static row rows[ROWS_MAX];
+    /* StarterSelect reads the registry's concatenation order, unlike battle
+     * learnsets which sort by level. Form moves follow all base moves. */
+    int n=0,w=0;
+    if(sp->level_moves.n>ROWS_MAX)return -1;
+    for(int i=0;i<sp->level_moves.n;i++)rows[n++]=(row){sp->level_moves.v[i].level,sp->level_moves.v[i].move,0};
+    const char *key=form_key(sp,form);
+    for(int i=0;i<gc_form_level_moves_count;i++) {
+        const gc_form_level_moves *f=&gc_form_level_moves_data[i];
+        if(f->species!=species || strcmp(f->form_key,key))continue;
+        if(n+f->n>ROWS_MAX)return -1;
+        for(int k=0;k<f->n;k++)rows[n++]=(row){f->v[k].level,f->v[k].move,0};
+    }
+    uint16_t eggs[4]={0};
+    if (sys && species<=GC_MAX_SPECIES_ID) for(int i=0;i<gc_starter_egg_moves_count;i++)
+        if(gc_starter_egg_moves_data[i].species==species) {
+            for(int k=0;k<4;k++) if(sys->starters[species].egg_moves&(1<<k))
+                eggs[k]=gc_starter_egg_moves_data[i].egg_moves[k];
+            break;
+        }
+    for(int i=0;i<n+4;i++) {
+        int move=i<n ? (rows[i].level>0 && rows[i].level<=5 ? rows[i].move : 0) : eggs[i-n];
+        if(!move) continue;
+        bool duplicate=false;for(int k=0;k<w;k++) if(out[k]==move) duplicate=true;
+        if(duplicate) continue;
+        if(w>=cap) return -1;
+        out[w++]=(uint16_t)move;
+    }
+    return w;
+}
+
 /* getRegularLevelMoves(context, includeEvolutionMoves, includeRelearnerMoves, fromFusion) */
 static int regular_level_moves(const gc_mon *m, bool evo, bool relearn, bool from_fusion, row *out, int cap)
 {
@@ -253,6 +288,33 @@ static bool form_tms_have(int species, int form, int move)
     const pr_tm_list *l = &pr_tm_lists[pr_reward_forms[s->form_start + f].tms];
     for (unsigned i = 0; i < l->n; i++) if (pr_tm_pool[l->start + i] == move) return true;
     return false;
+}
+
+/* getCompatibleTms(false, false, false): raw species/form plus fusion TMs,
+ * even while transformed. PLAYER_TM_COMPATIBILITY's randomizer remains unported. */
+static bool tm_compatible(const gc_mon *m, int move)
+{
+    return m && move > 0 && move < PR_MOVE_COUNT
+        && (form_tms_have(m->b.species, m->b.form, move)
+            || (m->b.fusion_species && form_tms_have(m->b.fusion_species, m->b.fusion_form, move)));
+}
+
+/* TmModifierType.selectFilter calls isTmCompatible(move, true), which excludes
+ * Pokemon.moveset (permanent moves), not getMoveset()'s temporary override. */
+bool gc_mon_can_learn_tm(const gc_mon *m, int move)
+{
+    if (!tm_compatible(m, move)) return false;
+    for (int i = 0; i < m->b.n_moves; i++) if (m->b.moves[i] == move) return false;
+    return true;
+}
+
+/* PartySlot displays getMoveset()'s effective moves first, then compatibility.
+ * A displayed Learned/Able label is therefore not itself the teaching filter. */
+int gc_mon_tm_state(const gc_mon *m, int move)
+{
+    if (!m || move <= 0 || move >= PR_MOVE_COUNT) return 0;
+    for (int i = 0; i < PR_N_MOVES(&m->b); i++) if (PR_MOVES(&m->b)[i] == move) return 2;
+    return tm_compatible(m, move);
 }
 
 /* CanLearnMoveRequirement.getAllPokemonMoves(pkm) includes the move: getLevelMoves() with its defaults (startingLevel =

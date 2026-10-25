@@ -715,9 +715,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         return;
     }
     case PR_AC_MoneyAttr: {                              /* Pay Day: moneyScattered += getWaveMoneyAmount(0.2) */
-        int w = bt->wave_index, set = (int)ceil(w / 10.0) - 1;
-        double v = js_pow((set + 1 + (0.75 + (((w - 1) % 10) + 1) / 10.0)) * 100, 1 + 0.005 * set) * 0.2;
-        bt->money_scattered += (int32_t)(floor(v / 10) * 10);
+        bt->money_scattered += pr_wave_money_amount(bt->wave_index, 0.2);
         pr_queue_msg(bt, e, pr_msg0("moveTriggers:coinsScatteredEverywhere"));
         return;
     }
@@ -861,7 +859,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         if (a->cls == PR_AC_SacrificialAttrOnHit && !effect_can_apply(ef, user, target)) return;
         /* damageAndUpdate(user.hp, {result: INDIRECT, ignoreSegments: true}), then damageTaken +=
          * user.hp: the HP left afterwards, 0 unless the user got through */
-        pr_damage_and_update(bt, e, user, user->hp, HIT_RESULT_INDIRECT, false, NULL);
+        pr_damage_and_update_segments(bt, e, user, user->hp, HIT_RESULT_INDIRECT, true, false, NULL);
         user->damage_taken += user->hp;
         if (a->cls == PR_AC_SacrificialFullRestoreAttr) {
             const pr_attr_SacrificialFullRestoreAttr *x = P(SacrificialFullRestoreAttr,a);
@@ -1210,6 +1208,19 @@ const char *pr_held_item_name_key(const pr_modifier *m)
         return m->move_type>=0&&m->move_type<18?keys[m->move_type]:NULL;
     }
     switch (m->cls) {
+    case PR_MOD_STAT_BOOSTER: case PR_MOD_EVOLUTION_STAT_BOOSTER:
+        return m->mult==1.5&&m->stats_mask==((1u<<STAT_DEF)|(1u<<STAT_SPDEF))?"modifierType:ModifierType.EVIOLITE.name":NULL;
+    case PR_MOD_SPECIES_STAT_BOOSTER:
+        if(m->mult!=2)return NULL;
+        if(m->n_species==1&&m->species[0]==SPECIES_ID_PIKACHU&&m->stats_mask==((1u<<STAT_ATK)|(1u<<STAT_SPATK)))return "modifierType:SpeciesBoosterItem.LIGHT_BALL.name";
+        if(m->n_species==3&&m->species[0]==SPECIES_ID_CUBONE&&m->species[1]==SPECIES_ID_MAROWAK&&m->species[2]==SPECIES_ID_ALOLA_MAROWAK&&m->stats_mask==(1u<<STAT_ATK))return "modifierType:SpeciesBoosterItem.THICK_CLUB.name";
+        if(m->n_species==1&&m->species[0]==SPECIES_ID_DITTO){if(m->stats_mask==(1u<<STAT_DEF))return "modifierType:SpeciesBoosterItem.METAL_POWDER.name";if(m->stats_mask==(1u<<STAT_SPD))return "modifierType:SpeciesBoosterItem.QUICK_POWDER.name";}
+        if(m->n_species==1&&m->species[0]==SPECIES_ID_CLAMPERL){if(m->stats_mask==(1u<<STAT_SPDEF))return "modifierType:SpeciesBoosterItem.DEEP_SEA_SCALE.name";if(m->stats_mask==(1u<<STAT_SPATK))return "modifierType:SpeciesBoosterItem.DEEP_SEA_TOOTH.name";}
+        return NULL;
+    case PR_MOD_FIELD_EFFECT: return "modifierType:ModifierType.MYSTICAL_ROCK.name";
+    case PR_MOD_SPECIES_CRIT_BOOSTER: return "modifierType:ModifierType.LEEK.name";
+    case PR_MOD_EXP_BOOSTER: return m->mult==0.4?"modifierType:ModifierType.LUCKY_EGG.name":m->mult==1.0?"modifierType:ModifierType.GOLDEN_EGG.name":NULL;
+    case PR_MOD_FRIENDSHIP_BOOSTER: return "modifierType:ModifierType.SOOTHE_BELL.name";
     case PR_MOD_MOVE_ACCURACY_BOOSTER: return "modifierType:ModifierType.WIDE_LENS.name";
     case PR_MOD_MULTI_HIT: return "modifierType:ModifierType.MULTI_LENS.name";
     case PR_MOD_CRIT_BOOSTER: return "modifierType:ModifierType.SCOPE_LENS.name";
@@ -1217,6 +1228,8 @@ const char *pr_held_item_name_key(const pr_modifier *m)
     case PR_MOD_DAMAGE_MONEY_REWARD: return "modifierType:ModifierType.GOLDEN_PUNCH.name";
     case PR_MOD_INSTANT_REVIVE: return "modifierType:ModifierType.REVIVER_SEED.name";
     case PR_MOD_TURN_STATUS_EFFECT: return m->status_effect==STATUS_EFFECT_TOXIC?"modifierType:ModifierType.TOXIC_ORB.name":m->status_effect==STATUS_EFFECT_BURN?"modifierType:ModifierType.FLAME_ORB.name":NULL;
+    case PR_MOD_SWITCH_EFFECT_TRANSFER: return "modifierType:ModifierType.BATON.name";
+    case PR_MOD_CONTACT_HELD_TRANSFER: return "modifierType:ModifierType.GRIP_CLAW.name";
     case PR_MOD_TURN_HELD_TRANSFER: return "modifierType:ModifierType.MINI_BLACK_HOLE.name";
     case PR_MOD_TURN_HEAL: return "modifierType:ModifierType.LEFTOVERS.name";
     case PR_MOD_HIT_HEAL: return "modifierType:ModifierType.SHELL_BELL.name";

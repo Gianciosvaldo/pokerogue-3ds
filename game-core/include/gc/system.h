@@ -36,6 +36,8 @@ typedef struct {
     uint8_t egg_moves;
     uint16_t moveset[4];   /* 0 if default / empty */
     uint16_t classic_win_count;
+    uint8_t preference_flags; /* 1 nature, 2 appearance, 4 ability; absent in older saves */
+    uint8_t nature_preference, appearance_preference, ability_preference;
 } gc_starter_entry;
 
 /* Upstream Unlocks */
@@ -146,6 +148,12 @@ void gc_system_add_classic_win(gc_system *sys, uint16_t species_id);
 uint16_t gc_system_get_ribbons(const gc_system *sys, uint16_t species_id);
 
 /* SD Card System Data Serializer */
+/* Direct hidden-ability purchases are a user-requested extension at the same
+ * base-species candy cost as the pinned native passive unlock. */
+int gc_system_starter_unlock_cost(uint16_t species);
+int gc_system_starter_reduction_cost(const gc_system *sys,uint16_t species);
+bool gc_system_buy_starter_reduction(gc_system *sys,uint16_t species);
+bool gc_system_buy_starter_unlock(gc_system *sys, uint16_t species, bool hidden_ability);
 size_t gc_system_save(const gc_system *sys, void *buf, size_t cap);
 bool gc_system_load(gc_system *sys, const void *buf, size_t len, const char **why);
 

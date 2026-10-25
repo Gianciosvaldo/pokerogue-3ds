@@ -42,6 +42,7 @@ enum {
     RP_ME_POST,          /* PostMysteryEncounterPhase's onPostOptionPhase: a = encounter type, b = party index, c = option */
     RP_CUSTOM_OFFER,     /* custom content: the app's rematch offer, waits on CUSTOM_OFFER (gc/custom.h) */
     RP_FG_KO,            /* Fun and Games!: MysteryEncounterRewardsPhase running doContinueEncounter (handleLoseMinigame) */
+    RP_EGG_LAPSE,        /* EggLapsePhase: wave progress and ready hatch/profile rewards */
     RP_COUNT_
 };
 typedef struct { uint8_t type; int32_t a, b, c; double d; const char *key; } gc_rphase;
@@ -92,6 +93,10 @@ typedef struct {
     bool battle_won;            /* a VictoryPhase has run in this battle: its BattleEndPhase is the victory's */
     uint8_t thrown_ball;        /* the PokeballType of the last ball command: the one a catch is made with */
     bool pending_me_miss;       /* EncounterPhase increments spawn chance after the save point */
+    pr_msg refusal_message;     /* structured reason for the last refused choice; never saved */
+    bool undo_first, undo_save_point, undo_rng_live, undo_battle_rng_live;
+    pr_rng undo_rng, undo_battle_rng;
+    struct pr_turn_command undo_commands[2], undo_pre_commands[2];
     bool at_save_point;         /* from GC_EV_SAVE_POINT until the battle's first turn runs (gc_run_can_save) */
     /* gc_trainer_names' ring: run->trainer_names' texts, gc_m_trainer's key for each and whether that
      * key is the whole name (bit per GC_TNAME_*) */
@@ -122,7 +127,8 @@ static inline gc_rphase gc_rp(int type, int a, int b, int c) { gc_rphase p = {(u
 
 /* ---- events (src/gc_run.c) ---- */
 gc_event *gc_ev_new(gc_run *run, int kind);
-void gc_ev_msg(gc_run *run, const char *key, int n, ...);   /* n pr_msg_arg values follow */
+void gc_ev_money(gc_run *run, double change);
+gc_event *gc_ev_msg(gc_run *run, const char *key, int n, ...);   /* n pr_msg_arg values follow */
 pr_msg_arg gc_m_mon(gc_run *run, const char *name, int side, int idx);   /* getPokemonNameWithAffix */
 pr_msg_arg gc_m_mon_name(gc_run *run, const char *name, int side, int idx);   /* getNameToRender */
 pr_msg_arg gc_m_trainer(gc_run *run, const char *name, int which);       /* trainer.getName (GC_TNAME_*) */
@@ -142,6 +148,8 @@ const pr_species_gen *gc_species_gen(int id);                          /* run-co
  * form < 0 = getSpeciesFormIndex() (only for a species without forms), shiny < 0 = trySetShiny(). The moveset is
  * not rolled (Pokemon.generateAndPopulateMoveset isn't ported for a player's Pokemon: the stand-in is the caller's).
  * false = a species the roll can't be made for; the mon is then unusable. */
+bool gc_egg_generate(gc_run *run, const gc_egg *egg, gc_mon *out);
+int gc_system_hatch_ready_eggs(gc_run *run);
 bool gc_mon_roll_player(gc_run *run, pr_rng *rng, gc_mon *m, int species, int level, int ability_index, int form, int shiny);
 /* Task 63's clean wild constructor slice; false leaves the RNG/mon untouched. */
 bool gc_enemy_moveset(gc_run *run, gc_mon *m, const pr_enemy_gen *g);
@@ -158,6 +166,7 @@ int gc_level_up_moves(const gc_mon *m, int starting_level, uint16_t *out, int ma
 void gc_mon_add_exp(gc_run *run, gc_mon *m, double exp);              /* addExp */
 double gc_level_total_exp(int level, int growth_rate);
 /* EvolutionItemModifier.apply's evolution: the gc_evo_data index, -1 = none */
+int gc_mon_football_evolutions(gc_run *run, const gc_mon *m, int *out, int cap);
 int gc_mon_item_evolution(gc_run *run, const gc_mon *m, int item);
 /* getEvolution(): the gc_evo_data index, -1 = none */
 int gc_mon_get_evolution(gc_run *run, const gc_mon *m);
@@ -226,6 +235,9 @@ void gc_reward_change_form(gc_run *run, int party, int form);
 
 /* ---- items (src/gc_items.c) ---- */
 int gc_item_stack(const gc_run *run, const char *key);                 /* stack count of a player item, 0 = none */
+bool gc_item_key_form_change(const char *key);
+bool gc_form_items_context_known(const gc_run *run, const pr_pokemon *pokemon, int candidate);
+bool gc_item_key_locked(const char *key); /* intrinsic pinned constructor property */
 void gc_item_add(gc_run *run, const char *key, int16_t arg, uint32_t pokemon_id, int stack);
 void gc_item_remove_at(gc_run *run, int idx);
 /* The enemy's held items (the modifiers with a Pokemon) and the player's, as catching moves them. Each rebuilds
@@ -259,12 +271,15 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
 bool gc_mystery_pick_ok(const gc_run *run, int type, int option, int idx);   /* the option's party screen filter accepts the Pokemon */
 void gc_mystery_post(gc_run *run, const gc_rphase *p);
 bool gc_gen_wild(gc_run *run, int level);
+bool gc_trainer_is_double(const gc_run *run);
 void gc_trainer_names(gc_run *run);               /* run->trainer_names for the current trainer */
 bool gc_is_new_biome(const gc_run *run, int wave);   /* isNewBiome for the battle of `wave` */
 int gc_roll_biome_weather(gc_run *run);            /* Arena.setBiomeWeather's pick (consumes the run RNG) */
 int gc_roll_biome_terrain(gc_run *run);            /* Arena.setBiomeTerrain's pick */
 void gc_arena_reset_effects(gc_run *run);          /* Arena.resetArenaEffects: weather and terrain */
 void gc_arena_new_battle(gc_run *run, bool reset, bool roll);   /* ...then the biome's rolls */
+void gc_battle_note_unported(gc_run *run); /* drain battle diagnostics into persistent counters */
+bool gc_set_encounter_nature(pr_battle *bt, pr_pokemon *p, int nature, void *data);
 void gc_battle_cleanup_players(gc_run *run);   /* outgoing field, before generating the encounter */
 bool gc_battle_setup_field(gc_run *run, bool reset_arena);   /* bt from the parties, before the first turn */
 void gc_battle_restore_field(gc_run *run); /* pointers only; summon effects already saved */

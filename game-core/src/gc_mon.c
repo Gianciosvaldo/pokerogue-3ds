@@ -117,6 +117,7 @@ void gc_mon_new_enemy(gc_run *run, gc_mon *m, int species, int level, const pr_e
     p->friendship = g->friendship >= 0 ? (uint8_t)g->friendship : (sp ? sp->base_friendship : 0);
     p->tera_type = (int8_t)g->tera_type;
     p->has_trainer = trainer_slot != 0;
+    p->trainer_slot = (uint8_t)trainer_slot;
     /* EnemyPokemon.setBoss: bossSegments from run-core's getEncounterBossSegments, one shield fewer than
      * segments to start with (battle-core clears them as the damage breaks them; 0 = not a boss) */
     p->is_boss = g->boss_segments > 0;
@@ -156,7 +157,7 @@ bool gc_mon_roll_player(gc_run *run, pr_rng *rng, gc_mon *m, int species, int le
 {
     const pr_species_gen *sg = gc_species_gen(species);
     const pr_species *sp = gc_species(species);
-    if (!sg || !sp || (form < 0 && sg->n_forms) || form >= (sg->n_forms ? sg->n_forms : 1)) return false;
+    if (!sg || !sp || (form < 0 && form != -2 && sg->n_forms) || form >= (sg->n_forms ? sg->n_forms : 1)) return false;
     memset(m, 0, sizeof *m);
     pr_pokemon *p = &m->b;
     p->id = (uint32_t)floor(pr_rng_real_in_range(rng, 0, 4294967296.0));
@@ -169,6 +170,11 @@ bool gc_mon_roll_player(gc_run *run, pr_rng *rng, gc_mon *m, int species, int le
     p->ivs[5] = id & 0x0000001fu;
     if (sg->male_percent < 0) p->gender = -1;
     else p->gender = pr_rng_frac(rng) * 100 <= sg->male_percent ? 0 : 1;
+    if (form == -2) {
+        const pr_enemy_gen_ctx ctx = {.species=species,.wave=run->wave,.biome=run->biome,
+            .battle_type=run->battle_type,.trainer_type=run->trainer_type};
+        form = pr_run_get_egg_form_index(rng,&run->run,&ctx,p->gender);
+    }
     p->form = (uint8_t)(form < 0 ? 0 : form);
 
     if (shiny < 0) {
@@ -325,7 +331,7 @@ static bool pre_form_ok(const gc_mon *m, const gc_evo *e)
 }
 
 /* SpeciesEvolutionCondition.conditionsFulfilled (not a fusion) */
-static bool conditions_fulfilled(gc_run *run, const gc_mon *m, const gc_evo *e)
+static bool conditions_fulfilled(gc_run *run, const gc_mon *m, const gc_evo *e, bool football_choice)
 {
     const pr_pokemon *p = &m->b;
     for (int i = 0; i < e->n_cond; i++) {
@@ -347,7 +353,7 @@ static bool conditions_fulfilled(gc_run *run, const gc_mon *m, const gc_evo *e)
             }
             break;
         case GC_EVO_GENDER: ok = p->gender == c->v[0]; break;
-        case GC_EVO_SHEDINJA: ok = false; break;
+        case GC_EVO_SHEDINJA: ok = football_choice; break;
         case GC_EVO_BIOME: ok = has_value(c, run->biome); break;
         case GC_EVO_WEATHER: ok = has_value(c, run->bt.weather); break;
         case GC_EVO_TYROGUE: {
@@ -386,11 +392,22 @@ static bool conditions_fulfilled(gc_run *run, const gc_mon *m, const gc_evo *e)
                      && (!strcmp(run->items[k].key, "SPECIES_STAT_BOOSTER") || !strcmp(run->items[k].key, "RARE_SPECIES_STAT_BOOSTER"));
             break;
         }
-        case GC_EVO_TREASURE_TRACKER:
-            /* Gimmighoul's coins (the tracker plus the persistent treasure count) wait on reward-core */
-            gc_stub(run, GC_STUB_EVOLUTION);
-            ok = false;
+        case GC_EVO_TREASURE_TRACKER: {
+            /* Count objects, not their stacks. A tracker must exist even if
+             * the persistent treasure alone reaches the threshold. */
+            int treasure = 0;
+            for (int k = 0; k < run->n_items; k++) {
+                const gc_item *it = &run->items[k];
+                treasure += (!strcmp(it->key, "GOLDEN_PUNCH") && it->pokemon_id == p->id)
+                    || !strcmp(it->key, "AMULET_COIN") || !strcmp(it->key, "GOLDEN_POKEBALL");
+            }
+            for (int k = 0; k < run->n_items; k++) {
+                const gc_item *it = &run->items[k];
+                if (it->pokemon_id == p->id && !strcmp(it->key, "EVOLUTION_TRACKER_GIMMIGHOUL")
+                    && (int64_t)it->stack + it->virtual_stack + treasure >= c->v[0]) { ok = true; break; }
+            }
             break;
+        }
         }
         if (!ok) return false;
     }
@@ -407,10 +424,27 @@ int gc_mon_get_evolution(gc_run *run, const gc_mon *m)
         if (e->item) continue;                                   /* item === this.item: NONE only */
         if (m->b.level < e->level) continue;
         if (!pre_form_ok(m, e)) continue;                         /* getFormKey() === preFormKey */
-        if (!conditions_fulfilled(run, m, e)) continue;
+        if (!conditions_fulfilled(run, m, e, false)) continue;
         return se->start + i;
     }
     return -1;
+}
+
+/* Football offers validated split outcomes instead of silently taking the first.
+ * The Shedinja rule is a choice of replacement, rather than an extra spawn. */
+int gc_mon_football_evolutions(gc_run *run, const gc_mon *m, int *out, int cap)
+{
+    const gc_species_evo *se = species_evo(m->b.species);
+    if (!se || m->pause_evolutions) return 0;
+    int n = 0;
+    for (int i = 0; i < se->n; ++i) {
+        const gc_evo *e = &gc_evo_data[se->start + i];
+        if (e->item || m->b.level < e->level || !pre_form_ok(m,e)
+            || !conditions_fulfilled(run,m,e,true)) continue;
+        if (n == cap) return -1;
+        out[n++] = se->start + i;
+    }
+    return n;
 }
 
 /* EvolutionItemModifier.apply, not a fusion: the first of the species' evolutions whose item matches and validates
@@ -422,7 +456,7 @@ int gc_mon_item_evolution(gc_run *run, const gc_mon *m, int item)
     for (int i = 0; i < se->n; i++) {
         const gc_evo *e = &gc_evo_data[se->start + i];
         if (e->item != item || m->b.level < e->level || !pre_form_ok(m, e)) continue;
-        if (!conditions_fulfilled(run, m, e)) continue;
+        if (!conditions_fulfilled(run, m, e, false)) continue;
         return se->start + i;
     }
     return -1;
@@ -434,6 +468,7 @@ void gc_mon_evolve(gc_run *run, gc_mon *m, int evo)
 {
     const gc_evo *e = &gc_evo_data[evo];
     pr_pokemon *p = &m->b;
+    const int pre_species = p->species;
     const pr_form *pre = gc_form(p->species, p->form);
     int pre_count = pre->ability_hidden ? 3 : 2;
     m->pause_evolutions = false;
@@ -447,6 +482,15 @@ void gc_mon_evolve(gc_run *run, gc_mon *m, int evo)
     p->base_ability = (uint16_t)gc_form_ability(p->species, f, m->ability_index);
     if (p->ability_override <= 0) p->ability = p->base_ability;
     pr_refresh_ability(p);
+    if (pre_species == SPECIES_ID_GIMMIGHOUL) {
+        for (int k = 0; k < run->n_items; k++) {
+            if (run->items[k].pokemon_id == p->id
+                && !strcmp(run->items[k].key, "EVOLUTION_TRACKER_GIMMIGHOUL")) {
+                gc_item_remove_at(run, k); break; /* source removes the first tracker only */
+            }
+        }
+        gc_items_to_battle(run);
+    }
     gc_mon_recalc(run, m);
 
     if (run->sys) {

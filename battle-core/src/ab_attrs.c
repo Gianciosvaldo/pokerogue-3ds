@@ -5,6 +5,7 @@
 #include "pr/engine.h"
 #include <math.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define AB_FLAG_BYPASS_FAINT (1u << 0)
@@ -273,6 +274,22 @@ static bool type_in(const pr_intlist *l, int t)
     return false;
 }
 
+/* Integer Sets in the pinned generated table are encoded as {"$set": [ids]}.
+ * Read the constructor's actual members rather than special-casing an ability. */
+static bool int_set_has(const char *json, int value)
+{
+    const char *s = json ? strchr(json, '[') : NULL;
+    if (!s) return false;
+    for (++s; *s && *s != ']';) {
+        char *end;
+        long item = strtol(s, &end, 10);
+        if (end == s) { s++; continue; }
+        if (item == value) return true;
+        s = end;
+    }
+    return false;
+}
+
 /* What applySingleAbAttrs does between canApply and apply outside a simulation: show the
  * ability, queue its trigger message. The turn engine keeps these phases (NULL: no engine). */
 typedef struct {
@@ -415,6 +432,31 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         GATE(move >= 0 && move < PR_MOVE_COUNT
              && pr_moves[move].category == MOVE_CATEGORY_STATUS && *pp->value >= 50);
         *pp->value = 50; /* Source also modifies the holder during simulation. */
+        return 1;
+    case PR_AC_PostBattleLootAbAttr:
+        GATE(pr_pickup_can_apply(bt,(pr_pokemon *)p,pp->simulated,pp->victory));
+        pr_pickup_apply(bt,c->e,(pr_pokemon *)p);
+        return 1;
+    case PR_AC_MoneyAbAttr:
+        GATE(!pp->simulated && pp->victory);
+        bt->money_scattered += pr_wave_money_amount(bt->wave_index, 0.2);
+        return 1;
+    case PR_AC_SyncEncounterNatureAbAttr: {
+        GATE(true);
+        if (!pp->target) return -1;
+        pr_pokemon *target = (pr_pokemon *)pp->target;
+        /* Source setNature runs even in simulation. A scene setter preserves
+         * its raw/custom nature split; the core default has no custom override. */
+        if (pp->set_nature)
+            return pp->set_nature(bt, target, p->nature, pp->nature_ctx) ? 1 : -1;
+        target->nature = p->nature;
+        pr_recalculate_stats(bt, target);
+        return 1;
+    }
+    case PR_AC_DoubleBattleChanceAbAttr:
+        GATE(true);
+        if (!pp->value) return -1;
+        *pp->value /= 4; /* Includes simulated calls; the holder is the output. */
         return 1;
     case PR_AC_StatMultiplierAbAttr: {
         const pr_attr_StatMultiplierAbAttr *x = P(StatMultiplierAbAttr, a);
@@ -827,20 +869,44 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         *pp->flag = x->overwrites;
         return 1;
     }
+    case PR_AC_PostBiomeChangeWeatherChangeAbAttr: {
+        int w = P(PostBiomeChangeWeatherChangeAbAttr, a)->weatherType;
+        /* This override requires old immutable weather. canSetWeather only
+         * tests inequality; the actual setter may then reject the change. */
+        GATE(pr_weather_immutable(bt->weather) && bt->weather != w);
+        if (!pp->simulated) {
+            if (!c->e) return -1;
+            pr_try_set_weather(bt, c->e, w, p);
+        }
+        return 1;
+    }
+    case PR_AC_PostBiomeChangeTerrainChangeAbAttr: {
+        int t = P(PostBiomeChangeTerrainChangeAbAttr, a)->terrainType;
+        GATE(bt->terrain != t);
+        if (!pp->simulated) {
+            if (!c->e) return -1;
+            pr_try_set_terrain(bt, c->e, t, false, p);
+        }
+        return 1;
+    }
     case PR_AC_PostSummonWeatherChangeAbAttr: {                         /* Drizzle, Drought, the primal weathers */
         int w = P(PostSummonWeatherChangeAbAttr, a)->weatherType;
-        if (!c->e) return -1;
         bool replaceable = w == WEATHER_TYPE_HEAVY_RAIN || w == WEATHER_TYPE_HARSH_SUN || w == WEATHER_TYPE_STRONG_WINDS
                            || w == WEATHER_TYPE_NONE || !pr_weather_immutable(bt->weather);
         GATE(replaceable && bt->weather != w);                          /* canSetWeather */
-        if (!pp->simulated) pr_try_set_weather(bt, c->e, w, p);
+        if (!pp->simulated) {
+            if (!c->e) return -1;
+            pr_try_set_weather(bt, c->e, w, p);
+        }
         return 1;
     }
     case PR_AC_PostSummonTerrainChangeAbAttr: {                         /* the Surges */
         int t = P(PostSummonTerrainChangeAbAttr, a)->terrainType;
-        if (!c->e) return -1;
         GATE(bt->terrain != t);                                         /* canSetTerrain */
-        if (!pp->simulated) pr_try_set_terrain(bt, c->e, t, false, p);
+        if (!pp->simulated) {
+            if (!c->e) return -1;
+            pr_try_set_terrain(bt, c->e, t, false, p);
+        }
         return 1;
     }
     case PR_AC_PreLeaveFieldRemoveSuppressAbilitiesSourceAbAttr:
@@ -1277,6 +1343,19 @@ static int apply_one(pr_battle *bt, const pr_attr *a, pr_ab_params *pp, ab_ctx *
         GATE(pr_can_add_tag(bt, (pr_pokemon *)p, x->tagType));
         if (!pp->simulated) pr_add_tag(bt, c->e, (pr_pokemon *)p, x->tagType, x->turnCount, 0, -1);
         return 1;
+    }
+    case PR_AC_ConfusionOnStatusEffectAbAttr: {                        /* Poison Puppeteer */
+        bool effect = int_set_has(P(ConfusionOnStatusEffectAbAttr, a)->effects, pp->effect);
+        if (effect && !o) return -1; /* Native would dereference a missing required opponent. */
+        GATE(effect && o->hp > 0 && pr_can_add_tag(bt, (pr_pokemon *)o, BATTLER_TAG_TYPE_CONFUSED));
+        if (!pp->simulated) {
+            if (!c->e) return -1;
+            /* canAddTag only checks existing tags and ability immunity. Misty
+             * Terrain can reject the actual add after this native RNG draw. */
+            int turns = pr_battle_rand_seed_int(bt, 4, 2);
+            pr_add_tag(bt, c->e, (pr_pokemon *)o, BATTLER_TAG_TYPE_CONFUSED, turns, 0, (int64_t)o->id);
+        }
+        return 1; /* Native apply ignores addTag's result. */
     }
     case PR_AC_TerrainEventTypeChangeAbAttr: {                          /* Mimicry */
         GATE(!p->terastallized);

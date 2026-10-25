@@ -149,7 +149,7 @@ There are **Custom Run** and **Custom Load** on the title (custom content, task 
 (`csession_<n>.sav`: the run bytes and the run's custom state in one file, never readable as an ordinary session). At the windows of the frozen
 schedule (waves 27, 77, 127 and 177) it may ask, before any combat, whether to fight a remembered Nemesis; Yes builds that enemy through game-core's
 own enemy construction at the wave's ordinary level (no scaling, boosts, boss segments or change to what the player carries), No gives the ordinary
-encounter. A win pays one regular voucher, once. Only an ordinary single wild encounter can be offered; the defeat that makes a Nemesis is named only
+encounter. A win pays one regular voucher, once. A verified wild finisher from a double battle can be remembered on its own; only an ordinary single wild encounter can be offered; the defeat that makes a Nemesis is named only
 when battle-core's own state names the attacker. An ordinary run never installs a hook. If `custom.sav` cannot be used the custom entries say so and start
 nothing. Contracts section 2.16.
 
@@ -398,3 +398,8 @@ make -C game/tests animtest && game/tests/build/animtest path/to/pokerogue-asset
 - Sound without snd.pak is silent (the packs in the test rig have no sound yet).
 - Forms, variants and gender sprite differences in sprite keys.
 - Every other screen in the beta plan that is not listed above as done.
+
+The ARM main thread reserves 512 KiB explicitly through libctru's startup stack
+override. The real-command guard-page regression and built-ELF checks are described
+in [STACK-CRASH-VALIDATION.md](STACK-CRASH-VALIDATION.md). Keep these checks when
+changing startup or the Windows builder payload.

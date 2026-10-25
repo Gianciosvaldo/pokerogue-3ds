@@ -228,7 +228,7 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             bt->post_battle_loot = (int)inum(l, "loot");
             bt->battle_score = dnum(l, "score");
             has_money = field(l, "money") != NULL;
-            bt->money_scattered = has_money ? (int32_t)inum(l, "money") : 0;
+            bt->money_scattered = has_money ? dnum(l, "money") : 0;
             bt->battle_type = (uint8_t)inum(l, "type");
             bt->double_battle = inum(l, "double") != 0;
             bt->max_exp_level = (int)inum(l, "mel");
@@ -481,6 +481,14 @@ static void read_state(const lines_t *L, int from, int to, case_state *cs)
             m->pokemon_id = inum(l, "pid");
             m->stack_count = (int32_t)inum(l, "stack");
             m->is_transferable = true;
+            if(field(l,"lock")){
+                if(m->cls!=PR_MOD_SWITCH_EFFECT_TRANSFER || inum(l,"lock")!=1){fprintf(stderr,"invalid Baton transfer lock\n");exit(2);}
+                m->is_transferable=false;
+            }
+            if (m->cls == PR_MOD_CONTACT_HELD_TRANSFER) {
+                if (!field(l,"chance")) { fprintf(stderr,"missing Grip Claw chance\n"); exit(2); }
+                m->mult=dnum(l,"chance");
+            }
             if (field(l, "btype")) m->berry_type = (int8_t)inum(l, "btype");
             if (m->cls == PR_MOD_ENEMY_ATTACK_STATUS_EFFECT_CHANCE) {
                 if (!field(l, "effect")) { fprintf(stderr, "missing enemy status-token effect\n"); exit(2); }
@@ -760,7 +768,7 @@ static void dump_state(lines_t *L, const pr_battle *bt, const case_state *cs, bo
     }
     LIST(&s, np, ',', "%u", part[i]);
     sb(&s, " loot=%d score=%.17g", bt->post_battle_loot, bt->battle_score);
-    if (has_money) sb(&s, " money=%d", bt->money_scattered);
+    if (has_money) sb(&s, " money=%.0f", bt->money_scattered);
     sb(&s, " type=%d double=%d mel=%d bar=%d ball=", bt->battle_type, bt->double_battle, bt->max_exp_level,
        bt->ability_bar_visible);
     num_or_u(&s, bt->last_used_pokeball, -1);
@@ -809,6 +817,12 @@ static void dump_state(lines_t *L, const pr_battle *bt, const case_state *cs, bo
             if (m->cls == PR_MOD_BERRY)
                 add_line(L, "MOD side=%d cls=%s pid=%lld stack=%d btype=%d", side,
                          pr_mod_class_name[m->cls], (long long)m->pokemon_id, m->stack_count, m->berry_type);
+            else if (m->cls == PR_MOD_SWITCH_EFFECT_TRANSFER)
+                add_line(L,"MOD side=%d cls=%s pid=%lld stack=%d%s",side,
+                    pr_mod_class_name[m->cls],(long long)m->pokemon_id,m->stack_count,m->is_transferable?"":" lock=1");
+            else if (m->cls == PR_MOD_CONTACT_HELD_TRANSFER)
+                add_line(L,"MOD side=%d cls=%s pid=%lld stack=%d chance=%g",side,
+                    pr_mod_class_name[m->cls],(long long)m->pokemon_id,m->stack_count,m->mult);
             else if (m->cls == PR_MOD_ENEMY_ATTACK_STATUS_EFFECT_CHANCE)
                 add_line(L, "MOD side=%d cls=%s pid=%lld stack=%d effect=%d", side,
                          pr_mod_class_name[m->cls], (long long)m->pokemon_id, m->stack_count, m->berry_type);

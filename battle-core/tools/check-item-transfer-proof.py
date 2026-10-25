@@ -6,18 +6,25 @@ p=argparse.ArgumentParser();p.add_argument('trace',type=Path);p.add_argument('tu
 r=Path(__file__).resolve().parents[2];out=r/'battle-core/build/item-transfer-guards';out.mkdir(parents=True,exist_ok=True)
 env=os.environ.copy();assert env.get('TURNTEST_LOCALES')
 mutations={
- 'skip-sticky':('item_transfer.c','if(cancelled)return false;','cancelled=false;'),
+ 'skip-sticky':('item_transfer.c','if (cancelled) return false;','cancelled=false;'),
  'wrong-opponent':('item_transfer.c','opponents[pr_battle_rand_seed_int(bt,n,0)]','opponents[0]'),
  'wrong-stock':('item_transfer.c','indices[pr_battle_rand_seed_int(bt,count,0)]','indices[0]'),
  'ignore-lock':('item_transfer.c','&&m->is_transferable)',')'),
- 'wrong-cap':('item_transfer.c','matching].stack_count>=cap','matching].stack_count>cap'),
- 'skip-source-loss':('item_transfer.c','bt->mods[other][index].stack_count-=taken;','bt->mods[other][index].stack_count-=0;'),
+ 'wrong-cap':('item_transfer.c','existing>=cap','existing>cap'),
+ 'skip-source-loss':('item_transfer.c','bt->mods[from_side][index].stack_count-=taken;','bt->mods[from_side][index].stack_count-=0;'),
  'skip-unburden':('item_transfer.c','pr_apply_ab_attrs(bt,PR_AC_PostItemLostAbAttr,&lost);','(void)lost;'),
  'skip-stat-refresh':('item_transfer.c','pr_refresh_berry_modifiers(bt,side);','(void)side;'),
  'skip-turn-end':('phases.c','pr_apply_turn_held_item_transfers(bt,e,p);','(void)p;'),
 }
 for name,(file,old,new) in mutations.items():
- s=(r/'battle-core/src'/file).read_text();scope=s.split('/* getOrInferTier caches positive tiers.')[0] if file=='item_transfer.c' else s;assert scope.count(old)==1,(name,scope.count(old));src=out/(name+'.c');obj=out/(name+'.o');exe=out/name;src.write_text(s.replace(old,new,1))
+ s=(r/'battle-core/src'/file).read_text()
+ if file=='item_transfer.c':
+  cut=s.index('bool pr_try_transfer_held_item(')
+  if name in {'wrong-opponent','wrong-stock','ignore-lock'}:prefix='';scope=s[:cut];suffix=s[cut:]
+  else:prefix=s[:cut];scope=s[cut:];suffix=''
+ else:prefix='';scope=s;suffix=''
+ assert scope.count(old)==1,(name,scope.count(old))
+ src=out/(name+'.c');obj=out/(name+'.o');exe=out/name;src.write_text(prefix+scope.replace(old,new)+suffix)
  flags=['-O2','-std=c99','-ffp-contract=off','-I'+str(r/'battle-core/include'),'-I'+str(r/'battle-core/gen/out')]
  subprocess.run(['gcc',*flags,'-c',str(src),'-o',str(obj)],check=True)
  subprocess.run(['gcc',*flags,str(r/'battle-core/tests/item-transfer-test.c'),str(obj),str(r/'battle-core/build/libprcore.a'),'-lm','-o',str(exe)],check=True)

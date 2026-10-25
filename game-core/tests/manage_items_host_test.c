@@ -40,14 +40,17 @@ int main(void){
  CHECK(gc_item_transfer(&run,-1,1,1)==0&&gc_item_transfer(&run,run.n_items,1,1)==0&&gc_item_transfer(&run,find("LEFTOVERS",-1,0),1,0)==0);
  give("SHELL_BELL",-1,0,1);run.items[find("SHELL_BELL",-1,0)].non_transferable=true;
  CHECK(gc_item_transfer(&run,find("SHELL_BELL",-1,0),1,1)==0&&gc_item_discard(&run,find("SHELL_BELL",-1,0),1)==0);
- /* a vitamin: the cap is the holder's IV for its stat, and the stats follow at once */
+ /* Retain the vitamin quantities/IV boundary: source party UI excludes
+  * constructor-locked vitamins, so neither transfer changes ownership or HP. */
  give("BASE_STAT_BOOSTER",STAT_HP,0,3);
  const int hp0=run.party[0].b.stats[STAT_HP],hp1=run.party[1].b.stats[STAT_HP];
  CHECK(gc_item_max_held(&run,"BASE_STAT_BOOSTER",STAT_HP,&run.party[1])==2);
- CHECK(gc_item_transfer(&run,find("BASE_STAT_BOOSTER",STAT_HP,0),1,3)==3); /* no stack there yet: no cap */
- CHECK(run.party[1].b.stats[STAT_HP]>hp1&&run.party[0].b.stats[STAT_HP]<hp0);
+ CHECK(gc_item_transfer(&run,find("BASE_STAT_BOOSTER",STAT_HP,0),1,3)==0);
+ CHECK(held("BASE_STAT_BOOSTER",STAT_HP,0)==3&&held("BASE_STAT_BOOSTER",STAT_HP,1)==0);
+ CHECK(run.party[1].b.stats[STAT_HP]==hp1&&run.party[0].b.stats[STAT_HP]==hp0);
  give("BASE_STAT_BOOSTER",STAT_HP,0,1);
- CHECK(gc_item_transfer(&run,find("BASE_STAT_BOOSTER",STAT_HP,0),1,1)==0); /* 3 is over the IV of 2 */
+ CHECK(gc_item_transfer(&run,find("BASE_STAT_BOOSTER",STAT_HP,0),1,1)==0);
+ CHECK(held("BASE_STAT_BOOSTER",STAT_HP,0)==4&&held("BASE_STAT_BOOSTER",STAT_HP,1)==0);
  /* discard: the asked copies, the entry with the last one */
  CHECK(gc_item_discard(&run,find("LEFTOVERS",-1,1),3)==3&&held("LEFTOVERS",-1,1)==1);
  CHECK(gc_item_discard(&run,find("LEFTOVERS",-1,1),9)==1&&find("LEFTOVERS",-1,1)<0);

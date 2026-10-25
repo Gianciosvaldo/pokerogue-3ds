@@ -22,10 +22,7 @@ static void queue_battle_end(gc_run *run)
     const bool endless = mode == GAME_MODES_ENDLESS || mode == GAME_MODES_SPLICED_ENDLESS;
     const bool classic = mode == GAME_MODES_CLASSIC;
     if (endless || !pr_run_is_wave_final(mode, wave)) {
-        /* EggLapsePhase: increment egg hatch step counters */
-        if (run->sys) {
-            gc_system_increment_egg_steps(run->sys);
-        }
+        gc_rq_push(run, gc_rp(RP_EGG_LAPSE, 0, 0, 0));
         if (classic && wave == 165) {
             gc_rphase p = gc_rp(RP_MODIFIER_REWARD, 0, 0, 0); p.key = "LOCK_CAPSULE"; gc_rq_push(run, p);
         }
@@ -181,10 +178,25 @@ static void victory(gc_run *run, int enemy_idx)
         if (bt->n_participants > 0)
             for (int k = 0; k < run->n_party; k++) {
                 gc_mon *m = pm(run, run->party_order[k]);
-                if (m->b.hp > 0 && pp.party[k].participated
-                    && !gc_soothe_battle_gain(run,run->party_order[k])) {
-                    gc_stub(run,GC_STUB_REWARD_APPLY);
-                    gc_system_add_friendship(run->sys, run, m, 3, false);
+                if (m->b.hp > 0 && pp.party[k].participated) {
+                    if (!gc_soothe_battle_gain(run,run->party_order[k])) {
+                        gc_stub(run,GC_STUB_REWARD_APPLY);
+                        gc_system_add_friendship(run->sys, run, m, 3, false);
+                    }
+                    /* applyPartyExp: first held Brace before the EXP-level cap
+                     * gate. Pinned capture also queues VictoryPhase, hence true. */
+                    for (int j = 0; j < run->n_items; j++) {
+                        gc_item *it = &run->items[j];
+                        if (it->detached || it->pokemon_id != m->b.id
+                            || strcmp(it->key, "MYSTERY_ENCOUNTER_MACHO_BRACE")) continue;
+                        if (it->stack < 50) {
+                            it->stack++;
+                            for (int q = 0; q < run->n_items; q++) run->items[q].virtual_stack = 0;
+                            gc_items_to_battle(run);
+                            for (int q = 0; q < run->n_party; q++) gc_mon_recalc(run, &run->party[q]);
+                        }
+                        break;
+                    }
                 }
             }
         gc_exp_party_queue(run, &pp, exp_value, false);
@@ -253,13 +265,22 @@ static void learn(gc_run *run, int idx, int move, int slot)
         gc_rq_push(run, gc_rp(RP_REWARD_FORM, idx, form, 0));
 }
 
+static void learned_tm(gc_run *run,const gc_rphase *p){
+    if(p->c!=1)return;
+    gc_mon *m=pm(run,p->a);bool found=false;
+    for(int i=0;i<m->n_used_tms;i++)found|=m->used_tms[i]==p->b;
+    if(!found&&m->n_used_tms<64)m->used_tms[m->n_used_tms++]=(uint16_t)p->b;
+    gc_rq_remove(run,RP_SELECT_MODIFIER);
+    gc_int(run)->reward.copy_pending=false;
+}
+
 static bool learn_move_start(gc_run *run, gc_rphase *p)
 {
     gc_mon *m = pm(run, p->a);
     const int move = p->b;
     if (pr_moves[move].unimplemented) return true;
     for (int i = 0; i < PR_N_MOVES(&m->b); i++) if (PR_MOVES(&m->b)[i] == move && move != MOVE_ID_SKETCH) return true;
-    if (PR_N_MOVES(&m->b) < 4) { learn(run, p->a, move, PR_N_MOVES(&m->b)); return true; }
+    if (PR_N_MOVES(&m->b) < 4) { learned_tm(run,p);learn(run, p->a, move, PR_N_MOVES(&m->b)); return true; }
     gc_ev_msg(run, "battle:learnMovePrompt", 2, gc_m_mon(run, "pokemonName", 0, p->a), pr_arg_move("moveName", move));
     gc_ev_msg(run, "battle:learnMoveLimitReached", 1, gc_m_mon(run, "pokemonName", 0, p->a));
     gc_screen *s = &run->screen;
@@ -311,10 +332,35 @@ void gc_pick_up_scattered_money(gc_run *run)
         if (!strcmp(run->items[i].key, "AMULET_COIN")) amount += floor(amount * 0.2 * run->items[i].stack);
     if (pr_arena_has_tag(bt, ARENA_TAG_TYPE_HAPPY_HOUR, ARENA_TAG_SIDE_BOTH)) amount *= 2;
     run->money = pr_run_add_money(run->money, amount);
-    gc_event *ev = gc_ev_new(run, GC_EV_MONEY);
-    if (ev) { ev->a = (int32_t)amount; ev->b = (int32_t)run->money; }
-    gc_ev_msg(run, "battle:moneyPickedUp", 1, pr_arg_int("moneyAmount", (int)amount));
+    gc_ev_money(run, amount);
+    gc_event *message = gc_ev_msg(run, "battle:moneyPickedUp", 1, pr_arg_money_en_us("moneyAmount", amount));
+    if (message) message->prompt = true;
     bt->money_scattered = 0;
+}
+
+/* BattleEndPhase callbacks in party order, before money and enemy-item cleanup. */
+static void post_battle_money(gc_run *run, bool victory)
+{
+    pr_battle *bt = &run->bt;
+    bt->game_mode = run->run.mode;
+    bt->wave_index = run->wave;
+    bt->challenge_flags = run->run.mode == GAME_MODES_CHALLENGE ? run->run.challenge_flags : 0;
+    bt->challenge_flags_known = !run->run.has_challenges || run->run.challenge_flags != 0;
+    bt->n_party[0] = run->n_party;
+    for (int k = 0; k < run->n_party; k++) {
+        pr_pokemon *p = &run->party[run->party_order[k]].b;
+        bt->party[0][k] = p;
+        pr_update_passive(bt, p);
+    }
+    gc_items_to_battle(run);
+    bt->rng = run->run.rng;
+    bt->rng_live = true;
+    pr_prepare_post_battle_money(bt, &run->eng, victory);
+    pr_run_post_battle_money(bt, &run->eng);
+    gc_items_from_battle(run);
+    run->run.rng = bt->rng;
+    gc_battle_note_unported(run);
+    gc_ev_battle(run);
 }
 
 static void battle_end(gc_run *run, gc_rphase *p)
@@ -322,16 +368,12 @@ static void battle_end(gc_run *run, gc_rphase *p)
     gc_internal *in = gc_int(run);
     pr_battle *bt = &run->bt;
     bool victory = p->a;
-    /* cull any other BattleEndPhase */
-    for (;;) {
-        gc_rqueue *q = &in->rq;
-        bool found = false;
-        for (int l = 0; l < q->n_levels && !found; l++)
-            for (int k = 0; k < q->n[l]; k++)
-                if (q->q[l][k].type == RP_BATTLE_END) { victory |= q->q[l][k].a; found = true; break; }
-        if (!found) break;
-        gc_rq_remove(run, RP_BATTLE_END);
-    }
+    /* hasPhaseOfType with the victory predicate observes every level before removal. */
+    gc_rqueue *q = &in->rq;
+    for (int l = 0; l < q->n_levels; l++)
+        for (int k = 0; k < q->n[l]; k++)
+            if (q->q[l][k].type == RP_BATTLE_END) victory |= q->q[l][k].a;
+    gc_rq_remove_all(run, RP_BATTLE_END);
     if (victory) {
         /* currentBattle.addBattleScore(): Sine.easeIn over the turns taken */
         double mult = run->n_enemy / 2.0 + 0.5;
@@ -342,15 +384,13 @@ static void battle_end(gc_run *run, gc_rphase *p)
         double ease = v == 0 ? 0 : v == 1 ? 1 : 1 - cos(v * 3.141592653589793 / 2);   /* Phaser's Sine.In */
         run->score += (int)ceil(bt->battle_score * ease);
     }
-    /* PostBattleAbAttr: Pickup (PostBattleLootAbAttr) takes an item from the enemies' loot after a victory. battle-core keeps
-     * only the loot's count and game-core drops the enemy items at the battle's end, so the transfer is not ported:
-     * counted when it would have happened. */
-    if (victory && bt->post_battle_loot > 0)
-        for (int i = 0; i < run->n_party; i++)
-            if (gc_mon_allowed(&run->party[i]) && pr_has_ability_active(bt, &run->party[i].b, ABILITY_ID_PICKUP)) {
-                gc_stub(run, GC_STUB_POST_BATTLE);
-                break;
-            }
+    /* Endless graceful end runs before callbacks and cancels queued rewards/new battle. */
+    if ((run->run.mode == GAME_MODES_ENDLESS || run->run.mode == GAME_MODES_SPLICED_ENDLESS)
+        && run->wave >= 5850) {
+        gc_rq_clear(run);
+        gc_rq_unshift(run, gc_rp(RP_GAME_OVER, 1, 0, 0));
+    }
+    post_battle_money(run, victory);
     /* PR_DEV_ILLUSION: IllusionPostBattleAbAttr, the disguise ends with the battle (the next one's start gives it again) */
     if (bt->deviations & PR_DEV_ILLUSION)
         for (int i = 0; i < run->n_party; i++) pr_break_illusion(&run->party[i].b);
@@ -360,9 +400,9 @@ static void battle_end(gc_run *run, gc_rphase *p)
     run->n_enemy_items = 0;
     if (!gc_temp_lapse(run, NULL)) gc_stub(run, GC_STUB_POST_BATTLE);
     if (!gc_lure_lapse(run, NULL)) gc_stub(run, GC_STUB_POST_BATTLE);
-    if (!victory && !bt->successful_run && !gc_rq_has(run, RP_SELECT_MODIFIER)) {
+    if (!victory && !gc_rq_has(run, RP_SELECT_MODIFIER)) {
         if (bt->enemy_faints > 0) gc_rq_unshift(run, gc_rp(RP_SELECT_MODIFIER, 0, 0, 0));
-        else gc_rq_unshift(run, gc_rp(RP_SELECT_MODIFIER, 1, 0, 0));   /* no reroll, no fill: rewards stub */
+        else if (!bt->successful_run) gc_rq_unshift(run, gc_rp(RP_SELECT_MODIFIER, 1, 0, 0));   /* no reroll, no fill: rewards stub */
     }
     in->last_battle_type = run->battle_type;
     in->last_final_boss = run->run.mode == GAME_MODES_CLASSIC && pr_run_is_wave_final(run->run.mode, run->wave);
@@ -415,11 +455,12 @@ static void money_reward(gc_run *run, double mult)
     int stacks[8], n = 0;
     for (int i = 0; i < run->n_items && n < 8; i++)
         if (!strcmp(run->items[i].key, "AMULET_COIN")) stacks[n++] = run->items[i].stack;
-    const double amount = pr_run_get_money_reward(run->wave, mult, stacks, n, false);
+    const double amount = pr_run_get_money_reward(run->wave, mult, stacks, n,
+        pr_arena_has_tag(&run->bt, ARENA_TAG_TYPE_HAPPY_HOUR, ARENA_TAG_SIDE_BOTH));
     run->money = pr_run_add_money(run->money, amount);
-    gc_event *ev = gc_ev_new(run, GC_EV_MONEY);
-    if (ev) { ev->a = (int32_t)amount; ev->b = (int32_t)run->money; }
-    gc_ev_msg(run, "battle:moneyWon", 1, pr_arg_int("moneyAmount", (int)amount));
+    gc_ev_money(run, amount);
+    gc_event *message = gc_ev_msg(run, "battle:moneyWon", 1, pr_arg_money_en_us("moneyAmount", amount));
+    if (message) message->prompt = true;
 }
 
 /* ---- SelectModifierPhase ---- */
@@ -474,8 +515,7 @@ static bool select_modifier_choose(gc_run *run, gc_rphase *p, const gc_choice *c
         if (run->money < o.cost) { *why = "modifierSelectUiHandler:notEnoughMoney"; return false; }
         if (!gc_port_apply_reward(run, &o, c->b, c->c, why)) return false;
         run->money -= o.cost;
-        gc_event *ev = gc_ev_new(run, GC_EV_MONEY);
-        if (ev) { ev->a = -(int32_t)o.cost; ev->b = (int32_t)run->money; }
+        gc_ev_money(run, -o.cost);
         *ok = true;
         /* a purchase keeps the screen open (applyModifier with a cost doesn't end the phase) */
         return false;
@@ -484,8 +524,7 @@ static bool select_modifier_choose(gc_run *run, gc_rphase *p, const gc_choice *c
         if (s->reroll_cost < 0) { *why = "no reroll here"; return false; }
         if (!pr_reward_try_deduct_money(&run->money, s->reroll_cost)) { *why = "modifierSelectUiHandler:notEnoughMoney"; return false; }
         {
-            gc_event *ev = gc_ev_new(run, GC_EV_MONEY);
-            if (ev) { ev->a = -(int32_t)s->reroll_cost; ev->b = (int32_t)run->money; }
+            gc_ev_money(run, -s->reroll_cost);
         }
         reward_screen(run, GC_REWARD_REROLL);
         *ok = true;
@@ -524,8 +563,7 @@ static void set_next_biome(gc_run *run, int biome)
         if (n) {
             const double before = run->money;
             run->money = pr_run_apply_money_interest(run->money, stacks, n);
-            gc_event *ev = gc_ev_new(run, GC_EV_MONEY);
-            if (ev) { ev->a = (int32_t)(run->money - before); ev->b = (int32_t)run->money; }
+            gc_ev_money(run, run->money - before);
         }
         gc_rq_unshift(run, gc_rp(RP_PARTY_HEAL, 0, 0, 0));
     }
@@ -581,23 +619,26 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
     case RP_TURN_INIT:
         if (gc_fg_turn_init(run)) return true;   /* handleMysteryEncounterTurnStartEffects: the minigame decides before the commands */
         gc_battle_turn_init(run);
-        if (!run->bt.field[0] || run->bt.field[0]->hp <= 0) {
-            /* a fainted lead left on the field (a faint in the turn's lost tail): SwitchPhase */
-            bool bench = false;
-            for (int i = 0; i < run->n_party; i++) bench |= gc_mon_allowed(&run->party[i]) && !run->party[i].b.on_field;
-            if (!bench) { gc_rq_unshift(run, gc_rp(RP_GAME_OVER, 0, 0, 0)); return true; }
-            gc_rq_unshift(run, gc_rp(RP_SWITCH, 1, 0, 0));
-            return true;
+        for(int field=0;field<(run->bt.double_battle?2:1);field++) {
+            if(run->bt.field[field]&&run->bt.field[field]->hp>0)continue;
+            bool bench=false,alive=false;
+            for(int i=0;i<run->n_party;i++){bool allowed=gc_mon_allowed(&run->party[i]);alive|=allowed;bench|=allowed&&!run->party[i].b.on_field;}
+            if(!alive){gc_rq_unshift(run,gc_rp(RP_GAME_OVER,0,0,0));return true;}
+            if(bench){gc_rq_unshift(run,gc_rp(RP_SWITCH,1,field,0));return true;}
         }
         gc_rq_unshift(run, gc_rp(RP_COMMAND, 0, 0, 0));
+        if(run->bt.double_battle)gc_rq_unshift(run,gc_rp(RP_COMMAND,1,0,0));
         gc_rq_unshift(run, gc_rp(RP_TURN, 0, 0, 0));
         return true;
     case RP_COMMAND:
+        run->screen.slot=p->a;
+        if(!run->bt.field[p->a]||run->bt.field[p->a]->hp<=0||run->bt.commands[p->a].skip)return true;
         if (gc_battle_queued_command(run)) return true;
         gc_battle_command_screen(run);
         return false;
     case RP_TURN: {
         gc_port_enemy_command(run, 2);
+        if(run->bt.double_battle)gc_port_enemy_command(run,3);
         /* withSkipEnemyBattleTurns: EnemyCommandPhase still chose (and drew for) the move, but the command is skipped */
         if (gc_int(run)->fg.active) run->bt.commands[2].skip = true;
         after_stop(run, gc_battle_run(run, -2));
@@ -609,6 +650,7 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
             gc_screen *s = &run->screen;
             memset(s, 0, sizeof *s);
             s->kind = GC_SCREEN_SWITCH;
+            s->slot=p->b;
             for (int i = 0; i < run->n_party; i++) s->pick_ok[i] = gc_mon_allowed(&run->party[i]) && !run->party[i].b.on_field;
             return false;
         }
@@ -647,6 +689,12 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
         return evolution_start(run, p);
     case RP_REWARD_FORM:
         gc_reward_change_form(run, p->a, p->b);
+        return true;
+    case RP_EGG_LAPSE:
+        if (run->sys) {
+            gc_system_increment_egg_steps(run->sys);
+            gc_system_hatch_ready_eggs(run);
+        }
         return true;
     case RP_BATTLE_END:
         battle_end(run, p);
@@ -715,11 +763,47 @@ bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char *
     *ok = false;
     switch (p->type) {
     case RP_COMMAND:
+        if(run->screen.kind==GC_SCREEN_TARGET){
+            if(c->kind==GC_CH_CANCEL){
+                run->bt.commands[p->a].command=-1;run->bt.pre_commands[p->a].command=-1;
+                gc_battle_command_screen(run);*ok=true;return false;
+            }
+            if(c->kind!=GC_CH_TARGET||c->a<0||c->a>=4||!run->screen.target_ok[c->a]){
+                *why="invalid move target";return false;
+            }
+            struct pr_turn_command *tc=&run->bt.commands[p->a];
+            tc->targets[0]=c->a;tc->n_targets=1;*ok=true;return true;
+        }
+        if(c->kind==GC_CH_CANCEL && p->a==1 && gc_int(run)->undo_first){
+            gc_internal *in=gc_int(run);
+            memcpy(run->bt.commands,in->undo_commands,sizeof in->undo_commands);
+            memcpy(run->bt.pre_commands,in->undo_pre_commands,sizeof in->undo_pre_commands);
+            run->bt.rng=in->undo_rng;run->bt.battle_rng=in->undo_battle_rng;
+            run->bt.rng_live=in->undo_rng_live;run->bt.battle_rng_live=in->undo_battle_rng_live;
+            in->at_save_point=in->undo_save_point;in->undo_first=false;
+            p->a=0;run->screen.slot=0;
+            gc_rq_unshift(run,gc_rp(RP_COMMAND,1,0,0));
+            gc_battle_command_screen(run);*ok=true;return false;
+        }
         if (c->kind != GC_CH_FIGHT && c->kind != GC_CH_POKEMON && c->kind != GC_CH_BALL && c->kind != GC_CH_RUN) {
             *why = "not a command";
             return false;
         }
+        if(p->a==0){
+            gc_internal *in=gc_int(run);in->undo_first=false;
+            in->undo_rng=run->bt.rng;in->undo_battle_rng=run->bt.battle_rng;
+            in->undo_rng_live=run->bt.rng_live;in->undo_battle_rng_live=run->bt.battle_rng_live;
+            in->undo_save_point=in->at_save_point;
+            memcpy(in->undo_commands,run->bt.commands,sizeof in->undo_commands);
+            memcpy(in->undo_pre_commands,run->bt.pre_commands,sizeof in->undo_pre_commands);
+        }
         if (!gc_battle_player_command(run, c, why)) return false;
+        if(p->a==0)gc_int(run)->undo_first=true;
+        gc_int(run)->at_save_point=false;
+        if(run->screen.kind==GC_SCREEN_TARGET){*ok=true;return false;}
+        if(c->kind==GC_CH_BALL||c->kind==GC_CH_RUN)for(int i=0;i<2;i++)if(i!=p->a){
+            run->bt.commands[i].skip=true;run->bt.pre_commands[i].skip=true;
+        }
         *ok = true;
         return true;
     case RP_SWITCH: {
@@ -732,20 +816,21 @@ bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char *
         *ok = true;
         if (p->a) {
             /* game-core's own prompt: straight onto the field, then the turn goes on as usual */
-            pr_pokemon *old = run->bt.field[0];
+            int field=p->b;
+            pr_pokemon *old = run->bt.field[field];
             if (old) old->on_field = false;
             gc_mon *m = &run->party[c->a];
             pr_reset_summon_data(&m->b);
             pr_reset_turn_data(&m->b);
             m->b.on_field = true;
             m->b.switch_out_status = false;
-            run->bt.field[0] = &m->b;
+            run->bt.field[field] = &m->b;
             /* the party order: the new lead takes the old one's slot */
-            int k_new = gc_battle_slot_of(run, c->a), k_old = 0;
+            int k_new = gc_battle_slot_of(run, c->a), k_old = field;
             int8_t t = run->party_order[k_old]; run->party_order[k_old] = run->party_order[k_new]; run->party_order[k_new] = t;
             for (int k = 0; k < run->n_party; k++) run->bt.party[0][k] = &run->party[run->party_order[k]].b;
             gc_event *ev = gc_ev_new(run, GC_EV_SUMMON);
-            if (ev) { ev->a = 0; ev->b = c->a; }
+            if (ev) { ev->a = 0; ev->b = c->a; ev->c=field; }
             gc_ev_msg(run, "battle:playerGo", 1, gc_m_mon(run, "pokemonName", 0, c->a));
             return true;
         }
@@ -764,6 +849,7 @@ bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char *
         gc_ev_msg(run, "battle:countdownPoof", 0);
         gc_ev_msg(run, "battle:learnMoveForgetSuccess", 2, gc_m_mon(run, "pokemonName", 0, p->a), pr_arg_move("moveName", m->b.moves[c->a]));
         gc_ev_msg(run, "battle:learnMoveAnd", 0);
+        learned_tm(run,p);
         learn(run, p->a, p->b, c->a);
         return true;
     }

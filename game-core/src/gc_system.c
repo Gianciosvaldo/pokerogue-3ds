@@ -4,6 +4,45 @@
 #include "gc/data.h"
 #include "gc/run.h"
 #include "internal.h"
+#include <stdio.h>
+
+int gc_system_starter_unlock_cost(uint16_t species) {
+    static const uint8_t costs[10]={40,40,35,30,25,20,15,10,10,10};
+    int cost=gc_starter_cost(species);
+    return cost>=1 && cost<=10 ? costs[cost-1] : -1;
+}
+
+int gc_system_starter_reduction_cost(const gc_system *sys,uint16_t species){
+    static const uint8_t costs[10][2]={{25,60},{25,60},{20,50},{15,40},{12,35},{10,30},{8,20},{5,15},{5,15},{5,15}};
+    int base=gc_starter_cost(species);
+    if(!sys||species>GC_MAX_SPECIES_ID||base<1||base>10||!sys->dex[species].caught_attr||sys->starters[species].value_reduction>=2)return -1;
+    return costs[base-1][sys->starters[species].value_reduction];
+}
+bool gc_system_buy_starter_reduction(gc_system *sys,uint16_t species){
+    int cost=gc_system_starter_reduction_cost(sys,species);
+    if(cost<0||sys->starters[species].candy_count<cost)return false;
+    sys->starters[species].candy_count-=cost;sys->starters[species].value_reduction++;return true;
+}
+
+bool gc_system_buy_starter_unlock(gc_system *sys, uint16_t species, bool hidden) {
+    int cost=gc_system_starter_unlock_cost(species);
+    if (!sys || species>GC_MAX_SPECIES_ID || cost<0 || !sys->dex[species].caught_attr) return false;
+    const pr_species *sp=gc_species(species);
+    if (!sp || !sp->nforms) return false;
+    const pr_form *form=&pr_forms[sp->form0];
+    gc_starter_entry *s=&sys->starters[species];
+    if (s->candy_count<cost) return false;
+    if (hidden) {
+        if (!form->ability_hidden || (s->ability_attr&4)) return false;
+        s->ability_attr|=4;
+        s->ability_preference=2;s->preference_flags|=4;
+    } else {
+        if (!form->passive || (s->passive_attr&1)) return false;
+        s->passive_attr|=3;
+    }
+    s->candy_count-=cost;
+    return true;
+}
 #include <string.h>
 
 void gc_system_init_defaults(gc_system *sys) {
@@ -383,4 +422,18 @@ void gc_system_add_classic_win(gc_system *sys, uint16_t species_id) {
 uint16_t gc_system_get_ribbons(const gc_system *sys, uint16_t species_id) {
     if (!sys || species_id == 0 || species_id > GC_MAX_SPECIES_ID) return 0;
     return sys->starters[species_id].classic_win_count;
+}
+
+/* Requested rotation: three unique species per UTC three-hour bucket. Native
+ * getPokerusStarters uses the same isolated timestamp seed and registry order,
+ * with five per UTC day at the pinned revision. */
+void gc_pokerus_starters(uint64_t unix_ms,uint16_t out[3]){
+    const uint64_t period=10800000;
+    char key[32];snprintf(key,sizeof key,"%llu",(unsigned long long)(unix_ms/period*period));
+    pr_seedstr seed;pr_rng rng;pr_seed_from_ascii(&seed,key);pr_rng_sow(&rng,&seed);
+    int n=0;while(n<3){
+        uint16_t id=gc_starter_costs[pr_rng_seed_int(&rng,gc_starter_cost_count,0)].id;
+        bool used=false;for(int k=0;k<n;k++)used|=out[k]==id;
+        if(!used)out[n++]=id;
+    }
 }

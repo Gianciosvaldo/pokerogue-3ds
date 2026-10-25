@@ -1,6 +1,7 @@
 /* The battle screen (see battle_view.h). Positions are upstream's: the field container for the
  * arena and sprites, fieldUI for the info boxes, the ui container for the bottom strip. */
 #include "battle_view.h"
+#include "luck_meter.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -8,12 +9,12 @@
 #include <string.h>
 
 #include "battle_anim.h"
+#include "field_border.h"
 #include "gm_enum_names.h"
 #include "i18n.h"
 #include "menus.h"
 #include "pr_data.h"
 #include "pr_enums.h"
-#include "screen_clip.h"
 #include "tween.h"
 #include "ui.h"
 #include "ui_text.h"
@@ -77,7 +78,10 @@ typedef enum { M_IDLE, M_EVENTS, M_COMMAND, M_FIGHT } mode;
 static struct {
   bv_setup setup;
   char biome[32];
-  side s[2]; /* 0 player, 1 enemy */
+  bool stats_shown;
+  float stats_alpha;
+  tween stats_tw;
+  side s[4]; /* primary player/enemy, secondary player/enemy */
   float arena_player_x, arena_enemy_x, enemy_slide;
   float arena_old_x;  /* the previous wave's enemy platform, sliding out (setup.next_encounter) */
   bool arena_old_on;
@@ -135,11 +139,14 @@ static struct {
   /* an item's description the summary screen asks for (bv_set_info), shown in the message window while no command is asked */
   bool info_on;
   char info_name[64], info_desc[512];
+  bool trainer_visible;
+  bool player_trainer_visible, opening_summon;
+  float player_throw_ms; /* -1 before the opening SummonPhase */
   bool has_balls;
   uint8_t balls[6]; /* the party tray: BV_BALL_* of each slot */
   /* promptLevelUpStats' window (BEV_LEVEL_UP) */
   struct {
-    bool on, totals;
+    bool on, totals, ivs;
     const int* stats;
   } lvl;
 } B;
@@ -147,7 +154,9 @@ static struct {
 /* the command menu is on screen: asked, or answered with BALL / POKEMON and waiting for that screen */
 static bool cmd_shown(void) { return B.mode == M_COMMAND || (B.mode == M_IDLE && B.hold_cmd); }
 
-static side* side_of(int battler) { return &B.s[battler >= 2 ? 1 : 0]; }
+static int field_of(const side *sd){int i=(int)(sd-B.s);return (i%2)*2+i/2;}
+static side* side_of(int battler) { if(battler<0||battler>=4)return &B.s[0];return &B.s[(battler%2)*2+(battler>=2)]; }
+static side* command_side(void){return side_of(B.opts.command_slot==1?1:0);}
 bv_mon* bv_mon_of(int battler) { return &side_of(battler)->mon; }
 int bv_biome(void) { return B.begun ? B.setup.biome : -1; }
 
@@ -227,8 +236,11 @@ static void load_mon_sprite(side* sd, bool player) {
   menu_sprite_free(&sd->sprite);
   menu_mon visual = {.species = m->species, .form = m->form, .gender = m->gender,
                      .shiny = m->shiny, .variant = m->variant};
-  menu_sprite_load(&sd->sprite, &visual, player);
-  sprite_key(m, player, sd->sprite_key, sizeof sd->sprite_key);
+  sd->sprite_key[0]=0;
+  if(!m->species)return;
+  /* The shared loader owns the atlas. Do not load a second copy into img's cache. */
+  if(!menu_sprite_load(&sd->sprite,&visual,player))
+    sprite_key(m,player,sd->sprite_key,sizeof sd->sprite_key);
 }
 
 static void set_mon(side* sd, const bv_mon* m, bool player) {
@@ -247,7 +259,7 @@ static void set_mon(side* sd, const bv_mon* m, bool player) {
   sd->mon_alpha = 1;
   memset(&sd->stat_banner, 0, sizeof sd->stat_banner);
   memset(&sd->status_banner, 0, sizeof sd->status_banner);
-  ba_show(player ? 0 : 2);
+  ba_show(field_of(sd));
 }
 
 static void cry(const bv_mon* m) {
@@ -272,6 +284,7 @@ static const char* name_with_affix(int battler) {
 
 static const rr_frame* sprite_frame(side* sd) {
   if (sd->sprite.n) return menu_sprite_frame(&sd->sprite, ui_now());
+  if(!sd->sprite_key[0])return NULL;
   int frame = (int)(ui_now() * 10 / 1000); /* upstream anims run at 10 fps */
   return img_anim_frame(sd->sprite_key, frame);
 }
@@ -281,12 +294,12 @@ static void mon_pos(const side* sd, bool player, float* x, float* y);
 
 static void anim_field(ba_mon out[4]) {
   memset(out, 0, 4 * sizeof *out);
-  for (int k = 0; k < 2; k++) {
+  for (int k = 0; k < 4; k++) {
     side* sd = &B.s[k];
-    ba_mon* m = &out[k ? 2 : 0];
+    ba_mon* m = &out[field_of(sd)];
     m->on_field = sd->present;
-    m->player = !k;
-    mon_pos(sd, !k, &m->x, &m->y);
+    m->player = !(k%2);
+    mon_pos(sd, !(k%2), &m->x, &m->y);
     m->frame = sprite_frame(sd);
     m->half_h = (m->frame ? m->frame->src_h : 40) * sd->scale / 2;
     m->species = sd->mon.species;
@@ -319,6 +332,7 @@ static int foot_gap(const side* sd) {
 static void mon_pos(const side* sd, bool player, float* x, float* y) {
   *x = (player ? 106 : 236 + B.enemy_slide) + sd->sub_off * (player ? -30 : 30);
   *y = (player ? PLAYER_Y : 84) + sd->sub_off * (player ? 10 : -10) + sd->catch_dy + foot_gap(sd) * sd->scale;
+  if(B.setup.doubles){bool right=field_of(sd)%2!=0;*x+=right?32:-32;*y+=right?0:-8;}
 }
 
 /* The doll ("pkmn__sub" / "pkmn__back__sub", origin (0.5, 1), half size on the player's side) at
@@ -423,7 +437,7 @@ static void draw_ball(void) {
  * summoned or returned, after a form change and when the wild Pokemon appears; with nobody on the field the scale stays as it is. */
 static void update_field_scale(bool instant) {
   float biggest = 0;
-  for (int k = 0; k < 2; k++)
+  for (int k = 0; k < 4; k++)
     if (B.s[k].present && B.s[k].mon.species > 0) {
       const float sc = get_mon_scale(&B.s[k].mon);
       if (sc > biggest) biggest = sc;
@@ -437,6 +451,50 @@ static void update_field_scale(bool instant) {
 }
 
 static void field_zoom(bool on) { rr_set_zoom(on ? B.field_scale : 1, 160, 132); }
+
+/* Trainer starts at (-72,80) and slides +300 with the enemy platform. Paired
+ * trainers use the native -4/+28 offsets; double-only art is one sprite. */
+static void draw_trainers(void) {
+  if (!B.trainer_visible) return;
+  bool pair=B.setup.trainer_keys[1][0]!=0;
+  for (int k=0;k<2;k++) {
+    if (!B.setup.trainer_keys[k][0]) continue;
+    const rr_frame* frame=img_anim_frame(B.setup.trainer_keys[k],0);
+    if (!frame) continue;
+    rr_draw_opts o=RR_DEFAULT_OPTS;o.origin_x=0.5f;o.origin_y=1;
+    float x=228+B.enemy_slide+(pair?(k?28:-4):0);
+    rr_draw(frame,x,80,&o);
+  }
+}
+
+/* EncounterPhase's player back sprite, then SummonPhase's three throw poses.
+ * Keep this separate from the capture ball and ordinary switch summons. */
+static void draw_player_trainer(void) {
+  if (!B.player_trainer_visible) return;
+  char key[64];
+  bool throwing=B.player_throw_ms>=0;
+  snprintf(key,sizeof key,"images/trainer/trainer_%c_back%s",
+           B.setup.player_female?'f':'m',throwing?"_pb":"");
+  int frame=throwing?(B.player_throw_ms>=626?2:B.player_throw_ms>=562?1:0):0;
+  const rr_frame* f=img_anim_frame(key,frame);
+  if (!f) return;
+  rr_draw_opts o=RR_DEFAULT_OPTS;o.origin_x=0.5f;o.origin_y=1;
+  float x=throwing?106-142*ease(EASE_LINEAR,B.player_throw_ms/1000):106+B.arena_player_x;
+  rr_draw(f,x,186,&o);
+}
+
+static void draw_opening_ball(void) {
+  const float t=B.player_throw_ms-750;
+  if (!B.opening_summon || t<0 || t>=650) return;
+  static const char* const names[]={"pb","gb","ub","rb","mb"};
+  int type=B.setup.player.pokeball;
+  const rr_frame* f=img_frame("images/pb",names[type>=0 && type<5?type:0]);
+  if (!f) return;
+  rr_draw_opts o=RR_DEFAULT_OPTS;o.origin_x=0.5f;o.origin_y=0.625f;
+  o.angle=t<150?0:8*3.14159265f*ease(EASE_LINEAR,(t-150)/500);
+  float y=t<150?80-10*ease(EASE_CUBIC_OUT,t/150):70+62*ease(EASE_CUBIC_IN,(t-150)/500);
+  rr_draw(f,36+64*t/650,y,&o);
+}
 
 static void draw_field(void) {
   char k[64];
@@ -459,16 +517,28 @@ static void draw_field(void) {
   /* the enemy's doll is added over it; the player's Pokemon is brought over its doll */
   side *en = &B.s[1], *pl = &B.s[0];
   if (B.ball.behind) draw_ball();
-  draw_sprite(en, false);
+  draw_trainers();
+  for(int i=0;i<2;i++){
+    side *foe=&B.s[1+2*i];draw_sprite(foe,false);
+    if(i&&foe->present&&foe->sub_on)draw_sub(foe,false,false);
+    if(i&&foe->present&&foe->tint_on)draw_sub(foe,false,true);
+  }
   if (en->present && en->sub_on) draw_sub(en, false, false);
   if (en->present && en->tint_on) draw_sub(en, false, true);
   ba_draw(BA_LAYER_MID, field);
+  draw_player_trainer();
   if (pl->present && pl->sub_on) draw_sub(pl, true, false);
   if (pl->present && pl->tint_on && !pl->tint_above) draw_sub(pl, true, true);
   draw_sprite(pl, true);
   if (pl->present && pl->tint_on && pl->tint_above) draw_sub(pl, true, true);
+  side *ally=&B.s[2];
+  if(ally->present&&ally->sub_on)draw_sub(ally,true,false);
+  if(ally->present&&ally->tint_on&&!ally->tint_above)draw_sub(ally,true,true);
+  draw_sprite(ally,true);
+  if(ally->present&&ally->tint_on&&ally->tint_above)draw_sub(ally,true,true);
   ba_draw(BA_LAYER_TOP, field);
   if (!B.ball.behind) draw_ball();
+  draw_opening_ball();
   field_zoom(false);
 }
 
@@ -564,10 +634,53 @@ static void draw_stat_indicators(side* sd, bool player, float bx, float by) {
   }
 }
 
+/* BattleInfo.constructStatContainer/updateStats: native two-row labels and
+ * signed number frames over each health box; HP reserves the enemy's first column. */
+static void draw_stat_panel(side *sd,bool player,float bx,float by){
+  if(B.stats_alpha<=0)return;
+  const char *key=player?"images/ui/pbinfo_player_stats":sd->mon.boss?"images/ui/pbinfo_enemy_boss_stats":"images/ui/pbinfo_enemy_mini_stats";
+  const rr_frame *box=img_frame(key,NULL);if(!box)return;
+  rr_draw_opts o=RR_DEFAULT_OPTS;o.origin_x=1;o.origin_y=.5f;
+  o.tint=RR_RGBA(255,255,255,(int)(255*B.stats_alpha));rr_draw(box,bx,by,&o);
+  static const int player_order[]={1,2,3,4,6,7,5},enemy_order[]={0,1,2,3,4,6,7,5};
+  static const char *labels[]={"HP","ATK","DEF","SPATK","SPDEF","SPD","ACC","EVA"};
+  const int *order=player?player_order:enemy_order;int n=player?7:8;
+  float number_x[8]={0},number_w[8]={0};
+  char atlas[128];snprintf(atlas,sizeof atlas,"images/ui/text_images/%s/battle_ui/pbinfo_stat",i18n_language());
+  for(int i=0;i<n;i++){
+    int stat=order[i],prev=i>=2?i-2:0;
+    float x=i>(player?1:0)?number_x[prev]+number_w[prev]+(player?4:2):bx-box->src_w+(player?8:5);
+    float y=by-box->src_h/2.0f+4;
+    if(stat==0||stat==5)y+=5;else if(player==(bool)(i%2))y+=10;
+    const rr_frame *label=img_frame(atlas,labels[stat]);
+    if(!label)label=img_frame("images/ui/text_images/en/battle_ui/pbinfo_stat",labels[stat]);
+    char value[12];snprintf(value,sizeof value,"%d",stat?sd->mon.stat_stages[stat-1]:0);
+    const rr_frame *number=img_frame("images/ui/pbinfo_stat_numbers",stat?value:"empty");
+    const rr_frame *initial=img_frame("images/ui/pbinfo_stat_numbers",stat?"3":"empty");
+    number_x[i]=x+(label?label->src_w:12);number_w[i]=initial?initial->src_w:6;
+    if(!stat)continue;
+    o.origin_x=o.origin_y=0;
+    /* PlayerBattleInfo.initInfo positions the full-size values container at (8,7). */
+    float parent_x=player?8:0,parent_y=player?7:0;
+    if(label)rr_draw(label,x+parent_x,y+parent_y,&o);
+    if(number)rr_draw(number,number_x[i]+parent_x,y+parent_y,&o);
+  }
+}
+
+static float player_info_y(const side *sd){
+  /* Keep both full-sized player boxes above the command strip at y=-48. */
+  return B.setup.doubles?(field_of(sd)==1?-72:-116):-72;
+}
+
+static float info_base_x(const side *sd,bool player){
+  if(!B.setup.doubles)return player?310:140;
+  return player?348:sd->mon.boss?150:102;
+}
+
 static void draw_player_info(side* sd) {
   if (!sd->present || !sd->info_on) return;
   const bv_mon* m = &sd->mon;
-  float bx = 310 + sd->info_dx, by = -72; /* PlayerBattleInfo container */
+  float bx = info_base_x(sd,true) + sd->info_dx, by = player_info_y(sd); /* PlayerBattleInfo container */
   img_draw("images/ui/pbinfo_player", NULL, bx, by, 1, 0.5f);
   draw_types(m, true, bx, by);
   draw_name(m, true, bx - 115, by - 15.2f);
@@ -588,12 +701,13 @@ static void draw_player_info(side* sd) {
   int ew = (int)floorf(85 * sd->exp_shown + 0.5f);
   if (ef && ew > 0) rr_draw_cropped(ef, bx - 98, by + 18, ew, ef->src_h, NULL);
   draw_stat_indicators(sd, true, bx, by);
+  draw_stat_panel(sd,true,bx,by);
 }
 
 static void draw_enemy_info(side* sd) {
   if (!sd->present || !sd->info_on) return;
   const bv_mon* m = &sd->mon;
-  float bx = 140 + sd->info_dx, by = -141; /* EnemyBattleInfo container */
+  float bx = info_base_x(sd,false) + sd->info_dx, by = B.setup.doubles?(field_of(sd)==3?-103:-141):-141; /* EnemyBattleInfo container */
   img_draw("images/ui/pbinfo_enemy_mini", NULL, bx, by, 1, 0.5f);
   draw_types(m, false, bx, by);
   draw_name(m, false, bx - 124, by - 11.2f);
@@ -606,6 +720,7 @@ static void draw_enemy_info(side* sd) {
   if (hf && w > 0) rr_draw_cropped(hf, bx - 71, by + 4.5f, w, hf->src_h, NULL);
   img_draw("images/ui/text_images/en/battle_ui/overlay_hp_label", NULL, bx - 72, by + 1.5f, 1, 0);
   draw_stat_indicators(sd, false, bx, by);
+  draw_stat_panel(sd,false,bx,by);
 }
 
 /* ------------------------------------------------------------------ drawing: bottom strip */
@@ -650,7 +765,7 @@ static text_style pp_style(int left, int max) {
 }
 
 static void draw_fight_menu(bool top) {
-  const bv_mon* m = &B.s[0].mon;
+  const bv_mon* m = &command_side()->mon;
   const float lx = top ? -TOP_PAD : 0, rx = top ? TOP_PAD : 0; /* the moves' window's contents and the move info's */
   ui_window(top ? -TOP_EXTRA : 0, -48, top ? 243 + TOP_EXTRA : 243, 48, WIN_NORMAL);
   ui_window(240, -48, top ? 80 + TOP_EXTRA : 80, 48, WIN_NORMAL);
@@ -691,7 +806,7 @@ static void draw_fight_menu(bool top) {
   text_draw(TS_MOVE_LABEL, 1 + rx + 320 - 12, -26, s, &po);
   if (pm) {
     if (pm->power >= 0)
-      snprintf(s, sizeof s, "%d", pm->power);
+      snprintf(s, sizeof s, "%d", m->move_power[B.move_cursor]>0?m->move_power[B.move_cursor]:pm->power);
     else
       snprintf(s, sizeof s, "---");
     text_draw(TS_MOVE_LABEL, 1 + rx + 320 - 12, -18, s, &ro);
@@ -706,7 +821,7 @@ static void draw_fight_menu(bool top) {
 /* The free part of the bottom screen above the strip (y -240..-48): the move's description in
  * the fight menu (upstream shows it on the info button, MoveInfoOverlay). */
 static void draw_move_details(void) {
-  const bv_mon* m = &B.s[0].mon;
+  const bv_mon* m = &command_side()->mon;
   if (B.move_cursor >= m->n_moves) return;
   char k[96], c[64], s[400];
   if (B.reason_ms > 0 && B.reason[0]) {
@@ -734,6 +849,23 @@ static void draw_ability_bar(void) {
  * 320 - 73, the "+" column at 320 - 50 (gains only), the values end at 320 - 7; all from y -94, TextStyle.WINDOW */
 static void draw_level_stats(void) {
   if (!B.lvl.on || !B.lvl.stats) return;
+  if (B.lvl.ivs) {
+    const float width = 200;
+    ui_window(320 - width, -100, width, 100, WIN_NORMAL);
+    for (int s = 0; s < 6; s++) {
+      const int iv = B.lvl.stats[s];
+      const char* key = iv == 31 ? "ivBest" : iv == 30 ? "ivFantastic" : iv > 20 ? "ivVeryGood" :
+                        iv > 10 ? "ivPrettyGood" : iv > 0 ? "ivDecent" : "ivNoGood";
+      char locale[80], value[96];
+      snprintf(locale, sizeof locale, "battleMessageUiHandler:%s", key);
+      i18n_t(value, sizeof value, locale, NULL);
+      text_draw(TS_WINDOW, 320 - width + 6, -94 + s * 14, i18n_stat_name(s), NULL);
+      text_opts o = text_defaults(); o.origin_x = 1;
+      text_style style = iv > B.lvl.stats[6+s] ? (iv == 31 ? TS_PERFECT_IV : TS_SUMMARY_GREEN) : TS_WINDOW;
+      text_draw(style, 313, -94 + s * 14, value, &o);
+    }
+    return;
+  }
   char labels[192] = "", vals[96] = "";
   for (int s = 0; s < 6; s++) {
     char v[16];
@@ -793,7 +925,11 @@ static void draw_cursor_frame(float x, float y, float w, float h) {
 #define TBAR_ICONS 12
 static int tbar_first(void) { return B.bar_sel >= TBAR_ICONS ? B.bar_sel - TBAR_ICONS + 1 : 0; }
 static void draw_top_bar(void) {
-  if (B.mode != M_COMMAND && B.mode != M_FIGHT && !cmd_shown()) return;
+  if (!B.begun) return;
+  char meter[48];int luck=B.opts.party_luck<0?0:B.opts.party_luck>14?14:B.opts.party_luck;
+  snprintf(meter,sizeof meter,"Luck: %s (%d/14)",luck_grade(luck),luck);
+  text_opts label=text_defaults();label.origin_x=1;
+  text_draw(TS_MOVE_LABEL,390,10,meter,&label);
   rr_rect(TBAR_X, TBAR_Y, TBAR_W, TBAR_H, RR_RGBA(0x40, 0x40, 0x48, 255));
   rr_rect(TBAR_X + 1, TBAR_Y + 1, TBAR_W - 2, TBAR_H - 2, RR_RGBA(0x28, 0x28, 0x30, 255));
   text_draw(TS_MOVE_LABEL, TBAR_X + TBAR_TITLE_X, TBAR_Y + 11, bar_title(), NULL);
@@ -801,7 +937,7 @@ static void draw_top_bar(void) {
   for (int i = first; i < n && i < first + TBAR_ICONS; i++)
     draw_bar_icon(bar_it(i), TBAR_X + TBAR_ICONS_X + (i - first) * 26 + 1, TBAR_Y + 3);
   if (n == 0) text_draw(TS_MOVE_LABEL, TBAR_X + TBAR_ICONS_X, TBAR_Y + 11, "none", NULL);
-  if (B.bar_sel >= 0 && B.bar_sel < n) draw_cursor_frame(TBAR_X + TBAR_ICONS_X + (B.bar_sel - first) * 26, TBAR_Y + 2, 26, 26);
+  if (B.mode==M_COMMAND && B.bar_sel >= 0 && B.bar_sel < n) draw_cursor_frame(TBAR_X + TBAR_ICONS_X + (B.bar_sel - first) * 26, TBAR_Y + 2, 26, 26);
 }
 
 /* An item's name (with its stack) and effect, in the message window in place of its usual text: the bar's selected item ("What will X
@@ -848,23 +984,25 @@ static void draw_bottom(bool top) {
     else
       rr_rect(0, -48, 320, 48, RR_RGBA(0x30, 0x50, 0x68, 255));
   }
-  const bool info = B.mode == M_COMMAND && B.bar_open && B.bar_sel >= 0 && B.bar_sel < bar_n();
+  const bool bar_info = B.mode == M_COMMAND && B.bar_open && B.bar_sel >= 0 && B.bar_sel < bar_n();
+  const bool summary_info = B.info_on && (B.mode == M_IDLE || B.mode == M_COMMAND);
+  const bool info = bar_info || summary_info;
   if (cmd_shown() && !info) draw_command_menu(top);
   if (B.mode == M_FIGHT) {
     draw_fight_menu(top);
     if (!top) draw_move_details();
-  } else if (info) {
+  } else if (bar_info) {
     char name[64];
     const char* desc;
     bar_info_text(name, sizeof name, &desc);
     draw_item_text(name, desc, top);
-  } else if (B.info_on && B.mode == M_IDLE) {
+  } else if (summary_info) {
     draw_item_text(B.info_name, B.info_desc, top);
   } else {
     msgbox_draw(&B.msg, top ? 12 - TOP_PAD : 12, -39);
   }
   if (cmd_shown() && B.has_balls && !info) draw_party_tray();
-  draw_level_stats();
+  if(!top)draw_level_stats();
   if (!top) draw_ability_bar();
 }
 
@@ -898,7 +1036,7 @@ static float seg(float t, float delay, float ms, ease_fn f) {
 
 /* PokemonAnimPhase's Substitute animations at time t (ms). Returns true while running. */
 static bool substitute_anim(side* sd, int type, float t) {
-  bool player = sd == &B.s[0];
+  bool player = field_of(sd)<2;
   float full = player ? 0.5f : 1; /* getSpriteScale() * (isPlayer ? 0.5 : 1) */
   float u;
   switch (type) {
@@ -1186,6 +1324,9 @@ static void run_event(float dt) {
   bool player = e->battler < 2;
   B.t += dt;
   switch (e->type) {
+    case BEV_FIELD_SWAP: {
+      side tmp=B.s[0];B.s[0]=B.s[2];B.s[2]=tmp;finish_event();break;
+    }
     case BEV_MESSAGE:
       if (B.step == 0) {
         msgbox_show(&B.msg, e->text ? e->text : "", -1, e->prompt);
@@ -1193,6 +1334,17 @@ static void run_event(float dt) {
         B.step = 1;
       }
       if (msgbox_done(&B.msg)) finish_event();
+      break;
+
+    case BEV_IVS:
+      if (B.step == 0) {
+        msgbox_clear(&B.msg);
+        B.lvl.on = e->stats != NULL;
+        B.lvl.ivs = true;
+        B.lvl.stats = e->stats;
+        B.step = 1;
+      }
+      if (!B.lvl.on) finish_event();
       break;
 
     case BEV_LEVEL_UP:
@@ -1210,6 +1362,7 @@ static void run_event(float dt) {
           break;
         }
         B.lvl.on = true;
+        B.lvl.ivs = false;
         B.lvl.totals = false;
         B.lvl.stats = e->stats;
         B.step = 2;
@@ -1225,6 +1378,8 @@ static void run_event(float dt) {
         en->present = !trainer && en->mon.species > 0;
         en->black = en->present;
         en->info_on = false;
+        side *ally=&B.s[3];ally->present=!trainer&&ally->mon.species>0;
+        ally->black=ally->present;ally->info_on=false;
         tween_start(&B.tw, 0, 300, 2000, EASE_LINEAR);
         B.step = 1;
       }
@@ -1243,12 +1398,14 @@ static void run_event(float dt) {
             tween_start(&B.tw2, 0, 0, 0, EASE_LINEAR);
           } else {
             en->black = false; /* untint(100) */
+            if(B.s[3].present){B.s[3].black=false;B.s[3].info_on=true;B.s[3].info_dx=-150;}
             update_field_scale(false);
-            cry(&en->mon);
+            cry(en->present?&en->mon:&B.s[3].mon);
             en->info_on = true;
             en->info_dx = -150;
             tween_start(&B.tw2, -150, 0, 1000, EASE_CUBIC_OUT);
-            i18n_t(s, sizeof s, "battle:singleWildAppeared", "pokemonName", en->mon.name, NULL);
+            if(B.s[3].present&&en->present)i18n_t(s,sizeof s,"battle:doubleWildAppeared","pokemonName1",en->mon.name,"pokemonName2",B.s[3].mon.name,NULL);
+            else i18n_t(s, sizeof s, "battle:singleWildAppeared", "pokemonName", en->present?en->mon.name:B.s[3].mon.name, NULL);
           }
           msgbox_show(&B.msg, s, -1, false);
           B.msg.wait_ms = 1500;
@@ -1257,7 +1414,7 @@ static void run_event(float dt) {
       }
       if (B.step == 2) {
         tween_update(&B.tw2, dt);
-        if (!trainer) B.s[1].info_dx = B.tw2.value;
+        if (!trainer){B.s[1].info_dx = B.tw2.value;B.s[3].info_dx=B.tw2.value;}
         if (msgbox_done(&B.msg) && tween_done(&B.tw2)) finish_event();
       }
       break;
@@ -1265,6 +1422,9 @@ static void run_event(float dt) {
 
     case BEV_SUMMON:
       if (B.step == 0) {
+        B.opening_summon=player && B.player_trainer_visible;
+        if (B.opening_summon) B.player_throw_ms=0;
+        if (!player) B.trainer_visible=false;
         if (e->mon) set_mon(sd, e->mon, player);
         sd->present = true;
         sd->scale = 0;
@@ -1281,7 +1441,7 @@ static void run_event(float dt) {
         B.step = 1;
         B.t = 0;
       }
-      if (B.step == 1 && B.t >= (player ? 750 : 250)) {
+      if (B.step == 1 && B.t >= (B.opening_summon ? 1400 : player ? 750 : 250)) {
         /* the ball opens: the Pokemon grows in, cries, and its info box slides in */
         ui_play_sound("se/pb_rel");
         update_field_scale(false);
@@ -1433,7 +1593,7 @@ static void run_event(float dt) {
         char s[64];
         snprintf(s, sizeof s, "%s", i18n_ability_name(e->a));
         i18n_t(B.ability_text, sizeof B.ability_text, "fightUiHandler:abilityFlyInText", "pokemonName",
-               sd->mon.name, "passive", "", "abilityName", s, NULL);
+               e->text&&*e->text?e->text:sd->mon.name, "passive", "", "abilityName", s, NULL);
         for (char* p = B.ability_text; *p; p++)
           if (*p == '\n') *p = ' ';
         B.ability_t = 1500;
@@ -1569,10 +1729,27 @@ static void run_event(float dt) {
 
 /* ------------------------------------------------------------------ the screen */
 
+static bool stats_input(ui_button b){
+  if(b!=BTN_STATS)return false;
+  B.stats_shown=true;tween_start(&B.stats_tw,B.stats_alpha,1,125,EASE_SINE_IN_OUT);return true;
+}
+static bool undo_command(ui_button b){
+  if(b!=BTN_CANCEL||B.mode!=M_COMMAND||!B.opts.can_undo)return false;
+  B.mode=M_IDLE;ui_play_select();
+  if(B.on_command)B.on_command((bv_command){4,0},B.command_arg);
+  return true;
+}
+
 static bool bv_input(ui_screen* s, ui_button b) {
   (void)s;
+  if(stats_input(b))return true;
   if (B.mode == M_EVENTS && B.lvl.on) {
     /* promptLevelUpStats' onActionInput: the gains, then the totals, then the window closes */
+    if (B.lvl.ivs) {
+      if (b != BTN_ACTION && b != BTN_CANCEL) return false;
+      B.lvl.on = false;
+      return true;
+    }
     if (b != BTN_ACTION) return false;
     if (!B.lvl.totals) B.lvl.totals = true;
     else B.lvl.on = false;
@@ -1617,6 +1794,7 @@ static bool bv_input(ui_screen* s, ui_button b) {
     return false;
   }
   if (B.mode == M_COMMAND) {
+    if(undo_command(b))return true;
     int c = B.cmd_cursor;
     switch (b) {
       case BTN_UP:
@@ -1703,7 +1881,7 @@ static bool bv_input(ui_screen* s, ui_button b) {
         B.reason_ms = 0;
         return true;
       case BTN_ACTION: {
-        const bv_mon* m = &B.s[0].mon;
+        const bv_mon* m = &command_side()->mon;
         if (c >= m->n_moves || m->pp_left[c] <= 0 || !B.opts.move_ok[c]) {
           ui_play_error();
           B.reason[0] = 0;
@@ -1729,8 +1907,13 @@ static bool bv_input(ui_screen* s, ui_button b) {
 }
 
 static void bv_update(ui_screen* s, float dt) {
+  tween_update(&B.stats_tw,dt);B.stats_alpha=B.stats_tw.value;
   (void)s;
   float frame_dt = dt;
+  if (B.player_throw_ms>=0 && B.player_throw_ms<1400) {
+    B.player_throw_ms=fminf(1400,B.player_throw_ms+dt);
+    if (B.player_throw_ms>=1000) B.player_trainer_visible=false;
+  }
   msgbox_update(&B.msg, dt);
   if (B.ability_t > 0) B.ability_t -= dt;
   if (B.reason_ms > 0) B.reason_ms -= dt;
@@ -1744,7 +1927,7 @@ static void bv_update(ui_screen* s, float dt) {
     B.ball.alpha = B.ball.fade_t < 250 ? 1 : 1 - ease(EASE_SINE_IN, (B.ball.fade_t - 250) / 250);
     if (B.ball.fade_t >= 500) B.ball.on = false;
   }
-  for (int k = 0; k < 2; k++) {
+  for (int k = 0; k < 4; k++) {
     if (B.s[k].show_ms > 0 && (B.s[k].show_ms -= dt) <= 0) {
       B.s[k].show_ms = 0;
       B.s[k].mon.hidden = false;
@@ -1789,56 +1972,37 @@ static void bv_update(ui_screen* s, float dt) {
   }
 }
 
-/* The 40 px side bands and 30 px top and bottom bands of the 400x240 top screen around upstream's 320x180 field (lorenzo,
- * 2026-10-19: widen the background, never scale the field). The biome's background is mirrored out from each edge, so it meets the
- * field's own copy seamlessly; drawn after the field, it also hides what slides past the field's edge as the black bands did. */
+/* The 40 px side bands and 30 px top and bottom bands of the 400x240 top screen around upstream's 320x180 field (field_border.h). */
 static void draw_border(void) {
   char k[64];
   snprintf(k, sizeof k, "images/arenas/%s_bg", B.biome);
-  const rr_frame* f = img_frame(k, NULL);
-  if (!f) {
-    rr_rect(0, 0, 40, 240, RR_RGBA(0, 0, 0, 255));
-    rr_rect(360, 0, 40, 240, RR_RGBA(0, 0, 0, 255));
-    rr_rect(0, 0, 400, 30, RR_RGBA(0, 0, 0, 255));
-    rr_rect(0, 210, 400, 30, RR_RGBA(0, 0, 0, 255));
-    return;
-  }
-  const float fw = f->src_w, fh = f->src_h;
-  /* the bands: left, right, top, bottom (the corners go with the top and bottom ones) */
-  static const float BAND[4][4] = {{0, 30, 40, 180}, {360, 30, 40, 180}, {0, 0, 400, 30}, {0, 210, 400, 30}};
-  for (int b = 0; b < 4; b++) {
-    clip_rect(BAND[b][0], BAND[b][1], BAND[b][2], BAND[b][3]);
-    for (int tx = -1; tx <= 1; tx++)
-      for (int ty = -1; ty <= 1; ty++) {
-        if (!tx && !ty) continue;
-        rr_draw_opts o = RR_DEFAULT_OPTS;
-        o.scale_x = tx ? -1 : 1;
-        o.scale_y = ty ? -1 : 1;
-        /* a mirrored copy is drawn with its edge on the field's edge: x 40 for the left one (it runs leftwards), 40 + 2 * 320 for the
-         * right one; the same with 30 and 30 + 2 * 180 vertically */
-        const float x = tx < 0 ? 40 : tx > 0 ? 40 + 2 * fw : 40, y = ty < 0 ? 30 : ty > 0 ? 30 + 2 * fh : 30;
-        rr_draw(f, x, y, &o);
-      }
-    clip_off();
-  }
+  field_border_draw(k);
+}
+
+static void bv_release(ui_screen *s,ui_button b){
+  (void)s;if(b==BTN_STATS){B.stats_shown=false;tween_start(&B.stats_tw,B.stats_alpha,0,125,EASE_SINE_IN_OUT);}
 }
 
 static void bv_draw(ui_screen* s, rr_screen which) {
   (void)s;
   if (which == RR_TOP) {
     if (ui_space(UI_FIELD)) draw_field();
+    if (ui_space(UI_PHYS_TOP)) draw_border();
     if (ui_space(UI_FIELD_UI)) {
       draw_enemy_info(&B.s[1]);
       draw_player_info(&B.s[0]);
+      draw_enemy_info(&B.s[3]);
+      draw_player_info(&B.s[2]);
     }
     /* the field is 320x180 on a 400x240 screen: keep sprites that slide past it off the border */
-    if (ui_space(UI_PHYS_TOP)) draw_border();
     /* the strip and the item bar run across the border (the whole screen's width), so they come after it */
     if (ui_space(UI_TOP_CANVAS_UI)) draw_bottom(true);
     if (ui_space(UI_PHYS_TOP)) draw_top_bar();
   } else {
     if (ui_space(UI_PHYS_BOTTOM)) rr_rect(0, 0, 320, 240, RR_RGBA(0x10, 0x10, 0x18, 255));
     if (ui_space(UI_BOTTOM_UI)) draw_bottom(false);
+    if((B.mode==M_COMMAND||B.mode==M_FIGHT)&&ui_space(UI_PHYS_BOTTOM))
+      text_draw(TS_MOVE_LABEL,8,6,"Hold SELECT: Stat changes",NULL);
     draw_debug();
   }
 }
@@ -1870,23 +2034,30 @@ static bool bv_touch(ui_screen* s, float px, float py) {
   return false;
 }
 
-static ui_screen g_battle = {"battle", 0, NULL, NULL, NULL, bv_input, bv_update, bv_draw, NULL, bv_touch};
+static ui_screen g_battle = {"battle", 0, NULL, NULL, NULL, bv_input, bv_update, bv_draw, NULL, bv_touch, bv_release};
 
 void bv_begin(const bv_setup* setup) {
-  menu_sprite_free(&B.s[0].sprite);
-  menu_sprite_free(&B.s[1].sprite);
+  for(int i=0;i<4;i++)menu_sprite_free(&B.s[i].sprite);
+  int selected_bar=B.bar;
   memset(&B, 0, sizeof B);
+  B.bar=selected_bar;B.bar_sel=-1;
   B.setup = *setup;
   gm_enum_lower(GM_E_BIOME_ID, setup->biome, B.biome, sizeof B.biome);
   set_mon(&B.s[0], &setup->player, true);
   set_mon(&B.s[1], &setup->enemy, false);
+  set_mon(&B.s[2],&setup->player_ally,true);
+  set_mon(&B.s[3],&setup->enemy_ally,false);
   B.begun = true;
   B.arena_player_x = setup->player_present ? 0 : 300;
   B.arena_enemy_x = -280;
   B.enemy_slide = -300;
   B.arena_old_on = setup->next_encounter;
   B.arena_old_x = 20;
+  B.trainer_visible=setup->trainer;
+  B.player_trainer_visible=!setup->player_present;
+  B.player_throw_ms=-1;
   B.s[0].present = B.s[0].info_on = setup->player_present;
+  B.s[2].present=B.s[2].info_on=setup->player_ally_present;
   B.s[1].present = B.s[1].info_on = false;
   B.field_scale = 1;
   update_field_scale(true);
@@ -1923,6 +2094,14 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
 
 bool bv_playing(void) { return B.mode == M_EVENTS; }
 
+void bv_set_item_bars(const bv_item *foe,int n_foe,const bv_item *keys,int n_keys,int luck){
+  B.n_foe=B.n_key=0;
+  for(int i=0;foe&&i<n_foe&&B.n_foe<BV_MAX_FOE_ITEMS;i++)B.foe[B.n_foe++]=foe[i];
+  for(int i=0;keys&&i<n_keys&&B.n_key<BV_MAX_FOE_ITEMS;i++)B.key[B.n_key++]=keys[i];
+  B.opts.party_luck=luck;
+  if(B.bar_sel>=bar_n()){B.bar_sel=-1;B.bar_open=false;}
+}
+
 void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, void*), void* arg) {
   B.on_command = on_command;
   B.command_arg = arg;
@@ -1933,14 +2112,9 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
     B.opts.can_ball = B.opts.can_switch = B.opts.can_run = true;
     for (int i = 0; i < 4; i++) B.opts.move_ok[i] = true;
   }
-  B.n_foe = 0;
-  B.n_key = 0;
-  B.bar_sel = -1;
-  B.bar_open = false;
-  if (opts && opts->foe_items)
-    for (int i = 0; i < opts->n_foe_items && B.n_foe < BV_MAX_FOE_ITEMS; i++) B.foe[B.n_foe++] = opts->foe_items[i];
-  if (opts && opts->key_items)
-    for (int i = 0; i < opts->n_key_items && B.n_key < BV_MAX_FOE_ITEMS; i++) B.key[B.n_key++] = opts->key_items[i];
+  bv_set_item_bars(opts?opts->foe_items:NULL,opts?opts->n_foe_items:0,
+                   opts?opts->key_items:NULL,opts?opts->n_key_items:0,opts?opts->party_luck:0);
+  B.bar_sel=-1;B.bar_open=false;
   B.opts.foe_items = B.opts.key_items = NULL;
   B.has_balls = opts && opts->has_party_balls;
   if (B.has_balls) memcpy(B.balls, opts->party_balls, sizeof B.balls);
@@ -1951,7 +2125,7 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
   /* "What will X do?", wrapped to the space left of the command window (1110 / 6) */
   B.msg.opts.wrap_w = B.has_balls ? 128 : 1110 / 6.0f; /* narrower beside the party tray */
   char s[128];
-  i18n_t(s, sizeof s, "commandUiHandler:actionMessage", "pokemonName", B.s[0].mon.name, NULL);
+  i18n_t(s, sizeof s, "commandUiHandler:actionMessage", "pokemonName", command_side()->mon.name, NULL);
   msgbox_show(&B.msg, s, 0, false);
   B.msg.wait_ms = 1e9f;
   (void)name_with_affix;

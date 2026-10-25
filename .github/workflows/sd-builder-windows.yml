@@ -41,6 +41,10 @@ jobs:
             'make -j4 && cp pokerogue.3dsx pokerogue.smdh /src/dist/game/ &&
              /opt/devkitpro/devkitARM/bin/arm-none-eabi-strip --strip-debug -o /src/dist/game/pokerogue.elf pokerogue.elf'
           ls -l dist/game
+      - name: Check the bundled ARM startup stack
+        run: |
+          python3 game/tests/check_stack_size.py game/pokerogue.elf --usage-dir game/build
+          python3 game/tests/check_stack_size.py dist/game/pokerogue.elf
       - name: bundle.py writes what devkitPro's mkromfs3ds and 3dsxtool write, byte for byte
         run: python3 sd-builder/tests/bundle_test.py --reference game/pokerogue.elf game/pokerogue.smdh
       - name: The probe app (a small test of the packs inside an app) builds

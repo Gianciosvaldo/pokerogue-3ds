@@ -157,7 +157,7 @@ int main(int argc, char **argv)
         const int wave = (int)integer(), option = (int)integer();
         const double money_start = real();
         const int balls_start = (int)integer(), trainer_id = (int)integer(), secret_id = (int)integer(), charms = (int)integer(), biome = (int)integer(), weather = (int)integer();
-        const int n_mons = (int)integer(), runs = (int)integer(), pick_mon = (int)integer(), pick_sub = (int)integer(), cycle_offset = (int)integer();
+        const int n_mons = (int)integer(), runs = (int)integer(), pick_mon = (int)integer(), pick_sub = (int)integer(), cycle_offset = (int)integer(), unlock_mbh = (int)integer(), unlock_eviolite = (int)integer();
         case_option = option; case_wave = wave;
         if (n_mons < 1 || n_mons > 6) { fputs("party size\n", stderr); return 2; }
         struct { int species, form, level, nature, ivs[6], pokerus, ability, passive, has_passive, hp, max, stats[6], n_moves, moves[4]; } setup[6];
@@ -172,7 +172,8 @@ int main(int argc, char **argv)
             for (int k = 0; k < setup[m].n_moves; k++) setup[m].moves[k] = (int)integer();
         }
         tag('P');
-        for (int m = 0; m < n_mons * 5; m++) integer();
+        int gender[6];
+        for (int m = 0; m < n_mons; m++) { for (int k = 0; k < 5; k++) integer(); gender[m] = (int)integer(); }
         tag('L');
         static item_row before_items[120], after_items[120];
         const int n_before = read_items(before_items, true);
@@ -263,6 +264,7 @@ int main(int argc, char **argv)
             mon->base_nature = (uint8_t)setup[m].nature;
             mon->has_custom_nature = false;
             mon->b.nature = (uint8_t)setup[m].nature;
+            mon->b.gender = (int8_t)gender[m];
             mon->b.on_field = false;
             mon->pokerus = setup[m].pokerus != 0;
             mon->b.ability = mon->b.base_ability = (uint16_t)setup[m].ability;
@@ -290,6 +292,8 @@ int main(int argc, char **argv)
             CHECK(same && mon->b.stats[0] == setup[m].max, "starting stats of Pokemon %d differ (C max %d, upstream %d)", m, mon->b.stats[0], setup[m].max);
             mon->b.hp = setup[m].hp;
         }
+        sys.unlocks.mini_black_hole = unlock_mbh != 0;
+        sys.unlocks.eviolite = unlock_eviolite != 0;
         run.trainer_id = trainer_id;
         run.secret_id = secret_id;
         run.wave_cycle_offset = cycle_offset;

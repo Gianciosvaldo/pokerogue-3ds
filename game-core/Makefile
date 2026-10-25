@@ -12,7 +12,7 @@ RUN_LIB := $(BUILD)/run-core/librun.a
 CORE_LIB := $(BUILD)/run-core/battle-core/libprcore.a
 AI_LIB := $(BUILD)/ai-core/libai.a
 REWARD_LIB := $(BUILD)/reward-core/libreward.a
-SRCS := src/gc_custom.c src/gc_gacha.c gen/out/gc_egg_pool.c src/gc_classic.c src/gc_multi.c src/gc_wide.c src/gc_orb_add.c src/gc_soothe.c src/gc_lure.c src/gc_temp.c src/gc_moveset.c src/gc_fungames.c src/gc_movegen.c gen/out/gc_movegen.c src/gc_gts.c gen/out/gc_traders.c src/gc_run.c src/gc_phases.c src/gc_mon.c src/gc_items.c src/gc_encounter.c src/gc_battle.c src/gc_save.c src/gc_stubs.c src/gc_system.c src/gc_mystery.c src/gc_reward.c src/gc_reward_lifecycle.c src/gc_learnset.c src/gc_catch.c gen/out/gc_evolutions.c gen/out/gc_biome_fields.c gen/out/gc_starters.c gen/out/gc_trainers.c gen/out/gc_dex.c gen/out/gc_learnsets.c
+SRCS := src/gc_form_items.c src/gc_football.c src/gc_egg_hatch.c src/gc_custom.c src/gc_gacha.c gen/out/gc_egg_pool.c src/gc_classic.c src/gc_multi.c src/gc_wide.c src/gc_orb_add.c src/gc_soothe.c src/gc_lure.c src/gc_temp.c src/gc_moveset.c src/gc_fungames.c src/gc_movegen.c gen/out/gc_movegen.c src/gc_gts.c gen/out/gc_traders.c src/gc_run.c src/gc_phases.c src/gc_mon.c src/gc_items.c src/gc_encounter.c src/gc_battle.c src/gc_save.c src/gc_stubs.c src/gc_system.c src/gc_mystery.c src/gc_reward.c src/gc_reward_lifecycle.c src/gc_learnset.c src/gc_catch.c gen/out/gc_evolutions.c gen/out/gc_biome_fields.c gen/out/gc_starters.c gen/out/gc_trainers.c gen/out/gc_dex.c gen/out/gc_learnsets.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
 all: $(BUILD)/transform_host_test
@@ -794,3 +794,277 @@ $(BUILD)/keldeo_learn_test: tests/keldeo_learn_test.c $(BATTLE_CORE)/build/wide-
 	$(CC) $(CPPFLAGS) -I$(BATTLE_CORE)/build $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
 $(BATTLE_CORE)/build/wide-substitute-frame.inc:
 	$(MAKE) -C $(BATTLE_CORE) build/wide-substitute-frame.inc
+
+all: $(BUILD)/double_chance_host_test
+$(BUILD)/double_chance_host_test: tests/double_chance_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -Wl,--wrap=pr_run_new_battle -lm -o $@
+test: double-chance-host-test
+double-chance-host-test: $(BUILD)/double_chance_host_test
+	$(BUILD)/double_chance_host_test
+.PHONY: double-chance-host-test
+
+all: $(BUILD)/sync_nature_test
+$(BUILD)/sync_nature_test: tests/sync_nature_test.c $(BATTLE_CORE)/tests/double-chance-test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(MAKE) -s -C $(BATTLE_CORE) build/wide-substitute-frame.inc
+	$(CC) $(CPPFLAGS) -I$(BATTLE_CORE)/build $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+
+all: $(BUILD)/sync_nature_host_test
+$(BUILD)/sync_nature_host_test: tests/sync_nature_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -Wl,--wrap=pr_run_new_battle -Wl,--wrap=gc_mon_new_enemy -lm -o $@
+test: sync-nature-host-test
+sync-nature-host-test: $(BUILD)/sync_nature_host_test
+	$(BUILD)/sync_nature_host_test
+.PHONY: sync-nature-host-test
+
+all: $(BUILD)/wide_money_test
+$(BUILD)/wide_money_test: tests/wide_money_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(MAKE) -s -C $(BATTLE_CORE) build/wide-substitute-frame.inc
+	$(CC) $(CPPFLAGS) -I$(BATTLE_CORE)/build $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+
+all: $(BUILD)/honey_money_host_test
+test: honey-money-host-test
+honey-money-host-test: $(BUILD)/honey_money_host_test
+	$(BUILD)/honey_money_host_test
+$(BUILD)/honey_money_host_test: tests/honey_money_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: honey-money-host-test
+
+all: $(BUILD)/endless_terminal_test
+$(BUILD)/endless_terminal_test: tests/endless_terminal_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(MAKE) -s -C $(BATTLE_CORE) build/wide-substitute-frame.inc
+	$(CC) $(CPPFLAGS) -I$(BATTLE_CORE)/build $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -Wl,--wrap=pr_prepare_post_battle_money -lm -o $@
+
+all: $(BUILD)/endless_terminal_host_test
+test: endless-terminal-host-test
+endless-terminal-host-test: $(BUILD)/endless_terminal_host_test
+	$(BUILD)/endless_terminal_host_test
+$(BUILD)/endless_terminal_host_test: tests/endless_terminal_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: endless-terminal-host-test
+
+all: $(BUILD)/command_stack_host_test
+test: command-stack-host-test
+command-stack-host-test: $(BUILD)/command_stack_host_test
+	$(BUILD)/command_stack_host_test
+$(BUILD)/command_stack_host_test: tests/command_stack_host_test.c ../game/include/runtime_limits.h $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -pthread -lm -o $@
+.PHONY: command-stack-host-test
+
+$(BUILD)/tm_compat_diff_test: tests/tm_compat_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/grip_claw_host_test
+test: grip-claw-host-test
+grip-claw-host-test: $(BUILD)/grip_claw_host_test
+	$(BUILD)/grip_claw_host_test
+$(BUILD)/grip_claw_host_test: tests/grip_claw_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: grip-claw-host-test
+
+all: $(BUILD)/baton_host_test
+test: baton-host-test
+baton-host-test: $(BUILD)/baton_host_test
+	$(BUILD)/baton_host_test
+$(BUILD)/baton_host_test: tests/baton_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: baton-host-test
+
+all: $(BUILD)/egg_hatch_diff_test
+$(BUILD)/egg_hatch_diff_test: tests/egg_hatch_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/egg_hatch_host_test
+test: egg-hatch-host-test
+egg-hatch-host-test: $(BUILD)/egg_hatch_host_test
+	$(BUILD)/egg_hatch_host_test
+$(BUILD)/egg_hatch_host_test: tests/egg_hatch_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: egg-hatch-host-test
+
+test: starter-options-test
+starter-options-test: $(BUILD)/starter_options_test
+	$(BUILD)/starter_options_test tests/fixtures/starter-options.native.txt
+$(BUILD)/starter_options_test: tests/starter_options_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: starter-options-test
+
+test: shared-type-host-test
+shared-type-host-test: $(BUILD)/shared_type_host_test
+	$(BUILD)/shared_type_host_test
+$(BUILD)/shared_type_host_test: tests/shared_type_host_test.c tests/item_transfer_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/shared_type_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+.PHONY: shared-type-host-test
+
+$(BUILD)/species_egg_test: tests/species_egg_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+species-egg-test: $(BUILD)/species_egg_test
+	$(BUILD)/species_egg_test tests/fixtures/species-eggs.native.txt
+test: species-egg-test
+.PHONY: species-egg-test
+$(BUILD)/src/gc_gacha.o: gen/out/gc_species_egg_info.inc
+
+$(BUILD)/doubles_host_test: tests/doubles_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+doubles-host-test: $(BUILD)/doubles_host_test
+	$(BUILD)/doubles_host_test
+test: doubles-host-test
+.PHONY: doubles-host-test
+
+$(BUILD)/doubles_encounter_test: tests/doubles_encounter_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -Wl,--wrap=pr_run_new_battle -Wl,--wrap=pr_run_generate_enemy_items -Wl,--wrap=gc_enemy_moveset -lm -o $@
+doubles-encounter-test: $(BUILD)/doubles_encounter_test
+	$< tests/fixtures/doubles-encounter.native.txt
+test: doubles-encounter-test
+.PHONY: doubles-encounter-test
+
+$(BUILD)/hardware_feedback_test: tests/hardware_feedback_test.c tests/doubles_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+hardware-feedback-test: $(BUILD)/hardware_feedback_test
+	$(BUILD)/hardware_feedback_test tests/fixtures/starter-feedback.native.txt tests/fixtures/sacrifice-hp.native.txt
+test: hardware-feedback-test
+.PHONY: hardware-feedback-test
+
+$(BUILD)/chain_waves_test: tests/chain_waves_test.c tests/doubles_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+chain-waves-test: $(BUILD)/chain_waves_test
+	$(BUILD)/chain_waves_test tests/fixtures/chain-power.native.txt
+test: chain-waves-test
+.PHONY: chain-waves-test
+
+$(BUILD)/pokerus_trap_test: tests/pokerus_trap_test.c tests/doubles_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+pokerus-trap-test: $(BUILD)/pokerus_trap_test
+	$< tests/fixtures/pokerus-trap.native.txt
+test: pokerus-trap-test
+.PHONY: pokerus-trap-test
+
+$(BUILD)/pickup_host_test: tests/pickup_host_test.c tests/doubles_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+pickup-host-test: $(BUILD)/pickup_host_test
+	$<
+.PHONY: pickup-host-test
+test: pickup-host-test
+
+$(BUILD)/stat_loot_host_test: tests/stat_loot_host_test.c tests/doubles_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+stat-loot-host-test: $(BUILD)/stat_loot_host_test
+	$< tests/fixtures/stat-loot-save.native.txt
+test: stat-loot-host-test
+.PHONY: stat-loot-host-test
+
+$(BUILD)/fused_held_host_test: tests/fused_held_host_test.c tests/doubles_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+fused-held-host-test: $(BUILD)/fused_held_host_test
+	$<
+test: fused-held-host-test
+.PHONY: fused-held-host-test
+
+$(BUILD)/inventory_capacity_host_test: tests/inventory_capacity_host_test.c tests/doubles_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+inventory-capacity-host-test: $(BUILD)/inventory_capacity_host_test
+	$< tests/fixtures/inventory-capacity.native.txt
+test: inventory-capacity-host-test
+.PHONY: inventory-capacity-host-test
+
+$(BUILD)/last_resort_history_host_test: tests/last_resort_history_host_test.c tests/doubles_host_test.c ../battle-core/tests/last-resort-history-fixture.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+last-resort-history-host-test: $(BUILD)/last_resort_history_host_test
+	$< tests/fixtures/last-resort-history.native.txt
+test: last-resort-history-host-test
+.PHONY: last-resort-history-host-test
+
+$(BUILD)/evo_tracker_host_test: tests/evo_tracker_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+evo-tracker-host-test: $(BUILD)/evo_tracker_host_test
+	$< tests/fixtures/evo-tracker.native.txt
+test: evo-tracker-host-test
+.PHONY: evo-tracker-host-test
+
+$(BUILD)/evo_tracker_turn_host_test: tests/evo_tracker_turn_host_test.c tests/doubles_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+evo-tracker-turn-host-test: $(BUILD)/evo_tracker_turn_host_test
+	$<
+test: evo-tracker-turn-host-test
+.PHONY: evo-tracker-turn-host-test
+
+$(BUILD)/held_lock_host_test: tests/held_lock_host_test.c tests/doubles_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+held-lock-host-test: $(BUILD)/held_lock_host_test
+	$< tests/fixtures/held-lock.native.txt
+test: held-lock-host-test
+.PHONY: held-lock-host-test
+
+all: $(BUILD)/macho_brace_host_test
+$(BUILD)/macho_brace_host_test: tests/macho_brace_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: macho-brace-host-test
+macho-brace-host-test: $(BUILD)/macho_brace_host_test
+	$(BUILD)/macho_brace_host_test tests/fixtures/macho-brace.native.txt
+
+all: $(BUILD)/held_form_items_host_test
+$(BUILD)/held_form_items_host_test: tests/held_form_items_host_test.c tests/doubles_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/held_form_items_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+
+.PHONY: held-form-items-host-test
+held-form-items-host-test: $(BUILD)/held_form_items_host_test
+	python3 tools/check-held-form-state-proof.py
+
+test: held-form-items-host-test
+
+$(BUILD)/form_item_menu_host_test: tests/form_item_menu_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+$(BUILD)/form_item_phase_host_test: tests/form_item_phase_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+$(BUILD)/form_item_acquisition_host_test: tests/form_item_acquisition_host_test.c tests/form_item_phase_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/form_item_acquisition_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+
+$(BUILD)/form_item_owner_guards_test: tests/form_item_owner_guards_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+.PHONY: form-item-owner-host-test
+form-item-owner-host-test: $(BUILD)/form_item_menu_host_test $(BUILD)/form_item_phase_host_test $(BUILD)/form_item_acquisition_host_test $(BUILD)/form_item_owner_guards_test
+	python3 tools/check-form-item-owner-proof.py
+test: form-item-owner-host-test
+
+$(BUILD)/encounter_intro_test: tests/encounter_intro_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -Wl,--wrap=gc_battle_setup_field -lm -o $@
+.PHONY: encounter-intro-test
+encounter-intro-test: $(BUILD)/encounter_intro_test
+	$(BUILD)/encounter_intro_test
+test: encounter-intro-test
+
+$(BUILD)/nonvirtual_history_host_test: tests/nonvirtual_history_host_test.c tests/doubles_host_test.c ../battle-core/tests/nonvirtual-history-fixture.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+nonvirtual-history-host-test: $(BUILD)/nonvirtual_history_host_test
+	$< tests/fixtures/nonvirtual-history.native.txt
+test: nonvirtual-history-host-test
+.PHONY: nonvirtual-history-host-test
+
+$(BUILD)/protect_history_host_test: tests/protect_history_host_test.c tests/doubles_host_test.c ../battle-core/tests/protect-history-fixture.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+protect-history-host-test: $(BUILD)/protect_history_host_test
+	$(MAKE) -C $(BATTLE_CORE) build/protect-history-test build/protect-history-guards-test
+	python3 ../battle-core/tools/check-protect-history-proof.py --run-only
+test: protect-history-host-test
+.PHONY: protect-history-host-test
+
+$(BUILD)/two_turn_end_host_test: tests/two_turn_end_host_test.c tests/doubles_host_test.c tests/fixtures/two-turn-end.native.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -Wl,--wrap=gc_battle_end_cleanup -lm -o $@
+two-turn-end-host-test: $(BUILD)/two_turn_end_host_test
+	$<
+test: two-turn-end-host-test
+.PHONY: two-turn-end-host-test
+
+two-turn-end-faults: $(BUILD)/two_turn_end_host_test
+	python3 tools/check-two-turn-end-faults.py
+test: two-turn-end-faults
+.PHONY: two-turn-end-faults
+
+$(BUILD)/remaining_history_host_test: tests/remaining_history_host_test.c tests/doubles_host_test.c ../battle-core/tests/remaining-history-test.c ../battle-core/tests/remaining-history.native.inc ../battle-core/src/phases.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/remaining_history_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+remaining-history-host-test: $(BUILD)/remaining_history_host_test
+	$(BUILD)/remaining_history_host_test
+test: remaining-history-host-test
+.PHONY: remaining-history-host-test

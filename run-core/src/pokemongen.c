@@ -36,13 +36,13 @@ static const pr_form_gen *form_gen(const pr_species_gen *sp, int form)
 }
 
 /* getSpeciesFormIndex(species, gender, nature, ignoreArena); nature -1 = undefined */
-static int form_index(pr_rng *rng, pr_run *run, const pr_enemy_gen_ctx *ctx, int species, int gender, int nature, bool ignore_arena)
+static int form_index(pr_rng *rng, pr_run *run, const pr_enemy_gen_ctx *ctx, int species, int gender, int nature, bool ignore_arena, bool egg_phase)
 {
     const pr_species_gen *sp = species_gen(species);
     if (!sp) { run->unported |= PR_RUN_UNPORTED_SPECIES; return 0; }
-    /* if (species.forms.length === 0) return 0; (not in an egg phase: isEggPhase is false) */
+    /* A species without forms consumes no form RNG. */
     if (!sp->n_forms) return 0;
-    const bool trainer_battle = ctx->battle_type == BATTLE_TYPE_TRAINER;
+    const bool trainer_battle = !egg_phase && ctx->battle_type == BATTLE_TYPE_TRAINER;
     const int s = species;
     /* Trainers with a specialty type (config.hasSpecialtyType()) get a form of that type */
     int specialty = -1;
@@ -123,7 +123,7 @@ static int form_index(pr_rng *rng, pr_run *run, const pr_enemy_gen_ctx *ctx, int
         }
         return 0;
     case SPECIES_ID_GIMMIGHOUL:   /* gameMode.hasMysteryEncounters: CLASSIC and CHALLENGE */
-        if (run->mode == GAME_MODES_CLASSIC || run->mode == GAME_MODES_CHALLENGE)
+        if (!egg_phase && (run->mode == GAME_MODES_CLASSIC || run->mode == GAME_MODES_CHALLENGE))
             return 1;
         return pr_rng_seed_int(rng, sp->n_forms, 0);
     case SPECIES_ID_ETERNATUS:
@@ -149,9 +149,14 @@ static int form_index(pr_rng *rng, pr_run *run, const pr_enemy_gen_ctx *ctx, int
     return 0;
 }
 
+int pr_run_get_egg_form_index(pr_rng *rng, pr_run *run, const pr_enemy_gen_ctx *ctx, int gender)
+{
+    return form_index(rng, run, ctx, ctx->species, gender, -1, true, true);
+}
+
 int pr_run_get_species_form_index(pr_run *run, const pr_enemy_gen_ctx *ctx, int gender)
 {
-    return form_index(&run->rng, run, ctx, ctx->species, gender, -1, false);
+    return form_index(&run->rng, run, ctx, ctx->species, gender, -1, false, false);
 }
 
 void pr_run_get_eternatus_moveset(int form, bool inverse_battle, int moveset[4])
@@ -202,7 +207,7 @@ static int generate_fusion(pr_run *run, const pr_enemy_gen_ctx *ctx, const pr_sp
     if (fs->male_percent < 0) out->fusion_gender = GENDER_GENDERLESS;
     else out->fusion_gender = (out->id % 256) * 0.390625 < fs->male_percent ? GENDER_MALE : GENDER_FEMALE;
     /* getSpeciesFormIndex(fusionSpecies, fusionGender, getNature(), true) */
-    out->fusion_form = form_index(&run->rng, run, ctx, fusion, out->fusion_gender, out->nature, true);
+    out->fusion_form = form_index(&run->rng, run, ctx, fusion, out->fusion_gender, out->nature, true, false);
     return 0;
 }
 
@@ -272,7 +277,7 @@ int pr_run_enemy_pokemon_base_rng(pr_rng *rng, pr_run *run, const pr_enemy_gen_c
     bool ignore_arena = ctx->trainer_slot == 0 && ctx->wave < 0;
     /* Daily starters use a temporary offset RNG. Form rolls must advance that same
      * stream, rather than consuming the run's saved outer RNG. */
-    out->form = form_index(rng, run, ctx, ctx->species, out->gender, -1, ignore_arena);
+    out->form = form_index(rng, run, ctx, ctx->species, out->gender, -1, ignore_arena, false);
 
     if (ctx->trainer_slot == 0 && ctx->wave < 0) {
         /* Player starter: trySetShiny() check, then nature */

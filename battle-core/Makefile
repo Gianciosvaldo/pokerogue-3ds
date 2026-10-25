@@ -4,7 +4,7 @@ CC ?= gcc
 CFLAGS ?= -O2 -g -std=c99 -Wall -Wextra -Wno-unused-parameter -ffp-contract=off
 CPPFLAGS += -Iinclude -Igen/out
 BUILD ?= build
-SRCS := src/item_transfer.c src/rng.c src/hooks.c src/pokemon.c src/damage.c src/move_attrs.c src/closures.c src/closures_moves.c src/closures_conditions.c src/ab_attrs.c src/closures_abilities.c src/modifiers.c src/tags.c src/battler_tags.c src/arena_tags.c src/history.c src/engine.c src/phases.c src/move_effects.c src/called_moves.c src/switching.c src/commands.c src/js_math.c src/text.c src/events.c gen/out/pr_data.c
+SRCS := src/form_items.c gen/out/pr_item_forms.c src/pickup.c src/item_transfer.c src/rng.c src/hooks.c src/pokemon.c src/damage.c src/move_attrs.c src/closures.c src/closures_moves.c src/closures_conditions.c src/ab_attrs.c src/closures_abilities.c src/modifiers.c src/tags.c src/battler_tags.c src/arena_tags.c src/history.c src/engine.c src/phases.c src/move_effects.c src/called_moves.c src/switching.c src/commands.c src/js_math.c src/js_number.c src/text.c src/events.c gen/out/pr_data.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
 all: $(BUILD)/transform-test
@@ -612,3 +612,93 @@ $(BUILD)/entry-allies-test: tests/entry-allies-test.c $(BUILD)/wide-substitute-f
 all: $(BUILD)/costar-test
 $(BUILD)/costar-test: tests/costar-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/poison-puppeteer-test
+$(BUILD)/poison-puppeteer-test: tests/poison-puppeteer-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/biome-callback-test
+$(BUILD)/biome-callback-test: tests/biome-callback-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/double-chance-test
+$(BUILD)/double-chance-test: tests/double-chance-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/double-generation-test
+$(BUILD)/double-generation-test: tests/double-generation-test.c tests/double-chance-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a $(BUILD)/double-chance-run/librun.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -I../run-core/include $(CFLAGS) $< $(BUILD)/double-chance-run/librun.a $(BUILD)/libprcore.a -lm -o $@
+
+$(BUILD)/double-chance-run/librun.a: $(wildcard include/pr/*.h gen/out/*.h ../run-core/src/*.c ../run-core/include/pr/*.h ../run-core/gen/out/*.[ch])
+	$(MAKE) -s -C ../run-core BUILD=$(abspath $(BUILD))/double-chance-run $(abspath $@)
+
+$(BUILD)/src/js_number.o: $(wildcard vendor/ryu/*)
+
+all: $(BUILD)/honey-money-test
+$(BUILD)/honey-money-test: tests/honey-money-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/money-number-test
+$(BUILD)/money-number-test: tests/money-number-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/honey-owner-test
+$(BUILD)/honey-owner-test: tests/honey-owner-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/scene-transfer-test
+$(BUILD)/scene-transfer-test: tests/scene-transfer-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/grip-claw-test
+$(BUILD)/grip-claw-test: tests/grip-claw-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/baton-switch-test
+$(BUILD)/baton-switch-test: tests/baton-switch-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/pickup-test
+$(BUILD)/pickup-test: tests/pickup-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/stat-loot-test
+$(BUILD)/stat-loot-test: tests/stat-loot-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+$(BUILD)/fused-held-replay.inc: tests/effective-stat-item-replay.inc tests/critical-item-replay.inc tools/build-fused-held-replay.py
+	@mkdir -p $(@D)
+	python3 tools/build-fused-held-replay.py $@
+all: $(BUILD)/fused-held-test
+$(BUILD)/fused-held-test: tests/fused-held-test.c tests/statitem-guards.inc tests/crititem-guards.inc $(BUILD)/fused-held-replay.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) -Itests $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+all: $(BUILD)/last-resort-history-test
+$(BUILD)/last-resort-history-test: tests/last-resort-history-test.c tests/last-resort-history-fixture.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+$(BUILD)/held-form-items-test: tests/held-form-items-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+.PHONY: held-form-items-host-test
+held-form-items-host-test: $(BUILD)/held-form-items-test
+	python3 tools/check-held-form-items-proof.py
+
+$(BUILD)/nonvirtual-history-test: tests/nonvirtual-history-test.c tests/nonvirtual-history-fixture.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/nonvirtual-history-test.c $(BUILD)/libprcore.a -lm -o $@
+$(BUILD)/nonvirtual-history-guards-test: tests/nonvirtual-history-guards-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+$(BUILD)/protect-history-test: tests/protect-history-test.c tests/protect-history-fixture.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/protect-history-test.c $(BUILD)/libprcore.a -lm -o $@
+$(BUILD)/protect-history-guards-test: tests/protect-history-guards-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+build/remaining-history-test: tests/remaining-history-test.c tests/remaining-history.native.inc src/phases.c build/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/remaining-history-test.c build/libprcore.a -lm -o $@
+build/remaining-history-guards-test: tests/remaining-history-guards-test.c build/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/remaining-history-guards-test.c build/libprcore.a -lm -o $@
+remaining-history-host-test: build/remaining-history-test build/remaining-history-guards-test
+	build/remaining-history-test
+	build/remaining-history-guards-test
+.PHONY: remaining-history-host-test

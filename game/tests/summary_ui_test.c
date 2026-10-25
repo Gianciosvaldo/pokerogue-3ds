@@ -57,6 +57,10 @@ void mui_sfx(const char* key) {
 
 /* the key itself, in a buffer that outlives the caller's (the real mui_t returns a string of its own) */
 const char* mui_t(const char* key) {
+  /* Actual pinned English locale labels, rather than generated Move.name debug text. */
+  if (!strcmp(key, "move:return.name")) return "Return";
+  if (!strcmp(key, "move:pursuit.name")) return "Pursuit (P)";
+  if (!strcmp(key, "move:uproar.name")) return "Uproar (P)";
   static char buf[16][160];
   static int next;
   char* b = buf[next++ & 15];
@@ -499,6 +503,33 @@ int main(void) {
   summary_close(); /* closing the screen takes the description down */
   assert(!g_info_on);
   printf("Item window touch PASSED.\n");
+
+  /* Live stages stay distinct from permanent stats and IVs, including ACC/EVA. */
+  party[0].show_battle_stages = true;
+  party[0].stat_stages[0] = 2;
+  party[0].stat_stages[1] = -6;
+  party[0].stat_stages[5] = 3;
+  party[0].stat_stages[6] = -2;
+  args.page = SUMMARY_STATS;
+  args.index = 0;
+  summary_open(&args, &ev);
+  summary_update(300.0f);
+  g_ndr = 0;
+  summary_draw();
+  assert(find('o', "(+2)", 0) && find('o', "(-6)", 0));
+  assert(find('o', "ACC +3   EVA -2", 0));
+  summary_close();
+  party[0].show_battle_stages = false;
+  summary_open(&args, &ev);
+  summary_update(300.0f);
+  g_ndr = 0;
+  summary_draw();
+  assert(!find('o', "(+2)", 0) && !find('o', "ACC +3", 0));
+  summary_close();
+
+  assert(!strcmp(menu_move_name(216), "Return"));
+  assert(!strcmp(menu_move_name(228), "Pursuit"));
+  assert(!strcmp(menu_move_name(253), "Uproar"));
 
   printf("summary_ui_test PASSED ALL CHECKS!\n");
   return 0;

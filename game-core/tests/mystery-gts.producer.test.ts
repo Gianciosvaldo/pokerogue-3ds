@@ -16,6 +16,7 @@ import { timedEventManager } from "#app/global-event-manager";
 import { modifierTypes } from "#data/data-lists";
 import { BiomeId } from "#enums/biome-id";
 import { MoveId } from "#enums/move-id";
+import { Unlockables } from "#enums/unlockables";
 import { MysteryEncounterType } from "#enums/mystery-encounter-type";
 import * as EncounterPhaseUtils from "#mystery-encounters/encounter-phase-utils";
 import * as MysteryEncounters from "#mystery-encounters/mystery-encounter-biomes";
@@ -134,7 +135,7 @@ for (let ci = 0; ci < chunks; ci++) {
       ["SPECIES_STAT_BOOSTER", true, () => rnd(6)], ["RARE_SPECIES_STAT_BOOSTER", true, () => rnd(6)],
       ["FORM_CHANGE_ITEM", true, () => 1 + rnd(40)], ["RARE_FORM_CHANGE_ITEM", true, () => 1 + rnd(40)],
       ["EVOLUTION_TRACKER_GIMMIGHOUL", false, () => undefined], ["MYSTERY_ENCOUNTER_SHUCKLE_JUICE", true, () => (rnd(2) ? 10 : -15)],
-      ["MYSTERY_ENCOUNTER_OLD_GATEAU", false, () => undefined],
+      ["MYSTERY_ENCOUNTER_OLD_GATEAU", false, () => undefined], ["MYSTERY_ENCOUNTER_MACHO_BRACE", false, () => undefined],
     ];
     const funcs = (modifierTypes as any);
     const mk = (id: string, mon: any, arg: number | undefined, stack: number): boolean => {
@@ -150,7 +151,7 @@ for (let ci = 0; ci < chunks; ci++) {
         if (!type.id) type.id = id;
         const modifier = type.newModifier(mon);
         if (!modifier) return false;
-        modifier.stackCount = stack;
+        modifier.stackCount = Math.max(1, Math.min(stack, modifier.getMaxStackCount()));   // never past the maximum, as the game cannot reach it
         scene.addModifier(modifier, true);
         return true;
       } catch {
@@ -231,7 +232,7 @@ for (let ci = 0; ci < chunks; ci++) {
       const meets = encounter.options.map((o: any) => (o.meetsRequirements() ? 1 : 0));
       const mapOf = (mon: any) => encounter.misc.tradeOptionsMap.get(mon.id) as any[];
       const optionLines = party.map((mon: any) => `O ${mapOf(mon).length} ${mapOf(mon).map((e: any) => monTokens(e)).join(" ")}`);
-      const levelsLine = party.map((p: any) => `${p.species.speciesId} ${p.formIndex} ${p.level} ${p.hp > 0 ? 1 : 0} ${+!!p.passive}`);
+      const levelsLine = party.map((p: any) => `${p.species.speciesId} ${p.formIndex} ${p.level} ${p.hp > 0 ? 1 : 0} ${+!!p.passive} ${p.gender}`);
       const mons = party.map((p: any) => `${p.species.speciesId} ${p.formIndex} ${p.level} ${p.nature} ${p.ivs.join(" ")} ${p.pokerus ? 1 : 0} ${p.getAbility().id} ${p.getPassiveAbility().id} ${p.hasPassive() ? 1 : 0} ${p.hp} ${p.getMaxHp()} ${p.stats.join(" ")} ${p.moveset.length} ${p.moveset.map((mv: any) => mv.moveId).join(" ")}`);
       for (const mon of party) for (const e of mapOf(mon)) cover.species.add(e.species.speciesId);
       for (const mon of party) {
@@ -254,7 +255,7 @@ for (let ci = 0; ci < chunks; ci++) {
       let filterFlags = party.map(() => 1);
       if (k === 2) filterFlags = party.map((p: any) => (xferOf(p).length ? 1 : 0));
       if (k === 3) runs = true;
-      lines.push(`C ${caseNo} ${runSeed} ${waveSeed} ${wave} ${k} ${scene.money} ${balls0} ${gameData.trainerId} ${gameData.secretId} ${charms} ${scene.arena.biomeId} ${weather} ${party.length} ${runs ? 1 : 0} ${pickMon} ${pickSub} ${scene.waveCycleOffset}`,
+      lines.push(`C ${caseNo} ${runSeed} ${waveSeed} ${wave} ${k} ${scene.money} ${balls0} ${gameData.trainerId} ${gameData.secretId} ${charms} ${scene.arena.biomeId} ${weather} ${party.length} ${runs ? 1 : 0} ${pickMon} ${pickSub} ${scene.waveCycleOffset} ${+gameData.isUnlocked(Unlockables.MINI_BLACK_HOLE)} ${+gameData.isUnlocked(Unlockables.EVIOLITE)}`,
         `U ${mons.join(" ")}`, `P ${levelsLine.join(" ")}`, `L ${list().length} ${listX().join(" ")}`,
         `A ${meets.join(" ")} ${filterFlags.join(" ")} ${scene.getMaxExpLevel()}`, `Z ${rngStart} ${rngInit}`, ...optionLines);
       if (!runs) { cover.disabled++; lines.push("E"); continue; }

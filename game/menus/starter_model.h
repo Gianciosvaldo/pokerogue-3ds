@@ -12,7 +12,7 @@
  *     species order. Upstream's UP from the first row goes to the filter bar and DOWN from a single row too; with none here
  *     UP from the first row wraps to the last row and DOWN from a single row does nothing. DOWN from the Start button and
  *     UP/DOWN from Randomize pass through the filter bar upstream: here they go where two presses would end up.
- *   - the cycle buttons (shiny, form, gender, ability, nature, tera), IVs, moves, nature, candy, favourites, rename.
+ *   - the cycle buttons (shiny, form, gender, ability, nature, tera), IVs, favourites, rename. The host handles Customize overlays for moves, nature, shiny tier, ability and candy.
  *     Every species is picked with the defaults upstream chooses for a species with no stored preference.
  */
 #ifndef GAME_MENUS_STARTER_MODEL_H
@@ -55,7 +55,7 @@ typedef struct {
   double base_cost;  /* speciesStarterCosts: the cost label is blue or gold when the cost is reduced */
   uint8_t form;      /* the default dex props (getSpeciesDefaultDexAttrProps): the icon */
   uint8_t variant;
-  bool female, shiny;
+  bool female, shiny, pokerus;
   bool passive;      /* passiveAttr != 0: the passive background */
   bool hidden_ability; /* the hidden ability is unlocked: the capsule */
   bool won;          /* classicWinCount > 0: the champion ribbon */

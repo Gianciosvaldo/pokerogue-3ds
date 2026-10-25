@@ -25,11 +25,14 @@ typedef struct {
   /* "Do you want to exit?" answered Yes. */
   void (*on_exit)(void* arg);
   void* arg;
+  bool (*save_profile)(void* arg); /* NULL: sysd_save; injectable for host tests */
+  /* Optional mode-specific validator, before accepting or leaving the selector. */
+  bool (*validate_team)(const gc_starter* team, int n, void* arg, const char** why);
 } sh_events;
 
 /* Shows the screen (the UI fades to it, replacing the one on top) with the species `sys` has caught. `notice` (may be NULL) is a
  * message in the box that waits for A. False when there is nothing to choose from; nothing is then shown. */
-bool sh_open(const gc_system* sys, const char* notice, const sh_events* ev);
+bool sh_open(gc_system* sys, const char* notice, const sh_events* ev);
 
 #ifdef __cplusplus
 }

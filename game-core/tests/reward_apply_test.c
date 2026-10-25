@@ -509,6 +509,7 @@ static const gc_screen *flow_fight(gc_run *r)
     const char *why;
     gc_choice c = {GC_CH_FIGHT, 0, -1, 0};
     CHECK(gc_run_choose(r, &c, &why));
+    if(r->screen.kind==GC_SCREEN_TARGET){int target=2;while(target<4&&!r->screen.target_ok[target])target++;CHECK(target<4);c=(gc_choice){GC_CH_TARGET,target,0,0};CHECK(gc_run_choose(r,&c,&why));}
     return gc_run_screen(r);
 }
 
@@ -1162,26 +1163,91 @@ static void test_tm_and_memory_mushroom(void)
     m->b.level = 50;
     gc_mon_recalc(&run, m);
 
+    /* TmModifierType.selectFilter uses current species/form, not the generic item filter. */
+    m->b.species = SPECIES_ID_CHARIZARD;
+    m->b.form = 0;
+    m->b.n_moves = 1;
+    m->b.moves[0] = MOVE_ID_TACKLE;
+
     /* TM application */
     const char *why = NULL;
     gc_offer tm_offer = offer("TM_COMMON", 0);
     tm_offer.arg = MOVE_ID_FLAMETHROWER;
     int res = gc_reward_apply(&run, &tm_offer, 0, 0, &why);
     CHECK(res == GC_APPLY_DONE);
-    CHECK(m->n_used_tms == 1);
-    CHECK(m->used_tms[0] == MOVE_ID_FLAMETHROWER);
+    CHECK(m->n_used_tms == 0); /* record only after actual successful learning */
 
     gc_internal *in = gc_int(&run);
     gc_rphase queued_p;
-    CHECK(gc_rq_next(&in->rq, &queued_p) && queued_p.type == RP_SELECT_MODIFIER);
     CHECK(gc_rq_next(&in->rq, &queued_p) && queued_p.type == RP_LEARN_MOVE && queued_p.b == MOVE_ID_FLAMETHROWER);
+    CHECK(gc_phase_start(&run,&queued_p)); /* free slot: actual LearnMovePhase learns immediately */
+    CHECK(m->n_used_tms==1 && m->used_tms[0]==MOVE_ID_FLAMETHROWER);
+    CHECK(!gc_rq_has(&run,RP_SELECT_MODIFIER)&&!in->reward.copy_pending); /* success removes only its reward copy; unrelated run phases remain */
     gc_rq_clear(&run);
 
+    gc_mon_set_move(m,1,MOVE_ID_SCRATCH);
     /* duplicate TM application doesn't duplicate in used_tms */
     res = gc_reward_apply(&run, &tm_offer, 0, 0, &why);
     CHECK(res == GC_APPLY_DONE);
     CHECK(m->n_used_tms == 1);
     gc_rq_clear(&run);
+
+    /* Cancelling a full-moveset TM preserves the copied screen and history;
+     * committing the replacement consumes it. */
+    m->b.n_moves=4;m->b.moves[0]=MOVE_ID_TACKLE;m->b.moves[1]=MOVE_ID_SCRATCH;m->b.moves[2]=MOVE_ID_GROWL;m->b.moves[3]=MOVE_ID_LEER;
+    res=gc_reward_apply(&run,&tm_offer,0,-1,&why);CHECK(res==GC_APPLY_DONE);
+    CHECK(gc_rq_next(&in->rq,&queued_p)&&queued_p.type==RP_LEARN_MOVE&&!gc_phase_start(&run,&queued_p));
+    bool chosen=false;gc_choice choice={GC_CH_FORGET,-1,0,0};
+    CHECK(gc_phase_choose(&run,&queued_p,&choice,&why,&chosen)&&chosen);
+    CHECK(gc_rq_has(&run,RP_SELECT_MODIFIER)&&m->n_used_tms==1&&m->b.moves[0]==MOVE_ID_TACKLE);gc_rq_clear(&run);
+    res=gc_reward_apply(&run,&tm_offer,0,-1,&why);CHECK(res==GC_APPLY_DONE);
+    CHECK(gc_rq_next(&in->rq,&queued_p)&&queued_p.type==RP_LEARN_MOVE&&!gc_phase_start(&run,&queued_p));
+    chosen=false;choice.a=0;CHECK(gc_phase_choose(&run,&queued_p,&choice,&why,&chosen)&&chosen);
+    CHECK(!gc_rq_has(&run,RP_SELECT_MODIFIER)&&!in->reward.copy_pending&&m->n_used_tms==1&&m->b.moves[0]==MOVE_ID_FLAMETHROWER);gc_rq_clear(&run);
+
+    /* Already known and incompatible targets cannot consume an offer or queue a phase. */
+    gc_mon_set_move(m, 0, MOVE_ID_FLAMETHROWER);
+    CHECK(gc_mon_tm_state(m, MOVE_ID_FLAMETHROWER) == 2);
+    res = gc_reward_apply(&run, &tm_offer, 0, -1, &why);
+    CHECK(res == GC_APPLY_REFUSED && !strcmp(why, NO_EFFECT));
+    CHECK(!gc_rq_next(&in->rq, &queued_p));
+    m->b.species = SPECIES_ID_MAGIKARP;
+    gc_mon_set_move(m, 0, MOVE_ID_SPLASH);
+    CHECK(gc_mon_tm_state(m, MOVE_ID_FLAMETHROWER) == 0);
+    static const char *const tiers[] = {"TM_COMMON", "TM_GREAT", "TM_ULTRA"};
+    for (int t = 0; t < 3; t++) {
+        tm_offer.key = tiers[t];
+        res = gc_reward_apply(&run, &tm_offer, 0, -1, &why);
+        CHECK(res == GC_APPLY_REFUSED && !strcmp(why, NO_EFFECT));
+        CHECK(m->n_used_tms == 1 && !gc_rq_next(&in->rq, &queued_p));
+    }
+    /* Fusion compatibility is a union; fainting and used-TM history do not block teaching. */
+    m->b.fusion_species = SPECIES_ID_CHARIZARD;
+    m->b.fusion_form = 0;
+    m->b.hp = 0;
+    CHECK(gc_mon_tm_state(m, MOVE_ID_FLAMETHROWER) == 1);
+    res = gc_reward_apply(&run, &tm_offer, 0, -1, &why);
+    CHECK(res == GC_APPLY_DONE && m->n_used_tms == 1);
+    gc_rq_clear(&run);
+    m->b.fusion_species = 0;
+    m->b.species = SPECIES_ID_CHARIZARD;
+    m->b.hp = 300;
+    CHECK(gc_mon_tm_state(m, -1) == 0 && gc_mon_tm_state(m, PR_MOVE_COUNT) == 0);
+
+    /* Native labels use getMoveset(), while the TM filter excludes permanent moves. */
+    m->b.summon_moves_active = true;
+    m->b.transform_n_moves = m->b.n_moves;
+    m->b.transform_moves[0] = MOVE_ID_FLAMETHROWER;
+    CHECK(gc_mon_tm_state(m, MOVE_ID_FLAMETHROWER) == 2);
+    CHECK(gc_mon_can_learn_tm(m, MOVE_ID_FLAMETHROWER));
+    gc_mon_set_move(m, 0, MOVE_ID_FLAMETHROWER);
+    m->b.transform_moves[0] = MOVE_ID_SURF;
+    CHECK(gc_mon_tm_state(m, MOVE_ID_FLAMETHROWER) == 1);
+    CHECK(!gc_mon_can_learn_tm(m, MOVE_ID_FLAMETHROWER));
+    CHECK(gc_mon_tm_state(m, MOVE_ID_SURF) == 2);
+    CHECK(!gc_mon_can_learn_tm(m, MOVE_ID_SURF));
+    m->b.summon_moves_active = false;
+    gc_mon_set_move(m, 0, MOVE_ID_SPLASH);
 
     /* Memory Mushroom application on mon level 50 with relearnable moves */
     pr_reward_ctx *ctx = gc_reward_ctx(&run);

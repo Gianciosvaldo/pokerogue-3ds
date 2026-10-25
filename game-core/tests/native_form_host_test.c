@@ -7,7 +7,7 @@ static unsigned char saved[GC_SAVE_MAX];
 static int checks;
 #define CHECK(x) do { checks++; if(!(x)){fprintf(stderr,"native form host line%d: %s\n",__LINE__,#x);exit(1);} } while(0)
 static void drain(void){gc_event ev;while(gc_run_next_event(&run,&ev)){} }
-static void fight(int slot){const char *why=NULL;gc_choice c={GC_CH_FIGHT,slot,-1,0};CHECK(gc_run_choose(&run,&c,&why));drain();}
+static void fight(int slot){const char *why=NULL;gc_choice c={GC_CH_FIGHT,slot,-1,0};CHECK(gc_run_choose(&run,&c,&why));drain();if(run.screen.kind==GC_SCREEN_TARGET){int target=2;while(target<4&&!run.screen.target_ok[target])target++;CHECK(target<4);c=(gc_choice){GC_CH_TARGET,target,0,0};CHECK(gc_run_choose(&run,&c,&why));drain();}}
 static void continue_to_save(void){
  const char *why=NULL;
  for(int step=0;step<25&&!gc_run_can_save(&run);step++){
@@ -44,9 +44,10 @@ int main(void){
   p->species=species[k];p->form=start[k];p->level=22;p->custom_ability=abilities[k];p->ability_override=-1;pr_refresh_ability(p);pr_recalculate_stats(&run.bt,p);
   run.party[run.party_order[0]].exp=gc_level_total_exp(22,gc_species(species[k])->growth_rate);
   p->hp=k==3?p->stats[STAT_HP]:p->stats[STAT_HP]/2;
-  foe->n_moves=1;foe->moves[0]=MOVE_ID_SPLASH;foe->pp_used[0]=foe->pp_up[0]=0;foe->max_pp_override[0]=-1;foe->custom_ability=ABILITY_ID_BALL_FETCH;foe->ability_override=-1;pr_refresh_ability(foe);
+  for(int field=2;field<4;field++){pr_pokemon *foe=run.bt.field[field];if(!foe)continue;
+  foe->n_moves=1;foe->moves[0]=MOVE_ID_SPLASH;foe->pp_used[0]=foe->pp_up[0]=0;foe->max_pp_override[0]=-1;foe->custom_ability=ABILITY_ID_BALL_FETCH;foe->ability_override=-1;pr_refresh_ability(foe);}
   fight(0);CHECK(p->form==after[k]&&p->ability==abilities[k]);CHECK(!run.bt.n_unported&&!run.eng.overflow);
-  foe->species=SPECIES_ID_RATTATA;foe->form=0;pr_recalculate_stats(&run.bt,foe);foe->hp=1;fight(1);continue_to_save();roundtrip();
+  foe->species=SPECIES_ID_RATTATA;foe->form=0;pr_recalculate_stats(&run.bt,foe);foe->hp=1;fight(1);if(run.bt.double_battle&&run.bt.field[3]&&run.bt.field[3]->hp>0){run.bt.field[3]->hp=1;fight(1);}continue_to_save();roundtrip();
   p=run.bt.field[0];int recalled_form=k==7?2:k==4?p->form:0;
   run.wave=10;run.n_battle_events=0;gc_new_battle(&run);CHECK(run.wave==11);
   int recalls=0;

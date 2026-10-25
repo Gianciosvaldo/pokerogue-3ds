@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "bgm.h"
+#include "field_border.h"
 #include "gm_enum_names.h"
 #include "i18n.h"
 #include "ui.h"
@@ -64,6 +65,12 @@ static void ts_draw(ui_screen* s, rr_screen which) {
         text_draw(TS_SUMMARY, 160, 24, "PokeRogue", &o);
       }
     }
+    /* the field is 320x180 on a 400x240 screen: the biome's background widened over the bands around it */
+    if (ui_space(UI_PHYS_TOP)) {
+      char k[96];
+      snprintf(k, sizeof k, "images/arenas/%s_bg", T.biome);
+      if (img_has(k)) field_border_draw(k);
+    }
   } else {
     if (ui_space(UI_PHYS_BOTTOM)) rr_rect(0, 0, 320, 240, RR_RGBA(0x10, 0x10, 0x18, 255));
     if (ui_space(UI_BOTTOM_UI)) optlist_draw(&T.list);
@@ -96,6 +103,8 @@ void title_screen_open(const title_args* a) {
   T.choice[n++] = TITLE_RADAR;
   snprintf(T.labels[n], sizeof T.labels[n], "Capsule Machine"); /* the custom content's own entry: no upstream string */
   T.choice[n++] = TITLE_CAPSULE;
+  snprintf(T.labels[n], sizeof T.labels[n], "Football Playoff");
+  T.choice[n++] = TITLE_FOOTBALL;
   for (int i = 0; i < n; i++) T.label_ptrs[i] = T.labels[i];
   optlist_init(&T.list, T.label_ptrs, n);
   T.list.no_cancel = true; /* blockCancelButton: true */

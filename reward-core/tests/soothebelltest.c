@@ -76,8 +76,14 @@ static void selftest(void)
 {
     pr_reward_ctx c;
 #define GUARD(field,value) do{c=fixture();c.field=value;refusal(c);}while(0)
-    GUARD(n_party,0);GUARD(n_party,7);GUARD(n_items,-1);GUARD(n_items,257);GUARD(party[1].id,1);
+    GUARD(n_party,0);GUARD(n_party,7);GUARD(n_items,-1);GUARD(n_items,PR_REWARD_MAX_OWNED+1);GUARD(party[1].id,1);
 #undef GUARD
+    /* Retain the old 257-entry boundary as an admitted input; the invalid
+     * count guard above follows the expanded storage ceiling. */
+    c=fixture();c.n_items=257;pr_reward_ctx old_boundary=c;
+    if(pr_reward_add_soothe_bell(&c,0)!=PR_REWARD_SOOTHE_ADDED||c.n_items!=258||memcmp(c.items,old_boundary.items,257*sizeof c.items[0]))die("old capacity admission");
+    guards++;
+
 #define ITEM_GUARD(field,value) do{c=fixture();c.n_items=1;c.items[0]=(pr_owned_item){.item=PR_ITEM_SOOTHE_BELL,.owner=0,.stack=1};c.items[0].field=value;refusal(c);}while(0)
     ITEM_GUARD(item,PR_ITEM_COUNT_);ITEM_GUARD(owner,-2);ITEM_GUARD(owner,2);ITEM_GUARD(arg,1);ITEM_GUARD(battle_count,1);
     ITEM_GUARD(stack,0);ITEM_GUARD(stack,-1);ITEM_GUARD(stack,4);
@@ -94,7 +100,7 @@ static void selftest(void)
     if(pr_reward_add_soothe_bell(&c,0)!=PR_REWARD_SOOTHE_UNSUPPORTED||memcmp(&old,&c,sizeof c))die("capacity");
     guards++;
     c.items[0]=(pr_owned_item){.item=PR_ITEM_SOOTHE_BELL,.owner=0,.stack=2};
-    if(pr_reward_add_soothe_bell(&c,0)!=PR_REWARD_SOOTHE_STACKED||c.items[0].stack!=3||c.n_items!=256)die("capacity stack");
+    if(pr_reward_add_soothe_bell(&c,0)!=PR_REWARD_SOOTHE_STACKED||c.items[0].stack!=3||c.n_items!=PR_REWARD_MAX_OWNED)die("capacity stack");
     old=c;
     if(pr_reward_add_soothe_bell(&c,0)!=PR_REWARD_SOOTHE_FULL||memcmp(&old,&c,sizeof c))die("full refusal");
     guards+=2;

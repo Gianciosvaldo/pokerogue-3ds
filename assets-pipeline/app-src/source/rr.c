@@ -20,6 +20,7 @@ struct rr_tex {
   C3D_Tex tex;
   int w, h;         /* image size */
   size_t bytes;
+  GPU_TEXCOLOR format;
   bool dirty;       /* CPU wrote texels this frame; flush before submit */
   rr_tex* next;     /* live list, for stats + dirty flush */
 };
@@ -79,6 +80,7 @@ static rr_tex* tex_create(int w, int h, GPU_TEXCOLOR fmt) {
   C3D_TexSetFilter(&t->tex, GPU_NEAREST, GPU_NEAREST);
   C3D_TexSetWrap(&t->tex, GPU_CLAMP_TO_EDGE, GPU_CLAMP_TO_EDGE);
   memset(t->tex.data, 0, t->tex.size);
+  t->format = fmt;
   t->w = w;
   t->h = h;
   t->bytes = t->tex.size;
@@ -132,6 +134,30 @@ rr_tex* rr_tex_load_png(const char* path) {
   free(px);
   C3D_TexFlush(&t->tex);
   return t;
+}
+
+rr_tex* rr_tex_thumbnail(const rr_frame* f, unsigned edge) {
+  if (!f || !f->tex || edge < 8 || edge > 128 || f->src_w <= 0 || f->src_h <= 0 ||
+      f->w <= 0 || f->h <= 0 || f->x < 0 || f->y < 0 ||
+      f->x + f->w > f->tex->w || f->y + f->h > f->tex->h) return NULL;
+  rr_tex* src = f->tex;
+  if (src->format != GPU_RGBA8 && src->format != GPU_RGBA5551) return NULL;
+  float scale = fminf((float)edge / f->src_w, (float)edge / f->src_h);
+  int w = (int)fmaxf(1, floorf(f->src_w * scale));
+  int h = (int)fmaxf(1, floorf(f->src_h * scale));
+  rr_tex* dst = tex_create(w, h, src->format);
+  if (!dst) return NULL;
+  for (int y = 0; y < h; ++y) for (int x = 0; x < w; ++x) {
+    int sx = x * f->src_w / w - f->off_x;
+    int sy = y * f->src_h / h - f->off_y;
+    if (sx < 0 || sy < 0 || sx >= f->w || sy >= f->h) continue;
+    u32 a = texel_index(f->x + sx, f->y + sy, src->tex.width, src->tex.height);
+    u32 b = texel_index(x, y, dst->tex.width, dst->tex.height);
+    if (src->format == GPU_RGBA8) ((u32*)dst->tex.data)[b] = ((u32*)src->tex.data)[a];
+    else ((u16*)dst->tex.data)[b] = ((u16*)src->tex.data)[a];
+  }
+  C3D_TexFlush(&dst->tex);
+  return dst;
 }
 
 void rr_tex_free(rr_tex* t) {
@@ -576,6 +602,15 @@ void rr_frame_end(void) {
   C3D_FrameEnd(0);
   g_cpu_ms = C3D_GetProcessingTime();
   g_gpu_ms = C3D_GetDrawingTime();
+}
+
+bool rr_frame_c2d_image(const rr_frame *f, C2D_Image *image, Tex3DS_SubTexture *sub) {
+  if (!f || !f->tex || !image || !sub || f->w <= 0 || f->h <= 0) return false;
+  const float tw = f->tex->tex.width, th = f->tex->tex.height;
+  *sub = (Tex3DS_SubTexture){(u16)f->w, (u16)f->h,
+      f->x / tw, 1.0f - f->y / th, (f->x + f->w) / tw, 1.0f - (f->y + f->h) / th};
+  *image = (C2D_Image){&f->tex->tex, sub};
+  return true;
 }
 
 static inline u32 to_c2d(rr_color c) { return __builtin_bswap32(c); }

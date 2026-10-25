@@ -7,11 +7,6 @@
 #include "menus.h"
 #include "pr_data.h"
 
-const char* menu_move_name(uint16_t id) {
-  if (id < PR_MOVE_COUNT && pr_moves[id].id == id) return pr_moves[id].name;
-  return "???";
-}
-
 const pr_species* menu_species(uint16_t id) {
   int lo = 0, hi = PR_SPECIES_COUNT - 1;
   while (lo <= hi) {
