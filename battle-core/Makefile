@@ -693,3 +693,12 @@ $(BUILD)/protect-history-test: tests/protect-history-test.c tests/protect-histor
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/protect-history-test.c $(BUILD)/libprcore.a -lm -o $@
 $(BUILD)/protect-history-guards-test: tests/protect-history-guards-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+build/remaining-history-test: tests/remaining-history-test.c tests/remaining-history.native.inc src/phases.c build/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/remaining-history-test.c build/libprcore.a -lm -o $@
+build/remaining-history-guards-test: tests/remaining-history-guards-test.c build/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/remaining-history-guards-test.c build/libprcore.a -lm -o $@
+remaining-history-host-test: build/remaining-history-test build/remaining-history-guards-test
+	build/remaining-history-test
+	build/remaining-history-guards-test
+.PHONY: remaining-history-host-test

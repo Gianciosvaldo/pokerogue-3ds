@@ -616,6 +616,9 @@ void pr_targets_changed(pr_battle *bt, pr_engine *e, int list)
             memcpy(p->history_last[q].targets,t->v,4);
             p->history_last[q].n_targets=t->n;
         }
+        if((p->history_all_present&2)&&p->history_aim_serial==e->hist_alias[k].abs){
+            memcpy(p->history_aim.targets,t->v,4);p->history_aim.n_targets=t->n;
+        }
         int64_t at = (int64_t)e->hist_alias[k].abs - ((int64_t)p->history_serial - kept) - 1;
         if (at < 0 || at >= kept) continue;     /* fell out of the kept entries */
         memcpy(p->move_history[at].targets, t->v, 4);

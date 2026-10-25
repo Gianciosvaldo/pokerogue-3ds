@@ -638,12 +638,8 @@ static double conversion_2(ARGS)
     UNUSED;
     NEED_TARGET;
     if (u->terastallized) return 0;
-    for (int k = 0; k < t->n_move_history; k++) {
-        const pr_turn_move *tm = pr_last_move(bt, t, k);
-        if (!tm) return 1;                                     /* older than the kept entries (reported) */
-        if (tm->move != MOVE_ID_NONE) return 1;
-    }
-    return 0;
+    bool unknown=false;
+    return pr_history_any_move(bt,t,&unknown);
 }
 
 /* Last Resort: the moveset has the move and another one, and every other move is in the

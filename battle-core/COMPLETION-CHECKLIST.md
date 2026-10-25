@@ -79,7 +79,7 @@ money handling merged in #357; see [their validation record](HONEY-MONEY-VALIDAT
    selectors, their shared-target identities and optional save state. The
    [Protect follow-up](PROTECT-HISTORY-VALIDATION.md) adds complete protection
    streaks, Number-sized seeded ranges and compatible saves. Other all-history
-   queries and faint-history capacity remain separate audit items.
+   queries now have [Conversion 2 and Lock-On/Mind Reader evidence](REMAINING-HISTORY-VALIDATION.md). Faint-history capacity remains a separate audit item.
 4. Finish wide-level Endless acceptance across generation, arithmetic,
    progression, display and compatible saves, then publish the final evidence
    audit and explicitly list any remaining external prerequisites.
