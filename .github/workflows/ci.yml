@@ -39,7 +39,7 @@ jobs:
       - name: Run football module tests
         run: make -C football-core test
       - name: Sanitize football match rules and replay tests
-        run: make -C football-core BUILD="$RUNNER_TEMP/football-sanitize" CFLAGS="-O1 -g -std=c99 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer" rules-test match-test contact-test defense-test pass-test tactics-test live-test career-test live-screen-test
+        run: make -C football-core BUILD="$RUNNER_TEMP/football-sanitize" CFLAGS="-O1 -g -std=c99 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer" rules-test match-test contact-test defense-test pass-test tactics-test live-test career-test live-screen-test live-systems-test live-art-test
       - name: Build encounter and money native comparison runners
         run: make -C game-core build/sync_nature_test build/wide_money_test build/endless_terminal_test build/tm_compat_diff_test build/egg_hatch_diff_test
 

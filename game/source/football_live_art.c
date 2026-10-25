@@ -1,4 +1,5 @@
 #include "football_live_art.h"
+#include "football_live_systems.h"
 #include <math.h>
 #include <stdio.h>
 static void label(FootballRenderer *r,const char *s,float x,float y,float scale,u32 color)
@@ -55,7 +56,8 @@ void football_live_art_top(FootballRenderer *r,const FootballCareer *c,const Foo
         if(selected){rect(x-16,y+10,32,3,.11f,gold);rect(x-16,y-17,3,29,.11f,gold);rect(x+13,y-17,3,29,.11f,gold);}
         const rr_frame *frame=football_render_front_frame(r,i,ms);
         float scale=frame && frame->src_w>0 && frame->src_h>0?fminf(38.0f/frame->src_w,38.0f/frame->src_h):1;
-        if(!football_render_draw_sprite(frame,x,y-6,scale,a->vx<0 || (a->vx==0 && !a->home)))rect(x-9,y-15,18,25,.2f,team);
+        /* Adversary front sheets natively face LEFT; flip them to face right. */
+        if(!football_render_draw_sprite(frame,x,y-6,scale,!football_live_faces_left(m,i)))rect(x-9,y-15,18,25,.2f,team);
         rect(x-7,y+13,14,3,.3f,team);
     }
     /* Receivers keep their numbered targets even when outside the closer view. */

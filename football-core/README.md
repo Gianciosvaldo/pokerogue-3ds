@@ -49,6 +49,6 @@ See [BALANCE.md](BALANCE.md) for the reproducible playoff pacing audit and its
 limits, including the automated economy and termination checks.
 
 The default Football entry now uses the [live mode](LIVE.md): 22 players, a
-40-point draft, editable offense/defense lineups, live movement and passing,
+55-point draft, editable offense/defense lineups, live movement and passing,
 diagram play cards and a closer eased camera. The earlier modules and audit
 remain available for legacy six-player checkpoint compatibility.

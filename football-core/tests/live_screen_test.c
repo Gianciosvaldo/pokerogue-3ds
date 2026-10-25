@@ -5,6 +5,7 @@
 #include "ui.h"
 #include <3ds.h>
 #include <assert.h>
+#include "football_profile_fixture.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -45,12 +46,19 @@ static void exited(void *arg){(void)arg;ui_set(&title);}
 static void press(ui_button button){assert(top->input);top->input(top,button);}
 static void tick(void){game_screen->update(game_screen,17);if(top==game_screen){top->draw(top,RR_TOP);top->draw(top,RR_BOTTOM);}down=0;}
 static void answer(int n){top=game_screen;answer_fn(n,answer_arg);}
+static gc_system profile,locked_profile;
 int main(void)
 {
-    football_screen_args args={.entropy=5,.persistence=true,.on_exit=exited};top=&title;
+    football_test_unlock_all(&profile);
+    football_screen_args args={.profile=&profile,.entropy=5,.persistence=true,.on_exit=exited};top=&title;
+    gc_system_init_defaults(&locked_profile);args.profile=&locked_profile;
+    assert(football_screen_open(&args));game_screen=top;
+    for(unsigned i=0;i<25;++i){press(BTN_ACTION);press(BTN_DOWN);}
+    assert(career()->phase==FB_CAREER_DRAFT && career()->roster.count<22 && writes==0);
+    press(BTN_MENU);answer(4);assert(top==&title);args.profile=&profile;
     assert(football_screen_open(&args));game_screen=top;assert(speed==1);
     for(unsigned i=0;i<22;++i){press(BTN_ACTION);if(i<21)press(BTN_DOWN);}
-    assert(career()->phase==FB_CAREER_LINEUP && career()->roster.count==22 && career()->roster.cost<=40);tick();assert(writes==1);
+    assert(career()->phase==FB_CAREER_LINEUP && career()->roster.count==22 && career()->roster.cost<=55);tick();assert(writes==1);
     uint8_t old=career()->roster.lineup[0];press(BTN_ACTION);press(BTN_RIGHT);assert(career()->roster.lineup[0]!=(unsigned)old);press(BTN_CANCEL);press(BTN_CANCEL);
     assert(career()->phase==FB_CAREER_READY);press(BTN_ACTION);tick();assert(career()->phase==FB_CAREER_MATCH && career()->live.phase==FB_LIVE_CALL && loads==22);
     down=KEY_A;press(BTN_ACTION);tick();assert(career()->live.phase==FB_LIVE_SET); /* play selection must not also snap */

@@ -27,19 +27,34 @@ bool football_roster_refresh(FootballRoster *r,unsigned i)
     r->player[i].attributes.spd=(uint8_t)(a>99?99:a);r->player[i].attributes.str=(uint8_t)(b>99?99:b);
     return true;
 }
+bool football_roster_starter(const gc_system *profile,unsigned species,gc_starter *out)
+{
+    if(!profile || !out || species>GC_MAX_SPECIES_ID || !profile->dex[species].caught_attr)return false;
+    const pr_species *sp=NULL;for(unsigned i=0;i<PR_SPECIES_COUNT;++i)if(pr_species_table[i].id==species)sp=&pr_species_table[i];
+    if(!sp || sp->prevolution>0 || gc_starter_cost(species)<0)return false;
+    gc_starter starter={.species=(uint16_t)species,.tera_type=-1};
+    uint64_t caught=profile->dex[species].caught_attr;
+    starter.female=sp->male_permille==0 || (!(caught&4) && (caught&8));
+    if(!(caught&1)){starter.shiny=true;while(starter.variant<2 && !(caught&(UINT64_C(1)<<(4+starter.variant))))++starter.variant;}
+    bool nature=false;for(unsigned n=0;n<25;++n)if(profile->dex[species].nature_attr&(1u<<(n+1))){starter.nature=(uint8_t)n;nature=true;break;}
+    if(!nature)return false;
+    memcpy(starter.ivs,profile->dex[species].ivs,sizeof starter.ivs);
+    for(unsigned ability=0;ability<3;++ability){starter.ability_index=(uint8_t)ability;
+        if(gc_starter_is_available(profile,&starter,NULL,NULL)){*out=starter;return true;}
+    }
+    return false;
+}
 bool football_roster_add(FootballRoster *r,gc_run *scratch,const gc_starter *s,const gc_system *profile,const char **why)
 {
-    const char *error="Draft needs 22 base-form Pokemon within 40 points.";
-    if(!r || !scratch || !s || r->count>=22)goto bad;
+    const char *error="Draft needs 22 base-form Pokemon within 55 points.";
+    if(!r || !scratch || !s || !profile || r->count>=22)goto bad;
     const pr_species *species=NULL;
     for(unsigned i=0;i<PR_SPECIES_COUNT;++i)if(pr_species_table[i].id==s->species)species=&pr_species_table[i];
     if(!species || species->prevolution>0 || s->form)goto bad;
     for(unsigned i=0;i<r->count;++i)if(r->mon[i].b.species==s->species){error="That species is already drafted.";goto bad;}
-    /* Football has its own full base-form draft pool. Classic cost reductions
-     * still apply, but classic catch unlocks cannot make a 22-player team impossible. */
-    double cost=gc_starter_value(profile,s->species);
-    if(cost<0 || r->cost+cost>40.000000001)goto bad;
-    if(!gc_starter_is_available(NULL,s,NULL,why))return false;
+    double cost;
+    if(!gc_starter_is_available(profile,s,&cost,why))return false;
+    if(cost<0 || r->cost+cost>FB_ROSTER_BUDGET+1e-9)goto bad;
     if(!gc_football_create_member(scratch,s,why))return false;
     unsigned i=r->count++;r->mon[i]=scratch->party[0];
     if(!football_roster_refresh(r,i)){--r->count;goto bad;}

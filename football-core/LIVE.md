@@ -1,7 +1,7 @@
 # Live football (default entry)
 
 The title's Football option now opens `football_live_screen.c`, a dedicated
-22-player, 40-point draft and live playoff. The older six-player mode is retained
+22-player, 55-point draft and live playoff. The older six-player mode is retained
 as `football_legacy_screen_open` and is explicitly accessible through START;
 its `football.sav` file is preserved. New checkpoints use `football_live.sav`.
 Classic parties, cost limits, saves and battle APIs remain six-wide.
@@ -14,11 +14,18 @@ boosts and a permutation assigning each member to one of 22 slots. There are
 three LB, two CB, FS, SS). A swap always preserves one distinct member per slot.
 Auto-assignment provides a starting point; it is never the only way to assign.
 
-The draft uses classic species costs and profile cost reductions with a 40-point
-aggregate limit. Football opens the full base-form pool independently of classic
-catch unlocks, allowing a new profile to fill all 22 slots. Duplicate species and
-evolved starting species are rejected. The catalog starts with cheaper species;
-Left/Right pages, A drafts, B undoes the last draft. All 22 slots must be filled.
+The draft uses classic species costs and profile cost reductions with a 55-point
+aggregate limit. Only base-form starters available in the current Classic/Endless
+profile are listed and accepted. The same availability API enforces species,
+form, nature, ability and shiny unlocks. Football chooses a valid unlocked starter
+configuration, including shiny-only or non-default ability/nature catches.
+A profile is required; a missing profile never opens the entire Pokédex.
+Duplicate species and evolved starting species are rejected. The catalog starts
+with cheaper unlocked species; Left/Right pages, A drafts, B undoes the last draft.
+All 22 slots must be filled. A pool smaller than 22 or too expensive even with
+its cheapest 22 members shows a progression/cost-reduction notice. Existing saves
+are also checked against the current profile's original starter unlocks and remain
+preserved if they cannot be used with that profile.
 On the lineup screen A toggles editing and Left/Right swaps the selected slot's
 member. Touch rows select slots and the bottom buttons cycle members while
 editing. B finishes editing, then returns to the round hub. Auto-assignment and
@@ -51,7 +58,7 @@ a simulation step consumes them, then used once. Menus and overlays pause play.
 
 Plays initialize formations and AI routes, rather than precomputing results.
 Actors accelerate, blockers hold nearby rushers for strength-dependent intervals,
-defenders pursue or cover, and a throw travels to a predicted receiver position.
+defenders keep coverage responsibilities, and a throw travels to a predicted receiver position.
 Accuracy and arm range affect error; actors near the landing point determine
 catches/interceptions. Passing beyond the line of scrimmage is disabled. Contact,
 sidelines, scoring and a 25-second play bound end downs under the shared rules.
@@ -61,6 +68,35 @@ time and runoff once at the dead ball. The seven-round playoff, shop and EXP loo
 remains. This is arcade football: no field goals, punts, kickoff returns, penalties
 or interception return phase are added here. A fumble uses a nearest-actor recovery
 contest at its contact spot, without a bouncing-ball phase.
+
+## Coverage, body contact and facing
+
+`football_live_defense.c` owns snap-local coverage: four DL rush, LB/corners
+match the RB, TE and three receivers, and two safeties protect deep halves. Man
+assignments persist for the entire held pass; there is no three-second collapse.
+Zone defenders match threats inside their area and break on throws inside that
+responsibility. A five-man blitz rotates a safety onto the RB while keeping one
+high safety. Confirmed handoffs, catches and a QB crossing the line release the
+shell into run pursuit. A thrown pass only pulls its covering defender and nearby
+zone/safety help, rather than sending all eleven players to the ball. CPU defensive
+schemes depend on the situation/seed, not the selected offensive play.
+
+`football_live_physics.c` resolves solid circular bodies for all 22 players,
+including the controlled defender. Five OL engage nearby opponents with a
+strength/stamina-dependent hold, expiry and re-engagement cooldown. Strength
+controls push and inverse mass; four bounded contact passes remove overlap and
+closing velocity. A defender can go around a blocker or push the line, but does
+not phase through a body merely because the user controls it. Normal tackle
+reach includes body radius so contact remains possible after separation.
+
+Horizontal heading follows actual velocity and persists when moving vertically
+or stopping. The QB looks toward receivers even while retreating. The direction
+uses the original snap offense during a dead-ball turnover display. Existing
+adversary sheets natively face left: live rendering mirrors them for rightward
+facing, the inverse of the earlier mistaken convention. The pinned Charizard
+sheet (`pokerogue-assets` revision `87426a7`, `images/pokemon/6.png`) was inspected
+to confirm the orientation. Front art supports horizontal mirroring only; no new
+up/down sprite sheets are introduced.
 
 ## Art, UI and camera
 
@@ -100,10 +136,14 @@ Live movement and pending EXP prompts are not checkpointed. START may return to
 the last checkpoint, or explicitly leave without saving. Unreadable saves remain
 untouched until explicit deletion. Profile and session are two separate files.
 
-Host checks cover real 22-member drafts, assignment permutations, manual snapping,
+Host checks cover 55-point limits, locked/default-profile restrictions, valid
+unlocked variants, cost reductions, saved-profile restrictions, assignment permutations, manual snapping,
 movement, throws, deterministic replay, all-defender switching, bounded camera
 movement, 20 full live matches, shared progression, codec rejection, shop currency,
-and actual screen input/pause/save flows. New live/career/screen tests are included
+and actual screen input/pause/save flows. Coverage through a four-second held pocket, mirrored matchups, zone discipline,
+blitz matchups, sustained user-vs-OL body contact, passing around a body, native
+sprite UV direction and the QB exception also have regressions. Live/career/screen
+and coverage/physics/art tests are included
 in sanitizer CI. The old balance audit describes the legacy snap engine; it is
 not a win-rate claim for this new live engine. Visual and on-device performance
 testing remain deferred to the next Windows build as requested.

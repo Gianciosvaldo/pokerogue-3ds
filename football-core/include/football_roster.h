@@ -3,7 +3,7 @@
 #include "gc/football.h"
 #include "football_stats.h"
 #define FB_ROSTER_SIZE 22
-#define FB_ROSTER_BUDGET 40
+#define FB_ROSTER_BUDGET 55
 #define FB_UNIT_SIZE 11
 /* Each slot owns a different roster member: offense 0..10, defense 11..21. */
 typedef struct {
@@ -18,6 +18,8 @@ typedef struct {
 extern const char *const football_slot_names[FB_ROSTER_SIZE];
 FootballPosition football_slot_position(unsigned slot);
 bool football_roster_init(FootballRoster *r);
+/* A valid base-form starter from the same unlock data Classic uses. */
+bool football_roster_starter(const gc_system *profile,unsigned species,gc_starter *out);
 bool football_roster_add(FootballRoster *r,gc_run *scratch,const gc_starter *starter,const gc_system *profile,const char **why);
 bool football_roster_refresh(FootballRoster *r,unsigned member);
 bool football_roster_assign(FootballRoster *r,unsigned slot,unsigned member);
