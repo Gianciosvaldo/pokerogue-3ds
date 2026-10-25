@@ -168,8 +168,8 @@ static void h_faint(void *user, const gc_run *r, const gc_custom_faint *f)
     n_faints++;
     n_direct += f->direct;
 }
-static const gc_custom_hooks hooks_all = {NULL, h_encounter, h_answer, h_built, h_faint};
-static const gc_custom_hooks hooks_faint_only = {NULL, NULL, NULL, NULL, h_faint};
+static const gc_custom_hooks hooks_all = {NULL, h_encounter, h_answer, h_built, h_faint, NULL};
+static const gc_custom_hooks hooks_faint_only = {NULL, NULL, NULL, NULL, h_faint, NULL};
 
 /* ---------------------------------------------------------------- 1. off is identical */
 static uint64_t play_hash(const char *seed, const gc_custom_hooks *hooks, int steps, int *waves)
@@ -246,7 +246,7 @@ static bool h_agree(void *user, const gc_run *r, const gc_custom_encounter *enc)
 }
 static void test_kind_agrees(void)
 {
-    static const gc_custom_hooks h = {NULL, h_agree, NULL, NULL, NULL};
+    static const gc_custom_hooks h = {NULL, h_agree, NULL, NULL, NULL, NULL};
     int w;
     for (int s = 0; s < 4; s++) {
         char seed[32];
