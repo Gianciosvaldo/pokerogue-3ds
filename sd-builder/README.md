@@ -4,6 +4,14 @@ One download and one double-click that put the game on a 3DS SD card, with nothi
 
 **The zip holds no Pokémon or PokeRogue content**, only the tool: the launcher, this folder's Python, the pipeline scripts, the Windows build of the audio encoder (183 KB) and the game app (`game/`: the 2.7 MB `.3dsx`, its stripped ELF, icon and HOME-menu banner, which is drawn by `tools/make_banner_art.py` from plain colours and a pixel font). The user's steps are in [`READ-ME-FIRST.txt`](READ-ME-FIRST.txt), which is also in the zip.
 
+## The project's own pictures (JoJo trainers)
+
+The JoJo challengers' sprites are not PokeRogue files and are not in Git. The builder packs any PNG it finds under
+`files/extra-images/` (next to `builder.py`) into `gfx.pak`, laid out like upstream's `images/` folder, so
+`files/extra-images/trainer/custom/kira.png` becomes the picture `images/trainer/custom/kira` that the game asks for. A file of
+the same name as an upstream picture replaces it. The folder's files are part of the packs' recipe, so adding or changing one
+re-runs the pictures step (the longest step with the music). Tested by `assets-pipeline/tests/extra_images_test.py`.
+
 ## October 24 battle fixes and football build
 
 This refresh includes the merged battle fixes through PR #396 and the custom

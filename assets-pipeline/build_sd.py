@@ -44,7 +44,18 @@ def _gfx_job(args):
         return rel, None, None, f"{type(e).__name__}: {e}"
 
 
-def build_gfx(assets, out_dir, jobs, report):
+def extra_pngs(extra):
+    """(path, rel) of every PNG under `extra`, laid out like assets/images (trainer/custom/kira.png), in sorted order."""
+    out = []
+    for d, _, files in walk(extra):
+        for f in files:
+            if f.endswith(".png"):
+                p = os.path.join(d, f)
+                out.append((p, os.path.relpath(p, extra).replace(os.sep, "/")))
+    return out
+
+
+def build_gfx(assets, out_dir, jobs, report, extra_images=None):
     root = os.path.join(assets, "images")
     anim_bgs = gfx.anim_backgrounds(assets)
     todo, variant_maps, skipped = [], [], []
@@ -61,6 +72,11 @@ def build_gfx(assets, out_dir, jobs, report):
                     skipped.append(rel)
             elif os.path.splitext(f)[1] in SKIP_IMAGE_EXT:
                 skipped.append(rel)
+    if extra_images:  # the project's own pictures (the JoJo trainers): they replace an upstream file of the same name
+        extra = extra_pngs(extra_images)
+        names = {rel for _, rel in extra}
+        todo = [t for t in todo if t[1] not in names] + [(p, rel, gfx.anim_bg_mode(rel, anim_bgs)) for p, rel in extra]
+        print(f"  gfx: {len(extra)} extra images from {extra_images}", flush=True)
     w = rpak.Writer(os.path.join(out_dir, "gfx.pak"))
     stats = {"entries": 0, "stored": 0, "raw": 0, "tex_bytes": 0, "errors": [], "multipage": [], "direct": 0,
              "rgba8": 0}
@@ -289,6 +305,7 @@ def main():
     ap.add_argument("--only", default="gfx,snd,bgm,font,data")
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 2)
     ap.add_argument("--encoder", help="path to a built tools/dspadpcm")
+    ap.add_argument("--extra-images", help="folder laid out like assets/images whose PNGs go into gfx.pak too (the JoJo trainers' images/trainer/custom/<id>.png)")
     ap.add_argument("--locales", help="checkout of pokerogue-locales (default: GAME/locales)")
     a = ap.parse_args()
     only = set(a.only.split(","))
@@ -297,7 +314,7 @@ def main():
     report_path = os.path.join(out_dir, "build-report.json")
     report = json.load(open(report_path)) if os.path.exists(report_path) else {}
     if "gfx" in only:
-        build_gfx(a.assets, out_dir, a.jobs, report)
+        build_gfx(a.assets, out_dir, a.jobs, report, a.extra_images)
     if "data" in only:
         loc = a.locales or (os.path.join(a.game, "locales") if a.game else None)
         build_data(a.assets, a.game, loc, out_dir, report)
