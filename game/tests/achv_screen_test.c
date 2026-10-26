@@ -114,7 +114,7 @@ int main(void) {
 
   /* the first page: the first seven names and the count */
   draw(1);
-  CHECK(has_text(1, "Achievements") && has_text(1, "0/60"), "title and count");
+  CHECK(has_text(1, "Achievements") && has_text(1, "0/68"), "title and count");
   CHECK(has_text(1, gc_achv_defs[0].name) && has_text(1, gc_achv_defs[6].name), "first seven rows");
   CHECK(!has_text(1, gc_achv_defs[7].name), "the eighth is on the next page");
   CHECK(has_text(1, "1 Egg Voucher"), "the reward of a row");
@@ -154,7 +154,7 @@ int main(void) {
   for (int i = 0; i < 17; i++) press(BTN_DOWN);
   draw(1);
   CHECK(has_text(1, "2/3"), "the Pillar Men set has 2 of 3");
-  CHECK(has_text(1, "3/60"), "three finished (Kars, Wamuu and Untouched: Kars fell with nobody fainted)");
+  CHECK(has_text(1, "3/68"), "three finished (Kars, Wamuu and Untouched: Kars fell with nobody fainted)");
   draw(0);
   CHECK(has_text(0, "Progress: 2/3"), "the top screen says the progress of a counting one");
   for (int i = 0; i < 7; i++) press(BTN_DOWN);

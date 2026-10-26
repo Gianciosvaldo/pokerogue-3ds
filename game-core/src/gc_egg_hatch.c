@@ -1,5 +1,6 @@
 /* EggLapsePhase / Egg.generatePlayerPokemon: isolated egg seed and profile rewards. */
 #include "internal.h"
+#include "gc/achv.h"
 
 bool gc_egg_generate(gc_run *run, const gc_egg *egg, gc_mon *out)
 {
@@ -57,6 +58,7 @@ int gc_system_hatch_ready_eggs(gc_run *run)
         gc_system_set_pokemon_caught_ex(sys,&mon,true,true,false,false,NULL);
         gc_system_update_species_dex_ivs(sys,mon.b.species,mon.b.ivs);
         sys->stats.total_hatches++;
+        gc_achv_egg_hatched(sys,egg.tier,mon.b.shiny);
         gc_event *reveal=gc_ev_new(run,GC_EV_EGG_HATCH);
         if(reveal){reveal->a=mon.b.species;reveal->b=mon.b.form;reveal->c=mon.b.gender;
             reveal->egg_tier=egg.tier;reveal->egg_shiny=mon.b.shiny;reveal->egg_variant=mon.variant;

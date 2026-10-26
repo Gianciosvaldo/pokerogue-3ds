@@ -1329,7 +1329,7 @@ static const sfield stat_milestone_fields[] = {
 static const sfield achv_progress_fields[] = {
     SF(gc_achv_progress, jojo_beaten), SF(gc_achv_progress, jojo_battles), SF(gc_achv_progress, jojo_clean),
     SF(gc_achv_progress, run_tag), SF(gc_achv_progress, run_jojo), SF(gc_achv_progress, best_run_jojo),
-    SF(gc_achv_progress, custom_wins), SF(gc_achv_progress, best_wave), SF(gc_achv_progress, feats),
+    SF(gc_achv_progress, custom_wins), SF(gc_achv_progress, best_wave), SF(gc_achv_progress, feats), SF(gc_achv_progress, hatch_feats),
 };
 
 static const sfield pity_fields[]={SF(gc_system, egg_pity),SF(gc_system, unlock_pity)};
