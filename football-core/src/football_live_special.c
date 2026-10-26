@@ -117,6 +117,7 @@ void football_live_special_finish(FootballLive *m,FootballResultKind kind,float 
     bool score=(rd>0 && x>=110) || (rd<0 && x<=10);
     if(kind==FB_RESULT_FUMBLE)conclude(m,ks,spot_for(ks,x),FB_EVENT_FUMBLE,x);
     else if(score){
+        football_live_credit(m,m->carrier,FB_CREDIT_TOUCHDOWN);
         m->return_yards=(int16_t)limit(roundf((x-m->catch_x)*rd),-100,100);
         settle(m,football_rules_touchdown(&m->rules,(FootballSide)rs,seconds),FB_EVENT_TOUCHDOWN,x,seconds);
     }

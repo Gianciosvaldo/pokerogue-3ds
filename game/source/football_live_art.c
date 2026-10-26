@@ -111,6 +111,14 @@ void football_live_art_top(FootballRenderer *r,const FootballCareer *c,const Foo
         float width=(float)strlen(line)*13;
         rect(200-width/2-14,96,width+28,36,.85f,navy);rect(200-width/2-14,96,width+28,3,.86f,gold);rect(200-width/2-14,129,width+28,3,.86f,gold);
         label(r,line,200-width/2,101,.8f,white);
+        /* Whoever made the play earns species candy for it. */
+        unsigned candy=0,member=22;
+        for(unsigned i=0;i<m->credit_count && i<4;++i)if(m->credits[i].side==FB_HOME){candy+=football_credit_candy(m->credits[i].kind);member=m->credits[i].member;}
+        if(candy && member<22){
+            char gain[48];snprintf(gain,sizeof gain,"%.14s  +%u CANDY",football_live_art_species(c->roster.mon[member].b.species),candy);
+            float gw=(float)strlen(gain)*7.5f;
+            rect(200-gw/2-10,136,gw+20,22,.85f,navy);rect(200-gw/2-10,136,gw+20,2,.86f,gold);label(r,gain,200-gw/2,140,.45f,gold);
+        }
     }
     C2D_DrawRectSolid(0,0,.8f,400,44,navy);C2D_DrawRectSolid(0,41,.81f,400,3,gold);
     char score[72],situation[72];unsigned seconds=m->rules.seconds_left;

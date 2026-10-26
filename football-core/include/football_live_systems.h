@@ -14,6 +14,8 @@ void football_live_move(FootballLiveActor *actor,float x,float y,bool sprint);
 /* Kick plays (football_live_special.c): formation, one fixed step, and the end of the dead ball. */
 void football_live_special_arrange(FootballLive *match);
 void football_live_special_step(FootballLive *match,FootballLiveInput input);
+/* Credit the actor (0..21) with a play: tallies it for the match and lists it for the dead ball. */
+void football_live_credit(FootballLive *match,unsigned actor,FootballCreditKind kind);
 /* The ball is dead and the rules ran: decide whether a try or a kickoff follows (football_live.c). */
 void football_live_after_play(FootballLive *match);
 /* The try after a touchdown ended (a kick or a play): rules, banner, then the kickoff. */

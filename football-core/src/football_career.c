@@ -26,10 +26,42 @@ bool football_career_start(FootballCareer *c)
             p.attributes.spd=(uint8_t)(spd>99?99:spd);p.attributes.str=(uint8_t)(str>99?99:str);c->live.units[0][c->mega]=p.attributes;
         }
     }
+    c->candy_plays=c->candy_team=c->seen_snaps=0;
     c->phase=FB_CAREER_MATCH;return true;
+}
+/* Starter candy is earned by the species the member started as. A career with no profile earns nothing. */
+static void give_candy(FootballCareer *c,unsigned member,unsigned amount)
+{
+    if(!c->profile || member>=22 || !amount)return;
+    c->candy_pending[member]+=amount;c->candy_plays+=amount;
+}
+unsigned football_career_flush_candy(FootballCareer *c)
+{
+    unsigned given=0;
+    if(!c || !c->profile)return 0;
+    for(unsigned i=0;i<22;++i){
+        unsigned amount=c->candy_pending[i];c->candy_pending[i]=0;
+        uint16_t species=amount?gc_species_root_for_starter(c->roster.mon[i].b.species):0;
+        if(species && gc_system_add_starter_candy(c->profile,species,(int32_t)amount))given+=amount;
+    }
+    return given;
+}
+/* The dead ball has just made its credits: the player behind each of the human team's plays is paid at once. */
+static void pay_credits(FootballCareer *c)
+{
+    const FootballLive *m=&c->live;
+    for(unsigned i=0;i<m->credit_count && i<4;++i)if(m->credits[i].side==FB_HOME)give_candy(c,m->credits[i].member,football_credit_candy(m->credits[i].kind));
+}
+/* Everyone on the team earns candy for the match, once, when it is over. */
+static void pay_match(FootballCareer *c,bool won)
+{
+    unsigned before=c->candy_plays;
+    for(unsigned i=0;i<22;++i)give_candy(c,i,FB_CANDY_PLAYED+(won?FB_CANDY_WIN:0));
+    c->candy_team=c->candy_plays-before;
 }
 static void shop(FootballCareer *c)
 {
+    pay_match(c,true);
     c->phase=FB_CAREER_SHOP;memset(c->sold,0,sizeof c->sold);c->prices[0]=125+25*c->round;c->prices[1]=c->prices[0];c->prices[2]=1000;c->stone_target=-1;c->stone_item=0;
     if((c->seed+c->round*7)%4==0)for(unsigned i=0;i<22;++i){prepare(c,i);int item=gc_football_mega_item(c->scratch,0);if(item>0 && !c->roster.mega_item[i]){c->stone_target=(int)i;c->stone_item=item;break;}}
 }
@@ -50,7 +82,12 @@ static bool award(FootballCareer *c)
 void football_career_tick(FootballCareer *c,unsigned ms,FootballLiveInput input)
 {
     if(!c)return;
-    if(c->phase==FB_CAREER_MATCH){football_live_tick(&c->live,ms,input);if(c->live.phase==FB_LIVE_END)c->phase=FB_CAREER_RESULT;return;}
+    if(c->phase==FB_CAREER_MATCH){
+        football_live_tick(&c->live,ms,input);
+        if(c->live.snaps!=c->seen_snaps){c->seen_snaps=c->live.snaps;pay_credits(c);}
+        if(c->live.phase==FB_LIVE_END)c->phase=FB_CAREER_RESULT;
+        return;
+    }
     if(c->phase!=FB_CAREER_EXP)return;
     gc_event event;while(gc_run_next_event(c->scratch,&event)){}
     gc_football_progress progress=gc_football_tick(c->scratch);
@@ -73,7 +110,7 @@ bool football_career_continue(FootballCareer *c)
 {
     if(!c)return false;
     if(c->phase==FB_CAREER_RESULT){
-        if(c->live.rules.winner!=FB_HOME){c->phase=FB_CAREER_END;return true;}
+        if(c->live.rules.winner!=FB_HOME){pay_match(c,false);c->phase=FB_CAREER_END;return true;}
         ++c->wins;c->wallet+=400+100*c->round;c->exp_member=0;c->phase=FB_CAREER_EXP;
         if(!award(c)){c->phase=FB_CAREER_ERROR;return false;}return true;
     }

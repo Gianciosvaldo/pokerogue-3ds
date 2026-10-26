@@ -75,7 +75,13 @@ int main(void)
     /* Returning mid-play preserves the last safe checkpoint; resume opens a playcall. */
     press(BTN_MENU);answer(4);assert(top==&title && speed==2);
     assert(football_screen_open(&args));game_screen=top;assert(career()->phase==FB_CAREER_MATCH && career()->live.phase==FB_LIVE_CALL);tick();assert(draws>0);
-    write_ok=false;press(BTN_MENU);answer(1);assert(top==game_screen);write_ok=true;press(BTN_MENU);answer(1);assert(top==&title);
+    /* Species candy waits for a checkpoint: a failed write leaves it pending, the saved one hands it to the profile. */
+    {
+        FootballCareer *w=(FootballCareer *)career();uint16_t root=gc_species_root_for_starter(w->roster.mon[3].b.species);int32_t had=profile.starters[root].candy_count;
+        w->candy_pending[3]=7;
+        write_ok=false;press(BTN_MENU);answer(1);assert(top==game_screen && w->candy_pending[3]==7 && profile.starters[root].candy_count==had);
+        write_ok=true;press(BTN_MENU);answer(1);assert(top==&title && !w->candy_pending[3] && profile.starters[root].candy_count==had+7);
+    }
     /* Special teams are the third page of the playcall: a punt is always there, a field goal only from inside range. */
     assert(football_screen_open(&args));game_screen=top;assert(career()->live.phase==FB_LIVE_CALL && career()->live.rules.offense==FB_HOME);
     tick();press(BTN_RIGHT);press(BTN_RIGHT);tick();assert(special_cards==2);
