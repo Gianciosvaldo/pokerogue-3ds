@@ -14,14 +14,29 @@
 #include <stdlib.h>
 #include <math.h>
 
-#include "battle_anim.h"
+#include <string.h>
 
-void* pak_read(const char* key, size_t* len) { return NULL; }
+#include "battle_anim.h"
+#include "pr_enums.h"
+
+/* a move's animation with one graphic, one background and one sound, for the preload test */
+static const char k_anim[] =
+    "{\"graphic\":\"G\",\"frames\":[[]],\"frameTimedEvents\":{\"0\":[{\"eventType\":\"AnimTimedAddBgEvent\",\"resourceName\":\"BG\"},"
+    "{\"eventType\":\"AnimTimedSoundEvent\",\"resourceName\":\"S.wav\"}]}}";
+static bool g_serve_anim;
+static int g_img_gets, g_sfx_preloads, g_drops;
+static size_t g_linear_free = (size_t)1 << 30;
+void* pak_read(const char* key, size_t* len) {
+  if (!g_serve_anim) return NULL;
+  *len = strlen(k_anim);
+  return strdup(k_anim);
+}
 static rr_frame g_frame = {NULL, 0, 0, 40, 40, 0, 0, 96, 96};
-rr_atlas* img_get(const char* key) { return (rr_atlas*)&g_frame; }
+rr_atlas* img_get(const char* key) { g_img_gets++; return (rr_atlas*)&g_frame; }
 const rr_frame* img_frame(const char* key, const char* frame) { return &g_frame; }
-void img_drop_prefix(const char* prefix) {}
-bool snd_sfx_preload(const char* key) { return true; }
+void img_drop_prefix(const char* prefix) { if (!strcmp(prefix, "images/battle_anims/")) g_drops++; }
+rr_stats rr_get_stats(void) { rr_stats s = {0}; s.linear_free = g_linear_free; return s; }
+bool snd_sfx_preload(const char* key) { g_sfx_preloads++; return true; }
 bool snd_sfx_play_ex(const char* key, float v, float r) { return true; }
 float snd_sfx_seconds(const char* key) { return 0.5f; }
 void rr_set_blend(rr_blend b) {}
@@ -84,9 +99,38 @@ static void test_anim_apply_tone_gray(void) {
   printf("test_anim_apply_tone_gray PASSED\n");
 }
 
+/* Preloading the animations of a party's moves must leave the texture memory the Pokemon's sprites need: with 8 MB or more free it loads
+ * the graphic, the background and the sound, and with less it loads nothing (they load when the move plays). */
+static void test_preload_leaves_room(void) {
+  g_serve_anim = true;
+  g_linear_free = (size_t)64 << 20;
+  g_img_gets = g_sfx_preloads = 0;
+  ba_preload_move(MOVE_ID_TACKLE);
+  assert(g_img_gets == 2 && g_sfx_preloads == 1);
+
+  ba_drop_moves();
+  g_linear_free = ((size_t)8 << 20) - 1;
+  g_img_gets = g_sfx_preloads = 0;
+  ba_preload_move(MOVE_ID_TACKLE);
+  assert(g_img_gets == 0 && g_sfx_preloads == 0);
+
+  g_linear_free = (size_t)8 << 20;
+  ba_preload_move(MOVE_ID_TACKLE);
+  assert(g_img_gets == 2 && g_sfx_preloads == 1);
+
+  /* the idle animation images can be freed for a sprite, and are not while one plays */
+  g_drops = 0;
+  assert(!ba_active() && ba_release_graphics() && g_drops == 1);
+
+  ba_drop_moves();
+  g_serve_anim = false;
+  printf("test_preload_leaves_room PASSED\n");
+}
+
 int main(void) {
   test_anim_get_target_is_substitute();
   test_anim_apply_tone_gray();
+  test_preload_leaves_room();
   printf("All animation detail tests passed successfully.\n");
   return 0;
 }

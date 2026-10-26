@@ -46,6 +46,9 @@ typedef enum { BA_LAYER_BELOW_ENEMY, BA_LAYER_MID, BA_LAYER_TOP } ba_layer;
 void ba_preload_move(int move);
 /* Frees the move and charge animations and their images (common animations stay). */
 void ba_drop_moves(void);
+/* Frees the animation images that nothing is playing, for texture memory a Pokemon's sprite needs. They load again when a move
+ * plays. Does nothing, and returns false, while an animation plays. */
+bool ba_release_graphics(void);
 
 /* Starts an animation: kind and id (MoveId, CommonAnim or ChargeAnim), the user's and the
  * target's battler index (target < 0: the user), the field. Returns false when nothing plays

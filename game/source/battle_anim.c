@@ -240,20 +240,27 @@ static void sound_key(const char* res, char* out, int n) {
   if (dot && !strchr(dot, '/')) *dot = 0;
 }
 
+/* A preload is a guess at which moves will play. A party of six and their foes can name moves whose images come to more than the 32 MB
+ * of texture memory, and the Pokemon's sprites (one sheet is up to 3 MB in one piece) load after them; a sprite that finds no room is
+ * not drawn. So once less than this is free the rest are left to load when they play. */
+#define PRELOAD_KEEP_FREE ((size_t)8 << 20)
+
+static bool preload_has_room(void) { return rr_get_stats().linear_free >= PRELOAD_KEEP_FREE; }
+
 static void preload_config(const anim_config* c) {
   if (!c) return;
   char k[128];
-  if (c->graphic[0]) {
+  if (c->graphic[0] && preload_has_room()) {
     graphic_key(c->graphic, k, sizeof k);
     img_get(k);
   }
   for (int i = 0; i < c->n_events; i++) {
     const anim_event* e = &c->ev[i];
     if (!e->res[0]) continue;
-    if (e->type == EV_ADD_BG) {
+    if (e->type == EV_ADD_BG && preload_has_room()) {
       graphic_key(e->res, k, sizeof k);
       img_get(k);
-    } else if (e->type == EV_SOUND) {
+    } else if (e->type == EV_SOUND && preload_has_room()) {
       sound_key(e->res, k, sizeof k);
       snd_sfx_preload(k);
     }
@@ -278,6 +285,12 @@ void ba_drop_moves(void) {
   }
   g_nfiles = k;
   img_drop_prefix("images/battle_anims/");
+}
+
+bool ba_release_graphics(void) {
+  if (ba_active()) return false;
+  img_drop_prefix("images/battle_anims/");
+  return true;
 }
 
 /* ------------------------------------------------------------------ playing */

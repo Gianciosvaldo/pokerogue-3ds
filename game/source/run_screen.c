@@ -403,7 +403,6 @@ static void wave_black(void* arg) {
   img_drop_prefix("images/trainer/");
   if (!G.next_encounter) img_drop_prefix("images/arenas/"); /* the same biome's platforms are still on screen, sliding out */
   ba_drop_moves();
-  preload_moves();
   bgm_on_wave(&G.run, (int)w->a, (int)w->b, (int)w->c); /* at black: the music starts here, never while something moves */
   ps_set_run(&G.run); /* the summary's ID No. and where each Pokemon was met */
 
@@ -444,6 +443,8 @@ static void wave_black(void* arg) {
   if(G.run.double_battle&&G.present[2]&&G.shown_ally>=0){s.player_ally=*bv_mon_of(1);s.player_ally_present=true;}
   if(!trainer&&!mystery&&!offer&&G.run.double_battle&&G.run.n_enemy>1&&(!loaded||(G.run.bt.field[3]&&G.run.bt.field[3]->on_field&&G.run.bt.field[3]->hp>0)))s.enemy_ally=make_mon(&G.run.enemy[1],false);
   bv_begin(&s);
+  /* after the Pokemon's sprites, which need texture memory in big pieces: the preload is only a guess at what will play */
+  preload_moves();
   refresh_item_bars();
   G.present[0] = s.player_present;
   G.present[1] = !trainer && !mystery && !offer && s.enemy.species > 0;
