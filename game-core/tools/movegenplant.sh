@@ -1,10 +1,14 @@
 #!/bin/sh
 # The moveset generator: show the comparator can fail. Replays one trace (from tools/movegendiff.sh) through copies of game-core,
 # each with one line of src/gc_movegen.c changed, and prints each one's totals. Every copy must exit 1.
+# The bosses (the trace's B and F records) have their own: the pool filters, the weight, the passive.
 # Not planted, because no trace reaches them: DefAtkAttr (Body Press is in no wild level pool), Weather Ball's sandstorm type (no Rock/Ground learner).
-# Usage: tools/movegenplant.sh <trace>
+# A plant counts as caught when any of the traces fails (a few of them need a particular roll, which one seed may not reach).
+# Usage: tools/movegenplant.sh <trace> [<trace>...]
 set -e
-TRACE=$(CDPATH= cd -- "$(dirname "${1:?trace}")" && pwd)/$(basename "$1")
+: "${1:?trace}"
+TRACES=""
+for t in "$@"; do TRACES="$TRACES $(CDPATH= cd -- "$(dirname "$t")" && pwd)/$(basename "$t")"; done
 HERE=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 ROOT=$(CDPATH= cd -- "$HERE/.." && pwd)
 WORK=${WORK:-/tmp/game-core-movegen-plant}
@@ -19,8 +23,13 @@ plant() {
   n=$(diff "$HERE/src/$FILE" "$W/game-core/src/$FILE" | grep -c '^>' || true)
   [ "$n" = 1 ] || { echo "$NAME: the change didn't apply ($n lines)"; exit 2; }
   make -s -j2 -C "$W/game-core" BUILD="$W/build" "$W/build/movegen_diff_test" >/dev/null 2>&1
-  st=0; "$W/build/movegen_diff_test" "$TRACE" >"$W/out.txt" 2>&1 || st=$?
-  echo "$NAME: exit $st, $(grep '^TOTAL' "$W/out.txt")"
+  st=0; tot=""
+  for TRACE in $TRACES; do
+    s1=0; "$W/build/movegen_diff_test" "$TRACE" >"$W/out.txt" 2>&1 || s1=$?
+    tot="$tot $(grep '^TOTAL' "$W/out.txt" | tr -d '\n')"
+    [ "$s1" = 1 ] && st=1
+  done
+  echo "$NAME: exit $st,$tot"
   total=$((total + 1))
   [ "$st" = 1 ] || fails=$((fails + 1))
 }
@@ -46,5 +55,18 @@ plant gender-row-ignored 's/if (c->p.gender == 0 || c->p.gender == 1) alt = find
 plant neuroforce-threshold 's/>= 2) \*power_mult = 1.25;/> 2) *power_mult = 1.25;/'
 plant sketch-count 's/for (int i = 0; i < 4; i++) c.moves\[i\] = MOVE_ID_SKETCH;/for (int i = 0; i < 3; i++) c.moves[i] = MOVE_ID_SKETCH;/'
 plant weather-ball-rain 's/case WEATHER_TYPE_RAIN: case WEATHER_TYPE_HEAVY_RAIN: type = POKEMON_TYPE_WATER; break;/case WEATHER_TYPE_RAIN: case WEATHER_TYPE_HEAVY_RAIN: type = POKEMON_TYPE_GRASS; break;/'
+plant boss-weight-extra 's/if (c.boss) weight_multiplier += gc_mg_const.boss_extra_weight_multiplier;/if (0) weight_multiplier += gc_mg_const.boss_extra_weight_multiplier;/'
+plant boss-superceded 's/if (c.boss) filter_superceded(&pool);/if (0) filter_superceded(\&pool);/'
+plant boss-singles-only 's/((c->single \&\& sorted_has(/((!c->single \&\& sorted_has(/'
+plant boss-level-denylist 's/c->p.level >= gc_mg_const.level_based_denylist_threshold/c->p.level > gc_mg_const.level_based_denylist_threshold/'
+plant boss-worse-stat 's/denied >= 0 \&\& matches_offensive_category(move, denied)/denied > 0 \&\& matches_offensive_category(move, denied)/'
+plant boss-pain-split 's/drop = mg_flag(move, GC_MGF_SACRIFICIAL | GC_MGF_HP_SPLIT)/drop = mg_flag(move, GC_MGF_SACRIFICIAL)/'
+plant boss-terrain-setter 's/(mg_flag(move, GC_MGF_TERRAIN_CHANGE) \&\& block_terrain)/(mg_flag(move, GC_MGF_TERRAIN_CHANGE) \&\& 0)/'
+plant boss-gorilla-tactics 's/|| (gorilla \&\& pr_moves\[move\].category == MOVE_CATEGORY_STATUS);/|| (0 \&\& gorilla \&\& pr_moves[move].category == MOVE_CATEGORY_STATUS);/'
+plant boss-soft-fallback 's/if (pool.n == 0 \&\& unfiltered.n > 0) {/if (0 \&\& pool.n == 0 \&\& unfiltered.n > 0) {/'
+plant boss-passive-ignored 's/c->passive = pr_has_passive(&c->bt, &c->p) ? c->p.passive : 0;/c->passive = 0;/'
+plant boss-passive-same-ability 's/if (c->passive \&\& c->passive != c->ability) {/if (c->passive) {/'
+plant boss-passive-weather-ball 's/w = gc_mg_abilities\[c->passive\].summon_weather;   \/\*/w = w;   \/*/'
+plant boss-levitate-terrain 's/|| ((mg_bits_of(ab) \& GC_MGA_TERRAIN_SUMMON) \&\& (mg_ability_is(c, ABILITY_ID_LEVITATE)/|| ((mg_bits_of(ab) \& GC_MGA_TERRAIN_SUMMON) \&\& (0 \&\& mg_ability_is(c, ABILITY_ID_LEVITATE)/'
 [ "$fails" = 0 ] || { echo "$fails of $total planted bug(s) not caught"; exit 1; }
 echo "all $total planted bugs caught"

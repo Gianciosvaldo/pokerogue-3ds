@@ -28,7 +28,7 @@ static int bad, shown;
 
 typedef struct { int species, form, level, ability_index, gender, nature, ivs[6]; } shape;
 
-static void make_mon(gc_mon *m, const shape *s, int weather)
+static void make_mon(gc_mon *m, const shape *s, int weather, int segments)
 {
     pr_enemy_gen g;
     memset(&g, 0, sizeof g);
@@ -41,6 +41,7 @@ static void make_mon(gc_mon *m, const shape *s, int weather)
     g.nature = s->nature;
     g.friendship = -1;
     run.bt.weather = (uint8_t)weather;
+    g.boss_segments = segments;
     gc_mon_new_enemy(&run, m, s->species, s->level, &g, 0);
 }
 
@@ -56,6 +57,9 @@ int main(int argc, char **argv)
     run.sys = &sys;
     run.wave = 45;
 
+    int boss_cases = 0, boss_moves = 0, boss_powers = 0;
+    gc_mon last_boss;
+    bool have_boss = false;
     int cases = 0, unsupported = 0, moves_checked = 0, powers_checked = 0, e_cases = 0, sig = 0, four = 0;
     static int by_weather[10];
     while (fscanf(f, " %c", &c) == 1) {
@@ -79,7 +83,7 @@ int main(int argc, char **argv)
             by_weather[weather]++;
 
             gc_mon m;
-            make_mon(&m, &s, weather);
+            make_mon(&m, &s, weather, 0);
             if (forced >= 0) m.b.base_ability = m.b.ability = (uint16_t)forced;   /* customPokemonData.ability */
             CHECK(m.b.ability == ability, "case %d: species %d form %d ability slot %d is %d, upstream %d", idx, s.species, s.form, s.ability_index, m.b.ability, ability);
             (void)forced;
@@ -102,6 +106,68 @@ int main(int argc, char **argv)
             for (int k = 0; k < 6; k++) CHECK(m.b.stats[k] == stats[k], "case %d: stat %d is %d, upstream %d", idx, k, m.b.stats[k], stats[k]);
             if (n == 4) four++;
             (void)sig;
+        } else if (c == 'B') {
+            /* a boss: the same, plus its boss segments, the passive forced on it (-1 none) and the one it has, and a double battle */
+            shape s;
+            const int idx = (int)integer();
+            s.species = (int)integer(); s.form = (int)integer(); s.level = (int)integer(); s.ability_index = (int)integer();
+            const int forced = (int)integer(), ability = (int)integer();
+            s.gender = (int)integer(); s.nature = (int)integer();
+            for (int k = 0; k < 6; k++) s.ivs[k] = (int)integer();
+            const int weather = (int)integer(), offset = (int)integer();
+            char seed_text[64];
+            word(seed_text, sizeof seed_text);
+            const int segments = (int)integer(), forced_passive = (int)integer(), passive = (int)integer(), dbl = (int)integer();
+            int stats[6], n, up_moves[4] = {0};
+            for (int k = 0; k < 6; k++) stats[k] = (int)integer();
+            n = (int)integer();
+            for (int k = 0; k < n && k < 4; k++) up_moves[k] = (int)integer();
+            const int d1 = (int)integer(), d2 = (int)integer();
+            boss_cases++;
+            by_weather[weather]++;
+
+            gc_mon m;
+            make_mon(&m, &s, weather, segments);
+            if (forced >= 0) m.b.base_ability = m.b.ability = (uint16_t)forced;
+            m.b.custom_passive = (int16_t)forced_passive;
+            run.double_battle = dbl != 0;
+            CHECK(m.b.ability == ability, "boss %d: species %d form %d ability slot %d is %d, upstream %d", idx, s.species, s.form, s.ability_index, m.b.ability, ability);
+            pr_battle bt;
+            memset(&bt, 0, sizeof bt);
+            bt.game_mode = run.run.mode;
+            bt.wave_index = run.wave;
+            CHECK(pr_has_passive(&bt, &m.b) && pr_get_passive_ability(&m.b) == passive, "boss %d: species %d passive %d, upstream %d", idx, s.species, pr_get_passive_ability(&m.b), passive);
+            pr_seedstr seed;
+            pr_seed_from_ascii(&seed, seed_text);
+            pr_rng r = pr_run_seed_offset_rng(&run.run, offset, &seed);
+            if (!gc_generate_moveset(&run, &r, &m)) {
+                unsupported++;
+                if (getenv("MG_VERBOSE")) fprintf(stderr, "unsupported boss: case %d species %d form %d level %d\n", idx, s.species, s.form, s.level);
+                continue;
+            }
+            const int e1 = pr_rng_seed_int(&r, 1000000, 0), e2 = pr_rng_seed_int(&r, 1000000, 0);
+            CHECK(m.b.n_moves == n, "boss %d: species %d form %d level %d: %d moves, upstream %d", idx, s.species, s.form, s.level, m.b.n_moves, n);
+            for (int k = 0; k < n && k < 4; k++) {
+                boss_moves++;
+                CHECK(m.b.moves[k] == up_moves[k], "boss %d: species %d form %d level %d ability %d passive %d weather %d double %d: move %d is %d, upstream %d", idx, s.species, s.form, s.level, ability, passive, weather, dbl, k, m.b.moves[k], up_moves[k]);
+            }
+            CHECK(e1 == d1 && e2 == d2, "boss %d: species %d level %d: the RNG afterwards gives %d %d, upstream %d %d", idx, s.species, s.level, e1, e2, d1, d2);
+            pr_calculate_stats(&run.bt, &m.b);
+            for (int k = 0; k < 6; k++) CHECK(m.b.stats[k] == stats[k], "boss %d: stat %d is %d, upstream %d", idx, k, m.b.stats[k], stats[k]);
+            run.double_battle = false;
+            last_boss = m;
+            have_boss = true;
+        } else if (c == 'F') {
+            /* the effective powers of the boss just made: its passive's attributes apply after its ability's */
+            const int idx = (int)integer(), n = (int)integer();
+            static uint16_t moves[1024];
+            static double up[1024], got[1024];
+            for (int k = 0; k < n; k++) { moves[k] = (uint16_t)integer(); up[k] = real(); }
+            if (!have_boss || !gc_mg_effective_powers(&run, &last_boss, moves, n, got)) { unsupported++; continue; }
+            for (int k = 0; k < n; k++) {
+                boss_powers++;
+                CHECK(got[k] == up[k], "boss %d: species %d ability %d passive %d: move %d power %.17g, upstream %.17g", idx, last_boss.b.species, last_boss.b.ability, last_boss.b.custom_passive, moves[k], got[k], up[k]);
+            }
         } else if (c == 'E') {
             shape s;
             const int idx = (int)integer();
@@ -116,7 +182,7 @@ int main(int argc, char **argv)
             static double up[1024], got[1024];
             for (int k = 0; k < n; k++) { moves[k] = (uint16_t)integer(); up[k] = real(); }
             gc_mon m;
-            make_mon(&m, &s, weather);
+            make_mon(&m, &s, weather, 0);
             m.b.base_ability = m.b.ability = (uint16_t)ability;
             e_cases++;
             if (!gc_mg_effective_powers(&run, &m, moves, n, got)) { unsupported++; continue; }
@@ -129,6 +195,7 @@ int main(int argc, char **argv)
             return 2;
         }
     }
+    printf("movegen bosses: %d movesets (%d moves), %d effective powers\n", boss_cases, boss_moves, boss_powers);
     printf("movegen: %d movesets (%d with four moves, %d moves), %d effective-power records (%d powers), %d unsupported, weathers", cases, four, moves_checked, e_cases, powers_checked, unsupported);
     for (int w = 0; w < 10; w++) printf(" %d", by_weather[w]);
     printf("\nTOTAL %d\n", bad);

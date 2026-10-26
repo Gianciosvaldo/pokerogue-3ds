@@ -1,17 +1,24 @@
-/* generateMoveset (src/ai/ai-moveset-gen.ts @ 8555c08) for a wild Pokemon that is neither a boss nor a trainer's, with no
- * passive and no fusion: what every Pokemon of a mystery encounter (the Global Trade System's, the Salesman's) and, one day,
- * of a wild wave is made with. What a trainer's or a boss's moveset adds (TM and egg moves, the superceded and forbidden
- * lists, the weight bumps, instant Tera) is not here: gc_generate_moveset says so and leaves the Pokemon alone.
+/* generateMoveset (src/ai/ai-moveset-gen.ts @ 8555c08) for a wild Pokemon, a boss included, that has no trainer and no fusion: what
+ * every Pokemon of a mystery encounter (the Global Trade System's, the Salesman's, the Dark Deal boss) is made with. A boss adds
+ * to the steps below: its pool drops a move that a better move of the pool makes redundant (SUPERCEDED_MOVES), then Pain Split,
+ * the self-KO moves, the doubles-only moves in singles, the level-based denylist from level 70, the moves of the offensive
+ * category its species must not use, weather or terrain setters when its ability or passive sets one and status moves under
+ * Gorilla Tactics (and when that leaves nothing, the unfiltered pool again without the soft blocklists); its weights are raised
+ * to 2 instead of 1.6; and a boss has its passive, whose attributes act after its ability's wherever the generator reads
+ * abilities. What a trainer's moveset adds (TM and egg moves, the weight bumps, instant Tera) is not here: gc_generate_moveset
+ * says so and leaves the Pokemon alone. An ability and a passive whose effects depend on each other (a move-type changer next
+ * to a type-conditional power ability) are not modelled: no species has such a pair, checked by the differential on every
+ * species, form and ability slot.
  *
  * Step by step, with the order upstream draws from the RNG:
  *  1. the level pool: getLevelMoves({startingLevel: 1, includeEvolutionMoves, includePrevolutionMoves}) in its own order, up
  *     to the Pokemon's level, each move once, unimplemented moves left out; the weight is the earliest level + 20, an
  *     evolution move 60, a level 1 move of power 70 or more ("move reminder") 50;
- *  2. filterMovePool: only Memento-like moves (SacrificialAttrOnHit) go for a wild Pokemon;
+ *  2. filterMovePool: only Memento-like moves (SacrificialAttrOnHit) go for a wild Pokemon (and a boss's lists, above);
  *  3. adjustDamageMoveWeights: each damaging move's weight x clamp(effective power / the highest (40 to 120), 1/4, 1), and
  *     the ones that use the lower of Attack and Special Attack are scaled by min((lower/higher)^3 * 2, 1) (Body Press by
  *     min((Defense/higher)^3 * 1.3, 1.1)); effective power is Move.calculateEffectivePower with the Pokemon's ability;
- *  4. every weight becomes ceil(weight^1.6 * 100);
+ *  4. every weight becomes ceil(weight^1.6 * 100) (^2 for a boss);
  *  5. forceSignatureMove (a 60% coin, randSeedInt(100), only when a signature move is in the pool; randSeedItem for a list)
  *     and, unless that gave a damaging move of one of the Pokemon's types, forceStabMove (randSeedInt(total) over the STAB
  *     moves, walking with rand > weight);
@@ -52,6 +59,8 @@ typedef struct {
     int8_t types[PR_MAX_TYPES];
     int n_types;
     uint16_t ability;           /* getAbility() */
+    uint16_t passive;           /* getPassiveAbility() when hasPassive() (a boss), else 0 */
+    bool boss, single;          /* isBoss(), and the current battle is not a double battle */
     uint16_t moves[4];          /* the moveset so far */
     int n_moves;
 } mg_ctx;
@@ -63,10 +72,16 @@ static bool mg_has_type(const mg_ctx *c, int type)
     for (int i = 0; i < c->n_types; i++) if (c->types[i] == type) return true;
     return false;
 }
-static bool mg_ability_is(const mg_ctx *c, int id) { return c->p.base_ability == id; }
+/* hasAbility(id): the ability or, with a passive, the passive */
+static bool mg_ability_is(const mg_ctx *c, int id) { return c->p.base_ability == id || (c->passive && c->passive == id); }
+static uint16_t mg_bits_of(int ability)
+{
+    return (unsigned)ability < (unsigned)gc_mg_ability_count ? gc_mg_abilities[ability].bits : 0;
+}
+/* hasAbilityWithAttr: the ability's attributes or the passive's */
 static uint16_t mg_ab_bits(const mg_ctx *c)
 {
-    return c->ability < (unsigned)gc_mg_ability_count ? gc_mg_abilities[c->ability].bits : 0;
+    return (uint16_t)(mg_bits_of(c->ability) | (c->passive ? mg_bits_of(c->passive) : 0));
 }
 
 /* ---- Move.calculateEffectivePower(pokemon) ---- */
@@ -88,11 +103,10 @@ static const gc_mg_pow *find_pow(int ability, int move, int dim, int val)
 }
 
 /* effectivePowerAbilityCheck: what the Pokemon's ability does to this move's power and accuracy */
-static void ability_stats(mg_ctx *c, int move, double *power_mult, double *acc_mult)
+static void ability_stats_of(mg_ctx *c, int move, int ab, double *power_mult, double *acc_mult)
 {
     *power_mult = 1;
     *acc_mult = 1;
-    const int ab = c->ability;
     if (ab == ABILITY_ID_NEUROFORCE) {
         /* MovePowerBoostAbAttr((user, target, move) => target.getMoveEffectiveness(user, move) >= 2, 1.25), target = the user */
         if (pr_get_move_effectiveness(&c->bt, &c->p, &c->p, move) >= 2) *power_mult = 1.25;
@@ -102,7 +116,10 @@ static void ability_stats(mg_ctx *c, int move, double *power_mult, double *acc_m
     const gc_mg_pow *alt = NULL;
     if (c->p.gender == 0 || c->p.gender == 1) alt = find_pow(ab, 0, 2, c->p.gender);
     if (!alt && c->bt.weather) alt = find_pow(ab, move, 1, c->bt.weather);
-    if (!alt && mg_has_type(c, POKEMON_TYPE_FLYING)) alt = find_pow(ab, move, 3, 1);
+    /* the terrain summoners' boost is off for a Pokemon that is Flying or has Levitate or Eelevate (as ability or passive) */
+    if (!alt && (mg_has_type(c, POKEMON_TYPE_FLYING)
+                 || ((mg_bits_of(ab) & GC_MGA_TERRAIN_SUMMON) && (mg_ability_is(c, ABILITY_ID_LEVITATE) || mg_ability_is(c, ABILITY_ID_EELEVATE)))))
+        alt = find_pow(ab, move, 3, 1);
     if (!alt && mg_flag(move, GC_MGF_VARIABLE_TYPE)) {
         const int type = pr_get_move_type(&c->bt, &c->p, move);
         if (type != pr_moves[move].type) alt = find_pow(ab, move, 4, type);
@@ -111,6 +128,19 @@ static void ability_stats(mg_ctx *c, int move, double *power_mult, double *acc_m
     if (row) {
         *power_mult = row->power_mult;
         *acc_mult = row->acc_mult;
+    }
+}
+
+/* applyAbAttrs runs the ability's attributes and then the passive's on the same holders, which they multiply */
+static void ability_stats(mg_ctx *c, int move, double *power_mult, double *acc_mult)
+{
+    ability_stats_of(c, move, c->ability, power_mult, acc_mult);
+    /* applySingleAbAttrs skips a passive that is the same ability as the active one */
+    if (c->passive && c->passive != c->ability) {
+        double pm, am;
+        ability_stats_of(c, move, c->passive, &pm, &am);
+        *power_mult *= pm;
+        *acc_mult *= am;
     }
 }
 
@@ -151,7 +181,9 @@ static int movegen_type(mg_ctx *c, int move)
         break;
     case GC_MGV_WEATHER_BALL: {
         /* the weather the Pokemon's own ability summons (getAbilityAttrs("PostSummonWeatherChangeAbAttr").at(-1)) */
-        const int w = c->ability < (unsigned)gc_mg_ability_count ? gc_mg_abilities[c->ability].summon_weather : -1;
+        int w = (unsigned)c->ability < (unsigned)gc_mg_ability_count ? gc_mg_abilities[c->ability].summon_weather : -1;
+        if (c->passive && (unsigned)c->passive < (unsigned)gc_mg_ability_count && gc_mg_abilities[c->passive].summon_weather >= 0)
+            w = gc_mg_abilities[c->passive].summon_weather;   /* .at(-1): the passive's attribute comes last */
         switch (w) {
         case WEATHER_TYPE_SUNNY: case WEATHER_TYPE_HARSH_SUN: type = POKEMON_TYPE_FIRE; break;
         case WEATHER_TYPE_RAIN: case WEATHER_TYPE_HEAVY_RAIN: type = POKEMON_TYPE_WATER; break;
@@ -416,6 +448,75 @@ static void fill_remaining(mg_ctx *c, pr_rng *rng, mg_pool *base)
     }
 }
 
+/* ---- the boss's pool: filterSupercededMoves and filterMovePool ---- */
+
+static bool sorted_has(const uint16_t *list, int n, int move)
+{
+    int lo = 0, hi = n - 1;
+    while (lo <= hi) {
+        const int mid = (lo + hi) / 2;
+        if (list[mid] == move) return true;
+        if (list[mid] < move) lo = mid + 1; else hi = mid - 1;
+    }
+    return false;
+}
+
+/* filterSupercededMoves(pool): a move goes when any move that supercedes it is in the pool as it stood before the filter */
+static void filter_superceded(mg_pool *p)
+{
+    bool del[MG_POOL_MAX] = {false};
+    for (int i = 0; i < p->n; i++) {
+        int lo = 0, hi = gc_mg_superceded_count - 1;
+        const gc_mg_superceded *row = NULL;
+        while (lo <= hi) {
+            const int mid = (lo + hi) / 2;
+            if (gc_mg_supercededs[mid].move == p->e[i].move) { row = &gc_mg_supercededs[mid]; break; }
+            if (gc_mg_supercededs[mid].move < p->e[i].move) lo = mid + 1; else hi = mid - 1;
+        }
+        if (!row) continue;
+        for (int k = 0; k < row->n; k++)
+            if (pool_find(p, gc_mg_superceded_moves[row->first + k]) >= 0) { del[i] = true; break; }
+    }
+    int out = 0;
+    for (int i = 0; i < p->n; i++) if (!del[i]) p->e[out++] = p->e[i];
+    p->n = out;
+}
+
+/* getSpeciesDeniedOffensiveStat(species, form): the MoveCategory the species must not generate, or -1 */
+static int denied_offensive_stat(const mg_ctx *c)
+{
+    for (int i = 0; i < gc_mg_offstat_count; i++)
+        if (gc_mg_offstats[i].species == c->p.species && (gc_mg_offstats[i].form < 0 || gc_mg_offstats[i].form == c->p.form))
+            return gc_mg_offstats[i].stat;
+    return -1;
+}
+
+/* filterMovePool(pool, isBoss, hasTrainer = false, pokemon, ignoreSoftBlocklists) */
+static void filter_move_pool(const mg_ctx *c, mg_pool *p, bool ignore_soft)
+{
+    const uint16_t bits = mg_ab_bits(c);
+    const bool block_weather = (bits & (GC_MGA_WEATHER_CHANGE | GC_MGA_SUPPRESS_WEATHER)) != 0;
+    const bool block_terrain = (bits & GC_MGA_TERRAIN_SUMMON) != 0, gorilla = (bits & GC_MGA_GORILLA_TACTICS) != 0;
+    const int denied = c->boss ? denied_offensive_stat(c) : -1;
+    int out = 0;
+    for (int i = 0; i < p->n; i++) {
+        const int move = p->e[i].move;
+        bool drop = p->e[i].w <= 0 || pr_moves[move].unimplemented || mg_flag(move, GC_MGF_SACRIFICIAL_ON_HIT);
+        if (!drop && c->boss) {
+            const bool soft = !ignore_soft
+                && ((c->single && sorted_has(gc_mg_forbidden_singles, gc_mg_forbidden_singles_count, move))
+                    || (c->p.level >= gc_mg_const.level_based_denylist_threshold && sorted_has(gc_mg_level_denylist, gc_mg_level_denylist_count, move))
+                    || (pr_moves[move].category != MOVE_CATEGORY_STATUS && !sorted_has(gc_mg_offstat_exempt, gc_mg_offstat_exempt_count, move)
+                        && denied >= 0 && matches_offensive_category(move, denied)));
+            drop = mg_flag(move, GC_MGF_SACRIFICIAL | GC_MGF_HP_SPLIT) || soft
+                || (mg_flag(move, GC_MGF_WEATHER_CHANGE) && block_weather) || (mg_flag(move, GC_MGF_TERRAIN_CHANGE) && block_terrain)
+                || (gorilla && pr_moves[move].category == MOVE_CATEGORY_STATUS);
+        }
+        if (!drop) p->e[out++] = p->e[i];
+    }
+    p->n = out;
+}
+
 /* ---- generateMoveset ---- */
 
 /* the constructor's view of the Pokemon: before enemy items and summon effects, on a battle that has only the arena's weather */
@@ -429,8 +530,10 @@ static bool ctx_init(mg_ctx *c, const gc_run *run, const gc_mon *m)
     c->p = m->b;
     pr_update_passive(&c->bt, &c->p);
     pr_calculate_stats(&c->bt, &c->p);
-    if (pr_has_passive(&c->bt, &c->p)) return false;
     c->ability = c->p.ability;
+    c->passive = pr_has_passive(&c->bt, &c->p) ? c->p.passive : 0;
+    c->boss = m->b.is_boss;
+    c->single = !run->double_battle;
     c->n_types = pr_get_types(&c->p, c->types, 0);
     return true;
 }
@@ -445,7 +548,7 @@ bool gc_mg_effective_powers(gc_run *run, const gc_mon *m, const uint16_t *moves,
 
 bool gc_generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m)
 {
-    if (m->b.has_trainer || m->trainer_slot || m->b.is_boss || m->b.fusion_species || run->run.has_challenges) return false;
+    if (m->b.has_trainer || m->trainer_slot || m->b.fusion_species || run->run.has_challenges) return false;
     if (!gc_species(m->b.species)) return false;
 
     static mg_ctx c;   /* ~the stack of a 3DS thread is 32 KB: the pools are too big for it */
@@ -484,9 +587,16 @@ bool gc_generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m)
             pool.e[pool.n].move = (uint16_t)id;
             pool.e[pool.n++].w = weight;
         }
-        /* 2. filterMovePool */
-        for (int i = pool.n - 1; i >= 0; i--)
-            if (pool.e[i].w <= 0 || pr_moves[pool.e[i].move].unimplemented || mg_flag(pool.e[i].move, GC_MGF_SACRIFICIAL_ON_HIT)) pool_delete(&pool, pool.e[i].move);
+        /* 2. a boss drops what a better move of its pool makes redundant, then filterMovePool; when that leaves nothing the
+         * unfiltered pool is filtered again without the soft blocklists */
+        if (c.boss) filter_superceded(&pool);
+        static mg_pool unfiltered;
+        unfiltered = pool;
+        filter_move_pool(&c, &pool, false);
+        if (pool.n == 0 && unfiltered.n > 0) {
+            pool = unfiltered;
+            filter_move_pool(&c, &pool, true);
+        }
 
         /* 3. adjustDamageMoveWeights */
         double max_power = 40;
@@ -515,11 +625,13 @@ bool gc_generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m)
             }
             pool.e[i].w = w;
         }
-        /* 4. the base weights */
+        /* 4. the base weights; a boss's weights count for more */
+        double weight_multiplier = gc_mg_const.base_weight_multiplier;
+        if (c.boss) weight_multiplier += gc_mg_const.boss_extra_weight_multiplier;
         for (int i = 0; i < pool.n; i++) {
             if (pool.e[i].w <= 0) continue;
             base.e[base.n].move = pool.e[i].move;
-            base.e[base.n++].w = ceil(js_pow(pool.e[i].w, gc_mg_const.base_weight_multiplier) * 100);
+            base.e[base.n++].w = ceil(js_pow(pool.e[i].w, weight_multiplier) * 100);
         }
 
         /* 5. a signature move, then a STAB move unless the signature is one */

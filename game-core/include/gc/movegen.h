@@ -8,7 +8,8 @@
 typedef struct {
     int base_level_weight_offset, evo_move_bp_threshold, evolution_move_weight, relearn_move_weight;
     double base_weight_multiplier;
-    int move_power_ceiling, forced_signature_move_chance;
+    int move_power_ceiling, forced_signature_move_chance, level_based_denylist_threshold;
+    double boss_extra_weight_multiplier;
 } gc_mg_constants;
 extern const gc_mg_constants gc_mg_const;
 
@@ -21,7 +22,7 @@ enum {
     GC_MGF_COND_USER_SLEEP = 1 << 14, GC_MGF_SELF_STATUS_SINGLE = 1 << 15, GC_MGF_THUNDER_ACC = 1 << 16,
     GC_MGF_STORM_ACC = 1 << 17, GC_MGF_ANTI_SUN = 1 << 18, GC_MGF_SLEEP_STATUS = 1 << 19, GC_MGF_SLEEP_SELF = 1 << 20,
     GC_MGF_POISON_ATTR = 1 << 21, GC_MGF_VARIABLE_TYPE = 1 << 22, GC_MGF_WEATHER_BALL_TYPE = 1 << 23,
-    GC_MGF_TERA_CATEGORY = 1 << 24, GC_MGF_CALL_MOVE = 1 << 25,
+    GC_MGF_TERA_CATEGORY = 1 << 24, GC_MGF_CALL_MOVE = 1 << 25, GC_MGF_HP_SPLIT = 1 << 26, GC_MGF_TERRAIN_CHANGE = 1 << 27,
 };
 /* gc_mg_move.vt_kind: the class of the move's last VariableMoveTypeAttr */
 enum {
@@ -45,6 +46,7 @@ enum {
     GC_MGA_WEATHER_CHANGE = 1 << 0, GC_MGA_SUPPRESS_WEATHER = 1 << 1, GC_MGA_PREATTACK_WEATHER = 1 << 2,
     GC_MGA_IGNORE_CONTACT = 1 << 3, GC_MGA_DEF_POISON = 1 << 4, GC_MGA_ATK_POISON = 1 << 5, GC_MGA_ATK_TOXIC = 1 << 6,
     GC_MGA_ATK_TOXIC_NO_CONTACT = 1 << 7, GC_MGA_SUN_INSTANT = 1 << 8,
+    GC_MGA_TERRAIN_SUMMON = 1 << 9, GC_MGA_GORILLA_TACTICS = 1 << 10,
 };
 typedef struct { uint16_t bits; int8_t summon_weather; } gc_mg_ability;   /* by AbilityId */
 extern const int gc_mg_ability_count;
@@ -57,6 +59,16 @@ extern const int gc_mg_sig_count;
 extern const gc_mg_signature gc_mg_signatures[];
 extern const int gc_mg_stab_blacklist_count;
 extern const uint16_t gc_mg_stab_blacklist[];
+
+/* the boss and trainer blocklists: FORBIDDEN_SINGLES_MOVES, LEVEL_BASED_DENYLIST and EXCLUDED_MOVES_FOR_WORSE_OFFENSIVE_STAT (sorted
+ * move ids), getSpeciesDeniedOffensiveStat (form -1 = every form; stat 0 denies physical moves, 1 special) and SUPERCEDED_MOVES
+ * (a move and the moves, gc_mg_superceded_moves[first .. first + n), that make it redundant; sorted by move) */
+typedef struct { uint16_t species; int8_t form; uint8_t stat; } gc_mg_offstat;
+typedef struct { uint16_t move, first; uint8_t n; } gc_mg_superceded;
+extern const int gc_mg_forbidden_singles_count, gc_mg_level_denylist_count, gc_mg_offstat_exempt_count, gc_mg_offstat_count, gc_mg_superceded_count;
+extern const uint16_t gc_mg_forbidden_singles[], gc_mg_level_denylist[], gc_mg_offstat_exempt[], gc_mg_superceded_moves[];
+extern const gc_mg_offstat gc_mg_offstats[];
+extern const gc_mg_superceded gc_mg_supercededs[];
 
 /* Move.effectivePowerAbilityCheck for an ability: the result a (ability, move) gets when nothing about the user matters
  * (dim 0), and where one of these does (dim 1 weather = WeatherType, 2 gender = Gender (move 0: every damaging move), 3 Flying, 4 the move's type =

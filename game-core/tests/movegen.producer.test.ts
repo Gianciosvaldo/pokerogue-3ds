@@ -14,11 +14,13 @@ import { MoveCategory } from "#enums/move-category";
 import { AbilityId } from "#enums/ability-id";
 import { SpeciesId } from "#enums/species-id";
 import { MoveId } from "#enums/move-id";
+import { getSpeciesDeniedOffensiveStat } from "#balance/off-stat-denylist";
 import { GameManager } from "#test/framework/game-manager";
 import Phaser from "phaser";
 import * as fs from "node:fs";
 import { expect, it } from "vitest";
 
+const NB = Number(process.env.GC_MG_B ?? 800);
 const N = Number(process.env.GC_MG_N ?? 1500), NE = Number(process.env.GC_MG_E ?? 60), SEED = Number(process.env.GC_MG_SEED ?? 777);
 let seed = SEED;
 const rnd = (n: number) => { seed = (Math.imul(seed, 1103515245) + 12345) >>> 0; return (seed >>> 8) % n; };
@@ -75,6 +77,10 @@ it("movegen oracle", async () => {
     AbilityId.SAND_VEIL, AbilityId.SNOW_WARNING, AbilityId.SHEER_FORCE, AbilityId.NEUROFORCE]) relevant.add(a);
   for (const ab of allAbilities) if (ab.hasAttr("PostSummonWeatherChangeAbAttr") || ab.hasAttr("PostDefendWeatherChangeAbAttr") || ab.hasAttr("PreAttackWeatherOverrideAbAttr") || ab.hasAttr("SuppressWeatherEffectAbAttr")) relevant.add(ab.id);
   const relevantList = [...relevant].filter(a => a > 0);
+  /* a passive that changes the move's type (Normalize, the -ate abilities, Liquid Voice) next to an ability whose power depends on that type
+   * is not modelled: no species has such a pair (the exhaustive pass below checks every species, form and ability slot) */
+  const typeChangers = new Set<number>(allAbilities.filter(a => a.id > 0 && a.hasAttr("MoveTypeChangeAbAttr")).map(a => a.id));
+  const passiveList = relevantList.filter(a => !typeChangers.has(a) && !allAbilities[a].hasAttr("PreAttackWeatherOverrideAbAttr") && !allAbilities[a].hasAttr("SuppressWeatherEffectAbAttr"));
   /* the abilities filterUselessMoves keeps a weather move for, and the weather summoners */
   const weatherAbilities = [AbilityId.RAIN_DISH, AbilityId.FORECAST, AbilityId.SWIFT_SWIM, AbilityId.DRY_SKIN, AbilityId.CHLOROPHYLL, AbilityId.FLOWER_GIFT, AbilityId.PROTOSYNTHESIS,
     AbilityId.HARVEST, AbilityId.SOLAR_POWER, AbilityId.SLUSH_RUSH, AbilityId.ICE_FACE, AbilityId.SNOW_CLOAK, AbilityId.ICE_BODY, AbilityId.SAND_FORCE, AbilityId.SAND_RUSH,
@@ -83,17 +89,26 @@ it("movegen oracle", async () => {
     scene.arena.weather = w ? ({ weatherType: w, isImmutable: () => false, turnsLeft: 0, maxDuration: 0, isEffectSuppressed: () => false } as any) : null;
   };
   /* a random Pokemon of a random species, in the same object: nothing is rolled from the RNG under test */
-  const shape = (forcedAbility: number, wf = false) => {
-    const sid = wf ? weatherFocus[rnd(weatherFocus.length)] : focus.length && rnd(2) ? focus[rnd(focus.length)] : speciesIds[rnd(speciesIds.length)];
+  /* species on the worse-offensive-stat denylist: bosses are the ones it acts on */
+  const denyFocus = speciesIds.filter(sid => {
+    const sp = speciesDataRegistry.getSpecies(sid);
+    for (let f = 0; f < Math.max(sp.forms.length, 1); f++) if (getSpeciesDeniedOffensiveStat(sid, f) !== undefined) return true;
+    return false;
+  });
+  const shape = (forcedAbility: number, wf = false, boss = false, fixed?: { sid: number; form: number; slot: number; weather: number; passive?: number }) => {
+    const sid = fixed ? fixed.sid : wf ? weatherFocus[rnd(weatherFocus.length)]
+      : boss && rnd(3) === 0 ? denyFocus[rnd(denyFocus.length)]
+      : focus.length && rnd(2) ? focus[rnd(focus.length)] : speciesIds[rnd(speciesIds.length)];
     const sp = speciesDataRegistry.getSpecies(sid);
     const nForms = sp.forms.length;
-    const form = nForms > 1 && rnd(3) ? rnd(nForms) : 0;
-    const level = rnd(4) === 0 ? 1 + rnd(150) : 1 + rnd(100);
-    const abilityIndex = rnd(3);
+    const form = fixed ? fixed.form : nForms > 1 && rnd(3) ? rnd(nForms) : 0;
+    const level = boss && rnd(2) ? 55 + rnd(100) : rnd(4) === 0 ? 1 + rnd(150) : 1 + rnd(100);
+    const abilityIndex = fixed ? fixed.slot : rnd(3);
     const gender = [-1, 0, 1][rnd(3)];
     const nature = rnd(25);
     const ivs = Array.from({ length: 6 }, () => rnd(32));
-    const weather = rnd(2) ? 0 : rnd(10);
+    const weather0 = rnd(2) ? 0 : rnd(10);
+    const weather = fixed ? fixed.weather : weather0;
     e.species = sp;
     e.fusionSpecies = null;
     e.formIndex = form;
@@ -104,10 +119,18 @@ it("movegen oracle", async () => {
     e.nature = nature;
     e.ivs = ivs;
     e.moveset = [];
+    /* a boss has its passive and, in doubles, the doubles-only moves; everything else is a plain wild Pokemon */
+    const segments = boss ? 1 + rnd(4) : 0;
+    /* the weather-focus bosses get a weather passive half the time (Weather Ball's type follows the last summoner, the passive's) */
+    const passive = fixed?.passive ?? (boss && !fixed && (wf ? rnd(2) === 0 : rnd(3) === 0) ? (wf ? weatherAbilities[rnd(weatherAbilities.length)] : passiveList[rnd(passiveList.length)]) : -1);
+    const double = boss && rnd(4) === 0;   /* the draws above stay in step for fixed shapes */
+    e.bossSegments = segments;
+    e.customPokemonData.passive = passive;
+    scene.currentBattle.double = double;
     e.calculateStats();
     e.hp = e.stats[0];
     setWeather(weather);
-    return { sp, form, level, abilityIndex, gender, nature, ivs, weather };
+    return { sp, form, level, abilityIndex, gender, nature, ivs, weather, segments, passive, double };
   };
 
   let skipped = 0;
@@ -139,6 +162,83 @@ it("movegen oracle", async () => {
     }
     lines.push(`M ${i} ${s.sp.speciesId} ${s.form} ${s.level} ${s.abilityIndex} ${e.customPokemonData.ability} ${e.getAbility().id} ${s.gender} ${s.nature} ${s.ivs.join(" ")} ${s.weather} ${offset} ${waveSeed} ${e.stats.join(" ")} ${moves.length} ${moves.join(" ")} ${d1} ${d2}`);
   }
+  /* bosses: the same, with boss segments (so a passive), a forced passive on a third, and a double battle on a quarter */
+  const emitBoss = (i: number, s: any) => {
+    if (!e.isBoss() || !e.hasPassive()) { skipped++; return; }
+    const offset = rnd(2000), waveSeed = word();
+    let moves: number[] = [], d1 = 0, d2 = 0;
+    try {
+      scene.executeWithSeedOffset(() => {
+        e.generateAndPopulateMoveset();
+        moves = e.moveset.map((m: any) => m.moveId);
+        d1 = randSeedInt(1000000);
+        d2 = randSeedInt(1000000);
+      }, offset, waveSeed);
+    } catch (err) {
+      skipped++;
+      reasons.set(`boss gen: ${String(err).slice(0, 80)}`, (reasons.get(`boss gen: ${String(err).slice(0, 80)}`) ?? 0) + 1);
+      return;
+    }
+    lines.push(`B ${i} ${s.sp.speciesId} ${s.form} ${s.level} ${s.abilityIndex} ${e.customPokemonData.ability} ${e.getAbility().id} ${s.gender} ${s.nature} ${s.ivs.join(" ")} ${s.weather} ${offset} ${waveSeed} ${s.segments} ${s.passive} ${e.getPassiveAbility().id} ${s.double ? 1 : 0} ${e.stats.join(" ")} ${moves.length} ${moves.join(" ")} ${d1} ${d2}`);
+    if (i % 6 === 0) {
+      /* the effective power of every damaging move for this boss (its passive's attributes apply after its ability's) */
+      globalScene.movesetGenInProgress = true;
+      const powers = damaging.map(id => allMoves[id].calculateEffectivePower(e));
+      globalScene.movesetGenInProgress = false;
+      lines.push(`F ${i} ${powers.length} ${damaging.map((id, k) => `${id} ${powers[k]}`).join(" ")}`);
+    }
+  };
+  /* forced abilities that rewrite the move's type or the weather would pair with the species' passive in a way no species has */
+  const interacting = new Set<number>(allAbilities.filter(a => a.id > 0 && (a.hasAttr("MoveTypeChangeAbAttr") || a.hasAttr("PreAttackWeatherOverrideAbAttr")
+    || a.hasAttr("SuppressWeatherEffectAbAttr"))).map(a => a.id));
+  const terrainSummoners = allAbilities.filter(a => a.id > 0 && a.hasAttr("PostSummonTerrainChangeAbAttr")).map(a => a.id);
+  const forcedList = relevantList.filter(a => !interacting.has(a));
+  for (let i = 0; i < NB; i++) {
+    let s;
+    try {
+      const wf = rnd(5) === 0;
+      s = wf ? shape(weatherAbilities[rnd(weatherAbilities.length)], true, true) : shape(rnd(3) === 0 ? forcedList[rnd(forcedList.length)] : -1, false, true);
+    } catch (err) {
+      skipped++;
+      continue;
+    }
+    emitBoss(i, s);
+  }
+  /* every species, form and ability slot as a boss with the abilities it really has (the passive of its form): the pairs of an
+   * ability and a passive that a species can have, which is where the two attribute lists could interact */
+  if (process.env.GC_MG_X !== "0") {
+    let n = 100000;
+    for (const sid of speciesIds) {
+      const sp = speciesDataRegistry.getSpecies(sid);
+      for (let form = 0; form < Math.max(sp.forms.length, 1); form++) {
+        for (let slot = 0; slot < 3; slot++) {
+          let s;
+          try {
+            s = shape(-1, false, true, { sid, form, slot, weather: n % 10 });
+          } catch {
+            skipped++;
+            continue;
+          }
+          emitBoss(n++, s);
+          /* a Levitate or Eelevate ability with a terrain summoner's passive: the summoners' boost is off for it */
+          if ([AbilityId.LEVITATE, AbilityId.EELEVATE].includes(e.getAbility().id)) {
+            for (const t of terrainSummoners) {
+              try {
+                s = shape(-1, false, true, { sid, form, slot, weather: n % 10, passive: t });
+              } catch {
+                skipped++;
+                continue;
+              }
+              emitBoss(n++, s);
+            }
+          }
+        }
+      }
+    }
+  }
+  e.bossSegments = 0;
+  e.customPokemonData.passive = -1;
+  scene.currentBattle.double = false;
   /* effective power: the same kind of Pokemon with a given ability, every damaging move */
   for (let i = 0; i < NE; i++) {
     const ability = i % 3 === 0 ? allAbilities[1 + rnd(allAbilities.length - 1)].id : powerAbilities[rnd(powerAbilities.length)];
