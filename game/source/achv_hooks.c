@@ -102,6 +102,7 @@ bool ach_on_screen(const gc_run* run, int kind, int jojo, bool custom)
       H.jojo = jojo;
       H.fainted0 = fainted_count(run);
       H.counted = false;
+      changed |= evaluate(sys, run); /* the Pokedex of the profile may have grown since the last wave */
     }
   }
   /* a new best wave (waves reached in any run) */

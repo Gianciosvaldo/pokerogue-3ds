@@ -10,6 +10,7 @@
 #define SHINY(t) GC_AREW_SHINY_EGG, t, 1
 #define J GC_ACHV_GROUP_JOJO
 #define RUN GC_ACHV_GROUP_RUNS
+#define COL GC_ACHV_GROUP_COLLECTION
 /* Ids follow the list order: the 17 challengers (GC_JOJO_*), then the sets and counts. */
 const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     {"Kars", "Defeat Kars.", J, V(GC_VOUCHER_REGULAR, 1)},
@@ -57,9 +58,27 @@ const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     {"Fresh Faces", "Win a Classic run with six Pokemon that can still evolve.", RUN, V(GC_VOUCHER_PREMIUM, 1)},
     {"Lone Hero", "Win a Classic run in which only one Pokemon ever fought.", RUN, V(GC_VOUCHER_PREMIUM, 1)},
     {"Ball-Free", "Win a Classic run without throwing a Poke Ball.", RUN, V(GC_VOUCHER_PLUS, 1)},
+    /* 44..59: the collection */
+    {"Collector", "Catch 10 different species.", COL, V(GC_VOUCHER_REGULAR, 1)},
+    {"Keen Collector", "Catch 50 different species.", COL, V(GC_VOUCHER_REGULAR, 2)},
+    {"Seasoned Collector", "Catch 100 different species.", COL, V(GC_VOUCHER_PLUS, 1)},
+    {"Master Collector", "Catch 250 different species.", COL, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Grand Collector", "Catch 500 different species.", COL, V(GC_VOUCHER_GOLDEN, 1)},
+    {"Gotta Catch Them All", "Catch every species you can catch.", COL, EGG(3)},
+    {"Something Shiny", "Catch your first shiny.", COL, V(GC_VOUCHER_REGULAR, 2)},
+    {"Glittering Five", "Own shinies of 5 different species.", COL, V(GC_VOUCHER_PLUS, 1)},
+    {"Glittering Twenty-Five", "Own shinies of 25 different species.", COL, SHINY(2)},
+    {"Radiant", "Own a shiny of the rarest kind (tier 3).", COL, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Legend Hunter", "Catch your first legendary.", COL, V(GC_VOUCHER_REGULAR, 2)},
+    {"Legend Chaser", "Catch 5 different legendaries.", COL, V(GC_VOUCHER_PLUS, 1)},
+    {"All the Legends", "Catch every legendary you can catch.", COL, EGG(3)},
+    {"Mythical Find", "Catch your first mythical.", COL, V(GC_VOUCHER_PLUS, 1)},
+    {"Generation Complete", "Catch every species of one generation.", COL, V(GC_VOUCHER_PLUS, 1)},
+    {"Complete Pokedex", "Catch every species of every generation.", COL, SHINY(2)},
 };
 #undef J
 #undef RUN
+#undef COL
 
 static const uint32_t SET_PILLAR = 1u << GC_JOJO_KARS | 1u << GC_JOJO_WAMUU | 1u << GC_JOJO_ESIDISI;
 static const uint32_t SET_P2 = SET_PILLAR | 1u << GC_JOJO_JOSEPH | 1u << GC_JOJO_STROHEIM;
@@ -89,6 +108,64 @@ void gc_achv_jojo_won(gc_system *sys, int jojo, uint32_t run_tag, bool clean)
     }
     if (a->run_jojo < 255) a->run_jojo++;
     if (a->run_jojo > a->best_run_jojo) a->best_run_jojo = a->run_jojo;
+}
+
+/* ---- the Pokedex counts ---- */
+#define DEX_SHINY 2ull
+#define DEX_VARIANT_3 64ull
+#define GEN_COUNT 9
+static const uint16_t GEN_LAST[GEN_COUNT] = {151, 251, 386, 493, 649, 721, 809, 905, 1025};
+
+/* the species a new profile starts with already in its Pokedex: they are not catches, so "catch N species" does not count them */
+static bool starts_caught(int id)
+{
+    static uint8_t known[1026];
+    static bool built;
+    if (!built) {
+        static gc_system fresh;
+        gc_system_init_defaults(&fresh);
+        for (int i = 1; i <= 1025; i++) known[i] = fresh.dex[i].caught_attr != 0;
+        built = true;
+    }
+    return id >= 1 && id <= 1025 && known[id];
+}
+
+typedef struct {
+    uint32_t caught, catchable, caught_catchable, shiny, shiny3, legendary, legendary_total, legendary_catchable, mythical, gens_done;
+} dex_counts;
+
+static void count_dex(const gc_system *sys, dex_counts *c)
+{
+    memset(c, 0, sizeof *c);
+    int gen = 0;
+    bool whole = true;
+    for (int i = 0; i < pr_species_gen_count; i++) {
+        const pr_species_gen *g = &pr_species_gens[i];
+        if (g->id < 1 || g->id > 1025 || g->id > GC_MAX_SPECIES_ID) continue;
+        while (gen < GEN_COUNT && g->id > GEN_LAST[gen]) {
+            if (whole) c->gens_done++;
+            whole = true;
+            gen++;
+        }
+        const gc_dex_entry *d = &sys->dex[g->id];
+        const bool caught = d->caught_attr != 0;
+        const bool leg = g->legendary || g->sub_legendary;
+        if (caught && !starts_caught(g->id)) c->caught++;
+        if (g->catchable) {
+            c->catchable++;
+            if (caught) c->caught_catchable++;
+            if (!caught) whole = false;
+            if (leg) {
+                c->legendary_total++;
+                if (caught) c->legendary_catchable++;
+            }
+        }
+        if (d->caught_attr & DEX_SHINY) c->shiny++;
+        if ((d->caught_attr & DEX_SHINY) && (d->caught_attr & DEX_VARIANT_3)) c->shiny3++;
+        if (caught && leg) c->legendary++;
+        if (caught && g->mythical) c->mythical++;
+    }
+    if (gen < GEN_COUNT && whole) c->gens_done++;
 }
 
 void gc_achv_wave_reached(gc_system *sys, uint32_t wave)
@@ -132,7 +209,32 @@ bool gc_achv_progress_of(const gc_system *sys, int id, uint32_t *have, uint32_t 
     case 38: h = a->best_wave; n = 100; break;
     case 39: h = a->best_wave; n = 150; break;
     case 40: h = a->best_wave; n = 190; break;
-    default: return false;
+    default:
+        if (id < 44) return false;
+        {
+            dex_counts c;
+            count_dex(sys, &c);
+            switch (id) {
+            case 44: h = c.caught; n = 10; break;
+            case 45: h = c.caught; n = 50; break;
+            case 46: h = c.caught; n = 100; break;
+            case 47: h = c.caught; n = 250; break;
+            case 48: h = c.caught; n = 500; break;
+            case 49: h = c.caught_catchable; n = c.catchable; break;
+            case 50: h = c.shiny; n = 1; break;
+            case 51: h = c.shiny; n = 5; break;
+            case 52: h = c.shiny; n = 25; break;
+            case 53: h = c.shiny3; n = 1; break;
+            case 54: h = c.legendary; n = 1; break;
+            case 55: h = c.legendary; n = 5; break;
+            case 56: h = c.legendary_catchable; n = c.legendary_total; break;
+            case 57: h = c.mythical; n = 1; break;
+            case 58: h = c.gens_done; n = 1; break;
+            case 59: h = c.gens_done; n = GEN_COUNT; break;
+            default: return false;
+            }
+        }
+        break;
     }
     if (h > n) h = n;
     if (have) *have = h;
