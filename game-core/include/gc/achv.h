@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-typedef enum { GC_ACHV_GROUP_JOJO = 0, GC_ACHV_GROUP_COUNT } gc_achv_group;
+typedef enum { GC_ACHV_GROUP_JOJO = 0, GC_ACHV_GROUP_RUNS, GC_ACHV_GROUP_COUNT } gc_achv_group;
 
 typedef enum {
     GC_AREW_VOUCHER,      /* arg = VoucherType, n = how many */
@@ -35,7 +35,7 @@ typedef struct {
     uint8_t arg, n;
 } gc_achv_def;
 
-#define GC_ACHV_COUNT 30
+#define GC_ACHV_COUNT 44
 extern const gc_achv_def gc_achv_defs[GC_ACHV_COUNT];
 
 /* The JoJo challengers' bit order: custom-core's cc_jojo_chars. */
@@ -46,6 +46,13 @@ enum { GC_JOJO_KARS, GC_JOJO_GYRO, GC_JOJO_DIAVOLO, GC_JOJO_KIRA, GC_JOJO_PUCCI,
 /* A JoJo challenger (index in the order above) was beaten in a Custom run. `run_tag` names the run (any value that is the same for the
  * whole run and differs between runs), `clean` is true when none of the party fainted in the battle. */
 void gc_achv_jojo_won(gc_system *sys, int jojo, uint32_t run_tag, bool clean);
+
+/* Group B, the runs: what the app tells at the end of a run. The wave is told whenever a run reaches one (only a new best is kept). A won run
+ * is told once, after game-core has counted the Classic win (gc_classic_finish); `feats` are the GC_FEAT_* it was won with. A Custom win also
+ * counts as a Classic win (a Custom run is a Classic run with the custom content on). */
+enum { GC_FEAT_SIX_UNEVOLVED = 1, GC_FEAT_SOLO = 2, GC_FEAT_NO_BALL = 4 };
+void gc_achv_wave_reached(gc_system *sys, uint32_t wave);
+void gc_achv_run_won(gc_system *sys, bool custom, uint8_t feats);
 
 /* A progress line for the screen: how far a count-based achievement is. False for one with no count. */
 bool gc_achv_progress_of(const gc_system *sys, int id, uint32_t *have, uint32_t *need);

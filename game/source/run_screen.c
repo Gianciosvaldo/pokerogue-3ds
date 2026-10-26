@@ -780,6 +780,7 @@ static bool submit(const gc_choice* c) {
   G.save_due = false;
   if (gc_run_choose(&G.run, c, &why)) {
     G.refused_in_row = 0;
+    if (c->kind == GC_CH_BALL) ach_on_ball();
     drain();
     return true;
   }
@@ -1659,15 +1660,15 @@ static void screen_step(void) {
       say(note);
       return;
     }
-    /* a JoJo challenger beaten counts for the achievements: what it unlocks is told before the reward screen */
-    {
-      const cc_jojo_char* foe = cr_jojo_foe(&G.run);
-      if (ach_on_screen(&G.run, s->kind, foe ? (int)(foe - cc_jojo_chars) : -1) && G.cfg.save_sys) G.cfg.save_sys();
-      const char* ach = ach_take_message();
-      if (ach) {
-        say(ach);
-        return;
-      }
+  }
+  /* achievements: a JoJo challenger beaten, a wave reached, a run won; what they unlock is told before the screen is handled */
+  {
+    const cc_jojo_char* foe = G.cfg.custom ? cr_jojo_foe(&G.run) : NULL;
+    if (ach_on_screen(&G.run, s->kind, foe ? (int)(foe - cc_jojo_chars) : -1, G.cfg.custom) && G.cfg.save_sys) G.cfg.save_sys();
+    const char* ach = ach_take_message();
+    if (ach) {
+      say(ach);
+      return;
     }
   }
   G.st.screens[s->kind & 15]++;
@@ -1809,7 +1810,7 @@ rsv_status rs_resume(const rs_config* cfg, char why[RSV_WHY_LEN]) {
   const rsv_status st = cfg->custom ? cr_load(cfg->slot, &G.run, why) : rsv_load(cfg->slot, &G.run, why);
   if (st != RSV_OK) return st; /* G.run is not usable: the caller must not drive it */
   G.run.sys = cfg->sys; /* a saved run holds no system data: it takes the player's */
-  ach_reset();
+  ach_reset_loaded();
   /* observation starts here: the battles before the save were not seen (a custom run's save carries the turns it had kept) */
   if (cfg->custom)
     cr_begin_observer();
