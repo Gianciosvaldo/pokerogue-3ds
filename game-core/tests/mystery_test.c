@@ -101,11 +101,14 @@ static void test_mystery_actions_and_options(void)
     bool ok;
     run.screen.mystery_type = GC_ME_DARK_DEAL;
     gc_mystery_setup_screen(&run);
-    double initial_money = run.money;
+    const int party_before_deal = run.n_party, rogue_before = run.pokeballs[3];
+    assert(party_before_deal >= 2);
     assert(gc_mystery_execute(&run, 0, 0, 0, &why, &ok));
     assert(ok);
-    assert(run.party[0].b.hp == 0);
-    assert(run.money > initial_money);
+    /* a Pokemon leaves for five Rogue Balls and a boss battle (the real option, tools/darkdealdiff.sh) */
+    assert(run.n_party == party_before_deal - 1);
+    assert(run.pokeballs[3] == rogue_before + 5);
+    assert(run.me_battle && run.n_enemy == 1 && run.enemy[0].b.is_boss);
 
     /* Test 4: Pokemon Salesman action execution */
     run.screen.mystery_type = GC_ME_THE_POKEMON_SALESMAN;

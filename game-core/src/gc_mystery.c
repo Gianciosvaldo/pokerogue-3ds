@@ -401,7 +401,7 @@ void gc_mystery_setup_screen(gc_run *run)
         /* selling and leaving need nothing; extorting needs a Pokemon allowed in battle with an extortion move or ability */
         s->option_ok[1] = gc_mystery_primary_pokemon(run, type, 1) >= 0;
     } else if (type == GC_ME_DARK_DEAL) {
-        s->option_ok[0] = legal_party(run) > 0;
+        /* both options are open: the encounter's own requirement is a party of two */
     } else if (type == GC_ME_SHADY_VITAMIN_DEALER) {
         /* MoneyRequirement(0, 1.5) / (0, 5): the option is disabled without the money; it also needs a Pokemon the
          * party screen would let the player pick */
@@ -536,6 +536,18 @@ static void start_mystery_wild_battle(gc_run *run, int species, int level, bool 
     /* what EncounterPhase does to the enemy party of any battle: passive, stats (a species rolled by gc_gen_wild has none yet), seen flags,
      * its held items and the AI */
     gc_enemy_finish_party(run);
+    gc_battle_setup_field(run, true);
+    gc_rq_push(run, gc_rp(RP_TURN_INIT, 0, 0, 0));
+}
+
+void gc_me_begin_battle(gc_run *run, int type)
+{
+    run->me_battle = true;
+    gc_int(run)->at_save_point = false;   /* the encounter's one save is the one at its start */
+    run->me_catch_allowed = me_catch_allowed(type);
+    run->mystery_type = run->mystery_tier = -1;
+    run->in_battle = true;
+    run->battle_type = BATTLE_TYPE_WILD;
     gc_battle_setup_field(run, true);
     gc_rq_push(run, gc_rp(RP_TURN_INIT, 0, 0, 0));
 }
@@ -1149,17 +1161,7 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_DARK_DEAL:
-        if (option == 0) {
-            int target = (b >= 0 && b < run->n_party && run->party[b].b.hp > 0) ? b : -1;
-            if (target < 0) {
-                for (int i = 0; i < run->n_party; i++) if (run->party[i].b.hp > 0) { target = i; break; }
-            }
-            if (target >= 0) run->party[target].b.hp = 0;
-            run->money = pr_run_add_money(run->money, pr_run_get_wave_money_amount(run->wave, 5.0));
-            end_mystery_encounter_leave(run);
-            return true;
-        }
-        end_mystery_encounter_leave(run);
+        gc_dark_deal_execute(run, option);
         return true;
 
     case GC_ME_FIGHT_OR_FLIGHT:
