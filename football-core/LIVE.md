@@ -65,7 +65,7 @@ sidelines, scoring and a 25-second play bound end downs under the shared rules.
 CPU offense chooses independently of the selected Man/Zone/Blitz scheme (see "CPU play" below).
 The clock display advances during live play; the shared rules commit its elapsed
 time and runoff once at the dead ball. The seven-round playoff, shop and EXP loop
-remains. This is arcade football: punts, field goals and punt returns exist (see "Special teams"), but no kickoff returns, penalties
+remains. This is arcade football: punts, field goals, kickoffs, the try after a touchdown and both kinds of return exist (see "Special teams" and "Touchdowns, tries and kickoffs"), but no opening kickoff, onside kicks, penalties
 or interception return phase are added here. A fumble uses a nearest-actor recovery
 contest at its contact spot, without a bouncing-ball phase.
 
@@ -129,6 +129,44 @@ share the clock, quarter, half and overtime logic with `football_rules_advance`.
 PUNT n YDS, FAIR CATCH, TOUCHBACK, BLOCKED, FIELD GOAL, NO GOOD, plus TOUCHDOWN, INTERCEPTION, SACK, FUMBLE, SAFETY after
 ordinary plays) is drawn by `football_live_art_top`. `tests/special_test.c` covers the formation, snap timing, blocks,
 fair catch with a steering human, returns, the field goal curve, the CPU's fourth-down choices and 30 whole CPU games.
+
+## Touchdowns, tries and kickoffs
+
+A touchdown is six points (`rules.td_points`, set by `football_live_begin`; the older six-player mode keeps its flat seven).
+When the ball is dead after the score, `football_live_after_play` records what comes next in `FootballLive.after`:
+`FB_AFTER_CONVERSION` after a touchdown (including a return touchdown and a defensive one), `FB_AFTER_KICKOFF` after a
+field goal, a safety or the half. Nothing follows in overtime, or on the play that ends the game: those touchdowns are
+worth the full seven, which is how `football_rules.c` scores a touchdown whose clock runs out the game or an overtime
+possession. The next `CALL` (`begin_next` in `football_live.c`) then sets the state up.
+
+**The try (`conversion` 1).** The scorer is offense on the 4-yard line and `football_live_call` is refused until it
+chooses: `football_live_special(FB_SPECIAL_EXTRA_POINT)` (a kick from the 15 through the field-goal formation, 32 yards
+of flight, chance `98% + the kicker's thp/tha over 50`, no distance penalty: about 93% with average legs; a rusher who
+reaches the kicker blocks it) or `football_live_go_for_two` (`conversion` 2, then an ordinary playcall; two points if the
+carrier or the catch crosses the goal line, nothing otherwise). A straight run from the 4 scored 62% in testing (93%
+from the 2, the NFL spot, which was too easy here); the CPU's own plays score about 18%. `football_live_ai_goes_for_two`
+decides for the CPU: only from the fourth quarter down by 2, 5, 8, 10 or 13 after the touchdown, and 4% of the time
+(12% when 9+ behind) earlier. A try never runs the clock. `football_rules_conversion` books the points and gives the other
+team the ball at its 25 until the kickoff decides the real spot.
+
+**The kickoff (`FB_SPECIAL_KICKOFF`).** The team that scored (or conceded the safety, or the home team at the half)
+kicks from its 35; rules.offense is the kicker until the catch like any kick. Ten coverage men line up abreast with the
+kicker four yards behind the ball, the receiving team in a front line ten yards away, a second line, two corners and two
+returners on its 5 and 10. The kick comes 1.1 s after the human presses A (the CPU 1.2 s after the set); the run-up is
+scripted, and the line starts to run 0.6 s in. Length is `49 + 0.18 thp +/- 7` yards and a human aims it left/right with
+the Circle Pad (a full push runs to the sideline and can go out of bounds, which gives the receiver the ball at the 40).
+In the end zone it is a touchback to the 25. The deep man nearer the landing spot runs to it while the rest of the
+return team falls back into a wall in front of the catch, and the nearest man within 2.8 yards catches it (there is no
+fair catch on a kickoff; a muff is rarer than on a punt). A human receiver steers any man, and B switches. The return is
+the ordinary run-play code again, so juke, dive, fumbles, a tackle and a return touchdown all work. The clock runs from the
+catch only (touchbacks cost one second).
+
+`FootballLive.event`, `kick_yards` and `return_yards` drive the banners (KICKOFF 58 YDS RETURN 21, EXTRA POINT IS GOOD,
+TWO-POINT CONVERSION GOOD / TRY STOPPED). A match is only saved at an ordinary playcall (`football_career_save_ready` refuses a
+try), and the match always resumes with `td_points` at six. The opening kickoff is not played: a match still starts with
+the home team at its 25. `tests/kickoff_test.c` covers the try (kick, block, two points, both outcomes of a real play),
+touchdowns that are worth seven, the second-half and field-goal and safety kickoffs, human kicking and returning, a return
+touchdown, 60 whole CPU games where every score is one of the known kinds, and replay determinism.
 
 ## Coverage, body contact and facing
 

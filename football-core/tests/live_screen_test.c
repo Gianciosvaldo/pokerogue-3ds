@@ -38,6 +38,7 @@ bool football_render_draw_sprite(const rr_frame *f,float x,float y,float scale,b
 void football_live_art_top(FootballRenderer *r,const FootballCareer *c,const FootballCamera *cam,unsigned ms){(void)r;(void)c;(void)cam;(void)ms;++draws;}
 void football_live_art_card(FootballRenderer *r,FootballPlayId p,float x,float y,float w,float h,bool selected){(void)r;(void)p;(void)x;(void)y;(void)w;(void)h;(void)selected;}
 static unsigned special_cards;
+const char *football_live_art_special_name(FootballSpecial k){return k==FB_SPECIAL_PUNT?"PUNT":"KICK";}
 void football_live_art_special_card(FootballRenderer *r,FootballSpecial k,const char *detail,float x,float y,float w,float h,bool selected,bool enabled){(void)r;(void)k;(void)x;(void)y;(void)w;(void)h;(void)selected;(void)enabled;assert(detail && detail[0]);++special_cards;}
 void football_live_art_defense_card(FootballRenderer *r,FootballDefenseId d,float x,float y,float w,float h,bool selected){(void)r;(void)d;(void)x;(void)y;(void)w;(void)h;(void)selected;}
 bool football_shop_prepare(FootballShopView *v,const FootballSeason *s){(void)v;assert(s->phase==FB_SEASON_SHOP);return true;}
@@ -86,6 +87,21 @@ int main(void)
     down=KEY_A;tick();assert(career()->live.phase==FB_LIVE_PLAY);
     for(unsigned i=0;i<3000 && career()->live.phase==FB_LIVE_PLAY;++i)tick();
     assert(career()->live.phase==FB_LIVE_DEAD && career()->live.rules.offense==FB_AWAY && career()->live.event!=FB_EVENT_NONE);
+    /* The try after a touchdown: two cards, no page flipping, and either choice leaves the call without also snapping. */
+    {
+        FootballCareer *w=(FootballCareer *)career();
+        w->live.phase=FB_LIVE_CALL;w->live.special=FB_SPECIAL_NONE;w->live.rules.offense=FB_HOME;w->live.rules.ball=96;w->live.rules.down=1;w->live.rules.first_down_at=100;
+        w->live.conversion=1;w->live.next_offense=FB_AWAY;w->live.after_side=FB_HOME;
+        unsigned cards=special_cards;tick();assert(special_cards==cards+2);
+        press(BTN_RIGHT);tick();assert(career()->live.conversion==1 && special_cards==cards+4); /* no second page */
+        press(BTN_DOWN);press(BTN_ACTION);tick();
+        assert(career()->live.conversion==2 && career()->live.phase==FB_LIVE_CALL && !career()->live.special); /* go for two: pick a play next */
+        press(BTN_RIGHT);press(BTN_RIGHT);press(BTN_RIGHT);tick();assert(special_cards==cards+4); /* only the two pages of plays */
+        press(BTN_ACTION);tick();assert(career()->live.phase==FB_LIVE_SET && career()->live.conversion==2);
+        w->live.phase=FB_LIVE_CALL;w->live.special=FB_SPECIAL_NONE;w->live.conversion=1;
+        down=KEY_A;press(BTN_ACTION);tick();
+        assert(career()->live.phase==FB_LIVE_SET && career()->live.special==FB_SPECIAL_EXTRA_POINT && career()->live.rules.ball==85);
+    }
     press(BTN_MENU);answer(4);assert(top==&title);
     puts("football live screen: real 22-player draft, assignment, playcall/snap separation, held movement, pause, save/resume and failed-write retry passed");
 }

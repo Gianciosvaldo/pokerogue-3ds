@@ -27,7 +27,14 @@ static bool banner(const FootballLive *m,char *out,size_t size)
     case FB_EVENT_SACK:snprintf(out,size,"SACK!");break;
     case FB_EVENT_FUMBLE:snprintf(out,size,"FUMBLE!");break;
     case FB_EVENT_SAFETY:snprintf(out,size,"SAFETY");break;
-    case FB_EVENT_PUNT:snprintf(out,size,"PUNT  %d YDS",(int)m->kick_yards);break;
+    case FB_EVENT_PUNT:
+        if(m->return_yards>0)snprintf(out,size,"PUNT  %d YDS   RETURN %d",(int)m->kick_yards,(int)m->return_yards);
+        else snprintf(out,size,"PUNT  %d YDS",(int)m->kick_yards);
+        break;
+    case FB_EVENT_KICKOFF:
+        if(m->return_yards>0)snprintf(out,size,"KICKOFF  %d YDS   RETURN %d",(int)m->kick_yards,(int)m->return_yards);
+        else snprintf(out,size,"KICKOFF  %d YDS",(int)m->kick_yards);
+        break;
     case FB_EVENT_FAIR_CATCH:snprintf(out,size,"FAIR CATCH");break;
     case FB_EVENT_TOUCHBACK:snprintf(out,size,"TOUCHBACK");break;
     case FB_EVENT_OUT_OF_BOUNDS:snprintf(out,size,"OUT OF BOUNDS");break;
@@ -35,6 +42,10 @@ static bool banner(const FootballLive *m,char *out,size_t size)
     case FB_EVENT_BLOCKED:snprintf(out,size,"BLOCKED!");break;
     case FB_EVENT_FIELD_GOAL:snprintf(out,size,"FIELD GOAL  %d YDS",(int)m->kick_yards);break;
     case FB_EVENT_FIELD_GOAL_MISSED:snprintf(out,size,"NO GOOD");break;
+    case FB_EVENT_EXTRA_POINT:snprintf(out,size,"EXTRA POINT IS GOOD");break;
+    case FB_EVENT_EXTRA_POINT_MISSED:snprintf(out,size,"EXTRA POINT NO GOOD");break;
+    case FB_EVENT_TWO_POINT:snprintf(out,size,"TWO-POINT CONVERSION GOOD");break;
+    case FB_EVENT_TWO_POINT_FAILED:snprintf(out,size,"TWO-POINT TRY STOPPED");break;
     default:return false;
     }
     return true;
@@ -89,11 +100,11 @@ void football_live_art_top(FootballRenderer *r,const FootballCareer *c,const Foo
     }
     float bx=football_camera_x(cam,m->ball_x),by=football_camera_y(cam,m->ball_y)-m->ball_z*5;
     rect(bx-4,by-4,9,5,.6f,C2D_Color32(154,85,36,255));rect(bx-1,by-3,3,2,.61f,white);
-    if(m->special==FB_SPECIAL_PUNT && m->stage==FB_STAGE_FLIGHT){
-        /* Where the punt comes down, for the returner and for the coverage. */
+    if((m->special==FB_SPECIAL_PUNT || m->special==FB_SPECIAL_KICKOFF) && m->stage==FB_STAGE_FLIGHT){
+        /* Where the kick comes down, for the returner and for the coverage. */
         world(cam,m->to_x-1.4f,m->to_y-.6f,2.8f,1.2f,.07f,C2D_Color32(255,210,63,200));
         world(cam,m->to_x-.6f,m->to_y-1.4f,1.2f,2.8f,.07f,C2D_Color32(255,210,63,200));
-        if(m->kick_side==FB_AWAY)label(r,"A: FAIR CATCH",138,218,.45f,gold);
+        if(m->kick_side==FB_AWAY && m->special==FB_SPECIAL_PUNT)label(r,"A: FAIR CATCH",138,218,.45f,gold);
     }
     char line[40];
     if(banner(m,line,sizeof line)){
@@ -105,7 +116,8 @@ void football_live_art_top(FootballRenderer *r,const FootballCareer *c,const Foo
     char score[72],situation[72];unsigned seconds=m->rules.seconds_left;
     if(m->phase==FB_LIVE_PLAY && m->rules.quarter<5)seconds=seconds>(unsigned)m->elapsed?seconds-(unsigned)m->elapsed:0;
     snprintf(score,sizeof score,"HOME %02u   AWAY %02u     Q%u  %u:%02u",m->rules.score[0],m->rules.score[1],m->rules.quarter,seconds/60,seconds%60);
-    if(m->special)snprintf(situation,sizeof situation,"ROUND %u/7   %s",c->round,m->special==FB_SPECIAL_PUNT?"PUNT":"FIELD GOAL");
+    if(m->special)snprintf(situation,sizeof situation,"ROUND %u/7   %s",c->round,football_live_art_special_name(m->special));
+    else if(m->conversion)snprintf(situation,sizeof situation,"ROUND %u/7   %s",c->round,m->conversion==1?"TRY AFTER TOUCHDOWN":"TWO-POINT TRY");
     else snprintf(situation,sizeof situation,"ROUND %u/7   %s  DOWN %u / %u YD",c->round,dir>0?">>>":"<<<",m->rules.down,football_rules_distance(&m->rules));
     label(r,score,12,2,.53f,white);label(r,situation,12,23,.40f,gold);
 }
@@ -125,17 +137,27 @@ void football_live_art_card(FootballRenderer *r,FootballPlayId id,float x,float 
     C2D_DrawRectSolid(last_x-2,last_y-3,.04f,7,3,gold);
 }
 
+const char *football_live_art_special_name(FootballSpecial kind)
+{
+    return kind==FB_SPECIAL_PUNT?"PUNT":kind==FB_SPECIAL_FIELD_GOAL?"FIELD GOAL":kind==FB_SPECIAL_EXTRA_POINT?"EXTRA POINT":kind==FB_SPECIAL_KICKOFF?"KICKOFF":"GO FOR TWO";
+}
 void football_live_art_special_card(FootballRenderer *r,FootballSpecial kind,const char *detail,float x,float y,float w,float h,bool selected,bool enabled)
 {
     if(!r || !r->text)return;
     u32 gold=C2D_Color32(255,210,63,255),white=C2D_Color32(246,246,242,255),dim=C2D_Color32(120,126,148,255),blue=C2D_Color32(74,163,255,255);
     C2D_DrawRectSolid(x,y,0,w,h,selected?gold:C2D_Color32(74,80,104,255));
     C2D_DrawRectSolid(x+2,y+2,.01f,w-4,h-4,C2D_Color32(27,37,71,255));
-    label(r,kind==FB_SPECIAL_PUNT?"PUNT":"FIELD GOAL",x+8,y+5,.46f,!enabled?dim:selected?gold:white);
+    label(r,football_live_art_special_name(kind),x+8,y+5,.46f,!enabled?dim:selected?gold:white);
     C2D_DrawRectSolid(x+8,y+31,.02f,w-16,1,enabled?blue:dim);
     if(kind==FB_SPECIAL_PUNT){
         /* A high arc down the field. */
         for(unsigned i=0;i<20;++i){float t=i/19.0f;C2D_DrawRectSolid(x+14+t*(w-40),y+h-24-4*t*(1-t)*(h-58)*1.6f,.03f,3,3,enabled?gold:dim);}
+    }else if(kind==FB_SPECIAL_NONE){
+        /* The try as a play: the end zone line, the ball carrier and the defenders standing in front of it. */
+        C2D_DrawRectSolid(x+10,y+40,.03f,w-20,2,enabled?gold:dim);
+        for(unsigned i=0;i<4;++i)C2D_DrawRectSolid(x+w*.25f+i*(w*.5f/3)-2,y+h-34,.03f,5,5,enabled?blue:dim);
+        C2D_DrawRectSolid(x+w*.5f-3,y+h-24,.04f,7,7,enabled?gold:dim);
+        for(unsigned i=0;i<8;++i)C2D_DrawRectSolid(x+w*.5f,y+h-28-i*(h-70)/8,.04f,2,2,enabled?white:dim);
     }else{
         /* The uprights, with the kick on its way. */
         float px=x+w-34;

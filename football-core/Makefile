@@ -217,6 +217,13 @@ special-test: core-libs
 	$(BUILD)/special_test
 test: special-test
 
+.PHONY: kickoff-test
+kickoff-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/kickoff_test.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/kickoff_test
+	$(BUILD)/kickoff_test
+test: kickoff-test
+
 .PHONY: live-art-test
 live-art-test: $(BUILD)/live_art_test
 	$(BUILD)/live_art_test

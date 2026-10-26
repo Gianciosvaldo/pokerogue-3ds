@@ -109,5 +109,30 @@ int main(void)
     assert(football_rules_touchdown(&r,FB_AWAY,9));
     assert(r.score[FB_AWAY]==7 && r.last.touchdown && r.offense==FB_HOME && r.ball==25 && r.seconds_left==FB_QUARTER_SECONDS-9);
 
+    /* Six-point touchdowns (live mode): the try follows, except on the last play of regulation and in overtime. */
+    assert(football_rules_begin(&r,FB_HOME));r.td_points=6;r.ball=95;r.first_down_at=100;
+    assert(football_rules_advance(&r,(FootballResolvedPlay){FB_RESULT_RUN,5,6}));
+    assert(r.score[FB_HOME]==6 && r.last.touchdown && r.offense==FB_AWAY && r.ball==25);
+    assert(football_rules_touchdown(&r,FB_AWAY,6) && r.score[FB_AWAY]==6);
+    assert(football_rules_begin(&r,FB_HOME));r.td_points=6;r.quarter=4;r.seconds_left=5;r.ball=95;r.first_down_at=100;r.score[1]=3;
+    assert(football_rules_advance(&r,(FootballResolvedPlay){FB_RESULT_RUN,5,6}));
+    assert(r.score[FB_HOME]==7 && r.finished && r.winner==FB_HOME); /* the clock ran out on the touchdown: full seven, no try */
+    assert(football_rules_begin(&r,FB_HOME));r.td_points=6;r.quarter=4;r.seconds_left=20;r.ball=95;r.first_down_at=100;
+    assert(football_rules_advance(&r,(FootballResolvedPlay){FB_RESULT_RUN,5,6}) && r.score[FB_HOME]==6 && !r.finished);
+    assert(football_rules_begin(&r,FB_HOME));r.td_points=6;r.quarter=5;r.ball=75;r.first_down_at=85;r.overtime_drives=0;
+    assert(football_rules_advance(&r,(FootballResolvedPlay){FB_RESULT_RUN,30,6}) && r.score[FB_HOME]==7);
+    /* A touchdown at the end of the first half still gets its try, and the second half then belongs to AWAY. */
+    assert(football_rules_begin(&r,FB_HOME));r.td_points=6;r.quarter=2;r.seconds_left=4;r.ball=95;r.first_down_at=100;
+    assert(football_rules_advance(&r,(FootballResolvedPlay){FB_RESULT_RUN,5,6}) && r.score[FB_HOME]==6 && r.quarter==3 && r.last.halftime && r.offense==FB_AWAY);
+    /* Conversions: one or two points, none for a miss; no clock, and the receiver starts at its 25. */
+    assert(football_rules_begin(&r,FB_HOME));r.td_points=6;r.score[0]=6;r.offense=FB_HOME;r.ball=85;r.first_down_at=100;r.seconds_left=77;
+    assert(!football_rules_conversion(&r,FB_HOME,3,FB_AWAY) && !football_rules_conversion(&r,(FootballSide)2,1,FB_AWAY) && !football_rules_conversion(&r,FB_HOME,1,(FootballSide)2));
+    assert(football_rules_conversion(&r,FB_HOME,1,FB_AWAY));
+    assert(r.score[0]==7 && r.last.conversion && r.offense==FB_AWAY && r.ball==25 && r.down==1 && r.seconds_left==77);
+    assert(football_rules_conversion(&r,FB_AWAY,2,FB_HOME) && r.score[1]==2 && r.offense==FB_HOME);
+    assert(football_rules_conversion(&r,FB_AWAY,0,FB_HOME) && r.score[1]==2 && !r.last.conversion);
+    r.quarter=5;assert(!football_rules_conversion(&r,FB_HOME,1,FB_AWAY));
+    r.quarter=4;r.finished=true;assert(!football_rules_conversion(&r,FB_HOME,1,FB_AWAY));
+
     puts("football rules: downs, spots, turnovers, scoring, halftime, final-play scoring and bounded overtime passed");
 }

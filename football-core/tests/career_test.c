@@ -31,6 +31,9 @@ int main(void)
     assert(!football_career_load(&loaded,&other,&profile,bytes,n-1));
     assert(football_career_start(&career));n=football_career_save(&career,bytes,sizeof bytes);assert(n && football_career_load(&loaded,&other,&profile,bytes,n));
     assert(loaded.live.rules.ball==career.live.rules.ball && loaded.live.rng==career.live.rng && loaded.live.actors[0].x==career.live.actors[0].x);
+    assert(loaded.live.rules.td_points==6 && career.live.rules.td_points==6); /* a touchdown is six wherever the match resumes */
+    /* The try after a touchdown is not a safe checkpoint: a resumed match always opens a playcall, never a try. */
+    career.live.conversion=1;assert(!football_career_save_ready(&career));career.live.conversion=2;assert(!football_career_save_ready(&career));career.live.conversion=0;assert(football_career_save_ready(&career));
     assert(football_live_call(&career.live,FB_RUN_DIVE));assert(!football_career_save_ready(&career));
     /* Reach real shared EXP/evolution phases for all 22 members. */
     /* Full movesets everywhere, so every level-up move needs a slot replaced. */
