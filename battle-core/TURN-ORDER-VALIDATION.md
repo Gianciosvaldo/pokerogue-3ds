@@ -15,6 +15,8 @@ consumers found in the pinned source search. Repeated occurrences of one actor
 have the same predicate during this pure query, so the latest occurrence of each
 identity suffices **after excluding the final occurrence**.
 
+The [actor-reference follow-up](TURN-ACTOR-VALIDATION.md) preserves actual object
+identity when numeric IDs collide, change, or no longer resolve through a party.
 The legacy first-eight transport remains available. A separate summary stores
 latest distinct identities, and their order immediately before the last append,
 within the two six-member parties. It reads live histories at query time and

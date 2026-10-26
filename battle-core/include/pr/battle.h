@@ -391,10 +391,16 @@ typedef struct pr_pokemon {
 #define PR_MAX_QUEUED_MOVERS 8
 #define PR_MAX_TURN_ORDER 8
 
-/* Most-recent distinct identities, both with and without the latest occurrence.
+/* Most-recent distinct actor objects, both with and without the latest occurrence.
  * Queries read each actor's current history; they do not cache move results. */
+typedef struct pr_turn_actor {
+    uint32_t id;
+    const pr_pokemon *actor;
+} pr_turn_actor;
+
 typedef struct pr_turn_order_history {
-    uint32_t recent[2 * PR_MAX_PARTY], before[2 * PR_MAX_PARTY];
+    pr_turn_actor recent[2 * PR_MAX_PARTY], before[2 * PR_MAX_PARTY];
+    uint32_t prefix[PR_MAX_TURN_ORDER];
     uint8_t count, n_recent, n_before;
     bool valid, complete, before_complete;
 } pr_turn_order_history;
@@ -848,8 +854,10 @@ const pr_turn_move *pr_last_non_virtual_move(pr_battle *bt, const pr_pokemon *p,
                                              bool ignore_follow_up, bool *unknown);
 /* MovePhasePriorityQueue.pop / clear; latest distinct actors before the final occurrence. */
 void pr_record_turn_order(pr_battle *bt, uint32_t id);
+void pr_record_turn_actor(pr_battle *bt, const pr_pokemon *actor);
 void pr_clear_turn_order(pr_battle *bt);
 int pr_prior_turn_movers(const pr_battle *bt, uint32_t out[2 * PR_MAX_PARTY], bool *complete);
+int pr_prior_turn_actors(const pr_battle *bt, const pr_pokemon *out[2 * PR_MAX_PARTY], bool *complete);
 /* turnData.attacksReceived.unshift(record) */
 void pr_unshift_attack_received(pr_pokemon *p, const pr_attack_record *r);
 bool pr_received_counter(pr_battle *bt, const pr_pokemon *p, int category, pr_attack_record *out);

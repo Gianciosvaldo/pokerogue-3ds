@@ -738,3 +738,15 @@ turn-order-host-test: $(BUILD)/turn-order-test $(BUILD)/turn-order-guards-test $
 	$(BUILD)/turn-order-guards-test
 	$(BUILD)/turn-order-command-test
 .PHONY: turn-order-host-test
+
+$(BUILD)/turn-actor-command-test: tests/turn-actor-command-test.c tests/turn-actor-command.native.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -Wl,--wrap=pr_phase_run -lm -o $@
+$(BUILD)/turn-actors-test: tests/turn-actors-test.c tests/turn-actors.native.inc src/engine.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+turn-actors-host-test: $(BUILD)/turn-actor-command-test $(BUILD)/turn-actors-test $(BUILD)/turn-actors-guards-test
+	$(BUILD)/turn-actor-command-test
+	$(BUILD)/turn-actors-test
+	$(BUILD)/turn-actors-guards-test
+.PHONY: turn-actors-host-test
+$(BUILD)/turn-actors-guards-test: tests/turn-actors-guards-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@

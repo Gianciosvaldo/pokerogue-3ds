@@ -180,51 +180,79 @@ const pr_turn_move *pr_last_non_virtual_move(pr_battle *bt, const pr_pokemon *p,
     return NULL;
 }
 
-static bool distinct_order_ids(const uint32_t *ids, unsigned n)
+/* Numeric IDs are not unique object identities. Raw legacy ID inputs can be
+ * resolved only when the two-party scene contains one matching object. */
+static const pr_pokemon *unique_order_actor(const pr_battle *bt, uint32_t id)
+{
+    const pr_pokemon *found = NULL;
+    for (int side = 0; side < 2; side++) {
+        int n = bt->n_party[side] ? bt->n_party[side] : 2;
+        for (int k = 0; k < n; k++) {
+            const pr_pokemon *p = bt->n_party[side] ? bt->party[side][k] : bt->field[2 * side + k];
+            if (!p || p->id != id || p == found) continue;
+            if (found) return NULL;
+            found = p;
+        }
+    }
+    return found;
+}
+static bool same_order_actor(pr_turn_actor a, pr_turn_actor b)
+{
+    return a.actor && b.actor ? a.actor == b.actor : !a.actor && !b.actor && a.id == b.id;
+}
+static bool distinct_order_actors(const pr_turn_actor *ids, unsigned n)
 {
     for (unsigned i = 0; i < n; i++)
-        for (unsigned j = 0; j < i; j++) if (ids[i] == ids[j]) return false;
+        for (unsigned j = 0; j < i; j++) if (same_order_actor(ids[i], ids[j])) return false;
     return true;
 }
 
-static void remember_turn_mover(pr_turn_order_history *h, uint32_t id)
+static void remember_turn_mover(pr_turn_order_history *h, pr_turn_actor actor)
 {
     h->n_before = h->n_recent;
     memcpy(h->before, h->recent, sizeof h->before);
     h->before_complete = h->complete;
     unsigned at = 0;
-    while (at < h->n_recent && h->recent[at] != id) at++;
+    while (at < h->n_recent && !same_order_actor(h->recent[at], actor)) at++;
     if (at == h->n_recent) {
         if (h->n_recent < 2 * PR_MAX_PARTY) h->n_recent++;
         else { h->complete = false; at--; }
     }
     while (at > 0) { h->recent[at] = h->recent[at - 1]; at--; }
-    h->recent[0] = id;
+    h->recent[0] = actor;
 }
 
 static void turn_order_snapshot(const pr_battle *bt, pr_turn_order_history *h)
 {
     const pr_turn_order_history *saved = &bt->turn_order_history;
-    if (bt->n_last_turn_order > PR_MAX_TURN_ORDER && saved->valid
-        && saved->count == bt->n_last_turn_order && saved->n_recent <= 2 * PR_MAX_PARTY
-        && saved->n_before <= 2 * PR_MAX_PARTY
-        && distinct_order_ids(saved->recent, saved->n_recent)
-        && distinct_order_ids(saved->before, saved->n_before)) {
+    int kept = bt->n_last_turn_order < PR_MAX_TURN_ORDER ? bt->n_last_turn_order : PR_MAX_TURN_ORDER;
+    if (saved->valid && saved->count == bt->n_last_turn_order
+        && !memcmp(saved->prefix, bt->last_turn_order, kept * sizeof *saved->prefix)
+        && saved->n_recent <= 2 * PR_MAX_PARTY && saved->n_before <= 2 * PR_MAX_PARTY
+        && distinct_order_actors(saved->recent, saved->n_recent)
+        && distinct_order_actors(saved->before, saved->n_before)) {
         *h = *saved;
         return;
     }
     memset(h, 0, sizeof *h);
     h->valid = true;
     h->count = bt->n_last_turn_order;
+    memcpy(h->prefix, bt->last_turn_order, kept * sizeof *h->prefix);
     h->complete = h->before_complete = bt->n_last_turn_order <= PR_MAX_TURN_ORDER;
     /* Legacy transport has the first entries, so a missing suffix can contain
      * newer actors than every supplied entry. It cannot seed a known suffix. */
     if (h->complete) {
-        for (int i = 0; i < bt->n_last_turn_order; i++) remember_turn_mover(h, bt->last_turn_order[i]);
+        for (int i = 0; i < bt->n_last_turn_order; i++) {
+            uint32_t id = bt->last_turn_order[i];
+            remember_turn_mover(h, (pr_turn_actor){id, unique_order_actor(bt, id)});
+        }
     } else if (bt->n_last_turn_order == PR_MAX_TURN_ORDER + 1) {
         /* Only the excluded final occurrence is missing. All prior actors are
          * supplied, but a subsequent append must still treat that suffix as unknown. */
-        for (int i = 0; i < PR_MAX_TURN_ORDER; i++) remember_turn_mover(h, bt->last_turn_order[i]);
+        for (int i = 0; i < PR_MAX_TURN_ORDER; i++) {
+            uint32_t id = bt->last_turn_order[i];
+            remember_turn_mover(h, (pr_turn_actor){id, unique_order_actor(bt, id)});
+        }
         memcpy(h->before, h->recent, sizeof h->before);
         h->n_before = h->n_recent;
         h->before_complete = true;
@@ -232,15 +260,24 @@ static void turn_order_snapshot(const pr_battle *bt, pr_turn_order_history *h)
     }
 }
 
-void pr_record_turn_order(pr_battle *bt, uint32_t id)
+static void record_turn_actor(pr_battle *bt, pr_turn_actor actor)
 {
     pr_turn_order_history h;
     turn_order_snapshot(bt, &h);
-    remember_turn_mover(&h, id);
-    if (bt->n_last_turn_order < PR_MAX_TURN_ORDER) bt->last_turn_order[bt->n_last_turn_order] = id;
+    remember_turn_mover(&h, actor);
+    if (bt->n_last_turn_order < PR_MAX_TURN_ORDER) bt->last_turn_order[bt->n_last_turn_order] = actor.id;
     if (bt->n_last_turn_order < UINT8_MAX) bt->n_last_turn_order++;
     h.count = bt->n_last_turn_order;
+    memcpy(h.prefix, bt->last_turn_order, sizeof h.prefix);
     bt->turn_order_history = h;
+}
+void pr_record_turn_order(pr_battle *bt, uint32_t id)
+{
+    record_turn_actor(bt, (pr_turn_actor){id, unique_order_actor(bt, id)});
+}
+void pr_record_turn_actor(pr_battle *bt, const pr_pokemon *actor)
+{
+    record_turn_actor(bt, (pr_turn_actor){actor->id, actor});
 }
 
 void pr_clear_turn_order(pr_battle *bt)
@@ -253,7 +290,15 @@ int pr_prior_turn_movers(const pr_battle *bt, uint32_t out[2 * PR_MAX_PARTY], bo
 {
     pr_turn_order_history h;
     turn_order_snapshot(bt, &h);
-    memcpy(out, h.before, h.n_before * sizeof *out);
+    for (int i = 0; i < h.n_before; i++) out[i] = h.before[i].id;
+    *complete = h.before_complete;
+    return h.n_before;
+}
+int pr_prior_turn_actors(const pr_battle *bt, const pr_pokemon *out[2 * PR_MAX_PARTY], bool *complete)
+{
+    pr_turn_order_history h;
+    turn_order_snapshot(bt, &h);
+    for (int i = 0; i < h.n_before; i++) out[i] = h.before[i].actor ? h.before[i].actor : unique_order_actor(bt, h.before[i].id);
     *complete = h.before_complete;
     return h.n_before;
 }
