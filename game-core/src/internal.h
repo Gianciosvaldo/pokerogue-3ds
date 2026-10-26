@@ -335,6 +335,9 @@ void gc_fg_lose(gc_run *run);                                   /* handleLoseMin
 void gc_fg_battle_end(gc_run *run, bool victory);               /* handleMysteryEncounterVictory's phases, after the minigame's battle ended */
 bool gc_fg_wobbuffet_moveset(gc_run *run, gc_mon *m);           /* generateMoveset for a wild Wobbuffet, on the run's RNG */
 /* mystery-encounter exits for gc_fungames.c (src/gc_mystery.c) */
+void gc_enemy_finish_party_items(gc_run *run, const gc_item *items, int n);   /* gc_enemy_finish_party with the first Pokemon's items given (no item rolls) */
+void gc_me_begin_battle(gc_run *run, int type);                /* the encounter's battle starts: the field, the first turn (an EnemyPartyConfig's enemy party is in place) */
+void gc_dark_deal_execute(gc_run *run, int option);
 void gc_me_leave_with_heal_shop(gc_run *run);                   /* leaveEncounterWithoutBattle(true) */
 void gc_me_leave_with_shop(gc_run *run, const char *key);       /* setEncounterRewards({guaranteedModifierTypeFuncs: [key], fillRemaining: false}), leaveEncounterWithoutBattle() */
 

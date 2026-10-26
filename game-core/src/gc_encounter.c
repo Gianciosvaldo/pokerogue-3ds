@@ -191,6 +191,49 @@ int gc_party_luck(gc_run *run)
     return pr_run_get_party_luck_value(&run->run, m, run->n_party, NULL, 0, 0);
 }
 
+/* regenerateModifierPoolThresholds(getEnemyField(), WILD or TRAINER) on the run's RNG, without the item rolls that follow it: each
+ * non-plain entry of every tier asks its generator for a type (generateType(party)), and each rolls once. A mystery encounter's
+ * battle with held items given in its config does only this (initBattleWithEnemyConfig, after the first await: the run's own RNG).
+ * Same draws as the first step of run-core's pr_run_generate_enemy_items */
+void gc_enemy_pool_thresholds(gc_run *run)
+{
+    const int pool = run->battle_type == BATTLE_TYPE_TRAINER ? 1 : 0;
+    const int n_field = run->n_enemy < (run->double_battle ? 2 : 1) ? run->n_enemy : (run->double_battle ? 2 : 1);
+    pr_rng *r = &run->run.rng;
+    for (int t = 0; t < 6; t++) {
+        const pr_pool_tier *pt = &pr_enemy_pools[pool][t];
+        for (int i = 0; i < pt->n; i++) {
+            const pr_pool_entry *e = &pr_pool_entries[pt->start + i];
+            if (e->kind == PR_POOL_BERRY) {
+                /* rand = randSeedInt(12): < 6 a fixed berry, else berryTypes[randSeedInt(berryTypes.length - 3) + 2] */
+                if (pr_rng_seed_int(r, 12, 0) >= 6) pr_rng_seed_int(r, (BERRY_TYPE_LEPPA + 1) - 3, 0);
+            } else if (e->kind == PR_POOL_BASE_STAT) {
+                pr_rng_seed_int(r, STAT_SPD + 1, 0);
+            } else if (e->kind == PR_POOL_ATTACK_TYPE) {
+                /* each attack move's type of the field, at most 3 weights per type; no types, no roll */
+                int8_t types[32];
+                int weights[32], n = 0, total = 0;
+                for (int p = 0; p < n_field; p++) {
+                    const pr_pokemon *mon = &run->enemy[p].b;
+                    for (int k = 0; k < mon->n_moves; k++) {
+                        if (!mon->moves[k] || !pr_move_is_attack(mon->moves[k])) continue;
+                        const int ty = pr_moves[mon->moves[k]].type;
+                        int j = 0;
+                        while (j < n && types[j] != ty) j++;
+                        if (j == n) {
+                            if (n == 32) continue;
+                            types[n] = (int8_t)ty;
+                            weights[n++] = 0;
+                        }
+                        if (weights[j] < 3) { weights[j]++; total++; }
+                    }
+                }
+                if (n) pr_rng_seed_int(r, total, 0);
+            }
+        }
+    }
+}
+
 /* The enemy's held items: regenerateModifierPoolThresholds + generateEnemyModifiers */
 static void enemy_items(gc_run *run)
 {
@@ -366,7 +409,7 @@ static void arena_flags(const gc_run *run, int prev_wave, bool *reset, bool *new
 
 /* What follows the enemy party's generation: passives and stats, the dex's seen flags, the enemy's items, the AI's view, the trainer names.
  * Also run after a custom rematch replaced the wild enemy (gc_custom_build_enemy), so the rematch enemy goes through the same paths. */
-void gc_enemy_finish_party(gc_run *run)
+static void finish_party(gc_run *run, const gc_item *given, int n_given)
 {
     gc_internal *in = gc_int(run);
     for (int i = 0; i < run->n_enemy; i++) {
@@ -379,10 +422,39 @@ void gc_enemy_finish_party(gc_run *run)
             gc_system_set_pokemon_seen(run->sys, &run->enemy[i], true, is_trainer);
         }
     }
-    enemy_items(run);
+    if (n_given < 0) enemy_items(run);
+    else {
+        /* generateEnemyModifiers(customModifierTypes) with a config for the first Pokemon: its items as given, no item rolls; the
+         * thresholds were regenerated just before */
+        gc_enemy_pool_thresholds(run);
+        run->n_enemy_items = 0;
+        for (int k = 0; k < n_given && run->n_enemy_items < GC_MAX_ITEMS; k++) {
+            gc_item *it = &run->enemy_items[run->n_enemy_items++];
+            *it = given[k];
+            it->pokemon_id = run->enemy[0].b.id;
+            it->detached = false;
+            it->virtual_stack = 0;
+            it->type_ref = 0;
+            it->loot_ref = 0;
+        }
+        gc_custom_team_items(run);
+        gc_cache_generated_item_tiers(run);
+        /* addEnemyModifier: the stat boosters it just gave count in the stats */
+        gc_items_to_battle(run);
+        for (int i = 0; i < run->n_enemy; i++) {
+            const bool full = run->enemy[i].b.hp >= run->enemy[i].b.stats[STAT_HP];
+            pr_calculate_stats(&run->bt, &run->enemy[i].b);
+            if (full) run->enemy[i].b.hp = run->enemy[i].b.stats[STAT_HP];
+        }
+    }
     gc_ai_enemy_party(run);
     gc_trainer_names(run);
 }
+
+void gc_enemy_finish_party(gc_run *run) { finish_party(run, NULL, -1); }
+
+/* the same for an encounter whose EnemyPokemonConfig names the first Pokemon's held items (modifierConfigs) */
+void gc_enemy_finish_party_items(gc_run *run, const gc_item *items, int n) { finish_party(run, items, n); }
 
 /* setNature changes the underlying nature even if a Mint/custom nature keeps
  * getNature (b.nature) unchanged. The scene owns that split and saves both. */
