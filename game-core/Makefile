@@ -1122,3 +1122,10 @@ received-history-host-test: $(BUILD)/received_history_host_test
 
 test: received-history-host-test
 .PHONY: received-history-host-test
+
+$(BUILD)/turn_order_host_test: tests/turn_order_host_test.c tests/doubles_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+turn-order-host-test: $(BUILD)/turn_order_host_test
+	$(BUILD)/turn_order_host_test
+test: turn-order-host-test
+.PHONY: turn-order-host-test

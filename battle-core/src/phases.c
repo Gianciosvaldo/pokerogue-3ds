@@ -3533,7 +3533,7 @@ static void turn_end_phase(pr_battle *bt, pr_engine *e, int ph)
         e->command_targets[i] = -1;
     }
     bt->battle_rng_live = false;
-    bt->n_last_turn_order = 0;                            /* clearLastTurnOrder */
+    pr_clear_turn_order(bt);                            /* clearLastTurnOrder */
     if (bt->ability_bar_visible) {                        /* hideAbilityBar */
         int h = pr_phase_new(e, PH_HIDE_ABILITY, -1);
         pr_phase_unshift(bt, e, h);

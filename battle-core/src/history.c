@@ -180,6 +180,84 @@ const pr_turn_move *pr_last_non_virtual_move(pr_battle *bt, const pr_pokemon *p,
     return NULL;
 }
 
+static bool distinct_order_ids(const uint32_t *ids, unsigned n)
+{
+    for (unsigned i = 0; i < n; i++)
+        for (unsigned j = 0; j < i; j++) if (ids[i] == ids[j]) return false;
+    return true;
+}
+
+static void remember_turn_mover(pr_turn_order_history *h, uint32_t id)
+{
+    h->n_before = h->n_recent;
+    memcpy(h->before, h->recent, sizeof h->before);
+    h->before_complete = h->complete;
+    unsigned at = 0;
+    while (at < h->n_recent && h->recent[at] != id) at++;
+    if (at == h->n_recent) {
+        if (h->n_recent < 2 * PR_MAX_PARTY) h->n_recent++;
+        else { h->complete = false; at--; }
+    }
+    while (at > 0) { h->recent[at] = h->recent[at - 1]; at--; }
+    h->recent[0] = id;
+}
+
+static void turn_order_snapshot(const pr_battle *bt, pr_turn_order_history *h)
+{
+    const pr_turn_order_history *saved = &bt->turn_order_history;
+    if (bt->n_last_turn_order > PR_MAX_TURN_ORDER && saved->valid
+        && saved->count == bt->n_last_turn_order && saved->n_recent <= 2 * PR_MAX_PARTY
+        && saved->n_before <= 2 * PR_MAX_PARTY
+        && distinct_order_ids(saved->recent, saved->n_recent)
+        && distinct_order_ids(saved->before, saved->n_before)) {
+        *h = *saved;
+        return;
+    }
+    memset(h, 0, sizeof *h);
+    h->valid = true;
+    h->count = bt->n_last_turn_order;
+    h->complete = h->before_complete = bt->n_last_turn_order <= PR_MAX_TURN_ORDER;
+    /* Legacy transport has the first entries, so a missing suffix can contain
+     * newer actors than every supplied entry. It cannot seed a known suffix. */
+    if (h->complete) {
+        for (int i = 0; i < bt->n_last_turn_order; i++) remember_turn_mover(h, bt->last_turn_order[i]);
+    } else if (bt->n_last_turn_order == PR_MAX_TURN_ORDER + 1) {
+        /* Only the excluded final occurrence is missing. All prior actors are
+         * supplied, but a subsequent append must still treat that suffix as unknown. */
+        for (int i = 0; i < PR_MAX_TURN_ORDER; i++) remember_turn_mover(h, bt->last_turn_order[i]);
+        memcpy(h->before, h->recent, sizeof h->before);
+        h->n_before = h->n_recent;
+        h->before_complete = true;
+        h->n_recent = 0;
+    }
+}
+
+void pr_record_turn_order(pr_battle *bt, uint32_t id)
+{
+    pr_turn_order_history h;
+    turn_order_snapshot(bt, &h);
+    remember_turn_mover(&h, id);
+    if (bt->n_last_turn_order < PR_MAX_TURN_ORDER) bt->last_turn_order[bt->n_last_turn_order] = id;
+    if (bt->n_last_turn_order < UINT8_MAX) bt->n_last_turn_order++;
+    h.count = bt->n_last_turn_order;
+    bt->turn_order_history = h;
+}
+
+void pr_clear_turn_order(pr_battle *bt)
+{
+    bt->n_last_turn_order = 0;
+    memset(&bt->turn_order_history, 0, sizeof bt->turn_order_history);
+}
+
+int pr_prior_turn_movers(const pr_battle *bt, uint32_t out[2 * PR_MAX_PARTY], bool *complete)
+{
+    pr_turn_order_history h;
+    turn_order_snapshot(bt, &h);
+    memcpy(out, h.before, h.n_before * sizeof *out);
+    *complete = h.before_complete;
+    return h.n_before;
+}
+
 enum { RECEIVED_POSITIVE = 1, RECEIVED_SUPER = 2, RECEIVED_OLDEST = 4 };
 
 static void received_remember(pr_received_history *h, const pr_attack_record *r, bool first)

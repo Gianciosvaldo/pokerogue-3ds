@@ -138,18 +138,23 @@ void pr_apply_variable_power(pr_battle *bt, const pr_pokemon *user, const pr_pok
             /* Fusion Flare / Bolt: for (p of getLastTurnOrder().slice(0, -1).reverse()) {
              *   const [lastMove] = p.getLastXMoves(1);
              *   if (lastMove.result !== FAIL) { if (SUCCESS && lastMove.move === this.move) x2; break; } } */
-            for (int k = bt->n_last_turn_order - 2; k >= 0; k--) {
-                const pr_pokemon *p = k < PR_MAX_TURN_ORDER ? pr_field_pokemon_by_id(bt, bt->last_turn_order[k]) : NULL;
-                if (!p) { pr_note_unported(bt, PR_FEAT_TURN_ORDER); break; }
+            uint32_t ids[2 * PR_MAX_PARTY];
+            bool complete, stopped = false;
+            int n = pr_prior_turn_movers(bt, ids, &complete);
+            for (int k = 0; k < n; k++) {
+                const pr_pokemon *p = pr_pokemon_by_id(bt, ids[k]);
+                if (!p) { pr_note_unported(bt, PR_FEAT_TURN_ORDER); stopped = true; break; }
                 const pr_turn_move *last = pr_last_move(bt, p, 0);
-                /* An empty history makes upstream read .result of undefined and throw */
-                if (!last) { pr_note_unported(bt, PR_FEAT_TURN_ORDER); break; }
+                /* An empty history makes upstream read .result of undefined and throw. */
+                if (!last) { pr_note_unported(bt, PR_FEAT_TURN_ORDER); stopped = true; break; }
                 if (last->result != MOVE_RESULT_FAIL) {
                     if (last->result == MOVE_RESULT_SUCCESS && last->move == P(LastMoveDoublePowerAttr, a)->move)
                         *power *= 2;
+                    stopped = true;
                     break;
                 }
             }
+            if (!stopped && !complete) pr_note_unported(bt, PR_FEAT_TURN_ORDER);
             break;
         }
         case PR_AC_MultiHitPowerIncrementAttr: {

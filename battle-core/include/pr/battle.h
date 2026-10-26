@@ -391,6 +391,14 @@ typedef struct pr_pokemon {
 #define PR_MAX_QUEUED_MOVERS 8
 #define PR_MAX_TURN_ORDER 8
 
+/* Most-recent distinct identities, both with and without the latest occurrence.
+ * Queries read each actor's current history; they do not cache move results. */
+typedef struct pr_turn_order_history {
+    uint32_t recent[2 * PR_MAX_PARTY], before[2 * PR_MAX_PARTY];
+    uint8_t count, n_recent, n_before;
+    bool valid, complete, before_complete;
+} pr_turn_order_history;
+
 /* A Pokemon has fainted (custom content, task C10). Reported from FaintPhase at doFaint, after a Reviver Seed could no longer save it and
  * before attacksReceived is cleared, so the caller can read, without guessing, who landed the hit that took the last HP.
  * `direct` is set only when the engine's own state names the attacker: the FaintPhase was queued by the hit itself (source != -1) AND the
@@ -465,6 +473,7 @@ typedef struct pr_battle {
      * started this turn, in order (its length, and its first PR_MAX_TURN_ORDER entries) */
     uint8_t n_last_turn_order;
     uint32_t last_turn_order[PR_MAX_TURN_ORDER];
+    pr_turn_order_history turn_order_history;
     /* Pokemon.id of each MovePhase still queued this turn (phaseManager.hasPhaseOfType("MovePhase")) */
     uint32_t queued_movers[PR_MAX_QUEUED_MOVERS];
     uint8_t n_queued_movers;
@@ -837,6 +846,10 @@ const pr_turn_move *pr_last_move(pr_battle *bt, const pr_pokemon *p, int k);
 /* getLastNonVirtualMove(ignoreStruggle, ignoreFollowUp); *unknown when older entries were needed */
 const pr_turn_move *pr_last_non_virtual_move(pr_battle *bt, const pr_pokemon *p, bool ignore_struggle,
                                              bool ignore_follow_up, bool *unknown);
+/* MovePhasePriorityQueue.pop / clear; latest distinct actors before the final occurrence. */
+void pr_record_turn_order(pr_battle *bt, uint32_t id);
+void pr_clear_turn_order(pr_battle *bt);
+int pr_prior_turn_movers(const pr_battle *bt, uint32_t out[2 * PR_MAX_PARTY], bool *complete);
 /* turnData.attacksReceived.unshift(record) */
 void pr_unshift_attack_received(pr_pokemon *p, const pr_attack_record *r);
 bool pr_received_counter(pr_battle *bt, const pr_pokemon *p, int category, pr_attack_record *out);
