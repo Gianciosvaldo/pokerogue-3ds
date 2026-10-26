@@ -64,7 +64,8 @@ If something goes wrong
 
 When you're done
   You can delete this whole folder to get the space back. Keep it if you'd rather not
-  download everything again next time the game needs new files.
+  download everything again next time the game needs new files (see "Updating").
+  To free about 800 MB and still update quickly, delete only the folder files\work.
 
 Saves
   Your saves stay in the 3ds\pokerogue\save folder on the SD card, whichever of the three you

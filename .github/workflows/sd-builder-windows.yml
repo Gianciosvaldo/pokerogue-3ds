@@ -129,7 +129,7 @@ jobs:
         shell: pwsh
         run: |
           $out = Get-Content (Join-Path $env:RUNNER_TEMP 'update-1.txt') -Raw
-          if ($out -match 'Downloading|Unpacking|Converting') { throw 'the update run downloaded or converted something' }
+          if ($out -cmatch 'Downloading|Unpacking|Converting') { throw 'the update run downloaded or converted something' }
           if ([regex]::Matches($out, 'already done').Count -ne 5) { throw 'the update run did not skip all five packs' }
           # What a newer zip's app looks like to the builder: the same file with different bytes
           $fs = [IO.File]::Open((Join-Path $env:BUILDER 'files\game\pokerogue.3dsx'), 'Append'); $fs.WriteByte(0); $fs.Close()
@@ -144,7 +144,7 @@ jobs:
         shell: pwsh
         run: |
           $out = Get-Content (Join-Path $env:RUNNER_TEMP 'update-2.txt') -Raw
-          if ($out -match 'Downloading|Unpacking|Converting') { throw 'the changed-app run downloaded or converted something' }
+          if ($out -cmatch 'Downloading|Unpacking|Converting') { throw 'the changed-app run downloaded or converted something' }
           if ([regex]::Matches($out, 'already done').Count -ne 5) { throw 'the changed-app run did not skip all five packs' }
           $app = Join-Path $env:BUILDER 'files\game\pokerogue.3dsx'
           if ((Get-FileHash (Join-Path $env:SD '3ds\PokeRogue.3dsx') -Algorithm SHA256).Hash -ne (Get-FileHash $app -Algorithm SHA256).Hash) { throw 'the changed app did not reach the card' }
