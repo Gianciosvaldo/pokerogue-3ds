@@ -759,3 +759,12 @@ event-delivery-host-test: $(BUILD)/event-delivery-test $(BUILD)/event-delivery-g
 	$(BUILD)/event-delivery-test
 	$(BUILD)/event-delivery-guards-test
 .PHONY: event-delivery-host-test
+
+$(BUILD)/trace-capacity-test: tests/trace-capacity-test.c tests/trace-capacity.native.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -Wl,--wrap=pr_phase_run -lm -o $@
+$(BUILD)/trace-capacity-guards-test: tests/trace-capacity-guards-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+trace-capacity-host-test: $(BUILD)/trace-capacity-test $(BUILD)/trace-capacity-guards-test
+	$(BUILD)/trace-capacity-test
+	$(BUILD)/trace-capacity-guards-test
+.PHONY: trace-capacity-host-test
