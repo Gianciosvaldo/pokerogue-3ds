@@ -252,6 +252,8 @@ typedef struct pr_pokemon {
     uint8_t form;
     uint16_t fusion_species;   /* 0 = null (not fused) */
     uint8_t fusion_form;
+    int8_t fusion_gender;      /* secondary Pokemon.gender, when supplied by the owner */
+    bool fusion_gender_known; /* old saves/imports may lack it; do not infer from the primary */
     pr_illusion illusion;
     int8_t fusion_ability_index; /* 0, 1, 2 for ability1, ability2, ability_hidden; -1 = none */
     int32_t level;

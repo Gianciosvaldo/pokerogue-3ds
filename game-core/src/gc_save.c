@@ -120,6 +120,7 @@ static const sfield mon_fields[] = {
 static const sfield pokemon_fields[] = {
     SF(pr_pokemon, id), SF(pr_pokemon, species), SF(pr_pokemon, form),
     SF(pr_pokemon, fusion_species), SF(pr_pokemon, fusion_form), SF(pr_pokemon, fusion_ability_index),
+    SF(pr_pokemon, fusion_gender), SF(pr_pokemon, fusion_gender_known),
     SF(pr_pokemon, level), SF(pr_pokemon, ivs),
     SF(pr_pokemon, nature), SF(pr_pokemon, ability), SF(pr_pokemon, base_ability), SF(pr_pokemon, ability_override),
     SF(pr_pokemon, passive), SF(pr_pokemon, passive_flag), SF(pr_pokemon, custom_passive), SF(pr_pokemon, added_type),
@@ -247,7 +248,7 @@ static reader section(const reader *body, const char *name)
 
 /* The next block into base[0 .. count-1] (stride apart), at most max records; returns the count. The
  * fields it can't fill keep what base holds and count in *dropped. */
-static int get_block(reader *r, const sfield *f, int nf, void *base, size_t stride, int max, int *dropped)
+static int get_block_impl(reader *r, const sfield *f, int nf, void *base, size_t stride, int max, int *dropped, bool legacy_fusion_gender)
 {
     enum { MAX_SAVED = 128 };
     uint32_t sh[MAX_SAVED];
@@ -279,7 +280,13 @@ static int get_block(reader *r, const sfield *f, int nf, void *base, size_t stri
             }
             off += ss[k];
         }
-        if (at[i] < 0 && count > 0) (*dropped)++;
+        /* The complete absence of the newly introduced gender pair is a
+         * supported legacy schema. All other missing/size-mismatched fields
+         * retain ordinary dropped-state accounting. */
+        bool optional_gender = legacy_fusion_gender && f == pokemon_fields
+            && (f[i].off == offsetof(pr_pokemon, fusion_gender)
+                || f[i].off == offsetof(pr_pokemon, fusion_gender_known));
+        if (at[i] < 0 && count > 0 && !optional_gender) (*dropped)++;
     }
     const int keep = count < max ? count : max;
     for (int k = 0; k < keep; k++) {
@@ -301,6 +308,11 @@ static int get_block(reader *r, const sfield *f, int nf, void *base, size_t stri
     if (count > max) (*dropped)++;
     r->pos += rec * (size_t)count;
     return keep;
+}
+
+static int get_block(reader *r, const sfield *f, int nf, void *base, size_t stride, int max, int *dropped)
+{
+    return get_block_impl(r,f,nf,base,stride,max,dropped,false);
 }
 
 /* New temporary state is optional for older, untransformed saves, but all of
@@ -359,6 +371,24 @@ static bool ability_schema_ok(reader r)
         }
     }
     return !r.bad && (found==0 || found==8);
+}
+
+/* Old saves have no secondary gender. A partial identity must not turn an
+ * absent gender into a known default male. */
+static bool fusion_gender_schema_ok(reader r, bool *present_schema)
+{
+    const char *fields[]={"fusion_gender","fusion_gender_known"};
+    bool present[2]={false};int count=0,n=take16(&r);
+    if(r.bad || n>128)return false;
+    for(int i=0;i<n;i++){
+        uint32_t name=take32(&r);uint16_t size=take16(&r);
+        for(int k=0;k<2;k++)if(name==hash(fields[k])){
+            if(size!=1 || present[k])return false;
+            present[k]=true;count++;
+        }
+    }
+    *present_schema = count == 2;
+    return !r.bad && (count==0 || count==2);
 }
 
 /* Old Transform-only saves have no alias metadata. New moveset identity is atomic. */
@@ -647,6 +677,7 @@ static bool mon_ok(const gc_mon *m)
     if (b->fusion_species != 0) {
         const pr_species *fsp = gc_species(b->fusion_species);
         if (!fsp || b->fusion_form >= fsp->nforms) return false;
+        if (b->fusion_gender_known && (b->fusion_gender < -1 || b->fusion_gender > 1)) return false;
         if (b->fusion_ability_index < -1 || b->fusion_ability_index > 2) return false;
     }
     if (b->ability_lookup_known && (b->ability_index < 0 || b->ability_index > 2
@@ -839,8 +870,13 @@ static bool get_mons(const reader *body, const char *name, gc_mon *mons, int n, 
     if (r.bad) return false;
     if (get_block(&r, mon_fields, NF(mon_fields), mons, sizeof(gc_mon), n, dropped) != n) return false;
     const bool transform_schema = has_transform_schema(r);
-    if (!berry_schema_ok(r) || !ability_schema_ok(r) || !moveset_schema_ok(r)) return false;
-    if (get_block(&r, pokemon_fields, NF(pokemon_fields), &mons[0].b, sizeof(gc_mon), n, dropped) != n) return false;
+    bool gender_schema;
+    if (!berry_schema_ok(r) || !ability_schema_ok(r) || !fusion_gender_schema_ok(r,&gender_schema) || !moveset_schema_ok(r)) return false;
+    if (get_block_impl(&r, pokemon_fields, NF(pokemon_fields), &mons[0].b, sizeof(gc_mon), n, dropped,!gender_schema) != n) return false;
+    for (int i = 0; i < n; i++) {
+        uint8_t known;memcpy(&known,&mons[i].b.fusion_gender_known,1);
+        if(known>1)return false;
+    }
     for (int i = 0; i < n; i++) {
         pr_pokemon *b = &mons[i].b;
         b->n_tags = (uint8_t)get_block(&r, tag_fields, NF(tag_fields), b->tags, sizeof b->tags[0], PR_MAX_BATTLER_TAGS, dropped);

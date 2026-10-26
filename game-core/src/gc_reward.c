@@ -158,7 +158,7 @@ static void fill_mon(gc_run *run, gc_mon *m, pr_reward_mon *r)
     r->fusion_species = p->fusion_species ? (int16_t)p->fusion_species : -1;
     r->fusion_form = p->fusion_form;
     r->gender = p->gender;
-    r->fusion_gender = 0;
+    r->fusion_gender = p->fusion_gender;
     r->level = p->level;
     r->exp = m->exp;
     r->hp = p->hp;

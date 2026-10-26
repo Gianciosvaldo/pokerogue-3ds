@@ -251,8 +251,13 @@ static void level_up(gc_run *run, gc_rphase *p)
          * walked yet */
     }
     if (!m->pause_evolutions) {
-        const int evo = gc_mon_get_evolution(run, m);
-        if (evo >= 0) gc_rq_unshift(run, gc_rp(RP_EVOLUTION, p->a, evo, p->b));
+        bool fusion;
+        const int evo = gc_mon_get_evolution_target(run, m, &fusion);
+        if (evo >= 0) {
+            gc_rphase request = gc_rp(RP_EVOLUTION, p->a, evo, p->b);
+            request.d = fusion;
+            gc_rq_unshift(run, request);
+        }
     }
 }
 
@@ -312,11 +317,12 @@ static bool evolution_start(gc_run *run, gc_rphase *p)
 static void evolve(gc_run *run, gc_rphase *p)
 {
     gc_mon *m = pm(run, p->a);
-    const int before = m->b.species;
+    const bool fusion = p->d == 1;
+    const int before = fusion ? m->b.fusion_species : m->b.species;
     const pr_msg_arg pre_name = gc_m_mon(run, "pokemonName", 0, p->a);
-    gc_mon_evolve(run, m, p->b);
+    gc_mon_evolve_target(run, m, p->b, fusion);
     gc_event *ev = gc_ev_new(run, GC_EV_EVOLVED);
-    if (ev) { ev->a = p->a; ev->b = before; ev->c = m->b.species; }
+    if (ev) { ev->a = p->a; ev->b = before; ev->c = fusion ? m->b.fusion_species : m->b.species; }
     gc_ev_msg(run, "menu:evolutionDone", 2, pre_name, pr_arg_pokemon_name(&run->bt, "evolvedPokemonName", &m->b));
     /* postEvolve: getLevelMoves({startingLevel: lastLevel + 1, includeEvolutionMoves}) filtered to the evolution moves
      * (level 0) of the evolved form, one LearnMovePhase each */
