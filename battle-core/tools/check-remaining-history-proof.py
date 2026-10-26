@@ -25,15 +25,19 @@ with tempfile.TemporaryDirectory(prefix='remaining-capture-') as directory:
  print('8 malformed native captures rejected',flush=True)
 for binary in [bc/'build/remaining-history-test',bc/'build/remaining-history-guards-test',gc/'build/remaining_history_host_test']:subprocess.run([binary],check=True)
 faults=[]
-def fault(file,name,old,new,kind='native'):
- source=(root/file).read_text();assert source.count(old)==1,(name,source.count(old));faults.append((name,file,source.replace(old,new),kind))
+def fault(file,name,old,new,kind='native',also=None):
+ source=(root/file).read_text();assert source.count(old)==1,(name,source.count(old));source=source.replace(old,new)
+ if also:
+  # Recycling and target propagation independently reject stale summon epochs.
+  prior,replacement=also;assert source.count(prior)==1;source=source.replace(prior,replacement)
+ faults.append((name,file,source,kind))
 fault('battle-core/src/history.c','ignore-virtual','if(tm->move!=MOVE_ID_NONE){','if(tm->move!=MOVE_ID_NONE&&tm->use_mode<MOVE_USE_MODE_INDIRECT){')
 fault('battle-core/src/history.c','ignore-failed-aim','if(tm->move==MOVE_ID_LOCK_ON||tm->move==MOVE_ID_MIND_READER){','if(tm->result==MOVE_RESULT_SUCCESS&&(tm->move==MOVE_ID_LOCK_ON||tm->move==MOVE_ID_MIND_READER)){')
 fault('battle-core/src/history.c','omit-mind-reader','if(tm->move==MOVE_ID_LOCK_ON||tm->move==MOVE_ID_MIND_READER){','if(tm->move==MOVE_ID_LOCK_ON){')
 fault('battle-core/src/history.c','retain-first-aim','if(tm->move==MOVE_ID_LOCK_ON||tm->move==MOVE_ID_MIND_READER){','if(!(p->history_all_present&2)&&(tm->move==MOVE_ID_LOCK_ON||tm->move==MOVE_ID_MIND_READER)){')
 fault('battle-core/src/history.c','invent-legacy-absence','p->history_all_known=p->n_move_history<=PR_MAX_MOVE_HISTORY?3:0;','p->history_all_known=3;','guard')
 fault('battle-core/src/engine.c','lose-shared-targets','if((p->history_all_present&2)&&p->history_aim_serial==e->hist_alias[k].abs){','if(false){')
-fault('battle-core/src/engine.c','bind-old-summon-array','if(e->hist_alias[k].epoch!=p->history_epoch)continue;','/* stale array remains bound */','guard')
+fault('battle-core/src/engine.c','bind-old-summon-array','if(e->hist_alias[k].epoch!=p->history_epoch)continue;','/* stale array remains bound */','guard',also=('if (epoch != p->history_epoch) return false;','/* retain stale summon aliases */'))
 fault('game-core/src/gc_save.c','omit-save-extension','    snprintf(key,sizeof key,"%s_all_moves",name);','    snprintf(key,sizeof key,"old_%s_all_moves",name);','save')
 fault('game-core/src/gc_save.c','invent-legacy-prefix','if(!sections){for(int i=0;i<n;i++)pr_rebuild_all_history(&mons[i].b);return true;}','if(!sections){for(int i=0;i<n;i++){pr_rebuild_all_history(&mons[i].b);mons[i].b.history_all_known=3;}return true;}','save')
 fault('game-core/src/gc_save.c','admit-invalid-mask','if(p->history_all_known>3||','if(false||','save')
