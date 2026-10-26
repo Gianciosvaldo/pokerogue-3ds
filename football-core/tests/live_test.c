@@ -84,7 +84,10 @@ int main(void)
         assert(football_live_begin(&game,&roster,seed,1));
         unsigned steps=0;
         while(game.phase!=FB_LIVE_END && ++steps<30000){
-            if(game.phase==FB_LIVE_CALL)assert(football_live_call(&game,FB_RUN_DIVE));
+            if(game.phase==FB_LIVE_CALL){
+                if(game.conversion==1)assert(football_live_special(&game,FB_SPECIAL_EXTRA_POINT)); /* the try after a touchdown */
+                else assert(football_live_call(&game,FB_RUN_DIVE));
+            }
             football_live_tick(&game,100,(FootballLiveInput){.x=game.rules.offense==FB_HOME?1:-1,.pressed=FB_LIVE_ACTION,.receiver=-1});
         }
         assert(game.phase==FB_LIVE_END && game.snaps>0 && steps<30000);

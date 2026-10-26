@@ -48,9 +48,12 @@ static void run_clock(FootballRules *r, unsigned seconds)
         if (r->quarter==3) { r->last.halftime=true; drive(r,FB_AWAY,25); }
     }
 }
-static void touchdown(FootballRules *r, unsigned scorer)
+/* A touchdown is worth td_points (7 when unset), unless nothing can follow it: the end of regulation or overtime. */
+static void touchdown(FootballRules *r, unsigned scorer, unsigned seconds)
 {
-    r->score[scorer]+=7; r->last.touchdown=true; end_drive(r,1-scorer,25);
+    bool final_play=r->quarter>=5 || (r->quarter==4 && seconds>=r->seconds_left);
+    r->score[scorer]+=r->td_points && !final_play ? r->td_points : 7;
+    r->last.touchdown=true; end_drive(r,1-scorer,25);
 }
 bool football_rules_begin(FootballRules *out, FootballSide tiebreak_side)
 {
@@ -78,10 +81,10 @@ bool football_rules_advance(FootballRules *out, FootballResolvedPlay p)
     if (lost) {
         r.last.turnover=true;
         if (spot<=0) { /* Lost ball recovered in the offense's own end zone. */
-            touchdown(&r,defense);
+            touchdown(&r,defense,p.seconds);
         } else end_drive(&r,defense,spot>=100 ? 25 : (unsigned)(100-spot));
     } else if (spot>=100) {
-        touchdown(&r,offense);
+        touchdown(&r,offense,p.seconds);
     } else if (spot<=0) {
         r.score[defense]+=2; r.last.safety=true; end_drive(&r,defense,25);
     } else {
@@ -120,7 +123,16 @@ bool football_rules_touchdown(FootballRules *out, FootballSide scorer, unsigned 
     if (!sound(out) || (unsigned)scorer>FB_AWAY || !seconds || seconds>30) return false;
     FootballRules r=*out;
     memset(&r.last,0,sizeof r.last);
-    touchdown(&r,scorer);
+    touchdown(&r,scorer,seconds);
     run_clock(&r,seconds);
+    *out=r; return true;
+}
+bool football_rules_conversion(FootballRules *out, FootballSide scorer, unsigned points, FootballSide receiver)
+{
+    if (!sound(out) || out->quarter>=5 || (unsigned)scorer>FB_AWAY || (unsigned)receiver>FB_AWAY || points>2) return false;
+    FootballRules r=*out;
+    memset(&r.last,0,sizeof r.last);
+    r.score[scorer]+=(uint16_t)points; r.last.conversion=points>0;
+    drive(&r,receiver,25);
     *out=r; return true;
 }

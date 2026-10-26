@@ -68,6 +68,15 @@ FootballSpecial football_live_ai_special(const FootballLive *m)
     if(last_minutes && lead<0 && r->ball>=40 && to_go<=8)return FB_SPECIAL_NONE;
     return FB_SPECIAL_PUNT;
 }
+bool football_live_ai_goes_for_two(const FootballLive *m)
+{
+    const FootballRules *r=&m->rules;unsigned me=m->after_side;
+    /* The score includes the touchdown just scored. Late, go for two where it changes what the other team needs. */
+    int lead=(int)r->score[me]-(int)r->score[1-me];
+    if(r->quarter>=4)return lead==-2 || lead==-5 || lead==-8 || lead==-10 || lead==-13;
+    /* Earlier it is a rare gamble, a little likelier when far behind. */
+    return (m->rng>>9)%100u<(lead<=-9?12u:4u);
+}
 FootballDefenseId football_live_ai_defense(FootballLive *m)
 {
     const FootballRules *r=&m->rules;unsigned to_go=football_rules_distance(r);

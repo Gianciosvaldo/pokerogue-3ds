@@ -9,8 +9,10 @@ bool football_live_is_blocker(const FootballLive *m,unsigned actor)
     unsigned off=offense(m);
     if(actor<off || actor>=off+11 || actor==m->carrier)return false;
     if(m->special && m->stage!=FB_STAGE_RETURN){
-        /* The kicking line holds the rushers off until the foot meets the ball; the gunners are already gone. */
-        return m->stage==FB_STAGE_SNAP && (actor>=off+6 || (m->special==FB_SPECIAL_FIELD_GOAL && actor>=off+2));
+        /* The kicking line holds the rushers off until the foot meets the ball; the gunners are already gone, and a
+         * kickoff has no line to hold. */
+        if(m->stage!=FB_STAGE_SNAP || m->special==FB_SPECIAL_KICKOFF)return false;
+        return actor>=off+6 || (m->special!=FB_SPECIAL_PUNT && actor>=off+2);
     }
     /* Five linemen always block; on a called run the receivers and the tight end do too. */
     const FootballPlayDefinition *p=football_playbook_get(m->play);
