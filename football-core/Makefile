@@ -194,7 +194,7 @@ live-screen-test: core-libs
 	$(BUILD)/live_screen_test
 test: live-screen-test
 
-LIVE_SRCS = src/football_live.c src/football_live_ai.c src/football_live_defense.c src/football_live_physics.c
+LIVE_SRCS = src/football_live.c src/football_live_ai.c src/football_live_defense.c src/football_live_physics.c src/football_live_special.c
 
 .PHONY: live-systems-test
 live-systems-test: core-libs
@@ -209,6 +209,13 @@ ai-test: core-libs
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/ai_test.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/ai_test
 	$(BUILD)/ai_test
 test: ai-test
+
+.PHONY: special-test
+special-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/special_test.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/special_test
+	$(BUILD)/special_test
+test: special-test
 
 .PHONY: live-art-test
 live-art-test: $(BUILD)/live_art_test

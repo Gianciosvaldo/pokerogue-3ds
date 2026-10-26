@@ -2,6 +2,7 @@
 #include "football_live_systems.h"
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 static void label(FootballRenderer *r,const char *s,float x,float y,float scale,u32 color)
 {
     C2D_Text t;C2D_TextParse(&t,r->text,s);C2D_TextOptimize(&t);C2D_DrawText(&t,C2D_WithColor,x,y,.9f,scale,scale,color);
@@ -15,6 +16,28 @@ static void rect(float x,float y,float w,float h,float z,u32 color)
 static void world(const FootballCamera *c,float x,float y,float w,float h,float z,u32 color)
 {
     rect(football_camera_x(c,x),football_camera_y(c,y),w*FB_CAMERA_SCALE,h*FB_CAMERA_SCALE*FB_CAMERA_SQUASH,z,color);
+}
+/* The line shown over the field while the ball is dead. */
+static bool banner(const FootballLive *m,char *out,size_t size)
+{
+    if((m->phase!=FB_LIVE_DEAD && m->phase!=FB_LIVE_END) || m->event==FB_EVENT_NONE)return false;
+    switch(m->event){
+    case FB_EVENT_TOUCHDOWN:snprintf(out,size,"TOUCHDOWN!");break;
+    case FB_EVENT_INTERCEPTION:snprintf(out,size,"INTERCEPTION!");break;
+    case FB_EVENT_SACK:snprintf(out,size,"SACK!");break;
+    case FB_EVENT_FUMBLE:snprintf(out,size,"FUMBLE!");break;
+    case FB_EVENT_SAFETY:snprintf(out,size,"SAFETY");break;
+    case FB_EVENT_PUNT:snprintf(out,size,"PUNT  %d YDS",(int)m->kick_yards);break;
+    case FB_EVENT_FAIR_CATCH:snprintf(out,size,"FAIR CATCH");break;
+    case FB_EVENT_TOUCHBACK:snprintf(out,size,"TOUCHBACK");break;
+    case FB_EVENT_OUT_OF_BOUNDS:snprintf(out,size,"OUT OF BOUNDS");break;
+    case FB_EVENT_MUFF:snprintf(out,size,"MUFFED CATCH!");break;
+    case FB_EVENT_BLOCKED:snprintf(out,size,"BLOCKED!");break;
+    case FB_EVENT_FIELD_GOAL:snprintf(out,size,"FIELD GOAL  %d YDS",(int)m->kick_yards);break;
+    case FB_EVENT_FIELD_GOAL_MISSED:snprintf(out,size,"NO GOOD");break;
+    default:return false;
+    }
+    return true;
 }
 void football_live_art_top(FootballRenderer *r,const FootballCareer *c,const FootballCamera *cam,unsigned ms)
 {
@@ -45,7 +68,7 @@ void football_live_art_top(FootballRenderer *r,const FootballCareer *c,const Foo
     const FootballLive *m=&c->live;float dir=m->rules.offense==FB_HOME?1:-1;
     world(cam,m->los,0,.18f,53.333f,.05f,C2D_Color32(74,163,255,255));
     float first=m->rules.offense==FB_HOME?10+m->rules.first_down_at:110-m->rules.first_down_at;
-    world(cam,first,0,.18f,53.333f,.05f,gold);
+    if(!m->special)world(cam,first,0,.18f,53.333f,.05f,gold);
     unsigned order[22];for(unsigned i=0;i<22;++i){order[i]=i;for(unsigned j=i;j>0 && m->actors[order[j]].y<m->actors[order[j-1]].y;--j){unsigned t=order[j];order[j]=order[j-1];order[j-1]=t;}}
     for(unsigned rank=0;rank<22;++rank){unsigned i=order[rank];const FootballLiveActor *a=&m->actors[i];
         float x=football_camera_x(cam,a->x),y=football_camera_y(cam,a->y);
@@ -61,16 +84,29 @@ void football_live_art_top(FootballRenderer *r,const FootballCareer *c,const Foo
         rect(x-7,y+13,14,3,.3f,team);
     }
     /* Receivers keep their numbered targets even when outside the closer view. */
-    if(m->rules.offense==FB_HOME && !m->caught){static const unsigned targets[5]={2,3,4,5,1};
+    if(m->rules.offense==FB_HOME && !m->caught && !m->special){static const unsigned targets[5]={2,3,4,5,1};
         for(unsigned i=0;i<5;++i){const FootballLiveActor *a=&m->actors[targets[i]];float x=bound(football_camera_x(cam,a->x),12,382),y=bound(football_camera_y(cam,a->y)-34,50,217);char n[3];snprintf(n,sizeof n,"%u",i+1);rect(x-7,y,18,19,.7f,navy);label(r,n,x-3,y,.5f,gold);}
     }
     float bx=football_camera_x(cam,m->ball_x),by=football_camera_y(cam,m->ball_y)-m->ball_z*5;
     rect(bx-4,by-4,9,5,.6f,C2D_Color32(154,85,36,255));rect(bx-1,by-3,3,2,.61f,white);
+    if(m->special==FB_SPECIAL_PUNT && m->stage==FB_STAGE_FLIGHT){
+        /* Where the punt comes down, for the returner and for the coverage. */
+        world(cam,m->to_x-1.4f,m->to_y-.6f,2.8f,1.2f,.07f,C2D_Color32(255,210,63,200));
+        world(cam,m->to_x-.6f,m->to_y-1.4f,1.2f,2.8f,.07f,C2D_Color32(255,210,63,200));
+        if(m->kick_side==FB_AWAY)label(r,"A: FAIR CATCH",138,218,.45f,gold);
+    }
+    char line[40];
+    if(banner(m,line,sizeof line)){
+        float width=(float)strlen(line)*13;
+        rect(200-width/2-14,96,width+28,36,.85f,navy);rect(200-width/2-14,96,width+28,3,.86f,gold);rect(200-width/2-14,129,width+28,3,.86f,gold);
+        label(r,line,200-width/2,101,.8f,white);
+    }
     C2D_DrawRectSolid(0,0,.8f,400,44,navy);C2D_DrawRectSolid(0,41,.81f,400,3,gold);
     char score[72],situation[72];unsigned seconds=m->rules.seconds_left;
     if(m->phase==FB_LIVE_PLAY && m->rules.quarter<5)seconds=seconds>(unsigned)m->elapsed?seconds-(unsigned)m->elapsed:0;
     snprintf(score,sizeof score,"HOME %02u   AWAY %02u     Q%u  %u:%02u",m->rules.score[0],m->rules.score[1],m->rules.quarter,seconds/60,seconds%60);
-    snprintf(situation,sizeof situation,"ROUND %u/7   %s  DOWN %u / %u YD",c->round,dir>0?">>>":"<<<",m->rules.down,football_rules_distance(&m->rules));
+    if(m->special)snprintf(situation,sizeof situation,"ROUND %u/7   %s",c->round,m->special==FB_SPECIAL_PUNT?"PUNT":"FIELD GOAL");
+    else snprintf(situation,sizeof situation,"ROUND %u/7   %s  DOWN %u / %u YD",c->round,dir>0?">>>":"<<<",m->rules.down,football_rules_distance(&m->rules));
     label(r,score,12,2,.53f,white);label(r,situation,12,23,.40f,gold);
 }
 void football_live_art_card(FootballRenderer *r,FootballPlayId id,float x,float y,float w,float h,bool selected)
@@ -87,6 +123,26 @@ void football_live_art_card(FootballRenderer *r,FootballPlayId id,float x,float 
     for(unsigned i=0;i<18;++i){FootballRoutePoint point=football_playbook_route(p,i/17.0f);float px=x+w*.22f+point.y*2,py=y+h-12-point.x*1.2f;
         C2D_DrawRectSolid(px,py,.04f,3,3,gold);last_x=px;last_y=py;}
     C2D_DrawRectSolid(last_x-2,last_y-3,.04f,7,3,gold);
+}
+
+void football_live_art_special_card(FootballRenderer *r,FootballSpecial kind,const char *detail,float x,float y,float w,float h,bool selected,bool enabled)
+{
+    if(!r || !r->text)return;
+    u32 gold=C2D_Color32(255,210,63,255),white=C2D_Color32(246,246,242,255),dim=C2D_Color32(120,126,148,255),blue=C2D_Color32(74,163,255,255);
+    C2D_DrawRectSolid(x,y,0,w,h,selected?gold:C2D_Color32(74,80,104,255));
+    C2D_DrawRectSolid(x+2,y+2,.01f,w-4,h-4,C2D_Color32(27,37,71,255));
+    label(r,kind==FB_SPECIAL_PUNT?"PUNT":"FIELD GOAL",x+8,y+5,.46f,!enabled?dim:selected?gold:white);
+    C2D_DrawRectSolid(x+8,y+31,.02f,w-16,1,enabled?blue:dim);
+    if(kind==FB_SPECIAL_PUNT){
+        /* A high arc down the field. */
+        for(unsigned i=0;i<20;++i){float t=i/19.0f;C2D_DrawRectSolid(x+14+t*(w-40),y+h-24-4*t*(1-t)*(h-58)*1.6f,.03f,3,3,enabled?gold:dim);}
+    }else{
+        /* The uprights, with the kick on its way. */
+        float px=x+w-34;
+        C2D_DrawRectSolid(px,y+38,.03f,2,24,enabled?gold:dim);C2D_DrawRectSolid(px+14,y+38,.03f,2,24,enabled?gold:dim);C2D_DrawRectSolid(px,y+62,.03f,16,2,enabled?gold:dim);C2D_DrawRectSolid(px+7,y+62,.03f,2,12,enabled?gold:dim);
+        for(unsigned i=0;i<12;++i){float t=i/11.0f;C2D_DrawRectSolid(x+14+t*(w-58),y+h-18-t*(h-46)-2*t*(1-t)*20,.03f,3,3,enabled?white:dim);}
+    }
+    if(detail)label(r,detail,x+8,y+h-17,.33f,enabled?white:dim);
 }
 
 void football_live_art_defense_card(FootballRenderer *r,FootballDefenseId id,float x,float y,float w,float h,bool selected)

@@ -42,6 +42,7 @@ static Stats play_games(unsigned first_seed,unsigned games)
             unsigned before=m.snaps;FootballPlayId play=m.play;
             football_live_tick(&m,16,(FootballLiveInput){.receiver=-1});
             if(m.snaps==before)continue;
+            if(m.special)continue; /* kicks are counted in special_test */
             st.snaps++;st.plays[play]++;
             switch(m.result.kind){
             case FB_RESULT_RUN:st.runs++;

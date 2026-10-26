@@ -7,6 +7,16 @@
 #define FB_LIVE_ACTORS 22
 #define FB_LIVE_STEP (1.0f/60.0f)
 typedef enum { FB_LIVE_CALL,FB_LIVE_SET,FB_LIVE_PLAY,FB_LIVE_DEAD,FB_LIVE_END } FootballLivePhase;
+/* A kick played in place of a scrimmage play, and where in its flight it is. The return stage hands the ball
+ * to the receiving team: rules.offense flips to it, so carrier, blockers and pursuit work as on any run. */
+typedef enum { FB_SPECIAL_NONE,FB_SPECIAL_PUNT,FB_SPECIAL_FIELD_GOAL } FootballSpecial;
+typedef enum { FB_STAGE_SNAP,FB_STAGE_FLIGHT,FB_STAGE_ROLL,FB_STAGE_RETURN } FootballKickStage;
+/* What just happened, for the banner the screen shows during the dead ball. */
+typedef enum {
+    FB_EVENT_NONE,FB_EVENT_TOUCHDOWN,FB_EVENT_INTERCEPTION,FB_EVENT_SACK,FB_EVENT_FUMBLE,FB_EVENT_SAFETY,
+    FB_EVENT_PUNT,FB_EVENT_FAIR_CATCH,FB_EVENT_TOUCHBACK,FB_EVENT_OUT_OF_BOUNDS,FB_EVENT_MUFF,FB_EVENT_BLOCKED,
+    FB_EVENT_FIELD_GOAL,FB_EVENT_FIELD_GOAL_MISSED
+} FootballLiveEvent;
 enum { FB_LIVE_ACTION=1,FB_LIVE_JUKE=2,FB_LIVE_SWITCH=4 };
 typedef struct { float x,y;unsigned pressed;int receiver; } FootballLiveInput;
 typedef struct { FootballAttributes attributes;float x,y,vx,vy,stun,contact,block_time,block_cooldown,block_edge;
@@ -31,6 +41,9 @@ typedef struct {
     /* Not serialized: the CPU's last three calls (play id + 1), the side a scripted run bends toward
      * (-1/+1), and bit 0 set to let the CPU play the HOME side too (host tests, demos). */
     uint8_t recent[3],autoplay;int8_t run_side;
+    /* Kicks (not serialized: a checkpoint is always taken at a call). kick_yards is the gross distance of the
+     * last punt from the line of scrimmage; the landing spot is to_x/to_y while the ball flies. */
+    uint8_t special,stage,kick_side,event;bool fair_catch,kick_good;int16_t kick_yards;
     FootballResolvedPlay result;
     unsigned snaps;
 } FootballLive;
@@ -46,4 +59,16 @@ FootballPlayId football_live_ai_call(FootballLive *m);
 /* True when the CPU runs that side (always AWAY; HOME too when autoplay is set). */
 bool football_live_cpu(const FootballLive *m,FootballSide side);
 void football_live_switch(FootballLive *m);
+/* Special teams, CALL phase only. A punt is always allowed; a field goal only within kick range of the goal. The
+ * kicker is the QB slot of the offense unit, so its throw power and accuracy set the kick. */
+bool football_live_special(FootballLive *m,FootballSpecial kind);
+bool football_live_special_allowed(const FootballLive *m,FootballSpecial kind);
+/* Field-goal kick length in yards (line of scrimmage to goal line plus the end zone and the holder) and the
+ * percent chance this kicker makes it. */
+unsigned football_live_fg_distance(const FootballLive *m);
+unsigned football_live_fg_chance(const FootballLive *m);
+/* What the CPU does on this down: FB_SPECIAL_NONE (run a play), a punt or a field goal. */
+FootballSpecial football_live_ai_special(const FootballLive *m);
+/* Where the camera should look: the controlled player, the ball in flight, or the kicker before a kick. */
+void football_live_focus(const FootballLive *m,float *x,float *y,float *vx);
 #endif
