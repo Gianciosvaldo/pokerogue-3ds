@@ -93,6 +93,14 @@ def gb(n):
     return f"{n / GB:.1f} GB"
 
 
+def version():
+    """The game revision this zip was made from (files/VERSION.txt, written by make-zip.sh), or ""."""
+    try:
+        return open(os.path.join(FILES, "VERSION.txt"), encoding="utf-8").read().strip()
+    except OSError:
+        return ""
+
+
 # ---------------------------------------------------------------- downloads
 
 
@@ -452,22 +460,35 @@ STAGE_TEXT = {
 }
 
 
+def pending_stages():
+    """The packs that have to be made: missing, stopped halfway, or made by other pins or pipeline code."""
+    want = recipe()
+    return [s for s in PINS["packs"]
+            if not (os.path.exists(os.path.join(PACK_DIR, f"{s}.pak")) and os.path.exists(os.path.join(PACK_DIR, f".{s}.done"))
+                    and open(os.path.join(PACK_DIR, f".{s}.done")).read() == want)]
+
+
 def build(assets, locales, game, lib, ffmpeg):
+    """Makes the packs in pending_stages() and says which ones were already done. The tools and upstream's files
+    (assets, locales, game, lib, ffmpeg) may be None when nothing is pending."""
     os.makedirs(PACK_DIR, exist_ok=True)
     jobs = _args.jobs or max(1, (os.cpu_count() or 2) - 1)  # leave a core free so the PC stays usable
-    encoder = os.path.join(PIPELINE, "tools", "dspadpcm.exe") if WINDOWS else _unix_encoder()
+    encoder = None
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join(p for p in (lib, PIPELINE) if p)
     if ffmpeg:
         env["PATH"] = ffmpeg + os.pathsep + env.get("PATH", "")
     want = recipe()
     stages = PINS["packs"]
+    todo = pending_stages()
     for n, stage in enumerate(stages, 1):
         pak = os.path.join(PACK_DIR, f"{stage}.pak")
         marker = os.path.join(PACK_DIR, f".{stage}.done")
-        if os.path.exists(pak) and os.path.exists(marker) and open(marker).read() == want:
+        if stage not in todo:
             say(f"[{n}/{len(stages)}] {STAGE_TEXT[stage]}: already done")
             continue
+        if encoder is None:
+            encoder = os.path.join(PIPELINE, "tools", "dspadpcm.exe") if WINDOWS else _unix_encoder()
         say(f"[{n}/{len(stages)}] Converting {STAGE_TEXT[stage]}...")
         if os.path.exists(marker):
             os.remove(marker)
@@ -833,6 +854,9 @@ def main():
     say("20 to 60 minutes. You can use the PC meanwhile. If it stops, just run it again.")
     say("The files it makes are for your own console only. Please don't share them.")
     say("")
+    if version():
+        say(version())  # in the log too, so a build-log.txt names the game it was made with
+        say("")
 
     t0 = time.time()
     try:
@@ -860,7 +884,7 @@ def main():
             missing = [n for n, p in _packs() if not os.path.exists(p)]
             if missing:
                 raise Stop(f"--existing-packs: {', '.join(missing)} not in {PACK_DIR}")
-        else:
+        elif pending_stages():
             lib = unpack_wheels()
             install_fribidi()
             ffmpeg = unpack_ffmpeg()
@@ -870,6 +894,10 @@ def main():
             say("")
             say("Converting everything for the 3DS. This is the long part.")
             build(assets, locales, game, lib, ffmpeg)
+            say("")
+        else:  # an update: everything an earlier run made is still right, so nothing is downloaded either
+            say("The pictures, sounds, music and text from an earlier run are up to date: nothing to fetch or make.")
+            build(None, None, None, None, None)
             say("")
         outputs = bundle_game(kinds_of(fmt))
         items = sd_items(fmt, outputs)

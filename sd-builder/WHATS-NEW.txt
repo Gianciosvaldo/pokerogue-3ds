@@ -1,0 +1,62 @@
+What is in this build of PokeRogue 3DS
+======================================
+
+The exact version is in files\VERSION.txt, and the builder prints it when it starts and writes it to
+build-log.txt. Quote it in a bug report.
+
+Converted files: this build adds pictures (the JoJo trainer sprites, in the pictures pack). Coming from the
+October 24 builder or earlier, the first run converts everything again (up to half an hour). Later builds skip
+that unless WHATS-NEW.txt says otherwise.
+
+New since the October 24 builder
+  Rivals and trainers
+    - The six Classic rival waves are real fights now (a male player meets Ivy; the app has no player
+      gender yet). Trainers speak their upstream encounter and victory lines in battle.
+    - Custom runs: on each eligible trainer wave there is a 1 in 4 chance of a JoJo challenger instead
+      (17 characters; each at most once a run, at most one per wave). Their sprites are fan art that ships
+      inside this builder. Classic runs never meet them.
+    - Custom runs also have a "Pillar Men" mystery encounter with three options: Esidisi (easy), Wamuu
+      (hard) and Kars (brutal).
+  Mystery encounters
+    - All 20 kinds can come up in runs now (a bug had limited runs to 2 kinds), and they show a question
+      screen with the upstream options. Several are still simplified stand-ins, the screen has no closing
+      text yet, and the GTS second pick takes the first Pokemon in the list.
+  Screens and layout
+    - Starter select has upstream-style filters.
+    - Move animations cover the whole top screen, background and graphics.
+    - Pokemon and platforms are bigger on the top screen, and in doubles the foes sit clear of your boxes.
+      Only the geometry was set, nothing was seen on a screen: tell me what to move.
+  Achievements
+    - 68 of about 100, on the title menu, with their rewards: 30 for the JoJo challengers, 14 about runs,
+      16 about the collection and 8 about eggs. Not in yet: the 14 battle feats, the mystery encounter and
+      economy ones, and the rival and party ones.
+  Fixes
+    - A run saved after Counter, Mirror Coat or Metal Burst loads again.
+    - Fights inside a mystery encounter no longer overwrite the run's one save.
+    - Exact battle history for Protect streaks, Last Resort, Conversion 2, Lock-On and more; Macho Brace;
+      held form items and their Check Team actions.
+
+Earlier builds, still in this one
+  - Football Playoff on the title menu: its own save, playcalling, progression and shops.
+  - Starter customization: select a Pokemon, then Customize to choose moves, an unlocked nature, shiny tier
+    or ability. Use candies buys the passive or hidden ability at the species passive price, and an unlocked
+    passive can be switched on or off. Caught natures and mints stay unlocked. Catching, hatching and
+    friendship give species candy. Team luck shows before a run and in the battle commands.
+  - Eggs show a cracking and reveal animation. Customize > Use candies > Buy species egg buys an egg of that
+    Pokemon. Eggs unlock starters after enough victories; they do not join your party.
+  - Doubles: Lures lead to playable double battles. Choose a move for each ally and a target when asked;
+    B on the second ally undoes the first. Hold SELECT in battle for upstream's stat-change panels.
+  - Hatch results show the IV radar, nature and new egg moves. Three starters get Pokerus every three hours.
+    Customize > Use candies offers two starter cost reductions. Fight shows consecutive-move power.
+  - IV Scanner questions appear when you enter an ordinary wild battle with the item. Hold SELECT on a shop
+    TM to read its move's effect. Existing PP Ups show in item menus.
+  - Your trainer throws the opening Poke Ball and the rivals are visible. The run report can name the
+    final blow.
+
+Not checked on a real 3DS
+  Automated checks on a PC cannot replace your console. In particular: the one-file PokeRogue.3dsx and
+  PokeRogue.cia (the packs inside the file) have never been started on a console; the new top-screen
+  sizes, the mystery encounter screen, the Pillar Men options and the achievements screen have not been
+  seen on any screen; and Valentine's quote is long enough that it may wrap badly in the dialogue box.
+  If PokeRogue.3dsx will not start, choose answer 3 (loose files) and tell the project thread what the
+  3DS screen says.
