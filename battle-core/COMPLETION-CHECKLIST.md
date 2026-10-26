@@ -76,6 +76,8 @@ money handling merged in #357; see [their validation record](HONEY-MONEY-VALIDAT
    The [turn-order follow-up](TURN-ORDER-VALIDATION.md) covers complete Fusion
    Flare/Bolt queries beyond the first eight movers, live actor histories,
    shared-target alias lifetime and a native nineteen-action turn.
+   The [actor-reference follow-up](TURN-ACTOR-VALIDATION.md) preserves native
+   turn-order objects across ID collisions, ID changes and party removal.
 2. Finish the source inventory, including AI moveset attributes, constructor
    closures/conditions, tags, modifiers, phases and unsupported/capacity paths.
 3. Reconcile identity/form/copy and persistent interaction evidence with later
@@ -97,7 +99,8 @@ Source proofs must observe actual pinned methods, including native RNG captured
 before GameManager construction when the framework would replace it.
 
 The user authorized cross-core fixes during unattended continuation on
-2026-10-17; no other lanes are active. Follow existing contracts and validate
+2026-10-17. Another agent handles mystery encounters and rival fights as of
+2026-10-26. Follow existing contracts and validate
 any run/game/AI changes required to close battle-core callers.
 Hardware/emulator acceptance is separate from source parity and a passing build.
 

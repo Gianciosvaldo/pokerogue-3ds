@@ -40,7 +40,7 @@ with tempfile.TemporaryDirectory(prefix='turn-order-proof-')as td:
  ('history.c','    if (at == h->n_recent) {','    if (true) {','retain duplicate identities'),
  ('history.c','    } else if (bt->n_last_turn_order == PR_MAX_TURN_ORDER + 1) {','    } else if (false) {','lose raw nine coverage'),
  ('history.c','    bt->n_last_turn_order = 0;','    ;','lose order reset'),
- ('move_attrs.c','const pr_pokemon *p = pr_pokemon_by_id(bt, ids[k]);','const pr_pokemon *p = pr_field_pokemon_by_id(bt, ids[k]);','lose bench identity'),
+ ('move_attrs.c','const pr_pokemon *p = actors[k];','const pr_pokemon *p = actors[k];if(p!=bt->field[0]&&p!=bt->field[1]&&p!=bt->field[2]&&p!=bt->field[3])p=NULL;','lose bench identity'),
  ('move_attrs.c','if (last->result != MOVE_RESULT_FAIL) {','if (last->result == MOVE_RESULT_SUCCESS) {','ignore pending miss and other blockers'),
  ('move_attrs.c','if (!stopped && !complete) pr_note_unported(bt, PR_FEAT_TURN_ORDER);',';','hide unknown order'),
  ('engine.c','if (epoch != p->history_epoch) return false;','if (false) return false;','retain stale epoch aliases'),

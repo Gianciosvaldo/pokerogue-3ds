@@ -138,11 +138,11 @@ void pr_apply_variable_power(pr_battle *bt, const pr_pokemon *user, const pr_pok
             /* Fusion Flare / Bolt: for (p of getLastTurnOrder().slice(0, -1).reverse()) {
              *   const [lastMove] = p.getLastXMoves(1);
              *   if (lastMove.result !== FAIL) { if (SUCCESS && lastMove.move === this.move) x2; break; } } */
-            uint32_t ids[2 * PR_MAX_PARTY];
+            const pr_pokemon *actors[2 * PR_MAX_PARTY];
             bool complete, stopped = false;
-            int n = pr_prior_turn_movers(bt, ids, &complete);
+            int n = pr_prior_turn_actors(bt, actors, &complete);
             for (int k = 0; k < n; k++) {
-                const pr_pokemon *p = pr_pokemon_by_id(bt, ids[k]);
+                const pr_pokemon *p = actors[k];
                 if (!p) { pr_note_unported(bt, PR_FEAT_TURN_ORDER); stopped = true; break; }
                 const pr_turn_move *last = pr_last_move(bt, p, 0);
                 /* An empty history makes upstream read .result of undefined and throw. */

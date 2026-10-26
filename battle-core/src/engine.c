@@ -364,7 +364,7 @@ static int dyn_pop(pr_battle *bt, pr_engine *e, int type)
     e->n_dyn[type]--;
     if (type == PH_MOVE) {
         /* MovePhasePriorityQueue.pop records the turn order */
-        pr_record_turn_order(bt, e->pool[ph].pokemon->id);
+        pr_record_turn_actor(bt, e->pool[ph].pokemon);
         pr_sync_queued_movers(bt, e);
     }
     return ph;
