@@ -34,8 +34,8 @@ Ready also have touch buttons. Lineups can be revisited between rounds.
 One heap scratch `gc_run` creates members and runs the existing EXP/evolution
 queue for one member at a time. Each winning match awards all 22 members the
 existing football EXP schedule. Evolution targets are explicitly selectable,
-including Nincada's mutually exclusive Ninjask/Shedinja choice. Move-learning can
-replace a slot or be skipped. The shop retains Carbos, Protein and rare compatible
+including Nincada's mutually exclusive Ninjask/Shedinja choice. Level-up moves are learned
+without a prompt; with four known the weakest (lowest power, earliest slot) is replaced. The shop retains Carbos, Protein and rare compatible
 mega stones, using existing classic item icons. A mega holder is explicitly
 selected between rounds; the form's stats and artwork apply for that match.
 
