@@ -19,7 +19,7 @@
 extern "C" {
 #endif
 
-typedef enum { GC_ACHV_GROUP_JOJO = 0, GC_ACHV_GROUP_RUNS, GC_ACHV_GROUP_COUNT } gc_achv_group;
+typedef enum { GC_ACHV_GROUP_JOJO = 0, GC_ACHV_GROUP_RUNS, GC_ACHV_GROUP_COLLECTION, GC_ACHV_GROUP_COUNT } gc_achv_group;
 
 typedef enum {
     GC_AREW_VOUCHER,      /* arg = VoucherType, n = how many */
@@ -35,7 +35,7 @@ typedef struct {
     uint8_t arg, n;
 } gc_achv_def;
 
-#define GC_ACHV_COUNT 44
+#define GC_ACHV_COUNT 60
 extern const gc_achv_def gc_achv_defs[GC_ACHV_COUNT];
 
 /* The JoJo challengers' bit order: custom-core's cc_jojo_chars. */
@@ -53,6 +53,10 @@ void gc_achv_jojo_won(gc_system *sys, int jojo, uint32_t run_tag, bool clean);
 enum { GC_FEAT_SIX_UNEVOLVED = 1, GC_FEAT_SOLO = 2, GC_FEAT_NO_BALL = 4 };
 void gc_achv_wave_reached(gc_system *sys, uint32_t wave);
 void gc_achv_run_won(gc_system *sys, bool custom, uint8_t feats);
+
+/* Group C, the collection, reads the Pokedex of the profile itself (nothing to report): species caught, shinies owned, legendaries and
+ * mythicals caught, generations completed. "Every species" and a "completed generation" count the species the game lets the player catch
+ * (battle-core's `catchable`), of SpeciesId 1..1025 (the ones a new profile starts with do not count towards "catch N species"); "legendary" is a legendary or a sub-legendary of that range. */
 
 /* A progress line for the screen: how far a count-based achievement is. False for one with no count. */
 bool gc_achv_progress_of(const gc_system *sys, int id, uint32_t *have, uint32_t *need);

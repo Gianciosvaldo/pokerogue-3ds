@@ -423,6 +423,8 @@ static void on_achv_exit(void* arg) {
 }
 
 static void show_achievements(void) {
+  /* the collection ones follow the Pokedex, which changes outside a run too (hatching): what is met now is given before the list shows */
+  if (gc_achv_evaluate(sysd_get(), "title", 0, NULL) > 0) sysd_save();
   const achv_args a = {sysd_get(), on_achv_exit, NULL};
   achv_screen_open(&a);
 }

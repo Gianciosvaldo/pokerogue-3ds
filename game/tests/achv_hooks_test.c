@@ -200,6 +200,23 @@ int main(void)
   ach_on_screen(&R, GC_SCREEN_CLEAR, -1, false);
   CHECK(!(S.achv.feats & (GC_FEAT_SOLO | GC_FEAT_NO_BALL)), "a resumed run cannot earn the feats that need the whole run");
 
+  /* group C: the Pokedex is read when a new wave starts (catches of the last wave, hatched eggs), and what it unlocks is told */
+  gc_system_init_defaults(&S);
+  ach_reset();
+  new_run(5, 'm');
+  static gc_system base;
+  gc_system_init_defaults(&base);
+  int caught = 0;
+  for (int id = 1; id <= 1025 && caught < 10; id++)
+    if (!base.dex[id].caught_attr) {
+      S.dex[id].caught_attr = 1;
+      caught++;
+    }
+  CHECK(ach_on_screen(&R, GC_SCREEN_COMMAND, -1, false) && gc_achv_unlocked(&S, 44), "ten new species unlock Collector when the wave starts");
+  m = ach_take_message();
+  CHECK(m && strstr(m, "Achievement unlocked: Collector!"), "and it is told: %s", m ? m : "(none)");
+  CHECK(!ach_on_screen(&R, GC_SCREEN_COMMAND, -1, false), "the same wave asks for nothing more");
+
   printf("achv_hooks_test: %d checks, %d failed\n", checks, failed);
   return failed ? 1 : 0;
 }

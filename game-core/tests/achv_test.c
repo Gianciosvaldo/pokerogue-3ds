@@ -6,6 +6,7 @@
 #include "gc/achv.h"
 #include "gc/gacha.h"
 #include "gc/system.h"
+#include "pr/run.h"
 
 static gc_system S;
 
@@ -228,6 +229,126 @@ int main(void)
         gc_system_init_defaults(&loaded);
         assert(n && gc_system_load(&loaded, buf, n, &why));
         assert(!memcmp(&loaded.achv, &S.achv, sizeof S.achv) && loaded.achv.best_wave == 77 && loaded.achv.custom_wins == 1);
+    }
+
+    /* group C, the collection: the Pokedex of the profile */
+    {
+        static int all[1100], n_all, leg[200], n_leg, myth[100], n_myth;
+        for (int i = 0; i < pr_species_gen_count; i++) {
+            const pr_species_gen *g = &pr_species_gens[i];
+            if (g->id < 1 || g->id > 1025 || !g->catchable) continue;
+            all[n_all++] = g->id;
+            if (g->legendary || g->sub_legendary) leg[n_leg++] = g->id;
+            if (g->mythical) myth[n_myth++] = g->id;
+        }
+        assert(n_all > 900 && n_leg > 10 && n_myth > 5);
+        static const struct { int id; int n; } CAUGHT[] = {{44, 10}, {45, 50}, {46, 100}, {47, 250}, {48, 500}};
+        for (unsigned k = 0; k < 5; k++) {
+            fresh();
+            /* the species that are not legendary, so the count is only the count */
+            static gc_system base;
+            gc_system_init_defaults(&base);
+            int put = 0, i = 0;
+            for (; i < n_all && put < CAUGHT[k].n - 1; i++)
+                if (!base.dex[all[i]].caught_attr) { S.dex[all[i]].caught_attr = 1; put++; }
+            eval(NULL);
+            assert(!gc_achv_unlocked(&S, CAUGHT[k].id));
+            while (base.dex[all[i]].caught_attr) i++;
+            S.dex[all[i]].caught_attr = 1;
+            eval(NULL);
+            assert(gc_achv_unlocked(&S, CAUGHT[k].id));
+            if (k < 4) assert(!gc_achv_unlocked(&S, CAUGHT[k + 1].id));
+        }
+        assert(S.voucher_counts[GC_VOUCHER_GOLDEN] >= 1);
+        fresh();
+        for (int i = 0; i < n_all - 1; i++) S.dex[all[i]].caught_attr = 1;
+        eval(NULL);
+        assert(!gc_achv_unlocked(&S, 49) && !gc_achv_unlocked(&S, 59));
+        S.dex[all[n_all - 1]].caught_attr = 1;
+        eval(NULL);
+        assert(gc_achv_unlocked(&S, 49) && gc_achv_unlocked(&S, 58) && gc_achv_unlocked(&S, 59) && gc_achv_unlocked(&S, 56));
+        /* a species that cannot be caught is not needed, and caught ones do not count for "every species" */
+        fresh();
+        int uncatchable = 0;
+        for (int i = 0; i < pr_species_gen_count; i++)
+            if (pr_species_gens[i].id >= 1 && pr_species_gens[i].id <= 1025 && !pr_species_gens[i].catchable) { uncatchable = pr_species_gens[i].id; break; }
+        if (uncatchable) {
+            for (int i = 0; i < n_all; i++) S.dex[all[i]].caught_attr = 1;
+            eval(NULL);
+            assert(gc_achv_unlocked(&S, 49));                  /* without the uncatchable one */
+        }
+        /* a legendary that cannot be caught is no part of "every legendary", and one caught does not stand in for a missing one */
+        {
+            int odd = 0;
+            for (int i = 0; i < pr_species_gen_count && !odd; i++) {
+                const pr_species_gen *g = &pr_species_gens[i];
+                if (g->id >= 1 && g->id <= 1025 && !g->catchable && (g->legendary || g->sub_legendary)) odd = g->id;
+            }
+            fresh();
+            for (int i = 0; i < n_leg - 1; i++) S.dex[leg[i]].caught_attr = 1;
+            if (odd) S.dex[odd].caught_attr = 1;
+            eval(NULL);
+            assert(!gc_achv_unlocked(&S, 56));
+        }
+        /* shinies */
+        fresh();
+        S.dex[all[0]].caught_attr = 1 | 2;
+        eval(NULL);
+        assert(gc_achv_unlocked(&S, 50) && !gc_achv_unlocked(&S, 51) && !gc_achv_unlocked(&S, 53));
+        for (int i = 1; i < 4; i++) S.dex[all[i]].caught_attr = 1 | 2;
+        eval(NULL);
+        assert(!gc_achv_unlocked(&S, 51));                            /* four shinies are not five */
+        S.dex[all[4]].caught_attr = 1 | 2;
+        eval(NULL);
+        assert(gc_achv_unlocked(&S, 51) && !gc_achv_unlocked(&S, 52));
+        for (int i = 5; i < 25; i++) S.dex[all[i]].caught_attr = 1 | 2;
+        eval(NULL);
+        assert(gc_achv_unlocked(&S, 52));
+        assert(S.n_eggs == 1 && S.eggs[0].variant_tier == 2);   /* the guaranteed tier 3 shiny egg */
+        fresh();
+        S.dex[all[0]].caught_attr = 1 | 64;                        /* tier 3 variant but not shiny */
+        eval(NULL);
+        assert(!gc_achv_unlocked(&S, 53) && !gc_achv_unlocked(&S, 50));
+        S.dex[all[0]].caught_attr = 1 | 2 | 64;
+        eval(NULL);
+        assert(gc_achv_unlocked(&S, 53));
+        /* legendaries and mythicals */
+        fresh();
+        S.dex[leg[0]].caught_attr = 1;
+        eval(NULL);
+        assert(gc_achv_unlocked(&S, 54) && !gc_achv_unlocked(&S, 55) && !gc_achv_unlocked(&S, 57));
+        for (int i = 1; i < 5; i++) S.dex[leg[i]].caught_attr = 1;
+        eval(NULL);
+        assert(gc_achv_unlocked(&S, 55) && !gc_achv_unlocked(&S, 56));
+        for (int i = 0; i < n_leg - 1; i++) S.dex[leg[i]].caught_attr = 1;
+        eval(NULL);
+        assert(!gc_achv_unlocked(&S, 56));
+        S.dex[leg[n_leg - 1]].caught_attr = 1;
+        eval(NULL);
+        assert(gc_achv_unlocked(&S, 56) && S.n_eggs >= 1);
+        fresh();
+        S.dex[myth[0]].caught_attr = 1;
+        eval(NULL);
+        assert(gc_achv_unlocked(&S, 57));
+        /* one generation: Generation 1 (1..151) caught, nothing else */
+        fresh();
+        for (int i = 0; i < n_all && all[i] <= 151; i++) S.dex[all[i]].caught_attr = 1;
+        eval(NULL);
+        assert(gc_achv_unlocked(&S, 58) && !gc_achv_unlocked(&S, 59));
+        uint32_t h, n;
+        assert(gc_achv_progress_of(&S, 59, &h, &n) && h == 1 && n == 9);
+        fresh();
+        for (int i = 0; i < n_all && all[i] <= 151; i++) if (all[i] != 25) S.dex[all[i]].caught_attr = 1;
+        eval(NULL);
+        assert(!gc_achv_unlocked(&S, 58));                          /* Pikachu missing */
+        fresh();
+        S.dex[252].caught_attr = 0;                                 /* the first of the next generation is a starter a new profile has */
+        for (int i = 0; i < n_all; i++) if (all[i] > 151 && all[i] <= 251) S.dex[all[i]].caught_attr = 1;
+        eval(NULL);
+        assert(gc_achv_unlocked(&S, 58));                           /* any one generation, not the first */
+        /* nothing caught: nothing unlocked, and it does not change the profile */
+        fresh();
+        assert(eval(NULL) == 0);                                    /* the starting species are not catches */
     }
 
     /* every achievement has a name, a description and a reward text; progress lines never exceed their need */
