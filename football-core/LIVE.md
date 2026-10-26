@@ -221,6 +221,27 @@ clean); `live_art_test` keeps every pose, shake and draw inside bounds for every
 `FB_FX_TURN` (+1) says a positive angle tips a sprite clockwise on screen, which is how citro2d takes it as far as I know; it
 has not been seen on a console, and flipping that one number reverses every lean.
 
+## Menus
+
+The menus are built from the classic game's own widgets (`game/source/football_menu.c`): the grey bevelled windows (`ui_window`),
+the emerald font (`text_draw`), the option list's cursor arrow and scroll bar, and the save-slot list's yellow frame for the button
+that is chosen. Nothing in them keeps state; `football_live_screen.c` decides what to show.
+
+- **Bottom screen** (320 x 240): a header window, one list window of nine rows (18 px apart, the same rows on every list so a tap lands
+  where the cursor would), a hint bar or two buttons along the bottom. Draft, lineup, evolution and shop are that list; the lists page
+  with Left/Right and show a scroll bar when there is more than a page. Text that does not fit steps down in size (never below 6 logical
+  px) instead of running over.
+- **Top screen** outside a match (draft, lineup, the hub, experience, shop, the end): the arena of the round behind a header, the
+  Pokemon's sprite in one window and its name, cost or eight attribute bars in another, and a one-line tip. The match field itself
+  (scoreboard, banner, effects) is unchanged.
+- **Playcall**: offense, defense and special-teams cards are windows with the name inside and the route drawn over them, the chosen one
+  framed in yellow. During a play the bottom screen shows the controls, the numbered receivers (X, Y, L, R, Select) with who they are,
+  or a map of the field to tap a defender on.
+- Host tests (`menu_test`, `live_screen_test`, `live_art_test`) run the real drawing code against fakes that record every window and
+  text (`tests/menu_fakes.h`): nothing leaves its screen, every text sits inside a window and clear of every other, every card's
+  diagram stays inside the card, and the screen draws every menu it has. They use a generous 8 logical px per character, so they
+  cannot say how the real font looks. **Not seen on a console or an emulator.**
+
 ## Coverage, body contact and facing
 
 `football_live_defense.c` owns snap-local coverage: four DL rush, LB/corners

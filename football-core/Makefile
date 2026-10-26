@@ -184,13 +184,13 @@ career-test: core-libs
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/career_test.c src/football_career.c src/football_career_save.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/career_test
 	$(BUILD)/career_test
 live-screen-check:
-	$(CC) $(CPPFLAGS) $(CFLAGS) -fsyntax-only -D__3DS__ -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include ../game/source/football_live_screen.c ../game/source/football_live_art.c ../game/source/football_live_fx.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -fsyntax-only -D__3DS__ -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include ../game/source/football_live_screen.c ../game/source/football_live_art.c ../game/source/football_live_fx.c ../game/source/football_menu.c
 test: career-test live-screen-check
 
 .PHONY: live-screen-test
 live-screen-test: core-libs
 	mkdir -p $(BUILD)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -D__3DS__ -DFOOTBALL_LIVE_SCREEN_TEST -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include tests/live_screen_test.c ../game/source/football_live_screen.c src/football_career.c src/football_career_save.c src/football_camera.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/live_screen_test
+	$(CC) $(CPPFLAGS) $(CFLAGS) -D__3DS__ -DFOOTBALL_LIVE_SCREEN_TEST -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include tests/live_screen_test.c ../game/source/football_live_screen.c ../game/source/football_menu.c src/football_career.c src/football_career_save.c src/football_camera.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/live_screen_test
 	$(BUILD)/live_screen_test
 test: live-screen-test
 
@@ -238,10 +238,18 @@ fx-test: core-libs
 	$(BUILD)/fx_test
 test: fx-test
 
+.PHONY: menu-test
+menu-test: $(BUILD)/menu_test
+	$(BUILD)/menu_test
+$(BUILD)/menu_test: tests/menu_test.c tests/menu_fakes.h ../game/source/football_menu.c ../game/include/football_menu.h
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -D__3DS__ -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include tests/menu_test.c ../game/source/football_menu.c -lm -o $@
+test: menu-test
+
 .PHONY: live-art-test
 live-art-test: $(BUILD)/live_art_test
 	$(BUILD)/live_art_test
-$(BUILD)/live_art_test: tests/live_art_test.c ../game/source/football_live_art.c ../game/source/football_live_fx.c src/football_live_physics.c src/football_camera.c src/football_defense.c src/football_playbook.c src/football_rules.c
+$(BUILD)/live_art_test: tests/live_art_test.c tests/menu_fakes.h ../game/source/football_live_art.c ../game/source/football_live_fx.c ../game/source/football_menu.c src/football_live_physics.c src/football_camera.c src/football_defense.c src/football_playbook.c src/football_rules.c
 	mkdir -p $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -D__3DS__ -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include $^ -lm -o $@
 test: live-art-test
