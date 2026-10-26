@@ -1,0 +1,137 @@
+Historical snapshot taken 2026-10-26. The [current inventory](../../battle-core/HELD-ITEM-INVENTORY.md) supersedes these class-status rows. Original proof notes are retained below; relative links have been adjusted for this archive.
+
+# Pinned held-item dispatch inventory (Card 104)
+
+Source target: `8555c08c823b856cbec4eb99ca84ea52a955836d`,
+`src/modifier/modifier.ts`, inspected 2026-10-07. This lists every transitive
+subclass of `PokemonHeldItemModifier`: 33 classes, comprising 31 concrete
+classes and two abstract bases. Enemy tokens and persistent side-wide modifiers
+are not held-item subclasses and are outside this inventory.
+
+The C class registry in `src/modifiers.c` is distinct from the conservative
+`pr_mod_is_ported_item` turn-path whitelist. An implemented stat/damage helper
+alone does not establish full-turn parity; absence from that whitelist alone
+does not establish missing behavior. Rows marked "helper" remain conservatively
+unported in turns and need their own bounded turn fixtures before promotion.
+The bounded slices below add dispatch or prove existing helpers; Card 104 remains partial.
+
+[Thief/Covet](../../battle-core/MOVE-THEFT-VALIDATION.md) now has bounded canonical-stock proofs,
+including tier cache/transfer and native load reset. Berry stealing/eating,
+Pickup, broader item identities and full interactions remain open.
+
+| Pinned class | C mapping / actual dispatch | Remaining scope |
+| --- | --- | --- |
+| `LapsingPokemonHeldItemModifier` (abstract) | No C class | Lapsing held-item lifecycle; no concrete subclass at this pin |
+| `BaseStatModifier` | `PR_MOD_BASE_STAT`; `pr_apply_base_stat_modifiers` helper | Full-turn fixtures/whitelist; vitamin stats themselves already implemented |
+| `EvoTrackerModifier` | `PR_MOD_EVO_TRACKER`; canonical nontransferable Gimmighoul coins, money acquisition, primary evolution and saves | [Native acquisition/primary evolution evidence](../../game-core/EVO-TRACKER-VALIDATION.md); fusion evolution selection remains open |
+| `PokemonBaseStatTotalModifier` | `PR_MOD_BASE_STAT_TOTAL`; base-stat helper | Full-turn fixtures/whitelist |
+| `PokemonBaseStatFlatModifier` | `PR_MOD_BASE_STAT_FLAT`; base-stat helper | Full-turn fixtures/whitelist |
+| `PokemonIncrementingStatModifier` | `PR_MOD_INCREMENTING_STAT`; canonical Brace bridge, real-stock stats, Victory/capture owner and saves | [Native stat/owner/capture proof](../../game-core/MACHO-BRACE-VALIDATION.md); Winstrate reward chain and raw scene-cleanup histories remain separate |
+| `StatBoosterModifier` | `PR_MOD_STAT_BOOSTER`; `pr_apply_stat_booster_modifiers` helper | Full-turn fixtures/whitelist |
+| `EvolutionStatBoosterModifier` | `PR_MOD_EVOLUTION_STAT_BOOSTER`; stat helper includes evolution check | Full-turn fixtures/whitelist |
+| `SpeciesStatBoosterModifier` | `PR_MOD_SPECIES_STAT_BOOSTER`; stat helper includes species check | Full-turn fixtures/whitelist |
+| `CritBoosterModifier` | `PR_MOD_CRIT_BOOSTER`; `pr_apply_crit_booster_modifiers` helper | Full-turn fixtures/whitelist |
+| `SpeciesCritBoosterModifier` | `PR_MOD_SPECIES_CRIT_BOOSTER`; crit helper includes species check | Full-turn fixtures/whitelist |
+| `AttackTypeBoosterModifier` | Existing `PR_MOD_ATTACK_TYPE_BOOSTER` damage-power calculation; bounded known identity promoted | Pinned20%/18types/cap99 singles proof; acquisition/save/transfer excluded |
+| `SurviveDamageModifier` | `PR_MOD_SURVIVE_DAMAGE`; fatal-hit chance dispatch | Existing Focus Band scope; broader item lifecycle/identities not implied |
+| `BypassSpeedChanceModifier` | `PR_MOD_BYPASS_SPEED_CHANCE`; turn-order chance dispatch | Existing Quick Claw scope |
+| `FlinchChanceModifier` | `PR_MOD_FLINCH_CHANCE`; post-hit chance dispatch | Existing King's Rock scope |
+| `TurnHealModifier` | `PR_MOD_TURN_HEAL`; TurnEnd heal dispatch | Existing Leftovers scope |
+| `TurnStatusEffectModifier` | **Added:** `PR_MOD_TURN_STATUS_EFFECT`; TurnEnd self-status dispatch | Toxic/Flame Orb only; reward acquisition and run inventory bridge excluded |
+| `HitHealModifier` | `PR_MOD_HIT_HEAL`; damage-dependent recovery dispatch | Existing Shell Bell scope |
+| `BerryModifier` | `PR_MOD_BERRY`; trigger/consume dispatch for all eleven pinned berries | Existing bounded berry suites; lifecycle outside their fixtures not implied |
+| `PokemonInstantReviveModifier` | `PR_MOD_INSTANT_REVIVE`; FaintPhase early return, queued revival and item consumption | Added bounded singles Reviver Seed; Commander/doubles and acquisition/save integration remain outside this slice |
+| `ResetNegativeStatStageModifier` | `PR_MOD_RESET_NEGATIVE_STAT_STAGE`; adverse-stage reset dispatch | Existing White Herb scope |
+| `FieldEffectModifier` | `PR_MOD_FIELD_EFFECT`; existing weather/terrain duration callers | [Bounded Mystical Rock proof](../../battle-core/FIELD-EFFECT-VALIDATION.md): four seeds ×2000 full turns, effective cap2, real-only duration/first-match, scoped summon orphan/virtual cleanup; broader lifecycle remains separate |
+| `PokemonExpBoosterModifier` | No C class in battle-core | Held Lucky/Golden Egg experience dispatch; side-wide Exp. Charm helper is a different class |
+| `PokemonFriendshipBoosterModifier` | No C class in battle-core | Held Soothe Bell friendship dispatch |
+| `PokemonNatureWeightModifier` | Existing `PR_MOD_NATURE_WEIGHT` nature-stat calculation; bounded Soul Dew class promoted | Proven singles stats/full-turn scope; acquisition/save/transfer excluded |
+| `PokemonMoveAccuracyBoosterModifier` | `PR_MOD_MOVE_ACCURACY_BOOSTER`; battle-accuracy dispatch | Added bounded Wide Lens amount=5, stacks 1–3 including virtual stacks; other identities remain unported |
+| `PokemonMultiHitModifier` | `PR_MOD_MULTI_HIT`; hit-count dispatch plus existing damage scaling/held-stack helpers | Added bounded singles Multi Lens (effective stacks1–2); Parental Bond/doubles and acquisition/save integration remain outside this slice |
+| `PokemonFormChangeItemModifier` | `PR_MOD_FORM_CHANGE_ITEM`; canonical identity, native callback and ordered item-trigger selection/queue dispatch | [Native callback proof](../../battle-core/HELD-FORM-VALIDATION.md), [inventory/save projection](../../game-core/HELD-FORM-STATE-VALIDATION.md), [acquisition and party action owner](../../game-core/FORM-ITEM-OWNER-VALIDATION.md); [app menu wiring](../../FORM-ITEM-MENU-2026-10-24.md) is merged; Transform and arbitrary mixed histories remain open |
+| `DamageMoneyRewardModifier` | `PR_MOD_DAMAGE_MONEY_REWARD`; player-to-enemy final-damage money dispatch | Golden Punch bounded singles proof; wallet bridge/acquisition/UI/achievement lifecycle excluded |
+| `SwitchEffectTransferModifier` | No C class; switching explicitly leaves held Baton transfer unported | Held Baton ownership transfer; Baton Pass move/tag transfer is already implemented separately |
+| `HeldItemTransferModifier` (abstract) | No C class | General stealing base; bounded Knock Off/Incinerate removal is a separate move attribute |
+| `TurnHeldItemTransferModifier` | No C class; TurnEnd reports turn modifiers | Missing Mini Black Hole end-turn theft |
+| `ContactHeldItemTransferChanceModifier` | No C class; post-hit path reports turn modifiers | Missing Grip Claw on-hit theft |
+
+The chosen family was genuinely absent before this change: neither a C modifier
+class nor a TurnEnd status application existed. Upstream applies the orb after
+PostTurn ability dispatch, outside its `switchOutStatus` guard, using the holder
+as source, the orb name as `sourceText`, and `trySetStatus`'s default `quiet=true`.
+The new C dispatch uses the existing status/ability/queue implementation and
+preserves that position. It consumes no item, changes no stack or owner, and
+makes no item RNG draw. Unknown subclasses and unsupported status identities
+continue to report unported.
+
+`PR_MOD_TURN_STATUS_EFFECT` is appended after all existing modifier IDs. The
+`pr_modifier.status_effect` field carries TOXIC/BURN identity explicitly. Struct
+layout changes require dependent C consumers to rebuild; no existing enum ID,
+phase ID, generated table, application save schema or bridge is changed.
+
+The later Wide Lens slice adds the actual missing battle-accuracy dispatch. It
+adds five accuracy points per effective stack before Fog and Gravity flooring,
+while preserving OHKO and accuracy=-1 rejection. The new ID is appended after
+the orb ID; the existing `num` field holds the bounded identity amount of five.
+Neither promotion implies reward acquisition, save bridging, removal or theft
+parity for those identities.
+
+The Reviver Seed slice appends `PR_MOD_INSTANT_REVIVE` after Wide Lens without
+changing existing IDs or modifier fields. Its FaintPhase path follows pinned
+upstream's `preventInstantRevive` gate, immediate status reset, first matching
+item consumption and early return. Direct-hit knockouts can revive; indirect
+self-KOs cannot. The scope is supported singles fixtures and stat-neutral
+adjacent Leftovers; promotion does not establish acquisition, inventory/save,
+Commander or general doubles parity.
+
+The Multi Lens slice fills the actual missing MoveEffectPhase hit-count dispatch,
+after intrinsic multi-hit/Parental Bond callbacks and before hit checks. It uses
+the existing `PR_MOD_MULTI_HIT` ID and fields; earlier per-strike damage scaling
+is retained. Count increases by real plus virtual stacks only for eligible
+moves/owners. Parental Bond's ability hook remains unported, so the recorded
+singles oracle uses Ball Fetch and does not claim that ability interaction.
+
+The Golden Punch slice appends `PR_MOD_DAMAGE_MONEY_REWARD` and its side-wide
+`PR_MOD_MONEY_MULTIPLIER` dependency after existing IDs. `pr_battle.money` is a
+new double wallet field; `money_scattered` remains the distinct Pay Day balance.
+Dependent consumers must rebuild and explicitly transport their wallet to use
+this dispatch. The reference covers fractional initial wallets, per-hit final
+damage, sequential Amulet Coin rounding, saturation at JS MAX_SAFE_INTEGER,
+real/virtual stacks and ownership/refusal boundaries. It does not implement
+MoneyUI, money achievements, reward acquisition or a game save bridge.
+
+The Soul Dew slice proves the existing `PokemonNatureWeightModifier` stat
+calculation through real upstream stats and full turns, then promotes the
+bounded known class. It adds no class ID, field or arithmetic formula. Unknown
+or invalid-stack identities refuse before changing the nature multiplier.
+All 25 natures, both sides, real/virtual stacks, wildcard and bench ownership,
+first-success matching and neutral/down-stat boundaries receive focused proof.
+Reward acquisition, save bridging, transfer, other abilities/forms and doubles
+remain outside this evidence.
+
+The type-booster slice proves the existing real damage-power caller with all18
+pinned item types, 20% boost and effective cap99. IDs/fields/formula are unchanged.
+Pinned booster matching uses the base move type plus ability changes, not the
+separate VariableMoveTypeAttr result: Hidden Power can have a different damage
+type while only its Normal-type booster matches the power caller. The focused
+suite records this behavior. Unsupported type/multiplier/stack identities remain
+unported; this promotion does not establish acquisition, transfer or a save bridge.
+
+## Fusion follow-up (2026-10-23)
+
+The historical helper-only rows for EvolutionStatBoosterModifier,
+SpeciesStatBoosterModifier and SpeciesCritBoosterModifier above are superseded
+by [the fused held-item validation](../../battle-core/FUSED-HELD-VALIDATION.md). Original Eviolite
+checks evolution in both components, with a half boost for exactly one
+unevolved component, and checks Max forms in either component. The six species
+boosters and Leek accept either original component species. Canonical full-turn
+admission and raw projection are both covered. Generic raw constructor
+parameters, inventory capacity and all other historical lifecycle exclusions
+still require their own reconciliation; this update does not close the full
+inventory. [Transferred stat-item class identity](../../battle-core/STAT-LOOT-VALIDATION.md) and
+[Pickup ownership](../../battle-core/PICKUP-VALIDATION.md) remain independently required.
+
+[Inventory capacity](../../battle-core/INVENTORY-CAPACITY-VALIDATION.md) now has a pinned catalogue
+audit and native large-stock owner/save proof. The shared battle/reward limit is
+2,048 with a wide count. Detached transient histories and the other exclusions
+above remain separate; increasing storage does not implement unknown item classes.

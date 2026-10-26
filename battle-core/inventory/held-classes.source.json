@@ -1,0 +1,206 @@
+{
+  "version": 1,
+  "source_pin": "8555c08c823b856cbec4eb99ca84ea52a955836d",
+  "source_file": "src/modifier/modifier.ts",
+  "sha256": "1f583b25c43dcee40e65bcc9a08625683d95f9607e99bea1819c008ca4d49207",
+  "classes": [
+    {
+      "name": "LapsingPokemonHeldItemModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": true,
+      "line": 761
+    },
+    {
+      "name": "BaseStatModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": false,
+      "line": 815
+    },
+    {
+      "name": "EvoTrackerModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": false,
+      "line": 869
+    },
+    {
+      "name": "PokemonBaseStatTotalModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": false,
+      "line": 929
+    },
+    {
+      "name": "PokemonBaseStatFlatModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": false,
+      "line": 990
+    },
+    {
+      "name": "PokemonIncrementingStatModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": false,
+      "line": 1059
+    },
+    {
+      "name": "StatBoosterModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": false,
+      "line": 1121
+    },
+    {
+      "name": "EvolutionStatBoosterModifier",
+      "parent": "StatBoosterModifier",
+      "abstract": false,
+      "line": 1187
+    },
+    {
+      "name": "SpeciesStatBoosterModifier",
+      "parent": "StatBoosterModifier",
+      "abstract": false,
+      "line": 1243
+    },
+    {
+      "name": "CritBoosterModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": false,
+      "line": 1316
+    },
+    {
+      "name": "SpeciesCritBoosterModifier",
+      "parent": "CritBoosterModifier",
+      "abstract": false,
+      "line": 1362
+    },
+    {
+      "name": "AttackTypeBoosterModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": false,
+      "line": 1415
+    },
+    {
+      "name": "SurviveDamageModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": false,
+      "line": 1495
+    },
+    {
+      "name": "BypassSpeedChanceModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": false,
+      "line": 1541
+    },
+    {
+      "name": "FlinchChanceModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": false,
+      "line": 1582
+    },
+    {
+      "name": "TurnHealModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": false,
+      "line": 1630
+    },
+    {
+      "name": "TurnStatusEffectModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": false,
+      "line": 1672
+    },
+    {
+      "name": "HitHealModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": false,
+      "line": 1725
+    },
+    {
+      "name": "BerryModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": false,
+      "line": 1796
+    },
+    {
+      "name": "PokemonInstantReviveModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": false,
+      "line": 1893
+    },
+    {
+      "name": "ResetNegativeStatStageModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": false,
+      "line": 1942
+    },
+    {
+      "name": "FieldEffectModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": false,
+      "line": 1987
+    },
+    {
+      "name": "PokemonExpBoosterModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": false,
+      "line": 2499
+    },
+    {
+      "name": "PokemonFriendshipBoosterModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": false,
+      "line": 2596
+    },
+    {
+      "name": "PokemonNatureWeightModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": false,
+      "line": 2624
+    },
+    {
+      "name": "PokemonMoveAccuracyBoosterModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": false,
+      "line": 2653
+    },
+    {
+      "name": "PokemonMultiHitModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": false,
+      "line": 2705
+    },
+    {
+      "name": "PokemonFormChangeItemModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": false,
+      "line": 2786
+    },
+    {
+      "name": "DamageMoneyRewardModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": false,
+      "line": 2909
+    },
+    {
+      "name": "SwitchEffectTransferModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": false,
+      "line": 3132
+    },
+    {
+      "name": "HeldItemTransferModifier",
+      "parent": "PokemonHeldItemModifier",
+      "abstract": true,
+      "line": 3159
+    },
+    {
+      "name": "TurnHeldItemTransferModifier",
+      "parent": "HeldItemTransferModifier",
+      "abstract": false,
+      "line": 3236
+    },
+    {
+      "name": "ContactHeldItemTransferChanceModifier",
+      "parent": "HeldItemTransferModifier",
+      "abstract": false,
+      "line": 3275
+    }
+  ]
+}
