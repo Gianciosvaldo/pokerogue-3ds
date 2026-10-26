@@ -45,7 +45,7 @@ static void nv_schema(size_t length){
  }else CHECK(!unknown&&!back.bt.n_unported);
  size_t partial=gc_run_save(&back,changed,sizeof changed);CHECK(partial&&gc_run_load(&back,changed,partial,&why)&&!back.load_dropped);
 }
-int main(int argc,char**argv){CHECK(argc==2);FILE*f=fopen(argv[1],"r");CHECK(f);nv_header(f);pr_closures_init();int roundtrips=0;
+int main(int argc,char**argv){CHECK(argc==2);FILE*f=fopen(argv[1],"r");CHECK(f);nv_header(f);pr_closures_init();int roundtrips=0,aimed_done=0;
  for(int i=0;i<972;i++){
   nv_read(f,i,&capture);setup(1);r.n_items=r.n_enemy_items=0;gc_items_to_battle(&r);
   pr_pokemon*subject=r.bt.field[0],*other=r.bt.field[2];
@@ -60,7 +60,15 @@ int main(int argc,char**argv){CHECK(argc==2);FILE*f=fopen(argv[1],"r");CHECK(f);
    CHECK(back.bt.field[0]->history_last_known==subject->history_last_known&&back.bt.field[0]->history_last_present==subject->history_last_present);
    for(int q=0;q<4;q++)if(subject->history_last_present&(1u<<q))CHECK(nv_equal(&subject->history_last[q],&back.bt.field[0]->history_last[q]));
    if(stage==0&&(i==324||i==432))nv_schema(size);
+   if(!aimed_done){ /* Counter, Mirror Coat and Metal Burst aim at BattlerIndex.ATTACKER (-1): a run saved after one of them must load */
+    pr_turn_move kept[4];memcpy(kept,subject->history_last,sizeof kept);int aimed=0;
+    for(int q=0;q<4;q++)if((subject->history_last_present&(1u<<q))&&subject->history_last[q].n_targets>0){subject->history_last[q].targets[0]=BATTLER_INDEX_ATTACKER;aimed++;}
+    if(!aimed){goto skip_aim;}aimed_done=1;
+    size_t sz=gc_run_save(&r,save,sizeof save);CHECK(sz&&gc_run_load(&back,save,sz,&why)&&!back.load_dropped);
+    for(int q=0;q<4;q++)if((subject->history_last_present&(1u<<q))&&subject->history_last[q].n_targets>0)CHECK(back.bt.field[0]->history_last[q].targets[0]==BATTLER_INDEX_ATTACKER);
+    skip_aim:memcpy(subject->history_last,kept,sizeof kept);
+   }
   }
  }
- nv_aliases(f);nv_footer(f);fclose(f);CHECK(roundtrips==5832);printf("Nonvirtual query/condition save: %d native roundtrips, %d checks passed\n",roundtrips,checks);return 0;
+ nv_aliases(f);nv_footer(f);fclose(f);CHECK(roundtrips==5832&&aimed_done);printf("Nonvirtual query/condition save: %d native roundtrips, %d checks passed\n",roundtrips,checks);return 0;
 }
