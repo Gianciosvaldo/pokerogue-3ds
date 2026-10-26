@@ -37,7 +37,6 @@ static const char *name(unsigned species)
     for(unsigned i=0;i<PR_SPECIES_COUNT;++i)if(pr_species_table[i].id==species)return pr_species_table[i].name;
     return "Pokemon";
 }
-static const char *move_name(unsigned id){return id<PR_MOVE_COUNT?pr_moves[id].name:"Unknown move";}
 static void text(const char *s,float x,float y,float size,u32 color)
 {
     C2D_Text t;C2D_TextParse(&t,L.renderer.text,s);C2D_TextOptimize(&t);C2D_DrawText(&t,C2D_WithColor,x,y,.9f,size,size,color);
@@ -120,7 +119,7 @@ static void preview(void)
 {
     unsigned id=0;const FootballRoster *r=&L.career.roster;
     if(L.career.phase==FB_CAREER_DRAFT && L.catalog_count)id=L.catalog[L.cursor];
-    else if(L.career.phase==FB_CAREER_EXP || L.career.phase==FB_CAREER_EVOLVE || L.career.phase==FB_CAREER_LEARN)id=L.scratch->party[0].b.species;
+    else if(L.career.phase==FB_CAREER_EXP || L.career.phase==FB_CAREER_EVOLVE)id=L.scratch->party[0].b.species;
     else if(r->count)id=r->mon[r->lineup[L.cursor%r->count]].b.species;
     if(!id || id==L.preview)return;
     C3D_FrameSync();football_render_clear_sprites(&L.renderer);menu_mon mon={.species=(uint16_t)id,.gender=-1};football_render_load_front(&L.renderer,0,&mon);L.preview=id;L.asset_offense=-1;
@@ -151,7 +150,7 @@ static void shop_assets(void)
 }
 static unsigned option_count(void)
 {
-    switch(L.career.phase){case FB_CAREER_DRAFT:return L.catalog_count;case FB_CAREER_LINEUP:return 22;case FB_CAREER_EVOLVE:return L.career.evolution_count+1;case FB_CAREER_LEARN:return 5;case FB_CAREER_SHOP:return 4;case FB_CAREER_MATCH:return L.career.live.rules.offense==FB_HOME?4:3;default:return 1;}
+    switch(L.career.phase){case FB_CAREER_DRAFT:return L.catalog_count;case FB_CAREER_LINEUP:return 22;case FB_CAREER_EVOLVE:return L.career.evolution_count+1;case FB_CAREER_SHOP:return 4;case FB_CAREER_MATCH:return L.career.live.rules.offense==FB_HOME?4:3;default:return 1;}
 }
 static void cycle_mega(int direction)
 {
@@ -175,7 +174,6 @@ static void choose_current(void)
         }break;
     case FB_CAREER_RESULT:football_career_continue(c);L.cursor=0;break;
     case FB_CAREER_EVOLVE:football_career_evolve(c,L.cursor<c->evolution_count?(int)L.cursor:-1);L.cursor=0;break;
-    case FB_CAREER_LEARN:football_career_learn(c,L.cursor<4?(int)L.cursor:-1);L.cursor=0;break;
     case FB_CAREER_SHOP:if(L.cursor==3){football_career_continue(c);L.cursor=0;}else football_career_buy(c,L.cursor,L.member);break;
     case FB_CAREER_END:exit_game();break;
     default:break;
@@ -202,7 +200,6 @@ static bool input(ui_screen *s,ui_button button)
         else if(c->phase==FB_CAREER_LINEUP){if(L.editing)L.editing=false;else {c->phase=FB_CAREER_READY;L.cursor=0;}}
         else if(c->phase==FB_CAREER_READY){c->phase=FB_CAREER_LINEUP;L.cursor=0;}
         else if(c->phase==FB_CAREER_EVOLVE){football_career_evolve(c,-1);L.cursor=0;}
-        else if(c->phase==FB_CAREER_LEARN){football_career_learn(c,-1);L.cursor=0;}
     }
     return true;
 }
@@ -274,7 +271,6 @@ static void rows(unsigned count)
             snprintf(line,sizeof line,"%s%.17s   %.2f PT",drafted?"+ ":"",name(id),gc_starter_value(L.args.profile,id));break;}
         case FB_CAREER_LINEUP:snprintf(line,sizeof line,"%-4s  %.18s",football_slot_names[i],name(c->roster.mon[c->roster.lineup[i]].b.species));break;
         case FB_CAREER_EVOLVE:snprintf(line,sizeof line,"%s",i<c->evolution_count?name(c->evolutions[i]):"Keep current Pokemon");break;
-        case FB_CAREER_LEARN:snprintf(line,sizeof line,"%s",i<4?move_name(PR_MOVES(&L.scratch->party[0].b)[i]):"Skip new move");break;
         case FB_CAREER_SHOP:if(i==3)snprintf(line,sizeof line,"Continue to next round");else snprintf(line,sizeof line,"%s  %u  %s",i==0?"CARBOS":i==1?"PROTEIN":"MEGA STONE",c->prices[i],c->sold[i]?"SOLD":i==2 && c->stone_target<0?"NO STOCK":"");break;
         default:break;
         }
@@ -338,9 +334,9 @@ static void draw(ui_screen *s,rr_screen which)
     case FB_CAREER_RESULT:text(c->live.rules.winner==FB_HOME?"MATCH WON":"PLAYOFF ELIMINATION",14,30,.65f,gold());text("A / Tap: team progression",14,90,.47f,ink());break;
     case FB_CAREER_EXP:snprintf(title,sizeof title,"EXP: PLAYER %u / 22",c->exp_member+1);text(title,14,30,.6f,gold());text("Applying existing level-up and evolution logic",14,90,.35f,ink());break;
     case FB_CAREER_EVOLVE:text("CHOOSE EVOLUTION",12,10,.56f,gold());rows(c->evolution_count+1);break;
-    case FB_CAREER_LEARN:snprintf(title,sizeof title,"LEARN %.23s?",move_name(L.scratch->screen.move));text(title,12,10,.48f,gold());rows(5);break;
     case FB_CAREER_SHOP:snprintf(title,sizeof title,"SHOP   CASH %u",c->wallet);text(title,12,8,.55f,gold());rows(4);snprintf(title,sizeof title,"TARGET %u: %.16s",L.member+1,name(c->roster.mon[L.member].b.species));text(title,12,185,.40f,gold());text("Left/Right: target    A: buy / continue",12,214,.34f,ink());break;
     case FB_CAREER_END:snprintf(title,sizeof title,"PLAYOFF COMPLETE: %u / 7 WINS",c->wins);text(title,12,35,.54f,gold());text("A / Tap: return to title",12,95,.45f,ink());break;
+    case FB_CAREER_LEARN:break; /* level-up moves are learned without a prompt */
     case FB_CAREER_ERROR:text("CHECKPOINT PRESERVED",12,30,.54f,gold());text(c->message,12,80,.33f,ink());break;
     }
     if(L.save_failed)text("SAVE FAILED: START TO RETRY OR RETURN",12,230,.32f,C2D_Color32(255,110,95,255));

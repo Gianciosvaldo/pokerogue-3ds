@@ -1,7 +1,7 @@
 #ifndef FOOTBALL_CAREER_H
 #define FOOTBALL_CAREER_H
 #include "football_live.h"
-typedef enum { FB_CAREER_DRAFT,FB_CAREER_LINEUP,FB_CAREER_READY,FB_CAREER_MATCH,FB_CAREER_RESULT,FB_CAREER_EXP,FB_CAREER_EVOLVE,FB_CAREER_LEARN,FB_CAREER_SHOP,FB_CAREER_END,FB_CAREER_ERROR } FootballCareerPhase;
+typedef enum { FB_CAREER_DRAFT,FB_CAREER_LINEUP,FB_CAREER_READY,FB_CAREER_MATCH,FB_CAREER_RESULT,FB_CAREER_EXP,FB_CAREER_EVOLVE,FB_CAREER_LEARN /* unused: level-up moves are learned without a prompt; kept so saved phase numbers stay valid */,FB_CAREER_SHOP,FB_CAREER_END,FB_CAREER_ERROR } FootballCareerPhase;
 typedef struct {
     FootballRoster roster;
     FootballLive live;
@@ -18,7 +18,8 @@ bool football_career_start(FootballCareer *c);
 void football_career_tick(FootballCareer *c,unsigned ms,FootballLiveInput input);
 bool football_career_continue(FootballCareer *c);
 bool football_career_evolve(FootballCareer *c,int choice);
-bool football_career_learn(FootballCareer *c,int slot);
+/* The move slot a level-up move replaces when four are known: the lowest power (status moves count 0), the earliest slot on a tie; -1 with no moves. */
+int football_career_forget_slot(const pr_pokemon *p);
 bool football_career_buy(FootballCareer *c,unsigned offer,unsigned member);
 /* Safe checkpoints: lineup, round hub, playcall, shop and final result. */
 bool football_career_save_ready(const FootballCareer *c);
