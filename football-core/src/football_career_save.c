@@ -45,7 +45,12 @@ static void state(Stream *s,FootballCareer *c)
             if(s->read){bool found=false;for(unsigned j=0;j<PR_FORM_COUNT;++j)if(pr_forms[j].species==m->away_species[i] && pr_forms[j].form_index==m->away_form[i])found=true;if(!found)s->ok=false;}
         }
         m->phase=FB_LIVE_CALL;m->pending_receiver=-1;
-        if(s->read){if(!football_live_call(m,FB_PASS_SLANTS))s->ok=false;m->phase=FB_LIVE_CALL;}
+        if(s->read){
+            /* Setting up the formation draws from the match RNG (run lane, CPU scheme); a resumed match must continue from the saved stream. */
+            uint32_t rng=m->rng;
+            if(!football_live_call(m,FB_PASS_SLANTS))s->ok=false;
+            m->rng=rng;m->phase=FB_LIVE_CALL;
+        }
     }
 }
 #undef N

@@ -1,11 +1,21 @@
 #include "football_live_systems.h"
 #include <math.h>
 static float clamp(float v,float a,float b){return v<a?a:v>b?b:v;}
+/* The match's one random stream: the live systems share it so a seed replays identically. */
+uint32_t football_live_random(FootballLive *m){uint32_t x=m->rng;x^=x<<13;x^=x>>17;x^=x<<5;m->rng=x;return x;}
 static unsigned offense(const FootballLive *m){return m->rules.offense==FB_HOME?0:11;}
+bool football_live_is_blocker(const FootballLive *m,unsigned actor)
+{
+    unsigned off=offense(m);
+    if(actor<off || actor>=off+11)return false;
+    /* Five linemen always block; on a called run the receivers and the tight end do too. */
+    const FootballPlayDefinition *p=football_playbook_get(m->play);
+    return actor>=off+6 || (p && p->type==FB_PLAY_RUN && actor>=off+2 && actor<=off+5);
+}
 unsigned football_live_block_target(const FootballLive *m,unsigned blocker)
 {
     unsigned off=offense(m),def=11-off;
-    if(blocker<off+6 || blocker>=off+11)return 255;
+    if(!football_live_is_blocker(m,blocker))return 255;
     const FootballLiveActor *b=&m->actors[blocker];
     if(b->block_peer<22)return b->block_peer;
     unsigned best=255;float score=64;
@@ -22,14 +32,15 @@ unsigned football_live_block_target(const FootballLive *m,unsigned blocker)
 static void release(FootballLive *m,unsigned i)
 {
     FootballLiveActor *a=&m->actors[i];unsigned peer=a->block_peer;
-    if(peer<22 && m->actors[peer].block_peer==i){m->actors[peer].block_peer=255;m->actors[peer].block_time=0;m->actors[peer].block_cooldown=.8f;}
+    /* A rusher who beat his blocker gets a longer free run before anyone can pick him up again. */
+    if(peer<22 && m->actors[peer].block_peer==i){m->actors[peer].block_peer=255;m->actors[peer].block_time=0;m->actors[peer].block_cooldown=.8f+(a->block_edge<0?-a->block_edge*.8f:0);}
     a->block_peer=255;a->block_time=0;a->block_cooldown=.8f;
 }
 void football_live_physics(FootballLive *m)
 {
     unsigned off=offense(m),def=11-off;float dir=off?-1:1;
     for(unsigned i=0;i<22;++i)if(m->actors[i].block_cooldown>0)m->actors[i].block_cooldown-=FB_LIVE_STEP;
-    for(unsigned i=off+6;i<off+11;++i){FootballLiveActor *b=&m->actors[i];
+    for(unsigned i=off+2;i<off+11;++i){FootballLiveActor *b=&m->actors[i];if(!football_live_is_blocker(m,i))continue;
         if(b->block_peer<22){
             FootballLiveActor *a=&m->actors[b->block_peer];b->block_time-=FB_LIVE_STEP;
             float dx=a->x-b->x,dy=a->y-b->y;
@@ -37,8 +48,11 @@ void football_live_physics(FootballLive *m)
             a->block_time=b->block_time;
             /* Contact permits a strength-dependent push; it never teleports a
              * rusher through a blocker, and controlled rushers use this too. */
-            float push=clamp((b->attributes.str-a->attributes.str)*.018f,-.8f,.8f)*FB_LIVE_STEP*dir;
+            float push=clamp(.35f+(b->attributes.str-a->attributes.str)*.018f,-.5f,1.2f)*FB_LIVE_STEP*dir;
             a->x+=push;b->x+=push;
+            /* A defender in a block is slowed to a crawl: that is what opens the running lanes. */
+            /* Run blockers drive their man off the ball; pass blockers only shield the QB, and rushers shed them sooner. */
+            bool running=m->carrier!=off || m->caught;float hold=clamp((running?.84f:.88f)-b->block_edge*.12f,.5f,.97f);a->vx*=hold;a->vy*=hold;
         }else if(b->block_cooldown<=0){
             unsigned peer=255;float best=1.65f*1.65f;
             for(unsigned d=def;d<def+11;++d){FootballLiveActor *a=&m->actors[d];float dx=a->x-b->x,dy=a->y-b->y;
@@ -46,7 +60,10 @@ void football_live_physics(FootballLive *m)
                 float dist=dx*dx+dy*dy;if(dist<best){best=dist;peer=d;}
             }
             if(peer<22){FootballLiveActor *a=&m->actors[peer];b->block_peer=(uint8_t)peer;a->block_peer=(uint8_t)i;
-                b->block_time=a->block_time=clamp(1.1f+(b->attributes.str-a->attributes.str)*.012f+(b->attributes.sta-50)*.003f,.35f,2.4f);
+                /* Each engagement is a contest: strength tilts it, and the rest is who wins the leverage. */
+                float edge=(b->attributes.str-a->attributes.str)*.012f+(((int)(football_live_random(m)%2001)-1000)/1000.0f)*.5f;
+                b->block_edge=a->block_edge=edge;
+                b->block_time=a->block_time=clamp(1.0f+edge*1.2f+(b->attributes.sta-50)*.003f,.3f,2.4f)*(m->carrier!=off || m->caught?1:.7f);
             }
         }
     }

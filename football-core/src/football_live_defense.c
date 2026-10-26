@@ -30,7 +30,11 @@ void football_live_defense_intent(FootballLive *m,unsigned actor,float *x,float 
     bool running=!m->flying && (m->caught || (m->carrier!=off && m->elapsed>=.4f) || (m->carrier==off && (carrier->x-m->los)*dir>.5f));
     bool rushing=rank<4 || (m->defense==FB_DEF_BLITZ && rank==5);
     float tx=a->x,ty=a->y;
-    if(running || rushing){tx=carrier->x+carrier->vx*.15f;ty=carrier->y+carrier->vy*.15f;}
+    if(running || rushing){
+        /* Pursue where the carrier will be, not where he is: lead grows with the distance to close. */
+        float lead=clamp(hypotf(carrier->x-a->x,carrier->y-a->y)/(4.3f+a->attributes.spd*.045f),.1f,1.1f);
+        tx=carrier->x+carrier->vx*lead;ty=carrier->y+carrier->vy*lead;
+    }
     else if(m->defense==FB_DEF_ZONE){
         tx=m->zone_x[rank];ty=m->zone_y[rank];
         unsigned threat=255;float best=100000;
