@@ -77,5 +77,37 @@ int main(void)
     assert(football_rules_begin(&r,FB_HOME));r.down=4;
     assert(football_rules_advance(&r,(FootballResolvedPlay){FB_RESULT_FUMBLE_RECOVERED,1,5}));assert(r.last.turnover && r.offense==FB_AWAY);
 
+    /* Special teams: punts, kicks and returns change possession without a scrimmage result. */
+    assert(football_rules_begin(&r,FB_HOME));r.ball=30;r.down=4;r.first_down_at=40;
+    FootballRules before=r;
+    assert(!football_rules_possession(&r,FB_AWAY,0,5) && !football_rules_possession(&r,FB_AWAY,100,5) &&
+        !football_rules_possession(&r,FB_AWAY,30,0) && !football_rules_possession(&r,FB_AWAY,30,31) &&
+        !football_rules_possession(&r,(FootballSide)2,30,5) && !memcmp(&r,&before,sizeof r));
+    assert(football_rules_possession(&r,FB_AWAY,38,6));
+    assert(r.offense==FB_AWAY && r.ball==38 && r.down==1 && r.first_down_at==48 && r.last.turnover && r.seconds_left==FB_QUARTER_SECONDS-6);
+    /* The same side can keep the ball (a muffed punt it recovers). */
+    assert(football_rules_possession(&r,FB_AWAY,60,3) && r.offense==FB_AWAY && r.ball==60 && r.first_down_at==70);
+    /* A kick that runs out the quarter still ends it, and the half hands the ball to AWAY at its 25. */
+    r.quarter=2;r.seconds_left=3;
+    assert(football_rules_possession(&r,FB_HOME,20,4));
+    assert(r.quarter==3 && r.last.halftime && r.offense==FB_AWAY && r.ball==25 && r.seconds_left==FB_QUARTER_SECONDS);
+    /* The end of regulation decides the game unless it is tied. */
+    r.quarter=4;r.seconds_left=2;r.score[0]=3;r.score[1]=0;
+    assert(football_rules_possession(&r,FB_AWAY,30,2) && r.finished && r.winner==FB_HOME);
+    assert(!football_rules_possession(&r,FB_AWAY,30,2) && !football_rules_field_goal(&r,3) && !football_rules_touchdown(&r,FB_HOME,3));
+    /* Field goals are three points and the other team then starts at its 25. */
+    assert(football_rules_begin(&r,FB_HOME));r.ball=70;r.down=4;r.first_down_at=80;
+    assert(!football_rules_field_goal(&r,0) && !football_rules_field_goal(&r,31));
+    assert(football_rules_field_goal(&r,4));
+    assert(r.score[FB_HOME]==3 && r.last.field_goal && !r.last.touchdown && r.offense==FB_AWAY && r.ball==25 && r.down==1);
+    /* Overtime: a field goal ends that team's possession, and a possession change ends it too. */
+    assert(football_rules_begin(&r,FB_HOME));r.quarter=5;r.seconds_left=0;r.offense=FB_HOME;r.ball=75;r.first_down_at=85;
+    assert(football_rules_field_goal(&r,4) && r.offense==FB_AWAY && r.ball==75 && r.overtime_drives==1 && r.score[FB_HOME]==3);
+    assert(football_rules_possession(&r,FB_HOME,30,4) && r.overtime_drives==2 && r.finished && r.winner==FB_HOME);
+    /* Return touchdowns score for the returning side. */
+    assert(football_rules_begin(&r,FB_HOME));r.ball=40;r.down=4;r.first_down_at=50;
+    assert(football_rules_touchdown(&r,FB_AWAY,9));
+    assert(r.score[FB_AWAY]==7 && r.last.touchdown && r.offense==FB_HOME && r.ball==25 && r.seconds_left==FB_QUARTER_SECONDS-9);
+
     puts("football rules: downs, spots, turnovers, scoring, halftime, final-play scoring and bounded overtime passed");
 }

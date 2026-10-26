@@ -7,7 +7,11 @@ static unsigned offense(const FootballLive *m){return m->rules.offense==FB_HOME?
 bool football_live_is_blocker(const FootballLive *m,unsigned actor)
 {
     unsigned off=offense(m);
-    if(actor<off || actor>=off+11)return false;
+    if(actor<off || actor>=off+11 || actor==m->carrier)return false;
+    if(m->special && m->stage!=FB_STAGE_RETURN){
+        /* The kicking line holds the rushers off until the foot meets the ball; the gunners are already gone. */
+        return m->stage==FB_STAGE_SNAP && (actor>=off+6 || (m->special==FB_SPECIAL_FIELD_GOAL && actor>=off+2));
+    }
     /* Five linemen always block; on a called run the receivers and the tight end do too. */
     const FootballPlayDefinition *p=football_playbook_get(m->play);
     return actor>=off+6 || (p && p->type==FB_PLAY_RUN && actor>=off+2 && actor<=off+5);
@@ -19,7 +23,7 @@ unsigned football_live_block_target(const FootballLive *m,unsigned blocker)
     const FootballLiveActor *b=&m->actors[blocker];
     if(b->block_peer<22)return b->block_peer;
     unsigned best=255;float score=64;
-    bool running=m->caught || m->carrier!=off || (m->actors[m->carrier].x-m->los)*(off?-1:1)>.5f;
+    bool running=m->special || m->caught || m->carrier!=off || (m->actors[m->carrier].x-m->los)*(off?-1:1)>.5f;
     for(unsigned d=def;d<def+11;++d){const FootballLiveActor *a=&m->actors[d];
         bool user_rush=d==m->controlled && fabsf(a->x-m->actors[off].x)<10;
         if(!running && d>=def+4 && !(m->defense==FB_DEF_BLITZ && d==def+5) && !user_rush)continue;

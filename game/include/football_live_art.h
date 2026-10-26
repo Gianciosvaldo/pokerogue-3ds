@@ -5,5 +5,6 @@
 #include "football_render.h"
 void football_live_art_top(FootballRenderer *r,const FootballCareer *career,const FootballCamera *camera,unsigned animation_ms);
 void football_live_art_defense_card(FootballRenderer *r,FootballDefenseId id,float x,float y,float w,float h,bool selected);
+void football_live_art_special_card(FootballRenderer *r,FootballSpecial kind,const char *detail,float x,float y,float w,float h,bool selected,bool enabled);
 void football_live_art_card(FootballRenderer *r,FootballPlayId id,float x,float y,float w,float h,bool selected);
 #endif

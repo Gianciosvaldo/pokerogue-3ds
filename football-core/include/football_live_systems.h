@@ -9,6 +9,13 @@
 #define FB_AI_THROW_AWAY 5
 #define FB_AI_SCRAMBLE 6
 uint32_t football_live_random(FootballLive *match);
+/* Shared movement step for a player's intended direction (-1..1 per axis). */
+void football_live_move(FootballLiveActor *actor,float x,float y,bool sprint);
+/* Kick plays (football_live_special.c): formation, one fixed step, and the end of the dead ball. */
+void football_live_special_arrange(FootballLive *match);
+void football_live_special_step(FootballLive *match,FootballLiveInput input);
+/* A return ended (tackle, sideline, goal line, fumble): rules, banner and dead ball. */
+void football_live_special_finish(FootballLive *match,FootballResultKind kind,float x);
 /* A carrier's steering: the scripted lane of a run play, then reading the defenders. */
 void football_live_ai_carrier(const FootballLive *match,unsigned actor,float *x,float *y);
 /* The QB's read: FB_AI_HOLD, a receiver 0..4, FB_AI_THROW_AWAY or FB_AI_SCRAMBLE. */

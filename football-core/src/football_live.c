@@ -15,7 +15,7 @@ static void arrange(FootballLive *m)
     static const float oy[11]={26.67f,28,4,49,13,39,21,24,26.67f,29,32};
     static const float dx[11]={2,2,2,2,7,7,7,2,2,15,15};
     static const float dy[11]={20,24,29,33,15,26.67f,38,5,48,18,36};
-    m->snap_offense=m->rules.offense;
+    m->snap_offense=m->rules.offense;m->event=FB_EVENT_NONE;
     float dir=direction(m);m->los=m->rules.offense==FB_HOME?10+m->rules.ball:110-m->rules.ball;
     unsigned off=offense_base(m),def=defense_base(m);
     const FootballPlayDefinition *play=football_playbook_get(m->play);
@@ -34,6 +34,7 @@ static void arrange(FootballLive *m)
     m->run_side=random32(m)&1?1:-1;
     m->ball_x=m->actors[off].x;m->ball_y=m->actors[off].y;m->ball_z=0;
     m->flying=m->thrown=m->caught=m->loose=m->scramble=false;m->elapsed=m->juke=m->cooldown=0;
+    if(m->special)football_live_special_arrange(m);
 }
 bool football_live_begin(FootballLive *m,const FootballRoster *r,uint32_t seed,unsigned round)
 {
@@ -62,15 +63,21 @@ bool football_live_call(FootballLive *m,FootballPlayId play)
         /* Scheme depends on situation/seed, never the selected offensive play. */
         m->defense=football_live_ai_defense(m);
     }
-    m->play=play;m->phase=FB_LIVE_SET;arrange(m);return true;
+    m->special=FB_SPECIAL_NONE;m->play=play;m->phase=FB_LIVE_SET;arrange(m);return true;
+}
+bool football_live_special(FootballLive *m,FootballSpecial kind)
+{
+    if(!football_live_special_allowed(m,kind))return false;
+    m->special=(uint8_t)kind;m->play=FB_RUN_TOSS;m->phase=FB_LIVE_SET;arrange(m);return true;
 }
 bool football_live_defend(FootballLive *m,FootballDefenseId defense)
 {
     if(!m || m->phase!=FB_LIVE_CALL || !football_live_cpu(m,(FootballSide)m->rules.offense) || (unsigned)defense>=FB_DEF_COUNT)return false;
     /* CPU call never reads the human scheme. */
-    FootballPlayId play=football_live_ai_call(m);
     m->defense=defense;
-    return football_live_call(m,play);
+    FootballSpecial kick=football_live_ai_special(m);
+    if(kick!=FB_SPECIAL_NONE && football_live_special(m,kick))return true;
+    return football_live_call(m,football_live_ai_call(m));
 }
 void football_live_switch(FootballLive *m)
 {
@@ -80,14 +87,18 @@ void football_live_switch(FootballLive *m)
 }
 static void finish(FootballLive *m,FootballResultKind kind,float x)
 {
+    if(m->special && m->stage==FB_STAGE_RETURN){football_live_special_finish(m,kind,x);return;}
     int yards=(int)roundf((x-m->los)*direction(m));
     if(kind==FB_RESULT_INCOMPLETE)yards=0;
     if(kind==FB_RESULT_INTERCEPTION && yards<0)yards=0;
     m->result=(FootballResolvedPlay){kind,(int16_t)limit((float)yards,-100,100),(uint8_t)limit(ceilf(m->elapsed)+4,1,30)};
     if(!football_rules_advance(&m->rules,m->result)){m->rules.finished=true;m->rules.winner=FB_AWAY;}
+    const FootballRuleEvents *last=&m->rules.last;
+    m->event=last->touchdown?FB_EVENT_TOUCHDOWN:last->safety?FB_EVENT_SAFETY:kind==FB_RESULT_INTERCEPTION?FB_EVENT_INTERCEPTION:
+        kind==FB_RESULT_SACK?FB_EVENT_SACK:kind==FB_RESULT_FUMBLE?FB_EVENT_FUMBLE:FB_EVENT_NONE;
     ++m->snaps;m->phase=m->rules.finished?FB_LIVE_END:FB_LIVE_DEAD;m->dead_time=0;
 }
-static void move(FootballLiveActor *a,float tx,float ty,bool sprint)
+void football_live_move(FootballLiveActor *a,float tx,float ty,bool sprint)
 {
     float length=sqrtf(tx*tx+ty*ty);if(length>1){tx/=length;ty/=length;}
     float speed=(4.3f+a->attributes.spd*.045f)*(sprint?1.08f:1);
@@ -145,7 +156,7 @@ static void step(FootballLive *m,FootballLiveInput input)
 {
     ++m->steps;
     if(m->phase==FB_LIVE_CALL || m->phase==FB_LIVE_END)return;
-    if(m->phase==FB_LIVE_DEAD){m->dead_time+=FB_LIVE_STEP;if(m->dead_time>=1){m->phase=FB_LIVE_CALL;arrange(m);}return;}
+    if(m->phase==FB_LIVE_DEAD){m->dead_time+=FB_LIVE_STEP;if(m->dead_time>=1){m->phase=FB_LIVE_CALL;m->special=FB_SPECIAL_NONE;arrange(m);}return;}
     m->elapsed+=FB_LIVE_STEP;
     unsigned off=offense_base(m),def=defense_base(m);float dir=direction(m);
     const FootballPlayDefinition *p=football_playbook_get(m->play);
@@ -153,10 +164,11 @@ static void step(FootballLive *m,FootballLiveInput input)
     if(m->phase==FB_LIVE_SET){
         if((!cpu && (input.pressed&FB_LIVE_ACTION)) || (cpu && m->elapsed>=1.2f)){
             m->phase=FB_LIVE_PLAY;m->elapsed=0;
-            if(p->type==FB_PLAY_RUN){m->carrier=(uint8_t)(off+1);if(!cpu)m->controlled=m->carrier;}
+            if(!m->special && p->type==FB_PLAY_RUN){m->carrier=(uint8_t)(off+1);if(!cpu)m->controlled=m->carrier;}
         }
         return;
     }
+    if(m->special && m->stage!=FB_STAGE_RETURN){football_live_special_step(m,input);return;}
     if(input.pressed&FB_LIVE_SWITCH)football_live_switch(m);
     if(!cpu && input.receiver>=0)throw_ball(m,(unsigned)input.receiver);
     if(m->cooldown>0)m->cooldown-=FB_LIVE_STEP;
@@ -201,7 +213,7 @@ static void step(FootballLive *m,FootballLiveInput input)
         }else football_live_defense_intent(m,i,&tx,&ty);
         intent[i][0]=tx;intent[i][1]=ty;
     }
-    for(unsigned i=0;i<22;++i)move(&m->actors[i],intent[i][0],intent[i][1],i==m->controlled || (m->flying && i==m->target));
+    for(unsigned i=0;i<22;++i)football_live_move(&m->actors[i],intent[i][0],intent[i][1],i==m->controlled || (m->flying && i==m->target));
     football_live_physics(m);
     football_live_update_facing(m);
     if(!m->thrown && m->carrier==off && (carrier->x-m->los)*dir>0)m->thrown=true; /* QB scramble past LOS */

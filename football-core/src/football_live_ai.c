@@ -40,6 +40,34 @@ FootballPlayId football_live_ai_call(FootballLive *m)
     m->recent[2]=m->recent[1];m->recent[1]=m->recent[0];m->recent[0]=(uint8_t)(id+1);
     return (FootballPlayId)id;
 }
+FootballSpecial football_live_ai_special(const FootballLive *m)
+{
+    const FootballRules *r=&m->rules;
+    if(r->down<4)return FB_SPECIAL_NONE;
+    unsigned me=r->offense,to_go=football_rules_distance(r);
+    int lead=(int)r->score[me]-(int)r->score[1-me];
+    bool overtime=r->quarter>=5,last_minutes=r->quarter>=4 && !overtime && r->seconds_left<=150,desperate=r->quarter>=4 && !overtime && r->seconds_left<=60;
+    /* The kicker is the QB slot of this offense: a stronger leg kicks from further out. */
+    const FootballLiveActor *kicker=&m->actors[off_base(m)];
+    unsigned reach=(unsigned)(40+kicker->attributes.thp*.18f);
+    bool kick_ok=football_live_special_allowed(m,FB_SPECIAL_FIELD_GOAL) && football_live_fg_distance(m)<=reach;
+    unsigned roll=(unsigned)((m->rng>>7)%100u);
+    /* Time is running out and a field goal does not help: only a touchdown will. */
+    bool need_touchdown=last_minutes && lead<-3 && !(desperate && lead>=-3);
+    if(overtime || need_touchdown){
+        if(kick_ok && !(need_touchdown && lead<-3))return FB_SPECIAL_FIELD_GOAL;
+        return FB_SPECIAL_NONE;
+    }
+    /* Inside the red zone with a yard to go, take the touchdown more often than not. */
+    if(kick_ok && to_go<=1 && r->ball>=96 && roll<60u)return FB_SPECIAL_NONE;
+    if(kick_ok)return FB_SPECIAL_FIELD_GOAL;
+    /* Short yardage past midfield: go for it. Nearer the goal line is worth even more. */
+    if(to_go<=1 && r->ball>=45 && roll<(r->ball>=70?70u:45u))return FB_SPECIAL_NONE;
+    if(to_go<=3 && r->ball>=65 && roll<35u)return FB_SPECIAL_NONE;
+    /* Behind late and short of the goal: punting only hands the ball over for good. */
+    if(last_minutes && lead<0 && r->ball>=40 && to_go<=8)return FB_SPECIAL_NONE;
+    return FB_SPECIAL_PUNT;
+}
 FootballDefenseId football_live_ai_defense(FootballLive *m)
 {
     const FootballRules *r=&m->rules;unsigned to_go=football_rules_distance(r);

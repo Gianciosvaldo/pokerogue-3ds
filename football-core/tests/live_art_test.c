@@ -27,5 +27,10 @@ int main(void)
     assert(drawn==22 && mirror[0] && !mirror[2] && mirror[3]); /* left-native sheet mirrors ONLY to look right */
     drawn=0;m->actors[2].facing=1;m->actors[3].facing=-1;
     football_live_art_top(&renderer,&career,&camera,0);assert(mirror[0] && mirror[2] && !mirror[3]);
+    /* Kick plays: the landing marker, the fair-catch hint and every dead-ball banner draw without degenerate rectangles. */
+    drawn=0;m->special=FB_SPECIAL_PUNT;m->stage=FB_STAGE_FLIGHT;m->kick_side=FB_AWAY;m->to_x=70;m->to_y=26;m->phase=FB_LIVE_PLAY;
+    football_live_art_top(&renderer,&career,&camera,0);
+    m->special=FB_SPECIAL_FIELD_GOAL;m->stage=FB_STAGE_SNAP;
+    for(unsigned event=FB_EVENT_NONE;event<=FB_EVENT_FIELD_GOAL_MISSED;++event){drawn=0;m->phase=FB_LIVE_DEAD;m->event=(uint8_t)event;m->kick_yards=47;football_live_art_top(&renderer,&career,&camera,0);}
     puts("football live art: native-left front sprites, running directions and retreating QB receiver-facing submission passed");
 }
