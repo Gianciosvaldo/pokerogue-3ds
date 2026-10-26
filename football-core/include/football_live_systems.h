@@ -16,6 +16,8 @@ void football_live_special_arrange(FootballLive *match);
 void football_live_special_step(FootballLive *match,FootballLiveInput input);
 /* Credit the actor (0..21) with a play: tallies it for the match and lists it for the dead ball. */
 void football_live_credit(FootballLive *match,unsigned actor,FootballCreditKind kind);
+/* Records a moment for the screen: where `actor` is now, or the ball for an interception. The oldest is overwritten. */
+void football_live_fx(FootballLive *match,FootballFxKind kind,unsigned actor,unsigned other,int side);
 /* The ball is dead and the rules ran: decide whether a try or a kickoff follows (football_live.c). */
 void football_live_after_play(FootballLive *match);
 /* The try after a touchdown ended (a kick or a play): rules, banner, then the kickoff. */

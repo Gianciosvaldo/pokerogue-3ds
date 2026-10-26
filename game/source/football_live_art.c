@@ -1,4 +1,5 @@
 #include "football_live_art.h"
+#include "football_live_fx.h"
 #include "football_live_systems.h"
 #include <math.h>
 #include <stdio.h>
@@ -50,10 +51,14 @@ static bool banner(const FootballLive *m,char *out,size_t size)
     }
     return true;
 }
-void football_live_art_top(FootballRenderer *r,const FootballCareer *c,const FootballCamera *cam,unsigned ms)
+void football_live_art_top(FootballRenderer *r,const FootballCareer *c,const FootballCamera *camera,unsigned ms)
 {
-    if(!r || !r->text || !c || !cam)return;
+    if(!r || !r->text || !c || !camera)return;
     C2D_TextBufClear(r->text);
+    /* A hit, a turnover or a touchdown shakes the whole field for a moment (the scoreboard stays put). */
+    float shake_x,shake_y;football_live_fx_shake(&c->live,&shake_x,&shake_y);
+    FootballCamera shaken=*camera;shaken.x+=shake_x/FB_CAMERA_SCALE;shaken.y+=shake_y/(FB_CAMERA_SCALE*FB_CAMERA_SQUASH);
+    const FootballCamera *cam=&shaken;
     u32 white=C2D_Color32(238,244,234,255),navy=C2D_Color32(20,26,46,255),gold=C2D_Color32(255,210,63,255);
     rect(0,44,400,196,0,navy);
     /* Reference palette, oblique turf and repeatable crowd pixels. All bounded
@@ -86,14 +91,17 @@ void football_live_art_top(FootballRenderer *r,const FootballCareer *c,const Foo
         if(x< -18 || x>418 || y<50 || y>242)continue;
         bool selected=i==m->controlled;
         u32 team=C2D_Color32(a->home?76:232,a->home?201:53,a->home?240:74,255);
-        rect(x-10,y+8,20,4,.10f,C2D_Color32(15,50,23,220));
+        FootballFxPose pose=football_live_fx_pose(m,i);
+        float lift=pose.dy<0?-pose.dy:0,shadow=20-lift*.7f;
+        rect(x-shadow/2,y+8,shadow,4,.10f,C2D_Color32(15,50,23,220));
         if(selected){rect(x-16,y+10,32,3,.11f,gold);rect(x-16,y-17,3,29,.11f,gold);rect(x+13,y-17,3,29,.11f,gold);}
         const rr_frame *frame=football_render_front_frame(r,i,ms);
         float scale=frame && frame->src_w>0 && frame->src_h>0?fminf(38.0f/frame->src_w,38.0f/frame->src_h):1;
         /* Adversary front sheets natively face LEFT; flip them to face right. */
-        if(!football_render_draw_sprite(frame,x,y-6,scale,!football_live_faces_left(m,i)))rect(x-9,y-15,18,25,.2f,team);
-        rect(x-7,y+13,14,3,.3f,team);
+        if(!football_render_draw_sprite_pose(frame,x+pose.dx,y-6+pose.dy,scale,!football_live_faces_left(m,i),pose.sx,pose.sy,pose.angle))rect(x+pose.dx-9,y+pose.dy-15,18,25,.2f,team);
+        rect(x+pose.dx-7,y+13,14,3,.3f,team);
     }
+    football_live_fx_draw(r,c,cam);
     /* Receivers keep their numbered targets even when outside the closer view. */
     if(m->rules.offense==FB_HOME && !m->caught && !m->special){static const unsigned targets[5]={2,3,4,5,1};
         for(unsigned i=0;i<5;++i){const FootballLiveActor *a=&m->actors[targets[i]];float x=bound(football_camera_x(cam,a->x),12,382),y=bound(football_camera_y(cam,a->y)-34,50,217);char n[3];snprintf(n,sizeof n,"%u",i+1);rect(x-7,y,18,19,.7f,navy);label(r,n,x-3,y,.5f,gold);}
@@ -108,16 +116,16 @@ void football_live_art_top(FootballRenderer *r,const FootballCareer *c,const Foo
     }
     char line[40];
     if(banner(m,line,sizeof line)){
-        float width=(float)strlen(line)*13;
-        rect(200-width/2-14,96,width+28,36,.85f,navy);rect(200-width/2-14,96,width+28,3,.86f,gold);rect(200-width/2-14,129,width+28,3,.86f,gold);
-        label(r,line,200-width/2,101,.8f,white);
+        float pop=football_live_fx_banner_scale(m),width=(float)strlen(line)*13*pop,top=70-18*pop; /* high up, so the players it is about stay in view */
+        rect(200-width/2-14,top,width+28,36*pop,.85f,navy);rect(200-width/2-14,top,width+28,3,.86f,gold);rect(200-width/2-14,top+33*pop,width+28,3,.86f,gold);
+        label(r,line,200-width/2,top+5*pop,.8f*pop,white);
         /* Whoever made the play earns species candy for it. */
         unsigned candy=0,member=22;
         for(unsigned i=0;i<m->credit_count && i<4;++i)if(m->credits[i].side==FB_HOME){candy+=football_credit_candy(m->credits[i].kind);member=m->credits[i].member;}
         if(candy && member<22){
             char gain[48];snprintf(gain,sizeof gain,"%.14s  +%u CANDY",football_live_art_species(c->roster.mon[member].b.species),candy);
-            float gw=(float)strlen(gain)*7.5f;
-            rect(200-gw/2-10,136,gw+20,22,.85f,navy);rect(200-gw/2-10,136,gw+20,2,.86f,gold);label(r,gain,200-gw/2,140,.45f,gold);
+            float gw=(float)strlen(gain)*7.5f,gy=top+36*pop+4;
+            rect(200-gw/2-10,gy,gw+20,22,.85f,navy);rect(200-gw/2-10,gy,gw+20,2,.86f,gold);label(r,gain,200-gw/2,gy+4,.45f,gold);
         }
     }
     C2D_DrawRectSolid(0,0,.8f,400,44,navy);C2D_DrawRectSolid(0,41,.81f,400,3,gold);

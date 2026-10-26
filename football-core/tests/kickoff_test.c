@@ -40,7 +40,8 @@ static void touchdown(uint32_t seed,FootballSide side)
     m.actors[m.carrier].x=side==FB_HOME?110.5f:9.5f;
     tick(2,idle());
 }
-static void next_call(void){tick(70,idle());}
+/* The dead ball waits out its celebration (up to FB_LIVE_HOLD_TOUCHDOWN) before the next call. */
+static void next_call(void){unsigned guard=0;while(m.phase==FB_LIVE_DEAD){assert(++guard<400);tick(1,idle());}}
 int main(void)
 {
     assert(football_roster_init(&roster));roster.count=22;

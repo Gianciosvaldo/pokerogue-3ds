@@ -196,6 +196,31 @@ the tallies' worth, nothing reaches the profile between checkpoints, the team ca
 checkpoint, a resume earning nothing twice, a career without a profile); `live_screen_test` checks that a failed checkpoint write
 leaves the candy pending and the saved one hands it over.
 
+## Motion
+
+The engine records the moments worth animating in `FootballLive.fx` (a ring of eight, `FootballFx`: kind, who, who it
+happened to, which way, where, and the `steps` it happened at). It is not serialized, and the next play lining up clears it.
+`football_live_fx` is called where the play is decided: a juke (a human's press or a CPU carrier's), a dive (every press of a
+human defender, whether or not it reaches), a tackle, a sack, a fumble, an interception (at the ball), a catch and a
+touchdown (the scorer: the runner, the receiver, a returner, or the defender of a pick-six). Nothing else in the engine reads
+them, so they change no play.
+
+`game/source/football_live_fx.c` turns them into motion from the recorded moment and `steps`, never from frame times, so a
+moment looks the same at any speed. A player is lifted, shifted, stretched and turned (`football_live_fx_pose`, drawn with
+`football_render_draw_sprite_pose`, the ordinary sprite turned about its middle: no new art): a juke shimmies and hops, a
+dive launches, lies flat and gets up, a tackled runner falls the way he was hit, a sack throws the quarterback further and
+shakes the field, an interception takes two jumps with rings and a PICK! popup, a touchdown is three jumps with the players
+around him joining in a beat apart, a white flash, confetti and a banner that pops in. Dust, speed lines, outline ghosts,
+impact stars and rings are plain rectangles. The banner now sits at the top of the field so the players stay in view.
+
+The dead ball waits longer when there is something to see: `FB_LIVE_HOLD_TOUCHDOWN` (2.4 s) for a touchdown,
+`FB_LIVE_HOLD_TURNOVER` (1.4 s) for an interception, a sack or a fumble, 1 s for everything else. `tests/fx_test.c` checks the
+record (ring, guards, juke and dive, and over 30 whole games that every touchdown, sack, interception and fumble has exactly
+its moment naming the player the credits name, that the hold is as long as the event says and that the next play starts
+clean); `live_art_test` keeps every pose, shake and draw inside bounds for every kind and age.
+`FB_FX_TURN` (+1) says a positive angle tips a sprite clockwise on screen, which is how citro2d takes it as far as I know; it
+has not been seen on a console, and flipping that one number reverses every lean.
+
 ## Coverage, body contact and facing
 
 `football_live_defense.c` owns snap-local coverage: four DL rush, LB/corners

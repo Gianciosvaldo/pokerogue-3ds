@@ -71,18 +71,20 @@ const rr_frame *football_render_front_frame(const FootballRenderer *r,
     if(!r || slot>=FB_RENDER_ACTOR_CAP)return NULL;
     return r->compact[slot]?&r->compact_frame[slot]:menu_sprite_frame(&r->sprites[slot],animation_ms);
 }
-bool football_render_draw_sprite(const rr_frame *front, float x, float y,
-                                 float scale, bool faces_left)
+bool football_render_draw_sprite_pose(const rr_frame *front, float x, float y,
+                                      float scale, bool faces_left,
+                                      float stretch_x, float stretch_y, float angle)
 {
-    if (!front || !isfinite(x) || !isfinite(y) || !isfinite(scale) || scale<=0) return false;
+    if (!front || !isfinite(x) || !isfinite(y) || !isfinite(scale) || scale<=0 ||
+        !isfinite(stretch_x) || !isfinite(stretch_y) || stretch_x<=0 || stretch_y<=0 || !isfinite(angle)) return false;
     Tex3DS_SubTexture sub;
     C2D_Image image;
     if (!rr_frame_c2d_image(front,&image,&sub)) return false;
-    float scale_x=faces_left ? -scale : scale;
+    float scale_x=(faces_left ? -scale : scale)*stretch_x, scale_y=scale*stretch_y;
     C2D_DrawParams params={
         {x+(front->off_x-front->src_w*.5f)*scale_x,
-         y+(front->off_y-front->src_h*.5f)*scale,
-         front->w*scale_x,front->h*scale}, {0,0}, .2f, 0
+         y+(front->off_y-front->src_h*.5f)*scale_y,
+         front->w*scale_x,front->h*scale_y}, {0,0}, .2f, 0
     };
     /* The PICA200 culls negative-width quads. Preserve the requested -1 X
      * transform in the wrapper, then submit equivalent UVs and positive width. */
@@ -91,7 +93,20 @@ bool football_render_draw_sprite(const rr_frame *front, float x, float y,
         params.pos.w=-params.pos.w;
         float left=sub.left; sub.left=sub.right; sub.right=left;
     }
+    if (angle!=0) {
+        /* citro2d puts pos at the pivot and takes the pivot as an offset into the quad: turn about (x, y). */
+        params.center.x=x-params.pos.x;
+        params.center.y=y-params.pos.y;
+        params.pos.x=x;
+        params.pos.y=y;
+        params.angle=angle;
+    }
     return C2D_DrawImage(image,&params,NULL);
+}
+bool football_render_draw_sprite(const rr_frame *front, float x, float y,
+                                 float scale, bool faces_left)
+{
+    return football_render_draw_sprite_pose(front,x,y,scale,faces_left,1,1,0);
 }
 void football_render_top(FootballRenderer *r, const FootballRenderScene *scene)
 {

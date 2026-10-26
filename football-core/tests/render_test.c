@@ -67,6 +67,12 @@ int main(void)
     assert(last.pos.x==96 && last.pos.w==20 && uv.left==1 && uv.right==0);
     assert(!football_render_draw_sprite(&f,100,100,-1,false));
     assert(!football_render_draw_sprite(&f,NAN,100,1,false));
+    /* A plain draw keeps citro2d's top-left origin; a posed one stretches, and a turn pivots about (x, y). */
+    assert(football_render_draw_sprite(&f,100,100,1,false) && last.center.x==0 && last.center.y==0 && last.angle==0);
+    assert(football_render_draw_sprite_pose(&f,100,100,1,false,2,.5f,0) && last.pos.x==68 && last.pos.y==91 && last.pos.w==40 && last.pos.h==15 && last.angle==0 && last.center.x==0);
+    assert(football_render_draw_sprite_pose(&f,100,100,1,false,1,1,.5f) && last.pos.x==100 && last.pos.y==100 && last.center.x==16 && last.center.y==18 && last.angle==.5f && last.pos.w==20 && uv.left==0);
+    assert(football_render_draw_sprite_pose(&f,100,100,1,true,1,1,-.5f) && last.pos.x==100 && last.center.x==4 && last.center.y==18 && last.angle==-.5f && uv.left==1 && uv.right==0);
+    assert(!football_render_draw_sprite_pose(&f,100,100,1,false,0,1,0) && !football_render_draw_sprite_pose(&f,100,100,1,false,1,-1,0) && !football_render_draw_sprite_pose(&f,100,100,1,false,1,1,NAN) && !football_render_draw_sprite_pose(NULL,100,100,1,false,1,1,0));
     menu_mon mon={0};
     for (unsigned i=0;i<4;++i) assert(football_render_load_front(&renderer,i,&mon));
     assert(renderer.total_sprite_bytes==FB_RENDER_TEXTURE_BUDGET);

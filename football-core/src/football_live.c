@@ -35,6 +35,7 @@ static void arrange(FootballLive *m)
     m->run_side=random32(m)&1?1:-1;
     m->ball_x=m->actors[off].x;m->ball_y=m->actors[off].y;m->ball_z=0;
     m->flying=m->thrown=m->caught=m->loose=m->scramble=false;m->elapsed=m->juke=m->cooldown=0;
+    memset(m->fx,0,sizeof m->fx);m->fx_next=0;
     if(m->special)football_live_special_arrange(m);
 }
 bool football_live_begin(FootballLive *m,const FootballRoster *r,uint32_t seed,unsigned round)
@@ -107,6 +108,13 @@ void football_live_credit(FootballLive *m,unsigned actor,FootballCreditKind kind
     if(*stat<255)++*stat;
     if(m->credit_count<4)m->credits[m->credit_count++]=(FootballCredit){(uint8_t)side,(uint8_t)member,(uint8_t)kind};
 }
+void football_live_fx(FootballLive *m,FootballFxKind kind,unsigned actor,unsigned other,int side)
+{
+    if(!m || actor>=22 || kind<=FB_FX_NONE || kind>FB_FX_TOUCHDOWN)return;
+    bool at_ball=kind==FB_FX_INTERCEPTION;
+    m->fx[m->fx_next]=(FootballFx){(uint8_t)kind,(uint8_t)actor,(uint8_t)(other<22?other:22),(int8_t)(side<0?-1:1),m->steps,at_ball?m->ball_x:m->actors[actor].x,at_ball?m->ball_y:m->actors[actor].y};
+    m->fx_next=(uint8_t)((m->fx_next+1)%FB_FX_COUNT);
+}
 /* After the ball is dead and the rules have run: a touchdown is followed by its try, a field goal, a safety or the
  * half by a kickoff. Nothing follows in overtime, where a touchdown is worth the full seven, or at the end. */
 void football_live_after_play(FootballLive *m)
@@ -143,7 +151,10 @@ static void finish(FootballLive *m,FootballResultKind kind,float x)
     if(!football_rules_advance(&m->rules,m->result)){m->rules.finished=true;m->rules.winner=FB_AWAY;}
     const FootballRuleEvents *last=&m->rules.last;
     /* The scorer is the carrier, or the defender who took the ball away and ran it in. */
-    if(last->touchdown)football_live_credit(m,(kind==FB_RESULT_INTERCEPTION || kind==FB_RESULT_FUMBLE) && m->credited<22?m->credited:m->carrier,FB_CREDIT_TOUCHDOWN);
+    if(last->touchdown){
+        unsigned scorer=(kind==FB_RESULT_INTERCEPTION || kind==FB_RESULT_FUMBLE) && m->credited<22?m->credited:m->carrier;
+        football_live_credit(m,scorer,FB_CREDIT_TOUCHDOWN);football_live_fx(m,FB_FX_TOUCHDOWN,scorer,22,m->actors[scorer].facing<0?-1:1);
+    }
     m->event=last->touchdown?FB_EVENT_TOUCHDOWN:last->safety?FB_EVENT_SAFETY:kind==FB_RESULT_INTERCEPTION?FB_EVENT_INTERCEPTION:
         kind==FB_RESULT_SACK?FB_EVENT_SACK:kind==FB_RESULT_FUMBLE?FB_EVENT_FUMBLE:FB_EVENT_NONE;
     ++m->snaps;m->phase=m->rules.finished?FB_LIVE_END:FB_LIVE_DEAD;m->dead_time=0;
@@ -197,10 +208,10 @@ static void ball_step(FootballLive *m)
     if(defender<22){
         /* Alone under it a defender usually takes it; with a receiver there it is a fight. */
         float chance=receiver<22?3+m->actors[defender].attributes.cth/20.0f:58+m->actors[defender].attributes.cth/3.0f;
-        if(random32(m)%100<chance){m->credited=(uint8_t)defender;football_live_credit(m,defender,FB_CREDIT_INTERCEPTION);finish(m,FB_RESULT_INTERCEPTION,m->ball_x);return;}
+        if(random32(m)%100<chance){m->credited=(uint8_t)defender;football_live_credit(m,defender,FB_CREDIT_INTERCEPTION);football_live_fx(m,FB_FX_INTERCEPTION,defender,receiver,(m->ball_x>=m->from_x)?1:-1);finish(m,FB_RESULT_INTERCEPTION,m->ball_x);return;}
     }
     if(receiver==22 || (defender<22 && random32(m)%100<12u+m->actors[defender].attributes.cth/8u) || random32(m)%100>55u+m->actors[receiver].attributes.cth/3){finish(m,FB_RESULT_INCOMPLETE,m->los);return;}
-    m->carrier=(uint8_t)receiver;m->caught=true;
+    m->carrier=(uint8_t)receiver;m->caught=true;football_live_fx(m,FB_FX_CATCH,receiver,22,direction(m)>0?1:-1);
     if(!football_live_cpu(m,(FootballSide)m->rules.offense))m->controlled=m->carrier;
 }
 /* The dead ball is over: the next playcall, the try after a touchdown, or a kickoff. */
@@ -222,7 +233,10 @@ static void step(FootballLive *m,FootballLiveInput input)
 {
     ++m->steps;
     if(m->phase==FB_LIVE_CALL || m->phase==FB_LIVE_END)return;
-    if(m->phase==FB_LIVE_DEAD){m->dead_time+=FB_LIVE_STEP;if(m->dead_time>=1)begin_next(m);return;}
+    if(m->phase==FB_LIVE_DEAD){
+        float hold=m->event==FB_EVENT_TOUCHDOWN?FB_LIVE_HOLD_TOUCHDOWN:m->event==FB_EVENT_INTERCEPTION || m->event==FB_EVENT_SACK || m->event==FB_EVENT_FUMBLE?FB_LIVE_HOLD_TURNOVER:1;
+        m->dead_time+=FB_LIVE_STEP;if(m->dead_time>=hold)begin_next(m);return;
+    }
     m->elapsed+=FB_LIVE_STEP;
     unsigned off=offense_base(m),def=defense_base(m);float dir=direction(m);
     const FootballPlayDefinition *p=football_playbook_get(m->play);
@@ -239,7 +253,7 @@ static void step(FootballLive *m,FootballLiveInput input)
     if(!cpu && input.receiver>=0)throw_ball(m,(unsigned)input.receiver);
     if(m->cooldown>0)m->cooldown-=FB_LIVE_STEP;
     if(m->juke>0)m->juke-=FB_LIVE_STEP;
-    if(!cpu && (input.pressed&FB_LIVE_JUKE) && m->cooldown<=0){m->juke=.35f;m->cooldown=1.6f;}
+    if(!cpu && (input.pressed&FB_LIVE_JUKE) && m->cooldown<=0){m->juke=.35f;m->cooldown=1.6f;football_live_fx(m,FB_FX_JUKE,m->carrier,22,m->actors[m->carrier].vy<0?-1:1);}
     if(cpu && p->type==FB_PLAY_PASS && !m->thrown && !m->scramble){
         int read=football_live_ai_qb(m);
         if(read>=0 && read<5)throw_ball(m,(unsigned)read);
@@ -290,9 +304,10 @@ static void step(FootballLive *m,FootballLiveInput input)
             finish(m,m->caught?FB_RESULT_COMPLETE:FB_RESULT_RUN,carrier->x);return;}
         if(cpu && m->cooldown<=0){
             float near=100;for(unsigned d=def;d<def+11;++d)near=fminf(near,distance(carrier->x,carrier->y,m->actors[d].x,m->actors[d].y));
-            if(near<2.4f && random32(m)%100<8u+carrier->attributes.agi/12u){m->juke=.35f;m->cooldown=1.6f;} /* the CPU carrier jukes */
+            if(near<2.4f && random32(m)%100<8u+carrier->attributes.agi/12u){m->juke=.35f;m->cooldown=1.6f;football_live_fx(m,FB_FX_JUKE,m->carrier,22,carrier->vy<0?-1:1);} /* the CPU carrier jukes */
         }
         for(unsigned d=def;d<def+11;++d){FootballLiveActor *a=&m->actors[d];bool dive=d==m->controlled && (input.pressed&FB_LIVE_ACTION);
+            if(dive)football_live_fx(m,FB_FX_DIVE,d,m->carrier,carrier->x>=a->x?1:-1);
             if(a->contact>0 || distance(a->x,a->y,carrier->x,carrier->y)>(dive?2.6f:1.7f))continue;
             a->contact=.35f;float chance=limit(53+(a->attributes.tak-carrier->attributes.agi)*.35f+(dive?15:0)-(m->juke>0?35:0),15,95);
             if(random32(m)%100<chance){
@@ -300,10 +315,11 @@ static void step(FootballLive *m,FootballLiveInput input)
                     /* Recovery belongs to the nearest actor at the actual loose-ball spot. */
                     unsigned recover=m->carrier;float nearest=2.5f;
                     for(unsigned j=0;j<22;++j)if(j!=m->carrier){float dist=distance(carrier->x,carrier->y,m->actors[j].x,m->actors[j].y);if(dist<nearest){nearest=dist;recover=j;}}
-                    bool same=(recover<11)==(m->carrier<11);m->credited=(uint8_t)recover;finish(m,same?FB_RESULT_FUMBLE_RECOVERED:FB_RESULT_FUMBLE,carrier->x);return;
+                    bool same=(recover<11)==(m->carrier<11);m->credited=(uint8_t)recover;football_live_fx(m,FB_FX_FUMBLE,m->carrier,d,carrier->x>=a->x?1:-1);finish(m,same?FB_RESULT_FUMBLE_RECOVERED:FB_RESULT_FUMBLE,carrier->x);return;
                 }
                 FootballResultKind kind=!m->thrown && p->type==FB_PLAY_PASS?FB_RESULT_SACK:m->caught?FB_RESULT_COMPLETE:FB_RESULT_RUN;
                 if(kind==FB_RESULT_SACK)football_live_credit(m,d,FB_CREDIT_SACK);
+                football_live_fx(m,kind==FB_RESULT_SACK?FB_FX_SACK:FB_FX_TACKLE,d,m->carrier,carrier->x>=a->x?1:-1);
                 float spot=kind==FB_RESULT_SACK ? m->los+dir*fminf(0,(carrier->x-m->los)*dir):carrier->x;
                 finish(m,kind,spot);return;
             }
