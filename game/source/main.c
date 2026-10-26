@@ -18,6 +18,7 @@
 #include <string.h>
 
 #include "app_flow.h"
+#include "battle_event_store.h"
 #include "i18n.h"
 #include "mui.h"
 #include "pak.h"
@@ -96,6 +97,7 @@ int main(void) {
   app_start(&cfg);
   while (ui_tick()) {
   }
+  bes_shutdown();
   snd_exit();
   rr_exit();
   return 0;

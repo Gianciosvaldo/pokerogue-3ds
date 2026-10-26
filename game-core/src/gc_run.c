@@ -2,6 +2,7 @@
  * phase queue (upstream's PhaseTree, src/phase-tree.ts, for the phases between battle-core's turns). */
 #include "internal.h"
 #include <stdarg.h>
+#include <limits.h>
 #include <stdio.h>
 
 _Static_assert(sizeof(gc_internal) <= sizeof(((gc_run *)0)->internal_), "gc_run.internal_ is too small");
@@ -121,13 +122,37 @@ pr_msg_arg gc_m_item(const char *name, const char *item_key)
     return a;
 }
 
+const pr_event *gc_run_battle_event_data(const gc_run *run)
+{
+    return run->battle_event_storage ? run->battle_event_storage : run->battle_events;
+}
+
+void gc_run_set_battle_event_storage(gc_run *run, gc_battle_event_reserve_fn reserve, void *ctx)
+{
+    run->battle_event_reserve = reserve;
+    run->battle_event_reserve_ctx = ctx;
+}
+
 /* battle-core's events from its last call, kept for the app until the next choice */
 void gc_ev_battle_chunk(gc_run *run, const pr_event *events, int n)
 {
-    const int first = run->n_battle_events;
-    if (first + n > GC_MAX_BATTLE_EVENTS) { n = GC_MAX_BATTLE_EVENTS - first; run->battle_events_overflow = true; }
     if (n <= 0) return;
-    memcpy(&run->battle_events[first], events, sizeof(pr_event) * (size_t)n);
+    const int first = run->n_battle_events;
+    int capacity = run->battle_event_storage ? run->battle_event_capacity : GC_MAX_BATTLE_EVENTS;
+    if (first < 0 || first > capacity || n > INT_MAX-first) { run->battle_events_overflow = true; return; }
+    if (n > capacity-first && run->battle_event_reserve && !run->battle_events_overflow) {
+        pr_event *storage = NULL; int reserved = 0;
+        if (run->battle_event_reserve(run->battle_event_reserve_ctx,
+                                     gc_run_battle_event_data(run), first, first+n, &storage, &reserved)
+            && storage && reserved >= first+n) {
+            run->battle_event_storage = storage;
+            run->battle_event_capacity = capacity = reserved;
+        }
+    }
+    if (n > capacity-first) { n = capacity-first; run->battle_events_overflow = true; }
+    if (n <= 0) return;
+    pr_event *storage = run->battle_event_storage ? run->battle_event_storage : run->battle_events;
+    memcpy(storage+first, events, sizeof(pr_event) * (size_t)n);
     run->n_battle_events += n;
     gc_event *ev = gc_ev_new(run, GC_EV_BATTLE);
     if (ev) { ev->a = first; ev->b = n; }

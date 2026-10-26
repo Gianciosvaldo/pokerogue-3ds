@@ -856,14 +856,10 @@ static bool cancel_encounter_charges(gc_run *run)
  * the preceding post-battle callback events have already been handed over. */
 static void charge_cleanup_snapshot(gc_run *run)
 {
-    if(run->n_battle_events>=GC_MAX_BATTLE_EVENTS){run->battle_events_overflow=true;return;}
     pr_event *snapshot=pr_event_add(&run->bt,&run->eng,PR_EV_NONE,-1,-1,0,0,NULL);
     if(!snapshot){run->battle_events_overflow=true;return;}
-    int first=run->n_battle_events++;
-    run->battle_events[first]=*snapshot;
+    gc_ev_battle_chunk(run,snapshot,1);
     pr_event_acknowledge(&run->eng);
-    gc_event *event=gc_ev_new(run,GC_EV_BATTLE);
-    if(event){event->a=first;event->b=1;}
 }
 
 void gc_battle_end_cleanup(gc_run *run)

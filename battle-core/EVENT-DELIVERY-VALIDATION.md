@@ -54,6 +54,10 @@ Neither the192-event core buffer nor the384-event game-core handoff limit is
 increased. There is no allocation. The downstream limit still reports failure;
 this slice is not a claim that all presentation/capacity bounds are closed.
 
+The later [controller storage follow-up](../game-core/CONTROLLER-EVENT-STORAGE-VALIDATION.md)
+adds optional caller-owned growth and binds it in the app. Default clients keep
+the explicit 384-event limit; the core chunk capacity remains 192.
+
 `pr_event_add` returns the appended entry so callers can annotate it even when a
 flush changed its index. The actual Tera animation owner and charge-cleanup
 snapshot use that entry. Game-core installs the sink for each battle, including

@@ -83,6 +83,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run game/ host tests
         run: game/tests/run_host_tests.sh
+      - name: Check controller event storage failure controls
+        run: python3 game/tests/check_event_store.py
 
   build-3ds:
     runs-on: ubuntu-24.04

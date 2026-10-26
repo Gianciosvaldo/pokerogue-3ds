@@ -22,13 +22,13 @@ TESTS = os.path.join(GAME, "tests")
 # (file under game/, old text, new text, make target, command to run, what the mutation is)
 M = [
     ("source/run_screen.c",
-     "  co_observe(++G.drain_no, G.q, G.nq, G.run.battle_events, G.run.n_battle_events, G.run.battle_events_overflow, G.run.ev_overflow);\n",
+     "  co_observe(++G.drain_no, G.q, G.nq, gc_run_battle_event_data(&G.run), G.run.n_battle_events, G.run.battle_events_overflow, G.run.ev_overflow);\n",
      "",
      "runtest", ["build/runtest", "60", "0"], "drain() no longer gives the raw events to the observer"),
     ("source/run_screen.c",
-     "  co_observe(++G.drain_no, G.q, G.nq, G.run.battle_events, G.run.n_battle_events, G.run.battle_events_overflow, G.run.ev_overflow);\n",
-     "  co_observe(++G.drain_no, G.q, G.nq, G.run.battle_events, G.run.n_battle_events, G.run.battle_events_overflow, G.run.ev_overflow);\n"
-     "  co_observe(++G.drain_no, G.q, G.nq, G.run.battle_events, G.run.n_battle_events, G.run.battle_events_overflow, G.run.ev_overflow);\n",
+     "  co_observe(++G.drain_no, G.q, G.nq, gc_run_battle_event_data(&G.run), G.run.n_battle_events, G.run.battle_events_overflow, G.run.ev_overflow);\n",
+     "  co_observe(++G.drain_no, G.q, G.nq, gc_run_battle_event_data(&G.run), G.run.n_battle_events, G.run.battle_events_overflow, G.run.ev_overflow);\n"
+     "  co_observe(++G.drain_no, G.q, G.nq, gc_run_battle_event_data(&G.run), G.run.n_battle_events, G.run.battle_events_overflow, G.run.ev_overflow);\n",
      "runtest", ["build/runtest", "60", "0"], "every drain is observed twice (fresh numbers each time)"),
     ("source/run_screen.c",
      "  co_finish_run(kind == GC_SCREEN_CLEAR, &G.run);\n",
