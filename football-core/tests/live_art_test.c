@@ -1,6 +1,7 @@
 #include "football_live_art.h"
 #include "football_live_fx.h"
 #include "football_live_systems.h"
+#include "menu_fakes.h"
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -17,9 +18,11 @@ void C2D_TextParse(C2D_Text *t,C2D_TextBuf b,const char *s){(void)t;assert(b && 
 void C2D_TextOptimize(C2D_Text *t){(void)t;}
 void C2D_DrawText(const C2D_Text *t,unsigned flags,float x,float y,float z,float sx,float sy,u32 color){(void)t;(void)flags;(void)x;(void)y;(void)z;(void)sx;(void)sy;(void)color;}
 static unsigned rects;
+static bool capture;static float cap_x0,cap_y0,cap_x1,cap_y1; /* the extent of the rectangles drawn while a card is being drawn */
 /* The engine records these (football_live_fx); the art only reads them, so the test writes them itself. */
 static void put_fx(FootballLive *m,unsigned kind,unsigned actor,unsigned other,int side){m->fx[m->fx_next]=(FootballFx){(uint8_t)kind,(uint8_t)actor,(uint8_t)other,(int8_t)side,m->steps,m->actors[actor].x,m->actors[actor].y};m->fx_next=(uint8_t)((m->fx_next+1)%FB_FX_COUNT);}
-bool C2D_DrawRectSolid(float x,float y,float z,float w,float h,u32 color){(void)x;(void)y;(void)z;(void)color;assert(isfinite(w) && w>0 && isfinite(h) && h>0 && isfinite(x) && isfinite(y));++rects;return true;}
+bool C2D_DrawRectSolid(float x,float y,float z,float w,float h,u32 color){(void)z;(void)color;assert(isfinite(w) && w>0 && isfinite(h) && h>0 && isfinite(x) && isfinite(y));++rects;
+    if(capture){cap_x0=fminf(cap_x0,x);cap_y0=fminf(cap_y0,y);cap_x1=fmaxf(cap_x1,x+w);cap_y1=fmaxf(cap_y1,y+h);}return true;}
 const rr_frame *football_render_front_frame(const FootballRenderer *r,unsigned slot,uint32_t ms){(void)r;(void)ms;assert(slot<22);return &frame;}
 static float last_angle,last_sx=1,last_sy=1,last_x,last_y;
 bool football_render_draw_sprite_pose(const rr_frame *f,float x,float y,float scale,bool flip,float sx,float sy,float angle){assert(f && scale>0 && sx>0 && sy>0 && isfinite(x) && isfinite(y) && isfinite(angle) && drawn<22);mirror[drawn++]=flip;last_x=x;last_y=y;last_sx=sx;last_sy=sy;last_angle=angle;return true;}
@@ -97,6 +100,29 @@ int main(void)
     drawn=0;rects=0;football_live_art_top(&renderer,&career,&camera,17);assert(rects==first);FootballFxPose b=football_live_fx_pose(m,3);assert(a.dy==b.dy && a.angle==b.angle && a.dy!=0);
     assert(!football_live_fx_pose(NULL,0).dy && football_live_fx_pose(m,22).dy==0);football_live_fx_shake(NULL,&sx,&sy);assert(sx==0 && sy==0);football_live_fx_shake(m,NULL,NULL);
     memset(m->fx,0,sizeof m->fx);m->phase=FB_LIVE_CALL;
+    /* The playcall cards on the bottom screen: one classic window each with its name inside, the diagram within the card, and the yellow
+     * frame (four rectangles) on the chosen one only. */
+    {
+        const float x=10,y=40,w=145,h=80;unsigned cards=0;
+        for(unsigned kind=0;kind<3;++kind){
+            unsigned count=kind==0?FB_PLAY_COUNT:kind==1?FB_DEF_COUNT:FB_SPECIAL_KICKOFF+1;
+            for(unsigned id=0;id<count;++id)for(unsigned pick=0;pick<2;++pick)for(unsigned enabled=0;enabled<2;++enabled){
+                if(kind!=2 && !enabled)continue;
+                fake_begin(RR_BOTTOM);assert(ui_space(UI_PHYS_BOTTOM));capture=true;cap_x0=cap_y0=1e9f;cap_x1=cap_y1=-1e9f;
+                if(kind==0)football_live_art_card(&renderer,(FootballPlayId)id,x,y,w,h,pick);
+                else if(kind==1)football_live_art_defense_card(&renderer,(FootballDefenseId)id,x,y,w,h,pick);
+                else football_live_art_special_card(&renderer,(FootballSpecial)id,id==FB_SPECIAL_FIELD_GOAL?"58 yd: out of range":"45 yd   62% to make it",x,y,w,h,pick,enabled);
+                capture=false;
+                assert(fake.window_count==1 && fake.windows[0].x==x && fake.windows[0].y==y && fake.windows[0].w==w && fake.windows[0].h==h);
+                assert(fake.rect_count==((pick && enabled)?4u:0u) && fake.text_count>=1);
+                fake_check(); /* the name (and the detail) inside the window, clear of each other */
+                assert(cap_x0>=x && cap_y0>=y && cap_x1<=x+w && cap_y1<=y+h); /* the diagram stays in the card */
+                ++cards;
+            }
+        }
+        assert(cards>40);
+        football_live_art_card(NULL,FB_RUN_DRAW,x,y,w,h,false);football_live_art_card(&renderer,FB_PLAY_COUNT,x,y,w,h,false);football_live_art_defense_card(&renderer,FB_DEF_COUNT,x,y,w,h,false);
+    }
     printf("motion: at most %u extra rectangles in a frame (a plain frame is %u)\n",worst,plain);
     puts("football live art: native-left front sprites, running directions and retreating QB receiver-facing submission passed");
 }

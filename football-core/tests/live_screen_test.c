@@ -3,6 +3,7 @@
 #include "football_shop_render.h"
 #include "save.h"
 #include "ui.h"
+#include "menu_fakes.h"
 #include <3ds.h>
 #include <assert.h>
 #include "football_profile_fixture.h"
@@ -21,7 +22,6 @@ bool ui_busy(void){return false;}bool ui_input_repeating(void){return false;}flo
 ui_screen *ui_top(void){return top;}
 void ui_set(ui_screen *s){ui_screen *old=top;top=s;if(old && old->leave)old->leave(old);if(s->enter)s->enter(s);}
 void ui_push_options(const char *const *o,int count,bool cancel,void(*done)(int,void*),void *arg){assert(o && count>0 && cancel);top=&overlay;answer_fn=done;answer_arg=arg;}
-bool ui_space(ui_space_id id){(void)id;return true;}
 void C3D_FrameSync(void){}
 bool C2D_DrawRectSolid(float x,float y,float z,float w,float h,u32 c){(void)x;(void)y;(void)z;(void)c;assert(w>0 && h>0);return true;}
 void C2D_TextBufClear(C2D_TextBuf b){assert(b);}
@@ -47,7 +47,9 @@ save_result save_write(const char *file,const void *b,size_t n){assert(!strcmp(f
 save_result save_read(const char *file,char **b,size_t *n,bool *backup){assert(!strcmp(file,"football_live"));*backup=false;if(!length)return SAVE_NOT_FOUND;*b=malloc(length);assert(*b);memcpy(*b,bytes,length);*n=length;return SAVE_OK;}
 static void exited(void *arg){(void)arg;ui_set(&title);}
 static void press(ui_button button){assert(top->input);top->input(top,button);}
-static void tick(void){game_screen->update(game_screen,17);if(top==game_screen){top->draw(top,RR_TOP);top->draw(top,RR_BOTTOM);}down=0;}
+/* Both screens drawn onto the recording fakes: nothing runs off a screen, every text sits in a window and clear of the others. */
+static void draw_both(void){fake_begin(RR_TOP);game_screen->draw(game_screen,RR_TOP);fake_check();fake_begin(RR_BOTTOM);game_screen->draw(game_screen,RR_BOTTOM);fake_check();}
+static void tick(void){game_screen->update(game_screen,17);if(top==game_screen)draw_both();down=0;}
 static void answer(int n){top=game_screen;answer_fn(n,answer_arg);}
 static gc_system profile,locked_profile;
 int main(void)
@@ -55,14 +57,16 @@ int main(void)
     football_test_unlock_all(&profile);
     football_screen_args args={.profile=&profile,.entropy=5,.persistence=true,.on_exit=exited};top=&title;
     gc_system_init_defaults(&locked_profile);args.profile=&locked_profile;
-    assert(football_screen_open(&args));game_screen=top;
+    assert(football_screen_open(&args));game_screen=top;draw_both();
     for(unsigned i=0;i<25;++i){press(BTN_ACTION);press(BTN_DOWN);}
     assert(career()->phase==FB_CAREER_DRAFT && career()->roster.count<22 && writes==0);
     press(BTN_MENU);answer(4);assert(top==&title);args.profile=&profile;
     assert(football_screen_open(&args));game_screen=top;assert(speed==1);
+    /* The draft list pages with Left/Right and draws on every page; paging back and forth returns to the first row. */
+    game_screen->update(game_screen,17);draw_both();for(unsigned i=0;i<3;++i){press(BTN_RIGHT);draw_both();}for(unsigned i=0;i<3;++i)press(BTN_LEFT);draw_both();
     for(unsigned i=0;i<22;++i){press(BTN_ACTION);if(i<21)press(BTN_DOWN);}
     assert(career()->phase==FB_CAREER_LINEUP && career()->roster.count==22 && career()->roster.cost<=55);tick();assert(writes==1);
-    uint8_t old=career()->roster.lineup[0];press(BTN_ACTION);press(BTN_RIGHT);assert(career()->roster.lineup[0]!=(unsigned)old);press(BTN_CANCEL);press(BTN_CANCEL);
+    uint8_t old=career()->roster.lineup[0];press(BTN_ACTION);draw_both();press(BTN_RIGHT);draw_both();assert(career()->roster.lineup[0]!=(unsigned)old);press(BTN_CANCEL);press(BTN_CANCEL);
     assert(career()->phase==FB_CAREER_READY);press(BTN_ACTION);tick();assert(career()->phase==FB_CAREER_MATCH && career()->live.phase==FB_LIVE_CALL && loads==22);
     down=KEY_A;press(BTN_ACTION);tick();assert(career()->live.phase==FB_LIVE_SET); /* play selection must not also snap */
     for(unsigned i=0;i<30;++i){tick();}
@@ -107,6 +111,26 @@ int main(void)
         w->live.phase=FB_LIVE_CALL;w->live.special=FB_SPECIAL_NONE;w->live.conversion=1;
         down=KEY_A;press(BTN_ACTION);tick();
         assert(career()->live.phase==FB_LIVE_SET && career()->live.special==FB_SPECIAL_EXTRA_POINT && career()->live.rules.ball==85);
+    }
+    /* Every other menu, drawn: the result, the experience, evolution, shop and end screens, the checkpoint error, and a failed save on top. */
+    {
+        FootballCareer *w=(FootballCareer *)career();
+        static const FootballCareerPhase phases[]={FB_CAREER_DRAFT,FB_CAREER_LINEUP,FB_CAREER_READY,FB_CAREER_RESULT,FB_CAREER_EXP,FB_CAREER_EVOLVE,FB_CAREER_SHOP,FB_CAREER_END,FB_CAREER_ERROR};
+        w->evolution_count=3;w->evolutions[0]=2;w->evolutions[1]=3;w->evolutions[2]=6;w->wallet=1234;w->round=5;w->wins=4;w->mega=2;
+        for(unsigned i=0;i<sizeof phases/sizeof phases[0];++i){
+            w->phase=phases[i];
+            if(phases[i]==FB_CAREER_DRAFT)snprintf(w->message,sizeof w->message,"Over budget: 55.00 points at most.");
+            if(phases[i]==FB_CAREER_ERROR)snprintf(w->message,sizeof w->message,"The checkpoint could not be read: it is kept as it is, and a new playoff can be started from the title screen.");
+            draw_both();
+            if(phases[i]==FB_CAREER_RESULT){w->live.rules.winner=w->live.rules.winner==FB_HOME?FB_AWAY:FB_HOME;draw_both();} /* a win and a loss */
+        }
+        w->phase=FB_CAREER_SHOP;press(BTN_RIGHT);press(BTN_DOWN);draw_both();
+        w->message[0]=0;w->mega=-1;w->phase=FB_CAREER_READY;draw_both();
+    }
+    {
+        static const char *const seen[]={"Draft  ","Lineup","Pick a member","Playoffs","Round 5 / 7","Choose your play","Special teams","Go for two","Touchdown!","Live play","Match won","Playoff elimination","Experience","Choose an evolution","Shop","Cash 1234","Playoff complete","Checkpoint preserved","Species candy","Mega evolution","Tap the map","Circle Pad"};
+        for(unsigned i=0;i<sizeof seen/sizeof seen[0];++i)if(!fake_saw(seen[i]))fprintf(stderr,"never drawn: %s\n",seen[i]);
+        for(unsigned i=0;i<sizeof seen/sizeof seen[0];++i)assert(fake_saw(seen[i]));
     }
     press(BTN_MENU);answer(4);assert(top==&title);
     puts("football live screen: real 22-player draft, assignment, playcall/snap separation, held movement, pause, save/resume and failed-write retry passed");
