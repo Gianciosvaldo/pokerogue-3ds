@@ -22,7 +22,7 @@ D="$STAGE/PokeRogue-SD-Builder"
 mkdir -p "$D/files/pipeline/tools" "$D/files/apps" "$OUT"
 OUT=$(cd "$OUT" && pwd)  # zip runs from the staging folder
 
-cp "$HERE/windows/BUILD-SD-CARD.bat" "$HERE/READ-ME-FIRST.txt" "$D/"
+cp "$HERE/windows/BUILD-SD-CARD.bat" "$HERE/READ-ME-FIRST.txt" "$HERE/WHATS-NEW.txt" "$D/"
 cp "$HERE/builder.py" "$HERE/bundle.py" "$HERE/pins.json" "$HERE/windows/setup.ps1" "$D/files/"
 for f in build_sd.py gfx.py audio.py font.py rpak.py; do cp "$REPO/assets-pipeline/$f" "$D/files/pipeline/"; done
 cp "$REPO/assets-pipeline/tools/dspadpcm.c" "$D/files/pipeline/tools/"
@@ -58,7 +58,7 @@ REV=$(git -C "$REPO" rev-parse --short HEAD)
 printf 'Built from pokerogue-3ds %s (%s).\n' "$REV" "$(git -C "$REPO" log -1 --format=%cd --date=short)" > "$D/files/VERSION.txt"
 
 # Windows line endings for what Windows tools read (cmd needs them for labels in .bat files)
-for f in "$D/BUILD-SD-CARD.bat" "$D/READ-ME-FIRST.txt" "$D/files/setup.ps1" "$D/files/VERSION.txt"; do
+for f in "$D/BUILD-SD-CARD.bat" "$D/READ-ME-FIRST.txt" "$D/WHATS-NEW.txt" "$D/files/setup.ps1" "$D/files/VERSION.txt"; do
   python3 -c 'import sys; p=sys.argv[1]; b=open(p,"rb").read().replace(b"\r\n",b"\n").replace(b"\n",b"\r\n"); open(p,"wb").write(b)' "$f"
 done
 

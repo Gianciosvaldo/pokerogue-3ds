@@ -1,47 +1,9 @@
 PokeRogue SD card builder (Windows 10 or 11)
 =============================================
 
-October 24 battle fixes and football build
-  Includes merged battle fixes through PR #396 and Football Playoff on the title
-  menu, with its own save/resume file, playcalling, progression and shops.
-  Battle-core completion is still in progress. This refresh also reduces reward
-  dispatcher stack use on the 3DS. The app revision is in files\VERSION.txt.
-
-Earlier hardware and starter changes included in this build
-  Includes the battle-menu crash/TM shop fixes, corrected move names, battle stat
-  stage display, egg hatching, IV Scanner prompts, visible rivals and your trainer's
-  opening Poke Ball throw. The run report can name an engine-recorded final blow.
-  Existing game speed settings are included.
-  Build a fresh game file and replace the older PokeRogue.3dsx on your card. The
-  builder's files\VERSION.txt identifies the app revision for a bug report.
-  Please check the opening throw and rivals, TM compatibility/cancel, and Fight/Ball
-  menus. Eggs unlock starters after enough victories; they do not join your party.
-  IV Scanner questions appear when entering an ordinary wild battle with the item.
-  Hold SELECT during battle to see upstream's stat-change panels over all active
-  Pokemon's health boxes, including both opponents in a double battle. Release
-  SELECT to hide them. Lures now lead to playable double battles: choose a move
-  for each active ally and choose a target when prompted (B goes back).
-  Eggs now show a cracking/reveal animation with the hatched Pokemon's sprite.
-  Customize > Use candies > Buy species egg buys an egg of that Pokemon.
-  B on the second ally's command menu now undoes the first ally's selection.
-  Hold SELECT while hovering over a shop TM to read the move's effect.
-  Existing PP Ups appear in item menus. Successful free TM teaching consumes
-  that reward; cancelling lets you choose again. Level-up stats use the bottom
-  screen, and ability descriptions scroll independently of battle speed.
-  Hatch results show a neutral background, IV radar, nature and new egg moves.
-  Claimed Nemeses leave the available list. Doubles bars sit further outward,
-  sprite loading avoids duplicate atlases, and returning to singles clears allies.
-  Three starters receive Pokerus every three hours. Customize > Use candies also
-  offers two starter cost reductions. Consecutive-move power is shown in Fight.
-  Automated checks cannot replace testing on your physical 3DS.
-
-Before starting a run
-  Select a Pokemon, then Customize: choose moves, an unlocked nature, shiny tier
-  or ability. Use candies buys its passive or hidden ability at the species passive
-  price. You can toggle an unlocked passive. Choices are saved in your profile.
-  Species with no hidden ability have no hidden-ability purchase option.
-  Mints and caught natures stay unlocked. Catching, hatching and friendship earn
-  species candy. Team luck is shown before the run and in battle commands.
+What is in this build
+  See WHATS-NEW.txt (in this folder). It lists what changed, how to try it, and what nobody has seen on a
+  real 3DS yet.
 
 What this does
   The 3DS game needs PokeRogue's pictures, sounds, music and text, converted for the 3DS
@@ -83,6 +45,18 @@ Steps
      (they run a small tool called DSP1 once on the 3DS).
   6. Eject the SD card before taking it out: in File Explorer, right-click the card's drive
      and choose Eject. Put the card back in your 3DS.
+
+Updating to a newer build
+  A new build comes as a new PokeRogue-SD-Builder.zip. You don't have to start over:
+  1. Open the new zip (double-click it) and open the PokeRogue-SD-Builder folder inside it.
+  2. Select everything inside and drag it into your OLD PokeRogue-SD-Builder folder (the one with
+     BUILD-SD-CARD and the "files" folder in it). When Windows asks, choose "Replace the files in the
+     destination".
+  3. Double-click BUILD-SD-CARD as usual. It finds the pictures, sounds and music it already made, skips
+     them, and only makes the new game file and copies it to the card: a few minutes, not an hour. If a
+     new build changed how those are made, the window says "Converting" and redoes them (up to half an
+     hour); WHATS-NEW.txt says when that happens.
+  Unzipping into a fresh folder also works, but then everything is downloaded and converted again.
 
 If something goes wrong
   The window says what happened and what to do. If it keeps failing, send the file

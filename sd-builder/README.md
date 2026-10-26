@@ -2,7 +2,7 @@
 
 One download and one double-click that put the game on a 3DS SD card, with nothing to install. The game is either one file (`PokeRogue.3dsx` or an installable `PokeRogue.cia`, with the packs inside it: see **One file instead of loose packs**) or the app plus the loose packs. The packs (`gfx`, `snd`, `bgm`, `font` and `data.pak`, 848 MB) are Pokémon and PokeRogue content, so they can't be shared: each person builds their own from PokeRogue's public files. This wraps [`assets-pipeline/build_sd.py`](../assets-pipeline/) so a non-developer can do that.
 
-**The zip holds no Pokémon or PokeRogue content**, only the tool: the launcher, this folder's Python, the pipeline scripts, the Windows build of the audio encoder (183 KB) and the game app (`game/`: the 2.7 MB `.3dsx`, its stripped ELF, icon and HOME-menu banner, which is drawn by `tools/make_banner_art.py` from plain colours and a pixel font). The user's steps are in [`READ-ME-FIRST.txt`](READ-ME-FIRST.txt), which is also in the zip.
+**The zip holds no Pokémon or PokeRogue content**, only the tool: the launcher, this folder's Python, the pipeline scripts, the Windows build of the audio encoder (45 KB), the 17 JoJo trainer sprites, the release notes and the game app (`game/`: the 3.9 MB `.3dsx`, its stripped ELF, icon and HOME-menu banner, which is drawn by `tools/make_banner_art.py` from plain colours and a pixel font). The user's steps are in [`READ-ME-FIRST.txt`](READ-ME-FIRST.txt), which is also in the zip.
 
 ## The project's own pictures (JoJo trainers)
 
@@ -13,40 +13,13 @@ The JoJo challengers' sprites (17 PNGs, third-party art of unclear licence, comm
 the same name as an upstream picture replaces it. The folder's files are part of the packs' recipe, so adding or changing one
 re-runs the pictures step (the longest step with the music). Tested by `assets-pipeline/tests/extra_images_test.py`.
 
-## October 24 battle fixes and football build
+## What is in a build, and updating
 
-This refresh includes the merged battle fixes through PR #396 and the custom
-**Football Playoff** title-menu mode, including its dedicated save/resume,
-playcalling, progression, shops and short-season balance changes through PR #395.
-The full battle-core parity effort is still in progress. The ARM check now also
-rejects reward dispatcher/helper frame pairs that together exceed the startup
-stack; fusion-only temporary storage no longer inflates that dispatcher frame.
-`files/VERSION.txt` identifies the packaged revision. Windows/Linux builder and
-normal app/custom/save/core/3DS checks must pass for the release revision.
+Each builder zip says what its game contains in [`WHATS-NEW.txt`](WHATS-NEW.txt) (also in the zip, next to `READ-ME-FIRST.txt`), including what has not been seen on a real console. Write it again for each refresh, and say there when the converted files (the five packs) change: the builder redoes them whenever the pipeline scripts, the encoder, the upstream pins or `extra-images/` differ from what made the packs it already has, and says "Converting" when it does. The game revision is in `files/VERSION.txt`; the builder prints it when it starts and writes it to `build-log.txt`.
 
-## October 22 starter customization build
+**Updating is "extract over the old folder".** The zip holds none of the folders the builder creates (`files/runtime`, `files/downloads`, `files/work`, `files/build`), so unzipping a newer zip on top of an earlier builder folder replaces only the tool and the game app. The next run then skips every download, skips each pack whose recipe hasn't changed (`recipe()` in `builder.py`), and only makes the new `PokeRogue.3dsx`/`.cia` and copies it. That is the normal path for a game-only refresh and is what `READ-ME-FIRST.txt` tells the user. The workflow checks it on Windows (step "Update over an earlier folder"). Dragging the files over the old folder in Explorer and choosing "Replace the files in the destination" should have the same effect as the workflow's `Expand-Archive -Force`, but only the latter is run in CI. One limit: files the newer zip no longer has (a removed `extra-images/` picture) stay in the old folder, so remove those by hand.
 
-This refresh packages the app fixes through PRs #359 and #363–#367: battle-menu
-stack protection and TM shop flow, localized move names and own stat stages,
-egg hatching, ordinary-wild IV Scanner prompts, rival/player trainer visibility
-and the opening throw, and engine-confirmed final-blow reporting. Existing game
-speed settings remain available. `files/VERSION.txt` in the generated ZIP names
-the packaged app revision. Replace the old game file with the newly built one.
-
-The Windows and Linux builder workflows must finish successfully for this exact
-revision before calling the builder tested. The normal app/custom/save, core and
-3DS checks remain required; only the separate custom-only Task63 job is skipped.
-Physical-console checks remain necessary, especially repeated Fight/Ball menu
-entry, TM cancel/compatibility labels, and visible opening/rival trainers. Eggs
-unlock starter data after victories rather than adding Pokémon to the run party.
-
-Before starting a run, select a Pokémon and choose **Customize**. Choose its moves,
-unlocked nature, shiny tier and ability. **Use candies** shows the species balance
-and buys its passive or hidden ability; each uses that species’ passive candy
-price. An unlocked passive can be enabled or disabled. Choices persist in your
-profile. Catching and hatching Pokémon and earning friendship award species candy;
-caught natures and natures supplied by mints remain unlocked. The starter screen
-and battle command screen show your team’s luck grade and points.
+The only slow thing a game refresh can force is a pack rebuild, and it is all or nothing: `recipe()` is one hash for all five packs, so a change to one picture re-converts the music too (about 9 minutes on four cores by the asset pipeline's own timings; not measured on lorenzo's PC). Per-pack recipes would save most of that; they were left out because `build_sd.py`'s stages share modules (`font.py` and the data stage import `gfx.py`, the data stage reads `audio.py`) and a wrong dependency list would leave a stale pack on a card without any message.
 
 ## What it does
 1. `BUILD-SD-CARD.bat` runs `setup.ps1`, which downloads a portable Python (python-build-standalone, 45 MB) with `curl.exe`, checks its SHA-256 and unpacks it with `tar.exe`. Both ship with Windows 10 1803 and later.
@@ -70,7 +43,7 @@ Everything is logged to `build-log.txt` next to the .bat. It stops with a plain 
 |---|---|---|
 | What it is | the app, then the five packs as a RomFS appended to it, offset in the header: what `3dsxtool --romfs` writes | an installable title, made by makerom from the app's ELF with the packs as the title's RomFS |
 | Made by | `bundle.py` (standard library), checked byte for byte against `3dsxtool` and `mkromfs3ds` | makerom v0.18.4 (MIT, pinned and SHA-256 checked, 240 KB, downloaded only for this) with `game/pokerogue.rsf` |
-| Size | the packs + 2.7 MB (about 851 MB) | the packs + 2 to 3 MB (about 851 MB); the card needs about 1 GB free while FBI installs it |
+| Size | the packs + 3.9 MB (about 852 MB) | the packs + 4 to 5 MB (about 853 MB); the card needs about 1 GB free while FBI installs it |
 | Start | Homebrew Launcher, like any other homebrew | HOME menu, after a one-time install with FBI |
 | Needs | what you needed before | a CFW with signature patches (Luma3DS with them on) and FBI: the title is signed with makerom's test keys (`-target t`), as homebrew CIAs are |
 | Saves | `sdmc:/3ds/pokerogue/save`, unchanged | the same folder: not the title's own save data, so uninstalling keeps them |

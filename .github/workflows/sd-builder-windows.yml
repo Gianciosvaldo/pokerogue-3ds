@@ -8,6 +8,8 @@
 # output byte for byte against devkitPro's mkromfs3ds and 3dsxtool, the finished files against the packs by an
 # independent reader (tests/check_bundle.py) and, for the CIA on Linux, against 3DSGuy's ctrtool. None of that
 # proves the files run on a console: see sd-builder/README.md.
+# The Windows job also does what a user does for a newer build: extracts the zip over the folder the first run used, runs it
+# (nothing may be downloaded or converted again) and runs it once more with a changed app (the app is copied again).
 # One run takes about 20 minutes on each runner; Windows minutes count double on a private repo.
 name: SD card builder on Windows
 
@@ -113,6 +115,39 @@ jobs:
           "%BUILDER%\files\runtime\python\python.exe" -I -X utf8 "%GITHUB_WORKSPACE%\repo\sd-builder\tests\check_bundle.py" "%BUILDER%\files\build\3ds\pokerogue" --3dsx "%SD2%\3ds\PokeRogue.3dsx" --cia "%SD2%\cias\PokeRogue.cia"
           if errorlevel 1 exit /b 1
           if exist "%SD2%\3ds\pokerogue\*.pak" (echo loose packs on the card of a one-file build & exit /b 1)
+      - name: Update over an earlier folder, step 1 (the zip extracted again over the folder the first run used)
+        shell: pwsh
+        run: Expand-Archive PokeRogue-SD-Builder.zip -DestinationPath (Split-Path $env:BUILDER -Parent) -Force
+      - name: Update over an earlier folder, step 2 (run it)
+        shell: cmd
+        run: |
+          call "%BUILDER%\BUILD-SD-CARD.bat" --sd "%SD%" --yes --format folder < nul > "%RUNNER_TEMP%\update-1.txt" 2>&1
+          set RC=%errorlevel%
+          type "%RUNNER_TEMP%\update-1.txt"
+          exit /b %RC%
+      - name: Update over an earlier folder, step 3 (nothing was downloaded or converted again; then change the app)
+        shell: pwsh
+        run: |
+          $out = Get-Content (Join-Path $env:RUNNER_TEMP 'update-1.txt') -Raw
+          if ($out -match 'Downloading|Unpacking|Converting') { throw 'the update run downloaded or converted something' }
+          if ([regex]::Matches($out, 'already done').Count -ne 5) { throw 'the update run did not skip all five packs' }
+          # What a newer zip's app looks like to the builder: the same file with different bytes
+          $fs = [IO.File]::Open((Join-Path $env:BUILDER 'files\game\pokerogue.3dsx'), 'Append'); $fs.WriteByte(0); $fs.Close()
+      - name: Update over an earlier folder, step 4 (run it with the changed app)
+        shell: cmd
+        run: |
+          call "%BUILDER%\BUILD-SD-CARD.bat" --sd "%SD%" --yes --format folder < nul > "%RUNNER_TEMP%\update-2.txt" 2>&1
+          set RC=%errorlevel%
+          type "%RUNNER_TEMP%\update-2.txt"
+          exit /b %RC%
+      - name: Update over an earlier folder, step 5 (still no conversion, and the changed app reached the card)
+        shell: pwsh
+        run: |
+          $out = Get-Content (Join-Path $env:RUNNER_TEMP 'update-2.txt') -Raw
+          if ($out -match 'Downloading|Unpacking|Converting') { throw 'the changed-app run downloaded or converted something' }
+          if ([regex]::Matches($out, 'already done').Count -ne 5) { throw 'the changed-app run did not skip all five packs' }
+          $app = Join-Path $env:BUILDER 'files\game\pokerogue.3dsx'
+          if ((Get-FileHash (Join-Path $env:SD '3ds\PokeRogue.3dsx') -Algorithm SHA256).Hash -ne (Get-FileHash $app -Algorithm SHA256).Hash) { throw 'the changed app did not reach the card' }
       - name: Keep the log and build report (no packs)
         if: always()
         uses: actions/upload-artifact@v4

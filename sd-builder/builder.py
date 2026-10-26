@@ -93,6 +93,14 @@ def gb(n):
     return f"{n / GB:.1f} GB"
 
 
+def version():
+    """The game revision this zip was made from (files/VERSION.txt, written by make-zip.sh), or ""."""
+    try:
+        return open(os.path.join(FILES, "VERSION.txt"), encoding="utf-8").read().strip()
+    except OSError:
+        return ""
+
+
 # ---------------------------------------------------------------- downloads
 
 
@@ -833,6 +841,9 @@ def main():
     say("20 to 60 minutes. You can use the PC meanwhile. If it stops, just run it again.")
     say("The files it makes are for your own console only. Please don't share them.")
     say("")
+    if version():
+        say(version())  # in the log too, so a build-log.txt names the game it was made with
+        say("")
 
     t0 = time.time()
     try:
