@@ -31,12 +31,17 @@
         {
           "path": "game-core/src/gc_reward.c",
           "symbol": "result.tracker_stacks"
+        },
+        {
+          "path": "game-core/src/gc_mon.c",
+          "symbol": "gc_mon_get_evolution_target"
         }
       ],
       "evidence": [
-        "game-core/EVO-TRACKER-VALIDATION.md"
+        "game-core/EVO-TRACKER-VALIDATION.md",
+        "game-core/FUSION-EVOLUTION-VALIDATION.md"
       ],
-      "boundary": "Canonical Gimmighoul acquisition and primary evolution; general fusion evolution remains open."
+      "boundary": "Canonical Gimmighoul acquisition and primary/secondary level-up evolution; fusion acquisition, item evolution and special extra-party evolutions remain separate."
     },
     {
       "name": "PokemonBaseStatTotalModifier",

@@ -321,17 +321,21 @@ static bool has_value(const gc_evo_cond *c, int v)
 
 /* correctForm in SpeciesFormEvolution.validate: preFormKey null, or the mon's getFormKey() equals it. -2 is a key no form
  * has (never matches); -3 is "" with no form that has it, which a species without forms (or a form out of range) answers */
-static bool pre_form_ok(const gc_mon *m, const gc_evo *e)
+static bool pre_form_identity(const gc_mon *m, const gc_evo *e, bool fusion)
 {
+    const int species = fusion ? m->b.fusion_species : m->b.species;
+    const int form = fusion ? m->b.fusion_form : m->b.form;
     if (e->pre_form == -1) return true;
-    if (e->pre_form >= 0) return e->pre_form == m->b.form;
+    if (e->pre_form >= 0) return e->pre_form == form;
     if (e->pre_form != -3) return false;
-    const pr_species *s = gc_species(m->b.species);
-    return !s || s->nforms == 0 || m->b.form >= s->nforms || !gc_form(m->b.species, m->b.form)->form_key[0];
+    const pr_species *s = gc_species(species);
+    return !s || s->nforms == 0 || form >= s->nforms || !gc_form(species, form)->form_key[0];
 }
 
-/* SpeciesEvolutionCondition.conditionsFulfilled (not a fusion) */
-static bool conditions_fulfilled(gc_run *run, const gc_mon *m, const gc_evo *e, bool football_choice)
+static bool pre_form_ok(const gc_mon *m, const gc_evo *e) { return pre_form_identity(m, e, false); }
+
+/* SpeciesEvolutionCondition.conditionsFulfilled */
+static bool conditions_fulfilled(gc_run *run, const gc_mon *m, const gc_evo *e, bool football_choice, bool fusion)
 {
     const pr_pokemon *p = &m->b;
     for (int i = 0; i < e->n_cond; i++) {
@@ -352,7 +356,7 @@ static bool conditions_fulfilled(gc_run *run, const gc_mon *m, const gc_evo *e, 
                 ok |= f->type1 == c->v[0] || f->type2 == c->v[0];
             }
             break;
-        case GC_EVO_GENDER: ok = p->gender == c->v[0]; break;
+        case GC_EVO_GENDER: ok = (fusion ? p->fusion_gender : p->gender) == c->v[0]; break;
         case GC_EVO_SHEDINJA: ok = football_choice; break;
         case GC_EVO_BIOME: ok = has_value(c, run->biome); break;
         case GC_EVO_WEATHER: ok = has_value(c, run->bt.weather); break;
@@ -424,7 +428,32 @@ int gc_mon_get_evolution(gc_run *run, const gc_mon *m)
         if (e->item) continue;                                   /* item === this.item: NONE only */
         if (m->b.level < e->level) continue;
         if (!pre_form_ok(m, e)) continue;                         /* getFormKey() === preFormKey */
-        if (!conditions_fulfilled(run, m, e, false)) continue;
+        if (!conditions_fulfilled(run, m, e, false, false)) continue;
+        return se->start + i;
+    }
+    return -1;
+}
+
+/* Pokemon.getEvolution: primary candidates first, then secondary candidates.
+ * Secondary validation changes only the form/gender reads. */
+int gc_mon_get_evolution_target(gc_run *run, const gc_mon *m, bool *fusion)
+{
+    *fusion = false;
+    int evo = gc_mon_get_evolution(run, m);
+    if (evo >= 0 || !m->b.fusion_species) return evo;
+    const gc_species_evo *se = species_evo(m->b.fusion_species);
+    if (!se) return -1;
+    for (int i = 0; i < se->n; i++) {
+        const gc_evo *e = &gc_evo_data[se->start + i];
+        if (e->item || m->b.level < e->level || !pre_form_identity(m, e, true)) continue;
+        if (!m->b.fusion_gender_known) {
+            for (int j = 0; j < e->n_cond; j++) if (gc_evo_conds[e->cond_start + j].key == GC_EVO_GENDER) {
+                pr_note_unported(&run->bt, PR_FEAT_FORM_CHANGE);
+                return -1; /* an earlier gender-gated candidate cannot be guessed */
+            }
+        }
+        if (!conditions_fulfilled(run, m, e, false, true)) continue;
+        *fusion = true;
         return se->start + i;
     }
     return -1;
@@ -440,7 +469,7 @@ int gc_mon_football_evolutions(gc_run *run, const gc_mon *m, int *out, int cap)
     for (int i = 0; i < se->n; ++i) {
         const gc_evo *e = &gc_evo_data[se->start + i];
         if (e->item || m->b.level < e->level || !pre_form_ok(m,e)
-            || !conditions_fulfilled(run,m,e,true)) continue;
+            || !conditions_fulfilled(run,m,e,true,false)) continue;
         if (n == cap) return -1;
         out[n++] = se->start + i;
     }
@@ -456,30 +485,44 @@ int gc_mon_item_evolution(gc_run *run, const gc_mon *m, int item)
     for (int i = 0; i < se->n; i++) {
         const gc_evo *e = &gc_evo_data[se->start + i];
         if (e->item != item || m->b.level < e->level || !pre_form_ok(m, e)) continue;
-        if (!conditions_fulfilled(run, m, e, false)) continue;
+        if (!conditions_fulfilled(run, m, e, false, false)) continue;
         return se->start + i;
     }
     return -1;
 }
 
-/* Pokemon.evolve(evolution, preEvolution), not a fusion: species, form (when preFormKey is set), ability
- * index (hidden into a species with 2 abilities becomes 1), stats. Nincada's Shedinja isn't made yet. */
-void gc_mon_evolve(gc_run *run, gc_mon *m, int evo)
+/* Pokemon.evolve: mutate the selected half, form and ability index, then stats.
+ * The separate Nincada/Shedinja extra-party owner remains outside this helper. */
+void gc_mon_evolve_target(gc_run *run, gc_mon *m, int evo, bool fusion)
 {
     const gc_evo *e = &gc_evo_data[evo];
     pr_pokemon *p = &m->b;
-    const int pre_species = p->species;
-    const pr_form *pre = gc_form(p->species, p->form);
+    const int pre_species = fusion ? p->fusion_species : p->species;
+    const pr_form *pre = gc_form(pre_species, fusion ? p->fusion_form : p->form);
     int pre_count = pre->ability_hidden ? 3 : 2;
     m->pause_evolutions = false;
-    p->species = e->species;
-    if (e->pre_form != -1) p->form = (uint8_t)(e->evo_form >= 0 ? e->evo_form : 0);
-    const pr_form *f = gc_form(p->species, p->form);
+    if (fusion) p->fusion_species = e->species;
+    else p->species = e->species;
+    if (e->pre_form != -1) {
+        uint8_t form = (uint8_t)(e->evo_form >= 0 ? e->evo_form : 0);
+        if (fusion) p->fusion_form = form; else p->form = form;
+    }
+    const pr_form *f = gc_form(e->species, fusion ? p->fusion_form : p->form);
     int count = f->ability_hidden ? 3 : 2;
-    if (m->ability_index > 2) m->ability_index = 0;
-    if (m->ability_index == 2 && pre_count == 3 && count == 2) m->ability_index = 1;
-    p->ability_index = (int8_t)m->ability_index;
-    p->base_ability = (uint16_t)gc_form_ability(p->species, f, m->ability_index);
+    int index = fusion ? p->fusion_ability_index : m->ability_index;
+    if (index < 0 || index > 2) index = 0;
+    if (index == 2 && pre_count == 3 && count == 2) index = 1;
+    if (fusion) p->fusion_ability_index = (int8_t)index;
+    else { m->ability_index = (uint8_t)index; p->ability_index = (int8_t)index; }
+    const int effective_species = p->fusion_species ? p->fusion_species : p->species;
+    const int effective_form = p->fusion_species ? p->fusion_form : p->form;
+    const pr_form *effective = gc_form(effective_species, effective_form);
+    /* getAbility's fusion branch returns NONE directly; only the primary
+     * branch falls back to its species' first ability. */
+    p->base_ability = p->fusion_species
+        ? (p->fusion_ability_index == 0 ? effective->ability1
+           : p->fusion_ability_index == 1 ? effective->ability2 : effective->ability_hidden)
+        : (uint16_t)gc_form_ability(effective_species, effective, m->ability_index);
     if (p->ability_override <= 0) p->ability = p->base_ability;
     pr_refresh_ability(p);
     if (pre_species == SPECIES_ID_GIMMIGHOUL) {
@@ -498,6 +541,11 @@ void gc_mon_evolve(gc_run *run, gc_mon *m, int evo)
         gc_system_set_pokemon_seen(run->sys, m, false, false);
         gc_system_set_pokemon_caught(run->sys, m, false, false);
     }
+}
+
+void gc_mon_evolve(gc_run *run, gc_mon *m, int evo)
+{
+    gc_mon_evolve_target(run, m, evo, false);
 }
 
 /* ---- starters ---- */

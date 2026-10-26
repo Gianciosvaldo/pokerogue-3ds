@@ -3,7 +3,8 @@
 Source: `8555c08c823b856cbec4eb99ca84ea52a955836d`, locales
 `270ed0a2938b2c3e2e34e7de940e84aecadf548b`. This closes the canonical
 EvoTracker held-class admission, Nugget acquisition and primary evolution
-caller gaps. It does not close battle core or general fusion evolution selection.
+caller gaps. The [fusion level-up follow-up](FUSION-EVOLUTION-VALIDATION.md)
+adds secondary selection/mutation; neither record closes battle core.
 
 `EvoTrackerModifier` is nontransferable, has a no-op `apply` returning true,
 clones its species/required fields, and caps held stacks at 999. Its canonical
@@ -42,15 +43,16 @@ the transport builder.
   multiple/absent Gimmighoul arrangements, eight tracker counts including
   997/998/999, and four treasure inventories. Full ordered stock, balances and
   ball fallback match; every source case is required, with no exclusions.
-- 2,688 primary/no-fusion evolution observations match before/after rewards.
-  **272 ready source fused evolution observations are recorded but are not
-  credited as selected evolutions:** game-core's general fusion evolution
-  selection remains an open owning-caller prerequisite. Fused acquisition is
-  fully compared in all 576 cases. No source observation is discarded.
+- All 3,456 primary/secondary evolution queries match before/after rewards:
+  the retained 2,688 primary/no-fusion observations and all 768 secondary
+  observations, including 272 ready secondary evolutions after the reward.
+  Fused acquisition is fully compared in all 576 cases. No source observation
+  is discarded. The level-up queue and mutation owner have separate evidence
+  in the fusion follow-up; this query corpus does not prove a whole battle.
 - 12 actual source primary evolution cleanups: both forms, one/two/three
   tracker objects, fused/unfused primary holders, preserving another holder's
   tracker and the remaining ordered inventory.
-- The native replay includes 57,808 C owner/save checks, all snapshots restored
+- The native replay includes 58,576 C owner/save checks, all snapshots restored
   with zero dropped entries. A separate 2,124-check C test runs actual doubles
   commands before/after restore and checks legacy lock flags, discard/transfer
   refusal and full inventory boundaries. These C command checks establish
@@ -81,6 +83,7 @@ python3 game-core/tools/check-evo-tracker-proof.py
 make -j2 -C game-core test
 ```
 
-General fusion evolution selection/phase presentation, every raw constructor
+Fusion acquisition/item-evolution owners and special extra-party evolutions,
+every raw constructor
 parameter, virtual/orphan money acquisition, wider money-wave bounds and all
 other open battle-core inventory/history/Endless rows remain outside this slice.
