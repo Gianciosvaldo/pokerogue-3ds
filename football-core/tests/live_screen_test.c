@@ -1,8 +1,10 @@
 #include "football_screen.h"
 #include "football_live_art.h"
+#include "football_menu.h"
 #include "football_shop_render.h"
 #include "save.h"
 #include "ui.h"
+#include "mui.h"
 #include "menu_fakes.h"
 #include <3ds.h>
 #include <assert.h>
@@ -41,6 +43,8 @@ static unsigned special_cards;
 const char *football_live_art_special_name(FootballSpecial k){return k==FB_SPECIAL_PUNT?"PUNT":"KICK";}
 void football_live_art_special_card(FootballRenderer *r,FootballSpecial k,const char *detail,float x,float y,float w,float h,bool selected,bool enabled){(void)r;(void)k;(void)x;(void)y;(void)w;(void)h;(void)selected;(void)enabled;assert(detail && detail[0]);++special_cards;}
 void football_live_art_defense_card(FootballRenderer *r,FootballDefenseId d,float x,float y,float w,float h,bool selected){(void)r;(void)d;(void)x;(void)y;(void)w;(void)h;(void)selected;}
+static unsigned icon_loads;static const rr_frame icon={.src_w=16,.src_h=16};
+const rr_frame *mui_frame(const char *key,const char *frame){assert(!strcmp(key,"items") && frame && frame[0]);++icon_loads;return &icon;}
 bool football_shop_prepare(FootballShopView *v,const FootballSeason *s){(void)v;assert(s->phase==FB_SEASON_SHOP);return true;}
 bool football_legacy_screen_open(const football_screen_args *args){(void)args;return false;}
 save_result save_write(const char *file,const void *b,size_t n){assert(!strcmp(file,"football_live"));++writes;if(!write_ok)return SAVE_IO_ERROR;assert(n<sizeof bytes);memcpy(bytes,b,n);length=n;return SAVE_OK;}
@@ -48,7 +52,18 @@ save_result save_read(const char *file,char **b,size_t *n,bool *backup){assert(!
 static void exited(void *arg){(void)arg;ui_set(&title);}
 static void press(ui_button button){assert(top->input);top->input(top,button);}
 /* Both screens drawn onto the recording fakes: nothing runs off a screen, every text sits in a window and clear of the others. */
-static void draw_both(void){fake_begin(RR_TOP);game_screen->draw(game_screen,RR_TOP);fake_check();fake_begin(RR_BOTTOM);game_screen->draw(game_screen,RR_BOTTOM);fake_check();}
+static char top_texts[FAKE_CAP][128];static unsigned top_text_count;
+static void draw_both(void)
+{
+    fake_begin(RR_TOP);game_screen->draw(game_screen,RR_TOP);fake_check();
+    top_text_count=fake.text_count;for(unsigned i=0;i<fake.text_count;++i)snprintf(top_texts[i],sizeof top_texts[i],"%s",fake.texts[i].text);
+    fake_begin(RR_BOTTOM);game_screen->draw(game_screen,RR_BOTTOM);fake_check();
+}
+/* What the last frame showed on each screen (fake_saw remembers everything ever drawn). */
+static bool on_top(const char *prefix){for(unsigned i=0;i<top_text_count;++i)if(!strncmp(top_texts[i],prefix,strlen(prefix)))return true;return false;}
+/* A stat cell that shows a change ("52>67"): a digit, '>', a digit. */
+static bool on_top_change(void){for(unsigned i=0;i<top_text_count;++i){const char *t=top_texts[i];for(;t[0] && t[1] && t[2];++t)if(t[0]>='0' && t[0]<='9' && t[1]=='>' && t[2]>='0' && t[2]<='9')return true;}return false;}
+static bool on_bottom(const char *prefix){for(unsigned i=0;i<fake.text_count;++i)if(!strncmp(fake.texts[i].text,prefix,strlen(prefix)))return true;return false;}
 static void tick(void){game_screen->update(game_screen,17);if(top==game_screen)draw_both();down=0;}
 static void answer(int n){top=game_screen;answer_fn(n,answer_arg);}
 static gc_system profile,locked_profile;
@@ -127,8 +142,44 @@ int main(void)
         w->phase=FB_CAREER_SHOP;press(BTN_RIGHT);press(BTN_DOWN);draw_both();
         w->message[0]=0;w->mega=-1;w->phase=FB_CAREER_READY;draw_both();
     }
+    /* The shop with evolution items: a Growlithe (Fire Stone), an Eevee (Water and Thunder Stones) and a Scyther (the rare Black Augurite). */
     {
-        static const char *const seen[]={"Draft  ","Lineup","Pick a member","Playoffs","Round 5 / 7","Choose your play","Special teams","Go for two","Touchdown!","Live play","Match won","Playoff elimination","Experience","Choose an evolution","Shop","Cash 1234","Playoff complete","Checkpoint preserved","Species candy","Mega evolution","Tap the map","Circle Pad"};
+        FootballCareer *w=(FootballCareer *)career();
+        static const struct { unsigned member,species; } made[3]={{0,58},{1,133},{2,123}};
+        for(unsigned i=0;i<3;++i){w->roster.mon[made[i].member].b.species=(int)made[i].species;w->roster.mon[made[i].member].b.form=0;assert(football_roster_refresh(&w->roster,made[i].member));w->roster.mega_item[made[i].member]=0;}
+        w->stone_target=-1;w->mega=-1;memset(w->sold,0,sizeof w->sold);w->wallet=2000;w->round=3;w->wins=3;w->message[0]=0;
+        w->phase=FB_CAREER_READY;tick();
+        w->evo_count=4;
+        w->evo[0]=(FootballEvoOffer){.member=0,.item=5,.state=FB_EVO_OFFER,.species=59,.price=450};
+        w->evo[1]=(FootballEvoOffer){.member=1,.item=6,.state=FB_EVO_OFFER,.species=134,.price=450};
+        w->evo[2]=(FootballEvoOffer){.member=1,.item=7,.state=FB_EVO_OFFER,.species=135,.price=450};
+        w->evo[3]=(FootballEvoOffer){.member=2,.item=51,.state=FB_EVO_OFFER,.species=900,.price=1025};
+        for(unsigned i=0;i<4;++i)assert(football_career_evo_valid(w,&w->evo[i]));
+        unsigned icons=icon_loads;w->phase=FB_CAREER_SHOP;tick();assert(icon_loads==icons+4); /* one icon for each evolution item */
+        for(unsigned i=0;i<8;++i){assert(w->evo_count==4);tick();press(BTN_DOWN);} /* every row (three fixed, four evolutions, Continue), and round to the first again */
+        tick();assert(on_bottom("Carbos") && on_bottom("Growlithe: Fire Stone") && on_bottom("Eevee: Water Stone") && on_bottom("Eevee: Thunder Stone") && on_bottom("Scyther: Black Augurite") && on_bottom("Continue to next round"));
+        assert(on_bottom("450") && on_bottom("1025") && !on_top("Growlithe >")); /* on Carbos: no evolution preview */
+        press(BTN_DOWN);press(BTN_DOWN);press(BTN_DOWN);tick(); /* on the first evolution offer */
+        assert(on_top("Growlithe > Arcanine") && on_top_change() && on_top("Growlithe evolves into Arcanine.") && on_bottom("A: buy for 450    Up/Down: choose") && !on_bottom("A: buy for 450    Up/Down: choose    Not"));
+        press(BTN_DOWN);press(BTN_DOWN);press(BTN_DOWN);tick();assert(on_top("Scyther > Kleavor") && on_top("Scyther evolves into Kleavor. A rare item.") && on_bottom("A: buy for 1025"));
+        w->wallet=1000;tick();assert(on_bottom("A: buy for 1025    Up/Down: choose    Not enough cash"));w->wallet=2000;
+        /* Buying: the member evolves, the cash goes, the note shows until the cursor moves. */
+        press(BTN_UP);press(BTN_UP);press(BTN_UP);tick();press(BTN_ACTION);tick();
+        assert(w->roster.mon[0].b.species==59 && w->wallet==2000-450 && w->evo[0].state==FB_EVO_SOLD && on_bottom("Growlithe evolved into Arcanine!") && on_top("Growlithe evolved into Arcanine!"));
+        press(BTN_DOWN);tick();assert(!w->message[0] && on_top("Eevee > Vaporeon") && on_bottom("A: buy for 450"));
+        press(BTN_ACTION);tick();assert(w->roster.mon[1].b.species==134 && w->evo[2].state==FB_EVO_VOID); /* the other Eevee stone no longer fits */
+        press(BTN_DOWN);tick();assert(on_bottom("Vaporeon: Thunder Stone") && on_bottom("Evolved") && on_bottom("This Pokemon evolved another way.") && !on_top("Vaporeon >"));
+        press(BTN_ACTION);tick();assert(w->wallet==2000-450-450); /* nothing bought */
+        press(BTN_UP);press(BTN_UP);tick();assert(on_bottom("Sold") && on_bottom("Bought: this Pokemon has evolved.")); /* back on the Growlithe row */
+        /* A tap on a row is the cursor and A: the Scyther row is the seventh, and the rare stone is bought. */
+        w->wallet=1100;game_screen->touch(game_screen,100,FM_LIST_Y+FM_LIST_PAD+6*FM_ROW_PITCH+8);tick();
+        assert(w->roster.mon[2].b.species==900 && w->wallet==75 && w->evo[3].state==FB_EVO_SOLD && on_bottom("Scyther evolved into Kleavor!"));
+        /* The continue row leaves the shop and clears the shelf. */
+        press(BTN_DOWN);tick();assert(!w->message[0] && on_bottom("Target ")); /* the cursor moved on from the Scyther row to Continue */
+        press(BTN_ACTION);tick();assert(w->phase==FB_CAREER_READY && w->evo_count==0);
+    }
+    {
+        static const char *const seen[]={"Draft  ","Lineup","Pick a member","Playoffs","Round 5 / 7","Choose your play","Special teams","Go for two","Touchdown!","Live play","Match won","Playoff elimination","Experience","Choose an evolution","Shop","Cash 1234","Playoff complete","Checkpoint preserved","Species candy","Mega evolution","Tap the map","Circle Pad","Growlithe: Fire Stone","Growlithe > Arcanine","Eevee > Vaporeon"};
         for(unsigned i=0;i<sizeof seen/sizeof seen[0];++i)if(!fake_saw(seen[i]))fprintf(stderr,"never drawn: %s\n",seen[i]);
         for(unsigned i=0;i<sizeof seen/sizeof seen[0];++i)assert(fake_saw(seen[i]));
     }
