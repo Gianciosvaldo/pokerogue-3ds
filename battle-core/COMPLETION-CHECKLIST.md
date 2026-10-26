@@ -78,6 +78,9 @@ money handling merged in #357; see [their validation record](HONEY-MONEY-VALIDAT
    shared-target alias lifetime and a native nineteen-action turn.
    The [actor-reference follow-up](TURN-ACTOR-VALIDATION.md) preserves native
    turn-order objects across ID collisions, ID changes and party removal.
+   The [current held dispatch inventory](HELD-ITEM-INVENTORY.md) reconciles all
+   33 pinned subclasses with C mappings, owner references and bounded proof
+   records. Its class mapping count is not a semantic completion count.
 2. Finish the source inventory, including AI moveset attributes, constructor
    closures/conditions, tags, modifiers, phases and unsupported/capacity paths.
 3. Reconcile identity/form/copy and persistent interaction evidence with later
@@ -109,5 +112,9 @@ and persistence now have [native owner evidence](../game-core/EVO-TRACKER-VALIDA
 General fusion evolution selection remains an explicitly open caller prerequisite.
 
 [Constructor-lock transport](../game-core/HELD-LOCK-VALIDATION.md) now preserves
-source locks in acquisition, projection and save reconstruction. This does not
-close the remaining held-form activation or incrementing-stat owners.
+source locks in acquisition, projection and save reconstruction. Held-form
+activation and party action owners also have [their own proof](../game-core/FORM-ITEM-OWNER-VALIDATION.md).
+The [Macho Brace stat/Victory/capture owners](../game-core/MACHO-BRACE-VALIDATION.md)
+are implemented; Winstrate reward selection and arbitrary cleanup histories
+remain separate. Do not recreate these merged owners based on the historical
+Card 104 table.

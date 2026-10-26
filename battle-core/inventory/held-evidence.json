@@ -1,0 +1,508 @@
+{
+  "version": 1,
+  "meaning": "Registry and owner references plus bounded proof links; not semantic completion",
+  "rows": [
+    {
+      "name": "LapsingPokemonHeldItemModifier",
+      "c_class": null,
+      "owners": [],
+      "evidence": [],
+      "boundary": "Abstract; no concrete descendants at this pin. BattleEnd lapsing-held dispatch has no enabled instance."
+    },
+    {
+      "name": "BaseStatModifier",
+      "c_class": "PR_MOD_BASE_STAT",
+      "owners": [
+        {
+          "path": "battle-core/src/pokemon.c",
+          "symbol": "pr_apply_base_stat_after_fusion"
+        }
+      ],
+      "evidence": [
+        "battle-core/STAT-ORDER-VALIDATION.md",
+        "game-core/VITAMIN-VALIDATION.md"
+      ],
+      "boundary": "IV-capped canonical vitamins; generic constructor values and all mixed histories are not implied."
+    },
+    {
+      "name": "EvoTrackerModifier",
+      "c_class": "PR_MOD_EVO_TRACKER",
+      "owners": [
+        {
+          "path": "game-core/src/gc_reward.c",
+          "symbol": "result.tracker_stacks"
+        }
+      ],
+      "evidence": [
+        "game-core/EVO-TRACKER-VALIDATION.md"
+      ],
+      "boundary": "Canonical Gimmighoul acquisition and primary evolution; general fusion evolution remains open."
+    },
+    {
+      "name": "PokemonBaseStatTotalModifier",
+      "c_class": "PR_MOD_BASE_STAT_TOTAL",
+      "owners": [
+        {
+          "path": "battle-core/src/pokemon.c",
+          "symbol": "pr_apply_base_stat_before_fusion"
+        }
+      ],
+      "evidence": [
+        "battle-core/STAT-ORDER-VALIDATION.md"
+      ],
+      "boundary": "Shuckle Juice 10/-15 or Old Gateau, before fusion/halving; mystery event selection is a separate owner."
+    },
+    {
+      "name": "PokemonBaseStatFlatModifier",
+      "c_class": "PR_MOD_BASE_STAT_FLAT",
+      "owners": [
+        {
+          "path": "battle-core/src/pokemon.c",
+          "symbol": "pr_apply_base_stat_before_fusion"
+        }
+      ],
+      "evidence": [
+        "battle-core/STAT-ORDER-VALIDATION.md"
+      ],
+      "boundary": "Shuckle Juice 10/-15 or Old Gateau, before fusion/halving; mystery event selection is a separate owner."
+    },
+    {
+      "name": "PokemonIncrementingStatModifier",
+      "c_class": "PR_MOD_INCREMENTING_STAT",
+      "owners": [
+        {
+          "path": "battle-core/src/pokemon.c",
+          "symbol": "pr_apply_incrementing_stat_modifier"
+        },
+        {
+          "path": "game-core/src/gc_phases.c",
+          "symbol": "MYSTERY_ENCOUNTER_MACHO_BRACE"
+        }
+      ],
+      "evidence": [
+        "game-core/MACHO-BRACE-VALIDATION.md"
+      ],
+      "boundary": "Canonical Brace stat, Victory/capture and save owners; Winstrate reward chain and arbitrary cleanup histories are separate."
+    },
+    {
+      "name": "StatBoosterModifier",
+      "c_class": "PR_MOD_STAT_BOOSTER",
+      "owners": [
+        {
+          "path": "battle-core/src/pokemon.c",
+          "symbol": "pr_apply_stat_booster_modifiers"
+        }
+      ],
+      "evidence": [
+        "battle-core/STAT-ITEM-VALIDATION.md",
+        "battle-core/STAT-LOOT-VALIDATION.md",
+        "battle-core/FUSED-HELD-VALIDATION.md"
+      ],
+      "boundary": "Original Eviolite and six species boosters, transferred base-class clones and fused eligibility; generic constructor parameters retain guards."
+    },
+    {
+      "name": "EvolutionStatBoosterModifier",
+      "c_class": "PR_MOD_EVOLUTION_STAT_BOOSTER",
+      "owners": [
+        {
+          "path": "battle-core/src/pokemon.c",
+          "symbol": "pr_apply_stat_booster_modifiers"
+        }
+      ],
+      "evidence": [
+        "battle-core/STAT-ITEM-VALIDATION.md",
+        "battle-core/STAT-LOOT-VALIDATION.md",
+        "battle-core/FUSED-HELD-VALIDATION.md"
+      ],
+      "boundary": "Original Eviolite and six species boosters, transferred base-class clones and fused eligibility; generic constructor parameters retain guards."
+    },
+    {
+      "name": "SpeciesStatBoosterModifier",
+      "c_class": "PR_MOD_SPECIES_STAT_BOOSTER",
+      "owners": [
+        {
+          "path": "battle-core/src/pokemon.c",
+          "symbol": "pr_apply_stat_booster_modifiers"
+        }
+      ],
+      "evidence": [
+        "battle-core/STAT-ITEM-VALIDATION.md",
+        "battle-core/STAT-LOOT-VALIDATION.md",
+        "battle-core/FUSED-HELD-VALIDATION.md"
+      ],
+      "boundary": "Original Eviolite and six species boosters, transferred base-class clones and fused eligibility; generic constructor parameters retain guards."
+    },
+    {
+      "name": "CritBoosterModifier",
+      "c_class": "PR_MOD_CRIT_BOOSTER",
+      "owners": [
+        {
+          "path": "battle-core/src/damage.c",
+          "symbol": "pr_project_crit_booster_modifiers"
+        }
+      ],
+      "evidence": [
+        "battle-core/CRITICAL-VALIDATION.md",
+        "battle-core/FUSED-HELD-VALIDATION.md"
+      ],
+      "boundary": "Scope Lens and original Leek including fused species; arbitrary raw stat/species identities are outside those proofs."
+    },
+    {
+      "name": "SpeciesCritBoosterModifier",
+      "c_class": "PR_MOD_SPECIES_CRIT_BOOSTER",
+      "owners": [
+        {
+          "path": "battle-core/src/damage.c",
+          "symbol": "pr_project_crit_booster_modifiers"
+        }
+      ],
+      "evidence": [
+        "battle-core/CRITICAL-VALIDATION.md",
+        "battle-core/FUSED-HELD-VALIDATION.md"
+      ],
+      "boundary": "Scope Lens and original Leek including fused species; arbitrary raw stat/species identities are outside those proofs."
+    },
+    {
+      "name": "AttackTypeBoosterModifier",
+      "c_class": "PR_MOD_ATTACK_TYPE_BOOSTER",
+      "owners": [
+        {
+          "path": "battle-core/src/damage.c",
+          "symbol": "pr_project_attack_type_booster_modifiers"
+        }
+      ],
+      "evidence": [
+        "battle-core/tests/attack-type.producer.test.ts",
+        "battle-core/PICKUP-VALIDATION.md"
+      ],
+      "boundary": "Eighteen canonical types, 20% and cap99; source base-move type rule, not arbitrary multipliers."
+    },
+    {
+      "name": "SurviveDamageModifier",
+      "c_class": "PR_MOD_SURVIVE_DAMAGE",
+      "owners": [
+        {
+          "path": "battle-core/src/phases.c",
+          "symbol": "pr_apply_survive_damage_modifiers"
+        }
+      ],
+      "evidence": [
+        "battle-core/tests/turntest.producer.test.ts",
+        "battle-core/ITEM-TRANSFER-VALIDATION.md",
+        "battle-core/SCENE-TRANSFER-VALIDATION.md"
+      ],
+      "boundary": "Focus Band fatal-hit chance; bounded singles item-turn mode and named stock/transfer proofs, not every interaction."
+    },
+    {
+      "name": "BypassSpeedChanceModifier",
+      "c_class": "PR_MOD_BYPASS_SPEED_CHANCE",
+      "owners": [
+        {
+          "path": "battle-core/src/phases.c",
+          "symbol": "pr_apply_bypass_speed_chance_modifiers"
+        }
+      ],
+      "evidence": [
+        "battle-core/tests/turntest.producer.test.ts",
+        "battle-core/ITEM-TRANSFER-VALIDATION.md",
+        "battle-core/SCENE-TRANSFER-VALIDATION.md"
+      ],
+      "boundary": "Quick Claw turn-start chance; bounded singles item-turn mode and named stock/transfer proofs, not every interaction."
+    },
+    {
+      "name": "FlinchChanceModifier",
+      "c_class": "PR_MOD_FLINCH_CHANCE",
+      "owners": [
+        {
+          "path": "battle-core/src/phases.c",
+          "symbol": "pr_apply_flinch_chance_modifiers"
+        }
+      ],
+      "evidence": [
+        "battle-core/tests/turntest.producer.test.ts",
+        "battle-core/ITEM-TRANSFER-VALIDATION.md",
+        "battle-core/SCENE-TRANSFER-VALIDATION.md"
+      ],
+      "boundary": "King's Rock post-hit chance; bounded singles item-turn mode and named stock/transfer proofs, not every interaction."
+    },
+    {
+      "name": "TurnHealModifier",
+      "c_class": "PR_MOD_TURN_HEAL",
+      "owners": [
+        {
+          "path": "battle-core/src/phases.c",
+          "symbol": "pr_apply_turn_heal_modifiers"
+        }
+      ],
+      "evidence": [
+        "battle-core/tests/turntest.producer.test.ts",
+        "battle-core/ITEM-TRANSFER-VALIDATION.md",
+        "battle-core/SCENE-TRANSFER-VALIDATION.md"
+      ],
+      "boundary": "Leftovers turn-end healing; bounded singles item-turn mode and named stock/transfer proofs, not every interaction."
+    },
+    {
+      "name": "TurnStatusEffectModifier",
+      "c_class": "PR_MOD_TURN_STATUS_EFFECT",
+      "owners": [
+        {
+          "path": "battle-core/src/phases.c",
+          "symbol": "pr_apply_turn_status_modifiers"
+        }
+      ],
+      "evidence": [
+        "battle-core/tests/status-orb.producer.test.ts",
+        "game-core/ORB-VALIDATION.md",
+        "game-core/ORB-ACQUISITION-VALIDATION.md"
+      ],
+      "boundary": "Flame/Toxic Orb order, self-status and canonical acquisition; broader mixed inventories remain separate."
+    },
+    {
+      "name": "HitHealModifier",
+      "c_class": "PR_MOD_HIT_HEAL",
+      "owners": [
+        {
+          "path": "battle-core/src/phases.c",
+          "symbol": "pr_apply_hit_heal_modifiers"
+        }
+      ],
+      "evidence": [
+        "battle-core/tests/turntest.producer.test.ts",
+        "battle-core/ITEM-TRANSFER-VALIDATION.md",
+        "battle-core/SCENE-TRANSFER-VALIDATION.md"
+      ],
+      "boundary": "Shell Bell move-end healing; bounded singles item-turn mode and named stock/transfer proofs, not every interaction."
+    },
+    {
+      "name": "BerryModifier",
+      "c_class": "PR_MOD_BERRY",
+      "owners": [
+        {
+          "path": "battle-core/src/phases.c",
+          "symbol": "pr_apply_berry_ex"
+        }
+      ],
+      "evidence": [
+        "battle-core/BERRY-LIFECYCLE-VALIDATION.md",
+        "battle-core/BERRY-MOVES-VALIDATION.md",
+        "battle-core/RECEIVED-HISTORY-VALIDATION.md"
+      ],
+      "boundary": "All eleven pinned berry identities; Harvest/Cud Chew histories, berry moves and Enigma received-hit owner have separate proofs."
+    },
+    {
+      "name": "PokemonInstantReviveModifier",
+      "c_class": "PR_MOD_INSTANT_REVIVE",
+      "owners": [
+        {
+          "path": "battle-core/src/phases.c",
+          "symbol": "PR_MOD_INSTANT_REVIVE"
+        }
+      ],
+      "evidence": [
+        "battle-core/tests/reviver-seed.producer.test.ts",
+        "battle-core/tests/reviverseedtest.c"
+      ],
+      "boundary": "Reviver Seed FaintPhase/preventInstantRevive/consumption; general doubles and Commander combinations are not implied."
+    },
+    {
+      "name": "ResetNegativeStatStageModifier",
+      "c_class": "PR_MOD_RESET_NEGATIVE_STAT_STAGE",
+      "owners": [
+        {
+          "path": "battle-core/src/phases.c",
+          "symbol": "pr_apply_reset_negative_stat_stage_modifier"
+        }
+      ],
+      "evidence": [
+        "battle-core/tests/turntest.producer.test.ts",
+        "battle-core/ITEM-TRANSFER-VALIDATION.md",
+        "battle-core/SCENE-TRANSFER-VALIDATION.md"
+      ],
+      "boundary": "White Herb stat-change owner; bounded singles item-turn mode and named stock/transfer proofs, not every interaction."
+    },
+    {
+      "name": "FieldEffectModifier",
+      "c_class": "PR_MOD_FIELD_EFFECT",
+      "owners": [
+        {
+          "path": "battle-core/src/phases.c",
+          "symbol": "pr_apply_field_effect_modifier"
+        }
+      ],
+      "evidence": [
+        "battle-core/FIELD-EFFECT-VALIDATION.md"
+      ],
+      "boundary": "Mystical Rock weather/terrain duration and bounded cleanup; arbitrary scene histories remain separate."
+    },
+    {
+      "name": "PokemonExpBoosterModifier",
+      "c_class": "PR_MOD_EXP_BOOSTER",
+      "owners": [
+        {
+          "path": "game-core/src/gc_phases.c",
+          "symbol": "gc_apply_exp_boosters"
+        }
+      ],
+      "evidence": [
+        "battle-core/WIDE-EXP-PHASE-VALIDATION.md",
+        "battle-core/WIDE-PROGRESSION-VALIDATION.md"
+      ],
+      "boundary": "Lucky/Golden Egg award/projection and wide EXP phases; whole Endless progression acceptance remains open."
+    },
+    {
+      "name": "PokemonFriendshipBoosterModifier",
+      "c_class": "PR_MOD_FRIENDSHIP_BOOSTER",
+      "owners": [
+        {
+          "path": "game-core/src/gc_phases.c",
+          "symbol": "gc_soothe_battle_gain"
+        }
+      ],
+      "evidence": [
+        "game-core/SOOTHE-BATTLE-VALIDATION.md",
+        "game-core/SOOTHE-ACQUISITION-VALIDATION.md"
+      ],
+      "boundary": "Soothe Bell positive battle friendship, cap/candy and acquisition owners within recorded bounds."
+    },
+    {
+      "name": "PokemonNatureWeightModifier",
+      "c_class": "PR_MOD_NATURE_WEIGHT",
+      "owners": [
+        {
+          "path": "battle-core/src/pokemon.c",
+          "symbol": "pr_project_nature_weight_modifier"
+        }
+      ],
+      "evidence": [
+        "battle-core/tests/soul-dew.producer.test.ts",
+        "game-core/MINT-VALIDATION.md"
+      ],
+      "boundary": "Soul Dew canonical stacks and nature rounding; unrestricted nature/stat/inventory histories are not implied."
+    },
+    {
+      "name": "PokemonMoveAccuracyBoosterModifier",
+      "c_class": "PR_MOD_MOVE_ACCURACY_BOOSTER",
+      "owners": [
+        {
+          "path": "battle-core/src/phases.c",
+          "symbol": "pr_apply_accuracy_booster_modifiers"
+        }
+      ],
+      "evidence": [
+        "battle-core/tests/wide-lens.producer.test.ts",
+        "game-core/LENS-VALIDATION.md"
+      ],
+      "boundary": "Wide Lens amount5 with represented stacks; arbitrary accuracy booster identities remain guarded."
+    },
+    {
+      "name": "PokemonMultiHitModifier",
+      "c_class": "PR_MOD_MULTI_HIT",
+      "owners": [
+        {
+          "path": "battle-core/src/phases.c",
+          "symbol": "pr_apply_multi_hit_count_modifiers"
+        },
+        {
+          "path": "battle-core/src/damage.c",
+          "symbol": "pr_apply_multi_hit_damage_modifiers"
+        }
+      ],
+      "evidence": [
+        "battle-core/tests/multi-lens.producer.test.ts",
+        "game-core/MULTI-VALIDATION.md",
+        "game-core/MULTI-ACQUISITION-VALIDATION.md"
+      ],
+      "boundary": "Multi Lens hit count/damage/owning inventory within recorded caps; all multi-hit/doubles ability interactions are separate."
+    },
+    {
+      "name": "PokemonFormChangeItemModifier",
+      "c_class": "PR_MOD_FORM_CHANGE_ITEM",
+      "owners": [
+        {
+          "path": "battle-core/src/form_items.c",
+          "symbol": "pr_apply_form_change_item"
+        }
+      ],
+      "evidence": [
+        "battle-core/HELD-FORM-VALIDATION.md",
+        "game-core/HELD-FORM-STATE-VALIDATION.md",
+        "game-core/FORM-ITEM-OWNER-VALIDATION.md",
+        "FORM-ITEM-MENU-2026-10-24.md"
+      ],
+      "boundary": "Canonical item trigger, state/save, acquisition and party action owners are implemented; arbitrary Transform/fusion/mixed cleanup is not closed."
+    },
+    {
+      "name": "DamageMoneyRewardModifier",
+      "c_class": "PR_MOD_DAMAGE_MONEY_REWARD",
+      "owners": [
+        {
+          "path": "battle-core/src/phases.c",
+          "symbol": "pr_apply_damage_money_modifiers"
+        }
+      ],
+      "evidence": [
+        "battle-core/HONEY-MONEY-VALIDATION.md",
+        "game-core/GOLDEN-VALIDATION.md",
+        "game-core/MONEY-VALIDATION.md"
+      ],
+      "boundary": "Golden Punch final-damage wallet owner, native Number arithmetic and cap; unrelated achievements/UI are not implied."
+    },
+    {
+      "name": "SwitchEffectTransferModifier",
+      "c_class": "PR_MOD_SWITCH_EFFECT_TRANSFER",
+      "owners": [
+        {
+          "path": "battle-core/src/switching.c",
+          "symbol": "pr_transfer_baton_on_switch"
+        }
+      ],
+      "evidence": [
+        "battle-core/BATON-VALIDATION.md"
+      ],
+      "boundary": "Held Baton transfer on switch, distinct from Baton Pass; canonical stock and recorded branch bounds."
+    },
+    {
+      "name": "HeldItemTransferModifier",
+      "c_class": null,
+      "owners": [
+        {
+          "path": "battle-core/src/item_transfer.c",
+          "symbol": "pr_try_transfer_held_item"
+        }
+      ],
+      "evidence": [
+        "battle-core/ITEM-TRANSFER-VALIDATION.md",
+        "battle-core/SCENE-TRANSFER-VALIDATION.md"
+      ],
+      "boundary": "Abstract shared theft semantics are flattened into its two concrete C classes; no standalone source factory."
+    },
+    {
+      "name": "TurnHeldItemTransferModifier",
+      "c_class": "PR_MOD_TURN_HELD_TRANSFER",
+      "owners": [
+        {
+          "path": "battle-core/src/phases.c",
+          "symbol": "pr_apply_turn_held_item_transfers"
+        }
+      ],
+      "evidence": [
+        "battle-core/ITEM-TRANSFER-VALIDATION.md"
+      ],
+      "boundary": "Mini Black Hole turn-end theft; canonical stock and source order within the recorded bounds."
+    },
+    {
+      "name": "ContactHeldItemTransferChanceModifier",
+      "c_class": "PR_MOD_CONTACT_HELD_TRANSFER",
+      "owners": [
+        {
+          "path": "battle-core/src/phases.c",
+          "symbol": "pr_apply_contact_held_item_transfers"
+        }
+      ],
+      "evidence": [
+        "battle-core/GRIP-CLAW-VALIDATION.md"
+      ],
+      "boundary": "Grip Claw post-hit theft; 10% canonical chance and bounded effective stacks/stock."
+    }
+  ]
+}
