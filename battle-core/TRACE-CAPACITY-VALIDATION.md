@@ -75,7 +75,9 @@ python3 battle-core/tools/check-trace-capacity-proof.py
 
 The fixed trace prefix is explicitly incomplete on long turns. A consumer
 requiring a full trace must observe all phases rather than treating the prefix
-as complete. The 555 core events exceed game-core's separate 384-event handoff
-limit: this proof collects core chunks and does not claim the app can present
-that whole turn. That downstream limit and other engine capacities remain open
-in the [completion checklist](COMPLETION-CHECKLIST.md). No builder is released.
+as complete. This proof collects core chunks. The subsequent
+[controller storage proof](../game-core/CONTROLLER-EVENT-STORAGE-VALIDATION.md)
+passes all 555 events through the app's optional growable storage and converter;
+default controller clients still have an explicit 384-event limit. Other
+capacities remain open in the [completion checklist](COMPLETION-CHECKLIST.md).
+No builder is released.

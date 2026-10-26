@@ -39,7 +39,7 @@
  * (include/pr/events.h), handed over as GC_EV_BATTLE. */
 typedef enum {
     GC_EV_MESSAGE,       /* a text box: msg */
-    GC_EV_BATTLE,        /* play battle-core's events run->battle_events[a] .. [a + b - 1] (a turn, the
+    GC_EV_BATTLE,        /* play b events from gc_run_battle_event_data(run) + a (a turn, the
                           * rest of one after a switch prompt or after a victory's experience, the start of
                           * a battle after the "Will you switch?" answer). They stay valid until the next
                           * gc_run_choose */
@@ -274,6 +274,11 @@ typedef struct {
 #define GC_MAX_EVENTS 256
 #define GC_MAX_UNPORTED (PR_FEAT_COUNT_ + 16)
 #define GC_MAX_BATTLE_EVENTS 384
+/* Optional caller-owned storage growth. Preserve the `used` event prefix before
+ * releasing/moving old_data. On success, return storage/capacity >= required;
+ * on failure leave old_data valid. Synchronous, no engine/run reentry. */
+typedef bool (*gc_battle_event_reserve_fn)(void *ctx, const pr_event *old_data, int used,
+                                         int required, pr_event **storage, int *capacity);
 /* The Trainer.getName calls the game makes (gc_run.trainer_names) */
 enum {
     GC_TNAME_TITLED,            /* getName(NONE, true): appeared, defeated */
@@ -342,8 +347,12 @@ typedef struct gc_run {
     gc_event events[GC_MAX_EVENTS];
     int ev_head, ev_count;
     bool ev_overflow;
-    /* battle-core's events since the last gc_run_choose (GC_EV_BATTLE points into them) */
-    pr_event battle_events[GC_MAX_BATTLE_EVENTS];
+    /* Events since the last choice; GC_EV_BATTLE ranges use the read accessor. */
+    pr_event battle_events[GC_MAX_BATTLE_EVENTS]; /* default inline store */
+    pr_event *battle_event_storage;              /* optional caller-owned store */
+    int battle_event_capacity;
+    gc_battle_event_reserve_fn battle_event_reserve;
+    void *battle_event_reserve_ctx;
     int n_battle_events;
     bool battle_events_overflow;
     /* what the run hit that isn't ported yet: counts by battle-core's unported ids, and game-core's own
@@ -395,6 +404,12 @@ bool gc_run_set_starters(gc_run *run, const gc_starter *starters, int n, const c
 
 /* The next event to show, oldest first; false when there are none left. */
 bool gc_run_next_event(gc_run *run, gc_event *out);
+
+/* Read the complete presentation sequence until the next choice/reset. Default
+ * callers still use the inline store. An opt-in growth owner must use this view,
+ * keep returned memory alive, and bind again after new/load (not serialized). */
+const pr_event *gc_run_battle_event_data(const gc_run *run);
+void gc_run_set_battle_event_storage(gc_run *run, gc_battle_event_reserve_fn reserve, void *ctx);
 
 /* What the player must answer now. */
 const gc_screen *gc_run_screen(const gc_run *run);

@@ -87,6 +87,9 @@ money handling merged in #357; see [their validation record](HONEY-MONEY-VALIDAT
    The [diagnostic trace follow-up](TRACE-CAPACITY-VALIDATION.md) lets a native
    607-phase turn finish after its 512-entry diagnostic prefix fills; trace
    truncation is explicit and separate from genuine engine-storage failures.
+   The [controller storage follow-up](../game-core/CONTROLLER-EVENT-STORAGE-VALIDATION.md)
+   delivers that turn's 555 events through the app with optional caller-owned
+   growth. Default inline clients and other engine/app capacities remain bounded.
 2. Finish the source inventory, including AI moveset attributes, constructor
    closures/conditions, tags, modifiers, phases and unsupported/capacity paths.
 3. Reconcile identity/form/copy and persistent interaction evidence with later

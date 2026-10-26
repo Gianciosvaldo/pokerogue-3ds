@@ -104,10 +104,10 @@ RW := ../../reward-core
 CCORE := ../../custom-core
 OBS_SRCS := ../source/combat_observer.c ../source/custom_core_build.c
 RUN_CPPFLAGS := $(CPPFLAGS) -I$(CCORE)/include -I../menus -I../gen -I$(GC)/include -I$(GC)/gen/out -I$(RC)/include -I$(RC)/gen/out -I$(RW)/include -I$(RW)/gen/out -I$(APP)/include
-RUN_SRCS := me_fake.c ../source/achv_hooks.c ../gen/gm_trainer_art.c runtest.c snd_fake.c ../menus/item_ui.c ../gen/gm_item_ui.c ../source/bgm.c ../source/bgm_choose.c ../source/bgm_player.c ../gen/gm_bgm_data.c party_fake.c ../menus/party.c ../menus/menus_names.c ../menus/move_names.c ../menus/menus_data.c ../source/starter_data.c ../source/run_screen.c ../source/battle_events.c ../source/run_saves.c ../source/run_history.c ../source/history_record.c ../source/run_text.c ../source/custom_run.c ../source/custom_store.c ../source/profile_tx.c ../source/system_data.c $(OBS_SRCS) $(APP)/source/save.c ../gen/gm_enum_names.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+RUN_SRCS := me_fake.c ../source/achv_hooks.c ../gen/gm_trainer_art.c runtest.c snd_fake.c ../menus/item_ui.c ../gen/gm_item_ui.c ../source/bgm.c ../source/bgm_choose.c ../source/bgm_player.c ../gen/gm_bgm_data.c party_fake.c ../menus/party.c ../menus/menus_names.c ../menus/move_names.c ../menus/menus_data.c ../source/starter_data.c ../source/run_screen.c ../source/battle_event_store.c ../source/battle_events.c ../source/run_saves.c ../source/run_history.c ../source/history_record.c ../source/run_text.c ../source/custom_run.c ../source/custom_store.c ../source/profile_tx.c ../source/system_data.c $(OBS_SRCS) $(APP)/source/save.c ../gen/gm_enum_names.c $(wildcard $(GC)/src/*.c) $(wildcard $(GC)/gen/out/*.c) $(wildcard $(RC)/src/*.c) $(wildcard $(RC)/gen/out/*.c) $(wildcard $(RW)/src/*.c) $(RW)/gen/out/reward_data.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
 build/runtest: $(RUN_SRCS)
 	@mkdir -p build
-	$(CC) $(RUN_CPPFLAGS) -I$(GC)/src $(CFLAGS) $(RUN_SRCS) -lm -o $@
+	$(CC) $(RUN_CPPFLAGS) -I$(GC)/src $(CFLAGS) $(RUN_SRCS) -Wl,--wrap=gc_ev_battle -Wl,--wrap=gc_ev_battle_chunk -lm -o $@
 runtest: build/runtest
 .PHONY: runtest
 
@@ -306,7 +306,8 @@ profile_tx_test: build/profile_tx_test
 
 # the same test with game-core compiled once into an archive: only the files under test are rebuilt (profile_tx_mutations.py uses it)
 PTX_OWN := profile_tx_test.c ../source/profile_tx.c ../source/system_data.c ../source/custom_store.c ../source/custom_core_build.c $(APP)/source/save.c
-build/ptx_core.a: $(CORE_SRCS)
+CORE_HEADERS := $(wildcard $(GC)/include/gc/*.h $(RC)/include/pr/*.h $(RW)/include/pr/*.h $(BC)/include/pr/*.h $(AI)/include/pr/*.h $(BC)/gen/out/*.h)
+build/ptx_core.a: $(CORE_SRCS) $(CORE_HEADERS)
 	@mkdir -p build/ptxobj
 	@for f in $(CORE_SRCS); do o=build/ptxobj/$$(echo $$f | tr '/.' '__').o; $(CC) $(RUN_CPPFLAGS) $(CFLAGS) -c $$f -o $$o || exit 1; done
 	ar rcs $@ build/ptxobj/*.o
@@ -425,3 +426,9 @@ build/charge_visibility_test: charge_visibility_test.c ../source/battle_events.c
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined charge_visibility_test.c ../source/battle_events.c build/ptx_core.a -lm -o $@
 charge_visibility_test: build/charge_visibility_test
 .PHONY: charge_visibility_test
+
+EVENT_STORE_OWN := event_store_test.c ../source/battle_event_store.c ../source/battle_events.c
+build/event_store_test: $(EVENT_STORE_OWN) $(BC)/tests/trace-capacity-test.c $(BC)/tests/trace-capacity.native.inc build/ptx_core.a
+	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -DEVENT_STORE_LEGACY_SAVE='"$(abspath $(GC)/tests/fixtures/held-form.pr399.save)"' $(EVENT_STORE_OWN) build/ptx_core.a -Wl,--wrap=pr_phase_run -Wl,--wrap=realloc -lm -o $@
+event_store_test: build/event_store_test
+.PHONY: event_store_test
