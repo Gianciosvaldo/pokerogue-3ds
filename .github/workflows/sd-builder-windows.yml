@@ -49,6 +49,8 @@ jobs:
           python3 game/tests/check_stack_size.py dist/game/pokerogue.elf
       - name: bundle.py writes what devkitPro's mkromfs3ds and 3dsxtool write, byte for byte
         run: python3 sd-builder/tests/bundle_test.py --reference game/pokerogue.elf game/pokerogue.smdh
+      - name: The packs' recipe covers the extra pictures, the pipeline scripts and the pins (an update must not keep stale packs)
+        run: python3 sd-builder/tests/recipe_test.py
       - name: The probe app (a small test of the packs inside an app) builds
         run: docker run --rm -v "$PWD":/src -w /src/sd-builder/tests/probe devkitpro/devkitarm make
       - run: GAME_DIR=dist/game sd-builder/make-zip.sh dist && sha256sum dist/PokeRogue-SD-Builder.zip
@@ -105,6 +107,11 @@ jobs:
           if (($log | Select-String -Pattern "=== done" -AllMatches).Matches.Count -ne 2) { throw "expected two finished runs" }
           $app = (Get-FileHash (Join-Path $env:SD "3ds\PokeRogue.3dsx") -Algorithm SHA256).Hash
           if ($app -ne (Get-FileHash (Join-Path $env:BUILDER "files\game\pokerogue.3dsx") -Algorithm SHA256).Hash) { throw "folder mode did not copy the plain app" }
+      - name: The extra pictures (the JoJo trainer sprites) are in the real gfx.pak under the keys the game asks for
+        shell: cmd
+        run: |
+          "%BUILDER%\files\runtime\python\python.exe" -I -X utf8 "%GITHUB_WORKSPACE%\repo\sd-builder\tests\check_pack_keys.py" "%BUILDER%\files\build\3ds\pokerogue\gfx.pak" "%BUILDER%\files\extra-images" --min 17
+          if errorlevel 1 exit /b 1
       - name: Third run, on a second card (one .3dsx and one .cia, the packs inside them)
         shell: cmd
         run: call "%BUILDER%\BUILD-SD-CARD.bat" --sd "%SD2%" --yes --format both < nul
@@ -148,6 +155,27 @@ jobs:
           if ([regex]::Matches($out, 'already done').Count -ne 5) { throw 'the changed-app run did not skip all five packs' }
           $app = Join-Path $env:BUILDER 'files\game\pokerogue.3dsx'
           if ((Get-FileHash (Join-Path $env:SD '3ds\PokeRogue.3dsx') -Algorithm SHA256).Hash -ne (Get-FileHash $app -Algorithm SHA256).Hash) { throw 'the changed app did not reach the card' }
+      - name: Update over a folder whose pictures pack is out of date, step 1 (what a pack made before the sprites looks like)
+        shell: pwsh
+        run: Remove-Item (Join-Path $env:BUILDER 'files\build\3ds\pokerogue\.gfx.done')
+      - name: Update over a folder whose pictures pack is out of date, step 2 (run it)
+        shell: cmd
+        run: |
+          call "%BUILDER%\BUILD-SD-CARD.bat" --sd "%SD%" --yes --format folder < nul > "%RUNNER_TEMP%\update-3.txt" 2>&1
+          set RC=%errorlevel%
+          type "%RUNNER_TEMP%\update-3.txt"
+          exit /b %RC%
+      - name: Update over a folder whose pictures pack is out of date, step 3 (only the pictures were made again, with the sprites in)
+        shell: pwsh
+        run: |
+          $out = Get-Content (Join-Path $env:RUNNER_TEMP 'update-3.txt') -Raw
+          if ($out -cmatch 'Downloading|Unpacking') { throw 'the run downloaded something' }
+          if ([regex]::Matches($out, 'Converting the pictures').Count -ne 1) { throw 'the pictures were not made again' }
+          if ([regex]::Matches($out, 'already done').Count -ne 4) { throw 'the other four packs were not skipped' }
+          $pak = Join-Path $env:BUILDER 'files\build\3ds\pokerogue\gfx.pak'
+          & (Join-Path $env:BUILDER 'files\runtime\python\python.exe') -I -X utf8 (Join-Path $env:GITHUB_WORKSPACE 'repo\sd-builder\tests\check_pack_keys.py') $pak (Join-Path $env:BUILDER 'files\extra-images') --min 17
+          if ($LASTEXITCODE -ne 0) { throw 'the sprites are not in the rebuilt gfx.pak' }
+          if ((Get-FileHash (Join-Path $env:SD '3ds\pokerogue\gfx.pak') -Algorithm SHA256).Hash -ne (Get-FileHash $pak -Algorithm SHA256).Hash) { throw 'the card has a different gfx.pak' }
       - name: Keep the log and build report (no packs)
         if: always()
         uses: actions/upload-artifact@v4
@@ -189,6 +217,8 @@ jobs:
           echo "hashes=$(echo "$h" | paste -sd';')" >> "$GITHUB_OUTPUT"
       - name: One .3dsx and one .cia (stages are skipped, so this is the bundling alone)
         run: python PokeRogue-SD-Builder/files/builder.py --no-sd --yes --format both < /dev/null
+      - name: The extra pictures (the JoJo trainer sprites) are in the real gfx.pak under the keys the game asks for
+        run: python -I repo/sd-builder/tests/check_pack_keys.py PokeRogue-SD-Builder/files/build/3ds/pokerogue/gfx.pak PokeRogue-SD-Builder/files/extra-images --min 17
       - name: Check them against the packs, and the .cia with ctrtool
         run: |
           B=PokeRogue-SD-Builder
