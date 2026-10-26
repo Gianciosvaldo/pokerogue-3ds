@@ -168,6 +168,34 @@ the home team at its 25. `tests/kickoff_test.c` covers the try (kick, block, two
 touchdowns that are worth seven, the second-half and field-goal and safety kickoffs, human kicking and returning, a return
 touchdown, 60 whole CPU games where every score is one of the known kinds, and replay determinism.
 
+## Species candy
+
+The human team's Pokemon earn species candy (the candy of the species each member started as, in the profile's starter
+data, so it spends on passives and cost reductions like candy from a run) while playing. The engine only names the player
+behind a play; the career pays.
+
+- `FootballLive.credits` lists the plays of the last dead ball (at most four: an interception returned for a touchdown is
+  two): the defender who intercepted (`FB_CREDIT_INTERCEPTION`), the rusher who sacked (`FB_CREDIT_SACK`) and whoever
+  carried the ball in (`FB_CREDIT_TOUCHDOWN`, a return or a defender's touchdown too). A sack in the end zone is a safety and
+  is still a sack. `stats[side][member][kind]` is the tally of the whole match (saturates at 255); both teams are tallied,
+  only the human team is paid.
+- `football_credit_candy`: interception 4, sack 2, touchdown 5 (`FB_CANDY_*`). Every one of the 22 also gets 1 candy for
+  playing the match and 1 more for winning it, so a team that does nothing special still earns something.
+- Timing: a career earns the play candy on the first tick after the dead ball (`seen_snaps` tells a new dead ball from the one
+  already looked at; loading a save sets it, so a resumed match earns nothing twice) and the match candy once, when the match
+  is over. Earned candy waits per member in `candy_pending`; `football_career_flush_candy` moves it to the profile and the
+  screen calls it when it writes a checkpoint, just before it saves the profile. So the profile never has candy that no
+  checkpoint knows about: quit mid-match and resume, and the plays after the last checkpoint are played again and earn
+  again, and nothing is paid twice. The match candy is flushed by the shop checkpoint after a win and the end checkpoint after
+  a loss. With no profile (`football_career_new(..., NULL, ...)`) nothing is earned.
+- `candy_plays` and `candy_team` are the totals shown on the result and end screens (earned, flushed or not); they are not
+  saved, so they count from the last resume. The banner of a credited play shows the species and the candy under the headline.
+`tests/candy_test.c` covers the credit list and tally bounds, a touchdown, a sack by a human defender, a return touchdown, 30
+whole games where every credit matches one play and the tallies match the credits, and 8 whole careers (candy earned equals
+the tallies' worth, nothing reaches the profile between checkpoints, the team candy and the rest arrive with the shop or end
+checkpoint, a resume earning nothing twice, a career without a profile); `live_screen_test` checks that a failed checkpoint write
+leaves the candy pending and the saved one hands it over.
+
 ## Coverage, body contact and facing
 
 `football_live_defense.c` owns snap-local coverage: four DL rush, LB/corners

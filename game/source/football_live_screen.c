@@ -37,6 +37,7 @@ static const char *name(unsigned species)
     for(unsigned i=0;i<PR_SPECIES_COUNT;++i)if(pr_species_table[i].id==species)return pr_species_table[i].name;
     return "Pokemon";
 }
+const char *football_live_art_species(unsigned species){return name(species);}
 static void text(const char *s,float x,float y,float size,u32 color)
 {
     C2D_Text t;C2D_TextParse(&t,L.renderer.text,s);C2D_TextOptimize(&t);C2D_DrawText(&t,C2D_WithColor,x,y,.9f,size,size,color);
@@ -62,6 +63,7 @@ static bool save_checkpoint(void)
     if(L.save_bad || !football_career_save_ready(&L.career))return false;
     size_t n=football_career_save(&L.career,checkpoint_bytes,sizeof checkpoint_bytes);
     if(!n || save_write("football_live",checkpoint_bytes,n)!=SAVE_OK)return false;
+    football_career_flush_candy(&L.career); /* the candy earned up to this checkpoint goes to the profile with it, never before */
     if(L.args.save_profile && !L.args.save_profile(L.args.arg))return false;
     L.checkpoint=token();L.save_failed=false;return true;
 }
@@ -378,11 +380,17 @@ static void draw(ui_screen *s,rr_screen which)
             const char *kick_label=m->special==FB_SPECIAL_KICKOFF?"A: KICK":"A: SNAP";
             panel(10,186,145,38,false);panel(165,186,145,38,true);text(offense?"B: JUKE":"B: SWITCH",20,195,.45f,ink());text(offense?kick_label:fair?"A: FAIR CATCH":receiving && free_kick && m->stage!=FB_STAGE_RETURN?"":"A: DIVE",174,195,.45f,gold());
         }break;
-    case FB_CAREER_RESULT:text(c->live.rules.winner==FB_HOME?"MATCH WON":"PLAYOFF ELIMINATION",14,30,.65f,gold());text("A / Tap: team progression",14,90,.47f,ink());break;
+    case FB_CAREER_RESULT:{
+        bool won=c->live.rules.winner==FB_HOME;char gain[96];
+        text(won?"MATCH WON":"PLAYOFF ELIMINATION",14,30,.65f,gold());text("A / Tap: team progression",14,90,.47f,ink());
+        snprintf(gain,sizeof gain,"SPECIES CANDY: +%u FROM PLAYS",c->candy_plays);text(gain,14,132,.42f,gold());
+        snprintf(gain,sizeof gain,"+%u MORE FOR THE TEAM",22*(FB_CANDY_PLAYED+(won?FB_CANDY_WIN:0)));text(gain,14,156,.42f,ink());
+        break;}
     case FB_CAREER_EXP:snprintf(title,sizeof title,"EXP: PLAYER %u / 22",c->exp_member+1);text(title,14,30,.6f,gold());text("Applying existing level-up and evolution logic",14,90,.35f,ink());break;
     case FB_CAREER_EVOLVE:text("CHOOSE EVOLUTION",12,10,.56f,gold());rows(c->evolution_count+1);break;
     case FB_CAREER_SHOP:snprintf(title,sizeof title,"SHOP   CASH %u",c->wallet);text(title,12,8,.55f,gold());rows(4);snprintf(title,sizeof title,"TARGET %u: %.16s",L.member+1,name(c->roster.mon[L.member].b.species));text(title,12,185,.40f,gold());text("Left/Right: target    A: buy / continue",12,214,.34f,ink());break;
-    case FB_CAREER_END:snprintf(title,sizeof title,"PLAYOFF COMPLETE: %u / 7 WINS",c->wins);text(title,12,35,.54f,gold());text("A / Tap: return to title",12,95,.45f,ink());break;
+    case FB_CAREER_END:snprintf(title,sizeof title,"PLAYOFF COMPLETE: %u / 7 WINS",c->wins);text(title,12,35,.54f,gold());text("A / Tap: return to title",12,95,.45f,ink());
+        snprintf(title,sizeof title,"SPECIES CANDY THIS MATCH: +%u",c->candy_plays);text(title,12,132,.42f,gold());break;
     case FB_CAREER_LEARN:break; /* level-up moves are learned without a prompt */
     case FB_CAREER_ERROR:text("CHECKPOINT PRESERVED",12,30,.54f,gold());text(c->message,12,80,.33f,ink());break;
     }

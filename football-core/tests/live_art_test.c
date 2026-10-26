@@ -9,6 +9,8 @@ static FootballRenderer renderer;
 static rr_frame frame={.src_w=64,.src_h=64,.w=64,.h=64};
 static unsigned drawn;
 static bool mirror[22];
+static unsigned named;
+const char *football_live_art_species(unsigned species){named++;return species?"BULBASAUR":"?";}
 void C2D_TextBufClear(C2D_TextBuf b){assert(b);}
 void C2D_TextParse(C2D_Text *t,C2D_TextBuf b,const char *s){(void)t;assert(b && s);}
 void C2D_TextOptimize(C2D_Text *t){(void)t;}
@@ -40,5 +42,11 @@ int main(void)
     m->special=FB_SPECIAL_NONE;m->phase=FB_LIVE_CALL;m->event=FB_EVENT_NONE;
     for(unsigned conversion=1;conversion<=2;++conversion){drawn=0;m->conversion=(uint8_t)conversion;football_live_art_top(&renderer,&career,&camera,0);}
     m->conversion=0;
+    /* A credited play adds the species line under the banner; a credit for the other side or none adds nothing. */
+    m->phase=FB_LIVE_DEAD;m->event=FB_EVENT_INTERCEPTION;named=0;drawn=0;m->credit_count=0;football_live_art_top(&renderer,&career,&camera,0);assert(!named);
+    m->credit_count=1;m->credits[0]=(FootballCredit){FB_AWAY,3,FB_CREDIT_INTERCEPTION};drawn=0;football_live_art_top(&renderer,&career,&camera,0);assert(!named);
+    for(unsigned kind=FB_CREDIT_SACK;kind<=FB_CREDIT_TOUCHDOWN;++kind){m->credits[0]=(FootballCredit){FB_HOME,3,(uint8_t)kind};named=0;drawn=0;football_live_art_top(&renderer,&career,&camera,0);assert(named==1);}
+    m->credits[0].member=22;named=0;drawn=0;football_live_art_top(&renderer,&career,&camera,0);assert(!named);
+    m->credit_count=0;
     puts("football live art: native-left front sprites, running directions and retreating QB receiver-facing submission passed");
 }

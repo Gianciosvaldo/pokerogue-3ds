@@ -44,7 +44,7 @@ static void state(Stream *s,FootballCareer *c)
         for(unsigned i=0;i<22;++i){N(m->away_species[i],UINT16_MAX);N(m->away_form[i],255);
             if(s->read){bool found=false;for(unsigned j=0;j<PR_FORM_COUNT;++j)if(pr_forms[j].species==m->away_species[i] && pr_forms[j].form_index==m->away_form[i])found=true;if(!found)s->ok=false;}
         }
-        r->td_points=6;m->phase=FB_LIVE_CALL;m->pending_receiver=-1;
+        r->td_points=6;m->phase=FB_LIVE_CALL;m->pending_receiver=-1;c->seen_snaps=m->snaps;
         if(s->read){
             /* Setting up the formation draws from the match RNG (run lane, CPU scheme); a resumed match must continue from the saved stream. */
             uint32_t rng=m->rng;

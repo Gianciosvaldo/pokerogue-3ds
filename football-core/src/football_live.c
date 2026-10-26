@@ -15,6 +15,7 @@ static void arrange(FootballLive *m)
     static const float oy[11]={26.67f,28,4,49,13,39,21,24,26.67f,29,32};
     static const float dx[11]={2,2,2,2,7,7,7,2,2,15,15};
     static const float dy[11]={20,24,29,33,15,26.67f,38,5,48,18,36};
+    m->credit_count=0;m->credited=FB_NO_ACTOR;
     m->snap_offense=m->rules.offense;m->event=FB_EVENT_NONE;m->snap_score[0]=m->rules.score[0];m->snap_score[1]=m->rules.score[1];
     float dir=direction(m);m->los=m->rules.offense==FB_HOME?10+m->rules.ball:110-m->rules.ball;
     unsigned off=offense_base(m),def=defense_base(m);
@@ -97,6 +98,15 @@ void football_live_switch(FootballLive *m)
     /* Cycle through all eleven defenders, never hand control back to the AI. */
     m->controlled=(uint8_t)((m->controlled+1)%11);
 }
+void football_live_credit(FootballLive *m,unsigned actor,FootballCreditKind kind)
+{
+    if(!m || actor>=22 || kind<FB_CREDIT_INTERCEPTION || kind>FB_CREDIT_TOUCHDOWN)return;
+    unsigned side=actor<11?FB_HOME:FB_AWAY,member=m->actors[actor].roster;
+    if(member>=22)return;
+    uint8_t *stat=&m->stats[side][member][kind-1];
+    if(*stat<255)++*stat;
+    if(m->credit_count<4)m->credits[m->credit_count++]=(FootballCredit){(uint8_t)side,(uint8_t)member,(uint8_t)kind};
+}
 /* After the ball is dead and the rules have run: a touchdown is followed by its try, a field goal, a safety or the
  * half by a kickoff. Nothing follows in overtime, where a touchdown is worth the full seven, or at the end. */
 void football_live_after_play(FootballLive *m)
@@ -132,6 +142,8 @@ static void finish(FootballLive *m,FootballResultKind kind,float x)
     }
     if(!football_rules_advance(&m->rules,m->result)){m->rules.finished=true;m->rules.winner=FB_AWAY;}
     const FootballRuleEvents *last=&m->rules.last;
+    /* The scorer is the carrier, or the defender who took the ball away and ran it in. */
+    if(last->touchdown)football_live_credit(m,(kind==FB_RESULT_INTERCEPTION || kind==FB_RESULT_FUMBLE) && m->credited<22?m->credited:m->carrier,FB_CREDIT_TOUCHDOWN);
     m->event=last->touchdown?FB_EVENT_TOUCHDOWN:last->safety?FB_EVENT_SAFETY:kind==FB_RESULT_INTERCEPTION?FB_EVENT_INTERCEPTION:
         kind==FB_RESULT_SACK?FB_EVENT_SACK:kind==FB_RESULT_FUMBLE?FB_EVENT_FUMBLE:FB_EVENT_NONE;
     ++m->snaps;m->phase=m->rules.finished?FB_LIVE_END:FB_LIVE_DEAD;m->dead_time=0;
@@ -185,7 +197,7 @@ static void ball_step(FootballLive *m)
     if(defender<22){
         /* Alone under it a defender usually takes it; with a receiver there it is a fight. */
         float chance=receiver<22?3+m->actors[defender].attributes.cth/20.0f:58+m->actors[defender].attributes.cth/3.0f;
-        if(random32(m)%100<chance){finish(m,FB_RESULT_INTERCEPTION,m->ball_x);return;}
+        if(random32(m)%100<chance){m->credited=(uint8_t)defender;football_live_credit(m,defender,FB_CREDIT_INTERCEPTION);finish(m,FB_RESULT_INTERCEPTION,m->ball_x);return;}
     }
     if(receiver==22 || (defender<22 && random32(m)%100<12u+m->actors[defender].attributes.cth/8u) || random32(m)%100>55u+m->actors[receiver].attributes.cth/3){finish(m,FB_RESULT_INCOMPLETE,m->los);return;}
     m->carrier=(uint8_t)receiver;m->caught=true;
@@ -288,9 +300,10 @@ static void step(FootballLive *m,FootballLiveInput input)
                     /* Recovery belongs to the nearest actor at the actual loose-ball spot. */
                     unsigned recover=m->carrier;float nearest=2.5f;
                     for(unsigned j=0;j<22;++j)if(j!=m->carrier){float dist=distance(carrier->x,carrier->y,m->actors[j].x,m->actors[j].y);if(dist<nearest){nearest=dist;recover=j;}}
-                    bool same=(recover<11)==(m->carrier<11);finish(m,same?FB_RESULT_FUMBLE_RECOVERED:FB_RESULT_FUMBLE,carrier->x);return;
+                    bool same=(recover<11)==(m->carrier<11);m->credited=(uint8_t)recover;finish(m,same?FB_RESULT_FUMBLE_RECOVERED:FB_RESULT_FUMBLE,carrier->x);return;
                 }
                 FootballResultKind kind=!m->thrown && p->type==FB_PLAY_PASS?FB_RESULT_SACK:m->caught?FB_RESULT_COMPLETE:FB_RESULT_RUN;
+                if(kind==FB_RESULT_SACK)football_live_credit(m,d,FB_CREDIT_SACK);
                 float spot=kind==FB_RESULT_SACK ? m->los+dir*fminf(0,(carrier->x-m->los)*dir):carrier->x;
                 finish(m,kind,spot);return;
             }

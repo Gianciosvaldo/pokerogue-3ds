@@ -21,6 +21,17 @@ typedef enum {
 } FootballLiveEvent;
 /* What the dead ball leads to: the try after a touchdown, or a kickoff (after a score, a safety or at the half). */
 typedef enum { FB_AFTER_NONE,FB_AFTER_CONVERSION,FB_AFTER_KICKOFF } FootballLiveAfter;
+/* Plays that name one player on the field: the engine tallies them per team member (stats) and lists the ones of the
+ * dead ball in credits, for the career to turn into species candy. */
+typedef enum { FB_CREDIT_NONE,FB_CREDIT_INTERCEPTION,FB_CREDIT_SACK,FB_CREDIT_TOUCHDOWN } FootballCreditKind;
+typedef struct { uint8_t side,member,kind; } FootballCredit;
+/* Species candy for the human team's Pokemon: every one of the 22 gets FB_CANDY_PLAYED at the end of a match (and
+ * FB_CANDY_WIN more for a win); the player who makes the play gets the rest, when the ball is dead. */
+enum { FB_CANDY_PLAYED=1,FB_CANDY_WIN=1,FB_CANDY_SACK=2,FB_CANDY_INTERCEPTION=4,FB_CANDY_TOUCHDOWN=5 };
+static inline unsigned football_credit_candy(unsigned kind)
+{
+    return kind==FB_CREDIT_INTERCEPTION?FB_CANDY_INTERCEPTION:kind==FB_CREDIT_SACK?FB_CANDY_SACK:kind==FB_CREDIT_TOUCHDOWN?FB_CANDY_TOUCHDOWN:0;
+}
 enum { FB_LIVE_ACTION=1,FB_LIVE_JUKE=2,FB_LIVE_SWITCH=4 };
 typedef struct { float x,y;unsigned pressed;int receiver; } FootballLiveInput;
 typedef struct { FootballAttributes attributes;float x,y,vx,vy,stun,contact,block_time,block_cooldown,block_edge;
@@ -52,6 +63,9 @@ typedef struct {
      * that play is run. after/after_side say what the next call is (the scorer, or the kicker); next_offense is
      * who gets the ball once the try is over. catch_x/catch_time mark where and when a kick was caught. */
     uint8_t after,after_side,next_offense,conversion;uint16_t snap_score[2];float catch_x,catch_time;
+    /* Credits (not serialized: the career pays them out the moment the ball is dead). stats[side][member][kind-1] counts
+     * the match; `credited` names the defender who recovered a loose ball or intercepted, for a touchdown that follows. */
+    FootballCredit credits[4];uint8_t credit_count,credited;uint8_t stats[2][22][3];
     FootballResolvedPlay result;
     unsigned snaps;
 } FootballLive;

@@ -224,6 +224,13 @@ kickoff-test: core-libs
 	$(BUILD)/kickoff_test
 test: kickoff-test
 
+.PHONY: candy-test
+candy-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/candy_test.c src/football_career.c src/football_career_save.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/candy_test
+	$(BUILD)/candy_test
+test: candy-test
+
 .PHONY: live-art-test
 live-art-test: $(BUILD)/live_art_test
 	$(BUILD)/live_art_test
