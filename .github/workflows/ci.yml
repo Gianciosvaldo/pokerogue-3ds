@@ -52,6 +52,8 @@ jobs:
         run: python3 battle-core/tools/check-turn-order-proof.py
       - name: Compare turn-order object identities, constructor collision and command/save owners
         run: python3 battle-core/tools/check-turn-actors-proof.py
+      - name: Compare complete event delivery, controller handoff and failure controls
+        run: python3 battle-core/tools/check-event-delivery-proof.py
       - name: Audit pinned held-class mappings and evidence references
         run: python3 battle-core/tools/audit-held-dispatch.py
       - name: Audit pinned inventory catalogue capacity

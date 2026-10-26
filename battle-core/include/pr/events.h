@@ -2,6 +2,9 @@
  *
  * pr_run_turn, pr_resume_switch and pr_continue each start a fresh list in e->events and append one
  * event for every presentation step upstream takes, in the order upstream takes them.
+ * A caller can install bt->event_sink to receive full pending buffers in FIFO
+ * order, process the remaining suffix after each call, and acknowledge delivery.
+ * Without a drain, the original fixed-buffer overflow is still reported.
  * The screen plays them one by one, then reads bt for anything else it shows. Each event
  * carries the field as it stands once the event has happened (pr_event_field), so the
  * screen can move HP bars and status icons to it without knowing the rules.
@@ -88,7 +91,7 @@ typedef struct {
     uint32_t pokemon_id;
 } pr_event_field;
 
-typedef struct {
+typedef struct pr_event {
     uint8_t type;              /* pr_event_type */
     int8_t battler;            /* BattlerIndex 0-3 (player 0/1, enemy 2/3), -1 = none */
     int8_t target;             /* a second BattlerIndex, -1 = none */

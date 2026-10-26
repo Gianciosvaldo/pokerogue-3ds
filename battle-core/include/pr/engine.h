@@ -179,7 +179,8 @@ typedef struct pr_engine {
      * pr_resume_switch */
     pr_event events[PR_MAX_EVENTS];
     int n_events;
-    bool events_overflow;      /* more than PR_MAX_EVENTS: the later ones were dropped */
+    int n_events_acknowledged; /* delivered prefix; diagnostic entries remain readable until reuse */
+    bool events_overflow;      /* full pending buffer with no sink/drain: later events were dropped */
 } pr_engine;
 
 /* Run one turn from TurnStartPhase, as upstream's PhaseManager would, until the turn is over
@@ -337,8 +338,12 @@ const char *pr_terrain_key(int terrain, int kind);
 pr_msg pr_terrain_block_msg(const pr_battle *bt, int terrain, const pr_pokemon *p);
 /* the text a phase shows itself (ui.showText), as a PR_EV_TEXT event now */
 void pr_show_text(pr_battle *bt, pr_engine *e, pr_msg m);
-/* append an event with the field as it stands */
-void pr_event_add(pr_battle *bt, pr_engine *e, int type, int battler, int target, int id, int32_t value,
+/* Append a snapshot, draining unacknowledged full buffers through event_sink.
+ * NULL means no storage/transport was available. The returned entry may be
+ * annotated until the next append. Process the final unacknowledged suffix
+ * after each engine call, then acknowledge it to prevent duplicate delivery. */
+void pr_event_acknowledge(pr_engine *e);
+pr_event *pr_event_add(pr_battle *bt, pr_engine *e, int type, int battler, int target, int id, int32_t value,
                   const pr_msg *m);
 void pr_queue_ability_display(pr_battle *bt, pr_engine *e, const pr_pokemon *p, bool passive, bool show);
 /* queueFaintPhase(battlerIndex, preventInstantRevive, source) */

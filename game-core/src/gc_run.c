@@ -122,19 +122,24 @@ pr_msg_arg gc_m_item(const char *name, const char *item_key)
 }
 
 /* battle-core's events from its last call, kept for the app until the next choice */
-void gc_ev_battle(gc_run *run)
+void gc_ev_battle_chunk(gc_run *run, const pr_event *events, int n)
 {
-    const pr_engine *e = &run->eng;
-    if (!e->n_events) return;
     const int first = run->n_battle_events;
-    int n = e->n_events;
     if (first + n > GC_MAX_BATTLE_EVENTS) { n = GC_MAX_BATTLE_EVENTS - first; run->battle_events_overflow = true; }
-    if (e->events_overflow) run->battle_events_overflow = true;
     if (n <= 0) return;
-    memcpy(&run->battle_events[first], e->events, sizeof(pr_event) * (size_t)n);
+    memcpy(&run->battle_events[first], events, sizeof(pr_event) * (size_t)n);
     run->n_battle_events += n;
     gc_event *ev = gc_ev_new(run, GC_EV_BATTLE);
     if (ev) { ev->a = first; ev->b = n; }
+}
+
+void gc_ev_battle(gc_run *run)
+{
+    pr_engine *e = &run->eng;
+    if (e->events_overflow) run->battle_events_overflow = true;
+    int first = e->n_events_acknowledged;
+    gc_ev_battle_chunk(run, e->events + first, e->n_events - first);
+    pr_event_acknowledge(e);
 }
 
 bool gc_run_next_event(gc_run *run, gc_event *out)

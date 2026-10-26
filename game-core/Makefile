@@ -1136,3 +1136,10 @@ turn-actors-host-test: $(BUILD)/turn_actors_host_test
 	$(BUILD)/turn_actors_host_test
 test: turn-actors-host-test
 .PHONY: turn-actors-host-test
+
+$(BUILD)/event_delivery_host_test: tests/event_delivery_host_test.c tests/doubles_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+event-delivery-host-test: $(BUILD)/event_delivery_host_test
+	$(BUILD)/event_delivery_host_test
+test: event-delivery-host-test
+.PHONY: event-delivery-host-test

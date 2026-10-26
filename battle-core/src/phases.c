@@ -2804,12 +2804,12 @@ static void tera_phase(pr_battle *bt, pr_engine *e, int ph)
     if(!p){pr_note_unported(bt,PR_FEAT_PHASE_0+PH_TERA);return;}
     pr_queue_msg(bt,e,pr_msg2("battle:pokemonTerastallized",
         pr_arg_pokemon(bt,"pokemonNameWithAffix",p),pr_arg_type("type",pr_get_tera_type(p))));
-    int before=e->n_events,b=pr_battler_index(bt,p);
-    pr_event_add(bt,e,PR_EV_COMMON_ANIM,b,b,COMMON_ANIM_TERASTALLIZE,0,NULL);
-    if(e->n_events>before){
-        e->events[before].actor_ids_known=true;
-        e->events[before].actor_id=p->id;
-        e->events[before].target_id=p->id;
+    int b=pr_battler_index(bt,p);
+    pr_event *event=pr_event_add(bt,e,PR_EV_COMMON_ANIM,b,b,COMMON_ANIM_TERASTALLIZE,0,NULL);
+    if(event){
+        event->actor_ids_known=true;
+        event->actor_id=p->id;
+        event->target_id=p->id;
     }
     pr_tera_end(bt,p);
 }
