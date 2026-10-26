@@ -32,6 +32,18 @@ static inline unsigned football_credit_candy(unsigned kind)
 {
     return kind==FB_CREDIT_INTERCEPTION?FB_CANDY_INTERCEPTION:kind==FB_CREDIT_SACK?FB_CANDY_SACK:kind==FB_CREDIT_TOUCHDOWN?FB_CANDY_TOUCHDOWN:0;
 }
+/* Moments the screen dresses up with motion. Not serialized (a checkpoint is always taken at a call) and cleared when the
+ * next play lines up. Each is stamped with `steps`, so an animation follows the match clock and never the frame time. */
+typedef enum {
+    FB_FX_NONE,FB_FX_JUKE,FB_FX_DIVE,FB_FX_TACKLE,FB_FX_SACK,FB_FX_INTERCEPTION,FB_FX_FUMBLE,FB_FX_CATCH,FB_FX_TOUCHDOWN
+} FootballFxKind;
+#define FB_FX_COUNT 8
+/* actor made it happen, other is who it happened to (22 for nobody), side is the direction it points (-1 or +1: the run
+ * of the play along the field for a tackle, a dive or a touchdown; the cut for a juke); x, y are where. */
+typedef struct { uint8_t kind,actor,other;int8_t side;uint32_t step;float x,y; } FootballFx;
+/* The dead ball waits this long before the next playcall: a touchdown is celebrated, a turnover or a sack is let sink in. */
+#define FB_LIVE_HOLD_TOUCHDOWN 2.4f
+#define FB_LIVE_HOLD_TURNOVER 1.4f
 enum { FB_LIVE_ACTION=1,FB_LIVE_JUKE=2,FB_LIVE_SWITCH=4 };
 typedef struct { float x,y;unsigned pressed;int receiver; } FootballLiveInput;
 typedef struct { FootballAttributes attributes;float x,y,vx,vy,stun,contact,block_time,block_cooldown,block_edge;
@@ -66,6 +78,7 @@ typedef struct {
     /* Credits (not serialized: the career pays them out the moment the ball is dead). stats[side][member][kind-1] counts
      * the match; `credited` names the defender who recovered a loose ball or intercepted, for a touchdown that follows. */
     FootballCredit credits[4];uint8_t credit_count,credited;uint8_t stats[2][22][3];
+    FootballFx fx[FB_FX_COUNT];uint8_t fx_next;
     FootballResolvedPlay result;
     unsigned snaps;
 } FootballLive;

@@ -46,6 +46,11 @@ const rr_frame *football_render_front_frame(const FootballRenderer *renderer,
 /* Caller can draw inside its rr frame or use the complete dual-screen wrapper. */
 bool football_render_draw_sprite(const rr_frame *front, float x, float y,
                                  float scale, bool faces_left);
+/* The same sprite stretched (factors on top of scale) and turned about (x, y), the middle of its untrimmed frame; angle in
+ * radians as citro2d takes it. Stretch 1 and angle 0 draw exactly as above. */
+bool football_render_draw_sprite_pose(const rr_frame *front, float x, float y,
+                                      float scale, bool faces_left,
+                                      float stretch_x, float stretch_y, float angle);
 void football_render_top(FootballRenderer *renderer, const FootballRenderScene *scene);
 void football_render_bottom(FootballRenderer *renderer, const FootballPlaycall *ui);
 void football_render_defense_bottom(FootballRenderer *renderer, const FootballDefenseMenu *menu);
