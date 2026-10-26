@@ -303,6 +303,7 @@ static const rr_frame* sprite_frame(side* sd) {
 }
 
 /* The field as battle animations see it: where each Pokemon stands and its current frame. */
+#define FOE_RAISE 36.0f
 static void mon_pos(const side* sd, bool player, float* x, float* y);
 
 static void anim_field(ba_mon out[4]) {
@@ -345,7 +346,7 @@ static int foot_gap(const side* sd) {
 static void mon_pos(const side* sd, bool player, float* x, float* y) {
   *x = (player ? 106 : 236 + B.enemy_slide) + sd->sub_off * (player ? -30 : 30);
   *y = (player ? PLAYER_Y : 84) + sd->sub_off * (player ? 10 : -10) + sd->catch_dy + foot_gap(sd) * sd->scale;
-  if(B.setup.doubles){bool right=field_of(sd)%2!=0;*x+=right?32:-32;*y+=player?(right?0:-8):(right?-36:-44);} /* doubles: the foes stand above the player's boxes (field y 43 and up), which are 42 px tall */
+  if(B.setup.doubles){bool right=field_of(sd)%2!=0;*x+=right?32:-32;*y+=player?(right?0:-8):(right?0:-8)-FOE_RAISE;} /* doubles: the foes stand above the player's boxes (field y 43 and up), which are 42 px tall */
 }
 
 /* The doll ("pkmn__sub" / "pkmn__back__sub", origin (0.5, 1), half size on the player's side) at
@@ -528,8 +529,10 @@ static void draw_field(void) {
     rr_rect(0, 0, 320, 180, RR_RGBA(0x88, 0xc8, 0xf0, 255));
   field_zoom(true);
   snprintf(k, sizeof k, "images/arenas/%s_b", B.biome);
-  if (B.arena_old_on) img_draw(k, NULL, B.arena_old_x, 0, 0, 0);
-  img_draw(k, NULL, B.arena_enemy_x, 0, 0, 0);
+  /* doubles: the foes stand FOE_RAISE higher (mon_pos), so their platform goes up with them */
+  const float raise = B.setup.doubles ? FOE_RAISE : 0;
+  if (B.arena_old_on) img_draw(k, NULL, B.arena_old_x, raise, 0, 0);
+  img_draw(k, NULL, B.arena_enemy_x, raise, 0, 0);
   snprintf(k, sizeof k, "images/arenas/%s_a", B.biome);
   img_draw(k, NULL, B.arena_player_x, 0, 0, 0);
   field_zoom(false);
