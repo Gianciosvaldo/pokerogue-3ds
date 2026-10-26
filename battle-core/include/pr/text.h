@@ -94,7 +94,7 @@ size_t pr_money_en_us(double value, char *out, size_t cap);
  * into out. Returns its length, or 0 when missing. */
 size_t pr_text_lookup(const pr_text_source *src, const char *key, char *out, size_t cap);
 
-/* upstream's file name for a namespace ("abilityTriggers" -> "ability-trigger") */
+/* upstream's file name for a namespace ("abilityTriggers" -> "ability-trigger", "mysteryEncounters/lostAtSea" -> "mystery-encounters/lost-at-sea-dialogue") */
 void pr_text_ns_file(const char *ns, char *out, size_t cap);
 
 /* Pinned getFusedSpeciesName for native English species/form names (UTF-8).
