@@ -425,6 +425,10 @@ typedef struct pr_faint_note {
     const struct pr_pokemon *source;   /* direct: the attacker where it stands now (pr_pokemon_by_id), NULL if it is gone from the parties */
 } pr_faint_note;
 struct pr_battle;
+struct pr_event;
+/* Optional synchronous presentation transport. Copy/consume the supplied events
+ * before returning; the callback must not reenter or mutate the battle engine. */
+typedef void (*pr_event_sink_fn)(const struct pr_event *events, int count, void *ctx);
 typedef void (*pr_faint_observer_fn)(const struct pr_battle *bt, const pr_faint_note *note, void *ctx);
 
 enum { PR_ACHV_CHECK_TERASTALLIZE, PR_ACHV_CHECK_STELLAR_TERASTALLIZE };
@@ -554,6 +558,8 @@ typedef struct pr_battle {
     void *achievement_check_ctx;
     pr_faint_observer_fn faint_observer;
     void *faint_observer_ctx;
+    pr_event_sink_fn event_sink;
+    void *event_sink_ctx;
     /* Deliberate departures from the source pin that lorenzo asked for (PR_DEV_*). 0, the default,
      * is the pin; differential harnesses never set them, game-core turns them on for real runs. */
     uint32_t deviations;

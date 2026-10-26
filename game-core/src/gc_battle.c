@@ -9,6 +9,7 @@
 #include "internal.h"
 
 static void sync_ability_indices(gc_run *run);
+static void battle_event_chunk(const pr_event *events, int count, void *ctx);
 
 static int next_summon_cb(pr_battle *bt, int trainer_slot, void *ctx);
 
@@ -223,6 +224,7 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
     const double player_teras_used = bt->player_teras_used;
 
     memset(bt, 0, sizeof *bt);
+    bt->event_sink = battle_event_chunk; bt->event_sink_ctx = run;
     bt->deviations = PR_DEV_ENEMY_ZERO_TO_HERO | PR_DEV_ILLUSION;   /* lorenzo's departures from the pin */
     bt->player_teras_used_known = true;
     bt->player_teras_used = player_teras_used;
@@ -705,16 +707,28 @@ static void reveal(gc_run *run, int side, const pr_event_field *f)
  * shows, Frisk reveals its opponents, Trace the one it copies (in singles, the one opponent). battle-core
  * doesn't keep the flag, and its events say where a Pokemon stands, not which one it is: it is matched
  * by species and form, and left unrevealed (as upstream's default) when two of a side share them. */
-static void note_revealed(gc_run *run)
+static void note_revealed_chunk(gc_run *run, const pr_event *ev, int count)
 {
-    const pr_event *ev = run->eng.events;
-    for (int i = 0; i < run->eng.n_events; i++) {
+    for (int i = 0; i < count; i++) {
         if (ev[i].type != PR_EV_ABILITY_SHOW || ev[i].battler < 0 || ev[i].battler > 3) continue;
         const int side = ev[i].battler / 2;
         reveal(run, side, &ev[i].field[ev[i].battler]);
         if (ev[i].id == ABILITY_ID_FRISK || ev[i].id == ABILITY_ID_TRACE)
             for (int b = (1 - side) * 2; b < (1 - side) * 2 + 2; b++) reveal(run, 1 - side, &ev[i].field[b]);
     }
+}
+
+static void note_revealed(gc_run *run)
+{
+    int first = run->eng.n_events_acknowledged;
+    note_revealed_chunk(run, run->eng.events + first, run->eng.n_events - first);
+}
+
+static void battle_event_chunk(const pr_event *events, int count, void *ctx)
+{
+    gc_run *run = ctx;
+    note_revealed_chunk(run, events, count);
+    gc_ev_battle_chunk(run, events, count);
 }
 
 /* changeForm can clamp the battle actor's permanent abilityIndex. Keep the
@@ -843,11 +857,11 @@ static bool cancel_encounter_charges(gc_run *run)
 static void charge_cleanup_snapshot(gc_run *run)
 {
     if(run->n_battle_events>=GC_MAX_BATTLE_EVENTS){run->battle_events_overflow=true;return;}
-    int old=run->eng.n_events;
-    pr_event_add(&run->bt,&run->eng,PR_EV_NONE,-1,-1,0,0,NULL);
-    if(run->eng.n_events==old){run->battle_events_overflow=true;return;}
+    pr_event *snapshot=pr_event_add(&run->bt,&run->eng,PR_EV_NONE,-1,-1,0,0,NULL);
+    if(!snapshot){run->battle_events_overflow=true;return;}
     int first=run->n_battle_events++;
-    run->battle_events[first]=run->eng.events[old];
+    run->battle_events[first]=*snapshot;
+    pr_event_acknowledge(&run->eng);
     gc_event *event=gc_ev_new(run,GC_EV_BATTLE);
     if(event){event->a=first;event->b=1;}
 }

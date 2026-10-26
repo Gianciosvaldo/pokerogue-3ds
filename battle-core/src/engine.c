@@ -987,7 +987,7 @@ void pr_answer_check_switch(pr_battle *bt, pr_engine *e, bool yes)
 {
     if (!e->awaiting_confirm) return;
     bt->engine = e;
-    e->n_events = 0;
+    e->n_events = e->n_events_acknowledged = 0;
     e->events_overflow = false;
     int ph = e->pick_phase;
     e->awaiting_confirm = false;
@@ -1018,7 +1018,7 @@ void pr_continue(pr_battle *bt, pr_engine *e)
 {
     if (e->stop != PH_VICTORY) return;
     bt->engine = e;
-    e->n_events = 0;
+    e->n_events = e->n_events_acknowledged = 0;
     e->events_overflow = false;
     e->stop = 0;
     if (e->n_trace < PR_MAX_TRACE)
@@ -1051,7 +1051,7 @@ void pr_resume_party_pick(pr_battle *bt, pr_engine *e, int slot)
 {
     if (!e->awaiting_pick) return;
     bt->engine = e;
-    e->n_events = 0;
+    e->n_events = e->n_events_acknowledged = 0;
     e->events_overflow = false;
     int ph = e->pick_phase;
     e->awaiting_pick = false;

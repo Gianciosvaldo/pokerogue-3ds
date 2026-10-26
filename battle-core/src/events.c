@@ -100,11 +100,18 @@ pr_msg pr_msg_p(const pr_battle *bt, const char *key, const pr_pokemon *p)
     return pr_msg1(key, pr_arg_pokemon(bt, "pokemonNameWithAffix", p));
 }
 
-void pr_event_add(pr_battle *bt, pr_engine *e, int type, int battler, int target, int id, int32_t value,
+pr_event *pr_event_add(pr_battle *bt, pr_engine *e, int type, int battler, int target, int id, int32_t value,
                   const pr_msg *m)
 {
-    if (!e) return;
-    if (e->n_events >= PR_MAX_EVENTS) { e->events_overflow = true; return; }
+    if (!e) return NULL;
+    /* Older callers may reset the public diagnostic count directly. */
+    if (e->n_events_acknowledged > e->n_events) e->n_events_acknowledged = 0;
+    if (e->n_events >= PR_MAX_EVENTS) {
+        int pending = e->n_events - e->n_events_acknowledged;
+        if (pending && !bt->event_sink) { e->events_overflow = true; return NULL; }
+        if (pending) bt->event_sink(e->events + e->n_events_acknowledged, pending, bt->event_sink_ctx);
+        e->n_events = e->n_events_acknowledged = 0;
+    }
     pr_event *ev = &e->events[e->n_events++];
     memset(ev, 0, sizeof *ev);
     ev->type = (uint8_t)type;
@@ -157,6 +164,12 @@ void pr_event_add(pr_battle *bt, pr_engine *e, int type, int battler, int target
             ev->transform.pp_left[i] = ev->transform.pp_max[i] - PR_PP_USED(p)[i];
         }
     }
+    return ev;
+}
+
+void pr_event_acknowledge(pr_engine *e)
+{
+    if (e) e->n_events_acknowledged = e->n_events;
 }
 
 void pr_show_text(pr_battle *bt, pr_engine *e, pr_msg m)

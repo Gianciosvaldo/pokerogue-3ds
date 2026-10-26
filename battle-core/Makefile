@@ -750,3 +750,12 @@ turn-actors-host-test: $(BUILD)/turn-actor-command-test $(BUILD)/turn-actors-tes
 .PHONY: turn-actors-host-test
 $(BUILD)/turn-actors-guards-test: tests/turn-actors-guards-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+
+$(BUILD)/event-delivery-test: tests/event-delivery-test.c tests/event-delivery.native.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) -DEVENT_DELIVERY_STREAM $< $(BUILD)/libprcore.a -Wl,--wrap=pr_phase_run -lm -o $@
+$(BUILD)/event-delivery-guards-test: tests/event-delivery-guards-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+event-delivery-host-test: $(BUILD)/event-delivery-test $(BUILD)/event-delivery-guards-test
+	$(BUILD)/event-delivery-test
+	$(BUILD)/event-delivery-guards-test
+.PHONY: event-delivery-host-test
