@@ -407,7 +407,7 @@ static step_t step(void) {
       }
       jojo_seen();
       if (bot.stop_wave && R->wave == bot.stop_wave) return STEP_STOPPED;
-      if (bot.stop_at_jojo && cr_jojo_foe(R) && R->wave != bot.jojo_done_wave) return STEP_STOPPED;
+      if (bot.stop_at_jojo && cr_jojo_foe(R) && !R->me_battle && R->wave != bot.jojo_done_wave) return STEP_STOPPED;
       if (bot.stop_after_enemy) {
         cr_view v;
         cr_view_get(&v);
@@ -1956,7 +1956,7 @@ static void test_reward_crash(void) {
 /* At a JoJo battle's first COMMAND screen: the party on the field is the character's, as the table lists it. */
 static void jojo_seen(void) {
   const cc_jojo_char* foe = cr_jojo_foe(R);
-  if (!J.on || !foe || R->wave == J.last) return;
+  if (!J.on || !foe || R->me_battle || R->wave == J.last) return; /* a Pillar Man (encounter battle, no save point of its own) is test_pillar's */
   J.last = R->wave;
   if (J.n >= 64) return;
   J.wave[J.n] = R->wave;
@@ -2018,6 +2018,31 @@ static void jojo_play(const char* seed, int salt, bool interrupt, bool custom, i
     break;
   }
   J.on = false;
+}
+
+/* the Pillar Men's hook: offered in a custom run only, each option hands in its fighter's team and makes him the live foe, and the roll state
+ * with a live Pillar Man still saves and loads (a live character must be a dealt one) */
+static void test_pillar(void) {
+  CHECK(new_run("pillar-hook", true, 100), "a custom run starts");
+  const gc_custom_hooks* h = cr_hooks();
+  CHECK(h->pillar && h->pillar(NULL, R, -1, NULL), "offered in a custom run");
+  static const char* const ID[3] = {"esidisi", "wamuu", "kars"};
+  for (int which = 0; which < 3; which++) {
+    gc_custom_team t;
+    memset(&t, 0, sizeof t);
+    CHECK(h->pillar(NULL, R, which, &t), "option %d hands in a team", which);
+    CHECK(t.n >= 1 && t.name && !strcasecmp(t.name, ID[which]), "option %d is %s: %s", which, ID[which], t.name ? t.name : "?");
+    R->battle_type = BATTLE_TYPE_TRAINER;
+    const cc_jojo_char* foe = cr_jojo_foe(R);
+    CHECK(foe && !strcmp(foe->id, ID[which]), "option %d makes %s the live foe", which, ID[which]);
+  }
+  gc_custom_team t;
+  CHECK(!h->pillar(NULL, R, 3, &t), "no fourth fighter");
+  R->battle_type = BATTLE_TYPE_WILD;
+  CHECK(cr_save(slot_used, R) == RSV_SAVED, "a run with a Pillar Man dealt saves");
+  char why[RSV_WHY_LEN];
+  CHECK(resume_run(slot_used, why) == RSV_OK, "and loads again: %s", why);
+  end_run(GC_SCREEN_GAME_OVER, true);
 }
 
 #define JOJO_WAVES 100
@@ -2171,6 +2196,7 @@ int main(int argc, char** argv) {
   test_identity();
   test_reward_crash();
   test_jojo();
+  test_pillar();
   test_jojo_overlay();
   printf("custom_run_test: %d checks, %d failed\n", checks, failed);
   if (chdir("/") == 0) {

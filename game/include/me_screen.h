@@ -25,6 +25,8 @@ extern "C" {
 #define ME_LABEL_LEN 96
 #define ME_TOOLTIP_LEN 320
 #define ME_TEXT_LEN 640
+#define ME_MAX_SPRITES 3
+#define ME_SPRITE_LEN 64
 
 typedef struct {
   char label[ME_LABEL_LEN];
@@ -37,6 +39,7 @@ typedef struct {
   char description[ME_TEXT_LEN];
   char query[ME_TEXT_LEN];
   me_option options[ME_MAX_OPTIONS];
+  char sprites[ME_MAX_SPRITES][ME_SPRITE_LEN]; /* image keys drawn as black silhouettes under the texts (the Pillar Men); "" = none */
   int n;
   int cursor;                         /* where the cursor starts */
   bool can_back;                      /* B calls on_back (and the hint "B: back" shows) */

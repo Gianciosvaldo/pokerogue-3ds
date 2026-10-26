@@ -56,6 +56,21 @@ bool ui_space(ui_space_id sp) {
   const bool top = sp == UI_FIELD || sp == UI_FIELD_UI || sp == UI_TOP_CANVAS || sp == UI_TOP_CANVAS_UI || sp == UI_PHYS_TOP;
   return top == (g_which == 0);
 }
+const rr_draw_opts RR_DEFAULT_OPTS = {0, 0, 1, 1, 0, 0xFFFFFFFFu};
+static rr_frame g_frame;
+static char g_sil_key[ME_MAX_SPRITES + 1][ME_SPRITE_LEN];
+static unsigned g_sil_tint[ME_MAX_SPRITES + 1];
+static int n_sil;
+const rr_frame* img_anim_frame(const char* key, int i) {
+  (void)i;
+  if (n_sil <= ME_MAX_SPRITES) snprintf(g_sil_key[n_sil], ME_SPRITE_LEN, "%s", key);
+  return &g_frame;
+}
+void rr_draw(const rr_frame* f, float x, float y, const rr_draw_opts* o) {
+  (void)f, (void)x, (void)y;
+  if (n_sil <= ME_MAX_SPRITES) g_sil_tint[n_sil] = (unsigned)o->tint;
+  n_sil++;
+}
 void rr_rect(float x, float y, float w, float h, rr_color c) { (void)x, (void)y, (void)w, (void)h, (void)c; }
 void ui_window(float x, float y, float w, float h, win_variant v) { (void)x, (void)y, (void)w, (void)h, (void)v; }
 void ui_cursor(float x, float y) { (void)x, (void)y; }
@@ -352,6 +367,34 @@ int main(void) {
   press(BTN_DOWN);
   press(BTN_ACTION);
   CHECK(n_got == 1 && got.option == 0 && got.b == 0 && got.c == 1, "the second move: %d %d %d", got.option, got.b, got.c);
+
+  /* the Pillar Men: their own texts, three plain options, and three black silhouettes of the fighters on the top screen */
+  run_at(GC_ME_PILLAR_MEN, 3);
+  me_flow_intro(&R, intro, sizeof intro);
+  CHECK(!strcmp(intro, "Three shadows rise in the dark.$A Bizarre Foe appears!"), "pillar intro: %s", intro);
+  CHECK(me_flow_open(&R, chosen, NULL), "pillar question opens");
+  n_sil = 0;
+  draw(0);
+  CHECK(n_sil == 3, "three silhouettes: %d", n_sil);
+  CHECK(!strcmp(g_sil_key[0], "images/trainer/custom/esidisi") && !strcmp(g_sil_key[1], "images/trainer/custom/wamuu") &&
+            !strcmp(g_sil_key[2], "images/trainer/custom/kars"),
+        "in the order of the options");
+  CHECK(g_sil_tint[0] == 0x000000FFu && g_sil_tint[1] == 0x000000FFu && g_sil_tint[2] == 0x000000FFu, "drawn black");
+  draw(1);
+  CHECK(has_text(1, "Esidisi") && has_text(1, "Wamuu") && has_text(1, "Kars"), "the three fighters");
+  CHECK(has_text(1, "easy fight"), "the highlighted tooltip");
+  press(BTN_DOWN);
+  press(BTN_DOWN);
+  draw(1);
+  CHECK(has_text(1, "brutal fight"), "the last tooltip");
+  press(BTN_ACTION);
+  CHECK(n_got == 1 && got.option == 2 && got.b == 0 && !strcmp(got.selected, "You step up to Kars!"), "Kars: %d '%s'", got.option, got.selected);
+  /* an encounter that is not the Pillar Men draws no silhouettes */
+  run_at(GC_ME_SHADY_VITAMIN_DEALER, 3);
+  CHECK(me_flow_open(&R, chosen, NULL), "another encounter opens");
+  n_sil = 0;
+  draw(0);
+  CHECK(n_sil == 0, "no silhouettes elsewhere");
 
   /* a screen that is not an encounter does not open */
   R.screen.kind = GC_SCREEN_COMMAND;
