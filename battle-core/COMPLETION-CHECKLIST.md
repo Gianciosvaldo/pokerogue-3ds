@@ -84,6 +84,9 @@ money handling merged in #357; see [their validation record](HONEY-MONEY-VALIDAT
    The [event handoff follow-up](EVENT-DELIVERY-VALIDATION.md) drains full core
    presentation buffers through the real controller without changing their
    capacities. Downstream and other engine limits remain explicit.
+   The [diagnostic trace follow-up](TRACE-CAPACITY-VALIDATION.md) lets a native
+   607-phase turn finish after its 512-entry diagnostic prefix fills; trace
+   truncation is explicit and separate from genuine engine-storage failures.
 2. Finish the source inventory, including AI moveset attributes, constructor
    closures/conditions, tags, modifiers, phases and unsupported/capacity paths.
 3. Reconcile identity/form/copy and persistent interaction evidence with later

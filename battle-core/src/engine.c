@@ -728,7 +728,7 @@ static int shift_phase(pr_battle *bt, pr_engine *e)
 
 static void trace(pr_engine *e, int ph)
 {
-    if (e->n_trace >= PR_MAX_TRACE) { e->overflow = true; return; }
+    if (e->n_trace >= PR_MAX_TRACE) { e->trace_overflow = true; return; }
     pr_phase *p = &e->pool[ph];
     char *out = e->trace[e->n_trace++];
     /* upstream: `${phaseName}:${battlerIndex}` for phases with getPokemon and a numeric battlerIndex */
@@ -777,7 +777,6 @@ static void run_phases(pr_battle *bt, pr_engine *e, int ph)
             break;
         }
         phase_free(e, ph);
-        if (e->n_trace >= PR_MAX_TRACE) { e->overflow = true; continue; }
         ph = shift_phase(bt, e);
     }
     bt->engine = NULL;
@@ -1023,6 +1022,7 @@ void pr_continue(pr_battle *bt, pr_engine *e)
     e->stop = 0;
     if (e->n_trace < PR_MAX_TRACE)
         snprintf(e->trace[e->n_trace++], 40, "%s:%d", pr_phase_name[PH_VICTORY], e->stop_phase.battler);
+    else e->trace_overflow = true;
     if (bt->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) pr_note_unported(bt, PR_FEAT_TRAINER);
     /* getEnemyParty().find(p => WILD ? p.isOnField() : !p?.isFainted()) finds nobody, and no
      * TrainerVictoryPhase is queued yet: that one goes in with the trainer battle's BattleEndPhase */

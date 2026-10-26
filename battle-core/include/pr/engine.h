@@ -165,6 +165,7 @@ typedef struct pr_engine {
     /* the phases that ran (upstream's phaseName, ":battler" for PokemonPhases) */
     char trace[PR_MAX_TRACE][40];
     int n_trace;
+    bool trace_overflow;       /* later diagnostic entries omitted; gameplay continues */
     uint8_t stop;              /* the phase type the turn stopped at */
     pr_phase stop_phase;       /* that phase, with its arguments (the switch prompt's) */
     /* PH_SWITCH stop: the SwitchPhase opened the party screen and waits in the pool for the
