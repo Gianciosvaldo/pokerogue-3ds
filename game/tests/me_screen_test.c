@@ -148,9 +148,11 @@ static const char* locale_get(void* ctx, const char* file, int fallback, size_t*
   (void)ctx;
   const char* r = NULL;
   if (fallback) return NULL;
-  if (strstr(file, "shady-vitamin-dealer")) r = SHADY;
-  else if (strstr(file, "lost-at-sea")) r = LOST;
-  else if (strstr(file, "field-trip")) r = TRIP;
+  /* the file names the packs really hold (locales/en/mystery-encounters/<kebab name>-dialogue.json): a looser match here once let the
+   * formatter ask for ".../lost-at-sea" and show "Option 1" with no text on a console */
+  if (!strcmp(file, "mystery-encounters/shady-vitamin-dealer-dialogue")) r = SHADY;
+  else if (!strcmp(file, "mystery-encounters/lost-at-sea-dialogue")) r = LOST;
+  else if (!strcmp(file, "mystery-encounters/field-trip-dialogue")) r = TRIP;
   else if (!strcmp(file, "pokemon")) r = POKEMON;
   else if (!strcmp(file, "move")) r = MOVE;
   if (r) *len = strlen(r);
@@ -401,6 +403,26 @@ int main(void) {
   CHECK(!me_flow_open(&R, chosen, NULL), "only on an encounter screen");
   CHECK(me_flow_ns(GC_ME_LOST_AT_SEA) && !strcmp(me_flow_ns(GC_ME_LOST_AT_SEA), "lostAtSea") && !me_flow_ns(GC_ME_COUNT),
         "namespace table");
+
+  /* every encounter's namespace names a real upstream locale file (the 31 files of locales 270ed0a; Pillar Men have none, their text is in the app) */
+  {
+    static const char* const FILES[GC_ME_COUNT] = {
+        "mysterious-challengers", "mysterious-chest", "dark-deal", "fight-or-flight", "slumbering-snorlax", "training-session",
+        "department-store-sale", "shady-vitamin-dealer", "field-trip", "safari-zone", "lost-at-sea", "fiery-fallout",
+        "the-strong-stuff", "the-pokemon-salesman", "an-offer-you-cant-refuse", "delibirdy", "absolute-avarice", "a-trainers-test",
+        "trash-to-treasure", "berries-abound", "clowning-around", "part-timer", "dancing-lessons", "weird-dream",
+        "the-winstrate-challenge", "teleporting-hijinks", "bug-type-superfan", "fun-and-games", "uncommon-breed",
+        "global-trade-system", "the-expert-pokemon-breeder", NULL};
+    for (int t = 0; t < GC_ME_COUNT; t++) {
+      char ns[96], file[96], want[96];
+      if (!FILES[t]) continue;
+      snprintf(ns, sizeof ns, "mysteryEncounters/%s", me_flow_ns(t));
+      snprintf(want, sizeof want, "mystery-encounters/%s-dialogue", FILES[t]);
+      pr_text_ns_file(ns, file, sizeof file);
+      CHECK(!strcmp(file, want), "namespace -> locale file");
+      if (strcmp(file, want)) printf("  %s -> %s, wanted %s\n", ns, file, want);
+    }
+  }
 
   printf("me_screen_test: %d checks, %d failed\n", checks, failed);
   return failed ? 1 : 0;

@@ -15,7 +15,7 @@
 
 #define LOC_MAX 48
 static struct {
-  char lang[16], file[48];
+  char lang[16], file[64]; /* "mystery-encounters/the-expert-pokemon-breeder-dialogue" is 54 */
   char* text; /* NULL = missing */
   size_t len;
 } g_loc[LOC_MAX];

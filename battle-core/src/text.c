@@ -277,6 +277,9 @@ void pr_text_ns_file(const char *ns, char *out, size_t cap)
     };
     for (size_t i = 0; i < sizeof map / sizeof map[0]; i++)
         if (!strcmp(ns, map[i][0])) { snprintf(out, cap, "%s", map[i][1]); return; }
+    /* src/i18n.ts: a mystery encounter's namespace ("mysteryEncounters/lostAtSea") is its dialogue file,
+     * toKebabCase(ns + "-dialogue") = mystery-encounters/lost-at-sea-dialogue */
+    const bool dialogue = !strncmp(ns, "mysteryEncounters/", 18);
     /* toKebabCase: a word starts at each capital after a lower-case letter or digit */
     obuf o = {out, cap, 0};
     for (const char *p = ns; *p; p++) {
@@ -287,6 +290,7 @@ void pr_text_ns_file(const char *ns, char *out, size_t cap)
         }
         put(&o, &c, 1);
     }
+    if (dialogue) put(&o, "-dialogue", 9);
     end(&o);
 }
 
