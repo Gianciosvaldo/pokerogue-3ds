@@ -9,6 +9,7 @@
 #define EGG(t) GC_AREW_EGG, t, 1
 #define SHINY(t) GC_AREW_SHINY_EGG, t, 1
 #define J GC_ACHV_GROUP_JOJO
+#define RUN GC_ACHV_GROUP_RUNS
 /* Ids follow the list order: the 17 challengers (GC_JOJO_*), then the sets and counts. */
 const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     {"Kars", "Defeat Kars.", J, V(GC_VOUCHER_REGULAR, 1)},
@@ -41,8 +42,24 @@ const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     {"Hat Trick", "Defeat 3 challengers in one run.", J, V(GC_VOUCHER_REGULAR, 2)},
     {"Hundred Duels", "Win 100 challenger battles.", J, EGG(3)},
     {"Untouched", "Defeat a challenger without any of your Pokemon fainting.", J, V(GC_VOUCHER_PLUS, 1)},
+    /* 30..43: the runs */
+    {"Victor", "Win a Classic run.", RUN, V(GC_VOUCHER_PLUS, 1)},
+    {"Five Victories", "Win 5 Classic runs.", RUN, V(GC_VOUCHER_PLUS, 1)},
+    {"Ten Victories", "Win 10 Classic runs.", RUN, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Twenty-Five Victories", "Win 25 Classic runs.", RUN, EGG(3)},
+    {"Fifty Victories", "Win 50 Classic runs.", RUN, SHINY(2)},
+    {"Custom Victor", "Win a Custom run.", RUN, V(GC_VOUCHER_PLUS, 1)},
+    {"Custom Veteran", "Win 10 Custom runs.", RUN, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Wave 50", "Reach wave 50 in a run.", RUN, V(GC_VOUCHER_REGULAR, 2)},
+    {"Wave 100", "Reach wave 100 in a run.", RUN, V(GC_VOUCHER_PLUS, 1)},
+    {"Wave 150", "Reach wave 150 in a run.", RUN, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Wave 190", "Reach wave 190 in a run.", RUN, EGG(2)},
+    {"Fresh Faces", "Win a Classic run with six Pokemon that can still evolve.", RUN, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Lone Hero", "Win a Classic run in which only one Pokemon ever fought.", RUN, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Ball-Free", "Win a Classic run without throwing a Poke Ball.", RUN, V(GC_VOUCHER_PLUS, 1)},
 };
 #undef J
+#undef RUN
 
 static const uint32_t SET_PILLAR = 1u << GC_JOJO_KARS | 1u << GC_JOJO_WAMUU | 1u << GC_JOJO_ESIDISI;
 static const uint32_t SET_P2 = SET_PILLAR | 1u << GC_JOJO_JOSEPH | 1u << GC_JOJO_STROHEIM;
@@ -74,6 +91,18 @@ void gc_achv_jojo_won(gc_system *sys, int jojo, uint32_t run_tag, bool clean)
     if (a->run_jojo > a->best_run_jojo) a->best_run_jojo = a->run_jojo;
 }
 
+void gc_achv_wave_reached(gc_system *sys, uint32_t wave)
+{
+    if (sys && wave > sys->achv.best_wave) sys->achv.best_wave = wave;
+}
+
+void gc_achv_run_won(gc_system *sys, bool custom, uint8_t feats)
+{
+    if (!sys) return;
+    if (custom && sys->achv.custom_wins < UINT32_MAX) sys->achv.custom_wins++;
+    sys->achv.feats |= feats;
+}
+
 bool gc_achv_progress_of(const gc_system *sys, int id, uint32_t *have, uint32_t *need)
 {
     if (!sys || id < 0 || id >= GC_ACHV_COUNT) return false;
@@ -92,6 +121,17 @@ bool gc_achv_progress_of(const gc_system *sys, int id, uint32_t *have, uint32_t 
     case 26: h = (uint32_t)popcount32(a->jojo_beaten); n = GC_JOJO_COUNT; break;
     case 27: h = a->best_run_jojo; n = 3; break;
     case 28: h = a->jojo_battles; n = 100; break;
+    case 30: h = sys->stats.classic_wins; n = 1; break;
+    case 31: h = sys->stats.classic_wins; n = 5; break;
+    case 32: h = sys->stats.classic_wins; n = 10; break;
+    case 33: h = sys->stats.classic_wins; n = 25; break;
+    case 34: h = sys->stats.classic_wins; n = 50; break;
+    case 35: h = a->custom_wins; n = 1; break;
+    case 36: h = a->custom_wins; n = 10; break;
+    case 37: h = a->best_wave; n = 50; break;
+    case 38: h = a->best_wave; n = 100; break;
+    case 39: h = a->best_wave; n = 150; break;
+    case 40: h = a->best_wave; n = 190; break;
     default: return false;
     }
     if (h > n) h = n;
@@ -105,6 +145,9 @@ static bool met(const gc_system *sys, int id)
     const gc_achv_progress *a = &sys->achv;
     if (id < GC_JOJO_COUNT) return (a->jojo_beaten >> id & 1u) != 0;
     if (id == 29) return a->jojo_clean > 0;
+    if (id == 41) return (a->feats & GC_FEAT_SIX_UNEVOLVED) != 0;
+    if (id == 42) return (a->feats & GC_FEAT_SOLO) != 0;
+    if (id == 43) return (a->feats & GC_FEAT_NO_BALL) != 0;
     uint32_t h, n;
     return gc_achv_progress_of(sys, id, &h, &n) && h >= n;
 }

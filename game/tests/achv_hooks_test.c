@@ -42,9 +42,9 @@ static void new_run(int wave, int seed_char)
 /* a battle against `jojo` that ends in `end` (a screen kind); returns what ach_on_screen said at the end */
 static bool battle(int jojo, int end, int faint_during)
 {
-  ach_on_screen(&R, GC_SCREEN_COMMAND, jojo);
+  ach_on_screen(&R, GC_SCREEN_COMMAND, jojo, true);
   for (int i = 0; i < faint_during; i++) R.party[i].b.hp = 0;
-  return ach_on_screen(&R, end, jojo);
+  return ach_on_screen(&R, end, jojo, true);
 }
 
 static int drain(void)
@@ -70,14 +70,14 @@ int main(void)
   CHECK(m && strstr(m, "Untouched"), "the second names Untouched");
   CHECK(ach_take_message() == NULL, "nothing more");
   const uint32_t battles = S.achv.jojo_battles;
-  CHECK(!ach_on_screen(&R, GC_SCREEN_REWARD, GC_JOJO_DIO) && S.achv.jojo_battles == battles, "the reward screen seen again counts nothing");
+  CHECK(!ach_on_screen(&R, GC_SCREEN_REWARD, GC_JOJO_DIO, true) && S.achv.jojo_battles == battles, "the reward screen seen again counts nothing");
 
   /* no challenger, a defeat, no system data */
   new_run(11, 'a');
   CHECK(!battle(-1, GC_SCREEN_REWARD, 0), "an ordinary wave reports nothing");
   new_run(12, 'a');
-  CHECK(!battle(GC_JOJO_KARS, GC_SCREEN_GAME_OVER, 3), "a defeat reports nothing");
-  CHECK(!gc_achv_unlocked(&S, GC_JOJO_KARS), "and unlocks nothing");
+  battle(GC_JOJO_KARS, GC_SCREEN_GAME_OVER, 3);
+  CHECK(!gc_achv_unlocked(&S, GC_JOJO_KARS) && S.achv.jojo_battles == 1, "a defeat counts no challenger and unlocks nothing");
   new_run(13, 'a');
   R.sys = NULL;
   CHECK(!battle(GC_JOJO_KARS, GC_SCREEN_REWARD, 0), "a run with no system data reports nothing");
@@ -122,9 +122,83 @@ int main(void)
 
   /* ach_reset forgets the battle: its end is not a win any more */
   new_run(50, 'f');
-  ach_on_screen(&R, GC_SCREEN_COMMAND, GC_JOJO_MISTA);
+  ach_on_screen(&R, GC_SCREEN_COMMAND, GC_JOJO_MISTA, true);
   ach_reset();
-  CHECK(!ach_on_screen(&R, GC_SCREEN_REWARD, GC_JOJO_MISTA) && !gc_achv_unlocked(&S, GC_JOJO_MISTA), "after a reset the old battle is not counted");
+  CHECK(!ach_on_screen(&R, GC_SCREEN_REWARD, GC_JOJO_MISTA, true) && !gc_achv_unlocked(&S, GC_JOJO_MISTA), "after a reset the old battle is not counted");
+
+  /* group B: waves, wins and feats, in a run with no challengers (Classic or Custom) */
+  gc_system_init_defaults(&S);
+  ach_reset();
+  new_run(49, 'g');
+  CHECK(!ach_on_screen(&R, GC_SCREEN_COMMAND, -1, false) && S.achv.best_wave == 49 && !gc_achv_unlocked(&S, 37), "wave 49 is kept, nothing unlocked");
+  R.wave = 50;
+  CHECK(ach_on_screen(&R, GC_SCREEN_COMMAND, -1, false) && gc_achv_unlocked(&S, 37), "wave 50 unlocks Wave 50 and asks for a write");
+  m = ach_take_message();
+  CHECK(m && strstr(m, "Achievement unlocked: Wave 50!") && strstr(m, "2 Egg Vouchers"), "and says so: %s", m ? m : "(none)");
+  R.wave = 20;
+  ach_on_screen(&R, GC_SCREEN_COMMAND, -1, false);
+  CHECK(S.achv.best_wave == 50, "a lower wave in another run keeps the best");
+
+  /* a win: solo (one Pokemon ever fielded), no ball, six that can evolve */
+  gc_system_init_defaults(&S);
+  ach_reset();
+  new_run(200, 'h');
+  R.n_party = 6;
+  for (int i = 0; i < 6; i++) {
+    R.party[i].b.hp = 50;
+    R.party[i].b.species = 25;               /* Pikachu: can evolve */
+  }
+  R.party[0].b.on_field = true;
+  ach_on_screen(&R, GC_SCREEN_COMMAND, -1, true);
+  CHECK(ach_on_screen(&R, GC_SCREEN_CLEAR, -1, true), "the end of a won run asks for a write");
+  CHECK(S.achv.custom_wins == 1 && (S.achv.feats & GC_FEAT_SOLO) && (S.achv.feats & GC_FEAT_NO_BALL) && (S.achv.feats & GC_FEAT_SIX_UNEVOLVED),
+        "a Custom win with all three feats: %d", S.achv.feats);
+  CHECK(gc_achv_unlocked(&S, 35) && gc_achv_unlocked(&S, 41) && gc_achv_unlocked(&S, 42) && gc_achv_unlocked(&S, 43), "and they unlock");
+  CHECK(drain() >= 4, "and are told");
+  CHECK(!ach_on_screen(&R, GC_SCREEN_CLEAR, -1, true) && S.achv.custom_wins == 1, "the end seen again counts nothing");
+
+  /* a second Pokemon on the field, a ball thrown, a Pokemon that cannot evolve, a defeat, a resumed run */
+  gc_system_init_defaults(&S);
+  ach_reset();
+  new_run(200, 'i');
+  R.n_party = 6;
+  for (int i = 0; i < 6; i++) {
+    R.party[i].b.hp = 50;
+    R.party[i].b.species = 25;
+  }
+  R.party[5].b.species = 131;                /* Lapras: cannot evolve */
+  R.party[0].b.on_field = true;
+  ach_on_screen(&R, GC_SCREEN_COMMAND, -1, false);
+  R.party[0].b.on_field = false;
+  R.party[1].b.on_field = true;
+  R.wave = 201;
+  ach_on_screen(&R, GC_SCREEN_COMMAND, -1, false);
+  ach_on_ball();
+  ach_on_screen(&R, GC_SCREEN_CLEAR, -1, false);
+  CHECK(S.achv.feats == 0 && S.achv.custom_wins == 0, "two fielded, a ball and a Lapras: no feat, and a Classic win is no Custom win (%d)", S.achv.feats);
+  CHECK(S.stats.classic_wins == 0, "the hook never counts the Classic win itself (game-core does)");
+  gc_system_init_defaults(&S);
+  ach_reset();
+  new_run(30, 'j');
+  ach_on_screen(&R, GC_SCREEN_COMMAND, -1, false);
+  ach_on_screen(&R, GC_SCREEN_GAME_OVER, -1, false);
+  CHECK(S.achv.feats == 0 && S.achv.custom_wins == 0 && S.achv.best_wave == 30, "a defeat is no win; the wave counts");
+  gc_system_init_defaults(&S);
+  ach_reset();
+  new_run(200, 'l');
+  R.n_party = 5;
+  for (int i = 0; i < 5; i++) R.party[i].b.species = 25;
+  ach_on_screen(&R, GC_SCREEN_COMMAND, -1, false);
+  ach_on_screen(&R, GC_SCREEN_CLEAR, -1, false);
+  CHECK(!(S.achv.feats & GC_FEAT_SIX_UNEVOLVED), "five that can evolve are not six");
+  gc_system_init_defaults(&S);
+  ach_reset_loaded();
+  new_run(200, 'k');
+  R.n_party = 1;
+  R.party[0].b.on_field = true;
+  ach_on_screen(&R, GC_SCREEN_COMMAND, -1, false);
+  ach_on_screen(&R, GC_SCREEN_CLEAR, -1, false);
+  CHECK(!(S.achv.feats & (GC_FEAT_SOLO | GC_FEAT_NO_BALL)), "a resumed run cannot earn the feats that need the whole run");
 
   printf("achv_hooks_test: %d checks, %d failed\n", checks, failed);
   return failed ? 1 : 0;

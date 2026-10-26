@@ -8,7 +8,8 @@
  * <reward>!". The driver says them one at a time (ach_take_message) before it handles the screen, and writes the profile when ach_on_screen
  * returned true.
  *
- * Only a Custom run calls it (JoJo challengers appear in no other run). Approximations, said here: a Pokemon revived mid-battle and one that
+ * Group B (the runs) uses the same calls in every run: the waves reached, and the end of the run (a won run's feats: six Pokemon that can
+ * still evolve, only one Pokemon ever on the field at a command screen, no Poke Ball thrown). Only a Custom run has JoJo challengers. Approximations, said here: a Pokemon revived mid-battle and one that
  * fainted in its place hide each other (the count compares fainted Pokemon at the start and at the end), and a run loaded in the middle of
  * a challenger's battle counts it from its first COMMAND screen again, which is the save point's moment, so a win is never counted twice.
  */
@@ -25,7 +26,14 @@ extern "C" {
 
 /* `jojo` is the challenger on the field (an index of custom-core's table, GC_JOJO_*), or -1. Returns true when the profile changed and must be
  * written. Does nothing when the run has no system data. */
-bool ach_on_screen(const gc_run* run, int kind, int jojo);
+bool ach_on_screen(const gc_run* run, int kind, int jojo, bool custom);
+
+/* A Poke Ball was thrown (a GC_CH_BALL accepted by game-core). */
+void ach_on_ball(void);
+
+/* Like ach_reset, for a run resumed from a save: what it did before the save is unknown, so it cannot earn the achievements that need the
+ * whole run (Lone Hero, Ball-Free). */
+void ach_reset_loaded(void);
 
 /* The next queued message, or NULL. The text stays valid until the next call. */
 const char* ach_take_message(void);

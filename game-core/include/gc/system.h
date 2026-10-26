@@ -90,6 +90,9 @@ typedef struct {
     uint32_t run_tag;       /* the run run_jojo counts in (a hash of its seed) */
     uint8_t run_jojo;       /* challengers beaten in that run */
     uint8_t best_run_jojo;  /* the most in one run */
+    uint32_t custom_wins;   /* Custom runs won */
+    uint32_t best_wave;     /* the highest wave any run reached */
+    uint8_t feats;          /* GC_FEAT_* bits: won a run with that feat at least once */
 } gc_achv_progress;
 
 /* Overall system data (upstream GameData) */

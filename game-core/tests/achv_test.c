@@ -151,6 +151,85 @@ int main(void)
         assert(loaded.voucher_counts[0] == S.voucher_counts[0]);
     }
 
+    /* group B, the runs: Classic win counts (game-core counts them in stats.classic_wins), each with its reward */
+    {
+        static const struct { int id; uint32_t wins; } WINS[] = {{30, 1}, {31, 5}, {32, 10}, {33, 25}, {34, 50}};
+        for (unsigned k = 0; k < sizeof WINS / sizeof WINS[0]; k++) {
+            fresh();
+            S.stats.classic_wins = WINS[k].wins - 1;
+            eval(NULL);
+            assert(!gc_achv_unlocked(&S, WINS[k].id));              /* one short */
+            S.stats.classic_wins = WINS[k].wins;
+            eval(NULL);
+            assert(gc_achv_unlocked(&S, WINS[k].id));
+            for (unsigned j = k + 1; j < sizeof WINS / sizeof WINS[0]; j++) assert(!gc_achv_unlocked(&S, WINS[j].id));   /* the next ones wait */
+        }
+        fresh();
+        S.stats.classic_wins = 50;
+        gc_achv_new fresh_n;
+        eval(&fresh_n);
+        assert(fresh_n.n == 5);
+        assert(S.n_eggs == 2);                                       /* the Legendary egg and the tier 3 shiny egg */
+        assert(S.eggs[0].tier == 3 || S.eggs[1].tier == 3);
+        assert(S.eggs[0].variant_tier == 2 || S.eggs[1].variant_tier == 2);
+        fresh();
+        gc_achv_run_won(&S, false, 0);
+        eval(NULL);
+        assert(!gc_achv_unlocked(&S, 35));                           /* a Classic win is no Custom win */
+        gc_achv_run_won(&S, true, 0);
+        eval(NULL);
+        assert(gc_achv_unlocked(&S, 35) && !gc_achv_unlocked(&S, 36));
+        for (int i = 0; i < 9; i++) gc_achv_run_won(&S, true, 0);
+        eval(NULL);
+        assert(gc_achv_unlocked(&S, 36));
+    }
+    /* waves: only the best is kept, and a lower wave never lowers it */
+    {
+        static const struct { int id; uint32_t wave; } W[] = {{37, 50}, {38, 100}, {39, 150}, {40, 190}};
+        fresh();
+        for (unsigned k = 0; k < 4; k++) {
+            gc_achv_wave_reached(&S, W[k].wave - 1);
+            eval(NULL);
+            assert(!gc_achv_unlocked(&S, W[k].id));
+            gc_achv_wave_reached(&S, W[k].wave);
+            eval(NULL);
+            assert(gc_achv_unlocked(&S, W[k].id));
+        }
+        gc_achv_wave_reached(&S, 3);
+        assert(S.achv.best_wave == 190);
+        uint32_t h, n;
+        assert(gc_achv_progress_of(&S, 40, &h, &n) && h == 190 && n == 190);
+        fresh();
+        gc_achv_wave_reached(&S, 120);
+        assert(gc_achv_progress_of(&S, 39, &h, &n) && h == 120 && n == 150);
+    }
+    /* feats: each of its own, and a win without any feat gives none */
+    {
+        static const struct { int id; uint8_t feat; } F[] = {{41, GC_FEAT_SIX_UNEVOLVED}, {42, GC_FEAT_SOLO}, {43, GC_FEAT_NO_BALL}};
+        for (unsigned k = 0; k < 3; k++) {
+            fresh();
+            gc_achv_run_won(&S, false, 0);
+            eval(NULL);
+            for (unsigned j = 0; j < 3; j++) assert(!gc_achv_unlocked(&S, F[j].id));
+            gc_achv_run_won(&S, false, F[k].feat);
+            eval(NULL);
+            for (unsigned j = 0; j < 3; j++) assert(gc_achv_unlocked(&S, F[j].id) == (j == k));
+        }
+    }
+    /* group B survives a save */
+    {
+        fresh();
+        gc_achv_wave_reached(&S, 77);
+        gc_achv_run_won(&S, true, GC_FEAT_SOLO | GC_FEAT_NO_BALL);
+        static uint8_t buf[600000];
+        size_t n = gc_system_save(&S, buf, sizeof buf);
+        static gc_system loaded;
+        const char *why = NULL;
+        gc_system_init_defaults(&loaded);
+        assert(n && gc_system_load(&loaded, buf, n, &why));
+        assert(!memcmp(&loaded.achv, &S.achv, sizeof S.achv) && loaded.achv.best_wave == 77 && loaded.achv.custom_wins == 1);
+    }
+
     /* every achievement has a name, a description and a reward text; progress lines never exceed their need */
     fresh();
     for (int i = 0; i < GC_ACHV_COUNT; i++) {
