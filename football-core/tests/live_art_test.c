@@ -30,7 +30,15 @@ int main(void)
     /* Kick plays: the landing marker, the fair-catch hint and every dead-ball banner draw without degenerate rectangles. */
     drawn=0;m->special=FB_SPECIAL_PUNT;m->stage=FB_STAGE_FLIGHT;m->kick_side=FB_AWAY;m->to_x=70;m->to_y=26;m->phase=FB_LIVE_PLAY;
     football_live_art_top(&renderer,&career,&camera,0);
+    drawn=0;m->special=FB_SPECIAL_KICKOFF;m->stage=FB_STAGE_FLIGHT;m->kick_side=FB_HOME;m->phase=FB_LIVE_PLAY;football_live_art_top(&renderer,&career,&camera,0);
     m->special=FB_SPECIAL_FIELD_GOAL;m->stage=FB_STAGE_SNAP;
-    for(unsigned event=FB_EVENT_NONE;event<=FB_EVENT_FIELD_GOAL_MISSED;++event){drawn=0;m->phase=FB_LIVE_DEAD;m->event=(uint8_t)event;m->kick_yards=47;football_live_art_top(&renderer,&career,&camera,0);}
+    for(unsigned event=FB_EVENT_NONE;event<=FB_EVENT_KICKOFF;++event){
+        for(unsigned returned=0;returned<2;++returned){drawn=0;m->phase=FB_LIVE_DEAD;m->event=(uint8_t)event;m->kick_yards=47;m->return_yards=(int16_t)(returned?23:0);football_live_art_top(&renderer,&career,&camera,0);}
+    }
+    /* The headline names every kick, and the try is labelled before and during its play. */
+    assert(!strcmp(football_live_art_special_name(FB_SPECIAL_KICKOFF),"KICKOFF") && !strcmp(football_live_art_special_name(FB_SPECIAL_EXTRA_POINT),"EXTRA POINT") && !strcmp(football_live_art_special_name(FB_SPECIAL_NONE),"GO FOR TWO"));
+    m->special=FB_SPECIAL_NONE;m->phase=FB_LIVE_CALL;m->event=FB_EVENT_NONE;
+    for(unsigned conversion=1;conversion<=2;++conversion){drawn=0;m->conversion=(uint8_t)conversion;football_live_art_top(&renderer,&career,&camera,0);}
+    m->conversion=0;
     puts("football live art: native-left front sprites, running directions and retreating QB receiver-facing submission passed");
 }

@@ -14,6 +14,10 @@ void football_live_move(FootballLiveActor *actor,float x,float y,bool sprint);
 /* Kick plays (football_live_special.c): formation, one fixed step, and the end of the dead ball. */
 void football_live_special_arrange(FootballLive *match);
 void football_live_special_step(FootballLive *match,FootballLiveInput input);
+/* The ball is dead and the rules ran: decide whether a try or a kickoff follows (football_live.c). */
+void football_live_after_play(FootballLive *match);
+/* The try after a touchdown ended (a kick or a play): rules, banner, then the kickoff. */
+void football_live_conversion_done(FootballLive *match,unsigned points,FootballLiveEvent event);
 /* A return ended (tackle, sideline, goal line, fumble): rules, banner and dead ball. */
 void football_live_special_finish(FootballLive *match,FootballResultKind kind,float x);
 /* A carrier's steering: the scripted lane of a run play, then reading the defenders. */
