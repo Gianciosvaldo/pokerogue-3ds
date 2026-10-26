@@ -383,7 +383,7 @@ static void music_command(void) {
 static void music_reward(void) {
   if (!M.have) return;
   const gc_run* r = rs_run();
-  if (r->battle_type == BATTLE_TYPE_TRAINER) {
+  if (r->battle_type == BATTLE_TYPE_TRAINER && !r->me_battle) { /* an encounter's trainer fight has no TrainerVictoryPhase (handleMysteryEncounterVictory) */
     const char* v = bgm_trainer_victory(r->trainer_type);
     if (strcmp(bgm_current(), v)) BAD("the reward screen after trainer %d plays \"%s\", its victory music is \"%s\"", r->trainer_type, bgm_current(), v);
     M.victories++;

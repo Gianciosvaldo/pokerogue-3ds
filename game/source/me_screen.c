@@ -209,7 +209,18 @@ static void draw_top(void)
   text_wrap(TS_INSTRUCTIONS_TEXT, M.a.description, &o, wrapped, sizeof wrapped);
   text_draw(TS_INSTRUCTIONS_TEXT, 20, 40, wrapped, &o);
   text_wrap(TS_WINDOW, M.a.query, &o, wrapped, sizeof wrapped);
-  text_draw(TS_WINDOW, 20, 130, wrapped, &o);
+  int n_sprites = 0;
+  while (n_sprites < ME_MAX_SPRITES && M.a.sprites[n_sprites][0]) n_sprites++;
+  text_draw(TS_WINDOW, 20, n_sprites ? 70 : 130, wrapped, &o);
+  for (int i = 0; i < n_sprites; i++) { /* black silhouettes standing on the window's floor, evenly spread */
+    const rr_frame* f = img_anim_frame(M.a.sprites[i], 0);
+    if (!f) continue;
+    rr_draw_opts d = RR_DEFAULT_OPTS;
+    d.origin_x = 0.5f;
+    d.origin_y = 1;
+    d.tint = RR_RGBA(0, 0, 0, 255);
+    rr_draw(f, 8 + 304 * (2 * i + 1) / (2 * n_sprites), 166, &d);
+  }
 }
 
 static void draw_row(int i, float y)

@@ -41,7 +41,36 @@ static const char* const NS[GC_ME_COUNT] = {
     [GC_ME_UNCOMMON_BREED] = "uncommonBreed",
     [GC_ME_GLOBAL_TRADE_SYSTEM] = "globalTradeSystem",
     [GC_ME_THE_EXPERT_POKEMON_BREEDER] = "theExpertPokemonBreeder",
+    [GC_ME_PILLAR_MEN] = "pillarMen",
 };
+
+/* The Pillar Men are lorenzo's own encounter (custom runs): no upstream locale file, so their texts are here. The three silhouettes are
+ * the trainer art of the three fighters, in the order of the options (easy, hard, brutal). */
+static const char* const PILLAR_ID[3] = {"esidisi", "wamuu", "kars"};
+static bool pillar_text(const char* sub, char* out, size_t n)
+{
+  static const struct { const char* sub; const char* text; } T[] = {
+      {"intro", "Three shadows rise in the dark.$A Bizarre Foe appears!"},
+      {"title", "The Pillar Men"},
+      {"description", "Three ancient warriors bar the way, and each wants to test you."},
+      {"query", "Whom will you face?"},
+      {"option.1.label", "Esidisi"},
+      {"option.1.tooltip", "(+) An easy fight (+) TMs and a Memory Mushroom"},
+      {"option.1.selected", "You step up to Esidisi!"},
+      {"option.2.label", "Wamuu"},
+      {"option.2.tooltip", "(-) A hard fight (+) Ultra and Great rewards"},
+      {"option.2.selected", "You step up to Wamuu!"},
+      {"option.3.label", "Kars"},
+      {"option.3.tooltip", "(-) A brutal fight (+) Rogue and Ultra rewards"},
+      {"option.3.selected", "You step up to Kars!"},
+  };
+  for (size_t i = 0; i < sizeof T / sizeof *T; i++)
+    if (!strcmp(T[i].sub, sub)) {
+      snprintf(out, n, "%s", T[i].text);
+      return true;
+    }
+  return false;
+}
 
 const char* me_flow_ns(int type)
 {
@@ -64,6 +93,7 @@ static struct {
 static bool fmt(const char* sub, const pr_msg_arg* extra, int n_extra, bool complete, char* out, size_t n)
 {
   out[0] = 0;
+  if (F.type == GC_ME_PILLAR_MEN) return pillar_text(sub, out, n);
   const char* ns = me_flow_ns(F.type);
   if (!ns) return false;
   char key[160], raw[ME_TEXT_LEN * 2];
@@ -248,6 +278,8 @@ static void open_question(int cursor)
       fmt(sub, NULL, 0, false, o->tooltip, sizeof o->tooltip);
     }
   }
+  if (F.type == GC_ME_PILLAR_MEN)
+    for (int i = 0; i < 3 && i < s->n_options; i++) snprintf(a.sprites[i], sizeof a.sprites[i], "images/trainer/custom/%s", PILLAR_ID[i]);
   a.can_back = false;
   a.on_pick = on_option;
   if (!me_screen_open(&a)) finish(0, 0, 0);

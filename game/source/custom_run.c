@@ -445,7 +445,28 @@ const cc_jojo_char* cr_jojo_foe(const gc_run* run) {
   return &cc_jojo_chars[R.jojo_live - 1];
 }
 
-static const gc_custom_hooks HOOKS = {NULL, hk_encounter, hk_answer, hk_built, hk_faint, hk_trainer};
+/* The Pillar Men encounter (game-core gc_pillar.c): which < 0 asks whether it is offered (custom runs only), 0..2 is Esidisi, Wamuu or Kars
+ * and fills the team. They are not biome rivals, so the roll never deals them; marking one dealt keeps the saved roll state consistent
+ * (a live character must be a dealt one) and lets the fight show the JoJo intro and iconic line like the other characters'. */
+static bool hk_pillar(void* user, const struct gc_run* run, int which, gc_custom_team* team) {
+  (void)user;
+  if (!R.active) return false;
+  if (which < 0) return true;
+  static const char* const ID[3] = {"esidisi", "wamuu", "kars"};
+  if (which > 2) return false;
+  const int idx = cc_jojo_find(ID[which]);
+  if (idx == CC_JOJO_NONE || !cr_jojo_team(idx, team)) return false;
+  if (!(R.jojo.used >> idx & 1u)) {
+    R.jojo.used |= 1u << idx;
+    R.jojo.fights++;
+  }
+  R.jojo_live = (uint8_t)(idx + 1);
+  R.jojo_wave = (uint16_t)run->wave;
+  R.st.jojo_fights++;
+  return true;
+}
+
+static const gc_custom_hooks HOOKS = {NULL, hk_encounter, hk_answer, hk_built, hk_faint, hk_trainer, hk_pillar};
 const gc_custom_hooks* cr_hooks(void) { return &HOOKS; }
 
 int cr_offer_species(void) { return R.offering ? R.offer_rec.species : 0; }
