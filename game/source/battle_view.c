@@ -252,8 +252,11 @@ static void load_mon_sprite(side* sd, bool player) {
   sd->sprite_key[0]=0;
   if(!m->species)return;
   /* The shared loader owns the atlas. Do not load a second copy into img's cache. */
-  if(!menu_sprite_load(&sd->sprite,&visual,player))
-    sprite_key(m,player,sd->sprite_key,sizeof sd->sprite_key);
+  if(menu_sprite_load(&sd->sprite,&visual,player))return;
+  /* A sheet can be 1 to 3 MB in one piece, and texture memory may hold the idle animation images: free them (they load again when a
+   * move plays) and try once more before showing the stand-in box. */
+  if(ba_release_graphics()&&menu_sprite_load(&sd->sprite,&visual,player))return;
+  sprite_key(m,player,sd->sprite_key,sizeof sd->sprite_key);
 }
 
 static void set_mon(side* sd, const bv_mon* m, bool player) {
@@ -1040,8 +1043,8 @@ static void draw_debug(void) {
   if (!ui_space(UI_PHYS_BOTTOM)) return;
   rr_stats st = rr_get_stats();
   char d[160];
-  snprintf(d, sizeof d, "%.0f fps  cpu %.1f ms  gpu %.1f ms  tex %.1f MB", B.fps, st.cpu_ms, st.gpu_ms,
-           st.tex_bytes / 1048576.0);
+  snprintf(d, sizeof d, "%.0f fps  cpu %.1f  gpu %.1f ms  tex %.1f  free %.1f MB", B.fps, st.cpu_ms, st.gpu_ms,
+           st.tex_bytes / 1048576.0, st.linear_free / 1048576.0);
   rr_text_sys(2, 2, 0.4f, d, RR_RGBA(0x90, 0x90, 0x98, 255));
 }
 

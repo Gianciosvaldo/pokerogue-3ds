@@ -1149,3 +1149,10 @@ event-delivery-host-test: $(BUILD)/event_delivery_host_test
 	$(BUILD)/event_delivery_host_test
 test: event-delivery-host-test
 .PHONY: event-delivery-host-test
+
+$(BUILD)/fusion_evolution_host_test: tests/fusion_evolution_host_test.c tests/doubles_host_test.c tests/fusion-evolution-save-guards.inc tests/fixtures/fusion-evolution.native.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+fusion-evolution-host-test: $(BUILD)/fusion_evolution_host_test
+	$<
+test: fusion-evolution-host-test
+.PHONY: fusion-evolution-host-test

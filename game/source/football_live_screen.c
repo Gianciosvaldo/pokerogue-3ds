@@ -1,6 +1,7 @@
 #include "football_screen.h"
 #include "football_career.h"
 #include "football_live_art.h"
+#include "football_menu.h"
 #include "football_shop_render.h"
 #include "gc/data.h"
 #include "save.h"
@@ -31,6 +32,8 @@ static struct {
 } L;
 static unsigned char checkpoint_bytes[FB_CAREER_SAVE_MAX];
 static ui_screen live_screen;
+/* Where the field map and the receiver buttons sit on the bottom screen during a live play (the touch handler reads the same numbers). */
+enum { MAP_X=10,MAP_Y=76,TARGET_X=4,TARGET_Y=68,TARGET_W=100,TARGET_H=62,TARGET_PITCH_X=106,TARGET_PITCH_Y=68 };
 bool football_legacy_screen_open(const football_screen_args *args);
 static const char *name(unsigned species)
 {
@@ -38,17 +41,6 @@ static const char *name(unsigned species)
     return "Pokemon";
 }
 const char *football_live_art_species(unsigned species){return name(species);}
-static void text(const char *s,float x,float y,float size,u32 color)
-{
-    C2D_Text t;C2D_TextParse(&t,L.renderer.text,s);C2D_TextOptimize(&t);C2D_DrawText(&t,C2D_WithColor,x,y,.9f,size,size,color);
-}
-static u32 ink(void){return C2D_Color32(246,246,242,255);}
-static u32 gold(void){return C2D_Color32(255,210,63,255);}
-static void panel(float x,float y,float w,float h,bool selected)
-{
-    C2D_DrawRectSolid(x,y,0,w,h,selected?gold():C2D_Color32(74,80,104,255));
-    C2D_DrawRectSolid(x+2,y+2,.01f,w-4,h-4,C2D_Color32(27,37,71,255));
-}
 static uint64_t token(void)
 {
     const FootballCareer *c=&L.career;uint64_t hash=1469598103934665603ull;
@@ -117,12 +109,10 @@ static void catalog(void)
         while(n>0 && gc_starter_value(L.args.profile,L.catalog[n])<gc_starter_value(L.args.profile,L.catalog[n-1])){uint16_t t=L.catalog[n];L.catalog[n]=L.catalog[n-1];L.catalog[n-1]=t;--n;}
     }
 }
+static unsigned top_species(void);
 static void preview(void)
 {
-    unsigned id=0;const FootballRoster *r=&L.career.roster;
-    if(L.career.phase==FB_CAREER_DRAFT && L.catalog_count)id=L.catalog[L.cursor];
-    else if(L.career.phase==FB_CAREER_EXP || L.career.phase==FB_CAREER_EVOLVE)id=L.scratch->party[0].b.species;
-    else if(r->count)id=r->mon[r->lineup[L.cursor%r->count]].b.species;
+    unsigned id=top_species();
     if(!id || id==L.preview)return;
     C3D_FrameSync();football_render_clear_sprites(&L.renderer);menu_mon mon={.species=(uint16_t)id,.gender=-1};football_render_load_front(&L.renderer,0,&mon);L.preview=id;L.asset_offense=-1;
 }
@@ -200,7 +190,7 @@ static bool input(ui_screen *s,ui_button button)
     else if(button==BTN_DOWN)L.cursor=(L.cursor+1)%count;
     else if(button==BTN_LEFT || button==BTN_RIGHT){int delta=button==BTN_RIGHT?1:-1;
         if(c->phase==FB_CAREER_LINEUP && L.editing){unsigned member=c->roster.lineup[L.cursor];football_roster_assign(&c->roster,L.cursor,(member+22+delta)%22);}
-        else if(c->phase==FB_CAREER_DRAFT)L.cursor=(L.cursor+count+(delta>0?6:count-6%count))%count;
+        else if(c->phase==FB_CAREER_DRAFT)L.cursor=(L.cursor+count+(delta>0?FM_ROWS:count-FM_ROWS%count))%count;
         else if(c->phase==FB_CAREER_READY)cycle_mega(delta);
         else if(c->phase==FB_CAREER_SHOP)L.member=(L.member+22+delta)%22;
         else if(c->phase==FB_CAREER_MATCH && c->live.conversion!=1){L.play_page=(L.play_page+pages()+(unsigned)delta)%pages();L.cursor=0;}
@@ -218,21 +208,25 @@ static bool touch(ui_screen *s,float x,float y)
     (void)s;FootballCareer *c=&L.career;
     if(c->phase==FB_CAREER_RESULT || c->phase==FB_CAREER_END){choose_current();return true;}
     if(c->phase==FB_CAREER_MATCH && c->live.phase!=FB_LIVE_CALL){
-        if(c->live.rules.offense==FB_AWAY && y>=70 && y<180){
+        if(c->live.rules.offense==FB_AWAY && y>=MAP_Y && y<MAP_Y+108){
             unsigned nearest=0;float best=100000;
-            for(unsigned i=0;i<11;++i){float dx=x-(10+c->live.actors[i].x*2.5f),dy=y-(70+c->live.actors[i].y*2);float d=dx*dx+dy*dy;if(d<best){best=d;nearest=i;}}
+            for(unsigned i=0;i<11;++i){float dx=x-(MAP_X+c->live.actors[i].x*2.5f),dy=y-(MAP_Y+c->live.actors[i].y*2);float d=dx*dx+dy*dy;if(d<best){best=d;nearest=i;}}
             c->live.controlled=(uint8_t)nearest;return true;
         }
         if(c->live.special && c->live.stage!=FB_STAGE_RETURN && c->live.kick_side==FB_HOME){L.pending|=FB_LIVE_ACTION;}
-        else if(y>=78 && y<176 && x>=10 && x<310){unsigned column=(unsigned)((x-10)/100),row=(unsigned)((y-78)/49);unsigned target=row*3+column;if(target<5)L.receiver=(int)target;else L.pending|=FB_LIVE_ACTION;}
-        else if(y>=186 && y<224){if(x<160)L.pending|=FB_LIVE_JUKE|FB_LIVE_SWITCH;else L.pending|=FB_LIVE_ACTION;}
+        else if(y>=TARGET_Y && y<TARGET_Y+2*TARGET_PITCH_Y-6 && x>=TARGET_X && x<TARGET_X+3*TARGET_PITCH_X){
+            unsigned column=(unsigned)((x-TARGET_X)/TARGET_PITCH_X),row=(unsigned)((y-TARGET_Y)/TARGET_PITCH_Y);unsigned target=row*3+column;
+            if(target<5)L.receiver=(int)target;else L.pending|=FB_LIVE_ACTION;
+        }
+        else if(y>=FM_FOOT_Y-4){if(x<160)L.pending|=FB_LIVE_JUKE|FB_LIVE_SWITCH;else L.pending|=FB_LIVE_ACTION;}
         return true;
     }
-    if(c->phase==FB_CAREER_MATCH){if(y>=40 && y<214){L.cursor=(x>=160?1:0)+(y>=127?2:0);if(L.cursor<option_count())choose_current();}else if(y>=216 && c->live.conversion!=1){L.play_page=(L.play_page+1)%pages();L.cursor=0;}return true;}
-    if(c->phase==FB_CAREER_READY){if(y>140 && y<180)cycle_mega(1);else if(y>=184){if(x<160){c->phase=FB_CAREER_LINEUP;L.cursor=0;}else choose_current();}return true;}
-    if(c->phase==FB_CAREER_LINEUP && y>=214){if(L.editing){unsigned member=c->roster.lineup[L.cursor];football_roster_assign(&c->roster,L.cursor,(member+(x<160?21:1))%22);return true;}if(x<160)football_roster_autofill(&c->roster);else {c->phase=FB_CAREER_READY;L.editing=false;L.cursor=0;}return true;}
-    if(c->phase==FB_CAREER_SHOP && y>=30 && y<65){L.member=(L.member+1)%22;return true;}
-    if(y>=42 && y<210){unsigned row=(unsigned)((y-42)/28),page=L.cursor/6;unsigned option=page*6+row;if(option<option_count()){L.cursor=option;choose_current();}}
+    if(c->phase==FB_CAREER_MATCH){if(y>=38 && y<FM_FOOT_Y-2){L.cursor=(x>=160?1:0)+(y>=127?2:0);if(L.cursor<option_count())choose_current();}else if(y>=FM_FOOT_Y-2 && c->live.conversion!=1){L.play_page=(L.play_page+1)%pages();L.cursor=0;}return true;}
+    if(c->phase==FB_CAREER_READY){if(y>=124 && y<FM_FOOT_Y-4)cycle_mega(1);else if(y>=FM_FOOT_Y-4){if(x<160){c->phase=FB_CAREER_LINEUP;L.cursor=0;}else choose_current();}return true;}
+    if(c->phase==FB_CAREER_LINEUP && y>=FM_FOOT_Y-4){if(L.editing){unsigned member=c->roster.lineup[L.cursor];football_roster_assign(&c->roster,L.cursor,(member+(x<160?21:1))%22);return true;}if(x<160)football_roster_autofill(&c->roster);else {c->phase=FB_CAREER_READY;L.editing=false;L.cursor=0;}return true;}
+    if(c->phase==FB_CAREER_SHOP && y>=FM_FOOT_Y-4){L.member=(L.member+1)%22;return true;}
+    int row=football_menu_row_at(x,y);
+    if(row>=0){unsigned option=L.cursor/FM_ROWS*FM_ROWS+(unsigned)row;if(option<option_count()){L.cursor=option;choose_current();}}
     return true;
 }
 static void update(ui_screen *s,float dt)
@@ -273,128 +267,251 @@ static void update(ui_screen *s,float dt)
         if(!save_checkpoint()){L.save_failed=true;L.checkpoint=token();} /* retry explicitly from START; avoid frame write loops */
     }
 }
-static void rows(unsigned count)
+static char row_label[FM_ROWS][48],row_value[FM_ROWS][24];
+static FootballMenuRow page_rows[FM_ROWS];
+static const char *const shop_names[3]={"Carbos","Protein","Mega stone"};
+/* The page of the list the cursor is on, in the classic option list's look; the rows are built from the career as the old menus built them. */
+static void list_menu(unsigned count)
 {
-    FootballCareer *c=&L.career;unsigned first=L.cursor/6*6;
-    for(unsigned row=0;row<6 && first+row<count;++row){unsigned i=first+row;char line[100];line[0]=0;
+    FootballCareer *c=&L.career;unsigned first=L.cursor/FM_ROWS*FM_ROWS,n=0;
+    for(;n<FM_ROWS && first+n<count;++n){
+        unsigned i=first+n;FootballMenuRow *r=&page_rows[n];*r=(FootballMenuRow){.label=row_label[n]};row_label[n][0]=row_value[n][0]=0;
         switch(c->phase){
-        case FB_CAREER_DRAFT:{unsigned id=L.catalog[i];bool drafted=false;for(unsigned j=0;j<c->roster.count;++j)if(c->roster.mon[j].b.species==id)drafted=true;
-            snprintf(line,sizeof line,"%s%.17s   %.2f PT",drafted?"+ ":"",name(id),gc_starter_value(L.args.profile,id));break;}
-        case FB_CAREER_LINEUP:snprintf(line,sizeof line,"%-4s  %.18s",football_slot_names[i],name(c->roster.mon[c->roster.lineup[i]].b.species));break;
-        case FB_CAREER_EVOLVE:snprintf(line,sizeof line,"%s",i<c->evolution_count?name(c->evolutions[i]):"Keep current Pokemon");break;
-        case FB_CAREER_SHOP:if(i==3)snprintf(line,sizeof line,"Continue to next round");else snprintf(line,sizeof line,"%s  %u  %s",i==0?"CARBOS":i==1?"PROTEIN":"MEGA STONE",c->prices[i],c->sold[i]?"SOLD":i==2 && c->stone_target<0?"NO STOCK":"");break;
+        case FB_CAREER_DRAFT:{unsigned id=L.catalog[i];bool drafted=false;
+            for(unsigned j=0;j<c->roster.count;++j)if(c->roster.mon[j].b.species==id)drafted=true;
+            snprintf(row_label[n],sizeof row_label[n],"%s",name(id));
+            if(drafted){r->value="Picked";r->value_style=TS_SUMMARY_GREEN;}
+            else{snprintf(row_value[n],sizeof row_value[n],"%.2f",gc_starter_value(L.args.profile,id));r->value=row_value[n];r->value_style=TS_MONEY;}
+            break;}
+        case FB_CAREER_LINEUP:
+            snprintf(row_label[n],sizeof row_label[n],"%s",name(c->roster.mon[c->roster.lineup[i]].b.species));r->tag=football_slot_names[i];
+            if(L.editing && i==L.cursor){r->value="< >";r->value_style=TS_SUMMARY_GOLD;}
+            break;
+        case FB_CAREER_EVOLVE:snprintf(row_label[n],sizeof row_label[n],"%s",i<c->evolution_count?name(c->evolutions[i]):"Keep current Pokemon");break;
+        case FB_CAREER_SHOP:
+            if(i==3){snprintf(row_label[n],sizeof row_label[n],"Continue to next round");break;}
+            snprintf(row_label[n],sizeof row_label[n],"%s",shop_names[i]);r->indent=24;
+            if(c->sold[i]){r->value="Sold";r->dim=true;}
+            else if(i==2 && c->stone_target<0){r->value="No stock";r->dim=true;}
+            else{snprintf(row_value[n],sizeof row_value[n],"%u",c->prices[i]);r->value=row_value[n];r->value_style=TS_MONEY;}
+            break;
         default:break;
         }
-        panel(10,42+row*28,300,26,i==L.cursor);text(line,18,46+row*28,.42f,i==L.cursor?gold():ink());
-        if(c->phase==FB_CAREER_SHOP && i<3 && L.shop.icons[i])football_render_draw_sprite(L.shop.icons[i],295,55+row*28,.5f,false);
     }
+    football_menu_list(page_rows,n,(int)(L.cursor-first),first,count);
+    if(c->phase==FB_CAREER_SHOP)for(unsigned i=0;i<3 && i<n;++i)if(L.shop.icons[i])football_render_draw_sprite(L.shop.icons[i],FM_LIST_X+FM_LABEL_X+12,FM_LIST_Y+FM_LIST_PAD+8+i*FM_ROW_PITCH,.45f,false);
+}
+/* Two buttons along the bottom, the right one the main action. */
+static void buttons(const char *left,const char *right,bool right_enabled)
+{
+    football_menu_button(FM_FOOT_X,FM_FOOT_Y,152,FM_FOOT_H,left,false,true);
+    football_menu_button(FM_FOOT_X+160,FM_FOOT_Y,152,FM_FOOT_H,right,right_enabled,right_enabled);
+}
+static void save_failed_notice(void)
+{
+    football_menu_panel(FM_HEAD_X,FM_HEAD_Y,FM_HEAD_W,FM_HEAD_H);
+    football_menu_text(TS_SETTINGS_SELECTED,FM_PX_SMALL,FM_HEAD_X+12,FM_HEAD_Y+FM_TEXT_PAD+1,FM_HEAD_W-24,"Save failed: press START to retry or return");
+}
+static const char *const down_names[4]={"1st","2nd","3rd","4th"};
+static void match_call(void)
+{
+    FootballCareer *c=&L.career;bool home=c->live.rules.offense==FB_HOME,attempt=home && c->live.conversion==1;
+    const char *heading=!home?(c->live.conversion?"Set the defense for the try":"Choose a defensive scheme"):attempt?"Touchdown!  The try":c->live.conversion?"Go for two: choose a play":L.play_page==2?"Special teams":"Choose your play";
+    char right[24]="";
+    if(home && !c->live.conversion && c->live.rules.down>=1 && c->live.rules.down<=4)snprintf(right,sizeof right,"%s & %u",down_names[c->live.rules.down-1],football_rules_distance(&c->live.rules));
+    football_menu_head(heading,right);
+    if(attempt){
+        char detail[48];
+        snprintf(detail,sizeof detail,"+1   %u%% to make it",football_live_extra_point_chance(&c->live));
+        football_live_art_special_card(&L.renderer,FB_SPECIAL_EXTRA_POINT,detail,10,40,145,80,L.cursor==0,true);
+        football_live_art_special_card(&L.renderer,FB_SPECIAL_NONE,"+2   play it from the 4",165,40,145,80,L.cursor==1,true);
+        snprintf(detail,sizeof detail,"%u - %u after the touchdown",c->live.rules.score[0],c->live.rules.score[1]);
+        football_menu_panel(FM_HEAD_X,126,FM_HEAD_W,FM_HEAD_H);football_menu_text(TS_MONEY,FM_PX_BODY,FM_HEAD_X+12,126+FM_TEXT_PAD,FM_HEAD_W-24,detail);
+    }else if(home && L.play_page==2){
+        char detail[48];
+        snprintf(detail,sizeof detail,"Kick it away, then cover the return");
+        football_live_art_special_card(&L.renderer,FB_SPECIAL_PUNT,detail,10,40,145,80,L.cursor==0,true);
+        bool range=football_live_special_allowed(&c->live,FB_SPECIAL_FIELD_GOAL);
+        if(range)snprintf(detail,sizeof detail,"%u yd   %u%% to make it",football_live_fg_distance(&c->live),football_live_fg_chance(&c->live));
+        else snprintf(detail,sizeof detail,"%u yd: out of range",football_live_fg_distance(&c->live));
+        football_live_art_special_card(&L.renderer,FB_SPECIAL_FIELD_GOAL,detail,165,40,145,80,L.cursor==1,range);
+        snprintf(detail,sizeof detail,"%s down, %u yd to go",down_names[c->live.rules.down>=1 && c->live.rules.down<=4?c->live.rules.down-1:3],football_rules_distance(&c->live.rules));
+        football_menu_panel(FM_HEAD_X,126,FM_HEAD_W,FM_HEAD_H);football_menu_text(TS_MONEY,FM_PX_BODY,FM_HEAD_X+12,126+FM_TEXT_PAD,FM_HEAD_W-24,detail);
+    }else for(unsigned i=0;i<(home?4u:3u);++i){
+        if(home)football_live_art_card(&L.renderer,(FootballPlayId)(L.play_page*4+i),10+(i%2)*155,40+(i/2)*87,145,80,i==L.cursor);
+        else football_live_art_defense_card(&L.renderer,(FootballDefenseId)i,10+(i%2)*155,40+(i/2)*87,145,80,i==L.cursor);
+    }
+    football_menu_foot(attempt?"A or tap: choose the try":home?(c->live.conversion?"Left/Right or tap: more plays":"Left/Right or tap: plays / special teams"):"A: set the defense, then control a defender");
+}
+static void match_live(void)
+{
+    FootballCareer *c=&L.career;const FootballLive *m=&c->live;
+    /* Which controls the human has right now: the kicker, the return team, or the ordinary offense/defense. */
+    bool kicking=m->special && m->stage!=FB_STAGE_RETURN && m->kick_side==FB_HOME;
+    bool covering=m->special && ((m->stage==FB_STAGE_RETURN && m->rules.offense==FB_AWAY));
+    bool receiving=m->special && ((m->stage!=FB_STAGE_RETURN && m->kick_side==FB_AWAY) || (m->stage==FB_STAGE_RETURN && m->rules.offense==FB_HOME));
+    bool free_kick=m->special==FB_SPECIAL_PUNT || m->special==FB_SPECIAL_KICKOFF;
+    football_menu_head(m->phase==FB_LIVE_SET?"A or tap: snap the ball":"Live play",NULL);
+    const char *help;
+    if(kicking)help=m->special==FB_SPECIAL_PUNT?"Circle Pad up/down aims the punt":m->special==FB_SPECIAL_KICKOFF?"Circle Pad up/down aims the kick":"The kicker takes the snap and kicks";
+    else if(receiving && free_kick)help=m->stage==FB_STAGE_RETURN?"Circle Pad: run     B: juke":m->special==FB_SPECIAL_KICKOFF?"Circle Pad: get under it, then run it back":"Circle Pad: get under it     A: fair catch";
+    else if(receiving)help="Circle Pad: rush the kicker     A: dive     B: switch";
+    else if(covering || m->special)help="Circle Pad: chase the returner     B: switch     A: dive";
+    else help=m->rules.offense==FB_HOME?"Circle Pad: run     B: juke":"Circle Pad: move     B: switch defender";
+    football_menu_panel(FM_HEAD_X,32,FM_HEAD_W,30);football_menu_text(TS_WINDOW,FM_PX_SMALL,FM_HEAD_X+12,32+FM_TEXT_PAD+1,FM_HEAD_W-24,help);
+    if(kicking){
+        football_menu_panel(FM_HEAD_X,68,FM_HEAD_W,100);
+        football_menu_text(TS_SUMMARY_GOLD,FM_PX_BODY,16,78,288,football_live_art_special_name((FootballSpecial)m->special));
+        char info[48];if(m->special==FB_SPECIAL_FIELD_GOAL)snprintf(info,sizeof info,"%u yd   %u%% to make it",football_live_fg_distance(m),football_live_fg_chance(m));
+        else if(m->special==FB_SPECIAL_EXTRA_POINT)snprintf(info,sizeof info,"%u%% to make it",football_live_extra_point_chance(m));
+        else snprintf(info,sizeof info,m->special==FB_SPECIAL_KICKOFF?"Tap or press A to kick off":"Tap or press A to snap");
+        football_menu_text(TS_WINDOW,FM_PX_BODY,16,104,288,info);
+    }else if(m->rules.offense==FB_HOME && !m->special){
+        const char *const targets[]={"1  X","2  Y","3  L","4  R","5  Select","A  Snap"};
+        static const unsigned slots[5]={2,3,4,5,1};
+        for(unsigned i=0;i<6;++i){float x=TARGET_X+(i%3)*TARGET_PITCH_X,y=TARGET_Y+(i/3)*TARGET_PITCH_Y;
+            football_menu_panel(x,y,TARGET_W,TARGET_H);football_menu_text(i<5?TS_STATS_LABEL:TS_SUMMARY_GOLD,FM_PX_BODY,x+10,y+9,TARGET_W-20,targets[i]);
+            if(i<5)football_menu_text(TS_WINDOW,FM_PX_TINY,x+10,y+34,TARGET_W-18,name(c->roster.mon[m->actors[slots[i]].roster].b.species));
+        }
+    }else{
+        football_menu_panel(FM_HEAD_X,66,FM_HEAD_W,130);
+        rr_rect(MAP_X,MAP_Y,300,108,RR_RGBA(42,128,52,255));
+        for(unsigned i=0;i<22;++i){const FootballLiveActor *a=&m->actors[i];float x=MAP_X+a->x*2.5f,y=MAP_Y+a->y*2;
+            C2D_DrawRectSolid(x-2,y-2,.1f,5,5,i==m->controlled?C2D_Color32(255,210,63,255):a->home?C2D_Color32(76,201,240,255):C2D_Color32(232,53,74,255));}
+        football_menu_text(TS_WINDOW,FM_PX_TINY,MAP_X+2,MAP_Y+110,296,"Tap the map to select any player");
+    }
+    bool offense=kicking || (!m->special && m->rules.offense==FB_HOME);
+    bool fair=receiving && m->special==FB_SPECIAL_PUNT && m->stage!=FB_STAGE_RETURN;
+    const char *kick_label=m->special==FB_SPECIAL_KICKOFF?"A: Kick":"A: Snap";
+    const char *action=offense?kick_label:fair?"A: Fair catch":receiving && free_kick && m->stage!=FB_STAGE_RETURN?"":"A: Dive";
+    buttons(offense?"B: Juke":"B: Switch",action,action[0]!=0);
+}
+static void bottom_menu(void)
+{
+    FootballCareer *c=&L.career;char left[96],right[64];
+    switch(c->phase){
+    case FB_CAREER_DRAFT:
+        snprintf(left,sizeof left,"Draft  %u/22",c->roster.count);snprintf(right,sizeof right,"%.2f / 55 pt",c->roster.cost);
+        football_menu_head(left,right);list_menu(L.catalog_count);
+        football_menu_foot(L.catalog_count<22?"Unlock 22 base forms in Classic / Endless":c->message[0]?c->message:"A: draft    B: undo    Left/Right: page");break;
+    case FB_CAREER_LINEUP:
+        football_menu_head(L.editing?"Pick a member for this slot":"Lineup",L.editing?"Left/Right: swap":"A: edit    B: ready");list_menu(22);
+        buttons(L.editing?"Previous":"Auto-assign",L.editing?"Next":"Ready",true);break;
+    case FB_CAREER_READY:
+        snprintf(right,sizeof right,"Round %u / 7",c->round);football_menu_head("Playoffs",right);
+        football_menu_panel(4,32,312,92);
+        football_menu_text(TS_STATS_LABEL,FM_PX_BODY,16,41,288,"11 offense + 11 defense");
+        football_menu_text(TS_WINDOW,FM_PX_SMALL,16,63,288,"Circle Pad: move     A: snap / tackle");
+        football_menu_text(TS_WINDOW,FM_PX_SMALL,16,81,288,"X / Y / L / R / Select: receivers 1-5");
+        football_menu_text(TS_WINDOW,FM_PX_SMALL,16,99,288,"B: juke / switch defender");
+        football_menu_panel(4,128,312,60);
+        football_menu_text(TS_STATS_LABEL,FM_PX_BODY,16,137,130,"Mega evolution");
+        football_menu_text_right(TS_MONEY,FM_PX_BODY,304,137,160,c->mega<0?"None":name(c->roster.mon[c->mega].b.species));
+        football_menu_text(TS_WINDOW,FM_PX_SMALL,16,163,288,"Left/Right or tap: choose who mega evolves");
+        buttons("B: Lineup","A: Kick off",true);break;
+    case FB_CAREER_MATCH:if(c->live.phase==FB_LIVE_CALL)match_call();else match_live();break;
+    case FB_CAREER_RESULT:{
+        bool won=c->live.rules.winner==FB_HOME;
+        football_menu_head(won?"Match won":"Playoff elimination",NULL);
+        football_menu_panel(4,32,312,112);
+        snprintf(left,sizeof left,"Final   Home %u - %u Away",c->live.rules.score[0],c->live.rules.score[1]);
+        football_menu_text(TS_WINDOW,FM_PX_BODY,16,42,288,left);
+        football_menu_text(TS_STATS_LABEL,FM_PX_BODY,16,72,288,"Species candy");
+        snprintf(left,sizeof left,"+%u from plays",c->candy_plays);football_menu_text(TS_MONEY,FM_PX_BODY,16,92,288,left);
+        snprintf(left,sizeof left,"+%u more for the team",22*(FB_CANDY_PLAYED+(won?FB_CANDY_WIN:0)));football_menu_text(TS_WINDOW,FM_PX_BODY,16,112,288,left);
+        football_menu_foot("A or tap: team progression");break;}
+    case FB_CAREER_EXP:
+        snprintf(right,sizeof right,"Player %u / 22",c->exp_member+1);football_menu_head("Experience",right);
+        football_menu_panel(4,32,312,60);football_menu_text(TS_WINDOW,FM_PX_BODY,16,48,288,"Applying level-ups and evolutions...");break;
+    case FB_CAREER_EVOLVE:
+        football_menu_head("Choose an evolution",name(L.scratch->party[0].b.species));list_menu(c->evolution_count+1);football_menu_foot("A: choose    B: keep the current Pokemon");break;
+    case FB_CAREER_SHOP:
+        snprintf(right,sizeof right,"Cash %u",c->wallet);football_menu_head("Shop",right);list_menu(4);
+        snprintf(left,sizeof left,"Target %u: %.16s    Left/Right: change    A: buy",L.member+1,name(c->roster.mon[L.member].b.species));football_menu_foot(left);break;
+    case FB_CAREER_END:
+        snprintf(left,sizeof left,"Playoff complete: %u / 7 wins",c->wins);football_menu_head(left,NULL);
+        football_menu_panel(4,32,312,76);football_menu_text(TS_STATS_LABEL,FM_PX_BODY,16,42,288,"Species candy this match");
+        snprintf(left,sizeof left,"+%u",c->candy_plays);football_menu_text(TS_MONEY,FM_PX_BODY,16,66,288,left);
+        football_menu_foot("A or tap: return to title");break;
+    case FB_CAREER_LEARN:break; /* level-up moves are learned without a prompt */
+    case FB_CAREER_ERROR:
+        football_menu_head("Checkpoint preserved",NULL);football_menu_panel(4,32,312,120);football_menu_wrap(TS_WINDOW,FM_PX_SMALL,16,44,288,6,c->message);break;
+    }
+    if(L.save_failed)save_failed_notice();
+}
+/* The member and species the top screen's info panel shows. */
+static unsigned top_member(void)
+{
+    const FootballCareer *c=&L.career;
+    if(c->phase==FB_CAREER_SHOP)return L.member%22;
+    if(c->phase==FB_CAREER_EXP || c->phase==FB_CAREER_EVOLVE)return c->exp_member%22;
+    return c->roster.count?c->roster.lineup[L.cursor%c->roster.count]%22:0;
+}
+static unsigned top_species(void)
+{
+    const FootballCareer *c=&L.career;
+    if(c->phase==FB_CAREER_DRAFT)return L.catalog_count?L.catalog[L.cursor%L.catalog_count]:0;
+    if(c->phase==FB_CAREER_EXP || c->phase==FB_CAREER_EVOLVE)return L.scratch->party[0].b.species;
+    return c->roster.count?c->roster.mon[top_member()].b.species:0;
+}
+static void top_menu(void)
+{
+    FootballCareer *c=&L.career;char right[48],line[64];
+    football_menu_top_bg(c->round);
+    football_menu_panel(10,6,380,28);football_menu_text(TS_WINDOW,FM_PX_BODY,24,13,170,"Pokemon Playoff");
+    if(c->phase==FB_CAREER_DRAFT)snprintf(right,sizeof right,"Draft %u/22   %.2f / 55 pt",c->roster.count,c->roster.cost);
+    else snprintf(right,sizeof right,"Round %u / 7",c->round);
+    football_menu_text_right(TS_MONEY,FM_PX_BODY,376,13,190,right);
+    if(c->phase==FB_CAREER_DRAFT && !L.catalog_count){
+        football_menu_panel(10,40,380,150);
+        football_menu_text(TS_SUMMARY_GOLD,FM_PX_BODY,26,56,348,"No unlocked base-form starters");
+        football_menu_wrap(TS_WINDOW,FM_PX_BODY,26,86,348,4,"Unlock Pokemon in Classic / Endless first.");
+        return;
+    }
+    if(c->phase==FB_CAREER_ERROR){
+        football_menu_panel(10,40,380,150);
+        football_menu_text(TS_SUMMARY_GOLD,FM_PX_BODY,26,56,348,"Checkpoint preserved");
+        football_menu_wrap(TS_WINDOW,FM_PX_BODY,26,86,348,4,c->message);
+        return;
+    }
+    unsigned id=top_species(),member=top_member();
+    football_menu_panel(10,40,150,150);
+    const rr_frame *f=football_render_front_frame(&L.renderer,0,L.ms);
+    if(f && f->src_w && f->src_h)football_render_draw_sprite(f,85,115,fminf(108.0f/f->src_w,108.0f/f->src_h),false);
+    football_menu_panel(168,40,222,150);
+    football_menu_text(TS_WINDOW,FM_PX_BODY,184,49,190,id?name(id):"");
+    if(c->phase==FB_CAREER_DRAFT){
+        football_menu_text(TS_STATS_LABEL,FM_PX_BODY,184,76,90,"Cost");
+        snprintf(line,sizeof line,"%.2f / 55",gc_starter_value(L.args.profile,id));football_menu_text_right(TS_MONEY,FM_PX_BODY,374,76,110,line);
+        football_menu_text(TS_STATS_LABEL,FM_PX_BODY,184,98,90,"Drafted");
+        snprintf(line,sizeof line,"%u of 22",c->roster.count);football_menu_text_right(TS_WINDOW,FM_PX_BODY,374,98,110,line);
+        football_menu_wrap(TS_WINDOW,FM_PX_SMALL,184,124,190,3,c->message[0]?c->message:"Draft 22 base forms within the 55 point budget.");
+    }else{
+        const FootballAttributes *a=&c->roster.player[member].attributes;
+        static const char *const labels[8]={"SPD","AGI","STR","TAK","STA","THP","THA","CTH"};
+        const unsigned values[8]={a->spd,a->agi,a->str,a->tak,a->sta,a->thp,a->tha,a->cth};
+        if(c->phase==FB_CAREER_LINEUP)football_menu_text_right(TS_STATS_LABEL,FM_PX_BODY,374,49,60,football_slot_names[L.cursor%22]);
+        for(unsigned i=0;i<8;++i){
+            float x=184+(i/4)*100,y=84+(i%4)*24;
+            football_menu_text(TS_STATS_LABEL,FM_PX_SMALL,x,y,34,labels[i]);
+            football_menu_bar(x+34,y+4,40,8,values[i],100);
+            snprintf(line,sizeof line,"%u",values[i]);football_menu_text_right(TS_WINDOW,FM_PX_SMALL,x+92,y,22,line);
+        }
+    }
+    football_menu_panel(10,196,380,32);
+    const char *tip=c->phase==FB_CAREER_ERROR?"Your checkpoint is kept exactly as it was.":c->phase==FB_CAREER_DRAFT?"Pick the Pokemon who will play for you.":c->phase==FB_CAREER_LINEUP?"Assign your lineup. Control every snap.":c->phase==FB_CAREER_SHOP?"Spend your winnings before the next round.":c->phase==FB_CAREER_EXP || c->phase==FB_CAREER_EVOLVE?"Level-ups and evolutions from the match.":"Seven rounds stand between you and the title.";
+    football_menu_text_center(TS_WINDOW,FM_PX_SMALL,200,196+FM_TEXT_PAD+1,356,tip);
 }
 static void draw(ui_screen *s,rr_screen which)
 {
     (void)s;FootballCareer *c=&L.career;if(!L.renderer.text)return;
     if(!ui_space(which==RR_TOP?UI_PHYS_TOP:UI_PHYS_BOTTOM))return;
-    if(which==RR_TOP && (c->phase==FB_CAREER_MATCH || c->phase==FB_CAREER_RESULT)){football_live_art_top(&L.renderer,c,&L.camera,L.ms);return;}
-    C2D_TextBufClear(L.renderer.text);float width=which==RR_TOP?400:320;
-    C2D_DrawRectSolid(0,0,0,width,240,C2D_Color32(11,13,20,255));
     if(which==RR_TOP){
-        if(c->phase==FB_CAREER_DRAFT && !L.catalog_count){text("NO UNLOCKED BASE-FORM STARTERS",18,35,.52f,gold());text("Unlock Pokemon in Classic / Endless first.",18,90,.43f,ink());return;}
-        text("POKEMON PLAYOFF",22,14,.8f,gold());text("22 PLAYERS  /  55 POINT DRAFT",24,47,.46f,ink());
-        const rr_frame *f=football_render_front_frame(&L.renderer,0,L.ms);if(f && f->src_w && f->src_h)football_render_draw_sprite(f,85,139,fminf(90.0f/f->src_w,90.0f/f->src_h),false);
-        unsigned i=c->roster.count?c->roster.lineup[L.cursor%c->roster.count]:0;unsigned id=c->phase==FB_CAREER_DRAFT?L.catalog[L.cursor]:c->roster.mon[i].b.species;
-        text(name(id),154,85,.65f,ink());char info[96];
-        if(c->phase==FB_CAREER_DRAFT)snprintf(info,sizeof info,"COST %.2f / 55",gc_starter_value(L.args.profile,id));
-        else {const FootballAttributes *a=&c->roster.player[i].attributes;snprintf(info,sizeof info,"SPD %u  AGI %u  STR %u",a->spd,a->agi,a->str);}
-        text(info,154,120,.43f,gold());
-        if(c->roster.count){const FootballAttributes *a=&c->roster.player[i].attributes;snprintf(info,sizeof info,"TAK %u  CTH %u  THA %u",a->tak,a->cth,a->tha);text(info,154,147,.43f,ink());}
-        text("ASSIGN YOUR LINEUP. CONTROL EVERY SNAP.",18,210,.43f,ink());return;
+        if(c->phase==FB_CAREER_MATCH || c->phase==FB_CAREER_RESULT)football_live_art_top(&L.renderer,c,&L.camera,L.ms);
+        else top_menu();
+        return;
     }
-    char title[100];
-    switch(c->phase){
-    case FB_CAREER_DRAFT:snprintf(title,sizeof title,"DRAFT %u/22   %.2f/55 PT",c->roster.count,c->roster.cost);text(title,12,10,.55f,gold());rows(L.catalog_count);text(L.catalog_count<22?"Unlock 22 base forms in Classic / Endless":c->message[0]?c->message:"A: draft  B: undo  Left/Right: page",12,214,.32f,ink());break;
-    case FB_CAREER_LINEUP:text(L.editing?"ASSIGN: LEFT/RIGHT SWAPS MEMBER":"LINEUP: A TO EDIT SLOT",12,10,.49f,gold());rows(22);panel(10,214,145,24,false);panel(165,214,145,24,true);text(L.editing?"PREV MEMBER":"AUTO-ASSIGN",18,218,.36f,ink());text(L.editing?"NEXT MEMBER":"B / TAP: READY",173,218,.36f,gold());break;
-    case FB_CAREER_READY:
-        snprintf(title,sizeof title,"PLAYOFF ROUND %u / 7",c->round);text(title,16,15,.65f,gold());text("11 OFFENSE + 11 DEFENSE",16,55,.48f,ink());
-        text("Circle Pad: move    A: snap / tackle",16,87,.40f,ink());text("X/Y/L/R/SELECT: receivers 1-5",16,111,.40f,ink());
-        snprintf(title,sizeof title,"MEGA: %s",c->mega<0?"NONE":name(c->roster.mon[c->mega].b.species));panel(10,142,300,36,false);text(title,18,151,.43f,gold());
-        panel(10,190,145,40,false);panel(165,190,145,40,true);text("B: LINEUP",20,201,.45f,ink());text("A: KICK OFF",174,201,.45f,gold());break;
-    case FB_CAREER_MATCH:
-        if(c->live.phase==FB_LIVE_CALL){
-            bool home=c->live.rules.offense==FB_HOME,attempt=home && c->live.conversion==1;
-            const char *heading=!home?(c->live.conversion?"SET THE DEFENSE FOR THE TRY":"CHOOSE DEFENSIVE SCHEME"):attempt?"TOUCHDOWN!  THE TRY":c->live.conversion?"GO FOR TWO: CHOOSE A PLAY":L.play_page==2?"SPECIAL TEAMS":"CHOOSE YOUR PLAY";
-            text(heading,12,8,.51f,gold());
-            if(attempt){
-                char detail[48];
-                snprintf(detail,sizeof detail,"+1   %u%% TO MAKE IT",football_live_extra_point_chance(&c->live));
-                football_live_art_special_card(&L.renderer,FB_SPECIAL_EXTRA_POINT,detail,10,40,145,80,L.cursor==0,true);
-                football_live_art_special_card(&L.renderer,FB_SPECIAL_NONE,"+2   PLAY IT FROM THE 4",165,40,145,80,L.cursor==1,true);
-                snprintf(detail,sizeof detail,"%u - %u after the touchdown",c->live.rules.score[0],c->live.rules.score[1]);
-                text(detail,12,134,.4f,gold());
-            }else if(home && L.play_page==2){
-                char detail[48];
-                snprintf(detail,sizeof detail,"Kick it away, then cover the return");
-                football_live_art_special_card(&L.renderer,FB_SPECIAL_PUNT,detail,10,40,145,80,L.cursor==0,true);
-                bool range=football_live_special_allowed(&c->live,FB_SPECIAL_FIELD_GOAL);
-                if(range)snprintf(detail,sizeof detail,"%u YD   %u%% TO MAKE IT",football_live_fg_distance(&c->live),football_live_fg_chance(&c->live));
-                else snprintf(detail,sizeof detail,"%u YD: OUT OF RANGE",football_live_fg_distance(&c->live));
-                football_live_art_special_card(&L.renderer,FB_SPECIAL_FIELD_GOAL,detail,165,40,145,80,L.cursor==1,range);
-                snprintf(detail,sizeof detail,"%s DOWN, %u YD TO GO",c->live.rules.down==1?"1ST":c->live.rules.down==2?"2ND":c->live.rules.down==3?"3RD":"4TH",football_rules_distance(&c->live.rules));
-                text(detail,12,134,.4f,gold());
-            }else for(unsigned i=0;i<(home?4u:3u);++i){
-                if(home)football_live_art_card(&L.renderer,(FootballPlayId)(L.play_page*4+i),10+(i%2)*155,40+(i/2)*87,145,80,i==L.cursor);
-                else football_live_art_defense_card(&L.renderer,(FootballDefenseId)i,10+(i%2)*155,40+(i/2)*87,145,80,i==L.cursor);
-            }
-            text(attempt?"A or tap: choose the try":home?(c->live.conversion?"Left/Right or tap: more plays":"Left/Right or tap: plays / special teams"):"A: set defense, then control your defender",12,219,.34f,ink());
-        }else{
-            const FootballLive *m=&c->live;
-            /* Which controls the human has right now: the kicker, the return team, or the ordinary offense/defense. */
-            bool kicking=m->special && m->stage!=FB_STAGE_RETURN && m->kick_side==FB_HOME;
-            bool covering=m->special && ((m->stage==FB_STAGE_RETURN && m->rules.offense==FB_AWAY));
-            bool receiving=m->special && ((m->stage!=FB_STAGE_RETURN && m->kick_side==FB_AWAY) || (m->stage==FB_STAGE_RETURN && m->rules.offense==FB_HOME));
-            text(m->phase==FB_LIVE_SET?"A: SNAP / TOUCH SNAP":"LIVE PLAY",12,10,.6f,gold());
-            bool free_kick=m->special==FB_SPECIAL_PUNT || m->special==FB_SPECIAL_KICKOFF;
-            if(kicking)text(m->special==FB_SPECIAL_PUNT?"Circle Pad up/down aims the punt":m->special==FB_SPECIAL_KICKOFF?"Circle Pad up/down aims the kick":"The kicker takes the snap and kicks",12,44,.4f,ink());
-            else if(receiving && free_kick)text(m->stage==FB_STAGE_RETURN?"Circle Pad: run   B: juke":m->special==FB_SPECIAL_KICKOFF?"Circle Pad: get under it, then run it back":"Circle Pad: get under it   A: fair catch",12,44,.4f,ink());
-            else if(receiving)text("Circle Pad: rush the kicker   A: dive   B: switch",12,44,.4f,ink());
-            else if(covering || m->special)text("Circle Pad: chase the returner   B: switch   A: dive",12,44,.4f,ink());
-            else text(m->rules.offense==FB_HOME?"Circle Pad: run   B: juke":"Circle Pad: move   B: switch defender",12,44,.4f,ink());
-            if(kicking){
-                panel(10,78,300,98,false);text(football_live_art_special_name((FootballSpecial)m->special),20,84,.55f,gold());
-                char info[48];if(m->special==FB_SPECIAL_FIELD_GOAL)snprintf(info,sizeof info,"%u YD   %u%% TO MAKE IT",football_live_fg_distance(m),football_live_fg_chance(m));
-                else if(m->special==FB_SPECIAL_EXTRA_POINT)snprintf(info,sizeof info,"%u%% TO MAKE IT",football_live_extra_point_chance(m));
-                else snprintf(info,sizeof info,m->special==FB_SPECIAL_KICKOFF?"Tap or press A to kick off":"Tap or press A to snap");
-                text(info,20,118,.42f,ink());text(m->special==FB_SPECIAL_KICKOFF?"A  KICK":"A  SNAP",20,148,.45f,gold());
-            }else if(m->rules.offense==FB_HOME && !m->special){
-                const char *const targets[]={"1  X","2  Y","3  L","4  R","5 SELECT","A  SNAP"};
-                static const unsigned slots[5]={2,3,4,5,1};
-                for(unsigned i=0;i<6;++i){float x=10+(i%3)*100,y=78+(i/3)*49;panel(x,y,94,43,false);text(targets[i],x+7,y+5,.42f,ink());
-                    if(i<5){unsigned member=c->live.actors[slots[i]].roster;char mon[15];snprintf(mon,sizeof mon,"%.12s",name(c->roster.mon[member].b.species));text(mon,x+5,y+25,.29f,gold());}
-                }
-            }else{
-                C2D_DrawRectSolid(10,70,0,300,108,C2D_Color32(42,128,52,255));
-                for(unsigned i=0;i<22;++i){const FootballLiveActor *a=&c->live.actors[i];float x=10+a->x*2.5f,y=70+a->y*2;
-                    C2D_DrawRectSolid(x-2,y-2,.1f,5,5,i==c->live.controlled?gold():a->home?C2D_Color32(76,201,240,255):C2D_Color32(232,53,74,255));}
-                text("Tap map to select any player",16,164,.30f,ink());
-            }
-            bool offense=kicking || (!m->special && m->rules.offense==FB_HOME);
-            bool fair=receiving && m->special==FB_SPECIAL_PUNT && m->stage!=FB_STAGE_RETURN;
-            const char *kick_label=m->special==FB_SPECIAL_KICKOFF?"A: KICK":"A: SNAP";
-            panel(10,186,145,38,false);panel(165,186,145,38,true);text(offense?"B: JUKE":"B: SWITCH",20,195,.45f,ink());text(offense?kick_label:fair?"A: FAIR CATCH":receiving && free_kick && m->stage!=FB_STAGE_RETURN?"":"A: DIVE",174,195,.45f,gold());
-        }break;
-    case FB_CAREER_RESULT:{
-        bool won=c->live.rules.winner==FB_HOME;char gain[96];
-        text(won?"MATCH WON":"PLAYOFF ELIMINATION",14,30,.65f,gold());text("A / Tap: team progression",14,90,.47f,ink());
-        snprintf(gain,sizeof gain,"SPECIES CANDY: +%u FROM PLAYS",c->candy_plays);text(gain,14,132,.42f,gold());
-        snprintf(gain,sizeof gain,"+%u MORE FOR THE TEAM",22*(FB_CANDY_PLAYED+(won?FB_CANDY_WIN:0)));text(gain,14,156,.42f,ink());
-        break;}
-    case FB_CAREER_EXP:snprintf(title,sizeof title,"EXP: PLAYER %u / 22",c->exp_member+1);text(title,14,30,.6f,gold());text("Applying existing level-up and evolution logic",14,90,.35f,ink());break;
-    case FB_CAREER_EVOLVE:text("CHOOSE EVOLUTION",12,10,.56f,gold());rows(c->evolution_count+1);break;
-    case FB_CAREER_SHOP:snprintf(title,sizeof title,"SHOP   CASH %u",c->wallet);text(title,12,8,.55f,gold());rows(4);snprintf(title,sizeof title,"TARGET %u: %.16s",L.member+1,name(c->roster.mon[L.member].b.species));text(title,12,185,.40f,gold());text("Left/Right: target    A: buy / continue",12,214,.34f,ink());break;
-    case FB_CAREER_END:snprintf(title,sizeof title,"PLAYOFF COMPLETE: %u / 7 WINS",c->wins);text(title,12,35,.54f,gold());text("A / Tap: return to title",12,95,.45f,ink());
-        snprintf(title,sizeof title,"SPECIES CANDY THIS MATCH: +%u",c->candy_plays);text(title,12,132,.42f,gold());break;
-    case FB_CAREER_LEARN:break; /* level-up moves are learned without a prompt */
-    case FB_CAREER_ERROR:text("CHECKPOINT PRESERVED",12,30,.54f,gold());text(c->message,12,80,.33f,ink());break;
-    }
-    if(L.save_failed)text("SAVE FAILED: START TO RETRY OR RETURN",12,230,.32f,C2D_Color32(255,110,95,255));
+    C2D_TextBufClear(L.renderer.text);football_menu_bottom();bottom_menu();
 }
 static ui_screen live_screen={.name="football-live",.flags=UI_FADE,.leave=leave,.input=input,.touch=touch,.update=update,.draw=draw};
 bool football_screen_open(const football_screen_args *args)

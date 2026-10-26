@@ -115,7 +115,10 @@ Hardware/emulator acceptance is separate from source parity and a passing build.
 
 Gimmighoul canonical EvoTracker acquisition, class admission, primary evolution
 and persistence now have [native owner evidence](../game-core/EVO-TRACKER-VALIDATION.md).
-General fusion evolution selection remains an explicitly open caller prerequisite.
+The [fusion level-up follow-up](../game-core/FUSION-EVOLUTION-VALIDATION.md)
+adds primary/secondary selection, mutation, queued confirmation and optional
+secondary-gender saves. Fusion acquisition, item evolution, special extra-party
+evolutions and broader interactions remain open caller prerequisites.
 
 [Constructor-lock transport](../game-core/HELD-LOCK-VALIDATION.md) now preserves
 source locks in acquisition, projection and save reconstruction. Held-form

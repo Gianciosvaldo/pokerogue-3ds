@@ -1,6 +1,4 @@
-/* Native snapshot replay: acquisition, primary evolution and persistence.
- * Fusion evolution selection is an explicit external prerequisite; all fused
- * acquisition snapshots remain required and compared in full. */
+/* Native snapshot replay: acquisition, primary/secondary evolution queries and persistence. */
 #include "../src/internal.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,9 +30,9 @@ static void inventory(char tag,bool compare){
 static void roundtrip(void){const char *why;size_t n=gc_run_save(&r,saved,sizeof saved);CHECK(n&&gc_run_load(&back,saved,n,&why)&&!back.load_dropped);CHECK(back.money==r.money&&back.n_items==r.n_items);
  for(int j=0;j<r.n_items;j++)CHECK(!strcmp(back.items[j].key,r.items[j].key)&&back.items[j].stack==r.items[j].stack&&back.items[j].pokemon_id==r.items[j].pokemon_id&&back.items[j].non_transferable==r.items[j].non_transferable);
 }
-static int target(gc_run *run,gc_mon *m){int evo=gc_mon_get_evolution(run,m);return evo<0?0:gc_evo_data[evo].species;}
+static int target(gc_run *run,gc_mon *m){bool fusion;int evo=gc_mon_get_evolution_target(run,m,&fusion);return evo<0?0:gc_evo_data[evo].species;}
 int main(int argc,char **argv){CHECK(argc==2);f=fopen(argv[1],"r");CHECK(f);CHECK(fgets(buf,sizeof buf,f)&&!strcmp(buf,"EVOTRACKER 1 576 12\n"));line++;
- bool seen[3][6][8][4]={0};int source_fused_evolutions=0,primary_observations=0;
+ bool seen[3][6][8][4]={0};int source_fused_evolutions=0,primary_observations=0,fused_observations=0;
  for(int i=0;i<576;i++){
   int id,family,arrangement,count,treasure,wave,balls,end;double before,money;char *b=record('C');
   CHECK(sscanf(b,"%d %d %d %d %d %d %lf %lf %d %n",&id,&family,&arrangement,&count,&treasure,&wave,&before,&money,&balls,&end)==9&&b[end]==0);
@@ -49,11 +47,11 @@ int main(int argc,char **argv){CHECK(argc==2);f=fopen(argv[1],"r");CHECK(f);CHEC
   }
   inventory('B',false);gc_items_to_battle(&r);for(int j=0;j<3;j++)gc_mon_recalc(&r,&r.party[j]);
   pr_reward_ctx *ctx=gc_reward_ctx(&r);for(int j=0;j<3;j++)CHECK(ctx->party[j].persistent_treasure==treasures[j]);
-  for(int j=0;j<3;j++){gc_mon *m=&r.party[r.party_order[j]];if(m->b.species==SPECIES_ID_GIMMIGHOUL||!m->b.fusion_species){CHECK(target(&r,m)==expected[j][0]);primary_observations++;}}
+  for(int j=0;j<3;j++){gc_mon *m=&r.party[r.party_order[j]];CHECK(target(&r,m)==expected[j][0]);if(m->b.species==SPECIES_ID_GIMMIGHOUL||!m->b.fusion_species)primary_observations++;else fused_observations++;}
   pr_rng rng=r.run.rng;const char *why=NULL;const char *keys[]={"NUGGET","BIG_NUGGET","RELIC_GOLD"};gc_offer o={.key=keys[family],.target=GC_TARGET_NONE};
   CHECK(gc_reward_apply(&r,&o,-1,-1,&why)==GC_APPLY_DONE);CHECK(r.money==money&&r.pokeballs[0]==balls&&!memcmp(&rng,&r.run.rng,sizeof rng));inventory('A',true);
   CHECK(!r.stubs[GC_STUB_REWARD_APPLY]&&!r.stubs[GC_STUB_EVOLUTION]);
-  for(int j=0;j<3;j++){gc_mon *m=&r.party[r.party_order[j]];if(m->b.species==SPECIES_ID_GIMMIGHOUL||!m->b.fusion_species){CHECK(target(&r,m)==expected[j][1]);primary_observations++;}else source_fused_evolutions+=expected[j][1]!=0;}
+  for(int j=0;j<3;j++){gc_mon *m=&r.party[r.party_order[j]];CHECK(target(&r,m)==expected[j][1]);if(m->b.species==SPECIES_ID_GIMMIGHOUL||!m->b.fusion_species)primary_observations++;else {fused_observations++;source_fused_evolutions+=expected[j][1]!=0;}}
   gc_items_to_battle(&r);
   for(int j=0;j<r.bt.n_mods[0];j++)if(r.bt.mods[0][j].cls==PR_MOD_EVO_TRACKER){CHECK(pr_mod_is_ported_item(&r.bt.mods[0][j])&&!r.bt.mods[0][j].is_transferable);}
   roundtrip();
@@ -66,5 +64,5 @@ int main(int argc,char **argv){CHECK(argc==2);f=fopen(argv[1],"r");CHECK(f);CHEC
   CHECK(fusion==(fused?SPECIES_ID_MEW:-1));inventory('B',false);gc_items_to_battle(&r);int evo=gc_mon_get_evolution(&r,m);CHECK(evo>=0);gc_mon_evolve(&r,m,evo);CHECK(m->b.species==species&&m->b.fusion_species==(fusion<0?0:fusion));inventory('A',true);roundtrip();
  }
  CHECK(fgets(buf,sizeof buf,f)&&!strcmp(buf,"END 576 12\n")&&fgetc(f)==EOF);fclose(f);
- printf("EvoTracker: 576 exact acquisition snapshots, 12 native evolution cleanups, %d primary evolution observations, %u checks. Fusion selection remains separate (%d ready native fused observations).\n",primary_observations,checks,source_fused_evolutions);return 0;
+ printf("EvoTracker: 576 exact acquisition snapshots, 12 native evolution cleanups, %d primary evolution observations, %u checks. %d secondary observations (%d ready after reward).\n",primary_observations,checks,fused_observations,source_fused_evolutions);return 0;
 }

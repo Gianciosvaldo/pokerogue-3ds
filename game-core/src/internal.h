@@ -24,7 +24,7 @@ enum {
     RP_EXP,              /* ExpPhase / ShowPartyExpBarPhase: a = party index, d = exp */
     RP_LEVEL_UP,         /* LevelUpPhase: a = party index, b = last level, c = new level */
     RP_LEARN_MOVE,       /* LearnMovePhase: a = party index, b = move; may wait on LEARN_MOVE */
-    RP_EVOLUTION,        /* EvolutionPhase: a = party index, b = gc_evo_data index, c = last level */
+    RP_EVOLUTION,        /* EvolutionPhase: a = party index, b = gc_evo_data index, c = last level, d = secondary half */
     RP_CONTINUE,         /* the rest of the turn after a VictoryPhase's experience (battle-core's pr_continue) */
     RP_CHECK_SWITCH,     /* CheckSwitchPhase: waits on CHECK_SWITCH (only with run->ask_switch) */
     RP_BATTLE_END,       /* BattleEndPhase: a = victory */
@@ -179,8 +179,10 @@ double gc_level_total_exp(int level, int growth_rate);
 int gc_mon_football_evolutions(gc_run *run, const gc_mon *m, int *out, int cap);
 int gc_mon_item_evolution(gc_run *run, const gc_mon *m, int item);
 /* getEvolution(): the gc_evo_data index, -1 = none */
-int gc_mon_get_evolution(gc_run *run, const gc_mon *m);
+int gc_mon_get_evolution(gc_run *run, const gc_mon *m); /* primary-only compatibility helper */
+int gc_mon_get_evolution_target(gc_run *run, const gc_mon *m, bool *fusion);
 void gc_mon_evolve(gc_run *run, gc_mon *m, int evo);
+void gc_mon_evolve_target(gc_run *run, gc_mon *m, int evo, bool fusion);
 void gc_mon_recalc(gc_run *run, gc_mon *m);                            /* calculateStats on a living Pokemon */
 bool gc_mon_fainted(const gc_mon *m);
 bool gc_mon_allowed(const gc_mon *m);                                  /* isAllowedInBattle */

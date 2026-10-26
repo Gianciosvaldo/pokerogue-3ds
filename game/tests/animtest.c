@@ -33,6 +33,7 @@ static rr_frame g_frame = {NULL, 0, 0, 40, 40, 0, 0, 96, 96};
 rr_atlas* img_get(const char* key) { return (rr_atlas*)&g_frame; }
 const rr_frame* img_frame(const char* key, const char* frame) { return &g_frame; }
 void img_drop_prefix(const char* prefix) {}
+rr_stats rr_get_stats(void) { rr_stats s = {0}; s.linear_free = (size_t)1 << 30; return s; } /* all of it: every animation preloads */
 bool snd_sfx_preload(const char* key) { return true; }
 bool snd_sfx_play_ex(const char* key, float v, float r) { g_sounds++; return true; }
 float snd_sfx_seconds(const char* key) { return 0.5f; }
