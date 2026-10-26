@@ -33,6 +33,7 @@ permissions:
 jobs:
   zip:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30  # a normal run is about 6; the apt step once hung for over an hour (GitHub's default limit is 6 hours)
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq mingw-w64 zip
