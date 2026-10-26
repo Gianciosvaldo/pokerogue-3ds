@@ -765,7 +765,7 @@ static bool get_nonvirtual_history(const reader *body,const char *name,gc_mon *m
                ||(m->result>MOVE_RESULT_OTHER&&m->result!=PR_MOVE_RESULT_UNDEFINED)
                ||(q/2&&m->move==MOVE_ID_STRUGGLE)
                ||!(m->use_mode<MOVE_USE_MODE_INDIRECT||(!(q%2)&&m->use_mode==MOVE_USE_MODE_FOLLOW_UP)))return false;
-            for(int k=0;k<m->n_targets;k++)if(m->targets[k]<0||m->targets[k]>3)return false;
+            for(int k=0;k<m->n_targets;k++)if(m->targets[k]<BATTLER_INDEX_ATTACKER||m->targets[k]>3)return false;
         }
     }
     return !r.bad&&r.pos==r.n;
