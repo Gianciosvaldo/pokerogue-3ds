@@ -33,17 +33,42 @@ int main(void)
     assert(loaded.live.rules.ball==career.live.rules.ball && loaded.live.rng==career.live.rng && loaded.live.actors[0].x==career.live.actors[0].x);
     assert(football_live_call(&career.live,FB_RUN_DIVE));assert(!football_career_save_ready(&career));
     /* Reach real shared EXP/evolution phases for all 22 members. */
+    /* Full movesets everywhere, so every level-up move needs a slot replaced. */
+    static const uint16_t filler[4]={MOVE_ID_TACKLE,MOVE_ID_GROWL,MOVE_ID_TAIL_WHIP,MOVE_ID_LEER};
+    for(unsigned i=0;i<22;++i){pr_pokemon *p=&career.roster.mon[i].b;p->n_moves=4;for(unsigned k=0;k<4;++k){p->moves[k]=filler[k];p->pp_used[k]=0;}}
     career.phase=FB_CAREER_RESULT;career.live.rules.winner=FB_HOME;assert(football_career_continue(&career));
-    unsigned guard=0,choices=0;
+    unsigned guard=0,choices=0,changed=0;uint16_t before[22][4];unsigned known[22];
+    for(unsigned i=0;i<22;++i){known[i]=(unsigned)PR_N_MOVES(&career.roster.mon[i].b);for(unsigned k=0;k<4;++k)before[i][k]=k<known[i]?PR_MOVES(&career.roster.mon[i].b)[k]:0;}
     while(career.phase!=FB_CAREER_SHOP && ++guard<10000){
+        /* A level-up move is learned without a prompt: the career never waits on one. */
+        assert(career.phase!=FB_CAREER_LEARN);
         if(career.phase==FB_CAREER_EVOLVE){assert(football_career_evolve(&career,0));choices++;}
-        else if(career.phase==FB_CAREER_LEARN)assert(football_career_learn(&career,-1));
         else {assert(career.phase==FB_CAREER_EXP);football_career_tick(&career,16,(FootballLiveInput){.receiver=-1});}
     }
+    for(unsigned i=0;i<22;++i){const pr_pokemon *p=&career.roster.mon[i].b;unsigned n=(unsigned)PR_N_MOVES(p);assert(n>=known[i] && n<=4);
+        for(unsigned a=0;a<n;++a)for(unsigned b=a+1;b<n;++b)assert(PR_MOVES(p)[a]!=PR_MOVES(p)[b] || PR_MOVES(p)[a]==MOVE_ID_SKETCH);
+        for(unsigned k=0;k<n;++k)if(k>=known[i] || PR_MOVES(p)[k]!=before[i][k]){++changed;break;}}
+    assert(changed>0); /* some member replaced a full slot with a level-up move */
+    for(unsigned i=0;i<22 && changed;++i){const pr_pokemon *p=&career.roster.mon[i].b;assert(PR_N_MOVES(p)==4);
+        for(unsigned k=0;k<4;++k)if(PR_MOVES(p)[k]!=filler[0] && PR_MOVES(p)[k]!=filler[1] && PR_MOVES(p)[k]!=filler[2] && PR_MOVES(p)[k]!=filler[3])changed=0;}
+    assert(!changed);
     assert(career.phase==FB_CAREER_SHOP && guard<10000 && career.wins==1 && career.wallet==500);
     for(unsigned i=0;i<22;++i)assert(career.roster.mon[i].b.level>5);
     assert(football_career_buy(&career,0,21));assert(!football_career_buy(&career,0,21));
     n=football_career_save(&career,bytes,sizeof bytes);assert(n && football_career_load(&loaded,&other,&profile,bytes,n));assert(loaded.roster.speed[21]==2 && loaded.sold[0]);
     assert(football_career_continue(&loaded) && loaded.round==2 && loaded.phase==FB_CAREER_READY);
-    printf("football career: 22-member persistence, CRC/truncation rejection, safe checkpoints, shared EXP/evolution (%u choices) and shop conservation passed\n",choices);
+    {   /* Replacing a full moveset drops the weakest move; status moves count as power 0 and the earliest slot wins a tie. */
+        pr_pokemon p;memset(&p,0,sizeof p);unsigned strong=0,weak=0,status=0;
+        for(unsigned id=1;id<PR_MOVE_COUNT;++id){if(pr_moves[id].unimplemented)continue;
+            if(pr_moves[id].power>=100 && !strong)strong=id;
+            if(pr_moves[id].power>0 && pr_moves[id].power<=20 && !weak)weak=id;
+            if(pr_moves[id].power<=0 && !status)status=id;}
+        assert(strong && weak && status);
+        p.n_moves=4;p.moves[0]=(uint16_t)strong;p.moves[1]=(uint16_t)weak;p.moves[2]=(uint16_t)strong;p.moves[3]=(uint16_t)status;
+        assert(football_career_forget_slot(&p)==3);
+        p.moves[3]=(uint16_t)strong;assert(football_career_forget_slot(&p)==1);
+        p.moves[1]=(uint16_t)strong;assert(football_career_forget_slot(&p)==0);
+        p.n_moves=0;assert(football_career_forget_slot(&p)==-1 && football_career_forget_slot(NULL)==-1);
+    }
+    printf("football career: 22-member persistence, CRC/truncation rejection, safe checkpoints, shared EXP/evolution (%u choices), prompt-free level-up moves and shop conservation passed\n",choices);
 }

@@ -22,9 +22,10 @@ requires acknowledgement before team progression begins.
 EXP and level-up messages are acknowledged with A (or the Continue button).
 Evolution presents explicit species choices and Cancel: Nincada can become
 Ninjask OR Shedinja, or remain Nincada. Evolving never silently adds a second
-party member. Move-learning shows the new move and the existing move slots,
-plus Do not learn; B skips it. Each answer goes through the shared EXP/evolution
-phase adapter, with no automatic acceptance of a branch or a move replacement.
+party member. Level-up moves are learned without a prompt in the live mode (moves play no part in a
+match): with four moves known, the weakest one makes room (lowest power, status moves count
+as 0, earliest slot on a tie). The older six-player mode still asks. Evolution and every
+learn answer go through the shared EXP/evolution phase adapter.
 
 The shop shows classic item artwork, prices, sold stock and the selected
 teammate's stats. Tap the target row or use Left/Right to choose a teammate. Tap

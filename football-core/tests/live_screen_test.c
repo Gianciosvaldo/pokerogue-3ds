@@ -37,6 +37,8 @@ const rr_frame *football_render_front_frame(const FootballRenderer *r,unsigned s
 bool football_render_draw_sprite(const rr_frame *f,float x,float y,float scale,bool left){(void)f;(void)x;(void)y;(void)scale;(void)left;return false;}
 void football_live_art_top(FootballRenderer *r,const FootballCareer *c,const FootballCamera *cam,unsigned ms){(void)r;(void)c;(void)cam;(void)ms;++draws;}
 void football_live_art_card(FootballRenderer *r,FootballPlayId p,float x,float y,float w,float h,bool selected){(void)r;(void)p;(void)x;(void)y;(void)w;(void)h;(void)selected;}
+static unsigned special_cards;
+void football_live_art_special_card(FootballRenderer *r,FootballSpecial k,const char *detail,float x,float y,float w,float h,bool selected,bool enabled){(void)r;(void)k;(void)x;(void)y;(void)w;(void)h;(void)selected;(void)enabled;assert(detail && detail[0]);++special_cards;}
 void football_live_art_defense_card(FootballRenderer *r,FootballDefenseId d,float x,float y,float w,float h,bool selected){(void)r;(void)d;(void)x;(void)y;(void)w;(void)h;(void)selected;}
 bool football_shop_prepare(FootballShopView *v,const FootballSeason *s){(void)v;assert(s->phase==FB_SEASON_SHOP);return true;}
 bool football_legacy_screen_open(const football_screen_args *args){(void)args;return false;}
@@ -73,5 +75,17 @@ int main(void)
     press(BTN_MENU);answer(4);assert(top==&title && speed==2);
     assert(football_screen_open(&args));game_screen=top;assert(career()->phase==FB_CAREER_MATCH && career()->live.phase==FB_LIVE_CALL);tick();assert(draws>0);
     write_ok=false;press(BTN_MENU);answer(1);assert(top==game_screen);write_ok=true;press(BTN_MENU);answer(1);assert(top==&title);
+    /* Special teams are the third page of the playcall: a punt is always there, a field goal only from inside range. */
+    assert(football_screen_open(&args));game_screen=top;assert(career()->live.phase==FB_LIVE_CALL && career()->live.rules.offense==FB_HOME);
+    tick();press(BTN_RIGHT);press(BTN_RIGHT);tick();assert(special_cards==2);
+    press(BTN_DOWN);press(BTN_ACTION);tick();assert(career()->live.phase==FB_LIVE_CALL && !career()->live.special); /* out of range from the 25 */
+    press(BTN_UP);down=KEY_A;press(BTN_ACTION);tick();
+    assert(career()->live.phase==FB_LIVE_SET && career()->live.special==FB_SPECIAL_PUNT && career()->live.controlled==0); /* the same press does not also snap */
+    for(unsigned i=0;i<30;++i){tick();}
+    assert(career()->live.phase==FB_LIVE_SET);
+    down=KEY_A;tick();assert(career()->live.phase==FB_LIVE_PLAY);
+    for(unsigned i=0;i<3000 && career()->live.phase==FB_LIVE_PLAY;++i)tick();
+    assert(career()->live.phase==FB_LIVE_DEAD && career()->live.rules.offense==FB_AWAY && career()->live.event!=FB_EVENT_NONE);
+    press(BTN_MENU);answer(4);assert(top==&title);
     puts("football live screen: real 22-player draft, assignment, playcall/snap separation, held movement, pause, save/resume and failed-write retry passed");
 }

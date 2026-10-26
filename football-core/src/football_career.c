@@ -33,6 +33,16 @@ static void shop(FootballCareer *c)
     c->phase=FB_CAREER_SHOP;memset(c->sold,0,sizeof c->sold);c->prices[0]=125+25*c->round;c->prices[1]=c->prices[0];c->prices[2]=1000;c->stone_target=-1;c->stone_item=0;
     if((c->seed+c->round*7)%4==0)for(unsigned i=0;i<22;++i){prepare(c,i);int item=gc_football_mega_item(c->scratch,0);if(item>0 && !c->roster.mega_item[i]){c->stone_target=(int)i;c->stone_item=item;break;}}
 }
+int football_career_forget_slot(const pr_pokemon *p)
+{
+    int slot=-1,weakest=0;
+    if(!p)return -1;
+    for(int i=0;i<PR_N_MOVES(p) && i<4;++i){
+        unsigned id=PR_MOVES(p)[i];int power=id<PR_MOVE_COUNT && pr_moves[id].power>0?pr_moves[id].power:0;
+        if(slot<0 || power<weakest){slot=i;weakest=power;}
+    }
+    return slot;
+}
 static bool award(FootballCareer *c)
 {
     prepare(c,c->exp_member);return gc_football_award_exp(c->scratch,c->round,NULL);
@@ -48,7 +58,11 @@ void football_career_tick(FootballCareer *c,unsigned ms,FootballLiveInput input)
     if(progress==GC_FB_ERROR){c->phase=FB_CAREER_ERROR;snprintf(c->message,sizeof c->message,"Team progression failed; checkpoint preserved.");}
     else if(progress==GC_FB_WAIT){
         if(c->scratch->screen.kind==GC_SCREEN_EVOLVE){c->evolution_count=(unsigned)gc_football_evolution_choices(c->scratch,c->evolutions);c->phase=FB_CAREER_EVOLVE;}
-        else if(c->scratch->screen.kind==GC_SCREEN_LEARN_MOVE)c->phase=FB_CAREER_LEARN;
+        else if(c->scratch->screen.kind==GC_SCREEN_LEARN_MOVE){
+            /* Moves play no part in a match, so a level-up move is learned without asking. */
+            gc_choice choice={.kind=GC_CH_FORGET,.a=football_career_forget_slot(&c->scratch->party[c->scratch->screen.party].b)};
+            if(!gc_football_choose(c->scratch,&choice,0,NULL))c->phase=FB_CAREER_ERROR;
+        }
         else {gc_choice choice={.kind=GC_CH_CONFIRM};if(!gc_football_choose(c->scratch,&choice,0,NULL))c->phase=FB_CAREER_ERROR;}
     }else if(progress==GC_FB_DONE){
         c->roster.mon[c->exp_member]=c->scratch->party[0];football_roster_refresh(&c->roster,c->exp_member);
@@ -71,13 +85,6 @@ bool football_career_evolve(FootballCareer *c,int pick)
     if(!c || c->phase!=FB_CAREER_EVOLVE || pick>=(int)c->evolution_count)return false;
     gc_choice choice={.kind=pick<0?GC_CH_CANCEL:GC_CH_EVOLVE};
     if(!gc_football_choose(c->scratch,&choice,pick<0?0:(unsigned)pick,NULL))return false;
-    c->phase=FB_CAREER_EXP;return true;
-}
-bool football_career_learn(FootballCareer *c,int slot)
-{
-    if(!c || c->phase!=FB_CAREER_LEARN || slot>3)return false;
-    gc_choice choice={.kind=GC_CH_FORGET,.a=slot};
-    if(!gc_football_choose(c->scratch,&choice,0,NULL))return false;
     c->phase=FB_CAREER_EXP;return true;
 }
 bool football_career_buy(FootballCareer *c,unsigned offer,unsigned member)
