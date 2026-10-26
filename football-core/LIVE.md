@@ -62,12 +62,42 @@ defenders keep coverage responsibilities, and a throw travels to a predicted rec
 Accuracy and arm range affect error; actors near the landing point determine
 catches/interceptions. Passing beyond the line of scrimmage is disabled. Contact,
 sidelines, scoring and a 25-second play bound end downs under the shared rules.
-CPU offense chooses independently of the selected Man/Zone/Blitz scheme.
+CPU offense chooses independently of the selected Man/Zone/Blitz scheme (see "CPU play" below).
 The clock display advances during live play; the shared rules commit its elapsed
 time and runoff once at the dead ball. The seven-round playoff, shop and EXP loop
 remains. This is arcade football: no field goals, punts, kickoff returns, penalties
 or interception return phase are added here. A fumble uses a nearest-actor recovery
 contest at its contact spot, without a bouncing-ball phase.
+
+## CPU play
+
+`football_live_ai.c` holds everything the CPU decides; it reads only the live state and the match's own RNG,
+so a seed still replays identically.
+
+- **Play calling** (`football_live_ai_call`): a weight per play from down and distance (short yardage runs, long
+  yardage throws), field position (no deep routes near the goal line, no pitches from the shadow of the own goal),
+  and score/clock in the fourth quarter (trailing teams throw, leading teams run the clock). A play it ran on one of
+  the last three snaps is much less likely, so drives are not one play repeated.
+- **Defense** (`football_live_ai_defense`): blitz, zone or man by situation. Obvious passing downs bring more
+  pressure and more zone; short yardage stays tight.
+- **Ball carrier** (`football_live_ai_carrier`): follows the called run's route (the side it bends toward is picked
+  per snap in `run_side`), leans away from defenders in the lane, slows when one stands square in front of it and
+  stays off the sideline. Receivers and runners no longer share one straight line through the middle.
+- **QB** (`football_live_ai_qb`): waits for the routes to break (quick routes early, deep and play-action routes
+  late), throws to the most open receiver (the QB misjudges openness more the lower his `tha`), takes a smaller
+  window as the clock in the pocket runs, reacts to pressure a beat late (a rusher can arrive first: a sack),
+  throws the ball away or, with the agility, scrambles when nothing opens.
+- **Receivers and blockers**: the targeted receiver runs to the landing spot; the others keep their routes and
+  nudge away from nearby defenders. Run plays also use the tight end and receivers as blockers. Each block is a
+  contest: strength tilts it, then a random edge sets how long it lasts and how fast a beaten blocker is shed.
+- **The catch**: the ball comes down among the closest receiver and the closest defender. Alone under it a defender
+  usually intercepts; with a receiver there the defender intercepts rarely or breaks the pass up; otherwise the
+  receiver's hands decide.
+
+`tests/ai_test.c` checks the call mix per situation, the anti-repeat rule, the QB timing, and plays 40 mirror
+games between two CPU sides (`FootballLive.autoplay`, host tests only; the human is always HOME in the app) to hold
+run/pass mix, completion, sack and interception rates, scoring and lateral variety of runs inside bands, and that
+the same seeds give identical games.
 
 ## Coverage, body contact and facing
 
