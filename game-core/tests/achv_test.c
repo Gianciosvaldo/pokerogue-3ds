@@ -351,6 +351,39 @@ int main(void)
         assert(eval(NULL) == 0);                                    /* the starting species are not catches */
     }
 
+    /* group D, the eggs */
+    {
+        static const struct { int id; uint32_t n; } H[] = {{60, 1}, {61, 10}, {62, 50}, {63, 100}, {64, 500}};
+        for (unsigned k = 0; k < 5; k++) {
+            fresh();
+            S.stats.total_hatches = H[k].n - 1;
+            eval(NULL);
+            assert(!gc_achv_unlocked(&S, H[k].id));
+            S.stats.total_hatches = H[k].n;
+            eval(NULL);
+            assert(gc_achv_unlocked(&S, H[k].id));
+            if (k < 4) assert(!gc_achv_unlocked(&S, H[k + 1].id));
+        }
+        static const struct { int id; int tier; bool shiny; } F[] = {{65, 2, false}, {66, 3, false}, {67, 0, true}};
+        for (unsigned k = 0; k < 3; k++) {
+            fresh();
+            gc_achv_egg_hatched(&S, 1, false);                       /* a Rare plain egg is none of them */
+            eval(NULL);
+            for (unsigned j = 0; j < 3; j++) assert(!gc_achv_unlocked(&S, F[j].id));
+            gc_achv_egg_hatched(&S, F[k].tier, F[k].shiny);
+            eval(NULL);
+            for (unsigned j = 0; j < 3; j++) assert(gc_achv_unlocked(&S, F[j].id) == (j == k));
+        }
+        fresh();
+        gc_achv_egg_hatched(&S, 3, true);
+        static uint8_t buf[600000];
+        size_t n = gc_system_save(&S, buf, sizeof buf);
+        static gc_system loaded;
+        const char *why = NULL;
+        gc_system_init_defaults(&loaded);
+        assert(n && gc_system_load(&loaded, buf, n, &why) && loaded.achv.hatch_feats == (GC_HATCH_LEGENDARY | GC_HATCH_SHINY));
+    }
+
     /* every achievement has a name, a description and a reward text; progress lines never exceed their need */
     fresh();
     for (int i = 0; i < GC_ACHV_COUNT; i++) {

@@ -1,5 +1,6 @@
 /* Real battle victory, egg lapse, profile rewards and save/reload. */
 #include "../src/internal.h"
+#include "gc/achv.h"
 #include <stdio.h>
 #include <stdlib.h>
 static gc_run run,resumed;static gc_system sys,loaded;
@@ -40,6 +41,17 @@ int main(void){
   resumed.sys=&loaded;
   CHECK(gc_system_hatch_ready_eggs(&resumed)==0&&loaded.stats.total_hatches==n);
 
+ }
+ /* the hatches feed the egg achievements: a plain hatch only counts, an Epic shiny sets two feats, a Legendary the third */
+ {
+  gc_system_init_defaults(&sys);run.sys=&sys;sys.n_eggs=1;
+  sys.eggs[0]=(gc_egg){.id=77u,.hatch_waves=0,.species=SPECIES_ID_BULBASAUR,.tier=0};
+  CHECK(gc_system_hatch_ready_eggs(&run)==1&&sys.stats.total_hatches==1&&sys.achv.hatch_feats==0);
+  sys.n_eggs=1;sys.eggs[0]=(gc_egg){.id=78u,.hatch_waves=0,.species=SPECIES_ID_BULBASAUR,.tier=2,.is_shiny=true};
+  CHECK(gc_system_hatch_ready_eggs(&run)==1&&sys.achv.hatch_feats==(GC_HATCH_EPIC|GC_HATCH_SHINY));
+  sys.n_eggs=1;sys.eggs[0]=(gc_egg){.id=79u,.hatch_waves=0,.species=SPECIES_ID_BULBASAUR,.tier=3};
+  CHECK(gc_system_hatch_ready_eggs(&run)==1&&sys.achv.hatch_feats==(GC_HATCH_EPIC|GC_HATCH_SHINY|GC_HATCH_LEGENDARY)&&sys.stats.total_hatches==3);
+  {gc_event ev;while(gc_run_next_event(&run,&ev));}
  }
  /* Future eggs keep order/countdown; failed legacy/invalid eggs stay recoverable. */
  sys.n_eggs=3;run.sys=&sys;

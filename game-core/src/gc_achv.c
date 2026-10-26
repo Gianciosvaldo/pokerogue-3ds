@@ -11,6 +11,7 @@
 #define J GC_ACHV_GROUP_JOJO
 #define RUN GC_ACHV_GROUP_RUNS
 #define COL GC_ACHV_GROUP_COLLECTION
+#define EGGS GC_ACHV_GROUP_EGGS
 /* Ids follow the list order: the 17 challengers (GC_JOJO_*), then the sets and counts. */
 const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     {"Kars", "Defeat Kars.", J, V(GC_VOUCHER_REGULAR, 1)},
@@ -75,10 +76,20 @@ const gc_achv_def gc_achv_defs[GC_ACHV_COUNT] = {
     {"Mythical Find", "Catch your first mythical.", COL, V(GC_VOUCHER_PLUS, 1)},
     {"Generation Complete", "Catch every species of one generation.", COL, V(GC_VOUCHER_PLUS, 1)},
     {"Complete Pokedex", "Catch every species of every generation.", COL, SHINY(2)},
+    /* 60..67: the eggs */
+    {"First Hatch", "Hatch an egg.", EGGS, V(GC_VOUCHER_REGULAR, 1)},
+    {"Ten Hatches", "Hatch 10 eggs.", EGGS, V(GC_VOUCHER_REGULAR, 1)},
+    {"Fifty Hatches", "Hatch 50 eggs.", EGGS, V(GC_VOUCHER_REGULAR, 2)},
+    {"Hundred Hatches", "Hatch 100 eggs.", EGGS, V(GC_VOUCHER_PLUS, 1)},
+    {"Five Hundred Hatches", "Hatch 500 eggs.", EGGS, V(GC_VOUCHER_PREMIUM, 1)},
+    {"Epic Hatch", "Hatch an Epic egg.", EGGS, V(GC_VOUCHER_REGULAR, 2)},
+    {"Legendary Hatch", "Hatch a Legendary egg.", EGGS, V(GC_VOUCHER_PLUS, 1)},
+    {"Shiny Hatch", "Hatch a shiny from an egg.", EGGS, V(GC_VOUCHER_REGULAR, 2)},
 };
 #undef J
 #undef RUN
 #undef COL
+#undef EGGS
 
 static const uint32_t SET_PILLAR = 1u << GC_JOJO_KARS | 1u << GC_JOJO_WAMUU | 1u << GC_JOJO_ESIDISI;
 static const uint32_t SET_P2 = SET_PILLAR | 1u << GC_JOJO_JOSEPH | 1u << GC_JOJO_STROHEIM;
@@ -173,6 +184,14 @@ void gc_achv_wave_reached(gc_system *sys, uint32_t wave)
     if (sys && wave > sys->achv.best_wave) sys->achv.best_wave = wave;
 }
 
+void gc_achv_egg_hatched(gc_system *sys, int tier, bool shiny)
+{
+    if (!sys) return;
+    if (tier == 2) sys->achv.hatch_feats |= GC_HATCH_EPIC;
+    if (tier == 3) sys->achv.hatch_feats |= GC_HATCH_LEGENDARY;
+    if (shiny) sys->achv.hatch_feats |= GC_HATCH_SHINY;
+}
+
 void gc_achv_run_won(gc_system *sys, bool custom, uint8_t feats)
 {
     if (!sys) return;
@@ -209,6 +228,11 @@ bool gc_achv_progress_of(const gc_system *sys, int id, uint32_t *have, uint32_t 
     case 38: h = a->best_wave; n = 100; break;
     case 39: h = a->best_wave; n = 150; break;
     case 40: h = a->best_wave; n = 190; break;
+    case 60: h = sys->stats.total_hatches; n = 1; break;
+    case 61: h = sys->stats.total_hatches; n = 10; break;
+    case 62: h = sys->stats.total_hatches; n = 50; break;
+    case 63: h = sys->stats.total_hatches; n = 100; break;
+    case 64: h = sys->stats.total_hatches; n = 500; break;
     default:
         if (id < 44) return false;
         {
@@ -247,6 +271,9 @@ static bool met(const gc_system *sys, int id)
     const gc_achv_progress *a = &sys->achv;
     if (id < GC_JOJO_COUNT) return (a->jojo_beaten >> id & 1u) != 0;
     if (id == 29) return a->jojo_clean > 0;
+    if (id == 65) return (a->hatch_feats & GC_HATCH_EPIC) != 0;
+    if (id == 66) return (a->hatch_feats & GC_HATCH_LEGENDARY) != 0;
+    if (id == 67) return (a->hatch_feats & GC_HATCH_SHINY) != 0;
     if (id == 41) return (a->feats & GC_FEAT_SIX_UNEVOLVED) != 0;
     if (id == 42) return (a->feats & GC_FEAT_SOLO) != 0;
     if (id == 43) return (a->feats & GC_FEAT_NO_BALL) != 0;

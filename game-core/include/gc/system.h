@@ -93,6 +93,7 @@ typedef struct {
     uint32_t custom_wins;   /* Custom runs won */
     uint32_t best_wave;     /* the highest wave any run reached */
     uint8_t feats;          /* GC_FEAT_* bits: won a run with that feat at least once */
+    uint8_t hatch_feats;    /* GC_HATCH_* bits: hatched an Epic egg / a Legendary egg / a shiny from an egg */
 } gc_achv_progress;
 
 /* Overall system data (upstream GameData) */
