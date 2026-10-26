@@ -101,9 +101,9 @@ static bool is_form_change_item(const gc_item *it)
     return !strcmp(it->key, "FORM_CHANGE_ITEM") || !strcmp(it->key, "RARE_FORM_CHANGE_ITEM");
 }
 
-/* new EnemyPokemon(species, level, NONE, boss = true) and addEnemyPokemon's second IV roll, on `r` (a seed-offset stream); the config's
- * form index 0 is applied by the caller */
-static bool new_boss(gc_run *run, pr_rng *r, int species, int level, gc_mon *out)
+/* new EnemyPokemon(species, level, NONE, boss = true) on `r` (a seed-offset stream), and with `second_iv` addEnemyPokemon's second IV
+ * roll (a boss made without a data source); the config's form index 0 is applied by the caller */
+bool gc_me_new_boss(gc_run *run, pr_rng *r, int species, int level, bool second_iv, gc_mon *out)
 {
     pr_enemy_gen_ctx ec;
     gc_enemy_ctx(run, &ec);
@@ -120,6 +120,7 @@ static bool new_boss(gc_run *run, pr_rng *r, int species, int level, gc_mon *out
     if (!gc_generate_moveset(run, r, out)) gc_port_enemy_moveset(run, out);
     const pr_rng saved = run->run.rng;
     run->run.rng = *r;
+    ec.boss = second_iv;   /* the finish rolls the second IVs of a boss */
     const int rc = pr_run_enemy_pokemon_finish(&run->run, &ec, &g);
     *r = run->run.rng;
     run->run.rng = saved;
@@ -159,7 +160,7 @@ void gc_dark_deal_execute(gc_run *run, int option)
     /* initBattleWithEnemyConfig: battle.enemyLevels = [getLevelForWave()], rolled on the same stream */
     const int level = pr_run_get_level_for_wave(&run->run, &r, run->wave);
     gc_mon *boss = &run->enemy[0];
-    if (!new_boss(run, &r, species, level, boss)) {
+    if (!gc_me_new_boss(run, &r, species, level, true, boss)) {
         /* a species run-core has no rolls for: nobody fights, the encounter ends as if declined */
         gc_stub(run, GC_STUB_UNPORTED_ENEMY);
         run->n_enemy = 0;

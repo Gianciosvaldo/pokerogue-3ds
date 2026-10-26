@@ -291,6 +291,16 @@ static bool has_extortion_ability(const gc_mon *m)
     return false;
 }
 
+/* STEALING_MOVES (requirement-groups.ts) and MoveRequirement(STEALING_MOVES, true): allowed in battle, one of the moves among its moves */
+static bool has_stealing_move(const gc_mon *m)
+{
+    static const int moves[] = {MOVE_ID_PLUCK, MOVE_ID_COVET, MOVE_ID_KNOCK_OFF, MOVE_ID_THIEF, MOVE_ID_TRICK, MOVE_ID_SWITCHEROO};
+    if (!gc_mon_allowed(m)) return false;
+    for (int k = 0; k < m->b.n_moves; k++)
+        for (size_t j = 0; j < sizeof moves / sizeof moves[0]; j++) if (m->b.moves[k] > 0 && m->b.moves[k] == moves[j]) return true;
+    return false;
+}
+
 /* CHARMING_MOVES (src/data/mystery-encounters/requirements/requirement-groups.ts) */
 static bool is_charming_move(int move)
 {
@@ -354,6 +364,21 @@ static void setup_texts(gc_run *run)
     case GC_ME_FIELD_TRIP:
         s->option_pick[0] = s->option_pick[1] = s->option_pick[2] = GC_PICK_MEMBER_MOVE;
         break;
+    case GC_ME_FIGHT_OR_FLIGHT: {
+        pr_msg_arg enemy, item;
+        if (gc_fof_tokens(run, &enemy, &item)) { screen_arg(s, enemy); screen_arg(s, item); }
+        const int p = gc_mystery_primary_pokemon(run, type, 1);
+        if (p >= 0) {
+            screen_arg(s, pr_arg_pokemon_name(NULL, "option2PrimaryName", &run->party[p].b));
+            int move = 0;
+            for (int k = 0; k < run->party[p].b.n_moves && !move; k++) {
+                const int m = run->party[p].b.moves[k];
+                if (m == MOVE_ID_PLUCK || m == MOVE_ID_COVET || m == MOVE_ID_KNOCK_OFF || m == MOVE_ID_THIEF || m == MOVE_ID_TRICK || m == MOVE_ID_SWITCHEROO) move = m;
+            }
+            screen_arg(s, pr_arg_move("option2PrimaryMove", move));
+        }
+        break;
+    }
     case GC_ME_FUN_AND_GAMES:
         s->option_pick[0] = GC_PICK_MEMBER;
         screen_arg(s, pr_arg_money_en_us("option1Money", pr_run_get_wave_money_amount(run->wave, 1.5)));
@@ -399,6 +424,9 @@ void gc_mystery_setup_screen(gc_run *run)
 
     if (type == GC_ME_AN_OFFER_YOU_CANT_REFUSE) {
         /* selling and leaving need nothing; extorting needs a Pokemon allowed in battle with an extortion move or ability */
+        s->option_ok[1] = gc_mystery_primary_pokemon(run, type, 1) >= 0;
+    } else if (type == GC_ME_FIGHT_OR_FLIGHT) {
+        /* the battle and leaving need nothing; stealing needs a Pokemon allowed in battle with a stealing move */
         s->option_ok[1] = gc_mystery_primary_pokemon(run, type, 1) >= 0;
     } else if (type == GC_ME_DARK_DEAL) {
         /* both options are open: the encounter's own requirement is a party of two */
@@ -682,6 +710,13 @@ int gc_mystery_primary_pokemon(const gc_run *run, int type, int option)
                 if (!gc_mon_allowed(m)) continue;
                 if (by_move ? has_extortion_move(m) : has_extortion_ability(m)) return run->party_order[k];
             }
+        return -1;
+    }
+    if (type == GC_ME_FIGHT_OR_FLIGHT) {
+        /* MoveRequirement(STEALING_MOVES, true): the first Pokemon of the party allowed in battle with one of the moves */
+        if (option != 1) return -1;
+        for (int k = 0; k < run->n_party; k++)
+            if (has_stealing_move(&run->party[run->party_order[k]])) return run->party_order[k];
         return -1;
     }
     if (type == GC_ME_PART_TIMER) {
@@ -1165,11 +1200,7 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_FIGHT_OR_FLIGHT:
-        if (option == 0) {
-            start_mystery_wild_battle(run, 0, wave_level, true, 2, 1);
-            return true;
-        }
-        end_mystery_encounter_leave(run);
+        gc_fof_execute(run, option);
         return true;
 
     case GC_ME_SLUMBERING_SNORLAX:
