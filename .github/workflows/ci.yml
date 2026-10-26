@@ -48,6 +48,8 @@ jobs:
           python3 battle-core/tools/check-faint-history-proof.py
       - name: Compare complete received-hit queries, command/save owners and failure controls
         run: python3 battle-core/tools/check-received-history-proof.py
+      - name: Compare complete turn-order queries, command/save owners and failure controls
+        run: python3 battle-core/tools/check-turn-order-proof.py
       - name: Audit pinned inventory catalogue capacity
         run: python3 battle-core/tools/audit-inventory-catalogue.py
       - name: Run battle entry controller tests

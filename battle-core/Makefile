@@ -726,3 +726,15 @@ received-history-host-test: $(BUILD)/received-history-test $(BUILD)/received-his
 	$(BUILD)/received-command-test
 
 .PHONY: received-history-host-test
+
+$(BUILD)/turn-order-test: tests/turn-order-test.c tests/turn-order.native.inc src/engine.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+$(BUILD)/turn-order-guards-test: tests/turn-order-guards-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -lm -o $@
+$(BUILD)/turn-order-command-test: tests/turn-order-command-test.c tests/turn-order-command.native.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libprcore.a -Wl,--wrap=pr_phase_run -lm -o $@
+turn-order-host-test: $(BUILD)/turn-order-test $(BUILD)/turn-order-guards-test $(BUILD)/turn-order-command-test
+	$(BUILD)/turn-order-test
+	$(BUILD)/turn-order-guards-test
+	$(BUILD)/turn-order-command-test
+.PHONY: turn-order-host-test

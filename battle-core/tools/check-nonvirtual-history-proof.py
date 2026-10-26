@@ -7,8 +7,12 @@ trace=gc/'tests/fixtures/nonvirtual-history.native.txt'
 runner=bc/'build/nonvirtual-history-test';guards=bc/'build/nonvirtual-history-guards-test';host=gc/'build/nonvirtual_history_host_test'
 for command in [[runner,trace],[guards],[host,trace]]:subprocess.run(command,check=True)
 faults=[]
-def fault(file,name,old,new,kind='core'):
- source=(root/file).read_text();assert source.count(old)==1,(name,source.count(old));faults.append((name,source.replace(old,new),kind))
+def fault(file,name,old,new,kind='core',also=None):
+ source=(root/file).read_text();assert source.count(old)==1,(name,source.count(old));source=source.replace(old,new)
+ if also:
+  # Recycling and target propagation independently reject stale summon epochs.
+  prior,replacement=also;assert source.count(prior)==1;source=source.replace(prior,replacement)
+ faults.append((name,source,kind))
 fault('battle-core/src/history.c','forget-aged-real-move','    remember_nonvirtual(p,&tm,++p->history_serial);','    /* forgot incoming semantic state */')
 fault('battle-core/src/history.c','conflate-query-flags','for(int q=0;q<4;q++)if(nonvirtual_matches(tm,q/2,q%2))','for(int q=0;q<4;q++)if(nonvirtual_matches(tm,false,false))')
 fault('battle-core/src/history.c','ignore-follow-ups','(!ignore_follow_up && tm->use_mode==MOVE_USE_MODE_FOLLOW_UP)','(false && tm->use_mode==MOVE_USE_MODE_FOLLOW_UP)')
@@ -17,8 +21,8 @@ fault('battle-core/src/history.c','require-success','return tm->move!=MOVE_ID_NO
 fault('battle-core/src/history.c','lose-targets','p->history_last[q]=*tm;','p->history_last[q]=*tm;p->history_last[q].n_targets=0;')
 fault('battle-core/src/history.c','lose-result','p->history_last[q]=*tm;','p->history_last[q]=*tm;p->history_last[q].result=MOVE_RESULT_SUCCESS;')
 fault('battle-core/src/engine.c','drop-shared-cache-targets','p->history_last_serial[q]==e->hist_alias[k].abs','false')
-fault('battle-core/src/engine.c','truncate-shared-history-position','(p->history_serial<p->n_move_history?p->n_move_history:p->history_serial)+1','(uint16_t)((p->history_serial<p->n_move_history?p->n_move_history:p->history_serial)+1)')
-fault('battle-core/src/engine.c','reuse-old-summon-alias','if(e->hist_alias[k].epoch!=p->history_epoch)continue;','/* old summon leaks */')
+fault('battle-core/src/engine.c','truncate-shared-history-position','e->hist_alias[retained].abs = p->history_serial;','e->hist_alias[retained].abs = (uint16_t)p->history_serial;')
+fault('battle-core/src/engine.c','reuse-old-summon-alias','if(e->hist_alias[k].epoch!=p->history_epoch)continue;','/* old summon leaks */',also=('if (epoch != p->history_epoch) return false;','/* retain stale summon aliases */'))
 fault('battle-core/src/history.c','invent-complete-prefix','p->history_last_known=p->n_move_history<=PR_MAX_MOVE_HISTORY?15:0;','p->history_last_known=15;','guard')
 fault('battle-core/src/phases.c','retain-reset-cache','    pr_rebuild_nonvirtual_history(p);','    /* stale summon state */','guard')
 fault('game-core/src/gc_save.c','omit-saved-cache','    snprintf(key,sizeof key,"%s_last_moves",name);','    snprintf(key,sizeof key,"old_%s_last_moves",name);','save')

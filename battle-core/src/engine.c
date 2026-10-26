@@ -364,8 +364,7 @@ static int dyn_pop(pr_battle *bt, pr_engine *e, int type)
     e->n_dyn[type]--;
     if (type == PH_MOVE) {
         /* MovePhasePriorityQueue.pop records the turn order */
-        if (bt->n_last_turn_order < PR_MAX_TURN_ORDER) bt->last_turn_order[bt->n_last_turn_order] = e->pool[ph].pokemon->id;
-        if (bt->n_last_turn_order < UINT8_MAX) bt->n_last_turn_order++;
+        pr_record_turn_order(bt, e->pool[ph].pokemon->id);
         pr_sync_queued_movers(bt, e);
     }
     return ph;
@@ -626,24 +625,41 @@ void pr_targets_changed(pr_battle *bt, pr_engine *e, int list)
     }
 }
 
+static bool history_alias_live(const pr_pokemon *p, uint32_t serial, uint32_t epoch)
+{
+    if (epoch != p->history_epoch) return false;
+    unsigned kept = p->n_move_history < PR_MAX_MOVE_HISTORY ? p->n_move_history : PR_MAX_MOVE_HISTORY;
+    if (serial && serial <= p->history_serial && p->history_serial - serial < kept) return true;
+    for (int q = 0; q < 4; q++)
+        if ((p->history_last_present & (1u << q)) && p->history_last_serial[q] == serial) return true;
+    return (p->history_all_present & 2) && p->history_aim_serial == serial;
+}
+
 void pr_push_history_shared(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_turn_move tm, int list)
 {
     /* pushMoveHistory: only while the Pokemon is on the field */
     if (!p->on_field || p->switch_out_status) return;
     if (list >= 0) {
+        if (list >= e->n_target_lists) { limit(bt, e); return; }
         memcpy(tm.targets, e->target_lists[list].v, 4);
         tm.n_targets = e->target_lists[list].n;
-        if (e->n_hist_alias < (int)(sizeof e->hist_alias / sizeof e->hist_alias[0])) {
-            e->hist_alias[e->n_hist_alias].p = p;
-            e->hist_alias[e->n_hist_alias].epoch = p->history_epoch;
-            e->hist_alias[e->n_hist_alias].abs = (p->history_serial<p->n_move_history?p->n_move_history:p->history_serial)+1;
-            e->hist_alias[e->n_hist_alias].list = (int8_t)list;
-            e->n_hist_alias++;
-        } else {
-            limit(bt, e);
-        }
     }
     pr_push_move_history(p, tm);
+    if (list >= 0) {
+        /* Push first: an evicted tail entry may release the slot we need. The
+         * semantic selectors above keep their aliases even outside that tail. */
+        int retained = 0;
+        for (int k = 0; k < e->n_hist_alias; k++)
+            if (history_alias_live(e->hist_alias[k].p, e->hist_alias[k].abs, e->hist_alias[k].epoch))
+                e->hist_alias[retained++] = e->hist_alias[k];
+        e->n_hist_alias = retained;
+        if (e->n_hist_alias >= PR_MAX_HISTORY_ALIASES) { limit(bt, e); return; }
+        e->hist_alias[retained].p = p;
+        e->hist_alias[retained].epoch = p->history_epoch;
+        e->hist_alias[retained].abs = p->history_serial;
+        e->hist_alias[retained].list = (int8_t)list;
+        e->n_hist_alias++;
+    }
 }
 
 int pr_targets_new(pr_engine *e, const int8_t *v, int n)
@@ -703,7 +719,7 @@ static int shift_phase(pr_battle *bt, pr_engine *e)
             for (int i = 0; i < e->n_dyn[t]; i++) phase_free(e, e->dyn[t][i]);
             e->n_dyn[t] = 0;
         }
-        bt->n_last_turn_order = 0;      /* MovePhasePriorityQueue.clear() also clears the order */
+        pr_clear_turn_order(bt);      /* MovePhasePriorityQueue.clear() also clears the order */
         pr_sync_queued_movers(bt, e);
         ph = pr_phase_new(e, PH_TURN_INIT, -1);
     }
