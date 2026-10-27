@@ -701,10 +701,15 @@ static float player_info_y(const side *sd){
   return B.setup.doubles?(field_of(sd)==1?-72:-116):-72;
 }
 
+/* A boss's box rests 48 px to the right of a mini one (Pokemon.showInfo slides it in by 246 px from -198, the others by 150 from -150):
+ * the wide box (178 px against 130) keeps the same left margin. */
 static float info_base_x(const side *sd,bool player){
-  if(!B.setup.doubles)return player?310:140;
+  if(!B.setup.doubles)return player?310:sd->mon.boss?188:140;
   return player?348:sd->mon.boss?150:102;
 }
+
+/* how far a box slides in from (and out to) the side: Pokemon.showInfo / hideInfo */
+static float info_slide(const side *sd,bool player){return player?150:sd->mon.boss?246:150;}
 
 static void draw_player_info(side* sd) {
   if (!sd->present || !sd->info_on) return;
@@ -733,21 +738,42 @@ static void draw_player_info(side* sd) {
   draw_stat_panel(sd,true,bx,by);
 }
 
+/* EnemyBattleInfo.updateBossSegmentDividers: the boss bar's dividers, one fewer than the segments, 1 px wide and 1 px under the bar's top,
+ * as tall as the bar less that pixel; at round(maxHp / segments * s) / maxHp of the bar's width, white while the shield s is up
+ * (bossSegmentIndex >= s) and 0x404040 once it is broken. A 1 px rectangle centred between two pixels takes the left one. */
+static void draw_boss_dividers(const bv_mon* m, float bar_x, float bar_y, float bar_w, float bar_h) {
+  const int segments = m->boss_segments;
+  if (segments < 2 || m->max_hp <= 0) return;
+  const double segment_hp = (double)m->max_hp / segments;
+  for (int s = 1; s < segments; s++) {
+    const double at = floor(segment_hp * s + 0.5) / m->max_hp * bar_w; /* Math.round */
+    const bool up = m->boss_segment_index >= s;
+    rr_rect(floorf(bar_x + (float)at), bar_y + 1, 1, bar_h - 1, up ? RR_RGBA(0xff, 0xff, 0xff, 255) : RR_RGBA(0x40, 0x40, 0x40, 255));
+  }
+}
+
+/* A boss (EnemyBattleInfo.updateBossSegments) has the wide pbinfo_enemy_boss (178 px; the mini box is 130): the name with its icons and the
+ * stat values sit 48 px further left, the level 2, the HP bar and its label 38 (the bar 2 px higher, the label 1) and the bar is
+ * overlay_hp_boss, 86 px instead of 48, with the label overlay_hp_label_boss. */
 static void draw_enemy_info(side* sd) {
   if (!sd->present || !sd->info_on) return;
   const bv_mon* m = &sd->mon;
+  const bool boss = m->boss;
   float bx = info_base_x(sd,false) + sd->info_dx, by = B.setup.doubles?(field_of(sd)==3?-103:-141):-141; /* EnemyBattleInfo container */
-  img_draw("images/ui/pbinfo_enemy_mini", NULL, bx, by, 1, 0.5f);
+  const float name_x = bx - (boss ? 172 : 124), bar_x = bx - (boss ? 109 : 71), bar_y = by + (boss ? 2.5f : 4.5f), bar_w = boss ? 86 : 48;
+  img_draw(boss ? "images/ui/pbinfo_enemy_boss" : "images/ui/pbinfo_enemy_mini", NULL, bx, by, 1, 0.5f);
   draw_types(m, false, bx, by);
-  draw_name(m, false, bx - 124, by - 11.2f);
-  if (m->caught_before) img_draw("images/ui/icon_owned", NULL, bx - 124, by - 11.2f + 11.75f, 0, 0);
-  draw_level(bx - 50, by - 5, m->level, false);
+  draw_name(m, false, name_x, by - 11.2f);
+  if (m->caught_before) img_draw("images/ui/icon_owned", NULL, name_x, by - 11.2f + 11.75f, 0, 0);
+  draw_level(bx - (boss ? 52 : 50), by - 5, m->level, false);
   float ratio = m->max_hp ? fminf(sd->hp_shown / m->max_hp, 1.0f) : 0;
-  const rr_frame* hf = img_frame("images/ui/overlay_hp", hp_frame(ratio));
-  int w = (int)floorf(48 * ratio + 0.5f);
+  const rr_frame* hf = img_frame(boss ? "images/ui/overlay_hp_boss" : "images/ui/overlay_hp", hp_frame(ratio));
+  int w = (int)floorf(bar_w * ratio + 0.5f);
   if (w < 1 && sd->hp_shown > 0) w = 1;
-  if (hf && w > 0) rr_draw_cropped(hf, bx - 71, by + 4.5f, w, hf->src_h, NULL);
-  img_draw("images/ui/text_images/en/battle_ui/overlay_hp_label", NULL, bx - 72, by + 1.5f, 1, 0);
+  if (hf && w > 0) rr_draw_cropped(hf, bar_x, bar_y, w, hf->src_h, NULL);
+  img_draw(boss ? "images/ui/text_images/en/battle_ui/overlay_hp_label_boss" : "images/ui/text_images/en/battle_ui/overlay_hp_label", NULL,
+           bx - (boss ? 110 : 72), by + (boss ? 0.5f : 1.5f), 1, 0);
+  if (boss) draw_boss_dividers(m, bar_x, bar_y, bar_w, hf ? (float)hf->src_h : 4);
   draw_stat_indicators(sd, false, bx, by);
   draw_stat_panel(sd,false,bx,by);
 }
@@ -1513,12 +1539,12 @@ static void run_event(float dt) {
             tween_start(&B.tw2, 0, 0, 0, EASE_LINEAR);
           } else {
             en->black = false; /* untint(100) */
-            if(B.s[3].present){B.s[3].black=false;B.s[3].info_on=true;B.s[3].info_dx=-150;}
+            if(B.s[3].present){B.s[3].black=false;B.s[3].info_on=true;B.s[3].info_dx=-info_slide(&B.s[3],false);}
             update_field_scale(false);
             cry(en->present?&en->mon:&B.s[3].mon);
             en->info_on = true;
-            en->info_dx = -150;
-            tween_start(&B.tw2, -150, 0, 1000, EASE_CUBIC_OUT);
+            en->info_dx = -info_slide(en, false);
+            tween_start(&B.tw2, en->info_dx, 0, 1000, EASE_CUBIC_OUT);
             if(B.s[3].present&&en->present)i18n_t(s,sizeof s,"battle:doubleWildAppeared","pokemonName1",en->mon.name,"pokemonName2",B.s[3].mon.name,NULL);
             else i18n_t(s, sizeof s, "battle:singleWildAppeared", "pokemonName", en->present?en->mon.name:B.s[3].mon.name, NULL);
           }
@@ -1569,7 +1595,7 @@ static void run_event(float dt) {
         if (tween_done(&B.tw)) {
           cry(&sd->mon);
           sd->info_on = true;
-          sd->info_dx = player ? 150 : -150;
+          sd->info_dx = player ? 150 : -info_slide(sd, false);
           tween_start(&B.tw2, sd->info_dx, 0, 1000, EASE_CUBIC_OUT);
           B.step = 3;
         }
@@ -1585,7 +1611,7 @@ static void run_event(float dt) {
       if (B.step == 0) {
         if (!player && B.ball.on && !B.ball.fading) B.ball.fading = true, B.ball.fade_t = 0; /* removePb() */
         tween_start(&B.tw, 1, 0, 250, EASE_SINE_IN);
-        tween_start(&B.tw2, 0, player ? 150 : -150, 500, EASE_CUBIC_IN);
+        tween_start(&B.tw2, 0, player ? 150 : -info_slide(sd, false), 500, EASE_CUBIC_IN);
         B.step = 1;
       }
       tween_update(&B.tw, dt);
@@ -1726,7 +1752,7 @@ static void run_event(float dt) {
       if (B.step == 1 && B.t >= 250) {
         ui_play_sound("se/faint");
         tween_start(&B.tw, 0, 150, 500, EASE_SINE_IN);
-        tween_start(&B.tw2, sd->info_dx, sd->info_dx + (player ? 150 : -150), 500, EASE_CUBIC_IN);
+        tween_start(&B.tw2, sd->info_dx, sd->info_dx + (player ? 150 : -info_slide(sd, false)), 500, EASE_CUBIC_IN);
         B.step = 2;
       }
       if (B.step == 2) {
@@ -1803,6 +1829,11 @@ static void run_event(float dt) {
 
     case BEV_MAX_HP:
       sd->mon.max_hp = e->a;
+      finish_event();
+      break;
+
+    case BEV_BOSS_SHIELD:
+      sd->mon.boss_segment_index = e->a;
       finish_event();
       break;
 

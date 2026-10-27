@@ -86,6 +86,9 @@ typedef struct {
     int8_t gender, types[3];
     uint8_t variant, n_types;
     float sprite_scale;
+    uint8_t boss_segments;     /* EnemyPokemon.bossSegments, 0 = not a boss */
+    uint8_t boss_segment_index;/* bossSegmentIndex: the shields still up. A hit that breaks one changes it before the
+                                * hit's own DAMAGE event (Pokemon.damage -> handleBossSegmentCleared) */
     /* Stable identity survives later form changes and party reordering. */
     bool pokemon_id_known;
     uint32_t pokemon_id;

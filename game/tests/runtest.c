@@ -165,6 +165,7 @@ static struct {
 static int n_resumes;
 
 static int check_form_events;
+static int n_boss_foes, n_boss_shields;   /* boss enemies the screen was shown (a wave's own, or a trainer's sent out) and the shield breaks it was told */
 static int violations, n_scenes, n_ask, n_dialogs, n_options, n_party_opens, n_balls, n_party_full_swaps;
 static int n_talk_enc, n_talk_win, n_talk_portrait, n_trainer_show;
 static int n_jojo_intro, n_jojo_talk;   /* RUNTEST_CUSTOM: JoJo trainers' intros and iconic lines */
@@ -546,6 +547,8 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
           if (W.mon[1].species <= 0) BAD("wild intro with no enemy");
           W.present[1] = true;
           W.present[3]=W.mon[3].species>0;
+          n_boss_foes += W.mon[1].boss_segments > 0;
+          n_boss_foes += W.mon[3].boss_segments > 0;
         }
         break;
       case BEV_SUMMON:
@@ -559,6 +562,7 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
         W.mon[s] = *e->mon;
         W.present[s] = true;
         W.fainted_shown[s] = false;
+        n_boss_foes += e->mon->boss_segments > 0 && e->battler >= 2;
         break;
       case BEV_WITHDRAW:
         if (side_ok(e->battler, "withdraw")) W.present[s] = false;
@@ -628,6 +632,15 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
           for (int k = 0; k < 6; k++)
             if (e->stats[k] <= 0 || e->stats[6 + k] < e->stats[k])
               BAD("level up stat %d went from %d to %d", k, e->stats[k], e->stats[6 + k]);
+        }
+        break;
+      case BEV_BOSS_SHIELD:
+        /* a hit broke a boss's shield: only a segmented boss has them, the index only ever counts down and stays a valid shield */
+        if (side_ok(e->battler, "boss shield")) {
+          if (W.mon[s].boss_segments < 2) BAD("a shield broke on a Pokemon with %d segments", W.mon[s].boss_segments);
+          else if (e->a < 0 || e->a >= W.mon[s].boss_segment_index) BAD("shield index %d after %d of %d segments", e->a, W.mon[s].boss_segment_index, W.mon[s].boss_segments);
+          W.mon[s].boss_segment_index = e->a;
+          n_boss_shields++;
         }
         break;
       case BEV_MAX_HP:
@@ -750,6 +763,9 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
     if(a->form!=form->form_index||a->gender!=gender||a->shiny!=p->shiny||a->variant!=p->variant)
       BAD("field%d displayed form/gender/shiny identity differs",field);
     for(int stat=0;stat<7;stat++)if(a->stat_stages[stat]!=p->stat_stages[stat])BAD("field%d stage%d differs",field,stat);
+    /* the boss's box: the wide one and its dividers need the segments, and the shields the screen shows are the battle's */
+    if(a->boss!=p->is_boss||a->boss_segments!=p->boss_segments||a->boss_segment_index!=p->boss_segment_index)
+      BAD("field%d screen boss %d %d/%d, run %d %d/%d",field,a->boss,a->boss_segment_index,a->boss_segments,p->is_boss,p->boss_segment_index,p->boss_segments);
   }
   if(!enemy)BAD("asked command with no enemy");
   if(me){
@@ -1964,6 +1980,8 @@ int main(int argc, char** argv) {
   printf("scenes: %d, of them %d next waves of the same biome (no fade, the player's platform stays)\n", n_scenes, n_seamless);
   if (!n_seamless && n_scenes > 50) BAD("no scene was a next wave of the same biome");
   printf("level ups: %d, of them %d with the stat window\n", n_level_ups, n_level_windows);
+  printf("boss foes shown: %d, shield breaks shown: %d\n", n_boss_foes, n_boss_shields);
+  if (!n_boss_foes && n_scenes > 50) BAD("no boss was shown");
   printf("commands with the foe's item bar: %d; enemy items with no icon row: %d\n", n_foe_bars, n_foe_hidden);
   printf("commands with the key item bar: %d; party trays: %d (%d fainted balls)\n", n_key_bars, n_trays, n_fainted_balls);
   if(FORM.enabled) {
