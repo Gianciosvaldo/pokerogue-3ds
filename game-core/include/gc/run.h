@@ -471,6 +471,9 @@ int gc_item_transfer(gc_run *run, int item_idx, int to, int qty);
 int gc_item_discard(gc_run *run, int item_idx, int count);
 
 int gc_party_luck(gc_run *run); /* actual allowed living party, clamped by native rules */
+/* GC_TARGET_FUSE's party filter (FusePokemonModifierType.selectFilter) for one pick: false for a Pokemon that is already fused, or a
+ * fainted one in a Hardcore run. The party screen shows "it won't have any effect" for it */
+bool gc_fusion_pickable(const gc_run *run, int party);
 int gc_starter_budget(int mode);                       /* the cost limit: 10 in classic */
 int gc_starter_cost(int species);                      /* base speciesStarterCosts, -1 = not a starter */
 void gc_pokerus_starters(uint64_t unix_ms,uint16_t out[3]);

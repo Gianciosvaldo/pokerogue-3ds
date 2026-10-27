@@ -168,6 +168,28 @@ static void refusals(void)
     CHECK(!buy(0, 1, &why) && !strcmp(why, "partyUiHandler:anyEffect"));
     CHECK(!buy(1, 0, &why) && !strcmp(why, "partyUiHandler:anyEffect"));
     CHECK(r.money == 700 && r.n_party == 2);
+    CHECK(!gc_fusion_pickable(&r, 0) && gc_fusion_pickable(&r, 1) && !gc_fusion_pickable(&r, -1) && !gc_fusion_pickable(&r, 2));
+
+    /* Hardcore: a fainted member is no pick, as the first or the second (HardcoreChallenge.applyPokemonFusion); a living pair is fine */
+    for (int fainted = 0; fainted < 3; fainted++) {
+        setup(3, false);
+        r.run.has_challenges = true;
+        r.run.challenge_flags = 1u << CHALLENGES_HARDCORE;
+        r.party[fainted].b.hp = 0;
+        r.party[fainted].b.status = STATUS_EFFECT_FAINT;
+        const int a = (fainted + 1) % 3, b = (fainted + 2) % 3;
+        CHECK(!gc_fusion_pickable(&r, fainted) && gc_fusion_pickable(&r, a) && gc_fusion_pickable(&r, b));
+        screen(splicers(300), true);
+        CHECK(!buy(fainted, a, &why) && !strcmp(why, "partyUiHandler:anyEffect"));
+        CHECK(!buy(a, fainted, &why) && !strcmp(why, "partyUiHandler:anyEffect"));
+        CHECK(r.money == 1000 && r.n_party == 3);
+        CHECK(buy(a, b, &why) && r.money == 700 && r.n_party == 2);
+    }
+    /* the same fainted member is fine to fuse without the challenge */
+    setup(3, false);
+    r.party[0].b.hp = 0;
+    r.party[0].b.status = STATUS_EFFECT_FAINT;
+    CHECK(gc_fusion_pickable(&r, 0));
 }
 
 /* a free pick closes the screen, the queued phases teach what fits, and a full moveset asks */

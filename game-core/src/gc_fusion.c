@@ -27,6 +27,17 @@
 
 static bool has_status(int status) { return status != STATUS_EFFECT_NONE && status != STATUS_EFFECT_FAINT; }
 
+/* FusePokemonModifierType.selectFilter, which the party screen asks of each of the two picks: a Pokemon that is already fused has no
+ * effect, and so has a fainted one in a Hardcore run (HardcoreChallenge.applyPokemonFusion). `party` is a storage index */
+bool gc_fusion_pickable(const gc_run *run, int party)
+{
+    if (party < 0 || party >= run->n_party) return false;
+    const pr_pokemon *p = &run->party[party].b;
+    if (p->fusion_species) return false;
+    const bool hardcore = run->run.has_challenges && (run->run.challenge_flags & (1u << CHALLENGES_HARDCORE));
+    return !(hardcore && p->hp <= 0);
+}
+
 /* DNA Splicers through reward-core: the pair at reward-core's party positions k1 (stays) and k2 (goes) in a fresh context. What it
  * decides is whether the pair may fuse (the fusion filter, the challenge) and the fusion half the first one takes; its hp, status and
  * stats are not used: it rounds the average hp with floor(x + 0.5), which is not Math.round at 0.49999999999999994, and it has no held
@@ -63,8 +74,9 @@ int gc_fusion_scene_apply(gc_run *run, const gc_offer *o, int primary, int donor
     gc_mon *a = &run->party[primary];
     const gc_mon *b = &run->party[donor];
 
-    /* the pair as reward-core accepts it, and the fusion half it makes */
-    pr_reward_ctx *c = fuse_in_core(run, k1, k2);
+    /* the filter of each pick (reward-core's own check of the pair is the first pick's alone), then the pair as reward-core accepts it,
+     * and the fusion half it makes */
+    pr_reward_ctx *c = gc_fusion_pickable(run, primary) && gc_fusion_pickable(run, donor) ? fuse_in_core(run, k1, k2) : NULL;
     if (!c) {
         *why = "partyUiHandler:anyEffect";
         return GC_APPLY_REFUSED;

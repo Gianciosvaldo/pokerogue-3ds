@@ -6,7 +6,8 @@ added to the Pokemon that was picked, and no fusion happened. It now runs upstre
 
 - `FusePokemonModifierType`: the offer needs two picks (`GC_TARGET_FUSE`; `GC_CH_REWARD`/`GC_CH_SHOP` carry the member that
   stays in `b` and the member that goes in `c`, both party indices). The same member twice, a pick that is not in the party,
-  a member that is already fused (either one) and the fusion challenge are refusals: nothing is taken, no money is spent.
+  a member that is already fused (either one) and a fainted member in a Hardcore run (either pick: the only challenge with a
+  fusion rule upstream, `gc_fusion_pickable` is the party screen's filter for it) are refusals: nothing is taken, no money is spent.
 - `FusePokemonModifier.apply` -> `PlayerPokemon.fuse()`, in `src/gc_fusion.c`: the fusion half (species, form, gender, ability
   index, shiny, variant, luck, the second member's custom ability, evolution pause), the new hit points from both members'
   maxima before the fusion (`Math.round`), the stats of the fusion with the first member's held items, the status (the
@@ -43,8 +44,8 @@ order and place, every part of the fusion half, the evolution pause): **23 of 23
 fusion ability set by hand next to `pr_refresh_ability` (the refresh derives the same value) and the Gimmighoul tracker that
 a Gimmighoul second member brings (it needs a member holding its tracker).
 
-`tests/fusion_host_test.c` (325 checks, in `make test`) covers what doesn't need upstream: the shop and the free pick, the
-refusals leaving everything as it was, the two orders of the picks, a full moveset asking what to forget, the coin and the
+`tests/fusion_host_test.c` (362 checks, in `make test`) covers what doesn't need upstream: the shop and the free pick, the
+refusals leaving everything as it was (Hardcore included, which the differential does not run), the two orders of the picks, a full moveset asking what to forget, the coin and the
 status rules, held items (a full stack, vitamins, the Orbs), the luck and the save, including the save from before the
 section and damaged ones. `make test` also replays `tests/fixtures/fusion-splicers.native.txt.gz` (the seed 777 trace,
 produced by upstream) so CI checks the comparator without an upstream checkout.
