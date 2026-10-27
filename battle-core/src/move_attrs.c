@@ -278,7 +278,7 @@ void pr_apply_variable_move_type(pr_battle *bt, const pr_pokemon *user, int move
     for (unsigned i = 0; i < mv->nattr; i++) {
         const pr_attr *a = ATTR(move, i);
         if (!pr_attr_is(a->cls, PR_AC_VariableMoveTypeAttr)) continue;
-        /* Fusions aren't modelled, so fusionSpecies never matches. */
+        /* Species/form checks follow each native attribute below. */
         int sp = user->species, form = user->form;
         switch (a->cls) {
         case PR_AC_HiddenPowerTypeAttr:
@@ -323,6 +323,10 @@ void pr_apply_variable_move_type(pr_battle *bt, const pr_pokemon *user, int move
         case PR_AC_RagingBullTypeAttr:
             if (sp == SPECIES_ID_PALDEA_TAUROS)
                 *type = form == 1 ? POKEMON_TYPE_FIRE : form == 2 ? POKEMON_TYPE_WATER : POKEMON_TYPE_FIGHTING;
+            else if (user->fusion_species == SPECIES_ID_PALDEA_TAUROS)
+                /* Source reads fusionSpecies.formIndex (registry form 0),
+                 * rather than the Pokemon's stored fusionFormIndex. */
+                *type = POKEMON_TYPE_FIGHTING;
             break;
         case PR_AC_IvyCudgelTypeAttr:
             if (sp == SPECIES_ID_OGERPON) {
