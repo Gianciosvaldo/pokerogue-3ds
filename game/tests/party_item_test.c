@@ -92,6 +92,86 @@ static void check_team_cases(void) {
   assert(!pf_text_count("partyUiHandler:activate Venusaurite"));
   input(BTN_CANCEL);input(BTN_CANCEL);assert(check_back==1&&form_party==-1&&depth==1);
 }
+/* The reward screens list the party in upstream's party order (a lead change in battle moves a member to the front); the callbacks
+ * still speak party[] indexes, which is what game-core's choices mean. */
+static int moved_src = -1, moved_count, moved_to = -2, moves;
+static void on_move(int item_src, int count, int to, void* arg) {
+  (void)arg;
+  moved_src = item_src;
+  moved_count = count;
+  moved_to = to;
+  moves++;
+}
+static void transfer_done(void* arg) { (void)arg; ps_close(); }
+
+static void open_item(int mode, int tm_move) {
+  picked = -1;
+  ps_open_item(&run, mode, false, tm_move, on_pick, NULL);
+  assert(depth == 2 && party_active());
+}
+
+static void order_cases(void) {
+  memset(&run, 0, sizeof run);
+  run.n_party = 3;
+  for (int i = 0; i < 3; i++) {
+    pr_pokemon* p = &run.party[i].b;
+    p->id = 500 + i;
+    p->species = i == 1 ? SPECIES_ID_MAGIKARP : SPECIES_ID_CHARIZARD;
+    p->level = 10 + i;
+    p->hp = p->stats[0] = 100;
+    p->n_moves = 1;
+    p->moves[0] = i == 2 ? MOVE_ID_FLAMETHROWER : MOVE_ID_TACKLE;
+    for (int j = 0; j < 4; j++) p->max_pp_override[j] = -1;
+  }
+  /* party[2] led the last battle, then party[0], then party[1]: the screen starts with party[2] */
+  run.party_order[0] = 2;
+  run.party_order[1] = 0;
+  run.party_order[2] = 1;
+  ps_set_run(&run);
+
+  /* an item on the slot the player sees: the first slot is party[2], the second party[0] */
+  open_item(PARTY_MODIFIER, 0);
+  input(BTN_ACTION); input(BTN_DOWN); input(BTN_ACTION); /* Summary */
+  assert(summary_calls > 0 && summary_mon.level == 12);
+  ps_close();
+  open_item(PARTY_MODIFIER, 0);
+  input(BTN_ACTION); input(BTN_ACTION); /* Apply */
+  assert(picked == 2 && depth == 1);
+  open_item(PARTY_MODIFIER, 0);
+  input(BTN_DOWN); input(BTN_ACTION); input(BTN_ACTION);
+  assert(picked == 0 && depth == 1);
+  open_item(PARTY_MODIFIER, 0);
+  input(BTN_DOWN); input(BTN_DOWN); input(BTN_ACTION); input(BTN_ACTION);
+  assert(picked == 1 && depth == 1);
+
+  /* a TM: party[2] already knows Flamethrower (first slot), party[1] is a Magikarp (last slot); only the second slot, party[0], may learn it */
+  open_item(PARTY_TM_MODIFIER, MOVE_ID_FLAMETHROWER);
+  input(BTN_ACTION); input(BTN_ACTION);
+  assert(picked == -1 && depth == 2);
+  input(BTN_DOWN); input(BTN_ACTION); input(BTN_ACTION);
+  assert(picked == 0 && depth == 1);
+  open_item(PARTY_TM_MODIFIER, MOVE_ID_FLAMETHROWER);
+  input(BTN_DOWN); input(BTN_DOWN); input(BTN_ACTION); input(BTN_ACTION);
+  assert(picked == -1 && depth == 2);
+  input(BTN_CANCEL);
+  assert(picked == 6 && depth == 1);
+
+  /* Manage Items: party[0] holds the item and is the second slot; party[2] is the first slot */
+  run.n_items = 1;
+  run.items[0] = (gc_item){.key = "LEFTOVERS", .stack = 1, .pokemon_id = 500};
+  ps_open_transfer(&run, on_move, transfer_done, NULL);
+  input(BTN_DOWN); input(BTN_DOWN); /* the cursor goes through the Transfer / Discard button to the second slot */
+  input(BTN_ACTION); input(BTN_ACTION); /* its item, then who gets it */
+  input(BTN_UP); input(BTN_UP); input(BTN_ACTION); input(BTN_ACTION); /* the first slot: Transfer */
+  assert(moves == 1 && moved_src == 0 && moved_count == 1 && moved_to == 2);
+  ps_close();
+
+  /* a party_order that is not a permutation shows storage order */
+  run.party_order[0] = run.party_order[1] = run.party_order[2] = 0;
+  open_item(PARTY_MODIFIER, 0);
+  input(BTN_DOWN); input(BTN_ACTION); input(BTN_ACTION);
+  assert(picked == 1 && depth == 1);
+}
 int main(void) {
   run.n_party = 3;
   for (int i = 0; i < 3; i++) {
@@ -171,6 +251,7 @@ int main(void) {
   input(BTN_CANCEL);
   assert(picked == 6 && calls == 7 && depth == 1);
   check_team_cases();
+  order_cases();
   puts("party_item_test: TM labels, Teach/filter, B/touch cancellation and move-item reset passed");
   return 0;
 }
