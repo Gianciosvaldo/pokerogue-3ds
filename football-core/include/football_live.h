@@ -25,9 +25,12 @@ typedef enum { FB_AFTER_NONE,FB_AFTER_CONVERSION,FB_AFTER_KICKOFF } FootballLive
  * dead ball in credits, for the career to turn into species candy. */
 typedef enum { FB_CREDIT_NONE,FB_CREDIT_INTERCEPTION,FB_CREDIT_SACK,FB_CREDIT_TOUCHDOWN } FootballCreditKind;
 typedef struct { uint8_t side,member,kind; } FootballCredit;
-/* Species candy for the human team's Pokemon: every one of the 22 gets FB_CANDY_PLAYED at the end of a match (and
- * FB_CANDY_WIN more for a win); the player who makes the play gets the rest, when the ball is dead. */
-enum { FB_CANDY_PLAYED=1,FB_CANDY_WIN=1,FB_CANDY_SACK=2,FB_CANDY_INTERCEPTION=4,FB_CANDY_TOUCHDOWN=5 };
+/* Species candy points for the human team's Pokemon: every one of the 22 gets FB_CANDY_PLAYED at the end of a match (and
+ * FB_CANDY_WIN more for a win); the player who makes the play gets the rest, when the ball is dead. A point is not a candy: it
+ * adds FB_CANDY_FRIENDSHIP_PER_POINT to the species' candy bar, which is as long as its friendship cap in the classic game
+ * (25 for a cost 1 starter, 600 for a cost 10), so a touchdown is more than a candy to a common Pokemon and a small step for
+ * a legendary. */
+enum { FB_CANDY_PLAYED=1,FB_CANDY_WIN=1,FB_CANDY_SACK=2,FB_CANDY_INTERCEPTION=4,FB_CANDY_TOUCHDOWN=5,FB_CANDY_FRIENDSHIP_PER_POINT=6 };
 static inline unsigned football_credit_candy(unsigned kind)
 {
     return kind==FB_CREDIT_INTERCEPTION?FB_CANDY_INTERCEPTION:kind==FB_CREDIT_SACK?FB_CANDY_SACK:kind==FB_CREDIT_TOUCHDOWN?FB_CANDY_TOUCHDOWN:0;

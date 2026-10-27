@@ -313,6 +313,27 @@ bool gc_system_set_pokemon_caught(gc_system *sys, const gc_mon *m, bool incremen
     return gc_system_set_pokemon_caught_ex(sys, m, increment_count, from_egg, increment_count, false, NULL);
 }
 
+int gc_system_add_starter_friendship(gc_system *sys, uint16_t starter_id, int points) {
+    if (!sys || points <= 0 || starter_id == 0 || starter_id > GC_MAX_SPECIES_ID) return 0;
+    gc_starter_entry *s = &sys->starters[starter_id];
+    s->friendship += points;
+    int cost = gc_starter_cost(starter_id);
+    if (cost < 1) cost = 1;
+    int cap = getStarterValueFriendshipCap(cost);
+    int candies = 0;
+    if (s->friendship >= cap) {
+        candies = s->friendship / cap;
+        bool inc = gc_system_add_starter_candy(sys, starter_id, candies);
+        if (inc) {
+            s->friendship %= cap;
+        } else {
+            s->friendship = cap - 1;
+            candies = 0;
+        }
+    }
+    return candies;
+}
+
 void gc_system_add_friendship(gc_system *sys, const gc_run *run, gc_mon *m, int friendship, bool capped) {
     if (!m) return;
     if (friendship <= 0) {
@@ -327,24 +348,7 @@ void gc_system_add_friendship(gc_system *sys, const gc_run *run, gc_mon *m, int 
     if (sys) {
         int mode = run ? run->run.mode : 0;
         int mult = (mode == GAME_MODES_CLASSIC) ? 3 : 1;
-        int candy_f_amount = friendship * mult;
-        uint16_t starter_id = gc_species_root_id(m->b.species);
-        if (starter_id > 0 && starter_id <= GC_MAX_SPECIES_ID) {
-            gc_starter_entry *s = &sys->starters[starter_id];
-            s->friendship += candy_f_amount;
-            int cost = gc_starter_cost(starter_id);
-            if (cost < 1) cost = 1;
-            int cap = getStarterValueFriendshipCap(cost);
-            if (s->friendship >= cap) {
-                int candies = s->friendship / cap;
-                bool inc = gc_system_add_starter_candy(sys, starter_id, candies);
-                if (inc) {
-                    s->friendship %= cap;
-                } else {
-                    s->friendship = cap - 1;
-                }
-            }
-        }
+        gc_system_add_starter_friendship(sys, gc_species_root_id(m->b.species), friendship * mult);
     }
 }
 

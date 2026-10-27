@@ -45,6 +45,7 @@ static const char *name(unsigned species)
     return "Pokemon";
 }
 const char *football_live_art_species(unsigned species){return name(species);}
+unsigned football_live_art_candy_milli(const FootballCareer *career,unsigned member,unsigned points){return football_candy_milli(career,member,points);}
 /* The classic game's evolution items, common and rare (ids above 50), as the reward screens name and draw them. */
 static const gm_item_ui *evo_item(unsigned item){return gm_item_ui_find(item>50?"RARE_EVOLUTION_ITEM":"EVOLUTION_ITEM",(int)item);}
 static const char *evo_item_name(unsigned item){const gm_item_ui *u=evo_item(item);return u && u->name?u->name:"Evolution item";}
@@ -471,8 +472,10 @@ static void bottom_menu(void)
         snprintf(left,sizeof left,"Final   Home %u - %u Away",c->live.rules.score[0],c->live.rules.score[1]);
         football_menu_text(TS_WINDOW,FM_PX_BODY,16,42,288,left);
         football_menu_text(TS_STATS_LABEL,FM_PX_BODY,16,72,288,"Species candy");
-        snprintf(left,sizeof left,"+%u from plays",c->candy_plays);football_menu_text(TS_MONEY,FM_PX_BODY,16,92,288,left);
-        snprintf(left,sizeof left,"+%u more for the team",22*(FB_CANDY_PLAYED+(won?FB_CANDY_WIN:0)));football_menu_text(TS_WINDOW,FM_PX_BODY,16,112,288,left);
+        /* Candy points fill each species' candy bar, so a common Pokemon earns whole candies and a legendary a sliver: the totals are in hundredths. */
+        snprintf(left,sizeof left,"+%u.%02u from plays",c->candy_plays_milli/1000,c->candy_plays_milli%1000/10);football_menu_text(TS_MONEY,FM_PX_BODY,16,92,288,left);
+        { const unsigned team=football_career_team_candy_milli(c,won);snprintf(left,sizeof left,"+%u.%02u more for the team",team/1000,team%1000/10);football_menu_text(TS_WINDOW,FM_PX_BODY,16,110,288,left); }
+        football_menu_text(TS_WINDOW,FM_PX_SMALL,16,129,288,"Each candy bar is longer for rarer Pokemon.");
         football_menu_foot("A or tap: team progression");break;}
     case FB_CAREER_EXP:
         snprintf(right,sizeof right,"Player %u / 22",c->exp_member+1);football_menu_head("Experience",right);
@@ -493,7 +496,7 @@ static void bottom_menu(void)
     case FB_CAREER_END:
         snprintf(left,sizeof left,"Playoff complete: %u / 7 wins",c->wins);football_menu_head(left,NULL);
         football_menu_panel(4,32,312,76);football_menu_text(TS_STATS_LABEL,FM_PX_BODY,16,42,288,"Species candy this match");
-        snprintf(left,sizeof left,"+%u",c->candy_plays);football_menu_text(TS_MONEY,FM_PX_BODY,16,66,288,left);
+        { const unsigned total=c->candy_plays_milli+c->candy_team_milli;snprintf(left,sizeof left,"+%u.%02u",total/1000,total%1000/10);football_menu_text(TS_MONEY,FM_PX_BODY,16,66,288,left); }
         football_menu_foot("A or tap: return to title");break;
     case FB_CAREER_LEARN:break; /* level-up moves are learned without a prompt */
     case FB_CAREER_ERROR:

@@ -116,9 +116,13 @@ int main(void)
     /* Species candy waits for a checkpoint: a failed write leaves it pending, the saved one hands it to the profile. */
     {
         FootballCareer *w=(FootballCareer *)career();uint16_t root=gc_species_root_for_starter(w->roster.mon[3].b.species);int32_t had=profile.starters[root].candy_count;
-        w->candy_pending[3]=7;
-        write_ok=false;press(BTN_MENU);answer(1);assert(top==game_screen && w->candy_pending[3]==7 && profile.starters[root].candy_count==had);
-        write_ok=true;press(BTN_MENU);answer(1);assert(top==&title && !w->candy_pending[3] && profile.starters[root].candy_count==had+7);
+        /* 100 points are 600 friendship, a full bar even for the longest one (600), and the rest stays on the bar. */
+        const int bar=getStarterValueFriendshipCap(gc_starter_cost(root)<1?1:gc_starter_cost(root));const unsigned sum=profile.starters[root].friendship+100u*FB_CANDY_FRIENDSHIP_PER_POINT;
+        const int32_t earned=(int32_t)(sum/(unsigned)bar);const uint16_t left=(uint16_t)(sum%(unsigned)bar);
+        assert(earned>=1);
+        w->candy_pending[3]=100;
+        write_ok=false;press(BTN_MENU);answer(1);assert(top==game_screen && w->candy_pending[3]==100 && profile.starters[root].candy_count==had);
+        write_ok=true;press(BTN_MENU);answer(1);assert(top==&title && !w->candy_pending[3] && profile.starters[root].candy_count==had+earned && profile.starters[root].friendship==left);
     }
     /* Special teams are the third page of the playcall: a punt is always there, a field goal only from inside range. */
     assert(football_screen_open(&args));game_screen=top;assert(career()->live.phase==FB_LIVE_CALL && career()->live.rules.offense==FB_HOME);
