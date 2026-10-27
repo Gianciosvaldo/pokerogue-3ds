@@ -81,3 +81,12 @@ constructors (including all 794 formerly rejected inputs). Eleven compiled
 faults, thirteen malformed capture/corpus controls and four forged-output
 controls are detected. Both source captures and generated fixtures reproduce
 byte for byte, including the appended boundary cases.
+
+The first normal app CI run exposed a coverage gap in the 150-run scanner
+sequence: scanner confirmation and all 889 windows passed, but none of its
+three full-party release lists selected Cancel. The scanner sequence extends
+to 350 with the original 150-run prefix and all coverage assertions retained.
+The local extension passes 2,067 accepted / 1,052 declined prompts and 2,067
+windows, without stuck runs, screen mismatches or model violations. Normal
+core CI and the ARM build passed on the original combined head; final CI must
+validate the extended sequence and latest merged main.
