@@ -19,6 +19,15 @@ static unsigned long total_candy(const gc_system *sys)
     for(unsigned id=1;id<=GC_MAX_SPECIES_ID;++id)total+=(unsigned long)sys->starters[id].candy_count;
     return total;
 }
+/* A candy bar in points: the candies of a species, each worth its friendship cap, plus the part of the next one already filled. */
+static int bar_of(unsigned id){int cost=gc_starter_cost((uint16_t)id);return getStarterValueFriendshipCap(cost<1?1:cost);}
+static unsigned long bar_points(const gc_system *sys,unsigned id){return (unsigned long)sys->starters[id].candy_count*(unsigned long)bar_of(id)+sys->starters[id].friendship;}
+static unsigned long total_points(const gc_system *sys)
+{
+    unsigned long total=0;
+    for(unsigned id=1;id<=GC_MAX_SPECIES_ID;++id)if(gc_starter_cost((uint16_t)id)>=0)total+=bar_points(sys,id);
+    return total;
+}
 static unsigned long pending(const FootballCareer *c)
 {
     unsigned long total=0;
@@ -94,14 +103,15 @@ int main(void)
 
     /* The career earns candy as the plays happen and for the whole team at the end, and the profile gets it only with a
      * checkpoint (football_career_flush_candy, which the screen calls when it saves one). */
-    unsigned wins=0,losses=0,unsaved_runs=0;unsigned long paid_plays=0,paid_team=0;
+    unsigned wins=0,losses=0,unsaved_runs=0;unsigned long paid_plays=0,paid_team=0,paid_plays_milli=0,paid_team_milli=0;
     for(uint32_t run=1;run<=8;++run){
         football_test_unlock_all(&profile);
         assert(football_career_new(&career,&scratch,&profile,run));
         for(int i=0;i<gc_starter_cost_count && career.roster.count<22;++i){if(gc_starter_costs[i].cost>1)continue;gc_starter s={.species=gc_starter_costs[i].id,.tera_type=-1};football_roster_add(&career.roster,&scratch,&s,&profile,NULL);}
         assert(career.roster.count==22);football_roster_autofill(&career.roster);career.phase=FB_CAREER_READY;
         assert(football_career_start(&career));career.live.autoplay=1;
-        unsigned long base=total_candy(&profile),flushed=0;guard=0;
+        unsigned long base=total_candy(&profile),flushed=0,base_points=total_points(&profile),flushed_points=0,member_base[22];guard=0;
+        for(unsigned i=0;i<22;++i)member_base[i]=bar_points(&profile,gc_species_root_for_starter(career.roster.mon[i].b.species));
         bool resumed=false,unsaved_checked=false;
         while(career.phase==FB_CAREER_MATCH){
             assert(++guard<300000);
@@ -113,36 +123,38 @@ int main(void)
                 /* The checkpoint: the screen saves the career, then flushes, then saves the profile. */
                 if(!resumed && career.live.snaps>20 && football_career_save_ready(&career)){
                     size_t n=football_career_save(&career,bytes,sizeof bytes);assert(n);
-                    flushed+=football_career_flush_candy(&career);resumed_profile=profile;
+                    flushed_points+=pending(&career)*FB_CANDY_FRIENDSHIP_PER_POINT;flushed+=football_career_flush_candy(&career);resumed_profile=profile;
                     assert(football_career_load(&loaded,&other,&resumed_profile,bytes,n) && loaded.seen_snaps==loaded.live.snaps && !pending(&loaded));
                     /* A resumed match does not earn what it already earned: the load looks at no dead ball until a new one happens. */
                     unsigned long before=total_candy(&resumed_profile);football_career_tick(&loaded,1,idle());
                     assert(total_candy(&resumed_profile)==before && !loaded.candy_plays && !pending(&loaded));
                     resumed=true;
-                }else flushed+=football_career_flush_candy(&career);
+                }else{flushed_points+=pending(&career)*FB_CANDY_FRIENDSHIP_PER_POINT;flushed+=football_career_flush_candy(&career);}
                 assert(football_live_defend(&career.live,FB_DEF_MAN));
             }
             football_career_tick(&career,16,idle());
-            assert(total_candy(&profile)-base==flushed && flushed+pending(&career)==career.candy_plays && career.candy_plays==worth(&career) && !career.candy_team);
+            assert(total_candy(&profile)-base==flushed && total_points(&profile)-base_points==flushed_points && flushed_points/FB_CANDY_FRIENDSHIP_PER_POINT+pending(&career)==career.candy_plays && career.candy_plays==worth(&career) && !career.candy_team);
         }
         unsaved_runs+=unsaved_checked;assert(resumed && career.phase==FB_CAREER_RESULT && career.candy_plays==worth(&career));
-        unsigned long plays_paid=career.candy_plays;
+        unsigned long plays_paid=career.candy_plays,plays_milli=career.candy_plays_milli;
         bool won=career.live.rules.winner==FB_HOME;
         assert(football_career_continue(&career));
         if(won){
             wins++;guard=0;
             while(career.phase!=FB_CAREER_SHOP){assert(++guard<20000);if(career.phase==FB_CAREER_EVOLVE)assert(football_career_evolve(&career,0));else football_career_tick(&career,16,idle());}
-            assert(career.candy_team==22u*(FB_CANDY_PLAYED+FB_CANDY_WIN));
+            assert(career.candy_team==22u*(FB_CANDY_PLAYED+FB_CANDY_WIN) && career.candy_team_milli==football_career_team_candy_milli(&career,true));
         }else{
-            losses++;assert(career.phase==FB_CAREER_END && career.candy_team==22u*FB_CANDY_PLAYED);
+            losses++;assert(career.phase==FB_CAREER_END && career.candy_team==22u*FB_CANDY_PLAYED && career.candy_team_milli==football_career_team_candy_milli(&career,false));
         }
         /* The shop (or end) checkpoint hands over the rest: the plays not yet flushed and the team's candy, nothing twice. */
         assert(total_candy(&profile)-base==flushed && career.candy_plays==plays_paid+career.candy_team);
-        flushed+=football_career_flush_candy(&career);
-        assert(total_candy(&profile)-base==flushed && flushed==career.candy_plays && !pending(&career) && !football_career_flush_candy(&career));
-        paid_plays+=plays_paid;paid_team+=career.candy_team;
-        /* The paid candy sits on the species each member started as. */
-        for(unsigned i=0;i<22;++i){uint16_t root=gc_species_root_for_starter(career.roster.mon[i].b.species);assert(root && profile.starters[root].candy_count>0);}
+        flushed_points+=pending(&career)*FB_CANDY_FRIENDSHIP_PER_POINT;flushed+=football_career_flush_candy(&career);
+        assert(total_candy(&profile)-base==flushed && total_points(&profile)-base_points==flushed_points && flushed_points==career.candy_plays*FB_CANDY_FRIENDSHIP_PER_POINT && !pending(&career) && !football_career_flush_candy(&career));
+        paid_plays+=plays_paid;paid_team+=career.candy_team;paid_plays_milli+=plays_milli;paid_team_milli+=career.candy_team_milli;
+        /* The paid points sit on the species each member started as, and a cost 1 starter's bar (25) is nowhere near the 450 of a cost 8 one. */
+        for(unsigned i=0;i<22;++i){uint16_t root=gc_species_root_for_starter(career.roster.mon[i].b.species);assert(root && bar_points(&profile,root)>member_base[i]);}
+        /* The whole team's candy is worth the bar of each species: milli-candy is points * 6 * 1000 / bar, summed. */
+        assert(career.candy_team_milli>0 && career.candy_team_milli<=football_career_team_candy_milli(&career,true));
     }
     assert(wins+losses==8 && unsaved_runs>=6); /* most matches earn candy before their last play */
     /* Nobody to pay: a career without a profile plays on and earns nothing. */
@@ -151,7 +163,34 @@ int main(void)
     football_roster_autofill(&career.roster);career.phase=FB_CAREER_READY;assert(football_career_start(&career));
     career.live.credit_count=1;career.live.credits[0]=(FootballCredit){FB_HOME,0,FB_CREDIT_TOUCHDOWN};career.live.snaps++;
     football_career_tick(&career,1,idle());assert(career.candy_plays==0 && !pending(&career) && !football_career_flush_candy(&career) && !football_career_flush_candy(NULL));
-    printf("candy: 8 careers (%u won, %u lost): %.1f candy per match from the plays, %.1f for the whole team; the profile only changed at checkpoints\n",wins,losses,paid_plays/8.0,paid_team/8.0);
+    printf("candy: 8 careers (%u won, %u lost) with cost 1 starters: %.1f points (%.2f candy) per match from the plays, %.1f points (%.2f candy) for the whole team; the profile only changed at checkpoints\n",wins,losses,paid_plays/8.0,paid_plays_milli/8000.0,paid_team/8.0,paid_team_milli/8000.0);
+
+    /* The same points are worth far less to a legendary. Yveltal is a cost 8 starter: its bar is 450, so a touchdown (5 points =
+     * 30 of 450) is 0.067 candy, two of them 0.133 -- not the ten candies a flat 5 per touchdown gave. */
+    {
+        gc_system pro;football_test_unlock_all(&pro);
+        assert(football_career_new(&career,&scratch,&pro,3));
+        career.roster.mon[0].b.species=717;career.roster.mon[1].b.species=gc_starter_costs[0].id;
+        assert(gc_starter_cost(717)==8 && getStarterValueFriendshipCap(8)==450 && bar_of(717)==450);
+        assert(football_candy_milli(&career,0,2*FB_CANDY_TOUCHDOWN)==133 && football_candy_milli(&career,0,FB_CANDY_TOUCHDOWN)==67 && football_candy_milli(&career,0,0)==0);
+        unsigned cheap=0;for(unsigned id=1;id<=GC_MAX_SPECIES_ID;++id)if(gc_starter_cost((uint16_t)id)==1){cheap=id;break;}
+        assert(cheap);career.roster.mon[1].b.species=(uint16_t)cheap;
+        assert(football_candy_milli(&career,1,FB_CANDY_TOUCHDOWN)==1200 && football_candy_milli(&career,1,FB_CANDY_TOUCHDOWN)>football_candy_milli(&career,0,FB_CANDY_TOUCHDOWN)*15);
+        assert(!football_candy_milli(NULL,0,5) && !football_candy_milli(&career,22,5));
+        /* The profile: two touchdowns fill 60 of the 450, no candy yet; the bar carries over to the next match and pays one candy when full. */
+        const int32_t had=pro.starters[717].candy_count;
+        career.candy_pending[0]=2*FB_CANDY_TOUCHDOWN;
+        assert(football_career_flush_candy(&career)==0 && pro.starters[717].candy_count==had && pro.starters[717].friendship==60 && !career.candy_pending[0]);
+        career.candy_pending[0]=65;
+        assert(football_career_flush_candy(&career)==1 && pro.starters[717].candy_count==had+1 && pro.starters[717].friendship==0);
+        /* Many candies at once on a cheap species (cap 25), and a full candy store keeps the bar one short. */
+        career.candy_pending[1]=21;
+        const int32_t cheap_had=pro.starters[cheap].candy_count;
+        assert(football_career_flush_candy(&career)==5 && pro.starters[cheap].candy_count==cheap_had+5 && pro.starters[cheap].friendship==1);
+        pro.starters[717].candy_count=9999;career.candy_pending[0]=100;
+        assert(football_career_flush_candy(&career)==0 && pro.starters[717].candy_count==9999 && pro.starters[717].friendship==449);
+        puts("candy: a touchdown is 0.07 candy for Yveltal and 1.2 for a cost 1 starter");
+    }
     puts("football species candy tests passed");
     return 0;
 }

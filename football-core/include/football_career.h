@@ -15,11 +15,13 @@ typedef struct {
     gc_system *profile;
     FootballCareerPhase phase;
     unsigned round,wins,wallet,seed,exp_member,evolution_count;
-    /* Species candy earned in this match (not serialized, for the result screen): plays as they happen, then the match
-     * bonus for everyone. It waits in candy_pending per member until football_career_flush_candy moves it to the profile
-     * with a checkpoint, so it is never in the profile without the checkpoint that knows about it. seen_snaps is how
-     * many dead balls have been looked at for credits. */
-    unsigned candy_plays,candy_team,seen_snaps,candy_pending[22];
+    /* Species candy earned in this match (not serialized, for the result screen), counted in candy points (FB_CANDY_*): plays as
+     * they happen, then the match bonus for everyone. A point is a small step of the species' candy bar, not a candy (see
+     * FB_CANDY_FRIENDSHIP_PER_POINT), and the *_milli fields are what the points are worth in thousandths of a candy, for display.
+     * The points wait in candy_pending per member until football_career_flush_candy moves them to the profile with a checkpoint,
+     * so they are never in the profile without the checkpoint that knows about them. seen_snaps is how many dead balls have been
+     * looked at for credits. */
+    unsigned candy_plays,candy_team,seen_snaps,candy_pending[22],candy_plays_milli,candy_team_milli;
     uint16_t evolutions[GC_FOOTBALL_MAX_EVOLUTIONS];
     unsigned prices[3];bool sold[3];int stone_target,stone_item,mega;
     unsigned evo_count;FootballEvoOffer evo[FB_SHOP_EVO_MAX];
@@ -42,9 +44,14 @@ bool football_career_evo_valid(FootballCareer *c,const FootballEvoOffer *offer);
 bool football_career_evo_preview(FootballCareer *c,unsigned offer,FootballPlayer *out);
 /* Safe checkpoints: lineup, round hub, playcall, shop and final result. */
 bool football_career_save_ready(const FootballCareer *c);
-/* Gives the profile the candy that is waiting (to the species each member started as) and returns how much it got; the
- * screen calls this when it saves a checkpoint, just before it saves the profile. */
+/* Gives the profile the candy points that are waiting (to the species each member started as, as steps of its candy bar) and
+ * returns how many whole candies that made; the screen calls this when it saves a checkpoint, just before it saves the profile. */
 unsigned football_career_flush_candy(FootballCareer *c);
+/* What candy points are worth for a member, in thousandths of a candy: the bar of the species it started as is as long as its
+ * friendship cap in the classic game, so the same play is worth far less to a legendary than to a common Pokemon. */
+unsigned football_candy_milli(const FootballCareer *c,unsigned member,unsigned points);
+/* What the match bonus (played, and won) comes to for the whole team, in thousandths of a candy, before it is paid. */
+unsigned football_career_team_candy_milli(const FootballCareer *c,bool won);
 #define FB_CAREER_SAVE_MAX (512u*1024u)
 size_t football_career_save(FootballCareer *c,void *bytes,size_t capacity);
 bool football_career_load(FootballCareer *c,gc_run *scratch,gc_system *profile,const void *bytes,size_t length);

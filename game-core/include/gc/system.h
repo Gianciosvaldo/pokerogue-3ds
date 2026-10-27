@@ -143,6 +143,9 @@ void gc_system_update_species_dex_ivs(gc_system *sys, uint16_t species_id, const
 void gc_system_unlock_species_nature(gc_system *sys, uint16_t species_id, uint8_t nature);
 bool gc_system_add_starter_candy(gc_system *sys, uint16_t species_id, int32_t count);
 void gc_system_add_friendship(gc_system *sys, const gc_run *run, gc_mon *m, int friendship, bool capped);
+/* The starter's candy bar (its friendship toward the species' friendship cap, set by its starter cost): adds points and gives a candy for every full
+ * bar, returning how many. gc_system_add_friendship feeds it the Pokemon's gain; the football mode feeds it the points its plays earn. */
+int gc_system_add_starter_friendship(gc_system *sys, uint16_t starter_id, int points);
 
 /* Egg and Voucher helpers */
 int gc_system_increment_egg_steps(gc_system *sys);
