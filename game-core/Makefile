@@ -373,7 +373,7 @@ $(BUILD)/starter_unlock_test: tests/starter_unlock_test.c $(BUILD)/libgc.a $(REW
 $(BUILD)/resume_test: tests/resume_test.c tools/gcplay.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/resume_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
 
-$(BUILD)/enemy_moveset_test: tests/enemy_moveset_test.c tests/fixtures/wild-movesets.native.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+$(BUILD)/enemy_moveset_test: tests/enemy_moveset_test.c tests/fixtures/wild-movesets.native.inc tests/fixtures/wild-boss-movesets.native.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
 
 # the save checks, level/evo tests, biome tests, voucher/egg tests, then 200 soak runs twice: with a save/load round trip at every save point, the runs'
@@ -1200,3 +1200,10 @@ wild-movesets-host-test: $(BUILD)/wild_movesets_host_test
 	$(BUILD)/wild_movesets_host_test
 test: wild-movesets-host-test
 .PHONY: wild-movesets-host-test
+
+$(BUILD)/wild_boss_movesets_host_test: tests/wild_boss_movesets_host_test.c tests/fixtures/wild-boss-movesets.native.inc tests/fixtures/wild-movesets.native.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -Wl,--wrap=pr_calculate_stats -lm -o $@
+wild-boss-movesets-host-test: $(BUILD)/wild_boss_movesets_host_test
+	$(BUILD)/wild_boss_movesets_host_test
+test: wild-boss-movesets-host-test
+.PHONY: wild-boss-movesets-host-test
