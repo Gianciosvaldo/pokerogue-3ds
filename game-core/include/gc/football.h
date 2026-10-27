@@ -7,6 +7,11 @@
 #ifndef GC_FOOTBALL_EXP_FACTOR
 #define GC_FOOTBALL_EXP_FACTOR 2000
 #endif
+/* Friendship every member gains for a won round (gc_football_award_exp). The classic game gives +3 for each battle won; a round
+ * stands for twenty waves there, but friendship evolutions would then all fire in round 1 or 2, so this is a quarter of that. */
+#ifndef GC_FOOTBALL_FRIENDSHIP_PER_WIN
+#define GC_FOOTBALL_FRIENDSHIP_PER_WIN 15
+#endif
 
 typedef enum { GC_FB_BUSY, GC_FB_WAIT, GC_FB_DONE, GC_FB_ERROR } gc_football_progress;
 /* Caller owns a dedicated gc_run, kept static or on the heap, not the stack.
