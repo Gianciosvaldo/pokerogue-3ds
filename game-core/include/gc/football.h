@@ -24,6 +24,15 @@ gc_football_progress gc_football_tick(gc_run *run);
 int gc_football_evolution_choices(gc_run *run, uint16_t out[GC_FOOTBALL_MAX_EVOLUTIONS]);
 bool gc_football_choose(gc_run *run, const gc_choice *choice, unsigned evolution_choice,
                         const char **why);
+/* Evolution items (the classic game's EVOLUTION_ITEM and RARE_EVOLUTION_ITEM, rare above id 50) that would evolve a party member now,
+ * each with the species it brings: at most one per item, in the species table's order. */
+#define GC_FOOTBALL_MAX_ITEM_EVOLUTIONS 8
+typedef struct { uint8_t item; uint16_t species; } gc_football_item_evolution;
+int gc_football_item_evolutions(gc_run *run, unsigned party, gc_football_item_evolution out[GC_FOOTBALL_MAX_ITEM_EVOLUTIONS]);
+/* Evolves a party member with an item through the evolution phase and the moves it brings, answering every prompt itself: forget_slot
+ * names the slot a new move replaces (NULL or -1 leaves the move unlearned). False, with nothing changed, when the item does not
+ * evolve it. Same isolated scratch run as the rest of this header. */
+bool gc_football_item_evolve(gc_run *run, unsigned party, int item, int (*forget_slot)(const pr_pokemon *), const char **why);
 /* Read classic form-change item catalog for a compatible rare shop offer. */
 int gc_football_mega_item(const gc_run *run, unsigned party);
 /* Returns a supported mega form only for a matching, applicable item. */

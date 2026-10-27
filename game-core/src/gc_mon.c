@@ -491,6 +491,25 @@ int gc_mon_item_evolution(gc_run *run, const gc_mon *m, int item)
     return -1;
 }
 
+/* The items that would evolve the member now: for each distinct item in the species' table, the evolution gc_mon_item_evolution
+ * picks for it (indexes into gc_evo_data, in the table's order). Football's shop sells these; -1 is never returned. */
+int gc_mon_item_evolutions(gc_run *run, const gc_mon *m, int *out, int cap)
+{
+    const gc_species_evo *se = species_evo(m->b.species);
+    if (!se || m->pause_evolutions || m->b.fusion_species) return 0;
+    int n = 0;
+    for (int i = 0; i < se->n && n < cap; i++) {
+        const gc_evo *e = &gc_evo_data[se->start + i];
+        if (!e->item) continue;
+        bool seen = false;
+        for (int k = 0; k < n; k++) seen |= gc_evo_data[out[k]].item == e->item;
+        if (seen) continue;
+        const int evo = gc_mon_item_evolution(run, m, e->item);
+        if (evo >= 0) out[n++] = evo;
+    }
+    return n;
+}
+
 /* Pokemon.evolve: mutate the selected half, form and ability index, then stats.
  * The separate Nincada/Shedinja extra-party owner remains outside this helper. */
 void gc_mon_evolve_target(gc_run *run, gc_mon *m, int evo, bool fusion)

@@ -59,11 +59,46 @@ static void pay_match(FootballCareer *c,bool won)
     for(unsigned i=0;i<22;++i)give_candy(c,i,FB_CANDY_PLAYED+(won?FB_CANDY_WIN:0));
     c->candy_team=c->candy_plays-before;
 }
+/* What an evolution item costs: the common ones climb with the round, the rare ones (id above 50, the classic game's rare tier) cost more. */
+static unsigned evo_price(unsigned round,unsigned item){return item>50?800+75*round:400+50*round;}
+bool football_career_evo_valid(FootballCareer *c,const FootballEvoOffer *o)
+{
+    if(!c || !o || o->member>=22 || o->member>=c->roster.count || !o->item)return false;
+    if(c->roster.mega_item[o->member] || c->stone_target==(int)o->member)return false; /* evolving would lose the stone */
+    prepare(c,o->member);
+    gc_football_item_evolution found[GC_FOOTBALL_MAX_ITEM_EVOLUTIONS];int n=gc_football_item_evolutions(c->scratch,0,found);
+    for(int i=0;i<n;++i)if(found[i].item==o->item)return found[i].species==o->species;
+    return false;
+}
+/* The evolution items the roster can use now, for the shop. Each member is offered the items that evolve it; when more are possible than
+ * the shop holds, the first item of every member comes before anyone's second, and the member the list starts from moves with the round,
+ * so nobody is left out for good. A member who holds a mega stone, or is about to be offered one, is left alone: evolving would lose it. */
+static void roll_evolutions(FootballCareer *c)
+{
+    gc_football_item_evolution found[22][GC_FOOTBALL_MAX_ITEM_EVOLUTIONS];int n[22];
+    memset(found,0,sizeof found);memset(c->evo,0,sizeof c->evo);c->evo_count=0;
+    for(unsigned i=0;i<22;++i){
+        n[i]=0;
+        if(c->roster.mega_item[i] || c->stone_target==(int)i)continue;
+        prepare(c,i);n[i]=gc_football_item_evolutions(c->scratch,0,found[i]);
+    }
+    const unsigned start=(c->seed+c->round*5)%22;
+    for(unsigned pass=0;pass<GC_FOOTBALL_MAX_ITEM_EVOLUTIONS;++pass)for(unsigned k=0;k<22;++k){
+        unsigned i=(start+k)%22;
+        if((int)pass>=n[i] || c->evo_count>=FB_SHOP_EVO_MAX)continue;
+        c->evo[c->evo_count++]=(FootballEvoOffer){.member=(uint8_t)i,.item=found[i][pass].item,.state=FB_EVO_OFFER,.species=found[i][pass].species,.price=(uint16_t)evo_price(c->round,found[i][pass].item)};
+    }
+    /* Listed by roster member, so a member's items sit together. */
+    for(unsigned i=1;i<c->evo_count;++i){FootballEvoOffer o=c->evo[i];unsigned j=i;
+        while(j>0 && (c->evo[j-1].member>o.member || (c->evo[j-1].member==o.member && c->evo[j-1].item>o.item))){c->evo[j]=c->evo[j-1];--j;}
+        c->evo[j]=o;}
+}
 static void shop(FootballCareer *c)
 {
     pay_match(c,true);
-    c->phase=FB_CAREER_SHOP;memset(c->sold,0,sizeof c->sold);c->prices[0]=125+25*c->round;c->prices[1]=c->prices[0];c->prices[2]=1000;c->stone_target=-1;c->stone_item=0;
+    c->phase=FB_CAREER_SHOP;memset(c->sold,0,sizeof c->sold);c->prices[0]=125+25*c->round;c->prices[1]=c->prices[0];c->prices[2]=1000;c->stone_target=-1;c->stone_item=0;c->message[0]=0;
     if((c->seed+c->round*7)%4==0)for(unsigned i=0;i<22;++i){prepare(c,i);int item=gc_football_mega_item(c->scratch,0);if(item>0 && !c->roster.mega_item[i]){c->stone_target=(int)i;c->stone_item=item;break;}}
+    roll_evolutions(c);
 }
 int football_career_forget_slot(const pr_pokemon *p)
 {
@@ -114,7 +149,7 @@ bool football_career_continue(FootballCareer *c)
         ++c->wins;c->wallet+=400+100*c->round;c->exp_member=0;c->phase=FB_CAREER_EXP;
         if(!award(c)){c->phase=FB_CAREER_ERROR;return false;}return true;
     }
-    if(c->phase==FB_CAREER_SHOP){if(c->round==7)c->phase=FB_CAREER_END;else {++c->round;c->mega=-1;c->phase=FB_CAREER_READY;}return true;}
+    if(c->phase==FB_CAREER_SHOP){memset(c->evo,0,sizeof c->evo);c->evo_count=0;c->message[0]=0;if(c->round==7)c->phase=FB_CAREER_END;else {++c->round;c->mega=-1;c->phase=FB_CAREER_READY;}return true;}
     return false;
 }
 bool football_career_evolve(FootballCareer *c,int pick)
@@ -124,9 +159,44 @@ bool football_career_evolve(FootballCareer *c,int pick)
     if(!gc_football_choose(c->scratch,&choice,pick<0?0:(unsigned)pick,NULL))return false;
     c->phase=FB_CAREER_EXP;return true;
 }
+bool football_career_evo_preview(FootballCareer *c,unsigned index,FootballPlayer *out)
+{
+    if(!c || !out || index>=c->evo_count || !football_career_evo_valid(c,&c->evo[index]))return false;
+    const unsigned member=c->evo[index].member;
+    prepare(c,member);
+    if(!gc_football_item_evolve(c->scratch,0,c->evo[index].item,football_career_forget_slot,NULL))return false;
+    /* Run the roster's own refresh on the evolved member, then put the member back exactly. */
+    const gc_mon old=c->roster.mon[member];const FootballPlayer old_player=c->roster.player[member];
+    c->roster.mon[member]=c->scratch->party[0];
+    bool ok=football_roster_refresh(&c->roster,member);
+    if(ok)*out=c->roster.player[member];
+    c->roster.mon[member]=old;c->roster.player[member]=old_player;
+    return ok;
+}
+static bool buy_evolution(FootballCareer *c,unsigned index)
+{
+    FootballEvoOffer *o=&c->evo[index];
+    if(o->state!=FB_EVO_OFFER || c->wallet<o->price || !football_career_evo_valid(c,o))return false;
+    const unsigned member=o->member;
+    prepare(c,member);
+    const gc_mon old=c->roster.mon[member];const FootballPlayer old_player=c->roster.player[member];
+    const uint16_t before=old.b.species;
+    if(!gc_football_item_evolve(c->scratch,0,o->item,football_career_forget_slot,NULL) || c->scratch->party[0].b.species!=o->species)return false;
+    c->roster.mon[member]=c->scratch->party[0];
+    if(!football_roster_refresh(&c->roster,member)){c->roster.mon[member]=old;c->roster.player[member]=old_player;return false;}
+    c->wallet-=o->price;o->state=FB_EVO_SOLD;
+    /* The member has evolved: its other items no longer fit. */
+    for(unsigned i=0;i<c->evo_count;++i)if(i!=index && c->evo[i].member==member && c->evo[i].state==FB_EVO_OFFER)c->evo[i].state=FB_EVO_VOID;
+    const char *from=NULL,*to=NULL;
+    for(unsigned i=0;i<PR_SPECIES_COUNT;++i){if(pr_species_table[i].id==before)from=pr_species_table[i].name;if(pr_species_table[i].id==o->species)to=pr_species_table[i].name;}
+    snprintf(c->message,sizeof c->message,"%s evolved into %s!",from?from:"Pokemon",to?to:"a new form");
+    return true;
+}
 bool football_career_buy(FootballCareer *c,unsigned offer,unsigned member)
 {
-    if(!c || c->phase!=FB_CAREER_SHOP || offer>2 || member>=22 || c->sold[offer] || c->wallet<c->prices[offer])return false;
+    if(!c || c->phase!=FB_CAREER_SHOP)return false;
+    if(offer>=FB_SHOP_FIXED)return offer-FB_SHOP_FIXED<c->evo_count && buy_evolution(c,offer-FB_SHOP_FIXED);
+    if(member>=22 || c->sold[offer] || c->wallet<c->prices[offer])return false;
     if(offer==2){if(c->stone_target<0)return false;c->roster.mega_item[c->stone_target]=(int16_t)c->stone_item;}
     else {uint8_t *boost=offer==0?&c->roster.speed[member]:&c->roster.strength[member];if(*boost>=20)return false;*boost=(uint8_t)(*boost+2>20?20:*boost+2);football_roster_refresh(&c->roster,member);}
     c->wallet-=c->prices[offer];c->sold[offer]=true;return true;
