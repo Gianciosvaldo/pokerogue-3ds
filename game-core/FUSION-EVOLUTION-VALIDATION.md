@@ -91,8 +91,9 @@ ARM build/stack checks remain required. Only dedicated Task63 is skipped.
 
 ## Remaining scope
 
-This does not implement general DNA Splicers acquisition or fusion item-evolution
-selection. Those owners must supply secondary gender where available; older
+The [item-evolution follow-up](FUSION-ITEM-EVOLUTION-VALIDATION.md) adds primary-first
+selection and actual reward/evolution phase ownership for fused members.
+General DNA Splicers acquisition must supply secondary gender where available; older
 unknown metadata remains explicit. Nincada/Shedinja's extra-party creation,
 every evolution condition/challenge/form/custom ability arrangement, graphical
 evolution timing and full-run/AI acceptance remain separate. A passing bounded

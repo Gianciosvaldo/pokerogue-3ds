@@ -14,10 +14,10 @@ with tempfile.TemporaryDirectory(prefix='fusion-evolution-proof-')as td:
  print(run(['make','-C',GC,'fusion-evolution-host-test']),flush=True)
  print(run([GC/'build/fusion_evolution_host_test']),flush=True)
  faults=[
- ('gc_mon.c','if (evo >= 0 || !m->b.fusion_species) return evo;','return evo;','omit secondary selection'),
+ ('gc_mon.c','int evo = gc_mon_get_evolution(run, m);\n    if (evo >= 0 || !m->b.fusion_species) return evo;','int evo = gc_mon_get_evolution(run, m);\n    return evo;','omit secondary selection'),
  ('gc_mon.c','int evo = gc_mon_get_evolution(run, m);','int evo = -1;','skip primary priority'),
  ('gc_mon.c','(fusion ? p->fusion_gender : p->gender) == c->v[0]','p->gender == c->v[0]','use primary gender'),
- ('gc_mon.c','!pre_form_identity(m, e, true)','!pre_form_identity(m, e, false)','use primary form'),
+ ('gc_mon.c','if (e->item || m->b.level < e->level || !pre_form_identity(m, e, true)) continue;','if (e->item || m->b.level < e->level || !pre_form_identity(m, e, false)) continue;','use primary form'),
  ('gc_mon.c','if (fusion) p->fusion_species = e->species;','if (fusion) p->species = e->species;','mutate primary half'),
  ('gc_mon.c','if (index == 2 && pre_count == 3 && count == 2) index = 1;',';','omit hidden ability downgrade'),
  ('gc_mon.c',': p->fusion_ability_index == 1 ? effective->ability2 : effective->ability_hidden)',': gc_form_ability(effective_species,effective,p->fusion_ability_index))','wrong fusion NONE fallback'),

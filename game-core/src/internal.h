@@ -192,6 +192,7 @@ double gc_level_total_exp(int level, int growth_rate);
 /* EvolutionItemModifier.apply's evolution: the gc_evo_data index, -1 = none */
 int gc_mon_football_evolutions(gc_run *run, const gc_mon *m, int from_level, int *out, int cap);
 int gc_mon_item_evolution(gc_run *run, const gc_mon *m, int item);
+int gc_mon_item_evolution_target(gc_run *run, const gc_mon *m, int item, bool *fusion);
 int gc_mon_item_evolutions(gc_run *run, const gc_mon *m, int *out, int cap);
 /* getEvolution(): the gc_evo_data index, -1 = none */
 int gc_mon_get_evolution(gc_run *run, const gc_mon *m); /* primary-only compatibility helper */

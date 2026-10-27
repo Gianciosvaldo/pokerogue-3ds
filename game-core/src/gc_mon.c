@@ -527,6 +527,31 @@ int gc_mon_item_evolution(gc_run *run, const gc_mon *m, int item)
     return -1;
 }
 
+/* EvolutionItemModifier.apply checks the primary first, then validates the
+ * secondary with its own form and gender. An explicit item ignores pause. */
+int gc_mon_item_evolution_target(gc_run *run, const gc_mon *m, int item, bool *fusion)
+{
+    *fusion = false;
+    int evo = gc_mon_item_evolution(run, m, item);
+    if (evo >= 0 || !m->b.fusion_species) return evo;
+    const gc_species_evo *se = species_evo(m->b.fusion_species);
+    if (!se) return -1;
+    for (int i = 0; i < se->n; i++) {
+        const gc_evo *e = &gc_evo_data[se->start + i];
+        if (e->item != item || m->b.level < e->level || !pre_form_identity(m, e, true)) continue;
+        if (!m->b.fusion_gender_known) {
+            for (int j = 0; j < e->n_cond; j++) if (gc_evo_conds[e->cond_start + j].key == GC_EVO_GENDER) {
+                pr_note_unported(&run->bt, PR_FEAT_FORM_CHANGE);
+                return -1;
+            }
+        }
+        if (!conditions_fulfilled(run, m, e, false, true, 0, -1)) continue;
+        *fusion = true;
+        return se->start + i;
+    }
+    return -1;
+}
+
 /* The items that would evolve the member now: for each distinct item in the species' table, the evolution gc_mon_item_evolution
  * picks for it (indexes into gc_evo_data, in the table's order). Football's shop sells these; -1 is never returned. */
 int gc_mon_item_evolutions(gc_run *run, const gc_mon *m, int *out, int cap)

@@ -1,5 +1,5 @@
 /* Caller lifecycle at upstream 8555c08: evolution items and held form items.
- * Fusion evolution keeps its counted stand-in; form items use scene selection. */
+ * Evolution targets preserve primary-first fusion selection; form items use scene selection. */
 #include "internal.h"
 #include "pr_item_forms.h"
 
@@ -16,7 +16,12 @@ int gc_reward_lifecycle_apply(gc_run *run, const gc_offer *o, int party, const c
         return GC_APPLY_REFUSED;
     }
     gc_mon *m = &run->party[party];
-    if (evolution && m->b.fusion_species) return GC_APPLY_UNHANDLED;
+    bool fusion = false;
+    int evo = -1;
+    if (evolution && (evo = gc_mon_item_evolution_target(run, m, o->arg, &fusion)) < 0) {
+        *why = "partyUiHandler:anyEffect";
+        return GC_APPLY_REFUSED;
+    }
     if (!evolution) {
         if (run->n_items < 0 || run->n_items > PR_MAX_MODIFIERS || run->n_enemy_items < 0 || run->n_enemy_items > PR_MAX_MODIFIERS) {
             pr_note_unported(&run->bt, PR_FEAT_ENGINE_LIMIT);
@@ -66,16 +71,16 @@ int gc_reward_lifecycle_apply(gc_run *run, const gc_offer *o, int party, const c
     if (evolution) {
         const pr_reward_evolution_event *ev = &ctx->evolution_events[0];
         /* reward-core decided that the item works; game-core's own lookup must reach the same evolution */
-        int evo;
-        if (ctx->n_evolution_events != 1 || ev->fusion || ev->pokemon_id != m->b.id
-            || (evo = gc_mon_item_evolution(run, m, ev->item)) < 0
+        if (ctx->n_evolution_events != 1 || ev->fusion != fusion || ev->pokemon_id != m->b.id
             || gc_evo_data[evo].species != ev->target_species) {
             gc_stub(run, GC_STUB_EVOLUTION);
             *why = "unexpected evolution request";
             return GC_APPLY_REFUSED;
         }
         /* The stone is consumed now; the cancellable phase changes the mon later. */
-        gc_rq_unshift(run, gc_rp(RP_EVOLUTION, party, evo, m->b.level - 1));
+        gc_rphase request = gc_rp(RP_EVOLUTION, party, evo, m->b.level - 1);
+        request.d = fusion;
+        gc_rq_unshift(run, request);
     } else {
         /* addModifier installs the held item before triggering FormChangePhase.
          * Ownership follows the stable Pokemon ID, not the party position. */
