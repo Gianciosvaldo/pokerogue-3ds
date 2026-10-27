@@ -116,8 +116,17 @@ static void test_part_timer_and_games(void)
     assert(run.screen.n_me_args == 0);
 
     /* an encounter without ported texts carries no tokens and asks for no pick, and the arguments do not pile up between screens */
-    start(GC_ME_SLUMBERING_SNORLAX, 45, "tx-snorlax", sp, mv, 2, 1000);
+    start(GC_ME_SAFARI_ZONE, 45, "tx-safari", sp, mv, 2, 1000);
     assert(run.screen.n_me_args == 0);
+    for (int o = 0; o < 8; o++) assert(run.screen.option_pick[o] == GC_PICK_NONE);
+
+    /* Slumbering Snorlax carries its dialogue token and, for the steal, the Pokemon and move (option 3) */
+    const int thief[2] = {MOVE_ID_TACKLE, MOVE_ID_THIEF};
+    start(GC_ME_SLUMBERING_SNORLAX, 45, "tx-snorlax", sp, thief, 2, 1000);
+    assert(arg("snorlaxName"));
+    { const pr_msg_arg *tm = arg("option3PrimaryMove"), *tn = arg("option3PrimaryName");
+      assert(tm && (int)tm->v == MOVE_ID_THIEF);
+      assert(tn && (tn->v >> 16) == SPECIES_ID_LAPRAS); }
     for (int o = 0; o < 8; o++) assert(run.screen.option_pick[o] == GC_PICK_NONE);
     puts("ok");
 }

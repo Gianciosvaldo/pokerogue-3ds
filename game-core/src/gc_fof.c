@@ -29,6 +29,8 @@ typedef struct {
     pr_reward_option item;
 } fof_t;
 
+static void set_item_shop(pr_reward_custom *c, const pr_reward_option *item);
+
 /* getEncounterPokemonLevelForWave(1): the level of the wave plus Math.max(Math.round(wave / 10 * 1), 0) */
 static int boosted_level(gc_run *run, pr_rng *r)
 {
@@ -142,14 +144,16 @@ static void fight(gc_run *run, const fof_t *f)
     gc_enemy_finish_party_me(run);
     in->me_no_flee = true;
     in->me_reward.active = true;
+    in->me_reward.has_item = true;
     in->me_reward.item = f->item;
+    in->me_reward.func = -1;
+    in->me_reward.fill = false;
     gc_me_begin_battle(run, GC_ME_FIGHT_OR_FLIGHT);
 }
 
 /* the shop of the item (setEncounterRewards({guaranteedModifierTypeOptions: [item], fillRemaining: false})) */
-static void set_item_shop(gc_run *run, const pr_reward_option *item)
+static void set_item_shop(pr_reward_custom *c, const pr_reward_option *item)
 {
-    pr_reward_custom *c = &gc_int(run)->reward.me_custom;
     memset(c, 0, sizeof *c);
     c->options[c->n_options++] = *item;
     c->fill_remaining = false;
@@ -157,14 +161,6 @@ static void set_item_shop(gc_run *run, const pr_reward_option *item)
     c->allow_luck_upgrades = true;
 }
 
-void gc_fof_victory(gc_run *run)
-{
-    gc_internal *in = gc_int(run);
-    in->me_reward.active = false;
-    gc_rq_push(run, gc_rp(RP_BATTLE_END, 1, 0, 0));
-    set_item_shop(run, &in->me_reward.item);
-    gc_me_end_with_shop(run);
-}
 
 void gc_fof_execute(gc_run *run, int option)
 {
@@ -178,15 +174,8 @@ void gc_fof_execute(gc_run *run, int option)
     }
     if (option == 0) { fight(run, &f); return; }
     /* option 2 of the screen: the Pokemon steals the item */
-    set_item_shop(run, &f.item);
+    set_item_shop(&gc_int(run)->reward.me_custom, &f.item);
     const int primary = gc_mystery_primary_pokemon(run, GC_ME_FIGHT_OR_FLIGHT, 1);
-    if (primary >= 0) {
-        pr_exp_party pp;
-        const uint32_t id = run->party[primary].b.id;
-        gc_exp_party_build(run, &pp, &id, 1);
-        pp.trainer_battle = false;
-        pp.me_exp_multiplier = 1.0;   /* isBattleMysteryEncounter(): the encounter's expMultiplier, 1 */
-        gc_exp_party_queue(run, &pp, gc_form(f.boss.b.species, 0)->base_exp, true);
-    }
+    if (primary >= 0) gc_me_steal_exp(run, primary, f.boss.b.species);
     gc_me_end_shop(run);
 }

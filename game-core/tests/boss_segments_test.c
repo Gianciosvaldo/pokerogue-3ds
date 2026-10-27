@@ -237,12 +237,18 @@ static bool trainer_boss(const char *seed)
     return true;
 }
 
-/* A mystery encounter's boss: its own count (Slumbering Snorlax: 3). */
+/* A mystery encounter's boss: its own count (Slumbering Snorlax: getEncounterBossSegments for its level). */
 static void mystery_boss(void)
 {
     const char *why = "";
     bool ok = false;
     new_run(&run, "boss-mystery");
+    /* a party that lives through the start-of-battle Snore */
+    for (int i = 0; i < run.n_party; i++) {
+        run.party[i].b.level = 60;
+        gc_mon_recalc(&run, &run.party[i]);
+        run.party[i].b.hp = run.party[i].b.stats[0];
+    }
     drain();
     gc_rq_clear(&run);
     gc_int(&run)->rq.waiting = false;
@@ -255,7 +261,9 @@ static void mystery_boss(void)
     CHECK(run.screen.kind == GC_SCREEN_COMMAND && run.n_enemy == 1);
     const pr_pokemon *p = &run.enemy[0].b;
     CHECK(p->species == SPECIES_ID_SNORLAX);
-    CHECK(p->is_boss && p->boss_segments == 3 && p->boss_segment_index == 2);
+    /* the count is the level's, as the encounter's own boss (the differential compares it with upstream for every wave and level) */
+    const int want = pr_run_get_encounter_boss_segments(&run.run, run.wave, p->level, p->species, true);
+    CHECK(p->is_boss && p->boss_segments == want && p->boss_segment_index == want - 1);
     CHECK(run.bt.field[2] == p);
 }
 

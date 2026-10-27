@@ -16,8 +16,8 @@ static void queue_battle_end(gc_run *run)
         gc_fg_battle_end(run, true);
         return;
     }
-    if (in->me_reward.active) {   /* Fight or Flight: handleMysteryEncounterVictory, the guaranteed item's shop */
-        gc_fof_victory(run);
+    if (in->me_reward.active) {   /* handleMysteryEncounterVictory with setEncounterRewards in place: the shop it set */
+        gc_me_win_rewards(run);
         return;
     }
     if (in->pillar.active) {   /* the Pillar Men: handleMysteryEncounterVictory, no TrainerVictoryPhase */
@@ -634,6 +634,11 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
     case RP_TURN_INIT:
         if (gc_fg_turn_init(run)) return true;   /* handleMysteryEncounterTurnStartEffects: the minigame decides before the commands */
         gc_battle_turn_init(run);
+        if (run->bt.n_me_start) {   /* handleMysteryEncounterBattleStartEffects: the encounter's moves before the first command */
+            const int stop = gc_battle_start_effects(run);
+            after_stop(run, stop);
+            if (stop != PH_TURN_INIT) return true;
+        }
         for(int field=0;field<(run->bt.double_battle?2:1);field++) {
             if(run->bt.field[field]&&run->bt.field[field]->hp>0)continue;
             bool bench=false,alive=false;
