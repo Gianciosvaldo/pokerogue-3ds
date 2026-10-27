@@ -233,12 +233,13 @@ behind a play; the career pays.
   only the human team is paid.
 - Candy is earned in **points**, not candies: `football_credit_candy` is interception 4, sack 2, touchdown 5 (`FB_CANDY_*`),
   and every one of the 22 also gets 1 point for playing the match and 1 more for winning it. A point adds
-  `FB_CANDY_FRIENDSHIP_PER_POINT` (6) to the species' candy bar, which is the starter's friendship in the profile and as long
+  `FB_CANDY_FRIENDSHIP_PER_POINT` (45) to the species' candy bar, which is the starter's friendship in the profile and as long
   as its friendship cap in the classic game (`getStarterValueFriendshipCap` of the starter cost: 25 for cost 1 up to 600 for
   cost 10); a full bar pays one candy and the rest carries over to the next match (`gc_system_add_starter_friendship`, the
-  same code the classic friendship gain ends in). So a touchdown is 1.2 candy to a cost 1 starter and 0.07 to Yveltal (cost 8,
-  bar 450): two touchdowns were 10 candies to a legendary before, and are a seventh of one now. The 6 is the one number that
-  tunes the whole mode.
+  same code the classic friendship gain ends in). So a touchdown is 9 candies to a cost 1 starter, 1.5 to a cost 5 one
+  and exactly 0.5 to Yveltal (cost 8, bar 450): two touchdowns were 10 candies to a legendary in the flat version, and are
+  one candy now. The 45 is the one number that tunes the whole mode (it was 6, which made a legendary touchdown 0.07; lorenzo
+  asked for 0.5 on 2026-10-27, which is 7.5 times everything else too).
 - Timing: a career earns the play points on the first tick after the dead ball (`seen_snaps` tells a new dead ball from the one
   already looked at; loading a save sets it, so a resumed match earns nothing twice) and the match points once, when the match
   is over. Earned points wait per member in `candy_pending`; `football_career_flush_candy` moves them to the profile (and

@@ -166,30 +166,38 @@ int main(void)
     printf("candy: 8 careers (%u won, %u lost) with cost 1 starters: %.1f points (%.2f candy) per match from the plays, %.1f points (%.2f candy) for the whole team; the profile only changed at checkpoints\n",wins,losses,paid_plays/8.0,paid_plays_milli/8000.0,paid_team/8.0,paid_team_milli/8000.0);
 
     /* The same points are worth far less to a legendary. Yveltal is a cost 8 starter: its bar is 450, so a touchdown (5 points =
-     * 30 of 450) is 0.067 candy, two of them 0.133 -- not the ten candies a flat 5 per touchdown gave. */
+     * 225 of 450) is exactly half a candy and two of them one candy, against 9 candies for a cost 1 starter (bar 25). */
     {
         gc_system pro;football_test_unlock_all(&pro);
         assert(football_career_new(&career,&scratch,&pro,3));
-        career.roster.mon[0].b.species=717;career.roster.mon[1].b.species=gc_starter_costs[0].id;
-        assert(gc_starter_cost(717)==8 && getStarterValueFriendshipCap(8)==450 && bar_of(717)==450);
-        assert(football_candy_milli(&career,0,2*FB_CANDY_TOUCHDOWN)==133 && football_candy_milli(&career,0,FB_CANDY_TOUCHDOWN)==67 && football_candy_milli(&career,0,0)==0);
+        career.roster.mon[0].b.species=717;
+        assert(gc_starter_cost(717)==8 && getStarterValueFriendshipCap(8)==450 && bar_of(717)==450 && FB_CANDY_FRIENDSHIP_PER_POINT==45);
+        assert(football_candy_milli(&career,0,FB_CANDY_TOUCHDOWN)==500 && football_candy_milli(&career,0,2*FB_CANDY_TOUCHDOWN)==1000 && football_candy_milli(&career,0,0)==0);
+        assert(football_candy_milli(&career,0,FB_CANDY_SACK)==200 && football_candy_milli(&career,0,FB_CANDY_PLAYED+FB_CANDY_WIN)==200);
         unsigned cheap=0;for(unsigned id=1;id<=GC_MAX_SPECIES_ID;++id)if(gc_starter_cost((uint16_t)id)==1){cheap=id;break;}
         assert(cheap);career.roster.mon[1].b.species=(uint16_t)cheap;
-        assert(football_candy_milli(&career,1,FB_CANDY_TOUCHDOWN)==1200 && football_candy_milli(&career,1,FB_CANDY_TOUCHDOWN)>football_candy_milli(&career,0,FB_CANDY_TOUCHDOWN)*15);
+        assert(football_candy_milli(&career,1,FB_CANDY_TOUCHDOWN)==9000 && football_candy_milli(&career,1,FB_CANDY_TOUCHDOWN)==football_candy_milli(&career,0,FB_CANDY_TOUCHDOWN)*18);
         assert(!football_candy_milli(NULL,0,5) && !football_candy_milli(&career,22,5));
-        /* The profile: two touchdowns fill 60 of the 450, no candy yet; the bar carries over to the next match and pays one candy when full. */
+        /* The profile: three points fill 135 of the 450, no candy yet; the bar carries over to the next match and pays one candy when full. */
         const int32_t had=pro.starters[717].candy_count;
-        career.candy_pending[0]=2*FB_CANDY_TOUCHDOWN;
-        assert(football_career_flush_candy(&career)==0 && pro.starters[717].candy_count==had && pro.starters[717].friendship==60 && !career.candy_pending[0]);
-        career.candy_pending[0]=65;
+        career.candy_pending[0]=3;
+        assert(football_career_flush_candy(&career)==0 && pro.starters[717].candy_count==had && pro.starters[717].friendship==135 && !career.candy_pending[0]);
+        career.candy_pending[0]=7;
         assert(football_career_flush_candy(&career)==1 && pro.starters[717].candy_count==had+1 && pro.starters[717].friendship==0);
-        /* Many candies at once on a cheap species (cap 25), and a full candy store keeps the bar one short. */
+        /* Two touchdowns at once are exactly one candy. */
+        career.candy_pending[0]=2*FB_CANDY_TOUCHDOWN;
+        assert(football_career_flush_candy(&career)==1 && pro.starters[717].candy_count==had+2 && pro.starters[717].friendship==0);
+        /* Many candies at once on a cheap species (cap 25): 21 points are 945 friendship. */
         career.candy_pending[1]=21;
         const int32_t cheap_had=pro.starters[cheap].candy_count;
-        assert(football_career_flush_candy(&career)==5 && pro.starters[cheap].candy_count==cheap_had+5 && pro.starters[cheap].friendship==1);
+        assert(football_career_flush_candy(&career)==37 && pro.starters[cheap].candy_count==cheap_had+37 && pro.starters[cheap].friendship==20);
+        /* A bar that is nearly full is not lost to the 16 bits of the field: 2000 points are 90000 friendship. */
+        career.candy_pending[0]=2000;
+        assert(football_career_flush_candy(&career)==200 && pro.starters[717].candy_count==had+202 && pro.starters[717].friendship==0);
+        /* A full candy store keeps the bar one short. */
         pro.starters[717].candy_count=9999;career.candy_pending[0]=100;
         assert(football_career_flush_candy(&career)==0 && pro.starters[717].candy_count==9999 && pro.starters[717].friendship==449);
-        puts("candy: a touchdown is 0.07 candy for Yveltal and 1.2 for a cost 1 starter");
+        puts("candy: a touchdown is 0.5 candy for Yveltal and 9 for a cost 1 starter");
     }
     puts("football species candy tests passed");
     return 0;

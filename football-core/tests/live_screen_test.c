@@ -116,7 +116,7 @@ int main(void)
     /* Species candy waits for a checkpoint: a failed write leaves it pending, the saved one hands it to the profile. */
     {
         FootballCareer *w=(FootballCareer *)career();uint16_t root=gc_species_root_for_starter(w->roster.mon[3].b.species);int32_t had=profile.starters[root].candy_count;
-        /* 100 points are 600 friendship, a full bar even for the longest one (600), and the rest stays on the bar. */
+        /* 100 points are 4500 friendship, a full bar even for the longest one (600), and the rest stays on the bar. */
         const int bar=getStarterValueFriendshipCap(gc_starter_cost(root)<1?1:gc_starter_cost(root));const unsigned sum=profile.starters[root].friendship+100u*FB_CANDY_FRIENDSHIP_PER_POINT;
         const int32_t earned=(int32_t)(sum/(unsigned)bar);const uint16_t left=(uint16_t)(sum%(unsigned)bar);
         assert(earned>=1);

@@ -316,21 +316,24 @@ bool gc_system_set_pokemon_caught(gc_system *sys, const gc_mon *m, bool incremen
 int gc_system_add_starter_friendship(gc_system *sys, uint16_t starter_id, int points) {
     if (!sys || points <= 0 || starter_id == 0 || starter_id > GC_MAX_SPECIES_ID) return 0;
     gc_starter_entry *s = &sys->starters[starter_id];
-    s->friendship += points;
+    /* summed in int: the field is 16 bits and the football mode adds a whole match's points at once */
+    long total = (long)s->friendship + points;
     int cost = gc_starter_cost(starter_id);
     if (cost < 1) cost = 1;
     int cap = getStarterValueFriendshipCap(cost);
     int candies = 0;
-    if (s->friendship >= cap) {
-        candies = s->friendship / cap;
-        bool inc = gc_system_add_starter_candy(sys, starter_id, candies);
+    if (total >= cap) {
+        long earned = total / cap;
+        if (earned > 9999) earned = 9999;
+        bool inc = gc_system_add_starter_candy(sys, starter_id, (int32_t)earned);
         if (inc) {
-            s->friendship %= cap;
+            total %= cap;
+            candies = (int)earned;
         } else {
-            s->friendship = cap - 1;
-            candies = 0;
+            total = cap - 1;
         }
     }
+    s->friendship = (uint16_t)total;
     return candies;
 }
 
