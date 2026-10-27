@@ -328,6 +328,9 @@ int main(int argc, char **argv)
             EQ("catch allowed", run.me_catch_allowed, 1);
             EQ("fleeing is off", gc_int(&run)->me_no_flee, 1);
             EQ("rewards set", gc_int(&run)->me_reward.active, n_rewards == 1);
+            EQ("reward is an item, not a function", gc_int(&run)->me_reward.has_item, 1);
+            EQ("reward has no function", gc_int(&run)->me_reward.func, -1);
+            EQ("reward does not fill the rest", gc_int(&run)->me_reward.fill, fill == 0 ? 0 : 1);
             CHECK(!strcmp(pr_item_keys[gc_int(&run)->me_reward.item.type.item], opt_id) && gc_int(&run)->me_reward.item.type.arg == opt_arg && gc_int(&run)->me_reward.item.tier == opt_tier,
                   "reward is %s, upstream %s", pr_item_keys[gc_int(&run)->me_reward.item.type.item], opt_id);
             const gc_mon *e = &run.enemy[0];

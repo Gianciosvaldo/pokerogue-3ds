@@ -254,6 +254,15 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
     bt->challenge_flags_known = !run->run.has_challenges || run->run.challenge_flags != 0;
     bt->battle_type = (uint8_t)run->battle_type;
     bt->me_no_flee = gc_int(run)->me_no_flee;
+    if (!restoring) {
+        bt->n_me_start = gc_int(run)->n_me_start;
+        for (int k = 0; k < bt->n_me_start; k++) {
+            bt->me_start[k].source = gc_int(run)->me_start[k].source;
+            bt->me_start[k].target = gc_int(run)->me_start[k].target;
+            bt->me_start[k].move = gc_int(run)->me_start[k].move;
+            bt->me_start[k].use_mode = gc_int(run)->me_start[k].use_mode;
+        }
+    }
     bt->biome = (int16_t)run->biome;
     bt->has_biome = true;
     bt->last_player_involved = bt->last_enemy_involved = -1;
@@ -773,6 +782,17 @@ int gc_battle_run(gc_run *run, int pick)
     } else {
         pr_resume_party_pick(bt, &run->eng, pick >= 0 ? gc_battle_slot_of(run, pick) : -1);
     }
+    return engine_returned(run);
+}
+
+/* handleMysteryEncounterBattleStartEffects: the MovePhases and the cleanup, run to the next stop (not a turn: the turn counter stays) */
+int gc_battle_start_effects(gc_run *run)
+{
+    gc_wallet_to_battle(run);
+    balls_to_battle(run);
+    gc_int(run)->at_save_point = false;
+    gc_int(run)->n_me_start = 0;
+    pr_run_start_of_battle_effects(&run->bt, &run->eng);
     return engine_returned(run);
 }
 

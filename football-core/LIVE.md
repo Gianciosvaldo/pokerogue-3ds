@@ -32,10 +32,17 @@ editing. B finishes editing, then returns to the round hub. Auto-assignment and
 Ready also have touch buttons. Lineups can be revisited between rounds.
 
 One heap scratch `gc_run` creates members and runs the existing EXP/evolution
-queue for one member at a time. Each winning match awards all 22 members the
-existing football EXP schedule. Evolution targets are explicitly selectable,
+queue for one member at a time. Each winning match awards all 22 members exactly ten levels
+(`GC_FOOTBALL_LEVELS_PER_WIN`, `gc_football_award_levels`): the EXP that member's growth rate needs, so after the seven games every member
+is level 75 whatever it is, and the highest level evolution there is (Zweilous to Hydreigon at 64) happens in game 6. Levels do not
+touch a player's attributes, which come from base stats, so this only decides when evolutions happen. The six-player season keeps its
+own EXP schedule (`gc_football_award_exp`, 2000 * round squared). Evolution targets are explicitly selectable,
 including Nincada's mutually exclusive Ninjask/Shedinja choice. Level-up moves are learned
-without a prompt; with four known the weakest (lowest power, earliest slot) is replaced. The shop retains Carbos, Protein and rare compatible
+without a prompt; with four known the weakest (lowest power, earliest slot) is replaced, but never a move the member's
+evolution asks for (Tangela keeps Ancient Power for Tangrowth, an Eevee its only Fairy move for Sylveon) unless every move is one.
+Evolutions football cannot meet stay out of reach: weather, a party type, a gender, a treasure count, and two moves a ten-level jump
+passes (Piloswine's Ancient Power is a relearn move; Primeape's Rage Fist comes at 35, while the member was still a Mankey).
+`tests/pace_test.c` takes every draftable species through the seven games. The shop retains Carbos, Protein and rare compatible
 mega stones, using existing classic item icons, and adds the evolution items (next section). A mega holder is explicitly
 selected between rounds; the form's stats and artwork apply for that match.
 
