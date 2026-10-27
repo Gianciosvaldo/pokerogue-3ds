@@ -89,6 +89,29 @@ static struct {
   void* arg;
 } F;
 
+/* A {{token}} the screen does not carry (an encounter not ported with its texts yet) is worded as a plain phrase instead of showing its braces. */
+static void strip_tokens(char* t)
+{
+  char* w = t;
+  for (const char* r = t; *r;) {
+    const char* e = r[0] == '{' && r[1] == '{' ? strstr(r, "}}") : NULL;
+    if (!e) {
+      *w++ = *r++;
+      continue;
+    }
+    char name[48];
+    size_t l = (size_t)(e - r - 2);
+    if (l >= sizeof name) l = sizeof name - 1;
+    memcpy(name, r + 2, l);
+    name[l] = 0;
+    const char* rep = strstr(name, "Name") ? "a Pokemon" : (strstr(name, "oney") || strstr(name, "rice") || strstr(name, "ost")) ? "some money" : "?";
+    memcpy(w, rep, strlen(rep));
+    w += strlen(rep);
+    r = e + 2;
+  }
+  *w = 0;
+}
+
 /* The text at "mysteryEncounters/<ns>:<sub>" worded with the screen's tokens and `extra`. Returns false when the locale lacks the key,
  * or (with `complete`) when the text names a token nobody carries. */
 static bool fmt(const char* sub, const pr_msg_arg* extra, int n_extra, bool complete, char* out, size_t n)
@@ -123,6 +146,7 @@ static bool fmt(const char* sub, const pr_msg_arg* extra, int n_extra, bool comp
     if (!dup && m.n_args < PR_MSG_MAX_ARGS) m.args[m.n_args++] = *found;
   }
   be_format_message(&m, out, n);
+  strip_tokens(out);
   return out[0] != 0;
 }
 

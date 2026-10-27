@@ -100,6 +100,7 @@ float text_line_width(text_style st, int font_px, const char* s, int nbytes) {
   (void)st, (void)font_px;
   return 6.0f * (float)(nbytes < 0 ? (int)strlen(s) : nbytes);
 }
+int text_lines(text_style st, const char* s, const text_opts* o) { (void)st, (void)o; int n = 1; for (; *s; s++) n += *s == '\n'; return n; }
 float text_line_pitch(text_style st, const text_opts* o) { (void)st, (void)o; return 12.0f; }
 float hint_x(text_style st, float x0, const char* const* texts, int i) {
   float x = x0;
@@ -142,6 +143,9 @@ static const char* const SHADY =
     "\"2\":{\"label\":\"The Pricey Deal\",\"tooltip\":\"(-) Pay {{option2Money, money}}\\n(+) Chosen Pokémon Gains 2 Random Vitamins\"},"
     "\"3\":{\"label\":\"Leave\",\"tooltip\":\"(-) No Rewards\",\"selected\":\"Heh, wouldn't have figured you for a coward.\"},"
     "\"selected\":\"The man hands you two bottles.${{selectedPokemon}} gained {{boost1}} and {{boost2}} boosts!\"}}";
+static const char* const TELE =
+    "{\"title\":\"Teleporting Hijinks\",\"option\":{\"1\":{\"label\":\"Put Money In\",\"tooltip\":\"(-) Pay {{price, money}}\"},"
+    "\"2\":{\"label\":\"A Pokémon Helps\",\"tooltip\":\"(-) {{option2PrimaryName}} Helps\"},\"3\":{\"label\":\"Inspect the Machine\",\"tooltip\":\"(-) Pokémon Battle\"}}}";
 static const char* const LOST =
     "{\"intro\":\"Wandering aimlessly through the sea.\",\"title\":\"Lost at Sea\",\"description\":\"The sea is turbulent.\","
     "\"query\":\"What will you do?\",\"option\":{\"1\":{\"label\":\"{{option1PrimaryName}} Might Help\","
@@ -165,6 +169,7 @@ static const char* locale_get(void* ctx, const char* file, int fallback, size_t*
    * formatter ask for ".../lost-at-sea" and show "Option 1" with no text on a console */
   if (!strcmp(file, "mystery-encounters/shady-vitamin-dealer-dialogue")) r = SHADY;
   else if (!strcmp(file, "mystery-encounters/lost-at-sea-dialogue")) r = LOST;
+  else if (!strcmp(file, "mystery-encounters/teleporting-hijinks-dialogue")) r = TELE;
   else if (!strcmp(file, "mystery-encounters/field-trip-dialogue")) r = TRIP;
   else if (!strcmp(file, "pokemon")) r = POKEMON;
   else if (!strcmp(file, "move")) r = MOVE;
@@ -492,6 +497,13 @@ int main(void) {
   press(BTN_DOWN);
   press(BTN_ACTION);
   CHECK(n_got == 1 && got.option == 2 && got.b == 0 && (got.c == 1 || got.c == 2), "an ability slot: %d %d %d", got.option, got.b, got.c);
+
+  /* Teleporting Hijinks (texts not ported): tokens the screen does not carry never show their braces */
+  run_at(GC_ME_TELEPORTING_HIJINKS, 3);
+  CHECK(me_flow_open(&R, chosen, NULL), "teleporting opens");
+  press(BTN_DOWN);
+  draw(1);
+  CHECK(!has_text(1, "{{") && has_text(1, "a Pokemon Helps"), "no raw tokens in the tooltip");
 
   /* a screen that is not an encounter does not open */
   R.screen.kind = GC_SCREEN_COMMAND;

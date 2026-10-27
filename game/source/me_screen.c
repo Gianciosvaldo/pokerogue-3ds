@@ -209,10 +209,13 @@ static void draw_top(void)
   char wrapped[ME_TEXT_LEN + 32];
   text_wrap(TS_INSTRUCTIONS_TEXT, M.a.description, &o, wrapped, sizeof wrapped);
   text_draw(TS_INSTRUCTIONS_TEXT, 20, 40, wrapped, &o);
+  /* the question goes under however many lines the description took (a fixed y overlapped a three-line description) */
+  const float desc_h = (float)text_lines(TS_INSTRUCTIONS_TEXT, wrapped, &o) * text_line_pitch(TS_INSTRUCTIONS_TEXT, &o);
   text_wrap(TS_WINDOW, M.a.query, &o, wrapped, sizeof wrapped);
   int n_sprites = 0;
   while (n_sprites < ME_MAX_SPRITES && M.a.sprites[n_sprites][0]) n_sprites++;
-  text_draw(TS_WINDOW, 20, n_sprites || M.a.n_intro ? 70 : 130, wrapped, &o);
+  const float below = 40 + desc_h + 6;
+  text_draw(TS_WINDOW, 20, n_sprites || M.a.n_intro ? (below > 70 ? below : 70) : (below > 130 ? below : 130), wrapped, &o);
   for (int i = 0; i < n_sprites; i++) { /* black silhouettes standing on the window's floor, evenly spread */
     const rr_frame* f = img_anim_frame(M.a.sprites[i], 0);
     if (!f) continue;
@@ -255,7 +258,7 @@ static void draw_bottom(void)
   for (int i = 0; i < rows && M.scroll + i < M.a.n; i++) draw_row(M.scroll + i, (float)(LIST_Y + i * ROW_H));
   ui_window(1, TIP_Y, 318, 76, WIN_NORMAL);
   const me_option* op = &M.a.options[M.a.cursor];
-  if (op->tooltip[0]) draw_marked(TS_TOOLTIP_CONTENT, 10, TIP_Y + 6, op->tooltip, TIP_W);
+  if (op->tooltip[0]) draw_marked(TS_MOVE_LABEL, 10, TIP_Y + 6, op->tooltip, TIP_W); /* the 8 px pixel font: the 9 px emerald of TS_TOOLTIP_CONTENT blurs on the 3DS */
   if (M.a.can_back)
     for (int i = 0; i < 2; i++) text_draw(TS_INSTRUCTIONS_TEXT, hint_x(TS_INSTRUCTIONS_TEXT, HINT_X, HINTS, i), HINT_Y, HINTS[i], NULL);
 }
