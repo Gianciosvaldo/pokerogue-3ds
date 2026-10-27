@@ -34,12 +34,23 @@ typedef struct {
   bool ok;                      /* false: shown dimmed, A plays the error sound */
 } me_option;
 
+#define ME_MAX_INTRO 12
+/* One of the encounter's intro sprites (upstream's MysteryEncounterIntroVisuals): where its feet land on the top screen, drawn in colour. */
+typedef struct {
+  char key[ME_SPRITE_LEN];   /* image key; with frame "" the image's first animation frame */
+  char frame[32];            /* "items" atlas icon name (key is then "items"); "" otherwise */
+  float x, y, scale;         /* x centre and y feet on the screen; scale 1 = native */
+  float dark;                /* 0..1: how far the sprite is shaded toward black (upstream's tint) */
+} me_intro_sprite;
+
 typedef struct {
   char title[ME_LABEL_LEN];
   char description[ME_TEXT_LEN];
   char query[ME_TEXT_LEN];
   me_option options[ME_MAX_OPTIONS];
   char sprites[ME_MAX_SPRITES][ME_SPRITE_LEN]; /* image keys drawn as black silhouettes under the texts (the Pillar Men); "" = none */
+  me_intro_sprite intro[ME_MAX_INTRO]; /* the encounter's intro sprites (me_flow_intro_sprites), n_intro of them */
+  int n_intro;
   int n;
   int cursor;                         /* where the cursor starts */
   bool can_back;                      /* B calls on_back (and the hint "B: back" shows) */
