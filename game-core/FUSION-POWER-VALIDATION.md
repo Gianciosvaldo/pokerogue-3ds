@@ -40,8 +40,9 @@ The strict transport validates all 812 inputs, complete ordered pools, implement
 move selections and observed powers. The host test compares the public
 `gc_mg_effective_powers` query with 27,118 native power observations, checking
 stats, active/passive identities, input immutability and caller RNG. It retains
-the fused-boss generator rejection and its atomicity. Passing these bounded
-queries does not establish fused-boss generation or full battle-core completion.
+challenge-constructor rejection and its atomicity. Successful fused-boss
+generation for every one of these inputs has a [separate owner proof](FUSED-BOSS-OWNER-VALIDATION.md).
+Passing these bounded queries does not establish full battle-core completion.
 
 Checks:
 

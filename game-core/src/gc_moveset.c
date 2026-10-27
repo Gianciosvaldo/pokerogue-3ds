@@ -53,7 +53,7 @@ bool gc_enemy_moveset(gc_run *run, gc_mon *m, const pr_enemy_gen *g)
         || run->battle_type != BATTLE_TYPE_WILD || run->run.has_challenges
         || (run->run.mode != GAME_MODES_CLASSIC && run->run.mode != GAME_MODES_ENDLESS
             && run->run.mode != GAME_MODES_SPLICED_ENDLESS)
-        || (m->b.is_boss && m->b.fusion_species) || m->b.passive_flag) return false;
+        || m->b.passive_flag) return false;
     const pr_species *sp = gc_species(m->b.species);
     if (!sp || (sp->form_change_triggers & (1u << PR_FCT_SpeciesFormChangeMoveLearnedTrigger)))
         return false; /* The constructor's post-moveset form callback is separate. */
@@ -63,6 +63,8 @@ bool gc_enemy_moveset(gc_run *run, gc_mon *m, const pr_enemy_gen *g)
         || g->fusion_form != m->b.fusion_form
         || g->fusion_ability_index != m->b.fusion_ability_index
         || g->fusion_gender != m->b.fusion_gender)) return false;
+    /* Native isBoss() reads bossSegments. Reject inconsistent raw snapshots. */
+    if (m->b.fusion_species && m->b.is_boss != (m->b.boss_segments > 0)) return false;
     /* Fresh Spliced constructors above level one always have a fusion. */
     if (run->run.mode == GAME_MODES_SPLICED_ENDLESS && m->b.level > 1 && !m->b.fusion_species)
         return false;

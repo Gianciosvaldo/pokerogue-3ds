@@ -33,7 +33,9 @@ static void one(const native_fusion_power_case *n)
         CHECK(powers[i]==n->powers[i]);
     }
     CHECK(!memcmp(m,&before,sizeof before));CHECK(same_rng(&run.run.rng,&rng));CHECK(same_rng(&run.bt.rng,&bt_rng));
-    /* This proof does not enable the guarded fused-boss generator. */
+    /* Challenge constructors remain outside the weighted wild owner. Native
+     * successful generation for these same inputs has a separate owner proof. */
+    run.run.has_challenges=true;
     CHECK(!gc_generate_moveset(&run,&run.run.rng,m));CHECK(!memcmp(m,&before,sizeof before));CHECK(same_rng(&run.run.rng,&rng));
     cases++;
 }
