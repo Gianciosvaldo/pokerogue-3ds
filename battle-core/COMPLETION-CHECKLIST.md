@@ -104,6 +104,9 @@ money handling merged in #357; see [their validation record](HONEY-MONEY-VALIDAT
 4. Finish wide-level Endless acceptance across generation, arithmetic,
    progression, display and compatible saves, then publish the final evidence
    audit and explicitly list any remaining external prerequisites.
+   The [Endless wave sweep](../run-core/ENDLESS-WAVE-SWEEP-VALIDATION.md)
+   retains wave-rule/level/RNG observations at every wave through 5,850 in
+   both modes. It does not close complete encounter generation or whole runs.
 
 The order can change when an actual source mismatch reveals a prerequisite.
 Each slice retains its own reproducible validation and exact-head CI record.
