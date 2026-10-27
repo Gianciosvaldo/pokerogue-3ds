@@ -118,7 +118,8 @@ typedef enum {
     GC_CH_CANCEL,           /* EVOLVE: stop the evolution (upstream's B button); a = 1 also answers yes to
                              * "pause evolutions for this Pokemon?" */
     GC_CH_REWARD,           /* REWARD: a = option index, b = the party index it is used on (-1 = none),
-                             * c = the move slot it is used on (-1 = none) */
+                             * c = the move slot it is used on (-1 = none); for DNA Splicers (GC_TARGET_FUSE) c = the
+                             * party index of the member that is fused into b and leaves the party */
     GC_CH_SHOP,             /* REWARD: a = shop item index, b = party index, c = move slot */
     GC_CH_REROLL,           /* REWARD */
     GC_CH_SKIP,             /* REWARD: take nothing */
@@ -149,7 +150,9 @@ typedef struct {
     int8_t upgrade_count;   /* ModifierTypeOption.upgradeCount: how many tiers the luck upgrade raised it */
     bool is_purchase;       /* set by SHOP even at price 0; free offers use cost 0 or -1 */
 } gc_offer;
-enum { GC_TARGET_NONE, GC_TARGET_POKEMON, GC_TARGET_MOVE };
+/* GC_TARGET_FUSE: the DNA Splicers' party screen (PartyUiMode.SPLICE): two members are picked, the first stays and takes the second's
+ * species as its fusion half. Choose it with b = the member that stays and c = the one that goes, both party indices */
+enum { GC_TARGET_NONE, GC_TARGET_POKEMON, GC_TARGET_MOVE, GC_TARGET_FUSE };
 
 typedef struct {
     uint8_t kind;           /* gc_screen_kind */
@@ -219,6 +222,12 @@ typedef struct gc_mon {
      * the base nature; old saves default has_custom_nature to false. */
     uint8_t base_nature;
     bool has_custom_nature;
+    /* What a DNA Splicers fusion keeps of the second member (PlayerPokemon.fuse: fusionShiny, fusionVariant,
+     * fusionLuck). The fusion half's luck counts in getLuck(); zero for an unfused Pokemon. Saved in a section
+     * of its own, so older saves load with these at zero */
+    bool fusion_shiny;
+    uint8_t fusion_variant;
+    int8_t fusion_luck;
 } gc_mon;
 
 /* The player's items and the enemy's: upstream's modifier list entries, by modifierTypes key */

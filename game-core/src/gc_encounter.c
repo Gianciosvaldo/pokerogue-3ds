@@ -186,6 +186,9 @@ int gc_party_luck(gc_run *run)
         memset(&m[i], 0, sizeof m[i]);
         m[i].species = run->party[i].b.species;
         m[i].luck = run->party[i].luck;
+        /* getLuck(): luck + (isFusion() ? fusionLuck : 0) */
+        m[i].fusion = run->party[i].b.fusion_species != 0;
+        m[i].fusion_luck = run->party[i].fusion_luck;
         m[i].allowed = gc_mon_allowed(&run->party[i]);
     }
     return pr_run_get_party_luck_value(&run->run, m, run->n_party, NULL, 0, 0);
