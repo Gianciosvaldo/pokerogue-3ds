@@ -4,11 +4,35 @@ What is in this build of PokeRogue 3DS
 The exact version is in files\VERSION.txt, and the builder prints it when it starts and writes it to
 build-log.txt. Quote it in a bug report.
 
-Converted files: this build adds pictures (the JoJo trainer sprites, in the pictures pack). Coming from the
-October 24 builder or earlier, the first run converts everything again (up to half an hour). Later builds skip
-that unless WHATS-NEW.txt says otherwise.
+Converted files: nothing new in the packs since the October 26 builder (same pictures, sounds and text), so extracting
+this zip over the old folder and running it only replaces the game app: nothing is downloaded or converted again.
+Coming from the October 24 builder or earlier, the first run converts everything again (up to half an hour).
 
-New since the October 24 builder
+New since the October 26 builder
+  Mystery encounters (each one checked against the upstream game's own numbers)
+    - Ported properly: Fight or Flight, Slumbering Snorlax, Dark Deal, Training Session and Berries Abound. The
+      other kinds are still simplified stand-ins.
+    - The question screen now draws each encounter's own picture (the bush, the crate, the scientist, the item
+      icons...). Pokemon and trainers the encounter picks at random are not drawn there yet.
+    - Training Session lets you pick the Pokemon, then a nature (25, "(new)" marks the ones not in the Pokedex yet)
+      or an ability. Seen only in tests, not on a screen.
+    - Dialogue fixes: encounter texts load again (they showed "Option 1" and blank screens).
+  Football Playoff
+    - The CPU varies its plays and reads the field; punts, field goals, kickoffs, extra points, two-point tries
+      and returns; new animations for jukes, dives, tackles, sacks, interceptions, fumbles and touchdowns; the
+      menus look like the Classic ones; species candy for plays; evolution items in the shop; members gain
+      friendship and ten levels for each won round, and keep the move an evolution needs.
+  Battle
+    - Boss info box, HP bar dividers and shields are drawn.
+    - In doubles the foes' platform goes up with the foes (Only the geometry was set; tell me what to move).
+    - The Pokemon's sprites get first claim on texture memory (the blue/orange box on a Tentacruel). If you still see
+      it, send the "free N" MB number on the bottom screen's debug line during that battle.
+    - Fused enemies keep their identity and the secondary species can evolve after fusion level ups; long turns no
+      longer drop events.
+  Not checked on a real 3DS
+    - Everything above. In particular the intro pictures' placement on the question screen and the Training pickers.
+
+New in the October 26 builder (still in this one)
   Rivals and trainers
     - The six Classic rival waves are real fights now (a male player meets Ivy; the app has no player
       gender yet). Trainers speak their upstream encounter and victory lines in battle.
