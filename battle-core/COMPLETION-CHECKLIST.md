@@ -132,7 +132,9 @@ The [enemy fusion projection follow-up](../game-core/ENEMY-FUSION-PROJECTION-VAL
 preserves run-core's generated fusion identity through controller creation,
 refresh, stats and saves. The [ordinary wild moveset follow-up](../game-core/WILD-MOVESETS-VALIDATION.md)
 connects weighted level pools through the wild adapter, including non-boss
-fusions without passives. Complete fused boss/passive/trainer movesets,
+fusions without passives. The [unfused boss follow-up](../game-core/WILD-BOSS-MOVESETS-VALIDATION.md)
+connects the existing weighted boss helper with natural species passives.
+Complete fused boss/passive/trainer movesets,
 post-moveset form callbacks and complete encounter generation remain open.
 
 [Constructor-lock transport](../game-core/HELD-LOCK-VALIDATION.md) now preserves

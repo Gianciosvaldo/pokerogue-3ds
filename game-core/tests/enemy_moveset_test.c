@@ -7,6 +7,7 @@
 #include <stdlib.h>
 
 #include "fixtures/wild-movesets.native.inc"
+#include "fixtures/wild-boss-movesets.native.inc"
 
 static gc_run run;
 static unsigned checks, supported, fallback, wild_supported, wild_fallback, wild_draws;
@@ -47,6 +48,10 @@ static const native_move_case *native_retained(int kind,int index)
     for (unsigned i=0;i<sizeof native_retained_moves/sizeof *native_retained_moves;i++)
         if (native_retained_moves[i].kind==kind && native_retained_moves[i].index==index)
             return &native_retained_moves[i];
+    for (unsigned i=0;i<sizeof native_boss_retained_moves/sizeof *native_boss_retained_moves;i++) {
+        const native_move_case *b=&native_boss_retained_moves[i].mon;
+        if(b->kind==kind && b->index==index)return b;
+    }
     return NULL;
 }
 static void check_native_moves(const gc_mon *m,const native_move_case *n)
@@ -109,6 +114,7 @@ static void adapter_matrix(void)
         else if(native) { check_native_moves(&m,native); supported++; }
         else { CHECK(!memcmp(&m, &before, sizeof m)); fallback++; }
     }
+    CHECK(index==2100);CHECK(supported==2100);CHECK(fallback==0);
 }
 
 static void unsupported_boundaries(void)

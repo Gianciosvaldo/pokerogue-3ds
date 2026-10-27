@@ -53,7 +53,7 @@ bool gc_enemy_moveset(gc_run *run, gc_mon *m, const pr_enemy_gen *g)
         || run->battle_type != BATTLE_TYPE_WILD || run->run.has_challenges
         || (run->run.mode != GAME_MODES_CLASSIC && run->run.mode != GAME_MODES_ENDLESS
             && run->run.mode != GAME_MODES_SPLICED_ENDLESS)
-        || m->b.is_boss || m->b.passive_flag) return false;
+        || (m->b.is_boss && m->b.fusion_species) || m->b.passive_flag) return false;
     const pr_species *sp = gc_species(m->b.species);
     if (!sp || (sp->form_change_triggers & (1u << PR_FCT_SpeciesFormChangeMoveLearnedTrigger)))
         return false; /* The constructor's post-moveset form callback is separate. */
