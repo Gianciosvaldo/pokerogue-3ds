@@ -1,7 +1,7 @@
 #include "football_career.h"
 #include <stdlib.h>
 #include <string.h>
-typedef struct { unsigned char *p;size_t n,cap;bool read,ok; } Stream;
+typedef struct { unsigned char *p;size_t n,cap;bool read,ok;unsigned version; } Stream;
 static uint32_t crc(const unsigned char *p,size_t n){uint32_t v=~0u;while(n--){v^=*p++;for(unsigned i=0;i<8;++i)v=(v>>1)^(0xedb88320u & (0u-(v&1)));}return ~v;}
 static uint32_t number(Stream *s,uint32_t v,uint32_t max)
 {
@@ -32,6 +32,17 @@ static void state(Stream *s,FootballCareer *c)
     }
     for(unsigned i=0;i<3;++i){N(c->prices[i],1000);N(c->sold[i],1);}
     unsigned target=(unsigned)(c->stone_target+1);N(target,22);c->stone_target=(int)target-1;N(c->stone_item,INT16_MAX);
+    if(s->version>=2){
+        /* The evolution items on sale (an older save has none). */
+        N(c->evo_count,FB_SHOP_EVO_MAX);
+        for(unsigned i=0;i<c->evo_count;++i){
+            const FootballEvoOffer o=c->evo[i];unsigned member=o.member,item=o.item,st=o.state,species=o.species,price=o.price;
+            N(member,21);N(item,255);N(st,FB_EVO_VOID);N(species,UINT16_MAX);N(price,5000);
+            if(!item || !species || !price)s->ok=false;
+            /* Only a read changes the offer: a save that fails leaves the career as it was. */
+            if(s->read)c->evo[i]=(FootballEvoOffer){.member=(uint8_t)member,.item=(uint8_t)item,.state=(uint8_t)st,.species=(uint16_t)species,.price=(uint16_t)price};
+        }
+    }
     if(c->phase==FB_CAREER_MATCH){
         FootballLive *m=&c->live;FootballRules *r=&m->rules;
         N(m->rng,UINT32_MAX);N(m->snaps,4096);
@@ -61,16 +72,16 @@ bool football_career_save_ready(const FootballCareer *c)
 size_t football_career_save(FootballCareer *c,void *buffer,size_t capacity)
 {
     if(!football_career_save_ready(c) || !buffer || capacity<4096 || capacity>FB_CAREER_SAVE_MAX)return 0;
-    Stream s={buffer,20,capacity,false,true};state(&s,c);if(!s.ok)return 0;
-    Stream header={buffer,8,20,false,true};number(&header,1,1);number(&header,(uint32_t)s.n,FB_CAREER_SAVE_MAX);number(&header,crc((unsigned char *)buffer+20,s.n-20),UINT32_MAX);memcpy(buffer,"PRFBLIVE",8);c->scratch->sys=c->profile;return s.n;
+    Stream s={buffer,20,capacity,false,true,2};state(&s,c);if(!s.ok)return 0;
+    Stream header={buffer,8,20,false,true,2};number(&header,2,2);number(&header,(uint32_t)s.n,FB_CAREER_SAVE_MAX);number(&header,crc((unsigned char *)buffer+20,s.n-20),UINT32_MAX);memcpy(buffer,"PRFBLIVE",8);c->scratch->sys=c->profile;return s.n;
 }
 bool football_career_load(FootballCareer *c,gc_run *scratch,gc_system *profile,const void *buffer,size_t length)
 {
     if(!c || !scratch || !profile || !buffer || length<20 || length>FB_CAREER_SAVE_MAX || memcmp(buffer,"PRFBLIVE",8))return false;
-    Stream s={(unsigned char *)buffer,8,length,true,true};unsigned version=number(&s,0,1),size=number(&s,0,FB_CAREER_SAVE_MAX),sum=number(&s,0,UINT32_MAX);
-    if(!s.ok || version!=1 || size!=length || sum!=crc((const unsigned char *)buffer+20,length-20))return false;
+    Stream s={(unsigned char *)buffer,8,length,true,true,0};unsigned version=number(&s,0,2),size=number(&s,0,FB_CAREER_SAVE_MAX),sum=number(&s,0,UINT32_MAX);
+    if(!s.ok || version<1 || version>2 || size!=length || sum!=crc((const unsigned char *)buffer+20,length-20))return false;
     FootballCareer *copy=calloc(1,sizeof *copy);if(!copy)return false;
-    bool valid=football_career_new(copy,scratch,NULL,1);state(&s,copy);
+    s.version=version;bool valid=football_career_new(copy,scratch,NULL,1);state(&s,copy);
     valid=valid && s.ok && s.n==length && copy->round>0 && copy->seed && football_career_save_ready(copy) && copy->wins<=copy->round;
     if((copy->phase==FB_CAREER_READY || copy->phase==FB_CAREER_LINEUP || copy->phase==FB_CAREER_MATCH) && copy->wins+1!=copy->round)valid=false;
     if(copy->phase==FB_CAREER_SHOP && copy->wins!=copy->round)valid=false;
@@ -84,6 +95,12 @@ bool football_career_load(FootballCareer *c,gc_run *scratch,gc_system *profile,c
     if(valid && copy->stone_target>=0){
         gc_football_new(scratch,NULL,"check-offer",1);scratch->party[0]=copy->roster.mon[copy->stone_target];scratch->n_party=1;
         if(!gc_football_mega_form(scratch,0,copy->stone_item))valid=false;
+    }
+    /* An evolution offer exists only in the shop, and holds only while its member can still use the item. */
+    if(valid && copy->phase!=FB_CAREER_SHOP && copy->evo_count)valid=false;
+    if(valid){
+        copy->profile=profile;
+        for(unsigned i=0;valid && i<copy->evo_count;++i)if(copy->evo[i].state==FB_EVO_OFFER && !football_career_evo_valid(copy,&copy->evo[i]))valid=false;
     }
     if(valid){copy->profile=profile;*c=*copy;scratch->sys=profile;}
     free(copy);return valid;

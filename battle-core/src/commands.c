@@ -271,7 +271,7 @@ bool pr_can_run(pr_battle *bt, const pr_pokemon *p, pr_msg *why)
     pr_msg m = {0};
     bool ok;
     if (bt->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) pr_note_unported(bt, PR_FEAT_TRAINER);   /* fleeAllowed */
-    if (bt->has_biome && bt->biome == BIOME_ID_END) {
+    if ((bt->has_biome && bt->biome == BIOME_ID_END) || bt->me_no_flee) {
         m = pr_msg0("battle:noEscapeForce");
         ok = false;
     } else if (bt->battle_type == BATTLE_TYPE_TRAINER) {

@@ -378,7 +378,11 @@ typedef struct pr_pokemon {
     bool summon_moves_active; /* Mimic can override moves without transforming identity. */
     uint8_t summon_moves_alias_mask; /* slots sharing their PokemonMove with permanent moves */
     uint8_t variant;           /* permanent shiny variant; Transform does not copy it */
+    /* EnemyPokemon.mysteryEncounterBattleEffects with the MYSTERY_ENCOUNTER_POST_SUMMON tag (PR_ME_POST_*): its PostSummonPhase runs it once. Set by the
+     * encounter that built the enemy, kept out of the summon data on purpose (summoning resets that); never saved: the fight cannot be saved before it */
+    uint8_t me_post_summon;
 } pr_pokemon;
+enum { PR_ME_POST_NONE, PR_ME_POST_STAT_BOOST /* Fight or Flight: one of Atk, Def, SpAtk, SpDef up two stages */ };
 
 /* getMoveset(): temporary collection from Transform or Mimic; the fields above named
  * moves/PP always represent the permanent Pokemon.moveset. These selectors also
@@ -504,6 +508,7 @@ typedef struct pr_battle {
     int wave_index;
     int8_t game_mode;          /* gameMode.modeId (GameModes), -1 = unknown */
     uint8_t battle_type;       /* BattleType */
+    bool me_no_flee;           /* currentBattle.mysteryEncounter.fleeAllowed === false (an encounter's fight run as a wild battle): no running, no forcing the wild enemy out, no switching out of its own accord */
     uint16_t last_move;        /* currentBattle.lastMove, 0 = none */
     int8_t last_player_involved, last_enemy_involved;  /* -1 = undefined */
     uint32_t participants[PR_MAX_PARTY];               /* playerParticipantIds, sorted */

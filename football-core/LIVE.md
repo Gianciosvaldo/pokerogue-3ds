@@ -36,8 +36,43 @@ queue for one member at a time. Each winning match awards all 22 members the
 existing football EXP schedule. Evolution targets are explicitly selectable,
 including Nincada's mutually exclusive Ninjask/Shedinja choice. Level-up moves are learned
 without a prompt; with four known the weakest (lowest power, earliest slot) is replaced. The shop retains Carbos, Protein and rare compatible
-mega stones, using existing classic item icons. A mega holder is explicitly
+mega stones, using existing classic item icons, and adds the evolution items (next section). A mega holder is explicitly
 selected between rounds; the form's stats and artwork apply for that match.
+
+## Evolution items in the shop
+
+Levels do not evolve everything (a Growlithe needs a Fire Stone, an Eevee one of five stones), so after a win the shop lists the
+classic game's evolution items (`EVOLUTION_ITEM`, and the `RARE_EVOLUTION_ITEM` tier above id 50: Black Augurite, Metal Alloy, the
+scrolls) that would evolve a member of the roster **now**. Which items fit comes from game-core (`gc_football_item_evolutions`: the
+species' evolution table, the level, the form and the conditions, the same test the classic reward screen uses); an offer is
+bound to its member, at most eight are shown (`FB_SHOP_EVO_MAX`), the first item of every member before anyone's second, from a
+member that moves with the round so nobody is left out for good, and a member who holds a mega stone or is about to be offered one is
+skipped (evolving would lose the stone). Price: `400 + 50 * round` for a common item, `800 + 75 * round` for a rare one.
+
+Buying (`football_career_buy`, offer `FB_SHOP_FIXED + n`) runs the real evolution on the scratch run (`gc_football_item_evolve`: the
+evolution phase, then any move the new form brings, a full set replacing the weakest move as after a level-up), copies the member back
+and refreshes its player; the member's other items are voided, as it has evolved. The shop shows each offer as "Growlithe: Fire Stone"
+with the item's icon, and the top screen the member beside what it would become with each attribute as "today>evolved"
+(`football_career_evo_preview` runs the evolution without keeping it).
+
+Not covered: fusion (football has none).
+
+### Friendship
+
+Every member gains `GC_FOOTBALL_FRIENDSHIP_PER_WIN` (15) friendship for each won round, in `gc_football_award_exp` before the round's
+EXP is queued, so the level-up it brings can already evolve on it. A lost match gives nothing; friendship stops at 255. It is
+the member's own friendship only: the classic game also feeds the starter's candy from it, which here is the candy rules' job
+(see Species candy), so no profile is passed. The six-player team gets it from the same call.
+
+Friendship evolutions are decided the way the classic game does, at a level-up with the friendship the species asks for (and
+its time of day or move type where it asks for one): the EVOLVE screen offers them with the level-based ones. Starting
+from each species' base friendship, a run of wins evolves Pichu, Cleffa, Igglybuff, Togepi, Azurill and Budew after round 2,
+Chingling, Woobat, Cosmog and Snom after round 3, Buneary after round 4, Munchlax and Eevee after round 5, Riolu after round 6
+and Type: Null after round 7 (the ones with a time of day or a move type wait for a round where it fits).
+`tests/friendship_test.c` sweeps every draftable species with a friendship evolution through seven won rounds and checks
+none evolves in round 1, each plain one evolves on the round its friendship allows and all have by round 7; the gain is a
+design choice, and that test is what fails if it is made too fast or too slow. Mid-stages with a friendship evolution (Golbat,
+Chansey, Swadloon) are not draftable, so they matter only once levels have brought a member there; the sweep does not cover them.
 
 ## Live engine and controls
 
@@ -302,7 +337,9 @@ Transient loading, fonts and other application assets are outside that figure.
 ## Persistence and validation
 
 The versioned `PRFBLIVE` codec serializes named existing mon packets plus explicit
-little-endian lineup, boost, shop, round and match-call fields, with CRC validation.
+little-endian lineup, boost, shop (including the evolution offers, from format version 2; a version 1 checkpoint loads with none),
+round and match-call fields, with CRC validation. An offer that no longer holds against the roster (its member cannot use that item,
+or it brings another species) refuses the checkpoint, as does one outside the shop.
 It never serializes pointers or raw C structs. Size is capped before file reading.
 Safe checkpoints are lineup/round hub, shop, final results and between snaps.
 Live movement and pending EXP prompts are not checkpointed. START may return to

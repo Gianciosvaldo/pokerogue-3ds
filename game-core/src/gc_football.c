@@ -67,6 +67,9 @@ bool gc_football_award_exp(gc_run *r, unsigned round, const char **why)
     r->wave=(int)round*20;
     r->bt.wave_index=r->wave;
     for (int i=0;i<r->n_party;++i) {
+        /* Friendship first, so the level-up this EXP brings can already evolve on it. No profile: the starter's candy comes from
+         * the football rules, not from friendship as in the classic game. */
+        gc_system_add_friendship(NULL,r,&r->party[i],GC_FOOTBALL_FRIENDSHIP_PER_WIN,false);
         gc_rphase p=gc_rp(RP_EXP,i,0,0);
         p.d=(double)GC_FOOTBALL_EXP_FACTOR*round*round;
         gc_rq_push(r,p);
@@ -106,6 +109,21 @@ int gc_football_evolution_choices(gc_run *r, uint16_t out[GC_FOOTBALL_MAX_EVOLUT
     for (int i=0;i<n;++i) out[i]=gc_evo_data[choices[i]].species;
     return n;
 }
+/* Hands the answer to the waiting phase; the caller has checked there is one. */
+static bool answer(gc_run *r, const gc_choice *c, const char **why)
+{
+    gc_rqueue *q=&gc_int(r)->rq;
+    bool ok=false;
+    const char *dummy=NULL;
+    if (!why) why=&dummy;
+    bool done=gc_phase_choose(r,&q->current,c,why,&ok);
+    if (!ok) return false;
+    if (done) {
+        q->waiting=false; q->current.type=RP_NONE;
+        memset(&r->screen,0,sizeof r->screen);
+    }
+    return true;
+}
 bool gc_football_choose(gc_run *r, const gc_choice *c, unsigned pick, const char **why)
 {
     if (!r || !c) return fail(why,"missing choice");
@@ -118,16 +136,49 @@ bool gc_football_choose(gc_run *r, const gc_choice *c, unsigned pick, const char
         if (n<0 || pick>=(unsigned)n) return fail(why,"invalid evolution choice");
         q->current.b=choices[pick];
     }
-    bool ok=false;
-    const char *dummy=NULL;
-    if (!why) why=&dummy;
-    bool done=gc_phase_choose(r,&q->current,c,why,&ok);
-    if (!ok) return false;
-    if (done) {
-        q->waiting=false; q->current.type=RP_NONE;
-        memset(&r->screen,0,sizeof r->screen);
+    return answer(r,c,why);
+}
+int gc_football_item_evolutions(gc_run *r, unsigned party, gc_football_item_evolution out[GC_FOOTBALL_MAX_ITEM_EVOLUTIONS])
+{
+    if (!r || !out || party>=(unsigned)r->n_party || r->n_party>6) return 0;
+    int found[GC_FOOTBALL_MAX_ITEM_EVOLUTIONS];
+    int n=gc_mon_item_evolutions(r,&r->party[party],found,GC_FOOTBALL_MAX_ITEM_EVOLUTIONS);
+    for (int i=0;i<n;++i) {
+        out[i].item=gc_evo_data[found[i]].item;
+        out[i].species=gc_evo_data[found[i]].species;
     }
-    return true;
+    return n;
+}
+bool gc_football_item_evolve(gc_run *r, unsigned party, int item, int (*forget_slot)(const pr_pokemon *), const char **why)
+{
+    if (!r || party>=(unsigned)r->n_party || r->n_party>6) return fail(why,"no such member");
+    gc_rqueue *q=&gc_int(r)->rq;
+    if (r->screen.kind!=GC_SCREEN_NONE || q->waiting || q->current.type!=RP_NONE) return fail(why,"pending phase");
+    for (int i=0;i<q->n_levels;++i) if (q->n[i]) return fail(why,"pending phase");
+    gc_mon *m=&r->party[party];
+    int evo=item>0?gc_mon_item_evolution(r,m,item):-1;
+    if (evo<0 || m->pause_evolutions || m->b.fusion_species) return fail(why,"that item does not evolve it");
+    /* The same phase the classic reward screen queues for an evolution item: the evolution, then the moves it brings. */
+    gc_rq_unshift(r,gc_rp(RP_EVOLUTION,(int)party,evo,m->b.level-1));
+    gc_event event;
+    for (unsigned guard=0;guard<64;++guard) {
+        while (gc_run_next_event(r,&event)) {}
+        gc_football_progress progress=gc_football_tick(r);
+        while (gc_run_next_event(r,&event)) {}
+        if (progress==GC_FB_ERROR) return fail(why,"evolution failed");
+        if (progress==GC_FB_DONE) return true;
+        if (progress!=GC_FB_WAIT) continue;
+        gc_choice choice={0};
+        if (r->screen.kind==GC_SCREEN_EVOLVE) choice.kind=GC_CH_EVOLVE;
+        else if (r->screen.kind==GC_SCREEN_LEARN_MOVE) {
+            /* A move that needs a slot replaces the one the caller names; none named leaves it unlearned. */
+            choice.kind=GC_CH_FORGET;
+            choice.a=(int16_t)(forget_slot?forget_slot(&r->party[r->screen.party].b):-1);
+        }
+        else return fail(why,"unexpected evolution prompt");
+        if (!answer(r,&choice,why)) return false;
+    }
+    return fail(why,"evolution did not finish");
 }
 const pr_form *gc_football_mega_form(const gc_run *r,unsigned party,int item)
 {

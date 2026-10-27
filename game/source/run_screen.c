@@ -723,7 +723,6 @@ static bool handle_event(int i) {
         bv_mon* sh = bv_mon_of(field);
         snprintf(sh->name, sizeof sh->name, "%s", m.name);
         sh->max_hp = m.max_hp;
-        sh->level = m.level;
         /* the new species' stats move the HP with the maximum */
         if (m.hp > sh->hp)
           *ev_new() = (bv_event){.type = BEV_HEAL, .battler = field, .a = m.hp};

@@ -109,6 +109,7 @@ bool pr_switch_out_condition(pr_battle *bt, bool self_switch, int switch_type, c
             if (remaining <= 1) return false;
         }
         /* no forcing a wild Pokemon out of a mystery encounter that doesn't allow fleeing */
+        if (!player && bt->me_no_flee) return false;
         if (!player && bt->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) pr_note_unported(bt, PR_FEAT_TRAINER);
         /* Suction Cups, Guard Dog: applied for real, so the ability shows */
         bool blocked = false;
@@ -275,6 +276,7 @@ static bool helper_switch_out_condition(pr_battle *bt, const pr_pokemon *p, cons
     }
     /* `!waveIndex && waveIndex % 10 === 0`: only a wave index of 0 */
     if (bt->battle_type == BATTLE_TYPE_WILD && bt->wave_index == 0) return false;
+    if (bt->me_no_flee) return false;
     if (bt->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) { pr_note_unported(bt, PR_FEAT_TRAINER); return true; }
     if (bt->battle_type == BATTLE_TYPE_WILD) return true;
     int res[PR_MAX_PARTY];
@@ -649,8 +651,16 @@ void pr_post_summon_phase(pr_battle *bt, pr_engine *e, int ph)
      * loop skip the one after it, as upstream's does */
     for (int i = 0; i < bt->n_arena_tags; i++)
         if (pr_arena_tag_is(bt->arena_tags[i].type, PR_ARENACLASS_ENTRY_HAZARD)) entry_hazard_apply(bt, e, i, p);
-    /* a mystery encounter's post-summon tag */
-    if (bt->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) pr_note_unported(bt, PR_FEAT_TRAINER);
+    /* a mystery encounter's post-summon tag (lapsed once): Fight or Flight's boss queues its message, then a random one of Atk, Def, SpAtk
+     * and SpDef (randSeedInt(4, 1)) goes up two stages. Another encounter's effects are not ported */
+    if (p->me_post_summon == PR_ME_POST_STAT_BOOST) {
+        p->me_post_summon = PR_ME_POST_NONE;
+        pr_queue_msg(bt, e, pr_msg1("mysteryEncounters/fightOrFlight:option.1.statBoost", pr_arg_pokemon_name(bt, "enemyPokemon", p)));
+        const int32_t stat = pr_rng_seed_int(&bt->rng, 4, 1);   /* utils/common randSeedInt: the global RNG, not the battle seed's */
+        pr_unshift_stat_stage_change(bt, e, q->battler, &stat, 1, 2, p);
+    } else if (bt->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) {
+        pr_note_unported(bt, PR_FEAT_TRAINER);
+    }
     /* getAlliesGenerator pops in speed order; each callback evaluates its own
      * predicate after earlier callbacks have applied their tags. */
     pr_speed_iter allies;
