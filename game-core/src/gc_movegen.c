@@ -7,9 +7,8 @@
  * Gorilla Tactics (and when that leaves nothing, the unfiltered pool again without the soft blocklists); its weights are raised
  * to 2 instead of 1.6; and a boss has its passive, whose attributes act after its ability's wherever the generator reads
  * abilities. What a trainer's moveset adds (TM and egg moves, the weight bumps, instant Tera) is not here: gc_generate_moveset
- * says so and leaves the Pokemon alone. An ability and a passive whose effects depend on each other (a move-type changer next
- * to a type-conditional power ability) are not modelled: no species has such a pair, checked by the differential on every
- * species, form and ability slot.
+ * says so and leaves the Pokemon alone. Power-table queries include the resolved move type so an active type-changing
+ * ability can affect a type-conditional passive. Fused boss generation remains guarded pending its separate owner proof.
  *
  * Step by step, with the order upstream draws from the RNG:
  *  1. the level pool: getLevelMoves({startingLevel: 1, includeEvolutionMoves, includePrevolutionMoves}) in its own order, up
