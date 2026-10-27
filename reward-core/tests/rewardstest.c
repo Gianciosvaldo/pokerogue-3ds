@@ -141,7 +141,7 @@ int main(int argc, char **argv)
                 const int mv = (int)num(&save);
                 if (i < PR_REWARD_MAX_LEVEL_MOVES) m->level_moves[m->n_level_moves++] = (uint16_t)mv;
             }
-            m->n_used_tms = (uint8_t)num(&save);
+            m->n_used_tms = (uint16_t)num(&save);
             for (int i = 0; i < m->n_used_tms; i++) m->used_tms[i] = (uint16_t)num(&save);
             const int na = (int)num(&save);
             for (int i = 0; i < na; i++) {

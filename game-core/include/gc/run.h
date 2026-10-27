@@ -28,6 +28,7 @@
 #include <stdint.h>
 #include "pr/engine.h"   /* battle-core: pr_battle, pr_pokemon, pr_engine */
 #include "pr/run.h"      /* run-core: pr_run, pr_biome_depths */
+#include "pr/tm-history.h"
 #include "gc/system.h"   /* game-core: gc_system */
 
 #define GC_API_VERSION 1
@@ -213,8 +214,8 @@ typedef struct gc_mon {
     int32_t met_level;          /* Pokemon.metLevel: its level when it joined (a catch sets it again) */
     int8_t met_biome;           /* Pokemon.metBiome (BiomeId), -1 for a starter */
     uint16_t met_species;       /* Pokemon.metSpecies */
-    uint16_t used_tms[64];      /* TMs used on this Pokemon (up to 64) */
-    uint8_t n_used_tms;
+    uint16_t used_tms[PR_TM_HISTORY_CAPACITY]; /* ordered distinct taught TMs */
+    uint16_t n_used_tms;
     /* b.nature is getNature() for battle/stat callers. Before a Mint it is also
      * the base nature; old saves default has_custom_nature to false. */
     uint8_t base_nature;

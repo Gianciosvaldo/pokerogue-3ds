@@ -263,20 +263,27 @@ static int get_block_impl(reader *r, const sfield *f, int nf, void *base, size_t
     long at[MAX_SAVED];
     bool legacy_level[MAX_SAVED] = {false};
     bool legacy_sub_hp[MAX_SAVED] = {false};
+    bool legacy_tm_array[MAX_SAVED] = {false};
+    bool legacy_tm_count[MAX_SAVED] = {false};
     for (int i = 0; i < nf && i < MAX_SAVED; i++) {
         at[i] = -1;
         const uint32_t h = hash(f[i].name);
         size_t off = 0;
         for (int k = 0; k < n; k++) {
-            /* Only the two historical byte-sized Pokemon level fields may
-             * widen. All unrelated size mismatches retain normal drop behavior. */
+            /* Only known historical field representations may widen. All
+             * unrelated size mismatches retain normal drop behavior. */
             bool byte_level = ss[k] == 1 && f[i].size == sizeof(int32_t)
                 && ((f == pokemon_fields && f[i].off == offsetof(pr_pokemon, level))
                     || (f == mon_fields && f[i].off == offsetof(gc_mon, met_level)));
             bool sub_hp = ss[k] == sizeof(int32_t) && f[i].size == sizeof(double)
                 && f == tag_fields && f[i].off == offsetof(pr_battler_tag, hp);
-            if (sh[k] == h && (ss[k] == f[i].size || byte_level || sub_hp)) {
-                at[i] = (long)off; legacy_level[i] = byte_level; legacy_sub_hp[i] = sub_hp; break;
+            bool old_tm_array = f == mon_fields && f[i].off == offsetof(gc_mon, used_tms)
+                && ss[k] == 64 * sizeof(uint16_t) && f[i].size == sizeof(((gc_mon *)0)->used_tms);
+            bool old_tm_count = f == mon_fields && f[i].off == offsetof(gc_mon, n_used_tms)
+                && ss[k] == 1 && f[i].size == sizeof(uint16_t);
+            if (sh[k] == h && (ss[k] == f[i].size || byte_level || sub_hp || old_tm_array || old_tm_count)) {
+                at[i] = (long)off; legacy_level[i] = byte_level; legacy_sub_hp[i] = sub_hp;
+                legacy_tm_array[i] = old_tm_array; legacy_tm_count[i] = old_tm_count; break;
             }
             off += ss[k];
         }
@@ -302,6 +309,11 @@ static int get_block_impl(reader *r, const sfield *f, int nf, void *base, size_t
                     memcpy(&old_hp, src + at[i], sizeof old_hp);
                     double hp = old_hp;
                     memcpy(dst + f[i].off, &hp, sizeof hp);
+                } else if (legacy_tm_count[i]) {
+                    uint16_t count = src[at[i]];
+                    memcpy(dst + f[i].off, &count, sizeof count);
+                } else if (legacy_tm_array[i]) {
+                    memcpy(dst + f[i].off, src + at[i], 64 * sizeof(uint16_t));
                 } else memcpy(dst + f[i].off, src + at[i], f[i].size);
             }
     }
@@ -863,12 +875,32 @@ static bool get_protect_history(const reader *body,const char *name,gc_mon *mons
     return true;
 }
 
+/* The old pair is exactly a 64-entry array and a byte count. A partial or
+ * mixed-width pair cannot describe a complete history. Both absent fields keep
+ * ordinary legacy missing-field accounting (format 1 discards TM history). */
+static bool tm_history_schema(reader r, bool *legacy)
+{
+    int count=take16(&r), seen=0;uint16_t array_size=0,count_size=0;
+    if(r.bad||count>128)return false;
+    for(int i=0;i<count;i++){
+        uint32_t name=take32(&r);uint16_t size=take16(&r);
+        if(name==hash("used_tms")){if(seen&1)return false;seen|=1;array_size=size;}
+        if(name==hash("n_used_tms")){if(seen&2)return false;seen|=2;count_size=size;}
+    }
+    if(r.bad)return false;
+    *legacy=seen==3&&array_size==64*sizeof(uint16_t)&&count_size==1;
+    return seen==0||*legacy||(seen==3&&array_size==sizeof(((gc_mon*)0)->used_tms)&&count_size==sizeof(uint16_t));
+}
+
 static bool get_mons(const reader *body, const char *name, gc_mon *mons, int n, int *dropped)
 {
     reader r = section(body, name);
     for (int i = 0; i < 6; i++) mon_defaults(&mons[i]);
     if (r.bad) return false;
+    bool legacy_tms;
+    if(!tm_history_schema(r,&legacy_tms))return false;
     if (get_block(&r, mon_fields, NF(mon_fields), mons, sizeof(gc_mon), n, dropped) != n) return false;
+    for(int i=0;i<n;i++)if(mons[i].n_used_tms>(legacy_tms?64:PR_TM_HISTORY_CAPACITY))return false;
     const bool transform_schema = has_transform_schema(r);
     bool gender_schema;
     if (!berry_schema_ok(r) || !ability_schema_ok(r) || !fusion_gender_schema_ok(r,&gender_schema) || !moveset_schema_ok(r)) return false;

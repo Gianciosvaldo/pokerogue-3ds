@@ -55,7 +55,7 @@ int main(int argc, char **argv)
             m->egg_moves[i] = (uint16_t)next_int(&p); skip(&p);
         }
 
-        m->n_used_tms = (uint8_t)next_int(&p); skip(&p);
+        m->n_used_tms = (uint16_t)next_int(&p); skip(&p);
         if (m->n_used_tms > PR_REWARD_MAX_USED_TMS) return 2;
         for (int i = 0; i < m->n_used_tms; i++) {
             m->used_tms[i] = (uint16_t)next_int(&p); skip(&p);

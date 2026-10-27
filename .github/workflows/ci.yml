@@ -60,6 +60,8 @@ jobs:
         run: python3 game-core/tools/check-fusion-evolution-proof.py
       - name: Compare fusion evolution-item rewards and queued evolution owners
         run: python3 game-core/tools/check-fusion-item-evolution-proof.py
+      - name: Compare complete TM history, memory choices and compatible saves
+        run: python3 game-core/tools/check-tm-history-proof.py
       - name: Compare generated enemy fusion transport, stats, saves and failure controls
         run: python3 game-core/tools/check-enemy-fusion-proof.py
       - name: Compare full wild movesets, retained encounter seeds and failure controls

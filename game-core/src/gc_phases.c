@@ -289,8 +289,10 @@ static void learn(gc_run *run, int idx, int move, int slot)
 static void learned_tm(gc_run *run,const gc_rphase *p){
     if(p->c!=1)return;
     gc_mon *m=pm(run,p->a);bool found=false;
+    if(m->n_used_tms>PR_TM_HISTORY_CAPACITY){gc_stub(run,GC_STUB_REWARD_INPUT);return;}
     for(int i=0;i<m->n_used_tms;i++)found|=m->used_tms[i]==p->b;
-    if(!found&&m->n_used_tms<64)m->used_tms[m->n_used_tms++]=(uint16_t)p->b;
+    if(!found&&m->n_used_tms<PR_TM_HISTORY_CAPACITY)m->used_tms[m->n_used_tms++]=(uint16_t)p->b;
+    else if(!found)gc_stub(run,GC_STUB_REWARD_INPUT);
     gc_rq_remove(run,RP_SELECT_MODIFIER);
     gc_int(run)->reward.copy_pending=false;
 }
