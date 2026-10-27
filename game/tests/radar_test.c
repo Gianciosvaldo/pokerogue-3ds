@@ -392,9 +392,12 @@ static void test_empty_and_unusable(void) {
   draw_both();
   draw(0);
   CHECK(has_text("No enemy is remembered yet."), "top says nothing is remembered");
-  CHECK(has_text("and only from defeats it can explain."), "top says where enemies come from");
+  CHECK(has_text("A Custom Run remembers the ordinary wild") && has_text("Pokemon that finished your team off."), "top says where enemies come from");
+  CHECK(has_text("Bosses, trainers and fixed encounters") && has_text("are not remembered."), "top says what is not kept");
   draw(1);
   CHECK(has_text("No enemy is remembered."), "bottom says so");
+  CHECK(has_text("A Custom Run remembers the ordinary wild") && has_text("Bosses, trainers and fixed encounters"), "bottom says what is kept and what is not");
+  CHECK(has_text("are not remembered. The result says why."), "bottom points at the result screen");
   CHECK(has_text("Rematches are offered during a Custom Run."), "bottom says where rematches are offered");
   CHECK(has_text("0/16"), "the count is 0 of 16");
   CHECK(!has_text("A: scout"), "no Scout button with nothing to scout");
