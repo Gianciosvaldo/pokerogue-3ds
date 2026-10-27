@@ -144,3 +144,8 @@ The [Macho Brace stat/Victory/capture owners](../game-core/MACHO-BRACE-VALIDATIO
 are implemented; Winstrate reward selection and arbitrary cleanup histories
 remain separate. Do not recreate these merged owners based on the historical
 Card 104 table.
+
+The [fusion variable-type follow-up](../game-core/FUSION-VARIABLE-TYPES-VALIDATION.md)
+adds the missing Raging Bull partner lookup and retains complete pinned query
+matrices for species/form move types and their item projection. Fused boss
+admission and broader conditional ability interactions remain separate.

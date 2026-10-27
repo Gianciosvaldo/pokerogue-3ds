@@ -1207,3 +1207,10 @@ wild-boss-movesets-host-test: $(BUILD)/wild_boss_movesets_host_test
 	$(BUILD)/wild_boss_movesets_host_test
 test: wild-boss-movesets-host-test
 .PHONY: wild-boss-movesets-host-test
+
+$(BUILD)/fusion_variable_types_host_test: tests/fusion_variable_types_host_test.c tests/fixtures/fusion-variable-types.native.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+fusion-variable-types-host-test: $(BUILD)/fusion_variable_types_host_test
+	$(BUILD)/fusion_variable_types_host_test
+test: fusion-variable-types-host-test
+.PHONY: fusion-variable-types-host-test
