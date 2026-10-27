@@ -24,6 +24,9 @@ boundaries are documented in [ORB-VALIDATION.md](ORB-VALIDATION.md).
 Vitamin application, the pinned purchase-error behavior and remaining guarded
 paths are documented in [VITAMIN-VALIDATION.md](VITAMIN-VALIDATION.md).
 
+DNA Splicers (the second pick, `PlayerPokemon.fuse()`, the second member's held items and moves, the save) are documented in
+[FUSION-VALIDATION.md](FUSION-VALIDATION.md).
+
 ## The API (`include/gc/run.h`)
 
 ```c
@@ -181,7 +184,7 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 | Stand-in | Waits on |
 |---|---|
 | Enemy moveset: the last four level moves for unsupported constructors. Task 64's first slice calls Task 63 for supported clean wild enemies; trainer streams and broader pools still use the counted fallback | run-core |
-| A reward taken that isn't a ball, Full Heal, Rare Candy, Rarer Candy (Task 96 / PR #136), held item or one of the healing, revive and PP items Task 60/96 ported (TMs, Memory Mushroom, Mints, money, evolution items, DNA Splicers) is added to the items and counted (`reward taken without its own effect`) | later reward tasks |
+| A reward taken that isn't a ball, Full Heal, Rare Candy, Rarer Candy (Task 96 / PR #136), held item or one of the healing, revive and PP items Task 60/96 ported (TMs, Memory Mushroom, Mints, money, evolution items) is added to the items and counted (`reward taken without its own effect`) | later reward tasks |
 | Double battles are played as singles (M1 rule) | doubles in battle-core |
 | Mystery encounters and the fixed classic battles run-core can't make (evil team, gyms) become wild battles of the wave's level; the six classic rivals and the Classic/Challenge E4 are real since `gc_new_battle` sets `enable_fixed_rivals` | run-core, later the encounters |
 | A boss's battle score: `addFaintedEnemyScore` (and the catch's own copy of it) multiplies it by `sqrt(bossSegments)`; Task 93 sets `boss_segments` on Pokemon encounters and `gc_phases.c` calculates score using `boss_segments` | Task 93 (PR #122) |

@@ -665,16 +665,25 @@ static void held_items_changed(gc_run *run)
  * is capped at its getMaxStackCount(); with no matching stack nothing caps it. The taken copies go in a new entry at the end
  * of the list (the old matching entry is removed and re-added, as removeModifier + addModifier do), and an emptied source is
  * removed. Returns how many copies moved; 0 = refused (upstream returns false and nothing changes). */
-int gc_item_transfer(gc_run *run, int item_idx, int to, int qty)
+/* PokemonHeldItemModifier.matchType: the same item with the same argument, or the two status Orbs (TurnStatusEffectModifier is the
+ * class of both: a Pokemon holding a Flame Orb already "has" a Toxic Orb's stack) */
+static bool same_stack(const gc_item *a, const gc_item *b)
+{
+    if (!strcmp(a->key, b->key) && a->arg == b->arg) return true;
+    return (!strcmp(a->key, "TOXIC_ORB") || !strcmp(a->key, "FLAME_ORB")) && (!strcmp(b->key, "TOXIC_ORB") || !strcmp(b->key, "FLAME_ORB"));
+}
+
+static int transfer_impl(gc_run *run, int item_idx, int to, int qty, bool force)
 {
     if (!run || item_idx < 0 || item_idx >= run->n_items || to < 0 || to >= run->n_party || qty <= 0) return 0;
     gc_item src = run->items[item_idx];
     const uint32_t to_id = run->party[to].b.id;
-    if (!src.pokemon_id || src.pokemon_id == to_id || src.non_transferable
-        || gc_item_key_locked(src.key) || src.stack <= 0) return 0;
+    if (!src.pokemon_id || src.pokemon_id == to_id || src.stack <= 0) return 0;
+    /* the party screen only lists the transferable ones; PlayerPokemon.fuse moves every held item of the second member */
+    if (!force && (src.non_transferable || gc_item_key_locked(src.key))) return 0;
     int match = -1;
     for (int i = 0; i < run->n_items; i++)
-        if (i != item_idx && run->items[i].pokemon_id == to_id && !strcmp(run->items[i].key, src.key) && run->items[i].arg == src.arg) {
+        if (i != item_idx && run->items[i].pokemon_id == to_id && same_stack(&run->items[i], &src)) {
             match = i;
             break;
         }
@@ -702,8 +711,33 @@ int gc_item_transfer(gc_run *run, int item_idx, int to, int qty)
     if (hi >= 0) gc_item_remove_at(run, hi);
     if (lo >= 0) gc_item_remove_at(run, lo);
     run->items[run->n_items++] = moved;
-    held_items_changed(run);
     return taken;
+}
+
+int gc_item_transfer(gc_run *run, int item_idx, int to, int qty)
+{
+    const int taken = transfer_impl(run, item_idx, to, qty, false);
+    if (taken > 0) held_items_changed(run);
+    return taken;
+}
+
+/* PlayerPokemon.fuse's loop: tryTransferHeldItemModifier(modifier, this, false, modifier.getStackCount(), true, true, false) for every
+ * held item of the second member, in the list's order as it stood. The item need not be transferable, a held stack at the target's
+ * maximum is left behind (the second member's items are dropped with it), and ignoreUpdate: the stats wait for the updateModifiers
+ * that follows the whole loop. `from_id` is the second member's Pokemon id, `to` the party index of the one that stays. */
+void gc_items_fuse_transfer(gc_run *run, uint32_t from_id, int to)
+{
+    static gc_item snap[GC_MAX_ITEMS];
+    int n = 0;
+    for (int i = 0; i < run->n_items && n < GC_MAX_ITEMS; i++)
+        if (run->items[i].pokemon_id == from_id) snap[n++] = run->items[i];
+    for (int k = 0; k < n; k++) {
+        /* the stacks of one Pokemon are unique by type and argument, so the entry is found again after the earlier moves */
+        int at = -1;
+        for (int i = 0; i < run->n_items && at < 0; i++)
+            if (run->items[i].pokemon_id == from_id && run->items[i].arg == snap[k].arg && !strcmp(run->items[i].key, snap[k].key)) at = i;
+        if (at >= 0) transfer_impl(run, at, to, run->items[at].stack, true);
+    }
 }
 
 /* The party screen's DISCARD (tryDiscardHeldItemModifier): `count` copies of a transferable held item go, the entry with
