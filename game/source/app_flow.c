@@ -252,6 +252,9 @@ static void on_run_end(int kind, void* arg) {
     if (note) snprintf(A.note, sizeof A.note, "%s", note);
     else if (stored.outcome == CS_STORED && stored.commit.record_id)
       snprintf(A.note, sizeof A.note, "The enemy that beat you was remembered. It may challenge you again.");
+    else if (A.custom && !A.result.victory && (note = cr_not_remembered_note(&stored, rs_custom_defeat() != NULL)) != NULL)
+      /* a Custom Run's defeat that left the Radar as it was says why (a boss, a trainer's Pokemon, a fight that was not an attack...) */
+      snprintf(A.note, sizeof A.note, "%s", note);
     A.result.note = A.note[0] ? A.note : NULL;
   }
   /* the run's line in the Run History (upstream's GameOverPhase: getRunHistoryEntry, saveRunHistory), with the name the player gave it. A

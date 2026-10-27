@@ -479,8 +479,10 @@ static void draw_top(void) {
       centred(160, 150, "It is left as it is.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
     } else {
       centred(160, 66, "No enemy is remembered yet.", TS_WINDOW, 0);
-      centred(160, 96, "Only a Custom Run adds enemies,", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
-      centred(160, 108, "and only from defeats it can explain.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
+      centred(160, 94, "A Custom Run remembers the ordinary wild", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
+      centred(160, 106, "Pokemon that finished your team off.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
+      centred(160, 118, "Bosses, trainers and fixed encounters", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
+      centred(160, 130, "are not remembered.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
     }
     return;
   }
@@ -568,7 +570,10 @@ static void draw_bottom_list(void) {
     line(12, LIST_Y + 60, "The file is left as it is.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
   } else if (R.roster.count == 0) {
     line(12, LIST_Y + 14, "No enemy is remembered.", TS_WINDOW, 0);
-    line(12, LIST_Y + 38, "Only a Custom Run adds enemies to this list.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
+    line(12, LIST_Y + 38, "A Custom Run remembers the ordinary wild", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
+    line(12, LIST_Y + 50, "Pokemon that finished your team off.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
+    line(12, LIST_Y + 62, "Bosses, trainers and fixed encounters", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
+    line(12, LIST_Y + 74, "are not remembered. The result says why.", TS_INSTRUCTIONS_TEXT, RR_RGBA(0xa0, 0xa0, 0xa0, 255));
   } else {
     for (int i = 0; i < VISIBLE && R.scroll + i < R.roster.count; i++) draw_row(R.scroll + i, (float)(LIST_Y + 6 + i * ROW_H));
     if (R.scroll > 0) {

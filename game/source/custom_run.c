@@ -548,8 +548,67 @@ static bool build_defeat(const gc_run* run, cs_defeat* out) {
   return true;
 }
 
+/* Why build_defeat found no finisher, in words for the player: the same checks in the same order, asked again once it has refused. It is
+ * kept outside R because the result screen reads it after cr_end. */
+static char g_why[96];
+
+static void why_no_finisher(const gc_run* run) {
+  const cand_t* c = &R.cand;
+  const char* w = "The enemy could not be identified.";
+  if (!c->valid)
+    w = "The fall of your last Pokemon was not seen.";
+  else if (!c->direct)
+    w = "Your last Pokemon fell to something other than an attack (poison, weather, recoil...).";
+  else if (!c->source_enemy)
+    w = "The last hit did not come from an enemy.";
+  else if (c->wave != run->wave || R.enc_wave != run->wave)
+    w = "The last hit belongs to another wave's battle.";
+  else if (R.enc_kind == GC_ENC_UNSUPPORTED)
+    w = "This battle uses something the Radar cannot record.";
+  else if (c->src.species != c->src.start_species || c->src.form != c->src.start_form)
+    w = "The enemy changed form during the fight.";
+  snprintf(g_why, sizeof g_why, "%s", w);
+}
+
+const char* cr_defeat_why(void) { return g_why; }
+
+const char* cr_not_remembered_note(const cs_result* stored, bool named) {
+  static char out[160];
+  if (!stored) return NULL;
+  if (stored->outcome == CS_REPLAYED) return stored->commit.record_id ? NULL : "No enemy remembered: this run's result had been stored already.";
+  if (stored->outcome != CS_STORED || stored->commit.record_id) return NULL;   /* a failed store has its own note (cs_note) */
+  const char* why;
+  char tail[96];
+  if (!named) {
+    why = g_why[0] ? g_why : "The enemy could not be identified.";
+  } else if (stored->status != CC_OK) {
+    snprintf(tail, sizeof tail, "The enemy's data was refused (%s).", cc_status_str(stored->status));
+    why = tail;
+  } else {
+    switch (stored->commit.refusal) {
+      case CC_REFUSE_BOSS: why = "A boss is not remembered."; break;
+      case CC_REFUSE_FUSED:
+      case CC_REFUSE_TERA: why = "A fused or Terastallized enemy is not remembered."; break;
+      case CC_REFUSE_TRAINER_OWNED: why = "A trainer's Pokemon is not remembered."; break;
+      case CC_REFUSE_MYSTERY: why = "A mystery encounter's enemy is not remembered."; break;
+      case CC_REFUSE_FIXED_SCRIPTED: why = "This wild fight stands in for a fixed battle, so it is not remembered."; break;
+      case CC_REFUSE_REMATCH: why = "A rematch enemy is not remembered again."; break;
+      case CC_REFUSE_ABILITY_UNKNOWN:
+      case CC_REFUSE_MOVES_UNKNOWN: why = "The enemy's ability or moves were not known."; break;
+      case CC_REFUSE_ROSTER_FULL: why = "All places hold enemies that cannot be replaced yet."; break;
+      default: why = "The enemy could not be identified."; break;
+    }
+  }
+  snprintf(out, sizeof out, "No enemy remembered: %s", why);
+  return out;
+}
+
 bool cr_on_run_end(const gc_run* run, int kind, cs_defeat* out) {
-  if (!R.active) return false;
+  g_why[0] = 0;
+  if (!R.active) {
+    if (kind == GC_SCREEN_GAME_OVER) snprintf(g_why, sizeof g_why, "The custom run was no longer active.");
+    return false;
+  }
   retry_result();
   if (R.rematch_live) write_result(kind != GC_SCREEN_GAME_OVER && R.enemy_down ? 1 : 2);
   /* the run is over: whatever it still holds (a record scheduled and never offered) is given back */
@@ -563,10 +622,12 @@ bool cr_on_run_end(const gc_run* run, int kind, cs_defeat* out) {
   bool have = false;
   if (kind == GC_SCREEN_GAME_OVER) {
     have = build_defeat(run, out);
-    if (have)
+    if (have) {
       R.st.candidates++;
-    else
+    } else {
       R.st.candidates_none++;
+      why_no_finisher(run);
+    }
   }
   return have;
 }

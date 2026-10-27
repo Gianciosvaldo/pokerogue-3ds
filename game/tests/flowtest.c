@@ -917,6 +917,8 @@ int main(void) {
     CHECK(n_resume == res01 + 1 && CFG.custom && CFG.slot == 2 && cr_active(), "Load Game resumes it as a custom run");
     CHECK(RUN.sys == sysd_get(), "with the player's system data");
     driver_end(GC_SCREEN_GAME_OVER);
+    CHECK(R.note && !strncmp(R.note, "No enemy remembered: ", 21) && strstr(R.note, cr_defeat_why()) && cr_defeat_why()[0],
+          "a custom run's defeat that made no record says why on the result screen: \"%s\"", R.note ? R.note : "(none)");
     CHECK(!exists(nc), "the custom run's name went with it");
     CHECK(!cr_active() && cr_inspect(2, &inf) == RSV_EMPTY && !exists(cp), "the custom file of a finished run is cleared");
     CHECK(status_of(0) == RSV_OK, "the ordinary run is untouched");
@@ -929,6 +931,7 @@ int main(void) {
     sh_confirm(1);
     CHECK(!CFG.custom && CFG.slot == 1 && !cr_active(), "an ordinary run: no custom flag, no controller");
     driver_end(GC_SCREEN_GAME_OVER);
+    CHECK(!R.note || !strstr(R.note, "No enemy remembered"), "an ordinary run's defeat has no 'not remembered' line: it never remembers anyone");
     R.on_done(R.arg);
 
     /* a slot is one place for either kind: an ordinary New Game over a custom run replaces it */

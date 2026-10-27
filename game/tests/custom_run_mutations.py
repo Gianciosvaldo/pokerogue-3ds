@@ -25,6 +25,7 @@ CS = "source/custom_store.c"
 GCE = "../game-core/src/gc_encounter.c"
 GCC = "../game-core/src/gc_custom.c"
 T = ("custom_run_test", ["build/custom_run_test"])
+FT = ("flowtest", ["build/flowtest"])
 
 # (file under game/, old text, new text, (make target, command), what the mutation is)
 M = [
@@ -125,10 +126,10 @@ M = [
     (CR, "  if (state == CC_SCHED_NO_CANDIDATE || state == CC_SCHED_EXHAUSTED || state == CC_SCHED_DECLINED) {\n    return cc_roster_release(&m->roster, uid, NULL);\n  }",
          "  if (state == CC_SCHED_NO_CANDIDATE || state == CC_SCHED_EXHAUSTED || state == CC_SCHED_DECLINED) {\n    return CC_OK;\n  }", T,
      "a finished schedule keeps its record held after a load"),
-    (CR, "  return rsv_remove_files(slot_file(slot, name));", "  return true;", T, "a cleared slot keeps its files"),
+    (CR, "  return rsv_remove_files(name);", "  return true;", T, "a cleared slot keeps its files"),
     (CR, "  if (!overlay_decode(ov, n_ov, &x.o, &carry_in)) {\n    free(raw);", "  if (false) {\n    free(raw);", T, "a damaged overlay is loaded"),
     (CR, "  if (rsv_load_bytes(core, n_core, run, &info) != RSV_OK) {", "  if (false) {", T, "damaged core bytes are loaded"),
-    (CR, "  gc_run_set_custom(run, &HOOKS);\n  cr_settle_owed();", "  cr_settle_owed();", T, "a resumed run has no rematch hooks"),
+    (CR, "  gc_run_set_custom(run, &HOOKS);\n  if (cr_jojo_foe(run))", "  if (cr_jojo_foe(run))", T, "a resumed run has no rematch hooks"),
     (CR, "  R.carry = carry_in;\n  R.have_carry = x.o.has_carry;", "  R.have_carry = false;", T, "the observer's turns are not carried over a resume"),
     (CR, "  if (!cr_usable(fw)) {", "  if (false) {", T, "a custom run is resumed with an unusable custom file"),
     (CR, "  if (kind == GC_SCREEN_GAME_OVER) {\n    have = build_defeat(run, out);", "  if (true) {\n    have = build_defeat(run, out);", T, "a Classic clear can name a finisher"),
@@ -148,6 +149,28 @@ M = [
     (CR, "  w8(&w, R.jojo_live);", "  w8(&w, 0);", T, "the JoJo battle on the field is not saved"),
     (CR, "  w16(&w, R.jojo_wave);", "  w16(&w, 0);", T, "the wave of the JoJo battle is not saved"),
     (CR, "    if (r.bad || cc_jojo_validate(&o->jojo) != CC_OK) return false;", "    if (r.bad) return false;", T, "a damaged JoJo state is loaded"),
+    # ---- the result screen's "not remembered" line
+    (CR, "  if (!c->valid)\n    w = \"The fall of your last Pokemon was not seen.\";", "  if (false)\n    w = \"The fall of your last Pokemon was not seen.\";", T,
+     "an unseen fall is explained as a hit that was no attack"),
+    (CR, "  else if (!c->direct)\n    w = \"Your last Pokemon fell", "  else if (false)\n    w = \"Your last Pokemon fell", T, "an indirect fall is not explained as one"),
+    (CR, "  else if (!c->source_enemy)\n    w = ", "  else if (false)\n    w = ", T, "a hit from the player's own side is not explained as one"),
+    (CR, "  else if (c->wave != run->wave || R.enc_wave != run->wave)\n    w = ", "  else if (false)\n    w = ", T, "a hit of another wave is not explained as one"),
+    (CR, "  else if (R.enc_kind == GC_ENC_UNSUPPORTED)\n    w = ", "  else if (false)\n    w = ", T, "an unsupported battle is not explained as one"),
+    (CR, "  else if (c->src.species != c->src.start_species || c->src.form != c->src.start_form)\n    w = ", "  else if (false)\n    w = ", T,
+     "a form change is not explained as one"),
+    (CR, "  g_why[0] = 0;\n  if (!R.active) {", "  if (!R.active) {", T, "a reason from an earlier run lingers into the next run end"),
+    (CR, "    if (kind == GC_SCREEN_GAME_OVER) snprintf(g_why, sizeof g_why, \"The custom run was no longer active.\");\n", "", T,
+     "a run that was no longer active gives no reason"),
+    (CR, "  if (stored->outcome != CS_STORED || stored->commit.record_id) return NULL;", "  if (stored->outcome != CS_STORED) return NULL;", T,
+     "a remembered enemy is also reported as not remembered"),
+    (CR, "  } else if (stored->status != CC_OK) {", "  } else if (false) {", T, "a candidate the store could not validate is explained as a refusal"),
+    (CR, "      case CC_REFUSE_FIXED_SCRIPTED: why = ", "      case 99: why = ", T, "a stand-in for a fixed battle is not explained"),
+    (CR, "      case CC_REFUSE_BOSS: why = ", "      case 99: why = ", T, "a boss is not explained"),
+    (CR, "      case CC_REFUSE_TRAINER_OWNED: why = ", "      case 99: why = ", T, "a trainer's Pokemon is not explained"),
+    ("source/app_flow.c", "    else if (A.custom && !A.result.victory && (note = cr_not_remembered_note", "    else if (!A.result.victory && (note = cr_not_remembered_note", FT,
+     "an ordinary run's defeat is told as a Custom Run's"),
+    ("source/app_flow.c", "    else if (A.custom && !A.result.victory && (note = cr_not_remembered_note", "    else if (false && (note = cr_not_remembered_note", FT,
+     "a Custom Run's defeat says nothing about why"),
     (CR, "    if (o->jojo_live > cc_jojo_count || (o->jojo_live && !(o->jojo.used >> (o->jojo_live - 1) & 1u))) return false;", "    if (o->jojo_live > cc_jojo_count) return false;", T,
      "a JoJo battle against a character never dealt is loaded"),
     (CR, "    if (o->jojo_live > cc_jojo_count || (o->jojo_live && !(o->jojo.used >> (o->jojo_live - 1) & 1u))) return false;", "    if ((o->jojo_live && !(o->jojo.used >> (o->jojo_live - 1) & 1u))) return false;", T,
