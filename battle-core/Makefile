@@ -47,9 +47,15 @@ $(BUILD)/turntest: tests/turntest.c tests/optional-phase-map.inc $(BUILD)/libprc
 $(BUILD)/bosssegmenttest: tests/bosssegmenttest.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 
-gen: gen/out/pr_data.c
-gen/out/pr_data.c: gen/gen_tables.py $(wildcard gen/upstream/*.json)
+# Normal builds use the committed tables without needing an upstream dump.
+# Explicit regeneration still requires the dump; regenerate automatically when
+# those inputs are present and change.
+gen:
 	python3 gen/gen_tables.py
+ifneq ($(wildcard gen/upstream/enums.json),)
+gen/out/pr_data.c: gen/gen_tables.py gen/closure_identity.py $(wildcard gen/upstream/*.json)
+	python3 gen/gen_tables.py
+endif
 
 clean:
 	rm -rf $(BUILD)
