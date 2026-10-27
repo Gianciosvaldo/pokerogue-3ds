@@ -67,6 +67,9 @@ bool gc_football_award_exp(gc_run *r, unsigned round, const char **why)
     r->wave=(int)round*20;
     r->bt.wave_index=r->wave;
     for (int i=0;i<r->n_party;++i) {
+        /* Friendship first, so the level-up this EXP brings can already evolve on it. No profile: the starter's candy comes from
+         * the football rules, not from friendship as in the classic game. */
+        gc_system_add_friendship(NULL,r,&r->party[i],GC_FOOTBALL_FRIENDSHIP_PER_WIN,false);
         gc_rphase p=gc_rp(RP_EXP,i,0,0);
         p.d=(double)GC_FOOTBALL_EXP_FACTOR*round*round;
         gc_rq_push(r,p);

@@ -55,8 +55,24 @@ and refreshes its player; the member's other items are voided, as it has evolved
 with the item's icon, and the top screen the member beside what it would become with each attribute as "today>evolved"
 (`football_career_evo_preview` runs the evolution without keeping it).
 
-Not covered: evolutions that are not items (friendship, such as Pichu, Togepi or Eevee's Espeon and Umbreon; a member's friendship
-never rises in this mode, so those never evolve), and fusion.
+Not covered: fusion (football has none).
+
+### Friendship
+
+Every member gains `GC_FOOTBALL_FRIENDSHIP_PER_WIN` (15) friendship for each won round, in `gc_football_award_exp` before the round's
+EXP is queued, so the level-up it brings can already evolve on it. A lost match gives nothing; friendship stops at 255. It is
+the member's own friendship only: the classic game also feeds the starter's candy from it, which here is the candy rules' job
+(see Species candy), so no profile is passed. The six-player team gets it from the same call.
+
+Friendship evolutions are decided the way the classic game does, at a level-up with the friendship the species asks for (and
+its time of day or move type where it asks for one): the EVOLVE screen offers them with the level-based ones. Starting
+from each species' base friendship, a run of wins evolves Pichu, Cleffa, Igglybuff, Togepi, Azurill and Budew after round 2,
+Chingling, Woobat, Cosmog and Snom after round 3, Buneary after round 4, Munchlax and Eevee after round 5, Riolu after round 6
+and Type: Null after round 7 (the ones with a time of day or a move type wait for a round where it fits).
+`tests/friendship_test.c` sweeps every draftable species with a friendship evolution through seven won rounds and checks
+none evolves in round 1, each plain one evolves on the round its friendship allows and all have by round 7; the gain is a
+design choice, and that test is what fails if it is made too fast or too slow. Mid-stages with a friendship evolution (Golbat,
+Chansey, Swadloon) are not draftable, so they matter only once levels have brought a member there; the sweep does not cover them.
 
 ## Live engine and controls
 

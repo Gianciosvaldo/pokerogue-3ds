@@ -238,6 +238,13 @@ shop-evo-test: core-libs
 	$(BUILD)/shop_evo_test
 test: shop-evo-test
 
+.PHONY: friendship-test
+friendship-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/friendship_test.c src/football_career.c src/football_career_save.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/friendship_test
+	$(BUILD)/friendship_test
+test: friendship-test
+
 .PHONY: fx-test
 fx-test: core-libs
 	mkdir -p $(BUILD)
