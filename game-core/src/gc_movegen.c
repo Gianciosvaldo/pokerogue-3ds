@@ -1,4 +1,5 @@
-/* generateMoveset (src/ai/ai-moveset-gen.ts @ 8555c08) for a wild Pokemon, a boss included, that has no trainer and no fusion: what
+/* generateMoveset (src/ai/ai-moveset-gen.ts @ 8555c08) for trainerless wild Pokemon:
+ * unfused bosses and non-boss fusions without a passive are supported. This is what
  * every Pokemon of a mystery encounter (the Global Trade System's, the Salesman's, the Dark Deal boss) is made with. A boss adds
  * to the steps below: its pool drops a move that a better move of the pool makes redundant (SUPERCEDED_MOVES), then Pain Split,
  * the self-KO moves, the doubles-only moves in singles, the level-based denylist from level 70, the moves of the offensive
@@ -548,11 +549,17 @@ bool gc_mg_effective_powers(gc_run *run, const gc_mon *m, const uint16_t *moves,
 
 bool gc_generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m)
 {
-    if (m->b.has_trainer || m->trainer_slot || m->b.fusion_species || run->run.has_challenges) return false;
-    if (!gc_species(m->b.species)) return false;
+    if (m->b.has_trainer || m->trainer_slot || run->run.has_challenges) return false;
+    const pr_species *sp = gc_species(m->b.species);
+    if (!sp) return false;
+    if (m->b.fusion_species && (!gc_species(m->b.fusion_species)
+        || (sp->form_change_triggers & (1u << PR_FCT_SpeciesFormChangeMoveLearnedTrigger))))
+        return false;
 
     static mg_ctx c;   /* ~the stack of a 3DS thread is 32 KB: the pools are too big for it */
     if (!ctx_init(&c, run, m)) return false;
+    if (m->b.fusion_species && (c.boss || c.passive)) return false;
+    const pr_rng before = *rng;
 
     int pp_up[4] = {0, 0, 0, 0};
     if (m->b.species == SPECIES_ID_SMEARGLE) {
@@ -646,6 +653,10 @@ bool gc_generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m)
             fill_remaining(&c, rng, &base);
         } while (outer > 0 && filter_useless_moves(&c));
     }
+
+    /* An unsupported ability/stat operation must not publish a partial moveset
+     * or consume the fallback caller's random stream. */
+    if (c.bt.n_unported) { *rng = before; return false; }
 
     memset(m->b.moves, 0, sizeof m->b.moves);
     memset(m->b.pp_used, 0, sizeof m->b.pp_used);

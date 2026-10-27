@@ -353,8 +353,8 @@ $(BUILD)/starter_unlock_test: tests/starter_unlock_test.c $(BUILD)/libgc.a $(REW
 $(BUILD)/resume_test: tests/resume_test.c tools/gcplay.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/resume_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
 
-$(BUILD)/enemy_moveset_test: tests/enemy_moveset_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+$(BUILD)/enemy_moveset_test: tests/enemy_moveset_test.c tests/fixtures/wild-movesets.native.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
 
 # the save checks, level/evo tests, biome tests, voucher/egg tests, then 200 soak runs twice: with a save/load round trip at every save point, the runs'
 # digest must come out the same
@@ -1173,3 +1173,10 @@ enemy-fusion-host-test: $(BUILD)/enemy_fusion_host_test
 	$(BUILD)/enemy_fusion_host_test
 test: enemy-fusion-host-test
 .PHONY: enemy-fusion-host-test
+
+$(BUILD)/wild_movesets_host_test: tests/wild_movesets_host_test.c tests/fixtures/wild-movesets.native.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -Wl,--wrap=pr_calculate_stats -lm -o $@
+wild-movesets-host-test: $(BUILD)/wild_movesets_host_test
+	$(BUILD)/wild_movesets_host_test
+test: wild-movesets-host-test
+.PHONY: wild-movesets-host-test
