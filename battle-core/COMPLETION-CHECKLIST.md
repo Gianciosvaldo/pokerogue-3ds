@@ -128,6 +128,9 @@ The [fusion level-up follow-up](../game-core/FUSION-EVOLUTION-VALIDATION.md)
 adds primary/secondary selection, mutation, queued confirmation and optional
 secondary-gender saves. Fusion acquisition, item evolution, special extra-party
 evolutions and broader interactions remain open caller prerequisites.
+The [enemy fusion projection follow-up](../game-core/ENEMY-FUSION-PROJECTION-VALIDATION.md)
+preserves run-core's generated fusion identity through controller creation,
+refresh, stats and saves. Complete fused moveset/encounter generation remains open.
 
 [Constructor-lock transport](../game-core/HELD-LOCK-VALIDATION.md) now preserves
 source locks in acquisition, projection and save reconstruction. Held-form
