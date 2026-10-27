@@ -40,9 +40,15 @@ own EXP schedule (`gc_football_award_exp`, 2000 * round squared). Evolution targ
 including Nincada's mutually exclusive Ninjask/Shedinja choice. Level-up moves are learned
 without a prompt; with four known the weakest (lowest power, earliest slot) is replaced, but never a move the member's
 evolution asks for (Tangela keeps Ancient Power for Tangrowth, an Eevee its only Fairy move for Sylveon) unless every move is one.
-Evolutions football cannot meet stay out of reach: weather, a party type, a gender, a treasure count, and two moves a ten-level jump
-passes (Piloswine's Ancient Power is a relearn move; Primeape's Rage Fist comes at 35, while the member was still a Mankey).
-`tests/pace_test.c` takes every draftable species through the seven games. The shop retains Carbos, Protein and rare compatible
+Every level evolution happens by its level. A member has no way to meet weather, a party type, a treasure count or a gender it was not
+drafted with, nor a move its species only relearns (Piloswine's Ancient Power) or learns at a level a ten-level jump passes while it is
+still the earlier form (Primeape's Rage Fist at 35, as a Mankey), so when a species has no evolution it can take by the rules, it takes
+the ones that ask for nothing else (`gc_mon_football_evolutions`: the second pass waives those conditions, and a move only once its
+learn level is behind the member). That is how Annihilape, Mamoswine, Vespiquen, Salazzle, Pangoro, Goodra and Gholdengo happen. It is a
+fallback, never a replacement: a species with an evolution it can take (a Burmy of either gender, Tangela before it has learned Ancient
+Power) keeps the rules and the round it always had. The rule belongs to football runs only (`gc_football_new` marks the run; classic and
+custom runs queue evolutions by the upstream rules, unchanged). The evolution prompt is as before.
+`tests/pace_test.c` takes every draftable species through the seven games and finds none with a level evolution left; `tests/evolve_all_test.c` pins the seven species, the unchanged rounds of the others, the moves and the classic runs. The shop retains Carbos, Protein and rare compatible
 mega stones, using existing classic item icons, and adds the evolution items (next section). A mega holder is explicitly
 selected between rounds; the form's stats and artwork apply for that match.
 

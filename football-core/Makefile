@@ -252,6 +252,13 @@ pace-test: core-libs
 	$(BUILD)/pace_test
 test: pace-test
 
+.PHONY: evolve-all-test
+evolve-all-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/evolve_all_test.c src/football_career.c src/football_career_save.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/evolve_all_test
+	$(BUILD)/evolve_all_test
+test: evolve-all-test
+
 .PHONY: fx-test
 fx-test: core-libs
 	mkdir -p $(BUILD)

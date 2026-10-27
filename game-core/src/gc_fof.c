@@ -38,35 +38,56 @@ static int boosted_level(gc_run *run, pr_rng *r)
     return base + (int)floor((double)run->wave / 10 + 0.5);
 }
 
-/* onInit, on the stream of the wave seed (the boss, its level and the item); false when run-core has no roll for the biome and wave or the species */
-bool gc_fof_init(gc_run *run, gc_mon *boss, int *level, pr_reward_option *item)
+/* getRandomEncounterPokemon with isBoss in onInit, on the stream of the wave seed: the boss's level, the boss itself and its calculated stats; `after` is the
+ * stream where onInit's further rolls (Fight or Flight's item) go on. False when run-core has no roll for the biome and wave or the species. The run's RNG and
+ * unported flags are left as they were. */
+bool gc_me_init_boss(gc_run *run, gc_mon *boss, int *level, pr_rng *after)
 {
-    static fof_t made;
-    fof_t *f = &made;
     pr_rng r = pr_run_seed_offset_rng(&run->run, run->wave, NULL);
     const pr_rng saved = run->run.rng;
     const unsigned flags = run->run.unported;
     const bool dbl = run->double_battle;
     bool ok = false;
     run->double_battle = false;
-    f->level = boosted_level(run, &r);
+    *level = boosted_level(run, &r);
 
     /* arena.randomSpecies(wave, level, 0, luck, true) and getWildSpeciesForLevel, on `r` */
     run->run.rng = r;
     int species = pr_run_get_override_species(&run->run, run->wave);
     if (species < 0 && run->run.unported == flags) {
         bool evo_boss = false;
-        species = pr_run_random_species(&run->run, run->biome, run->wave, f->level, gc_party_luck(run), 1, run->wave_cycle_offset, &evo_boss);
-        if (species >= 0) species = pr_run_get_wild_species_for_level(&run->run.rng, species, f->level, true, evo_boss, false);
+        species = pr_run_random_species(&run->run, run->biome, run->wave, *level, gc_party_luck(run), 1, run->wave_cycle_offset, &evo_boss);
+        if (species >= 0) species = pr_run_get_wild_species_for_level(&run->run.rng, species, *level, true, evo_boss, false);
     }
     r = run->run.rng;
     run->run.rng = saved;
     if (species <= 0 || run->run.unported != flags) goto done;
 
-    if (!gc_me_new_boss(run, &r, species, f->level, false, &f->boss)) goto done;
+    if (!gc_me_new_boss(run, &r, species, *level, false, boss)) goto done;
     /* the constructor's calculateStats: the stats (and full HP) of the boss as it stands, before any item */
-    pr_update_passive(&run->bt, &f->boss.b);
-    pr_calculate_stats(&run->bt, &f->boss.b);
+    pr_update_passive(&run->bt, &boss->b);
+    pr_calculate_stats(&run->bt, &boss->b);
+    *after = r;
+    ok = true;
+done:
+    run->run.rng = saved;
+    run->double_battle = dbl;
+    run->run.unported = flags;
+    return ok;
+}
+
+/* onInit, on the stream of the wave seed (the boss, its level and the item); false when run-core has no roll for the biome and wave or the species */
+bool gc_fof_init(gc_run *run, gc_mon *boss, int *level, pr_reward_option *item)
+{
+    static fof_t made;
+    fof_t *f = &made;
+    pr_rng r;
+    if (!gc_me_init_boss(run, &f->boss, &f->level, &r)) return false;
+    const pr_rng saved = run->run.rng;
+    const unsigned flags = run->run.unported;
+    const bool dbl = run->double_battle;
+    bool ok = false;
+    run->double_battle = false;
 
     /* the item: regenerateModifierPoolThresholds(party, PLAYER, 0), then options of the wave's tier until one is no TM and no Candy Jar */
     {
@@ -89,7 +110,6 @@ bool gc_fof_init(gc_run *run, gc_mon *boss, int *level, pr_reward_option *item)
         run->run.rng = saved;
         if (run->run.unported != flags) ok = false;
     }
-done:
     run->run.rng = saved;
     run->double_battle = dbl;
     run->run.unported = flags;
@@ -121,34 +141,44 @@ bool gc_fof_tokens(gc_run *run, pr_msg_arg *enemy_name, pr_msg_arg *item_name)
     return true;
 }
 
-/* option 1: the boss fights */
-static void fight(gc_run *run, const fof_t *f)
+/* initBattleWithEnemyConfig for the boss of onInit's config; the caller has set in->me_reward. post_summon: PR_ME_POST_*, the MYSTERY_ENCOUNTER_POST_SUMMON effects.
+ * stream: the option's stream where earlier rolls of the option left it (NULL: from its start), or &run->run.rng when an await ahead of initBattleWithEnemyConfig
+ * took it out of the option's seed offset: the level, the new id and the rolls after them are then on the run's own RNG */
+void gc_me_start_boss_battle(gc_run *run, const gc_mon *boss, int level, int post_summon, pr_rng *stream, int type)
 {
     gc_internal *in = gc_int(run);
     /* initBattleWithEnemyConfig: a single battle; battle.enemyLevels = [getLevelForWave()] draws on the option's stream, and the
      * boss from its data source takes a new id from it */
     run->double_battle = false;
-    pr_rng r = gc_me_option_rng(run);
-    (void)pr_run_get_level_for_wave(&run->run, &r, run->wave);
+    pr_rng fresh = gc_me_option_rng(run);
+    pr_rng *rs = stream ? stream : &fresh;
+    (void)pr_run_get_level_for_wave(&run->run, rs, run->wave);
     gc_mon *e = &run->enemy[0];
-    *e = f->boss;
-    e->b.id = (uint32_t)floor(pr_rng_real_in_range(&r, 0, 4294967296.0));
-    e->b.boss_segments = (uint8_t)pr_run_get_encounter_boss_segments(&run->run, run->wave, f->level, e->b.species, true);
+    *e = *boss;
+    e->b.id = (uint32_t)floor(pr_rng_real_in_range(rs, 0, 4294967296.0));
+    e->b.boss_segments = (uint8_t)pr_run_get_encounter_boss_segments(&run->run, run->wave, level, e->b.species, true);
     e->b.boss_segment_index = (uint8_t)(e->b.boss_segments - 1);
     e->b.is_boss = true;
     e->b.passive_flag = false;
-    e->b.me_post_summon = PR_ME_POST_STAT_BOOST;
+    e->b.me_post_summon = (uint8_t)post_summon;
     run->n_enemy = 1;
     run->battle_type = BATTLE_TYPE_WILD;
     /* after the first await: the wild pool's thresholds and the item rolls, on the run's RNG */
     gc_enemy_finish_party_me(run);
     in->me_no_flee = true;
+    gc_me_begin_battle(run, type);
+}
+
+/* option 1: the boss fights */
+static void fight(gc_run *run, const fof_t *f)
+{
+    gc_internal *in = gc_int(run);
     in->me_reward.active = true;
     in->me_reward.has_item = true;
     in->me_reward.item = f->item;
     in->me_reward.func = -1;
     in->me_reward.fill = false;
-    gc_me_begin_battle(run, GC_ME_FIGHT_OR_FLIGHT);
+    gc_me_start_boss_battle(run, &f->boss, f->level, PR_ME_POST_STAT_BOOST, NULL, GC_ME_FIGHT_OR_FLIGHT);
 }
 
 /* the shop of the item (setEncounterRewards({guaranteedModifierTypeOptions: [item], fillRemaining: false})) */

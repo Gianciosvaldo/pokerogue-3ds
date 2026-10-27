@@ -365,6 +365,12 @@ static void setup_texts(gc_run *run)
     case GC_ME_FIELD_TRIP:
         s->option_pick[0] = s->option_pick[1] = s->option_pick[2] = GC_PICK_MEMBER_MOVE;
         break;
+    case GC_ME_BERRIES_ABOUND: {
+        pr_msg_arg enemy, fastest;
+        int grab = 0;
+        if (gc_berries_tokens(run, &enemy, &fastest, &grab)) { screen_arg(s, enemy); screen_arg(s, fastest); screen_arg(s, pr_arg_int("numBerries", grab)); screen_arg(s, pr_arg_int("raceLost", gc_berries_race_lost(run))); }
+        break;
+    }
     case GC_ME_FIGHT_OR_FLIGHT: {
         pr_msg_arg enemy, item;
         if (gc_fof_tokens(run, &enemy, &item)) { screen_arg(s, enemy); screen_arg(s, item); }
@@ -440,7 +446,7 @@ void gc_mystery_setup_screen(gc_run *run)
     case GC_ME_ABSOLUTE_AVARICE: case GC_ME_CLOWNING_AROUND: case GC_ME_PART_TIMER:
     case GC_ME_DANCING_LESSONS: case GC_ME_WEIRD_DREAM: case GC_ME_TELEPORTING_HIJINKS:
     case GC_ME_UNCOMMON_BREED: case GC_ME_THE_EXPERT_POKEMON_BREEDER: case GC_ME_FIELD_TRIP:
-    case GC_ME_AN_OFFER_YOU_CANT_REFUSE: case GC_ME_PILLAR_MEN:
+    case GC_ME_AN_OFFER_YOU_CANT_REFUSE: case GC_ME_PILLAR_MEN: case GC_ME_BERRIES_ABOUND:
         n = 3; break;
     case GC_ME_TRAINING_SESSION: case GC_ME_DEPARTMENT_STORE_SALE:
     case GC_ME_SAFARI_ZONE: case GC_ME_DELIBIRDY: case GC_ME_GLOBAL_TRADE_SYSTEM:
@@ -1359,12 +1365,7 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_BERRIES_ABOUND:
-        if (option == 0) {
-            gc_port_give_reward(run, "SITRUS_BERRY");
-            end_mystery_encounter_leave(run);
-            return true;
-        }
-        end_mystery_encounter_leave(run);
+        gc_berries_execute(run, option);
         return true;
 
     case GC_ME_CLOWNING_AROUND:
@@ -1510,10 +1511,11 @@ void gc_me_win_rewards(gc_run *run)
     gc_internal *in = gc_int(run);
     in->me_reward.active = false;
     gc_rq_push(run, gc_rp(RP_BATTLE_END, 1, 0, 0));
-    if (in->me_reward.before) gc_rq_push(run, gc_rp(RP_ME_TRAINING_RETURN, 0, 0, 0));   /* onBeforeRewardsPhase */
+    if (in->me_reward.before) gc_rq_push(run, gc_rp(RP_ME_BEFORE_REWARDS, 0, 0, 0));   /* the callback setEncounterRewards was given */
     pr_reward_custom *c = &in->reward.me_custom;
     memset(c, 0, sizeof *c);
     if (in->me_reward.has_item) c->options[c->n_options++] = in->me_reward.item;
+    for (int i = 0; i < in->me_reward.n_more && c->n_options < PR_REWARD_MAX_OPTIONS; i++) c->options[c->n_options++] = in->me_reward.more[i];
     if (in->me_reward.func >= 0) c->funcs[c->n_funcs++] = (uint16_t)in->me_reward.func;
     c->fill_remaining = in->me_reward.fill;
     c->reroll_multiplier = NAN;

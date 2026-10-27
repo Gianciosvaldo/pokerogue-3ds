@@ -43,7 +43,7 @@ enum {
     RP_CUSTOM_OFFER,     /* custom content: the app's rematch offer, waits on CUSTOM_OFFER (gc/custom.h) */
     RP_FG_KO,            /* Fun and Games!: MysteryEncounterRewardsPhase running doContinueEncounter (handleLoseMinigame) */
     RP_EGG_LAPSE,        /* EggLapsePhase: wave progress and ready hatch/profile rewards */
-    RP_ME_TRAINING_RETURN, /* Training Session's onBeforeRewardsPhase: the Pokemon comes back changed */
+    RP_ME_BEFORE_REWARDS, /* a mystery encounter's callback before the rewards (Training Session: the Pokemon comes back changed; Berries Abound: the berries) */
     RP_COUNT_
 };
 typedef struct { uint8_t type; int32_t a, b, c; double d; const char *key; } gc_rphase;
@@ -120,7 +120,7 @@ typedef struct {
     /* an encounter's fight that is not allowed to flee (withFleeAllowed(false)) and, for a fight with a guaranteed reward (Fight or Flight), what its
      * victory opens: setEncounterRewards({guaranteedModifierTypeOptions: [item], fillRemaining: false}). Not saved, for the same reason as fg */
     bool me_no_flee;
-    struct { bool active, fill, before; int16_t func; bool has_item; pr_reward_option item; } me_reward;   /* the shop: one item (has_item) or one reward function (func >= 0) */
+    struct { bool active, fill, before; int16_t func; bool has_item; pr_reward_option item; uint8_t n_more; pr_reward_option more[5]; } me_reward;   /* the shop: one item (has_item) or one reward function (func >= 0) */
     /* the encounter's startOfBattleEffects (source battler, its target, the move): copied into the battle at its setup, played once by the
      * first TurnInitPhase */
     struct { int8_t source, target; uint16_t move; uint8_t use_mode; } me_start[4];
@@ -129,7 +129,11 @@ typedef struct {
     bool me_no_stats;
     /* Training Session: the Pokemon picked is out of the party for the fight (removePokemonFromPlayerParty(.., false)), with the held items
      * it will get back and what the rewards phase does to it (onBeforeRewardsPhase). Not saved, for the same reason as fg */
+    struct { bool pending; uint8_t n; } berries;   /* Berries Abound: the berries the fight's win gives */
     struct { bool away; int8_t kind, nature, ability; int n_kept; gc_mon mon; gc_item kept[64]; } training;
+    /* A football run (gc_football_new): its members evolve by the football rules (gc_mon_football_evolutions). Never set on a classic or
+     * custom run, and not saved */
+    bool football;
 } gc_internal;
 gc_internal *gc_int(gc_run *run);
 
@@ -186,7 +190,7 @@ int gc_level_up_moves(const gc_mon *m, int starting_level, uint16_t *out, int ma
 void gc_mon_add_exp(gc_run *run, gc_mon *m, double exp);              /* addExp */
 double gc_level_total_exp(int level, int growth_rate);
 /* EvolutionItemModifier.apply's evolution: the gc_evo_data index, -1 = none */
-int gc_mon_football_evolutions(gc_run *run, const gc_mon *m, int *out, int cap);
+int gc_mon_football_evolutions(gc_run *run, const gc_mon *m, int from_level, int *out, int cap);
 int gc_mon_item_evolution(gc_run *run, const gc_mon *m, int item);
 int gc_mon_item_evolutions(gc_run *run, const gc_mon *m, int *out, int cap);
 /* getEvolution(): the gc_evo_data index, -1 = none */
@@ -366,6 +370,13 @@ void gc_snorlax_tokens(gc_run *run, pr_msg_arg *name);
 void gc_me_add_start_effect(gc_run *run, int source, int target, int move);   /* startOfBattleEffects.push({sourceBattlerIndex, targets: [target], move, useMode: IGNORE_PP}) */
 int gc_battle_start_effects(gc_run *run);                       /* handleMysteryEncounterBattleStartEffects: the engine runs them to its next stop */
 void gc_me_leave(gc_run *run);                                   /* leaveEncounterWithoutBattle(): no heal shop */
+bool gc_me_init_boss(gc_run *run, gc_mon *boss, int *level, pr_rng *after);   /* onInit's boss (Fight or Flight, Berries Abound), src/gc_fof.c */
+void gc_me_start_boss_battle(gc_run *run, const gc_mon *boss, int level, int post_summon, pr_rng *stream, int type);
+void gc_berries_execute(gc_run *run, int option);                  /* Berries Abound (src/gc_berries.c) */
+void gc_berries_reward(gc_run *run);
+bool gc_berries_tokens(gc_run *run, pr_msg_arg *enemy_name, pr_msg_arg *fastest_name, int *grab);
+bool gc_berries_race_lost(gc_run *run);
+int gc_berries_fastest(const gc_run *run);                          /* getHighestStatPlayerPokemon(SPD, true, false): a storage index */
 void gc_training_execute(gc_run *run, int option, int member, int choice);
 void gc_training_return(gc_run *run);
 bool gc_training_pick_ok(const gc_run *run, int idx);

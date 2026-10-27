@@ -147,6 +147,8 @@ pr_event *pr_event_add(pr_battle *bt, pr_engine *e, int type, int battler, int t
         f->gender = (int8_t)(look ? pr_apparent_gender(p, true) : pr_get_gender(p));
         f->variant = p->variant;
         f->sprite_scale = (float)pr_get_sprite_scale(p);
+        f->boss_segments = p->boss_segments;
+        f->boss_segment_index = p->boss_segment_index;
         int8_t types[PR_MAX_TYPES]; int n = pr_get_types(p, types, look ? PR_TYPES_USE_ILLUSION : 0);
         for (int j = 0; j < n && j < 3; j++) f->types[f->n_types++] = types[j];
     }

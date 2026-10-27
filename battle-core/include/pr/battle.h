@@ -382,7 +382,8 @@ typedef struct pr_pokemon {
      * encounter that built the enemy, kept out of the summon data on purpose (summoning resets that); never saved: the fight cannot be saved before it */
     uint8_t me_post_summon;
 } pr_pokemon;
-enum { PR_ME_POST_NONE, PR_ME_POST_STAT_BOOST /* Fight or Flight: one of Atk, Def, SpAtk, SpDef up two stages */ };
+enum { PR_ME_POST_NONE, PR_ME_POST_STAT_BOOST /* Fight or Flight: one of Atk, Def, SpAtk, SpDef up two stages */,
+       PR_ME_POST_ENRAGED_LOW /* Berries Abound below wave 50: Def, SpDef and Spd up one stage */, PR_ME_POST_ENRAGED_HIGH /* from wave 50: Atk, Def, SpAtk, SpDef and Spd */ };
 
 /* getMoveset(): temporary collection from Transform or Mimic; the fields above named
  * moves/PP always represent the permanent Pokemon.moveset. These selectors also

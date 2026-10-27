@@ -375,6 +375,12 @@ typedef struct gc_run {
 
 /* Whether the encounter's party screen accepts the member for the option (a member that cannot be picked is shown but not selectable). */
 bool gc_mystery_member_ok(const gc_run *run, int option, int idx);
+/* Training Session's lists (GC_PICK_MEMBER_NATURE / _ABILITY): whether nature 0..24 is new to the party member's dex entry; the member's ability
+ * slots to offer (n of them, at most 3) and whether each is new to its starter; the locale key of a nature ("adamant"). */
+bool gc_training_nature_new(const gc_run *run, int member, int nature);
+int gc_training_abilities(const gc_run *run, int member, int slots[3], bool is_new[3]);
+const char *gc_nature_key(int nature);
+int gc_ability_of_slot(const gc_run *run, int member, int slot);
 
 /* game-core's own stand-ins, counted in run->stubs */
 enum {
