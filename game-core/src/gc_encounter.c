@@ -443,7 +443,7 @@ static void finish_party(gc_run *run, const gc_item *given, int n_given)
         in->enemy_start_form[i] = run->enemy[i].b.form;
         pr_update_passive(&run->bt, &run->enemy[i].b);
         pr_calculate_stats(&run->bt, &run->enemy[i].b);
-        if (run->sys) {
+        if (run->sys && !gc_int(run)->me_no_stats) {   /* an encounter that prevents game stats updates does not count them as seen */
             bool is_trainer = (run->battle_type == BATTLE_TYPE_TRAINER);
             gc_system_set_pokemon_seen(run->sys, &run->enemy[i], true, is_trainer);
         }
@@ -582,7 +582,7 @@ void gc_new_battle(gc_run *run)
     in->custom_trainer_name[0] = 0;
     in->custom_team_on = false;
     in->pillar.active = false;
-    in->me_no_flee = in->me_reward.active = false;
+    in->me_no_flee = in->me_reward.active = in->me_reward.before = in->me_no_stats = false;
     in->n_me_start = 0;
 
     pr_new_battle_ctx ctx;

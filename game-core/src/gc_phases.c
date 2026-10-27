@@ -744,6 +744,9 @@ bool gc_phase_start(gc_run *run, gc_rphase *p)
     case RP_PARTY_HEAL:
         party_heal(run);
         return true;
+    case RP_ME_TRAINING_RETURN:
+        gc_training_return(run);
+        return true;
     case RP_MYSTERY: {
         gc_screen *s = &run->screen;
         memset(s, 0, sizeof *s);

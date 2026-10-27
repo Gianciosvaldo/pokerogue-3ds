@@ -43,6 +43,7 @@ enum {
     RP_CUSTOM_OFFER,     /* custom content: the app's rematch offer, waits on CUSTOM_OFFER (gc/custom.h) */
     RP_FG_KO,            /* Fun and Games!: MysteryEncounterRewardsPhase running doContinueEncounter (handleLoseMinigame) */
     RP_EGG_LAPSE,        /* EggLapsePhase: wave progress and ready hatch/profile rewards */
+    RP_ME_TRAINING_RETURN, /* Training Session's onBeforeRewardsPhase: the Pokemon comes back changed */
     RP_COUNT_
 };
 typedef struct { uint8_t type; int32_t a, b, c; double d; const char *key; } gc_rphase;
@@ -119,11 +120,16 @@ typedef struct {
     /* an encounter's fight that is not allowed to flee (withFleeAllowed(false)) and, for a fight with a guaranteed reward (Fight or Flight), what its
      * victory opens: setEncounterRewards({guaranteedModifierTypeOptions: [item], fillRemaining: false}). Not saved, for the same reason as fg */
     bool me_no_flee;
-    struct { bool active, fill; int16_t func; bool has_item; pr_reward_option item; } me_reward;   /* the shop: one item (has_item) or one reward function (func >= 0) */
+    struct { bool active, fill, before; int16_t func; bool has_item; pr_reward_option item; } me_reward;   /* the shop: one item (has_item) or one reward function (func >= 0) */
     /* the encounter's startOfBattleEffects (source battler, its target, the move): copied into the battle at its setup, played once by the
      * first TurnInitPhase */
     struct { int8_t source, target; uint16_t move; uint8_t use_mode; } me_start[4];
     uint8_t n_me_start;
+    /* withPreventGameStatsUpdates(true): the enemy is not counted as seen (Training Session: it is the player's own Pokemon) */
+    bool me_no_stats;
+    /* Training Session: the Pokemon picked is out of the party for the fight (removePokemonFromPlayerParty(.., false)), with the held items
+     * it will get back and what the rewards phase does to it (onBeforeRewardsPhase). Not saved, for the same reason as fg */
+    struct { bool away; int8_t kind, nature, ability; int n_kept; gc_mon mon; gc_item kept[64]; } training;
 } gc_internal;
 gc_internal *gc_int(gc_run *run);
 
@@ -359,7 +365,13 @@ void gc_snorlax_execute(gc_run *run, int option);                /* Slumbering S
 void gc_snorlax_tokens(gc_run *run, pr_msg_arg *name);
 void gc_me_add_start_effect(gc_run *run, int source, int target, int move);   /* startOfBattleEffects.push({sourceBattlerIndex, targets: [target], move, useMode: IGNORE_PP}) */
 int gc_battle_start_effects(gc_run *run);                       /* handleMysteryEncounterBattleStartEffects: the engine runs them to its next stop */
-void gc_me_leave(gc_run *run);                                  /* leaveEncounterWithoutBattle(): no heal shop */
+void gc_me_leave(gc_run *run);                                   /* leaveEncounterWithoutBattle(): no heal shop */
+void gc_training_execute(gc_run *run, int option, int member, int choice);
+void gc_training_return(gc_run *run);
+bool gc_training_pick_ok(const gc_run *run, int idx);
+bool gc_training_nature_new(const gc_run *run, int member, int nature);
+int gc_training_abilities(const gc_run *run, int member, int slots[3], bool is_new[3]);
+const char *gc_nature_key(int nature);
 void gc_me_steal_exp(gc_run *run, int primary, int species);    /* setEncounterExp(primary.id, species.baseExp) */                               /* the fight is won: the item's shop, then the next wave */
 bool gc_fof_preview(gc_run *run, int *species, int *form, bool *shiny, int *variant, const char **item_key);   /* what onInit made, for the question screen; false when it could not */
 void gc_me_leave_with_heal_shop(gc_run *run);                   /* leaveEncounterWithoutBattle(true) */
