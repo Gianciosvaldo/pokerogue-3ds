@@ -274,6 +274,8 @@ static pr_reward_ctx *ctx_base(gc_run *run, bool count)
     return c;
 }
 
+pr_reward_ctx *gc_reward_ctx_base(gc_run *run) { return ctx_base(run, false); }
+
 pr_reward_ctx *gc_reward_ctx(gc_run *run)
 {
     pr_reward_ctx *c = ctx_base(run, true);
@@ -294,6 +296,8 @@ static uint8_t target_of(int item)
      * items, healing, evolution and form change items, TMs, the Memory Mushroom...) a party member */
     if (item == PR_ITEM_ETHER || item == PR_ITEM_MAX_ETHER || item == PR_ITEM_PP_UP || item == PR_ITEM_PP_MAX)
         return GC_TARGET_MOVE;
+    /* FusePokemonModifierType: SelectModifierPhase.openFusionMenu, the party screen's SPLICE mode picks two members */
+    if (item == PR_ITEM_DNA_SPLICERS) return GC_TARGET_FUSE;
     return pr_items[item].flags & (PR_ITEMF_POKEMON | PR_ITEMF_HELD | PR_ITEMF_FORM_CHANGE) ? GC_TARGET_POKEMON
                                                                                              : GC_TARGET_NONE;
 }
@@ -724,6 +728,7 @@ static int apply_money_item(gc_run *run, int item)
 int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, const char **why)
 {
     const int item = gc_reward_item_index(o->key);
+    if (item == PR_ITEM_DNA_SPLICERS) return gc_fusion_scene_apply(run, o, party, move_slot, why);
     const int lifecycle = gc_reward_lifecycle_apply(run, o, party, why);
     if (lifecycle != GC_APPLY_UNHANDLED) return lifecycle;
     if (item < 0) return GC_APPLY_UNHANDLED;

@@ -1004,8 +1004,11 @@ static void ask(void) {
   o.n_key_items = key_items(keys, BV_MAX_FOE_ITEMS);
   o.key_items = keys;
   o.has_party_balls = true;
-  for (int i = 0; i < 6; i++)
-    o.party_balls[i] = i >= G.run.n_party ? BV_BALL_EMPTY : G.run.party[i].b.hp > 0 ? BV_BALL_ALIVE : BV_BALL_FAINTED;
+  for (int i = 0; i < 6; i++) {
+    /* the tray lists the party in upstream's party order, which a switch in battle changes */
+    const int idx = i < G.run.n_party && G.run.party_order[i] >= 0 && G.run.party_order[i] < G.run.n_party ? G.run.party_order[i] : i;
+    o.party_balls[i] = i >= G.run.n_party ? BV_BALL_EMPTY : G.run.party[idx].b.hp > 0 ? BV_BALL_ALIVE : BV_BALL_FAINTED;
+  }
   const gc_mon* me = command_mon();
   for (int i = 0; i < 4; i++) {
     o.move_ok[i] = s->move_ok[i];

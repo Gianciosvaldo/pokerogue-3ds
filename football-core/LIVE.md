@@ -12,7 +12,7 @@ Classic parties, cost limits, saves and battle APIs remain six-wide.
 boosts and a permutation assigning each member to one of 22 slots. There are
 11 offense slots (QB, RB, three WR, TE, five OL) and 11 defense slots (four DL,
 three LB, two CB, FS, SS). A swap always preserves one distinct member per slot.
-Auto-assignment provides a starting point; it is never the only way to assign.
+The draft fills the slots in order, so the lineup is the picks; auto-assignment and swapping remain for changing it later.
 
 The draft uses classic species costs and profile cost reductions with a 55-point
 aggregate limit. Only base-form starters available in the current Classic/Endless
@@ -21,7 +21,11 @@ form, nature, ability and shiny unlocks. Football chooses a valid unlocked start
 configuration, including shiny-only or non-default ability/nature catches.
 A profile is required; a missing profile never opens the entire Pokédex.
 Duplicate species and evolved starting species are rejected. The catalog starts
-with cheaper unlocked species; Left/Right pages, A drafts, B undoes the last draft.
+with cheaper unlocked species. The draft is one pick for each position, in slot order (Quarterback, Running back, Wide receiver 1
+... Strong safety, `football_slot_titles`): the header names the slot being filled, the pick goes into it (`lineup` starts as the
+identity and the draft never assigns), every row is tagged with the position its species is best at (`FootballPlayer.position`,
+`football_position_label`) and the top screen shows the highlighted species' eight attributes. Left/Right pages, A picks for the
+slot, B takes the last pick back. After the 22nd pick the round hub opens (no auto-assignment); its B opens the lineup screen.
 All 22 slots must be filled. A pool smaller than 22 or too expensive even with
 its cheapest 22 members shows a progression/cost-reduction notice. Existing saves
 are also checked against the current profile's original starter unlocks and remain
@@ -227,22 +231,32 @@ behind a play; the career pays.
   carried the ball in (`FB_CREDIT_TOUCHDOWN`, a return or a defender's touchdown too). A sack in the end zone is a safety and
   is still a sack. `stats[side][member][kind]` is the tally of the whole match (saturates at 255); both teams are tallied,
   only the human team is paid.
-- `football_credit_candy`: interception 4, sack 2, touchdown 5 (`FB_CANDY_*`). Every one of the 22 also gets 1 candy for
-  playing the match and 1 more for winning it, so a team that does nothing special still earns something.
-- Timing: a career earns the play candy on the first tick after the dead ball (`seen_snaps` tells a new dead ball from the one
-  already looked at; loading a save sets it, so a resumed match earns nothing twice) and the match candy once, when the match
-  is over. Earned candy waits per member in `candy_pending`; `football_career_flush_candy` moves it to the profile and the
-  screen calls it when it writes a checkpoint, just before it saves the profile. So the profile never has candy that no
-  checkpoint knows about: quit mid-match and resume, and the plays after the last checkpoint are played again and earn
-  again, and nothing is paid twice. The match candy is flushed by the shop checkpoint after a win and the end checkpoint after
-  a loss. With no profile (`football_career_new(..., NULL, ...)`) nothing is earned.
-- `candy_plays` and `candy_team` are the totals shown on the result and end screens (earned, flushed or not); they are not
-  saved, so they count from the last resume. The banner of a credited play shows the species and the candy under the headline.
+- Candy is earned in **points**, not candies: `football_credit_candy` is interception 4, sack 2, touchdown 5 (`FB_CANDY_*`),
+  and every one of the 22 also gets 1 point for playing the match and 1 more for winning it. A point adds
+  `FB_CANDY_FRIENDSHIP_PER_POINT` (45) to the species' candy bar, which is the starter's friendship in the profile and as long
+  as its friendship cap in the classic game (`getStarterValueFriendshipCap` of the starter cost: 25 for cost 1 up to 600 for
+  cost 10); a full bar pays one candy and the rest carries over to the next match (`gc_system_add_starter_friendship`, the
+  same code the classic friendship gain ends in). So a touchdown is 9 candies to a cost 1 starter, 1.5 to a cost 5 one
+  and exactly 0.5 to Yveltal (cost 8, bar 450): two touchdowns were 10 candies to a legendary in the flat version, and are
+  one candy now. The 45 is the one number that tunes the whole mode (it was 6, which made a legendary touchdown 0.07; lorenzo
+  asked for 0.5 on 2026-10-27, which is 7.5 times everything else too).
+- Timing: a career earns the play points on the first tick after the dead ball (`seen_snaps` tells a new dead ball from the one
+  already looked at; loading a save sets it, so a resumed match earns nothing twice) and the match points once, when the match
+  is over. Earned points wait per member in `candy_pending`; `football_career_flush_candy` moves them to the profile (and
+  returns the whole candies that made) and the screen calls it when it writes a checkpoint, just before it saves the profile.
+  So the profile never has candy that no checkpoint knows about: quit mid-match and resume, and the plays after the last
+  checkpoint are played again and earn again, and nothing is paid twice. The match points are flushed by the shop checkpoint
+  after a win and the end checkpoint after a loss. With no profile (`football_career_new(..., NULL, ...)`) nothing is earned.
+- `candy_plays` and `candy_team` are the point totals, and `candy_plays_milli` and `candy_team_milli` what they are worth in
+  thousandths of a candy (`football_candy_milli`, the species' bar), shown with two decimals on the banner of a credited
+  play, the result screen and the end screen (earned, flushed or not); none of them is saved, so they count from the last
+  resume. The result screen's team figure before the bonus is paid is `football_career_team_candy_milli`.
 `tests/candy_test.c` covers the credit list and tally bounds, a touchdown, a sack by a human defender, a return touchdown, 30
-whole games where every credit matches one play and the tallies match the credits, and 8 whole careers (candy earned equals
-the tallies' worth, nothing reaches the profile between checkpoints, the team candy and the rest arrive with the shop or end
-checkpoint, a resume earning nothing twice, a career without a profile); `live_screen_test` checks that a failed checkpoint write
-leaves the candy pending and the saved one hands it over.
+whole games where every credit matches one play and the tallies match the credits, and 8 whole careers (the bar points added
+equal the points earned, nothing reaches the profile between checkpoints, the team points and the rest arrive with the shop
+or end checkpoint, a resume earning nothing twice, a career without a profile), plus Yveltal against a cost 1 starter (what a
+touchdown is worth, a bar filling across matches, many candies at once, a full candy store); `live_screen_test` checks that a
+failed checkpoint write leaves the points pending and the saved one hands them over.
 
 ## Motion
 

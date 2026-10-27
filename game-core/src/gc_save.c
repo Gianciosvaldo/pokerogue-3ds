@@ -77,6 +77,9 @@ typedef struct { uint8_t double_battle; } sv_encounter;
 static const sfield encounter_fields[]={SF(sv_encounter,double_battle)};
 static const sfield illusion_fields[]={SF(pr_illusion,species),SF(pr_illusion,fusion_species),
     SF(pr_illusion,form),SF(pr_illusion,fusion_form),SF(pr_illusion,gender),SF(pr_illusion,active)};
+/* What a DNA Splicers fusion keeps of the second member (gc_mon's fusion_shiny, fusion_variant, fusion_luck): a section of its own, so a
+ * save from before the splice screen loads with them at zero and counts nothing as dropped */
+static const sfield fusion_fields[]={SF(gc_mon,fusion_shiny),SF(gc_mon,fusion_variant),SF(gc_mon,fusion_luck)};
 typedef struct { uint8_t terminal_result; } sv_terminal;
 static const sfield terminal_fields[]={SF(sv_terminal,terminal_result)};
 static const sfield run_fields[] = {
@@ -609,6 +612,9 @@ size_t gc_run_save(const gc_run *run, void *buf, size_t cap)
     put_block(&w,illusion_fields,NF(illusion_fields),&run->party[0].b.illusion,sizeof(gc_mon),run->n_party);
     put_block(&w,illusion_fields,NF(illusion_fields),&run->enemy[0].b.illusion,sizeof(gc_mon),run->n_enemy);
     section_end(&w,s);
+    s=section_start(&w,"fusion");
+    put_block(&w,fusion_fields,NF(fusion_fields),run->party,sizeof(gc_mon),run->n_party);
+    section_end(&w,s);
     s = section_start(&w, "depths");
     put_block(&w, depth_fields, NF(depth_fields), &run->depths, sizeof run->depths, 1);
     section_end(&w, s);
@@ -734,6 +740,24 @@ static bool illusion_schema_ok(reader r){
         if(found<0||(seen&(1u<<found)))return false;seen|=1u<<found;
     }
     return !r.bad;
+}
+
+static bool fusion_schema_ok(reader r){
+    int n=take16(&r);unsigned seen=0;if(r.bad||n!=NF(fusion_fields))return false;
+    for(int i=0;i<n;i++){
+        uint32_t name=take32(&r);uint16_t size=take16(&r);int found=-1;
+        for(int k=0;k<NF(fusion_fields);k++)if(name==hash(fusion_fields[k].name)&&size==fusion_fields[k].size)found=k;
+        if(found<0||(seen&(1u<<found)))return false;
+        seen|=1u<<found;
+    }
+    return !r.bad;
+}
+
+/* the half of a fusion that is not the species: only a fused Pokemon has one (variant 0..2, luck: a shiny's variant + 1, at most twice) */
+static bool fusion_half_ok(const gc_mon *m){
+    uint8_t shiny;memcpy(&shiny,&m->fusion_shiny,1);if(shiny>1)return false;
+    if(m->fusion_variant>2||m->fusion_luck<0||m->fusion_luck>6)return false;
+    return m->b.fusion_species||(!shiny&&!m->fusion_variant&&!m->fusion_luck);
 }
 
 static bool illusion_ok(const pr_illusion *v){
@@ -1173,6 +1197,15 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
             ||illusions.bad||illusions.pos!=illusions.n){*why="the stored disguises are damaged";return false;}
         for(int side=0;side<2;side++)for(int k=0;k<(side?run->n_enemy:run->n_party);k++)
             if(!illusion_ok(&(side?run->enemy:run->party)[k].b.illusion)){*why="the stored disguise is damaged";return false;}
+    }
+
+    /* Older saves have no fusion section either: a fused Pokemon from before it keeps its fusion half's species and nothing more */
+    reader fusion=section(&body,"fusion");
+    if(!fusion.bad){
+        if(!fusion_schema_ok(fusion)||get_block(&fusion,fusion_fields,NF(fusion_fields),run->party,sizeof(gc_mon),run->n_party,&dropped)!=run->n_party
+            ||fusion.bad||fusion.pos!=fusion.n){*why="the stored fusion halves are damaged";return false;}
+        for(int k=0;k<run->n_party;k++)
+            if(!fusion_half_ok(&run->party[k])){*why="a stored fusion half is damaged";return false;}
     }
 
     /* the arena the battle keeps, then the battle as gc_battle_setup_field builds it with the lead

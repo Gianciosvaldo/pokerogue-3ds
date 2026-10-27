@@ -131,7 +131,8 @@ the report with an unknown cause and inserts no Nemesis; a Custom Run (C10, belo
 The title screen has a **Nemesis Radar** (custom content, task C06): [`radar_screen.c`](source/radar_screen.c) lists the remembered enemies
 of `custom.sav`, newest first, with a free Scout page for each (what the record remembers, "not recorded" for the rest). It is a read-only
 look: it writes nothing, starts no rematch, spends nothing and says that rematches are offered during a Custom Run (C10). Only a custom
-run creates records, so a fresh install shows an empty roster; [`mkcustom.c`](tests/mkcustom.c) writes a file with
+run creates records (only the ordinary wild Pokemon whose attack finished the team: bosses, trainers and fixed encounters are not kept, and the
+result screen of a Custom Run's defeat says "No enemy remembered: ..." with the reason, `cr_not_remembered_note`), so a fresh install shows an empty roster; [`mkcustom.c`](tests/mkcustom.c) writes a file with
 records for the emulator (contracts section 2.12). Buttons only: the framework has no touch path for these screens.
 
 There is a **capsule machine preview** (custom content, task C07): [`capsule_screen.c`](source/capsule_screen.c) over the pure

@@ -113,6 +113,13 @@ const char* cr_take_message(void);
 /* The run ended (GC_SCREEN_GAME_OVER or GC_SCREEN_CLEAR): settles an unresolved rematch as lost and gives back what the run still
  * held. Fills *out and returns true when the faint hook named a finisher for this defeat (hand it to cs_commit_defeat). */
 bool cr_on_run_end(const gc_run* run, int screen_kind, cs_defeat* out);
+/* Why the last cr_on_run_end named no finisher, in words for the player ("" when it named one or the run was not a defeat). Kept after
+ * cr_end, until the next cr_on_run_end. */
+const char* cr_defeat_why(void);
+/* The line for the result screen when a Custom Run's defeat remembered no enemy: `stored` is what cs_commit_defeat returned for the run's
+ * report, `named` whether cr_on_run_end handed a finisher over. NULL when an enemy was remembered, or the store failed (cs_note says so
+ * then). The text is valid until the next call. */
+const char* cr_not_remembered_note(const cs_result* stored, bool named);
 
 /* Boot: finishes the vouchers owed to won rematches a crash left unclaimed. Call after ptx_boot. Returns how many it claimed. */
 unsigned cr_settle_owed(void);

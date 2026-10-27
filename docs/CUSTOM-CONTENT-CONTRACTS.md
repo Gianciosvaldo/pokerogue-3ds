@@ -656,7 +656,9 @@ number, and has no fight, invasion or purchase button; its text says "Live remat
   agrees with the record's life; when they contradict each other it says so and shows neither as scheduled. **The app has no stored
   schedule** (it lives in C10's overlay of the run's save), so the app passes none: the windows are shown only in host tests that pass a
   frozen schedule.
-- **Empty and unusable.** No file or no records: "No enemy is remembered yet." and that this version does not add enemies during play.
+- **Empty and unusable.** No file or no records: "No enemy is remembered yet." and what a Custom Run does remember (the ordinary wild
+  Pokemon that finished the team; bosses, trainers and fixed encounters are not kept) with a pointer to the result screen, which says
+  why a defeat remembered nobody.
   An unusable file (damaged, other version, unreadable): its reason from `cs_get_state`, "It is left as it is."; the file is not read
   again or written.
 - **Input.** Buttons only. **There is no touch input for `ui.h` screens** (only the shop reads the touch screen), so there are no
@@ -896,6 +898,12 @@ wave 27 / 77 / 127 / 177: encounter hook -> scheduler (C05) -> OFFER (accept / d
   Its eventual rematch still requires an eligible single wild encounter; no doubles rematch is introduced.
   Other insertion restrictions and attribution requirements remain.
   Nemeses are created **only** in custom runs.
+- **Why nobody was remembered.** A Custom Run's defeat that leaves the roster as it was says why on the result screen ("No enemy
+  remembered: ..."), from `cr_not_remembered_note`: the store's refusal (a boss, a trainer's Pokemon, a stand-in for a fixed battle, a
+  mystery encounter, fused or Terastallized, a rematch enemy, an unknown ability or moves, a full roster), a candidate the store could
+  not validate (with its status), or the controller's own reason for naming no finisher (`cr_defeat_why`: the last Pokemon fell to
+  something other than an attack, the fall was not seen, the hit did not come from an enemy or from another wave's battle, the enemy
+  changed form, the run was no longer active). Nothing is guessed: an enemy no check explains is "could not be identified".
 - **The overlay and the slot.** Sticky flag (the slot's own file), run uid, the frozen schedule, whether the enemy on the field is a rematch
   enemy and its id, the encounter's wave / kind / flags, the reward ids, and the observation's retained turns are in ONE `save_write` with the
   core run bytes (magic `PRCS`, checksum, previous kept). The roster stays in `custom.sav`. So a crash between the two files is possible and

@@ -231,6 +231,8 @@ int gc_party_luck(gc_run *run);
 /* A pr_reward_ctx made from the run as it is now (a static: valid until the next call). Its party is in
  * upstream's party order (run->party_order), so ctx party index k is run->party[run->party_order[k]]. */
 pr_reward_ctx *gc_reward_ctx(gc_run *run);
+/* the same without the learnsets: what the application of a reward reads (the party, the items, the unlocks, the balls, the arena) */
+pr_reward_ctx *gc_reward_ctx_base(gc_run *run);
 /* The types an attack move counts as for the type-boosting items: VariableMoveTypeAttr.getTypesForItemSpawn
  * or Pokemon.getMoveTypeForItemSpawn. Returns how many (out holds 2). */
 int gc_types_for_item_spawn(gc_run *run, const gc_mon *m, int move, int8_t out[2]);
@@ -254,6 +256,9 @@ uint8_t gc_reward_target(const char *key);
 enum { GC_APPLY_UNHANDLED, GC_APPLY_DONE, GC_APPLY_REFUSED };
 int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, const char **why);
 int gc_reward_lifecycle_apply(gc_run *run, const gc_offer *o, int party, const char **why);
+/* DNA Splicers (FusePokemonModifierType) taken from the reward screen: party[primary] gets party[donor] as its fusion half and the donor
+ * leaves the party (src/gc_fusion.c). Both are party indices (run->party[]); GC_APPLY_DONE / GC_APPLY_REFUSED with *why */
+int gc_fusion_scene_apply(gc_run *run, const gc_offer *o, int primary, int donor, const char **why);
 /* Task 96: Poke Ball rewards. add_pokeballs = AddPokeballModifier.apply (+5, Master Ball +1, at most 99) for a reward
  * key, false when the key is not a Poke Ball; gc_reward_gain = ModifierRewardPhase.doReward: give the reward, then
  * queue battle:rewardGain naming it. */
@@ -273,6 +278,7 @@ void gc_item_remove_at(gc_run *run, int idx);
 void gc_items_take_enemy_held(gc_run *run);      /* addToParty: findModifiers(held, false) -> addModifier: onto the player's list */
 void gc_items_drop_enemy_held(gc_run *run);      /* clearEnemyHeldItemModifiers() */
 void gc_items_drop_held_of(gc_run *run, uint32_t pokemon_id);   /* removePartyMemberModifiers: a released member's */
+void gc_items_fuse_transfer(gc_run *run, uint32_t from_id, int to);   /* PlayerPokemon.fuse: all of `from_id`'s held items onto party[to] */
 int gc_item_remove_stacks(gc_run *run, const char *key, int count);
 void gc_items_from_battle(gc_run *run); /* persist consumed berries/White Herb */
 void gc_items_to_battle(gc_run *run);                                  /* the player's and the enemy's lists into bt->mods */

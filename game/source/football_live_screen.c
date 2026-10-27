@@ -45,6 +45,7 @@ static const char *name(unsigned species)
     return "Pokemon";
 }
 const char *football_live_art_species(unsigned species){return name(species);}
+unsigned football_live_art_candy_milli(const FootballCareer *career,unsigned member,unsigned points){return football_candy_milli(career,member,points);}
 /* The classic game's evolution items, common and rare (ids above 50), as the reward screens name and draw them. */
 static const gm_item_ui *evo_item(unsigned item){return gm_item_ui_find(item>50?"RARE_EVOLUTION_ITEM":"EVOLUTION_ITEM",(int)item);}
 static const char *evo_item_name(unsigned item){const gm_item_ui *u=evo_item(item);return u && u->name?u->name:"Evolution item";}
@@ -131,6 +132,14 @@ static void catalog(void)
         while(n>0 && gc_starter_value(L.args.profile,L.catalog[n])<gc_starter_value(L.args.profile,L.catalog[n-1])){uint16_t t=L.catalog[n];L.catalog[n]=L.catalog[n-1];L.catalog[n-1]=t;--n;}
     }
 }
+/* The player a catalog species would make, from its base form: the stats and the position it is best at, shown while it is picked. */
+static bool draft_player(unsigned species,FootballPlayer *out)
+{
+    for(unsigned j=0;j<PR_FORM_COUNT;++j)if(pr_forms[j].species==species && pr_forms[j].form_index==0)return football_stats_generate(out,0,&pr_forms[j],&L.career.roster.maxima);
+    return false;
+}
+/* The slot the next pick fills. */
+static unsigned draft_slot(void){return L.career.roster.count<22?L.career.roster.count:21;}
 static unsigned top_species(void);
 static unsigned top_after(void);
 static void preview(void)
@@ -186,8 +195,9 @@ static void choose_current(void)
     switch(c->phase){
     case FB_CAREER_DRAFT:{gc_starter s;const char *why=NULL;
         if(!L.catalog_count || !football_roster_starter(L.args.profile,L.catalog[L.cursor],&s))return;
+        /* Picks fill the slots in order (QB, RB, WR1 ...) and lineup[] starts as the identity, so each pick is already in its position. */
         if(!football_roster_add(&c->roster,L.scratch,&s,L.args.profile,&why))snprintf(c->message,sizeof c->message,"%s",why?why:"Cannot draft this Pokemon.");
-        else {c->message[0]=0;if(c->roster.count==22){football_roster_autofill(&c->roster);c->phase=FB_CAREER_LINEUP;L.cursor=0;}}break;}
+        else {c->message[0]=0;if(c->roster.count==22){c->phase=FB_CAREER_READY;L.cursor=0;}}break;}
     case FB_CAREER_LINEUP:L.editing=!L.editing;break;
     case FB_CAREER_READY:if(football_career_start(c)){L.cursor=0;L.asset_offense=-1;L.camera.ready=false;}break;
     case FB_CAREER_MATCH:
@@ -311,6 +321,7 @@ static void list_menu(unsigned count)
         case FB_CAREER_DRAFT:{unsigned id=L.catalog[i];bool drafted=false;
             for(unsigned j=0;j<c->roster.count;++j)if(c->roster.mon[j].b.species==id)drafted=true;
             snprintf(row_label[n],sizeof row_label[n],"%s",name(id));
+            {FootballPlayer p;if(draft_player(id,&p))r->tag=football_position_label(p.position);} /* what it is best at */
             if(drafted){r->value="Picked";r->value_style=TS_SUMMARY_GREEN;}
             else{snprintf(row_value[n],sizeof row_value[n],"%.2f",gc_starter_value(L.args.profile,id));r->value=row_value[n];r->value_style=TS_MONEY;}
             break;}
@@ -434,9 +445,10 @@ static void bottom_menu(void)
     FootballCareer *c=&L.career;char left[96],right[64];
     switch(c->phase){
     case FB_CAREER_DRAFT:
-        snprintf(left,sizeof left,"Draft  %u/22",c->roster.count);snprintf(right,sizeof right,"%.2f / 55 pt",c->roster.cost);
+        snprintf(left,sizeof left,"Pick your %s",football_slot_titles[draft_slot()]);snprintf(right,sizeof right,"%.2f / 55 pt",c->roster.cost);
         football_menu_head(left,right);list_menu(L.catalog_count);
-        football_menu_foot(L.catalog_count<22?"Unlock 22 base forms in Classic / Endless":c->message[0]?c->message:"A: draft    B: undo    Left/Right: page");break;
+        snprintf(left,sizeof left,"A: pick for %s    B: undo    Left/Right: page",football_slot_names[draft_slot()]);
+        football_menu_foot(L.catalog_count<22?"Unlock 22 base forms in Classic / Endless":c->message[0]?c->message:left);break;
     case FB_CAREER_LINEUP:
         football_menu_head(L.editing?"Pick a member for this slot":"Lineup",L.editing?"Left/Right: swap":"A: edit    B: ready");list_menu(22);
         buttons(L.editing?"Previous":"Auto-assign",L.editing?"Next":"Ready",true);break;
@@ -460,8 +472,10 @@ static void bottom_menu(void)
         snprintf(left,sizeof left,"Final   Home %u - %u Away",c->live.rules.score[0],c->live.rules.score[1]);
         football_menu_text(TS_WINDOW,FM_PX_BODY,16,42,288,left);
         football_menu_text(TS_STATS_LABEL,FM_PX_BODY,16,72,288,"Species candy");
-        snprintf(left,sizeof left,"+%u from plays",c->candy_plays);football_menu_text(TS_MONEY,FM_PX_BODY,16,92,288,left);
-        snprintf(left,sizeof left,"+%u more for the team",22*(FB_CANDY_PLAYED+(won?FB_CANDY_WIN:0)));football_menu_text(TS_WINDOW,FM_PX_BODY,16,112,288,left);
+        /* Candy points fill each species' candy bar, so a common Pokemon earns whole candies and a legendary a sliver: the totals are in hundredths. */
+        snprintf(left,sizeof left,"+%u.%02u from plays",c->candy_plays_milli/1000,c->candy_plays_milli%1000/10);football_menu_text(TS_MONEY,FM_PX_BODY,16,92,288,left);
+        { const unsigned team=football_career_team_candy_milli(c,won);snprintf(left,sizeof left,"+%u.%02u more for the team",team/1000,team%1000/10);football_menu_text(TS_WINDOW,FM_PX_BODY,16,110,288,left); }
+        football_menu_text(TS_WINDOW,FM_PX_SMALL,16,129,288,"Each candy bar is longer for rarer Pokemon.");
         football_menu_foot("A or tap: team progression");break;}
     case FB_CAREER_EXP:
         snprintf(right,sizeof right,"Player %u / 22",c->exp_member+1);football_menu_head("Experience",right);
@@ -482,7 +496,7 @@ static void bottom_menu(void)
     case FB_CAREER_END:
         snprintf(left,sizeof left,"Playoff complete: %u / 7 wins",c->wins);football_menu_head(left,NULL);
         football_menu_panel(4,32,312,76);football_menu_text(TS_STATS_LABEL,FM_PX_BODY,16,42,288,"Species candy this match");
-        snprintf(left,sizeof left,"+%u",c->candy_plays);football_menu_text(TS_MONEY,FM_PX_BODY,16,66,288,left);
+        { const unsigned total=c->candy_plays_milli+c->candy_team_milli;snprintf(left,sizeof left,"+%u.%02u",total/1000,total%1000/10);football_menu_text(TS_MONEY,FM_PX_BODY,16,66,288,left); }
         football_menu_foot("A or tap: return to title");break;
     case FB_CAREER_LEARN:break; /* level-up moves are learned without a prompt */
     case FB_CAREER_ERROR:
@@ -512,7 +526,7 @@ static void top_menu(void)
     FootballCareer *c=&L.career;char right[48],line[64];
     football_menu_top_bg(c->round);
     football_menu_panel(10,6,380,28);football_menu_text(TS_WINDOW,FM_PX_BODY,24,13,170,"Pokemon Playoff");
-    if(c->phase==FB_CAREER_DRAFT)snprintf(right,sizeof right,"Draft %u/22   %.2f / 55 pt",c->roster.count,c->roster.cost);
+    if(c->phase==FB_CAREER_DRAFT)snprintf(right,sizeof right,"%s  %u/22   %.2f / 55 pt",football_slot_names[draft_slot()],c->roster.count,c->roster.cost);
     else snprintf(right,sizeof right,"Round %u / 7",c->round);
     football_menu_text_right(TS_MONEY,FM_PX_BODY,376,13,190,right);
     if(c->phase==FB_CAREER_DRAFT && !L.catalog_count){
@@ -539,15 +553,16 @@ static void top_menu(void)
     else if(f && f->src_w && f->src_h)football_render_draw_sprite(f,85,115,fminf(108.0f/f->src_w,108.0f/f->src_h),false);
     football_menu_panel(168,40,222,150);
     if(after){snprintf(line,sizeof line,"%.15s > %.15s",name(id),name(after));football_menu_text(TS_WINDOW,FM_PX_BODY,184,49,190,line);}
-    else football_menu_text(TS_WINDOW,FM_PX_BODY,184,49,190,id?name(id):"");
-    if(c->phase==FB_CAREER_DRAFT){
-        football_menu_text(TS_STATS_LABEL,FM_PX_BODY,184,76,90,"Cost");
-        snprintf(line,sizeof line,"%.2f / 55",gc_starter_value(L.args.profile,id));football_menu_text_right(TS_MONEY,FM_PX_BODY,374,76,110,line);
-        football_menu_text(TS_STATS_LABEL,FM_PX_BODY,184,98,90,"Drafted");
-        snprintf(line,sizeof line,"%u of 22",c->roster.count);football_menu_text_right(TS_WINDOW,FM_PX_BODY,374,98,110,line);
-        football_menu_wrap(TS_WINDOW,FM_PX_SMALL,184,124,190,3,c->message[0]?c->message:"Draft 22 base forms within the 55 point budget.");
-    }else{
-        const FootballAttributes *a=&c->roster.player[member].attributes,*b=&L.evo_player.attributes;
+    else football_menu_text(TS_WINDOW,FM_PX_BODY,184,49,c->phase==FB_CAREER_DRAFT?130:190,id?name(id):"");
+    {
+        /* The stats of whoever is highlighted: a member of the roster, or while drafting the species as it would be picked. */
+        FootballPlayer drafting={0};
+        if(c->phase==FB_CAREER_DRAFT){
+            if(!draft_player(id,&drafting))drafting=(FootballPlayer){0};
+            snprintf(line,sizeof line,"%.2f",gc_starter_value(L.args.profile,id));football_menu_text_right(TS_MONEY,FM_PX_BODY,374,49,60,line);
+            snprintf(line,sizeof line,"Best at %s",football_position_label(drafting.position));football_menu_text(TS_STATS_LABEL,FM_PX_SMALL,184,66,190,line);
+        }
+        const FootballAttributes *a=c->phase==FB_CAREER_DRAFT?&drafting.attributes:&c->roster.player[member].attributes,*b=&L.evo_player.attributes;
         static const char *const labels[8]={"SPD","AGI","STR","TAK","STA","THP","THA","CTH"};
         const unsigned values[8]={a->spd,a->agi,a->str,a->tak,a->sta,a->thp,a->tha,a->cth};
         const unsigned later[8]={b->spd,b->agi,b->str,b->tak,b->sta,b->thp,b->tha,b->cth};
@@ -573,7 +588,8 @@ static void top_menu(void)
         else if(evo_cursor()>=0){const FootballEvoOffer *o=&c->evo[evo_cursor()];
             snprintf(shop_tip,sizeof shop_tip,o->state==FB_EVO_OFFER?"%.20s evolves into %.20s.%s":"%.20s: %.20s.%s",name(id),o->state==FB_EVO_OFFER?name(o->species):evo_item_name(o->item),o->item>50 && o->state==FB_EVO_OFFER?" A rare item.":"");}
     }
-    const char *tip=c->phase==FB_CAREER_SHOP && shop_tip[0]?shop_tip:c->phase==FB_CAREER_ERROR?"Your checkpoint is kept exactly as it was.":c->phase==FB_CAREER_DRAFT?"Pick the Pokemon who will play for you.":c->phase==FB_CAREER_LINEUP?"Assign your lineup. Control every snap.":c->phase==FB_CAREER_SHOP?"Spend your winnings before the next round.":c->phase==FB_CAREER_EXP || c->phase==FB_CAREER_EVOLVE?"Level-ups and evolutions from the match.":"Seven rounds stand between you and the title.";
+    if(c->phase==FB_CAREER_DRAFT)snprintf(shop_tip,sizeof shop_tip,"Choose who plays %s. Its stats are on the right.",football_slot_titles[draft_slot()]);
+    const char *tip=(c->phase==FB_CAREER_SHOP || c->phase==FB_CAREER_DRAFT) && shop_tip[0]?shop_tip:c->phase==FB_CAREER_ERROR?"Your checkpoint is kept exactly as it was.":c->phase==FB_CAREER_LINEUP?"Assign your lineup. Control every snap.":c->phase==FB_CAREER_SHOP?"Spend your winnings before the next round.":c->phase==FB_CAREER_EXP || c->phase==FB_CAREER_EVOLVE?"Level-ups and evolutions from the match.":"Seven rounds stand between you and the title.";
     football_menu_text_center(TS_WINDOW,FM_PX_SMALL,200,196+FM_TEXT_PAD+1,356,tip);
 }
 static void draw(ui_screen *s,rr_screen which)

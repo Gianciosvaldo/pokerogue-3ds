@@ -589,6 +589,31 @@ static enemy_snap snap_enemy_at(const gc_run* r,int index) {
   return e;
 }
 
+/* The words the result screen's line (cr_not_remembered_note) must contain for a gate case: why nobody was remembered. */
+static const char* gate_word_no_candidate(const char* name) {
+  static const struct { const char* name; const char* word; } W[] = {
+      {"unsupported kind", "cannot record"},      {"not a direct hit", "other than an attack"}, {"attacker gone", "did not come from an enemy"},
+      {"own side's attack", "did not come from an enemy"}, {"party not out", "was not seen"},     {"another fell after", "was not seen"},
+      {"wave mismatch", "another wave"},           {"species changed", "changed form"},
+  };
+  for (unsigned i = 0; i < sizeof W / sizeof W[0]; i++)
+    if (!strcmp(W[i].name, name)) return W[i].word;
+  return NULL;
+}
+static const char* gate_word_refusal(int refusal) {
+  switch (refusal) {
+    case CC_REFUSE_BOSS: return "A boss";
+    case CC_REFUSE_FUSED:
+    case CC_REFUSE_TERA: return "fused or Terastallized";
+    case CC_REFUSE_TRAINER_OWNED: return "trainer's Pokemon";
+    case CC_REFUSE_MYSTERY: return "mystery encounter";
+    case CC_REFUSE_FIXED_SCRIPTED: return "fixed battle";
+    case CC_REFUSE_ABILITY_UNKNOWN:
+    case CC_REFUSE_MOVES_UNKNOWN: return "ability or moves";
+  }
+  return NULL;
+}
+
 static enemy_snap snap_enemy(const gc_run* r) {return snap_enemy_at(r,0);}
 static int n_created, n_unattributed, n_refused_store,n_double_killers[2];
 static void test_defeat_creates(int nseeds) {
@@ -615,12 +640,18 @@ static void test_defeat_creates(int nseeds) {
       /* A finisher named, but its other traits are not supported: no record. */
       n_refused_store++;
       CHECK(m->roster.count == 0, "refused (%s): no record", cc_refusal_str(g_commit.commit.refusal));
+      {
+        const char* word = gate_word_refusal(g_commit.commit.refusal);
+        const char* note = cr_not_remembered_note(&g_commit, g_have_defeat);
+        CHECK(note && (!word || strstr(note, word)), "a refused defeat says why (%s): %s", cc_refusal_str(g_commit.commit.refusal), note ? note : "(none)");
+      }
       CHECK(g_commit.commit.refusal == CC_REFUSE_FUSED ||
                 g_commit.commit.refusal == CC_REFUSE_TERA || g_commit.commit.refusal == CC_REFUSE_BOSS ||
                 g_commit.commit.refusal == CC_REFUSE_TRAINER_OWNED || g_commit.commit.refusal == CC_REFUSE_ROSTER_FULL,
             "the refusal is one the encounter explains (%s)", cc_refusal_str(g_commit.commit.refusal));
     } else if (g_have_defeat) {
       n_created++;
+      CHECK(cr_not_remembered_note(&g_commit, g_have_defeat) == NULL, "a remembered enemy needs no 'not remembered' line");
       CHECK(m->roster.count == 1 && g_commit.commit.record_id == m->roster.rec[0].record_id, "one record, the one the commit named (count %u, status %d, refusal %d)", m->roster.count, (int)g_commit.status, (int)g_commit.commit.refusal);
       const cc_nemesis* n = &m->roster.rec[0];
       if(was_double) {
@@ -651,6 +682,9 @@ static void test_defeat_creates(int nseeds) {
             "the report names the finisher");
     } else {
       n_unattributed++;
+      CHECK(cr_defeat_why()[0] && cr_not_remembered_note(&g_commit, g_have_defeat) &&
+                strstr(cr_not_remembered_note(&g_commit, g_have_defeat), cr_defeat_why()),
+            "no reliable finisher: the line carries the reason");
       CHECK(m->roster.count == 0, "no reliable finisher: no record");
       CHECK(!(m->report.known & CC_TK_FINISH_ACTOR), "and the report says nothing about who");
     }
@@ -1143,6 +1177,22 @@ static void test_gate(void) {
     } else {
       CHECK(m->roster.count == 0, "%s: no record", c->name);
       CHECK(m->has_report && !(m->report.known & CC_TK_FINISH_ACTOR), "%s: the report does not say who finished the run", c->name);
+    }
+    /* the result screen says why nobody was remembered, for a defeat (the app asks nothing of a clear) */
+    if (!clear_end) {
+      const char* note = cr_not_remembered_note(&g_commit, g_have_defeat);
+      if (cand && c->refusal == CC_SUPPORT_OK) {
+        CHECK(note == NULL, "%s: a record was made, so there is no 'not remembered' line (%s)", c->name, note ? note : "");
+      } else if (cand) {
+        const char* word = gate_word_refusal(c->refusal);
+        CHECK(note && !strncmp(note, "No enemy remembered: ", 21) && word && strstr(note, word), "%s: the line names the refusal (%s)", c->name,
+              note ? note : "(none)");
+      } else {
+        const char* word = gate_word_no_candidate(c->name);
+        CHECK(cr_defeat_why()[0], "%s: the controller says why it named no finisher", c->name);
+        CHECK(note && !strncmp(note, "No enemy remembered: ", 21) && word && strstr(note, word) && strstr(note, cr_defeat_why()),
+              "%s: the line carries the controller's reason (%s | %s)", c->name, note ? note : "(none)", cr_defeat_why());
+      }
     }
   }
   printf("2  finisher gate: %u cases and a clear\n", nT);
@@ -2175,6 +2225,63 @@ static void test_jojo_overlay(void) {
   }
 }
 
+
+/* ------------------------------------------------------------------ 9. the result screen's "not remembered" line */
+
+static void test_not_remembered(void) {
+  cs_result r;
+  memset(&r, 0, sizeof r);
+  CHECK(cr_not_remembered_note(NULL, true) == NULL, "no result, no line");
+  r.outcome = CS_STORED;
+  r.commit.record_id = 5;
+  CHECK(cr_not_remembered_note(&r, true) == NULL, "a remembered enemy: no line");
+  r.commit.record_id = 0;
+  r.outcome = CS_WRITE_FAILED;
+  CHECK(cr_not_remembered_note(&r, true) == NULL, "a failed write has its own note (cs_note)");
+  r.outcome = CS_FILE_UNUSABLE;
+  CHECK(cr_not_remembered_note(&r, true) == NULL, "an unusable file has its own note");
+  r.outcome = CS_REPLAYED;
+  const char* line = cr_not_remembered_note(&r, true);
+  CHECK(line && strstr(line, "stored already"), "a replayed report that made no record says so (%s)", line ? line : "(none)");
+  r.commit.record_id = 9;
+  CHECK(cr_not_remembered_note(&r, true) == NULL, "a replayed report that made a record needs no line");
+  r.commit.record_id = 0;
+  r.outcome = CS_STORED;
+  r.status = CC_E_RANGE;
+  line = cr_not_remembered_note(&r, true);
+  CHECK(line && strstr(line, "data was refused") && strstr(line, cc_status_str(CC_E_RANGE)), "a candidate the store could not validate is named (%s)", line ? line : "(none)");
+  r.status = CC_OK;
+  r.commit.refusal = CC_REFUSE_ROSTER_FULL;
+  line = cr_not_remembered_note(&r, true);
+  CHECK(line && strstr(line, "cannot be replaced"), "a full roster is named (%s)", line ? line : "(none)");
+  r.commit.refusal = CC_REFUSE_REMATCH;
+  line = cr_not_remembered_note(&r, true);
+  CHECK(line && strstr(line, "rematch"), "a rematch enemy is named (%s)", line ? line : "(none)");
+  r.commit.refusal = CC_REFUSE_NOT_ATTRIBUTED;
+  line = cr_not_remembered_note(&r, true);
+  CHECK(line && strstr(line, "could not be identified"), "an enemy the store cannot tie to the run is named (%s)", line ? line : "(none)");
+  /* every line fits the two lines the result screen has for it (the 8 px font holds about 55 characters of a 300 px line) */
+  static const int ALL[] = {CC_REFUSE_BOSS, CC_REFUSE_FUSED, CC_REFUSE_TERA, CC_REFUSE_TRAINER_OWNED, CC_REFUSE_MYSTERY, CC_REFUSE_FIXED_SCRIPTED,
+                            CC_REFUSE_REMATCH, CC_REFUSE_ABILITY_UNKNOWN, CC_REFUSE_MOVES_UNKNOWN, CC_REFUSE_ROSTER_FULL, CC_REFUSE_NOT_ATTRIBUTED};
+  for (unsigned i = 0; i < sizeof ALL / sizeof ALL[0]; i++) {
+    r.commit.refusal = ALL[i];
+    line = cr_not_remembered_note(&r, true);
+    CHECK(line && strlen(line) <= 110, "the line for %s is short enough (%zu)", cc_refusal_str(ALL[i]), line ? strlen(line) : 0);
+  }
+  /* a run that was no longer active when it ended says so */
+  sd_new();
+  gc_run dummy;
+  memset(&dummy, 0, sizeof dummy);
+  cs_defeat d;
+  CHECK(!cr_active() && !cr_on_run_end(&dummy, GC_SCREEN_GAME_OVER, &d), "no active run: no finisher");
+  CHECK(strstr(cr_defeat_why(), "no longer active"), "and the reason is that (%s)", cr_defeat_why());
+  CHECK(!cr_on_run_end(&dummy, GC_SCREEN_CLEAR, &d) && cr_defeat_why()[0] == 0, "a clear needs no reason");
+  r.commit.refusal = CC_REFUSE_NOT_ATTRIBUTED;
+  line = cr_not_remembered_note(&r, false);
+  CHECK(line == NULL || strstr(line, "No enemy remembered: "), "an unnamed finisher is introduced the same way");
+  printf("9  not-remembered line: done\n");
+}
+
 int main(int argc, char** argv) {
   int nseeds = NSEEDS_DEFAULT + (argc > 1 ? atoi(argv[1]) : 0);
   char dir[64] = "/tmp/custom-run-test-XXXXXX";
@@ -2198,6 +2305,7 @@ int main(int argc, char** argv) {
   test_jojo();
   test_pillar();
   test_jojo_overlay();
+  test_not_remembered();
   printf("custom_run_test: %d checks, %d failed\n", checks, failed);
   if (chdir("/") == 0) {
     char cmd[128];

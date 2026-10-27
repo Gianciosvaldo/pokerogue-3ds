@@ -12,7 +12,7 @@ RUN_LIB := $(BUILD)/run-core/librun.a
 CORE_LIB := $(BUILD)/run-core/battle-core/libprcore.a
 AI_LIB := $(BUILD)/ai-core/libai.a
 REWARD_LIB := $(BUILD)/reward-core/libreward.a
-SRCS := src/gc_form_items.c src/gc_football.c src/gc_egg_hatch.c src/gc_custom.c src/gc_gacha.c src/gc_achv.c gen/out/gc_egg_pool.c src/gc_classic.c src/gc_multi.c src/gc_wide.c src/gc_orb_add.c src/gc_soothe.c src/gc_lure.c src/gc_temp.c src/gc_moveset.c src/gc_fungames.c src/gc_movegen.c gen/out/gc_movegen_data.c src/gc_gts.c src/gc_pillar.c src/gc_darkdeal.c src/gc_fof.c src/gc_snorlax.c src/gc_training.c src/gc_berries.c gen/out/gc_traders.c src/gc_run.c src/gc_phases.c src/gc_mon.c src/gc_items.c src/gc_encounter.c src/gc_battle.c src/gc_save.c src/gc_stubs.c src/gc_system.c src/gc_mystery.c src/gc_reward.c src/gc_reward_lifecycle.c src/gc_learnset.c src/gc_catch.c gen/out/gc_evolutions.c gen/out/gc_biome_fields.c gen/out/gc_starters.c gen/out/gc_trainers.c gen/out/gc_dex.c gen/out/gc_learnsets.c
+SRCS := src/gc_fusion.c src/gc_form_items.c src/gc_football.c src/gc_egg_hatch.c src/gc_custom.c src/gc_gacha.c src/gc_achv.c gen/out/gc_egg_pool.c src/gc_classic.c src/gc_multi.c src/gc_wide.c src/gc_orb_add.c src/gc_soothe.c src/gc_lure.c src/gc_temp.c src/gc_moveset.c src/gc_fungames.c src/gc_movegen.c gen/out/gc_movegen_data.c src/gc_gts.c src/gc_pillar.c src/gc_darkdeal.c src/gc_fof.c src/gc_snorlax.c src/gc_training.c src/gc_berries.c gen/out/gc_traders.c src/gc_run.c src/gc_phases.c src/gc_mon.c src/gc_items.c src/gc_encounter.c src/gc_battle.c src/gc_save.c src/gc_stubs.c src/gc_system.c src/gc_mystery.c src/gc_reward.c src/gc_reward_lifecycle.c src/gc_learnset.c src/gc_catch.c gen/out/gc_evolutions.c gen/out/gc_biome_fields.c gen/out/gc_starters.c gen/out/gc_trainers.c gen/out/gc_dex.c gen/out/gc_learnsets.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
 all: $(BUILD)/transform_host_test
@@ -169,6 +169,20 @@ test: pillar-host-test
 pillar-host-test: $(BUILD)/mystery_pillar_test
 	$(BUILD)/mystery_pillar_test
 .PHONY: pillar-host-test
+all: $(BUILD)/fusion_diff_test $(BUILD)/fusion_host_test
+$(BUILD)/fusion_diff_test: tests/fusion_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+$(BUILD)/fusion_host_test: tests/fusion_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: fusion-host-test
+fusion-host-test: $(BUILD)/fusion_host_test
+	$(BUILD)/fusion_host_test
+.PHONY: fusion-host-test
+# the 600 cases upstream's PlayerPokemon.fuse() produced (tests/fusion.producer.test.ts at 8555c08, seed 777), replayed without upstream
+test: fusion-replay
+fusion-replay: $(BUILD)/fusion_diff_test tests/fixtures/fusion-splicers.native.txt.gz
+	gzip -dc tests/fixtures/fusion-splicers.native.txt.gz | $(BUILD)/fusion_diff_test /dev/stdin
+.PHONY: fusion-replay
 all: $(BUILD)/mystery_gts_diff_test
 $(BUILD)/mystery_gts_diff_test: tests/mystery_gts_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

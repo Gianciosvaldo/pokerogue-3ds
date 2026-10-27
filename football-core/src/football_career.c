@@ -27,23 +27,45 @@ bool football_career_start(FootballCareer *c)
             p.attributes.spd=(uint8_t)(spd>99?99:spd);p.attributes.str=(uint8_t)(str>99?99:str);c->live.units[0][c->mega]=p.attributes;
         }
     }
-    c->candy_plays=c->candy_team=c->seen_snaps=0;
+    c->candy_plays=c->candy_team=c->seen_snaps=c->candy_plays_milli=c->candy_team_milli=0;
     c->phase=FB_CAREER_MATCH;return true;
 }
-/* Starter candy is earned by the species the member started as. A career with no profile earns nothing. */
-static void give_candy(FootballCareer *c,unsigned member,unsigned amount)
+/* The candy bar of the species a member started as is as long as its friendship cap in the classic game; 0 for none. */
+static int candy_bar(const FootballCareer *c,unsigned member,uint16_t *root)
 {
-    if(!c->profile || member>=22 || !amount)return;
-    c->candy_pending[member]+=amount;c->candy_plays+=amount;
+    uint16_t species=member<22?gc_species_root_for_starter(c->roster.mon[member].b.species):0;
+    if(root)*root=species;
+    if(!species)return 0;
+    int cost=gc_starter_cost(species);
+    return getStarterValueFriendshipCap(cost<1?1:cost);
+}
+unsigned football_candy_milli(const FootballCareer *c,unsigned member,unsigned points)
+{
+    int bar=c?candy_bar(c,member,NULL):0;
+    if(bar<=0)return 0;
+    return (unsigned)(((unsigned long)points*FB_CANDY_FRIENDSHIP_PER_POINT*1000u+(unsigned)bar/2)/(unsigned)bar);
+}
+unsigned football_career_team_candy_milli(const FootballCareer *c,bool won)
+{
+    unsigned total=0;
+    for(unsigned i=0;i<22;++i)total+=football_candy_milli(c,i,FB_CANDY_PLAYED+(won?FB_CANDY_WIN:0));
+    return total;
+}
+/* Starter candy is earned by the species the member started as. A career with no profile earns nothing. */
+static unsigned give_candy(FootballCareer *c,unsigned member,unsigned points)
+{
+    if(!c->profile || member>=22 || !points)return 0;
+    c->candy_pending[member]+=points;c->candy_plays+=points;
+    return football_candy_milli(c,member,points);
 }
 unsigned football_career_flush_candy(FootballCareer *c)
 {
     unsigned given=0;
     if(!c || !c->profile)return 0;
     for(unsigned i=0;i<22;++i){
-        unsigned amount=c->candy_pending[i];c->candy_pending[i]=0;
-        uint16_t species=amount?gc_species_root_for_starter(c->roster.mon[i].b.species):0;
-        if(species && gc_system_add_starter_candy(c->profile,species,(int32_t)amount))given+=amount;
+        unsigned points=c->candy_pending[i];c->candy_pending[i]=0;
+        uint16_t species=0;
+        if(points && candy_bar(c,i,&species) && species)given+=(unsigned)gc_system_add_starter_friendship(c->profile,species,(int)(points*FB_CANDY_FRIENDSHIP_PER_POINT));
     }
     return given;
 }
@@ -51,13 +73,13 @@ unsigned football_career_flush_candy(FootballCareer *c)
 static void pay_credits(FootballCareer *c)
 {
     const FootballLive *m=&c->live;
-    for(unsigned i=0;i<m->credit_count && i<4;++i)if(m->credits[i].side==FB_HOME)give_candy(c,m->credits[i].member,football_credit_candy(m->credits[i].kind));
+    for(unsigned i=0;i<m->credit_count && i<4;++i)if(m->credits[i].side==FB_HOME)c->candy_plays_milli+=give_candy(c,m->credits[i].member,football_credit_candy(m->credits[i].kind));
 }
 /* Everyone on the team earns candy for the match, once, when it is over. */
 static void pay_match(FootballCareer *c,bool won)
 {
     unsigned before=c->candy_plays;
-    for(unsigned i=0;i<22;++i)give_candy(c,i,FB_CANDY_PLAYED+(won?FB_CANDY_WIN:0));
+    for(unsigned i=0;i<22;++i)c->candy_team_milli+=give_candy(c,i,FB_CANDY_PLAYED+(won?FB_CANDY_WIN:0));
     c->candy_team=c->candy_plays-before;
 }
 /* What an evolution item costs: the common ones climb with the round, the rare ones (id above 50, the classic game's rare tier) cost more. */

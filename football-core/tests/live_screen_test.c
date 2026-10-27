@@ -79,8 +79,27 @@ int main(void)
     assert(football_screen_open(&args));game_screen=top;assert(speed==1);
     /* The draft list pages with Left/Right and draws on every page; paging back and forth returns to the first row. */
     game_screen->update(game_screen,17);draw_both();for(unsigned i=0;i<3;++i){press(BTN_RIGHT);draw_both();}for(unsigned i=0;i<3;++i)press(BTN_LEFT);draw_both();
-    for(unsigned i=0;i<22;++i){press(BTN_ACTION);if(i<21)press(BTN_DOWN);}
-    assert(career()->phase==FB_CAREER_LINEUP && career()->roster.count==22 && career()->roster.cost<=55);tick();assert(writes==1);
+    /* The draft is a pick for each position, in order: the header names the slot, each pick lands in it, B takes the last one back. */
+    {
+        tick();assert(on_bottom("Pick your Quarterback") && on_top("QB  0/22") && on_top("Best at ") && on_top("SPD") && on_bottom("A: pick for QB"));
+        static const char *const tags[]={"QB","WR","RB","OL/DL","LB","TE/S"};
+        bool tagged=false;for(unsigned t=0;t<sizeof tags/sizeof tags[0];++t)if(on_bottom(tags[t]))tagged=true;
+        assert(tagged); /* every row says which position it is best at */
+        for(unsigned i=0;i<22;++i){
+            char want[64];snprintf(want,sizeof want,"Pick your %s",football_slot_titles[i]);tick();assert(on_bottom(want));
+            snprintf(want,sizeof want,"%s  %u/22",football_slot_names[i],i);assert(on_top(want));
+            press(BTN_ACTION);assert(career()->roster.count==i+1 && career()->roster.lineup[i]==i);
+            for(unsigned j=0;j<i;++j)assert(career()->roster.mon[j].b.species!=career()->roster.mon[i].b.species);
+            if(i==2){ /* take the Wide receiver 1 back, then pick it again */
+                press(BTN_CANCEL);assert(career()->roster.count==2);tick();assert(on_bottom("Pick your Wide receiver 1"));press(BTN_ACTION);assert(career()->roster.count==3);
+            }
+            if(i<21)press(BTN_DOWN);
+        }
+    }
+    assert(career()->phase==FB_CAREER_READY && career()->roster.count==22 && career()->roster.cost<=55);tick();assert(writes==1);
+    for(unsigned i=0;i<22;++i)assert(career()->roster.lineup[i]==i); /* the picks are the lineup: nothing was assigned afterwards */
+    /* The lineup can still be changed from the round hub. */
+    press(BTN_CANCEL);assert(career()->phase==FB_CAREER_LINEUP);
     uint8_t old=career()->roster.lineup[0];press(BTN_ACTION);draw_both();press(BTN_RIGHT);draw_both();assert(career()->roster.lineup[0]!=(unsigned)old);press(BTN_CANCEL);press(BTN_CANCEL);
     assert(career()->phase==FB_CAREER_READY);press(BTN_ACTION);tick();assert(career()->phase==FB_CAREER_MATCH && career()->live.phase==FB_LIVE_CALL && loads==22);
     down=KEY_A;press(BTN_ACTION);tick();assert(career()->live.phase==FB_LIVE_SET); /* play selection must not also snap */
@@ -97,9 +116,13 @@ int main(void)
     /* Species candy waits for a checkpoint: a failed write leaves it pending, the saved one hands it to the profile. */
     {
         FootballCareer *w=(FootballCareer *)career();uint16_t root=gc_species_root_for_starter(w->roster.mon[3].b.species);int32_t had=profile.starters[root].candy_count;
-        w->candy_pending[3]=7;
-        write_ok=false;press(BTN_MENU);answer(1);assert(top==game_screen && w->candy_pending[3]==7 && profile.starters[root].candy_count==had);
-        write_ok=true;press(BTN_MENU);answer(1);assert(top==&title && !w->candy_pending[3] && profile.starters[root].candy_count==had+7);
+        /* 100 points are 4500 friendship, a full bar even for the longest one (600), and the rest stays on the bar. */
+        const int bar=getStarterValueFriendshipCap(gc_starter_cost(root)<1?1:gc_starter_cost(root));const unsigned sum=profile.starters[root].friendship+100u*FB_CANDY_FRIENDSHIP_PER_POINT;
+        const int32_t earned=(int32_t)(sum/(unsigned)bar);const uint16_t left=(uint16_t)(sum%(unsigned)bar);
+        assert(earned>=1);
+        w->candy_pending[3]=100;
+        write_ok=false;press(BTN_MENU);answer(1);assert(top==game_screen && w->candy_pending[3]==100 && profile.starters[root].candy_count==had);
+        write_ok=true;press(BTN_MENU);answer(1);assert(top==&title && !w->candy_pending[3] && profile.starters[root].candy_count==had+earned && profile.starters[root].friendship==left);
     }
     /* Special teams are the third page of the playcall: a punt is always there, a field goal only from inside range. */
     assert(football_screen_open(&args));game_screen=top;assert(career()->live.phase==FB_LIVE_CALL && career()->live.rules.offense==FB_HOME);
@@ -179,7 +202,7 @@ int main(void)
         press(BTN_ACTION);tick();assert(w->phase==FB_CAREER_READY && w->evo_count==0);
     }
     {
-        static const char *const seen[]={"Draft  ","Lineup","Pick a member","Playoffs","Round 5 / 7","Choose your play","Special teams","Go for two","Touchdown!","Live play","Match won","Playoff elimination","Experience","Choose an evolution","Shop","Cash 1234","Playoff complete","Checkpoint preserved","Species candy","Mega evolution","Tap the map","Circle Pad","Growlithe: Fire Stone","Growlithe > Arcanine","Eevee > Vaporeon"};
+        static const char *const seen[]={"Pick your ","Lineup","Pick a member","Playoffs","Round 5 / 7","Choose your play","Special teams","Go for two","Touchdown!","Live play","Match won","Playoff elimination","Experience","Choose an evolution","Shop","Cash 1234","Playoff complete","Checkpoint preserved","Species candy","Mega evolution","Tap the map","Circle Pad","Growlithe: Fire Stone","Growlithe > Arcanine","Eevee > Vaporeon"};
         for(unsigned i=0;i<sizeof seen/sizeof seen[0];++i)if(!fake_saw(seen[i]))fprintf(stderr,"never drawn: %s\n",seen[i]);
         for(unsigned i=0;i<sizeof seen/sizeof seen[0];++i)assert(fake_saw(seen[i]));
     }

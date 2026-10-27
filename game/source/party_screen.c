@@ -79,6 +79,31 @@ static struct {
   bool open;
 } S;
 
+/* The reward-time screens list the party in upstream's party order (run->party_order, which switching in battle changes), not in
+ * party[]'s storage order, which never moves. `order[slot]` is the index into party[] of the member shown in `slot`; the callbacks
+ * these screens take and give use party[] indexes, so a slot becomes `order[slot]` on its way out. A party_order that is not a
+ * permutation of the party falls back to storage order. */
+static int order[PR_MAX_PARTY];
+
+static void set_order(const gc_run* run) {
+  const int n = run ? (run->n_party < PR_MAX_PARTY ? run->n_party : PR_MAX_PARTY) : 0;
+  int used = 0;
+  bool ordered = true;
+  for (int slot = 0; slot < n; slot++) {
+    const int storage = run->party_order[slot];
+    if (storage < 0 || storage >= n || (used & (1 << storage))) {
+      ordered = false;
+      break;
+    }
+    used |= 1 << storage;
+    order[slot] = storage;
+  }
+  if (!ordered)
+    for (int slot = 0; slot < n; slot++) order[slot] = slot;
+}
+
+static int storage_at(int slot) { return slot >= 0 && slot < S.n && slot < PR_MAX_PARTY ? order[slot] : slot; }
+
 /* Converts gc_mon to menu_mon for item menus */
 static void gc_to_menu_mon(const gc_mon* gm, menu_mon* m) {
   memset(m, 0, sizeof *m);
@@ -308,15 +333,15 @@ static void on_item_select(void* ctx, int slot, int option) {
   }
   if (option >= PO_MOVE_1 && option <= PO_MOVE_4) {
     int move_idx = option - PO_MOVE_1;
-    if (ItemS.on_item_pick) ItemS.on_item_pick(slot, move_idx, ItemS.item_arg);
+    if (ItemS.on_item_pick) ItemS.on_item_pick(storage_at(slot), move_idx, ItemS.item_arg);
     return;
   }
-  if (ItemS.on_item_pick) ItemS.on_item_pick(slot, -1, ItemS.item_arg);
+  if (ItemS.on_item_pick) ItemS.on_item_pick(storage_at(slot), -1, ItemS.item_arg);
 }
 
 static const char* filter_tm(void* ctx, int slot) {
   (void)ctx;
-  return gc_mon_can_learn_tm(&g_run->party[slot], ItemS.tm_move) ? NULL : mui_t("partyUiHandler:anyEffect");
+  return gc_mon_can_learn_tm(&g_run->party[storage_at(slot)], ItemS.tm_move) ? NULL : mui_t("partyUiHandler:anyEffect");
 }
 
 void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, int tm_move, void (*on_pick)(int slot, int move_slot, void* arg), void* arg) {
@@ -331,9 +356,11 @@ void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, int tm_mo
   ItemS.tm_move = tm_move;
 
   if (run) {
-    for (int i = 0; i < run->n_party && i < PR_MAX_PARTY; i++) {
-      gc_to_menu_mon(&run->party[i], &S.party[i]);
-      if (S.mode == PARTY_TM_MODIFIER) S.party[i].tm_state = (uint8_t)gc_mon_tm_state(&run->party[i], tm_move);
+    set_order(run);
+    for (int slot = 0; slot < run->n_party && slot < PR_MAX_PARTY; slot++) {
+      const gc_mon* m = &run->party[order[slot]];
+      gc_to_menu_mon(m, &S.party[slot]);
+      if (S.mode == PARTY_TM_MODIFIER) S.party[slot].tm_state = (uint8_t)gc_mon_tm_state(m, tm_move);
     }
     S.n = run->n_party;
   }
@@ -362,7 +389,8 @@ static struct {
 } TrS;
 
 static void transfer_fill(void) {
-  for (int i = 0; i < g_run->n_party && i < PR_MAX_PARTY; i++) gc_to_menu_mon(&g_run->party[i], &S.party[i]);
+  set_order(g_run);
+  for (int slot = 0; slot < g_run->n_party && slot < PR_MAX_PARTY; slot++) gc_to_menu_mon(&g_run->party[order[slot]], &S.party[slot]);
   S.n = g_run->n_party;
 }
 
@@ -375,7 +403,7 @@ static void on_transfer_pick(void* ctx, int from, int item, int count, int to) {
   for (int i = 0, k = 0; i < m->nitems; i++)
     if (m->items[i].transferable && k++ == item) src = m->items[i].src;
   if (src < 0) return;
-  if (TrS.on_move) TrS.on_move(src, count, to, TrS.arg);
+  if (TrS.on_move) TrS.on_move(src, count, to < 0 ? -1 : storage_at(to), TrS.arg);
   /* the run's list changed (and with it each item's index): the menu is rebuilt from it */
   transfer_fill();
   party_refresh(S.party, S.n);
@@ -416,7 +444,6 @@ static struct {
   void (*on_pause)(int, bool, void*);
   void (*on_done)(void*);
   void* arg;
-  int storage[PR_MAX_PARTY];
 } Check;
 /* One item belongs to one member; total storage follows the full inventory,
  * independently of the summary's 24 displayed items. No large stack arrays. */
@@ -424,11 +451,11 @@ static menu_form_item form_items[PR_MAX_MODIFIERS];
 static int form_indices[PR_MAX_MODIFIERS];
 static void check_form(void* ctx, int slot, int item) {
   (void)ctx;
-  if (Check.on_form && slot>=0 && slot<S.n) Check.on_form(Check.storage[slot],item,Check.arg);
+  if (Check.on_form && slot>=0 && slot<S.n) Check.on_form(order[slot],item,Check.arg);
 }
 static void check_pause(void* ctx, int slot, bool paused) {
   (void)ctx;
-  if (Check.on_pause && slot>=0 && slot<S.n) Check.on_pause(Check.storage[slot],paused,Check.arg);
+  if (Check.on_pause && slot>=0 && slot<S.n) Check.on_pause(order[slot],paused,Check.arg);
 }
 static void check_select(void* ctx, int slot, int option) {
   (void)ctx;(void)slot;
@@ -441,17 +468,11 @@ void ps_open_check(const void* gc_run_ptr, int cursor, void (*on_form)(int,int,v
   _Static_assert(MENU_MAX_FORM_ITEMS >= PR_MAX_MODIFIERS,"full form inventory fits menu");
   ps_set_run(run);memset(&S,0,sizeof S);S.mode=PARTY_CHECK;S.n=run->n_party;
   Check.on_form=on_form;Check.on_pause=on_pause;Check.on_done=on_done;Check.arg=arg;
-  int used=0;bool ordered=true;
-  for(int slot=0;slot<S.n;slot++) {
-    int storage=run->party_order[slot];
-    if(storage<0 || storage>=S.n || (used&(1<<storage))) { ordered=false;break; }
-    used|=1<<storage;Check.storage[slot]=storage;
-  }
-  if(!ordered)for(int slot=0;slot<S.n;slot++)Check.storage[slot]=slot;
-  for(int slot=0;slot<S.n;slot++)gc_to_menu_mon(&run->party[Check.storage[slot]],&S.party[slot]);
+  set_order(run);
+  for(int slot=0;slot<S.n;slot++)gc_to_menu_mon(&run->party[order[slot]],&S.party[slot]);
   int count=0,initial=0;
   for(int slot=0;slot<S.n;slot++) {
-    int storage=Check.storage[slot];if(storage==cursor)initial=slot;
+    int storage=order[slot];if(storage==cursor)initial=slot;
     const int n=gc_form_item_options(run,storage,form_indices,PR_MAX_MODIFIERS);
     if(n<0 || n>PR_MAX_MODIFIERS-count) {
       /* Invalid aliased party identities cannot expose a partial action list. */

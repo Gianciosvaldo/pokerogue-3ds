@@ -124,7 +124,9 @@ void football_live_art_top(FootballRenderer *r,const FootballCareer *c,const Foo
         unsigned candy=0,member=22;
         for(unsigned i=0;i<m->credit_count && i<4;++i)if(m->credits[i].side==FB_HOME){candy+=football_credit_candy(m->credits[i].kind);member=m->credits[i].member;}
         if(candy && member<22){
-            char gain[48];snprintf(gain,sizeof gain,"%.14s  +%u CANDY",football_live_art_species(c->roster.mon[member].b.species),candy);
+            /* Points are steps of the species' candy bar: a legendary earns a sliver of a candy, a common Pokemon one or more. */
+            const unsigned milli=football_live_art_candy_milli(c,member,candy);
+            char gain[48];snprintf(gain,sizeof gain,"%.14s  +%u.%02u CANDY",football_live_art_species(c->roster.mon[member].b.species),milli/1000,milli%1000/10);
             float gw=(float)strlen(gain)*7.5f,gy=top+36*pop+4;
             rect(200-gw/2-10,gy,gw+20,22,.85f,navy);rect(200-gw/2-10,gy,gw+20,2,.86f,gold);label(r,gain,200-gw/2,gy+4,.45f,gold);
         }
