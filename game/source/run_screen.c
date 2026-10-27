@@ -14,6 +14,7 @@
 #include "pr_data.h"
 #include "battle_anim.h"
 #include "battle_events.h"
+#include "battle_event_store.h"
 #include "battle_view.h"
 #include "combat_observer.h"
 #include "custom_run.h"
@@ -310,7 +311,7 @@ static void drain(void) {
   while (G.nq < GC_MAX_EVENTS && gc_run_next_event(&G.run, &G.q[G.nq])) G.nq++;
   /* The combat history takes the raw events here, once per drain, before anything is converted or played: the screen's timing,
    * its redraws and its skips cannot count a turn twice or leave one out. */
-  co_observe(++G.drain_no, G.q, G.nq, G.run.battle_events, G.run.n_battle_events, G.run.battle_events_overflow, G.run.ev_overflow);
+  co_observe(++G.drain_no, G.q, G.nq, gc_run_battle_event_data(&G.run), G.run.n_battle_events, G.run.battle_events_overflow, G.run.ev_overflow);
   const gc_screen* s = gc_run_screen(&G.run);
 
   /* the learn dialog (menus' learn_move_start) shows what game-core says around its screen: drop
@@ -350,7 +351,7 @@ static void drain(void) {
         const char* k = G.q[j].msg.key;
         if (!k || (strcmp(k, "battle:playerGo") && strcmp(k, "battle:trainerSendOut"))) continue;
         for (int b = 0; b < e->b; b++) {
-          const pr_event* be = &G.run.battle_events[e->a + b];
+          const pr_event* be = &gc_run_battle_event_data(&G.run)[e->a + b];
           if (be->type == PR_EV_TEXT && be->msg.key && !strcmp(be->msg.key, k)) {
             G.skip[j] = true;
             G.st.dup_dropped++;
@@ -607,7 +608,7 @@ static bool handle_event(int i) {
          * BREAK_FREE_SHAKES) */
         bool caught = false;
         for (int k = 0; k < e->b; k++) {
-          const pr_event* be = &G.run.battle_events[e->a + k];
+          const pr_event* be = &gc_run_battle_event_data(&G.run)[e->a + k];
           if (be->type == PR_EV_TEXT && be->msg.key && !strcmp(be->msg.key, "battle:pokemonCaught")) caught = true;
         }
         bv_event* t = ev_new();
@@ -616,7 +617,7 @@ static bool handle_event(int i) {
         if (caught) G.st.catches++;
       }
       G.ball = -1;
-      G.n_ev += be_convert_events(&G.run.bt, &G.run.battle_events[e->a], e->b, settled_after(i), &v, G.ev + G.n_ev, EV_CAP - G.n_ev);
+      G.n_ev += be_convert_events(&G.run.bt, &gc_run_battle_event_data(&G.run)[e->a], e->b, settled_after(i), &v, G.ev + G.n_ev, EV_CAP - G.n_ev);
       G.present[0] = v.present[0];
       G.present[1] = v.present[1];
       G.present[2]=v.present[2];G.present[3]=v.present[3];
@@ -1772,6 +1773,7 @@ static bool new_run(bool from_black) {
   } else {
     cr_end();
   }
+  bes_bind(&G.run);
   gc_starter team[6];
   int n = 0;
   if (G.st.runs == 1 && G.cfg.n_team > 0) {
@@ -1809,6 +1811,7 @@ rsv_status rs_resume(const rs_config* cfg, char why[RSV_WHY_LEN]) {
   if (!cfg->custom) cr_end();
   const rsv_status st = cfg->custom ? cr_load(cfg->slot, &G.run, why) : rsv_load(cfg->slot, &G.run, why);
   if (st != RSV_OK) return st; /* G.run is not usable: the caller must not drive it */
+  bes_bind(&G.run);
   G.run.sys = cfg->sys; /* a saved run holds no system data: it takes the player's */
   ach_reset_loaded();
   /* observation starts here: the battles before the save were not seen (a custom run's save carries the turns it had kept) */

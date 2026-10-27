@@ -87,6 +87,9 @@ money handling merged in #357; see [their validation record](HONEY-MONEY-VALIDAT
    The [diagnostic trace follow-up](TRACE-CAPACITY-VALIDATION.md) lets a native
    607-phase turn finish after its 512-entry diagnostic prefix fills; trace
    truncation is explicit and separate from genuine engine-storage failures.
+   The [controller storage follow-up](../game-core/CONTROLLER-EVENT-STORAGE-VALIDATION.md)
+   delivers that turn's 555 events through the app with optional caller-owned
+   growth. Default inline clients and other engine/app capacities remain bounded.
 2. Finish the source inventory, including AI moveset attributes, constructor
    closures/conditions, tags, modifiers, phases and unsupported/capacity paths.
 3. Reconcile identity/form/copy and persistent interaction evidence with later
@@ -101,6 +104,9 @@ money handling merged in #357; see [their validation record](HONEY-MONEY-VALIDAT
 4. Finish wide-level Endless acceptance across generation, arithmetic,
    progression, display and compatible saves, then publish the final evidence
    audit and explicitly list any remaining external prerequisites.
+   The [Endless wave sweep](../run-core/ENDLESS-WAVE-SWEEP-VALIDATION.md)
+   retains wave-rule/level/RNG observations at every wave through 5,850 in
+   both modes. It does not close complete encounter generation or whole runs.
 
 The order can change when an actual source mismatch reveals a prerequisite.
 Each slice retains its own reproducible validation and exact-head CI record.

@@ -2,6 +2,12 @@
 #define FOOTBALL_CAREER_H
 #include "football_live.h"
 typedef enum { FB_CAREER_DRAFT,FB_CAREER_LINEUP,FB_CAREER_READY,FB_CAREER_MATCH,FB_CAREER_RESULT,FB_CAREER_EXP,FB_CAREER_EVOLVE,FB_CAREER_LEARN /* unused: level-up moves are learned without a prompt; kept so saved phase numbers stay valid */,FB_CAREER_SHOP,FB_CAREER_END,FB_CAREER_ERROR } FootballCareerPhase;
+/* An evolution item for sale, bound to the member who can use it now. Offer numbers for football_career_buy: 0..2 are Carbos, Protein
+ * and the mega stone, 3 + n is evo[n]. */
+#define FB_SHOP_EVO_MAX 8
+#define FB_SHOP_FIXED 3
+typedef enum { FB_EVO_OFFER,FB_EVO_SOLD,FB_EVO_VOID /* the member has evolved with another item */ } FootballEvoState;
+typedef struct { uint8_t member,item,state;uint16_t species,price; } FootballEvoOffer; /* item: the classic EvolutionItem id, above 50 rare; species: what it brings */
 typedef struct {
     FootballRoster roster;
     FootballLive live;
@@ -16,6 +22,7 @@ typedef struct {
     unsigned candy_plays,candy_team,seen_snaps,candy_pending[22];
     uint16_t evolutions[GC_FOOTBALL_MAX_EVOLUTIONS];
     unsigned prices[3];bool sold[3];int stone_target,stone_item,mega;
+    unsigned evo_count;FootballEvoOffer evo[FB_SHOP_EVO_MAX];
     char message[160];
 } FootballCareer;
 bool football_career_new(FootballCareer *c,gc_run *scratch,gc_system *profile,unsigned seed);
@@ -25,7 +32,14 @@ bool football_career_continue(FootballCareer *c);
 bool football_career_evolve(FootballCareer *c,int choice);
 /* The move slot a level-up move replaces when four are known: the lowest power (status moves count 0), the earliest slot on a tie; -1 with no moves. */
 int football_career_forget_slot(const pr_pokemon *p);
+/* member is the target of Carbos and Protein; an evolution offer is bound to its own member. An evolution runs the real evolution and
+ * move-learning phases on the member and refreshes the roster; the result is told in c->message. */
 bool football_career_buy(FootballCareer *c,unsigned offer,unsigned member);
+/* Whether an evolution offer still holds against the roster (the member can use that item and it brings that species). */
+bool football_career_evo_valid(FootballCareer *c,const FootballEvoOffer *offer);
+/* The player an evolution offer would make of its member (its attributes with the boosts it carries), without buying: the shop shows
+ * these beside today's. The roster and the scratch run are left as they were. */
+bool football_career_evo_preview(FootballCareer *c,unsigned offer,FootballPlayer *out);
 /* Safe checkpoints: lineup, round hub, playcall, shop and final result. */
 bool football_career_save_ready(const FootballCareer *c);
 /* Gives the profile the candy that is waiting (to the species each member started as) and returns how much it got; the

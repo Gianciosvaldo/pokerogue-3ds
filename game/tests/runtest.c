@@ -244,7 +244,7 @@ static void bad(const char* fmt, ...) {
     }
     printf("  battle-core events of this drain (%d):\n", r->n_battle_events);
     for (int i = 0; i < r->n_battle_events; i++) {
-      const pr_event* e = &r->battle_events[i];
+      const pr_event* e = &gc_run_battle_event_data(r)[i];
       printf("    ev type=%d b=%d t=%d id=%d v=%d%s%s", e->type, e->battler, e->target, e->id, e->value, e->msg.key ? " key=" : "", e->msg.key ? e->msg.key : "");
       if (e->battler >= 0 && e->battler < 4) printf(" snap sp=%d slot=%d hp=%d/%d", e->field[e->battler].species, e->field[e->battler].party_slot, e->field[e->battler].hp, e->field[e->battler].max_hp);
       printf("\n");
@@ -351,9 +351,26 @@ static void music_seen(const char* name) {
   if (M.n_seen < 400) snprintf(M.seen[M.n_seen++], BGM_NAME_LEN, "%s", name);
 }
 
+/* Force valid external storage even for short ordinary turns, and poison the
+ * inactive inline buffer before the real driver reads any published events. */
+static pr_event event_store_shadow[GC_MAX_BATTLE_EVENTS];
+static int event_store_promotions;
+static void promote_event_storage(gc_run *run){
+ if(!getenv("RUNTEST_EVENT_STORE")||run!=rs_run()||run->battle_event_storage||run->n_battle_events<=0)return;
+ if(run->n_battle_events>GC_MAX_BATTLE_EVENTS){fprintf(stderr,"invalid inline event count\n");exit(1);}
+ memcpy(event_store_shadow,run->battle_events,(size_t)run->n_battle_events*sizeof(pr_event));
+ run->battle_event_storage=event_store_shadow;run->battle_event_capacity=GC_MAX_BATTLE_EVENTS;
+ memset(run->battle_events,0,sizeof run->battle_events);event_store_promotions++;
+}
+void __real_gc_ev_battle(gc_run*);
+void __real_gc_ev_battle_chunk(gc_run*,const pr_event*,int);
+void __wrap_gc_ev_battle(gc_run*run){__real_gc_ev_battle(run);promote_event_storage(run);}
+void __wrap_gc_ev_battle_chunk(gc_run*run,const pr_event*events,int n){__real_gc_ev_battle_chunk(run,events,n);promote_event_storage(run);}
+
 /* a scene was just set up (at black): its music is upstream's, with the trainer's encounter music before its first send-out */
 static void music_scene(void) {
   const gc_run* r = rs_run();
+  if(!r->battle_event_reserve) BAD("new/resumed app run has no presentation storage owner");
   char b1[BGM_NAME_LEN], b2[BGM_NAME_LEN];
   const char* first = expect_track(r, false, b1);
   const char* battle = expect_track(r, true, b2);
@@ -2045,6 +2062,7 @@ int main(int argc, char** argv) {
   if (violations) printf("first violation: %s\n", first_violation);
   if (deadlock) printf("DEADLOCK: nothing was pending after %ld steps (run %d, wave %d)\n", steps, st->runs, rs_run()->wave);
   if (no_progress) printf("NO PROGRESS: no new wave in 20000 steps (wave %d)\n", rs_run()->wave);
+  if(getenv("RUNTEST_EVENT_STORE")){printf("external event storage promotions %d\n",event_store_promotions);if(!event_store_promotions)BAD("external event storage was not exercised");}
   const bool fail = violations || st->not_found || st->shown_mismatch || st->stuck || deadlock || no_progress || ended < runs;
   printf(fail ? "FAILED\n" : "OK\n");
   if (save_dir[0]) {
