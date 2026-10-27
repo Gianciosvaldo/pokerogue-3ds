@@ -144,7 +144,12 @@ static void fill_learnsets(gc_run *run, const gc_mon *m, pr_reward_mon *r)
     r->n_egg_moves = (uint8_t)gc_unlocked_egg_moves(run, m, r->egg_moves);
     r->met_as_starter = m->met_wave == -1;
     r->egg_relearn_allowed = true;   /* no challenge hook yet: ChallengeType.EGG_MOVE_RELEARN_AVAILABILITY keeps its default */
-    r->n_used_tms = (uint8_t)(m->n_used_tms < PR_REWARD_MAX_USED_TMS ? m->n_used_tms : PR_REWARD_MAX_USED_TMS);
+    if (m->n_used_tms > PR_REWARD_MAX_USED_TMS) {
+        gc_stub(run, GC_STUB_REWARD_INPUT);
+        r->n_used_tms = 0;
+        return;
+    }
+    r->n_used_tms = m->n_used_tms;
     for (int i = 0; i < r->n_used_tms; i++) r->used_tms[i] = m->used_tms[i];
 }
 

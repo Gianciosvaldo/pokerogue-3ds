@@ -1249,3 +1249,10 @@ fusion-item-evolution-host-test: $(BUILD)/fusion_item_evolution_host_test
 	$(BUILD)/fusion_item_evolution_host_test
 test: fusion-item-evolution-host-test
 .PHONY: fusion-item-evolution-host-test
+
+$(BUILD)/tm_history_host_test: tests/tm_history_host_test.c tests/fixtures/tm-history.native.inc tests/fixtures/tm-history.legacy-64.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/tm_history_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+tm-history-host-test: $(BUILD)/tm_history_host_test
+	$(BUILD)/tm_history_host_test
+test: tm-history-host-test
+.PHONY: tm-history-host-test

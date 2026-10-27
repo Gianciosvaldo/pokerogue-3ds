@@ -97,6 +97,9 @@ money handling merged in #357; see [their validation record](HONEY-MONEY-VALIDAT
    Generic registry misses require owning-caller review, not automatic rework.
 3. Reconcile identity/form/copy and persistent interaction evidence with later
    merged slices; retain exact state, queues, text, RNG and all prior covered IDs.
+   The [TM-history follow-up](../game-core/TM-HISTORY-VALIDATION.md) retains the
+   complete registered TM catalog, real learning callbacks, ordered memory
+   queries and compatible saves beyond the old 64-entry and byte-count limits.
    [Last Resort history](LAST-RESORT-HISTORY-VALIDATION.md) adds full non-virtual
    membership, summon reset and compatible saves. The [nonvirtual query
    follow-up](NONVIRTUAL-HISTORY-VALIDATION.md) adds all four last-real-move

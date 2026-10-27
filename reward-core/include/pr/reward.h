@@ -13,6 +13,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "pr/inventory_limits.h"
+#include "pr/tm-history.h"
 #include "pr/run.h"          /* pr_run: game mode, seeds, Phaser.Math.RND */
 #include "reward_items.h"    /* enum pr_item: modifierTypes keys (generated) */
 
@@ -130,7 +131,7 @@ int pr_item_type_group(pr_item_type t);
 
 /* ---- what the rolls read ---- */
 #define PR_REWARD_MAX_LEVEL_MOVES 160
-#define PR_REWARD_MAX_USED_TMS 64
+#define PR_REWARD_MAX_USED_TMS PR_TM_HISTORY_CAPACITY
 #define PR_REWARD_MAX_ATTACK_TYPES 16
 /* A party member (PlayerPokemon), as the weights and generators read it */
 typedef struct {
@@ -184,7 +185,7 @@ typedef struct {
     uint16_t egg_moves[4]; uint8_t n_egg_moves;
     bool met_as_starter;          /* metBiome === -1 */
     bool egg_relearn_allowed;     /* ChallengeType.EGG_MOVE_RELEARN_AVAILABILITY ValueHolder */
-    uint16_t used_tms[PR_REWARD_MAX_USED_TMS]; uint8_t n_used_tms;
+    uint16_t used_tms[PR_REWARD_MAX_USED_TMS]; uint16_t n_used_tms;
     /* caller: the attack type booster's input: for each attack move in getMoveset(), in order, its types
      * for item spawns (VariableMoveTypeAttr.getTypesForItemSpawn or getMoveTypeForItemSpawn) */
     int8_t attack_types[PR_REWARD_MAX_ATTACK_TYPES]; uint8_t n_attack_types;
