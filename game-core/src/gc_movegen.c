@@ -121,9 +121,9 @@ static void ability_stats_of(mg_ctx *c, int move, int ab, double *power_mult, do
     if (!alt && (mg_has_type(c, POKEMON_TYPE_FLYING)
                  || ((mg_bits_of(ab) & GC_MGA_TERRAIN_SUMMON) && (mg_ability_is(c, ABILITY_ID_LEVITATE) || mg_ability_is(c, ABILITY_ID_EELEVATE)))))
         alt = find_pow(ab, move, 3, 1);
-    if (!alt && mg_flag(move, GC_MGF_VARIABLE_TYPE)) {
+    if (!alt) {
         const int type = pr_get_move_type(&c->bt, &c->p, move);
-        if (type != pr_moves[move].type) alt = find_pow(ab, move, 4, type);
+        alt = find_pow(ab, move, 4, type);
     }
     if (alt) row = alt;
     if (row) {

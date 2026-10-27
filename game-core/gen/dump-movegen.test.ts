@@ -7,7 +7,8 @@
  * (no weather, genderless, not Flying, the move's own type) plus the rows where one of those four things changes it.
  * Run with tools/redump.sh <upstream dir>; writes gen/out/gc_movegen_data.c. The output is generated: don't edit it.
  */
-import { speciesDataRegistry } from "#app/global-species-data-registry";
+import { BattleScene } from "#app/battle-scene";
+import { speciesDataRegistry } from "#app/globals/global-species-data-registry";
 import { globalScene } from "#app/global-scene";
 import * as MG from "#balance/moveset-generation";
 import { FORBIDDEN_SINGLES_MOVES, LEVEL_BASED_DENYLIST } from "#balance/forbidden-moves";
@@ -47,9 +48,11 @@ const VT_KIND: Record<string, number> = {
 };
 
 it("dump movegen", async () => {
+  const nativeBattleRng = BattleScene.prototype.randBattleSeedInt;
   const game = new GameManager(new Phaser.Game({ type: Phaser.HEADLESS }));
   game.override.startingWave(45);
   await game.classicMode.startBattle(SpeciesId.BULBASAUR);
+  BattleScene.prototype.randBattleSeedInt = nativeBattleRng;
   const scene = game.scene as any;
   const out = process.env.DUMP_OUT ?? "/tmp/gc_movegen.c";
 
@@ -200,9 +203,11 @@ it("dump movegen", async () => {
         if (!same(t, base)) powRows.push({ ab, move: mv, dim: 3, val: 1, t });
       }
       dummy.customPokemonData.types = [];
-      if (vtMove) {
+      /* An active ability can change any move's type before a passive tests
+       * its power. Include the original type too: the base observation above
+       * uses the ability's ordinary type resolution for non-variable moves. */
+      {
         for (let ty = 0; ty < 18; ty++) {
-          if (ty === mt) continue;
           dummy.getMoveType = () => ty;
           const t = tup(ab, mv);
           if (!same(t, base)) powRows.push({ ab, move: mv, dim: 4, val: ty, t });

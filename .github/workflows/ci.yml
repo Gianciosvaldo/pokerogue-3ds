@@ -66,6 +66,8 @@ jobs:
         run: python3 game-core/tools/check-wild-boss-movesets-proof.py
       - name: Compare fusion variable move types and getter purity
         run: python3 game-core/tools/check-fusion-variable-types-proof.py
+      - name: Compare fusion ability power queries and failure controls
+        run: python3 game-core/tools/check-fusion-power-proof.py
       - name: Compare every supported Endless wave and reject uncovered results
         run: python3 run-core/tools/check-endless-wave-sweep.py
       - name: Audit pinned held-class mappings and evidence references

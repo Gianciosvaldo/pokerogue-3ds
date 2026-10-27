@@ -72,7 +72,7 @@ extern const gc_mg_superceded gc_mg_supercededs[];
 
 /* Move.effectivePowerAbilityCheck for an ability: the result a (ability, move) gets when nothing about the user matters
  * (dim 0), and where one of these does (dim 1 weather = WeatherType, 2 gender = Gender (move 0: every damaging move), 3 Flying, 4 the move's type =
- * PokemonType, for variable-type moves): by (ability, move, dim, val) */
+ * PokemonType, including ability changes to ordinary moves): by (ability, move, dim, val) */
 typedef struct { uint16_t ability, move; uint8_t dim, val; double power_mult, acc_mult; uint8_t instant, max_multi; } gc_mg_pow;
 extern const int gc_mg_pow_count;
 extern const gc_mg_pow gc_mg_pows[];
