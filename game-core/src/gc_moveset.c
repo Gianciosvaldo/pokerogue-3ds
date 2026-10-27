@@ -1,9 +1,9 @@
-/* Task 64, first slice: the clean wild constructor boundary supported by Task 63.
- * Trainer member streams and the wider moveset pools remain explicit fallbacks. */
+/* Wild constructor movesets: retain the clean factory, then weighted level pools.
+ * Trainer member streams and post-moveset form callbacks remain separate owners. */
 #include "internal.h"
 #include "pr/moveset.h"
 
-bool gc_enemy_moveset(gc_run *run, gc_mon *m, const pr_enemy_gen *g)
+static bool clean_enemy_moveset(gc_run *run, gc_mon *m, const pr_enemy_gen *g)
 {
     /* Trainer generation currently restores executeWithSeedOffset before returning
      * its constructor snapshots. Using the run RNG here would shift the wrong stream.
@@ -42,4 +42,29 @@ bool gc_enemy_moveset(gc_run *run, gc_mon *m, const pr_enemy_gen *g)
         m->b.pp_up[i] = (int8_t)generated.pp_up[i];
     }
     return true;
+}
+
+/* Broader native constructor domain: keep the independently retained clean
+ * factory first, then use the weighted level-pool owner for ordinary wilds. */
+bool gc_enemy_moveset(gc_run *run, gc_mon *m, const pr_enemy_gen *g)
+{
+    if (clean_enemy_moveset(run, m, g)) return true;
+    if (m->b.has_trainer || m->trainer_slot || run->me_battle
+        || run->battle_type != BATTLE_TYPE_WILD || run->run.has_challenges
+        || (run->run.mode != GAME_MODES_CLASSIC && run->run.mode != GAME_MODES_ENDLESS
+            && run->run.mode != GAME_MODES_SPLICED_ENDLESS)
+        || m->b.is_boss || m->b.passive_flag) return false;
+    const pr_species *sp = gc_species(m->b.species);
+    if (!sp || (sp->form_change_triggers & (1u << PR_FCT_SpeciesFormChangeMoveLearnedTrigger)))
+        return false; /* The constructor's post-moveset form callback is separate. */
+    if (g->fusion_species == 0 || (g->fusion_species > 0) != !!m->b.fusion_species)
+        return false;
+    if (m->b.fusion_species && (g->fusion_species != m->b.fusion_species
+        || g->fusion_form != m->b.fusion_form
+        || g->fusion_ability_index != m->b.fusion_ability_index
+        || g->fusion_gender != m->b.fusion_gender)) return false;
+    /* Fresh Spliced constructors above level one always have a fusion. */
+    if (run->run.mode == GAME_MODES_SPLICED_ENDLESS && m->b.level > 1 && !m->b.fusion_species)
+        return false;
+    return gc_generate_moveset(run, &run->run.rng, m);
 }

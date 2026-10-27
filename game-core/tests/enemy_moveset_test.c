@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "fixtures/wild-movesets.native.inc"
+
 static gc_run run;
 static unsigned checks, supported, fallback, wild_supported, wild_fallback, wild_draws;
 #define CHECK(x) do { checks++; if (!(x)) { fprintf(stderr, "enemy moveset line %d: %s\n", __LINE__, #x); exit(1); } } while (0)
@@ -37,8 +39,30 @@ static void check_moves(const gc_mon *m, const pr_generated_moveset *out)
     }
 }
 
+/* Phaser.state() publishes c/s0/s1/s2; n is only C's seed-mash scratch. */
+static bool same_native_rng(const pr_rng*a,const pr_rng*b)
+{return a->c==b->c&&a->s0==b->s0&&a->s1==b->s1&&a->s2==b->s2;}
+static const native_move_case *native_retained(int kind,int index)
+{
+    for (unsigned i=0;i<sizeof native_retained_moves/sizeof *native_retained_moves;i++)
+        if (native_retained_moves[i].kind==kind && native_retained_moves[i].index==index)
+            return &native_retained_moves[i];
+    return NULL;
+}
+static void check_native_moves(const gc_mon *m,const native_move_case *n)
+{
+    CHECK(m->b.n_moves==n->n);
+    for(int i=0;i<n->n;i++) {
+        CHECK(m->b.moves[i]==n->moves[i][0]);
+        CHECK(m->b.pp_used[i]==n->moves[i][1]);
+        CHECK(m->b.pp_up[i]==n->moves[i][2]);
+        CHECK(m->b.max_pp_override[i]==n->moves[i][3]);
+    }
+}
+
 static void adapter_matrix(void)
 {
+    unsigned index=0;
     const int species[] = {SPECIES_ID_CATERPIE, SPECIES_ID_WEEDLE, SPECIES_ID_MAGIKARP,
         SPECIES_ID_DITTO, SPECIES_ID_SMEARGLE, SPECIES_ID_ETERNATUS, SPECIES_ID_RATTATA};
     const int levels[] = {1, 5, 24, 25, 70, 100};
@@ -46,7 +70,8 @@ static void adapter_matrix(void)
     for (unsigned li = 0; li < sizeof levels / sizeof *levels; li++)
     for (int nature = 0; nature < PR_NATURE_COUNT; nature++)
     for (int boss = 0; boss < 2; boss++) {
-        setup(checks);
+        const unsigned current=index++;
+        setup(native_adapter_seeds[current]);
         const int id = species[si], form = id == SPECIES_ID_ETERNATUS ? nature % 2 : 0;
         pr_enemy_gen g = {.id = 123, .fusion_species = -1, .friendship = -1,
             .form = form, .nature = nature, .boss_segments = boss ? 2 : 0};
@@ -70,10 +95,18 @@ static void adapter_matrix(void)
         pr_generated_moveset out;
         bool expected = pr_run_enemy_moveset(&expected_rng, &c, &out) == PR_MOVESET_OK;
         gc_mon before = m;
-        CHECK(gc_enemy_moveset(&run, &m, &g) == expected);
+        const native_move_case *native = native_retained(0,current);
+        CHECK(!expected || !native); /* All original positive cases retain the old oracle. */
+        if(native) {
+            CHECK(same_native_rng(&run.run.rng,&native->before));
+            CHECK(!expected); /* Former rejection now has an independent native output. */
+            expected_rng=native->after;expected_rng.n=run.run.rng.n;
+        }
+        CHECK(gc_enemy_moveset(&run, &m, &g) == (expected || native));
         CHECK(!memcmp(&run.run.rng, &expected_rng, sizeof expected_rng));
         CHECK(run.stubs[GC_STUB_ENEMY_MOVESET] == 0);
         if (expected) { check_moves(&m, &out); supported++; }
+        else if(native) { check_native_moves(&m,native); supported++; }
         else { CHECK(!memcmp(&m, &before, sizeof m)); fallback++; }
     }
 }
@@ -130,7 +163,16 @@ static void wild_constructor(void)
         pr_generated_moveset out;
         pr_rng before_moves = expected.rng;
         bool ok = pr_run_enemy_moveset(&expected.rng, &c, &out) == PR_MOVESET_OK;
-        if (ok && memcmp(&before_moves, &expected.rng, sizeof before_moves)) wild_draws++;
+        const native_move_case *native=native_retained(1,seed);
+        CHECK(native && native->seed==seed);
+        CHECK(same_native_rng(&before_moves,&native->before));
+        if(ok) {
+            CHECK(same_native_rng(&expected.rng,&native->after));
+            CHECK(out.count==native->n);
+            for(int i=0;i<out.count;i++) CHECK(out.moves[i]==native->moves[i][0]);
+        }
+        expected.rng=native->after;expected.rng.n=before_moves.n;
+        if (memcmp(&before_moves, &expected.rng, sizeof before_moves)) wild_draws++;
         wc.enemy.species = w.species; wc.enemy.level = wc.level;
         wc.enemy.boss = w.boss; wc.enemy.shiny_lock = w.shiny_lock;
         CHECK(pr_run_enemy_pokemon_finish(&expected, &wc.enemy, &w.mon) == 0);
@@ -140,11 +182,13 @@ static void wild_constructor(void)
         CHECK(run.enemy[0].b.nature == w.mon.nature);
         CHECK(run.enemy[0].b.tera_type == w.mon.tera_type);
         CHECK(!memcmp(&run.run.rng, &expected.rng, sizeof expected.rng));
-        CHECK(run.stubs[GC_STUB_ENEMY_MOVESET] == (unsigned)!ok);
-        if (ok) { check_moves(&run.enemy[0], &out); wild_supported++; }
-        else wild_fallback++;
+        CHECK(run.stubs[GC_STUB_ENEMY_MOVESET] == 0);
+        check_native_moves(&run.enemy[0],native);
+        if (ok) check_moves(&run.enemy[0], &out);
+        wild_supported++;
+        if(!ok) wild_fallback++; /* Retain and count all 794 formerly rejected inputs. */
     }
-    CHECK(wild_supported > 0 && wild_fallback > 0 && wild_draws > 0);
+    CHECK(wild_supported == 800 && wild_fallback == 794 && wild_draws > 0);
 }
 
 static void saved_fixed_moves(void)
@@ -180,7 +224,7 @@ int main(void)
     unsupported_boundaries();
     wild_constructor();
     saved_fixed_moves();
-    printf("enemy moveset adapter: %u checks, %u supported, %u rejected; wild constructors %u supported (%u draw RNG), %u fallback\n",
+    printf("enemy moveset adapter: %u checks, %u supported, %u rejected; wild constructors %u supported (%u draw RNG), %u formerly fallback\n",
         checks, supported, fallback, wild_supported, wild_draws, wild_fallback);
     return 0;
 }

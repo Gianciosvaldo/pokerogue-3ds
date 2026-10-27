@@ -175,7 +175,7 @@ const pr_species_gen *gc_species_gen(int id);                          /* run-co
 bool gc_egg_generate(gc_run *run, const gc_egg *egg, gc_mon *out);
 int gc_system_hatch_ready_eggs(gc_run *run);
 bool gc_mon_roll_player(gc_run *run, pr_rng *rng, gc_mon *m, int species, int level, int ability_index, int form, int shiny);
-/* Task 63's clean wild constructor slice; false leaves the RNG/mon untouched. */
+/* Clean factory followed by validated ordinary wild level pools; false leaves RNG/mon untouched. */
 bool gc_enemy_moveset(gc_run *run, gc_mon *m, const pr_enemy_gen *g);
 /* generateMoveset for a wild, non-boss Pokemon on `rng` (src/gc_movegen.c); false = a Pokemon it does not cover, left untouched */
 bool gc_generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m);

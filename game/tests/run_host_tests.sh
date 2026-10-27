@@ -25,8 +25,11 @@ for t in $TESTS; do
 done
 # The rival now fights at wave 8 and later, so the random player dies sooner and these three need more runs to reach the same
 # full-party catch and release-list coverage (floors unchanged).
-echo "== runtest (IV Scanner encounter prompt and assessment) 150"
-RUNTEST_SCANNER=1 build/runtest 150 0 || failed="$failed runtest-scanner"
+# Retain the first 150 scanner runs and extend their deterministic sequence.
+# Weighted wild movesets change run lengths; 150 no longer reaches release-list
+# Cancel. Keep that coverage assertion and every original case.
+echo "== runtest (IV Scanner encounter prompt and assessment) 350"
+RUNTEST_SCANNER=1 build/runtest 350 0 || failed="$failed runtest-scanner"
 echo "== runtest (Check Team form toggle and reward return) 350"
 RUNTEST_FORM=1 build/runtest 350 0 || failed="$failed runtest-form"
 echo "== runtest (Check Team form change, animation and reward return) 350"
