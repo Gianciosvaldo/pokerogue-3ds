@@ -432,3 +432,17 @@ build/event_store_test: $(EVENT_STORE_OWN) $(BC)/tests/trace-capacity-test.c $(B
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -DEVENT_STORE_LEGACY_SAVE='"$(abspath $(GC)/tests/fixtures/held-form.pr399.save)"' $(EVENT_STORE_OWN) build/ptx_core.a -Wl,--wrap=pr_phase_run -Wl,--wrap=realloc -lm -o $@
 event_store_test: build/event_store_test
 .PHONY: event_store_test
+
+build/boss_panel_test: boss_panel_test.c ../source/battle_view.c ../source/tween.c ../gen/gm_enum_names.c
+	@mkdir -p build
+	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections boss_panel_test.c ../source/tween.c ../gen/gm_enum_names.c -Wl,--gc-sections -lm -o $@
+boss_panel_test: build/boss_panel_test
+.PHONY: boss_panel_test
+
+# a boss's shields in the battle screen's events: BEV_BOSS_SHIELD against battle-core's real boss fights
+BOSS_SHIELD_SRCS := boss_shield_events_test.c battle_setup.c ../source/battle_events.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+build/boss_shield_events_test: $(BOSS_SHIELD_SRCS)
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) -I../gen -I../../assets-pipeline/app-src/include $(CFLAGS) $(BOSS_SHIELD_SRCS) -lm -o $@
+boss_shield_events_test: build/boss_shield_events_test
+.PHONY: boss_shield_events_test

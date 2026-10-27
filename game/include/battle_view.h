@@ -42,7 +42,8 @@ typedef struct {
   float exp_ratio;           /* 0..1 of the level's EXP bar */
   int moves[4], pp_left[4], pp_max[4], move_power[4], n_moves;
   bool boss;
-  int boss_segments;
+  int boss_segments;         /* EnemyPokemon.bossSegments: the HP bar's dividers are one fewer */
+  int boss_segment_index;    /* bossSegmentIndex: shields still up; the divider s is white while this is >= s */
   int8_t stat_stages[7];     /* ATK DEF SPATK SPDEF SPD ACC EVA */
   bool caught_before;        /* the "owned" ball icon on the enemy's box */
   bool substitute;           /* a Substitute doll stands in front of it (set by the screen as the
@@ -100,6 +101,9 @@ typedef enum {
                     * dialogue with the name box alone. A button for each page; the portrait goes out and the field clears when
                     * the last page is read */
   BEV_TRAINER_SHOW,/* TrainerVictoryPhase's showEnemyTrainer: the defeated trainer slides back onto the enemy platform (750 ms) */
+  BEV_BOSS_SHIELD, /* battler, a = bossSegmentIndex after a hit broke a shield: the HP bar's dividers above it stay white, the ones
+                    * at or below it go dark (EnemyBattleInfo.updateBossSegmentDividers; upstream does it as the damage is dealt,
+                    * before the bar moves, so this event comes before the hit's BEV_DAMAGE) */
 } bev_type;
 #define BV_DIALOGUE_TEXT 2048
 

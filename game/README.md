@@ -370,6 +370,12 @@ make -C game/tests animtest && game/tests/build/animtest path/to/pokerogue-asset
   pkmnems at 8 px (PIL 12, Chromium 11), corrected in the tables.
 - Layout numbers from upstream `8555c08`: message and command windows, the fight menu and move
   info, both info boxes (name, level, HP bar and numbers, EXP bar, types, status), sprite anchors.
+- A boss's info box (`EnemyBattleInfo.updateBossSegments` / `updateBossSegmentDividers`, `Pokemon.showInfo`): the wide
+  `pbinfo_enemy_boss`, its 86 px HP bar and label, one divider per segment but the first (white while the shield is up, dark
+  once broken) and the 246 px slide. Transcribed from the pinned source, not run against upstream: the numbers are constants
+  there; `tests/boss_panel_test.c` holds them. The shields come from battle-core's own `boss_segment_index` through
+  `BEV_BOSS_SHIELD` (`tests/boss_shield_events_test.c`, `runtest`). There is no "BOSS" text in upstream's box; the wide box and
+  the divided bar are what marks a boss.
 - Timings: encounter slide 2000 ms, info boxes 1000 ms in and 500 ms out, HP bar
   `clamp(|dHP| x 5, 250, 5000)` ms, damage blink 6 x 100 ms, 20 ms per character, 1500 ms message
   wait, fades 250 / 100 / 250 ms.
