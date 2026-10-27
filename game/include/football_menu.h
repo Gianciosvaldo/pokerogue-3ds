@@ -22,7 +22,9 @@ enum { FM_PX_BODY=96,FM_PX_SMALL=72,FM_PX_TINY=60 };
 typedef struct {
     const char *label,*value; /* value is drawn at the right edge; NULL for none */
     const char *tag;          /* a short orange caption before the label (a lineup slot); NULL for none */
-    text_style value_style;   /* TS_NONE = TS_WINDOW */
+    int value_style;          /* a text_style, TS_NONE = TS_WINDOW. An int on purpose: text_style is an int where mui.h comes before ui_text.h (the
+                               * screen, through football_live_art.h) and a one-byte enum on the 3DS elsewhere (football_menu.c), so a text_style
+                               * member made this struct 24 bytes in one file and 20 in the other: the list read the wrong row. */
     bool dim;                 /* greyed out like a disabled option */
     float indent;             /* the label starts this much further right (room for an icon) */
 } FootballMenuRow;

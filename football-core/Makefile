@@ -266,6 +266,18 @@ fx-test: core-libs
 	$(BUILD)/fx_test
 test: fx-test
 
+# The row struct as football_live_screen.c and football_menu.c each see it, from their own #include lines, with the console's enum size.
+.PHONY: menu-abi-test
+menu-abi-test: core-libs
+	mkdir -p $(BUILD)
+	(echo '#include <stddef.h>'; grep '^#include' ../game/source/football_live_screen.c; \
+	 echo 'unsigned abi_screen(unsigned *dim,unsigned *indent){*dim=(unsigned)offsetof(FootballMenuRow,dim);*indent=(unsigned)offsetof(FootballMenuRow,indent);return (unsigned)sizeof(FootballMenuRow);}') > $(BUILD)/menu_abi_screen.c
+	(echo '#include <stddef.h>'; grep '^#include' ../game/source/football_menu.c; \
+	 echo 'unsigned abi_menu(unsigned *dim,unsigned *indent){*dim=(unsigned)offsetof(FootballMenuRow,dim);*indent=(unsigned)offsetof(FootballMenuRow,indent);return (unsigned)sizeof(FootballMenuRow);}') > $(BUILD)/menu_abi_menu.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -fshort-enums -D__3DS__ -DFOOTBALL_LIVE_SCREEN_TEST -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include tests/menu_abi_test.c $(BUILD)/menu_abi_screen.c $(BUILD)/menu_abi_menu.c -o $(BUILD)/menu_abi_test
+	$(BUILD)/menu_abi_test
+test: menu-abi-test
+
 .PHONY: menu-test
 menu-test: $(BUILD)/menu_test
 	$(BUILD)/menu_test
