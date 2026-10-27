@@ -49,6 +49,25 @@ static pr_event dmg(int type, int hp, int segments, int index) {
   return e;
 }
 
+static void redraw_after_shield(bs_battle *b) {
+  const int kinds[]={PR_EV_TRANSFORM,PR_EV_ILLUSION_BREAK};
+  for(unsigned k=0;k<sizeof kinds/sizeof *kinds;k++) {
+    be_view v={0};v.present[1]=true;
+    v.mon[1]=(bv_mon){.species=143,.hp=100,.max_hp=100,.boss=true,.boss_segments=2,.boss_segment_index=1};
+    pr_event ev[2]={dmg(PR_EV_DAMAGE,50,2,0),dmg(kinds[k],50,2,0)};
+    ev[1].field[2].species=25;
+    bv_event out[8];int n=be_convert_events(&b->bt,ev,2,false,&v,out,8),shield=0,redraw=0;
+    for(int i=0;i<n;i++) {
+      if(out[i].type==BEV_BOSS_SHIELD){CHECK(out[i].a==0);shield++;}
+      if(out[i].type==BEV_TRANSFORM||out[i].type==BEV_ILLUSION) {
+        CHECK(shield==1&&out[i].mon&&out[i].mon->boss);
+        CHECK(out[i].mon->boss_segments==2&&out[i].mon->boss_segment_index==0);
+        CHECK(out[i].mon->hp==50);redraw++;
+      }
+    }
+    CHECK(shield==1&&redraw==1);
+  }
+}
 static void hand_made(bs_battle* b) {
   be_view view;
   bv_event out[16];
@@ -150,7 +169,7 @@ static int rnd(int n) {
 int main(void) {
   static bs_battle b;
   bs_begin(&b, BIOME_ID_GRASS, 10, "boss_shield_events_test");
-  hand_made(&b);
+  hand_made(&b);redraw_after_shield(&b);
   summon_and_catch_up();
 
   /* 3: real battles. Player Pokemon of mid level with their strongest moves against a tanky boss of 2..7 segments whose moves heal or

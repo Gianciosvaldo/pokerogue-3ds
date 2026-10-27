@@ -92,4 +92,29 @@ static void switch_identity_after_form_change(void)
         CHECK(summons==1);
     }
 }
-int main(void){run_case(SPECIES_ID_PIKACHU,0,false);run_case(SPECIES_ID_CHARIZARD,1,true);run_case(SPECIES_ID_CHARIZARD,3,true);run_case(SPECIES_ID_DITTO,0,true);switch_imposter();switch_identity_after_form_change();printf("Transform visual adapter: %d checks passed\n",checks);return 0;}
+static void boss_damage_then_transform(void)
+{
+    static bs_battle b;bs_begin(&b,BIOME_ID_GRASS,10,"boss-shield-transform");
+    int attack[]={MOVE_ID_TACKLE},copy[]={MOVE_ID_TRANSFORM};
+    pr_pokemon *player=bs_add(&b,0,SPECIES_ID_RATTATA,40,attack,1);
+    pr_pokemon *boss=bs_add(&b,1,SPECIES_ID_DITTO,40,copy,1);
+    player->stats[STAT_ATK]=110;player->stats[STAT_SPD]=1000;
+    boss->stats[STAT_HP]=boss->hp=100;boss->stats[STAT_DEF]=40;boss->stats[STAT_SPD]=1;
+    boss->is_boss=true;boss->boss_segments=2;boss->boss_segment_index=1;
+    pr_update_passive(&b.bt,boss);
+    bv_mon shown_player,shown_boss;be_mon(&b.bt,player,&shown_player);be_mon(&b.bt,boss,&shown_boss);
+    bs_turn_fight(&b,0);
+    CHECK(boss->hp>0&&boss->transformed&&boss->boss_segment_index==0);
+    static bv_event events[128];int n=be_convert(&b.bt,&b.eng,&shown_player,&shown_boss,events,128),shields=0,copies=0;
+    for(int j=0;j<n;j++){
+        const bv_event *e=&events[j];if(e->battler!=2)continue;
+        if(e->type==BEV_BOSS_SHIELD){shown_boss.boss_segment_index=e->a;shields++;}
+        if(e->type==BEV_TRANSFORM){
+            CHECK(shields==1&&e->mon&&e->mon->boss&&e->mon->boss_segments==2);
+            CHECK(e->mon->boss_segment_index==0);
+            shown_boss=*e->mon;copies++;
+        }
+    }
+    CHECK(shields==1&&copies==1&&shown_boss.boss_segment_index==boss->boss_segment_index);
+}
+int main(void){run_case(SPECIES_ID_PIKACHU,0,false);run_case(SPECIES_ID_CHARIZARD,1,true);run_case(SPECIES_ID_CHARIZARD,3,true);run_case(SPECIES_ID_DITTO,0,true);switch_imposter();switch_identity_after_form_change();boss_damage_then_transform();printf("Transform visual adapter: %d checks passed\n",checks);return 0;}

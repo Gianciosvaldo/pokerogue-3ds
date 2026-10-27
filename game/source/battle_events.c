@@ -231,6 +231,8 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
           if (ev->field[k].boss_segments && ev->field[k].boss_segment_index < seen[k].shield) {
             PUT(.type = BEV_BOSS_SHIELD, .battler = k, .a = ev->field[k].boss_segment_index);
             seen[k].shield = ev->field[k].boss_segment_index;
+            /* Transform and Illusion redraws copy this actor later in the batch. */
+            current[view_slot(k)].boss_segment_index = (uint8_t)seen[k].shield;
           }
           /* the maximum changed (a form with other base stats: Zygarde, Morpeko): the bar's numbers follow */
           if (ev->field[k].max_hp > 0 && ev->field[k].max_hp != seen[k].max_hp) {
@@ -455,6 +457,7 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
     if (p->boss_segments && p->boss_segment_index < seen[k].shield) {
       PUT(.type = BEV_BOSS_SHIELD, .battler = k, .a = p->boss_segment_index);
       seen[k].shield = p->boss_segment_index;
+      current[view_slot(k)].boss_segment_index = (uint8_t)seen[k].shield;
     }
     if (p->hp < seen[k].hp) PUT(.type = BEV_DAMAGE, .battler = k, .a = p->hp, .b = HIT_RESULT_INDIRECT);
     else if (p->hp > seen[k].hp) PUT(.type = BEV_HEAL, .battler = k, .a = p->hp);

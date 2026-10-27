@@ -6,7 +6,7 @@ supported unfused bosses, including their species' passive. Both fresh native
 constructor observations and the original rejected adapter inputs match that
 helper. The public adapter now permits that existing unfused-boss path.
 
-The production change is one condition. Fused bosses, manually enabled passive
+The generation change is one condition. Fused bosses, manually enabled passive
 flags, trainer streams, challenges, unsupported modes and post-moveset form
 callbacks keep their previous boundaries. The clean factory still runs first.
 There is no new generation algorithm, save format or struct field.
@@ -81,3 +81,28 @@ finish/encounter generation, full Endless acceptance or hardware verification.
 The validation runner detects twelve compiled faults, seventeen malformed
 captures/corpora and five forged outputs. Scoped ASan/UBSan/LSan passes all
 1,766 native cases. Complete normal CI and the ARM build remain the merge gate.
+
+## Shield redraw regression
+
+The unchanged 10,000-run app corpus exposed a display defect twice after the
+more varied boss encounters became reachable: a boss lost a shield, then
+Transform or an Illusion redraw copied an older visual actor and restored its
+old shield index. The converter already emitted the correct shield-break
+event, but had not advanced the actor cache used for full redraw payloads. It
+now advances both representations together, including settled catch-up.
+
+A real core turn (Rattata's Tackle followed by a boss Ditto's Transform) fails
+on the old converter's Transform payload and passes with the fix. Event-only
+Transform and Illusion regressions also verify that a redraw preserves the
+preceding shield loss. Retained transform tests pass 73 checks; shield tests
+pass 400 fights / 1,501 turns / 16,086 checks. Scoped ASan/UBSan/LSan covers the
+converter and both test harnesses, with core/AI archives unsanitized. No
+assertion, input seed or coverage floor was removed. Normal app CI remains
+required on the final head.
+
+For local diagnosis the app runner links the real app sources to the retained
+shared core/AI/run/reward archives. It reproduces the original failure at run
+1,110 / wave 10 before the fix. Both original 10,000-run sequences (standard
+and external event storage) pass after the fix, with zero model violations and
+the unchanged failing-CI simulation digest `843695f9`. The canonical app build
+and complete host script still run in final CI.
