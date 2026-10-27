@@ -10,15 +10,15 @@ Generated:
 
 Nothing here is hand-edited: rerun after dumping a new upstream commit and diff.
 """
-import hashlib
 import json
 import os
 import re
 import sys
+from closure_identity import closure_hash
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-IN = os.path.join(HERE, "upstream")
-OUT = os.path.join(HERE, "out")
+IN = os.environ.get('PR_BATTLE_DUMP_DIR', os.path.join(HERE, "upstream"))
+OUT = os.environ.get('PR_BATTLE_GENERATED_DIR', os.path.join(HERE, "out"))
 
 
 def load(name):
@@ -43,13 +43,6 @@ def split_words(v):
 def camel(v):
     """upstream toCamelCase, which turns enum keys into locale keys (MoveId.DOUBLE_EDGE -> doubleEdge)"""
     return "".join(w.lower() if i == 0 else w[:1].upper() + w[1:].lower() for i, w in enumerate(split_words(v)))
-
-
-def closure_hash(cl):
-    """Source text plus any probed captured values (see dump-upstream.test.ts)."""
-    key = cl["src"] + ("\n#cap " + json.dumps(cl["cap"]) if "cap" in cl else "")
-    key += "\n#vals " + json.dumps(cl["vals"]) if "vals" in cl else ""
-    return hashlib.sha1(key.encode()).hexdigest()[:12]
 
 
 def c_str(s):

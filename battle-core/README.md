@@ -217,6 +217,10 @@ A covered turn hit nothing unported. The top reasons a plain turn isn't covered:
 - `tools/setup-upstream.sh <dir>` clones and prepares upstream (no images or audio are fetched). `tools/difftest.sh <dir> [N] [seed]` runs a differential test. `tools/redump.sh <dir>` refreshes the data and reports closure drift.
 
 Build: `make` (outputs to `build/`). `tools/closures.py` shows an owner's closures and fills registry hashes.
+The [closure identity validation](CLOSURE-IDENTITY-VALIDATION.md) checks captured
+constructor arguments, actual helper commands and byte-identical regeneration.
+Use `--dump-dir DIR` with an existing native dump; status counts generic registry
+mappings and requires separate review of class-specific owners.
 
 ## Custom content (planned, not built)
 Upstream ids are compiled into const tables. Custom species, moves, abilities and items will use a reserved id range (from 30000 up) and load from a small pack on the SD card at startup. They'll reuse the same attribute classes, so a custom move is data such as "StatStageChangeAttr {stats: [ATK], stages: 2}" plus, only if needed, a new C handler. Lookups already go through one function per table (`pr_pokemon_form`), which is where the custom registry plugs in.

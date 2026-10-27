@@ -92,6 +92,9 @@ money handling merged in #357; see [their validation record](HONEY-MONEY-VALIDAT
    growth. Default inline clients and other engine/app capacities remain bounded.
 2. Finish the source inventory, including AI moveset attributes, constructor
    closures/conditions, tags, modifiers, phases and unsupported/capacity paths.
+   The [closure identity audit](CLOSURE-IDENTITY-VALIDATION.md) keeps helper
+   hashes aligned with captured constructor arguments and the generator.
+   Generic registry misses require owning-caller review, not automatic rework.
 3. Reconcile identity/form/copy and persistent interaction evidence with later
    merged slices; retain exact state, queues, text, RNG and all prior covered IDs.
    [Last Resort history](LAST-RESORT-HISTORY-VALIDATION.md) adds full non-virtual
