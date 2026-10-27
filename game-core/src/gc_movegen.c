@@ -1,5 +1,5 @@
 /* generateMoveset (src/ai/ai-moveset-gen.ts @ 8555c08) for trainerless wild Pokemon:
- * unfused bosses and non-boss fusions without a passive are supported. This is what
+ * bosses, including fusions with their natural passive, are supported. This is what
  * every Pokemon of a mystery encounter (the Global Trade System's, the Salesman's, the Dark Deal boss) is made with. A boss adds
  * to the steps below: its pool drops a move that a better move of the pool makes redundant (SUPERCEDED_MOVES), then Pain Split,
  * the self-KO moves, the doubles-only moves in singles, the level-based denylist from level 70, the moves of the offensive
@@ -8,7 +8,7 @@
  * to 2 instead of 1.6; and a boss has its passive, whose attributes act after its ability's wherever the generator reads
  * abilities. What a trainer's moveset adds (TM and egg moves, the weight bumps, instant Tera) is not here: gc_generate_moveset
  * says so and leaves the Pokemon alone. Power-table queries include the resolved move type so an active type-changing
- * ability can affect a type-conditional passive. Fused boss generation remains guarded pending its separate owner proof.
+ * ability can affect a type-conditional passive. Explicit passive overrides on fusions remain outside this owner.
  *
  * Step by step, with the order upstream draws from the RNG:
  *  1. the level pool: getLevelMoves({startingLevel: 1, includeEvolutionMoves, includePrevolutionMoves}) in its own order, up
@@ -557,7 +557,8 @@ bool gc_generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m)
 
     static mg_ctx c;   /* ~the stack of a 3DS thread is 32 KB: the pools are too big for it */
     if (!ctx_init(&c, run, m)) return false;
-    if (m->b.fusion_species && (c.boss || c.passive)) return false;
+    if (m->b.fusion_species && (m->b.passive_flag || (!c.boss && c.passive)
+        || c.boss != (m->b.boss_segments > 0))) return false;
     const pr_rng before = *rng;
 
     int pp_up[4] = {0, 0, 0, 0};

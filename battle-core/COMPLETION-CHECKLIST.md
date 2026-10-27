@@ -146,10 +146,12 @@ remain separate. Do not recreate these merged owners based on the historical
 Card 104 table.
 
 The [fusion ability power follow-up](../game-core/FUSION-POWER-VALIDATION.md)
-checks 812 native contexts and the Liquid Voice/Water Bubble interaction;
-fused-boss generation remains guarded pending its own owner proof.
+checks 812 native contexts and the Liquid Voice/Water Bubble interaction.
+The [fused-boss owner proof](../game-core/FUSED-BOSS-OWNER-VALIDATION.md) checks
+complete movesets, refresh and RNG for those same inputs; natural fused bosses
+are admitted while explicit passive overrides and other unsupported owners stay guarded.
 
 The [fusion variable-type follow-up](../game-core/FUSION-VARIABLE-TYPES-VALIDATION.md)
 adds the missing Raging Bull partner lookup and retains complete pinned query
-matrices for species/form move types and their item projection. Fused boss
-admission and broader conditional ability interactions remain separate.
+matrices for species/form move types and their item projection. Broader
+conditional ability interactions remain subject to source validation.

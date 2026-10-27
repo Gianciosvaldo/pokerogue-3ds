@@ -28,7 +28,7 @@ with tempfile.TemporaryDirectory(prefix='wild-boss-movesets-proof-')as td:
   print('Scoped ASan/UBSan/LSan: moveset adapter, generator and encounter owner; supporting archives unsanitized')
  else:
   faults=[
-   ('gc_moveset.c','(m->b.is_boss && m->b.fusion_species)','m->b.is_boss','restore unfused boss rejection'),
+   ('gc_moveset.c','|| m->b.passive_flag) return false;','|| m->b.is_boss || m->b.passive_flag) return false;','restore unfused boss rejection'),
    ('gc_moveset.c','return gc_generate_moveset(run, &run->run.rng, m);','return false;','disconnect weighted owner'),
    ('gc_movegen.c','c->boss = m->b.is_boss;','c->boss = false;','lose boss filters and weights'),
    ('gc_movegen.c','c->passive = pr_has_passive(&c->bt, &c->p) ? c->p.passive : 0;','c->passive = 0;','lose species passive'),
