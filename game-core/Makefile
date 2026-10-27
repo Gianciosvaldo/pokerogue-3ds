@@ -1214,3 +1214,10 @@ fusion-variable-types-host-test: $(BUILD)/fusion_variable_types_host_test
 	$(BUILD)/fusion_variable_types_host_test
 test: fusion-variable-types-host-test
 .PHONY: fusion-variable-types-host-test
+
+$(BUILD)/fusion_power_host_test: tests/fusion_power_host_test.c tests/fixtures/fusion-power.native.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/fusion_power_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+fusion-power-host-test: $(BUILD)/fusion_power_host_test
+	$(BUILD)/fusion_power_host_test
+test: fusion-power-host-test
+.PHONY: fusion-power-host-test

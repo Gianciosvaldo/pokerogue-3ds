@@ -145,6 +145,10 @@ are implemented; Winstrate reward selection and arbitrary cleanup histories
 remain separate. Do not recreate these merged owners based on the historical
 Card 104 table.
 
+The [fusion ability power follow-up](../game-core/FUSION-POWER-VALIDATION.md)
+checks 812 native contexts and the Liquid Voice/Water Bubble interaction;
+fused-boss generation remains guarded pending its own owner proof.
+
 The [fusion variable-type follow-up](../game-core/FUSION-VARIABLE-TYPES-VALIDATION.md)
 adds the missing Raging Bull partner lookup and retains complete pinned query
 matrices for species/form move types and their item projection. Fused boss
