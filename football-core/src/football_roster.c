@@ -1,6 +1,12 @@
 #include "football_roster.h"
 #include <string.h>
 const char *const football_slot_names[22]={"QB","RB","WR1","WR2","WR3","TE","LT","LG","C","RG","RT","DE1","DT1","DT2","DE2","LB1","LB2","LB3","CB1","CB2","FS","SS"};
+const char *const football_slot_titles[22]={"Quarterback","Running back","Wide receiver 1","Wide receiver 2","Wide receiver 3","Tight end","Left tackle","Left guard","Center","Right guard","Right tackle","Defensive end 1","Defensive tackle 1","Defensive tackle 2","Defensive end 2","Linebacker 1","Linebacker 2","Linebacker 3","Cornerback 1","Cornerback 2","Free safety","Strong safety"};
+const char *football_position_label(FootballPosition p)
+{
+    static const char *const labels[FB_POSITION_COUNT]={"QB","WR","RB","OL/DL","LB","TE/S"};
+    return (unsigned)p<FB_POSITION_COUNT?labels[p]:"";
+}
 FootballPosition football_slot_position(unsigned s)
 {
     if(s==0)return FB_QB;

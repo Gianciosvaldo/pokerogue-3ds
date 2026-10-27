@@ -16,7 +16,11 @@ typedef struct {
     FootballDexMaxima maxima;
 } FootballRoster;
 extern const char *const football_slot_names[FB_ROSTER_SIZE];
+/* The slot spelled out ("Quarterback", "Wide receiver 1") for the draft, which fills the slots in this order. */
+extern const char *const football_slot_titles[FB_ROSTER_SIZE];
 FootballPosition football_slot_position(unsigned slot);
+/* The short name of the position class a player is best at ("QB", "WR", "RB", "OL/DL", "LB", "TE/S"). */
+const char *football_position_label(FootballPosition position);
 bool football_roster_init(FootballRoster *r);
 /* A valid base-form starter from the same unlock data Classic uses. */
 bool football_roster_starter(const gc_system *profile,unsigned species,gc_starter *out);
