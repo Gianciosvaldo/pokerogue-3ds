@@ -3,6 +3,7 @@
  * and returns true when it is done, false when it waits on a screen; gc_phase_choose takes the answer
  * to that screen (returns true when the phase is done, *ok = false when the answer isn't legal). */
 #include "internal.h"
+#include "gc/football.h"
 
 static gc_mon *pm(gc_run *run, int idx) { return &run->party[idx]; }
 
@@ -255,8 +256,15 @@ static void level_up(gc_run *run, gc_rphase *p)
          * walked yet */
     }
     if (!m->pause_evolutions) {
-        bool fusion;
-        const int evo = gc_mon_get_evolution_target(run, m, &fusion);
+        bool fusion = false;
+        int evo;
+        if (gc_int(run)->football) {
+            /* football's own rules (the first of the forms its screen offers); a member there is never a fusion */
+            int forms[GC_FOOTBALL_MAX_EVOLUTIONS];
+            evo = gc_mon_football_evolutions(run, m, p->b, forms, GC_FOOTBALL_MAX_EVOLUTIONS) > 0 ? forms[0] : -1;
+        } else {
+            evo = gc_mon_get_evolution_target(run, m, &fusion);
+        }
         if (evo >= 0) {
             gc_rphase request = gc_rp(RP_EVOLUTION, p->a, evo, p->b);
             request.d = fusion;

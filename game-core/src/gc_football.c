@@ -9,6 +9,7 @@ static bool fail(const char **why, const char *text)
 void gc_football_new(gc_run *r, gc_system *profile, const char *seed, uint32_t entropy)
 {
     gc_run_new(r,GAME_MODES_CLASSIC,seed,entropy);
+    gc_int(r)->football=true;
     r->sys=profile;
     r->money=0;
     r->bt.engine=&r->eng;
@@ -121,7 +122,7 @@ int gc_football_evolution_choices(gc_run *r, uint16_t out[GC_FOOTBALL_MAX_EVOLUT
 {
     if (!r || !out || r->screen.kind!=GC_SCREEN_EVOLVE) return 0;
     int choices[GC_FOOTBALL_MAX_EVOLUTIONS];
-    int n=gc_mon_football_evolutions(r,&r->party[r->screen.party],choices,
+    int n=gc_mon_football_evolutions(r,&r->party[r->screen.party],gc_int(r)->rq.current.c,choices,
                                    GC_FOOTBALL_MAX_EVOLUTIONS);
     for (int i=0;i<n;++i) out[i]=gc_evo_data[choices[i]].species;
     return n;
@@ -148,7 +149,7 @@ bool gc_football_choose(gc_run *r, const gc_choice *c, unsigned pick, const char
     if (!q->waiting || !allowed_phase(q->current.type)) return fail(why,"no pending choice");
     if (q->current.type==RP_EVOLUTION && c->kind==GC_CH_EVOLVE) {
         int choices[GC_FOOTBALL_MAX_EVOLUTIONS];
-        int n=gc_mon_football_evolutions(r,&r->party[q->current.a],choices,
+        int n=gc_mon_football_evolutions(r,&r->party[q->current.a],q->current.c,choices,
                                        GC_FOOTBALL_MAX_EVOLUTIONS);
         if (n<0 || pick>=(unsigned)n) return fail(why,"invalid evolution choice");
         q->current.b=choices[pick];
