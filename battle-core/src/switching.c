@@ -658,6 +658,14 @@ void pr_post_summon_phase(pr_battle *bt, pr_engine *e, int ph)
         pr_queue_msg(bt, e, pr_msg1("mysteryEncounters/fightOrFlight:option.1.statBoost", pr_arg_pokemon_name(bt, "enemyPokemon", p)));
         const int32_t stat = pr_rng_seed_int(&bt->rng, 4, 1);   /* utils/common randSeedInt: the global RNG, not the battle seed's */
         pr_unshift_stat_stage_change(bt, e, q->battler, &stat, 1, 2, p);
+    } else if (p->me_post_summon == PR_ME_POST_ENRAGED_LOW || p->me_post_summon == PR_ME_POST_ENRAGED_HIGH) {
+        /* Berries Abound's boss (the race lost): its message, then groupStatChange(stats, 1) */
+        static const int32_t low[3] = {STAT_DEF, STAT_SPDEF, STAT_SPD};
+        static const int32_t high[5] = {STAT_ATK, STAT_DEF, STAT_SPATK, STAT_SPDEF, STAT_SPD};
+        const bool is_low = p->me_post_summon == PR_ME_POST_ENRAGED_LOW;
+        p->me_post_summon = PR_ME_POST_NONE;
+        pr_queue_msg(bt, e, pr_msg1("mysteryEncounters/berriesAbound:option.2.bossEnraged", pr_arg_pokemon_name(bt, "enemyPokemon", p)));
+        pr_unshift_stat_stage_change(bt, e, q->battler, is_low ? low : high, is_low ? 3 : 5, 1, p);
     } else if (bt->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER) {
         pr_note_unported(bt, PR_FEAT_TRAINER);
     }
