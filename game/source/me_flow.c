@@ -156,7 +156,14 @@ static void finish(int option, int b, int c)
   if (F.run && b >= 0 && b < F.run->n_party && F.run->screen.option_pick[option])
     extra[n_extra++] = pr_arg_pokemon_name(NULL, "selectedPokemon", &F.run->party[b].b);
   char sub[48], page[ME_TEXT_LEN * 2];
-  snprintf(sub, sizeof sub, "option.%d.selected", option + 1);
+  /* Berries Abound: the race the boss wins has a text of its own */
+  bool lost = false;
+  if (F.run) {
+    const gc_screen* sc = gc_run_screen(F.run);
+    for (int i = 0; i < sc->n_me_args; i++)
+      if (sc->me_args[i].name && !strcmp(sc->me_args[i].name, "raceLost") && sc->me_args[i].v) lost = true;
+  }
+  snprintf(sub, sizeof sub, lost && option == 1 ? "option.%d.selectedBad" : "option.%d.selected", option + 1);
   if (fmt(sub, extra, n_extra, true, page, sizeof page)) append_page(ch.selected, sizeof ch.selected, page);
   if (fmt("option.selected", extra, n_extra, true, page, sizeof page)) append_page(ch.selected, sizeof ch.selected, page);
   void (*cb)(const me_choice*, void*) = F.on_choice;
