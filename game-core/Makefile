@@ -1228,3 +1228,10 @@ fused-boss-owner-host-test: $(BUILD)/fused_boss_owner_host_test
 	$(BUILD)/fused_boss_owner_host_test
 test: fused-boss-owner-host-test
 .PHONY: fused-boss-owner-host-test
+
+$(BUILD)/fusion_item_evolution_host_test: tests/fusion_item_evolution_host_test.c tests/fixtures/fusion-item-evolution.native.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/fusion_item_evolution_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+fusion-item-evolution-host-test: $(BUILD)/fusion_item_evolution_host_test
+	$(BUILD)/fusion_item_evolution_host_test
+test: fusion-item-evolution-host-test
+.PHONY: fusion-item-evolution-host-test

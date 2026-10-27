@@ -1,0 +1,44 @@
+import { BattleScene } from "#app/battle-scene";
+import { speciesDataRegistry as registry } from "#app/globals/global-species-data-registry";
+import { EvolutionItem,FusionSpeciesFormEvolution } from "#balance/pokemon-evolutions";
+import { EvolutionItemModifierType } from "#modifiers/modifier-type";
+import { EvolutionItemModifier } from "#modifiers/modifier";
+import { AbilityId } from "#enums/ability-id";
+import { MoveId } from "#enums/move-id";
+import { SpeciesId } from "#enums/species-id";
+import { Pokemon,PlayerPokemon } from "#field/pokemon";
+import { PokemonMove } from "#moves/pokemon-move";
+import { GameManager } from "#test/framework/game-manager";
+import Phaser from "phaser";
+import fs from "node:fs";
+import {expect,it,vi} from "vitest";
+it("native fusion item selection queued evolution and mutation",async()=>{
+ expect(Number(process.versions.node.split(".")[0])).toBe(22);
+ const native=BattleScene.prototype.randBattleSeedInt,evolve=PlayerPokemon.prototype.evolve,apply=EvolutionItemModifier.prototype.apply;
+ expect(vi.isMockFunction(native)).toBe(false);expect(vi.isMockFunction(evolve)).toBe(false);expect(vi.isMockFunction(apply)).toBe(false);
+ const g=new GameManager(new Phaser.Game({type:Phaser.HEADLESS}));
+ g.override.ability(AbilityId.NONE).enemyAbility(AbilityId.NONE).passiveAbility(AbilityId.NONE).enemyPassiveAbility(AbilityId.NONE).moveset(MoveId.SPLASH).enemyMoveset(MoveId.SPLASH).enemySpecies(SpeciesId.MAGIKARP).disableTrainerWaves().mysteryEncounterChance(0);
+ await g.classicMode.startBattle(SpeciesId.MEW);BattleScene.prototype.randBattleSeedInt=native;
+ const s:any=g.scene,p:any=s.getPlayerParty()[0];p.id=101;p.loadAssets=async()=>{};p.updateInfo=async()=>{};s.modifierBar.updateModifiers=()=>{};
+ expect(PlayerPokemon.prototype.evolve).toBe(evolve);expect(EvolutionItemModifier.prototype.apply).toBe(apply);
+ const queued:any[][]=[];vi.spyOn(s.phaseManager,"unshiftNew").mockImplementation((name:any,...args:any[])=>{expect(name).toBe("EvolutionPhase");queued.push([name,...args]);});
+ const pairs=[[151,58],[58,133],[25,58],[151,361],[361,151],[151,281],[281,58],[151,133],[133,58],[151,37],[151,64],[151,123]];
+ const items=[EvolutionItem.FIRE_STONE,EvolutionItem.THUNDER_STONE,EvolutionItem.WATER_STONE,EvolutionItem.DAWN_STONE,EvolutionItem.DUSK_STONE,EvolutionItem.LINKING_CORD,EvolutionItem.BLACK_AUGURITE];
+ const stock=()=>s.modifiers.map((m:any)=>({key:m.type.id,owner:m.pokemonId??-1,stack:m.stackCount,virtual:m.virtualStackCount}));
+ const frame=()=>({id:p.id,species:p.species.speciesId,form:p.formIndex,fusion:p.fusionSpecies?.speciesId??0,fusionForm:p.fusionFormIndex,gender:p.gender,fusionGender:p.fusionGender,abilityIndex:p.abilityIndex,fusionAbilityIndex:p.fusionAbilityIndex,ability:p.getAbility().id,level:p.level,nature:p.nature,ivs:[...p.ivs],hp:p.hp,stats:[...p.stats],friendship:p.friendship,pause:p.pauseEvolutions,name:p.name,moves:p.moveset.map((m:any)=>({move:m.moveId,used:m.ppUsed,up:m.ppUp,max:m.maxPpOverride??-1})),stock:stock(),global:Phaser.Math.RND.state(),battle:s.currentBattle.battleSeedState});
+ const rows:any[]=[];
+ for(const pair of pairs)for(const item of items)for(const gender of [0,1])for(const level of [1,50,70000])for(const abilityIndex of [0,2])for(const pause of [false,true]){
+  queued.length=0;s.modifiers=[];s.waveCycleOffset=5;s.arena.weather=null;s.arena.terrain=null;
+  p.resetSummonData();p.resetTurnData();p.resetBattleAndWaveData();p.species=registry.getSpecies(pair[0]);p.formIndex=0;p.fusionSpecies=registry.getSpecies(pair[1]);p.fusionFormIndex=0;p.gender=p.species.malePercent===null?-1:1-gender;p.fusionGender=p.fusionSpecies.malePercent===null?-1:gender;p.abilityIndex=0;p.fusionAbilityIndex=abilityIndex;p.passive=false;p.customPokemonData.ability=-1;p.customPokemonData.passive=-1;p.fusionCustomPokemonData=null;p.level=level;p.friendship=220;p.nature=0;p.customPokemonData.nature=-1;p.ivs=Array(6).fill(15);p.pauseEvolutions=pause;p.stats=Array(6).fill(0);p.hp=undefined;p.moveset=[new PokemonMove(MoveId.TACKLE,2,1),new PokemonMove(MoveId.GROWL,1,0)];p.calculateStats();p.hp=Math.max(1,Math.floor(p.getMaxHp()/2));p.generateName();
+  Phaser.Math.RND.sow([`fusion-item-${rows.length}`]);s.currentBattle.battleSeedState=null;s.currentBattle.randSeedInt(2);
+  const type=new EvolutionItemModifierType(item);type.id=item>50?"RARE_EVOLUTION_ITEM":"EVOLUTION_ITEM";type.tier=2;
+  const before=JSON.parse(JSON.stringify(frame())),filter=type.selectFilter(p),accepted=type.newModifier(p).apply(p);
+  expect(Phaser.Math.RND.state()).toBe(before.global);expect(accepted).toBe(queued.length===1);
+  const q=queued[0],e=q?.[2],fusion=e instanceof FusionSpeciesFormEvolution;
+  const selected=e?{species:e.speciesId,level:e.level,item:e.item,preForm:e.preFormKey,evoForm:e.evoFormKey,fusion,lastLevel:q[3]}:null;
+  if(e)await p.evolve(e,fusion?p.getFusionSpeciesForm():p.getSpeciesForm());
+  rows.push({pair,item,gender,level,abilityIndex,pause,before,filter,accepted,selected,after:JSON.parse(JSON.stringify(frame()))});
+ }
+ expect(rows).toHaveLength(2016);
+ fs.writeFileSync(process.env.FUSION_ITEM_EVOLUTION_OUT!,JSON.stringify({version:1,scope:"native evolution-item selectFilter/apply queue and Pokemon.evolve; raw compatible fusion snapshots",biome:s.arena.biomeId,wave:s.currentBattle.waveIndex,offset:5,weather:0,terrain:0,seed:s.seed,pokemon:JSON.parse(fs.readFileSync("locales/en/pokemon.json","utf8")),pairs,items,rows})+"\n");
+},240000);
