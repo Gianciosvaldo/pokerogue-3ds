@@ -36,7 +36,10 @@ jobs:
     timeout-minutes: 30  # a normal run is about 6; the apt step once hung for over an hour (GitHub's default limit is 6 hours)
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq mingw-w64 zip
+      - name: The apt helper cannot hang the job (a stalled apt-get is stopped and tried again)
+        run: sh sd-builder/tests/apt_install_test.sh
+      - name: Install mingw-w64 and zip (this step stalled for the whole job limit twice with plain apt-get)
+        run: sd-builder/tests/apt_install.sh mingw-w64 zip
       - name: Build the game app (the zip carries it, so the builder can put the packs inside it)
         run: |
           mkdir -p dist/game && chmod 777 dist/game
@@ -205,7 +208,7 @@ jobs:
           python-version: "3.12"
       - name: Install the same library versions the zip pins, and ffmpeg
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          repo/sd-builder/tests/apt_install.sh ffmpeg
           python -m pip install -q numpy==1.26.4 pillow==12.3.0 lz4==4.4.5 fonttools==4.66.0
       - name: Build without a card (SD-CARD-FILES), loose files
         run: unzip -q PokeRogue-SD-Builder.zip && python PokeRogue-SD-Builder/files/builder.py --no-sd --yes --format folder < /dev/null
