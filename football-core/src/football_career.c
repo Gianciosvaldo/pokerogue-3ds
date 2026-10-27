@@ -1,4 +1,5 @@
 #include "football_career.h"
+#include "gc/data.h"
 #include <stdio.h>
 #include <string.h>
 static void prepare(FootballCareer *c,unsigned member)
@@ -100,19 +101,45 @@ static void shop(FootballCareer *c)
     if((c->seed+c->round*7)%4==0)for(unsigned i=0;i<22;++i){prepare(c,i);int item=gc_football_mega_item(c->scratch,0);if(item>0 && !c->roster.mega_item[i]){c->stone_target=(int)i;c->stone_item=item;break;}}
     roll_evolutions(c);
 }
+/* An evolution of the member's species that asks for this move (or for a move of its type, when it is the only one known). */
+static bool evolution_needs(const pr_pokemon *p,int slot)
+{
+    const unsigned move=PR_MOVES(p)[slot];
+    if(move>=PR_MOVE_COUNT)return false;
+    for(int i=0;i<gc_species_evo_count;++i){
+        if(gc_species_evos[i].id!=p->species)continue;
+        for(unsigned k=0;k<gc_species_evos[i].n;++k){
+            const gc_evo *e=&gc_evo_data[gc_species_evos[i].start+k];
+            if(e->item)continue;
+            for(unsigned c=0;c<e->n_cond;++c){
+                const gc_evo_cond *cond=&gc_evo_conds[e->cond_start+c];
+                if(cond->key==GC_EVO_MOVE && cond->v[0]==(int)move)return true;
+                if(cond->key==GC_EVO_MOVE_TYPE && pr_moves[move].type==cond->v[0]){
+                    unsigned same=0;
+                    for(int m=0;m<PR_N_MOVES(p) && m<4;++m){const unsigned other=PR_MOVES(p)[m];if(other<PR_MOVE_COUNT && pr_moves[other].type==cond->v[0])++same;}
+                    if(same<=1)return true;
+                }
+            }
+        }
+    }
+    return false;
+}
 int football_career_forget_slot(const pr_pokemon *p)
 {
     int slot=-1,weakest=0;
     if(!p)return -1;
-    for(int i=0;i<PR_N_MOVES(p) && i<4;++i){
-        unsigned id=PR_MOVES(p)[i];int power=id<PR_MOVE_COUNT && pr_moves[id].power>0?pr_moves[id].power:0;
-        if(slot<0 || power<weakest){slot=i;weakest=power;}
-    }
+    /* The weakest move goes, but not one its evolution needs (Tangela keeps Ancient Power for Tangrowth), unless all of them are. */
+    for(int pass=0;pass<2 && slot<0;++pass)
+        for(int i=0;i<PR_N_MOVES(p) && i<4;++i){
+            if(!pass && evolution_needs(p,i))continue;
+            unsigned id=PR_MOVES(p)[i];int power=id<PR_MOVE_COUNT && pr_moves[id].power>0?pr_moves[id].power:0;
+            if(slot<0 || power<weakest){slot=i;weakest=power;}
+        }
     return slot;
 }
 static bool award(FootballCareer *c)
 {
-    prepare(c,c->exp_member);return gc_football_award_exp(c->scratch,c->round,NULL);
+    prepare(c,c->exp_member);return gc_football_award_levels(c->scratch,c->round,GC_FOOTBALL_LEVELS_PER_WIN,NULL);
 }
 void football_career_tick(FootballCareer *c,unsigned ms,FootballLiveInput input)
 {

@@ -245,6 +245,13 @@ friendship-test: core-libs
 	$(BUILD)/friendship_test
 test: friendship-test
 
+.PHONY: pace-test
+pace-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/pace_test.c src/football_career.c src/football_career_save.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/pace_test
+	$(BUILD)/pace_test
+test: pace-test
+
 .PHONY: fx-test
 fx-test: core-libs
 	mkdir -p $(BUILD)
