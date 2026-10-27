@@ -56,7 +56,8 @@ bool gc_football_draft(gc_run *r, const gc_starter *team, int count, const char 
     r->screen.kind=GC_SCREEN_NONE;
     return true;
 }
-bool gc_football_award_exp(gc_run *r, unsigned round, const char **why)
+/* levels == 0: the season's EXP schedule; otherwise that many levels for each member */
+static bool award(gc_run *r, unsigned round, unsigned levels, const char **why)
 {
     if (!r || !r->n_party || round<1 || round>7 || r->screen.kind!=GC_SCREEN_NONE)
         return fail(why,"invalid football EXP phase");
@@ -71,10 +72,26 @@ bool gc_football_award_exp(gc_run *r, unsigned round, const char **why)
          * the football rules, not from friendship as in the classic game. */
         gc_system_add_friendship(NULL,r,&r->party[i],GC_FOOTBALL_FRIENDSHIP_PER_WIN,false);
         gc_rphase p=gc_rp(RP_EXP,i,0,0);
-        p.d=(double)GC_FOOTBALL_EXP_FACTOR*round*round;
+        if (levels) {
+            const gc_mon *m=&r->party[i];
+            const pr_species *sp=gc_species(m->b.species);
+            int target=m->b.level+(int)levels;
+            if (target>100) target=100;
+            const double need=ceil(gc_level_total_exp(target,sp?sp->growth_rate:0)-m->exp); /* the phase floors what it adds */
+            p.d=need>0?need:0;
+        } else p.d=(double)GC_FOOTBALL_EXP_FACTOR*round*round;
         gc_rq_push(r,p);
     }
     return true;
+}
+bool gc_football_award_exp(gc_run *r, unsigned round, const char **why)
+{
+    return award(r,round,0,why);
+}
+bool gc_football_award_levels(gc_run *r, unsigned round, unsigned levels, const char **why)
+{
+    if (levels<1 || levels>99) return fail(why,"invalid football level award");
+    return award(r,round,levels,why);
 }
 static bool allowed_phase(int type)
 {
