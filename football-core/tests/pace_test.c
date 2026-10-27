@@ -13,25 +13,14 @@ static bool member_of(gc_run *run,unsigned species){return fb_member_of(run,&pro
 static const pr_species *species_of(unsigned id){for(unsigned i=0;i<PR_SPECIES_COUNT;++i)if(pr_species_table[i].id==id)return &pr_species_table[i];return NULL;}
 static int rate_of(const gc_run *run){const pr_species *sp=species_of((unsigned)run->party[0].b.species);return sp?sp->growth_rate:0;}
 /* The evolution a species has left to make by level, move or other conditions alone (no item), as far as level 75: its target, or 0. */
-static unsigned left_to_make(unsigned species,const gc_evo **which)
+static unsigned left_to_make(unsigned species)
 {
     for(int i=0;i<gc_species_evo_count;++i)if(gc_species_evos[i].id==species)
         for(unsigned k=0;k<gc_species_evos[i].n;++k){
             const gc_evo *e=&gc_evo_data[gc_species_evos[i].start+k];
-            if(!e->item && e->level<=75){*which=e;return e->species;}
+            if(!e->item && e->level<=75)return e->species;
         }
     return 0;
-}
-static bool football_cannot(const gc_evo *e)
-{
-    for(unsigned c=0;c<e->n_cond;++c){
-        switch(gc_evo_conds[e->cond_start+c].key){
-        case GC_EVO_WEATHER: case GC_EVO_BIOME: case GC_EVO_PARTY_TYPE: case GC_EVO_GENDER: case GC_EVO_TREASURE_TRACKER:
-        case GC_EVO_SPECIES_CAUGHT: case GC_EVO_HELD_ITEM: case GC_EVO_TIME: case GC_EVO_NATURE: case GC_EVO_RANDOM_FORM: return true;
-        default: break;
-        }
-    }
-    return false;
 }
 int main(void)
 {
@@ -85,7 +74,7 @@ int main(void)
     assert(gc_football_award_levels(&scratch,7,step,NULL) && fb_drive(&scratch,NULL) && scratch.party[0].b.level==100);
 
     /* ---- every draftable species through the seven games ---- */
-    unsigned total=0,fully=0,empty=0,movers=0;
+    unsigned total=0,empty=0;
     for(unsigned i=0;i<PR_SPECIES_COUNT;++i){
         const unsigned id=pr_species_table[i].id;
         if(!member_of(&scratch,id))continue;
@@ -96,15 +85,9 @@ int main(void)
             /* Deino: Zweilous at 50, Hydreigon at 64 (the highest level evolution there is) */
             if(id==633){assert(scratch.party[0].b.species==(round<5?633:round<6?634:635));}
         }
-        const gc_evo *which=NULL;const unsigned target=left_to_make(scratch.party[0].b.species,&which);
-        if(!target){++fully;continue;}
-        /* What is left is something football cannot ask of a member (weather, a party type, a gender, a treasure count...), or one of
-         * two moves a level-up skips on its way to the form that learns them. */
-        const unsigned now=scratch.party[0].b.species;
-        assert(football_cannot(which) || now==221 /* Piloswine: Ancient Power is a relearn move */ || now==57 /* Primeape: Rage Fist at 35 passed while Mankey */);
-        ++movers;
+        assert(!left_to_make(scratch.party[0].b.species)); /* nobody is left with a level evolution to make: see evolve_all_test.c for the ones football waives a condition for */
     }
-    assert(total>=500 && movers<=8 && fully==total-movers);
+    assert(total>=500);
     assert(empty==0); /* an evolution on offer is always one that can be taken */
     /* Their moves are why these evolve at all: Tangela's Ancient Power, Lickitung's Rollout, Girafarig's Twin Beam. */
     static const unsigned from[]={114,108,203,852,6211},to[]={465,463,981,853,904};
@@ -147,6 +130,6 @@ int main(void)
     size_t n=football_career_save(&career,bytes,sizeof bytes);assert(n && football_career_load(&loaded,&other,&profile,bytes,n));
     for(unsigned i=0;i<22;++i)assert(loaded.roster.mon[i].b.level==75 && loaded.roster.mon[i].b.species==635);
 
-    printf("football pace: %u levels per won round for every growth rate (15..75), %u draftable species through seven games, %u fully evolved, %u left with a condition football cannot meet or a move that is skipped, no evolution on offer that cannot be taken; passed\n",step,total,fully,movers);
+    printf("football pace: %u levels per won round for every growth rate (15..75), %u draftable species through seven games, every one fully evolved, no evolution on offer that cannot be taken; passed\n",step,total);
     return 0;
 }

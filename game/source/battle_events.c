@@ -113,6 +113,8 @@ void be_mon(const pr_battle* bt, const pr_pokemon* p, bv_mon* m) {
   }
   m->n_moves = PR_N_MOVES(p);
   m->boss = p->is_boss;
+  m->boss_segments = p->boss_segments;
+  m->boss_segment_index = p->boss_segment_index;
   for (int i = 0; i < 7; i++) m->stat_stages[i] = p->stat_stages[i];
 }
 
@@ -129,6 +131,7 @@ typedef struct {
   int hp, status;
   bool fainted, present, visible, substitute;
   int max_hp;
+  int shield;                /* bossSegmentIndex the screen shows */
 } seen_t;
 
 /* Switch snapshots identify the actual Pokemon, even if its form and party
@@ -186,7 +189,7 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
   for(int k=0;k<4;k++){
     int i=view_slot(k);view->sent[i]=NULL;current[i]=view->mon[i];
     const bv_mon *m=&view->mon[i];
-    seen[k]=(seen_t){m->species,m->form,m->hp,m->status,!view->present[i],view->present[i],!m->hidden,m->substitute,m->max_hp};
+    seen[k]=(seen_t){m->species,m->form,m->hp,m->status,!view->present[i],view->present[i],!m->hidden,m->substitute,m->max_hp,m->boss_segment_index};
   }
   enum { SENT_MAX = 16 };
   static bv_mon sent[SENT_MAX];
@@ -223,6 +226,11 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
           if (ev->field[k].visible != seen[k].visible) {
             PUT(.type = BEV_VISIBLE, .battler = k, .a = ev->field[k].visible);
             seen[k].visible = ev->field[k].visible;
+          }
+          /* a hit broke one of a boss's shields (Pokemon.damage clears them before the damage is shown) */
+          if (ev->field[k].boss_segments && ev->field[k].boss_segment_index < seen[k].shield) {
+            PUT(.type = BEV_BOSS_SHIELD, .battler = k, .a = ev->field[k].boss_segment_index);
+            seen[k].shield = ev->field[k].boss_segment_index;
           }
           /* the maximum changed (a form with other base stats: Zygarde, Morpeko): the bar's numbers follow */
           if (ev->field[k].max_hp > 0 && ev->field[k].max_hp != seen[k].max_hp) {
@@ -404,6 +412,8 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
         (*sm).hp = ev->field[b].hp;
         if (ev->field[b].max_hp > 0) (*sm).max_hp = ev->field[b].max_hp;
         (*sm).status = ev->field[b].status;
+        (*sm).boss_segments = ev->field[b].boss_segments;
+        (*sm).boss_segment_index = ev->field[b].boss_segment_index;
         (*sm).gender = ev->field[b].gender;
         (*sm).female = (*sm).gender == 1;
         (*sm).variant = ev->field[b].variant;
@@ -415,7 +425,7 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
         if (seen[b].present) PUT(.type = BEV_WITHDRAW, .battler = b);
         PUT(.type = BEV_SUMMON, .battler = b, .mon = &(*sm), .text = go_text);
         go_text = NULL;
-        seen[b] = (seen_t){ev->field[b].species, ev->field[b].form, ev->field[b].hp, ev->field[b].status, false, true, true, ev->field[b].substitute, sm->max_hp};
+        seen[b] = (seen_t){ev->field[b].species, ev->field[b].form, ev->field[b].hp, ev->field[b].status, false, true, true, ev->field[b].substitute, sm->max_hp, sm->boss_segment_index};
         break;
       }
       case PR_EV_POKEMON_ANIM:
@@ -442,6 +452,10 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
     const pr_pokemon* p = bt->field[k];
     if (!p || !seen[k].present) continue;
     if (p->hp > 0 && p->stats[STAT_HP] > 0 && p->stats[STAT_HP] != seen[k].max_hp) PUT(.type = BEV_MAX_HP, .battler = k, .a = p->stats[STAT_HP]);
+    if (p->boss_segments && p->boss_segment_index < seen[k].shield) {
+      PUT(.type = BEV_BOSS_SHIELD, .battler = k, .a = p->boss_segment_index);
+      seen[k].shield = p->boss_segment_index;
+    }
     if (p->hp < seen[k].hp) PUT(.type = BEV_DAMAGE, .battler = k, .a = p->hp, .b = HIT_RESULT_INDIRECT);
     else if (p->hp > seen[k].hp) PUT(.type = BEV_HEAL, .battler = k, .a = p->hp);
     if (p->status != seen[k].status) PUT(.type = BEV_STATUS, .battler = k, .a = p->status);

@@ -131,6 +131,9 @@ typedef struct {
      * it will get back and what the rewards phase does to it (onBeforeRewardsPhase). Not saved, for the same reason as fg */
     struct { bool pending; uint8_t n; } berries;   /* Berries Abound: the berries the fight's win gives */
     struct { bool away; int8_t kind, nature, ability; int n_kept; gc_mon mon; gc_item kept[64]; } training;
+    /* A football run (gc_football_new): its members evolve by the football rules (gc_mon_football_evolutions). Never set on a classic or
+     * custom run, and not saved */
+    bool football;
 } gc_internal;
 gc_internal *gc_int(gc_run *run);
 
@@ -187,7 +190,7 @@ int gc_level_up_moves(const gc_mon *m, int starting_level, uint16_t *out, int ma
 void gc_mon_add_exp(gc_run *run, gc_mon *m, double exp);              /* addExp */
 double gc_level_total_exp(int level, int growth_rate);
 /* EvolutionItemModifier.apply's evolution: the gc_evo_data index, -1 = none */
-int gc_mon_football_evolutions(gc_run *run, const gc_mon *m, int *out, int cap);
+int gc_mon_football_evolutions(gc_run *run, const gc_mon *m, int from_level, int *out, int cap);
 int gc_mon_item_evolution(gc_run *run, const gc_mon *m, int item);
 int gc_mon_item_evolutions(gc_run *run, const gc_mon *m, int *out, int cap);
 /* getEvolution(): the gc_evo_data index, -1 = none */
