@@ -116,6 +116,10 @@ typedef struct {
     struct { bool active; int8_t turns_remaining; } fg;
     /* the Pillar Men's fight is running (option 0..2): its victory is the encounter's rewards. Not saved, for the same reason as fg */
     struct { bool active; int8_t option; } pillar;
+    /* an encounter's fight that is not allowed to flee (withFleeAllowed(false)) and, for a fight with a guaranteed reward (Fight or Flight), what its
+     * victory opens: setEncounterRewards({guaranteedModifierTypeOptions: [item], fillRemaining: false}). Not saved, for the same reason as fg */
+    bool me_no_flee;
+    struct { bool active; pr_reward_option item; } me_reward;
 } gc_internal;
 gc_internal *gc_int(gc_run *run);
 
@@ -274,6 +278,7 @@ bool gc_custom_trainer_wave(gc_run *run, int wave);                             
 bool gc_custom_trainer(gc_run *run, const gc_custom_encounter *enc);                      /* trainer(): an eligible wave asks the app for a team and builds it */
 void gc_custom_team_items(gc_run *run);                                                   /* the team's items instead of the generated ones (enemy_items) */
 void gc_enemy_finish_party(gc_run *run);                             /* passives, stats, seen flags, items, AI, trainer names of the enemy party */
+void gc_enemy_finish_party_me(gc_run *run);                          /* the same for an initBattleWithEnemyConfig without item configs: the item rolls, then updateModifiers' stats */
 void gc_enemy_ctx(gc_run *run, pr_enemy_gen_ctx *ec);                /* the scene addEnemyPokemon sees (run-core's context) */
 void gc_refresh_enemy(gc_run *run, gc_mon *m, int species, int level, const pr_enemy_gen *g, int slot);   /* gc_mon_new_enemy again, keeping the moveset */
 /* Task 45: getMysteryEncounter() inside executeWithSeedOffset(wave * 16). */
@@ -341,6 +346,12 @@ bool gc_fg_wobbuffet_moveset(gc_run *run, gc_mon *m);           /* generateMoves
 void gc_enemy_finish_party_items(gc_run *run, const gc_item *items, int n);   /* gc_enemy_finish_party with the first Pokemon's items given (no item rolls) */
 void gc_me_begin_battle(gc_run *run, int type);                /* the encounter's battle starts: the field, the first turn (an EnemyPartyConfig's enemy party is in place) */
 void gc_dark_deal_execute(gc_run *run, int option);
+bool gc_me_new_boss(gc_run *run, pr_rng *r, int species, int level, bool second_iv, gc_mon *out);   /* new EnemyPokemon(.., boss) on a seed-offset stream */
+void gc_fof_execute(gc_run *run, int option);                    /* Fight or Flight (src/gc_fof.c) */
+bool gc_fof_init(gc_run *run, gc_mon *boss, int *level, pr_reward_option *item);   /* onInit, worked out from the run (the oracle's test reads it) */
+bool gc_fof_tokens(gc_run *run, pr_msg_arg *enemy_name, pr_msg_arg *item_name);   /* the tokens onInit sets: enemyPokemon, itemName */
+void gc_fof_victory(gc_run *run);                               /* the fight is won: the item's shop, then the next wave */
+bool gc_fof_preview(gc_run *run, int *species, int *form, bool *shiny, int *variant, const char **item_key);   /* what onInit made, for the question screen; false when it could not */
 void gc_me_leave_with_heal_shop(gc_run *run);                   /* leaveEncounterWithoutBattle(true) */
 void gc_me_leave_with_shop(gc_run *run, const char *key);       /* setEncounterRewards({guaranteedModifierTypeFuncs: [key], fillRemaining: false}), leaveEncounterWithoutBattle() */
 

@@ -16,6 +16,10 @@ static void queue_battle_end(gc_run *run)
         gc_fg_battle_end(run, true);
         return;
     }
+    if (in->me_reward.active) {   /* Fight or Flight: handleMysteryEncounterVictory, the guaranteed item's shop */
+        gc_fof_victory(run);
+        return;
+    }
     if (in->pillar.active) {   /* the Pillar Men: handleMysteryEncounterVictory, no TrainerVictoryPhase */
         gc_pillar_victory(run);
         return;
@@ -176,7 +180,7 @@ static void victory(gc_run *run, int enemy_idx)
         /* applyPartyExp(expValue, pokemonDefeated = true) */
         pr_exp_party pp;
         gc_exp_party_build(run, &pp, bt->participants, bt->n_participants);
-        if (gc_int(run)->fg.active) pp.me_exp_multiplier = 1.0;   /* isBattleMysteryEncounter(): the encounter's expMultiplier, 1 */
+        if (run->me_battle) pp.me_exp_multiplier = 1.0;   /* isBattleMysteryEncounter(): floor(expValue * the encounter's expMultiplier), 1 */
         /* Participating survivors gain friendship through the bounded Bell
          * projection. Unrepresented stock retains the counted legacy gain. */
         if (bt->n_participants > 0)

@@ -234,6 +234,27 @@ void gc_enemy_pool_thresholds(gc_run *run)
     }
 }
 
+/* getMaxHeldItemCount of the held items an enemy's pools roll (modifier.ts): a berry 2 (Sitrus, Lum, Leppa, Enigma) or 3, a base stat booster the
+ * holder's IV of that stat, an attack type booster 99, White Herb 2, Lucky and Golden Egg 99, Focus Band 5, Quick Claw 3, Grip Claw 5, Wide Lens 3,
+ * King's Rock 3, Leftovers 4, Shell Bell 4, Scope Lens 1 */
+static int enemy_item_max_stack(const gc_run *run, const gc_item *it)
+{
+    const char *k = it->key;
+    if (!strcmp(k, "BERRY")) return it->arg == BERRY_TYPE_SITRUS || it->arg == BERRY_TYPE_LUM || it->arg == BERRY_TYPE_LEPPA || it->arg == BERRY_TYPE_ENIGMA ? 2 : 3;
+    if (!strcmp(k, "BASE_STAT_BOOSTER")) {
+        for (int i = 0; i < run->n_enemy; i++)
+            if (run->enemy[i].b.id == it->pokemon_id && it->arg >= 0 && it->arg < 6) return run->enemy[i].b.ivs[it->arg];
+        return 0;
+    }
+    if (!strcmp(k, "ATTACK_TYPE_BOOSTER") || !strcmp(k, "LUCKY_EGG") || !strcmp(k, "GOLDEN_EGG")) return 99;
+    if (!strcmp(k, "WHITE_HERB")) return 2;
+    if (!strcmp(k, "FOCUS_BAND") || !strcmp(k, "GRIP_CLAW")) return 5;
+    if (!strcmp(k, "QUICK_CLAW") || !strcmp(k, "WIDE_LENS") || !strcmp(k, "KINGS_ROCK")) return 3;
+    if (!strcmp(k, "LEFTOVERS") || !strcmp(k, "SHELL_BELL")) return 4;
+    if (!strcmp(k, "SCOPE_LENS")) return 1;
+    return 999;
+}
+
 /* The enemy's held items: regenerateModifierPoolThresholds + generateEnemyModifiers */
 static void enemy_items(gc_run *run)
 {
@@ -247,10 +268,13 @@ static void enemy_items(gc_run *run)
     for (int i = 0; i < run->n_enemy; i++) {
         const pr_pokemon *p = &run->enemy[i].b;
         ic.party[i].boss = p->is_boss;
-        /* getTypesForItemSpawn: each attack move's type, in moveset order */
-        for (int k = 0; k < p->n_moves && ic.party[i].n_attack_types < 16; k++)
-            if (p->moves[k] && pr_move_is_attack(p->moves[k]))
-                ic.party[i].attack_types[ic.party[i].n_attack_types++] = pr_moves[p->moves[k]].type;
+        /* getTypesForItemSpawn: each attack move's types (Hidden Power's, Aura Wheel's, a type-changing ability's), in moveset order */
+        for (int k = 0; k < p->n_moves; k++) {
+            int8_t ty[2];
+            if (!p->moves[k] || !pr_move_is_attack(p->moves[k])) continue;
+            const int n = gc_types_for_item_spawn(run, &run->enemy[i], p->moves[k], ty);
+            for (int j = 0; j < n && ic.party[i].n_attack_types < 16; j++) ic.party[i].attack_types[ic.party[i].n_attack_types++] = ty[j];
+        }
     }
     static pr_enemy_items out;
     run->n_enemy_items = 0;
@@ -264,11 +288,12 @@ static void enemy_items(gc_run *run)
             it->arg = out.items[i][k].arg;
             it->stack = 1;
             it->pokemon_id = token && out.items[i][k].item != (uint8_t)pr_item_mini_black_hole ? 0 : run->enemy[i].b.id;
-            /* stack onto a matching entry, as addEnemyModifier does */
+            /* stack onto a matching entry, as addEnemyModifier does: add() -> incrementStack(), which refuses what would pass the item's
+             * maximum (the tokens' own are run-core's) */
             for (int j = 0; j < run->n_enemy_items - 1; j++) {
                 gc_item *o = &run->enemy_items[j];
                 if (o->key == it->key && o->arg == it->arg && o->pokemon_id == it->pokemon_id) {
-                    o->stack++;
+                    if (token || o->stack + 1 <= enemy_item_max_stack(run, o)) o->stack++;
                     run->n_enemy_items--;
                     break;
                 }
@@ -409,6 +434,7 @@ static void arena_flags(const gc_run *run, int prev_wave, bool *reset, bool *new
 
 /* What follows the enemy party's generation: passives and stats, the dex's seen flags, the enemy's items, the AI's view, the trainer names.
  * Also run after a custom rematch replaced the wild enemy (gc_custom_build_enemy), so the rematch enemy goes through the same paths. */
+#define GC_ME_RANDOM_ITEMS (-2)
 static void finish_party(gc_run *run, const gc_item *given, int n_given)
 {
     gc_internal *in = gc_int(run);
@@ -422,8 +448,18 @@ static void finish_party(gc_run *run, const gc_item *given, int n_given)
             gc_system_set_pokemon_seen(run->sys, &run->enemy[i], true, is_trainer);
         }
     }
-    if (n_given < 0) enemy_items(run);
-    else {
+    if (n_given < 0) {
+        enemy_items(run);
+        if (n_given == GC_ME_RANDOM_ITEMS) {
+            /* generateEnemyModifiers' updateModifiers(false): the stat boosters it rolled count in the stats; a Pokemon at full HP stays at full HP */
+            gc_items_to_battle(run);
+            for (int i = 0; i < run->n_enemy; i++) {
+                const bool full = run->enemy[i].b.hp >= run->enemy[i].b.stats[STAT_HP];
+                pr_calculate_stats(&run->bt, &run->enemy[i].b);
+                if (full) run->enemy[i].b.hp = run->enemy[i].b.stats[STAT_HP];
+            }
+        }
+    } else {
         /* generateEnemyModifiers(customModifierTypes) with a config for the first Pokemon: its items as given, no item rolls; the
          * thresholds were regenerated just before */
         gc_enemy_pool_thresholds(run);
@@ -452,6 +488,9 @@ static void finish_party(gc_run *run, const gc_item *given, int n_given)
 }
 
 void gc_enemy_finish_party(gc_run *run) { finish_party(run, NULL, -1); }
+
+/* the same for the party of an initBattleWithEnemyConfig whose configs name no items: the ordinary item rolls, then the stats made again */
+void gc_enemy_finish_party_me(gc_run *run) { finish_party(run, NULL, GC_ME_RANDOM_ITEMS); }
 
 /* the same for an encounter whose EnemyPokemonConfig names the first Pokemon's held items (modifierConfigs) */
 void gc_enemy_finish_party_items(gc_run *run, const gc_item *items, int n) { finish_party(run, items, n); }
@@ -543,6 +582,7 @@ void gc_new_battle(gc_run *run)
     in->custom_trainer_name[0] = 0;
     in->custom_team_on = false;
     in->pillar.active = false;
+    in->me_no_flee = in->me_reward.active = false;
 
     pr_new_battle_ctx ctx;
     memset(&ctx, 0, sizeof ctx);
