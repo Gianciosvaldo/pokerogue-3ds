@@ -19,6 +19,7 @@
 #include <stddef.h>
 
 #include "gc/run.h"
+#include "me_screen.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,6 +35,12 @@ typedef struct {
 /* The intro (the `intro` line, then `introDialogue`), "$" between pages, for the screen the run is on (GC_SCREEN_MYSTERY). "" if the
  * locale has neither. */
 void me_flow_intro(const gc_run* run, char* out, size_t n);
+
+/* The intro sprites upstream shows for the encounter type, laid out as MysteryEncounterIntroVisuals does (even spacing over -40..40 for
+ * the sprites without an offset, the rest at their x/y), as screen coordinates for a platform centred at cx with its floor at floor_y.
+ * Only the sprites whose image key is fixed are drawn; the Pokemon and trainers an encounter picks at run time keep their place empty.
+ * Returns how many were written (at most max). */
+int me_flow_intro_sprites(int type, float cx, float floor_y, me_intro_sprite* out, int max);
 
 /* Opens the question for the run's current encounter. on_choice is called once, from the screen's input, after the screens popped. False
  * (nothing opened) when the run is not on an encounter screen. */

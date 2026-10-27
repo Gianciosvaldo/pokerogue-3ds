@@ -7,6 +7,7 @@
 #include "ui.h"
 #include "ui_text.h"
 #include "ui_widgets.h"
+#include "mui.h"
 
 #define ROW_H 24
 #define LIST_Y 6
@@ -211,7 +212,7 @@ static void draw_top(void)
   text_wrap(TS_WINDOW, M.a.query, &o, wrapped, sizeof wrapped);
   int n_sprites = 0;
   while (n_sprites < ME_MAX_SPRITES && M.a.sprites[n_sprites][0]) n_sprites++;
-  text_draw(TS_WINDOW, 20, n_sprites ? 70 : 130, wrapped, &o);
+  text_draw(TS_WINDOW, 20, n_sprites || M.a.n_intro ? 70 : 130, wrapped, &o);
   for (int i = 0; i < n_sprites; i++) { /* black silhouettes standing on the window's floor, evenly spread */
     const rr_frame* f = img_anim_frame(M.a.sprites[i], 0);
     if (!f) continue;
@@ -220,6 +221,18 @@ static void draw_top(void)
     d.origin_y = 1;
     d.tint = RR_RGBA(0, 0, 0, 255);
     rr_draw(f, 8 + 304 * (2 * i + 1) / (2 * n_sprites), 166, &d);
+  }
+  for (int i = 0; i < M.a.n_intro; i++) { /* the encounter's own sprites, in colour (shaded toward black where upstream tints them) */
+    const me_intro_sprite* s = &M.a.intro[i];
+    const rr_frame* f = s->frame[0] ? mui_frame(s->key, s->frame) : img_anim_frame(s->key, 0);
+    if (!f) continue;
+    rr_draw_opts d = RR_DEFAULT_OPTS;
+    d.origin_x = 0.5f;
+    d.origin_y = 1;
+    d.scale_x = d.scale_y = s->scale;
+    const unsigned v = (unsigned)(255.0f * (1.0f - s->dark));
+    d.tint = RR_RGBA(v, v, v, 255);
+    rr_draw(f, s->x, s->y, &d);
   }
 }
 

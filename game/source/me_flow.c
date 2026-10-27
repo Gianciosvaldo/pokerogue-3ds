@@ -84,6 +84,7 @@ static struct {
   int type;
   int option, member;                  /* the option taken, the party slot picked */
   int move;
+  int trait[25], n_trait;              /* the natures or ability slots the list offers, by row */
   void (*on_choice)(const me_choice* c, void* arg);
   void* arg;
 } F;
@@ -143,10 +144,98 @@ void me_flow_intro(const gc_run* run, char* out, size_t n)
   if (fmt("introDialogue", NULL, 0, false, t, sizeof t)) append_page(out, n, t);
 }
 
+/* ------------------------------------------------------------------ the intro sprites */
+
+/* withIntroSpriteConfigs of each encounter (upstream 8555c08), in order. root: M = images/mystery-encounters, T = images/trainer, I = items
+ * icon, P = images/pokemon; "" = a sprite picked at run time (a Pokemon, a trainer): it keeps its place in the spacing but is not drawn.
+ * x and y as upstream has them (0 = not set); a sprite with neither is spaced evenly. */
+typedef struct {
+  char root;
+  const char* name;
+  int8_t x, y;
+  float scale, dark;
+} intro_cfg;
+#define INTRO_MAX 13
+static const struct {
+  int type;
+  int n;
+  intro_cfg c[INTRO_MAX];
+} INTRO[] = {
+    {GC_ME_DARK_DEAL, 2, {{'M', "dark_deal_scientist", 0, 0, 0, 0}, {'M', "dark_deal_porygon", 0, 0, 0, 0}}},
+    {GC_ME_MYSTERIOUS_CHEST, 1, {{'M', "mysterious_chest_blue", 0, 8, 0, 0}}},
+    {GC_ME_DEPARTMENT_STORE_SALE, 2, {{'M', "department_store_sale_lady", -20, 0, 0, 0}, {0, "", 30, 0, 0, 0}}},
+    {GC_ME_SHADY_VITAMIN_DEALER, 2, {{0, "", 24, 0, 1.1f, 0}, {'M', "shady_vitamin_dealer", -12, 3, 0, 0}}},
+    {GC_ME_FIELD_TRIP, 3, {{'T', "preschooler_m", 0, 0, 0, 0}, {'M', "field_trip_teacher", 0, 0, 0, 0}, {'T', "preschooler_f", 0, 0, 0, 0}}},
+    {GC_ME_SAFARI_ZONE, 1, {{'M', "safari_zone", 4, 6, 0, 0}}},
+    {GC_ME_LOST_AT_SEA, 1, {{'M', "lost_at_sea_buoy", 20, 3, 0, 0}}},
+    {GC_ME_THE_STRONG_STUFF, 2, {{'I', "berry_juice_good", -15, 3, 1.25f, 0}, {0, "", 20, 10, 1.25f, 0}}},
+    {GC_ME_THE_POKEMON_SALESMAN, 2, {{'M', "pokemon_salesman", 0, 0, 0, 0}, {0, "", 0, 0, 0, 0}}},
+    {GC_ME_AN_OFFER_YOU_CANT_REFUSE, 2, {{0, "", 0, -4, 0, 0}, {'T', "rich_kid_m", 2, 5, 0, 0}}},
+    {GC_ME_ABSOLUTE_AVARICE, 13, {{0, "", -5, 0, 0, 0}, {0, "", -5, 0, 0, 0}, {'I', "lum_berry", 7, -14, 0, 0}, {'I', "salac_berry", 2, 4, 0, 0},
+        {'I', "lansat_berry", 32, 5, 0, 0}, {'I', "liechi_berry", 6, -5, 0, 0}, {'I', "sitrus_berry", 7, 8, 0, 0},
+        {'I', "enigma_berry", 26, -4, 0, 0}, {'I', "leppa_berry", 16, -27, 0, 0}, {'I', "petaya_berry", 30, -17, 0, 0},
+        {'I', "ganlon_berry", 16, -11, 0, 0}, {'I', "apicot_berry", 14, -2, 0, 0}, {'I', "starf_berry", 18, 9, 0, 0}}},
+    {GC_ME_TRASH_TO_TREASURE, 1, {{'P', "569-gigantamax", 0, 8, 1.5f, 0.4f}}},
+    {GC_ME_BERRIES_ABOUND, 2, {{'M', "berries_abound_bush", 25, -6, 0, 0}, {0, "", -5, 0, 0, 0.25f}}},
+    {GC_ME_CLOWNING_AROUND, 3, {{0, "", -25, -3, 0, 0.3f}, {0, "", 25, -3, 0, 0.3f}, {'T', "harlequin", 0, 2, 0, 0}}},
+    {GC_ME_PART_TIMER, 2, {{'M', "part_timer_crate", 15, 6, 0, 0}, {'T', "worker_f", -18, 4, 0, 0}}},
+    {GC_ME_WEIRD_DREAM, 1, {{'M', "weird_dream_woman", 4, 11, 0, 0}}},
+    {GC_ME_THE_WINSTRATE_CHALLENGE, 5, {{'T', "vito", 16, -4, 0, 0}, {'T', "vivi", -14, -4, 0, 0}, {'T', "victor", -32, 0, 0, 0},
+        {'T', "victoria", 40, 0, 0, 0}, {'T', "vicky", 3, 5, 0, 0}}},
+    {GC_ME_TELEPORTING_HIJINKS, 1, {{'M', "teleporting_hijinks_teleporter", 4, 4, 0, 0}}},
+    {GC_ME_BUG_TYPE_SUPERFAN, 2, {{0, "", 35, -2, 0, 0}, {'T', "bug_type_superfan", -20, 5, 0, 0}}},
+    {GC_ME_FUN_AND_GAMES, 3, {{'M', "fun_and_games_game", 0, 6, 0, 0}, {'M', "fun_and_games_wobbuffet", -28, 6, 0, 0},
+        {'M', "fun_and_games_man", 40, 6, 0, 0}}},
+    {GC_ME_GLOBAL_TRADE_SYSTEM, 1, {{'M', "global_trade_system", 3, 5, 0, 0}}},
+    {GC_ME_THE_EXPERT_POKEMON_BREEDER, 2, {{0, "", 14, -2, 0, 0}, {'T', "expert_pokemon_breeder", -14, 4, 0, 0}}},
+    {GC_ME_TRAINING_SESSION, 1, {{'M', "training_session_gear", 5, 6, 0, 0}}},
+};
+
+int me_flow_intro_sprites(int type, float cx, float floor_y, me_intro_sprite* out, int max)
+{
+  for (size_t t = 0; t < sizeof INTRO / sizeof INTRO[0]; t++) {
+    if (INTRO[t].type != type) continue;
+    const int total = INTRO[t].n;
+    int spaced = 0;
+    for (int i = 0; i < total; i++) spaced += !INTRO[t].c[i].x && !INTRO[t].c[i].y;
+    const int spacing = (80 + spaced / 2) / (spaced > 1 ? spaced : 1); /* Math.round((maxX - minX) / max(spaced, 1)) */
+    int n = 0, k = 0;
+    for (int i = 0; i < total; i++) {
+      const intro_cfg* c = &INTRO[t].c[i];
+      const bool item = c->root == 'I';
+      float x = item ? -19.0f : 0.0f;
+      if (c->x || c->y) {
+        if (c->x) x = 4.0f + c->x;
+      } else if (total == 1) {
+        x = 4.0f;
+      } else {
+        x = -40.0f + ((float)k + 0.5f) * (float)spacing + 4.0f;
+        k++;
+      }
+      if (!c->root || n >= max) continue;
+      me_intro_sprite* o = &out[n++];
+      memset(o, 0, sizeof *o);
+      switch (c->root) {
+      case 'M': snprintf(o->key, sizeof o->key, "images/mystery-encounters/%s", c->name); break;
+      case 'T': snprintf(o->key, sizeof o->key, "images/trainer/%s", c->name); break;
+      case 'P': snprintf(o->key, sizeof o->key, "images/pokemon/%s", c->name); break;
+      default: snprintf(o->key, sizeof o->key, "items"); snprintf(o->frame, sizeof o->frame, "%s", c->name); break;
+      }
+      o->x = cx + x;
+      o->y = floor_y + (item ? 2.0f : 0.0f) + (float)c->y;
+      o->scale = c->scale > 0 ? c->scale : 1.0f;
+      o->dark = c->dark;
+    }
+    return n;
+  }
+  return 0;
+}
+
 /* ------------------------------------------------------------------ the picks */
 
 static void open_question(int cursor);
 static void open_members(void);
+static void open_moves(void);
 
 static void finish(int option, int b, int c)
 {
@@ -184,6 +273,49 @@ static void on_move(int idx, void* arg)
   finish(F.option, F.member, idx);
 }
 
+static void on_move_back(void* arg);
+
+static void on_trait(int idx, void* arg)
+{
+  (void)arg;
+  finish(F.option, F.member, idx < F.n_trait ? F.trait[idx] : 0);
+}
+
+/* the natures (25 of them) or the abilities a member can have, "(new)" where the dex does not have it yet */
+static void open_traits(void)
+{
+  static me_args a; /* static: 25 rows are too much for the 3DS stack; me_screen_open copies it */
+  memset(&a, 0, sizeof a);
+  fill_title(&a);
+  const bool nature = F.run->screen.option_pick[F.option] == GC_PICK_MEMBER_NATURE;
+  snprintf(a.query, sizeof a.query, nature ? "Choose a Nature." : "Choose an Ability.");
+  F.n_trait = 0;
+  if (nature) {
+    for (int i = 0; i < 25 && a.n < ME_MAX_OPTIONS; i++) {
+      char nm[40];
+      i18n_t(nm, sizeof nm, gc_nature_key(i), NULL); /* the key is already "nature:<name>" */
+      snprintf(a.options[a.n].label, ME_LABEL_LEN, "%s%s", nm, gc_training_nature_new(F.run, F.member, i) ? " (new)" : "");
+      a.options[a.n].ok = true;
+      F.trait[F.n_trait++] = i;
+      a.n++;
+    }
+  } else {
+    int slots[3];
+    bool fresh[3];
+    const int n = gc_training_abilities(F.run, F.member, slots, fresh);
+    for (int i = 0; i < n; i++) {
+      snprintf(a.options[a.n].label, ME_LABEL_LEN, "%s%s", i18n_ability_name(gc_ability_of_slot(F.run, F.member, slots[i])), fresh[i] ? " (new)" : "");
+      a.options[a.n].ok = true;
+      F.trait[F.n_trait++] = slots[i];
+      a.n++;
+    }
+  }
+  a.can_back = true;
+  a.on_pick = on_trait;
+  a.on_back = on_move_back;
+  if (!me_screen_open(&a)) finish(F.option, F.member, 0);
+}
+
 static void on_move_back(void* arg)
 {
   (void)arg;
@@ -193,7 +325,7 @@ static void on_move_back(void* arg)
 static void open_moves(void)
 {
   const gc_mon* m = &F.run->party[F.member];
-  me_args a;
+  static me_args a; /* static: 25 rows are too much for the 3DS stack; me_screen_open copies it */
   memset(&a, 0, sizeof a);
   fill_title(&a);
   snprintf(a.query, sizeof a.query, "Choose a move.");
@@ -219,8 +351,11 @@ static void on_member(int idx, void* arg)
 {
   (void)arg;
   F.member = slot_of(idx);
-  if (F.run->screen.option_pick[F.option] == GC_PICK_MEMBER_MOVE)
+  const int pick = F.run->screen.option_pick[F.option];
+  if (pick == GC_PICK_MEMBER_MOVE)
     open_moves();
+  else if (pick == GC_PICK_MEMBER_NATURE || pick == GC_PICK_MEMBER_ABILITY)
+    open_traits();
   else
     finish(F.option, F.member, 0);
 }
@@ -233,7 +368,7 @@ static void on_member_back(void* arg)
 
 static void open_members(void)
 {
-  me_args a;
+  static me_args a; /* static: 25 rows are too much for the 3DS stack; me_screen_open copies it */
   memset(&a, 0, sizeof a);
   fill_title(&a);
   snprintf(a.query, sizeof a.query, "Choose a Pokemon.");
@@ -264,7 +399,7 @@ static void on_option(int idx, void* arg)
 static void open_question(int cursor)
 {
   const gc_screen* s = gc_run_screen(F.run);
-  me_args a;
+  static me_args a; /* static: 25 rows are too much for the 3DS stack; me_screen_open copies it */
   memset(&a, 0, sizeof a);
   fill_title(&a);
   fmt("description", NULL, 0, false, a.description, sizeof a.description);
@@ -287,6 +422,7 @@ static void open_question(int cursor)
   }
   if (F.type == GC_ME_PILLAR_MEN)
     for (int i = 0; i < 3 && i < s->n_options; i++) snprintf(a.sprites[i], sizeof a.sprites[i], "images/trainer/custom/%s", PILLAR_ID[i]);
+  if (F.type != GC_ME_PILLAR_MEN) a.n_intro = me_flow_intro_sprites(F.type, 160, 164, a.intro, ME_MAX_INTRO);
   a.can_back = false;
   a.on_pick = on_option;
   if (!me_screen_open(&a)) finish(0, 0, 0);

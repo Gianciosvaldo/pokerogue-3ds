@@ -58,17 +58,28 @@ bool ui_space(ui_space_id sp) {
 }
 const rr_draw_opts RR_DEFAULT_OPTS = {0, 0, 1, 1, 0, 0xFFFFFFFFu};
 static rr_frame g_frame;
-static char g_sil_key[ME_MAX_SPRITES + 1][ME_SPRITE_LEN];
-static unsigned g_sil_tint[ME_MAX_SPRITES + 1];
+#define N_REC 16
+static char g_sil_key[N_REC][ME_SPRITE_LEN];
+static unsigned g_sil_tint[N_REC];
+static float g_sil_x[N_REC], g_sil_y[N_REC], g_sil_scale[N_REC];
 static int n_sil;
 const rr_frame* img_anim_frame(const char* key, int i) {
   (void)i;
-  if (n_sil <= ME_MAX_SPRITES) snprintf(g_sil_key[n_sil], ME_SPRITE_LEN, "%s", key);
+  if (n_sil < N_REC) snprintf(g_sil_key[n_sil], ME_SPRITE_LEN, "%s", key);
+  return &g_frame;
+}
+const rr_frame* mui_frame(const char* key, const char* frame) {
+  if (n_sil < N_REC) snprintf(g_sil_key[n_sil], ME_SPRITE_LEN, "%s:%s", key, frame);
   return &g_frame;
 }
 void rr_draw(const rr_frame* f, float x, float y, const rr_draw_opts* o) {
-  (void)f, (void)x, (void)y;
-  if (n_sil <= ME_MAX_SPRITES) g_sil_tint[n_sil] = (unsigned)o->tint;
+  (void)f;
+  if (n_sil < N_REC) {
+    g_sil_tint[n_sil] = (unsigned)o->tint;
+    g_sil_x[n_sil] = x;
+    g_sil_y[n_sil] = y;
+    g_sil_scale[n_sil] = o->scale_x;
+  }
   n_sil++;
 }
 void rr_rect(float x, float y, float w, float h, rr_color c) { (void)x, (void)y, (void)w, (void)h, (void)c; }
@@ -119,6 +130,8 @@ void text_wrap(text_style st, const char* s, const text_opts* o, char* out, int 
 }
 
 const char* i18n_species_name(int id) { return id == 25 ? "Pikachu" : id == 131 ? "Lapras" : "Mon"; }
+const char* i18n_ability_name(int id) { static char b[24]; snprintf(b, sizeof b, "Ability%d", id); return b; }
+const char* i18n_t(char* out, int n, const char* key, ...) { snprintf(out, (size_t)n, "%s", key); return out; }
 const char* i18n_move_name(int id) { return id == 57 ? "Surf" : id == 33 ? "Tackle" : "Move"; }
 
 /* a small locale: the real lines of Shady Vitamin Dealer and Lost at Sea (English), and the names the texts name */
@@ -392,11 +405,93 @@ int main(void) {
   press(BTN_ACTION);
   CHECK(n_got == 1 && got.option == 2 && got.b == 0 && !strcmp(got.selected, "You step up to Kars!"), "Kars: %d '%s'", got.option, got.selected);
   /* an encounter that is not the Pillar Men draws no silhouettes */
-  run_at(GC_ME_SHADY_VITAMIN_DEALER, 3);
+  run_at(GC_ME_SLUMBERING_SNORLAX, 3);
   CHECK(me_flow_open(&R, chosen, NULL), "another encounter opens");
   n_sil = 0;
   draw(0);
   CHECK(n_sil == 0, "no silhouettes elsewhere");
+
+  /* intro sprites, laid out as upstream's MysteryEncounterIntroVisuals does */
+  run_at(GC_ME_FIELD_TRIP, 3); /* three sprites without an offset: spaced over -40..40, 27 px apart, centre 4 right of the middle */
+  CHECK(me_flow_open(&R, chosen, NULL), "field trip opens for its sprites");
+  n_sil = 0;
+  draw(0);
+  CHECK(n_sil == 3, "field trip: three sprites: %d", n_sil);
+  CHECK(!strcmp(g_sil_key[0], "images/trainer/preschooler_m") && !strcmp(g_sil_key[1], "images/mystery-encounters/field_trip_teacher") &&
+            !strcmp(g_sil_key[2], "images/trainer/preschooler_f"),
+        "field trip: the keys: %s %s %s", g_sil_key[0], g_sil_key[1], g_sil_key[2]);
+  CHECK(g_sil_x[0] == 160 + -40 + 0.5f * 27 + 4 && g_sil_x[1] == 160 + -40 + 1.5f * 27 + 4 && g_sil_x[2] == 160 + -40 + 2.5f * 27 + 4,
+        "field trip: spaced: %g %g %g", g_sil_x[0], g_sil_x[1], g_sil_x[2]);
+  CHECK(g_sil_y[0] == 164 && g_sil_tint[0] == 0xFFFFFFFFu && g_sil_scale[0] == 1, "field trip: floor, no shading, native size");
+  run_at(GC_ME_LOST_AT_SEA, 3); /* one sprite with an offset */
+  CHECK(me_flow_open(&R, chosen, NULL), "lost at sea opens");
+  n_sil = 0;
+  draw(0);
+  CHECK(n_sil == 1 && g_sil_x[0] == 160 + 4 + 20 && g_sil_y[0] == 164 + 3, "buoy at its offset: %d %g %g", n_sil, g_sil_x[0], g_sil_y[0]);
+  run_at(GC_ME_THE_POKEMON_SALESMAN, 3); /* the run-time Pokemon keeps its place: one sprite drawn, spaced as one of two */
+  CHECK(me_flow_open(&R, chosen, NULL), "salesman opens");
+  n_sil = 0;
+  draw(0);
+  CHECK(n_sil == 1 && g_sil_x[0] == 160 + -40 + 0.5f * 40 + 4, "salesman at the left half: %d %g", n_sil, g_sil_x[0]);
+  run_at(GC_ME_TRASH_TO_TREASURE, 3); /* scaled, shaded */
+  CHECK(me_flow_open(&R, chosen, NULL), "trash opens");
+  n_sil = 0;
+  draw(0);
+  CHECK(n_sil == 1 && !strcmp(g_sil_key[0], "images/pokemon/569-gigantamax") && g_sil_scale[0] == 1.5f && g_sil_tint[0] == 0x999999FFu,
+        "garbodor: %d %s %g %08x", n_sil, g_sil_key[0], g_sil_scale[0], g_sil_tint[0]);
+  run_at(GC_ME_ABSOLUTE_AVARICE, 3); /* 11 item icons from the items atlas, at the item base (-19, +2) plus their offsets */
+  CHECK(me_flow_open(&R, chosen, NULL), "avarice opens");
+  n_sil = 0;
+  draw(0);
+  CHECK(n_sil == 11 && !strcmp(g_sil_key[0], "items:lum_berry") && g_sil_x[0] == 160 + 4 + 7 && g_sil_y[0] == 164 + 2 - 14,
+        "avarice berries: %d %s %g %g", n_sil, g_sil_key[0], g_sil_x[0], g_sil_y[0]);
+  {
+    me_intro_sprite sp[ME_MAX_INTRO];
+    int drawn = 0;
+    for (int t = 0; t < GC_ME_COUNT; t++) { /* nothing overflows, nothing is placed off the screen, every key is a known folder */
+      const int n = me_flow_intro_sprites(t, 160, 164, sp, ME_MAX_INTRO);
+      drawn += n > 0;
+      for (int i = 0; i < n; i++)
+        CHECK(sp[i].x > 40 && sp[i].x < 280 && sp[i].y > 100 && sp[i].y < 200 &&
+                  (!strncmp(sp[i].key, "images/", 7) || !strcmp(sp[i].key, "items")),
+              "sprite %d of encounter %d placed on the screen: %s %g %g", i, t, sp[i].key, sp[i].x, sp[i].y);
+    }
+    CHECK(drawn == 23, "23 encounters draw an intro: %d", drawn);
+  }
+
+  /* Training Session: the Pokemon, then one of the 25 natures (scrolling list) or its abilities */
+  run_at(GC_ME_TRAINING_SESSION, 3);
+  R.screen.option_pick[1] = GC_PICK_MEMBER_NATURE;
+  R.screen.option_pick[2] = GC_PICK_MEMBER_ABILITY;
+  CHECK(me_flow_open(&R, chosen, NULL), "training opens");
+  press(BTN_DOWN);
+  press(BTN_ACTION);
+  draw(1);
+  CHECK(has_text(1, "Pikachu  Lv.30"), "the party list first");
+  press(BTN_ACTION); /* Pikachu */
+  draw(1);
+  CHECK(has_text(1, "nature:hardy (new)") && !has_text(1, "nature:nature"), "the nature list starts at Hardy, new without a dex");
+  for (int i = 0; i < 24; i++) press(BTN_DOWN);
+  press(BTN_ACTION); /* the 25th */
+  CHECK(n_got == 1 && got.option == 1 && got.b == 0 && got.c == 24, "last nature: %d %d %d", got.option, got.b, got.c);
+  CHECK(!strcmp(gc_nature_key(24), "nature:quirky"), "nature key table");
+  run_at(GC_ME_TRAINING_SESSION, 3);
+  R.screen.option_pick[1] = GC_PICK_MEMBER_NATURE;
+  R.screen.option_pick[2] = GC_PICK_MEMBER_ABILITY;
+  CHECK(me_flow_open(&R, chosen, NULL), "training opens again");
+  press(BTN_DOWN);
+  press(BTN_DOWN);
+  press(BTN_ACTION);
+  press(BTN_ACTION);
+  draw(1);
+  CHECK(has_text(1, "Ability9"), "Pikachu's first ability (Static): %s", "list");
+  press(BTN_CANCEL);
+  draw(1);
+  CHECK(has_text(1, "Pikachu  Lv.30"), "B on the abilities goes back to the party");
+  press(BTN_ACTION);
+  press(BTN_DOWN);
+  press(BTN_ACTION);
+  CHECK(n_got == 1 && got.option == 2 && got.b == 0 && (got.c == 1 || got.c == 2), "an ability slot: %d %d %d", got.option, got.b, got.c);
 
   /* a screen that is not an encounter does not open */
   R.screen.kind = GC_SCREEN_COMMAND;
