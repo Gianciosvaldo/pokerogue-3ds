@@ -152,7 +152,7 @@ static struct {
 static int n_manage, n_transfers, n_transfer_copies, n_transfer_refused, n_discards;
 static bool scanner_fixture;
 static int n_scanner_yes, n_scanner_no, n_scanner_windows;
-static int n_shops, n_maps, n_item_opens, n_seamless, n_level_ups, n_level_windows, n_foe_bars, n_foe_hidden, n_key_bars, n_trays, n_fainted_balls;
+static int n_shops, n_maps, n_item_opens, n_seamless, n_level_ups, n_level_windows, n_foe_bars, n_foe_hidden, n_key_bars, n_trays, n_fainted_balls, n_reordered_trays;
 static bool save_on, resume_on, quit_on;
 static int n_menu_opened, n_menu_yes, n_menu_no, n_quit_callbacks;
 /* RUNTEST_CUSTOM */
@@ -740,11 +740,21 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
       BAD("no party tray");
     } else {
       n_trays++;
+      bool reordered = false;
       for (int i = 0; i < 6; i++) {
-        const int exp = i >= r->n_party ? BV_BALL_EMPTY : r->party[i].b.hp > 0 ? BV_BALL_ALIVE : BV_BALL_FAINTED;
+        /* upstream's tray (PokeballTray.showPbTray(getPlayerParty())) lists the party in its order, which a lead change in battle moves */
+        const int idx = i < r->n_party ? r->party_order[i] : -1;
+        if (i < r->n_party && (idx < 0 || idx >= r->n_party)) {
+          BAD("party order slot %d points at party[%d] of %d", i, idx, r->n_party);
+          continue;
+        }
+        const int exp = i >= r->n_party ? BV_BALL_EMPTY : r->party[idx].b.hp > 0 ? BV_BALL_ALIVE : BV_BALL_FAINTED;
+        const int stored = i >= r->n_party ? BV_BALL_EMPTY : r->party[i].b.hp > 0 ? BV_BALL_ALIVE : BV_BALL_FAINTED;
         if (opts->party_balls[i] != exp) BAD("party tray slot %d shows %d, the party has %d", i, opts->party_balls[i], exp);
+        if (exp != stored) reordered = true;
         if (opts->party_balls[i] == BV_BALL_FAINTED) n_fainted_balls++;
       }
+      if (reordered) n_reordered_trays++;
     }
   }
   const gc_mon* me=acting_mon(r);
@@ -1983,7 +1993,8 @@ int main(int argc, char** argv) {
   printf("boss foes shown: %d, shield breaks shown: %d\n", n_boss_foes, n_boss_shields);
   if (!n_boss_foes && n_scenes > 50) BAD("no boss was shown");
   printf("commands with the foe's item bar: %d; enemy items with no icon row: %d\n", n_foe_bars, n_foe_hidden);
-  printf("commands with the key item bar: %d; party trays: %d (%d fainted balls)\n", n_key_bars, n_trays, n_fainted_balls);
+  printf("commands with the key item bar: %d; party trays: %d (%d fainted balls, %d in a party order that differs from storage)\n", n_key_bars,
+         n_trays, n_fainted_balls, n_reordered_trays);
   if(FORM.enabled) {
     printf("Check Team: %d opens, directed form action stage %d\n",FORM.opens,FORM.stage);
     if(FORM.opens!=2 || FORM.stage!=3)BAD("Check Team form action/return was not exercised");
@@ -1993,6 +2004,7 @@ int main(int argc, char** argv) {
   if (!n_foe_bars && n_scenes > 50) BAD("no command showed the foe's items");
   if (!n_key_bars && n_scenes > 50) BAD("no command showed key items");
   if (!n_fainted_balls && n_scenes > 50) BAD("no party tray showed a fainted member");
+  if (!n_reordered_trays && n_scenes > 50) BAD("no party tray was checked in a party order that differs from storage");
   if ((!n_manage || !n_transfers || !n_discards) && n_scenes > 50) BAD("Manage Items was never used (opened %d, transfers %d, discards %d)", n_manage, n_transfers, n_discards);
   if (n_level_windows < n_level_ups) BAD("%d level ups without the stat window", n_level_ups - n_level_windows);
   if (!n_level_ups && n_scenes > 50) BAD("no level up was shown");
