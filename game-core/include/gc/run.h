@@ -185,12 +185,14 @@ typedef struct {
     bool option_ok[8];
     /* what the encounter's screen needs to word its texts and ask for its picks (gc_mystery_setup_screen): the {{tokens}} the intro, option
      * labels and tooltips use (only the encounters ported with their texts fill them), and for each option what the player picks first:
-     * GC_PICK_NONE, a party member (GC_CH_MYSTERY.b) or a party member and then one of its moves (b and c) */
+     * GC_PICK_NONE, a party member (GC_CH_MYSTERY.b) or a party member and then one of its moves, natures or abilities (b and c) */
     pr_msg_arg me_args[8];
     int n_me_args;
     uint8_t option_pick[8];
 } gc_screen;
-enum { GC_PICK_NONE = 0, GC_PICK_MEMBER = 1, GC_PICK_MEMBER_MOVE = 2 };
+enum { GC_PICK_NONE = 0, GC_PICK_MEMBER = 1, GC_PICK_MEMBER_MOVE = 2,
+       GC_PICK_MEMBER_NATURE = 3,    /* a party member and then one of the 25 natures (c); gc_training_nature_new marks the ones new to its dex entry */
+       GC_PICK_MEMBER_ABILITY = 4    /* a party member and then one of its abilities (c = the ability slot 0..2); gc_training_abilities lists them */ };
 
 
 /* ---------------------------------------------------------------- the run's state */
@@ -342,7 +344,7 @@ typedef struct gc_run {
     pr_battle bt;               /* battle-core's scene: field, weather, tags, the turn's commands */
     pr_engine eng;
     gc_screen screen;           /* what gc_run_screen returns */
-    uint64_t internal_[2048];   /* game-core's own state (the run's phase queue...): opaque */
+    uint64_t internal_[3072];   /* game-core's own state (the run's phase queue...): opaque */
     /* the event queue */
     gc_event events[GC_MAX_EVENTS];
     int ev_head, ev_count;

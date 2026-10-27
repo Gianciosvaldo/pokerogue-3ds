@@ -148,6 +148,7 @@ bool gc_mystery_pick_ok(const gc_run *run, int type, int option, int idx)
     /* Fun and Games!: isPokemonValidForEncounterOptionSelection, any Pokemon that is not fainted */
     if (type == GC_ME_FUN_AND_GAMES && option == 0) return gc_fg_pick_ok(run, idx);
     if (type == GC_ME_GLOBAL_TRADE_SYSTEM) return gc_gts_pick_ok(run, option, idx);
+    if (type == GC_ME_TRAINING_SESSION && option < 3) return gc_training_pick_ok(run, idx);
     return false;
 }
 
@@ -402,10 +403,23 @@ static void setup_texts(gc_run *run)
     case GC_ME_GLOBAL_TRADE_SYSTEM:
         s->option_pick[0] = s->option_pick[1] = s->option_pick[2] = GC_PICK_MEMBER;
         break;
+    case GC_ME_TRAINING_SESSION:
+        s->option_pick[0] = GC_PICK_MEMBER;
+        s->option_pick[1] = GC_PICK_MEMBER_NATURE;
+        s->option_pick[2] = GC_PICK_MEMBER_ABILITY;
+        break;
     default:
         break;
     }
 }
+
+/* the locale key of a nature's name */
+static const char *const nature_keys[25] = {
+    "nature:hardy", "nature:lonely", "nature:brave", "nature:adamant", "nature:naughty", "nature:bold", "nature:docile",
+    "nature:relaxed", "nature:impish", "nature:lax", "nature:timid", "nature:hasty", "nature:serious", "nature:jolly",
+    "nature:naive", "nature:modest", "nature:mild", "nature:quiet", "nature:bashful", "nature:rash", "nature:calm",
+    "nature:gentle", "nature:sassy", "nature:careful", "nature:quirky"};
+const char *gc_nature_key(int nature) { return nature >= 0 && nature < 25 ? nature_keys[nature] : "nature:hardy"; }
 
 bool gc_mystery_member_ok(const gc_run *run, int option, int idx)
 {
@@ -447,6 +461,9 @@ void gc_mystery_setup_screen(gc_run *run)
     } else if (type == GC_ME_SLUMBERING_SNORLAX) {
         /* the battle and the rest need nothing; stealing needs a Pokemon allowed in battle with a stealing move */
         s->option_ok[2] = gc_mystery_primary_pokemon(run, type, 2) >= 0;
+    } else if (type == GC_ME_TRAINING_SESSION) {
+        /* the three trainings need a Pokemon the party screen lets the player pick (isPokemonValidForEncounterOptionSelection); leaving needs nothing */
+        for (int o = 0; o < 3; o++) s->option_ok[o] = any_pick_ok(run, type, o);
     } else if (type == GC_ME_DARK_DEAL) {
         /* both options are open: the encounter's own requirement is a party of two */
     } else if (type == GC_ME_SHADY_VITAMIN_DEALER) {
@@ -1140,12 +1157,7 @@ void gc_mystery_post(gc_run *run, const gc_rphase *p)
     m->b.nature = (uint8_t)nature;
     gc_items_to_battle(run);
     pr_recalculate_stats(&run->bt, &m->b);
-    static const char *const nature_keys[25] = {
-        "nature:hardy", "nature:lonely", "nature:brave", "nature:adamant", "nature:naughty", "nature:bold", "nature:docile",
-        "nature:relaxed", "nature:impish", "nature:lax", "nature:timid", "nature:hasty", "nature:serious", "nature:jolly",
-        "nature:naive", "nature:modest", "nature:mild", "nature:quiet", "nature:bashful", "nature:rash", "nature:calm",
-        "nature:gentle", "nature:sassy", "nature:careful", "nature:quirky"};
-    gc_ev_msg(run, "mysteryEncounters/shadyVitaminDealer:cheapSideEffects", 1, pr_arg_key("newNature", nature_keys[nature]));
+    gc_ev_msg(run, "mysteryEncounters/shadyVitaminDealer:cheapSideEffects", 1, pr_arg_key("newNature", gc_nature_key(nature)));
 }
 
 bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why, bool *ok)
@@ -1227,19 +1239,7 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_TRAINING_SESSION:
-        if (option == 0 || option == 1 || option == 2) {
-            int target = (b >= 0 && b < run->n_party) ? b : 0;
-            /* Increase lowest IV to 31 */
-            int min_iv_idx = 0;
-            for (int i = 1; i < 6; i++) {
-                if (run->party[target].b.ivs[i] < run->party[target].b.ivs[min_iv_idx]) min_iv_idx = i;
-            }
-            run->party[target].b.ivs[min_iv_idx] = 31;
-            pr_calculate_stats(&run->bt, &run->party[target].b);
-            end_mystery_encounter_leave(run);
-            return true;
-        }
-        end_mystery_encounter_leave(run);
+        gc_training_execute(run, option, b, c);
         return true;
 
     case GC_ME_DEPARTMENT_STORE_SALE:
@@ -1510,6 +1510,7 @@ void gc_me_win_rewards(gc_run *run)
     gc_internal *in = gc_int(run);
     in->me_reward.active = false;
     gc_rq_push(run, gc_rp(RP_BATTLE_END, 1, 0, 0));
+    if (in->me_reward.before) gc_rq_push(run, gc_rp(RP_ME_TRAINING_RETURN, 0, 0, 0));   /* onBeforeRewardsPhase */
     pr_reward_custom *c = &in->reward.me_custom;
     memset(c, 0, sizeof *c);
     if (in->me_reward.has_item) c->options[c->n_options++] = in->me_reward.item;
