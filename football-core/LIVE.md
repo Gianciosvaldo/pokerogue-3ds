@@ -12,7 +12,7 @@ Classic parties, cost limits, saves and battle APIs remain six-wide.
 boosts and a permutation assigning each member to one of 22 slots. There are
 11 offense slots (QB, RB, three WR, TE, five OL) and 11 defense slots (four DL,
 three LB, two CB, FS, SS). A swap always preserves one distinct member per slot.
-Auto-assignment provides a starting point; it is never the only way to assign.
+The draft fills the slots in order, so the lineup is the picks; auto-assignment and swapping remain for changing it later.
 
 The draft uses classic species costs and profile cost reductions with a 55-point
 aggregate limit. Only base-form starters available in the current Classic/Endless
@@ -21,7 +21,11 @@ form, nature, ability and shiny unlocks. Football chooses a valid unlocked start
 configuration, including shiny-only or non-default ability/nature catches.
 A profile is required; a missing profile never opens the entire Pokédex.
 Duplicate species and evolved starting species are rejected. The catalog starts
-with cheaper unlocked species; Left/Right pages, A drafts, B undoes the last draft.
+with cheaper unlocked species. The draft is one pick for each position, in slot order (Quarterback, Running back, Wide receiver 1
+... Strong safety, `football_slot_titles`): the header names the slot being filled, the pick goes into it (`lineup` starts as the
+identity and the draft never assigns), every row is tagged with the position its species is best at (`FootballPlayer.position`,
+`football_position_label`) and the top screen shows the highlighted species' eight attributes. Left/Right pages, A picks for the
+slot, B takes the last pick back. After the 22nd pick the round hub opens (no auto-assignment); its B opens the lineup screen.
 All 22 slots must be filled. A pool smaller than 22 or too expensive even with
 its cheapest 22 members shows a progression/cost-reduction notice. Existing saves
 are also checked against the current profile's original starter unlocks and remain
