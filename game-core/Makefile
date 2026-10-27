@@ -1166,3 +1166,10 @@ fusion-evolution-host-test: $(BUILD)/fusion_evolution_host_test
 	$<
 test: fusion-evolution-host-test
 .PHONY: fusion-evolution-host-test
+
+$(BUILD)/enemy_fusion_host_test: tests/enemy_fusion_host_test.c tests/fixtures/enemy-fusion.native.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+enemy-fusion-host-test: $(BUILD)/enemy_fusion_host_test
+	$(BUILD)/enemy_fusion_host_test
+test: enemy-fusion-host-test
+.PHONY: enemy-fusion-host-test

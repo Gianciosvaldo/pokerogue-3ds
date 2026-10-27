@@ -104,6 +104,15 @@ void gc_mon_new_enemy(gc_run *run, gc_mon *m, int species, int level, const pr_e
     p->id = g->id;
     p->species = (uint16_t)species;
     p->form = (uint8_t)g->form;
+    /* generateFusionSpecies has already run in the constructor snapshot.
+     * Preserve it both before moveset generation and in gc_refresh_enemy. */
+    if (g->fusion_species > 0) {
+        p->fusion_species = (uint16_t)g->fusion_species;
+        p->fusion_form = (uint8_t)g->fusion_form;
+        p->fusion_ability_index = (int8_t)g->fusion_ability_index;
+        p->fusion_gender = (int8_t)g->fusion_gender;
+        p->fusion_gender_known = true;
+    }
     p->level = level;
     for (int i = 0; i < 6; i++) p->ivs[i] = (uint8_t)g->ivs[i];
     p->nature = (uint8_t)g->nature;
