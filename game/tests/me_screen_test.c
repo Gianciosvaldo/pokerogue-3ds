@@ -130,6 +130,8 @@ void text_wrap(text_style st, const char* s, const text_opts* o, char* out, int 
 }
 
 const char* i18n_species_name(int id) { return id == 25 ? "Pikachu" : id == 131 ? "Lapras" : "Mon"; }
+const char* i18n_ability_name(int id) { static char b[24]; snprintf(b, sizeof b, "Ability%d", id); return b; }
+const char* i18n_t(char* out, int n, const char* key, ...) { snprintf(out, (size_t)n, "%s", key); return out; }
 const char* i18n_move_name(int id) { return id == 57 ? "Surf" : id == 33 ? "Tackle" : "Move"; }
 
 /* a small locale: the real lines of Shady Vitamin Dealer and Lost at Sea (English), and the names the texts name */
@@ -456,6 +458,40 @@ int main(void) {
     }
     CHECK(drawn == 23, "23 encounters draw an intro: %d", drawn);
   }
+
+  /* Training Session: the Pokemon, then one of the 25 natures (scrolling list) or its abilities */
+  run_at(GC_ME_TRAINING_SESSION, 3);
+  R.screen.option_pick[1] = GC_PICK_MEMBER_NATURE;
+  R.screen.option_pick[2] = GC_PICK_MEMBER_ABILITY;
+  CHECK(me_flow_open(&R, chosen, NULL), "training opens");
+  press(BTN_DOWN);
+  press(BTN_ACTION);
+  draw(1);
+  CHECK(has_text(1, "Pikachu  Lv.30"), "the party list first");
+  press(BTN_ACTION); /* Pikachu */
+  draw(1);
+  CHECK(has_text(1, "nature:hardy (new)") && !has_text(1, "nature:nature"), "the nature list starts at Hardy, new without a dex");
+  for (int i = 0; i < 24; i++) press(BTN_DOWN);
+  press(BTN_ACTION); /* the 25th */
+  CHECK(n_got == 1 && got.option == 1 && got.b == 0 && got.c == 24, "last nature: %d %d %d", got.option, got.b, got.c);
+  CHECK(!strcmp(gc_nature_key(24), "nature:quirky"), "nature key table");
+  run_at(GC_ME_TRAINING_SESSION, 3);
+  R.screen.option_pick[1] = GC_PICK_MEMBER_NATURE;
+  R.screen.option_pick[2] = GC_PICK_MEMBER_ABILITY;
+  CHECK(me_flow_open(&R, chosen, NULL), "training opens again");
+  press(BTN_DOWN);
+  press(BTN_DOWN);
+  press(BTN_ACTION);
+  press(BTN_ACTION);
+  draw(1);
+  CHECK(has_text(1, "Ability9"), "Pikachu's first ability (Static): %s", "list");
+  press(BTN_CANCEL);
+  draw(1);
+  CHECK(has_text(1, "Pikachu  Lv.30"), "B on the abilities goes back to the party");
+  press(BTN_ACTION);
+  press(BTN_DOWN);
+  press(BTN_ACTION);
+  CHECK(n_got == 1 && got.option == 2 && got.b == 0 && (got.c == 1 || got.c == 2), "an ability slot: %d %d %d", got.option, got.b, got.c);
 
   /* a screen that is not an encounter does not open */
   R.screen.kind = GC_SCREEN_COMMAND;

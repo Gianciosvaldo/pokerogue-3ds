@@ -44,6 +44,12 @@ static int ability_of_slot(const gc_mon *m, int slot)
     return slot == 0 ? f->ability1 : slot == 1 ? f->ability2 : f->ability_hidden;
 }
 
+int gc_ability_of_slot(const gc_run *run, int member, int slot)
+{
+    if (member < 0 || member >= run->n_party || slot < 0 || slot > 2) return 0;
+    return ability_of_slot(&run->party[member], slot);
+}
+
 /* the ability list of option 3: slots and whether each is new to the starter (checkStarterAbilityIndexUnlocked) */
 int gc_training_abilities(const gc_run *run, int member, int slots[3], bool is_new[3])
 {

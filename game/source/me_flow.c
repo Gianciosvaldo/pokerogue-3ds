@@ -84,6 +84,7 @@ static struct {
   int type;
   int option, member;                  /* the option taken, the party slot picked */
   int move;
+  int trait[25], n_trait;              /* the natures or ability slots the list offers, by row */
   void (*on_choice)(const me_choice* c, void* arg);
   void* arg;
 } F;
@@ -234,6 +235,7 @@ int me_flow_intro_sprites(int type, float cx, float floor_y, me_intro_sprite* ou
 
 static void open_question(int cursor);
 static void open_members(void);
+static void open_moves(void);
 
 static void finish(int option, int b, int c)
 {
@@ -271,6 +273,49 @@ static void on_move(int idx, void* arg)
   finish(F.option, F.member, idx);
 }
 
+static void on_move_back(void* arg);
+
+static void on_trait(int idx, void* arg)
+{
+  (void)arg;
+  finish(F.option, F.member, idx < F.n_trait ? F.trait[idx] : 0);
+}
+
+/* the natures (25 of them) or the abilities a member can have, "(new)" where the dex does not have it yet */
+static void open_traits(void)
+{
+  static me_args a; /* static: 25 rows are too much for the 3DS stack; me_screen_open copies it */
+  memset(&a, 0, sizeof a);
+  fill_title(&a);
+  const bool nature = F.run->screen.option_pick[F.option] == GC_PICK_MEMBER_NATURE;
+  snprintf(a.query, sizeof a.query, nature ? "Choose a Nature." : "Choose an Ability.");
+  F.n_trait = 0;
+  if (nature) {
+    for (int i = 0; i < 25 && a.n < ME_MAX_OPTIONS; i++) {
+      char nm[40];
+      i18n_t(nm, sizeof nm, gc_nature_key(i), NULL); /* the key is already "nature:<name>" */
+      snprintf(a.options[a.n].label, ME_LABEL_LEN, "%s%s", nm, gc_training_nature_new(F.run, F.member, i) ? " (new)" : "");
+      a.options[a.n].ok = true;
+      F.trait[F.n_trait++] = i;
+      a.n++;
+    }
+  } else {
+    int slots[3];
+    bool fresh[3];
+    const int n = gc_training_abilities(F.run, F.member, slots, fresh);
+    for (int i = 0; i < n; i++) {
+      snprintf(a.options[a.n].label, ME_LABEL_LEN, "%s%s", i18n_ability_name(gc_ability_of_slot(F.run, F.member, slots[i])), fresh[i] ? " (new)" : "");
+      a.options[a.n].ok = true;
+      F.trait[F.n_trait++] = slots[i];
+      a.n++;
+    }
+  }
+  a.can_back = true;
+  a.on_pick = on_trait;
+  a.on_back = on_move_back;
+  if (!me_screen_open(&a)) finish(F.option, F.member, 0);
+}
+
 static void on_move_back(void* arg)
 {
   (void)arg;
@@ -280,7 +325,7 @@ static void on_move_back(void* arg)
 static void open_moves(void)
 {
   const gc_mon* m = &F.run->party[F.member];
-  me_args a;
+  static me_args a; /* static: 25 rows are too much for the 3DS stack; me_screen_open copies it */
   memset(&a, 0, sizeof a);
   fill_title(&a);
   snprintf(a.query, sizeof a.query, "Choose a move.");
@@ -306,8 +351,11 @@ static void on_member(int idx, void* arg)
 {
   (void)arg;
   F.member = slot_of(idx);
-  if (F.run->screen.option_pick[F.option] == GC_PICK_MEMBER_MOVE)
+  const int pick = F.run->screen.option_pick[F.option];
+  if (pick == GC_PICK_MEMBER_MOVE)
     open_moves();
+  else if (pick == GC_PICK_MEMBER_NATURE || pick == GC_PICK_MEMBER_ABILITY)
+    open_traits();
   else
     finish(F.option, F.member, 0);
 }
@@ -320,7 +368,7 @@ static void on_member_back(void* arg)
 
 static void open_members(void)
 {
-  me_args a;
+  static me_args a; /* static: 25 rows are too much for the 3DS stack; me_screen_open copies it */
   memset(&a, 0, sizeof a);
   fill_title(&a);
   snprintf(a.query, sizeof a.query, "Choose a Pokemon.");
@@ -351,7 +399,7 @@ static void on_option(int idx, void* arg)
 static void open_question(int cursor)
 {
   const gc_screen* s = gc_run_screen(F.run);
-  me_args a;
+  static me_args a; /* static: 25 rows are too much for the 3DS stack; me_screen_open copies it */
   memset(&a, 0, sizeof a);
   fill_title(&a);
   fmt("description", NULL, 0, false, a.description, sizeof a.description);

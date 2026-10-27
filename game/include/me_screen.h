@@ -21,7 +21,7 @@
 extern "C" {
 #endif
 
-#define ME_MAX_OPTIONS 8
+#define ME_MAX_OPTIONS 25
 #define ME_LABEL_LEN 96
 #define ME_TOOLTIP_LEN 320
 #define ME_TEXT_LEN 640
