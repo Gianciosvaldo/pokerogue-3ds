@@ -508,6 +508,10 @@ typedef struct pr_battle {
     int wave_index;
     int8_t game_mode;          /* gameMode.modeId (GameModes), -1 = unknown */
     uint8_t battle_type;       /* BattleType */
+    /* currentBattle.mysteryEncounter.startOfBattleEffects: moves a Pokemon uses before the first command (source battler, its one target,
+     * the move, the use mode); pr_run_start_of_battle_effects plays them once */
+    struct { int8_t source, target; uint16_t move; uint8_t use_mode; } me_start[4];
+    uint8_t n_me_start;
     bool me_no_flee;           /* currentBattle.mysteryEncounter.fleeAllowed === false (an encounter's fight run as a wild battle): no running, no forcing the wild enemy out, no switching out of its own accord */
     uint16_t last_move;        /* currentBattle.lastMove, 0 = none */
     int8_t last_player_involved, last_enemy_involved;  /* -1 = undefined */

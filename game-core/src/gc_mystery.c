@@ -379,6 +379,22 @@ static void setup_texts(gc_run *run)
         }
         break;
     }
+    case GC_ME_SLUMBERING_SNORLAX: {
+        pr_msg_arg name;
+        gc_snorlax_tokens(run, &name);
+        screen_arg(s, name);
+        const int p = gc_mystery_primary_pokemon(run, type, 2);
+        if (p >= 0) {
+            screen_arg(s, pr_arg_pokemon_name(NULL, "option3PrimaryName", &run->party[p].b));
+            int move = 0;
+            for (int k = 0; k < run->party[p].b.n_moves && !move; k++) {
+                const int m = run->party[p].b.moves[k];
+                if (m == MOVE_ID_PLUCK || m == MOVE_ID_COVET || m == MOVE_ID_KNOCK_OFF || m == MOVE_ID_THIEF || m == MOVE_ID_TRICK || m == MOVE_ID_SWITCHEROO) move = m;
+            }
+            screen_arg(s, pr_arg_move("option3PrimaryMove", move));
+        }
+        break;
+    }
     case GC_ME_FUN_AND_GAMES:
         s->option_pick[0] = GC_PICK_MEMBER;
         screen_arg(s, pr_arg_money_en_us("option1Money", pr_run_get_wave_money_amount(run->wave, 1.5)));
@@ -428,6 +444,9 @@ void gc_mystery_setup_screen(gc_run *run)
     } else if (type == GC_ME_FIGHT_OR_FLIGHT) {
         /* the battle and leaving need nothing; stealing needs a Pokemon allowed in battle with a stealing move */
         s->option_ok[1] = gc_mystery_primary_pokemon(run, type, 1) >= 0;
+    } else if (type == GC_ME_SLUMBERING_SNORLAX) {
+        /* the battle and the rest need nothing; stealing needs a Pokemon allowed in battle with a stealing move */
+        s->option_ok[2] = gc_mystery_primary_pokemon(run, type, 2) >= 0;
     } else if (type == GC_ME_DARK_DEAL) {
         /* both options are open: the encounter's own requirement is a party of two */
     } else if (type == GC_ME_SHADY_VITAMIN_DEALER) {
@@ -712,9 +731,9 @@ int gc_mystery_primary_pokemon(const gc_run *run, int type, int option)
             }
         return -1;
     }
-    if (type == GC_ME_FIGHT_OR_FLIGHT) {
+    if (type == GC_ME_FIGHT_OR_FLIGHT || type == GC_ME_SLUMBERING_SNORLAX) {
         /* MoveRequirement(STEALING_MOVES, true): the first Pokemon of the party allowed in battle with one of the moves */
-        if (option != 1) return -1;
+        if (option != (type == GC_ME_FIGHT_OR_FLIGHT ? 1 : 2)) return -1;
         for (int k = 0; k < run->n_party; k++)
             if (has_stealing_move(&run->party[run->party_order[k]])) return run->party_order[k];
         return -1;
@@ -1204,11 +1223,7 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_SLUMBERING_SNORLAX:
-        if (option == 0 || option == 1) {
-            start_mystery_wild_battle(run, SPECIES_ID_SNORLAX, wave_level, true, 3, 1);
-            return true;
-        }
-        end_mystery_encounter_leave(run);
+        gc_snorlax_execute(run, option);
         return true;
 
     case GC_ME_TRAINING_SESSION:
@@ -1475,3 +1490,43 @@ pr_rng gc_me_option_rng(const gc_run *run) { return me_option_rng(run); }
 void gc_me_prune_items(gc_run *run) { me_prune_items(run); }
 void gc_me_update_modifiers(gc_run *run) { me_update_modifiers(run); }
 void gc_me_end_shop(gc_run *run) { end_mystery_encounter_shop(run); }
+
+void gc_me_leave(gc_run *run) { end_mystery_encounter_leave(run); }
+
+void gc_me_add_start_effect(gc_run *run, int source, int target, int move)
+{
+    gc_internal *in = gc_int(run);
+    if (in->n_me_start >= 4) return;
+    in->me_start[in->n_me_start].source = (int8_t)source;
+    in->me_start[in->n_me_start].target = (int8_t)target;
+    in->me_start[in->n_me_start].move = (uint16_t)move;
+    in->me_start[in->n_me_start].use_mode = MOVE_USE_MODE_IGNORE_PP;
+    in->n_me_start++;
+}
+
+/* handleMysteryEncounterVictory for a fight whose option set rewards (setEncounterRewards): the battle's end, then the shop it set */
+void gc_me_win_rewards(gc_run *run)
+{
+    gc_internal *in = gc_int(run);
+    in->me_reward.active = false;
+    gc_rq_push(run, gc_rp(RP_BATTLE_END, 1, 0, 0));
+    pr_reward_custom *c = &in->reward.me_custom;
+    memset(c, 0, sizeof *c);
+    if (in->me_reward.has_item) c->options[c->n_options++] = in->me_reward.item;
+    if (in->me_reward.func >= 0) c->funcs[c->n_funcs++] = (uint16_t)in->me_reward.func;
+    c->fill_remaining = in->me_reward.fill;
+    c->reroll_multiplier = NAN;
+    c->allow_luck_upgrades = true;
+    end_mystery_encounter_shop(run);
+}
+
+/* setEncounterExp(primary.id, species.baseExp) (useWaveIndexMultiplier), the experience the Pokemon alone gets in the rewards phase */
+void gc_me_steal_exp(gc_run *run, int primary, int species)
+{
+    pr_exp_party pp;
+    const uint32_t id = run->party[primary].b.id;
+    gc_exp_party_build(run, &pp, &id, 1);
+    pp.trainer_battle = false;
+    pp.me_exp_multiplier = 1.0;   /* isBattleMysteryEncounter(): the encounter's expMultiplier, 1 */
+    gc_exp_party_queue(run, &pp, gc_form(species, 0)->base_exp, true);
+}

@@ -119,7 +119,11 @@ typedef struct {
     /* an encounter's fight that is not allowed to flee (withFleeAllowed(false)) and, for a fight with a guaranteed reward (Fight or Flight), what its
      * victory opens: setEncounterRewards({guaranteedModifierTypeOptions: [item], fillRemaining: false}). Not saved, for the same reason as fg */
     bool me_no_flee;
-    struct { bool active; pr_reward_option item; } me_reward;
+    struct { bool active, fill; int16_t func; bool has_item; pr_reward_option item; } me_reward;   /* the shop: one item (has_item) or one reward function (func >= 0) */
+    /* the encounter's startOfBattleEffects (source battler, its target, the move): copied into the battle at its setup, played once by the
+     * first TurnInitPhase */
+    struct { int8_t source, target; uint16_t move; uint8_t use_mode; } me_start[4];
+    uint8_t n_me_start;
 } gc_internal;
 gc_internal *gc_int(gc_run *run);
 
@@ -350,7 +354,13 @@ bool gc_me_new_boss(gc_run *run, pr_rng *r, int species, int level, bool second_
 void gc_fof_execute(gc_run *run, int option);                    /* Fight or Flight (src/gc_fof.c) */
 bool gc_fof_init(gc_run *run, gc_mon *boss, int *level, pr_reward_option *item);   /* onInit, worked out from the run (the oracle's test reads it) */
 bool gc_fof_tokens(gc_run *run, pr_msg_arg *enemy_name, pr_msg_arg *item_name);   /* the tokens onInit sets: enemyPokemon, itemName */
-void gc_fof_victory(gc_run *run);                               /* the fight is won: the item's shop, then the next wave */
+void gc_me_win_rewards(gc_run *run);                            /* an encounter's fight is won with setEncounterRewards in place: the shop it set, then the next wave */
+void gc_snorlax_execute(gc_run *run, int option);                /* Slumbering Snorlax (src/gc_snorlax.c) */
+void gc_snorlax_tokens(gc_run *run, pr_msg_arg *name);
+void gc_me_add_start_effect(gc_run *run, int source, int target, int move);   /* startOfBattleEffects.push({sourceBattlerIndex, targets: [target], move, useMode: IGNORE_PP}) */
+int gc_battle_start_effects(gc_run *run);                       /* handleMysteryEncounterBattleStartEffects: the engine runs them to its next stop */
+void gc_me_leave(gc_run *run);                                  /* leaveEncounterWithoutBattle(): no heal shop */
+void gc_me_steal_exp(gc_run *run, int primary, int species);    /* setEncounterExp(primary.id, species.baseExp) */                               /* the fight is won: the item's shop, then the next wave */
 bool gc_fof_preview(gc_run *run, int *species, int *form, bool *shiny, int *variant, const char **item_key);   /* what onInit made, for the question screen; false when it could not */
 void gc_me_leave_with_heal_shop(gc_run *run);                   /* leaveEncounterWithoutBattle(true) */
 void gc_me_leave_with_shop(gc_run *run, const char *key);       /* setEncounterRewards({guaranteedModifierTypeFuncs: [key], fillRemaining: false}), leaveEncounterWithoutBattle() */

@@ -7,7 +7,7 @@
 #include <string.h>
 
 const char *const pr_phase_name[PH_COUNT_] = {
-    [PH_QUIET_FORM_CHANGE] = "QuietFormChangePhase",
+    [PH_QUIET_FORM_CHANGE] = "QuietFormChangePhase", [PH_ME_START_CLEANUP] = "MysteryEncounterBattleStartCleanupPhase",
     [PH_FORM_CHANGE] = "FormChangePhase", [PH_END_EVOLUTION] = "EndEvolutionPhase",
     [PH_NONE] = "?", [PH_MARKER] = "DynamicPhaseMarker",
     [PH_TURN_START] = "TurnStartPhase", [PH_MOVE] = "MovePhase", [PH_MOVE_EFFECT] = "MoveEffectPhase",
@@ -790,6 +790,22 @@ void pr_run_turn(pr_battle *bt, pr_engine *e)
     /* the caller's pushNew("TurnStartPhase") + shiftPhase() */
     pr_phase_push(bt, e, pr_phase_new(e, PH_TURN_START, -1));
     run_phases(bt, e, shift_phase(bt, e));
+}
+
+void pr_run_start_of_battle_effects(pr_battle *bt, pr_engine *e)
+{
+    engine_reset(bt, e);
+    /* pushNew("MovePhase", source, targets, new PokemonMove(move), useMode) for each effect: the dynamic queue sorts them as it does any
+     * MovePhases; then pushNew("MysteryEncounterBattleStartCleanupPhase") */
+    for (int i = bt->n_me_start - 1; i >= 0; i--) {
+        pr_pokemon *source = bt->field[bt->me_start[i].source];
+        if (!source) continue;
+        const int8_t target = bt->me_start[i].target;
+        pr_unshift_move_phase(bt, e, source, bt->me_start[i].move, -1, &target, 1, bt->me_start[i].use_mode, 0);
+    }
+    bt->n_me_start = 0;
+    pr_phase_push(bt, e, pr_phase_new(e, PH_ME_START_CLEANUP, -1));
+    run_phases(bt, e, e->overflow ? -1 : shift_phase(bt, e));
 }
 
 static void engine_reset(pr_battle *bt, pr_engine *e)

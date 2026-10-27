@@ -583,6 +583,7 @@ void gc_new_battle(gc_run *run)
     in->custom_team_on = false;
     in->pillar.active = false;
     in->me_no_flee = in->me_reward.active = false;
+    in->n_me_start = 0;
 
     pr_new_battle_ctx ctx;
     memset(&ctx, 0, sizeof ctx);

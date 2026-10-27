@@ -4140,6 +4140,22 @@ void pr_init_final_boss_phase_two(pr_battle *bt, pr_engine *e, pr_pokemon *p)
     }
 }
 
+/* MysteryEncounterBattleStartCleanupPhase: the flinches and Endures the start-of-battle moves left are lapsed (TURN_END) in speed order and
+ * the PostTurnStatusEffectPhases (none are queued outside a TurnEndPhase here) go; the Pokemon of the field start the turn afresh. The
+ * game-over and fainted-lead switches the phase also queues are game-core's, where the turn's commands are asked for */
+static void me_start_cleanup_phase(pr_battle *bt, pr_engine *e)
+{
+    pr_speed_iter it;
+    pr_pokemon *p;
+    pr_speed_iter_init(bt, &it, ARENA_TAG_SIDE_BOTH);
+    while ((p = pr_speed_iter_next(bt, &it))) {
+        pr_lapse_tag(bt, e, p, BATTLER_TAG_TYPE_FLINCHED, BATTLER_TAG_LAPSE_TYPE_TURN_END);
+        pr_lapse_tag(bt, e, p, BATTLER_TAG_TYPE_ENDURING, BATTLER_TAG_LAPSE_TYPE_TURN_END);
+    }
+    for (int i = 0; i < 4; i++)
+        if (bt->field[i] && bt->field[i]->on_field) pr_reset_turn_data(bt->field[i]);
+}
+
 void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
 {
     switch (PH(ph)->type) {
@@ -4213,6 +4229,7 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_QUIET_FORM_CHANGE: quiet_form_change_phase(bt, e, ph); break;
     case PH_RETURN: return_phase(bt,e,ph); break;
     case PH_ATTEMPT_CAPTURE: attempt_capture_phase(bt, e, ph); break;
+    case PH_ME_START_CLEANUP: me_start_cleanup_phase(bt, e); break;
     default:
         /* a phase with no port: it was reported when it was queued */
         pr_note_unported(bt, (uint16_t)(PR_FEAT_PHASE_0 + PH(ph)->type));

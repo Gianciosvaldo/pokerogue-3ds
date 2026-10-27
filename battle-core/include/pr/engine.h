@@ -40,6 +40,7 @@ typedef enum {
     PH_ILLUSION_BREAK,         /* PR_DEV_ILLUSION only (no upstream phase): shows the disguise ending, queued after the hit's DamageAnimPhase */
     PH_REVIVAL_BLESSING,       /* appended: player party selection, paused mid-phase */
     PH_FORM_CHANGE, PH_END_EVOLUTION, /* appended: nonquiet scene form changes */
+    PH_ME_START_CLEANUP,       /* appended: MysteryEncounterBattleStartCleanupPhase */
     PH_COUNT_
 } pr_phase_type;
 #define PH_FIRST_UNPORTED PH_TERA
@@ -188,6 +189,10 @@ typedef struct pr_engine {
  * (the next TurnInitPhase) or a phase outside the turn (victory, a switch prompt...). The turn
  * commands in bt->commands / bt->pre_commands must be set. */
 void pr_run_turn(pr_battle *bt, pr_engine *e);
+
+/* handleMysteryEncounterBattleStartEffects (TurnInitPhase, before the first CommandPhase): a MovePhase for each of bt->me_start, then the
+ * MysteryEncounterBattleStartCleanupPhase; runs on to the next stop, as pr_run_turn (the queue empty: PH_TURN_INIT) */
+void pr_run_start_of_battle_effects(pr_battle *bt, pr_engine *e);
 
 /* The start of a battle, from where upstream's EncounterPhase ends to the first turn: the
  * trainer sends out its Pokemon (SummonPhase), the player sends out theirs, and the PostSummon
