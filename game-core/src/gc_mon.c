@@ -343,8 +343,21 @@ static bool pre_form_identity(const gc_mon *m, const gc_evo *e, bool fusion)
 
 static bool pre_form_ok(const gc_mon *m, const gc_evo *e) { return pre_form_identity(m, e, false); }
 
-/* SpeciesEvolutionCondition.conditionsFulfilled */
-static bool conditions_fulfilled(gc_run *run, const gc_mon *m, const gc_evo *e, bool football_choice, bool fusion)
+/* The move a member does not know and, as far as level-ups go, has no more chance to learn: its species learns it only at levels the member
+ * has gone past (from_level, the level before the level-up) or not by level at all (a relearn or egg move). */
+static bool move_missed(const gc_mon *m, int move, int from_level)
+{
+    const pr_species *sp = gc_species(m->b.species);
+    if (!sp) return false;
+    for (int i = 0; i < sp->level_moves.n; i++)
+        if (sp->level_moves.v[i].move == move && sp->level_moves.v[i].level > from_level) return false;
+    return true;
+}
+
+/* SpeciesEvolutionCondition.conditionsFulfilled. waive: a bit for each condition key (1u << GC_EVO_*) that counts as met whether it is or
+ * not; missed_from: with a level (not -1), a move the member does not know counts as met when move_missed. 0 and -1 for every upstream
+ * rule: only the football fallback (gc_mon_football_evolutions) passes any */
+static bool conditions_fulfilled(gc_run *run, const gc_mon *m, const gc_evo *e, bool football_choice, bool fusion, unsigned waive, int missed_from)
 {
     const pr_pokemon *p = &m->b;
     for (int i = 0; i < e->n_cond; i++) {
@@ -355,7 +368,7 @@ static bool conditions_fulfilled(gc_run *run, const gc_mon *m, const gc_evo *e, 
         case GC_EVO_TIME:
             ok = has_value(c, pr_run_get_time_of_day(run->biome, run->wave, run->wave_cycle_offset));
             break;
-        case GC_EVO_MOVE: ok = knows(p, c->v[0]); break;
+        case GC_EVO_MOVE: ok = knows(p, c->v[0]) || (missed_from >= 0 && move_missed(m, c->v[0], missed_from)); break;
         case GC_EVO_MOVE_TYPE:
             for (int k = 0; k < PR_N_MOVES(p); k++) ok |= PR_MOVES(p)[k] && pr_moves[PR_MOVES(p)[k]].type == c->v[0];
             break;
@@ -422,7 +435,7 @@ static bool conditions_fulfilled(gc_run *run, const gc_mon *m, const gc_evo *e, 
             break;
         }
         }
-        if (!ok) return false;
+        if (!ok && !((waive >> c->key) & 1u)) return false;
     }
     return true;
 }
@@ -437,7 +450,7 @@ int gc_mon_get_evolution(gc_run *run, const gc_mon *m)
         if (e->item) continue;                                   /* item === this.item: NONE only */
         if (m->b.level < e->level) continue;
         if (!pre_form_ok(m, e)) continue;                         /* getFormKey() === preFormKey */
-        if (!conditions_fulfilled(run, m, e, false, false)) continue;
+        if (!conditions_fulfilled(run, m, e, false, false, 0, -1)) continue;
         return se->start + i;
     }
     return -1;
@@ -461,16 +474,19 @@ int gc_mon_get_evolution_target(gc_run *run, const gc_mon *m, bool *fusion)
                 return -1; /* an earlier gender-gated candidate cannot be guessed */
             }
         }
-        if (!conditions_fulfilled(run, m, e, false, true)) continue;
+        if (!conditions_fulfilled(run, m, e, false, true, 0, -1)) continue;
         *fusion = true;
         return se->start + i;
     }
     return -1;
 }
 
-/* Football offers validated split outcomes instead of silently taking the first.
- * The Shedinja rule is a choice of replacement, rather than an extra spawn. */
-int gc_mon_football_evolutions(gc_run *run, const gc_mon *m, int *out, int cap)
+/* What a football member has no way to meet: weather and a party type (a member plays alone, in no biome's weather), a number of treasures,
+ * and a gender it was not drafted with. A move it missed is the same (move_missed): Annihilape's Rage Fist, which a ten-level jump passes
+ * while the member is still a Mankey, or Mamoswine's Ancient Power, which Piloswine only relearns. */
+#define FOOTBALL_WAIVED ((1u << GC_EVO_WEATHER) | (1u << GC_EVO_PARTY_TYPE) | (1u << GC_EVO_TREASURE_TRACKER) | (1u << GC_EVO_GENDER))
+
+static int football_evolutions(gc_run *run, const gc_mon *m, int *out, int cap, unsigned waive, int missed_from)
 {
     const gc_species_evo *se = species_evo(m->b.species);
     if (!se || m->pause_evolutions) return 0;
@@ -478,11 +494,22 @@ int gc_mon_football_evolutions(gc_run *run, const gc_mon *m, int *out, int cap)
     for (int i = 0; i < se->n; ++i) {
         const gc_evo *e = &gc_evo_data[se->start + i];
         if (e->item || m->b.level < e->level || !pre_form_ok(m,e)
-            || !conditions_fulfilled(run,m,e,true,false)) continue;
+            || !conditions_fulfilled(run,m,e,true,false,waive,missed_from)) continue;
         if (n == cap) return -1;
         out[n++] = se->start + i;
     }
     return n;
+}
+
+/* Football offers validated split outcomes instead of silently taking the first.
+ * The Shedinja rule is a choice of replacement, rather than an extra spawn.
+ * A species with none it can take by those rules takes the ones that ask for nothing but what a football member cannot give
+ * (FOOTBALL_WAIVED, move_missed): so every level evolution happens by its level, while the ones that work keep working as they did.
+ * from_level: the member's level before this level-up. */
+int gc_mon_football_evolutions(gc_run *run, const gc_mon *m, int from_level, int *out, int cap)
+{
+    const int n = football_evolutions(run, m, out, cap, 0, -1);
+    return n == 0 ? football_evolutions(run, m, out, cap, FOOTBALL_WAIVED, from_level) : n;
 }
 
 /* EvolutionItemModifier.apply, not a fusion: the first of the species' evolutions whose item matches and validates
@@ -494,7 +521,7 @@ int gc_mon_item_evolution(gc_run *run, const gc_mon *m, int item)
     for (int i = 0; i < se->n; i++) {
         const gc_evo *e = &gc_evo_data[se->start + i];
         if (e->item != item || m->b.level < e->level || !pre_form_ok(m, e)) continue;
-        if (!conditions_fulfilled(run, m, e, false, false)) continue;
+        if (!conditions_fulfilled(run, m, e, false, false, 0, -1)) continue;
         return se->start + i;
     }
     return -1;
