@@ -2,6 +2,7 @@
 #include "football_live_art.h"
 #include "football_menu.h"
 #include "football_shop_render.h"
+#include "gm_item_ui.h"
 #include "save.h"
 #include "ui.h"
 #include "mui.h"
@@ -45,7 +46,7 @@ void football_live_art_special_card(FootballRenderer *r,FootballSpecial k,const 
 void football_live_art_defense_card(FootballRenderer *r,FootballDefenseId d,float x,float y,float w,float h,bool selected){(void)r;(void)d;(void)x;(void)y;(void)w;(void)h;(void)selected;}
 static unsigned icon_loads;static const rr_frame icon={.src_w=16,.src_h=16};
 const rr_frame *mui_frame(const char *key,const char *frame){assert(!strcmp(key,"items") && frame && frame[0]);++icon_loads;return &icon;}
-bool football_shop_prepare(FootballShopView *v,const FootballSeason *s){(void)v;assert(s->phase==FB_SEASON_SHOP);return true;}
+bool football_shop_prepare(FootballShopView *v,const FootballSeason *s){assert(s->phase==FB_SEASON_SHOP);memset(v,0,sizeof *v);const gm_item_ui *item=gm_item_ui_find("RARE_FORM_CHANGE_ITEM",s->shop[2].classic_arg);if(item)v->names[2]=item->name;return true;}
 bool football_legacy_screen_open(const football_screen_args *args){(void)args;return false;}
 save_result save_write(const char *file,const void *b,size_t n){assert(!strcmp(file,"football_live"));++writes;if(!write_ok)return SAVE_IO_ERROR;assert(n<sizeof bytes);memcpy(bytes,b,n);length=n;return SAVE_OK;}
 save_result save_read(const char *file,char **b,size_t *n,bool *backup){assert(!strcmp(file,"football_live"));*backup=false;if(!length)return SAVE_NOT_FOUND;*b=malloc(length);assert(*b);memcpy(*b,bytes,length);*n=length;return SAVE_OK;}
@@ -200,6 +201,20 @@ int main(void)
         /* The continue row leaves the shop and clears the shelf. */
         press(BTN_DOWN);tick();assert(!w->message[0] && on_bottom("Target ")); /* the cursor moved on from the Scyther row to Continue */
         press(BTN_ACTION);tick();assert(w->phase==FB_CAREER_READY && w->evo_count==0);
+    }
+    /* A Mega Stone has a fixed holder: changing the vitamin target must not mislabel it. */
+    {
+        FootballCareer *w=(FootballCareer *)career();
+        w->phase=FB_CAREER_READY;tick();
+        w->roster.mon[1].b.species=SPECIES_ID_MAWILE;w->roster.mon[1].b.form=0;
+        assert(football_roster_refresh(&w->roster,1));w->roster.mega_item[1]=0;
+        w->stone_target=1;w->stone_item=FORM_CHANGE_ITEM_MAWILITE;
+        w->wallet=1500;w->prices[2]=1000;w->sold[2]=false;w->message[0]=0;
+        w->phase=FB_CAREER_SHOP;tick();press(BTN_DOWN);press(BTN_DOWN);tick();
+        assert(on_bottom("Mawile: Mawilite") && on_bottom("Holder: Mawile") && on_top("Mawile") && on_top("For Mawile. Select Mega"));
+        press(BTN_RIGHT);tick();assert(on_bottom("Holder: Mawile") && on_top("Mawile"));
+        press(BTN_ACTION);tick();assert(w->wallet==500 && w->roster.mega_item[1]==FORM_CHANGE_ITEM_MAWILITE && on_bottom("Sold"));
+        w->stone_target=-1;tick();assert(on_top("Mega Stones require a compatible holder."));
     }
     {
         static const char *const seen[]={"Pick your ","Lineup","Pick a member","Playoffs","Round 5 / 7","Choose your play","Special teams","Go for two","Touchdown!","Live play","Match won","Playoff elimination","Experience","Choose an evolution","Shop","Cash 1234","Playoff complete","Checkpoint preserved","Species candy","Mega evolution","Tap the map","Circle Pad","Growlithe: Fire Stone","Growlithe > Arcanine","Eevee > Vaporeon"};

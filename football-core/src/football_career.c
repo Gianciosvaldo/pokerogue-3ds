@@ -19,13 +19,23 @@ bool football_career_new(FootballCareer *c,gc_run *scratch,gc_system *profile,un
 bool football_career_start(FootballCareer *c)
 {
     if(!c || (c->phase!=FB_CAREER_READY && c->phase!=FB_CAREER_LINEUP) || c->roster.count!=22)return false;
+    FootballPlayer mega_player;
+    bool mega=c->mega>=0;
+    if(mega){
+        if(c->mega>=22 || !c->roster.mega_item[c->mega])return false;
+        prepare(c,(unsigned)c->mega);
+        const pr_form *form=gc_football_mega_form(c->scratch,0,c->roster.mega_item[c->mega]);
+        if(!form || !football_stats_generate(&mega_player,c->roster.mon[c->mega].b.id,form,&c->roster.maxima))return false;
+        unsigned spd=mega_player.attributes.spd+c->roster.speed[c->mega],str=mega_player.attributes.str+c->roster.strength[c->mega];
+        mega_player.attributes.spd=(uint8_t)(spd>99?99:spd);mega_player.attributes.str=(uint8_t)(str>99?99:str);
+    }
     if(!football_live_begin(&c->live,&c->roster,c->seed+c->round*104729u,c->round))return false;
-    if(c->mega>=0 && c->mega<22 && c->roster.mega_item[c->mega]){
-        prepare(c,(unsigned)c->mega);const pr_form *form=gc_football_mega_form(c->scratch,0,c->roster.mega_item[c->mega]);FootballPlayer p;
-        if(form && football_stats_generate(&p,c->roster.mon[c->mega].b.id,form,&c->roster.maxima)){
-            unsigned spd=p.attributes.spd+c->roster.speed[c->mega],str=p.attributes.str+c->roster.strength[c->mega];
-            p.attributes.spd=(uint8_t)(spd>99?99:spd);p.attributes.str=(uint8_t)(str>99?99:str);c->live.units[0][c->mega]=p.attributes;
-        }
+    if(mega){
+        c->live.units[FB_HOME][c->mega]=mega_player.attributes;
+        /* begin() already copied the first formation. Update the active actor too,
+         * including a selected defensive player and a rearranged lineup. */
+        for(unsigned i=0;i<22;++i)if(c->live.actors[i].home && c->live.actors[i].roster==c->mega)
+            c->live.actors[i].attributes=mega_player.attributes;
     }
     c->candy_plays=c->candy_team=c->seen_snaps=c->candy_plays_milli=c->candy_team_milli=0;
     c->phase=FB_CAREER_MATCH;return true;
@@ -120,7 +130,16 @@ static void shop(FootballCareer *c)
 {
     pay_match(c,true);
     c->phase=FB_CAREER_SHOP;memset(c->sold,0,sizeof c->sold);c->prices[0]=125+25*c->round;c->prices[1]=c->prices[0];c->prices[2]=1000;c->stone_target=-1;c->stone_item=0;c->message[0]=0;
-    if((c->seed+c->round*7)%4==0)for(unsigned i=0;i<22;++i){prepare(c,i);int item=gc_football_mega_item(c->scratch,0);if(item>0 && !c->roster.mega_item[i]){c->stone_target=(int)i;c->stone_item=item;break;}}
+    bool owns_mega=false;
+    for(unsigned i=0;i<22;++i)owns_mega|=c->roster.mega_item[i]!=0;
+    /* Keep the first usable stone available until it can be afforded. Otherwise
+     * an unaffordable first offer (500 winnings, 1000 price) can vanish for four rounds. */
+    if(!owns_mega || (c->seed+c->round*7)%4==0)for(unsigned k=0;k<22;++k){
+        unsigned i=(c->seed+c->round*7+k)%22;
+        if(c->roster.mega_item[i])continue;
+        prepare(c,i);int item=gc_football_mega_item(c->scratch,0);
+        if(item>0){c->stone_target=(int)i;c->stone_item=item;break;}
+    }
     roll_evolutions(c);
 }
 /* An evolution of the member's species that asks for this move (or for a move of its type, when it is the only one known). */
@@ -246,7 +265,12 @@ bool football_career_buy(FootballCareer *c,unsigned offer,unsigned member)
     if(!c || c->phase!=FB_CAREER_SHOP)return false;
     if(offer>=FB_SHOP_FIXED)return offer-FB_SHOP_FIXED<c->evo_count && buy_evolution(c,offer-FB_SHOP_FIXED);
     if(member>=22 || c->sold[offer] || c->wallet<c->prices[offer])return false;
-    if(offer==2){if(c->stone_target<0)return false;c->roster.mega_item[c->stone_target]=(int16_t)c->stone_item;}
+    if(offer==2){
+        if(c->stone_target<0 || c->stone_target>=c->roster.count || c->roster.mega_item[c->stone_target])return false;
+        prepare(c,(unsigned)c->stone_target);
+        if(!gc_football_mega_form(c->scratch,0,c->stone_item))return false;
+        c->roster.mega_item[c->stone_target]=(int16_t)c->stone_item;
+    }
     else {uint8_t *boost=offer==0?&c->roster.speed[member]:&c->roster.strength[member];if(*boost>=20)return false;*boost=(uint8_t)(*boost+2>20?20:*boost+2);football_roster_refresh(&c->roster,member);}
     c->wallet-=c->prices[offer];c->sold[offer]=true;return true;
 }

@@ -293,3 +293,18 @@ $(BUILD)/live_art_test: tests/live_art_test.c tests/menu_fakes.h ../game/source/
 	mkdir -p $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -D__3DS__ -Itests/stubs -I../game/include -I../game/menus -I../assets-pipeline/app-src/include $^ -lm -o $@
 test: live-art-test
+
+.PHONY: movement-regression-test
+movement-regression-test: $(BUILD)/movement_regression_test
+	$(BUILD)/movement_regression_test
+$(BUILD)/movement_regression_test: tests/movement_regression_test.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ ../battle-core/gen/out/pr_data.c -lm -o $@
+test: movement-regression-test
+
+.PHONY: mega-career-test
+mega-career-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/mega_career_test.c src/football_career.c src/football_career_save.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/mega_career_test
+	$(BUILD)/mega_career_test
+test: mega-career-test
