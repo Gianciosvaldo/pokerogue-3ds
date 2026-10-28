@@ -55,13 +55,13 @@ with tempfile.TemporaryDirectory(prefix='tm-history-')as td:
  print(command(['make','-C',GC,'tm-history-host-test']),flush=True)
  if os.environ.get('TM_HISTORY_SANITIZE')=='1':
   san=flags+['-g','-fsanitize=address,undefined','-fno-sanitize-recover=all'];objects=[]
-  for source in [GC/'src/gc_phases.c',GC/'src/gc_reward.c',GC/'src/gc_save.c',RC/'src/memory.c']:
+  for source in [GC/'src/gc_mon.c',GC/'src/gc_phases.c',GC/'src/gc_reward.c',GC/'src/gc_save.c',RC/'src/memory.c']:
    obj=temp/(source.stem+'.o');command([cc,*san,'-c',source,'-o',obj]);objects.append(obj)
   exe=temp/'san';command([cc,*san,test,*objects,*libs,'-lm','-o',exe]);print(command([exe]),flush=True);print('Scoped ASan/UBSan/LSan: TM callback, reward projection, saves and memory query; supporting archives unsanitized');raise SystemExit(0)
  faults=[
-  (GC/'src/gc_phases.c','if(!found&&m->n_used_tms<PR_TM_HISTORY_CAPACITY)','if(!found&&m->n_used_tms<64)','restore 64-entry cutoff'),
-  (GC/'src/gc_phases.c','if(!found&&m->n_used_tms<PR_TM_HISTORY_CAPACITY)','if(m->n_used_tms<PR_TM_HISTORY_CAPACITY)','record duplicate TM'),
-  (GC/'src/gc_phases.c','m->used_tms[m->n_used_tms++]=(uint16_t)p->b;','{m->used_tms[m->n_used_tms++]=(uint16_t)p->b;m->n_used_tms=(uint8_t)m->n_used_tms;}','narrow history count to byte'),
+  (GC/'src/gc_mon.c','if(!found){','if(!found&&m->n_used_tms<64){','restore 64-entry cutoff'),
+  (GC/'src/gc_mon.c','if(!found){','if(true){','record duplicate TM'),
+  (GC/'src/gc_mon.c','m->used_tms[m->n_used_tms++]=(uint16_t)move;','{m->used_tms[m->n_used_tms++]=(uint16_t)move;m->n_used_tms=(uint8_t)m->n_used_tms;}','narrow history count to byte'),
   (GC/'src/gc_phases.c','gc_rq_remove(run,RP_SELECT_MODIFIER);','pr_rng_seed_int(&run->run.rng,100,0);gc_rq_remove(run,RP_SELECT_MODIFIER);','consume learning RNG'),
   (GC/'src/gc_reward.c','r->n_used_tms = m->n_used_tms;','r->n_used_tms = (uint8_t)m->n_used_tms;','narrow projection count'),
   (GC/'src/gc_reward.c','r->n_used_tms = m->n_used_tms;','r->n_used_tms = m->n_used_tms < 64 ? m->n_used_tms : 64;','truncate reward projection'),
