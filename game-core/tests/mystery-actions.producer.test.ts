@@ -1,3 +1,4 @@
+import { BattleScene } from "#app/battle-scene";
 /* Mystery encounter action oracle (card 82's harness; the older gen/dump-mystery-actions.test.ts and
  * tests/mystery_diff_test.c stay as they are). The real encounter is started through the game manager, then for each
  * case the run seed, wave seed and wave are changed and the chosen option's real onOptionPhase is run exactly as
@@ -22,7 +23,7 @@ import { SelectModifierPhase } from "#phases/select-modifier-phase";
 import { Stat } from "#enums/stat";
 import { MoveId } from "#enums/move-id";
 import { AbilityId } from "#enums/ability-id";
-import { speciesDataRegistry } from "#app/global-species-data-registry";
+import { speciesDataRegistry } from "#app/globals/global-species-data-registry";
 import { PartyExpPhase } from "#phases/party-exp-phase";
 import { ModifierRewardPhase } from "#phases/modifier-reward-phase";
 import { allMoves } from "#data/data-lists";
@@ -33,6 +34,7 @@ import i18next from "i18next";
 import * as fs from "node:fs";
 import { expect, it, vi } from "vitest";
 
+const nativeBattleRng = BattleScene.prototype.randBattleSeedInt;
 const N = Number(process.env.GC_MYS_N ?? 400), SEED = Number(process.env.GC_MYS_SEED ?? 777);
 let seed = SEED;
 const rnd = (n: number) => { seed = (Math.imul(seed, 1103515245) + 12345) >>> 0; return (seed >>> 8) % n; };
@@ -76,6 +78,7 @@ for (let ci = 0; ci < configs.length; ci++) {
     game.override.mysteryEncounterChance(100).startingWave(37).startingBiome(BiomeId.PLAINS).disableTrainerWaves().startingLevel(5);
     vi.spyOn(MysteryEncounters, "mysteryEncountersByBiome", "get").mockReturnValue(biomeMap);
     await game.runToMysteryEncounter(MysteryEncounterType.DEPARTMENT_STORE_SALE, configs[ci]);
+    BattleScene.prototype.randBattleSeedInt = nativeBattleRng;
     const scene = game.scene as any, encounter = scene.currentBattle.mysteryEncounter, party = scene.getPlayerParty();
     expect(encounter.options.length).toBe(4);
     const funcKey = new Map<any, string>(Object.entries(modifierTypes as any).map(([k, f]) => [f, k]));
@@ -147,6 +150,7 @@ for (let ci = 0; ci < shadyConfigs.length; ci++) {
     CIVILIZATION_ENCOUNTER_BIOMES.forEach(b => biomes.set(b, [MysteryEncounterType.SHADY_VITAMIN_DEALER]));
     vi.spyOn(MysteryEncounters, "mysteryEncountersByBiome", "get").mockReturnValue(biomes);
     await game.runToMysteryEncounter(MysteryEncounterType.SHADY_VITAMIN_DEALER, shadyConfigs[ci]);
+    BattleScene.prototype.randBattleSeedInt = nativeBattleRng;
     const scene = game.scene as any, encounter = scene.currentBattle.mysteryEncounter, party = scene.getPlayerParty();
     expect(encounter.options.length).toBe(3);
     // the party screens' filters, and the callbacks, as selectPokemonForOption receives them
@@ -160,7 +164,7 @@ for (let ci = 0; ci < shadyConfigs.length; ci++) {
     const realT = i18next.t.bind(i18next);
     vi.spyOn(i18next, "t").mockImplementation(((k: any, o?: any) => {
       const key = String(k);
-      if (/paidMoney|cheapSideEffects|noBadEffects/.test(key)) keys.push(key.replace(/^.*[:]/, "") + (o?.amount !== undefined ? `:${o.amount}` : ""));
+      if (/paidMoney|cheapSideEffects|noBadEffects|mysteryEncounters\/shadyVitaminDealer:option\.selected/.test(key)) keys.push(key.replace(/^.*[:]/, "") + (o?.amount !== undefined ? `:${o.amount}` : ""));
       return realT(k, o);
     }) as any);
     const filters: Array<(p: any) => string | null> = [];
@@ -243,6 +247,13 @@ for (let ci = 0; ci < shadyConfigs.length; ci++) {
         afterPre = rng();
         // the party screen's callback: outside any seed offset
         captured!.cb(party[pick]);
+        // selectPokemonForOption's actual wrapper sets this token after the callback; the old capture
+        // omitted the selected-dialogue presentation entirely. Observe its native keys and formatting too.
+        encounter.setDialogueToken("selectedPokemon", party[pick].getNameToRender());
+        for (const dialogue of option.dialogue?.selected ?? []) {
+          const text = EncounterDialogueUtils.getEncounterText(dialogue.text);
+          expect(text).not.toContain("{{");
+        }
         afterPick = rng();
         moneyPick = scene.money;
         stats = encounter.misc.modifiers.map((m: any) => m.stat).join(" ");
@@ -333,6 +344,7 @@ for (let ci = 0; ci < lostConfigs.length; ci++) {
     CIVILIZATION_ENCOUNTER_BIOMES.forEach(b => biomes.set(b, [MysteryEncounterType.LOST_AT_SEA]));
     vi.spyOn(MysteryEncounters, "mysteryEncountersByBiome", "get").mockReturnValue(biomes);
     await game.runToMysteryEncounter(MysteryEncounterType.LOST_AT_SEA, lostConfigs[ci]);
+    BattleScene.prototype.randBattleSeedInt = nativeBattleRng;
     const scene = game.scene as any, encounter = scene.currentBattle.mysteryEncounter, party = scene.getPlayerParty();
     expect(encounter.options.length).toBe(3);
     const leave = vi.spyOn(EncounterPhaseUtils, "leaveEncounterWithoutBattle").mockImplementation(() => {});
@@ -496,6 +508,7 @@ for (let ci = 0; ci < tripConfigs.length; ci++) {
     CIVILIZATION_ENCOUNTER_BIOMES.forEach(b => biomes.set(b, [MysteryEncounterType.FIELD_TRIP]));
     vi.spyOn(MysteryEncounters, "mysteryEncountersByBiome", "get").mockReturnValue(biomes);
     await game.runToMysteryEncounter(MysteryEncounterType.FIELD_TRIP, tripConfigs[ci]);
+    BattleScene.prototype.randBattleSeedInt = nativeBattleRng;
     const scene = game.scene as any, encounter = scene.currentBattle.mysteryEncounter, party = scene.getPlayerParty();
     expect(encounter.options.length).toBe(3);
     let captured: { cb: (p: any) => any } | undefined;
@@ -667,6 +680,7 @@ for (let ci = 0; ci < timerConfigs.length; ci++) {
     CIVILIZATION_ENCOUNTER_BIOMES.forEach(b => biomes.set(b, [MysteryEncounterType.PART_TIMER]));
     vi.spyOn(MysteryEncounters, "mysteryEncountersByBiome", "get").mockReturnValue(biomes);
     await game.runToMysteryEncounter(MysteryEncounterType.PART_TIMER, timerConfigs[ci]);
+    BattleScene.prototype.randBattleSeedInt = nativeBattleRng;
     const scene = game.scene as any, encounter = scene.currentBattle.mysteryEncounter, party = scene.getPlayerParty();
     expect(encounter.options.length).toBe(3);
     let captured: { cb: (p: any) => void; filter: (p: any) => string | null } | undefined;
@@ -883,6 +897,7 @@ for (let ci = 0; ci < offerConfigs.length; ci++) {
     CIVILIZATION_ENCOUNTER_BIOMES.forEach(b => biomes.set(b, [MysteryEncounterType.AN_OFFER_YOU_CANT_REFUSE]));
     vi.spyOn(MysteryEncounters, "mysteryEncountersByBiome", "get").mockReturnValue(biomes);
     await game.runToMysteryEncounter(MysteryEncounterType.AN_OFFER_YOU_CANT_REFUSE, offerConfigs[ci]);
+    BattleScene.prototype.randBattleSeedInt = nativeBattleRng;
     const scene = game.scene as any, encounter = scene.currentBattle.mysteryEncounter, party = scene.getPlayerParty();
     expect(encounter.options.length).toBe(3);
     const leave = vi.spyOn(EncounterPhaseUtils, "leaveEncounterWithoutBattle").mockImplementation(() => {});

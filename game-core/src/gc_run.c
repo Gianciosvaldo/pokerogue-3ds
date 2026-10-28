@@ -122,6 +122,17 @@ pr_msg_arg gc_m_item(const char *name, const char *item_key)
     return a;
 }
 
+pr_msg_arg gc_m_item_arg(const char *name, const char *item_key, int arg)
+{
+    const int item = gc_reward_item_index(item_key);
+    if (item >= 0 && pr_items[item].gen) {
+        const int id = pr_item_type_name((pr_item_type){(uint16_t)item, (int16_t)arg});
+        if (id > 0 && id < pr_reward_string_count && pr_reward_strings[id])
+            return (pr_msg_arg){name, PR_ARG_STR, 0, pr_reward_strings[id]};
+    }
+    return gc_m_item(name, item_key);
+}
+
 const pr_event *gc_run_battle_event_data(const gc_run *run)
 {
     return run->battle_event_storage ? run->battle_event_storage : run->battle_events;

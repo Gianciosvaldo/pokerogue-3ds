@@ -8,7 +8,7 @@
  *
  * The same screen lists a party (to pick the Pokemon an option uses) and a Pokemon's moves; those lists have a back button, the question
  * does not (upstream cannot back out of an encounter). UP/DOWN move, A takes the row, B backs out where allowed, a tap on a row moves the
- * cursor to it and takes it. Pure presentation: it keeps copies of its texts and calls back with the index; it changes no game state.
+ * cursor to it and takes it. LEFT/RIGHT page long descriptions and tooltips; art fits below the text. Pure presentation: it keeps copies of its texts and calls back with the index; it changes no game state.
  */
 #ifndef GM_ME_SCREEN_H
 #define GM_ME_SCREEN_H

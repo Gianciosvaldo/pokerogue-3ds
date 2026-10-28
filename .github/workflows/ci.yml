@@ -86,6 +86,8 @@ jobs:
         run: make -C battle-core summon-entry-host-test tera-phase-host-test
       - name: Run game-core tests
         run: make -C game-core test
+      - name: Check mystery encounter UI and reward failure controls
+        run: python3 game/tests/check_mystery_ui_faults.py
       - name: Check custom record policy and sanitized module tests
         run: |
           make -C custom-core unit-test san-test

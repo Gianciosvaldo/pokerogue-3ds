@@ -272,25 +272,29 @@ static bool lost_at_sea_move_ok(const gc_run *run, int option)
 }
 
 /* EXTORTION_MOVES / EXTORTION_ABILITIES (requirement-groups.ts) */
-static bool has_extortion_move(const gc_mon *m)
+static int extortion_move_of(const gc_mon *m)
 {
     static const int moves[] = {MOVE_ID_BIND, MOVE_ID_CLAMP, MOVE_ID_INFESTATION, MOVE_ID_SAND_TOMB, MOVE_ID_SNAP_TRAP,
         MOVE_ID_THUNDER_CAGE, MOVE_ID_WRAP, MOVE_ID_SPIRIT_SHACKLE, MOVE_ID_MEAN_LOOK, MOVE_ID_JAW_LOCK, MOVE_ID_BLOCK,
         MOVE_ID_SPIDER_WEB, MOVE_ID_ANCHOR_SHOT, MOVE_ID_OCTOLOCK, MOVE_ID_PURSUIT, MOVE_ID_CONSTRICT, MOVE_ID_BEAT_UP,
         MOVE_ID_COIL, MOVE_ID_WRING_OUT, MOVE_ID_STRING_SHOT};
     for (int k = 0; k < m->b.n_moves; k++)
-        for (size_t j = 0; j < sizeof moves / sizeof moves[0]; j++) if (m->b.moves[k] > 0 && m->b.moves[k] == moves[j]) return true;
-    return false;
+        for (size_t j = 0; j < sizeof moves / sizeof moves[0]; j++) if (m->b.moves[k] > 0 && m->b.moves[k] == moves[j]) return m->b.moves[k];
+    return 0;
 }
 
+static bool has_extortion_move(const gc_mon *m) { return extortion_move_of(m) != 0; }
+
 /* Pokemon.hasAbility(a, false): the ability, or the passive when it is unlocked and enabled */
-static bool has_extortion_ability(const gc_mon *m)
+static int extortion_ability_of(const gc_mon *m)
 {
     static const int abilities[] = {ABILITY_ID_INTIMIDATE, ABILITY_ID_ARENA_TRAP, ABILITY_ID_SHADOW_TAG, ABILITY_ID_SUCTION_CUPS, ABILITY_ID_STICKY_HOLD};
     for (size_t j = 0; j < sizeof abilities / sizeof abilities[0]; j++)
-        if (m->b.ability == abilities[j] || (m->b.passive_flag && m->b.passive == abilities[j])) return true;
-    return false;
+        if (m->b.ability == abilities[j] || (m->b.passive_flag && m->b.passive == abilities[j])) return abilities[j];
+    return 0;
 }
+
+static bool has_extortion_ability(const gc_mon *m) { return extortion_ability_of(m) != 0; }
 
 /* STEALING_MOVES (requirement-groups.ts) and MoveRequirement(STEALING_MOVES, true): allowed in battle, one of the moves among its moves */
 static bool has_stealing_move(const gc_mon *m)
@@ -347,7 +351,7 @@ static void setup_texts(gc_run *run)
         s->option_pick[0] = s->option_pick[1] = GC_PICK_MEMBER;
         const int p = gc_mystery_primary_pokemon(run, type, 2);
         if (p >= 0) {
-            screen_arg(s, pr_arg_pokemon_name(NULL, "option3PrimaryName", &run->party[p].b));
+            screen_arg(s, pr_arg_pokemon_name(&run->bt, "option3PrimaryName", &run->party[p].b));
             screen_arg(s, pr_arg_move("option3PrimaryMove", charming_move_of(&run->party[p])));
         }
         break;
@@ -357,7 +361,7 @@ static void setup_texts(gc_run *run)
             const int p = gc_mystery_primary_pokemon(run, type, o);
             const char *pn = o == 0 ? "option1PrimaryName" : "option2PrimaryName";
             const char *mv = o == 0 ? "option1RequiredMove" : "option2RequiredMove";
-            if (p >= 0) screen_arg(s, pr_arg_pokemon_name(NULL, pn, &run->party[p].b));
+            if (p >= 0) screen_arg(s, pr_arg_pokemon_name(&run->bt, pn, &run->party[p].b));
             screen_arg(s, pr_arg_move(mv, o == 0 ? MOVE_ID_SURF : MOVE_ID_FLY));
         }
         screen_arg(s, pr_arg_int("damagePercentage", 25));
@@ -376,7 +380,7 @@ static void setup_texts(gc_run *run)
         if (gc_fof_tokens(run, &enemy, &item)) { screen_arg(s, enemy); screen_arg(s, item); }
         const int p = gc_mystery_primary_pokemon(run, type, 1);
         if (p >= 0) {
-            screen_arg(s, pr_arg_pokemon_name(NULL, "option2PrimaryName", &run->party[p].b));
+            screen_arg(s, pr_arg_pokemon_name(&run->bt, "option2PrimaryName", &run->party[p].b));
             int move = 0;
             for (int k = 0; k < run->party[p].b.n_moves && !move; k++) {
                 const int m = run->party[p].b.moves[k];
@@ -392,7 +396,7 @@ static void setup_texts(gc_run *run)
         screen_arg(s, name);
         const int p = gc_mystery_primary_pokemon(run, type, 2);
         if (p >= 0) {
-            screen_arg(s, pr_arg_pokemon_name(NULL, "option3PrimaryName", &run->party[p].b));
+            screen_arg(s, pr_arg_pokemon_name(&run->bt, "option3PrimaryName", &run->party[p].b));
             int move = 0;
             for (int k = 0; k < run->party[p].b.n_moves && !move; k++) {
                 const int m = run->party[p].b.moves[k];
@@ -405,10 +409,41 @@ static void setup_texts(gc_run *run)
     case GC_ME_FUN_AND_GAMES:
         s->option_pick[0] = GC_PICK_MEMBER;
         screen_arg(s, pr_arg_money_en_us("option1Money", pr_run_get_wave_money_amount(run->wave, 1.5)));
+        screen_arg(s, pr_arg_key("wobbuffetName", "pokemon:wobbuffet"));
         break;
     case GC_ME_GLOBAL_TRADE_SYSTEM:
-        s->option_pick[0] = s->option_pick[1] = s->option_pick[2] = GC_PICK_MEMBER;
+        s->option_pick[0] = GC_PICK_MEMBER_TRADE;
+        s->option_pick[1] = GC_PICK_MEMBER;
+        s->option_pick[2] = GC_PICK_MEMBER_ITEM;
         break;
+    case GC_ME_THE_POKEMON_SALESMAN: {
+        static gc_mon offer;
+        double price;
+        if (gc_salesman_offer(run, &offer, &price)) {
+            screen_arg(s, pr_arg_pokemon_name(&run->bt, "purchasePokemon", &offer.b));
+            screen_arg(s, pr_arg_money_en_us("price", price));
+            screen_arg(s, pr_arg_int("salesmanShiny", offer.b.shiny));
+        }
+        break;
+    }
+    case GC_ME_AN_OFFER_YOU_CANT_REFUSE: {
+        double price;
+        const int strongest = gc_offer_terms(run, &price);
+        if (strongest >= 0) {
+            screen_arg(s, pr_arg_pokemon_name(&run->bt, "strongestPokemon", &run->party[strongest].b));
+            screen_arg(s, pr_arg_money_en_us("price", price));
+        }
+        screen_arg(s, gc_m_item("itemName", "SHINY_CHARM"));
+        screen_arg(s, pr_arg_key("liepardName", "pokemon:liepard"));
+        const int primary = gc_mystery_primary_pokemon(run, type, 1);
+        if (primary >= 0) {
+            const gc_mon *m = &run->party[primary];
+            screen_arg(s, pr_arg_pokemon_name(&run->bt, "option2PrimaryName", &m->b));
+            const int move = extortion_move_of(m);
+            screen_arg(s, move ? pr_arg_move("moveOrAbility", move) : pr_arg_ability("moveOrAbility", extortion_ability_of(m)));
+        }
+        break;
+    }
     case GC_ME_TRAINING_SESSION:
         s->option_pick[0] = GC_PICK_MEMBER;
         s->option_pick[1] = GC_PICK_MEMBER_NATURE;
@@ -1033,6 +1068,14 @@ static void shady_vitamin_dealer(gc_run *run, int option, int b)
     gc_ev_msg(run, "mysteryEncounterMessages:paidMoney", 1, pr_arg_int("amount", (int32_t)price));
     const int first = pr_rng_seed_int(&run->run.rng, 6, 0);
     const int second = pr_rng_seed_int(&run->run.rng, 6, 0);
+    static const char *const vitamin_names[] = {
+        "modifierType:BaseStatBoosterItem.hp_up", "modifierType:BaseStatBoosterItem.protein",
+        "modifierType:BaseStatBoosterItem.iron", "modifierType:BaseStatBoosterItem.calcium",
+        "modifierType:BaseStatBoosterItem.zinc", "modifierType:BaseStatBoosterItem.carbos"
+    };
+    gc_ev_msg(run, "mysteryEncounters/shadyVitaminDealer:option.selected", 3,
+              pr_arg_pokemon_name(&run->bt, "selectedPokemon", &run->party[mon].b),
+              pr_arg_key("boost1", vitamin_names[first]), pr_arg_key("boost2", vitamin_names[second]));
     me_give_vitamin(run, mon, first);
     me_give_vitamin(run, mon, second);
     me_leave_with_heal_shop(run, true, GC_ME_SHADY_VITAMIN_DEALER, mon, option);
@@ -1163,7 +1206,8 @@ void gc_mystery_post(gc_run *run, const gc_rphase *p)
     m->b.nature = (uint8_t)nature;
     gc_items_to_battle(run);
     pr_recalculate_stats(&run->bt, &m->b);
-    gc_ev_msg(run, "mysteryEncounters/shadyVitaminDealer:cheapSideEffects", 1, pr_arg_key("newNature", gc_nature_key(nature)));
+    gc_ev_msg(run, "mysteryEncounters/shadyVitaminDealer:cheapSideEffects", 2,
+              pr_arg_pokemon_name(&run->bt, "selectedPokemon", &m->b), pr_arg_key("newNature", gc_nature_key(nature)));
 }
 
 bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why, bool *ok)

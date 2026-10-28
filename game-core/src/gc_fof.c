@@ -18,7 +18,7 @@
  * order): the same rewards, the Pokemon alone gets the boss species' base experience (setEncounterExp, scaled by the wave), and the
  * encounter leaves with the item's shop and no heal shop. Option 3 leaves with the heal shop.
  *
- * Not ported: the non-seeded roll nothing, but the shown name of an item that has an argument (the stat of a booster) is its type's. */
+ * Generated reward names use the pinned concrete-type English catalog, including argument-dependent names. */
 #include "internal.h"
 #include <math.h>
 #include <string.h>
@@ -137,7 +137,7 @@ bool gc_fof_tokens(gc_run *run, pr_msg_arg *enemy_name, pr_msg_arg *item_name)
     static fof_t f;
     if (!fof_init(run, &f)) return false;
     *enemy_name = pr_arg_pokemon_name(&run->bt, "enemyPokemon", &f.boss.b);
-    *item_name = gc_m_item("itemName", pr_item_keys[f.item.type.item]);
+    *item_name = gc_m_item_arg("itemName", pr_item_keys[f.item.type.item], f.item.type.arg);
     return true;
 }
 

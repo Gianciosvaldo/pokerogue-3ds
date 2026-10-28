@@ -1,3 +1,4 @@
+import { BattleScene } from "#app/battle-scene";
 /* The Pokemon Salesman oracle (card 82's harness, like mystery-actions.producer.test.ts). The real encounter is started
  * through the game manager; for each case the run seed, wave seed, wave, biome, money, trainer and secret ids, Shiny Charms
  * and the party are changed, then the encounter's own onInit runs again exactly as EncounterPhase runs it
@@ -21,7 +22,7 @@ import * as EncounterPhaseUtils from "#mystery-encounters/encounter-phase-utils"
 import * as EncounterDialogueUtils from "#mystery-encounters/encounter-dialogue-utils";
 import * as MysteryEncounters from "#mystery-encounters/mystery-encounter-biomes";
 import { CIVILIZATION_ENCOUNTER_BIOMES } from "#mystery-encounters/mystery-encounter-biomes";
-import { speciesDataRegistry } from "#app/global-species-data-registry";
+import { speciesDataRegistry } from "#app/globals/global-species-data-registry";
 import { VictoryPhase } from "#phases/victory-phase";
 import { GameManager } from "#test/framework/game-manager";
 import Phaser from "phaser";
@@ -29,6 +30,7 @@ import i18next from "i18next";
 import * as fs from "node:fs";
 import { expect, it, vi } from "vitest";
 
+const nativeBattleRng = BattleScene.prototype.randBattleSeedInt;
 const N = Number(process.env.GC_MYS_N ?? 400), SEED = Number(process.env.GC_MYS_SEED ?? 777);
 let seed = SEED;
 const rnd = (n: number) => { seed = (Math.imul(seed, 1103515245) + 12345) >>> 0; return (seed >>> 8) % n; };
@@ -70,6 +72,7 @@ for (let ci = 0; ci < configs.length; ci++) {
     CIVILIZATION_ENCOUNTER_BIOMES.forEach(b => biomes.set(b, [MysteryEncounterType.THE_POKEMON_SALESMAN]));
     vi.spyOn(MysteryEncounters, "mysteryEncountersByBiome", "get").mockReturnValue(biomes);
     await game.runToMysteryEncounter(MysteryEncounterType.THE_POKEMON_SALESMAN, configs[ci]);
+    BattleScene.prototype.randBattleSeedInt = nativeBattleRng;
     vi.spyOn(timedEventManager, "isEventActive").mockReturnValue(false);
     vi.spyOn(timedEventManager, "getEventEncounters").mockReturnValue([]);
     const scene = game.scene as any, encounter = scene.currentBattle.mysteryEncounter, party = scene.getPlayerParty(), gameData = scene.gameData;

@@ -13,7 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "gc/run.h"
+#include "../../game-core/src/internal.h"
 #include "me_flow.h"
 #include "me_screen.h"
 #include "ui.h"
@@ -161,10 +161,19 @@ static const char* const TRIP = "{\"title\":\"Field Trip\",\"description\":\"A t
 static const char* const POKEMON = "{\"pikachu\":\"Pikachu\",\"lapras\":\"Lapras\"}";
 static const char* const MOVE = "{\"surf\":{\"name\":\"Surf\"},\"fly\":{\"name\":\"Fly\"}}";
 
+#include "fixtures/mystery-encounters-en.inc"
+static bool use_source_locales;
+
 static const char* locale_get(void* ctx, const char* file, int fallback, size_t* len) {
   (void)ctx;
   const char* r = NULL;
   if (fallback) return NULL;
+  if (use_source_locales)
+    for (size_t i = 0; i < sizeof source_locales / sizeof *source_locales; i++)
+      if (!strcmp(file, source_locales[i].file)) {
+        *len = strlen(source_locales[i].json);
+        return source_locales[i].json;
+      }
   /* the file names the packs really hold (locales/en/mystery-encounters/<kebab name>-dialogue.json): a looser match here once let the
    * formatter ask for ".../lost-at-sea" and show "Option 1" with no text on a console */
   if (!strcmp(file, "mystery-encounters/shady-vitamin-dealer-dialogue")) r = SHADY;
@@ -199,6 +208,7 @@ static ui_screen* top(void) { return g_depth ? g_stack[g_depth - 1] : NULL; }
 static void draw(int which) {
   n_drawn = 0;
   g_which = which;
+  if (!top()) { CHECK(false, "draw requires an open screen"); return; }
   top()->draw(top(), which ? RR_BOTTOM : RR_TOP);
 }
 static bool has_text(int screen, const char* needle) {
@@ -211,7 +221,7 @@ static const drawn_t* find_text(int screen, const char* needle) {
     if (g_drawn[i].screen == screen && strstr(g_drawn[i].text, needle)) return &g_drawn[i];
   return NULL;
 }
-static void press(ui_button b) { top()->input(top(), b); }
+static void press(ui_button b) { if (!top()) { CHECK(false, "input requires an open screen"); return; } top()->input(top(), b); }
 
 static void mon(int i, int species, int level, int hp, int max_hp) {
   memset(&R.party[i], 0, sizeof R.party[i]);
@@ -504,6 +514,224 @@ int main(void) {
   press(BTN_DOWN);
   draw(1);
   CHECK(!has_text(1, "{{") && has_text(1, "a Pokemon Helps"), "no raw tokens in the tooltip");
+
+  /* The GTS must not silently pick offer zero. Exercise the actual generated offers and choice encoding. */
+  run_at(GC_ME_GLOBAL_TRADE_SYSTEM, 4);
+  gc_run_new(&R, GAME_MODES_CLASSIC, "mystery-ui-gts", 812);
+  gc_starter starters[2] = {{.species = SPECIES_ID_PIKACHU, .tera_type = -1}, {.species = SPECIES_ID_LAPRAS, .tera_type = -1}};
+  for (int k = 0; k < 2; k++) for (int j = 0; j < 6; j++) starters[k].ivs[j] = 15;
+  const char* why = NULL;
+  CHECK(gc_run_set_starters(&R, starters, 2, &why), "real GTS party: %s", why ? why : "");
+  R.wave = 37;
+  pr_run_reset_seed(&R.run, R.wave);
+  R.mystery_type = R.screen.mystery_type = GC_ME_GLOBAL_TRADE_SYSTEM;
+  R.screen.kind = GC_SCREEN_MYSTERY;
+  gc_mystery_setup_screen(&R);
+  CHECK(R.screen.option_pick[0] == GC_PICK_MEMBER_TRADE && R.screen.option_pick[2] == GC_PICK_MEMBER_ITEM, "both GTS second picks exposed");
+  const pr_rng before_preview = R.run.rng;
+  for (int offer = 0; offer < 3; offer++) {
+    g_depth = n_got = 0;
+    CHECK(me_flow_open(&R, chosen, NULL), "GTS offer %d", offer);
+    press(BTN_ACTION); /* party */
+    press(BTN_ACTION); /* member 0 */
+    draw(0);
+    CHECK(has_text(0, "Choose a trade offer."), "GTS asks before committing");
+    CHECK(n_got == 0, "no automatic trade");
+    press(BTN_CANCEL);
+    CHECK(n_got == 0 && g_depth == 1, "back to party without a trade");
+    press(BTN_ACTION);
+    for (int i = 0; i < offer; i++) press(BTN_DOWN);
+    press(BTN_ACTION);
+    CHECK(n_got == 1 && got.option == 0 && got.b == 0 && got.c == offer, "GTS offer ordinal %d transmitted (%d)", offer, got.c);
+    CHECK(!memcmp(&before_preview, &R.run.rng, sizeof before_preview), "preview and navigation preserve run RNG");
+  }
+  /* Transferable items beyond the screen's row capacity remain reachable, with actual variant names. */
+  R.n_items = 0;
+  for (int i = 0; i < 18; i++) gc_item_add(&R, "ATTACK_TYPE_BOOSTER", i, R.party[0].b.id, 1);
+  for (int i = 0; i < 11; i++) gc_item_add(&R, "BERRY", i, R.party[0].b.id, 1);
+  gc_item_add(&R, "BASE_STAT_BOOSTER", STAT_ATK, R.party[0].b.id, 1); /* not transferable */
+  int held[GC_MAX_ITEMS];
+  const int n_held = gc_gts_held_items(&R, 0, held);
+  CHECK(n_held == 29, "only transferable held items: %d", n_held);
+  g_depth = n_got = 0;
+  CHECK(me_flow_open(&R, chosen, NULL), "item trade opens");
+  press(BTN_DOWN); press(BTN_DOWN); press(BTN_ACTION); press(BTN_ACTION);
+  draw(0);
+  CHECK(has_text(0, "Choose an item to trade."), "item picker");
+  CHECK(n_got == 0, "does not give away the first item");
+  for (int i = 0; i < ME_MAX_OPTIONS - 2; i++) press(BTN_DOWN);
+  draw(1);
+  CHECK(has_text(1, "Next page"), "all inventory pages available");
+  press(BTN_ACTION);
+  press(BTN_DOWN); /* ordinal 24 */
+  press(BTN_ACTION);
+  CHECK(n_got == 1 && got.option == 2 && got.b == 0 && got.c == 24, "second page sends held-item ordinal 24: %d", got.c);
+  const gc_item traded = R.items[held[24]];
+  bool ok = false;
+  gc_rq_reset(&gc_int(&R)->rq);
+  CHECK(gc_mystery_execute(&R, got.option, got.b, got.c, &why, &ok) && ok, "real item-trade handler accepts the UI choice");
+  bool remains = false;
+  for (int i = 0; i < R.n_items; i++) remains |= R.items[i].pokemon_id == traded.pokemon_id && R.items[i].arg == traded.arg && !strcmp(R.items[i].key, traded.key);
+  CHECK(!remains, "the selected item, rather than item zero, was consumed");
+  gc_run_until_screen(&R);
+  CHECK(R.screen.kind == GC_SCREEN_REWARD && R.screen.n_options == 1, "upgraded item reaches the reward screen");
+
+  /* Field Trip must transmit the original moveset slot after omitting empty rows. */
+  run_at(GC_ME_FIELD_TRIP, 3);
+  R.party[0].b.n_moves = 3;
+  R.party[0].b.moves[0] = MOVE_ID_TACKLE;
+  R.party[0].b.moves[1] = 0;
+  R.party[0].b.moves[2] = MOVE_ID_SURF;
+  R.screen.option_pick[0] = GC_PICK_MEMBER_MOVE;
+  CHECK(me_flow_open(&R, chosen, NULL), "sparse move picker");
+  press(BTN_ACTION); press(BTN_ACTION); press(BTN_DOWN); press(BTN_ACTION);
+  CHECK(n_got == 1 && got.c == 2, "actual move slot retained (%d)", got.c);
+
+  /* Markup is rendered rather than printed; long descriptions/tooltips can be read without drawing over the windows. */
+  static me_args long_text;
+  memset(&long_text, 0, sizeof long_text);
+  snprintf(long_text.title, sizeof long_text.title, "Details");
+  snprintf(long_text.description, sizeof long_text.description, "@[TOOLTIP_TITLE]{First}\nSecond\nThird\nFourth\nFifth\nLast description");
+  snprintf(long_text.query, sizeof long_text.query, "What will you do?");
+  snprintf(long_text.options[0].label, ME_LABEL_LEN, "Read");
+  snprintf(long_text.options[0].tooltip, ME_TOOLTIP_LEN, "Tip1\nTip2\nTip3\nTip4\nTip5\nLast tip");
+  long_text.options[0].ok = true;
+  long_text.n = 1;
+  long_text.n_intro = 1;
+  snprintf(long_text.intro[0].key, ME_SPRITE_LEN, "images/mystery-encounters/field_trip_teacher");
+  long_text.intro[0].x = 160; long_text.intro[0].y = 164; long_text.intro[0].scale = 1;
+  g_frame.src_h = g_frame.src_w = 96;
+  n_sil = 0;
+  g_depth = 0;
+  CHECK(me_screen_open(&long_text), "long text opens");
+  draw(0);
+  CHECK(n_sil == 1 && g_sil_y[0] - g_sil_scale[0] * 96 >= 122, "art fits below description and query");
+  CHECK(has_text(0, "First") && !has_text(0, "@[") && !has_text(0, "Last description"), "first description page, no raw markup");
+  draw(1);
+  CHECK(has_text(1, "Tip1") && !has_text(1, "Last tip") && has_text(1, "Details 1/2"), "tooltip is paged");
+  press(BTN_RIGHT);
+  draw(0);
+  CHECK(has_text(0, "Last description") && has_text(0, "What will you do?"), "last description and question reachable");
+  draw(1);
+  CHECK(has_text(1, "Last tip") && has_text(1, "Details 2/2"), "last tooltip reachable");
+  for (int i = 0; i < n_drawn; i++) CHECK(g_drawn[i].y < 240, "text stays on the bottom screen: %g", g_drawn[i].y);
+  press(BTN_LEFT);
+  draw(1);
+  CHECK(has_text(1, "Tip1"), "details can be reread");
+
+  g_frame.src_h = g_frame.src_w = 0;
+
+  /* Audit the actual English texts of all fourteen source-backed encounters, not invented short translations. */
+  use_source_locales = true;
+  const int ported[] = {GC_ME_DEPARTMENT_STORE_SALE, GC_ME_SHADY_VITAMIN_DEALER, GC_ME_LOST_AT_SEA, GC_ME_FIELD_TRIP,
+    GC_ME_PART_TIMER, GC_ME_AN_OFFER_YOU_CANT_REFUSE, GC_ME_THE_POKEMON_SALESMAN, GC_ME_FUN_AND_GAMES,
+    GC_ME_GLOBAL_TRADE_SYSTEM, GC_ME_FIGHT_OR_FLIGHT, GC_ME_SLUMBERING_SNORLAX, GC_ME_BERRIES_ABOUND,
+    GC_ME_DARK_DEAL, GC_ME_TRAINING_SESSION};
+  for (size_t t = 0; t < sizeof ported / sizeof *ported; t++) {
+    g_depth = n_got = 0;
+    gc_run_new(&R, GAME_MODES_CLASSIC, "mystery-ui-locale", 812);
+    CHECK(gc_run_set_starters(&R, starters, 2, &why), "locale party");
+    R.wave = 37; R.money = 1000000;
+    pr_run_reset_seed(&R.run, R.wave);
+    R.party[0].b.n_moves = 3;
+    R.party[0].b.moves[0] = MOVE_ID_MEAN_LOOK;
+    R.party[0].b.moves[1] = MOVE_ID_THIEF;
+    R.party[0].b.moves[2] = MOVE_ID_CHARM;
+    R.mystery_type = R.screen.mystery_type = (int8_t)ported[t];
+    R.screen.kind = GC_SCREEN_MYSTERY;
+    const pr_rng before = R.run.rng;
+    gc_mystery_setup_screen(&R);
+    CHECK(!memcmp(&before, &R.run.rng, sizeof before), "encounter %d screen preserves RNG", ported[t]);
+    CHECK(me_flow_open(&R, chosen, NULL), "encounter %d opens", ported[t]);
+    draw(0);
+    CHECK(!has_text(0, "@[") && !has_text(0, "{{") && !has_text(0, "some money") && !has_text(0, "a Pokemon"),
+          "encounter %d description carries real values", ported[t]);
+    for (int i = 0; i < R.screen.n_options; i++) {
+      draw(1);
+      CHECK(!has_text(1, "{{") && !has_text(1, "some money") && !has_text(1, "a Pokemon"),
+            "encounter %d option %d carries real values", ported[t], i);
+      press(BTN_DOWN);
+    }
+    if (ported[t] == GC_ME_SHADY_VITAMIN_DEALER) {
+      g_depth = 0;
+      R.ev_head = R.ev_count = 0;
+      gc_rq_reset(&gc_int(&R)->rq);
+      bool applied = false;
+      CHECK(gc_mystery_execute(&R, 0, 0, 0, &why, &applied) && applied, "vitamin deal applies");
+      gc_event e;
+      bool selected = false;
+      while (gc_run_next_event(&R, &e))
+        if (e.msg.key && !strcmp(e.msg.key, "mysteryEncounters/shadyVitaminDealer:option.selected")) {
+          char message[1200]; be_format_message(&e.msg, message, sizeof message);
+          selected = true;
+          CHECK(!strstr(message, "{{") && strstr(message, "Pikachu") && strstr(message, "boosts"), "actual vitamin result: %s", message);
+        }
+      CHECK(selected, "vitamin rewards are announced");
+      gc_rphase post = gc_rp(RP_ME_POST, GC_ME_SHADY_VITAMIN_DEALER, 0, 0);
+      gc_mystery_post(&R, &post);
+      bool side = false;
+      while (gc_run_next_event(&R, &e))
+        if (e.msg.key && !strcmp(e.msg.key, "mysteryEncounters/shadyVitaminDealer:cheapSideEffects")) {
+          char message[1200]; be_format_message(&e.msg, message, sizeof message);
+          side = true;
+          CHECK(!strstr(message, "{{") && strstr(message, "Pikachu"), "actual side effect names the Pokemon: %s", message);
+        }
+      CHECK(side, "vitamin side effects announced");
+    }
+    if (ported[t] == GC_ME_FIELD_TRIP) {
+      g_depth = n_got = 0;
+      CHECK(me_flow_open(&R, chosen, NULL), "actual Field Trip dialogue");
+      press(BTN_ACTION); press(BTN_ACTION); /* Mean Look is status, wrong for physical */
+      press(BTN_ACTION);
+      CHECK(n_got == 1 && strstr(got.selected, "isn’t a Physical move") && !strstr(got.selected, "{{"), "wrong-category explanation: %s", got.selected);
+      g_depth = n_got = 0;
+      CHECK(me_flow_open(&R, chosen, NULL), "correct Field Trip dialogue");
+      press(BTN_DOWN); press(BTN_DOWN); press(BTN_ACTION); press(BTN_ACTION); press(BTN_ACTION);
+      CHECK(n_got == 1 && strstr(got.selected, "Thank you so much") && strstr(got.selected, "valuable experience"), "correct-category reward explanation: %s", got.selected);
+    }
+    if (ported[t] == GC_ME_THE_POKEMON_SALESMAN) {
+      for (int shiny = 0; shiny < 2; shiny++) {
+        for (int a = 0; a < R.screen.n_me_args; a++)
+          if (!strcmp(R.screen.me_args[a].name, "salesmanShiny")) R.screen.me_args[a].v = (uint32_t)shiny;
+        g_depth = n_got = 0;
+        CHECK(me_flow_open(&R, chosen, NULL), "Salesman variant %d", shiny);
+        draw(0);
+        CHECK(has_text(0, shiny ? "has a pigment" : "carries an ability"), "correct Salesman description variant");
+        draw(1);
+        CHECK(has_text(1, shiny ? "Gain a shiny" : "Hidden Ability"), "correct Salesman offer tooltip");
+      }
+    }
+    if (ported[t] == GC_ME_SLUMBERING_SNORLAX) {
+      R.party[0].b.n_moves = 1;
+      R.party[0].b.moves[0] = MOVE_ID_TACKLE;
+      gc_mystery_setup_screen(&R);
+      g_depth = n_got = 0;
+      CHECK(me_flow_open(&R, chosen, NULL), "disabled steal");
+      press(BTN_DOWN); press(BTN_DOWN);
+      draw(1);
+      CHECK(has_text(1, "need to know certain moves"), "source's disabledTooltip is used");
+    }
+    if (ported[t] == GC_ME_DARK_DEAL) {
+      R.ev_head = R.ev_count = 0;
+      gc_rq_reset(&gc_int(&R)->rq);
+      bool applied = false;
+      CHECK(gc_mystery_execute(&R, 0, 0, 0, &why, &applied) && applied, "Dark Deal applies");
+      gc_event e;
+      int announced = 0;
+      while (gc_run_next_event(&R, &e))
+        if (e.msg.key && (!strcmp(e.msg.key, "mysteryEncounters/darkDeal:option.1.selectedDialogue") ||
+                         !strcmp(e.msg.key, "mysteryEncounters/darkDeal:option.1.selectedMessage"))) {
+          char message[1200]; be_format_message(&e.msg, message, sizeof message);
+          announced++;
+          CHECK(!strstr(message, "{{") && (strstr(message, "Pikachu") || strstr(message, "Lapras")), "actual lost Pokemon is named: %s", message);
+        }
+      CHECK(announced == 2, "both Dark Deal messages delivered before the battle");
+    }
+  }
+  const pr_msg_arg berry_name = gc_m_item_arg("itemName", "BERRY", BERRY_TYPE_LUM);
+  CHECK(berry_name.kind == PR_ARG_STR && !strcmp(berry_name.s, "Lum Berry"), "concrete generated item, rather than missing BERRY.name");
+  const pr_msg_arg booster_name = gc_m_item_arg("itemName", "BASE_STAT_BOOSTER", STAT_ATK);
+  CHECK(booster_name.kind == PR_ARG_STR && !strcmp(booster_name.s, "Protein"), "concrete vitamin name");
 
   /* a screen that is not an encounter does not open */
   R.screen.kind = GC_SCREEN_COMMAND;

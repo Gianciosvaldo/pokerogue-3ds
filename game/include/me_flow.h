@@ -4,13 +4,13 @@
  * wants and the "selected" text to say before that choice runs.
  *
  * Texts are the encounter's locale file (locales/<lang>/mystery-encounters/<name>-dialogue.json), worded with the {{tokens}} the screen
- * carries (gc_screen.me_args) and, for the picked Pokemon, selectedPokemon. A token the screen does not carry shows as nothing, and a
+ * carries (gc_screen.me_args) and, for the picked Pokemon, selectedPokemon. A missing token uses a bounded plain-text fallback, and a
  * "selected" text that would need one is left out rather than said with a hole in it. Encounters whose texts are not ported yet carry no
  * tokens: they show their texts as the locale has them.
  *
- * What it does not do: the encounter's `outro` and the texts that depend on the result (boosts gained, the Nature changed...) are said by
- * the events game-core queues (or not at all yet); the second pick of the Global Trade System (which of three offers, which item) is not
- * asked yet, so those take the first.
+ * The GTS asks for each of its three Pokemon offers or any transferable held item, with back navigation.
+ * The encounter's `outro` and texts that depend on the result (boosts gained, the Nature changed...) are said by
+ * the events game-core queues (or not at all yet).
  */
 #ifndef GM_ME_FLOW_H
 #define GM_ME_FLOW_H
