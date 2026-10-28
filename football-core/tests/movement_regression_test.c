@@ -27,6 +27,64 @@ static void isolate(unsigned receiver,unsigned defender)
     if(defender<22){m.actors[defender].x=m.los+(off?-16:16);m.actors[defender].y=20;
         m.actors[defender].attributes=(FootballAttributes){25,25,80,60,60,60,60,60};m.coverage[defender-def]=(uint8_t)receiver;}
 }
+/* Distance to the called path, measured from the actual snap position. This
+ * checks the trajectory, not just whether x happened to increase. */
+static float route_distance(const FootballPlayDefinition *p,float x,float y)
+{
+    float nearest=1e6f;FootballRoutePoint start={0,0};
+    for(unsigned k=0;k<=p->route_count;++k){
+        FootballRoutePoint end=k<p->route_count?p->route[k]:(FootballRoutePoint){start.x+100,start.y};
+        float dx=end.x-start.x,dy=end.y-start.y,len2=dx*dx+dy*dy;
+        float t=len2?((x-start.x)*dx+(y-start.y)*dy)/len2:0;t=fmaxf(0,fminf(1,t));
+        nearest=fminf(nearest,hypotf(x-start.x-t*dx,y-start.y-t*dy));start=end;
+    }
+    return nearest;
+}
+static void called_routes(const FootballPlayId *passes,const FootballAttributes *profiles)
+{
+    for(unsigned profile=0;profile<3;++profile)for(unsigned away=0;away<2;++away)for(unsigned p=0;p<4;++p)for(unsigned rank=1;rank<=5;++rank){
+        setup(away,passes[p]);unsigned off=away?11:0,i=off+rank;float dir=away?-1:1;
+        float sx=m.actors[i].x,sy=m.actors[i].y,inside=sy<26.67f?1:-1;
+        isolate(i,22);m.actors[i].x=sx;m.actors[i].y=sy;m.actors[i].attributes=profiles[profile];
+        for(unsigned a=0;a<22;++a)if(a!=i)m.actors[a].stun=30;
+        float worst=0;
+        for(unsigned frame=0;frame<480;++frame){
+            football_live_tick(&m,17,(FootballLiveInput){.receiver=-1});
+            worst=fmaxf(worst,route_distance(football_playbook_get(passes[p]),(m.actors[i].x-sx)*dir,(m.actors[i].y-sy)*inside));
+        }
+        CHECK(worst<1,"receiver left called path: profile%u side%u play%u rank%u error%.2f",profile,away,p,rank,worst);
+        if(p==1)CHECK((m.actors[i].y-sy)*inside>15,"cross never crossed inside: side%u rank%u",away,rank);
+    }
+}
+static void full_releases(const FootballPlayId *passes)
+{
+    for(unsigned away=0;away<2;++away)for(unsigned p=0;p<4;++p)for(unsigned scheme=0;scheme<3;++scheme){
+        setup(away,passes[p]);unsigned off=away?11:0;float dir=away?-1:1;
+        m.defense=(FootballDefenseId)scheme;football_live_defense_setup(&m);
+        for(unsigned a=0;a<22;++a)m.actors[a].attributes=(FootballAttributes){60,60,60,60,60,60,60,60};
+        float start[4],lane[4],worst[4]={0};for(unsigned rank=2;rank<=5;++rank){start[rank-2]=m.actors[off+rank].x;lane[rank-2]=m.actors[off+rank].y;}
+        for(unsigned frame=0;frame<90 && m.phase==FB_LIVE_PLAY;++frame){
+            football_live_tick(&m,17,(FootballLiveInput){.receiver=-1});
+            for(unsigned rank=2;rank<=5;++rank)worst[rank-2]=fmaxf(worst[rank-2],route_distance(football_playbook_get(passes[p]),(m.actors[off+rank].x-start[rank-2])*dir,(m.actors[off+rank].y-lane[rank-2])*(lane[rank-2]<26.67f?1:-1)));
+        }
+        for(unsigned rank=2;rank<=5;++rank){
+            float gain=(m.actors[off+rank].x-start[rank-2])*dir;
+            CHECK(gain>m.elapsed*2,"full formation receiver stalled: side%u play%u defense%u rank%u gain%.2f time%.2f",away,p,scheme,rank,gain,m.elapsed);
+            CHECK(m.actors[off+rank].block_peer==255,"eligible receiver engaged as blocker before pass");
+            CHECK(worst[rank-2]<3.5f,"coverage diverted receiver from route: side%u play%u defense%u rank%u error%.2f",away,p,scheme,rank,worst[rank-2]);
+        }
+    }
+    /* No reachable assignment on a run means releasing to block downfield,
+     * rather than standing at the snap position as an idle lineman. */
+    for(unsigned away=0;away<2;++away){
+        setup(away,FB_RUN_DIVE);unsigned off=away?11:0,def=11-off;float dir=away?-1:1;
+        m.carrier=(uint8_t)(off+1);m.controlled=m.carrier;
+        for(unsigned d=def;d<def+11;++d){m.actors[d].x=away?2:118;m.actors[d].stun=30;}
+        float start[4];for(unsigned rank=2;rank<=5;++rank)start[rank-2]=m.actors[off+rank].x;
+        for(unsigned frame=0;frame<60;++frame)football_live_tick(&m,17,(FootballLiveInput){.receiver=-1});
+        for(unsigned rank=2;rank<=5;++rank)CHECK((m.actors[off+rank].x-start[rank-2])*dir>3,"run receiver never released downfield");
+    }
+}
 int main(void)
 {
     memset(&roster,0,sizeof roster);roster.count=22;
@@ -39,6 +97,7 @@ int main(void)
         found=football_stats_generate(&electrode,101,&pr_forms[f],&roster.maxima);break;
     }
     CHECK(found,"actual Electrode attributes generated");profiles[2]=electrode.attributes;
+    called_routes(passes,profiles);full_releases(passes);
     unsigned backward=0;
     for(unsigned profile=0;profile<3;++profile)for(unsigned away=0;away<2;++away)for(unsigned p=0;p<4;++p)for(unsigned rank=1;rank<=5;++rank){
         setup(away,passes[p]);unsigned off=away?11:0,i=off+rank;float dir=away?-1:1;
@@ -75,5 +134,8 @@ int main(void)
         football_live_physics(&m);
         CHECK(m.actors[off+6].block_peer==255,"pass blocker abandoned edge assignment for an incidental contact");
     }
+    setup(0,FB_PASS_SLANTS);m.actors[2].route_peer=19;m.actors[2].route_side=1;m.actors[2].route_y=12;
+    m.phase=FB_LIVE_CALL;CHECK(football_live_call(&m,FB_PASS_VERTICALS),"next snap after a release");
+    CHECK(!m.actors[2].route_peer && !m.actors[2].route_side && !m.actors[2].route_y,"release state leaked into the next snap");
     printf("football movement regressions: %u checks, %u failures\n",checks,failed);return failed?1:0;
 }

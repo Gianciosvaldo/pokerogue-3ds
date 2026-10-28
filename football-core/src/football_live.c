@@ -281,6 +281,9 @@ static void step(FootballLive *m,FootballLiveInput input)
                 if(mark<22){tx=m->actors[mark].x-a->x;ty=m->actors[mark].y-a->y;
                     /* Pass protection sets and mirrors; it does not charge into the rushers. */
                     if(p->type==FB_PLAY_PASS && !m->caught){float len=hypotf(tx,ty);if(len>.55f){tx*=.55f/len;ty*=.55f/len;}}}
+                /* A run's eligible blockers release downfield when no defender
+                 * is in reach; an empty assignment is not an order to stand still. */
+                else if(p->type==FB_PLAY_RUN && rank>=2 && rank<=5)tx=dir;
             }else if(rank>=1){
                 if(m->flying && i==m->target){tx=m->to_x-a->x;ty=m->to_y-a->y;} /* the target goes to the ball */
                 else if(m->caught){tx=dir;ty=(carrier->y-a->y)*.1f;}

@@ -49,8 +49,10 @@ typedef struct { uint8_t kind,actor,other;int8_t side;uint32_t step;float x,y; }
 #define FB_LIVE_HOLD_TURNOVER 1.4f
 enum { FB_LIVE_ACTION=1,FB_LIVE_JUKE=2,FB_LIVE_SWITCH=4 };
 typedef struct { float x,y;unsigned pressed;int receiver; } FootballLiveInput;
-typedef struct { FootballAttributes attributes;float x,y,vx,vy,stun,contact,block_time,block_cooldown,block_edge;
-    uint8_t roster,block_peer;int8_t facing;bool home; } FootballLiveActor;
+/* route_* is snap-local release state: route_peer is defender + 1, or 0.
+ * Formation setup clears it; checkpoints rebuild actors rather than storing it. */
+typedef struct { FootballAttributes attributes;float x,y,vx,vy,stun,contact,block_time,block_cooldown,block_edge,route_y;
+    uint8_t roster,block_peer,route_peer;int8_t route_side,facing;bool home; } FootballLiveActor;
 typedef struct {
     FootballRules rules;
     FootballLiveActor actors[22];

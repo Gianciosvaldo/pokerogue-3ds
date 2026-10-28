@@ -154,29 +154,66 @@ float football_live_ai_separation(const FootballLive *m,unsigned i)
     return push*(3-best)/3*(.25f+a->attributes.agi/250.0f);
 }
 
-void football_live_ai_receiver(const FootballLive *m,unsigned i,float *x,float *y)
+/* Project onto the called polyline, then look ahead by distance along it.
+ * Advancing by x alone skips the nearly sideways legs of PA Cross. */
+static FootballRoutePoint receiver_route(const FootballPlayDefinition *p,float x,float y)
+{
+    FootballRoutePoint start={0,0},point={0,0};unsigned segment=0;float nearest=1e9f;
+    for(unsigned k=0;k<p->route_count;++k){
+        FootballRoutePoint end=p->route[k];float dx=end.x-start.x,dy=end.y-start.y;
+        float len2=dx*dx+dy*dy,t=len2>0?clampf(((x-start.x)*dx+(y-start.y)*dy)/len2,0,1):0;
+        FootballRoutePoint q={start.x+t*dx,start.y+t*dy};float gap2=(q.x-x)*(q.x-x)+(q.y-y)*(q.y-y);
+        if(gap2<nearest){nearest=gap2;point=q;segment=k;}
+        start=end;
+    }
+    float left=1.5f;
+    for(unsigned k=segment;k<p->route_count;++k){
+        FootballRoutePoint end=p->route[k];float dx=end.x-point.x,dy=end.y-point.y,len=hypotf(dx,dy);
+        if(len>left)return (FootballRoutePoint){point.x+dx*left/len,point.y+dy*left/len};
+        left-=len;point=end;
+    }
+    point.x=fmaxf(point.x,x)+left;return point;
+}
+
+void football_live_ai_receiver(FootballLive *m,unsigned i,float *x,float *y)
 {
     unsigned off=off_base(m),def=11-off,rank=i-off;
-    const FootballLiveActor *a=&m->actors[i];
+    FootballLiveActor *a=&m->actors[i];
     const FootballPlayDefinition *p=football_playbook_get(m->play);
-    float dir=dir_of(m),depth=(a->x-m->los)*dir-rank*2;
-    FootballRoutePoint route=p->route[p->route_count-1];
-    /* A fast receiver must not run back toward a clock-driven waypoint he has passed.
-     * Look ahead along the called route, then continue downfield after its final break. */
-    for(unsigned k=0;k<p->route_count;++k)if(p->route[k].x>depth+2.5f){route=p->route[k];break;}
-    float lane=rank==1?30:rank==2?6:rank==3?47:rank==4?16:37;
-    float tx=dir*fmaxf(2.5f,route.x-depth),ty=clampf(lane+route.y*(rank%2?1:-1),2,51)-a->y;
+    /* Receiver-relative routes start at the snap position. Inside is toward the
+     * middle of the field, independent of slot parity and direction of play. */
+    float dir=dir_of(m),origin=rank==1?(p->formation==FB_FORM_UNDER_CENTER?-5.f:-7.f):-1.f;
+    float lane=rank==1?28:rank==2?4:rank==3?49:rank==4?13:39,inside=lane<26.67f?1.f:-1.f;
+    float depth=(a->x-m->los)*dir-origin;
+    FootballRoutePoint route=receiver_route(p,depth,(a->y-lane)*inside);
+    float tx=dir*fmaxf(.1f,route.x-depth),ty=clampf(lane+route.y*inside,2,51)-a->y;
     float length=hypotf(tx,ty);if(length>1){tx/=length;ty/=length;}
-    /* Coverage is a solid body. Begin a lateral release before contact instead of
-     * repeatedly pushing straight into the defender who is mirroring this route. */
-    float nearest=4;
-    for(unsigned d=def;d<def+11;++d){const FootballLiveActor *b=&m->actors[d];
-        float ahead=(b->x-a->x)*dir,side=b->y-a->y,range=gap(a,b);
-        if(ahead<-FB_BODY_DIAMETER || ahead>3.5f || fabsf(side)>1.65f || range>=nearest)continue;
-        nearest=range;
-        float release=fabsf(side)<.3f?(a->y<26.67f?1.f:-1.f):(side>0?-1.f:1.f);
-        if(a->y<3)release=1;else if(a->y>50)release=-1;
-        tx=dir*fmaxf(tx*dir,.5f);ty=release*fmaxf(fabsf(ty),.85f);
+    /* Hold a sidestep lane until past the obstructing body, rather than
+     * continuously running sideways or turning straight back into contact. */
+    if(a->route_peer){const FootballLiveActor *b=&m->actors[a->route_peer-1];
+        if((b->x-a->x)*dir<-FB_BODY_DIAMETER || gap(a,b)>6)a->route_peer=0;
+    }
+    if(!a->route_peer){
+        float nearest=3;
+        for(unsigned d=def;d<def+11;++d){const FootballLiveActor *b=&m->actors[d];
+            float ahead=(b->x-a->x)*dir,side=b->y-a->y,range=gap(a,b);
+            float closing=(a->vx-b->vx)*dir;
+            if(ahead<0 || ahead>2.5f || fabsf(side)>FB_BODY_DIAMETER || range>=nearest ||
+               (ahead>FB_BODY_DIAMETER+.2f && closing<.5f))continue;
+            nearest=range;
+            float release=fabsf(side)<.3f?(fabsf(ty)>.2f?(ty>0?1.f:-1.f):inside):(side>0?-1.f:1.f);
+            if(b->y+release*(FB_BODY_DIAMETER+.4f)<2 || b->y+release*(FB_BODY_DIAMETER+.4f)>51)release=-release;
+            a->route_peer=(uint8_t)(d+1);a->route_side=(int8_t)release;
+            a->route_y=clampf(b->y+release*(FB_BODY_DIAMETER+.4f),2,51);
+        }
+    }
+    if(a->route_peer){const FootballLiveActor *b=&m->actors[a->route_peer-1];
+        /* If coverage follows the first step, keep enough lateral clearance. */
+        if(fabsf(b->y-a->y)<FB_BODY_DIAMETER && (b->x-a->x)*dir>0)
+            a->route_y=clampf(b->y+a->route_side*(FB_BODY_DIAMETER+.4f),2,51);
+        float center=clampf(lane+route.y*inside,2,51);
+        a->route_y=clampf(a->route_y,center-1.7f,center+1.7f);
+        tx=dir*fmaxf(.1f,route.x-depth);ty=a->route_y-a->y;
     }
     *x=tx;*y=ty;
 }

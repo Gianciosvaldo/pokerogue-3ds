@@ -6,6 +6,8 @@ void football_live_defense_setup(FootballLive *m)
     if(!m)return;
     unsigned off=m->rules.offense==FB_HOME?0:11,def=11-off;
     float dir=off? -1:1;
+    const FootballPlayDefinition *play=football_playbook_get(m->play);
+    bool passing=play && play->type==FB_PLAY_PASS;
     /* DL rush, LB covers WR3/RB/TE, corners cover WR1/WR2, two deep safeties.
      * A five-man blitz rotates the free safety onto the RB and keeps one high. */
     static const uint8_t man[11]={255,255,255,255,4,1,5,2,3,255,255};
@@ -18,7 +20,9 @@ void football_live_defense_setup(FootballLive *m)
         if(rank>=4){
             FootballLiveActor *a=&m->actors[def+rank];unsigned target=m->coverage[rank];
             if(m->defense!=FB_DEF_ZONE && target!=255){
-                a->x=m->los+dir*(rank==7 || rank==8?2:5);a->y=m->actors[target].y;
+                a->x=m->los+dir*(rank==7 || rank==8?2:5);
+                float leverage=target==off+2 || target==off+4?1.f:-1.f;
+                a->y=clamp(m->actors[target].y+(passing?leverage*(FB_BODY_DIAMETER+.4f):0),2,51);
             }else if(m->defense==FB_DEF_ZONE){a->x=m->zone_x[rank];a->y=m->zone_y[rank];}
         }
     }
@@ -54,7 +58,12 @@ void football_live_defense_intent(FootballLive *m,unsigned actor,float *x,float 
         if(m->flying && fabsf(m->to_y-m->zone_y[rank])<=(rank>=9?17:11) && ((m->to_x-m->los)*dir<=18 || rank>=9)) {tx=m->to_x;ty=m->to_y;}
     }else if(m->coverage[rank]!=255){
         unsigned mark=m->coverage[rank];const FootballLiveActor *r=&m->actors[mark];
-        tx=r->x+dir*.8f+r->vx*.12f;ty=r->y+r->vy*.12f;
+        /* Keep the coverage target outside the receiver's solid body.
+         * An .8-yard lead is inside the 1.3-yard diameter and makes the DB
+         * run back into the receiver instead of carrying the route downfield. */
+        const FootballPlayDefinition *play=football_playbook_get(m->play);bool passing=play && play->type==FB_PLAY_PASS;
+        tx=r->x+dir*(passing?FB_BODY_DIAMETER+.4f:.8f)+r->vx*.12f;
+        ty=clamp(r->y+(passing?(mark==off+2 || mark==off+4?1.f:-1.f)*(FB_BODY_DIAMETER+.4f):0)+r->vy*.12f,2,51);
         if(m->flying && m->target==mark){tx=m->to_x;ty=m->to_y;}
     }else {
         /* Safety help stays over its half; no arbitrary three-second collapse. */
