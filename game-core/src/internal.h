@@ -202,6 +202,7 @@ int gc_mon_get_evolution_target(gc_run *run, const gc_mon *m, bool *fusion);
 void gc_mon_evolve(gc_run *run, gc_mon *m, int evo);
 void gc_mon_evolve_target(gc_run *run, gc_mon *m, int evo, bool fusion);
 bool gc_mon_share_tms(gc_run *run, gc_mon *source, gc_mon *copy);
+void gc_mon_publish_ivs(gc_run *run, const gc_mon *source);
 bool gc_mon_remember_tm(gc_run *run, gc_mon *m, int move);
 void gc_mon_recalc(gc_run *run, gc_mon *m);                            /* calculateStats on a living Pokemon */
 bool gc_mon_fainted(const gc_mon *m);

@@ -610,6 +610,34 @@ bool gc_mon_remember_tm(gc_run *run,gc_mon *m,int move)
     return true;
 }
 
+/* The explicit IV argument of the native child constructor is also an array
+ * reference. Its identity is separate from usedTMs, and neither survives JSON. */
+static bool share_ivs(gc_run *run, gc_mon *source, gc_mon *copy)
+{
+    if (!source->iv_alias) {
+        if (gc_int(run)->next_tm_alias == UINT32_MAX) {
+            pr_note_unported(&run->bt, PR_FEAT_ENGINE_LIMIT);
+            return false;
+        }
+        source->iv_alias = ++gc_int(run)->next_tm_alias;
+    }
+    copy->iv_alias = source->iv_alias;
+    return true;
+}
+
+void gc_mon_publish_ivs(gc_run *run, const gc_mon *source)
+{
+    if (!source->iv_alias) return;
+    gc_mon *members[PR_MAX_PARTY + 1];
+    const int n = tm_members(run, members);
+    for (int i = 0; i < n; i++) {
+        if (members[i] != source && members[i]->iv_alias == source->iv_alias)
+            memcpy(members[i]->b.ivs, source->b.ivs, sizeof source->b.ivs);
+    }
+    /* Source writes the shared IV array, not the siblings' calculated stats.
+     * The ordinary updateModifiers owner performs the later recalculation. */
+}
+
 /* This runs before the parent's species changes, as handleSpecialEvolutions
  * does. Fresh constructor state and explicitly copied properties are distinct. */
 static void special_evolution(gc_run *run,gc_mon *m,const gc_evo *e,bool fusion)
@@ -654,6 +682,7 @@ static void special_evolution(gc_run *run,gc_mon *m,const gc_evo *e,bool fusion)
     }
     run->party_order[slot]=(int8_t)slot;run->n_party++;
     if(!gc_mon_share_tms(run,m,copy))return;
+    if(!share_ivs(run,m,copy))return;
     gc_mon_evolve_target(run,copy,rows->start+1,fusion);
     const int stock=run->n_items;
     for(int i=0;i<stock;i++)if(run->items[i].pokemon_id==m->b.id)(void)gc_item_clone_held(run,i,slot);
