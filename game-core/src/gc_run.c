@@ -109,6 +109,15 @@ pr_msg_arg gc_m_trainer(gc_run *run, const char *name, int which)
 /* modifierType.name: "modifierType:ModifierType.<KEY>.name" for the plain modifier types */
 pr_msg_arg gc_m_item(const char *name, const char *item_key)
 {
+    /* Known types have stable catalog identities. A long run must not exhaust a small
+     * first-seen cache and start printing internal IDs for later reward types. */
+    const int item = gc_reward_item_index(item_key);
+    if (item >= 0) {
+        static char keys[PR_ITEM_COUNT_][72];
+        if (!keys[item][0]) snprintf(keys[item], sizeof keys[item], "modifierType:ModifierType.%s.name", item_key);
+        return pr_arg_key(name, keys[item]);
+    }
+    /* Preserve the existing fallback for a stand-in key outside the catalog. */
     static struct { const char *item; char key[72]; } pool[48];
     static int n_pool;
     pr_msg_arg a = {name, PR_ARG_STR, 0, item_key};
@@ -125,7 +134,9 @@ pr_msg_arg gc_m_item(const char *name, const char *item_key)
 pr_msg_arg gc_m_item_arg(const char *name, const char *item_key, int arg)
 {
     const int item = gc_reward_item_index(item_key);
-    if (item >= 0 && pr_items[item].gen) {
+    /* A concrete type also carries pack/voucher names (e.g. "5× Poke Ball"), which
+     * have no generic ModifierType.<ID>.name locale entry. */
+    if (item >= 0) {
         const int id = pr_item_type_name((pr_item_type){(uint16_t)item, (int16_t)arg});
         if (id > 0 && id < pr_reward_string_count && pr_reward_strings[id])
             return (pr_msg_arg){name, PR_ARG_STR, 0, pr_reward_strings[id]};

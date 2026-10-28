@@ -34,9 +34,10 @@ FAULTS = [
  ('missing-side-effect-pokemon', 'game-core/src/gc_mystery.c', 'pr_arg_pokemon_name(&run->bt, "selectedPokemon", &m->b), pr_arg_key("newNature"',
      'pr_arg_pokemon_name(&run->bt, "wrongPokemon", &m->b), pr_arg_key("newNature"'),
  ('silent-dark-deal', 'game-core/src/gc_darkdeal.c', '"mysteryEncounters/darkDeal:option.1.selectedMessage"', '"mysteryEncounters/darkDeal:missingMessage"'),
- ('generic-generator-name', 'game-core/src/gc_run.c', 'if (item >= 0 && pr_items[item].gen)', 'if (false && item >= 0 && pr_items[item].gen)'),
+ ('generic-generator-name', 'game-core/src/gc_run.c', 'if (item >= 0) {\n        const int id', 'if (false && item >= 0) {\n        const int id'),
  ('missing-minigame-name', 'game-core/src/gc_mystery.c', 'pr_arg_key("wobbuffetName", "pokemon:wobbuffet")', 'pr_arg_key("wrongName", "pokemon:wobbuffet")'),
  ('missing-trade-picker', 'game-core/src/gc_mystery.c', 's->option_pick[0] = GC_PICK_MEMBER_TRADE;', 's->option_pick[0] = GC_PICK_MEMBER;'),
+ ('exhausted-item-name-cache', 'game-core/src/gc_run.c', 'if (item >= 0) {\n        static char keys', 'if (item >= 0 && item < 48) {\n        static char keys'),
 ]
 
 def run(args):

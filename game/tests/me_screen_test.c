@@ -732,6 +732,21 @@ int main(void) {
   CHECK(berry_name.kind == PR_ARG_STR && !strcmp(berry_name.s, "Lum Berry"), "concrete generated item, rather than missing BERRY.name");
   const pr_msg_arg booster_name = gc_m_item_arg("itemName", "BASE_STAT_BOOSTER", STAT_ATK);
   CHECK(booster_name.kind == PR_ARG_STR && !strcmp(booster_name.s, "Protein"), "concrete vitamin name");
+  const pr_msg_arg ball_name = gc_m_item_arg("itemName", "POKEBALL", -1);
+  CHECK(ball_name.kind == PR_ARG_STR && !strcmp(ball_name.s, "5× Poké Ball"), "ball-pack count and name, not a nonexistent generic locale key");
+  /* A long run sees more than 48 distinct types; every registered plain item must retain its locale key. */
+  const pr_msg_arg first_name = gc_m_item("itemName", "SHINY_CHARM");
+  int plain_types = 0;
+  for (int i = 0; i < PR_ITEM_COUNT_; i++) {
+    if (pr_items[i].gen) continue;
+    char expected[96];
+    snprintf(expected, sizeof expected, "modifierType:ModifierType.%s.name", pr_item_keys[i]);
+    const pr_msg_arg named = gc_m_item("itemName", pr_item_keys[i]);
+    CHECK(named.kind == PR_ARG_KEY && !strcmp(named.s, expected), "plain item %s retains its translation after many types", pr_item_keys[i]);
+    plain_types++;
+  }
+  CHECK(plain_types > 48, "full plain-item catalog was checked: %d", plain_types);
+  CHECK(!strcmp(first_name.s, "modifierType:ModifierType.SHINY_CHARM.name"), "earlier message arguments remain valid");
 
   /* a screen that is not an encounter does not open */
   R.screen.kind = GC_SCREEN_COMMAND;

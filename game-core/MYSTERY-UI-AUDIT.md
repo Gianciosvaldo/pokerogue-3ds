@@ -30,8 +30,10 @@ with Left/Right, resets details when changing the highlighted option, and scales
 art into the remaining space below the question. Long lists open scrolled to
 the requested cursor. Token fallback copies into a bounded separate buffer:
 expanding a short missing token cannot overwrite its unread input.
-Generated item names use reward-core's pinned English concrete-type catalog;
-plain modifier names retain their existing locale keys.
+Encounter item names use reward-core's pinned English concrete-type catalog,
+including pack counts and generated variants. Other plain modifier messages
+retain their existing locale keys. Known catalog types use catalog-indexed name
+storage, so later reward names do not fall back to internal IDs after 48 types.
 
 ## Validation
 
