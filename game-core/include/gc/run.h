@@ -221,6 +221,7 @@ typedef struct gc_mon {
     uint16_t met_species;       /* Pokemon.metSpecies */
     uint16_t used_tms[PR_TM_HISTORY_CAPACITY]; /* ordered distinct taught TMs */
     uint16_t n_used_tms;
+    uint32_t used_tm_alias;     /* runtime shared-array identity; JSON/save reconstruction separates arrays */
     /* b.nature is getNature() for battle/stat callers. Before a Mint it is also
      * the base nature; old saves default has_custom_nature to false. */
     uint8_t base_nature;

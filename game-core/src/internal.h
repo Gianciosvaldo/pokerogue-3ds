@@ -77,6 +77,7 @@ typedef struct {
 /* run-level state that isn't part of the public struct */
 typedef struct {
     gc_rqueue rq;
+    uint32_t next_tm_alias;    /* runtime array identities, independent of Pokemon IDs */
     uint32_t stub_rng;          /* the stand-ins' own RNG, so they never move upstream's */
     int reroll_count;
     int battle_item_count[2];   /* represented inventory prefix; rebuilt on load/setup */
@@ -200,6 +201,8 @@ int gc_mon_get_evolution(gc_run *run, const gc_mon *m); /* primary-only compatib
 int gc_mon_get_evolution_target(gc_run *run, const gc_mon *m, bool *fusion);
 void gc_mon_evolve(gc_run *run, gc_mon *m, int evo);
 void gc_mon_evolve_target(gc_run *run, gc_mon *m, int evo, bool fusion);
+bool gc_mon_share_tms(gc_run *run, gc_mon *source, gc_mon *copy);
+bool gc_mon_remember_tm(gc_run *run, gc_mon *m, int move);
 void gc_mon_recalc(gc_run *run, gc_mon *m);                            /* calculateStats on a living Pokemon */
 bool gc_mon_fainted(const gc_mon *m);
 bool gc_mon_allowed(const gc_mon *m);                                  /* isAllowedInBattle */
@@ -273,6 +276,7 @@ bool gc_item_key_form_change(const char *key);
 bool gc_form_items_context_known(const gc_run *run, const pr_pokemon *pokemon, int candidate);
 bool gc_item_key_locked(const char *key); /* intrinsic pinned constructor property */
 void gc_item_add(gc_run *run, const char *key, int16_t arg, uint32_t pokemon_id, int stack);
+bool gc_item_clone_held(gc_run *run, int item, int to);
 void gc_item_remove_at(gc_run *run, int idx);
 /* The enemy's held items (the modifiers with a Pokemon) and the player's, as catching moves them. Each rebuilds
  * battle-core's modifier lists (gc_items_to_battle) from the lists as they stand. */

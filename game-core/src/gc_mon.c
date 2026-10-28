@@ -571,8 +571,100 @@ int gc_mon_item_evolutions(gc_run *run, const gc_mon *m, int *out, int cap)
     return n;
 }
 
+/* usedTMs is a source array object, not a Pokemon-ID keyed set. Materialize
+ * its contents in the members for existing read-only reward/memory callers. */
+static int tm_members(gc_run *run, gc_mon **out)
+{
+    int n=0;for(int i=0;i<run->n_party;i++)out[n++]=&run->party[i];
+    if(gc_int(run)->training.away)out[n++]=&gc_int(run)->training.mon;
+    return n;
+}
+static void tm_publish(gc_run *run,const gc_mon *source)
+{
+    gc_mon *members[PR_MAX_PARTY+1];int n=tm_members(run,members);
+    for(int i=0;i<n;i++)if(members[i]!=source && members[i]->used_tm_alias==source->used_tm_alias){
+        members[i]->n_used_tms=source->n_used_tms;
+        memcpy(members[i]->used_tms,source->used_tms,sizeof source->used_tms);
+    }
+}
+bool gc_mon_share_tms(gc_run *run,gc_mon *source,gc_mon *copy)
+{
+    if(source->n_used_tms>PR_TM_HISTORY_CAPACITY){gc_stub(run,GC_STUB_REWARD_INPUT);return false;}
+    if(!source->used_tm_alias){
+        if(gc_int(run)->next_tm_alias==UINT32_MAX){pr_note_unported(&run->bt,PR_FEAT_ENGINE_LIMIT);return false;}
+        source->used_tm_alias=++gc_int(run)->next_tm_alias;
+    }
+    copy->used_tm_alias=source->used_tm_alias;copy->n_used_tms=source->n_used_tms;
+    memcpy(copy->used_tms,source->used_tms,sizeof source->used_tms);
+    return true;
+}
+bool gc_mon_remember_tm(gc_run *run,gc_mon *m,int move)
+{
+    if(m->n_used_tms>PR_TM_HISTORY_CAPACITY){gc_stub(run,GC_STUB_REWARD_INPUT);return false;}
+    bool found=false;for(int i=0;i<m->n_used_tms;i++)found|=m->used_tms[i]==move;
+    if(!found){
+        if(m->n_used_tms==PR_TM_HISTORY_CAPACITY){gc_stub(run,GC_STUB_REWARD_INPUT);return false;}
+        m->used_tms[m->n_used_tms++]=(uint16_t)move;
+    }
+    if(m->used_tm_alias)tm_publish(run,m);
+    return true;
+}
+
+/* This runs before the parent's species changes, as handleSpecialEvolutions
+ * does. Fresh constructor state and explicitly copied properties are distinct. */
+static void special_evolution(gc_run *run,gc_mon *m,const gc_evo *e,bool fusion)
+{
+    if(gc_int(run)->football || (fusion?m->b.fusion_species:m->b.species)!=SPECIES_ID_NINCADA
+        || e->species!=SPECIES_ID_NINJASK || run->n_party>=PR_MAX_PARTY || !run->pokeballs[POKEBALL_TYPE_POKEBALL])return;
+    const gc_species_evo *rows=species_evo(SPECIES_ID_NINCADA);
+    if(!rows || rows->n<2 || gc_evo_data[rows->start+1].species!=SPECIES_ID_SHEDINJA){gc_stub(run,GC_STUB_EVOLUTION);return;}
+    int own=0;for(int i=0;i<run->n_items;i++)own+=run->items[i].pokemon_id==m->b.id;
+    if(run->n_items+own>PR_MAX_MODIFIERS){pr_note_unported(&run->bt,PR_FEAT_ENGINE_LIMIT);return;}
+    const int slot=run->n_party;gc_mon *copy=&run->party[slot];
+    gc_starter starter={.species=m->b.species,.form=m->b.form,.ability_index=m->ability_index,
+        .shiny=m->b.shiny,.variant=m->variant,.nature=m->has_custom_nature?m->base_nature:m->b.nature,.tera_type=-1};
+    memcpy(starter.ivs,m->b.ivs,sizeof starter.ivs);
+    gc_mon_new_player(run,copy,&starter,m->b.level); /* new ID, explicit constructor inputs */
+    const pr_species_gen *species=gc_species_gen(m->b.species);
+    if(species && species->male_percent>=0)(void)pr_rng_frac(&run->run.rng); /* undefined gender, later forced genderless */
+    pr_enemy_gen temporary;memset(&temporary,0,sizeof temporary);
+    temporary.id=copy->b.id;temporary.form=m->b.form;temporary.nature=starter.nature;temporary.fusion_species=-1;
+    if(run->run.mode==GAME_MODES_SPLICED_ENDLESS && m->b.level>1){
+        pr_enemy_gen_ctx ctx={.species=m->b.species,.level=m->b.level,.wave=run->wave,.biome=run->biome,
+            .wave_cycle_offset=run->wave_cycle_offset,.trainer_type=-1,
+            .hidden_ability_charm_stacks=gc_item_stack(run,"ABILITY_CHARM")};
+        if(pr_run_generate_fusion(&run->run,&ctx,&temporary)<0){gc_stub(run,GC_STUB_EVOLUTION);return;}
+    }
+    int8_t types[2];int n=pr_run_enemy_types(&temporary,m->b.species,types);
+    if(n<1){gc_stub(run,GC_STUB_EVOLUTION);return;}
+    copy->b.tera_type=types[n==1?0:pr_rng_integer_in_range(&run->run.rng,0,n-1)];
+    if(run->run.mode==GAME_MODES_DAILY && !gc_generate_moveset(run,&run->run.rng,copy))gc_stub(run,GC_STUB_ENEMY_MOVESET);
+    copy->b.gender=-1;copy->b.passive_flag=m->b.passive_flag;copy->luck=m->luck;
+    copy->b.fusion_species=m->b.fusion_species;copy->b.fusion_form=m->b.fusion_form;
+    copy->b.fusion_ability_index=m->b.fusion_ability_index;
+    copy->b.fusion_gender=m->b.fusion_gender;copy->b.fusion_gender_known=m->b.fusion_gender_known;
+    copy->fusion_shiny=m->fusion_shiny;copy->fusion_variant=m->fusion_variant;copy->fusion_luck=m->fusion_luck;
+    copy->met_level=m->met_level;copy->met_biome=m->met_biome;copy->met_species=m->met_species;copy->met_wave=m->met_wave;
+    copy->b.n_moves=0;memset(copy->b.moves,0,sizeof copy->b.moves);
+    memset(copy->b.pp_used,0,sizeof copy->b.pp_used);memset(copy->b.pp_up,0,sizeof copy->b.pp_up);
+    for(int i=0;i<4;i++){
+        copy->b.max_pp_override[i]=-1;
+        if(i<m->b.n_moves){pr_set_original_move(&copy->b,i,m->b.moves[i]);
+            copy->b.pp_up[i]=m->b.pp_up[i];copy->b.max_pp_override[i]=m->b.max_pp_override[i];}
+    }
+    run->party_order[slot]=(int8_t)slot;run->n_party++;
+    if(!gc_mon_share_tms(run,m,copy))return;
+    gc_mon_evolve_target(run,copy,rows->start+1,fusion);
+    const int stock=run->n_items;
+    for(int i=0;i<stock;i++)if(run->items[i].pokemon_id==m->b.id)(void)gc_item_clone_held(run,i,slot);
+    run->bt.n_party[0]=(uint8_t)run->n_party;
+    for(int k=0;k<run->n_party;k++)run->bt.party[0][k]=&run->party[run->party_order[k]].b;
+    gc_me_update_modifiers(run);
+    run->bt.rng=run->run.rng;
+}
+
 /* Pokemon.evolve: mutate the selected half, form and ability index, then stats.
- * The separate Nincada/Shedinja extra-party owner remains outside this helper. */
+ * Special extra-party creation happens before mutation. */
 void gc_mon_evolve_target(gc_run *run, gc_mon *m, int evo, bool fusion)
 {
     const gc_evo *e = &gc_evo_data[evo];
@@ -581,6 +673,7 @@ void gc_mon_evolve_target(gc_run *run, gc_mon *m, int evo, bool fusion)
     const pr_form *pre = gc_form(pre_species, fusion ? p->fusion_form : p->form);
     int pre_count = pre->ability_hidden ? 3 : 2;
     m->pause_evolutions = false;
+    special_evolution(run,m,e,fusion);
     if (fusion) p->fusion_species = e->species;
     else p->species = e->species;
     if (e->pre_form != -1) {
@@ -616,7 +709,7 @@ void gc_mon_evolve_target(gc_run *run, gc_mon *m, int evo, bool fusion)
     }
     gc_mon_recalc(run, m);
 
-    if (run->sys) {
+    if (run->sys && (run->run.mode != GAME_MODES_DAILY || m->met_biome > -1)) {
         gc_system_update_species_dex_ivs(run->sys, m->b.species, m->b.ivs);
         gc_system_set_pokemon_seen(run->sys, m, false, false);
         gc_system_set_pokemon_caught(run->sys, m, false, false);
