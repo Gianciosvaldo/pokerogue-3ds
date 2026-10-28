@@ -103,13 +103,31 @@ int main(void)
 
     /* The career earns candy as the plays happen and for the whole team at the end, and the profile gets it only with a
      * checkpoint (football_career_flush_candy, which the screen calls when it saves one). */
-    unsigned wins=0,losses=0,unsaved_runs=0;unsigned long paid_plays=0,paid_team=0,paid_plays_milli=0,paid_team_milli=0;
+    unsigned wins=0,losses=0,unsaved_runs=0,checkpoint_cases=0;unsigned long paid_plays=0,paid_team=0,paid_plays_milli=0,paid_team_milli=0;
     for(uint32_t run=1;run<=8;++run){
         football_test_unlock_all(&profile);
         assert(football_career_new(&career,&scratch,&profile,run));
         for(int i=0;i<gc_starter_cost_count && career.roster.count<22;++i){if(gc_starter_costs[i].cost>1)continue;gc_starter s={.species=gc_starter_costs[i].id,.tera_type=-1};football_roster_add(&career.roster,&scratch,&s,&profile,NULL);}
         assert(career.roster.count==22);football_roster_autofill(&career.roster);career.phase=FB_CAREER_READY;
-        assert(football_career_start(&career));career.live.autoplay=1;
+        assert(football_career_start(&career));
+        /* Exercise every play-reward owner at a real checkpoint independently of
+         * whether this weak roster scores against the CPU in a particular seed.
+         * The full games below still check every naturally occurring credit. */
+        for(unsigned kind=FB_CREDIT_INTERCEPTION;kind<=FB_CREDIT_TOUCHDOWN;++kind){
+            loaded=career;loaded.scratch=&other;resumed_profile=profile;loaded.profile=&resumed_profile;
+            unsigned actor=0;while(actor<22 && !loaded.live.actors[actor].home)++actor;assert(actor<22);
+            unsigned long before=total_points(&resumed_profile),points=football_credit_candy(kind);
+            football_live_credit(&loaded.live,actor,(FootballCreditKind)kind);loaded.live.snaps++;
+            football_career_tick(&loaded,0,idle());
+            assert(loaded.candy_plays==points && pending(&loaded)==points && total_points(&resumed_profile)==before);
+            football_career_tick(&loaded,0,idle());assert(pending(&loaded)==points); /* no duplicate delivery */
+            assert(football_career_save_ready(&loaded) && football_career_save(&loaded,bytes,sizeof bytes));
+            assert(total_points(&resumed_profile)==before); /* saving the career alone never pays the profile */
+            football_career_flush_candy(&loaded);
+            assert(!pending(&loaded) && total_points(&resumed_profile)==before+points*FB_CANDY_FRIENDSHIP_PER_POINT);
+            assert(!football_career_flush_candy(&loaded));checkpoint_cases++;
+        }
+        career.live.autoplay=1;
         unsigned long base=total_candy(&profile),flushed=0,base_points=total_points(&profile),flushed_points=0,member_base[22];guard=0;
         for(unsigned i=0;i<22;++i)member_base[i]=bar_points(&profile,gc_species_root_for_starter(career.roster.mon[i].b.species));
         bool resumed=false,unsaved_checked=false;
@@ -156,7 +174,8 @@ int main(void)
         /* The whole team's candy is worth the bar of each species: milli-candy is points * 6 * 1000 / bar, summed. */
         assert(career.candy_team_milli>0 && career.candy_team_milli<=football_career_team_candy_milli(&career,true));
     }
-    assert(wins+losses==8 && unsaved_runs>=6); /* most matches earn candy before their last play */
+    assert(wins+losses==8 && checkpoint_cases==24);
+    printf("candy: 24 deterministic unflushed checkpoint cases; %u/8 careers also earned natural play rewards before their final play\n",unsaved_runs);
     /* Nobody to pay: a career without a profile plays on and earns nothing. */
     assert(football_career_new(&career,&scratch,NULL,5));
     for(int i=0;i<gc_starter_cost_count && career.roster.count<22;++i){if(gc_starter_costs[i].cost>1)continue;gc_starter s={.species=gc_starter_costs[i].id,.tera_type=-1};football_roster_add(&career.roster,&scratch,&s,&profile,NULL);}

@@ -282,13 +282,9 @@ static void step(FootballLive *m,FootballLiveInput input)
                     /* Pass protection sets and mirrors; it does not charge into the rushers. */
                     if(p->type==FB_PLAY_PASS && !m->caught){float len=hypotf(tx,ty);if(len>.55f){tx*=.55f/len;ty*=.55f/len;}}}
             }else if(rank>=1){
-                FootballRoutePoint route=football_playbook_route(p,limit(m->elapsed/3,0,1));
-                float target_x=m->los+dir*(route.x+rank*2),target_y=rank==1?30:rank==2?6:rank==3?47:rank==4?16:37;
-                target_y+=route.y*(rank%2?1:-1);
-                tx=target_x-a->x;ty=limit(target_y,2,51)-a->y;
                 if(m->flying && i==m->target){tx=m->to_x-a->x;ty=m->to_y-a->y;} /* the target goes to the ball */
-                else if(!m->caught)ty+=football_live_ai_separation(m,i);
-                if(m->caught){tx=dir;ty=(carrier->y-a->y)*.1f;}
+                else if(m->caught){tx=dir;ty=(carrier->y-a->y)*.1f;}
+                else football_live_ai_receiver(m,i,&tx,&ty);
             }
         }else football_live_defense_intent(m,i,&tx,&ty);
         intent[i][0]=tx;intent[i][1]=ty;

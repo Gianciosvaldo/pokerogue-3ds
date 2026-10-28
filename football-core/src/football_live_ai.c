@@ -153,3 +153,30 @@ float football_live_ai_separation(const FootballLive *m,unsigned i)
     for(unsigned d=def;d<def+11;++d){float g=gap(a,&m->actors[d]);if(g<best){best=g;push=a->y>=m->actors[d].y?1.f:-1.f;}}
     return push*(3-best)/3*(.25f+a->attributes.agi/250.0f);
 }
+
+void football_live_ai_receiver(const FootballLive *m,unsigned i,float *x,float *y)
+{
+    unsigned off=off_base(m),def=11-off,rank=i-off;
+    const FootballLiveActor *a=&m->actors[i];
+    const FootballPlayDefinition *p=football_playbook_get(m->play);
+    float dir=dir_of(m),depth=(a->x-m->los)*dir-rank*2;
+    FootballRoutePoint route=p->route[p->route_count-1];
+    /* A fast receiver must not run back toward a clock-driven waypoint he has passed.
+     * Look ahead along the called route, then continue downfield after its final break. */
+    for(unsigned k=0;k<p->route_count;++k)if(p->route[k].x>depth+2.5f){route=p->route[k];break;}
+    float lane=rank==1?30:rank==2?6:rank==3?47:rank==4?16:37;
+    float tx=dir*fmaxf(2.5f,route.x-depth),ty=clampf(lane+route.y*(rank%2?1:-1),2,51)-a->y;
+    float length=hypotf(tx,ty);if(length>1){tx/=length;ty/=length;}
+    /* Coverage is a solid body. Begin a lateral release before contact instead of
+     * repeatedly pushing straight into the defender who is mirroring this route. */
+    float nearest=4;
+    for(unsigned d=def;d<def+11;++d){const FootballLiveActor *b=&m->actors[d];
+        float ahead=(b->x-a->x)*dir,side=b->y-a->y,range=gap(a,b);
+        if(ahead<-FB_BODY_DIAMETER || ahead>3.5f || fabsf(side)>1.65f || range>=nearest)continue;
+        nearest=range;
+        float release=fabsf(side)<.3f?(a->y<26.67f?1.f:-1.f):(side>0?-1.f:1.f);
+        if(a->y<3)release=1;else if(a->y>50)release=-1;
+        tx=dir*fmaxf(tx*dir,.5f);ty=release*fmaxf(fabsf(ty),.85f);
+    }
+    *x=tx;*y=ty;
+}

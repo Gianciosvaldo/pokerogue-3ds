@@ -18,6 +18,12 @@ bool football_live_is_blocker(const FootballLive *m,unsigned actor)
     const FootballPlayDefinition *p=football_playbook_get(m->play);
     return actor>=off+6 || (p && p->type==FB_PLAY_RUN && actor>=off+2 && actor<=off+5);
 }
+static bool pass_protection(const FootballLive *m)
+{
+    unsigned off=offense(m);const FootballPlayDefinition *p=football_playbook_get(m->play);
+    return !m->special && p && p->type==FB_PLAY_PASS && !m->caught && m->carrier==off &&
+           (m->actors[off].x-m->los)*(off?-1:1)<=.5f;
+}
 unsigned football_live_block_target(const FootballLive *m,unsigned blocker)
 {
     unsigned off=offense(m),def=11-off;
@@ -26,6 +32,34 @@ unsigned football_live_block_target(const FootballLive *m,unsigned blocker)
     if(b->block_peer<22)return b->block_peer;
     unsigned best=255;float score=64;
     bool running=m->special || m->caught || m->carrier!=off || (m->actors[m->carrier].x-m->los)*(off?-1:1)>.5f;
+    if(pass_protection(m)){
+        unsigned plan[5]={255,255,255,255,255};bool used_blocker[5]={0},used_rusher[11]={0};
+        /* Make one shared assignment, rather than five independent nearest-neighbor
+         * decisions. Protect an edge with few reachable blockers before doubling a DT. */
+        for(unsigned n=0;n<5;++n){
+            unsigned rush=255,fewest=6;
+            for(unsigned d=def;d<def+11;++d){
+                bool user_rush=d==m->controlled && fabsf(m->actors[d].x-m->actors[off].x)<10;
+                if(used_rusher[d-def] || m->actors[d].block_peer<22 ||
+                   (d>=def+4 && !(m->defense==FB_DEF_BLITZ && d==def+5) && !user_rush))continue;
+                unsigned count=0;
+                for(unsigned k=0;k<5;++k){const FootballLiveActor *line=&m->actors[off+6+k];
+                    float dx=m->actors[d].x-line->x,dy=m->actors[d].y-line->y;
+                    if(!used_blocker[k] && line->block_peer>=22 && dx*dx+dy*dy<64)count++;
+                }
+                if(count && count<fewest){fewest=count;rush=d;}
+            }
+            if(rush>=22)break;
+            unsigned line=255;float nearest=64;
+            for(unsigned k=0;k<5;++k){const FootballLiveActor *a=&m->actors[off+6+k];
+                float dx=m->actors[rush].x-a->x,dy=m->actors[rush].y-a->y,range=dx*dx+dy*dy;
+                if(!used_blocker[k] && a->block_peer>=22 && range<nearest){nearest=range;line=k;}
+            }
+            if(line>=5)break;
+            plan[line]=rush;used_blocker[line]=true;used_rusher[rush-def]=true;
+        }
+        return plan[blocker-off-6];
+    }
     for(unsigned d=def;d<def+11;++d){const FootballLiveActor *a=&m->actors[d];
         bool user_rush=d==m->controlled && fabsf(a->x-m->actors[off].x)<10;
         if(!running && d>=def+4 && !(m->defense==FB_DEF_BLITZ && d==def+5) && !user_rush)continue;
@@ -45,6 +79,7 @@ static void release(FootballLive *m,unsigned i)
 void football_live_physics(FootballLive *m)
 {
     unsigned off=offense(m),def=11-off;float dir=off?-1:1;
+    bool protecting=pass_protection(m);
     for(unsigned i=0;i<22;++i)if(m->actors[i].block_cooldown>0)m->actors[i].block_cooldown-=FB_LIVE_STEP;
     for(unsigned i=off+2;i<off+11;++i){FootballLiveActor *b=&m->actors[i];if(!football_live_is_blocker(m,i))continue;
         if(b->block_peer<22){
@@ -61,7 +96,9 @@ void football_live_physics(FootballLive *m)
             bool running=m->carrier!=off || m->caught;float hold=clamp((running?.84f:.88f)-b->block_edge*.12f,.5f,.97f);a->vx*=hold;a->vy*=hold;
         }else if(b->block_cooldown<=0){
             unsigned peer=255;float best=1.65f*1.65f;
+            unsigned assigned=protecting?football_live_block_target(m,i):255;
             for(unsigned d=def;d<def+11;++d){FootballLiveActor *a=&m->actors[d];float dx=a->x-b->x,dy=a->y-b->y;
+                if(protecting && d!=assigned)continue;
                 if(a->block_peer<22 || a->block_cooldown>0)continue;
                 float dist=dx*dx+dy*dy;if(dist<best){best=dist;peer=d;}
             }
