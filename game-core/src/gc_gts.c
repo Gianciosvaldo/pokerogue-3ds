@@ -417,7 +417,7 @@ static bool item_trade(gc_run *run, int holder, int which, const char **why)
     cs->allow_luck_upgrades = true;
 
     /* loseHeldItem(modifier, false), then updateModifiers(true) */
-    const pr_msg_arg chosen_name = gc_m_item("chosenItem", chosen.key);
+    const pr_msg_arg chosen_name = gc_m_item_arg("chosenItem", chosen.key, chosen.arg);
     if (--run->items[held[which]].stack <= 0) gc_item_remove_at(run, held[which]);
     gc_me_prune_items(run);
     gc_me_update_modifiers(run);
@@ -425,7 +425,7 @@ static bool item_trade(gc_run *run, int holder, int which, const char **why)
     /* the name comes after the await: the run's own RNG */
     const char *trader = trader_name(&run->run.rng);
     gc_ev_msg(run, "mysteryEncounters/globalTradeSystem:itemTradeSelected", 3, chosen_name, name_arg("tradeTrainerName", trader),
-              gc_m_item("itemName", pr_item_keys[got.type.item]));
+              gc_m_item_arg("itemName", pr_item_keys[got.type.item], got.type.arg));
     gc_me_end_shop(run);
     return true;
 }

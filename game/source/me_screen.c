@@ -15,12 +15,14 @@
 #define HINT_X 10
 #define HINT_Y 226
 #define TIP_W 296
+#define TOP_LINES 5
+#define TIP_LINES 5
 
 static const char* const HINTS[2] = {"A: choose", "B: back"};
 
 static struct {
   me_args a;
-  int scroll;
+  int scroll, detail_page, detail_pages;
   bool left;
 } M;
 
@@ -86,7 +88,7 @@ static rr_color kind_color(int k, bool shadow)
 }
 
 /* The wrapped, coloured text at (x, y). `wrapped` has '\n' where text_wrap broke (in place of a space, or added). */
-static void draw_marked(text_style st, float x, float y, const char* src, float wrap_w)
+static int draw_marked(text_style st, float x, float y, const char* src, float wrap_w, int first, int limit)
 {
   char plain[ME_TEXT_LEN], wrapped[ME_TEXT_LEN + 32];
   uint8_t kinds[ME_TEXT_LEN];
@@ -98,6 +100,7 @@ static void draw_marked(text_style st, float x, float y, const char* src, float 
   size_t pi = 0;
   float ly = y;
   const char* line = wrapped;
+  int row = 0;
   while (*line) {
     const char* nl = strchr(line, '\n');
     const size_t len = nl ? (size_t)(nl - line) : strlen(line);
@@ -112,17 +115,39 @@ static void draw_marked(text_style st, float x, float y, const char* src, float 
       text_opts so = text_defaults();
       so.color = kind_color(k, false);
       so.shadow = kind_color(k, true);
-      text_draw(st, lx, ly, seg, &so);
+      if (row >= first && row < first + limit) text_draw(st, lx, ly, seg, &so);
       lx += text_line_width(st, 0, seg, (int)(e - s));
       s = e;
     }
     pi += len;
+    row++;
     if (!nl) break;
     /* the break replaced a space, or was added by the wrap, or the text had its own newline */
     if (pi < strlen(plain) && (plain[pi] == ' ' || plain[pi] == '\n')) pi++;
     line = nl + 1;
-    ly += pitch;
+    if (row > first) ly += pitch;
   }
+  return row;
+}
+
+static int marked_lines(text_style st, const char* src, float width)
+{
+  char plain[ME_TEXT_LEN], wrapped[ME_TEXT_LEN + 32];
+  uint8_t kinds[ME_TEXT_LEN];
+  me_markup(src, plain, kinds, sizeof plain);
+  text_opts o = text_defaults();
+  o.wrap_w = width;
+  text_wrap(st, plain, &o, wrapped, sizeof wrapped);
+  return text_lines(st, wrapped, &o);
+}
+
+static void reset_details(void)
+{
+  const int top = (marked_lines(TS_INSTRUCTIONS_TEXT, M.a.description, 280) + TOP_LINES - 1) / TOP_LINES;
+  const int tip = (marked_lines(TS_MOVE_LABEL, M.a.options[M.a.cursor].tooltip, TIP_W) + TIP_LINES - 1) / TIP_LINES;
+  M.detail_page = 0;
+  M.detail_pages = top > tip ? top : tip;
+  if (M.detail_pages < 1) M.detail_pages = 1;
 }
 
 /* ------------------------------------------------------------------ the screen */
@@ -131,6 +156,7 @@ static void move_to(int i)
 {
   if (i < 0 || i >= M.a.n || i == M.a.cursor) return;
   M.a.cursor = i;
+  reset_details();
   const int rows = (TIP_Y - LIST_Y) / ROW_H;
   if (M.a.cursor < M.scroll) M.scroll = M.a.cursor;
   if (M.a.cursor >= M.scroll + rows) M.scroll = M.a.cursor - rows + 1;
@@ -163,6 +189,13 @@ static bool ms_input(ui_screen* s, ui_button b)
   switch (b) {
     case BTN_UP: move_to(M.a.cursor - 1); return true;
     case BTN_DOWN: move_to(M.a.cursor + 1); return true;
+    case BTN_LEFT:
+    case BTN_RIGHT:
+      if (M.detail_pages > 1) {
+        M.detail_page = (M.detail_page + (b == BTN_RIGHT ? 1 : M.detail_pages - 1)) % M.detail_pages;
+        ui_play_select();
+      }
+      return true;
     case BTN_ACTION:
     case BTN_SUBMIT:
       if (!M.a.options[M.a.cursor].ok) {
@@ -189,7 +222,7 @@ static bool ms_touch(ui_screen* s, float x, float y)
   for (int i = 0; i < rows && M.scroll + i < M.a.n; i++) {
     const float top = LIST_Y + i * ROW_H;
     if (x < 4 || x >= 316 || y < top || y >= top + ROW_H) continue;
-    M.a.cursor = M.scroll + i;
+    move_to(M.scroll + i);
     return ms_input(s, BTN_ACTION);
   }
   return false;
@@ -206,22 +239,26 @@ static void draw_top(void)
   text_draw(TS_WINDOW, 20, 16, M.a.title, &t);
   text_opts o = text_defaults();
   o.wrap_w = 280;
-  char wrapped[ME_TEXT_LEN + 32];
-  text_wrap(TS_INSTRUCTIONS_TEXT, M.a.description, &o, wrapped, sizeof wrapped);
-  text_draw(TS_INSTRUCTIONS_TEXT, 20, 40, wrapped, &o);
-  /* the question goes under however many lines the description took (a fixed y overlapped a three-line description) */
-  const float desc_h = (float)text_lines(TS_INSTRUCTIONS_TEXT, wrapped, &o) * text_line_pitch(TS_INSTRUCTIONS_TEXT, &o);
-  text_wrap(TS_WINDOW, M.a.query, &o, wrapped, sizeof wrapped);
+  const int desc_lines = marked_lines(TS_INSTRUCTIONS_TEXT, M.a.description, 280);
+  const int desc_pages = (desc_lines + TOP_LINES - 1) / TOP_LINES;
+  const int desc_page = M.detail_page < desc_pages ? M.detail_page : (desc_pages > 0 ? desc_pages - 1 : 0);
+  const int first = desc_page * TOP_LINES;
+  draw_marked(TS_INSTRUCTIONS_TEXT, 20, 40, M.a.description, 280, first, TOP_LINES);
+  const int shown = desc_lines - first < TOP_LINES ? desc_lines - first : TOP_LINES;
+  const float below = 40 + shown * text_line_pitch(TS_INSTRUCTIONS_TEXT, &o) + 6;
+  const int query_lines = draw_marked(TS_WINDOW, 20, below, M.a.query, 280, 0, 3);
+  const float art_top = below + query_lines * text_line_pitch(TS_WINDOW, &o) + 4;
   int n_sprites = 0;
   while (n_sprites < ME_MAX_SPRITES && M.a.sprites[n_sprites][0]) n_sprites++;
-  const float below = 40 + desc_h + 6;
-  text_draw(TS_WINDOW, 20, n_sprites || M.a.n_intro ? (below > 70 ? below : 70) : (below > 130 ? below : 130), wrapped, &o);
   for (int i = 0; i < n_sprites; i++) { /* black silhouettes standing on the window's floor, evenly spread */
     const rr_frame* f = img_anim_frame(M.a.sprites[i], 0);
     if (!f) continue;
     rr_draw_opts d = RR_DEFAULT_OPTS;
     d.origin_x = 0.5f;
     d.origin_y = 1;
+    const float room = 166 - art_top;
+    if (room <= 0) continue;
+    if (f->src_h > room) d.scale_x = d.scale_y = room / f->src_h;
     d.tint = RR_RGBA(0, 0, 0, 255);
     rr_draw(f, 8 + 304 * (2 * i + 1) / (2 * n_sprites), 166, &d);
   }
@@ -232,7 +269,10 @@ static void draw_top(void)
     rr_draw_opts d = RR_DEFAULT_OPTS;
     d.origin_x = 0.5f;
     d.origin_y = 1;
+    const float room = s->y - art_top;
+    if (room <= 0) continue;
     d.scale_x = d.scale_y = s->scale;
+    if (f->src_h > 0 && f->src_h * s->scale > room) d.scale_x = d.scale_y = room / f->src_h;
     const unsigned v = (unsigned)(255.0f * (1.0f - s->dark));
     d.tint = RR_RGBA(v, v, v, 255);
     rr_draw(f, s->x, s->y, &d);
@@ -258,7 +298,16 @@ static void draw_bottom(void)
   for (int i = 0; i < rows && M.scroll + i < M.a.n; i++) draw_row(M.scroll + i, (float)(LIST_Y + i * ROW_H));
   ui_window(1, TIP_Y, 318, 76, WIN_NORMAL);
   const me_option* op = &M.a.options[M.a.cursor];
-  if (op->tooltip[0]) draw_marked(TS_MOVE_LABEL, 10, TIP_Y + 6, op->tooltip, TIP_W); /* the 8 px pixel font: the 9 px emerald of TS_TOOLTIP_CONTENT blurs on the 3DS */
+  if (op->tooltip[0]) {
+    const int tip_pages = (marked_lines(TS_MOVE_LABEL, op->tooltip, TIP_W) + TIP_LINES - 1) / TIP_LINES;
+    const int page = M.detail_page < tip_pages ? M.detail_page : tip_pages - 1;
+    draw_marked(TS_MOVE_LABEL, 10, TIP_Y + 6, op->tooltip, TIP_W, page * TIP_LINES, TIP_LINES);
+  } /* the 8 px pixel font: the 9 px emerald of TS_TOOLTIP_CONTENT blurs on the 3DS */
+  if (M.detail_pages > 1) {
+    char hint[40];
+    snprintf(hint, sizeof hint, "< > Details %d/%d", M.detail_page + 1, M.detail_pages);
+    text_draw(TS_INSTRUCTIONS_TEXT, 170, HINT_Y, hint, NULL);
+  }
   if (M.a.can_back)
     for (int i = 0; i < 2; i++) text_draw(TS_INSTRUCTIONS_TEXT, hint_x(TS_INSTRUCTIONS_TEXT, HINT_X, HINTS, i), HINT_Y, HINTS[i], NULL);
 }
@@ -289,6 +338,9 @@ bool me_screen_open(const me_args* a)
       M.a.cursor = i;
       break;
     }
+  const int rows = (TIP_Y - LIST_Y) / ROW_H;
+  if (M.a.cursor >= rows) M.scroll = M.a.cursor - rows + 1;
+  reset_details();
   ui_push(&g_screen);
   return true;
 }

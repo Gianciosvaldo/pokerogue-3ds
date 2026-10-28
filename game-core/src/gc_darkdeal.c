@@ -137,6 +137,9 @@ void gc_dark_deal_execute(gc_run *run, int option)
     pr_rng pre = pr_run_seed_offset_rng(&run->run, run->wave * 1000 + 512, NULL);
     const int slot = random_player_pokemon(run, &pre);
     const int idx = run->party_order[slot];
+    const pr_msg_arg removed_name = pr_arg_pokemon_name(&run->bt, "pokeName", &run->party[idx].b);
+    gc_ev_msg(run, "mysteryEncounters/darkDeal:option.1.selectedDialogue", 1, removed_name);
+    gc_ev_msg(run, "mysteryEncounters/darkDeal:option.1.selectedMessage", 1, removed_name);
     int8_t types[PR_MAX_TYPES];
     const int n_types = pr_get_types(&run->party[idx].b, types, PR_TYPES_NO_TERA);
     static gc_item kept[GC_MAX_ITEMS];

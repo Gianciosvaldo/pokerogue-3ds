@@ -785,6 +785,9 @@ sets), and the five Poke Ball counts before and after. `tools/trainervictoryplan
 
 ## Mystery encounter actions: upstream harness (card 82) and Department Store Sale
 
+The current source-backed encounter UI/reward audit and remaining stand-ins are tracked in
+[MYSTERY-UI-AUDIT.md](MYSTERY-UI-AUDIT.md).
+
 `tools/mysterydiff.sh <upstream 8555c08> [N=2000] [seed]` runs the real encounters' own option code through
 `tests/mystery-actions.producer.test.ts` (the game manager starts the encounter; each case changes the run seed, wave
 seed and wave and runs the chosen option's `onOptionPhase` exactly as `MysteryEncounterOptionSelectedPhase` does, in
@@ -796,8 +799,8 @@ money, items owned, that the encounter left without a battle, the shop's `custom
 Pikachu, Eevee), the RNG after the shop, and that the next wave is queued. The old `gen/dump-mystery-actions.test.ts`
 and `tests/mystery_diff_test.c` are untouched and still only smoke coverage.
 
-Department Store Sale, Shady Vitamin Dealer, Lost at Sea, Field Trip, Part Timer, An Offer You Can't Refuse and The Pokemon Salesman are ported and compared. Every other encounter's actions in
-`gc_mystery.c` are still the Task 46 stand-ins; the encounter *selection* (`gc_mystery_select`) and the intro checks
+Fourteen encounters have source-backed implementations (including the later GTS, Fun and Games, Fight or Flight, Snorlax, Berries, Dark Deal and Training ports). The current list and the fifteen remaining Task 46 stand-ins are in
+[MYSTERY-UI-AUDIT.md](MYSTERY-UI-AUDIT.md); the encounter *selection* (`gc_mystery_select`) and the intro checks
 are not part of this comparison.
 
 ### Shady Vitamin Dealer
@@ -824,8 +827,7 @@ Upstream behaviours this reproduces on purpose, all found by the comparison or b
   ran: no experience is ever given (the producer records that no experience phase is queued).
 - `applyDamageToPokemon`'s "never faint" floor cannot be reached here (the cheap deal needs more than half the HP), so no
   planted bug on it can be caught; it is kept to follow upstream.
-- The party screen is the app's: until it exists, `gc_mystery_execute` takes the first Pokemon the filter accepts when the
-  one it is given is refused.
+- The app now asks for a member and enforces the filter. The core retains the first-valid fallback for older/headless callers that supply a refused member.
 
 ### Lost at Sea
 
@@ -874,8 +876,7 @@ Upstream behaviours reproduced on purpose:
 - The shop items are `generateModifierTypeOption`s: tier from the player pool (`withTierFromPool`), a stat for the X items.
   `pr_reward_pregen_option` (reward-core) makes them without rolling anything.
 - The experience phases are taken out of the queue before the shop is opened: upstream's shop is computed without them applied.
-- The app's party/move screen does not exist yet: `gc_mystery_execute(.., b, c)` takes the Pokemon (storage index) and the move
-  slot, and reads a value out of range as the first Pokemon and the first move.
+- The app asks for the member and move and sends their storage/slot indexes. The core retains the old first-member/first-move fallback for out-of-range headless choices.
 
 ### Part Timer
 
@@ -905,8 +906,7 @@ Upstream behaviours reproduced on purpose:
 - The third option needs a Pokemon *allowed in battle* with one of the eight charming moves; the primary Pokemon is the first
   such one in party order.
 - The shop is `setEncounterRewards({fillRemaining: true})`: the ordinary rolled shop, no heal shop.
-- The app's party screen does not exist yet: `gc_mystery_execute(.., b, ..)` takes the Pokemon (storage index); one the filter
-  refuses is read as the first that passes.
+- The app asks for a member and enforces the filter; the core retains the first-valid fallback for older/headless callers.
 
 ### An Offer You Can't Refuse
 
@@ -965,8 +965,7 @@ Not covered, on purpose: the bought Pokemon's moveset (upstream's `generateAndPo
 `gc_port_enemy_moveset` stands in and the moves are left out of the comparison), the timed-event species branch (events are out and
 mocked off), achievements and `gameStats.pokemonDefeated` (not tracked in C), and the reroll count of the hidden-ability search (the five rerolls and the Magikarp that follows when all six draws lack one need
 about six species in a row without a hidden ability: never hit in 8000 offers, so a loop that stops one early is not caught; the
-shiny Magikarps compared all come from the roll of 0). `game/` has no mystery-encounter screen yet
-(`mystery_auto` picks), so the encounter is not reachable on the console.
+shiny Magikarps compared all come from the roll of 0). The app now presents the actual offer and price, including the shiny variant, and the existing catch/party-replacement screens handle the purchase.
 
 ### Fun and Games!
 
@@ -1047,11 +1046,10 @@ Gaps, on purpose or by necessity:
 
 - A pair trainer name ("A & B") shows the whole entry (`$t(trainersCommon:<class>[.male|.female].<k>)`); which half upstream shows is drawn
   from the right stream (checked through the RNG) but not shown. The text itself comes from the locale at display time.
-- The Poke Ball of the received Pokemon is unseeded upstream (`randInt(4)`): drawn with the stand-in, never compared. The chosen item's name
-  loses its argument (a Berry type, a stat) in the message.
+- The Poke Ball of the received Pokemon is unseeded upstream (`randInt(4)`): drawn with the stand-in, never compared. Generated item messages now carry the concrete argument-dependent type name from the pinned English catalog.
 - Achievements (`addPokemonDataToDexAndValidateAchievements`) are not tracked in C. Timed events are off.
 - Upstream loops forever when every candidate species is used (`generateTradeOption`); the port gives up and the trade is refused.
-- `game/` has no mystery-encounter screen (`mystery_auto` picks the first option with the first healthy Pokemon and the first offer).
+- The app asks for the member, one of its three trade offers, or a transferable item. Back navigation and all held-item pages are supported.
 - Offers use the generic wild moveset generator (`gc_movegen.c`); a Pokemon it does not cover falls back to `gc_port_enemy_moveset`.
 
 ## Fleeing: upstream differential (Task 77 / #125)

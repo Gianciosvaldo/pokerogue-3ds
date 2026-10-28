@@ -156,6 +156,7 @@ pr_msg_arg gc_m_mon(gc_run *run, const char *name, int side, int idx);   /* getP
 pr_msg_arg gc_m_mon_name(gc_run *run, const char *name, int side, int idx);   /* getNameToRender */
 pr_msg_arg gc_m_trainer(gc_run *run, const char *name, int which);       /* trainer.getName (GC_TNAME_*) */
 pr_msg_arg gc_m_item(const char *name, const char *item_key);            /* a modifier type's name */
+pr_msg_arg gc_m_item_arg(const char *name, const char *item_key, int arg); /* generated modifier's concrete type name */
 void gc_ev_battle_chunk(gc_run *run, const pr_event *events, int count);
 void gc_ev_battle(gc_run *run);                   /* battle-core's events of the last call, as GC_EV_BATTLE */
 void gc_stub(gc_run *run, int which);

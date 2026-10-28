@@ -196,7 +196,9 @@ typedef struct {
 } gc_screen;
 enum { GC_PICK_NONE = 0, GC_PICK_MEMBER = 1, GC_PICK_MEMBER_MOVE = 2,
        GC_PICK_MEMBER_NATURE = 3,    /* a party member and then one of the 25 natures (c); gc_training_nature_new marks the ones new to its dex entry */
-       GC_PICK_MEMBER_ABILITY = 4    /* a party member and then one of its abilities (c = the ability slot 0..2); gc_training_abilities lists them */ };
+       GC_PICK_MEMBER_ABILITY = 4,   /* a party member and then one of its abilities (c = the ability slot 0..2); gc_training_abilities lists them */
+       GC_PICK_MEMBER_TRADE = 5,     /* GTS: a party member, then one of its three offers (c = 0..2) */
+       GC_PICK_MEMBER_ITEM = 6 };    /* GTS: a holder, then its transferable held item (c = index in gc_gts_held_items) */
 
 
 /* ---------------------------------------------------------------- the run's state */
@@ -385,6 +387,10 @@ typedef struct gc_run {
 
 /* Whether the encounter's party screen accepts the member for the option (a member that cannot be picked is shown but not selectable). */
 bool gc_mystery_member_ok(const gc_run *run, int option, int idx);
+/* GTS's second pick. Offers use the encounter's seed offset and preserve the run RNG; the returned Pokemon
+ * are previews, not party members. Item indexes are in held-item order, not in the run's entire inventory. */
+bool gc_gts_trade_options(gc_run *run, int party_idx, gc_mon out[3]);
+int gc_gts_held_items(const gc_run *run, int idx, int out[GC_MAX_ITEMS]);
 /* Training Session's lists (GC_PICK_MEMBER_NATURE / _ABILITY): whether nature 0..24 is new to the party member's dex entry; the member's ability
  * slots to offer (n of them, at most 3) and whether each is new to its starter; the locale key of a nature ("adamant"). */
 bool gc_training_nature_new(const gc_run *run, int member, int nature);

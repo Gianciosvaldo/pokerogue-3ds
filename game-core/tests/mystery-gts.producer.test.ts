@@ -1,3 +1,4 @@
+import { BattleScene } from "#app/battle-scene";
 /* The Global Trade System oracle (card 82's harness, like mystery-salesman.producer.test.ts). The real encounter is started
  * through the game manager; per case the run seed, wave seed, wave, biome, weather, trainer and secret ids, Shiny Charms, money
  * and a fresh random party (species of every kind, forms, levels, fainted ones, passives, held items) are set, then the
@@ -21,7 +22,7 @@ import { MysteryEncounterType } from "#enums/mystery-encounter-type";
 import * as EncounterPhaseUtils from "#mystery-encounters/encounter-phase-utils";
 import * as MysteryEncounters from "#mystery-encounters/mystery-encounter-biomes";
 import { CIVILIZATION_ENCOUNTER_BIOMES } from "#mystery-encounters/mystery-encounter-biomes";
-import { speciesDataRegistry } from "#app/global-species-data-registry";
+import { speciesDataRegistry } from "#app/globals/global-species-data-registry";
 import { SpeciesId } from "#enums/species-id";
 import { PokemonMove } from "#moves/pokemon-move";
 import { GameManager } from "#test/framework/game-manager";
@@ -30,6 +31,7 @@ import i18next from "i18next";
 import * as fs from "node:fs";
 import { expect, it, vi } from "vitest";
 
+const nativeBattleRng = BattleScene.prototype.randBattleSeedInt;
 const N = Number(process.env.GC_GTS_N ?? 400), SEED = Number(process.env.GC_GTS_SEED ?? 777);
 let seed = SEED;
 const rnd = (n: number) => { seed = (Math.imul(seed, 1103515245) + 12345) >>> 0; return (seed >>> 8) % n; };
@@ -86,6 +88,7 @@ for (let ci = 0; ci < chunks; ci++) {
     CIVILIZATION_ENCOUNTER_BIOMES.forEach(b => biomes.set(b, [MysteryEncounterType.GLOBAL_TRADE_SYSTEM]));
     vi.spyOn(MysteryEncounters, "mysteryEncountersByBiome", "get").mockReturnValue(biomes);
     await game.runToMysteryEncounter(MysteryEncounterType.GLOBAL_TRADE_SYSTEM, [SpeciesId.LAPRAS, SpeciesId.GENGAR, SpeciesId.ABRA]);
+    BattleScene.prototype.randBattleSeedInt = nativeBattleRng;
     vi.spyOn(timedEventManager, "isEventActive").mockReturnValue(false);
     vi.spyOn(timedEventManager, "getEventEncounters").mockReturnValue([]);
     const scene = game.scene as any, encounter = scene.currentBattle.mysteryEncounter, party = scene.getPlayerParty(), gameData = scene.gameData;

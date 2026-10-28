@@ -248,8 +248,8 @@ achv_screen_test: build/achv_screen_test
 .PHONY: achv_screen_test
 
 # a Mystery Encounter's question and picks (source/me_screen.c, source/me_flow.c) over game-core's real option checks and battle-core's formatter, with a fake drawing layer; make me_screen_test && build/me_screen_test
-ME_SRCS := me_screen_test.c ../source/me_screen.c ../source/me_flow.c $(CORE_SRCS)
-build/me_screen_test: $(ME_SRCS)
+ME_SRCS := me_screen_test.c ../source/me_screen.c ../source/me_flow.c ../menus/item_ui.c ../gen/gm_item_ui.c $(CORE_SRCS)
+build/me_screen_test: $(ME_SRCS) fixtures/mystery-encounters-en.inc
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(ME_SRCS) -lm -o $@
 me_screen_test: build/me_screen_test

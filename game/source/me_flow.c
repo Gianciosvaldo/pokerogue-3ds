@@ -7,6 +7,8 @@
 #include "battle_events.h"
 #include "i18n.h"
 #include "me_screen.h"
+#include "gm_item_ui.h"
+#include "pr_data.h"
 
 /* locale namespace per gc_mystery_type */
 static const char* const NS[GC_ME_COUNT] = {
@@ -85,18 +87,23 @@ static struct {
   int option, member;                  /* the option taken, the party slot picked */
   int move;
   int trait[25], n_trait;              /* the natures or ability slots the list offers, by row */
+  int pick_row[ME_MAX_OPTIONS], item_page; /* row -> move/item ordinal, or -1/-2 for previous/next */
   void (*on_choice)(const me_choice* c, void* arg);
   void* arg;
 } F;
 
 /* A {{token}} the screen does not carry (an encounter not ported with its texts yet) is worded as a plain phrase instead of showing its braces. */
-static void strip_tokens(char* t)
+static void strip_tokens(char* t, size_t n)
 {
-  char* w = t;
+  char result[ME_TEXT_LEN * 2];
+  size_t used = 0;
+  if (n > sizeof result) n = sizeof result;
+  if (!n) return;
   for (const char* r = t; *r;) {
     const char* e = r[0] == '{' && r[1] == '{' ? strstr(r, "}}") : NULL;
     if (!e) {
-      *w++ = *r++;
+      if (used + 1 < n) result[used++] = *r;
+      r++;
       continue;
     }
     char name[48];
@@ -105,11 +112,11 @@ static void strip_tokens(char* t)
     memcpy(name, r + 2, l);
     name[l] = 0;
     const char* rep = strstr(name, "Name") ? "a Pokemon" : (strstr(name, "oney") || strstr(name, "rice") || strstr(name, "ost")) ? "some money" : "?";
-    memcpy(w, rep, strlen(rep));
-    w += strlen(rep);
+    for (; *rep && used + 1 < n; rep++) result[used++] = *rep;
     r = e + 2;
   }
-  *w = 0;
+  result[used] = 0;
+  memcpy(t, result, used + 1);
 }
 
 /* The text at "mysteryEncounters/<ns>:<sub>" worded with the screen's tokens and `extra`. Returns false when the locale lacks the key,
@@ -146,7 +153,7 @@ static bool fmt(const char* sub, const pr_msg_arg* extra, int n_extra, bool comp
     if (!dup && m.n_args < PR_MSG_MAX_ARGS) m.args[m.n_args++] = *found;
   }
   be_format_message(&m, out, n);
-  strip_tokens(out);
+  strip_tokens(out, n);
   return out[0] != 0;
 }
 
@@ -260,14 +267,26 @@ int me_flow_intro_sprites(int type, float cx, float floor_y, me_intro_sprite* ou
 static void open_question(int cursor);
 static void open_members(void);
 static void open_moves(void);
+static void open_trade_offers(void);
+static void open_items(void);
 
 static void finish(int option, int b, int c)
 {
   me_choice ch = {.option = option, .b = b, .c = c};
-  pr_msg_arg extra[1];
+  pr_msg_arg extra[4];
   int n_extra = 0;
   if (F.run && b >= 0 && b < F.run->n_party && F.run->screen.option_pick[option])
     extra[n_extra++] = pr_arg_pokemon_name(NULL, "selectedPokemon", &F.run->party[b].b);
+  bool field_correct = false;
+  if (F.type == GC_ME_FIELD_TRIP && b >= 0 && b < F.run->n_party && c >= 0 && c < F.run->party[b].b.n_moves) {
+    const int move = F.run->party[b].b.moves[c];
+    const int category[] = {MOVE_CATEGORY_PHYSICAL, MOVE_CATEGORY_SPECIAL, MOVE_CATEGORY_STATUS};
+    const char* const names[] = {"mysteryEncounters/fieldTrip:physical", "mysteryEncounters/fieldTrip:special", "mysteryEncounters/fieldTrip:status"};
+    extra[n_extra++] = pr_arg_pokemon_name(NULL, "pokeName", &F.run->party[b].b);
+    extra[n_extra++] = pr_arg_move("move", move);
+    extra[n_extra++] = pr_arg_key("moveCategory", names[option]);
+    field_correct = pr_moves[move].category == category[option];
+  }
   char sub[48], page[ME_TEXT_LEN * 2];
   /* Berries Abound: the race the boss wins has a text of its own */
   bool lost = false;
@@ -279,6 +298,14 @@ static void finish(int option, int b, int c)
   snprintf(sub, sizeof sub, lost && option == 1 ? "option.%d.selectedBad" : "option.%d.selected", option + 1);
   if (fmt(sub, extra, n_extra, true, page, sizeof page)) append_page(ch.selected, sizeof ch.selected, page);
   if (fmt("option.selected", extra, n_extra, true, page, sizeof page)) append_page(ch.selected, sizeof ch.selected, page);
+  if (F.type == GC_ME_FIELD_TRIP) {
+    if (fmt(field_correct ? "correct" : "incorrect", extra, n_extra, true, page, sizeof page)) append_page(ch.selected, sizeof ch.selected, page);
+    if (fmt(field_correct ? "correctExp" : "incorrectExp", extra, n_extra, true, page, sizeof page)) append_page(ch.selected, sizeof ch.selected, page);
+  }
+  if (F.type == GC_ME_THE_POKEMON_SALESMAN && option == 0) {
+    if (fmt("option.1.selectedMessage", extra, n_extra, true, page, sizeof page)) append_page(ch.selected, sizeof ch.selected, page);
+    if (fmt("option.1.selectedDialogue", extra, n_extra, true, page, sizeof page)) append_page(ch.selected, sizeof ch.selected, page);
+  }
   void (*cb)(const me_choice*, void*) = F.on_choice;
   void* arg = F.arg;
   if (cb) cb(&ch, arg);
@@ -294,7 +321,7 @@ static void fill_title(me_args* a)
 static void on_move(int idx, void* arg)
 {
   (void)arg;
-  finish(F.option, F.member, idx);
+  finish(F.option, F.member, F.pick_row[idx]);
 }
 
 static void on_move_back(void* arg);
@@ -357,12 +384,92 @@ static void open_moves(void)
     if (m->b.moves[i] <= 0) continue;
     snprintf(a.options[a.n].label, ME_LABEL_LEN, "%s", i18n_move_name(m->b.moves[i]));
     a.options[a.n].ok = true;
+    F.pick_row[a.n] = i;
     a.n++;
   }
   a.can_back = true;
   a.on_pick = on_move;
   a.on_back = on_move_back;
   if (!me_screen_open(&a)) finish(F.option, F.member, 0);
+}
+
+static void on_trade_offer(int idx, void* arg)
+{
+  (void)arg;
+  finish(F.option, F.member, idx);
+}
+
+static void open_trade_offers(void)
+{
+  static gc_mon offers[3];
+  static me_args a;
+  memset(&a, 0, sizeof a);
+  fill_title(&a);
+  snprintf(a.query, sizeof a.query, "Choose a trade offer.");
+  /* The core generator uses a temporary offset stream and restores the run RNG. It returns copies. */
+  if (!gc_gts_trade_options((gc_run*)F.run, F.member, offers)) {
+    open_members();
+    return;
+  }
+  for (int i = 0; i < 3; i++) {
+    const gc_mon* m = &offers[i];
+    snprintf(a.options[i].label, ME_LABEL_LEN, "%s  Lv.%u%s", i18n_species_name(m->b.species),
+             (unsigned)m->b.level, m->b.shiny ? " (Shiny)" : "");
+    snprintf(a.options[i].tooltip, ME_TOOLTIP_LEN, "%s\nNature: %s\nAbility: %s", a.options[i].label,
+             i18n_t(a.description, sizeof a.description, gc_nature_key(m->b.nature), NULL), i18n_ability_name(m->b.ability));
+    a.options[i].ok = true;
+  }
+  a.description[0] = 0;
+  a.n = 3;
+  a.can_back = true;
+  a.on_pick = on_trade_offer;
+  a.on_back = on_move_back;
+  me_screen_open(&a);
+}
+
+static void on_item(int idx, void* arg)
+{
+  (void)arg;
+  const int item = F.pick_row[idx];
+  if (item < 0) {
+    F.item_page += item == -1 ? -1 : 1;
+    open_items();
+  } else finish(F.option, F.member, item);
+}
+
+static void open_items(void)
+{
+  static int held[GC_MAX_ITEMS];
+  const int n = gc_gts_held_items(F.run, F.member, held);
+  static me_args a;
+  memset(&a, 0, sizeof a);
+  fill_title(&a);
+  snprintf(a.query, sizeof a.query, "Choose an item to trade.");
+  /* Keep all inventory entries reachable without growing the 25-row screen on the 3DS. */
+  const int page_size = ME_MAX_OPTIONS - 2;
+  for (int i = F.item_page * page_size; i < n && i < (F.item_page + 1) * page_size; i++) {
+    const gc_item* it = &F.run->items[held[i]];
+    const gm_item_ui* display = gm_item_ui_find(it->key, it->arg);
+    me_option* o = &a.options[a.n];
+    snprintf(o->label, sizeof o->label, "%s x%u", display ? display->name : it->key, (unsigned)it->stack);
+    if (display) snprintf(o->tooltip, sizeof o->tooltip, "%s", display->desc);
+    o->ok = true;
+    F.pick_row[a.n++] = i;
+  }
+  if (F.item_page > 0) {
+    snprintf(a.options[a.n].label, ME_LABEL_LEN, "Previous page");
+    a.options[a.n].ok = true;
+    F.pick_row[a.n++] = -1;
+  }
+  if ((F.item_page + 1) * page_size < n) {
+    snprintf(a.options[a.n].label, ME_LABEL_LEN, "Next page");
+    a.options[a.n].ok = true;
+    F.pick_row[a.n++] = -2;
+  }
+  a.can_back = true;
+  a.on_pick = on_item;
+  a.on_back = on_move_back;
+  if (!me_screen_open(&a)) open_members();
 }
 
 /* the list index -> the party slot: the screen lists the party in its order (the order the player sees) */
@@ -380,6 +487,12 @@ static void on_member(int idx, void* arg)
     open_moves();
   else if (pick == GC_PICK_MEMBER_NATURE || pick == GC_PICK_MEMBER_ABILITY)
     open_traits();
+  else if (pick == GC_PICK_MEMBER_TRADE)
+    open_trade_offers();
+  else if (pick == GC_PICK_MEMBER_ITEM) {
+    F.item_page = 0;
+    open_items();
+  }
   else
     finish(F.option, F.member, 0);
 }
@@ -426,7 +539,11 @@ static void open_question(int cursor)
   static me_args a; /* static: 25 rows are too much for the 3DS stack; me_screen_open copies it */
   memset(&a, 0, sizeof a);
   fill_title(&a);
-  fmt("description", NULL, 0, false, a.description, sizeof a.description);
+  bool salesman_shiny = false;
+  if (F.type == GC_ME_THE_POKEMON_SALESMAN)
+    for (int i = 0; i < s->n_me_args; i++)
+      if (!strcmp(s->me_args[i].name, "salesmanShiny")) salesman_shiny = s->me_args[i].v != 0;
+  fmt(salesman_shiny ? "descriptionShiny" : "description", NULL, 0, false, a.description, sizeof a.description);
   fmt("query", NULL, 0, false, a.query, sizeof a.query);
   a.cursor = cursor;
   for (int i = 0; i < s->n_options && i < ME_MAX_OPTIONS; i++) {
@@ -439,9 +556,15 @@ static void open_question(int cursor)
       if (!fmt(sub, NULL, 0, false, o->label, sizeof o->label)) snprintf(o->label, sizeof o->label, "Option %d", i + 1);
     }
     snprintf(sub, sizeof sub, "option.%d.tooltip%s", i + 1, o->ok ? "" : "Disabled");
+    if (salesman_shiny && i == 0) snprintf(sub, sizeof sub, "option.1.tooltipShiny");
     if (!fmt(sub, NULL, 0, false, o->tooltip, sizeof o->tooltip)) {
-      snprintf(sub, sizeof sub, "option.%d.tooltip", i + 1);
-      fmt(sub, NULL, 0, false, o->tooltip, sizeof o->tooltip);
+      /* Both names occur in pinned locales: Lost at Sea uses tooltipDisabled, while Snorlax,
+       * Fight or Flight, Part Timer and others use disabledTooltip. */
+      snprintf(sub, sizeof sub, "option.%d.disabledTooltip", i + 1);
+      if (o->ok || !fmt(sub, NULL, 0, false, o->tooltip, sizeof o->tooltip)) {
+        snprintf(sub, sizeof sub, "option.%d.tooltip", i + 1);
+        fmt(sub, NULL, 0, false, o->tooltip, sizeof o->tooltip);
+      }
     }
   }
   if (F.type == GC_ME_PILLAR_MEN)
