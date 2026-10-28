@@ -1256,3 +1256,11 @@ tm-history-host-test: $(BUILD)/tm_history_host_test
 	$(BUILD)/tm_history_host_test
 test: tm-history-host-test
 .PHONY: tm-history-host-test
+
+# Actual pinned Nincada extra-party owner, live TM aliases and JSON save boundary.
+$(BUILD)/shedinja_host_test: tests/shedinja_host_test.c tests/fixtures/shedinja.native.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/shedinja_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+shedinja-host-test: $(BUILD)/shedinja_host_test
+	$(BUILD)/shedinja_host_test
+test: shedinja-host-test
+.PHONY: shedinja-host-test

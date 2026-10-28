@@ -410,6 +410,8 @@ int pr_run_enemy_pokemon_finish(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_ene
 /* getTypes() of a new enemy (no tera, no summon data): its form's types, combined with its fusion's.
  * Returns how many (1 or 2), or -1 where upstream reads an undefined form */
 int pr_run_enemy_types(const pr_enemy_gen *mon, int species, int8_t types[2]);
+/* Pokemon.generateFusionSpecies(false), also used by new PlayerPokemon in Spliced Endless. */
+int pr_run_generate_fusion(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_enemy_gen *out);
 /* battleScene.getSpeciesFormIndex(species, gender, undefined, false) for an enemy, on run->rng */
 int pr_run_get_species_form_index(pr_run *run, const pr_enemy_gen_ctx *ctx, int gender);
 /* Player form selection during EggLapsePhase/EggHatchPhase; uses the isolated egg RNG. */

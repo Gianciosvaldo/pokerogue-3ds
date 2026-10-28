@@ -130,8 +130,11 @@ and persistence now have [native owner evidence](../game-core/EVO-TRACKER-VALIDA
 The [fusion level-up follow-up](../game-core/FUSION-EVOLUTION-VALIDATION.md)
 adds primary/secondary selection, mutation, queued confirmation and optional
 secondary-gender saves. The [fusion item-evolution follow-up](../game-core/FUSION-ITEM-EVOLUTION-VALIDATION.md)
-adds primary-first item targets and their reward/phase owners. Fusion acquisition, special extra-party
-evolutions and broader interactions remain open caller prerequisites.
+adds primary-first item targets and their reward/phase owners. Special extra-party evolution now has [Shedinja creation and live TM-history
+evidence](../game-core/SHEDINJA-VALIDATION.md), including native constructor RNG
+and the Daily rental profile gate. IV-array identity, remaining held clone
+shapes, fusion acquisition reconciliation and broader interactions remain open
+caller prerequisites.
 The [enemy fusion projection follow-up](../game-core/ENEMY-FUSION-PROJECTION-VALIDATION.md)
 preserves run-core's generated fusion identity through controller creation,
 refresh, stats and saves. The [ordinary wild moveset follow-up](../game-core/WILD-MOVESETS-VALIDATION.md)

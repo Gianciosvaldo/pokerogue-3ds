@@ -211,6 +211,13 @@ static int generate_fusion(pr_run *run, const pr_enemy_gen_ctx *ctx, const pr_sp
     return 0;
 }
 
+int pr_run_generate_fusion(pr_run *run,const pr_enemy_gen_ctx *ctx,pr_enemy_gen *out)
+{
+    const pr_species_gen *base=species_gen(ctx->species);
+    if(!base){run->unported|=PR_RUN_UNPORTED_SPECIES;return -1;}
+    return generate_fusion(run,ctx,base,out);
+}
+
 /* getTypes({includeTeraType: false, bypassSummonData: true, ignoreThirdType: true}) with a fusion:
  * getBaseTypes gives [type1, the fusion's type2 when set and not type1, else its type1 when not type1,
  * else type2 ?? UNKNOWN], then a Set without UNKNOWN when there are two */

@@ -673,6 +673,27 @@ static bool same_stack(const gc_item *a, const gc_item *b)
     return (!strcmp(a->key, "TOXIC_ORB") || !strcmp(a->key, "FLAME_ORB")) && (!strcmp(b->key, "TOXIC_ORB") || !strcmp(b->key, "FLAME_ORB"));
 }
 
+/* Pokemon.handleSpecialEvolutions: clone(), retarget, addModifier. This does
+ * not move or consume the original, and includes constructor-locked items. */
+bool gc_item_clone_held(gc_run *run,int index,int to)
+{
+    if(index<0 || index>=run->n_items || to<0 || to>=run->n_party)return false;
+    gc_item clone=run->items[index];clone.pokemon_id=run->party[to].b.id;
+    clone.virtual_stack=0;clone.battle_count=0;clone.detached=false;clone.loot_ref=0;
+    clone.non_transferable=gc_item_key_locked(clone.key);
+    if(!strcmp(clone.key,"EVIOLITE"))clone.eviolite_base=true; /* inherited StatBoosterModifier.clone */
+    for(int i=0;i<run->n_items;i++)if(run->items[i].pokemon_id==clone.pokemon_id && same_stack(&clone,&run->items[i])){
+        int cap=gc_item_max_held(run,clone.key,clone.arg,&run->party[to]);
+        if(run->items[i].stack<cap){
+            int room=cap-run->items[i].stack;
+            run->items[i].stack+=clone.stack<room?clone.stack:room;
+        }
+        return true;
+    }
+    if(run->n_items>=PR_MAX_MODIFIERS){pr_note_unported(&run->bt,PR_FEAT_ENGINE_LIMIT);return false;}
+    run->items[run->n_items++]=clone;return true;
+}
+
 static int transfer_impl(gc_run *run, int item_idx, int to, int qty, bool force)
 {
     if (!run || item_idx < 0 || item_idx >= run->n_items || to < 0 || to >= run->n_party || qty <= 0) return 0;
