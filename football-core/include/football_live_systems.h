@@ -31,7 +31,7 @@ int football_live_ai_qb(FootballLive *match);
 /* A receiver's nudge away from the closest defender, in field axes. */
 float football_live_ai_separation(const FootballLive *match,unsigned actor);
 /* Follow a receiver's route by field progress and steer around coverage bodies. */
-void football_live_ai_receiver(const FootballLive *match,unsigned actor,float *x,float *y);
+void football_live_ai_receiver(FootballLive *match,unsigned actor,float *x,float *y);
 FootballDefenseId football_live_ai_defense(FootballLive *match);
 /* Snap-local state only: rebuilt at formation setup, not serialized. */
 void football_live_defense_setup(FootballLive *match);
