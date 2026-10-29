@@ -742,7 +742,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
          * addTag(SUBSTITUTE, 0, move, user.id) */
         if (!effect_can_apply(ef, user, target)) return;
         const pr_attr_AddSubstituteAttr *x = P(AddSubstituteAttr, a);
-        double cost = pr_get_stat(user, STAT_HP, false) * x->hpCost;
+        double cost = pr_get_stat(user, STAT_HP, true) * x->hpCost;
         cost = x->roundUp ? ceil(cost) : (floor(cost) < 1 ? 1 : floor(cost));
         pr_damage_and_update(bt, e, user, cost, HIT_RESULT_INDIRECT, true, NULL);
         pr_add_tag(bt, e, user, BATTLER_TAG_TYPE_SUBSTITUTE, 0, move, user->id);

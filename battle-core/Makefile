@@ -786,3 +786,9 @@ $(BUILD)/arena-capacity-test: tests/arena-capacity-test.c tests/tailwind-owner-t
 .PHONY: arena-capacity-host-test
 arena-capacity-host-test: $(BUILD)/arena-capacity-test
 	python3 tools/check-arena-capacity-proof.py --replay-only
+
+$(BUILD)/substitute-max-hp-test: tests/substitute-max-hp-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) tests/substitute-max-hp-test.c $(BUILD)/libprcore.a -lm -o $@
+.PHONY: substitute-max-hp-host-test
+substitute-max-hp-host-test: $(BUILD)/substitute-max-hp-test
+	python3 tools/check-substitute-max-hp-proof.py --replay-only

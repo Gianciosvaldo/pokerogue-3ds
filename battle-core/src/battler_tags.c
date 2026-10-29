@@ -885,7 +885,7 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
             if (t->source_id >= 0) pr_note_unported(bt, PR_FEAT_PARTY);
             return;
         }
-        t->hp = (int32_t)floor(pr_get_stat(source, STAT_HP, false) / 4.0);
+        t->hp = floor(pr_get_stat(source, STAT_HP, true) / 4.0);
         t->in_focus = false;
         pr_unshift_pokemon_anim(bt, e, pr_battler_index(bt, p), POKEMON_ANIM_TYPE_SUBSTITUTE_ADD);
         say(bt, e, t->source_move == MOVE_ID_SHED_TAIL ? "battlerTags:shedTailOnAdd" : "battlerTags:substituteOnAdd", p);

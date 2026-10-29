@@ -124,6 +124,10 @@ The [arena capacity follow-up](ARENA-CAPACITY-VALIDATION.md) retains all 48
 publicly constructible keys, layered Court Change and ordered removals, with
 variable-count save transport across the old 24-entry boundary. Natural mixed
 turn reachability and arbitrary imported duplicates remain separate.
+The [Substitute maximum-HP follow-up](SUBSTITUTE-MAX-HP-VALIDATION.md) aligns
+the raw Substitute/Shed Tail costs and doll constructor with native permanent
+HP, including wide-level and temporary-setter controls. Other HP getter owners
+remain part of the audit.
 Source proofs must observe actual pinned methods, including native RNG captured
 before GameManager construction when the framework would replace it.
 
