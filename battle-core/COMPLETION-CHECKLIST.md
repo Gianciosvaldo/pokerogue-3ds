@@ -116,6 +116,10 @@ money handling merged in #357; see [their validation record](HONEY-MONEY-VALIDAT
 
 The order can change when an actual source mismatch reveals a prerequisite.
 Each slice retains its own reproducible validation and exact-head CI record.
+The [retained Tailwind source proof](TAILWIND-SOURCE-VALIDATION.md) now follows
+Court Change through benched/fainted casters with original-side callbacks,
+exact queued observations and explicit unknown-party guards. Other arena
+capacity and mixed-tag interactions remain part of the source inventory.
 Source proofs must observe actual pinned methods, including native RNG captured
 before GameManager construction when the framework would replace it.
 

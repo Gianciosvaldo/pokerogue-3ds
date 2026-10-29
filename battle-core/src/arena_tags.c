@@ -3,12 +3,10 @@
  * its constructor's fields, onAdd, onOverlap, lapse and onRemove; and ConditionalProtectTag.apply
  * (Quick Guard, Wide Guard, Mat Block, Crafty Shield), which MoveEffectPhase.protectedCheck runs.
  *
- * Pending heals' lapse remains outside this dispatcher and reports PR_FEAT_ARENA_TAG_TURN. */
+ * Pending heals' stored effects are applied by the PostSummon entry owner below. */
 #include "pr/engine.h"
 #include <math.h>
 #include <string.h>
-
-static void note(pr_battle *bt) { pr_note_unported(bt, PR_FEAT_ARENA_TAG_TURN); }
 
 int pr_arena_max_layers(int type)
 {
@@ -163,9 +161,12 @@ static void gravity_on_add(pr_battle *bt, pr_engine *e)
  * Pokemon that isn't charged yet, Wind Rider raises Attack */
 static void tailwind_on_add(pr_battle *bt, pr_engine *e, const pr_arena_tag *t)
 {
-    pr_pokemon *source = pr_field_pokemon_by_id(bt, t->source_id);
+    pr_pokemon *source = pr_pokemon_by_id(bt, t->source_id);
     if (!source) {
-        if (t->source_id >= 0) pr_note_unported(bt, PR_FEAT_PARTY);   /* getPokemonById: off the field */
+        /* Court Change can re-add a tag whose caster has left the field. A
+         * genuinely missing caster is a no-op when both parties are known. */
+        if (t->source_id >= 0 && (!bt->n_party[0] || !bt->n_party[1]))
+            pr_note_unported(bt, PR_FEAT_PARTY);
         return;
     }
     pr_speed_iter it;
