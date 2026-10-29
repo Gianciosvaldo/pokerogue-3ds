@@ -1,3 +1,5 @@
+import { Stat } from "#enums/stat";
+import { BattleScene } from "#app/battle-scene";
 /* Actual stored healing effects, entry dispatcher and held healing phases. */
 import { getPokemonNameWithAffix } from "#app/messages";
 import i18next from "i18next";
@@ -16,14 +18,15 @@ import * as fs from "node:fs";
 import { it,vi } from "vitest";
 it("actual pending heal and entry",async()=>{
  const N=Number(process.env.PENDING_N??8192),seed=Number(process.env.PENDING_SEED??777);if(!Number.isSafeInteger(N)||N<1024||!process.versions.node.startsWith("22."))throw Error("Node22,N>=1024 required");
- const doubles=process.env.PENDING_DOUBLE==="1";
+ const doubles=process.env.PENDING_DOUBLE==="1",hpContext=process.env.PENDING_HP_CONTEXT==="1",nativeBattleRNG=BattleScene.prototype.randBattleSeedInt;
+ if(vi.isMockFunction(nativeBattleRNG))throw Error("native battle RNG required before GameManager");
  const game=new GameManager(new Phaser.Game({type:Phaser.HEADLESS}));game.override.battleStyle(doubles?"double":"single").ability(AbilityId.BALL_FETCH).enemyAbility(AbilityId.BALL_FETCH).moveset(MoveId.SPLASH).enemyMoveset(MoveId.SPLASH).enemySpecies(SpeciesId.MAGIKARP);
- await game.classicMode.startBattle(...(doubles?[SpeciesId.BULBASAUR,SpeciesId.SQUIRTLE]:[SpeciesId.BULBASAUR]));game.override.moveset([]).enemyMoveset([]);const s:any=game.scene,pm:any=s.phaseManager,ps:any[]=doubles?s.getField():[game.field.getPlayerPokemon(),game.field.getEnemyPokemon()];
+ await game.classicMode.startBattle(...(doubles?[SpeciesId.BULBASAUR,SpeciesId.SQUIRTLE]:[SpeciesId.BULBASAUR]));BattleScene.prototype.randBattleSeedInt=nativeBattleRNG;game.override.moveset([]).enemyMoveset([]);const s:any=game.scene,pm:any=s.phaseManager,ps:any[]=doubles?s.getField():[game.field.getPlayerPokemon(),game.field.getEnemyPokemon()];
  vi.spyOn(pm,"shiftPhase").mockImplementation(()=>{});for(const p of ps){vi.spyOn(p,"updateInfo").mockImplementation(async()=>{});}
  vi.spyOn(s.damageNumberHandler,"add").mockImplementation(()=>{});
  const rng=(r:string)=>r.replace(/^!rnd,/,"").replaceAll(","," ");
  const snap=(p:any)=>[p.hp,p.getMaxHp(),p.status?.effect??0,p.status?.toxicTurnCount??0,p.status?.sleepTurnsRemaining??-1,p.status?.freezeTurnsRemaining??-1,...p.getMoveset().map((m:any)=>m.ppUsed)];
- const rows=[`PENDING 2 ${N} ${seed} ${ps.length}`];
+ const rows=[`PENDING ${hpContext?4:2} ${N} ${seed} ${ps.length}`];
  for(let i=0;i<N;i++){
   const state=Math.floor(i/ps.length)%64,p=ps[i%ps.length],b=p.getBattlerIndex(),source=ps.find(q=>q.getBattlerIndex()===(b^2)),mode=Math.floor(i/(64*ps.length))%4,simulated=mode===1;
   for(const q of ps){q.resetSummonData();q.resetTurnData();q.resetBattleAndWaveData();q.id=100+q.getBattlerIndex();q.switchOutStatus=false;q.status=null;q.hp=q.getMaxHp();q.moveset=[new PokemonMove(MoveId.TACKLE),new PokemonMove(MoveId.SPLASH)];}
@@ -31,6 +34,7 @@ it("actual pending heal and entry",async()=>{
   if(state%8===2||state%8===6)p.status=new Status(StatusEffect.TOXIC,2);
   if(state%8===3||state%8===7)p.moveset[0].ppUsed=2;
   if(state%16>=12)p.addTag(BattlerTagType.HEAL_BLOCK,3,MoveId.HEAL_BLOCK,source.id);
+  if(hpContext){const context=Math.floor(i/(256*ps.length))%4;p.setStat(Stat.HP,[0,1,2*p.getMaxHp()+1,34359738371][context],false);}
   s.modifiers=[];s.enemyModifiers=[];s.arena.tags=[];pm.clearAllPhases();pm.phaseQueue.deferredActive=false;
   const tag=new PendingHealTag();s.arena.tags.push(tag);const queued:any[]=[];
   for(let j=0;j<(state>=32?0:1+Math.floor(state/8)%3);j++){
@@ -40,6 +44,7 @@ it("actual pending heal and entry",async()=>{
   const dump=()=>Object.entries(tag.pendingHeals).flatMap(([index,es]:any)=>es.map((e:any)=>`${index},${e.sourceId},${e.moveId},${+e.restorePP},${Buffer.from(e.healMessage).toString("hex")}`)).join(";")||"-";
   Phaser.Math.RND.sow([`pending-${seed}-${i}`]);s.currentBattle.battleSeedState=null;s.currentBattle.randSeedInt(2);
   rows.push(`C ${i} ${b} ${mode} ${+!!p.getTag(BattlerTagType.HEAL_BLOCK)} ${queued.length}`,`W ${s.waveSeed} ${s.currentBattle.turn}`,`R ${rng(Phaser.Math.RND.state())}`,`B ${rng(s.currentBattle.battleSeedState)}`,`I ${snap(p).join(" ")}`);
+  if(hpContext)rows.push(`X ${p.summonData.stats[Stat.HP]??0}`);
   ps.forEach(q=>rows.push(`S ${q.getBattlerIndex()} ${q.id} ${q.species.speciesId} ${q.formIndex} ${q.getMaxHp()}`));
   queued.forEach(q=>rows.push(`H ${q.index} ${q.sourceId} ${q.moveId} ${+q.restorePP} ${Buffer.from(q.healMessage).toString("hex")}`));rows.push(`SI ${dump()}`);
   let result=-1;if(mode===2){result=+tag.lapse();s.arena.lapseTags();}else if(mode===3){const ph=pm.create("PostSummonPhase",b);pm.currentPhase=ph;ph.start();}else result=+tag.apply(simulated,p);

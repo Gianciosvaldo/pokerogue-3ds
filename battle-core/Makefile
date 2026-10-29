@@ -792,3 +792,7 @@ $(BUILD)/substitute-max-hp-test: tests/substitute-max-hp-test.c $(BUILD)/wide-su
 .PHONY: substitute-max-hp-host-test
 substitute-max-hp-host-test: $(BUILD)/substitute-max-hp-test
 	python3 tools/check-substitute-max-hp-proof.py --replay-only
+
+.PHONY: pending-max-hp-host-test
+pending-max-hp-host-test: $(BUILD)/pending-heal-test
+	python3 tools/check-pending-max-hp-proof.py --replay-only

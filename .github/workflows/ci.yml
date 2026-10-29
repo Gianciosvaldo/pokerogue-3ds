@@ -68,6 +68,8 @@ jobs:
         run: python3 battle-core/tools/check-arena-capacity-proof.py
       - name: Compare Substitute and Shed Tail maximum-HP owners and failure controls
         run: python3 battle-core/tools/check-substitute-max-hp-proof.py
+      - name: Compare pending-heal maximum HP, executed restoration and failure controls
+        run: python3 battle-core/tools/check-pending-max-hp-proof.py
       - name: Compare primary and secondary level-up evolution owners and saves
         run: python3 game-core/tools/check-fusion-evolution-proof.py
       - name: Compare fusion evolution-item rewards and queued evolution owners

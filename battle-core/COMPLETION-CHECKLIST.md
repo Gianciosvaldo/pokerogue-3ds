@@ -128,6 +128,9 @@ The [Substitute maximum-HP follow-up](SUBSTITUTE-MAX-HP-VALIDATION.md) aligns
 the raw Substitute/Shed Tail costs and doll constructor with native permanent
 HP, including wide-level and temporary-setter controls. Other HP getter owners
 remain part of the audit.
+The [pending-heal maximum-HP follow-up](PENDING-MAX-HP-VALIDATION.md) adds
+temporary-setter controls through simulated/application/lapse/entry owners and
+executed healing/status restoration. It retains the ordinary doubles capture.
 Source proofs must observe actual pinned methods, including native RNG captured
 before GameManager construction when the framework would replace it.
 

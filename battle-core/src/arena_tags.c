@@ -462,7 +462,7 @@ bool pr_arena_apply_pending_heal(pr_battle *bt, pr_engine *e, pr_pokemon *p, boo
     int b = pr_battler_index(bt, p);
     for (int i = 0; i < t->n_pending_heals;) {
         pr_pending_heal h = t->pending_heals[i];
-        bool can_apply = p->hp < pr_get_stat(p, STAT_HP, false) || p->status;
+        bool can_apply = p->hp < pr_get_stat(p, STAT_HP, true) || p->status;
         for (int k = 0; !can_apply && h.restore_pp && k < PR_N_MOVES(p); k++) can_apply = PR_PP_USED(p)[k] > 0;
         if (h.target_index != b || !can_apply) { i++; continue; }
         if (simulated) return true;
@@ -477,7 +477,7 @@ bool pr_arena_apply_pending_heal(pr_battle *bt, pr_engine *e, pr_pokemon *p, boo
             if (a->cls == PR_AC_SacrificialFullRestoreAttr) key = ((const pr_attr_SacrificialFullRestoreAttr *)a->p)->moveMessage;
         }
         pr_msg_arg name = {"pokemonName",PR_ARG_POKEMON,h.pokemon_name,NULL,h.fusion_name};
-        pr_unshift_heal_msg(bt, e, b, pr_get_stat(p, STAT_HP, false),
+        pr_unshift_heal_msg(bt, e, b, pr_get_stat(p, STAT_HP, true),
             PR_HEAL_MESSAGE | PR_HEAL_NO_FULL_HP_MESSAGE | PR_HEAL_SKIP_ANIM | PR_HEAL_STATUS
                 | (h.restore_pp ? PR_HEAL_RESTORE_PP : 0), pr_msg1(key,name));
         return true;
