@@ -58,6 +58,8 @@ jobs:
         run: python3 battle-core/tools/check-trace-capacity-proof.py
       - name: Compare Shedinja extra-party evolution, live TM sharing and saved copies
         run: python3 game-core/tools/check-shedinja-proof.py
+      - name: Compare shared IV arrays through Training Session rewards and JSON reload
+        run: python3 game-core/tools/check-iv-alias-proof.py
       - name: Compare primary and secondary level-up evolution owners and saves
         run: python3 game-core/tools/check-fusion-evolution-proof.py
       - name: Compare fusion evolution-item rewards and queued evolution owners

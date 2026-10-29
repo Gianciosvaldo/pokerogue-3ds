@@ -1264,3 +1264,10 @@ shedinja-host-test: $(BUILD)/shedinja_host_test
 	$(BUILD)/shedinja_host_test
 test: shedinja-host-test
 .PHONY: shedinja-host-test
+
+$(BUILD)/iv_alias_host_test: tests/iv_alias_host_test.c tests/fixtures/iv-alias.native.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/iv_alias_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+iv-alias-host-test: $(BUILD)/iv_alias_host_test
+	$(BUILD)/iv_alias_host_test
+test: iv-alias-host-test
+.PHONY: iv-alias-host-test

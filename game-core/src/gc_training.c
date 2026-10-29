@@ -220,6 +220,7 @@ void gc_training_return(gc_run *run)
             improved++;
         }
         if (improved > 0) {
+            gc_mon_publish_ivs(run, m);
             pr_recalculate_stats(&run->bt, &m->b);
             if (run->sys) {
                 gc_system_update_species_dex_ivs(run->sys, gc_species_root_for_starter(m->b.species), m->b.ivs);
