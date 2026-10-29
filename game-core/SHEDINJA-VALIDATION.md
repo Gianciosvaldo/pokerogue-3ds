@@ -82,7 +82,9 @@ must match the retained fixture exactly.
 This closes the recorded creation/TM-history cases, not all copying or inventory
 semantics. Native also shares the IV array; the [Training Session follow-up](IV-ARRAY-VALIDATION.md)
 now covers its light-reward mutation owner, separate identities and JSON reset.
-Other constructor/IV mutation owners still need review. Full held
+Other constructor/IV mutation owners still need review.
+[Manual Eviolite transport](MANUAL-CLONE-VALIDATION.md) also covers inherited
+clone classes, directional matches and full-add fallbacks. Full held
 class/parameter cloning and arbitrary lock/virtual/type-reference histories are
 not established by these four factories. Native `fusionTeraType` is retained in
 the capture, but the pin only declares, serializes and copies it: it has no battle

@@ -1271,3 +1271,10 @@ iv-alias-host-test: $(BUILD)/iv_alias_host_test
 	$(BUILD)/iv_alias_host_test
 test: iv-alias-host-test
 .PHONY: iv-alias-host-test
+
+$(BUILD)/manual_eviolite_host_test: tests/manual_eviolite_host_test.c tests/fixtures/manual-eviolite.native.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/manual_eviolite_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+manual-eviolite-host-test: $(BUILD)/manual_eviolite_host_test
+	$(BUILD)/manual_eviolite_host_test
+test: manual-eviolite-host-test
+.PHONY: manual-eviolite-host-test

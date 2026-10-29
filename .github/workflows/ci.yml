@@ -60,6 +60,8 @@ jobs:
         run: python3 game-core/tools/check-shedinja-proof.py
       - name: Compare shared IV arrays through Training Session rewards and JSON reload
         run: python3 game-core/tools/check-iv-alias-proof.py
+      - name: Compare manual Eviolite cloning, tier fallbacks, text and saved classes
+        run: python3 game-core/tools/check-manual-eviolite-proof.py
       - name: Compare primary and secondary level-up evolution owners and saves
         run: python3 game-core/tools/check-fusion-evolution-proof.py
       - name: Compare fusion evolution-item rewards and queued evolution owners

@@ -134,8 +134,9 @@ adds primary-first item targets and their reward/phase owners. Special extra-par
 evidence](../game-core/SHEDINJA-VALIDATION.md), including native constructor RNG
 and the Daily rental profile gate. [Shared IVs through the Training Session
 reward owner](../game-core/IV-ARRAY-VALIDATION.md) now retain live siblings and
-separate them after JSON reload. Other IV mutation owners, remaining held clone
-shapes, fusion acquisition reconciliation and broader interactions remain open
+separate them after JSON reload. [Manual Eviolite clones](../game-core/MANUAL-CLONE-VALIDATION.md) now cover
+directional transfer matching, tier fallbacks, exact messages and saved classes.
+Other IV mutation owners, remaining held clone shapes, fusion acquisition reconciliation and broader interactions remain open
 caller prerequisites.
 The [enemy fusion projection follow-up](../game-core/ENEMY-FUSION-PROJECTION-VALIDATION.md)
 preserves run-core's generated fusion identity through controller creation,
