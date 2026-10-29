@@ -774,3 +774,9 @@ trace-capacity-host-test: $(BUILD)/trace-capacity-test $(BUILD)/trace-capacity-g
 	$(BUILD)/trace-capacity-test
 	$(BUILD)/trace-capacity-guards-test
 .PHONY: trace-capacity-host-test
+
+$(BUILD)/tailwind-owner-test: tests/tailwind-owner-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/tailwind-owner-test.c $(BUILD)/libprcore.a -lm -o $@
+.PHONY: tailwind-owner-host-test
+tailwind-owner-host-test: $(BUILD)/tailwind-owner-test
+	python3 tools/check-tailwind-owner-proof.py --replay-only
