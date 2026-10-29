@@ -673,15 +673,21 @@ static bool same_stack(const gc_item *a, const gc_item *b)
     return (!strcmp(a->key, "TOXIC_ORB") || !strcmp(a->key, "FLAME_ORB")) && (!strcmp(b->key, "TOXIC_ORB") || !strcmp(b->key, "FLAME_ORB"));
 }
 
+static gc_item held_clone(const gc_item *source, uint32_t owner)
+{
+    gc_item clone=*source;clone.pokemon_id=owner;
+    clone.virtual_stack=0;clone.battle_count=0;clone.detached=false;clone.loot_ref=0;
+    clone.non_transferable=gc_item_key_locked(clone.key);
+    if(!strcmp(clone.key,"EVIOLITE"))clone.eviolite_base=true; /* inherited StatBoosterModifier.clone */
+    return clone;
+}
+
 /* Pokemon.handleSpecialEvolutions: clone(), retarget, addModifier. This does
  * not move or consume the original, and includes constructor-locked items. */
 bool gc_item_clone_held(gc_run *run,int index,int to)
 {
     if(index<0 || index>=run->n_items || to<0 || to>=run->n_party)return false;
-    gc_item clone=run->items[index];clone.pokemon_id=run->party[to].b.id;
-    clone.virtual_stack=0;clone.battle_count=0;clone.detached=false;clone.loot_ref=0;
-    clone.non_transferable=gc_item_key_locked(clone.key);
-    if(!strcmp(clone.key,"EVIOLITE"))clone.eviolite_base=true; /* inherited StatBoosterModifier.clone */
+    gc_item clone=held_clone(&run->items[index],run->party[to].b.id);
     for(int i=0;i<run->n_items;i++)if(run->items[i].pokemon_id==clone.pokemon_id && same_stack(&clone,&run->items[i])){
         int cap=gc_item_max_held(run,clone.key,clone.arg,&run->party[to]);
         if(run->items[i].stack<cap){
@@ -694,6 +700,27 @@ bool gc_item_clone_held(gc_run *run,int index,int to)
     run->items[run->n_items++]=clone;return true;
 }
 
+/* The recipient matches the original class during transfer selection; the
+ * subsequent addModifier matches the inherited clone against existing stock. */
+static bool transfer_match(const gc_item *target, const gc_item *source)
+{
+    if (!strcmp(source->key, "EVIOLITE") && !strcmp(target->key, "EVIOLITE")
+        && source->eviolite_base && !target->eviolite_base) return false;
+    return same_stack(target, source);
+}
+
+static void clone_stack_full(gc_run *run, const gc_item *item)
+{
+    const int tier = item->type_tier ? item->type_tier - 1 : 0;
+    if (tier >= 5) { pr_note_unported(&run->bt, PR_FEAT_MODIFIERS); return; }
+    const int fallback = pr_player_pool_entries[pr_player_pool[tier].start].item;
+    gc_ev_msg(run, "battle:itemStackFull", 2, gc_m_item("fullItemName", item->key),
+        (pr_msg_arg){"itemName", PR_ARG_STR, 0, pr_reward_strings[pr_items[fallback].name]});
+    gc_offer replacement = {.key=pr_item_keys[fallback], .arg=-1, .target=GC_TARGET_NONE};
+    const char *why = NULL;
+    if (!gc_port_apply_reward(run, &replacement, -1, -1, &why)) gc_stub(run, GC_STUB_REWARD_APPLY);
+}
+
 static int transfer_impl(gc_run *run, int item_idx, int to, int qty, bool force)
 {
     if (!run || item_idx < 0 || item_idx >= run->n_items || to < 0 || to >= run->n_party || qty <= 0) return 0;
@@ -704,7 +731,7 @@ static int transfer_impl(gc_run *run, int item_idx, int to, int qty, bool force)
     if (!force && (src.non_transferable || gc_item_key_locked(src.key))) return 0;
     int match = -1;
     for (int i = 0; i < run->n_items; i++)
-        if (i != item_idx && run->items[i].pokemon_id == to_id && same_stack(&run->items[i], &src)) {
+        if (i != item_idx && run->items[i].pokemon_id == to_id && transfer_match(&run->items[i], &src)) {
             match = i;
             break;
         }
@@ -721,9 +748,21 @@ static int transfer_impl(gc_run *run, int item_idx, int to, int qty, bool force)
         total = taken;
     }
     /* newItemModifier = itemModifier.clone(): the source's fields, on the target */
-    gc_item moved = src;
-    moved.pokemon_id = to_id;
+    gc_item moved = held_clone(&src, to_id);
     moved.stack = total;
+    if (match < 0) {
+        for (int i = 0; i < run->n_items; i++) {
+            const gc_item *target = &run->items[i];
+            if (i == item_idx || target->pokemon_id != to_id || !same_stack(&moved, target)) continue;
+            const int cap = gc_item_max_held(run, moved.key, moved.arg, &run->party[to]);
+            if (target->stack + target->virtual_stack + moved.stack > cap) {
+                run->items[item_idx].stack -= taken;
+                if (!run->items[item_idx].stack) gc_item_remove_at(run, item_idx);
+                clone_stack_full(run, &moved);
+                return taken;
+            }
+        }
+    }
     if (match < 0 && src.stack > taken && run->n_items >= GC_MAX_ITEMS) return 0; /* no room for the new entry */
     run->items[item_idx].stack -= taken;
     /* remove the higher index first so the lower one stays valid */
