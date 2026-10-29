@@ -802,3 +802,9 @@ $(BUILD)/max-hp-moves-test: tests/max-hp-moves-test.c $(BUILD)/wide-substitute-f
 .PHONY: max-hp-moves-host-test
 max-hp-moves-host-test: $(BUILD)/max-hp-moves-test
 	python3 tools/check-max-hp-moves-proof.py --replay-only
+
+$(BUILD)/residual-max-hp-test: tests/residual-max-hp-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) tests/residual-max-hp-test.c $(BUILD)/libprcore.a -lm -o $@
+.PHONY: residual-max-hp-host-test
+residual-max-hp-host-test: $(BUILD)/residual-max-hp-test
+	python3 tools/check-residual-max-hp-proof.py --replay-only

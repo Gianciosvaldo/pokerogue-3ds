@@ -72,6 +72,8 @@ jobs:
         run: python3 battle-core/tools/check-pending-max-hp-proof.py
       - name: Compare permanent-HP move callbacks, status/faint payloads and failure controls
         run: python3 battle-core/tools/check-max-hp-moves-proof.py
+      - name: Compare residual/tag/Wish permanent HP and failure controls
+        run: python3 battle-core/tools/check-residual-max-hp-proof.py
       - name: Compare primary and secondary level-up evolution owners and saves
         run: python3 game-core/tools/check-fusion-evolution-proof.py
       - name: Compare fusion evolution-item rewards and queued evolution owners

@@ -392,7 +392,7 @@ static void sea_of_fire(pr_battle *bt, pr_engine *e, int side)
         pr_queue_msg(bt, e, pr_msg_p(bt, "arenaTag:fireGrassPledgeLapse", p));
         int b = pr_battler_index(bt, p);
         pr_unshift_common_anim(bt, e, b, b, COMMON_ANIM_MAGMA_STORM);
-        double damage = floor(pr_get_stat(p, STAT_HP, false) / 8.0);
+        double damage = floor(pr_get_stat(p, STAT_HP, true) / 8.0);
         pr_damage_and_update(bt, e, p, damage < 1 ? 1 : damage, HIT_RESULT_INDIRECT, false, NULL);
     }
 }
