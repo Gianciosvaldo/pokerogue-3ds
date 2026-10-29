@@ -597,6 +597,13 @@ $(BUILD)/arena_cleanup_host_test: tests/arena_cleanup_host_test.c $(BUILD)/libgc
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 .PHONY: arena-cleanup-host-test
 
+test: arena-capacity-host-test
+arena-capacity-host-test: $(BUILD)/arena_capacity_host_test
+	$(BUILD)/arena_capacity_host_test
+$(BUILD)/arena_capacity_host_test: tests/arena_capacity_host_test.c tests/fixtures/arena-capacity.native.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+.PHONY: arena-capacity-host-test
+
 all: $(BUILD)/stance_change_host_test
 test: stance-change-host-test
 stance-change-host-test: $(BUILD)/stance_change_host_test

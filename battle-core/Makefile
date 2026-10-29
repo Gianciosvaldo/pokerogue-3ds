@@ -780,3 +780,9 @@ $(BUILD)/tailwind-owner-test: tests/tailwind-owner-test.c tests/gas-lifecycle-te
 .PHONY: tailwind-owner-host-test
 tailwind-owner-host-test: $(BUILD)/tailwind-owner-test
 	python3 tools/check-tailwind-owner-proof.py --replay-only
+
+$(BUILD)/arena-capacity-test: tests/arena-capacity-test.c tests/tailwind-owner-test.c tests/gas-lifecycle-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/arena-capacity-test.c $(BUILD)/libprcore.a -lm -o $@
+.PHONY: arena-capacity-host-test
+arena-capacity-host-test: $(BUILD)/arena-capacity-test
+	python3 tools/check-arena-capacity-proof.py --replay-only
