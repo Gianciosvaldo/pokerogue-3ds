@@ -334,7 +334,7 @@ bool pr_arena_add_tag(pr_battle *bt, pr_engine *e, int type, int turn_count, int
 void pr_arena_remove_tags_on_side(pr_battle *bt, pr_engine *e, const int32_t *types, int n_types, int side, bool quiet)
 {
     /* every match in list order gets onRemove, then the list keeps the rest */
-    pr_arena_tag keep[PR_MAX_ARENA_TAGS];
+    uint8_t keep[PR_MAX_ARENA_TAGS];
     int k = 0;
     for (int i = 0; i < bt->n_arena_tags; i++) {
         const pr_arena_tag *t = &bt->arena_tags[i];
@@ -342,12 +342,14 @@ void pr_arena_remove_tags_on_side(pr_battle *bt, pr_engine *e, const int32_t *ty
         for (int j = 0; j < n_types; j++)
             if (types[j] == t->type) match = true;
         if (!match || !pr_arena_tag_on_side(t, side)) {
-            keep[k++] = *t;
+            keep[k++] = (uint8_t)i;
             continue;
         }
         on_remove(bt, e, t, quiet);
     }
-    memcpy(bt->arena_tags, keep, sizeof(pr_arena_tag) * (size_t)k);
+    /* Native leftoverTags holds references until all callbacks finish. Keep
+     * the original list visible, then compact forward without a payload copy. */
+    for (int i = 0; i < k; i++) bt->arena_tags[i] = bt->arena_tags[keep[i]];
     bt->n_arena_tags = (uint8_t)k;
 }
 

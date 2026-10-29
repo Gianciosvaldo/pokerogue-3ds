@@ -120,6 +120,10 @@ The [retained Tailwind source proof](TAILWIND-SOURCE-VALIDATION.md) now follows
 Court Change through benched/fainted casters with original-side callbacks,
 exact queued observations and explicit unknown-party guards. Other arena
 capacity and mixed-tag interactions remain part of the source inventory.
+The [arena capacity follow-up](ARENA-CAPACITY-VALIDATION.md) retains all 48
+publicly constructible keys, layered Court Change and ordered removals, with
+variable-count save transport across the old 24-entry boundary. Natural mixed
+turn reachability and arbitrary imported duplicates remain separate.
 Source proofs must observe actual pinned methods, including native RNG captured
 before GameManager construction when the framework would replace it.
 

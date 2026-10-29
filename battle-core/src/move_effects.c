@@ -831,7 +831,14 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         /* findTagsOnSide for each side (a BOTH-sided tag is found on both), then every one
          * removed quietly by type from its side, then re-added on the other side as many
          * times as it had layers, quietly (each extra layer's onAdd isn't) */
-        pr_arena_tag found[2][PR_MAX_ARENA_TAGS];
+        /* Only constructor arguments survive this operation. Do not copy each
+         * tag's unrelated pending-heal payload onto the ARM stack. */
+        struct swapped_tag {
+            int64_t source_id;
+            int16_t turn_count;
+            uint16_t source_move;
+            uint8_t type, layers;
+        } found[2][PR_MAX_ARENA_TAGS];
         int nfound[2] = {0, 0};
         const int sides[2] = {ARENA_TAG_SIDE_PLAYER, ARENA_TAG_SIDE_ENEMY};
         for (int s = 0; s < 2; s++)
@@ -840,13 +847,15 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
                 bool ok = false;
                 for (int k = 0; k < valid->n; k++)
                     if (valid->v[k] == t->type) ok = true;
-                if (ok && pr_arena_tag_on_side(t, sides[s])) found[s][nfound[s]++] = *t;
+                if (ok && pr_arena_tag_on_side(t, sides[s]))
+                    found[s][nfound[s]++] = (struct swapped_tag){t->source_id,
+                        t->turn_count, t->source_move, t->type, t->layers};
             }
         for (int s = 0; s < 2; s++)
             for (int i = 0; i < nfound[s]; i++) pr_arena_remove_tag_on_side(bt, e, found[s][i].type, sides[s], true);
         for (int s = 0; s < 2; s++)
             for (int i = 0; i < nfound[s]; i++) {
-                const pr_arena_tag *t = &found[s][i];
+                const struct swapped_tag *t = &found[s][i];
                 for (int l = 0; l < t->layers; l++)
                     pr_arena_add_tag(bt, e, t->type, t->turn_count, t->source_move, t->source_id, sides[1 - s], true);
             }

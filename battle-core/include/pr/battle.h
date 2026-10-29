@@ -182,7 +182,9 @@ typedef struct pr_arena_tag {
     uint8_t n_pending_heals;
     pr_pending_heal pending_heals[PR_MAX_PENDING_HEALS];
 } pr_arena_tag;
-#define PR_MAX_ARENA_TAGS 24
+/* Pinned getArenaTag: 8 global types plus 20 types on each side. The public
+ * addTag lookup admits at most one global or two side-specific tags per type. */
+#define PR_MAX_ARENA_TAGS 48
 
 /* arena.positionalTagManager.tags: Future Sight and Doom Desire (DelayedAttackTag), Wish (WishTag) */
 typedef struct pr_positional_tag {

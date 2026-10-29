@@ -23,6 +23,7 @@ static void emit(const pr_phase*p,char scope,int group,int order){
  if(p->type==PH_MARKER)snprintf(name,sizeof name,"Marker:%s",pr_phase_name[p->marker_of]);else snprintf(name,sizeof name,"%s",pr_phase_name[p->type]);
  if(nq>=128)bad();snprintf(queue[nq++],sizeof queue[0],"Q %c %d %d %s %d %d %d %s %s %d\n",scope,group,order,name,p->type==PH_MARKER?-1:p->battler,p->type==PH_SHOW_ABILITY?p->anim_result:-1,p->type==PH_SHOW_ABILITY?(p->anim==UINT16_MAX?-1:p->anim):-1,text,stages,p->type==PH_STAT_STAGE_CHANGE?actor_index(p->source_p):-1);
 }
+#ifndef TAILWIND_OWNER_NO_MAIN
 int main(int argc,char**argv){if(argc!=2)return 2;input=fopen(argv[1],"r");if(!input||strcmp(line_read("TAILWIND_OWNER "),"1 2048\n"))bad();int failed=0;char*w=line_read("W ");w[strcspn(w,"\n")]=0;pr_seedstr wave;pr_seed_from_ascii(&wave,w);
  const pr_move*move=&pr_moves[MOVE_ID_COURT_CHANGE];int attr=-1;for(int i=0;i<move->nattr;i++)if(pr_attrs[move->attr0+i].cls==PR_AC_SwapArenaTagsAttr)attr=move->attr0+i;if(attr<0)bad();
  for(int c=0;c<2048;c++){
@@ -64,3 +65,5 @@ int main(int argc,char**argv){if(argc!=2)return 2;input=fopen(argv[1],"r");if(!i
  if(absent.n_unported){fprintf(stderr,"undefined source spuriously flagged\n");return 1;}
  printf("Tailwind owner: 2048 cases, %u checks, %d mismatches\n",checks,failed);return failed?1:0;
 }
+
+#endif
