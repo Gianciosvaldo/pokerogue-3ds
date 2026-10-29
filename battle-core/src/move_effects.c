@@ -569,7 +569,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
             int r = last ? last->result : MOVE_RESULT_FAIL;
             if (r == MOVE_RESULT_FAIL || r == MOVE_RESULT_MISS) return;
         }
-        double base = x->useHp ? pr_get_stat(user, STAT_HP, false) : user->total_damage_dealt;
+        double base = x->useHp ? pr_get_stat(user, STAT_HP, true) : user->total_damage_dealt;
         double recoil = floor(base * x->damageRatio);
         if (recoil < 1) recoil = 1;                                                 /* toDmgValue */
         /* damageAndUpdate(recoil, {result: INDIRECT, ignoreSegments: true}) */
@@ -710,7 +710,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
             pr_apply_ab_attrs(bt, PR_AC_BlockNonDirectDamageAbAttr, &ap);
         }
         if (cancelled || !ally || ally->switch_out_status) return;
-        double damage = floor(pr_get_stat(ally, STAT_HP, false) / 16.0);
+        double damage = floor(pr_get_stat(ally, STAT_HP, true) / 16.0);
         pr_damage_and_update(bt, e, ally, damage < 1 ? 1 : damage, HIT_RESULT_INDIRECT, false, NULL);
         return;
     }
@@ -883,7 +883,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         pr_ab_params ap = {.pokemon = user, .move = -1, .flag = &cancelled};
         pr_apply_ab_attrs(bt, PR_AC_BlockNonDirectDamageAbAttr, &ap);
         if (cancelled) return;
-        double d = floor(pr_get_stat(user, STAT_HP, false) / 2.0);
+        double d = floor(pr_get_stat(user, STAT_HP, true) / 2.0);
         pr_damage_and_update(bt, e, user, d < 1 ? 1 : d, HIT_RESULT_INDIRECT, false, NULL);
         pr_queue_msg(bt, e, pr_msg1("moveTriggers:cutHpPowerUpMove", pr_arg_pokemon(bt, "pokemonName", user)));
         return;
@@ -1122,7 +1122,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         double ratio = P(RestAttr, a)->healRatio;
         pr_ab_params hp = {.pokemon = user, .opponent = target, .move = move, .value = &ratio};
         pr_apply_ab_attrs(bt, PR_AC_MoveHealBoostAbAttr, &hp);
-        pr_unshift_heal(bt, e, pr_battler_index(bt, user), pr_get_stat(user, STAT_HP, false), 0);
+        pr_unshift_heal(bt, e, pr_battler_index(bt, user), pr_get_stat(user, STAT_HP, true), 0);
         return;
     }
     case PR_AC_DestinyBondAttr:                          /* PRE_APPLY; no canApply check */
@@ -1141,7 +1141,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
                 pr_queue_msg(bt, e, pr_msg0("battle:attackFailed"));
                 return;
             }
-            double d = floor(pr_get_stat(user, STAT_HP, false) / 2.0);
+            double d = floor(pr_get_stat(user, STAT_HP, true) / 2.0);
             pr_damage_and_update(bt, e, user, d < 1 ? 1 : d, HIT_RESULT_INDIRECT, false, NULL);
             pr_queue_msg(bt, e, pr_msg2("battlerTags:cursedOnAdd", pr_arg_pokemon(bt, "pokemonNameWithAffix", user),
                                         pr_arg_pokemon(bt, "pokemonName", target)));
@@ -1186,7 +1186,7 @@ void pr_apply_move_effect(pr_battle *bt, pr_engine *e, int ph, int attr_index, p
         pr_pokemon *on = self_target ? user : target;
         /* PokemonHealPhase(Math.round(maxHp * ratio), {message, showFullHpMessage, skipAnim: !showAnim}):
          * a move's heal rounds half up */
-        pr_unshift_heal_msg(bt, e, pr_battler_index(bt, on), js_round(pr_get_stat(on, STAT_HP, false) * ratio),
+        pr_unshift_heal_msg(bt, e, pr_battler_index(bt, on), js_round(pr_get_stat(on, STAT_HP, true) * ratio),
                             PR_HEAL_MESSAGE | (show_anim ? 0 : PR_HEAL_SKIP_ANIM),
                             pr_msg1("moveTriggers:healHp", pr_arg_pokemon(bt, "pokemonName", on)));
         return;
