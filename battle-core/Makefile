@@ -796,3 +796,9 @@ substitute-max-hp-host-test: $(BUILD)/substitute-max-hp-test
 .PHONY: pending-max-hp-host-test
 pending-max-hp-host-test: $(BUILD)/pending-heal-test
 	python3 tools/check-pending-max-hp-proof.py --replay-only
+
+$(BUILD)/max-hp-moves-test: tests/max-hp-moves-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) tests/max-hp-moves-test.c $(BUILD)/libprcore.a -lm -o $@
+.PHONY: max-hp-moves-host-test
+max-hp-moves-host-test: $(BUILD)/max-hp-moves-test
+	python3 tools/check-max-hp-moves-proof.py --replay-only

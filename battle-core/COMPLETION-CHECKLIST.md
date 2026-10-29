@@ -131,6 +131,10 @@ remain part of the audit.
 The [pending-heal maximum-HP follow-up](PENDING-MAX-HP-VALIDATION.md) adds
 temporary-setter controls through simulated/application/lapse/entry owners and
 executed healing/status restoration. It retains the ordinary doubles capture.
+The [permanent-HP move callback follow-up](MAX-HP-MOVES-VALIDATION.md) adds
+Struggle, Flame Burst, Steel Beam, Rest, Ghost Curse, Recover and Moonlight,
+including dynamic status and faint payloads. Wish and residual-tag HP getters
+remain explicit follow-ups.
 Source proofs must observe actual pinned methods, including native RNG captured
 before GameManager construction when the framework would replace it.
 
