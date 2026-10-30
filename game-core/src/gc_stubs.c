@@ -81,10 +81,24 @@ static bool apply_reward(gc_run *run, const gc_offer *o, int party, int move_slo
     }
     if (party < 0 || party >= run->n_party) { *why = "pick a Pokemon"; return false; }
     const pr_pokemon *b = &run->party[party].b;
+    /* The whole-Scene/stat guard may keep Multi Lens in this fallback (a
+     * vitamin, Soul Dew or a fusion). Its inventory owner is still canonical:
+     * constructor-only arg -1/0 must not create two independent lenses. Keep
+     * the unsupported Scene diagnostic; only the proven .add owner is used. */
+    bool multi_added = false;
+    if (idx == PR_ITEM_MULTI_LENS && (o->arg == -1 || o->arg == 0)) {
+        const int status = gc_multi_add(run, party);
+        if (status == PR_REWARD_HELD_FULL) {
+            gc_stub(run, GC_STUB_REWARD_APPLY);
+            if (why) *why = "modifierType:ModifierType.PokemonHeldItemModifierType.extra.tooMany";
+            return false;
+        }
+        multi_added = status == PR_REWARD_HELD_ADDED || status == PR_REWARD_HELD_STACKED;
+    }
     /* a held item is added as it is; anything else would act on the Pokemon, and doesn't yet */
     if (idx < 0 || !(pr_items[idx].flags & PR_ITEMF_HELD) || idx == PR_ITEM_BASE_STAT_BOOSTER || idx == PR_ITEM_WIDE_LENS || idx == PR_ITEM_MULTI_LENS)
         gc_stub(run, GC_STUB_REWARD_APPLY); /* unsupported bounded persistent adapter path */
-    gc_item_add(run, k, o->arg, b->id, 1);
+    if (!multi_added) gc_item_add(run, k, o->arg, b->id, 1);
     gc_event *ev = gc_ev_new(run, GC_EV_HP);
     if (ev) { ev->a = 0; ev->b = party; ev->c = b->hp; }
     return true;
