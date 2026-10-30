@@ -12,7 +12,7 @@ RUN_LIB := $(BUILD)/run-core/librun.a
 CORE_LIB := $(BUILD)/run-core/battle-core/libprcore.a
 AI_LIB := $(BUILD)/ai-core/libai.a
 REWARD_LIB := $(BUILD)/reward-core/libreward.a
-SRCS := src/gc_fusion.c src/gc_form_items.c src/gc_football.c src/gc_egg_hatch.c src/gc_custom.c src/gc_gacha.c src/gc_achv.c gen/out/gc_egg_pool.c src/gc_classic.c src/gc_multi.c src/gc_wide.c src/gc_orb_add.c src/gc_soothe.c src/gc_lure.c src/gc_temp.c src/gc_moveset.c src/gc_fungames.c src/gc_movegen.c gen/out/gc_movegen_data.c src/gc_gts.c src/gc_pillar.c src/gc_darkdeal.c src/gc_fof.c src/gc_snorlax.c src/gc_training.c src/gc_berries.c gen/out/gc_traders.c src/gc_run.c src/gc_phases.c src/gc_mon.c src/gc_items.c src/gc_encounter.c src/gc_battle.c src/gc_save.c src/gc_stubs.c src/gc_system.c src/gc_mystery.c src/gc_reward.c src/gc_reward_lifecycle.c src/gc_learnset.c src/gc_catch.c gen/out/gc_evolutions.c gen/out/gc_biome_fields.c gen/out/gc_starters.c gen/out/gc_trainers.c gen/out/gc_dex.c gen/out/gc_learnsets.c
+SRCS := src/gc_trash.c src/gc_fusion.c src/gc_form_items.c src/gc_football.c src/gc_egg_hatch.c src/gc_custom.c src/gc_gacha.c src/gc_achv.c gen/out/gc_egg_pool.c src/gc_classic.c src/gc_multi.c src/gc_wide.c src/gc_orb_add.c src/gc_soothe.c src/gc_lure.c src/gc_temp.c src/gc_moveset.c src/gc_fungames.c src/gc_movegen.c gen/out/gc_movegen_data.c src/gc_gts.c src/gc_pillar.c src/gc_darkdeal.c src/gc_fof.c src/gc_snorlax.c src/gc_training.c src/gc_berries.c gen/out/gc_traders.c src/gc_run.c src/gc_phases.c src/gc_mon.c src/gc_items.c src/gc_encounter.c src/gc_battle.c src/gc_save.c src/gc_stubs.c src/gc_system.c src/gc_mystery.c src/gc_reward.c src/gc_reward_lifecycle.c src/gc_learnset.c src/gc_catch.c gen/out/gc_evolutions.c gen/out/gc_biome_fields.c gen/out/gc_starters.c gen/out/gc_trainers.c gen/out/gc_dex.c gen/out/gc_learnsets.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 
 all: $(BUILD)/transform_host_test
@@ -1305,3 +1305,20 @@ tera-shard-host-test: $(BUILD)/tera_shard_host_test $(BUILD)/tera-shard.native.t
 	$(BUILD)/tera_shard_host_test $(BUILD)/tera-shard.native.txt
 test: tera-shard-host-test
 .PHONY: tera-shard-host-test
+
+$(BUILD)/trash.native.inc: tests/fixtures/trash.native.json.gz tools/build-trash-proof.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-trash-proof.py $< $@
+$(BUILD)/trash_host_test: tests/trash_host_test.c $(BUILD)/trash.native.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+trash-host-test: $(BUILD)/trash_host_test
+	$(BUILD)/trash_host_test
+test: trash-host-test
+.PHONY: trash-host-test
+
+$(BUILD)/trash_flow_test: tests/trash_flow_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+trash-flow-test: $(BUILD)/trash_flow_test
+	$(BUILD)/trash_flow_test
+test: trash-flow-test
+.PHONY: trash-flow-test

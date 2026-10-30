@@ -454,6 +454,15 @@ int main(void) {
   draw(0);
   CHECK(n_sil == 1 && !strcmp(g_sil_key[0], "images/pokemon/569-gigantamax") && g_sil_scale[0] == 1.5f && g_sil_tint[0] == 0x999999FFu,
         "garbodor: %d %s %g %08x", n_sil, g_sil_key[0], g_sil_scale[0], g_sil_tint[0]);
+  /* Actual source labels, the cost token and both battle-introduction pages. */
+  use_source_locales=true;run_at(GC_ME_TRASH_TO_TREASURE,2);R.n_party=3;mon(2,SPECIES_ID_MEW,30,40,40);
+  gc_mystery_setup_screen(&R);
+  CHECK(R.screen.n_options==2&&R.screen.option_ok[0]&&R.screen.option_ok[1],"both trash options work with an empty inventory");
+  CHECK(me_flow_open(&R,chosen,NULL),"trash source question opens");press(BTN_DOWN);draw(1);
+  CHECK(has_text(1,"Dig for Valuables")&&has_text(1,"2.5"),"digging shows source reward/cost description");
+  press(BTN_UP);press(BTN_ACTION);
+  CHECK(n_got==1&&got.option==0&&strstr(got.selected,"You wander around the heap")&&strstr(got.selected,"Suddenly, the garbage shifts!"),"investigation includes the Garbodor reveal: %s",got.selected);
+  use_source_locales=false;
   run_at(GC_ME_ABSOLUTE_AVARICE, 3); /* 11 item icons from the items atlas, at the item base (-19, +2) plus their offsets */
   CHECK(me_flow_open(&R, chosen, NULL), "avarice opens");
   n_sil = 0;

@@ -298,6 +298,7 @@ static void finish(int option, int b, int c)
   snprintf(sub, sizeof sub, lost && option == 1 ? "option.%d.selectedBad" : "option.%d.selected", option + 1);
   if (fmt(sub, extra, n_extra, true, page, sizeof page)) append_page(ch.selected, sizeof ch.selected, page);
   if (fmt("option.selected", extra, n_extra, true, page, sizeof page)) append_page(ch.selected, sizeof ch.selected, page);
+  if (F.type == GC_ME_TRASH_TO_TREASURE && option == 0 && fmt("option.1.selected2", extra, n_extra, true, page, sizeof page)) append_page(ch.selected,sizeof ch.selected,page);
   if (F.type == GC_ME_FIELD_TRIP) {
     if (fmt(field_correct ? "correct" : "incorrect", extra, n_extra, true, page, sizeof page)) append_page(ch.selected, sizeof ch.selected, page);
     if (fmt(field_correct ? "correctExp" : "incorrectExp", extra, n_extra, true, page, sizeof page)) append_page(ch.selected, sizeof ch.selected, page);

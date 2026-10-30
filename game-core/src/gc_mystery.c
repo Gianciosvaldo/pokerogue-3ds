@@ -342,6 +342,9 @@ static void setup_texts(gc_run *run)
     s->n_me_args = 0;
     memset(s->option_pick, 0, sizeof s->option_pick);
     switch (type) {
+    case GC_ME_TRASH_TO_TREASURE:
+        screen_arg(s, (pr_msg_arg){"costMultiplier",PR_ARG_STR,0,"2.5"});
+        break;
     case GC_ME_SHADY_VITAMIN_DEALER:
         s->option_pick[0] = s->option_pick[1] = GC_PICK_MEMBER;
         screen_arg(s, pr_arg_money_en_us("option1Money", pr_run_get_wave_money_amount(run->wave, 1.5)));
@@ -532,8 +535,6 @@ void gc_mystery_setup_screen(gc_run *run)
         s->option_ok[2] = run->n_items > 0;
     } else if (type == GC_ME_ABSOLUTE_AVARICE) {
         s->option_ok[1] = berry_stacks(run) >= 6;
-    } else if (type == GC_ME_TRASH_TO_TREASURE) {
-        s->option_ok[0] = run->n_items >= 3;
     } else if (type == GC_ME_BUG_TYPE_SUPERFAN) {
         s->option_ok[0] = bug_in_party(run);
     } else if (type == GC_ME_GLOBAL_TRADE_SYSTEM) {
@@ -1398,14 +1399,7 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_TRASH_TO_TREASURE:
-        if (option == 0) {
-            int to_remove = run->n_items >= 3 ? 3 : run->n_items;
-            for (int i = 0; i < to_remove; i++) gc_item_remove_at(run, 0);
-            gc_port_give_reward(run, "GOLDEN_POKEBALL");
-            end_mystery_encounter_leave(run);
-            return true;
-        }
-        end_mystery_encounter_leave(run);
+        gc_trash_execute(run,option);
         return true;
 
     case GC_ME_BERRIES_ABOUND:
@@ -1561,6 +1555,8 @@ void gc_me_win_rewards(gc_run *run)
     if (in->me_reward.has_item) c->options[c->n_options++] = in->me_reward.item;
     for (int i = 0; i < in->me_reward.n_more && c->n_options < PR_REWARD_MAX_OPTIONS; i++) c->options[c->n_options++] = in->me_reward.more[i];
     if (in->me_reward.func >= 0) c->funcs[c->n_funcs++] = (uint16_t)in->me_reward.func;
+    c->n_tiers=in->me_reward.n_tiers;
+    for(int i=0;i<c->n_tiers;i++)c->tiers[i]=in->me_reward.tiers[i];
     c->fill_remaining = in->me_reward.fill;
     c->reroll_multiplier = NAN;
     c->allow_luck_upgrades = true;
