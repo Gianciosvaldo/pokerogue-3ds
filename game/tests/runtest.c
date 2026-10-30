@@ -44,6 +44,7 @@
 #include <unistd.h>
 
 #include "gc/data.h"
+#include "gc/reward.h"
 #include "../../game-core/src/internal.h"   /* gc_mon_recalc, for the strong party of RUNTEST_CUSTOM=strong */
 #include "battle_view.h"
 #include "gm_item_ui.h"
@@ -139,7 +140,7 @@ static struct {
   int n_biomes;
   void (*item_pick)(int slot, int move_slot, void* arg);
   void* item_arg;
-  bool item_move;
+  bool item_move, item_memory;
   void (*menu)(void* arg);   /* rh_set_menu: START on the reward screen */
   void* menu_arg;
 } X;
@@ -1079,6 +1080,14 @@ void ps_open_item(const void* run, int pmode, bool target_move, int tm_move, voi
   X.item_pick = on_pick;
   X.item_arg = arg;
   X.item_move = target_move;
+  X.item_memory = false;
+}
+
+/* Keep the headless host's callback boundary aligned with the real adapter.
+ * Real filtering, labels, scrolling and cancellation are in party_item_test. */
+void ps_open_reward(const void* run,const char* key,bool target_move,int item_arg,void (*pick)(int,int,void*),void* arg) {
+  ps_open_item(run,0,target_move,item_arg,pick,arg);
+  X.item_memory=!strcmp(key,"MEMORY_MUSHROOM");
 }
 
 void ps_open_transfer(const void* run, void (*on_move)(int, int, int, void*), void (*on_done)(void*), void* arg) {
@@ -1449,7 +1458,11 @@ static bool step(void) {
     }
     if (rnd(8) == 0)
       f(6, -1, X.item_arg); /* backs out: the driver shows the rewards again */
-    else
+    else if (X.item_memory) {
+      static pr_reward_memory_move rows[GC_MEMORY_MOVE_CAPACITY];
+      int n=gc_memory_moves((gc_run*)r,best,rows,GC_MEMORY_MOVE_CAPACITY);
+      if(n>0)f(best,(int)rnd(n),X.item_arg);else f(6,-1,X.item_arg);
+    } else
       f(best, X.item_move ? (int)rnd(4) : -1, X.item_arg);
     return true;
   }
