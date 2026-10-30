@@ -432,8 +432,8 @@ multi-acquire-host: $(BUILD)/multi_acquire_host_test
 	$(BUILD)/multi_acquire_host_test
 multi-acquire-raw-guards: $(BUILD)/multi_acquire_raw_test
 	$(BUILD)/multi_acquire_raw_test --selftest
-$(BUILD)/multi_acquire_host_test: tests/multi_acquire_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+$(BUILD)/multi_acquire_host_test: tests/multi_acquire_host_test.c tests/multi-fallback.native.inc tests/fixtures/multi-fallback-legacy.save $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -DMULTI_FALLBACK_LEGACY='"$(abspath tests/fixtures/multi-fallback-legacy.save)"' tests/multi_acquire_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
 $(BUILD)/multi_acquire_diff_test: tests/multi_acquire_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
 $(BUILD)/multi_acquire_raw_test: tests/multi_acquire_raw_test.c tests/multi-acquire-raw-bridge.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
@@ -1322,3 +1322,15 @@ trash-flow-test: $(BUILD)/trash_flow_test
 	$(BUILD)/trash_flow_test
 test: trash-flow-test
 .PHONY: trash-flow-test
+
+# Verify all frozen fallback observations, including corruption rejection.
+test: multi-fallback-capture
+multi-fallback-capture:
+	python3 tests/multi_fallback_capture_test.py
+.PHONY: multi-fallback-capture
+
+# The native/save checks must detect broken acquisition, repair and damage.
+test: multi-fallback-faults
+multi-fallback-faults: $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	python3 tools/check_multi_fallback_faults.py --build $(abspath $(BUILD))
+.PHONY: multi-fallback-faults

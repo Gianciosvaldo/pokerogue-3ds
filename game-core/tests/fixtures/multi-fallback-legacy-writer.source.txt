@@ -1,0 +1,8 @@
+#define main retained_multi_main
+#include "../../game-core/tests/multi_acquire_host_test.c"
+#undef main
+int main(void){setup();uint32_t id=run.party[0].b.id;
+ run.items[0]=(gc_item){.key="BASE_STAT_BOOSTER",.arg=STAT_ATK,.stack=1,.pokemon_id=id};
+ run.items[1]=(gc_item){.key="MULTI_LENS",.arg=0,.stack=1,.pokemon_id=id,.type_tier=4};
+ run.items[2]=(gc_item){.key="MULTI_LENS",.arg=-1,.stack=1,.pokemon_id=id,.type_tier=2};run.n_items=3;gc_items_to_battle(&run);
+ pr_pokemon*p=&run.party[0].b;p->hit_count=3;for(int i=0;i<3;i++){p->hits_left=3-i;double d=1;pr_apply_multi_hit_damage_modifiers(&run.bt,p,MOVE_ID_TACKLE,&d);printf("old hit %d factor %.4f\n",i+1,d);}size_t n=gc_run_save(&run,saved,sizeof saved);CHECK(n>0);FILE*f=fopen("game-core/tests/fixtures/multi-fallback-legacy.save","wb");CHECK(f);CHECK(fwrite(saved,1,n,f)==n);CHECK(fclose(f)==0);return 0;}

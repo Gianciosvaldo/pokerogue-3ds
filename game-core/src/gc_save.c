@@ -604,6 +604,12 @@ size_t gc_run_save(const gc_run *run, void *buf, size_t cap)
     size_t s = section_start(&w, "run");
     put_block(&w, run_fields, NF(run_fields), &v, sizeof v, 1);
     section_end(&w, s);
+    /* Optional compatibility marker: new saves preserve deliberately distinct
+     * native modifier records; older port saves may contain the arg-alias bug. */
+    s = section_start(&w,"multi_lens_storage");
+    const uint8_t multi_lens_storage = 1;
+    put(&w,&multi_lens_storage,1);
+    section_end(&w,s);
     s = section_start(&w,"encounter");
     sv_encounter encounter={run->double_battle};
     put_block(&w,encounter_fields,NF(encounter_fields),&encounter,sizeof encounter,1);
@@ -1018,6 +1024,31 @@ static bool get_items(const reader *body, const char *name, gc_item *items, int 
     return true;
 }
 
+/* Old generic acquisition both split constructor-only -1/0 aliases and let
+ * stacks exceed native's two-lens cap. Repair those old port shapes only. */
+static void repair_legacy_multi_lenses(gc_run *run)
+{
+    for(int i=0;i<run->n_items;i++) {
+        gc_item *a=&run->items[i];
+        if(strcmp(a->key,"MULTI_LENS")||(a->arg!=-1&&a->arg!=0)||!a->pokemon_id)continue;
+        bool holder=false;for(int k=0;k<run->n_party;k++)holder|=run->party[k].b.id==a->pokemon_id;
+        if(!holder)continue;
+        int first=-1,count=0;int64_t total=0;bool valid=true,aliases=false;
+        for(int j=0;j<run->n_items;j++) {
+            const gc_item *b=&run->items[j];
+            if(strcmp(b->key,"MULTI_LENS")||b->pokemon_id!=a->pokemon_id)continue;
+            if(first<0)first=j;
+            count++;total+=b->stack;aliases|=b->arg!=a->arg;
+            if(b->stack<=0||(b->arg!=-1&&b->arg!=0)||b->detached||b->virtual_stack||b->battle_count
+                ||b->eviolite_base||b->form_inactive||b->non_transferable!=a->non_transferable)valid=false;
+        }
+        if(!valid||first!=i||!(total>2||(count==2&&total==2&&aliases)))continue;
+        a->stack=2;
+        for(int j=run->n_items-1;j>i;j--)if(!strcmp(run->items[j].key,"MULTI_LENS")&&run->items[j].pokemon_id==a->pokemon_id)
+            gc_item_remove_at(run,j);
+    }
+}
+
 bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
 {
     const char *dummy;
@@ -1176,6 +1207,10 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
         *why = "the save is damaged";
         return false;
     }
+
+    reader multi_storage=section(&body,"multi_lens_storage");
+    if(multi_storage.bad)repair_legacy_multi_lenses(run);
+    else if(multi_storage.n!=1||multi_storage.p[0]!=1){*why="the stored Multi Lens compatibility marker is damaged";return false;}
 
     if (format < 2) {
         for (int i = 0; i < run->n_party; i++) {

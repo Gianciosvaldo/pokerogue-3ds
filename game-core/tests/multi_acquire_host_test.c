@@ -39,4 +39,66 @@ CHECK(gc_reward_apply(&run,&o,-1,-1,&why)==GC_APPLY_REFUSED&&!strcmp(why,"pick a
  setup();run.n_items=1;run.items[0]=(gc_item){.key="LEFTOVERS",.stack=1};before=run;CHECK(gc_multi_scene_apply(&run,&o,0,&why,true)==GC_APPLY_UNHANDLED&&!memcmp(&run,&before,sizeof run));
  setup();run.n_items=1;run.items[0]=(gc_item){.key="MULTI_LENS",.arg=-1,.stack=1,.pokemon_id=run.party[0].b.id,.virtual_stack=1};CHECK(gc_reward_apply(&run,&o,0,-1,&why)==GC_APPLY_UNHANDLED);CHECK(gc_port_apply_reward(&run,&o,0,-1,&why)&&run.stubs[GC_STUB_REWARD_APPLY]==1&&run.items[0].virtual_stack==1);
 }
-int main(void){acquisition();refusal();printf("Multi acquisition host: %d checks passed\n",checks);return 0;}
+#include "multi-fallback.native.inc"
+static void fallback_inventory(void){
+ CHECK(sizeof fallback_native/sizeof *fallback_native==192);
+ for(unsigned i=0;i<sizeof fallback_native/sizeof *fallback_native;i++){
+  setup();int target=fallback_native[i].storage;run.party_order[0]=target;run.party_order[1]=1-target;
+  if(fallback_native[i].context==7)run.party[target].b.fusion_species=SPECIES_ID_RATTATA;
+  else run.items[run.n_items++]=(gc_item){.key=fallback_native[i].context<6?"BASE_STAT_BOOSTER":"SOUL_DEW",.arg=fallback_native[i].context<6?fallback_native[i].context:0,.stack=1,.pokemon_id=run.party[target].b.id};
+  int other=run.n_items;
+  if(fallback_native[i].stack)run.items[run.n_items++]=(gc_item){.key="MULTI_LENS",.arg=fallback_native[i].old_arg,.stack=fallback_native[i].stack,.pokemon_id=run.party[target].b.id};
+  gc_items_to_battle(&run);gc_item original=run.items[0];gc_system before=sys;pr_rng rng=run.run.rng;
+  gc_offer o=offer(1,false);o.arg=fallback_native[i].incoming_arg;const char*why=NULL;
+  CHECK(gc_reward_apply(&run,&o,target,-1,&why)==GC_APPLY_UNHANDLED); /* keep the whole-Scene coverage guard */
+  bool result=gc_port_apply_reward(&run,&o,target,-1,&why);
+  if(result!=fallback_native[i].ok||run.n_items!=other+fallback_native[i].n_lenses)fprintf(stderr,"fallback native case%u context%d stock%d oldArg%d incomingArg%d: result%d items%d\n",i,fallback_native[i].context,fallback_native[i].stack,fallback_native[i].old_arg,fallback_native[i].incoming_arg,result,run.n_items);
+  CHECK(result==fallback_native[i].ok);CHECK(run.n_items==other+fallback_native[i].n_lenses);CHECK(run.items[other].stack==fallback_native[i].output_stack);
+  if(other)CHECK(!memcmp(&original,&run.items[0],sizeof original));
+  CHECK(run.stubs[GC_STUB_REWARD_APPLY]==1&&!memcmp(&sys,&before,sizeof sys)&&!memcmp(&rng,&run.run.rng,sizeof rng));
+  gc_items_to_battle(&run);pr_pokemon*p=&run.party[target].b;int hits=1;pr_apply_multi_hit_count_modifiers(&run.bt,p,MOVE_ID_TACKLE,&hits);CHECK(hits==fallback_native[i].hits);
+  for(int ordinal=0;ordinal<hits;ordinal++){p->hit_count=hits;p->hits_left=hits-ordinal;double d=1;pr_apply_multi_hit_damage_modifiers(&run.bt,p,MOVE_ID_TACKLE,&d);CHECK(d==fallback_native[i].factors[ordinal]);}
+  CHECK(gc_run_can_save(&run));size_t size=gc_run_save(&run,saved,sizeof saved);CHECK(size&&gc_run_load(&loaded,saved,size,&why));
+  int restored=1;pr_apply_multi_hit_count_modifiers(&loaded.bt,&loaded.party[target].b,MOVE_ID_TACKLE,&restored);CHECK(restored==hits);
+  for(int ordinal=0;ordinal<hits;ordinal++){pr_pokemon*q=&loaded.party[target].b;q->hit_count=hits;q->hits_left=hits-ordinal;double d=1;pr_apply_multi_hit_damage_modifiers(&loaded.bt,q,MOVE_ID_TACKLE,&d);CHECK(d==fallback_native[i].factors[ordinal]);}
+ }
+ puts("Multi fallback: 192 native inventory/strike records and save round trips compared; Scene guards retained");
+}
+/* Remove only the optional extension to emulate an older tagged-field save.
+ * Recompute its envelope checksum, leaving the inventory bytes untouched. */
+static uint32_t legacy_hash(const char*s){uint32_t h=2166136261u;for(;*s;s++)h=(h^(unsigned char)*s)*16777619u;return h;}
+static size_t without_multi_marker(size_t n){
+ size_t at=20;bool found=false;
+ while(at+8<=n){uint32_t name,len;memcpy(&name,saved+at,4);memcpy(&len,saved+at+4,4);CHECK(len<=n-at-8);
+  if(name==legacy_hash("multi_lens_storage")){memmove(saved+at,saved+at+8+len,n-at-8-len);n-=8+len;found=true;break;}at+=8+len;
+ }
+ CHECK(found);uint32_t length=n-20;memcpy(saved+12,&length,4);uint32_t crc=~0u;
+ for(size_t i=20;i<n;i++){crc^=saved[i];for(int j=0;j<8;j++)crc=(crc>>1)^((0u-(crc&1u))&0xedb88320u);}crc=~crc;memcpy(saved+16,&crc,4);return n;
+}
+static void legacy_guards(void){
+ for(int control=0;control<14;control++){
+  setup();run.items[0]=(gc_item){.key="MULTI_LENS",.arg=0,.stack=1,.pokemon_id=run.party[0].b.id};run.items[1]=run.items[0];run.items[1].arg=-1;run.n_items=2;
+  switch(control){case 1:run.items[1].arg=0;break;case 2:run.items[1].stack=2;break;case 3:run.items[1].detached=true;break;case 4:run.items[1].pokemon_id=run.party[1].b.id;break;case 5:run.items[1].battle_count=1;break;case 6:run.items[2]=run.items[1];run.n_items=3;break;case 7:run.items[1].key="WIDE_LENS";break;case 8:run.items[1].arg=5;break;case 9:run.items[0].pokemon_id=run.items[1].pokemon_id=0;break;case 10:run.items[1].non_transferable=true;break;case 11:run.n_items=1;run.items[0].stack=3;break;case 12:run.n_items=1;run.items[0].stack=4;break;case 13:run.items[2]=run.items[0];run.items[3]=run.items[1];run.n_items=4;break;}
+  gc_item original[4];memcpy(original,run.items,sizeof original);int count=run.n_items;const char*why=NULL;
+  size_t n=gc_run_save(&run,saved,sizeof saved);CHECK(n>0);n=without_multi_marker(n);CHECK(gc_run_load(&loaded,saved,n,&why));
+  bool repair=control==0||control==2||control==6||control>=11;
+  CHECK(loaded.n_items==(repair?1:count));
+  if(repair)CHECK(loaded.items[0].stack==2&&loaded.items[0].arg==0);
+  else for(int j=0;j<count;j++)CHECK(!strcmp(loaded.items[j].key,original[j].key)&&loaded.items[j].stack==original[j].stack&&loaded.items[j].arg==original[j].arg&&loaded.items[j].pokemon_id==original[j].pokemon_id&&loaded.items[j].detached==original[j].detached&&loaded.items[j].battle_count==original[j].battle_count&&loaded.items[j].non_transferable==original[j].non_transferable);
+ }
+ puts("Multi legacy: six alias/three/four-lens repairs plus eight nonmatching, detached and lock controls");
+}
+static void legacy_fallback(void){
+ const char*why=NULL;FILE*f=fopen(MULTI_FALLBACK_LEGACY,"rb");CHECK(f);size_t n=fread(saved,1,sizeof saved,f);CHECK(!ferror(f)&&fclose(f)==0&&n>0);
+ CHECK(gc_run_load(&run,saved,n,&why));CHECK(run.n_items==2&&!strcmp(run.items[0].key,"BASE_STAT_BOOSTER")&&run.items[0].stack==1);
+ CHECK(!strcmp(run.items[1].key,"MULTI_LENS")&&run.items[1].stack==2&&run.items[1].arg==0);
+ int hits=1;pr_apply_multi_hit_count_modifiers(&run.bt,&run.party[0].b,MOVE_ID_TACKLE,&hits);CHECK(hits==3);
+ for(int i=0;i<3;i++){pr_pokemon*p=&run.party[0].b;p->hit_count=3;p->hits_left=3-i;double d=1;pr_apply_multi_hit_damage_modifiers(&run.bt,p,MOVE_ID_TACKLE,&d);CHECK(d==(i?.25:.5));}
+ n=gc_run_save(&run,saved,sizeof saved);CHECK(n&&gc_run_load(&loaded,saved,n,&why)&&loaded.n_items==2&&loaded.items[1].stack==2);
+ /* A new-format deliberate duplicate remains distinct, as in the native raw
+  * inventory controls; migration must not rewrite every imported list. */
+ setup();run.items[0]=(gc_item){.key="MULTI_LENS",.arg=0,.stack=1,.pokemon_id=run.party[0].b.id};run.items[1]=run.items[0];run.items[1].arg=-1;run.n_items=2;
+ n=gc_run_save(&run,saved,sizeof saved);CHECK(n&&gc_run_load(&loaded,saved,n,&why)&&loaded.n_items==2&&loaded.items[0].stack==1&&loaded.items[1].stack==1);
+ puts("Multi legacy: pre-fix split stock repaired to 50/25/25; current native duplicate controls preserved");
+}
+int main(void){legacy_guards();legacy_fallback();fallback_inventory();acquisition();refusal();printf("Multi acquisition host: %d checks passed\n",checks);return 0;}
