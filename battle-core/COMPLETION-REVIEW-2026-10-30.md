@@ -25,7 +25,7 @@ keys and the audited direct maximum-HP getter fixes now have their own evidence.
 | --- | --- | --- |
 | Registered source inventory | Closure identities, constructor arguments and generator stability are retained. All 33 held subclasses have owner/evidence mappings. | Reconcile enabled move/ability attributes, conditions, tags, phases and public callers into one implementation/evidence/exception ledger. Registry-name misses alone do not establish missing mechanics. |
 | Explicit unsupported and capacity paths | Fresh static collection records 305 candidate source lines. Held catalogue audit passes: bound 1,447 versus storage 2,048. Arena public-key bound 48 is implemented. | Classify actual branches as source-disabled/exceptional, invalid or missing context, externally supplied context, or an enabled valid-input gap. Candidate lines are neither distinct missing mechanics nor a completion percentage. A real missing path must not be converted to a no-op. |
-| Source identity and field/party lookup | Tailwind now follows full parties. History/actor references, fusion evolution, Shedinja/TM sharing, IV sharing and Eviolite clones have later owner proofs. | Three battler-tag blocks still query only the field: Trapped/Octolock admission, Seed on-add and Substitute on-add. Native `BattlerTag.getSourcePokemon` searches full parties. Prove the relevant owners and classify bench/fainted/absent-source cases before changing guards. Missing-source Substitute can leave undefined native HP; it must not be silently mapped to a normal zero-HP doll. |
+| Source identity and field/party lookup | Tailwind now follows full parties. History/actor references, fusion evolution, Shedinja/TM sharing, IV sharing and Eviolite clones have later owner proofs. | [Full-party tag-source follow-up](TAG-PARTY-SOURCES-VALIDATION.md) now fixes those three blocks and compares 696 API cases; 72 native undefined-HP Substitute cases stay explicitly guarded. Broader identity/phase reachability remains in the ledger. |
 | Generation and owning callers | Ordinary wild, unfused boss, natural fused-boss/passive movesets and enemy fusion projection have separate retained proofs. | `gc_generate_moveset` still rejects trainer/challenge, fusion with learned-move form triggers, and certain explicit passive inputs. Determine whether each higher-level owner supplies equivalent behavior or actually falls back. Do not classify all trainer generation as absent merely from this helper's return value. |
 | Interactions and persistence | Doubles callbacks, complete history queries, event delivery, selected copy/save and form/item owners are implemented. | Reconcile simultaneous faint/switch, suppression/passive, fusion/Transform, clone/IV mutation and phase-transition combinations against enabled source branches. Preserve later fixes when reading older exclusion lists. These are evidence obligations, not a claim that every listed interaction is broken. |
 
@@ -37,8 +37,8 @@ same file, native `src/data/battler-tags.ts::BattlerTag.getSourcePokemon`, and
 
 The held-class and catalogue audits were rerun successfully for this review.
 The 305-line collection is a discovery aid; semantic classification remains
-unfinished. No new native counterexample for the field/party candidates is
-claimed by this document.
+unfinished. The later tag-source follow-up records the demonstrated counterexamples and
+its bounded API scope.
 
 ## Endless: established evidence and remaining acceptance
 

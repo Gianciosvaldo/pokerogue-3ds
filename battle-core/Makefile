@@ -808,3 +808,9 @@ $(BUILD)/residual-max-hp-test: tests/residual-max-hp-test.c $(BUILD)/wide-substi
 .PHONY: residual-max-hp-host-test
 residual-max-hp-host-test: $(BUILD)/residual-max-hp-test
 	python3 tools/check-residual-max-hp-proof.py --replay-only
+
+$(BUILD)/tag-party-sources-test: tests/tag-party-sources-test.c $(BUILD)/wide-substitute-frame.inc $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) tests/tag-party-sources-test.c $(BUILD)/libprcore.a -lm -o $@
+.PHONY: tag-party-sources-host-test
+tag-party-sources-host-test: $(BUILD)/tag-party-sources-test
+	python3 tools/check-tag-party-sources-proof.py --replay-only

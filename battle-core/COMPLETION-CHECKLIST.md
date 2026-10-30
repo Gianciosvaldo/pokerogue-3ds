@@ -142,6 +142,11 @@ including dynamic status and faint payloads. The [residual/Wish follow-up](RESID
 now covers the seven remaining direct HP reads across twenty APIs/actions,
 including all ten damaging-trap classes. Variable-stat and broader HP
 interactions remain part of the source inventory.
+The [full-party tag-source follow-up](TAG-PARTY-SOURCES-VALIDATION.md) now
+covers Trapped/Octolock admission and Seed/Substitute construction with
+benched/fainted casters. Missing-source Substitute remains explicitly guarded
+because native HP/focus are undefined. This API proof does not close arbitrary
+whole-turn tag reachability.
 Source proofs must observe actual pinned methods, including native RNG captured
 before GameManager construction when the framework would replace it.
 

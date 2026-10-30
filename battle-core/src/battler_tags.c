@@ -611,12 +611,8 @@ static bool can_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *
         return true;
     case BATTLER_TAG_TYPE_TRAPPED:
     case BATTLER_TAG_TYPE_OCTOLOCK: {                     /* TrappedTag.canAdd */
-        /* getSourcePokemon() searches both parties; only the field is modelled */
-        pr_pokemon *source = pr_field_pokemon_by_id(bt, t->source_id);
-        if (!source) {
-            pr_note_unported(bt, PR_FEAT_PARTY);
-            return false;
-        }
+        pr_pokemon *source = tag_source(bt, t);
+        if (!source) return false;
         if (t->source_move && pr_move_hits_substitute(bt, t->source_move, source, p)) return false;
         return !pr_find_battler_tag_class(p, PR_TAGCLASS_TRAPPED) && !pr_is_of_type(p, POKEMON_TYPE_GHOST);
     }
@@ -866,13 +862,9 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
         return;
     }
     case BATTLER_TAG_TYPE_SEEDED: {
-        /* SeedTag.onAdd: nothing without its source (getSourcePokemon searches both parties; only
-         * the field is modelled), else the message, then sourceIndex = the source's battler index */
-        pr_pokemon *source = t->source_id >= 0 ? pr_field_pokemon_by_id(bt, t->source_id) : NULL;
-        if (!source) {
-            if (t->source_id >= 0) pr_note_unported(bt, PR_FEAT_PARTY);
-            return;
-        }
+        /* SeedTag.onAdd keeps the party caster, even after it leaves the field. */
+        pr_pokemon *source = tag_source(bt, t);
+        if (!source) return;
         say(bt, e, "battlerTags:seededOnAdd", p);
         t->source_index = (int8_t)pr_battler_index(bt, source);
         return;
@@ -880,9 +872,11 @@ static void on_add(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t
     case BATTLER_TAG_TYPE_SUBSTITUTE: {
         /* SubstituteTag.onAdd: the doll gets a quarter of its source's max HP, its animation
          * (PokemonAnimPhase), the message, then the Pokemon's damaging traps go */
-        pr_pokemon *source = t->source_id >= 0 ? pr_field_pokemon_by_id(bt, t->source_id) : NULL;
+        pr_pokemon *source = pr_pokemon_by_id(bt, t->source_id);
         if (!source) {
-            if (t->source_id >= 0) pr_note_unported(bt, PR_FEAT_PARTY);
+            /* Native returns with hp/sourceInFocus undefined. Do not admit
+             * that incomplete doll as a normal C zero-HP Substitute. */
+            pr_note_unported(bt, PR_FEAT_PARTY);
             return;
         }
         t->hp = floor(pr_get_stat(source, STAT_HP, true) / 4.0);
