@@ -354,10 +354,13 @@ void football_live_focus(const FootballLive *m,float *x,float *y,float *vx)
 {
     unsigned actor=m->controlled<22?m->controlled:m->carrier;
     *x=m->actors[actor].x;*y=m->actors[actor].y;*vx=m->actors[actor].vx;
+    /* The human must see the player they steer under a kick, including its
+     * flight and bounce. Test this before the general flying-ball view. */
+    bool returner_view=(m->special==FB_SPECIAL_KICKOFF || m->special==FB_SPECIAL_PUNT)
+        && m->controlled<22 && !football_live_cpu(m,(FootballSide)(1-m->kick_side));
+    if(returner_view && m->phase!=FB_LIVE_DEAD && m->phase!=FB_LIVE_END)return;
     if(m->flying){*x=m->ball_x;*y=m->ball_y;*vx=0;return;}
     if(!m->special)return;
-    /* A human who receives the kickoff watches the returner until the ball is in the air; every other kick starts on the kicker. */
-    bool returner_view=m->special==FB_SPECIAL_KICKOFF && !football_live_cpu(m,(FootballSide)(1-m->kick_side));
     if(m->stage==FB_STAGE_SNAP && m->phase!=FB_LIVE_DEAD && !returner_view){const FootballLiveActor *k=&m->actors[base(m->kick_side)];*x=k->x;*y=k->y;*vx=0;}
     else if(m->stage==FB_STAGE_ROLL || m->phase==FB_LIVE_DEAD){*x=m->ball_x;*y=m->ball_y;*vx=0;}
 }
