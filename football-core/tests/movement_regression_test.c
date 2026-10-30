@@ -85,6 +85,45 @@ static void full_releases(const FootballPlayId *passes)
         for(unsigned rank=2;rank<=5;++rank)CHECK((m.actors[off+rank].x-start[rank-2])*dir>3,"run receiver never released downfield");
     }
 }
+/* Uploaded ai.js routeThink settles before the rear line. Exercise the real
+ * movement integrator, in both directions, including its obstruction override. */
+static void end_zone_routes(const FootballPlayId *passes,const FootballAttributes *profiles)
+{
+    for(unsigned profile=0;profile<4;++profile)for(unsigned away=0;away<2;++away)
+    for(unsigned p=0;p<4;++p)for(unsigned obstructed=0;obstructed<2;++obstructed){
+        setup(away,passes[p]);unsigned off=away?11:0,i=off+2,d=11-off+7;float dir=away?-1:1;
+        isolate(i,22);m.actors[i].x=away?9:111;m.actors[i].y=4;m.actors[i].attributes=profile<3?profiles[profile]:(FootballAttributes){99,1,25,60,60,60,60,60};
+        m.actors[i].vx=dir*(4.3f+m.actors[i].attributes.spd*.045f);
+        if(obstructed){m.actors[d].x=away?4:116;m.actors[d].y=4;
+            m.actors[i].route_peer=(uint8_t)(d+1);m.actors[i].route_side=1;m.actors[i].route_y=5.7f;}
+        float farthest=0;
+        for(unsigned frame=0;frame<600;++frame){float x,y;
+            football_live_ai_receiver(&m,i,&x,&y);football_live_move(&m.actors[i],x,y,false);
+            farthest=fmaxf(farthest,away?120-m.actors[i].x:m.actors[i].x);
+        }
+        CHECK(farthest<117,"receiver ran out back: profile%u side%u play%u obstruction%u depth%.2f",profile,away,p,obstructed,farthest);
+        CHECK(farthest>114,"receiver settled short of end zone");
+        CHECK(fabsf(m.actors[i].vx)<.1f,"receiver failed to settle: velocity%.2f",m.actors[i].vx);
+    }
+}
+static void protection_urgency(void)
+{
+    for(unsigned away=0;away<2;++away){
+        setup(away,FB_PASS_VERTICALS);m.thrown=false;
+        unsigned off=away?11:0,def=11-off;float dir=away?-1:1;
+        /* One available lineman, two reachable rushers. The higher-index
+         * rusher is already at the quarterback; array order must not win. */
+        for(unsigned j=0;j<22;++j){m.actors[j].x=away?2:118;m.actors[j].y=2;m.actors[j].block_peer=255;}
+        m.actors[off].x=m.los-dir*7;m.actors[off].y=26;
+        m.actors[off+6].x=m.los-dir*4;m.actors[off+6].y=26;
+        m.actors[def].x=m.los+dir*2;m.actors[def].y=26;
+        m.actors[def+3].x=m.los-dir*6;m.actors[def+3].y=27;
+        CHECK(football_live_block_target(&m,off+6)==def+3,"protection ignored most urgent reachable rusher side%u",away);
+        /* Keep engaged assignments; do not swap opponents on every frame. */
+        m.actors[off+6].block_peer=(uint8_t)def;m.actors[def].block_peer=(uint8_t)(off+6);
+        CHECK(football_live_block_target(&m,off+6)==def,"protection abandoned engaged rusher");
+    }
+}
 int main(void)
 {
     memset(&roster,0,sizeof roster);roster.count=22;
@@ -98,6 +137,7 @@ int main(void)
     }
     CHECK(found,"actual Electrode attributes generated");profiles[2]=electrode.attributes;
     called_routes(passes,profiles);full_releases(passes);
+    end_zone_routes(passes,profiles);protection_urgency();
     unsigned backward=0;
     for(unsigned profile=0;profile<3;++profile)for(unsigned away=0;away<2;++away)for(unsigned p=0;p<4;++p)for(unsigned rank=1;rank<=5;++rank){
         setup(away,passes[p]);unsigned off=away?11:0,i=off+rank;float dir=away?-1:1;

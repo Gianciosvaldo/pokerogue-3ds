@@ -37,7 +37,7 @@ unsigned football_live_block_target(const FootballLive *m,unsigned blocker)
         /* Make one shared assignment, rather than five independent nearest-neighbor
          * decisions. Protect an edge with few reachable blockers before doubling a DT. */
         for(unsigned n=0;n<5;++n){
-            unsigned rush=255,fewest=6;
+            unsigned rush=255,fewest=6;float urgent=1e9f;
             for(unsigned d=def;d<def+11;++d){
                 bool user_rush=d==m->controlled && fabsf(m->actors[d].x-m->actors[off].x)<10;
                 if(used_rusher[d-def] || m->actors[d].block_peer<22 ||
@@ -47,7 +47,12 @@ unsigned football_live_block_target(const FootballLive *m,unsigned blocker)
                     float dx=m->actors[d].x-line->x,dy=m->actors[d].y-line->y;
                     if(!used_blocker[k] && line->block_peer>=22 && dx*dx+dy*dy<64)count++;
                 }
-                if(count && count<fewest){fewest=count;rush=d;}
+                /* As in the supplied JS passPro, urgent rushers win ties.
+                 * Keep scarce edge coverage ahead of urgency, and preserve
+                 * existing engagements rather than rematching contact. */
+                float qx=m->actors[d].x-m->actors[off].x,qy=m->actors[d].y-m->actors[off].y;
+                float danger=qx*qx+qy*qy;
+                if(count && (count<fewest || (count==fewest && danger<urgent))){fewest=count;rush=d;urgent=danger;}
             }
             if(rush>=22)break;
             unsigned line=255;float nearest=64;
