@@ -308,3 +308,10 @@ mega-career-test: core-libs
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/mega_career_test.c src/football_career.c src/football_career_save.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/mega_career_test
 	$(BUILD)/mega_career_test
 test: mega-career-test
+
+.PHONY: return-camera-test
+return-camera-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/return_camera_test.c src/football_camera.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/return_camera_test
+	$(BUILD)/return_camera_test
+test: return-camera-test

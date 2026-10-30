@@ -115,6 +115,7 @@ bool football_live_go_for_two(FootballLive *m);
 unsigned football_live_extra_point_chance(const FootballLive *m);
 /* The CPU's choice at the try: true to go for two. Reads score and clock only (no randomness consumed). */
 bool football_live_ai_goes_for_two(const FootballLive *m);
-/* Where the camera should look: the controlled player, the ball in flight, or the kicker before a kick. */
+/* Camera focus: the controlled returner throughout a receiving kick, otherwise
+ * the controlled player, the ball in flight, or the kicker before a kick. */
 void football_live_focus(const FootballLive *m,float *x,float *y,float *vx);
 #endif
