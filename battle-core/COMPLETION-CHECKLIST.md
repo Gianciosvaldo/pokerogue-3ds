@@ -119,6 +119,11 @@ money handling merged in #357; see [their validation record](HONEY-MONEY-VALIDAT
    retains wave-rule/level/RNG observations at every wave through 5,850 in
    both modes. It does not close complete encounter generation or whole runs.
 
+The [joined constructor follow-up](../game-core/CONSTRUCTOR-FINISH-VALIDATION.md)
+retains base, moveset, finish/boss-IV, deferred-stat and threshold-RNG APIs in
+both Endless modes. Its supplied-species/level, explicit empty-item contexts
+do not close natural encounter selection or battle/progression/save integration.
+
 The order can change when an actual source mismatch reveals a prerequisite.
 Each slice retains its own reproducible validation and exact-head CI record.
 The [retained Tailwind source proof](TAILWIND-SOURCE-VALIDATION.md) now follows
