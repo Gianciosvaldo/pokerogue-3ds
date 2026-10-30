@@ -5,6 +5,11 @@ Target: enabled battle behavior at upstream
 This checklist describes the finish line. A checked-in implementation or a high
 passing percentage in a bounded random sample does not close a whole category.
 
+The [30 October closure review](COMPLETION-REVIEW-2026-10-30.md) consolidates the
+remaining work into broader source coverage and integrated Endless acceptance,
+followed by final regression/build sign-off. It lists concrete candidates and
+superseded exclusions; it does not certify that only two small checks remain.
+
 ## Required before claiming completion
 
 - [ ] Finish the source inventory: enabled move/ability attributes, constructor
@@ -165,8 +170,10 @@ refresh, stats and saves. The [ordinary wild moveset follow-up](../game-core/WIL
 connects weighted level pools through the wild adapter, including non-boss
 fusions without passives. The [unfused boss follow-up](../game-core/WILD-BOSS-MOVESETS-VALIDATION.md)
 connects the existing weighted boss helper with natural species passives.
-Complete fused boss/passive/trainer movesets,
-post-moveset form callbacks and complete encounter generation remain open.
+Natural fused-boss/passive movesets now have the later fused-boss owner proof
+below. Trainer/challenge and explicit-passive admission, post-moveset form
+callbacks and complete encounter-generation integration still require their
+owning-caller review.
 
 [Constructor-lock transport](../game-core/HELD-LOCK-VALIDATION.md) now preserves
 source locks in acquisition, projection and save reconstruction. Held-form
