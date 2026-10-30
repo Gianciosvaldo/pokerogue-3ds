@@ -121,7 +121,7 @@ typedef struct {
     /* an encounter's fight that is not allowed to flee (withFleeAllowed(false)) and, for a fight with a guaranteed reward (Fight or Flight), what its
      * victory opens: setEncounterRewards({guaranteedModifierTypeOptions: [item], fillRemaining: false}). Not saved, for the same reason as fg */
     bool me_no_flee;
-    struct { bool active, fill, before; int16_t func; bool has_item; pr_reward_option item; uint8_t n_more; pr_reward_option more[5]; } me_reward;   /* the shop: one item (has_item) or one reward function (func >= 0) */
+    struct { bool active, fill, before; int16_t func; bool has_item; pr_reward_option item; uint8_t n_more, n_tiers; int8_t tiers[3]; pr_reward_option more[5]; } me_reward;   /* the shop: one item (has_item) or one reward function (func >= 0) */
     /* the encounter's startOfBattleEffects (source battler, its target, the move): copied into the battle at its setup, played once by the
      * first TurnInitPhase */
     struct { int8_t source, target; uint16_t move; uint8_t use_mode; } me_start[4];
@@ -313,6 +313,8 @@ bool gc_mystery_select(gc_run *run, int *type, int *tier);
 void gc_mystery_record(gc_run *run, int type, int tier);
 void gc_mystery_increment_miss(gc_run *run);
 void gc_mystery_setup_screen(gc_run *run);
+int gc_trash_items(gc_run *run,gc_item out[10]);
+void gc_trash_execute(gc_run *run,int option);
 bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why, bool *ok);
 bool gc_mystery_pick_ok(const gc_run *run, int type, int option, int idx);   /* the option's party screen filter accepts the Pokemon */
 void gc_mystery_post(gc_run *run, const gc_rphase *p);
