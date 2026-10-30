@@ -133,8 +133,10 @@ temporary-setter controls through simulated/application/lapse/entry owners and
 executed healing/status restoration. It retains the ordinary doubles capture.
 The [permanent-HP move callback follow-up](MAX-HP-MOVES-VALIDATION.md) adds
 Struggle, Flame Burst, Steel Beam, Rest, Ghost Curse, Recover and Moonlight,
-including dynamic status and faint payloads. Wish and residual-tag HP getters
-remain explicit follow-ups.
+including dynamic status and faint payloads. The [residual/Wish follow-up](RESIDUAL-MAX-HP-VALIDATION.md)
+now covers the seven remaining direct HP reads across twenty APIs/actions,
+including all ten damaging-trap classes. Variable-stat and broader HP
+interactions remain part of the source inventory.
 Source proofs must observe actual pinned methods, including native RNG captured
 before GameManager construction when the framework would replace it.
 

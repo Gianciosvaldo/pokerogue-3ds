@@ -54,6 +54,7 @@ move conditions and complete turns are not claimed; C's void dispatch is not a
 return-value comparison. One-HP inputs and their queued faints are retained,
 without claiming all natural Wonder Guard cases. Boss shields, held items,
 suppression/passives, fusion, arbitrary histories, changed recipient identities,
-other healing constructors, Wish, residual tags, other languages, saves and
-hardware acceptance retain their separate evidence or audit obligations. This
+other healing constructors, other languages, saves and hardware acceptance
+retain their separate evidence or audit obligations. Wish and the listed residual
+callbacks now have a [subsequent proof](RESIDUAL-MAX-HP-VALIDATION.md). This
 does not establish every maximum-HP caller or complete battle-core parity.

@@ -160,7 +160,7 @@ int pr_moveset_slot_with_pp(const pr_pokemon *p, int move)
 /* toDmgValue(pokemon.getMaxHp() / div) */
 static double max_hp_part(const pr_pokemon *p, double div)
 {
-    double v = floor(pr_get_stat(p, STAT_HP, false) / div);
+    double v = floor(pr_get_stat(p, STAT_HP, true) / div);
     return v < 1 ? 1 : v;
 }
 
@@ -999,7 +999,7 @@ static bool seed_drain(pr_battle *bt, pr_engine *e, pr_pokemon *p, const pr_batt
     pr_apply_ab_attrs(bt, PR_AC_BlockNonDirectDamageAbAttr, &ap);
     if (cancelled) return true;
     pr_unshift_common_anim(bt, e, pr_battler_index(bt, source), pr_battler_index(bt, p), COMMON_ANIM_LEECH_SEED);
-    double hp = floor(pr_get_stat(p, STAT_HP, false) / 8.0);
+    double hp = floor(pr_get_stat(p, STAT_HP, true) / 8.0);
     double damage = pr_damage_and_update(bt, e, p, hp < 1 ? 1 : hp, HIT_RESULT_INDIRECT, false, NULL);
     /* hasAbilityWithAttr("ReverseDrainAbAttr", false): no canApplyAbility check */
     bool reverse = pr_ability_first_attr(p->ability, PR_AC_ReverseDrainAbAttr)
@@ -1032,7 +1032,7 @@ static void protect_on_contact(pr_battle *bt, pr_engine *e, pr_pokemon *p, const
         pr_ab_params ap = {.pokemon = p, .move = -1, .flag = &cancelled};
         pr_apply_ab_attrs(bt, PR_AC_BlockNonDirectDamageAbAttr, &ap);
         if (!cancelled) {
-            double d = floor(pr_get_stat(attacker, STAT_HP, false) * (1.0 / 8));
+            double d = floor(pr_get_stat(attacker, STAT_HP, true) * (1.0 / 8));
             pr_damage_and_update(bt, e, attacker, d < 1 ? 1 : d, HIT_RESULT_INDIRECT, false, NULL);
         }
         return;
@@ -1333,7 +1333,7 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
         bool cancelled = false;
         pr_ab_params ap = {.pokemon = p, .move = -1, .flag = &cancelled};
         pr_apply_ab_attrs(bt, PR_AC_BlockNonDirectDamageAbAttr, &ap);
-        if (!cancelled) pr_damage_and_update(bt, e, p, floor(pr_get_stat(p, STAT_HP, false) / 4.0), HIT_RESULT_INDIRECT, false, NULL);
+        if (!cancelled) pr_damage_and_update(bt, e, p, floor(pr_get_stat(p, STAT_HP, true) / 4.0), HIT_RESULT_INDIRECT, false, NULL);
         pr_queue_msg(bt, e, pr_msg1("battlerTags:powderLapse", pr_arg_move("moveName", move)));   /* move.name */
         return true;
     }
@@ -1435,7 +1435,7 @@ static bool lapse(pr_battle *bt, pr_engine *e, pr_pokemon *p, pr_battler_tag *t,
         pr_ab_params ap = {.pokemon = p, .move = -1, .flag = &cancelled};
         pr_apply_ab_attrs(bt, PR_AC_BlockNonDirectDamageAbAttr, &ap);
         if (!cancelled) {
-            double damage = floor(pr_get_stat(p, STAT_HP, false) / 8.0);
+            double damage = floor(pr_get_stat(p, STAT_HP, true) / 8.0);
             pr_damage_and_update(bt, e, p, damage < 1 ? 1 : damage, HIT_RESULT_INDIRECT, false, NULL);
         }
         return true;
