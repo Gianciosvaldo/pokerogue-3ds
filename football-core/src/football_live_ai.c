@@ -215,5 +215,11 @@ void football_live_ai_receiver(FootballLive *m,unsigned i,float *x,float *y)
         a->route_y=clampf(a->route_y,center-1.7f,center+1.7f);
         tx=dir*fmaxf(.1f,route.x-depth);ty=a->route_y-a->y;
     }
+    /* Settle before the back of the end zone, as routeThink does in the
+     * supplied JS AI. Four yards of braking also covers high-speed, low-agility
+     * players. Apply after release steering so contact cannot cancel it. */
+    float rear=dir>0?116.5f:3.5f;
+    float forward=clampf((rear-a->x)*dir/4.f,-.3f,1.f);
+    if(tx*dir>forward)tx=dir*forward;
     *x=tx;*y=ty;
 }
