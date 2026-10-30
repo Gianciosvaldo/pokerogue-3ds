@@ -1285,3 +1285,13 @@ manual-eviolite-host-test: $(BUILD)/manual_eviolite_host_test
 	$(BUILD)/manual_eviolite_host_test
 test: manual-eviolite-host-test
 .PHONY: manual-eviolite-host-test
+
+$(BUILD)/constructor-finish.native.inc: tests/fixtures/constructor-finish.native.json.gz tests/fixtures/fusion-power.constructors.json.gz tools/build-constructor-finish-proof.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-constructor-finish-proof.py $< $@
+$(BUILD)/constructor_finish_host_test: tests/constructor_finish_host_test.c $(BUILD)/constructor-finish.native.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -Wl,--wrap=pr_rng_seed_int -lm -o $@
+constructor-finish-host-test: $(BUILD)/constructor_finish_host_test
+	$(BUILD)/constructor_finish_host_test
+test: constructor-finish-host-test
+.PHONY: constructor-finish-host-test
