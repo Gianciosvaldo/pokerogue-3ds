@@ -6,6 +6,7 @@
  * rolls on run->run.rng; this file rolls nothing itself. What the player does with an option: the application
  * of healing, revive, PP and PP Up rewards is at the end of this file (Task 60); the rest is gc_stubs.c. */
 #include "internal.h"
+#include "gc/reward.h"
 
 /* ---- the items by key ---- */
 int gc_reward_item_index(const char *key)
@@ -411,6 +412,23 @@ int gc_port_reward_options(gc_run *run, int kind, gc_offer out[GC_MAX_OPTIONS], 
     return n;
 }
 
+int gc_memory_moves(gc_run *run,int party,pr_reward_memory_move *out,int capacity)
+{
+    if (!run || party < 0 || party >= run->n_party || capacity < 0) return -1;
+    const int k=gc_battle_slot_of(run,party);
+    if (k < 0) return -1;
+    return pr_reward_memory_moves(gc_reward_ctx(run),k,out,capacity);
+}
+
+bool gc_mon_can_use_tera_shard(const gc_mon *mon)
+{
+    if (!mon) return false;
+    const int species[]={mon->b.species,mon->b.fusion_species};
+    for (int i=0;i<2;i++)
+        if (species[i]==SPECIES_ID_TERAPAGOS || species[i]==SPECIES_ID_OGERPON || species[i]==SPECIES_ID_SHEDINJA) return false;
+    return true;
+}
+
 /* ---- applying a reward: healing, revives, PP restores and PP Ups (Task 60) ----
  * What `applyModifier` does once the player has picked the target: PokemonHpRestoreModifier (Potions, Full
  * Restore, Revives, Sacred Ash), PokemonPpRestoreModifier / PokemonAllMovePpRestoreModifier (Ether, Elixir)
@@ -760,6 +778,21 @@ int gc_reward_apply(gc_run *run, const gc_offer *o, int party, int move_slot, co
         }
         gc_rq_unshift(run, gc_rp(RP_LEARN_MOVE, party, o->arg, 1));
         gc_reward_queue_copy(run);
+        return GC_APPLY_DONE;
+    }
+
+    if (item == PR_ITEM_TERA_SHARD) {
+        if (party < 0 || party >= run->n_party || gc_battle_slot_of(run,party) < 0) {
+            *why = "pick a Pokemon";
+            return GC_APPLY_REFUSED;
+        }
+        if (o->arg < POKEMON_TYPE_NORMAL || o->arg > POKEMON_TYPE_STELLAR || !gc_mon_can_use_tera_shard(&run->party[party])) {
+            *why = "partyUiHandler:anyEffect";
+            return GC_APPLY_REFUSED;
+        }
+        /* TerastallizeModifier.apply changes the type even if it is unchanged.
+         * This consumable never becomes a held item and does not activate Tera. */
+        run->party[party].b.tera_type=(int8_t)o->arg;
         return GC_APPLY_DONE;
     }
 

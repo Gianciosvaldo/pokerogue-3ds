@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "gc/run.h"
+#include "gc/reward.h"
 #include "menus.h"
 #include "party_screen.h"
 #include "party_fake.h"
@@ -172,6 +173,24 @@ static void order_cases(void) {
   input(BTN_DOWN); input(BTN_ACTION); input(BTN_ACTION);
   assert(picked == 1 && depth == 1);
 }
+static void remember_reward_cases(void) {
+  memset(&run,0,sizeof run);run.n_party=2;run.party_order[0]=1;run.party_order[1]=0;
+  gc_mon*m=&run.party[1];m->b.species=SPECIES_ID_MEW;m->b.level=100;m->b.id=2;m->b.hp=100;m->b.stats[0]=100;m->b.n_moves=1;m->b.moves[0]=MOVE_ID_SPLASH;
+  run.party[0].b.species=SPECIES_ID_MAGIKARP;run.party[0].b.level=5;run.party[0].b.id=1;run.party[0].b.n_moves=1;run.party[0].b.moves[0]=MOVE_ID_SPLASH;
+  for(int move=1;move<pr_tm_tier_count;move++)if(pr_tm_tier[move]>=0&&!pr_moves[move].unimplemented){assert(m->n_used_tms<PR_TM_HISTORY_CAPACITY);m->used_tms[m->n_used_tms++]=move;}
+  static pr_reward_memory_move rows[GC_MEMORY_MOVE_CAPACITY];int n=gc_memory_moves(&run,1,rows,GC_MEMORY_MOVE_CAPACITY);assert(n>255&&n<=512);assert(gc_memory_moves(&run,1,rows,n-1)==-1);
+  int before=calls;picked=-1;
+  ps_open_reward(&run,"MEMORY_MUSHROOM",false,-1,on_pick,NULL);input(BTN_ACTION);input(BTN_UP);input(BTN_UP);
+  pf_clear_text();ui_top()->draw(ui_top(),RR_BOTTOM);assert(pf_text_count(menu_move_name(rows[n-1].move))>0);
+  input(BTN_ACTION);assert(calls==before+1&&picked==1&&move_slot==n-1&&depth==1);
+  ps_open_reward(&run,"MEMORY_MUSHROOM",false,-1,on_pick,NULL);input(BTN_CANCEL);assert(depth==1&&picked==6&&move_slot==-1);
+  /* The shard uses the same real item-party path, with its own species filter. */
+  m->b.species=SPECIES_ID_OGERPON;picked=-1;
+  ps_open_reward(&run,"TERA_SHARD",false,POKEMON_TYPE_FIRE,on_pick,NULL);input(BTN_ACTION);input(BTN_ACTION);assert(picked==-1&&depth==2);input(BTN_CANCEL);assert(depth==1);
+  m->b.species=SPECIES_ID_MEW;m->b.hp=0;picked=-1;
+  ps_open_reward(&run,"TERA_SHARD",false,POKEMON_TYPE_FIRE,on_pick,NULL);input(BTN_ACTION);input(BTN_ACTION);assert(picked==1&&depth==1);
+}
+
 int main(void) {
   run.n_party = 3;
   for (int i = 0; i < 3; i++) {
@@ -252,6 +271,7 @@ int main(void) {
   assert(picked == 6 && calls == 7 && depth == 1);
   check_team_cases();
   order_cases();
+  remember_reward_cases();
   puts("party_item_test: TM labels, Teach/filter, B/touch cancellation and move-item reset passed");
   return 0;
 }

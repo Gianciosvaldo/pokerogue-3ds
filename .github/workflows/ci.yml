@@ -94,6 +94,8 @@ jobs:
         run: python3 game-core/tools/check-fusion-power-proof.py
       - name: Compare complete fused boss moveset owners and failure controls
         run: python3 game-core/tools/check-fused-boss-owner-proof.py
+      - name: Compare Tera shard consumption and recipient filters
+        run: python3 game-core/tools/check-tera-shards-proof.py
       - name: Compare joined boss constructor finish, stat update and threshold RNG
         run: python3 game-core/tools/check-constructor-finish-proof.py
       - name: Compare every supported Endless wave and reject uncovered results

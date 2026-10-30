@@ -1,5 +1,6 @@
 /* The party and summary screens over the battle (see party_screen.h). */
 #include "party_screen.h"
+#include "gc/reward.h"
 #include "battle_view.h"
 
 #include <stdio.h>
@@ -331,6 +332,10 @@ static void on_item_select(void* ctx, int slot, int option) {
     if (ItemS.on_item_pick) ItemS.on_item_pick(6, -1, ItemS.item_arg);
     return;
   }
+  if (S.mode == PARTY_REMEMBER_MOVE_MODIFIER && option >= 0 && option < S.party[slot].nrelearn) {
+    if (ItemS.on_item_pick) ItemS.on_item_pick(storage_at(slot), option, ItemS.item_arg);
+    return;
+  }
   if (option >= PO_MOVE_1 && option <= PO_MOVE_4) {
     int move_idx = option - PO_MOVE_1;
     if (ItemS.on_item_pick) ItemS.on_item_pick(storage_at(slot), move_idx, ItemS.item_arg);
@@ -344,7 +349,14 @@ static const char* filter_tm(void* ctx, int slot) {
   return gc_mon_can_learn_tm(&g_run->party[storage_at(slot)], ItemS.tm_move) ? NULL : mui_t("partyUiHandler:anyEffect");
 }
 
-void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, int tm_move, void (*on_pick)(int slot, int move_slot, void* arg), void* arg) {
+static const char* filter_remember(void* ctx,int slot) {
+  (void)ctx;return S.party[slot].nrelearn ? NULL : mui_t("partyUiHandler:anyEffect");
+}
+static const char* filter_tera_shard(void* ctx,int slot) {
+  (void)ctx;return gc_mon_can_use_tera_shard(&g_run->party[storage_at(slot)]) ? NULL : mui_t("partyUiHandler:anyEffect");
+}
+
+static void open_item(const void* gc_run_ptr, int pmode, bool target_move, int tm_move, bool tera_shard, void (*on_pick)(int slot, int move_slot, void* arg), void* arg) {
   const gc_run* run = (const gc_run*)gc_run_ptr;
   ps_set_run(run);
   memset(&S, 0, sizeof S);
@@ -361,6 +373,16 @@ void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, int tm_mo
       const gc_mon* m = &run->party[order[slot]];
       gc_to_menu_mon(m, &S.party[slot]);
       if (S.mode == PARTY_TM_MODIFIER) S.party[slot].tm_state = (uint8_t)gc_mon_tm_state(m, tm_move);
+      if (S.mode == PARTY_REMEMBER_MOVE_MODIFIER) {
+        static pr_reward_memory_move rows[GC_MEMORY_MOVE_CAPACITY];
+        typedef char memory_capacity_fits[(GC_MEMORY_MOVE_CAPACITY <= sizeof S.party[slot].relearn / sizeof S.party[slot].relearn[0] && GC_MEMORY_MOVE_CAPACITY < PO_SCROLL_UP) ? 1 : -1];
+        (void)sizeof(memory_capacity_fits);
+        int n=gc_memory_moves((gc_run*)gc_run_ptr,order[slot],rows,GC_MEMORY_MOVE_CAPACITY);
+        if (n > 0) {
+          S.party[slot].nrelearn=(uint16_t)n;
+          for (int i=0;i<n;i++) {S.party[slot].relearn[i]=rows[i].move;S.party[slot].relearn_level[i]=rows[i].level>0?(uint32_t)rows[i].level:0;}
+        }
+      }
     }
     S.n = run->n_party;
   }
@@ -372,12 +394,23 @@ void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, int tm_mo
   a.in_reward_phase = true;
   a.show_move_pp = target_move;
   if (S.mode == PARTY_TM_MODIFIER) a.filter = filter_tm;
+  if (S.mode == PARTY_REMEMBER_MOVE_MODIFIER) a.filter = filter_remember;
+  if (tera_shard) a.filter = filter_tera_shard;
 
   static party_events ev;
   ev = (party_events){on_item_select, NULL, NULL, NULL, NULL, on_summary, NULL};
   party_open(&a, S.party, S.n, &ev);
   S.open = true;
   ui_push(&g_screen);
+}
+
+void ps_open_item(const void* run,int mode,bool target_move,int tm_move,void (*pick)(int,int,void*),void* arg) {
+  open_item(run,mode,target_move,tm_move,false,pick,arg);
+}
+void ps_open_reward(const void* run,const char* key,bool target_move,int item_arg,void (*pick)(int,int,void*),void* arg) {
+  bool tm=!strcmp(key,"TM_COMMON")||!strcmp(key,"TM_GREAT")||!strcmp(key,"TM_ULTRA");
+  int mode=!strcmp(key,"MEMORY_MUSHROOM")?PARTY_REMEMBER_MOVE_MODIFIER:tm?PARTY_TM_MODIFIER:target_move?PARTY_MOVE_MODIFIER:PARTY_MODIFIER;
+  open_item(run,mode,target_move,item_arg,!strcmp(key,"TERA_SHARD"),pick,arg);
 }
 
 /* ---- Manage Items: the reward screen's transfer (SelectModifierPhase.openModifierTransferScreen) ---- */
