@@ -320,6 +320,9 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
         PUT(.type = BEV_MESSAGE, .battler = -1, .text = g_txt[nt], .a = ev->value, .prompt = ev->id == 1);
         nt++;
         break;
+      case PR_EV_SHINY_SPARKLE:
+        if(single&&seen[b].present)PUT(.type=BEV_SHINY_SPARKLE,.battler=b);
+        break;
       case PR_EV_MOVE_ANIM:
       case PR_EV_CHARGE_ANIM:
       case PR_EV_COMMON_ANIM:
@@ -437,7 +440,7 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
           seen[b].substitute = ev->id != POKEMON_ANIM_TYPE_SUBSTITUTE_REMOVE;
         }
         break;
-      default: /* ABILITY_HIDE, SHINY_SPARKLE: not drawn yet */
+      default: /* ABILITY_HIDE: not drawn yet */
         break;
     }
     /* status icons follow the snapshot */

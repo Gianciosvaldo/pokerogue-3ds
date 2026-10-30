@@ -57,6 +57,7 @@ typedef struct {
   bool info_on;
   float hp_shown;     /* the HP bar's displayed hp (tweened) */
   float exp_shown;
+  float sparkle_ms; /* 0 inactive; native atlas: 35 frames at 32 fps */
   float show_ms;      /* BEV_VISIBLE: ms until the hidden Pokemon shows again */
   stat_banner_state stat_banner;     /* active stat modifier indicator banner */
   status_banner_state status_banner; /* active status visual banner */
@@ -371,6 +372,29 @@ static void draw_sub(const side* sd, bool player, bool tint) {
   if (tint) rr_set_tone(0, 0, 0);
 }
 
+/* The cached sparkle atlases are transient. Keep them until every overlapping
+ * animation finishes, then return their texture memory to Pokemon/move art. */
+static void update_sparkles(float dt) {
+  bool had=false,active=false;
+  for(int k=0;k<4;k++)if(B.s[k].sparkle_ms>0){
+    had=true;B.s[k].sparkle_ms+=dt;
+    if(B.s[k].sparkle_ms>=35000.0f/32)B.s[k].sparkle_ms=0;
+    else active=true;
+  }
+  if(had&&!active)img_drop_prefix("images/effects/shiny");
+}
+
+static void draw_sparkle(const side* sd,bool player) {
+  if(sd->sparkle_ms<=0||!sd->present||sd->mon.hidden||sd->scale<=0)return;
+  int frame=(int)(sd->sparkle_ms*32/1000);if(frame>=35)return;
+  char atlas[48],name[16];int variant=sd->mon.variant;
+  if(variant>=1&&variant<=2)snprintf(atlas,sizeof atlas,"images/effects/shiny_%d",variant+1);else snprintf(atlas,sizeof atlas,"images/effects/shiny");
+  snprintf(name,sizeof name,"%d.png",frame);const rr_frame*f=img_frame(atlas,name);
+  if(!f){snprintf(name,sizeof name,"%d",frame);f=img_frame(atlas,name);}
+  if(!f)return;
+  float x,y;mon_pos(sd,player,&x,&y);rr_draw_opts o=RR_DEFAULT_OPTS;o.origin_x=.5f;o.origin_y=1;o.scale_x=o.scale_y=sd->scale;rr_draw(f,x,y,&o);
+}
+
 static void draw_sprite(side* sd, bool player) {
   if (!sd->present || !sd->sprite_on || sd->scale <= 0 || sd->mon.hidden || ba_hidden(player ? 0 : 2)) return;
   const rr_frame* f = sprite_frame(sd);
@@ -548,7 +572,7 @@ static void draw_field(void) {
   if (B.ball.behind) draw_ball();
   draw_trainers();
   for(int i=0;i<2;i++){
-    side *foe=&B.s[1+2*i];draw_sprite(foe,false);
+    side *foe=&B.s[1+2*i];draw_sprite(foe,false);draw_sparkle(foe,false);
     if(i&&foe->present&&foe->sub_on)draw_sub(foe,false,false);
     if(i&&foe->present&&foe->tint_on)draw_sub(foe,false,true);
   }
@@ -558,12 +582,12 @@ static void draw_field(void) {
   draw_player_trainer();
   if (pl->present && pl->sub_on) draw_sub(pl, true, false);
   if (pl->present && pl->tint_on && !pl->tint_above) draw_sub(pl, true, true);
-  draw_sprite(pl, true);
+  draw_sprite(pl, true);draw_sparkle(pl,true);
   if (pl->present && pl->tint_on && pl->tint_above) draw_sub(pl, true, true);
   side *ally=&B.s[2];
   if(ally->present&&ally->sub_on)draw_sub(ally,true,false);
   if(ally->present&&ally->tint_on&&!ally->tint_above)draw_sub(ally,true,true);
-  draw_sprite(ally,true);
+  draw_sprite(ally,true);draw_sparkle(ally,true);
   if(ally->present&&ally->tint_on&&ally->tint_above)draw_sub(ally,true,true);
   ba_draw(BA_LAYER_TOP, field);
   if (!B.ball.behind) draw_ball();
@@ -1625,6 +1649,11 @@ static void run_event(float dt) {
       }
       break;
 
+    case BEV_SHINY_SPARKLE:
+      if(B.step==0){sd->sparkle_ms=1;ui_play_sound("se/sparkle");B.step=1;}
+      if(B.t>=1000)finish_event();
+      break;
+
     case BEV_MOVE_ANIM: {
       ba_mon field[4];
       anim_field(field);
@@ -2074,6 +2103,7 @@ static void bv_update(ui_screen* s, float dt) {
     B.ball.alpha = B.ball.fade_t < 250 ? 1 : 1 - ease(EASE_SINE_IN, (B.ball.fade_t - 250) / 250);
     if (B.ball.fade_t >= 500) B.ball.on = false;
   }
+  update_sparkles(dt);
   for (int k = 0; k < 4; k++) {
     if (B.s[k].show_ms > 0 && (B.s[k].show_ms -= dt) <= 0) {
       B.s[k].show_ms = 0;

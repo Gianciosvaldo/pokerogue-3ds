@@ -393,8 +393,18 @@ static void preload_moves(void) {
 static void wave_black(void* arg) {
   (void)arg;
   const gc_event* w = &G.q[G.wave_ev];
+  /* A trainer chosen inside a mystery encounter starts on the same wave. Its
+   * TRAINER event owns a fresh scene; its fields are not wave/biome metadata. */
+  const gc_event mid_wave={.kind=GC_EV_WAVE,.a=G.run.wave,.b=G.run.biome,.c=G.run.battle_type};
+  if(w->kind==GC_EV_TRAINER)w=&mid_wave;
   const bool trainer = w->c == BATTLE_TYPE_TRAINER;
   const bool mystery = w->c == BATTLE_TYPE_MYSTERY_ENCOUNTER;
+  /* A normal or loaded trainer wave already owns its TRAINER event. Only an
+   * event without that wave owner starts the extra mystery battle scene. */
+  if(trainer&&G.q[G.wave_ev].kind==GC_EV_WAVE)
+    for(int j=G.wave_ev+1;j<G.nq&&j<=G.wave_ev+5;j++)
+      if(G.q[j].kind==GC_EV_TRAINER){G.skip[j]=true;break;}
+
   /* a custom rematch is on offer: the ordinary enemy in the run is about to be replaced (or kept), so nobody is shown on the enemy side
    * yet; it appears when the battle starts, after the answer */
   const bool offer = G.cfg.custom && gc_run_screen(&G.run)->kind == GC_SCREEN_CUSTOM_OFFER;
@@ -580,6 +590,17 @@ static bool handle_event(int i) {
       if (e->c == 1 && !(G.cfg.custom && cr_jojo_foe(&G.run))) {   /* a JoJo trainer has no class talk */
         *ev_new() = (bv_event){.type = BEV_TRAINER_SHOW, .battler = -1};
         put_dialogue(e);
+      }
+      break;
+
+    case GC_EV_TRAINER:
+      if(G.run.me_battle&&G.run.battle_type==BATTLE_TYPE_TRAINER) {
+        G.st.mystery_trainers++;
+        G.wave_ev=i;G.next_encounter=false;G.resume_wave=false;
+        bgm_on_wave_coming(&G.run,G.run.wave,G.run.biome,BATTLE_TYPE_TRAINER);
+        if(G.fade_done||ui_depth()==0){G.fade_done=false;wave_black(NULL);}
+        else ui_fade(250,100,250,wave_black,NULL);
+        return true;
       }
       break;
 

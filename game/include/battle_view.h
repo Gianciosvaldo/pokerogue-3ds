@@ -104,6 +104,7 @@ typedef enum {
   BEV_BOSS_SHIELD, /* battler, a = bossSegmentIndex after a hit broke a shield: the HP bar's dividers above it stay white, the ones
                     * at or below it go dark (EnemyBattleInfo.updateBossSegmentDividers; upstream does it as the damage is dealt,
                     * before the bar moves, so this event comes before the hit's BEV_DAMAGE) */
+  BEV_SHINY_SPARKLE, /* native ShinySparklePhase: battler, one-second phase; variant from the displayed Pokemon */
 } bev_type;
 #define BV_DIALOGUE_TEXT 2048
 

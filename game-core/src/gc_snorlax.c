@@ -110,7 +110,8 @@ void gc_snorlax_execute(gc_run *run, int option)
     if (option == 0) { fight(run); return; }
     if (option == 1) {
         gc_rq_push(run, gc_rp(RP_PARTY_HEAL, 0, 0, 0));
-        gc_ev_msg(run, "mysteryEncounters/slumberingSnorlax:option.2.restResult", 0);
+        gc_ev_msg(run, "mysteryEncounters/slumberingSnorlax:option.2.restResult", 1,
+                  pr_arg_key("snorlaxName", "pokemon:snorlax"));
         gc_me_leave(run);
         return;
     }

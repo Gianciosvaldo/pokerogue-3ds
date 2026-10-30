@@ -75,6 +75,7 @@ typedef struct {
   int loads;                  /* runs that came from a save (rs_resume) */
   int saves, save_failed;     /* save points written, and the writes the SD card refused */
   int waves;                  /* WAVE events shown */
+  int mystery_trainers;       /* same-wave mystery TRAINER scenes shown */
   int fights, balls, switches, runs_tried;    /* commands answered (accepted by game-core) */
   int refused;                /* answers game-core refused (the player was told why) */
   int quits;                  /* Save and Quit confirmed */
