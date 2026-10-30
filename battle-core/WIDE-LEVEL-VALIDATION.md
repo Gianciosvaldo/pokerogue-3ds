@@ -91,6 +91,12 @@ excluded as requested. No run-core files are changed.
 
 ## Remaining work and limits
 
+This historical section predates [wide progression](WIDE-PROGRESSION-VALIDATION.md),
+[EXP award phases](WIDE-EXP-PHASE-VALIDATION.md), [wide combat](WIDE-COMBAT-VALIDATION.md)
+and the later doubles callbacks. Its old 200/255-cap and callback exclusions
+below are superseded by those slices. Use the [current closure review](COMPLETION-REVIEW-2026-10-30.md)
+for remaining obligations; do not recreate the merged fixes from this old list.
+
 This establishes representation, bounded permanent-stat/score parity and save
 continuity. It does not prove arbitrary int32 levels or JavaScript's full safe
 integer range. Stats/HP remain int32; values outside their numeric range need a
