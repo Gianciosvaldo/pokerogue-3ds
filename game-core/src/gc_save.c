@@ -1024,23 +1024,28 @@ static bool get_items(const reader *body, const char *name, gc_item *items, int 
     return true;
 }
 
-/* Old generic acquisition could split a legitimate two-stack item solely by
- * its constructor-only -1/0 arg. Repair only that exact pair, with a real party
- * holder and no transient/class state. Never discard an over-cap inventory. */
+/* Old generic acquisition both split constructor-only -1/0 aliases and let
+ * stacks exceed native's two-lens cap. Repair those old port shapes only. */
 static void repair_legacy_multi_lenses(gc_run *run)
 {
     for(int i=0;i<run->n_items;i++) {
         gc_item *a=&run->items[i];
-        if(strcmp(a->key,"MULTI_LENS")||a->stack!=1||a->detached||a->virtual_stack||a->battle_count
-            ||a->eviolite_base||a->form_inactive||(a->arg!=-1&&a->arg!=0)||!a->pokemon_id)continue;
+        if(strcmp(a->key,"MULTI_LENS")||(a->arg!=-1&&a->arg!=0)||!a->pokemon_id)continue;
         bool holder=false;for(int k=0;k<run->n_party;k++)holder|=run->party[k].b.id==a->pokemon_id;
         if(!holder)continue;
-        int peer=-1,count=0;
-        for(int j=0;j<run->n_items;j++)if(!strcmp(run->items[j].key,"MULTI_LENS")&&run->items[j].pokemon_id==a->pokemon_id){count++;if(j!=i)peer=j;}
-        if(count!=2||peer<i)continue;
-        const gc_item *b=&run->items[peer];
-        if(b->stack!=1||b->arg==a->arg||(b->arg!=-1&&b->arg!=0)||b->detached||b->virtual_stack||b->battle_count||b->eviolite_base||b->form_inactive||b->non_transferable!=a->non_transferable)continue;
-        a->stack=2;gc_item_remove_at(run,peer);
+        int first=-1,count=0;int64_t total=0;bool valid=true,aliases=false;
+        for(int j=0;j<run->n_items;j++) {
+            const gc_item *b=&run->items[j];
+            if(strcmp(b->key,"MULTI_LENS")||b->pokemon_id!=a->pokemon_id)continue;
+            if(first<0)first=j;
+            count++;total+=b->stack;aliases|=b->arg!=a->arg;
+            if(b->stack<=0||(b->arg!=-1&&b->arg!=0)||b->detached||b->virtual_stack||b->battle_count
+                ||b->eviolite_base||b->form_inactive||b->non_transferable!=a->non_transferable)valid=false;
+        }
+        if(!valid||first!=i||!(total>2||(count==2&&total==2&&aliases)))continue;
+        a->stack=2;
+        for(int j=run->n_items-1;j>i;j--)if(!strcmp(run->items[j].key,"MULTI_LENS")&&run->items[j].pokemon_id==a->pokemon_id)
+            gc_item_remove_at(run,j);
     }
 }
 

@@ -8,7 +8,7 @@ build=(args.build or root/'game-core/build').resolve()
 folder=Path(tempfile.mkdtemp(prefix='multi-fallback-faults-'))
 flags=['-Igame-core/include','-Igame-core/src','-Irun-core/include','-Iai-core/include','-Ireward-core/include','-Ireward-core/gen/out','-Ibattle-core/include','-Ibattle-core/gen/out','-O1','-std=c99','-ffp-contract=off']
 libs=[str(build/p) for p in ['libgc.a','reward-core/libreward.a','ai-core/libai.a','run-core/librun.a','run-core/battle-core/libprcore.a']]
-faults=[('fallback','game-core/src/gc_stubs.c','const int status = gc_multi_add(run, party);','const int status = PR_REWARD_HELD_UNSUPPORTED;'),('migration-omitted','game-core/src/gc_save.c','if(multi_storage.bad)repair_legacy_multi_lenses(run);','if(multi_storage.bad){}'),('migration-unconditional','game-core/src/gc_save.c','if(multi_storage.bad)repair_legacy_multi_lenses(run);','if(true)repair_legacy_multi_lenses(run);'),('migration-overcap','game-core/src/gc_save.c','if(count!=2||peer<i)continue;','if(peer<0||peer<i)continue;'),('full-later-hit','battle-core/src/modifiers.c','else if (src->hit_count - src->hits_left != stacks + 1) *mult *= 0.25;','else if (src->hit_count - src->hits_left != stacks + 1) *mult *= 1;')]
+faults=[('fallback','game-core/src/gc_stubs.c','const int status = gc_multi_add(run, party);','const int status = PR_REWARD_HELD_UNSUPPORTED;'),('migration-omitted','game-core/src/gc_save.c','if(multi_storage.bad)repair_legacy_multi_lenses(run);','if(multi_storage.bad){}'),('migration-unconditional','game-core/src/gc_save.c','if(multi_storage.bad)repair_legacy_multi_lenses(run);','if(true)repair_legacy_multi_lenses(run);'),('migration-opaque','game-core/src/gc_save.c','(b->arg!=-1&&b->arg!=0)||b->detached','b->detached'),('migration-uncapped','game-core/src/gc_save.c','a->stack=2;','a->stack=(int16_t)total;'),('full-later-hit','battle-core/src/modifiers.c','else if (src->hit_count - src->hits_left != stacks + 1) *mult *= 0.25;','else if (src->hit_count - src->hits_left != stacks + 1) *mult *= 1;')]
 with (folder/'faults.log').open('w') as log:
  for name,path,old,new in faults:
   source=Path(path).read_text();assert source.count(old)==1,(name,source.count(old));f=folder/'fault.c';f.write_text(source.replace(old,new));obj=folder/'fault.o';exe=folder/'fault'
@@ -18,4 +18,4 @@ with (folder/'faults.log').open('w') as log:
   r=subprocess.run([str(exe)],stdout=log,stderr=log)
   if r.returncode==0:raise RuntimeError('missed fault '+name)
   log.write('CAUGHT '+name+'\n');log.flush();exe.unlink()
- print('Five compiled Multi Lens fallback, migration and damage faults rejected; logs: '+str(folder/'faults.log'))
+ print('Six compiled Multi Lens fallback, migration and damage faults rejected; logs: '+str(folder/'faults.log'))

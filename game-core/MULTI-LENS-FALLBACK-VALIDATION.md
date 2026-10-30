@@ -16,13 +16,14 @@ prove every co-item/stat/Scene side effect or unsupported imported inventory.
 
 An actual pre-repair C save contains a vitamin and one lens at arg0 plus another
 at arg-1. Before repair its three observed factors are .5625, .0625, 1. A load
-repairs exactly two one-stack aliases on the same real holder, preserving the
-first stock's identity/order, to one two-stack record (.5,.25,.25). It does not
-merge same-arg records, over-cap totals, missing/different holders, detached or
-transient stocks, differing transfer locks, or groups with more than two
-records. An optional multi_lens_storage section marks current saves, preserving
-deliberately imported native duplicate controls on current save round trips.
-The tagged-field format number and existing field schemas do not change.
+combines that exact alias split and caps older over-stacked three/four-lens
+inventories to native's two-lens maximum, preserving the first stock and other
+items' order. Repair requires real holders, recognized constructor args,
+positive stacks and compatible transfer/class state. Opaque, detached, transient
+or differently locked groups are retained for their unsupported diagnostics.
+An optional multi_lens_storage section marks current saves, preserving deliberately
+imported native duplicate controls on current save round trips. The tagged-field
+format number and existing field schemas do not change.
 
 Evidence:
 
@@ -35,16 +36,16 @@ Evidence:
   `tools/check_multi_fallback.py` validates the complete record domain and
   compares every observation. Ten malformed/forged captures are rejected.
 - Actual gc_port_apply_reward path, actual battle modifier bridge and actual
-  save/load: 192 native records plus retained acquisition/atomic guards; 3650
+  save/load: 192 native records plus retained acquisition/atomic guards; 3671
   host checks pass. Every added record checks post-load strike factors too.
 - `tests/fixtures/multi-fallback-legacy.save` was written before the optional
   marker/migration. Its writer is retained as `.source.txt`; setup and serializer
   are from presentation head 2fc64fe4447b2695a846cff8d4a9761ed15b5aa0.
   Compile the writer in work/multi-fallback against that head's libraries to
-  reproduce it. Additional current-save marker removal controls exercise ten
-  nonmatching/over-cap/lock cases and preserve deliberate current duplicates.
-- Five compiled faults are caught: generic fallback, missing repair, repair of
-  current saves, repair of over-cap groups, full damage on later lens hits.
+  reproduce it. Additional current-save marker removal controls exercise six repair shapes (including three and four lenses) and eight
+  nonmatching/lock cases and preserve deliberate current duplicates.
+- Six compiled faults are caught: generic fallback, missing repair, repair of
+  current saves, repair of opaque groups, missing over-cap clamping, full damage on later lens hits.
   Capture and compiled-fault checks are wired into normal game-core tests.
 - Scoped ASan/UBSan/LSan instruments acquisition fallback, canonical bridge,
   item projection and save owners, linking retained supporting core archives.
@@ -61,4 +62,4 @@ or battle-core completion. Normal app/core/custom/save/football and actual
 
 Final local integration: 10,000 ordinary app runs and 100 strong custom
 save/resume runs pass with zero model violations. The final scoped sanitizer
-run passes all 3650 host checks without address/undefined/leak failures.
+run passes all 3671 host checks without address/undefined/leak failures.

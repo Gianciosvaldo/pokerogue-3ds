@@ -76,16 +76,17 @@ static size_t without_multi_marker(size_t n){
  for(size_t i=20;i<n;i++){crc^=saved[i];for(int j=0;j<8;j++)crc=(crc>>1)^((0u-(crc&1u))&0xedb88320u);}crc=~crc;memcpy(saved+16,&crc,4);return n;
 }
 static void legacy_guards(void){
- for(int control=0;control<11;control++){
+ for(int control=0;control<14;control++){
   setup();run.items[0]=(gc_item){.key="MULTI_LENS",.arg=0,.stack=1,.pokemon_id=run.party[0].b.id};run.items[1]=run.items[0];run.items[1].arg=-1;run.n_items=2;
-  switch(control){case 1:run.items[1].arg=0;break;case 2:run.items[1].stack=2;break;case 3:run.items[1].detached=true;break;case 4:run.items[1].pokemon_id=run.party[1].b.id;break;case 5:run.items[1].battle_count=1;break;case 6:run.items[2]=run.items[1];run.n_items=3;break;case 7:run.items[1].key="WIDE_LENS";break;case 8:run.items[1].arg=5;break;case 9:run.items[0].pokemon_id=run.items[1].pokemon_id=0;break;case 10:run.items[1].non_transferable=true;break;}
-  gc_item original[3];memcpy(original,run.items,sizeof original);int count=run.n_items;const char*why=NULL;
+  switch(control){case 1:run.items[1].arg=0;break;case 2:run.items[1].stack=2;break;case 3:run.items[1].detached=true;break;case 4:run.items[1].pokemon_id=run.party[1].b.id;break;case 5:run.items[1].battle_count=1;break;case 6:run.items[2]=run.items[1];run.n_items=3;break;case 7:run.items[1].key="WIDE_LENS";break;case 8:run.items[1].arg=5;break;case 9:run.items[0].pokemon_id=run.items[1].pokemon_id=0;break;case 10:run.items[1].non_transferable=true;break;case 11:run.n_items=1;run.items[0].stack=3;break;case 12:run.n_items=1;run.items[0].stack=4;break;case 13:run.items[2]=run.items[0];run.items[3]=run.items[1];run.n_items=4;break;}
+  gc_item original[4];memcpy(original,run.items,sizeof original);int count=run.n_items;const char*why=NULL;
   size_t n=gc_run_save(&run,saved,sizeof saved);CHECK(n>0);n=without_multi_marker(n);CHECK(gc_run_load(&loaded,saved,n,&why));
-  CHECK(loaded.n_items==(control?count:1));
-  if(!control)CHECK(loaded.items[0].stack==2&&loaded.items[0].arg==0);
+  bool repair=control==0||control==2||control==6||control>=11;
+  CHECK(loaded.n_items==(repair?1:count));
+  if(repair)CHECK(loaded.items[0].stack==2&&loaded.items[0].arg==0);
   else for(int j=0;j<count;j++)CHECK(!strcmp(loaded.items[j].key,original[j].key)&&loaded.items[j].stack==original[j].stack&&loaded.items[j].arg==original[j].arg&&loaded.items[j].pokemon_id==original[j].pokemon_id&&loaded.items[j].detached==original[j].detached&&loaded.items[j].battle_count==original[j].battle_count&&loaded.items[j].non_transferable==original[j].non_transferable);
  }
- puts("Multi legacy: exact alias repair plus ten nonmatching, detached and over-cap controls");
+ puts("Multi legacy: six alias/three/four-lens repairs plus eight nonmatching, detached and lock controls");
 }
 static void legacy_fallback(void){
  const char*why=NULL;FILE*f=fopen(MULTI_FALLBACK_LEGACY,"rb");CHECK(f);size_t n=fread(saved,1,sizeof saved,f);CHECK(!ferror(f)&&fclose(f)==0&&n>0);
