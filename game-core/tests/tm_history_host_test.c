@@ -1,5 +1,6 @@
 /* Native TM callbacks, complete memory choices and compatible command saves. */
 #include "../src/internal.h"
+#include "gc/reward.h"
 #include "fixtures/tm-history.native.inc"
 #include "fixtures/tm-history.legacy-64.inc"
 #include <stdio.h>
@@ -21,6 +22,8 @@ static void compare(gc_run*r,const native_tm_frame*f)
  for(int i=0;i<f->n;i++)CHECK(ctx->party[0].used_tms[i]==f->used[i]);
  pr_reward_memory_move rows[PR_REWARD_MAX_LEVEL_MOVES+PR_REWARD_MAX_USED_TMS+4];
  int n=pr_reward_memory_moves(ctx,0,rows,sizeof rows/sizeof *rows);CHECK(n==f->nmemory);
+ for(int i=0;i<n;i++){CHECK(rows[i].level==f->memory[i][0]);CHECK(rows[i].move==f->memory[i][1]);CHECK(rows[i].source==f->memory[i][2]);}
+ CHECK(gc_memory_moves(r,0,rows,sizeof rows/sizeof *rows)==f->nmemory);
  for(int i=0;i<n;i++){CHECK(rows[i].level==f->memory[i][0]);CHECK(rows[i].move==f->memory[i][1]);CHECK(rows[i].source==f->memory[i][2]);}
  CHECK(r->stubs[GC_STUB_REWARD_INPUT]==0);
 }

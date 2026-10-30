@@ -1248,10 +1248,7 @@ static void on_item_target_picked(int slot, int move_slot, void* arg) {
 }
 
 static void prompt_item_target(const gc_offer* offer) {
-  bool move_target = (offer->target == GC_TARGET_MOVE);
-  const bool tm = !strcmp(offer->key, "TM_COMMON") || !strcmp(offer->key, "TM_GREAT") || !strcmp(offer->key, "TM_ULTRA");
-  ps_open_item(&G.run, tm ? PARTY_TM_MODIFIER : move_target ? PARTY_MOVE_MODIFIER : PARTY_MODIFIER,
-               move_target, tm ? offer->arg : 0, on_item_target_picked, NULL);
+  ps_open_reward(&G.run,offer->key,offer->target==GC_TARGET_MOVE,offer->arg,on_item_target_picked,NULL);
 }
 
 static void on_shop_select_reward(void* ctx, int option_idx) {

@@ -87,9 +87,10 @@ typedef struct {
   bool allowed_in_battle; /* challenge rules (FilterChallengeLegal); true outside challenges */
   uint8_t tm_state;       /* TM_MODIFIER mode: 0 not able, 1 able, 2 learned */
   /* REMEMBER_MOVE_MODIFIER mode: the relearnable moves (getLearnableLevelMoves) */
-  uint16_t relearn[32];
-  uint8_t relearn_level[32]; /* level learned, 0 = TM/egg source */
-  uint8_t nrelearn;
+  /* Full core bound is 160 level rows + 322 TMs + 4 egg moves. */
+  uint16_t relearn[512];
+  uint32_t relearn_level[512]; /* level learned, 0 = TM/egg source */
+  uint16_t nrelearn;
 
   /* ---- summary screen ---- */
   int8_t types[2];        /* getTypes (no tera, no third type); types[1] = -1 when single-typed */

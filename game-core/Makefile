@@ -1295,3 +1295,13 @@ constructor-finish-host-test: $(BUILD)/constructor_finish_host_test
 	$(BUILD)/constructor_finish_host_test
 test: constructor-finish-host-test
 .PHONY: constructor-finish-host-test
+
+$(BUILD)/tera-shard.native.txt: tests/fixtures/tera-shards.native.txt.gz
+	@mkdir -p $(BUILD)
+	gzip -dc $< > $@
+$(BUILD)/tera_shard_host_test: tests/tera_shard_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+tera-shard-host-test: $(BUILD)/tera_shard_host_test $(BUILD)/tera-shard.native.txt
+	$(BUILD)/tera_shard_host_test $(BUILD)/tera-shard.native.txt
+test: tera-shard-host-test
+.PHONY: tera-shard-host-test
