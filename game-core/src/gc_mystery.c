@@ -931,13 +931,14 @@ static void part_timer(gc_run *run, int option, int b)
         pp.me_exp_multiplier = 1.0;   /* isBattleMysteryEncounter(): the encounter's expMultiplier, 1 */
         gc_exp_party_queue(run, &pp, 100, true);
     }
-    gc_ev_msg(run, multiplier > 2.5 || option == 2 ? "mysteryEncounters/partTimer:jobCompleteGood" : "mysteryEncounters/partTimer:jobCompleteBad", 0);
+    const pr_msg_arg name = pr_arg_pokemon_name(&run->bt, "selectedPokemon", &m->b);
+    gc_ev_msg(run, multiplier > 2.5 || option == 2 ? "mysteryEncounters/partTimer:jobCompleteGood" : "mysteryEncounters/partTimer:jobCompleteBad", 1, name);
     double amount = pr_run_get_wave_money_amount(run->wave, multiplier);
     for (int i = 0; i < run->n_items; i++)
         if (!strcmp(run->items[i].key, "AMULET_COIN")) amount += floor(amount * 0.2 * run->items[i].stack);
     run->money = fmin(fmax(run->money + amount, 0.0), 9007199254740991.0);
     gc_ev_msg(run, "mysteryEncounterMessages:receiveMoney", 1, pr_arg_int("amount", (int32_t)amount));
-    gc_ev_msg(run, "mysteryEncounters/partTimer:pokemonTired", 0);
+    gc_ev_msg(run, "mysteryEncounters/partTimer:pokemonTired", 1, name);
     pr_reward_custom *cs = &gc_int(run)->reward.me_custom;
     memset(cs, 0, sizeof *cs);
     cs->fill_remaining = true;

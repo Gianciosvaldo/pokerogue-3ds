@@ -687,6 +687,20 @@ int main(void) {
         }
       CHECK(side, "vitamin side effects announced");
     }
+    if (ported[t] == GC_ME_PART_TIMER) {
+      for(int option=0;option<3;option++) {
+        R.ev_head=R.ev_count=0;gc_rq_reset(&gc_int(&R)->rq);
+        bool applied=false;CHECK(gc_mystery_execute(&R,option,1,0,&why,&applied)&&applied,"Part Timer option %d applies",option);
+        gc_event e;int named=0;
+        const char*expected=option==2?"Pikachu":"Lapras";
+        while(gc_run_next_event(&R,&e))if(e.msg.key&&(!strcmp(e.msg.key,"mysteryEncounters/partTimer:jobCompleteGood")||!strcmp(e.msg.key,"mysteryEncounters/partTimer:jobCompleteBad")||!strcmp(e.msg.key,"mysteryEncounters/partTimer:pokemonTired"))){
+          char message[1200];be_format_message(&e.msg,message,sizeof message);named++;
+          CHECK(!strstr(message,"{{")&&strstr(message,expected),"Part Timer result names selected Pokemon: %s",message);
+        }
+        CHECK(named==2,"both Part Timer results delivered for option %d",option);
+        R.mystery_type=R.screen.mystery_type=GC_ME_PART_TIMER;gc_mystery_setup_screen(&R);
+      }
+    }
     if (ported[t] == GC_ME_FIELD_TRIP) {
       g_depth = n_got = 0;
       CHECK(me_flow_open(&R, chosen, NULL), "actual Field Trip dialogue");
@@ -719,6 +733,15 @@ int main(void) {
       press(BTN_DOWN); press(BTN_DOWN);
       draw(1);
       CHECK(has_text(1, "need to know certain moves"), "source's disabledTooltip is used");
+      R.ev_head=R.ev_count=0;gc_rq_reset(&gc_int(&R)->rq);
+      bool applied=false;CHECK(gc_mystery_execute(&R,1,0,0,&why,&applied)&&applied,"Snorlax rest applies");
+      gc_event e;int named=0;
+      while(gc_run_next_event(&R,&e))if(e.msg.key&&!strcmp(e.msg.key,"mysteryEncounters/slumberingSnorlax:option.2.restResult")){
+        char message[1200];be_format_message(&e.msg,message,sizeof message);named++;
+        CHECK(!strstr(message,"{{")&&strstr(message,"Snorlax"),"Snorlax rest result names the Pokemon: %s",message);
+      }
+      CHECK(named==1,"Snorlax rest result delivered");
+
     }
     if (ported[t] == GC_ME_DARK_DEAL) {
       R.ev_head = R.ev_count = 0;

@@ -169,6 +169,7 @@ static int check_form_events;
 static int n_boss_foes, n_boss_shields;   /* boss enemies the screen was shown (a wave's own, or a trainer's sent out) and the shield breaks it was told */
 static int violations, n_scenes, n_ask, n_dialogs, n_options, n_party_opens, n_balls, n_party_full_swaps;
 static int n_talk_enc, n_talk_win, n_talk_portrait, n_trainer_show;
+static int n_mystery_trainer_scenes;
 static int n_jojo_intro, n_jojo_talk;   /* RUNTEST_CUSTOM: JoJo trainers' intros and iconic lines */
 static int n_throw_ev, n_caught_ev, n_broke_ev, n_bv_farewell, n_real_releases, n_list_backs, n_rel_checked, n_decl_checked;
 
@@ -428,6 +429,10 @@ static bool side_ok(int battler, const char* what) {
 void bv_begin(const bv_setup* setup) {
   if (setup->trainer) {
     const gc_run* r=rs_run();
+    if(r->me_battle){
+      n_mystery_trainer_scenes++;
+      if(setup->next_encounter)BAD("same-wave mystery trainer reused a seamless wild transition");
+    }
     if (!setup->trainer_keys[0][0]) BAD("trainer %d variant%d has no sprite key",r->trainer_type,r->trainer_variant);
     const cc_jojo_char* foe = custom_on ? cr_jojo_foe(r) : NULL;
     char custom_key[64] = "";
@@ -602,6 +607,9 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
       case BEV_POKEMON_ANIM:
       case BEV_VISIBLE:
         side_ok(e->battler, "effect");
+        break;
+      case BEV_SHINY_SPARKLE:
+        side_ok(e->battler,"shiny sparkle");
         break;
       case BEV_MOVE_ANIM:
         side_ok(e->battler, "move animation");
@@ -2024,7 +2032,10 @@ int main(int argc, char** argv) {
   printf("music: %d scenes under upstream's track (%d with encounter music before the trainer's first send-out), %d commands under the battle's "
          "music, %d trainer victories under their victory music, %d run ends faded; %d track starts, %d different tracks heard\n",
          M.scenes, M.encounter_scenes, M.commands, M.victories, M.run_end_fades, M.starts, M.n_seen);
-  if (M.scenes != st->waves) BAD("%d scenes set up, the driver counted %d waves", M.scenes, st->waves);
+  if (M.scenes != st->waves+st->mystery_trainers) BAD("%d scenes set up, the driver counted %d waves and %d same-wave mystery trainer scenes", M.scenes, st->waves,st->mystery_trainers);
+  if(n_mystery_trainer_scenes<st->mystery_trainers)BAD("a mystery trainer scene was not rebuilt with trainer art");
+  if(custom_strong&&runs>=200&&!st->mystery_trainers)BAD("no same-wave mystery trainer scene was exercised");
+  printf("mystery trainers: %d same-wave scenes rebuilt with trainer art and encounter music\n",n_mystery_trainer_scenes);
   /* Keep actual trainer victory/encounter coverage required. The additional
    * directed run supplies it even when every random team loses early. */
   if (trainer_music_fixture && M.victories <= trainer_music_victories)
