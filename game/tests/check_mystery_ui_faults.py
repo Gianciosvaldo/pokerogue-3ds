@@ -37,6 +37,9 @@ FAULTS = [
  ('generic-generator-name', 'game-core/src/gc_run.c', 'if (item >= 0) {\n        const int id', 'if (false && item >= 0) {\n        const int id'),
  ('missing-minigame-name', 'game-core/src/gc_mystery.c', 'pr_arg_key("wobbuffetName", "pokemon:wobbuffet")', 'pr_arg_key("wrongName", "pokemon:wobbuffet")'),
  ('missing-trade-picker', 'game-core/src/gc_mystery.c', 's->option_pick[0] = GC_PICK_MEMBER_TRADE;', 's->option_pick[0] = GC_PICK_MEMBER;'),
+ ('delibirdy-gts-item-list', UI[0], 'const int n = gc_mystery_held_items(F.run, F.option, F.member, held, GC_MAX_ITEMS);\n  static me_args a;',
+     'const int n = gc_gts_held_items(F.run, F.member, held);\n  static me_args a;'),
+ ('silent-chosen-item', UI[0], 'extra[n_extra++] = (pr_msg_arg){.name = "chosenItem"', '(void)(pr_msg_arg){.name = "chosenItem"'),
  ('exhausted-item-name-cache', 'game-core/src/gc_run.c', 'if (item >= 0) {\n        static char keys', 'if (item >= 0 && item < 48) {\n        static char keys'),
 ]
 

@@ -220,6 +220,7 @@ static const struct {
     {GC_ME_GLOBAL_TRADE_SYSTEM, 1, {{'M', "global_trade_system", 3, 5, 0, 0}}},
     {GC_ME_THE_EXPERT_POKEMON_BREEDER, 2, {{0, "", 14, -2, 0, 0}, {'T', "expert_pokemon_breeder", -14, 4, 0, 0}}},
     {GC_ME_TRAINING_SESSION, 1, {{'M', "training_session_gear", 5, 6, 0, 0}}},
+    {GC_ME_DELIBIRDY, 3, {{'P', "225", 0, 0, 0.94f, 0}, {'P', "225", 0, 0, 1.06f, 0}, {'P', "225", 1, 5, 0, 0}}},
 };
 
 int me_flow_intro_sprites(int type, float cx, float floor_y, me_intro_sprite* out, int max)
@@ -277,6 +278,18 @@ static void finish(int option, int b, int c)
   int n_extra = 0;
   if (F.run && b >= 0 && b < F.run->n_party && F.run->screen.option_pick[option])
     extra[n_extra++] = pr_arg_pokemon_name(NULL, "selectedPokemon", &F.run->party[b].b);
+  /* Delibird-y: "You toss the {{chosenItem}} to the Delibirds": the name of the held item the second list gave */
+  static char chosen_item[ME_LABEL_LEN]; /* outlives the message */
+  if (F.run && n_extra < 4 && F.run->screen.option_pick[option] == GC_PICK_MEMBER_ITEM && b >= 0 && b < F.run->n_party) {
+    static int held[GC_MAX_ITEMS];
+    const int n = gc_mystery_held_items(F.run, option, b, held, GC_MAX_ITEMS);
+    if (c >= 0 && c < n) {
+      const gc_item* it = &F.run->items[held[c]];
+      const gm_item_ui* display = gm_item_ui_find(it->key, it->arg);
+      snprintf(chosen_item, sizeof chosen_item, "%s", display && display->name ? display->name : it->key);
+      extra[n_extra++] = (pr_msg_arg){.name = "chosenItem", .kind = PR_ARG_STR, .s = chosen_item};
+    }
+  }
   bool field_correct = false;
   if (F.type == GC_ME_FIELD_TRIP && b >= 0 && b < F.run->n_party && c >= 0 && c < F.run->party[b].b.n_moves) {
     const int move = F.run->party[b].b.moves[c];
@@ -441,11 +454,16 @@ static void on_item(int idx, void* arg)
 static void open_items(void)
 {
   static int held[GC_MAX_ITEMS];
-  const int n = gc_gts_held_items(F.run, F.member, held);
+  const int n = gc_mystery_held_items(F.run, F.option, F.member, held, GC_MAX_ITEMS);
   static me_args a;
   memset(&a, 0, sizeof a);
   fill_title(&a);
   snprintf(a.query, sizeof a.query, "Choose an item to trade.");
+  if (F.type == GC_ME_DELIBIRDY) { /* "Select an item to give." */
+    char sub[48], prompt[ME_LABEL_LEN];
+    snprintf(sub, sizeof sub, "option.%d.selectPrompt", F.option + 1);
+    if (fmt(sub, NULL, 0, false, prompt, sizeof prompt)) snprintf(a.query, sizeof a.query, "%s", prompt);
+  }
   /* Keep all inventory entries reachable without growing the 25-row screen on the 3DS. */
   const int page_size = ME_MAX_OPTIONS - 2;
   for (int i = F.item_page * page_size; i < n && i < (F.item_page + 1) * page_size; i++) {
