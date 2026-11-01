@@ -2,6 +2,7 @@
 # The evil teams' fixed fights in the run: show the checks can fail. Replays one trace (from tools/evildiff.sh) through copies of game-core and run-core,
 # each with one line of src/newbattle.c (run-core) or src/gc_encounter.c (game-core) changed, and runs both the differential (tests/gym_e4_diff_test.c)
 # and the host test (tests/gym_e4_test.c) on it. Every copy must fail at least one of them (exit 1); the first column says which caught it.
+# Admin and boss plants cover the group choice (pool, offset, shuffle), the gender roll, the boss pool index and form, the flags and the closure members.
 # Not planted (equivalent under both): the order of the ctx assignments, the comments, the party template roll in trainer_ctor (the Youngster and the grunts have
 # one template, so randSeedItem rolls nothing).
 # Usage: tools/evilplant.sh <trace>   (EVIL_PLANT_FROM=<name> starts at that plant)
@@ -53,6 +54,19 @@ plant names-wrong-gender    's/(out->variant == TRAINER_VARIANT_FEMALE ? t->name
 plant grunts-not-fixed      's/const int fixed_evil = ctx->enable_evil_grunts ? evil_grunt_kind(run->mode, wave) : 0;/const int fixed_evil = 0;/' $N
 plant evil-off              's/    ctx.enable_evil_grunts = true;/    ctx.enable_evil_grunts = false;/'
 plant pin-ignored           's/in->evil_roll_pinned ? in->evil_roll\[0\] : //'
-plant last-grunt-no-roll    's/wave == CLASSIC_FIXED_BOSS_WAVES_EVIL_GRUNT_4) {/wave == 0) {/'
+plant last-admin-no-roll    's/wave == CLASSIC_FIXED_BOSS_WAVES_EVIL_ADMIN_3) {/wave == 0) {/'
+plant admin-pool-short      's/const evil_entry \*c = \&pool\[seed_item(r, 10)\];/const evil_entry *c = \&pool[seed_item(r, 9)];/' $N
+plant admin-offset-ignored  's/if (seed_offset == 0 || c->n <= seed_offset) return/if (1) return/' $N
+plant admin-unshuffled      's/return a\[seed_offset\];/return a[0];/' $N
+plant admin-shuffle-seed    's/pr_rng r0 = pr_run_seed_offset_rng(run, 0, NULL);/pr_rng r0 = pr_run_seed_offset_rng(run, 1, NULL);/' $N
+plant admin-gender-inverted 's/out->variant = ctx->evil_gender_roll ? TRAINER_VARIANT_DEFAULT : TRAINER_VARIANT_FEMALE;/out->variant = ctx->evil_gender_roll ? TRAINER_VARIANT_FEMALE : TRAINER_VARIANT_DEFAULT;/' $N
+plant boss-pool-short       's/evil_bosses\[fixed_leader - 6\]\[seed_item(\&r, 10)\]/evil_bosses[fixed_leader - 6][seed_item(\&r, 9)]/' $N
+plant boss-first-form       's/evil_bosses\[fixed_leader - 6\]\[/evil_bosses[0][/' $N
+plant boss-female           's/out->variant = TRAINER_VARIANT_DEFAULT;$/out->variant = TRAINER_VARIANT_FEMALE;/' $N
+plant leaders-not-fixed     's/const int fixed_leader = ctx->enable_evil_bosses ? evil_leader_kind(run->mode, wave) : 0;/const int fixed_leader = 0;/' $N
+plant bosses-off            's/    ctx.enable_evil_bosses = true;/    ctx.enable_evil_bosses = false;/'
+plant closure-evolves       's/if (!cl->ignore_evolution) {/if (1) {/' run-core:evil_team.c
+plant closure-never-evolves 's/if (!cl->ignore_evolution) {/if (0) {/' run-core:evil_team.c
+plant closure-no-pick       's/const int pick = cl->n == 1 ? 0 : pr_rng_integer_in_range(\&run->rng, 0, cl->n - 1);/const int pick = 0;/' run-core:evil_team.c
 [ "$fails" = 0 ] || { echo "$fails of $total planted bug(s) not caught"; exit 1; }
 echo "all $total planted bugs caught"

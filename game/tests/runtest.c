@@ -1601,7 +1601,10 @@ static bool step(void) {
     /* the full-party release list: pick a member (the options list, Release, the farewell), or back out to the question */
     n_party_full_swaps++;
     const int n = rs_run()->n_party;
-    const int slot = rnd(10) < 7 ? (int)rnd((uint32_t)n) : -1;
+    int slot = rnd(10) < 7 ? (int)rnd((uint32_t)n) : -1;
+    /* the first list of a process always backs out (the roll above is still drawn): with few full-party catches in a short soak, 30% per list
+     * left a 12% chance that no list ever did, and the coverage check below then failed on whichever stream a gameplay change happened to produce */
+    if (!n_list_backs && n_party_full_swaps == 1) slot = -1;
     const int said = pf_farewells();
     REL.pick = slot;
     pf_release(slot);

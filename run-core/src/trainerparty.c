@@ -125,6 +125,7 @@ int pr_run_gen_trainer_party(pr_run *run, const pr_trainer_party_ctx *ctx, pr_tr
             if(ctx->enable_gym_e4){
                 handled=pr_run_gen_pair_closure_member(run,ctx,e,func_key,&out->mons[e],&species);
                 if(!handled)handled=pr_run_gen_gym_e4_closure_member(run,ctx,e,func_key,&out->mons[e],&species);
+                if(!handled)handled=pr_run_gen_evil_closure_member(run,ctx,e,func_key,&out->mons[e],&species);
             }
             if (handled < 0) { run->rng = saved; return -1; }
             if (!handled) {

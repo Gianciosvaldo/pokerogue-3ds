@@ -306,6 +306,7 @@ typedef struct {
     int n_lures, n_double_chance_abilities;   /* what getDoubleBattleChance counts */
     bool enable_fixed_rivals;            /* Task 48: caller opts into the six ported Classic rival closures */
     bool enable_gym_e4;                   /* Task 49: caller opts into Gym/E4 fixed trainer closures */
+    bool enable_evil_bosses;              /* the evil teams' admins (waves 66, 114, 164) and bosses (115, 165); needs enable_gym_e4 in the party context for their closures */
     bool enable_evil_grunts;              /* the Town Youngster (wave 5) and the four evil team grunt fights (35, 62, 64, 112): plain species pools */
     /* getRandomTrainerFunc rolls an evil team's gender (randInt(2)) and, for a grunt, its double variant (randInt(3)) with Math.random, which is not
      * seeded upstream: the caller supplies both rolls (0..1 and 0..2). They are only read for those fights */
@@ -501,6 +502,13 @@ int pr_run_gen_pair_closure_member(pr_run *run,const pr_trainer_party_ctx *ctx,
                                   int index,int func_key,pr_enemy_gen *out,int *out_species);
 /* Task 49 Gym/E4 closures. The member helper is called with the exact partyMemberFuncs key selected
  * by Trainer.genPartyMember and returns 1 when Task 49 owns it, 0 otherwise, -1 on error. */
+/* The evil team admins' and bosses' partyMemberFuncs (src/evil_team.c, data gen/out/run_evil_closures.c from tools/gen-evil-closures.py): the species of
+ * getRandomPartyMemberFunc(pool, TrainerSlot.TRAINER, ignoreEvolution) for one member. Same 1/0/-1 convention; the postProcess callbacks are not ported. */
+typedef struct { uint16_t type; uint8_t slot, ignore_evolution; uint16_t start, n; } pr_evil_closure;
+extern const pr_evil_closure pr_evil_closures[];
+extern const int pr_evil_closure_count;
+extern const uint16_t pr_evil_closure_species[];
+int pr_run_gen_evil_closure_member(pr_run *run, const pr_trainer_party_ctx *ctx, int index, int func_key, pr_enemy_gen *out, int *out_species);
 int pr_run_gen_gym_e4_closure_member(pr_run *run, const pr_trainer_party_ctx *ctx,
                                      int index, int func_key, pr_enemy_gen *out, int *out_species);
 /* Classic/Challenge fixed E4/Champion trainer selection at 182/184/186/188/190; -1 otherwise. */
