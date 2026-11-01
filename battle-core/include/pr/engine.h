@@ -108,6 +108,7 @@ typedef struct pr_phase {
     int8_t sw_type, sw_field_index, sw_slot;
     bool sw_modal, sw_do_return, sw_player;
     bool sw_use_name, position_double; /* encounter prompt/position constructor arguments */
+    bool announce_double;            /* ToggleDoublePositionPhase queued by initFinalBossPhaseTwo: it says so (PR_EV_DOUBLE_START) */
     /* PostSummonPhase; PostSummonActivateAbilityPhase (the same phaseName) is one with
      * ps_activate set: getPriority() and which ability it applies */
     int8_t ps_priority;

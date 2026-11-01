@@ -323,6 +323,10 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
       case PR_EV_SHINY_SPARKLE:
         if(single&&seen[b].present)PUT(.type=BEV_SHINY_SPARKLE,.battler=b);
         break;
+      case PR_EV_DOUBLE_START:
+        /* the final boss' second phase: the player's side goes to two columns before the ally is sent out */
+        PUT(.type=BEV_DOUBLES,.battler=-1);
+        break;
       case PR_EV_MOVE_ANIM:
       case PR_EV_CHARGE_ANIM:
       case PR_EV_COMMON_ANIM:

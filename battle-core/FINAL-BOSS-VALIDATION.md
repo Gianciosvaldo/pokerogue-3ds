@@ -70,3 +70,9 @@ game-core host suite passes (paired 200-run digest `d62eb254`), including the
 32,956-check enemy moveset adapter. Its former unsigned workaround assertions
 now require actual Source raw -4 metadata and no maximum-PP override.
 App/retained and exact-head CI results are recorded after completion.
+
+2026-11-01 presentation note (no change to the phase queue or to any compared value): the ToggleDoublePositionPhase that
+`pr_init_final_boss_phase_two` queues carries `announce_double`, and only that phase emits `PR_EV_DOUBLE_START` when it runs, so the
+battle screen can move the player's lead to the left before the second Pokemon is sent out (a later toggle, such as the ally taking
+a fainted lead's place, says nothing). The queue order, phase types and arguments the 16,384-case comparison checks are unchanged.
+`game/tests/final_boss_double_events_test.c` runs real wave-200 fights for the event.

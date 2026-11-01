@@ -4030,9 +4030,10 @@ static void attempt_run_phase(pr_battle *bt, pr_engine *e, int ph)
 /* ToggleDoublePositionPhase: the first of getPlayerField() active on the field moves (its sprite;
  * to the centre after a faint left it alone); once there, one in field slot 1 swaps party slots
  * with the Pokemon in slot 0, and so takes field index 0 */
-static void toggle_double_position_phase(pr_battle *bt,pr_engine *e)
+static void toggle_double_position_phase(pr_battle *bt,pr_engine *e,int ph)
 {
     if (!bt->double_battle) return;                       /* singles: the one on the field is at index 0 */
+    if (PH(ph)->announce_double) pr_event_add(bt,e,PR_EV_DOUBLE_START,-1,-1,0,0,NULL);
     if (!bt->n_party[0]) { pr_note_unported(bt, PR_FEAT_PARTY); return; }
     int n = bt->n_party[0] < 2 ? bt->n_party[0] : 2;
     for (int k = 0; k < n; k++) {
@@ -4130,7 +4131,9 @@ void pr_init_final_boss_phase_two(pr_battle *bt, pr_engine *e, pr_pokemon *p)
         if (++count == 2) second = bt->party[0][i];
     }
     if (count > 1) {
-        push_new(bt,e,PH_TOGGLE_DOUBLE_POSITION,-1);
+        int toggle = new_pokemon_phase(e,PH_TOGGLE_DOUBLE_POSITION,-1);
+        if (toggle >= 0) PH(toggle)->announce_double = true;     /* (only the screen reads this: the queue is unchanged) */
+        pr_phase_push(bt,e,toggle);
         if (!is_on_field(second)) {
             int summon = new_pokemon_phase(e,PH_SUMMON,1);
             if (summon >= 0) { PH(summon)->sw_player=true; PH(summon)->sw_field_index=1; }
@@ -4220,7 +4223,7 @@ void pr_phase_run(pr_battle *bt, pr_engine *e, int ph)
     case PH_SUMMON: pr_summon_phase(bt, e, ph); break;
     case PH_INIT_ENCOUNTER: pr_init_encounter_phase(bt, e, ph); break;
     case PH_CHECK_SWITCH: pr_check_switch_phase(bt, e, ph); break;
-    case PH_TOGGLE_DOUBLE_POSITION: toggle_double_position_phase(bt,e); break;
+    case PH_TOGGLE_DOUBLE_POSITION: toggle_double_position_phase(bt,e,ph); break;
     case PH_MOVE_REFLECT: move_reflect_phase(bt, e, ph); break;
     case PH_SHINY_SPARKLE: pr_event_add(bt, e, PR_EV_SHINY_SPARKLE, PH(ph)->battler, -1, 0, 0, NULL); break;
     case PH_ILLUSION_BREAK: pr_event_add(bt, e, PR_EV_ILLUSION_BREAK, PH(ph)->battler, -1, 0, 0, NULL); break;
