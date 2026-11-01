@@ -1,0 +1,161 @@
+/* Gym leaders, the Elite Four and the Champion in the run (src/gc_encounter.c: gc_new_battle and gen_trainer_party), against the pinned upstream.
+ *
+ * The cases are the ones run-core's gym_e4 producer writes (run-core/tests/gym_e4.producer.test.ts, left as it is): for a random run seed, wave cycle
+ * offset, offsetGym, biome and trainer/secret ids, the real gym leader of a boss wave (the biome's boss pool) or the real fixed Elite Four / Champion
+ * of waves 182..190, with the party template, the levels and every member's species and constructor state. Here the same inputs go to gc_new_battle,
+ * the way the app starts the wave, and what the run ends up holding is compared: that the battle is the trainer battle (not the wild stand-in
+ * game-core used before it switched run-core's Gym/E4 closures on), the trainer type and variant, double or single, the number of members and each
+ * one's level, species, id, gender, form, nature, ability slot, Tera type and fusion.
+ *
+ * usage: gym_e4_diff_test <cases file> */
+#define _POSIX_C_SOURCE 200809L
+#include "../src/internal.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+static gc_run run;
+static gc_system sys;
+
+static char *tok(char **save)
+{
+    char *t = strtok_r(NULL, " \n", save);
+    if (!t) { fprintf(stderr, "short line\n"); exit(2); }
+    return t;
+}
+static long num(char **save) { return strtol(tok(save), NULL, 10); }
+
+/* a run at the end of wave - 1 with a party of three, so that gc_new_battle starts `wave` */
+static void start(const char *seed, int wave, int biome, bool offset_gym, int wave_cycle_offset, int trainer_id, int secret_id)
+{
+    gc_run_new(&run, GAME_MODES_CLASSIC, seed, 7);
+    gc_system_init_defaults(&sys);
+    run.sys = &sys;
+    pr_seed_from_ascii(&run.run.seed, seed);
+    run.run.offset_gym = offset_gym;
+    run.wave_cycle_offset = wave_cycle_offset;
+    run.trainer_id = trainer_id;
+    run.secret_id = secret_id;
+    run.biome = biome;
+    run.n_items = 0;
+    run.n_party = 3;
+    for (int i = 0; i < 3; i++) {
+        gc_starter s;
+        memset(&s, 0, sizeof s);
+        s.species = (uint16_t)(i == 0 ? SPECIES_ID_PIKACHU : i == 1 ? SPECIES_ID_LAPRAS : SPECIES_ID_GENGAR);
+        s.tera_type = -1;
+        for (int k = 0; k < 6; k++) s.ivs[k] = 15;
+        s.moves[0] = MOVE_ID_TACKLE;
+        gc_mon_new_player(&run, &run.party[i], &s, 100);
+        run.party_order[i] = (int8_t)i;
+    }
+    run.battle_type = BATTLE_TYPE_WILD;
+    gc_items_to_battle(&run);
+    gc_rq_reset(&gc_int(&run)->rq);
+    run.wave = wave - 1;
+    run.in_battle = true;
+}
+
+int main(int argc, char **argv)
+{
+    FILE *f = fopen(argc > 1 ? argv[1] : "gym-e4-cases.txt", "r");
+    if (!f) { perror("cases"); return 2; }
+
+    char line[4096];
+    int line_no = 0, cases = 0, matched = 0, members = 0, mismatches = 0, gyms = 0, fixed_fights = 0, stand_ins = 0, no_items = 0, school_forms = 0;
+    int member = 0, expected_members = 0;
+    bool case_ok = true, case_fixed = false;
+
+    while (fgets(line, sizeof line, f)) {
+        line_no++;
+        char *save;
+        char *t = strtok_r(line, " \n", &save);
+        if (!t || t[0] == '#') continue;
+
+        if (!strcmp(t, "C")) {
+            if (cases && case_ok) matched++;
+            cases++;
+            const bool fixed = num(&save) != 0;
+            const char *seed = tok(&save);
+            const int wave = (int)num(&save);
+            const int biome = (int)num(&save);
+            const bool offset_gym = num(&save) != 0;
+            const int wave_cycle_offset = (int)num(&save);
+            const int trainer_id = (int)num(&save);
+            const int secret_id = (int)num(&save);
+            const int exp_type = (int)num(&save);
+            const int exp_variant = (int)num(&save);
+            const bool exp_double = num(&save) != 0;
+            for (int i = 0; i < 2 + 8 + 8; i++) num(&save);   /* the party template: run-core's own comparator checks it */
+            const int nlevels = (int)num(&save);
+            int exp_levels[PR_MAX_PARTY_TEMPLATE];
+            for (int i = 0; i < nlevels && i < PR_MAX_PARTY_TEMPLATE; i++) exp_levels[i] = (int)num(&save);
+
+            start(seed, wave, biome, offset_gym, wave_cycle_offset, trainer_id, secret_id);
+            gc_new_battle(&run);
+            case_fixed = fixed;
+            if (fixed) fixed_fights++; else gyms++;
+
+            case_ok = run.battle_type == BATTLE_TYPE_TRAINER && run.trainer_type == exp_type && run.trainer_variant == exp_variant
+                && run.double_battle == exp_double && run.n_enemy == nlevels && run.wave == wave;
+            /* none of the stand-ins game-core falls back to: a fixed battle or a trainer config run-core could not make. The one stand-in left is the
+             * held items of the trainers whose config has a genModifiersFunc (Red, Steven, Wallace and Kieran among the Champions): run-core's item
+             * generation reports PR_RUN_UNPORTED_TRAINER for them and they hold nothing; their teams are the real ones */
+            const bool gen_modifiers = exp_type >= 0 && exp_type < pr_trainer_item_flag_count && (pr_trainer_item_flags[exp_type] & 2);
+            if (run.stubs[GC_STUB_UNPORTED_ENEMY] != (gen_modifiers ? 1u : 0u) || run.run_core_unported[4] || run.run_core_unported[5]) {
+                case_ok = false;
+                stand_ins++;
+            }
+            if (gen_modifiers) no_items++;
+            for (int i = 0; case_ok && i < nlevels; i++) case_ok = run.enemy[i].b.level == exp_levels[i];
+            if (!case_ok && ++mismatches <= 20)
+                printf("MISMATCH line %d: %s wave %d got type %d (battle %d) expected %d, %d members expected %d\n", line_no,
+                       fixed ? "E4/Champion" : "gym", wave, run.trainer_type, run.battle_type, exp_type, run.n_enemy, nlevels);
+            member = 0;
+            expected_members = nlevels;
+        } else if (!strcmp(t, "M")) {
+            const int e = member++;
+            const int species = atoi(tok(&save));
+            char *snap = tok(&save);
+            if (!case_ok || e >= run.n_enemy || !strcmp(snap, "none")) continue;
+            const gc_mon *m = &run.enemy[e];
+            /* the snapshot: ability slot, id, gender, form, nature, Tera type, then the fusion */
+            const int x_ability = atoi(snap);
+            const uint32_t x_id = (uint32_t)num(&save);
+            const int x_gender = (int)num(&save), x_form = (int)num(&save), x_nature = (int)num(&save), x_tera = (int)num(&save);
+            const int fs = (int)num(&save), fa = (int)num(&save), fg = (int)num(&save), ff = (int)num(&save);
+            /* the producer's snapshot is taken before the member is summoned: Wishiwashi of level 20 or more (healthy) is in its School form
+             * (Schooling, PostSummonFormChangeAbAttr) once the battle starts, which game-core has applied by the end of gc_new_battle */
+            const bool schooling = species == SPECIES_ID_WISHIWASHI && x_form == 0 && m->b.form == 1 && m->b.level >= 20;
+            if (schooling) school_forms++;
+            const char *bad = NULL;
+            if (m->b.species != species) bad = "species";
+            else if (m->ability_index != x_ability) bad = "ability slot";
+            else if (m->b.id != x_id) bad = "id";
+            else if (m->b.gender != x_gender) bad = "gender";
+            else if (m->b.form != x_form && !schooling) bad = "form";
+            else if (m->b.nature != x_nature) bad = "nature";
+            else if (m->b.tera_type != x_tera) bad = "Tera type";
+            else if ((m->b.fusion_species ? m->b.fusion_species : -1) != fs) bad = "fusion species";
+            else if (fs >= 0 && (m->b.fusion_ability_index != fa || m->b.fusion_gender != fg || m->b.fusion_form != ff)) bad = "fusion state";
+            const bool ok = !bad;
+            if (!ok) {
+                case_ok = false;
+                if (++mismatches <= 20)
+                    printf("MISMATCH line %d: %s member %d (species %d): %s differs (form got %d expected %d)\n", line_no, case_fixed ? "E4/Champion" : "gym", e,
+                           species, bad, m->b.form, x_form);
+            } else {
+                members++;
+            }
+        }
+    }
+    if (cases && case_ok) matched++;
+    fclose(f);
+    (void)expected_members;
+
+    printf("gym/e4 in game-core: %d cases (%d gym waves, %d Elite Four / Champion), %d fully matched, %d members, %d stand-ins, %d without held items "
+           "(genModifiersFunc champions), %d Wishiwashi already in School form, %d mismatches\n",
+           cases, gyms, fixed_fights, matched, members, stand_ins, no_items, school_forms, mismatches);
+    printf("TOTAL %d cases, %d mismatches\n", cases, mismatches);
+    return mismatches || !cases ? 1 : 0;
+}

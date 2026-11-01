@@ -245,7 +245,7 @@ static void level_up(gc_run *run, gc_rphase *p)
     gc_mon *m = pm(run, p->a);
     gc_mon_recalc(run, m);
     gc_event *ev = gc_ev_new(run, GC_EV_LEVEL_UP);
-    if (ev) { ev->a = p->a; ev->b = p->c; ev->c = p->b; }
+    if (ev) { ev->a = p->a; ev->b = p->c; ev->c = p->b; ev->hp = (int32_t)m->b.hp; }
     gc_ev_msg(run, "battle:levelUp", 2, gc_m_mon(run, "pokemonName", 0, p->a), pr_arg_int("level", p->c));
     /* end(): the new level moves, then the evolution check */
     if (p->b < 100) {
@@ -467,7 +467,8 @@ static void trainer_victory(gc_run *run)
             gc_rq_unshift(run, vp);
         }
     }
-    gc_ev_msg(run, "battle:trainerDefeated", 1, gc_m_trainer(run, "trainerName", GC_TNAME_TITLED));
+    gc_event *defeated = gc_ev_msg(run, "battle:trainerDefeated", 1, gc_m_trainer(run, "trainerName", GC_TNAME_TITLED));
+    if (defeated) defeated->a = run->trainer_type;   /* for the victory music: the next wave may have started by the time the app plays this */
     gc_ev_trainer_dialogue(run, 1);   /* then the trainer's victory line, before the money and the rewards */
 }
 

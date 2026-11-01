@@ -1576,7 +1576,10 @@ static void test_saves(void) {
   CHECK(new_run(FX.seed, true, 100), "another custom run takes the record");
   bot.heal = true;
   bot.save_every = 0;
-  CHECK(go_wave(29) == STEP_STOPPED && life_of(FX.rid) == CC_LIFE_REWARD_CLAIMED && vouchers() == 1, "and wins it");
+  /* the gym leader of wave 20 (a real fight now) pays a regular voucher of its own on a first win: what the record pays is counted from wave 26 */
+  CHECK(go_wave(26) == STEP_STOPPED, "the other run reaches wave 26");
+  const unsigned gym_vouchers = vouchers();
+  CHECK(go_wave(29) == STEP_STOPPED && life_of(FX.rid) == CC_LIFE_REWARD_CLAIMED && vouchers() == gym_vouchers + 1, "and wins it");
   cr_end();
   {
     const snap before = take();
@@ -1593,7 +1596,7 @@ static void test_saves(void) {
     drop(&after);
     rsv_info info;
     CHECK(cr_inspect(slot_used, &info) == RSV_OK, "the slot itself is still a good save");
-    CHECK(vouchers() == 1, "and nothing was paid");
+    CHECK(vouchers() == gym_vouchers + 1, "and nothing was paid");
   }
   /* the other direction: a run that took over a record another run held (the title's reservation is only ever for the run played now) */
   fx_restore();

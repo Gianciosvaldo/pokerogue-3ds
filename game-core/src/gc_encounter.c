@@ -45,6 +45,13 @@ void gc_ev_trainer_dialogue(gc_run *run, int kind)
     ev->b = run->trainer_variant;
     ev->c = kind;
     ev->msg.key = key;
+    /* the speaker, taken now: a win on a wave that has no reward screen (every tenth: the gym leaders, the Champion) goes straight on
+     * to the next wave in the same batch of events, so the run no longer holds this trainer's names when the app plays the line */
+    const char *speaker = run->trainer_names[kind == 0 ? GC_TNAME_TITLED : GC_TNAME_SPEAKER];
+    if (speaker) {
+        ev->msg.args[0] = (pr_msg_arg){"speaker", PR_ARG_STR, 0, speaker, 0};
+        ev->msg.n_args = 1;
+    }
 }
 
 bool gc_trainer_is_double(const gc_run *run)
@@ -370,6 +377,8 @@ static bool gen_trainer_party(gc_run *run, const pr_party_template *tpl, int tra
     const pr_trainer_info *t = trainer_info(trainer_type);
     tc.is_double = (t && t->double_only) || variant == TRAINER_VARIANT_DOUBLE;
     tc.classic_wave20_trainer = run->wave == 20 && run->run.mode == GAME_MODES_CLASSIC;
+    /* the gym leaders', Elite Four's and champions' partyMemberFuncs (run-core's gym_e4.c, diff-tested) */
+    tc.enable_gym_e4 = true;
     tc.template_ = tpl;
     tc.n_levels = n_levels;
     memcpy(tc.levels, levels, sizeof(int) * (size_t)n_levels);
@@ -603,6 +612,8 @@ void gc_new_battle(gc_run *run)
     /* the six Classic rival fights (waves 8, 25, 55, 95, 145, 195) are run-core's fixed battles. The app's player is the male one, so the rival
      * is the female variant, Ivy (ctx.player_female stays false) */
     ctx.enable_fixed_rivals = true;
+    /* and the Elite Four (waves 182, 184, 186, 188) and the Champion (190): run-core picks their trainers (gym_e4.c) */
+    ctx.enable_gym_e4 = true;
     pr_new_battle nb;
     unsigned before = run->run.unported;
     int rc = pr_run_new_battle(&run->run, wave, &ctx, &nb);

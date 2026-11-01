@@ -112,6 +112,9 @@ static bool h_trainer(void *user, const gc_run *r, const gc_custom_encounter *en
     if (r->battle_type != BATTLE_TYPE_TRAINER || r->double_battle || enc->kind != GC_ENC_TRAINER) bad_calls++;
     if (enc->wave == 20 || pr_run_is_wave_final(r->run.mode, enc->wave)) bad_calls++;
     for (int i = 0; i < r->n_enemy; i++) if (r->enemy[i].b.is_boss) bad_calls++;
+    /* a gym leader's wave, the Elite Four and the Champion are real trainer fights of their own (isBoss trainers): never offered to a team */
+    if (pr_run_is_trainer_boss(&r->run, enc->wave, r->biome, r->run.offset_gym) || pr_run_is_fixed_battle((pr_run *)&r->run, enc->wave)) bad_calls++;
+    { const gc_trainer_config *tc = gc_trainer_config_of(r->trainer_type); if (!tc || tc->is_boss) bad_calls++; }
     if (enc->wave != r->wave || enc->level != r->enemy[0].b.level || enc->species != r->enemy[0].b.species) bad_calls++;
     ordinary_n = r->n_enemy;
     ordinary_level0 = r->enemy[0].b.level;

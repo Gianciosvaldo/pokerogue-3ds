@@ -145,6 +145,15 @@ test: delibirdy-host-test
 delibirdy-host-test: $(BUILD)/mystery_delibirdy_test
 	$(BUILD)/mystery_delibirdy_test
 .PHONY: delibirdy-host-test
+all: $(BUILD)/gym_e4_diff_test $(BUILD)/gym_e4_test
+$(BUILD)/gym_e4_diff_test: tests/gym_e4_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+$(BUILD)/gym_e4_test: tests/gym_e4_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: gym-e4-host-test
+gym-e4-host-test: $(BUILD)/gym_e4_test
+	$(BUILD)/gym_e4_test
+.PHONY: gym-e4-host-test
 all: $(BUILD)/mystery_delibirdy_diff_test
 $(BUILD)/mystery_delibirdy_diff_test: tests/mystery_delibirdy_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

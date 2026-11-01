@@ -252,9 +252,12 @@ static bool put_dialogue(const gc_event* d) {
   if (!d->msg.key) return false;
   i18n_t(text, sizeof text, d->msg.key, NULL);
   if (!text[0]) return false;
+  /* the speaker comes with the event: a win on a wave with no reward screen has gone on to the next wave by now, and the run no longer
+   * holds this trainer's names */
   const int which = d->c == 0 ? GC_TNAME_TITLED : GC_TNAME_SPEAKER;
+  const char* speaker = d->msg.n_args > 0 ? d->msg.args[0].s : G.run.trainer_names[which];
   name[0] = 0;
-  if (G.run.trainer_names[which]) i18n_resolve(name, sizeof name, G.run.trainer_names[which]);
+  if (speaker) i18n_resolve(name, sizeof name, speaker);
   atlas[0] = 0;
   const gc_trainer_config* c = gc_trainer_config_of((int)d->a);
   const char* key = c && c->has_char_sprite ? gm_trainer_sprite_key((int)d->a, (int)d->b, 0) : NULL;
@@ -581,7 +584,7 @@ static bool handle_event(int i) {
       egg_hatch_open(e,pump,NULL);
       return true;
     case GC_EV_MESSAGE:
-      if (msg_is(e, "battle:trainerDefeated")) bgm_on_trainer_defeated(&G.run); /* TrainerVictoryPhase.start */
+      if (msg_is(e, "battle:trainerDefeated")) bgm_on_trainer_defeated((int)e->a); /* TrainerVictoryPhase.start: the beaten trainer's music */
       if (put_gc_msg(&e->msg) && e->prompt) G.ev[G.n_ev - 1].prompt = true;
       break;
 
@@ -718,6 +721,8 @@ static bool handle_event(int i) {
           if (G.q[j].kind == GC_EV_LEVEL_UP && G.q[j].a == e->a) last = false;
         static bv_mon after;
         after = make_mon(&G.run.party[e->a], true);
+        /* the HP of the level-up itself: the rest of the turn (a hit on the Pokemon, a Transform's snapshot) can have moved the run's HP by now */
+        if (e->hp > 0) after.hp = e->hp < after.max_hp ? e->hp : after.max_hp;
         *ev_new() = (bv_event){.type = BEV_EXP, .battler = field, .a = last ? (int)(after.exp_ratio * 1000) : 0,
                                .b = e->b, .mon = &after};
       }

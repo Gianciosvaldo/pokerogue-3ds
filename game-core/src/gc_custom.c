@@ -345,6 +345,10 @@ bool gc_custom_trainer_wave(gc_run *run, int wave)
     if (run->battle_type != BATTLE_TYPE_TRAINER || run->double_battle || run->n_enemy < 1) return false;
     if (pr_run_is_wave_final(run->run.mode, wave) || pr_run_is_fixed_battle(&run->run, wave)) return false;
     if (run->run.mode == GAME_MODES_CLASSIC && wave == 20) return false;
+    /* a gym leader's wave (the boss trainer waves, 30, 60... or 20, 50... by offsetGym) and any boss trainer: the gym leaders are real fights now */
+    if (pr_run_is_trainer_boss(&run->run, wave, run->biome, run->run.offset_gym)) return false;
+    const gc_trainer_config *cfg = gc_trainer_config_of(run->trainer_type);
+    if (cfg && cfg->is_boss) return false;
     for (int i = 0; i < run->n_enemy; i++) if (run->enemy[i].b.is_boss) return false;
     return true;
 }
