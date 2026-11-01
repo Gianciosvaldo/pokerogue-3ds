@@ -841,17 +841,40 @@ static bool send_out_foe(void) {
   if(!G.n_ev)return false;play_chunk();return true;
 }
 
+/* Whether the look on screen is no longer the one this Pokemon has: a disguise taken, lost or changed with no battle event the
+ * screen saw. `live` is the look it has now. The same species with another gender or form counts too: the last party member
+ * a Zorua copies can change to another Hoppip (a catch, a fusion, the order) without the species ever differing. */
+static bool illusion_look_stale(const pr_battle *bt, const pr_pokemon *p, const bv_mon *shown, bv_mon *live) {
+  const bool disguised = p->illusion.active || shown->illusion;
+  if (shown->species != pr_shown_form(bt, p)->species) {
+    if (!(disguised || shown->species == pr_pokemon_form(p)->species || shown->species == pr_apparent_form(p, true)->species)) return false;
+    be_mon(bt, p, live);
+    return true;
+  }
+  if (!disguised) return false;
+  be_mon(bt, p, live);
+  return shown->form != live->form || shown->gender != live->gender;
+}
+
+/* the look of `live` on top of what `shown` has: only the look changes, HP and status catch up after */
+static void restyle_look(bv_mon *look, const bv_mon *shown, const bv_mon *live) {
+  *look = *shown;
+  look->illusion = live->illusion; look->species = live->species; look->form = live->form;
+  look->gender = live->gender; look->female = live->female; look->sprite_scale = live->sprite_scale;
+  look->n_types = live->n_types;
+  memcpy(look->types, live->types, sizeof look->types);
+  memcpy(look->name, live->name, sizeof look->name);
+}
+
 static bool resync_field(void) {
   /* Illusion can begin/end between waves without a move event, on either
    * secondary slot as well as on the lead. Preserve bars while replacing the look. */
   for(int field=1;field<4;field++){
     pr_pokemon *p=G.run.bt.field[field];bv_mon *shown=bv_mon_of(field);
     if(!p||!p->on_field||p->hp<=0||!G.present[displayed_slot(field)]||!(G.run.bt.deviations&PR_DEV_ILLUSION))continue;
-    const int species=shown->species,target=pr_shown_form(&G.run.bt,p)->species;
-    if(species!=target&&(p->illusion.active||shown->illusion||species==pr_pokemon_form(p)->species||species==pr_apparent_form(p,true)->species)){
-      static bv_mon look;bv_mon live;be_mon(&G.run.bt,p,&live);look=*shown;
-      look.illusion=live.illusion;look.species=live.species;look.form=live.form;look.gender=live.gender;look.female=live.female;look.sprite_scale=live.sprite_scale;
-      look.n_types=live.n_types;memcpy(look.types,live.types,sizeof look.types);memcpy(look.name,live.name,sizeof look.name);
+    static bv_mon look;bv_mon live;
+    if(illusion_look_stale(&G.run.bt,p,shown,&live)){
+      restyle_look(&look,shown,&live);
       G.n_ev=G.ev_pos=G.n_txt=0;*ev_new()=(bv_event){.type=BEV_ILLUSION,.battler=field,.mon=&look};play_chunk();return true;
     }
   }
@@ -865,15 +888,10 @@ static bool resync_field(void) {
   if ((G.run.bt.deviations & PR_DEV_ILLUSION) && G.present[0] && G.shown == idx) {
     /* PR_DEV_ILLUSION: the same Pokemon showing its real look while it has a disguise, or the other way round (a
      * disguise taken or lost with no battle event the screen saw, such as at a battle's start): the look catches up */
-    const int sp = bv_mon_of(BV_PLAYER)->species, shown = pr_shown_form(&G.run.bt, &me->b)->species;
-    if (sp != shown && (me->b.illusion.active || bv_mon_of(BV_PLAYER)->illusion || sp == pr_pokemon_form(&me->b)->species || sp == pr_apparent_form(&me->b, true)->species)) {
-      static bv_mon look;
-      const bv_mon live = make_mon(me, true);
-      look = *bv_mon_of(BV_PLAYER);                                   /* only the look changes; HP and status catch up after */
-      look.illusion=live.illusion;look.species = live.species; look.form = live.form; look.gender = live.gender; look.female = live.female;
-      look.sprite_scale = live.sprite_scale; look.n_types = live.n_types;
-      memcpy(look.types, live.types, sizeof look.types);
-      memcpy(look.name, live.name, sizeof look.name);
+    static bv_mon look;
+    bv_mon live;
+    if (illusion_look_stale(&G.run.bt, &me->b, bv_mon_of(BV_PLAYER), &live)) {
+      restyle_look(&look, bv_mon_of(BV_PLAYER), &live);
       G.n_ev = G.ev_pos = G.n_txt = 0;
       *ev_new() = (bv_event){.type = BEV_ILLUSION, .battler = BV_PLAYER, .a = 0, .mon = &look};
       play_chunk();
