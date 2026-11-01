@@ -122,3 +122,11 @@ save/resume runs and 100 custom Save and Quit runs all pass with zero model
 violations. The 78 retained arena cleanup/save checks and merged encounter tests
 pass. The 320 native cases and thirteen fault controls pass after the runtime
 snapshot change as well. Temporary debug observers are not part of this change.
+
+The first CI attempt passed the full app suite but exposed a coverage-only
+failure in the separate event-storage driver's 300-run baseline: no release-list
+Cancel occurred. Retain that seeded prefix and extend this control corpus to
+600 runs. It now exercises 19 releases, 15 Let Go choices and four Cancels with
+zero model violations. Its original coverage assertions remain mandatory; all
+nine storage-owner and three real-driver compiled faults are rejected. Verbose
+failure diagnostics identify the unmet assertion if the corpus later changes.

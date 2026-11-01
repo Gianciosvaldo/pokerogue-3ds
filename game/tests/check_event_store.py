@@ -92,9 +92,12 @@ def main():
         core_prefixes = ('../../game-core/', '../../run-core/', '../../reward-core/', '../../battle-core/', '../../ai-core/')
         args = [arg for arg in args if not (arg.startswith(core_prefixes) and arg.endswith('.c'))]
         args.insert(args.index('-lm'), str(TESTS / 'build/ptx_core.a'))
-        env = dict(os.environ, RUNTEST_EVENT_STORE='1', RUNTEST_SAVE='resume', RUNTEST_FAILFAST='1')
+        env = dict(os.environ, RUNTEST_EVENT_STORE='1', RUNTEST_SAVE='resume', RUNTEST_FAILFAST='1', RUNTEST_VERBOSE='1')
         def driver_run(exe):
-            return subprocess.run([str(exe), '300', '0'], cwd=TESTS, env=env,
+            # Retain the original 300 seeded cases and extend the sequence so
+            # Release, Let Go and Cancel all occur after source encounter changes.
+            # The driver's existing coverage assertions remain mandatory.
+            return subprocess.run([str(exe), '600', '0'], cwd=TESTS, env=env,
                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         base_exe = temp / 'driver-baseline'
         base_build = [str(base_exe) if arg == 'build/runtest' else arg for arg in args]
