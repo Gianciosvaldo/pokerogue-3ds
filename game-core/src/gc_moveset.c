@@ -1,12 +1,13 @@
 /* Wild constructor movesets: retain the clean factory, then weighted level pools.
- * Trainer member streams and post-moveset form callbacks remain separate owners. */
+ * Trainer members continue inside their seeded constructor in gc_encounter.c;
+ * post-moveset form callbacks remain separate owners. */
 #include "internal.h"
 #include "pr/moveset.h"
 
 static bool clean_enemy_moveset(gc_run *run, gc_mon *m, const pr_enemy_gen *g)
 {
-    /* Trainer generation currently restores executeWithSeedOffset before returning
-     * its constructor snapshots. Using the run RNG here would shift the wrong stream.
+    /* Wild dispatch cannot own a trainer member's executeWithSeedOffset stream.
+     * The trainer continuation in gc_encounter.c handles its validated domain.
      * Daily/custom and challenge constructors need their own validated boundary. */
     if (m->b.has_trainer || m->trainer_slot || run->me_battle || run->battle_type != BATTLE_TYPE_WILD
         || (run->run.mode != GAME_MODES_CLASSIC && run->run.mode != GAME_MODES_ENDLESS)

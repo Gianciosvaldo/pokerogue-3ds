@@ -469,7 +469,13 @@ int be_convert_events(const pr_battle* bt, const pr_event* events, int n_events,
     if (p->hp < seen[k].hp) PUT(.type = BEV_DAMAGE, .battler = k, .a = p->hp, .b = HIT_RESULT_INDIRECT);
     else if (p->hp > seen[k].hp) PUT(.type = BEV_HEAL, .battler = k, .a = p->hp);
     if (p->status != seen[k].status) PUT(.type = BEV_STATUS, .battler = k, .a = p->status);
-    if (p->hp <= 0 && !seen[k].fainted) PUT(.type = BEV_FAINT, .battler = k);
+    if (p->hp <= 0 && !seen[k].fainted) {
+      /* The faint the screen shows now is the faint it has shown: when a pause (a Wimp Out switch prompt) comes between the
+       * killing hit and battle-core's FAINT event, that event arrives in the next batch and must find the Pokemon gone */
+      PUT(.type = BEV_FAINT, .battler = k);
+      seen[k].fainted = true;
+      seen[k].present = false;
+    }
     /* a doll gone without its animation (SubstituteTag.onRemove while the Pokemon was in focus) */
     if (seen[k].substitute && !pr_get_battler_tag(p, BATTLER_TAG_TYPE_SUBSTITUTE))
       PUT(.type = BEV_POKEMON_ANIM, .battler = k, .a = -1);

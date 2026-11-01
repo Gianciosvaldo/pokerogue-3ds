@@ -476,7 +476,7 @@ typedef struct {
                                    * species, level, slot, boss and shinyLock are set per member */
     bool is_double;               /* trainer.isDouble() */
     bool classic_wave20_trainer;
-    bool enable_gym_e4;            /* Task 49: caller opts into Gym/E4 partyMemberFuncs */
+    bool enable_gym_e4;            /* opt into Gym/E4 and ordinary paired partyMemberFuncs */
     const pr_party_template *template_;   /* trainer.getPartyTemplate() */
     int n_levels, levels[PR_MAX_PARTY_TEMPLATE];   /* currentBattle.enemyLevels */
 } pr_trainer_party_ctx;
@@ -490,12 +490,23 @@ typedef struct {
  * run->rng is left as it was. Returns 0, or -1 with a flag (partyMemberFuncs: PR_RUN_UNPORTED_TRAINER)
  * and the members made so far in out->n. */
 int pr_run_gen_trainer_party(pr_run *run, const pr_trainer_party_ctx *ctx, pr_trainer_party *out);
+/* Optional constructor continuation, called after base rolls while the member's
+ * executeWithSeedOffset stream is active. Return 1 after moveset + finish, 0 for
+ * an unowned constructor, or -1 on error. A 0 restores both rolls and RNG; every
+ * path restores the ambient RNG before returning to the caller. Rivals retain
+ * their dedicated deferred constructor owner and do not call this continuation.
+ * The callback must not retain ctx/out pointers or mutate other run state. */
+typedef int (*pr_trainer_constructor_owner)(pr_run *run, const pr_enemy_gen_ctx *ctx,
+                                            int member, pr_enemy_gen *out, void *user);
+int pr_run_gen_trainer_party_with_constructor(pr_run *run, const pr_trainer_party_ctx *ctx,
+                                              pr_trainer_party *out,
+                                              pr_trainer_constructor_owner owner, void *user);
 /* Rival partyMemberFuncs for Classic waves 8/25/55/95/145/195. fight is 1..6. */
 int pr_run_gen_rival_party(pr_run *run, const pr_trainer_party_ctx *ctx, int fight, pr_trainer_party *out);
 /* Called by pr_run_enemy_pokemon_finish after the rival member's constructor state is complete. */
 void pr_run_rival_finish(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_enemy_gen *out);
 
-/* Ordinary Twins/Mysterious Sisters random-pool factories: observe constructor
+/* Ordinary Twins/Mysterious Sisters/Young Couple random-pool factories: observe constructor
  * inputs, then run the base constructor. Same 1/0/-1 ownership convention. */
 int pr_run_gen_pair_closure_member(pr_run *run,const pr_trainer_party_ctx *ctx,
                                   int index,int func_key,pr_enemy_gen *out,int *out_species);

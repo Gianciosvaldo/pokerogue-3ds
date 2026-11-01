@@ -10,6 +10,7 @@ typedef struct {
     double base_weight_multiplier;
     int move_power_ceiling, forced_signature_move_chance, level_based_denylist_threshold;
     double boss_extra_weight_multiplier;
+    int common_tm_level, relearn_level;
 } gc_mg_constants;
 extern const gc_mg_constants gc_mg_const;
 
@@ -23,6 +24,7 @@ enum {
     GC_MGF_STORM_ACC = 1 << 17, GC_MGF_ANTI_SUN = 1 << 18, GC_MGF_SLEEP_STATUS = 1 << 19, GC_MGF_SLEEP_SELF = 1 << 20,
     GC_MGF_POISON_ATTR = 1 << 21, GC_MGF_VARIABLE_TYPE = 1 << 22, GC_MGF_WEATHER_BALL_TYPE = 1 << 23,
     GC_MGF_TERA_CATEGORY = 1 << 24, GC_MGF_CALL_MOVE = 1 << 25, GC_MGF_HP_SPLIT = 1 << 26, GC_MGF_TERRAIN_CHANGE = 1 << 27,
+    GC_MGF_TRAINER_BUFF = 1 << 28, GC_MGF_OHKO = 1 << 29,
 };
 /* gc_mg_move.vt_kind: the class of the move's last VariableMoveTypeAttr */
 enum {

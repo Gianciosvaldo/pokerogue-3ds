@@ -1,4 +1,5 @@
-/* generateMoveset (src/ai/ai-moveset-gen.ts @ 8555c08) for trainerless wild Pokemon:
+/* generateMoveset (src/ai/ai-moveset-gen.ts @ 8555c08) for wild Pokemon and the
+ * guarded ordinary-trainer constructor domain below:
  * bosses, including fusions with their natural passive, are supported. This is what
  * every Pokemon of a mystery encounter (the Global Trade System's, the Salesman's, the Dark Deal boss) is made with. A boss adds
  * to the steps below: its pool drops a move that a better move of the pool makes redundant (SUPERCEDED_MOVES), then Pain Split,
@@ -6,8 +7,10 @@
  * category its species must not use, weather or terrain setters when its ability or passive sets one and status moves under
  * Gorilla Tactics (and when that leaves nothing, the unfiltered pool again without the soft blocklists); its weights are raised
  * to 2 instead of 1.6; and a boss has its passive, whose attributes act after its ability's wherever the generator reads
- * abilities. What a trainer's moveset adds (TM and egg moves, the weight bumps, instant Tera) is not here: gc_generate_moveset
- * says so and leaves the Pokemon alone. Power-table queries include the resolved move type so an active type-changing
+ * abilities. Ordinary Classic trainers below the TM/relearner thresholds also use this owner: source
+ * trainer blocklists, weight adjustments and remaining-slot type diversity apply. Higher-level
+ * TM/egg pools, instant Tera and trainer-specific signatures remain guarded. Power-table queries
+ * include the resolved move type so an active type-changing
  * ability can affect a type-conditional passive. Explicit passive overrides on fusions remain outside this owner.
  *
  * Step by step, with the order upstream draws from the RNG:
@@ -60,7 +63,7 @@ typedef struct {
     int n_types;
     uint16_t ability;           /* getAbility() */
     uint16_t passive;           /* getPassiveAbility() when hasPassive() (a boss), else 0 */
-    bool boss, single;          /* isBoss(), and the current battle is not a double battle */
+    bool boss, single, trainer; /* isBoss(), singles, hasTrainer() */
     uint16_t moves[4];          /* the moveset so far */
     int n_moves;
 } mg_ctx;
@@ -442,6 +445,27 @@ static void fill_remaining(mg_ctx *c, pr_rng *rng, mg_pool *base)
             total += base->e[i].w;
         }
         if (!n) return;
+        if (c->trainer) {
+            int damaging = 0;
+            for (int k = 0; k < c->n_moves; k++) damaging += pr_moves[c->moves[k]].power > 1;
+            const double denominator = fmax(js_pow(4, damaging) / 8, .5);
+            const uint32_t existing = existing_damage_types(c);
+            total = 0;
+            for (int k = 0; k < n; k++) {
+                const int move = remaining[k].move;
+                if (pr_moves[move].category != MOVE_CATEGORY_STATUS) {
+                    const int type = movegen_type(c, move);
+                    double weight = remaining[k].w;
+                    if (type >= 0 && (existing & (1u << type))) weight = sqrt(weight);
+                    else {
+                        weight /= denominator;
+                        if (mg_has_type(c, type) && !stab_blacklisted(move)) weight *= 20;
+                    }
+                    remaining[k].w = ceil(weight);
+                }
+                total += remaining[k].w;
+            }
+        }
         const int index = pick_weighted(rng, remaining, n, total);
         pool_delete(base, remaining[index].move);
         c->moves[c->n_moves++] = remaining[index].move;
@@ -497,18 +521,18 @@ static void filter_move_pool(const mg_ctx *c, mg_pool *p, bool ignore_soft)
     const uint16_t bits = mg_ab_bits(c);
     const bool block_weather = (bits & (GC_MGA_WEATHER_CHANGE | GC_MGA_SUPPRESS_WEATHER)) != 0;
     const bool block_terrain = (bits & GC_MGA_TERRAIN_SUMMON) != 0, gorilla = (bits & GC_MGA_GORILLA_TACTICS) != 0;
-    const int denied = c->boss ? denied_offensive_stat(c) : -1;
+    const int denied = (c->boss || c->trainer) ? denied_offensive_stat(c) : -1;
     int out = 0;
     for (int i = 0; i < p->n; i++) {
         const int move = p->e[i].move;
-        bool drop = p->e[i].w <= 0 || pr_moves[move].unimplemented || mg_flag(move, GC_MGF_SACRIFICIAL_ON_HIT);
-        if (!drop && c->boss) {
+        bool drop = p->e[i].w <= 0 || pr_moves[move].unimplemented || mg_flag(move, GC_MGF_SACRIFICIAL_ON_HIT) || (c->trainer && mg_flag(move, GC_MGF_OHKO));
+        if (!drop && (c->boss || c->trainer)) {
             const bool soft = !ignore_soft
                 && ((c->single && sorted_has(gc_mg_forbidden_singles, gc_mg_forbidden_singles_count, move))
                     || (c->p.level >= gc_mg_const.level_based_denylist_threshold && sorted_has(gc_mg_level_denylist, gc_mg_level_denylist_count, move))
                     || (pr_moves[move].category != MOVE_CATEGORY_STATUS && !sorted_has(gc_mg_offstat_exempt, gc_mg_offstat_exempt_count, move)
                         && denied >= 0 && matches_offensive_category(move, denied)));
-            drop = mg_flag(move, GC_MGF_SACRIFICIAL | GC_MGF_HP_SPLIT) || soft
+            drop = (c->boss && mg_flag(move, GC_MGF_SACRIFICIAL | GC_MGF_HP_SPLIT)) || soft
                 || (mg_flag(move, GC_MGF_WEATHER_CHANGE) && block_weather) || (mg_flag(move, GC_MGF_TERRAIN_CHANGE) && block_terrain)
                 || (gorilla && pr_moves[move].category == MOVE_CATEGORY_STATUS);
         }
@@ -533,6 +557,7 @@ static bool ctx_init(mg_ctx *c, const gc_run *run, const gc_mon *m)
     c->ability = c->p.ability;
     c->passive = pr_has_passive(&c->bt, &c->p) ? c->p.passive : 0;
     c->boss = m->b.is_boss;
+    c->trainer = m->b.has_trainer;
     c->single = !run->double_battle;
     c->n_types = pr_get_types(&c->p, c->types, 0);
     return true;
@@ -548,9 +573,20 @@ bool gc_mg_effective_powers(gc_run *run, const gc_mon *m, const uint16_t *moves,
 
 bool gc_generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m)
 {
-    if (m->b.has_trainer || m->trainer_slot || run->run.has_challenges) return false;
+    if (run->run.has_challenges) return false;
+    const bool trainer = m->b.has_trainer || m->trainer_slot || m->b.trainer_slot;
+    /* This constructor domain has no TM/egg pool or instant Tera. Rivals, Gym/E4,
+     * challenges, fusions and post-moveset form callbacks need separate owners. */
+    if (trainer && (!m->b.has_trainer || !m->trainer_slot
+        || m->trainer_slot != m->b.trainer_slot || m->trainer_slot > TRAINER_SLOT_TRAINER_PARTNER
+        || m->b.level < 1 || m->b.n_moves || run->battle_type != BATTLE_TYPE_TRAINER
+        || m->b.level >= gc_mg_const.common_tm_level || m->b.level >= gc_mg_const.relearn_level
+        || m->b.fusion_species || m->b.is_boss || m->b.passive_flag || m->b.terastallized
+        || m->b.n_tags || m->b.on_field || run->run.mode != GAME_MODES_CLASSIC
+        || run->trainer_type <= 0 || run->trainer_type > TRAINER_TYPE_YOUNGSTER)) return false;
     const pr_species *sp = gc_species(m->b.species);
-    if (!sp) return false;
+    if (!sp || (trainer && (sp->form_change_triggers
+        & (1u << PR_FCT_SpeciesFormChangeMoveLearnedTrigger)))) return false;
     if (m->b.fusion_species && (!gc_species(m->b.fusion_species)
         || (sp->form_change_triggers & (1u << PR_FCT_SpeciesFormChangeMoveLearnedTrigger))))
         return false;
@@ -580,7 +616,7 @@ bool gc_generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m)
         pool.n = base.n = 0;
         /* 1. the level pool */
         static gc_learn_row rows[512];
-        const int count = gc_level_moves(m, 1, true, true, false, rows, 512);
+        const int count = gc_level_moves(m, 1, true, true, c.trainer, rows, 512);
         if (count < 0) return false;
         for (int i = 0; i < count; i++) {
             const int learn_level = rows[i].level, id = rows[i].move;
@@ -596,7 +632,7 @@ bool gc_generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m)
         }
         /* 2. a boss drops what a better move of its pool makes redundant, then filterMovePool; when that leaves nothing the
          * unfiltered pool is filtered again without the soft blocklists */
-        if (c.boss) filter_superceded(&pool);
+        if (c.boss || c.trainer) filter_superceded(&pool);
         static mg_pool unfiltered;
         unfiltered = pool;
         filter_move_pool(&c, &pool, false);
@@ -605,6 +641,14 @@ bool gc_generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m)
             filter_move_pool(&c, &pool, true);
         }
 
+        if (c.trainer) {
+            for (int i = 0; i < pool.n; i++) {
+                const int move = pool.e[i].move;
+                if (mg_flag(move, GC_MGF_SACRIFICIAL)) pool.e[i].w *= .5;
+                if (mg_flag(move, GC_MGF_TRAINER_BUFF)) pool.e[i].w *= 1.25;
+                if (mg_flag(move, GC_MGF_CHARGING | GC_MGF_RECHARGE)) pool.e[i].w *= .7;
+            }
+        }
         /* 3. adjustDamageMoveWeights */
         double max_power = 40;
         for (int i = 0; i < pool.n; i++) {

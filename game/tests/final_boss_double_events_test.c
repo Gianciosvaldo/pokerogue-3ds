@@ -9,6 +9,7 @@
  *   3  the same hit with one Pokemon left to send out: no toggle, no sign, no summon (availablePartyMembers.length > 1 is false)
  *   4  a boss that is not the Classic final boss (wave 190, or Eternatus already in its second phase) never gives the sign, whoever breaks its
  *      shields; neither does an ordinary switch, with the second Pokemon on the bench
+ *   5  (not about the final boss) a faint the settled catch-up has shown is not shown again by the FAINT event that comes in the next batch
  * Host consistency of the converter against battle-core's real engine, not an upstream comparison (the phase queue itself is differential-
  * tested: battle-core/tests/final-boss-test.c). */
 #include <assert.h>
@@ -90,10 +91,50 @@ static void final_fight(bs_battle* b, int wave, int allowed, const char* seed, i
   boss->hp = boss->stats[STAT_HP] * 55 / 100;   /* just above the line of the last shield (half of it): any hit that lands takes it down */
 }
 
+/* 5: a hit takes the partner's HP to 0, a pause comes before battle-core's FAINT (a Wimp Out switch prompt in the same turn), and the run
+ * stops there. The settled catch-up shows the faint, so the FAINT event of the next batch has nothing left to show (found by runtest, run 6575
+ * of the event-storage pass: "faint on side 2 with nobody out"). */
+static void late_faint(void) {
+  static bs_battle f;
+  int pm[] = {MOVE_ID_SPLASH}, em[] = {MOVE_ID_SPLASH};
+  bs_begin(&f, BIOME_ID_PLAINS, 6, "late_faint");
+  pr_pokemon* lead = bs_add(&f, 0, SPECIES_ID_GARCHOMP, 50, pm, 1);
+  pr_pokemon* partner = bs_add(&f, 0, SPECIES_ID_BLAZIKEN, 50, pm, 1);
+  pr_pokemon* foe = bs_add(&f, 1, SPECIES_ID_ZUBAT, 5, em, 1);
+  f.bt.field[0] = lead;
+  f.bt.field[1] = partner;
+  f.bt.field[2] = foe;
+  f.bt.double_battle = true;
+  be_view view;
+  bv_event out[16];
+  memset(&view, 0, sizeof view);
+  bv_mon sp0, sp1, se;
+  be_mon(&f.bt, lead, &sp0);
+  be_mon(&f.bt, partner, &sp1);
+  be_mon(&f.bt, foe, &se);
+  view.present[0] = view.present[1] = view.present[2] = true;
+  view.mon[0] = sp0;
+  view.mon[2] = sp1;
+  view.mon[1] = se;
+  partner->hp = 0;
+  int n = be_convert_events(&f.bt, NULL, 0, true, &view, out, 16);
+  CHECK(count(out, n, BEV_FAINT) == 1 && find(out, n, BEV_FAINT, 1) >= 0);
+  CHECK(view.present[0] && !view.present[2]);   /* the screen has the partner gone */
+  pr_event ev[1];
+  memset(ev, 0, sizeof ev);
+  ev[0].type = PR_EV_FAINT;
+  ev[0].battler = 1;
+  ev[0].target = -1;
+  ev[0].field[1] = (pr_event_field){.species = SPECIES_ID_BLAZIKEN, .hp = 0, .max_hp = partner->stats[STAT_HP], .visible = true, .party_slot = 1};
+  n = be_convert_events(&f.bt, ev, 1, true, &view, out, 16);
+  CHECK(count(out, n, BEV_FAINT) == 0);   /* no second faint for the Pokemon already shown fainted */
+}
+
 int main(void) {
   static bs_battle b;
   bs_begin(&b, BIOME_ID_END, 200, "final_boss_double_events");
   hand_made(&b);
+  late_faint();
 
   /* 2: the real thing, over a few seeds (the hit, the order, and that the fight is a double afterwards) */
   int fights = 0, phase_twos = 0, summons = 0, later_toggles = 0;

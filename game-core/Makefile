@@ -1397,3 +1397,20 @@ $(BUILD)/post_fusion_cleanup_test: tests/post_fusion_cleanup_test.c tests/fusion
 post-fusion-cleanup-test: $(BUILD)/post_fusion_cleanup_test
 	$(BUILD)/post_fusion_cleanup_test
 test: post-fusion-cleanup-test
+
+# Native ordinary trainer constructors, with moves and finish inside each member seed.
+$(BUILD)/trainer-constructor.native.inc: tests/fixtures/trainer-constructor.native.json.gz tools/build-trainer-constructor-proof.py
+	@mkdir -p $(BUILD)
+	python3 tools/build-trainer-constructor-proof.py $< $@
+$(BUILD)/trainer_constructor_test: tests/trainer_constructor_test.c $(BUILD)/trainer-constructor.native.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) -I$(BUILD) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -Wl,--wrap=pr_run_enemy_pokemon_base,--wrap=gc_generate_moveset,--wrap=pr_run_enemy_pokemon_finish,--wrap=pr_calculate_stats -lm -o $@
+trainer-constructor-test: $(BUILD)/trainer_constructor_test
+	$(BUILD)/trainer_constructor_test
+test: trainer-constructor-test
+.PHONY: trainer-constructor-test
+trainer-constructor-capture:
+	python3 tools/check_trainer_constructor_capture.py
+trainer-constructor-faults: $(BUILD)/trainer-constructor.native.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	python3 tools/check_trainer_constructor_faults.py --build $(BUILD)
+test: trainer-constructor-capture trainer-constructor-faults
+.PHONY: trainer-constructor-capture trainer-constructor-faults
