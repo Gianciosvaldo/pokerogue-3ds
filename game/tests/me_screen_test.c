@@ -14,6 +14,7 @@
 #include <string.h>
 
 #include "../../game-core/src/internal.h"
+#include "gm_item_ui.h"
 #include "me_flow.h"
 #include "me_screen.h"
 #include "ui.h"
@@ -480,7 +481,7 @@ int main(void) {
                   (!strncmp(sp[i].key, "images/", 7) || !strcmp(sp[i].key, "items")),
               "sprite %d of encounter %d placed on the screen: %s %g %g", i, t, sp[i].key, sp[i].x, sp[i].y);
     }
-    CHECK(drawn == 23, "23 encounters draw an intro: %d", drawn);
+    CHECK(drawn == 24, "24 encounters draw an intro: %d", drawn);
   }
 
   /* Training Session: the Pokemon, then one of the 25 natures (scrolling list) or its abilities */
@@ -584,6 +585,92 @@ int main(void) {
   CHECK(!remains, "the selected item, rather than item zero, was consumed");
   gc_run_until_screen(&R);
   CHECK(R.screen.kind == GC_SCREEN_REWARD && R.screen.n_options == 1, "upgraded item reaches the reward screen");
+
+  /* Delibird-y: Give Food and Give an Item ask for the Pokemon and then for the held item (upstream's two lists); the choice carries both and the
+   * result text names the item. The real encounter code then runs on that choice. */
+  {
+    use_source_locales = true;
+    g_depth = n_got = 0;
+    gc_run_new(&R, GAME_MODES_CLASSIC, "mystery-ui-delibirdy", 813);
+    CHECK(gc_run_set_starters(&R, starters, 2, &why), "real Delibird-y party: %s", why ? why : "");
+    R.wave = 37;
+    R.money = 1000000;
+    pr_run_reset_seed(&R.run, R.wave);
+    R.n_items = 0;
+    gc_item_add(&R, "WIDE_LENS", -1, R.party[1].b.id, 1);
+    gc_item_add(&R, "BERRY", BERRY_TYPE_SITRUS, R.party[1].b.id, 2);
+    gc_item_add(&R, "BERRY", BERRY_TYPE_LUM, R.party[1].b.id, 1);
+    gc_item_add(&R, "LEFTOVERS", -1, R.party[0].b.id, 1);
+    R.mystery_type = R.screen.mystery_type = GC_ME_DELIBIRDY;
+    R.screen.kind = GC_SCREEN_MYSTERY;
+    gc_mystery_setup_screen(&R);
+    CHECK(R.screen.n_options == 3 && R.screen.option_ok[0] && R.screen.option_ok[1] && R.screen.option_ok[2], "three Delibird-y options are on");
+    CHECK(R.screen.option_pick[0] == GC_PICK_NONE && R.screen.option_pick[1] == GC_PICK_MEMBER_ITEM && R.screen.option_pick[2] == GC_PICK_MEMBER_ITEM,
+          "both item options ask for a Pokemon and an item");
+    me_intro_sprite sprites[ME_MAX_INTRO];
+    CHECK(me_flow_intro_sprites(GC_ME_DELIBIRDY, 160, 164, sprites, ME_MAX_INTRO) == 3 && !strcmp(sprites[0].key, "images/pokemon/225"),
+          "three Delibird sprites");
+    CHECK(me_flow_open(&R, chosen, NULL), "Delibird-y opens");
+    draw(0);
+    CHECK(has_text(0, "Delibir-dy") && has_text(0, "What will you give them?"), "title and query");
+    draw(1);
+    CHECK(has_text(1, "Give Money") && has_text(1, "Give Food") && has_text(1, "Give an Item"), "the three options");
+
+    /* Give Money asks for nothing */
+    press(BTN_ACTION);
+    CHECK(n_got == 1 && got.option == 0 && g_depth == 0 && strstr(got.selected, "You toss the money to the Delibirds"), "Give Money answers at once: %s", got.selected);
+
+    /* Give Food: Pikachu holds no food (its row cannot be taken); Lapras holds a Wide Lens and two kinds of berry */
+    g_depth = n_got = 0;
+    CHECK(me_flow_open(&R, chosen, NULL), "reopens");
+    press(BTN_DOWN); press(BTN_ACTION);
+    press(BTN_UP); /* the cursor starts on Lapras, the first row that can be taken */
+    const int errors_before = n_error;
+    press(BTN_ACTION);
+    CHECK(n_error == errors_before + 1 && n_got == 0 && g_depth == 1, "a Pokemon without food cannot be taken");
+    press(BTN_DOWN); press(BTN_ACTION);
+    draw(0);
+    CHECK(has_text(0, "Select an item to give.") && g_depth == 1 && n_got == 0, "the second list asks for the item");
+    draw(1);
+    const gm_item_ui* sitrus = gm_item_ui_find("BERRY", BERRY_TYPE_SITRUS);
+    const gm_item_ui* lum = gm_item_ui_find("BERRY", BERRY_TYPE_LUM);
+    const gm_item_ui* lens = gm_item_ui_find("WIDE_LENS", -1);
+    CHECK(sitrus && lum && lens && has_text(1, sitrus->name) && has_text(1, lum->name) && !has_text(1, lens->name), "only the food of the chosen Pokemon is listed");
+    press(BTN_CANCEL);
+    CHECK(n_got == 0 && g_depth == 1, "B goes back to the party");
+    press(BTN_ACTION);
+    press(BTN_DOWN);
+    press(BTN_ACTION);
+    CHECK(n_got == 1 && got.option == 1 && got.b == 1 && got.c == 1, "the second berry of slot 1: option %d b %d c %d", got.option, got.b, got.c);
+    CHECK(lum && strstr(got.selected, lum->name) && strstr(got.selected, "to the Delibirds"), "the result names the berry: %s", got.selected);
+    gc_rq_reset(&gc_int(&R)->rq);
+    bool done = false;
+    CHECK(gc_mystery_execute(&R, got.option, got.b, got.c, &why, &done) && done, "the real Give Food accepts the UI choice");
+    gc_run_until_screen(&R);
+    CHECK(gc_item_stack(&R, "CANDY_JAR") == 1 && gc_item_stack(&R, "BERRY") == 2 && gc_item_stack(&R, "WIDE_LENS") == 1,
+          "a Candy Jar for one Lum Berry, the Sitrus Berries and the Wide Lens stay");
+
+    /* Give an Item: Lapras's berries are food, so its list is the Wide Lens alone (not the transferable items the GTS lists) */
+    g_depth = n_got = 0;
+    R.mystery_type = R.screen.mystery_type = GC_ME_DELIBIRDY;
+    R.screen.kind = GC_SCREEN_MYSTERY;
+    gc_mystery_setup_screen(&R);
+    CHECK(me_flow_open(&R, chosen, NULL), "reopens for Give an Item");
+    press(BTN_DOWN); press(BTN_DOWN); press(BTN_ACTION);
+    press(BTN_DOWN); /* Pikachu (Leftovers) and Lapras (Wide Lens) can both be taken */
+    press(BTN_ACTION);
+    draw(1);
+    CHECK(n_got == 0 && has_text(1, lens->name) && !has_text(1, sitrus->name), "Give an Item lists the Wide Lens, not the berries");
+    press(BTN_ACTION);
+    CHECK(n_got == 1 && got.option == 2 && got.b == 1 && got.c == 0 && strstr(got.selected, lens->name),
+          "the Wide Lens of slot 1: option %d b %d c %d: %s", got.option, got.b, got.c, got.selected);
+    gc_rq_reset(&gc_int(&R)->rq);
+    done = false;
+    CHECK(gc_mystery_execute(&R, got.option, got.b, got.c, &why, &done) && done, "the real Give an Item accepts the UI choice");
+    gc_run_until_screen(&R);
+    CHECK(gc_item_stack(&R, "HEALING_CHARM") == 1 && gc_item_stack(&R, "WIDE_LENS") == 0 && gc_item_stack(&R, "BERRY") == 2, "a Healing Charm for the Wide Lens");
+    use_source_locales = false;
+  }
 
   /* Field Trip must transmit the original moveset slot after omitting empty rows. */
   run_at(GC_ME_FIELD_TRIP, 3);
