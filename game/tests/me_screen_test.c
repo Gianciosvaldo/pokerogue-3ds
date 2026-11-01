@@ -14,6 +14,7 @@
 #include <string.h>
 
 #include "../../game-core/src/internal.h"
+#include "../../game-core/tests/challengers.native.inc"
 #include "gm_item_ui.h"
 #include "me_flow.h"
 #include "me_screen.h"
@@ -893,6 +894,18 @@ int main(void) {
     }
   }
 
+  /* The three onInit sprites must match source-selected trainers, not fixed
+   * silhouettes. Observe actual me_flow -> me_screen draw keys for every record. */
+  for(unsigned i=0;i<sizeof challenger_native/sizeof *challenger_native;i++){
+    const challenger_case*c=&challenger_native[i];char seed[48],wave[48];snprintf(seed,sizeof seed,"challengers-run-%u",i);snprintf(wave,sizeof wave,"challengers-wave-%u",i);
+    g_depth=n_got=0;gc_run_new(&R,GAME_MODES_CLASSIC,seed,1);R.wave=c->wave;R.biome=c->biome;R.wave_cycle_offset=5;pr_seed_from_ascii(&R.run.wave_seed,wave);
+    R.mystery_type=R.screen.mystery_type=GC_ME_MYSTERIOUS_CHALLENGERS;R.screen.kind=GC_SCREEN_MYSTERY;gc_mystery_setup_screen(&R);
+    const pr_rng before=R.run.rng;CHECK(me_flow_open(&R,chosen,NULL),"challengers %u opens",i);n_sil=0;draw(0);
+    CHECK(n_sil==3,"challengers %u draws three trainers",i);
+    for(int j=0;j<3;j++){char expected[ME_SPRITE_LEN];snprintf(expected,sizeof expected,"images/trainer/%s",c->sprites[j]);CHECK(!strcmp(g_sil_key[j],expected)&&g_sil_tint[j]==0x000000FFu,"challengers %u sprite%d: %s instead of %s",i,j,g_sil_key[j],expected);}
+    CHECK(!memcmp(&before,&R.run.rng,sizeof before),"challenger preview/drawing preserves RNG");
+    press(BTN_ACTION);CHECK(n_got==1&&got.option==0,"challenger choice delivered");
+  }
   printf("me_screen_test: %d checks, %d failed\n", checks, failed);
   return failed ? 1 : 0;
 }

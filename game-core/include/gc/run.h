@@ -73,6 +73,11 @@ typedef struct {
     uint8_t kind;               /* gc_event_kind */
     int32_t a, b, c;
     pr_msg msg;                 /* GC_EV_MESSAGE */
+    /* GC_EV_SUMMON: the send-out state, before entry effects can damage the
+     * live Pokemon. Runtime-only; never part of the session save format. */
+    int32_t summon_hp, summon_max_hp;
+    uint8_t summon_status;
+    bool summon_snapshot;
     /* GC_EV_EXP only: exact native award and the pre-award display state.
      * b mirrors the amount only when it fits int32, otherwise zero. Runtime
      * events are not part of the session save format. */
@@ -392,6 +397,8 @@ typedef struct gc_run {
 
 /* Whether the encounter's party screen accepts the member for the option (a member that cannot be picked is shown but not selectable). */
 bool gc_mystery_member_ok(const gc_run *run, int option, int idx);
+/* Source-seeded trainer previews for the three Mysterious Challengers; RNG-pure. */
+bool gc_mc_trainers(const gc_run *run,int types[3],int variants[3]);
 /* GTS's second pick. Offers use the encounter's seed offset and preserve the run RNG; the returned Pokemon
  * are previews, not party members. Item indexes are in held-item order, not in the run's entire inventory. */
 bool gc_gts_trade_options(gc_run *run, int party_idx, gc_mon out[3]);

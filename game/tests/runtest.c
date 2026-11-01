@@ -786,7 +786,7 @@ void bv_ask_command(const bv_command_opts* opts, void (*on_command)(bv_command, 
     if(a->species!=form->species||a->level!=p->level||a->hp!=p->hp||a->max_hp!=p->stats[STAT_HP])
       BAD("field%d screen %d L%d %d/%d, run %d L%d %d/%d",field,a->species,a->level,a->hp,a->max_hp,form->species,p->level,p->hp,p->stats[STAT_HP]);
     if(a->form!=form->form_index||a->gender!=gender||a->shiny!=p->shiny||a->variant!=p->variant)
-      BAD("field%d displayed form/gender/shiny identity differs",field);
+      BAD("field%d displayed form/gender/shiny identity differs: species%d shown %d/%d/%d/%d live %d/%d/%d/%d",field,form->species,a->form,a->gender,a->shiny,a->variant,form->form_index,gender,p->shiny,p->variant);
     for(int stat=0;stat<7;stat++)if(a->stat_stages[stat]!=p->stat_stages[stat])BAD("field%d stage%d differs",field,stat);
     /* the boss's box: the wide one and its dividers need the segments, and the shields the screen shows are the battle's */
     if(a->boss!=p->is_boss||a->boss_segments!=p->boss_segments||a->boss_segment_index!=p->boss_segment_index)
@@ -1176,6 +1176,15 @@ static void drive_manage_items(void) {
     const uint32_t to_id = r->party[to].b.id;
     const int had_from = held_copies(r, it.key, it.arg, it.pokemon_id), had_to = held_copies(r, it.key, it.arg, to_id);
     const int max = gc_item_max_held(r, it.key, it.arg, &r->party[to]);
+    /* Source TurnStatusEffectModifier.matchType deliberately ignores the
+     * orb effect and constructor argument. An opposite orb occupies capacity
+     * even though held_copies correctly counts zero literal incoming copies. */
+    int matched = had_to;
+    if (!strcmp(it.key,"FLAME_ORB") || !strcmp(it.key,"TOXIC_ORB")) {
+      matched=0;
+      for(int j=0;j<r->n_items;j++)if(r->items[j].pokemon_id==to_id &&
+          (!strcmp(r->items[j].key,"FLAME_ORB") || !strcmp(r->items[j].key,"TOXIC_ORB"))){matched=r->items[j].stack;break;}
+    }
     const int n_before = r->n_items;
     if (rnd(100) < 15) {
       MI.move(src, 1, -1, MI.arg);
@@ -1187,17 +1196,10 @@ static void drive_manage_items(void) {
       const int now_from = held_copies(r, it.key, it.arg, it.pokemon_id), now_to = held_copies(r, it.key, it.arg, to_id);
       const int moved = had_from - now_from;
       if (now_to - had_to != moved) BAD("a transfer of %s lost or made copies (%d left, %d arrived)", it.key, moved, now_to - had_to);
-      if (had_to > 0 && had_to < max && moved != (qty < max - had_to ? qty : max - had_to))
-        BAD("a transfer of %d %s onto a stack of %d (max %d) moved %d", qty, it.key, had_to, max, moved);
-      if (had_to > 0 && had_to >= max && moved) BAD("a transfer onto a full stack of %s moved %d", it.key, moved);
-      /* TurnStatusEffectModifier.match: a Toxic Orb and a Flame Orb are the same stack, so the one on the recipient (max 1) refuses the other */
-      const bool orb = !strcmp(it.key, "TOXIC_ORB") || !strcmp(it.key, "FLAME_ORB");
-      const char* pair = !strcmp(it.key, "TOXIC_ORB") ? "FLAME_ORB" : "TOXIC_ORB";
-      bool orb_blocked = false;
-      for (int k = 0; orb && k < r->n_items; k++)
-        if (r->items[k].pokemon_id == to_id && !strcmp(r->items[k].key, pair) && r->items[k].stack > 0) orb_blocked = true;
-      if (orb_blocked && moved) BAD("a transfer of %s onto a Pokemon holding the other orb moved %d", it.key, moved);
-      if (!had_to && !orb_blocked && moved != qty) BAD("a transfer of %d %s to a Pokemon without it moved %d", qty, it.key, moved);
+      if (matched > 0 && matched < max && moved != (qty < max - matched ? qty : max - matched))
+        BAD("a transfer of %d %s onto a matching stack of %d (max %d) moved %d", qty, it.key, matched, max, moved);
+      if (matched > 0 && matched >= max && moved) BAD("a transfer onto a full matching stack of %s moved %d", it.key, moved);
+      if (!matched && moved != qty) BAD("a transfer of %d %s to a Pokemon without a matching item moved %d", qty, it.key, moved);
       if (moved) {
         n_transfers++;
         n_transfer_copies += moved;

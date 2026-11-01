@@ -103,3 +103,10 @@ $(BUILD)/rivaltest: tests/rivaltest.c $(BUILD)/librun.a $(CORE_LIB)
 
 $(BUILD)/gym_e4test: tests/gym_e4test.c $(BUILD)/librun.a $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+$(BUILD)/pair_trainer_test: tests/pair_trainer_test.c tests/pair-trainers.native.inc $(BUILD)/librun.a $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/pair_trainer_test.c $(BUILD)/librun.a $(CORE_LIB) -Wl,--wrap=pr_run_enemy_pokemon_base -lm -o $@
+.PHONY: pair-trainer-host-test
+pair-trainer-host-test: $(BUILD)/pair_trainer_test
+	$(BUILD)/pair_trainer_test
+test: pair-trainer-host-test
