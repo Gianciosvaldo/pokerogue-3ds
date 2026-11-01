@@ -5,7 +5,9 @@
  *  - none of those waves used a stand-in (run-core's fixed-battle and trainer-config flags, GC_STUB_UNPORTED_ENEMY), and winning one gives what the
  *    trainer's config says: the "defeated" text and the prize money (the config's multiplier), no GC_STUB_TRAINER_REWARDS;
  *  - the enemy AI reads the trainer's own isBoss (gym leaders, the Elite Four and the Champion are bosses, an ordinary trainer is not);
- *  - a battle saved at its start and loaded back is the same gym leader with the same team.
+ *  - a battle saved at its start and loaded back is the same gym leader with the same team;
+ *  - the Town Youngster (wave 5) and the evil team grunt fights (35, 62, 64, 112) are trainer battles too: the same team at all four waves of a run,
+ *    a team of 2, 3, 3 and 6, a pair of grunts when the (unseeded upstream) double roll says so, no stand-in, the grunts' rewards and no boss AI.
  * Each fixture fails on game-core as it was (the wave would be a wild battle). */
 #include "../src/internal.h"
 #include <math.h>
@@ -19,6 +21,7 @@ static unsigned char save[GC_SAVE_MAX];
 static int checks;
 #define CHECK(x) do { checks++; if (!(x)) { fprintf(stderr, "gym/e4 FAIL line %d (wave %d, trainer %d): %s\n", __LINE__, run.wave, run.trainer_type, #x); exit(1); } } while (0)
 
+static int pin_roll[2] = {-1, -1};   /* the unseeded evil-team rolls (gender, double) a fight pins, -1 = drawn */
 static int n_gym, n_e4, n_champion, n_ordinary, n_defeated, n_saved, n_ai_boss, n_ai_plain, n_turns, n_talk, n_talk_moved_on, n_defeated_moved_on;
 
 /* a run that has just won wave - 1, with a party of three (all the waves' levels are far above theirs, so the stats are made up in play) */
@@ -48,6 +51,11 @@ static void start(const char *seed, int wave, int biome)
     run.battle_type = BATTLE_TYPE_WILD;
     gc_items_to_battle(&run);
     gc_rq_reset(&gc_int(&run)->rq);
+    if (pin_roll[0] >= 0) {
+        gc_int(&run)->evil_roll_pinned = true;
+        gc_int(&run)->evil_roll[0] = (uint8_t)pin_roll[0];
+        gc_int(&run)->evil_roll[1] = (uint8_t)pin_roll[1];
+    }
     run.wave = wave - 1;
     run.in_battle = true;
     gc_rq_push(&run, gc_rp(RP_NEW_BATTLE, 0, 0, 0));
@@ -187,6 +195,50 @@ static void fight(const char *seed, int wave, int biome, int kind)
     n_defeated++;
 }
 
+static const int evil_grunt_types[10] = {
+    TRAINER_TYPE_ROCKET_GRUNT, TRAINER_TYPE_MAGMA_GRUNT, TRAINER_TYPE_AQUA_GRUNT, TRAINER_TYPE_GALACTIC_GRUNT, TRAINER_TYPE_PLASMA_GRUNT,
+    TRAINER_TYPE_FLARE_GRUNT, TRAINER_TYPE_AETHER_GRUNT, TRAINER_TYPE_SKULL_GRUNT, TRAINER_TYPE_MACRO_GRUNT, TRAINER_TYPE_STAR_GRUNT,
+};
+static int n_youngster, n_grunt, n_grunt_double, n_grunt_female, n_grunt_male, n_evil_won;
+
+/* the Town Youngster (wave 5) or a grunt fight; for a grunt the type of the run's first one, so that every fight of the run is the same team */
+static int evil_fight(const char *seed, int wave, int team)
+{
+    start(seed, wave, BIOME_ID_PLAINS);
+    CHECK(run.wave == wave && run.battle_type == BATTLE_TYPE_TRAINER);   /* and not the wild stand-in */
+    CHECK(!run.stubs[GC_STUB_UNPORTED_ENEMY] && !run.run_core_unported[4] && !run.run_core_unported[5]);
+    const gc_trainer_config *cfg = gc_trainer_config_of(run.trainer_type);
+    CHECK(cfg && !cfg->is_boss);
+    if (wave == CLASSIC_FIXED_BOSS_WAVES_TOWN_YOUNGSTER) {
+        CHECK(run.trainer_type == TRAINER_TYPE_YOUNGSTER && !run.double_battle);
+        CHECK(run.trainer_variant == TRAINER_VARIANT_DEFAULT || run.trainer_variant == TRAINER_VARIANT_FEMALE);
+        n_youngster++;
+    } else {
+        bool grunt = false;
+        for (int i = 0; i < 10; i++) grunt |= run.trainer_type == evil_grunt_types[i];
+        CHECK(grunt);
+        if (team >= 0) CHECK(run.trainer_type == team);
+        const int size = wave == 35 ? 2 : wave == 62 || wave == 64 ? 3 : 6;
+        CHECK(run.n_enemy == size);
+        CHECK(run.double_battle == (run.trainer_variant == TRAINER_VARIANT_DOUBLE));
+        if (run.double_battle) n_grunt_double++;
+        else if (run.trainer_variant == TRAINER_VARIANT_FEMALE) n_grunt_female++;
+        else n_grunt_male++;
+        n_grunt++;
+    }
+    for (int i = 0; i < run.n_enemy; i++) CHECK(run.enemy[i].b.species > 0 && run.enemy[i].b.level >= 1);
+    const int type = run.trainer_type;
+    check_save_load();
+    const double money = run.money, mult = cfg->money_multiplier;
+    bool defeated = false, boss = false;
+    CHECK(win(&defeated, &boss));
+    CHECK(defeated && boss);
+    CHECK(!run.stubs[GC_STUB_TRAINER_REWARDS]);
+    CHECK(run.money == pr_run_add_money(money, pr_run_get_money_reward(wave, mult, NULL, 0, false)));
+    n_evil_won++;
+    return type;
+}
+
 /* an ordinary random trainer of some wave in [first, first + 40): the AI must not be told it faces a boss */
 static void ordinary(const char *seed, int first)
 {
@@ -213,16 +265,36 @@ int main(void)
         for (int wave = offset_gym ? 30 : 20; wave < 200; wave += 30) fight(seeds[i], wave, 1 + (i * 5 + wave / 10) % 31, 0);   /* the start town has no boss pool */
         for (int wave = 182; wave <= 190; wave += 2) fight(seeds[i], wave, 1 + (i * 3 + wave) % 31, wave == 190 ? 2 : 1);
         ordinary(seeds[i], 12);
+        /* the Youngster and the four grunt fights of the run: one team from the first to the last */
+        pin_roll[0] = pin_roll[1] = -1;
+        evil_fight(seeds[i], CLASSIC_FIXED_BOSS_WAVES_TOWN_YOUNGSTER, -1);
+        const int team = evil_fight(seeds[i], CLASSIC_FIXED_BOSS_WAVES_EVIL_GRUNT_1, -1);
+        evil_fight(seeds[i], CLASSIC_FIXED_BOSS_WAVES_EVIL_GRUNT_2, team);
+        evil_fight(seeds[i], CLASSIC_FIXED_BOSS_WAVES_EVIL_GRUNT_3, team);
+        evil_fight(seeds[i], CLASSIC_FIXED_BOSS_WAVES_EVIL_GRUNT_4, team);
     }
+    /* the unseeded rolls pinned: randInt(2) === 0 is the female grunt, randInt(3) === 0 a double (a grunt that has one) */
+    for (int g = 0; g < 2; g++)
+        for (int d = 0; d < 3; d++) {
+            pin_roll[0] = g;
+            pin_roll[1] = d;
+            evil_fight("gym-e4-a", CLASSIC_FIXED_BOSS_WAVES_EVIL_GRUNT_1, -1);
+            CHECK(run.trainer_variant == (d == 0 ? TRAINER_VARIANT_DOUBLE : g == 0 ? TRAINER_VARIANT_FEMALE : TRAINER_VARIANT_DEFAULT) && run.double_battle == (d == 0));
+        }
+    pin_roll[0] = pin_roll[1] = -1;
     CHECK(n_gym == 6 * runs);
     CHECK(n_e4 == 4 * runs);
     CHECK(n_champion == runs);
     CHECK(n_defeated == 11 * runs);
-    CHECK(n_saved == 11 * runs);
+    CHECK(n_saved == 11 * runs + n_evil_won);   /* and the Youngster and the grunt fights */
     CHECK(n_ordinary > 0 && n_ai_plain > 0 && n_ai_boss > 0);
+    CHECK(n_youngster == runs && n_grunt == 4 * runs + 6 && n_evil_won == 5 * runs + 6);
+    CHECK(n_grunt_double > 0 && n_grunt_female > 0 && n_grunt_male > 0);
     /* the gym leaders' and Elite Four's wins with no reward screen: the beaten trainer is named by the events themselves */
     CHECK(n_defeated_moved_on == 7 * runs);   /* the six gym waves and the Champion's 190 (the Elite Four's 182..188 have their reward screen) */
     CHECK(n_talk > 0 && n_talk_moved_on > 0);
+    printf("evil teams: %d Town Youngsters, %d grunt fights (%d single male, %d single female, %d double), all won with their prize money\n",
+           n_youngster, n_grunt, n_grunt_male, n_grunt_female, n_grunt_double);
     printf("gym/e4: %d seeds, %d gym leaders, %d Elite Four, %d Champions won (prize money, no battle stand-ins), %d ordinary trainers, AI boss flag read %d times "
            "(%d bosses, %d not), %d battles saved and loaded back, %d victory lines (%d played after the run had moved on, as the events say); %d checks passed\n",
            runs, n_gym, n_e4, n_champion, n_ordinary, n_ai_boss + n_ai_plain, n_ai_boss, n_ai_plain, n_saved, n_talk, n_talk_moved_on, checks);

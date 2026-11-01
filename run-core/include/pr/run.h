@@ -306,6 +306,10 @@ typedef struct {
     int n_lures, n_double_chance_abilities;   /* what getDoubleBattleChance counts */
     bool enable_fixed_rivals;            /* Task 48: caller opts into the six ported Classic rival closures */
     bool enable_gym_e4;                   /* Task 49: caller opts into Gym/E4 fixed trainer closures */
+    bool enable_evil_grunts;              /* the Town Youngster (wave 5) and the four evil team grunt fights (35, 62, 64, 112): plain species pools */
+    /* getRandomTrainerFunc rolls an evil team's gender (randInt(2)) and, for a grunt, its double variant (randInt(3)) with Math.random, which is not
+     * seeded upstream: the caller supplies both rolls (0..1 and 0..2). They are only read for those fights */
+    int evil_gender_roll, evil_double_roll;
     pr_me_save me;                       /* mysteryEncounterSaveData */
     bool player_female;                  /* settings.isPlayerFemale: fixed rival variant */
     /* Optional scene callback, evaluated only when a trainer/wild double roll

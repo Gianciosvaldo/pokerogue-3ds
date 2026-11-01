@@ -1,4 +1,4 @@
-/* Gym leaders, the Elite Four and the Champion in the run (src/gc_encounter.c: gc_new_battle and gen_trainer_party), against the pinned upstream.
+/* Gym leaders, the Elite Four, the Champion and the evil teams' fixed fights in the run (src/gc_encounter.c: gc_new_battle and gen_trainer_party), against the pinned upstream.
  *
  * The cases are the ones run-core's gym_e4 producer writes (run-core/tests/gym_e4.producer.test.ts, left as it is): for a random run seed, wave cycle
  * offset, offsetGym, biome and trainer/secret ids, the real gym leader of a boss wave (the biome's boss pool) or the real fixed Elite Four / Champion
@@ -6,6 +6,10 @@
  * the way the app starts the wave, and what the run ends up holding is compared: that the battle is the trainer battle (not the wild stand-in
  * game-core used before it switched run-core's Gym/E4 closures on), the trainer type and variant, double or single, the number of members and each
  * one's level, species, id, gender, form, nature, ability slot, Tera type and fusion.
+ *
+ * The same comparator replays tools/evildiff.sh's trace (game-core/tests/evil.producer.test.ts): the Town Youngster and the evil team grunt fights
+ * (and, once ported, the admins and bosses). Upstream rolls a grunt's gender and double variant with Math.random, so the producer writes them in an
+ * "R <gender roll> <double roll>" line before the case and they are pinned in the run (evil_roll_pinned) instead of drawn.
  *
  * usage: gym_e4_diff_test <cases file> */
 #define _POSIX_C_SOURCE 200809L
@@ -16,6 +20,7 @@
 
 static gc_run run;
 static gc_system sys;
+static int roll_gender, roll_double;
 
 static char *tok(char **save)
 {
@@ -72,7 +77,21 @@ int main(int argc, char **argv)
         char *t = strtok_r(line, " \n", &save);
         if (!t || t[0] == '#') continue;
 
-        if (!strcmp(t, "C")) {
+        if (!strcmp(t, "R")) {
+            roll_gender = (int)num(&save);
+            roll_double = (int)num(&save);
+        } else if (!strcmp(t, "T")) {
+            /* the trainer's name and its partner's: upstream's locale keys end in the 1-based entry run-core rolled (index + 1); "-" = none */
+            const char *nk = tok(&save), *pk = tok(&save);
+            const char *dot = strrchr(nk, '.'), *pdot = strrchr(pk, '.');
+            const int name = !strcmp(nk, "-") || !dot ? -1 : atoi(dot + 1) - 1;
+            const int partner = !strcmp(pk, "-") || !pdot ? -1 : atoi(pdot + 1) - 1;
+            if (case_ok && (run.trainer_name != name || run.trainer_partner_name != partner)) {
+                case_ok = false;
+                if (++mismatches <= 20)
+                    printf("MISMATCH line %d: names got %d / %d expected %d / %d (%s %s)\n", line_no, run.trainer_name, run.trainer_partner_name, name, partner, nk, pk);
+            }
+        } else if (!strcmp(t, "C")) {
             if (cases && case_ok) matched++;
             cases++;
             const bool fixed = num(&save) != 0;
@@ -92,6 +111,9 @@ int main(int argc, char **argv)
             for (int i = 0; i < nlevels && i < PR_MAX_PARTY_TEMPLATE; i++) exp_levels[i] = (int)num(&save);
 
             start(seed, wave, biome, offset_gym, wave_cycle_offset, trainer_id, secret_id);
+            gc_int(&run)->evil_roll_pinned = true;
+            gc_int(&run)->evil_roll[0] = (uint8_t)roll_gender;
+            gc_int(&run)->evil_roll[1] = (uint8_t)roll_double;
             gc_new_battle(&run);
             case_fixed = fixed;
             if (fixed) fixed_fights++; else gyms++;
@@ -110,7 +132,7 @@ int main(int argc, char **argv)
             for (int i = 0; case_ok && i < nlevels; i++) case_ok = run.enemy[i].b.level == exp_levels[i];
             if (!case_ok && ++mismatches <= 20)
                 printf("MISMATCH line %d: %s wave %d got type %d (battle %d) expected %d, %d members expected %d\n", line_no,
-                       fixed ? "E4/Champion" : "gym", wave, run.trainer_type, run.battle_type, exp_type, run.n_enemy, nlevels);
+                       fixed ? "fixed" : "gym", wave, run.trainer_type, run.battle_type, exp_type, run.n_enemy, nlevels);
             member = 0;
             expected_members = nlevels;
         } else if (!strcmp(t, "M")) {
@@ -142,7 +164,7 @@ int main(int argc, char **argv)
             if (!ok) {
                 case_ok = false;
                 if (++mismatches <= 20)
-                    printf("MISMATCH line %d: %s member %d (species %d): %s differs (form got %d expected %d)\n", line_no, case_fixed ? "E4/Champion" : "gym", e,
+                    printf("MISMATCH line %d: %s member %d (species %d): %s differs (form got %d expected %d)\n", line_no, case_fixed ? "fixed" : "gym", e,
                            species, bad, m->b.form, x_form);
             } else {
                 members++;
@@ -153,7 +175,7 @@ int main(int argc, char **argv)
     fclose(f);
     (void)expected_members;
 
-    printf("gym/e4 in game-core: %d cases (%d gym waves, %d Elite Four / Champion), %d fully matched, %d members, %d stand-ins, %d without held items "
+    printf("gym/e4/evil in game-core: %d cases (%d gym waves, %d fixed fights), %d fully matched, %d members, %d stand-ins, %d without held items "
            "(genModifiersFunc champions), %d Wishiwashi already in School form, %d mismatches\n",
            cases, gyms, fixed_fights, matched, members, stand_ins, no_items, school_forms, mismatches);
     printf("TOTAL %d cases, %d mismatches\n", cases, mismatches);
