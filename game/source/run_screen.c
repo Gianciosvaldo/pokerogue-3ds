@@ -1286,7 +1286,39 @@ static void on_item_target_picked(int slot, int move_slot, void* arg) {
   answer(&rc);
 }
 
+/* DNA Splicers: the party screen's SPLICE mode gives the member that stays and the member that goes (party[] indexes, slot 6 when
+ * backed out), and game-core fuses them. The second one leaves the party, so the storage closes over its place: the indexes the
+ * screen keeps for the Pokemon on show follow the Pokemon, and the one that went is no longer on show. */
+static int shown_id(int index) { return index >= 0 && index < G.run.n_party ? (int)G.run.party[index].b.id : 0; }
+static int shown_index(int id) {
+  for (int i = 0; id && i < G.run.n_party; i++)
+    if ((int)G.run.party[i].b.id == id) return i;
+  return -1;
+}
+
+static void on_fusion_picked(int keep, int donor, void* arg) {
+  (void)arg;
+  ps_close();
+  if (keep < 0 || keep >= G.run.n_party || donor < 0 || donor >= G.run.n_party || keep == donor) {
+    open_shop_ui();
+    return;
+  }
+  rc.b = (int16_t)keep;
+  rc.c = (int16_t)donor;
+  const int lead = shown_id(G.shown), ally = shown_id(G.shown_ally);
+  if (!submit(&rc)) return; /* refused: told, and the reward screen comes back */
+  G.shown = shown_index(lead);
+  G.shown_ally = shown_index(ally);
+  if (G.shown < 0) G.present[0] = false;
+  if (G.shown_ally < 0) G.present[2] = false;
+  pump(NULL);
+}
+
 static void prompt_item_target(const gc_offer* offer) {
+  if (offer->target == GC_TARGET_FUSE) {
+    ps_open_fusion(&G.run, on_fusion_picked, NULL);
+    return;
+  }
   ps_open_reward(&G.run,offer->key,offer->target==GC_TARGET_MOVE,offer->arg,on_item_target_picked,NULL);
 }
 

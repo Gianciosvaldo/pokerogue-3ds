@@ -355,7 +355,7 @@ static void update_options(void) {
         P.options[P.nopt++] = PO_APPLY;
       }
       add_common_options(m);
-      if (m->fusion) P.options[P.nopt++] = PO_UNSPLICE;
+      if (m->fusion && !P.a.preserve_roster) P.options[P.nopt++] = PO_UNSPLICE;
       break;
     case PARTY_RELEASE:
       P.options[P.nopt++] = PO_RELEASE;

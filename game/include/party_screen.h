@@ -34,6 +34,11 @@ void ps_close(void);
 void ps_open_reward(const void* gc_run_ptr,const char* key,bool target_move,int item_arg,void (*on_pick)(int slot,int move_slot,void* arg),void* arg);
 void ps_open_item(const void* gc_run_ptr, int pmode, bool target_move, int tm_move, void (*on_pick)(int slot, int move_slot, void* arg), void* arg);
 
+/* Opens the party screen in SPLICE mode over a gc_run party (DNA Splicers on the reward screen): the first pick stays, the second one
+ * fuses into it and leaves the party. Each pick goes through game-core's gc_fusion_pickable. on_pick gets both as indexes into the run's
+ * party[] (the member that stays, the member that goes), or slot 6 when the player backs out. The screen stays open until ps_close. */
+void ps_open_fusion(const void* gc_run_ptr, void (*on_pick)(int keep, int donor, void* arg), void* arg);
+
 /* Opens the party screen in MODIFIER_TRANSFER mode over a gc_run party (the reward screen's Manage Items). on_move gets the item's
  * index in the run's item list, how many copies and the party index that gets them (-1 = discard them), and must apply the transfer to the run before
  * it returns (the screen then shows the run again). on_done runs when the player backs out; the screen stays open until ps_close. */

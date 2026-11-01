@@ -105,6 +105,20 @@ static void set_order(const gc_run* run) {
 
 static int storage_at(int slot) { return slot >= 0 && slot < S.n && slot < PR_MAX_PARTY ? order[slot] : slot; }
 
+/* The fusion half the icons and the summary draw (a Pokemon that has taken another one with DNA Splicers); `g` is the run's entry for the
+ * Pokemon, which holds the half's shine, NULL when the Pokemon isn't one of the run's */
+static void fill_fusion(menu_mon* m, const pr_pokemon* p, const gc_mon* g) {
+  m->fusion = p->fusion_species != 0;
+  if (!m->fusion) return;
+  m->fusion_species = p->fusion_species;
+  m->fusion_form = p->fusion_form;
+  m->fusion_gender = p->fusion_gender;
+  if (g) {
+    m->fusion_shiny = g->fusion_shiny;
+    m->fusion_variant = g->fusion_variant;
+  }
+}
+
 /* Converts gc_mon to menu_mon for item menus */
 static void gc_to_menu_mon(const gc_mon* gm, menu_mon* m) {
   memset(m, 0, sizeof *m);
@@ -146,6 +160,7 @@ static void gc_to_menu_mon(const gc_mon* gm, menu_mon* m) {
   m->met_level = p->level;
   if(gm)m->pokerus=gm->pokerus;
   fill_met(m, gm);
+  fill_fusion(m, p, gm);
   fill_items(m, p->id);
 }
 
@@ -190,6 +205,7 @@ static void ps_menu_mon(const pr_battle* bt, const pr_pokemon* p, menu_mon* m) {
   m->met_level = p->level;
   const gc_mon* g = run_mon_of(p);
   if (g) {m->pokerus=g->pokerus;fill_met(m, g);}
+  fill_fusion(m, p, g);
   if (g) fill_items(m, p->id);
 }
 
@@ -411,6 +427,57 @@ void ps_open_reward(const void* run,const char* key,bool target_move,int item_ar
   bool tm=!strcmp(key,"TM_COMMON")||!strcmp(key,"TM_GREAT")||!strcmp(key,"TM_ULTRA");
   int mode=!strcmp(key,"MEMORY_MUSHROOM")?PARTY_REMEMBER_MOVE_MODIFIER:tm?PARTY_TM_MODIFIER:target_move?PARTY_MOVE_MODIFIER:PARTY_MODIFIER;
   open_item(run,mode,target_move,item_arg,!strcmp(key,"TERA_SHARD"),pick,arg);
+}
+
+/* ---- DNA Splicers: the reward screen's SPLICE mode (SelectModifierPhase.openFusionMenu) ---- */
+
+/* FusePokemonModifierType.selectFilter, asked of each of the two picks */
+static const char* filter_fuse(void* ctx, int slot) {
+  (void)ctx;
+  return g_run && gc_fusion_pickable(g_run, storage_at(slot)) ? NULL : mui_t("partyUiHandler:anyEffect");
+}
+
+/* PartyModifierSpliceSelectCallback(fromSlotIndex, spliceSlotIndex): the party screen gives the first pick as `slot` and the second as
+ * `option`; leaving the screen is slot 6 with PO_CANCEL. Anything that isn't two different members of the party is the screen
+ * being left (openFusionMenu: resetModifierSelect) */
+static void on_fuse_select(void* ctx, int slot, int option) {
+  (void)ctx;
+  if (!ItemS.on_item_pick) return;
+  if (option == PO_CANCEL || slot < 0 || slot >= S.n || option < 0 || option >= S.n || slot == option) {
+    ItemS.on_item_pick(6, -1, ItemS.item_arg);
+    return;
+  }
+  ItemS.on_item_pick(storage_at(slot), storage_at(option), ItemS.item_arg);
+}
+
+void ps_open_fusion(const void* gc_run_ptr, void (*on_pick)(int keep, int donor, void* arg), void* arg) {
+  const gc_run* run = (const gc_run*)gc_run_ptr;
+  ps_set_run(run);
+  memset(&S, 0, sizeof S);
+  memset(&ItemS, 0, sizeof ItemS);
+  S.mode = PARTY_SPLICE;
+  ItemS.on_item_pick = on_pick;
+  ItemS.item_arg = arg;
+
+  if (run) {
+    set_order(run);
+    for (int slot = 0; slot < run->n_party && slot < PR_MAX_PARTY; slot++) gc_to_menu_mon(&run->party[order[slot]], &S.party[slot]);
+    S.n = run->n_party;
+  }
+
+  party_args a;
+  memset(&a, 0, sizeof a);
+  a.mode = PARTY_SPLICE;
+  a.battler_count = 1;
+  a.in_reward_phase = true;
+  a.filter = filter_fuse;
+  a.preserve_roster = true; /* unsplicing isn't ported: no Unsplice option on a fused member */
+
+  static party_events ev;
+  ev = (party_events){on_fuse_select, NULL, NULL, NULL, NULL, on_summary, NULL};
+  party_open(&a, S.party, S.n, &ev);
+  S.open = true;
+  ui_push(&g_screen);
 }
 
 /* ---- Manage Items: the reward screen's transfer (SelectModifierPhase.openModifierTransferScreen) ---- */

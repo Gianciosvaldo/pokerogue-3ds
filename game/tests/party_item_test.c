@@ -191,6 +191,117 @@ static void remember_reward_cases(void) {
   ps_open_reward(&run,"TERA_SHARD",false,POKEMON_TYPE_FIRE,on_pick,NULL);input(BTN_ACTION);input(BTN_ACTION);assert(picked==1&&depth==1);
 }
 
+/* DNA Splicers: the SPLICE screen over the reward screen's party. The first pick stays, the second leaves; the screen speaks party[] indexes
+ * and filters both picks with game-core's gc_fusion_pickable. */
+static int fused_keep = -1, fused_donor = -1, fuse_calls;
+static void on_fuse_pick(int keep, int donor, void* arg) {
+  (void)arg;
+  fuse_calls++;
+  fused_keep = keep;
+  fused_donor = donor;
+  ps_close();
+  assert(ui_top() == &shop);
+}
+static void open_fusion(void) {
+  fused_keep = fused_donor = -1;
+  ps_open_fusion(&run, on_fuse_pick, NULL);
+  assert(depth == 2 && party_active());
+}
+static void fusion_cases(void) {
+  memset(&run, 0, sizeof run);
+  run.n_party = 3;
+  for (int i = 0; i < 3; i++) {
+    pr_pokemon* p = &run.party[i].b;
+    p->id = 600 + i;
+    p->species = i == 1 ? SPECIES_ID_MAGIKARP : SPECIES_ID_CHARIZARD;
+    p->level = 20 + i;
+    p->hp = p->stats[0] = 100;
+    p->n_moves = 1;
+    p->moves[0] = MOVE_ID_TACKLE;
+    for (int j = 0; j < 4; j++) p->max_pp_override[j] = -1;
+  }
+  /* the screen lists party[2], party[0], party[1] */
+  run.party_order[0] = 2;
+  run.party_order[1] = 0;
+  run.party_order[2] = 1;
+  run.screen.kind = GC_SCREEN_REWARD;
+  ps_set_run(&run);
+
+  /* pick the first slot, then the second one: party[2] stays, party[0] goes */
+  open_fusion();
+  input(BTN_ACTION); input(BTN_ACTION);                    /* the options, Apply */
+  assert(fuse_calls == 0 && depth == 2);
+  input(BTN_DOWN); input(BTN_ACTION);                      /* the options of the second pick */
+  pf_clear_text(); ui_top()->draw(ui_top(), RR_BOTTOM);
+  assert(pf_text_count("Splice") == 1);
+  input(BTN_ACTION);                                       /* Splice */
+  assert(fuse_calls == 1 && fused_keep == 2 && fused_donor == 0 && depth == 1);
+
+  /* the other direction, over the last slot */
+  open_fusion();
+  input(BTN_DOWN); input(BTN_DOWN); input(BTN_ACTION); input(BTN_ACTION);   /* party[1] first */
+  input(BTN_UP); input(BTN_ACTION); input(BTN_ACTION);                      /* party[0] second */
+  assert(fuse_calls == 2 && fused_keep == 1 && fused_donor == 0 && depth == 1);
+
+  /* B while the second one is being chosen goes back to the first pick; B again leaves the screen */
+  open_fusion();
+  input(BTN_ACTION); input(BTN_ACTION);
+  input(BTN_CANCEL);
+  assert(fuse_calls == 2 && depth == 2);
+  input(BTN_CANCEL);
+  assert(fuse_calls == 3 && fused_keep == 6 && depth == 1);
+  open_fusion();
+  assert(ui_top()->touch(ui_top(), 291, 194));            /* the Cancel button */
+  assert(fuse_calls == 4 && fused_keep == 6 && depth == 1);
+
+  /* a Pokemon that is fused already has no effect, as the first pick and as the second */
+  run.party[0].b.fusion_species = SPECIES_ID_BULBASAUR;    /* the second slot */
+  run.party[0].fusion_shiny = true;
+  run.party[0].fusion_variant = 2;
+  run.party[0].b.fusion_form = 1;
+  open_fusion();
+  input(BTN_DOWN); input(BTN_ACTION); input(BTN_ACTION);   /* it first */
+  assert(fuse_calls == 4 && depth == 2);
+  ps_close();
+  open_fusion();
+  input(BTN_ACTION); input(BTN_ACTION);                    /* party[2] first: fine */
+  input(BTN_DOWN); input(BTN_ACTION); input(BTN_ACTION);   /* the fused one second */
+  assert(fuse_calls == 4 && depth == 2);
+  /* a fainted one in a Hardcore run */
+  ps_close();
+  run.party[0].b.fusion_species = 0;
+  run.run.has_challenges = true;
+  run.run.challenge_flags = 1u << CHALLENGES_HARDCORE;
+  run.party[1].b.hp = 0;
+  open_fusion();
+  input(BTN_ACTION); input(BTN_ACTION);                    /* party[2] first */
+  input(BTN_DOWN); input(BTN_DOWN); input(BTN_ACTION); input(BTN_ACTION);   /* the fainted party[1] second */
+  assert(fuse_calls == 4 && depth == 2);
+  ps_close();
+  run.run.has_challenges = false;
+  run.party[1].b.hp = 100;
+
+  /* a fused member shows its other half in the menus, and has no Unsplice option here (unsplicing isn't ported) */
+  run.party[0].b.fusion_species = SPECIES_ID_BULBASAUR;
+  open_fusion();
+  memset(&summary_mon, 0, sizeof summary_mon);
+  input(BTN_DOWN); input(BTN_ACTION);                      /* the options of the fused one (the second slot) */
+  pf_clear_text(); ui_top()->draw(ui_top(), RR_BOTTOM);
+  assert(!pf_text_count("Unsplice"));
+  input(BTN_DOWN); input(BTN_ACTION);                      /* Summary */
+  assert(summary_mon.fusion && summary_mon.fusion_species == SPECIES_ID_BULBASAUR && summary_mon.fusion_form == 1);
+  assert(summary_mon.fusion_shiny && summary_mon.fusion_variant == 2);
+  ps_close();
+  /* the battle's party screen shows it too */
+  run.bt.n_party[0] = 3;
+  for (int i = 0; i < 3; i++) run.bt.party[0][i] = &run.party[i].b;
+  memset(&summary_mon, 0, sizeof summary_mon);
+  ps_open(&run.bt, PS_SWITCH, on_pick, NULL);
+  input(BTN_ACTION); input(BTN_ACTION);                    /* party[0]'s summary */
+  assert(summary_mon.fusion && summary_mon.fusion_species == SPECIES_ID_BULBASAUR && summary_mon.fusion_form == 1);
+  assert(summary_mon.fusion_shiny && summary_mon.fusion_variant == 2);
+  ps_close();
+}
 int main(void) {
   run.n_party = 3;
   for (int i = 0; i < 3; i++) {
@@ -272,6 +383,7 @@ int main(void) {
   check_team_cases();
   order_cases();
   remember_reward_cases();
-  puts("party_item_test: TM labels, Teach/filter, B/touch cancellation and move-item reset passed");
+  fusion_cases();
+  puts("party_item_test: TM labels, Teach/filter, B/touch cancellation, move-item reset, remembered moves and the DNA Splicers screen passed");
   return 0;
 }
