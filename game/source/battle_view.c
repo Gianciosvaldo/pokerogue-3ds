@@ -86,6 +86,9 @@ static struct {
   float stats_alpha;
   tween stats_tw;
   side s[4]; /* primary player/enemy, secondary player/enemy */
+  bool late_double;   /* BEV_DOUBLES: the player's side went to two columns in the middle of the fight (the final boss' second phase) while
+                       * the foe's side did not: setup.doubles says both sides are doubles from the start */
+  float split;        /* how far the lead has stepped from the centre to its left place (0..1), tweened by BEV_DOUBLES */
   float arena_player_x, arena_enemy_x, enemy_slide;
   float arena_old_x;  /* the previous wave's enemy platform, sliding out (setup.next_encounter) */
   bool arena_old_on;
@@ -347,10 +350,39 @@ static int foot_gap(const side* sd) {
   return gap > 0 ? gap : 0;
 }
 
+/* Whether the player's side stands in two columns: a doubles encounter, or the final boss' second phase (BEV_DOUBLES), which turns a
+ * single fight into a double with the one foe where it was. The foe's side follows setup.doubles alone. */
+static bool player_doubles(void) { return B.setup.doubles || B.late_double; }
+/* How far the player's Pokemon are from the centre towards their column: 1 in a doubles encounter, BEV_DOUBLES' tween in the middle of one */
+static float player_split(void) { return B.setup.doubles ? 1.0f : B.late_double ? B.split : 0.0f; }
+
+/* BEV_DOUBLES, one frame of it; true when it is over. Pokemon.setFieldPosition(LEFT, 500): the boxes change at once (setMini, setOffset) and the
+ * sprite slides over 500 ms, Sine.easeOut. A screen that already has two player columns has nothing to do. */
+static bool step_doubles(float dt) {
+  if (B.step == 0) {
+    if (player_doubles()) return true;
+    B.late_double = true;
+    B.split = 0;
+    tween_start(&B.tw, 0, 1, 500, EASE_SINE_OUT);
+    B.step = 1;
+  }
+  tween_update(&B.tw, dt);
+  B.split = B.tw.value;
+  return tween_done(&B.tw);
+}
+
 static void mon_pos(const side* sd, bool player, float* x, float* y) {
   *x = (player ? 106 : 236 + B.enemy_slide) + sd->sub_off * (player ? -30 : 30);
   *y = (player ? PLAYER_Y : 84) + sd->sub_off * (player ? 10 : -10) + sd->catch_dy + foot_gap(sd) * sd->scale;
-  if(B.setup.doubles){bool right=field_of(sd)%2!=0;*x+=right?32:-32;*y+=player?(right?0:-8):(right?0:-8)-FOE_RAISE;} /* doubles: the foes stand above the player's boxes (field y 43 and up), which are 42 px tall */
+  const bool right = field_of(sd) % 2 != 0;
+  if (player) {
+    const float k = player_split(); /* FieldPosition.LEFT is (-32, -8), RIGHT (32, 0) */
+    *x += (right ? 32 : -32) * k;
+    *y += right ? 0 : -8 * k;
+  } else if (B.setup.doubles) { /* doubles: the foes stand above the player's boxes (field y 43 and up), which are 42 px tall */
+    *x += right ? 32 : -32;
+    *y += (right ? 0 : -8) - FOE_RAISE;
+  }
 }
 
 /* The doll ("pkmn__sub" / "pkmn__back__sub", origin (0.5, 1), half size on the player's side) at
@@ -722,14 +754,15 @@ static void draw_stat_panel(side *sd,bool player,float bx,float by){
 
 static float player_info_y(const side *sd){
   /* Keep both full-sized player boxes above the command strip at y=-48. */
-  return B.setup.doubles?(field_of(sd)==1?-72:-116):-72;
+  return player_doubles()?(field_of(sd)==1?-72:-116):-72;
 }
 
 /* A boss's box rests 48 px to the right of a mini one (Pokemon.showInfo slides it in by 246 px from -198, the others by 150 from -150):
  * the wide box (178 px against 130) keeps the same left margin. */
 static float info_base_x(const side *sd,bool player){
-  if(!B.setup.doubles)return player?310:sd->mon.boss?188:140;
-  return player?348:sd->mon.boss?150:102;
+  if(player)return player_doubles()?348:310;
+  if(!B.setup.doubles)return sd->mon.boss?188:140;
+  return sd->mon.boss?150:102;
 }
 
 /* how far a box slides in from (and out to) the side: Pokemon.showInfo / hideInfo */
@@ -1417,6 +1450,9 @@ static void run_event(float dt) {
     case BEV_FIELD_SWAP: {
       side tmp=B.s[0];B.s[0]=B.s[2];B.s[2]=tmp;finish_event();break;
     }
+    case BEV_DOUBLES:
+      if (step_doubles(dt)) finish_event();
+      break;
     case BEV_MESSAGE:
       if (B.step == 0) {
         msgbox_show(&B.msg, e->text ? e->text : "", -1, e->prompt);

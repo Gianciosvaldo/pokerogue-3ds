@@ -105,6 +105,10 @@ typedef enum {
                     * at or below it go dark (EnemyBattleInfo.updateBossSegmentDividers; upstream does it as the damage is dealt,
                     * before the bar moves, so this event comes before the hit's BEV_DAMAGE) */
   BEV_SHINY_SPARKLE, /* native ShinySparklePhase: battler, one-second phase; variant from the displayed Pokemon */
+  BEV_DOUBLES,     /* initFinalBossPhaseTwo's ToggleDoublePositionPhase(true): the player's side goes to two columns. The lead steps
+                    * to the left over 500 ms (setFieldPosition(LEFT, 500)) and both player info boxes take their doubles places;
+                    * the ally the next BEV_SUMMON sends out stands to its right. The foe is not moved: the one boss stays where
+                    * it was, in the single layout. Nothing happens on a screen that already shows two player columns */
 } bev_type;
 #define BV_DIALOGUE_TEXT 2048
 

@@ -612,6 +612,11 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
       case BEV_SHINY_SPARKLE:
         side_ok(e->battler,"shiny sparkle");
         break;
+      case BEV_DOUBLES:
+        /* the final boss' second phase turns a single fight into a double (the SummonPhase after it sends the ally out): the screen
+         * switch names no battler */
+        if (e->battler != -1) BAD("the doubles switch names battler %d", e->battler);
+        break;
       case BEV_MOVE_ANIM:
         side_ok(e->battler, "move animation");
         break;
