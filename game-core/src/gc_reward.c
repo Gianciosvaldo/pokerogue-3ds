@@ -42,13 +42,19 @@ static pr_pokemon with_partner_as_primary(const pr_pokemon *p, int a, int b)
     return t;
 }
 
-static bool can_species_tera(const gc_run *run, const pr_pokemon *p)
+/* canSpeciesTera(pokemon): findModifier(TerastallizeAccessModifier) (the Tera Orb), and not isMega() / isMax() /
+ * hasSpecies(NECROZMA, "ultra"), which looks at the fusion half as well */
+bool gc_can_species_tera(const gc_run *run, const pr_pokemon *p)
 {
-    /* canSpeciesTera: the Tera Orb, and not a Mega, a Gigantamax or Ultra Necrozma */
     if (gc_item_stack(run, "TERA_ORB") <= 0 || pr_is_mega(p) || pr_is_max(p)) return false;
-    const pr_species *sp = gc_species(p->species);
-    return !(p->species == SPECIES_ID_NECROZMA && sp && !strcmp(gc_form(p->species, p->form)->form_key, "ultra"));
+    if (p->species == SPECIES_ID_NECROZMA && gc_species(p->species) && !strcmp(gc_form(p->species, p->form)->form_key, "ultra"))
+        return false;
+    if (p->fusion_species == SPECIES_ID_NECROZMA && gc_species(p->fusion_species) &&
+        !strcmp(gc_form(p->fusion_species, p->fusion_form)->form_key, "ultra"))
+        return false;
+    return true;
 }
+static bool can_species_tera(const gc_run *run, const pr_pokemon *p) { return gc_can_species_tera(run, p); }
 
 int gc_types_for_item_spawn(gc_run *run, const gc_mon *m, int move, int8_t out[2])
 {

@@ -340,6 +340,12 @@ void gc_ai_enemy_party(gc_run *run);              /* ...and the enemy party's en
 void gc_battle_turn_init(gc_run *run);            /* TurnInitPhase's part: participants, resetTurnData */
 /* The player's command for field slot 0: fills bt->commands[0]; false (and why) if not allowed */
 bool gc_battle_player_command(gc_run *run, const gc_choice *c, const char **why);
+/* canSpeciesTera / canTerastallize (pokemon-utils.ts): the Tera Orb and a form that may Terastallize / also fewer than
+ * MAX_TERAS_PER_ARENA (1) used in this arena; and the command menu's own canTera() for field slot `field`, which also counts the
+ * Tera already chosen for slot 0 this turn */
+bool gc_can_species_tera(const gc_run *run, const pr_pokemon *p);
+bool gc_can_terastallize(const gc_run *run, const pr_pokemon *p);
+bool gc_can_tera_command(const gc_run *run, int field);
 void gc_battle_command_screen(gc_run *run);       /* fills run->screen for COMMAND */
 /* battle-core's turn from TurnStartPhase (or the pick after a SwitchPhase, pick >= -1), to its next
  * stop: returns the stop's phase type */

@@ -447,6 +447,23 @@ static bool has_any_pokeball(const gc_run *run)
     return false;
 }
 
+/* canTerastallize(pokemon): hasAvailableTeras (arena.playerTerasUsed < MAX_TERAS_PER_ARENA) && canSpeciesTera */
+#define GC_MAX_TERAS_PER_ARENA 1
+bool gc_can_terastallize(const gc_run *run, const pr_pokemon *p)
+{
+    return run->bt.player_teras_used < GC_MAX_TERAS_PER_ARENA && gc_can_species_tera(run, p);
+}
+
+/* CommandUiHandler.canTera(): the field Pokemon is the player's, canTerastallize, and the Tera already chosen for slot 0 this turn counts
+ * against the arena's limit when the command is for slot 1 (the pre-turn command is kept per slot, set by CommandPhase.handleFightCommand) */
+bool gc_can_tera_command(const gc_run *run, int field)
+{
+    const pr_pokemon *p = field >= 0 && field < 2 ? run->bt.field[field] : NULL;
+    if (!p || !p->is_player || !gc_can_terastallize(run, p)) return false;
+    const int planned = run->bt.pre_commands[0].command == COMMAND_TERA && field > 0;
+    return run->bt.player_teras_used + planned < GC_MAX_TERAS_PER_ARENA;
+}
+
 void gc_battle_command_screen(gc_run *run)
 {
     gc_screen *s = &run->screen;
@@ -465,10 +482,12 @@ void gc_battle_command_screen(gc_run *run)
     s->can_switch = p && allowed_bench(run) > 0 && !trapped(run, p);
     s->can_ball = run->battle_type == BATTLE_TYPE_WILD && has_any_pokeball(run);
     s->can_run = p && pr_can_run(&run->bt, p, NULL);
+    s->can_tera = p && gc_can_tera_command(run, field);
+    s->tera_type = s->can_tera ? (int8_t)pr_get_tera_type(p) : (int8_t)POKEMON_TYPE_UNKNOWN;
     if (gc_fg_active(run)) {
         /* withSkipToFightInput and withFleeAllowed(false): the FIGHT menu straight away, nothing else to choose */
         s->fight_only = true;
-        s->can_switch = s->can_ball = s->can_run = false;
+        s->can_switch = s->can_ball = s->can_run = s->can_tera = false;
     }
 }
 
@@ -492,6 +511,10 @@ bool gc_battle_player_command(gc_run *run, const gc_choice *c, const char **why)
             struggle = slot >= 0 && !any;
             if (!struggle) { *why = reason; return false; }
         }
+        /* c = 1: the Terastallize command (Command.TERA): the same fight command with a TERA pre-turn command. The menu only offers it
+         * through canTera(); a caller that sends it anyway is refused here rather than Terastallizing a Pokemon upstream would not let */
+        const bool tera = c->c == 1;
+        if (tera && !gc_can_tera_command(run, field)) { *why = "Terastallization is not available."; return false; }
         int move = struggle ? MOVE_ID_STRUGGLE : PR_MOVES(p)[slot];
         memset(tc, 0, sizeof *tc);
         tc->command = COMMAND_FIGHT;
@@ -511,10 +534,10 @@ bool gc_battle_player_command(gc_run *run, const gc_choice *c, const char **why)
         tc->n_targets = (uint8_t)n;
         memcpy(tc->targets, tg, (size_t)n);
         memset(pc, 0, sizeof *pc);
-        pc->command = COMMAND_FIGHT;
+        pc->command = tera ? COMMAND_TERA : COMMAND_FIGHT;
         pc->targets[0] = field;
         pc->n_targets = 1;
-        pc->skip = true;
+        pc->skip = !tera;   /* skip: command === Command.FIGHT */
         pc->cursor = PR_CURSOR_UNDEFINED;
         if(select_target){
             gc_screen *screen=&run->screen;memset(screen,0,sizeof *screen);
