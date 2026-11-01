@@ -12,13 +12,13 @@ node -e 'if(process.versions.node.split(".")[0]!=="22")throw Error("Use Node 22"
 producer_dir=$(mktemp -d "$upstream/test/tests/moves/trainer-constructor-XXXXXX")
 trap 'rm -rf -- "$producer_dir"' EXIT
 cp "$repo/game-core/tests/trainer-constructor.producer.test.ts" "$producer_dir/producer.test.ts"
-(cd "$upstream"; TRAINER_FULL_OUT="$output/native.json" TRAINER_FACTS_OUT="$output/move-facts.json" node node_modules/vitest/vitest.mjs run "$producer_dir/producer.test.ts" --maxWorkers=1 > "$output/native.log" 2>&1)
-python3 "$repo/game-core/tools/build-trainer-constructor-proof.py" "$output/native.json" "$output/native.inc"
+(cd "$upstream"; TRAINER_FULL_OUT="$output/native.json.gz" TRAINER_FACTS_OUT="$output/move-facts.json" node node_modules/vitest/vitest.mjs run "$producer_dir/producer.test.ts" --maxWorkers=1 > "$output/native.log" 2>&1)
+python3 "$repo/game-core/tools/build-trainer-constructor-proof.py" "$output/native.json.gz" "$output/native.inc"
 cmp "$output/native.inc" "$repo/game-core/build/trainer-constructor.native.inc"
 python3 - "$repo" "$output" <<'PY'
 from pathlib import Path
 import gzip,sys
 repo,output=map(Path,sys.argv[1:])
-assert (output/'native.json').read_bytes()==gzip.decompress((repo/'game-core/tests/fixtures/trainer-constructor.native.json.gz').read_bytes())
+assert gzip.decompress((output/'native.json.gz').read_bytes())==gzip.decompress((repo/'game-core/tests/fixtures/trainer-constructor.native.json.gz').read_bytes())
 print('Fresh actual trainer constructors and generated C fixture are byte-identical')
 PY

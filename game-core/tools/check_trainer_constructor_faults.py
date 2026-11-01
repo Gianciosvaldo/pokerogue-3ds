@@ -11,7 +11,7 @@ mutants=[
  ('no-trainer-diversity',move,'if (c->trainer) {','if (false) {'),
  ('no-trainer-weights',move,'if (c.trainer) {','if (false) {'),
  ('no-superceding',move,'if (c.boss || c.trainer) filter_superceded(&pool);','if (c.boss) filter_superceded(&pool);'),
- ('include-tm-domain',move,'m->b.level >= gc_mg_const.common_tm_level','m->b.level > 1000'),
+ ('omit-trainer-pools',move,'if (c.trainer && !trainer_pools(&c, &pool)) return false;','if (false) return false;'),
  ('wrong-trainer-stream',entry,'gc_generate_moveset(state->run, &r->rng, m)','gc_generate_moveset(state->run, &state->run->bt.battle_rng, m)'),
  ('double-finish',entry,'if (state.ready[e]) {','if (false) {'),
  ('disabled-owner',entry,'finish_trainer_constructor, &state','NULL, NULL'),
@@ -22,6 +22,15 @@ mutants=[
  ('decline-output',party,'if (!handled) { run->rng = base_rng; out->mons[e] = base; }','if (!handled) { run->rng = base_rng; }'),
  ('reject-old-moves',move,'m->b.level < 1 || m->b.n_moves','m->b.level < 1'),
  ('no-form-guard',move,'if (!sp || (trainer && (sp->form_change_triggers','if (!sp || (false && (sp->form_change_triggers'),
+ ('omit-relearner-weight',move,'weight = c.trainer && c.p.level >= gc_mg_const.relearn_level ? gc_mg_const.relearn_move_weight : 0;','weight = 0;'),
+ ('delay-common-tms',move,'if (c->p.level >= gc_mg_trainer_const.tm_level[0]) {','if (c->p.level >= gc_mg_trainer_const.tm_level[1]) {'),
+ ('reverse-tm-order',move,'for (int k = 0; k < list->n; k++) {','for (int k = list->n - 1; k >= 0; k--) {'),
+ ('lose-tm-weight',move,'(mg_ent){move, gc_mg_trainer_const.tm_weight[tier]}','(mg_ent){move, 0}'),
+ ('allow-forbidden-tms',move,'sorted_has(gc_mg_tm_forbidden, gc_mg_tm_forbidden_count, move)','false'),
+ ('unlimited-tm-cap',move,'nonlevel >= tm_cap && c->source_of[move] == 1','false'),
+ ('lose-tm-count',move,'if (c->source_of[move] == 1) c->tm_count++;','if (c->source_of[move] == 1) {}'),
+ ('lose-tm-cross-superceding',move,'(a && pool_find(a, gc_mg_superceded_moves[row->first + k]) >= 0)','false'),
+
 ]
 with tempfile.TemporaryDirectory(prefix='trainer-owner-')as directory:
  d=pathlib.Path(directory)

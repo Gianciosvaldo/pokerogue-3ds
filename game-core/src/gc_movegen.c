@@ -7,9 +7,9 @@
  * category its species must not use, weather or terrain setters when its ability or passive sets one and status moves under
  * Gorilla Tactics (and when that leaves nothing, the unfiltered pool again without the soft blocklists); its weights are raised
  * to 2 instead of 1.6; and a boss has its passive, whose attributes act after its ability's wherever the generator reads
- * abilities. Ordinary Classic trainers below the TM/relearner thresholds also use this owner: source
- * trainer blocklists, weight adjustments and remaining-slot type diversity apply. Higher-level
- * TM/egg pools, instant Tera and trainer-specific signatures remain guarded. Power-table queries
+ * abilities. Ordinary Classic trainers also use their ordered TM pool and caps, trainer
+ * blocklists, weight adjustments and remaining-slot type diversity. Egg-enabled trainers,
+ * instant Tera and trainer-specific rival signatures remain guarded. Power-table queries
  * include the resolved move type so an active type-changing
  * ability can affect a type-conditional passive. Explicit passive overrides on fusions remain outside this owner.
  *
@@ -66,6 +66,8 @@ typedef struct {
     bool boss, single, trainer; /* isBoss(), singles, hasTrainer() */
     uint16_t moves[4];          /* the moveset so far */
     int n_moves;
+    int tm_count; /* includes selected moves later removed as useless */
+    unsigned char source_of[PR_MOVE_COUNT];
 } mg_ctx;
 
 static const gc_mg_move *mgm(int move) { return &gc_mg_moves[move]; }
@@ -228,6 +230,8 @@ static int pick_weighted(pr_rng *rng, const mg_ent *pool, int n, double total)
 static void add_to_moveset(mg_ctx *c, mg_pool *base, int move)
 {
     pool_delete(base, move);
+    if (c->source_of[move] == 1) c->tm_count++;
+    c->source_of[move] = 0;
     c->moves[c->n_moves++] = (uint16_t)move;
 }
 
@@ -427,6 +431,8 @@ static bool filter_useless_moves(mg_ctx *c)
     return false;
 }
 
+static int nonlevel_cap(int level, const int thresholds[4]);
+
 /* ---- fillInRemainingMovesetSlots ---- */
 
 static void fill_remaining(mg_ctx *c, pr_rng *rng, mg_pool *base)
@@ -440,7 +446,9 @@ static void fill_remaining(mg_ctx *c, pr_rng *rng, mg_pool *base)
             bool taken = false;
             for (int k = 0; k < c->n_moves; k++)
                 if (c->moves[k] == move || (mg_flag(move, GC_MGF_SACRIFICIAL) && mg_flag(c->moves[k], GC_MGF_SACRIFICIAL))) taken = true;
-            if (taken) continue;
+            const int nonlevel = c->tm_count;
+            const int tm_cap = nonlevel_cap(c->p.level, gc_mg_trainer_const.tm_cap_level);
+            if (taken || (nonlevel >= tm_cap && c->source_of[move] == 1)) continue;
             remaining[n++] = base->e[i];
             total += base->e[i].w;
         }
@@ -467,8 +475,7 @@ static void fill_remaining(mg_ctx *c, pr_rng *rng, mg_pool *base)
             }
         }
         const int index = pick_weighted(rng, remaining, n, total);
-        pool_delete(base, remaining[index].move);
-        c->moves[c->n_moves++] = remaining[index].move;
+        add_to_moveset(c, base, remaining[index].move);
     }
 }
 
@@ -486,7 +493,7 @@ static bool sorted_has(const uint16_t *list, int n, int move)
 }
 
 /* filterSupercededMoves(pool): a move goes when any move that supercedes it is in the pool as it stood before the filter */
-static void filter_superceded(mg_pool *p)
+static void filter_superceded_extra(mg_pool *p, const mg_pool *a)
 {
     bool del[MG_POOL_MAX] = {false};
     for (int i = 0; i < p->n; i++) {
@@ -499,11 +506,64 @@ static void filter_superceded(mg_pool *p)
         }
         if (!row) continue;
         for (int k = 0; k < row->n; k++)
-            if (pool_find(p, gc_mg_superceded_moves[row->first + k]) >= 0) { del[i] = true; break; }
+            if (pool_find(p, gc_mg_superceded_moves[row->first + k]) >= 0
+                || (a && pool_find(a, gc_mg_superceded_moves[row->first + k]) >= 0)) { del[i] = true; break; }
     }
     int out = 0;
     for (int i = 0; i < p->n; i++) if (!del[i]) p->e[out++] = p->e[i];
     p->n = out;
+}
+
+static void filter_superceded(mg_pool *p) { filter_superceded_extra(p, NULL); }
+
+static int nonlevel_cap(int level, const int thresholds[4])
+{
+    int cap = 0;
+    for (int i = 0; i < 4; i++) cap += level >= thresholds[i];
+    return cap;
+}
+
+/* Ordered native pools: TMs, then level moves. Ordinary configs disable eggs
+ * (checked at admission), so the source tmCount + eggCount is just tmCount.
+ * Forced signature/STAB picks bypass the fill cap as upstream does. */
+static bool trainer_pools(mg_ctx *c, mg_pool *level)
+{
+    static mg_pool tm, combined;
+    tm.n = combined.n = 0;
+    if (c->p.level >= gc_mg_trainer_const.tm_level[0]) {
+        const pr_reward_species *species = NULL;
+        int lo = 0, hi = pr_reward_species_count - 1;
+        while (lo <= hi && !species) {
+            const int mid = (lo + hi) / 2, id = pr_reward_species_data[mid].id;
+            if (id == c->p.species) species = &pr_reward_species_data[mid];
+            else if (id < c->p.species) lo = mid + 1;
+            else hi = mid - 1;
+        }
+        if (!species) return false;
+        const int form = species->n_forms && c->p.form < species->n_forms ? c->p.form : 0;
+        const pr_tm_list *list = &pr_tm_lists[pr_reward_forms[species->form_start + form].tms];
+        for (int k = 0; k < list->n; k++) {
+            const int move = pr_tm_pool[list->start + k];
+            if (move >= pr_tm_tier_count || move >= PR_MOVE_COUNT) return false;
+            if (sorted_has(gc_mg_tm_forbidden, gc_mg_tm_forbidden_count, move)
+                || pool_find(level, move) >= 0 || pool_find(&tm, move) >= 0) continue;
+            int tier = pr_tm_tier[move];
+            if (tier < 0) continue;
+            tier &= 7; /* bit 3 is isUnimplemented; filterMovePool owns that exclusion */
+            if (tier > 2 || c->p.level < gc_mg_trainer_const.tm_level[tier]) continue;
+            if (tm.n >= MG_POOL_MAX) return false;
+            tm.e[tm.n++] = (mg_ent){move, gc_mg_trainer_const.tm_weight[tier]};
+        }
+        filter_superceded_extra(&tm, level);
+    }
+    if (tm.n + level->n > MG_POOL_MAX) return false;
+    for (int k = 0; k < tm.n; k++) {
+        combined.e[combined.n++] = tm.e[k];
+        c->source_of[tm.e[k].move] = 1;
+    }
+    for (int k = 0; k < level->n; k++) combined.e[combined.n++] = level->e[k];
+    *level = combined;
+    return true;
 }
 
 /* getSpeciesDeniedOffensiveStat(species, form): the MoveCategory the species must not generate, or -1 */
@@ -575,15 +635,15 @@ bool gc_generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m)
 {
     if (run->run.has_challenges) return false;
     const bool trainer = m->b.has_trainer || m->trainer_slot || m->b.trainer_slot;
-    /* This constructor domain has no TM/egg pool or instant Tera. Rivals, Gym/E4,
+    /* Ordinary Classic trainer pools. Instant Tera, rivals, Gym/E4,
      * challenges, fusions and post-moveset form callbacks need separate owners. */
     if (trainer && (!m->b.has_trainer || !m->trainer_slot
         || m->trainer_slot != m->b.trainer_slot || m->trainer_slot > TRAINER_SLOT_TRAINER_PARTNER
         || m->b.level < 1 || m->b.n_moves || run->battle_type != BATTLE_TYPE_TRAINER
-        || m->b.level >= gc_mg_const.common_tm_level || m->b.level >= gc_mg_const.relearn_level
         || m->b.fusion_species || m->b.is_boss || m->b.passive_flag || m->b.terastallized
         || m->b.n_tags || m->b.on_field || run->run.mode != GAME_MODES_CLASSIC
-        || run->trainer_type <= 0 || run->trainer_type > TRAINER_TYPE_YOUNGSTER)) return false;
+        || run->trainer_type <= 0 || run->trainer_type > TRAINER_TYPE_YOUNGSTER
+        || run->trainer_type >= gc_mg_trainer_egg_count || gc_mg_trainer_egg[run->trainer_type])) return false;
     const pr_species *sp = gc_species(m->b.species);
     if (!sp || (trainer && (sp->form_change_triggers
         & (1u << PR_FCT_SpeciesFormChangeMoveLearnedTrigger)))) return false;
@@ -625,7 +685,8 @@ bool gc_generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m)
             double weight = learn_level + gc_mg_const.base_level_weight_offset;
             if (learn_level == 0) weight = gc_mg_const.evolution_move_weight;
             else if (learn_level == 1 && pr_moves[id].power >= gc_mg_const.evo_move_bp_threshold) weight = gc_mg_const.relearn_move_weight;
-            else if (learn_level == -1) weight = 0;
+            else if (learn_level == -1)
+                weight = c.trainer && c.p.level >= gc_mg_const.relearn_level ? gc_mg_const.relearn_move_weight : 0;
             if (pool.n >= MG_POOL_MAX) return false;
             pool.e[pool.n].move = (uint16_t)id;
             pool.e[pool.n++].w = weight;
@@ -633,6 +694,7 @@ bool gc_generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m)
         /* 2. a boss drops what a better move of its pool makes redundant, then filterMovePool; when that leaves nothing the
          * unfiltered pool is filtered again without the soft blocklists */
         if (c.boss || c.trainer) filter_superceded(&pool);
+        if (c.trainer && !trainer_pools(&c, &pool)) return false;
         static mg_pool unfiltered;
         unfiltered = pool;
         filter_move_pool(&c, &pool, false);

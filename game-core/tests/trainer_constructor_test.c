@@ -1,5 +1,6 @@
 /* Real native constructor observations, through the production party caller. */
 #include "../src/internal.h"
+#include "gc/movegen.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,6 +16,7 @@ typedef struct {
     int index, type, wave, level;
     bool doubles, full;
     int cycle;
+    bool allow_egg;
     pr_party_template tpl;
     pr_rng ambient;
     int start, n;
@@ -23,7 +25,7 @@ typedef struct {
 static gc_run run;
 static const trainer_party_case *group;
 static const trainer_member_case *member;
-static unsigned checks, constructors, generated, finished, parties, doubles, high_guards;
+static unsigned checks, constructors, generated, finished, parties, doubles;
 static int base_count, move_count, finish_count;
 static bool observing, inject_stats_failure;
 static int injected_finish_calls;
@@ -66,7 +68,7 @@ bool __real_gc_generate_moveset(gc_run*,pr_rng*,gc_mon*);
 bool __wrap_gc_generate_moveset(gc_run *r,pr_rng *rng,gc_mon *m)
 {
     if (!observing) return __real_gc_generate_moveset(r,rng,m);
-    CHECK(member && group->level<25 && state(rng,&member->moves_before));
+    CHECK(member && state(rng,&member->moves_before));
     CHECK(m->b.friendship==member->initial.friendship);
     CHECK(m->b.id==member->initial.id && m->b.ability==member->ability && m->b.trainer_slot==member->slot);
     for(int k=0;k<6;k++) CHECK(m->b.ivs[k]==member->initial.ivs[k]);
@@ -113,18 +115,7 @@ static void native_cases(void)
     for (unsigned i=0;i<sizeof trainer_parties/sizeof *trainer_parties;i++) {
         group=&trainer_parties[i];setup(group);
         int levels[6];for(int k=0;k<group->n;k++)levels[k]=group->level;
-        if (group->level>=25) {
-            /* Higher pools remain explicitly unowned: retain actual prefix proof
-             * and require atomic rejection of the weighted factory. */
-            pr_trainer_party_ctx c=context();pr_trainer_party p;observing=true;
-            CHECK(!pr_run_gen_trainer_party(&run.run,&c,&p));observing=false;
-            CHECK(p.n==1 && base_count==1 && !move_count && !finish_count);
-            CHECK(state(&run.run.rng,&group->ambient));
-            gc_mon m;gc_mon_new_enemy(&run,&m,member->species,member->level,&member->initial,member->slot);
-            gc_mon before=m;pr_rng rng=member->moves_before;
-            CHECK(!gc_generate_moveset(&run,&rng,&m));CHECK(!memcmp(&m,&before,sizeof m));
-            CHECK(state(&rng,&member->moves_before));high_guards++;continue;
-        }
+        CHECK(gc_mg_trainer_egg[group->type]==group->allow_egg);
         uint32_t stub_before[16];memcpy(stub_before,run.stubs,sizeof stub_before);observing=true;
         CHECK(gc_gen_trainer_party(&run,&group->tpl,group->type,run.trainer_variant,levels,group->n));
         observing=false;
@@ -146,7 +137,7 @@ static void native_cases(void)
         }
         if(group->full){parties++;doubles+=group->doubles;}
     }
-    CHECK(parties==504 && constructors==1880 && generated==1752 && finished==1752 && high_guards==128);
+    CHECK(parties==856 && constructors==3574 && generated==3574 && finished==3574);
 }
 /* The run-core continuation contract must keep old prefix callers intact even
  * if a declining callback has already touched its temporary RNG/output. */
@@ -175,7 +166,7 @@ static void unsupported(void)
         case 2:m.b.trainer_slot=0;break;
         case 3:m.trainer_slot=TRAINER_SLOT_TRAINER_PARTNER;break;
         case 4:run.trainer_type=TRAINER_TYPE_RIVAL;break;
-        case 5:m.b.level=25;break;
+        case 5:run.trainer_type=TRAINER_TYPE_UNKNOWN;break;
         case 6:m.b.fusion_species=SPECIES_ID_DITTO;break;
         case 7:m.b.is_boss=true;break;
         case 8:m.b.passive_flag=true;break;
@@ -208,6 +199,6 @@ static void unsupported(void)
 int main(void)
 {
     native_cases();continuation_contract();unsupported();
-    printf("Trainer constructors: %u checks, %u actual base prefixes, %u complete moves/PP/finish streams, %u whole parties (%u doubles), %u higher-level guards\n",checks,constructors,generated,parties,doubles,high_guards);
+    printf("Trainer constructors: %u checks, %u actual base prefixes, %u complete moves/PP/finish streams, %u whole parties (%u doubles)\n",checks,constructors,generated,parties,doubles);
     return 0;
 }

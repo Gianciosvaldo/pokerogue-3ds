@@ -4,6 +4,12 @@
 
 const gc_mg_constants gc_mg_const = {20, 70, 60, 50, 1.6, 120, 60, 70, 0.4, 25, 40};
 
+const gc_mg_trainer_constants gc_mg_trainer_const = {{25, 40, 55}, {12, 14, 18}, {25, 41, 71, 101}};
+const int gc_mg_tm_forbidden_count = 24;
+const uint16_t gc_mg_tm_forbidden[24] = {5, 6, 36, 70, 101, 138, 148, 173, 184, 206, 214, 244, 264, 283, 285, 590, 599, 796, 798, 802, 803, 804, 913, 918};
+const int gc_mg_trainer_egg_count = 64;
+const bool gc_mg_trainer_egg[64] = {false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false};
+
 const int gc_mg_move_count = 921;
 const gc_mg_move gc_mg_moves[921] = {
     {0u, 0, 0, 0, 0},

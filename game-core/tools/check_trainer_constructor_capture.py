@@ -27,11 +27,11 @@ with tempfile.TemporaryDirectory(prefix='trainer-transport-')as directory:
  # Mutate consistent full-party snapshots: transport is allowed to copy native data,
  # but the committed independent projection must detect forged moves or outcomes.
  def consistent(y,key,value):
-  p=y['parties'][0];m=p['members'][0]
+  p=y['parties'][504];m=p['members'][0]
   for f in [m['atMoves']['output'],m['atConstructor']['output'],m['finished'],p['refreshed'][0]]:f[key]=copy.deepcopy(value)
  reject('forged-consistent-moves',lambda y:consistent(y,'moves',[{'move':1,'ppUsed':0,'ppUp':0}]))
  def final_ivs(y):
-  p=y['parties'][0];m=p['members'][0]
+  p=y['parties'][504];m=p['members'][0]
   for f in [m['atConstructor']['output'],m['finished'],p['refreshed'][0]]:f['ivs'][0]=(f['ivs'][0]+1)%32
  reject('forged-finish-ivs',final_ivs)
  source.write_text('{"version":1,"version":1}')
