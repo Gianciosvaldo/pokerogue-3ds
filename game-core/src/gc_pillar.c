@@ -74,23 +74,9 @@ static const pr_party_template *hard_template(int wave)
 
 static const double level_modifier[3] = {0, 1, 1.5};
 
-void gc_pillar_execute(gc_run *run, int option)
+/* onInit: the three trainers, on the wave's offset stream (run->run.rng must already be that stream) */
+static void draw_trainers(gc_run *run, int type[3], bool female[3])
 {
-    gc_internal *in = gc_int(run);
-    const gc_custom_hooks *h = in->custom;
-    static gc_custom_team team;
-    memset(&team, 0, sizeof team);
-    team.passive = -1;
-    if (option < 0 || option > 2 || !h || !h->pillar || !h->pillar(h->user, run, option, &team) || !gc_custom_team_check(&team, NULL)) {
-        gc_me_leave_with_heal_shop(run);
-        return;
-    }
-
-    /* onInit: the three trainers, on the wave's offset stream */
-    const pr_rng saved = run->run.rng;
-    run->run.rng = pr_run_seed_offset_rng(&run->run, run->wave, NULL);
-    int type[3];
-    bool female[3];
     type[0] = pick_type(run, false);
     female[0] = type[0] >= 0 && roll_female(run, type[0]);
     type[1] = pick_type(run, false);
@@ -98,6 +84,38 @@ void gc_pillar_execute(gc_run *run, int option)
     female[1] = type[1] >= 0 && roll_female(run, type[1]);
     type[2] = pick_type(run, true);
     female[2] = type[2] >= 0 && roll_female(run, type[2]);
+}
+
+/* the three trainers of Mysterious Challengers as the encounter starts (the screen draws their silhouettes) */
+void gc_mc_trainers(gc_run *run, int type[3], int variant[3])
+{
+    const pr_rng saved = run->run.rng;
+    bool female[3];
+    run->run.rng = pr_run_seed_offset_rng(&run->run, run->wave, NULL);
+    draw_trainers(run, type, female);
+    run->run.rng = saved;
+    for (int i = 0; i < 3; i++) variant[i] = female[i] ? TRAINER_VARIANT_FEMALE : TRAINER_VARIANT_DEFAULT;
+}
+
+/* mc: Mysterious Challengers, whose trainers fight with the teams game-core generates; else the Pillar Men, whose teams the app hands in */
+static void execute(gc_run *run, int option, bool mc)
+{
+    gc_internal *in = gc_int(run);
+    const gc_custom_hooks *h = in->custom;
+    static gc_custom_team team;
+    memset(&team, 0, sizeof team);
+    team.passive = -1;
+    if (option < 0 || option > 2 ||
+        (!mc && (!h || !h->pillar || !h->pillar(h->user, run, option, &team) || !gc_custom_team_check(&team, NULL)))) {
+        gc_me_leave_with_heal_shop(run);
+        return;
+    }
+
+    const pr_rng saved = run->run.rng;
+    run->run.rng = pr_run_seed_offset_rng(&run->run, run->wave, NULL);
+    int type[3];
+    bool female[3];
+    draw_trainers(run, type, female);
 
     /* the option's own stream (executeWithSeedOffset(wave * 10, 100, 1000)): the battle's draws */
     static const int offset_mult[3] = {10, 100, 1000};
@@ -141,7 +159,7 @@ void gc_pillar_execute(gc_run *run, int option)
             run->trainer_variant = female[0] ? TRAINER_VARIANT_FEMALE : TRAINER_VARIANT_DEFAULT;
             ok = gc_gen_trainer_party(run, tpl, type[0], run->trainer_variant, levels, n);
         }
-        if (ok) {
+        if (ok && !mc) {
             if (team.n > n) team.n = (uint8_t)n;
             ok = gc_custom_build_trainer(run, &team);
         }
@@ -170,11 +188,15 @@ void gc_pillar_execute(gc_run *run, int option)
     if (run->eng.awaiting_confirm) gc_rq_unshift(run, gc_rp(RP_CHECK_SWITCH, 0, 0, 0));
     in->pillar.active = true;
     in->pillar.option = (int8_t)option;
+    in->pillar.mc = mc;
     in->at_save_point = false;   /* the encounter's one save is the one at its start */
     gc_rq_push(run, gc_rp(RP_TURN_INIT, 0, 0, 0));
 }
 
 /* handleMysteryEncounterVictory: BattleEndPhase(victory), then the encounter's rewards (setEncounterRewards) and the next wave */
+void gc_pillar_execute(gc_run *run, int option) { execute(run, option, false); }
+void gc_mc_execute(gc_run *run, int option) { execute(run, option, true); }
+
 void gc_pillar_victory(gc_run *run)
 {
     gc_internal *in = gc_int(run);

@@ -495,6 +495,12 @@ void gc_mystery_setup_screen(gc_run *run)
 
     s->n_options = n;
     for (int i = 0; i < 8; i++) s->option_ok[i] = i < n;
+    for (int i = 0; i < 3; i++) s->mc_trainer[i] = -1;
+    if (type == GC_ME_MYSTERIOUS_CHALLENGERS) {
+        int t[3], v[3];
+        gc_mc_trainers(run, t, v);
+        for (int i = 0; i < 3; i++) { s->mc_trainer[i] = (int16_t)t[i]; s->mc_variant[i] = (int8_t)v[i]; }
+    }
 
     if (type == GC_ME_AN_OFFER_YOU_CANT_REFUSE) {
         /* selling and leaving need nothing; extorting needs a Pokemon allowed in battle with an extortion move or ability */
@@ -1229,20 +1235,7 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_MYSTERIOUS_CHALLENGERS:
-        if (option == 0) {
-            gc_port_give_reward(run, "MEMORY_MUSHROOM");
-            end_mystery_encounter_leave(run);
-            return true;
-        } else if (option == 1) {
-            gc_port_give_reward(run, "RARE_CANDY");
-            end_mystery_encounter_leave(run);
-            return true;
-        } else if (option == 2) {
-            gc_port_give_reward(run, "EXP_CHARM");
-            end_mystery_encounter_leave(run);
-            return true;
-        }
-        end_mystery_encounter_leave(run);
+        gc_mc_execute(run, option);
         return true;
 
     case GC_ME_MYSTERIOUS_CHEST:
