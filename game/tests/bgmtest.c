@@ -377,7 +377,7 @@ int main(int argc, char** argv) {
       starts = SND.starts;
       bgm_on_foe_sent_out(&R); /* its second Pokemon */
       CHECK(SND.starts == starts, "the trainer's second Pokemon restarted the music");
-      bgm_on_trainer_defeated(&R);
+      bgm_on_trainer_defeated(R.trainer_type);
       CHECK(!strcmp(bgm_current(), bgm_trainer_victory(enc->trainer_type)), "victory music %s, want %s", bgm_current(),
             bgm_trainer_victory(enc->trainer_type));
 

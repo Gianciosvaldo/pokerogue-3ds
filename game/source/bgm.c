@@ -76,6 +76,6 @@ void bgm_on_foe_sent_out(const gc_run* run) {
   bgm_play(track_now(run, buf));
 }
 
-void bgm_on_trainer_defeated(const gc_run* run) { bgm_play(bgm_trainer_victory(run->trainer_type)); }
+void bgm_on_trainer_defeated(int trainer_type) { bgm_play(bgm_trainer_victory(trainer_type)); }
 
 void bgm_on_run_end(bool clear) { bgm_fade_out(clear ? 10000.0f : 5000.0f); }

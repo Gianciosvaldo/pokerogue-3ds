@@ -317,7 +317,8 @@ void ui_fade(float out_ms, float hold_ms, float in_ms, void (*at_black)(void* ar
 static struct {
   bool have;
   char battle[BGM_NAME_LEN]; /* what this wave's battle plays once it is going, as the chooser answers for the run when the scene is set up */
-  int scenes, encounter_scenes, commands, victories, run_end_fades, starts;
+  int trainer;               /* the trainer of this wave's scene (TrainerType), -2 when the battle is not a trainer's */
+  int scenes, encounter_scenes, commands, victories, run_end_fades, starts, slide_backs;
   char seen[400][BGM_NAME_LEN];
   int n_seen;
 } M;
@@ -329,11 +330,11 @@ static void snd_start(const char* key) {
 }
 
 /* what upstream's Battle.getBgmOverride / the biome's music gives for the run as it is now (bgm_choose, not the app's scene code) */
-static const char* expect_track(const gc_run* r, bool started, char buf[BGM_NAME_LEN]) {
+static const char* expect_track(const gc_run* r, int biome, bool started, char buf[BGM_NAME_LEN]) {
   bgm_scene sc;
   memset(&sc, 0, sizeof sc);
   sc.wave = r->wave;
-  sc.biome = r->biome;
+  sc.biome = biome;
   sc.battle_type = r->battle_type;
   sc.me_default = r->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER;
   sc.started = started;
@@ -372,17 +373,20 @@ void __wrap_gc_ev_battle(gc_run*run){__real_gc_ev_battle(run);promote_event_stor
 void __wrap_gc_ev_battle_chunk(gc_run*run,const pr_event*events,int n){__real_gc_ev_battle_chunk(run,events,n);promote_event_storage(run);}
 
 /* a scene was just set up (at black): its music is upstream's, with the trainer's encounter music before its first send-out */
-static void music_scene(void) {
+static void music_scene(int scene_biome) {
   const gc_run* r = rs_run();
   if(!r->battle_event_reserve) BAD("new/resumed app run has no presentation storage owner");
   char b1[BGM_NAME_LEN], b2[BGM_NAME_LEN];
-  const char* first = expect_track(r, false, b1);
-  const char* battle = expect_track(r, true, b2);
+  /* the scene's biome is the one its wave event named: when a batch of events holds two waves (a hit that wins the wave before the player is
+   * asked anything, as with a locked-in move), the run is already in the next wave's biome when the first wave's scene is set up */
+  const char* first = expect_track(r, scene_biome, false, b1);
+  const char* battle = expect_track(r, scene_biome, true, b2);
   if (strcmp(bgm_current(), first)) BAD("the wave starts with the music \"%s\", upstream plays \"%s\"", bgm_current(), first);
   char key[BGM_NAME_LEN + 16];
   snprintf(key, sizeof key, "audio/bgm/%s", first);
   if (strcmp(SND.key, key) || SND.volume != 1.0f) BAD("the DSP plays \"%s\" at volume %.2f, the wave wants \"%s\"", SND.key, SND.volume, key);
   snprintf(M.battle, sizeof M.battle, "%s", battle);
+  M.trainer = r->battle_type == BATTLE_TYPE_TRAINER ? r->trainer_type : -2;
   M.have = true;
   M.scenes++;
   if (strcmp(first, battle)) M.encounter_scenes++;
@@ -472,7 +476,7 @@ void bv_begin(const bv_setup* setup) {
   memset(W.fainted_shown,0,sizeof W.fainted_shown);
   W.playing = W.asking = false;
   W.sp_open = false;
-  music_scene();
+  music_scene(setup->biome);
 }
 
 bv_mon* bv_mon_of(int battler) { return &W.mon[screen_slot(battler)]; }
@@ -543,6 +547,13 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
         break;
       case BEV_TRAINER_SHOW:
         n_trainer_show++;
+        /* the beaten trainer slides back to his victory music: the trainer of this scene, even when the run is a wave further by now (a win on
+         * a wave with no reward screen goes straight on to the next one) */
+        if (M.have && M.trainer != -2) {
+          const char* v = bgm_trainer_victory(M.trainer);
+          if (strcmp(bgm_current(), v)) BAD("trainer %d slides back with the music \"%s\", its victory music is \"%s\"", M.trainer, bgm_current(), v);
+          M.slide_backs++;
+        }
         break;
       case BEV_INTRO_WILD:
         if (custom_on && e->a == 1 && e->text && !strcmp(e->text, "A Bizarre Foe appears!")) {
@@ -2102,6 +2113,7 @@ int main(int argc, char** argv) {
   if(n_mystery_trainer_scenes<st->mystery_trainers)BAD("a mystery trainer scene was not rebuilt with trainer art");
   if(custom_strong&&runs>=200&&!st->mystery_trainers)BAD("no same-wave mystery trainer scene was exercised");
   printf("mystery trainers: %d same-wave scenes rebuilt with trainer art and encounter music\n",n_mystery_trainer_scenes);
+  printf("victory music: %d trainer slide-backs checked against the beaten trainer's own track\n", M.slide_backs);
   /* Keep actual trainer victory/encounter coverage required. The additional
    * directed run supplies it even when every random team loses early. */
   if (trainer_music_fixture && M.victories <= trainer_music_victories)

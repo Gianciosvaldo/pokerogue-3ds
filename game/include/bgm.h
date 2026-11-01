@@ -44,8 +44,9 @@ void bgm_on_wave(const gc_run* run, int wave, int biome, int battle_type);
 /* A trainer sent out its first Pokemon: Battle.started becomes true, the encounter music gives way to the battle music
  * (EncounterPhase's doSummon). Harmless when the battle is not a trainer's or the music is already the battle's. */
 void bgm_on_foe_sent_out(const gc_run* run);
-/* TrainerVictoryPhase.start: the trainer's victory music (TrainerConfig.victoryBgm) */
-void bgm_on_trainer_defeated(const gc_run* run);
+/* TrainerVictoryPhase.start: the beaten trainer's victory music (TrainerConfig.victoryBgm). The type comes from the event, not from the
+ * run: a win on a wave with no reward screen (a gym leader, the Champion) is played after the next wave has started */
+void bgm_on_trainer_defeated(int trainer_type);
 /* GameOverPhase.handleGameOver: the music fades out, over 10 s after a win and 5 s after a loss */
 void bgm_on_run_end(bool clear);
 
