@@ -121,7 +121,8 @@ typedef enum {
 } gc_screen_kind;
 
 typedef enum {
-    GC_CH_FIGHT,            /* COMMAND: a = move slot (0-3), b = target BattlerIndex (-1 = the move's own) */
+    GC_CH_FIGHT,            /* COMMAND: a = move slot (0-3), b = target BattlerIndex (-1 = the move's own), c = 1 to Terastallize
+                             * this turn (Command.TERA; only when the screen's can_tera is set, refused otherwise) */
     GC_CH_BALL,             /* COMMAND: a = PokeballType */
     GC_CH_POKEMON,          /* COMMAND: a = party index to switch in */
     GC_CH_RUN,              /* COMMAND */
@@ -177,6 +178,8 @@ typedef struct {
      * upstream i18n key, e.g. "battle:moveNoPp"; {{moveName}} is the slot's move and
      * {{pokemonNameWithAffix}} the Pokemon) in move_why */
     bool can_ball, can_switch, can_run, can_undo;
+    bool can_tera;          /* CommandUiHandler.canTera(): the Terastallize button is offered; tera_type = its type (getTeraType()) */
+    int8_t tera_type;
     bool fight_only;        /* a mystery encounter skips to the FIGHT menu (skipToFightInput): the menu cannot be backed out of */
     bool target_ok[4];       /* TARGET: legal single-target choices */
     bool move_ok[4];

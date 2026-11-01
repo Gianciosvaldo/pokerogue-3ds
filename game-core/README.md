@@ -200,7 +200,7 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 
 Not started: the dex and starter unlocks, eggs, Imprison and the
 restriction texts of their own (a restricted move answers `battle:moveCannotBeSelected` until
-battle-core's `pr_move_usable` lands), Terastallization for the gym leaders', Elite Four's and Champion's trainers, form learnsets for level-up learning (`gc_level_up_moves`; the TM and Memory Mushroom
+battle-core's `pr_move_usable` lands), Terastallization for the gym leaders', Elite Four's and Champion's trainers (the player's own is in), form learnsets for level-up learning (`gc_level_up_moves`; the TM and Memory Mushroom
 lists read them since Task 59), and the prevolution-move messages.
 
 ## Data
@@ -1108,6 +1108,31 @@ Gaps, on purpose or by necessity:
 - The timed event's extra gift (`getDelibirdyBuff`), the intro sprites and the outro text.
 - `meetsRequirements()` of an encounter with a primary requirement draws `randSeedInt` at selection upstream; `gc_mystery_select` does not draw
   those for any such encounter (not Delibird-y's doing).
+
+## The player's Terastallize command
+
+In Classic the Tera Orb comes from Rival 4's win (wave 95) and nowhere else (its weight in the reward pool is 0 there; Endless and the other modes roll it), but the app had no
+way to Terastallize: the battle screen offered FIGHT, BALL, POKEMON and RUN only, and `gc_battle_player_command` always wrote a FIGHT pre-turn command.
+`TERA_ORB` is `TerastallizeAccessModifier`, the Tera Shard is the one-shot `TerastallizeModifier` that only sets the Pokemon's Tera type (never held,
+no Terastallization), and battle-core already ran `TeraPhase` from the pre-turn command (`tera-phase-diff.sh`).
+
+- `gc_screen.can_tera` / `tera_type` are `CommandUiHandler.canTera()` and the button's type (`getTeraType()`: Stellar for Terapagos, the mask's type for
+  Ogerpon, Bug for Shedinja): the Tera Orb, not a Mega, a Gigantamax or Ultra Necrozma (as the species or as the fusion half, `canSpeciesTera`), fewer than
+  `MAX_TERAS_PER_ARENA` (1) used in this arena (`bt.player_teras_used`, reset by a new biome and the party heal), and for slot 1 no Tera already chosen for slot 0
+  this turn (`plannedTera`).
+- `GC_CH_FIGHT` with `c = 1` is `Command.TERA` (`CommandPhase.handleFightCommand(TERA, ...)`): the turn command is the same FIGHT, the pre-turn command is
+  `{TERA, [slot], skip: false}` instead of `{FIGHT, [slot], skip: true}`. A caller that sends it where the menu would not offer it is refused with
+  "Terastallization is not available." and the commands are left as they were (upstream's CommandPhase has no gate of its own, only the menu does).
+- Cancelling out of the target screen or out of slot 1 clears or restores the pre-turn command with the turn command, as before.
+
+`tools/teracmddiff.sh <upstream 8555c08> [N=600] [seed]` runs `canTerastallize`, `CommandUiHandler.canTera()`, `getTeraType()` and the real
+`CommandPhase.handleFightCommand(TERA)` on a real singles and doubles battle (`tests/tera-command.producer.test.ts`: Tera Orb or not, the arena counter 0 to 2, a Tera
+planned for slot 0, random species, forms, fusion halves, Ultra Necrozma on either half, Tera types including Stellar, movesets with spent PP) and
+`tests/tera_command_diff_test.c` replays it through game-core. `tools/teracmdplant.sh` plants 14 bugs. `tests/tera_command_test.c` plays it through a
+run: the text and the Terastallized state after the turn, the counter at the next wave and in a save, the doubles flow with the cancel, and the refusals.
+
+Not covered by this: the app's button (a separate change in `game/`), Terastallization by trainers (below, the gym leaders', Elite Four's and Champion's AI
+tera mode is still NO_TERA), the Tera sprite effect, and the SelectTargetPhase conditions of the fight command (the same code as a plain FIGHT).
 
 ## Fleeing: upstream differential (Task 77 / #125)
 
