@@ -413,6 +413,13 @@ int gc_gts_held_items(const gc_run *run, int idx, int out[GC_MAX_ITEMS]);
 bool gc_gts_pick_ok(const gc_run *run, int option, int idx);
 int gc_gts_allowed(const gc_run *run);
 bool gc_gts_execute(gc_run *run, int option, int b, int c, const char **why);
+/* Delibird-y (src/gc_delibirdy.c) */
+int gc_delibirdy_held_items(const gc_run *run, int option, int idx, int out[GC_MAX_ITEMS]);   /* the held items option 1 or 2 takes from party member idx, as run->items indexes */
+bool gc_delibirdy_pick_ok(const gc_run *run, int option, int idx);
+bool gc_delibirdy_spawnable(const gc_run *run);                  /* the encounter's primary requirement */
+bool gc_delibirdy_option_ok(const gc_run *run, int option);
+double gc_delibirdy_price(const gc_run *run);                    /* getWaveMoneyAmount(2) */
+bool gc_delibirdy_execute(gc_run *run, int option, int b, int c, const char **why);   /* b = the Pokemon (storage index), c = which of gc_delibirdy_held_items */
 /* the Pillar Men (src/gc_pillar.c, custom runs) */
 bool gc_pillar_offered(const gc_run *run);                  /* the hook says the encounter is on offer */
 void gc_pillar_execute(gc_run *run, int option);            /* the option chosen: the fight starts (or the encounter leaves with the heal shop) */

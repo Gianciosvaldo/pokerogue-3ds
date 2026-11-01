@@ -1052,6 +1052,40 @@ Gaps, on purpose or by necessity:
 - The app asks for the member, one of its three trade offers, or a transferable item. Back navigation and all held-item pages are supported.
 - Offers use the generic wild moveset generator (`gc_movegen.c`); a Pokemon it does not cover falls back to `gc_port_enemy_moveset`.
 
+### Delibird-y
+
+`src/gc_delibirdy.c` is the port of `delibirdy-encounter.ts`, `tests/mystery-delibirdy.producer.test.ts` the producer,
+`tests/mystery_delibirdy_diff_test.c` the comparator (`tools/delibirddiff.sh <upstream 8555c08> [N=600] [seed]`;
+`tools/delibirdplant.sh <trace>` plants one-line bugs in a copy of the port and each must make the comparator exit 1; the host checks are
+`tests/mystery_delibirdy_test.c`, part of `make test`). It replaces the stand-in that took items and gave a Candy Jar or nothing: Give Money
+took the money and gave nothing back. Per case a random party (fainted members, about 36 kinds of held items, stacks up to the maximum) and
+wallet are set, the Amulet Coin, Candy Jar, Berry Pouch and Healing Charm are sometimes held at their maximum stack and a Shell Bell now and then, then the real
+encounter's `onInit`, each option's `onPreOptionPhase` and `onOptionPhase` run under the game manager. Compared: the encounter's primary
+requirement, which options are on, the party screen's filter per member, the list of held items each option offers (names and order), the
+money, the queued `ModifierRewardPhase`s, the "battle:rewardGain" message, the whole item list entry by entry.
+
+Upstream behaviours reproduced on purpose:
+
+- Three options, not four. Give Money takes `getWaveMoneyAmount(2)` (no text), then gives an Amulet Coin through a `ModifierRewardPhase`
+  ahead of the rewards phase. Give Food takes one stack of a Berry or Reviver Seed (a Candy Jar for a Berry, a Berry Pouch for a Reviver
+  Seed); Give an Item takes one stack of any other transferable held item (a Healing Charm). Nothing draws from any RNG.
+- At the maximum stack of the gift a Shell Bell goes to the first Pokemon of the field (party slot 0, or nobody when that Pokemon is not
+  allowed in battle), with the "battle:rewardGain" text said at once even when the Shell Bell is at its own maximum and nothing is added.
+  Give an Item gives it to `getPlayerParty()[0]` instead, fainted or not.
+- The "second list" is the chosen Pokemon's held items in `getHeldItems()` order; the encounter spawns when any Pokemon (fainted too) holds
+  an item option 2 or option 3 takes. `OPTION_3_DISALLOWED_MODIFIERS` also names `PokemonBaseStatModifier` (no such class; vitamins are
+  `BaseStatModifier`), `PokemonBaseStatTotalModifier` (the Shuckle's juice) and `TerastallizeModifier` (the Tera Shard, never held): vitamins
+  and the juice are not transferable anyway, so Give an Item is every transferable held item except a Berry or a Reviver Seed.
+- The item is taken with `loseHeldItem(.., false)`: one stack, no `updateModifiers`.
+
+Gaps, on purpose or by necessity:
+
+- A field without an active Pokemon on the Shell Bell branches: upstream's `getPlayerPokemon()` answers undefined and `.newModifier` throws; here
+  nothing is given and `GC_STUB_REWARD_APPLY` is counted. The producer never builds that case.
+- The timed event's extra gift (`getDelibirdyBuff`), the intro sprites and the outro text.
+- `meetsRequirements()` of an encounter with a primary requirement draws `randSeedInt` at selection upstream; `gc_mystery_select` does not draw
+  those for any such encounter (not Delibird-y's doing).
+
 ## Fleeing: upstream differential (Task 77 / #125)
 
 `tools/fleediff.sh <upstream 8555c08> [N=600] [seed]` runs the real `AttemptRunPhase.start()` on a live battle in

@@ -148,6 +148,7 @@ bool gc_mystery_pick_ok(const gc_run *run, int type, int option, int idx)
     /* Fun and Games!: isPokemonValidForEncounterOptionSelection, any Pokemon that is not fainted */
     if (type == GC_ME_FUN_AND_GAMES && option == 0) return gc_fg_pick_ok(run, idx);
     if (type == GC_ME_GLOBAL_TRADE_SYSTEM) return gc_gts_pick_ok(run, option, idx);
+    if (type == GC_ME_DELIBIRDY && option >= 1 && option <= 2) return gc_delibirdy_pick_ok(run, option, idx);
     if (type == GC_ME_TRAINING_SESSION && option < 3) return gc_training_pick_ok(run, idx);
     return false;
 }
@@ -187,7 +188,7 @@ static bool available(const gc_run *r, int type, int tier)
         }
         if (!bug) return false;
     }
-    if (type == GC_ME_DELIBIRDY && r->n_items == 0) return false;
+    if (type == GC_ME_DELIBIRDY && !gc_delibirdy_spawnable(r)) return false;
     return true;
 }
 
@@ -447,6 +448,11 @@ static void setup_texts(gc_run *run)
         }
         break;
     }
+    case GC_ME_DELIBIRDY:
+        s->option_pick[1] = s->option_pick[2] = GC_PICK_MEMBER_ITEM;
+        screen_arg(s, pr_arg_key("delibirdName", "pokemon:delibird"));
+        screen_arg(s, pr_arg_money_en_us("money", gc_delibirdy_price(run)));
+        break;
     case GC_ME_TRAINING_SESSION:
         s->option_pick[0] = GC_PICK_MEMBER;
         s->option_pick[1] = GC_PICK_MEMBER_NATURE;
@@ -464,6 +470,18 @@ static const char *const nature_keys[25] = {
     "nature:naive", "nature:modest", "nature:mild", "nature:quiet", "nature:bashful", "nature:rash", "nature:calm",
     "nature:gentle", "nature:sassy", "nature:careful", "nature:quirky"};
 const char *gc_nature_key(int nature) { return nature >= 0 && nature < 25 ? nature_keys[nature] : "nature:hardy"; }
+
+/* the second list of GC_PICK_MEMBER_ITEM: see run.h */
+int gc_mystery_held_items(const gc_run *run, int option, int member, int *out, int max)
+{
+    int held[GC_MAX_ITEMS];
+    int n = 0;
+    if (run->screen.mystery_type == GC_ME_DELIBIRDY) n = gc_delibirdy_held_items(run, option, member, held);
+    else if (run->screen.mystery_type == GC_ME_GLOBAL_TRADE_SYSTEM) n = gc_gts_held_items(run, member, held);
+    if (n > max) n = max;
+    for (int i = 0; i < n; i++) out[i] = held[i];
+    return n;
+}
 
 bool gc_mystery_member_ok(const gc_run *run, int option, int idx)
 {
@@ -484,10 +502,10 @@ void gc_mystery_setup_screen(gc_run *run)
     case GC_ME_ABSOLUTE_AVARICE: case GC_ME_CLOWNING_AROUND: case GC_ME_PART_TIMER:
     case GC_ME_DANCING_LESSONS: case GC_ME_WEIRD_DREAM: case GC_ME_TELEPORTING_HIJINKS:
     case GC_ME_UNCOMMON_BREED: case GC_ME_THE_EXPERT_POKEMON_BREEDER: case GC_ME_FIELD_TRIP:
-    case GC_ME_AN_OFFER_YOU_CANT_REFUSE: case GC_ME_PILLAR_MEN: case GC_ME_BERRIES_ABOUND:
+    case GC_ME_AN_OFFER_YOU_CANT_REFUSE: case GC_ME_PILLAR_MEN: case GC_ME_BERRIES_ABOUND: case GC_ME_DELIBIRDY:
         n = 3; break;
     case GC_ME_TRAINING_SESSION: case GC_ME_DEPARTMENT_STORE_SALE:
-    case GC_ME_SAFARI_ZONE: case GC_ME_DELIBIRDY: case GC_ME_GLOBAL_TRADE_SYSTEM:
+    case GC_ME_SAFARI_ZONE: case GC_ME_GLOBAL_TRADE_SYSTEM:
         n = 4; break;
     default:
         n = 2; break;
@@ -530,9 +548,8 @@ void gc_mystery_setup_screen(gc_run *run)
          * release when the Pokemon is bought, as when one is caught */
         s->option_ok[0] = run->money >= pr_run_get_wave_money_amount(run->wave, 4.0);
     } else if (type == GC_ME_DELIBIRDY) {
-        s->option_ok[0] = run->n_items > 0;
-        s->option_ok[1] = run->n_items > 0;
-        s->option_ok[2] = run->n_items > 0;
+        /* MoneyRequirement(0, 2) on the first option; a Pokemon holding a Berry or Reviver Seed / any other transferable item for the others */
+        for (int o = 0; o < 3; o++) s->option_ok[o] = gc_delibirdy_option_ok(run, o);
     } else if (type == GC_ME_ABSOLUTE_AVARICE) {
         s->option_ok[1] = berry_stacks(run) >= 6;
     } else if (type == GC_ME_BUG_TYPE_SUPERFAN) {
@@ -1364,14 +1381,8 @@ bool gc_mystery_execute(gc_run *run, int option, int b, int c, const char **why,
         return true;
 
     case GC_ME_DELIBIRDY:
-        if (option >= 0 && option <= 2) {
-            int item_idx = (b >= 0 && b < run->n_items) ? b : 0;
-            if (run->n_items > 0) gc_item_remove_at(run, item_idx);
-            gc_port_give_reward(run, option == 0 ? "SUPER_POTION" : option == 1 ? "HYPER_POTION" : "MAX_POTION");
-            end_mystery_encounter_leave(run);
-            return true;
-        }
-        end_mystery_encounter_leave(run);
+        /* Delibird-y (src/gc_delibirdy.c); a rejected pick leaves the screen as it was */
+        if (!gc_delibirdy_execute(run, option, b, c, why)) { *ok = false; return false; }
         return true;
 
     case GC_ME_ABSOLUTE_AVARICE:
