@@ -671,6 +671,7 @@ static bool handle_event(int i) {
       static bv_mon sent;
       const gc_mon* m = side == 0 ? &G.run.party[e->b] : &G.run.enemy[e->b];
       sent = make_mon(m, side == 0);
+      if(e->summon_snapshot){sent.hp=e->summon_hp;sent.max_hp=e->summon_max_hp;sent.status=e->summon_status;}
       /* the send-out text follows the summon in game-core's events */
       char* text = NULL;
       if (i + 1 < G.nq && (msg_is(&G.q[i + 1], "battle:playerGo") || msg_is(&G.q[i + 1], "battle:trainerSendOut"))) {

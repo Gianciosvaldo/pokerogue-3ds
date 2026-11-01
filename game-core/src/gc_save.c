@@ -1340,7 +1340,13 @@ bool gc_run_load(gc_run *run, const void *buf, size_t len, const char **why)
     for(int k=0;k<(run->double_battle?2:1)&&k<run->n_party;k++){
         int idx=run->party_order[k];
         if(run->party[idx].b.on_field&&run->party[idx].b.hp>0){
-            ev=gc_ev_new(run,GC_EV_SUMMON);if(ev){ev->a=0;ev->b=idx;ev->c=k;}
+            ev=gc_ev_new(run,GC_EV_SUMMON);
+            if(ev){
+                const pr_pokemon *p=&run->party[idx].b;
+                ev->a=0;ev->b=idx;ev->c=k;
+                ev->summon_hp=p->hp;ev->summon_max_hp=p->stats[STAT_HP];
+                ev->summon_status=p->status;ev->summon_snapshot=true;
+            }
         }
     }
     gc_ai_reset(run);

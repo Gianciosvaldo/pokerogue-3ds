@@ -56,6 +56,36 @@ static int filtered_signature(const pr_trainer_species *ts, const pr_trainer_par
     return n;
 }
 
+/* getRandomPartyMemberFunc factories on the two ordinary paired classes.
+ * Pools and explicit partner slots are from the pinned trainer-config source. */
+int pr_run_gen_pair_closure_member(pr_run *run,const pr_trainer_party_ctx *ctx,
+                                  int index,int func_key,pr_enemy_gen *out,int *out_species)
+{
+    if(!run||!ctx||!out||!out_species)return -1;
+    static const uint16_t twins[2][18]={
+        {SPECIES_ID_METAPOD,SPECIES_ID_LEDYBA,SPECIES_ID_CLEFFA,SPECIES_ID_MAREEP,SPECIES_ID_WOOPER,SPECIES_ID_TEDDIURSA,SPECIES_ID_REMORAID,SPECIES_ID_HOUNDOUR,SPECIES_ID_SILCOON,SPECIES_ID_PLUSLE,SPECIES_ID_VOLBEAT,SPECIES_ID_SPINDA,SPECIES_ID_BONSLY,SPECIES_ID_PETILIL,SPECIES_ID_SPRITZEE,SPECIES_ID_BOUNSWEET,SPECIES_ID_MILCERY,SPECIES_ID_PICHU},
+        {SPECIES_ID_KAKUNA,SPECIES_ID_SPINARAK,SPECIES_ID_IGGLYBUFF,SPECIES_ID_MAREEP,SPECIES_ID_PALDEA_WOOPER,SPECIES_ID_PHANPY,SPECIES_ID_MANTYKE,SPECIES_ID_ELECTRIKE,SPECIES_ID_CASCOON,SPECIES_ID_MINUN,SPECIES_ID_ILLUMISE,SPECIES_ID_SPINDA,SPECIES_ID_MIME_JR,SPECIES_ID_COTTONEE,SPECIES_ID_SWIRLIX,SPECIES_ID_FOMANTIS,SPECIES_ID_FIDOUGH,SPECIES_ID_EEVEE}
+    };
+    static const uint16_t sisters[2][11]={
+        {SPECIES_ID_GASTLY,SPECIES_ID_MISDREAVUS,SPECIES_ID_DRIFLOON,SPECIES_ID_SABLEYE,SPECIES_ID_BANETTE,SPECIES_ID_ESPURR,SPECIES_ID_PUMPKABOO,SPECIES_ID_HATENNA,SPECIES_ID_SINISTEA,SPECIES_ID_GREAVARD,SPECIES_ID_ALOLA_MAROWAK},
+        {SPECIES_ID_CLEFFA,SPECIES_ID_AZURILL,SPECIES_ID_TOGEPI,SPECIES_ID_MAWILE,SPECIES_ID_MIMIKYU,SPECIES_ID_ESPURR,SPECIES_ID_SWIRLIX,SPECIES_ID_IMPIDIMP,SPECIES_ID_MILCERY,SPECIES_ID_SNUBBULL,SPECIES_ID_ALOLA_VULPIX}
+    };
+    if(func_key<0||func_key>1)return 0;
+    const uint16_t *pool;int count;
+    if(ctx->enemy.trainer_type==TRAINER_TYPE_TWINS){pool=twins[func_key];count=18;}
+    else if(ctx->enemy.trainer_type==TRAINER_TYPE_MYSTERIOUS_SISTERS){pool=sisters[func_key];count=11;}
+    else return 0;
+    if(!ctx->template_||index<0||index>=ctx->n_levels||index>=PR_MAX_PARTY_TEMPLATE)return -1;
+    const int kind=(ctx->template_->member[index]>>2)&3;
+    if(kind!=PR_EVO_KIND_NORMAL&&kind!=PR_EVO_KIND_STRONG)return -1;
+    int species=pool[pr_rng_integer_in_range(&run->rng,0,count-1)];
+    species=pr_run_determine_enemy_species(&run->rng,species,ctx->levels[index],true,kind,true,ctx->classic_wave20_trainer);
+    if(species<0)return -1;
+    pr_enemy_gen_ctx ec=ctx->enemy;ec.species=species;ec.level=ctx->levels[index];ec.trainer_slot=func_key+1;ec.boss=false;ec.shiny_lock=false;
+    if(pr_run_enemy_pokemon_base(run,&ec,out)<0)return -1;
+    *out_species=species;return 1;
+}
+
 int pr_run_gen_trainer_party(pr_run *run, const pr_trainer_party_ctx *ctx, pr_trainer_party *out)
 {
     memset(out, 0, sizeof *out);
@@ -91,9 +121,11 @@ int pr_run_gen_trainer_party(pr_run *run, const pr_trainer_party_ctx *ctx, pr_tr
         int species = -1;
         bool closure_generated = false;
         if (func_key != 99) {
-            int handled = ctx->enable_gym_e4
-                ? pr_run_gen_gym_e4_closure_member(run, ctx, e, func_key, &out->mons[e], &species)
-                : 0;
+            int handled = 0;
+            if(ctx->enable_gym_e4){
+                handled=pr_run_gen_pair_closure_member(run,ctx,e,func_key,&out->mons[e],&species);
+                if(!handled)handled=pr_run_gen_gym_e4_closure_member(run,ctx,e,func_key,&out->mons[e],&species);
+            }
             if (handled < 0) { run->rng = saved; return -1; }
             if (!handled) {
                 run->unported |= PR_RUN_UNPORTED_TRAINER;

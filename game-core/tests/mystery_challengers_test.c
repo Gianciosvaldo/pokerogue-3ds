@@ -50,7 +50,7 @@ static bool queue_has(int type, int a)
 static void test_fights(void)
 {
     for (int wave = 25; wave <= 145; wave += 40) {
-        int levels[3] = {0, 0, 0}, sizes[3];
+        int levels[3] = {0, 0, 0}, sizes[3],hard_type=-1;
         for (int option = 0; option < 3; option++) {
             start("mc-fight", wave);
             assert(run.screen.n_options == 3);
@@ -58,10 +58,12 @@ static void test_fights(void)
             const char *why = "";
             bool ok = false;
             assert(gc_mystery_execute(&run, option, 0, 0, &why, &ok) && ok);
-            assert(run.battle_type == BATTLE_TYPE_TRAINER && run.me_battle && !run.me_catch_allowed && !run.double_battle);
+            assert(run.battle_type == BATTLE_TYPE_TRAINER && run.me_battle && !run.me_catch_allowed);
+            assert(run.double_battle == (run.screen.mc_variant[option] == TRAINER_VARIANT_DOUBLE));
+            if(option==1)hard_type=run.trainer_type;
             /* the fought trainer is the one the screen showed */
             assert(gc_int(&run)->pillar.active && gc_int(&run)->pillar.mc && gc_int(&run)->pillar.option == option);
-            assert(run.trainer_type == run.screen.mc_trainer[option] || option == 2);
+            assert(run.trainer_type == run.screen.mc_trainer[option]);
             assert(run.n_enemy >= 1 && run.n_enemy <= 6);
             sizes[option] = run.n_enemy;
             for (int i = 0; i < run.n_enemy; i++) if (run.enemy[i].b.level > levels[option]) levels[option] = run.enemy[i].b.level;
@@ -69,7 +71,12 @@ static void test_fights(void)
         }
         assert(sizes[2] == 6);
         const int avg = (wave + 19) / 20 > 5 ? 5 : (wave + 19) / 20;
-        assert(sizes[1] == 1 + avg);
+        /* Source clone preserves partyTemplateFunc on the hard trainer.
+         * The native boundary corpus separately verifies its exact template. */
+        const pr_trainer_info *hard=gc_trainer_info_of(hard_type);
+        assert(hard);
+        if(hard->has_template_func){const pr_party_template *t=gc_party_template_of(&run,hard_type,0,wave);assert(t&&sizes[1]==t->size);}
+        else assert(sizes[1] == 1 + avg);
         assert(levels[0] <= levels[1] && levels[1] < levels[2]);
         printf("ok fights wave %d (sizes %d/%d/%d, top levels %d/%d/%d)\n", wave, sizes[0], sizes[1], sizes[2], levels[0], levels[1], levels[2]);
     }
