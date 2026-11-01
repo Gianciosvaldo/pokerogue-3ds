@@ -1,5 +1,6 @@
 /* A Mystery Encounter's texts, question and picks (see me_flow.h). */
 #include "me_flow.h"
+#include "trainer_art.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -588,6 +589,11 @@ static void open_question(int cursor)
   }
   if (F.type == GC_ME_PILLAR_MEN)
     for (int i = 0; i < 3 && i < s->n_options; i++) snprintf(a.sprites[i], sizeof a.sprites[i], "images/trainer/custom/%s", PILLAR_ID[i]);
+  if (F.type == GC_ME_MYSTERIOUS_CHALLENGERS) /* the three trainers drawn when the encounter began, tint 1: black silhouettes */
+    for (int i = 0; i < 3; i++) {
+      const char* key = s->mc_trainer[i] >= 0 ? gm_trainer_sprite_key(s->mc_trainer[i], s->mc_variant[i], 0) : NULL;
+      if (key && *key) snprintf(a.sprites[i], sizeof a.sprites[i], "images/trainer/%s", key);
+    }
   if (F.type != GC_ME_PILLAR_MEN) a.n_intro = me_flow_intro_sprites(F.type, 160, 164, a.intro, ME_MAX_INTRO);
   a.can_back = false;
   a.on_pick = on_option;

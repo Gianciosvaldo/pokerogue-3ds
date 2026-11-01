@@ -1,18 +1,13 @@
-/* The Pillar Men: a mystery encounter of custom runs only (gc/custom.h, pillar), beside Mysterious Challengers. Lorenzo, 2026-10-18..25:
- * three foes of rising difficulty and prizes (Esidisi easy, Wamuu hard, Kars brutal), met as black silhouettes; each fights as a trainer battle
- * of the encounter with his own team, which the app hands in.
+/* Shared Mysterious Challengers / custom Pillar Men trainer encounter.
+ * Ordinary Challengers retain native trainer selection, gender/double variants,
+ * constructor-level templates and rewards. Pillar Men filter trainers for their
+ * custom teams and replace generated members through the custom hook.
  *
- * It is built the way upstream builds Mysterious Challengers (src/data/mystery-encounters/encounters/mysterious-challengers-encounter.ts and
- * initBattleWithEnemyConfig), with the team replacing the generated members (upstream's own EnemyPartyConfig.pokemonConfigs):
- *   - three trainer types of the biome are drawn when the encounter starts (onInit: the wave's offset stream): a normal one, a different one
- *     (up to five retries) and a boss one, each with its gender roll when the class has genders;
- *   - easy: the normal trainer's template, no level bonus; hard: one STRONGER and min(ceil(wave / 20), 5) AVERAGE members, levels +1 per 10
- *     waves; brutal: the Elite Four template (six members), levels +1.5 per 10 waves (level += max(round(wave / 10 * modifier), 0));
- *   - the team is cut to the template's size (the first members fight), the levels are the template's;
- *   - the fight is the encounter's: no trainer money or rewards (handleMysteryEncounterVictory), experience as a trainer battle (x1.5; upstream's
- *     0.9 for the brutal fight is ignored there, as it is a trainer battle), and setEncounterRewards: easy TM_COMMON, TM_GREAT and MEMORY_MUSHROOM;
- *     hard ULTRA, ULTRA, GREAT, GREAT; brutal ROGUE, ROGUE, ULTRA, GREAT; each with fillRemaining.
- * Not upstream parity: the exact random draws of a team's trainer party are not compared (the team replaces it), only the structure above. */
+ * This owner is always linked. The private `pillar` state is shared so both
+ * encounters bypass ordinary TrainerVictoryPhase and receive encounter rewards.
+ * Full generated-party moveset and post-constructor RNG parity remain outside
+ * this owner proof; unsupported generation keeps its explicit diagnostic.
+ */
 #include "internal.h"
 #include <math.h>
 #include <string.h>
@@ -23,6 +18,25 @@ bool gc_pillar_offered(const gc_run *run)
 {
     const gc_custom_hooks *h = gc_int((gc_run *)run)->custom;
     return h && h->pillar && h->pillar(h->user, run, -1, NULL);
+}
+
+/* Mysterious Challengers onInit: no custom-only filtering of double trainers.
+ * Query on a local RNG owner so opening or redrawing the menu consumes none. */
+bool gc_mc_trainers(const gc_run *run,int types[3],int variants[3])
+{
+    pr_run preview=run->run;preview.unported=0;
+    preview.rng=pr_run_seed_offset_rng(&run->run,run->wave,NULL);
+    bool valid=true;
+    for(int i=0;i<3;i++) {
+        types[i]=pr_run_random_trainer_type(&preview,run->biome,run->wave,i==2);
+        if(i==1)for(int retry=0;retry<5&&types[1]==types[0];retry++)
+            types[1]=pr_run_random_trainer_type(&preview,run->biome,run->wave,false);
+        const pr_trainer_info *t=gc_trainer_info_of(types[i]);
+        bool female=t&&t->has_genders&&pr_rng_seed_int(&preview.rng,2,0)!=0;
+        variants[i]=t&&t->double_only?TRAINER_VARIANT_DOUBLE:female?TRAINER_VARIANT_FEMALE:TRAINER_VARIANT_DEFAULT;
+        valid&=t!=NULL;
+    }
+    return valid&&preview.unported==0;
 }
 
 /* arena.randomTrainerType, drawn again when the class cannot fight alone as a team (a double-only class, one without templates) */
@@ -74,14 +88,14 @@ static const pr_party_template *hard_template(int wave)
 
 static const double level_modifier[3] = {0, 1, 1.5};
 
-void gc_pillar_execute(gc_run *run, int option)
+static void trainer_encounter_execute(gc_run *run, int option, bool pillar)
 {
     gc_internal *in = gc_int(run);
     const gc_custom_hooks *h = in->custom;
     static gc_custom_team team;
     memset(&team, 0, sizeof team);
     team.passive = -1;
-    if (option < 0 || option > 2 || !h || !h->pillar || !h->pillar(h->user, run, option, &team) || !gc_custom_team_check(&team, NULL)) {
+    if (option < 0 || option > 2 || (pillar && (!h || !h->pillar || !h->pillar(h->user, run, option, &team) || !gc_custom_team_check(&team, NULL)))) {
         gc_me_leave_with_heal_shop(run);
         return;
     }
@@ -91,6 +105,8 @@ void gc_pillar_execute(gc_run *run, int option)
     run->run.rng = pr_run_seed_offset_rng(&run->run, run->wave, NULL);
     int type[3];
     bool female[3];
+    int variants[3]={0};
+    if(pillar) {
     type[0] = pick_type(run, false);
     female[0] = type[0] >= 0 && roll_female(run, type[0]);
     type[1] = pick_type(run, false);
@@ -98,6 +114,9 @@ void gc_pillar_execute(gc_run *run, int option)
     female[1] = type[1] >= 0 && roll_female(run, type[1]);
     type[2] = pick_type(run, true);
     female[2] = type[2] >= 0 && roll_female(run, type[2]);
+    }else if(!gc_mc_trainers(run,type,variants)) {
+        run->run.rng=saved;gc_stub(run,GC_STUB_UNPORTED_ENEMY);gc_me_leave_with_heal_shop(run);return;
+    }
 
     /* the option's own stream (executeWithSeedOffset(wave * 10, 100, 1000)): the battle's draws */
     static const int offset_mult[3] = {10, 100, 1000};
@@ -106,10 +125,10 @@ void gc_pillar_execute(gc_run *run, int option)
     const int t = type[option];
     const pr_party_template *tpl = NULL;
     if (t >= 0) {
-        if (option == 0) {
+        if (option == 0 || (!pillar && option == 1 && gc_trainer_info_of(t)->has_template_func)) {
             const pr_trainer_info *info = gc_trainer_info_of(t);
-            const int idx = info->n_templates > 1 ? pr_rng_seed_int(&run->run.rng, info->n_templates, 0) : 0;
-            tpl = gc_party_template_of(run, t, idx, run->wave - 1);
+            const int idx = option==0 && info->n_templates > 1 ? pr_rng_seed_int(&run->run.rng, info->n_templates, 0) : 0;
+            tpl = gc_party_template_of(run, t, idx, pillar?run->wave-1:run->wave);
         } else if (option == 1) {
             tpl = hard_template(run->wave);
         } else {
@@ -122,26 +141,38 @@ void gc_pillar_execute(gc_run *run, int option)
         uint8_t strengths[8];
         for (int i = 0; i < tpl->size && i < 8; i++) strengths[i] = (uint8_t)tpl->strengths[i];
         int levels[PR_MAX_PARTY_TEMPLATE];
-        const int n = pr_run_get_party_levels(&run->run, run->wave, tpl->size, strengths, tpl->strength, false, levels);
+        const bool doubles=!pillar&&variants[option]==TRAINER_VARIANT_DOUBLE;
+        const int n = pr_run_get_party_levels(&run->run, run->wave, tpl->size, strengths, tpl->strength, doubles, levels);
         const int add = (int)fmax(js_round(run->wave / 10.0 * level_modifier[option]), 0);
         for (int i = 0; i < n; i++) levels[i] += add;
-        const int variant = female[option] ? TRAINER_VARIANT_FEMALE : TRAINER_VARIANT_DEFAULT;
+        const int variant = pillar?(female[option] ? TRAINER_VARIANT_FEMALE : TRAINER_VARIANT_DEFAULT):variants[option];
 
         run->battle_type = BATTLE_TYPE_TRAINER;
-        run->double_battle = false;
+        run->double_battle = doubles;
         run->trainer_type = t;
         run->trainer_variant = variant;
         run->trainer_name = run->trainer_partner_name = -1;
+        if(!pillar) {
+            in->custom_trainer_name[0]=0;
+            const pr_trainer_info *info=gc_trainer_info_of(t);
+            if(info->names>=0){
+                int count=info->names_male>=0?(variant==TRAINER_VARIANT_FEMALE?info->names_female:info->names_male):info->names;
+                if(count>0)run->trainer_name=count>1?pr_rng_seed_int(&run->run.rng,count,0):0;
+                else gc_stub(run,GC_STUB_TRAINER_TITLE);
+                if(doubles&&!info->double_only){count=info->names_female>=0?info->names_female:info->names;run->trainer_partner_name=count>1?pr_rng_seed_int(&run->run.rng,count,0):count==1?0:-1;}
+            }
+        }
+
         in->custom_team_on = false;
         ok = gc_gen_trainer_party(run, tpl, t, variant, levels, n);
-        if (!ok && option == 2 && type[0] >= 0) {
+        if (!ok && pillar && option == 2 && type[0] >= 0) {
             /* a boss class whose party members run-core cannot make (its closures are the fixed battles'): the normal trainer's class stands
              * in for the AI, money and name, the team is the one that fights anyway */
             run->trainer_type = type[0];
             run->trainer_variant = female[0] ? TRAINER_VARIANT_FEMALE : TRAINER_VARIANT_DEFAULT;
             ok = gc_gen_trainer_party(run, tpl, type[0], run->trainer_variant, levels, n);
         }
-        if (ok) {
+        if (ok && pillar) {
             if (team.n > n) team.n = (uint8_t)n;
             ok = gc_custom_build_trainer(run, &team);
         }
@@ -163,16 +194,20 @@ void gc_pillar_execute(gc_run *run, int option)
     run->in_battle = true;
     gc_event *ev = gc_ev_new(run, GC_EV_TRAINER);
     if (ev) { ev->a = run->trainer_type; ev->b = run->trainer_variant; }
-    gc_ev_msg(run, "battle:trainerAppeared", 1, gc_m_trainer(run, "trainerName", GC_TNAME_TITLED));
+    gc_ev_msg(run, run->double_battle?"battle:trainerAppearedDouble":"battle:trainerAppeared", 1, gc_m_trainer(run, "trainerName", GC_TNAME_TITLED));
     const bool sent_out = gc_battle_setup_field(run, true);
     gc_ev_msg(run, "battle:trainerSendOut", 2, gc_m_trainer(run, "trainerName", GC_TNAME_TRAINER), gc_m_mon_name(run, "pokemonName", 1, 0));
     if (sent_out) gc_ev_msg(run, "battle:playerGo", 1, gc_m_mon(run, "pokemonName", 0, gc_player_active_index(run)));
     if (run->eng.awaiting_confirm) gc_rq_unshift(run, gc_rp(RP_CHECK_SWITCH, 0, 0, 0));
     in->pillar.active = true;
     in->pillar.option = (int8_t)option;
+    in->pillar.mc = !pillar;
     in->at_save_point = false;   /* the encounter's one save is the one at its start */
     gc_rq_push(run, gc_rp(RP_TURN_INIT, 0, 0, 0));
 }
+
+void gc_pillar_execute(gc_run *run,int option){trainer_encounter_execute(run,option,true);}
+void gc_mc_execute(gc_run *run,int option){trainer_encounter_execute(run,option,false);}
 
 /* handleMysteryEncounterVictory: BattleEndPhase(victory), then the encounter's rewards (setEncounterRewards) and the next wave */
 void gc_pillar_victory(gc_run *run)

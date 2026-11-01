@@ -248,8 +248,8 @@ achv_screen_test: build/achv_screen_test
 .PHONY: achv_screen_test
 
 # a Mystery Encounter's question and picks (source/me_screen.c, source/me_flow.c) over game-core's real option checks and battle-core's formatter, with a fake drawing layer; make me_screen_test && build/me_screen_test
-ME_SRCS := me_screen_test.c ../source/me_screen.c ../source/me_flow.c ../menus/item_ui.c ../gen/gm_item_ui.c $(CORE_SRCS)
-build/me_screen_test: $(ME_SRCS) fixtures/mystery-encounters-en.inc
+ME_SRCS := ../gen/gm_trainer_art.c me_screen_test.c ../source/me_screen.c ../source/me_flow.c ../menus/item_ui.c ../gen/gm_item_ui.c $(CORE_SRCS)
+build/me_screen_test: $(ME_SRCS) fixtures/mystery-encounters-en.inc ../../game-core/tests/challengers.native.inc
 	@mkdir -p build
 	$(CC) $(RUN_CPPFLAGS) $(CFLAGS) -fsanitize=address,undefined -fno-sanitize-recover=undefined $(ME_SRCS) -lm -o $@
 me_screen_test: build/me_screen_test
@@ -438,6 +438,21 @@ build/boss_panel_test: boss_panel_test.c ../source/battle_view.c ../source/tween
 	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections boss_panel_test.c ../source/tween.c ../gen/gm_enum_names.c -Wl,--gc-sections -lm -o $@
 boss_panel_test: build/boss_panel_test
 .PHONY: boss_panel_test
+
+# the final boss' second phase on the battle screen: the player's side in two columns, the boss not moved (BEV_DOUBLES)
+build/final_boss_double_layout_test: final_boss_double_layout_test.c ../source/battle_view.c ../source/tween.c ../gen/gm_enum_names.c
+	@mkdir -p build
+	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections final_boss_double_layout_test.c ../source/tween.c ../gen/gm_enum_names.c -Wl,--gc-sections -lm -o $@
+final_boss_double_layout_test: build/final_boss_double_layout_test
+.PHONY: final_boss_double_layout_test
+
+# the final boss' second phase in the battle screen's events: PR_EV_DOUBLE_START -> BEV_DOUBLES against battle-core's real wave 200
+FINAL_DOUBLE_SRCS := final_boss_double_events_test.c battle_setup.c ../source/battle_events.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)
+build/final_boss_double_events_test: $(FINAL_DOUBLE_SRCS)
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) -I../gen -I../../assets-pipeline/app-src/include $(CFLAGS) $(FINAL_DOUBLE_SRCS) -lm -o $@
+final_boss_double_events_test: build/final_boss_double_events_test
+.PHONY: final_boss_double_events_test
 
 # a boss's shields in the battle screen's events: BEV_BOSS_SHIELD against battle-core's real boss fights
 BOSS_SHIELD_SRCS := boss_shield_events_test.c battle_setup.c ../source/battle_events.c $(wildcard $(BC)/src/*.c $(BC)/gen/out/*.c) $(wildcard $(AI)/src/*.c $(AI)/gen/out/*.c)

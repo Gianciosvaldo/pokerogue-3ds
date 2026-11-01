@@ -66,6 +66,9 @@ typedef enum {
     PR_EV_TRANSFORM,           /* battler; value = play sound (Imposter only); transform = display state */
     PR_EV_ILLUSION_BREAK,      /* PR_DEV_ILLUSION: battler's disguise ended; field[battler] already shows its real look */
     PR_EV_FIELD_SWAP,          /* native ToggleDoublePosition: player slots 0 and 1 exchange places */
+    PR_EV_DOUBLE_START,        /* initFinalBossPhaseTwo's ToggleDoublePositionPhase(true): the fight is a double from here and the
+                                * player's lead steps to the left (FieldPosition.LEFT) for the ally the SummonPhase after it sends
+                                * out. The enemy side is not repositioned: the one boss stays where it was. battler = -1 */
     PR_EV_COUNT_
 } pr_event_type;
 

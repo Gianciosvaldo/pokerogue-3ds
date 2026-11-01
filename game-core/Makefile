@@ -188,6 +188,13 @@ test: pillar-host-test
 pillar-host-test: $(BUILD)/mystery_pillar_test
 	$(BUILD)/mystery_pillar_test
 .PHONY: pillar-host-test
+all: $(BUILD)/mystery_challengers_test
+$(BUILD)/mystery_challengers_test: tests/mystery_challengers_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: challengers-host-test
+challengers-host-test: $(BUILD)/mystery_challengers_test
+	$(BUILD)/mystery_challengers_test
+.PHONY: challengers-host-test
 all: $(BUILD)/fusion_diff_test $(BUILD)/fusion_host_test
 $(BUILD)/fusion_diff_test: tests/fusion_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
@@ -1353,3 +1360,40 @@ test: multi-fallback-faults
 multi-fallback-faults: $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	python3 tools/check_multi_fallback_faults.py --build $(abspath $(BUILD))
 .PHONY: multi-fallback-faults
+
+all: $(BUILD)/challengers_test
+$(BUILD)/challengers_test: tests/challengers_test.c tests/challengers.native.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/challengers_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -Wl,--wrap=gc_gen_trainer_party -lm -o $@
+test: native-challengers-host-test
+native-challengers-host-test: $(BUILD)/challengers_test
+	$(BUILD)/challengers_test
+.PHONY: native-challengers-host-test
+
+.PHONY: pair-trainer-boundary
+pair-trainer-boundary: $(RUN_LIB) $(CORE_LIB)
+	$(MAKE) -C $(RUN_CORE) BUILD=$(abspath $(BUILD)/run-core) BATTLE_CORE=$(abspath $(BATTLE_CORE)) pair-trainer-host-test
+test: pair-trainer-boundary
+
+$(BUILD)/challengers_flow_test: tests/challengers_flow_test.c tests/challengers.native.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+challengers-flow-test: $(BUILD)/challengers_flow_test
+	$(BUILD)/challengers_flow_test
+test: challengers-flow-test
+.PHONY: challengers-flow-test
+
+.PHONY: challengers-capture
+challengers-capture:
+	python3 tests/challengers_capture_test.py
+test: challengers-capture
+
+.PHONY: challengers-faults
+challengers-faults: $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	python3 tools/check_challengers_faults.py --build $(abspath $(BUILD))
+test: challengers-faults
+
+$(BUILD)/post_fusion_cleanup_test: tests/post_fusion_cleanup_test.c tests/fusion_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB) -lm -o $@
+.PHONY: post-fusion-cleanup-test
+post-fusion-cleanup-test: $(BUILD)/post_fusion_cleanup_test
+	$(BUILD)/post_fusion_cleanup_test
+test: post-fusion-cleanup-test

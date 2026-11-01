@@ -59,7 +59,11 @@ static void summon(gc_run *run, int side, int idx,int field)
     m->b.switch_out_status = false;
     run->bt.field[side*2+field] = &m->b;
     gc_event *ev = gc_ev_new(run, GC_EV_SUMMON);
-    if (ev) { ev->a = side; ev->b = idx; ev->c = field; }
+    if (ev) {
+        ev->a=side;ev->b=idx;ev->c=field;
+        ev->summon_hp=m->b.hp;ev->summon_max_hp=m->b.stats[STAT_HP];
+        ev->summon_status=m->b.status;ev->summon_snapshot=true;
+    }
 }
 
 /* ---- the arena's weather and terrain at a new battle ---- */
@@ -165,6 +169,10 @@ void gc_battle_cleanup_players(gc_run *run)
     bt->rng=run->run.rng;
     bt->rng_live=true;
     gc_items_to_battle(run);
+    /* Source getPlayerField()/getField() derives slots from the current party.
+     * A fusion can splice out the old lead and shift the surviving ally before
+     * ReturnPhase runs; its snapshot must use that member, not a stale hole. */
+    for(int k=0;k<(bt->double_battle?2:1)&&k<bt->n_party[0];k++)bt->field[k]=bt->party[0][k];
     pr_prepare_player_cleanup(bt,&run->eng,true);
     pr_run_player_cleanup(bt,&run->eng);
     sync_ability_indices(run);

@@ -378,6 +378,14 @@ make -C game/tests animtest && game/tests/build/animtest path/to/pokerogue-asset
   there; `tests/boss_panel_test.c` holds them. The shields come from battle-core's own `boss_segment_index` through
   `BEV_BOSS_SHIELD` (`tests/boss_shield_events_test.c`, `runtest`). There is no "BOSS" text in upstream's box; the wide box and
   the divided bar are what marks a boss.
+- The final boss' second phase (`BattleScene.initFinalBossPhaseTwo`): Eternatus becomes Eternamax and the fight turns into a double
+  with one foe. Battle-core's `ToggleDoublePositionPhase` for it says so (`PR_EV_DOUBLE_START`, from that queued phase only) and the
+  screen takes `BEV_DOUBLES`: the lead slides to `FieldPosition.LEFT` (-32, -8) over 500 ms, both player boxes take their doubles
+  places and the ally the next `BEV_SUMMON` sends out stands at RIGHT (+32, 0). Only the player's side changes (`player_doubles()`
+  in `battle_view.c`); the one boss keeps its place and its single-layout box, as upstream, which repositions no enemy there. Before
+  this the layout was fixed at `bv_begin` (`setup.doubles`), so the ally stood on the lead with its box on the lead's: two Pokemon
+  overlapping and one HP bar. `tests/final_boss_double_layout_test.c`, `tests/final_boss_double_events_test.c` (real battle-core
+  wave-200 fights). Positions are transcribed from the pinned source, not seen on a screen or run against upstream.
 - Timings: encounter slide 2000 ms, info boxes 1000 ms in and 500 ms out, HP bar
   `clamp(|dHP| x 5, 250, 5000)` ms, damage blink 6 x 100 ms, 20 ms per character, 1500 ms message
   wait, fades 250 / 100 / 250 ms.

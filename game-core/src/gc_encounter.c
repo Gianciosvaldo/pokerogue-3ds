@@ -374,6 +374,7 @@ static bool gen_trainer_party(gc_run *run, const pr_party_template *tpl, int tra
     pr_trainer_party_ctx tc;
     memset(&tc, 0, sizeof tc);
     gc_enemy_ctx(run, &tc.enemy);
+    tc.enable_gym_e4=run->mystery_type==GC_ME_MYSTERIOUS_CHALLENGERS;
     const pr_trainer_info *t = trainer_info(trainer_type);
     tc.is_double = (t && t->double_only) || variant == TRAINER_VARIANT_DOUBLE;
     tc.classic_wave20_trainer = run->wave == 20 && run->run.mode == GAME_MODES_CLASSIC;

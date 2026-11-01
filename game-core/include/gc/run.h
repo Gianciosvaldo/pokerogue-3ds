@@ -79,6 +79,11 @@ typedef struct {
     uint8_t kind;               /* gc_event_kind */
     int32_t a, b, c;
     pr_msg msg;                 /* GC_EV_MESSAGE */
+    /* GC_EV_SUMMON: the send-out state, before entry effects can damage the
+     * live Pokemon. Runtime-only; never part of the session save format. */
+    int32_t summon_hp, summon_max_hp;
+    uint8_t summon_status;
+    bool summon_snapshot;
     /* GC_EV_EXP only: exact native award and the pre-award display state.
      * b mirrors the amount only when it fits int32, otherwise zero. Runtime
      * events are not part of the session save format. */
@@ -194,6 +199,9 @@ typedef struct {
     int8_t mystery_type;         /* MysteryEncounterType 0..30 */
     int8_t mystery_tier;         /* 0 COMMON, 1 GREAT, 2 ULTRA, 3 ROGUE */
     bool option_ok[8];
+    /* Mysterious Challengers: the three trainers of its easy, hard and brutal fights (trainer types, -1 = none) and their variants, for the silhouettes */
+    int16_t mc_trainer[3];
+    int8_t mc_variant[3];
     /* what the encounter's screen needs to word its texts and ask for its picks (gc_mystery_setup_screen): the {{tokens}} the intro, option
      * labels and tooltips use (only the encounters ported with their texts fill them), and for each option what the player picks first:
      * GC_PICK_NONE, a party member (GC_CH_MYSTERY.b) or a party member and then one of its moves, natures or abilities (b and c) */
@@ -396,6 +404,8 @@ typedef struct gc_run {
 
 /* Whether the encounter's party screen accepts the member for the option (a member that cannot be picked is shown but not selectable). */
 bool gc_mystery_member_ok(const gc_run *run, int option, int idx);
+/* Source-seeded trainer previews for the three Mysterious Challengers; RNG-pure. */
+bool gc_mc_trainers(const gc_run *run,int types[3],int variants[3]);
 /* GTS's second pick. Offers use the encounter's seed offset and preserve the run RNG; the returned Pokemon
  * are previews, not party members. Item indexes are in held-item order, not in the run's entire inventory. */
 bool gc_gts_trade_options(gc_run *run, int party_idx, gc_mon out[3]);

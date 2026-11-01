@@ -491,6 +491,10 @@ int pr_run_gen_rival_party(pr_run *run, const pr_trainer_party_ctx *ctx, int fig
 /* Called by pr_run_enemy_pokemon_finish after the rival member's constructor state is complete. */
 void pr_run_rival_finish(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_enemy_gen *out);
 
+/* Ordinary Twins/Mysterious Sisters random-pool factories: observe constructor
+ * inputs, then run the base constructor. Same 1/0/-1 ownership convention. */
+int pr_run_gen_pair_closure_member(pr_run *run,const pr_trainer_party_ctx *ctx,
+                                  int index,int func_key,pr_enemy_gen *out,int *out_species);
 /* Task 49 Gym/E4 closures. The member helper is called with the exact partyMemberFuncs key selected
  * by Trainer.genPartyMember and returns 1 when Task 49 owns it, 0 otherwise, -1 on error. */
 int pr_run_gen_gym_e4_closure_member(pr_run *run, const pr_trainer_party_ctx *ctx,

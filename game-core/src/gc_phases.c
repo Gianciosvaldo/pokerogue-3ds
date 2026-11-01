@@ -181,7 +181,10 @@ static void victory(gc_run *run, int enemy_idx)
         /* applyPartyExp(expValue, pokemonDefeated = true) */
         pr_exp_party pp;
         gc_exp_party_build(run, &pp, bt->participants, bt->n_participants);
-        if (run->me_battle) pp.me_exp_multiplier = 1.0;   /* isBattleMysteryEncounter(): floor(expValue * the encounter's expMultiplier), 1 */
+        if (run->me_battle) {   /* isBattleMysteryEncounter(): floor(expValue * the encounter's expMultiplier), 1; Mysterious Challengers' brutal fight sets 0.9 */
+            const gc_internal *gi = gc_int(run);
+            pp.me_exp_multiplier = gi->pillar.active && gi->pillar.mc && gi->pillar.option == 2 ? 0.9 : 1.0;
+        }
         /* Participating survivors gain friendship through the bounded Bell
          * projection. Unrepresented stock retains the counted legacy gain. */
         if (bt->n_participants > 0)
@@ -861,7 +864,11 @@ bool gc_phase_choose(gc_run *run, gc_rphase *p, const gc_choice *c, const char *
             int8_t t = run->party_order[k_old]; run->party_order[k_old] = run->party_order[k_new]; run->party_order[k_new] = t;
             for (int k = 0; k < run->n_party; k++) run->bt.party[0][k] = &run->party[run->party_order[k]].b;
             gc_event *ev = gc_ev_new(run, GC_EV_SUMMON);
-            if (ev) { ev->a = 0; ev->b = c->a; ev->c=field; }
+            if (ev) {
+                ev->a=0;ev->b=c->a;ev->c=field;
+                ev->summon_hp=m->b.hp;ev->summon_max_hp=m->b.stats[STAT_HP];
+                ev->summon_status=m->b.status;ev->summon_snapshot=true;
+            }
             gc_ev_msg(run, "battle:playerGo", 1, gc_m_mon(run, "pokemonName", 0, c->a));
             return true;
         }
