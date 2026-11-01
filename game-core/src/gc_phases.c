@@ -65,6 +65,24 @@ static void queue_battle_end(gc_run *run)
     (void)in;
 }
 
+/* FaintPhase, on every faint: `for (const pokemon of globalScene.getPlayerField()) if (pokemon?.isActive() || pokemon?.isFainted()) addParticipant(pokemon)`.
+ * getPlayerField() is the first one or two members of the party (two in a double battle), whether or not they were sent out, so a member that fainted in
+ * an earlier wave and sits behind the lead of a double battle is a participant too and takes its share of the experience. battle-core's own faint step
+ * reads its field slots, which hold nothing for a member that was never sent out: this is that step for the foe's faint, where battle-core stops. */
+static void add_faint_participants(gc_run *run)
+{
+    pr_battle *bt = &run->bt;
+    for (int k = 0; k < (bt->double_battle ? 2 : 1) && k < run->n_party; k++) {
+        const uint32_t id = pm(run, run->party_order[k])->b.id;
+        bool have = false;
+        for (int i = 0; i < bt->n_participants; i++) have |= bt->participants[i] == id;
+        if (have || bt->n_participants >= PR_MAX_PARTY) continue;
+        int i = bt->n_participants++;   /* kept sorted, as the producer lists the Set */
+        while (i > 0 && bt->participants[i - 1] > id) { bt->participants[i] = bt->participants[i - 1]; i--; }
+        bt->participants[i] = id;
+    }
+}
+
 /* battle-core stopped: queue what upstream would run next */
 static void after_stop(gc_run *run, int stop)
 {
@@ -81,6 +99,7 @@ static void after_stop(gc_run *run, int stop)
          * A trainer's next Pokemon is battle-core's: FaintPhase pushed its SwitchSummonPhase, which pr_continue
          * runs where upstream does, after the turn's end-of-turn phases. */
         const pr_pokemon *p = run->bt.field[run->eng.stop_phase.battler >= 0 ? run->eng.stop_phase.battler : 2];
+        add_faint_participants(run);
         int idx = -1;
         for (int i = 0; i < run->n_enemy; i++) if (&run->enemy[i].b == p) idx = i;
         /* a Pokemon that was caught: AttemptCapturePhase.catch() runs first (the dex, the party, the held items)

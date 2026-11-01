@@ -320,10 +320,8 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
     if (restoring) {
         /* The legal save point is after summon effects. Rebuild pointers without
          * summoning again: otherwise Intimidate/hazards/item effects run twice. */
-        /* a double battle's second slot is empty when the mon behind the lead is fainted (the new-battle path below does the same): a fainted
-         * mon put there would join the participants when a foe faints, and share the experience */
         for(int k=0;k<(bt->double_battle?2:1)&&k<bt->n_party[0];k++)
-            if(k==0||(bt->party[0][k]->on_field&&bt->party[0][k]->hp>0))bt->field[k]=bt->party[0][k];
+            bt->field[k]=bt->party[0][k];
         for(int k=0;k<(bt->double_battle?2:1)&&k<bt->n_party[1];k++)
             bt->field[2+k]=bt->party[1][k];
     } else if (run->battle_type != BATTLE_TYPE_TRAINER && run->n_enemy) {

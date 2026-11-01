@@ -186,7 +186,7 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 | Enemy moveset: the last four level moves for unsupported constructors. Task 64's first slice calls Task 63 for supported clean wild enemies; trainer streams and broader pools still use the counted fallback | run-core |
 | A reward taken that isn't a ball, Full Heal, Rare Candy, Rarer Candy (Task 96 / PR #136), held item or one of the healing, revive and PP items Task 60/96 ported (TMs, Memory Mushroom, Mints, money, evolution items) is added to the items and counted (`reward taken without its own effect`) | later reward tasks |
 | Double battles are played as singles (M1 rule) | doubles in battle-core |
-| Mystery encounters and the fixed classic battles run-core can't make (the evil team's admins and bosses) become wild battles of the wave's level; the six classic rivals (`enable_fixed_rivals`), the gym leaders of the boss trainer waves, the Elite Four and the Champion (`enable_gym_e4`), the Town Youngster and the evil team grunts (`enable_evil_grunts`) are real fights | run-core, later the encounters |
+| Mystery encounters become wild battles of the wave's level when run-core can't make them; the six classic rivals (`enable_fixed_rivals`), the gym leaders of the boss trainer waves, the Elite Four and the Champion (`enable_gym_e4`), the Town Youngster, the evil team grunts (`enable_evil_grunts`), admins and bosses (`enable_evil_bosses`) are real fights | run-core, later the encounters |
 | The held items of the Champions Red, Steven, Wallace and Kieran (and rivals 5 and 6): their configs have a `genModifiersFunc`, which run-core's item generation reports as `PR_RUN_UNPORTED_TRAINER`, so they hold nothing (counted as `enemy run-core can't generate`) | run-core |
 | Terastallization of the gym leaders, the Elite Four and the Champion (`config.trainerAI.teraMode` and the random Tera modifiers are not in the trainer data): the AI's tera mode stays NO_TERA | trainer data dump |
 | A boss's battle score: `addFaintedEnemyScore` (and the catch's own copy of it) multiplies it by `sqrt(bossSegments)`; Task 93 sets `boss_segments` on Pokemon encounters and `gc_phases.c` calculates score using `boss_segments` | Task 93 (PR #122) |
@@ -782,20 +782,33 @@ line the run already holds the next battle (`trainer_names` empty, `trainer_type
 `msg.args[0].s` is the speaker's name and the `battle:trainerDefeated` message's `a` is the beaten trainer type (the victory music). `tests/gym_e4_test.c`
 checks both on every win, and that they are exercised after the run has moved on (the six gym waves and the Champion's 190 of each seed, and the victory lines among them).
 
-### The Town Youngster and the evil team grunts
+### The Town Youngster and the evil teams (grunts, admins, bosses)
 
-`gc_new_battle` sets `enable_evil_grunts` on run-core's new battle: wave 5 is the Town Youngster (`randSeedInt(2)` picks the female one) and waves 35, 62, 64 and
+`gc_new_battle` sets `enable_evil_grunts` and `enable_evil_bosses` on run-core's new battle: wave 5 is the Town Youngster (`randSeedInt(2)` picks the female one) and waves 35, 62, 64 and
 112 are an evil team's grunts (`getRandomTrainerFunc(grunts, true)`: one of ten teams by `randSeedItem`, under `setSeedOffsetWave(EVIL_GRUNT_1)`, so every grunt fight
 of a run is the same team; the party template grows 2, 3, 3 and 6 members with the wave). Their teams come from the grunts' species pools, which run-core already
 ported, so this needed no closures. Upstream picks the grunt's gender (`randInt(2)`) and its double variant (`randInt(3) === 0`, a third of the fights) with
 `Math.random`, which is not a seeded stream: the run hashes its seed and the wave for the two rolls (`ctx.evil_gender_roll`, `ctx.evil_double_roll`), so
-each run mixes differently and a fight started again is the same one. The admins (66, 114, 164) and the bosses (115, 165) are still the wild stand-in.
+each run mixes differently and a fight started again is the same one.
+
+The admins (waves 66, 114, 164) and the two bosses (115, 165) are real too. They share the grunts' seed offset, so a run's grunts, admins and bosses are one
+team: `getRandomTrainerFunc(pool, true, 0/1/2)` for an admin (the pool's group is picked with `randSeedItem`, or with `randSeedUniqueItem(group, offset)` so
+the three admins of a team differ: a group no longer than the offset picks at random on the current RNG, a longer one shuffles a copy on the unshifted run
+seed's RNG and takes the entry at the offset) and `getRandomTrainerFunc(pool)` for a boss (the first form at 115, the same team's second form at 165, never
+female). Their parties are made of closures (`getRandomPartyMemberFunc(pool, TrainerSlot.TRAINER, ignoreEvolution, postProcess)`) that run-core's generator
+`run-core/tools/gen-evil-closures.py <upstream dir>` reads out of the upstream config (`--check` fails when `gen/out/run_evil_closures.c` is stale); only the
+species pool and `ignoreEvolution` are ported, not the `postProcess` (ability index, gender, a form such as Mega Kangaskhan, the boss segments, balls and
+movesets), which stays a gap. A trainer with a `genModifiersFunc` (Guzma's second form) still holds no items and counts the one stand-in left.
+
+Winning is shared with upstream's `FaintPhase`: every Pokemon of the player's field (party slots 0 and 1 in a double battle) that is active or fainted joins
+the participants that split the experience, so an ally that fainted still gets its share (`add_faint_participants`, run at the victory in `after_stop`).
+This was a divergence in doubles that the longer fights (saved and loaded battles replay it) made visible; it changes who gets experience in those fights.
 
 `tools/evildiff.sh <upstream dir> [N] [seed]` runs `tests/evil.producer.test.ts` (the real fixed config's trainer of those waves for random seeds, wave cycle
 offsets and ids, with `Math.random` fed two known values that are written in an `R` line) and compares in the same `tests/gym_e4_diff_test.c` as the gym
 leaders, pinning the same rolls (`evil_roll_pinned`): the trainer type and variant, double or single, the name entries, the levels and every member's
-constructor state, and that no stand-in was used. `tools/evilplant.sh <trace>` shows twelve one-line breakages, in game-core and in run-core's `newbattle.c`,
-fail the differential or `tests/gym_e4_test.c`, which also plays the five fights of eight runs and the six pinned (gender, double) combinations.
+constructor state, and that no stand-in was used. `tools/evilplant.sh <trace>` shows twenty-five one-line breakages, in game-core and in run-core's `newbattle.c` and `evil_team.c`,
+fail the differential or `tests/gym_e4_test.c`, which also plays the ten fights (Youngster, grunts, admins, bosses) of eight runs and the six pinned (gender, double) combinations.
 
 ### Trainer dialogue (`GC_EV_DIALOGUE`)
 Upstream gives every trainer class an encounter and a victory line (`initTrainerTypeDialogue`, the `dialogue` namespace), picked with

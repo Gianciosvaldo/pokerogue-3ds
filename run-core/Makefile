@@ -6,7 +6,7 @@ BATTLE_CORE ?= ../battle-core
 CPPFLAGS += -Iinclude -I$(BATTLE_CORE)/include -I$(BATTLE_CORE)/gen/out
 BUILD ?= build
 CORE_LIB := $(BUILD)/battle-core/libprcore.a
-SRCS := src/wave.c src/shop.c src/biome.c src/evolution.c gen/out/run_biomes.c gen/out/run_evolutions.c src/exp.c gen/out/run_exp.c src/upkeep.c src/newbattle.c gen/out/run_trainers.c src/pokemongen.c gen/out/run_pokemongen.c src/trainerspecies.c gen/out/run_trainerspecies.c src/trainerparty.c src/rival.c src/gym_e4.c src/wildenemy.c src/challenges.c src/enemyitems.c gen/out/run_enemyitems.c src/daily.c
+SRCS := src/wave.c src/shop.c src/biome.c src/evolution.c gen/out/run_biomes.c gen/out/run_evolutions.c src/exp.c gen/out/run_exp.c src/upkeep.c src/newbattle.c gen/out/run_trainers.c src/pokemongen.c gen/out/run_pokemongen.c src/trainerspecies.c gen/out/run_trainerspecies.c src/trainerparty.c src/rival.c src/gym_e4.c src/evil_team.c gen/out/run_evil_closures.c src/wildenemy.c src/challenges.c src/enemyitems.c gen/out/run_enemyitems.c src/daily.c
 OBJS := $(SRCS:%.c=$(BUILD)/%.o)
 OBJS += $(BUILD)/src/moveset.o
 

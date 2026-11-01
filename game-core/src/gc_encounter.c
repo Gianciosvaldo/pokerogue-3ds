@@ -647,12 +647,15 @@ void gc_new_battle(gc_run *run)
     ctx.enable_fixed_rivals = true;
     /* and the Elite Four (waves 182, 184, 186, 188) and the Champion (190): run-core picks their trainers (gym_e4.c) */
     ctx.enable_gym_e4 = true;
-    /* the Town Youngster (wave 5) and the evil team grunt fights (35, 62, 64, 112). getRandomTrainerFunc rolls the grunt's gender and double variant
+    /* the Town Youngster (wave 5), the evil team grunt fights (35, 62, 64, 112), the admins (66, 114, 164) and the bosses (115, 165). getRandomTrainerFunc rolls the grunt's gender and double variant
      * with Math.random (randInt), which is not a seeded stream upstream. Here they come from a hash of the run's seed and the wave, so that each run
      * has its own mix and the same wave started again (a reload does not get here: it loads the saved trainer) is the same fight */
     ctx.enable_evil_grunts = true;
+    ctx.enable_evil_bosses = true;
     if (wave == CLASSIC_FIXED_BOSS_WAVES_EVIL_GRUNT_1 || wave == CLASSIC_FIXED_BOSS_WAVES_EVIL_GRUNT_2
-        || wave == CLASSIC_FIXED_BOSS_WAVES_EVIL_GRUNT_3 || wave == CLASSIC_FIXED_BOSS_WAVES_EVIL_GRUNT_4) {
+        || wave == CLASSIC_FIXED_BOSS_WAVES_EVIL_GRUNT_3 || wave == CLASSIC_FIXED_BOSS_WAVES_EVIL_GRUNT_4
+        || wave == CLASSIC_FIXED_BOSS_WAVES_EVIL_ADMIN_1 || wave == CLASSIC_FIXED_BOSS_WAVES_EVIL_ADMIN_2
+        || wave == CLASSIC_FIXED_BOSS_WAVES_EVIL_ADMIN_3) {   /* an admin's gender is the first roll too; only a grunt reads the second */
         uint32_t h = 2166136261u ^ (uint32_t)wave;   /* FNV-1a over the seed's code units */
         for (size_t i = 0; i < run->run.seed.len; i++) h = (h ^ run->run.seed.u[i]) * 16777619u;
         h ^= h >> 15; h *= 0x2c1b3c6du; h ^= h >> 12;

@@ -85,6 +85,69 @@ static int evil_grunt_kind(int mode, int wave)
     }
 }
 
+/* The admins' and bosses' pools (the same file): an entry is one trainer or a group to pick one from. Admin fights pick the group member with
+ * randSeedItem (the first) or randSeedUniqueItem(group, 1 / 2) (the second and third, so that a team never sends the same admin twice) */
+typedef struct { uint8_t n; uint16_t t[5]; } evil_entry;
+#define EV1(a) {1, {a}}
+#define EV2(a, b) {2, {a, b}}
+#define EV3(a, b, c) {3, {a, b, c}}
+#define EV4(a, b, c, d) {4, {a, b, c, d}}
+#define EV5(a, b, c, d, e) {5, {a, b, c, d, e}}
+#define EV_GROUPS EV2(TRAINER_TYPE_TABITHA, TRAINER_TYPE_COURTNEY), EV2(TRAINER_TYPE_MATT, TRAINER_TYPE_SHELLY), \
+    EV3(TRAINER_TYPE_JUPITER, TRAINER_TYPE_MARS, TRAINER_TYPE_SATURN)
+#define EV_STAR EV5(TRAINER_TYPE_GIACOMO, TRAINER_TYPE_MELA, TRAINER_TYPE_ATTICUS, TRAINER_TYPE_ORTEGA, TRAINER_TYPE_ERI)
+static const evil_entry evil_admins[3][10] = {
+    { EV1(TRAINER_TYPE_PETREL), EV_GROUPS, EV1(TRAINER_TYPE_COLRESS),
+      EV4(TRAINER_TYPE_BRYONY, TRAINER_TYPE_ALIANA, TRAINER_TYPE_CELOSIA, TRAINER_TYPE_MABLE), EV1(TRAINER_TYPE_FABA),
+      EV1(TRAINER_TYPE_PLUMERIA), EV1(TRAINER_TYPE_OLEANA), EV_STAR },
+    { EV1(TRAINER_TYPE_PROTON), EV_GROUPS, EV1(TRAINER_TYPE_ZINZOLIN),
+      EV4(TRAINER_TYPE_BRYONY, TRAINER_TYPE_ALIANA, TRAINER_TYPE_CELOSIA, TRAINER_TYPE_MABLE), EV1(TRAINER_TYPE_FABA),
+      EV1(TRAINER_TYPE_PLUMERIA), EV1(TRAINER_TYPE_OLEANA), EV_STAR },
+    { EV2(TRAINER_TYPE_ARCHER, TRAINER_TYPE_ARIANA), EV2(TRAINER_TYPE_TABITHA, TRAINER_TYPE_COURTNEY), EV2(TRAINER_TYPE_MATT, TRAINER_TYPE_SHELLY),
+      EV3(TRAINER_TYPE_JUPITER, TRAINER_TYPE_MARS, TRAINER_TYPE_SATURN), EV1(TRAINER_TYPE_COLRESS), EV1(TRAINER_TYPE_XEROSIC),
+      EV1(TRAINER_TYPE_FABA), EV1(TRAINER_TYPE_PLUMERIA), EV1(TRAINER_TYPE_OLEANA), EV_STAR },
+};
+static const uint16_t evil_bosses[2][10] = {
+    { TRAINER_TYPE_ROCKET_BOSS_GIOVANNI_1, TRAINER_TYPE_MAXIE, TRAINER_TYPE_ARCHIE, TRAINER_TYPE_CYRUS, TRAINER_TYPE_GHETSIS, TRAINER_TYPE_LYSANDRE,
+      TRAINER_TYPE_LUSAMINE, TRAINER_TYPE_GUZMA, TRAINER_TYPE_ROSE, TRAINER_TYPE_PENNY },
+    { TRAINER_TYPE_ROCKET_BOSS_GIOVANNI_2, TRAINER_TYPE_MAXIE_2, TRAINER_TYPE_ARCHIE_2, TRAINER_TYPE_CYRUS_2, TRAINER_TYPE_GHETSIS_2,
+      TRAINER_TYPE_LYSANDRE_2, TRAINER_TYPE_LUSAMINE_2, TRAINER_TYPE_GUZMA_2, TRAINER_TYPE_ROSE_2, TRAINER_TYPE_PENNY_2 },
+};
+
+/* 3..5 = the admin fights of waves 66, 114 and 164, 6 and 7 = the bosses of 115 and 165, 0 = neither */
+static int evil_leader_kind(int mode, int wave)
+{
+    if (mode != GAME_MODES_CLASSIC && mode != GAME_MODES_CHALLENGE) return 0;
+    switch (wave) {
+    case CLASSIC_FIXED_BOSS_WAVES_EVIL_ADMIN_1: return 3;
+    case CLASSIC_FIXED_BOSS_WAVES_EVIL_ADMIN_2: return 4;
+    case CLASSIC_FIXED_BOSS_WAVES_EVIL_ADMIN_3: return 5;
+    case CLASSIC_FIXED_BOSS_WAVES_EVIL_BOSS_1: return 6;
+    case CLASSIC_FIXED_BOSS_WAVES_EVIL_BOSS_2: return 7;
+    default: return 0;
+    }
+}
+
+/* getRandomTrainerFunc's choice for an admin pool: randSeedItem(pool), then for a group seedOffset 0: randSeedItem(group), else
+ * randSeedUniqueItem(group, seedOffset): a group no longer than the offset picks at random on this RNG, a longer one shuffles a copy on the RNG of
+ * executeWithSeedOffset(.., 0) and takes the entry at the offset */
+static int evil_admin_choice(pr_run *run, pr_rng *r, const evil_entry *pool, int seed_offset)
+{
+    const evil_entry *c = &pool[seed_item(r, 10)];
+    if (c->n == 1) return c->t[0];
+    if (seed_offset == 0 || c->n <= seed_offset) return c->t[seed_item(r, c->n)];
+    uint16_t a[5];
+    for (int i = 0; i < c->n; i++) a[i] = c->t[i];
+    pr_rng r0 = pr_run_seed_offset_rng(run, 0, NULL);
+    for (int i = c->n - 1; i > 0; i--) {
+        const int j = pr_rng_integer_in_range(&r0, 0, i);
+        const uint16_t tmp = a[i];
+        a[i] = a[j];
+        a[j] = tmp;
+    }
+    return a[seed_offset];
+}
+
 /* trainer.getPartyTemplate(): config.partyTemplateFunc?.() ?? config.partyTemplates[partyTemplateIndex].
  * The func reads the scene's currentBattle, which newBattle hasn't replaced yet when the Battle
  * constructor asks: the previous battle's wave (0 = none). */
@@ -109,23 +172,38 @@ int pr_run_new_battle(pr_run *run, int wave, const pr_new_battle_ctx *ctx, pr_ne
     const int fixed_rival = ctx->enable_fixed_rivals ? classic_rival_type(run->mode, wave) : -1;
     const int fixed_e4 = ctx->enable_gym_e4 ? pr_run_fixed_e4_trainer(run, wave) : -1;
     const int fixed_evil = ctx->enable_evil_grunts ? evil_grunt_kind(run->mode, wave) : 0;
+    const int fixed_leader = ctx->enable_evil_bosses ? evil_leader_kind(run->mode, wave) : 0;
     /* Tasks 48/49 close rivals plus the Classic/Challenge E4 and Champion fixed battles; the grunts and the Town Youngster too */
-    if (pr_run_is_fixed_battle(run, wave) && fixed_rival < 0 && fixed_e4 < 0 && !fixed_evil) {
+    if (pr_run_is_fixed_battle(run, wave) && fixed_rival < 0 && fixed_e4 < 0 && !fixed_evil && !fixed_leader) {
         run->unported |= PR_RUN_UNPORTED_FIXED_BATTLE;
         return -1;
     }
     bool has_trainers = run->mode == GAME_MODES_CLASSIC || run->mode == GAME_MODES_CHALLENGE || run->mode == GAME_MODES_DAILY;
-    out->battle_type = (fixed_rival >= 0 || fixed_e4 >= 0 || fixed_evil) ? BATTLE_TYPE_TRAINER
+    out->battle_type = (fixed_rival >= 0 || fixed_e4 >= 0 || fixed_evil || fixed_leader) ? BATTLE_TYPE_TRAINER
         : has_trainers && pr_run_is_wave_trainer(run, wave, ctx->trainer_chance) ? BATTLE_TYPE_TRAINER
                                                                                 : BATTLE_TYPE_WILD;
-    if (fixed_rival < 0 && fixed_e4 < 0 && !fixed_evil
+    if (fixed_rival < 0 && fixed_e4 < 0 && !fixed_evil && !fixed_leader
         && pr_run_is_wave_mystery_encounter(run, out->battle_type == BATTLE_TYPE_WILD, wave, &ctx->me)) {
         out->battle_type = BATTLE_TYPE_MYSTERY_ENCOUNTER;
         out->me_spawn_chance_reset = true;
     }
     const pr_trainer_info *t = NULL;
     if (out->battle_type == BATTLE_TYPE_TRAINER) {
-        if (fixed_evil) {
+        if (fixed_leader) {
+            /* the admins: getRandomTrainerFunc(pool, true, seedOffset 0 / 1 / 2) and the bosses getRandomTrainerFunc(pool), both under
+             * setSeedOffsetWave(EVIL_GRUNT_1). An admin's gender is randInt(2), the caller's roll; a boss is never female and none is a grunt */
+            pr_rng r = pr_run_seed_offset_rng(run, CLASSIC_FIXED_BOSS_WAVES_EVIL_GRUNT_1 << 8, NULL);
+            if (fixed_leader <= 5) {
+                out->trainer_type = evil_admin_choice(run, &r, evil_admins[fixed_leader - 3], fixed_leader - 3);
+                out->variant = ctx->evil_gender_roll ? TRAINER_VARIANT_DEFAULT : TRAINER_VARIANT_FEMALE;   /* randInt(2) === 0 */
+            } else {
+                out->trainer_type = evil_bosses[fixed_leader - 6][seed_item(&r, 10)];
+                out->variant = TRAINER_VARIANT_DEFAULT;
+            }
+            t = trainer_info(out->trainer_type);
+            if (!t || !t->n_templates) { run->unported |= PR_RUN_UNPORTED_TRAINER; return -1; }
+            trainer_ctor(run, &r, t, out);
+        } else if (fixed_evil) {
             /* battleConfig.getTrainer() inside executeWithSeedOffset((seedOffsetWave || waveIndex) << 8) */
             pr_rng r = pr_run_seed_offset_rng(run, (fixed_evil == 1 ? wave : CLASSIC_FIXED_BOSS_WAVES_EVIL_GRUNT_1) << 8, NULL);
             if (fixed_evil == 1) {
