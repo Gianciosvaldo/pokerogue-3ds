@@ -86,15 +86,30 @@ static void test_mystery_actions_and_options(void)
     assert(run.screen.n_options == 3);
     assert(run.screen.option_ok[0] && run.screen.option_ok[1] && run.screen.option_ok[2]);
 
-    /* Test 2: Delibirdy option availability based on items */
+    /* Test 2: Delibird-y options (the real ones, tools/delibirddiff.sh): Give Money needs twice the wave's money, Give Food a held Berry or
+     * Reviver Seed, Give an Item any other held item that can be transferred */
     run.screen.mystery_type = GC_ME_DELIBIRDY;
     run.n_items = 0;
+    for (int i = 0; i < run.n_party; i++) run.party[i].b.id = 100u + (uint32_t)i;
+    gc_mystery_setup_screen(&run);
+    assert(run.screen.n_options == 3);
+    assert(run.screen.option_ok[0] && !run.screen.option_ok[1] && !run.screen.option_ok[2]);
+    run.money = 0;
     gc_mystery_setup_screen(&run);
     assert(!run.screen.option_ok[0]);
+    run.money = 100000;
 
-    gc_item_add(&run, "POTION", -1, 0, 1);
+    gc_item_add(&run, "POTION", -1, 0, 1);   /* not a held item: nothing changes */
     gc_mystery_setup_screen(&run);
-    assert(run.screen.option_ok[0]);
+    assert(!run.screen.option_ok[1] && !run.screen.option_ok[2]);
+
+    gc_item_add(&run, "LEFTOVERS", -1, run.party[1].b.id, 1);
+    gc_mystery_setup_screen(&run);
+    assert(!run.screen.option_ok[1] && run.screen.option_ok[2]);
+
+    gc_item_add(&run, "REVIVER_SEED", -1, run.party[2].b.id, 1);
+    gc_mystery_setup_screen(&run);
+    assert(run.screen.option_ok[1] && run.screen.option_ok[2]);
 
     /* Test 3: Dark Deal action execution */
     const char *why;

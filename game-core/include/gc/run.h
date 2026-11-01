@@ -198,7 +198,7 @@ enum { GC_PICK_NONE = 0, GC_PICK_MEMBER = 1, GC_PICK_MEMBER_MOVE = 2,
        GC_PICK_MEMBER_NATURE = 3,    /* a party member and then one of the 25 natures (c); gc_training_nature_new marks the ones new to its dex entry */
        GC_PICK_MEMBER_ABILITY = 4,   /* a party member and then one of its abilities (c = the ability slot 0..2); gc_training_abilities lists them */
        GC_PICK_MEMBER_TRADE = 5,     /* GTS: a party member, then one of its three offers (c = 0..2) */
-       GC_PICK_MEMBER_ITEM = 6 };    /* GTS: a holder, then its transferable held item (c = index in gc_gts_held_items) */
+       GC_PICK_MEMBER_ITEM = 6 };    /* a holder, then one of its held items the option takes (c = the position in gc_mystery_held_items: GTS's item trade, Delibird-y) */
 
 
 /* ---------------------------------------------------------------- the run's state */
@@ -393,6 +393,9 @@ bool gc_mystery_member_ok(const gc_run *run, int option, int idx);
  * are previews, not party members. Item indexes are in held-item order, not in the run's entire inventory. */
 bool gc_gts_trade_options(gc_run *run, int party_idx, gc_mon out[3]);
 int gc_gts_held_items(const gc_run *run, int idx, int out[GC_MAX_ITEMS]);
+/* GC_PICK_MEMBER_ITEM's second list: the held items of party member `member` that `option` of the encounter takes (GTS: the item trade's, Delibird-y's
+ * two item options), as indexes into run->items in the order they are listed; at most `max` (n written). The choice's c is the position in this list. */
+int gc_mystery_held_items(const gc_run *run, int option, int member, int *out, int max);
 /* Training Session's lists (GC_PICK_MEMBER_NATURE / _ABILITY): whether nature 0..24 is new to the party member's dex entry; the member's ability
  * slots to offer (n of them, at most 3) and whether each is new to its starter; the locale key of a nature ("adamant"). */
 bool gc_training_nature_new(const gc_run *run, int member, int nature);
