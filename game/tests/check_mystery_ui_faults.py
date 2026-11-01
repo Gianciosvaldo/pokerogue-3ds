@@ -17,7 +17,7 @@ INCLUDES = ['game/tests', 'game/include', 'game/menus', 'assets-pipeline/app-src
             'battle-core/include', 'battle-core/gen/out', 'ai-core/include', 'ai-core/gen/out']
 FLAGS = ['-O1', '-g', '-std=gnu11', '-ffp-contract=off', *['-I'+str(ROOT/p) for p in INCLUDES]]
 UI = ['game/source/me_flow.c', 'game/source/me_screen.c']
-COMMON = ['game/tests/me_screen_test.c', 'game/menus/item_ui.c', 'game/gen/gm_item_ui.c']
+COMMON = ['game/tests/me_screen_test.c', 'game/menus/item_ui.c', 'game/gen/gm_item_ui.c', 'game/gen/gm_trainer_art.c']
 LIBS = ['game-core/build/libgc.a', 'game-core/build/reward-core/libreward.a',
         'game-core/build/ai-core/libai.a', 'game-core/build/run-core/librun.a',
         'game-core/build/run-core/battle-core/libprcore.a']
