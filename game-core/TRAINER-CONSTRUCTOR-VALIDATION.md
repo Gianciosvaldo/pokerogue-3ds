@@ -32,8 +32,8 @@ Read directly in the pinned checkout:
   same-seed and member-specific offsets matter.
 - `src/data/trainers/trainer-config.ts`: exact paired species pools/partner
   slots, same-seed configuration and `allowEggMoves`. Ordinary configs leave it
-  false; boss/static configuration enables it. Runtime custom configs are not
-  assumed equivalent to these defaults.
+  false. `setBoss` and `setEggMovesAllowed` enable it; `setStaticParty` alone
+  does not. Runtime custom configs are not assumed equivalent to these defaults.
 - `src/ai/ai-moveset-gen.ts`: trainers include relearner rows; level moves are
   superseded before constructing the TM pool; TMs exclude level/egg duplicates
   and forbidden TMs, and consider level moves when filtering superseded TMs.
