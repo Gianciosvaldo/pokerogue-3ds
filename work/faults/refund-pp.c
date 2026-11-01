@@ -9,6 +9,7 @@
 #include "internal.h"
 
 static void sync_ability_indices(gc_run *run);
+static void battle_event_chunk(const pr_event *events, int count, void *ctx);
 
 static int next_summon_cb(pr_battle *bt, int trainer_slot, void *ctx);
 
@@ -58,7 +59,11 @@ static void summon(gc_run *run, int side, int idx,int field)
     m->b.switch_out_status = false;
     run->bt.field[side*2+field] = &m->b;
     gc_event *ev = gc_ev_new(run, GC_EV_SUMMON);
-    if (ev) { ev->a = side; ev->b = idx; ev->c = field; }
+    if (ev) {
+        ev->a=side;ev->b=idx;ev->c=field;
+        ev->summon_hp=m->b.hp;ev->summon_max_hp=m->b.stats[STAT_HP];
+        ev->summon_status=m->b.status;ev->summon_snapshot=true;
+    }
 }
 
 /* ---- the arena's weather and terrain at a new battle ---- */
@@ -164,6 +169,10 @@ void gc_battle_cleanup_players(gc_run *run)
     bt->rng=run->run.rng;
     bt->rng_live=true;
     gc_items_to_battle(run);
+    /* Source getPlayerField()/getField() derives slots from the current party.
+     * A fusion can splice out the old lead and shift the surviving ally before
+     * ReturnPhase runs; its snapshot must use that member, not a stale hole. */
+    for(int k=0;k<(bt->double_battle?2:1)&&k<bt->n_party[0];k++)bt->field[k]=bt->party[0][k];
     pr_prepare_player_cleanup(bt,&run->eng,true);
     pr_run_player_cleanup(bt,&run->eng);
     sync_ability_indices(run);
@@ -223,6 +232,7 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
     const double player_teras_used = bt->player_teras_used;
 
     memset(bt, 0, sizeof *bt);
+    bt->event_sink = battle_event_chunk; bt->event_sink_ctx = run;
     bt->deviations = PR_DEV_ENEMY_ZERO_TO_HERO | PR_DEV_ILLUSION;   /* lorenzo's departures from the pin */
     bt->player_teras_used_known = true;
     bt->player_teras_used = player_teras_used;
@@ -251,6 +261,16 @@ static bool setup_field(gc_run *run, bool reset_arena, bool restoring)
     bt->challenge_flags = run->run.mode == GAME_MODES_CHALLENGE ? run->run.challenge_flags : 0;
     bt->challenge_flags_known = !run->run.has_challenges || run->run.challenge_flags != 0;
     bt->battle_type = (uint8_t)run->battle_type;
+    bt->me_no_flee = gc_int(run)->me_no_flee;
+    if (!restoring) {
+        bt->n_me_start = gc_int(run)->n_me_start;
+        for (int k = 0; k < bt->n_me_start; k++) {
+            bt->me_start[k].source = gc_int(run)->me_start[k].source;
+            bt->me_start[k].target = gc_int(run)->me_start[k].target;
+            bt->me_start[k].move = gc_int(run)->me_start[k].move;
+            bt->me_start[k].use_mode = gc_int(run)->me_start[k].use_mode;
+        }
+    }
     bt->biome = (int16_t)run->biome;
     bt->has_biome = true;
     bt->last_player_involved = bt->last_enemy_involved = -1;
@@ -705,16 +725,28 @@ static void reveal(gc_run *run, int side, const pr_event_field *f)
  * shows, Frisk reveals its opponents, Trace the one it copies (in singles, the one opponent). battle-core
  * doesn't keep the flag, and its events say where a Pokemon stands, not which one it is: it is matched
  * by species and form, and left unrevealed (as upstream's default) when two of a side share them. */
-static void note_revealed(gc_run *run)
+static void note_revealed_chunk(gc_run *run, const pr_event *ev, int count)
 {
-    const pr_event *ev = run->eng.events;
-    for (int i = 0; i < run->eng.n_events; i++) {
+    for (int i = 0; i < count; i++) {
         if (ev[i].type != PR_EV_ABILITY_SHOW || ev[i].battler < 0 || ev[i].battler > 3) continue;
         const int side = ev[i].battler / 2;
         reveal(run, side, &ev[i].field[ev[i].battler]);
         if (ev[i].id == ABILITY_ID_FRISK || ev[i].id == ABILITY_ID_TRACE)
             for (int b = (1 - side) * 2; b < (1 - side) * 2 + 2; b++) reveal(run, 1 - side, &ev[i].field[b]);
     }
+}
+
+static void note_revealed(gc_run *run)
+{
+    int first = run->eng.n_events_acknowledged;
+    note_revealed_chunk(run, run->eng.events + first, run->eng.n_events - first);
+}
+
+static void battle_event_chunk(const pr_event *events, int count, void *ctx)
+{
+    gc_run *run = ctx;
+    note_revealed_chunk(run, events, count);
+    gc_ev_battle_chunk(run, events, count);
 }
 
 /* changeForm can clamp the battle actor's permanent abilityIndex. Keep the
@@ -758,6 +790,17 @@ int gc_battle_run(gc_run *run, int pick)
     } else {
         pr_resume_party_pick(bt, &run->eng, pick >= 0 ? gc_battle_slot_of(run, pick) : -1);
     }
+    return engine_returned(run);
+}
+
+/* handleMysteryEncounterBattleStartEffects: the MovePhases and the cleanup, run to the next stop (not a turn: the turn counter stays) */
+int gc_battle_start_effects(gc_run *run)
+{
+    gc_wallet_to_battle(run);
+    balls_to_battle(run);
+    gc_int(run)->at_save_point = false;
+    gc_int(run)->n_me_start = 0;
+    pr_run_start_of_battle_effects(&run->bt, &run->eng);
     return engine_returned(run);
 }
 
@@ -842,14 +885,10 @@ static bool cancel_encounter_charges(gc_run *run)
  * the preceding post-battle callback events have already been handed over. */
 static void charge_cleanup_snapshot(gc_run *run)
 {
-    if(run->n_battle_events>=GC_MAX_BATTLE_EVENTS){run->battle_events_overflow=true;return;}
-    int old=run->eng.n_events;
-    pr_event_add(&run->bt,&run->eng,PR_EV_NONE,-1,-1,0,0,NULL);
-    if(run->eng.n_events==old){run->battle_events_overflow=true;return;}
-    int first=run->n_battle_events++;
-    run->battle_events[first]=run->eng.events[old];
-    gc_event *event=gc_ev_new(run,GC_EV_BATTLE);
-    if(event){event->a=first;event->b=1;}
+    pr_event *snapshot=pr_event_add(&run->bt,&run->eng,PR_EV_NONE,-1,-1,0,0,NULL);
+    if(!snapshot){run->battle_events_overflow=true;return;}
+    gc_ev_battle_chunk(run,snapshot,1);
+    pr_event_acknowledge(&run->eng);
 }
 
 void gc_battle_end_cleanup(gc_run *run)
