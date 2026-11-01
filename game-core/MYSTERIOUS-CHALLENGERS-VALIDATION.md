@@ -131,7 +131,7 @@ zero model violations. Its original coverage assertions remain mandatory; all
 nine storage-owner and three real-driver compiled faults are rejected. Verbose
 failure diagnostics identify the unmet assertion if the corpus later changes.
 
-Ordinary low-level trainer constructors are subsequently covered by
+Ordinary default trainer constructors, including their TM/relearner pools, are covered by
 [TRAINER-CONSTRUCTOR-VALIDATION.md](TRAINER-CONSTRUCTOR-VALIDATION.md). Its bounds
-remain explicit; this does not extend the Challengers source proof to higher-level
-trainer TM/egg generation or all played battles.
+remain explicit; this does not extend the Challengers source proof to egg-enabled
+boss/static trainer generation or all played battles.

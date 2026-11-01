@@ -14,6 +14,15 @@ typedef struct {
 } gc_mg_constants;
 extern const gc_mg_constants gc_mg_const;
 
+/* Trainer pools and caps, from the same pinned balance module and trainer configs. */
+typedef struct {
+    int tm_level[3], tm_weight[3], tm_cap_level[4];
+} gc_mg_trainer_constants;
+extern const gc_mg_trainer_constants gc_mg_trainer_const;
+extern const int gc_mg_tm_forbidden_count, gc_mg_trainer_egg_count;
+extern const uint16_t gc_mg_tm_forbidden[];
+extern const bool gc_mg_trainer_egg[];
+
 /* gc_mg_move.flags */
 enum {
     GC_MGF_CHARGING = 1 << 0, GC_MGF_RECHARGE = 1 << 1, GC_MGF_DELAYED = 1 << 2, GC_MGF_MULTIHIT_POWER_INC = 1 << 3,

@@ -1,5 +1,5 @@
 /* Actual Trainer.genPartyMember with its real moveset and constructor finish.
- * Retains 696 single-member observations, then observes complete ordinary parties. */
+ * Retains the original 1880 observations and adds higher-level pools/cap boundaries. */
 import { BattleScene } from "#app/battle-scene";
 import { timedEventManager } from "#app/global-event-manager";
 import { activeOverrides } from "#app/overrides";
@@ -16,6 +16,7 @@ import { willTerastallize } from "#utils/pokemon-utils";
 import { GameManager } from "#test/framework/game-manager";
 import Phaser from "phaser";
 import fs from "node:fs";
+import { gzipSync } from "node:zlib";
 import { it,expect,vi } from "vitest";
 it('actual trainer member moveset and constructor finish',async()=>{
  const native=BattleScene.prototype.randBattleSeedInt;expect(vi.isMockFunction(native)).toBe(false);
@@ -39,6 +40,8 @@ it('actual trainer member moveset and constructor finish',async()=>{
  for(const type of [TrainerType.YOUNGSTER,TrainerType.BREEDER])for(const wave of [11,99])for(const level of [5,24,25,69,70,100])for(let sample=0;sample<8;sample++)cases.push({type,wave,level});
  const generic=Object.values(trainerConfigs).filter((c:any)=>c.trainerType>0&&c.trainerType<=TrainerType.YOUNGSTER).map((c:any)=>c.trainerType);
  for(const type of generic)for(const wave of [11,99])for(const level of [5,24])for(let sample=0;sample<2;sample++)cases.push({type,wave,level});
+ const higherTypes=[TrainerType.ACE_TRAINER,TrainerType.BREEDER,TrainerType.BAKER,TrainerType.MYSTERIOUS_SISTERS,TrainerType.TWINS,TrainerType.VETERAN,TrainerType.YOUNG_COUPLE,TrainerType.YOUNGSTER];
+ for(const type of higherTypes)for(const wave of [11,99])for(const level of [24,25,39,40,41,54,55,69,70,71,79,80,100,101,120,121,160,161,169,170,200,201])for(let sample=0;sample<2;sample++)cases.push({type,wave,level});
  for(const {type,wave,level}of cases){
   const index=rows.length;s.currentBattle.waveIndex=wave;s.currentBattle.battleType=BattleType.TRAINER;s.currentBattle.enemyParty=[];s.currentBattle.enemyLevels=[level];s.enemyModifiers=[];s.modifiers=[];
   s.setSeed(`trainer-full-${index}`);s.waveSeed=`trainer-full-wave-${index}`;
@@ -54,7 +57,10 @@ it('actual trainer member moveset and constructor finish',async()=>{
  }
  expect(rows.length).toBe(cases.length);
  const parties:any[]=[];
- for(const type of generic)for(const wave of [11,99])for(const level of [5,24])for(let sample=0;sample<2;sample++){
+ const partyCases:any[]=[];
+ for(const type of generic)for(const wave of [11,99])for(const level of [5,24])for(let sample=0;sample<2;sample++)partyCases.push({type,wave,level});
+ for(const type of higherTypes)for(const wave of [11,99])for(const level of [25,40,41,55,71,80,101,121,161,170,201])for(let sample=0;sample<2;sample++)partyCases.push({type,wave,level});
+ for(const {type,wave,level}of partyCases){
   const index=parties.length;s.currentBattle.waveIndex=wave;s.currentBattle.battleType=BattleType.TRAINER;s.currentBattle.enemyParty=[];s.enemyModifiers=[];s.modifiers=[];
   s.setSeed(`trainer-party-${index}`);s.waveSeed=`trainer-party-wave-${index}`;
   const double=!!trainerConfigs[type].doubleOnly;s.currentBattle.double=double;
@@ -74,7 +80,7 @@ it('actual trainer member moveset and constructor finish',async()=>{
   for(const p of s.currentBattle.enemyParty){s.fieldUI.remove(p.battleInfo);s.field.remove(p);p.destroy();}
   s.currentBattle.enemyParty=[];trainer.destroy();s.currentBattle.trainer=null;
  }
- expect(parties.length).toBe(504);
- fs.writeFileSync(process.env.TRAINER_FULL_OUT??'/tmp/trainer-full.json',JSON.stringify({version:1,upstream:'8555c08c823b856cbec4eb99ca84ea52a955836d',rows,parties})+'\n');
+ expect(parties.length).toBe(partyCases.length);
+ fs.writeFileSync(process.env.TRAINER_FULL_OUT??'/tmp/trainer-full.json.gz',gzipSync(JSON.stringify({version:2,upstream:'8555c08c823b856cbec4eb99ca84ea52a955836d',rows,parties})+'\n'));
  fs.writeFileSync(process.env.TRAINER_FACTS_OUT??'/tmp/trainer-move-facts.json',JSON.stringify(allMoves.map((m:any)=>(m.getAttrs('StatStageChangeAttr').some((a:any)=>a.stages>1&&a.selfTarget)?1:0)|(m.hasAttr('OneHitKOAttr')?2:0)))+'\n');
 },120000);
