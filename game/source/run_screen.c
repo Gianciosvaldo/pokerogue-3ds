@@ -1041,6 +1041,8 @@ static void ask(void) {
   o.can_switch = s->can_switch;
   o.can_run = s->can_run;
   o.struggle = s->struggle;
+  o.can_tera = s->can_tera;
+  o.tera_type = s->tera_type;
   o.on_menu = G.cfg.on_quit ? open_run_menu : NULL;
   static bv_item foe[BV_MAX_FOE_ITEMS];
   o.n_foe_items = foe_items(foe, BV_MAX_FOE_ITEMS);
@@ -1111,6 +1113,7 @@ static void on_command(bv_command c, void* arg) {
       ch.kind = GC_CH_FIGHT;
       ch.a = (int16_t)c.move_slot;
       ch.b = -1;
+      ch.c = (int16_t)(c.tera ? 1 : 0); /* 1 = Terastallize (game-core: gc_can_tera_command) */
       if (answer(&ch)) G.st.fights++;
       break;
     case 1: {
