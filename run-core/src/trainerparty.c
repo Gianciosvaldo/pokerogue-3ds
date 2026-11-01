@@ -1,6 +1,6 @@
 /* Trainer.genPartyMember (src/field/trainer.ts) for each party member in turn, as the EncounterPhase
  * calls it: the member's own RNG (executeWithSeedOffset on the run seed), the species (partyMemberFuncs
- * are closures and report PR_RUN_UNPORTED_TRAINER; the double named trainers' split signature pools;
+ * use guarded explicit owners or report PR_RUN_UNPORTED_TRAINER; the double named trainers' split signature pools;
  * same-species templates; genNewPartyMemberSpecies; the final getSpeciesForLevel) and addEnemyPokemon up
  * to the moveset, whose form gives the member's types for the next members' balance check. The JS each
  * step replaces is quoted where it happens. */
@@ -56,7 +56,7 @@ static int filtered_signature(const pr_trainer_species *ts, const pr_trainer_par
     return n;
 }
 
-/* getRandomPartyMemberFunc factories on the two ordinary paired classes.
+/* getRandomPartyMemberFunc factories on the three ordinary paired classes.
  * Pools and explicit partner slots are from the pinned trainer-config source. */
 int pr_run_gen_pair_closure_member(pr_run *run,const pr_trainer_party_ctx *ctx,
                                   int index,int func_key,pr_enemy_gen *out,int *out_species)
@@ -70,10 +70,15 @@ int pr_run_gen_pair_closure_member(pr_run *run,const pr_trainer_party_ctx *ctx,
         {SPECIES_ID_GASTLY,SPECIES_ID_MISDREAVUS,SPECIES_ID_DRIFLOON,SPECIES_ID_SABLEYE,SPECIES_ID_BANETTE,SPECIES_ID_ESPURR,SPECIES_ID_PUMPKABOO,SPECIES_ID_HATENNA,SPECIES_ID_SINISTEA,SPECIES_ID_GREAVARD,SPECIES_ID_ALOLA_MAROWAK},
         {SPECIES_ID_CLEFFA,SPECIES_ID_AZURILL,SPECIES_ID_TOGEPI,SPECIES_ID_MAWILE,SPECIES_ID_MIMIKYU,SPECIES_ID_ESPURR,SPECIES_ID_SWIRLIX,SPECIES_ID_IMPIDIMP,SPECIES_ID_MILCERY,SPECIES_ID_SNUBBULL,SPECIES_ID_ALOLA_VULPIX}
     };
+    static const uint16_t couple[2][8]={
+        {SPECIES_ID_NIDORAN_F,SPECIES_ID_MILTANK,SPECIES_ID_SILCOON,SPECIES_ID_SKITTY,SPECIES_ID_ILLUMISE,SPECIES_ID_LUVDISC,SPECIES_ID_ALOLA_VULPIX,SPECIES_ID_GALAR_PONYTA},
+        {SPECIES_ID_NIDORAN_M,SPECIES_ID_TAUROS,SPECIES_ID_CASCOON,SPECIES_ID_ELECTRIKE,SPECIES_ID_VOLBEAT,SPECIES_ID_LUVDISC,SPECIES_ID_VULPIX,SPECIES_ID_PONYTA}
+    };
     if(func_key<0||func_key>1)return 0;
     const uint16_t *pool;int count;
     if(ctx->enemy.trainer_type==TRAINER_TYPE_TWINS){pool=twins[func_key];count=18;}
     else if(ctx->enemy.trainer_type==TRAINER_TYPE_MYSTERIOUS_SISTERS){pool=sisters[func_key];count=11;}
+    else if(ctx->enemy.trainer_type==TRAINER_TYPE_YOUNG_COUPLE){pool=couple[func_key];count=8;}
     else return 0;
     if(!ctx->template_||index<0||index>=ctx->n_levels||index>=PR_MAX_PARTY_TEMPLATE)return -1;
     const int kind=(ctx->template_->member[index]>>2)&3;
@@ -86,7 +91,9 @@ int pr_run_gen_pair_closure_member(pr_run *run,const pr_trainer_party_ctx *ctx,
     *out_species=species;return 1;
 }
 
-int pr_run_gen_trainer_party(pr_run *run, const pr_trainer_party_ctx *ctx, pr_trainer_party *out)
+int pr_run_gen_trainer_party_with_constructor(pr_run *run, const pr_trainer_party_ctx *ctx,
+                                              pr_trainer_party *out,
+                                              pr_trainer_constructor_owner owner, void *user)
 {
     memset(out, 0, sizeof *out);
     const pr_trainer_species *ts = trainer_species(ctx->enemy.trainer_type);
@@ -187,6 +194,20 @@ int pr_run_gen_trainer_party(pr_run *run, const pr_trainer_party_ctx *ctx, pr_tr
         out->levels[e] = level;
         out->n = e + 1;
 
+        if (owner) {
+            pr_enemy_gen_ctx ec = ctx->enemy;
+            ec.species = species;
+            ec.level = level;
+            ec.trainer_slot = !ctx->is_double || !(e % 2) ? 1 : 2;
+            ec.boss = false;
+            ec.shiny_lock = false;
+            const pr_rng base_rng = run->rng;
+            const pr_enemy_gen base = out->mons[e];
+            const int handled = owner(run, &ec, e, &out->mons[e], user);
+            if (handled < 0) { run->rng = saved; return -1; }
+            if (!handled) { run->rng = base_rng; out->mons[e] = base; }
+        }
+
         /* what the next members see: the root (checkDuplicateSpecies) and getTypes() of the new member
          * (its fusion's types too, in spliced endless) */
         int8_t types[2];
@@ -203,4 +224,9 @@ int pr_run_gen_trainer_party(pr_run *run, const pr_trainer_party_ctx *ctx, pr_tr
     }
     run->rng = saved;   /* each member rolled inside executeWithSeedOffset: RND comes back */
     return 0;
+}
+
+int pr_run_gen_trainer_party(pr_run *run, const pr_trainer_party_ctx *ctx, pr_trainer_party *out)
+{
+    return pr_run_gen_trainer_party_with_constructor(run, ctx, out, NULL, NULL);
 }

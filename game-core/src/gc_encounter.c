@@ -360,6 +360,30 @@ bool gc_gen_wild(gc_run *run, int level)
     return gen_wild(run, level);
 }
 
+/* A continuation of addEnemyPokemon inside Trainer.genPartyMember's member RNG.
+ * Only publish these staged mons after the entire party's prefix succeeds. */
+typedef struct {
+    gc_run *run;
+    gc_mon mons[6];
+    bool ready[6];
+} trainer_constructor_state;
+
+static int finish_trainer_constructor(pr_run *r, const pr_enemy_gen_ctx *ec,
+                                      int member, pr_enemy_gen *g, void *user)
+{
+    trainer_constructor_state *state = user;
+    if (member < 0 || member >= 6 || ec->trainer_type != state->run->trainer_type) return 0;
+    gc_mon *m = &state->mons[member];
+    gc_mon_new_enemy(state->run, m, ec->species, ec->level, g, ec->trainer_slot);
+    if (!gc_generate_moveset(state->run, &r->rng, m)) return 0;
+    memset(g->moveset, 0, sizeof g->moveset);
+    for (int k = 0; k < m->b.n_moves; k++) g->moveset[k] = m->b.moves[k];
+    if (pr_run_enemy_pokemon_finish(r, ec, g) < 0) return -1;
+    gc_refresh_enemy(state->run, m, ec->species, ec->level, g, ec->trainer_slot);
+    state->ready[member] = true;
+    return 1;
+}
+
 /* the ordinary party of a trainer: `tpl`'s members at `levels`, as EncounterPhase generates them (unfinished: gc_enemy_finish_party follows) */
 static bool gen_trainer_party(gc_run *run, const pr_party_template *tpl, int trainer_type, int variant, const int *levels, int n_levels)
 {
@@ -367,7 +391,8 @@ static bool gen_trainer_party(gc_run *run, const pr_party_template *tpl, int tra
     pr_trainer_party_ctx tc;
     memset(&tc, 0, sizeof tc);
     gc_enemy_ctx(run, &tc.enemy);
-    tc.enable_gym_e4=run->mystery_type==GC_ME_MYSTERIOUS_CHALLENGERS;
+    tc.enable_gym_e4 = run->mystery_type == GC_ME_MYSTERIOUS_CHALLENGERS
+        || (trainer_type > 0 && trainer_type <= TRAINER_TYPE_YOUNGSTER);
     const pr_trainer_info *t = trainer_info(trainer_type);
     tc.is_double = (t && t->double_only) || variant == TRAINER_VARIANT_DOUBLE;
     tc.classic_wave20_trainer = run->wave == 20 && run->run.mode == GAME_MODES_CLASSIC;
@@ -375,9 +400,17 @@ static bool gen_trainer_party(gc_run *run, const pr_party_template *tpl, int tra
     tc.n_levels = n_levels;
     memcpy(tc.levels, levels, sizeof(int) * (size_t)n_levels);
     static pr_trainer_party party;
-    if (pr_run_gen_trainer_party(&run->run, &tc, &party) < 0) return false;
+    static trainer_constructor_state state; /* six mons exceed the 3DS stack budget */
+    memset(&state, 0, sizeof state);
+    state.run = run;
+    if (pr_run_gen_trainer_party_with_constructor(&run->run, &tc, &party,
+                                                  finish_trainer_constructor, &state) < 0) return false;
     run->n_enemy = 0;
     for (int e = 0; e < party.n && e < 6; e++) {
+        if (state.ready[e]) {
+            run->enemy[run->n_enemy++] = state.mons[e];
+            continue;
+        }
         pr_enemy_gen_ctx ec = tc.enemy;
         ec.species = party.species[e];
         ec.level = levels[e];

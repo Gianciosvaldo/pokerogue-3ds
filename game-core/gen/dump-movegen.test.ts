@@ -39,7 +39,7 @@ const F: Record<string, number> = {
   SACRIFICIAL_ON_HIT: 1 << 11, WEATHER_CHANGE: 1 << 12, COND_TARGET_SLEEP: 1 << 13, COND_USER_SLEEP: 1 << 14,
   SELF_STATUS_SINGLE: 1 << 15, THUNDER_ACC: 1 << 16, STORM_ACC: 1 << 17, ANTI_SUN: 1 << 18, SLEEP_STATUS: 1 << 19,
   SLEEP_SELF: 1 << 20, POISON_ATTR: 1 << 21, VARIABLE_TYPE: 1 << 22, WEATHER_BALL_TYPE: 1 << 23, TERA_CATEGORY: 1 << 24,
-  CALL_MOVE: 1 << 25, HP_SPLIT: 1 << 26, TERRAIN_CHANGE: 1 << 27,
+  CALL_MOVE: 1 << 25, HP_SPLIT: 1 << 26, TERRAIN_CHANGE: 1 << 27, TRAINER_BUFF: 1 << 28, OHKO: 1 << 29,
 };
 const VT_KIND: Record<string, number> = {
   "": 0, FormChangeItemTypeAttr: 1, TechnoBlastTypeAttr: 2, AuraWheelTypeAttr: 3, RagingBullTypeAttr: 4, IvyCudgelTypeAttr: 5,
@@ -70,6 +70,8 @@ it("dump movegen", async () => {
     const set = (name: string, cond: boolean) => { if (cond) flags |= F[name]; };
     set("CHARGING", m.isChargingMove());
     set("RECHARGE", has("RechargeAttr"));
+    set("TRAINER_BUFF", m.getAttrs("StatStageChangeAttr").some((a: any) => a.stages > 1 && a.selfTarget));
+    set("OHKO", has("OneHitKOAttr"));
     set("DELAYED", has("DelayedAttackAttr"));
     set("MULTIHIT_POWER_INC", has("MultiHitPowerIncrementAttr"));
     set("MULTIHIT", has("MultiHitAttr"));
@@ -283,7 +285,7 @@ it("dump movegen", async () => {
     '#include "gc/movegen.h"',
     "#include <math.h>",
     "",
-    `const gc_mg_constants gc_mg_const = {${MG.BASE_LEVEL_WEIGHT_OFFSET}, ${MG.EVO_MOVE_BP_THRESHOLD}, ${MG.EVOLUTION_MOVE_WEIGHT}, ${MG.RELEARN_MOVE_WEIGHT}, ${MG.BASE_WEIGHT_MULTIPLIER}, ${MG.MOVE_POWER_CEILING}, ${MG.FORCED_SIGNATURE_MOVE_CHANCE}, ${MG.LEVEL_BASED_DENYLIST_THRESHOLD}, ${MG.BOSS_EXTRA_WEIGHT_MULTIPLIER}};`,
+    `const gc_mg_constants gc_mg_const = {${MG.BASE_LEVEL_WEIGHT_OFFSET}, ${MG.EVO_MOVE_BP_THRESHOLD}, ${MG.EVOLUTION_MOVE_WEIGHT}, ${MG.RELEARN_MOVE_WEIGHT}, ${MG.BASE_WEIGHT_MULTIPLIER}, ${MG.MOVE_POWER_CEILING}, ${MG.FORCED_SIGNATURE_MOVE_CHANCE}, ${MG.LEVEL_BASED_DENYLIST_THRESHOLD}, ${MG.BOSS_EXTRA_WEIGHT_MULTIPLIER}, ${MG.COMMON_TIER_TM_LEVEL_REQUIREMENT}, ${MG.RELEARN_LEVEL_REQUIREMENT}};`,
     "",
     `const int gc_mg_move_count = ${moves};`,
     `const gc_mg_move gc_mg_moves[${moves}] = {`,
