@@ -186,7 +186,9 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 | Enemy moveset: the last four level moves for unsupported constructors. Task 64's first slice calls Task 63 for supported clean wild enemies; trainer streams and broader pools still use the counted fallback | run-core |
 | A reward taken that isn't a ball, Full Heal, Rare Candy, Rarer Candy (Task 96 / PR #136), held item or one of the healing, revive and PP items Task 60/96 ported (TMs, Memory Mushroom, Mints, money, evolution items) is added to the items and counted (`reward taken without its own effect`) | later reward tasks |
 | Double battles are played as singles (M1 rule) | doubles in battle-core |
-| Mystery encounters and the fixed classic battles run-core can't make (evil team, gyms) become wild battles of the wave's level; the six classic rivals and the Classic/Challenge E4 are real since `gc_new_battle` sets `enable_fixed_rivals` | run-core, later the encounters |
+| Mystery encounters and the fixed classic battles run-core can't make (the Town Youngster, the evil team's grunts, admins and bosses) become wild battles of the wave's level; the six classic rivals (`enable_fixed_rivals`), the gym leaders of the boss trainer waves, the Elite Four and the Champion (`enable_gym_e4`) are real fights | run-core, later the encounters |
+| The held items of the Champions Red, Steven, Wallace and Kieran (and rivals 5 and 6): their configs have a `genModifiersFunc`, which run-core's item generation reports as `PR_RUN_UNPORTED_TRAINER`, so they hold nothing (counted as `enemy run-core can't generate`) | run-core |
+| Terastallization of the gym leaders, the Elite Four and the Champion (`config.trainerAI.teraMode` and the random Tera modifiers are not in the trainer data): the AI's tera mode stays NO_TERA | trainer data dump |
 | A boss's battle score: `addFaintedEnemyScore` (and the catch's own copy of it) multiplies it by `sqrt(bossSegments)`; Task 93 sets `boss_segments` on Pokemon encounters and `gc_phases.c` calculates score using `boss_segments` | Task 93 (PR #122) |
 | In a wave whose number is a multiple of 10, once every enemy has fainted, upstream's CheckInterludePhase (`onInterlude`) drops the rest of that turn's weather, berry and status-effect phases and flags the TurnEndPhase; battle-core has it unported (`(phase CheckInterludePhase)` in the soak's unported list: 218 of 1000 runs), so those effects run | battle-core: CheckInterludePhase |
 | The biome's weather and terrain are set on the arena without the engine's phases: no start animation, and no PostWeatherChange abilities for a Daily Run's per-wave roll with a Pokémon already out; the weather text comes out as game-core's own messages before "A wild ... appeared"; timed-event pools are left out | `gc_arena_new_battle` |
@@ -198,8 +200,7 @@ Stand-ins (counted in `run->stubs`, named in `gc_stub_name`):
 
 Not started: the dex and starter unlocks, eggs, Imprison and the
 restriction texts of their own (a restricted move answers `battle:moveCannotBeSelected` until
-battle-core's `pr_move_usable` lands), the trainer config's boss flag and Terastallization for the fixed
-battles' trainers, form learnsets for level-up learning (`gc_level_up_moves`; the TM and Memory Mushroom
+battle-core's `pr_move_usable` lands), Terastallization for the gym leaders', Elite Four's and Champion's trainers, form learnsets for level-up learning (`gc_level_up_moves`; the TM and Memory Mushroom
 lists read them since Task 59), and the prevolution-move messages.
 
 ## Data
@@ -759,12 +760,34 @@ rule, such as the Plus voucher for later wins or the wave-115 Mega Bracelet and 
 `GC_STUB_TRAINER_REWARDS` is counted only if reward-core has no row for a reward the config
 lists (none does today). The six classic rivals are real fights (`enable_fixed_rivals`), so their rewards are reachable.
 
+### Gym leaders, the Elite Four and the Champion
+
+`gc_new_battle` sets `enable_gym_e4` on run-core's new battle (waves 182, 184, 186 and 188 are the Elite Four and 190 the Champion, picked from run-core's
+fixed table) and `gen_trainer_party` on the trainer's party (the boss trainer waves, `wave % 30 == 20` or `0` with offsetGym, draw a gym leader from the biome's
+boss pool and generate its team through `partyMemberFuncs`), so these fights are the trainer's own and no longer the wild stand-in. Before this change the
+flag was never set: every gym wave and waves 182 to 190 were wild battles. The trainer's `isBoss` reaches the AI (`ai_trainer_on`: a boss switches at 2x the matchup
+instead of 3x), and the prize money, the "defeated" text, the voucher and the dialogue are the trainer's config, as for any trainer.
+
+`tools/gymdiff.sh <upstream dir> [N] [seed]` replays run-core's gym_e4 producer (the real gym leader and fixed battle of random seeds, waves, biomes, wave
+cycle offsets and ids; its file is the unchanged `run-core/tests/gym_e4.producer.test.ts`) through `gc_new_battle` and compares, in `tests/gym_e4_diff_test.c`,
+the trainer type and variant, double or single, the number of members and each member's level, species, id, gender, form, nature, ability slot, Tera type and
+fusion, and that no stand-in was used. The producer's snapshot is taken before a member is summoned, so a Wishiwashi of level 20 or more is expected in its School
+form (Schooling) and counted as such. `tools/gymplant.sh <trace>` shows ten one-line breakages fail the differential or `tests/gym_e4_test.c` (a whole fight per
+boss wave on eight seeds with an unbeatable party: team size, no stand-in, prize money, the AI's boss flag, a save and load at the start of each fight,
+and what the win's events carry, below).
+
+A win on a wave whose number is a multiple of 10 has no reward screen (`queue_battle_end`), which is every gym wave and the Champion's 190: the rewards, the
+next wave's `GC_EV_WAVE` and its first events come in the same batch as the victory, so by the time the app plays "X was defeated!" and the trainer's
+line the run already holds the next battle (`trainer_names` empty, `trainer_type` -1). The events therefore carry what they need: `GC_EV_DIALOGUE`'s
+`msg.args[0].s` is the speaker's name and the `battle:trainerDefeated` message's `a` is the beaten trainer type (the victory music). `tests/gym_e4_test.c`
+checks both on every win, and that they are exercised after the run has moved on (the six gym waves and the Champion's 190 of each seed, and the victory lines among them).
+
 ### Trainer dialogue (`GC_EV_DIALOGUE`)
 Upstream gives every trainer class an encounter and a victory line (`initTrainerTypeDialogue`, the `dialogue` namespace), picked with
 `randSeedItem` under the wave's seed offset; the six rivals also have a portrait (`hasCharSprite`). `gen/dump-trainers.test.ts` dumps
 both lists per variant and `hasCharSprite` into `gc_trainers.c` (`gc_trainer_config.dialogue[variant][0 encounter / 1 victory]`,
 `has_char_sprite`, the key pool `gc_trainer_dialogue_keys`). `gc_trainer_dialogue_key(run, kind)` picks the line, and the run queues
-`GC_EV_DIALOGUE` (a = trainer type, b = variant, c = kind, `msg.key` = the locale key) right after `GC_EV_TRAINER` and before
+`GC_EV_DIALOGUE` (a = trainer type, b = variant, c = kind, `msg.key` = the locale key, `msg.args[0].s` = the speaker's name) right after `GC_EV_TRAINER` and before
 "X would like to battle!" (also when a saved battle loads, as upstream shows it again), and after "X was defeated!". The pick uses
 a separate seed-offset RNG, so no other roll moves. The rival's variant follows the player (a male player meets the female Ivy).
 `tests/rival_dialogue_host_test.c` plays a run to wave 8 and checks the order, the keys and the loaded battle.

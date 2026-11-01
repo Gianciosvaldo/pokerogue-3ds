@@ -39,7 +39,8 @@
  * The turns' own events (moves, damage, faints, switches, their texts) are battle-core's pr_event list
  * (include/pr/events.h), handed over as GC_EV_BATTLE. */
 typedef enum {
-    GC_EV_MESSAGE,       /* a text box: msg */
+    GC_EV_MESSAGE,       /* a text box: msg. "battle:trainerDefeated" also has a = the TrainerType that was beaten (the run may be a
+                          * wave further by the time it is played: see GC_EV_DIALOGUE) */
     GC_EV_BATTLE,        /* play b events from gc_run_battle_event_data(run) + a (a turn, the
                           * rest of one after a switch prompt or after a victory's experience, the start of
                           * a battle after the "Will you switch?" answer). They stay valid until the next
@@ -52,7 +53,8 @@ typedef enum {
     GC_EV_RECALL,        /* outside a turn, a Pokemon goes back into its ball: a = side, b = party index */
     GC_EV_HP,            /* outside a turn (items, the party heal): a = side, b = party index, c = HP now */
     GC_EV_EXP,           /* a = party index, c = level before; see exp_amount/exp_before */
-    GC_EV_LEVEL_UP,      /* a = party index, b = the new level (stats are already updated), c = the level before */
+    GC_EV_LEVEL_UP,      /* a = party index, b = the new level (stats are already updated), c = the level before; hp = its HP right after
+                          * the level-up (the rest of the turn can still change it before the app plays this) */
     GC_EV_MOVE_LEARNED,  /* a = party index, b = move slot, c = MoveId */
     GC_EV_EVOLVED,       /* a = party index, b = species before, c = species after */
     GC_EV_MONEY,         /* money_change / money_after; a/b truncate in-range values, otherwise zero */
@@ -65,7 +67,11 @@ typedef enum {
                           * (EncounterPhase, after the trainer slides in and before "X would like to battle!"), 1 after it is won
                           * (TrainerVictoryPhase, after "X was defeated!"). msg.key is the line's locale key; the text keeps its
                           * @c{expression} markers, @d{delay} and "$" page breaks. The app shows it with the trainer's name and,
-                          * where gc_trainer_config.has_char_sprite, the trainer's portrait */
+                          * where gc_trainer_config.has_char_sprite, the trainer's portrait. msg.args[0].s is the speaker's name
+                          * (i18next nesting text for i18n_resolve; getName(NONE, true) before the fight, getName(TRAINER, true)
+                          * after it), read from the event and not from gc_run.trainer_names: a win on a wave with no reward screen
+                          * (every tenth) goes straight on to the next wave in the same batch of events, and by the time the app
+                          * plays the line the run holds the next battle's names. The text stays valid for the next two trainer battles */
     GC_EV_COUNT,
 } gc_event_kind;
 
@@ -88,6 +94,7 @@ typedef struct {
     bool egg_shiny, egg_move_rare;
     uint8_t egg_nature, egg_ivs[6], egg_previous_ivs[6];
     uint16_t egg_move;
+    int32_t hp;                /* GC_EV_LEVEL_UP only */
 } gc_event;
 
 /* ---------------------------------------------------------------- screens and choices */

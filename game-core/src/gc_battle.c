@@ -649,13 +649,14 @@ void gc_ai_enemy_party(gc_run *run)
 }
 
 /* currentBattle.trainer for the AI's calls (NULL in a wild battle); ai.trainer goes back to NULL after
- * each call. Only the random trainers' classes are met for now (the fixed battles, where gym leaders,
- * the Elite Four, champions and evil team bosses are, fall back to wild ones): none is a boss and none
- * terastallizes, which is what these defaults say. Trainer pairs retain separate reserve ownership. */
+ * each call. isBoss is the trainer config's (gym leaders, the Elite Four, champions, the later rivals: they switch at 2x the
+ * matchup, not 3x); nobody terastallizes yet (config.trainerAI's tera modes are not in the trainer data), which is what
+ * the NO_TERA default says. Trainer pairs retain separate reserve ownership. */
 static void ai_trainer_on(gc_run *run)
 {
     gc_internal *in = gc_int(run);
-    in->ai_trainer.is_boss = false;
+    const gc_trainer_config *tc = run->battle_type == BATTLE_TYPE_TRAINER ? gc_trainer_config_of(run->trainer_type) : NULL;
+    in->ai_trainer.is_boss = tc && tc->is_boss;
     in->ai_trainer.is_double = gc_trainer_is_double(run);
     run->bt.trainer_partner = in->ai_trainer.is_double;
     in->ai_trainer.tera_mode = PR_TERA_AI_NO_TERA;

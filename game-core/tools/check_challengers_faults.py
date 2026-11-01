@@ -18,7 +18,7 @@ mutants=[
  ('pair-slot',pair,'ec.trainer_slot=func_key+1','ec.trainer_slot=0'),
  ('pair-evolution',pair,'true,kind,true,ctx->classic_wave20_trainer','true,PR_EVO_KIND_WILD,true,ctx->classic_wave20_trainer'),
  ('pair-pool',pair,'SPECIES_ID_METAPOD,SPECIES_ID_LEDYBA','SPECIES_ID_MAGIKARP,SPECIES_ID_LEDYBA'),
- ('entry-opt-in',entry,'tc.enable_gym_e4 = run->mystery_type == GC_ME_MYSTERIOUS_CHALLENGERS\n        || (trainer_type > 0 && trainer_type <= TRAINER_TYPE_YOUNGSTER);','tc.enable_gym_e4=false;'),
+ ('entry-opt-in',entry,'tc.enable_gym_e4 = true;','tc.enable_gym_e4 = false;'),
  ('fusion-field',battle,'for(int k=0;k<(bt->double_battle?2:1)&&k<bt->n_party[0];k++)bt->field[k]=bt->party[0][k];',''),
  ('summon-state',battle,'ev->summon_snapshot=true;','ev->summon_snapshot=false;'),
 ]
