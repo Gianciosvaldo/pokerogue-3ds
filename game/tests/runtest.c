@@ -191,6 +191,7 @@ static struct {
   bool armed;
   int party_idx;
   int species_before;
+  int fusion_before;   /* the fusion half's species (0: not fused): a fused member evolves either half */
   int species_target;
   int n_moves_before;
   uint16_t moves_before[4];
@@ -206,7 +207,7 @@ static struct {
   uint16_t move[16];
   bool offered[16];
 } EVM;
-static int n_evo_checked, n_cancel_checked, n_evo_moves_checked;
+static int n_evo_checked, n_cancel_checked, n_evo_moves_checked, n_evo_fusion;
 
 static char first_violation[300];
 
@@ -881,6 +882,7 @@ void ui_push_confirm(void (*on_done)(int yes, void* arg), void* arg) {
     EVO.armed = true;
     EVO.party_idx = sc->party;
     EVO.species_before = r->party[sc->party].b.species;
+    EVO.fusion_before = r->party[sc->party].b.fusion_species;
     EVO.species_target = sc->species;
     EVO.n_moves_before = r->party[sc->party].b.n_moves;
     for (int i = 0; i < EVO.n_moves_before && i < 4; i++) EVO.moves_before[i] = r->party[sc->party].b.moves[i];
@@ -897,12 +899,17 @@ static void evo_check(void) {
     return;
   }
   int current_species = r->party[EVO.party_idx].b.species;
+  const int current_fusion = r->party[EVO.party_idx].b.fusion_species;
   if (EVO.choice == 1) {
-    if (current_species != EVO.species_target) {
-      BAD("party slot %d holds species %d after evolution, expected target species %d",
-          EVO.party_idx, current_species, EVO.species_target);
+    /* the base species evolves and the fusion half stays, or (a fused member) the fusion half evolves and the base stays */
+    const bool base_evolved = current_species == EVO.species_target && current_fusion == EVO.fusion_before;
+    const bool fusion_evolved = EVO.fusion_before && current_fusion == EVO.species_target && current_species == EVO.species_before;
+    if (!base_evolved && !fusion_evolved) {
+      BAD("party slot %d holds species %d (fusion %d) after evolution, expected target species %d (it was %d, fusion %d)",
+          EVO.party_idx, current_species, current_fusion, EVO.species_target, EVO.species_before, EVO.fusion_before);
       return;
     }
+    if (fusion_evolved && !base_evolved) n_evo_fusion++;
     n_evo_checked++;
     uint16_t mv[16];
     const int n = gc_evolution_moves(&r->party[EVO.party_idx], mv, 16);
@@ -918,9 +925,9 @@ static void evo_check(void) {
       EVM.offered[EVM.n++] = false;
     }
   } else {
-    if (current_species != EVO.species_before) {
-      BAD("party slot %d holds species %d after cancelled evolution, expected original species %d",
-          EVO.party_idx, current_species, EVO.species_before);
+    if (current_species != EVO.species_before || current_fusion != EVO.fusion_before) {
+      BAD("party slot %d holds species %d (fusion %d) after cancelled evolution, expected original species %d (fusion %d)",
+          EVO.party_idx, current_species, current_fusion, EVO.species_before, EVO.fusion_before);
       return;
     }
     n_cancel_checked++;
@@ -1096,6 +1103,19 @@ void ps_open_item(const void* run, int pmode, bool target_move, int tm_move, voi
 void ps_open_reward(const void* run,const char* key,bool target_move,int item_arg,void (*pick)(int,int,void*),void* arg) {
   ps_open_item(run,0,target_move,item_arg,pick,arg);
   X.item_memory=!strcmp(key,"MEMORY_MUSHROOM");
+}
+
+/* DNA Splicers' party screen: the driver picks two members the screen's filter allows (or backs out), as a person would */
+static struct {
+  void (*pick)(int keep, int donor, void* arg);
+  void* arg;
+} FU;
+static int n_fuse_opens, n_fusions, n_fuse_back;
+void ps_open_fusion(const void* run, void (*on_pick)(int keep, int donor, void* arg), void* arg) {
+  (void)run;
+  n_fuse_opens++;
+  FU.pick = on_pick;
+  FU.arg = arg;
 }
 
 void ps_open_transfer(const void* run, void (*on_move)(int, int, int, void*), void (*on_done)(void*), void* arg) {
@@ -1472,6 +1492,37 @@ static bool step(void) {
       if(n>0)f(best,(int)rnd(n),X.item_arg);else f(6,-1,X.item_arg);
     } else
       f(best, X.item_move ? (int)rnd(4) : -1, X.item_arg);
+    return true;
+  }
+  if (FU.pick) {
+    void (*f)(int, int, void*) = FU.pick;
+    FU.pick = NULL;
+    const gc_run* r = rs_run();
+    int ok[PR_MAX_PARTY], n_ok = 0;
+    for (int i = 0; i < r->n_party; i++)
+      if (gc_fusion_pickable(r, i)) ok[n_ok++] = i;
+    if (n_ok < 2 || rnd(8) == 0) {
+      n_fuse_back++;
+      f(6, -1, FU.arg); /* backs out: the driver shows the rewards again */
+      return true;
+    }
+    const int a = (int)rnd((uint32_t)n_ok), b = (a + 1 + (int)rnd((uint32_t)(n_ok - 1))) % n_ok;
+    const int keep = ok[a], donor = ok[b], before = r->n_party;
+    const uint32_t keep_id = r->party[keep].b.id, donor_id = r->party[donor].b.id;
+    const uint16_t donor_species = r->party[donor].b.species;
+    f(keep, donor, FU.arg);
+    r = rs_run();
+    if (r->n_party != before - 1) BAD("DNA Splicers on two members the filter allowed left %d of %d in the party", r->n_party, before);
+    bool kept = false;
+    for (int i = 0; i < r->n_party; i++) {
+      if (r->party[i].b.id == donor_id) BAD("the member that was fused in is still in the party");
+      if (r->party[i].b.id == keep_id) {
+        kept = true;
+        if (r->party[i].b.fusion_species != donor_species) BAD("the member that stays has fusion species %d, the second member was %d", r->party[i].b.fusion_species, donor_species);
+      }
+    }
+    if (!kept) BAD("the member that stays left the party");
+    n_fusions++;
     return true;
   }
   if (X.biome) {
@@ -2003,6 +2054,7 @@ int main(int argc, char** argv) {
     BAD("the observer took in %ld battle ranges, the screen played %d", OBS.ranges, st->events[GC_EV_BATTLE]);
   if (OBS.runs != ended) BAD("%ld combat reports checked for %d runs", OBS.runs, ended);
   printf("reward screens: %d shops, %d item targets, %d biome maps\n", n_shops, n_item_opens, n_maps);
+  printf("DNA Splicers: %d party screens, %d fusions, %d backed out; %d evolutions of a fused member's fusion half\n", n_fuse_opens, n_fusions, n_fuse_back, n_evo_fusion);
   if (scanner_fixture) {
     printf("IV scanner: %d accepted, %d declined, %d windows\n",n_scanner_yes,n_scanner_no,n_scanner_windows);
     if (!n_scanner_yes || !n_scanner_no || n_scanner_windows!=n_scanner_yes)
