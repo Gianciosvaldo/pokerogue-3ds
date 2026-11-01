@@ -1190,7 +1190,14 @@ static void drive_manage_items(void) {
       if (had_to > 0 && had_to < max && moved != (qty < max - had_to ? qty : max - had_to))
         BAD("a transfer of %d %s onto a stack of %d (max %d) moved %d", qty, it.key, had_to, max, moved);
       if (had_to > 0 && had_to >= max && moved) BAD("a transfer onto a full stack of %s moved %d", it.key, moved);
-      if (!had_to && moved != qty) BAD("a transfer of %d %s to a Pokemon without it moved %d", qty, it.key, moved);
+      /* TurnStatusEffectModifier.match: a Toxic Orb and a Flame Orb are the same stack, so the one on the recipient (max 1) refuses the other */
+      const bool orb = !strcmp(it.key, "TOXIC_ORB") || !strcmp(it.key, "FLAME_ORB");
+      const char* pair = !strcmp(it.key, "TOXIC_ORB") ? "FLAME_ORB" : "TOXIC_ORB";
+      bool orb_blocked = false;
+      for (int k = 0; orb && k < r->n_items; k++)
+        if (r->items[k].pokemon_id == to_id && !strcmp(r->items[k].key, pair) && r->items[k].stack > 0) orb_blocked = true;
+      if (orb_blocked && moved) BAD("a transfer of %s onto a Pokemon holding the other orb moved %d", it.key, moved);
+      if (!had_to && !orb_blocked && moved != qty) BAD("a transfer of %d %s to a Pokemon without it moved %d", qty, it.key, moved);
       if (moved) {
         n_transfers++;
         n_transfer_copies += moved;

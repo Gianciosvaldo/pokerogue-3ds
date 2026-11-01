@@ -181,7 +181,10 @@ static void victory(gc_run *run, int enemy_idx)
         /* applyPartyExp(expValue, pokemonDefeated = true) */
         pr_exp_party pp;
         gc_exp_party_build(run, &pp, bt->participants, bt->n_participants);
-        if (run->me_battle) pp.me_exp_multiplier = 1.0;   /* isBattleMysteryEncounter(): floor(expValue * the encounter's expMultiplier), 1 */
+        if (run->me_battle) {   /* isBattleMysteryEncounter(): floor(expValue * the encounter's expMultiplier), 1; Mysterious Challengers' brutal fight sets 0.9 */
+            const gc_internal *gi = gc_int(run);
+            pp.me_exp_multiplier = gi->pillar.active && gi->pillar.mc && gi->pillar.option == 2 ? 0.9 : 1.0;
+        }
         /* Participating survivors gain friendship through the bounded Bell
          * projection. Unrepresented stock retains the counted legacy gain. */
         if (bt->n_participants > 0)

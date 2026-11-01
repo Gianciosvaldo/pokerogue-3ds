@@ -179,6 +179,13 @@ test: pillar-host-test
 pillar-host-test: $(BUILD)/mystery_pillar_test
 	$(BUILD)/mystery_pillar_test
 .PHONY: pillar-host-test
+all: $(BUILD)/mystery_challengers_test
+$(BUILD)/mystery_challengers_test: tests/mystery_challengers_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+test: challengers-host-test
+challengers-host-test: $(BUILD)/mystery_challengers_test
+	$(BUILD)/mystery_challengers_test
+.PHONY: challengers-host-test
 all: $(BUILD)/fusion_diff_test $(BUILD)/fusion_host_test
 $(BUILD)/fusion_diff_test: tests/fusion_diff_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

@@ -187,6 +187,9 @@ typedef struct {
     int8_t mystery_type;         /* MysteryEncounterType 0..30 */
     int8_t mystery_tier;         /* 0 COMMON, 1 GREAT, 2 ULTRA, 3 ROGUE */
     bool option_ok[8];
+    /* Mysterious Challengers: the three trainers of its easy, hard and brutal fights (trainer types, -1 = none) and their variants, for the silhouettes */
+    int16_t mc_trainer[3];
+    int8_t mc_variant[3];
     /* what the encounter's screen needs to word its texts and ask for its picks (gc_mystery_setup_screen): the {{tokens}} the intro, option
      * labels and tooltips use (only the encounters ported with their texts fill them), and for each option what the player picks first:
      * GC_PICK_NONE, a party member (GC_CH_MYSTERY.b) or a party member and then one of its moves, natures or abilities (b and c) */

@@ -117,7 +117,7 @@ typedef struct {
      * save point is the encounter's start, before the option is chosen */
     struct { bool active; int8_t turns_remaining; } fg;
     /* the Pillar Men's fight is running (option 0..2): its victory is the encounter's rewards. Not saved, for the same reason as fg */
-    struct { bool active; int8_t option; } pillar;
+    struct { bool active; bool mc; int8_t option; } pillar;   /* mc: Mysterious Challengers (gc_pillar.c) */
     /* an encounter's fight that is not allowed to flee (withFleeAllowed(false)) and, for a fight with a guaranteed reward (Fight or Flight), what its
      * victory opens: setEncounterRewards({guaranteedModifierTypeOptions: [item], fillRemaining: false}). Not saved, for the same reason as fg */
     bool me_no_flee;
@@ -423,6 +423,8 @@ bool gc_delibirdy_execute(gc_run *run, int option, int b, int c, const char **wh
 /* the Pillar Men (src/gc_pillar.c, custom runs) */
 bool gc_pillar_offered(const gc_run *run);                  /* the hook says the encounter is on offer */
 void gc_pillar_execute(gc_run *run, int option);            /* the option chosen: the fight starts (or the encounter leaves with the heal shop) */
+void gc_mc_trainers(gc_run *run, int type[3], int variant[3]);   /* Mysterious Challengers' three trainers */
+void gc_mc_execute(gc_run *run, int option);                /* its option chosen: the fight starts (victory is gc_pillar_victory) */
 void gc_pillar_victory(gc_run *run);                        /* the fight is won: the encounter's rewards, then the next wave */
 void gc_me_end_with_shop(gc_run *run);                      /* the shop in me_custom, then on to the next wave (end_mystery_encounter_shop) */
 const pr_trainer_info *gc_trainer_info_of(int type);
