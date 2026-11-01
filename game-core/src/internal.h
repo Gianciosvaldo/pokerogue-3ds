@@ -79,6 +79,9 @@ typedef struct {
     gc_rqueue rq;
     uint32_t next_tm_alias;    /* runtime array identities, independent of Pokemon IDs */
     uint32_t stub_rng;          /* the stand-ins' own RNG, so they never move upstream's */
+    /* tests only: pin the unseeded rolls of an evil team grunt fight (randInt(2) gender, randInt(3) double) instead of drawing them from stub_rng */
+    bool evil_roll_pinned;
+    uint8_t evil_roll[2];
     int reroll_count;
     int battle_item_count[2];   /* represented inventory prefix; rebuilt on load/setup */
     /* ai-core's view of the battle: enemySwitchCounter, each Pokemon's AI entry (initialTeamIndex,

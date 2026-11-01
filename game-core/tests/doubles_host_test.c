@@ -42,7 +42,10 @@ static void release_active_ally(void){
 static void restore_fainted_field(void){
  setup(2);pr_pokemon *ally=r.bt.field[1];CHECK(ally);ally->hp=0;ally->on_field=false;ally->status=STATUS_EFFECT_FAINT;
  const char *why=NULL;size_t n=gc_run_save(&r,save,sizeof save);CHECK(n&&gc_run_load(&back,save,n,&why));
- CHECK(back.bt.field[1]&&back.bt.field[1]==back.bt.party[0][1]&&back.bt.field[1]->id==ally->id&&!back.bt.field[1]->on_field&&back.bt.field[1]->hp==0);
+ /* A save is only written at a wave's start (gc_run_can_save), where a fainted mon behind the lead fainted in an earlier wave and is not sent out: its
+  * slot is empty, as in a battle that was not saved. A mon put in the slot would join the participants when a foe faints and take a share of the experience
+  * (found by gcplay --save-test: a loaded run and the same run unsaved ended differently). The lead and a living, sent-out ally are restored as before. */
+ CHECK(back.bt.field[0]&&back.bt.field[0]==back.bt.party[0][0]&&back.bt.field[1]==NULL&&back.bt.party[0][1]->id==ally->id&&back.bt.party[0][1]->hp==0);
 }
 static void restore_disguise(void){
  setup(3);pr_pokemon *ally=r.bt.field[1];CHECK(ally);ally->custom_ability=ABILITY_ID_ILLUSION;pr_refresh_ability(ally);pr_set_illusion(ally,&r.party[2].b);

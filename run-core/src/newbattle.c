@@ -43,13 +43,46 @@ static int classic_rival_type(int mode, int wave)
 }
 
 /* getRandomLocaleEntry(key): randSeedItem(Object.keys(i18next.t(key, { returnObjects: true }))) */
-static int locale_entry(pr_run *run, int count)
+static int locale_entry(pr_run *run, pr_rng *rng, int count)
 {
     if (count < 1) { /* a missing key: Object.keys of the key string itself, not modelled */
         run->unported |= PR_RUN_UNPORTED_TRAINER;
         return -1;
     }
-    return seed_item(&run->rng, count);
+    return seed_item(rng, count);
+}
+
+/* new Trainer(type, variant) after the variant is known: partyTemplateIndex = randSeedItem(the config's templates), then the name
+ * (and the partner's) from the class's locale entries, all on `rng` */
+static void trainer_ctor(pr_run *run, pr_rng *rng, const pr_trainer_info *t, pr_new_battle *out)
+{
+    out->template_index = seed_item(rng, t->n_templates);
+    if (t->names >= 0) {
+        int count = t->names_male >= 0 ? (out->variant == TRAINER_VARIANT_FEMALE ? t->names_female : t->names_male)
+                                       : t->names;
+        out->name = locale_entry(run, rng, count);
+        if (out->variant == TRAINER_VARIANT_DOUBLE && !t->double_only)
+            out->partner_name = locale_entry(run, rng, t->names_female >= 0 ? t->names_female : t->names);
+    }
+}
+
+/* The fixed battles of the evil teams' grunts (fixed-battle-configs.ts: getRandomTrainerFunc(grunts, true) under setSeedOffsetWave(EVIL_GRUNT_1),
+ * so every grunt fight of a run is the same team) and the Town Youngster */
+static const uint16_t evil_grunts[10] = {
+    TRAINER_TYPE_ROCKET_GRUNT, TRAINER_TYPE_MAGMA_GRUNT, TRAINER_TYPE_AQUA_GRUNT, TRAINER_TYPE_GALACTIC_GRUNT, TRAINER_TYPE_PLASMA_GRUNT,
+    TRAINER_TYPE_FLARE_GRUNT, TRAINER_TYPE_AETHER_GRUNT, TRAINER_TYPE_SKULL_GRUNT, TRAINER_TYPE_MACRO_GRUNT, TRAINER_TYPE_STAR_GRUNT,
+};
+
+/* 1 = the Town Youngster, 2 = a grunt fight, 0 = neither (the other fixed waves) */
+static int evil_grunt_kind(int mode, int wave)
+{
+    if (mode != GAME_MODES_CLASSIC && mode != GAME_MODES_CHALLENGE) return 0;
+    switch (wave) {
+    case CLASSIC_FIXED_BOSS_WAVES_TOWN_YOUNGSTER: return 1;
+    case CLASSIC_FIXED_BOSS_WAVES_EVIL_GRUNT_1: case CLASSIC_FIXED_BOSS_WAVES_EVIL_GRUNT_2:
+    case CLASSIC_FIXED_BOSS_WAVES_EVIL_GRUNT_3: case CLASSIC_FIXED_BOSS_WAVES_EVIL_GRUNT_4: return 2;
+    default: return 0;
+    }
 }
 
 /* trainer.getPartyTemplate(): config.partyTemplateFunc?.() ?? config.partyTemplates[partyTemplateIndex].
@@ -75,23 +108,43 @@ int pr_run_new_battle(pr_run *run, int wave, const pr_new_battle_ctx *ctx, pr_ne
     pr_run_reset_seed(run, wave);
     const int fixed_rival = ctx->enable_fixed_rivals ? classic_rival_type(run->mode, wave) : -1;
     const int fixed_e4 = ctx->enable_gym_e4 ? pr_run_fixed_e4_trainer(run, wave) : -1;
-    /* Tasks 48/49 close rivals plus the Classic/Challenge E4 and Champion fixed battles. */
-    if (pr_run_is_fixed_battle(run, wave) && fixed_rival < 0 && fixed_e4 < 0) {
+    const int fixed_evil = ctx->enable_evil_grunts ? evil_grunt_kind(run->mode, wave) : 0;
+    /* Tasks 48/49 close rivals plus the Classic/Challenge E4 and Champion fixed battles; the grunts and the Town Youngster too */
+    if (pr_run_is_fixed_battle(run, wave) && fixed_rival < 0 && fixed_e4 < 0 && !fixed_evil) {
         run->unported |= PR_RUN_UNPORTED_FIXED_BATTLE;
         return -1;
     }
     bool has_trainers = run->mode == GAME_MODES_CLASSIC || run->mode == GAME_MODES_CHALLENGE || run->mode == GAME_MODES_DAILY;
-    out->battle_type = (fixed_rival >= 0 || fixed_e4 >= 0) ? BATTLE_TYPE_TRAINER
+    out->battle_type = (fixed_rival >= 0 || fixed_e4 >= 0 || fixed_evil) ? BATTLE_TYPE_TRAINER
         : has_trainers && pr_run_is_wave_trainer(run, wave, ctx->trainer_chance) ? BATTLE_TYPE_TRAINER
                                                                                 : BATTLE_TYPE_WILD;
-    if (fixed_rival < 0 && fixed_e4 < 0
+    if (fixed_rival < 0 && fixed_e4 < 0 && !fixed_evil
         && pr_run_is_wave_mystery_encounter(run, out->battle_type == BATTLE_TYPE_WILD, wave, &ctx->me)) {
         out->battle_type = BATTLE_TYPE_MYSTERY_ENCOUNTER;
         out->me_spawn_chance_reset = true;
     }
     const pr_trainer_info *t = NULL;
     if (out->battle_type == BATTLE_TYPE_TRAINER) {
-        if (fixed_rival >= 0 || fixed_e4 >= 0) {
+        if (fixed_evil) {
+            /* battleConfig.getTrainer() inside executeWithSeedOffset((seedOffsetWave || waveIndex) << 8) */
+            pr_rng r = pr_run_seed_offset_rng(run, (fixed_evil == 1 ? wave : CLASSIC_FIXED_BOSS_WAVES_EVIL_GRUNT_1) << 8, NULL);
+            if (fixed_evil == 1) {
+                /* new Trainer(YOUNGSTER, randSeedInt(2) ? FEMALE : DEFAULT) */
+                out->trainer_type = TRAINER_TYPE_YOUNGSTER;
+                t = trainer_info(out->trainer_type);
+                if (!t || !t->n_templates) { run->unported |= PR_RUN_UNPORTED_TRAINER; return -1; }
+                out->variant = pr_rng_seed_int(&r, 2, 0) ? TRAINER_VARIANT_FEMALE : TRAINER_VARIANT_DEFAULT;
+            } else {
+                /* getRandomTrainerFunc(grunts, true): randSeedItem(pool), then randInt(2) === 0 ? FEMALE : DEFAULT and, as a grunt
+                 * with a double, randInt(3) === 0 ? DOUBLE : that gender. randInt is Math.random: the caller's rolls */
+                out->trainer_type = evil_grunts[seed_item(&r, 10)];
+                t = trainer_info(out->trainer_type);
+                if (!t || !t->n_templates) { run->unported |= PR_RUN_UNPORTED_TRAINER; return -1; }
+                out->variant = ctx->evil_gender_roll == 0 ? TRAINER_VARIANT_FEMALE : TRAINER_VARIANT_DEFAULT;
+                if (t->has_double && ctx->evil_double_roll == 0) out->variant = TRAINER_VARIANT_DOUBLE;
+            }
+            trainer_ctor(run, &r, t, out);
+        } else if (fixed_rival >= 0 || fixed_e4 >= 0) {
             /* Fixed BattleConfig constructs the chosen trainer under its own seed-offset RNG.  The
              * rival variant follows the player gender; these static classes have one party template. */
             out->trainer_type = fixed_rival >= 0 ? fixed_rival : fixed_e4;
@@ -112,14 +165,7 @@ int pr_run_new_battle(pr_run *run, int wave, const pr_new_battle_ctx *ctx, pr_ne
             else dbl = pr_rng_seed_int(&run->rng, (int32_t)get_double_chance(wave, ctx), 0) == 0;
             out->variant = dbl ? TRAINER_VARIANT_DOUBLE : pr_rng_seed_int(&run->rng, 2, 0) ? TRAINER_VARIANT_FEMALE
                                                                                          : TRAINER_VARIANT_DEFAULT;
-            out->template_index = seed_item(&run->rng, t->n_templates);
-            if (t->names >= 0) {
-                int count = t->names_male >= 0 ? (out->variant == TRAINER_VARIANT_FEMALE ? t->names_female : t->names_male)
-                                               : t->names;
-                out->name = locale_entry(run, count);
-                if (out->variant == TRAINER_VARIANT_DOUBLE && !t->double_only)
-                    out->partner_name = locale_entry(run, t->names_female >= 0 ? t->names_female : t->names);
-            }
+            trainer_ctor(run, &run->rng, t, out);
         }
     }
     /* checkIsDouble: never on a final wave, an endless boss wave or a mystery encounter;
