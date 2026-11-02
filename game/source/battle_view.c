@@ -1477,6 +1477,63 @@ static void first_variant(const char* text, char* out, size_t n) {
   snprintf(out, n, "%.*s", end ? (int)(end - (c + 3)) : 7, end ? c + 3 : "neutral");
 }
 
+/* ui.showDialogue finishes its callback only after the prompted pages (and
+ * optional portrait) are dismissed. Shared by all dialogue owners. */
+static bool step_dialogue(const bv_event *e, float dt) {
+  /* EncounterPhase / TrainerVictoryPhase: with a portrait, showFieldOverlay(500), the portrait slides in (750), the dialogue is read
+   * a page at a time, the portrait goes out (750) and hideFieldOverlay(250); without one, the dialogue alone */
+  const bool portrait = e->atlas != NULL;
+  if (B.step == 0) {
+    B.speaker = NULL;
+    if (portrait) {
+      tween_start(&B.overlay_tw, B.overlay, 0.5f, 500, EASE_SINE_OUT);
+      B.step = 1;
+    } else {
+      B.step = 3;
+    }
+  }
+  if (B.step == 1) {
+    tween_update(&B.overlay_tw, dt);
+    B.overlay = B.overlay_tw.value;
+    if (tween_done(&B.overlay_tw)) {
+      char variant[32];
+      first_variant(e->text, variant, sizeof variant);
+      chs_show(e->atlas, variant); /* showCharacter(...).then(showDialogue) */
+      B.step = 2;
+    }
+  }
+  if (B.step == 2 && !chs_busy()) B.step = 3;
+  if (B.step == 3) {
+    B.speaker = e->name && *e->name ? e->name : NULL;
+    msgbox_show(&B.msg, e->text ? e->text : "", -1, true);
+    B.msg.wait_ms = 0;
+    B.step = 4;
+  }
+  if (B.step == 4) {
+    const char* v = msgbox_take_variant(&B.msg); /* MessageUiHandler: charSprite.setVariant when the typing passes @c{} */
+    if (v && portrait) chs_set_variant(v);
+    if (msgbox_done(&B.msg)) {
+      B.speaker = NULL; /* hideNameText */
+      if (!portrait) {
+        return true;
+      }
+      chs_hide();
+      B.step = 5;
+    }
+  }
+  if (B.step == 5 && !chs_busy()) {
+    chs_reset();
+    tween_start(&B.overlay_tw, B.overlay, 0, 250, EASE_CUBIC_IN);
+    B.step = 6;
+  }
+  if (B.step == 6) {
+    tween_update(&B.overlay_tw, dt);
+    B.overlay = B.overlay_tw.value;
+    if (tween_done(&B.overlay_tw)) return true;
+  }
+  return false;
+}
+
 static void run_event(float dt) {
   bv_event* e = &B.ev[B.cur];
   side* sd = side_of(e->battler);
@@ -1498,61 +1555,9 @@ static void run_event(float dt) {
       if (msgbox_done(&B.msg)) finish_event();
       break;
 
-    case BEV_DIALOGUE: {
-      /* EncounterPhase / TrainerVictoryPhase: with a portrait, showFieldOverlay(500), the portrait slides in (750), the dialogue is read
-       * a page at a time, the portrait goes out (750) and hideFieldOverlay(250); without one, the dialogue alone */
-      const bool portrait = e->atlas != NULL;
-      if (B.step == 0) {
-        B.speaker = NULL;
-        if (portrait) {
-          tween_start(&B.overlay_tw, B.overlay, 0.5f, 500, EASE_SINE_OUT);
-          B.step = 1;
-        } else {
-          B.step = 3;
-        }
-      }
-      if (B.step == 1) {
-        tween_update(&B.overlay_tw, dt);
-        B.overlay = B.overlay_tw.value;
-        if (tween_done(&B.overlay_tw)) {
-          char variant[32];
-          first_variant(e->text, variant, sizeof variant);
-          chs_show(e->atlas, variant); /* showCharacter(...).then(showDialogue) */
-          B.step = 2;
-        }
-      }
-      if (B.step == 2 && !chs_busy()) B.step = 3;
-      if (B.step == 3) {
-        B.speaker = e->name && *e->name ? e->name : NULL;
-        msgbox_show(&B.msg, e->text ? e->text : "", -1, true);
-        B.msg.wait_ms = 0;
-        B.step = 4;
-      }
-      if (B.step == 4) {
-        const char* v = msgbox_take_variant(&B.msg); /* MessageUiHandler: charSprite.setVariant when the typing passes @c{} */
-        if (v && portrait) chs_set_variant(v);
-        if (msgbox_done(&B.msg)) {
-          B.speaker = NULL; /* hideNameText */
-          if (!portrait) {
-            finish_event();
-            break;
-          }
-          chs_hide();
-          B.step = 5;
-        }
-      }
-      if (B.step == 5 && !chs_busy()) {
-        chs_reset();
-        tween_start(&B.overlay_tw, B.overlay, 0, 250, EASE_CUBIC_IN);
-        B.step = 6;
-      }
-      if (B.step == 6) {
-        tween_update(&B.overlay_tw, dt);
-        B.overlay = B.overlay_tw.value;
-        if (tween_done(&B.overlay_tw)) finish_event();
-      }
+    case BEV_DIALOGUE:
+      if (step_dialogue(e, dt)) finish_event();
       break;
-    }
 
     case BEV_TRAINER_SHOW:
       /* showEnemyTrainer: the sprite is back on the platform and moves in from 16 px up and right, fading in, over 750 ms */

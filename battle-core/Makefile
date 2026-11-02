@@ -832,3 +832,7 @@ move-inventory-audit: $(BUILD)/move-inventory-dump
 all: $(BUILD)/final-boss-faint-test
 $(BUILD)/final-boss-faint-test: tests/final-boss-faint-test.c $(BUILD)/libprcore.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+
+all: $(BUILD)/final-boss-dialogue-test
+$(BUILD)/final-boss-dialogue-test: tests/final-boss-dialogue-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@

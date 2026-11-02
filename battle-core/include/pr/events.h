@@ -69,6 +69,8 @@ typedef enum {
     PR_EV_DOUBLE_START,        /* initFinalBossPhaseTwo's ToggleDoublePositionPhase(true): the fight is a double from here and the
                                 * player's lead steps to the left (FieldPosition.LEFT) for the ally the SummonPhase after it sends
                                 * out. The enemy side is not repositioned: the one boss stays where it was. battler = -1 */
+    PR_EV_DIALOGUE,            /* ui.showDialogue: msg is the locale key; id is the frozen speaker species (base name, without
+                                * form/fusion/foe affixes). The final boss speaks before its second-form faint. No portrait. */
     PR_EV_COUNT_
 } pr_event_type;
 

@@ -81,3 +81,9 @@ a fainted lead's place, says nothing). The queue order, phase types and argument
 adds the first-form threshold-bypass cancellation owned by FaintPhase.start.
 It compares 480 prepared mode/wave/HP/queue/tag contexts against the pinned
 native prefix and keeps second-form victory dialogue explicitly uncovered.
+
+2026-11-02 second-form dialogue follow-up:
+[FINAL-BOSS-DIALOGUE-VALIDATION.md](FINAL-BOSS-DIALOGUE-VALIDATION.md) covers the
+victory line before ordinary faint processing, including the speaker, native
+callback boundary and prompted app playback. It adds no shield/form arithmetic
+and does not establish legal-start Classic clears or full battle-core parity.

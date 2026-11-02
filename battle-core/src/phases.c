@@ -3071,9 +3071,11 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
     }
     if (is_classic_final_boss(bt) && !player) {
         if (p->form > 0) {
-            /* The second-form victory dialogue remains an explicit presentation
-             * prerequisite; ordinary faint processing follows its callback. */
-            pr_note_unported(bt, PR_FEAT_FINAL_BOSS);
+            /* ui.showDialogue(..., enemy.species.name, null, () => doFaint()).
+             * Event playback waits for the dialogue before showing the faint;
+             * its snapshot is taken before doFaint changes the field. */
+            pr_msg dialogue = pr_msg0("battleSpecDialogue:secondStageWin");
+            pr_event_add(bt, e, PR_EV_DIALOGUE, f->battler, -1, p->species, 0, &dialogue);
         } else {
             /* handleFinalBossFaint: a bypassed HP threshold cancels this faint.
              * DamageAnimPhase owns the existing phase-two transition. */

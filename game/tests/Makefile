@@ -467,3 +467,15 @@ build/boss_shield_events_test: $(BOSS_SHIELD_SRCS)
 	$(CC) $(CPPFLAGS) -I../gen -I../../assets-pipeline/app-src/include $(CFLAGS) $(BOSS_SHIELD_SRCS) -lm -o $@
 boss_shield_events_test: build/boss_shield_events_test
 .PHONY: boss_shield_events_test
+
+build/final_boss_dialogue_events_test: final_boss_dialogue_events_test.c battle_setup.c ../source/battle_events.c build/ptx_core.a
+	@mkdir -p build
+	$(CC) $(CPPFLAGS) -I../gen -I../../assets-pipeline/app-src/include $(CFLAGS) final_boss_dialogue_events_test.c battle_setup.c ../source/battle_events.c build/ptx_core.a -lm -o $@
+final_boss_dialogue_events_test: build/final_boss_dialogue_events_test
+.PHONY: final_boss_dialogue_events_test
+
+build/final_boss_dialogue_playback_test: final_boss_dialogue_playback_test.c ../source/battle_view.c ../source/ui_widgets.c ../source/tween.c
+	@mkdir -p build
+	$(CC) $(MAP_CPPFLAGS) -I../gen $(CFLAGS) -ffunction-sections -fdata-sections final_boss_dialogue_playback_test.c ../source/ui_widgets.c ../source/tween.c -Wl,--gc-sections -lm -o $@
+final_boss_dialogue_playback_test: build/final_boss_dialogue_playback_test
+.PHONY: final_boss_dialogue_playback_test

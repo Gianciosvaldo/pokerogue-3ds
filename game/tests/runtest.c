@@ -542,6 +542,13 @@ void bv_play(const bv_event* ev, int n, void (*on_done)(void*), void* arg) {
           n_talk_win++;
           if (custom_on && cr_jojo_foe(rs_run())) BAD("a JoJo trainer gives his class's victory talk");
         }
+        else if (e->battler >= 2 && e->battler < 4 && e->a == SPECIES_ID_ETERNATUS &&
+                 !strcmp(e->text, "secondStageWin")) {
+          /* The final boss speaks without a trainer/portrait before its faint.
+           * This host has no locale pack, so the exact source key is displayed. */
+          if (e->atlas || strcmp(e->name, i18n_species_name(e->a))) BAD("invalid final-boss dialogue speaker/portrait");
+          if (!W.present[s] || W.mon[s].species != e->a || W.fainted_shown[s]) BAD("final-boss dialogue after its sprite left");
+        }
         else BAD("a dialogue that follows neither the trainer's intro nor its slide back");
         if (e->atlas) n_talk_portrait++;
         break;

@@ -17,8 +17,9 @@ It now follows the cancellation and restricts the final-boss gate to the actual
 modes. A full engine pool still reports the engine-limit guard and overflow.
 
 For form index >0, upstream waits for its victory dialogue callback before
-`doFaint`; this presentation prerequisite remains explicitly unsupported here.
-This change does not modify shield damage arithmetic, abilities or form rules.
+`doFaint`. The follow-up [dialogue proof](FINAL-BOSS-DIALOGUE-VALIDATION.md) now
+covers that separate path; the 480 cases here retain their original first-form
+scope. Shield damage arithmetic, abilities and form rules are unchanged here.
 
 ## Native comparison
 
