@@ -7,7 +7,7 @@ subprocess.run([runner,trace],check=True,env=env)
 faults=[]
 def fault(name,file,old,new,own=False):
  s=(r/'battle-core/src'/file).read_text();assert s.count(old)==1,(name,s.count(old));faults.append((name,file,s.replace(old,new,1),own))
-fault('missing-hp-gate','battler_tags.c','if(user->hp<=0 || user->species','if(user->species')
+fault('missing-hp-gate','battler_tags.c','if(user->hp<=0 || (user->species','if((user->species')
 fault('wrong-half-boundary','battler_tags.c','pr_get_hp_ratio(user,false)>=0.5','pr_get_hp_ratio(user,false)>0.5')
 fault('wrong-callback-return','battler_tags.c','    pr_add_tag(bt,e,user,pr_get_hp_ratio','    return pr_add_tag(bt,e,user,pr_get_hp_ratio')
 fault('wrong-source-move','battler_tags.c','(t->source_move==MOVE_ID_SURF||t->source_move==MOVE_ID_DIVE)','(t->source_move==MOVE_ID_SURF)')

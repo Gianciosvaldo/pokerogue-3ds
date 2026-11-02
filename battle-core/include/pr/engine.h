@@ -69,6 +69,7 @@ typedef struct pr_phase {
     int8_t targets;            /* index into engine->target_lists, -1 = none */
     pr_move_ref move;          /* MovePhase */
     uint16_t move_id;          /* MoveEffectPhase.move */
+    uint8_t form_half;         /* (Quiet)FormChangePhase under PR_DEV_FUSION_ABILITIES: 1 changes the fusion's form, 0 the Pokemon's own */
     uint8_t use_mode;
     uint8_t timing;            /* MovePhase.timingModifier */
     bool prevent_instant_revive;       /* FaintPhase */

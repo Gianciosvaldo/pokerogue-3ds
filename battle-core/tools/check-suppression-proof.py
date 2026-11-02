@@ -33,12 +33,11 @@ mutations={
 # Restore the observed bug: scheduling ability displays before the complete canApply check.
 start_ab=ab.index('    case PR_AC_PostSummonFormChangeByWeatherAbAttr:');end_ab=ab.index('    case PR_AC_PostSummonFormChangeAbAttr:',start_ab)
 weather=ab[start_ab:end_ab]
-old='''        GATE(wanted >= 0 && !p->ability_suppressed && !pr_weather_effect_suppressed(bt)
-             && pr_has_ability_active(bt, p, wanted) && form >= 0 && form != p->form);'''
+old='''        GATE(half >= 0 && !p->ability_suppressed && !pr_weather_effect_suppressed(bt)
+             && form >= 0 && form != (half > 0 ? p->fusion_form : p->form));'''
 assert weather.count(old)==1
-weather=weather.replace('        int form =', '''        GATE(wanted >= 0 && !p->ability_suppressed && !pr_weather_effect_suppressed(bt)
-             && pr_has_ability_active(bt, p, wanted));
-        int form =''').replace(old,'        GATE(form >= 0 && form != p->form);')
+weather=weather.replace('        int form =', '''        GATE(half >= 0 && !p->ability_suppressed && !pr_weather_effect_suppressed(bt));
+        int form =''').replace(old,'        GATE(form >= 0 && form != (half > 0 ? p->fusion_form : p->form));')
 mutations['premature-weather-display']=('ab_attrs',ab[:start_ab]+weather+ab[end_ab:])
 flags=['-O2','-std=c99','-ffp-contract=off','-I'+str(root/'battle-core/include'),'-I'+str(root/'battle-core/gen/out')]
 for name,(file,code) in mutations.items():
