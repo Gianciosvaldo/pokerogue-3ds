@@ -76,3 +76,8 @@ App/retained and exact-head CI results are recorded after completion.
 battle screen can move the player's lead to the left before the second Pokemon is sent out (a later toggle, such as the ally taking
 a fainted lead's place, says nothing). The queue order, phase types and arguments the 16,384-case comparison checks are unchanged.
 `game/tests/final_boss_double_events_test.c` runs real wave-200 fights for the event.
+
+2026-11-02 faint-prefix follow-up: [FINAL-BOSS-FAINT-VALIDATION.md](FINAL-BOSS-FAINT-VALIDATION.md)
+adds the first-form threshold-bypass cancellation owned by FaintPhase.start.
+It compares 480 prepared mode/wave/HP/queue/tag contexts against the pinned
+native prefix and keeps second-form victory dialogue explicitly uncovered.

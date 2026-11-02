@@ -29,19 +29,20 @@ int main(void)
     in.quarterback.thp=99;FootballPassReport strong=resolve(in);
     assert(strong.completion_chance>weak.completion_chance && strong.depth_yards>base.depth_yards);
     assert(strong.release_ms>base.release_ms);
-    const FootballPlayId plays[]={FB_PASS_SLANTS,FB_PASS_PLAY_ACTION,FB_PASS_VERTICALS,FB_PASS_POST};
-    for(unsigned p=0;p<4;++p)for(unsigned d=0;d<FB_DEF_COUNT;++d) {
-        in=(FootballPassInput){rating(60),rating(60),rating(60),rating(60),plays[p],(FootballDefenseId)d,0};
+    unsigned cases=0;
+    for(unsigned p=0;p<FB_PLAY_COUNT;++p)for(unsigned d=0;d<FB_DEF_COUNT;++d) {
+        if(football_playbook_get((FootballPlayId)p)->type!=FB_PLAY_PASS)continue;
+        in=(FootballPassInput){rating(60),rating(60),rating(60),rating(60),(FootballPlayId)p,(FootballDefenseId)d,0};
         unsigned counts[6]={0};
         for(unsigned pressure=0;pressure<100;++pressure)for(unsigned catch_roll=0;catch_roll<100;++catch_roll){
             assert(football_pass_resolve(&r,&in,pressure,catch_roll,50));
             assert(r.pressure<=99 && r.separation<=99 && r.completion_chance>=15 && r.completion_chance<=92);
             assert(r.resolved.kind<=FB_RESULT_SACK && r.resolved.yards>=-5 && r.resolved.yards<=40);
-            counts[r.resolved.kind]++;
+            counts[r.resolved.kind]++;++cases;
         }
         assert(counts[FB_RESULT_SACK]==100u*r.sack_chance);
         assert(counts[FB_RESULT_INTERCEPTION]==100u*r.interception_chance);
         assert(counts[FB_RESULT_COMPLETE]+counts[FB_RESULT_INCOMPLETE]+counts[FB_RESULT_SACK]+counts[FB_RESULT_INTERCEPTION]==10000);
     }
-    puts("football passing: atomic guards, arm/accuracy, separation, coverage, protection, release depth and 120,000 probability cases passed");
+    printf("football passing: atomic guards, arm/accuracy, separation, coverage, protection, release depth and %u probability cases passed\n",cases);
 }

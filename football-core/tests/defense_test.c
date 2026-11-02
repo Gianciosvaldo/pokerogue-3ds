@@ -19,7 +19,7 @@ int main(void)
         assert(football_defense_take(&menu,&out) && out==(FootballDefenseId)i);
         assert(!football_defense_take(&menu,&out));
     }
-    football_defense_update(&menu,(FootballCallInput){.pressed=FB_INPUT_UP});assert(menu.selected==FB_DEF_BLITZ);
+    football_defense_update(&menu,(FootballCallInput){.pressed=FB_INPUT_UP});assert(menu.selected==FB_DEF_COUNT-1);
     football_defense_update(&menu,(FootballCallInput){.pressed=FB_INPUT_BACK|FB_INPUT_ACCEPT});assert(menu.selected==0 && !menu.ready);
     assert(!football_defense_get(FB_DEF_COUNT));
     FootballTeam t=team();FootballMatch m,saved;

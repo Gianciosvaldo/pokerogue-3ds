@@ -203,6 +203,13 @@ live-systems-test: core-libs
 	$(BUILD)/live_systems_test
 test: live-systems-test
 
+.PHONY: expanded-playbook-test
+expanded-playbook-test: core-libs
+	mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/expanded_playbook_test.c src/football_roster.c $(LIVE_SRCS) src/football_stats.c src/football_rules.c src/football_playbook.c $(CORE_LIBS) -lm -o $(BUILD)/expanded_playbook_test
+	$(BUILD)/expanded_playbook_test
+test: expanded-playbook-test
+
 .PHONY: ai-test
 ai-test: core-libs
 	mkdir -p $(BUILD)

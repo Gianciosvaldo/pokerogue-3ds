@@ -244,7 +244,7 @@ static void step(FootballLive *m,FootballLiveInput input)
     if(m->phase==FB_LIVE_SET){
         if((!cpu && (input.pressed&FB_LIVE_ACTION)) || (cpu && m->elapsed>=1.2f)){
             m->phase=FB_LIVE_PLAY;m->elapsed=0;
-            if(!m->special && p->type==FB_PLAY_RUN){m->carrier=(uint8_t)(off+1);if(!cpu)m->controlled=m->carrier;}
+            if(!m->special && p->type==FB_PLAY_RUN){m->carrier=(uint8_t)(off+football_playbook_runner(p));if(!cpu)m->controlled=m->carrier;}
         }
         return;
     }
@@ -283,7 +283,7 @@ static void step(FootballLive *m,FootballLiveInput input)
                     if(p->type==FB_PLAY_PASS && !m->caught){float len=hypotf(tx,ty);if(len>.55f){tx*=.55f/len;ty*=.55f/len;}}}
                 /* A run's eligible blockers release downfield when no defender
                  * is in reach; an empty assignment is not an order to stand still. */
-                else if(p->type==FB_PLAY_RUN && rank>=2 && rank<=5)tx=dir;
+                else if((p->type==FB_PLAY_RUN || m->caught) && rank>=1 && rank<=5)tx=dir;
             }else if(rank>=1){
                 if(m->flying && i==m->target){tx=m->to_x-a->x;ty=m->to_y-a->y;} /* the target goes to the ball */
                 else if(m->caught){tx=dir;ty=(carrier->y-a->y)*.1f;}

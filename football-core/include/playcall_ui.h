@@ -6,7 +6,10 @@ typedef enum { FB_FORM_SHOTGUN, FB_FORM_UNDER_CENTER } FootballFormation;
 typedef enum { FB_PLAY_RUN, FB_PLAY_PASS } FootballPlayType;
 typedef enum { FB_CALL_MAIN, FB_CALL_FORMATION, FB_CALL_TYPE, FB_CALL_PLAY, FB_CALL_READY } FootballCallState;
 typedef enum { FB_RUN_INSIDE_ZONE, FB_PASS_SLANTS, FB_RUN_DIVE, FB_PASS_PLAY_ACTION,
-    FB_RUN_DRAW, FB_PASS_VERTICALS, FB_RUN_TOSS, FB_PASS_POST, FB_PLAY_COUNT } FootballPlayId;
+    FB_RUN_DRAW, FB_PASS_VERTICALS, FB_RUN_TOSS, FB_PASS_POST,
+    FB_RUN_POWER, FB_RUN_COUNTER, FB_RUN_OUTSIDE_ZONE, FB_RUN_JET_SWEEP,
+    FB_PASS_STICK, FB_PASS_MESH, FB_PASS_FLOOD, FB_PASS_CURLS,
+    FB_PASS_SMASH, FB_PASS_HB_SCREEN, FB_PASS_BUBBLE, FB_PASS_SHALLOW_CROSS, FB_PLAY_COUNT } FootballPlayId;
 typedef struct PlayInfo {
     FootballFormation formation;
     FootballPlayType type;
@@ -34,6 +37,7 @@ unsigned football_playcall_option_count(const FootballPlaycall *ui);
 const char *football_playcall_title(const FootballPlaycall *ui);
 const char *football_playcall_label(const FootballPlaycall *ui, unsigned option);
 FootballTouchRect football_playcall_rect(unsigned option);
+FootballTouchRect football_playcall_option_rect(const FootballPlaycall *ui,unsigned option);
 #ifdef __3DS__
 /* Call after the application's single hidScanInput per frame. */
 FootballCallInput football_playcall_read_input(void);

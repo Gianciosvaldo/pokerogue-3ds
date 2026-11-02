@@ -149,9 +149,14 @@ void football_live_art_card(FootballRenderer *r,FootballPlayId id,float x,float 
     football_menu_panel(x,y,w,h);if(selected)football_menu_select(x,y,w,h);
     football_menu_text(selected?TS_SUMMARY_GOLD:TS_WINDOW,FM_PX_BODY,x+10,y+8,w-20,p->name);
     for(unsigned i=0;i<5;++i)C2D_DrawRectSolid(x+w*.5f-12+i*6,y+36,.03f,4,4,white);
-    float last_x=x+w*.22f,last_y=y+h-12;
+    unsigned read=football_playbook_primary_receiver(p),rank=read==4?1:read+2;
+    FootballRouteView path=p->type==FB_PLAY_PASS?football_playbook_receiver_path(p,rank):(FootballRouteView){p->route,p->route_count};
+    float depth=1,back=0,lateral=1;for(unsigned i=0;i<path.count;++i){depth=fmaxf(depth,path.point[i].x);back=fminf(back,path.point[i].x);lateral=fmaxf(lateral,fabsf(path.point[i].y));}
+    float scale_x=(h-46)/(depth-back),scale_y=fminf(2,(w*.4f)/lateral);
+    float origin_y=y+h-12+back*scale_x;
+    float last_x=x+w*.5f,last_y=origin_y;
     C2D_DrawRectSolid(last_x-2,last_y-2,.03f,5,5,gold);
-    for(unsigned i=0;i<18;++i){FootballRoutePoint point=football_playbook_route(p,i/17.0f);float px=x+w*.22f+point.y*2,py=y+h-12-point.x*1.2f;
+    for(unsigned i=0;i<18;++i){FootballRoutePoint point=football_playbook_sample_path(path,i/17.0f);float px=x+w*.5f+point.y*scale_y,py=origin_y-point.x*scale_x;
         C2D_DrawRectSolid(px,py,.04f,3,3,gold);last_x=px;last_y=py;}
     C2D_DrawRectSolid(last_x-2,last_y-3,.04f,7,3,gold);
 }
@@ -190,9 +195,16 @@ void football_live_art_defense_card(FootballRenderer *r,FootballDefenseId id,flo
     u32 gold=C2D_Color32(255,210,63,255),blue=C2D_Color32(76,201,240,255);
     football_menu_panel(x,y,w,h);if(selected)football_menu_select(x,y,w,h);
     football_menu_text(selected?TS_SUMMARY_GOLD:TS_SUMMARY_BLUE,FM_PX_BODY,x+10,y+8,w-20,d->name);
-    for(unsigned i=0;i<5;++i){float px=x+16+i*(w-34)/4;
-        C2D_DrawRectSolid(px,y+36,.03f,5,5,gold);
-        if(id==FB_DEF_ZONE)C2D_DrawRectSolid(px-6,y+45,.03f,18,5,blue);
-        else for(unsigned step=0;step<5;++step)C2D_DrawRectSolid(px+(id==FB_DEF_BLITZ?0:step),y+44+step*3,.03f,2,2,blue);
+    unsigned rush=0,deep=0;
+    for(unsigned rank=0;rank<11;++rank){rush+=football_defense_is_rusher(id,rank);deep+=(football_defense_deep_mask(id)&(1u<<rank))!=0;}
+    /* The diagram shows this call's actual rush and shell rather than the same
+     * five dots on every card. Top is deep; the rush arrows point to the QB. */
+    for(unsigned row=0;row<3;++row){unsigned count=row==0?deep:row==1?11-rush-deep:rush;
+        for(unsigned i=0;i<count;++i){float px=x+12+(i+.5f)*(w-24)/count,py=y+34+row*14;
+            C2D_DrawRectSolid(px-2,py,.03f,5,5,row==2?gold:blue);
+            if(row==2){C2D_DrawRectSolid(px,py+4,.03f,1,7,gold);C2D_DrawRectSolid(px-2,py+8,.03f,5,1,gold);}
+            else if(football_defense_is_zone(id))C2D_DrawRectSolid(px-6,py+5,.03f,13,1,blue);
+            else if(row==1)C2D_DrawRectSolid(px,py+4,.03f,1,6,blue);
+        }
     }
 }

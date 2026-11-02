@@ -178,11 +178,31 @@ static void shop_assets(void)
         L.evo_icons[i]=u && u->icon?mui_frame("items",u->icon):NULL;
     }
 }
-/* The playcall has plays, more plays and special teams; the two-point try has no kicks to offer. */
-static unsigned pages(void){return L.career.live.conversion?2:3;}
+/* Four cards per page; the final offensive page is special teams. */
+static unsigned offensive_pages(void){return (FB_PLAY_COUNT+3)/4;}
+static unsigned pages(void)
+{
+    const FootballLive *m=&L.career.live;
+    if(m->rules.offense!=FB_HOME)return (FB_DEF_COUNT+3)/4;
+    if(m->conversion==1)return 1;
+    return offensive_pages()+(m->conversion?0:1);
+}
+static bool special_page(void){return L.career.live.rules.offense==FB_HOME&&!L.career.live.conversion&&L.play_page==offensive_pages();}
 static unsigned option_count(void)
 {
-    switch(L.career.phase){case FB_CAREER_DRAFT:return L.catalog_count;case FB_CAREER_LINEUP:return 22;case FB_CAREER_EVOLVE:return L.career.evolution_count+1;case FB_CAREER_SHOP:return FB_SHOP_FIXED+L.career.evo_count+1;case FB_CAREER_MATCH:{const FootballLive *m=&L.career.live;return m->rules.offense!=FB_HOME?3:m->conversion==1 || L.play_page==2?2:4;}default:return 1;}
+    switch(L.career.phase){
+    case FB_CAREER_DRAFT:return L.catalog_count;
+    case FB_CAREER_LINEUP:return 22;
+    case FB_CAREER_EVOLVE:return L.career.evolution_count+1;
+    case FB_CAREER_SHOP:return FB_SHOP_FIXED+L.career.evo_count+1;
+    case FB_CAREER_MATCH:{
+        L.play_page%=pages();const FootballLive *m=&L.career.live;
+        if(m->rules.offense==FB_HOME&&(m->conversion==1||special_page())){if(L.cursor>=2)L.cursor=0;return 2;}
+        unsigned count=m->rules.offense==FB_HOME?FB_PLAY_COUNT:FB_DEF_COUNT;
+        unsigned remaining=count-L.play_page*4,visible=remaining<4?remaining:4;if(L.cursor>=visible)L.cursor=0;return visible;
+    }
+    default:return 1;
+    }
 }
 static void cycle_mega(int direction)
 {
@@ -201,13 +221,13 @@ static void choose_current(void)
     case FB_CAREER_LINEUP:L.editing=!L.editing;break;
     case FB_CAREER_READY:if(football_career_start(c)){L.cursor=0;L.asset_offense=-1;L.camera.ready=false;}break;
     case FB_CAREER_MATCH:
-        if(c->live.phase==FB_LIVE_CALL){FootballPlayId id=(FootballPlayId)(L.play_page*4+L.cursor);if(c->live.rules.offense==FB_AWAY)football_live_defend(&c->live,(FootballDefenseId)L.cursor);
+        if(c->live.phase==FB_LIVE_CALL){FootballPlayId id=(FootballPlayId)(L.play_page*4+L.cursor);if(c->live.rules.offense==FB_AWAY)football_live_defend(&c->live,(FootballDefenseId)(L.play_page*4+L.cursor));
             else if(c->live.conversion==1){
                 /* The try after a touchdown: kick it, or play it from the 4 with the ordinary playcall. */
                 if(L.cursor==0){if(!football_live_special(&c->live,FB_SPECIAL_EXTRA_POINT))return;}
                 else{if(football_live_go_for_two(&c->live)){L.cursor=0;L.play_page=0;}return;}
             }
-            else if(L.play_page==2){if(!football_live_special(&c->live,L.cursor?FB_SPECIAL_FIELD_GOAL:FB_SPECIAL_PUNT))return;}
+            else if(special_page()){if(!football_live_special(&c->live,L.cursor?FB_SPECIAL_FIELD_GOAL:FB_SPECIAL_PUNT))return;}
             else football_live_call(&c->live,id);
             L.ignore_keys=true;
         }break;
@@ -233,7 +253,7 @@ static bool input(ui_screen *s,ui_button button)
         else if(c->phase==FB_CAREER_DRAFT)L.cursor=(L.cursor+count+(delta>0?FM_ROWS:count-FM_ROWS%count))%count;
         else if(c->phase==FB_CAREER_READY)cycle_mega(delta);
         else if(c->phase==FB_CAREER_SHOP)L.member=(L.member+22+delta)%22;
-        else if(c->phase==FB_CAREER_MATCH && c->live.conversion!=1){L.play_page=(L.play_page+pages()+(unsigned)delta)%pages();L.cursor=0;}
+        else if(c->phase==FB_CAREER_MATCH && (c->live.rules.offense!=FB_HOME || c->live.conversion!=1)){L.play_page=(L.play_page+pages()+(unsigned)delta)%pages();L.cursor=0;}
     }else if(button==BTN_ACTION || button==BTN_SUBMIT)choose_current();
     else if(button==BTN_CANCEL){
         if(c->phase==FB_CAREER_DRAFT && c->roster.count){unsigned i=--c->roster.count;c->roster.cost-=gc_starter_value(L.args.profile,c->roster.mon[i].b.species);}
@@ -261,7 +281,7 @@ static bool touch(ui_screen *s,float x,float y)
         else if(y>=FM_FOOT_Y-4){if(x<160)L.pending|=FB_LIVE_JUKE|FB_LIVE_SWITCH;else L.pending|=FB_LIVE_ACTION;}
         return true;
     }
-    if(c->phase==FB_CAREER_MATCH){if(y>=38 && y<FM_FOOT_Y-2){L.cursor=(x>=160?1:0)+(y>=127?2:0);if(L.cursor<option_count())choose_current();}else if(y>=FM_FOOT_Y-2 && c->live.conversion!=1){L.play_page=(L.play_page+1)%pages();L.cursor=0;}return true;}
+    if(c->phase==FB_CAREER_MATCH){if(y>=38 && y<FM_FOOT_Y-2){L.cursor=(x>=160?1:0)+(y>=127?2:0);if(L.cursor<option_count())choose_current();}else if(y>=FM_FOOT_Y-2 && (c->live.rules.offense!=FB_HOME || c->live.conversion!=1)){L.play_page=(L.play_page+1)%pages();L.cursor=0;}return true;}
     if(c->phase==FB_CAREER_READY){if(y>=124 && y<FM_FOOT_Y-4)cycle_mega(1);else if(y>=FM_FOOT_Y-4){if(x<160){c->phase=FB_CAREER_LINEUP;L.cursor=0;}else choose_current();}return true;}
     if(c->phase==FB_CAREER_LINEUP && y>=FM_FOOT_Y-4){if(L.editing){unsigned member=c->roster.lineup[L.cursor];football_roster_assign(&c->roster,L.cursor,(member+(x<160?21:1))%22);return true;}if(x<160)football_roster_autofill(&c->roster);else {c->phase=FB_CAREER_READY;L.editing=false;L.cursor=0;}return true;}
     if(c->phase==FB_CAREER_SHOP && y>=FM_FOOT_Y-4){L.member=(L.member+1)%22;return true;}
@@ -371,8 +391,8 @@ static void save_failed_notice(void)
 static const char *const down_names[4]={"1st","2nd","3rd","4th"};
 static void match_call(void)
 {
-    FootballCareer *c=&L.career;bool home=c->live.rules.offense==FB_HOME,attempt=home && c->live.conversion==1;
-    const char *heading=!home?(c->live.conversion?"Set the defense for the try":"Choose a defensive scheme"):attempt?"Touchdown!  The try":c->live.conversion?"Go for two: choose a play":L.play_page==2?"Special teams":"Choose your play";
+    FootballCareer *c=&L.career;L.play_page%=pages();bool home=c->live.rules.offense==FB_HOME,attempt=home && c->live.conversion==1;
+    const char *heading=!home?(c->live.conversion?"Set the defense for the try":"Choose a defensive scheme"):attempt?"Touchdown!  The try":c->live.conversion?"Go for two: choose a play":special_page()?"Special teams":"Choose your play";
     char right[24]="";
     if(home && !c->live.conversion && c->live.rules.down>=1 && c->live.rules.down<=4)snprintf(right,sizeof right,"%s & %u",down_names[c->live.rules.down-1],football_rules_distance(&c->live.rules));
     football_menu_head(heading,right);
@@ -383,7 +403,7 @@ static void match_call(void)
         football_live_art_special_card(&L.renderer,FB_SPECIAL_NONE,"+2   play it from the 4",165,40,145,80,L.cursor==1,true);
         snprintf(detail,sizeof detail,"%u - %u after the touchdown",c->live.rules.score[0],c->live.rules.score[1]);
         football_menu_panel(FM_HEAD_X,126,FM_HEAD_W,FM_HEAD_H);football_menu_text(TS_MONEY,FM_PX_BODY,FM_HEAD_X+12,126+FM_TEXT_PAD,FM_HEAD_W-24,detail);
-    }else if(home && L.play_page==2){
+    }else if(special_page()){
         char detail[48];
         snprintf(detail,sizeof detail,"Kick it away, then cover the return");
         football_live_art_special_card(&L.renderer,FB_SPECIAL_PUNT,detail,10,40,145,80,L.cursor==0,true);
@@ -393,11 +413,14 @@ static void match_call(void)
         football_live_art_special_card(&L.renderer,FB_SPECIAL_FIELD_GOAL,detail,165,40,145,80,L.cursor==1,range);
         snprintf(detail,sizeof detail,"%s down, %u yd to go",down_names[c->live.rules.down>=1 && c->live.rules.down<=4?c->live.rules.down-1:3],football_rules_distance(&c->live.rules));
         football_menu_panel(FM_HEAD_X,126,FM_HEAD_W,FM_HEAD_H);football_menu_text(TS_MONEY,FM_PX_BODY,FM_HEAD_X+12,126+FM_TEXT_PAD,FM_HEAD_W-24,detail);
-    }else for(unsigned i=0;i<(home?4u:3u);++i){
+    }else for(unsigned i=0;i<option_count();++i){
         if(home)football_live_art_card(&L.renderer,(FootballPlayId)(L.play_page*4+i),10+(i%2)*155,40+(i/2)*87,145,80,i==L.cursor);
-        else football_live_art_defense_card(&L.renderer,(FootballDefenseId)i,10+(i%2)*155,40+(i/2)*87,145,80,i==L.cursor);
+        else football_live_art_defense_card(&L.renderer,(FootballDefenseId)(L.play_page*4+i),10+(i%2)*155,40+(i/2)*87,145,80,i==L.cursor);
     }
-    football_menu_foot(attempt?"A or tap: choose the try":home?(c->live.conversion?"Left/Right or tap: more plays":"Left/Right or tap: plays / special teams"):"A: set the defense, then control a defender");
+    char footer[80];
+    if(attempt)snprintf(footer,sizeof footer,"A or tap: choose the try");
+    else snprintf(footer,sizeof footer,"%s %u/%u   L/R or tap: page   A: choose",home?"Playbook":"Defense",L.play_page+1,pages());
+    football_menu_foot(footer);
 }
 static void match_live(void)
 {

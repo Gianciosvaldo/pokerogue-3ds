@@ -3069,7 +3069,23 @@ static void faint_phase(pr_battle *bt, pr_engine *e, int ph)
         pr_pokemon *q = bt->field[i];
         if (q && (is_active(q) || q->hp <= 0)) add_participant(bt, q->id);
     }
-    if (bt->wave_index == 200 && !player) pr_note_unported(bt, PR_FEAT_FINAL_BOSS);
+    if (is_classic_final_boss(bt) && !player) {
+        if (p->form > 0) {
+            /* The second-form victory dialogue remains an explicit presentation
+             * prerequisite; ordinary faint processing follows its callback. */
+            pr_note_unported(bt, PR_FEAT_FINAL_BOSS);
+        } else {
+            /* handleFinalBossFaint: a bypassed HP threshold cancels this faint.
+             * DamageAnimPhase owns the existing phase-two transition. */
+            p->hp++;
+            int damage = pr_phase_new(e, PH_DAMAGE_ANIM, f->battler);
+            if (damage < 0) { pr_note_unported(bt, PR_FEAT_ENGINE_LIMIT); e->overflow = true; return; }
+            e->pool[damage].anim_result = HIT_RESULT_INDIRECT;
+            e->pool[damage].anim_amount = 0;
+            pr_phase_unshift(bt, e, damage);
+            return;
+        }
+    }
 
     /* doFaint */
     if (bt->faint_observer) faint_notify(bt, f, p, player);

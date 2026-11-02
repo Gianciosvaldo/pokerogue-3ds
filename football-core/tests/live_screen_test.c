@@ -39,11 +39,12 @@ bool football_render_load_compact(FootballRenderer *r,unsigned slot,const menu_m
 const rr_frame *football_render_front_frame(const FootballRenderer *r,unsigned slot,uint32_t ms){(void)r;(void)slot;(void)ms;return NULL;}
 bool football_render_draw_sprite(const rr_frame *f,float x,float y,float scale,bool left){(void)f;(void)x;(void)y;(void)scale;(void)left;return false;}
 void football_live_art_top(FootballRenderer *r,const FootballCareer *c,const FootballCamera *cam,unsigned ms){(void)r;(void)c;(void)cam;(void)ms;++draws;}
-void football_live_art_card(FootballRenderer *r,FootballPlayId p,float x,float y,float w,float h,bool selected){(void)r;(void)p;(void)x;(void)y;(void)w;(void)h;(void)selected;}
+static uint32_t offense_cards,defense_cards;
+void football_live_art_card(FootballRenderer *r,FootballPlayId p,float x,float y,float w,float h,bool selected){(void)r;assert(p<FB_PLAY_COUNT);offense_cards|=1u<<p;(void)x;(void)y;(void)w;(void)h;(void)selected;}
 static unsigned special_cards;
 const char *football_live_art_special_name(FootballSpecial k){return k==FB_SPECIAL_PUNT?"PUNT":"KICK";}
 void football_live_art_special_card(FootballRenderer *r,FootballSpecial k,const char *detail,float x,float y,float w,float h,bool selected,bool enabled){(void)r;(void)k;(void)x;(void)y;(void)w;(void)h;(void)selected;(void)enabled;assert(detail && detail[0]);++special_cards;}
-void football_live_art_defense_card(FootballRenderer *r,FootballDefenseId d,float x,float y,float w,float h,bool selected){(void)r;(void)d;(void)x;(void)y;(void)w;(void)h;(void)selected;}
+void football_live_art_defense_card(FootballRenderer *r,FootballDefenseId d,float x,float y,float w,float h,bool selected){(void)r;assert(d<FB_DEF_COUNT);defense_cards|=1u<<d;(void)x;(void)y;(void)w;(void)h;(void)selected;}
 static unsigned icon_loads;static const rr_frame icon={.src_w=16,.src_h=16};
 const rr_frame *mui_frame(const char *key,const char *frame){assert(!strcmp(key,"items") && frame && frame[0]);++icon_loads;return &icon;}
 bool football_shop_prepare(FootballShopView *v,const FootballSeason *s){assert(s->phase==FB_SEASON_SHOP);memset(v,0,sizeof *v);const gm_item_ui *item=gm_item_ui_find("RARE_FORM_CHANGE_ITEM",s->shop[2].classic_arg);if(item)v->names[2]=item->name;return true;}
@@ -125,9 +126,9 @@ int main(void)
         write_ok=false;press(BTN_MENU);answer(1);assert(top==game_screen && w->candy_pending[3]==100 && profile.starters[root].candy_count==had);
         write_ok=true;press(BTN_MENU);answer(1);assert(top==&title && !w->candy_pending[3] && profile.starters[root].candy_count==had+earned && profile.starters[root].friendship==left);
     }
-    /* Special teams are the third page of the playcall: a punt is always there, a field goal only from inside range. */
+    /* Special teams follow every offensive page of the playcall: a punt is always there, a field goal only from inside range. */
     assert(football_screen_open(&args));game_screen=top;assert(career()->live.phase==FB_LIVE_CALL && career()->live.rules.offense==FB_HOME);
-    tick();press(BTN_RIGHT);press(BTN_RIGHT);tick();assert(special_cards==2);
+    tick();for(unsigned p=0;p<(FB_PLAY_COUNT+3)/4;++p)press(BTN_RIGHT);tick();assert(special_cards==2);
     press(BTN_DOWN);press(BTN_ACTION);tick();assert(career()->live.phase==FB_LIVE_CALL && !career()->live.special); /* out of range from the 25 */
     press(BTN_UP);down=KEY_A;press(BTN_ACTION);tick();
     assert(career()->live.phase==FB_LIVE_SET && career()->live.special==FB_SPECIAL_PUNT && career()->live.controlled==0); /* the same press does not also snap */
@@ -145,11 +146,35 @@ int main(void)
         press(BTN_RIGHT);tick();assert(career()->live.conversion==1 && special_cards==cards+4); /* no second page */
         press(BTN_DOWN);press(BTN_ACTION);tick();
         assert(career()->live.conversion==2 && career()->live.phase==FB_LIVE_CALL && !career()->live.special); /* go for two: pick a play next */
-        press(BTN_RIGHT);press(BTN_RIGHT);press(BTN_RIGHT);tick();assert(special_cards==cards+4); /* only the two pages of plays */
+        press(BTN_RIGHT);press(BTN_RIGHT);press(BTN_RIGHT);tick();assert(special_cards==cards+4); /* only ordinary play pages */
         press(BTN_ACTION);tick();assert(career()->live.phase==FB_LIVE_SET && career()->live.conversion==2);
         w->live.phase=FB_LIVE_CALL;w->live.special=FB_SPECIAL_NONE;w->live.conversion=1;
         down=KEY_A;press(BTN_ACTION);tick();
         assert(career()->live.phase==FB_LIVE_SET && career()->live.special==FB_SPECIAL_EXTRA_POINT && career()->live.rules.ball==85);
+    }
+    /* Real card UI: page through and select every offensive and defensive call,
+     * alternating touch and buttons; no new ID is merely present in the catalog. */
+    {
+        FootballCareer *w=(FootballCareer *)career();
+        for(unsigned side=0;side<2;++side){
+            unsigned count=side?FB_DEF_COUNT:FB_PLAY_COUNT;
+            w->live.phase=FB_LIVE_CALL;w->live.special=FB_SPECIAL_NONE;w->live.conversion=0;w->live.rules.offense=side?FB_AWAY:FB_HOME;
+            /* Moving right wraps to page one; the rendered footer is the public page state. */
+            for(unsigned n=0;n<8;++n){tick();if(on_bottom(side?"Defense 1/":"Playbook 1/"))break;press(BTN_RIGHT);}
+            assert(on_bottom(side?"Defense 1/":"Playbook 1/"));
+            for(unsigned id=0;id<count;++id){
+                if(id%4==0 && id)press(BTN_RIGHT);
+                tick();
+                if(id&1){assert(game_screen->touch);game_screen->touch(game_screen, id%4%2?200:50,id%4>=2?160:70);}
+                else {for(unsigned k=0;k<id%4;++k)press(BTN_DOWN);press(BTN_ACTION);}
+                assert(w->live.phase==FB_LIVE_SET);
+                assert(side?(unsigned)w->live.defense==id:(unsigned)w->live.play==id);
+                w->live.phase=FB_LIVE_CALL;w->live.special=FB_SPECIAL_NONE;
+                /* Reset cursor to first option while staying on this page. */
+                press(BTN_RIGHT);press(BTN_LEFT);
+            }
+        }
+        assert(offense_cards==((1u<<FB_PLAY_COUNT)-1));assert(defense_cards==((1u<<FB_DEF_COUNT)-1));
     }
     /* Every other menu, drawn: the result, the experience, evolution, shop and end screens, the checkpoint error, and a failed save on top. */
     {
