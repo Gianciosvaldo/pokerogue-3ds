@@ -234,6 +234,14 @@ static int fused_types(const pr_form_gen *f, const pr_form_gen *ff, int8_t out[2
     return n;
 }
 
+int pr_run_species_type(int species, int which)
+{
+    const pr_species_gen *sp = species_gen(species);
+    if (!sp || (which != 1 && which != 2)) return -1;
+    const pr_form_gen *f = form_gen(sp, 0);
+    return f && which <= f->n_types ? f->types[which - 1] : -1;
+}
+
 int pr_run_enemy_types(const pr_enemy_gen *mon, int species, int8_t types[2])
 {
     const pr_species_gen *sp = species_gen(species);

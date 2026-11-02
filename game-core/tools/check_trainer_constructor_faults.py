@@ -21,7 +21,7 @@ mutants=[
  ('ambient-restore',party,'run->rng = saved;   /* each member rolled','/* fault */   /* each member rolled'),
  ('decline-output',party,'if (!handled) { run->rng = base_rng; out->mons[e] = base; }','if (!handled) { run->rng = base_rng; }'),
  ('reject-old-moves',move,'m->b.level < 1 || m->b.n_moves','m->b.level < 1'),
- ('no-form-guard',move,'if (!sp || (trainer && (sp->form_change_triggers','if (!sp || (false && (sp->form_change_triggers'),
+ ('no-form-guard',move,'if (!sp || (trainer && !(run->trainer_type >= TRAINER_TYPE_LORELEI && run->trainer_type <= TRAINER_TYPE_KIERAN) && (sp->form_change_triggers','if (!sp || (false && (sp->form_change_triggers'),
  ('omit-relearner-weight',move,'weight = c.trainer && c.p.level >= gc_mg_const.relearn_level ? gc_mg_const.relearn_move_weight : 0;','weight = 0;'),
  ('delay-common-tms',move,'if (c->p.level >= gc_mg_trainer_const.tm_level[0]) {','if (c->p.level >= gc_mg_trainer_const.tm_level[1]) {'),
  ('reverse-tm-order',move,'for (int k = 0; k < list->n; k++) {','for (int k = list->n - 1; k >= 0; k--) {'),

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Writes gen/out/run_evil_closures.c: the partyMemberFuncs of the evil teams' admins and bosses.
+"""Writes gen/out/run_evil_closures.c: the partyMemberFuncs of the evil teams' admins and bosses and of the Elite Four and Champions.
 
 Their closures are getRandomPartyMemberFunc([species...], TrainerSlot.TRAINER, ignoreEvolution, postProcess) written out in
 src/data/trainers/trainer-config.ts of the pinned upstream, so (unlike the data the vitest dumpers read) they can't be called
@@ -39,7 +39,7 @@ def balanced(s, i):
     raise SystemExit("unbalanced parentheses")
 
 
-OPS = ["IF", "REGEN", "BALL", "BOSS", "ABILITY", "GENDER", "FORM", "FORM_RAND", "FRIENDSHIP", "MOVE", "MOVE_RAND", "REPLACE_MOVE", "MOVESET"]
+OPS = ["IF", "REGEN", "BALL", "BOSS", "ABILITY", "GENDER", "FORM", "FORM_RAND", "FRIENDSHIP", "MOVE", "MOVE_RAND", "REPLACE_MOVE", "MOVESET", "TERA", "TERA_SPECIES", "JMP"]
 BALLS = {"POKEBALL": 0, "GREAT_BALL": 1, "ULTRA_BALL": 2, "ROGUE_BALL": 3, "MASTER_BALL": 4, "LUXURY_BALL": 5}
 GENDERS = {"GENDERLESS": "GENDER_GENDERLESS", "MALE": "GENDER_MALE", "FEMALE": "GENDER_FEMALE"}
 
@@ -82,6 +82,12 @@ class Post:
         m = re.fullmatch(r"!p\.moveset\.some\(move => move\.moveId === MoveId\.([A-Z0-9_]+)\)", t)
         if m:
             return ("PR_EG_LACKS_MOVE", "MOVE_ID_" + m.group(1), None)
+        m = re.fullmatch(r"p\.formIndex === (\d+)", t)
+        if m:
+            return ("PR_EG_FORM_EQ", m.group(1), None)
+        m = re.fullmatch(r"p\.species\.speciesId === SpeciesId\.([A-Z0-9_]+) && !p\.moveset\.some\(move => move\.moveId === MoveId\.([A-Z0-9_]+)\)", t)
+        if m:
+            return ("PR_EG_SPECIES_LACKS", "SPECIES_ID_" + m.group(1), "MOVE_ID_" + m.group(2))
         self.fail("condition outside the grammar: " + t)
 
     def block(self, s):
@@ -101,32 +107,49 @@ class Post:
                 i = j + 1
 
     def if_chain(self, s, i):
-        """if (c) {..} [else if (c) {..}]* [else {..}] from s[i]; returns the index after it"""
-        prev, branches = None, 0
+        """if (c) {..} [else if (c) {..}]* [else {..}] from s[i]; returns the index after it.  Each branch is an IF that skips its body (and the
+        JMP that ends it) when its condition fails; a JMP at the end of every branch but the last skips the branches after it"""
+        branches = []   # (guard, body) ; guard None = the final else
         while True:
             m = re.compile(r"if\s*\(").match(s, i)
             if m:
                 a = m.end() - 1
                 b = balanced(s, a)
-                kind, val, neg = self.cond(s[a + 1:b])
-                if prev is not None and prev[0] != kind:
-                    self.fail("mixed else-if chain")
+                guard = self.cond(s[a + 1:b])
                 k = s.index("{", b)
                 e = braced(s, k)
-                self.guarded(kind, val, s[k + 1:e])
-                prev, branches = (kind, val, neg), branches + 1
+                branches.append((guard, s[k + 1:e]))
             else:
                 m = re.compile(r"\{").match(s, i)
-                if prev is None or prev[2] is None or branches != 1 or not m:
+                if not m:
                     self.fail("else outside the grammar")
                 e = braced(s, i)
-                self.guarded(prev[2], prev[1], s[i + 1:e])
-                return e + 1
+                branches.append((None, s[i + 1:e]))
+                return self.emit_chain(branches, e + 1)
             i = e + 1
             m2 = re.compile(r"\s*else\s*").match(s, i)
             if not m2:
-                return i
+                return self.emit_chain(branches, i)
             i = m2.end()
+
+    def emit_chain(self, branches, end):
+        jumps = []
+        for n, (guard, body) in enumerate(branches):
+            if guard is None:
+                self.block(body)
+                continue
+            at = self.emit("IF")
+            self.ops[at]["g"], self.ops[at]["gv"] = guard[0], guard[1]
+            if guard[0] == "PR_EG_SPECIES_LACKS":
+                self.ops[at]["b"] = guard[2]
+            before = len(self.ops)
+            self.block(body)
+            if n + 1 < len(branches):
+                jumps.append(self.emit("JMP"))
+            self.ops[at]["a"] = str(len(self.ops) - before)
+        for j in jumps:
+            self.ops[j]["a"] = str(len(self.ops) - j - 1)
+        return end
 
     def guarded(self, kind, val, body):
         at = self.emit("IF", g=None)
@@ -173,14 +196,21 @@ class Post:
             self.emit("BOSS", a=m.group(1))
         elif (m := re.fullmatch(r"p\.friendship = (\d+)", t)):
             self.emit("FRIENDSHIP", a=m.group(1))
-        elif (m := re.fullmatch(r"p\.(abilityIndex|formIndex|gender) = (.*)", t)):
+        elif (m := re.fullmatch(r"p\.(abilityIndex|formIndex|gender|teraType) = (.*)", t)):
             field, rhs = m.groups()
-            op = {"abilityIndex": "ABILITY", "formIndex": "FORM", "gender": "GENDER"}[field]
-            t2 = re.fullmatch(r"p\.species\.speciesId === SpeciesId\.([A-Z0-9_]+) \? (.+?) : (.+)", rhs)
+            op = {"abilityIndex": "ABILITY", "formIndex": "FORM", "gender": "GENDER", "teraType": "TERA"}[field]
+            # cond ? x : y on the species (one species, or two joined by ||): two guarded assignments
+            t2 = re.fullmatch(r"((?:p\.species\.speciesId === SpeciesId\.[A-Z0-9_]+(?: \|\| )?)+) \? (.+?) : (.+)", rhs)
             if t2:
-                for kind, val in (("PR_EG_SPECIES_EQ", t2.group(2)), ("PR_EG_SPECIES_NE", t2.group(3))):
+                names = re.findall(r"SpeciesId\.([A-Z0-9_]+)", t2.group(1))
+                if len(names) > 2:
+                    self.fail("more than two species in a ternary: " + t)
+                for kind, val in ((("PR_EG_SPECIES_EQ", "PR_EG_SPECIES_EQ2")[len(names) - 1], t2.group(2)),
+                                  (("PR_EG_SPECIES_NE", "PR_EG_SPECIES_NE2")[len(names) - 1], t2.group(3))):
                     at = self.emit("IF")
-                    self.ops[at]["g"], self.ops[at]["gv"], self.ops[at]["a"] = kind, "SPECIES_ID_" + t2.group(1), "1"
+                    self.ops[at]["g"], self.ops[at]["gv"], self.ops[at]["a"] = kind, "SPECIES_ID_" + names[0], "1"
+                    if len(names) == 2:
+                        self.ops[at]["b"] = "SPECIES_ID_" + names[1]
                     self.assign(op, val)
             else:
                 self.assign(op, rhs)
@@ -213,6 +243,13 @@ class Post:
             self.emit(op, a=rhs)
         elif op == "FORM" and (m := re.fullmatch(r"randSeedInt\((\d+)(?:, (\d+))?\)", rhs)):
             self.emit("FORM_RAND", a=m.group(1), b=m.group(2) or "0")
+        elif op == "FORM" and (m := re.fullmatch(r"randSeedIntRange\((\d+), (\d+)\)", rhs)):
+            lo, hi = int(m.group(1)), int(m.group(2))   # randSeedInt(hi - lo + 1, lo)
+            self.emit("FORM_RAND", a=str(hi - lo + 1), b=str(lo))
+        elif op == "TERA" and (m := re.fullmatch(r"PokemonType\.([A-Z]+)", rhs)):
+            self.emit("TERA", a="POKEMON_TYPE_" + m.group(1))
+        elif op == "TERA" and (m := re.fullmatch(r"p\.species\.type([12])!?", rhs)):
+            self.emit("TERA_SPECIES", a=m.group(1))
         else:
             self.fail("%s = %s" % (op, rhs))
 
@@ -243,8 +280,11 @@ def main():
     starts = [(m.start(), m.group(1)) for m in re.finditer(r"\n  \[TrainerType\.([A-Z0-9_]+)\]: new TrainerConfig\(", src)]
     blocks = {n: src[s:(starts[i + 1][0] if i + 1 < len(starts) else len(src))] for i, (s, n) in enumerate(starts)}
     rows, species, ops, items = [], [], [], []
-    for n in ADMINS + BOSSES:
-        block = blocks[n]
+    # the Elite Four and Champions (initForEliteFour / initForChampion) have the same partyMemberFuncs; the gym leaders (initForGymLeader) have none
+    # but are scanned all the same, so one that gains a closure fails the run instead of being skipped
+    fixed = [n for _, n in starts if re.search(r"\.initFor(EliteFour|Champion|GymLeader)\(", blocks[n]) and n not in ADMINS + BOSSES]
+    for n in ADMINS + BOSSES + fixed:
+        block = re.sub(r"(?m)^(\s*)//[^\n]*|(?<=[;,{(\s])//[^\n]*", r"\1", blocks[n])   # a comment can hold an apostrophe
         seen = set()
         for m in re.finditer(r"\.setPartyMemberFunc\(", block):
             a = m.end() - 1

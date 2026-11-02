@@ -1,7 +1,7 @@
 /* The evil teams' admins and bosses: the members that have a partyMemberFunc (src/data/trainers/trainer-config.ts, getRandomPartyMemberFunc).
  * The data is gen/out/run_evil_closures.c (tools/gen-evil-closures.py reads it off the pinned upstream's source). Same member generation as the Gym/E4
  * explicit closures (gym_e4.c): randSeedItem over the pool, getTrainerSpeciesForLevel unless the closure ignores evolution, then addEnemyPokemon.
- * What the postProcess callbacks do (ability slot, forms, boss segments, balls, movesets) happens after the constructor and is not ported. */
+ * The postProcess callbacks (ability slot, forms, boss segments, balls, movesets, Tera type) are the ops of the closure, run after the constructor. */
 #include "pr/run.h"
 
 static const pr_evil_closure *find_closure(int type, int slot)
@@ -38,11 +38,27 @@ int pr_run_gen_evil_closure_member(pr_run *run, const pr_trainer_party_ctx *ctx,
     return 1;
 }
 
+/* a member of an Elite Four / Champion closure: gym_e4.c made it (the pool is its own table); the postProcess is this file's */
+void pr_run_evil_attach(const pr_run *run, int type, int func_key, pr_enemy_gen *out)
+{
+    const pr_evil_closure *cl = find_closure(type, func_key);
+    if (!cl) return;
+    out->evil_pending = true;
+    out->evil_closure = (int)(cl - pr_evil_closures);
+    out->evil_rng = run->rng;
+}
+
 static bool guard_holds(const pr_evil_op *op, const pr_enemy_gen_ctx *ctx, const pr_enemy_gen *g)
 {
     switch (op->g) {
     case PR_EG_SPECIES_EQ: return ctx->species == op->gv;
     case PR_EG_SPECIES_NE: return ctx->species != op->gv;
+    case PR_EG_SPECIES_EQ2: return ctx->species == op->gv || ctx->species == (uint16_t)op->b;
+    case PR_EG_SPECIES_NE2: return ctx->species != op->gv && ctx->species != (uint16_t)op->b;
+    case PR_EG_SPECIES_LACKS:
+        if (ctx->species != op->gv) return false;
+        for (int k = 0; k < 4; k++) if (g->moveset[k] == op->b) return false;
+        return true;
     case PR_EG_WAVE_EQ: return ctx->wave == op->gv;
     case PR_EG_WAVE_NE: return ctx->wave != op->gv;
     case PR_EG_FORM_EQ: return g->form == op->gv;
@@ -65,6 +81,14 @@ int pr_run_evil_finish(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_enemy_gen *o
         const pr_evil_op *op = &pr_evil_ops[cl->op_start + i];
         switch (op->op) {
         case PR_EOP_IF: if (!guard_holds(op, ctx, out)) i += op->a; break;
+        case PR_EOP_JMP: i += op->a; break;
+        case PR_EOP_TERA: out->tera_type = op->a; break;
+        case PR_EOP_TERA_SPECIES: {
+            const int t = pr_run_species_type(ctx->species, op->a);
+            if (t < 0) return -1;
+            out->tera_type = t;
+            break;
+        }
         case PR_EOP_REGEN:
             if (ctx->post_regen && ctx->post_regen(ctx->post_regen_user, out, rng) < 0) return -1;
             break;

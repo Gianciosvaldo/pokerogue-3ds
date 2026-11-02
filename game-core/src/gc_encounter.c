@@ -402,7 +402,7 @@ static int post_regen(void *user, void *gen, pr_rng *rng)
         post_moveset(st->run, st->m, g);
         return 0;
     }
-    /* the Pokemon as it is now: the postProcess's form, ability slot, gender and boss segments and the IVs the constructor rerolled (Hidden
+    /* the Pokemon as it is now: the postProcess's form, ability slot, gender, Tera type and boss segments and the IVs the constructor rerolled (Hidden
      * Power's type reads them); its stats are still the ones the constructor calculated */
     static gc_mon cur;   /* 4 KB: off the 3DS stack */
     cur = *st->m;
@@ -412,6 +412,7 @@ static int post_regen(void *user, void *gen, pr_rng *rng)
     p->base_ability = p->ability = (uint16_t)gc_form_ability(p->species, gc_form(p->species, g->form), g->ability_index);
     p->gender = (int8_t)g->gender;
     for (int i = 0; i < 6; i++) p->ivs[i] = (uint8_t)g->ivs[i];   /* the rerolled IVs: Hidden Power's type */
+    p->tera_type = g->tera_type;   /* a postProcess's teraType (Tera Blast, the Tera STAB of the pool) */
     p->is_boss = g->boss_segments > 0;
     p->boss_segments = (uint8_t)(g->boss_segments > 0 ? g->boss_segments : 0);
     memset(p->moves, 0, sizeof p->moves);

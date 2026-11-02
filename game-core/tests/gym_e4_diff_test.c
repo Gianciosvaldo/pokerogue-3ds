@@ -195,7 +195,6 @@ int main(int argc, char **argv)
             else if (m->b.id != x_id) bad = "id";
             else if (m->b.nature != x_nature) bad = "nature";
             /* Trainer.genAI (setRandomTeraModifiers, after the party) gives the one member that Terastallizes the config's specialty type */
-            else if (m->b.tera_type != x_tera && !m->tera_instant) bad = "Tera type";
             else if (!ctor_ok) bad = "constructor moves";
             else if ((m->b.fusion_species ? m->b.fusion_species : -1) != fs) bad = "fusion species";
             else if (fs >= 0 && (m->b.fusion_ability_index != fa || m->b.fusion_gender != fg || m->b.fusion_form != ff)) bad = "fusion state";
@@ -216,6 +215,7 @@ int main(int argc, char **argv)
             const int x_ability = (int)num(&save), x_gender = (int)num(&save), x_form = (int)num(&save), x_boss = (int)num(&save), x_friend = (int)num(&save);
             int x_moves[4];
             for (int k = 0; k < 4; k++) x_moves[k] = (int)num(&save);
+            const int x_tera_final = (int)num(&save);
             if (!pend.open) continue;
             pend.open = false;
             if (!case_ok || pend.e >= run.n_enemy) continue;
@@ -231,6 +231,8 @@ int main(int argc, char **argv)
             else if (m->b.form != x_form && !schooling) mismatch(l, pend.fixed, e, sp, "form after postProcess", m->b.form, x_form);
             else if (m->b.boss_segments != x_boss) mismatch(l, pend.fixed, e, sp, "boss segments", m->b.boss_segments, x_boss);
             else if (m->b.friendship != x_friend) mismatch(l, pend.fixed, e, sp, "friendship", m->b.friendship, x_friend);
+            /* the config's setRandomTeraModifiers (an Elite Four's, a Champion's, an instant Tera slot) gives its member the specialty type after the party */
+            else if (m->b.tera_type != x_tera_final && !m->tera_instant) mismatch(l, pend.fixed, e, sp, "Tera type after postProcess", m->b.tera_type, x_tera_final);
             else if (!moves_ok) {
                 mismatch(l, pend.fixed, e, sp, "moves", m->b.moves[0], x_moves[0]);
                 if (mismatches <= 20)
@@ -248,7 +250,7 @@ int main(int argc, char **argv)
     printf("gym/e4/evil in game-core: %d cases (%d gym waves, %d fixed fights), %d fully matched, %d members, %d stand-ins, %d without held items "
            "(genModifiersFunc champions), %d Wishiwashi already in School form, %d mismatches\n",
            cases, gyms, fixed_fights, matched, members, stand_ins, no_items, school_forms, mismatches);
-    printf("%d members the generator declines (Keldeo: its Secret Sword form change is not ported) kept the stand-in moveset\n", declined);
+    printf("%d members whose constructor moveset the generator declines kept the stand-in moveset (none expected: Keldeo of the Elite Four and Champions is generated too)\n", declined);
     printf("%d members compared after their postProcess (ability slot, gender, form, boss segments, friendship, moves)\n", post_checked);
     printf("TOTAL %d cases, %d mismatches\n", cases, mismatches);
     return mismatches || !cases ? 1 : 0;

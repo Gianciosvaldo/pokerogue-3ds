@@ -1,8 +1,7 @@
 /* Task 49: Gym Leader / Elite Four / Champion team closures.
  * Explicit positive-slot pools are transcribed from pagefaultgames/pokerogue 8555c08
  * src/data/trainers/trainer-config.ts. Gym/E4 negative signature closures reuse the generated
- * signature-species data. Moveset/post-moveset callbacks remain outside run-core's existing
- * pre-moveset trainer-party boundary. */
+ * signature-species data. The closures' postProcess callbacks are ops (evil_team.c, data from tools/gen-evil-closures.py). */
 #include "pr/run.h"
 
 typedef struct {
@@ -437,6 +436,8 @@ int pr_run_gen_gym_e4_closure_member(pr_run *run, const pr_trainer_party_ctx *ct
     ec.shiny_lock = false;
     if (pr_run_enemy_pokemon_base(run, &ec, out) < 0) return -1;
     *out_species = species;
+    /* the rest of the constructor and the closure's postProcess (ability slot, form, boss segments, fixed moves...) run on this member's RNG */
+    if (func_key >= 0) pr_run_evil_attach(run, type, func_key, out);
     return 1;
 }
 

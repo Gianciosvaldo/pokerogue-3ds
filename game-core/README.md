@@ -797,9 +797,11 @@ the three admins of a team differ: a group no longer than the offset picks at ra
 seed's RNG and takes the entry at the offset) and `getRandomTrainerFunc(pool)` for a boss (the first form at 115, the same team's second form at 165, never
 female). Their parties are made of closures (`getRandomPartyMemberFunc(pool, TrainerSlot.TRAINER, ignoreEvolution, postProcess)`) that run-core's generator
 `run-core/tools/gen-evil-closures.py <upstream dir>` reads out of the upstream config (`--check` fails when `gen/out/run_evil_closures.c` is stale); the
-`postProcess` is parsed into ops as well (`pr_evil_ops`: ability slot, gender, form (also `randSeedInt`, by wave, by species), `setBoss(true, 2)` shields,
-Poke Ball, friendship, fixed and `randSeedItem` moves, `replaceInMoveset`, whole movesets, `generateAndPopulateMoveset()`; anything outside that grammar
-fails the generator). The member keeps its seed-offset RNG (`evil_pending`/`evil_rng`), so `pr_run_enemy_pokemon_finish` finishes the constructor on it and
+`postProcess` is parsed into ops as well (`pr_evil_ops`: ability slot, gender, form (also `randSeedInt` and `randSeedIntRange`, by wave, by species, by form),
+`setBoss(true, 2)` shields, Poke Ball, friendship, Tera type (a type or one of the species' types), fixed and `randSeedItem` moves, `replaceInMoveset`, whole
+movesets, `generateAndPopulateMoveset()`, if / else if / else chains that nest; anything outside that grammar fails the generator). The Elite Four and the
+Champions (`initForEliteFour`, `initForChampion`) have the same closures, so the same generator reads theirs and `gym_e4.c` attaches the ops to the members it
+makes (`pr_run_evil_attach`); the gym leaders have no closures with a postProcess. The member keeps its seed-offset RNG (`evil_pending`/`evil_rng`), so `pr_run_enemy_pokemon_finish` finishes the constructor on it and
 then runs the ops, as upstream does inside `executeWithSeedOffset`; `generateAndPopulateMoveset()` calls back into game-core (`ctx.post_regen`). A trainer with a
 `genModifiersFunc` (Guzma's second form) still holds no items and counts the one stand-in left.
 
@@ -810,7 +812,8 @@ which `setBoss` and `setEggMovesAllowed` do, from level 80 gets its root species
 moves together, and the egg caps rise at 80/121/161/201); `gen/dump-movegen.test.ts` dumps the egg policy of every trainer type and the egg constants. Instant
 Tera: a party slot in the config's `setInstantTera` list (`tera_static`; Penny's Sylveon, the Paldean gym leaders) generates with `willTerastallize()`, which
 changes the type of Tera Blast, Tera Starstorm and Revelation Dance, the STAB and type-diversity rules and the Hail and Sandstorm checks. Rivals (their own
-signature moves) and species whose form changes when a move is learned (Keldeo's Secret Sword) stay on the stand-in.
+signature moves) stay on the stand-in; Keldeo (Alder's, whose form changes when it learns Secret Sword: upstream queues a form change phase that is not run here) is
+generated like any member of the Elite Four and Champions, and every other trainer still declines it.
 A member made by a closure runs its constructor moveset first (on its own seed, `evil_rng`), then the constructor's finish, then the ops; a `generateAndPopulateMoveset()`
 op regenerates with what the ops assigned so far: the form, ability slot, gender and boss segments (a trainer's Pokemon is only a boss from `setBoss`, so the
 regeneration of a boss has its extra weights, no rare egg moves and its passive), the IVs the constructor rerolled (Hidden Power's type) but the stats the
@@ -825,8 +828,8 @@ offsets and ids, with `Math.random` fed two known values that are written in an 
 of the native generator are compared: an `M` line per member also carries the moves its constructor made, a `P` line what the real `postProcess` left: ability slot,
 gender, form, boss segments, friendship, moves; and compares in the same `tests/gym_e4_diff_test.c` as the gym leaders, pinning the same rolls (`evil_roll_pinned`): the trainer type and variant,
 double or single, the name entries, the levels, every member's constructor state and moveset, and that no stand-in was used. `DIFF_MODE=gym` makes the producer pick the
-gym leaders and the Elite Four / Champion fights the way run-core's does and compares their constructor movesets (their closures' `postProcess` is not in the ops yet,
-so there are no `P` lines). `tools/evilplant.sh <trace> [<stub trace>]` shows the one-line breakages, in game-core and in run-core's `newbattle.c` and `evil_team.c`,
+gym leaders and the Elite Four / Champion fights the way run-core's does and compares them the same way, `P` lines included (the Tera type there is the one the
+postProcess left; a member the config's `setRandomTeraModifiers` makes Terastallize gets the specialty type later and is not compared). `tools/evilplant.sh <trace> [<stub trace>]` shows the one-line breakages, in game-core and in run-core's `newbattle.c` and `evil_team.c`,
 fail the differential or `tests/gym_e4_test.c`, which also plays the ten fights (Youngster, grunts, admins, bosses) of eight runs and the six pinned (gender, double) combinations.
 
 ### Trainer dialogue (`GC_EV_DIALOGUE`)

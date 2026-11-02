@@ -523,15 +523,17 @@ int pr_run_gen_pair_closure_member(pr_run *run,const pr_trainer_party_ctx *ctx,
                                   int index,int func_key,pr_enemy_gen *out,int *out_species);
 /* Task 49 Gym/E4 closures. The member helper is called with the exact partyMemberFuncs key selected
  * by Trainer.genPartyMember and returns 1 when Task 49 owns it, 0 otherwise, -1 on error. */
-/* The evil team admins' and bosses' partyMemberFuncs (src/evil_team.c, data gen/out/run_evil_closures.c from tools/gen-evil-closures.py): the species of
+/* The evil team admins' and bosses' (and the Elite Four's and Champions') partyMemberFuncs (src/evil_team.c, data gen/out/run_evil_closures.c from tools/gen-evil-closures.py; also the Elite Four's and Champions', whose members gym_e4.c makes): the species of
  * getRandomPartyMemberFunc(pool, TrainerSlot.TRAINER, ignoreEvolution) for one member. Same 1/0/-1 convention; the postProcess callbacks are not ported. */
 typedef struct { uint16_t type; uint8_t slot, ignore_evolution; uint16_t start, n; uint16_t op_start, op_n; } pr_evil_closure;
 /* postProcess as data: ops run in order, each only when its guard holds */
 enum { PR_EOP_IF, PR_EOP_REGEN, PR_EOP_BALL, PR_EOP_BOSS, PR_EOP_ABILITY, PR_EOP_GENDER, PR_EOP_FORM, PR_EOP_FORM_RAND, PR_EOP_FRIENDSHIP,
-       PR_EOP_MOVE, PR_EOP_MOVE_RAND, PR_EOP_REPLACE_MOVE, PR_EOP_MOVESET };
-enum { PR_EG_NONE, PR_EG_SPECIES_EQ, PR_EG_SPECIES_NE, PR_EG_WAVE_EQ, PR_EG_WAVE_NE, PR_EG_FORM_EQ, PR_EG_LACKS_MOVE };
+       PR_EOP_MOVE, PR_EOP_MOVE_RAND, PR_EOP_REPLACE_MOVE, PR_EOP_MOVESET, PR_EOP_TERA, PR_EOP_TERA_SPECIES, PR_EOP_JMP };
+enum { PR_EG_NONE, PR_EG_SPECIES_EQ, PR_EG_SPECIES_NE, PR_EG_WAVE_EQ, PR_EG_WAVE_NE, PR_EG_FORM_EQ, PR_EG_LACKS_MOVE,
+       PR_EG_SPECIES_EQ2, PR_EG_SPECIES_NE2, PR_EG_SPECIES_LACKS };
 /* op: a, b, c by kind. MOVE: slot a, move b. MOVE_RAND: slot a, then the n = b items at pr_evil_op_items[c]. REPLACE_MOVE: a -> b. MOVESET: four moves at
- * pr_evil_op_items[a]. FORM_RAND: randSeedInt(a, b). Guard: kind g, value gv */
+ * pr_evil_op_items[a]. FORM_RAND: randSeedInt(a, b). TERA: teraType = a. TERA_SPECIES: teraType = the species' type a (1 or 2). JMP: skip the next a ops.
+ * IF: skip the next a ops when the guard (kind g, value gv; EQ2/NE2: gv or b; SPECIES_LACKS: species gv and no move b) fails */
 typedef struct { uint8_t op, g; uint16_t gv; int16_t a, b, c; } pr_evil_op;
 extern const pr_evil_op pr_evil_ops[];
 extern const uint16_t pr_evil_op_items[];
@@ -539,6 +541,10 @@ extern const pr_evil_closure pr_evil_closures[];
 extern const int pr_evil_closure_count;
 extern const uint16_t pr_evil_closure_species[];
 int pr_run_evil_finish(pr_run *run, const pr_enemy_gen_ctx *ctx, pr_enemy_gen *out);
+/* a member of an Elite Four / Champion closure (made by gym_e4.c) takes the closure's postProcess: it runs at the end of its finish on its own RNG */
+void pr_run_evil_attach(const pr_run *run, int type, int func_key, pr_enemy_gen *out);
+/* PokemonSpecies.type1 (which = 1) or type2 (2) of a species: its first form's types; -1 when there is none */
+int pr_run_species_type(int species, int which);
 int pr_run_gen_evil_closure_member(pr_run *run, const pr_trainer_party_ctx *ctx, int index, int func_key, pr_enemy_gen *out, int *out_species);
 int pr_run_gen_gym_e4_closure_member(pr_run *run, const pr_trainer_party_ctx *ctx,
                                      int index, int func_key, pr_enemy_gen *out, int *out_species);

@@ -737,7 +737,10 @@ bool gc_generate_moveset_stale(gc_run *run, pr_rng *rng, gc_mon *m, const gc_mon
         || run->trainer_type <= 0 || run->trainer_type >= gc_mg_trainer_egg_count
         || (run->trainer_type >= TRAINER_TYPE_RIVAL && run->trainer_type <= TRAINER_TYPE_RIVAL_6))) return false;
     const pr_species *sp = gc_species(m->b.species);
-    if (!sp || (trainer && (sp->form_change_triggers
+    /* A form change on learning a move (Keldeo's Secret Sword): upstream queues a QuietFormChangePhase after the generation, which this does not
+     * run; only the Elite Four's and Champions' scripted teams (Alder's Keldeo) have such a member, so their trainer types are let through
+     * and every other trainer declines */
+    if (!sp || (trainer && !(run->trainer_type >= TRAINER_TYPE_LORELEI && run->trainer_type <= TRAINER_TYPE_KIERAN) && (sp->form_change_triggers
         & (1u << PR_FCT_SpeciesFormChangeMoveLearnedTrigger)))) return false;
     if (m->b.fusion_species && (!gc_species(m->b.fusion_species)
         || (sp->form_change_triggers & (1u << PR_FCT_SpeciesFormChangeMoveLearnedTrigger))))

@@ -27,7 +27,7 @@ it("evil team producer", async () => {
   const OUT = process.env.DIFF_OUT ?? "/tmp/pr-evil-cases.txt";
   const WAVES = (process.env.DIFF_WAVES ?? "5,35,62,64,112").split(",").map(Number);
   // DIFF_MODE=gym: run-core's selection instead (the Elite Four / Champion fixed fights and the gym leaders from the biome's boss pool, at the
-  // gym waves of either offset); no "P" lines then, the gym closures' postProcess is not ported
+  // gym waves of either offset)
   const GYM = process.env.DIFF_MODE === "gym";
   const gymNormal = [20, 50, 80, 110, 140, 170];
   const gymOffset = [30, 60, 90, 120, 150, 180];
@@ -68,6 +68,13 @@ it("evil team producer", async () => {
     realMoveset.apply(this, args);
     // the constructor's own moveset (the first generation), which a postProcess's regeneration replaces
     this.__ctorMoves ??= [0, 1, 2, 3].map(k => this.moveset[k]?.moveId ?? 0).join(" ");
+  };
+
+  // init() follows the postProcess in addEnemyPokemon: the Tera type then is the one the constructor and the postProcess left (Trainer.genAI picks later)
+  const realInit = (EnemyPokemon.prototype as any).init;
+  (EnemyPokemon.prototype as any).init = function (this: any, ...args: any[]) {
+    this.__postTera = this.teraType;
+    return realInit.apply(this, args);
   };
 
   const tplLine = (t: any) => {
@@ -142,7 +149,7 @@ it("evil team producer", async () => {
       const p: any = trainer.genPartyMember(e);
       battle.enemyParty[e] = p;
       members.push(`M ${p.species.speciesId} ${p.__task49Snapshot ? `${p.__task49Snapshot} ${p.__ctorMoves}` : "none"}`);
-      if (!GYM) members.push(`P ${p.abilityIndex} ${p.gender} ${p.formIndex} ${p.bossSegments ?? 0} ${p.friendship} ${[0, 1, 2, 3].map(k => p.moveset[k]?.moveId ?? 0).join(" ")}`);
+      members.push(`P ${p.abilityIndex} ${p.gender} ${p.formIndex} ${p.bossSegments ?? 0} ${p.friendship} ${[0, 1, 2, 3].map(k => p.moveset[k]?.moveId ?? 0).join(" ")} ${p.__postTera ?? p.teraType}`);
     }
 
     lines.push([
