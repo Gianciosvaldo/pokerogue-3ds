@@ -12,7 +12,7 @@ mutants=[
  ('no-trainer-weights',move,'if (c.trainer) {','if (false) {'),
  ('no-superceding',move,'if (c.boss || c.trainer) filter_superceded(&pool);','if (c.boss) filter_superceded(&pool);'),
  ('omit-trainer-pools',move,'if (c.trainer && !trainer_pools(&c, &pool)) return false;','if (false) return false;'),
- ('wrong-trainer-stream',entry,'gc_generate_moveset(state->run, &r->rng, m)','gc_generate_moveset(state->run, &state->run->bt.battle_rng, m)'),
+ ('wrong-trainer-stream',entry,'gc_generate_moveset(state->run, rng, m)','gc_generate_moveset(state->run, &state->run->bt.battle_rng, m)'),
  ('double-finish',entry,'if (state.ready[e]) {','if (false) {'),
  ('disabled-owner',entry,'finish_trainer_constructor, &state','NULL, NULL'),
  ('partner-slot',party,'ec.trainer_slot = !ctx->is_double || !(e % 2) ? 1 : 2;','ec.trainer_slot = 1;'),

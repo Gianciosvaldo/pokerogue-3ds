@@ -82,7 +82,8 @@ typedef struct {
     /* tests only: pin the unseeded rolls of an evil team grunt fight (randInt(2) gender, randInt(3) double) instead of drawing them from stub_rng */
     bool evil_roll_pinned;
     uint8_t evil_roll[2];
-    bool post_sentinel_moves;   /* tests: a closure member's constructor-time and regenerated movesets are moves 1..4 (the upstream producer's stub) */
+    bool ctor_will_tera;        /* the party member being made is in its trainer config's setInstantTera list: gc_generate_moveset generates for a Pokemon that will Terastallize */
+    uint16_t ctor_moves[6][4];  /* tests: the moveset each party member's constructor made (a postProcess's regeneration replaces it) */
     int reroll_count;
     int battle_item_count[2];   /* represented inventory prefix; rebuilt on load/setup */
     /* ai-core's view of the battle: enemySwitchCounter, each Pokemon's AI entry (initialTeamIndex,
@@ -187,6 +188,10 @@ bool gc_enemy_moveset(gc_run *run, gc_mon *m, const pr_enemy_gen *g);
  * false leaves Pokemon/RNG untouched. Trainer postProcess regeneration needs its
  * actual generation-time stats and a separate owner; do not recalculate blindly. */
 bool gc_generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m);
+/* ...the same for a Pokemon whose form, ability, gender or boss status were assigned after its constructor (a closure's postProcess):
+ * its stats stay those of `stats_of`, the Pokemon as the constructor made it; will_tera = willTerastallize(): the member's party slot is one the
+ * trainer config lists in setInstantTera */
+bool gc_generate_moveset_stale(gc_run *run, pr_rng *rng, gc_mon *m, const gc_mon *stats_of, bool will_tera);
 /* Move.calculateEffectivePower(pokemon) of each of `n` moves for a Pokemon (what the differential compares); false = a passive */
 bool gc_mg_effective_powers(gc_run *run, const gc_mon *m, const uint16_t *moves, int n, double *out);
 void gc_mon_set_move(gc_mon *m, int slot, int move);                  /* setMove */

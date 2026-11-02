@@ -182,7 +182,7 @@ static void unsupported(void)
         case 17:m.b.level=0;break;
         case 18:m.trainer_slot=m.b.trainer_slot=3;break;
         case 19:inject_stats_failure=true;break;
-        case 20:run.trainer_type=TRAINER_TYPE_ARCHER;break;
+        case 20:run.trainer_type=TRAINER_TYPE_RIVAL_3;break;
         case 21:run.trainer_variant=-1;break;
         case 22:run.trainer_variant=3;break;
         case 23:run.double_battle=true;break;

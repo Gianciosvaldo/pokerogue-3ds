@@ -22,7 +22,7 @@ static gc_run run;
 static gc_system sys;
 static int roll_gender, roll_double;
 static bool case_ok = true, case_admin_or_boss;
-static int mismatches, members, school_forms, post_checked;
+static int mismatches, members, school_forms, post_checked, declined;
 
 static char *tok(char **save)
 {
@@ -142,13 +142,11 @@ int main(int argc, char **argv)
 
             start(seed, wave, biome, offset_gym, wave_cycle_offset, trainer_id, secret_id);
             gc_int(&run)->evil_roll_pinned = true;
-            gc_int(&run)->post_sentinel_moves = true;   /* the producer's moveset stub: moves 1..4 */
             gc_int(&run)->evil_roll[0] = (uint8_t)roll_gender;
             gc_int(&run)->evil_roll[1] = (uint8_t)roll_double;
             gc_new_battle(&run);
             case_fixed = fixed;
-            /* only the admins' and bosses' closures leave the producer's stub moves; an ordinary member's moveset is the generator's, not the stub */
-            case_admin_or_boss = fixed && (wave == 66 || wave == 114 || wave == 164 || wave == 115 || wave == 165);
+            case_admin_or_boss = true;
             if (fixed) fixed_fights++; else gyms++;
 
             case_ok = run.battle_type == BATTLE_TYPE_TRAINER && run.trainer_type == exp_type && run.trainer_variant == exp_variant
@@ -179,11 +177,26 @@ int main(int argc, char **argv)
             const uint32_t x_id = (uint32_t)num(&save);
             const int x_gender = (int)num(&save), x_form = (int)num(&save), x_nature = (int)num(&save), x_tera = (int)num(&save);
             const int fs = (int)num(&save), fa = (int)num(&save), fg = (int)num(&save), ff = (int)num(&save);
+            /* the moveset the constructor made (a postProcess may regenerate it); the older traces have none */
+            bool ctor_ok = true;
+            const char *c0 = strtok_r(NULL, " \n", &save);
+            if (c0) {
+                int x_ctor[4] = {atoi(c0), 0, 0, 0};
+                for (int k = 1; k < 4; k++) x_ctor[k] = (int)num(&save);
+                /* a member the generator declines (a species whose form changes when it learns a move: Keldeo) keeps the stand-in and has no
+                 * constructor moveset to compare */
+                bool made = false;
+                for (int k = 0; k < 4; k++) made |= gc_int(&run)->ctor_moves[e][k] != 0;
+                if (!made) declined++;
+                else for (int k = 0; k < 4; k++) ctor_ok &= gc_int(&run)->ctor_moves[e][k] == x_ctor[k];
+            }
             const char *bad = NULL;
             if (m->b.species != species) bad = "species";
             else if (m->b.id != x_id) bad = "id";
             else if (m->b.nature != x_nature) bad = "nature";
-            else if (m->b.tera_type != x_tera) bad = "Tera type";
+            /* Trainer.genAI (setRandomTeraModifiers, after the party) gives the one member that Terastallizes the config's specialty type */
+            else if (m->b.tera_type != x_tera && !m->tera_instant) bad = "Tera type";
+            else if (!ctor_ok) bad = "constructor moves";
             else if ((m->b.fusion_species ? m->b.fusion_species : -1) != fs) bad = "fusion species";
             else if (fs >= 0 && (m->b.fusion_ability_index != fa || m->b.fusion_gender != fg || m->b.fusion_form != ff)) bad = "fusion state";
             if (bad) {
@@ -218,7 +231,12 @@ int main(int argc, char **argv)
             else if (m->b.form != x_form && !schooling) mismatch(l, pend.fixed, e, sp, "form after postProcess", m->b.form, x_form);
             else if (m->b.boss_segments != x_boss) mismatch(l, pend.fixed, e, sp, "boss segments", m->b.boss_segments, x_boss);
             else if (m->b.friendship != x_friend) mismatch(l, pend.fixed, e, sp, "friendship", m->b.friendship, x_friend);
-            else if (!moves_ok) mismatch(l, pend.fixed, e, sp, "moves", m->b.moves[0], x_moves[0]);
+            else if (!moves_ok) {
+                mismatch(l, pend.fixed, e, sp, "moves", m->b.moves[0], x_moves[0]);
+                if (mismatches <= 20)
+                    printf("    trainer %d (Tera slots %x) wave %d level %d moves got %d %d %d %d expected %d %d %d %d\n", run.trainer_type, gc_trainer_config_of(run.trainer_type) ? gc_trainer_config_of(run.trainer_type)->tera_static : 0, run.wave, m->b.level, m->b.moves[0], m->b.moves[1], m->b.moves[2], m->b.moves[3],
+                           x_moves[0], x_moves[1], x_moves[2], x_moves[3]);
+            }
             else members++;
         }
     }
@@ -230,6 +248,7 @@ int main(int argc, char **argv)
     printf("gym/e4/evil in game-core: %d cases (%d gym waves, %d fixed fights), %d fully matched, %d members, %d stand-ins, %d without held items "
            "(genModifiersFunc champions), %d Wishiwashi already in School form, %d mismatches\n",
            cases, gyms, fixed_fights, matched, members, stand_ins, no_items, school_forms, mismatches);
+    printf("%d members the generator declines (Keldeo: its Secret Sword form change is not ported) kept the stand-in moveset\n", declined);
     printf("%d members compared after their postProcess (ability slot, gender, form, boss segments, friendship, moves)\n", post_checked);
     printf("TOTAL %d cases, %d mismatches\n", cases, mismatches);
     return mismatches || !cases ? 1 : 0;
