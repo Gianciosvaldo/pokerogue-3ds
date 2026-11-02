@@ -136,9 +136,27 @@ int main(void)
     zo.terastallized = false;
     pr_illusion_on_summon(&bt, &zo); CHECK(zo.illusion.active && zo.illusion.species == SPECIES_ID_TERAPAGOS);
     pr_break_illusion(&zo);
-    zo.fusion_species = SPECIES_ID_PIDGEY;                              /* NoFusionAbilityAbAttr */
-    pr_illusion_on_summon(&bt, &zo); CHECK(!zo.illusion.active);
-    zo.fusion_species = 0;
+    /* a fusion disguises too (lorenzo 2026-11-02: the draft's NoFusionAbilityAbAttr is not applied): Zoroark as the second Pokemon gives
+     * the fused Pokemon its Illusion (the fusion half's ability), and the first Pokemon's own ability slot is no longer the one in use */
+    {
+        pr_pokemon fused = mon(SPECIES_ID_RATTATA, ABILITY_ID_GUTS, false);
+        fused.fusion_species = SPECIES_ID_ZOROARK; fused.fusion_ability_index = 0; fused.fusion_custom_ability = -1; fused.fusion_gender_known = true; fused.ability_lookup_known = true;
+        pr_refresh_ability(&fused);
+        CHECK(pr_get_ability(&fused, false) == ABILITY_ID_ILLUSION);
+        bt.party[1][0] = &fused;
+        pr_illusion_on_summon(&bt, &fused);
+        CHECK(fused.illusion.active && fused.illusion.species == SPECIES_ID_TERAPAGOS);   /* the last other member, as for a lone Zoroark */
+        CHECK(pr_shows_illusion(&bt, &fused) && pr_shown_form(&bt, &fused)->species == SPECIES_ID_TERAPAGOS);
+        CHECK(pr_illusion_on_hit(&bt, &fused, HIT_RESULT_EFFECTIVE) && !fused.illusion.active);   /* the first damaging hit ends it */
+        pr_illusion_on_summon(&bt, &fused);
+        CHECK(fused.illusion.active);                                    /* and the next battle's start gives it again */
+        fused.fusion_species = 0;
+        pr_break_illusion(&fused);
+        pr_refresh_ability(&fused);
+        pr_illusion_on_summon(&bt, &fused);
+        CHECK(!fused.illusion.active);                                   /* the same Pokemon unfused has no Illusion */
+        bt.party[1][0] = &zo;
+    }
     bt.deviations = 0;                                                  /* the pin: Illusion does nothing */
     pr_illusion_on_summon(&bt, &zo); CHECK(!zo.illusion.active);
     bt.deviations = PR_DEV_ILLUSION;

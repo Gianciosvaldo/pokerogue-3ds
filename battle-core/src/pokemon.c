@@ -362,11 +362,13 @@ void pr_set_illusion_species(pr_pokemon *p, uint16_t species, uint8_t form)
 /* PR_DEV_ILLUSION, after the source's commented-out draft (IllusionPreSummonAbAttr): a Pokemon with a
  * trainer (every player Pokemon too) takes the look of the last other party member allowed in battle; a
  * wild one a species from the game's callback. None when there is no other member, when that member or the
- * user is a Terastallized Ogerpon/Terapagos pairing, for a fusion (NoFusionAbilityAbAttr) or when one is
- * already active. The draft's canApply returned true only with an illusion already set, so it never ran. */
+ * user is a Terastallized Ogerpon/Terapagos pairing or when one is already active. The draft's
+ * canApply returned true only with an illusion already set, so it never ran. A fusion disguises like any other
+ * Pokemon (lorenzo 2026-11-02): the draft's NoFusionAbilityAbAttr line, commented out in the source too, is not applied,
+ * so a fused Pokemon whose ability is Illusion (Zoroark as the second Pokemon) takes the last other member's look. */
 void pr_illusion_on_summon(pr_battle *bt, pr_pokemon *p)
 {
-    if (!(bt->deviations & PR_DEV_ILLUSION) || !p || p->illusion.active || p->fusion_species) return;
+    if (!(bt->deviations & PR_DEV_ILLUSION) || !p || p->illusion.active) return;
     if (!pr_has_ability_active(bt, p, ABILITY_ID_ILLUSION)) return;
     if (p->is_player || p->has_trainer) {
         const int side = p->is_player ? 0 : 1;
