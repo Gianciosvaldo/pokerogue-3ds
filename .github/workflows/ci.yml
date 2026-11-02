@@ -104,6 +104,10 @@ jobs:
         run: python3 game-core/tools/check-constructor-finish-proof.py
       - name: Compare every supported Endless wave and reject uncovered results
         run: python3 run-core/tools/check-endless-wave-sweep.py
+      - name: Audit native move registrations, inherited dispatch and family switches
+        run: |
+          python3 battle-core/tools/audit-move-inventory.py
+          python3 battle-core/tools/check-move-inventory-guards.py
       - name: Audit pinned held-class mappings and evidence references
         run: python3 battle-core/tools/audit-held-dispatch.py
       - name: Check native closure identities, helper commands and generated table stability
