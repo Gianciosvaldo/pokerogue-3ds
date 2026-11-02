@@ -661,6 +661,21 @@ bool gc_mg_effective_powers(gc_run *run, const gc_mon *m, const uint16_t *moves,
     return true;
 }
 
+/* All ten grunt configs have ordinary constructor pools, no egg moves or
+ * member postProcess callbacks. Keep interleaved admin/boss IDs excluded. */
+static bool plain_grunt(int type)
+{
+    switch (type) {
+    case TRAINER_TYPE_ROCKET_GRUNT: case TRAINER_TYPE_MAGMA_GRUNT:
+    case TRAINER_TYPE_AQUA_GRUNT: case TRAINER_TYPE_GALACTIC_GRUNT:
+    case TRAINER_TYPE_PLASMA_GRUNT: case TRAINER_TYPE_FLARE_GRUNT:
+    case TRAINER_TYPE_AETHER_GRUNT: case TRAINER_TYPE_SKULL_GRUNT:
+    case TRAINER_TYPE_MACRO_GRUNT: case TRAINER_TYPE_STAR_GRUNT:
+        return true;
+    default: return false;
+    }
+}
+
 /* These pinned plain Gym profiles have no postProcess regeneration or instant
  * Tera policy. Special callbacks, forms/shields and trainer Tera have other owners. */
 static bool plain_egg_gym(int type)
@@ -674,6 +689,9 @@ bool gc_generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m)
     if (run->run.has_challenges) return false;
     const bool trainer = m->b.has_trainer || m->trainer_slot || m->b.trainer_slot;
     const bool egg_gym = plain_egg_gym(run->trainer_type);
+    if (trainer && plain_grunt(run->trainer_type)
+        && (run->trainer_variant < TRAINER_VARIANT_DEFAULT || run->trainer_variant > TRAINER_VARIANT_DOUBLE
+            || run->double_battle != (run->trainer_variant == TRAINER_VARIANT_DOUBLE))) return false;
     /* Ordinary Classic trainer pools. Instant Tera, rivals, Gym/E4,
      * challenges, fusions and post-moveset form callbacks need separate owners. */
     if (trainer && (!m->b.has_trainer || !m->trainer_slot
@@ -683,7 +701,7 @@ bool gc_generate_moveset(gc_run *run, pr_rng *rng, gc_mon *m)
             && run->trainer_type != TRAINER_TYPE_LIZA)
         || m->b.fusion_species || m->b.is_boss || m->b.passive_flag || m->b.terastallized
         || m->b.n_tags || m->b.on_field || run->run.mode != GAME_MODES_CLASSIC
-        || run->trainer_type <= 0 || (!egg_gym && run->trainer_type > TRAINER_TYPE_YOUNGSTER)
+        || run->trainer_type <= 0 || (!egg_gym && !plain_grunt(run->trainer_type) && run->trainer_type > TRAINER_TYPE_YOUNGSTER)
         || run->trainer_type >= gc_mg_trainer_egg_count
         || (!egg_gym && gc_mg_trainer_egg[run->trainer_type]))) return false;
     const pr_species *sp = gc_species(m->b.species);

@@ -91,4 +91,6 @@ and inheritance. Nine family-switch defaults have no missing registered enabled
 subclass. Source/runtime semantics and the other diagnostic branches still need
 review. The original generation row above predates #508/#513/#515: ordinary
 Classic constructors and four plain Gym profiles now have native moveset proofs;
-grunt, other special profile and postProcess moveset admission remain separate.
+other special profile and postProcess moveset admission remain separate.
+[Ten grunt profiles](../game-core/GRUNT-CONSTRUCTOR-VALIDATION.md) now also have
+6,000 native constructor comparisons across all three variants.

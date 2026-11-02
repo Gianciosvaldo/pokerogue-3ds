@@ -32,3 +32,8 @@ Tera work; it does not certify completion of those lanes.
 The retained ordinary and plain-Gym proofs are in
 [TRAINER-CONSTRUCTOR-VALIDATION.md](TRAINER-CONSTRUCTOR-VALIDATION.md) and
 [GYM-EGG-CONSTRUCTOR-VALIDATION.md](GYM-EGG-CONSTRUCTOR-VALIDATION.md).
+
+[The grunt constructor proof](GRUNT-CONSTRUCTOR-VALIDATION.md) adds the ten
+no-egg/no-member-callback profiles in all three variants. Its explicit whitelist
+never admits the admin/boss IDs interleaved between them and does not generalize
+the fresh factory into a postProcess regeneration API.
