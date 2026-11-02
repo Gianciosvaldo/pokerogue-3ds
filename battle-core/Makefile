@@ -814,3 +814,11 @@ $(BUILD)/tag-party-sources-test: tests/tag-party-sources-test.c $(BUILD)/wide-su
 .PHONY: tag-party-sources-host-test
 tag-party-sources-host-test: $(BUILD)/tag-party-sources-test
 	python3 tools/check-tag-party-sources-proof.py --replay-only
+
+# Native status-setting observations, replayed through the owning status phase.
+all: $(BUILD)/sleep-invulnerability-test
+$(BUILD)/sleep-invulnerability-test: tests/sleep-invulnerability-test.c $(BUILD)/libprcore.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+sleep-invulnerability-host-test: $(BUILD)/sleep-invulnerability-test
+	python3 tools/check-sleep-invulnerability-proof.py --runner $(BUILD)/sleep-invulnerability-test
+.PHONY: sleep-invulnerability-host-test
