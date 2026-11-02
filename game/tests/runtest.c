@@ -1652,6 +1652,8 @@ static bool step(void) {
       for (int i = 0; i < 4; i++)
         if (o->move_ok[i]) ok[n++] = i;
       c.move_slot = o->struggle || !n ? 0 : ok[rnd((uint32_t)n)];
+      /* the Tera button, when the screen offers it: a few turns Terastallize */
+      c.tera = o->can_tera && rnd(100) < 25;
       if (n && !o->struggle && rnd(100) < 80) {
         const gc_mon* me = acting_mon(rs_run());
         int best = -1;

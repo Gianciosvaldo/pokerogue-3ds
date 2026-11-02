@@ -131,6 +131,7 @@ typedef struct {
 typedef struct {
   int command;
   int move_slot;  /* FIGHT: 0..3 */
+  int tera;       /* FIGHT: 1 = Terastallize this turn (the Tera button, then a move; upstream's Command.TERA) */
 } bv_command;
 
 typedef struct {
@@ -171,6 +172,8 @@ typedef struct {
   bool move_ok[4];
   const char* move_why[4];   /* the reason text for each move that is not ok (already translated), or NULL; the strings
                               * stay the caller's and must live until the command is answered */
+  bool can_tera;             /* the Tera button is offered (game-core's screen.can_tera: Tera Orb, under the arena limit, not Mega/Max) */
+  int tera_type;             /* the button's type (PokemonType); only read with can_tera */
   bool struggle;             /* every move is unusable: FIGHT goes straight to Struggle (move slot 0) */
   /* START on the command menu (ui-inputs.ts buttonMenu: UiMode.COMMAND opens the menu overlay). Called with the argument of
    * bv_ask_command; NULL = START does nothing. The fight menu is a mode of its own upstream and does not open it. */
