@@ -1449,3 +1449,11 @@ gym-egg-faults: $(BUILD)/gym-egg.native.inc $(BUILD)/libgc.a $(REWARD_LIB) $(AI_
 	python3 tools/check_gym_egg_faults.py --build $(BUILD)
 test: gym-egg-capture gym-egg-faults
 .PHONY: gym-egg-capture gym-egg-faults
+
+all: $(BUILD)/endless_journey_host_test
+test: endless-journey-host-test
+endless-journey-host-test: $(BUILD)/endless_journey_host_test
+	$(BUILD)/endless_journey_host_test
+$(BUILD)/endless_journey_host_test: tests/endless_journey_host_test.c $(BUILD)/libgc.a $(REWARD_LIB) $(AI_LIB) $(RUN_LIB) $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -lm -o $@
+.PHONY: endless-journey-host-test
