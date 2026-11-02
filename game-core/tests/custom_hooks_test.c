@@ -237,10 +237,13 @@ static bool h_agree(void *user, const gc_run *r, const gc_custom_encounter *enc)
     (void)user;
     const bool trainer = r->battle_type == BATTLE_TYPE_TRAINER;
     const bool me = r->battle_type == BATTLE_TYPE_MYSTERY_ENCOUNTER;
+    /* a boss encounter is one with a shielded Pokemon anywhere in the enemy party (an evil team boss's later members have shields, its lead may not) */
+    bool any_boss = false;
+    for (int i = 0; i < r->n_enemy; i++) any_boss |= r->enemy[i].b.is_boss;
     if (enc->kind == GC_ENC_TRAINER && !trainer) kind_agrees = false;
     if (enc->kind == GC_ENC_MYSTERY && !me) kind_agrees = false;
-    if (enc->kind == GC_ENC_ORDINARY_WILD && (trainer || me || r->enemy[0].b.is_boss)) kind_agrees = false;
-    if (enc->kind == GC_ENC_BOSS && !r->enemy[0].b.is_boss) kind_agrees = false;
+    if (enc->kind == GC_ENC_ORDINARY_WILD && (trainer || me || any_boss)) kind_agrees = false;
+    if (enc->kind == GC_ENC_BOSS && !any_boss) kind_agrees = false;
     if (trainer && enc->kind != GC_ENC_TRAINER && enc->kind != GC_ENC_BOSS && enc->kind != GC_ENC_FINAL) kind_agrees = false;
     return false;
 }

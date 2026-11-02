@@ -21,6 +21,8 @@
 static gc_run run;
 static gc_system sys;
 static int roll_gender, roll_double;
+static bool case_ok = true, case_admin_or_boss;
+static int mismatches, members, school_forms, post_checked;
 
 static char *tok(char **save)
 {
@@ -61,15 +63,42 @@ static void start(const char *seed, int wave, int biome, bool offset_gym, int wa
     run.in_battle = true;
 }
 
+/* the last member's constructor snapshot, until its P line (or the next member) says what the post-process left: its ability slot, gender and form
+ * are compared with the P line's when there is one, with the snapshot's when there is not (the gym leaders' producer writes no P lines) */
+static struct { bool open, fixed; int line, e, species, ability, gender, form; } pend;
+
+static void mismatch(int line, bool fixed, int e, int species, const char *what, int got, int expected)
+{
+    case_ok = false;
+    if (++mismatches <= 20)
+        printf("MISMATCH line %d: %s member %d (species %d): %s differs (got %d expected %d)\n", line, fixed ? "fixed" : "gym", e, species, what, got, expected);
+}
+
+static void flush_pending(void)
+{
+    if (!pend.open) return;
+    pend.open = false;
+    if (!case_ok || pend.e >= run.n_enemy) return;
+    const gc_mon *m = &run.enemy[pend.e];
+    /* the producer's snapshot is taken before the member is summoned: Wishiwashi of level 20 or more (healthy) is in its School form
+     * (Schooling, PostSummonFormChangeAbAttr) once the battle starts, which game-core has applied by the end of gc_new_battle */
+    const bool schooling = pend.species == SPECIES_ID_WISHIWASHI && pend.form == 0 && m->b.form == 1 && m->b.level >= 20;
+    if (schooling) school_forms++;
+    if (m->ability_index != pend.ability) mismatch(pend.line, pend.fixed, pend.e, pend.species, "ability slot", m->ability_index, pend.ability);
+    else if (m->b.gender != pend.gender) mismatch(pend.line, pend.fixed, pend.e, pend.species, "gender", m->b.gender, pend.gender);
+    else if (m->b.form != pend.form && !schooling) mismatch(pend.line, pend.fixed, pend.e, pend.species, "form", m->b.form, pend.form);
+    else members++;
+}
+
 int main(int argc, char **argv)
 {
     FILE *f = fopen(argc > 1 ? argv[1] : "gym-e4-cases.txt", "r");
     if (!f) { perror("cases"); return 2; }
 
     char line[4096];
-    int line_no = 0, cases = 0, matched = 0, members = 0, mismatches = 0, gyms = 0, fixed_fights = 0, stand_ins = 0, no_items = 0, school_forms = 0;
+    int line_no = 0, cases = 0, matched = 0, gyms = 0, fixed_fights = 0, stand_ins = 0, no_items = 0;
     int member = 0, expected_members = 0;
-    bool case_ok = true, case_fixed = false;
+    bool case_fixed = false;
 
     while (fgets(line, sizeof line, f)) {
         line_no++;
@@ -77,6 +106,7 @@ int main(int argc, char **argv)
         char *t = strtok_r(line, " \n", &save);
         if (!t || t[0] == '#') continue;
 
+        if (strcmp(t, "P")) flush_pending();
         if (!strcmp(t, "R")) {
             roll_gender = (int)num(&save);
             roll_double = (int)num(&save);
@@ -112,10 +142,13 @@ int main(int argc, char **argv)
 
             start(seed, wave, biome, offset_gym, wave_cycle_offset, trainer_id, secret_id);
             gc_int(&run)->evil_roll_pinned = true;
+            gc_int(&run)->post_sentinel_moves = true;   /* the producer's moveset stub: moves 1..4 */
             gc_int(&run)->evil_roll[0] = (uint8_t)roll_gender;
             gc_int(&run)->evil_roll[1] = (uint8_t)roll_double;
             gc_new_battle(&run);
             case_fixed = fixed;
+            /* only the admins' and bosses' closures leave the producer's stub moves; an ordinary member's moveset is the generator's, not the stub */
+            case_admin_or_boss = fixed && (wave == 66 || wave == 114 || wave == 164 || wave == 115 || wave == 165);
             if (fixed) fixed_fights++; else gyms++;
 
             case_ok = run.battle_type == BATTLE_TYPE_TRAINER && run.trainer_type == exp_type && run.trainer_variant == exp_variant
@@ -146,31 +179,50 @@ int main(int argc, char **argv)
             const uint32_t x_id = (uint32_t)num(&save);
             const int x_gender = (int)num(&save), x_form = (int)num(&save), x_nature = (int)num(&save), x_tera = (int)num(&save);
             const int fs = (int)num(&save), fa = (int)num(&save), fg = (int)num(&save), ff = (int)num(&save);
-            /* the producer's snapshot is taken before the member is summoned: Wishiwashi of level 20 or more (healthy) is in its School form
-             * (Schooling, PostSummonFormChangeAbAttr) once the battle starts, which game-core has applied by the end of gc_new_battle */
-            const bool schooling = species == SPECIES_ID_WISHIWASHI && x_form == 0 && m->b.form == 1 && m->b.level >= 20;
-            if (schooling) school_forms++;
             const char *bad = NULL;
             if (m->b.species != species) bad = "species";
-            else if (m->ability_index != x_ability) bad = "ability slot";
             else if (m->b.id != x_id) bad = "id";
-            else if (m->b.gender != x_gender) bad = "gender";
-            else if (m->b.form != x_form && !schooling) bad = "form";
             else if (m->b.nature != x_nature) bad = "nature";
             else if (m->b.tera_type != x_tera) bad = "Tera type";
             else if ((m->b.fusion_species ? m->b.fusion_species : -1) != fs) bad = "fusion species";
             else if (fs >= 0 && (m->b.fusion_ability_index != fa || m->b.fusion_gender != fg || m->b.fusion_form != ff)) bad = "fusion state";
-            const bool ok = !bad;
-            if (!ok) {
-                case_ok = false;
-                if (++mismatches <= 20)
-                    printf("MISMATCH line %d: %s member %d (species %d): %s differs (form got %d expected %d)\n", line_no, case_fixed ? "fixed" : "gym", e,
-                           species, bad, m->b.form, x_form);
+            if (bad) {
+                mismatch(line_no, case_fixed, e, species, bad, 0, 0);
             } else {
-                members++;
+                pend.open = true;
+                pend.fixed = case_fixed;
+                pend.line = line_no;
+                pend.e = e;
+                pend.species = species;
+                pend.ability = x_ability;
+                pend.gender = x_gender;
+                pend.form = x_form;
             }
+        } else if (!strcmp(t, "P")) {
+            /* what the post-process left: ability slot, gender, form, boss segments, friendship, the four moves */
+            const int x_ability = (int)num(&save), x_gender = (int)num(&save), x_form = (int)num(&save), x_boss = (int)num(&save), x_friend = (int)num(&save);
+            int x_moves[4];
+            for (int k = 0; k < 4; k++) x_moves[k] = (int)num(&save);
+            if (!pend.open) continue;
+            pend.open = false;
+            if (!case_ok || pend.e >= run.n_enemy) continue;
+            const gc_mon *m = &run.enemy[pend.e];
+            const bool schooling = pend.species == SPECIES_ID_WISHIWASHI && x_form == 0 && m->b.form == 1 && m->b.level >= 20;
+            if (schooling) school_forms++;
+            const int l = line_no, e = pend.e, sp = pend.species;
+            bool moves_ok = true;
+            for (int k = 0; k < 4; k++) moves_ok &= !case_admin_or_boss || (k < m->b.n_moves ? m->b.moves[k] : 0) == x_moves[k];
+            post_checked++;
+            if (m->ability_index != x_ability) mismatch(l, pend.fixed, e, sp, "ability slot after postProcess", m->ability_index, x_ability);
+            else if (m->b.gender != x_gender) mismatch(l, pend.fixed, e, sp, "gender after postProcess", m->b.gender, x_gender);
+            else if (m->b.form != x_form && !schooling) mismatch(l, pend.fixed, e, sp, "form after postProcess", m->b.form, x_form);
+            else if (m->b.boss_segments != x_boss) mismatch(l, pend.fixed, e, sp, "boss segments", m->b.boss_segments, x_boss);
+            else if (m->b.friendship != x_friend) mismatch(l, pend.fixed, e, sp, "friendship", m->b.friendship, x_friend);
+            else if (!moves_ok) mismatch(l, pend.fixed, e, sp, "moves", m->b.moves[0], x_moves[0]);
+            else members++;
         }
     }
+    flush_pending();
     if (cases && case_ok) matched++;
     fclose(f);
     (void)expected_members;
@@ -178,6 +230,7 @@ int main(int argc, char **argv)
     printf("gym/e4/evil in game-core: %d cases (%d gym waves, %d fixed fights), %d fully matched, %d members, %d stand-ins, %d without held items "
            "(genModifiersFunc champions), %d Wishiwashi already in School form, %d mismatches\n",
            cases, gyms, fixed_fights, matched, members, stand_ins, no_items, school_forms, mismatches);
+    printf("%d members compared after their postProcess (ability slot, gender, form, boss segments, friendship, moves)\n", post_checked);
     printf("TOTAL %d cases, %d mismatches\n", cases, mismatches);
     return mismatches || !cases ? 1 : 0;
 }

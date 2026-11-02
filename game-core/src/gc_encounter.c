@@ -391,6 +391,36 @@ static int finish_trainer_constructor(pr_run *r, const pr_enemy_gen_ctx *ec,
     return 1;
 }
 
+/* A closure member's postProcess (run-core's ops, at the end of pr_run_enemy_pokemon_finish) reads and writes the moveset of the Pokemon being made
+ * and may regenerate it (p.generateAndPopulateMoveset()). The moveset is the stand-in until the boss trainers' generator is ported; the tests make
+ * it moves 1..4, which is what the upstream producer's stub leaves. */
+typedef struct { gc_run *run; gc_mon *m; } post_regen_state;
+
+static void post_moveset(gc_run *run, gc_mon *m, pr_enemy_gen *g)
+{
+    if (gc_int(run)->post_sentinel_moves) {
+        for (int k = 0; k < 4; k++) gc_mon_set_move(m, k, k + 1);
+    } else {
+        gc_port_enemy_moveset(run, m);
+    }
+    memset(g->moveset, 0, sizeof g->moveset);
+    for (int k = 0; k < m->b.n_moves && k < 4; k++) g->moveset[k] = m->b.moves[k];
+}
+
+static int post_regen(void *user, void *gen, pr_rng *rng)
+{
+    (void)rng;   /* the stand-in rolls nothing */
+    post_regen_state *st = user;
+    post_moveset(st->run, st->m, gen);
+    return 0;
+}
+
+static void post_apply_moves(gc_mon *m, const pr_enemy_gen *g)
+{
+    for (int k = 0; k < 4; k++)
+        if (g->moveset[k] && (k >= m->b.n_moves || m->b.moves[k] != g->moveset[k])) gc_mon_set_move(m, k, g->moveset[k]);
+}
+
 /* the ordinary party of a trainer: `tpl`'s members at `levels`, as EncounterPhase generates them (unfinished: gc_enemy_finish_party follows) */
 static bool gen_trainer_party(gc_run *run, const pr_party_template *tpl, int trainer_type, int variant, const int *levels, int n_levels)
 {
@@ -425,8 +455,12 @@ static bool gen_trainer_party(gc_run *run, const pr_party_template *tpl, int tra
         ec.trainer_slot = tc.is_double && e % 2 ? TRAINER_SLOT_TRAINER_PARTNER : TRAINER_SLOT_TRAINER;
         gc_mon *m = &run->enemy[run->n_enemy];
         gc_mon_new_enemy(run, m, party.species[e], levels[e], &party.mons[e], ec.trainer_slot);
-        gc_port_enemy_moveset(run, m);
+        post_moveset(run, m, &party.mons[e]);   /* the constructor's moveset */
+        post_regen_state regen = {run, m};
+        ec.post_regen = post_regen;
+        ec.post_regen_user = &regen;
         if (pr_run_enemy_pokemon_finish(&run->run, &ec, &party.mons[e]) < 0) return false;
+        post_apply_moves(m, &party.mons[e]);   /* what the closure's postProcess did to it */
         gc_refresh_enemy(run, m, party.species[e], levels[e], &party.mons[e], ec.trainer_slot);
         run->n_enemy++;
     }
